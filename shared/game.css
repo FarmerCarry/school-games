@@ -1,0 +1,160 @@
+/* Shared base styles for every game page.
+   <link rel="stylesheet" href="../../shared/game.css"> */
+
+@font-face {
+  font-family: 'Fredoka';
+  src: url('fonts/fredoka-latin-500-normal.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Fredoka';
+  src: url('fonts/fredoka-latin-700-normal.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  --sg-font: 'Fredoka', 'Segoe UI Rounded', 'Segoe UI', 'Trebuchet MS', system-ui, sans-serif;
+  --sg-bg: #10142b;
+  --sg-panel: rgba(16, 20, 43, 0.88);
+  --sg-text: #ffffff;
+  --sg-accent: #ffcc00;
+  --sg-accent-ink: #3a2a00;
+  --sg-good: #3ddc84;
+  --sg-bad: #ff5a5f;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--sg-bg);
+  color: var(--sg-text);
+  font-family: var(--sg-font);
+  font-weight: 500;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+canvas { display: block; outline: none; }
+
+/* Full-screen overlay for title / pause / game-over screens. */
+.sg-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 10, 24, 0.55);
+  z-index: 10;
+}
+.sg-overlay[hidden] { display: none; }
+
+.sg-panel {
+  background: var(--sg-panel);
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-radius: 24px;
+  padding: 28px 36px;
+  min-width: 320px;
+  max-width: min(92vw, 560px);
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  animation: sg-pop 0.25s ease-out;
+}
+
+.sg-title {
+  margin: 0 0 8px;
+  font-size: clamp(32px, 6vw, 56px);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: 0.5px;
+  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+}
+
+.sg-sub { margin: 0 0 18px; font-size: 18px; opacity: 0.85; }
+
+.sg-btn {
+  display: inline-block;
+  font: inherit;
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--sg-accent-ink);
+  background: var(--sg-accent);
+  border: none;
+  border-radius: 999px;
+  padding: 12px 34px;
+  margin: 6px;
+  cursor: pointer;
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.35);
+  transition: transform 0.08s ease, filter 0.08s ease;
+}
+.sg-btn:hover { transform: translateY(-2px) scale(1.04); filter: brightness(1.08); }
+.sg-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
+.sg-btn.secondary { background: #ffffff; color: #1d2340; }
+.sg-btn.good { background: var(--sg-good); color: #07351c; }
+
+/* Keycap for "how to play" boxes: <span class="sg-key">←</span> */
+.sg-key {
+  display: inline-block;
+  min-width: 30px;
+  padding: 2px 8px;
+  margin: 0 2px;
+  border-radius: 7px;
+  background: #fff;
+  color: #1d2340;
+  font-weight: 700;
+  font-size: 16px;
+  box-shadow: 0 3px 0 #9aa3c7;
+  text-align: center;
+}
+
+.sg-howto {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 14px;
+  align-items: center;
+  text-align: left;
+  margin: 14px auto 18px;
+  max-width: 420px;
+  font-size: 17px;
+}
+
+/* Round mute button added by Kit.muteButton(). */
+.sg-mute {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sg-mute:hover { background: rgba(0, 0, 0, 0.55); }
+
+/* HUD text drawn with DOM instead of canvas (optional). */
+.sg-hud {
+  position: fixed;
+  top: 10px;
+  left: 14px;
+  z-index: 5;
+  font-size: 26px;
+  font-weight: 700;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+@keyframes sg-pop {
+  from { transform: scale(0.85); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
