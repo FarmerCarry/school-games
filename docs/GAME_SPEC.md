@@ -7,6 +7,37 @@ no copied code or art, no ads, no network calls, no links to other sites.
 The aim is **fun**: the kind of game a 10-year-old picks on Poki or CrazyGames and asks for
 "one more round". These are not educational games.
 
+## 🌐 Language: ARABIC (required)
+
+The whole site is in **Arabic**. This was a late change, so **if a game you're working on
+still has English text, converting it to Arabic is part of your job.**
+
+- **Every piece of text the player sees is in Arabic**: the title/logo, buttons, how-to-play,
+  HUD labels, popups ("ممتاز!", "رائع!"), level and world names, shop and skin names, mission
+  text, achievements, bot/character names (fun, kid-friendly names that work in Arabic),
+  pause and game-over screens, and the thumbnail logo text if it has any.
+  Use simple, energetic Modern Standard Arabic that a 10-year-old understands instantly.
+- **Game title**: use the Arabic `title` from this game's entry in `js/catalog.js`.
+- **Numbers** use Western digits 0–9 (scores, timers, levels): "النقاط: 120".
+- **Key names** on keycaps: arrows ← → ↑ ↓ and letters (W, A, S, D, P, M, R…) stay as printed
+  on the keyboard. Space = "مسافة", Enter = "Enter", Esc = "Esc", Shift = "Shift", Tab = "Tab".
+  Mouse = "الفأرة", click = "انقر", drag = "اسحب". Wrap a group of keycaps in `<span dir="ltr">`
+  so "← →" keeps its order.
+- `<html lang="ar" dir="rtl">`. DOM panels and menus flow right-to-left, and text is right-aligned
+  or centered.
+- **Font**: CSS uses `var(--sg-font)`, and canvas uses `'700 40px Fredoka'` (or 500). The shared
+  `Fredoka` family in `shared/game.css` automatically draws Arabic letters with a rounded Arabic
+  font (Baloo Bhaijaan 2). Never draw Arabic with a font that has no Arabic glyphs. For canvas,
+  wait for `document.fonts.load('700 40px Fredoka', 'ب')` or simply redraw every frame.
+- **Canvas text**: set `ctx.direction = 'rtl'` when drawing Arabic. With `dir="rtl"`, the default
+  `textAlign` of `'start'` means right-aligned, so **always set `textAlign` explicitly**
+  (`'center'`, `'left'` or `'right'`). Never draw Arabic one letter at a time (it breaks the letter
+  joining) and never use letter-spacing on Arabic.
+- **Game worlds are NOT mirrored**: → still moves right, and courses, tables and mazes stay as
+  designed. Only text and menu layout go right-to-left.
+- **Check screenshots**: letters must be joined (not separated or reversed) and mixed Arabic with
+  numbers must read correctly.
+
 ## Folder layout
 
 ```

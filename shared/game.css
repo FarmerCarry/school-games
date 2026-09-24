@@ -1,21 +1,41 @@
 /* Shared base styles for every game page.
    <link rel="stylesheet" href="../../shared/game.css"> */
 
+/* The site is in Arabic. The 'Fredoka' family below is a composite: Latin
+   letters and digits come from Fredoka, Arabic letters come from the rounded
+   Baloo Bhaijaan 2. So `font: 700 40px Fredoka` works for Arabic text in
+   canvas as well as CSS. */
 @font-face {
   font-family: 'Fredoka';
   src: url('fonts/fredoka-latin-500-normal.woff2') format('woff2');
-  font-weight: 500;
+  font-weight: 400 500;
   font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-200B, U+2010-206F, U+20AC, U+2122, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: 'Fredoka';
   src: url('fonts/fredoka-latin-700-normal.woff2') format('woff2');
-  font-weight: 700;
+  font-weight: 600 900;
   font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-200B, U+2010-206F, U+20AC, U+2122, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Fredoka';
+  src: url('fonts/baloo-bhaijaan-2-arabic-500-normal.woff2') format('woff2');
+  font-weight: 400 500;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200F, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+}
+@font-face {
+  font-family: 'Fredoka';
+  src: url('fonts/baloo-bhaijaan-2-arabic-700-normal.woff2') format('woff2');
+  font-weight: 600 900;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200F, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
 }
 
 :root {
-  --sg-font: 'Fredoka', 'Segoe UI Rounded', 'Segoe UI', 'Trebuchet MS', system-ui, sans-serif;
+  --sg-font: 'Fredoka', 'Segoe UI', Tahoma, 'Trebuchet MS', system-ui, sans-serif;
   --sg-bg: #10142b;
   --sg-panel: rgba(16, 20, 43, 0.88);
   --sg-text: #ffffff;
@@ -103,6 +123,8 @@ canvas { display: block; outline: none; }
   display: inline-block;
   min-width: 30px;
   padding: 2px 8px;
+  direction: ltr;
+  unicode-bidi: isolate;
   margin: 0 2px;
   border-radius: 7px;
   background: #fff;
@@ -118,7 +140,7 @@ canvas { display: block; outline: none; }
   grid-template-columns: auto 1fr;
   gap: 8px 14px;
   align-items: center;
-  text-align: left;
+  text-align: start;
   margin: 14px auto 18px;
   max-width: 420px;
   font-size: 17px;
@@ -129,6 +151,7 @@ canvas { display: block; outline: none; }
   position: fixed;
   top: 10px;
   right: 10px;
+  left: auto;
   z-index: 20;
   width: 44px;
   height: 44px;

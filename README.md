@@ -1,7 +1,8 @@
-# Recess Arcade 🎮
+# ألعاب الفسحة (Recess Arcade) 🎮
 
-A light, ad-free games website for 4th and 5th graders: a small Poki-style portal with
-original browser games, all written from scratch for this site.
+A light, ad-free games website **in Arabic** for 4th and 5th graders: a small Poki-style portal
+with original browser games, all written from scratch for this site. The site and all of its
+games are in Arabic, laid out right-to-left.
 
 - **No ads, no accounts, no chat, no tracking, no links to other sites.**
 - **Nothing loads from the internet.** Every game, sound, font and picture lives in this repo.
@@ -31,7 +32,7 @@ Everything the home page shows comes from **`js/catalog.js`**:
 
 - **Hide a game:** add `hidden: true` to its entry.
 - **Feature a game** in the "🔥 Hot right now" row: set `hot: true`.
-- **Rename the site:** change `name` in `window.SITE`.
+- **Rename the site:** change `name` in `window.SITE` (currently "ألعاب الفسحة").
 
 ## For developers
 
@@ -53,4 +54,5 @@ Test a game automatically with `node tools/playtest.mjs <slug>`.
 
 - Games, art, sounds and site: original work made for this project.
 - [three.js](https://threejs.org) r159, MIT license (`lib/three/LICENSE`).
-- Fredoka font, SIL Open Font License (`shared/fonts/LICENSE-Fredoka.txt`).
+- Fredoka font (Latin) and Baloo Bhaijaan 2 font (Arabic), SIL Open Font License
+  (`shared/fonts/LICENSE-*.txt`).
