@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recess Arcade</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="css/site.css">
+</head>
+<body class="route-home">
+<header class="topbar" id="topbar">
+  <a class="logo" id="logo" href="#/" aria-label="Home"></a>
+  <form class="search" id="searchForm" role="search" autocomplete="off">
+    <span class="search-icon" aria-hidden="true">🔍</span>
+    <input id="q" type="search" placeholder="Search games..." aria-label="Search games" spellcheck="false" autocomplete="off" maxlength="40">
+  </form>
+  <button class="surprise" id="surprise" type="button" title="Play a random game">
+    <span class="dice" aria-hidden="true">🎲</span><span class="surprise-text">Surprise me</span>
+  </button>
+</header>
+<nav class="chips" id="chips" aria-label="Categories"></nav>
+<main class="app" id="app"></main>
+<footer class="foot">
+  <span>Made for our class ❤️ — no ads, no accounts</span>
+</footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<noscript><p style="text-align:center;font:20px sans-serif">Please turn on JavaScript to play the games.</p></noscript>
+<script src="js/catalog.js"></script>
+<script src="js/site.js"></script>
+</body>
+</html>
