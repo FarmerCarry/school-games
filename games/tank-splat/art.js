@@ -63,7 +63,7 @@
     c.arcTo(x, y, x + w, y, r);
     c.closePath();
   }
-  function circle(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); }
+  function circle(c, x, y, r) { c.beginPath(); c.arc(x, y, r > 0 ? r : 0, 0, Math.PI * 2); }
 
   /* ------------------------------------------------------------ hats */
   // Hats are drawn upright (not rotated with the tank). (x, y) = top of turret.

@@ -263,7 +263,7 @@
     theme: { bg1: '#0a1f14', bg2: '#127a4a', ground1: '#0f5a36', ground2: '#03200f', line: '#ff5ad1',
       block: '#06261a', blockLine: '#ff5ad1', spike: '#ffe14d', accent: '#ff5ad1', deco: '#1fae6a' },
     song: { root: 57, scale: 'dorian', prog: [0, 6, 3, 4], lead: 'pulse12', seed: 51, style: 'drive' },
-    signs: [{ x: 70, y: 7.3, text: 'صاروخ! اضغط مطولًا لتطير، واترك لتنزل', col: '#ff9be6' }],
+    signs: [{ x: 52, y: 4.6, text: 'صاروخ! اضغط مطولًا لتطير، واترك لتنزل', col: '#ff9be6' }],
     chunks: [
       ['....|....|....|....|....'],
       // cube warm-up
@@ -314,7 +314,7 @@
     theme: { bg1: '#12002e', bg2: '#4a00a8', ground1: '#3a0a8a', ground2: '#10002a', line: '#ffdd00',
       block: '#140033', blockLine: '#00f0ff', spike: '#ff3b8d', accent: '#ffdd00', deco: '#7a2cff' },
     song: { root: 60, scale: 'minor', prog: [0, 5, 3, 4], lead: 'pulse25', seed: 77, style: 'drive' },
-    signs: [{ x: 240, y: 7.6, text: 'صاروخ مقلوب: التحكم ينعكس!', col: '#ffb300' }],
+    signs: [{ x: 176, y: 5, text: 'صاروخ مقلوب: التحكم ينعكس!', col: '#ffb300' }],
     chunks: [
       ['....|....|....|....|....'],
       // fast rhythm

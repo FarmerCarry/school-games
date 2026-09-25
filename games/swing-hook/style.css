@@ -141,3 +141,8 @@
 .rs-unlock small { display: block; font-size: 15px; opacity: 0.9; }
 .big-num { font-size: 72px !important; line-height: 1; }
 .howto .sg-key, .hint .sg-key { text-shadow: none; }
+
+/* `hidden` must always win over the display rules above (e.g. .rs-stars / .sg-btn) */
+#ui [hidden] { display: none !important; }
+.rs-stats:has(.big-num) { align-items: flex-end; }
+.rs-stats b { display: inline-block; line-height: 1.15; }

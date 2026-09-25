@@ -42,6 +42,28 @@
       return r.t[x] !== T.WALL && r.t[x] !== T.SPIKE;
     }
     function lock(x, y) { if (x >= 0 && x < W) world.ensureRow(y).lock[x] = 1; }
+    // Carve a dead-end side pocket (for a bat) only if it touches nothing but
+    // the path cell it hangs off: every cell must be a plain unlocked wall and
+    // every other neighbour must stay wall, so no route or stopper changes.
+    function pocket(cells, attach) {
+      var i, k, inSet = function (x, y) {
+        if (x === attach[0] && y === attach[1]) return true;
+        for (var j = 0; j < cells.length; j++) if (cells[j][0] === x && cells[j][1] === y) return true;
+        return false;
+      };
+      for (i = 0; i < cells.length; i++) {
+        var cx = cells[i][0], cy = cells[i][1];
+        if (cx < 1 || cx > W - 2) return false;
+        var r = world.ensureRow(cy);
+        if (r.t[cx] !== T.WALL || r.lock[cx] || r.it[cx]) return false;
+        for (k = 0; k < 4; k++) {
+          var nx2 = cx + C.DIRS[k].dx, ny2 = cy + C.DIRS[k].dy;
+          if (!inSet(nx2, ny2) && isOpen(nx2, ny2)) return false;
+        }
+      }
+      for (i = 0; i < cells.length; i++) { world.ensureRow(cells[i][1]).t[cells[i][0]] = T.EMPTY; lock(cells[i][0], cells[i][1]); }
+      return true;
+    }
 
     function hop() {
       var ax = gen.ax, ay = gen.ay, h = gen.startY - ay, d = diff(ay);
@@ -94,14 +116,21 @@
           world.addTrap({ x: sq[0], y: sq[1], off: Math.random() * C.TIMING.TRAP_CYCLE });
         }
       }
-      // bats patrol the corridor interior (never the rest cells at the ends)
-      var batSp = 1.9 + 1.4 * d;
-      if (h > 28 && rowLen >= 5 && chance(0.25 + 0.4 * d)) {
-        var lo = Math.min(ax, nx) + 1, hi = Math.max(ax, nx) - 1;
-        world.addBat({ x: ri(lo, hi), y: ny, axis: 0, min: lo, max: hi, speed: batSp, off: Math.random() * 8 });
+      // Bats fly ACROSS the path from a little side pocket (never along it),
+      // so there is always a gap to dash through.
+      var batSp = 1.9 + 1.4 * d, batDone = false;
+      if (h > 28 && interior.length >= 3 && chance(0.25 + 0.4 * d)) {
+        var bq = interior[ri(1, interior.length - 2)], bx = bq[0];
+        if (pocket([[bx, ny + 1], [bx, ny + 2]], [bx, ny])) {
+          world.addBat({ x: bx, y: ny + 1, axis: 1, min: ny, max: ny + 2, speed: batSp, off: Math.random() * 8 });
+          batDone = true;
+        }
       }
-      if (h > 70 && shaft.length >= 4 && chance(0.3 * d)) {
-        world.addBat({ x: ax, y: ny + 1, axis: 1, min: ny + 1, max: ay - 1, speed: batSp * 0.9, off: Math.random() * 8 });
+      if (!batDone && h > 70 && shaft.length >= 4 && chance(0.3 * d)) {
+        var rq = shaft[ri(1, shaft.length - 2)], s2 = chance(0.5) ? 1 : -1, ry = rq[1];
+        if (pocket([[ax + s2, ry], [ax + 2 * s2, ry]], [ax, ry])) {
+          world.addBat({ x: ax + s2, y: ry, axis: 0, min: Math.min(ax, ax + 2 * s2), max: Math.max(ax, ax + 2 * s2), speed: batSp * 0.9, off: Math.random() * 8 });
+        }
       }
       // puffer in a wall beside the corridor interior
       if (h > 90 && interior.length >= 3 && chance(0.3 * d)) {

@@ -136,7 +136,7 @@
     $('tCoins').textContent = save.coins;
     $('tWins').textContent = save.stats.wins;
     $('tDunks').textContent = save.stats.dunks;
-    $('tChars').textContent = unlockedChars().length + ' / ' + CH.length;
+    $('tChars').textContent = unlockedChars().length + ' من ' + CH.length;
     var cups = $('tCups'); cups.innerHTML = '';
     HH.CUPS.forEach(function (cp) {
       var cv = document.createElement('canvas'); cv.width = 96; cv.height = 96; cv.title = cp.name;
@@ -369,7 +369,7 @@
       b.appendChild(d);
       var r = document.createElement('div'); r.className = 'reward'; r.innerHTML = 'الجائزة: <span class="coin"></span>' + cp.reward + ' + شخصية سرية';
       b.appendChild(r);
-      var st = document.createElement('div'); st.className = 'state'; st.textContent = won ? 'فزت بها! ✔' : (locked ? '' : 'العب الآن ▶');
+      var st = document.createElement('div'); st.className = 'state'; st.textContent = won ? 'فزت بها! ✔' : (locked ? '' : 'العب الآن ◀');
       b.appendChild(st);
       drawTrophy(cv, cp.color, locked, 0);
       b.addEventListener('click', function () {
@@ -398,7 +398,7 @@
     state = 'ladder'; show('scrLadder');
     var cp = tour.cup;
     $('ladTitle').textContent = cp.name;
-    $('ladSub').textContent = tour.stage === 0 ? 'اهزم الخصوم الخمسة واحدًا تلو الآخر!' : (tour.stage === 4 ? 'المباراة الأخيرة ضد الزعيم!' : 'رائع! بقي ' + (5 - tour.stage) + ' خصوم');
+    $('ladSub').textContent = tour.stage === 0 ? 'اهزم الخصوم الخمسة واحدًا تلو الآخر!' : (tour.stage === 4 ? 'المباراة الأخيرة ضد الزعيم!' : (5 - tour.stage === 2 ? 'رائع! بقي خصمان فقط' : 'رائع! بقي ' + (5 - tour.stage) + ' خصوم'));
     var lad = $('ladder'); lad.innerHTML = '';
     tour.opps.forEach(function (id, i) {
       var ch = HH.charById(id);
@@ -412,7 +412,7 @@
       var num = document.createElement('div'); num.className = 'num'; num.textContent = 'الخصم ' + (i + 1); d.appendChild(num);
       d.appendChild(cv);
       var n = document.createElement('div'); n.className = 'ln'; n.textContent = hidden ? '؟؟؟' : ch.name; d.appendChild(n);
-      var lv = document.createElement('div'); lv.className = 'lv'; lv.textContent = 'القوة: ' + '★★★★★'.slice(0, Math.max(1, Math.round(cp.lv[i] + 1.3)));
+      var lv = document.createElement('div'); lv.className = 'lv'; lv.textContent = 'القوة: ' + '★★★★★'.slice(0, Math.max(1, Math.min(5, Math.round(cp.lv[i] * 1.5 + 1))));
       d.appendChild(lv);
       lad.appendChild(d);
     });
@@ -512,6 +512,8 @@
       : '<span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> حركة، <span class="sg-key">W</span> قفز، <span class="sg-key">S</span> تصويب (أو الأسهم)<br>اقفز قرب السلة واضغط <span class="sg-key">S</span> = دانك!';
     setFocus($('pResume'));
     Kit.keys.reset();
+    // held keys are forgotten while paused, so drop a half-charged shot instead of firing it on resume
+    match.players.forEach(function (p) { if (p.ctrl === 'human') { p.charging = false; p.charge = 0; p.prevShoot = false; p.prevJump = false; } });
   }
   function resume() { state = 'play'; show(null); S.click(); }
   function restart() {
@@ -579,7 +581,7 @@
       $('resS' + i).textContent = p.score;
     });
     var chips = [];
-    function chip(label, v) { chips.push('<span class="st">' + label + '<b>' + v + '</b></span>'); }
+    function chip(label, v) { chips.push('<span class="st">' + label + '<b dir="ltr">' + v + '</b></span>'); }
     if (c.mode === 'duo') {
       chip('دانك', a.st.dunks + ' - ' + b.st.dunks); chip('ثلاثيات', a.st.threes + ' - ' + b.st.threes);
       chip('صدّ', a.st.blocks + ' - ' + b.st.blocks); chip('خطف', a.st.steals + ' - ' + b.st.steals);
@@ -588,7 +590,7 @@
     }
     $('resStats').innerHTML = chips.join('');
     var coinHtml = '<span class="coin"></span>+<span id="coinCount">0</span>';
-    if (c.mode === 'cpu' && win && save.streak >= 2) coinHtml += '<span class="newrec">' + (newRec ? 'رقم قياسي جديد! ' : '') + save.streak + ' انتصارات متتالية 🔥</span>';
+    if (c.mode === 'cpu' && win && save.streak >= 2) coinHtml += '<span class="newrec">' + (newRec ? 'رقم قياسي جديد! ' : '') + streakText(save.streak) + ' 🔥</span>';
     $('resCoins').innerHTML = coinHtml;
     countUp($('coinCount'), coins);
     var un = $('resUnlock');
@@ -627,6 +629,10 @@
     state = 'result'; show('scrResult');
     setFocus(again);
     if (c.mode === 'duo' || win) S.win(); else S.lose();
+  }
+  function streakText(n) {
+    if (n === 2) return 'انتصاران متتاليان';
+    return n + (n <= 10 ? ' انتصارات متتالية' : ' انتصارًا متتاليًا');
   }
   function countUp(el, n) {
     var t0 = performance.now();
@@ -733,7 +739,11 @@
   showTitle();
   // make sure canvas text redraws once the Arabic font is ready
   if (document.fonts && document.fonts.load) {
-    document.fonts.load('700 40px Fredoka', 'بسلة').then(function () { if (state === 'title') showTitle(); }).catch(function () {});
+    Promise.all([document.fonts.load('700 40px Fredoka', 'بسلة'), document.fonts.load('700 30px Fredoka', '3')]).then(function () {
+      HH.resetBg();
+      if (state === 'title') showTitle();
+      else if (state === 'shop') buildShop();
+    }).catch(function () {});
   }
 
   /* ============================================================ DEBUG HOOK */

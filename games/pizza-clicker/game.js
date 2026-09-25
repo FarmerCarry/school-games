@@ -95,7 +95,14 @@
     return v;
   }
   // signed number that keeps its "+" on the left inside RTL text
-  function plus(s) { return '<bdi dir="ltr">+' + s + '</bdi>'; }
+  // Only the numeric part is isolated: "+1.2 مليون" must keep the Arabic word
+  // to the LEFT of the number (RTL order), otherwise it reads backwards.
+  function plus(s) {
+    s = String(s);
+    var sp = s.indexOf(' ');
+    if (sp < 0) return '<bdi dir="ltr">+' + s + '</bdi>';
+    return '<bdi dir="ltr">+' + s.slice(0, sp) + '</bdi>' + s.slice(sp);
+  }
   function gain(n, hand) {
     if (!(n > 0)) return;
     S.pizzas += n; S.runBaked += n; S.lifetime += n;
@@ -353,6 +360,9 @@
       var r = Math.random() * tot;
       for (i = 0; i < GOLD_EFFECTS.length; i++) { r -= GOLD_EFFECTS[i].w; if (r <= 0) { eff = GOLD_EFFECTS[i].id; break; } }
       if (S.golden <= 1) eff = 'frenzy';
+      // ×7 of (almost) nothing is a let-down: with no real production yet,
+      // give the ×77 super clicks instead so the first golden pizza always feels huge.
+      if (eff === 'frenzy' && S.ppsBase < 2) eff = 'click';
     }
     if (eff === 'frenzy') {
       buffs.frenzy = buffs.frenzyMax = 30 * D.goldDur;
@@ -543,11 +553,12 @@
       var cost = PZ.buildCost(i, S.owned[i], S.buyAmt);
       var each = b.pps * D.bmult[i], tot = each * S.owned[i];
       var pct = S.ppsBase > 0 ? Math.round(tot / S.ppsBase * 100) : 0;
+      if (pct < 1 && tot > 0) pct = '<1';
       var html = '<div class="th"><img src="' + bIconURL(i) + '" alt=""><div><div class="tn">' + b.name + (S.buyAmt > 1 ? ' <span dir="ltr">×' + S.buyAmt + '</span>' : '') + '</div>' +
         '<div class="tc' + (S.pizzas < cost ? ' no' : '') + '"><img src="' + pizzaIconURL() + '" alt="">' + PZ.fmt(cost) + '</div></div></div>' +
         '<div class="td">' + b.desc + '</div>' +
         '<div class="ts">كل واحد يصنع <b>' + PZ.fmtRate(each) + '</b> في الثانية' +
-        (S.owned[i] ? '<br>لديك <b>' + S.owned[i] + '</b> تصنع <b>' + PZ.fmtRate(tot) + '</b> في الثانية <bdi dir="ltr">(' + pct + '%)</bdi>' : '') + '</div>';
+        (S.owned[i] ? '<br>لديك <b>' + S.owned[i] + '</b> تصنع <b>' + PZ.fmtRate(tot) + '</b> في الثانية <bdi dir="ltr">(' + (pct === '<1' ? '&lt;1' : pct) + '%)</bdi>' : '') + '</div>';
       if (tipEl._h !== html) { tipEl.innerHTML = html; tipEl._h = html; }
     };
     tipFor(); placeTip(row.el);
@@ -965,7 +976,7 @@
 
   /* ============================================================ save */
   var noSave = false; // debug only: lets tests fake time away
-  function save() { if (noSave) return; S.t = Date.now(); store.set('save', S); }
+  function save() { if (noSave || !started) return; S.t = Date.now(); store.set('save', S); }
   window.addEventListener('pagehide', save);
   window.addEventListener('beforeunload', save);
   document.addEventListener('visibilitychange', function () {
@@ -1283,10 +1294,22 @@
       var sc = f.pop < 0.12 ? 0.6 + f.pop / 0.12 * 0.5 : f.pop < 0.22 ? 1.1 - (f.pop - 0.12) : 1;
       c.globalAlpha = Math.min(1, f.life / f.max * 2.2);
       c.font = '700 ' + Math.round(f.size * sc) + 'px Fredoka';
-      c.direction = f.rtl ? 'rtl' : 'ltr';
-      c.lineWidth = Math.max(4, f.size * 0.2); c.strokeStyle = '#4a1606';
-      c.strokeText(f.text, f.x, f.y);
-      c.fillStyle = f.color; c.fillText(f.text, f.x, f.y);
+      c.lineWidth = Math.max(4, f.size * 0.2); c.strokeStyle = '#4a1606'; c.fillStyle = f.color;
+      var sp = f.rtl ? -1 : f.text.indexOf(' ');
+      if (sp < 0) {
+        // single run (a number, or a pure Arabic word)
+        c.direction = f.rtl ? 'rtl' : 'ltr'; c.textAlign = 'center';
+        var hw = c.measureText(f.text).width / 2, fx0 = K.clamp(f.x, PX + 8 + hw, W - 8 - hw);
+        c.strokeText(f.text, fx0, f.y); c.fillText(f.text, fx0, f.y);
+      } else {
+        // "+1.2 مليون": number on the right, Arabic word on its left (RTL reading order)
+        var nTxt = f.text.slice(0, sp), wTxt = f.text.slice(sp + 1);
+        var wn = c.measureText(nTxt).width, ww = c.measureText(wTxt).width, gp = f.size * 0.25 * sc;
+        var tw = wn + gp + ww, lx0 = K.clamp(f.x - tw / 2, PX + 8, W - 8 - tw);
+        c.textAlign = 'left';
+        c.direction = 'rtl'; c.strokeText(wTxt, lx0, f.y); c.fillText(wTxt, lx0, f.y);
+        c.direction = 'ltr'; c.strokeText(nTxt, lx0 + ww + gp, f.y); c.fillText(nTxt, lx0 + ww + gp, f.y);
+      }
     }
     c.globalAlpha = 1; c.direction = 'ltr';
     c.restore();

@@ -144,7 +144,7 @@
       '.....Gcc',
       '......Gc',
       '.......G'] },
-    { score: 1300, moves: 58, diff: 0.3, help: 0.58, stars: [28, 38], board: [
+    { score: 1300, moves: 62, diff: 0.3, help: 0.58, stars: [28, 38], board: [
       '........',
       '.hhhhhh.',
       '.h....h.',
@@ -154,7 +154,7 @@
       '.hhhhhh.',
       '........'] },
     // ---------------------------------------------------------------- world 4
-    { gems: { 1: 3, 2: 2, 3: 2, 4: 2 }, moves: 50, diff: 0.3, help: 0.58, gemRate: 0.45, stars: [26, 36], board: [
+    { gems: { 1: 3, 2: 2, 3: 2, 4: 2 }, moves: 54, diff: 0.3, help: 0.58, gemRate: 0.45, stars: [26, 36], board: [
       'R.....B.',
       '.b...b..',
       '..b.b...',
@@ -190,7 +190,7 @@
       'fff..fff',
       'fBf..fRf',
       'fff..fff'] },
-    { gems: { 1: 4, 2: 4, 3: 4, 4: 4 }, score: 1700, moves: 72, diff: 0.42, help: 0.55, gemRate: 0.5, stars: [40, 54], board: [
+    { gems: { 1: 4, 2: 4, 3: 4, 4: 4 }, score: 1700, moves: 78, diff: 0.42, help: 0.55, gemRate: 0.5, stars: [40, 54], board: [
       'Y......R',
       '.aa..bb.',
       '.aG..Bb.',

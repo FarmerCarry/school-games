@@ -19,7 +19,7 @@
     { name: 'ثلاثي الألوان', bots: [['medium', 5], ['medium', 1]], target: 3 },
     { name: 'القنّاص', bots: [['hard', 6]], target: 3 },
     { name: 'العاصفة', bots: [['medium', 2], ['hard', 7]], target: 3 },
-    { name: 'نهائي البطولة', bots: [['medium', 4], ['hard', 6], ['hard', 7]], target: 5 }
+    { name: 'نهائي البطولة', bots: [['medium', 4], ['medium', 6], ['hard', 7]], target: 5 }
   ];
   var CROWN = 10, CROWN_STARS = 24;
 
@@ -274,7 +274,7 @@
       d.querySelector('b').textContent = pl.name;
       var sp = d.querySelector('span');
       if (pl.human) sp.textContent = f.humans === 1 ? 'WASD / ↑←↓→' : hints[pl.ctrl];
-      else { sp.textContent = 'كمبيوتر - ' + DIFF_NAME[pl.bot]; sp.style.direction = 'rtl'; }
+      else { sp.textContent = 'المستوى: ' + DIFF_NAME[pl.bot]; sp.style.direction = 'rtl'; }
       var c = d.querySelector('canvas').getContext('2d'); c.scale(2, 2);
       miniTank(c, 45, 38, A.PAL[pl.slot], pl.hat, 1.05, -Math.PI / 2);
       lu.appendChild(d);
@@ -319,7 +319,7 @@
       var ib = d.querySelector('.ibtn');
       if (eq === i) ib.textContent = 'مُختار ✓';
       else if (has) ib.textContent = 'اختر';
-      else if (crown) ib.innerHTML = '<span class="star"></span>' + CROWN_STARS;
+      else if (crown) { ib.innerHTML = '<span class="star"></span>' + totalStars() + ' / ' + CROWN_STARS; ib.classList.add('crown'); ib.dir = 'ltr'; }
       else ib.innerHTML = '<span class="coin"></span>' + it.price;
       var c = d.querySelector('canvas').getContext('2d'); c.scale(2, 2);
       if (app.shopKind === 'hat') {

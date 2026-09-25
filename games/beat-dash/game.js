@@ -1114,9 +1114,15 @@
     var pw = Math.max(170, w + 30 + 10 + 24), px = 16;
     ctx.fillStyle = 'rgba(10,5,40,0.55)'; BD.rr(ctx, px, 14, pw, 34 + 10 + rows.length * 36, 17); ctx.fill();
     ctx.fillStyle = 'rgba(53,198,255,0.95)'; BD.rr(ctx, px, 14, pw, 36, 17); ctx.fill();
-    ctx.direction = 'rtl'; ctx.textAlign = 'center'; ctx.fillStyle = '#062a44';
+    ctx.direction = 'rtl'; ctx.textAlign = 'right'; ctx.fillStyle = '#062a44';
     ctx.font = '700 22px Fredoka, "Segoe UI", sans-serif';
-    ctx.fillText('تدريب  ◆ ' + G.cps.length, px + pw / 2, 33);
+    ctx.fillText('تدريب', px + pw - 16, 33);
+    // checkpoint counter: green diamond + number (same marker as in the world)
+    ctx.save(); ctx.translate(px + 22, 32); ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#7dff5a'; ctx.strokeStyle = '#0a4a26'; ctx.lineWidth = 2;
+    ctx.fillRect(-6, -6, 12, 12); ctx.strokeRect(-6, -6, 12, 12); ctx.restore();
+    ctx.direction = 'ltr'; ctx.textAlign = 'left'; ctx.fillStyle = '#062a44';
+    ctx.fillText(String(G.cps.length), px + 36, 33);
     for (i = 0; i < rows.length; i++) {
       var ry = 58 + i * 36, kx = px + pw - 12 - 30;
       drawKeycap(kx, ry, rows[i][0]);

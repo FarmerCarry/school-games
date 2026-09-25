@@ -58,7 +58,7 @@
   function skinReq(s) {
     var u = s.unlock;
     if (u.t === 'free') return '';
-    if (u.t === 'mass') return 'اوصل إلى كتلة ' + u.v;
+    if (u.t === 'mass') return 'اكبَر حتى الحجم ' + u.v;
     return u.txt;
   }
   function arenaUnlocked(i) { return i === 0 || stats['arena' + (i + 1)] >= 1; }
@@ -159,7 +159,7 @@
     o.hate = AR.hate; o.spd = AR.spd;
     o.cap = AR.caps[0] + (AR.caps[1] - AR.caps[0]) * Math.pow(Math.random(), 1.7);
     o.cells.length = 0; o.alive = true; o.lastEater = null;
-    o.ai.next = T + rand(0, 0.3); o.ai.splitCD = T + rand(3, 8); o.ai.food = -1;
+    o.ai.next = T + rand(0, 0.3); o.ai.splitCD = T + rand(3, 8); o.ai.food = -1; o.ai.hunter = Math.random();
     var p = safeSpot(m * 1.2);
     newCell(o, p.x, p.y, m);
     o.tx = p.x; o.ty = p.y; o.mass = m;
@@ -257,7 +257,7 @@
     ownerCenter(o, tmpC);
     var cx = tmpC.x, cy = tmpC.y, me = tmpC.big, myM = me.m, myR = me.r;
     var vis = 360 + myR * 3 + s * 240;
-    var fx = 0, fy = 0, threat = 0, prey = null, pScore = 0, preyD = 0, i, dx, dy, dist, edge, w;
+    var fx = 0, fy = 0, threat = 0, prey = null, pScore = 0, preyD = 0, i, dx, dy, dist, edge, w, avx = 0, avy = 0;
     for (i = 0; i < cells.length; i++) {
       var c = cells[i]; if (c.o === o) continue;
       dx = c.x - cx; dy = c.y - cy; dist = Math.sqrt(dx * dx + dy * dy) || 1; edge = dist - c.r - myR;
@@ -271,7 +271,11 @@
           if (w > threat) threat = w;
         }
       } else if (myM > c.m * 1.3 && c.m > 9) {
-        if (c.o === player && T < player.shield) continue;
+        if (c.o === player && (T < player.shield || o.ai.hunter > huntMul())) {
+          // not hunting the player yet: politely steer around them
+          if (edge < 80) { avx -= dx / dist; avy -= dy / dist; }
+          continue;
+        }
         var sc = c.m / (Math.max(0, edge) + 70) * (c.o === player ? o.hate : 1);
         if (sc > pScore) { pScore = sc; prey = c; preyD = edge; }
       }
@@ -291,13 +295,13 @@
 
     if (threat > 0.12 - s * 0.06) {
       var fl = Math.sqrt(fx * fx + fy * fy) || 1;
-      o.tx = cx + fx / fl * 600; o.ty = cy + fy / fl * 600;
+      o.tx = cx + fx / fl * 600; o.ty = cy + fy / fl * 600; o.ai.mode = 'flee';
       return;
     }
     if (prey && Math.random() < 0.5 + o.aggro * 0.5) {
       var lead = 0.15 + s * 0.2;
-      o.tx = prey.x + prey.vx * lead; o.ty = prey.y + prey.vy * lead;
-      if (o.cells.length <= 2 && myM >= MIN_SPLIT && myM / 2 > prey.m * 1.3 && preyD < launchDist(myM / 2) * 0.85 &&
+      o.tx = prey.x + prey.vx * lead; o.ty = prey.y + prey.vy * lead; o.ai.mode = prey.o === player ? 'hunt' : 'prey';
+      if (o.cells.length <= 2 && myM >= MIN_SPLIT && (prey.o !== player || huntMul() >= 1) && myM / 2 > prey.m * 1.3 && preyD < launchDist(myM / 2) * 0.85 &&
           T > o.ai.splitCD && threat < 0.02 && Math.random() < o.aggro) {
         splitOwner(o, o.tx, o.ty);
         o.ai.splitCD = T + rand(6, 11) - o.aggro * 3;
@@ -305,9 +309,24 @@
       return;
     }
     var f = findFood(o, cx, cy, 260 + myR);
-    if (f >= 0) { o.tx = pX[f]; o.ty = pY[f]; return; }
-    if (T > o.ai.wT) { o.ai.wx = rand(300, WS - 300); o.ai.wy = rand(300, WS - 300); o.ai.wT = T + 4; }
-    o.tx = o.ai.wx; o.ty = o.ai.wy;
+    if (f >= 0) { o.tx = pX[f]; o.ty = pY[f]; o.ai.mode = 'food'; }
+    else {
+      o.ai.mode = 'wander';
+      if (T > o.ai.wT) { o.ai.wx = rand(300, WS - 300); o.ai.wy = rand(300, WS - 300); o.ai.wT = T + 4; }
+      o.tx = o.ai.wx; o.ty = o.ai.wy;
+    }
+    if (avx || avy) {
+      var al = Math.sqrt(avx * avx + avy * avy) || 1;
+      o.tx = cx + avx / al * (200 + myR); o.ty = cy + avy / al * (200 + myR);
+    }
+  }
+  // Grace period: at the start of a round bots mostly ignore the player, then hunt them more and more.
+  // Longest in the first (easy) arena so new players get a calm, fun first half-minute.
+  var GRACE = [40, 20, 10];
+  function huntMul() {
+    if (!round) return 1;
+    var k = clamp((T - round.t0 - 2) / GRACE[arenaIdx], 0, 1);
+    return k * k;
   }
   function findFood(o, cx, cy, R) {
     var prev = o.ai.food;
@@ -824,7 +843,7 @@
     var nb = round.maxMass > round.prevBest && round.maxMass > 30;
     $('newBest').hidden = !nb;
     if (nb) { confettiBurst(); setTimeout(function () { if (state === 'over') sfx.fanfare(); }, 250); }
-    $('oBest').textContent = 'أفضل كتلة في ' + AR.name + ': ' + Kit.fmt(stats['best' + (arenaIdx + 1)]);
+    $('oBest').textContent = 'أفضل حجم في ' + AR.name + ': ' + Kit.fmt(stats['best' + (arenaIdx + 1)]);
     var un = $('oUnlocks'); un.innerHTML = '';
     var list = round.newSkins.slice(0, 4);
     list.forEach(function (sk) {
@@ -844,10 +863,10 @@
     if (s) {
       var left = s.unlock.v - Math.floor(round.maxMass);
       if (left > 0 && round.maxMass >= s.unlock.v * 0.7) lines.push('كدت تصل! ينقصك ' + left + ' فقط لتفتح «' + esc(s.name) + '»');
-      else lines.push('اوصل إلى كتلة ' + s.unlock.v + ' لتفتح «' + esc(s.name) + '»');
+      else lines.push('اكبَر حتى الحجم ' + s.unlock.v + ' لتفتح «' + esc(s.name) + '»');
     }
     for (var i = 1; i < ARENAS.length; i++) {
-      if (!arenaUnlocked(i) && ARENAS[i].need.a === arenaIdx) { lines.push('اوصل إلى ' + ARENAS[i].need.m + ' هنا لتفتح ' + ARENAS[i].name); break; }
+      if (!arenaUnlocked(i) && ARENAS[i].need.a === arenaIdx) { lines.push('اكبَر حتى الحجم ' + ARENAS[i].need.m + ' هنا لتفتح ' + ARENAS[i].name); break; }
     }
     return lines.map(function (l) { return '<div>' + l + '</div>'; }).join('');
   }
@@ -897,7 +916,7 @@
       b.className = 'arena' + (i === arenaIdx ? ' sel' : '') + (un ? '' : ' locked');
       b.style.setProperty('--ac', a.theme.border);
       var best = stats['best' + (i + 1)];
-      var sub = un ? (best > 0 ? 'أفضل كتلة: ' + Kit.fmt(best) : 'جديدة! جرّبها') : '🔒 اوصل إلى ' + a.need.m + ' في ' + ARENAS[a.need.a].name;
+      var sub = un ? (best > 0 ? 'أفضل حجم: ' + Kit.fmt(best) : 'جديدة! جرّبها') : '🔒 اكبَر حتى ' + a.need.m + ' في ' + ARENAS[a.need.a].name;
       b.innerHTML = '<span class="adot">' + (un ? (i + 1) : '🔒') + '</span><span class="atx"><b>' + a.name +
         ' <span class="diff">' + a.diff + '</span></b><small>' + sub + '</small></span>';
       b.addEventListener('click', function () {
@@ -1238,6 +1257,13 @@
       g.globalAlpha = Math.min(1, (1.7 - tp) * 3);
       var ty = state === 'over' ? 40 : 180;
       text(g, t0.s, W / 2, ty, 46 * sc2, t0.col, 'center', 10);
+      if (t0.skin) {
+        // show the freshly unlocked skin right next to the text (at its start, since Arabic reads right-to-left)
+        var tw = g.measureText(t0.s).width, ir = 30 * sc2;
+        fake.t = realT; fake.phase = 3; fake.wob = 0.04; fake.sa = 0; fake.sq = 0; fake.rot = realT; fake.lx = 0; fake.ly = 0.2;
+        fake.blink = 0; fake.mouth = 0.4 + Math.sin(realT * 8) * 0.4; fake.skin = t0.skin; fake.pts = 32;
+        BB.drawBlob(g, W / 2 + tw / 2 + ir + 14, ty, ir, fake);
+      }
       g.globalAlpha = 1;
     }
     // confetti
@@ -1295,7 +1321,7 @@
     // ---- mass (top centre)
     var mass = Math.floor(player.alive ? player.mass : 0);
     g.fillStyle = 'rgba(25,30,62,0.55)'; rrect(g, W / 2 - 150, 10, 300, 60, 22); g.fill();
-    text(g, 'الكتلة ' + mass, W / 2, 41, 36, '#ffffff', 'center', 0);
+    text(g, 'الحجم ' + mass, W / 2, 41, 36, '#ffffff', 'center', 0);
     // rank chip
     if (player.alive) text(g, 'المركز ' + player.rank + ' من ' + lb.length, W / 2, 86, 20, '#ffffff', 'center', 5);
     // next skin progress
@@ -1320,7 +1346,9 @@
     }
     if (player.alive) {
       var vw = W / cam.z * k, vh = H / cam.z * k;
+      g.save(); g.beginPath(); g.rect(mx, my, ms, ms); g.clip();
       g.strokeStyle = 'rgba(40,50,90,0.6)'; g.lineWidth = 1.5; g.strokeRect(mx + cam.x * k - vw / 2, my + cam.y * k - vh / 2, vw, vh);
+      g.restore();
       for (i = 0; i < player.cells.length; i++) {
         var c = player.cells[i];
         g.beginPath(); g.arc(mx + c.x * k, my + c.y * k, Math.max(3.5, c.r * k), 0, TAU);
@@ -1418,13 +1446,14 @@
         while (state === 'play' && T - t0 < maxSec) {
           if (T >= nextT) {
             nextT = T + 0.2;
-            if (mode === 'naive') { ownerCenter(player, tmpC); var f = findFood(player, tmpC.x, tmpC.y, 400); if (f >= 0) { player.tx = pX[f]; player.ty = pY[f]; } }
+            if (mode === 'still') { ownerCenter(player, tmpC); player.tx = tmpC.x; player.ty = tmpC.y; }
+            else if (mode === 'naive') { ownerCenter(player, tmpC); var f = findFood(player, tmpC.x, tmpC.y, 400); if (f >= 0) { player.tx = pX[f]; player.ty = pY[f]; } }
             else { player.smart = 0.5; player.aggro = 0.3; player.hate = 1; think(player); }
           }
           sim(1 / 60); fxUpdate(1 / 60); updateCam(1 / 60);
           if (player.mass > peak) peak = player.mass;
         }
-        out.push({ t: Math.round(T - t0), peak: Math.round(peak), eaten: round.eaten, rank: round.bestRank, dead: state !== 'play', by: round.killer ? Math.round(round.killer.mass) : 0 });
+        out.push({ t: Math.round(T - t0), peak: Math.round(peak), eaten: round.eaten, rank: round.bestRank, dead: state !== 'play', by: round.killer ? Math.round(round.killer.mass) + (round.killer.ai ? round.killer.ai.mode : '') : 0 });
         autoMode = null; state = 'play';
       }
       toMenu();

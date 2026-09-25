@@ -544,7 +544,7 @@
       }
       if (state === 'title' || state === 'skins') updateAttract(dt);
     } else if (state === 'over') {
-      overLock -= dt;
+      // (overLock is a real-time guard, see showOver)
       // world keeps animating slowly behind the results
       if (!player || !player.alive) world.step(dt * 0.5);
       handleEvents();
@@ -603,8 +603,28 @@
     if (!player.alive || !player.trail.length) { homeDir = null; return; }
     if (homeT > 0) return;
     homeT = 0.12;
-    var hc = PG.nearestOwn(world, player, 80);
-    homeDir = hc >= 0 ? { x: (hc % N) + 0.5, y: ((hc / N) | 0) + 0.5 } : null;
+    var hc = nearestHome(player, 90);
+    if (hc < 0) { homeDir = null; return; }
+    if (!homeDir) homeDir = { x: 0, y: 0 };
+    homeDir.x = (hc % N) + 0.5; homeDir.y = ((hc / N) | 0) + 0.5;
+  }
+  // allocation-free ring search for the closest own (non-trail) cell
+  function nearestHome(a, maxR) {
+    var own = world.owner, tr = world.trail, id = a.id, cx = a.cx, cy = a.cy;
+    for (var r = 1; r <= maxR; r++) {
+      var best = -1, bd = 1e9;
+      for (var k = -r; k <= r; k++) {
+        for (var j = 0; j < 4; j++) {
+          var x = j === 0 || j === 1 ? cx + k : (j === 2 ? cx - r : cx + r);
+          var y = j === 0 ? cy - r : j === 1 ? cy + r : cy + k;
+          if (x < 0 || y < 0 || x >= N || y >= N) continue;
+          var c = y * N + x;
+          if (own[c] === id && !tr[c]) { var d = (x - cx) * (x - cx) + (y - cy) * (y - cy); if (d < bd) { bd = d; best = c; } }
+        }
+      }
+      if (best >= 0) return best;
+    }
+    return -1;
   }
 
   function updateCamera(dt) {
@@ -827,7 +847,7 @@
     if (extra) row(player, pRank, y + 42 + rows * rowH);
 
     // timer (top-center)
-    var tl = Math.max(0, timeLeft), m = Math.floor(tl / 60), s = Math.floor(tl % 60);
+    var tl = Math.ceil(Math.max(0, timeLeft)), m = Math.floor(tl / 60), s = tl % 60;
     var ts = m + ':' + (s < 10 ? '0' : '') + s;
     var low = tl <= 10;
     var pulse = low ? 1 + Math.max(0, Math.sin(clock * 12)) * 0.08 : 1;
@@ -1053,11 +1073,11 @@
     showItemInfo(list[cur], true);
   }
   function showItemInfo(it, ok) {
-    $('skInfo').innerHTML = ok ? '<b>' + it.name + '</b>' : '<b>' + it.name + '</b> — مقفل: ' + isoHtml(PG.reqText(it.req)) + ' <span style="opacity:.6">' + ltrHtml('(' + progressText(it.req) + ')') + '</span>';
+    $('skInfo').innerHTML = ok ? '<b>' + it.name + '</b>' : '<b>' + it.name + '</b> — مقفل: ' + isoHtml(PG.reqText(it.req)) + ' <span style="opacity:.6">(' + isoHtml(progressText(it.req)) + ')</span>';
   }
   function progressText(r) {
     var v = statOf(r.t);
-    return (r.t === 'best' ? v.toFixed(1) + '%' : v) + ' / ' + r.v + (r.t === 'best' ? '%' : '');
+    return (r.t === 'best' ? v.toFixed(1) + '%' : v) + ' من ' + r.v + (r.t === 'best' ? '%' : '');
   }
   function drawItemIcon(cv, tab, i) {
     var c = cv.getContext('2d');
@@ -1094,7 +1114,7 @@
   /* ============================================================ game over UI */
   function showOver() {
     state = 'over';
-    overLock = 0.6;
+    overLock = performance.now() + 600;   // ignore replay keys for 0.6 s so a held key does not skip the results
     var r = result, en = r.en;
     var head = $('oHead'), why = $('oWhy');
     if (en.reason === 'death') {
@@ -1211,7 +1231,7 @@
       if (c === 'KeyP' || c === 'Escape' || go) { e.preventDefault(); resumeGame(); }
       else if (c === 'KeyR') { e.preventDefault(); startMatch(); }
     } else if (state === 'over') {
-      if (overLock > 0) return;
+      if (performance.now() < overLock) return;
       if (go || c === 'KeyR') { e.preventDefault(); startMatch(); }
       else if (c === 'Escape') { e.preventDefault(); toTitle(); }
     } else if (state === 'skins') {

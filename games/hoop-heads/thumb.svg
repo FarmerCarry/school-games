@@ -111,7 +111,7 @@
 
   <!-- logo -->
   <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
-    <text x="200" y="382" font-size="50" fill="#1d1235" stroke="#1d1235" stroke-width="14" stroke-linejoin="round">سلة الرؤوس</text>
-    <text x="200" y="382" font-size="50" fill="#ffd23f">سلة الرؤوس</text>
+    <text x="200" y="376" font-size="50" fill="#1d1235" stroke="#1d1235" stroke-width="14" stroke-linejoin="round">سلة الرؤوس</text>
+    <text x="200" y="376" font-size="50" fill="#ffd23f">سلة الرؤوس</text>
   </g>
 </svg>

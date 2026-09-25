@@ -618,6 +618,12 @@
       if (G.done[q.id]) continue;
       if (q.val(s) >= q.need) completeQuest(q);
     }
+    // All quests done: celebrate once, as soon as the player is back in the world (not in the backpack/pause).
+    if (!G.masterShown && G.mode === 'play' && starCount() >= qs.length) {
+      G.masterShown = true;
+      var slot = G.slot;
+      setTimeout(function () { if (G.slot === slot) showMaster(); }, 1800);
+    }
   }
   function starCount() { var n = 0; for (var k in G.done) if (G.done[k]) n++; return n; }
   function completeQuest(q) {
@@ -630,7 +636,6 @@
     BW.SKINS.forEach(function (sk, i) {
       if (sk.stars > before && sk.stars <= meta.totalStars) G.toasts.push({ title: 'زيّ جديد: ' + sk.name + '!', text: 'اختره من الشاشة الرئيسية', icon: 0, skin: i, t: 0, dur: 3.4 });
     });
-    if (starCount() >= questsFor(G.gm).length && !G.masterShown) { G.masterShown = true; setTimeout(showMaster, 2600); }
   }
 
   // --------------------------------------------------------- world setup
@@ -879,6 +884,7 @@
     ctx.imageSmoothingEnabled = false;
     drawEmissive(ctx, cx, cy, env);
     drawParticles(ctx, cx, cy, true);
+    drawGuide(ctx, cx, cy);
     drawTexts(ctx, cx, cy);
     if ((G.mode === 'play' || G.mode === 'inv' || G.mode === 'pause') ) { drawCursor(ctx, cx, cy); drawHUD(ctx); }
     drawConfetti(ctx);
@@ -962,7 +968,6 @@
       ctx.fillStyle = 'rgba(255,255,255,' + (k * 0.5) + ')';
       ctx.fillRect(sx(placePop.x, cx) - k * 3, sx(placePop.y, cy) - k * 3, TS + k * 6, TS + k * 6);
     }
-    drawGuide(ctx, cx, cy);
     drawParticles(ctx, cx, cy, false);
   }
   // ---- beginner guide: arrow to the nearest tree while "chop a tree" is the current quest
@@ -1003,14 +1008,14 @@
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,220,60,' + (0.55 + Math.sin(t * 8) * 0.35) + ')';
     ctx.strokeRect(x - 1, y - 1, TS + 2, TS + 2);
     // down arrow above the tile
-    var ax = x + TS / 2, ay = y - 12 - bob;
+    var ax = x + TS / 2, ay = y - 10 - bob;
     ctx.fillStyle = '#1d2340';
-    ctx.beginPath(); ctx.moveTo(ax - 17, ay - 22); ctx.lineTo(ax + 17, ay - 22); ctx.lineTo(ax, ay + 3); ctx.closePath(); ctx.fill();
-    ctx.fillRect(ax - 8, ay - 44, 16, 24);
+    ctx.beginPath(); ctx.moveTo(ax - 22, ay - 28); ctx.lineTo(ax + 22, ay - 28); ctx.lineTo(ax, ay + 4); ctx.closePath(); ctx.fill();
+    ctx.fillRect(ax - 10, ay - 56, 20, 30);
     ctx.fillStyle = '#ffd23a';
-    ctx.beginPath(); ctx.moveTo(ax - 12, ay - 20); ctx.lineTo(ax + 12, ay - 20); ctx.lineTo(ax, ay - 2); ctx.closePath(); ctx.fill();
-    ctx.fillRect(ax - 5, ay - 41, 10, 22);
-    txt(ctx, 'اقطعها!', ax, ay - 52, 18, '#ffe066', 'center');
+    ctx.beginPath(); ctx.moveTo(ax - 16, ay - 25); ctx.lineTo(ax + 16, ay - 25); ctx.lineTo(ax, ay - 2); ctx.closePath(); ctx.fill();
+    ctx.fillRect(ax - 6, ay - 52, 12, 28);
+    txt(ctx, 'اقطعها!', ax, ay - 64, 22, '#ffe066', 'center');
   }
   function drawTexts(ctx, cx, cy) {
     var i;
@@ -1623,6 +1628,7 @@
     placeAt: function (x, y) { return placeBlock(G.sel, x, y); },
     craftId: function (id, n) { var r = BW.RECIPES.filter(function (r) { return r.out === id; })[0]; return r ? craft(r, n || 1) : 0; },
     surfaceY: surfaceY,
+    get guide() { return guide; },
     render: function () { render(); }, update: function (dt) { update(dt || 1 / 60); },
     B: B, I: I
   };

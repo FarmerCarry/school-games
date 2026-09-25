@@ -104,7 +104,8 @@
   function giveBall(m, p, quiet) {
     var b = m.ball;
     b.holder = p; b.state = 'held'; b.pts = 2; b.fire = false; b.dunk = false; b.touched = false; b.shooter = null; b.hidden = false;
-    p.protect = Math.max(p.protect, 0.7);
+    // a moment to make a move before the defender can knock it away (a bit longer for humans)
+    p.protect = Math.max(p.protect, p.ctrl === 'human' ? 1.15 : 0.7);
     if (p.ai) { p.ai.plan = null; p.ai.hold = 0; }
     if (!quiet && !m.demo) S.grab();
     m.lastShotBy = null;
@@ -279,6 +280,21 @@
     m.fx.burst(c.x, headY(c) - 20, { count: 12, colors: ['#ffd23f', '#fff'], speed: 260, life: 0.5, size: 6, gravity: 0 });
     if (!m.demo) { S.steal(); popup(m, 'خطف!', (c.x + o.x) / 2, headY(c) - 70, { color: '#5fd0ff', size: 42 }); }
     if (m.tip === 'steal' && o.ctrl === 'human') m.tipDone = true;
+  }
+
+  // Bumped into the carrier's back: bounce off with a bonk (no steal).
+  function bumpOff(m, c, o, ballSide) {
+    var dir = sgn(o.x - c.x);
+    o.vx = dir * 330; o.stealCd = 0.5;
+    o.sqx = 1.15; o.sqy = 0.88; c.sqx = 1.1; c.sqy = 0.92;
+    if (!m.demo) {
+      S.bonk();
+      if (ballSide) { if (o.ctrl === 'human') popup(m, 'أفلتت!', o.x, headY(o) - 70, { color: '#ffd23f', size: 28, life: 0.7 }); }
+      else if (o.ctrl === 'human' && (m.bumpHintT || 0) <= 0) {
+        m.bumpHintT = 2.5;
+        popup(m, 'اخطفها من الأمام!', o.x, headY(o) - 70, { color: '#ffd23f', size: 30, life: 1.0 });
+      }
+    }
   }
 
   /* -------------------------------------------------------- players step */
@@ -602,6 +618,16 @@
       if (!pl.started) tx = goal;
       var blocked = o.onGround && Math.abs(o.x - p.x) < 95 && sgn(o.x - p.x) === sA;
       if (blocked) ai.stuck += dt; else ai.stuck = Math.max(0, ai.stuck - dt);
+      // Pressure: a defender rushing in on the ball side -> pull up for a jump shot over them.
+      var odx = o.x - p.x;
+      var press = o.onGround && Math.abs(odx) < 160 && sgn(odx) === p.facing && o.vx * -sgn(odx) > 60 && p.protect < 0.25;
+      if (press && !pl.started && pl.kind !== 'drive' && p.onGround && !p.charging && Math.abs(p.x - hA.x) < 760 &&
+          Math.random() < dt * (3 + ai.lv * 3)) {
+        pl.kind = 'mid'; pl.started = true; pl.pull = 0.001;
+        ai.tp = Math.max(0.35, Math.min(0.99, SWEET + randn() * P.aimErr * zoneFor(p, hA) * 1.1));
+        scheduleJump(0, 0.45);
+      }
+      if (pl.pull) pl.pull += dt;
       if (pl.kind === 'drive') {
         var near = Math.abs(p.x - hA.x) < 230 + (p.jumpV - 700) * 0.35;
         if (p.onGround && (near || ai.stuck > 0.45 + P.react) && sgn(hA.x - p.x) === sA) { scheduleJump(0, 0.35); pl.dunkOk = Math.random() < P.dunkSkill; }
@@ -617,6 +643,7 @@
         if (pl.started) {
           tx = p.x;
           if (!p.charging && !wantShoot) wantShoot = true;
+          if (pl.pull && p.onGround && !p.charging && pl.pull < 0.3) wantShoot = false; // jump first, then shoot
           if (p.charging) {
             wantShoot = true;
             if (p.chargeDir > 0 && p.charge >= ai.tp) wantShoot = false;
@@ -688,7 +715,7 @@
   var TIPS = {
     shoot: { cpu: 'امسك S… واتركه عندما يكون المؤشر في الأخضر!', duo: 'امسك S أو ↓ واتركه في الأخضر!' },
     dunk: { cpu: 'اقترب من السلة، اقفز واضغط S = دانك!', duo: 'اقفز قرب السلة واضغط زر التصويب = دانك!' },
-    steal: { cpu: 'اصطدم بالخصم لتخطف الكرة منه!', duo: 'اصطدم بصاحب الكرة لتخطفها!' }
+    steal: { cpu: 'اركض نحو الخصم من الأمام لتخطف الكرة!', duo: 'اصطدم بصاحب الكرة من الأمام لتخطفها!' }
   };
   function updateTips(m, dt) {
     if (m.demo) return;
@@ -721,6 +748,7 @@
     m.flash = Math.max(0, m.flash - rdt * 1.5);
     m.shake.update(rdt);
     m.crowd = Math.max(0, m.crowd - rdt);
+    m.bumpHintT = Math.max(0, (m.bumpHintT || 0) - rdt);
 
     var a = m.players[0], b2 = m.players[1];
     [a, b2].forEach(function (p) { if (p.ctrl === 'human') readHuman(m, p); else aiUpdate(m, p, dt); });
@@ -768,7 +796,15 @@
           var toward = o.vx * -sgn(dx) > 140;
           var fromAbove = !o.onGround && o.vy > 0 && dy < -30;
           var air = !c.onGround && !o.onGround && o.vy < -150 && Math.abs(c.x - attackHoop(m, c).x) < 260;
-          if (toward || fromAbove || air) knockLoose(m, c, o);
+          // A ground steal only works from the ball side (in front of the dribbler).
+          // Charging into the carrier's back just bounces you off, so chasing is not a free win.
+          var ballSide = sgn(dx) === c.facing || c.charging;
+          // ...and even then a good dribbler sometimes keeps it (CPU ball security grows with level).
+          var keep = c.ai ? 0.33 + Math.min(2, c.ai.lv) * 0.1 : 0.45;
+          if (c.charging && c.onGround) keep *= 0.5;
+          if (fromAbove || air) knockLoose(m, c, o);
+          else if (toward && ballSide && Math.random() >= keep) knockLoose(m, c, o);
+          else if (toward) bumpOff(m, c, o, ballSide);
         }
       }
     } else if (m.phase === 'score') {

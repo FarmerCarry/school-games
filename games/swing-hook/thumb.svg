@@ -87,9 +87,9 @@
   <path d="M0 338 Q25 328 50 338 T100 338 T150 338 T200 338 T250 338 T300 338 T350 338 T400 338 L400 400 L0 400Z" fill="#8fd0ff"/>
   <path d="M0 348 Q25 338 50 348 T100 348 T150 348 T200 348 T250 348 T300 348 T350 348 T400 348 L400 400 L0 400Z" fill="url(#sea)"/>
   <!-- logo -->
-  <g font-family="'Arial Black', 'Segoe UI Black', 'Fredoka', Impact, sans-serif" font-weight="900" text-anchor="middle" transform="rotate(-5 200 356)">
-    <text x="200" y="378" font-size="56" textLength="350" lengthAdjust="spacingAndGlyphs" fill="#2a1747" stroke="#2a1747" stroke-width="16" stroke-linejoin="round">SWING HOOK</text>
-    <text x="200" y="372" font-size="56" textLength="350" lengthAdjust="spacingAndGlyphs" fill="#2a1747" stroke="#2a1747" stroke-width="16" stroke-linejoin="round">SWING HOOK</text>
-    <text x="200" y="372" font-size="56" textLength="350" lengthAdjust="spacingAndGlyphs" fill="#ffd21f">SWING <tspan fill="#ff4fa3">HOOK</tspan></text>
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl" transform="rotate(-5 200 340)">
+    <text x="200" y="366" font-size="56" fill="#2a1747" stroke="#2a1747" stroke-width="16" stroke-linejoin="round">الخطّاف الطائر</text>
+    <text x="200" y="360" font-size="56" fill="#2a1747" stroke="#2a1747" stroke-width="16" stroke-linejoin="round">الخطّاف الطائر</text>
+    <text x="200" y="360" font-size="56" fill="#ffd21f">الخطّاف <tspan fill="#ff4fa3">الطائر</tspan></text>
   </g>
 </svg>

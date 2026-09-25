@@ -10,7 +10,8 @@
 
   /* ------------------------------------------------------------ layout */
   var C = 62, BX = 392, BY = 34;             // board grid origin + cell size
-  var TC = 30, TY = 628, TX = [410, 640, 870]; // tray
+  var TC = 36, TY = 628, TX = [410, 640, 870]; // tray (cell size shrinks for 5-tall pieces)
+  function tcOf(sh) { return Math.min(TC, 146 / sh.h); }
   var LPX = 40, LPW = 300, RPX = 940, RPW = 300;
   var BOMB_BTN = { x: 120, y: 612, r: 46 }, SHUF_BTN = { x: 260, y: 612, r: 46 };
 
@@ -98,6 +99,11 @@
   function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function skin() { return Art.SKINS[save.skin]; }
+  // Arabic counted nouns: 3-10 take the plural, everything else the singular (kid-friendly simplification)
+  function cnt(n, one, few) { return n + ' ' + (n >= 3 && n <= 10 ? few : one); }
+  function pieces(n) { return cnt(n, 'قطعة', 'قطع'); }
+  function starsTxt(n) { return cnt(n, 'نجمة', 'نجوم'); }
+  function ptsTxt(n) { return cnt(n, 'نقطة', 'نقاط'); }
   function cellX(c) { return BX + c * C; }
   function cellY(r) { return BY + r * C; }
 
@@ -107,6 +113,12 @@
     ctx.textAlign = align || 'center';
     ctx.textBaseline = o.base || 'middle';
     ctx.direction = o.ltr ? 'ltr' : 'rtl';
+    if (o.max && ctx.measureText(s).width > o.max) {
+      // shrink the font (not squash) so long Arabic lines always fit their card
+      size = Math.max(10, Math.floor(size * o.max / ctx.measureText(s).width));
+      ctx.font = (o.w || 700) + ' ' + size + 'px Fredoka';
+      if (o.sw) o.sw = Math.min(o.sw, size * 0.25);
+    }
     if (o.stroke) { ctx.lineJoin = 'round'; ctx.lineWidth = o.sw || size * 0.2; ctx.strokeStyle = o.stroke; ctx.strokeText(s, x, y); }
     ctx.fillStyle = fill; ctx.fillText(s, x, y);
     ctx.direction = 'ltr';
@@ -153,7 +165,7 @@
     for (var i = 0; i < 3; i++) slots[i].fits = f.each[i];
   }
   function trayTL(i, sc) {
-    var p = run.tray[i]; sc = sc || TC;
+    var p = run.tray[i]; sc = sc || tcOf(p.shape);
     return { x: TX[i] - p.shape.w * sc / 2, y: TY - p.shape.h * sc / 2 };
   }
 
@@ -185,9 +197,9 @@
   function levelGoalText(lv) {
     var parts2 = [];
     if (lv.gems) parts2.push('اجمع الجواهر');
-    if (lv.score) parts2.push('اجمع ' + lv.score + ' نقطة');
+    if (lv.score) parts2.push('اجمع ' + ptsTxt(lv.score));
     var s = parts2.join(' و');
-    if (lv.moves) s += ' في ' + lv.moves + ' قطعة';
+    if (lv.moves) s += ' في ' + pieces(lv.moves);
     return s + '!';
   }
   function startLevel(idx) {
@@ -207,6 +219,7 @@
     var piece = run.tray[slot];
     var ev = Rules.place(run, slot, r, c);
     hintIdle = 0;
+    if (banner && banner.t < 2.0) banner.t = 2.0;
     var s = piece.shape, cx = 0, cy = 0;
     for (var k = 0; k < s.cells.length; k++) {
       var i = (r + s.cells[k][0]) * N + (c + s.cells[k][1]);
@@ -355,8 +368,8 @@
     var p = logical(e); lastPtr = p;
     if (e.button === 2) { if (drag) returnPiece(); return; }
     if (e.button !== 0) return;
-    if (drag && drag.sticky) { drop(p); return; }
-    if (drag) return;
+    // a held drag whose button-up was lost (released outside the frame) drops on the next click too
+    if (drag) { drop(p); return; }
     var s = slotAt(p);
     if (s >= 0) { startDrag(s, p); return; }
     if (inBtn(p, BOMB_BTN)) {
@@ -384,10 +397,14 @@
     drop(p);
   });
 
+  // leaving the frame mid-drag (alt-tab, click outside) puts the piece back instead of leaving it stuck to the cursor
+  window.addEventListener('blur', function () { if (drag && state === 'play') returnPiece(); });
+  window.addEventListener('pointercancel', function () { if (drag && state === 'play') returnPiece(); });
   function startDrag(s, p) {
     var tl = trayTL(s), sh = run.tray[s].shape;
-    var fx = clamp((p.x - tl.x) / (sh.w * TC), 0.1, 0.9), fy = clamp((p.y - tl.y) / (sh.h * TC), 0.1, 0.9);
-    drag = { slot: s, fx: fx, fy: fy, x: tl.x, y: tl.y, scale: TC / C, sticky: false, t0: time, sx: p.x, sy: p.y, r: -1, c: -1, valid: false, pv: null };
+    var tc = tcOf(sh);
+    var fx = clamp((p.x - tl.x) / (sh.w * tc), 0.1, 0.9), fy = clamp((p.y - tl.y) / (sh.h * tc), 0.1, 0.9);
+    drag = { slot: s, fx: fx, fy: fy, x: tl.x, y: tl.y, scale: tc / C, sticky: false, t0: time, sx: p.x, sy: p.y, r: -1, c: -1, valid: false, pv: null };
     moveDrag(p);
     drag.x = tl.x; drag.y = tl.y; // start from tray position, glide to cursor
     Snd.pick();
@@ -528,8 +545,8 @@
       var s = Art.SKINS[i];
       if (skinUnlocked(i)) continue;
       var have, need, label;
-      if (s.need.stars) { have = ts; need = s.need.stars; label = 'اجمع ' + need + ' نجمة في المغامرة'; }
-      else { have = best; need = s.need.best; label = 'سجّل ' + need + ' نقطة في الكلاسيكي'; }
+      if (s.need.stars) { have = ts; need = s.need.stars; label = 'اجمع ' + starsTxt(need) + ' في المغامرة'; }
+      else { have = best; need = s.need.best; label = 'سجّل ' + ptsTxt(need) + ' في الكلاسيكي'; }
       var pct = Math.round(Math.min(1, have / need) * 100);
       return '🔒 الشكل التالي «' + s.name + '»: ' + label + ' (' + Math.min(have, need) + ' / ' + need + ')' +
         '<div class="ub"><i style="width:' + pct + '%"></i></div>';
@@ -576,7 +593,7 @@
     $('winSub').textContent = 'المرحلة ' + (runLevel + 1) + ' مكتملة';
     $('winScore').textContent = Kit.fmt(run.score);
     $('winMoves').textContent = run.moves;
-    $('winHint').textContent = st < 3 ? 'للحصول على 3 نجوم: أنهِها بـ ' + lv.stars[0] + ' قطعة أو أقل' : 'أنت نجم! ★';
+    $('winHint').textContent = st < 3 ? 'للحصول على 3 نجوم: أنهِها بـ ' + pieces(lv.stars[0]) + ' أو أقل' : 'أنت نجم! ★';
     var last = runLevel + 1 >= LV.LEVELS.length;
     $('btnNext').innerHTML = last ? '🏁 الخريطة <span class="sg-key">Enter</span>' : 'التالي ◀ <span class="sg-key">Enter</span>';
     $('winUnlock').innerHTML = unlockBarHTML();
@@ -656,7 +673,7 @@
       }
       b.addEventListener('click', function () {
         b.blur();
-        if (!skinUnlocked(i)) { Snd.bad(); toast(s.need.stars ? 'اجمع ' + s.need.stars + ' نجمة في المغامرة لفتحه' : 'سجّل ' + s.need.best + ' نقطة في الكلاسيكي لفتحه'); return; }
+        if (!skinUnlocked(i)) { Snd.bad(); toast(s.need.stars ? 'اجمع ' + starsTxt(s.need.stars) + ' في المغامرة لفتحه' : 'سجّل ' + ptsTxt(s.need.best) + ' في الكلاسيكي لفتحه'); return; }
         save.skin = i; store.set('skin', i);
         if (save.seen.indexOf(i) < 0) { save.seen.push(i); store.set('seenSkins', save.seen); }
         Snd.pick(); buildTitle();
@@ -956,7 +973,7 @@
       if (!p || (drag && !drag.bomb && drag.slot === i)) continue;
       if (sl.appear <= 0) continue;
       var e = easeOutBack(clamp(sl.appear, 0, 1));
-      var sc = TC * (1 + 0.1 * sl.hover);
+      var sc = tcOf(p.shape) * (1 + 0.1 * sl.hover);
       var tl = trayTL(i, sc), x = tl.x + (1 - e) * 280, y = tl.y - Math.sin(time * 2.2 + i * 1.3) * 2.5 * sl.hover;
       var alpha = clamp(sl.appear * 2, 0, 1);
       if (sl.ret) {
@@ -999,7 +1016,7 @@
     if (fit < 1) ctx.scale(fit, fit);
     txt(b.text, 0, 6, b.size, 'rgba(0,0,0,0.35)', 'center', { stroke: 'rgba(0,0,0,0.35)', sw: b.size * 0.3 });
     txt(b.text, 0, 0, b.size, b.color, 'center', { stroke: '#1b0f3a', sw: b.size * 0.26 });
-    if (b.sub) txt(b.sub, 0, b.size * 0.78, b.size * 0.46, '#ffffff', 'center', { stroke: '#1b0f3a', sw: b.size * 0.14 });
+    if (b.sub) txt(b.sub, 0, b.size * 0.78, b.size * 0.46, '#ffffff', 'center', { stroke: '#1b0f3a', sw: b.size * 0.14, ltr: b.sub.charAt(0) === '+' });
     ctx.restore();
   }
   function drawBanner() {
@@ -1028,7 +1045,7 @@
     ctx.globalAlpha = t > 0.8 ? (1 - t) / 0.2 : 1;
     drawHand(hx, hy);
     ctx.globalAlpha = 1;
-    txt('اسحب قطعة إلى اللوحة!', BX + C * 4, 530, 30, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 8 });
+    txt('اسحب قطعة إلى اللوحة!', BX + C * 4, BY + C * 1.2, 36, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 9 });
   }
   function drawHand(x, y) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(-0.3);
@@ -1102,7 +1119,7 @@
     Art.rr(ctx, bx, 152, bw, 26, 13); ctx.fillStyle = '#120a33'; ctx.fill();
     if (k > 0.02) { Art.rr(ctx, bx + bw * (1 - k), 152, bw * k, 26, 13); ctx.fillStyle = '#ff8a4f'; ctx.fill(); }
     ctx.lineWidth = 3; ctx.strokeStyle = '#1b0f3a'; Art.rr(ctx, bx, 152, bw, 26, 13); ctx.stroke();
-    txt('بعد ' + Math.max(0, run.nextGift - run.score) + ' نقطة', LPX + LPW / 2, 208, 22, '#cfc8ff', 'center');
+    txt('بعد ' + ptsTxt(Math.max(0, run.nextGift - run.score)), LPX + LPW / 2, 208, 22, '#cfc8ff', 'center');
     card(LPX, 266, LPW, 110);
     txt('الصفوف المفجّرة', LPX + LPW / 2, 296, 22, '#cfc8ff', 'center');
     txt(String(run.linesTotal), LPX + LPW / 2, 342, 44, '#ffffff', 'center', { ltr: true, stroke: '#1b0f3a', sw: 8 });
@@ -1170,7 +1187,7 @@
       }
       var nextT = st === 3 ? run.level.stars[0] : st === 2 ? run.level.stars[1] : 0;
       txt('القطع المستخدمة: ' + run.moves, cx, 470, 21, '#ffffff', 'center');
-      if (nextT) txt('لتبقى ' + st + ' نجوم: حتى ' + nextT, cx, 498, 18, '#ffe38a', 'center');
+      if (nextT) txt((st === 3 ? '3 نجوم' : 'نجمتان') + ' إذا فزت بـ ' + pieces(nextT) + ' أو أقل', cx, 498, 18, '#ffe38a', 'center', { max: RPW - 24 });
       else txt('أكمل الهدف لتفوز!', cx, 498, 18, '#ffe38a', 'center');
       return;
     }

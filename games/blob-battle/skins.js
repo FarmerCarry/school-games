@@ -356,7 +356,7 @@
     { id: 'checker', name: 'شطرنج', color: '#2fb5ff', face: 'eyes', tex: 'checker', roll: 1, unlock: { t: 'stat', k: 'maxTime', v: 420, txt: 'ابقَ حيًّا 7 دقائق' } },
     { id: 'lava', name: 'حِمَم', color: '#8a2414', face: 'eyes', tex: 'lava', unlock: { t: 'stat', k: 'arena3', v: 1, txt: 'افتح ساحة البركان' } },
     { id: 'candy', name: 'مصّاصة', color: '#ff3b5c', face: 'eyes', tex: 'candy', roll: 1, unlock: { t: 'stat', k: 'kingTime', v: 60, txt: 'ابقَ الأول لمدة دقيقة' } },
-    { id: 'panda', name: 'باندا', color: '#e8ecf2', face: 'panda', tex: 'panda', unlock: { t: 'stat', k: 'bestA3', v: 1000, txt: 'اوصل إلى 1000 في ساحة البركان' } }
+    { id: 'panda', name: 'باندا', color: '#e8ecf2', face: 'panda', tex: 'panda', unlock: { t: 'stat', k: 'bestA3', v: 1000, txt: 'اكبَر حتى الحجم 1000 في ساحة البركان' } }
   ];
   BB.SKIN_BY_ID = {};
   BB.SKINS.forEach(function (s, i) { s.index = i; BB.SKIN_BY_ID[s.id] = s; });

@@ -8,7 +8,7 @@
   var PARAMS = {
     easy: { think: 0.45, bounces: 0, samples: 0, aimErr: 0.13, react: 0.45, dodge: 0.2, maxBalls: 2, crates: false, turn: 0.7, speed: 0.78, range: 460, fireGap: 1.0, validate: 0.4 },
     medium: { think: 0.25, bounces: 1, samples: 40, aimErr: 0.055, react: 0.26, dodge: 0.5, maxBalls: 3, crates: true, turn: 0.88, speed: 0.95, range: 700, fireGap: 0.55, validate: 0.85 },
-    hard: { think: 0.14, bounces: 2, samples: 60, aimErr: 0.025, react: 0.14, dodge: 0.8, maxBalls: 4, crates: true, turn: 1, speed: 1, range: 900, fireGap: 0.32, validate: 1 }
+    hard: { think: 0.16, bounces: 1, samples: 56, aimErr: 0.04, react: 0.2, dodge: 0.6, maxBalls: 3, crates: true, turn: 1, speed: 1, range: 850, fireGap: 0.42, validate: 1 }
   };
 
   var OUT = { fwd: 0, turn: 0, fire: false };

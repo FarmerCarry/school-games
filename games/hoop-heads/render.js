@@ -256,6 +256,7 @@
     bgKey = key;
     return bgCanvas;
   }
+  HH.resetBg = function () { bgKey = ''; }; // redraw the cached court once web fonts are ready
   HH.drawCourtPreview = function (c, courtId, w, h) {
     c.save(); c.scale(w / W, h / H); (COURT_DRAW[courtId] || COURT_DRAW.street)(c); c.restore();
   };

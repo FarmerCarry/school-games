@@ -24,16 +24,16 @@
   // Tournament cups. lv = AI level of each of the 5 opponents; boss = last opponent.
   HH.CUPS = [
     { id: 'b', name: 'الكأس البرونزية', short: 'البرونزية', color: '#e08a4a', lv: [0, 0.35, 0.7, 1.0, 1.3], boss: 'melon', reward: 120, need: null },
-    { id: 's', name: 'الكأس الفضية', short: 'الفضية', color: '#c9d3e6', lv: [1.0, 1.35, 1.7, 2.0, 2.3], boss: 'blaze', reward: 250, need: 'b' },
-    { id: 'g', name: 'الكأس الذهبية', short: 'الذهبية', color: '#ffc93a', lv: [2.0, 2.3, 2.6, 2.9, 3.2], boss: 'legend', reward: 500, need: 's' }
+    { id: 's', name: 'الكأس الفضية', short: 'الفضية', color: '#c9d3e6', lv: [0.7, 0.95, 1.2, 1.45, 1.7], boss: 'blaze', reward: 250, need: 'b' },
+    { id: 'g', name: 'الكأس الذهبية', short: 'الذهبية', color: '#ffc93a', lv: [1.4, 1.7, 2.0, 2.3, 2.6], boss: 'legend', reward: 500, need: 's' }
   ];
 
   // AI tuning at integer levels 0..3; fractional levels interpolate.
   var AI = [
-    { react: 0.55, aimErr: 2.2, spd: 0.68, block: 0.06, steal: 0.12, dunk: 0.15, jumpShot: 0.1, dunkSkill: 0.4 },
+    { react: 0.6, aimErr: 3.4, spd: 0.64, block: 0.05, steal: 0.1, dunk: 0.12, jumpShot: 0.1, dunkSkill: 0.4 },
     { react: 0.32, aimErr: 1.25, spd: 0.84, block: 0.25, steal: 0.35, dunk: 0.32, jumpShot: 0.2, dunkSkill: 0.7 },
-    { react: 0.2, aimErr: 0.8, spd: 0.95, block: 0.45, steal: 0.6, dunk: 0.45, jumpShot: 0.35, dunkSkill: 0.85 },
-    { react: 0.12, aimErr: 0.5, spd: 1.02, block: 0.65, steal: 0.8, dunk: 0.55, jumpShot: 0.45, dunkSkill: 0.95 }
+    { react: 0.2, aimErr: 0.95, spd: 0.95, block: 0.36, steal: 0.6, dunk: 0.45, jumpShot: 0.35, dunkSkill: 0.85 },
+    { react: 0.14, aimErr: 0.7, spd: 1.0, block: 0.5, steal: 0.75, dunk: 0.55, jumpShot: 0.45, dunkSkill: 0.95 }
   ];
   HH.aiParams = function (lv) {
     lv = Math.max(0, Math.min(3.4, lv));

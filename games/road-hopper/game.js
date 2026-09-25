@@ -905,6 +905,7 @@
     var now = performance.now(), rdt = Math.min(0.05, (now - lastR) / 1000);
     lastR = now;
     if (decoDirty) rebuildDeco();
+    bestSign.visible = !titleLike(); // on the menu it would sit half-hidden under the missions box
     applyPlayer();
     applyCamera();
     renderer.render(scene, cam);
@@ -935,6 +936,7 @@
     var el = document.createElement('div');
     el.className = 'pop ' + (cls || '');
     el.textContent = text;
+    if (!/[\u0600-\u06ff]/.test(text)) el.dir = 'ltr'; // "+5" must not turn into "5+"
     el.style.left = ((_v.x + 1) / 2 * 100) + '%';
     el.style.top = ((1 - _v.y) / 2 * 100) + '%';
     var box = $('pops');
@@ -989,6 +991,7 @@
     if (state !== 'title') return;
     A.unlock();
     state = 'play';
+    if (!P.hop && !P.log) { P.y = 0; P.jump = 0; } // the title idle-hop could leave the critter floating
     showScreen(null);
     $('hud').hidden = false;
     $('hint').hidden = started;

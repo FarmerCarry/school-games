@@ -302,6 +302,13 @@
         var s = WS.goalCheck(b);
         if (s >= 0) { onGoal(s, b); break; }
         if (b.roofT > 1.1) { poofBall(b); }
+        // a ball nobody reaches for a while hops back into play
+        if (Math.abs(b.vx) + Math.abs(b.vy) < 25 && b.y + b.r > G - 3) b.stillT += dt; else b.stillT = 0;
+        if (b.stillT > 4.5) {
+          b.stillT = 0; b.vy = -620; b.vx = (W / 2 - b.x) * 0.35 + rnd(-60, 60);
+          stars(b.x, b.y, 8, ['#fff', '#ffd23f']); S.boing(); dust(b.x, G, 4);
+          popup('هوب!', b.x, b.y - 70, '#fff', 32);
+        }
       }
       for (i = 0; i < world.players.length; i++) { var p = world.players[i]; if (!isFinite(p.x) || !isFinite(p.y)) p.reset(); }
       hypeTarget();
@@ -659,7 +666,7 @@
       for (var side = 0; side < 2; side++) {
         var hx = HOMES[side][0], hy = 372 + Math.sin(T * 6 + side) * 5;
         if (m.mode === '2p') drawKeyBubble(hx, hy, [side === 0 ? 'W' : '↑'], side === 0 ? 'اللاعب 1' : 'اللاعب 2');
-        else if (side === 0) drawKeyBubble(hx, hy, ['W', 'مسافة'], 'أنت! اضغط');
+        else if (side === 0) drawKeyBubble(hx, hy, ['W', 'أو', 'مسافة'], 'أنت! اضغط');
         else drawKeyBubble(hx, hy, null, 'الكمبيوتر');
       }
       ctx.globalAlpha = 1;
@@ -711,9 +718,14 @@
     if (keys) {
       var kx = x + kw / 2 - 3;   // keys read left-to-right physically; start from the right for RTL grouping
       var kxs = [];
+      ctx.font = '700 19px Fredoka';
       for (i = 0; i < keys.length; i++) { var w2 = Math.max(34, ctx.measureText(keys[i]).width + 20); kxs.push(w2); }
       kx = x - kw / 2 + 3;
-      for (i = 0; i < keys.length; i++) { ART.keycap(ctx, keys[i], kx + kxs[i] / 2, y - 24, 32); kx += kxs[i] + 6; }
+      for (i = 0; i < keys.length; i++) {
+        if (keys[i] === 'أو') ART.text(ctx, keys[i], kx + kxs[i] / 2, y - 22, { size: 18, color: OUT });
+        else ART.keycap(ctx, keys[i], kx + kxs[i] / 2, y - 24, 32);
+        kx += kxs[i] + 6;
+      }
     }
     ctx.restore();
   }
@@ -1228,7 +1240,8 @@
         if (m.behind >= 2) unlock('comeback');
         unlock('win1');
       } else {
-        oHead.textContent = pick(['كدت تفوز!', 'خسارة...', 'حاول مجددًا!']);
+        var close = m.score[0] >= m.target - 1;
+        oHead.textContent = close ? 'كدت تفوز!' : pick(['خسارة... هذه المرة!', 'حاول مجددًا!', 'الجولة القادمة لك!']);
         oHead.style.color = '#ff8fb1';
         coins += 3;
         lines.push(m.score[0] >= m.target - 1 ? 'كنت قريبًا جدًا! هدف واحد فقط!' : 'لا بأس! كل مباراة تجعلك أقوى');

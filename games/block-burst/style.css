@@ -25,7 +25,7 @@ button { font-family: var(--sg-font); }
 
 /* ------------------------------------------------------------ TITLE */
 #scrTitle { display: flex; flex-direction: column; align-items: center; }
-.logo { position: relative; margin-top: 8px; text-align: center; line-height: 1; animation: logoIn 0.6s cubic-bezier(.2,1.6,.4,1) both; }
+.logo { position: relative; margin-top: 20px; text-align: center; line-height: 1; animation: logoIn 0.6s cubic-bezier(.2,1.6,.4,1) both; }
 .logo-blocks { display: flex; justify-content: center; gap: 6px; height: 56px; margin-bottom: -6px; }
 .logo-blocks i { display: block; width: 52px; height: 52px; background-size: 100% 100%; filter: drop-shadow(0 5px 0 rgba(0,0,0,0.35)); animation: blockBob 1.6s ease-in-out infinite; }
 .logo-blocks .b1 { transform: rotate(-10deg); animation-delay: 0s; }

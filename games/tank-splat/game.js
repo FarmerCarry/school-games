@@ -9,6 +9,7 @@
   var MAX_BALLS = 5, FIRE_CD = 0.13, BALL_LIFE = 7, BALL_BOUNCES = 6;
   var GIANT_R = 15, GIANT_SPEED = 245;
   var HIT_R = 17;
+  var OWN_GRACE = 0.3; // s: a brand-new ball can't splat its own tank (point-blank wall shots)
   var CORNERS = [[15, 15], [15, -15], [-15, 15], [-15, -15]];
 
   var CONTROLS = [
@@ -257,12 +258,37 @@
       var alive = 0, last = null, humansAlive = 0;
       G.tanks.forEach(function (t) { if (t.alive) { alive++; last = t; if (t.human) humansAlive++; } });
       if (alive <= 1) {
-        G.endT += realDt;
-        if (G.endT > 1.0) finishRound(last);
-      } else if (!G.demo && humansAlive === 0) {
+        // short wait (in game time, so the slow-motion splat plays out) to catch a trade
+        G.endT += dt;
+        if (G.endT > 0.35) finishRound(last);
+      } else if (!G.demo && humansAlive === 0 && !G.ffing) {
         G.spectate += realDt;
-        if (G.spectate > 9 || G.skipSpectate || Kit.keys.anyPressed(['Space', 'Enter'])) finishRound(null);
+        if (G.spectate > 9 || G.skipSpectate || (G.spectate > 0.6 && Kit.keys.anyPressed(['Space', 'Enter']))) fastForward();
       }
+    }
+
+    // All humans are out: play the rest of the round instantly (silently) so the
+    // computer tanks still earn their point fairly. Skipping must not turn a lost
+    // round into a draw (that would make 3-star wins free).
+    function fastForward() {
+      var wasOn = S.enabled; S.enabled = false; G.ffing = true;
+      var step = 1 / 60, alive = 2, last = null;
+      for (var n = 0; n < 60 * 25; n++) {
+        playStep(step, 0);
+        alive = 0; last = null;
+        for (var i = 0; i < G.tanks.length; i++) if (G.tanks[i].alive) { alive++; last = G.tanks[i]; }
+        if (alive <= 1) break;
+      }
+      // let paint already in the air land (a last-second double splat is a draw)
+      for (var k = 0; k < 18 && alive === 1 && G.balls.length; k++) {
+        playStep(step, 0);
+        alive = 0; last = null;
+        for (var j = 0; j < G.tanks.length; j++) if (G.tanks[j].alive) { alive++; last = G.tanks[j]; }
+      }
+      G.ffing = false; S.enabled = wasOn; G.slow = 0; G.spectate = 0;
+      if (alive > 1) last = null;
+      S.splat();
+      finishRound(last);
     }
 
     // Tank collision: one centre circle plus four corner circles.
@@ -304,7 +330,7 @@
       var r = giant ? GIANT_R : BALL_R, sp = giant ? GIANT_SPEED : BALL_SPEED;
       var b = {
         x: t.x, y: t.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: r, owner: t,
-        life: BALL_LIFE, bounces: 0, maxB: giant ? 4 : BALL_BOUNCES, safe: true, dist: 0,
+        life: BALL_LIFE, age: 0, bounces: 0, maxB: giant ? 4 : BALL_BOUNCES, safe: true, dist: 0,
         color: t.pal.paint, sq: 0, sqA: 0, giant: giant
       };
       // travel from the tank centre to the muzzle, bouncing if the barrel is in a wall
@@ -347,10 +373,9 @@
       for (var i = 0; i < G.tanks.length; i++) {
         var t = G.tanks[i];
         if (!t.alive) continue;
-        if (t === b.owner && b.safe) continue;
+        if (t === b.owner && (b.safe || b.age < OWN_GRACE)) continue;
         var dx = b.x - t.x, dy = b.y - t.y, d = Math.hypot(dx, dy);
         if (t.shield > 0 && d < 30 + b.r) {
-          if (t === b.owner && b.safe) continue;
           // bounce off the shield bubble
           var nx = dx / (d || 1), ny = dy / (d || 1), dot = b.vx * nx + b.vy * ny;
           if (dot < 0) {
@@ -375,7 +400,7 @@
       for (var i = G.balls.length - 1; i >= 0; i--) {
         var b = G.balls[i];
         if (frozen) { b.life = Math.min(b.life, 0.25); }
-        b.life -= dt;
+        b.life -= dt; b.age += dt;
         b.sq = Math.max(0, b.sq - dt * 7);
         if (b.life > 0 && !frozen) moveBall(b, Math.hypot(b.vx, b.vy) * dt, false);
         if (b.life <= 0) {
@@ -408,6 +433,12 @@
         killer.lastKill = G.time;
         pop(t.x, t.y - 34, word, killer.pal.light, 40, 1.2);
         if (killer.human && !G.demo) G.coins += 5;
+      }
+      // A splatted tank's paint balls burst in mid-air: whoever splats first wins,
+      // so near-simultaneous shots rarely end in a draw.
+      for (var q = 0; q < G.balls.length; q++) {
+        var ob = G.balls[q];
+        if (ob.owner === t && ob !== b && ob.life > 0) { ob.life = 0; addDot(ob.x, ob.y, ob.giant ? 8 : 4.5, ob.color); }
       }
       var alive = 0; G.tanks.forEach(function (x) { if (x.alive) alive++; });
       if (alive <= 1 && !G.demo) G.slow = 0.55;
@@ -620,8 +651,10 @@
           c.font = '700 17px Fredoka'; c.direction = 'ltr';
           var tw = c.measureText(hint).width + 20;
           var hx = Math.max(G.maze.ox + tw / 2, Math.min(G.maze.ox + G.maze.cols * G.maze.cs - tw / 2, t.x));
-          A.rr(c, hx - tw / 2, t.y + 30, tw, 28, 14); c.fillStyle = 'rgba(42,34,64,0.85)'; c.fill();
-          c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; c.fillText(hint, hx, t.y + 45);
+          // below the tank, or above the name tag when the tank is on the bottom row
+          var hy = t.y + 58 > G.maze.oy + G.maze.rows * G.maze.cs ? t.y - 94 + bob : t.y + 30;
+          A.rr(c, hx - tw / 2, hy, tw, 28, 14); c.fillStyle = 'rgba(42,34,64,0.85)'; c.fill();
+          c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; c.fillText(hint, hx, hy + 15);
         }
       }
     }
@@ -639,7 +672,7 @@
     if (!G.demo && G.state !== 'matchEnd') drawHud(c, G);
   }
 
-  function easeBack(t) { if (t >= 1) return 1; var s = 1.7; t = t - 1; return t * t * ((s + 1) * t + s) + 1; }
+  function easeBack(t) { if (t >= 1) return 1; if (t <= 0) return 0; var s = 1.7; t = t - 1; return t * t * ((s + 1) * t + s) + 1; }
 
   /* ------------------------------------------------------------ HUD */
   function drawHud(c, G) {
@@ -695,7 +728,7 @@
     }
     if (G.state === 'play' && G.spectate > 0) {
       A.rr(c, W / 2 - 250, H - 62, 500, 46, 23); c.fillStyle = 'rgba(42,34,64,0.8)'; c.fill();
-      text(c, 'الكمبيوتر يكمل الجولة...  مسافة = تخطٍّ', W / 2, H - 39, 22, '#fff', 'center');
+      text(c, 'الكمبيوتر يكمل الجولة... اضغط مسافة للتخطي', W / 2, H - 39, 22, '#fff', 'center');
     }
     if ((G.state === 'roundEnd') && G.banner) {
       var bn = G.banner, s2 = easeBack(Math.min(1, bn.t * 3.5));

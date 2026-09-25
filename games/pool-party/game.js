@@ -30,7 +30,7 @@
 
   var OPPS = [
     { id: 'easy', name: 'الجرو ريكس', short: 'ريكس', avatar: 'rex', label: 'سهل', color: '#5ff0a0', reward: 40 },
-    { id: 'medium', name: 'القطة كوكو', short: 'كوكو', avatar: 'coco', label: 'متوسط', color: '#ffc94d', reward: 80 },
+    { id: 'medium', name: 'القطة كوكو', short: 'كوكو', fem: true, avatar: 'coco', label: 'متوسط', color: '#ffc94d', reward: 80 },
     { id: 'hard', name: 'القرش زعنون', short: 'زعنون', avatar: 'finn', label: 'صعب', color: '#ff6b8a', reward: 150 }
   ];
   var LINES = {
@@ -44,6 +44,7 @@
     if (!L) return;
     G.say = { text: L[Math.floor(Math.random() * L.length)], t: 0 };
   }
+  function winTxt(pl) { return (pl.fem ? 'فازت ' : 'فاز ') + pl.name + '!'; }
   function oppById(id) { for (var i = 0; i < OPPS.length; i++) if (OPPS[i].id === id) return OPPS[i]; return OPPS[0]; }
 
   /* =============================================================== canvas */
@@ -57,6 +58,7 @@
   var view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: function (v) {
     K = v.scale * v.dpr;
     needTable = true;
+    if (avatarCache) for (var ak in avatarCache) delete avatarCache[ak];
     for (var i = 0; i < sprites.length; i++) sprites[i].dirty = true;
     ui.style.transform = 'translate(' + canvas.style.left + ',' + canvas.style.top + ') scale(' + v.scale + ')';
   } });
@@ -221,11 +223,11 @@
     wireState(G.st);
     if (kind === 'cpu') {
       G.opp = oppById(oppId);
-      G.players = [{ name: 'أنت', avatar: 'you', cpu: null }, { name: G.opp.name, avatar: G.opp.avatar, cpu: G.opp.id }];
+      G.players = [{ name: 'أنت', avatar: 'you', cpu: null }, { name: G.opp.name, fem: !!G.opp.fem, avatar: G.opp.avatar, cpu: G.opp.id }];
     } else if (kind === 'pvp') {
       G.players = [{ name: 'اللاعب 1', avatar: 'you', cpu: null }, { name: 'اللاعب 2', avatar: 'p2', cpu: null }];
     } else {
-      G.players = [{ name: 'A', avatar: 'rex', cpu: 'medium' }, { name: 'B', avatar: 'coco', cpu: 'medium' }];
+      G.players = [{ name: 'أ', avatar: 'rex', cpu: 'medium' }, { name: 'ب', avatar: 'coco', cpu: 'medium' }];
       G.turn = Math.random() < 0.5 ? 0 : 1;
     }
     G.isBreak = true; G.inHand = true; G.kitchen = true;
@@ -262,6 +264,8 @@
   function startTurn(first) {
     G.spinX = 0; G.spinY = 0; G.power = 0; G.drag = null; G.strike = null; G.cueAlpha = 0;
     G.shotPots = []; G.rollT = 0;
+    // keep the helpful preset aim until the mouse really moves
+    lastPX = ptr.x; lastPY = ptr.y;
     if (G.kind === 'trick') {
       G.legal = G.lv.targets.filter(function (n) { var b = P.ball(G.st, n); return b && b.on; });
       if (G.lv.eightLast && G.legal.length > 1) G.legal = G.legal.filter(function (n) { return n !== 8; });
@@ -716,7 +720,7 @@
     var humanWon = G.kind === 'pvp' || !G.players[winner].cpu;
     if (humanWon) { SFX.cheer(); confettiBurst(160); shake.add(6); }
     else SFX.lose();
-    banner(G.players[winner].cpu ? 'الفوز لـ' + G.players[winner].name : (G.kind === 'cpu' ? 'فزت!' : 'الفوز لـ' + G.players[winner].name + '!'), reason || '', humanWon ? '#ffe45c' : '#9fdcff', 2);
+    banner(G.kind === 'cpu' && !G.players[winner].cpu ? 'فزت!' : winTxt(G.players[winner]), reason || '', humanWon ? '#ffe45c' : '#9fdcff', 2);
     // rewards
     G.badges = [];
     if (G.kind === 'cpu') {
@@ -1463,13 +1467,13 @@
     var t = $('oTitle');
     var win = G.players[G.winner];
     if (G.kind === 'cpu') {
-      t.textContent = humanWon ? 'فزت!' : 'الفوز لـ' + win.name;
+      t.textContent = humanWon ? 'فزت!' : winTxt(win);
       t.className = humanWon ? '' : 'lose';
       var left = G.groups[0] ? Rules.remaining(G.st, G.groups[0]) : 7;
       $('oSub').textContent = humanWon ? (G.opp.id === 'hard' ? 'تفوّقت على القرش نفسه!' : 'هزمت ' + G.opp.name + '!') :
         (G.loseReason ? G.loseReason + ' ' : '') + (left <= 2 ? 'كدت تفوز! مباراة أخرى؟' : 'ستفوز في المرة القادمة!');
     } else {
-      t.textContent = 'الفوز لـ' + win.name + '!'; t.className = '';
+      t.textContent = winTxt(win); t.className = '';
       $('oSub').textContent = G.loseReason ? G.loseReason : 'يا لها من مباراة!';
     }
     var c = $('oAvatar'), g = c.getContext('2d');
@@ -1573,10 +1577,12 @@
     },
     setAim: function (a) { if (G) { G.aim = a; lastPX = ptr.x; lastPY = ptr.y; } },
     fast: function (on) { window.__fast = !!on; },
-    win: function (p) { if (G && G.kind !== 'trick' && G.kind !== 'demo') finishMatch(p || 0, p ? '8-ball too early!' : ''); else if (G && G.kind === 'trick') { G.attempts = 1; trickEnd({ pots: G.lv.targets.map(function (n) { var b = P.ball(G.st, n); b.on = false; return { n: n, pocket: (G.lv.pockets || [0])[0], cush: 1 }; }) }); } },
+    win: function (p) { if (G && G.kind !== 'trick' && G.kind !== 'demo') finishMatch(p || 0, p ? 'دخلت الكرة 8 قبل وقتها!' : ''); else if (G && G.kind === 'trick') { G.attempts = 1; trickEnd({ pots: G.lv.targets.map(function (n) { var b = P.ball(G.st, n); b.on = false; return { n: n, pocket: (G.lv.pockets || [0])[0], cush: 1 }; }) }); } },
     skip: function () { if (G && G.kind === 'trick') { nextLevel(); } },
     trick: function (i) { newTrick(i); show('game'); },
-    coins: function (n) { save.coins = n; persist(); }
+    coins: function (n) { save.coins = n; persist(); },
+    say: function (k) { say(k); if (G && G.say) G.say.t = 0; },
+    banner: function (t, s) { banner(t, s, '#ff6b6b', 3); }
   };
 
   /* =============================================================== go */

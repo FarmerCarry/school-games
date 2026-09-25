@@ -1293,7 +1293,7 @@
       }
       if (w.st === 'ready' && readyT < 1.6 && tries <= 1) {
         var k = Math.min(1, readyT * 4), out = readyT > 1.2 ? (readyT - 1.2) / 0.4 : 0;
-        c.save(); c.globalAlpha = 1 - out; c.translate(W / 2, 170 - out * 40); c.scale(0.6 + 0.4 * k + Math.sin(readyT * 20) * 0.02 * (1 - k), 0.6 + 0.4 * k);
+        c.save(); c.globalAlpha = 1 - out; c.translate(W / 2, 290 - out * 40); c.scale(0.6 + 0.4 * k + Math.sin(readyT * 20) * 0.02 * (1 - k), 0.6 + 0.4 * k);
         text(c, 'المرحلة ' + (lvl + 1), 0, -40, 30, '#ffe14d', 'center', 'rtl');
         text(c, def.name, 0, 16, 64, '#fff', 'center', 'rtl', 1000);
         c.restore(); c.globalAlpha = 1;
@@ -1536,7 +1536,8 @@
     var box = $('rsUnlock'), items = [];
     SKINS.forEach(function (s) { if (s.req > before && s.req <= after) items.push({ kind: 'skin', s: s }); });
     TRAILS.forEach(function (s, i) { if (s.req > before && s.req <= after) items.push({ kind: 'trail', s: s, i: i }); });
-    if (li === 5 && before !== after && save.unlocked >= 7 && !save.seenEndless) { items.push({ kind: 'endless' }); save.seenEndless = 1; }
+    // the endless-mode unlock is the biggest news, so it goes first
+    if (li === 5 && save.unlocked >= 7 && !save.seenEndless) { items.unshift({ kind: 'endless' }); save.seenEndless = 1; persist(); }
     if (!items.length) { box.hidden = true; return; }
     var it = items[0];
     box.innerHTML = '';
@@ -1546,13 +1547,13 @@
     else { var ic = cv.getContext('2d'); ic.setTransform(2, 0, 0, 2, 0, 0); ic.font = '700 56px ' + FONT; ic.textAlign = 'center'; ic.textBaseline = 'middle'; ic.direction = 'ltr'; ic.fillStyle = '#fff'; ic.fillText('∞', 30, 32); }
     box.appendChild(cv);
     var tx = document.createElement('div');
-    tx.innerHTML = it.kind === 'endless' ? 'فتحت وضع «بلا نهاية»!<small>إلى أي مسافة تستطيع أن تطير؟</small>' :
-      (it.kind === 'skin' ? 'شخصية جديدة: ' : 'أثر جديد: ') + it.s.name + '!' + '<small>' + (items.length > 1 ? 'و' + (items.length - 1) + ' أخرى · ' : '') + 'انقر لتستخدمه!</small>';
+    tx.innerHTML = it.kind === 'endless' ? 'فتحت وضع «بلا نهاية»!<small>إلى أي مسافة ستطير؟ انقر لتجرّب!</small>' :
+      (it.kind === 'skin' ? 'شخصية جديدة: ' : 'أثر جديد: ') + it.s.name + '!' + '<small>' + (items.length > 1 ? 'وهناك المزيد! · ' : '') + 'انقر لتستخدمه!</small>';
     box.appendChild(tx);
     box.onclick = function () {
       if (it.kind === 'skin') save.skin = SKINS.indexOf(it.s);
       else if (it.kind === 'trail') save.trail = it.i;
-      else return;
+      else { sfx.click(); startEndless(); return; }
       persist(); sfx.star(2);
       tx.querySelector('small').textContent = 'تم اختياره!';
     };
@@ -1603,6 +1604,6 @@
   /* ------------------------------------------------------------------ boot */
   setMode('title');
   startAttract();
-  if (document.fonts && document.fonts.load) { try { document.fonts.load('700 20px Fredoka'); } catch (e) { /* ignore */ } }
+  if (document.fonts && document.fonts.load) { try { document.fonts.load('700 20px Fredoka', 'بA1'); document.fonts.load('500 20px Fredoka', 'بA1'); } catch (e) { /* ignore */ } }
   Kit.loop(function (dt) { if (mode !== 'peek') update(dt); else { time += dt; Kit.keys.endFrame(); } }, render);
 })();

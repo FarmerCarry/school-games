@@ -166,7 +166,11 @@
     var lean = 0;
     if (ball) {
       if (this.idx === 1) lean = clamp((this.homeX - this.x) * 0.0022 + (ball.x - this.x) * 0.0005, -0.3, 0.3);
-      else lean = clamp((ball.x - this.x) * 0.0011, -0.3, 0.3);
+      else {
+        // lean harder when the ball got behind you, so hops bring you back to it
+        var bdx = ball.x - this.x;
+        lean = clamp(bdx * (bdx * this.dir < 0 ? 0.0026 : 0.0011), -0.3, 0.3);
+      }
     }
     this.lean = lean;
     var a = wrapAng(this.a);

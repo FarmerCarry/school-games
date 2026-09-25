@@ -195,6 +195,7 @@ html, body { background: #2e2160; }
 .item.eq { background: #e1ffe6; box-shadow: 0 5px 0 var(--ink), 0 0 0 5px #3fd15d; }
 .item.eq .ibtn { background: #3fd15d; color: #fff; }
 .item.poor .ibtn { background: #eee; opacity: 0.8; }
+.item .ibtn.crown { background: #8a5aff; color: #fff; }
 .item.shake { animation: shake 0.35s; }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-7px); } 75% { transform: translateX(7px); } }
 
@@ -227,3 +228,6 @@ html, body { background: #2e2160; }
 #toast.on { opacity: 1; transform: translateX(-50%) scale(1); }
 .result-card .menu-row { gap: 12px; }
 .result-card .menu-row .btn { min-width: 0; width: 230px; }
+
+/* <kbd> defaults to a monospace font that can't join Arabic letters ("مسافة"). */
+#ui kbd.sg-key { font-family: inherit; }

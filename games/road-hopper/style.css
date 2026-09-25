@@ -182,7 +182,7 @@ html, body { background: #9fe3ff; }
 #mReveal { position: absolute; inset: 0; border-radius: 1.2em; background: #161b48; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
 .rays { position: absolute; left: 50%; top: 45%; width: 60em; height: 60em; margin: -30em 0 0 -30em; animation: spin 8s linear infinite;
   background: repeating-conic-gradient(#3a3a5e 0 10deg, #161b48 10deg 20deg); }
-.r-new { position: relative; font-size: 2.6em; font-weight: 700; color: var(--yellow); text-shadow: var(--outline), 0 0.08em 0 var(--navy); animation: pop 0.4s; }
+.r-new { position: relative; font-size: 2.6em; font-weight: 700; color: var(--yellow); text-shadow: var(--outline), 0 0.08em 0 var(--navy); animation: popS 0.45s cubic-bezier(.2,1.6,.5,1); }
 #mImg { position: relative; width: 13em; height: 13em; animation: popBig 0.6s cubic-bezier(.2,1.6,.5,1); }
 .r-name { position: relative; font-size: 2.2em; font-weight: 700; margin-bottom: 0.3em; }
 .r-btns { position: relative; }
@@ -194,6 +194,7 @@ html, body { background: #9fe3ff; }
 @keyframes float { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, -0.2em); } }
 @keyframes logoFloat { 0%, 100% { transform: rotate(3deg) translateY(0); } 50% { transform: rotate(1.5deg) translateY(-0.15em); } }
 @keyframes pop { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes popS { from { transform: scale(0.5); } to { transform: scale(1); } }
 @keyframes popBig { from { transform: scale(0.2) rotate(-20deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
 @keyframes popUp { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; } 15% { transform: translate(-50%, -80%) scale(1.15); opacity: 1; }
   70% { opacity: 1; } 100% { transform: translate(-50%, -190%) scale(1); opacity: 0; } }

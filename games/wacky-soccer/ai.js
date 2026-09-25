@@ -57,9 +57,9 @@
       if (Math.random() < sk * sk) {
         var gain = this.lookahead(world);
         this.lastGain = gain;
-        return gain > lerp(160, 40, sk);
+        return gain > lerp(160, 40, sk) || this.approach(world, me);
       }
-      return this.heuristic(world, me);
+      return this.heuristic(world, me) || this.approach(world, me);
     }
     // everyone far from the ball: hop toward it now and then
     if (far) {
@@ -79,6 +79,18 @@
         var dx = (ball.x - hip.x) * p.dir, dy = ball.y - hip.y;
         if (dx > -10 && dx < p.legLen + ball.r + 30 && dy > -150 && dy < p.legLen + 20) return true;
       }
+    }
+    return false;
+  };
+
+  // standing around near a ball nobody is kicking: hop toward it
+  CPU.prototype.approach = function (world, me) {
+    var sk = this.skill;
+    for (var i = 0; i < me.length; i++) {
+      var p = me[i], b = world.nearestBall(p.x);
+      if (!b || !p.grounded() || p.lying() || p.idleT < lerp(1.3, 0.5, sk)) continue;
+      var d = Math.abs(b.x - p.x);
+      if (d > 70 && d < 330) return true;
     }
     return false;
   };
