@@ -1,30 +1,31 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Recess Arcade</title>
+<title>ألعاب الفسحة</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="stylesheet" href="css/site.css">
 </head>
 <body class="route-home">
+<a class="skip" href="#app">تخطَّ إلى الألعاب</a>
 <header class="topbar" id="topbar">
-  <a class="logo" id="logo" href="#/" aria-label="Home"></a>
+  <a class="logo" id="logo" href="#/" aria-label="الصفحة الرئيسية" title="الصفحة الرئيسية"></a>
   <form class="search" id="searchForm" role="search" autocomplete="off">
     <span class="search-icon" aria-hidden="true">🔍</span>
-    <input id="q" type="search" placeholder="Search games..." aria-label="Search games" spellcheck="false" autocomplete="off" maxlength="40">
+    <input id="q" type="search" placeholder="ابحث عن لعبة…" aria-label="ابحث عن لعبة" spellcheck="false" autocomplete="off" maxlength="40" enterkeyhint="search">
   </form>
-  <button class="surprise" id="surprise" type="button" title="Play a random game">
-    <span class="dice" aria-hidden="true">🎲</span><span class="surprise-text">Surprise me</span>
+  <button class="surprise" id="surprise" type="button" title="العب لعبة عشوائية" aria-label="فاجئني! العب لعبة عشوائية">
+    <span class="dice" aria-hidden="true">🎲</span><span class="surprise-text">فاجئني!</span>
   </button>
 </header>
-<nav class="chips" id="chips" aria-label="Categories"></nav>
+<nav class="chips" id="chips" aria-label="أقسام الألعاب"></nav>
 <main class="app" id="app"></main>
 <footer class="foot">
-  <span>Made for our class ❤️ — no ads, no accounts</span>
+  <span>صُنع لصفّنا ❤️ — بلا إعلانات وبلا حسابات</span>
 </footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<noscript><p style="text-align:center;font:20px sans-serif">Please turn on JavaScript to play the games.</p></noscript>
+<noscript><p class="noscript">شغّل JavaScript في المتصفح لتلعب الألعاب.</p></noscript>
 <script src="js/catalog.js"></script>
 <script src="js/site.js"></script>
 </body>

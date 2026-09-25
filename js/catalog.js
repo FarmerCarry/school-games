@@ -14,7 +14,7 @@ window.SITE = {
 window.CATEGORIES = [
   { id: 'running', label: 'جري', icon: '🏃' },
   { id: 'racing', label: 'سباقات', icon: '🏎️' },
-  { id: 'two-player', label: 'لاعبان', icon: '👯' },
+  { id: 'two-player', label: 'لاعبان', icon: '👥' },
   { id: 'sports', label: 'رياضة', icon: '🏀' },
   { id: 'puzzle', label: 'ألغاز', icon: '🧩' },
   { id: 'arcade', label: 'أركيد', icon: '👾' },
