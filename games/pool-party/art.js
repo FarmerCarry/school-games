@@ -16,22 +16,22 @@
   Art.hexRGB = hexRGB;
 
   Art.FELTS = [
-    { id: 'green', name: 'Classic Green', price: 0, bed: '#18a060', dark: '#0f7a47', cushion: '#138a50' },
-    { id: 'blue', name: 'Ocean Blue', price: 80, bed: '#1f84e6', dark: '#1561b0', cushion: '#1a70c8' },
-    { id: 'purple', name: 'Grape Pop', price: 120, bed: '#8a4dff', dark: '#6232c9', cushion: '#743fe0' },
-    { id: 'red', name: 'Hot Sauce', price: 160, bed: '#e0384f', dark: '#a8233a', cushion: '#c42c44' },
-    { id: 'pink', name: 'Bubblegum', price: 200, bed: '#ff5fa8', dark: '#d63f86', cushion: '#ec4f98' },
-    { id: 'orange', name: 'Sunset', price: 260, bed: '#ff8a2a', dark: '#d1631a', cushion: '#e87522' },
-    { id: 'galaxy', name: 'Galaxy', price: 0, trophy: 'stars', bed: '#2a2266', dark: '#150f3d', cushion: '#221b55', stars: true }
+    { id: 'green', name: 'أخضر كلاسيكي', price: 0, bed: '#18a060', dark: '#0f7a47', cushion: '#138a50' },
+    { id: 'blue', name: 'أزرق المحيط', price: 80, bed: '#1f84e6', dark: '#1561b0', cushion: '#1a70c8' },
+    { id: 'purple', name: 'عنب بنفسجي', price: 120, bed: '#8a4dff', dark: '#6232c9', cushion: '#743fe0' },
+    { id: 'red', name: 'صلصة حارّة', price: 160, bed: '#e0384f', dark: '#a8233a', cushion: '#c42c44' },
+    { id: 'pink', name: 'علكة وردية', price: 200, bed: '#ff5fa8', dark: '#d63f86', cushion: '#ec4f98' },
+    { id: 'orange', name: 'غروب الشمس', price: 260, bed: '#ff8a2a', dark: '#d1631a', cushion: '#e87522' },
+    { id: 'galaxy', name: 'المجرّة', price: 0, trophy: 'stars', bed: '#2a2266', dark: '#150f3d', cushion: '#221b55', stars: true }
   ];
   Art.CUES = [
-    { id: 'classic', name: 'Classic Oak', price: 0, shaft: '#f2dcae', butt: '#7a4320', wrap: '#2b1a10', band: '#e9c46a' },
-    { id: 'candy', name: 'Candy Cane', price: 60, shaft: '#fff4f4', butt: '#ff3b5c', wrap: '#ffffff', band: '#ff3b5c', stripes: '#ff3b5c' },
-    { id: 'ocean', name: 'Ocean Wave', price: 120, shaft: '#e6f6ff', butt: '#1e7bff', wrap: '#0b3d91', band: '#5ee7ff' },
-    { id: 'lava', name: 'Lava Stick', price: 180, shaft: '#ffe7c7', butt: '#2b1010', wrap: '#ff4d00', band: '#ffb300', flames: true },
-    { id: 'rainbow', name: 'Rainbow', price: 260, shaft: '#fffdf5', butt: '#ff4d6d', wrap: '#222', band: '#fff', rainbow: true },
-    { id: 'neon', name: 'Neon Laser', price: 340, shaft: '#eaffea', butt: '#101820', wrap: '#39ff88', band: '#39ff88', glow: '#39ff88' },
-    { id: 'gold', name: 'Golden Shark', price: 0, trophy: 'hard', shaft: '#fff3c4', butt: '#d4a017', wrap: '#7a5a00', band: '#fff1a8', gold: true }
+    { id: 'classic', name: 'خشب البلّوط', price: 0, shaft: '#f2dcae', butt: '#7a4320', wrap: '#2b1a10', band: '#e9c46a' },
+    { id: 'candy', name: 'عصا الحلوى', price: 60, shaft: '#fff4f4', butt: '#ff3b5c', wrap: '#ffffff', band: '#ff3b5c', stripes: '#ff3b5c' },
+    { id: 'ocean', name: 'موجة المحيط', price: 120, shaft: '#e6f6ff', butt: '#1e7bff', wrap: '#0b3d91', band: '#5ee7ff' },
+    { id: 'lava', name: 'عصا الحمم', price: 180, shaft: '#ffe7c7', butt: '#2b1010', wrap: '#ff4d00', band: '#ffb300', flames: true },
+    { id: 'rainbow', name: 'قوس قزح', price: 260, shaft: '#fffdf5', butt: '#ff4d6d', wrap: '#222', band: '#fff', rainbow: true },
+    { id: 'neon', name: 'ليزر النيون', price: 340, shaft: '#eaffea', butt: '#101820', wrap: '#39ff88', band: '#39ff88', glow: '#39ff88' },
+    { id: 'gold', name: 'القرش الذهبي', price: 0, trophy: 'hard', shaft: '#fff3c4', butt: '#d4a017', wrap: '#7a5a00', band: '#fff1a8', gold: true }
   ];
   Art.felt = function (id) { for (var i = 0; i < Art.FELTS.length; i++) if (Art.FELTS[i].id === id) return Art.FELTS[i]; return Art.FELTS[0]; };
   Art.cue = function (id) { for (var i = 0; i < Art.CUES.length; i++) if (Art.CUES[i].id === id) return Art.CUES[i]; return Art.CUES[0]; };
@@ -275,8 +275,8 @@
     // center logo on the felt
     g.save();
     g.globalAlpha = 0.12; g.fillStyle = '#fff';
-    g.font = '700 64px ' + Art.font; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText('POOL PARTY', P.CX, P.CY);
+    g.font = '700 64px ' + Art.font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.direction = 'rtl';
+    g.fillText('حفلة البلياردو', P.CX, P.CY);
     g.restore();
     // head string + foot spot
     g.strokeStyle = 'rgba(255,255,255,0.10)'; g.lineWidth = 2; g.setLineDash([6, 8]);

@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<title>Critter Mart</title>
+<title>سوق الحيوانات</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="../../shared/game.css">
 <style>
@@ -95,7 +95,7 @@
   @keyframes cm-slide { from { opacity: 0; transform: translateX(40px) scale(var(--ui)); } to { opacity: 1; transform: translateX(0) scale(var(--ui)); } }
   .cm-upg h3 { margin: 0 0 2px; font-size: 22px; text-align: center; }
   .cm-upg-row {
-    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font: inherit; color: inherit;
+    display: flex; align-items: center; gap: 8px; width: 100%; text-align: right; font: inherit; color: inherit;
     background: #fff; border: 3px solid rgba(74, 46, 31, 0.25); border-radius: 14px; padding: 3px 8px; margin: 4px 0; cursor: pointer;
   }
   .cm-upg-row img { width: 36px; height: 36px; }
@@ -106,11 +106,11 @@
   .cm-upg-mid { flex: 1; min-width: 0; }
   .cm-upg-name { font-weight: 700; font-size: 16px; line-height: 1.1; white-space: nowrap; }
   .cm-upg-desc { font-size: 12.5px; opacity: 0.75; line-height: 1.1; white-space: nowrap; }
-  .cm-pips i { display: inline-block; width: 12px; height: 8px; border-radius: 4px; background: #e4d6bd; margin-right: 3px; }
+  .cm-pips i { display: inline-block; width: 12px; height: 8px; border-radius: 4px; background: #e4d6bd; margin-left: 3px; }
   .cm-pips i.on { background: #1fb5a8; }
-  .cm-upg-cost { font-weight: 700; font-size: 16px; white-space: nowrap; text-align: right; min-width: 64px; }
+  .cm-upg-cost { font-weight: 700; font-size: 16px; white-space: nowrap; text-align: left; min-width: 64px; }
   .cm-upg-row.locked .cm-upg-cost { font-size: 13px; }
-  .cm-upg-cost .cm-coin { width: 15px; height: 15px; margin-right: 3px; }
+  .cm-upg-cost .cm-coin { width: 15px; height: 15px; margin-left: 3px; }
   .cm-upg-row.no .cm-upg-cost { color: #c0392b; }
   .cm-upg-key { font-size: 13px !important; min-width: 22px !important; padding: 0 4px !important; }
   .cm-upg-foot { font-size: 13px; text-align: center; opacity: 0.7; margin-top: 4px; }
@@ -119,12 +119,12 @@
 <body>
 <canvas id="game" tabindex="0"></canvas>
 
-<button id="pauseBtn" type="button" aria-label="Pause" hidden>II</button>
+<button id="pauseBtn" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)" hidden>II</button>
 
 <div id="upgrades" class="cm-upg" hidden>
-  <h3>Upgrades</h3>
+  <h3>لوحة التطوير</h3>
   <div id="upgList"></div>
-  <div class="cm-upg-foot">Click or press <span class="sg-key cm-upg-key">1</span>-<span class="sg-key cm-upg-key">6</span> to buy · walk away to close</div>
+  <div class="cm-upg-foot">انقر أو اضغط <span dir="ltr"><span class="sg-key cm-upg-key">1</span>-<span class="sg-key cm-upg-key">6</span></span> للشراء · ابتعد للإغلاق</div>
 </div>
 
 <div id="title" class="sg-overlay cm-ov">
@@ -132,19 +132,19 @@
     <canvas id="hero" width="880" height="268"></canvas>
     <div class="cm-row">
       <div class="cm-col">
-        <button id="playBtn" class="sg-btn cm-big" type="button">Play!</button>
+        <button id="playBtn" class="sg-btn cm-big" type="button">العب!</button>
         <div id="prog" class="cm-prog"></div>
         <div id="bestLine" class="cm-best"></div>
-        <button id="newBtn" class="cm-link" type="button">Start a brand-new store</button>
+        <button id="newBtn" class="cm-link" type="button">ابدأ متجرًا جديدًا</button>
       </div>
       <div class="cm-col cm-how">
-        <div class="cm-h">How to play</div>
+        <div class="cm-h">طريقة اللعب</div>
         <div class="sg-howto">
-          <span><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></span><span>Walk (or arrows, or click)</span>
-          <span class="cm-ico"><img data-icon="banana" alt=""><img data-icon="corn" alt=""><img data-icon="egg" alt=""></span><span>Walk into crops, then to shelves</span>
-          <span class="cm-ico"><img data-icon="register" alt=""></span><span>Stand at the checkout to sell</span>
-          <span class="cm-ico"><img data-icon="lock" alt=""></span><span>Stand on circles to unlock</span>
-          <span><span class="sg-key">P</span><span class="sg-key">M</span></span><span>Pause · Sound</span>
+          <span dir="ltr"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></span><span>امشِ (أو بالأسهم، أو انقر بالفأرة)</span>
+          <span class="cm-ico"><img data-icon="banana" alt=""><img data-icon="corn" alt=""><img data-icon="egg" alt=""></span><span>اقطف المحاصيل، ثم ضعها على الرفوف</span>
+          <span class="cm-ico"><img data-icon="register" alt=""></span><span>قف عند صندوق الدفع لتبيع</span>
+          <span class="cm-ico"><img data-icon="lock" alt=""></span><span>قف على الدوائر لتفتح أشياء جديدة</span>
+          <span dir="ltr"><span class="sg-key">P</span><span class="sg-key">M</span></span><span>إيقاف مؤقت · الصوت</span>
         </div>
       </div>
     </div>
@@ -154,48 +154,48 @@
 
 <div id="pause" class="sg-overlay cm-ov" hidden>
   <div class="cm-card cm-small">
-    <h2>Paused</h2>
-    <p>Your critters are waiting!</p>
+    <h2>استراحة</h2>
+    <p>حيواناتك بانتظارك!</p>
     <div class="cm-btns">
-      <button id="resumeBtn" class="sg-btn cm-btn green" type="button">Resume</button>
-      <button id="musicBtn" class="sg-btn cm-btn alt" type="button">Music: On</button>
-      <button id="menuBtn" class="sg-btn cm-btn alt" type="button">Main Menu</button>
-      <button id="restartBtn" class="sg-btn cm-btn red" type="button">New Store</button>
+      <button id="resumeBtn" class="sg-btn cm-btn green" type="button">تابع اللعب</button>
+      <button id="musicBtn" class="sg-btn cm-btn alt" type="button">الموسيقى: تعمل</button>
+      <button id="menuBtn" class="sg-btn cm-btn alt" type="button">القائمة الرئيسية</button>
+      <button id="restartBtn" class="sg-btn cm-btn red" type="button">متجر جديد</button>
     </div>
-    <div class="cm-hint">Your store saves by itself.</div>
+    <div class="cm-hint">متجرك يُحفظ تلقائيًا.</div>
   </div>
 </div>
 
 <div id="welcome" class="sg-overlay cm-ov" hidden>
   <div class="cm-card cm-small">
-    <h2>Welcome back!</h2>
-    <p>While you were away, your mart earned:</p>
+    <h2>أهلًا بعودتك!</h2>
+    <p>وأنت بعيد، ربح سوقك:</p>
     <div class="cm-bigcoin"><span class="cm-coin"></span> <span id="welcomeAmt">0</span></div>
-    <div class="cm-btns"><button id="collectBtn" class="sg-btn cm-btn green" type="button">Collect!</button></div>
+    <div class="cm-btns"><button id="collectBtn" class="sg-btn cm-btn green" type="button">اجمعها!</button></div>
   </div>
 </div>
 
 <div id="finale" class="sg-overlay cm-ov" hidden>
   <div class="cm-card cm-small" style="width:560px">
-    <div id="finBest" class="cm-newbest" hidden>New best time!</div>
-    <h2>Mega Mart<br>Complete!</h2>
-    <p>You built the best store in Critter Town!</p>
+    <div id="finBest" class="cm-newbest" hidden>أسرع وقت جديد!</div>
+    <h2>اكتمل السوق<br>العملاق!</h2>
+    <p>بنيتَ أفضل متجر في مدينة الحيوانات!</p>
     <div id="finStats" class="cm-stats"></div>
     <div class="cm-btns">
-      <button id="keepBtn" class="sg-btn cm-btn green" type="button">Keep Playing</button>
-      <button id="finNewBtn" class="sg-btn cm-btn alt" type="button">Build a New Store (R)</button>
-      <button id="finMenuBtn" class="cm-link" type="button">Main Menu</button>
+      <button id="keepBtn" class="sg-btn cm-btn green" type="button">تابع اللعب</button>
+      <button id="finNewBtn" class="sg-btn cm-btn alt" type="button">ابنِ متجرًا جديدًا (R)</button>
+      <button id="finMenuBtn" class="cm-link" type="button">القائمة الرئيسية</button>
     </div>
   </div>
 </div>
 
 <div id="confirm" class="sg-overlay cm-ov" hidden>
   <div class="cm-card cm-small">
-    <h2>New store?</h2>
-    <p>This starts over from zero. Your hats stay unlocked!</p>
+    <h2>متجر جديد؟</h2>
+    <p>ستبدأ من الصفر، لكن قبعاتك تبقى معك!</p>
     <div class="cm-btns">
-      <button id="noBtn" class="sg-btn cm-btn green" type="button">No, keep my store</button>
-      <button id="yesBtn" class="sg-btn cm-btn red" type="button">Yes, start over</button>
+      <button id="noBtn" class="sg-btn cm-btn green" type="button">لا، أبقِ متجري (N)</button>
+      <button id="yesBtn" class="sg-btn cm-btn red" type="button">نعم، ابدأ من جديد (Y)</button>
     </div>
   </div>
 </div>

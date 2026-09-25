@@ -217,7 +217,16 @@
       return b.s(3, 12, 'P').s(28, 5, 'D').done();
     })(),
     script: function (L) {
-      L.when(function () { return L.on('a'); }, function () { L.g('a').move(0, -9, 3, 0.25); L.sfx('elevator'); });
+      // The elevator rides up into the spikes, then comes back down (with a
+      // warning shake) so a missed jump never leaves the player stuck below.
+      var a = L.g('a');
+      var arm = function () {
+        L.when(function () { return L.on('a'); }, function () {
+          L.sfx('elevator');
+          a.move(0, -9, 3, 0.25, function () { a.move(0, 9, 4, 0.9, arm); });
+        });
+      };
+      arm();
     }
   });
 

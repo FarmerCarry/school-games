@@ -564,7 +564,7 @@
     for (var i = 0; i <= 8; i++) { var fx = x + 3 + i * 9; ctx.lineTo(fx, y - 146 + Math.sin(t * 7 - i * 0.7) * (3 + i * 0.6)); }
     for (i = 8; i >= 0; i--) { var fx2 = x + 3 + i * 9; ctx.lineTo(fx2, y - 104 + Math.sin(t * 7 - i * 0.7) * (3 + i * 0.6)); }
     ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 22px Fredoka, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 22px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.direction = 'ltr';
     ctx.fillText(on ? '✓' : '!', x + 38, y - 117);
   }
   function drawFinish(ctx, x, y, t) {
@@ -577,8 +577,8 @@
       ctx.fillRect(x0 - 10 + c * cs, y - h - 20 + r * cs + Math.sin(t * 3 + c * 0.5) * 3, cs + 0.5, cs + 0.5);
     }
     ctx.fillStyle = '#ff3b3b'; rrect(ctx, x0 + 10, y - h + 26, w - 20, 44, 12); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 30px Fredoka, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('FINISH', x, y - h + 59);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 30px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.direction = 'rtl';
+    ctx.fillText('النهاية', x, y - h + 57);
     // balloons
     var cols2 = ['#ffd23f', '#3fb7ff', '#ff5ab4', '#3ddc84'];
     for (var i = 0; i < 4; i++) {
@@ -588,7 +588,7 @@
     }
   }
   function drawSign(ctx, s) {
-    ctx.font = 'bold 22px Fredoka, sans-serif';
+    ctx.font = 'bold 22px Fredoka, sans-serif'; ctx.direction = 'rtl';
     var w = Math.max(160, ctx.measureText(s.text).width + 36), x = s.x + 60, y = s.y;
     ctx.fillStyle = '#6b4b2a'; ctx.fillRect(x - 5, y - 80, 10, 80);
     ctx.fillStyle = 'rgba(0,0,0,0.25)'; rrect(ctx, x - w / 2 + 4, y - 132, w, 54, 12); ctx.fill();

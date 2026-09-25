@@ -72,7 +72,7 @@
     var d = loadSaved(N);
     if (!d) return null;
     var any = false; for (var i = 0; i < d.v.length; i++) if (d.v[i]) any = true;
-    return any && canMoveVals(d.v, N) ? d : null;
+    return any && d.m > 0 && canMoveVals(d.v, N) ? d : null;
   }
 
   /* ============================================================== board */
@@ -157,7 +157,9 @@
     moves: 0, dead: false, deadAt: 0, maxT: 0, startBest: 0, newBest: false, shownScore: 0
   };
   var queue = [];
-  function later(d, fn) { queue.push({ at: now + d, fn: fn }); }
+  function later(d, fn, keep) { queue.push({ at: now + d, fn: fn, keep: !!keep }); }
+  // Clears pending effects but keeps the ones that must not be lost (unlock / record news).
+  function clearQueue() { for (var i = queue.length - 1; i >= 0; i--) if (!queue[i].keep) queue.splice(i, 1); }
 
   var fx = { parts: [], floats: [], rings: [], big: null, shake: 0, sx: 0, sy: 0, bx: 0, by: 0, flash: 0 };
 
@@ -525,7 +527,7 @@
   /* ============================================================== game */
   function startGame(N, fresh) {
     G.N = N; save.size = N; store.set('size', N);
-    queue.length = 0;
+    clearQueue();
     fx.parts.length = 0; fx.floats.length = 0; fx.rings.length = 0; fx.big = null;
     G.board = new Board(N);
     var d = fresh ? null : liveSave(N);
@@ -539,7 +541,7 @@
       G.startBest = save.best[N];
       save.games++; store.set('games', save.games);
     }
-    G.dead = false; G.maxT = G.board.maxTile(); G.newBest = G.startBest > 0 && G.score > G.startBest;
+    G.dead = false; G.winPending = false; G.maxT = G.board.maxTile(); G.newBest = G.startBest > 0 && G.score > G.startBest;
     G.shownScore = G.score;
     setScreen('play');
     refreshHUD(true);
@@ -576,7 +578,7 @@
       save.best[N] = G.score; store.set('best', save.best);
       if (!G.newBest && G.startBest > 0) {
         G.newBest = true;
-        later(SLIDE + 0.1, function () { toast('🏆 رقم قياسي جديد!'); sfx.best(); confetti(40, true); });
+        later(SLIDE + 0.1, function () { toast('🏆 رقم قياسي جديد!'); sfx.best(); confetti(40, true); }, true);
       }
     }
     var mx = b.maxTile();
@@ -589,11 +591,11 @@
       var prev = save.bestTile;
       save.bestTile = mx; store.set('bestTile', mx);
       THEMES.forEach(function (th) {
-        if (th.req > prev && th.req <= mx) later(0.9, function () { toast('🔓 شكل جديد: «' + th.name + '»! اضغط T'); sfx.unlock(); refreshHUD(); });
+        if (th.req > prev && th.req <= mx) later(0.9, function () { toast('🔓 شكل جديد: «' + th.name + '»! اضغط T'); sfx.unlock(); refreshHUD(); }, true);
       });
     }
     if (mx >= WIN[N] && !G.won) {
-      G.won = true;
+      G.won = true; G.winPending = true;
       later(0.45, showWin);
     }
     if (!b.canMove()) markDead();
@@ -650,12 +652,13 @@
     }
     var h = G.hist.pop();
     G.undos--;
-    queue.length = 0;
+    clearQueue(); G.winPending = false;
     fx.big = null;
     G.board.load(h.v, now, 0.012);
     G.board.grid.forEach(function (t) { if (t) t.born = now - SPAWN * 0.55; });
     G.score = h.s; G.shownScore = G.score;
     G.dead = false; G.maxT = G.board.maxTile();
+    if (!G.keep && G.maxT < WIN[G.N]) G.won = false;
     if (G.screen === 'over') setScreen('play');
     sfx.undo();
     for (var i = 0; i < 18; i++) {
@@ -682,8 +685,14 @@
   }
 
   function pause() { if (G.screen !== 'play') return; sfx.click(); setScreen('pause'); }
-  function resume() { if (G.screen !== 'pause') return; sfx.click(); setScreen('play'); }
-  function toMenu() { sfx.click(); saveGame(); queue.length = 0; fx.big = null; demoReset(); setScreen('title'); }
+  function resume() {
+    if (G.screen !== 'pause') return;
+    sfx.click(); setScreen('play');
+    // a win or game over that happened right before pausing must still show up
+    if (G.winPending) later(0.3, showWin);
+    else if (G.dead) later(0.5, function () { if (G.screen === 'play' && G.dead) showOver(); });
+  }
+  function toMenu() { sfx.click(); saveGame(); clearQueue(); fx.big = null; demoReset(); setScreen('title'); }
 
   function showOver() {
     var N = G.N;
@@ -698,6 +707,7 @@
     drawIcon($('overTile'), theme(), G.maxT || 2);
     var hint;
     if (G.newBest) hint = 'تفوّقت على نفسك! هل تستطيع أكثر؟';
+    else if (G.startBest === 0 && G.score > 0 && G.score >= save.best[N]) hint = 'سجّلت أول رقم قياسي! هل تتفوّق عليه؟';
     else if (G.maxT >= 1024 && !G.won) hint = 'كنت قريباً جداً من 2048! 😮';
     else if (save.best[N] > 0 && G.score >= save.best[N] * 0.85) hint = 'قريب جداً من رقمك القياسي!';
     else if (canU) hint = 'جرّب التراجع وغيّر خطتك! ↶';
@@ -707,7 +717,8 @@
   }
 
   function showWin() {
-    if (G.screen !== 'play') return;
+    if (G.screen !== 'play' || !G.winPending) return;
+    G.winPending = false;
     setScreen('win');
     $('winNum').textContent = WIN[G.N];
     drawIcon($('winTile'), theme(), WIN[G.N]);

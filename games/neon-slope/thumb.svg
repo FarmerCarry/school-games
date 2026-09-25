@@ -102,9 +102,9 @@
   <ellipse cx="184" cy="242" rx="14" ry="9" fill="#ffffff" opacity="0.55"/>
 
   <!-- logo -->
-  <g font-family="'Arial Black', 'Segoe UI Black', Impact, sans-serif" font-weight="900" font-style="italic" text-anchor="middle" font-size="60">
-    <text x="200" y="356" textLength="352" lengthAdjust="spacingAndGlyphs" fill="#ff2bd6" stroke="#ff2bd6" stroke-width="12" stroke-linejoin="round" opacity="0.55" filter="url(#glow)">NEON SLOPE</text>
-    <text x="200" y="356" textLength="352" lengthAdjust="spacingAndGlyphs" fill="#ffffff" stroke="#3a0850" stroke-width="8" stroke-linejoin="round" paint-order="stroke"><tspan fill="#ffe3fa">NEON </tspan><tspan fill="#c8fbff">SLOPE</tspan></text>
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" font-size="62" direction="rtl">
+    <text x="200" y="364" fill="#ff2bd6" stroke="#ff2bd6" stroke-width="12" stroke-linejoin="round" opacity="0.55" filter="url(#glow)">منحدر النيون</text>
+    <text x="200" y="364" fill="#ffffff" stroke="#3a0850" stroke-width="8" stroke-linejoin="round" paint-order="stroke"><tspan fill="#ffe3fa">منحدر </tspan><tspan fill="#c8fbff">النيون</tspan></text>
   </g>
   <g fill="#ffffff">
     <path d="M86 250 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z"/>

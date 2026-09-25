@@ -8,38 +8,38 @@
   var INK = '#1b1033';
 
   BD.FACES = [
-    { id: 'smile', name: 'Smiley' },
-    { id: 'cool', name: 'Shades', need: { lvl: 0 } },
-    { id: 'cat', name: 'Kitty', need: { lvl: 1 } },
-    { id: 'robot', name: 'Robo', need: { lvl: 2 } },
-    { id: 'alien', name: 'Alien', need: { lvl: 3 } },
-    { id: 'ninja', name: 'Ninja', need: { lvl: 4 } },
-    { id: 'wow', name: 'Wow!', need: { attempts: 25 } },
-    { id: 'starry', name: 'Starstruck', need: { stars: 3 } },
-    { id: 'grr', name: 'Grr', need: { stars: 6 } },
-    { id: 'panda', name: 'Panda', need: { stars: 9 } },
-    { id: 'dizzy', name: 'Dizzy', need: { attempts: 100 } },
-    { id: 'king', name: 'King', need: { stars: 15 } }
+    { id: 'smile', name: 'مبتسم' },
+    { id: 'cool', name: 'النظّارة', need: { lvl: 0 } },
+    { id: 'cat', name: 'قطقوط', need: { lvl: 1 } },
+    { id: 'robot', name: 'روبو', need: { lvl: 2 } },
+    { id: 'alien', name: 'فضائي', need: { lvl: 3 } },
+    { id: 'ninja', name: 'نينجا', need: { lvl: 4 } },
+    { id: 'wow', name: 'واو!', need: { attempts: 25 } },
+    { id: 'starry', name: 'عيون النجوم', need: { stars: 3 } },
+    { id: 'grr', name: 'غاضب', need: { stars: 6 } },
+    { id: 'panda', name: 'باندا', need: { stars: 9 } },
+    { id: 'dizzy', name: 'دوخة', need: { attempts: 100 } },
+    { id: 'king', name: 'الملك', need: { stars: 15 } }
   ];
   BD.COLORS = [
-    { c: '#ffd93b', name: 'Sunny' },
-    { c: '#35e0ff', name: 'Sky' },
-    { c: '#ff5ad1', name: 'Bubblegum' },
-    { c: '#7dff5a', name: 'Lime' },
-    { c: '#ff8a2a', name: 'Orange', need: { attempts: 10 } },
-    { c: '#ffffff', name: 'Snow', need: { stars: 1 } },
-    { c: '#b36bff', name: 'Grape', need: { lvl: 0 } },
-    { c: '#ff3b4f', name: 'Cherry', need: { stars: 2 } },
-    { c: '#2f6bff', name: 'Ocean', need: { lvl: 1 } },
-    { c: '#1de9b6', name: 'Mint', need: { stars: 4 } },
-    { c: '#ffb3e6', name: 'Candy', need: { attempts: 50 } },
-    { c: '#3b3f58', name: 'Shadow', need: { lvl: 2 } },
-    { c: '#c6ff00', name: 'Electric', need: { stars: 7 } },
-    { c: '#ff9ecb', name: 'Peach', need: { jumps: 500 } },
-    { c: '#8a5a2b', name: 'Cocoa', need: { stars: 10 } },
-    { c: '#ffc300', name: 'Gold', need: { lvl: 3 } },
-    { c: '#00ffa2', name: 'Neon', need: { stars: 12 } },
-    { c: '#ff2bd6', name: 'Magenta', need: { lvl: 4 } }
+    { c: '#ffd93b', name: 'مشمس' },
+    { c: '#35e0ff', name: 'سماوي' },
+    { c: '#ff5ad1', name: 'علكة' },
+    { c: '#7dff5a', name: 'ليموني' },
+    { c: '#ff8a2a', name: 'برتقالي', need: { attempts: 10 } },
+    { c: '#ffffff', name: 'ثلجي', need: { stars: 1 } },
+    { c: '#b36bff', name: 'عنبي', need: { lvl: 0 } },
+    { c: '#ff3b4f', name: 'كرزي', need: { stars: 2 } },
+    { c: '#2f6bff', name: 'محيطي', need: { lvl: 1 } },
+    { c: '#1de9b6', name: 'نعناعي', need: { stars: 4 } },
+    { c: '#ffb3e6', name: 'حلوى', need: { attempts: 50 } },
+    { c: '#3b3f58', name: 'ظلّ', need: { lvl: 2 } },
+    { c: '#c6ff00', name: 'كهربائي', need: { stars: 7 } },
+    { c: '#ff9ecb', name: 'خوخي', need: { jumps: 500 } },
+    { c: '#8a5a2b', name: 'كاكاو', need: { stars: 10 } },
+    { c: '#ffc300', name: 'ذهبي', need: { lvl: 3 } },
+    { c: '#00ffa2', name: 'نيون', need: { stars: 12 } },
+    { c: '#ff2bd6', name: 'فوشيا', need: { lvl: 4 } }
   ];
 
   function rr(ctx, x, y, w, h, r) {
@@ -222,11 +222,11 @@
 
   // Difficulty face on a circle, for the level select card.
   BD.DIFFS = {
-    easy: { label: 'EASY', col: '#3ddc84', ink: '#0a4a26' },
-    normal: { label: 'NORMAL', col: '#35c6ff', ink: '#08395a' },
-    hard: { label: 'HARD', col: '#ffb300', ink: '#5a3a00' },
-    harder: { label: 'HARDER', col: '#ff4d5a', ink: '#5a0010' },
-    insane: { label: 'INSANE', col: '#c05cff', ink: '#3a0060' }
+    easy: { label: 'سهل', col: '#3ddc84', ink: '#0a4a26' },
+    normal: { label: 'متوسط', col: '#35c6ff', ink: '#08395a' },
+    hard: { label: 'صعب', col: '#ffb300', ink: '#5a3a00' },
+    harder: { label: 'أصعب', col: '#ff4d5a', ink: '#5a0010' },
+    insane: { label: 'جنوني', col: '#c05cff', ink: '#3a0060' }
   };
   BD.drawDiffFace = function (ctx, kind, size) {
     var d = BD.DIFFS[kind] || BD.DIFFS.easy, r = size / 2;

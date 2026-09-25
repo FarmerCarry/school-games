@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Munch Rope</title>
+<title>حبل الحلوى</title>
 <link rel="stylesheet" href="../../shared/game.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -13,39 +13,39 @@
 <div id="ui">
   <!-- in-game buttons -->
   <div id="hud" hidden>
-    <button class="hb" id="bHint" type="button" aria-label="Hint" title="Hint (H)"><span class="bulb"></span></button>
-    <button class="hb" id="bRestart" type="button" aria-label="Restart" title="Restart (R)"><span class="rst">&#x21bb;</span></button>
-    <button class="hb" id="bPause" type="button" aria-label="Pause" title="Pause (P)"><span class="pz"></span><span class="pz"></span></button>
+    <button class="hb" id="bHint" type="button" aria-label="تلميح" title="تلميح (H)"><span class="bulb"></span></button>
+    <button class="hb" id="bRestart" type="button" aria-label="إعادة" title="إعادة (R)"><span class="rst">&#x21bb;</span></button>
+    <button class="hb" id="bPause" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)"><span class="pz"></span><span class="pz"></span></button>
   </div>
 
   <!-- TITLE -->
   <section id="sTitle" class="scr pass">
     <div class="tleft">
-      <h1 class="logo" aria-label="Munch Rope">
-        <span class="w1"><b style="--c:#7ed957;--d:0">M</b><b style="--c:#7ed957;--d:1">U</b><b style="--c:#7ed957;--d:2">N</b><b style="--c:#7ed957;--d:3">C</b><b style="--c:#7ed957;--d:4">H</b></span>
-        <span class="w2"><b style="--c:#ff4f7a;--d:5">R</b><b style="--c:#ffc21f;--d:6">O</b><b style="--c:#3ec7ff;--d:7">P</b><b style="--c:#b36bff;--d:8">E</b></span>
+      <h1 class="logo" aria-label="حبل الحلوى">
+        <span class="w1"><b style="--c:#ffc21f;--d:0">حبل</b></span>
+        <span class="w2"><b style="--c:#ff4f7a;--d:3">الحلوى</b></span>
       </h1>
-      <button class="sg-btn big" id="tPlay" type="button">&#9654; PLAY</button>
+      <button class="sg-btn big" id="tPlay" type="button">&#9654; العب</button>
       <div class="row">
-        <button class="sg-btn secondary" id="tLevels" type="button">Levels</button>
-        <button class="sg-btn secondary" id="tStyle" type="button">Style<em class="newdot" id="styleNew" hidden>NEW</em></button>
+        <button class="sg-btn secondary" id="tLevels" type="button">المراحل</button>
+        <button class="sg-btn secondary" id="tStyle" type="button">الأزياء<em class="newdot" id="styleNew" hidden>جديد</em></button>
       </div>
       <div class="howto">
-        <div><span class="sg-key">Drag</span> swipe to cut ropes</div>
-        <div><span class="sg-key">Click</span> pop bubbles &amp; puff air</div>
-        <div><span class="sg-key">R</span> restart &nbsp;<span class="sg-key">P</span> pause</div>
+        <div><span class="sg-key">اسحب</span> بالفأرة عبر الحبل لتقطعه</div>
+        <div><span class="sg-key">انقر</span> لتفرقع الفقاعات وتنفخ الهواء</div>
+        <div><span class="sg-key">R</span> إعادة &nbsp;<span class="sg-key">P</span> إيقاف &nbsp;<span class="sg-key">H</span> تلميح</div>
       </div>
       <div class="progress" id="tProgress"></div>
     </div>
-    <div class="ttry">Psst... try cutting that rope!</div>
+    <div class="ttry">جرّب أن تقطع هذا الحبل!</div>
   </section>
 
   <!-- BOXES -->
   <section id="sBoxes" class="scr dim" hidden>
     <div class="panel wide">
       <div class="phead">
-        <button class="sg-btn secondary small" id="bxBack" type="button">&larr; Back</button>
-        <h2>Pick a Box</h2>
+        <button class="sg-btn secondary small" id="bxBack" type="button">&rarr; رجوع</button>
+        <h2>اختر صندوقًا</h2>
         <div class="starcount" id="bxStars"></div>
       </div>
       <div class="boxes" id="bxList"></div>
@@ -56,8 +56,8 @@
   <section id="sLevels" class="scr dim" hidden>
     <div class="panel wide">
       <div class="phead">
-        <button class="sg-btn secondary small" id="lvBack" type="button">&larr; Boxes</button>
-        <h2 id="lvTitle">Box</h2>
+        <button class="sg-btn secondary small" id="lvBack" type="button">&rarr; الصناديق</button>
+        <h2 id="lvTitle">الصندوق</h2>
         <div class="starcount" id="lvStars"></div>
       </div>
       <div class="grid" id="lvGrid"></div>
@@ -68,44 +68,44 @@
   <section id="sStyle" class="scr dim" hidden>
     <div class="panel wide">
       <div class="phead">
-        <button class="sg-btn secondary small" id="stBack" type="button">&larr; Back</button>
-        <h2>Style</h2>
+        <button class="sg-btn secondary small" id="stBack" type="button">&rarr; رجوع</button>
+        <h2>الأزياء</h2>
         <div class="starcount" id="stStars"></div>
       </div>
-      <h3>Candy</h3>
+      <h3>شكل الحلوى</h3>
       <div class="picks" id="stCandy"></div>
-      <h3>Munch's Hat</h3>
+      <h3>قبعة قضّوم</h3>
       <div class="picks" id="stHat"></div>
-      <p class="note">Collect stars to unlock more!</p>
+      <p class="note">اجمع النجوم لتفتح المزيد!</p>
     </div>
   </section>
 
   <!-- PAUSE -->
   <section id="sPause" class="scr dim" hidden>
     <div class="panel">
-      <h2 class="big">Paused</h2>
+      <h2 class="big">استراحة</h2>
       <div class="col">
-        <button class="sg-btn good" id="pResume" type="button">&#9654; Resume</button>
-        <button class="sg-btn secondary" id="pRestart" type="button">&#x21bb; Restart <span class="sg-key">R</span></button>
-        <button class="sg-btn secondary" id="pLevels" type="button">Levels</button>
-        <button class="sg-btn secondary" id="pMenu" type="button">Main Menu</button>
+        <button class="sg-btn good" id="pResume" type="button">&#9654; تابع</button>
+        <button class="sg-btn secondary" id="pRestart" type="button">&#x21bb; أعد المرحلة <span class="sg-key">R</span></button>
+        <button class="sg-btn secondary" id="pLevels" type="button">المراحل</button>
+        <button class="sg-btn secondary" id="pMenu" type="button">القائمة الرئيسية</button>
       </div>
-      <p class="note"><span class="sg-key">P</span> or <span class="sg-key">Esc</span> to resume</p>
+      <p class="note"><span class="sg-key">P</span> أو <span class="sg-key">Esc</span> للمتابعة</p>
     </div>
   </section>
 
   <!-- WIN -->
   <section id="sWin" class="scr" hidden>
     <div class="panel win">
-      <div class="ribbon" id="wTitle">Yum!</div>
+      <div class="ribbon" id="wTitle">لذيذ!</div>
       <div class="bigstars" id="wStars"><i></i><i></i><i></i></div>
       <div class="wlevel" id="wLevel"></div>
-      <div class="newbest" id="wBest" hidden>New best!</div>
+      <div class="newbest" id="wBest" hidden>رقم قياسي جديد!</div>
       <div class="unlocks" id="wUnlocks"></div>
       <div class="row">
-        <button class="sg-btn secondary" id="wLevels" type="button">Levels</button>
-        <button class="sg-btn secondary" id="wReplay" type="button">&#x21bb; Replay <span class="sg-key">R</span></button>
-        <button class="sg-btn good" id="wNext" type="button">Next &#9654; <span class="sg-key">Enter</span></button>
+        <button class="sg-btn secondary" id="wLevels" type="button">المراحل</button>
+        <button class="sg-btn secondary" id="wReplay" type="button">&#x21bb; مرة أخرى <span class="sg-key">R</span></button>
+        <button class="sg-btn good" id="wNext" type="button">التالي &#9664; <span class="sg-key">Enter</span></button>
       </div>
     </div>
   </section>
@@ -113,13 +113,13 @@
   <!-- FAIL -->
   <section id="sFail" class="scr" hidden>
     <div class="panel fail">
-      <h2 class="big" id="fTitle">Oh no!</h2>
+      <h2 class="big" id="fTitle">يا خسارة!</h2>
       <p class="reason" id="fReason"></p>
       <div class="row">
-        <button class="sg-btn secondary" id="fLevels" type="button">Levels</button>
-        <button class="sg-btn secondary" id="fHint" type="button">Hint</button>
-        <button class="sg-btn secondary" id="fSkip" type="button" hidden>Skip &#9197;</button>
-        <button class="sg-btn good" id="fRetry" type="button">&#x21bb; Try again <span class="sg-key">R</span></button>
+        <button class="sg-btn secondary" id="fLevels" type="button">المراحل</button>
+        <button class="sg-btn secondary" id="fHint" type="button">تلميح <span class="sg-key">H</span></button>
+        <button class="sg-btn secondary" id="fSkip" type="button" hidden>تخطَّ المرحلة</button>
+        <button class="sg-btn good" id="fRetry" type="button">&#x21bb; حاول مجددًا <span class="sg-key">R</span></button>
       </div>
     </div>
   </section>

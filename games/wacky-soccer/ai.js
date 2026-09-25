@@ -19,15 +19,17 @@
     this.cool -= dt; this.think -= dt;
     if (this.pending >= 0) {
       this.pending -= dt;
-      if (this.pending < 0) { this.cool = lerp(0.45, 0.22, sk); return true; }
+      if (this.pending < 0) { this.cool = lerp(0.85, 0.22, sk); return true; }
       return false;
     }
     if (this.cool > 0 || this.think > 0) return false;
     this.think = lerp(0.26, 0.07, sk) * (0.8 + Math.random() * 0.4);
+    // low skill: sometimes the CPU daydreams for a moment
+    if (Math.random() < (1 - sk) * (1 - sk) * 0.35) { this.cool = lerp(1.2, 0.3, sk) * (0.6 + Math.random() * 0.6); return false; }
     var want = this.decide(world);
     if (!want && Math.random() < (1 - sk) * 0.05) want = true;           // silly random press
-    if (want && Math.random() < (1 - sk) * 0.3) { want = false; this.cool = 0.3; }       // missed chance
-    if (want) this.pending = lerp(0.26, 0.0, sk) + Math.random() * lerp(0.12, 0.02, sk);
+    if (want && Math.random() < (1 - sk) * 0.45) { want = false; this.cool = lerp(0.5, 0.2, sk); }   // missed chance
+    if (want) this.pending = lerp(0.34, 0.0, sk) + Math.random() * lerp(0.16, 0.02, sk);
     return false;
   };
 

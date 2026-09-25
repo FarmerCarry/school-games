@@ -7,7 +7,7 @@
   BW.W = W; BW.H = H; BW.SEA = SEA;
   var BIOMES = ['ocean', 'beach', 'forest', 'plains', 'desert', 'snow'];
   BW.BIOMES = BIOMES;
-  var BIOME_LABEL = { ocean: 'Ocean', beach: 'Sunny Beach', forest: 'Green Forest', plains: 'Flower Meadow', desert: 'Dusty Desert', snow: 'Snowy Peaks' };
+  var BIOME_LABEL = { ocean: 'المحيط', beach: 'الشاطئ المشمس', forest: 'الغابة الخضراء', plains: 'مرج الأزهار', desert: 'الصحراء الذهبية', snow: 'القمم الثلجية' };
   BW.BIOME_LABEL = BIOME_LABEL;
 
   function mulberry(a) {
@@ -85,6 +85,17 @@
       segs.push({ a: x, b: Math.min(462, x + wdt), type: type }); usedR.push(type); prev = type; x += wdt;
     }
     segs[segs.length - 1].b = 462;
+    // Every world must have all 5 lands (the "visit all 5 lands" goal needs a flower meadow):
+    // if no plains segment was rolled, turn a repeated land type into plains.
+    if (!segs.some(function (sg) { return sg.type === 'plains'; })) {
+      var cnt = {};
+      segs.forEach(function (sg) { cnt[sg.type] = (cnt[sg.type] || 0) + 1; });
+      for (var si = 0; si < segs.length; si++) {
+        var sg0 = segs[si];
+        if (sg0.a === cx0 && sg0.b === cx1) continue; // keep the spawn forest
+        if (cnt[sg0.type] > 1) { cnt[sg0.type]--; sg0.type = 'plains'; break; }
+      }
+    }
     function biomeOf(x) {
       if (x < 24 || x >= 476) return 'ocean';
       if (x < 38 || x >= 462) return 'beach';

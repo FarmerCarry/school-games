@@ -19,15 +19,14 @@
 
 /* ---------- title ---------- */
 #scr-title { background: radial-gradient(ellipse at 50% 38%, rgba(255,255,255,0.0) 30%, rgba(30,10,70,0.25) 100%); }
-.logo { margin-top: -10px; text-align: center; line-height: 0.86; transform: rotate(-4deg); }
-.logo-row { display: flex; justify-content: center; gap: 2px; }
-.logo-row.two { margin-left: 70px; position: relative; }
+.logo { margin: -10px 0 0; text-align: center; line-height: 1; transform: rotate(-4deg); display: flex; flex-direction: column; align-items: center; font-weight: 700; }
 .logo b {
-  display: inline-block; font-weight: 700; font-size: 150px; color: var(--c);
+  display: block; font-weight: 700; font-size: 128px; line-height: 1.02; color: var(--c); white-space: nowrap;
   -webkit-text-stroke: 14px #2a1747; paint-order: stroke fill;
-  text-shadow: 0 12px 0 #2a1747, 0 18px 24px rgba(0,0,0,0.25);
+  text-shadow: 0 10px 0 #2a1747, 0 16px 24px rgba(0,0,0,0.25);
   animation: bob 1.6s ease-in-out infinite; animation-delay: calc(var(--d) * -0.14s);
 }
+.logo b.w2 { margin-top: -34px; margin-right: 120px; font-size: 116px; }
 .logo-hook {
   position: absolute; right: -86px; top: 30px; width: 78px; height: 120px;
   border: 14px solid #2a1747; border-top: none; border-radius: 0 0 50px 50px; border-left-color: transparent;
@@ -66,7 +65,7 @@
 .panel.wide { width: 1080px; padding: 20px 30px 22px; }
 @keyframes popin { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .panel h2 { margin: 0; font-size: 40px; font-weight: 700; text-shadow: 0 4px 0 rgba(0,0,0,0.3); }
-.panel h3 { margin: 10px 0 8px; font-size: 24px; text-align: left; color: #ffe14d; }
+.panel h3 { margin: 10px 0 8px; font-size: 24px; text-align: right; color: #ffe14d; }
 .panel .bigtitle { font-size: 60px; margin-bottom: 10px; }
 .panel .col { display: flex; flex-direction: column; align-items: center; }
 .panel .col .sg-btn { width: 260px; }

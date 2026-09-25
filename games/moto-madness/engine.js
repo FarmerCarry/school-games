@@ -344,7 +344,7 @@
     this.crashed = false; this.crashT = 0; this.rider = null;
     this.airT = 0; this.takeoffA = 0; this.pendingFlip = null; this.wheelieT = 0; this.wheelieShown = false;
     this.boostCd = 0; this.bounceCd = 0; this.grounded = true; this.chassisHit = 0;
-    this.maxAirH = 0;
+    this.maxAirH = 0; this.hungT = 0;
     // dynamic stuff back to the start
     this.movers = [];
     for (i = 0; i < L.moverDefs.length; i++) this.movers.push(this.makeMover(L.moverDefs[i]));
@@ -613,6 +613,16 @@
     var gas = ctl && inp.gas, brake = ctl && inp.brake, lean = ctl ? (inp.lean || 0) : 0;
     if (this.finished) brake = true;
     if (!this.started && !this.crashed) { gas = false; brake = true; lean = 0; }
+    // standing on a lift / ferry that hasn't arrived yet: it holds the wheels so you can't ride off by accident
+    var hold = null;
+    if (ctl) for (i = 0; i < this.movers.length; i++) { var mv = this.movers[i]; if (mv.type === 'platform' && mv.onT > 0 && mv.st !== 2) hold = mv; }
+    if (hold) {
+      gas = false; brake = false;
+      // "magnet" deck: quickly match the platform's speed so even a fast arrival stops on it
+      var kd = 1 - 11 * h;
+      b.vx = hold.vx + (b.vx - hold.vx) * kd;
+      for (i = 0; i < 2; i++) { wh = b.wheels[i]; wh.vx = hold.vx + (wh.vx - hold.vx) * kd; }
+    }
     var ca = Math.cos(b.a), sa = Math.sin(b.a);
 
     // gravity + air drag
@@ -647,9 +657,9 @@
     if (gas) {
       if (rear.s < VMAX) rear.s = Math.min(VMAX, rear.s + MOTOR * h * (1 - Math.max(0, rear.s) / (VMAX * 1.2)));
     }
-    if (brake) {
+    if (brake || hold) {
       for (i = 0; i < 2; i++) { wh = b.wheels[i]; wh.s = wh.s > 0 ? Math.max(0, wh.s - BRAKE * h) : Math.min(0, wh.s + BRAKE * h); }
-      if (fwd < 40 && this.started) rear.s = Math.max(-280, rear.s - 1800 * h);
+      if (brake && fwd < 40 && this.started) rear.s = Math.max(-280, rear.s - 1800 * h);
     }
     for (i = 0; i < 2; i++) { wh = b.wheels[i]; if (wh.air > 0.1 && !(gas && i === 0)) wh.s *= (1 - 0.6 * h); }
     // lean
@@ -892,6 +902,13 @@
         }
       }
     }
+    // hung up on the belly (e.g. on a pit edge or a ramp lip) with the driven rear wheel dangling:
+    // nobody can ride out of that, so tumble off and go back to the checkpoint
+    if (!this.crashed && this.started && !this.finished && rear.air > 0.3 && this.chassisHit > 0 &&
+        Math.abs(b.vx) < 120 && Math.abs(b.vy) < 120) {
+      this.hungT += DT;
+      if (this.hungT > 1.2) this.crash('stuck');
+    } else this.hungT = 0;
     // wheelie
     if (!this.crashed && rear.air < 0.05 && front.air > 0.25 && b.vx > 200) {
       this.wheelieT += DT;

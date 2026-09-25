@@ -198,21 +198,46 @@
       if (!w.grid[y * E.COLS + x]) continue;
       if (y > 0 && !w.grid[(y - 1) * E.COLS + x] && !w.owner[(y - 1) * E.COLS + x]) g.fillRect(x * T, y * T, T + 0.5, 5);
     }
+    // subtle dotted texture inside big solid areas so they don't look flat
+    g.fillStyle = pal.ink2; g.globalAlpha = 0.45;
+    for (y = 1; y < E.ROWS; y++) for (x = 0; x < E.COLS; x++) {
+      if (!w.grid[y * E.COLS + x] || !w.grid[(y - 1) * E.COLS + x]) continue;
+      if ((x + y) % 2) continue;
+      g.beginPath(); g.arc(x * T + 20, y * T + 20, 3, 0, Math.PI * 2); g.fill();
+    }
+    g.globalAlpha = 1;
     return c;
   };
+
+  function twinkle(ctx, x, y, r, a) {
+    ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(x, y - r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.quadraticCurveTo(x, y, x, y + r);
+    ctx.quadraticCurveTo(x, y, x - r, y); ctx.quadraticCurveTo(x, y, x, y - r);
+    ctx.fill(); ctx.restore();
+  }
 
   Art.drawGroups = function (ctx, w, pal, t) {
     for (var i = 0; i < w.groups.length; i++) {
       var g = w.groups[i];
       if (!g.active) continue;
-      if (g.invis && !g.revealed) continue;
+      if (g.invis && !g.revealed) {
+        // hidden block: an occasional faint twinkle is the only clue ("trust the sparkle")
+        for (var q = 0; q < g.tiles.length; q++) {
+          var tq = g.tiles[q], ph = Math.sin(t * 2.3 + tq.x * 1.9 + tq.y * 0.7);
+          if (ph < 0.55) continue;
+          var ta = Math.pow((ph - 0.55) / 0.45, 2) * 0.85;
+          twinkle(ctx, tq.x * T + g.ox + 20 + ((tq.x * 7) % 11) - 5, tq.y * T + g.oy + 12, 3 + ta * 6, ta);
+        }
+        continue;
+      }
       var jx = 0, jy = 0;
       if (g.shakeT > 0) { jx = Math.sin(t * 90 + i) * 2.5; jy = Math.cos(t * 70 + i) * 1.5; }
       var tiles = g.tiles;
       ctx.fillStyle = pal.ink;
       for (var k = 0; k < tiles.length; k++) {
         var tx = tiles[k].x * T + g.ox + jx, ty = tiles[k].y * T + g.oy + jy;
-        ctx.fillRect(tx, ty, T + 0.5, T + 0.5);
+        ctx.fillRect(tx - 0.5, ty - 0.5, T + 1, T + 1);
       }
       ctx.fillStyle = pal.ink2;
       for (k = 0; k < tiles.length; k++) {

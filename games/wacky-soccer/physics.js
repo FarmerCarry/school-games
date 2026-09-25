@@ -12,6 +12,7 @@
   var BAR_Y = WS.BAR_Y = G - GOAL_H;   // crossbar height (y)
   var BAR_R = 8;
   WS.MAXV = 1050;
+  WS.TUNE = { kickBase: 700, kickFoot: 0.25, anyPart: true, ownDamp: 0.3 };
 
   WS.baseParams = function () {
     return {
@@ -121,7 +122,7 @@
       return true;
     }
     if (this.grounded()) {
-      var jv = 760 * P.jumpMul * (0.85 + 0.15 * this.s);
+      var jv = 760 * P.jumpMul * (0.85 + 0.15 * this.s) * (0.8 + 0.2 * (this.power || 1));
       var ja = a + (Math.random() - 0.5) * 0.22;
       this.vx = this.vx * 0.3 + Math.sin(ja) * jv + this.dir * 40;
       this.vy = Math.min(this.vy, 0) * 0.3 - Math.cos(ja) * jv;
@@ -417,7 +418,9 @@
       if (s[0] === 'c') { pvx = s[6]; pvy = s[7]; }
       var part = s[10];
       var isLeg = part.charAt(0) === 'l' || part.charAt(0) === 'f';
-      var isKick = p.kickT > 0 && !p.kickHit && (part === 'leg0' || part === 'foot0');
+      var footKick = part === 'leg0' || part === 'foot0';
+      // while the button's kick window is open, ANY touch sends the ball forward (weaker than a real foot kick)
+      var isKick = p.kickT > 0 && !p.kickHit && (footKick || WS.TUNE.anyPart);
       // push out (ball takes most of it)
       var pen = rr - d;
       this.x += nx * pen; this.y += ny * pen;
@@ -426,8 +429,8 @@
       if (isKick) {
         // a kick always launches the ball forward; a faster foot = a harder kick
         var fs = Math.sqrt(pvx * pvx + pvy * pvy);
-        var km = P.kickMul / Math.sqrt(Math.max(0.5, mb));
-        var pw = (500 + Math.min(fs, 1500) * 0.25) * km;
+        var km = P.kickMul * (p.power || 1) / Math.sqrt(Math.max(0.5, mb));
+        var pw = (WS.TUNE.kickBase + Math.min(fs, 1500) * WS.TUNE.kickFoot) * km * (footKick ? 1 : 0.72);
         var rel = (p.pts.hip.y - this.y) / p.legLen;      // > 0 when the ball is above the hip
         if (rel < -1) rel = -1; else if (rel > 1.5) rel = 1.5;
         var ang = 0.72 - rel * 0.32 + (Math.random() - 0.5) * 0.3;
@@ -458,6 +461,9 @@
         this.vx += jb * nx; this.vy += jb * ny;
         var tvx = rvx - vn * nx, tvy = rvy - vn * ny;
         this.spin += (tvx * -ny + tvy * nx) / r * 0.3;
+        // own-goal guard: a clumsy body bump rarely rockets the ball toward your own goal
+        var bv = -this.vx * p.dir;
+        if (bv > 160) { bv = 160 + (bv - 160) * WS.TUNE.ownDamp; this.vx = -p.dir * bv; }
         var J = jb * mb * 0.5;
         p.applyImpulse(qx, qy, -J * nx, -J * ny);
         power = -vn;

@@ -8,37 +8,37 @@
   var MM = root.MM = root.MM || {};
 
   MM.WORLDS = [
-    { id: 'grass', name: 'Grassland', color: '#43c451' },
-    { id: 'desert', name: 'Desert', color: '#ffa733' },
-    { id: 'winter', name: 'Winter', color: '#59c8ff' },
-    { id: 'factory', name: 'Night Factory', color: '#a45cff' }
+    { id: 'grass', name: 'المروج الخضراء', color: '#43c451' },
+    { id: 'desert', name: 'الصحراء', color: '#ffa733' },
+    { id: 'winter', name: 'بلاد الثلج', color: '#59c8ff' },
+    { id: 'factory', name: 'مصنع الليل', color: '#a45cff' }
   ];
 
   MM.LEVELS = [
     /* ------------------------------------------------------------ GRASSLAND */
-    { name: 'First Ride', theme: 'grass', seed: 1, stars: [23, 35], build: function (b) {
-      b.flat(220).sign('Hold  ↑  to GO!', 160).flat(620)
+    { name: 'أول جولة', theme: 'grass', seed: 1, stars: [23, 35], build: function (b) {
+      b.flat(220).sign('اضغط ↑ لتنطلق!', 160).flat(620)
         .hill(600, 60).flat(300)
-        .sign('← →  lean the bike').flat(300)
+        .sign('← أو → لإمالة الدراجة').flat(300)
         .hill(700, 120).flat(300)
         .bumps(3, 240, 24).flat(400)
         .checkpoint().flat(160)
-        .sign('Jump! Hold ← in the air to FLIP').flat(420)
+        .sign('اقفز! واضغط ← في الهواء لتتشقلب').flat(420)
         .kicker(220, 80).flat(900)
         .to(500, 130).flat(300).crates([2, 1]).flat(260)
         .to(600, -130).flat(500)
         .hill(800, 150).flat(400)
         .checkpoint().flat(300)
-        .sign('Big jump! Try a BACKFLIP').flat(300)
+        .sign('قفزة كبيرة! جرّب شقلبة خلفية').flat(300)
         .ramp(260, 70).landing(760, 260).flat(500)
         .bumps(4, 220, 28).flat(400)
         .kicker(220, 80).flat(700)
         .crates([3]).flat(300)
         .hill(900, 170).flat(400);
     } },
-    { name: 'Hop Hills', theme: 'grass', seed: 2, stars: [28, 41], build: function (b) {
+    { name: 'تلال القفز', theme: 'grass', seed: 2, stars: [28, 41], build: function (b) {
       b.flat(700).hill(800, 150).flat(400)
-        .sign('Jump the spikes!').flat(300)
+        .sign('اقفز فوق الأشواك!').flat(300)
         .kicker(220, 85).pit(240, 170).flat(500)
         .hill(600, 100).hill(600, 140).flat(500)
         .checkpoint().flat(100)
@@ -53,8 +53,8 @@
         .kicker(240, 90).pit(280, 200).flat(500)
         .hill(700, 120).flat(400);
     } },
-    { name: 'Mushroom Meadow', theme: 'grass', seed: 3, stars: [29, 42], build: function (b) {
-      b.flat(600).sign('Bounce on the mushrooms!').flat(300)
+    { name: 'مرج الفطر', theme: 'grass', seed: 3, stars: [29, 42], build: function (b) {
+      b.flat(600).sign('انطّ على الفطر!').flat(300)
         .mushroom(1100).flat(160).slope(40, 220).flat(900)
         .to(500, -220).flat(500)
         .mushroom(1150).flat(60).pit(300, 200).flat(700)
@@ -69,8 +69,8 @@
         .kicker(220, 90).pit(260, 180).flat(600)
         .mushroom(1250).flat(900).crates([3, 2, 1]).flat(300);
     } },
-    { name: 'Seesaw Park', theme: 'grass', seed: 4, stars: [26, 38], build: function (b) {
-      b.flat(600).sign('Ride across the seesaw').flat(300)
+    { name: 'حديقة الميزان', theme: 'grass', seed: 4, stars: [26, 38], build: function (b) {
+      b.flat(600).sign('اعبر فوق الميزان الخشبي').flat(300)
         .seesaw(360).flat(600)
         .hill(600, 110).flat(400)
         .logs(4, 140).flat(400)
@@ -88,8 +88,8 @@
         .logs(3, 160).flat(300)
         .seesaw(400).flat(500);
     } },
-    { name: 'Loop Lagoon', theme: 'grass', seed: 5, stars: [27, 40], build: function (b) {
-      b.flat(500).sign('TURBO! Then loop-the-loop!').flat(300)
+    { name: 'بحيرة اللفّات', theme: 'grass', seed: 5, stars: [27, 40], build: function (b) {
+      b.flat(500).sign('تيربو! ثم لفّة كاملة!').flat(300)
         .boost(220).loop(170).flat(400)
         .hill(800, 160).flat(500)
         .kicker(240, 100).pit(320, 200).flat(500)
@@ -107,8 +107,8 @@
     } },
 
     /* --------------------------------------------------------------- DESERT */
-    { name: 'Dune Runner', theme: 'desert', seed: 6, stars: [33, 48], build: function (b) {
-      b.flat(700).sign('Big dunes = big air!').flat(200)
+    { name: 'سباق الكثبان', theme: 'desert', seed: 6, stars: [33, 48], build: function (b) {
+      b.flat(700).sign('كثبان كبيرة = قفزات عالية!').flat(200)
         .hill(900, 200).flat(200).hill(1000, 260).flat(500)
         .to(500, 150).flat(400).ramp(260, 90).landing(1100, 480).flat(500)
         .checkpoint().flat(100)
@@ -122,7 +122,7 @@
         .hill(900, 220).hill(900, 260).flat(500)
         .kicker(240, 100).pit(340, 200).flat(600);
     } },
-    { name: 'Canyon Leap', theme: 'desert', seed: 7, stars: [28, 41], build: function (b) {
+    { name: 'قفزة الوادي', theme: 'desert', seed: 7, stars: [28, 41], build: function (b) {
       b.flat(700)
         .kicker(220, 90).pit(260, 220).flat(600)
         .to(500, 180).flat(500)
@@ -140,9 +140,9 @@
         .to(600, 200).flat(400).ramp(260, 100).pit(340, 320, -120).flat(600)
         .crates([3, 3]).flat(400);
     } },
-    { name: 'Rolling Rocks', theme: 'desert', seed: 8, stars: [23, 34], build: function (b) {
+    { name: 'الصخور المتدحرجة', theme: 'desert', seed: 8, stars: [23, 34], build: function (b) {
       b.flat(600).to(700, 250).flat(300)
-        .sign('Uh oh... RIDE FAST!').flat(300)
+        .sign('أوه لا… أسرع أسرع!').flat(300)
         .boulder(560, 420)
         .landing(1600, 700).flat(700)
         .kicker(220, 90).pit(260, 200).flat(500)
@@ -161,8 +161,8 @@
         .crates([3, 2, 1]).flat(500)
         .kicker(240, 100).pit(320, 220).flat(600);
     } },
-    { name: 'Crumble Bridge', theme: 'desert', seed: 9, stars: [22, 34], build: function (b) {
-      b.flat(600).sign('Keep going! The bridge falls!').flat(300)
+    { name: 'الجسر المتهاوي', theme: 'desert', seed: 9, stars: [22, 34], build: function (b) {
+      b.flat(600).sign('لا تتوقف! الجسر يسقط!').flat(300)
         .bridge(520, 7).flat(600)
         .hill(700, 140).flat(500)
         .kicker(220, 90).pit(280, 200).flat(500)
@@ -177,7 +177,7 @@
         .landing(800, 260).flat(500)
         .bridge(600, 8).flat(300).bridge(600, 8).flat(600);
     } },
-    { name: 'Scorpion Loop', theme: 'desert', seed: 10, stars: [24, 36], build: function (b) {
+    { name: 'لفّة العقرب', theme: 'desert', seed: 10, stars: [24, 36], build: function (b) {
       b.flat(600).hill(800, 160).flat(400)
         .boost(220).loop(180).flat(400)
         .seesaw(400).flat(500)
@@ -195,8 +195,8 @@
     } },
 
     /* --------------------------------------------------------------- WINTER */
-    { name: 'Snow Day', theme: 'winter', seed: 11, stars: [25, 37], build: function (b) {
-      b.flat(600).sign('Ice is slippery!').flat(300)
+    { name: 'يوم الثلج', theme: 'winter', seed: 11, stars: [25, 37], build: function (b) {
+      b.flat(600).sign('انتبه! الجليد زلق!').flat(300)
         .ice(600).hill(700, 120).flat(500)
         .kicker(220, 90).pit(260, 200).flat(500)
         .ice(400).to(600, 180).flat(500)
@@ -211,7 +211,7 @@
         .crates([3, 2, 1]).flat(400)
         .ice(500).kicker(240, 100).pit(320, 220).flat(600);
     } },
-    { name: 'Frozen Falls', theme: 'winter', seed: 12, stars: [24, 35], build: function (b) {
+    { name: 'الشلال المتجمد', theme: 'winter', seed: 12, stars: [24, 35], build: function (b) {
       b.flat(700)
         .ramp(220, 60).drop(160).flat(700)
         .ramp(220, 60).drop(200).flat(700)
@@ -227,11 +227,12 @@
         .bridge(600, 8).flat(500)
         .ramp(240, 70).drop(200).flat(600);
     } },
-    { name: 'Ice Elevator', theme: 'winter', seed: 13, stars: [32, 47], build: function (b) {
-      b.flat(600).sign('Stop on the lift!  ↓ = brake').flat(500)
+    { name: 'مصعد الجليد', theme: 'winter', seed: 13, stars: [32, 47], build: function (b) {
+      b.flat(600).sign('قف على المصعد! ↓ للفرامل').flat(500)
         .lift(300, 300).flat(700)
-        .landing(700, 200).flat(500)
-        .sign('Ride the ferry across').flat(400)
+        .landing(700, 200).flat(300)
+        .checkpoint().flat(100)
+        .sign('قف على المنصة لتعبر!').flat(300)
         .ferry(760, 300).flat(600)
         .checkpoint().flat(200)
         .hill(700, 140).flat(500)
@@ -243,9 +244,9 @@
         .ice(400).flat(200).mushroom(1150).flat(200).slope(40, 250).flat(900)
         .landing(800, 250).flat(500);
     } },
-    { name: 'Avalanche!', theme: 'winter', seed: 14, stars: [20, 31], build: function (b) {
+    { name: 'انهيار ثلجي!', theme: 'winter', seed: 14, stars: [20, 31], build: function (b) {
       b.flat(600).to(800, 320).flat(300)
-        .sign('SNOWBALL! Don\'t stop!').flat(300)
+        .sign('كرة ثلج! لا تتوقف!').flat(300)
         .boulder(560, 460, 70)
         .landing(1700, 760).flat(700)
         .kicker(220, 90).pit(260, 200).flat(400)
@@ -263,7 +264,7 @@
         .crates([3, 2, 1]).flat(500)
         .kicker(240, 100).pit(320, 220).flat(600);
     } },
-    { name: 'Double Loop Peak', theme: 'winter', seed: 15, stars: [28, 41], build: function (b) {
+    { name: 'قمة اللفّتين', theme: 'winter', seed: 15, stars: [28, 41], build: function (b) {
       b.flat(600).hill(800, 150).flat(400)
         .boost(220).loop(170).flat(100).boost(220).loop(180).flat(400)
         .checkpoint().flat(200)
@@ -280,8 +281,8 @@
     } },
 
     /* -------------------------------------------------------- NIGHT FACTORY */
-    { name: 'Night Shift', theme: 'factory', seed: 16, stars: [23, 34], build: function (b) {
-      b.flat(600).sign('Turbo pads = super speed!').flat(300)
+    { name: 'جولة الليل', theme: 'factory', seed: 16, stars: [23, 34], build: function (b) {
+      b.flat(600).sign('منصات التيربو = سرعة خارقة!').flat(300)
         .boost(220).kicker(240, 100).pit(560, 240).flat(600)
         .crates([3, 2, 1]).flat(300)
         .hill(700, 140).flat(500)
@@ -296,10 +297,11 @@
         .boost(220).kicker(260, 110).pit(640, 260).flat(600)
         .hill(800, 160).flat(500);
     } },
-    { name: 'Piston Park', theme: 'factory', seed: 17, stars: [30, 43], build: function (b) {
-      b.flat(600).sign('Stop on the piston!  ↓ = brake').flat(400)
+    { name: 'ساحة المكابس', theme: 'factory', seed: 17, stars: [30, 43], build: function (b) {
+      b.flat(600).sign('قف على المكبس! ↓ للفرامل').flat(400)
         .lift(300, 320).flat(700)
-        .landing(700, 240).flat(500)
+        .landing(700, 240).flat(300)
+        .checkpoint().flat(100)
         .ferry(760, 300).flat(500)
         .checkpoint().flat(200)
         .kicker(240, 100).pit(320, 220).flat(500)
@@ -311,7 +313,7 @@
         .seesaw(400).flat(500)
         .crates([3, 2, 1]).flat(400);
     } },
-    { name: 'Spark Pits', theme: 'factory', seed: 18, stars: [24, 35], build: function (b) {
+    { name: 'حُفر الشرر', theme: 'factory', seed: 18, stars: [24, 35], build: function (b) {
       b.flat(600)
         .kicker(220, 90).pit(280, 220).flat(500)
         .kicker(220, 90).pit(280, 220).flat(500)
@@ -327,8 +329,8 @@
         .landing(900, 300).flat(500)
         .seesaw(400).flat(600);
     } },
-    { name: 'Crate Crusher', theme: 'factory', seed: 19, stars: [18, 28], build: function (b) {
-      b.flat(600).sign('SMASH!').flat(200)
+    { name: 'محطّم الصناديق', theme: 'factory', seed: 19, stars: [18, 28], build: function (b) {
+      b.flat(600).sign('حطّم الصناديق!').flat(200)
         .crates([4, 3, 2, 1]).flat(300)
         .bridge(600, 8).flat(400)
         .crates([3, 3, 3]).flat(300)
@@ -346,8 +348,8 @@
         .hill(800, 160).flat(500)
         .crates([3, 2, 1]).flat(300).crates([3, 2, 1]).flat(400);
     } },
-    { name: 'Moto Madness', theme: 'factory', seed: 20, stars: [34, 49], build: function (b) {
-      b.flat(600).sign('The ULTIMATE ride!').flat(300)
+    { name: 'جنون الدراجات', theme: 'factory', seed: 20, stars: [34, 49], build: function (b) {
+      b.flat(600).sign('التحدي الأكبر!').flat(300)
         .boost(220).loop(180).flat(400)
         .kicker(240, 100).pit(320, 220).flat(500)
         .seesaw(400).flat(500)

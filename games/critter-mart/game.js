@@ -60,6 +60,11 @@
   function isUnlocked(id) { return DEF[id].cost === 0 || !!S.un[id]; }
 
   /* ========================================================= helpers */
+  // Canvas text direction: Arabic strings draw RTL, pure numbers/symbols LTR
+  // (so "+25" never flips to "25+"). Always call through dir() before drawing text.
+  var ARX = /[\u0600-\u06FF]/;
+  function dir(c, s) { s = String(s); c.direction = ARX.test(s) ? 'rtl' : 'ltr'; return s; }
+  function coinWord(n) { n = Math.floor(n) % 100; return (n >= 3 && n <= 10) ? 'عملات' : 'عملة'; }
   function d2(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
   function hash(i, j) { var h = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return h - Math.floor(h); }
   function rnd(a, b) { return a + Math.random() * (b - a); }
@@ -566,7 +571,7 @@
           c.wait += dt;
           if (c.wait > 38) {
             c.mood = Math.max(0, c.mood - 0.45);
-            floatText(c.x, c.y - 100, 'No ' + ITEMS[c.wants[c.wi]].name + '?', '#ffb3b3', 22);
+            floatText(c.x, c.y - 100, 'أين ' + ITEMS[c.wants[c.wi]].al + '؟', '#ffb3b3', 22);
             SFX.sad();
             var skip = c.wants[c.wi];
             while (c.wi < c.wants.length && c.wants[c.wi] === skip) c.wi++;
@@ -846,7 +851,7 @@
   function flashFull() {
     if (P.fullT > 0) return;
     P.fullT = 1.0;
-    floatText(P.x, P.y - 110 - P.stack.length * 14, 'FULL!', '#ff5d5d', 26);
+    floatText(P.x, P.y - 110 - P.stack.length * 14, 'يداك ممتلئتان!', '#ff5d5d', 26);
     SFX.full();
   }
 
@@ -953,7 +958,7 @@
     if (P.padT < 0.25) return;
     var remain = on.d.cost - on.paid;
     if (S.coins < 1) {
-      if (P.padT > 0.3 && !on.warned) { on.warned = true; floatText(on.x, on.y - 70, 'Need more coins!', '#ffd23f', 24); SFX.no(); }
+      if (P.padT > 0.3 && !on.warned) { on.warned = true; floatText(on.x, on.y - 70, 'تحتاج عملات أكثر!', '#ffd23f', 24); SFX.no(); }
       return;
     }
     on.warned = false;
@@ -987,10 +992,10 @@
     burst(d.x, d.y - 20, 20, { speed: 300, up: 100, life: 0.7, size: 12, colors: ['#ffffff', '#ffe14a'], g: 300, shape: 'star' });
     R.shake.add(9);
     SFX.unlock();
-    var sub = { field: 'Walk into ripe crops to pick them', shelf: 'Stock it to sell ' + (d.item ? ITEMS[d.item].name : ''), machine: 'Bring ' + (d.input ? ITEMS[d.input].name : '') + ' to make ' + (d.output ? ITEMS[d.output].name : ''),
-      coop: 'Hens lay eggs in the nests', pen: 'Grab fresh milk from the crate', orchard: 'Apples grow on the trees', decor: 'Customers pay ' + Math.round((d.bonus || 0) * 100) + '% more!',
-      hire: d.role === 'farmer' ? 'Farmers pick and stock for you' : 'Your cashier sells for you', expand: 'A whole new room!', desk: 'Buy upgrades here', register: 'With its own cashier!' }[d.kind] || '';
-    banner(d.name + '!', sub, '#ffd23f', 2.6);
+    var sub = { field: 'امشِ إلى المحاصيل الناضجة لتقطفها', shelf: 'املأه لتبيع ' + (d.item ? ITEMS[d.item].al : ''), machine: 'أحضر ' + (d.input ? ITEMS[d.input].al : '') + ' لتصنع ' + (d.output ? ITEMS[d.output].al : ''),
+      coop: 'الدجاجات تضع البيض في الأعشاش', pen: 'خذ الحليب الطازج من الصندوق', orchard: 'التفاح ينمو على الأشجار', decor: 'الزبائن يدفعون ' + Math.round((d.bonus || 0) * 100) + '% أكثر!',
+      hire: d.role === 'farmer' ? 'المزارع يقطف ويملأ الرفوف عنك' : 'الكاشير يبيع للزبائن عنك', expand: 'غرفة جديدة كاملة!', desk: 'اشترِ التطويرات من هنا', register: 'ومعه كاشير خاص!' }[d.kind] || '';
+    banner(d.name.replace(/!$/, '') + '!', sub, '#ffd23f', 2.6);
     if (d.kind === 'hire' || d.helper) SFX.hire();
     if (d.id === 'cornField' && S.tut < 5) setTut(5);
     if (d.id === 'cornShelf') setTut(6);
@@ -1006,7 +1011,7 @@
       setTimeout(function () {
         var hat = null;
         CM.HATS.forEach(function (h) { if (h.lvl === lvl && lvl > META.maxLvl) hat = h; });
-        banner('Mart Level ' + lvl + '!', hat ? 'New hat unlocked: ' + hat.name + '!' : 'More customers are coming!', '#7ef0ff', 3);
+        banner('مستوى السوق ' + lvl + '!', hat ? 'قبعة جديدة: ' + hat.name + '!' : 'زبائن جدد في الطريق!', '#7ef0ff', 3);
         SFX.level();
         confetti(P.x, P.y - 80, 50);
         if (lvl > META.maxLvl) { META.maxLvl = lvl; saveMeta(); }
@@ -1021,7 +1026,7 @@
     if (u.needs && !isUnlocked(u.needs)) { SFX.no(); return false; }
     if (l >= u.costs.length) { SFX.no(); return false; }
     var c = u.costs[l];
-    if (S.coins < c) { SFX.no(); floatText(P.x, P.y - 120, 'Need ' + K.fmt(c) + ' coins', '#ffd23f', 24); return false; }
+    if (S.coins < c) { SFX.no(); floatText(P.x, P.y - 120, 'تحتاج ' + K.fmt(c) + ' ' + coinWord(c), '#ffd23f', 24); return false; }
     S.coins -= c; S.up[id] = l + 1;
     SFX.upgrade();
     burst(P.x, P.y - 40, 26, { speed: 300, up: 150, life: 0.8, size: 9, colors: ['#7ef0ff', '#ffe14a', '#ffffff'], shape: 'star', g: 300 });
@@ -1038,35 +1043,35 @@
     S.tut = n;
     if (n === 2 && !R.firstCust) { R.firstCust = true; spawnCustomer(true); R.spawnT = 7; }
   }
-  var TUT_TEXT = ['Walk into the banana plants to pick bananas!', 'Carry them to the banana shelf!', 'A customer is coming! Stand at the checkout to sell.', 'Walk over your coins to grab them!', ''];
+  var TUT_TEXT = ['امشِ إلى أشجار الموز لتقطف الموز!', 'احمل الموز إلى رف الموز!', 'زبون قادم! قف عند صندوق الدفع لتبيع.', 'امشِ فوق العملات لتجمعها!', ''];
   function computeHint() {
     var h = null;
     var cashierSpot = function (reg) { return { x: reg.d.cashier.x, y: reg.d.cashier.y }; };
     var reg1 = R.byId.register1;
     if (S.tut === 0) { var bf = R.byId.bananaField; h = { text: TUT_TEXT[0], x: bf.x, y: bf.y - 20, icon: 'banana' }; }
-    else if (S.tut === 1) { var bs = R.byId.bananaShelf; h = { text: P.stack.length ? TUT_TEXT[1] : 'Pick some bananas first!', x: P.stack.length ? bs.x : R.byId.bananaField.x, y: P.stack.length ? bs.y - 30 : R.byId.bananaField.y, icon: 'banana' }; }
+    else if (S.tut === 1) { var bs = R.byId.bananaShelf; h = { text: P.stack.length ? TUT_TEXT[1] : 'اقطف بعض الموز أولًا!', x: P.stack.length ? bs.x : R.byId.bananaField.x, y: P.stack.length ? bs.y - 30 : R.byId.bananaField.y, icon: 'banana' }; }
     else if (S.tut === 2) {
       var anyQ = reg1.queue.length > 0;
       if (reg1.pile > 0) { setTut(3); }
-      h = { text: anyQ ? 'Stand at the checkout to sell!' : TUT_TEXT[2], x: reg1.d.cashier.x, y: reg1.d.cashier.y, icon: 'register' };
-      if (!anyQ && P.stack.length && shelfFor('banana').count < 8) h = { text: 'Stock more bananas while you wait!', x: R.byId.bananaShelf.x, y: R.byId.bananaShelf.y - 30, icon: 'banana' };
+      h = { text: anyQ ? 'قف عند صندوق الدفع لتبيع!' : TUT_TEXT[2], x: reg1.d.cashier.x, y: reg1.d.cashier.y, icon: 'register' };
+      if (!anyQ && P.stack.length && shelfFor('banana').count < 8) h = { text: 'ضع موزًا أكثر على الرف وأنت تنتظر!', x: R.byId.bananaShelf.x, y: R.byId.bananaShelf.y - 30, icon: 'banana' };
     }
     if (S.tut === 3) { h = { text: TUT_TEXT[3], x: reg1.d.pile.x, y: reg1.d.pile.y, icon: 'coin' }; if (reg1.pile <= 0 && S.coins > 0) setTut(4); }
     if (h) return h;
     // generic hints
     for (var i = 0; i < R.registers.length; i++) {
       var r = R.registers[i];
-      if (r.queue.length && r.queue[0].arrived && !(r.helper && r.helper.atPost) && r.queue[0].wait > (S.tut < 5 ? 0 : 4)) return { text: 'Customers are waiting to pay!', x: cashierSpot(r).x, y: cashierSpot(r).y, icon: 'register', urgent: true };
+      if (r.queue.length && r.queue[0].arrived && !(r.helper && r.helper.atPost) && r.queue[0].wait > (S.tut < 5 ? 0 : 4)) return { text: 'الزبائن ينتظرون الدفع!', x: cashierSpot(r).x, y: cashierSpot(r).y, icon: 'register', urgent: true };
     }
     var cheapest = null;
     R.pads.forEach(function (p) { if (!cheapest || p.d.cost - p.paid < cheapest.d.cost - cheapest.paid) cheapest = p; });
-    if (cheapest && S.coins >= cheapest.d.cost - cheapest.paid) return { text: 'You can unlock ' + cheapest.d.name + '!', x: cheapest.x, y: cheapest.y, icon: 'star', pad: true };
-    for (var j = 0; j < R.registers.length; j++) { var rg = R.registers[j]; if (rg.pile >= 20 || (S.tut < 6 && rg.pile > 0)) return { text: 'Grab your coins!', x: rg.d.pile.x, y: rg.d.pile.y, icon: 'coin' }; }
+    if (cheapest && S.coins >= cheapest.d.cost - cheapest.paid) return { text: 'تستطيع أن تفتح: ' + cheapest.d.name.replace(/!$/, '') + '!', x: cheapest.x, y: cheapest.y, icon: 'star', pad: true };
+    for (var j = 0; j < R.registers.length; j++) { var rg = R.registers[j]; if (rg.pile >= 20 || (S.tut < 6 && rg.pile > 0)) return { text: 'اجمع عملاتك!', x: rg.d.pile.x, y: rg.d.pile.y, icon: 'coin' }; }
     if (P.stack.length) {
       var type = P.stack[P.stack.length - 1].type, dst = null;
       R.shelves.forEach(function (s) { if (!dst && s.item === type && s.count < s.cap) dst = s; });
       R.machines.forEach(function (m) { if (!dst && m.d.input === type && m.inCount < m.cap) dst = m; });
-      if (dst) { var dp = dst.kind === 'machine' ? dst.inMat : { x: dst.x, y: dst.y - 30 }; return { text: dst.kind === 'machine' ? 'Put ' + ITEMS[type].name + ' in the ' + dst.d.name + '!' : 'Stock the ' + dst.d.name + '!', x: dp.x, y: dp.y, icon: type }; }
+      if (dst) { var dp = dst.kind === 'machine' ? dst.inMat : { x: dst.x, y: dst.y - 30 }; return { text: dst.kind === 'machine' ? 'ضع ' + ITEMS[type].al + ' في ' + dst.d.name + '!' : 'املأ ' + dst.d.name + '!', x: dp.x, y: dp.y, icon: type }; }
     }
     // an empty shelf that customers want
     var want = null;
@@ -1076,11 +1081,11 @@
       srcs.forEach(function (sr) { if (!src || availAt(sr) > availAt(src)) src = sr; });
       if (src) {
         var sp = srcPoint(src);
-        if (src.kind === 'machine' && src.outCount === 0) { sp = src.inMat; return { text: 'Make ' + ITEMS[want.item].name + ': bring ' + ITEMS[src.d.input].name + ' to the ' + src.d.name + '!', x: sp.x, y: sp.y, icon: src.d.input }; }
-        return { text: 'A customer wants ' + ITEMS[want.item].name + '!', x: sp.x, y: sp.y - 10, icon: want.item };
+        if (src.kind === 'machine' && src.outCount === 0) { sp = src.inMat; return { text: 'لتصنع ' + ITEMS[want.item].al + ': أحضر ' + ITEMS[src.d.input].al + ' إلى ' + src.d.name + '!', x: sp.x, y: sp.y, icon: src.d.input }; }
+        return { text: 'زبون يريد ' + ITEMS[want.item].al + '!', x: sp.x, y: sp.y - 10, icon: want.item };
       }
     }
-    if (cheapest) return { text: 'Save up ' + K.fmt(cheapest.d.cost - cheapest.paid) + ' coins for ' + cheapest.d.name, x: cheapest.x, y: cheapest.y, icon: 'star', soft: true };
+    if (cheapest) return { text: 'اجمع ' + K.fmt(cheapest.d.cost - cheapest.paid) + ' ' + coinWord(cheapest.d.cost - cheapest.paid) + ' لتفتح: ' + cheapest.d.name.replace(/!$/, ''), x: cheapest.x, y: cheapest.y, icon: 'star', soft: true };
     return null;
   }
 
@@ -1161,6 +1166,7 @@
         var n = Math.min(10, 2 + Math.floor(value / 5));
         for (var i = 0; i < n; i++) fly('coin', null, reg.x - 40, reg.y - 60, { x: reg.d.pile.x + rnd(-14, 14), y: reg.d.pile.y - rnd(0, 10) }, 0.35 + i * 0.04, rnd(50, 90), 20, null);
         c.mood = Math.min(1, c.mood + 0.5);
+        if (playerHere) praiseSale(reg);
         burst(c.x, c.y - 110, 1, { speed: 10, up: 60, life: 1.0, size: 22, color: '#ff5d8f', g: -30, shape: 'heart' });
         SFX.happy();
         reg.queue.shift();
@@ -1170,6 +1176,21 @@
         if (S.tut === 2) setTut(3);
       }
     });
+  }
+
+  // Serving customers back to back at the checkout builds a little combo with praise words.
+  var PRAISE = [['رائع!', '#7ef0ff'], ['ممتاز!', '#3ddc84'], ['مذهل!', '#ff8fbf'], ['خارق!', '#ffd23f']];
+  function praiseSale(reg) {
+    R.combo = (R.t - (R.lastSale || -99) < 4.5) ? (R.combo || 0) + 1 : 1;
+    R.lastSale = R.t;
+    if (R.combo < 2) return;
+    var pr = PRAISE[Math.min(PRAISE.length - 1, R.combo - 2)];
+    var old = TEXTS.indexOf(R.praiseTxt); if (old >= 0) TEXTS.splice(old, 1);
+    floatText(reg.x + 125, reg.y - 105, pr[0], pr[1], 30 + Math.min(4, R.combo) * 3);
+    R.praiseTxt = TEXTS[TEXTS.length - 1];
+    var f = 660 * Math.pow(1.12, Math.min(8, R.combo));
+    tone({ freq: f, to: f * 1.5, type: 'triangle', dur: 0.12, vol: 0.12, delay: 0.25 });
+    if (R.combo >= 4) { R.shake.add(3); burst(reg.x + 125, reg.y - 105, 10, { speed: 220, up: 80, life: 0.6, size: 9, colors: CONF, g: 300, shape: 'star' }); }
   }
 
   function spawnLogic(dt) {
@@ -1183,8 +1204,8 @@
     if (R.spawnT <= 0 && custs < maxC) { R.spawnT = interval * rnd(0.7, 1.3); spawnCustomer(false); }
     // rush hour
     if (R.lvl >= 3) {
-      if (R.rush > 0) { R.rush -= dt; if (R.rush <= 0) { R.rushT = rnd(150, 210); banner('Rush hour is over', 'Phew! Great job!', '#ffffff', 2); } }
-      else { R.rushT -= dt; if (R.rushT <= 0) { R.rush = 25; banner('RUSH HOUR!', 'Lots of customers paying 50% extra!', '#ff7a59', 3); SFX.rush(); R.shake.add(5); } }
+      if (R.rush > 0) { R.rush -= dt; if (R.rush <= 0) { R.rushT = rnd(150, 210); banner('انتهت الزحمة', 'أحسنت! عمل رائع!', '#ffffff', 2); } }
+      else { R.rushT -= dt; if (R.rushT <= 0) { R.rush = 25; banner('وقت الزحمة!', 'زبائن كثيرون يدفعون 50% زيادة!', '#ff7a59', 3); SFX.rush(); R.shake.add(5); } }
     }
   }
 
@@ -1548,12 +1569,12 @@
     A.icon(c, padIcon(d), 0, -30, 46);
     // name
     c.font = '700 20px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    var nw = c.measureText(d.name).width + 24;
+    var nw = c.measureText(dir(c, d.name)).width + 24;
     A.rr(c, -nw / 2, -86, nw, 28, 14); c.fillStyle = 'rgba(40,30,60,0.8)'; c.fill();
-    c.fillStyle = '#ffffff'; c.fillText(d.name, 0, -71);
+    c.fillStyle = '#ffffff'; c.fillText(dir(c, d.name), 0, -71);
     // cost
     c.font = '700 22px Fredoka, sans-serif';
-    var txt = K.fmt(remain), tw = c.measureText(txt).width + 44;
+    var txt = dir(c, K.fmt(remain)), tw = c.measureText(txt).width + 44;
     A.rr(c, -tw / 2, 6, tw, 32, 16); c.fillStyle = afford ? '#3ddc84' : '#ffffff'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 3; c.stroke();
     A.coin(c, -tw / 2 + 17, 22, 11);
     c.fillStyle = afford ? '#08361d' : '#4a2e1f'; c.textAlign = 'left'; c.fillText(txt, -tw / 2 + 32, 23);
@@ -1719,7 +1740,7 @@
     // price tag
     var price = Math.round(priceOf(o.item));
     c.font = '700 17px Fredoka, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle';
-    var tw = c.measureText(price).width + 30;
+    var tw = c.measureText(dir(c, price)).width + 30;
     A.rr(c, x - tw / 2, yb - (d.fridge ? 14 : 30), tw, 22, 8); c.fillStyle = '#ffffff'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 2; c.stroke();
     A.coin(c, x - tw / 2 + 12, yb - (d.fridge ? 3 : 19), 8);
     c.fillStyle = OUT; c.fillText(price, x - tw / 2 + 22, yb - (d.fridge ? 2 : 18));
@@ -1761,8 +1782,8 @@
     c.beginPath(); c.moveTo(x0 + w - 2, yb - 40); c.lineTo(x0 + w + 26, yb - 22); c.lineTo(x0 + w + 26, yb - 12); c.lineTo(x0 + w - 2, yb - 24); c.closePath(); c.fillStyle = '#c9ccd6'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 2.5; c.stroke();
     // label
     c.font = '700 14px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillStyle = 'rgba(0,0,0,0.25)'; c.fillText(d.name.toUpperCase(), x + 1, yb - 9);
-    c.fillStyle = '#ffffff'; c.fillText(d.name.toUpperCase(), x, yb - 10);
+    c.fillStyle = 'rgba(0,0,0,0.25)'; c.fillText(dir(c, d.name), x + 1, yb - 9);
+    c.fillStyle = '#ffffff'; c.fillText(d.name, x, yb - 10);
     c.restore();
     // output items on out mat
     var vout = Math.max(0, o.outCount);
@@ -1771,7 +1792,7 @@
   }
   function badge(c, x, y, txt, col) {
     c.font = '700 16px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    var w = c.measureText(txt).width + 14;
+    var w = c.measureText(dir(c, txt)).width + 14;
     A.rr(c, x - w / 2, y - 11, w, 22, 11); c.fillStyle = col; c.fill(); c.strokeStyle = OUT; c.lineWidth = 2; c.stroke();
     c.fillStyle = '#ffffff'; c.fillText(txt, x, y + 1);
   }
@@ -1799,7 +1820,7 @@
     A.rr(c, x0 + 16, ry - 22, 40, 30, 6); c.fillStyle = '#3f4ea8'; c.fill(); c.stroke();
     A.rr(c, x0 + 21, ry - 17, 30, 16, 3); c.fillStyle = o.scan > 0 ? '#ffffff' : '#9ff7d6'; c.fill();
     c.fillStyle = '#1b5e4a'; c.font = '700 13px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText(o.ching > 0 ? '$$$' : (o.queue.length && o.queue[0].state === 'paying' ? Math.round(o.queue[0].paid) + '' : 'HI!'), x0 + 36, ry - 8);
+    c.fillText(dir(c, o.ching > 0 ? 'شكرًا' : (o.queue.length && o.queue[0].state === 'paying' ? Math.round(o.queue[0].paid) + '' : 'أهلًا')), x0 + 36, ry - 8);
     c.fillStyle = '#ffffff'; for (var i = 0; i < 3; i++) { c.fillRect(x0 + 16 + i * 14, ry + 16, 9, 6); c.fillRect(x0 + 16 + i * 14, ry + 26, 9, 6); }
     c.restore();
   }
@@ -1836,7 +1857,7 @@
     A.rr(c, x - 82, yt - H - 56, 164, 12, 6); c.fillStyle = '#b85a3e'; c.fill(); c.strokeStyle = OUT; c.stroke();
     // sign
     A.rr(c, x - 44, yt - H - 32, 88, 26, 8); c.fillStyle = '#fff7d6'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 2.5; c.stroke();
-    c.font = '700 16px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#9b4a32'; c.fillText('EGGS', x, yt - H - 18);
+    c.font = '700 16px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#9b4a32'; c.fillText(dir(c, 'بيض'), x, yt - H - 18);
     // hen peeking in the window
     A.head(c, 'chicken', x + 50, yb - 32, 0.42, { look: Math.sin(R.t) });
     c.restore();
@@ -1874,7 +1895,7 @@
     fence(c, x - w / 2, x + w / 2, y + h / 2);
     fenceV(c, x - w / 2, y - h / 2, y + h / 2); fenceV(c, x + w / 2, y - h / 2, y + h / 2);
     A.rr(c, x - 42, y - h / 2 - 50, 84, 26, 8); c.fillStyle = '#fff7d6'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 2.5; c.stroke();
-    c.font = '700 16px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#3d6ecf'; c.fillText('MILK', x, y - h / 2 - 36);
+    c.font = '700 16px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#3d6ecf'; c.fillText(dir(c, 'حليب'), x, y - h / 2 - 36);
     c.restore();
   }
   function fence(c, x0, x1, y) {
@@ -1933,7 +1954,7 @@
     A.rr(c, -45, -33, 90, 50, 5); c.fillStyle = '#f5deb3'; c.fill();
     c.fillStyle = '#ffffff'; c.fillRect(-38, -28, 26, 20); c.fillStyle = '#fff6a0'; c.fillRect(-6, -30, 24, 22); c.fillStyle = '#c8f0ff'; c.fillRect(22, -26, 18, 18);
     c.font = '700 13px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#9b4a32';
-    c.fillText('UPGRADES', 0, 6);
+    c.fillText(dir(c, 'تطويرات'), 0, 6);
     arrowShape(c, 0, -46 + Math.sin(R.t * 4) * 3, -Math.PI / 2, 12, '#3ddc84');
     c.restore();
   }
@@ -1963,8 +1984,8 @@
     A.rr(c, x - 125, y - 196 + bob, 250, 62, 16); c.fillStyle = '#ffcf3f'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 4; c.stroke();
     A.rr(c, x - 116, y - 188 + bob, 232, 46, 11); c.fillStyle = '#ff7a59'; c.fill();
     c.font = '700 30px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.lineWidth = 6; c.strokeStyle = OUT; c.strokeText('CRITTER MART', x, y - 163 + bob);
-    c.fillStyle = '#ffffff'; c.fillText('CRITTER MART', x, y - 163 + bob);
+    c.lineWidth = 6; c.strokeStyle = OUT; c.strokeText(dir(c, 'سوق الحيوانات'), x, y - 163 + bob);
+    c.fillStyle = '#ffffff'; c.fillText('سوق الحيوانات', x, y - 163 + bob);
   }
   function drawDesk() { /* board is drawn on the back wall */ }
   function drawTrash(c, o) {
@@ -2056,12 +2077,12 @@
       var a = 1 - Math.max(0, (tx.t - tx.life * 0.6) / (tx.life * 0.4)), sc = tx.t < 0.15 ? 0.5 + tx.t / 0.15 * 0.7 : 1.2 - Math.min(0.2, (tx.t - 0.15));
       c.save(); c.globalAlpha = Math.max(0, a); c.translate(tx.x, tx.y - tx.t * 50); c.scale(sc, sc);
       c.font = '700 ' + tx.size + 'px Fredoka, sans-serif';
-      c.lineWidth = 7; c.strokeStyle = OUT; c.strokeText(tx.text, 0, 0); c.fillStyle = tx.color; c.fillText(tx.text, 0, 0);
+      c.lineWidth = 7; c.strokeStyle = OUT; c.strokeText(dir(c, tx.text), 0, 0); c.fillStyle = tx.color; c.fillText(tx.text, 0, 0);
       c.restore();
     }
     // target arrow above hint target
     if (R.mode === 'play' && R.hint && showArrow()) {
-      var h = R.hint, by = h.y - 110 + Math.sin(R.t * 6) * 10;
+      var h = R.hint, by = h.y - (h.pad || (h.text && R.pads.some(function (p) { return p.x === h.x && p.y === h.y; })) ? 205 : 110) + Math.sin(R.t * 6) * 10;
       if (inView(h.x, h.y, -40) && d2(P.x, P.y, h.x, h.y) > 70 * 70) {
         c.save(); c.translate(h.x, by);
         c.beginPath(); c.moveTo(-18, -22); c.lineTo(18, -22); c.lineTo(18, 2); c.lineTo(30, 2); c.lineTo(0, 30); c.lineTo(-30, 2); c.lineTo(-18, 2); c.closePath();
@@ -2100,7 +2121,7 @@
       var full = n >= cap;
       var ty = y - n * 14 - 24;
       c.font = '700 17px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-      var txt = full ? 'MAX' : n + '/' + cap, w = c.measureText(txt).width + 16;
+      var txt = dir(c, full ? 'ممتلئ' : n + '/' + cap), w = c.measureText(txt).width + 16;
       A.rr(c, x + sway * Math.pow(n, 1.25) * 3 - w / 2, ty - 11, w, 22, 11); c.fillStyle = full ? '#ff5d5d' : 'rgba(40,30,60,0.8)'; c.fill();
       c.fillStyle = '#fff'; c.fillText(txt, x + sway * Math.pow(n, 1.25) * 3, ty + 1);
     }
@@ -2128,9 +2149,9 @@
     A.rr(c, -26, -24, 52, 48, 20); c.fillStyle = waitLong ? '#ffe3e3' : '#ffffff'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 3; c.stroke();
     if (type) A.itemC(c, type, 0, 0, 38);
     else if (ico === 'register') { A.icon(c, 'register', 0, 0, 38); }
-    else if (ico === 'sad') { c.font = '700 26px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#6b7085'; c.fillText(':(', 0, 1); }
-    if (cnt > 1) { A.circ(c, 22, -20, 12); c.fillStyle = '#ff5d8f'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 2.5; c.stroke(); c.font = '700 15px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; c.fillText('x' + cnt, 22, -19); }
-    if (waitLong) { A.circ(c, -24, -20, 11); c.fillStyle = '#ff5d5d'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 2.5; c.stroke(); c.font = '700 17px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; c.fillText('!', -24, -19); }
+    else if (ico === 'sad') { c.font = '700 26px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#6b7085'; c.fillText(dir(c, ':('), 0, 1); }
+    if (cnt > 1) { A.circ(c, 22, -20, 12); c.fillStyle = '#ff5d8f'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 2.5; c.stroke(); c.font = '700 15px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; c.fillText(dir(c, '×' + cnt), 22, -19); }
+    if (waitLong) { A.circ(c, -24, -20, 11); c.fillStyle = '#ff5d5d'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 2.5; c.stroke(); c.font = '700 17px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff'; c.fillText(dir(c, '!'), -24, -19); }
     c.restore();
   }
 
@@ -2140,44 +2161,46 @@
   }
   function pill(c, x, y, w, h, col) { A.rr(c, x, y, w, h, h / 2); c.fillStyle = col; c.fill(); }
   function drawHUD(c) {
-    c.textBaseline = 'middle';
+    c.textBaseline = 'middle'; c.lineJoin = 'round'; c.lineCap = 'round';
     // coins
     var bump = R.coinBump;
     c.save(); c.translate(22, 16);
     pill(c, 0, 4, 230, 56, 'rgba(30,22,50,0.55)');
     c.save(); c.translate(28, 32); c.scale(1 + bump * 0.3, 1 + bump * 0.3); A.coin(c, 0, 0, 24); c.restore();
     c.font = '700 36px Fredoka, sans-serif'; c.textAlign = 'left';
-    c.lineWidth = 6; c.strokeStyle = OUT; c.strokeText(K.fmt(R.disp), 60, 34); c.fillStyle = '#ffe14a'; c.fillText(K.fmt(R.disp), 60, 34);
+    c.lineWidth = 6; c.strokeStyle = OUT; c.strokeText(dir(c, K.fmt(R.disp)), 60, 34); c.fillStyle = '#ffe14a'; c.fillText(K.fmt(R.disp), 60, 34);
     c.restore();
     // level bar
     var n = unlockedCount(), lvl = R.lvl, prog = (n % 3) / 3;
     if (n >= PAID_UNLOCKS) prog = 1;
-    var bx = VW / 2 - 150, byy = 18;
-    pill(c, bx, byy, 300, 46, 'rgba(30,22,50,0.55)');
-    pill(c, bx + 58, byy + 15, 226, 16, 'rgba(255,255,255,0.25)');
-    if (prog > 0) pill(c, bx + 58, byy + 15, Math.max(16, 226 * prog), 16, '#7ef0ff');
-    A.star(c, bx + 28, byy + 23, 5, 24, 11); c.fillStyle = '#ffd23f'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 3; c.stroke();
-    c.font = '700 18px Fredoka, sans-serif'; c.textAlign = 'center'; c.fillStyle = OUT; c.fillText(lvl, bx + 28, byy + 25);
-    c.font = '700 14px Fredoka, sans-serif'; c.fillStyle = '#fff'; c.fillText('MART LEVEL ' + lvl + '  ·  ' + n + '/' + PAID_UNLOCKS + ' unlocked', bx + 171, byy + 8 + 34);
+    var bx = VW / 2 - 150, byy = 16;
+    pill(c, bx, byy, 300, 54, 'rgba(30,22,50,0.55)');
+    pill(c, bx + 58, byy + 11, 226, 14, 'rgba(255,255,255,0.25)');
+    if (prog > 0) pill(c, bx + 58, byy + 11, Math.max(14, 226 * prog), 14, '#7ef0ff');
+    A.star(c, bx + 28, byy + 27, 5, 24, 11); c.fillStyle = '#ffd23f'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 3; c.stroke();
+    c.font = '700 18px Fredoka, sans-serif'; c.textAlign = 'center'; c.fillStyle = OUT; c.fillText(dir(c, lvl), bx + 28, byy + 29);
+    c.font = '700 14px Fredoka, sans-serif'; c.fillStyle = '#fff'; c.fillText(dir(c, 'مستوى السوق ' + lvl + '  ·  فتحت ' + n + ' من ' + PAID_UNLOCKS), bx + 171, byy + 38);
     // rush timer
     if (R.rush > 0) {
       c.save(); c.translate(VW / 2, 100); var rs = 1 + Math.sin(R.t * 10) * 0.04; c.scale(rs, rs);
       pill(c, -120, -20, 240, 40, '#ff7a59'); c.strokeStyle = OUT; c.lineWidth = 3; A.rr(c, -120, -20, 240, 40, 20); c.stroke();
-      c.font = '700 22px Fredoka, sans-serif'; c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText('RUSH HOUR  ' + Math.ceil(R.rush) + 's', 0, 1);
+      c.font = '700 22px Fredoka, sans-serif'; c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText(dir(c, 'وقت الزحمة  ' + Math.ceil(R.rush) + ' ث'), 0, 1);
       c.restore();
     }
     // hint
     if (R.hint && R.mode === 'play' && (S.tut < 5 || showArrow())) {
       var h = R.hint;
-      c.font = '700 24px Fredoka, sans-serif'; c.textAlign = 'left';
-      var tw = c.measureText(h.text).width, w = tw + 84, x = VW / 2 - w / 2, y = VH - 74;
+      c.font = '700 24px Fredoka, sans-serif'; c.textAlign = 'right';
+      var tw = c.measureText(dir(c, h.text)).width;
+      if (tw > VW - 130) { c.font = '700 ' + Math.floor(24 * (VW - 130) / tw) + 'px Fredoka, sans-serif'; tw = c.measureText(h.text).width; }
+      var w = Math.min(VW - 40, tw + 84), x = VW / 2 - w / 2, y = VH - 74;
       var pulse = S.tut < 5 ? 1 + Math.sin(R.t * 5) * 0.02 : 1;
       c.save(); c.translate(VW / 2, y + 26); c.scale(pulse, pulse); c.translate(-VW / 2, -(y + 26));
       A.rr(c, x, y + 4, w, 52, 26); c.fillStyle = 'rgba(0,0,0,0.25)'; c.fill();
       A.rr(c, x, y, w, 52, 26); c.fillStyle = h.urgent ? '#ff6b6b' : '#ffffff'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 4; c.stroke();
-      if (h.icon === 'coin') A.coin(c, x + 34, y + 26, 17);
-      else A.icon(c, h.icon, x + 34, y + 26, 38);
-      c.fillStyle = h.urgent ? '#ffffff' : '#3a2a50'; c.fillText(h.text, x + 60, y + 28);
+      if (h.icon === 'coin') A.coin(c, x + w - 34, y + 26, 17);
+      else A.icon(c, h.icon, x + w - 34, y + 26, 38);
+      c.fillStyle = h.urgent ? '#ffffff' : '#3a2a50'; c.fillText(h.text, x + w - 60, y + 28);
       c.restore();
     }
     // off-screen hint arrow
@@ -2205,11 +2228,11 @@
       var yy = 150 + i * 88;
       c.save(); c.globalAlpha = al; c.translate(VW / 2, yy); c.scale(sc2, sc2);
       c.font = '700 44px Fredoka, sans-serif'; c.textAlign = 'center';
-      c.lineWidth = 10; c.strokeStyle = OUT; c.strokeText(b.text, 0, 0);
+      c.lineWidth = 10; c.strokeStyle = OUT; c.strokeText(dir(c, b.text), 0, 0);
       c.fillStyle = b.color; c.fillText(b.text, 0, 0);
       if (b.sub) {
         c.font = '700 22px Fredoka, sans-serif';
-        c.lineWidth = 6; c.strokeText(b.sub, 0, 38); c.fillStyle = '#ffffff'; c.fillText(b.sub, 0, 38);
+        c.lineWidth = 6; c.strokeText(dir(c, b.sub), 0, 38); c.fillStyle = '#ffffff'; c.fillText(b.sub, 0, 38);
       }
       c.restore();
     }
@@ -2222,10 +2245,16 @@
     upg: $('upgrades'), upgList: $('upgList'), pauseBtn: $('pauseBtn'), hats: $('hats'), prog: $('prog'), hero: $('hero')
   };
   var muteBtn = K.muteButton();
+  muteBtn.setAttribute('aria-label', 'الصوت'); muteBtn.title = 'الصوت (M)';
 
   function show(o, on) { if (on) o.removeAttribute('hidden'); else o.setAttribute('hidden', ''); }
+  var titleSize = null;
   function fitUI() {
     var s = Math.min(window.innerWidth / 1100, window.innerHeight / 640);
+    // never let the (tall) title card run past the window edges
+    var tc = document.querySelector('.cm-title-card');
+    if (tc && tc.offsetHeight) titleSize = { w: tc.offsetWidth, h: tc.offsetHeight };
+    if (titleSize) s = Math.min(s, (window.innerWidth - 16) / titleSize.w, (window.innerHeight - 24) / (titleSize.h + 10));
     s = Math.max(0.45, Math.min(1.5, s));
     document.documentElement.style.setProperty('--ui', s.toFixed(3));
   }
@@ -2246,11 +2275,12 @@
 
   function titleInfo() {
     var n = unlockedCount();
-    if (n === 0 && S.coins === 0 && S.tut === 0) { el.prog.innerHTML = 'Your very own store is waiting!'; $('playBtn').textContent = 'Play!'; }
-    else { el.prog.innerHTML = '<b>Mart Level ' + levelFor(n) + '</b> · ' + n + '/' + PAID_UNLOCKS + ' unlocked · <span class="cm-coin"></span> ' + K.fmt(S.coins); $('playBtn').textContent = 'Continue!'; }
+    if (n === 0 && S.coins === 0 && S.tut === 0) { el.prog.innerHTML = 'متجرك الخاص بانتظارك!'; $('playBtn').textContent = 'العب!'; }
+    else { el.prog.innerHTML = '<b>مستوى السوق ' + levelFor(n) + '</b> · فتحت ' + n + ' من ' + PAID_UNLOCKS + ' · <span class="cm-coin"></span> ' + K.fmt(S.coins); $('playBtn').textContent = 'تابع!'; }
     $('newBtn').style.display = (n > 0 || S.tut > 0) ? '' : 'none';
-    $('bestLine').textContent = META.best ? 'Best finish: ' + fmtTime(META.best) : '';
+    $('bestLine').textContent = META.best ? 'أسرع إنهاء للسوق: ' + fmtTime(META.best) : '';
     buildHats();
+    fitUI();
   }
   function buildHats() {
     el.hats.innerHTML = '';
@@ -2264,7 +2294,7 @@
       A.head(c2, 'raccoon', 30, 36, 0.95, { hat: h.id });
       if (locked) { c2.fillStyle = 'rgba(40,30,60,0.55)'; c2.fillRect(0, 0, 60, 60); A.icon(c2, 'lock', 30, 30, 34); }
       b.appendChild(cv);
-      var sp = document.createElement('span'); sp.textContent = locked ? 'Lv ' + h.lvl : h.name; b.appendChild(sp);
+      var sp = document.createElement('span'); sp.textContent = locked ? 'مستوى ' + h.lvl : h.name; b.appendChild(sp);
       b.addEventListener('click', function () {
         if (locked) { SFX.no(); return; }
         META.hat = h.id; saveMeta(); SFX.click(); buildHats();
@@ -2281,7 +2311,7 @@
     K.keys.reset();
     R.cam.x = P.x; R.cam.y = P.y - 40; camUpdate(0, true);
     if (R.welcome > 0) { setMode('welcome'); $('welcomeAmt').textContent = K.fmt(R.welcome); }
-    if (S.tut === 0 && P.stack.length === 0) banner('Welcome to Critter Mart!', "Let's make some money!", '#ffd23f', 2.6);
+    if (S.tut === 0 && P.stack.length === 0) banner('أهلًا في سوق الحيوانات!', 'هيا نربح العملات!', '#ffd23f', 2.6);
   }
   function closeWelcome() {
     if (R.welcome > 0) {
@@ -2293,7 +2323,7 @@
     }
     setMode('play');
   }
-  function pauseGame() { if (R.mode !== 'play') return; saveGame(); setMode('pause'); $('musicBtn').textContent = 'Music: ' + (META.music ? 'On' : 'Off'); }
+  function pauseGame() { if (R.mode !== 'play') return; saveGame(); setMode('pause'); $('musicBtn').textContent = 'الموسيقى: ' + (META.music ? 'تعمل' : 'متوقفة'); }
   function resumeGame() { SFX.click(); setMode('play'); K.keys.reset(); }
   function toMenu() { saveGame(); setMode('title'); titleInfo(); }
   var confirmFrom = 'title';
@@ -2309,20 +2339,20 @@
     var t = S.stats.play;
     var isBest = !S.cheat && (!META.best || t < META.best);
     if (!S.done) { if (isBest) META.best = t; S.done = true; saveMeta(); saveGame(); }
-    $('finStats').innerHTML = '<div><b>' + fmtTime(t) + '</b><span>time</span></div><div><b>' + K.fmt(S.stats.served) + '</b><span>customers</span></div><div><b>' + K.fmt(S.stats.earned) + '</b><span>coins earned</span></div>';
+    $('finStats').innerHTML = '<div><b>' + fmtTime(t) + '</b><span>الوقت</span></div><div><b>' + K.fmt(S.stats.served) + '</b><span>زبون سعيد</span></div><div><b>' + K.fmt(S.stats.earned) + '</b><span>عملة ربحتها</span></div>';
     show($('finBest'), isBest);
     setMode('finale');
     SFX.level(); setTimeout(function () { K.sfx.win(); }, 700);
     confetti(R.cam.x, R.cam.y - 200, 120);
   }
-  function closeFinale() { setMode('play'); banner('Keep on shopping!', 'Your mart is the best in town', '#ffd23f', 2.4); }
+  function closeFinale() { setMode('play'); banner('تابع البيع!', 'سوقك هو الأفضل في المدينة!', '#ffd23f', 2.4); }
 
   $('playBtn').addEventListener('click', startPlay);
   $('newBtn').addEventListener('click', function () { SFX.click(); askNewStore(); });
   $('resumeBtn').addEventListener('click', resumeGame);
   $('menuBtn').addEventListener('click', function () { SFX.click(); toMenu(); });
   $('restartBtn').addEventListener('click', function () { SFX.click(); askNewStore(); });
-  $('musicBtn').addEventListener('click', function () { META.music = !META.music; saveMeta(); au.unlock(); SFX.click(); $('musicBtn').textContent = 'Music: ' + (META.music ? 'On' : 'Off'); });
+  $('musicBtn').addEventListener('click', function () { META.music = !META.music; saveMeta(); au.unlock(); SFX.click(); $('musicBtn').textContent = 'الموسيقى: ' + (META.music ? 'تعمل' : 'متوقفة'); });
   $('yesBtn').addEventListener('click', function () { SFX.click(); newStore(); });
   $('noBtn').addEventListener('click', function () { SFX.click(); if (confirmFrom === 'pause') setMode('pause'); else if (confirmFrom === 'finale') setMode('finale'); else { setMode('title'); titleInfo(); } });
   $('collectBtn').addEventListener('click', closeWelcome);
@@ -2376,7 +2406,7 @@
       var ph = '';
       for (var i = 0; i < max; i++) ph += '<i class="' + (i < l ? 'on' : '') + '"></i>';
       r.pips.innerHTML = ph;
-      r.cost.innerHTML = locked ? 'Hire a<br>helper first' : (l >= max ? 'MAX' : '<span class="cm-coin"></span>' + K.fmt(c));
+      r.cost.innerHTML = locked ? 'وظّف كاشير<br>أولًا' : (l >= max ? 'مكتمل' : '<span class="cm-coin"></span>' + K.fmt(c));
     });
   }
 
@@ -2411,35 +2441,38 @@
   /* ========================================================= title hero */
   var heroCtx = el.hero.getContext('2d');
   function drawHero() {
-    var c = heroCtx, W = el.hero.width, H = el.hero.height, t = R.t;
+    var c = heroCtx, W = 880, H = 268, t = R.t;
+    // backing store matches the on-screen size so the logo stays crisp when the card is scaled up
+    var ui = parseFloat(document.documentElement.style.getPropertyValue('--ui')) || 1;
+    var k = Math.max(1, Math.min(2.5, ui * (window.devicePixelRatio || 1)));
+    if (Math.abs(el.hero.width - Math.round(W * k)) > 1) { el.hero.width = Math.round(W * k); el.hero.height = Math.round(H * k); }
+    c.setTransform(el.hero.width / W, 0, 0, el.hero.height / H, 0, 0);
     c.clearRect(0, 0, W, H);
     c.lineJoin = 'round'; c.lineCap = 'round';
     // sun rays
     c.save(); c.translate(W / 2, H * 0.62); c.rotate(t * 0.15);
     for (var i = 0; i < 14; i++) { c.rotate(TAU / 14); c.beginPath(); c.moveTo(0, 0); c.lineTo(-40, -520); c.lineTo(40, -520); c.closePath(); c.fillStyle = i % 2 ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.05)'; c.fill(); }
     c.restore();
-    // logo
-    var words = [['Critter', '#ffcf3f', 0], ['Mart', '#ff7a59', 1]];
-    c.font = '700 92px Fredoka, sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'left';
-    var total = c.measureText('Critter Mart').width;
-    var x = W / 2 - total / 2 - 30, y = 88;
-    var letters = 'Critter Mart';
-    for (var k = 0; k < letters.length; k++) {
-      var ch = letters[k], cw = c.measureText(ch).width;
-      var by = Math.sin(t * 3 - k * 0.45) * 6;
-      var col = k < 7 ? '#ffcf3f' : '#ff7a59';
-      c.save(); c.translate(x + cw / 2, y + by); c.rotate(Math.sin(t * 2 + k) * 0.03);
-      c.lineWidth = 18; c.strokeStyle = OUT; c.strokeText(ch, -cw / 2, 6);
-      c.lineWidth = 18; c.strokeText(ch, -cw / 2, 0);
-      c.fillStyle = col; c.fillText(ch, -cw / 2, 0);
-      c.fillStyle = 'rgba(255,255,255,0.35)'; c.save(); c.beginPath(); c.rect(-cw / 2, -40, cw, 22); c.clip(); c.fillText(ch, -cw / 2, 0); c.restore();
+    // logo: two whole Arabic words (never letter by letter, so the letters stay joined).
+    // RTL: the first word "سوق" sits on the right.
+    var words = [['سوق', '#ffcf3f'], ['الحيوانات', '#ff7a59']];
+    c.font = '700 88px Fredoka, sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'center'; c.direction = 'rtl';
+    var gap = 26, w0 = c.measureText(words[0][0]).width, w1 = c.measureText(words[1][0]).width;
+    var total = w0 + gap + w1, xr = W / 2 + total / 2 - 30, y = 84;
+    for (var k = 0; k < words.length; k++) {
+      var wd = words[k][0], cw = k === 0 ? w0 : w1, cx0 = k === 0 ? xr - w0 / 2 : xr - w0 - gap - w1 / 2;
+      var by = Math.sin(t * 3 - k * 1.3) * 6;
+      c.save(); c.translate(cx0, y + by); c.rotate(Math.sin(t * 2 + k * 2) * 0.03);
+      c.lineWidth = 18; c.strokeStyle = OUT; c.strokeText(wd, 0, 6);
+      c.strokeText(wd, 0, 0);
+      c.fillStyle = words[k][1]; c.fillText(wd, 0, 0);
+      c.fillStyle = 'rgba(255,255,255,0.3)'; c.save(); c.beginPath(); c.rect(-cw / 2 - 10, -46, cw + 20, 26); c.clip(); c.fillText(wd, 0, 0); c.restore();
       c.restore();
-      x += cw;
     }
     // tagline ribbon
     c.save(); c.translate(W / 2 - 30, 158);
     A.rr(c, -170, -20, 340, 40, 20); c.fillStyle = '#1fb5a8'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 4; c.stroke();
-    c.font = '700 22px Fredoka, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText('Grow it! Stock it! Sell it!', 0, 1);
+    c.font = '700 26px Fredoka, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#fff'; c.fillText(dir(c, 'ازرع! رتّب! بِع!'), 0, 3);
     c.restore();
     // mascot with stack
     var mx = W - 110, my = H - 18;
@@ -2515,7 +2548,10 @@
   R.welcome = offlineEarnings();
   titleInfo();
   setMode('title');
-  if (document.fonts && document.fonts.load) { try { document.fonts.load('700 20px Fredoka'); } catch (e) { /* ignore */ } }
+  if (document.fonts && document.fonts.load) {
+    // make sure the Arabic half of the composite Fredoka family is ready for canvas text
+    try { document.fonts.load('700 20px Fredoka', 'سوق'); document.fonts.load('700 20px Fredoka', '0'); document.fonts.ready.then(fitUI); } catch (e) { /* ignore */ }
+  }
 
   window.__game = {
     get mode() { return R.mode; },
@@ -2563,6 +2599,7 @@
     S: function () { return S; },
     setTut: function (n) { S.tut = n; },
     spawn: function () { spawnCustomer(false); },
-    rush: function () { R.rushT = 0.01; }
+    rush: function () { R.rushT = 0.01; },
+    praise: function (n) { for (var i = 0; i < (n || 2); i++) praiseSale(R.registers[0]); return R.combo; }
   };
 })();

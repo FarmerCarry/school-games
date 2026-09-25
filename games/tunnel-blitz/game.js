@@ -1030,10 +1030,10 @@
     G.state = 'play'; G.runActive = true; G.committed = false;
     G.runT = 0; G.score = 0; G.bonus = 0; G.orbsRun = 0; G.closeRun = 0; G.streak = 0; G.bestStreak = 0; G.lastCloseT = -9;
     G.lastCloseRow = -1; G.shieldsRun = 0; G.shield = false; G.invuln = 0; G.passedBest = false; G.runMissions = [];
-    G.orbStreak = 0; G.flash = 0.6; G.flashCol = ZT[1].col; G.fovKick = 1; G.dispScore = 0; G.missionTimer = 0;
+    G.orbStreak = 0; G.zoneOrbs = 0; G.flash = 0.6; G.flashCol = ZT[1].col; G.fovKick = 1; G.dispScore = 0; G.missionTimer = 0;
     PS.length = 0; pops.length = 0;
     save.runs++; persist();
-    showBanner('انطلق!', 'المنطقة 1 · ' + ZT[1].name, rgba(ZT[1].col, 1), 1.4);
+    showBanner('انطلق!', ZT[1].name, rgba(ZT[1].col, 1), 1.4);
     Sfx.go();
     Mus.play('game'); musicForZone(1);
     document.getElementById('pauseBtn').hidden = false;
@@ -1049,10 +1049,18 @@
     G.zone = k;
     var Z = ZT[k], col = zoneCol(Z, 0, G.t);
     if (G.state !== 'play') return;
-    showBanner('المنطقة ' + k, Z.name + '  ·  أسرع!', rgba(col, 1), 2);
+    showBanner('المنطقة ' + k, Z.name + ' - أسرع!', rgba(col, 1), 2);
     G.flash = 0.55; G.flashCol = col.slice(); G.fovKick = 1; G.shake = Math.max(G.shake, 6);
     Sfx.zone();
     musicForZone(k);
+    // reward for reaching a new zone: bonus orbs (makes shop unlocks come faster)
+    var zb = Math.min(40, 5 * (k - 1));
+    if (zb > 0) {
+      G.orbsRun += zb; G.zoneOrbs = (G.zoneOrbs || 0) + zb;
+      pop('+' + zb, CX, 400, '#ffd23f', 54, 1.6);
+      pop('مكافأة المنطقة', CX, 450, '#fff6c0', 28, 1.6);
+      Sfx.orb(10);
+    }
     for (var i = 0; i < 40; i++) {
       var a = Math.random() * TAU, sp = rnd(300, 900);
       part(CX, CY, Math.cos(a) * sp, Math.sin(a) * sp, rnd(0.4, 0.9), rnd(3, 7), rgba(col, 1), 1);
@@ -1147,7 +1155,7 @@
     if (G.wasBest) { save.best = G.score; save.bestD = G.D; }
     save.bestZone = Math.max(save.bestZone, G.zone);
     save.orbs += G.orbsRun; save.orbsTotal += G.orbsRun; save.closeTotal += G.closeRun;
-    save.recOrbs = Math.max(save.recOrbs, G.orbsRun);
+    save.recOrbs = Math.max(save.recOrbs, G.orbsRun - (G.zoneOrbs || 0)); // picked orbs only (zone bonus excluded)
     save.recClose = Math.max(save.recClose, G.closeRun);
     save.recStreak = Math.max(save.recStreak, G.bestStreak);
     save.recShield = Math.max(save.recShield, G.shieldsRun);
@@ -1167,7 +1175,7 @@
     switch (m.t) {
       case 'dist': return Math.max(save.best, r ? G.score : 0);
       case 'zone': return Math.max(save.bestZone, r ? G.zone : 0);
-      case 'orbsRun': return Math.max(save.recOrbs, r ? G.orbsRun : 0);
+      case 'orbsRun': return Math.max(save.recOrbs, r ? G.orbsRun - (G.zoneOrbs || 0) : 0);
       case 'closeRun': return Math.max(save.recClose, r ? G.closeRun : 0);
       case 'combo': return Math.max(save.recStreak, r ? G.bestStreak : 0);
       case 'shield': return Math.max(save.recShield, r ? G.shieldsRun : 0);
@@ -1185,17 +1193,18 @@
       var m = TB.MISSIONS[done];
       save.mdone[done] = 1; save.orbs += m.r; persist();
       G.runMissions.push(done);
-      toast('مهمة منجزة! ' + TB.missionText(m) + '  +' + m.r, false);
+      toast('مهمة منجزة! ' + TB.missionText(m), false, '+' + m.r);
       Sfx.mission();
     }
     refreshBadges();
   }
   var toastBox = document.getElementById('toasts');
-  function toast(text, gold) {
+  function toast(text, gold, reward) {
     var el = document.createElement('div');
     el.className = 'toast' + (gold ? ' gold' : '');
     el.innerHTML = '<i class="orb"></i>';
     el.appendChild(document.createTextNode(text));
+    if (reward) { var rb = document.createElement('bdi'); rb.dir = 'ltr'; rb.className = 'rew'; rb.textContent = reward; el.appendChild(rb); }
     toastBox.appendChild(el);
     while (toastBox.children.length > 3) toastBox.removeChild(toastBox.firstChild);
     setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 2700);
@@ -1417,12 +1426,16 @@
     G.runMissions.forEach(function (i, n) {
       if (n > 2) return;
       var d = document.createElement('div'); d.className = 'om';
-      d.textContent = '✔ ' + TB.missionText(TB.MISSIONS[i]) + '  (+' + TB.MISSIONS[i].r + ')';
+      d.textContent = '✔ ' + TB.missionText(TB.MISSIONS[i]) + ' ';
+      var rb = document.createElement('bdi'); rb.dir = 'ltr'; rb.className = 'rew';
+      rb.innerHTML = '+' + TB.MISSIONS[i].r + ' <i class="orb"></i>';
+      d.appendChild(rb);
       om.appendChild(d);
     });
     if (G.runMissions.length > 3) {
       var more = document.createElement('div'); more.className = 'om';
-      more.textContent = '+ ' + (G.runMissions.length - 3) + ' مهمات أخرى!';
+      var mn = G.runMissions.length - 3;
+      more.textContent = mn === 1 ? 'ومهمة أخرى!' : mn === 2 ? 'ومهمتان أخريان!' : 'و' + TB.count(mn, ['', '', 'مهمات', 'مهمة']) + ' أخرى!';
       om.appendChild(more);
     }
     var c = cheapestLocked(), u = $('oUnlock');
@@ -1431,7 +1444,7 @@
       var ready = save.orbs >= c.price;
       u.className = 'unlock' + (ready ? ' ready' : '');
       $('oUnlockText').innerHTML = ready ? 'يمكنك الآن فتح <b>' + c.name + '</b> من المتجر!'
-        : 'اجمع <b>' + Kit.fmt(c.price - save.orbs) + '</b> كرة ضوء أخرى لتفتح <b>' + c.name + '</b>';
+        : 'باقٍ لك <b>' + Kit.fmt(c.price - save.orbs) + '</b> <i class="orb"></i> لتفتح <b>' + c.name + '</b>!';
       $('oUnlockFill').style.width = '0%';
       setTimeout(function () { $('oUnlockFill').style.width = Math.min(100, save.orbs / c.price * 100).toFixed(1) + '%'; }, 60);
     } else u.hidden = true;
@@ -1488,7 +1501,7 @@
       u.hidden = false;
       u.className = 'unlock' + (ready ? ' ready' : '');
       $('oUnlockText').innerHTML = ready ? 'يمكنك الآن فتح <b>' + c.name + '</b> من المتجر!'
-        : 'اجمع <b>' + Kit.fmt(c.price - save.orbs) + '</b> كرة ضوء أخرى لتفتح <b>' + c.name + '</b>';
+        : 'باقٍ لك <b>' + Kit.fmt(c.price - save.orbs) + '</b> <i class="orb"></i> لتفتح <b>' + c.name + '</b>!';
       $('oUnlockFill').style.width = Math.min(100, save.orbs / c.price * 100).toFixed(1) + '%';
     } else u.hidden = true;
   }
@@ -1660,7 +1673,8 @@
   document.addEventListener('visibilitychange', function () { if (document.hidden) pauseGame(); });
   canvas.addEventListener('pointerdown', function () { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } });
 
-  Kit.muteButton();
+  var muteBtn = Kit.muteButton();
+  muteBtn.setAttribute('aria-label', 'الصوت'); muteBtn.title = 'الصوت (M)';
   A.onMuteChange(function () { if (A.muted) Mus.wind(0); });
 
   /* -------------------------------------------------------------- debug */

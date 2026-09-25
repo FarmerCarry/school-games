@@ -38,7 +38,8 @@
   var ptr = Kit.pointer(view);
   var fx = R.particles();
   var shake = Kit.shake();
-  Kit.muteButton();
+  var muteBtn = Kit.muteButton();
+  muteBtn.setAttribute('aria-label', 'الصوت');
   var $ = function (id) { return document.getElementById(id); };
 
   /* ----------------------------------------------------------- state */
@@ -68,6 +69,7 @@
       if (k === 'fire') { tone({ freq: 240, to: 520, type: 'square', dur: 0.12, vol: 0.08 }); noise({ dur: 0.08, vol: 0.05, filter: 2400, to: 900 }); }
       else { tone({ freq: 520, to: 1040, type: 'triangle', dur: 0.12, vol: 0.14 }); tone({ freq: 1560, type: 'sine', dur: 0.06, vol: 0.05, delay: 0.04 }); }
     },
+    thud: function (v) { tone({ freq: 120, to: 60, type: 'square', dur: 0.08, vol: Math.min(0.14, 0.04 + v / 8000) }); noise({ dur: 0.12, vol: 0.08, filter: 900, to: 200 }); },
     land: function (v) { tone({ freq: 150, to: 70, type: 'triangle', dur: 0.07, vol: Math.min(0.2, 0.05 + v / 6000) }); },
     gem: function (k) {
       var f = k === 'fire' ? [784, 1175, 1568] : [1047, 1568, 2093];
@@ -152,11 +154,15 @@
     $('pauseBtn').hidden = true;
   }
   function goMap() {
+    // highlight the level just played (or the next one after a win)
+    if (world && (mode === 'play' || mode === 'paused')) mapSel = (world.state === 'won' && levelIdx + 1 < save.unlocked) ? levelIdx + 1 : levelIdx;
     mode = 'map';
     world = null; bot = null;
     hideOverlays();
     $('pauseBtn').hidden = true;
     mapSel = Kit.clamp(mapSel, 0, save.unlocked - 1);
+    // the click that opened the map must not also press a level node underneath it
+    ptr.pressed = false; ptr.released = false;
   }
   function startLevel(i) {
     levelIdx = i;
@@ -201,20 +207,20 @@
   function refreshTitle() {
     var st = totalStars();
     $('titleStars').textContent = st + ' / ' + NL * 3;
-    $('titleLevel').textContent = save.beaten ? 'Temple escaped! Go for gold!' : 'Level ' + (continueLevel() + 1) + ' of ' + NL;
+    $('titleLevel').textContent = save.beaten ? 'هربتم من المعبد! اجمعوا الذهب!' : 'المرحلة ' + (continueLevel() + 1) + ' من ' + NL;
     $('modeDuo').classList.toggle('on', !save.solo);
     $('modeSolo').classList.toggle('on', save.solo);
     $('howSolo').hidden = !save.solo;
     $('howDuo').hidden = save.solo;
-    $('playBtn').textContent = (save.unlocked > 1 || save.best[0]) ? '▶  Continue' : '▶  Play';
+    $('playBtn').textContent = (save.unlocked > 1 || save.best[0]) ? '▶ تابِع' : '▶ العب';
   }
   function setSolo(v) {
     save.solo = !!v; persist(); refreshTitle(); refreshPause();
   }
   function refreshPause() {
-    $('pauseSolo').textContent = save.solo ? 'Solo mode: ON' : 'Solo mode: OFF';
-    $('pauseMusic').textContent = save.music ? 'Music: ON' : 'Music: OFF';
-    $('pauseLevel').textContent = world ? 'Level ' + (levelIdx + 1) + ' · ' + LEVELS[levelIdx].name : '';
+    $('pauseSolo').textContent = save.solo ? 'لاعب واحد: نعم' : 'لاعب واحد: لا';
+    $('pauseMusic').textContent = save.music ? 'الموسيقى: تعمل' : 'الموسيقى: متوقفة';
+    $('pauseLevel').textContent = world ? 'المرحلة ' + (levelIdx + 1) + ' · ' + LEVELS[levelIdx].name : '';
   }
 
   /* ------------------------------------------------------ win / dead */
@@ -246,12 +252,13 @@
 
     var medal = ['bronze', 'silver', 'gold'][stars - 1];
     $('winMedal').className = 'medal ' + medal;
-    $('winMedalText').textContent = medal.toUpperCase();
-    $('winTitle').textContent = def.name + ' escaped!';
+    $('winMedalText').textContent = { gold: 'ذهبية', silver: 'فضية', bronze: 'برونزية' }[medal];
+    $('winTitle').textContent = ['نجحتم!', 'رائع جدًا!', 'مذهل!'][stars - 1];
+    $('winName').textContent = 'المرحلة ' + (levelIdx + 1) + ' · ' + def.name;
     var crit = [
-      ['Escaped the level', true],
-      ['All gems  ' + (w.gemsGot.fire + w.gemsGot.ice) + ' / ' + (w.gemsTotal.fire + w.gemsTotal.ice), gemsAll],
-      ['Beat par time  ' + fmtPar(def.par), fast]
+      ['أنهيتم المرحلة', true],
+      ['كل الجواهر ' + (w.gemsGot.fire + w.gemsGot.ice) + '/' + (w.gemsTotal.fire + w.gemsTotal.ice), gemsAll],
+      ['أسرع من ' + fmtPar(def.par), fast]
     ];
     var box = $('winStars');
     box.innerHTML = '';
@@ -262,10 +269,10 @@
       d.querySelector('.clabel').textContent = c[0];
       box.appendChild(d);
     });
-    $('winTime').textContent = 'Time ' + fmtTime(w.t) + (prev ? '   ·   Best ' + fmtTime(rec.time) : '');
+    $('winTime').textContent = 'الوقت ' + fmtTime(w.t) + (prev ? '   ·   الأفضل ' + fmtTime(rec.time) : '');
     $('winNew').hidden = !(newBest && prev);
     $('winHat').hidden = !newHats.length;
-    if (newHats.length) $('winHat').textContent = '🎩 New hat unlocked: ' + newHats[newHats.length - 1].name + '!';
+    if (newHats.length) $('winHat').textContent = '🎩 قبعة جديدة: ' + newHats[newHats.length - 1].name + '!';
     $('winNext').hidden = levelIdx >= NL - 1;
     $('winFinal').hidden = levelIdx < NL - 1;
     showOverlay('winScreen');
@@ -284,26 +291,28 @@
   }
   function showFinal() {
     $('finalStars').textContent = totalStars() + ' / ' + NL * 3;
+    winTimers.forEach(clearTimeout); winTimers = [];
     showOverlay('finalScreen');
     SFX.win();
     for (var i = 0; i < 120; i++) confetti(Math.random() * 1280, -20 - Math.random() * 200, true);
   }
   function nextLevel() {
     if (levelIdx + 1 < NL) { SFX.click(); startLevel(levelIdx + 1); }
-    else { SFX.click(); goMap(); }
+    else { SFX.click(); showFinal(); }   // last level: always show the big celebration
   }
 
   var DEATH = {
-    lava: ['Ice melted!', 'Ice can’t touch the lava. Only Fire can walk on it!'],
-    water: ['Fire fizzled out!', 'Fire can’t touch the water. Only Ice can swim in it!'],
-    goo: ['Splat! Green goo!', 'Green goo is bad for BOTH of you. Jump over it!']
+    lava: ['ذاب الجليد!', 'الجليد لا يلمس الحمم. النار وحدها تمشي عليها!'],
+    water: ['انطفأت النار!', 'النار لا تلمس الماء. الجليد وحده يسبح فيه!'],
+    goo: ['بلوب! وحل أخضر!', 'الوحل الأخضر خطر على الاثنين. اقفزوا فوقه!']
   };
   function showDead() {
     deadShown = true;
     var d = DEATH[world.deadCause] || DEATH.goo;
-    var t = world.deadCause === 'goo' ? (world.deadWho === 'fire' ? 'Splat! Fire fell in the goo!' : 'Splat! Ice fell in the goo!') : d[0];
-    $('deadTitle').textContent = t;
-    $('deadTip').textContent = d[1];
+    $('deadTitle').textContent = d[0];
+    $('deadTip').textContent = world.deadCause === 'goo'
+      ? (world.deadWho === 'fire' ? 'النار وقعت في الوحل الأخضر. إنه خطر على الاثنين، اقفزوا فوقه!' : 'الجليد وقع في الوحل الأخضر. إنه خطر على الاثنين، اقفزوا فوقه!')
+      : d[1];
     $('deadScreen').className = 'sg-overlay dead-' + world.deadWho;
     showOverlay('deadScreen');
   }
@@ -353,6 +362,12 @@
         case 'moverStart': if (!quiet && e.m.ch && !e.m.auto) SFX.mover(); break;
         case 'moverStop': if (!quiet && e.m.ch && !e.m.auto) SFX.moverStop(); break;
         case 'bonk': if (!quiet) SFX.bonk(); break;
+        case 'boxLand': {
+          if (!quiet) SFX.thud(e.v);
+          fx.burst(e.b.x + e.b.w / 2, e.b.y + e.b.h - 1, { count: 10, colors: ['#d8c3a0', '#b89c74', '#fff2d8'], speed: 120, angle: -Math.PI / 2, spread: Math.PI * 1.3, life: 0.4, size: 3.4, g: 300, drag: 2 });
+          if (e.v > 600) shake.add(3);
+          break;
+        }
         case 'portal': {
           if (!quiet) SFX.portal();
           var pc = e.from.color;
@@ -593,9 +608,9 @@
     }
   })();
   var MAPBTN = {
-    back: { x: 30, y: 648, w: 150, h: 50 },
-    hatL: { x: 1000, y: 650, w: 44, h: 46 },
-    hatR: { x: 1210, y: 650, w: 44, h: 46 },
+    back: { x: 1100, y: 648, w: 150, h: 50 },
+    hatL: { x: 30, y: 650, w: 44, h: 46 },
+    hatR: { x: 250, y: 650, w: 44, h: 46 },
     play: { x: 540, y: 648, w: 200, h: 54 }
   };
   function inBtn(b, x, y) { return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h; }
@@ -663,8 +678,9 @@
     R.drawWorld(g, w, time, anim, fx, { shakeX: shake.x, shakeY: shake.y, hat: save.hat === 'none' ? null : save.hat, soloActive: save.solo ? soloActive : null });
     // toasts in world space
     g.save(); g.translate(w.cam.ox, w.cam.oy); g.scale(w.cam.s, w.cam.s);
-    g.textAlign = 'center'; g.font = '700 18px ' + R.FONT;
+    g.textAlign = 'center'; g.font = '700 18px ' + R.FONT; g.textBaseline = 'alphabetic';
     toasts.forEach(function (t) {
+      R.dir(g, t.text);
       g.globalAlpha = Math.min(1, t.life * 2.5);
       g.lineWidth = 4; g.strokeStyle = 'rgba(30,10,0,0.8)'; g.strokeText(t.text, t.x, t.y);
       g.fillStyle = t.color; g.fillText(t.text, t.x, t.y);
@@ -673,18 +689,19 @@
     // "waiting" bubbles
     ['fire', 'ice'].forEach(function (k) {
       var p = w[k], o = w[k === 'fire' ? 'ice' : 'fire'];
-      if (w.state === 'play' && p.atDoor && !o.atDoor) bubble(g, p.x + p.w / 2, p.y - 18, k === 'fire' ? 'Come on, Ice!' : 'Come on, Fire!', time);
+      if (w.state === 'play' && p.atDoor && !o.atDoor) bubble(g, p.x + p.w / 2, p.y - 18, k === 'fire' ? 'هيا يا جليد!' : 'هيا يا نار!', time);
     });
     g.restore();
     drawHud(g, w);
   }
 
   function bubble(g, x, y, text, t) {
-    g.font = '600 13px ' + R.FONT;
-    var tw = g.measureText(text).width + 16;
+    g.font = '700 14px ' + R.FONT; g.textBaseline = 'alphabetic';
+    R.dir(g, text);
+    var tw = g.measureText(text).width + 18;
     y += Math.sin(t * 4) * 2;
     g.fillStyle = 'rgba(255,255,255,0.95)';
-    R.rr(g, x - tw / 2, y - 24, tw, 22, 10); g.fill();
+    R.rr(g, x - tw / 2, y - 27, tw, 25, 11); g.fill();
     g.beginPath(); g.moveTo(x - 5, y - 3); g.lineTo(x + 5, y - 3); g.lineTo(x, y + 4); g.fill();
     g.fillStyle = '#2a1a10'; g.textAlign = 'center';
     g.fillText(text, x, y - 8.5);
@@ -704,43 +721,49 @@
     g.font = '700 18px ' + R.FONT;
     var name = def.name;
     var nw = g.measureText(name).width;
-    pill(g, 10, 6, nw + 62, 34);
+    var pw = nw + 64;
+    pill(g, 10, 6, pw, 34);
+    // number badge on the right end of the pill (reads first in RTL)
+    var bx = 10 + pw - 20;
     g.fillStyle = '#ffcc33';
-    g.beginPath(); g.arc(28, 23, 13, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#3a2400'; g.textAlign = 'center'; g.font = '700 16px ' + R.FONT;
-    g.fillText(String(levelIdx + 1), 28, 24);
-    g.textAlign = 'left'; g.fillStyle = '#fff'; g.font = '700 18px ' + R.FONT;
-    g.fillText(name, 48, 24);
+    g.beginPath(); g.arc(bx, 23, 13, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#3a2400'; g.textAlign = 'center'; g.font = '700 16px ' + R.FONT; g.direction = 'ltr';
+    g.fillText(String(levelIdx + 1), bx, 24);
+    g.fillStyle = '#fff'; g.font = '700 18px ' + R.FONT;
+    R.dir(g, name); g.textAlign = 'right';
+    g.fillText(name, bx - 20, 25);
     // key reminder
-    g.font = '600 13px ' + R.FONT; g.fillStyle = 'rgba(255,240,210,0.6)';
-    g.fillText('R restart  ·  P pause', nw + 84, 24);
+    g.font = '600 14px ' + R.FONT; g.fillStyle = 'rgba(255,240,210,0.65)';
+    g.direction = 'rtl'; g.textAlign = 'left';
+    var keysTxt = 'R إعادة  ·  P إيقاف';
+    if (10 + pw + 14 + g.measureText(keysTxt).width < 555) g.fillText(keysTxt, 10 + pw + 14, 25);
     // timer
     var under = w.t <= def.par;
     pill(g, 560, 6, 160, 34);
     g.textAlign = 'center';
-    g.font = '700 20px ' + R.FONT;
+    g.font = '700 20px ' + R.FONT; g.direction = 'ltr';
     g.fillStyle = under ? '#ffe066' : '#ffffff';
-    g.fillText(fmtTime(w.t), 618, 24);
-    g.font = '600 12px ' + R.FONT;
+    g.fillText(fmtTime(w.t), 612, 24);
+    g.font = '600 13px ' + R.FONT; g.direction = 'rtl';
     g.fillStyle = under ? 'rgba(255,230,120,0.9)' : 'rgba(255,255,255,0.55)';
-    g.fillText('par ' + fmtPar(def.par), 685, 25);
+    g.fillText('الهدف ' + fmtPar(def.par), 680, 25);
     // gems
-    pill(g, 970, 6, 190, 34);
-    R.drawGem(g, 996, 23, 'fire', time, 0.8);
-    R.drawGem(g, 1082, 23, 'ice', time + 1, 0.8);
-    g.font = '700 18px ' + R.FONT; g.textAlign = 'left'; g.fillStyle = '#fff';
-    g.fillText(w.gemsGot.fire + '/' + w.gemsTotal.fire, 1011, 24);
-    g.fillText(w.gemsGot.ice + '/' + w.gemsTotal.ice, 1097, 24);
+    pill(g, 955, 6, 190, 34);
+    R.drawGem(g, 981, 23, 'fire', time, 0.8);
+    R.drawGem(g, 1067, 23, 'ice', time + 1, 0.8);
+    g.font = '700 18px ' + R.FONT; g.textAlign = 'left'; g.fillStyle = '#fff'; g.direction = 'ltr';
+    g.fillText(w.gemsGot.fire + '/' + w.gemsTotal.fire, 996, 24);
+    g.fillText(w.gemsGot.ice + '/' + w.gemsTotal.ice, 1082, 24);
     // solo banner
     if (save.solo && w.state === 'play') {
-      var who = soloActive === 'fire' ? 'FIRE' : 'ICE';
-      g.font = '700 16px ' + R.FONT;
-      var txt = 'SOLO:  moving ' + who + '   ·   Tab / Shift = swap';
+      var who = soloActive === 'fire' ? 'النار' : 'الجليد';
+      g.font = '700 17px ' + R.FONT; g.direction = 'rtl';
+      var txt = 'أنت تحرّك ' + who + '   ·   Tab أو Shift للتبديل';
       var tw = g.measureText(txt).width + 40;
       pill(g, 640 - tw / 2, 676, tw, 34);
       g.textAlign = 'center';
       g.fillStyle = soloActive === 'fire' ? '#ffb347' : '#9ce8ff';
-      g.fillText(txt, 640, 694);
+      g.fillText(txt, 640, 695);
     }
     // level banner
     if (banner > 0) {
@@ -749,8 +772,8 @@
       g.fillStyle = 'rgba(15,8,4,0.55)';
       g.fillRect(0, 290, 1280, 110);
       g.textAlign = 'center';
-      g.font = '700 22px ' + R.FONT; g.fillStyle = '#ffcc33';
-      g.fillText('LEVEL ' + (levelIdx + 1), 640, 318);
+      g.font = '700 24px ' + R.FONT; g.fillStyle = '#ffcc33'; g.direction = 'rtl';
+      g.fillText('المرحلة ' + (levelIdx + 1), 640, 316);
       g.font = '700 46px ' + R.FONT; g.fillStyle = '#fff';
       g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,0.4)'; g.strokeText(def.name, 640, 362);
       g.fillText(def.name, 640, 362);
@@ -767,12 +790,13 @@
     g.textAlign = 'center';
     g.font = '700 44px ' + R.FONT;
     g.lineWidth = 8; g.strokeStyle = 'rgba(0,0,0,0.5)';
-    g.strokeText('Temple Map', 640, 48);
-    var tg = g.createLinearGradient(0, 28, 0, 70); tg.addColorStop(0, '#ffe27a'); tg.addColorStop(1, '#ff9a2b');
-    g.fillStyle = tg; g.fillText('Temple Map', 640, 48);
+    g.direction = 'rtl';
+    g.strokeText('خريطة المعبد', 640, 50);
+    var tg = g.createLinearGradient(0, 28, 0, 72); tg.addColorStop(0, '#ffe27a'); tg.addColorStop(1, '#ff9a2b');
+    g.fillStyle = tg; g.fillText('خريطة المعبد', 640, 50);
     // star total
     pill(g, 30, 26, 170, 42);
-    g.font = '700 22px ' + R.FONT; g.fillStyle = '#ffd230';
+    g.font = '700 22px ' + R.FONT; g.fillStyle = '#ffd230'; g.direction = 'ltr'; g.textAlign = 'center';
     g.fillText('★ ' + totalStars() + ' / ' + NL * 3, 115, 48);
     // path
     g.lineCap = 'round';
@@ -807,7 +831,7 @@
       g.fillStyle = inner; g.beginPath(); g.arc(n.x, y, r - 6, 0, Math.PI * 2); g.fill();
       g.fillStyle = 'rgba(255,255,255,0.25)'; g.beginPath(); g.ellipse(n.x - 8, y - r * 0.42, r * 0.45, r * 0.2, -0.3, 0, Math.PI * 2); g.fill();
       if (unlocked) {
-        g.font = '700 ' + (sel ? 34 : 30) + 'px ' + R.FONT; g.fillStyle = '#fff';
+        g.font = '700 ' + (sel ? 34 : 30) + 'px ' + R.FONT; g.fillStyle = '#fff'; g.direction = 'ltr'; g.textAlign = 'center';
         g.lineWidth = 5; g.strokeStyle = 'rgba(0,0,0,0.35)'; g.strokeText(String(i + 1), n.x, y + 2);
         g.fillText(String(i + 1), n.x, y + 2);
       } else drawLock(g, n.x, y);
@@ -826,30 +850,31 @@
     R.drawKid(g, 'fire', sn.x + 70, sn.y + 30, kb, time, hat);
     // bottom bar
     g.fillStyle = 'rgba(10,5,2,0.6)'; g.fillRect(0, 630, 1280, 90);
-    btn(g, MAPBTN.back, '◀ Back', inBtn(MAPBTN.back, ptr.x, ptr.y), '#ffffff', '#1d2340');
-    btn(g, MAPBTN.play, '▶ Play ' + (mapSel + 1), inBtn(MAPBTN.play, ptr.x, ptr.y), '#ffcc00', '#3a2a00');
+    btn(g, MAPBTN.back, '▶ رجوع', inBtn(MAPBTN.back, ptr.x, ptr.y), '#ffffff', '#1d2340');
+    btn(g, MAPBTN.play, '▶ العب ' + (mapSel + 1), inBtn(MAPBTN.play, ptr.x, ptr.y), '#ffcc00', '#3a2a00');
     var def = LEVELS[mapSel], best2 = save.best[mapSel];
-    g.textAlign = 'left';
+    g.textAlign = 'right'; g.direction = 'rtl';
     g.font = '700 22px ' + R.FONT; g.fillStyle = '#fff';
-    g.fillText(def.name, 200, 663);
+    g.fillText(def.name, 1080, 662);
     g.font = '500 15px ' + R.FONT; g.fillStyle = 'rgba(255,240,210,0.8)';
-    g.fillText(best2 ? 'Best ' + fmtTime(best2.time) + '  ·  par ' + fmtPar(def.par) : 'Par time ' + fmtPar(def.par), 200, 690);
+    g.fillText(best2 ? 'الأفضل ' + fmtTime(best2.time) + '  ·  الهدف ' + fmtPar(def.par) : 'الوقت الهدف ' + fmtPar(def.par), 1080, 691);
     // hat chooser
     var hatObj = R.HATS.filter(function (h) { return h.id === save.hat; })[0] || R.HATS[0];
     btn(g, MAPBTN.hatL, '◀', inBtn(MAPBTN.hatL, ptr.x, ptr.y), '#ffffff', '#1d2340');
     btn(g, MAPBTN.hatR, '▶', inBtn(MAPBTN.hatR, ptr.x, ptr.y), '#ffffff', '#1d2340');
     g.textAlign = 'center';
-    g.font = '600 13px ' + R.FONT; g.fillStyle = 'rgba(255,240,210,0.75)';
-    g.fillText('HAT  (H)', 1127, 656);
+    var hcx = (MAPBTN.hatL.x + MAPBTN.hatL.w + MAPBTN.hatR.x) / 2;
+    g.font = '600 14px ' + R.FONT; g.fillStyle = 'rgba(255,240,210,0.75)'; g.direction = 'rtl';
+    g.fillText('القبعة (H)', hcx, 655);
     g.font = '700 19px ' + R.FONT; g.fillStyle = '#fff';
-    g.fillText(hatObj.name, 1127, 680);
+    g.fillText(hatObj.name, hcx, 679);
     var nextHat = R.HATS.filter(function (h) { return h.stars > totalStars(); })[0];
     if (nextHat) {
       g.font = '500 13px ' + R.FONT; g.fillStyle = '#ffd230';
-      g.fillText('Next hat at ★' + nextHat.stars, 1127, 702);
+      g.fillText('القبعة التالية عند ★' + nextHat.stars, hcx, 703);
     }
     g.fillStyle = 'rgba(255,240,210,0.6)'; g.font = '500 14px ' + R.FONT;
-    g.fillText('Arrows to choose · Enter to play', 640, 712);
+    g.fillText('الأسهم للاختيار · Enter للعب', 640, 712);
     g.textBaseline = 'alphabetic'; g.textAlign = 'left';
   }
   function btn(g, b, label, hov, bg, ink) {
@@ -857,7 +882,8 @@
     g.fillStyle = 'rgba(0,0,0,0.35)'; R.rr(g, b.x, b.y + 5, b.w, b.h, b.h / 2); g.fill();
     g.fillStyle = bg; R.rr(g, b.x, y, b.w, b.h, b.h / 2); g.fill();
     g.fillStyle = ink; g.textAlign = 'center'; g.font = '700 20px ' + R.FONT;
-    g.fillText(label, b.x + b.w / 2, y + b.h / 2 + 1);
+    R.dir(g, label);
+    g.fillText(label, b.x + b.w / 2, y + b.h / 2 + 2);
   }
   function star(g, x, y, r, col, shine) {
     g.fillStyle = col;
@@ -902,7 +928,11 @@
   window.addEventListener('blur', function () { if (mode === 'play' && world && world.state === 'play' && !bot) pause(); });
 
   if (document.fonts && document.fonts.load) {
-    document.fonts.load('700 20px Fredoka').then(function () { layersDirty = true; }, function () { /* ignore */ });
+    // load the Latin AND the Arabic faces of the composite Fredoka family, then redraw cached layers
+    Promise.all([
+      document.fonts.load('700 20px Fredoka', 'Aب'),
+      document.fonts.load('500 20px Fredoka', 'Aب')
+    ]).then(function () { layersDirty = true; }, function () { layersDirty = true; });
   }
 
   // debug / test hook

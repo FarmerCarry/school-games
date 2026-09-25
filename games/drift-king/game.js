@@ -39,23 +39,23 @@
     { id: 'j1', text: 'اقفز من فوق منحدر', type: 'jumps', n: 1, r: 30 },
     { id: 's400', text: 'اجمع 400 نقطة في جولة', type: 'score', n: 400, r: 40 },
     { id: 'r5', text: 'العب 5 جولات', type: 'runs', n: 5, r: 30 },
-    { id: 'z2', text: 'اصل إلى الغروب الذهبي', type: 'zone', n: 2, r: 50 },
+    { id: 'z2', text: 'انطلق حتى الغروب الذهبي', type: 'zone', n: 2, r: 50 },
     { id: 'c25', text: 'اجمع 25 عملة في جولة', type: 'coins', n: 25, r: 50 },
     { id: 'p6', text: '6 انعطافات ممتازة متتالية', type: 'combo', n: 6, r: 60 },
-    { id: 'buy', text: 'اشترِ سيارة جديدة', type: 'cars', n: 2, r: 40 },
+    { id: 'buy', text: 'اشترِ سيارة جديدة', type: 'cars', n: 2, r: 40, noCount: true },
     { id: 's800', text: 'اجمع 800 نقطة في جولة', type: 'score', n: 800, r: 80 },
     { id: 'g1', text: 'اجمع جوهرة زرقاء', type: 'gems', n: 1, r: 40 },
     { id: 'j4', text: '4 قفزات في جولة واحدة', type: 'jumps', n: 4, r: 70 },
-    { id: 'z3', text: 'اصل إلى الشفق البنفسجي', type: 'zone', n: 3, r: 90 },
+    { id: 'z3', text: 'انطلق حتى الشفق البنفسجي', type: 'zone', n: 3, r: 90 },
     { id: 'p10', text: '10 انعطافات ممتازة متتالية', type: 'combo', n: 10, r: 100 },
     { id: 's1500', text: 'اجمع 1500 نقطة في جولة', type: 'score', n: 1500, r: 150 },
     { id: 'c50', text: 'اجمع 50 عملة في جولة', type: 'coins', n: 50, r: 120 },
-    { id: 'z4', text: 'اصل إلى ليل النجوم', type: 'zone', n: 4, r: 150 },
+    { id: 'z4', text: 'انطلق حتى ليل النجوم', type: 'zone', n: 4, r: 150 },
     { id: 'r30', text: 'العب 30 جولة', type: 'runs', n: 30, r: 120 },
     { id: 'p15', text: '15 انعطافًا ممتازًا متتاليًا', type: 'combo', n: 15, r: 180 },
     { id: 's2500', text: 'اجمع 2500 نقطة في جولة', type: 'score', n: 2500, r: 250 },
     { id: 'cars6', text: 'امتلك 6 سيارات', type: 'cars', n: 6, r: 200 },
-    { id: 'z5', text: 'اصل إلى فجر الحلوى', type: 'zone', n: 5, r: 250 },
+    { id: 'z5', text: 'انطلق حتى فجر الحلوى', type: 'zone', n: 5, r: 250 },
     { id: 's4000', text: 'اجمع 4000 نقطة في جولة', type: 'score', n: 4000, r: 400 }
   ];
   function activeMissions() {
@@ -76,8 +76,8 @@
     }
     return 0;
   }
-  function checkMissions(st) {
-    var act = activeMissions();
+  function checkMissions(st, quiet) {
+    var act = activeMissions(), got = [];
     for (var k = 0; k < act.length; k++) {
       var m = act[k];
       if (missionValue(m, st) >= m.n) {
@@ -85,19 +85,21 @@
         save.coins += m.r;
         if (st) st.missionCoins += m.r;
         persist();
-        toast('مهمة مكتملة! <span dir="ltr">+' + m.r + '</span>', true);
+        got.push(m.id);
+        if (!quiet) toast('مهمة مكتملة! <span dir="ltr">+' + m.r + '</span>', true);
         DK.snd.mission();
       }
     }
+    return got;
   }
-  function missionHTML(list, st, showDone) {
+  function missionHTML(list, st, just) {
     return list.map(function (m) {
       var v = Math.min(m.n, missionValue(m, st));
       var done = save.done.indexOf(m.id) >= 0;
       var pct = done ? 100 : Math.round(v / m.n * 100);
-      return '<div class="mis' + (done ? ' done' : '') + '"><span class="chk"></span><div class="mt">' + m.text +
-        (m.n > 1 && !done ? ' <span dir="ltr">(' + v + '/' + m.n + ')</span>' : '') +
-        '<div class="mb"><i style="width:' + pct + '%"></i></div></div><span class="mr"><i class="coin sm"></i>' + m.r + '</span></div>';
+      return '<div class="mis' + (done ? ' done' : '') + (just && just.indexOf(m.id) >= 0 ? ' just' : '') + '"><span class="chk"></span><div class="mt">' + m.text +
+        (m.n > 1 && !done && m.type !== 'zone' && !m.noCount ? ' <span dir="ltr">(' + v + '/' + m.n + ')</span>' : '') +
+        '<div class="mb"><i style="width:' + pct + '%"></i></div></div><span class="mr"><i class="coin sm"></i><span dir="ltr">' + (done ? '+' : '') + m.r + '</span></span></div>';
     }).join('');
   }
 
@@ -113,7 +115,9 @@
   });
   view.resize();
   var ctx = view.ctx;
-  Kit.muteButton();
+  var muteBtn = Kit.muteButton();
+  muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
+  muteBtn.title = 'الصوت (M)';
   DK.snd.setMusic(save.music);
 
   /* ------------------------------------------------------------- state */
@@ -188,6 +192,7 @@
   }
   var toastTimer = 0;
   function toast(text, coin) {
+    el.toast.classList.toggle('top', G.mode === 'garage');
     el.toast.innerHTML = (coin ? '<i class="coin sm"></i>' : '') + text;
     el.toast.classList.add('show');
     clearTimeout(toastTimer);
@@ -268,19 +273,24 @@
     DK.snd.musicLevel(0.4);
   }
 
+  var overMissions = [];
   var FALL_TITLES = ['إلى الغيوم!', 'طِرتَ بعيدًا!', 'أوووه!', 'بوووم في الغيوم!', 'انزلاق أكثر من اللازم!'];
   function gameOver() {
     G.mode = 'over';
+    // a mission toast from the last seconds of the run would cover the panel's buttons
+    clearTimeout(toastTimer); el.toast.classList.remove('show');
     overT = 0;
     show(el.btnPause, false);
     var st = run;
     st.score = Math.floor(G.car.progress) + st.bonus;
     save.runs++;
-    var newBest = st.score > save.best && st.score > 0;
     var prevBest = save.best;
-    if (newBest) save.best = st.score;
+    // Celebrate a new best, but not a tiny first score of a few points.
+    var newBest = st.score > save.best && (prevBest > 0 ? true : st.score >= 30);
+    if (st.score > save.best) save.best = st.score;
     if (G.car.progress > save.bestDist) save.bestDist = G.car.progress;
-    checkMissions(st);
+    overMissions = activeMissions();
+    var justDone = checkMissions(st, true);
     persist();
     $('oTitle').textContent = FALL_TITLES[(Math.random() * FALL_TITLES.length) | 0];
     $('oScore').textContent = '0';
@@ -297,20 +307,8 @@
     } else ob.textContent = 'الأفضل: ' + Kit.fmt(save.best);
     show($('oRibbon'), newBest);
     document.querySelector('.panel.over').classList.toggle('nb', newBest);
-    // next car
-    var nx = null;
-    for (var k = 0; k < DK.CARS.length; k++) if (save.owned.indexOf(DK.CARS[k].id) < 0) { nx = DK.CARS[k]; break; }
-    var on = $('oNext');
-    if (nx) {
-      var pct = Math.min(100, Math.round(save.coins / nx.price * 100));
-      var ready = save.coins >= nx.price;
-      on.innerHTML = '<canvas width="220" height="140"></canvas><div class="ntxt">' +
-        (ready ? 'يمكنك شراء «' + nx.name + '» الآن!' : 'السيارة التالية: «' + nx.name + '»') +
-        '<div class="nbar"><i style="width:' + pct + '%"></i></div></div>' +
-        '<div style="font-weight:700;direction:ltr;white-space:nowrap"><i class="coin sm"></i> ' + Kit.fmt(save.coins) + ' / ' + Kit.fmt(nx.price) + '</div>';
-      drawPreview(on.querySelector('canvas'), nx, -2.3, 1.25);
-    } else on.innerHTML = '';
-    $('oMissions').innerHTML = missionHTML(activeMissions(), st);
+    renderNextCar();
+    $('oMissions').innerHTML = missionHTML(overMissions, st, justDone);
     show(el.over, true);
     DK.snd.stopEngine();
     DK.snd.musicLevel(0.55);
@@ -330,17 +328,43 @@
   }
 
   /* ---------------------------------------------------------- garage */
-  function drawPreview(cv, car, yaw, scale) {
+  // Screen-space bounds of a car model (at S = 1) over a full turn, so a
+  // preview can be scaled to fit its canvas whatever the car's shape.
+  var boundsCache = {};
+  function carBounds(car) {
+    if (boundsCache[car.id]) return boundsCache[car.id];
+    var I = DK.ISO, b = { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 }, zh = car.hover ? 0.15 : 0;
+    function add(x, y, z, r) {
+      for (var a = 0; a < 12; a++) {
+        var yaw = a / 12 * Math.PI * 2, cy = Math.cos(yaw), sy = Math.sin(yaw);
+        var X = cy * x - sy * y, Y = sy * x + cy * y;
+        var px = (X - Y) * I.PX, py = (X + Y) * I.PY - (z + zh) * I.PZ;
+        if (px - r < b.x0) b.x0 = px - r; if (px + r > b.x1) b.x1 = px + r;
+        if (py - r < b.y0) b.y0 = py - r; if (py + r > b.y1) b.y1 = py + r;
+      }
+    }
+    car.parts.forEach(function (p) {
+      if (p.t === 'b') add(p.c[0], p.c[1], p.c[2], p.r);
+      else p.v.forEach(function (v) { add(v[0], v[1], v[2], 0); });
+    });
+    b.y1 = Math.max(b.y1, 0.5);   // leave room for the ground shadow
+    boundsCache[car.id] = b;
+    return b;
+  }
+  var PREVIEW_YAW = 0.2;
+  function drawPreview(cv, car, yaw) {
     var c2 = cv.getContext('2d');
     c2.setTransform(1, 0, 0, 1, 0, 0);
     c2.clearRect(0, 0, cv.width, cv.height);
-    var S = (cv.width / 220) * 62 * (scale || 1) * (1.6 / Math.max(1.5, car.len || 1.5));
+    var b = carBounds(car);
+    var S = Math.min(cv.width * 0.9 / (b.x1 - b.x0), cv.height * 0.9 / (b.y1 - b.y0));
+    var ox = cv.width / 2 - (b.x0 + b.x1) / 2 * S, oy = cv.height / 2 - (b.y0 + b.y1) / 2 * S;
     c2.fillStyle = 'rgba(60,30,100,0.15)';
-    c2.beginPath(); c2.ellipse(cv.width / 2, cv.height * 0.72, S * 1.05, S * 0.4, 0, 0, Math.PI * 2); c2.fill();
-    DK.drawCar(c2, car, { x: cv.width / 2, y: cv.height * 0.72, S: S, yaw: yaw, pitch: 0, roll: 0, sq: 1, z: car.hover ? 0.15 : 0 });
+    c2.beginPath(); c2.ellipse(ox, oy + S * 0.1, S * 1.0, S * 0.42, 0, 0, Math.PI * 2); c2.fill();
+    DK.drawCar(c2, car, { x: ox, y: oy, S: S, yaw: yaw, pitch: 0, roll: 0, sq: 1, z: car.hover ? 0.15 : 0 });
   }
   var gCards = [];
-  var gYaw = -2.3;
+  var gYaw = 0.2;
   function buildGarage() {
     var grid = $('grid');
     grid.innerHTML = '';
@@ -364,7 +388,7 @@
       if (sel) act.innerHTML = '<div class="owned">✔ مختارة</div>';
       else if (owned) act.innerHTML = '<div class="owned">اختر</div>';
       else act.innerHTML = '<button class="nbtn ' + (save.coins >= g.car.price ? 'gold' : 'ghost') + '" type="button"><i class="coin"></i><span dir="ltr">' + Kit.fmt(g.car.price) + '</span></button>';
-      drawPreview(g.cv, g.car, sel ? gYaw : -2.3, 1.3);
+      drawPreview(g.cv, g.car, sel ? gYaw : PREVIEW_YAW);
     });
   }
   function garageClick(car) {
@@ -400,15 +424,24 @@
     else { G.mode = 'title'; show(el.title, true); refreshTitle(); }
   }
   function refreshOverAfterGarage() {
-    $('oMissions').innerHTML = missionHTML(activeMissions(), run);
+    // a car bought in the garage may have completed a mission
+    $('oMissions').innerHTML = missionHTML(overMissions, run);
+    renderNextCar();
+  }
+  // "Next car" progress block on the game-over panel.
+  function renderNextCar() {
     var nx = null;
     for (var k = 0; k < DK.CARS.length; k++) if (save.owned.indexOf(DK.CARS[k].id) < 0) { nx = DK.CARS[k]; break; }
-    if (!nx) { $('oNext').innerHTML = ''; return; }
     var on = $('oNext');
+    if (!nx) { on.innerHTML = ''; return; }
+    var ready = save.coins >= nx.price;
     var pct = Math.min(100, Math.round(save.coins / nx.price * 100));
-    on.innerHTML = '<canvas width="220" height="140"></canvas><div class="ntxt">السيارة التالية: «' + nx.name + '»<div class="nbar"><i style="width:' + pct + '%"></i></div></div>' +
-      '<div style="font-weight:700;direction:ltr;white-space:nowrap"><i class="coin sm"></i> ' + Kit.fmt(save.coins) + ' / ' + Kit.fmt(nx.price) + '</div>';
-    drawPreview(on.querySelector('canvas'), nx, -2.3, 1.25);
+    on.classList.toggle('ready', ready);
+    on.innerHTML = '<canvas width="220" height="140"></canvas><div class="ntxt">' +
+      (ready ? 'يمكنك شراء «' + nx.name + '» الآن!' : 'السيارة التالية: «' + nx.name + '»') +
+      '<div class="nbar"><i style="width:' + pct + '%"></i></div></div>' +
+      '<div style="font-weight:700;direction:ltr;white-space:nowrap"><i class="coin sm"></i> ' + Kit.fmt(Math.min(save.coins, nx.price)) + ' / ' + Kit.fmt(nx.price) + '</div>';
+    drawPreview(on.querySelector('canvas'), nx, PREVIEW_YAW);
   }
 
   /* ------------------------------------------------------------- gift */
@@ -431,7 +464,7 @@
     $('giftBox').classList.add('open');
     $('giftTitle').textContent = amt >= 150 ? 'جائزة كبرى!' : 'رائع!';
     var ga = $('giftAmount');
-    ga.querySelector('span').textContent = amt;
+    ga.querySelector('span').textContent = '+' + amt;
     show(ga, true); show($('giftHint'), false); show($('btnGiftOk'), true);
     DK.snd.gift();
     burstConfetti(80);
@@ -514,7 +547,7 @@
     var car = G.car;
     var m = G.mode;
     if (m === 'play' || m === 'title' || m === 'falling' || m === 'over' || m === 'garage' || m === 'gift') {
-      if (m === 'play' || m === 'falling' || m === 'title' || m === 'garage' || m === 'gift') simulate(dt);
+      if (m === 'play' || m === 'falling' || m === 'title' || m === 'gift') simulate(dt);
     }
     // popups / particles always animate except while paused
     if (m !== 'paused') {
@@ -555,8 +588,6 @@
     } else if (m === 'garage') {
       if (K.pressed('Escape')) closeGarage();
       gYaw += dt * 1.2;
-      var sel = gCards.filter(function (g) { return g.car.id === save.car; })[0];
-      if (sel) drawPreview(sel.cv, sel.car, gYaw, 1.3);
     } else if (m === 'gift') {
       if (K.pressed('Space') || K.pressed('Enter')) { if (!giftOpened) crackGift(); else closeGift(); }
       else if (K.pressed('Escape') && giftOpened) closeGift();
@@ -721,7 +752,7 @@
         } else {
           if (run.combo >= 3) popup('انتهت السلسلة', car.x, car.y, 1.4, '#ffffff', 26, null, 0.9);
           run.combo = 0;
-          if (e.q === 'close') { popup('كادت!', car.x, car.y, 1.5, '#7df3ff', 38, '+2'); run.bonus += 2; DK.snd.close(); }
+          if (e.q === 'close') { popup('على الحافة!', car.x, car.y, 1.5, '#7df3ff', 38, '+2'); run.bonus += 2; DK.snd.close(); }
         }
         break;
       case 'jump':
@@ -750,7 +781,17 @@
   }
 
   /* ---------------------------------------------------------- render */
+  var frozenDrawn = false;
   function render() {
+    // The garage panel covers nearly the whole screen: draw the world once and
+    // keep it still underneath (saves a full-screen redraw every frame).
+    if (G.mode === 'garage') {
+      for (var k = 0; k < gCards.length; k++) if (gCards[k].car.id === save.car) drawPreview(gCards[k].cv, gCards[k].car, gYaw);
+      if (!confetti.length) {
+        if (frozenDrawn) return;
+        frozenDrawn = true;
+      }
+    } else frozenDrawn = false;
     ctx.save();
     DK.drawWorld(ctx, G);
     ctx.restore();
@@ -811,7 +852,7 @@
       var zl = DK.ZONE_LEN, pr = G.car.progress, z = Math.floor(pr / zl), f = (pr - z * zl) / zl;
       ctx.fillStyle = 'rgba(40,20,80,0.45)';
       roundRect(16, 72, 170, 38, 19); ctx.fill();
-      txt(DK.zoneName(z), 101, 84, 15, '#ffffff', 'center');
+      txt(DK.zoneName(z), 101, 84, 17, '#ffffff', 'center');
       ctx.fillStyle = 'rgba(255,255,255,0.3)'; roundRect(30, 96, 142, 7, 4); ctx.fill();
       ctx.fillStyle = DK.palOf(z + 1).curb; roundRect(30, 96, Math.max(7, 142 * f), 7, 4); ctx.fill();
     }

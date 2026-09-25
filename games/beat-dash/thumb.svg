@@ -76,9 +76,9 @@
     <ellipse cx="76" cy="92" rx="10" ry="8"/>
   </g>
   <!-- logo -->
-  <g font-family="Fredoka, 'Segoe UI Rounded', 'Arial Rounded MT Bold', 'Segoe UI', Arial, sans-serif" font-weight="800" text-anchor="middle" transform="rotate(-5 200 360)">
-    <text x="200" y="380" font-size="66" textLength="352" lengthAdjust="spacingAndGlyphs" fill="#16063f" stroke="#16063f" stroke-width="16" stroke-linejoin="round">BEAT DASH</text>
-    <text x="200" y="373" font-size="66" textLength="352" lengthAdjust="spacingAndGlyphs" fill="#16063f" stroke="#16063f" stroke-width="16" stroke-linejoin="round">BEAT DASH</text>
-    <text x="200" y="371" font-size="66" textLength="352" lengthAdjust="spacingAndGlyphs"><tspan fill="#ffe14d">BEAT</tspan> <tspan fill="#3df2ff">DASH</tspan></text>
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl" transform="rotate(-5 200 360)">
+    <text x="200" y="376" font-size="64" fill="#16063f" stroke="#16063f" stroke-width="16" stroke-linejoin="round">قفزة الإيقاع</text>
+    <text x="200" y="369" font-size="64" fill="#16063f" stroke="#16063f" stroke-width="16" stroke-linejoin="round">قفزة الإيقاع</text>
+    <text x="200" y="367" font-size="64"><tspan fill="#ffe14d">قفزة</tspan> <tspan fill="#3df2ff">الإيقاع</tspan></text>
   </g>
 </svg>

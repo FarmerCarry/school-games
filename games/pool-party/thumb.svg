@@ -113,11 +113,11 @@
   </g>
 
   <!-- logo -->
-  <g font-family="Arial Black, Segoe UI Black, Arial, sans-serif" font-weight="900" text-anchor="middle" transform="rotate(-6 200 80)">
-    <text x="200" y="92" font-size="74" fill="#7a3cff" stroke="#7a3cff" stroke-width="14" stroke-linejoin="round">POOL</text>
-    <text x="200" y="86" font-size="74" fill="#ff3b8d" stroke="#ff3b8d" stroke-width="10" stroke-linejoin="round">POOL</text>
-    <text x="200" y="82" font-size="74" fill="#ffe45c">POOL</text>
-    <text x="200" y="146" font-size="54" fill="#2a1270" stroke="#2a1270" stroke-width="12" stroke-linejoin="round">PARTY</text>
-    <text x="200" y="142" font-size="54" fill="#5fe0ff" stroke="#1e6bff" stroke-width="5" stroke-linejoin="round" paint-order="stroke">PARTY</text>
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" transform="rotate(-5 200 80)">
+    <text x="200" y="88" font-size="76" fill="#7a3cff" stroke="#7a3cff" stroke-width="14" stroke-linejoin="round">حفلة</text>
+    <text x="200" y="82" font-size="76" fill="#ff3b8d" stroke="#ff3b8d" stroke-width="10" stroke-linejoin="round">حفلة</text>
+    <text x="200" y="78" font-size="76" fill="#ffe45c">حفلة</text>
+    <text x="200" y="146" font-size="56" fill="#2a1270" stroke="#2a1270" stroke-width="12" stroke-linejoin="round">البلياردو</text>
+    <text x="200" y="142" font-size="56" fill="#5fe0ff" stroke="#1e6bff" stroke-width="5" stroke-linejoin="round" paint-order="stroke">البلياردو</text>
   </g>
 </svg>

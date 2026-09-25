@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>عبور الطريق</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="gl" tabindex="0"></canvas>
+<div id="vignette"></div>
+<canvas id="fx"></canvas>
+
+<div id="ui">
+  <!-- ======================= HUD ======================= -->
+  <div id="hud" hidden>
+    <div class="hud-score"><div id="hScore">0</div><div class="hud-best">الأفضل: <b id="hBest">0</b></div></div>
+    <div class="hud-coins"><span class="coin"></span><b id="hCoins">0</b></div>
+    <button id="btnPause" class="hud-btn" type="button" aria-label="إيقاف مؤقت"><i></i><i></i></button>
+    <div id="hint">اضغط <span dir="ltr"><span class="sg-key">↑</span></span> أو <span class="sg-key">W</span> للقفز إلى الأمام!</div>
+    <div id="warn">النسر قادم! تقدّم بسرعة!</div>
+  </div>
+  <div id="pops"></div>
+  <div id="banner"><div class="b-top"></div><div class="b-main"></div></div>
+
+  <!-- ======================= TITLE ======================= -->
+  <div id="title" class="screen">
+    <div class="t-main">
+      <div class="logo"><span class="l1">عبور</span><span class="l2">الطريق</span></div>
+      <div class="tagline">اقفز، تفادَ السيارات، واجمع العملات!</div>
+      <div class="playrow">
+        <button class="sg-btn play" id="btnPlay" type="button">العب!</button>
+      </div>
+      <div class="orpress">أو اضغط <span class="sg-key">Enter</span> أو <span class="sg-key">↑</span></div>
+      <div class="t-row">
+        <button id="btnChars" class="sg-btn secondary" type="button">الشخصيات <span class="cnt" id="tCharCount">1/16</span></button>
+        <button id="btnMachine" class="sg-btn machine-btn" type="button">آلة الجوائز<span class="badge" id="machBadge" hidden>!</span></button>
+      </div>
+      <div class="chips">
+        <div class="chip">الأفضل <b id="tBest">0</b></div>
+        <div class="chip"><span class="coin"></span><b id="tCoins">0</b></div>
+        <button class="chip gift" id="tGift" type="button" hidden>🎁 هدية!</button>
+      </div>
+    </div>
+    <div class="t-missions box">
+      <div class="box-h">المهام <span class="box-sub">أكملها لتربح عملات</span></div>
+      <div id="tMissions"></div>
+    </div>
+    <div class="howto box">
+      <div><span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">←</span><span class="sg-key">↓</span><span class="sg-key">→</span></span> أو <span dir="ltr"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></span> قفز</div>
+      <div><span class="sg-key">P</span> إيقاف مؤقت &nbsp; <span class="sg-key">M</span> الصوت</div>
+      <div class="howto-tip">لا تتوقف طويلًا… النسر يراقبك!</div>
+    </div>
+    <div id="charpick" dir="ltr">
+      <button id="cPrev" type="button" aria-label="السابق">◀</button>
+      <div class="cp-name" dir="rtl"><span id="cpName">الكتكوت</span><small><span class="sg-key">←</span><span class="sg-key">→</span> غيّر الشخصية</small></div>
+      <button id="cNext" type="button" aria-label="التالي">▶</button>
+    </div>
+  </div>
+
+  <!-- ======================= PAUSE ======================= -->
+  <div id="pause" class="screen dim" hidden>
+    <div class="panel">
+      <h2>استراحة</h2>
+      <div class="p-score">النقاط: <b id="pScore">0</b></div>
+      <div class="col">
+        <button id="btnResume" class="sg-btn play mid" type="button">تابع اللعب</button>
+        <button id="btnRestart" class="sg-btn secondary" type="button">ابدأ من جديد</button>
+        <button id="btnMenu" class="sg-btn secondary" type="button">القائمة الرئيسية</button>
+      </div>
+      <div class="tiny"><span class="sg-key">P</span> أو <span class="sg-key">Esc</span> للمتابعة</div>
+    </div>
+  </div>
+
+  <!-- ======================= GAME OVER ======================= -->
+  <div id="over" class="screen dim" hidden>
+    <div class="panel over-panel">
+      <div id="oReason" class="o-reason">انتهت الجولة!</div>
+      <div class="o-scores">
+        <div class="o-big"><div class="o-num" id="oScore">0</div><div class="o-lbl">النقاط</div></div>
+        <div class="o-side">
+          <div class="o-line">الأفضل: <b id="oBest">0</b></div>
+          <div class="o-line"><span class="coin"></span> <b dir="ltr" id="oCoins">+0</b></div>
+          <div class="o-bonus" id="oBonus"></div>
+        </div>
+      </div>
+      <div id="oNewBest" class="newbest" hidden>رقم قياسي جديد!</div>
+      <div id="oUnlock" class="unlock" hidden></div>
+      <div id="oMissions" class="o-missions"></div>
+      <div class="o-extra">
+        <button id="oGift" class="sg-btn gift-btn" type="button" hidden>🎁 هدية مجانية!</button>
+        <button id="oMachine" class="sg-btn machine-btn glow" type="button" hidden>آلة الجوائز جاهزة!</button>
+      </div>
+      <button id="btnAgain" class="sg-btn play big" type="button">العب مرة أخرى</button>
+      <div class="o-btns2">
+        <button id="oChars" class="sg-btn secondary small" type="button">الشخصيات</button>
+        <button id="oMenu" class="sg-btn secondary small" type="button">القائمة</button>
+      </div>
+      <div class="tiny"><span class="sg-key">Enter</span> أو <span class="sg-key">R</span> للعب مرة أخرى</div>
+    </div>
+  </div>
+
+  <!-- ======================= CHARACTERS ======================= -->
+  <div id="chars" class="screen dim" hidden>
+    <div class="panel wide">
+      <h2>الشخصيات <span class="h-cnt" id="cCount">1/16</span></h2>
+      <div id="cGrid"></div>
+      <div class="c-foot">
+        <button id="cBack" class="sg-btn play mid" type="button">تم</button>
+        <button id="cMach" class="sg-btn machine-btn" type="button">آلة الجوائز</button>
+      </div>
+      <div class="tiny">انقر على شخصية لاختيارها &nbsp; <span class="sg-key">Esc</span> للرجوع</div>
+    </div>
+  </div>
+
+  <!-- ======================= PRIZE MACHINE ======================= -->
+  <div id="machine" class="screen dim" hidden>
+    <div class="panel wide mach">
+      <h2>آلة الجوائز</h2>
+      <div class="m-wrap">
+        <div class="gacha" id="gacha">
+          <div class="g-dome"><i style="--c:#ff4d6d;--x:18%;--y:58%"></i><i style="--c:#3fb6ff;--x:44%;--y:66%"></i><i style="--c:#ffd23f;--x:68%;--y:57%"></i><i style="--c:#5bd12e;--x:30%;--y:38%"></i><i style="--c:#b36bff;--x:58%;--y:36%"></i><i style="--c:#ff8a1f;--x:44%;--y:14%"></i></div>
+          <div class="g-body"><div class="g-knob" id="gKnob"></div><div class="g-slot"></div><div class="g-label">100</div></div>
+          <div class="g-ball" id="gBall"></div>
+        </div>
+        <div class="m-info">
+          <p class="m-text">كل سحبة تعطيك <b>شخصية جديدة</b>!</p>
+          <div class="m-coins"><span class="coin"></span> <b id="mCoins">0</b> <span class="m-of">/ 100</span></div>
+          <div class="m-bar"><i id="mBar"></i></div>
+          <button id="mPull" class="sg-btn play mid" type="button">اسحب! <span class="coin"></span> 100</button>
+          <div id="mMsg" class="m-msg"></div>
+        </div>
+      </div>
+      <button id="mBack" class="sg-btn secondary" type="button">رجوع</button>
+      <div id="mReveal" hidden>
+        <div class="rays"></div>
+        <div class="r-new">شخصية جديدة!</div>
+        <img id="mImg" alt="">
+        <div id="mName" class="r-name"></div>
+        <div class="r-btns">
+          <button id="mUse" class="sg-btn play mid" type="button">العب بها!</button>
+          <button id="mOk" class="sg-btn secondary" type="button">رائع!</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../../lib/three/three.min.js"></script>
+<script src="../../shared/kit.js"></script>
+<script src="models.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

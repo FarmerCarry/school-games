@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>دبابات الألوان</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="cv" tabindex="0"></canvas>
+
+<div id="ui">
+  <!-- ======================= TITLE ======================= -->
+  <section id="scr-title" class="scr">
+    <div class="chips">
+      <div class="chip"><span class="coin"></span><b data-bind="coins">0</b></div>
+      <div class="chip"><span class="star"></span><b data-bind="stars">0</b><small>/24</small></div>
+    </div>
+    <h1 class="logo"><span class="w1">دبابات</span> <span class="w2">الألوان</span></h1>
+    <p class="tag">لطّخ خصومك بكرات الطلاء المرتدّة في المتاهة!</p>
+    <div class="menu">
+      <button class="btn big green pulse" data-act="camp">العب!<small>البطولة ضد الكمبيوتر</small></button>
+      <div class="menu-row">
+        <button class="btn orange" data-act="free">مع الأصدقاء<small>2 أو 3 لاعبين</small></button>
+        <button class="btn pink" data-act="shop">المتجر<small>قبعات وبقع</small></button>
+      </div>
+    </div>
+    <div class="howto">
+      <div class="how-p p0"><i></i><div><b>الأخضر</b><span dir="ltr"><kbd class="sg-key">W</kbd><kbd class="sg-key">A</kbd><kbd class="sg-key">S</kbd><kbd class="sg-key">D</kbd> + <kbd class="sg-key">Q</kbd></span></div></div>
+      <div class="how-p p1"><i></i><div><b>الأحمر</b><span dir="ltr"><kbd class="sg-key">↑</kbd><kbd class="sg-key">←</kbd><kbd class="sg-key">↓</kbd><kbd class="sg-key">→</kbd> + <kbd class="sg-key">/</kbd></span></div></div>
+      <div class="how-p p2"><i></i><div><b>الأزرق</b><span dir="ltr"><kbd class="sg-key">I</kbd><kbd class="sg-key">J</kbd><kbd class="sg-key">K</kbd><kbd class="sg-key">L</kbd> + <kbd class="sg-key">U</kbd></span></div></div>
+      <p class="rule">الكرات ترتدّ عن الجدران، وكرتك تلطّخك أنت أيضًا! آخر دبابة تبقى تفوز بالجولة.</p>
+    </div>
+  </section>
+
+  <!-- ======================= CAMPAIGN ======================= -->
+  <section id="scr-camp" class="scr" hidden>
+    <div class="topbar">
+      <button class="btn small white" data-act="title">→ رجوع</button>
+      <h2>البطولة</h2>
+      <div class="chips inline">
+        <div class="chip"><span class="star"></span><b data-bind="stars">0</b><small>/24</small></div>
+        <div class="chip"><span class="coin"></span><b data-bind="coins">0</b></div>
+      </div>
+    </div>
+    <div id="stages"></div>
+    <p class="hint">انقر على مرحلة لتبدأ، أو اضغط <kbd class="sg-key">Enter</kbd>. اجمع 3 نجوم: اربح دون أن يسجّل خصمك نقطة!</p>
+  </section>
+
+  <!-- ======================= FREE PLAY ======================= -->
+  <section id="scr-free" class="scr" hidden>
+    <div class="topbar">
+      <button class="btn small white" data-act="title">→ رجوع</button>
+      <h2>مع الأصدقاء</h2>
+      <div class="chips inline"><div class="chip"><span class="coin"></span><b data-bind="coins">0</b></div></div>
+    </div>
+    <div class="card free-card">
+      <div class="opt"><label>عدد اللاعبين</label><div class="pills" data-opt="humans"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button></div></div>
+      <div class="opt"><label>دبابات الكمبيوتر</label><div class="pills" data-opt="bots"><button data-v="0">0</button><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button></div></div>
+      <div class="opt"><label>مستوى الكمبيوتر</label><div class="pills" data-opt="diff"><button data-v="easy">سهل</button><button data-v="medium">متوسط</button><button data-v="hard">صعب</button></div></div>
+      <div class="opt"><label>الفوز عند</label><div class="pills" data-opt="target"><button data-v="3">3 جولات</button><button data-v="5">5 جولات</button><button data-v="7">7 جولات</button></div></div>
+      <div id="lineup"></div>
+      <button class="btn big green" data-act="startFree">ابدأ المعركة!</button>
+    </div>
+  </section>
+
+  <!-- ======================= SHOP ======================= -->
+  <section id="scr-shop" class="scr" hidden>
+    <div class="topbar">
+      <button class="btn small white" data-act="title">→ رجوع</button>
+      <h2>المتجر</h2>
+      <div class="chips inline"><div class="chip"><span class="coin"></span><b data-bind="coins">0</b></div></div>
+    </div>
+    <div class="card shop-card">
+      <div class="shop-head">
+        <div class="tabs" id="slotTabs"><span>لمن؟</span><button data-slot="0" class="s0">الأخضر</button><button data-slot="1" class="s1">الأحمر</button><button data-slot="2" class="s2">الأزرق</button></div>
+        <div class="tabs" id="kindTabs"><button data-kind="hat">القبعات</button><button data-kind="splat">شكل البقعة</button></div>
+      </div>
+      <div id="items"></div>
+      <p class="hint small">اربح عملات: <b dir="ltr">+5</b> لكل لطخة، <b dir="ltr">+10</b> لكل جولة، <b dir="ltr">+30</b> للفوز بالمباراة، و<b dir="ltr">+5</b> لكل مباراة.</p>
+    </div>
+  </section>
+
+  <!-- ======================= PAUSE ======================= -->
+  <section id="scr-pause" class="scr dim" hidden>
+    <div class="card small-card">
+      <h2 class="big-h">استراحة</h2>
+      <div class="col">
+        <button class="btn green" data-act="resume">تابع <kbd class="sg-key">P</kbd></button>
+        <button class="btn white" data-act="restart">أعد المباراة <kbd class="sg-key">R</kbd></button>
+        <button class="btn white" data-act="menu">القائمة الرئيسية</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= RESULT ======================= -->
+  <section id="scr-result" class="scr" hidden>
+    <div class="card result-card">
+      <h2 class="big-h" id="resTitle"></h2>
+      <p class="res-sub" id="resSub"></p>
+      <div id="resTable"></div>
+      <div class="rewards">
+        <div id="resStars" class="res-stars"></div>
+        <div class="res-coins"><span class="coin"></span><b id="resCoins" dir="ltr">+0</b></div>
+      </div>
+      <div id="resNote" class="res-note"></div>
+      <div class="col">
+        <button class="btn green" id="resMain" data-act="resMain"></button>
+        <div class="menu-row">
+          <button class="btn white small2" id="resAgain" data-act="restart">العب مجددًا <kbd class="sg-key">R</kbd></button>
+          <button class="btn white small2" data-act="menu">القائمة <kbd class="sg-key">Esc</kbd></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <button id="pauseBtn" class="round-btn" hidden aria-label="إيقاف مؤقت">❚❚</button>
+  <div id="toast"></div>
+</div>
+
+<script src="../../shared/kit.js"></script>
+<script src="art.js"></script>
+<script src="sound.js"></script>
+<script src="maze.js"></script>
+<script src="bot.js"></script>
+<script src="game.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>

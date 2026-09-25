@@ -10,25 +10,25 @@
 (function (root) {
   'use strict';
   var LEVELS = [
-    { name: 'First Shot', hint: 'Line up the guide with the pocket, pull back and let go!',
+    { name: 'الضربة الأولى', hint: 'وجّه الخط نحو الجيب، ثم اسحب للخلف واترك!',
       cue: [470, 440], balls: [[1, 788, 534]], targets: [1], shots: 1 },
-    { name: 'Side Swipe', hint: 'Cut the 2 into the side pocket.',
+    { name: 'الجيب الأوسط', hint: 'أدخل الكرة 2 في الجيب الأوسط السفلي.',
       cue: [430, 300], balls: [[2, 590, 540]], targets: [2], pockets: [5], shots: 1 },
-    { name: 'Double Trouble', hint: 'Two balls, two shots. Sink them both!',
+    { name: 'كرتان وضربتان', hint: 'كرتان وضربتان. أدخل الاثنتين!',
       cue: [640, 400], balls: [[3, 330, 262], [11, 948, 536]], targets: [3, 11], shots: 2 },
-    { name: 'Combo Time', hint: 'Hit the 5 so it knocks the 4 into the corner.',
+    { name: 'وقت الكومبو', hint: 'اضرب الكرة 5 لتدفع الكرة 4 إلى الزاوية.',
       cue: [640, 450], balls: [[4, 1010, 244], [5, 968, 286]], targets: [4], pockets: [1], shots: 1 },
-    { name: 'Bank It!', hint: 'Bounce the 6 off a rail and into ANY pocket. Watch the bounce line!',
+    { name: 'ارتدّ وادخل!', hint: 'ارتدّ بالكرة 6 عن الحافة إلى أي جيب. انظر إلى خط الارتداد!',
       cue: [560, 250], balls: [[6, 760, 520], [8, 920, 348]], targets: [6], avoid: [8], bank: true, shots: 1 },
-    { name: 'Stop Right There', hint: 'Pot the 10 but don’t let the cue ball follow it in. Try back spin!',
+    { name: 'قف مكانك!', hint: 'أدخل الكرة 10 ولا تدع البيضاء تلحق بها. جرّب الدوران الخلفي!',
       cue: [430, 250], balls: [[10, 850, 494]], targets: [10], pockets: [3], shots: 1 },
-    { name: 'Two in One', hint: 'Pot BOTH balls with just ONE shot! Hit one, then bounce into the other.',
+    { name: 'اثنتان بضربة', hint: 'أدخل الكرتين بضربة واحدة فقط! اضرب واحدة ثم ارتدّ إلى الأخرى.',
       cue: [640, 396], balls: [[7, 1051, 205], [9, 1051, 587]], targets: [7, 9], shots: 1 },
-    { name: 'Kick Shot', hint: 'No straight path! Bounce the cue ball off a rail to reach the 15.',
+    { name: 'ضربة الحافة', hint: 'لا يوجد طريق مباشر! ارتدّ بالبيضاء عن الحافة لتصل إلى الكرة 15.',
       cue: [700, 300], balls: [[15, 300, 540], [8, 520, 420], [1, 470, 330], [2, 590, 520], [3, 400, 440]], targets: [15], avoid: [8], shots: 1 },
-    { name: 'Clean Sweep', hint: 'Sink all four balls in five shots. Plan where the cue ball stops!',
+    { name: 'نظّف الطاولة', hint: 'أدخل الكرات الأربع في 5 ضربات. فكّر أين ستقف البيضاء!',
       cue: [400, 396], balls: [[12, 300, 250], [13, 980, 250], [14, 640, 520], [3, 900, 520]], targets: [12, 13, 14, 3], shots: 5 },
-    { name: 'Grand Finale', hint: 'Pot the 1, 2 and 3, then finish with the 8. Six shots!',
+    { name: 'الختام الكبير', hint: 'أدخل 1 و2 و3، ثم اختم بالكرة 8. لديك 6 ضربات!',
       cue: [360, 396], balls: [[1, 560, 300], [2, 760, 470], [3, 980, 300], [8, 880, 396]], targets: [1, 2, 3, 8], eightLast: true, shots: 6 }
   ];
   // Judge one finished shot of a trick level. prog = { shotsUsed } (already counts this shot).
@@ -37,19 +37,19 @@
     var i, remaining = 0;
     for (i = 0; i < shot.pots.length; i++) {
       var p = shot.pots[i];
-      if (p.n === 0) return { status: 'fail', reason: 'Scratch! The cue ball went in.' };
-      if (lv.avoid && lv.avoid.indexOf(p.n) >= 0) return { status: 'fail', reason: 'Oops! Not the ' + p.n + '-ball!' };
-      if (lv.targets.indexOf(p.n) >= 0 && lv.pockets && lv.pockets.indexOf(p.pocket) < 0) return { status: 'fail', reason: 'Wrong pocket!' };
-      if (lv.targets.indexOf(p.n) >= 0 && lv.bank && p.cush < 1) return { status: 'fail', reason: 'It has to bounce off a rail first!' };
+      if (p.n === 0) return { status: 'fail', reason: 'أوبس! سقطت الكرة البيضاء.' };
+      if (lv.avoid && lv.avoid.indexOf(p.n) >= 0) return { status: 'fail', reason: 'أوبس! ليس الكرة ' + p.n + '!' };
+      if (lv.targets.indexOf(p.n) >= 0 && lv.pockets && lv.pockets.indexOf(p.pocket) < 0) return { status: 'fail', reason: 'الجيب الخطأ!' };
+      if (lv.targets.indexOf(p.n) >= 0 && lv.bank && p.cush < 1) return { status: 'fail', reason: 'يجب أن ترتدّ عن الحافة أولًا!' };
     }
     for (i = 0; i < st.balls.length; i++) if (st.balls[i].on && lv.targets.indexOf(st.balls[i].n) >= 0) remaining++;
     if (lv.eightLast) {
       var eightDown = false;
       for (i = 0; i < st.balls.length; i++) if (st.balls[i].n === 8 && !st.balls[i].on) eightDown = true;
-      if (eightDown && remaining > 0) return { status: 'fail', reason: 'The 8 has to go LAST!' };
+      if (eightDown && remaining > 0) return { status: 'fail', reason: 'الكرة 8 يجب أن تكون الأخيرة!' };
     }
     if (remaining === 0) return { status: 'win' };
-    if (prog.shotsUsed >= lv.shots) return { status: 'fail', reason: lv.shots === 1 ? 'Try again, you got this!' : 'Out of shots! Try again.' };
+    if (prog.shotsUsed >= lv.shots) return { status: 'fail', reason: lv.shots === 1 ? 'حاول مرة أخرى، أنت تستطيع!' : 'انتهت الضربات! حاول مجددًا.' };
     return { status: 'go' };
   };
 

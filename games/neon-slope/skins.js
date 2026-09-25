@@ -28,36 +28,36 @@
   }
 
   var BALLS = [
-    { id: 'neon', name: 'Neon Core', price: 0, glow: '#3ff0ff', draw: function (g) {
+    { id: 'neon', name: 'قلب النيون', price: 0, glow: '#3ff0ff', draw: function (g) {
       fill(g, '#0b1236');
       g.strokeStyle = '#3ff0ff'; g.lineWidth = 5; g.shadowColor = '#3ff0ff'; g.shadowBlur = 10;
       for (var i = 0; i <= 8; i++) { g.beginPath(); g.moveTo(i * 32, 0); g.lineTo(i * 32, H); g.stroke(); }
       for (var j = 1; j < 4; j++) { g.beginPath(); g.moveTo(0, j * 32); g.lineTo(W, j * 32); g.stroke(); }
       g.shadowBlur = 0;
     } },
-    { id: 'bubblegum', name: 'Bubblegum', price: 25, glow: '#ff5fc8', draw: function (g) {
+    { id: 'bubblegum', name: 'علكة', price: 25, glow: '#ff5fc8', draw: function (g) {
       fill(g, '#ff4fbf');
       g.fillStyle = '#ffffff';
       g.fillRect(0, 22, W, 14); g.fillRect(0, 57, W, 14); g.fillRect(0, 92, W, 14);
       var r = rng(3);
       for (var i = 0; i < 30; i++) dot(g, r() * W, 40 + (r() < 0.5 ? 0 : 35) + r() * 12, 3, '#ffd1f0');
     } },
-    { id: 'cookie', name: 'Cookie', price: 40, glow: '#ffb46b', draw: function (g) {
+    { id: 'cookie', name: 'بسكويتة', price: 40, glow: '#ffb46b', draw: function (g) {
       fill(g, '#dba26a');
       var r = rng(7);
       for (var i = 0; i < 60; i++) dot(g, r() * W, r() * H, 2 + r() * 2, 'rgba(160,100,40,0.5)');
       for (var k = 0; k < 26; k++) ell(g, r() * W, 10 + r() * (H - 20), 6 + r() * 4, 5 + r() * 3, '#4a2812');
     } },
-    { id: 'lime', name: 'Lime Pop', price: 60, glow: '#7dff3a', draw: function (g) {
+    { id: 'lime', name: 'ليمونة', price: 60, glow: '#7dff3a', draw: function (g) {
       fill(g, '#7dff3a');
       for (var y = 0; y < 4; y++) for (var x = 0; x < 8; x++) dot(g, x * 32 + (y % 2) * 16 + 8, y * 32 + 16, 8, '#2fa014');
     } },
-    { id: 'checkers', name: 'Checkers', price: 80, glow: '#ffffff', draw: function (g) {
+    { id: 'checkers', name: 'شطرنج', price: 80, glow: '#ffffff', draw: function (g) {
       for (var y = 0; y < 4; y++) for (var x = 0; x < 8; x++) {
         g.fillStyle = (x + y) % 2 ? '#141414' : '#ffffff'; g.fillRect(x * 32, y * 32, 32, 32);
       }
     } },
-    { id: 'tennis', name: 'Fuzzy Ace', price: 100, glow: '#d7ff3d', draw: function (g) {
+    { id: 'tennis', name: 'كرة تنس', price: 100, glow: '#d7ff3d', draw: function (g) {
       fill(g, '#d4f53a');
       g.strokeStyle = '#ffffff'; g.lineWidth = 7; g.beginPath();
       for (var x = 0; x <= W; x += 4) {
@@ -66,7 +66,7 @@
       }
       g.stroke();
     } },
-    { id: 'eight', name: 'Lucky Eight', price: 120, glow: '#b98cff', draw: function (g) {
+    { id: 'eight', name: 'رقم الحظ', price: 120, glow: '#b98cff', draw: function (g) {
       fill(g, '#15121f');
       g.fillStyle = '#ffffff';
       g.beginPath(); g.ellipse(64, 64, 26, 30, 0, 0, TAU); g.fill();
@@ -74,7 +74,7 @@
       g.fillStyle = '#15121f'; g.font = 'bold 40px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText('8', 64, 66); g.fillText('8', 192, 66);
     } },
-    { id: 'melon', name: 'Watermelon', price: 150, glow: '#5fff6a', draw: function (g) {
+    { id: 'melon', name: 'بطيخة', price: 150, glow: '#5fff6a', draw: function (g) {
       fill(g, '#79e36c');
       g.strokeStyle = '#1d7a2a'; g.lineWidth = 11;
       for (var k = 0; k < 8; k++) {
@@ -86,7 +86,7 @@
         g.stroke();
       }
     } },
-    { id: 'smiley', name: 'Smiley', price: 180, glow: '#ffd93b', draw: function (g) {
+    { id: 'smiley', name: 'وجه ضاحك', price: 180, glow: '#ffd93b', draw: function (g) {
       fill(g, '#ffd93b');
       function face(cx, wink) {
         g.fillStyle = '#2b1a00';
@@ -101,12 +101,12 @@
       }
       face(128, false); face(0, true); face(256, true);
     } },
-    { id: 'beach', name: 'Beach Ball', price: 220, glow: '#ffffff', draw: function (g) {
+    { id: 'beach', name: 'كرة الشاطئ', price: 220, glow: '#ffffff', draw: function (g) {
       var cols = ['#ff3b3b', '#ffffff', '#2f7bff', '#ffd93b', '#ffffff', '#2fd35f'];
       for (var i = 0; i < 6; i++) { g.fillStyle = cols[i]; g.fillRect(i * W / 6, 0, W / 6 + 1, H); }
       g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, 12); g.fillRect(0, H - 12, W, 12);
     } },
-    { id: 'pizza', name: 'Pizza', price: 260, glow: '#ffb13b', draw: function (g) {
+    { id: 'pizza', name: 'بيتزا', price: 260, glow: '#ffb13b', draw: function (g) {
       fill(g, '#ffc83d');
       var r = rng(11);
       for (var i = 0; i < 40; i++) dot(g, r() * W, r() * H, 3 + r() * 3, '#ffe27a');
@@ -116,7 +116,7 @@
       }
       for (var m = 0; m < 12; m++) { g.fillStyle = '#2f9e3a'; g.fillRect(r() * W, r() * H, 7, 3); }
     } },
-    { id: 'disco', name: 'Disco', price: 320, glow: '#e0e8ff', draw: function (g) {
+    { id: 'disco', name: 'ديسكو', price: 320, glow: '#e0e8ff', draw: function (g) {
       fill(g, '#2a2a3a');
       var r = rng(5);
       for (var y = 0; y < 8; y++) for (var x = 0; x < 16; x++) {
@@ -125,7 +125,7 @@
         g.fillRect(x * 16 + 1, y * 16 + 1, 14, 14);
       }
     } },
-    { id: 'lava', name: 'Lava Rock', price: 380, glow: '#ff6a1a', draw: function (g) {
+    { id: 'lava', name: 'صخرة الحمم', price: 380, glow: '#ff6a1a', draw: function (g) {
       fill(g, '#2a0c06');
       var r = rng(9);
       g.strokeStyle = '#ff7a1a'; g.lineWidth = 4; g.shadowColor = '#ffcc33'; g.shadowBlur = 12; g.lineCap = 'round';
@@ -137,7 +137,7 @@
       g.shadowBlur = 0;
       for (var k = 0; k < 10; k++) dot(g, r() * W, r() * H, 4, '#ffd23a');
     } },
-    { id: 'planet', name: 'Planet', price: 450, glow: '#4da6ff', draw: function (g) {
+    { id: 'planet', name: 'كوكب', price: 450, glow: '#4da6ff', draw: function (g) {
       fill(g, '#1a5cff');
       var r = rng(21);
       for (var i = 0; i < 9; i++) {
@@ -148,14 +148,14 @@
       g.fillStyle = 'rgba(255,255,255,0.35)';
       for (var c = 0; c < 8; c++) g.fillRect(r() * W, 20 + r() * 88, 40, 5);
     } },
-    { id: 'gold', name: 'Solid Gold', price: 750, glow: '#ffd21f', draw: function (g) {
+    { id: 'gold', name: 'ذهب خالص', price: 750, glow: '#ffd21f', draw: function (g) {
       var gr = g.createLinearGradient(0, 0, 0, H);
       gr.addColorStop(0, '#fff6b0'); gr.addColorStop(0.45, '#ffc21a'); gr.addColorStop(1, '#a8740a');
       g.fillStyle = gr; g.fillRect(0, 0, W, H);
       g.fillStyle = 'rgba(255,255,255,0.5)';
       for (var i = 0; i < 4; i++) { g.save(); g.translate(i * 64 + 20, 0); g.rotate(0.35); g.fillRect(0, -20, 10, 180); g.restore(); }
     } },
-    { id: 'comet', name: 'Comet', req: 800, glow: '#9ff3ff', draw: function (g) {
+    { id: 'comet', name: 'مذنّب', req: 800, glow: '#9ff3ff', draw: function (g) {
       var gr = g.createLinearGradient(0, 0, 0, H);
       gr.addColorStop(0, '#e8fdff'); gr.addColorStop(1, '#2a8cff');
       g.fillStyle = gr; g.fillRect(0, 0, W, H);
@@ -163,7 +163,7 @@
       g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 3; g.lineCap = 'round';
       for (var i = 0; i < 22; i++) { var x = r() * W, y = r() * H; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 26, y + 8); g.stroke(); }
     } },
-    { id: 'galaxy', name: 'Galaxy', req: 1500, glow: '#c05bff', draw: function (g) {
+    { id: 'galaxy', name: 'مجرّة', req: 1500, glow: '#c05bff', draw: function (g) {
       fill(g, '#10002a');
       var r = rng(8), cols = ['rgba(255,60,200,', 'rgba(80,120,255,', 'rgba(160,60,255,'];
       for (var i = 0; i < 14; i++) {
@@ -176,7 +176,7 @@
       }
       for (var s = 0; s < 70; s++) dot(g, r() * W, r() * H, r() < 0.15 ? 2 : 1, '#ffffff');
     } },
-    { id: 'prism', name: 'Prism', req: 2500, glow: '#ffffff', rainbow: true, draw: function (g) {
+    { id: 'prism', name: 'ألوان الطيف', req: 2500, glow: '#ffffff', rainbow: true, draw: function (g) {
       for (var x = 0; x < W; x += 2) { g.fillStyle = 'hsl(' + (x / W * 720 % 360) + ',100%,58%)'; g.fillRect(x, 0, 2, H); }
       g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(0, 56, W, 16);
     } }
@@ -184,17 +184,17 @@
 
   // Trails: ribbon colors plus an optional particle effect.
   var TRAILS = [
-    { id: 'glow', name: 'Glow', price: 0, fx: null, desc: 'Matches your ball' },
-    { id: 'sparkle', name: 'Sparkle', price: 40, fx: 'sparkle', colors: ['#ffffff', '#bff8ff'] },
-    { id: 'fire', name: 'Fire', price: 90, fx: 'fire', colors: ['#fff27a', '#ff9a1f', '#ff3b1f'] },
-    { id: 'snow', name: 'Snowfall', price: 120, fx: 'snow', colors: ['#ffffff', '#dff6ff'] },
-    { id: 'confetti', name: 'Confetti', price: 150, fx: 'confetti', colors: ['#ff4fbf', '#3ff0ff', '#ffd93b', '#7dff3a', '#a855ff'] },
-    { id: 'bubbles', name: 'Bubbles', price: 190, fx: 'bubbles', colors: ['#7fd8ff', '#bff0ff', '#ffffff'] },
-    { id: 'rainbow', name: 'Rainbow', price: 240, fx: null, rainbow: true },
-    { id: 'toxic', name: 'Toxic Goo', price: 280, fx: 'toxic', colors: ['#7dff3a', '#b6ff3a', '#2fd35f'] },
-    { id: 'stars', name: 'Star Dust', price: 340, fx: 'stars', colors: ['#ffe14d', '#ffffff'] },
-    { id: 'lightning', name: 'Lightning', req: 1200, fx: 'zap', colors: ['#bfe8ff', '#6fb6ff', '#ffffff'] },
-    { id: 'plasma', name: 'Plasma', req: 2000, fx: 'zap', colors: ['#ff3fd0', '#b46bff', '#ffffff'] }
+    { id: 'glow', name: 'توهّج', price: 0, fx: null },
+    { id: 'sparkle', name: 'بريق', price: 40, fx: 'sparkle', colors: ['#ffffff', '#bff8ff'] },
+    { id: 'fire', name: 'نار', price: 90, fx: 'fire', colors: ['#fff27a', '#ff9a1f', '#ff3b1f'] },
+    { id: 'snow', name: 'ثلج', price: 120, fx: 'snow', colors: ['#ffffff', '#dff6ff'] },
+    { id: 'confetti', name: 'قصاصات ملونة', price: 150, fx: 'confetti', colors: ['#ff4fbf', '#3ff0ff', '#ffd93b', '#7dff3a', '#a855ff'] },
+    { id: 'bubbles', name: 'فقاعات', price: 190, fx: 'bubbles', colors: ['#7fd8ff', '#bff0ff', '#ffffff'] },
+    { id: 'rainbow', name: 'قوس قزح', price: 240, fx: null, rainbow: true },
+    { id: 'toxic', name: 'هلام أخضر', price: 280, fx: 'toxic', colors: ['#7dff3a', '#b6ff3a', '#2fd35f'] },
+    { id: 'stars', name: 'غبار النجوم', price: 340, fx: 'stars', colors: ['#ffe14d', '#ffffff'] },
+    { id: 'lightning', name: 'برق', req: 1200, fx: 'zap', colors: ['#bfe8ff', '#6fb6ff', '#ffffff'] },
+    { id: 'plasma', name: 'بلازما', req: 2000, fx: 'zap', colors: ['#ff3fd0', '#b46bff', '#ffffff'] }
   ];
 
   var cache = {};

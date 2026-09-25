@@ -8,25 +8,25 @@
   var TAU = Math.PI * 2;
 
   var CANDIES = [
-    { name: 'Cherry Swirl', need: 0, a: '#ff3b5c', b: '#ffffff', wrap: '#ff8fa3', edge: '#a3122f' },
-    { name: 'Lemon Zing', need: 4, a: '#ffc400', b: '#fff6c2', wrap: '#ffe066', edge: '#a37400' },
-    { name: 'Blue Razz', need: 10, a: '#1f7bff', b: '#c4e2ff', wrap: '#79b8ff', edge: '#0b3f91' },
-    { name: 'Grape Pop', need: 18, a: '#9b4dff', b: '#ecdcff', wrap: '#c99bff', edge: '#4c1a99' },
-    { name: 'Mint Chill', need: 28, a: '#13c28a', b: '#e2fff4', wrap: '#86efc9', edge: '#06714f' },
-    { name: 'Choco Chip', need: 40, a: '#7a4a2a', b: '#b77a4c', wrap: '#e8b98a', edge: '#3d2210', chips: true },
-    { name: 'Rainbow', need: 54, rainbow: true, a: '#ff3b5c', b: '#ffffff', wrap: '#ffffff', edge: '#5b3b8c' },
-    { name: 'Golden', need: 72, a: '#ffb800', b: '#fff1b0', wrap: '#ffe27a', edge: '#8a5a00', gold: true }
+    { name: 'كرز دوّار', need: 0, a: '#ff3b5c', b: '#ffffff', wrap: '#ff8fa3', edge: '#a3122f' },
+    { name: 'ليمون لاذع', need: 4, a: '#ffc400', b: '#fff6c2', wrap: '#ffe066', edge: '#a37400' },
+    { name: 'توت أزرق', need: 10, a: '#1f7bff', b: '#c4e2ff', wrap: '#79b8ff', edge: '#0b3f91' },
+    { name: 'عنب فوّار', need: 18, a: '#9b4dff', b: '#ecdcff', wrap: '#c99bff', edge: '#4c1a99' },
+    { name: 'نعناع منعش', need: 28, a: '#13c28a', b: '#e2fff4', wrap: '#86efc9', edge: '#06714f' },
+    { name: 'شوكولاتة', need: 40, a: '#7a4a2a', b: '#b77a4c', wrap: '#e8b98a', edge: '#3d2210', chips: true },
+    { name: 'قوس قزح', need: 54, rainbow: true, a: '#ff3b5c', b: '#ffffff', wrap: '#ffffff', edge: '#5b3b8c' },
+    { name: 'الذهبية', need: 72, a: '#ffb800', b: '#fff1b0', wrap: '#ffe27a', edge: '#8a5a00', gold: true }
   ];
   var RAINBOW = ['#ff3b5c', '#ff9f1a', '#ffd21f', '#2fd35a', '#1fa8ff', '#9b5cff'];
 
   var HATS = [
-    { name: 'No Hat', need: 0, id: 'none' },
-    { name: 'Pink Bow', need: 6, id: 'bow' },
-    { name: 'Party Hat', need: 14, id: 'party' },
-    { name: 'Ball Cap', need: 24, id: 'cap' },
-    { name: 'Flower', need: 34, id: 'flower' },
-    { name: 'Top Hat', need: 48, id: 'tophat' },
-    { name: 'Crown', need: 64, id: 'crown' }
+    { name: 'بلا قبعة', need: 0, id: 'none' },
+    { name: 'فيونكة وردية', need: 6, id: 'bow' },
+    { name: 'قبعة الحفلة', need: 14, id: 'party' },
+    { name: 'قبعة رياضية', need: 24, id: 'cap' },
+    { name: 'وردة', need: 34, id: 'flower' },
+    { name: 'قبعة أنيقة', need: 48, id: 'tophat' },
+    { name: 'تاج', need: 64, id: 'crown' }
   ];
 
   function rr(ctx, x, y, w, h, r) {
@@ -136,7 +136,7 @@
       ctx.beginPath(); ctx.arc(0, 4, 36, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.beginPath(); ctx.ellipse(34, 2, 26, 8, 0.05, 0, TAU); ctx.fillStyle = '#d42f2f'; ctx.fill(); ctx.stroke();
       ctx.beginPath(); ctx.arc(0, -32, 5, 0, TAU); ctx.fillStyle = '#fff'; ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#fff'; ctx.font = '700 20px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('M', 0, -6);
+      ctx.fillStyle = '#fff'; ctx.font = '700 22px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.direction = 'rtl'; ctx.fillText('ق', 0, -6);
     } else if (id === 'flower') {
       ctx.save(); ctx.translate(-30, 10);
       ctx.fillStyle = '#fff';
@@ -363,8 +363,8 @@
       ctx.fillStyle = 'rgba(80,45,10,0.22)'; ctx.beginPath(); ctx.moveTo(W - 219 + 3, H - 308); ctx.arc(W - 219, H - 308, 3, 0, TAU); ctx.moveTo(W - 201 + 3, H - 308); ctx.arc(W - 201, H - 308, 3, 0, TAU); ctx.fill();
       ctx.beginPath(); var hx = 230, hy = 250; ctx.moveTo(hx, hy + 18); ctx.bezierCurveTo(hx - 30, hy - 4, hx - 12, hy - 26, hx, hy - 8); ctx.bezierCurveTo(hx + 12, hy - 26, hx + 30, hy - 4, hx, hy + 18); ctx.stroke();
       starPath(ctx, W - 330, 110, 20, 8, 0.2); ctx.stroke();
-      ctx.font = '700 26px Fredoka, sans-serif'; ctx.fillStyle = 'rgba(80,45,10,0.2)'; ctx.textAlign = 'center';
-      ctx.fillText('THIS SIDE UP', 140, H - 118); ctx.fillText('YUMMY INSIDE', W - 140, H - 118);
+      ctx.font = '700 28px Fredoka, sans-serif'; ctx.fillStyle = 'rgba(80,45,10,0.2)'; ctx.textAlign = 'center'; ctx.direction = 'rtl';
+      ctx.fillText('للأعلى', 140, H - 118); ctx.fillText('حلوى لذيذة', W - 140, H - 118);
     }
     // soft vignette
     var v = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 1.05);

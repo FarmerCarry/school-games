@@ -35,10 +35,54 @@ LEVELS.forEach((def, i) => {
   rows.forEach((r, y) => { if (r[0] !== '#' && r[0] !== 'X' || r[12] !== '#' && r[12] !== 'X') probs.push('border open at row ' + y); });
   if (rows[0] !== '#############' || rows[rows.length - 1] !== '#############') probs.push('top/bottom border');
   const r = C.verifyLevel(def);
-  const tag = r.allItems ? 'OK ' : (r.ok ? 'MISS' : 'FAIL');
-  if (!r.allItems || probs.length) fails++;
+  // Exhaustive state search (player rest cell + exact block state, blocks
+  // reverse when they would hit the player). Proves: the exit is reachable,
+  // every dot/coin can be collected on some path that can still finish,
+  // and no reachable state is a dead end (soft lock).
+  {
+    const L0 = C.parseLevel(def), G0 = C.levelGrid(L0), K = C.key;
+    const b0 = L0.blocks.map(b => ({ x: b.x, y: b.y, dx: b.dx, dy: b.dy }));
+    const enc = (x, y, bl) => x + ',' + y + '|' + bl.map(b => b.x + ',' + b.y + ',' + b.dx + ',' + b.dy).join(';');
+    const idx = new Map(), states = [], edges = [], exitEdge = [];
+    function add(x, y, bl) { const k = enc(x, y, bl); let i = idx.get(k); if (i === undefined) { i = states.length; idx.set(k, i); states.push({ x, y, bl }); edges.push([]); exitEdge.push(null); } return i; }
+    add(L0.start.x, L0.start.y, b0);
+    for (let h = 0; h < states.length && states.length < 400000; h++) {
+      const st = states[h], snap = {};
+      st.bl.forEach(b => { snap[K(b.x, b.y)] = 1; });
+      for (let d = 0; d < 4; d++) {
+        const m = C.dash(G0, st.x, st.y, d, snap);
+        if (!m || m.dead) continue;
+        if (m.exit) { exitEdge[h] = (exitEdge[h] || []).concat([m.cells]); continue; }
+        edges[h].push([add(m.x, m.y, st.bl), m.cells]);
+      }
+      if (st.bl.length) {
+        const bl = st.bl.map(b => ({ x: b.x, y: b.y, dx: b.dx, dy: b.dy }));
+        C.stepBlocks(G0, bl, (x, y) => x === st.x && y === st.y);
+        edges[h].push([add(st.x, st.y, bl), []]);
+      }
+    }
+    // good = can reach exit
+    const good = new Uint8Array(states.length); let changed = true;
+    for (let i = 0; i < states.length; i++) if (exitEdge[i]) good[i] = 1;
+    while (changed) { changed = false; for (let i = 0; i < states.length; i++) if (!good[i]) for (const [j] of edges[i]) if (good[j]) { good[i] = 1; changed = true; break; } }
+    if (!good[0]) probs.push('EXIT UNREACHABLE');
+    const got = new Set();
+    for (let i = 0; i < states.length; i++) {
+      for (const [j, cells] of edges[i]) if (good[j]) cells.forEach(c => got.add(c));
+      if (exitEdge[i]) exitEdge[i].forEach(cells => cells.forEach(c => got.add(c)));
+    }
+    const unget = [];
+    for (let y = 0; y < L0.h; y++) for (let x = 0; x < L0.w; x++) { const it = L0.items[y * L0.w + x]; if (it && !got.has(K(x, y))) unget.push(`(${x},${y})`); }
+    if (unget.length) probs.push('uncollectable ' + unget.join(' '));
+    const deadCells = new Set();
+    for (let i = 0; i < states.length; i++) if (!good[i]) deadCells.add(`(${states[i].x},${states[i].y})`);
+    if (deadCells.size) probs.push('dead-end rest points ' + [...deadCells].join(' '));
+    r.states = states.length;
+  }
+  const tag = probs.length ? 'BAD ' : 'OK  ';
+  if (probs.length) fails++;
   const est = (r.dist / C.TIMING.DASH_SPEED + r.moves * 0.45 + r.waits * C.TIMING.BLOCK_STEP);
-  console.log(`L${String(n).padStart(2)} ${tag} ${def.name.padEnd(18)} ${rows.length}r dots ${r.dots} coins ${r.coins} moves ${r.moves} waits ${r.waits} est ${est.toFixed(1)}s par ${def.par}` +
+  console.log(`L${String(n).padStart(2)} ${tag} ${def.name.padEnd(18)} ${rows.length}r dots ${r.dots} coins ${r.coins} states ${r.states} greedy:${r.allItems ? 'all' : 'no'} moves ${r.moves} waits ${r.waits} est ${est.toFixed(1)}s par ${def.par}` +
     (r.missing.length ? ' missing ' + r.missing.map(m => `(${m.x},${m.y})`).join(' ') : '') + (probs.length ? ' PROBLEMS: ' + probs.join('; ') : '') +
     (def.par && def.par < est * 1.2 ? ' PAR-TIGHT' : ''));
   if (showMap || (!r.allItems && only)) {

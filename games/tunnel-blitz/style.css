@@ -170,3 +170,7 @@ body { background: #04060f; }
 .pausebtn[hidden] { display: none; }
 .pausebtn span { width: 5px; height: 16px; background: #fff; border-radius: 2px; display: block; }
 .pausebtn:hover { background: rgba(0,0,0,0.55); }
+.toast .rew, .om .rew { unicode-bidi: isolate; display: inline-flex; align-items: center; gap: 4px; }
+.toast .rew { margin-inline-start: 4px; }
+.om .rew .orb { width: 16px; height: 16px; }
+.utext .orb { width: 16px; height: 16px; }

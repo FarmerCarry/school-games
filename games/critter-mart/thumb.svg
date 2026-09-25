@@ -168,9 +168,9 @@
   <use href="#milk" x="134" y="58" width="62" height="62"/>
   <use href="#banana" x="140" y="22" width="64" height="64"/>
   <use href="#popcorn" x="150" y="-10" width="62" height="62"/>
-  <!-- logo -->
-  <g font-family="Arial Black, Segoe UI Black, Arial, sans-serif" font-weight="900" text-anchor="middle" stroke="#4a2e1f" stroke-linejoin="round" paint-order="stroke">
-    <text x="200" y="382" font-size="52" textLength="364" lengthAdjust="spacingAndGlyphs" stroke-width="13" fill="#4a2e1f" transform="translate(0 5)">CRITTER MART</text>
-    <text x="200" y="382" font-size="52" textLength="364" lengthAdjust="spacingAndGlyphs" stroke-width="13"><tspan fill="#ffcf3f">CRITTER </tspan><tspan fill="#ff7a59">MART</tspan></text>
+  <!-- logo (Arabic, one text run so the words keep their order and joining) -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" stroke="#4a2e1f" stroke-linejoin="round" paint-order="stroke" font-size="54" direction="rtl">
+    <text x="200" y="382" stroke-width="13" fill="#4a2e1f" transform="translate(0 5)">سوق الحيوانات</text>
+    <text x="200" y="382" stroke-width="13"><tspan fill="#ffcf3f">سوق</tspan> <tspan fill="#ff7a59">الحيوانات</tspan></text>
   </g>
 </svg>

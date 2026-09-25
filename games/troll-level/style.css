@@ -39,7 +39,7 @@ button { font-family: var(--sg-font); }
 }
 .tag {
   position: absolute; left: 0; right: 0; top: 170px; text-align: center; pointer-events: none;
-  font-size: 27px; font-weight: 700; color: #ffffff; -webkit-text-stroke: 7px var(--ink); paint-order: stroke fill;
+  font-size: 27px; font-weight: 700; color: #ffffff; text-shadow: 3px 0px 0 var(--ink), -3px 0px 0 var(--ink), 0px 3px 0 var(--ink), 0px -3px 0 var(--ink), 2.0999999999999996px 2.0999999999999996px 0 var(--ink), -2.0999999999999996px 2.0999999999999996px 0 var(--ink), 2.0999999999999996px -2.0999999999999996px 0 var(--ink), -2.0999999999999996px -2.0999999999999996px 0 var(--ink), 0 4px 0 var(--ink);
 }
 .title-bottom {
   position: absolute; left: 24px; right: 24px; top: 530px; height: 180px;
@@ -85,7 +85,7 @@ button { font-family: var(--sg-font); }
 .enter-hint.dark { color: #54456a; margin-top: 10px; }
 
 /* ----------------------------------------------------------- level select */
-.sel-head { position: absolute; left: 40px; right: 40px; top: 18px; height: 70px; display: flex; align-items: center; justify-content: space-between; }
+.sel-head { position: absolute; left: 40px; right: 78px; top: 18px; height: 70px; display: flex; align-items: center; justify-content: space-between; }
 .sel-head h2 { margin: 0; font-size: 50px; color: var(--yel); -webkit-text-stroke: 10px var(--ink); paint-order: stroke fill; }
 .sel-stars { font-size: 30px; font-weight: 700; color: #ffffff; min-width: 150px; text-align: left; }
 .backbtn {
@@ -133,7 +133,7 @@ button { font-family: var(--sg-font); }
 .skin .req { font-size: 16px; font-weight: 500; }
 .skin.sel { background: var(--yel); outline: 5px solid #ffffff; outline-offset: 2px; }
 .skin.locked { cursor: default; background: #b9aec8; }
-.skin.locked canvas { filter: brightness(0) opacity(0.45); }
+.skin.locked canvas { filter: saturate(0.6); }
 
 /* ----------------------------------------------------------- panels */
 .panel {
@@ -146,7 +146,7 @@ button { font-family: var(--sg-font); }
 .panel .menu-row { margin-top: 14px; }
 .pause-info { font-size: 20px; margin-bottom: 14px; color: #54456a; }
 #scr-win { background: rgba(22, 12, 34, 0.35); pointer-events: auto; }
-.panel.win h2 { font-size: 58px; color: var(--yel); -webkit-text-stroke: 10px var(--ink); paint-order: stroke fill; animation: bob 1.4s ease-in-out infinite; }
+.panel.win h2 { font-size: 58px; color: var(--yel); text-shadow: 4px 0px 0 var(--ink), -4px 0px 0 var(--ink), 0px 4px 0 var(--ink), 0px -4px 0 var(--ink), 2.8px 2.8px 0 var(--ink), -2.8px 2.8px 0 var(--ink), 2.8px -2.8px 0 var(--ink), -2.8px -2.8px 0 var(--ink), 0 7px 0 var(--ink); animation: bob 1.4s ease-in-out infinite; }
 .win-lvl { font-size: 20px; color: #54456a; font-weight: 700; }
 .win-sub { font-size: 21px; margin-bottom: 6px; }
 .win-sub.small { font-size: 17px; color: #54456a; margin-top: 10px; }
@@ -175,3 +175,7 @@ button { font-family: var(--sg-font); }
 .hudbtn[hidden] { display: none; }
 .hudbtn span { display: block; width: 5px; height: 16px; background: #ffffff; border-radius: 2px; }
 .hudbtn:hover { background: rgba(0, 0, 0, 0.55); }
+.midbtn.skip { margin-top: 12px; background: #ffe14d; font-size: 19px; }
+.midbtn.skip[hidden] { display: none; }
+#scr-end .panel { width: 640px; }
+#scr-end .panel.win h2 { font-size: 50px; }

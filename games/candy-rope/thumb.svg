@@ -89,12 +89,9 @@
   <use href="#st" transform="translate(338 132) rotate(-8) scale(0.8)" fill="url(#star)" stroke="#a35a00" stroke-width="3.5" stroke-linejoin="round"/>
 
   <!-- logo -->
-  <g font-family="Fredoka, 'Segoe UI Rounded', 'Segoe UI', 'Trebuchet MS', sans-serif" font-weight="700" text-anchor="middle" stroke-linejoin="round">
-    <g transform="rotate(-5 200 60)">
-      <text x="200" y="76" font-size="72" fill="#2b1238" stroke="#2b1238" stroke-width="16">MUNCH</text><text x="200" y="70" font-size="72" fill="#2b1238" stroke="#2b1238" stroke-width="10">MUNCH</text>
-      <text x="200" y="70" font-size="72" fill="#7ed957">MUNCH</text>
-      <text x="238" y="130" font-size="52" fill="#2b1238" stroke="#2b1238" stroke-width="14">ROPE</text><text x="238" y="125" font-size="52" fill="#2b1238" stroke="#2b1238" stroke-width="9">ROPE</text>
-      <text x="238" y="125" font-size="52" fill="#ff4f7a">ROPE</text>
-    </g>
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" font-size="76" text-anchor="middle" direction="rtl" stroke-linejoin="round" transform="rotate(-5 200 70)">
+    <text x="200" y="92" fill="#2b1238" stroke="#2b1238" stroke-width="18">حبل الحلوى</text>
+    <text x="200" y="86" fill="#2b1238" stroke="#2b1238" stroke-width="12">حبل الحلوى</text>
+    <text x="200" y="86"><tspan fill="#ffc21f">حبل</tspan> <tspan fill="#ff4f7a">الحلوى</tspan></text>
   </g>
 </svg>

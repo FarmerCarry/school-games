@@ -12,6 +12,9 @@
   var store = Kit.store('neon-slope');
   var $ = function (id) { return document.getElementById(id); };
   var clamp = Kit.clamp, rand = Math.random;
+  // Wraps a left-to-right snippet like "+5" so it keeps its order inside Arabic text.
+  function ltr(t) { return '\u2066' + t + '\u2069'; }
+  function musicLabel() { return save.music ? 'الموسيقى: تعمل' : 'الموسيقى: متوقفة'; }
   function randInt(a, b) { return Math.floor(a + rand() * (b - a + 1)); }
   function pick(a) { return a[Math.floor(rand() * a.length)]; }
 
@@ -44,13 +47,13 @@
 
   /* ---------------------------------------------------------- missions */
   var MISSIONS = [
-    { id: 'dist', txt: 'Roll {n} m in one run', vals: [250, 400, 600, 900, 1200, 1600, 2000, 2600], rew: [20, 25, 30, 40, 50, 60, 80, 100] },
-    { id: 'gems', txt: 'Grab {n} gems in one run', vals: [10, 20, 30, 45, 60, 80, 100], rew: [20, 25, 35, 45, 60, 80, 100] },
-    { id: 'air', txt: 'Get {n} BIG AIR{s} in one run', vals: [1, 2, 3, 5, 7, 9], rew: [20, 25, 35, 50, 70, 90] },
-    { id: 'near', txt: 'Get {n} CLOSE ONE{s} in one run', vals: [1, 2, 3, 5, 7, 9], rew: [20, 25, 35, 50, 70, 90] },
-    { id: 'zone', txt: 'Reach Zone {n}', vals: [2, 3, 4, 5, 6, 7, 8, 9], rew: [25, 35, 50, 65, 80, 100, 120, 150] },
-    { id: 'power', txt: 'Grab {n} power-up{s} in one run', vals: [1, 2, 3, 4], rew: [25, 40, 60, 80] },
-    { id: 'total', txt: 'Roll {n} m in total', vals: [1500, 3000, 6000, 10000, 16000, 25000], rew: [30, 45, 70, 100, 130, 170] }
+    { id: 'dist', txt: 'تدحرج {n} م في جولة واحدة', vals: [250, 400, 600, 900, 1200, 1600, 2000, 2600], rew: [20, 25, 30, 40, 50, 60, 80, 100] },
+    { id: 'gems', txt: 'اجمع {n} في جولة واحدة', w: ['جوهرة واحدة', 'جوهرتين', 'جواهر', 'جوهرة'], vals: [10, 20, 30, 45, 60, 80, 100], rew: [20, 25, 35, 45, 60, 80, 100] },
+    { id: 'air', txt: 'نفّذ {n} في جولة واحدة', w: ['قفزة عالية واحدة', 'قفزتين عاليتين', 'قفزات عالية', 'قفزة عالية'], vals: [1, 2, 3, 5, 7, 9], rew: [20, 25, 35, 50, 70, 90] },
+    { id: 'near', txt: 'مُرّ بجانب الأحمر بفارق شعرة {n}', w: ['مرة واحدة', 'مرتين', 'مرات', 'مرة'], vals: [1, 2, 3, 5, 7, 9], rew: [20, 25, 35, 50, 70, 90] },
+    { id: 'zone', txt: 'صِل إلى المنطقة {n}', vals: [2, 3, 4, 5, 6, 7, 8, 9], rew: [25, 35, 50, 65, 80, 100, 120, 150] },
+    { id: 'power', txt: 'اجمع {n} في جولة واحدة', w: ['قوة خارقة واحدة', 'قوتين خارقتين', 'قوى خارقة', 'قوة خارقة'], vals: [1, 2, 3, 4], rew: [25, 40, 60, 80] },
+    { id: 'total', txt: 'تدحرج {n} م في كل جولاتك', vals: [1500, 3000, 6000, 10000, 16000, 25000], rew: [30, 45, 70, 100, 130, 170] }
   ];
   function misDef(id) { for (var i = 0; i < MISSIONS.length; i++) if (MISSIONS[i].id === id) return MISSIONS[i]; return null; }
   function newMission(exclude) {
@@ -73,14 +76,14 @@
   var COLS = 9, TW = 1.6, TL = 2, NR = 100, AHEAD = 88, R = 0.45, G = 34, SLOPE = 0.2, TH = 0.6;
   var ZONE_LEN = 400, START_D = 14;
   var ZONES = [
-    { name: 'Pink Pulse', c: '#ff2bd6' },
-    { name: 'Cyan Circuit', c: '#19e6ff' },
-    { name: 'Lime Lightning', c: '#7dff3a' },
-    { name: 'Violet Vortex', c: '#a855ff' },
-    { name: 'Blue Blaze', c: '#3d7bff' },
-    { name: 'Mint Rush', c: '#3dffc5' },
-    { name: 'Frost Byte', c: '#d8f6ff' },
-    { name: 'Prism Storm', c: '#ffffff', prism: true }
+    { name: 'النبض الوردي', c: '#ff2bd6' },
+    { name: 'المدار السماوي', c: '#19e6ff' },
+    { name: 'البرق الأخضر', c: '#7dff3a' },
+    { name: 'الدوامة البنفسجية', c: '#a855ff' },
+    { name: 'اللهب الأزرق', c: '#3d7bff' },
+    { name: 'عاصفة النعناع', c: '#3dffc5' },
+    { name: 'مملكة الجليد', c: '#d8f6ff' },
+    { name: 'عاصفة الألوان', c: '#ffffff', prism: true }
   ];
   function colX(c) { return (c - 4) * TW; }
   function span(a, b) { var m = 0; for (var c = a; c <= b; c++) m |= (1 << c); return m; }
@@ -427,9 +430,16 @@
     g.clearRect(0, 0, 512, 128);
     g.fillStyle = 'rgba(40,10,60,0.75)'; roundRect(g, 8, 10, 496, 108, 30); g.fill();
     g.lineWidth = 6; g.strokeStyle = '#ffd93b'; g.shadowColor = '#ffd93b'; g.shadowBlur = 16; roundRect(g, 8, 10, 496, 108, 30); g.stroke();
-    g.shadowBlur = 12; g.fillStyle = '#fff6c0'; g.font = 'bold 64px Fredoka, "Segoe UI", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText('BEST  ' + Kit.fmt(m) + ' m', 256, 68);
+    g.shadowBlur = 12; g.fillStyle = '#fff6c0'; g.font = '700 60px Fredoka, "Segoe UI", Tahoma, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.direction = 'rtl';
+    fitText(g, 'أفضل مسافة: ' + Kit.fmt(m) + ' م', 256, 68, 460);
     g.shadowBlur = 0; bestTex.needsUpdate = true;
+  }
+  // Draws centered text, shrinking it horizontally if it would not fit maxW.
+  function fitText(g, text, x, y, maxW) {
+    var w = g.measureText(text).width;
+    if (w > maxW) { g.save(); g.translate(x, y); g.scale(maxW / w, 1); g.fillText(text, 0, 0); g.restore(); }
+    else g.fillText(text, x, y);
   }
   function roundRect(g, x, y, w, h, r) {
     g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
@@ -446,9 +456,9 @@
     var m = markers[markerNext]; markerNext = (markerNext + 1) % markers.length;
     var g = m.cv.getContext('2d');
     g.clearRect(0, 0, 256, 128);
-    g.font = 'bold 72px Fredoka, "Segoe UI", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = '700 68px Fredoka, "Segoe UI", Tahoma, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.direction = 'rtl';
     g.fillStyle = '#ffffff'; g.shadowColor = '#ffffff'; g.shadowBlur = 10;
-    g.globalAlpha = 0.55; g.fillText(meters + 'm', 128, 66); g.globalAlpha = 1; g.shadowBlur = 0;
+    g.globalAlpha = 0.55; fitText(g, meters + ' م', 128, 66, 240); g.globalAlpha = 1; g.shadowBlur = 0;
     m.tex.needsUpdate = true;
     m.mesh.position.set(x, y + 0.04, -d); m.mesh.visible = true; m.d = d;
   }
@@ -519,13 +529,19 @@
   function chBlocks() {
     var D = gDiff(), w = D < 0.3 ? 5 : pick([5, 5, 4, 6]);
     centered(w, 1); plain(2);
-    var cnt = 3 + Math.floor(D * 4) + randInt(0, 1);
+    var cnt = 3 + Math.floor(D * 4) + randInt(0, 1), lastFree = -1;
     for (var j = 0; j < cnt; j++) {
       var bw = (D > 0.35 && rand() < 0.4 && w >= 5) ? 2 : 1;
       var two = D > 0.45 && w >= 5 && bw === 1 && rand() < 0.4;
       var sp = reactRows(bw + 1) + (j === 0 ? 0 : randInt(0, 2));
-      var c0 = randInt(gen.a, gen.b - bw + 1);
+      // The first block sits on the middle line and later ones often land where the
+      // previous gem trail led, so riding straight or only chasing gems is not enough.
+      var c0;
+      if (j === 0) c0 = clamp(Math.round((gen.a + gen.b) / 2) - (bw > 1 ? randInt(0, 1) : 0), gen.a, gen.b - bw + 1);
+      else if (lastFree >= 0 && rand() < 0.55) c0 = lastFree === gen.a ? gen.a : gen.b - bw + 1;
+      else c0 = randInt(gen.a, gen.b - bw + 1);
       var free = (c0 - gen.a) >= (gen.b - (c0 + bw - 1)) ? gen.a : gen.b;
+      lastFree = free;
       for (var k = 0; k < sp - 1; k++) { var pr = mkRow(lane()); if (k % 2 === 0) gemC(pr, free); }
       var r = mkRow(lane());
       block(r, c0, c0 + bw - 1);
@@ -542,7 +558,8 @@
     var cnt = 3 + Math.floor(D * 3), hr = Math.max(2, Math.round(gV() / 10));
     for (var j = 0; j < cnt; j++) {
       var hw = D < 0.3 ? 1 : pick([1, 2, 2]);
-      var c0 = randInt(gen.a, gen.b - hw + 1), sp = reactRows(hw + 1);
+      var c0 = j === 0 ? clamp(Math.round((gen.a + gen.b) / 2) - (hw > 1 ? randInt(0, 1) : 0), gen.a, gen.b - hw + 1) : randInt(gen.a, gen.b - hw + 1);
+      var sp = reactRows(hw + 1);
       var free = (c0 - gen.a) >= (gen.b - (c0 + hw - 1)) ? gen.a : gen.b;
       for (var k = 0; k < sp - 1; k++) { var pr = mkRow(lane()); if (k % 2 === 0) gemC(pr, free); }
       var m = lane() & ~span(c0, c0 + hw - 1);
@@ -944,7 +961,7 @@
       if (b.air > 0.8) {
         var bonus = b.air > 1.25 ? 3 : 1;
         st.gemsRun += bonus; st.rs.air++;
-        popup(b.air > 1.25 ? 'HUGE AIR! +' + bonus : 'BIG AIR! +' + bonus, '#ffe14d', true, b.x, s + 1.5, b.d + 2);
+        popup((b.air > 1.25 ? 'قفزة خارقة! ' : 'قفزة عالية! ') + ltr('+' + bonus), '#ffe14d', true, b.x, s + 1.5, b.d + 2);
         bumpGems();
       }
     }
@@ -1070,10 +1087,10 @@
     st.lastGem = st.t;
     var v = g.big ? 5 : 1;
     st.gemsRun += v; st.rs.gems += v;
-    if (g.big) { SND.sfx.bigGem(); popup('+5', '#ff5fe0', true, g.x, g.y + 0.8, g.d); }
+    if (g.big) { SND.sfx.bigGem(); popup(ltr('+5'), '#ff5fe0', true, g.x, g.y + 0.8, g.d); }
     else {
       SND.sfx.gem(st.combo);
-      if (st.combo > 0 && st.combo % 5 === 4) popup('COMBO x' + (st.combo + 1), '#ffd93b', false, g.x, g.y + 1, g.d);
+      if (st.combo > 0 && st.combo % 5 === 4) popup('سلسلة ' + (st.combo + 1) + '!', '#ffd93b', false, g.x, g.y + 1, g.d);
     }
     bumpGems();
   }
@@ -1095,8 +1112,8 @@
           p.active = false; p.mesh.visible = false;
           if (st.demo) continue;
           st.rs.power++;
-          if (p.type === 'shield') { b.shield = true; SND.sfx.shield(); popup('SHIELD!', '#3ff0ff', true, p.x, p.y + 1, p.d); }
-          else { b.magnet = 10; SND.sfx.magnet(); popup('MAGNET!', '#b46bff', true, p.x, p.y + 1, p.d); }
+          if (p.type === 'shield') { b.shield = true; SND.sfx.shield(); popup('درع!', '#3ff0ff', true, p.x, p.y + 1, p.d); }
+          else { b.magnet = 10; SND.sfx.magnet(); popup('مغناطيس!', '#b46bff', true, p.x, p.y + 1, p.d); }
           burst(p.x, p.y, -p.d, 30, 7, 0.6, 0.7, [p.type === 'shield' ? '#3ff0ff' : '#b46bff', '#ffffff'], 0);
         }
       }
@@ -1131,7 +1148,7 @@
         o.passed = true;
         var gap = Math.abs(b.x - o.x) - o.hw - R;
         if (!st.demo && gap < 0.42 && cy < o.y + o.h + 0.2 && st.nearCool <= 0) {
-          st.nearCool = 1.2; st.rs.near++; SND.sfx.near(); popup('CLOSE ONE!', '#3ff0ff', false, b.x, cy + 1.2, b.d + 1.5);
+          st.nearCool = 1.2; st.rs.near++; SND.sfx.near(); popup('بفارق شعرة!', '#3ff0ff', false, b.x, cy + 1.2, b.d + 1.5);
         }
       }
       if (ddz > o.hl + R + 0.3) continue;
@@ -1142,7 +1159,7 @@
           b.shield = false; o.active = false; obsMesh.setMatrixAt(k, ZERO_M);
           SND.sfx.shieldPop(); st.shake = 0.35; flash(0.3);
           burst(o.x, o.y + o.h / 2, -o.d, 40, 10, 0.7, 0.7, ['#ff1f4a', '#ffd0d8', '#3ff0ff'], 8);
-          popup('SAVED!', '#3ff0ff', true, b.x, cy + 1.2, b.d + 2);
+          popup('أنقذك الدرع!', '#3ff0ff', true, b.x, cy + 1.2, b.d + 2);
         } else { die('bonk'); return; }
       }
     }
@@ -1242,15 +1259,15 @@
     var z = zoneOf(b.d);
     if (z > st.zone) {
       st.zone = z; var info = zoneInfo(z);
-      banner('ZONE ' + (z + 1), info.name, info.prism ? '#ffffff' : info.c);
+      banner('المنطقة ' + (z + 1), info.name, info.prism ? '#ffffff' : info.c);
       SND.sfx.zone(); setHorizon(z);
       burst(b.x, b.y + 1, -b.d - 3, 40, 9, 0.9, 0.8, [info.prism ? '#ff3fd0' : info.c, '#ffffff', '#ffd93b'], 3, 3);
       if (z >= 2) SND.setMusic(3);
     }
     if (st.bestD && !st.bestPassed && b.d > st.bestD) {
       st.bestPassed = true; SND.sfx.best();
-      $('hBest').innerHTML = 'NEW BEST!'; $('hBest').classList.add('beat');
-      popup('NEW BEST!', '#ffd93b', true, b.x, b.y + 2, b.d + 3);
+      $('hBest').textContent = 'رقم قياسي جديد!'; $('hBest').classList.add('beat');
+      popup('رقم قياسي جديد!', '#ffd93b', true, b.x, b.y + 2, b.d + 3);
       burst(b.x, b.y + 1.5, -b.d - 4, 60, 10, 1.2, 0.8, ['#ffd93b', '#ff3fd0', '#3ff0ff', '#7dff3a', '#ffffff'], 8, 4);
     }
     var ar = getRow(Math.floor((b.d + 16) / TL));
@@ -1269,12 +1286,12 @@
     SND.rollSound(b.grounded ? 0.35 + speedN * 0.65 : 0.08, b.vz);
   }
 
-  var CALLOUTS = { ramp: 'RAMP! GET AIR!', narrow: 'NARROW PATH!', stairs: 'STAIRS!', holes: 'MIND THE HOLES!', gates: 'FIND THE GAP!',
-    drop: 'BIG DROP!', bank: 'TILT! LEAN UPHILL!', sliders: 'MOVING BLOCKS!', split: 'PICK A PATH!', slalom: 'ZIG-ZAG!' };
+  var CALLOUTS = { ramp: 'منصة قفز! طِر عاليًا!', narrow: 'طريق ضيق!', stairs: 'درجات!', holes: 'انتبه للحفر!', gates: 'ابحث عن الفتحة!',
+    drop: 'سقطة كبيرة!', bank: 'طريق مائل! اصعد للأعلى!', sliders: 'مكعبات متحركة!', split: 'اختر طريقك!', slalom: 'يمينًا ويسارًا!' };
   function callout(text) {
     var e = popEls[popNext]; popNext = (popNext + 1) % popEls.length;
     e.textContent = text; e.className = 'pop big callout'; e.style.setProperty('--pc', zoneInfo(st.zone).prism ? '#ff3fd0' : zoneInfo(st.zone).c);
-    e.style.left = '50%'; e.style.top = '30%'; e.style.display = 'block';
+    e.style.left = '50%'; e.style.top = '38%'; e.style.display = 'block';
     e.style.animation = 'none'; void e.offsetWidth; e.style.animation = '';
   }
   var TRAIL_RATE = { sparkle: 36, fire: 70, confetti: 34, stars: 26, zap: 44, snow: 30, bubbles: 22, toxic: 34 };
@@ -1434,14 +1451,14 @@
     if (st.gemsRun !== lastHud.g) { hGemsN.textContent = st.gemsRun; lastHud.g = st.gemsRun; }
     if (st.zone !== lastHud.z) {
       lastHud.z = st.zone; var info = zoneInfo(st.zone);
-      hZoneLbl.textContent = 'ZONE ' + (st.zone + 1) + ' · ' + info.name.toUpperCase();
+      hZoneLbl.textContent = 'المنطقة ' + (st.zone + 1) + ' · ' + info.name;
       hud.style.setProperty('--zc', info.prism ? '#ff3fd0' : info.c);
     }
     var zp = ((ball.d - START_D) % ZONE_LEN) / ZONE_LEN;
     hZoneFill.style.width = (zp * 100).toFixed(1) + '%';
     var html = '';
-    if (ball.shield) html += '<div class="pw" style="color:#3ff0ff">SHIELD</div>';
-    if (ball.magnet > 0) html += '<div class="pw" style="color:#c48bff">MAGNET <div class="pbar"><i style="width:' + (ball.magnet * 10).toFixed(0) + '%"></i></div></div>';
+    if (ball.shield) html += '<div class="pw" style="color:#3ff0ff">درع</div>';
+    if (ball.magnet > 0) html += '<div class="pw" style="color:#c48bff">مغناطيس <div class="pbar"><i style="width:' + (ball.magnet * 10).toFixed(0) + '%"></i></div></div>';
     if (html !== hPower._last) { hPower.innerHTML = html; hPower._last = html; }
   }
   function bumpGems() { var e = $('hGems'); e.classList.remove('bump'); void e.offsetWidth; e.classList.add('bump'); }
@@ -1457,8 +1474,9 @@
     e.style.left = sx + 'px'; e.style.top = sy + 'px'; e.style.display = 'block';
     e.style.animation = 'none'; void e.offsetWidth; e.style.animation = '';
   }
-  function banner(top, name, color) {
+  function banner(top, name, color, small) {
     var b = $('banner');
+    b.classList.toggle('small', !!small);
     $('bannerTop').textContent = top; $('bannerName').textContent = name;
     b.style.setProperty('--bc', color);
     b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
@@ -1477,7 +1495,7 @@
   function onClick(id, fn) { $(id).addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); fn(); this.blur(); }); }
 
   var mute = Kit.muteButton();
-  void mute;
+  mute.setAttribute('aria-label', 'تشغيل الصوت أو كتمه'); mute.title = 'الصوت (M)';
   var pauseBtn = $('btnPause');
 
   function show(id, on) { $(id).hidden = !on; }
@@ -1511,7 +1529,7 @@
     st.mode = 'play'; st.lastUnlockCheck = 0;
     show('title', false); show('over', false); show('pause', false); hud.hidden = false; pauseBtn.hidden = false;
     lastHud.d = lastHud.g = lastHud.z = -1;
-    $('hBest').innerHTML = 'BEST <span id="hBestN">' + Kit.fmt(save.best) + '</span> m'; $('hBest').classList.remove('beat');
+    $('hBest').innerHTML = 'الأفضل: <span id="hBestN">' + Kit.fmt(save.best) + '</span> م'; $('hBest').classList.remove('beat');
     $('hBest').style.visibility = save.best > 0 ? 'visible' : 'hidden';
     st.hintT = save.runs < 4 ? 4.5 : 0;
     $('hHint').classList.toggle('show', st.hintT > 0);
@@ -1522,7 +1540,7 @@
     if (st.mode !== 'play') return;
     st.mode = 'paused'; show('pause', true); SND.setMusic(0); SND.rollSound(0, 0);
     renderMissions($('pMissions'), true);
-    $('btnMusic').textContent = 'MUSIC: ' + (save.music ? 'ON' : 'OFF');
+    $('btnMusic').textContent = musicLabel();
   }
   function resumeGame() {
     if (st.mode !== 'paused') return;
@@ -1550,11 +1568,19 @@
       persist();
       if (live) {
         SND.sfx.unlock();
-        banner('MISSION DONE!  +' + m.rew, misText(m), '#7dff3a');
+        banner('أنجزت مهمة! ' + ltr('+' + m.rew), misText(m), '#7dff3a', true);
       }
     }
   }
-  function misText(m) { return misDef(m.t).txt.replace('{n}', Kit.fmt(m.n)).replace('{s}', m.n === 1 ? '' : 's'); }
+  // Arabic counted nouns: 1 -> "x واحدة", 2 -> dual, 3..10 -> plural, 11+ -> singular.
+  function misText(m) {
+    var d = misDef(m.t), n = m.n, num;
+    if (!d.w) num = Kit.fmt(n);
+    else if (n === 1) num = d.w[0];
+    else if (n === 2) num = d.w[1];
+    else num = Kit.fmt(n) + ' ' + (n % 100 >= 3 && n % 100 <= 10 ? d.w[2] : d.w[3]);
+    return d.txt.replace('{n}', num);
+  }
   function renderMissions(el, live) {
     var html = '';
     save.missions.forEach(function (m) {
@@ -1572,9 +1598,9 @@
     save.missions = keep;
   }
   var OVER_LINES = {
-    bonk: [['BONK!', 'You smacked into a red block'], ['CRASH!', 'Red blocks are not your friends'], ['KA-BOOM!', 'Steer around the red blocks']],
-    lip: [['BONK!', 'You clipped the edge of a gap'], ['OUCH!', 'Too short! Stay on the tiles']],
-    fall: [['WHOOPS!', 'You rolled off the edge'], ['BYE-BYE!', 'Off the edge you go'], ['OOPS!', 'The slope ran out under you']]
+    bonk: [['طاخ!', 'اصطدمت بمكعب أحمر'], ['بوووم!', 'المكعبات الحمراء ليست صديقتك'], ['آخ!', 'وجّه الكرة بعيدًا عن الأحمر']],
+    lip: [['طاخ!', 'اصطدمت بحافة الحفرة'], ['آه!', 'قفزة قصيرة! ابقَ فوق البلاط']],
+    fall: [['أوووه!', 'تدحرجت خارج الطريق'], ['إلى اللقاء!', 'طارت الكرة من الحافة'], ['يا للهول!', 'انتهى الطريق تحت الكرة']]
   };
   function gameOver() {
     st.mode = 'over'; st.overT = 0;
@@ -1595,12 +1621,12 @@
     rollMissions(); persist();
     var ob = $('oBest');
     ob.className = '';
-    if (newBest && prevBest > 0) { ob.textContent = 'NEW BEST!'; ob.className = 'newbest'; }
-    else if (newBest) { ob.textContent = 'FIRST RECORD SET!'; ob.className = 'newbest'; }
-    else if (prevBest > 0 && dist === prevBest) { ob.textContent = 'You TIED your best!'; ob.className = 'close'; }
-    else if (prevBest > 0 && dist > 0 && prevBest - dist <= Math.max(25, prevBest * 0.12)) { ob.textContent = 'SO CLOSE! Only ' + (prevBest - dist) + ' m from your best!'; ob.className = 'close'; }
-    else if (prevBest > 0) ob.textContent = 'BEST: ' + Kit.fmt(prevBest) + ' m';
-    else ob.textContent = 'You got this! Try again!';
+    if (newBest && prevBest > 0) { ob.textContent = 'رقم قياسي جديد!'; ob.className = 'newbest'; }
+    else if (newBest) { ob.textContent = 'أول رقم قياسي لك!'; ob.className = 'newbest'; }
+    else if (prevBest > 0 && dist === prevBest) { ob.textContent = 'عادلت أفضل مسافة لك!'; ob.className = 'close'; }
+    else if (prevBest > 0 && dist > 0 && prevBest - dist <= Math.max(25, prevBest * 0.12)) { ob.textContent = 'قريب جدًا! ينقصك ' + (prevBest - dist) + ' م فقط!'; ob.className = 'close'; }
+    else if (prevBest > 0) ob.textContent = 'أفضل مسافة: ' + Kit.fmt(prevBest) + ' م';
+    else ob.textContent = 'أنت تستطيع! حاول مرة أخرى!';
     showUnlockHint();
     show('over', true); hud.hidden = true; pauseBtn.hidden = true;
     countUp($('oDist'), dist);
@@ -1635,7 +1661,7 @@
       if (!dl) { box.hidden = true; return; }
       box.hidden = false; box.classList.remove('ready');
       if (SK.balls.indexOf(dl) >= 0) SK.previewBall(cv, dl); else SK.previewTrail(cv, dl, curSkin);
-      $('oUnlockTxt').innerHTML = 'Roll <b>' + Kit.fmt(dl.req) + ' m</b> to unlock <b>' + dl.name + '</b>';
+      $('oUnlockTxt').innerHTML = 'تدحرج <b>' + Kit.fmt(dl.req) + ' م</b> لتفتح <b>' + dl.name + '</b>';
       $('oUnlockFill').style.width = Math.min(100, save.best / dl.req * 100) + '%';
       return;
     }
@@ -1645,24 +1671,24 @@
     fill.style.width = '0%';
     if (save.gems >= nu.item.price) {
       box.classList.add('ready');
-      $('oUnlockTxt').innerHTML = 'You can unlock <b>' + nu.item.name + '</b>! Visit the shop!';
+      $('oUnlockTxt').innerHTML = 'تستطيع شراء <b>' + nu.item.name + '</b>! اذهب إلى المتجر!';
       $('btnOShop').classList.add('glow');
       setTimeout(function () { fill.style.width = '100%'; }, 50);
     } else {
       box.classList.remove('ready');
-      $('oUnlockTxt').innerHTML = '<b>' + (nu.item.price - save.gems) + '</b> more gems for <b>' + nu.item.name + '</b>' + (nu.kind === 'trail' ? ' trail' : '');
+      $('oUnlockTxt').innerHTML = 'ينقصك <b><i class="gemico"></i>' + (nu.item.price - save.gems) + '</b> لتحصل على ' + (nu.kind === 'trail' ? 'ذيل ' : 'كرة ') + '<b>' + nu.item.name + '</b>';
       setTimeout(function () { fill.style.width = (save.gems / nu.item.price * 100).toFixed(1) + '%'; }, 50);
     }
   }
   function distanceUnlocks(m, live) {
     var got = [];
-    SK.balls.forEach(function (b) { if (b.req && m >= b.req && save.owned.indexOf(b.id) < 0) { save.owned.push(b.id); got.push(b.name + ' Ball'); } });
-    SK.trails.forEach(function (t) { if (t.req && m >= t.req && save.ownedTrails.indexOf(t.id) < 0) { save.ownedTrails.push(t.id); got.push(t.name + ' Trail'); } });
+    SK.balls.forEach(function (b) { if (b.req && m >= b.req && save.owned.indexOf(b.id) < 0) { save.owned.push(b.id); got.push(['كرة جديدة!', b.name]); } });
+    SK.trails.forEach(function (t) { if (t.req && m >= t.req && save.ownedTrails.indexOf(t.id) < 0) { save.ownedTrails.push(t.id); got.push(['ذيل جديد!', t.name]); } });
     if (got.length) {
       persist();
       if (live) {
         SND.sfx.unlock();
-        banner('UNLOCKED!', got[0], '#ffd93b');
+        banner(got[0][0], got[0][1], '#ffd93b');
       }
     }
   }
@@ -1697,9 +1723,9 @@
       var nm = document.createElement('div'); nm.className = 'cn'; nm.textContent = it.name;
       var pr = document.createElement('div'); pr.className = 'cp';
       var has = owned.indexOf(it.id) >= 0;
-      if (it.id === eqId) { card.classList.add('eq'); pr.textContent = 'EQUIPPED'; }
-      else if (has) { card.classList.add('owned'); pr.textContent = 'EQUIP'; }
-      else if (it.req) { card.classList.add('lock'); pr.textContent = 'Roll ' + Kit.fmt(it.req) + ' m'; }
+      if (it.id === eqId) { card.classList.add('eq'); pr.textContent = 'مختارة ✓'; }
+      else if (has) { card.classList.add('owned'); pr.textContent = 'اختر'; }
+      else if (it.req) { card.classList.add('lock'); pr.textContent = '🔒 تدحرج ' + Kit.fmt(it.req) + ' م'; }
       else { pr.innerHTML = '<i class="gemico"></i>' + it.price; if (save.gems >= it.price) card.classList.add('afford'); }
       card.appendChild(cv); card.appendChild(nm); card.appendChild(pr);
       card.addEventListener('click', function () { buyOrEquip(it, card); });
@@ -1735,7 +1761,7 @@
   onClick('btnMenu', showTitle);
   onClick('btnMusic', function () {
     save.music = !save.music; SND.setMusicOn(save.music); persist();
-    $('btnMusic').textContent = 'MUSIC: ' + (save.music ? 'ON' : 'OFF');
+    $('btnMusic').textContent = musicLabel();
   });
   onClick('btnAgain', startRun);
   onClick('btnOShop', openShop);
@@ -1817,12 +1843,26 @@
     pause: function () { pauseGame(); return st.mode; },
     addGems: function (n) { save.gems += n; persist(); refreshTitle(); },
     reset: function () { ['best', 'gems', 'owned', 'ownedTrails', 'skin', 'trail', 'runs', 'music', 'missions', 'mDone'].forEach(function (k) { store.remove(k); }); },
+    _fx: function () {
+      popup('قفزة خارقة! ' + ltr('+3'), '#ffe14d', true, ball.x - 3, ball.y + 1.5, ball.d + 6);
+      popup(ltr('+5'), '#ff5fe0', true, ball.x + 3, ball.y + 1, ball.d + 8);
+      popup('سلسلة 10!', '#ffd93b', false, ball.x + 4, ball.y + 3, ball.d + 14);
+      popup('بفارق شعرة!', '#3ff0ff', false, ball.x - 4, ball.y + 3, ball.d + 14);
+      callout(CALLOUTS.bank);
+      banner('أنجزت مهمة! ' + ltr('+25'), misText(save.missions[0]), '#7dff3a', true);
+    },
     shield: function () { ball.shield = true; },
     magnet: function () { ball.magnet = 10; },
     _hide: function (n) { var o = { trail: trail, under: underGlow, ball: ballRoot, parts: P.obj, glows: GG.obj }[n]; if (o) o.visible = false; },
     _dbg: function () { return { u: P.mat.uniforms.uScale.value, gs: Array.prototype.slice.call(GG.size, 0, 6), gp: Array.prototype.slice.call(GG.pos, 0, 6), gc: Array.prototype.slice.call(GG.col, 0, 6), vis: GG.obj.visible, parent: !!GG.obj.parent }; }
   };
 
+  // Canvas signs (best gate, distance markers) need the Arabic face of Fredoka loaded.
+  try {
+    if (document.fonts && document.fonts.load) {
+      document.fonts.load('700 60px Fredoka', 'بم').then(function () { if (st.bestD) drawBestSign(save.best); }, function () {});
+    }
+  } catch (e) { /* ignore */ }
   showTitle();
   requestAnimationFrame(frame);
 })();

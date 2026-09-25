@@ -12,8 +12,11 @@
   var VW = 1280, VH = 720;
   R.VW = VW; R.VH = VH;
 
-  var FONT = "'Fredoka', 'Segoe UI Rounded', 'Segoe UI', 'Trebuchet MS', sans-serif";
+  var FONT = "'Fredoka', 'Segoe UI', Tahoma, sans-serif";
   R.FONT = FONT;
+  // Arabic text is drawn right-to-left; numbers / key names left-to-right.
+  var AR = /[\u0600-\u06FF]/;
+  R.dir = function (g, s) { g.direction = AR.test(s) ? 'rtl' : 'ltr'; };
 
   function rng(seed) {
     var s = (seed >>> 0) || 1;
@@ -172,11 +175,12 @@
     });
     // signs
     (w.def.signs || []).forEach(function (s) {
-      g.font = '600 15px ' + FONT;
+      g.font = '600 16px ' + FONT;
+      R.dir(g, s[2]); g.textAlign = 'left'; g.textBaseline = 'alphabetic';
       var tw = g.measureText(s[2]).width;
       var sx = s[0] * T, sy = s[1] * T;
       g.fillStyle = 'rgba(20,10,5,0.35)';
-      rr(g, sx - 8, sy - 16, tw + 16, 24, 8); g.fill();
+      rr(g, sx - 8, sy - 18, tw + 16, 27, 9); g.fill();
       g.fillStyle = 'rgba(255,233,190,0.92)';
       g.fillText(s[2], sx, sy + 1);
     });
@@ -793,15 +797,15 @@
 
   /* ------------------------------------------------------------- hats */
   R.HATS = [
-    { id: 'none', name: 'No Hat', stars: 0 },
-    { id: 'party', name: 'Party Hat', stars: 4 },
-    { id: 'shades', name: 'Cool Shades', stars: 8 },
-    { id: 'bow', name: 'Big Bow', stars: 12 },
-    { id: 'top', name: 'Top Hat', stars: 16 },
-    { id: 'viking', name: 'Viking Horns', stars: 20 },
-    { id: 'wizard', name: 'Wizard Hat', stars: 25 },
-    { id: 'crown', name: 'Royal Crown', stars: 30 },
-    { id: 'halo', name: 'Golden Halo', stars: 36 }
+    { id: 'none', name: 'بلا قبعة', stars: 0 },
+    { id: 'party', name: 'قبعة الحفلة', stars: 4 },
+    { id: 'shades', name: 'نظارة رائعة', stars: 8 },
+    { id: 'bow', name: 'فيونكة كبيرة', stars: 12 },
+    { id: 'top', name: 'قبعة طويلة', stars: 16 },
+    { id: 'viking', name: 'قرون الفايكنج', stars: 20 },
+    { id: 'wizard', name: 'قبعة الساحر', stars: 25 },
+    { id: 'crown', name: 'التاج الملكي', stars: 30 },
+    { id: 'halo', name: 'الهالة الذهبية', stars: 36 }
   ];
   function drawHat(g, hat, by, face, fire, t) {
     var top = by - 4;

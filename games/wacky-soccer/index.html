@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>كرة القدم المجنونة</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+
+<div id="ui">
+  <!-- ============ TITLE ============ -->
+  <div id="scr-title" class="scr" hidden>
+    <div class="logo">
+      <div class="l1">كرة القدم</div>
+      <div class="l2">المجنونة!</div>
+    </div>
+    <div class="tag">زرّ واحد فقط... وفوضى بلا حدود!</div>
+
+    <div class="card side" id="howto">
+      <h3>طريقة اللعب</h3>
+      <div class="krow"><span dir="ltr"><span class="sg-key">W</span></span><span>اللاعب 1: قفز وركل</span></div>
+      <div class="krow"><span dir="ltr"><span class="sg-key">↑</span></span><span>اللاعب 2: قفز وركل</span></div>
+      <div class="krow"><span dir="ltr"><span class="sg-key">مسافة</span></span><span>أو <b>انقر</b> في وضع لاعب واحد</span></div>
+      <div class="small">اقفز في الوقت المناسب لتركل الكرة نحو مرمى الخصم!</div>
+      <div class="goal">بعد كل هدف... مفاجأة مجنونة جديدة!</div>
+    </div>
+
+    <div class="card side" id="prog">
+      <h3>إنجازاتك</h3>
+      <div class="coins-big"><span class="coin"></span><span id="tCoins">0</span></div>
+      <canvas id="tCups" width="220" height="70"></canvas>
+      <div class="small">الانتصارات: <b id="tWins">0</b> &nbsp;•&nbsp; الأهداف: <b id="tGoals">0</b></div>
+      <div class="small">الأوسمة: <b id="tAch">0 / 0</b></div>
+      <div class="bar"><div id="tBar"></div></div>
+      <div class="small hot" id="tNext"></div>
+    </div>
+
+    <div class="modes">
+      <button class="mbtn y" id="b1p" type="button"><b>لاعب واحد</b><small>ضد الكمبيوتر</small></button>
+      <button class="mbtn p" id="b2p" type="button"><b>لاعبان</b><small>على لوحة مفاتيح واحدة</small></button>
+    </div>
+    <div class="modes2">
+      <button class="mbtn2 cup" id="bCup" type="button">🏆 الكأس</button>
+      <button class="mbtn2 shop" id="bShop" type="button">🛒 المتجر</button>
+      <button class="mbtn2 ach" id="bAchv" type="button">⭐ الأوسمة</button>
+    </div>
+    <div class="enter-hint">اضغط <span class="sg-key">Enter</span> للعب بسرعة!</div>
+  </div>
+
+  <!-- ============ SELECT ============ -->
+  <div id="scr-select" class="scr" hidden>
+    <h2 class="sel-title" id="selTitle">اختر فريقك!</h2>
+    <div class="coins-big selcoins"><span class="coin"></span><span id="selCoins">0</span></div>
+    <div class="vs">ضد</div>
+    <div class="card tcard" id="tc0">
+      <div class="who" id="who0">فريقك</div>
+      <canvas class="flag" id="flag0" width="180" height="120"></canvas>
+      <div class="pick" dir="ltr"><button class="arr" type="button" data-arr="0,-1">◀</button><span class="tname" id="tn0"></span><button class="arr" type="button" data-arr="0,1">▶</button></div>
+      <div class="lockrow" id="lock0" hidden><span>مقفل:</span> <span class="coin sm"></span><b id="price0">0</b> <button class="buy" type="button" id="buy0">اشترِ!</button></div>
+      <div class="keys" id="keys0"><span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> لتغيير الفريق</div>
+    </div>
+    <div class="card tcard" id="tc1">
+      <div class="who" id="who1">الخصم</div>
+      <canvas class="flag" id="flag1" width="180" height="120"></canvas>
+      <div class="pick" dir="ltr"><button class="arr" type="button" data-arr="1,-1">◀</button><span class="tname" id="tn1"></span><button class="arr" type="button" data-arr="1,1">▶</button></div>
+      <div class="keys" id="keys1"><span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span> لتغيير الفريق</div>
+      <div class="diff" id="diffBox"></div>
+    </div>
+    <div class="card cupcard" id="cupPick" hidden>
+      <div class="who">اختر الكأس</div>
+      <div id="cupList"></div>
+    </div>
+    <div class="sel-bottom">
+      <button class="back" id="bBack" type="button">رجوع <small dir="ltr">Esc</small></button>
+      <button class="fight" id="bGo" type="button">ابدأ! <small dir="ltr">Enter</small></button>
+    </div>
+  </div>
+
+  <!-- ============ CUP BRACKET ============ -->
+  <div id="scr-cup" class="scr" hidden>
+    <h2 class="sel-title" id="cupTitle">الكأس</h2>
+    <div class="card bracket">
+      <div id="bracket"></div>
+      <div class="cupinfo" id="cupInfo"></div>
+    </div>
+    <div class="sel-bottom">
+      <button class="back" id="bCupQuit" type="button">انسحاب <small dir="ltr">Esc</small></button>
+      <button class="fight" id="bCupPlay" type="button">العب! <small dir="ltr">Enter</small></button>
+    </div>
+  </div>
+
+  <!-- ============ SHOP ============ -->
+  <div id="scr-shop" class="scr" hidden>
+    <div class="card shopcard">
+      <div class="shophead">
+        <h2>المتجر</h2>
+        <div class="coins-big"><span class="coin"></span><span id="sCoins">0</span></div>
+      </div>
+      <div class="tabs">
+        <button type="button" class="tab on" data-tab="balls">الكرات</button>
+        <button type="button" class="tab" data-tab="hats">القبعات</button>
+        <button type="button" class="tab" data-tab="teams">الفرق</button>
+      </div>
+      <div class="grid" id="shopGrid"></div>
+    </div>
+    <div class="sel-bottom shopbottom">
+      <button class="back" id="bShopBack" type="button">رجوع <small dir="ltr">Esc</small></button>
+    </div>
+  </div>
+
+  <!-- ============ ACHIEVEMENTS ============ -->
+  <div id="scr-ach" class="scr" hidden>
+    <div class="card achcard">
+      <h2>الأوسمة</h2>
+      <div id="achList"></div>
+    </div>
+    <div class="sel-bottom shopbottom">
+      <button class="back" id="bAchBack" type="button">رجوع <small dir="ltr">Esc</small></button>
+    </div>
+  </div>
+
+  <!-- ============ PAUSE ============ -->
+  <div id="scr-pause" class="scr" hidden>
+    <div class="card ppanel">
+      <h2>استراحة</h2>
+      <div class="col">
+        <button class="pbtn g" id="bResume" type="button">تابع اللعب <small dir="ltr">P / Esc</small></button>
+        <button class="pbtn y" id="bRestart" type="button">أعد المباراة <small dir="ltr">R</small></button>
+        <button class="pbtn" id="bMenu" type="button">القائمة الرئيسية</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ RESULT ============ -->
+  <div id="scr-over" class="scr" hidden>
+    <div id="oPanel" class="card">
+      <canvas id="oTrophy" width="160" height="160" hidden></canvas>
+      <h2 id="oHead">فوز!</h2>
+      <div id="oScore"></div>
+      <div id="oCoins" class="coins-big"><span class="coin"></span><span id="oCoinN">+0</span></div>
+      <div id="oLines"></div>
+      <div class="obtns">
+        <button class="pbtn g" id="bAgain" type="button">العب مجددًا <small dir="ltr">Enter</small></button>
+        <button class="pbtn" id="bOverMenu" type="button">القائمة <small dir="ltr">Esc</small></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+</div>
+
+<button id="bPause" class="sg-mute sb-btn" type="button" aria-label="استراحة" title="استراحة (P)" hidden>II</button>
+
+<script src="../../shared/kit.js"></script>
+<script src="data.js"></script>
+<script src="physics.js"></script>
+<script src="ai.js"></script>
+<script src="art.js"></script>
+<script src="audio.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

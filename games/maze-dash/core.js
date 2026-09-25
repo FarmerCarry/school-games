@@ -26,7 +26,7 @@
     TRAP_DOWN: 1.5, TRAP_WARN: 0.5,
     PUFF_CYCLE: 3.4,     // small 1.9, swell 0.5, big 0.8, shrink 0.2
     PUFF_SMALL: 1.9, PUFF_WARN: 0.5, PUFF_BIG: 0.8,
-    BLOCK_STEP: 0.42,    // one tile per step
+    BLOCK_STEP: 0.5,     // one tile per step
     BAT_SPEED: 2.6,
     BAT_RADIUS: 0.36,    // in tiles (player radius added separately)
     PLAYER_RADIUS: 0.26
@@ -173,13 +173,12 @@
     var D = DIRS[d], cx = x, cy = y, cells = [], n = 0;
     for (;;) {
       var nx = cx + D.dx, ny = cy + D.dy, t = G.tile(nx, ny);
-      if (isSolid(t) || (extraSolid && extraSolid[key(nx, ny)])) {
+      if (isSolid(t) || (extraSolid && extraSolid[key(nx, ny)]) || (G.puffer && G.puffer(nx, ny))) {
         if (n === 0) return null;
         return { x: cx, y: cy, cells: cells, exit: false, dead: t === T.SPIKE, spike: t === T.SPIKE };
       }
       cx = nx; cy = ny; n++;
       cells.push(key(cx, cy));
-      if (G.puffer && G.puffer(cx, cy)) return { x: cx, y: cy, cells: cells, exit: false, dead: true };
       if (t === T.EXIT) return { x: cx, y: cy, cells: cells, exit: true, dead: false };
       if (n > 400) return null;
     }
@@ -285,7 +284,7 @@
     }
     var blocks = L.blocks.map(function (b) { return { x: b.x, y: b.y, dx: b.dx, dy: b.dy }; });
     var px = L.start.x, py = L.start.y, moves = 0, waits = 0, dist = 0, done = false, guard = 0;
-    while (!done && guard++ < 400) {
+    while (!done && guard++ < 800) {
       var BS = blockSnapshots(G, blocks, function (x, y) { return x === px && y === py; });
       var r = null;
       if (left > 0) {
@@ -308,6 +307,7 @@
         m.cells.forEach(function (c) { if (remaining[c]) { delete remaining[c]; left--; } });
         px = m.x; py = m.y;
         if (m.exit) { done = true; break; }
+        if (blocks.length) break; // block timing depends on where the player rests: replan
       }
     }
     var miss = [];

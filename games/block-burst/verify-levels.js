@@ -144,7 +144,9 @@ if (classic) {
 }
 
 var bad = 0;
+var ONLY = process.env.ONLY ? process.env.ONLY.split(",").map(Number) : null;
 Lv.LEVELS.forEach(function (lv, idx) {
+  if (ONLY && ONLY.indexOf(idx + 1) < 0) return;
   // sanity: no full lines at start
   var b = Core.parseBoard(lv.board), m = Core.maskFromBoard(b.cells), colFull = 255;
   for (var r = 0; r < 8; r++) { colFull &= m[r]; if (m[r] === 255) { console.log('L' + (idx + 1) + ' starts with full row'); bad++; } }

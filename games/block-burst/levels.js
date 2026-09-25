@@ -16,14 +16,14 @@
   ];
   var L = [
     // ---------------------------------------------------------------- world 1
-    { gems: { 1: 2 }, diff: 0, help: 0.7, gemRate: 0, stars: [3, 6], board: [
+    { gems: { 1: 2 }, diff: 0, help: 0.8, gemRate: 0, stars: [5, 9], board: [
       '........',
       '........',
       '........',
       '........',
       '........',
-      '........',
-      'aabR.cRd',
+      'aab..cRd',
+      'aabR.c.d',
       '........'] },
     { score: 250, diff: 0, help: 0.7, stars: [14, 22], board: [
       '........',
@@ -34,7 +34,7 @@
       '........',
       '........',
       '........'] },
-    { gems: { 2: 3, 3: 2 }, diff: 0.05, help: 0.7, gemRate: 0.3, stars: [9, 16], board: [
+    { gems: { 2: 3, 3: 2 }, diff: 0.05, help: 0.7, gemRate: 0.3, stars: [14, 26], board: [
       '...B....',
       '...a....',
       '...e....',
@@ -43,7 +43,7 @@
       '...c....',
       '...B....',
       '........'] },
-    { gems: { 4: 5 }, diff: 0.05, help: 0.65, gemRate: 0.45, stars: [12, 20], board: [
+    { gems: { 4: 5 }, diff: 0.05, help: 0.65, gemRate: 0.45, stars: [16, 28], board: [
       '........',
       '.Y....Y.',
       '........',
@@ -62,7 +62,7 @@
       '.e....e.',
       'e......e'] },
     // ---------------------------------------------------------------- world 2
-    { gems: { 1: 3, 2: 3 }, diff: 0.1, help: 0.6, gemRate: 0.35, stars: [13, 22], board: [
+    { gems: { 1: 3, 2: 3 }, diff: 0.1, help: 0.6, gemRate: 0.35, stars: [15, 28], board: [
       '........',
       '.RR.BB..',
       'aaaa.ddd',
@@ -80,7 +80,7 @@
       '........',
       'cG....Gc',
       'cc....cc'] },
-    { score: 1000, diff: 0.15, help: 0.6, stars: [34, 50], board: [
+    { score: 1000, diff: 0.15, help: 0.6, stars: [24, 36], board: [
       'hh....hh',
       'h......h',
       '..bbbb..',
@@ -89,7 +89,7 @@
       '..bbbb..',
       'h......h',
       'hh....hh'] },
-    { gems: { 1: 3, 4: 3 }, diff: 0.15, help: 0.6, gemRate: 0.45, stars: [18, 30], board: [
+    { gems: { 1: 3, 4: 3 }, diff: 0.15, help: 0.6, gemRate: 0.45, stars: [26, 42], board: [
       'R......Y',
       '.a....a.',
       '..a..a..',
@@ -117,7 +117,7 @@
       '...ddd..',
       '....d...',
       '........'] },
-    { score: 900, moves: 40, diff: 0.2, help: 0.55, stars: [26, 33], board: [
+    { score: 900, moves: 44, diff: 0.2, help: 0.55, stars: [26, 33], board: [
       'a.b.c.d.',
       '........',
       'e.f.g.h.',
@@ -144,7 +144,7 @@
       '.....Gcc',
       '......Gc',
       '.......G'] },
-    { score: 1500, moves: 50, diff: 0.3, help: 0.5, stars: [34, 42], board: [
+    { score: 1300, moves: 58, diff: 0.3, help: 0.58, stars: [28, 38], board: [
       '........',
       '.hhhhhh.',
       '.h....h.',
@@ -154,7 +154,7 @@
       '.hhhhhh.',
       '........'] },
     // ---------------------------------------------------------------- world 4
-    { gems: { 1: 3, 2: 3, 3: 3, 4: 3 }, moves: 44, diff: 0.3, help: 0.5, gemRate: 0.45, stars: [25, 32], board: [
+    { gems: { 1: 3, 2: 2, 3: 2, 4: 2 }, moves: 50, diff: 0.3, help: 0.58, gemRate: 0.45, stars: [26, 36], board: [
       'R.....B.',
       '.b...b..',
       '..b.b...',
@@ -163,7 +163,7 @@
       '.b...b..',
       'G.....R.',
       '........'] },
-    { score: 2000, moves: 55, diff: 0.35, help: 0.5, stars: [40, 48], board: [
+    { score: 1700, moves: 62, diff: 0.35, help: 0.58, stars: [31, 42], board: [
       'cc.cc.cc',
       'c......c',
       '........',
@@ -181,7 +181,7 @@
       '..aYa...',
       '...Y....',
       '........'] },
-    { gems: { 1: 6, 2: 6 }, score: 1200, moves: 48, diff: 0.4, help: 0.45, gemRate: 0.5, stars: [30, 38], board: [
+    { gems: { 1: 6, 2: 6 }, score: 1200, moves: 54, diff: 0.4, help: 0.45, gemRate: 0.5, stars: [30, 38], board: [
       'hRh..hBh',
       'h.h..h.h',
       'hhh..hhh',
@@ -190,7 +190,7 @@
       'fff..fff',
       'fBf..fRf',
       'fff..fff'] },
-    { gems: { 1: 4, 2: 4, 3: 4, 4: 4 }, score: 2200, moves: 64, diff: 0.45, help: 0.45, gemRate: 0.5, stars: [42, 52], board: [
+    { gems: { 1: 4, 2: 4, 3: 4, 4: 4 }, score: 1700, moves: 72, diff: 0.42, help: 0.55, gemRate: 0.5, stars: [40, 54], board: [
       'Y......R',
       '.aa..bb.',
       '.aG..Bb.',

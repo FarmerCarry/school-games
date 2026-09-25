@@ -17,7 +17,8 @@
   var store = Kit.store('beat-dash');
   var music = new BD.Music();
   var shake = Kit.shake();
-  Kit.muteButton();
+  var muteBtn = Kit.muteButton();
+  muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
 
   function layoutUI(v) {
     var r = canvas.style;
@@ -67,11 +68,17 @@
     if (need.jumps != null) return save.total.jumps >= need.jumps;
     return false;
   }
+  // Arabic counted nouns: 1 نجمة واحدة, 2 نجمتان, 3-10 نجوم, 11+ نجمة
+  function countAr(n, one, two, few, many) {
+    if (n === 1) return one;
+    if (n === 2) return two;
+    return n + ' ' + (n >= 3 && n <= 10 ? few : many);
+  }
   function needText(need) {
-    if (need.lvl != null) return 'Beat ' + LEVELS[need.lvl].name + ' to unlock';
-    if (need.stars != null) return 'Collect ' + need.stars + ' star' + (need.stars > 1 ? 's' : '') + ' to unlock (you have ' + totalStars() + ')';
-    if (need.attempts != null) return 'Play ' + need.attempts + ' attempts to unlock (' + save.total.attempts + ' so far)';
-    if (need.jumps != null) return 'Jump ' + need.jumps + ' times to unlock (' + save.total.jumps + ' so far)';
+    if (need.lvl != null) return 'أكمل مرحلة «' + LEVELS[need.lvl].name + '» لتفتحه';
+    if (need.stars != null) return 'اجمع ' + countAr(need.stars, 'نجمة واحدة', 'نجمتين', 'نجوم', 'نجمة') + ' لتفتحه (معك ' + totalStars() + ')';
+    if (need.attempts != null) return 'العب ' + countAr(need.attempts, 'محاولة واحدة', 'محاولتين', 'محاولات', 'محاولة') + ' لتفتحه (لعبت ' + save.total.attempts + ')';
+    if (need.jumps != null) return 'اقفز ' + countAr(need.jumps, 'قفزة واحدة', 'قفزتين', 'قفزات', 'قفزة') + ' لتفتحه (قفزت ' + save.total.jumps + ')';
     return '';
   }
   function allUnlockKeys() {
@@ -88,7 +95,7 @@
     if (fresh.length) persist('seen');
     return fresh;
   }
-  function itemName(u) { return u.kind === 'l' ? 'New level unlocked: ' + LEVELS[u.i].def.name + '!' : u.kind === 'f' ? 'New face: ' + BD.FACES[u.i].name + '!' : 'New color: ' + BD.COLORS[u.i].name + '!'; }
+  function itemName(u) { return u.kind === 'l' ? 'فتحت مرحلة جديدة: ' + LEVELS[u.i].def.name + '!' : u.kind === 'f' ? 'وجه جديد: ' + BD.FACES[u.i].name + '!' : 'لون جديد: ' + BD.COLORS[u.i].name + '!'; }
   function myLook() {
     return { face: BD.FACES[save.face] ? BD.FACES[save.face].id : 'smile', c1: (BD.COLORS[save.c1] || BD.COLORS[0]).c, c2: (BD.COLORS[save.c2] || BD.COLORS[1]).c };
   }
@@ -212,7 +219,7 @@
   function goTitle() {
     scene = 'title'; show('title');
     var st = totalStars();
-    $('title-summary').innerHTML = BD.starSVG(true).replace('<svg', '<svg style="width:24px;height:24px;vertical-align:-4px"') + ' ' + st + ' / ' + maxStars() + ' stars &nbsp;·&nbsp; ' + beatenCount() + ' / ' + LEVELS.length + ' levels beaten';
+    $('title-summary').innerHTML = BD.starSVG(true).replace('<svg', '<svg style="width:24px;height:24px;vertical-align:-4px"') + ' النجوم: ' + st + ' من ' + maxStars() + ' &nbsp;·&nbsp; المراحل المكتملة: ' + beatenCount() + ' من ' + LEVELS.length;
     setTheme(LEVELS[0].theme);
     ensureMenuMusic(true);
   }
@@ -242,7 +249,7 @@
     card.style.background = 'linear-gradient(135deg, ' + th.bg2 + ', ' + th.bg1 + ')';
     card.style.borderColor = th.line;
     if (anim) { card.classList.remove('bump'); void card.offsetWidth; card.classList.add('bump'); }
-    $('lvl-num').textContent = 'LEVEL ' + (sel + 1);
+    $('lvl-num').textContent = 'المرحلة ' + (sel + 1);
     $('lvl-name').textContent = def.name;
     var D = BD.DIFFS[def.face];
     $('lvl-diff').textContent = D.label;
@@ -257,7 +264,7 @@
     fc.clearRect(0, 0, 120, 120); BD.drawDiffFace(fc, def.face, 120);
     var lock = $('lvl-lock');
     lock.hidden = unlocked;
-    if (!unlocked) lock.innerHTML = '<svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="12" rx="3" fill="#ffe14d"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="#ffe14d" stroke-width="2.6" fill="none"/></svg>Beat ' + LEVELS[sel - 1].def.name + ' to unlock<small>(beating it in Practice counts too!)</small>';
+    if (!unlocked) lock.innerHTML = '<svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="12" rx="3" fill="#ffe14d"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="#ffe14d" stroke-width="2.6" fill="none"/></svg>أكمل مرحلة «' + LEVELS[sel - 1].def.name + '» لتفتح هذه<small>(إكمالها في التدريب يُحسب أيضًا!)</small>';
     $('lvl-done').hidden = !save.done[L.id];
     $('b-go').disabled = !unlocked; $('b-practice').disabled = !unlocked;
     $('b-go').style.opacity = unlocked ? 1 : 0.4; $('b-practice').style.opacity = unlocked ? 1 : 0.4;
@@ -266,7 +273,7 @@
     for (var j = 0; j < ds.length; j++) {
       ds[j].className = (j === sel ? 'on' : '') + (save.done[LEVELS[j].id] ? ' done' : '');
     }
-    $('sel-stars').innerHTML = BD.starSVG(true).replace('<svg', '<svg style="width:26px;height:26px;vertical-align:-4px"') + ' ' + totalStars() + ' / ' + maxStars();
+    $('sel-stars').innerHTML = BD.starSVG(true).replace('<svg', '<svg style="width:26px;height:26px;vertical-align:-4px"') + ' ' + totalStars() + ' من ' + maxStars();
     setTheme(th);
     if (scene === 'select') previewSong();
   }
@@ -325,12 +332,12 @@
       } else {
         var sw = document.createElement('div'); sw.className = 'swatch'; sw.style.background = it.c; el.appendChild(sw);
       }
-      if (ok && save.gseen.indexOf(key) < 0) { var nb = document.createElement('span'); nb.className = 'new'; nb.textContent = 'NEW'; el.appendChild(nb); }
-      el.addEventListener('mouseenter', function () { $('grid-info').textContent = ok ? it.name : 'Locked: ' + needText(it.need); });
-      el.addEventListener('mouseleave', function () { $('grid-info').textContent = 'Beat levels and grab stars to unlock more!'; });
+      if (ok && save.gseen.indexOf(key) < 0) { var nb = document.createElement('span'); nb.className = 'new'; nb.textContent = 'جديد'; el.appendChild(nb); }
+      el.addEventListener('mouseenter', function () { $('grid-info').textContent = ok ? it.name : '🔒 ' + needText(it.need); });
+      el.addEventListener('mouseleave', function () { $('grid-info').textContent = 'أكمل المراحل واجمع النجوم لتفتح المزيد!'; });
       el.addEventListener('click', function () {
         Kit.audio.unlock();
-        if (!ok) { sfx.nope(); $('grid-info').textContent = 'Locked: ' + needText(it.need); el.animate && el.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }], { duration: 180 }); return; }
+        if (!ok) { sfx.nope(); $('grid-info').textContent = '🔒 ' + needText(it.need); el.animate && el.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }], { duration: 180 }); return; }
         if (garTab === 'face') { save.face = i; persist('face'); }
         else if (garTab === 'c1') { save.c1 = i; persist('c1'); }
         else { save.c2 = i; persist('c2'); }
@@ -340,8 +347,8 @@
       grid.appendChild(el);
     });
     $('preview-name').textContent = BD.FACES[save.face].name;
-    $('unlock-count').textContent = allUnlockKeys().length + ' / ' + (BD.FACES.length + BD.COLORS.length) + ' unlocked';
-    $('gar-stars').innerHTML = BD.starSVG(true).replace('<svg', '<svg style="width:26px;height:26px;vertical-align:-4px"') + ' ' + totalStars() + ' / ' + maxStars();
+    $('unlock-count').textContent = 'فتحت ' + allUnlockKeys().length + ' من ' + (BD.FACES.length + BD.COLORS.length);
+    $('gar-stars').innerHTML = BD.starSVG(true).replace('<svg', '<svg style="width:26px;height:26px;vertical-align:-4px"') + ' ' + totalStars() + ' من ' + maxStars();
   }
 
   /* ---------------------------------------------------------- pause */
@@ -349,11 +356,11 @@
     if (scene !== 'play' || G.paused || G.won) return;
     G.paused = true; music.stop(0.08);
     show('pause');
-    $('pause-level').textContent = G.L.def.name + (G.practice ? ' — Practice' : '') + ' — Attempt ' + G.sessionAtt;
+    $('pause-level').textContent = G.L.def.name + (G.practice ? ' — تدريب' : '') + ' — المحاولة ' + G.sessionAtt;
     var bn = save.best[G.L.id] || 0, bp = save.bestP[G.L.id] || 0;
     $('pbar-n').style.width = bn + '%'; $('pbar-n-t').textContent = bn + '%';
     $('pbar-p').style.width = bp + '%'; $('pbar-p-t').textContent = bp + '%';
-    $('b-toggle-practice').textContent = G.practice ? 'Normal mode' : 'Practice mode';
+    $('b-toggle-practice').textContent = G.practice ? 'الوضع العادي' : 'وضع التدريب';
   }
   function resumeGame() {
     if (!G.paused) return;
@@ -372,7 +379,7 @@
     show('win');
     var L = G.L;
     var t = $('win-title');
-    t.textContent = G.practice ? 'PRACTICE COMPLETE!' : 'LEVEL COMPLETE!';
+    t.textContent = G.practice ? 'أكملت التدريب!' : 'أكملت المرحلة!';
     t.className = 'win-title' + (G.practice ? ' practice' : '');
     $('win-level').textContent = L.def.name;
     var sb = save.stars[L.id] || 0, sh = '';
@@ -380,15 +387,15 @@
     $('win-stars').innerHTML = G.practice ? '' : sh;
     var jumps = G.s.jumps;
     $('win-stats').innerHTML = G.practice
-      ? 'Great practice! Now try it <b>for real</b> — no checkpoints!'
-      : 'Attempts: <b>' + G.sessionAtt + '</b> &nbsp;·&nbsp; Jumps: <b>' + jumps + '</b>' + (popcnt(sb) < L.stars ? '<br>Can you find all 3 stars?' : '<br><b>All stars found!</b>');
+      ? 'تدريب رائع! الآن جرّبها <b>بجدّ</b> بدون نقاط حفظ!'
+      : 'المحاولات: <b>' + G.sessionAtt + '</b> &nbsp;·&nbsp; القفزات: <b>' + jumps + '</b>' + (popcnt(sb) < L.stars ? '<br>هل تجد النجوم الثلاث كلها؟' : '<br><b>وجدت كل النجوم!</b>');
     var un = $('win-unlocks'); un.innerHTML = '';
     G.winUnlocks.forEach(function (u) { un.appendChild(unlockRow(u)); });
     var next = G.li + 1 < LEVELS.length && levelUnlocked(G.li + 1);
     var nb = $('b-win-next');
-    if (G.practice) nb.textContent = 'Play for real!';
-    else nb.textContent = next ? 'Next level ›' : 'Play again';
-    $('b-win-again').textContent = G.practice ? 'Practice again' : 'Play again';
+    if (G.practice) nb.textContent = 'العبها بجدّ!';
+    else nb.textContent = next ? 'المرحلة التالية' : 'العب مجددًا';
+    $('b-win-again').textContent = G.practice ? 'تدرّب مجددًا' : 'العب مجددًا';
     $('b-win-again').style.display = (!G.practice && !next) ? 'none' : '';
   }
   function unlockRow(u) {
@@ -415,7 +422,8 @@
   }
   onClick('b-win-next', winNext);
   onClick('b-win-again', function () { sfx.click(); startLevel(G.li, G.practice); });
-  onClick('b-win-menu', function () { sfx.click(); music.stop(0.2); goSelect(Math.min(G.li + (G.practice ? 0 : 1), LEVELS.length - 1)); });
+  function winMenu() { sfx.click(); music.stop(0.2); var n = Math.min(G.li + (G.practice ? 0 : 1), LEVELS.length - 1); goSelect(levelUnlocked(n) ? n : G.li); }
+  onClick('b-win-menu', winMenu);
 
   /* ---------------------------------------------------------- toast */
   var toastT = 0, toastQ = [];
@@ -496,11 +504,11 @@
     if (p > (save[key][L.id] || 0)) {
       save[key][L.id] = p; persist(key);
       if (!G.practice && p >= 5) {
-        popup('NEW BEST!', p + '%', '#ffe14d');
+        popup('رقم قياسي جديد!', p + '%', '#ffe14d');
         sfx.best();
         burst(W / 2, 250, 40, { speed: 520, life: 1.1, size: 12, colors: ['#ffe14d', '#ff5ad1', '#3df2ff', '#7dff5a'], g: 700, screen: true, shape: 4 });
       }
-    } else if (!G.practice && p >= 85) popup('SO CLOSE!', p + '%', '#ff8ad8');
+    } else if (!G.practice && p >= 85) popup('قريب جدًا!', p + '%', '#ff8ad8');
   }
 
   function popup(big, small, col) { G.popups.push({ big: big, small: small, col: col, t: 0, life: 1.6 }); }
@@ -546,7 +554,7 @@
         case 'star':
           burst(o.cx, o.cy, 22, { speed: 8, life: 0.8, size: 0.28, colors: ['#ffe14d', '#fff6b0', '#ffffff'], g: -6, shape: 4, drag: 1.5 });
           ring(o.cx, o.cy, '#ffe14d', 0.3, 1.8, 0.5);
-          popup('STAR!', (popcnt(s.stars)) + ' / ' + G.L.stars, '#ffe14d');
+          popup('نجمة!', popcnt(s.stars) + ' من ' + G.L.stars, '#ffe14d');
           if (!G.practice) {
             save.stars[G.L.id] = (save.stars[G.L.id] || 0) | (1 << o.idx); persist('stars');
             checkUnlocks().forEach(function (u) { toast(itemName(u)); });
@@ -563,12 +571,11 @@
 
   function winLevel() {
     var L = G.L, s = G.s;
+    var nextWasLocked = G.li + 1 < LEVELS.length && !levelUnlocked(G.li + 1);
     G.won = true; G.wonT = 0; G.winX = s.x; G.fireT = 0;
     save.total.jumps += s.jumps - G.jumpsAtStart; G.jumpsAtStart = s.jumps; persist('total');
     if (G.practice) { save.doneP[L.id] = true; persist('doneP'); save.bestP[L.id] = 100; persist('bestP'); }
     else { save.done[L.id] = true; persist('done'); save.best[L.id] = 100; persist('best'); }
-    var nextWasLocked = G.li + 1 < LEVELS.length && !levelUnlocked(G.li + 1);
-    if (G.practice) { save.doneP[L.id] = true; } else { save.done[L.id] = true; }
     G.winUnlocks = checkUnlocks();
     if (nextWasLocked) G.winUnlocks.unshift({ kind: 'l', i: G.li + 1 });
     G.flash = 0.6; G.flashCol = '#ffffff';
@@ -610,8 +617,8 @@
   function updatePlay(dt) {
     var s = G.s, L = G.L;
     // keys
-    if (Kit.keys.anyPressed(['KeyP', 'Escape'])) {
-      if (G.paused) resumeGame(); else if (!G.won) pauseGame();
+    if (!G.won && Kit.keys.anyPressed(['KeyP', 'Escape'])) {
+      if (G.paused) resumeGame(); else pauseGame();
       return;
     }
     if (G.paused) {
@@ -628,7 +635,7 @@
       if (G.winShown && G.wonT > 1.9) {
         if (Kit.keys.anyPressed(['Enter', 'Space'])) winNext();
         else if (Kit.keys.pressed('KeyR')) { sfx.click(); startLevel(G.li, G.practice); }
-        else if (Kit.keys.pressed('Escape')) { music.stop(0.2); goSelect(G.li); }
+        else if (Kit.keys.pressed('Escape')) winMenu();
       }
       if (G.wonT > 4 && music.playing) music.stop(1.5);
       return;
@@ -1066,7 +1073,7 @@
       ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fillRect(bx + 8, by + 3, Math.max(0, bw * p - 16), 4);
     }
     ctx.font = '700 26px Fredoka, "Segoe UI", sans-serif';
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.direction = 'ltr'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     var txt = Math.floor(p * 100) + '%';
     ctx.strokeText(txt, bx + bw + 16, by + bh / 2 + 1); ctx.fillStyle = '#fff'; ctx.fillText(txt, bx + bw + 16, by + bh / 2 + 1);
@@ -1081,15 +1088,38 @@
         ctx.restore();
       }
     }
-    if (G.practice) {
-      ctx.fillStyle = 'rgba(53,198,255,0.9)'; BD.rr(ctx, 16, 14, 150, 34, 17); ctx.fill();
-      ctx.font = '700 20px Fredoka, "Segoe UI", sans-serif'; ctx.fillStyle = '#062a44'; ctx.textAlign = 'center';
-      ctx.fillText('PRACTICE', 91, 32);
-      ctx.textAlign = 'left'; ctx.font = '500 16px Fredoka, "Segoe UI", sans-serif'; ctx.fillStyle = '#fff';
-      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-      var hint = 'Z = checkpoint   X = remove   (' + G.cps.length + ')';
-      ctx.strokeText(hint, 18, 64); ctx.fillText(hint, 18, 64);
+    if (G.practice) drawPracticeHUD();
+    ctx.direction = 'ltr';
+  }
+
+  // Practice legend (top-left): badge, then keycap rows laid out right-to-left.
+  function drawKeycap(x, y, label) {
+    ctx.fillStyle = '#9aa3c7'; BD.rr(ctx, x, y + 3, 30, 28, 7); ctx.fill();
+    ctx.fillStyle = '#ffffff'; BD.rr(ctx, x, y, 30, 28, 7); ctx.fill();
+    ctx.direction = 'ltr'; ctx.textAlign = 'center'; ctx.fillStyle = '#1d2340';
+    ctx.font = '700 17px Fredoka, "Segoe UI", sans-serif';
+    ctx.fillText(label, x + 15, y + 15);
+  }
+  function drawPracticeHUD() {
+    var rows = [['Z', 'ضع نقطة حفظ'], ['X', 'احذف آخر نقطة']];
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 18px Fredoka, "Segoe UI", sans-serif';
+    var w = 0;
+    for (var i = 0; i < rows.length; i++) w = Math.max(w, ctx.measureText(rows[i][1]).width);
+    var pw = Math.max(170, w + 30 + 10 + 24), px = 16;
+    ctx.fillStyle = 'rgba(10,5,40,0.55)'; BD.rr(ctx, px, 14, pw, 34 + 10 + rows.length * 36, 17); ctx.fill();
+    ctx.fillStyle = 'rgba(53,198,255,0.95)'; BD.rr(ctx, px, 14, pw, 36, 17); ctx.fill();
+    ctx.direction = 'rtl'; ctx.textAlign = 'center'; ctx.fillStyle = '#062a44';
+    ctx.font = '700 22px Fredoka, "Segoe UI", sans-serif';
+    ctx.fillText('تدريب  ◆ ' + G.cps.length, px + pw / 2, 33);
+    for (i = 0; i < rows.length; i++) {
+      var ry = 58 + i * 36, kx = px + pw - 12 - 30;
+      drawKeycap(kx, ry, rows[i][0]);
+      ctx.direction = 'rtl'; ctx.textAlign = 'right'; ctx.fillStyle = '#ffffff';
+      ctx.font = '700 18px Fredoka, "Segoe UI", sans-serif';
+      ctx.fillText(rows[i][1], kx - 10, ry + 15);
     }
+    ctx.direction = 'ltr';
   }
 
   function drawPopups() {
@@ -1100,7 +1130,7 @@
       var a = k > 0.75 ? 1 - (k - 0.75) / 0.25 : 1;
       ctx.save(); ctx.globalAlpha = a;
       ctx.translate(W / 2, 200 - i * 10 - k * 20); ctx.scale(sc, sc); ctx.rotate(-0.04);
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.direction = 'rtl'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = '700 72px Fredoka, "Segoe UI", sans-serif';
       ctx.lineWidth = 12; ctx.strokeStyle = '#1b1033'; ctx.lineJoin = 'round';
       ctx.strokeText(p.big, 0, 0); ctx.fillStyle = p.col; ctx.fillText(p.big, 0, 0);
@@ -1117,7 +1147,7 @@
     if (px < -800 || px > W + 800) return;
     ctx.save(); ctx.globalAlpha = alpha == null ? 1 : alpha;
     ctx.font = '700 ' + size + 'px Fredoka, "Segoe UI", sans-serif';
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.direction = 'rtl'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
     ctx.lineWidth = size * 0.2; ctx.strokeStyle = 'rgba(15,6,40,0.85)';
     ctx.strokeText(txt, px, py); ctx.fillStyle = col || '#fff'; ctx.fillText(txt, px, py);
     ctx.restore();
@@ -1142,7 +1172,7 @@
       ctx.save(); ctx.translate(shake.x, shake.y);
       var gy = GROUND0 + camY * U;
       // attempt text + signs
-      worldText('Attempt ' + G.sessionAtt, (G.attemptX || 0) + 3.5, 5.2, camX, gy, 64, '#ffffff');
+      worldText('المحاولة ' + G.sessionAtt, (G.attemptX || 0) + 3.5, 5.2, camX, gy, 64, '#ffffff');
       var signs = L.def.signs || [];
       for (var i = 0; i < signs.length; i++) worldText(signs[i].text, signs[i].x, signs[i].y, camX, gy, 34, signs[i].col || '#fff');
       drawLevel(L, th, camX, camY, t, bi, s, save.stars[L.id] || 0);

@@ -36,7 +36,7 @@
       x: 0, y: 0, ang: 0, target: 0, speed: this.baseSpeed * (def.speedMul || 1), turn: def.turn || 8,
       alive: false, home: true, trail: [], pts: [], cx: 0, cy: 0, cells: 0, sumX: 0, sumY: 0,
       kills: 0, respawnT: 0, trailStart: 0, personality: def.personality || 'greedy',
-      brain: null, maxCells: 0, deaths: 0, spawnTime: 0
+      brain: null, maxCells: 0, deaths: 0, spawnTime: 0, brake: 0
     };
     this.agents.push(a);
     return a;
@@ -68,7 +68,7 @@
     a.x = cx + 0.5; a.y = cy + 0.5; a.cx = cx; a.cy = cy;
     a.ang = Math.random() * TAU; a.target = a.ang;
     a.alive = true; a.home = true; a.trail.length = 0; a.pts.length = 0;
-    a.spawnTime = this.time; a.maxCells = a.cells;
+    a.spawnTime = this.time; a.maxCells = a.cells; a.brake = 0;
     a.brain = PG.newBrain(this, a);
     this.events.push({ type: 'spawn', id: a.id, cells: cells, x: a.x, y: a.y });
   };
@@ -142,6 +142,7 @@
     a.ang += d > mt ? mt : d < -mt ? -mt : d;
     if (a.ang > Math.PI) a.ang -= TAU; else if (a.ang < -Math.PI) a.ang += TAU;
     var dist = a.speed * dt;
+    if (a.brake > 0) { a.brake -= dt; dist *= 0.25; }
     var n = Math.ceil(dist / 0.4);
     var sx = Math.cos(a.ang) * dist / n, sy = Math.sin(a.ang) * dist / n;
     for (var i = 0; i < n; i++) {
@@ -158,8 +159,10 @@
           sgn = Math.abs(Math.cos(a.ang)) > 0.25 ? (Math.cos(a.ang) > 0 ? 1 : -1) : (a.x < N / 2 ? 1 : -1);
           a.ang = sgn > 0 ? 0 : Math.PI; nx = Math.max(0.5, Math.min(N - 0.5, a.x + sgn * step));
         } else {
-          // corner: turn toward the map centre
-          a.ang = Math.atan2(N / 2 - a.y, N / 2 - a.x);
+          // corner: keep sliding along the other wall. (Turning back toward the map centre made
+          // a player who holds one arrow key U-turn straight onto their own wall trail.)
+          if (Math.abs(Math.cos(a.ang)) >= Math.abs(Math.sin(a.ang))) a.ang = ny < N / 2 ? Math.PI / 2 : -Math.PI / 2;
+          else a.ang = nx < N / 2 ? 0 : Math.PI;
         }
         sx = Math.cos(a.ang) * step; sy = Math.sin(a.ang) * step;
       }
@@ -303,6 +306,8 @@
     else if (pers === 'cautious') { b.leg = [3, 7 * g]; b.maxTrail = 34; b.caution = 1.5; b.huntR = 3 * P.opp; }
     else { b.leg = [5, 10 * g]; b.maxTrail = 55; b.caution = 1.0; b.huntR = 9 + 9 * P.smart; }
     b.targetsPlayer = pers === 'hunter' ? Math.random() < P.huntPlayer : Math.random() < P.opp * 0.5;
+    // "polite" bots steer around the player's trail instead of blundering across it (easy arenas)
+    b.polite = !b.targetsPlayer && Math.random() < (P.polite || 0);
     return b;
   };
 
@@ -339,8 +344,10 @@
   function blockedAt(w, a, px, py) {
     var N = w.N;
     if (px < 0.6 || py < 0.6 || px > N - 0.6 || py > N - 0.6) return true;
-    var c = (py | 0) * N + (px | 0);
-    return w.trail[c] === a.id && !isRecent(a, c);
+    var c = (py | 0) * N + (px | 0), t = w.trail[c];
+    if (!t) return false;
+    if (t === a.id) return !isRecent(a, c);
+    return a.brain.polite && w.agents[t].isPlayer && a.brain.mode !== 'hunt';
   }
   function ownAt(w, a, px, py) {
     var c = (py | 0) * w.N + (px | 0);
@@ -543,5 +550,21 @@
       }
     }
     a.target = safeAngle(w, a, desired, 3.5);
+    // polite bots also hit the brakes when the player's trail is right in front of them
+    if (b.polite && b.mode !== 'hunt' && playerTrailAhead(w, a, 2.4)) a.brake = 0.22;
   };
+
+  function playerTrailAhead(w, a, L) {
+    var N = w.N, cs = Math.cos(a.ang), sn = Math.sin(a.ang), ox = -sn * 0.45, oy = cs * 0.45;
+    for (var k = 1; k <= L * 2; k++) {
+      var px = a.x + cs * k * 0.5, py = a.y + sn * k * 0.5;
+      for (var j = -1; j <= 1; j++) {
+        var qx = px + ox * j, qy = py + oy * j;
+        if (qx < 0 || qy < 0 || qx >= N || qy >= N) continue;
+        var t = w.trail[(qy | 0) * N + (qx | 0)];
+        if (t && t !== a.id && w.agents[t].isPlayer) return true;
+      }
+    }
+    return false;
+  }
 })();

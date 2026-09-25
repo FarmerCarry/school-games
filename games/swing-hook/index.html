@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Swing Hook</title>
+<title>الخطّاف الطائر</title>
 <link rel="stylesheet" href="../../shared/game.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -11,26 +11,26 @@
 <canvas id="game" tabindex="0"></canvas>
 
 <div id="ui">
-  <button id="pauseBtn" class="hudbtn" type="button" aria-label="Pause" hidden><span></span><span></span></button>
+  <button id="pauseBtn" class="hudbtn" type="button" aria-label="إيقاف مؤقت" hidden><span></span><span></span></button>
 
   <!-- TITLE -->
   <section id="scr-title" class="scr">
-    <div class="logo" aria-label="Swing Hook">
-      <div class="logo-row"><b style="--c:#ff4fa3;--d:0">S</b><b style="--c:#ffb000;--d:1">W</b><b style="--c:#2fd35a;--d:2">I</b><b style="--c:#1fa8ff;--d:3">N</b><b style="--c:#9b5cff;--d:4">G</b></div>
-      <div class="logo-row two"><b style="--c:#ff6a2b;--d:5">H</b><b style="--c:#ff4fa3;--d:6">O</b><b style="--c:#ffb000;--d:7">O</b><b style="--c:#2fd35a;--d:8">K</b></div>
-    </div>
+    <h1 class="logo" aria-label="الخطّاف الطائر">
+      <b class="w1" style="--c:#ffd21f;--d:0">الخطّاف</b>
+      <b class="w2" style="--c:#ff4fa3;--d:4">الطائر</b>
+    </h1>
     <div class="title-btns">
-      <button class="sg-btn big" id="btnPlay" type="button">▶ PLAY</button>
+      <button class="sg-btn big" id="btnPlay" type="button">▶ العب</button>
       <div class="row">
-        <button class="sg-btn secondary" id="btnLevels" type="button">Levels</button>
-        <button class="sg-btn secondary" id="btnStyle" type="button">Style<em class="newdot" id="styleNew" hidden>NEW</em></button>
-        <button class="sg-btn secondary" id="btnEndless" type="button">Endless</button>
+        <button class="sg-btn secondary" id="btnLevels" type="button">المراحل</button>
+        <button class="sg-btn secondary" id="btnStyle" type="button">الأزياء<em class="newdot" id="styleNew" hidden>جديد</em></button>
+        <button class="sg-btn secondary" id="btnEndless" type="button">بلا نهاية</button>
       </div>
     </div>
     <div class="title-info">
       <div class="howto">
-        <span><span class="sg-key">Click</span> or <span class="sg-key">Space</span> hold to hook</span>
-        <span>let go to <b>FLING!</b></span>
+        <span><span class="sg-key">انقر</span> أو <span class="sg-key">مسافة</span> اضغط مطولًا لتمسك الخطّاف</span>
+        <span>ثم اتركه <b>لتطير!</b></span>
       </div>
       <div class="progress" id="titleProgress"></div>
     </div>
@@ -40,14 +40,14 @@
   <section id="scr-levels" class="scr" hidden>
     <div class="panel wide">
       <div class="panel-head">
-        <button class="sg-btn secondary small" id="lvBack" type="button">← Back</button>
-        <h2 id="lvWorldName">World</h2>
+        <button class="sg-btn secondary small" id="lvBack" type="button">→ رجوع</button>
+        <h2 id="lvWorldName">العالم</h2>
         <div class="starcount" id="lvStars"></div>
       </div>
       <div class="worldnav">
-        <button class="arrow" id="lvPrev" type="button" aria-label="Previous world">◀</button>
+        <button class="arrow" id="lvPrev" type="button" aria-label="العالم السابق">▶</button>
         <div class="grid" id="lvGrid"></div>
-        <button class="arrow" id="lvNext" type="button" aria-label="Next world">▶</button>
+        <button class="arrow" id="lvNext" type="button" aria-label="العالم التالي">◀</button>
       </div>
       <div class="dots" id="lvDots"></div>
     </div>
@@ -57,13 +57,13 @@
   <section id="scr-style" class="scr" hidden>
     <div class="panel wide">
       <div class="panel-head">
-        <button class="sg-btn secondary small" id="stBack" type="button">← Back</button>
-        <h2>Style</h2>
+        <button class="sg-btn secondary small" id="stBack" type="button">→ رجوع</button>
+        <h2>خزانة الأزياء</h2>
         <div class="starcount" id="stStars"></div>
       </div>
-      <h3>Skins</h3>
+      <h3>الشخصيات</h3>
       <div class="skins" id="stSkins"></div>
-      <h3>Trails</h3>
+      <h3>آثار الطيران</h3>
       <div class="skins trails" id="stTrails"></div>
     </div>
   </section>
@@ -71,31 +71,31 @@
   <!-- PAUSE -->
   <section id="scr-pause" class="scr dim" hidden>
     <div class="panel">
-      <h2 class="bigtitle">Paused</h2>
+      <h2 class="bigtitle">استراحة</h2>
       <div class="col">
-        <button class="sg-btn good" id="psResume" type="button">▶ Resume</button>
-        <button class="sg-btn" id="psRestart" type="button">↻ Restart</button>
-        <button class="sg-btn secondary" id="psLevels" type="button">Levels</button>
-        <button class="sg-btn secondary" id="psMenu" type="button">Menu</button>
+        <button class="sg-btn good" id="psResume" type="button">▶ تابِع</button>
+        <button class="sg-btn" id="psRestart" type="button">↻ من جديد</button>
+        <button class="sg-btn secondary" id="psLevels" type="button">المراحل</button>
+        <button class="sg-btn secondary" id="psMenu" type="button">القائمة</button>
       </div>
-      <p class="hint"><span class="sg-key">P</span> or <span class="sg-key">Esc</span> to resume · <span class="sg-key">R</span> restart</p>
+      <p class="hint"><span class="sg-key">P</span> أو <span class="sg-key">Esc</span> للمتابعة · <span class="sg-key">R</span> من جديد</p>
     </div>
   </section>
 
   <!-- RESULT -->
   <section id="scr-result" class="scr dim" hidden>
     <div class="panel result">
-      <div class="newbest" id="rsBest" hidden>NEW BEST!</div>
-      <h2 class="bigtitle" id="rsTitle">Level Clear!</h2>
+      <div class="newbest" id="rsBest" hidden>رقم قياسي جديد!</div>
+      <h2 class="bigtitle" id="rsTitle">اجتزت المرحلة!</h2>
       <div class="rs-stars" id="rsStars"></div>
       <div class="rs-stats" id="rsStats"></div>
       <div class="rs-unlock" id="rsUnlock" hidden></div>
       <div class="row">
-        <button class="sg-btn secondary" id="rsLevels" type="button">Levels</button>
-        <button class="sg-btn" id="rsReplay" type="button">↻ Replay</button>
-        <button class="sg-btn good big2" id="rsNext" type="button">Next ▶</button>
+        <button class="sg-btn secondary" id="rsLevels" type="button">المراحل</button>
+        <button class="sg-btn" id="rsReplay" type="button">↻ أعِد</button>
+        <button class="sg-btn good big2" id="rsNext" type="button">التالي ◀</button>
       </div>
-      <p class="hint" id="rsHint"><span class="sg-key">Enter</span> next · <span class="sg-key">R</span> replay</p>
+      <p class="hint" id="rsHint"><span class="sg-key">Enter</span> التالي · <span class="sg-key">R</span> إعادة</p>
     </div>
   </section>
 </div>

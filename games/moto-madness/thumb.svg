@@ -100,8 +100,8 @@
   </g>
   <!-- title -->
   <rect x="0" y="300" width="400" height="100" fill="url(#band)"/>
-  <g font-family="Arial Black, 'Segoe UI Black', Impact, Arial, sans-serif" font-weight="900" text-anchor="middle" transform="rotate(-4 200 340)">
-    <text x="200" y="344" font-size="62" fill="#ffd23f" stroke="#7c2d12" stroke-width="12" paint-order="stroke" letter-spacing="1">MOTO</text>
-    <text x="200" y="388" font-size="44" fill="#ff3b3b" stroke="#ffffff" stroke-width="9" paint-order="stroke" letter-spacing="1">MADNESS</text>
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl" transform="rotate(-4 200 340)">
+    <text x="200" y="334" font-size="62" fill="#ffd23f" stroke="#7c2d12" stroke-width="12" stroke-linejoin="round" paint-order="stroke">جنون</text>
+    <text x="200" y="378" font-size="46" fill="#ff3b3b" stroke="#ffffff" stroke-width="9" stroke-linejoin="round" paint-order="stroke">الدراجات</text>
   </g>
 </svg>

@@ -141,5 +141,5 @@ button { font-family: var(--sg-font); }
 .wintile canvas { width: 130px; height: 130px; animation: spinpop 0.8s cubic-bezier(.2,1.6,.4,1) both; }
 @keyframes spinpop { from { transform: scale(0) rotate(-200deg); } to { transform: scale(1) rotate(0); } }
 
-#toast { position: absolute; left: 50%; top: 8px; transform: translate(-50%, -120px); background: var(--cream); color: var(--ink); border: 5px solid var(--ink); border-radius: 22px; box-shadow: 0 6px 0 rgba(34,18,63,0.6); padding: 6px 22px; font-size: 26px; font-weight: 700; white-space: nowrap; transition: transform 0.35s cubic-bezier(.2,1.5,.4,1); pointer-events: none; z-index: 30; }
-#toast.show { transform: translate(-50%, 0); }
+#toast { position: absolute; left: 50%; top: 8px; transform: translate(-50%, -120px); background: var(--cream); color: var(--ink); border: 5px solid var(--ink); border-radius: 22px; box-shadow: 0 6px 0 rgba(34,18,63,0.6); padding: 6px 22px; font-size: 26px; font-weight: 700; white-space: nowrap; transition: transform 0.35s cubic-bezier(.2,1.5,.4,1), opacity 0.25s; pointer-events: none; z-index: 30; opacity: 0; }
+#toast.show { transform: translate(-50%, 0); opacity: 1; }

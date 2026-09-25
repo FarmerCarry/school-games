@@ -8,6 +8,12 @@
   var A = Kit.audio;
   function $(id) { return document.getElementById(id); }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  // Arabic text helpers: pick the canvas text direction from the content, and keep
+  // number groups like "+3" or "3 / 27" in left-to-right order inside Arabic text.
+  var AR_RE = /[\u0600-\u06FF]/;
+  function dirOf(s) { return AR_RE.test(s) ? 'rtl' : 'ltr'; }
+  function ltr(s) { return '\u2066' + s + '\u2069'; }
+  function plusN(n, s) { return ltr('+' + n) + ' ' + s; }
 
   // --------------------------------------------------------------- canvas
   var canvas = $('game');
@@ -133,7 +139,7 @@
     for (var i = 0; i < 36; i++) { var s = G.inv[i]; if (s) { var it = ITEMS[s.id]; if (it && it.tool && it.tool > best.tool) best = { tool: it.tool, speed: it.speed, id: s.id }; } }
     return best;
   }
-  var PICK_FOR_TIER = [null, 'Wooden Pickaxe', 'Stone Pickaxe', 'Iron Pickaxe'];
+  var PICK_FOR_TIER = [null, 'معول خشبي', 'معول حجري', 'معول حديدي'];
 
   // ---------------------------------------------------------- particles
   var PMAX = 520, parts = [];
@@ -153,11 +159,11 @@
     if (key) {
       for (var i = texts.length - 1; i >= 0; i--) {
         var t = texts[i];
-        if (t.key === key && t.life > 0.7) { t.n += n; t.s = '+' + t.n + ' ' + s; t.life = 1.3; t.pop = 1; return; }
+        if (t.key === key && t.life > 0.7) { t.n += n; t.s = plusN(t.n, s); t.life = 1.3; t.pop = 1; return; }
       }
     }
     if (texts.length > 24) texts.shift();
-    texts.push({ x: x, y: y, s: key ? '+' + n + ' ' + s : s, col: col || '#fff', life: 1.3, max: 1.3, big: big, key: key, n: n || 0, pop: 1 });
+    texts.push({ x: x, y: y, s: key ? plusN(n, s) : s, col: col || '#fff', life: 1.3, max: 1.3, big: big, key: key, n: n || 0, pop: 1 });
   }
   var confetti = [];
   function confettiBurst() {
@@ -215,14 +221,21 @@
     return p;
   }
   var GRAV = 46, JUMP_V = 14.4, MAX_FALL = 26, RUN = 6.8;
+  // Creative flight: double tap Space. Measured on real key-press times so it also works when frames are slow.
+  var flyTap = false, lastSpaceMs = -1e9;
+  window.addEventListener('keydown', function (e) {
+    if (e.code !== 'Space' || e.repeat || G.mode !== 'play' || G.gm !== 'creative') return;
+    var now = (window.performance && performance.now) ? performance.now() : Date.now();
+    if (now - lastSpaceMs < 350) { flyTap = true; lastSpaceMs = -1e9; } else lastSpaceMs = now;
+  });
   function updatePlayer(dt, controls) {
     var p = P;
     var L = controls && kd(LEFT), Rr = controls && kd(RIGHT), up = controls && kd(UP), jumpHeld = controls && kd(JUMP), down = controls && kd(DOWN);
     var mx = (Rr ? 1 : 0) - (L ? 1 : 0);
     // creative flight toggle (double tap Space)
-    if (controls && kp(['Space'])) {
-      if (G.gm === 'creative' && G.time - p.lastSpace < 0.3) { p.flying = !p.flying; p.lastSpace = -1; if (p.flying) { G.stats.flew = 1; floatText(p.x + p.w / 2, p.y - 0.3, 'Flying!', '#bfe9ff'); SND.jump(); } }
-      else p.lastSpace = G.time;
+    if (flyTap) {
+      flyTap = false;
+      if (controls && G.gm === 'creative') { p.flying = !p.flying; if (p.flying) { G.stats.flew = 1; floatText(p.x + p.w / 2, p.y - 0.3, 'أنت تطير!', '#bfe9ff'); SND.jump(); } }
     }
     if (controls && kp(JUMP)) p.jumpBuf = 0.13;
     p.jumpBuf -= dt;
@@ -376,7 +389,7 @@
       for (var i = 0; i < n; i++) spawnItem(a.x + a.w / 2, a.y + 0.3, B.WOOL, 1, (Math.random() - 0.5) * 4, -6);
       burst(a.x + a.w / 2, a.y + 0.4, ['#ffffff', '#e8ecf4'], 12, 5, 0.2);
       G.stats.sheared++;
-      floatText(a.x + a.w / 2, a.y - 0.4, 'Snip! +Wool', '#ffffff');
+      floatText(a.x + a.w / 2, a.y - 0.4, 'قص قص! صوف', '#ffffff');
     }
     if (a.type === 'pig') SND.oink(); else if (a.type === 'sheep') SND.baa(); else SND.cluck();
     hearts(a.x + a.w / 2, a.y);
@@ -505,7 +518,7 @@
     if (surv) for (var i = 0; i < logs; i++) spawnItem(x + 0.5, trunk[i] + 0.5, B.LOG, 1, (Math.random() - 0.5) * 3, -4 - Math.random() * 3);
     G.stats.mined[B.TRUNK] = (G.stats.mined[B.TRUNK] || 0) + logs;
     SND.timber(); shake.add(5);
-    if (logs > 1) floatText(x + 0.5, top - 0.5, 'TIMBER!', '#ffd23a', true);
+    if (logs > 1) floatText(x + 0.5, top - 0.5, 'سقطت الشجرة!', '#ffd23a', true);
   }
   function placeBlock(slotIdx, tx, ty) {
     var wd = G.world, s = G.inv[slotIdx];
@@ -520,10 +533,10 @@
       for (var i = 0; i < G.animals.length; i++) if (boxOverlap(G.animals[i], tx, ty)) return false;
     }
     if (bid === B.DOOR_B) {
-      if (!BLOCKS[wd.get(tx, ty - 1)].replace || !wd.solid(tx, ty + 1)) { tip('Doors need 2 empty spaces on the ground'); return false; }
+      if (!BLOCKS[wd.get(tx, ty - 1)].replace || !wd.solid(tx, ty + 1)) { tip('الباب يحتاج مكانين فارغين فوق الأرض'); return false; }
     }
-    if (bd.support && !wd.solid(tx, ty + 1)) { tip(bd.name + ' needs ground under it'); return false; }
-    if (bid === B.SAPLING) { var below = wd.get(tx, ty + 1); if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW_GRASS) { tip('Plant saplings on grass or dirt'); return false; } }
+    if (bd.support && !wd.solid(tx, ty + 1)) { tip('ضع ' + bd.name + ' فوق أرض صلبة'); return false; }
+    if (bid === B.SAPLING) { var below = wd.get(tx, ty + 1); if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW_GRASS) { tip('ازرع الشتلات على العشب أو التراب'); return false; } }
     if (bd.attach && !hasAttach(tx, ty)) return false;
     if (G.gm === 'survival' && !hasNeighbor(tx, ty)) return false;
     wd.set(tx, ty, bid);
@@ -566,7 +579,7 @@
         var pk = bestPick();
         if (d.tier > pk.tool) {
           mine.prog = 0;
-          if (mine.hintT <= 0) { var deep = P.y + P.h > G.world.surf[clamp(Math.floor(P.x), 0, W - 1)] + 4 && pk.tool === 0; tip('You need a ' + PICK_FOR_TIER[Math.min(3, d.tier)] + ' to mine ' + d.name + '!' + (deep ? ' Stuck? Press P, then Go to Spawn' : '')); SND.bonk(); mine.hintT = 1.2; shake.add(1); burst(tx + 0.5, ty + 0.5, ['#ffffff'], 3, 3, 0.12); }
+          if (mine.hintT <= 0) { var deep = P.y + P.h > G.world.surf[clamp(Math.floor(P.x), 0, W - 1)] + 4 && pk.tool === 0; tip('تحتاج إلى ' + PICK_FOR_TIER[Math.min(3, d.tier)] + ' لتحفر ' + d.name + '!' + (deep ? ' عالق؟ اضغط P ثم «العودة للبداية»' : '')); SND.bonk(); mine.hintT = 1.2; shake.add(1); burst(tx + 0.5, ty + 0.5, ['#ffffff'], 3, 3, 0.12); }
         } else {
           if (mine.x !== tx || mine.y !== ty) { mine.x = tx; mine.y = ty; mine.prog = 0; mine.sndT = 0; }
           var spd = d.tier === 0 && pk.tool > 0 ? 1 + (pk.speed - 1) * 0.6 : pk.speed;
@@ -589,7 +602,7 @@
         P.face = wx < pcx ? -1 : 1;
         var ok = placeBlock(G.sel, tx, ty);
         placeCD = M.rp ? 0.28 : 0.13;
-        if (!ok && M.rp) { var s = G.inv[G.sel]; if (s && ITEMS[s.id] && !ITEMS[s.id].place) tip(ITEMS[s.id].tool ? 'Pickaxes work by themselves - just hold Left Click to mine!' : 'You can\'t place ' + ITEMS[s.id].name + ' - use it for crafting (E)'); }
+        if (!ok && M.rp) { var s = G.inv[G.sel]; if (s && ITEMS[s.id] && !ITEMS[s.id].place) tip(ITEMS[s.id].tool ? 'المعول يعمل وحده - اضغط مطوّلًا بالزر الأيسر لتحفر!' : 'لا يمكنك وضع ' + ITEMS[s.id].name + ' - استعمله في الصنع (E)'); }
       }
     }
     if (M.wheel) { G.sel = (G.sel + (M.wheel > 0 ? 1 : -1) + 9) % 9; M.wheel = 0; selChanged(); }
@@ -612,10 +625,10 @@
     var before = meta.totalStars;
     meta.totalStars++;
     saveMeta();
-    G.toasts.push({ title: 'QUEST COMPLETE!', text: q.text, icon: q.icon, t: 0, dur: 3.4 });
+    G.toasts.push({ title: 'أنجزت المهمة!', text: q.text, icon: q.icon, t: 0, dur: 3.4 });
     SND.quest(); confettiBurst();
     BW.SKINS.forEach(function (sk, i) {
-      if (sk.stars > before && sk.stars <= meta.totalStars) G.toasts.push({ title: 'NEW OUTFIT UNLOCKED!', text: sk.name + ' - pick it on the title screen', icon: 0, skin: i, t: 0, dur: 3.4 });
+      if (sk.stars > before && sk.stars <= meta.totalStars) G.toasts.push({ title: 'زيّ جديد: ' + sk.name + '!', text: 'اختره من الشاشة الرئيسية', icon: 0, skin: i, t: 0, dur: 3.4 });
     });
     if (starCount() >= questsFor(G.gm).length && !G.masterShown) { G.masterShown = true; setTimeout(showMaster, 2600); }
   }
@@ -648,7 +661,7 @@
     }
     G.lastBiome = ''; G.lastZone = '';
     enterPlay();
-    G.toasts.push({ title: gm === 'creative' ? 'CREATIVE WORLD' : 'WELCOME TO ' + G.name.toUpperCase() + '!', text: gm === 'creative' ? 'Every block is yours. Tap Space twice to fly!' : 'Chop a tree to get started - hold Left Click on it!', icon: gm === 'creative' ? B.WOOL + 4 : B.LOG, t: 0, dur: 4.5, soft: true });
+    G.toasts.push({ title: gm === 'creative' ? 'عالم الإبداع!' : 'أهلًا بك في ' + G.name + '!', text: gm === 'creative' ? 'كل المكعبات لك! اضغط مسافة مرتين لتطير' : 'ابدأ بقطع شجرة: اضغط عليها مطوّلًا بالفأرة!', icon: gm === 'creative' ? B.WOOL + 4 : B.LOG, t: 0, dur: 4.5, soft: true });
     saveGame();
   }
   function loadGame(slot) {
@@ -656,7 +669,7 @@
     if (!data || !data.world) return false;
     var world;
     try { world = BW.World.load(data.world); } catch (e) { return false; }
-    G.slot = slot; G.gm = data.gm || 'survival'; G.name = data.name || 'My World';
+    G.slot = slot; G.gm = data.gm || 'survival'; G.name = fixName(data.name || 'عالمي');
     startWorld(world);
     G.spawn = data.spawn || { x: 250, y: 0 };
     P = makePlayer(data.p ? data.p.x : 250, data.p ? data.p.y : 40);
@@ -670,29 +683,46 @@
     G.animals = (data.animals || []).map(function (o) { var a = makeAnimal(o.t, o.x, o.y); a.sheared = !!o.s; a.regrow = o.s ? 40 : 0; return a; });
     G.lastBiome = ''; G.lastZone = '';
     enterPlay();
-    G.toasts.push({ title: 'WELCOME BACK!', text: G.name + ' - ' + starCount() + ' / ' + questsFor(G.gm).length + ' stars', icon: G.gm === 'creative' ? B.WOOL + 4 : I.PICK_WOOD, t: 0, dur: 3, soft: true });
+    G.toasts.push({ title: 'أهلًا بعودتك!', text: G.name + ' - ★ ' + ltr(starCount() + ' / ' + questsFor(G.gm).length), icon: G.gm === 'creative' ? B.WOOL + 4 : I.PICK_WOOD, t: 0, dur: 3, soft: true });
     return true;
   }
   function saveGame() {
     if (!G.slot || !G.world || !P) return;
+    // A stack held on the mouse cursor (backpack open) is saved as if it were back in the bag,
+    // without disturbing the drag that is in progress.
+    var invSave = G.inv.map(function (s) { return s ? { id: s.id, n: s.n } : null; });
+    if (G.cursor) {
+      var cn = G.cursor.n, cmx = BW.maxStack(G.cursor.id), ci;
+      for (ci = 0; ci < 36 && cn > 0; ci++) { var cs = invSave[ci]; if (cs && cs.id === G.cursor.id && cs.n < cmx) { var ck = Math.min(cn, cmx - cs.n); cs.n += ck; cn -= ck; } }
+      for (ci = 0; ci < 36 && cn > 0; ci++) if (!invSave[ci]) { invSave[ci] = { id: G.cursor.id, n: cn }; cn = 0; }
+    }
     var data = {
       v: 1, gm: G.gm, name: G.name, world: G.world.serialize(), spawn: G.spawn,
       p: { x: +P.x.toFixed(2), y: +P.y.toFixed(2) },
-      inv: G.inv.map(function (s) { return s ? { id: s.id, n: s.n } : null; }),
+      inv: invSave,
       sel: G.sel, stats: G.stats, done: G.done, tod: +G.tod.toFixed(4), play: Math.round(G.play),
       saplings: G.saplings, master: G.masterShown,
       animals: G.animals.map(function (a) { return { t: a.type, x: +(a.x + a.w / 2).toFixed(2), y: +(a.y + a.h).toFixed(2), s: a.sheared ? 1 : 0 }; })
     };
-    if (G.cursor) addItem(G.cursor.id, G.cursor.n), G.cursor = null;
     store.set('slot' + G.slot, data);
     meta.slots[G.slot - 1] = { name: G.name, gm: G.gm, stars: starCount(), max: questsFor(G.gm).length, play: Math.round(G.play), last: Date.now() };
     meta.lastSlot = G.slot;
     saveMeta();
     G.savedFlash = 1.6;
   }
-  var ADJ = ['Sunny', 'Mossy', 'Sparkle', 'Cozy', 'Breezy', 'Maple', 'Pebble', 'Rainbow', 'Misty', 'Honey', 'Clover', 'Starry', 'Bouncy', 'Minty'];
-  var NOUN = ['Valley', 'Hills', 'Island', 'Meadow', 'Hollow', 'Peaks', 'Grove', 'Cove', 'Kingdom', 'Land', 'Canyon', 'Woods'];
-  function worldName(seed) { return ADJ[seed % ADJ.length] + ' ' + NOUN[Math.floor(seed / 7) % NOUN.length]; }
+  // World names: "<place> <thing>" e.g. وادي الشمس (Sunny Valley).
+  var ADJ = ['الشمس', 'الطحالب', 'البريق', 'الدفء', 'النسيم', 'القيقب', 'الحصى', 'قوس قزح', 'الضباب', 'العسل', 'البرسيم', 'النجوم', 'القفز', 'النعناع'];
+  var NOUN = ['وادي', 'تلال', 'جزيرة', 'مرج', 'كهف', 'قمم', 'بستان', 'خليج', 'مملكة', 'أرض', 'سهول', 'غابة'];
+  var ADJ_EN = ['Sunny', 'Mossy', 'Sparkle', 'Cozy', 'Breezy', 'Maple', 'Pebble', 'Rainbow', 'Misty', 'Honey', 'Clover', 'Starry', 'Bouncy', 'Minty'];
+  var NOUN_EN = ['Valley', 'Hills', 'Island', 'Meadow', 'Hollow', 'Peaks', 'Grove', 'Cove', 'Kingdom', 'Land', 'Canyon', 'Woods'];
+  function worldName(seed) { return NOUN[Math.floor(seed / 7) % NOUN.length] + ' ' + ADJ[seed % ADJ.length]; }
+  // Worlds saved before the Arabic switch had English names: translate them.
+  function fixName(n) {
+    n = String(n || '');
+    if (n === 'My World') return 'عالمي';
+    var p = n.split(' '), a = ADJ_EN.indexOf(p[0]), b = NOUN_EN.indexOf(p[1]);
+    return p.length === 2 && a >= 0 && b >= 0 ? NOUN[b] + ' ' + ADJ[a] : n;
+  }
 
   // ------------------------------------------------------------- env/tick
   var DAY_LEN = 420;
@@ -736,6 +766,7 @@
   }
   function markDoor(k) { var p = k.split(','); rend.markTile(+p[0], +p[1]); rend.markTile(+p[0], +p[1] - 1); }
   var ZONES = [[0, ''], [1, 'Underground'], [100, 'Deep Caves'], [124, 'Diamond Depths']];
+  var ZONE_LABEL = { Underground: 'تحت الأرض', 'Deep Caves': 'الكهوف العميقة', 'Diamond Depths': 'أعماق الألماس' };
   function updateExplore() {
     var cx = Math.floor(P.x + P.w / 2), feet = P.y + P.h;
     var bio = G.world.biomeAt(cx), surf = G.world.surf[clamp(cx, 0, W - 1)];
@@ -747,7 +778,7 @@
       G.stats.biomes[key] = 1;
       if (key !== G.lastBiome) { if (G.lastBiome) G.banner = { s: BW.BIOME_LABEL[key], t: 3 }; G.lastBiome = key; }
     }
-    if (zone !== G.lastZone) { if (zone && (G.lastZone === '' || ZONES.map(function (z) { return z[1]; }).indexOf(zone) > ZONES.map(function (z) { return z[1]; }).indexOf(G.lastZone))) G.banner = { s: zone, t: 3 }; G.lastZone = zone; if (!zone) G.lastBiome = ''; }
+    if (zone !== G.lastZone) { if (zone && (G.lastZone === '' || ZONES.map(function (z) { return z[1]; }).indexOf(zone) > ZONES.map(function (z) { return z[1]; }).indexOf(G.lastZone))) G.banner = { s: ZONE_LABEL[zone], t: 3 }; G.lastZone = zone; if (!zone) G.lastBiome = ''; }
   }
   function nearStations() {
     var t = false, f = false, cx = Math.floor(P.x + P.w / 2), cy = Math.floor(P.y + 1);
@@ -940,6 +971,7 @@
       var tx = texts[i], a2 = Math.min(1, tx.life / tx.max * 2);
       ctx.globalAlpha = a2;
       ctx.font = tx.big ? '700 30px Fredoka, sans-serif' : '700 ' + Math.round(18 + (tx.pop || 0) * 6) + 'px Fredoka, sans-serif';
+      ctx.direction = dirOf(tx.s);
       ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillText(tx.s, sx(tx.x, cx) + 2, sx(tx.y, cy) + 2);
       ctx.fillStyle = tx.col; ctx.fillText(tx.s, sx(tx.x, cx), sx(tx.y, cy));
     }
@@ -1022,9 +1054,17 @@
   }
   function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
   function txt(ctx, s, x, y, size, col, align, stroke) {
-    ctx.font = '700 ' + size + 'px Fredoka, sans-serif'; ctx.textAlign = align || 'left';
+    s = String(s);
+    ctx.font = '700 ' + size + 'px Fredoka, sans-serif'; ctx.textAlign = align || 'left'; ctx.direction = dirOf(s);
     ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillText(s, x + 2, y + 2.5);
     ctx.fillStyle = col || '#fff'; ctx.fillText(s, x, y);
+  }
+  // Like txt(), but shrinks the font until the text fits in maxW.
+  function txtFit(ctx, s, x, y, size, col, align, maxW) {
+    s = String(s);
+    ctx.direction = dirOf(s);
+    while (size > 10) { ctx.font = '700 ' + size + 'px Fredoka, sans-serif'; if (ctx.measureText(s).width <= maxW) break; size--; }
+    txt(ctx, s, x, y, size, col, align);
   }
   function icon(ctx, id, x, y, s) { var t = TEX[id === BW.FLOWER ? B.FLOWER_RED : id]; if (t) ctx.drawImage(t, x, y, s, s); }
   function drawHUD(ctx) {
@@ -1049,15 +1089,15 @@
     // pickaxe badge
     var bx = HB.x - 86, by = HB.y - 2;
     ctx.fillStyle = 'rgba(12,16,40,0.55)'; rrect(ctx, bx, by - 4, 70, 62, 14); ctx.fill();
-    if (G.gm === 'creative') { txt(ctx, '∞', bx + 35, by + 34, 34, '#ffcc00', 'center'); txt(ctx, 'Creative', bx + 35, by + 52, 12, '#fff', 'center'); }
-    else if (pk.id) { icon(ctx, pk.id, bx + 17, by, 36); txt(ctx, ['', 'Wood Pick', 'Stone Pick', 'Iron Pick', 'Diamond Pick'][pk.tool] || '', bx + 35, by + 52, 12, '#fff', 'center'); }
-    else { ctx.globalAlpha = 0.5; icon(ctx, I.PICK_WOOD, bx + 17, by, 36); ctx.globalAlpha = 1; txt(ctx, 'Hands', bx + 35, by + 52, 12, '#fff', 'center'); }
+    if (G.gm === 'creative') { txt(ctx, '∞', bx + 35, by + 34, 34, '#ffcc00', 'center'); txt(ctx, 'إبداع', bx + 35, by + 53, 13, '#fff', 'center'); }
+    else if (pk.id) { icon(ctx, pk.id, bx + 17, by - 2, 36); txtFit(ctx, ['', 'معول خشب', 'معول حجر', 'معول حديد', 'معول ألماس'][pk.tool] || '', bx + 35, by + 53, 13, '#fff', 'center', 66); }
+    else { ctx.globalAlpha = 0.5; icon(ctx, I.PICK_WOOD, bx + 17, by - 2, 36); ctx.globalAlpha = 1; txt(ctx, 'بيديك', bx + 35, by + 53, 13, '#fff', 'center'); }
     // bag button hint
     var ex = HB.x + 9 * (HB.s + HB.g) + 18;
     ctx.fillStyle = 'rgba(12,16,40,0.55)'; rrect(ctx, ex, by - 4, 70, 62, 14); ctx.fill();
     ctx.fillStyle = '#fff'; rrect(ctx, ex + 22, by + 6, 26, 26, 6); ctx.fill();
-    ctx.font = '700 17px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#1d2340'; ctx.fillText('E', ex + 35, by + 26);
-    txt(ctx, 'Craft', ex + 35, by + 52, 12, '#fff', 'center');
+    ctx.font = '700 17px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.direction = 'ltr'; ctx.fillStyle = '#1d2340'; ctx.fillText('E', ex + 35, by + 26);
+    txt(ctx, 'الصنع', ex + 35, by + 53, 13, '#fff', 'center');
     });
     // selected item name
     var cur = G.inv[G.sel];
@@ -1069,12 +1109,12 @@
     var tx = VW - 16, ty = 80;
     var env = BW.envAt(G.tod), night = env.night > 0.5;
     var depth = Math.max(0, Math.floor(P.y + P.h) - G.world.surf[clamp(Math.floor(P.x), 0, W - 1)]);
-    var where = depth > 3 ? 'Depth ' + depth + 'm' : BW.BIOME_LABEL[G.world.biomeAt(P.x)] || '';
-    var label = (night ? '☾ Night' : env.sunset > 0.3 ? '☀ Sunset' : '☀ Day') + '  ·  ' + where;
+    var where = depth > 3 ? 'العمق: ' + depth + ' م' : BW.BIOME_LABEL[G.world.biomeAt(P.x)] || '';
+    var label = (night ? '☾ ليل' : env.sunset > 0.3 ? '☀ غروب' : '☀ نهار') + '  ·  ' + where;
     cachedPanel(ctx, 'info', stars + '/' + max + label, VW - 200, 56, 196, 96, function (c) {
       c.fillStyle = 'rgba(12,16,40,0.55)'; rrect(c, VW - 196, 60, 182, 84, 14); c.fill();
       txt(c, '★ ' + stars + ' / ' + max, tx - 12, ty + 12, 24, '#ffcc00', 'right');
-      txt(c, label, tx - 12, ty + 44, 14, '#fff', 'right');
+      txtFit(c, label, tx - 12, ty + 45, 15, '#fff', 'right', 166);
     });
     // toasts
     drawToast(ctx);
@@ -1087,13 +1127,13 @@
     if (G.hint) {
       var ha = Math.min(1, G.hint.t * 2);
       ctx.globalAlpha = ha;
-      ctx.font = '700 20px Fredoka, sans-serif';
+      ctx.font = '700 20px Fredoka, sans-serif'; ctx.direction = dirOf(G.hint.s);
       var w = ctx.measureText(G.hint.s).width + 36;
       ctx.fillStyle = 'rgba(12,16,40,0.8)'; rrect(ctx, VW / 2 - w / 2, HB.y - 78, w, 40, 20); ctx.fill();
       txt(ctx, G.hint.s, VW / 2, HB.y - 51, 20, '#ffe066', 'center');
       ctx.globalAlpha = 1;
     }
-    if (G.savedFlash > 0) { ctx.globalAlpha = Math.min(1, G.savedFlash); txt(ctx, '✓ Saved', VW - 20, VH - 20, 16, '#9cf0b8', 'right'); ctx.globalAlpha = 1; }
+    if (G.savedFlash > 0) { ctx.globalAlpha = Math.min(1, G.savedFlash); txt(ctx, '✓ تم الحفظ', VW - 20, VH - 20, 16, '#9cf0b8', 'right'); ctx.globalAlpha = 1; }
   }
   function drawQuests(ctx) {
     var qs = questsFor(G.gm), s = G.stats, list = [], sig = G.gm + starCount();
@@ -1104,34 +1144,36 @@
     var i;
     var x = 14, y = 14, w = 360;
     ctx.fillStyle = 'rgba(12,16,40,0.6)'; rrect(ctx, x, y, w, list.length ? 46 + 78 + (list.length - 1) * 30 : 60, 16); ctx.fill();
-    txt(ctx, G.gm === 'creative' ? 'BUILD GOALS' : 'QUESTS', x + 16, y + 30, 18, '#ffcc00');
-    txt(ctx, starCount() + '/' + qs.length + ' ★', x + w - 16, y + 30, 16, '#fff', 'right');
-    if (!list.length) { txt(ctx, 'All done! You are a World Master!', x + 16, y + 52, 15, '#9cf0b8'); return; }
+    // Right-to-left layout: title and icons on the right, counters on the left.
+    txt(ctx, G.gm === 'creative' ? 'أهداف البناء' : 'المهام', x + w - 16, y + 31, 19, '#ffcc00', 'right');
+    txt(ctx, starCount() + '/' + qs.length + ' ★', x + 16, y + 30, 16, '#fff', 'left');
+    if (!list.length) { txt(ctx, 'أنجزت كل شيء! أنت سيّد العالم!', x + w - 16, y + 53, 16, '#9cf0b8', 'right'); return; }
     var q = list[0], v = Math.min(q.need, q.val(s));
     ctx.fillStyle = 'rgba(255,255,255,0.1)'; rrect(ctx, x + 8, y + 42, w - 16, 70, 12); ctx.fill();
-    icon(ctx, q.icon, x + 18, y + 52, 40);
-    wrapText(ctx, q.text, x + 68, y + 64, w - 90, 17);
-    ctx.fillStyle = 'rgba(0,0,0,0.35)'; rrect(ctx, x + 68, y + 90, w - 150, 12, 6); ctx.fill();
-    ctx.fillStyle = '#3ddc84'; rrect(ctx, x + 68, y + 90, Math.max(12, (w - 150) * v / q.need), 12, 6); ctx.fill();
-    txt(ctx, v + ' / ' + q.need, x + w - 20, y + 101, 14, '#fff', 'right');
+    icon(ctx, q.icon, x + w - 58, y + 52, 40);
+    wrapText(ctx, q.text, x + w - 68, y + 65, w - 90, 17, 'right');
+    var bw = w - 150, bx0 = x + w - 68 - bw, fw = Math.max(12, bw * v / q.need);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; rrect(ctx, bx0, y + 90, bw, 12, 6); ctx.fill();
+    ctx.fillStyle = '#3ddc84'; rrect(ctx, bx0 + bw - fw, y + 90, fw, 12, 6); ctx.fill();
+    txt(ctx, v + ' / ' + q.need, x + 18, y + 101, 14, '#fff', 'left');
     for (i = 1; i < list.length; i++) {
-      icon(ctx, list[i].icon, x + 18, y + 118 + (i - 1) * 30, 22);
-      ctx.globalAlpha = 0.8; txt(ctx, list[i].text, x + 48, y + 135 + (i - 1) * 30, 14, '#fff'); ctx.globalAlpha = 1;
+      icon(ctx, list[i].icon, x + w - 40, y + 118 + (i - 1) * 30, 22);
+      ctx.globalAlpha = 0.8; txtFit(ctx, list[i].text, x + w - 48, y + 135 + (i - 1) * 30, 15, '#fff', 'right', w - 64); ctx.globalAlpha = 1;
     }
   }
-  function wrapText(ctx, s, x, y, maxW, size) {
-    ctx.font = '700 ' + size + 'px Fredoka, sans-serif';
+  function wrapText(ctx, s, x, y, maxW, size, align) {
+    ctx.font = '700 ' + size + 'px Fredoka, sans-serif'; ctx.direction = dirOf(s);
     var words = s.split(' '), line = '', lines = [];
     for (var i = 0; i < words.length; i++) { var t = line ? line + ' ' + words[i] : words[i]; if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = words[i]; } else line = t; }
     lines.push(line);
     if (lines.length > 1) y -= 9;
-    for (i = 0; i < Math.min(2, lines.length); i++) txt(ctx, lines[i], x, y + i * 19, size, '#fff');
+    for (i = 0; i < Math.min(2, lines.length); i++) txt(ctx, lines[i], x, y + i * 20, size, '#fff', align);
   }
   function drawToast(ctx) {
     var t = G.toasts[0]; if (!t) return;
     var k = t.t < 0.3 ? t.t / 0.3 : t.t > t.dur - 0.4 ? (t.dur - t.t) / 0.4 : 1;
     var e = 1 - Math.pow(1 - clamp(k, 0, 1), 3);
-    var w = 560, h = 86, x = VW / 2 - w / 2, y = -h + e * (h + 16);
+    var w = 520, h = 86, x = VW / 2 - w / 2, y = -h + e * (h + 16);
     var pop = t.t < 0.5 ? 1 + Math.sin(t.t / 0.5 * Math.PI) * 0.06 : 1;
     ctx.save(); ctx.translate(VW / 2, y + h / 2); ctx.scale(pop, pop); ctx.translate(-VW / 2, -(y + h / 2));
     var grd = ctx.createLinearGradient(0, y, 0, y + h);
@@ -1139,12 +1181,12 @@
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; rrect(ctx, x, y + 6, w, h, 20); ctx.fill();
     ctx.fillStyle = grd; rrect(ctx, x, y, w, h, 20); ctx.fill();
     ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.3)'; rrect(ctx, x + 14, y + 11, 64, 64, 14); ctx.fill();
-    if (t.skin != null) { ctx.save(); ctx.translate(x + 46, y + 72); ctx.scale(0.85, 0.85); BW.drawPlayer(ctx, { walk: 0, walkAmt: 0, swing: 0, look: 0, skin: BW.SKINS[t.skin], held: 0 }); ctx.restore(); }
-    else if (t.icon) icon(ctx, t.icon, x + 22, y + 19, 48);
-    txt(ctx, (t.soft ? '' : '★ ') + t.title, x + 96, y + 36, 26, '#fff');
-    ctx.font = '700 17px Fredoka, sans-serif';
-    txt(ctx, t.text, x + 96, y + 64, 17, t.soft ? '#e8eeff' : '#5a2a00');
+    // Icon on the right, text right-aligned next to it (Arabic reads right to left).
+    ctx.fillStyle = 'rgba(255,255,255,0.3)'; rrect(ctx, x + w - 78, y + 11, 64, 64, 14); ctx.fill();
+    if (t.skin != null) { ctx.save(); ctx.translate(x + w - 46, y + 72); ctx.scale(-0.85, 0.85); BW.drawPlayer(ctx, { walk: 0, walkAmt: 0, swing: 0, look: 0, skin: BW.SKINS[t.skin], held: 0 }); ctx.restore(); }
+    else if (t.icon) icon(ctx, t.icon, x + w - 70, y + 19, 48);
+    txtFit(ctx, (t.soft ? '' : '★ ') + t.title, x + w - 96, y + 38, 26, '#fff', 'right', w - 116);
+    txtFit(ctx, t.text, x + w - 96, y + 67, 18, t.soft ? '#e8eeff' : '#5a2a00', 'right', w - 116);
     ctx.restore();
   }
   function drawConfetti(ctx) {
@@ -1168,7 +1210,7 @@
     G.cam.x = clamp(P.x - VTW / 2, 0, W - VTW); G.cam.y = clamp(P.y - VTH / 2, -2, H - VTH);
     rend.warm(G.cam.x, G.cam.y, VTW, VTH);
     G.saveT = 0; G.questT = 1;
-    K.reset(); M.left = M.right = false;
+    K.reset(); M.left = M.right = false; flyTap = false;
   }
   function toTitle() {
     G.mode = 'title';
@@ -1200,11 +1242,11 @@
     var qs = questsFor(G.gm), html = '';
     qs.forEach(function (q) {
       var d = !!G.done[q.id];
-      html += '<div class="q' + (d ? ' done' : '') + '"><img src="' + BW.iconURL(q.icon === BW.FLOWER ? B.FLOWER_RED : q.icon) + '"><span>' + q.text + '</span><b>' + (d ? '★' : Math.min(q.need, q.val(G.stats)) + '/' + q.need) + '</b></div>';
+      html += '<div class="q' + (d ? ' done' : '') + '"><img src="' + BW.iconURL(q.icon === BW.FLOWER ? B.FLOWER_RED : q.icon) + '"><span>' + q.text + '</span><b dir="ltr">' + (d ? '★' : Math.min(q.need, q.val(G.stats)) + '/' + q.need) + '</b></div>';
     });
     $('pauseQuests').innerHTML = html;
-    $('pauseStars').textContent = '★ ' + starCount() + ' / ' + qs.length;
-    $('pauseName').textContent = G.name + ' · ' + (G.gm === 'creative' ? 'Creative' : 'Survival');
+    $('pauseStars').textContent = '★ ' + ltr(starCount() + ' / ' + qs.length);
+    $('pauseName').textContent = G.name + ' · ' + (G.gm === 'creative' ? 'إبداع' : 'مغامرة');
   }
   window.addEventListener('keydown', function (e) {
     if (G.mode === 'pause' && (e.code === 'KeyP' || e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space') && !e.repeat) { e.preventDefault(); resume(); }
@@ -1218,7 +1260,7 @@
   function showMaster() {
     if (G.mode !== 'play') { G.masterShown = false; return; }
     G.mode = 'master';
-    $('masterStars').textContent = '★ ' + starCount() + ' / ' + questsFor(G.gm).length;
+    $('masterStars').textContent = '★ ' + ltr(starCount() + ' / ' + questsFor(G.gm).length);
     show(masterEl, true); SND.quest(); confettiBurst(); confettiBurst();
   }
   function closeMaster() { show(masterEl, false); G.mode = 'play'; K.reset(); }
@@ -1226,7 +1268,11 @@
   $('masterMenu').onclick = function () { show(masterEl, false); G.mode = 'play'; saveGame(); toTitle(); };
 
   // ----- title
-  function fmtTime(s) { var m = Math.round(s / 60); return m < 1 ? 'just started' : m + ' min played'; }
+  function fmtTime(s) {
+    var m = Math.round(s / 60);
+    if (m < 1) return 'بدأت للتو';
+    return 'لعبت ' + (m === 1 ? 'دقيقة واحدة' : m === 2 ? 'دقيقتين' : m <= 10 ? m + ' دقائق' : m + ' دقيقة');
+  }
   function buildTitle() {
     var wrap = $('slots'); wrap.innerHTML = '';
     for (var i = 1; i <= 3; i++) {
@@ -1235,13 +1281,13 @@
         var card = document.createElement('div');
         card.className = 'slot-card' + (i === selSlot ? ' sel' : '') + (m ? '' : ' empty');
         if (m) {
-          card.innerHTML = '<div class="sc-mode ' + m.gm + '">' + (m.gm === 'creative' ? 'Creative' : 'Survival') + '</div>' +
+          card.innerHTML = '<div class="sc-mode ' + m.gm + '">' + (m.gm === 'creative' ? 'إبداع' : 'مغامرة') + '</div>' +
             '<img class="sc-ic" src="' + BW.iconURL(m.gm === 'creative' ? B.WOOL + 4 : B.GRASS) + '">' +
-            '<div class="sc-name">' + escapeHTML(m.name) + '</div>' +
-            '<div class="sc-stars">★ ' + m.stars + ' / ' + m.max + '</div>' +
+            '<div class="sc-name">' + escapeHTML(fixName(m.name)) + '</div>' +
+            '<div class="sc-stars">★ <span dir="ltr">' + m.stars + ' / ' + m.max + '</span></div>' +
             '<div class="sc-time">' + fmtTime(m.play || 0) + '</div>' +
-            '<button class="sc-del" title="Delete world">✕</button>';
-        } else card.innerHTML = '<div class="sc-plus">+</div><div class="sc-name">New World</div><div class="sc-time">World ' + i + '</div>';
+            '<button class="sc-del" title="احذف العالم" aria-label="احذف العالم">✕</button>';
+        } else card.innerHTML = '<div class="sc-plus">+</div><div class="sc-name">عالم جديد</div><div class="sc-time">الخانة ' + i + '</div>';
         card.onclick = function (e) {
           if (e.target.classList.contains('sc-del')) { e.stopPropagation(); askDelete(i, card); return; }
           if (e.target.closest('.sc-confirm')) return;
@@ -1252,15 +1298,15 @@
       })(i);
     }
     var m2 = meta.slots[selSlot - 1];
-    $('playBtn').textContent = m2 ? '▶ Play ' + m2.name : '▶ New World';
-    $('totalStars').textContent = '★ ' + meta.totalStars + (meta.totalStars === 1 ? ' star' : ' stars') + ' earned';
+    $('playBtn').textContent = m2 ? '▶ العب: ' + fixName(m2.name) : '▶ عالم جديد';
+    $('totalStars').textContent = 'نجومك: ★ ' + meta.totalStars;
     drawSkinPreview();
   }
   function escapeHTML(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function askDelete(i, card) {
     var c = document.createElement('div');
     c.className = 'sc-confirm';
-    c.innerHTML = '<div>Delete this world?</div><button class="sg-btn yes">Delete</button><button class="sg-btn secondary no">Keep</button>';
+    c.innerHTML = '<div>نحذف هذا العالم؟</div><div><button class="sg-btn yes">احذف</button><button class="sg-btn secondary no">لا، أبقِه</button></div>';
     card.appendChild(c);
     c.querySelector('.yes').onclick = function (e) { e.stopPropagation(); store.remove('slot' + i); meta.slots[i - 1] = null; saveMeta(); SND.brk('stone'); buildTitle(); };
     c.querySelector('.no').onclick = function (e) { e.stopPropagation(); buildTitle(); };
@@ -1304,7 +1350,7 @@
     BW.drawPlayer(skinCtx, { walk: 0, walkAmt: 0, swing: 0, look: 0, skin: sk, held: 0 });
     skinCtx.filter = 'none';
     $('skinName').textContent = locked ? '🔒 ' + sk.name : sk.name;
-    $('skinInfo').textContent = locked ? 'Earn ' + sk.stars + ' ★ to unlock' : 'Outfit ' + (meta.skin + 1) + ' of ' + BW.SKINS.length;
+    $('skinInfo').textContent = locked ? 'اجمع ' + sk.stars + ' ★ لتفتحه' : 'الزي ' + (meta.skin + 1) + ' من ' + BW.SKINS.length;
   }
   function skinStep(d) {
     var n = BW.SKINS.length, i = meta.skin;
@@ -1406,7 +1452,7 @@
     $('stTable').className = 'station' + (G.nearTable ? ' on' : '');
     $('stFurnace').className = 'station' + (G.nearFurnace ? ' on' : '');
     var pk = bestPick();
-    $('invPick').innerHTML = pk.id ? '<img src="' + BW.iconURL(pk.id) + '"> Mining with: <b>' + BW.itemName(pk.id) + '</b>' : 'No pickaxe yet - craft one to mine stone!';
+    $('invPick').innerHTML = pk.id ? '<img src="' + BW.iconURL(pk.id) + '"> تحفر الآن بـ: <b>' + BW.itemName(pk.id) + '</b>' : 'ليس لديك معول بعد - اصنع واحدًا لتحفر الحجر!';
   }
   function renderCursor() {
     var c = G.cursor;
@@ -1426,29 +1472,29 @@
     var done = 0;
     for (var t = 0; t < (times || 1); t++) {
       if (!stationOK(r) || !hasIngredients(r)) break;
-      if (ITEMS[r.out].max === 1 && countItem(r.out) > 0) { tip('You already have a ' + BW.itemName(r.out) + '!'); break; }
+      if (ITEMS[r.out].max === 1 && countItem(r.out) > 0) { tip('لديك ' + BW.itemName(r.out) + ' بالفعل!'); break; }
       r.ing.forEach(function (g) { removeItem(g[0], g[1]); });
       var left = addItem(r.out, r.n);
       if (left) spawnItem(P.x + P.w / 2, P.y, r.out, left, P.face * 3, -4);
       G.stats.craft[r.out] = (G.stats.craft[r.out] || 0) + r.n;
       done++;
     }
-    if (done) { SND.craft(); checkQuests(); floatText(P.x + P.w / 2, P.y - 0.3, '+' + (r.n * done) + ' ' + BW.itemName(r.out), '#9cf0b8'); }
+    if (done) { SND.craft(); checkQuests(); floatText(P.x + P.w / 2, P.y - 0.3, plusN(r.n * done, BW.itemName(r.out)), '#9cf0b8'); }
     return done;
   }
   function recipeRow(r, idx) {
     var ok = stationOK(r), has = hasIngredients(r), can = ok && has;
     var row = document.createElement('div');
     row.className = 'crow' + (can ? ' can' : '');
-    var ing = r.ing.map(function (g) { var have = countItem(g[0]); return '<span class="ing' + (have >= g[1] ? ' ok' : '') + '"><img src="' + BW.iconURL(g[0] === BW.FLOWER ? B.FLOWER_RED : g[0]) + '" title="' + BW.itemName(g[0]) + '">' + Math.min(have, 99) + '/' + g[1] + '</span>'; }).join('');
-    var st = r.st ? '<span class="need' + (ok ? ' ok' : '') + '"><img src="' + BW.iconURL(r.st === 'table' ? B.TABLE : B.FURNACE) + '">' + (ok ? '' : 'near') + '</span>' : '';
-    row.innerHTML = '<img class="out" src="' + BW.iconURL(r.out) + '"><div class="cname">' + BW.itemName(r.out) + (r.n > 1 ? ' <small>×' + r.n + '</small>' : '') + '</div><div class="cing">' + ing + st + '</div><button class="cbtn">' + (can ? 'Craft' : '') + '</button>';
+    var ing = r.ing.map(function (g) { var have = countItem(g[0]); return '<span class="ing' + (have >= g[1] ? ' ok' : '') + '"><img src="' + BW.iconURL(g[0] === BW.FLOWER ? B.FLOWER_RED : g[0]) + '" title="' + BW.itemName(g[0]) + '"><bdi dir="ltr">' + Math.min(have, 99) + '/' + g[1] + '</bdi></span>'; }).join('');
+    var st = r.st ? '<span class="need' + (ok ? ' ok' : '') + '"><img src="' + BW.iconURL(r.st === 'table' ? B.TABLE : B.FURNACE) + '">' + (ok ? '' : 'قف قربه') + '</span>' : '';
+    row.innerHTML = '<img class="out" src="' + BW.iconURL(r.out) + '"><div class="cname">' + BW.itemName(r.out) + (r.n > 1 ? ' <small dir="ltr">×' + r.n + '</small>' : '') + '</div><div class="cing">' + ing + st + '</div><button class="cbtn">' + (can ? 'اصنع' : '') + '</button>';
     row.addEventListener('mousedown', function (e) {
       e.preventDefault();
       if (!can) {
         row.classList.remove('shake'); void row.offsetWidth; row.classList.add('shake');
         SND.bonk();
-        if (!ok) tip('Stand near a ' + (r.st === 'table' ? 'Crafting Table' : 'Furnace') + ' to make this');
+        if (!ok) tip('قف قرب ' + (r.st === 'table' ? 'طاولة الصنع' : 'الفرن') + ' لتصنع هذا');
         return;
       }
       var n = craft(r, e.shiftKey ? 10 : 1);
@@ -1467,14 +1513,14 @@
     // wool painter row
     var wr = document.createElement('div');
     wr.className = 'crow woolrow' + (countItem(B.WOOL) && countItem(I.DYE) ? ' can' : '');
-    var html = '<img class="out" src="' + BW.iconURL(B.WOOL + 1) + '"><div class="cname">Paint Wool<br><small>1 <img src="' + BW.iconURL(B.WOOL) + '"> + 1 <img src="' + BW.iconURL(I.DYE) + '"> (have ' + countItem(B.WOOL) + ' / ' + countItem(I.DYE) + ')</small></div><div class="swatches">';
+    var html = '<img class="out" src="' + BW.iconURL(B.WOOL + 1) + '"><div class="cname">لوّن الصوف<br><small><bdi dir="ltr">1 <img src="' + BW.iconURL(B.WOOL) + '"> + 1 <img src="' + BW.iconURL(I.DYE) + '"></bdi> (لديك <bdi dir="ltr">' + countItem(B.WOOL) + ' / ' + countItem(I.DYE) + '</bdi>)</small></div><div class="swatches">';
     wool.forEach(function (o) { html += '<button data-w="' + o.i + '" style="background:' + BW.WOOL_COLS[o.r.out - B.WOOL] + '" title="' + BW.itemName(o.r.out) + '"></button>'; });
     wr.innerHTML = html + '</div>';
     wr.querySelectorAll('button').forEach(function (b) {
       b.addEventListener('mousedown', function (e) {
         e.preventDefault(); e.stopPropagation();
         var r = BW.RECIPES[+b.getAttribute('data-w')];
-        if (!craft(r, e.shiftKey ? 10 : 1)) { SND.bonk(); tip('You need White Wool (from sheep) and Rainbow Dye (from flowers)'); }
+        if (!craft(r, e.shiftKey ? 10 : 1)) { SND.bonk(); tip('تحتاج صوفًا أبيض (من الخراف) وصبغة قوس قزح (من الأزهار)'); }
         else renderInv();
       });
     });
@@ -1493,8 +1539,12 @@
   activeSkinFix();
   toTitle();
   rend.warm(G.cam.x, G.cam.y, VTW, VTH);
-  Kit.muteButton();
+  var muteBtn = Kit.muteButton();
+  muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
+  muteBtn.title = 'الصوت (M)';
   Kit.loop(update, render);
+  // Cached HUD panels may have been drawn before the Arabic font finished loading: redraw them once it has.
+  try { if (document.fonts && document.fonts.load) document.fonts.load('700 20px Fredoka', 'عالم').then(function () { panelCache = {}; }, function () {}); } catch (e) { /* ignore */ }
   function persist() { if (G.slot && (G.mode === 'play' || G.mode === 'inv' || G.mode === 'pause' || G.mode === 'master')) saveGame(); }
   window.addEventListener('pagehide', persist);
   window.addEventListener('beforeunload', persist);

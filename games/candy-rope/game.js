@@ -15,7 +15,9 @@
   var view = Kit.fit(canvas, W, H, { maxDpr: 2, onResize: onResize });
   var ctx = view.ctx;
   var store = Kit.store('candy-rope');
-  Kit.muteButton();
+  var muteBtn = Kit.muteButton();
+  muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
+  muteBtn.title = 'الصوت (M)';
   var shake = Kit.shake();
 
   function $(id) { return document.getElementById(id); }
@@ -29,6 +31,10 @@
     bg = {};
   }
   onResize(view);
+  if (document.fonts && document.fonts.load) {
+    Promise.all([document.fonts.load('700 28px Fredoka', 'ب'), document.fonts.load('700 28px Fredoka', 'A')])
+      .then(function () { bg = {}; }, function () { /* ignore */ });
+  }
 
   /* ------------------------------------------------------------ saving */
   var prog = (function () {
@@ -41,6 +47,10 @@
     return p;
   })();
   function save() { store.set('prog', prog); }
+  // Arabic star counts (accusative): 1 -> نجمة واحدة, 2 -> نجمتين, 3-10 -> N نجوم, 11+ -> N نجمة
+  function nStars(n) { return n === 1 ? 'نجمة واحدة' : n === 2 ? 'نجمتين' : n >= 3 && n <= 10 ? n + ' نجوم' : n + ' نجمة'; }
+  // "a / b" kept left-to-right inside Arabic text
+  function frac(a, b) { return '<span dir="ltr">' + a + ' / ' + b + '</span>'; }
   function totalStars() { var s = 0; for (var i = 0; i < NL; i++) s += Math.max(0, prog.stars[i]); return s; }
   function boxOf(i) { for (var b = BOXES.length - 1; b >= 0; b--) if (i >= BOXES[b].from) return b; return 0; }
   function boxUnlocked(b) { return totalStars() >= BOXES[b].need; }
@@ -231,6 +241,8 @@
   function clearTimers() { G.timers.forEach(clearTimeout); G.timers = []; }
   function later(fn, ms) { G.timers.push(setTimeout(fn, ms)); }
 
+  function hasHl(L, what) { return !!(L.hl && (' ' + L.hl + ' ').indexOf(' ' + what + ' ') >= 0); }
+
   function toast(msg, ms) {
     var t = $('toast');
     t.textContent = msg; t.hidden = false;
@@ -245,7 +257,7 @@
   function refreshTitle() {
     var ts = totalStars(), done = 0;
     for (var i = 0; i < NL; i++) if (prog.stars[i] >= 0) done++;
-    $('tProgress').innerHTML = '<span class="st">&#9733; ' + ts + '</span> / ' + MAXSTARS + ' &nbsp;&middot;&nbsp; ' + done + ' / ' + NL + ' levels';
+    $('tProgress').innerHTML = '<span dir="ltr"><span class="st">&#9733; ' + ts + '</span> / ' + MAXSTARS + '</span> &nbsp;&middot;&nbsp; المراحل: ' + frac(done, NL);
     $('styleNew').hidden = !hasNewStyle();
   }
   function hasNewStyle() {
@@ -264,7 +276,7 @@
   }
   function openBoxes() {
     clearTimers(); G.state = 'boxes'; show('sBoxes');
-    $('bxStars').innerHTML = '&#9733; ' + totalStars() + ' / ' + MAXSTARS;
+    $('bxStars').innerHTML = frac('&#9733; ' + totalStars(), MAXSTARS);
     var list = $('bxList'); list.innerHTML = '';
     BOXES.forEach(function (b, bi) {
       var el = document.createElement('button');
@@ -273,10 +285,10 @@
       el.className = 'boxcard ' + b.theme + (open ? '' : ' locked');
       el.innerHTML = '<div class="art"><div class="bx"></div><div class="lid"></div></div>' +
         '<div class="bname">' + b.name + '</div>' +
-        '<div class="bstars">&#9733; ' + boxStars(bi) + ' / ' + (b.to - b.from) * 3 + '</div>' +
-        (open ? '' : '<div class="lock">&#128274; Collect ' + b.need + ' &#9733; to open</div>');
+        '<div class="bstars">' + frac('&#9733; ' + boxStars(bi), (b.to - b.from) * 3) + '</div>' +
+        (open ? '' : '<div class="lock">&#128274; يُفتح عند ' + nStars(b.need) + '</div>');
       el.addEventListener('click', function () {
-        if (!open) { SFX.lose(); toast('Collect ' + (b.need - totalStars()) + ' more stars to open!'); return; }
+        if (!open) { SFX.lose(); toast('ما زلت تحتاج إلى ' + nStars(b.need - totalStars()) + ' لفتحه!'); return; }
         SFX.click(); openLevels(bi);
       });
       list.appendChild(el);
@@ -286,7 +298,7 @@
     clearTimers(); G.state = 'levels'; G.box = bi; show('sLevels');
     var b = BOXES[bi];
     $('lvTitle').textContent = b.name;
-    $('lvStars').innerHTML = '&#9733; ' + boxStars(bi) + ' / ' + (b.to - b.from) * 3;
+    $('lvStars').innerHTML = frac('&#9733; ' + boxStars(bi), (b.to - b.from) * 3);
     var grid = $('lvGrid'); grid.innerHTML = '';
     var nxt = nextLevelToPlay();
     for (var i = b.from; i < b.to; i++) {
@@ -302,7 +314,7 @@
         }
         el.title = LEVELS[i].name;
         el.addEventListener('click', function () {
-          if (!un) { SFX.lose(); toast('Beat level ' + i + ' first!'); return; }
+          if (!un) { SFX.lose(); toast('أنهِ المرحلة ' + i + ' أولًا!'); return; }
           SFX.click(); startLevel(i);
         });
         grid.appendChild(el);
@@ -333,10 +345,10 @@
       }
       el.appendChild(cv);
       var sp = document.createElement('span');
-      sp.innerHTML = un ? it.name : '&#128274; &#9733; ' + it.need;
+      sp.innerHTML = un ? it.name : '<span dir="ltr">&#128274; &#9733; ' + it.need + '</span>';
       el.appendChild(sp);
       el.addEventListener('click', function () {
-        if (!un) { SFX.lose(); toast('Collect ' + it.need + ' stars to unlock ' + it.name + '!'); return; }
+        if (!un) { SFX.lose(); toast('«' + it.name + '» تُفتح عندما تجمع ' + nStars(it.need) + '!'); return; }
         prog[field] = i; save(); SFX.pop();
         buildPicks(id, list, field);
       });
@@ -384,16 +396,16 @@
     save();
     var after = totalStars();
     var unlocks = [];
-    BOXES.forEach(function (b, bi) { if (!boxWas[bi] && boxUnlocked(bi)) unlocks.push('&#127873; ' + b.name + ' unlocked!'); });
-    Art.CANDIES.forEach(function (c) { if (c.need > before && c.need <= after) unlocks.push('&#127852; New candy: ' + c.name + '!'); });
-    Art.HATS.forEach(function (c) { if (c.need > before && c.need <= after) unlocks.push('&#10024; New hat: ' + c.name + '!'); });
+    BOXES.forEach(function (b, bi) { if (!boxWas[bi] && boxUnlocked(bi)) unlocks.push('&#127873; فُتح ' + b.name + '!'); });
+    Art.CANDIES.forEach(function (c) { if (c.need > before && c.need <= after) unlocks.push('&#127852; حلوى جديدة: ' + c.name + '!'); });
+    Art.HATS.forEach(function (c) { if (c.need > before && c.need <= after) unlocks.push('&#10024; قبعة جديدة: ' + c.name + '!'); });
     G.win = { stars: s, best: s > Math.max(0, prev) && prev >= 0, first: prev < 0, unlocks: unlocks };
   }
   function showWinPanel() {
     G.panel = true; show('sWin');
     var s = G.win.stars;
-    $('wTitle').textContent = ['Yum!', 'Tasty!', 'Delicious!', 'PERFECT!'][s];
-    $('wLevel').textContent = 'Level ' + (G.level + 1) + ' · ' + LEVELS[G.level].name;
+    $('wTitle').textContent = ['أكلها!', 'لذيذ!', 'رائع!', 'مثالي!'][s];
+    $('wLevel').textContent = 'المرحلة ' + (G.level + 1) + ' · ' + LEVELS[G.level].name;
     var stars = $('wStars').children;
     for (var k = 0; k < 3; k++) stars[k].className = '';
     for (k = 0; k < s; k++) (function (k) { later(function () { stars[k].className = 'on'; SFX.winStar(k); shake.add(3); }, 250 + k * 280); })(k);
@@ -403,16 +415,16 @@
       later(function () { var d = document.createElement('div'); d.innerHTML = msg; u.appendChild(d); SFX.unlock(); }, 400 + s * 280 + j * 350);
     });
     var last = G.level + 1 >= NL;
-    $('wNext').innerHTML = last ? 'All done! &#127881;' : 'Next &#9654; <span class="sg-key">Enter</span>';
+    $('wNext').innerHTML = last ? 'انتهيت! &#127881;' : 'التالي &#9664; <span class="sg-key">Enter</span>';
   }
   function nextLevel() {
     SFX.click();
     var n = G.level + 1;
-    if (n >= NL) { openBoxes(); toast('You fed Munch every candy! Go for 3 stars everywhere!', 3500); return; }
+    if (n >= NL) { openBoxes(); toast('أطعمت قضّوم كل الحلوى! اجمع كل النجوم!', 3500); return; }
     if (levelUnlocked(n)) { startLevel(n); return; }
     openBoxes();
     var b = BOXES[boxOf(n)];
-    toast('Collect ' + (b.need - totalStars()) + ' more stars to open the ' + b.name + '!', 3200);
+    toast('ما زلت تحتاج إلى ' + nStars(b.need - totalStars()) + ' لفتح ' + b.name + '!', 3200);
   }
 
   function onLose() {
@@ -423,8 +435,8 @@
     G.panel = true; show('sFail');
     var w = G.world, i = G.level;
     var close = w.nearest < 150;
-    $('fTitle').textContent = close ? 'So close!' : ['Oh no!', 'Oops!', 'Whoops!'][(prog.fails[i] || 0) % 3];
-    $('fReason').textContent = w.reason === 'spikes' ? 'The candy hit the spikes!' : w.reason === 'float' ? 'The bubble floated away!' : 'The candy fell out of the box!';
+    $('fTitle').textContent = close ? 'كدت تنجح!' : ['يا خسارة!', 'أوه لا!', 'أوبس!'][(prog.fails[i] || 0) % 3];
+    $('fReason').textContent = w.reason === 'spikes' ? 'لمست الحلوى الأشواك!' : w.reason === 'float' ? 'طارت الفقاعة بعيدًا!' : 'سقطت الحلوى خارج الصندوق!';
     $('fSkip').hidden = !((prog.fails[i] || 0) >= 3 && prog.stars[i] < 0 && i + 1 < NL);
     $('fHint').hidden = !SOL[i];
   }
@@ -610,7 +622,7 @@
           SFX.star(e.n);
           burst(e.x, e.y, 16, { speed: 320, colors: ['#ffe14d', '#fff', '#ffb800'], type: 1, size: 7, g: 300, life: 0.7 });
           burst(e.x, e.y, 8, { speed: 120, color: '#fff', type: 2, size: 6, g: 0, life: 0.5 });
-          floatText(['Nice!', 'Great!', 'Super!'][clamp(e.n - 1, 0, 2)], e.x, e.y - 30, '#fff6a0', 30);
+          floatText(['حلو!', 'رائع!', 'خارق!'][clamp(e.n - 1, 0, 2)], e.x, e.y - 30, '#fff6a0', 30);
           if (main) G.flyers.push({ x0: e.x, y0: e.y, k: e.n - 1, t: 0 });
           shake.add(2);
           break;
@@ -621,7 +633,7 @@
         case 'bubble':
           SFX.bubble();
           burst(e.x, e.y, 10, { speed: 160, color: 'rgba(200,240,255,0.9)', size: 6, g: -100, life: 0.6 });
-          if (G.tipT <= 0 && main && LEVELS[G.level].tip && /bubble/i.test(LEVELS[G.level].tip)) G.tipT = 2;
+          if (G.tipT <= 0 && main && hasHl(LEVELS[G.level], 'bubble')) G.tipT = 2;
           break;
         case 'pop':
           SFX.pop();
@@ -660,7 +672,7 @@
           munchMood(m, 'eat'); m.sq = -0.25; m.sqv = 0; m.antv += 14;
           burst(e.x, e.y, 26, { speed: 420, colors: ['#ffe14d', '#fff', '#7ed957', '#ff6f91'], type: 2, size: 7, g: 250, life: 0.9 });
           burst(w.munch.x, w.munch.y - 40, 7, { speed: 180, angle: -Math.PI / 2, spread: 1.6, color: '#ff4f7a', type: 4, size: 9, g: -120, life: 1.3 });
-          floatText('YUM!', w.munch.x, w.munch.y - 110, '#ffffff', 48);
+          floatText('لذيذ!', w.munch.x, w.munch.y < 210 ? w.munch.y + 120 : w.munch.y - 110, '#ffffff', 48);
           shake.add(6);
           if (main) { G.state = 'won'; G.endT = 0; onWin(); }
           else G.titleRespawn = 2.2;
@@ -903,7 +915,7 @@
     for (i = 0; i < w.rings.length; i++) drawRing(w.rings[i]);
     for (i = 0; i < w.tramps.length; i++) drawTramp(w.tramps[i]);
     for (i = 0; i < w.spikes.length; i++) drawSpikes(w.spikes[i]);
-    var firstBlowerLevel = G.state === 'play' && w === G.world && LEVELS[G.level].tip && /puff/i.test(LEVELS[G.level].tip) && !w.actions;
+    var firstBlowerLevel = G.state === 'play' && w === G.world && hasHl(LEVELS[G.level], 'puff') && !w.actions;
     for (i = 0; i < w.blowers.length; i++) drawBlower(w.blowers[i], firstBlowerLevel);
     // Munch
     Art.drawStand(ctx, w.munch.x, w.munch.y + (munchScale - 1) * 56, theme);
@@ -933,7 +945,7 @@
       Art.drawCandy(ctx, c.x, c.y, c.rot, sk, ck, G.t);
       if (c.bubble) {
         drawBubbleAt(c.x, c.y, 44, G.t);
-        if (G.state === 'play' && w.bubbles.length && LEVELS[G.level].tip && /pop/i.test(LEVELS[G.level].tip) && c.bubbleT > 0.4) {
+        if (G.state === 'play' && w.bubbles.length && hasHl(LEVELS[G.level], 'pop') && c.bubbleT > 0.4) {
           var q = (G.t * 1.3) % 1;
           ctx.strokeStyle = 'rgba(255,255,255,' + (1 - q) + ')'; ctx.lineWidth = 4;
           ctx.beginPath(); ctx.arc(c.x, c.y, 50 + q * 30, 0, TAU); ctx.stroke();
@@ -966,7 +978,9 @@
     var ss = getStarSprite();
     pill(14, 12, 318, 56);
     ctx.fillStyle = '#fff'; ctx.font = '700 26px Fredoka, "Segoe UI", sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText('Level ' + (G.level + 1), 34, 41);
+    var lvTxt = 'المرحلة ' + (G.level + 1);
+    if (ctx.measureText(lvTxt).width > 140) ctx.font = '700 22px Fredoka, "Segoe UI", sans-serif';
+    ctx.fillText(lvTxt, 34, 43);
     for (var k = 0; k < 3; k++) {
       var p = HUD_SLOT(k);
       ctx.save(); ctx.translate(p.x, p.y);
@@ -1042,6 +1056,7 @@
       var key = Math.round(p.x / 30) + ',' + Math.round(p.y / 30);
       var off = (seen[key] || 0); seen[key] = off + 1;
       var x = p.x + off * 40, y = p.y - 44;
+      if (x < 370 && y < 120) y = 120; // keep the marker + label clear of the HUD pill
       var pulse = 1 + Math.sin(G.t * 6 + i) * 0.08;
       ctx.save(); ctx.translate(x, y); ctx.scale(pulse, pulse);
       ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#2b1238'; ctx.lineWidth = 4;
@@ -1049,7 +1064,7 @@
       ctx.beginPath(); ctx.moveTo(-8, 18); ctx.lineTo(0, 32); ctx.lineTo(8, 18); ctx.fill();
       ctx.fillStyle = '#2b1238'; ctx.fillText(String(i + 1), 0, 1);
       ctx.restore();
-      var lbl = it.a === 'cut' ? 'cut' : it.a === 'pop' ? 'pop' : 'puff' + (it.n > 1 ? ' x' + it.n : '');
+      var lbl = it.a === 'cut' ? 'اقطع' : it.a === 'pop' ? 'فرقع' : it.n === 2 ? 'انفخ مرتين' : it.n > 2 ? 'انفخ ' + it.n + ' مرات' : 'انفخ';
       ctx.font = '700 18px Fredoka, "Segoe UI", sans-serif';
       ctx.lineWidth = 5; ctx.strokeStyle = '#2b1238'; ctx.strokeText(lbl, x, y - 36);
       ctx.fillStyle = '#fff'; ctx.fillText(lbl, x, y - 36);
@@ -1096,6 +1111,7 @@
   function render() {
     var s = G.state;
     ctx.save();
+    ctx.direction = 'rtl'; // every canvas string is Arabic; all calls set textAlign explicitly
     if (s === 'title' || s === 'boxes' || s === 'levels' || s === 'style') {
       ctx.drawImage(getBg('cardboard'), 0, 0, W, H);
       drawTitleDeco();

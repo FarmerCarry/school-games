@@ -45,7 +45,7 @@
     { id: 'tiny', name: 'كرة صغيرة!', desc: 'كرة صغيرة وسريعة... ركّز!', color: '#4fc3f7', icon: 'tinyball',
       apply: function (P) { P.ballR *= 0.55; P.ballMass *= 0.7; } },
     { id: 'beach', name: 'كرة الشاطئ!', desc: 'خفيفة وتطير ببطء في الهواء', color: '#ff5fc8', icon: 'beach',
-      apply: function (P) { P.ballR *= 1.6; P.ballMass *= 0.35; P.ballGrav = 0.35; P.ballDrag = 0.9; P.ballRest = 0.85; P.ballSkin = 'beach'; } },
+      apply: function (P) { P.ballR *= 1.6; P.ballMass *= 0.35; P.ballGrav = 0.35; P.ballDrag = 0.6; P.ballRest = 0.85; P.ballSkin = 'beach'; } },
     { id: 'moon', name: 'جاذبية القمر!', desc: 'قفزات عالية جدًا... كأننا على القمر', color: '#b39ddb', icon: 'moon',
       apply: function (P) { P.grav *= 0.42; P.jumpMul = 0.74; P.sky = 'space'; } },
     { id: 'ice', name: 'ملعب جليدي!', desc: 'انتبه... كل شيء ينزلق!', color: '#8fe3ff', icon: 'ice',

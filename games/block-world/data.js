@@ -18,7 +18,7 @@
     STICK: 100, COAL: 101, COPPER_INGOT: 102, IRON_INGOT: 103, GOLD_INGOT: 104, DIAMOND: 105, DYE: 106,
     DOOR: 107, PICK_WOOD: 110, PICK_STONE: 111, PICK_IRON: 112, PICK_DIAMOND: 113
   };
-  var WOOL_NAMES = ['White', 'Red', 'Orange', 'Yellow', 'Lime', 'Green', 'Cyan', 'Blue', 'Purple', 'Pink', 'Black'];
+  var WOOL_NAMES = ['أبيض', 'أحمر', 'برتقالي', 'أصفر', 'ليموني', 'أخضر', 'سماوي', 'أزرق', 'بنفسجي', 'وردي', 'أسود'];
   var WOOL_COLS = ['#f4f4f4', '#e8413c', '#f89632', '#ffd93d', '#8ae03a', '#2f9e44', '#28c4d8', '#3b6fe0', '#9b4fe2', '#ff8fc8', '#2d2d36'];
   BW.B = B; BW.I = I; BW.WOOL_NAMES = WOOL_NAMES; BW.WOOL_COLS = WOOL_COLS;
 
@@ -38,53 +38,53 @@
     BLOCKS[id] = d;
     return d;
   }
-  def(B.AIR, { name: 'Air', solid: false, opaque: false, hard: 0, drop: 0, replace: true });
-  def(B.GRASS, { name: 'Grass', hard: 0.5, drop: B.DIRT, mat: 'dirt', cols: ['#5cc23c', '#8a5a36'] });
-  def(B.DIRT, { name: 'Dirt', hard: 0.45, mat: 'dirt', cols: ['#8a5a36', '#6e4527'] });
-  def(B.STONE, { name: 'Stone', hard: 1.4, tier: 1, mat: 'stone', cols: ['#8e8e96', '#76767e'] });
-  def(B.SAND, { name: 'Sand', hard: 0.4, mat: 'sand', cols: ['#f0d98c', '#dcc271'] });
-  def(B.TRUNK, { name: 'Tree', solid: false, opaque: false, hard: 1.0, drop: B.LOG, mat: 'wood', cols: ['#7a5230', '#553619'], noEdge: true });
-  def(B.LEAVES, { name: 'Leaves', solid: false, opaque: false, dim: 2, hard: 0.15, drop: 0, mat: 'leaf', cols: ['#3fa535', '#2a7a25', '#5fcf50'] });
-  def(B.LOG, { name: 'Log', hard: 1.0, mat: 'wood', cols: ['#7a5230', '#553619'] });
-  def(B.PLANKS, { name: 'Planks', hard: 0.9, mat: 'wood', cols: ['#c8955a', '#8f6334'] });
-  def(B.COAL_ORE, { name: 'Coal Ore', hard: 1.7, tier: 1, drop: I.COAL, mat: 'stone', cols: ['#8e8e96', '#2a2a2e'] });
-  def(B.COPPER_ORE, { name: 'Copper Ore', hard: 1.9, tier: 1, mat: 'stone', cols: ['#8e8e96', '#e07a3c'] });
-  def(B.IRON_ORE, { name: 'Iron Ore', hard: 2.3, tier: 2, mat: 'stone', cols: ['#8e8e96', '#e8c4a8'] });
-  def(B.GOLD_ORE, { name: 'Gold Ore', hard: 2.6, tier: 3, mat: 'stone', cols: ['#8e8e96', '#ffd23a'] });
-  def(B.DIAMOND_ORE, { name: 'Diamond Ore', hard: 3.2, tier: 3, drop: I.DIAMOND, mat: 'stone', cols: ['#8e8e96', '#4ef0e6'] });
-  def(B.BEDROCK, { name: 'Bedrock', hard: Infinity, tier: 99, drop: 0, mat: 'stone', cols: ['#333'] });
-  def(B.TORCH, { name: 'Torch', solid: false, opaque: false, hard: 0.05, light: 14, mat: 'wood', attach: true, cols: ['#ffcc33', '#8a5f38'] });
-  def(B.TABLE, { name: 'Crafting Table', hard: 0.9, mat: 'wood', cols: ['#c8955a', '#6a4526'] });
-  def(B.FURNACE, { name: 'Furnace', hard: 1.6, tier: 1, light: 6, mat: 'stone', cols: ['#8e8e96', '#ff8a2a'] });
-  def(B.GLASS, { name: 'Glass', opaque: false, hard: 0.4, mat: 'glass', cols: ['#dff6ff', '#a8dcf0'] });
-  def(B.BRICKS, { name: 'Bricks', hard: 1.6, tier: 1, mat: 'stone', cols: ['#b8483a', '#e8d8c8'] });
-  def(B.STONE_BRICKS, { name: 'Stone Bricks', hard: 1.6, tier: 1, mat: 'stone', cols: ['#9a9aa2', '#6b6b73'] });
-  def(B.DOOR_B, { name: 'Door', solid: false, opaque: false, hard: 0.8, drop: I.DOOR, mat: 'wood', support: true, animalSolid: true, cols: ['#b98549', '#6a4526'] });
-  def(B.DOOR_T, { name: 'Door', solid: false, opaque: false, hard: 0.8, drop: 0, mat: 'wood', animalSolid: true, cols: ['#b98549', '#6a4526'] });
-  def(B.LADDER, { name: 'Ladder', solid: false, opaque: false, hard: 0.4, mat: 'wood', climb: true, attach: true, cols: ['#b98549'] });
-  def(B.WATER, { name: 'Water', solid: false, opaque: false, hard: Infinity, tier: 99, drop: 0, liquid: true, replace: true, mat: 'water', cols: ['#3b8fe8', '#8fd0ff'] });
-  def(B.SNOW_GRASS, { name: 'Snowy Grass', hard: 0.5, drop: B.DIRT, mat: 'snow', cols: ['#f4fbff', '#8a5a36'] });
-  def(B.SNOW, { name: 'Snow', hard: 0.3, mat: 'snow', cols: ['#f4fbff', '#cfe4f4'] });
-  def(B.ICE, { name: 'Ice', opaque: false, hard: 0.5, mat: 'glass', cols: ['#bfe9ff', '#8fd0f4'] });
-  def(B.PINE_LEAVES, { name: 'Pine Leaves', solid: false, opaque: false, dim: 2, hard: 0.15, drop: 0, mat: 'leaf', cols: ['#23703a', '#f4fbff'] });
-  def(B.CACTUS, { name: 'Cactus', solid: false, opaque: false, hard: 0.4, mat: 'leaf', support: true, animalSolid: true, cols: ['#4caf3c', '#2f7a28'] });
-  def(B.TALLGRASS, { name: 'Tall Grass', solid: false, opaque: false, hard: 0.05, drop: 0, mat: 'leaf', support: true, replace: true, cols: ['#5cc23c'] });
-  def(B.FLOWER_RED, { name: 'Red Flower', solid: false, opaque: false, hard: 0.05, mat: 'leaf', support: true, cols: ['#ff4a4a', '#4fae33'] });
-  def(B.FLOWER_YELLOW, { name: 'Yellow Flower', solid: false, opaque: false, hard: 0.05, mat: 'leaf', support: true, cols: ['#ffe03a', '#4fae33'] });
-  def(B.FLOWER_BLUE, { name: 'Blue Flower', solid: false, opaque: false, hard: 0.05, mat: 'leaf', support: true, cols: ['#4a8cff', '#4fae33'] });
-  def(B.SAPLING, { name: 'Sapling', solid: false, opaque: false, hard: 0.05, mat: 'leaf', support: true, cols: ['#4fbf40', '#7a5230'] });
-  def(B.PUMPKIN, { name: 'Pumpkin', hard: 0.6, mat: 'wood', cols: ['#f28a1e', '#c9661a'] });
-  def(B.JACK, { name: 'Jack o\'Lantern', hard: 0.6, light: 13, mat: 'wood', cols: ['#f28a1e', '#ffe066'] });
-  def(B.MUSHROOM, { name: 'Glow Mushroom', solid: false, opaque: false, hard: 0.1, light: 9, mat: 'leaf', support: true, cols: ['#4ff0ff', '#b8fbff'] });
-  def(B.CLAY, { name: 'Clay', hard: 0.6, mat: 'dirt', cols: ['#9fa8c0', '#8a93ab'] });
-  def(B.LANTERN, { name: 'Lantern', hard: 0.6, light: 15, opaque: false, mat: 'glass', cols: ['#ffe066', '#555'] });
-  def(B.IRON_BLOCK, { name: 'Iron Block', hard: 2.5, tier: 1, mat: 'metal', cols: ['#e6e6ee', '#b8b8c4'] });
-  def(B.GOLD_BLOCK, { name: 'Gold Block', hard: 2.5, tier: 1, mat: 'metal', cols: ['#ffd84a', '#e8a820'] });
-  def(B.DIAMOND_BLOCK, { name: 'Diamond Block', hard: 2.5, tier: 1, mat: 'metal', cols: ['#6ff5ee', '#2fc6c0'] });
-  def(B.COPPER_BLOCK, { name: 'Copper Block', hard: 2.5, tier: 1, mat: 'metal', cols: ['#e8844a', '#b85a2a'] });
-  def(B.SANDSTONE, { name: 'Sandstone', hard: 1.0, tier: 1, mat: 'stone', cols: ['#e2c47a', '#c8a85e'] });
-  def(B.DEADBUSH, { name: 'Dry Bush', solid: false, opaque: false, hard: 0.05, drop: I.STICK, mat: 'leaf', support: true, replace: true, cols: ['#a07840'] });
-  for (var w = 0; w < 11; w++) def(B.WOOL + w, { name: WOOL_NAMES[w] + ' Wool', hard: 0.5, mat: 'wool', cols: [WOOL_COLS[w]] });
+  def(B.AIR, { name: 'هواء', solid: false, opaque: false, hard: 0, drop: 0, replace: true });
+  def(B.GRASS, { name: 'عشب', hard: 0.5, drop: B.DIRT, mat: 'dirt', cols: ['#5cc23c', '#8a5a36'] });
+  def(B.DIRT, { name: 'تراب', hard: 0.45, mat: 'dirt', cols: ['#8a5a36', '#6e4527'] });
+  def(B.STONE, { name: 'حجر', hard: 1.4, tier: 1, mat: 'stone', cols: ['#8e8e96', '#76767e'] });
+  def(B.SAND, { name: 'رمل', hard: 0.4, mat: 'sand', cols: ['#f0d98c', '#dcc271'] });
+  def(B.TRUNK, { name: 'جذع شجرة', solid: false, opaque: false, hard: 1.0, drop: B.LOG, mat: 'wood', cols: ['#7a5230', '#553619'], noEdge: true });
+  def(B.LEAVES, { name: 'أوراق شجر', solid: false, opaque: false, dim: 2, hard: 0.15, drop: 0, mat: 'leaf', cols: ['#3fa535', '#2a7a25', '#5fcf50'] });
+  def(B.LOG, { name: 'خشب', hard: 1.0, mat: 'wood', cols: ['#7a5230', '#553619'] });
+  def(B.PLANKS, { name: 'ألواح خشب', hard: 0.9, mat: 'wood', cols: ['#c8955a', '#8f6334'] });
+  def(B.COAL_ORE, { name: 'خام الفحم', hard: 1.7, tier: 1, drop: I.COAL, mat: 'stone', cols: ['#8e8e96', '#2a2a2e'] });
+  def(B.COPPER_ORE, { name: 'خام النحاس', hard: 1.9, tier: 1, mat: 'stone', cols: ['#8e8e96', '#e07a3c'] });
+  def(B.IRON_ORE, { name: 'خام الحديد', hard: 2.3, tier: 2, mat: 'stone', cols: ['#8e8e96', '#e8c4a8'] });
+  def(B.GOLD_ORE, { name: 'خام الذهب', hard: 2.6, tier: 3, mat: 'stone', cols: ['#8e8e96', '#ffd23a'] });
+  def(B.DIAMOND_ORE, { name: 'خام الألماس', hard: 3.2, tier: 3, drop: I.DIAMOND, mat: 'stone', cols: ['#8e8e96', '#4ef0e6'] });
+  def(B.BEDROCK, { name: 'صخر القاع', hard: Infinity, tier: 99, drop: 0, mat: 'stone', cols: ['#333'] });
+  def(B.TORCH, { name: 'شعلة', solid: false, opaque: false, hard: 0.05, light: 14, mat: 'wood', attach: true, cols: ['#ffcc33', '#8a5f38'] });
+  def(B.TABLE, { name: 'طاولة الصنع', hard: 0.9, mat: 'wood', cols: ['#c8955a', '#6a4526'] });
+  def(B.FURNACE, { name: 'فرن', hard: 1.6, tier: 1, light: 6, mat: 'stone', cols: ['#8e8e96', '#ff8a2a'] });
+  def(B.GLASS, { name: 'زجاج', opaque: false, hard: 0.4, mat: 'glass', cols: ['#dff6ff', '#a8dcf0'] });
+  def(B.BRICKS, { name: 'طوب', hard: 1.6, tier: 1, mat: 'stone', cols: ['#b8483a', '#e8d8c8'] });
+  def(B.STONE_BRICKS, { name: 'طوب حجري', hard: 1.6, tier: 1, mat: 'stone', cols: ['#9a9aa2', '#6b6b73'] });
+  def(B.DOOR_B, { name: 'باب', solid: false, opaque: false, hard: 0.8, drop: I.DOOR, mat: 'wood', support: true, animalSolid: true, cols: ['#b98549', '#6a4526'] });
+  def(B.DOOR_T, { name: 'باب', solid: false, opaque: false, hard: 0.8, drop: 0, mat: 'wood', animalSolid: true, cols: ['#b98549', '#6a4526'] });
+  def(B.LADDER, { name: 'سُلّم', solid: false, opaque: false, hard: 0.4, mat: 'wood', climb: true, attach: true, cols: ['#b98549'] });
+  def(B.WATER, { name: 'ماء', solid: false, opaque: false, hard: Infinity, tier: 99, drop: 0, liquid: true, replace: true, mat: 'water', cols: ['#3b8fe8', '#8fd0ff'] });
+  def(B.SNOW_GRASS, { name: 'عشب مثلج', hard: 0.5, drop: B.DIRT, mat: 'snow', cols: ['#f4fbff', '#8a5a36'] });
+  def(B.SNOW, { name: 'ثلج', hard: 0.3, mat: 'snow', cols: ['#f4fbff', '#cfe4f4'] });
+  def(B.ICE, { name: 'جليد', opaque: false, hard: 0.5, mat: 'glass', cols: ['#bfe9ff', '#8fd0f4'] });
+  def(B.PINE_LEAVES, { name: 'أوراق الصنوبر', solid: false, opaque: false, dim: 2, hard: 0.15, drop: 0, mat: 'leaf', cols: ['#23703a', '#f4fbff'] });
+  def(B.CACTUS, { name: 'صبّار', solid: false, opaque: false, hard: 0.4, mat: 'leaf', support: true, animalSolid: true, cols: ['#4caf3c', '#2f7a28'] });
+  def(B.TALLGRASS, { name: 'عشب طويل', solid: false, opaque: false, hard: 0.05, drop: 0, mat: 'leaf', support: true, replace: true, cols: ['#5cc23c'] });
+  def(B.FLOWER_RED, { name: 'زهرة حمراء', solid: false, opaque: false, hard: 0.05, mat: 'leaf', support: true, cols: ['#ff4a4a', '#4fae33'] });
+  def(B.FLOWER_YELLOW, { name: 'زهرة صفراء', solid: false, opaque: false, hard: 0.05, mat: 'leaf', support: true, cols: ['#ffe03a', '#4fae33'] });
+  def(B.FLOWER_BLUE, { name: 'زهرة زرقاء', solid: false, opaque: false, hard: 0.05, mat: 'leaf', support: true, cols: ['#4a8cff', '#4fae33'] });
+  def(B.SAPLING, { name: 'شتلة', solid: false, opaque: false, hard: 0.05, mat: 'leaf', support: true, cols: ['#4fbf40', '#7a5230'] });
+  def(B.PUMPKIN, { name: 'يقطينة', hard: 0.6, mat: 'wood', cols: ['#f28a1e', '#c9661a'] });
+  def(B.JACK, { name: 'فانوس اليقطين', hard: 0.6, light: 13, mat: 'wood', cols: ['#f28a1e', '#ffe066'] });
+  def(B.MUSHROOM, { name: 'فطر مضيء', solid: false, opaque: false, hard: 0.1, light: 9, mat: 'leaf', support: true, cols: ['#4ff0ff', '#b8fbff'] });
+  def(B.CLAY, { name: 'طين', hard: 0.6, mat: 'dirt', cols: ['#9fa8c0', '#8a93ab'] });
+  def(B.LANTERN, { name: 'فانوس', hard: 0.6, light: 15, opaque: false, mat: 'glass', cols: ['#ffe066', '#555'] });
+  def(B.IRON_BLOCK, { name: 'مكعب حديد', hard: 2.5, tier: 1, mat: 'metal', cols: ['#e6e6ee', '#b8b8c4'] });
+  def(B.GOLD_BLOCK, { name: 'مكعب ذهب', hard: 2.5, tier: 1, mat: 'metal', cols: ['#ffd84a', '#e8a820'] });
+  def(B.DIAMOND_BLOCK, { name: 'مكعب ألماس', hard: 2.5, tier: 1, mat: 'metal', cols: ['#6ff5ee', '#2fc6c0'] });
+  def(B.COPPER_BLOCK, { name: 'مكعب نحاس', hard: 2.5, tier: 1, mat: 'metal', cols: ['#e8844a', '#b85a2a'] });
+  def(B.SANDSTONE, { name: 'حجر رملي', hard: 1.0, tier: 1, mat: 'stone', cols: ['#e2c47a', '#c8a85e'] });
+  def(B.DEADBUSH, { name: 'شجيرة يابسة', solid: false, opaque: false, hard: 0.05, drop: I.STICK, mat: 'leaf', support: true, replace: true, cols: ['#a07840'] });
+  for (var w = 0; w < 11; w++) def(B.WOOL + w, { name: 'صوف ' + WOOL_NAMES[w], hard: 0.5, mat: 'wool', cols: [WOOL_COLS[w]] });
   for (var k = 0; k < 256; k++) if (!BLOCKS[k]) BLOCKS[k] = null;
   BW.BLOCKS = BLOCKS;
 
@@ -97,18 +97,18 @@
   });
   // blocks that are never items
   [B.TRUNK, B.DOOR_B, B.DOOR_T, B.WATER, B.BEDROCK, B.GRASS, B.SNOW_GRASS, B.TALLGRASS, B.DEADBUSH].forEach(function (id) { delete ITEMS[id]; });
-  item(I.STICK, { name: 'Stick', cols: ['#a07040'] });
-  item(I.COAL, { name: 'Coal', cols: ['#2a2a2e'] });
-  item(I.COPPER_INGOT, { name: 'Copper Bar', cols: ['#e8844a'] });
-  item(I.IRON_INGOT, { name: 'Iron Bar', cols: ['#e6e6ee'] });
-  item(I.GOLD_INGOT, { name: 'Gold Bar', cols: ['#ffd84a'] });
-  item(I.DIAMOND, { name: 'Diamond', cols: ['#6ff5ee'] });
-  item(I.DYE, { name: 'Rainbow Dye', cols: ['#ff5ab0', '#ffd93d', '#3b6fe0'] });
-  item(I.DOOR, { name: 'Door', place: B.DOOR_B, cols: ['#b98549'] });
-  item(I.PICK_WOOD, { name: 'Wooden Pickaxe', tool: 1, speed: 2, max: 1, cols: ['#c8955a'] });
-  item(I.PICK_STONE, { name: 'Stone Pickaxe', tool: 2, speed: 3, max: 1, cols: ['#9a9aa2'] });
-  item(I.PICK_IRON, { name: 'Iron Pickaxe', tool: 3, speed: 4.5, max: 1, cols: ['#e6e6ee'] });
-  item(I.PICK_DIAMOND, { name: 'Diamond Pickaxe', tool: 4, speed: 7, max: 1, cols: ['#6ff5ee'] });
+  item(I.STICK, { name: 'عصا', cols: ['#a07040'] });
+  item(I.COAL, { name: 'فحم', cols: ['#2a2a2e'] });
+  item(I.COPPER_INGOT, { name: 'سبيكة نحاس', cols: ['#e8844a'] });
+  item(I.IRON_INGOT, { name: 'سبيكة حديد', cols: ['#e6e6ee'] });
+  item(I.GOLD_INGOT, { name: 'سبيكة ذهب', cols: ['#ffd84a'] });
+  item(I.DIAMOND, { name: 'ألماسة', cols: ['#6ff5ee'] });
+  item(I.DYE, { name: 'صبغة قوس قزح', cols: ['#ff5ab0', '#ffd93d', '#3b6fe0'] });
+  item(I.DOOR, { name: 'باب', place: B.DOOR_B, cols: ['#b98549'] });
+  item(I.PICK_WOOD, { name: 'معول خشبي', tool: 1, speed: 2, max: 1, cols: ['#c8955a'] });
+  item(I.PICK_STONE, { name: 'معول حجري', tool: 2, speed: 3, max: 1, cols: ['#9a9aa2'] });
+  item(I.PICK_IRON, { name: 'معول حديدي', tool: 3, speed: 4.5, max: 1, cols: ['#e6e6ee'] });
+  item(I.PICK_DIAMOND, { name: 'معول ألماسي', tool: 4, speed: 7, max: 1, cols: ['#6ff5ee'] });
   BW.ITEMS = ITEMS;
   BW.WALL_NAMES = [null, 'dirt', 'stone', 'sandstone'];
 
@@ -150,55 +150,55 @@
   // Each: id, text, icon, need, val(stats) -> number
   function S(obj, id) { return (obj && obj[id]) || 0; }
   BW.QUESTS_SURVIVAL = [
-    { id: 'logs', text: 'Chop a tree (hold click on it)', icon: B.LOG, need: 4, val: function (s) { return S(s.got, B.LOG); } },
-    { id: 'planks', text: 'Craft Planks (press E)', icon: B.PLANKS, need: 4, val: function (s) { return S(s.craft, B.PLANKS); } },
-    { id: 'table', text: 'Craft a Crafting Table', icon: B.TABLE, need: 1, val: function (s) { return S(s.craft, B.TABLE); } },
-    { id: 'tableplace', text: 'Place your Crafting Table', icon: B.TABLE, need: 1, val: function (s) { return S(s.placed, B.TABLE); } },
-    { id: 'pickwood', text: 'Craft a Wooden Pickaxe', icon: I.PICK_WOOD, need: 1, val: function (s) { return S(s.craft, I.PICK_WOOD); } },
-    { id: 'stone', text: 'Dig down and mine Stone', icon: B.STONE, need: 10, val: function (s) { return S(s.got, B.STONE); } },
-    { id: 'pickstone', text: 'Craft a Stone Pickaxe', icon: I.PICK_STONE, need: 1, val: function (s) { return S(s.craft, I.PICK_STONE); } },
-    { id: 'coal', text: 'Find Coal', icon: I.COAL, need: 1, val: function (s) { return S(s.got, I.COAL); } },
-    { id: 'torch', text: 'Craft Torches', icon: B.TORCH, need: 4, val: function (s) { return S(s.craft, B.TORCH); } },
-    { id: 'torchplace', text: 'Light up a cave: place Torches', icon: B.TORCH, need: 5, val: function (s) { return S(s.placed, B.TORCH); } },
-    { id: 'furnace', text: 'Build a Furnace', icon: B.FURNACE, need: 1, val: function (s) { return S(s.craft, B.FURNACE); } },
-    { id: 'copper', text: 'Smelt a Copper Bar', icon: I.COPPER_INGOT, need: 1, val: function (s) { return S(s.craft, I.COPPER_INGOT); } },
-    { id: 'iron', text: 'Smelt Iron Bars', icon: I.IRON_INGOT, need: 3, val: function (s) { return S(s.craft, I.IRON_INGOT); } },
-    { id: 'pickiron', text: 'Craft an Iron Pickaxe', icon: I.PICK_IRON, need: 1, val: function (s) { return S(s.craft, I.PICK_IRON); } },
-    { id: 'glass', text: 'Make Glass from Sand', icon: B.GLASS, need: 1, val: function (s) { return S(s.craft, B.GLASS); } },
-    { id: 'shear', text: 'Get Wool from a Sheep (click it)', icon: B.WOOL, need: 1, val: function (s) { return s.sheared || 0; } },
-    { id: 'dye', text: 'Paint Wool a color', icon: B.WOOL + 7, need: 1, val: function (s) { var n = 0; for (var i = 1; i < 11; i++) n += S(s.craft, B.WOOL + i); return n; } },
-    { id: 'sapling', text: 'Plant a Sapling', icon: B.SAPLING, need: 1, val: function (s) { return S(s.placed, B.SAPLING); } },
-    { id: 'door', text: 'Build a house with a Door', icon: I.DOOR, need: 1, val: function (s) { return S(s.placed, B.DOOR_B); } },
-    { id: 'gold', text: 'Find Gold deep down', icon: B.GOLD_ORE, need: 1, val: function (s) { return S(s.got, B.GOLD_ORE); } },
-    { id: 'diamond', text: 'Find a Diamond!', icon: I.DIAMOND, need: 1, val: function (s) { return S(s.got, I.DIAMOND); } },
-    { id: 'pickdiamond', text: 'Craft a Diamond Pickaxe', icon: I.PICK_DIAMOND, need: 1, val: function (s) { return S(s.craft, I.PICK_DIAMOND); } },
-    { id: 'explore', text: 'Visit the desert, snow & beach', icon: B.CACTUS, need: 3, val: function (s) { var v = s.biomes || {}; return (v.desert ? 1 : 0) + (v.snow ? 1 : 0) + (v.beach ? 1 : 0); } },
-    { id: 'friends', text: 'Pet 5 animals (click them)', icon: B.FLOWER_RED, need: 5, val: function (s) { return s.pets || 0; } },
-    { id: 'bedrock', text: 'Dig all the way to Bedrock', icon: B.BEDROCK, need: 1, val: function (s) { return (s.maxDepth || 0) >= 144 ? 1 : 0; } },
-    { id: 'builder', text: 'Master builder: place 200 blocks', icon: B.BRICKS, need: 200, val: function (s) { return s.placedTotal || 0; } },
-    { id: 'diamondblock', text: 'Craft a shiny Diamond Block', icon: B.DIAMOND_BLOCK, need: 1, val: function (s) { return S(s.craft, B.DIAMOND_BLOCK); } }
+    { id: 'logs', text: 'اقطع شجرة (اضغط عليها مطوّلًا)', icon: B.LOG, need: 4, val: function (s) { return S(s.got, B.LOG); } },
+    { id: 'planks', text: 'اصنع ألواح خشب (اضغط E)', icon: B.PLANKS, need: 4, val: function (s) { return S(s.craft, B.PLANKS); } },
+    { id: 'table', text: 'اصنع طاولة الصنع', icon: B.TABLE, need: 1, val: function (s) { return S(s.craft, B.TABLE); } },
+    { id: 'tableplace', text: 'ضع طاولة الصنع على الأرض', icon: B.TABLE, need: 1, val: function (s) { return S(s.placed, B.TABLE); } },
+    { id: 'pickwood', text: 'اصنع معولًا خشبيًا', icon: I.PICK_WOOD, need: 1, val: function (s) { return S(s.craft, I.PICK_WOOD); } },
+    { id: 'stone', text: 'احفر للأسفل واجمع الحجر', icon: B.STONE, need: 10, val: function (s) { return S(s.got, B.STONE); } },
+    { id: 'pickstone', text: 'اصنع معولًا حجريًا', icon: I.PICK_STONE, need: 1, val: function (s) { return S(s.craft, I.PICK_STONE); } },
+    { id: 'coal', text: 'اعثر على الفحم', icon: I.COAL, need: 1, val: function (s) { return S(s.got, I.COAL); } },
+    { id: 'torch', text: 'اصنع مشاعل', icon: B.TORCH, need: 4, val: function (s) { return S(s.craft, B.TORCH); } },
+    { id: 'torchplace', text: 'أنِر كهفًا: ضع مشاعل', icon: B.TORCH, need: 5, val: function (s) { return S(s.placed, B.TORCH); } },
+    { id: 'furnace', text: 'ابنِ فرنًا', icon: B.FURNACE, need: 1, val: function (s) { return S(s.craft, B.FURNACE); } },
+    { id: 'copper', text: 'اصهر سبيكة نحاس في الفرن', icon: I.COPPER_INGOT, need: 1, val: function (s) { return S(s.craft, I.COPPER_INGOT); } },
+    { id: 'iron', text: 'اصهر سبائك حديد', icon: I.IRON_INGOT, need: 3, val: function (s) { return S(s.craft, I.IRON_INGOT); } },
+    { id: 'pickiron', text: 'اصنع معولًا حديديًا', icon: I.PICK_IRON, need: 1, val: function (s) { return S(s.craft, I.PICK_IRON); } },
+    { id: 'glass', text: 'اصنع زجاجًا من الرمل', icon: B.GLASS, need: 1, val: function (s) { return S(s.craft, B.GLASS); } },
+    { id: 'shear', text: 'خذ صوفًا من خروف (انقر عليه)', icon: B.WOOL, need: 1, val: function (s) { return s.sheared || 0; } },
+    { id: 'dye', text: 'لوّن الصوف', icon: B.WOOL + 7, need: 1, val: function (s) { var n = 0; for (var i = 1; i < 11; i++) n += S(s.craft, B.WOOL + i); return n; } },
+    { id: 'sapling', text: 'ازرع شتلة', icon: B.SAPLING, need: 1, val: function (s) { return S(s.placed, B.SAPLING); } },
+    { id: 'door', text: 'ابنِ بيتًا له باب', icon: I.DOOR, need: 1, val: function (s) { return S(s.placed, B.DOOR_B); } },
+    { id: 'gold', text: 'اعثر على الذهب في الأعماق', icon: B.GOLD_ORE, need: 1, val: function (s) { return S(s.got, B.GOLD_ORE); } },
+    { id: 'diamond', text: 'اعثر على ألماسة!', icon: I.DIAMOND, need: 1, val: function (s) { return S(s.got, I.DIAMOND); } },
+    { id: 'pickdiamond', text: 'اصنع معولًا ألماسيًا', icon: I.PICK_DIAMOND, need: 1, val: function (s) { return S(s.craft, I.PICK_DIAMOND); } },
+    { id: 'explore', text: 'زُر الصحراء والثلج والشاطئ', icon: B.CACTUS, need: 3, val: function (s) { var v = s.biomes || {}; return (v.desert ? 1 : 0) + (v.snow ? 1 : 0) + (v.beach ? 1 : 0); } },
+    { id: 'friends', text: 'داعب 5 حيوانات (انقر عليها)', icon: B.FLOWER_RED, need: 5, val: function (s) { return s.pets || 0; } },
+    { id: 'bedrock', text: 'احفر حتى تصل إلى صخر القاع', icon: B.BEDROCK, need: 1, val: function (s) { return (s.maxDepth || 0) >= 144 ? 1 : 0; } },
+    { id: 'builder', text: 'بنّاء ماهر: ضع 200 مكعب', icon: B.BRICKS, need: 200, val: function (s) { return s.placedTotal || 0; } },
+    { id: 'diamondblock', text: 'اصنع مكعب ألماس لامعًا', icon: B.DIAMOND_BLOCK, need: 1, val: function (s) { return S(s.craft, B.DIAMOND_BLOCK); } }
   ];
   BW.QUESTS_CREATIVE = [
-    { id: 'c50', text: 'Place 50 blocks', icon: B.PLANKS, need: 50, val: function (s) { return s.placedTotal || 0; } },
-    { id: 'cfly', text: 'Fly! (tap Space twice)', icon: B.GLASS, need: 1, val: function (s) { return s.flew ? 1 : 0; } },
-    { id: 'cwool', text: 'Build with 6 wool colors', icon: B.WOOL + 1, need: 6, val: function (s) { var n = 0; for (var i = 0; i < 11; i++) if (S(s.placed, B.WOOL + i)) n++; return n; } },
-    { id: 'cglass', text: 'Make a big window: 20 Glass', icon: B.GLASS, need: 20, val: function (s) { return S(s.placed, B.GLASS); } },
-    { id: 'clamp', text: 'Light it up: 10 Lanterns', icon: B.LANTERN, need: 10, val: function (s) { return S(s.placed, B.LANTERN); } },
-    { id: 'ctree', text: 'Plant a forest: 5 Saplings', icon: B.SAPLING, need: 5, val: function (s) { return S(s.placed, B.SAPLING); } },
-    { id: 'csky', text: 'Build up to the clouds', icon: B.SNOW, need: 1, val: function (s) { return (s.highestPlace || 999) <= 14 ? 1 : 0; } },
-    { id: 'cexplore', text: 'Visit all 5 lands', icon: B.CACTUS, need: 5, val: function (s) { var v = s.biomes || {}; var n = 0; for (var k in v) if (v[k]) n++; return n; } },
-    { id: 'cpets', text: 'Pet 5 animals', icon: B.FLOWER_RED, need: 5, val: function (s) { return s.pets || 0; } },
-    { id: 'c500', text: 'Mega builder: place 500 blocks', icon: B.GOLD_BLOCK, need: 500, val: function (s) { return s.placedTotal || 0; } }
+    { id: 'c50', text: 'ضع 50 مكعبًا', icon: B.PLANKS, need: 50, val: function (s) { return s.placedTotal || 0; } },
+    { id: 'cfly', text: 'طِر! (اضغط مسافة مرتين)', icon: B.GLASS, need: 1, val: function (s) { return s.flew ? 1 : 0; } },
+    { id: 'cwool', text: 'ابنِ بـ 6 ألوان من الصوف', icon: B.WOOL + 1, need: 6, val: function (s) { var n = 0; for (var i = 0; i < 11; i++) if (S(s.placed, B.WOOL + i)) n++; return n; } },
+    { id: 'cglass', text: 'نافذة كبيرة: ضع 20 زجاجًا', icon: B.GLASS, need: 20, val: function (s) { return S(s.placed, B.GLASS); } },
+    { id: 'clamp', text: 'أضئ المكان: ضع 10 فوانيس', icon: B.LANTERN, need: 10, val: function (s) { return S(s.placed, B.LANTERN); } },
+    { id: 'ctree', text: 'ازرع غابة: 5 شتلات', icon: B.SAPLING, need: 5, val: function (s) { return S(s.placed, B.SAPLING); } },
+    { id: 'csky', text: 'ابنِ حتى تصل إلى الغيوم', icon: B.SNOW, need: 1, val: function (s) { return (s.highestPlace || 999) <= 14 ? 1 : 0; } },
+    { id: 'cexplore', text: 'زُر الأراضي الخمس كلها', icon: B.CACTUS, need: 5, val: function (s) { var v = s.biomes || {}; var n = 0; for (var k in v) if (v[k]) n++; return n; } },
+    { id: 'cpets', text: 'داعب 5 حيوانات', icon: B.FLOWER_RED, need: 5, val: function (s) { return s.pets || 0; } },
+    { id: 'c500', text: 'بنّاء خارق: ضع 500 مكعب', icon: B.GOLD_BLOCK, need: 500, val: function (s) { return s.placedTotal || 0; } }
   ];
 
   // --------------------------------------------------------------- skins
   BW.SKINS = [
-    { name: 'Explorer', stars: 0, shirt: '#2fb5a8', pants: '#3b4a8c', hair: '#5a3418', skin: '#f2c49b', shoes: '#3a2a1a' },
-    { name: 'Sunny', stars: 3, shirt: '#ffcf2e', pants: '#2f6fd6', hair: '#d9772b', skin: '#ffd8b0', shoes: '#c43d3d' },
-    { name: 'Berry', stars: 8, shirt: '#b24de0', pants: '#2d2d4a', hair: '#1f1f2e', skin: '#c68a5e', shoes: '#ff6ab4' },
-    { name: 'Robo', stars: 14, shirt: '#b9c3cf', pants: '#6b7888', hair: '#6b7888', skin: '#dfe6ee', shoes: '#39424e', robot: true },
-    { name: 'Froggy', stars: 20, shirt: '#4cc94a', pants: '#2c8a3a', hair: '#4cc94a', skin: '#f2c49b', shoes: '#ffcc33', frog: true },
-    { name: 'Golden', stars: 30, shirt: '#ffd23a', pants: '#e8a820', hair: '#fff08a', skin: '#ffe4c0', shoes: '#b87a10', gold: true }
+    { name: 'رحّال', stars: 0, shirt: '#2fb5a8', pants: '#3b4a8c', hair: '#5a3418', skin: '#f2c49b', shoes: '#3a2a1a' },
+    { name: 'شمسي', stars: 3, shirt: '#ffcf2e', pants: '#2f6fd6', hair: '#d9772b', skin: '#ffd8b0', shoes: '#c43d3d' },
+    { name: 'توتة', stars: 8, shirt: '#b24de0', pants: '#2d2d4a', hair: '#1f1f2e', skin: '#c68a5e', shoes: '#ff6ab4' },
+    { name: 'روبو', stars: 14, shirt: '#b9c3cf', pants: '#6b7888', hair: '#6b7888', skin: '#dfe6ee', shoes: '#39424e', robot: true },
+    { name: 'ضفدوع', stars: 20, shirt: '#4cc94a', pants: '#2c8a3a', hair: '#4cc94a', skin: '#f2c49b', shoes: '#ffcc33', frog: true },
+    { name: 'الذهبي', stars: 30, shirt: '#ffd23a', pants: '#e8a820', hair: '#fff08a', skin: '#ffe4c0', shoes: '#b87a10', gold: true }
   ];
 
   // ============================================================ textures
@@ -497,6 +497,6 @@
     try { iconCache[id] = c.toDataURL(); } catch (e) { iconCache[id] = ''; }
     return iconCache[id];
   };
-  BW.itemName = function (id) { if (id === FLOWER) return 'Any Flower'; var it = ITEMS[id]; return it ? it.name : '?'; };
+  BW.itemName = function (id) { if (id === FLOWER) return 'أي زهرة'; var it = ITEMS[id]; return it ? it.name : '?'; };
   BW.maxStack = function (id) { var it = ITEMS[id]; return it && it.max ? it.max : 99; };
 })();

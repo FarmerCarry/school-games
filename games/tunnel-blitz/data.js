@@ -81,17 +81,29 @@
 
   // Mission descriptions (Arabic). Numbers stay as Western digits.
   function num(n) { return n.toLocaleString('en-US'); }
+  // Arabic counted nouns: 1 -> singular + "واحدة", 2 -> dual (no digit), 3-10 -> plural, 11+ -> singular.
+  // forms = [one, two, few, many]
+  TB.count = function (n, forms) {
+    if (n === 1) return forms[0];
+    if (n === 2) return forms[1];
+    var r = n % 100;
+    return num(n) + ' ' + (r >= 3 && r <= 10 ? forms[2] : forms[3]);
+  };
+  var ORBS = ['كرة ضوء واحدة', 'كرتَي ضوء', 'كرات ضوء', 'كرة ضوء'];
+  var TIMES = ['مرة واحدة', 'مرتين', 'مرات', 'مرة'];
+  var RUNS = ['جولة واحدة', 'جولتين', 'جولات', 'جولة'];
+  TB.ORB_FORMS = ORBS;
   TB.missionText = function (m) {
     switch (m.t) {
       case 'dist': return 'اقطع ' + num(m.n) + ' م في جولة واحدة';
       case 'zone': return 'صِل إلى المنطقة ' + m.n;
-      case 'orbsRun': return 'اجمع ' + m.n + ' كرة ضوء في جولة واحدة';
-      case 'closeRun': return 'مُرّ على الحافة ' + m.n + ' مرات في جولة واحدة';
-      case 'combo': return 'مُرّ على الحافة ' + m.n + ' مرات متتالية';
+      case 'orbsRun': return 'اجمع ' + TB.count(m.n, ORBS) + ' في جولة واحدة';
+      case 'closeRun': return 'مُرّ على الحافة ' + TB.count(m.n, TIMES) + ' في جولة واحدة';
+      case 'combo': return 'مُرّ على الحافة ' + TB.count(m.n, TIMES) + ' متتالية';
       case 'shield': return 'التقط فقاعة الدرع';
-      case 'runs': return 'العب ' + m.n + ' جولات';
-      case 'orbsTotal': return 'اجمع ' + num(m.n) + ' كرة ضوء بالمجموع';
-      case 'closeTotal': return 'مُرّ على الحافة ' + m.n + ' مرة بالمجموع';
+      case 'runs': return 'العب ' + TB.count(m.n, RUNS);
+      case 'orbsTotal': return 'اجمع ' + TB.count(m.n, ORBS) + ' بالمجموع';
+      case 'closeTotal': return 'مُرّ على الحافة ' + TB.count(m.n, TIMES) + ' بالمجموع';
     }
     return '';
   };

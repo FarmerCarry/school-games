@@ -29,14 +29,14 @@
   function starTotal() { var t = 0; for (var i = 0; i < LV.length; i++) t += save.stars[i] || 0; return t; }
 
   var OPPS = [
-    { id: 'easy', name: 'Rookie Rex', avatar: 'rex', label: 'Easy', color: '#5ff0a0', reward: 40, taunt: 'Woof! Let’s play!' },
-    { id: 'medium', name: 'Cool Coco', avatar: 'coco', label: 'Medium', color: '#ffc94d', reward: 80, taunt: 'Stay cool...' },
-    { id: 'hard', name: 'Finn the Shark', avatar: 'finn', label: 'Hard', color: '#ff6b8a', reward: 150, taunt: 'Chomp chomp!' }
+    { id: 'easy', name: 'الجرو ريكس', short: 'ريكس', avatar: 'rex', label: 'سهل', color: '#5ff0a0', reward: 40 },
+    { id: 'medium', name: 'القطة كوكو', short: 'كوكو', avatar: 'coco', label: 'متوسط', color: '#ffc94d', reward: 80 },
+    { id: 'hard', name: 'القرش زعنون', short: 'زعنون', avatar: 'finn', label: 'صعب', color: '#ff6b8a', reward: 150 }
   ];
   var LINES = {
-    easy: { pot: ['Woof! I did it!', 'Yay, a pot!', 'Wag wag!'], youPot: ['Wow, nice shot!', 'Ooh, good one!', 'Paws down, great!'], youFoul: ['Uh oh!', 'Oopsie!'], miss: ['Aww, missed!', 'Ruff luck...'], start: ['Let\u2019s play fetch... I mean pool!'] },
-    medium: { pot: ['Too cool.', 'Smooth.', 'Purr-fect!'], youPot: ['Not bad, kid.', 'Okay, okay!', 'Nice moves.'], youFoul: ['Tough break.', 'Meow-ch.'], miss: ['Hmph.', 'That was on purpose.'], start: ['Stay cool...'] },
-    hard: { pot: ['Chomp!', 'Too easy!', 'Shark attack!'], youPot: ['Hey, you\u2019re good!', 'Whoa, great shot!'], youFoul: ['Fresh meat!', 'My turn!'], miss: ['Fin-tastic... NOT.', 'Glub. Missed.'], start: ['Welcome to my tank!'] }
+    easy: { pot: ['هاو! نجحت!', 'ياي، دخلت!', 'ذيلي يهتز من الفرح!'], youPot: ['واو، ضربة رائعة!', 'أوه، جميلة!', 'مخالبي تصفّق لك!'], youFoul: ['أوه أوه!', 'أوبس!'], miss: ['آه، ضاعت!', 'هاو... حظ سيئ!'], start: ['هيا نلعب! هاو هاو!'] },
+    medium: { pot: ['بكل هدوء.', 'سهلة جدًا.', 'مياو، ممتاز!'], youPot: ['ليست سيئة!', 'حسنًا، حسنًا!', 'حركة جميلة.'], youFoul: ['حظ صعب!', 'مياو... أوبس!'], miss: ['همف!', 'قصدت ذلك!'], start: ['ابقَ هادئًا...'] },
+    hard: { pot: ['قضمة!', 'سهلة جدًا!', 'هجوم القرش!'], youPot: ['أنت ماهر!', 'واو، ضربة رائعة!'], youFoul: ['دوري الآن!', 'هاها، فرصتي!'], miss: ['بلوب... ضاعت!', 'زعنفتي انزلقت!'], start: ['أهلًا بك في حوضي!'] }
   };
   function say(key) {
     if (!G || G.kind !== 'cpu') return;
@@ -61,8 +61,22 @@
     ui.style.transform = 'translate(' + canvas.style.left + ',' + canvas.style.top + ') scale(' + v.scale + ')';
   } });
   var ctx = view.ctx;
+  // Arabic text must be drawn right-to-left, but pure number text ("3/10", "75%") left-to-right,
+  // so every fillText/strokeText on the game canvas picks its direction from the string.
+  var AR_RE = /[\u0600-\u06FF]/;
+  function autoDir(g) {
+    var f = g.fillText, st = g.strokeText;
+    g.fillText = function (t, x, y, m) { this.direction = AR_RE.test(t) ? 'rtl' : 'ltr'; return m === undefined ? f.call(this, t, x, y) : f.call(this, t, x, y, m); };
+    g.strokeText = function (t, x, y, m) { this.direction = AR_RE.test(t) ? 'rtl' : 'ltr'; return m === undefined ? st.call(this, t, x, y) : st.call(this, t, x, y, m); };
+    return g;
+  }
+  autoDir(ctx);
+  // keep "+40" / "3/10" in reading order inside Arabic sentences
+  function ltr(s) { return '\u2066' + s + '\u2069'; }
+  function shotsLeftTxt(n) { return n === 1 ? 'بقيت ضربة واحدة' : n === 2 ? 'بقيت ضربتان' : n === 0 ? 'لا ضربات' : 'بقيت ' + n + ' ضربات'; }
   var ptr = Kit.pointer(view);
-  Kit.muteButton();
+  var muteBtn = Kit.muteButton();
+  if (muteBtn && muteBtn.setAttribute) { muteBtn.setAttribute('aria-label', 'الصوت'); muteBtn.title = 'الصوت (M)'; }
   if (document.fonts && document.fonts.load) {
     document.fonts.load('700 20px Fredoka').then(function () {
       Art.buildNumberTextures(Art.font);
@@ -207,9 +221,9 @@
     wireState(G.st);
     if (kind === 'cpu') {
       G.opp = oppById(oppId);
-      G.players = [{ name: 'You', avatar: 'you', cpu: null }, { name: G.opp.name, avatar: G.opp.avatar, cpu: G.opp.id }];
+      G.players = [{ name: 'أنت', avatar: 'you', cpu: null }, { name: G.opp.name, avatar: G.opp.avatar, cpu: G.opp.id }];
     } else if (kind === 'pvp') {
-      G.players = [{ name: 'Player 1', avatar: 'you', cpu: null }, { name: 'Player 2', avatar: 'p2', cpu: null }];
+      G.players = [{ name: 'اللاعب 1', avatar: 'you', cpu: null }, { name: 'اللاعب 2', avatar: 'p2', cpu: null }];
     } else {
       G.players = [{ name: 'A', avatar: 'rex', cpu: 'medium' }, { name: 'B', avatar: 'coco', cpu: 'medium' }];
       G.turn = Math.random() < 0.5 ? 0 : 1;
@@ -219,7 +233,7 @@
     G.aim = 0;
     startTurn(true);
     if (kind !== 'demo') {
-      banner(kind === 'cpu' ? 'YOUR BREAK!' : 'PLAYER 1 BREAKS!', 'Smash the rack!', '#ffe45c');
+      banner(kind === 'cpu' ? 'أنت تبدأ!' : 'اللاعب 1 يبدأ!', 'حطّم المثلث بضربة قوية!', '#ffe45c');
       if (kind === 'cpu') { say('start'); G.say.t = -1.2; }
     }
   }
@@ -227,7 +241,7 @@
   function newTrick(idx) {
     G = baseSession('trick');
     G.level = idx; G.lv = LV[idx]; G.attempts = 1;
-    G.players = [{ name: 'You', avatar: 'you', cpu: null }];
+    G.players = [{ name: 'أنت', avatar: 'you', cpu: null }];
     resetTrick(true);
   }
   function resetTrick(first) {
@@ -240,7 +254,7 @@
     var cue = P.ball(G.st, 0), t = P.ball(G.st, G.lv.targets[0]);
     G.aim = Math.atan2(t.y - cue.y, t.x - cue.x);
     startTurn(true);
-    banner((first ? 'TRICK ' + (G.level + 1) : 'TRY #' + G.attempts), G.lv.name, '#5fe0ff');
+    banner((first ? 'التحدي ' + (G.level + 1) : 'المحاولة ' + G.attempts), G.lv.name, '#5fe0ff');
   }
 
   function match() { return { groups: G.groups, turn: G.turn, isBreak: G.isBreak }; }
@@ -306,16 +320,16 @@
       ring(pk.x, pk.y, a.n === 0 ? '#ff5a5f' : '#ffe45c', 10, 60, 0.45);
       fx.burst(pk.x, pk.y, { count: 22, colors: [col, '#ffe45c', '#fff', '#ff3b8d'], speed: 320, life: 0.7, size: 7, gravity: 300 });
       var cnt = 0; for (var i = 0; i < G.shotPots.length; i++) if (G.shotPots[i] !== 0) cnt++;
-      if (a.n === 0) float('Scratch!', pk.x, pk.y - 30, '#ff8a8a', 30);
+      if (a.n === 0) float('سقطت البيضاء!', pk.x, pk.y - 30, '#ff8a8a', 30);
       else if (G.kind !== 'demo') {
         var human = !G.players[G.turn].cpu;
         var own = G.kind === 'trick' ? G.lv.targets.indexOf(a.n) >= 0 : isOwnBall(a.n);
         if (own) {
           SFX.good(G.comboStreak + cnt);
           if (G.kind === 'cpu' && human) { float('+5', pk.x, pk.y - 30, '#ffe45c', 32); }
-          else float('Nice!', pk.x, pk.y - 30, '#fff', 28);
+          else float('رائع!', pk.x, pk.y - 30, '#fff', 28);
         }
-        if (cnt >= 2) float(cnt === 2 ? 'DOUBLE!' : cnt === 3 ? 'TRIPLE!' : 'MEGA POT!', P.CX, P.CY - 40, '#ff8cc6', 56, 1.3);
+        if (cnt >= 2) float(cnt === 2 ? 'كرتان معًا!' : cnt === 3 ? 'ثلاث كرات!' : 'ضربة خارقة!', P.CX, P.CY - 40, '#ff8cc6', 56, 1.3);
       }
     }
   }
@@ -618,7 +632,7 @@
     if (G.kind !== 'demo') {
       var bank = false;
       shot.pots.forEach(function (p) { if (p.n !== 0 && p.cush > 0 && !G.isBreak) bank = true; });
-      if (bank && !res.foul) float('BANK SHOT!', P.CX, P.CY + 30, '#5fe0ff', 46, 1.3);
+      if (bank && !res.foul) float('ضربة ارتداد!', P.CX, P.CY + 30, '#5fe0ff', 46, 1.3);
       if (!realPots.length && !res.foul && !G.isBreak) soClose(G.legal);
     }
     if (G.kind === 'cpu' && !res.win && !res.lose) {
@@ -642,7 +656,7 @@
       e8.on = true; e8.x = sp8.x; e8.y = sp8.y; e8.vx = e8.vy = e8.wx = e8.wy = 0;
       G.tray = G.tray.filter(function (t) { return t.n !== 8; });
       G.tray.forEach(function (t, i) { t.tx = 450 + i * 25.6; t.x = Math.min(t.x, t.tx + 1); });
-      float('8-ball back on the spot', P.FOOT_X, P.CY - 40, '#fff', 24);
+      float('عادت الكرة 8 إلى مكانها', P.FOOT_X - 60, P.CY - 40, '#fff', 24);
     }
     var wasBreak = G.isBreak;
     G.isBreak = false; G.kitchen = false;
@@ -656,7 +670,7 @@
       G.comboStreak = 0;
       startTurn();
       var nxt = G.players[G.turn];
-      banner('FOUL! ' + res.reason, (G.kind === 'cpu' && !nxt.cpu ? 'Ball in hand: drag the cue ball anywhere!' : nxt.name + ' gets ball in hand'), '#ff6b6b', 2.1);
+      banner('خطأ! ' + res.reason, (G.kind === 'cpu' && !nxt.cpu ? 'الكرة بيدك: اسحب البيضاء إلى أي مكان!' : 'الكرة البيضاء بيد ' + nxt.name), '#ff6b6b', 2.1);
       return;
     }
     G.inHand = false;
@@ -664,13 +678,13 @@
       G.comboStreak++;
       startTurn();
       if (res.assign) {
-        var mine = G.kind === 'cpu' && human ? 'You are ' : (name + ': ');
-        banner(mine + (res.assign === 'solid' ? 'SOLIDS!' : 'STRIPES!'), res.assign === 'solid' ? 'Balls 1 to 7' : 'Balls 9 to 15', '#ffe45c', 1.8);
+        var mine = G.kind === 'cpu' && human ? 'كراتك: ' : (name + ': ');
+        banner(mine + (res.assign === 'solid' ? 'السادة!' : 'المخطّطة!'), res.assign === 'solid' ? 'الكرات من 1 إلى 7' : 'الكرات من 9 إلى 15', '#ffe45c', 1.8);
       } else if (G.legal.length === 1 && G.legal[0] === 8) {
-        banner('GO FOR THE 8!', 'Sink the 8-ball to win!', '#ffe45c', 1.8);
+        banner('الآن الكرة 8!', 'أدخل الكرة 8 لتفوز!', '#ffe45c', 1.8);
       } else if (G.comboStreak >= 3 && human) {
-        float(G.comboStreak + ' IN A ROW!', P.CX, P.CY - 70, '#ffe45c', 44, 1.2);
-      } else if (!wasBreak && human) float('Shoot again!', P.CX, P.CY + 70, '#fff', 30, 1);
+        float(G.comboStreak + ' ضربات متتالية!', P.CX, P.CY - 70, '#ffe45c', 44, 1.2);
+      } else if (!wasBreak && human) float('اضرب مرة أخرى!', P.CX, P.CY + 70, '#fff', 30, 1);
       return;
     }
     G.comboStreak = 0;
@@ -679,9 +693,9 @@
     if (G.kind === 'demo') return;
     var np = G.players[G.turn];
     SFX.turn();
-    if (res.assign) banner(np.name + ': ' + (G.groups[G.turn] === 'solid' ? 'SOLIDS' : 'STRIPES'), 'Now it’s ' + (np.cpu ? np.name + '’s' : (G.kind === 'cpu' ? 'your' : np.name + '’s')) + ' turn', '#5fe0ff');
-    else if (G.kind === 'cpu') banner(np.cpu ? np.name.toUpperCase() + '’S TURN' : 'YOUR TURN!', '', np.cpu ? '#ff8cc6' : '#5fe0ff', 1.2);
-    else banner(np.name.toUpperCase() + '’S TURN', '', G.turn === 0 ? '#5fe0ff' : '#ff8cc6', 1.3);
+    if (res.assign) banner((G.kind === 'cpu' && !np.cpu ? 'كراتك' : np.name) + ': ' + (G.groups[G.turn] === 'solid' ? 'السادة' : 'المخطّطة'), (G.kind === 'cpu' && !np.cpu) ? 'دورك الآن!' : 'الدور الآن على ' + np.name, '#5fe0ff');
+    else if (G.kind === 'cpu') banner(np.cpu ? 'دور ' + np.name : 'دورك!', '', np.cpu ? '#ff8cc6' : '#5fe0ff', 1.2);
+    else banner('دور ' + np.name, '', G.turn === 0 ? '#5fe0ff' : '#ff8cc6', 1.3);
   }
 
   function soClose(targets) {
@@ -691,7 +705,7 @@
       if (!b.on || targets.indexOf(b.n) < 0) continue;
       for (var k = 0; k < P.pockets.length; k++) {
         var pk = P.pockets[k];
-        if (Kit.dist(b.x, b.y, pk.x, pk.y) < pk.r + 16) { float('So close!', b.x, b.y - 30, '#ffb3d9', 30, 1.2); return; }
+        if (Kit.dist(b.x, b.y, pk.x, pk.y) < pk.r + 16) { float('كادت تدخل!', b.x, b.y - 30, '#ffb3d9', 30, 1.2); return; }
       }
     }
   }
@@ -702,7 +716,7 @@
     var humanWon = G.kind === 'pvp' || !G.players[winner].cpu;
     if (humanWon) { SFX.cheer(); confettiBurst(160); shake.add(6); }
     else SFX.lose();
-    banner(G.players[winner].cpu ? G.players[winner].name.toUpperCase() + ' WINS' : (G.kind === 'cpu' ? 'YOU WIN!' : G.players[winner].name.toUpperCase() + ' WINS!'), reason || '', humanWon ? '#ffe45c' : '#9fdcff', 2);
+    banner(G.players[winner].cpu ? 'الفوز لـ' + G.players[winner].name : (G.kind === 'cpu' ? 'فزت!' : 'الفوز لـ' + G.players[winner].name + '!'), reason || '', humanWon ? '#ffe45c' : '#9fdcff', 2);
     // rewards
     G.badges = [];
     if (G.kind === 'cpu') {
@@ -711,10 +725,10 @@
         var first = !save.wins[o.id];
         save.wins[o.id] = (save.wins[o.id] || 0) + 1;
         G.coinsEarned += o.reward;
-        if (first) { G.coinsEarned += 100; G.badges.push('New trophy: beat ' + o.name + '!'); }
-        if (o.id === 'hard' && first) G.badges.push('Unlocked: Golden Shark cue!');
+        if (first) { G.coinsEarned += 100; G.badges.push('كأس جديد: هزمت ' + o.name + '!'); }
+        if (o.id === 'hard' && first) G.badges.push('فتحت عصا القرش الذهبي!');
         save.streak++;
-        if (save.streak > save.bestStreak) { save.bestStreak = save.streak; if (save.streak > 1) G.badges.push('New best streak: ' + save.streak + '!'); }
+        if (save.streak > save.bestStreak) { save.bestStreak = save.streak; if (save.streak > 1) G.badges.push('أفضل سلسلة فوز: ' + save.streak + '!'); }
       } else {
         save.losses[o.id] = (save.losses[o.id] || 0) + 1;
         save.streak = 0;
@@ -739,16 +753,16 @@
       if (stars > prev) save.stars[G.level] = stars;
       save.coins += G.coinsEarned;
       G.badges = [];
-      if (starTotal() === LV.length * 3 && prev < 3) G.badges.push('ALL 30 STARS! Galaxy table unlocked!');
+      if (starTotal() === LV.length * 3 && prev < 3) G.badges.push('كل النجوم الـ30! فتحت طاولة المجرّة!');
       persist();
       SFX.cheer(); confettiBurst(120); shake.add(5);
-      banner('AWESOME!', G.lv.name + ' done!', '#ffe45c', 1.4);
+      banner('مذهل!', 'أنجزت: ' + G.lv.name, '#ffe45c', 1.4);
       return;
     }
     if (r.status === 'fail') {
       G.phase = 'fail'; G.failT = 0;
       SFX.foul();
-      banner('MISSED!', r.reason, '#ff8a8a', 1.6);
+      banner('لم تنجح!', r.reason, '#ff8a8a', 1.6);
       soClose(G.lv.targets);
       return;
     }
@@ -756,8 +770,8 @@
     var cue = P.ball(G.st, 0);
     if (!cue.on) { G.phase = 'fail'; G.failT = 0; return; }
     var left = G.lv.shots - G.prog.shotsUsed;
-    if (shot.pots.length) float('Nice! ' + left + ' shot' + (left === 1 ? '' : 's') + ' left', P.CX, P.CY + 60, '#fff', 30);
-    else float(left + ' shot' + (left === 1 ? '' : 's') + ' left', P.CX, P.CY + 60, '#ffd0e6', 30);
+    if (shot.pots.length) float('رائع! ' + shotsLeftTxt(left), P.CX, P.CY + 60, '#fff', 30);
+    else float(shotsLeftTxt(left), P.CX, P.CY + 60, '#ffd0e6', 30);
     startTurn();
   }
 
@@ -1013,12 +1027,18 @@
     ctx.beginPath(); ctx.moveTo(-bw / 2 - 20, -bh / 2); ctx.lineTo(bw / 2 + 20, -bh / 2); ctx.lineTo(bw / 2, bh / 2); ctx.lineTo(-bw / 2, bh / 2); ctx.closePath(); ctx.fill();
     ctx.scale(s, s);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '700 56px ' + Art.font;
+    var fs = 56;
+    ctx.font = '700 ' + fs + 'px ' + Art.font;
+    while (fs > 30 && ctx.measureText(b.text).width > 780) { fs -= 2; ctx.font = '700 ' + fs + 'px ' + Art.font; }
     var ty = b.sub ? -14 : 0;
     ctx.lineWidth = 8; ctx.strokeStyle = '#2a1060'; ctx.lineJoin = 'round';
     ctx.strokeText(b.text, 0, ty);
     ctx.fillStyle = b.color; ctx.fillText(b.text, 0, ty);
-    if (b.sub) { ctx.font = '500 24px ' + Art.font; ctx.fillStyle = '#fff'; ctx.fillText(b.sub, 0, 36); }
+    if (b.sub) {
+      var ss = 24; ctx.font = '500 ' + ss + 'px ' + Art.font;
+      while (ss > 16 && ctx.measureText(b.sub).width > 780) { ss--; ctx.font = '500 ' + ss + 'px ' + Art.font; }
+      ctx.fillStyle = '#fff'; ctx.fillText(b.sub, 0, 36);
+    }
     ctx.restore();
   }
 
@@ -1074,7 +1094,7 @@
     ctx.fillText(pl.name, tx, y + 30);
     // group chip
     var g = G.groups[i];
-    var label = g === 'solid' ? 'SOLIDS' : g === 'stripe' ? 'STRIPES' : 'OPEN TABLE';
+    var label = g === 'solid' ? 'السادة' : g === 'stripe' ? 'المخطّطة' : 'لم تُحدَّد بعد';
     ctx.font = '700 15px ' + Art.font;
     var tw = ctx.measureText(label).width + 18;
     var cx = mirror ? tx - tw : tx;
@@ -1126,14 +1146,14 @@
   function drawVS() {
     var status = '';
     var pl = G.players[G.turn];
-    if (G.phase === 'cpu') status = G.cpu.stage === 'think' ? 'Thinking' + '...'.substr(0, 1 + ((time * 3) | 0) % 3) : 'Aiming...';
-    else if (G.phase === 'aim') status = G.inHand ? 'Ball in hand' : (G.kind === 'cpu' ? 'Your shot' : 'Shoot!');
+    if (G.phase === 'cpu') status = G.cpu.stage === 'think' ? 'يفكّر' + '...'.substr(0, 1 + ((time * 3) | 0) % 3) : 'يصوّب...';
+    else if (G.phase === 'aim') status = G.inHand ? 'الكرة بيدك' : (G.kind === 'cpu' ? 'دورك' : 'اضرب!');
     else if (G.phase === 'rolling' || G.phase === 'strike') status = '';
     ctx.save();
     ctx.translate(640, 58);
     ctx.fillStyle = '#ffe45c'; ctx.strokeStyle = '#2a1060'; ctx.lineWidth = 6; ctx.lineJoin = 'round';
     ctx.font = '700 34px ' + Art.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.strokeText('VS', 0, -12); ctx.fillText('VS', 0, -12);
+    ctx.strokeText('ضد', 0, -12); ctx.fillText('ضد', 0, -12);
     // turn arrow
     var dir = G.turn === 0 ? -1 : 1;
     if (G.phase !== 'over') {
@@ -1146,48 +1166,57 @@
   }
 
   function drawTrickHUD() {
-    var x = 170, y = 14, w = 940, h = 104;
+    // Arabic reads right-to-left: level title, name and hint sit on the right,
+    // shots / tries / target balls on the left.
+    var x = 170, y = 14, w = 940, h = 104, RX = x + w - 24;
     ctx.save();
-    ctx.fillStyle = 'rgba(30,20,80,0.92)'; Art.rr(ctx, x, y, w, h, 22); ctx.fill();
+    ctx.fillStyle = '#1e1450'; Art.rr(ctx, x, y, w, h, 22); ctx.fill();
     ctx.strokeStyle = '#5fe0ff'; ctx.lineWidth = 4; Art.rr(ctx, x, y, w, h, 22); ctx.stroke();
-    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'right';
     ctx.fillStyle = '#5fe0ff'; ctx.font = '700 20px ' + Art.font;
-    ctx.fillText('TRICK SHOT ' + (G.level + 1) + ' / ' + LV.length, x + 24, y + 26);
+    ctx.fillText('التحدي ' + ltr((G.level + 1) + '/' + LV.length), RX, y + 24);
     ctx.fillStyle = '#fff'; ctx.font = '700 32px ' + Art.font;
-    ctx.fillText(G.lv.name, x + 24, y + 58);
-    var hf = 17;
+    ctx.fillText(G.lv.name, RX, y + 56);
+    var hf = 18;
     ctx.font = '500 ' + hf + 'px ' + Art.font;
-    while (ctx.measureText(G.lv.hint).width > 540 && hf > 12) { hf--; ctx.font = '500 ' + hf + 'px ' + Art.font; }
-    ctx.fillStyle = 'rgba(255,255,255,0.88)';
-    ctx.fillText(G.lv.hint, x + 24, y + 88);
-    // right side: shots, tries, targets
-    ctx.textAlign = 'right';
+    while (ctx.measureText(G.lv.hint).width > 560 && hf > 12) { hf--; ctx.font = '500 ' + hf + 'px ' + Art.font; }
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillText(G.lv.hint, RX, y + 87);
+    // left side: shots and tries
+    ctx.textAlign = 'left';
     ctx.font = '700 15px ' + Art.font; ctx.fillStyle = '#ffe45c';
-    ctx.fillText('SHOTS LEFT', x + w - 24, y + 22);
+    ctx.fillText('الضربات المتبقية', x + 24, y + 22);
     var left = G.lv.shots - G.prog.shotsUsed;
     for (var i = 0; i < G.lv.shots; i++) {
-      var cx = x + w - 33 - i * 24;
+      var cx = x + 33 + i * 24;
       ctx.fillStyle = i < left ? '#fff' : 'rgba(255,255,255,0.18)';
       ctx.beginPath(); ctx.arc(cx, y + 48, 8.5, 0, 6.283); ctx.fill();
     }
     ctx.fillStyle = '#fff'; ctx.font = '700 16px ' + Art.font;
-    ctx.fillText('Try #' + G.attempts + '   \u2605 ' + (G.attempts === 1 ? 3 : G.attempts <= 3 ? 2 : 1), x + w - 24, y + 80);
+    ctx.fillText('المحاولة ' + G.attempts, x + 24, y + 80);
+    var tw = ctx.measureText('المحاولة ' + G.attempts).width;
+    var nst = G.attempts === 1 ? 3 : G.attempts <= 3 ? 2 : 1;
+    ctx.fillStyle = '#ffd21f';
+    ctx.fillText('\u2605'.repeat(nst), x + 24 + tw + 10, y + 80);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillText('\u2605'.repeat(3 - nst), x + 24 + tw + 10 + ctx.measureText('\u2605'.repeat(nst)).width, y + 80);
+    // target balls
     ctx.textAlign = 'center';
-    var nT = G.lv.targets.length, tRight = x + w - 200;
+    var nT = G.lv.targets.length, tL = x + 232;
     for (var t = 0; t < nT; t++) {
       var n = G.lv.targets[t], b = P.ball(G.st, n);
-      var tx = tRight - (nT - 1 - t) * 30;
+      var tx = tL + t * 30;
       Art.drawMiniBall(ctx, tx, y + 50, 12, n, b && b.on ? 1 : 0.25);
       if (b && !b.on) { ctx.fillStyle = '#3ddc84'; ctx.font = '700 18px ' + Art.font; ctx.fillText('\u2713', tx, y + 51); }
     }
     ctx.font = '700 15px ' + Art.font; ctx.fillStyle = '#ffe45c';
-    ctx.fillText(G.lv.eightLast ? 'POT (8 LAST)' : 'POT THESE', tRight - (nT - 1) * 15, y + 22);
+    ctx.fillText(G.lv.eightLast ? 'أدخلها، والـ8 أخيرًا' : 'أدخل هذه', tL + (nT - 1) * 15, y + 22);
     if (G.lv.avoid) {
-      var ax = tRight - (nT - 1) * 30 - 104;
+      var ax = tL + (nT - 1) * 30 + 104;
       Art.drawMiniBall(ctx, ax, y + 50, 12, G.lv.avoid[0], 1);
       ctx.strokeStyle = '#ff4d5a'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(ax - 12, y + 38); ctx.lineTo(ax + 12, y + 62); ctx.stroke();
-      ctx.fillStyle = '#ff8a8a'; ctx.fillText('NOT THIS', ax, y + 22);
+      ctx.fillStyle = '#ff8a8a'; ctx.fillText('ليس هذه!', ax, y + 22);
     }
     ctx.restore();
   }
@@ -1197,7 +1226,7 @@
     ctx.save();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '700 18px ' + Art.font; ctx.fillStyle = '#fff';
-    ctx.fillText('POWER', BAR.x + BAR.w / 2, BAR.y - 26);
+    ctx.fillText('القوة', BAR.x + BAR.w / 2, BAR.y - 26);
     ctx.fillStyle = 'rgba(0,0,0,0.45)'; Art.rr(ctx, BAR.x - 6, BAR.y - 6, BAR.w + 12, BAR.h + 12, 18); ctx.fill();
     ctx.fillStyle = '#1a1238'; Art.rr(ctx, BAR.x, BAR.y, BAR.w, BAR.h, 14); ctx.fill();
     var p = G.power;
@@ -1213,8 +1242,8 @@
       ctx.fillText(Math.round(p * 100) + '%', BAR.x + BAR.w / 2, BAR.y + BAR.h + 26);
     } else if (human && G.phase === 'aim') {
       ctx.font = '500 13px ' + Art.font; ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.fillText('drag', BAR.x + BAR.w / 2, BAR.y + BAR.h + 22);
-      ctx.fillText('down', BAR.x + BAR.w / 2, BAR.y + BAR.h + 38);
+      ctx.fillText('اسحب', BAR.x + BAR.w / 2, BAR.y + BAR.h + 22);
+      ctx.fillText('للأسفل', BAR.x + BAR.w / 2, BAR.y + BAR.h + 40);
     }
     // ticks
     ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2;
@@ -1226,7 +1255,7 @@
     ctx.save();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '700 18px ' + Art.font; ctx.fillStyle = '#fff';
-    ctx.fillText('SPIN', SPIN.x, SPIN.y - SPIN.r - 22);
+    ctx.fillText('الدوران', SPIN.x, SPIN.y - SPIN.r - 22);
     var g = ctx.createRadialGradient(SPIN.x - 16, SPIN.y - 18, 4, SPIN.x, SPIN.y, SPIN.r);
     g.addColorStop(0, '#ffffff'); g.addColorStop(0.7, '#eeeae0'); g.addColorStop(1, '#b8b2a4');
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(SPIN.x, SPIN.y, SPIN.r, 0, 6.283); ctx.fill();
@@ -1236,20 +1265,20 @@
     ctx.fillStyle = '#ff2d3a'; ctx.beginPath(); ctx.arc(dx, dy, 9, 0, 6.283); ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
     var lab = [];
-    if (G.spinY > 0.2) lab.push('Follow'); else if (G.spinY < -0.2) lab.push('Back spin');
-    if (G.spinX > 0.2) lab.push('Right'); else if (G.spinX < -0.2) lab.push('Left');
+    if (G.spinY > 0.2) lab.push('للأمام'); else if (G.spinY < -0.2) lab.push('للخلف');
+    if (G.spinX > 0.2) lab.push('يمين'); else if (G.spinX < -0.2) lab.push('يسار');
     ctx.font = '500 14px ' + Art.font; ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.fillText(lab.length ? lab.join(' + ') : 'click to set', SPIN.x, SPIN.y + SPIN.r + 20);
+    ctx.fillText(lab.length ? lab.join(' + ') : 'انقر لتختار', SPIN.x, SPIN.y + SPIN.r + 20);
     ctx.restore();
   }
 
   function drawTips() {
     if (G.phase !== 'aim' || G.players[G.turn].cpu) return;
     var tip = '';
-    if (G.isBreak && save.shots < 3 && !G.drag) tip = 'Aim at the balls, then click, drag back and let go!';
-    else if (G.inHand && !G.drag) tip = G.kitchen ? 'You can drag the white ball (left of the line)' : 'Ball in hand! Drag the white ball anywhere';
-    else if (save.shots < 4 && !G.drag) tip = 'Click and drag back, then let go to shoot!';
-    else if (G.drag && G.drag.type === 'shot' && save.shots < 6) tip = 'Let go to shoot (right-click cancels)';
+    if (G.isBreak && save.shots < 3 && !G.drag) tip = 'صوّب نحو الكرات، ثم انقر واسحب للخلف واترك!';
+    else if (G.inHand && !G.drag) tip = G.kitchen ? 'يمكنك سحب الكرة البيضاء (يسار الخط)' : 'الكرة بيدك! اسحب البيضاء إلى أي مكان';
+    else if (save.shots < 4 && !G.drag) tip = 'انقر واسحب للخلف، ثم اترك لتضرب!';
+    else if (G.drag && G.drag.type === 'shot' && save.shots < 6) tip = 'اترك لتضرب (النقرة اليمنى تلغي)';
     if (!tip) return;
     ctx.save();
     ctx.font = '700 20px ' + Art.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1296,7 +1325,8 @@
       var lv = document.createElement('div'); lv.className = 'lv'; lv.textContent = o.label; lv.style.background = o.color; b.appendChild(lv);
       var rec = document.createElement('div'); rec.className = 'rec';
       var w = save.wins[o.id] || 0, l = save.losses[o.id] || 0;
-      rec.textContent = w || l ? 'Wins ' + w + '  •  Losses ' + l : 'Win: +' + o.reward + ' coins';
+      if (w || l) rec.textContent = 'فوز ' + w + '  •  خسارة ' + l;
+      else rec.innerHTML = 'الجائزة: <span dir="ltr">+' + o.reward + '</span> عملة';
       b.appendChild(rec);
       if (w) {
         var t = document.createElement('div'); t.className = 'trophy';
@@ -1311,15 +1341,15 @@
       box.appendChild(b);
     });
   }
-  function updatePlayLabel() { $('btnPlay').innerHTML = '&#9654; PLAY vs ' + oppById(save.opp).name.split(' ').pop(); }
+  function updatePlayLabel() { $('btnPlay').innerHTML = '&#9654; العب ضد ' + oppById(save.opp).short; }
   function refreshTitle() {
     buildOpps(); updatePlayLabel();
     var cs = document.querySelectorAll('.coins'); for (var i = 0; i < cs.length; i++) cs[i].textContent = Kit.fmt(save.coins);
-    $('streakTxt').textContent = 'Best streak ' + save.bestStreak;
-    $('trickStars').textContent = '★ ' + starTotal() + '/' + (LV.length * 3);
+    $('streakTxt').textContent = 'أفضل سلسلة فوز: ' + save.bestStreak;
+    $('trickStars').innerHTML = '<span dir="ltr">★ ' + starTotal() + '/' + (LV.length * 3) + '</span>';
     aimLabels();
   }
-  function aimLabels() { $('btnAim').textContent = 'Aim help: ' + (save.aim === 'big' ? 'BIG' : 'PRO'); $('pAim').textContent = $('btnAim').textContent; }
+  function aimLabels() { $('btnAim').textContent = 'خط التصويب: ' + (save.aim === 'big' ? 'طويل' : 'قصير (محترف)'); $('pAim').textContent = $('btnAim').textContent; }
   function toggleAim() { save.aim = save.aim === 'big' ? 'pro' : 'big'; store.set('aim', save.aim); aimLabels(); }
 
   function startCpu() { newMatch('cpu', save.opp); show('game'); }
@@ -1351,7 +1381,7 @@
       }
       g.appendChild(b);
     });
-    $('lvStars').textContent = starTotal() + ' / ' + (LV.length * 3);
+    $('lvStars').textContent = starTotal() + '/' + (LV.length * 3);
   }
   on('lvBack', function () { show('title'); });
 
@@ -1390,9 +1420,9 @@
       b.appendChild(c);
       var nm = document.createElement('div'); nm.className = 'in'; nm.textContent = it.name; b.appendChild(nm);
       var pr = document.createElement('div');
-      if (eq) { pr.className = 'pr eqd'; pr.textContent = 'EQUIPPED'; }
-      else if (owned) { pr.className = 'pr own'; pr.textContent = 'USE'; }
-      else if (it.trophy) { pr.className = 'pr lock'; pr.textContent = it.trophy === 'hard' ? 'Beat Finn!' : 'Get 30 ★'; }
+      if (eq) { pr.className = 'pr eqd'; pr.textContent = 'مُختار ✓'; }
+      else if (owned) { pr.className = 'pr own'; pr.textContent = 'استخدم'; }
+      else if (it.trophy) { pr.className = 'pr lock'; pr.textContent = it.trophy === 'hard' ? 'اهزم زعنون!' : 'اجمع 30 ★'; }
       else { pr.className = 'pr'; pr.innerHTML = '<span class="coin" style="width:18px;height:18px"></span>' + it.price; }
       b.appendChild(pr);
       b.addEventListener('click', function (e) {
@@ -1433,19 +1463,19 @@
     var t = $('oTitle');
     var win = G.players[G.winner];
     if (G.kind === 'cpu') {
-      t.textContent = humanWon ? 'YOU WIN!' : win.name.toUpperCase() + ' WINS';
+      t.textContent = humanWon ? 'فزت!' : 'الفوز لـ' + win.name;
       t.className = humanWon ? '' : 'lose';
       var left = G.groups[0] ? Rules.remaining(G.st, G.groups[0]) : 7;
-      $('oSub').textContent = humanWon ? (G.opp.id === 'hard' ? 'You out-sharked the shark!' : 'You beat ' + G.opp.name + '!') :
-        (G.loseReason ? G.loseReason + ' ' : '') + (left <= 2 ? 'So close! Rematch?' : 'You’ll get ’em next time!');
+      $('oSub').textContent = humanWon ? (G.opp.id === 'hard' ? 'تفوّقت على القرش نفسه!' : 'هزمت ' + G.opp.name + '!') :
+        (G.loseReason ? G.loseReason + ' ' : '') + (left <= 2 ? 'كدت تفوز! مباراة أخرى؟' : 'ستفوز في المرة القادمة!');
     } else {
-      t.textContent = win.name.toUpperCase() + ' WINS!'; t.className = '';
-      $('oSub').textContent = G.loseReason ? G.loseReason : 'What a match!';
+      t.textContent = 'الفوز لـ' + win.name + '!'; t.className = '';
+      $('oSub').textContent = G.loseReason ? G.loseReason : 'يا لها من مباراة!';
     }
     var c = $('oAvatar'), g = c.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, 240, 240); g.scale(3, 3);
     Art.drawAvatar(g, 40, 40, 38, G.kind === 'cpu' && !humanWon ? win.avatar : win.avatar, humanWon ? 'wow' : '');
-    $('oEarn').innerHTML = '<span class="coin"></span> +' + G.coinsEarned + ' coins';
+    $('oEarn').innerHTML = '<span class="coin"></span> <bdi dir="ltr">+' + G.coinsEarned + '</bdi> عملة';
     $('oBadges').innerHTML = (G.badges || []).map(function (b) { return '<div class="badge">' + b + '</div>'; }).join('');
     show('over');
   }
@@ -1454,13 +1484,13 @@
   // ---- trick done
   function showDone() {
     var s = G.newStars;
-    $('dTitle').textContent = s === 3 ? 'PERFECT!' : 'Trick Complete!';
+    $('dTitle').textContent = s === 3 ? 'ممتاز!' : 'أنجزت التحدي!';
     $('dStars').innerHTML = STAR_SVG(s > 0) + STAR_SVG(s > 1) + STAR_SVG(s > 2);
     var svgs = $('dStars').querySelectorAll('svg');
     for (var i = 0; i < svgs.length; i++) svgs[i].style.animationDelay = (i * 0.25) + 's';
     for (i = 0; i < s; i++) (function (k) { setTimeout(function () { SFX.star(k); }, 250 * k + 100); })(i);
-    $('dSub').textContent = G.attempts === 1 ? 'First try! Amazing!' : 'Done in ' + G.attempts + ' tries.' + (s < 3 ? ' Replay it first try for 3 stars!' : '');
-    $('dEarn').innerHTML = G.coinsEarned ? '<span class="coin"></span> +' + G.coinsEarned + ' coins' : '';
+    $('dSub').textContent = G.attempts === 1 ? 'من أول محاولة! مذهل!' : 'أنجزته في ' + (G.attempts === 2 ? 'محاولتين' : G.attempts + (G.attempts <= 10 ? ' محاولات' : ' محاولة')) + '.' + (s < 3 ? ' أعده من أول محاولة لتربح 3 نجوم!' : '');
+    $('dEarn').innerHTML = G.coinsEarned ? '<span class="coin"></span> <bdi dir="ltr">+' + G.coinsEarned + '</bdi> عملة' : '';
     $('dBadges').innerHTML = (G.badges || []).map(function (b) { return '<div class="badge">' + b + '</div>'; }).join('');
     $('dNext').style.display = G.level < LV.length - 1 ? '' : 'none';
     show('done');
@@ -1474,7 +1504,7 @@
     if (screen === 'title') {
       if (k.pressed('Enter') || k.pressed('Space')) startCpu();
       else if (k.pressed('ArrowLeft') || k.pressed('ArrowRight')) {
-        var i = OPPS.indexOf(oppById(save.opp)) + (k.pressed('ArrowLeft') ? -1 : 1);
+        var i = OPPS.indexOf(oppById(save.opp)) + (k.pressed('ArrowLeft') ? 1 : -1);
         save.opp = OPPS[(i + OPPS.length) % OPPS.length].id; store.set('opp', save.opp); SFX.click(); buildOpps(); updatePlayLabel();
       }
     } else if (screen === 'game') {

@@ -58,19 +58,19 @@
   <ellipse cx="306" cy="35" rx="8" ry="4" fill="#4fa83a" transform="rotate(-30 306 35)"/>
   <circle cx="316" cy="82" r="4" fill="#ff8fb1"/>
 
-  <!-- title -->
-  <g font-family="'Fredoka','Segoe UI Rounded','Arial Rounded MT Bold','Trebuchet MS',sans-serif" font-weight="700" text-anchor="middle">
-    <text x="112" y="84" font-size="74" fill="#2a1206" stroke="#2a1206" stroke-width="12" stroke-linejoin="round" transform="rotate(-6 112 62)">FIRE</text>
-    <text x="112" y="84" font-size="74" fill="url(#fireTxt)" transform="rotate(-6 112 62)">FIRE</text>
-    <text x="204" y="76" font-size="48" fill="#3a2400" stroke="#3a2400" stroke-width="10" stroke-linejoin="round">&amp;</text>
-    <text x="204" y="76" font-size="48" fill="#ffd84a">&amp;</text>
-    <text x="296" y="84" font-size="74" fill="#07275a" stroke="#07275a" stroke-width="12" stroke-linejoin="round" transform="rotate(6 296 62)">ICE</text>
-    <text x="296" y="84" font-size="74" fill="url(#iceTxt)" transform="rotate(6 296 62)">ICE</text>
+  <!-- title (Arabic, reads right-to-left: النار on the right over the fire kid) -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
+    <text x="300" y="92" font-size="70" fill="#2a1206" stroke="#2a1206" stroke-width="12" stroke-linejoin="round" transform="rotate(5 300 66)">النار</text>
+    <text x="300" y="92" font-size="70" fill="url(#fireTxt)" transform="rotate(5 300 66)">النار</text>
+    <text x="206" y="80" font-size="46" fill="#3a2400" stroke="#3a2400" stroke-width="10" stroke-linejoin="round">و</text>
+    <text x="206" y="80" font-size="46" fill="#ffd84a">و</text>
+    <text x="106" y="92" font-size="60" fill="#07275a" stroke="#07275a" stroke-width="12" stroke-linejoin="round" transform="rotate(-5 106 66)">الجليد</text>
+    <text x="106" y="92" font-size="60" fill="url(#iceTxt)" transform="rotate(-5 106 66)">الجليد</text>
   </g>
 
   <!-- floating gems -->
-  <use href="#gem" x="40" y="128" color="#ff3b2f" transform="rotate(-10 40 128)"/>
-  <use href="#gem" x="362" y="128" color="#1fa2ff" transform="rotate(10 362 128)"/>
+  <use href="#gem" x="40" y="138" color="#1fa2ff" transform="rotate(-10 40 138)"/>
+  <use href="#gem" x="362" y="138" color="#ff3b2f" transform="rotate(10 362 138)"/>
   <use href="#gem" x="200" y="150" color="#ffd230"/>
 
   <!-- floor -->
@@ -84,17 +84,17 @@
     <line x1="280" y1="336" x2="280" y2="360"/><line x1="360" y1="336" x2="360" y2="360"/><line x1="80" y1="360" x2="80" y2="400"/><line x1="320" y1="360" x2="320" y2="400"/>
   </g>
   <!-- pools -->
-  <ellipse cx="115" cy="340" rx="85" ry="30" fill="url(#glowF)"/>
-  <ellipse cx="290" cy="340" rx="85" ry="30" fill="url(#glowI)"/>
-  <path d="M50 336 q16 -6 32 0 t32 0 t32 0 t32 0 v34 h-128 z" fill="url(#lava)"/>
-  <path d="M50 336 q16 -6 32 0 t32 0 t32 0 t32 0" stroke="#fff1a8" stroke-width="3" fill="none"/>
-  <circle cx="90" cy="352" r="4" fill="#ffe27a"/><circle cx="140" cy="358" r="3" fill="#ffe27a"/>
-  <path d="M226 336 q16 -6 32 0 t32 0 t32 0 t32 0 v34 h-128 z" fill="url(#water)"/>
-  <path d="M226 336 q16 -6 32 0 t32 0 t32 0 t32 0" stroke="#e8fdff" stroke-width="3" fill="none"/>
-  <circle cx="270" cy="354" r="4" fill="#dff8ff"/><circle cx="320" cy="360" r="3" fill="#dff8ff"/>
+  <ellipse cx="290" cy="340" rx="85" ry="30" fill="url(#glowF)"/>
+  <ellipse cx="115" cy="340" rx="85" ry="30" fill="url(#glowI)"/>
+  <path d="M226 336 q16 -6 32 0 t32 0 t32 0 t32 0 v34 h-128 z" fill="url(#lava)"/>
+  <path d="M226 336 q16 -6 32 0 t32 0 t32 0 t32 0" stroke="#fff1a8" stroke-width="3" fill="none"/>
+  <circle cx="266" cy="352" r="4" fill="#ffe27a"/><circle cx="316" cy="358" r="3" fill="#ffe27a"/>
+  <path d="M50 336 q16 -6 32 0 t32 0 t32 0 t32 0 v34 h-128 z" fill="url(#water)"/>
+  <path d="M50 336 q16 -6 32 0 t32 0 t32 0 t32 0" stroke="#e8fdff" stroke-width="3" fill="none"/>
+  <circle cx="94" cy="354" r="4" fill="#dff8ff"/><circle cx="144" cy="360" r="3" fill="#dff8ff"/>
 
   <!-- FIRE KID (jumping) -->
-  <g transform="translate(120 300) rotate(-8) scale(2.55)">
+  <g transform="translate(282 300) rotate(8) scale(-2.55 2.55)">
     <ellipse cx="-6" cy="-3" rx="5" ry="4" fill="#b83a0a"/><ellipse cx="6" cy="-4" rx="5" ry="4" fill="#b83a0a"/>
     <path d="M-8 -34 q-2 -12 3 -22 q2 10 5 8 q1 -10 7 -18 q2 12 6 10 q3 -6 6 -12 q3 14 -1 30 z" fill="#ff3d00"/>
     <path d="M-5 -34 q0 -8 3 -14 q2 7 4 5 q1 -6 5 -12 q2 9 4 8 q2 -4 3 -6 q1 8 -2 19 z" fill="#ff9100"/>
@@ -112,7 +112,7 @@
   </g>
 
   <!-- ICE KID (jumping) -->
-  <g transform="translate(282 300) rotate(8) scale(2.55)">
+  <g transform="translate(120 300) rotate(-8) scale(-2.55 2.55)">
     <ellipse cx="-6" cy="-4" rx="5" ry="4" fill="#1b5fb5"/><ellipse cx="6" cy="-3" rx="5" ry="4" fill="#1b5fb5"/>
     <path d="M-17 -30 L-15 -52 L-5 -32 Z" fill="#9fe6ff" stroke="#0b3a80" stroke-width="1.2"/>
     <path d="M-8 -32 L-2 -60 L6 -32 Z" fill="#bff4ff" stroke="#0b3a80" stroke-width="1.2"/>
@@ -132,11 +132,11 @@
   </g>
   <!-- sparkles -->
   <g fill="#fff">
-    <path d="M250 150 l3 10 l10 3 l-10 3 l-3 10 l-3 -10 l-10 -3 l10 -3 z"/>
-    <path d="M160 200 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 z"/>
-    <path d="M350 230 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 z"/>
+    <path d="M150 150 l3 10 l10 3 l-10 3 l-3 10 l-3 -10 l-10 -3 l10 -3 z"/>
+    <path d="M240 200 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 z"/>
+    <path d="M50 230 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 z"/>
   </g>
   <g fill="#ffb347">
-    <circle cx="96" cy="140" r="3"/><circle cx="140" cy="128" r="2.5"/><circle cx="80" cy="120" r="2"/>
+    <circle cx="304" cy="150" r="3"/><circle cx="262" cy="140" r="2.5"/><circle cx="322" cy="130" r="2"/>
   </g>
 </svg>

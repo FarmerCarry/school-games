@@ -19,29 +19,31 @@
   var store = Kit.store('moto-madness');
   var $ = function (id) { return document.getElementById(id); };
   var TAU = Math.PI * 2;
-  Kit.muteButton();
+  var muteBtn = Kit.muteButton();
+  muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
+  muteBtn.title = 'الصوت (M)';
 
   /* ------------------------------------------------------------ skins */
   var PAINTS = [
-    { name: 'Red Rocket', body: '#ff3b3b', dark: '#9e1b1b', accent: '#ffd23f', rim: '#ffd23f', cost: 0 },
-    { name: 'Lime Blast', body: '#7ed321', dark: '#3f7a0c', accent: '#ffffff', rim: '#ffffff', cost: 3 },
-    { name: 'Ocean Blue', body: '#2f8bff', dark: '#16459e', accent: '#7ff0ff', rim: '#7ff0ff', cost: 7 },
-    { name: 'Sunny Yellow', body: '#ffd000', dark: '#9e7a00', accent: '#1d1d24', rim: '#2b2d3a', cost: 12 },
-    { name: 'Purple Nova', body: '#a45cff', dark: '#5a26a8', accent: '#ff9cf2', rim: '#ff9cf2', cost: 18 },
-    { name: 'Candy Pink', body: '#ff6fb5', dark: '#a8326d', accent: '#ffffff', rim: '#ffffff', cost: 25 },
-    { name: 'Midnight', body: '#2b2d3a', dark: '#0f1017', accent: '#29e6ff', rim: '#29e6ff', cost: 33 },
-    { name: 'Gold Champ', body: '#ffc21a', dark: '#a3700a', accent: '#fff4b0', rim: '#fff4b0', cost: 42 },
-    { name: 'Rainbow', rainbow: true, body: '#ff3b3b', dark: '#2b2d3a', accent: '#ffffff', rim: '#ffffff', cost: 52 }
+    { name: 'الصاروخ الأحمر', body: '#ff3b3b', dark: '#9e1b1b', accent: '#ffd23f', rim: '#ffd23f', cost: 0 },
+    { name: 'الأخضر الليموني', body: '#7ed321', dark: '#3f7a0c', accent: '#ffffff', rim: '#ffffff', cost: 3 },
+    { name: 'أزرق المحيط', body: '#2f8bff', dark: '#16459e', accent: '#7ff0ff', rim: '#7ff0ff', cost: 7 },
+    { name: 'أصفر الشمس', body: '#ffd000', dark: '#9e7a00', accent: '#1d1d24', rim: '#2b2d3a', cost: 12 },
+    { name: 'البنفسجي اللامع', body: '#a45cff', dark: '#5a26a8', accent: '#ff9cf2', rim: '#ff9cf2', cost: 18 },
+    { name: 'وردي الحلوى', body: '#ff6fb5', dark: '#a8326d', accent: '#ffffff', rim: '#ffffff', cost: 25 },
+    { name: 'منتصف الليل', body: '#2b2d3a', dark: '#0f1017', accent: '#29e6ff', rim: '#29e6ff', cost: 33 },
+    { name: 'البطل الذهبي', body: '#ffc21a', dark: '#a3700a', accent: '#fff4b0', rim: '#fff4b0', cost: 42 },
+    { name: 'قوس قزح', rainbow: true, body: '#ff3b3b', dark: '#2b2d3a', accent: '#ffffff', rim: '#ffffff', cost: 52 }
   ];
   var SUITS = [
-    { name: 'Classic', suit: '#2f6bff', suitDark: '#1d3f9e', suitAccent: '#ffffff', helmet: '#ffffff', helmet2: '#ff3b3b', cost: 0 },
-    { name: 'Fire', suit: '#ff5a1f', suitDark: '#a8330c', suitAccent: '#ffd23f', helmet: '#ffd23f', helmet2: '#ff3b3b', cost: 5 },
-    { name: 'Jungle', suit: '#2fa84f', suitDark: '#1a6b30', suitAccent: '#ffe066', helmet: '#2fa84f', helmet2: '#ffe066', cost: 10 },
-    { name: 'Ice', suit: '#9fdcff', suitDark: '#5a9fcc', suitAccent: '#2f6bff', helmet: '#ffffff', helmet2: '#29c6ff', cost: 15 },
-    { name: 'Ninja', suit: '#2a2b36', suitDark: '#121319', suitAccent: '#ff3b3b', helmet: '#2a2b36', helmet2: '#ff3b3b', cost: 22 },
-    { name: 'Galaxy', suit: '#6a2cff', suitDark: '#3a168f', suitAccent: '#ff4fd8', helmet: '#1b1140', helmet2: '#ff4fd8', cost: 30 },
-    { name: 'Robot', suit: '#aeb6c8', suitDark: '#6a7086', suitAccent: '#29e6ff', helmet: '#dfe5ee', helmet2: '#29e6ff', cost: 38 },
-    { name: 'Superstar', suit: '#ffd23f', suitDark: '#b58a00', suitAccent: '#ff3b3b', helmet: '#ffd23f', helmet2: '#ffffff', cost: 48 }
+    { name: 'الكلاسيكية', suit: '#2f6bff', suitDark: '#1d3f9e', suitAccent: '#ffffff', helmet: '#ffffff', helmet2: '#ff3b3b', cost: 0 },
+    { name: 'النار', suit: '#ff5a1f', suitDark: '#a8330c', suitAccent: '#ffd23f', helmet: '#ffd23f', helmet2: '#ff3b3b', cost: 5 },
+    { name: 'الغابة', suit: '#2fa84f', suitDark: '#1a6b30', suitAccent: '#ffe066', helmet: '#2fa84f', helmet2: '#ffe066', cost: 10 },
+    { name: 'الجليد', suit: '#9fdcff', suitDark: '#5a9fcc', suitAccent: '#2f6bff', helmet: '#ffffff', helmet2: '#29c6ff', cost: 15 },
+    { name: 'النينجا', suit: '#2a2b36', suitDark: '#121319', suitAccent: '#ff3b3b', helmet: '#2a2b36', helmet2: '#ff3b3b', cost: 22 },
+    { name: 'المجرّة', suit: '#6a2cff', suitDark: '#3a168f', suitAccent: '#ff4fd8', helmet: '#1b1140', helmet2: '#ff4fd8', cost: 30 },
+    { name: 'الروبوت', suit: '#aeb6c8', suitDark: '#6a7086', suitAccent: '#29e6ff', helmet: '#dfe5ee', helmet2: '#29e6ff', cost: 38 },
+    { name: 'النجم الخارق', suit: '#ffd23f', suitDark: '#b58a00', suitAccent: '#ff3b3b', helmet: '#ffd23f', helmet2: '#ffffff', cost: 48 }
   ];
 
   /* ------------------------------------------------------------- save */
@@ -133,6 +135,47 @@
     if (wpops.length > 8) wpops.shift();
   }
 
+  /* ------------------------------------------------------------- ghost */
+  // Your best run is recorded (15 samples a second) and replayed as a see-through rider to race against.
+  var GHOST_HZ = 15, GHOST_MAX = GHOST_HZ * 150;
+  var rec = [], ghost = null, ghostX = null;
+  var GHOST_SKIN = { body: '#ffffff', dark: '#8f98c4', accent: '#ffffff', rim: '#dfe5ff', suit: '#e9edff', suitDark: '#aab2d8', suitAccent: '#ffffff', helmet: '#ffffff', helmet2: '#aab2d8' };
+  var ghostPose = { x: 0, y: 0, a: 0, lean: 0, crouch: 0, wheels: [{ x: 0, y: 0, rot: 0 }, { x: 0, y: 0, rot: 0 }] };
+  function loadGhost(i) {
+    var g = store.get('ghost' + i, null);
+    ghost = g && Array.isArray(g.d) && g.d.length >= 6 && g.d.length % 3 === 0 ? g.d : null;
+  }
+  function recordGhost() {
+    var w = world;
+    if (!w.started || w.finished || rec.length >= GHOST_MAX * 3) return;
+    var n = Math.floor(w.time * GHOST_HZ);
+    while (rec.length / 3 <= n) { var b = w.bike; rec.push(Math.round(b.x), Math.round(b.y), Math.round(b.a * 100)); }
+  }
+  function drawGhost(g) {
+    ghostX = null;
+    if (!ghost || demo || !world.started || world.time < 0.2) return;
+    var f = world.time * GHOST_HZ, i = Math.floor(f), k = f - i, n = ghost.length / 3;
+    if (i >= n - 1) { i = n - 2; k = 1; }
+    var x = ghost[i * 3] + (ghost[i * 3 + 3] - ghost[i * 3]) * k, y = ghost[i * 3 + 1] + (ghost[i * 3 + 4] - ghost[i * 3 + 1]) * k;
+    var a0 = ghost[i * 3 + 2] / 100, a1 = ghost[i * 3 + 5] / 100, a = a0 + (a1 - a0) * k;
+    if (Math.abs(a1 - a0) > 3) a = a1; // wrapped / respawned: don't sweep through a full turn
+    var ca = Math.cos(a), sa = Math.sin(a), P = ghostPose;
+    ghostX = x;
+    P.x = x; P.y = y; P.a = a;
+    for (var j = 0; j < 2; j++) {
+      var an = MM.ANCHORS[j], lx = an.ax + an.ux * 4, ly = an.ay + an.uy * 4;
+      P.wheels[j].x = x + lx * ca - ly * sa; P.wheels[j].y = y + lx * sa + ly * ca; P.wheels[j].rot = x / MM.WHEEL_R;
+    }
+    g.save();
+    g.globalAlpha = 0.38;
+    MMR.drawBike(g, P, GHOST_SKIN, clock);
+    g.globalAlpha = 0.8;
+    g.font = 'bold 18px Fredoka, sans-serif'; g.textAlign = 'center'; g.direction = 'rtl';
+    g.lineWidth = 4; g.lineJoin = 'round'; g.strokeStyle = 'rgba(20,20,45,0.7)';
+    g.strokeText('أفضل جولة لك', x, y - 108); g.fillStyle = '#ffffff'; g.fillText('أفضل جولة لك', x, y - 108);
+    g.restore();
+  }
+
   /* --------------------------------------------------------- level flow */
   function setWorld(i, isDemo) {
     level = getLevel(i);
@@ -157,6 +200,7 @@
     setWorld(i, false);
     state = 'play';
     bannerT = 0; prevTime = 0; hurry = 0; stuckT = 0;
+    rec = []; loadGhost(i);
     showOverlay(null);
     Kit.keys.reset();
     MMA.go();
@@ -165,7 +209,7 @@
   function restartLevel() {
     world.restart();
     clearParticles();
-    bannerT = 0; finishT = 0; state = 'play'; stuckT = 0;
+    bannerT = 0; finishT = 0; state = 'play'; stuckT = 0; prevTime = 0; hurry = 0; rec = [];
     showOverlay(null);
     var b = world.bike; cam.x = b.x + 220; cam.y = b.y - 60;
     MMA.respawn();
@@ -180,7 +224,7 @@
   function goTitle() {
     state = 'title';
     if (!demo) startDemo();
-    $('titleStat').textContent = '★ ' + totalStars() + ' / ' + NL * 3 + '   ·   Levels beaten: ' + save.stars.filter(function (s) { return s > 0; }).length + ' / ' + NL + (save.flips ? '   ·   Flips: ' + save.flips : '');
+    $('titleStat').textContent = '★ ' + totalStars() + ' من ' + NL * 3 + '   ·   المراحل المنجزة: ' + save.stars.filter(function (s) { return s > 0; }).length + ' من ' + NL + (save.flips ? '   ·   الشقلبات: ' + save.flips : '');
     showOverlay('title');
     MMA.silence();
   }
@@ -204,7 +248,7 @@
     for (var w = 0; w < MM.WORLDS.length; w++) {
       var W = MM.WORLDS[w], ws = 0;
       for (var j = 0; j < 5; j++) ws += save.stars[w * 5 + j] | 0;
-      html += '<div class="mm-world"><div class="mm-wname">' + W.name + '<small>★ ' + ws + ' / 15</small></div>';
+      html += '<div class="mm-world"><div class="mm-wname">' + W.name + '<small>★ ' + ws + ' من 15</small></div>';
       for (j = 0; j < 5; j++) {
         var i = w * 5 + j, lk = !unlocked(i), st = save.stars[i] | 0;
         var stars = '';
@@ -217,7 +261,7 @@
       html += '</div>';
     }
     g.innerHTML = html;
-    $('lvStars').textContent = '★ ' + totalStars() + ' / ' + NL * 3;
+    $('lvStars').textContent = '★ ' + totalStars() + ' من ' + NL * 3;
   }
   function tileColor(id, j) {
     var c = { grass: ['#34b34a', '#2a9a3d'], desert: ['#f59a2a', '#e07d12'], winter: ['#3aa8f0', '#2a86d0'], factory: ['#8b4cf0', '#6a2cd0'] }[id];
@@ -268,7 +312,7 @@
         var bg = kind === 'paint' ? (it.rainbow ? 'linear-gradient(135deg,#ff3b3b,#ffd23f,#3ddc84,#2f8bff,#a45cff)' : 'linear-gradient(135deg,' + it.body + ' 55%,' + it.accent + ' 56%)')
           : 'linear-gradient(135deg,' + it.suit + ' 55%,' + it.helmet2 + ' 56%)';
         h += '<button type="button" class="mm-sw' + (lk ? ' locked' : '') + (i === cur ? ' cur' : '') + '" data-k="' + kind + '" data-i="' + i + '" title="' + it.name + '" style="background:' + bg + '">' +
-          (lk ? '<span>🔒★' + it.cost + '</span>' : '') + '</button>';
+          (lk ? '<span dir="ltr">🔒★' + it.cost + '</span>' : '') + '</button>';
       }
       el.innerHTML = h;
     }
@@ -276,7 +320,7 @@
     row($('suitRow'), SUITS, save.suit, 'suit');
     $('paintName').textContent = PAINTS[save.paint].name;
     $('suitName').textContent = SUITS[save.suit].name;
-    $('gStars').textContent = '★ ' + ts + ' / ' + NL * 3;
+    $('gStars').textContent = '★ ' + ts + ' من ' + NL * 3;
   }
   function garageClick(e) {
     var t = e.target.closest('.mm-sw');
@@ -309,34 +353,40 @@
     var t = world.finalTime, i = levelIdx, st = starsFor(i, t);
     var before = totalStars();
     var prevBest = save.best[i], newBest = prevBest == null || t < prevBest - 0.0001;
-    if (newBest) save.best[i] = Math.round(t * 100) / 100;
+    if (newBest) {
+      save.best[i] = Math.round(t * 100) / 100;
+      if (rec.length >= 6 && rec.length < GHOST_MAX * 3) store.set('ghost' + i, { d: rec });
+    }
     save.stars[i] = Math.max(save.stars[i] | 0, st);
     save.flips += world.flips;
     persist();
     var after = totalStars();
-    $('cTitle').textContent = i === NL - 1 ? 'YOU BEAT MOTO MADNESS!' : 'Level Complete!';
+    $('cTitle').textContent = i === NL - 1 ? '🏆 أنهيت كل المراحل! أنت بطل!' : 'أنهيت المرحلة!';
     $('cTime').textContent = fmt(t);
-    $('cBest').innerHTML = newBest && prevBest != null ? '<span class="mm-best">NEW BEST!</span>' : (prevBest != null ? '<p class="mm-sub">Best: ' + fmt(save.best[i]) + '</p>' : '');
+    $('cBest').innerHTML = newBest && prevBest != null ? '<span class="mm-best">رقم قياسي جديد!</span>' : (prevBest != null ? '<p class="mm-sub">أفضل وقت: ' + fmt(save.best[i]) + '</p>' : '');
+    if (newBest && rec.length >= 6) $('cBest').innerHTML += '<p class="mm-sub">👻 العب مجددًا وسابق أفضل جولة لك!</p>';
     var info = [];
-    if (world.flips) info.push('Flips: ' + world.flips + ' (−' + world.bonus + 's)');
-    info.push('Crashes: ' + world.crashes);
-    if (world.smashed) info.push('Crates: ' + world.smashed);
+    if (world.flips) info.push('الشقلبات: ' + world.flips + ' (وفّرت ' + world.bonus + ' ث)');
+    info.push('السقطات: ' + world.crashes);
+    if (world.smashed) info.push('الصناديق: ' + world.smashed);
     $('cInfo').textContent = info.join('   ·   ');
     // unlocks
     var un = [];
-    PAINTS.forEach(function (p) { if (p.cost > before && p.cost <= after) un.push(p.name + ' paint'); });
-    SUITS.forEach(function (p) { if (p.cost > before && p.cost <= after) un.push(p.name + ' suit'); });
+    PAINTS.forEach(function (p) { if (p.cost > before && p.cost <= after) un.push('لون ' + p.name); });
+    SUITS.forEach(function (p) { if (p.cost > before && p.cost <= after) un.push('بدلة ' + p.name); });
     var teaser = '';
     if (!un.length) {
       var nx = null;
       PAINTS.concat(SUITS).forEach(function (p) { if (p.cost > after && (!nx || p.cost < nx.cost)) nx = p; });
-      if (nx) teaser = '<p class="mm-sub">🎁 Next unlock: <b>' + nx.name + (nx.body ? ' paint' : ' suit') + '</b> at ★' + nx.cost + ' (you have ★' + after + ')</p>';
+      if (nx) teaser = '<p class="mm-sub">🎁 الجائزة القادمة: <b>' + (nx.body ? 'لون ' : 'بدلة ') + nx.name + '</b> عند ★' + nx.cost + ' (معك ★' + after + ')</p>';
     }
-    $('cUnlock').innerHTML = un.length ? '<div class="mm-unlock">🎁 NEW in the Garage: ' + un.join(', ') + '!</div>' : teaser;
+    $('cUnlock').innerHTML = un.length ? '<div class="mm-unlock">🎁 جديد في المرآب: ' + un.join('، ') + '!</div>' : teaser;
     var s = MM.LEVELS[i].stars;
-    $('cNext').textContent = st < 3 ? (st === 1 ? '★★ under ' + fmt(s[1]) + '   ·   ★★★ under ' + fmt(s[0]) : '★★★ under ' + fmt(s[0]) + ' — flips take time off!') : 'Perfect! All 3 stars!';
-    $('btnNext').textContent = i < NL - 1 ? 'Next ▶' : '☰ Levels';
+    $('cNext').textContent = st < 3 ? (st === 1 ? '★★ أقل من ' + fmt(s[1]) + '   ·   ★★★ أقل من ' + fmt(s[0]) : '★★★ أقل من ' + fmt(s[0]) + ' — الشقلبات توفّر الوقت!') : 'ممتاز! حصلت على 3 نجوم!';
+    $('btnNext').textContent = i < NL - 1 ? 'التالي ◀' : '☰ المراحل';
     $('btnCLevels').hidden = i === NL - 1;
+    $('cKeys').innerHTML = i < NL - 1 ? '<span class="sg-key">Enter</span> التالي &nbsp; <span class="sg-key">R</span> إعادة &nbsp; <span class="sg-key">Esc</span> المراحل'
+      : '<span class="sg-key">Enter</span> المراحل &nbsp; <span class="sg-key">R</span> إعادة';
     var els = $('cStars').children;
     for (var k = 0; k < 3; k++) els[k].classList.remove('on');
     showOverlay('complete');
@@ -401,8 +451,9 @@
     if (state === 'title') {
       if (ok) { MMA.click(); goLevels(); } else if (c === 'KeyG') goGarage('title');
     } else if (state === 'levels') {
-      if (c === 'ArrowLeft' || c === 'KeyA') moveSel(-1, 0);
-      else if (c === 'ArrowRight' || c === 'KeyD') moveSel(1, 0);
+      // the level grid flows right-to-left (Arabic), so ← goes to the next level
+      if (c === 'ArrowLeft' || c === 'KeyA') moveSel(1, 0);
+      else if (c === 'ArrowRight' || c === 'KeyD') moveSel(-1, 0);
       else if (c === 'ArrowUp' || c === 'KeyW') moveSel(0, -1);
       else if (c === 'ArrowDown' || c === 'KeyS') moveSel(0, 1);
       else if (ok) { if (unlocked(sel)) { MMA.click(); startLevel(sel); } }
@@ -432,22 +483,22 @@
     for (var i = 0; i < ev.length; i++) {
       var e = ev[i];
       switch (e.type) {
-        case 'start': if (sound) bigPop('GO!', '', '#5dff9d'); break;
+        case 'start': if (sound) bigPop('انطلق!', '', '#5dff9d'); break;
         case 'land': {
           var k = Math.min(1, e.v / 1300);
           for (var w = 0; w < 2; w++) { var wh = b.wheels[w]; burst(wh.x, wh.y + 18, 6 + Math.round(k * 10), { colors: th.dust, speed: 160 + k * 200, angle: -Math.PI / 2, spread: 2.6, life: 0.6, size: 9, type: 1, g: -40, drag: 3 }); }
           if (e.v > 700) shake.add(3 + k * 6);
           crouch = Math.min(1, crouch + k);
           if (sound) MMA.land(e.v);
-          if (e.air > 1.5) worldPop('BIG AIR!', b.x, b.y - 90, '#7ff0ff', 30);
-          else if (e.perfect && !world.pendingFlip) worldPop('SMOOTH!', b.x, b.y - 90, '#b8ff6a', 26);
+          if (e.air > 1.5) worldPop('طيران عالٍ!', b.x, b.y - 90, '#7ff0ff', 30);
+          else if (e.perfect && !world.pendingFlip) worldPop('هبوط رائع!', b.x, b.y - 90, '#b8ff6a', 26);
           break;
         }
         case 'bump': if (sound) MMA.bump(); crouch = Math.min(1, crouch + 0.3); break;
         case 'flip': {
-          var names = ['', '', 'DOUBLE ', 'TRIPLE ', 'QUAD ', 'MEGA '];
-          var nm = (e.n < names.length ? names[e.n] : 'MEGA ') + (e.dir === 'back' ? 'BACKFLIP!' : 'FRONTFLIP!');
-          bigPop(nm, '−' + e.n + ' sec', e.n > 1 ? '#ff5ab4' : '#ffd23f');
+          var names = ['', '', ' مزدوجة', ' ثلاثية', ' رباعية', ' خارقة'];
+          var nm = (e.dir === 'back' ? 'شقلبة خلفية' : 'شقلبة أمامية') + (e.n < names.length ? names[e.n] : ' خارقة') + '!';
+          bigPop(nm, 'وفّرت ' + e.n + (e.n === 1 ? ' ثانية' : ' ث'), e.n > 1 ? '#ff5ab4' : '#ffd23f');
           bonusFlash = 1.2;
           burst(b.x, b.y - 40, 26 + e.n * 10, { colors: ['#ffd23f', '#ff5ab4', '#3fb7ff', '#3ddc84', '#fff'], speed: 520, life: 1.0, size: 11, type: 3, g: 500 });
           if (sound) MMA.flip(e.n);
@@ -457,7 +508,7 @@
           shake.add(12);
           burst(e.x, e.y, 14, { colors: ['#ffd23f', '#fff'], speed: 380, life: 0.8, size: 12, type: 2, g: 300 });
           burst(b.x, b.y + 20, 16, { colors: th.dust, speed: 260, life: 0.8, size: 12, type: 1, g: -30, drag: 3 });
-          var words = e.why === 'spikes' ? ['OUCH!', 'YIKES!'] : e.why === 'boulder' ? ['SQUASHED!', 'BONK!'] : e.why === 'fall' ? ['WHOOPS!'] : ['BONK!', 'OOF!', 'WIPEOUT!', 'OUCH!'];
+          var words = e.why === 'spikes' ? ['آخ!', 'أوتش!'] : e.why === 'boulder' ? ['انبطحت!', 'بونك!'] : e.why === 'fall' ? ['أووه!'] : ['بونك!', 'أوف!', 'سقطة!', 'آخ!'];
           worldPop(words[Math.floor(Math.random() * words.length)], e.x, e.y - 60, '#ff5a5f', 52);
           if (sound) MMA.crash();
           break;
@@ -468,20 +519,20 @@
           break;
         case 'checkpoint':
           burst(e.x + 40, e.y - 130, 30, { colors: ['#3ddc84', '#ffd23f', '#ffffff'], speed: 420, life: 1.0, size: 10, type: 3, g: 500 });
-          if (sound) { MMA.checkpoint(); bigPop('CHECKPOINT!', '', '#3ddc84'); }
+          if (sound) { MMA.checkpoint(); bigPop('نقطة حفظ!', '', '#3ddc84'); }
           break;
         case 'finish':
           finishT = 0.001;
           for (var f = 0; f < 3; f++) burst(level.finishX + (f - 1) * 90, e.y - 250, 40, { colors: ['#ffd23f', '#ff5ab4', '#3fb7ff', '#3ddc84', '#ff5a5f'], speed: 600, life: 1.6, size: 12, type: 3, g: 420 });
-          if (sound) { MMA.finish(); bigPop('FINISH!', fmt(world.finalTime), '#ffffff'); }
+          if (sound) { MMA.finish(); bigPop('وصلت!', fmt(world.finalTime), '#ffffff'); }
           break;
         case 'bounce':
           burst(e.x, e.y, 16, { colors: ['#ffffff', '#ffe0f0', '#ffd23f'], speed: 300, angle: -Math.PI / 2, spread: 2.4, life: 0.7, size: 7, type: 1, g: 200 });
           shake.add(3);
-          if (sound) { MMA.bounce(); worldPop('BOING!', e.x, e.y - 80, '#ff9cf2', 32); }
+          if (sound) { MMA.bounce(); worldPop('بوينغ!', e.x, e.y - 80, '#ff9cf2', 32); }
           break;
         case 'boost':
-          if (sound) { MMA.boost(); worldPop('TURBO!', b.x, b.y - 90, '#ffb21f', 36); }
+          if (sound) { MMA.boost(); worldPop('تيربو!', b.x, b.y - 90, '#ffb21f', 36); }
           burst(b.x - 40, b.y + 20, 12, { colors: ['#ffb21f', '#ffe14d'], speed: 300, angle: Math.PI, spread: 0.8, life: 0.4, size: 7, g: 0 });
           break;
         case 'crate':
@@ -497,17 +548,17 @@
         case 'thunk': if (sound) MMA.thunk(); shake.add(2); break;
         case 'boulder':
           shake.add(6);
-          if (sound) { MMA.boulder(); bigPop('RUN!!!', 'Don\'t stop!', '#ff5a5f'); }
+          if (sound) { MMA.boulder(); bigPop('اهرب!!!', 'لا تتوقف!', '#ff5a5f'); }
           break;
         case 'boulderBreak':
           shake.add(10);
           burst(e.x, e.y, 30, { colors: MMR.themeId() === 'winter' ? ['#ffffff', '#dbeeff'] : ['#8e8f9c', '#a9aab6', '#5d5e6b'], speed: 600, life: 1.1, size: 14, g: 1000 });
-          if (sound) { MMA.boulderBreak(); worldPop('PHEW!', e.x + 200, e.y - 120, '#3ddc84', 40); }
+          if (sound) { MMA.boulderBreak(); worldPop('نجوت!', e.x + 200, e.y - 120, '#3ddc84', 40); }
           break;
         case 'rumble': shake.add(Math.min(8, e.v / 150)); if (sound) MMA.rumble(); break;
         case 'thud': if (sound) MMA.thud(); break;
-        case 'loop': if (sound) { MMA.loop(); worldPop('LOOP!', e.x, e.y - 40, '#7ff0ff', 40); } break;
-        case 'wheelie': if (sound) { MMA.wheelie(); worldPop('WHEELIE!', b.x, b.y - 100, '#b8ff6a', 32); } break;
+        case 'loop': if (sound) { MMA.loop(); worldPop('لفّة كاملة!', e.x, e.y - 40, '#7ff0ff', 40); } break;
+        case 'wheelie': if (sound) { MMA.wheelie(); worldPop('على عجلة واحدة!', b.x, b.y - 100, '#b8ff6a', 32); } break;
         case 'lift': if (sound) MMA.lift(); break;
         case 'liftStop': if (sound) MMA.liftStop(); break;
       }
@@ -530,6 +581,7 @@
       var inp = readInput();
       lastInp = inp;
       world.step(inp);
+      recordGhost();
       handleEvents(true);
       emitTrail(inp);
       if (world.finished) {
@@ -546,6 +598,8 @@
       // stuck detection (for the "Press R" hint)
       if (Math.abs(world.bike.x - stuckX) > 60 || !world.started || world.finished || world.crashed || isOnLift()) { stuckX = world.bike.x; stuckT = 0; }
       else stuckT += dt;
+      // still going nowhere after 6 s of trying: tumble off and go back to the last checkpoint
+      if (stuckT > 6 && inp.gas) { world.crash('stuck'); stuckT = 0; }
       var b = world.bike;
       MMA.engine(!world.crashed || world.crashT > 1.2, b.wheels[0].s, inp.gas && !world.crashed && world.started, !world.grounded, dt);
     } else if (state === 'title' || state === 'levels' || state === 'garage') {
@@ -643,7 +697,7 @@
     if (!world || window.__noRender) return;
     var c = { x: cam.x + shake.x, y: cam.y + shake.y, zoom: cam.zoom };
     ctx.save();
-    MMR.drawWorld(ctx, world, c, clock, curSkin, { lean: lean, crouch: crouch, afterBike: function (g) {
+    MMR.drawWorld(ctx, world, c, clock, curSkin, { lean: lean, crouch: crouch, beforeBike: drawGhost, afterBike: function (g) {
       drawParticles(g);
       // flip meter while spinning in the air
       var w = world, bk = w.bike;
@@ -664,8 +718,9 @@
           g.stroke();
           if (ok) {
             g.font = 'bold 30px Fredoka, sans-serif'; g.textAlign = 'center'; g.lineJoin = 'round';
-            g.lineWidth = 6; g.strokeStyle = '#1b1d3a'; g.strokeText(full + 'x', 0, -108);
-            g.fillStyle = '#5dff9d'; g.fillText(full + 'x', 0, -108);
+            g.direction = 'ltr';
+            g.lineWidth = 6; g.strokeStyle = '#1b1d3a'; g.strokeText('×' + full, 0, -108);
+            g.fillStyle = '#5dff9d'; g.fillText('×' + full, 0, -108);
           }
           g.restore(); g.globalAlpha = 1;
         }
@@ -675,7 +730,7 @@
         var p = wpops[i], k = p.t / p.life, sc = p.t < 0.15 ? 0.5 + p.t / 0.15 * 0.7 : 1.2 - Math.min(0.2, (p.t - 0.15));
         g.save(); g.translate(p.x, p.y - k * 60); g.scale(sc, sc);
         g.globalAlpha = k > 0.75 ? (1 - k) * 4 : 1;
-        g.font = 'bold ' + p.size + 'px Fredoka, sans-serif'; g.textAlign = 'center';
+        g.font = 'bold ' + p.size + 'px Fredoka, sans-serif'; g.textAlign = 'center'; g.direction = 'rtl';
         g.lineWidth = 7; g.strokeStyle = '#1b1d3a'; g.lineJoin = 'round'; g.strokeText(p.text, 0, 0);
         g.fillStyle = p.color; g.fillText(p.text, 0, 0);
         g.restore();
@@ -689,9 +744,9 @@
     if (state === 'garage') drawPreview(clock);
   }
 
-  function outlined(text, x, y, size, color, align, lw) {
+  function outlined(text, x, y, size, color, align, lw, dir) {
     ctx.font = 'bold ' + size + 'px Fredoka, sans-serif';
-    ctx.textAlign = align || 'left'; ctx.lineJoin = 'round';
+    ctx.textAlign = align || 'left'; ctx.direction = dir || 'rtl'; ctx.lineJoin = 'round';
     ctx.lineWidth = lw || 7; ctx.strokeStyle = 'rgba(20,20,45,0.9)'; ctx.strokeText(text, x, y);
     ctx.fillStyle = color || '#fff'; ctx.fillText(text, x, y);
   }
@@ -702,7 +757,7 @@
     var tcol = cur <= L.stars[0] ? '#ffffff' : cur <= L.stars[1] ? '#ffe9a8' : '#ffc0c0';
     var pulse = hurry > 0 ? 1 + hurry * 0.25 : 1;
     ctx.save(); ctx.translate(26, 62); ctx.scale(pulse, pulse);
-    outlined(fmt(cur), 0, 0, 50, tcol, 'left', 9);
+    outlined(fmt(cur), 0, 0, 50, tcol, 'left', 9, 'ltr');
     ctx.restore();
     // star target
     var st = cur <= L.stars[0] ? 3 : cur <= L.stars[1] ? 2 : 1;
@@ -711,10 +766,10 @@
       ctx.fillStyle = 'rgba(20,20,45,0.9)'; MMR.star(ctx, 40 + i * 30, 94, 15, 'rgba(20,20,45,0.85)');
       MMR.star(ctx, 40 + i * 30, 94, 11, i < st ? '#ffd23f' : 'rgba(255,255,255,0.25)');
     }
-    if (target != null) outlined('under ' + fmt(target), 130, 102, 20, '#ffffff', 'left', 5);
+    if (target != null) outlined('أقل من ' + fmt(target), 130, 102, 20, '#ffffff', 'left', 5);
     if (bonusFlash > 0 || w.bonus > 0) {
       ctx.globalAlpha = bonusFlash > 0 ? 1 : 0.8;
-      outlined('Flip bonus −' + w.bonus + 's', 26, 136, bonusFlash > 0 ? 24 : 18, '#b8ff6a', 'left', 5);
+      outlined('الشقلبات وفّرت ' + w.bonus + ' ث', 26, 136, bonusFlash > 0 ? 24 : 18, '#b8ff6a', 'left', 5);
       ctx.globalAlpha = 1;
     }
     // progress bar
@@ -729,6 +784,11 @@
     }
     ctx.fillStyle = '#fff'; ctx.fillRect(px + pw - 2, py - 10, 4, 26);
     ctx.fillStyle = '#1d1d24'; ctx.fillRect(px + pw + 2, py - 10, 12, 6); ctx.fillStyle = '#fff'; ctx.fillRect(px + pw + 2, py - 4, 12, 6);
+    if (ghostX != null) { // your best run on the progress bar
+      var gp = Kit.clamp((ghostX - lv.start.x) / (lv.finishX - lv.start.x), 0, 1);
+      ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.arc(px + pw * gp, py + 4, 8, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(20,20,45,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+    }
     ctx.fillStyle = curSkin.rainbow ? '#ffd23f' : curSkin.body; ctx.beginPath(); ctx.arc(px + pw * prog, py + 4, 9, 0, TAU); ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
     // boulder warning when it is off the left edge
@@ -738,7 +798,7 @@
         var sy = Kit.clamp((chaser.y - cam.y) * cam.zoom + 360, 160, 640), fl = Math.sin(clock * 16) > 0;
         ctx.fillStyle = fl ? '#ff3b3b' : '#ffd23f';
         ctx.beginPath(); ctx.moveTo(14, sy); ctx.lineTo(54, sy - 30); ctx.lineTo(54, sy + 30); ctx.closePath(); ctx.fill();
-        outlined('!', 70, sy + 14, 42, fl ? '#ffd23f' : '#ff3b3b', 'center', 6);
+        outlined('!', 70, sy + 14, 42, fl ? '#ffd23f' : '#ff3b3b', 'center', 6, 'ltr');
       }
     }
     // level name
@@ -747,7 +807,7 @@
     if (stuckT > 4 && state === 'play') {
       ctx.globalAlpha = 0.75 + 0.25 * Math.sin(clock * 6);
       ctx.fillStyle = 'rgba(15,18,45,0.72)'; MMR.rrect(ctx, 470, 600, 340, 56, 18); ctx.fill();
-      outlined('Stuck? Press  R  to restart', 640, 637, 24, '#ffffff', 'center', 5);
+      outlined('عالق؟ اضغط R لتبدأ من جديد', 640, 637, 24, '#ffffff', 'center', 5);
       ctx.globalAlpha = 1;
     }
     // intro banner
@@ -756,7 +816,7 @@
       ctx.fillStyle = 'rgba(15,18,45,0.72)'; MMR.rrect(ctx, 430, 520, 420, 90, 22); ctx.fill();
       outlined(wi + '-' + li + '  ' + L.name, 640, 558, 32, '#ffd23f', 'center', 7);
       ctx.globalAlpha = a;
-      outlined('Hold  ↑  to ride!', 640, 594, 24, '#ffffff', 'center', 5);
+      outlined('اضغط ↑ باستمرار لتنطلق!', 640, 594, 24, '#ffffff', 'center', 5);
       ctx.globalAlpha = 1;
     }
   }
@@ -796,6 +856,7 @@
     get auto() { return auto; },
     finish: function () { if (state === 'play') { var x = world.level.finishX - 90; world.placeBike(x, world.groundAt(x, -1e9, true) - 44, 0); world.bike.vx = 300; world.started = true; } },
     unlockAll: function () { for (var i = 0; i < NL; i++) save.stars[i] = Math.max(save.stars[i] | 0, 3); persist(); curSkin = skin(); },
-    reset: function () { save = { stars: [], best: [], paint: 0, suit: 0, flips: 0 }; persist(); curSkin = skin(); }
+    get ghost() { return ghost; },
+    reset: function () { save = { stars: [], best: [], paint: 0, suit: 0, flips: 0 }; persist(); for (var i = 0; i < NL; i++) store.remove('ghost' + i); ghost = null; curSkin = skin(); }
   };
 })();

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pool Party</title>
+<title>حفلة البلياردو</title>
 <link rel="stylesheet" href="../../shared/game.css">
 <style>
   body { background: #130c33; }
@@ -28,9 +28,9 @@
 
   /* title */
   #scr-title { background: radial-gradient(ellipse at 50% 55%, rgba(10,6,30,0.25), rgba(10,6,30,0.78) 75%); }
-  .logo { margin: 22px 0 0; font-size: 104px; font-weight: 700; line-height: 1; letter-spacing: 2px; position: relative;
+  .logo { margin: 14px 0 0; font-size: 84px; font-weight: 700; line-height: 1.15; position: relative; display: flex; align-items: center; gap: 18px;
     color: #ffe45c; text-shadow: 0 6px 0 #ff3b8d, 0 12px 0 #7a3cff, 0 18px 30px rgba(0,0,0,0.5); animation: bob 2.6s ease-in-out infinite; }
-  .logo .o8 { display: inline-block; width: 86px; height: 86px; border-radius: 50%; vertical-align: -6px; margin: 0 2px;
+  .logo .o8 { display: inline-block; flex: none; width: 78px; height: 78px; border-radius: 50%; margin: 0 2px;
     background: radial-gradient(circle at 35% 30%, #666 0, #1b1b22 45%, #000 100%); position: relative; box-shadow: 0 6px 0 #ff3b8d, 0 12px 0 #7a3cff; animation: spin8 5s linear infinite; }
   .logo .o8::after { content: '8'; position: absolute; left: 50%; top: 50%; width: 42px; height: 42px; margin: -21px 0 0 -21px; border-radius: 50%;
     background: #fff; color: #111; font-size: 34px; line-height: 44px; text-align: center; text-shadow: none; }
@@ -38,20 +38,21 @@
   @keyframes bob { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-6px) rotate(1deg); } }
   @keyframes spin8 { 0% { transform: rotate(0); } 100% { transform: rotate(360deg); } }
   .tag { margin-top: 16px; font-size: 22px; color: #fff; opacity: .9; text-shadow: 0 2px 0 rgba(0,0,0,.4); }
-  .coinbar { position: absolute; left: 24px; top: 18px; display: flex; gap: 12px; }
-  .pill { background: rgba(0,0,0,0.45); border: 2px solid rgba(255,255,255,0.2); border-radius: 999px; padding: 6px 16px 6px 8px; font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 8px; color: #fff; }
+  .coinbar { position: absolute; left: 24px; top: 18px; display: flex; gap: 12px; direction: ltr; }
+  .coinbar .pill span { direction: rtl; }
+  .pill { background: rgba(0,0,0,0.45); border: 2px solid rgba(255,255,255,0.2); border-radius: 999px; padding: 6px 14px 6px 10px; font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 8px; color: #fff; }
   .coin { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6a8, #ffc400 55%, #d98e00); box-shadow: inset 0 0 0 3px #e0a000; display: inline-block; position: relative; }
   .coin::after { content: ''; position: absolute; left: 8px; top: 6px; width: 10px; height: 14px; border-radius: 3px; border: 2px solid #b57400; }
   .opps { display: flex; gap: 22px; margin-top: 22px; }
-  .opp { width: 236px; height: 214px; border-radius: 24px; background: rgba(20,14,56,0.85); border: 4px solid rgba(255,255,255,0.15); cursor: pointer; color: #fff;
+  .opp { width: 236px; height: 232px; border-radius: 24px; background: rgba(20,14,56,0.85); border: 4px solid rgba(255,255,255,0.15); cursor: pointer; color: #fff;
     display: flex; flex-direction: column; align-items: center; padding-top: 10px; position: relative; transition: transform .12s ease, border-color .12s; font-family: var(--sg-font); }
   .opp:hover { transform: translateY(-4px); }
   .opp.sel { border-color: #ffe45c; transform: translateY(-6px) scale(1.04); box-shadow: 0 0 0 4px rgba(255,228,92,0.25), 0 14px 30px rgba(0,0,0,0.4); }
   .opp canvas { width: 104px; height: 104px; }
-  .opp .nm { font-size: 24px; font-weight: 700; margin-top: 4px; }
-  .opp .lv { font-size: 16px; font-weight: 700; padding: 2px 12px; border-radius: 999px; margin-top: 4px; color: #1d1d1d; }
-  .opp .rec { font-size: 15px; opacity: .85; margin-top: 6px; }
-  .opp .trophy { position: absolute; right: 10px; top: 10px; width: 38px; height: 38px; }
+  .opp .nm { font-size: 24px; font-weight: 700; margin-top: 2px; line-height: 1.25; }
+  .opp .lv { font-size: 16px; font-weight: 700; padding: 0 14px; line-height: 1.5; border-radius: 999px; margin-top: 2px; color: #1d1d1d; }
+  .opp .rec { font-size: 15px; opacity: .85; margin-top: 4px; line-height: 1.3; }
+  .opp .trophy { position: absolute; left: 10px; top: 10px; width: 38px; height: 38px; }
   .playrow { margin-top: 24px; }
   .bigplay { font-size: 40px; padding: 16px 64px; animation: pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
@@ -80,8 +81,8 @@
   .hint { font-size: 17px; opacity: .8; margin-top: 12px; }
 
   /* screens with headers */
-  .hdr { display: flex; align-items: center; justify-content: space-between; width: 1180px; margin-top: 26px; }
-  .hdr h1 { margin: 0; font-size: 60px; color: #ffe45c; text-shadow: 0 5px 0 #ff3b8d, 0 10px 18px rgba(0,0,0,0.4); }
+  .hdr { display: flex; align-items: center; justify-content: space-between; width: 1180px; margin-top: 18px; }
+  .hdr h1 { margin: 0; font-size: 60px; line-height: 1.2; color: #ffe45c; text-shadow: 0 5px 0 #ff3b8d, 0 10px 18px rgba(0,0,0,0.4); }
   .full { background: radial-gradient(ellipse at 50% 50%, rgba(20,12,60,0.82), rgba(10,6,30,0.95)); }
   .lvgrid { display: grid; grid-template-columns: repeat(5, 206px); gap: 20px; margin-top: 30px; }
   .lvl { height: 196px; border-radius: 24px; border: 4px solid rgba(255,255,255,0.18); background: linear-gradient(#3a2a8a, #241a5e); color: #fff; cursor: pointer;
@@ -95,7 +96,7 @@
   .lvl.locked:hover { transform: none; border-color: rgba(255,255,255,0.18); }
   .lvl .lock { font-size: 44px; }
   .shoprow { display: flex; gap: 14px; margin-top: 12px; }
-  .sect { font-size: 28px; font-weight: 700; margin-top: 24px; color: #fff; width: 1180px; text-align: left; }
+  .sect { font-size: 28px; font-weight: 700; margin-top: 14px; line-height: 1.3; color: #fff; width: 1180px; text-align: right; }
   .item { width: 154px; height: 214px; border-radius: 20px; background: linear-gradient(#3a2a8a, #241a5e); border: 4px solid rgba(255,255,255,0.15); color: #fff;
     display: flex; flex-direction: column; align-items: center; padding: 10px 6px; cursor: pointer; font-family: var(--sg-font); transition: transform .1s; }
   .item:hover { transform: translateY(-4px); }
@@ -110,7 +111,7 @@
   .shake { animation: shk .35s; }
   @keyframes shk { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-8px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(6px); } }
 
-  #pauseBtn { position: fixed; top: 10px; right: 62px; z-index: 20; width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25);
+  #pauseBtn { position: fixed; top: 10px; right: 62px; direction: ltr; z-index: 20; width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25);
     background: rgba(0,0,0,0.35); color: #fff; font-size: 18px; font-weight: 700; cursor: pointer; font-family: var(--sg-font); }
   #pauseBtn:hover { background: rgba(0,0,0,0.55); }
   #pauseBtn[hidden] { display: none; }
@@ -121,90 +122,90 @@
 <div id="ui">
   <!-- TITLE -->
   <div id="scr-title" class="scr">
-    <div class="coinbar"><div class="pill"><span class="coin"></span><span class="coins">0</span></div><div class="pill" id="streakPill" title="Win streak"><span>&#9733;</span><span id="streakTxt">Best streak 0</span></div></div>
-    <h1 class="logo">P<span class="o8"></span>OL <span class="p2">PARTY</span></h1>
-    <div class="tag">Pick who you want to beat!</div>
+    <div class="coinbar"><div class="pill"><span class="coin"></span><span class="coins">0</span></div><div class="pill" id="streakPill" title="سلسلة الفوز"><span>&#9733;</span><span id="streakTxt">أفضل سلسلة فوز: 0</span></div></div>
+    <h1 class="logo"><span>حفلة</span> <span class="o8"></span> <span class="p2">البلياردو</span></h1>
+    <div class="tag">اختر خصمك وهيا نلعب!</div>
     <div class="opps" id="opps"></div>
-    <div class="playrow"><button class="btn b-yellow bigplay" id="btnPlay">&#9654; PLAY</button></div>
+    <div class="playrow"><button class="btn b-yellow bigplay" id="btnPlay">&#9654; العب</button></div>
     <div class="row">
-      <button class="btn b-pink b-small" id="btn2p">2 Players</button>
-      <button class="btn b-blue b-small" id="btnTrick">Trick Shots <span id="trickStars"></span></button>
-      <button class="btn b-green b-small" id="btnShop">Shop</button>
-      <button class="btn b-white b-small chip" id="btnAim">Aim help: BIG</button>
+      <button class="btn b-pink b-small" id="btn2p">لاعبان</button>
+      <button class="btn b-blue b-small" id="btnTrick">تحديات الضربات <span id="trickStars"></span></button>
+      <button class="btn b-green b-small" id="btnShop">المتجر</button>
+      <button class="btn b-white b-small chip" id="btnAim">خط التصويب: طويل</button>
     </div>
     <div class="howto">
-      <span class="k"><span class="sg-key">Mouse</span> aim</span>
-      <span class="k"><span class="sg-key">Drag</span> pull back, let go to shoot</span>
-      <span class="k"><span class="sg-key">&larr;</span><span class="sg-key">&rarr;</span> fine aim</span>
-      <span class="k"><span class="sg-key">Space</span> hold for power</span>
-      <span class="k"><span class="sg-key">P</span> pause</span>
+      <span class="k"><span class="sg-key">الفأرة</span> صوّب</span>
+      <span class="k"><span class="sg-key">اسحب</span> للخلف ثم اترك لتضرب</span>
+      <span class="k"><span dir="ltr"><span class="sg-key">&larr;</span><span class="sg-key">&rarr;</span></span> تصويب دقيق</span>
+      <span class="k"><span class="sg-key">مسافة</span> اضغط مطوّلًا للقوة</span>
+      <span class="k"><span class="sg-key">P</span> إيقاف</span>
     </div>
   </div>
 
   <!-- TRICK SHOT LEVELS -->
   <div id="scr-levels" class="scr full" hidden>
-    <div class="hdr"><button class="btn b-white b-small" id="lvBack">&#9664; Back</button><h1>Trick Shots</h1><div class="pill"><span>&#9733;</span><span id="lvStars">0 / 30</span></div></div>
+    <div class="hdr"><button class="btn b-white b-small" id="lvBack">&#9654; رجوع</button><h1>تحديات الضربات</h1><div class="pill"><span>&#9733;</span><span id="lvStars" dir="ltr">0/30</span></div></div>
     <div class="lvgrid" id="lvgrid"></div>
-    <div class="hint" style="margin-top:26px;font-size:20px">Finish a trick on your first try for 3 stars! Each new star gives <b>15 coins</b>.</div>
+    <div class="hint" style="margin-top:26px;font-size:20px">أنجز التحدي من أول محاولة لتربح 3 نجوم! كل نجمة جديدة تعطيك <b>15 عملة</b>.</div>
   </div>
 
   <!-- SHOP -->
   <div id="scr-shop" class="scr full" hidden>
-    <div class="hdr"><button class="btn b-white b-small" id="shopBack">&#9664; Back</button><h1>Shop</h1><div class="pill"><span class="coin"></span><span class="coins">0</span></div></div>
-    <div class="sect">Cues</div>
+    <div class="hdr"><button class="btn b-white b-small" id="shopBack">&#9654; رجوع</button><h1>المتجر</h1><div class="pill"><span class="coin"></span><span class="coins">0</span></div></div>
+    <div class="sect">عصي البلياردو</div>
     <div class="shoprow" id="shopCues"></div>
-    <div class="sect">Tables</div>
+    <div class="sect">ألوان الطاولة</div>
     <div class="shoprow" id="shopFelts"></div>
   </div>
 
   <!-- PAUSE -->
   <div id="scr-pause" class="scr dim" hidden>
     <div class="panel">
-      <h2>Paused</h2>
+      <h2>استراحة</h2>
       <div class="btns" style="flex-direction:column;align-items:center;gap:6px;margin-top:22px">
-        <button class="btn b-green" id="pResume">&#9654; Resume</button>
-        <button class="btn b-blue" id="pRestart">&#8635; Restart</button>
-        <button class="btn b-white b-small chip" id="pAim">Aim help: BIG</button>
-        <button class="btn b-pink b-small" id="pMenu">Menu</button>
+        <button class="btn b-green" id="pResume">&#9654; تابع اللعب</button>
+        <button class="btn b-blue" id="pRestart">&#8635; ابدأ من جديد</button>
+        <button class="btn b-white b-small chip" id="pAim">خط التصويب: طويل</button>
+        <button class="btn b-pink b-small" id="pMenu">القائمة</button>
       </div>
-      <div class="hint">Press <span class="sg-key">P</span> or <span class="sg-key">Esc</span> to resume</div>
+      <div class="hint">اضغط <span class="sg-key">P</span> أو <span class="sg-key">Esc</span> لتتابع</div>
     </div>
   </div>
 
   <!-- MATCH OVER -->
   <div id="scr-over" class="scr dim" hidden>
     <div class="panel">
-      <h2 id="oTitle">YOU WIN!</h2>
+      <h2 id="oTitle">فزت!</h2>
       <canvas class="av" id="oAvatar" width="240" height="240"></canvas>
       <p id="oSub"></p>
       <div id="oEarn" class="earn"></div>
       <div id="oBadges"></div>
       <div class="btns">
-        <button class="btn b-yellow" id="oAgain">&#8635; Play again</button>
-        <button class="btn b-white" id="oMenu">Menu</button>
+        <button class="btn b-yellow" id="oAgain">&#8635; العب مجددًا</button>
+        <button class="btn b-white" id="oMenu">القائمة</button>
       </div>
-      <div class="hint"><span class="sg-key">Enter</span> play again &nbsp; <span class="sg-key">Esc</span> menu</div>
+      <div class="hint"><span class="sg-key">Enter</span> العب مجددًا &nbsp;&nbsp; <span class="sg-key">Esc</span> القائمة</div>
     </div>
   </div>
 
   <!-- TRICK LEVEL DONE -->
   <div id="scr-done" class="scr dim" hidden>
     <div class="panel">
-      <h2 id="dTitle">Trick Complete!</h2>
+      <h2 id="dTitle">أنجزت التحدي!</h2>
       <div class="stars" id="dStars"></div>
       <p id="dSub"></p>
       <div id="dEarn" class="earn"></div>
       <div id="dBadges"></div>
       <div class="btns">
-        <button class="btn b-yellow" id="dNext">Next &#9654;</button>
-        <button class="btn b-blue" id="dRetry">&#8635; Retry</button>
-        <button class="btn b-white" id="dLevels">Levels</button>
+        <button class="btn b-yellow" id="dNext">التالي &#9664;</button>
+        <button class="btn b-blue" id="dRetry">&#8635; أعد المحاولة</button>
+        <button class="btn b-white" id="dLevels">كل التحديات</button>
       </div>
-      <div class="hint"><span class="sg-key">Enter</span> next &nbsp; <span class="sg-key">R</span> retry</div>
+      <div class="hint"><span class="sg-key">Enter</span> التالي &nbsp;&nbsp; <span class="sg-key">R</span> أعد المحاولة</div>
     </div>
   </div>
 </div>
-<button id="pauseBtn" type="button" aria-label="Pause" hidden>II</button>
+<button id="pauseBtn" type="button" aria-label="إيقاف مؤقت" hidden>II</button>
 
 <script src="../../shared/kit.js"></script>
 <script src="physics.js"></script>

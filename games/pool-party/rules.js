@@ -43,18 +43,18 @@
     var res = { foul: false, reason: '', assign: null, win: false, lose: false, keepTurn: false, ownPots: 0, respot8: false };
     var pots = shot.pots, i, scratch = false, eight = false;
     for (i = 0; i < pots.length; i++) { if (pots[i].n === 0) scratch = true; if (pots[i].n === 8) eight = true; }
-    if (shot.first < 0) { res.foul = true; res.reason = 'No ball hit!'; }
+    if (shot.first < 0) { res.foul = true; res.reason = 'لم تلمس أي كرة!'; }
     else if (legal.indexOf(shot.first) < 0) {
       res.foul = true;
-      res.reason = shot.first === 8 ? 'Hit the 8-ball first!' : 'Wrong ball first!';
+      res.reason = shot.first === 8 ? 'لمست الكرة 8 أولًا!' : 'لمست الكرة الخطأ أولًا!';
     }
-    if (scratch) { res.foul = true; res.reason = 'Scratch!'; }
+    if (scratch) { res.foul = true; res.reason = 'سقطت الكرة البيضاء!'; }
 
     var onEight = legal.length === 1 && legal[0] === 8 && !match.isBreak;
     if (eight) {
       if (match.isBreak) { res.respot8 = true; }
       else if (onEight && !res.foul) { res.win = true; return res; }
-      else { res.lose = true; res.reason = res.foul ? '8-ball with a foul!' : '8-ball too early!'; return res; }
+      else { res.lose = true; res.reason = res.foul ? 'دخلت الكرة 8 مع خطأ!' : 'دخلت الكرة 8 قبل وقتها!'; return res; }
     }
 
     if (!res.foul && !g) {

@@ -13,31 +13,33 @@
   // Arenas: a real difficulty curve. Stars: [goal1 %, goal2 %, finish #1].
   PG.ARENAS = [
     { name: 'حديقة الحلوى', short: 'الحلوى', goals: [5, 12],
-      bot: { speed: 0.80, turn: 5.2, smart: 0.30, opp: 0.10, hunters: 0, huntPlayer: 0.0, notice: 2.2, greed: 0.75 },
+      bot: { speed: 0.80, turn: 5.2, smart: 0.30, opp: 0.10, hunters: 0, huntPlayer: 0.0, notice: 2.2, greed: 0.75, polite: 0.9 },
       theme: { bg: '#f2fff8', grid: '#e1f7ec', out: '#8fe0bd', out2: '#79d3ab', rim: '#4fbf8f', deco: '#ffffff', card: 'linear-gradient(160deg,#b8f5d9,#6fd8a9)' } },
-    { name: 'شاطئ المثلجات', short: 'الشاطئ', goals: [7, 16],
-      bot: { speed: 0.86, turn: 5.8, smart: 0.50, opp: 0.25, hunters: 1, huntPlayer: 0.25, notice: 1.6, greed: 0.9 },
+    { name: 'شاطئ المثلجات', short: 'الشاطئ', goals: [7, 15],
+      bot: { speed: 0.86, turn: 5.8, smart: 0.50, opp: 0.25, hunters: 1, huntPlayer: 0.25, notice: 1.6, greed: 0.9, polite: 0.6 },
       theme: { bg: '#fffaf0', grid: '#fbeed6', out: '#6fd0f5', out2: '#5cc2ea', rim: '#f2b35c', deco: '#ffffff', card: 'linear-gradient(160deg,#ffe9b8,#6fd0f5)' } },
-    { name: 'غابة الفطر', short: 'الغابة', goals: [9, 20],
-      bot: { speed: 0.92, turn: 6.4, smart: 0.66, opp: 0.40, hunters: 2, huntPlayer: 0.4, notice: 1.2, greed: 1.0 },
+    { name: 'غابة الفطر', short: 'الغابة', goals: [9, 18],
+      bot: { speed: 0.92, turn: 6.4, smart: 0.66, opp: 0.40, hunters: 2, huntPlayer: 0.4, notice: 1.2, greed: 1.0, polite: 0.35 },
       theme: { bg: '#f7fbee', grid: '#eaf3d8', out: '#8cc96a', out2: '#7aba58', rim: '#c9824f', deco: '#ffffff', card: 'linear-gradient(160deg,#d7f5b0,#8cc96a)' } },
-    { name: 'جزيرة البالونات', short: 'البالونات', goals: [11, 24],
-      bot: { speed: 0.96, turn: 7.0, smart: 0.80, opp: 0.55, hunters: 2, huntPlayer: 0.55, notice: 0.9, greed: 1.1 },
+    { name: 'جزيرة البالونات', short: 'البالونات', goals: [11, 21],
+      bot: { speed: 0.96, turn: 7.0, smart: 0.80, opp: 0.55, hunters: 2, huntPlayer: 0.55, notice: 0.9, greed: 1.1, polite: 0.15 },
       theme: { bg: '#f3f8ff', grid: '#e2ecfb', out: '#8fb4ff', out2: '#7ca5f7', rim: '#ff8fb8', deco: '#ffffff', card: 'linear-gradient(160deg,#d6e6ff,#ff9ec5)' } },
-    { name: 'قلعة الغيوم', short: 'القلعة', goals: [13, 28],
+    { name: 'قلعة الغيوم', short: 'القلعة', goals: [13, 25],
       bot: { speed: 1.0, turn: 7.6, smart: 0.92, opp: 0.70, hunters: 3, huntPlayer: 0.65, notice: 0.6, greed: 1.2 },
       theme: { bg: '#faf5ff', grid: '#efe5fb', out: '#b79cff', out2: '#a88bf5', rim: '#ffd23f', deco: '#ffffff', card: 'linear-gradient(160deg,#eadcff,#b79cff)' } }
   ];
 
   // Unlock requirement text
+  // (simple Arabic counting: 1 / 2 / 3-10 / 11+)
+  function count(v, one, two, few, many) { return v === 1 ? one : v === 2 ? two : v <= 10 ? v + ' ' + few : v + ' ' + many; }
   PG.reqText = function (r) {
     if (!r) return '';
     switch (r.t) {
       case 'best': return 'لوّن ' + r.v + '% في جولة واحدة';
-      case 'kills': return 'أقصِ ' + r.v + ' روبوتات (المجموع)';
-      case 'stars': return 'اجمع ' + r.v + ' نجوم';
-      case 'rounds': return 'العب ' + r.v + ' جولات';
-      case 'wins': return r.v === 1 ? 'احصل على المركز الأول مرة' : 'احصل على المركز الأول ' + r.v + ' مرات';
+      case 'kills': return 'أقصِ ' + count(r.v, 'روبوتاً واحداً', 'روبوتين', 'روبوتات', 'روبوتاً') + ' في المجموع';
+      case 'stars': return 'اجمع ' + count(r.v, 'نجمة واحدة', 'نجمتين', 'نجوم', 'نجمة');
+      case 'rounds': return 'العب ' + count(r.v, 'جولة واحدة', 'جولتين', 'جولات', 'جولة');
+      case 'wins': return r.v === 1 ? 'احصل على المركز الأول مرة واحدة' : r.v === 2 ? 'احصل على المركز الأول مرتين' : 'احصل على المركز الأول ' + r.v + ' مرات';
     }
     return '';
   };

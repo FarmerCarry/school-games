@@ -1,4 +1,4 @@
-/* Critter Mart — world layout, items, unlocks and upgrades (plain data). */
+/* Critter Mart (سوق الحيوانات) — world layout, items, unlocks and upgrades (plain data). */
 (function () {
   'use strict';
   var CM = window.CM = window.CM || {};
@@ -17,16 +17,16 @@
   CM.START = { x: 700, y: 1150 };
 
   CM.ITEMS = {
-    banana:   { name: 'Bananas',      price: 5,  raw: true },
-    corn:     { name: 'Corn',         price: 7,  raw: true },
-    egg:      { name: 'Eggs',         price: 10,  raw: true },
-    milk:     { name: 'Milk',         price: 14,  raw: true },
-    apple:    { name: 'Apples',       price: 16,  raw: true },
-    pumpkin:  { name: 'Pumpkins',     price: 28, raw: true },
-    juice:    { name: 'Banana Juice', price: 24 },
-    popcorn:  { name: 'Popcorn',      price: 28 },
-    icecream: { name: 'Ice Cream',    price: 45 },
-    pie:      { name: 'Apple Pie',    price: 55 }
+    banana:   { name: 'موز', al: 'الموز', price: 5,  raw: true },
+    corn:     { name: 'ذرة', al: 'الذرة', price: 7,  raw: true },
+    egg:      { name: 'بيض', al: 'البيض', price: 10,  raw: true },
+    milk:     { name: 'حليب', al: 'الحليب', price: 14,  raw: true },
+    apple:    { name: 'تفاح', al: 'التفاح', price: 16,  raw: true },
+    pumpkin:  { name: 'يقطين', al: 'اليقطين', price: 28, raw: true },
+    juice:    { name: 'عصير موز', al: 'عصير الموز', price: 24 },
+    popcorn:  { name: 'فشار', al: 'الفشار', price: 28 },
+    icecream: { name: 'آيس كريم', al: 'الآيس كريم', price: 45 },
+    pie:      { name: 'فطيرة تفاح', al: 'فطيرة التفاح', price: 55 }
   };
 
   function field(id, name, cost, req, item, x, y, grow, extra) {
@@ -45,67 +45,67 @@
 
   // Order matters only for tie-breaking; "req" drives what shows up next.
   CM.UNLOCKS = [
-    field('bananaField', 'Banana Field', 0, [], 'banana', 560, 1010, 4.5),
-    shelf('bananaShelf', 'Banana Shelf', 0, [], 'banana', 1020, 1000),
-    { id: 'register1', name: 'Checkout', cost: 0, req: [], kind: 'register', x: 1540, y: 1490,
+    field('bananaField', 'حقل الموز', 0, [], 'banana', 560, 1010, 4.5),
+    shelf('bananaShelf', 'رف الموز', 0, [], 'banana', 1020, 1000),
+    { id: 'register1', name: 'صندوق الدفع', cost: 0, req: [], kind: 'register', x: 1540, y: 1490,
       cashier: { x: 1540, y: 1434 }, service: { x: 1540, y: 1556 }, pile: { x: 1662, y: 1440 },
       queue: [[1540, 1556], [1540, 1614], [1540, 1672], [1476, 1716], [1414, 1716], [1356, 1716]] },
-    { id: 'trash', name: 'Trash Bin', cost: 0, req: [], kind: 'trash', x: 852, y: 1320 },
+    { id: 'trash', name: 'سلة المهملات', cost: 0, req: [], kind: 'trash', x: 852, y: 1320 },
 
-    field('cornField', 'Corn Field', 15, [], 'corn', 560, 1320, 5.5),
-    shelf('cornShelf', 'Corn Shelf', 25, ['cornField'], 'corn', 1480, 1000),
-    { id: 'desk', name: 'Upgrade Board', cost: 30, req: ['cornShelf'], kind: 'desk', x: 1646, y: 918 },
-    { id: 'coop', name: 'Chicken Coop', cost: 50, req: ['cornShelf'], kind: 'coop', item: 'egg', x: 980, y: 590, grow: 5 },
-    shelf('eggShelf', 'Egg Shelf', 65, ['coop'], 'egg', 1020, 1170),
-    field('bananaField2', 'More Bananas', 50, ['desk'], 'banana', 250, 1010, 4.5),
-    { id: 'plants', name: 'Potted Plants', cost: 50, req: ['eggShelf'], kind: 'decor', decor: 'plants', x: 1250, y: 1500, bonus: 0.04 },
-    { id: 'cashier', name: 'Hire a Cashier', cost: 90, req: ['eggShelf'], kind: 'hire', role: 'cashier', reg: 'register1', x: 1664, y: 1600 },
-    { id: 'expand', name: 'Bigger Store!', cost: 140, req: ['cashier'], kind: 'expand', x: 1664, y: 1230 },
-    machine('juicer', 'Juice Maker', 180, ['expand'], 'banana', 'juice', 1900, 1010, 2.6, '#ffc93c'),
-    shelf('juiceShelf', 'Juice Shelf', 150, ['juicer'], 'juice', 2250, 1010, true),
-    { id: 'cow', name: 'Cow Pen', cost: 240, req: ['juiceShelf'], kind: 'pen', item: 'milk', x: 1560, y: 590, grow: 7 },
-    shelf('milkShelf', 'Milk Fridge', 220, ['cow'], 'milk', 1480, 1170, true),
-    { id: 'rug', name: 'Comfy Rug', cost: 150, req: ['plants', 'milkShelf'], kind: 'decor', decor: 'rug', x: 1250, y: 1500, bonus: 0.05 },
-    { id: 'farmer1', name: 'Hire a Farmer', cost: 350, req: ['juiceShelf'], kind: 'hire', role: 'farmer', x: 700, y: 1560 },
-    machine('popper', 'Popcorn Popper', 350, ['milkShelf'], 'corn', 'popcorn', 1900, 1190, 3, '#ff5d73'),
-    shelf('popcornShelf', 'Popcorn Shelf', 300, ['popper'], 'popcorn', 2250, 1190),
-    field('cornField2', 'More Corn', 300, ['popcornShelf'], 'corn', 250, 1320, 5.5),
-    { id: 'orchard', name: 'Apple Orchard', cost: 500, req: ['popcornShelf'], kind: 'orchard', item: 'apple',
+    field('cornField', 'حقل الذرة', 15, [], 'corn', 560, 1320, 5.5),
+    shelf('cornShelf', 'رف الذرة', 25, ['cornField'], 'corn', 1480, 1000),
+    { id: 'desk', name: 'لوحة التطوير', cost: 30, req: ['cornShelf'], kind: 'desk', x: 1646, y: 918 },
+    { id: 'coop', name: 'قن الدجاج', cost: 50, req: ['cornShelf'], kind: 'coop', item: 'egg', x: 980, y: 590, grow: 5 },
+    shelf('eggShelf', 'رف البيض', 65, ['coop'], 'egg', 1020, 1170),
+    field('bananaField2', 'موز أكثر!', 50, ['desk'], 'banana', 250, 1010, 4.5),
+    { id: 'plants', name: 'نباتات الزينة', cost: 50, req: ['eggShelf'], kind: 'decor', decor: 'plants', x: 1250, y: 1500, bonus: 0.04 },
+    { id: 'cashier', name: 'وظّف كاشير', cost: 90, req: ['eggShelf'], kind: 'hire', role: 'cashier', reg: 'register1', x: 1664, y: 1600 },
+    { id: 'expand', name: 'وسّع المتجر!', cost: 140, req: ['cashier'], kind: 'expand', x: 1664, y: 1230 },
+    machine('juicer', 'آلة العصير', 180, ['expand'], 'banana', 'juice', 1900, 1010, 2.6, '#ffc93c'),
+    shelf('juiceShelf', 'رف العصير', 150, ['juicer'], 'juice', 2250, 1010, true),
+    { id: 'cow', name: 'حظيرة البقرة', cost: 240, req: ['juiceShelf'], kind: 'pen', item: 'milk', x: 1560, y: 590, grow: 7 },
+    shelf('milkShelf', 'ثلاجة الحليب', 220, ['cow'], 'milk', 1480, 1170, true),
+    { id: 'rug', name: 'سجادة مريحة', cost: 150, req: ['plants', 'milkShelf'], kind: 'decor', decor: 'rug', x: 1250, y: 1500, bonus: 0.05 },
+    { id: 'farmer1', name: 'وظّف مزارعًا', cost: 350, req: ['juiceShelf'], kind: 'hire', role: 'farmer', x: 700, y: 1560 },
+    machine('popper', 'آلة الفشار', 350, ['milkShelf'], 'corn', 'popcorn', 1900, 1190, 3, '#ff5d73'),
+    shelf('popcornShelf', 'رف الفشار', 300, ['popper'], 'popcorn', 2250, 1190),
+    field('cornField2', 'ذرة أكثر!', 300, ['popcornShelf'], 'corn', 250, 1320, 5.5),
+    { id: 'orchard', name: 'بستان التفاح', cost: 500, req: ['popcornShelf'], kind: 'orchard', item: 'apple',
       x: 520, y: 560, cols: 3, rows: 2, sx: 165, sy: 150, grow: 7.5 },
-    shelf('appleShelf', 'Apple Shelf', 450, ['orchard'], 'apple', 1020, 1340),
-    { id: 'balloons', name: 'Balloon Arch', cost: 400, req: ['rug', 'appleShelf'], kind: 'decor', decor: 'balloons', x: 1250, y: 1500, bonus: 0.06 },
-    machine('creamer', 'Ice Cream Maker', 750, ['appleShelf'], 'milk', 'icecream', 1900, 1370, 3.2, '#ff9ecb'),
-    shelf('iceShelf', 'Ice Cream Freezer', 650, ['creamer'], 'icecream', 2250, 1370, true),
-    { id: 'register2', name: 'Second Checkout', cost: 1000, req: ['iceShelf'], kind: 'register', x: 960, y: 1490, helper: true,
+    shelf('appleShelf', 'رف التفاح', 450, ['orchard'], 'apple', 1020, 1340),
+    { id: 'balloons', name: 'قوس البالونات', cost: 400, req: ['rug', 'appleShelf'], kind: 'decor', decor: 'balloons', x: 1250, y: 1500, bonus: 0.06 },
+    machine('creamer', 'آلة الآيس كريم', 750, ['appleShelf'], 'milk', 'icecream', 1900, 1370, 3.2, '#ff9ecb'),
+    shelf('iceShelf', 'ثلاجة الآيس كريم', 650, ['creamer'], 'icecream', 2250, 1370, true),
+    { id: 'register2', name: 'صندوق دفع ثانٍ', cost: 1000, req: ['iceShelf'], kind: 'register', x: 960, y: 1490, helper: true,
       cashier: { x: 960, y: 1434 }, service: { x: 960, y: 1556 }, pile: { x: 842, y: 1440 },
       queue: [[960, 1556], [960, 1614], [960, 1672], [1024, 1716], [1086, 1716], [1146, 1716]] },
-    { id: 'farmer2', name: 'Hire a Farmer', cost: 1100, req: ['iceShelf', 'farmer1'], kind: 'hire', role: 'farmer', x: 700, y: 1560 },
-    field('pumpkinPatch', 'Pumpkin Patch', 1400, ['register2'], 'pumpkin', 400, 1600, 8, { sx: 110, sy: 90 }),
-    shelf('pumpkinShelf', 'Pumpkin Shelf', 1300, ['pumpkinPatch'], 'pumpkin', 1480, 1340),
-    machine('oven', 'Pie Oven', 1900, ['pumpkinShelf'], 'apple', 'pie', 1900, 1550, 3.6, '#ff8c42'),
-    shelf('pieShelf', 'Pie Shelf', 1700, ['oven'], 'pie', 2250, 1550),
-    { id: 'fountain', name: 'Fountain', cost: 2000, req: ['pieShelf'], kind: 'decor', decor: 'fountain', x: 2000, y: 1845, bonus: 0.08 },
-    { id: 'farmer3', name: 'Hire a Farmer', cost: 2400, req: ['pieShelf', 'farmer2'], kind: 'hire', role: 'farmer', x: 700, y: 1560 },
-    { id: 'statue', name: 'Golden Raccoon', cost: 6000, req: ['fountain', 'farmer3'], kind: 'decor', decor: 'statue', x: 960, y: 1845, bonus: 0.1, final: true }
+    { id: 'farmer2', name: 'وظّف مزارعًا', cost: 1100, req: ['iceShelf', 'farmer1'], kind: 'hire', role: 'farmer', x: 700, y: 1560 },
+    field('pumpkinPatch', 'حقل اليقطين', 1400, ['register2'], 'pumpkin', 400, 1600, 8, { sx: 110, sy: 90 }),
+    shelf('pumpkinShelf', 'رف اليقطين', 1300, ['pumpkinPatch'], 'pumpkin', 1480, 1340),
+    machine('oven', 'فرن الفطائر', 1900, ['pumpkinShelf'], 'apple', 'pie', 1900, 1550, 3.6, '#ff8c42'),
+    shelf('pieShelf', 'رف الفطائر', 1700, ['oven'], 'pie', 2250, 1550),
+    { id: 'fountain', name: 'نافورة', cost: 2000, req: ['pieShelf'], kind: 'decor', decor: 'fountain', x: 2000, y: 1845, bonus: 0.08 },
+    { id: 'farmer3', name: 'وظّف مزارعًا', cost: 2400, req: ['pieShelf', 'farmer2'], kind: 'hire', role: 'farmer', x: 700, y: 1560 },
+    { id: 'statue', name: 'الراكون الذهبي', cost: 6000, req: ['fountain', 'farmer3'], kind: 'decor', decor: 'statue', x: 960, y: 1845, bonus: 0.1, final: true }
   ];
 
   CM.UPGRADES = [
-    { id: 'speed', name: 'Zoomy Shoes', desc: 'Walk faster', icon: 'shoe', costs: [30, 80, 200, 500, 1200] },
-    { id: 'carry', name: 'Tall Stack', desc: 'Carry +2 items', icon: 'stack', costs: [40, 100, 250, 600, 1400, 3000] },
-    { id: 'grow', name: 'Super Soil', desc: 'Crops & machines faster', icon: 'sprout', costs: [50, 150, 400, 1000, 2400] },
-    { id: 'price', name: 'Fancy Prices', desc: '+20% coins per item', icon: 'tag', costs: [80, 250, 700, 1800, 4000] },
-    { id: 'fame', name: 'Mart Fame', desc: 'More customers', icon: 'star', costs: [120, 350, 1000, 2600] },
-    { id: 'helper', name: 'Helper Training', desc: 'Faster, stronger helpers', icon: 'helper', costs: [300, 800, 2000, 4500], needs: 'cashier' }
+    { id: 'speed', name: 'حذاء الصاروخ', desc: 'امشِ أسرع', icon: 'shoe', costs: [30, 80, 200, 500, 1200] },
+    { id: 'carry', name: 'كومة عالية', desc: 'احمل غرضين إضافيين', icon: 'stack', costs: [40, 100, 250, 600, 1400, 3000] },
+    { id: 'grow', name: 'تربة خارقة', desc: 'مزروعات وآلات أسرع', icon: 'sprout', costs: [50, 150, 400, 1000, 2400] },
+    { id: 'price', name: 'أسعار فاخرة', desc: 'عملات أكثر بـ 20% لكل غرض', icon: 'tag', costs: [80, 250, 700, 1800, 4000] },
+    { id: 'fame', name: 'شهرة السوق', desc: 'زبائن أكثر', icon: 'star', costs: [120, 350, 1000, 2600] },
+    { id: 'helper', name: 'تدريب المساعدين', desc: 'مساعدون أسرع وأقوى', icon: 'helper', costs: [300, 800, 2000, 4500], needs: 'cashier' }
   ];
 
   CM.HATS = [
-    { id: 'none', name: 'No hat', lvl: 1 },
-    { id: 'cap', name: 'Cap', lvl: 2 },
-    { id: 'flower', name: 'Flower', lvl: 3 },
-    { id: 'chef', name: 'Chef', lvl: 5 },
-    { id: 'straw', name: 'Straw', lvl: 7 },
-    { id: 'party', name: 'Party', lvl: 9 },
-    { id: 'crown', name: 'Crown', lvl: 11 }
+    { id: 'none', name: 'بلا قبعة', lvl: 1 },
+    { id: 'cap', name: 'كاب', lvl: 2 },
+    { id: 'flower', name: 'وردة', lvl: 3 },
+    { id: 'chef', name: 'طاهٍ', lvl: 5 },
+    { id: 'straw', name: 'قش', lvl: 7 },
+    { id: 'party', name: 'حفلة', lvl: 9 },
+    { id: 'crown', name: 'تاج', lvl: 11 }
   ];
 
   // Which species shop at your mart, unlocked by mart level.

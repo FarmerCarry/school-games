@@ -38,14 +38,14 @@
 
   /* ================================================== 1. NEON STEPS (easy) */
   LV.push({
-    id: 'neon-steps', name: 'Neon Steps', diff: 'Easy', face: 'easy', bpm: 135,
+    id: 'neon-steps', name: 'درجات النيون', diff: 'سهل', face: 'easy', bpm: 135,
     theme: { bg1: '#1a0b5e', bg2: '#3b1bb3', ground1: '#2a1a8a', ground2: '#150a4a', line: '#7cf3ff',
       block: '#150b45', blockLine: '#7cf3ff', spike: '#ff5ad1', accent: '#ff5ad1', deco: '#6b4dff' },
     song: { root: 57, scale: 'major', prog: [0, 4, 5, 3], lead: 'pulse25', seed: 11, style: 'bounce' },
-    signs: [{ x: 9, y: 3.6, text: 'Press SPACE or CLICK to jump!', col: '#7cf3ff' },
-            { x: 36, y: 3.6, text: 'Hold to keep jumping', col: '#ffffff' },
-            { x: 170, y: 6.2, text: 'Yellow pads bounce you up!', col: '#ffe14d' },
-            { x: 203, y: 5.2, text: 'Touch a ring and TAP to jump again', col: '#ffe14d' }],
+    signs: [{ x: 9, y: 3.6, text: 'اضغط مسافة أو انقر لتقفز!', col: '#7cf3ff' },
+            { x: 36, y: 3.6, text: 'اضغط مطولًا لتقفز باستمرار', col: '#ffffff' },
+            { x: 170, y: 6.2, text: 'المنصة الصفراء تطيّرك لأعلى!', col: '#ffe14d' },
+            { x: 203, y: 5.2, text: 'المس الحلقة واضغط لتقفز مرة أخرى!', col: '#ffe14d' }],
     chunks: [
       // intro
       ['....|....|....|....|....|....'],
@@ -100,12 +100,12 @@
 
   /* ================================================ 2. PULSE ROAD (normal) */
   LV.push({
-    id: 'pulse-road', name: 'Pulse Road', diff: 'Normal', face: 'normal', bpm: 150,
+    id: 'pulse-road', name: 'طريق النبض', diff: 'متوسط', face: 'normal', bpm: 150,
     theme: { bg1: '#04264d', bg2: '#0b6aa8', ground1: '#0a4f86', ground2: '#032040', line: '#ffe14d',
       block: '#06223f', blockLine: '#ffe14d', spike: '#ff8a2a', accent: '#ffe14d', deco: '#1d8fd6' },
     song: { root: 55, scale: 'minor', prog: [0, 5, 2, 6], lead: 'pulse25', seed: 23, style: 'drive' },
-    signs: [{ x: 100, y: 5.5, text: 'Spikes on the ceiling? Don’t jump!', col: '#ffe14d' },
-            { x: 152, y: 6.5, text: 'Tap on pink rings for a little hop', col: '#ff9be6' }],
+    signs: [{ x: 100, y: 5.5, text: 'أشواك في السقف؟ لا تقفز!', col: '#ffe14d' },
+            { x: 152, y: 6.5, text: 'اضغط عند الحلقة الوردية لقفزة صغيرة', col: '#ff9be6' }],
     chunks: [
       ['....|....|....|....|....'],
       ['..^.|....|..^.|....|..^^|....|....|....|..^.|..^.|..^^|....|....'],
@@ -176,12 +176,12 @@
   /* =============================================== 3. GRAVITY JAM (hard) */
   var CEIL = '####|####|####|####|####|####|####|####|####|####|####|####';
   LV.push({
-    id: 'gravity-jam', name: 'Gravity Jam', diff: 'Hard', face: 'hard', bpm: 140,
+    id: 'gravity-jam', name: 'الجاذبية المقلوبة', diff: 'صعب', face: 'hard', bpm: 140,
     theme: { bg1: '#3a0a2e', bg2: '#8a1a4a', ground1: '#6a1240', ground2: '#2a0418', line: '#5dffb0',
       block: '#2a0620', blockLine: '#5dffb0', spike: '#ffe14d', accent: '#5dffb0', deco: '#c02a6e' },
     song: { root: 58, scale: 'minor', prog: [0, 3, 4, 3], lead: 'pulse25', seed: 37, style: 'bounce' },
-    signs: [{ x: 58, y: 3.4, text: 'Orange portal = walk on the ceiling!', col: '#ffb300' },
-            { x: 116, y: 3.4, text: 'Blue pads and rings flip you too', col: '#4dc3ff' }],
+    signs: [{ x: 58, y: 3.4, text: 'البوابة البرتقالية = امشِ على السقف!', col: '#ffb300' },
+            { x: 116, y: 3.4, text: 'المنصات والحلقات الزرقاء تقلبك أيضًا!', col: '#4dc3ff' }],
     chunks: [
       ['....|....|....|....|....'],
       ['....|....|....|..##|....|....|....|....|....|....',
@@ -259,11 +259,11 @@
 
   /* =============================================== 4. ROCKET RAVE (harder) */
   LV.push({
-    id: 'rocket-rave', name: 'Rocket Rave', diff: 'Harder', face: 'harder', bpm: 160,
+    id: 'rocket-rave', name: 'حفلة الصواريخ', diff: 'أصعب', face: 'harder', bpm: 160,
     theme: { bg1: '#0a1f14', bg2: '#127a4a', ground1: '#0f5a36', ground2: '#03200f', line: '#ff5ad1',
       block: '#06261a', blockLine: '#ff5ad1', spike: '#ffe14d', accent: '#ff5ad1', deco: '#1fae6a' },
     song: { root: 57, scale: 'dorian', prog: [0, 6, 3, 4], lead: 'pulse12', seed: 51, style: 'drive' },
-    signs: [{ x: 70, y: 7.3, text: 'ROCKET! Hold to fly up, let go to fall', col: '#ff9be6' }],
+    signs: [{ x: 70, y: 7.3, text: 'صاروخ! اضغط مطولًا لتطير، واترك لتنزل', col: '#ff9be6' }],
     chunks: [
       ['....|....|....|....|....'],
       // cube warm-up
@@ -310,11 +310,11 @@
 
   /* ================================================ 5. STAR STORM (insane) */
   LV.push({
-    id: 'star-storm', name: 'Star Storm', diff: 'Insane', face: 'insane', bpm: 170,
+    id: 'star-storm', name: 'عاصفة النجوم', diff: 'جنوني', face: 'insane', bpm: 170,
     theme: { bg1: '#12002e', bg2: '#4a00a8', ground1: '#3a0a8a', ground2: '#10002a', line: '#ffdd00',
       block: '#140033', blockLine: '#00f0ff', spike: '#ff3b8d', accent: '#ffdd00', deco: '#7a2cff' },
     song: { root: 60, scale: 'minor', prog: [0, 5, 3, 4], lead: 'pulse25', seed: 77, style: 'drive' },
-    signs: [{ x: 240, y: 7.6, text: 'Upside-down rocket: controls flip!', col: '#ffb300' }],
+    signs: [{ x: 240, y: 7.6, text: 'صاروخ مقلوب: التحكم ينعكس!', col: '#ffb300' }],
     chunks: [
       ['....|....|....|....|....'],
       // fast rhythm
