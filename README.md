@@ -44,11 +44,16 @@ Every game saves best scores and unlocks in the browser, and has a title screen,
 
 ## Putting it online (GitHub Pages, free)
 
-1. Merge this branch into `main`.
-2. On GitHub, open the repo → **Settings** → **Pages**.
-3. Under **Build and deployment**, choose **Deploy from a branch**, then branch **`main`** and
+1. Merge this branch into `main` (already done if you're reading this on `main`).
+2. **If the repository is private:** on GitHub's free plan, Pages only works for public
+   repositories. Open **Settings** → **General**, scroll to the bottom (**Danger Zone**) →
+   **Change visibility** → **Public**. The repo contains only the games (no passwords, no
+   student data), so this is safe. (With a paid GitHub plan you can skip this step.)
+3. On GitHub, open the repo → **Settings** → **Pages**.
+4. Under **Build and deployment**, choose **Deploy from a branch**, then branch **`main`** and
    folder **`/ (root)`**, and click **Save**.
-4. After a minute the site is live at `https://<your-username>.github.io/school-games/`.
+5. After a minute the site is live at `https://<your-username>.github.io/school-games/`.
+   Every later change pushed to `main` (for example hiding a game) goes live automatically.
    Share that link with your class.
 
 If the school web filter blocks it, ask IT to allow that address. The site contains no ads and
