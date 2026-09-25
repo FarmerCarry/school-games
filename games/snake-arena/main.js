@@ -20,6 +20,7 @@
   if (typeof prefs.name !== 'string' || SA.PLAYER_NAMES.indexOf(prefs.name) < 0) prefs.name = Kit.pick(SA.PLAYER_NAMES);
   function savePrefs() { store.set('skin', prefs.skin); store.set('eyes', prefs.eyes); store.set('name', prefs.name); }
   function curSkin() { return byId(SA.SKINS, prefs.skin); }
+  savePrefs(); // keep the random starting name across reloads
 
   /* -------------------------------------------------------------- state */
   var G = {
@@ -72,6 +73,7 @@
   }
 
   function toMenu() {
+    commitRun();
     W.reset('demo');
     R.clearFx();
     G.state = 'title'; G.timeScale = 1; G.slowT = 0;
@@ -86,6 +88,7 @@
     var now = performance.now();
     if (now - G.lastStart < 250) return;
     G.lastStart = now;
+    commitRun();
     Kit.audio.unlock();
     W.reset('play');
     W.spawnPlayer(prefs.name, curSkin(), prefs.eyes);
@@ -112,7 +115,7 @@
     mouse.down = false;
     sfx.boostHum(false);
     showScreen('pause');
-    $('pBest').textContent = Kit.fmt(stats.bestLen);
+    $('pBest').textContent = Kit.fmt(Math.max(stats.bestLen, W.player.mass));
     $('pLen').textContent = Kit.fmt(W.player.mass);
   }
   function resume() {
@@ -126,7 +129,7 @@
   function projected() {
     var r = G.run, p = W.player, st = {};
     for (var k2 in stats) st[k2] = stats[k2];
-    var len = G.state === 'play' ? Math.floor(p.mass) : r.deathLen;
+    var len = r.deathLen || Math.floor(p.mass);
     st.bestLen = Math.max(stats.bestLen, len);
     st.totalKills = stats.totalKills + r.kills;
     st.bestKills = Math.max(stats.bestKills, r.kills);
@@ -138,6 +141,22 @@
     st.top1Time = Math.max(stats.top1Time, Math.floor(r.top1T));
     return st;
   }
+  // Adds this run to the saved stats exactly once (game over, or leaving a run early via
+  // pause -> restart / menu, or closing the page), so progress is never thrown away.
+  function commitRun() {
+    var r = G.run;
+    if (!r || r.committed) return false;
+    r.committed = true;
+    if (W.player.alive && r.t < 3) return false; // an instant restart doesn't count as a round
+    var st = projected();
+    for (var kk in st) stats[kk] = st[kk];
+    saveStats();
+    return true;
+  }
+  window.addEventListener('pagehide', function () {
+    if (G.state === 'play' || G.state === 'paused' || G.state === 'dying') commitRun();
+  });
+
   function liveUnlockCheck() {
     var st = projected(), lists = [SA.SKINS, SA.EYES];
     for (var l = 0; l < 2; l++) {
@@ -154,7 +173,7 @@
   }
 
   /* -------------------------------------------------------------- events */
-  var KILL_WORDS = ['', 'ضربة مزدوجة!', 'ثلاثية!', 'لا يمكن إيقافك!', 'أسطوري!'];
+  var KILL_WORDS = ['', 'فرقعة مزدوجة!', 'ثلاث فرقعات!', 'لا يمكن إيقافك!', 'أسطوري!'];
   function onDeath(e) {
     var s = e.s, p = W.player, i, cam = R.cam;
     var cols = s.skin.rainbow ? SA.RAINBOW : s.skin.colors;
@@ -179,16 +198,16 @@
       sfx.kill(r.combo - 1);
       G.shake = Math.max(G.shake, 9);
       G.timeScale = 0.3; G.slowT = 0.2;
-      toast('أطحت بـ ' + s.name + '!', '#ffe36b', KILL_WORDS[Math.min(4, r.combo - 1)], 44, 2);
-      R.floatText(s.hx, s.hy, 'بوب!', '#ffffff', 40);
+      toast('فرقعتَ ' + s.name + '!', '#ffe36b', KILL_WORDS[Math.min(4, r.combo - 1)], 44, 2);
+      R.floatText(s.hx, s.hy, 'فرقعة!', '#ffffff', 40);
       R.ring(s.hx, s.hy, '#ffe36b', 160 + s.r * 3, 0.7);
-      feed('أنت أطحت بـ ' + s.name, '#ffe36b');
+      feed('أنت فرقعتَ ' + s.name, '#ffe36b');
     } else {
       if (near) {
         var d = Math.sqrt(dx * dx + dy * dy) * cam.zoom;
         sfx.popFar(clamp(1 - d / 1100, 0, 1) * 0.8);
       }
-      if (e.killer) feed(e.killer.name + ' أطاح بـ ' + s.name);
+      if (e.killer) feed(e.killer.name + ' فرقع ' + s.name);
       else if (near || s.mass > 200) feed(s.name + ' لمس الحافة');
     }
   }
@@ -245,7 +264,7 @@
   var HINTS = [
     { from: 1.5, to: 7, txt: 'وجّه الثعبان بالفأرة وكُل النقاط المضيئة', games: 3 },
     { from: 8, to: 14, txt: 'اضغط مطولًا على الفأرة أو مسافة للتسريع!', games: 3 },
-    { from: 16, to: 22, txt: 'اجعل رؤوس الثعابين تصطدم بجسمك لتفجيرها!', games: 4 },
+    { from: 16, to: 22, txt: 'اجعل الثعابين تصطدم بجسمك لتفرقعها!', games: 4 },
     { from: 26, to: 31, txt: 'التقط الفقاعات الملوّنة لتحصل على قوى خارقة', games: 2 }
   ];
   function runTick(dt) {
@@ -357,21 +376,22 @@
     var before = {}, lists = [SA.SKINS, SA.EYES];
     for (var l = 0; l < 2; l++) for (i = 0; i < lists[l].length; i++) before[lists[l][i].id] = unlocked(lists[l][i]);
     var oldBest = stats.bestLen;
-    var st = projected();
-    for (var kk in st) stats[kk] = st[kk];
-    saveStats();
+    commitRun();
     var newBest = r.deathLen > oldBest && stats.games > 1;
 
     G.state = 'over'; G.overT = 0;
     showScreen('over');
-    $('oTitle').textContent = newBest ? 'رقم قياسي جديد!' : Kit.pick(['بوب!', 'أوووه!', 'بووم!']);
+    $('oTitle').textContent = newBest ? 'رقم قياسي جديد!' : Kit.pick(['فرقعة!', 'أوووه!', 'يا خسارة!']);
     $('oTitle').className = newBest ? 'otitle gold' : 'otitle';
-    $('oSub').textContent = r.reason === 'border' ? 'لمستَ حافة الساحة' : (r.killer ? 'اصطدمتَ بـ ' + r.killer.name : 'انفجرت!');
+    $('oSub').textContent = r.reason === 'border' ? 'لمستَ حافة الساحة' : (r.killer ? 'اصطدمتَ بـ ' + r.killer.name : 'فرقع ثعبانك!');
     $('oLen').textContent = Kit.fmt(r.deathLen);
     $('oRank').textContent = '#' + r.deathRank;
     $('oKills').textContent = r.kills;
     $('oTime').textContent = fmtTime(r.t);
     $('oBestV').textContent = Kit.fmt(stats.bestLen);
+    // "so close!" hook when the run nearly beat the record
+    var gap = oldBest - r.deathLen;
+    $('oClose').textContent = !newBest && oldBest > 0 && gap > 0 && r.deathLen >= oldBest * 0.6 ? 'ينقصك ' + Kit.fmt(gap) + ' فقط!' : '';
 
     // new unlocks
     var ul = $('oUnlocks'); ul.innerHTML = '';
@@ -381,8 +401,8 @@
       if (!before[it.id] && unlocked(it) && got < 3) {
         got++;
         var d = document.createElement('div'); d.className = 'unl';
-        var c = document.createElement('canvas'); c.width = l === 0 ? 150 : 60; c.height = l === 0 ? 50 : 60;
-        if (l === 0) R.drawPreview(c, it, 'happy', 1, { r: 11, n: 26, sp: 4.6, amp: 5 });
+        var c = document.createElement('canvas'); c.width = l === 0 ? 120 : 44; c.height = l === 0 ? 36 : 44;
+        if (l === 0) R.drawPreview(c, it, 'happy', 1, { r: 8, n: 26, sp: 3.7, amp: 4 });
         else R.drawHeadPreview(c, curSkin(), it.id, 1);
         var sp = document.createElement('span');
         sp.textContent = (l === 0 ? 'شكل جديد: ' : 'عيون جديدة: ') + it.name;
@@ -394,7 +414,7 @@
     var ng = nextGoal(), nx = $('oNext');
     if (ng) {
       nx.hidden = false;
-      $('oNextTxt').textContent = 'الهدف التالي (' + (ng.eyes ? 'عيون ' : 'شكل ') + ng.it.name + '): ' + SA.reqText(ng.it.req);
+      $('oNextTxt').textContent = 'الهدف التالي: ' + (ng.eyes ? 'عيون «' : 'شكل «') + ng.it.name + '» — ' + SA.reqText(ng.it.req);
       $('oNextFill').style.width = Math.round(ng.p * 100) + '%';
     } else nx.hidden = true;
 
@@ -551,7 +571,7 @@
     else if (!p.alive) p.boostWant = false;
     if (W.mode === 'play' && G.run) {
       W.D = clamp(0.2 + G.run.t / 300 + p.mass / 2500, 0.2, 1);
-      W.huntPlayer = G.run.t > 12;
+      W.huntPlayer = G.run.t > (stats.games < 3 ? 25 : 12); // gentler first rounds for new players
     }
     if (G.slowT > 0) { G.slowT -= dt; G.timeScale += (1 - G.timeScale) * dt * 2; if (G.slowT <= 0) G.timeScale = 1; }
     var sdt = dt * G.timeScale;
@@ -587,7 +607,9 @@
   W.reset('demo');
   refreshTitle();
   showScreen('title');
-  Kit.muteButton();
+  var muteBtn = Kit.muteButton();
+  muteBtn.setAttribute('aria-label', 'الصوت');
+  muteBtn.title = 'الصوت (M)';
   // Warm up a few seconds of demo so the title background is lively right away.
   for (var w = 0; w < 90; w++) W.update(1 / 60);
   W.events.length = 0;

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<title>Rail Rush</title>
+<title>عدّاء السكة</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="../../shared/game.css">
 <style>
@@ -22,35 +22,35 @@
   #ui .sg-btn.off { filter: grayscale(0.7) brightness(0.85); }
   #ui .sg-btn.shake { animation: shake 0.35s; }
   #ui .sg-key { font-size: 0.95em; min-width: 1.8em; padding: 0.05em 0.45em; border-radius: 0.4em; box-shadow: 0 0.18em 0 #9aa3c7; margin: 0 0.1em; }
-  #ui .sg-btn svg { width: 1em; height: 1em; vertical-align: -0.12em; margin-right: 0.25em; }
+  #ui .sg-btn svg { width: 1em; height: 1em; vertical-align: -0.12em; margin-left: 0.3em; }
   canvas[data-icon] { display: inline-block; }
-  .ci { width: 1.05em; height: 1.05em; vertical-align: -0.18em; margin-right: 0.2em; }
+  .ci { width: 1.05em; height: 1.05em; vertical-align: -0.18em; margin-left: 0.2em; }
 
   /* ---------- title */
-  #title { background: linear-gradient(90deg, rgba(20, 24, 70, 0.62) 0%, rgba(20, 24, 70, 0.35) 34%, rgba(20, 24, 70, 0) 55%); }
-  .title-left { position: absolute; left: 3.2em; top: 2.2em; width: 34em; }
-  .logo { display: flex; flex-direction: column; line-height: 0.84; transform: rotate(-5deg); transform-origin: left center; margin: 0 0 0.35em 0; animation: logoFloat 3.2s ease-in-out infinite; }
-  .logo span { font-weight: 700; font-size: 7.4em; letter-spacing: 0.02em; text-shadow: var(--outline), 0 0.12em 0 var(--navy), 0 0.2em 0.12em rgba(0,0,0,0.25); }
+  #title { background: linear-gradient(270deg, rgba(20, 24, 70, 0.62) 0%, rgba(20, 24, 70, 0.35) 34%, rgba(20, 24, 70, 0) 55%); }
+  .title-left { position: absolute; right: 4.6em; top: 1.6em; width: 34em; }
+  .logo { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.02; transform: rotate(-4deg); transform-origin: right center; margin: 0 0 0.35em 0; animation: logoFloat 3.2s ease-in-out infinite; }
+  .logo span { font-weight: 700; font-size: 6.6em; text-shadow: var(--outline), 0 0.12em 0 var(--navy), 0 0.2em 0.12em rgba(0,0,0,0.25); }
   .logo .l1 { color: var(--yellow); }
-  .logo .l2 { color: var(--orange); margin-left: 0.55em; }
-  .tagline { font-size: 1.35em; font-weight: 700; margin: 0.2em 0 0.9em 0.1em; text-shadow: 0 0.12em 0 rgba(0,0,0,0.35); letter-spacing: 0.02em; }
-  #ui .sg-btn.play { font-size: 2.5em; padding: 0.28em 1.5em; background: linear-gradient(#6dffa6, #19c95c); color: #053b1a; box-shadow: 0 0.16em 0 #0a7a35, 0 0.4em 0.9em rgba(0,0,0,0.3); animation: pulse 1.1s ease-in-out infinite; margin-left: 0; }
+  .logo .l2 { color: var(--orange); margin-right: 0.9em; margin-top: -0.28em; }
+  .tagline { font-size: 1.45em; font-weight: 700; margin: 0.1em 0.1em 0.7em 0; text-shadow: 0 0.12em 0 rgba(0,0,0,0.35); }
+  #ui .sg-btn.play { font-size: 2.5em; padding: 0.28em 1.5em; background: linear-gradient(#6dffa6, #19c95c); color: #053b1a; box-shadow: 0 0.16em 0 #0a7a35, 0 0.4em 0.9em rgba(0,0,0,0.3); animation: pulse 1.1s ease-in-out infinite; margin-right: 0; }
   #ui .sg-btn.play:hover { animation: none; transform: scale(1.07); }
   .playrow { display: flex; align-items: center; gap: 1em; }
   .orpress { font-size: 1.05em; opacity: 0.9; text-shadow: 0 0.1em 0 rgba(0,0,0,0.4); white-space: nowrap; }
-  .row { display: flex; gap: 0.4em; margin: 0.6em 0 0.9em -0.25em; }
-  .badge { display: inline-block; background: var(--pink); color: #fff; font-size: 0.65em; border-radius: 999px; padding: 0.1em 0.5em; vertical-align: 0.2em; margin-left: 0.2em; }
+  .row { display: flex; gap: 0.4em; margin: 0.6em -0.25em 0.9em 0; }
+  .badge { display: inline-block; background: var(--pink); color: #fff; font-size: 0.65em; border-radius: 999px; padding: 0.1em 0.5em; vertical-align: 0.2em; margin-right: 0.3em; }
   .chips { display: flex; gap: 0.6em; flex-wrap: wrap; }
   .chip { background: rgba(15, 18, 55, 0.6); border: 0.12em solid rgba(255,255,255,0.18); border-radius: 0.9em; padding: 0.35em 0.8em; font-size: 1.1em; display: flex; align-items: center; gap: 0.4em; }
   .chip b { font-size: 1.25em; color: var(--yellow); }
   .chip canvas { width: 1.4em; height: 1.4em; }
-  .howto-box { position: absolute; left: 3.2em; bottom: 1.6em; background: rgba(15, 18, 55, 0.66); border-radius: 1em; padding: 0.7em 1.1em; font-size: 1.02em; display: grid; grid-template-columns: auto auto; gap: 0.35em 1.4em; }
+  .howto-box { position: absolute; right: 3.2em; bottom: 1.6em; background: rgba(15, 18, 55, 0.66); border-radius: 1em; padding: 0.7em 1.1em; font-size: 1.02em; display: grid; grid-template-columns: auto auto; gap: 0.35em 1.4em; }
   .howto-box div { white-space: nowrap; }
-  .peek { position: absolute; right: 2em; bottom: 1.6em; width: 25em; background: rgba(15, 18, 55, 0.7); border-radius: 1em; padding: 0.6em 0.9em 0.7em; }
+  .peek { position: absolute; left: 2em; bottom: 1.6em; width: 25em; background: rgba(15, 18, 55, 0.7); border-radius: 1em; padding: 0.6em 0.9em 0.7em; }
   .peek-h { font-weight: 700; font-size: 1.05em; margin-bottom: 0.3em; color: var(--yellow); display: flex; justify-content: space-between; }
 
   /* ---------- missions rows */
-  .mission { display: flex; align-items: center; gap: 0.6em; background: rgba(255,255,255,0.08); border-radius: 0.8em; padding: 0.5em 0.7em; margin: 0.4em 0; text-align: left; }
+  .mission { display: flex; align-items: center; gap: 0.6em; background: rgba(255,255,255,0.08); border-radius: 0.8em; padding: 0.5em 0.7em; margin: 0.4em 0; text-align: right; }
   .mission.compact { padding: 0.25em 0.5em; margin: 0.25em 0; font-size: 0.88em; }
   .m-check { width: 1.6em; height: 1.6em; border-radius: 50%; border: 0.15em solid rgba(255,255,255,0.5); display: flex; align-items: center; justify-content: center; flex: none; font-weight: 700; }
   .mission.done .m-check { background: var(--green); border-color: var(--green); color: #053b1a; }
@@ -58,9 +58,9 @@
   .m-body { flex: 1; min-width: 0; }
   .m-text { font-size: 1.05em; margin-bottom: 0.25em; }
   .m-bar { height: 0.55em; background: rgba(0,0,0,0.35); border-radius: 1em; overflow: hidden; }
-  .m-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--yellow), var(--orange)); border-radius: 1em; }
+  .m-bar i { display: block; height: 100%; background: linear-gradient(270deg, var(--yellow), var(--orange)); border-radius: 1em; }
   .mission.done .m-bar i { background: var(--green); }
-  .m-num { font-weight: 700; font-size: 0.95em; opacity: 0.9; flex: none; }
+  .m-num { font-weight: 700; font-size: 0.95em; opacity: 0.9; flex: none; direction: ltr; unicode-bidi: isolate; }
 
   /* ---------- panels */
   .panel { background: linear-gradient(170deg, var(--navy2), var(--navy)); border: 0.2em solid rgba(255,255,255,0.18); border-radius: 1.5em; box-shadow: 0 1.2em 3em rgba(0,0,0,0.45); padding: 1.3em 1.8em; text-align: center; animation: popIn 0.35s cubic-bezier(.2,1.6,.4,1); }
@@ -77,9 +77,11 @@
   #overPanel { width: 38em; padding: 1em 1.8em 1.1em; position: relative; }
   #overPanel.best { border-color: var(--yellow); box-shadow: 0 0 0 0.3em rgba(255,210,63,0.35), 0 1.2em 3em rgba(0,0,0,0.45); }
   #overTitle { font-size: 3.6em; font-weight: 700; color: var(--orange); text-shadow: var(--outline), 0 0.1em 0 var(--navy); line-height: 1; animation: wobble 0.9s ease-out; }
-  .score-label { font-size: 1em; opacity: 0.75; letter-spacing: 0.15em; margin-top: 0.3em; }
+  .score-label { font-size: 1.1em; opacity: 0.8; margin-top: 0.3em; }
   #overScore { font-size: 4em; font-weight: 700; line-height: 1.05; text-shadow: 0 0.08em 0 rgba(0,0,0,0.35); }
   #newBest { display: inline-block; background: linear-gradient(90deg, #ffd23f, #ff9f1c); color: #4a2500; font-weight: 700; font-size: 1.5em; padding: 0.1em 0.9em; border-radius: 999px; animation: bestPop 0.6s cubic-bezier(.2,1.8,.4,1), pulse 0.8s 0.6s ease-in-out infinite; box-shadow: 0 0.15em 0 #b35c00; }
+  #soClose { display: inline-block; background: rgba(255,77,109,0.22); border: 0.12em solid #ff4d6d; color: #fff; font-weight: 700; font-size: 1.15em; padding: 0.12em 0.9em; border-radius: 999px; animation: bestPop 0.5s cubic-bezier(.2,1.8,.4,1); }
+  #soClose[hidden] { display: none; }
   .stats { display: flex; justify-content: center; gap: 0.7em; margin: 0.6em 0 0.4em; }
   .stat { background: rgba(255,255,255,0.1); border-radius: 0.8em; padding: 0.35em 0.8em; min-width: 8em; }
   .stat b { display: block; font-size: 1.5em; color: var(--yellow); }
@@ -91,15 +93,15 @@
   #nextGoal .m-bar { height: 0.7em; }
   .btns { margin-top: 0.6em; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; }
   #ui .sg-btn.go { font-size: 1.8em; background: linear-gradient(#6dffa6, #19c95c); color: #053b1a; box-shadow: 0 0.16em 0 #0a7a35; }
-  .wallet { position: absolute; right: 1em; top: 0.8em; font-size: 1.05em; opacity: 0.9; display: flex; align-items: center; gap: 0.2em; }
+  .wallet { position: absolute; left: 1em; top: 0.8em; font-size: 1.05em; opacity: 0.9; display: flex; align-items: center; gap: 0.2em; }
   .wallet canvas { width: 1.2em; height: 1.2em; }
 
   /* ---------- shop */
   #shop { background: linear-gradient(270deg, rgba(20,24,70,0.7) 0%, rgba(20,24,70,0.45) 55%, rgba(20,24,70,0) 75%); }
-  #shopPanel { position: absolute; right: max(3.9em, 64px); top: 1.4em; bottom: 1.4em; width: 46em; display: flex; flex-direction: column; padding: 1em 1.3em; text-align: left; }
+  #shopPanel { position: absolute; right: max(3.9em, 64px); top: 1.4em; bottom: 1.4em; width: 46em; display: flex; flex-direction: column; padding: 1em 1.3em; text-align: right; }
   .shop-head { display: flex; align-items: center; gap: 0.8em; margin-bottom: 0.5em; }
   .shop-head h2 { margin: 0; font-size: 2.3em; }
-  .shop-head .wallet { position: static; margin-left: auto; font-size: 1.5em; font-weight: 700; color: var(--yellow); }
+  .shop-head .wallet { position: static; margin-right: auto; font-size: 1.5em; font-weight: 700; color: var(--yellow); }
   .tabs { display: flex; gap: 0.4em; margin-bottom: 0.7em; }
   .tab { font: inherit; font-weight: 700; font-size: 1.15em; border: none; border-radius: 0.8em 0.8em 0.3em 0.3em; padding: 0.35em 1em; background: rgba(255,255,255,0.12); color: #fff; cursor: pointer; }
   .tab.on { background: var(--yellow); color: var(--navy); }
@@ -140,15 +142,15 @@
   .pill { display: inline-block; background: var(--yellow); color: #3a2a00; border-radius: 999px; padding: 0.02em 0.55em; font-weight: 700; font-size: 1.3em; box-shadow: 0 0.13em 0 rgba(0,0,0,0.3); }
   .pill.hot { background: linear-gradient(90deg, #ff4d6d, #ff9f1c); color: #fff; animation: pulse 0.5s ease-in-out infinite alternate; }
   #dist { font-size: 1.25em; font-weight: 700; text-shadow: var(--outline); }
-  #coinBox { position: absolute; right: 118px; top: 12px; display: flex; align-items: center; gap: 0.3em; background: rgba(15,18,55,0.55); border-radius: 999px; padding: 0.1em 0.8em 0.1em 0.25em; font-size: 1.7em; font-weight: 700; }
+  #coinBox { position: absolute; right: 118px; top: 12px; display: flex; align-items: center; gap: 0.3em; background: rgba(15,18,55,0.55); border-radius: 999px; padding: 0.1em 0.25em 0.1em 0.8em; font-size: 1.7em; font-weight: 700; }
   #coinBox canvas { width: 1.35em; height: 1.35em; }
   #coinBox.bump { animation: bump 0.18s ease-out; }
   #powers { position: absolute; left: 1.1em; top: 7.6em; display: flex; flex-direction: column; gap: 0.45em; }
-  .pw { display: none; align-items: center; gap: 0.4em; background: rgba(15,18,55,0.55); border-radius: 999px; padding: 0.2em 0.7em 0.2em 0.25em; animation: popIn 0.3s cubic-bezier(.2,1.6,.4,1); }
+  .pw { display: none; align-items: center; gap: 0.4em; background: rgba(15,18,55,0.55); border-radius: 999px; padding: 0.2em 0.25em 0.2em 0.7em; animation: popIn 0.3s cubic-bezier(.2,1.6,.4,1); }
   .pw.on { display: flex; }
   .pw canvas { width: 2.4em; height: 2.4em; }
   .pw-bar { width: 7em; height: 0.7em; background: rgba(0,0,0,0.4); border-radius: 1em; overflow: hidden; }
-  .pw-bar i { display: block; height: 100%; background: linear-gradient(90deg, #6dffa6, #19c95c); transform-origin: left center; }
+  .pw-bar i { display: block; height: 100%; background: linear-gradient(270deg, #6dffa6, #19c95c); transform-origin: right center; }
   .pw.low .pw-bar i { background: linear-gradient(90deg, #ff4d6d, #ff9f1c); }
   .pw.low canvas { animation: blink 0.3s steps(2) infinite; }
   #pop { position: absolute; left: 0; right: 0; top: 24%; text-align: center; font-size: 3.2em; font-weight: 700; color: #fff; text-shadow: var(--outline), 0 0.1em 0 var(--navy); opacity: 0; pointer-events: none; }
@@ -165,7 +167,7 @@
   #toasts { position: absolute; left: 50%; top: 0.7em; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 0.4em; }
   .toast { background: rgba(20, 150, 80, 0.92); border: 0.12em solid #6dffa6; border-radius: 999px; padding: 0.35em 1.1em; font-size: 1.15em; white-space: nowrap; animation: toastIn 0.4s cubic-bezier(.2,1.6,.4,1); transition: opacity 0.5s, transform 0.5s; }
   .toast.mile { background: rgba(40, 90, 220, 0.92); border-color: #8fc2ff; }
-  #pop.zone { color: #fff; font-size: 4em; letter-spacing: 0.04em; }
+  #pop.zone { color: #fff; font-size: 4em; }
   .toast.out { opacity: 0; transform: translateY(-1em); }
   #flash { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(255,40,60,0) 45%, rgba(255,40,60,0.75) 100%); opacity: 0; pointer-events: none; }
   #flash.on { animation: flash 0.55s ease-out; }
@@ -200,7 +202,7 @@
   <div id="hud" hidden>
     <div class="hud-score">
       <div id="score">0</div>
-      <div class="hud-row"><span id="mult" class="pill">x1</span><span id="dist">0 m</span></div>
+      <div class="hud-row"><span id="mult" class="pill">x1</span><span id="dist">0 م</span></div>
     </div>
     <div id="coinBox"><canvas data-icon="coin" width="64" height="64"></canvas><span id="coins">0</span></div>
     <div id="powers"></div>
@@ -211,97 +213,98 @@
 
   <section id="title" class="screen">
     <div class="title-left">
-      <div class="logo"><span class="l1">RAIL</span><span class="l2">RUSH</span></div>
-      <div class="tagline">Dodge trains. Grab coins. Run forever!</div>
-      <div class="playrow"><button id="playBtn" class="sg-btn play">&#9654; PLAY</button><span class="orpress">or press <span class="sg-key">Space</span></span></div>
+      <div class="logo"><span class="l1">عدّاء</span><span class="l2">السكة</span></div>
+      <div class="tagline">تفادَ القطارات، اجمع العملات، واركض بلا توقف!</div>
+      <div class="playrow"><button id="playBtn" class="sg-btn play">&#9654; العب</button><span class="orpress">أو اضغط <span class="sg-key">مسافة</span></span></div>
       <div class="row">
-        <button id="shopBtn" class="sg-btn secondary"><svg viewBox="0 0 24 24"><path fill="#1d2340" d="M3 4h2.2l2.1 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 1.9-1.4L21 8H7"/><path d="M3 4h2.2l2.1 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 1.9-1.4L21 8H7" fill="none" stroke="#1d2340" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/><circle cx="9.5" cy="20" r="1.8" fill="#1d2340"/><circle cx="17" cy="20" r="1.8" fill="#1d2340"/></svg>Shop</button>
-        <button id="missionsBtn" class="sg-btn secondary"><svg viewBox="0 0 24 24"><path fill="#ffb800" stroke="#1d2340" stroke-width="1.8" stroke-linejoin="round" d="M12 2.5l2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17.1l-5.9 3.2 1.3-6.5-4.9-4.5 6.6-.8z"/></svg>Missions <span class="badge" id="tMissions"></span></button>
+        <button id="shopBtn" class="sg-btn secondary"><svg viewBox="0 0 24 24"><path fill="#1d2340" d="M3 4h2.2l2.1 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 1.9-1.4L21 8H7"/><path d="M3 4h2.2l2.1 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 1.9-1.4L21 8H7" fill="none" stroke="#1d2340" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/><circle cx="9.5" cy="20" r="1.8" fill="#1d2340"/><circle cx="17" cy="20" r="1.8" fill="#1d2340"/></svg>المتجر</button>
+        <button id="missionsBtn" class="sg-btn secondary"><svg viewBox="0 0 24 24"><path fill="#ffb800" stroke="#1d2340" stroke-width="1.8" stroke-linejoin="round" d="M12 2.5l2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17.1l-5.9 3.2 1.3-6.5-4.9-4.5 6.6-.8z"/></svg>المهام <span class="badge" id="tMissions"></span></button>
       </div>
       <div class="chips">
-        <div class="chip"><span>Best</span><b id="tBest">0</b></div>
+        <div class="chip"><span>أفضل نتيجة</span><b id="tBest">0</b></div>
         <div class="chip"><canvas data-icon="coin" width="64" height="64"></canvas><b id="tCoins">0</b></div>
-        <div class="chip"><span>Multiplier</span><b id="tMult">x1</b></div>
+        <div class="chip"><span>المضاعف</span><b id="tMult">x1</b></div>
       </div>
     </div>
     <div class="howto-box">
-      <div><span class="sg-key">&larr;</span><span class="sg-key">&rarr;</span> or <span class="sg-key">A</span><span class="sg-key">D</span> Switch lanes</div>
-      <div><span class="sg-key">&uarr;</span><span class="sg-key">W</span><span class="sg-key">Space</span> Jump</div>
-      <div><span class="sg-key">&darr;</span><span class="sg-key">S</span> Roll (and drop fast)</div>
-      <div><span class="sg-key">Drag</span> Swipe with the mouse</div>
+      <div><span dir="ltr"><span class="sg-key">&larr;</span><span class="sg-key">&rarr;</span></span> أو <span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> غيّر المسار</div>
+      <div><span class="sg-key">&uarr;</span> <span class="sg-key">W</span> <span class="sg-key">مسافة</span> اقفز</div>
+      <div><span class="sg-key">&darr;</span> <span class="sg-key">S</span> تدحرج (وانزل بسرعة من الهواء)</div>
+      <div><span class="sg-key">اسحب</span> بالفأرة للتحرك والقفز</div>
     </div>
     <div class="peek">
-      <div class="peek-h"><span>Missions</span><span>complete all 3 for a bigger multiplier</span></div>
+      <div class="peek-h"><span>المهام</span><span>أنجز الثلاث ليكبر المضاعف!</span></div>
       <div id="tMissionPeek"></div>
     </div>
   </section>
 
   <section id="missions" class="screen center" hidden>
     <div class="panel">
-      <h2>Missions</h2>
-      <div class="mult-big">Score multiplier <span class="pill" id="mMult">x1</span> &rarr; <span class="pill hot" id="mNext">x2</span></div>
+      <h2>المهام</h2>
+      <div class="mult-big">مضاعف النقاط <span class="pill" id="mMult">x1</span> &larr; <span class="pill hot" id="mNext">x2</span></div>
       <div id="mList"></div>
-      <div class="tiny">Finish all 3 to raise your multiplier forever and win <b id="mReward">100</b> coins!</div>
-      <div class="btns"><button id="mBack" class="sg-btn">Got it!</button></div>
+      <div class="tiny">أنجز المهام الثلاث ليرتفع المضاعف للأبد، واربح <b id="mReward">100</b> عملة!</div>
+      <div class="btns"><button id="mBack" class="sg-btn">فهمت!</button></div>
     </div>
   </section>
 
   <section id="shop" class="screen" hidden>
     <div id="shopPanel" class="panel">
       <div class="shop-head">
-        <button id="sBack" class="sg-btn secondary small">&larr; Back</button>
-        <h2>Shop</h2>
+        <button id="sBack" class="sg-btn secondary small">&rarr; رجوع</button>
+        <h2>المتجر</h2>
         <div class="wallet"><canvas data-icon="coin" width="64" height="64"></canvas><span id="sCoins">0</span></div>
       </div>
       <div class="tabs">
-        <button class="tab on" data-tab="outfits">Outfits</button>
-        <button class="tab" data-tab="boards">Hoverboards</button>
-        <button class="tab" data-tab="ups">Power-ups</button>
+        <button class="tab on" data-tab="outfits">الملابس</button>
+        <button class="tab" data-tab="boards">الألواح الطائرة</button>
+        <button class="tab" data-tab="ups">القوى الخارقة</button>
       </div>
       <div id="shopBody"></div>
-      <div class="shop-tip">Click a card to try it on. Earn coins by running!</div>
+      <div class="shop-tip">انقر على أي بطاقة لتجرّبها. اجمع العملات بالركض!</div>
     </div>
   </section>
 
   <section id="pause" class="screen center" hidden>
     <div class="panel">
-      <h2>Paused</h2>
-      <button id="resumeBtn" class="sg-btn go">&#9654; Resume</button>
-      <button id="restartBtn" class="sg-btn secondary">Restart</button>
-      <button id="pMenuBtn" class="sg-btn secondary">Menu</button>
+      <h2>استراحة</h2>
+      <button id="resumeBtn" class="sg-btn go">&#9654; تابع</button>
+      <button id="restartBtn" class="sg-btn secondary">ابدأ من جديد</button>
+      <button id="pMenuBtn" class="sg-btn secondary">القائمة</button>
       <div id="pMissions" class="pmiss"></div>
-      <div class="tiny"><span class="sg-key">P</span> or <span class="sg-key">Esc</span> to resume</div>
+      <div class="tiny">اضغط <span class="sg-key">P</span> أو <span class="sg-key">Esc</span> للمتابعة</div>
     </div>
   </section>
 
   <section id="over" class="screen center" hidden>
     <div id="overPanel" class="panel">
       <div class="wallet"><canvas data-icon="coin" width="64" height="64"></canvas><span id="oTotal">0</span></div>
-      <div id="overTitle">BONK!</div>
-      <div class="score-label">SCORE</div>
+      <div id="overTitle">طاخ!</div>
+      <div class="score-label">النقاط</div>
       <div id="overScore">0</div>
-      <div id="newBest" hidden>&#9733; NEW BEST! &#9733;</div>
+      <div id="newBest" hidden>&#9733; رقم قياسي جديد! &#9733;</div>
+      <div id="soClose" hidden></div>
       <div class="stats">
-        <div class="stat"><b id="oCoins">0</b><span>coins</span></div>
-        <div class="stat"><b id="oDist">0 m</b><span>distance</span></div>
-        <div class="stat"><b id="oBest">0</b><span>best</span></div>
+        <div class="stat"><b id="oCoins" dir="ltr">0</b><span>عملات</span></div>
+        <div class="stat"><b id="oDist">0 م</b><span>المسافة</span></div>
+        <div class="stat"><b id="oBest">0</b><span>أفضل نتيجة</span></div>
       </div>
       <div id="levelUp" hidden></div>
       <div id="oMissions"></div>
       <div id="nextGoal" hidden></div>
       <div class="btns">
-        <button id="againBtn" class="sg-btn go">&#9654; Play Again</button>
-        <button id="oShop" class="sg-btn secondary">Shop</button>
-        <button id="oMenu" class="sg-btn secondary">Menu</button>
+        <button id="againBtn" class="sg-btn go">&#9654; العب مجددًا</button>
+        <button id="oShop" class="sg-btn secondary">المتجر</button>
+        <button id="oMenu" class="sg-btn secondary">القائمة</button>
       </div>
-      <div class="tiny">Press <span class="sg-key">Space</span> or <span class="sg-key">R</span> to run again</div>
+      <div class="tiny">اضغط <span class="sg-key">مسافة</span> أو <span class="sg-key">R</span> لتركض مجددًا</div>
     </div>
   </section>
 
   <canvas id="confetti"></canvas>
 </div>
-<button id="pauseBtn" class="sg-mute" type="button" aria-label="Pause" hidden><svg viewBox="0 0 20 20" width="18" height="18"><rect x="4" y="3" width="4.2" height="14" rx="1.2" fill="#fff"/><rect x="11.8" y="3" width="4.2" height="14" rx="1.2" fill="#fff"/></svg></button>
-<div id="nogl" hidden>Rail Rush needs 3D graphics (WebGL), which this browser has turned off.</div>
+<button id="pauseBtn" class="sg-mute" type="button" aria-label="إيقاف مؤقت" hidden><svg viewBox="0 0 20 20" width="18" height="18"><rect x="4" y="3" width="4.2" height="14" rx="1.2" fill="#fff"/><rect x="11.8" y="3" width="4.2" height="14" rx="1.2" fill="#fff"/></svg></button>
+<div id="nogl" hidden>لعبة عدّاء السكة تحتاج إلى رسوميات ثلاثية الأبعاد (WebGL)، وهي مُطفأة في هذا المتصفح.</div>
 
 <script src="../../lib/three/three.min.js"></script>
 <script src="../../shared/kit.js"></script>

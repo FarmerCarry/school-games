@@ -3,17 +3,24 @@
   'use strict';
   var SA = window.SA = window.SA || {};
 
-  // Unlock requirement text for each stat (Arabic, numbers stay Western).
+  // Unlock requirement text (Arabic, numbers stay Western). Arabic counted nouns change form:
+  // 1 -> singular, 2 -> dual, 3..10 -> plural, 11+ -> singular (accusative).
+  function cnt(n, one, two, few, many) {
+    if (n === 1) return one;
+    if (n === 2) return two;
+    if (n >= 3 && n <= 10) return n + ' ' + few;
+    return n + ' ' + many;
+  }
   var REQ_TEXT = {
-    bestLen: function (v) { return 'اوصل إلى الطول ' + v; },
-    totalKills: function (v) { return 'أطِح بـ ' + v + ' ثعابين (مجموع)'; },
-    bestKills: function (v) { return 'أطِح بـ ' + v + ' ثعابين في جولة واحدة'; },
-    games: function (v) { return 'العب ' + v + ' جولات'; },
-    totalFood: function (v) { return 'كُل ' + v + ' حبة طعام (مجموع)'; },
-    bestTime: function (v) { return 'اصمد ' + Math.round(v / 60) + ' دقائق في جولة'; },
+    bestLen: function (v) { return 'اجعل طولك ' + v; },
+    totalKills: function (v) { return 'فرقع ' + cnt(v, 'ثعبانًا', 'ثعبانين', 'ثعابين', 'ثعبانًا') + ' (بالمجموع)'; },
+    bestKills: function (v) { return 'فرقع ' + cnt(v, 'ثعبانًا', 'ثعبانين', 'ثعابين', 'ثعبانًا') + ' في جولة واحدة'; },
+    games: function (v) { return 'العب ' + cnt(v, 'جولة', 'جولتين', 'جولات', 'جولة'); },
+    totalFood: function (v) { return 'كُل ' + cnt(v, 'حبة', 'حبتين', 'حبات', 'حبة') + ' (بالمجموع)'; },
+    bestTime: function (v) { var m = Math.round(v / 60); return 'اصمد ' + cnt(m, 'دقيقة', 'دقيقتين', 'دقائق', 'دقيقة') + ' في جولة'; },
     bestRank: function () { return 'كن الأول في لوحة المتصدرين'; },
-    powerups: function (v) { return 'اجمع ' + v + ' قوى خارقة (مجموع)'; },
-    top1Time: function (v) { return 'ابقَ في المركز الأول ' + v + ' ثانية'; }
+    powerups: function (v) { return 'اجمع ' + cnt(v, 'قوة خارقة', 'قوتين خارقتين', 'قوى خارقة', 'قوة خارقة') + ' (بالمجموع)'; },
+    top1Time: function (v) { return 'ابقَ في المركز الأول ' + cnt(v, 'ثانية', 'ثانيتين', 'ثوانٍ', 'ثانية'); }
   };
   SA.reqText = function (req) { return req ? REQ_TEXT[req.stat](req.v) : ''; };
 

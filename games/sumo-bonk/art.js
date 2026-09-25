@@ -53,14 +53,14 @@
 
   /* ------------------------------------------------------------ roster */
   var SUMOS = [
-    { name: 'Momo', body: '#ff8fb1', belt: '#d61f5a', band: '#ffffff', face: 'blush' },
-    { name: 'Splash', body: '#5fc4ff', belt: '#1c47a8', band: '#ffd23f', face: 'teeth' },
-    { name: 'Wasabi', body: '#8be066', belt: '#17703a', band: '#ff5a5f', face: 'stache' },
-    { name: 'Tango', body: '#ffa047', belt: '#6a2db0', band: '#ffffff', face: 'grin' },
-    { name: 'Plum', body: '#b98aff', belt: '#ffc400', band: '#ff5fae', face: 'sleepy' },
-    { name: 'Butter', body: '#ffdf5e', belt: '#2a62d6', band: '#ff5a5f', face: 'freckles' },
-    { name: 'Minty', body: '#52dcc2', belt: '#ff4f9a', band: '#ffffff', face: 'lashes' },
-    { name: 'Chili', body: '#ff5b4f', belt: '#35244a', band: '#ffd23f', face: 'brows' }
+    { name: 'مومو', body: '#ff8fb1', belt: '#d61f5a', band: '#ffffff', face: 'blush' },
+    { name: 'بقبوق', body: '#5fc4ff', belt: '#1c47a8', band: '#ffd23f', face: 'teeth' },
+    { name: 'فستق', body: '#8be066', belt: '#17703a', band: '#ff5a5f', face: 'stache' },
+    { name: 'مشمش', body: '#ffa047', belt: '#6a2db0', band: '#ffffff', face: 'grin' },
+    { name: 'برقوق', body: '#b98aff', belt: '#ffc400', band: '#ff5fae', face: 'sleepy' },
+    { name: 'زبدة', body: '#ffdf5e', belt: '#2a62d6', band: '#ff5a5f', face: 'freckles' },
+    { name: 'نعناع', body: '#52dcc2', belt: '#ff4f9a', band: '#ffffff', face: 'lashes' },
+    { name: 'فلفول', body: '#ff5b4f', belt: '#35244a', band: '#ffd23f', face: 'brows' }
   ];
   SUMOS.forEach(function (s) {
     s.light = shade(s.body, 0.5); s.mid = shade(s.body, 0.22); s.dark = shade(s.body, -0.22);
@@ -69,23 +69,23 @@
 
   // stars: needed star count. special: unlocked by an achievement instead.
   var HATS = [
-    { id: 'none', name: 'No Hat', stars: 0 },
-    { id: 'party', name: 'Party Cone', stars: 0 },
-    { id: 'propeller', name: 'Propeller Cap', stars: 5 },
-    { id: 'tophat', name: 'Top Hat', stars: 12 },
-    { id: 'chef', name: 'Chef Hat', stars: 20 },
-    { id: 'flower', name: 'Flower', stars: 28 },
-    { id: 'cowboy', name: 'Cowboy Hat', stars: 38 },
-    { id: 'viking', name: 'Viking Horns', stars: 48 },
-    { id: 'cone', name: 'Traffic Cone', stars: 60 },
-    { id: 'bunny', name: 'Bunny Ears', stars: 72 },
-    { id: 'wizard', name: 'Wizard Hat', stars: 86 },
-    { id: 'pineapple', name: 'Pineapple', stars: 100 },
-    { id: 'cake', name: 'Birthday Cake', stars: 116 },
-    { id: 'duck', name: 'Rubber Duck', stars: 132 },
-    { id: 'pirate', name: 'Pirate Hat', stars: 150 },
-    { id: 'crown', name: 'Gold Crown', special: 'crown', how: 'Beat the HARD CPU' },
-    { id: 'halo', name: 'Halo', special: 'halo', how: 'Win a match 5 - 0' }
+    { id: 'none', name: 'بلا قبعة', stars: 0 },
+    { id: 'party', name: 'قبعة الحفلة', stars: 0 },
+    { id: 'propeller', name: 'قبعة المروحة', stars: 5 },
+    { id: 'tophat', name: 'القبعة الطويلة', stars: 12 },
+    { id: 'chef', name: 'قبعة الطاهي', stars: 20 },
+    { id: 'flower', name: 'الوردة', stars: 28 },
+    { id: 'cowboy', name: 'قبعة راعي البقر', stars: 38 },
+    { id: 'viking', name: 'خوذة القرون', stars: 48 },
+    { id: 'cone', name: 'مخروط المرور', stars: 60 },
+    { id: 'bunny', name: 'أذنا الأرنب', stars: 72 },
+    { id: 'wizard', name: 'قبعة الساحر', stars: 86 },
+    { id: 'pineapple', name: 'الأناناس', stars: 100 },
+    { id: 'cake', name: 'كعكة الميلاد', stars: 116 },
+    { id: 'duck', name: 'البطة المطاطية', stars: 132 },
+    { id: 'pirate', name: 'قبعة القرصان', stars: 150 },
+    { id: 'crown', name: 'التاج الذهبي', special: 'crown', short: 'الصعب', how: 'اهزم الكمبيوتر الصعب' },
+    { id: 'halo', name: 'الهالة', special: 'halo', short: '5-0', how: 'افز بمباراة بنتيجة 5 - 0' }
   ];
   var KEEP_BUN = { none: 1, flower: 1, bunny: 1, halo: 1 };
 

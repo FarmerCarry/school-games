@@ -40,7 +40,7 @@
 
   /* ------------------------------------------------------- snake hash */
   var GOFF = R + 260, CELL = 80, GN = Math.ceil(2 * GOFF / CELL);
-  var cellHead = new Int32Array(GN * GN);
+  var cellHead = new Int32Array(GN * GN).fill(-1);
   var MAXE = 40000, eCount = 0;
   var eNext = new Int32Array(MAXE), eX = new Float32Array(MAXE), eY = new Float32Array(MAXE), eR = new Float32Array(MAXE), eS = new Int16Array(MAXE);
   function cellOf(v) { var c = ((v + GOFF) / CELL) | 0; return c < 0 ? 0 : c >= GN ? GN - 1 : c; }
@@ -79,7 +79,7 @@
   var fCol = new Array(FMAX);
   var fFree = new Int32Array(FMAX), fFreeN = 0;
   var FCELL = 100, FGN = Math.ceil(2 * GOFF / FCELL);
-  var fCellHead = new Int32Array(FGN * FGN), fNext = new Int32Array(FMAX);
+  var fCellHead = new Int32Array(FGN * FGN).fill(-1), fNext = new Int32Array(FMAX).fill(-1);
   var foodAlive = 0, ambientAlive = 0;
   function fcell(v) { var c = ((v + GOFF) / FCELL) | 0; return c < 0 ? 0 : c >= FGN ? FGN - 1 : c; }
 
@@ -449,6 +449,9 @@
       b.addToHash();
     }
     for (i = 0; i < 4; i++) spawnPower();
+    // Build the food grid now: bots may search it before the first update rebuilds it
+    // (an all-zero grid would loop forever on fNext[0] === 0).
+    rebuildFoodGrid();
     W.powerT = 6;
     W.rankT = 0;
     rank();

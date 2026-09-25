@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="75%">
+      <stop offset="0" stop-color="#4a2aa8"/>
+      <stop offset="0.6" stop-color="#261463"/>
+      <stop offset="1" stop-color="#120a36"/>
+    </radialGradient>
+    <pattern id="hex" width="52" height="30" patternUnits="userSpaceOnUse">
+      <path d="M0 15 L9 0 H26 L35 15 L26 30 H9 Z M35 15 H52" fill="none" stroke="#7c5cff" stroke-opacity="0.22" stroke-width="2"/>
+    </pattern>
+    <radialGradient id="g" cx="38%" cy="32%" r="70%">
+      <stop offset="0" stop-color="#e6ffb3"/>
+      <stop offset="0.4" stop-color="#8dff3a"/>
+      <stop offset="1" stop-color="#3aa80f"/>
+    </radialGradient>
+    <radialGradient id="g2" cx="38%" cy="32%" r="70%">
+      <stop offset="0" stop-color="#f4ffe0"/>
+      <stop offset="0.4" stop-color="#5fe01f"/>
+      <stop offset="1" stop-color="#2a8a0a"/>
+    </radialGradient>
+    <radialGradient id="p" cx="38%" cy="32%" r="70%">
+      <stop offset="0" stop-color="#ffd0e0"/>
+      <stop offset="0.45" stop-color="#ff4d8d"/>
+      <stop offset="1" stop-color="#b3155a"/>
+    </radialGradient>
+    <radialGradient id="glow" r="50%">
+      <stop offset="0" stop-color="#fff" stop-opacity="1"/>
+      <stop offset="0.3" stop-color="#fff" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="halo" r="50%">
+      <stop offset="0" stop-color="#b4ff6a" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#b4ff6a" stop-opacity="0"/>
+    </radialGradient>
+    <g id="dot"><circle r="13" fill="url(#glow)" opacity="0.5"/><circle r="5.5" fill="#fff"/></g>
+  </defs>
+
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <rect width="400" height="400" fill="url(#hex)"/>
+  <!-- arena border -->
+  <circle cx="200" cy="170" r="248" fill="none" stroke="#ff4d8d" stroke-width="9" opacity="0.9"/>
+  <circle cx="200" cy="170" r="248" fill="none" stroke="#ffd1e3" stroke-width="2.5"/>
+
+  <!-- food dots -->
+  <g>
+    <use href="#dot" x="60" y="70"/>
+    <circle cx="60" cy="70" r="6" fill="#ffd23f"/>
+    <circle cx="330" cy="60" r="16" fill="#3ad7ff" opacity="0.35"/><circle cx="330" cy="60" r="7" fill="#8be6ff"/>
+    <circle cx="110" cy="140" r="14" fill="#ff7ae0" opacity="0.35"/><circle cx="110" cy="140" r="6" fill="#ffb3ef"/>
+    <circle cx="352" cy="160" r="14" fill="#ffd23f" opacity="0.35"/><circle cx="352" cy="160" r="6" fill="#fff08a"/>
+    <circle cx="44" cy="220" r="15" fill="#4dffb8" opacity="0.35"/><circle cx="44" cy="220" r="7" fill="#b3ffe4"/>
+    <circle cx="186" cy="44" r="13" fill="#ff8a3d" opacity="0.35"/><circle cx="186" cy="44" r="5.5" fill="#ffc08f"/>
+    <circle cx="258" cy="120" r="12" fill="#b06bff" opacity="0.35"/><circle cx="258" cy="120" r="5" fill="#dcbcff"/>
+    <circle cx="300" cy="228" r="18" fill="#ff4d6d" opacity="0.35"/><circle cx="300" cy="228" r="8" fill="#ffa3b3"/>
+    <circle cx="140" cy="36" r="10" fill="#8aff3a" opacity="0.35"/><circle cx="140" cy="36" r="4.5" fill="#d3ffae"/>
+  </g>
+
+  <!-- pink bot snake (top right) -->
+  <g stroke="#7a0f3d" stroke-width="2">
+    <circle cx="392" cy="100" r="17" fill="url(#p)"/>
+    <circle cx="380" cy="92" r="17" fill="#fff"/>
+    <circle cx="366" cy="86" r="17" fill="url(#p)"/>
+    <circle cx="351" cy="84" r="17" fill="#fff"/>
+    <circle cx="336" cy="87" r="17" fill="url(#p)"/>
+    <circle cx="322" cy="95" r="17" fill="#fff"/>
+    <circle cx="310" cy="106" r="18" fill="url(#p)"/>
+  </g>
+  <g transform="translate(302 116) rotate(130)">
+    <circle cx="4" cy="-7" r="6.5" fill="#fff" stroke="#2a1030" stroke-width="1.6"/>
+    <circle cx="4" cy="7" r="6.5" fill="#fff" stroke="#2a1030" stroke-width="1.6"/>
+    <circle cx="6.5" cy="-6" r="3.4" fill="#1a0c24"/>
+    <circle cx="6.5" cy="8" r="3.4" fill="#1a0c24"/>
+  </g>
+
+  <!-- hero snake -->
+  <circle cx="232" cy="178" r="100" fill="url(#halo)"/>
+  <g stroke="#1f6b06" stroke-width="2.5">
+    <circle cx="-10" cy="300" r="22" fill="url(#g2)"/>
+    <circle cx="8" cy="290" r="23" fill="url(#g)"/>
+    <circle cx="27" cy="282" r="24" fill="url(#g2)"/>
+    <circle cx="47" cy="277" r="25" fill="url(#g)"/>
+    <circle cx="68" cy="275" r="26" fill="url(#g2)"/>
+    <circle cx="90" cy="276" r="27" fill="url(#g)"/>
+    <circle cx="112" cy="278" r="28" fill="url(#g2)"/>
+    <circle cx="134" cy="278" r="29" fill="url(#g)"/>
+    <circle cx="156" cy="274" r="30" fill="url(#g2)"/>
+    <circle cx="176" cy="265" r="31" fill="url(#g)"/>
+    <circle cx="193" cy="251" r="32" fill="url(#g2)"/>
+    <circle cx="206" cy="234" r="33" fill="url(#g)"/>
+    <circle cx="215" cy="214" r="34" fill="url(#g2)"/>
+    <circle cx="222" cy="193" r="35" fill="url(#g)"/>
+    <circle cx="232" cy="172" r="40" fill="url(#g)" stroke-width="3"/>
+  </g>
+  <!-- face -->
+  <g transform="translate(232 172) rotate(-62)">
+    <circle cx="10" cy="-17" r="14" fill="#fff" stroke="#1b1030" stroke-width="3"/>
+    <circle cx="10" cy="17" r="14" fill="#fff" stroke="#1b1030" stroke-width="3"/>
+    <circle cx="16" cy="-14" r="7.5" fill="#10081e"/>
+    <circle cx="16" cy="20" r="7.5" fill="#10081e"/>
+    <circle cx="13.5" cy="-17" r="2.6" fill="#fff"/>
+    <circle cx="13.5" cy="17" r="2.6" fill="#fff"/>
+    <path d="M24 -6 Q34 0 24 6" fill="#ff5a8f" stroke="#1b1030" stroke-width="2.5"/>
+  </g>
+  <!-- crown -->
+  <g transform="translate(248 108) rotate(12)">
+    <path d="M-26 14 L-30 -14 L-13 0 L0 -22 L13 0 L30 -14 L26 14 Z" fill="#ffd21f" stroke="#8a5200" stroke-width="3.5" stroke-linejoin="round"/>
+    <circle cx="0" cy="5" r="5" fill="#ff3d7f"/>
+  </g>
+  <!-- sparkles -->
+  <path d="M330 300 l4 10 10 4 -10 4 -4 10 -4 -10 -10 -4 10 -4z" fill="#fff" opacity="0.9"/>
+  <path d="M80 190 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3z" fill="#fff" opacity="0.8"/>
+
+  <!-- title -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
+    <text x="200" y="374" font-size="56" fill="#1d0b4a" stroke="#1d0b4a" stroke-width="16" stroke-linejoin="round">ساحة الثعابين</text>
+    <text x="200" y="368" font-size="56" fill="#ffd23f" stroke="#1d0b4a" stroke-width="8" stroke-linejoin="round" paint-order="stroke fill">ساحة الثعابين</text>
+  </g>
+</svg>

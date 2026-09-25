@@ -325,7 +325,8 @@
     var b = document.createElement('button');
     b.className = 'sg-mute';
     b.type = 'button';
-    b.setAttribute('aria-label', 'Sound on/off');
+    b.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
+    b.title = opts.key === false ? 'الصوت' : 'الصوت (M)';
     function paint() { b.textContent = audio.muted ? '🔇' : '🔊'; }
     paint();
     audio.onMuteChange(paint);

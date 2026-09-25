@@ -56,22 +56,30 @@
   function multBase() { return 1 + save.mlevel; }
 
   /* ============================================================= missions */
+  // Arabic counted nouns: cnt(n, one, two, few (3-10), many (11+))
+  function cnt(n, one, two, few, many) {
+    if (n === 1) return one;
+    if (n === 2) return two;
+    return Kit.fmt(n) + ' ' + (n % 100 >= 3 && n % 100 <= 10 ? few : many);
+  }
+  var TIMES = ['مرة واحدة', 'مرتين', 'مرات', 'مرة'];
+  var COINS_W = ['عملة واحدة', 'عملتين', 'عملات', 'عملة'];
   var MT = {
-    coins: { txt: 'Collect {n} coins in one run', stat: 'coins', tiers: [40, 80, 130, 200, 280, 380, 500, 650] },
-    jumps: { txt: 'Jump {n} times in one run', stat: 'jumps', tiers: [8, 15, 25, 35, 50, 70, 90] },
-    rolls: { txt: 'Roll {n} times in one run', stat: 'rolls', tiers: [5, 10, 16, 24, 35, 50] },
-    dist: { txt: 'Run {n} m in one run', stat: 'dist', tiers: [300, 500, 800, 1200, 1700, 2400, 3200, 4200] },
-    score: { txt: 'Score {n} points in one run', stat: 'score', tiers: [300, 500, 800, 1100, 1500, 2000, 2600, 3300], byMult: true },
-    roof: { txt: 'Run {n} m on train roofs in one run', stat: 'roof', tiers: [30, 80, 150, 250, 380, 550] },
-    powers: { txt: 'Grab {n} power-ups in one run', stat: 'powers', tiers: [1, 2, 3, 5, 7, 9] },
-    dodge: { txt: 'Dodge {n} speeding trains in one run', stat: 'dodge', tiers: [2, 4, 7, 10, 15, 20] },
-    hops: { txt: 'Jump over {n} barriers in one run', stat: 'hops', tiers: [3, 6, 10, 15, 22, 30] },
-    unders: { txt: 'Roll under {n} barriers in one run', stat: 'unders', tiers: [2, 4, 7, 11, 16, 22] },
-    lanes: { txt: 'Switch lanes {n} times in one run', stat: 'lanes', tiers: [20, 40, 70, 100, 150, 200] },
-    total: { txt: 'Collect {n} coins in total', stat: 'coins', cum: true, tiers: [250, 500, 900, 1400, 2000, 3000, 4500] },
-    boards: { txt: 'Ride {n} hoverboards in total', stat: 'boards', cum: true, tiers: [1, 2, 4, 6, 9, 12] },
-    magnet: { txt: 'Collect {n} coins with a magnet in one run', stat: 'magCoins', tiers: [15, 40, 80, 130, 190] },
-    runs: { txt: 'Play {n} runs', stat: 'runs', cum: true, tiers: [2, 3, 4, 5, 6] }
+    coins: { txt: function (n) { return 'اجمع ' + cnt.apply(null, [n].concat(COINS_W)) + ' في جولة واحدة'; }, stat: 'coins', tiers: [40, 80, 130, 200, 280, 380, 500, 650] },
+    jumps: { txt: function (n) { return 'اقفز ' + cnt.apply(null, [n].concat(TIMES)) + ' في جولة واحدة'; }, stat: 'jumps', tiers: [8, 15, 25, 35, 50, 70, 90] },
+    rolls: { txt: function (n) { return 'تدحرج ' + cnt.apply(null, [n].concat(TIMES)) + ' في جولة واحدة'; }, stat: 'rolls', tiers: [5, 10, 16, 24, 35, 50] },
+    dist: { txt: function (n) { return 'اركض ' + cnt(n, 'مترًا', 'مترين', 'أمتار', 'متر') + ' في جولة واحدة'; }, stat: 'dist', tiers: [300, 500, 800, 1200, 1700, 2400, 3200, 4200] },
+    score: { txt: function (n) { return 'احصل على ' + cnt(n, 'نقطة', 'نقطتين', 'نقاط', 'نقطة') + ' في جولة واحدة'; }, stat: 'score', tiers: [300, 500, 800, 1100, 1500, 2000, 2600, 3300], byMult: true },
+    roof: { txt: function (n) { return 'اركض ' + cnt(n, 'مترًا', 'مترين', 'أمتار', 'مترًا') + ' فوق القطارات في جولة واحدة'; }, stat: 'roof', tiers: [30, 80, 150, 250, 380, 550] },
+    powers: { txt: function (n) { return 'التقط ' + cnt(n, 'قوة خارقة', 'قوتين خارقتين', 'قوى خارقة', 'قوة خارقة') + ' في جولة واحدة'; }, stat: 'powers', tiers: [1, 2, 3, 5, 7, 9] },
+    dodge: { txt: function (n) { return 'تفادَ ' + cnt(n, 'قطارًا مسرعًا', 'قطارين مسرعين', 'قطارات مسرعة', 'قطارًا مسرعًا') + ' في جولة واحدة'; }, stat: 'dodge', tiers: [2, 4, 7, 10, 15, 20] },
+    hops: { txt: function (n) { return 'اقفز فوق ' + cnt(n, 'حاجز واحد', 'حاجزين', 'حواجز', 'حاجزًا') + ' في جولة واحدة'; }, stat: 'hops', tiers: [3, 6, 10, 15, 22, 30] },
+    unders: { txt: function (n) { return 'تدحرج تحت ' + cnt(n, 'حاجز واحد', 'حاجزين', 'حواجز', 'حاجزًا') + ' في جولة واحدة'; }, stat: 'unders', tiers: [2, 4, 7, 11, 16, 22] },
+    lanes: { txt: function (n) { return 'غيّر المسار ' + cnt.apply(null, [n].concat(TIMES)) + ' في جولة واحدة'; }, stat: 'lanes', tiers: [20, 40, 70, 100, 150, 200] },
+    total: { txt: function (n) { return 'اجمع ' + cnt.apply(null, [n].concat(COINS_W)) + ' في كل جولاتك'; }, stat: 'coins', cum: true, tiers: [250, 500, 900, 1400, 2000, 3000, 4500] },
+    boards: { txt: function (n) { return 'اركب ' + cnt(n, 'لوحًا طائرًا', 'لوحين طائرين', 'ألواح طائرة', 'لوحًا طائرًا') + ' في كل جولاتك'; }, stat: 'boards', cum: true, tiers: [1, 2, 4, 6, 9, 12] },
+    magnet: { txt: function (n) { return 'اجمع ' + cnt.apply(null, [n].concat(COINS_W)) + ' بالمغناطيس في جولة واحدة'; }, stat: 'magCoins', tiers: [15, 40, 80, 130, 190] },
+    runs: { txt: function (n) { return 'العب ' + cnt(n, 'جولة واحدة', 'جولتين', 'جولات', 'جولة'); }, stat: 'runs', cum: true, tiers: [2, 3, 4, 5, 6] }
   };
   function makeMissions(level) {
     if (level === 0) return [mk('coins', 0), mk('jumps', 0), mk('dist', 0)];
@@ -101,10 +109,9 @@
   if (!Array.isArray(save.missions) || save.missions.length !== 3 || !save.missions.every(function (m) { return m && MT[m.k]; })) {
     save.missions = newMissionSet(save.mlevel);
   }
-  function missionText(m) {
-    var t = MT[m.k].txt.replace('{n}', Kit.fmt(m.n));
-    return m.n === 1 ? t.replace(/\b1 (\S+?)s\b/, '1 $1') : t;
-  }
+  function missionText(m) { return MT[m.k].txt(m.n); }
+  // keeps "+75" / "x2" reading left-to-right inside Arabic text
+  function ltr(t) { return '\u2066' + t + '\u2069'; }
 
   /* ============================================================ renderer */
   var canvas = $('gl');
@@ -734,7 +741,7 @@
     botState.show = 1;
     sfx.stumble();
     flashWarn();
-    pop('Careful!', 'warn');
+    pop('انتبه!', 'warn');
     parts.burst(P.x, P.y + 1.2, S.pD, { count: 10, colors: ['#ffffff', '#ffd23f'], speed: 4, life: 0.5, size: 0.3, gravity: 6 });
   }
   function breakBoard() {
@@ -745,7 +752,7 @@
     sfx.boardBreak();
     var bd = boardById(save.board);
     parts.burst(P.x, P.y + 0.3, S.pD, { count: 24, colors: [bd.deck, bd.stripe, bd.glow, '#ffffff'], speed: 7, up: 2, life: 0.8, size: 0.35, gravity: 14 });
-    pop('Board saved you!', 'good');
+    pop('اللوح أنقذك!', 'good');
   }
   function crash(reason, ob) {
     if (S.god || (S.mode !== 'play' && S.mode !== 'intro')) return;
@@ -956,7 +963,7 @@
     run.score = Math.floor(S.score);
     if (!S.bestAnnounced && save.best > 0 && run.score > save.best) {
       S.bestAnnounced = true;
-      pop('NEW BEST!', 'best');
+      pop('رقم قياسي جديد!', 'best');
       sfx.newBest();
       confetti(60);
     }
@@ -980,7 +987,7 @@
       sfx.mission();
     }
     if (run.dist >= S.milestone) {
-      toast('<b>' + Kit.fmt(S.milestone) + ' m!</b> Keep going!', 'mile');
+      toast('<b>' + Kit.fmt(S.milestone) + ' م!</b> واصل الركض!', 'mile');
       sfx.countTick(12);
       S.milestone += 500;
     }
@@ -997,7 +1004,7 @@
       var amt = [25, 40, 50, 75, 100, 150, 250][Math.min(6, Math.floor(Math.pow(Math.random(), 1.6) * 7))];
       run.bonus += amt;
       sfx.mystery();
-      pop('+' + amt + ' coins!', 'gold');
+      pop(ltr('+' + amt) + ' عملة!', 'gold');
       bumpCoins();
       return;
     }
@@ -1008,10 +1015,10 @@
       runner.setBoard(boardById(save.board));
       runner.board.visible = true;
       sfx.boardOn();
-      pop('HOVERBOARD!', 'blue');
+      pop('اللوح الطائر!', 'blue');
     } else {
       sfx.power();
-      pop({ magnet: 'COIN MAGNET!', sneakers: 'SUPER SNEAKERS!', doubler: '2X SCORE!' }[tp], tp);
+      pop({ magnet: 'مغناطيس العملات!', sneakers: 'الحذاء الخارق!', doubler: 'نقاط مضاعفة ' + ltr('x2') + '!' }[tp], tp);
     }
   }
 
@@ -1249,8 +1256,8 @@
     P.camY += (Math.max(groundF, (groundF + (yr - groundF) * 0.35)) - P.camY) * Math.min(1, rdt * 5);
     if (S.mode === 'title') {
       var shop = S.menu === 'shop';
-      camTarget = tmpV.set(shop ? 0.9 : -0.7, shop ? 1.75 : 2.05, shop ? 4.6 : 6.6);
-      lookTarget = tmpL.set(shop ? 1.75 : -2.05, shop ? 1.05 : 1.25, 0);
+      camTarget = tmpV.set(shop ? 0.9 : 0.7, shop ? 1.75 : 2.05, shop ? 4.6 : 6.6);
+      lookTarget = tmpL.set(shop ? 1.75 : 2.05, shop ? 1.05 : 1.25, 0);
       fov = 55;
     } else if (S.mode === 'crash' || S.mode === 'over') {
       camTarget = tmpV.set(xr * 0.8 + 1.6, P.camY + 2.9, 5.2);
@@ -1381,7 +1388,7 @@
     if ($('hud').hidden) return;
     setText('score', Kit.fmt(run.score || 0));
     setText('coins', Kit.fmt((run.coins || 0) + (run.bonus || 0)));
-    setText('dist', Kit.fmt(run.dist || 0) + ' m');
+    setText('dist', Kit.fmt(run.dist || 0) + ' م');
     var m = multBase() * (POW.doubler > 0 ? 2 : 1);
     setText('mult', 'x' + m);
     var mc = POW.doubler > 0 ? 'pill hot' : 'pill';
@@ -1420,11 +1427,11 @@
     setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 3200);
   }
   var HINTS = {
-    lane: '<span class="sg-key">←</span><span class="sg-key">→</span> Switch lanes!',
-    jump: '<span class="sg-key">↑</span> or <span class="sg-key">Space</span> Jump!',
-    roll: '<span class="sg-key">↓</span> Roll under!',
-    ramp: 'Run up the ramp onto the trains!',
-    oncoming: 'Train coming! Move over!'
+    lane: '<span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span> غيّر المسار!',
+    jump: '<span class="sg-key">↑</span> أو <span class="sg-key">مسافة</span> اقفز!',
+    roll: '<span class="sg-key">↓</span> تدحرج من تحته!',
+    ramp: 'اصعد المنحدر واركض فوق القطارات!',
+    oncoming: 'قطار قادم! ابتعد عن طريقه!'
   };
   var hintTimer = 0;
   function showHint(type) {
@@ -1491,7 +1498,7 @@
       if (m.p >= m.n) {
         m.p = m.n; m.done = true;
         sfx.mission();
-        toast('<b>✔ Mission done!</b> ' + missionText(m));
+        toast('<b>✔ أنجزت مهمة!</b> ' + missionText(m));
         persist();
       }
     });
@@ -1510,7 +1517,7 @@
     $('tCoins').textContent = Kit.fmt(save.coins);
     $('tMult').textContent = 'x' + multBase();
     var left = save.missions.filter(function (m) { return !m.done; }).length;
-    $('tMissions').textContent = left ? left + ' to go' : 'Done!';
+    $('tMissions').textContent = left ? 'باقي ' + left : 'تمّت!';
     $('tMissionPeek').innerHTML = save.missions.map(function (m) { return missionRow(m, true); }).join('');
   }
   function goTitle() {
@@ -1563,7 +1570,7 @@
 
   /* ----------------------------------------------------- game over */
   var overAnim = { on: false, t: 0, score: 0, shown: 0, ready: 0, newBest: false };
-  var OVER_TITLES = { bonk: ['BONK!', 'OOF!', 'WHOOPS!'], train: ['CHOO-BONK!', 'TOOT TOOT!'], caught: ['CAUGHT!'], low: ['TRIPPED!', 'OOPSIE!'], high: ['BONK!', 'OUCH!'], ramp: ['BONK!'] };
+  var OVER_TITLES = { bonk: ['طاخ!', 'أوف!', 'أوبس!'], train: ['توت توت… طاخ!', 'اصطدمت بالقطار!'], caught: ['أمسك بك الروبوت!'], low: ['تعثّرت!', 'أوبس!'], high: ['طاخ!', 'آخ! رأسي!'], ramp: ['طاخ!'] };
   function gameOver() {
     S.mode = 'over';
     run.runs = 1;
@@ -1590,18 +1597,26 @@
     persist();
 
     var titles = OVER_TITLES[S.reason] || OVER_TITLES.bonk;
-    $('overTitle').textContent = Kit.pick(titles);
+    var ot = Kit.pick(titles);
+    $('overTitle').textContent = ot;
+    $('overTitle').style.fontSize = ot.length > 10 ? '2.9em' : '';
     $('overScore').textContent = '0';
     $('oCoins').textContent = '+' + Kit.fmt(earned);
-    $('oDist').textContent = Kit.fmt(run.dist) + ' m';
+    $('oDist').textContent = Kit.fmt(run.dist) + ' م';
     $('oBest').textContent = Kit.fmt(save.best);
     $('newBest').hidden = true;
+    // "so close!" hook: nearly beat the best score
+    var sc = $('soClose');
+    if (!newBest && prevBest > 0 && score >= prevBest * 0.7) {
+      sc.textContent = 'كدت تفعلها! ينقصك ' + cnt(prevBest - score + 1, 'نقطة واحدة', 'نقطتان', 'نقاط', 'نقطة') + ' لتحطيم رقمك القياسي';
+      sc.hidden = false;
+    } else sc.hidden = true;
     $('overPanel').classList.toggle('best', newBest);
     $('oMissions').innerHTML = (levelUp ? [] : save.missions).map(function (m) { return missionRow(m, true); }).join('');
     var lu = $('levelUp');
     if (levelUp) {
       lu.hidden = false;
-      lu.innerHTML = '<b>All missions done!</b> Score multiplier <span class="pill">x' + levelUp.from + '</span> → <span class="pill hot">x' + levelUp.to + '</span> and <b>+' + Kit.fmt(levelUp.reward) + '</b> coins';
+      lu.innerHTML = '<b>أنجزت كل المهام!</b> المضاعف <span class="pill">x' + levelUp.from + '</span> ← <span class="pill hot">x' + levelUp.to + '</span>، وربحت <b>' + Kit.fmt(levelUp.reward) + '</b> عملة!';
     } else lu.hidden = true;
     // next unlock teaser
     var goal = nextGoal();
@@ -1609,7 +1624,7 @@
     if (goal) {
       ng.hidden = false;
       var have = save.coins, pct = Math.min(1, have / goal.price);
-      ng.innerHTML = '<div class="ng-text">' + (have >= goal.price ? '🎉 You can unlock <b>' + goal.name + '</b> in the shop!' : 'Next unlock: <b>' + goal.name + '</b> — ' + Kit.fmt(goal.price - have) + ' coins to go') + '</div><div class="m-bar"><i style="width:' + (pct * 100).toFixed(1) + '%"></i></div>';
+      ng.innerHTML = '<div class="ng-text">' + (have >= goal.price ? '🎉 تستطيع الآن شراء <b>' + goal.name + '</b> من المتجر!' : 'الجائزة التالية: <b>' + goal.name + '</b> — باقي ' + Kit.fmt(goal.price - have) + ' عملة') + '</div><div class="m-bar"><i style="width:' + (pct * 100).toFixed(1) + '%"></i></div>';
     } else ng.hidden = true;
     $('oTotal').textContent = Kit.fmt(save.coins);
     show('over');
@@ -1643,7 +1658,7 @@
   function nextGoal() {
     var best = null;
     RR.OUTFITS.forEach(function (o) { if (save.owned.indexOf(o.id) < 0 && (!best || o.price < best.price)) best = { name: o.name, price: o.price }; });
-    RR.BOARDS.forEach(function (b) { if (save.boards.indexOf(b.id) < 0 && (!best || b.price < best.price)) best = { name: b.name + ' board', price: b.price }; });
+    RR.BOARDS.forEach(function (b) { if (save.boards.indexOf(b.id) < 0 && (!best || b.price < best.price)) best = { name: 'لوح ' + b.name, price: b.price }; });
     return best;
   }
 
@@ -1704,10 +1719,10 @@
     renderer.render(scene, camera);
   }
   var UP_INFO = {
-    magnet: { name: 'Coin Magnet', desc: 'Pulls in every coin nearby' },
-    sneakers: { name: 'Super Sneakers', desc: 'Mega jumps onto train roofs' },
-    doubler: { name: '2X Score', desc: 'Doubles your score' },
-    board: { name: 'Hoverboard', desc: 'Saves you from one crash' }
+    magnet: { name: 'مغناطيس العملات', desc: 'يجذب كل العملات القريبة' },
+    sneakers: { name: 'الحذاء الخارق', desc: 'قفزات عملاقة فوق القطارات' },
+    doubler: { name: 'النقاط المضاعفة', desc: 'يضاعف نقاطك' },
+    board: { name: 'اللوح الطائر', desc: 'ينقذك من اصطدام واحد' }
   };
   function openShop() {
     makePortraits();
@@ -1733,9 +1748,8 @@
       var eq = shopTab === 'outfits' ? save.outfit : save.board;
       html = '<div class="grid ' + shopTab + '">' + list.map(function (it) {
         var own = owned.indexOf(it.id) >= 0, isEq = eq === it.id, can = save.coins >= it.price;
-        var btn = isEq ? '<span class="tag eq">Wearing</span>' : own ? '<button class="sg-btn small good" data-act="equip" data-id="' + it.id + '">Use</button>' :
+        var btn = isEq ? '<span class="tag eq">' + (shopTab === 'boards' ? 'مُختار' : 'ترتديه') + '</span>' : own ? '<button class="sg-btn small good" data-act="equip" data-id="' + it.id + '">' + (shopTab === 'boards' ? 'اختر' : 'البس') + '</button>' :
           '<button class="sg-btn small' + (can ? '' : ' off') + '" data-act="buy" data-id="' + it.id + '"><canvas data-icon="coin" class="ci" width="64" height="64"></canvas>' + Kit.fmt(it.price) + '</button>';
-        if (shopTab === 'boards' && isEq) btn = '<span class="tag eq">Equipped</span>';
 
         return '<div class="card' + (isEq ? ' eq' : '') + (preview === it.id ? ' sel' : '') + (own ? '' : ' locked') + '" data-id="' + it.id + '">' +
           '<canvas class="portrait" data-portrait="' + shopTab + ':' + it.id + '" width="160" height="160"></canvas><div class="c-name">' + it.name + '</div>' + btn + '</div>';
@@ -1744,8 +1758,8 @@
       html = '<div class="ups">' + POW_ORDER.map(function (k) {
         var lv = save.up[k], max = lv >= 5, cost = max ? 0 : UP_COST[lv], can = save.coins >= cost;
         var pips = ''; for (var i = 0; i < 5; i++) pips += '<i class="' + (i < lv ? 'on' : '') + '"></i>';
-        return '<div class="up"><canvas data-icon="' + k + '" width="64" height="64"></canvas><div class="up-body"><div class="up-name">' + UP_INFO[k].name + '</div><div class="up-desc">' + UP_INFO[k].desc + ' · lasts <b>' + powerDur(k) + 's</b></div><div class="pips">' + pips + '</div></div>' +
-          (max ? '<span class="tag eq">MAX</span>' : '<button class="sg-btn small' + (can ? '' : ' off') + '" data-act="up" data-id="' + k + '"><canvas data-icon="coin" class="ci" width="64" height="64"></canvas>' + Kit.fmt(cost) + '</button>') + '</div>';
+        return '<div class="up"><canvas data-icon="' + k + '" width="64" height="64"></canvas><div class="up-body"><div class="up-name">' + UP_INFO[k].name + '</div><div class="up-desc">' + UP_INFO[k].desc + ' · تدوم <b>' + cnt(powerDur(k), 'ثانية', 'ثانيتين', 'ثوانٍ', 'ثانية') + '</b></div><div class="pips">' + pips + '</div></div>' +
+          (max ? '<span class="tag eq">الحد الأقصى</span>' : '<button class="sg-btn small' + (can ? '' : ' off') + '" data-act="up" data-id="' + k + '"><canvas data-icon="coin" class="ci" width="64" height="64"></canvas>' + Kit.fmt(cost) + '</button>') + '</div>';
       }).join('') + '</div>';
     }
     $('shopBody').innerHTML = html;
@@ -1875,7 +1889,7 @@
   function closeMissions() { S.menu = 'title'; refreshTitle(); show('title'); }
 
   /* ----------------------------------------------------- boot */
-  Kit.muteButton();
+  Kit.muteButton().setAttribute('aria-label', 'الصوت: تشغيل / إيقاف');
   makeIcons();
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(function () { makeIcons(); makePickMats(); for (var i = 0; i < pickups.length; i++) pickups[i].s.material = pickMats[pickups[i].type]; });
@@ -1883,7 +1897,7 @@
   resetPlayer(); resetRun();
   layout();
   goTitle();
-  camPos.set(-0.7, 2.05, 6.6); camLook.set(-2.05, 1.25, 0);
+  camPos.set(0.7, 2.05, 6.6); camLook.set(2.05, 1.25, 0);
   Kit.loop(update, render);
   setTimeout(runIdleJobs, 50);
   setTimeout(function () { if (!portraits) makePortraits(); }, 1200);

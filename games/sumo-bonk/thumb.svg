@@ -126,8 +126,8 @@
   </g>
 
   <!-- logo -->
-  <g font-family="'Arial Black','Segoe UI Black','Segoe UI',Arial,sans-serif" font-weight="900" text-anchor="middle" stroke="#2b1d3a" stroke-linejoin="round" paint-order="stroke fill">
-    <text x="200" y="68" font-size="60" fill="#ffffff" stroke-width="13" transform="rotate(-4 200 60)">SUMO</text>
-    <text x="204" y="120" font-size="60" fill="#ffd23f" stroke-width="13" transform="rotate(3 200 115)">BONK<tspan fill="#ff5fae">!</tspan></text>
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl" stroke="#2b1d3a" stroke-linejoin="round" paint-order="stroke fill">
+    <text x="200" y="66" font-size="62" fill="#ffffff" stroke-width="13" transform="rotate(-4 200 50)">مصارعة</text>
+    <text x="204" y="126" font-size="62" fill="#ffd23f" stroke-width="13" transform="rotate(3 200 110)">السومو<tspan fill="#ff5fae">!</tspan></text>
   </g>
 </svg>

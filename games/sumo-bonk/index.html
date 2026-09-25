@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sumo Bonk</title>
+<title>مصارعة السومو</title>
 <link rel="stylesheet" href="../../shared/game.css">
 <style>
   #ui { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; pointer-events: none; z-index: 10; }
@@ -15,20 +15,20 @@
   /* ---------- title ---------- */
   #scr-title { pointer-events: none; }
   #scr-title > * { pointer-events: auto; }
-  .logo { position: absolute; left: 0; right: 0; top: 14px; text-align: center; line-height: 0.9; font-weight: 700; letter-spacing: 2px; pointer-events: none; }
+  .logo { position: absolute; left: 0; right: 0; top: 14px; text-align: center; line-height: 1.05; font-weight: 700; pointer-events: none; }
   .logo span { display: inline-block; font-size: 128px; -webkit-text-stroke: 14px #2b1d3a; paint-order: stroke fill; text-shadow: 0 10px 0 #2b1d3a; }
   .logo .l1 { color: #ffffff; transform: rotate(-5deg); animation: bob 1.6s ease-in-out infinite; }
-  .logo .l2 { color: #ffd23f; transform: rotate(4deg); margin-left: 18px; animation: bob 1.6s ease-in-out infinite 0.35s; }
+  .logo .l2 { color: #ffd23f; transform: rotate(4deg); margin-right: 26px; animation: bob 1.6s ease-in-out infinite 0.35s; }
   .logo .l2 i { font-style: normal; color: #ff5fae; }
   @keyframes bob { 0%,100% { translate: 0 0; } 50% { translate: 0 -8px; } }
   .tag { position: absolute; left: 0; right: 0; top: 170px; text-align: center; font-size: 26px; font-weight: 700; color: #fff; -webkit-text-stroke: 6px #2b1d3a; paint-order: stroke fill; pointer-events: none; }
   .card { background: rgba(255,255,255,0.94); color: #2b1d3a; border: 5px solid #2b1d3a; border-radius: 26px; box-shadow: 0 8px 0 rgba(43,29,58,0.55); }
   .side { position: absolute; top: 222px; width: 262px; padding: 14px 16px; font-size: 18px; }
   .side h3 { margin: 0 0 8px; font-size: 22px; font-weight: 700; }
-  #howto { left: 22px; transform: rotate(-2deg); }
-  #prog { right: 22px; transform: rotate(2deg); text-align: center; }
+  #howto { right: 22px; transform: rotate(2deg); }
+  #prog { left: 22px; transform: rotate(-2deg); text-align: center; }
   .krow { display: flex; align-items: center; gap: 6px; margin: 7px 0; font-size: 17px; }
-  .krow b { min-width: 34px; }
+  .krow b { min-width: 58px; font-size: 16px; }
   .krow .sg-key { box-shadow: 0 3px 0 #2b1d3a; border: 2px solid #2b1d3a; }
   .goal { margin-top: 8px; font-size: 16px; line-height: 1.25; font-weight: 700; color: #d61f5a; }
   .big-star { font-size: 44px; font-weight: 700; color: #ffb400; -webkit-text-stroke: 5px #2b1d3a; paint-order: stroke fill; line-height: 1; }
@@ -114,7 +114,7 @@
   .stars-earned small { font-size: 26px; color: #2b1d3a; -webkit-text-stroke: 0; }
   #oLines { min-height: 44px; margin: 6px 0; }
   .unlock { font-size: 24px; font-weight: 700; margin: 6px 0; animation: sg-pop 0.4s ease-out both; animation-delay: 0.9s; }
-  .unlock .new { display: inline-block; background: #ff5fae; color: #fff; border: 3px solid #2b1d3a; border-radius: 12px; padding: 0 10px; margin-right: 6px; -webkit-text-stroke: 4px #2b1d3a; paint-order: stroke fill; animation: pulse 0.8s infinite; }
+  .unlock .new { display: inline-block; background: #ff5fae; color: #fff; border: 3px solid #2b1d3a; border-radius: 12px; padding: 0 10px; margin-left: 6px; -webkit-text-stroke: 4px #2b1d3a; paint-order: stroke fill; animation: pulse 0.8s infinite; }
   .hint { font-size: 20px; margin: 8px 0; }
   #oStats { font-size: 17px; opacity: 0.85; margin-bottom: 12px; }
   .obtns { display: flex; flex-direction: column; align-items: center; gap: 10px; }
@@ -134,75 +134,75 @@
 <div id="ui">
   <!-- TITLE -->
   <div id="scr-title" class="scr" hidden>
-    <div class="logo"><span class="l1">SUMO</span><span class="l2">BONK<i>!</i></span></div>
-    <div class="tag">Wobbly belly-bumping battles on floating stages!</div>
+    <div class="logo"><span class="l1">مصارعة</span><span class="l2">السومو<i>!</i></span></div>
+    <div class="tag">معارك بطون مضحكة فوق حلبات طائرة!</div>
 
     <div id="howto" class="card side">
-      <h3>How to play</h3>
-      <div class="krow"><b>P1</b><span class="sg-key">W</span> jump <span class="sg-key">S</span> slam</div>
-      <div class="krow"><b>P2</b><span class="sg-key">&uarr;</span> jump <span class="sg-key">&darr;</span> slam</div>
-      <div class="small">Slam in the air for a <b>belly flop!</b></div>
-      <div class="goal">Bonk your rival into the water. First to 5 wins!</div>
+      <h3>طريقة اللعب</h3>
+      <div class="krow"><b>لاعب 1</b><span class="sg-key">W</span> قفز <span class="sg-key">S</span> هجوم</div>
+      <div class="krow"><b>لاعب 2</b><span class="sg-key">&uarr;</span> قفز <span class="sg-key">&darr;</span> هجوم</div>
+      <div class="small">اضغط <b>هجوم</b> وأنت في الهواء لتسقط ببطنك!</div>
+      <div class="goal">أوقع خصمك في الماء. أول من يجمع 5 نقاط يفوز!</div>
     </div>
 
     <div id="prog" class="card side">
-      <h3>Your stars</h3>
-      <div class="big-star">&#9733; <span id="tStars">0</span></div>
-      <div class="small" style="margin-top:6px">Hats unlocked: <b id="tHats">0</b></div>
+      <h3>نجومك</h3>
+      <div class="big-star"><span dir="ltr">&#9733; <span id="tStars">0</span></span></div>
+      <div class="small" style="margin-top:6px">القبعات المفتوحة: <b id="tHats" dir="ltr">0</b></div>
       <div class="bar"><div id="tBar"></div></div>
       <div class="small" id="tNext"></div>
-      <div class="small" style="margin-top:4px">Rival medals: <b id="tMedals">0 / 24</b></div>
+      <div class="small" style="margin-top:4px">ميداليات الخصوم: <b id="tMedals" dir="ltr">0 / 24</b></div>
       <div class="small" id="tRecord" style="margin-top:4px;color:#d61f5a;font-weight:700"></div>
     </div>
 
     <div class="modes">
-      <button class="mbtn y" id="b1p" type="button"><b>1 PLAYER</b><small>vs the CPU</small></button>
-      <button class="mbtn p" id="b2p" type="button"><b>2 PLAYERS</b><small>same keyboard</small></button>
+      <button class="mbtn y" id="b1p" type="button"><b>لاعب واحد</b><small>ضد الكمبيوتر</small></button>
+      <button class="mbtn p" id="b2p" type="button"><b>لاعبان</b><small>على لوحة مفاتيح واحدة</small></button>
     </div>
-    <div class="enter-hint">Press <span class="sg-key">Enter</span> to play &nbsp;&bull;&nbsp; win matches to unlock hats!</div>
+    <div class="enter-hint">اضغط <span class="sg-key">Enter</span> للعب &nbsp;&bull;&nbsp; اربح المباريات لتفتح قبعات جديدة!</div>
     <canvas id="hatbar"></canvas>
   </div>
 
   <!-- SELECT -->
   <div id="scr-select" class="scr" hidden>
-    <h2 class="sel-title" id="selTitle">PICK YOUR SUMO!</h2>
-    <div class="vs">VS</div>
+    <h2 class="sel-title" id="selTitle">اختر مصارعك!</h2>
+    <div class="vs">ضد</div>
     <div class="card pcard" id="card0">
-      <div class="who" id="who0">PLAYER 1</div>
+      <div class="who" id="who0">أنت</div>
       <canvas class="pv" id="pv0"></canvas>
-      <div class="pick"><button class="arr" type="button" data-arr="s,0,-1">&#9664;</button><span class="nm" id="nm0">Momo</span><button class="arr" type="button" data-arr="s,0,1">&#9654;</button></div>
-      <div class="pick hat"><button class="arr" type="button" data-arr="h,0,-1">&#9664;</button><span class="hn" id="hn0">Party Cone</span><button class="arr" type="button" data-arr="h,0,1">&#9654;</button></div>
+      <div class="pick" dir="ltr"><button class="arr" type="button" data-arr="s,0,-1" aria-label="المصارع السابق">&#9664;</button><span class="nm" id="nm0">مومو</span><button class="arr" type="button" data-arr="s,0,1" aria-label="المصارع التالي">&#9654;</button></div>
+      <div class="pick hat" dir="ltr"><button class="arr" type="button" data-arr="h,0,-1" aria-label="القبعة السابقة">&#9664;</button><span class="hn" id="hn0">قبعة الحفلة</span><button class="arr" type="button" data-arr="h,0,1" aria-label="القبعة التالية">&#9654;</button></div>
       <div class="keys" id="keys0"></div>
     </div>
     <div class="card pcard" id="card1">
-      <div class="who" id="who1">PLAYER 2</div>
+      <div class="who" id="who1">اللاعب 2</div>
       <canvas class="pv" id="pv1"></canvas>
-      <div class="pick" id="pick1n"><button class="arr" type="button" data-arr="s,1,-1" id="pick1">&#9664;</button><span class="nm" id="nm1">Splash</span><button class="arr" type="button" data-arr="s,1,1" id="pick1r">&#9654;</button></div>
-      <div class="pick hat" id="hatp1"><button class="arr" type="button" data-arr="h,1,-1">&#9664;</button><span class="hn" id="hn1">Party Cone</span><button class="arr" type="button" data-arr="h,1,1">&#9654;</button></div>
-      <div class="keys" id="keys1"><span class="sg-key">&larr;</span><span class="sg-key">&rarr;</span> sumo &nbsp; <span class="sg-key">&uarr;</span><span class="sg-key">&darr;</span> hat</div>
+      <div class="pick" id="pick1n" dir="ltr"><button class="arr" type="button" data-arr="s,1,-1" id="pick1" aria-label="المصارع السابق">&#9664;</button><span class="nm" id="nm1">بقبوق</span><button class="arr" type="button" data-arr="s,1,1" id="pick1r" aria-label="المصارع التالي">&#9654;</button></div>
+      <div class="pick hat" id="hatp1" dir="ltr"><button class="arr" type="button" data-arr="h,1,-1" aria-label="القبعة السابقة">&#9664;</button><span class="hn" id="hn1">قبعة الحفلة</span><button class="arr" type="button" data-arr="h,1,1" aria-label="القبعة التالية">&#9654;</button></div>
+      <div class="keys" id="keys1"><span dir="ltr"><span class="sg-key">&larr;</span><span class="sg-key">&rarr;</span></span> المصارع &nbsp; <span dir="ltr"><span class="sg-key">&uarr;</span><span class="sg-key">&darr;</span></span> القبعة</div>
       <div class="diff" id="diffBox">
-        <button type="button" id="d-easy"><b>Easy</b><span class="dw"></span><span class="dk">1</span></button>
-        <button type="button" id="d-medium"><b>Medium</b><span class="dw"></span><span class="dk">2</span></button>
-        <button type="button" id="d-hard"><b>Hard</b><span class="dw"></span><span class="dk">3</span></button>
+        <button type="button" id="d-easy"><b>سهل</b><span class="dw"></span><span class="dk">1</span></button>
+        <button type="button" id="d-medium"><b>متوسط</b><span class="dw"></span><span class="dk">2</span></button>
+        <button type="button" id="d-hard"><b>صعب</b><span class="dw"></span><span class="dk">3</span></button>
       </div>
       <div class="ddesc" id="dDesc"></div>
-      <div id="rivalBox"><div class="rtitle">Rivals &mdash; beat them all for medals!</div><canvas id="rivals"></canvas></div>
+      <div id="rivalBox"><div class="rtitle">الخصوم: اهزمهم كلهم لتربح الميداليات!</div><canvas id="rivals"></canvas></div>
     </div>
     <div class="sel-next" id="selNext"></div>
     <div class="sel-bottom">
-      <button class="back" id="bBack" type="button">&#9664; Back <small>(Esc)</small></button>
-      <button class="fight" id="bFight" type="button">FIGHT! <small>Enter</small></button>
+      <button class="back" id="bBack" type="button">&#9654; رجوع <small>(Esc)</small></button>
+      <button class="fight" id="bFight" type="button">ابدأ النزال! <small>Enter</small></button>
     </div>
   </div>
 
   <!-- PAUSE -->
   <div id="scr-pause" class="scr" hidden>
     <div class="card ppanel">
-      <h2>PAUSED</h2>
+      <h2>توقف مؤقت</h2>
       <div class="col">
-        <button class="pbtn g" id="bResume" type="button">Resume <small>P / Esc</small></button>
-        <button class="pbtn y" id="bRestart" type="button">Restart match <small>R</small></button>
-        <button class="pbtn" id="bMenu" type="button">Main menu</button>
+        <button class="pbtn g" id="bResume" type="button">متابعة <small>P / Esc</small></button>
+        <button class="pbtn y" id="bRestart" type="button">إعادة المباراة <small>R</small></button>
+        <button class="pbtn" id="bMenu" type="button">القائمة الرئيسية</button>
       </div>
     </div>
   </div>
@@ -210,24 +210,24 @@
   <!-- GAME OVER -->
   <div id="scr-over" class="scr" hidden>
     <div id="oPanel" class="card">
-      <h2 id="oHead">YOU WIN!</h2>
-      <div id="oSub">5 - 3</div>
-      <div class="stars-earned"><span id="oStars">+0</span> &#9733; <small>stars</small></div>
+      <h2 id="oHead">فزت!</h2>
+      <div id="oSub"></div>
+      <div class="stars-earned"><span dir="ltr"><span id="oStars">+0</span> &#9733;</span> <small>نجوم</small></div>
       <div id="oLines"></div>
       <div id="oStats"></div>
       <div class="obtns">
-        <button class="pbtn g" id="bAgain" type="button">REMATCH! <small>Enter</small></button>
+        <button class="pbtn g" id="bAgain" type="button">مباراة أخرى! <small>Enter</small></button>
         <div class="row">
-          <button class="pbtn y" id="bChange" type="button">Change sumo <small>C</small></button>
-          <button class="pbtn" id="bOverMenu" type="button">Menu <small>Esc</small></button>
+          <button class="pbtn y" id="bChange" type="button">غيّر المصارع <small>C</small></button>
+          <button class="pbtn" id="bOverMenu" type="button">القائمة <small>Esc</small></button>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<button id="bPause" class="sg-mute sb-btn" type="button" aria-label="Pause" title="Pause (P)" hidden>II</button>
-<button id="bMusic" class="sg-mute sb-btn" type="button" aria-label="Music on/off">&#9835;</button>
+<button id="bPause" class="sg-mute sb-btn" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)" hidden>II</button>
+<button id="bMusic" class="sg-mute sb-btn" type="button" aria-label="تشغيل الموسيقى أو إيقافها">&#9835;</button>
 
 <script src="../../shared/kit.js"></script>
 <script src="art.js"></script>

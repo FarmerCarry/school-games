@@ -104,9 +104,9 @@
   /* ------------------------------------------------- track chunks */
   // Returns { main, win } geometries for one 40 m chunk (z -20..20).
   RR.ZONES = [
-    { name: 'Downtown', grass: '#7fcf5a', gantry: ['#ff7a1a', '#3a86ff', '#ef476f'] },
-    { name: 'Sunny Beach', grass: '#ffe3a6', gantry: ['#1fb6ff', '#ff6fb5', '#ffd23f'] },
-    { name: 'Green Hills', grass: '#86d95e', gantry: ['#ff7a1a', '#9b5de5', '#06d6a0'] }
+    { name: 'وسط المدينة', grass: '#7fcf5a', gantry: ['#ff7a1a', '#3a86ff', '#ef476f'] },
+    { name: 'الشاطئ المشمس', grass: '#ffe3a6', gantry: ['#1fb6ff', '#ff6fb5', '#ffd23f'] },
+    { name: 'التلال الخضراء', grass: '#86d95e', gantry: ['#ff7a1a', '#9b5de5', '#06d6a0'] }
   ];
   RR.buildChunk = function (seed, zone) {
     zone = zone || 0;
@@ -789,25 +789,25 @@
 
   /* ---------------------------------------------------------- outfits */
   RR.OUTFITS = [
-    { id: 'rookie', name: 'Rookie', price: 0, c: { skin: '#f5c79c', hood: '#ff7a1a', hood2: '#ffd23f', pants: '#3056c9', shoes: '#ff3b5c', sole: '#ffffff', cap: '#e63946', brim: '#ffffff', hair: '#4a2c1a', acc: '#ffd23f', acc2: '#ffffff' }, acc: ['cap'] },
-    { id: 'skater', name: 'Skater', price: 300, c: { skin: '#d99a6c', hood: '#16c2b5', hood2: '#0e7c86', pants: '#2b2d42', shoes: '#f7f7f7', sole: '#e63946', cap: '#2b2d42', brim: '#ff7a1a', hair: '#1b1b1b', acc: '#ffd23f', acc2: '#ff7a1a' }, acc: ['cap', 'backpack'] },
-    { id: 'bubble', name: 'Bubblegum', price: 600, c: { skin: '#ffd9b8', hood: '#ff6fb5', hood2: '#ffc2e2', pants: '#7b5cff', shoes: '#ffffff', sole: '#ff6fb5', cap: '#9b5de5', brim: '#ffc2e2', hair: '#6b3b2a', acc: '#7b5cff', acc2: '#ffffff' }, acc: ['cap', 'phones'] },
-    { id: 'dino', name: 'Dino Dash', price: 1000, c: { skin: '#f5c79c', hood: '#3ec95b', hood2: '#b6f07a', pants: '#2f7a3b', shoes: '#ffb703', sole: '#ffffff', cap: '#3ec95b', brim: '#b6f07a', hair: '#4a2c1a', acc: '#ffb703', acc2: '#3ec95b' }, acc: ['cap', 'spikes'] },
-    { id: 'robo', name: 'Robo Kid', price: 1500, c: { skin: '#f0c9a4', hood: '#aab4c3', hood2: '#5b6b82', pants: '#5b6b82', shoes: '#3ad1ff', sole: '#2b2d42', cap: '#aab4c3', brim: '#aab4c3', hair: '#8a96a8', acc: '#3ad1ff', acc2: '#5b6b82' }, acc: ['antenna', 'visor', 'backpack'] },
-    { id: 'ninja', name: 'Ninja Nova', price: 2200, c: { skin: '#e8b58c', hood: '#23264a', hood2: '#e63946', pants: '#23264a', shoes: '#111322', sole: '#e63946', cap: '#23264a', brim: '#23264a', hair: '#111111', acc: '#e63946', acc2: '#ffffff' }, acc: ['band'] },
-    { id: 'astro', name: 'Astro Ace', price: 3000, c: { skin: '#f5c79c', hood: '#f4f4f4', hood2: '#ff7a1a', pants: '#e9ecef', shoes: '#6c757d', sole: '#ff7a1a', cap: '#f4f4f4', brim: '#f4f4f4', hair: '#7a4a2a', acc: '#cfd8e3', acc2: '#ff7a1a' }, acc: ['helmet', 'tank'] },
-    { id: 'royal', name: 'Royal Runner', price: 4200, c: { skin: '#f5c79c', hood: '#7b2cbf', hood2: '#ffd23f', pants: '#3c096c', shoes: '#ffd23f', sole: '#ffffff', cap: '#7b2cbf', brim: '#7b2cbf', hair: '#e0a458', acc: '#ffd23f', acc2: '#e63946' }, acc: ['crown', 'cape'] },
-    { id: 'lava', name: 'Lava Legend', price: 5500, c: { skin: '#d99a6c', hood: '#2b2b2b', hood2: '#ff5400', pants: '#1a1a1a', shoes: '#ff5400', sole: '#ffd23f', cap: '#ff5400', brim: '#2b2b2b', hair: '#1a1a1a', acc: '#ff7b00', acc2: '#ffd23f' }, acc: ['cap', 'flames'] },
-    { id: 'rainbow', name: 'Rainbow Star', price: 8000, c: { skin: '#f5c79c', hood: '#ff4d6d', hood2: '#ffffff', pants: '#4361ee', shoes: '#ffffff', sole: '#ffd23f', cap: '#ffffff', brim: '#ffd23f', hair: '#4a2c1a', acc: '#ffffff', acc2: '#ff4d6d' }, acc: ['cap', 'phones', 'cape'], rainbow: true }
+    { id: 'rookie', name: 'المبتدئ', price: 0, c: { skin: '#f5c79c', hood: '#ff7a1a', hood2: '#ffd23f', pants: '#3056c9', shoes: '#ff3b5c', sole: '#ffffff', cap: '#e63946', brim: '#ffffff', hair: '#4a2c1a', acc: '#ffd23f', acc2: '#ffffff' }, acc: ['cap'] },
+    { id: 'skater', name: 'المتزلّج', price: 300, c: { skin: '#d99a6c', hood: '#16c2b5', hood2: '#0e7c86', pants: '#2b2d42', shoes: '#f7f7f7', sole: '#e63946', cap: '#2b2d42', brim: '#ff7a1a', hair: '#1b1b1b', acc: '#ffd23f', acc2: '#ff7a1a' }, acc: ['cap', 'backpack'] },
+    { id: 'bubble', name: 'العلكة الوردية', price: 600, c: { skin: '#ffd9b8', hood: '#ff6fb5', hood2: '#ffc2e2', pants: '#7b5cff', shoes: '#ffffff', sole: '#ff6fb5', cap: '#9b5de5', brim: '#ffc2e2', hair: '#6b3b2a', acc: '#7b5cff', acc2: '#ffffff' }, acc: ['cap', 'phones'] },
+    { id: 'dino', name: 'الديناصور', price: 1000, c: { skin: '#f5c79c', hood: '#3ec95b', hood2: '#b6f07a', pants: '#2f7a3b', shoes: '#ffb703', sole: '#ffffff', cap: '#3ec95b', brim: '#b6f07a', hair: '#4a2c1a', acc: '#ffb703', acc2: '#3ec95b' }, acc: ['cap', 'spikes'] },
+    { id: 'robo', name: 'الفتى الآلي', price: 1500, c: { skin: '#f0c9a4', hood: '#aab4c3', hood2: '#5b6b82', pants: '#5b6b82', shoes: '#3ad1ff', sole: '#2b2d42', cap: '#aab4c3', brim: '#aab4c3', hair: '#8a96a8', acc: '#3ad1ff', acc2: '#5b6b82' }, acc: ['antenna', 'visor', 'backpack'] },
+    { id: 'ninja', name: 'النينجا', price: 2200, c: { skin: '#e8b58c', hood: '#23264a', hood2: '#e63946', pants: '#23264a', shoes: '#111322', sole: '#e63946', cap: '#23264a', brim: '#23264a', hair: '#111111', acc: '#e63946', acc2: '#ffffff' }, acc: ['band'] },
+    { id: 'astro', name: 'رائد الفضاء', price: 3000, c: { skin: '#f5c79c', hood: '#f4f4f4', hood2: '#ff7a1a', pants: '#e9ecef', shoes: '#6c757d', sole: '#ff7a1a', cap: '#f4f4f4', brim: '#f4f4f4', hair: '#7a4a2a', acc: '#cfd8e3', acc2: '#ff7a1a' }, acc: ['helmet', 'tank'] },
+    { id: 'royal', name: 'العدّاء الملكي', price: 4200, c: { skin: '#f5c79c', hood: '#7b2cbf', hood2: '#ffd23f', pants: '#3c096c', shoes: '#ffd23f', sole: '#ffffff', cap: '#7b2cbf', brim: '#7b2cbf', hair: '#e0a458', acc: '#ffd23f', acc2: '#e63946' }, acc: ['crown', 'cape'] },
+    { id: 'lava', name: 'بطل البركان', price: 5500, c: { skin: '#d99a6c', hood: '#2b2b2b', hood2: '#ff5400', pants: '#1a1a1a', shoes: '#ff5400', sole: '#ffd23f', cap: '#ff5400', brim: '#2b2b2b', hair: '#1a1a1a', acc: '#ff7b00', acc2: '#ffd23f' }, acc: ['cap', 'flames'] },
+    { id: 'rainbow', name: 'نجم قوس قزح', price: 8000, c: { skin: '#f5c79c', hood: '#ff4d6d', hood2: '#ffffff', pants: '#4361ee', shoes: '#ffffff', sole: '#ffd23f', cap: '#ffffff', brim: '#ffd23f', hair: '#4a2c1a', acc: '#ffffff', acc2: '#ff4d6d' }, acc: ['cap', 'phones', 'cape'], rainbow: true }
   ];
 
   RR.BOARDS = [
-    { id: 'classic', name: 'Classic', price: 0, deck: '#ff7a1a', stripe: '#ffd23f', under: '#2b2d42', glow: '#ffb347' },
-    { id: 'ocean', name: 'Ocean Wave', price: 250, deck: '#1fb6ff', stripe: '#ffffff', under: '#0a3d62', glow: '#6ff0ff' },
-    { id: 'bolt', name: 'Bolt', price: 600, deck: '#ffd23f', stripe: '#2b2d42', under: '#2b2d42', glow: '#fff36b' },
-    { id: 'galaxy', name: 'Galaxy', price: 1200, deck: '#5a189a', stripe: '#ff9ef5', under: '#10002b', glow: '#c77dff' },
-    { id: 'candy', name: 'Candy Pop', price: 2000, deck: '#ff8fc7', stripe: '#7cf5d2', under: '#ffffff', glow: '#ffb3e6' },
-    { id: 'gold', name: 'Golden Glide', price: 3500, deck: '#ffcc33', stripe: '#fff6c9', under: '#b8860b', glow: '#ffe98a' }
+    { id: 'classic', name: 'الكلاسيكي', price: 0, deck: '#ff7a1a', stripe: '#ffd23f', under: '#2b2d42', glow: '#ffb347' },
+    { id: 'ocean', name: 'موج البحر', price: 250, deck: '#1fb6ff', stripe: '#ffffff', under: '#0a3d62', glow: '#6ff0ff' },
+    { id: 'bolt', name: 'البرق', price: 600, deck: '#ffd23f', stripe: '#2b2d42', under: '#2b2d42', glow: '#fff36b' },
+    { id: 'galaxy', name: 'المجرّة', price: 1200, deck: '#5a189a', stripe: '#ff9ef5', under: '#10002b', glow: '#c77dff' },
+    { id: 'candy', name: 'الحلوى', price: 2000, deck: '#ff8fc7', stripe: '#7cf5d2', under: '#ffffff', glow: '#ffb3e6' },
+    { id: 'gold', name: 'الذهب', price: 3500, deck: '#ffcc33', stripe: '#fff6c9', under: '#b8860b', glow: '#ffe98a' }
   ];
 
   /* --------------------------------------------------------- runner */

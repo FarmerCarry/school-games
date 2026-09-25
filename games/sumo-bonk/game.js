@@ -50,6 +50,7 @@
     beaten: store.get('beaten', {})
   };
   var DIFF_LV = { easy: 1, medium: 2, hard: 3 };
+  var DIFF_AR = { easy: 'السهل', medium: 'المتوسط', hard: 'الصعب' };
   function medals() { var n = 0; for (var i = 0; i < 8; i++) n += save.beaten[i] || 0; return n; }
   function persist() {
     ['stars', 'wins', 'special', 'picks', 'mode', 'diff', 'streak', 'bestStreak', 'matches', 'bonks', 'music', 'seenHats', 'beaten'].forEach(function (k) { store.set(k, save[k]); });
@@ -119,7 +120,10 @@
   var popups = [];
   function popup(text, x, y, color, size) {
     if (popups.length > 6) popups.shift();
-    popups.push({ text: text, x: clamp(x, 120, W - 120), y: clamp(y, 90, H - 60), t: 0, life: 0.95, color: color || '#ffe14a', size: size || 54, rot: rand(-0.18, 0.18) });
+    size = size || 54;
+    ctx.font = '700 ' + size + 'px ' + FONT;
+    var hw = Math.min(W / 2 - 10, ctx.measureText(text).width * 0.72 + 16);
+    popups.push({ hw: hw, text: text, x: clamp(x, hw, W - hw), y: clamp(y, 90, H - 60), t: 0, life: 0.95, color: color || '#ffe14a', size: size || 54, rot: rand(-0.18, 0.18) });
   }
   var banner = null;
   function showBanner(text, sub, color, life, size) { banner = { text: text, sub: sub || '', color: color || '#ffe14a', t: 0, life: life || 1.2, size: size || 96 }; }
@@ -158,14 +162,14 @@
   /* =============================================================== arenas */
   var ARENA_TYPES = ['classic', 'shrink', 'ice', 'seesaw', 'moving', 'bouncy', 'windy', 'gap'];
   var ARENA_INFO = {
-    classic: { name: 'Classic Ring', tip: 'Bonk them off the edge!' },
-    shrink: { name: 'Shrinking Ring', tip: 'The ring gets smaller!' },
-    ice: { name: 'Icy Ring', tip: 'Super slippery!' },
-    seesaw: { name: 'Seesaw', tip: 'It tips when you move!' },
-    moving: { name: 'Cloud Ride', tip: 'The cloud floats around!' },
-    bouncy: { name: 'Trampoline', tip: 'Boing boing boing!' },
-    windy: { name: 'Windy Peak', tip: 'Watch the wind!' },
-    gap: { name: 'Mind the Gap', tip: 'Don’t fall in the middle!' }
+    classic: { name: 'حلبة السومو', tip: 'ادفع خصمك خارج الحلبة!' },
+    shrink: { name: 'الحلبة المتقلصة', tip: 'الحلبة تصغر وتصغر!' },
+    ice: { name: 'حلبة الجليد', tip: 'أرض زلقة جدا!' },
+    seesaw: { name: 'لوح التوازن', tip: 'اللوح يميل تحت وزنك!' },
+    moving: { name: 'السحابة الطائرة', tip: 'السحابة تتحرك يمينا ويسارا!' },
+    bouncy: { name: 'الترامبولين', tip: 'اضغط قفز لحظة الهبوط لقفزة خارقة!' },
+    windy: { name: 'قمة الرياح', tip: 'انتبه لاتجاه الريح!' },
+    gap: { name: 'انتبه للفجوة', tip: 'لا تسقط في المنتصف!' }
   };
   function plat(kind, x, y, w, h, o) {
     var p = { kind: kind, x: x, y: y, w: w, h: h, a: 0, av: 0, fric: 6, bounce: 0, dx: 0, dy: 0, vx: 0, vy: 0, anchor: 0, minW: 220, bx: x, by: y, crack: 0, dips: null };
@@ -298,8 +302,8 @@
     cam.x = W / 2; cam.y = H / 2; cam.z = 1;
     if (!demo) {
       var sub = arena.tip;
-      if (score[0] === WIN_SCORE - 1 || score[1] === WIN_SCORE - 1) sub = 'MATCH POINT!';
-      showBanner('ROUND ' + roundNo, arena.name.toUpperCase() + '  •  ' + sub, '#ffffff', 1.05, 92);
+      if (score[0] === WIN_SCORE - 1 || score[1] === WIN_SCORE - 1) sub = 'نقطة الفوز!';
+      showBanner('الجولة ' + roundNo, arena.name + '  •  ' + sub, '#ffffff', 1.05, 92);
     }
   }
 
@@ -308,12 +312,12 @@
     score = [0, 0]; roundNo = 1; bag = [];
     stats = { bonks: [0, 0], perfect: [0, 0], draws: 0 };
     P[0].sumo = save.picks.s0; P[0].hat = hatUnlocked(save.picks.h0) ? save.picks.h0 : 0;
-    P[0].cpu = false; P[0].label = mode === 1 ? 'YOU' : 'P1';
+    P[0].cpu = false; P[0].label = mode === 1 ? 'أنت' : 'لاعب 1';
     if (mode === 1) {
-      P[1].cpu = true; P[1].level = diff; P[1].label = 'CPU';
+      P[1].cpu = true; P[1].level = diff; P[1].label = 'الكمبيوتر';
       P[1].sumo = cpuPick.sumo; P[1].hat = cpuPick.hat;
     } else {
-      P[1].cpu = false; P[1].label = 'P2'; P[1].sumo = save.picks.s1; P[1].hat = hatUnlocked(save.picks.h1) ? save.picks.h1 : 0;
+      P[1].cpu = false; P[1].label = 'لاعب 2'; P[1].sumo = save.picks.s1; P[1].hat = hatUnlocked(save.picks.h1) ? save.picks.h1 : 0;
     }
     MUSIC.play(128, false);
     beginRound();
@@ -350,7 +354,7 @@
         ly = -R;
         if (landing && pl.bounce && vly > 380) {
           var bv = Math.min(1500, vly * pl.bounce);
-          if (p.jb > 0 && p.action === 'none') { bv = Math.max(bv, JUMPV * 1.4); p.jb = 0; if (sfxOn()) SFX.superJump(); popup('SUPER BOING!', p.x, p.y - 90, '#7de3ff', 40); }
+          if (p.jb > 0 && p.action === 'none') { bv = Math.max(bv, JUMPV * 1.4); p.jb = 0; if (sfxOn()) SFX.superJump(); popup('قفزة خارقة!', p.x, p.y - 90, '#7de3ff', 40); }
           vly = -bv; p.noSnap = 0.06;
           if (pl.dips.length < 6) pl.dips.push({ x: p.x, a: 0, a0: Math.min(34, bv * 0.03), t: 0 });
           if (sfxOn()) SFX.tramp();
@@ -429,7 +433,7 @@
       o.vx += dir * 300 * power; o.vy = -400 * power * arena.jump;
       o.grounded = false; o.plat = null; o.noSnap = 0.08; o.action = 'stun'; o.t = 0.22; o.spin = dir * 4;
       o.hits += 0.5;
-      popup('WOBBLE!', o.x, o.y - 100, '#9ff0ff', 40);
+      popup('زلزال!', o.x, o.y - 100, '#9ff0ff', 40);
       if (sfxOn()) SFX.boing();
     }
   }
@@ -437,7 +441,7 @@
   function onLand(p, v) {
     p.canDive = true;
     if (p.voidT > 0.1 && p.wasHit && !demo) {
-      popup(Math.random() < 0.5 ? 'SAVED!' : 'SO CLOSE!', p.x, p.y - 110, '#b6ff7a', 44);
+      popup(Math.random() < 0.5 ? 'نجاة!' : 'كاد يسقط!', p.x, p.y - 110, '#b6ff7a', 44);
       if (sfxOn()) SFX.cheer(false);
       hype = 1;
     }
@@ -463,7 +467,7 @@
   function markOut(p) {
     if (p.out) return;
     p.outInfo = { t: +roundT.toFixed(2), act: p.action, x: Math.round(p.x), y: Math.round(p.y), vx: Math.round(p.vx), vy: Math.round(p.vy), hits: p.hits, o: P[1 - p.idx].action };
-    p.out = true; p.action = 'fall'; p.grounded = false; p.plat = null;
+    p.out = true; p.outT = T; p.action = 'fall'; p.grounded = false; p.plat = null;
     var o = P[1 - p.idx];
     if (sfxOn()) SFX.fall();
     if (phase === 'fight' && !o.out) {
@@ -484,11 +488,11 @@
     spawn('ring', sx, WATER_Y + 4, 0, 0, 1.0, 100, 'rgba(255,255,255,0.7)', 0, 0, 0.22);
     shake.add(7);
     if (sfxOn()) { SFX.splash(); SFX.cheer(true); }
-    popup('SPLASH!', sx, WATER_Y - 120, '#8fdcff', 70);
+    popup('طرطشة!', sx, WATER_Y - 120, '#8fdcff', 70);
     hype = 1;
   }
 
-  var HIT_WORDS = ['BONK!', 'WHAM!', 'BOOF!', 'POW!', 'THWUMP!', 'BONK!', 'KA-BONK!'];
+  var HIT_WORDS = ['بوم!', 'طاخ!', 'دبّ!', 'بف!', 'ترااخ!', 'بوم!', 'بونغ!'];
   function hit(a, b, kind) {
     var dir = b.x >= a.x ? 1 : -1;
     if (Math.abs(b.x - a.x) < 6) dir = a.dir || a.f;
@@ -508,7 +512,7 @@
     burst('star', cx, cy, 9, { speed: 520, life: 0.6, size: 13, colors: ['#ffe14a', '#ffffff', '#ffb3d9'], g: 700 });
     burst('dot', cx, cy, 10, { speed: 380, life: 0.35, size: 7, color: '#ffffff', g: 0 });
     spawn('ring', cx, cy, 0, 0, 0.3, 60, '#ffffff', 0, 0, 1);
-    var word = kind === 'dive' ? 'BELLY FLOP!' : counter ? 'COUNTER!' : HIT_WORDS[(Math.random() * HIT_WORDS.length) | 0];
+    var word = kind === 'dive' ? 'ضربة البطن!' : counter ? 'ضربة مضادة!' : HIT_WORDS[(Math.random() * HIT_WORDS.length) | 0];
     popup(word, cx, cy - 70, kind === 'dive' ? '#ff9ad5' : '#ffe14a', kind === 'dive' ? 50 : 62);
     if (sfxOn()) { SFX.bonk(sc); if (sc > 1.3) SFX.cheer(false); }
     hype = Math.min(1, hype + 0.6);
@@ -523,7 +527,7 @@
     hitstop = 0.1; shake.add(14); flash = 0.25; cam.punch = 0.06;
     burst('star', cx, cy, 14, { speed: 600, life: 0.7, size: 14, colors: ['#ffe14a', '#7de3ff', '#ffffff'], g: 500 });
     spawn('ring', cx, cy, 0, 0, 0.4, 90, '#ffffff', 0, 0, 1);
-    popup('BELLY CLASH!', cx, cy - 90, '#7de3ff', 56);
+    popup('تصادم البطون!', cx, cy - 90, '#7de3ff', 56);
     if (sfxOn()) SFX.clash();
     hype = 1;
   }
@@ -533,7 +537,7 @@
     var cx = bot.x, cy = bot.y - 70;
     hitstop = 0.05; shake.add(7);
     burst('star', cx, cy, 8, { angle: -Math.PI / 2, spread: 2.4, speed: 380, life: 0.55, size: 11, colors: ['#ffe14a', '#ffffff'], g: 800 });
-    popup('HEAD BONK!', cx, cy - 50, '#b6ff7a', 46);
+    popup('على الرأس!', cx, cy - 50, '#b6ff7a', 46);
     if (sfxOn()) SFX.stomp();
     hype = Math.min(1, hype + 0.4);
   }
@@ -700,7 +704,7 @@
     if (p.grounded && p.plat && (p.action === 'none' || p.action === 'recover') && p.half - Math.abs(p.lx) < 20) {
       p.teeter = true; p.teeterT += dt;
       if (p.teeterT > 0.35 && Math.random() < dt * 3 && sfxOn()) SFX.teeter();
-      if (p.teeterT > 0.12 && p.teeterT - dt <= 0.12 && !demo) popup('WHOA!', p.x, p.y - 120, '#ffffff', 36);
+      if (p.teeterT > 0.12 && p.teeterT - dt <= 0.12 && !demo) popup('انتبه!', p.x, p.y - 120, '#ffffff', 36);
     } else p.teeterT = Math.max(0, p.teeterT - dt * 2);
     if (p.spin) { p.spin *= 1 - 1.2 * dt; }
     if (!p.grounded && !p.out && !overPlatform(p.x, 0)) p.voidT = (p.voidT || 0) + dt;
@@ -821,13 +825,13 @@
     var controls = live;
     if (phase === 'intro') {
       phaseT += dt;
-      if (phaseT > 0.95 && phaseT - dt <= 0.95) { if (!demo) showBanner('READY?', '', '#ffffff', 0.62, 110); if (sfxOn()) SFX.ready(); }
-      if (phaseT >= 1.6) { phase = 'fight'; if (!demo) showBanner('BONK!', '', '#ffe14a', 0.6, 140); if (sfxOn()) SFX.go(); }
+      if (phaseT > 0.95 && phaseT - dt <= 0.95) { if (!demo) showBanner('استعد...', '', '#ffffff', 0.62, 110); if (sfxOn()) SFX.ready(); }
+      if (phaseT >= 1.6) { phase = 'fight'; if (!demo) showBanner('هيا!', '', '#ffe14a', 0.6, 140); if (sfxOn()) SFX.go(); }
     } else if (phase === 'fight') {
       roundT += dt;
       if (roundT >= SD_TIME && !arena.sd) {
         arena.sd = true;
-        if (!demo) { showBanner('SUDDEN DEATH!', 'The stage is shrinking!', '#ff5a5f', 1.2, 90); SFX.siren(); }
+        if (!demo) { showBanner('أسرع!', 'الحلبة بدأت تصغر!', '#ff5a5f', 1.2, 90); SFX.siren(); }
       }
     } else if (phase === 'end') {
       endT += dt;
@@ -854,10 +858,15 @@
     resolved = true;
     var aOut = P[0].out, bOut = P[1].out;
     arena.windTarget = 0;
+    // both fell: whoever went out FIRST loses (bonking your rival off and tumbling after them still scores);
+    // only a truly simultaneous fall is a double splash
+    if (aOut && bOut && Math.abs(P[0].outT - P[1].outT) >= 0.06) {
+      if (P[0].outT < P[1].outT) bOut = false; else aOut = false;
+    }
     if (aOut && bOut) {
       roundWinner = -1;
-      roundLog.push({ arena: arena.type, t: +roundT.toFixed(2), winner: -1, hits: [P[0].hits, P[1].hits], out: [P[0].outInfo, P[1].outInfo] });
-      if (!demo) { showBanner('DOUBLE SPLASH!', 'Nobody scores - go again!', '#8fdcff', 1.4, 84); SFX.draw(); stats.draws++; }
+      roundLog.push({ arena: arena.type, t: +roundT.toFixed(2), winner: -1, hits: [P[0].hits, P[1].hits], out: [P[0].outInfo, P[1].outInfo] }); if (roundLog.length > 300) roundLog.shift();
+      if (!demo) { showBanner('سقطة مزدوجة!', 'لا نقاط لأحد، جولة جديدة!', '#8fdcff', 1.4, 84); SFX.draw(); stats.draws++; }
       return;
     }
     roundWinner = aOut ? 1 : 0;
@@ -866,9 +875,9 @@
     var w = P[roundWinner];
     if (w.hits === 0) stats.perfect[roundWinner]++;
     roundLog.push({ arena: arena.type, t: +roundT.toFixed(2), winner: roundWinner, hits: [P[0].hits, P[1].hits] }); if (roundLog.length > 300) roundLog.shift();
-    var name = mode === 1 ? (roundWinner === 0 ? 'YOU SCORE!' : 'CPU SCORES!') : 'PLAYER ' + (roundWinner + 1) + ' SCORES!';
-    var sub = w.hits === 0 ? 'PERFECT ROUND!' : (score[roundWinner] === WIN_SCORE - 1 ? 'MATCH POINT!' : '');
-    if (score[roundWinner] >= WIN_SCORE) { name = 'KNOCKOUT!'; sub = ''; }
+    var name = mode === 1 ? (roundWinner === 0 ? 'نقطة لك!' : 'نقطة للكمبيوتر!') : 'نقطة للاعب ' + (roundWinner + 1) + '!';
+    var sub = w.hits === 0 ? 'جولة مثالية!' : (score[roundWinner] === WIN_SCORE - 1 ? 'نقطة الفوز!' : '');
+    if (score[roundWinner] >= WIN_SCORE) { name = 'الضربة القاضية!'; sub = ''; }
     showBanner(name, sub, SUMOS[w.sumo].body, 1.6, 84);
     SFX.point();
     hudPop[roundWinner] = 1;
@@ -893,7 +902,7 @@
       earned = score[0] * mult + (matchWinner === 0 ? bonus : 0);
       if (matchWinner === 0) {
         var cs = P[1].sumo, lvn = DIFF_LV[diff];
-        if ((save.beaten[cs] || 0) < lvn) { save.beaten[cs] = lvn; newMedal = SUMOS[cs].name + ' on ' + diff.toUpperCase(); }
+        if ((save.beaten[cs] || 0) < lvn) { save.beaten[cs] = lvn; newMedal = SUMOS[cs].name + ' في المستوى ' + DIFF_AR[diff]; }
         save.wins[diff] = (save.wins[diff] || 0) + 1;
         save.streak++;
         if (diff === 'hard' && !save.special.crown) { save.special.crown = true; newSpecial.push('crown'); }
@@ -917,8 +926,8 @@
     });
     var unlockedDiff = null;
     if (mode === 1 && matchWinner === 0) {
-      if (diff === 'easy' && save.wins.easy === 1) unlockedDiff = 'MEDIUM';
-      if (diff === 'medium' && save.wins.medium === 1) unlockedDiff = 'HARD';
+      if (diff === 'easy' && save.wins.easy === 1) unlockedDiff = DIFF_AR.medium;
+      if (diff === 'medium' && save.wins.medium === 1) unlockedDiff = DIFF_AR.hard;
     }
     persist();
     overData = { newMedal: newMedal, humanWon: humanWon, earned: earned, newHats: newHats, newStreak: newStreak, unlockedDiff: unlockedDiff, t: 0, shown: 0 };
@@ -980,8 +989,10 @@
     }
   }
 
+  var AR_RE = /[\u0600-\u06FF]/;
   function text(str, x, y, size, fill, align, lw, stroke) {
     ctx.font = '700 ' + size + 'px ' + FONT;
+    ctx.direction = AR_RE.test(str) ? 'rtl' : 'ltr';
     ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
     var w = lw == null ? Math.max(4, size * 0.16) : lw;
@@ -1025,17 +1036,21 @@
     SA.drawWater(ctx, SA.THEMES[arena.theme], W, H + 60, WATER_Y, T, x0, x1);
     for (var m = 0; m < 2; m++) { var fp = P[m]; if (fp.splashed && fp.splashT >= 0.45) SA.drawFloatie(ctx, fp.x, WATER_Y + 2 + Math.sin(fp.splashT * 3) * 3, T); }
     drawParts(ctx);
-    drawPopups();
     ctx.restore();
+    drawPopups(z);
   }
 
-  function drawPopups() {
+  // popups live in world coordinates but are clamped in SCREEN space, so a zoomed camera never pushes them off the edge
+  function drawPopups(z) {
     for (var i = 0; i < popups.length; i++) {
       var q = popups[i], t = q.t;
       var s = t < 0.1 ? t / 0.1 * 1.35 : t < 0.2 ? 1.35 - (t - 0.1) * 3.5 : 1;
       var a = t > q.life - 0.25 ? (q.life - t) / 0.25 : 1;
+      var hw = Math.min(W / 2 - 4, q.hw * z);
+      var sx = clamp((q.x - cam.x) * z + W / 2 + shake.x, hw, W - hw);
+      var sy = clamp((q.y - t * 40 - cam.y) * z + H / 2 + shake.y, 60, H - 40);
       ctx.save(); ctx.globalAlpha = Math.max(0, a);
-      ctx.translate(q.x, q.y - t * 40); ctx.rotate(q.rot); ctx.scale(s, s);
+      ctx.translate(sx, sy); ctx.rotate(q.rot); ctx.scale(s * z, s * z);
       text(q.text, 0, 0, q.size, q.color, 'center', q.size * 0.2);
       ctx.restore();
     }
@@ -1047,7 +1062,7 @@
     SA.rrect(ctx, x - w / 2, y - 15, w, 30, 7);
     ctx.fillStyle = '#9aa3c7'; ctx.save(); ctx.translate(0, 4); ctx.fill(); ctx.restore();
     SA.rrect(ctx, x - w / 2, y - 15, w, 30, 7); SA.fs(ctx, '#ffffff', OUT, 2.5);
-    ctx.font = '700 18px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#1d2340'; ctx.fillText(label, x, y + 1);
+    ctx.font = '700 18px ' + FONT; ctx.direction = 'ltr'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#1d2340'; ctx.fillText(label, x, y + 1);
   }
 
   function drawHUD() {
@@ -1056,13 +1071,15 @@
     for (var i = 0; i < 2; i++) {
       var p = P[i], S = SUMOS[p.sumo], side = i ? 1 : -1;
       var pop = hudPop[i];
-      // name plate
-      var px = cx + side * 292;
+      // name plate: the label (أنت / الكمبيوتر / لاعب 1) on the outer side, the sumo name on the inner side
+      ctx.font = '700 18px ' + FONT; var lw = ctx.measureText(p.label).width;
+      ctx.font = '700 25px ' + FONT; var nw = ctx.measureText(S.name).width;
+      var pw = Math.max(184, lw + nw + 52), px = cx + side * (198 + pw / 2);
       ctx.save(); ctx.translate(px, 38);
-      SA.rrect(ctx, -92, -24, 184, 48, 24); SA.fs(ctx, S.body, OUT, 4);
+      SA.rrect(ctx, -pw / 2, -24, pw, 48, 24); SA.fs(ctx, S.body, OUT, 4);
       ctx.restore();
-      text(p.label, px + side * 58, 38, 22, '#ffffff', 'center', 5);
-      text(S.name, px - side * 22, 38, 24, '#ffffff', 'center', 5);
+      text(p.label, px + side * (pw / 2 - 16), 38, 18, '#ffffff', side > 0 ? 'right' : 'left', 5);
+      text(S.name, px - side * (pw / 2 - 18), 38, 25, '#ffffff', side > 0 ? 'left' : 'right', 5);
       // pips
       for (var k = 0; k < WIN_SCORE; k++) {
         var x = cx + side * (52 + k * 30), filled = k < score[i];
@@ -1074,7 +1091,7 @@
     for (var h = 0; h < 2; h++) hudPop[h] = Math.max(0, hudPop[h] - 0.03);
     SA.circ(ctx, cx, 38, 24); SA.fs(ctx, '#ffffff', OUT, 4);
     text(String(roundNo), cx, 39, 26, '#2b1d3a', 'center', 0);
-    text(arena.name.toUpperCase(), cx, 82, 18, '#ffffff', 'center', 5);
+    text(arena.name, cx, 82, 18, '#ffffff', 'center', 5);
 
     // wind indicator
     if (arena.type === 'windy' && (Math.abs(arena.windTarget) > 0 || arena.windWarn)) {
@@ -1084,7 +1101,7 @@
       ctx.beginPath(); ctx.moveTo(-60, -10); ctx.lineTo(20, -10); ctx.lineTo(20, -24); ctx.lineTo(56, 0); ctx.lineTo(20, 24); ctx.lineTo(20, 10); ctx.lineTo(-60, 10); ctx.closePath();
       SA.fs(ctx, arena.windWarn ? '#ffe14a' : '#ffffff', OUT, 4);
       ctx.restore();
-      text(arena.windWarn ? 'WIND CHANGE!' : 'WIND', cx, 158, 18, '#ffffff', 'center', 5);
+      text(arena.windWarn ? 'الريح ستتغير!' : 'ريح قوية', cx, 158, 18, '#ffffff', 'center', 5);
     }
 
     // labels + tutorial keycaps over players
@@ -1104,9 +1121,9 @@
       if (showKeys && !q.cpu) {
         var k1 = mode === 1 ? 'W' : (j ? '↑' : 'W'), k2 = mode === 1 ? 'S' : (j ? '↓' : 'S');
         var bob = Math.sin(T * 5) * 3;
-        SA.rrect(ctx, sx - 92, ty - 58 + bob, 184, 50, 14); SA.fs(ctx, 'rgba(255,255,255,0.92)', OUT, 3);
-        drawKey(sx - 70, ty - 33 + bob, k1); text('jump', sx - 30, ty - 33 + bob, 17, '#2b1d3a', 'center', 0);
-        drawKey(sx + 20, ty - 33 + bob, k2); text('slam', sx + 60, ty - 33 + bob, 17, '#2b1d3a', 'center', 0);
+        SA.rrect(ctx, sx - 100, ty - 58 + bob, 200, 50, 14); SA.fs(ctx, 'rgba(255,255,255,0.92)', OUT, 3);
+        drawKey(sx + 76, ty - 33 + bob, k1); text('قفز', sx + 52, ty - 31 + bob, 19, '#2b1d3a', 'right', 0);
+        drawKey(sx - 8, ty - 33 + bob, k2); text('هجوم', sx - 32, ty - 31 + bob, 19, '#2b1d3a', 'right', 0);
       }
       if (q.action === 'windup') {
         var ex = sx + q.f * 34, ey = ty + 40;
@@ -1235,10 +1252,10 @@
     if (nh) {
       var prev = 0;
       HATS.forEach(function (h) { if (!h.special && h.stars <= save.stars && h.stars > prev) prev = h.stars; });
-      $('tNext').textContent = 'Next hat: ' + nh.name + ' at ★' + nh.stars;
+      $('tNext').innerHTML = 'القبعة التالية: <b>' + nh.name + '</b> عند <span dir="ltr">★ ' + nh.stars + '</span>';
       $('tBar').style.width = Math.round(100 * (save.stars - prev) / Math.max(1, nh.stars - prev)) + '%';
-    } else { $('tNext').textContent = 'All star hats unlocked!'; $('tBar').style.width = '100%'; }
-    $('tRecord').textContent = save.bestStreak ? 'Best win streak: ' + save.bestStreak : '';
+    } else { $('tNext').textContent = 'فتحت كل قبعات النجوم!'; $('tBar').style.width = '100%'; }
+    $('tRecord').textContent = save.bestStreak ? 'أطول سلسلة انتصارات: ' + save.bestStreak : '';
     $('tMedals').textContent = medals() + ' / 24';
     hatBarDirty = true;
   }
@@ -1268,23 +1285,23 @@
   }
   function buildSelect() {
     var one = mode === 1;
-    $('selTitle').textContent = one ? 'PICK YOUR SUMO!' : 'PICK YOUR SUMOS!';
-    $('who1').textContent = one ? 'CPU' : 'PLAYER 2';
-    $('who0').textContent = one ? 'YOU' : 'PLAYER 1';
+    $('selTitle').textContent = one ? 'اختر مصارعك!' : 'اختارا مصارعيكما!';
+    $('who1').textContent = one ? 'الكمبيوتر' : 'اللاعب 2';
+    $('who0').textContent = one ? 'أنت' : 'اللاعب 1';
     $('diffBox').hidden = !one;
     $('hatp1').hidden = one; $('keys1').hidden = one; $('rivalBox').hidden = !one;
     $('card1').classList.toggle('one', one);
     $('keys0').innerHTML = one
-      ? '<span class="sg-key">←</span><span class="sg-key">→</span> sumo &nbsp; <span class="sg-key">↑</span><span class="sg-key">↓</span> hat'
-      : '<span class="sg-key">A</span><span class="sg-key">D</span> sumo &nbsp; <span class="sg-key">W</span><span class="sg-key">S</span> hat';
+      ? '<span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span> المصارع &nbsp; <span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">↓</span></span> القبعة'
+      : '<span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> المصارع &nbsp; <span dir="ltr"><span class="sg-key">W</span><span class="sg-key">S</span></span> القبعة';
     ['easy', 'medium', 'hard'].forEach(function (d) {
       var b = $('d-' + d), ok = diffUnlocked(d);
       b.classList.toggle('on', d === diff); b.classList.toggle('locked', !ok);
       var wins = save.wins[d] || 0;
-      b.querySelector('.dw').textContent = ok ? (wins ? '★ ' + wins + ' win' + (wins > 1 ? 's' : '') : 'x' + { easy: 1, medium: 2, hard: 3 }[d] + ' stars') : (d === 'medium' ? 'Beat Easy' : 'Beat Medium');
+      b.querySelector('.dw').innerHTML = ok ? (wins ? 'فوز: <span dir="ltr">' + wins + ' ★</span>' : 'النجوم <span dir="ltr">×' + { easy: 1, medium: 2, hard: 3 }[d] + '</span>') : (d === 'medium' ? 'اهزم السهل' : 'اهزم المتوسط');
     });
     $('dDesc').hidden = !one;
-    $('dDesc').textContent = { easy: 'A sleepy, slow wobbler. Great for learning the moves!', medium: 'Jumps over your slams and belly flops back!', hard: 'A lightning-fast champ. Beat it to win the Gold Crown!' }[diff];
+    $('dDesc').textContent = { easy: 'مصارع نعسان وبطيء. رائع لتتعلم الحركات!', medium: 'يقفز فوق هجماتك ويرد عليك بضربة بطن!', hard: 'بطل سريع كالبرق! اهزمه لتربح التاج الذهبي!' }[diff];
     refreshSelectNames();
   }
   function refreshSelectNames() {
@@ -1296,7 +1313,7 @@
     $('card0').style.setProperty('--c', SUMOS[pv[0].sumo].body);
     $('card1').style.setProperty('--c', SUMOS[pv[1].sumo].body);
     var nh = nextHat();
-    $('selNext').innerHTML = nh ? 'You have <b>★ ' + save.stars + '</b> &nbsp;•&nbsp; next hat <b>' + nh.name + '</b> at ★ ' + nh.stars : 'You have <b>★ ' + save.stars + '</b> &nbsp;•&nbsp; every star hat unlocked!';
+    $('selNext').innerHTML = 'معك <b dir="ltr">★ ' + save.stars + '</b> &nbsp;•&nbsp; ' + (nh ? 'القبعة التالية <b>' + nh.name + '</b> عند <b dir="ltr">★ ' + nh.stars + '</b>' : 'فتحت كل قبعات النجوم!');
   }
   function cycleSumo(i, d) {
     if (mode === 1 && i === 1) {
@@ -1380,7 +1397,8 @@
       if (!ok) {
         c.font = '700 13px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle';
         c.lineWidth = 4; c.strokeStyle = OUT; c.fillStyle = '#ffe14a';
-        var lab = HATS[i].special ? '?' : '★' + HATS[i].stars;
+        var lab = HATS[i].special ? HATS[i].short : '★' + HATS[i].stars;
+        c.direction = HATS[i].special === 'crown' ? 'rtl' : 'ltr';
         c.strokeText(lab, x, 80); c.fillText(lab, x, 80);
       }
     }
@@ -1391,29 +1409,29 @@
     var d = overData;
     var S = SUMOS[P[matchWinner].sumo];
     var head;
-    if (mode === 1) head = matchWinner === 0 ? 'YOU WIN!' : 'CPU WINS!';
-    else head = 'PLAYER ' + (matchWinner + 1) + ' WINS!';
+    if (mode === 1) head = matchWinner === 0 ? 'فزت!' : 'فاز الكمبيوتر!';
+    else head = 'فاز اللاعب ' + (matchWinner + 1) + '!';
     $('oHead').textContent = head;
     $('oHead').style.color = mode === 1 && matchWinner === 1 ? '#ffffff' : S.body;
-    var sub = score[0] + ' – ' + score[1];
-    if (mode === 1 && matchWinner === 1) sub += score[0] >= 3 ? '  •  So close! Try again!' : '  •  Keep bonking, you got this!';
-    else if (Math.min(score[0], score[1]) === 0) sub += '  •  FLAWLESS!';
-    $('oSub').textContent = sub;
+    var sub = '<span dir="ltr">' + score[0] + ' – ' + score[1] + '</span>';
+    if (mode === 1 && matchWinner === 1) sub += score[0] >= 3 ? '  •  كدت تفوز! حاول مرة أخرى!' : '  •  استمر، أنت قادر على الفوز!';
+    else if (Math.min(score[0], score[1]) === 0) sub += '  •  فوز ساحق!';
+    $('oSub').innerHTML = sub;
     $('oStars').textContent = '+0';
     var lines = [];
-    d.newHats.forEach(function (i) { lines.push('<div class="unlock"><span class="new">NEW HAT!</span> ' + HATS[i].name + '</div>'); });
-    if (d.newMedal) lines.push('<div class="unlock"><span class="new">MEDAL!</span> Beat ' + d.newMedal + '</div>');
-    if (d.unlockedDiff) lines.push('<div class="unlock"><span class="new">UNLOCKED!</span> ' + d.unlockedDiff + ' CPU</div>');
-    if (d.newStreak) lines.push('<div class="unlock"><span class="new">NEW RECORD!</span> ' + save.streak + ' wins in a row</div>');
+    d.newHats.forEach(function (i) { lines.push('<div class="unlock"><span class="new">قبعة جديدة!</span> ' + HATS[i].name + '</div>'); });
+    if (d.newMedal) lines.push('<div class="unlock"><span class="new">ميدالية!</span> هزمت ' + d.newMedal + '</div>');
+    if (d.unlockedDiff) lines.push('<div class="unlock"><span class="new">مستوى جديد!</span> الكمبيوتر ' + d.unlockedDiff + '</div>');
+    if (d.newStreak) lines.push('<div class="unlock"><span class="new">رقم قياسي!</span> انتصارات متتالية: ' + save.streak + '</div>');
     if (!lines.length) {
       var nh = nextHat();
-      if (nh) lines.push('<div class="hint">' + Math.max(0, nh.stars - save.stars) + ' more ★ for the <b>' + nh.name + '</b></div>');
-      else lines.push('<div class="hint">Bonks this match: <b>' + (stats.bonks[0] + stats.bonks[1]) + '</b></div>');
+      if (nh) lines.push('<div class="hint">باقي <b dir="ltr">' + Math.max(0, nh.stars - save.stars) + ' ★</b> لتحصل على <b>' + nh.name + '</b></div>');
+      else lines.push('<div class="hint">ضربات هذه المباراة: <b>' + (stats.bonks[0] + stats.bonks[1]) + '</b></div>');
     }
     $('oLines').innerHTML = lines.join('');
-    $('oStats').innerHTML = (mode === 1 ? 'Your bonks: <b>' + stats.bonks[0] + '</b>' : 'Bonks: P1 <b>' + stats.bonks[0] + '</b> • P2 <b>' + stats.bonks[1] + '</b>') +
-      ' &nbsp;•&nbsp; Total ★ <b>' + save.stars + '</b>';
-    $('bAgain').innerHTML = mode === 1 && matchWinner === 0 ? 'NEXT RIVAL! <small>Enter</small>' : 'REMATCH! <small>Enter</small>';
+    $('oStats').innerHTML = (mode === 1 ? 'ضرباتك: <b>' + stats.bonks[0] + '</b>' : 'ضربات لاعب 1: <b>' + stats.bonks[0] + '</b> • لاعب 2: <b>' + stats.bonks[1] + '</b>') +
+      ' &nbsp;•&nbsp; كل نجومك <b dir="ltr">★ ' + save.stars + '</b>';
+    $('bAgain').innerHTML = mode === 1 && matchWinner === 0 ? 'الخصم التالي! <small>Enter</small>' : 'مباراة أخرى! <small>Enter</small>';
     if (d.newHats.length) setTimeout(function () { if (scr === 'over') SFX.unlock(); }, 900);
   }
   function updateOverStars() { $('oStars').textContent = '+' + overData.shown; }
@@ -1488,12 +1506,14 @@
       b.blur();
     });
   });
-  function paintMusic() { btnMusic.textContent = '♫'; btnMusic.style.opacity = save.music ? '1' : '0.45'; btnMusic.title = save.music ? 'Music on' : 'Music off'; }
+  function paintMusic() { btnMusic.textContent = '♫'; btnMusic.style.opacity = save.music ? '1' : '0.45'; btnMusic.title = save.music ? 'الموسيقى تعمل' : 'الموسيقى متوقفة'; }
   onClick('bMusic', function () { save.music = !save.music; MUSIC.on = save.music; persist(); paintMusic(); });
   btnMusic.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
   btnPause.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
   paintMusic();
-  Kit.muteButton();
+  var muteBtn = Kit.muteButton();
+  muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
+  muteBtn.title = 'الصوت (M)';
 
   window.addEventListener('blur', function () { if (scr === 'game' && !paused) pause(true); });
   document.addEventListener('visibilitychange', function () { if (document.hidden && scr === 'game' && !paused) pause(true); });
@@ -1538,7 +1558,7 @@
   };
 
   // go!
-  if (document.fonts && document.fonts.load) { document.fonts.load('700 40px Fredoka').catch(function () {}); }
+  if (document.fonts && document.fonts.load) { document.fonts.load('700 40px Fredoka', 'بونغ BONK').catch(function () {}); }
   goTitle();
   Kit.loop(update, render);
 })();

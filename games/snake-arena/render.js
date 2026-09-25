@@ -4,6 +4,7 @@
   var SA = window.SA, W = SA.world;
   var CAP = W.CAP, SPACING = W.SPACING;
   var FONT = 'Fredoka, "Segoe UI", Tahoma, sans-serif';
+  var ARABIC = /[؀-ۿ]/;
 
   var R = SA.render = {
     cam: { x: 0, y: 0, zoom: 0.8, sx: 0, sy: 0 },
@@ -362,7 +363,8 @@
   function text(g, s, x, y, size, col, align, weight, rtl, stroke) {
     g.font = (weight || 700) + ' ' + Math.round(size) + 'px ' + FONT;
     g.textAlign = align || 'center';
-    g.direction = rtl === false ? 'ltr' : 'rtl';
+    // RTL only when the string actually contains Arabic (so "+6" / "#3" / "x2" keep their order).
+    g.direction = rtl !== false && ARABIC.test(s) ? 'rtl' : 'ltr';
     if (stroke) { g.lineWidth = stroke; g.strokeStyle = 'rgba(10,6,30,0.85)'; g.lineJoin = 'round'; g.strokeText(s, x, y); }
     g.fillStyle = col || '#fff';
     g.fillText(s, x, y);
@@ -555,7 +557,7 @@
     text(ctx, '' + Math.floor(P.mass), 0, 0, 38, '#ffffff', 'left', 700, false, 6);
     ctx.restore();
     text(ctx, 'المركز ' + prank + ' من ' + ranked.length, bx + 222, by + 66, 17, '#ffe36b', 'right', 700);
-    text(ctx, 'أطحت بـ ' + h.kills, bx + 222, by + 88, 17, '#ff9ec4', 'right', 700);
+    text(ctx, 'فرقعتَ: ' + h.kills, bx + 222, by + 88, 17, '#ff9ec4', 'right', 700);
 
     // --- power-up timers (bottom centre)
     var act = [];
@@ -592,13 +594,17 @@
     ctx.globalAlpha = 1;
 
     // --- toasts (top centre)
+    var ty = 96;
     for (i = 0; i < h.toasts.length; i++) {
       var to = h.toasts[i], age = to.age, sc = age < 0.3 ? easeBack(age / 0.3) : 1;
       var fade = Math.min(1, (to.dur - age) / 0.4);
+      var tsz = to.size || 44;
+      ty += tsz * 0.5;
       ctx.globalAlpha = Math.max(0, fade);
-      ctx.save(); ctx.translate(UW / 2, 110 + i * 64); ctx.scale(sc, sc);
+      ctx.save(); ctx.translate(UW / 2, ty); ctx.scale(sc, sc);
+      ty += tsz * 0.55 + (to.sub ? 36 : 0) + 10;
       text(ctx, to.txt, 0, 0, to.size || 44, to.col || '#fff', 'center', 700, true, 9);
-      if (to.sub) text(ctx, to.sub, 0, (to.size || 44) * 0.72, 20, '#fff', 'center', 700, true, 5);
+      if (to.sub) text(ctx, to.sub, 0, tsz * 0.62 + 16, 20, '#fff', 'center', 700, true, 5);
       ctx.restore();
     }
     ctx.globalAlpha = 1;

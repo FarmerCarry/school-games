@@ -159,8 +159,8 @@
   </g>
 
   <!-- logo -->
-  <g font-family="'Arial Black', 'Segoe UI Black', 'Fredoka', Impact, sans-serif" font-weight="900" text-anchor="middle" stroke="#1b1f4b" stroke-linejoin="round" paint-order="stroke" transform="rotate(-6 200 60)">
-    <text x="106" y="80" font-size="68" fill="#ffd23f" stroke-width="16" textLength="146" lengthAdjust="spacingAndGlyphs">RAIL</text>
-    <text x="286" y="80" font-size="68" fill="#ff7a1a" stroke-width="16" textLength="166" lengthAdjust="spacingAndGlyphs">RUSH</text>
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl" stroke="#1b1f4b" stroke-linejoin="round" paint-order="stroke" transform="rotate(-5 200 60)">
+    <text x="290" y="84" font-size="66" fill="#ffd23f" stroke-width="16">عدّاء</text>
+    <text x="118" y="84" font-size="66" fill="#ff7a1a" stroke-width="16">السكة</text>
   </g>
 </svg>
