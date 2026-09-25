@@ -9,6 +9,39 @@ games are in Arabic, laid out right-to-left.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores and progress are saved in each browser (localStorage) only.
 
+## The games (26)
+
+| Game | English name | Players | Type |
+|---|---|---|---|
+| عدّاء السكة | Rail Rush | 1 | جري |
+| منحدر النيون | Neon Slope | 1 | جري، أركيد |
+| نفق السرعة | Tunnel Blitz | 1 | جري، أركيد |
+| قفزة الإيقاع | Beat Dash | 1 | جري، أركيد |
+| الخطّاف الطائر | Swing Hook | 1 | أركيد |
+| جنون الدراجات | Moto Madness | 1 | سباقات |
+| ملك الانزلاق | Drift King | 1 | سباقات |
+| النار والجليد | Fire & Ice | 1-2 | لاعبان، ألغاز |
+| دبابات الألوان | Paint Tanks | 1-3 | لاعبان، تحدي الروبوتات |
+| مصارعة السومو | Sumo Bonk | 1-2 | لاعبان، رياضة |
+| هوكي الهواء | Air Hockey | 1-2 | لاعبان، رياضة |
+| سلة الرؤوس الكبيرة | Hoop Heads | 1-2 | رياضة، لاعبان |
+| كرة القدم المجنونة | Wacky Soccer | 1-2 | رياضة، لاعبان |
+| حفلة البلياردو | Pool Party | 1-2 | رياضة |
+| سوق الحيوانات | Critter Mart | 1 | بناء وإدارة |
+| إمبراطورية البيتزا | Pizza Empire | 1 | بناء وإدارة |
+| عالم المكعبات | Block World | 1 | بناء وإدارة، أركيد |
+| انفجار المكعبات | Block Burst | 1 | ألغاز |
+| دمج 2048 | 2048 | 1 | ألغاز |
+| حبل الحلوى | Munch Rope | 1 | ألغاز |
+| اندفاع المتاهة | Maze Dash | 1 | أركيد |
+| عبور الطريق | Road Hopper | 1 | أركيد |
+| المراحل الماكرة | Sneaky Levels | 1 | أركيد |
+| معركة الهلام | Blob Battle | 1 | تحدي الروبوتات |
+| لوّن الأرض | Paint Grab | 1 | تحدي الروبوتات |
+| ساحة الثعابين | Snake Arena | 1 | تحدي الروبوتات، أركيد |
+
+Every game saves best scores and unlocks in the browser, and has a title screen, P/Esc pause and a 🔊 mute button.
+
 ## Putting it online (GitHub Pages, free)
 
 1. Merge this branch into `main`.

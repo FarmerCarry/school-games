@@ -19,7 +19,7 @@
     { id: 8, name: 'التنين', body: '#9d5cff', dark: '#5a22b0', unlock: { coins: 570 } },
     { id: 9, name: 'البطيخة', body: '#ff4d5e', dark: '#2f9e3a', unlock: { coins: 700 } },
     { id: 10, name: 'الملك', body: '#ffcf3a', dark: '#b07a00', unlock: { stars: 60 } },
-    { id: 11, name: 'قوس قزح', body: '#ff4d9d', dark: '#8a2ad0', unlock: { height: 200 } }
+    { id: 11, name: 'قوس قزح', body: '#ff4d9d', dark: '#8a2ad0', unlock: { height: 150 } }
   ];
 
   function rr(ctx, x, y, w, h, r) {

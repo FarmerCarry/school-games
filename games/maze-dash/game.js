@@ -157,8 +157,9 @@
     $(id).addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); sfx.click(); fn(); this.blur(); });
   }
 
-  var toastTimer = 0;
+  var toastTimer = 0, toastQueue = [];
   function toast(msg) {
+    if (toastTimer > 0) { if (toastQueue.length < 4) toastQueue.push(msg); return; }
     var t = $('toast');
     t.textContent = msg; t.hidden = false;
     t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
@@ -189,7 +190,7 @@
     milestone: function () { [659, 784, 988, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.12, vol: 0.12, delay: i * 0.08 }); }); },
     buy: function () { Kit.sfx.power(); A.tone({ freq: 1568, type: 'triangle', dur: 0.3, vol: 0.15, delay: 0.25 }); },
     no: function () { A.tone({ freq: 200, to: 150, type: 'square', dur: 0.15, vol: 0.12 }); },
-    trap: function () { A.tone({ freq: 900, to: 1400, type: 'square', dur: 0.04, vol: 0.03 }); }
+    trap: function () { A.tone({ freq: 900, to: 1400, type: 'square', dur: 0.05, vol: 0.05 }); A.tone({ freq: 900, to: 1400, type: 'square', dur: 0.05, vol: 0.05, delay: 0.12 }); }
   };
 
   /* ----------------------------------------------------------- helpers */
@@ -529,6 +530,16 @@
     }
   }
 
+  // A quiet tick when a nearby spike trap starts its warning (so kids hear it coming).
+  function trapTicks() {
+    var tr = G.world.traps, played = false;
+    for (var i = 0; i < tr.length; i++) {
+      var st = C.trapState(tr[i], G.ht);
+      if (st === 1 && tr[i].lastSt === 0 && !played && Math.abs(tr[i].x - P.x) + Math.abs(tr[i].y - P.y) <= 4) { sfx.trap(); played = true; }
+      tr[i].lastSt = st;
+    }
+  }
+
   function stepBlocks() {
     var bl = G.world.blocks;
     if (!bl.length) return;
@@ -613,7 +624,10 @@
 
   function tick(dt) {
     G.menuT += dt;
-    if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) $('toast').hidden = true; }
+    if (toastTimer > 0) {
+      toastTimer -= dt;
+      if (toastTimer <= 0) { $('toast').hidden = true; if (toastQueue.length) toast(toastQueue.shift()); }
+    }
     handleKeys();
     if (G.screen === 'play') updatePlay(dt);
     else if (G.screen === 'title' || G.screen === 'levels' || G.screen === 'shop') updateMenuBg(dt);
@@ -664,6 +678,7 @@
       if (G.magnetT > 0) { G.magnetT -= dt; magnetPull(); }
       if (G.doubleT > 0) G.doubleT -= dt;
       updatePlayer(dt);
+      trapTicks();
       if (G.phase === 'play') checkHazards();
       if (G.autoplay) autoStep();
     } else if (G.phase === 'dying') {
@@ -1293,7 +1308,7 @@
     var starEls = document.querySelectorAll('#win-stars .md-star');
     Array.prototype.forEach.call(starEls, function (el) { el.classList.remove('on'); });
     $('win-stats').innerHTML = 'النقاط: <b>' + G.dotsGot + '/' + G.dotsTotal + '</b> · الوقت: <b dir="ltr">' + fmtTime(G.time) + '</b> · العملات: <b>' + G.coinsGot + '</b>' +
-      (starBonus ? '<br>مكافأة النجوم الجديدة: <b>+' + starBonus + '</b> <span class="md-coin-ico"></span>' : '');
+      (starBonus ? '<br>مكافأة النجوم الجديدة: <b dir="ltr">+' + starBonus + '</b> <span class="md-coin-ico"></span>' : '');
     var nb = $('win-new');
     if (prev.done && newBestTime) { nb.hidden = false; nb.textContent = 'أفضل وقت جديد!'; }
     else nb.hidden = true;

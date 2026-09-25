@@ -692,7 +692,7 @@
           '</div>' +
         '</div>' +
         '<aside class="play-side" id="playSide">' + controlsHTML(g) +
-          '<div class="card tip"><h3>💡 ' + T.tip + '</h3><p>' + T.tip1 + '</p><p>' + T.tip2 + '</p></div>' +
+          '<div class="card tip"><h3>💡 ' + T.tip + '</h3><p>' + T.tip1 + '</p><p>' + T.tip2 + '</p><p>' + T.tip3 + '</p></div>' +
         '</aside>' +
       '</div>' +
       sectionHTML('💖', T.more, gridHTML(more));

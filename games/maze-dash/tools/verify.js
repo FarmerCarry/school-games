@@ -2,10 +2,15 @@
 /*
  * Maze Dash level verifier (development tool, not loaded by the game).
  *   node games/maze-dash/tools/verify.js [levelNumber] [--map]
+ *   node games/maze-dash/tools/verify.js --endless [runs]
  * Checks every level parses (13 wide, rectangular, one start, one exit) and
  * that a greedy planner using the real dash rules can collect every dot and
- * coin and reach the exit. Timed hazards (bats, traps, puffers) are assumed
- * avoidable by waiting; moving blocks are simulated exactly.
+ * coin and reach the exit; moving blocks are simulated exactly. Timed hazards
+ * (bats, traps, puffers) are checked with their real timing: every dash the
+ * player can make must have safe moments to start it (a bat that patrols
+ * along the whole corridor you must dash through is a guaranteed hit).
+ * --endless generates random "Rising Goo" mazes and checks that each one can
+ * be climbed to 600 m and has no unavoidable hazard on any dash.
  * The in-browser autoplayer (window.__game.autoplay) re-checks each level with
  * real hazard timing.
  */
@@ -17,8 +22,55 @@ const dir = path.join(__dirname, '..');
 const ctx = { console, Math, Object, Array, JSON, Uint8Array };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ['core.js', 'levels.js']) vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f });
-const C = ctx.MDCore, LEVELS = ctx.MD_LEVELS;
+for (const f of ['core.js', 'levels.js', 'endless.js']) vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f });
+const C = ctx.MDCore, LEVELS = ctx.MD_LEVELS, TM = C.TIMING;
+
+// Is the player (at float tile position x,y) hit by a timed hazard at time t?
+function hazardAt(H, x, y, t) {
+  const rad = TM.BAT_RADIUS + TM.PLAYER_RADIUS;
+  for (const b of H.bats) { const q = C.batXY(b, t), dx = q.x - x, dy = q.y - y; if (dx * dx + dy * dy < rad * rad) return 'bat'; }
+  const cx = Math.round(x), cy = Math.round(y), tr = H.trapMap[C.key(cx, cy)];
+  if (tr && C.trapState(tr, t) === 2 && Math.abs(x - cx) < 0.35 && Math.abs(y - cy) < 0.35) return 'trap';
+  for (const p of H.puffers) if (Math.abs(p.x - cx) + Math.abs(p.y - cy) === 1 && C.puffState(p, t) === 2 && Math.abs(x - p.x) + Math.abs(y - p.y) < 1.25) return 'puffer';
+  return null;
+}
+// Fraction of start times (over 20 s) at which this dash gets through untouched.
+function dashSafeFraction(H, x, y, d, len) {
+  const D = C.DIRS[d], dur = len / TM.DASH_SPEED;
+  let ok = 0, n = 0;
+  for (let t0 = 0; t0 < 20; t0 += 0.05) {
+    n++; let bad = null;
+    for (let s = 0; s <= dur + 1e-9 && !bad; s += 1 / 96) { const f = Math.min(len, s * TM.DASH_SPEED); bad = hazardAt(H, x + D.dx * f, y + D.dy * f, t0 + s); }
+    if (!bad) ok++;
+  }
+  return ok / n;
+}
+
+if (process.argv.includes('--endless')) {
+  const runs = Number(process.argv[process.argv.indexOf('--endless') + 1]) || 20, HEIGHT = 600, K = C.key;
+  let bad = 0;
+  for (let run = 0; run < runs; run++) {
+    const w = { rows: {}, bats: [], traps: [], puffers: [], trapMap: {}, pufMap: {},
+      ensureRow(y) { let r = this.rows[y]; if (!r) { r = { t: new Uint8Array(13).fill(C.T.WALL), it: new Uint8Array(13), lock: new Uint8Array(13) }; this.rows[y] = r; } return r; },
+      addBat(b) { this.bats.push(b); }, addTrap(t) { this.traps.push(t); this.trapMap[K(t.x, t.y)] = t; }, addPuffer(p) { this.puffers.push(p); this.pufMap[K(p.x, p.y)] = p; } };
+    const gen = ctx.MDEndless.create(w);
+    for (let y = -50; y >= -HEIGHT - 60; y -= 50) gen.fill(y);
+    const G = { tile: (x, y) => (x < 0 || x >= 13 || !w.rows[y]) ? C.T.WALL : w.rows[y].t[x], puffer: (x, y) => !!w.pufMap[K(x, y)] };
+    const seen = new Set([K(6, 0)]), q = [[6, 0]]; let top = 0, stuck = 0;
+    while (q.length) {
+      const [x, y] = q.shift(); top = Math.min(top, y);
+      for (let d = 0; d < 4; d++) {
+        const m = C.dash(G, x, y, d, null);
+        if (!m || m.dead) continue;
+        if (y > -HEIGHT && dashSafeFraction(w, x, y, d, m.cells.length) === 0) stuck++;
+        const k = K(m.x, m.y); if (!seen.has(k)) { seen.add(k); q.push([m.x, m.y]); }
+      }
+    }
+    if (top > -HEIGHT || stuck) { bad++; console.log(`run ${run}: reached ${-top} m, ${stuck} dash(es) with an unavoidable hazard`); }
+  }
+  console.log(bad ? `${bad}/${runs} endless mazes with problems` : `all ${runs} endless mazes climbable to ${HEIGHT} m with no unavoidable hazards`);
+  process.exit(bad ? 1 : 0);
+}
 const only = process.argv[2] && !process.argv[2].startsWith('--') ? Number(process.argv[2]) : null;
 const showMap = process.argv.includes('--map');
 let fails = 0;
@@ -77,6 +129,26 @@ LEVELS.forEach((def, i) => {
     const deadCells = new Set();
     for (let i = 0; i < states.length; i++) if (!good[i]) deadCells.add(`(${states[i].x},${states[i].y})`);
     if (deadCells.size) probs.push('dead-end rest points ' + [...deadCells].join(' '));
+    // timed hazards: every dash used by a good path needs a safe moment
+    if (L0.bats.length || L0.traps.length || L0.puffers.length) {
+      const H = { bats: L0.bats, puffers: L0.puffers, trapMap: {} };
+      L0.traps.forEach(t => { H.trapMap[K(t.x, t.y)] = t; });
+      const tested = new Set(), unsafe = [];
+      for (let i = 0; i < states.length; i++) {
+        if (!good[i]) continue;
+        const st = states[i], snap = {};
+        st.bl.forEach(b => { snap[K(b.x, b.y)] = 1; });
+        for (let d = 0; d < 4; d++) {
+          const m = C.dash(G0, st.x, st.y, d, snap);
+          if (!m || m.dead) continue;
+          const ek = st.x + ',' + st.y + ',' + d + ',' + m.cells.length;
+          if (tested.has(ek)) continue;
+          tested.add(ek);
+          if (dashSafeFraction(H, st.x, st.y, d, m.cells.length) === 0) unsafe.push(`(${st.x},${st.y})${'URDL'[d]}`);
+        }
+      }
+      if (unsafe.length) probs.push('unavoidable hazard on dash ' + unsafe.join(' '));
+    }
     r.states = states.length;
   }
   const tag = probs.length ? 'BAD ' : 'OK  ';
