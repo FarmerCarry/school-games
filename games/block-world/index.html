@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>عالم المكعبات</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<style>
+  body { background: #0d1030; cursor: default; }
+  #game { cursor: crosshair; }
+  #ui { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; pointer-events: none; z-index: 10; }
+  .ov { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: auto; }
+  .ov[hidden] { display: none; }
+  .pbtn { position: fixed; top: 10px; right: 62px; z-index: 20; width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); background: rgba(0,0,0,.35); color: #fff; font-size: 18px; font-weight: 700; cursor: pointer; font-family: var(--sg-font); }
+  .pbtn:hover { background: rgba(0,0,0,.55); }
+  .pbtn[hidden] { display: none; }
+
+  /* ---------- title ---------- */
+  #title { flex-direction: column; justify-content: flex-start; background: linear-gradient(180deg, rgba(10,14,40,.15) 0%, rgba(10,14,40,.05) 30%, rgba(10,14,40,.55) 70%, rgba(10,14,40,.8) 100%); }
+  /* Arabic logo: each word is one chunky block (letters must stay joined, so no per-letter tiles). */
+  .logo { margin-top: 22px; display: flex; gap: 22px; align-items: flex-end; direction: rtl; }
+  .logo .lw { display: inline-block; height: 100px; padding: 0 30px; line-height: 112px; text-align: center; font-size: 74px; font-weight: 700; color: #fff; border-radius: 14px; position: relative; white-space: nowrap;
+    text-shadow: 0 5px 0 rgba(0,0,0,.4), 0 0 2px rgba(0,0,0,.5); box-shadow: inset 0 -9px 0 rgba(0,0,0,.25), inset 0 4px 0 rgba(255,255,255,.25), 0 9px 0 rgba(0,0,0,.35); animation: bob 2.4s ease-in-out infinite; }
+  .logo .lw::before, .logo .lw::after { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 3px; background: rgba(0,0,0,.18); bottom: 16px; }
+  .logo .lw::before { right: 10px; } .logo .lw::after { left: 10px; }
+  .logo .g { background: linear-gradient(180deg, #6fd24a 0 22%, #3f942a 22% 28%, #946340 28% 100%); }
+  .logo .o { background: linear-gradient(180deg, #ffd23a 0 22%, #d49a10 22% 28%, #8e8e96 28% 100%); animation-delay: .4s; }
+  @keyframes bob { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
+  .tag { margin-top: 14px; font-size: 26px; font-weight: 700; color: #fff; text-shadow: 0 3px 0 rgba(0,0,0,.4); }
+  #slots { display: flex; gap: 18px; margin-top: 30px; }
+  .slot-card { width: 236px; height: 170px; border-radius: 22px; background: rgba(16,20,48,.82); border: 4px solid rgba(255,255,255,.18); position: relative; cursor: pointer; text-align: center; padding-top: 16px; transition: transform .12s, border-color .12s; box-shadow: 0 8px 0 rgba(0,0,0,.35); }
+  .slot-card:hover { transform: translateY(-4px) scale(1.03); }
+  .slot-card.sel { border-color: #ffcc00; background: rgba(40,40,90,.92); transform: translateY(-6px) scale(1.05); }
+  .slot-card.empty { background: rgba(16,20,48,.6); border-style: dashed; }
+  .sc-ic { width: 56px; height: 56px; image-rendering: pixelated; filter: drop-shadow(0 4px 0 rgba(0,0,0,.35)); }
+  .sc-plus { font-size: 64px; line-height: 70px; color: #ffcc00; font-weight: 700; }
+  .sc-name { font-size: 22px; font-weight: 700; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; }
+  .sc-stars { font-size: 18px; color: #ffcc00; font-weight: 700; }
+  .sc-time { font-size: 14px; opacity: .75; }
+  .sc-mode { position: absolute; top: 10px; right: 12px; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: #3ddc84; color: #07351c; }
+  .sc-mode.creative { background: #ff8fc8; color: #4a0a2a; }
+  .sc-del { position: absolute; top: 8px; left: 10px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,.12); color: #fff; font-size: 14px; cursor: pointer; font-family: var(--sg-font); }
+  .sc-del:hover { background: #ff5a5f; }
+  .sc-confirm { position: absolute; inset: 0; border-radius: 18px; background: rgba(40,10,20,.95); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; }
+  .sc-confirm .sg-btn { font-size: 16px; padding: 6px 18px; margin: 4px; }
+  .sc-confirm .yes { background: #ff5a5f; color: #fff; }
+  .trow { display: flex; gap: 22px; margin-top: 28px; align-items: stretch; }
+  .tbox { background: rgba(16,20,48,.82); border: 3px solid rgba(255,255,255,.14); border-radius: 20px; padding: 12px 18px; }
+  .skinbox { display: flex; align-items: center; gap: 8px; }
+  .skinbox .arrow { width: 40px; height: 40px; border-radius: 50%; border: none; background: #fff; color: #1d2340; font-size: 18px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 0 #9aa3c7; font-family: var(--sg-font); }
+  .skinbox .arrow:active { transform: translateY(2px); box-shadow: 0 2px 0 #9aa3c7; }
+  #skinCv { width: 100px; height: 124px; }
+  .skinmeta { width: 128px; text-align: center; }
+  #skinName { font-size: 20px; font-weight: 700; }
+  #skinInfo { font-size: 13px; opacity: .8; }
+  #totalStars { font-size: 15px; color: #ffcc00; margin-top: 6px; font-weight: 700; }
+  .howto { display: grid; grid-template-columns: auto auto auto auto; gap: 8px 12px; align-items: center; font-size: 16px; }
+  .howto .k { text-align: left; white-space: nowrap; }
+  .howto .sg-key { font-size: 14px; min-width: 26px; padding: 1px 7px; }
+  #playBtn { margin-top: 24px; font-size: 30px; padding: 14px 54px; animation: pulse 1.6s ease-in-out infinite; max-width: 620px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+  .hint2 { margin-top: 8px; font-size: 14px; opacity: .75; }
+
+  /* ---------- panels ---------- */
+  .panel { background: rgba(16,20,48,.94); border: 4px solid rgba(255,255,255,.16); border-radius: 26px; padding: 24px 32px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.5); animation: sg-pop .25s ease-out; }
+  .panel h2 { margin: 0 0 6px; font-size: 44px; text-shadow: 0 4px 0 rgba(0,0,0,.35); }
+  #newworld, #pause, #loading, #master { background: rgba(8,10,24,.55); }
+  .modes { display: flex; gap: 22px; margin: 18px 0 10px; }
+  .mode { width: 300px; border-radius: 22px; padding: 18px; cursor: pointer; border: 4px solid rgba(255,255,255,.25); box-shadow: 0 8px 0 rgba(0,0,0,.35); transition: transform .12s; font-family: var(--sg-font); color: #fff; }
+  .mode:hover { transform: translateY(-5px) scale(1.04); }
+  .mode.s { background: linear-gradient(180deg, #43b85a, #2a8a44); }
+  .mode.c { background: linear-gradient(180deg, #ff7ab8, #b64fe2); }
+  .mode img { width: 72px; height: 72px; image-rendering: pixelated; filter: drop-shadow(0 4px 0 rgba(0,0,0,.3)); }
+  .mode b { display: block; font-size: 30px; margin: 4px 0; }
+  .mode p { margin: 0; font-size: 16px; line-height: 1.35; }
+  .mode .sg-key { font-size: 13px; margin-top: 8px; }
+  .pq { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; text-align: right; max-height: 330px; overflow-y: auto; margin: 12px 0 16px; padding-left: 6px; }
+  .q { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 3px 8px; border-radius: 10px; background: rgba(255,255,255,.06); }
+  .q img { width: 22px; height: 22px; image-rendering: pixelated; }
+  .q span { flex: 1; }
+  .q b { color: #9aa3c7; font-size: 13px; }
+  .q.done { background: rgba(61,220,132,.18); }
+  .q.done b { color: #ffcc00; font-size: 18px; }
+  #pauseStars { font-size: 26px; color: #ffcc00; font-weight: 700; }
+  #pauseName { font-size: 16px; opacity: .8; }
+  .loadbox { font-size: 30px; font-weight: 700; display: flex; align-items: center; gap: 16px; }
+  .loadblocks span { display: inline-block; width: 22px; height: 22px; margin: 0 3px; border-radius: 4px; animation: hop .6s ease-in-out infinite; }
+  .loadblocks span:nth-child(1) { background: #5cc23c; }
+  .loadblocks span:nth-child(2) { background: #8a5a36; animation-delay: .1s; }
+  .loadblocks span:nth-child(3) { background: #8e8e96; animation-delay: .2s; }
+  .loadblocks span:nth-child(4) { background: #3fe6dc; animation-delay: .3s; }
+  @keyframes hop { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+  #master h2 { font-size: 58px; color: #ffcc00; }
+  #masterStars { font-size: 34px; color: #ffcc00; font-weight: 700; margin: 6px 0 14px; }
+
+  /* ---------- inventory ---------- */
+  #inv { background: rgba(8,10,24,.45); }
+  .invp { width: 1160px; height: 600px; display: flex; gap: 22px; text-align: right; padding: 20px 24px; position: relative; }
+  .invp h3 { margin: 0 0 10px; font-size: 26px; display: flex; align-items: center; gap: 10px; }
+  .invL { width: 552px; display: flex; flex-direction: column; }
+  .invR { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  /* Slot grids stay left-to-right so hotbar slot 1..9 matches the number keys and the in-game hotbar. */
+  .grid { display: grid; grid-template-columns: repeat(9, 56px); gap: 5px; direction: ltr; }
+  .islot { width: 56px; height: 56px; border-radius: 10px; background: rgba(255,255,255,.1); border: 2px solid rgba(255,255,255,.14); position: relative; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .islot:hover { background: rgba(255,255,255,.22); border-color: rgba(255,255,255,.4); }
+  .islot img { width: 38px; height: 38px; image-rendering: pixelated; pointer-events: none; }
+  .islot span { position: absolute; right: 4px; bottom: 1px; font-size: 16px; font-weight: 700; text-shadow: 0 2px 0 #000; pointer-events: none; }
+  .islot.selected { border-color: #ffcc00; background: rgba(255,204,0,.2); }
+  #hot { margin-top: 14px; padding-top: 12px; border-top: 2px dashed rgba(255,255,255,.18); }
+  .lbl { font-size: 14px; opacity: .7; margin: 6px 0 4px; }
+  #invPick { margin-top: 14px; font-size: 16px; display: flex; align-items: center; gap: 8px; min-height: 36px; }
+  #invPick img { width: 32px; height: 32px; image-rendering: pixelated; }
+  .tips { margin-top: auto; font-size: 13px; opacity: .7; line-height: 1.5; }
+  #palette { display: none; grid-template-columns: repeat(9, 56px); gap: 5px; max-height: 330px; overflow-y: auto; padding-right: 4px; direction: ltr; }
+  #inv.creative #palette { display: grid; }
+  #inv .creaOnly { display: none; }
+  #inv.creative #bag, #inv.creative .survOnly { display: none; }
+  #inv.creative .creaOnly { display: block; }
+  .stations { display: flex; gap: 10px; margin-bottom: 10px; }
+  .station { display: flex; align-items: center; gap: 6px; font-size: 14px; padding: 4px 10px; border-radius: 99px; background: rgba(255,255,255,.08); opacity: .6; }
+  .station img { width: 22px; height: 22px; image-rendering: pixelated; }
+  .station.on { background: rgba(61,220,132,.25); opacity: 1; }
+  .station.on::after { content: '✓'; color: #3ddc84; font-weight: 700; }
+  #craftList { flex: 1; overflow-y: auto; padding-left: 6px; display: flex; flex-direction: column; gap: 6px; }
+  .crow { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 14px; background: rgba(255,255,255,.05); cursor: pointer; opacity: .55; border: 2px solid transparent; flex-shrink: 0; }
+  .crow.can { opacity: 1; background: rgba(61,220,132,.14); border-color: rgba(61,220,132,.45); }
+  .crow.can:hover { background: rgba(61,220,132,.3); }
+  .crow .out { width: 40px; height: 40px; image-rendering: pixelated; }
+  .cname { width: 150px; font-size: 17px; font-weight: 700; line-height: 1.2; }
+  .cname small { font-size: 13px; opacity: .8; }
+  .cname small img { width: 16px; height: 16px; vertical-align: middle; image-rendering: pixelated; }
+  .cing { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .ing, .need { display: inline-flex; align-items: center; gap: 3px; font-size: 14px; padding: 2px 4px 2px 8px; border-radius: 99px; background: rgba(255,90,95,.25); }
+  .ing.ok { background: rgba(255,255,255,.12); }
+  .ing img, .need img { width: 22px; height: 22px; image-rendering: pixelated; }
+  .need { background: rgba(255,204,0,.2); color: #ffe066; }
+  .need.ok { background: rgba(61,220,132,.2); }
+  .cbtn { font-family: var(--sg-font); font-weight: 700; font-size: 15px; border: none; border-radius: 99px; padding: 6px 14px; background: #3ddc84; color: #07351c; cursor: pointer; box-shadow: 0 3px 0 rgba(0,0,0,.35); }
+  .crow:not(.can) .cbtn { visibility: hidden; }
+  .swatches { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; }
+  .swatches button { width: 30px; height: 30px; border-radius: 8px; border: 3px solid rgba(255,255,255,.7); cursor: pointer; box-shadow: 0 3px 0 rgba(0,0,0,.35); }
+  .swatches button:hover { transform: scale(1.15); }
+  .crow.quest { border-color: #ffcc00; box-shadow: 0 0 0 2px rgba(255,204,0,.35), 0 0 16px rgba(255,204,0,.35); }
+  .crow.quest.can { animation: qglow 1.2s ease-in-out infinite; }
+  @keyframes qglow { 50% { box-shadow: 0 0 0 3px rgba(255,204,0,.6), 0 0 22px rgba(255,204,0,.55); } }
+  .qtag { display: block; font-size: 12px; color: #ffcc00; line-height: 1.2; }
+  .crow.flash { animation: flash .35s ease-out; }
+  @keyframes flash { from { background: rgba(255,255,255,.6); } }
+  .crow.shake { animation: shk .3s; }
+  @keyframes shk { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+  #invClose { position: absolute; top: 14px; left: 18px; font-size: 16px; padding: 6px 16px; margin: 0; }
+  #cursorStack { position: absolute; width: 48px; height: 48px; pointer-events: none; z-index: 30; }
+  #cursorStack img { width: 48px; height: 48px; image-rendering: pixelated; filter: drop-shadow(0 4px 2px rgba(0,0,0,.5)); }
+  #cursorStack span { position: absolute; right: -4px; bottom: -4px; font-weight: 700; font-size: 18px; text-shadow: 0 2px 0 #000; }
+  #cursorStack[hidden] { display: none; }
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.25); border-radius: 10px; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<button id="pausebtn" class="pbtn" hidden aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)">❚❚</button>
+<div id="ui">
+  <div id="title" class="ov" hidden>
+    <h1 class="logo" style="margin-bottom:0"><span class="lw g">عالم</span><span class="lw o">المكعبات</span></h1>
+    <div class="tag">احفر عميقًا · ابنِ بيتك · استكشف كل مكان!</div>
+    <div id="slots"></div>
+    <div class="trow">
+      <div class="tbox skinbox">
+        <button class="arrow" id="skinL" aria-label="الزي السابق">▶</button>
+        <canvas id="skinCv" width="100" height="124"></canvas>
+        <div class="skinmeta"><div id="skinName"></div><div id="skinInfo"></div><div id="totalStars"></div></div>
+        <button class="arrow" id="skinR" aria-label="الزي التالي">◀</button>
+      </div>
+      <div class="tbox howto">
+        <div class="k"><span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span></div><div>مشي</div>
+        <div class="k"><span class="sg-key">W</span><span class="sg-key">مسافة</span></div><div>قفز</div>
+        <div class="k"><span class="sg-key">انقر</span></div><div>اضغط مطوّلًا لتحفر</div>
+        <div class="k"><span class="sg-key">نقرة يمين</span></div><div>ضع مكعبًا</div>
+        <div class="k"><span class="sg-key">1-9</span><span class="sg-key">العجلة</span></div><div>اختر مكعبًا</div>
+        <div class="k"><span class="sg-key">E</span></div><div>الحقيبة والصنع</div>
+      </div>
+    </div>
+    <button id="playBtn" class="sg-btn good">▶ العب</button>
+    <div class="hint2">اضغط <span class="sg-key">Enter</span> للعب · عالمك يُحفظ وحده</div>
+  </div>
+
+  <div id="newworld" class="ov" hidden>
+    <div class="panel">
+      <h2>اختر طريقة اللعب!</h2>
+      <div class="modes">
+        <button class="mode s" id="modeSurv"><img id="icSurv" alt=""><b>مغامرة</b><p>اقطع الأشجار، احفر بحثًا عن الكنوز، اصنع معاول أقوى وأنجز 27 مهمة!</p><span class="sg-key">1</span></button>
+        <button class="mode c" id="modeCrea"><img id="icCrea" alt=""><b>إبداع</b><p>كل المكعبات بلا حدود. طِر في السماء وابنِ أي شيء تتخيله!</p><span class="sg-key">2</span></button>
+      </div>
+      <button class="sg-btn secondary" id="modeBack">رجوع</button>
+    </div>
+  </div>
+
+  <div id="loading" class="ov" hidden>
+    <div class="panel loadbox"><div class="loadblocks"><span></span><span></span><span></span><span></span></div>نبني عالمك…</div>
+  </div>
+
+  <div id="pause" class="ov" hidden>
+    <div class="panel" style="width:760px">
+      <h2>استراحة</h2>
+      <div id="pauseName"></div>
+      <div id="pauseStars"></div>
+      <div class="pq" id="pauseQuests"></div>
+      <button class="sg-btn good" id="resumeBtn">▶ تابع اللعب</button>
+      <button class="sg-btn secondary" id="homeBtn">🏠 العودة للبداية</button>
+      <button class="sg-btn secondary" id="quitBtn">💾 احفظ واخرج</button>
+      <div class="hint2">اضغط <span class="sg-key">P</span> أو <span class="sg-key">Esc</span> لتتابع · عالق؟ اختر «العودة للبداية»</div>
+    </div>
+  </div>
+
+  <div id="master" class="ov" hidden>
+    <div class="panel">
+      <h2>سيّد العالم!</h2>
+      <div style="font-size:21px">أنجزت كل مهام هذا العالم. أنت مذهل!</div>
+      <div id="masterStars"></div>
+      <button class="sg-btn good" id="masterKeep">تابع البناء</button>
+      <button class="sg-btn secondary" id="masterMenu">القائمة</button>
+      <div class="hint2">ابدأ عالمًا جديدًا لتربح نجومًا أكثر وتفتح أزياء جديدة</div>
+    </div>
+  </div>
+
+  <div id="inv" class="ov" hidden>
+    <div class="panel invp">
+      <button class="sg-btn secondary" id="invClose">إغلاق (E)</button>
+      <div class="invL">
+        <h3 class="survOnly">🎒 الحقيبة</h3>
+        <h3 class="creaOnly">🧱 كل المكعبات <small style="font-size:15px;opacity:.75">- انقر لتضعه في الشريط</small></h3>
+        <div class="grid" id="bag"></div>
+        <div id="palette"></div>
+        <div class="lbl">الشريط السريع</div>
+        <div class="grid" id="hot"></div>
+        <div id="invPick" class="survOnly"></div>
+        <div class="tips survOnly">انقر لتحمل الأغراض أو تضعها · نقرة يمين تأخذ النصف · <span dir="ltr">Shift</span>+نقرة تنقل بين الحقيبة والشريط</div>
+        <div class="tips creaOnly">انقر خانة في الشريط لتختارها، ثم انقر أي مكعب في الأعلى. نقرة يمين على خانة تفرغها.</div>
+      </div>
+      <div class="invR survOnly">
+        <h3>🔨 الصنع</h3>
+        <div class="stations"><span class="station" id="stTable"><img id="icTable" alt="">طاولة الصنع</span><span class="station" id="stFurnace"><img id="icFurn" alt="">الفرن</span><span style="font-size:14px;opacity:.65;align-self:center"><span dir="ltr">Shift</span>+نقرة تصنع 10</span></div>
+        <div id="craftList"></div>
+      </div>
+    </div>
+  </div>
+  <div id="cursorStack" hidden></div>
+</div>
+<script src="../../shared/kit.js"></script>
+<script src="data.js"></script>
+<script src="world.js"></script>
+<script src="render.js"></script>
+<script src="game.js"></script>
+<script>
+  (function () {
+    var B = BW.B;
+    document.getElementById('icSurv').src = BW.iconURL(BW.I.PICK_STONE);
+    document.getElementById('icCrea').src = BW.iconURL(B.WOOL + 4);
+    document.getElementById('icTable').src = BW.iconURL(B.TABLE);
+    document.getElementById('icFurn').src = BW.iconURL(B.FURNACE);
+  })();
+</script>
+</body>
+</html>

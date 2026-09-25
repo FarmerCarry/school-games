@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>معركة الهلام</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="c" tabindex="-1"></canvas>
+<div id="ui">
+  <button id="pauseBtn" class="rbtn" type="button" tabindex="-1" aria-label="إيقاف مؤقت" hidden>❚❚</button>
+
+  <!-- ============ TITLE ============ -->
+  <section id="scrTitle" class="scr">
+    <div class="logo"><span class="w1">معركة</span> <span class="w2">الهلام</span></div>
+    <div class="tag">كُل الحبوب، اكبَر، والتهم الجميع!</div>
+
+    <div class="card side" id="howto">
+      <h3>طريقة اللعب</h3>
+      <div class="krow"><span class="sg-key">الفأرة</span><span>حرّك كرتك</span></div>
+      <div class="krow"><span class="sg-key">مسافة</span><span>انقسم وانقضّ!</span></div>
+      <div class="krow"><span class="sg-key">W</span><span>اقذف قطعة صغيرة</span></div>
+      <div class="krow"><span class="sg-key">P</span><span>إيقاف مؤقت</span></div>
+      <div class="tipline">التهم الكرات الأصغر منك، واهرب من الأكبر!</div>
+      <div class="tipline green">اختبئ خلف الشجيرة الشائكة وأنت صغير 🌵</div>
+    </div>
+
+    <div class="card" id="skinBox">
+      <div class="skrow">
+        <button class="arr" id="skPrev" type="button" tabindex="-1" aria-label="السابق">▶</button>
+        <canvas id="skinPrev" width="200" height="200"></canvas>
+        <button class="arr" id="skNext" type="button" tabindex="-1" aria-label="التالي">◀</button>
+      </div>
+      <div id="skName">نعناع</div>
+      <div id="skLock"></div>
+      <button id="btnSkins" class="mini" type="button" tabindex="-1">🎨 كل الأشكال <b id="skCount" dir="ltr">0/0</b></button>
+    </div>
+
+    <div class="card side" id="arenaBox">
+      <h3>الساحات</h3>
+      <div id="arenaList"></div>
+    </div>
+
+    <button id="btnPlay" class="play" type="button" tabindex="-1">العب!</button>
+    <div class="enter-hint">أو اضغط <span dir="ltr"><span class="sg-key">Enter</span></span></div>
+  </section>
+
+  <!-- ============ SKINS ============ -->
+  <section id="scrSkins" class="scr dim" hidden>
+    <div class="card skinsPanel">
+      <h2>خزانة الأشكال <small id="skCount2" dir="ltr"></small></h2>
+      <div id="skinGrid"></div>
+      <div id="skinInfo">&nbsp;</div>
+      <button id="btnSkinsBack" class="pbtn g" type="button" tabindex="-1">تم ✔</button>
+    </div>
+  </section>
+
+  <!-- ============ PAUSE ============ -->
+  <section id="scrPause" class="scr dim center" hidden>
+    <div class="card ppanel">
+      <h2>استراحة</h2>
+      <div class="col">
+        <button id="btnResume" class="pbtn g" type="button" tabindex="-1">▶ تابع اللعب <small>(P)</small></button>
+        <button id="btnRestart" class="pbtn y" type="button" tabindex="-1">↻ جولة جديدة <small>(R)</small></button>
+        <button id="btnMenu1" class="pbtn" type="button" tabindex="-1">القائمة الرئيسية</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GAME OVER ============ -->
+  <section id="scrOver" class="scr center" hidden>
+    <div class="card opanel">
+      <div class="ohead">
+        <canvas id="killerCv" width="120" height="120"></canvas>
+        <div>
+          <div class="osmall">أوه لا!</div>
+          <h2 id="oTitle">التهمك بطبوط!</h2>
+        </div>
+      </div>
+      <div id="newBest" class="newbest" hidden>🏆 رقم قياسي جديد! 🏆</div>
+      <div class="stats">
+        <div class="stat"><b id="stMass">0</b><span>أكبر حجم</span></div>
+        <div class="stat"><b id="stTime">0:00</b><span>مدة البقاء</span></div>
+        <div class="stat"><b id="stRank">#1</b><span>أفضل ترتيب</span></div>
+        <div class="stat"><b id="stEat">0</b><span>كرات التهمتها</span></div>
+      </div>
+      <div id="oBest" class="obest"></div>
+      <div id="oUnlocks"></div>
+      <div id="oGoal" class="goal"></div>
+      <div class="obtns">
+        <button id="btnAgain" class="play small" type="button" tabindex="-1">العب مجددًا</button>
+        <button id="btnMenu2" class="pbtn" type="button" tabindex="-1">القائمة</button>
+      </div>
+      <div class="enter-hint2"><span dir="ltr"><span class="sg-key">Enter</span> <span class="sg-key">مسافة</span> <span class="sg-key">R</span></span> للعب مجددًا</div>
+    </div>
+  </section>
+</div>
+<script src="../../shared/kit.js"></script>
+<script src="skins.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

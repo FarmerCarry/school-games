@@ -1,0 +1,140 @@
+/* Fire & Ice — page styles on top of shared/game.css */
+body { background: #140c08; }
+
+.fi-pause {
+  position: fixed; top: 10px; right: 62px; z-index: 20;
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25); background: rgba(0, 0, 0, 0.35);
+  color: #fff; font: 700 15px var(--sg-font); cursor: pointer; letter-spacing: -2px; direction: ltr;
+}
+.fi-pause:hover { background: rgba(0, 0, 0, 0.55); }
+.fi-pause[hidden] { display: none; }
+
+/* ---------- title ---------- */
+.fi-title-ov { background: radial-gradient(ellipse at 50% 42%, rgba(20, 10, 4, 0.72) 0%, rgba(20, 10, 4, 0.35) 55%, rgba(0, 0, 0, 0) 80%); }
+.fi-title-wrap { text-align: center; max-width: 94vw; animation: sg-pop 0.35s ease-out; }
+.fi-logo {
+  margin: 0; font-weight: 700; line-height: 1.25; letter-spacing: 0;
+  font-size: clamp(54px, 10.5vh, 104px);
+  display: flex; align-items: center; justify-content: center; gap: 0.18em;
+  filter: drop-shadow(0 6px 0 rgba(0, 0, 0, 0.45));
+}
+.fi-logo span { display: inline-block; padding: 0 0.04em; -webkit-text-stroke: 3px #2a1206; paint-order: stroke fill; }
+.fi-logo .fire {
+  background: linear-gradient(180deg, #fff27a 0%, #ffb02e 40%, #ff4d12 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: fi-bob 2.4s ease-in-out infinite;
+}
+.fi-logo .ice {
+  background: linear-gradient(180deg, #ffffff 0%, #9ff0ff 40%, #2f8fff 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  -webkit-text-stroke: 3px #07275a;
+  animation: fi-bob 2.4s ease-in-out infinite; animation-delay: -1.2s;
+}
+.fi-logo .amp { color: #ffd84a; font-size: 0.62em; -webkit-text-stroke: 2px #3a2400; }
+.fi-sub {
+  display: inline-block; margin: 6px 0 12px; padding: 4px 18px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45); color: #ffe2a8; font-weight: 700; font-size: clamp(16px, 2.6vh, 24px);
+}
+@keyframes fi-bob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-6px) rotate(2deg); } }
+
+.fi-modes { display: flex; gap: 10px; justify-content: center; margin: 4px 0 8px; }
+.fi-mode {
+  font: inherit; cursor: pointer; border-radius: 16px; padding: 7px 20px; min-width: 150px;
+  background: rgba(0, 0, 0, 0.45); color: #fff; border: 3px solid rgba(255, 255, 255, 0.2);
+  display: flex; flex-direction: column; align-items: center; line-height: 1.15; transition: transform 0.08s;
+}
+.fi-mode b { font-size: 20px; }
+.fi-mode small { font-size: 13px; opacity: 0.75; }
+.fi-mode:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.45); }
+.fi-mode.on { background: #ffcc00; color: #3a2a00; border-color: #fff4b0; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35); }
+
+.fi-btns { margin: 4px 0 6px; }
+.fi-play { font-size: 30px; padding: 14px 52px; animation: fi-pulse 1.6s ease-in-out infinite; }
+@keyframes fi-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+.fi-play:hover { animation: none; }
+
+.fi-how { margin: 4px auto 6px; padding: 8px 18px 6px; border-radius: 18px; background: rgba(0, 0, 0, 0.45); display: inline-block; }
+.fi-howrow { display: flex; gap: 22px; justify-content: center; flex-wrap: wrap; }
+.fi-howrow[hidden] { display: none; }
+.fi-hero { display: flex; align-items: center; gap: 3px; font-size: 16px; }
+.fi-hero em { font-style: normal; font-weight: 700; margin-inline-end: 6px; }
+.fi-keys { display: inline-flex; gap: 3px; margin: 0 4px; }
+.fi-hero.ice em { color: #8fe3ff; }
+.fi-hero.fire em { color: #ffb347; }
+.fi-hero.swap em, .fi-hero.both em { color: #ffe066; }
+.fi-rules { margin: 6px 0 0; font-size: 15px; opacity: 0.92; }
+.t-fire { color: #ffb347; } .t-ice { color: #8fe3ff; } .t-lava { color: #ff9a3c; } .t-water { color: #5cc8ff; } .t-goo { color: #9bf04a; }
+.fi-progress { margin-top: 8px; font-size: 18px; font-weight: 700; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); }
+.fi-progress .st { color: #ffd230; }
+.fi-progress .dot { opacity: 0.5; margin: 0 6px; }
+
+/* ---------- panels ---------- */
+.fi-panel { background: rgba(28, 16, 9, 0.92); border-color: rgba(255, 210, 140, 0.25); }
+.fi-panel .sg-title { font-size: clamp(30px, 5vw, 46px); }
+.fi-small { font-size: 14px; opacity: 0.75; margin: 12px 0 0; }
+.fi-toggles { margin-top: 10px; }
+.fi-toggle {
+  font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; margin: 4px; padding: 8px 16px;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.12); color: #fff; border: 2px solid rgba(255, 255, 255, 0.25);
+}
+.fi-toggle:hover { background: rgba(255, 255, 255, 0.22); }
+
+.dead-ice .fi-dead { border-color: #5cc8ff; }
+.dead-fire .fi-dead { border-color: #ff8a3c; }
+.fi-dead .sg-title { color: #ffe0c0; }
+
+/* ---------- win ---------- */
+.fi-win { padding-top: 18px; }
+.medal {
+  width: 96px; height: 96px; margin: -4px auto 6px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 18px; color: #3a2400;
+  border: 5px solid rgba(255, 255, 255, 0.7); box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 0 40px rgba(255, 210, 80, 0.5);
+  animation: fi-medal 0.7s cubic-bezier(.2, 1.6, .4, 1) both;
+}
+.medal.gold { background: radial-gradient(circle at 35% 30%, #fff6b0, #ffcc1a 55%, #d18a00); }
+.medal.silver { background: radial-gradient(circle at 35% 30%, #ffffff, #cfd8e6 55%, #8a97ab); box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 0 30px rgba(200, 220, 255, 0.4); }
+.medal.bronze { background: radial-gradient(circle at 35% 30%, #ffd9b0, #e0955a 55%, #9a5a26); box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 0 30px rgba(230, 150, 90, 0.4); }
+@keyframes fi-medal { from { transform: scale(0) rotate(-180deg); } to { transform: scale(1) rotate(0); } }
+.fi-crits { display: flex; gap: 12px; justify-content: center; margin: 10px 0 6px; }
+.crit { width: 140px; display: flex; flex-direction: column; align-items: center; opacity: 0.25; transform: scale(0.8); transition: all 0.25s cubic-bezier(.2, 1.6, .4, 1); }
+.crit.show { opacity: 1; transform: scale(1); }
+.crit .bigstar { font-size: 50px; line-height: 1; color: rgba(255, 255, 255, 0.2); text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); }
+.crit.got .bigstar { color: #ffd230; }
+.crit.got.show .bigstar { animation: fi-starpop 0.5s cubic-bezier(.2, 1.8, .4, 1); }
+.crit .clabel { font-size: 14px; opacity: 0.9; margin-top: 2px; }
+.crit:not(.got) .clabel { opacity: 0.55; }
+@keyframes fi-starpop { 0% { transform: scale(0) rotate(-90deg); } 100% { transform: scale(1) rotate(0); } }
+.fi-time { margin: 4px 0; font-size: 17px; }
+.fi-winname { margin: 0 0 4px; font-size: 20px; font-weight: 700; color: #ffcc33; }
+.fi-newbest {
+  display: inline-block; margin: 4px 0; padding: 4px 16px; border-radius: 999px; background: #ff4fa3; color: #fff;
+  font-weight: 700; animation: fi-pulse 0.8s ease-in-out infinite;
+}
+.fi-newbest[hidden], .fi-hat[hidden] { display: none; }
+.fi-hat { margin: 6px 0; font-weight: 700; color: #ffe066; font-size: 17px; animation: fi-pulse 1s ease-in-out infinite; }
+.fi-winbtns { margin-top: 8px; }
+.fi-winbtns .sg-btn[hidden] { display: none; }
+
+.fi-final .sg-title { color: #ffe066; }
+.fi-bigstars { font-size: 44px; font-weight: 700; color: #ffd230; margin: 6px 0; text-shadow: 0 4px 0 rgba(0, 0, 0, 0.4); }
+
+@media (max-height: 560px) {
+  .fi-how { display: none; }
+  .fi-logo { font-size: 60px; }
+}
+
+/* Arabic: never letter-space (it breaks letter joining) */
+.sg-title, .sg-btn, .fi-panel, .fi-title-wrap { letter-spacing: 0; }
+
+/* short windows (the ~1100x620 site frame): keep the tall win panel on screen */
+@media (max-height: 700px) {
+  .fi-panel { padding: 16px 30px; }
+  .fi-panel .sg-title { font-size: 34px; margin-bottom: 4px; }
+  .medal { width: 72px; height: 72px; font-size: 15px; border-width: 4px; margin-bottom: 2px; }
+  .crit .bigstar { font-size: 38px; }
+  .fi-crits { margin: 6px 0 2px; }
+  .fi-winbtns .sg-btn { padding: 9px 26px; font-size: 20px; margin: 4px; }
+  .fi-small { margin-top: 8px; }
+}

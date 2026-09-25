@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دمج 2048</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+
+<div id="ui">
+  <!-- ============ TITLE ============ -->
+  <section id="scrTitle" class="scr">
+    <div class="logo">
+      <div class="logo-ar">دمج</div>
+      <div class="logo-tiles" dir="ltr"><span class="lt lt1">2</span><span class="lt lt2">0</span><span class="lt lt3">4</span><span class="lt lt4">8</span></div>
+    </div>
+
+    <div class="card side" id="sizeCard">
+      <h3>📐 حجم اللوحة</h3>
+      <div class="sizes" id="sizes"></div>
+    </div>
+
+    <div class="card side" id="themeCard">
+      <h3>🎨 الأشكال</h3>
+      <div class="themes" id="themes"></div>
+      <div class="besttile" id="bestTileLine"></div>
+    </div>
+
+    <div class="playrow">
+      <button type="button" class="bigbtn" id="btnPlay"><span id="playLbl">▶ العب</span><small id="playSub"></small></button>
+      <button type="button" class="midbtn" id="btnNewT" hidden>🔄 لعبة جديدة</button>
+    </div>
+
+    <div class="howto">
+      <span class="hk"><span dir="ltr"><span class="sg-key">←</span><span class="sg-key">↑</span><span class="sg-key">→</span><span class="sg-key">↓</span></span> أو <span dir="ltr"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></span> حرّك</span>
+      <span class="hk"><span class="sg-key">اسحب</span> بالفأرة</span>
+      <span class="hk"><span class="sg-key">U</span> تراجع</span>
+      <span class="hk"><span class="sg-key">P</span> إيقاف</span>
+      <span class="hk"><span class="sg-key">Enter</span> ابدأ</span>
+    </div>
+    <div class="tagline">ادمج الأرقام المتشابهة… واصنع 2048!</div>
+  </section>
+
+  <!-- ============ HUD ============ -->
+  <section id="hud" class="scr" hidden>
+    <div class="hud-right">
+      <div class="mini-logo"><span>دمج</span> <b dir="ltr">2048</b></div>
+      <div class="box" id="scoreBox"><label>النقاط</label><b id="score">0</b></div>
+      <div class="box best" id="bestBox"><label>الأفضل <span id="sizeLbl" dir="ltr">4×4</span></label><b id="best">0</b></div>
+      <div class="box goal">
+        <label>الهدف</label>
+        <div class="goalrow"><canvas id="goalTile" width="120" height="120"></canvas><div class="goaltxt" id="goalTxt">2048</div></div>
+        <div class="bar"><div id="goalBar"></div></div>
+      </div>
+    </div>
+    <div class="hud-left">
+      <button type="button" class="hbtn undo" id="btnUndo"><span class="ic">↶</span> تراجع <span class="dots" id="undoDots"><i></i><i></i><i></i></span><span class="sg-key">U</span></button>
+      <button type="button" class="hbtn" id="btnTheme"><span class="ic">🎨</span> <span id="themeName">أرقام</span><span class="sg-key">T</span></button>
+      <button type="button" class="hbtn" id="btnRestart"><span class="ic">🔄</span> <span id="restartLbl">لعبة جديدة</span></button>
+      <button type="button" class="hbtn" id="btnPause"><span class="ic">⏸</span> إيقاف<span class="sg-key">P</span></button>
+      <div class="hints">
+        <div><span dir="ltr"><span class="sg-key">←</span><span class="sg-key">↑</span><span class="sg-key">→</span><span class="sg-key">↓</span></span> حرّك</div>
+        <div><span class="sg-key">اسحب</span> بالفأرة</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAUSE ============ -->
+  <section id="scrPause" class="scr ovl" hidden>
+    <div class="panel">
+      <h2>استراحة ☕</h2>
+      <div class="col">
+        <button type="button" class="pbtn g" id="btnResume">▶ تابع اللعب <span class="sg-key">P</span></button>
+        <button type="button" class="pbtn" id="btnPauseRestart">🔄 لعبة جديدة <span class="sg-key">R</span></button>
+        <button type="button" class="pbtn" id="btnPauseMenu">🏠 القائمة</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GAME OVER ============ -->
+  <section id="scrOver" class="scr ovl" hidden>
+    <div class="panel">
+      <h2 id="overHead">لا توجد حركات!</h2>
+      <div class="newbest" id="overBest" hidden>🏆 رقم قياسي جديد!</div>
+      <div class="res">
+        <div class="rbox"><label>النقاط</label><b id="overScore">0</b></div>
+        <div class="rbox"><label>أكبر بلاطة</label><canvas id="overTile" width="120" height="120"></canvas></div>
+        <div class="rbox"><label>الأفضل</label><b id="overBestVal">0</b></div>
+      </div>
+      <div class="hint" id="overHint"></div>
+      <div class="col">
+        <button type="button" class="pbtn g" id="btnAgain">🔄 حاول مجدداً <span class="sg-key">Enter</span></button>
+        <button type="button" class="pbtn y" id="btnOverUndo">↶ تراجع خطوة <small id="overUndoN"></small> <span class="sg-key">U</span></button>
+        <button type="button" class="pbtn" id="btnOverMenu">🏠 القائمة <span class="sg-key">Esc</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ WIN ============ -->
+  <section id="scrWin" class="scr ovl win" hidden>
+    <div class="panel">
+      <div class="wintile"><canvas id="winTile" width="220" height="220"></canvas></div>
+      <h2>أحسنت! وصلت إلى <span dir="ltr" id="winNum">2048</span>!</h2>
+      <div class="sub">أنت بطل الدمج! 🎉</div>
+      <div class="col">
+        <button type="button" class="pbtn g" id="btnKeep">🚀 استمر في اللعب <span class="sg-key">Enter</span></button>
+        <button type="button" class="pbtn" id="btnWinNew">🔄 لعبة جديدة <span class="sg-key">R</span></button>
+      </div>
+    </div>
+  </section>
+
+  <div id="toast"></div>
+</div>
+
+<script src="../../shared/kit.js"></script>
+<script src="themes.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

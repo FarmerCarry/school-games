@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Munch Rope level preview (dev)</title>
+<style>body{margin:0;background:#222;color:#fff;font:14px sans-serif}canvas{display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script src="../sim.js"></script>
+<script src="../levels.js"></script>
+<script src="../solutions.js"></script>
+<script>
+// Dev only: draws levels + the recorded solution path. ?from=0&n=6&plan=[json]
+var q = new URLSearchParams(location.search);
+var from = +(q.get('from') || 0), n = +(q.get('n') || 6), S = 0.5, COLS = 2;
+var LV = window.MUNCH_LEVELS, SOL = window.MUNCH_SOLUTIONS || [];
+var extra = q.get('plan') ? JSON.parse(q.get('plan')) : null;
+var cv = document.getElementById('c'), ctx = cv.getContext('2d');
+var rows = Math.ceil(n / COLS);
+cv.width = 640 * COLS; cv.height = 360 * rows;
+for (var k = 0; k < n && from + k < LV.length; k++) {
+  var L = LV[from + k], ox = (k % COLS) * 640, oy = Math.floor(k / COLS) * 360;
+  ctx.save(); ctx.translate(ox, oy); ctx.scale(S, S);
+  ctx.fillStyle = (from + k) < 15 ? '#c89a62' : '#d0679c'; ctx.fillRect(0, 0, 1280, 720);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.strokeRect(0, 0, 1280, 720);
+  var w = MunchSim.create(L, { visual: false });
+  function circ(x, y, r, fill, stroke) { ctx.beginPath(); ctx.arc(x, y, r, 0, 7); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.stroke(); } }
+  ctx.lineWidth = 3;
+  w.pins.forEach(function (p) { if (p.move) { ctx.setLineDash([8, 8]); ctx.strokeStyle = '#555'; ctx.beginPath(); if (p.move.cx != null) ctx.arc(p.move.cx, p.move.cy, p.move.r, 0, 7); else { ctx.moveTo(p.x0, p.y0); ctx.lineTo(p.move.x2, p.move.y2); } ctx.stroke(); ctx.setLineDash([]); } });
+  w.ropes.forEach(function (r) { ctx.strokeStyle = '#6b3b10'; ctx.beginPath(); ctx.moveTo(r.anchor.x, r.anchor.y); ctx.lineTo(w.candy.x, w.candy.y); ctx.stroke(); ctx.setLineDash([4, 10]); circ(r.anchor.x, r.anchor.y, r.len, null, 'rgba(0,0,0,0.25)'); ctx.setLineDash([]); circ(r.anchor.x, r.anchor.y, 8, '#fc0'); });
+  w.rings.forEach(function (g) { ctx.setLineDash([10, 8]); circ(g.x, g.y, g.r, 'rgba(255,255,255,0.12)', '#fff'); ctx.setLineDash([]); circ(g.x, g.y, 8, '#fc0'); if (g.move) { ctx.strokeStyle = '#555'; ctx.setLineDash([8, 8]); ctx.beginPath(); if (g.move.cx != null) ctx.arc(g.move.cx, g.move.cy, g.move.r, 0, 7); else { ctx.moveTo(g.x0, g.y0); ctx.lineTo(g.move.x2, g.move.y2); } ctx.stroke(); ctx.setLineDash([]); } });
+  w.stars.forEach(function (s) { circ(s.x, s.y, 20, '#ffd700'); circ(s.x, s.y, MunchSim.C.STAR_R, null, 'rgba(255,215,0,0.5)'); });
+  w.bubbles.forEach(function (b) { circ(b.x, b.y, 40, 'rgba(120,200,255,0.5)', '#9df'); });
+  w.blowers.forEach(function (b) { ctx.fillStyle = '#39f'; ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.a); ctx.fillRect(-30, -24, 50, 48); ctx.beginPath(); ctx.moveTo(20, -12); ctx.lineTo(44, -22); ctx.lineTo(44, 22); ctx.lineTo(20, 12); ctx.fill(); ctx.restore(); });
+  w.spikes.forEach(function (s) { ctx.strokeStyle = '#333'; ctx.lineWidth = 22; ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke(); ctx.lineWidth = 3; if (s.move) { ctx.strokeStyle = '#555'; ctx.setLineDash([8, 8]); ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.move.x2, s.move.y2); ctx.stroke(); ctx.setLineDash([]); } });
+  w.tramps.forEach(function (s) { ctx.strokeStyle = '#e22'; ctx.lineWidth = 14; ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke(); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x + s.nx * 40, s.y + s.ny * 40); ctx.stroke(); });
+  circ(w.munch.x, w.munch.y, 56, '#5c3', '#000'); circ(w.munch.x, w.munch.y, MunchSim.C.EAT_R, null, 'rgba(0,120,0,0.6)');
+  circ(w.candy.x, w.candy.y, 22, '#f36', '#000');
+  // simulate plan
+  var plan = (extra && k === 0) ? extra : SOL[from + k];
+  var ww = MunchSim.create(L, { visual: false }), pi = 0, pts = [];
+  if (plan) {
+    while (ww.frame < 1500 && ww.state === 'play') {
+      while (pi < plan.length && plan[pi][0] <= ww.frame) {
+        MunchSim.act(ww, plan[pi].slice(1));
+        ctx.fillStyle = '#000'; ctx.font = 'bold 30px sans-serif'; circ(ww.candy.x, ww.candy.y, 10, '#00f'); ctx.fillStyle = '#00f'; ctx.fillText(plan[pi].slice(1).join(' ') + ' @' + plan[pi][0], ww.candy.x + 14, ww.candy.y - 10);
+        pi++;
+      }
+      MunchSim.step(ww); ww.events.length = 0;
+      pts.push(ww.candy.x, ww.candy.y);
+    }
+    ctx.strokeStyle = ww.state === 'won' ? '#0f0' : '#f00'; ctx.lineWidth = 4; ctx.beginPath();
+    for (var i = 0; i < pts.length; i += 2) i ? ctx.lineTo(pts[i], pts[i + 1]) : ctx.moveTo(pts[i], pts[i + 1]);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#000'; ctx.font = 'bold 44px sans-serif';
+  ctx.fillText('#' + (from + k + 1) + ' ' + L.name + (plan ? '  ' + ww.state + ' ' + ww.starsGot + '*' : '  (no plan)'), 20, 50);
+  ctx.restore();
+}
+</script></body></html>

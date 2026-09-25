@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>سوق الحيوانات</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../shared/game.css">
+<style>
+  html, body { background: #5fae4a; }
+  :root { --ui: 1; }
+  .cm-ov { background: radial-gradient(ellipse at center, rgba(255, 230, 170, 0.25), rgba(40, 20, 60, 0.55)); }
+  .cm-card {
+    position: relative;
+    background: linear-gradient(180deg, #fff7e3 0%, #ffe7b8 100%);
+    color: #4a2e1f;
+    border: 5px solid #4a2e1f;
+    border-radius: 30px;
+    box-shadow: 0 10px 0 #4a2e1f, 0 24px 60px rgba(0, 0, 0, 0.45);
+    padding: 22px 30px 24px;
+    text-align: center;
+    flex-shrink: 0;
+    transform: scale(var(--ui));
+    animation: cm-pop 0.35s cubic-bezier(.2, 1.6, .4, 1);
+  }
+  @keyframes cm-pop { from { transform: scale(calc(var(--ui) * 0.8)); opacity: 0; } to { transform: scale(var(--ui)); opacity: 1; } }
+  .cm-title-card { width: 940px; padding: 0 30px 22px; overflow: hidden; }
+  .cm-title-card::before {
+    content: ''; position: absolute; inset: 0 0 auto 0; height: 268px;
+    background: linear-gradient(180deg, #7fd7ff 0%, #bdf0ff 70%, #a8e38a 70%, #8fd46a 100%);
+    border-bottom: 5px solid #4a2e1f; z-index: 0;
+  }
+  #hero { position: relative; z-index: 1; display: block; width: 880px; height: 268px; margin: 0 auto; }
+  .cm-row { position: relative; z-index: 1; display: flex; gap: 26px; align-items: stretch; margin-top: 16px; }
+  .cm-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .cm-big {
+    font-size: 40px; padding: 14px 64px; border: 4px solid #4a2e1f; box-shadow: 0 7px 0 #4a2e1f;
+    background: #3ddc84; color: #fff; text-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+    animation: cm-pulse 1.4s ease-in-out infinite;
+  }
+  .cm-big:hover { filter: brightness(1.08); }
+  .cm-big:active { box-shadow: 0 2px 0 #4a2e1f; }
+  @keyframes cm-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+  .cm-prog { margin-top: 12px; font-size: 18px; }
+  .cm-best { font-size: 15px; opacity: 0.8; margin-top: 4px; min-height: 18px; }
+  .cm-link { margin-top: 8px; background: none; border: none; color: #9b4a32; font: inherit; font-size: 15px; text-decoration: underline; cursor: pointer; }
+  .cm-how { background: rgba(255, 255, 255, 0.6); border: 3px solid rgba(74, 46, 31, 0.25); border-radius: 20px; padding: 10px 14px; }
+  .cm-how .sg-howto { margin: 6px 0 0; font-size: 16px; gap: 7px 12px; max-width: none; }
+  .cm-how .sg-key { box-shadow: 0 3px 0 #b39a7a; border: 2px solid #4a2e1f; font-size: 15px; min-width: 28px; padding: 1px 6px; }
+  .cm-h { font-weight: 700; font-size: 20px; }
+  .cm-ico { display: flex; justify-content: center; gap: 2px; }
+  .cm-ico img { width: 30px; height: 30px; }
+  .cm-hats { position: relative; z-index: 1; display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+  .cm-hat {
+    width: 74px; padding: 4px 0 3px; border-radius: 16px; border: 3px solid rgba(74, 46, 31, 0.3); background: #fff;
+    cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; color: #4a2e1f; display: flex; flex-direction: column; align-items: center;
+  }
+  .cm-hat canvas { width: 56px; height: 56px; }
+  .cm-hat.on { border-color: #1fb5a8; background: #d9fbf6; box-shadow: 0 0 0 3px #1fb5a8; }
+  .cm-hat.locked { cursor: default; opacity: 0.8; background: #eee4d4; }
+  .cm-hat:not(.locked):hover { transform: translateY(-2px); }
+  .cm-hatlbl { position: relative; z-index: 1; font-size: 14px; margin-top: 12px; opacity: 0.8; }
+  .cm-coin { display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff3a0 0 20%, #ffd23f 22% 60%, #e59a00 62%); border: 2px solid #8a5200; vertical-align: -3px; }
+  .cm-small { width: 460px; }
+  .cm-small h2 { margin: 0 0 6px; font-size: 44px; line-height: 1.1; color: #ff7a59; -webkit-text-stroke: 2px #4a2e1f; text-shadow: 0 4px 0 #4a2e1f; }
+  .cm-small p { font-size: 19px; margin: 6px 0 16px; }
+  .cm-btns { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .cm-btn { border: 4px solid #4a2e1f; box-shadow: 0 6px 0 #4a2e1f; min-width: 250px; }
+  .cm-btn.alt { background: #fff; color: #4a2e1f; }
+  .cm-btn.red { background: #ff6b6b; color: #fff; }
+  .cm-btn.green { background: #3ddc84; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.25); }
+  .cm-bigcoin { font-size: 48px; font-weight: 700; color: #e59a00; -webkit-text-stroke: 2px #4a2e1f; margin: 4px 0 14px; }
+  .cm-bigcoin .cm-coin { width: 40px; height: 40px; vertical-align: -6px; border-width: 3px; }
+  .cm-stats { display: flex; gap: 12px; justify-content: center; margin: 10px 0 14px; }
+  .cm-stats div { background: #fff; border: 3px solid rgba(74, 46, 31, 0.3); border-radius: 16px; padding: 8px 14px; min-width: 110px; }
+  .cm-stats b { display: block; font-size: 28px; }
+  .cm-stats span { font-size: 14px; opacity: 0.75; }
+  .cm-newbest { display: inline-block; background: #ff5d8f; color: #fff; font-weight: 700; font-size: 22px; padding: 4px 18px; border-radius: 999px; border: 3px solid #4a2e1f; animation: cm-pulse 0.8s infinite; margin-bottom: 6px; }
+  .cm-newbest[hidden] { display: none; }
+  .cm-hint { font-size: 14px; opacity: 0.7; margin-top: 8px; }
+
+  #pauseBtn {
+    position: fixed; top: 10px; right: 62px; z-index: 20; width: 44px; height: 44px; border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.25); background: rgba(0, 0, 0, 0.35); color: #fff; font: 700 18px var(--sg-font); cursor: pointer;
+  }
+  #pauseBtn:hover { background: rgba(0, 0, 0, 0.55); }
+  #pauseBtn[hidden] { display: none; }
+
+  .cm-upg {
+    position: fixed; right: 12px; top: 64px; z-index: 15; width: 340px;
+    background: linear-gradient(180deg, #fff7e3, #ffe7b8); color: #4a2e1f; border: 4px solid #4a2e1f; border-radius: 22px;
+    box-shadow: 0 7px 0 #4a2e1f, 0 16px 40px rgba(0, 0, 0, 0.35); padding: 8px 10px 10px;
+    transform: scale(var(--ui)); transform-origin: top right; animation: cm-slide 0.25s cubic-bezier(.2, 1.4, .4, 1);
+  }
+  .cm-upg[hidden] { display: none; }
+  @keyframes cm-slide { from { opacity: 0; transform: translateX(40px) scale(var(--ui)); } to { opacity: 1; transform: translateX(0) scale(var(--ui)); } }
+  .cm-upg h3 { margin: 0 0 2px; font-size: 22px; text-align: center; }
+  .cm-upg-row {
+    display: flex; align-items: center; gap: 8px; width: 100%; text-align: right; font: inherit; color: inherit;
+    background: #fff; border: 3px solid rgba(74, 46, 31, 0.25); border-radius: 14px; padding: 3px 8px; margin: 4px 0; cursor: pointer;
+  }
+  .cm-upg-row img { width: 36px; height: 36px; }
+  .cm-upg-row.yes { border-color: #3ddc84; background: #eafff2; }
+  .cm-upg-row.yes:hover { transform: scale(1.02); }
+  .cm-upg-row.no, .cm-upg-row.locked { opacity: 0.75; cursor: default; }
+  .cm-upg-row.max { background: #f3ecff; border-color: #9b6bff; cursor: default; }
+  .cm-upg-mid { flex: 1; min-width: 0; }
+  .cm-upg-name { font-weight: 700; font-size: 16px; line-height: 1.1; white-space: nowrap; }
+  .cm-upg-desc { font-size: 12.5px; opacity: 0.75; line-height: 1.1; white-space: nowrap; }
+  .cm-pips i { display: inline-block; width: 12px; height: 8px; border-radius: 4px; background: #e4d6bd; margin-left: 3px; }
+  .cm-pips i.on { background: #1fb5a8; }
+  .cm-upg-cost { font-weight: 700; font-size: 16px; white-space: nowrap; text-align: left; min-width: 64px; }
+  .cm-upg-row.locked .cm-upg-cost { font-size: 13px; }
+  .cm-upg-cost .cm-coin { width: 15px; height: 15px; margin-left: 3px; }
+  .cm-upg-row.no .cm-upg-cost { color: #c0392b; }
+  .cm-upg-key { font-size: 13px !important; min-width: 22px !important; padding: 0 4px !important; }
+  .cm-upg-foot { font-size: 13px; text-align: center; opacity: 0.7; margin-top: 4px; }
+</style>
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+
+<button id="pauseBtn" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)" hidden>II</button>
+
+<div id="upgrades" class="cm-upg" hidden>
+  <h3>لوحة التطوير</h3>
+  <div id="upgList"></div>
+  <div class="cm-upg-foot">انقر أو اضغط <span dir="ltr"><span class="sg-key cm-upg-key">1</span>-<span class="sg-key cm-upg-key">6</span></span> للشراء · ابتعد للإغلاق</div>
+</div>
+
+<div id="title" class="sg-overlay cm-ov">
+  <div class="cm-card cm-title-card">
+    <canvas id="hero" width="880" height="268"></canvas>
+    <div class="cm-row">
+      <div class="cm-col">
+        <button id="playBtn" class="sg-btn cm-big" type="button">العب!</button>
+        <div id="prog" class="cm-prog"></div>
+        <div id="bestLine" class="cm-best"></div>
+        <button id="newBtn" class="cm-link" type="button">ابدأ متجرًا جديدًا</button>
+      </div>
+      <div class="cm-col cm-how">
+        <div class="cm-h">طريقة اللعب</div>
+        <div class="sg-howto">
+          <span dir="ltr"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></span><span>امشِ (أو بالأسهم، أو انقر بالفأرة)</span>
+          <span class="cm-ico"><img data-icon="banana" alt=""><img data-icon="corn" alt=""><img data-icon="egg" alt=""></span><span>اقطف المحاصيل، ثم ضعها على الرفوف</span>
+          <span class="cm-ico"><img data-icon="register" alt=""></span><span>قف عند صندوق الدفع لتبيع</span>
+          <span class="cm-ico"><img data-icon="lock" alt=""></span><span>قف على الدوائر لتفتح أشياء جديدة</span>
+          <span dir="ltr"><span class="sg-key">P</span><span class="sg-key">M</span></span><span>إيقاف مؤقت · الصوت</span>
+        </div>
+      </div>
+    </div>
+    <div id="hats" class="cm-hats"></div>
+  </div>
+</div>
+
+<div id="pause" class="sg-overlay cm-ov" hidden>
+  <div class="cm-card cm-small">
+    <h2>استراحة</h2>
+    <p>حيواناتك بانتظارك!</p>
+    <div class="cm-btns">
+      <button id="resumeBtn" class="sg-btn cm-btn green" type="button">تابع اللعب</button>
+      <button id="musicBtn" class="sg-btn cm-btn alt" type="button">الموسيقى: تعمل</button>
+      <button id="menuBtn" class="sg-btn cm-btn alt" type="button">القائمة الرئيسية</button>
+      <button id="restartBtn" class="sg-btn cm-btn red" type="button">متجر جديد</button>
+    </div>
+    <div class="cm-hint">متجرك يُحفظ تلقائيًا.</div>
+  </div>
+</div>
+
+<div id="welcome" class="sg-overlay cm-ov" hidden>
+  <div class="cm-card cm-small">
+    <h2>أهلًا بعودتك!</h2>
+    <p>وأنت بعيد، ربح سوقك:</p>
+    <div class="cm-bigcoin"><span class="cm-coin"></span> <span id="welcomeAmt">0</span></div>
+    <div class="cm-btns"><button id="collectBtn" class="sg-btn cm-btn green" type="button">اجمعها!</button></div>
+  </div>
+</div>
+
+<div id="finale" class="sg-overlay cm-ov" hidden>
+  <div class="cm-card cm-small" style="width:560px">
+    <div id="finBest" class="cm-newbest" hidden>أسرع وقت جديد!</div>
+    <h2>اكتمل السوق<br>العملاق!</h2>
+    <p>بنيتَ أفضل متجر في مدينة الحيوانات!</p>
+    <div id="finStats" class="cm-stats"></div>
+    <div class="cm-btns">
+      <button id="keepBtn" class="sg-btn cm-btn green" type="button">تابع اللعب</button>
+      <button id="finNewBtn" class="sg-btn cm-btn alt" type="button">ابنِ متجرًا جديدًا (R)</button>
+      <button id="finMenuBtn" class="cm-link" type="button">القائمة الرئيسية</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirm" class="sg-overlay cm-ov" hidden>
+  <div class="cm-card cm-small">
+    <h2>متجر جديد؟</h2>
+    <p>ستبدأ من الصفر، لكن قبعاتك تبقى معك!</p>
+    <div class="cm-btns">
+      <button id="noBtn" class="sg-btn cm-btn green" type="button">لا، أبقِ متجري (N)</button>
+      <button id="yesBtn" class="sg-btn cm-btn red" type="button">نعم، ابدأ من جديد (Y)</button>
+    </div>
+  </div>
+</div>
+
+<script src="../../shared/kit.js"></script>
+<script src="data.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

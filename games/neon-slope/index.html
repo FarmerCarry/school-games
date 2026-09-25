@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>منحدر النيون</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="gl" tabindex="0"></canvas>
+<div id="flash"></div>
+<div id="vignette"></div>
+
+<!-- HUD -->
+<div id="hud" hidden>
+  <div id="hDist"><span id="hDistN">0</span><small>م</small></div>
+  <div id="hBest">الأفضل: <span id="hBestN">0</span> م</div>
+  <div id="hZone"><div id="hZoneLbl">المنطقة 1</div><div id="hZoneBar"><div id="hZoneFill"></div></div></div>
+  <div id="hGems"><i class="gemico"></i><span id="hGemsN">0</span></div>
+  <div id="hPower"></div>
+  <div id="hHint">اضغط <span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span> لتوجيه الكرة!</div>
+</div>
+<button id="btnPause" type="button" aria-label="إيقاف مؤقت" hidden><b></b><b></b></button>
+<div id="banner"><div id="bannerTop">المنطقة 2</div><div id="bannerName">المدار السماوي</div></div>
+<div id="popups"></div>
+
+<!-- TITLE -->
+<div id="title" class="ov">
+  <div class="tbox">
+    <div class="ttop">
+      <div class="logo"><span class="l1">منحدر</span><span class="l2">النيون</span></div>
+      <div class="tag">تدحرج بسرعة &middot; تجنّب الأحمر &middot; اقفز عاليًا!</div>
+    </div>
+    <div class="tbot">
+      <div class="trow">
+        <div class="tstat"><div class="tl">أفضل مسافة</div><div class="tv"><span id="tBest">0</span><small>م</small></div></div>
+        <button id="btnPlay" class="nbtn play" type="button"><i class="tri"></i>العب</button>
+        <button id="btnShop" class="nbtn cyan shopbtn" type="button"><span>المتجر</span><span class="pill"><i class="gemico"></i><span id="tGems">0</span></span></button>
+      </div>
+      <div class="howto">
+        <span><span dir="ltr"><span class="sg-key">&larr;</span><span class="sg-key">&rarr;</span></span> أو <span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> للتوجيه</span>
+        <span class="sep"></span>
+        <span><i class="redblk"></i>الأحمر = اصطدام!</span>
+        <span class="sep"></span>
+        <span><i class="gemico"></i>اجمع الجواهر واشترِ كرات</span>
+        <span class="sep"></span>
+        <span><span class="sg-key">مسافة</span> للعب</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAUSE -->
+<div id="pause" class="ov dim" hidden>
+  <div class="panel">
+    <h2 class="ptitle">استراحة</h2>
+    <button id="btnResume" class="nbtn play small" type="button">تابِع اللعب</button>
+    <button id="btnRestart" class="nbtn cyan" type="button">ابدأ من جديد</button>
+    <div id="pMissions" class="mlist small"></div>
+    <div class="prow">
+      <button id="btnMusic" class="nbtn ghost" type="button">الموسيقى: تعمل</button>
+      <button id="btnMenu" class="nbtn ghost" type="button">القائمة</button>
+    </div>
+    <div class="phint"><span class="sg-key">P</span> متابعة &nbsp; <span class="sg-key">R</span> من جديد &nbsp; <span class="sg-key">M</span> كتم الصوت</div>
+  </div>
+</div>
+
+<!-- GAME OVER -->
+<div id="over" class="ov dim" hidden>
+  <div class="panel over">
+    <div class="ocols">
+      <div class="ocol">
+        <h2 id="oTitle" class="ptitle">طاخ!</h2>
+        <div id="oSub">اصطدمت بمكعب أحمر</div>
+        <div class="odist"><span id="oDist">0</span><small>م</small></div>
+        <div id="oBest"></div>
+        <div class="ogems">
+          <div class="gl"><span>جواهر جمعتها</span><b dir="ltr">+<span id="oGemRun">0</span></b></div>
+          <div class="gl"><span>مكافأة المسافة</span><b dir="ltr">+<span id="oGemBonus">0</span></b></div>
+          <div class="gl" id="oMisRow"><span>المهمات</span><b dir="ltr">+<span id="oGemMis">0</span></b></div>
+          <div class="gl tot"><span><i class="gemico"></i>كل جواهرك</span><b id="oGemTot">0</b></div>
+        </div>
+      </div>
+      <div class="ocol right">
+        <div class="mhead">المهمات</div>
+        <div id="oMissions" class="mlist"></div>
+        <div id="oUnlock"><canvas id="oUnlockCv" width="96" height="96"></canvas><div><div id="oUnlockTxt"></div><div class="bar"><div id="oUnlockFill"></div></div></div></div>
+      </div>
+    </div>
+    <div class="obtns">
+      <button id="btnAgain" class="nbtn play small" type="button">العب مجددًا</button>
+      <button id="btnOShop" class="nbtn cyan" type="button">المتجر</button>
+      <button id="btnOMenu" class="nbtn ghost" type="button">القائمة</button>
+    </div>
+    <div class="phint"><span class="sg-key">مسافة</span> العب مجددًا &nbsp; <span class="sg-key">S</span> المتجر &nbsp; <span class="sg-key">Esc</span> القائمة</div>
+  </div>
+</div>
+
+<!-- SHOP -->
+<div id="shop" class="ov dim" hidden>
+  <div class="panel shop">
+    <div class="shead">
+      <h2 class="ptitle">المتجر</h2>
+      <div class="tabs"><button id="tabBalls" class="tab on" type="button">الكرات</button><button id="tabTrails" class="tab" type="button">الذيول</button></div>
+      <div class="sgems"><i class="gemico"></i><span id="sGems">0</span></div>
+    </div>
+    <div id="sgrid"></div>
+    <div class="sfoot"><button id="btnShopBack" class="nbtn play small" type="button">تم</button><span class="phint"><span class="sg-key">Esc</span> رجوع</span></div>
+  </div>
+</div>
+
+<div id="nogl" hidden><div class="panel"><h2 class="ptitle">عذرًا!</h2><p>هذا الحاسوب لا يستطيع عرض الرسوم ثلاثية الأبعاد الآن.<br>جرّب لعبة أخرى!</p></div></div>
+
+<script src="../../shared/kit.js"></script>
+<script src="../../lib/three/three.min.js"></script>
+<script src="skins.js"></script>
+<script src="audio.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>اندفاع المتاهة</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" tabindex="0" aria-label="اندفاع المتاهة"></canvas>
+
+<!-- Title -->
+<div class="sg-overlay md-overlay" id="scr-title">
+  <div class="md-title-wrap">
+    <h1 class="md-logo"><span class="md-logo-top">اندفاع</span><span class="md-logo-bot">المتاهة</span></h1>
+    <p class="md-tag">اندفع كالبرق، اجمع النقاط، واهرب من الهلام!</p>
+    <button class="sg-btn md-play" id="btn-play" type="button">
+      <span class="md-btn-main">▶ العب</span>
+      <span class="md-btn-sub" id="sub-play">المرحلة 1</span>
+    </button>
+    <div class="md-menu">
+      <button class="sg-btn md-big md-goo" id="btn-endless" type="button">
+        <span class="md-btn-main">الهلام الصاعد</span>
+        <span class="md-btn-sub" id="sub-endless">اصعد بلا توقف!</span>
+      </button>
+      <button class="sg-btn md-big md-lvbtn" id="btn-levels" type="button">
+        <span class="md-btn-main">المراحل</span>
+        <span class="md-btn-sub" id="sub-levels">★ 0 / 90</span>
+      </button>
+      <button class="sg-btn md-big md-shop" id="btn-shop" type="button">
+        <span class="md-btn-main">الأقنعة</span>
+        <span class="md-btn-sub" id="sub-shop">0 عملة</span>
+      </button>
+    </div>
+    <div class="md-howto">
+      <div><span dir="ltr"><span class="sg-key">←</span><span class="sg-key">↑</span><span class="sg-key">→</span><span class="sg-key">↓</span></span> أو <span dir="ltr"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></span> اندفع حتى تصطدم بالجدار</div>
+      <div>أو <b>اسحب</b> بالفأرة في أي اتجاه · <span class="sg-key">P</span> إيقاف · <span class="sg-key">R</span> إعادة</div>
+    </div>
+  </div>
+</div>
+
+<!-- Level select -->
+<div class="sg-overlay md-overlay" id="scr-levels" hidden>
+  <div class="sg-panel md-panel md-wide">
+    <h2 class="md-h2">اختر المرحلة</h2>
+    <div class="md-tabs" id="world-tabs"></div>
+    <div class="md-world-name" id="world-name"></div>
+    <div class="md-grid" id="level-grid"></div>
+    <div class="md-row">
+      <span class="md-stars-total" id="stars-total"></span>
+      <button class="sg-btn secondary" id="btn-levels-back" type="button">رجوع</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shop -->
+<div class="sg-overlay md-overlay" id="scr-shop" hidden>
+  <div class="sg-panel md-panel md-wide">
+    <h2 class="md-h2">الأقنعة</h2>
+    <div class="md-coins-line">عملاتك: <b id="shop-coins">0</b> <span class="md-coin-ico"></span></div>
+    <div class="md-shop-grid" id="shop-grid"></div>
+    <div class="md-row"><button class="sg-btn secondary" id="btn-shop-back" type="button">رجوع</button></div>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="sg-overlay md-overlay" id="scr-pause" hidden>
+  <div class="sg-panel md-panel">
+    <h2 class="md-h2">استراحة</h2>
+    <p class="sg-sub" id="pause-sub"></p>
+    <div class="md-col">
+      <button class="sg-btn good" id="btn-resume" type="button">استمرار</button>
+      <button class="sg-btn" id="btn-restart" type="button">إعادة</button>
+      <button class="sg-btn secondary" id="btn-pause-menu" type="button">القائمة</button>
+    </div>
+  </div>
+</div>
+
+<!-- Level complete -->
+<div class="sg-overlay md-overlay" id="scr-win" hidden>
+  <div class="sg-panel md-panel md-result">
+    <div class="md-result-kicker" id="win-kicker">المرحلة 1</div>
+    <h2 class="md-h2 md-win-title" id="win-title">أحسنت!</h2>
+    <div class="md-stars" id="win-stars">
+      <div class="md-star" data-i="0"><div class="md-star-ico">★</div><div class="md-star-lbl">كل النقاط</div></div>
+      <div class="md-star" data-i="1"><div class="md-star-ico">★</div><div class="md-star-lbl">بلا إصابة</div></div>
+      <div class="md-star" data-i="2"><div class="md-star-ico">★</div><div class="md-star-lbl" id="win-par-lbl">أسرع من الوقت</div></div>
+    </div>
+    <div class="md-stats" id="win-stats"></div>
+    <div class="md-newbest" id="win-new" hidden></div>
+    <div class="md-col">
+      <button class="sg-btn good" id="btn-next" type="button">المرحلة التالية ◀</button>
+      <div>
+        <button class="sg-btn" id="btn-win-retry" type="button">إعادة</button>
+        <button class="sg-btn secondary" id="btn-win-levels" type="button">المراحل</button>
+      </div>
+    </div>
+    <div class="md-hint"><span class="sg-key">Enter</span> التالي · <span class="sg-key">R</span> إعادة</div>
+  </div>
+</div>
+
+<!-- Level failed -->
+<div class="sg-overlay md-overlay" id="scr-fail" hidden>
+  <div class="sg-panel md-panel md-result">
+    <div class="md-result-kicker" id="fail-kicker">المرحلة 1</div>
+    <h2 class="md-h2 md-fail-title">أوه! نفدت القلوب</h2>
+    <p class="sg-sub" id="fail-sub">كدت تنجح! حاول مرة أخرى.</p>
+    <div class="md-col">
+      <button class="sg-btn good" id="btn-fail-retry" type="button">حاول مرة أخرى</button>
+      <button class="sg-btn secondary" id="btn-fail-levels" type="button">المراحل</button>
+    </div>
+    <div class="md-hint"><span class="sg-key">Enter</span> أو <span class="sg-key">R</span> للإعادة</div>
+  </div>
+</div>
+
+<!-- Endless over -->
+<div class="sg-overlay md-overlay" id="scr-over" hidden>
+  <div class="sg-panel md-panel md-result">
+    <h2 class="md-h2 md-fail-title" id="over-title">ابتلعك الهلام!</h2>
+    <div class="md-bigscore"><span id="over-score">0</span><small>نقطة</small></div>
+    <div class="md-newbest" id="over-new" hidden>رقم قياسي جديد!</div>
+    <div class="md-stats" id="over-stats"></div>
+    <div class="md-col">
+      <button class="sg-btn good" id="btn-over-again" type="button">العب مرة أخرى</button>
+      <button class="sg-btn secondary" id="btn-over-menu" type="button">القائمة</button>
+    </div>
+    <div class="md-hint"><span class="sg-key">Enter</span> أو <span class="sg-key">R</span> للعب مرة أخرى</div>
+  </div>
+</div>
+
+<div class="md-toast" id="toast" hidden></div>
+
+<script src="../../shared/kit.js"></script>
+<script src="core.js"></script>
+<script src="levels.js"></script>
+<script src="masks.js"></script>
+<script src="endless.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

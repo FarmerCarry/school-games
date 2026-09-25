@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>حفلة البلياردو</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<style>
+  body { background: #130c33; }
+  #game { cursor: crosshair; }
+  #ui { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; pointer-events: none; z-index: 10; }
+  .scr { position: absolute; inset: 0; pointer-events: auto; display: flex; flex-direction: column; align-items: center; }
+  .scr[hidden] { display: none; }
+  .dim { background: rgba(10, 6, 30, 0.62); justify-content: center; }
+  button { font-family: var(--sg-font); }
+  .btn { font-weight: 700; border: none; border-radius: 999px; cursor: pointer; color: #fff; padding: 12px 26px; font-size: 24px;
+    box-shadow: 0 6px 0 rgba(0,0,0,0.35), inset 0 -4px 0 rgba(0,0,0,0.18), inset 0 3px 0 rgba(255,255,255,0.3);
+    transition: transform .09s ease, filter .09s ease; text-shadow: 0 2px 0 rgba(0,0,0,0.25); display: inline-flex; align-items: center; gap: 10px; }
+  .btn:hover { transform: translateY(-3px) scale(1.04); filter: brightness(1.1); }
+  .btn:active { transform: translateY(3px) scale(0.98); box-shadow: 0 2px 0 rgba(0,0,0,0.35); }
+  .b-yellow { background: linear-gradient(#ffe45c, #ffb800); color: #4a2a00; text-shadow: 0 2px 0 rgba(255,255,255,0.35); }
+  .b-green { background: linear-gradient(#5ff0a0, #19b865); color: #053a1d; text-shadow: 0 2px 0 rgba(255,255,255,0.3); }
+  .b-blue { background: linear-gradient(#5fc8ff, #1e7bff); }
+  .b-pink { background: linear-gradient(#ff8cc6, #ff3b8d); }
+  .b-purple { background: linear-gradient(#b48cff, #7a3cff); }
+  .b-white { background: linear-gradient(#ffffff, #dfe4f5); color: #1d2340; text-shadow: none; }
+  .b-small { font-size: 18px; padding: 9px 20px; }
+
+  /* title */
+  #scr-title { background: radial-gradient(ellipse at 50% 55%, rgba(10,6,30,0.25), rgba(10,6,30,0.78) 75%); }
+  .logo { margin: 14px 0 0; font-size: 84px; font-weight: 700; line-height: 1.15; position: relative; display: flex; align-items: center; gap: 18px;
+    color: #ffe45c; text-shadow: 0 6px 0 #ff3b8d, 0 12px 0 #7a3cff, 0 18px 30px rgba(0,0,0,0.5); animation: bob 2.6s ease-in-out infinite; }
+  .logo .o8 { display: inline-block; flex: none; width: 78px; height: 78px; border-radius: 50%; margin: 0 2px;
+    background: radial-gradient(circle at 35% 30%, #666 0, #1b1b22 45%, #000 100%); position: relative; box-shadow: 0 6px 0 #ff3b8d, 0 12px 0 #7a3cff; animation: spin8 5s linear infinite; }
+  .logo .o8::after { content: '8'; position: absolute; left: 50%; top: 50%; width: 42px; height: 42px; margin: -21px 0 0 -21px; border-radius: 50%;
+    background: #fff; color: #111; font-size: 34px; line-height: 44px; text-align: center; text-shadow: none; }
+  .logo .p2 { color: #5fe0ff; }
+  @keyframes bob { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-6px) rotate(1deg); } }
+  @keyframes spin8 { 0% { transform: rotate(0); } 100% { transform: rotate(360deg); } }
+  .tag { margin-top: 16px; font-size: 22px; color: #fff; opacity: .9; text-shadow: 0 2px 0 rgba(0,0,0,.4); }
+  .coinbar { position: absolute; left: 24px; top: 18px; display: flex; gap: 12px; direction: ltr; }
+  .coinbar .pill span { direction: rtl; }
+  .pill { background: rgba(0,0,0,0.45); border: 2px solid rgba(255,255,255,0.2); border-radius: 999px; padding: 6px 14px 6px 10px; font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 8px; color: #fff; }
+  .coin { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6a8, #ffc400 55%, #d98e00); box-shadow: inset 0 0 0 3px #e0a000; display: inline-block; position: relative; }
+  .coin::after { content: ''; position: absolute; left: 8px; top: 6px; width: 10px; height: 14px; border-radius: 3px; border: 2px solid #b57400; }
+  .opps { display: flex; gap: 22px; margin-top: 22px; }
+  .opp { width: 236px; height: 232px; border-radius: 24px; background: rgba(20,14,56,0.85); border: 4px solid rgba(255,255,255,0.15); cursor: pointer; color: #fff;
+    display: flex; flex-direction: column; align-items: center; padding-top: 10px; position: relative; transition: transform .12s ease, border-color .12s; font-family: var(--sg-font); }
+  .opp:hover { transform: translateY(-4px); }
+  .opp.sel { border-color: #ffe45c; transform: translateY(-6px) scale(1.04); box-shadow: 0 0 0 4px rgba(255,228,92,0.25), 0 14px 30px rgba(0,0,0,0.4); }
+  .opp canvas { width: 104px; height: 104px; }
+  .opp .nm { font-size: 24px; font-weight: 700; margin-top: 2px; line-height: 1.25; }
+  .opp .lv { font-size: 16px; font-weight: 700; padding: 0 14px; line-height: 1.5; border-radius: 999px; margin-top: 2px; color: #1d1d1d; }
+  .opp .rec { font-size: 15px; opacity: .85; margin-top: 4px; line-height: 1.3; }
+  .opp .trophy { position: absolute; left: 10px; top: 10px; width: 38px; height: 38px; }
+  .playrow { margin-top: 24px; }
+  .bigplay { font-size: 40px; padding: 16px 64px; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+  .bigplay:hover { animation: none; }
+  .row { display: flex; gap: 14px; margin-top: 22px; align-items: center; }
+  .howto { position: absolute; bottom: 14px; display: flex; gap: 22px; font-size: 17px; color: #fff; background: rgba(0,0,0,0.4); padding: 8px 20px; border-radius: 999px; }
+  .howto span.k { display: inline-flex; align-items: center; gap: 4px; }
+  .chip { font-size: 16px; }
+
+  /* panels */
+  .panel { background: linear-gradient(#2c1f6e, #1a1247); border: 4px solid rgba(255,255,255,0.18); border-radius: 30px; padding: 26px 40px 28px; text-align: center;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5); color: #fff; animation: popin .35s cubic-bezier(.2,1.6,.4,1); min-width: 480px; position: relative; }
+  @keyframes popin { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .panel h2 { margin: 0; font-size: 64px; line-height: 1.05; color: #ffe45c; text-shadow: 0 5px 0 #ff3b8d, 0 10px 20px rgba(0,0,0,0.4); }
+  .panel h2.lose { color: #9fdcff; text-shadow: 0 5px 0 #3b5bff, 0 10px 20px rgba(0,0,0,0.4); }
+  .panel p { margin: 10px 0; font-size: 22px; }
+  .panel .btns { margin-top: 18px; display: flex; gap: 14px; justify-content: center; }
+  .panel canvas.av { width: 120px; height: 120px; margin: 8px auto 0; display: block; }
+  .earn { display: inline-flex; align-items: center; gap: 8px; font-size: 30px; font-weight: 700; color: #ffe45c; margin-top: 6px; }
+  .badge { display: inline-block; margin: 6px 4px 0; padding: 6px 16px; border-radius: 999px; background: #ff3b8d; font-weight: 700; font-size: 20px; animation: wig 0.8s ease-in-out infinite; }
+  @keyframes wig { 0%,100% { transform: rotate(-3deg) scale(1); } 50% { transform: rotate(3deg) scale(1.08); } }
+  .stars { display: flex; justify-content: center; gap: 10px; margin: 10px 0 4px; }
+  .stars svg { width: 76px; height: 76px; }
+  .stars svg.on { animation: starpop .5s cubic-bezier(.2,1.8,.4,1) both; }
+  @keyframes starpop { from { transform: scale(0) rotate(-90deg); } to { transform: scale(1) rotate(0); } }
+  .hint { font-size: 17px; opacity: .8; margin-top: 12px; }
+
+  /* screens with headers */
+  .hdr { display: flex; align-items: center; justify-content: space-between; width: 1180px; margin-top: 18px; }
+  .hdr h1 { margin: 0; font-size: 60px; line-height: 1.2; color: #ffe45c; text-shadow: 0 5px 0 #ff3b8d, 0 10px 18px rgba(0,0,0,0.4); }
+  .full { background: radial-gradient(ellipse at 50% 50%, rgba(20,12,60,0.82), rgba(10,6,30,0.95)); }
+  .lvgrid { display: grid; grid-template-columns: repeat(5, 206px); gap: 20px; margin-top: 30px; }
+  .lvl { height: 196px; border-radius: 24px; border: 4px solid rgba(255,255,255,0.18); background: linear-gradient(#3a2a8a, #241a5e); color: #fff; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; transition: transform .1s; font-family: var(--sg-font); position: relative; }
+  .lvl:hover { transform: translateY(-4px) scale(1.03); border-color: #ffe45c; }
+  .lvl .num { font-size: 56px; font-weight: 700; line-height: 1; text-shadow: 0 4px 0 rgba(0,0,0,0.3); }
+  .lvl .ln { font-size: 19px; font-weight: 700; }
+  .lvl .st { display: flex; gap: 2px; }
+  .lvl .st svg { width: 32px; height: 32px; }
+  .lvl.locked { background: #241d44; cursor: not-allowed; opacity: .75; }
+  .lvl.locked:hover { transform: none; border-color: rgba(255,255,255,0.18); }
+  .lvl .lock { font-size: 44px; }
+  .shoprow { display: flex; gap: 14px; margin-top: 12px; }
+  .sect { font-size: 28px; font-weight: 700; margin-top: 14px; line-height: 1.3; color: #fff; width: 1180px; text-align: right; }
+  .item { width: 154px; height: 214px; border-radius: 20px; background: linear-gradient(#3a2a8a, #241a5e); border: 4px solid rgba(255,255,255,0.15); color: #fff;
+    display: flex; flex-direction: column; align-items: center; padding: 10px 6px; cursor: pointer; font-family: var(--sg-font); transition: transform .1s; }
+  .item:hover { transform: translateY(-4px); }
+  .item.eq { border-color: #3ddc84; box-shadow: 0 0 0 4px rgba(61,220,132,0.25); }
+  .item canvas { width: 134px; height: 92px; }
+  .item .in { font-size: 17px; font-weight: 700; margin-top: 8px; height: 44px; display: flex; align-items: center; text-align: center; line-height: 1.1; }
+  .item .pr { margin-top: 6px; font-size: 17px; font-weight: 700; padding: 5px 14px; border-radius: 999px; background: #ffe45c; color: #4a2a00; display: flex; align-items: center; gap: 6px; }
+  .item .pr.own { background: #fff; color: #1d2340; }
+  .item .pr.eqd { background: #3ddc84; color: #053a1d; }
+  .item .pr.lock { background: #5a4c92; color: #fff; font-size: 14px; }
+  .item.poor .pr { background: #7d6fb0; color: #ddd; }
+  .shake { animation: shk .35s; }
+  @keyframes shk { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-8px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(6px); } }
+
+  #pauseBtn { position: fixed; top: 10px; right: 62px; direction: ltr; z-index: 20; width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25);
+    background: rgba(0,0,0,0.35); color: #fff; font-size: 18px; font-weight: 700; cursor: pointer; font-family: var(--sg-font); }
+  #pauseBtn:hover { background: rgba(0,0,0,0.55); }
+  #pauseBtn[hidden] { display: none; }
+</style>
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+<div id="ui">
+  <!-- TITLE -->
+  <div id="scr-title" class="scr">
+    <div class="coinbar"><div class="pill"><span class="coin"></span><span class="coins">0</span></div><div class="pill" id="streakPill" title="سلسلة الفوز"><span>&#9733;</span><span id="streakTxt">أفضل سلسلة فوز: 0</span></div></div>
+    <h1 class="logo"><span>حفلة</span> <span class="o8"></span> <span class="p2">البلياردو</span></h1>
+    <div class="tag">اختر خصمك وهيا نلعب!</div>
+    <div class="opps" id="opps"></div>
+    <div class="playrow"><button class="btn b-yellow bigplay" id="btnPlay">&#9654; العب</button></div>
+    <div class="row">
+      <button class="btn b-pink b-small" id="btn2p">لاعبان</button>
+      <button class="btn b-blue b-small" id="btnTrick">تحديات الضربات <span id="trickStars"></span></button>
+      <button class="btn b-green b-small" id="btnShop">المتجر</button>
+      <button class="btn b-white b-small chip" id="btnAim">خط التصويب: طويل</button>
+    </div>
+    <div class="howto">
+      <span class="k"><span class="sg-key">الفأرة</span> صوّب</span>
+      <span class="k"><span class="sg-key">اسحب</span> للخلف ثم اترك لتضرب</span>
+      <span class="k"><span dir="ltr"><span class="sg-key">&larr;</span><span class="sg-key">&rarr;</span></span> تصويب دقيق</span>
+      <span class="k"><span class="sg-key">مسافة</span> اضغط مطوّلًا للقوة</span>
+      <span class="k"><span class="sg-key">P</span> إيقاف</span>
+    </div>
+  </div>
+
+  <!-- TRICK SHOT LEVELS -->
+  <div id="scr-levels" class="scr full" hidden>
+    <div class="hdr"><button class="btn b-white b-small" id="lvBack">&#9654; رجوع</button><h1>تحديات الضربات</h1><div class="pill"><span>&#9733;</span><span id="lvStars" dir="ltr">0/30</span></div></div>
+    <div class="lvgrid" id="lvgrid"></div>
+    <div class="hint" style="margin-top:26px;font-size:20px">أنجز التحدي من أول محاولة لتربح 3 نجوم! كل نجمة جديدة تعطيك <b>15 عملة</b>.</div>
+  </div>
+
+  <!-- SHOP -->
+  <div id="scr-shop" class="scr full" hidden>
+    <div class="hdr"><button class="btn b-white b-small" id="shopBack">&#9654; رجوع</button><h1>المتجر</h1><div class="pill"><span class="coin"></span><span class="coins">0</span></div></div>
+    <div class="sect">عصي البلياردو</div>
+    <div class="shoprow" id="shopCues"></div>
+    <div class="sect">ألوان الطاولة</div>
+    <div class="shoprow" id="shopFelts"></div>
+  </div>
+
+  <!-- PAUSE -->
+  <div id="scr-pause" class="scr dim" hidden>
+    <div class="panel">
+      <h2>استراحة</h2>
+      <div class="btns" style="flex-direction:column;align-items:center;gap:6px;margin-top:22px">
+        <button class="btn b-green" id="pResume">&#9654; تابع اللعب</button>
+        <button class="btn b-blue" id="pRestart">&#8635; ابدأ من جديد</button>
+        <button class="btn b-white b-small chip" id="pAim">خط التصويب: طويل</button>
+        <button class="btn b-pink b-small" id="pMenu">القائمة</button>
+      </div>
+      <div class="hint">اضغط <span class="sg-key">P</span> أو <span class="sg-key">Esc</span> لتتابع</div>
+    </div>
+  </div>
+
+  <!-- MATCH OVER -->
+  <div id="scr-over" class="scr dim" hidden>
+    <div class="panel">
+      <h2 id="oTitle">فزت!</h2>
+      <canvas class="av" id="oAvatar" width="240" height="240"></canvas>
+      <p id="oSub"></p>
+      <div id="oEarn" class="earn"></div>
+      <div id="oBadges"></div>
+      <div class="btns">
+        <button class="btn b-yellow" id="oAgain">&#8635; العب مجددًا</button>
+        <button class="btn b-white" id="oMenu">القائمة</button>
+      </div>
+      <div class="hint"><span class="sg-key">Enter</span> العب مجددًا &nbsp;&nbsp; <span class="sg-key">Esc</span> القائمة</div>
+    </div>
+  </div>
+
+  <!-- TRICK LEVEL DONE -->
+  <div id="scr-done" class="scr dim" hidden>
+    <div class="panel">
+      <h2 id="dTitle">أنجزت التحدي!</h2>
+      <div class="stars" id="dStars"></div>
+      <p id="dSub"></p>
+      <div id="dEarn" class="earn"></div>
+      <div id="dBadges"></div>
+      <div class="btns">
+        <button class="btn b-yellow" id="dNext">التالي &#9664;</button>
+        <button class="btn b-blue" id="dRetry">&#8635; أعد المحاولة</button>
+        <button class="btn b-white" id="dLevels">كل التحديات</button>
+      </div>
+      <div class="hint"><span class="sg-key">Enter</span> التالي &nbsp;&nbsp; <span class="sg-key">R</span> أعد المحاولة</div>
+    </div>
+  </div>
+</div>
+<button id="pauseBtn" type="button" aria-label="إيقاف مؤقت" hidden>II</button>
+
+<script src="../../shared/kit.js"></script>
+<script src="physics.js"></script>
+<script src="rules.js"></script>
+<script src="ai.js"></script>
+<script src="levels.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

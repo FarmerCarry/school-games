@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>قفزة الإيقاع</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+
+<div id="ui">
+  <!-- TITLE -->
+  <div id="scr-title" class="scr">
+    <div class="title-wrap">
+      <div class="logo" aria-label="قفزة الإيقاع">
+        <span class="logo-beat">قفزة</span><span class="logo-dash">الإيقاع</span>
+      </div>
+      <div class="tagline">اقفز مع الإيقاع!</div>
+      <button class="sg-btn big-play" id="b-play"><svg viewBox="0 0 24 24" class="ico"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg>العب</button>
+      <div class="title-row">
+        <button class="sg-btn secondary" id="b-garage"><svg viewBox="0 0 24 24" class="ico"><rect x="4" y="4" width="16" height="16" rx="3" fill="currentColor"/><circle cx="9.5" cy="10.5" r="1.6" fill="#fff"/><circle cx="14.5" cy="10.5" r="1.6" fill="#fff"/><path d="M8.5 14.5q3.5 3 7 0" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>مكعّبي</button>
+      </div>
+      <div class="howto-strip">
+        <span><span class="sg-key">مسافة</span><span class="sg-key">↑</span><span class="sg-key">انقر</span> قفز</span>
+        <span class="dot">•</span>
+        <span>اضغط مطولًا لتقفز باستمرار</span>
+        <span class="dot">•</span>
+        <span><span class="sg-key">P</span> إيقاف مؤقت</span>
+      </div>
+      <div class="summary" id="title-summary"></div>
+    </div>
+  </div>
+
+  <!-- LEVEL SELECT -->
+  <div id="scr-select" class="scr" hidden>
+    <div class="top-bar">
+      <button class="sg-btn secondary small" id="b-sel-back">→ رجوع</button>
+      <div class="top-title">اختر مرحلة</div>
+      <div class="star-total" id="sel-stars"></div>
+    </div>
+    <div class="carousel">
+      <button class="arrow" id="b-prev" aria-label="المرحلة السابقة">‹</button>
+      <div class="card" id="card">
+        <canvas class="diff-face" id="diff-face" width="120" height="120"></canvas>
+        <div class="card-main">
+          <div class="lvl-num" id="lvl-num"></div>
+          <div class="lvl-name" id="lvl-name"></div>
+          <div class="lvl-diff" id="lvl-diff"></div>
+          <div class="lvl-stars" id="lvl-stars"></div>
+        </div>
+        <div class="bars">
+          <div class="bar-label">عادي</div>
+          <div class="bar"><span id="bar-n"></span><em id="bar-n-t"></em></div>
+          <div class="bar-label">تدريب</div>
+          <div class="bar practice"><span id="bar-p"></span><em id="bar-p-t"></em></div>
+        </div>
+        <div class="lock" id="lvl-lock" hidden></div>
+        <div class="done-badge" id="lvl-done" hidden>مكتملة!</div>
+      </div>
+      <button class="arrow" id="b-next" aria-label="المرحلة التالية">›</button>
+    </div>
+    <div class="dots" id="dots"></div>
+    <div class="sel-actions">
+      <button class="sg-btn good big" id="b-go"><svg viewBox="0 0 24 24" class="ico"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg>العب</button>
+      <button class="sg-btn secondary" id="b-practice"><svg viewBox="0 0 24 24" class="ico"><path d="M12 2l3 7h7l-5.5 4.5 2 7.5-6.5-4.5-6.5 4.5 2-7.5L2 9h7z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>تدريب</button>
+    </div>
+    <div class="hint"><span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span> اختر &nbsp; <span class="sg-key">Enter</span> العب &nbsp; وضع التدريب فيه نقاط حفظ!</div>
+  </div>
+
+  <!-- GARAGE -->
+  <div id="scr-garage" class="scr" hidden>
+    <div class="top-bar">
+      <button class="sg-btn secondary small" id="b-gar-back">→ رجوع</button>
+      <div class="top-title">مكعّبي</div>
+      <div class="star-total" id="gar-stars"></div>
+    </div>
+    <div class="garage">
+      <div class="preview-box">
+        <canvas id="preview" width="260" height="260"></canvas>
+        <div class="preview-name" id="preview-name"></div>
+        <div class="unlock-count" id="unlock-count"></div>
+      </div>
+      <div class="picker">
+        <div class="tabs">
+          <button class="tab on" data-tab="face">الوجوه</button>
+          <button class="tab" data-tab="c1">اللون الأساسي</button>
+          <button class="tab" data-tab="c2">اللون الثاني</button>
+        </div>
+        <div class="grid" id="grid"></div>
+        <div class="grid-info" id="grid-info">أكمل المراحل واجمع النجوم لتفتح المزيد!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAUSE -->
+  <div id="scr-pause" class="scr dim" hidden>
+    <div class="sg-panel pause-panel">
+      <div class="sg-title">إيقاف مؤقت</div>
+      <div class="pause-level" id="pause-level"></div>
+      <div class="pause-bars">
+        <div class="bar-label">عادي</div>
+        <div class="bar"><span id="pbar-n"></span><em id="pbar-n-t"></em></div>
+        <div class="bar-label">تدريب</div>
+        <div class="bar practice"><span id="pbar-p"></span><em id="pbar-p-t"></em></div>
+      </div>
+      <div class="pause-btns">
+        <button class="sg-btn good" id="b-resume">تابع اللعب</button>
+        <button class="sg-btn" id="b-restart">من البداية</button>
+      </div>
+      <div class="pause-btns">
+        <button class="sg-btn secondary" id="b-toggle-practice"></button>
+        <button class="sg-btn secondary" id="b-menu">المراحل</button>
+      </div>
+      <div class="hint small"><span class="sg-key">P</span> تابع &nbsp; <span class="sg-key">R</span> <span id="pause-r-t">من البداية</span> &nbsp; <span class="sg-key">M</span> الصوت</div>
+    </div>
+  </div>
+
+  <!-- LEVEL COMPLETE -->
+  <div id="scr-win" class="scr" hidden>
+    <div class="sg-panel win-panel">
+      <div class="win-title" id="win-title">أكملت المرحلة!</div>
+      <div class="win-level" id="win-level"></div>
+      <div class="win-stars" id="win-stars"></div>
+      <div class="win-stats" id="win-stats"></div>
+      <div class="win-unlocks" id="win-unlocks"></div>
+      <div class="pause-btns win-btns">
+        <button class="sg-btn good big" id="b-win-next">المرحلة التالية</button>
+        <button class="sg-btn" id="b-win-again">العب مجددًا</button>
+        <button class="sg-btn secondary" id="b-win-menu">المراحل</button>
+      </div>
+      <div class="hint small"><span class="sg-key">Enter</span> <span id="win-enter-t">التالي</span> &nbsp; <span class="sg-key">R</span> مجددًا &nbsp; <span class="sg-key">Esc</span> المراحل</div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+</div>
+
+<button id="b-pause" class="pause-btn" aria-label="إيقاف مؤقت" hidden><svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.2" fill="#fff"/><rect x="14" y="5" width="4" height="14" rx="1.2" fill="#fff"/></svg></button>
+
+<script src="../../shared/kit.js"></script>
+<script src="engine.js"></script>
+<script src="levels.js"></script>
+<script src="music.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

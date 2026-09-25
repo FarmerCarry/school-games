@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#ff7ac2"/>
+      <stop offset="0.5" stop-color="#9b4dff"/>
+      <stop offset="1" stop-color="#2a1270"/>
+    </radialGradient>
+    <radialGradient id="felt" cx="45%" cy="40%" r="75%">
+      <stop offset="0" stop-color="#2fd07f"/>
+      <stop offset="1" stop-color="#0d8a4a"/>
+    </radialGradient>
+    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c8763a"/>
+      <stop offset="1" stop-color="#7a3d14"/>
+    </linearGradient>
+    <radialGradient id="shine" cx="35%" cy="30%" r="70%">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.9"/>
+      <stop offset="0.25" stop-color="#fff" stop-opacity="0.15"/>
+      <stop offset="0.7" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.45"/>
+    </radialGradient>
+    <radialGradient id="eight" cx="38%" cy="32%" r="75%">
+      <stop offset="0" stop-color="#5a5a6e"/>
+      <stop offset="0.45" stop-color="#1b1b24"/>
+      <stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="hole" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#000"/>
+      <stop offset="0.8" stop-color="#0a0710"/>
+      <stop offset="1" stop-color="#2d2338"/>
+    </radialGradient>
+    <linearGradient id="cue" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff5dc"/>
+      <stop offset="0.55" stop-color="#f2dcae"/>
+      <stop offset="0.56" stop-color="#ff3b8d"/>
+      <stop offset="1" stop-color="#9b1454"/>
+    </linearGradient>
+    <linearGradient id="cue2" gradientUnits="userSpaceOnUse" x1="78" y1="345" x2="-53" y2="468">
+      <stop offset="0" stop-color="#fffaf0"/>
+      <stop offset="0.5" stop-color="#f2dcae"/>
+      <stop offset="0.52" stop-color="#ff3b8d"/>
+      <stop offset="1" stop-color="#9b1454"/>
+    </linearGradient>
+    <filter id="sh" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="4" dy="7" stdDeviation="5" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <rect width="400" height="400" rx="0" fill="url(#bg)"/>
+  <!-- light rays -->
+  <g fill="#ffffff" opacity="0.1">
+    <path d="M200 170 L120 -20 L180 -20Z"/><path d="M200 170 L260 -20 L330 -20Z"/>
+    <path d="M200 170 L420 40 L420 120Z"/><path d="M200 170 L-20 60 L-20 140Z"/>
+    <path d="M200 170 L-20 260 L-20 330Z"/><path d="M200 170 L420 250 L420 320Z"/>
+  </g>
+  <!-- confetti -->
+  <g>
+    <rect x="30" y="40" width="14" height="8" rx="2" fill="#ffe45c" transform="rotate(-25 37 44)"/>
+    <rect x="345" y="30" width="14" height="8" rx="2" fill="#5fe0ff" transform="rotate(30 352 34)"/>
+    <rect x="360" y="150" width="12" height="7" rx="2" fill="#3ddc84" transform="rotate(-40 366 153)"/>
+    <rect x="20" y="170" width="12" height="7" rx="2" fill="#ff8a00" transform="rotate(35 26 173)"/>
+    <circle cx="70" cy="110" r="5" fill="#fff"/>
+    <circle cx="330" cy="95" r="5" fill="#ffe45c"/>
+    <circle cx="380" cy="215" r="4" fill="#ff3b8d"/>
+    <rect x="300" y="8" width="10" height="6" rx="2" fill="#ff3b8d" transform="rotate(20 305 11)"/>
+  </g>
+
+  <!-- table corner -->
+  <g filter="url(#sh)">
+    <path d="M-10 170 Q-10 150 10 150 L410 150 L410 410 L-10 410Z" fill="url(#wood)"/>
+    <rect x="18" y="178" width="400" height="240" rx="8" fill="#0b6e3a"/>
+    <rect x="30" y="190" width="390" height="230" fill="url(#felt)"/>
+  </g>
+  <circle cx="22" cy="182" r="30" fill="url(#hole)" stroke="#e8b04a" stroke-width="4"/>
+  <g fill="#fff2d6">
+    <path d="M110 157 l5 7 -5 7 -5 -7z"/><path d="M210 157 l5 7 -5 7 -5 -7z"/><path d="M310 157 l5 7 -5 7 -5 -7z"/>
+  </g>
+
+  <!-- cue stick -->
+  <g filter="url(#sh)">
+    <path d="M73.9 341.1 L82.1 349.9 L-44.9 476.6 L-61.1 459.4Z" fill="url(#cue2)"/>
+    <path d="M73.9 341.1 L82.1 349.9 L78.4 353.9 L70.2 345.1Z" fill="#2f7de0"/>
+  </g>
+
+  <!-- balls -->
+  <g filter="url(#sh)">
+    <!-- cue ball -->
+    <circle cx="100" cy="322" r="30" fill="#fbf8ee"/>
+    <circle cx="100" cy="322" r="30" fill="url(#shine)"/>
+    <circle cx="112" cy="330" r="4" fill="#e6283c"/>
+    <!-- yellow 1 -->
+    <circle cx="300" cy="248" r="34" fill="#ffd21f"/>
+    <circle cx="306" cy="244" r="15" fill="#fff"/>
+    <text x="306" y="251" font-family="Arial Black, Segoe UI Black, Arial, sans-serif" font-weight="900" font-size="20" text-anchor="middle" fill="#111">1</text>
+    <circle cx="300" cy="248" r="34" fill="url(#shine)"/>
+    <!-- red stripe 11 -->
+    <clipPath id="c11"><circle cx="352" cy="318" r="34"/></clipPath>
+    <circle cx="352" cy="318" r="34" fill="#fbf8ee"/>
+    <rect x="316" y="298" width="72" height="40" fill="#ff2d3a" clip-path="url(#c11)"/>
+    <circle cx="348" cy="318" r="14" fill="#fff"/>
+    <text x="348" y="325" font-family="Arial Black, Segoe UI Black, Arial, sans-serif" font-weight="900" font-size="17" text-anchor="middle" fill="#111">11</text>
+    <circle cx="352" cy="318" r="34" fill="url(#shine)"/>
+    <!-- blue 2 -->
+    <circle cx="250" cy="340" r="30" fill="#1e6bff"/>
+    <circle cx="246" cy="334" r="13" fill="#fff"/>
+    <text x="246" y="341" font-family="Arial Black, Segoe UI Black, Arial, sans-serif" font-weight="900" font-size="17" text-anchor="middle" fill="#111">2</text>
+    <circle cx="250" cy="340" r="30" fill="url(#shine)"/>
+    <!-- big 8 ball -->
+    <circle cx="200" cy="232" r="62" fill="url(#eight)"/>
+    <circle cx="208" cy="222" r="27" fill="#fff"/>
+    <text x="208" y="236" font-family="Arial Black, Segoe UI Black, Arial, sans-serif" font-weight="900" font-size="38" text-anchor="middle" fill="#111">8</text>
+    <ellipse cx="180" cy="200" rx="22" ry="13" fill="#fff" opacity="0.35" transform="rotate(-30 180 200)"/>
+  </g>
+
+  <!-- logo -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" transform="rotate(-5 200 80)">
+    <text x="200" y="88" font-size="76" fill="#7a3cff" stroke="#7a3cff" stroke-width="14" stroke-linejoin="round">حفلة</text>
+    <text x="200" y="82" font-size="76" fill="#ff3b8d" stroke="#ff3b8d" stroke-width="10" stroke-linejoin="round">حفلة</text>
+    <text x="200" y="78" font-size="76" fill="#ffe45c">حفلة</text>
+    <text x="200" y="146" font-size="56" fill="#2a1270" stroke="#2a1270" stroke-width="12" stroke-linejoin="round">البلياردو</text>
+    <text x="200" y="142" font-size="56" fill="#5fe0ff" stroke="#1e6bff" stroke-width="5" stroke-linejoin="round" paint-order="stroke">البلياردو</text>
+  </g>
+</svg>

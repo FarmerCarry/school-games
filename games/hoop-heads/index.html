@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>سلة الرؤوس الكبيرة</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+
+<div id="ui">
+  <!-- ================= TITLE ================= -->
+  <section id="scrTitle" class="scr" hidden>
+    <div class="logo">
+      <canvas class="logo-head" id="logoHeadR" width="180" height="180"></canvas>
+      <div class="logo-txt">
+        <div class="l1">سلة</div>
+        <div class="l2">الرؤوس الكبيرة</div>
+      </div>
+      <canvas class="logo-head flip" id="logoHeadL" width="180" height="180"></canvas>
+    </div>
+    <div class="tagline">كرة سلة واحد ضد واحد... برؤوس عملاقة!</div>
+
+    <div class="menu" id="mainMenu">
+      <button type="button" class="mbtn orange" data-act="cpu"><span class="ic">🤖</span><b>ضد الكمبيوتر</b><small>لاعب واحد</small></button>
+      <button type="button" class="mbtn blue" data-act="duo"><span class="ic">👯</span><b>لاعبان</b><small>على لوحة مفاتيح واحدة</small></button>
+      <button type="button" class="mbtn gold" data-act="tour"><span class="ic">🏆</span><b>البطولة</b><small>اهزم 5 خصوم واربح الكأس</small></button>
+      <button type="button" class="mbtn green" data-act="shop"><span class="ic">🛒</span><b>المتجر</b><small>كرات وملاعب جديدة</small></button>
+    </div>
+
+    <div class="card howto">
+      <h3>طريقة اللعب</h3>
+      <div class="krow"><span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span><span>تحرّك</span></div>
+      <div class="krow"><span dir="ltr"><span class="sg-key">W</span></span><span>اقفز</span></div>
+      <div class="krow"><span dir="ltr"><span class="sg-key">S</span></span><span>امسك للتصويب واترك في <b class="g">الأخضر</b></span></div>
+      <div class="krow"><span>🔥</span><span>اقفز قرب السلة + <span class="sg-key">S</span> = <b class="o">دانك!</b></span></div>
+      <div class="krow"><span>💥</span><span>اصطدم <b class="g">من الأمام</b> لتخطف الكرة</span></div>
+      <div class="krow"><span dir="ltr"><span class="sg-key">P</span></span><span>إيقاف مؤقت</span></div>
+      <div class="small">لاعب واحد؟ الأسهم تعمل أيضًا!</div>
+    </div>
+
+    <div class="card prog">
+      <h3>إنجازاتك</h3>
+      <div class="coins-big"><span class="coin"></span><b id="tCoins">0</b></div>
+      <div class="cups" id="tCups"></div>
+      <div class="small">الانتصارات: <b id="tWins">0</b> • الدانك: <b id="tDunks">0</b></div>
+      <div class="small">الشخصيات: <b id="tChars">0</b></div>
+      <div class="small hot" id="tNext"></div>
+    </div>
+    <div class="enter-hint">اضغط <span class="sg-key">Enter</span> للعب بسرعة!</div>
+  </section>
+
+  <!-- ================= CHARACTER SELECT ================= -->
+  <section id="scrSelect" class="scr" hidden>
+    <h2 class="scr-title" id="selTitle">اختر لاعبك!</h2>
+    <div class="sel-wrap">
+      <div class="pcard p1" id="pc0">
+        <div class="who" id="who0">اللاعب 1</div>
+        <canvas class="big-head" id="bigHead0" width="220" height="220"></canvas>
+        <div class="pname" id="pname0"></div>
+        <div class="pdesc" id="pdesc0"></div>
+        <div class="stats" id="pstats0"></div>
+        <div class="keys" id="pkeys0"></div>
+        <div class="ready" id="pready0" hidden>جاهز! ✔</div>
+      </div>
+      <div class="grid" id="charGrid"></div>
+      <div class="pcard p2" id="pc1">
+        <div class="who" id="who1">الخصم</div>
+        <canvas class="big-head" id="bigHead1" width="220" height="220"></canvas>
+        <div class="pname" id="pname1"></div>
+        <div class="pdesc" id="pdesc1"></div>
+        <div class="stats" id="pstats1"></div>
+        <div class="keys" id="pkeys1"></div>
+        <div class="ready" id="pready1" hidden>جاهز! ✔</div>
+      </div>
+    </div>
+    <div class="opts" id="optRow">
+      <div class="optgrp" id="diffGrp"><span class="lbl">الصعوبة:</span>
+        <button type="button" class="chip" data-diff="0">سهل</button>
+        <button type="button" class="chip" data-diff="1">عادي</button>
+        <button type="button" class="chip" data-diff="2">صعب</button>
+      </div>
+      <div class="optgrp" id="lenGrp"><span class="lbl">المباراة:</span>
+        <button type="button" class="chip" data-len="60">دقيقة واحدة</button>
+        <button type="button" class="chip" data-len="120">دقيقتان</button>
+      </div>
+      <div class="optgrp" id="courtGrp"><span class="lbl">الملعب:</span><span id="courtChips"></span></div>
+    </div>
+    <div class="sel-bottom">
+      <button type="button" class="back" id="selBack">رجوع <small dir="ltr">Esc</small></button>
+      <button type="button" class="go" id="selGo">ابدأ! <small dir="ltr">Enter</small></button>
+    </div>
+  </section>
+
+  <!-- ================= TOURNAMENT: CUPS ================= -->
+  <section id="scrCups" class="scr" hidden>
+    <h2 class="scr-title">البطولة 🏆</h2>
+    <div class="scr-sub">اهزم 5 خصوم لتربح الكأس وتفتح شخصية سرية!</div>
+    <div class="cup-row" id="cupRow"></div>
+    <div class="sel-bottom"><button type="button" class="back" id="cupsBack">رجوع <small dir="ltr">Esc</small></button></div>
+  </section>
+
+  <!-- ================= TOURNAMENT: LADDER ================= -->
+  <section id="scrLadder" class="scr" hidden>
+    <h2 class="scr-title" id="ladTitle"></h2>
+    <div class="scr-sub" id="ladSub"></div>
+    <div class="ladder" id="ladder"></div>
+    <div class="sel-bottom">
+      <button type="button" class="back" id="ladBack">انسحاب <small dir="ltr">Esc</small></button>
+      <button type="button" class="go" id="ladGo">العب! <small dir="ltr">Enter</small></button>
+    </div>
+  </section>
+
+  <!-- ================= SHOP ================= -->
+  <section id="scrShop" class="scr" hidden>
+    <h2 class="scr-title">المتجر 🛒</h2>
+    <div class="shop-coins"><span class="coin"></span><b id="shopCoins">0</b></div>
+    <div class="shop-tabs">
+      <button type="button" class="tab" data-tab="balls">الكرات</button>
+      <button type="button" class="tab" data-tab="courts">الملاعب</button>
+    </div>
+    <div class="shop-grid" id="shopGrid"></div>
+    <div class="scr-sub small">اربح العملات من كل مباراة: كل سلة وكل فوز!</div>
+    <div class="sel-bottom"><button type="button" class="back" id="shopBack">رجوع <small dir="ltr">Esc</small></button></div>
+  </section>
+
+  <!-- ================= HUD BUTTON ================= -->
+  <button type="button" id="pauseBtn" class="hbtn" hidden aria-label="إيقاف">⏸</button>
+
+  <!-- ================= PAUSE ================= -->
+  <section id="scrPause" class="scr dim" hidden>
+    <div class="panel">
+      <h2>توقّف مؤقت</h2>
+      <div class="col">
+        <button type="button" class="pbtn go" id="pResume">متابعة <small dir="ltr">P</small></button>
+        <button type="button" class="pbtn" id="pRestart">إعادة المباراة <small dir="ltr">R</small></button>
+        <button type="button" class="pbtn back" id="pMenu">القائمة الرئيسية</button>
+      </div>
+      <div class="pkeys" id="pauseKeys"></div>
+    </div>
+  </section>
+
+  <!-- ================= CONFIRM ================= -->
+  <section id="scrConfirm" class="scr dim" hidden>
+    <div class="panel">
+      <h2 id="cfText">هل أنت متأكد؟</h2>
+      <div class="row">
+        <button type="button" class="pbtn go" id="cfYes">نعم</button>
+        <button type="button" class="pbtn" id="cfNo">لا</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= RESULTS ================= -->
+  <section id="scrResult" class="scr dim" hidden>
+    <div class="panel result">
+      <div class="res-banner" id="resBanner">فزت!</div>
+      <div class="res-heads">
+        <div class="rh"><canvas id="resHead0" width="150" height="150"></canvas><div class="rn" id="resName0"></div></div>
+        <div class="res-score" dir="ltr"><span id="resS0">0</span><i>-</i><span id="resS1">0</span></div>
+        <div class="rh"><canvas id="resHead1" width="150" height="150"></canvas><div class="rn" id="resName1"></div></div>
+      </div>
+      <div class="res-stats" id="resStats"></div>
+      <div class="res-coins" id="resCoins"></div>
+      <div class="res-unlock" id="resUnlock" hidden></div>
+      <div class="row">
+        <button type="button" class="pbtn go" id="rAgain">العب مجددًا <small dir="ltr">Enter</small></button>
+        <button type="button" class="pbtn" id="rMenu">القائمة <small dir="ltr">Esc</small></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TROPHY ================= -->
+  <section id="scrTrophy" class="scr dim" hidden>
+    <div class="panel trophy">
+      <div class="res-banner gold">بطل البطولة!</div>
+      <canvas id="trophyCv" width="260" height="260"></canvas>
+      <div class="tr-text" id="trText"></div>
+      <div class="res-unlock" id="trUnlock"></div>
+      <div class="row"><button type="button" class="pbtn go" id="trOk">رائع! <small dir="ltr">Enter</small></button></div>
+    </div>
+  </section>
+
+  <div id="toast" hidden></div>
+</div>
+
+<script src="../../shared/kit.js"></script>
+<script src="chars.js"></script>
+<script src="data.js"></script>
+<script src="audio.js"></script>
+<script src="engine.js"></script>
+<script src="render.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
