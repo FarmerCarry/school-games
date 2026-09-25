@@ -41,7 +41,9 @@
       var r = world.ensureRow(y);
       return r.t[x] !== T.WALL && r.t[x] !== T.SPIKE;
     }
-    function lock(x, y) { if (x >= 0 && x < W) world.ensureRow(y).lock[x] = 1; }
+    // lock levels: 1 = keep as a plain wall, 3 = stopper the climb depends on
+    // (never turned into spikes or anything else, not even by later hops)
+    function lock(x, y, v) { if (x >= 0 && x < W) { var r = world.ensureRow(y); r.lock[x] = Math.max(r.lock[x], v || 1); } }
     // Carve a dead-end side pocket (for a bat) only if it touches nothing but
     // the path cell it hangs off: every cell must be a plain unlocked wall and
     // every other neighbour must stay wall, so no route or stopper changes.
@@ -85,7 +87,7 @@
       var s = nx > ax ? 1 : -1, row = [];
       for (x = ax; x !== nx + s; x += s) { carve(x, ny, I.DOT); row.push([x, ny]); }
       // stopper walls
-      lock(ax, ny - 1); lock(ax - s, ny); lock(nx + s, ny); lock(nx, ny + 1);
+      lock(ax, ny - 1, 3); lock(nx + s, ny, 3); lock(ax - s, ny); lock(nx, ny + 1);
 
       var rowLen = row.length, interior = row.slice(1, -1);
 
@@ -156,7 +158,7 @@
       // "don't press down here!" spikes under the corridor end (later on)
       if (h > 120 && chance(0.25 * d)) {
         var er = world.ensureRow(ny + 1);
-        if (er.t[nx] === T.WALL) { er.t[nx] = T.SPIKE; er.lock[nx] = 2; }
+        if (er.t[nx] === T.WALL && er.lock[nx] < 3) { er.t[nx] = T.SPIKE; er.lock[nx] = 2; }
       }
 
       gen.ax = nx; gen.ay = ny; gen.topY = ny - 1; gen.hops++;

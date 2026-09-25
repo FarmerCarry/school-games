@@ -12,6 +12,8 @@
   var C = window.MDCore, T = C.T, I = C.I, TM = C.TIMING, LEVELS = window.MD_LEVELS, MK = window.MDMasks;
   var W = 1280, H = 720, COLS = 13;
   var DASH_SPEED = 24; // tiles per second
+  var COIN_VALUE = 5;  // one coin pickup = 5 coins (x2 with the doubler)
+  var STAR_BONUS = 10; // coins for every star earned for the first time
 
   /* ------------------------------------------------------------ setup */
   var canvas = document.getElementById('game');
@@ -446,7 +448,7 @@
       sfx.dot(G.dotsInDash);
       if (fx.list.length < 500) fx.burst(px, py, { count: 3, color: G.pal.dot, speed: 90, life: 0.25, size: 4, gravity: 0 });
     } else if (it === I.COIN) {
-      var v = G.doubleT > 0 ? 2 : 1;
+      var v = (G.doubleT > 0 ? 2 : 1) * COIN_VALUE;
       G.coinsGot += v;
       sfx.coin();
       fx.burst(px, py, { count: 12, colors: ['#ffd400', '#fff6a8', '#ff9a1f'], speed: 220, life: 0.5, size: 6, gravity: 300 });
@@ -1277,8 +1279,10 @@
     var bits = (got[0] ? 1 : 0) | (got[1] ? 2 : 0) | (got[2] ? 4 : 0);
     var starsBefore = totalStars();
     var newBestTime = !prev.t || G.time < prev.t;
+    var newStars = bits & ~(prev.s | 0), starBonus = 0;
+    for (var sb = 0; sb < 3; sb++) if (newStars & (1 << sb)) starBonus += STAR_BONUS;
     save.lv[n] = { done: 1, s: (prev.s | bits), t: newBestTime ? Math.round(G.time * 10) / 10 : prev.t };
-    save.coins += G.coinsGot;
+    save.coins += G.coinsGot + starBonus;
     persist();
     checkMaskUnlocks(starsBefore, totalStars(), -1);
     if (!prev.done && n % 10 === 0 && n < LEVELS.length) toast('فتحت عالمًا جديدًا: ' + WORLDS[n / 10].name + '!');
@@ -1288,7 +1292,8 @@
     $('win-par-lbl').textContent = 'أسرع من ' + fmtTime(G.def.par);
     var starEls = document.querySelectorAll('#win-stars .md-star');
     Array.prototype.forEach.call(starEls, function (el) { el.classList.remove('on'); });
-    $('win-stats').innerHTML = 'النقاط: <b>' + G.dotsGot + '/' + G.dotsTotal + '</b> · الوقت: <b dir="ltr">' + fmtTime(G.time) + '</b> · العملات: <b>' + G.coinsGot + '</b>';
+    $('win-stats').innerHTML = 'النقاط: <b>' + G.dotsGot + '/' + G.dotsTotal + '</b> · الوقت: <b dir="ltr">' + fmtTime(G.time) + '</b> · العملات: <b>' + G.coinsGot + '</b>' +
+      (starBonus ? '<br>مكافأة النجوم الجديدة: <b>+' + starBonus + '</b> <span class="md-coin-ico"></span>' : '');
     var nb = $('win-new');
     if (prev.done && newBestTime) { nb.hidden = false; nb.textContent = 'أفضل وقت جديد!'; }
     else nb.hidden = true;
@@ -1333,13 +1338,14 @@
     save.runs++;
     if (isBest) save.bestScore = score;
     if (G.maxHeight > save.bestH) save.bestH = G.maxHeight;
-    save.coins += G.coinsGot;
+    var hBonus = Math.floor(G.maxHeight / 5);
+    save.coins += G.coinsGot + hBonus;
     persist();
     checkMaskUnlocks(-1, -1, hBefore);
     $('over-title').textContent = G.deathKind === 'goo' ? 'ابتلعك الهلام!' : 'أوه! أصابك خطر!';
     $('over-score').textContent = Kit.fmt(score);
     $('over-new').hidden = !isBest || score <= 0;
-    $('over-stats').innerHTML = 'الارتفاع: <b>' + G.maxHeight + ' م</b> · النقاط: <b>' + G.dotsGot + '</b> · العملات: <b>' + G.coinsGot + '</b><br>أفضل نتيجة: <b>' + Kit.fmt(save.bestScore) + '</b> · أعلى ارتفاع: <b>' + save.bestH + ' م</b>';
+    $('over-stats').innerHTML = 'الارتفاع: <b>' + G.maxHeight + ' م</b> · النقاط: <b>' + G.dotsGot + '</b> · العملات: <b>' + (G.coinsGot + hBonus) + '</b> <span class="md-coin-ico"></span><br>أفضل نتيجة: <b>' + Kit.fmt(save.bestScore) + '</b> · أعلى ارتفاع: <b>' + save.bestH + ' م</b>';
     if (isBest && score > 0) { setTimeout(function () { confetti(); }, 200); }
     else sfx.lose();
     showScreen('over');

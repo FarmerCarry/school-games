@@ -9,14 +9,14 @@
   // unlock: { coins: n } or { stars: n } or { height: n }
   var list = [
     { id: 0, name: 'البطل الأصفر', body: '#ffe600', dark: '#b88a00', unlock: { coins: 0 } },
-    { id: 1, name: 'النينجا', body: '#3a3f8f', dark: '#1d2150', unlock: { coins: 60 } },
-    { id: 2, name: 'الضفدع', body: '#5ee84a', dark: '#2b8f1f', unlock: { coins: 120 } },
-    { id: 3, name: 'القط', body: '#ff9a2e', dark: '#b85a00', unlock: { coins: 180 } },
-    { id: 4, name: 'الروبوت', body: '#c9d3e6', dark: '#6f7d99', unlock: { coins: 250 } },
-    { id: 5, name: 'البطريق', body: '#2a2d3a', dark: '#11131a', unlock: { coins: 320 } },
-    { id: 6, name: 'الفضائي', body: '#b6ff3a', dark: '#5f9900', unlock: { coins: 400 } },
-    { id: 7, name: 'الأخطبوط', body: '#ff6fcf', dark: '#b0287f', unlock: { coins: 480 } },
-    { id: 8, name: 'التنين', body: '#9d5cff', dark: '#5a22b0', unlock: { coins: 580 } },
+    { id: 1, name: 'النينجا', body: '#3a3f8f', dark: '#1d2150', unlock: { coins: 50 } },
+    { id: 2, name: 'الضفدع', body: '#5ee84a', dark: '#2b8f1f', unlock: { coins: 100 } },
+    { id: 3, name: 'القط', body: '#ff9a2e', dark: '#b85a00', unlock: { coins: 150 } },
+    { id: 4, name: 'الروبوت', body: '#c9d3e6', dark: '#6f7d99', unlock: { coins: 220 } },
+    { id: 5, name: 'البطريق', body: '#2a2d3a', dark: '#11131a', unlock: { coins: 300 } },
+    { id: 6, name: 'الفضائي', body: '#b6ff3a', dark: '#5f9900', unlock: { coins: 380 } },
+    { id: 7, name: 'الأخطبوط', body: '#ff6fcf', dark: '#b0287f', unlock: { coins: 470 } },
+    { id: 8, name: 'التنين', body: '#9d5cff', dark: '#5a22b0', unlock: { coins: 570 } },
     { id: 9, name: 'البطيخة', body: '#ff4d5e', dark: '#2f9e3a', unlock: { coins: 700 } },
     { id: 10, name: 'الملك', body: '#ffcf3a', dark: '#b07a00', unlock: { stars: 60 } },
     { id: 11, name: 'قوس قزح', body: '#ff4d9d', dark: '#8a2ad0', unlock: { height: 200 } }
