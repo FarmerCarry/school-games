@@ -361,6 +361,8 @@
     $('pbar-n').style.width = bn + '%'; $('pbar-n-t').textContent = bn + '%';
     $('pbar-p').style.width = bp + '%'; $('pbar-p-t').textContent = bp + '%';
     $('b-toggle-practice').textContent = G.practice ? 'الوضع العادي' : 'وضع التدريب';
+    var rt = G.practice && G.cps.length ? 'من نقطة الحفظ' : 'من البداية';
+    $('b-restart').textContent = rt; $('pause-r-t').textContent = rt;
   }
   function resumeGame() {
     if (!G.paused) return;
@@ -396,6 +398,7 @@
     if (G.practice) nb.textContent = 'العبها بجدّ!';
     else nb.textContent = next ? 'المرحلة التالية' : 'العب مجددًا';
     $('b-win-again').textContent = G.practice ? 'تدرّب مجددًا' : 'العب مجددًا';
+    $('win-enter-t').textContent = G.practice ? 'العبها بجدّ' : next ? 'التالي' : 'مجددًا';
     $('b-win-again').style.display = (!G.practice && !next) ? 'none' : '';
   }
   function unlockRow(u) {
@@ -509,6 +512,8 @@
         burst(W / 2, 250, 40, { speed: 520, life: 1.1, size: 12, colors: ['#ffe14d', '#ff5ad1', '#3df2ff', '#7dff5a'], g: 700, screen: true, shape: 4 });
       }
     } else if (!G.practice && p >= 85) popup('قريب جدًا!', p + '%', '#ff8ad8');
+    // stuck? point kids at practice mode (every 12 tries in a row)
+    if (!G.practice && G.sessionAtt % 12 === 0) toast('صعبة؟ جرّب وضع التدريب: اضغط P ثم «وضع التدريب»');
   }
 
   function popup(big, small, col) { G.popups.push({ big: big, small: small, col: col, t: 0, life: 1.6 }); }

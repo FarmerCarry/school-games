@@ -108,7 +108,7 @@ button { font-family: var(--sg-font); }
 .lv:hover:not(.locked), .lv.focus:not(.locked) { transform: translateY(-3px) scale(1.06); }
 .lv.focus { outline: 4px solid #ffffff; outline-offset: 3px; }
 .lv .num { font-size: 36px; }
-.lv .stars { font-size: 19px; letter-spacing: 1px; margin-top: 4px; direction: ltr; }
+.lv .stars { font-size: 19px; letter-spacing: 1px; margin-top: 4px; direction: rtl; }
 .lv .stars i { font-style: normal; opacity: 0.25; }
 .lv .stars i.on { opacity: 1; color: #ffffff; -webkit-text-stroke: 2px currentColor; }
 .lv .best { font-size: 13px; font-weight: 500; margin-top: 4px; }
@@ -150,7 +150,7 @@ button { font-family: var(--sg-font); }
 .win-lvl { font-size: 20px; color: #54456a; font-weight: 700; }
 .win-sub { font-size: 21px; margin-bottom: 6px; }
 .win-sub.small { font-size: 17px; color: #54456a; margin-top: 10px; }
-.stars3 { font-size: 78px; line-height: 1; margin: 2px 0 6px; direction: ltr; }
+.stars3 { font-size: 78px; line-height: 1; margin: 2px 0 6px; direction: rtl; }
 .stars3 .st { display: inline-block; color: #d8cfe3; -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill; margin: 0 4px; }
 .stars3 .st.on { color: #ffc400; animation: starpop .45s cubic-bezier(.2, 1.8, .5, 1) both; }
 .stars3 #st2 { font-size: 96px; }

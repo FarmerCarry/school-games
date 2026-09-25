@@ -85,6 +85,7 @@
   var round = null;
   var cellId = 0, ownerId = 0;
   var anyDead = false;
+  var autoMode = null; // debug autoplay only
 
   /* ---------------------------------------------------------------- pellets (spatial hash) */
   var MAXP = 4000;
@@ -332,7 +333,7 @@
     T += dt;
     var i, j, c, o;
     // player steering
-    if (player && player.alive && state === 'play') {
+    if (player && player.alive && state === 'play' && !autoMode) {
       player.tx = cam.x + (ptr.x - W / 2) / cam.z;
       player.ty = cam.y + (ptr.y - H / 2) / cam.z;
     }
@@ -1408,6 +1409,26 @@
     unlockAll: function () { stats.best = 99999; ['rounds', 'roundEaten', 'virusPops', 'splitEats', 'maxTime', 'kings', 'eatenTotal', 'virusShots', 'pellets', 'arena2', 'arena3', 'kingTime', 'bestA3'].forEach(function (k) { stats[k] = 99999; }); saveStats(); checkUnlocks(); refreshTitle(); },
     arena: function (i) { arenaIdx = i; store.set('arena', i); if (state === 'title') { buildWorld(false); refreshTitle(); } },
     split: function () { return player ? splitOwner(player, player.tx, player.ty) : 0; },
-    nearestVirus: function () { if (!player || !player.alive) return null; var c = player.cells[0], v = viruses[0]; c.x = v.x + 5; c.y = v.y; return true; }
+    nearestVirus: function () { if (!player || !player.alive) return null; var c = player.cells[0], v = viruses[0]; c.x = v.x + 5; c.y = v.y; return true; },
+    // debug: auto-play whole rounds headlessly. mode 'naive' = only chases food, 'bot' = uses the bot brain.
+    auto: function (mode, rounds, maxSec) {
+      var out = [];
+      for (var r = 0; r < rounds; r++) {
+        startGame(); autoMode = mode; var t0 = T, nextT = 0, peak = 0;
+        while (state === 'play' && T - t0 < maxSec) {
+          if (T >= nextT) {
+            nextT = T + 0.2;
+            if (mode === 'naive') { ownerCenter(player, tmpC); var f = findFood(player, tmpC.x, tmpC.y, 400); if (f >= 0) { player.tx = pX[f]; player.ty = pY[f]; } }
+            else { player.smart = 0.5; player.aggro = 0.3; player.hate = 1; think(player); }
+          }
+          sim(1 / 60); fxUpdate(1 / 60); updateCam(1 / 60);
+          if (player.mass > peak) peak = player.mass;
+        }
+        out.push({ t: Math.round(T - t0), peak: Math.round(peak), eaten: round.eaten, rank: round.bestRank, dead: state !== 'play', by: round.killer ? Math.round(round.killer.mass) : 0 });
+        autoMode = null; state = 'play';
+      }
+      toMenu();
+      return out;
+    }
   };
 })();

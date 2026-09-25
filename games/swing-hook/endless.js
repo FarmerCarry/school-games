@@ -18,7 +18,7 @@
   }
 
   function createLevel(seed, gentle) {
-    var L = Sim.build({ name: 'Endless', endless: true, start: [150, 450], finish: 1e9, sea: 900, hooks: [[420, 320]] });
+    var L = Sim.build({ name: 'بلا نهاية', endless: true, start: [150, 450], finish: 1e9, sea: 900, hooks: [[420, 320]] });
     var g = { x: 420, y: 320, r: rng(seed || 1), n: 0, gentle: !!gentle, last: '' };
     L.gen = g;
     return L;

@@ -85,7 +85,7 @@
 
   <!-- title -->
   <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
-    <text x="200" y="376" font-size="56" fill="#1d2340" stroke="#1d2340" stroke-width="14" stroke-linejoin="round">معركة الهلام</text>
-    <text x="200" y="370" font-size="56" fill="#ffd23f" stroke="#1d2340" stroke-width="3" stroke-linejoin="round">معركة الهلام</text>
+    <text x="200" y="377" font-size="58" fill="#1d2340" stroke="#1d2340" stroke-width="16" stroke-linejoin="round">معركة الهلام</text>
+    <text x="200" y="370" font-size="58" fill="#ffd23f" stroke="#1d2340" stroke-width="9" stroke-linejoin="round" paint-order="stroke">معركة الهلام</text>
   </g>
 </svg>

@@ -293,7 +293,7 @@
         } else say(K.pick(TAUNT), 1.3);
         var skin = Art.skinById(save.skin);
         fx.burst(d.x, d.y, { count: 22, colors: [skin.body, pal.ink, '#ffffff'], speed: 420, life: 0.7, size: 9, gravity: 900 });
-        fx.burst(d.x, d.y, { count: 10, color: '#ff4d6d', speed: 260, life: 0.5, size: 6, gravity: 400 });
+        fx.burst(d.x, d.y, { count: 10, colors: ['#ffe14d', '#ffffff'], speed: 260, life: 0.5, size: 6, gravity: 400 });
         shake.add(demo ? 5 : 11);
         game.flash = 0.35; game.flashC = '#ffffff';
         break;
@@ -467,6 +467,8 @@
     startLevel(game.li + 1);
   }
   document.addEventListener('visibilitychange', function () { if (document.hidden && mode === 'play') pause(); });
+  // Clicking outside the game frame steals the keyboard: pause instead of leaving the hero idle.
+  window.addEventListener('blur', function () { if (mode === 'play' && !game.auto) pause(); });
 
   /* ----------------------------------------------------- buttons */
   function on(id, fn) {

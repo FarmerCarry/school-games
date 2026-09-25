@@ -639,7 +639,7 @@
     G.world = world;
     if (!rend) { rend = new BW.Renderer(world); rend.doorOpen = function (x, y) { return !!G.openDoors[x + ',' + y]; }; }
     else rend.setWorld(world);
-    G.items = []; G.openDoors = {};
+    G.items = []; G.openDoors = {}; guide = null;
     for (var i = 0; i < PMAX; i++) parts[i].on = false;
     texts.length = 0;
   }
@@ -818,7 +818,7 @@
       updateWorldSim(dt);
       updateDoors();
       updateExplore();
-      G.questT -= dt; if (G.questT <= 0) { G.questT = 0.4; checkQuests(); if (G.mode === 'inv') { nearStations(); } }
+      G.questT -= dt; if (G.questT <= 0) { G.questT = 0.4; checkQuests(); if (G.mode === 'inv') { nearStations(); } updateGuide(); }
       G.saveT += dt; if (G.saveT > 30) { G.saveT = 0; saveGame(); }
       // camera
       var tcx = P.x + P.w / 2 - VTW / 2 + P.face * 1.2, tcy = P.y + P.h / 2 - VTH / 2 - 0.5;
@@ -962,7 +962,55 @@
       ctx.fillStyle = 'rgba(255,255,255,' + (k * 0.5) + ')';
       ctx.fillRect(sx(placePop.x, cx) - k * 3, sx(placePop.y, cy) - k * 3, TS + k * 6, TS + k * 6);
     }
+    drawGuide(ctx, cx, cy);
     drawParticles(ctx, cx, cy, false);
+  }
+  // ---- beginner guide: arrow to the nearest tree while "chop a tree" is the current quest
+  var guide = null;
+  function currentQuest() { var qs = questsFor(G.gm); for (var i = 0; i < qs.length; i++) if (!G.done[qs[i].id]) return qs[i]; return null; }
+  // Quests that are finished by crafting something: which recipe output they need.
+  var QUEST_RECIPE = { planks: B.PLANKS, table: B.TABLE, pickwood: I.PICK_WOOD, pickstone: I.PICK_STONE, torch: B.TORCH, furnace: B.FURNACE,
+    copper: I.COPPER_INGOT, iron: I.IRON_INGOT, pickiron: I.PICK_IRON, glass: B.GLASS, pickdiamond: I.PICK_DIAMOND, diamondblock: B.DIAMOND_BLOCK };
+  function questRecipe() {
+    if (G.gm !== 'survival') return null;
+    var q = currentQuest(), out = q && QUEST_RECIPE[q.id];
+    if (!out) return null;
+    for (var i = 0; i < BW.RECIPES.length; i++) if (BW.RECIPES[i].out === out) return BW.RECIPES[i];
+    return null;
+  }
+  function updateGuide() {
+    guide = null;
+    var q = currentQuest();
+    if (G.gm !== 'survival' || !q || q.id !== 'logs' || !P) return;
+    var wd = G.world, px = Math.floor(P.x + P.w / 2), best = null, bd = 99;
+    for (var dx = -18; dx <= 18; dx++) {
+      var x = px + dx; if (x < 0 || x >= W) continue;
+      // lowest trunk tile of a tree in this column, near the player's height
+      for (var y = Math.max(0, Math.floor(P.y) - 10); y < Math.min(H - 1, Math.floor(P.y) + 8); y++) {
+        if (wd.tiles[y * W + x] === B.TRUNK && wd.tiles[(y + 1) * W + x] !== B.TRUNK) {
+          var d = Math.abs(dx) + Math.abs(y - P.y) * 0.5;
+          if (d < bd) { bd = d; best = { x: x, y: y }; }
+        }
+      }
+    }
+    guide = best;
+  }
+  function drawGuide(ctx, cx, cy) {
+    if (!guide || G.mode !== 'play' || mine.prog > 0) return;
+    var t = G.time, x = sx(guide.x, cx), y = sx(guide.y, cy);
+    if (x < -40 || x > VW + 40 || y < -80 || y > VH + 40) return;
+    var bob = Math.abs(Math.sin(t * 5)) * 10;
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,220,60,' + (0.55 + Math.sin(t * 8) * 0.35) + ')';
+    ctx.strokeRect(x - 1, y - 1, TS + 2, TS + 2);
+    // down arrow above the tile
+    var ax = x + TS / 2, ay = y - 12 - bob;
+    ctx.fillStyle = '#1d2340';
+    ctx.beginPath(); ctx.moveTo(ax - 17, ay - 22); ctx.lineTo(ax + 17, ay - 22); ctx.lineTo(ax, ay + 3); ctx.closePath(); ctx.fill();
+    ctx.fillRect(ax - 8, ay - 44, 16, 24);
+    ctx.fillStyle = '#ffd23a';
+    ctx.beginPath(); ctx.moveTo(ax - 12, ay - 20); ctx.lineTo(ax + 12, ay - 20); ctx.lineTo(ax, ay - 2); ctx.closePath(); ctx.fill();
+    ctx.fillRect(ax - 5, ay - 41, 10, 22);
+    txt(ctx, 'اقطعها!', ax, ay - 52, 18, '#ffe066', 'center');
   }
   function drawTexts(ctx, cx, cy) {
     var i;
@@ -1099,6 +1147,15 @@
     ctx.font = '700 17px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.direction = 'ltr'; ctx.fillStyle = '#1d2340'; ctx.fillText('E', ex + 35, by + 26);
     txt(ctx, 'الصنع', ex + 35, by + 53, 13, '#fff', 'center');
     });
+    // pulse the crafting badge when the current quest's item can be crafted right now
+    var qr = questRecipe();
+    if (qr && hasIngredients(qr) && !(ITEMS[qr.out].max === 1 && countItem(qr.out) > 0)) {
+      var ebx = HB.x + 9 * (HB.s + HB.g) + 18, eby = HB.y - 6, pulse = 0.5 + Math.sin(G.time * 7) * 0.5;
+      ctx.lineWidth = 3 + pulse * 2; ctx.strokeStyle = 'rgba(255,204,0,' + (0.5 + pulse * 0.5) + ')';
+      rrect(ctx, ebx - 2 - pulse * 2, eby - 2 - pulse * 2, 74 + pulse * 4, 66 + pulse * 4, 16); ctx.stroke();
+      ctx.fillStyle = '#ff5a5f'; ctx.beginPath(); ctx.arc(ebx + 66, eby + 2, 11, 0, Math.PI * 2); ctx.fill();
+      txt(ctx, '!', ebx + 66, eby + 9, 17, '#fff', 'center');
+    }
     // selected item name
     var cur = G.inv[G.sel];
     if (G.selName > 0 && cur) { ctx.globalAlpha = Math.min(1, G.selName * 2); txt(ctx, BW.itemName(cur.id), VW / 2, HB.y - 18, 22, '#fff', 'center'); ctx.globalAlpha = 1; }
@@ -1485,10 +1542,11 @@
   function recipeRow(r, idx) {
     var ok = stationOK(r), has = hasIngredients(r), can = ok && has;
     var row = document.createElement('div');
-    row.className = 'crow' + (can ? ' can' : '');
+    var qr = questRecipe(), isQuest = qr === r;
+    row.className = 'crow' + (can ? ' can' : '') + (isQuest ? ' quest' : '');
     var ing = r.ing.map(function (g) { var have = countItem(g[0]); return '<span class="ing' + (have >= g[1] ? ' ok' : '') + '"><img src="' + BW.iconURL(g[0] === BW.FLOWER ? B.FLOWER_RED : g[0]) + '" title="' + BW.itemName(g[0]) + '"><bdi dir="ltr">' + Math.min(have, 99) + '/' + g[1] + '</bdi></span>'; }).join('');
     var st = r.st ? '<span class="need' + (ok ? ' ok' : '') + '"><img src="' + BW.iconURL(r.st === 'table' ? B.TABLE : B.FURNACE) + '">' + (ok ? '' : 'قف قربه') + '</span>' : '';
-    row.innerHTML = '<img class="out" src="' + BW.iconURL(r.out) + '"><div class="cname">' + BW.itemName(r.out) + (r.n > 1 ? ' <small dir="ltr">×' + r.n + '</small>' : '') + '</div><div class="cing">' + ing + st + '</div><button class="cbtn">' + (can ? 'اصنع' : '') + '</button>';
+    row.innerHTML = '<img class="out" src="' + BW.iconURL(r.out) + '"><div class="cname">' + (isQuest ? '<span class="qtag">★ مهمتك</span>' : '') + BW.itemName(r.out) + (r.n > 1 ? ' <small dir="ltr">×' + r.n + '</small>' : '') + '</div><div class="cing">' + ing + st + '</div><button class="cbtn">' + (can ? 'اصنع' : '') + '</button>';
     row.addEventListener('mousedown', function (e) {
       e.preventDefault();
       if (!can) {
@@ -1508,7 +1566,8 @@
     craftEl.innerHTML = '';
     var rows = BW.RECIPES.map(function (r, i) { return { r: r, i: i, can: stationOK(r) && hasIngredients(r), has: hasIngredients(r) }; });
     var wool = rows.filter(function (o) { return o.r.cat === 'wool'; }), rest = rows.filter(function (o) { return o.r.cat !== 'wool'; });
-    rest.sort(function (a, b) { return (b.can - a.can) || (b.has - a.has) || (a.i - b.i); });
+    var qr = questRecipe();
+    rest.sort(function (a, b) { return ((b.r === qr) - (a.r === qr)) || (b.can - a.can) || (b.has - a.has) || (a.i - b.i); });
     rest.forEach(function (o) { craftEl.appendChild(recipeRow(o.r, o.i)); });
     // wool painter row
     var wr = document.createElement('div');

@@ -18,7 +18,9 @@
   var view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: layoutUI });
   var ctx = view.ctx;
   layoutUI(view);
-  Kit.muteButton();
+  var muteBtn = Kit.muteButton();
+  muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
+  muteBtn.title = 'الصوت (M)';
   var store = Kit.store('swing-hook');
   var $ = function (id) { return document.getElementById(id); };
   var FONT = "'Fredoka', 'Segoe UI Rounded', 'Segoe UI', sans-serif";
@@ -38,13 +40,13 @@
 
   /* --------------------------------------------------------------- themes */
   var THEMES = [
-    { name: 'Sunny Park', sky: ['#38b8ff', '#c4f1ff'], sun: '#fff5a0', far: '#9be58a', near: '#52c862', hill: 'round',
+    { name: 'الحديقة المشمسة', sky: ['#38b8ff', '#c4f1ff'], sun: '#fff5a0', far: '#9be58a', near: '#52c862', hill: 'round',
       wall: '#ff9f43', wallTop: '#5ed36a', wallDark: '#d97a2a', sea: '#2f86ff', seaTop: '#8fd0ff', ink: '#23244a', cloud: '#ffffff', tile: '#2fb4ff' },
-    { name: 'Candy Clouds', sky: ['#ff86cc', '#ffe6f5'], sun: '#fffbe0', far: '#ffc6ea', near: '#c796ff', hill: 'round',
+    { name: 'غيوم الحلوى', sky: ['#ff86cc', '#ffe6f5'], sun: '#fffbe0', far: '#ffc6ea', near: '#c796ff', hill: 'round',
       wall: '#8f6bff', wallTop: '#ffffff', wallDark: '#6a47d6', sea: '#8a4dff', seaTop: '#d0b3ff', ink: '#35164f', cloud: '#ffffff', tile: '#ff5fb8' },
-    { name: 'Sunset Canyon', sky: ['#ff5f4a', '#ffd584'], sun: '#fff1a8', far: '#ee8a5c', near: '#c45a3a', hill: 'mesa',
+    { name: 'وادي الغروب', sky: ['#ff5f4a', '#ffd584'], sun: '#fff1a8', far: '#ee8a5c', near: '#c45a3a', hill: 'mesa',
       wall: '#c0633a', wallTop: '#ffcf5c', wallDark: '#8e3f22', sea: '#14b3a6', seaTop: '#7ae8dc', ink: '#3a1c14', cloud: '#ffe8cc', tile: '#ff7a3d' },
-    { name: 'Star Night', sky: ['#120c3a', '#4e2c95'], sun: '#fff6cf', far: '#2c2272', near: '#3d2f98', hill: 'spiky',
+    { name: 'ليلة النجوم', sky: ['#120c3a', '#4e2c95'], sun: '#fff6cf', far: '#2c2272', near: '#3d2f98', hill: 'spiky',
       wall: '#27c6f5', wallTop: '#ffffff', wallDark: '#1784b8', sea: '#2d44d6', seaTop: '#7f95ff', ink: '#0e0a2a', cloud: '#7d6bd0', tile: '#7b5cff', night: true }
   ];
   var WORLD_NAMES = THEMES.map(function (t) { return t.name; });
@@ -53,20 +55,20 @@
 
   /* ---------------------------------------------------------- skins/trails */
   var SKINS = [
-    { name: 'Bubblegum', col: '#ff4fa3', head: '#ffc4e1', acc: 'bow', ac: '#ffe14d', req: 0 },
-    { name: 'Ocean', col: '#1e9bff', head: '#c4e8ff', acc: 'cap', ac: '#ff4a4a', req: 2 },
-    { name: 'Lime', col: '#2fcf5f', head: '#caffd8', acc: 'sprout', ac: '#2fcf5f', req: 5 },
-    { name: 'Sunny', col: '#ffb000', head: '#fff0b0', acc: 'shades', ac: '#23244a', req: 9 },
-    { name: 'Grape', col: '#9b5cff', head: '#e4d2ff', acc: 'ears', ac: '#9b5cff', req: 14 },
-    { name: 'Ninja', col: '#34385a', head: '#4a5078', acc: 'band', ac: '#ff3b3b', req: 20 },
-    { name: 'Robot', col: '#8d9bb8', head: '#dfe6f5', acc: 'antenna', ac: '#ff3b3b', req: 27 },
-    { name: 'Tiger', col: '#ff8a1f', head: '#ffd29e', acc: 'tiger', ac: '#3a1c14', req: 35 },
-    { name: 'Galaxy', col: '#5a3cff', head: '#241556', acc: 'galaxy', ac: '#7ff6ff', req: 46 },
-    { name: 'Golden', col: '#ffc21a', head: '#fff3b0', acc: 'crown', ac: '#ffd21f', req: 60 }
+    { name: 'علكة', col: '#ff4fa3', head: '#ffc4e1', acc: 'bow', ac: '#ffe14d', req: 0 },
+    { name: 'بحر', col: '#1e9bff', head: '#c4e8ff', acc: 'cap', ac: '#ff4a4a', req: 2 },
+    { name: 'ليمون', col: '#2fcf5f', head: '#caffd8', acc: 'sprout', ac: '#2fcf5f', req: 5 },
+    { name: 'شمسي', col: '#ffb000', head: '#fff0b0', acc: 'shades', ac: '#23244a', req: 9 },
+    { name: 'عنب', col: '#9b5cff', head: '#e4d2ff', acc: 'ears', ac: '#9b5cff', req: 14 },
+    { name: 'نينجا', col: '#34385a', head: '#4a5078', acc: 'band', ac: '#ff3b3b', req: 20 },
+    { name: 'روبوت', col: '#8d9bb8', head: '#dfe6f5', acc: 'antenna', ac: '#ff3b3b', req: 27 },
+    { name: 'نمر', col: '#ff8a1f', head: '#ffd29e', acc: 'tiger', ac: '#3a1c14', req: 35 },
+    { name: 'مجرّة', col: '#5a3cff', head: '#241556', acc: 'galaxy', ac: '#7ff6ff', req: 46 },
+    { name: 'ذهبي', col: '#ffc21a', head: '#fff3b0', acc: 'crown', ac: '#ffd21f', req: 60 }
   ];
   var TRAILS = [
-    { name: 'Swoosh', req: 0 }, { name: 'Rainbow', req: 3 }, { name: 'Fire', req: 7 }, { name: 'Bubbles', req: 12 },
-    { name: 'Candy', req: 18 }, { name: 'Neon', req: 24 }, { name: 'Sparkle', req: 32 }, { name: 'Golden', req: 42 }
+    { name: 'نسيم', req: 0 }, { name: 'قوس قزح', req: 3 }, { name: 'نار', req: 7 }, { name: 'فقاعات', req: 12 },
+    { name: 'حلوى', req: 18 }, { name: 'نيون', req: 24 }, { name: 'بريق', req: 32 }, { name: 'ذهب', req: 42 }
   ];
   if (save.skin >= SKINS.length || SKINS[save.skin].req > totalStars()) save.skin = 0;
   if (save.trail >= TRAILS.length || TRAILS[save.trail].req > totalStars()) save.trail = 0;
@@ -245,7 +247,7 @@
       var sc = (p.t < 0.15 ? 0.3 + 1.0 * k : 1.3 - Math.min(0.3, (p.t - 0.15) * 2)) / z;
       c.save(); c.translate(p.x, p.y); c.scale(sc, sc); c.rotate(-0.06);
       c.globalAlpha = p.t > p.life - 0.3 ? (p.life - p.t) / 0.3 : 1;
-      c.font = '700 ' + p.size + 'px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = '700 ' + p.size + 'px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
       c.lineJoin = 'round'; c.lineWidth = 9; c.strokeStyle = '#2a1747'; c.strokeText(p.text, 0, 0);
       c.fillStyle = p.color; c.fillText(p.text, 0, 0);
       c.restore();
@@ -267,6 +269,16 @@
   var endlessBestShown = false, endlessStartX = 150;
   var tutorialRelease = false;
   var flashT = 0, pruneN = 0;
+  var tries = 1;            // attempts on the current level (shown after a fall)
+
+  // Arabic counting words for flips: 1 شقلبة واحدة, 2 شقلبتان, 3-10 شقلبات, 11+ شقلبة
+  function flipCount(n) {
+    if (n === 1) return 'شقلبة واحدة';
+    if (n === 2) return 'شقلبتان';
+    return n + (n >= 3 && n <= 10 ? ' شقلبات' : ' شقلبة');
+  }
+  // "5 / 72" kept in left-to-right order inside Arabic text
+  function frac(a, b) { return '<bdi dir="ltr">' + a + ' / ' + b + '</bdi>'; }
 
   /* ----------------------------------------------------------------- input */
   function inUI(e) { return e.target && e.target.closest && e.target.closest('button, .scr'); }
@@ -370,6 +382,7 @@
     useLevel(Sim.build(LEVELS[i]));
     needFresh = holdInput();
     tutorialRelease = i < 2;
+    tries = 1;
     setMode('play');
   }
   function startEndless() {
@@ -394,12 +407,14 @@
   function restart() {
     if (endless) { startEndless(); return; }
     useLevel(Sim.build(LEVELS[lvl]));
+    tries++;
     needFresh = holdInput();
     setMode('play');
   }
   function respawn() {
     // quick respawn after a bonk / splash
     useLevel(Sim.build(LEVELS[lvl]));
+    tries++;
     needFresh = holdInput();
   }
 
@@ -437,7 +452,7 @@
           P('ring', e.x, e.y, 0, 0, 0.35, 26, '#fff', 0);
           shake.add(e.kind === 'bumper' ? 5 : 7);
           kick(-7);
-          if (loud && Math.random() < 0.55) popup(e.kind === 'bumper' ? 'BONK!' : 'BOING!', e.x, e.y - 50, '#ff8ad0', 30);
+          if (loud && Math.random() < 0.55) popup(e.kind === 'bumper' ? 'طاخ!' : 'بوينغ!', e.x, e.y - 50, '#ff8ad0', 30);
           break;
         case 'thud':
           if (loud) sfx.thud(e.v);
@@ -447,8 +462,8 @@
           break;
         case 'flip':
           if (loud) sfx.flip(e.combo);
-          var names = ['', 'FLIP!', 'DOUBLE FLIP!', 'TRIPLE FLIP!', 'QUAD FLIP!!', 'MEGA FLIP!!'];
-          var txt = e.loop ? 'LOOP-DE-LOOP!' : (names[e.combo] || ('SUPER x' + e.combo + '!!'));
+          var names = ['', 'شقلبة!', 'شقلبة مزدوجة!', 'شقلبة ثلاثية!', 'شقلبة رباعية!!', 'شقلبة خارقة!!'];
+          var txt = e.loop ? 'دورة كاملة!' : (names[e.combo] || (flipCount(e.combo) + '!!'));
           var cols = ['#ffe14d', '#7ff6ff', '#9dff6b', '#ff8ad0', '#ffb000'];
           popup(txt, e.x, e.y - 60, cols[(e.combo - 1) % cols.length], 30 + Math.min(e.combo, 4) * 4);
           burst(e.x, e.y, 10 + e.combo * 4, { type: 'star', colors: ['#ffe14d', '#fff', '#7ff6ff'], speed: 320, life: 0.6, size: 7, g: 200 });
@@ -458,28 +473,28 @@
           burst(e.x, e.y, 22, { type: 'star', colors: ['#ffe14d', '#ffb000', '#fff'], speed: 420, life: 0.6, size: 8, g: 0, drag: 0.93 });
           P('ring', e.x, e.y, 0, 0, 0.45, 50, '#ffe14d', 0);
           shake.add(5); kick(6);
-          if (loud) popup('ZOOM!', e.x, e.y - 80, '#ffe14d', 34);
+          if (loud) popup('سرعة خارقة!', e.x, e.y - 80, '#ffe14d', 34);
           break;
         case 'die':
           if (e.kind === 'splash') {
             if (loud) sfx.splash();
             burst(e.x, L.sea - 20, 30, { type: 'dot', colors: [theme.seaTop, '#fff', theme.sea], speed: 520, angle: -Math.PI / 2, spread: 1.4, life: 0.9, size: 9, g: 1400 });
             P('ring', e.x, L.sea - 20, 0, 0, 0.5, 40, '#fff', 0);
-            if (loud) popup('SPLASH!', e.x, L.sea - 140, '#7ff6ff', 38);
+            if (loud) popup('طرطشة!', e.x, L.sea - 140, '#7ff6ff', 38);
           } else {
             if (loud) sfx.poof();
             burst(e.x, e.y, 26, { type: 'puff', colors: ['#fff', '#f1e8ff', '#ffe6f3'], speed: 260, life: 0.7, size: 12, g: -60, drag: 0.9 });
             burst(e.x, e.y, 14, { type: 'star', colors: ['#ffe14d', SKINS[save.skin].col], speed: 420, life: 0.7, size: 8, g: 500 });
-            if (loud) popup('POOF!', e.x, e.y - 70, '#fff', 40);
+            if (loud) popup('بوف!', e.x, e.y - 70, '#fff', 40);
           }
           shake.add(12);
-          if (loud && !L.endless && e.x > L.finish - 450) popup('SO CLOSE!', e.x, e.y - 130, '#ffe14d', 36);
+          if (loud && !L.endless && e.x > L.finish - 450) popup('اقتربت جدًّا!', e.x, e.y - 130, '#ffe14d', 36);
           break;
         case 'win':
           if (loud) sfx.win();
           confetti(e.x, e.y, 70);
           shake.add(8);
-          if (loud) popup('FINISH!', e.x, e.y - 90, '#ffe14d', 48);
+          if (loud) popup('وصلت!', e.x, e.y - 90, '#ffe14d', 48);
           break;
       }
     }
@@ -521,8 +536,8 @@
         if (kp('Enter') || kp('Space')) $('btnPlay').click();
       } else if (mode === 'levels') {
         if (kp('Escape')) $('lvBack').click();
-        else if (kp('ArrowLeft')) $('lvPrev').click();
-        else if (kp('ArrowRight')) $('lvNext').click();
+        else if (kp('ArrowLeft')) $('lvNext').click();
+        else if (kp('ArrowRight')) $('lvPrev').click();
         else if (kp('Enter')) playNext();
       } else if (mode === 'style') {
         if (kp('Escape')) $('stBack').click();
@@ -550,12 +565,12 @@
         var eti = Math.floor(dist() / 250) % THEMES.length;
         if (THEMES[eti] !== theme) {
           theme = THEMES[eti]; flashT = 0.4;
-          popup(theme.name.toUpperCase() + '!', w.x + 120, w.y - 130, '#fff', 44);
+          popup(theme.name + '!', w.x + 120, w.y - 130, '#fff', 44);
           sfx.ring();
         }
       }
       if (!attract && !endlessBestShown && save.endless > 0 && dist() > save.endless) {
-        endlessBestShown = true; popup('NEW BEST!', w.x, w.y - 90, '#ffe14d', 44); sfx.unlock(); confetti(w.x, w.y, 40);
+        endlessBestShown = true; popup('رقم قياسي جديد!', w.x, w.y - 90, '#ffe14d', 44); sfx.unlock(); confetti(w.x, w.y, 40);
       }
     }
 
@@ -844,9 +859,9 @@
       var a = 0.75 + Math.sin(time * 6) * 0.25;
       c.save(); c.translate(w.x, w.y - 78 + Math.sin(time * 5) * 4); c.scale(1 / cam.z * 0.9, 1 / cam.z * 0.9);
       c.globalAlpha = a;
-      c.font = '700 30px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.lineWidth = 8; c.strokeStyle = '#2a1747'; c.strokeText('HOLD TO GO!', 0, 0);
-      c.fillStyle = '#ffe14d'; c.fillText('HOLD TO GO!', 0, 0);
+      c.font = '700 30px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
+      c.lineJoin = 'round'; c.lineWidth = 8; c.strokeStyle = '#2a1747'; c.strokeText('اضغط مطولًا لتنطلق!', 0, 0);
+      c.fillStyle = '#ffe14d'; c.fillText('اضغط مطولًا لتنطلق!', 0, 0);
       c.restore(); c.globalAlpha = 1;
     }
     if (tutorialRelease && w.hook && w.st === 'play' && !attract) {
@@ -854,9 +869,9 @@
       var good = w.vx > 150 && va > 0.35 && va < 1.3 && w.x > w.hook.cx;
       if (good) {
         c.save(); c.translate(w.x + 20, w.y - 70); c.scale(1.2 / cam.z, 1.2 / cam.z); c.rotate(-0.08);
-        c.font = '700 34px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle';
-        c.lineWidth = 9; c.strokeStyle = '#2a1747'; c.strokeText('LET GO!', 0, 0);
-        c.fillStyle = '#7ff6ff'; c.fillText('LET GO!', 0, 0);
+        c.font = '700 34px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
+        c.lineJoin = 'round'; c.lineWidth = 9; c.strokeStyle = '#2a1747'; c.strokeText('اتركه الآن!', 0, 0);
+        c.fillStyle = '#7ff6ff'; c.fillText('اتركه الآن!', 0, 0);
         c.restore();
       }
     }
@@ -900,8 +915,8 @@
     for (i = 0; i <= 8; i++) c.lineTo(i * 17, Math.sin(time * 6 - i * 0.7) * 6 * i / 8);
     for (i = 8; i >= 0; i--) c.lineTo(i * 17, 70 + Math.sin(time * 6 - i * 0.7) * 6 * i / 8);
     c.closePath(); c.fill();
-    c.fillStyle = '#fff'; c.font = '700 30px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText('GOAL', 68, 36 + Math.sin(time * 6 - 3) * 3);
+    c.fillStyle = '#fff'; c.font = '700 28px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
+    c.fillText('النهاية', 68, 38 + Math.sin(time * 6 - 3) * 3);
     c.restore();
   }
 
@@ -1210,53 +1225,87 @@
     c.fillStyle = 'rgba(35,22,80,0.55)'; rr(c, x, y, w2, h2, 18); c.fill();
     c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 3; c.stroke();
   }
-  function text(c, s, x, y, size, col, align) {
-    c.font = '700 ' + size + 'px ' + FONT; c.textAlign = align || 'left'; c.textBaseline = 'middle';
+  // dir: 'rtl' for Arabic (default), 'ltr' for pure numbers like "3.4 / 5".
+  function text(c, s, x, y, size, col, align, dir, maxW) {
+    c.font = '700 ' + size + 'px ' + FONT; c.textAlign = align || 'center'; c.textBaseline = 'middle';
+    c.direction = dir || 'rtl';
+    if (maxW) { var mw = c.measureText(s).width; if (mw > maxW) { size = Math.floor(size * maxW / mw); c.font = '700 ' + size + 'px ' + FONT; } }
     c.lineJoin = 'round'; c.lineWidth = Math.max(4, size * 0.22); c.strokeStyle = '#2a1747'; c.strokeText(s, x, y);
     c.fillStyle = col || '#fff'; c.fillText(s, x, y);
+    c.direction = 'ltr';
   }
+  function textW(c, s, size) { c.font = '700 ' + size + 'px ' + FONT; return c.measureText(s).width; }
   function hudStar(c, x, y, r, on) {
     c.fillStyle = '#2a1747'; drawStar(c, x, y, r + 3, 0); c.fill();
     c.fillStyle = on ? '#ffd21f' : 'rgba(255,255,255,0.25)'; drawStar(c, x, y, r, 0); c.fill();
   }
+  // little drawn icons (no font glyphs needed)
+  function clockIcon(c, x, y, col) {
+    c.lineCap = 'round';
+    c.strokeStyle = '#2a1747'; c.lineWidth = 7; c.beginPath(); c.arc(x, y, 10, 0, TAU); c.stroke();
+    c.strokeStyle = col; c.lineWidth = 3.5; c.beginPath(); c.arc(x, y, 10, 0, TAU); c.stroke();
+    c.beginPath(); c.moveTo(x, y); c.lineTo(x, y - 6); c.moveTo(x, y); c.lineTo(x + 5, y + 2); c.stroke();
+  }
+  function flipIcon(c, x, y, col) {
+    c.lineCap = 'round';
+    for (var pass = 0; pass < 2; pass++) {
+      c.strokeStyle = pass ? col : '#2a1747'; c.fillStyle = c.strokeStyle; c.lineWidth = pass ? 3.5 : 7;
+      c.beginPath(); c.arc(x, y, 9, -Math.PI * 0.35, Math.PI * 1.35); c.stroke();
+      var ax = x + Math.cos(-Math.PI * 0.35) * 9, ay = y + Math.sin(-Math.PI * 0.35) * 9, k = pass ? 1 : 1.6;
+      c.beginPath(); c.moveTo(ax + 5 * k, ay - 1 * k); c.lineTo(ax - 3 * k, ay - 5 * k); c.lineTo(ax - 1 * k, ay + 4 * k); c.closePath(); c.fill();
+    }
+  }
   function drawHUD(c) {
     if (endless) {
       var d = dist();
-      text(c, d + ' m', W / 2, 46, 52, '#fff', 'center');
-      if (save.endless > 0) text(c, 'BEST ' + save.endless + ' m', W / 2, 92, 22, '#ffe14d', 'center');
-      if (w.flips) text(c, '↻ ' + w.flips, 30, 40, 30, '#7ff6ff');
+      text(c, d + ' م', W / 2, 46, 52, '#fff', 'center', 'rtl');
+      if (save.endless > 0) text(c, 'الأفضل: ' + save.endless + ' م', W / 2, 94, 22, '#ffe14d', 'center', 'rtl');
+      if (w.flips) { flipIcon(c, 40, 40, '#7ff6ff'); text(c, '' + w.flips, 58, 41, 30, '#7ff6ff', 'left', 'ltr'); }
     } else {
       var def = LEVELS[lvl];
-      panel(c, 14, 12, 382, 96);
-      text(c, (worldOf(lvl) + 1) + '-' + (lvl % 6 + 1), 32, 40, 30, '#ffe14d');
-      text(c, def.name, 92, 40, 26, '#fff');
+      var PX = 14, PW = 400, RX = PX + PW - 18;
+      panel(c, PX, 12, PW, 96);
+      // row 1 (right to left): level number badge, then the level name
+      var badge = (worldOf(lvl) + 1) + '-' + (lvl % 6 + 1);
+      var bw = textW(c, badge, 30);
+      text(c, badge, RX, 41, 30, '#ffe14d', 'right', 'ltr');
+      text(c, def.name, RX - bw - 14, 41, 26, '#fff', 'right', 'rtl', RX - bw - 14 - (PX + 16));
+      // row 2 (right to left): time / par, flips / goal, the 3 stars
       var t = w.timer, underPar = t <= def.par;
-      text(c, t.toFixed(1) + 's', 32, 82, 26, underPar ? '#9dff6b' : '#fff');
-      text(c, '/ ' + def.par + 's', 112, 82, 18, 'rgba(255,255,255,0.75)');
-      var fOk = w.flips >= def.flips;
-      text(c, '↻ ' + w.flips + '/' + def.flips, 200, 82, 26, fOk ? '#9dff6b' : '#fff');
+      clockIcon(c, RX - 10, 82, underPar ? '#9dff6b' : '#fff');
+      var par = '/ ' + def.par, pw = textW(c, par, 18);
+      text(c, par, RX - 28, 84, 18, 'rgba(255,255,255,0.8)', 'right', 'ltr');
+      text(c, t.toFixed(1), RX - 32 - pw, 82, 26, underPar ? '#9dff6b' : '#fff', 'right', 'ltr');
+      var fOk = w.flips >= def.flips, FX = RX - 160;
+      flipIcon(c, FX, 82, fOk ? '#9dff6b' : '#fff');
+      text(c, w.flips + '/' + def.flips, FX - 16, 82, 26, fOk ? '#9dff6b' : '#fff', 'right', 'ltr');
       var bits = starBits(lvl);
-      hudStar(c, 318, 82, 11, w.st === 'won' || (bits & 1));
-      hudStar(c, 346, 82, 11, underPar && w.st !== 'ready' || (bits & 2));
-      hudStar(c, 374, 82, 11, fOk || (bits & 4));
+      hudStar(c, PX + 32, 82, 11, w.st === 'won' || (bits & 1));
+      hudStar(c, PX + 60, 82, 11, underPar && w.st !== 'ready' || (bits & 2));
+      hudStar(c, PX + 88, 82, 11, fOk || (bits & 4));
       if (w.st === 'ready' && readyT < 3 && def.hint) {
         var a = Math.min(1, readyT * 3);
         c.globalAlpha = a;
-        var tw = Math.min(900, def.hint.length * 17 + 80);
-        panel(c, W / 2 - tw / 2, H - 110, tw, 64);
-        text(c, def.hint, W / 2, H - 78, 28, '#fff', 'center');
+        var tw = Math.min(1100, textW(c, def.hint, 28) + 70);
+        panel(c, W / 2 - tw / 2, H - 112, tw, 66);
+        text(c, def.hint, W / 2, H - 79, 28, '#fff', 'center', 'rtl', tw - 40);
         c.globalAlpha = 1;
       }
-      if (w.st === 'ready' && readyT < 1.6) {
+      if (w.st === 'ready' && readyT < 1.6 && tries <= 1) {
         var k = Math.min(1, readyT * 4), out = readyT > 1.2 ? (readyT - 1.2) / 0.4 : 0;
         c.save(); c.globalAlpha = 1 - out; c.translate(W / 2, 170 - out * 40); c.scale(0.6 + 0.4 * k + Math.sin(readyT * 20) * 0.02 * (1 - k), 0.6 + 0.4 * k);
-        text(c, 'LEVEL ' + (lvl + 1), 0, -34, 30, '#ffe14d', 'center');
-        text(c, def.name.toUpperCase(), 0, 16, 64, '#fff', 'center');
+        text(c, 'المرحلة ' + (lvl + 1), 0, -40, 30, '#ffe14d', 'center', 'rtl');
+        text(c, def.name, 0, 16, 64, '#fff', 'center', 'rtl', 1000);
         c.restore(); c.globalAlpha = 1;
+      }
+      if (w.st === 'ready' && tries > 1 && readyT < 1.4) {
+        c.globalAlpha = Math.min(1, (1.4 - readyT) * 3);
+        text(c, 'المحاولة ' + tries, W / 2, 150, 34, '#ffe14d', 'center', 'rtl');
+        c.globalAlpha = 1;
       }
     }
     if (stuckT > 1.8 && w.st === 'play') {
-      text(c, w.hook ? 'Stuck? Let go, or press R to restart' : 'Stuck? Press R to restart', W / 2, H - 40, 26, '#fff', 'center');
+      text(c, w.hook ? 'عالق؟ اترك الخطّاف أو اضغط R للبدء من جديد' : 'عالق؟ اضغط R للبدء من جديد', W / 2, H - 40, 26, '#fff', 'center', 'rtl');
     }
   }
 
@@ -1276,12 +1325,12 @@
   function refreshTitle() {
     var ts = totalStars(), done = 0;
     for (var i = 0; i < LEVELS.length; i++) if (starBits(i)) done++;
-    $('titleProgress').innerHTML = '<span class="st">★ ' + ts + ' / ' + MAXSTARS + '</span> &nbsp;·&nbsp; Levels ' + done + ' / ' + LEVELS.length + (save.endless ? ' &nbsp;·&nbsp; Endless best ' + save.endless + ' m' : '');
+    $('titleProgress').innerHTML = '<span class="st">★ ' + frac(ts, MAXSTARS) + '</span> &nbsp;·&nbsp; المراحل ' + frac(done, LEVELS.length) + (save.endless ? ' &nbsp;·&nbsp; أبعد مسافة ' + save.endless + ' م' : '');
     var eb = $('btnEndless');
     eb.classList.toggle('locked', !endlessUnlocked());
-    eb.textContent = endlessUnlocked() ? 'Endless' : 'Endless 🔒';
+    eb.textContent = endlessUnlocked() ? 'بلا نهاية' : 'بلا نهاية 🔒';
     $('styleNew').hidden = !hasNewStyle();
-    $('btnPlay').textContent = done === 0 ? '▶ PLAY' : '▶ PLAY ' + (nextLevelIndex() + 1);
+    $('btnPlay').textContent = done === 0 ? '▶ العب' : '▶ العب المرحلة ' + (nextLevelIndex() + 1);
   }
   function endlessUnlocked() { return !!(starBits(5)) || save.unlocked > 6; }
   function hasNewStyle() {
@@ -1305,7 +1354,7 @@
   btn('btnStyle', openStyle);
   btn('btnEndless', function () {
     if (endlessUnlocked()) startEndless();
-    else { var b = $('btnEndless'); b.textContent = 'Beat level 6!'; setTimeout(function () { if (mode === 'title') refreshTitle(); }, 1400); }
+    else { var b = $('btnEndless'); b.textContent = 'أنهِ المرحلة 6 أولًا!'; setTimeout(function () { if (mode === 'title') refreshTitle(); }, 1400); }
   });
   btn('pauseBtn', pause);
   btn('psResume', resume);
@@ -1331,8 +1380,8 @@
     if (!attract) startAttract();
     setMode('levels');
     var ts = totalStars();
-    $('lvStars').textContent = '★ ' + ts + ' / ' + MAXSTARS;
-    $('lvWorldName').textContent = 'World ' + (curWorld + 1) + ': ' + WORLD_NAMES[curWorld];
+    $('lvStars').innerHTML = '★ ' + frac(ts, MAXSTARS);
+    $('lvWorldName').textContent = 'العالم ' + (curWorld + 1) + ': ' + WORLD_NAMES[curWorld];
     var g = $('lvGrid'); g.innerHTML = '';
     var nextI = -1;
     for (var k = 0; k < save.unlocked && k < LEVELS.length; k++) if (!starBits(k)) { nextI = k; break; }
@@ -1391,7 +1440,7 @@
     if (!attract) startAttract();
     setMode('style');
     var ts = totalStars();
-    $('stStars').textContent = '★ ' + ts + ' / ' + MAXSTARS;
+    $('stStars').innerHTML = '★ ' + frac(ts, MAXSTARS);
     var prevSeenS = save.seenSkin, prevSeenT = save.seenTrail;
     var sk = $('stSkins'); sk.innerHTML = '';
     SKINS.forEach(function (s, i) {
@@ -1403,7 +1452,7 @@
       b.appendChild(cv);
       var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = s.name; b.appendChild(nm);
       if (locked) { var rq = document.createElement('span'); rq.className = 'req'; rq.textContent = '★ ' + s.req; b.appendChild(rq); }
-      else if (i >= prevSeenS && i > 0) { var nw = document.createElement('span'); nw.className = 'isnew'; nw.textContent = 'NEW'; b.appendChild(nw); }
+      else if (i >= prevSeenS && i > 0) { var nw = document.createElement('span'); nw.className = 'isnew'; nw.textContent = 'جديد'; b.appendChild(nw); }
       b.addEventListener('click', function () {
         if (locked) { sfx.thud(600); return; }
         save.skin = i; persist(); sfx.star(1);
@@ -1422,7 +1471,7 @@
       b.appendChild(cv);
       var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = s.name; b.appendChild(nm);
       if (locked) { var rq = document.createElement('span'); rq.className = 'req'; rq.style.top = '22px'; rq.textContent = '★ ' + s.req; b.appendChild(rq); }
-      else if (i >= prevSeenT && i > 0) { var nw = document.createElement('span'); nw.className = 'isnew'; nw.textContent = 'NEW'; b.appendChild(nw); }
+      else if (i >= prevSeenT && i > 0) { var nw = document.createElement('span'); nw.className = 'isnew'; nw.textContent = 'جديد'; b.appendChild(nw); }
       b.addEventListener('click', function () {
         if (locked) { sfx.thud(600); return; }
         save.trail = i; persist(); sfx.star(2);
@@ -1454,10 +1503,10 @@
     setMode('result');
     resultReady = 0.5;
     $('rsBest').hidden = !newBest;
-    $('rsBest').textContent = 'NEW BEST!';
+    $('rsBest').textContent = 'رقم قياسي جديد!';
     var n = popcount(got);
-    $('rsTitle').textContent = lvl === LEVELS.length - 1 ? 'YOU WIN!' : lvl % 6 === 5 ? 'World Clear!' : n === 3 ? 'PERFECT!' : n === 2 ? 'Great Swing!' : 'Level Clear!';
-    var labels = ['Finish', '≤ ' + def.par + 's', def.flips + (def.flips === 1 ? ' flip' : ' flips')];
+    $('rsTitle').textContent = lvl === LEVELS.length - 1 ? 'بطل الخطّاف!' : lvl % 6 === 5 ? 'أنهيت العالم!' : n === 3 ? 'مثالي!' : n === 2 ? 'أرجحة رائعة!' : 'اجتزت المرحلة!';
+    var labels = ['الوصول', 'خلال ' + def.par + ' ث', flipCount(def.flips)];
     var html = '';
     for (var i = 0; i < 3; i++) {
       var on = (got >> i) & 1;
@@ -1466,9 +1515,9 @@
     $('rsStars').innerHTML = html;
     $('rsStars').hidden = false;
     var b2 = save.best[lvl];
-    $('rsStats').innerHTML = '<div>Time<br><b>' + t.toFixed(2) + 's</b><span class="pb">best ' + b2.t.toFixed(2) + 's</span></div>' +
-      '<div>Flips<br><b>' + f + '</b><span class="pb">best ' + b2.f + '</span></div>' +
-      '<div>Stars<br><b>★ ' + after + '</b><span class="pb">of ' + MAXSTARS + '</span></div>';
+    $('rsStats').innerHTML = '<div>الوقت<br><b>' + t.toFixed(2) + ' ث</b><span class="pb">الأفضل ' + b2.t.toFixed(2) + ' ث</span></div>' +
+      '<div>الشقلبات<br><b>' + f + '</b><span class="pb">الأفضل ' + b2.f + '</span></div>' +
+      '<div>النجوم<br><b>★ ' + after + '</b><span class="pb">من ' + MAXSTARS + '</span></div>';
     [0, 1, 2].forEach(function (i) {
       setTimeout(function () {
         var el = $('rsS' + i); if (!el || mode !== 'result') return;
@@ -1477,10 +1526,10 @@
       }, 250 + i * 280);
     });
     showUnlocks(before, after, lvl);
-    $('rsNext').textContent = lvl + 1 < LEVELS.length ? 'Next ▶' : 'Endless ▶';
+    $('rsNext').textContent = lvl + 1 < LEVELS.length ? 'التالي ◀' : 'بلا نهاية ◀';
     $('rsReplay').hidden = false;
-    $('rsLevels').textContent = 'Levels';
-    $('rsHint').innerHTML = '<span class="sg-key">Enter</span> next · <span class="sg-key">R</span> replay';
+    $('rsLevels').textContent = 'المراحل';
+    $('rsHint').innerHTML = '<span class="sg-key">Enter</span> أو <span class="sg-key">مسافة</span> التالي · <span class="sg-key">R</span> إعادة';
     if (n === 3) setTimeout(function () { if (mode === 'result') { confetti(w.x, w.y - 200, 60); } }, 1000);
   }
   function showUnlocks(before, after, li) {
@@ -1494,18 +1543,18 @@
     var cv = previewCanvas(60, 60);
     if (it.kind === 'skin') drawSkinPreview(cv, it.s);
     else if (it.kind === 'trail') drawTrailPreview(cv, it.i);
-    else { cv.getContext('2d').font = '700 60px sans-serif'; cv.getContext('2d').fillText('∞', 28, 80); }
+    else { var ic = cv.getContext('2d'); ic.setTransform(2, 0, 0, 2, 0, 0); ic.font = '700 56px ' + FONT; ic.textAlign = 'center'; ic.textBaseline = 'middle'; ic.direction = 'ltr'; ic.fillStyle = '#fff'; ic.fillText('∞', 30, 32); }
     box.appendChild(cv);
     var tx = document.createElement('div');
-    tx.innerHTML = it.kind === 'endless' ? 'ENDLESS MODE unlocked!<small>How far can you swing?</small>' :
-      'NEW ' + (it.kind === 'skin' ? 'SKIN' : 'TRAIL') + ': ' + it.s.name + '!' + '<small>' + (items.length > 1 ? '+' + (items.length - 1) + ' more · ' : '') + 'Click to use it!</small>';
+    tx.innerHTML = it.kind === 'endless' ? 'فتحت وضع «بلا نهاية»!<small>إلى أي مسافة تستطيع أن تطير؟</small>' :
+      (it.kind === 'skin' ? 'شخصية جديدة: ' : 'أثر جديد: ') + it.s.name + '!' + '<small>' + (items.length > 1 ? 'و' + (items.length - 1) + ' أخرى · ' : '') + 'انقر لتستخدمه!</small>';
     box.appendChild(tx);
     box.onclick = function () {
       if (it.kind === 'skin') save.skin = SKINS.indexOf(it.s);
       else if (it.kind === 'trail') save.trail = it.i;
       else return;
       persist(); sfx.star(2);
-      tx.querySelector('small').textContent = 'Equipped!';
+      tx.querySelector('small').textContent = 'تم اختياره!';
     };
     box.hidden = false;
     setTimeout(function () { if (mode === 'result') sfx.unlock(); }, 950);
@@ -1517,14 +1566,14 @@
     setMode('result');
     resultReady = 0.6;
     $('rsBest').hidden = !nb || prev === 0;
-    $('rsTitle').textContent = w.deadKind === 'splash' ? 'SPLASH!' : 'BONK!';
+    $('rsTitle').textContent = w.deadKind === 'splash' ? 'طرطشة!' : 'بوف!';
     $('rsStars').hidden = true;
-    $('rsStats').innerHTML = '<div>Distance<br><b class="big-num">' + d + ' m</b><span class="pb">best ' + save.endless + ' m</span></div><div>Flips<br><b>' + w.flips + '</b></div>';
+    $('rsStats').innerHTML = '<div>المسافة<br><b class="big-num">' + d + ' م</b><span class="pb">الأفضل ' + save.endless + ' م</span></div><div>الشقلبات<br><b>' + w.flips + '</b></div>';
     $('rsUnlock').hidden = true;
-    $('rsNext').textContent = '↻ Again';
+    $('rsNext').textContent = '↻ مرة أخرى';
     $('rsReplay').hidden = true;
-    $('rsLevels').textContent = 'Menu';
-    $('rsHint').innerHTML = '<span class="sg-key">Enter</span> or <span class="sg-key">R</span> play again';
+    $('rsLevels').textContent = 'القائمة';
+    $('rsHint').innerHTML = '<span class="sg-key">Enter</span> أو <span class="sg-key">R</span> العب مرة أخرى';
     if (nb && prev > 0) { sfx.win(); confetti(w.x, w.y - 300, 70); }
   }
 

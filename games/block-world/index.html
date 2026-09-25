@@ -140,6 +140,10 @@
   .swatches { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; }
   .swatches button { width: 30px; height: 30px; border-radius: 8px; border: 3px solid rgba(255,255,255,.7); cursor: pointer; box-shadow: 0 3px 0 rgba(0,0,0,.35); }
   .swatches button:hover { transform: scale(1.15); }
+  .crow.quest { border-color: #ffcc00; box-shadow: 0 0 0 2px rgba(255,204,0,.35), 0 0 16px rgba(255,204,0,.35); }
+  .crow.quest.can { animation: qglow 1.2s ease-in-out infinite; }
+  @keyframes qglow { 50% { box-shadow: 0 0 0 3px rgba(255,204,0,.6), 0 0 22px rgba(255,204,0,.55); } }
+  .qtag { display: block; font-size: 12px; color: #ffcc00; line-height: 1.2; }
   .crow.flash { animation: flash .35s ease-out; }
   @keyframes flash { from { background: rgba(255,255,255,.6); } }
   .crow.shake { animation: shk .3s; }

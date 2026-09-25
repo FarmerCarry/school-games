@@ -370,10 +370,13 @@
       tm.t -= DT;
       if (tm.t <= 0) { this.timers.splice(i, 1); i--; tm.f(); if (this.state !== 'play') return; }
     }
+    var fired = false;
     for (i = 0; i < this.triggers.length; i++) {
       var tr = this.triggers[i];
-      if (!tr.done && tr.c()) { tr.done = true; tr.a(); }
+      if (!tr.done && tr.c()) { tr.done = true; fired = true; tr.a(); }
     }
+    // drop spent triggers so re-arming traps (pistons, elevator) never pile up
+    if (fired) this.triggers = this.triggers.filter(function (q) { return !q.done; });
     for (i = 0; i < this.ticks.length; i++) this.ticks[i]();
 
     this.updateGroups();
