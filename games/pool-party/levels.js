@@ -21,7 +21,7 @@
     { name: 'Bank It!', hint: 'Bounce the 6 off a rail and into ANY pocket. Watch the bounce line!',
       cue: [560, 250], balls: [[6, 760, 520], [8, 920, 348]], targets: [6], avoid: [8], bank: true, shots: 1 },
     { name: 'Stop Right There', hint: 'Pot the 10 but don’t let the cue ball follow it in. Try back spin!',
-      cue: [430, 250], balls: [[10, 850, 494]], targets: [10], pockets: [3], shots: 1, noFollow: true },
+      cue: [430, 250], balls: [[10, 850, 494]], targets: [10], pockets: [3], shots: 1 },
     { name: 'Two in One', hint: 'Pot BOTH balls with just ONE shot! Hit one, then bounce into the other.',
       cue: [640, 396], balls: [[7, 1051, 205], [9, 1051, 587]], targets: [7, 9], shots: 1 },
     { name: 'Kick Shot', hint: 'No straight path! Bounce the cue ball off a rail to reach the 15.',
@@ -49,7 +49,7 @@
       if (eightDown && remaining > 0) return { status: 'fail', reason: 'The 8 has to go LAST!' };
     }
     if (remaining === 0) return { status: 'win' };
-    if (prog.shotsUsed >= lv.shots) return { status: 'fail', reason: lv.shots === 1 ? 'So close! Try again.' : 'Out of shots!' };
+    if (prog.shotsUsed >= lv.shots) return { status: 'fail', reason: lv.shots === 1 ? 'Try again, you got this!' : 'Out of shots! Try again.' };
     return { status: 'go' };
   };
 

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fire &amp; Ice: Temple Escape</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+
+<button id="pauseBtn" class="fi-pause" type="button" aria-label="Pause" hidden>❚❚</button>
+
+<!-- Title -->
+<div id="titleScreen" class="sg-overlay fi-title-ov" hidden>
+  <div class="fi-title-wrap">
+    <h1 class="fi-logo"><span class="fire">FIRE</span><span class="amp">&amp;</span><span class="ice">ICE</span></h1>
+    <div class="fi-sub">TEMPLE ESCAPE</div>
+    <div class="fi-modes">
+      <button id="modeDuo" class="fi-mode" type="button"><b>2 Players</b><small>one keyboard</small></button>
+      <button id="modeSolo" class="fi-mode" type="button"><b>Solo</b><small>swap heroes</small></button>
+    </div>
+    <div class="fi-btns">
+      <button id="playBtn" class="sg-btn fi-play" type="button">▶  Play</button>
+      <button id="mapBtn" class="sg-btn secondary" type="button">Level Map</button>
+    </div>
+    <div class="fi-how">
+      <div id="howDuo" class="fi-howrow">
+        <div class="fi-hero ice"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">D</span><em>Ice</em></div>
+        <div class="fi-hero fire"><span class="sg-key">↑</span><span class="sg-key">←</span><span class="sg-key">→</span><em>Fire</em></div>
+      </div>
+      <div id="howSolo" class="fi-howrow" hidden>
+        <div class="fi-hero both"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">D</span>or<span class="sg-key">↑</span><span class="sg-key">←</span><span class="sg-key">→</span><em>move</em></div>
+        <div class="fi-hero swap"><span class="sg-key">Tab</span>or<span class="sg-key">Shift</span><em>swap hero</em></div>
+      </div>
+      <p class="fi-rules">Fire walks on <b class="t-lava">lava</b>, Ice swims in <b class="t-water">water</b>, <b class="t-goo">goo</b> is bad for both!<br>Get both heroes to their doors to escape.</p>
+    </div>
+    <div class="fi-progress"><span class="st">★</span> <span id="titleStars">0 / 36</span> <span class="dot">·</span> <span id="titleLevel">Level 1</span></div>
+  </div>
+</div>
+
+<!-- Pause -->
+<div id="pauseScreen" class="sg-overlay" hidden>
+  <div class="sg-panel fi-panel">
+    <h2 class="sg-title">Paused</h2>
+    <p class="sg-sub" id="pauseLevel"></p>
+    <div><button id="resumeBtn" class="sg-btn good" type="button">▶ Resume</button></div>
+    <div><button id="restartBtn" class="sg-btn" type="button">↻ Restart (R)</button><button id="pauseMapBtn" class="sg-btn secondary" type="button">Level Map</button></div>
+    <div class="fi-toggles"><button id="pauseSolo" class="fi-toggle" type="button">Solo mode: OFF</button><button id="pauseMusic" class="fi-toggle" type="button">Music: ON</button></div>
+    <p class="fi-small">Solo mode: <span class="sg-key">Tab</span> or <span class="sg-key">Shift</span> swaps between Fire and Ice.</p>
+  </div>
+</div>
+
+<!-- Dead -->
+<div id="deadScreen" class="sg-overlay" hidden>
+  <div class="sg-panel fi-panel fi-dead">
+    <h2 class="sg-title" id="deadTitle">Oops!</h2>
+    <p class="sg-sub" id="deadTip"></p>
+    <button id="retryBtn" class="sg-btn" type="button">↻ Try again</button><button id="deadMapBtn" class="sg-btn secondary" type="button">Level Map</button>
+    <p class="fi-small">Press <span class="sg-key">R</span> or <span class="sg-key">Enter</span> to try again</p>
+  </div>
+</div>
+
+<!-- Win -->
+<div id="winScreen" class="sg-overlay" hidden>
+  <div class="sg-panel fi-panel fi-win">
+    <div id="winMedal" class="medal gold"><span id="winMedalText">GOLD</span></div>
+    <h2 class="sg-title" id="winTitle">Escaped!</h2>
+    <div id="winStars" class="fi-crits"></div>
+    <p class="fi-time" id="winTime"></p>
+    <div id="winNew" class="fi-newbest" hidden>NEW BEST!</div>
+    <div id="winHat" class="fi-hat" hidden></div>
+    <div class="fi-winbtns">
+      <button id="winNext" class="sg-btn good" type="button">Next Level ▶</button>
+      <button id="winFinal" class="sg-btn good" type="button" hidden>Finish! ▶</button>
+      <button id="winReplay" class="sg-btn" type="button">↻ Replay</button>
+      <button id="winMap" class="sg-btn secondary" type="button">Level Map</button>
+    </div>
+    <p class="fi-small"><span class="sg-key">Enter</span> next · <span class="sg-key">R</span> replay · <span class="sg-key">Esc</span> map</p>
+  </div>
+</div>
+
+<!-- Final -->
+<div id="finalScreen" class="sg-overlay" hidden>
+  <div class="sg-panel fi-panel fi-final">
+    <h2 class="sg-title">You escaped the Temple!</h2>
+    <p class="sg-sub">Fire and Ice are free! What a team!</p>
+    <div class="fi-bigstars">★ <span id="finalStars">0 / 36</span></div>
+    <p class="fi-small">Go back and earn gold on every level to unlock all the hats — the Golden Halo needs all 36 stars!</p>
+    <button id="finalMap" class="sg-btn good" type="button">Level Map</button>
+  </div>
+</div>
+
+<script src="../../shared/kit.js"></script>
+<script src="engine.js"></script>
+<script src="levels.js"></script>
+<script src="render.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

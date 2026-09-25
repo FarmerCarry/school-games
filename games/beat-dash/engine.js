@@ -12,7 +12,7 @@
  *   G  gravity portal: upside down       N  gravity portal: normal
  *   R  rocket portal    C  cube portal
  *   1..4 speed portals (slow, normal, fast, very fast)
- *   *  star (3 per level)
+ *   *  star (3 per level)      |  ruler only (ignored), one group = one beat
  */
 (function (root) {
   'use strict';

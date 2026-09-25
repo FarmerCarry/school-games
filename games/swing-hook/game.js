@@ -136,6 +136,38 @@
     wind.f.frequency.setTargetAtTime(250 + sp * 0.9, t, 0.1);
   }
 
+  /* ----------------------------------------------------------------- music */
+  // A tiny cheerful sequencer (bass + chord stabs + arpeggio), scheduled ahead
+  // with WebAudio time. Different key and chords per world.
+  var MUSIC = [
+    { root: 60, prog: [0, 7, 9, 5], minor: [false, false, true, false], bpm: 124 },   // C G Am F
+    { root: 65, prog: [0, 5, 7, 5], minor: [false, false, false, false], bpm: 132 },  // F Bb C Bb
+    { root: 57, prog: [0, 8, 3, 10], minor: [true, false, false, false], bpm: 120 },  // Am F C G
+    { root: 62, prog: [0, 10, 8, 7], minor: [true, false, false, true], bpm: 112 }    // Dm C Bb Am
+  ];
+  var music = { on: false, next: 0, step: 0, song: 0 };
+  function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  function musicTick() {
+    var c = A.ctx;
+    if (!c || A.muted || !music.on) { if (c) music.next = Math.max(music.next, c.currentTime); return; }
+    var sg = MUSIC[music.song], spb = 60 / sg.bpm / 2; // eighth notes
+    if (music.next < c.currentTime) music.next = c.currentTime + 0.05;
+    while (music.next < c.currentTime + 0.25) {
+      var st = music.step, bar = Math.floor(st / 8) % 4, e = st % 8, d = music.next - c.currentTime;
+      var r = sg.root + sg.prog[bar], third = sg.minor[bar] ? 3 : 4;
+      if (e === 0 || e === 3 || e === 6) A.tone({ freq: mtof(r - 24), type: 'triangle', dur: spb * 1.6, vol: 0.13, delay: d });
+      var arp = [0, third, 7, 12, 7, third, 12, 7 + 12][e];
+      A.tone({ freq: mtof(r + arp), type: 'square', dur: spb * 0.7, vol: 0.022, delay: d });
+      if (e === 2 || e === 6) { A.tone({ freq: mtof(r + 12 + third), type: 'triangle', dur: spb * 0.9, vol: 0.035, delay: d }); }
+      if (e % 2 === 1) A.noise({ dur: 0.03, vol: 0.025, filter: 9000, delay: d });
+      music.next += spb; music.step++;
+    }
+  }
+  function setMusic(on, song) {
+    if (song != null && song !== music.song) { music.song = song; music.step = 0; }
+    music.on = on;
+  }
+
   /* ------------------------------------------------------------- particles */
   var PMAX = 480, parts = [], pcur = 0;
   for (var pi = 0; pi < PMAX; pi++) parts.push({ on: false });
@@ -234,18 +266,21 @@
   var apMem = {};
   var endlessBestShown = false, endlessStartX = 150;
   var tutorialRelease = false;
+  var flashT = 0, pruneN = 0;
 
   /* ----------------------------------------------------------------- input */
   function inUI(e) { return e.target && e.target.closest && e.target.closest('button, .scr'); }
   window.addEventListener('pointerdown', function (e) {
     if (e.button !== 0 || inUI(e)) return;
-    holdMouse = true;
+    holdMouse = true; mouseTap = true;
     try { canvas.focus({ preventScroll: true }); } catch (err) { /* ignore */ }
   });
   window.addEventListener('pointerup', function (e) { if (e.button === 0) holdMouse = false; });
   window.addEventListener('pointercancel', function () { holdMouse = false; });
   window.addEventListener('blur', function () { holdMouse = false; });
-  function holdInput() { return holdMouse || Kit.keys.down('Space'); }
+  var mouseTap = false;
+  // a tap shorter than one frame still counts as holding for one step
+  function holdInput() { return holdMouse || mouseTap || Kit.keys.down('Space') || Kit.keys.pressed('Space'); }
 
   /* --------------------------------------------------------------- ragdoll */
   // joints: elbowL handL elbowR handR kneeL footL kneeR footR (world coords, verlet)
@@ -326,7 +361,7 @@
     clearParts();
     for (var i = 0; i < pops.length; i++) pops[i].on = false;
     ragReset(w.x, w.y, 0, 'stand');
-    cam.x = w.x + 380; cam.y = Math.min(w.y - 40, L.sea + 110 - H / 2 / 0.9); cam.z = 0.9;
+    cam.x = w.x + 380; cam.y = L.sea + 70 - H / 2 / 0.9; cam.z = 0.9;
     apMem = {};
   }
   function startLevel(i) {
@@ -394,7 +429,7 @@
             for (var k = 0; k < 6; k++) P('streak', w.x + (Math.random() - 0.5) * 30, w.y + (Math.random() - 0.5) * 30, w.vx * 0.6, w.vy * 0.6, 0.3, 5, 'rgba(255,255,255,0.9)', 0, 0.9);
           }
           kick(4);
-          tutorialRelease = false;
+          if (endless || lvl !== 0) tutorialRelease = false;
           break;
         case 'bounce':
           if (loud) { if (e.kind === 'bumper') sfx.bumper(); else sfx.boing(e.v); }
@@ -438,6 +473,7 @@
             if (loud) popup('POOF!', e.x, e.y - 70, '#fff', 40);
           }
           shake.add(12);
+          if (loud && !L.endless && e.x > L.finish - 450) popup('SO CLOSE!', e.x, e.y - 130, '#ffe14d', 36);
           break;
         case 'win':
           if (loud) sfx.win();
@@ -461,6 +497,8 @@
   /* ------------------------------------------------------------------ update */
   function update(dt) {
     time += dt;
+    setMusic(mode !== 'pause', Math.max(0, THEMES.indexOf(theme)));
+    musicTick();
     var kp = Kit.keys.pressed;
     if (mode === 'play') {
       if (kp('KeyP') || kp('Escape')) pause();
@@ -491,6 +529,7 @@
       }
     }
     Kit.keys.endFrame();
+    mouseTap = false;
   }
 
   function stepGame(dt) {
@@ -506,7 +545,15 @@
 
     if (endless) {
       End.extend(L, w.x + 3200);
-      if ((time * 60 | 0) % 60 === 0) End.prune(L, w.x - 1600);
+      if (++pruneN % 60 === 0) End.prune(L, w.x - 1600);
+      if (!attract && w.st === 'play') {
+        var eti = Math.floor(dist() / 250) % THEMES.length;
+        if (THEMES[eti] !== theme) {
+          theme = THEMES[eti]; flashT = 0.4;
+          popup(theme.name.toUpperCase() + '!', w.x + 120, w.y - 130, '#fff', 44);
+          sfx.ring();
+        }
+      }
       if (!attract && !endlessBestShown && save.endless > 0 && dist() > save.endless) {
         endlessBestShown = true; popup('NEW BEST!', w.x, w.y - 90, '#ffe14d', 44); sfx.unlock(); confetti(w.x, w.y, 40);
       }
@@ -514,7 +561,7 @@
 
     if (w.st === 'play' || w.st === 'won') pushTrail(w.x, w.y);
     else if (w.st === 'ready') trailN = 0;
-    if (w.st === 'play' && !w.hook && Sim.speed(w) < 40) stuckT += dt; else stuckT = 0;
+    if (w.st === 'play' && Sim.speed(w) < 60) stuckT += dt; else stuckT = 0;
     if (attract && stuckT > 2) startAttract();
 
     // trail extras
@@ -549,6 +596,7 @@
 
     updateCamera(dt);
     updateParts(dt); updatePops(dt); shake.update(dt);
+    if (flashT > 0) flashT -= dt;
     updateWind(Sim.speed(w), mode === 'play' && w.st === 'play' && !attract);
   }
 
@@ -557,7 +605,7 @@
   function updateCamera(dt) {
     var sp = Sim.speed(w);
     var tx, ty, tz;
-    if (w.st === 'ready') { tx = w.x + 380; ty = w.y - 40; tz = 0.9; }
+    if (w.st === 'ready') { tx = w.x + 380; ty = L.sea; tz = 0.9; }
     else if (w.st === 'dead') { tx = cam.x; ty = cam.y; tz = cam.z; }
     else {
       tx = w.x + 170 + Kit.clamp(w.vx * 0.32, -420, 360);
@@ -567,10 +615,13 @@
     }
     var kx = 1 - Math.exp(-dt * 4.2), ky = 1 - Math.exp(-dt * 3.4), kz = 1 - Math.exp(-dt * 1.6);
     cam.z += (tz - cam.z) * kz;
-    ty = Math.min(ty, L.sea + 110 - H / 2 / cam.z);
+    // keep the water in view whenever the player is not too high up
+    var hh = H / 2 / cam.z, comfort = L.sea + 70 - hh;
+    if (w.st === 'ready') ty = comfort;
+    else if (w.st !== 'dead') ty = Math.min(comfort, w.y + Math.min(0, w.vy * 0.2) + hh - 170);
     cam.x += (tx - cam.x) * kx;
     cam.y += (ty - cam.y) * ky;
-    cam.y = Math.min(cam.y, L.sea + 140 - H / 2 / cam.z);
+    cam.y = Math.min(cam.y, L.sea + 100 - H / 2 / cam.z);
   }
 
   /* ----------------------------------------------------------------- render */
@@ -588,6 +639,7 @@
     drawWorld(c, vb);
     c.restore();
     drawSpeedLines(c);
+    if (flashT > 0) { c.fillStyle = 'rgba(255,255,255,' + Math.min(0.8, flashT * 2).toFixed(3) + ')'; c.fillRect(0, 0, W, H); }
     if (mode === 'play' || mode === 'pause') drawHUD(c);
   }
 
@@ -776,7 +828,7 @@
     if (w.st !== 'dead') {
       drawTrail(c);
       if (w.hook) drawRope(c);
-      var sk = SKINS[attract ? (save.skin) : save.skin];
+      var sk = SKINS[save.skin] || SKINS[0];
       drawGuyWorld(c, sk);
     }
 
@@ -871,7 +923,7 @@
   }
 
   function drawRope(c) {
-    var h = w.hook, hx = J[3].x, hy = J[3].y;
+    var h = w.hook, hx = w.x + (J[3].x - w.x) * 1.18, hy = w.y + (J[3].y - w.y) * 1.18;
     var ex = hx + (h.cx - hx) * ropeT, ey = hy + (h.cy - hy) * ropeT;
     c.strokeStyle = theme.ink; c.lineWidth = 7; c.beginPath(); c.moveTo(hx, hy); c.lineTo(ex, ey); c.stroke();
     c.strokeStyle = '#fff3c4'; c.lineWidth = 3.5; c.beginPath(); c.moveTo(hx, hy); c.lineTo(ex, ey); c.stroke();
@@ -1042,7 +1094,9 @@
     var ll = Math.sqrt(lx * lx + ly * ly) || 1;
     var llx = (lx * co - ly * si) / ll, lly = (lx * si + ly * co) / ll;
     var face = w.st === 'won' ? 'yay' : sp > 1300 ? 'wow' : 'happy';
+    c.save(); c.translate(bx, by); c.scale(1.18, 1.18); c.translate(-bx, -by);
     drawGuy(c, bx, by, ang, sk, LOCAL, { sq: squash, lx: llx, ly: lly, face: face, blink: blinkT < 0 });
+    c.restore();
   }
 
   // Draw the stick figure. J = 16 numbers of local joint coords.
@@ -1169,7 +1223,7 @@
     if (endless) {
       var d = dist();
       text(c, d + ' m', W / 2, 46, 52, '#fff', 'center');
-      text(c, 'BEST ' + Math.max(save.endless, 0) + ' m', W / 2, 92, 22, '#ffe14d', 'center');
+      if (save.endless > 0) text(c, 'BEST ' + save.endless + ' m', W / 2, 92, 22, '#ffe14d', 'center');
       if (w.flips) text(c, '↻ ' + w.flips, 30, 40, 30, '#7ff6ff');
     } else {
       var def = LEVELS[lvl];
@@ -1195,14 +1249,14 @@
       }
       if (w.st === 'ready' && readyT < 1.6) {
         var k = Math.min(1, readyT * 4), out = readyT > 1.2 ? (readyT - 1.2) / 0.4 : 0;
-        c.save(); c.globalAlpha = 1 - out; c.translate(W / 2, 200 - out * 40); c.scale(0.6 + 0.4 * k + Math.sin(readyT * 20) * 0.02 * (1 - k), 0.6 + 0.4 * k);
+        c.save(); c.globalAlpha = 1 - out; c.translate(W / 2, 170 - out * 40); c.scale(0.6 + 0.4 * k + Math.sin(readyT * 20) * 0.02 * (1 - k), 0.6 + 0.4 * k);
         text(c, 'LEVEL ' + (lvl + 1), 0, -34, 30, '#ffe14d', 'center');
         text(c, def.name.toUpperCase(), 0, 16, 64, '#fff', 'center');
         c.restore(); c.globalAlpha = 1;
       }
     }
     if (stuckT > 1.8 && w.st === 'play') {
-      text(c, 'Stuck? Press R to restart', W / 2, H - 40, 26, '#fff', 'center');
+      text(c, w.hook ? 'Stuck? Let go, or press R to restart' : 'Stuck? Press R to restart', W / 2, H - 40, 26, '#fff', 'center');
     }
   }
 
@@ -1227,7 +1281,7 @@
     eb.classList.toggle('locked', !endlessUnlocked());
     eb.textContent = endlessUnlocked() ? 'Endless' : 'Endless 🔒';
     $('styleNew').hidden = !hasNewStyle();
-    $('btnPlay').textContent = done === 0 ? '▶ PLAY' : '▶ PLAY ' + (Math.min(save.unlocked, LEVELS.length));
+    $('btnPlay').textContent = done === 0 ? '▶ PLAY' : '▶ PLAY ' + (nextLevelIndex() + 1);
   }
   function endlessUnlocked() { return !!(starBits(5)) || save.unlocked > 6; }
   function hasNewStyle() {
@@ -1236,12 +1290,12 @@
     TRAILS.forEach(function (s, i) { if (s.req <= ts) nt = i + 1; });
     return ns > save.seenSkin || nt > save.seenTrail;
   }
-  function playNext() {
-    var i = Math.min(save.unlocked, LEVELS.length) - 1;
-    // first unfinished level
-    for (var k = 0; k < save.unlocked && k < LEVELS.length; k++) if (!starBits(k)) { i = k; break; }
-    startLevel(i);
+  function nextLevelIndex() {
+    // first unfinished level, else the last unlocked one
+    for (var k = 0; k < save.unlocked && k < LEVELS.length; k++) if (!starBits(k)) return k;
+    return Math.min(save.unlocked, LEVELS.length) - 1;
   }
+  function playNext() { startLevel(nextLevelIndex()); }
 
   function btn(id, fn) {
     $(id).addEventListener('click', function (e) { e.preventDefault(); A.unlock(); sfx.click(); fn(); this.blur(); });
@@ -1314,8 +1368,8 @@
     var c = cv.getContext('2d');
     c.setTransform(2, 0, 0, 2, 0, 0);
     c.clearRect(0, 0, cv.width, cv.height);
-    var pose = POSES.cheer, Jl = pose.slice();
-    c.save(); c.translate(cv.width / 4, cv.height / 4 + 14); c.scale(1.35, 1.35);
+    var pose = POSES.cheer, Jl = pose.slice(), sz = cv.width / 2, k = sz / 88;
+    c.save(); c.translate(sz / 2, sz / 2 + 14 * k); c.scale(1.35 * k, 1.35 * k);
     drawGuy(c, 0, 0, 0, sk, Jl, { sq: 0, lx: 0.3, ly: 0.2, face: 'yay' });
     c.restore();
   }
@@ -1325,7 +1379,8 @@
     c.clearRect(0, 0, cv.width, cv.height);
     var old = save.trail, oN = trailN, oI = trailI, keep = trail.map(function (p) { return { x: p.x, y: p.y }; });
     save.trail = ti; trailN = TN; trailI = 0;
-    for (var i = 0; i < TN; i++) { trail[i].x = 6 + i * 3.4; trail[i].y = 35 + Math.sin(i * 0.25) * 18; }
+    var pw = cv.width / 2, ph = cv.height / 2;
+    for (var i = 0; i < TN; i++) { trail[i].x = 6 + i * (pw - 14) / TN; trail[i].y = ph / 2 + Math.sin(i * 0.25) * ph * 0.26; }
     c.save(); c.scale(1, 1); drawTrail(c); c.restore();
     if (ti === 6 || ti === 7) { c.fillStyle = ti === 7 ? '#ffd21f' : '#fff'; for (var k = 0; k < 4; k++) { drawStar(c, 20 + k * 22, 20 + (k % 2) * 30, 4, 0); c.fill(); } }
     if (ti === 2) { c.fillStyle = '#ffb000'; for (k = 0; k < 5; k++) { c.beginPath(); c.arc(14 + k * 18, 30 + (k % 3) * 10, 2.5, 0, TAU); c.fill(); } }
@@ -1344,7 +1399,7 @@
       var locked = s.req > ts;
       if (locked) b.classList.add('lock');
       if (i === save.skin) b.classList.add('sel');
-      var cv = previewCanvas(88, 88); drawSkinPreview(cv, s);
+      var cv = previewCanvas(76, 76); drawSkinPreview(cv, s);
       b.appendChild(cv);
       var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = s.name; b.appendChild(nm);
       if (locked) { var rq = document.createElement('span'); rq.className = 'req'; rq.textContent = '★ ' + s.req; b.appendChild(rq); }
@@ -1363,7 +1418,7 @@
       var locked = s.req > ts;
       if (locked) b.classList.add('lock');
       if (i === save.trail) b.classList.add('sel');
-      var cv = previewCanvas(110, 70); drawTrailPreview(cv, i);
+      var cv = previewCanvas(100, 64); drawTrailPreview(cv, i);
       b.appendChild(cv);
       var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = s.name; b.appendChild(nm);
       if (locked) { var rq = document.createElement('span'); rq.className = 'req'; rq.style.top = '22px'; rq.textContent = '★ ' + s.req; b.appendChild(rq); }
@@ -1401,7 +1456,7 @@
     $('rsBest').hidden = !newBest;
     $('rsBest').textContent = 'NEW BEST!';
     var n = popcount(got);
-    $('rsTitle').textContent = n === 3 ? 'PERFECT!' : n === 2 ? 'Great Swing!' : 'Level Clear!';
+    $('rsTitle').textContent = lvl === LEVELS.length - 1 ? 'YOU WIN!' : lvl % 6 === 5 ? 'World Clear!' : n === 3 ? 'PERFECT!' : n === 2 ? 'Great Swing!' : 'Level Clear!';
     var labels = ['Finish', '≤ ' + def.par + 's', def.flips + (def.flips === 1 ? ' flip' : ' flips')];
     var html = '';
     for (var i = 0; i < 3; i++) {
@@ -1438,13 +1493,20 @@
     box.innerHTML = '';
     var cv = previewCanvas(60, 60);
     if (it.kind === 'skin') drawSkinPreview(cv, it.s);
-    else if (it.kind === 'trail') { var c2 = previewCanvas(110, 70); drawTrailPreview(c2, it.i); cv.getContext('2d').drawImage(c2, 0, 20, 220, 140, 0, 10, 120, 76); }
+    else if (it.kind === 'trail') drawTrailPreview(cv, it.i);
     else { cv.getContext('2d').font = '700 60px sans-serif'; cv.getContext('2d').fillText('∞', 28, 80); }
     box.appendChild(cv);
     var tx = document.createElement('div');
     tx.innerHTML = it.kind === 'endless' ? 'ENDLESS MODE unlocked!<small>How far can you swing?</small>' :
-      'NEW ' + (it.kind === 'skin' ? 'SKIN' : 'TRAIL') + ': ' + it.s.name + '!' + '<small>' + (items.length > 1 ? '+' + (items.length - 1) + ' more · ' : '') + 'Pick it in Style</small>';
+      'NEW ' + (it.kind === 'skin' ? 'SKIN' : 'TRAIL') + ': ' + it.s.name + '!' + '<small>' + (items.length > 1 ? '+' + (items.length - 1) + ' more · ' : '') + 'Click to use it!</small>';
     box.appendChild(tx);
+    box.onclick = function () {
+      if (it.kind === 'skin') save.skin = SKINS.indexOf(it.s);
+      else if (it.kind === 'trail') save.trail = it.i;
+      else return;
+      persist(); sfx.star(2);
+      tx.querySelector('small').textContent = 'Equipped!';
+    };
     box.hidden = false;
     setTimeout(function () { if (mode === 'result') sfx.unlock(); }, 950);
   }
@@ -1483,6 +1545,8 @@
     win: function () { if (w && w.st !== 'won') { w.st = 'won'; w.ev.push({ type: 'win', x: w.x, y: w.y }); } },
     unlockAll: function () { save.unlocked = LEVELS.length; for (var i = 0; i < LEVELS.length; i++) save.stars[i] = 7; persist(); },
     reset: function () { store.remove('save'); location.reload(); },
+    // advance the game n fixed steps synchronously (for deterministic screenshots)
+    run: function (n) { for (var i = 0; i < n; i++) update(1 / 60); render(); return this.state(); },
     peek: function (x, y, z) { cam.x = x; cam.y = y; cam.z = z || 0.5; mode = 'peek'; screens.forEach(function (s) { $('scr-' + s).hidden = true; }); },
     save: save
   };

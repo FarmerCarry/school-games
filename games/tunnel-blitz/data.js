@@ -6,41 +6,41 @@
   // One entry per zone. After zone 8 the list loops with higher speed.
   // col = main neon, alt = second neon (bars / spirals), bg = far background, N = tunnel sides.
   TB.ZDEF = [
-    { name: 'CYAN SURGE',     col: [25, 235, 255],  alt: [60, 130, 255],  bg: [4, 14, 34],  N: 6,  key: 0 },
-    { name: 'MAGENTA MAZE',   col: [255, 70, 230],  alt: [160, 90, 255],  bg: [28, 4, 36],  N: 8,  key: 3 },
-    { name: 'LIME LIGHTNING', col: [150, 255, 60],  alt: [30, 230, 160],  bg: [6, 26, 10], N: 12, key: 5 },
-    { name: 'SOLAR STORM',    col: [255, 160, 40],  alt: [255, 80, 60],   bg: [34, 13, 3],  N: 6,  key: -2 },
-    { name: 'VIOLET VORTEX',  col: [175, 125, 255], alt: [255, 100, 215], bg: [15, 7, 40],  N: 10, key: 2 },
-    { name: 'RUBY RUSH',      col: [255, 70, 120],  alt: [255, 180, 50],  bg: [36, 5, 18],  N: 7,  key: 7 },
-    { name: 'MINT MACHINE',   col: [60, 255, 195],  alt: [70, 175, 255],  bg: [3, 28, 24],  N: 16, key: 4 },
-    { name: 'HYPER PRISM',    col: [255, 255, 255], alt: [255, 225, 60],  bg: [18, 11, 38], N: 8,  key: 0, rainbow: true }
+    { name: 'الاندفاع السماوي', col: [25, 235, 255],  alt: [60, 130, 255],  bg: [4, 14, 34],  N: 6,  key: 0 },
+    { name: 'المتاهة الوردية', col: [255, 70, 230],  alt: [160, 90, 255],  bg: [28, 4, 36],  N: 8,  key: 3 },
+    { name: 'البرق الأخضر', col: [150, 255, 60],  alt: [30, 230, 160],  bg: [6, 26, 10], N: 12, key: 5 },
+    { name: 'العاصفة الشمسية', col: [255, 160, 40],  alt: [255, 80, 60],   bg: [34, 13, 3],  N: 6,  key: -2 },
+    { name: 'الدوامة البنفسجية', col: [175, 125, 255], alt: [255, 100, 215], bg: [15, 7, 40],  N: 10, key: 2 },
+    { name: 'اندفاع الياقوت', col: [255, 70, 120],  alt: [255, 180, 50],  bg: [36, 5, 18],  N: 7,  key: 7 },
+    { name: 'آلة النعناع', col: [60, 255, 195],  alt: [70, 175, 255],  bg: [3, 28, 24],  N: 16, key: 4 },
+    { name: 'قوس قزح الخارق', col: [255, 255, 255], alt: [255, 225, 60],  bg: [18, 11, 38], N: 8,  key: 0, rainbow: true }
   ];
 
   // Ship skins. shape picks the drawing function below.
   TB.SHIPS = [
-    { id: 'blitz',  name: 'Blitz',       price: 0,    shape: 'dart',   body: '#ffffff', trim: '#19e6ff', dark: '#0d3b66', flame: ['#ffffff', '#19e6ff'] },
-    { id: 'bubble', name: 'Bubble Pod',  price: 80,   shape: 'pod',    body: '#ff7ad9', trim: '#ffffff', dark: '#6b1457', flame: ['#ffffff', '#ff5ad0'] },
-    { id: 'manta',  name: 'Manta',       price: 180,  shape: 'manta',  body: '#3a6bff', trim: '#8ff4ff', dark: '#10205e', flame: ['#e8fdff', '#39b8ff'] },
-    { id: 'bee',    name: 'Buzz Bee',    price: 300,  shape: 'bee',    body: '#ffd23f', trim: '#2a2230', dark: '#2a2230', flame: ['#fffbe0', '#ffb81a'] },
-    { id: 'saucer', name: 'Saucer Pal',  price: 450,  shape: 'saucer', body: '#aab6d6', trim: '#7dff3a', dark: '#39425e', flame: ['#f2ffe0', '#7dff3a'] },
-    { id: 'rocket', name: 'Red Rocket',  price: 650,  shape: 'rocket', body: '#ff4a4a', trim: '#ffffff', dark: '#6b0f16', flame: ['#fff6c0', '#ff7a1f'] },
-    { id: 'shark',  name: 'Sky Shark',   price: 900,  shape: 'shark',  body: '#5aa9d6', trim: '#ffffff', dark: '#1d4a66', flame: ['#e8fdff', '#5ad6ff'] },
-    { id: 'star',   name: 'Star Buddy',  price: 1200, shape: 'star',   body: '#ffdd33', trim: '#ff8a00', dark: '#8a4a00', flame: ['#ffffff', '#ffdd33'] },
-    { id: 'prism',  name: 'Prism',       price: 1700, shape: 'dart',   body: '#ffffff', trim: '#ffffff', dark: '#222244', flame: ['#ffffff', '#ff5ad0'], rainbow: true },
-    { id: 'gold',   name: 'Golden Wing', price: 2500, shape: 'wing',   body: '#ffcf3f', trim: '#fff6c0', dark: '#7a4a00', flame: ['#ffffff', '#ffcf3f'] }
+    { id: 'blitz',  name: 'البرق',          price: 0,    shape: 'dart',   body: '#ffffff', trim: '#19e6ff', dark: '#0d3b66', flame: ['#ffffff', '#19e6ff'] },
+    { id: 'bubble', name: 'الفقاعة',        price: 80,   shape: 'pod',    body: '#ff7ad9', trim: '#ffffff', dark: '#6b1457', flame: ['#ffffff', '#ff5ad0'] },
+    { id: 'manta',  name: 'جناح البحر',     price: 180,  shape: 'manta',  body: '#3a6bff', trim: '#8ff4ff', dark: '#10205e', flame: ['#e8fdff', '#39b8ff'] },
+    { id: 'bee',    name: 'النحلة الطنانة', price: 300,  shape: 'bee',    body: '#ffd23f', trim: '#2a2230', dark: '#2a2230', flame: ['#fffbe0', '#ffb81a'] },
+    { id: 'saucer', name: 'الصحن الفضائي',  price: 450,  shape: 'saucer', body: '#aab6d6', trim: '#7dff3a', dark: '#39425e', flame: ['#f2ffe0', '#7dff3a'] },
+    { id: 'rocket', name: 'الصاروخ الأحمر', price: 650,  shape: 'rocket', body: '#ff4a4a', trim: '#ffffff', dark: '#6b0f16', flame: ['#fff6c0', '#ff7a1f'] },
+    { id: 'shark',  name: 'قرش السماء',     price: 900,  shape: 'shark',  body: '#5aa9d6', trim: '#ffffff', dark: '#1d4a66', flame: ['#e8fdff', '#5ad6ff'] },
+    { id: 'star',   name: 'النجمة السعيدة', price: 1200, shape: 'star',   body: '#ffdd33', trim: '#ff8a00', dark: '#8a4a00', flame: ['#ffffff', '#ffdd33'] },
+    { id: 'prism',  name: 'قوس قزح',        price: 1700, shape: 'dart',   body: '#ffffff', trim: '#ffffff', dark: '#222244', flame: ['#ffffff', '#ff5ad0'], rainbow: true },
+    { id: 'gold',   name: 'الجناح الذهبي',  price: 2500, shape: 'wing',   body: '#ffcf3f', trim: '#fff6c0', dark: '#7a4a00', flame: ['#ffffff', '#ffcf3f'] }
   ];
 
   TB.TUNNELS = [
-    { id: 'grid',    name: 'Neon Grid',     price: 0 },
-    { id: 'stripes', name: 'Speed Stripes', price: 120 },
-    { id: 'stars',   name: 'Star Dust',     price: 280 },
-    { id: 'checker', name: 'Checker Pop',   price: 500 },
-    { id: 'rainbow', name: 'Rainbow Rings', price: 800 },
-    { id: 'pulse',   name: 'Bass Pulse',    price: 1200 },
-    { id: 'lava',    name: 'Lava Lamp',     price: 1600 },
-    { id: 'zebra',   name: 'Zebra Zoom',    price: 2000 },
-    { id: 'candy',   name: 'Candy Swirl',   price: 2600 },
-    { id: 'galaxy',  name: 'Galaxy',        price: 3500 }
+    { id: 'grid',    name: 'شبكة النيون',     price: 0 },
+    { id: 'stripes', name: 'خطوط السرعة',     price: 120 },
+    { id: 'stars',   name: 'غبار النجوم',     price: 280 },
+    { id: 'checker', name: 'المربعات',        price: 500 },
+    { id: 'rainbow', name: 'حلقات قوس قزح',   price: 800 },
+    { id: 'pulse',   name: 'نبض الإيقاع',     price: 1200 },
+    { id: 'lava',    name: 'مصباح الحمم',     price: 1600 },
+    { id: 'zebra',   name: 'الحمار الوحشي',   price: 2000 },
+    { id: 'candy',   name: 'دوامة الحلوى',    price: 2600 },
+    { id: 'galaxy',  name: 'المجرة',          price: 3500 }
   ];
 
   // Missions are done in order; the first three unfinished ones are active.
@@ -79,17 +79,19 @@
     { t: 'zone', n: 9, r: 500 }
   ];
 
+  // Mission descriptions (Arabic). Numbers stay as Western digits.
+  function num(n) { return n.toLocaleString('en-US'); }
   TB.missionText = function (m) {
     switch (m.t) {
-      case 'dist': return 'Fly ' + m.n.toLocaleString('en-US') + ' m in one run';
-      case 'zone': return 'Reach Zone ' + m.n;
-      case 'orbsRun': return 'Grab ' + m.n + ' orbs in one run';
-      case 'closeRun': return 'Get ' + m.n + ' CLOSE! calls in one run';
-      case 'combo': return 'Get a CLOSE! streak of ' + m.n;
-      case 'shield': return 'Grab a shield bubble';
-      case 'runs': return 'Play ' + m.n + ' runs';
-      case 'orbsTotal': return 'Collect ' + m.n.toLocaleString('en-US') + ' orbs in total';
-      case 'closeTotal': return 'Get ' + m.n + ' CLOSE! calls in total';
+      case 'dist': return 'اقطع ' + num(m.n) + ' م في جولة واحدة';
+      case 'zone': return 'صِل إلى المنطقة ' + m.n;
+      case 'orbsRun': return 'اجمع ' + m.n + ' كرة ضوء في جولة واحدة';
+      case 'closeRun': return 'مُرّ على الحافة ' + m.n + ' مرات في جولة واحدة';
+      case 'combo': return 'مُرّ على الحافة ' + m.n + ' مرات متتالية';
+      case 'shield': return 'التقط فقاعة الدرع';
+      case 'runs': return 'العب ' + m.n + ' جولات';
+      case 'orbsTotal': return 'اجمع ' + num(m.n) + ' كرة ضوء بالمجموع';
+      case 'closeTotal': return 'مُرّ على الحافة ' + m.n + ' مرة بالمجموع';
     }
     return '';
   };

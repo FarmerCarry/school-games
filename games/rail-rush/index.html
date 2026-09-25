@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rail Rush</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../shared/game.css">
+<style>
+  :root {
+    --navy: #1b1f4b; --navy2: #2b2f77; --orange: #ff7a1a; --yellow: #ffd23f; --pink: #ff4d6d; --green: #22d36b;
+    --outline: 0.06em 0 0 var(--navy), -0.06em 0 0 var(--navy), 0 0.06em 0 var(--navy), 0 -0.06em 0 var(--navy),
+      0.045em 0.045em 0 var(--navy), -0.045em 0.045em 0 var(--navy), 0.045em -0.045em 0 var(--navy), -0.045em -0.045em 0 var(--navy);
+  }
+  html, body { background: #86cbff; }
+  #gl { position: fixed; left: 0; top: 0; width: 100%; height: 100%; outline: none; }
+  #ui { position: fixed; inset: 0; pointer-events: none; font-size: 16px; overflow: hidden; z-index: 5; }
+  #ui [hidden] { display: none !important; }
+  #ui .screen { position: absolute; inset: 0; pointer-events: auto; }
+  #confetti { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }
+  #ui .sg-btn { font-size: 1.35em; padding: 0.42em 1.25em; margin: 0.25em; border-radius: 999px; box-shadow: 0 0.2em 0 rgba(0,0,0,0.3); white-space: nowrap; }
+  #ui .sg-btn.small { font-size: 1.05em; padding: 0.3em 0.9em; margin: 0; }
+  #ui .sg-btn.off { filter: grayscale(0.7) brightness(0.85); }
+  #ui .sg-btn.shake { animation: shake 0.35s; }
+  #ui .sg-key { font-size: 0.95em; min-width: 1.8em; padding: 0.05em 0.45em; border-radius: 0.4em; box-shadow: 0 0.18em 0 #9aa3c7; margin: 0 0.1em; }
+  #ui .sg-btn svg { width: 1em; height: 1em; vertical-align: -0.12em; margin-right: 0.25em; }
+  canvas[data-icon] { display: inline-block; }
+  .ci { width: 1.05em; height: 1.05em; vertical-align: -0.18em; margin-right: 0.2em; }
+
+  /* ---------- title */
+  #title { background: linear-gradient(90deg, rgba(20, 24, 70, 0.62) 0%, rgba(20, 24, 70, 0.35) 34%, rgba(20, 24, 70, 0) 55%); }
+  .title-left { position: absolute; left: 3.2em; top: 2.2em; width: 34em; }
+  .logo { display: flex; flex-direction: column; line-height: 0.84; transform: rotate(-5deg); transform-origin: left center; margin: 0 0 0.35em 0; animation: logoFloat 3.2s ease-in-out infinite; }
+  .logo span { font-weight: 700; font-size: 7.4em; letter-spacing: 0.02em; text-shadow: var(--outline), 0 0.12em 0 var(--navy), 0 0.2em 0.12em rgba(0,0,0,0.25); }
+  .logo .l1 { color: var(--yellow); }
+  .logo .l2 { color: var(--orange); margin-left: 0.55em; }
+  .tagline { font-size: 1.35em; font-weight: 700; margin: 0.2em 0 0.9em 0.1em; text-shadow: 0 0.12em 0 rgba(0,0,0,0.35); letter-spacing: 0.02em; }
+  #ui .sg-btn.play { font-size: 2.5em; padding: 0.28em 1.5em; background: linear-gradient(#6dffa6, #19c95c); color: #053b1a; box-shadow: 0 0.16em 0 #0a7a35, 0 0.4em 0.9em rgba(0,0,0,0.3); animation: pulse 1.1s ease-in-out infinite; margin-left: 0; }
+  #ui .sg-btn.play:hover { animation: none; transform: scale(1.07); }
+  .playrow { display: flex; align-items: center; gap: 1em; }
+  .orpress { font-size: 1.05em; opacity: 0.9; text-shadow: 0 0.1em 0 rgba(0,0,0,0.4); white-space: nowrap; }
+  .row { display: flex; gap: 0.4em; margin: 0.6em 0 0.9em -0.25em; }
+  .badge { display: inline-block; background: var(--pink); color: #fff; font-size: 0.65em; border-radius: 999px; padding: 0.1em 0.5em; vertical-align: 0.2em; margin-left: 0.2em; }
+  .chips { display: flex; gap: 0.6em; flex-wrap: wrap; }
+  .chip { background: rgba(15, 18, 55, 0.6); border: 0.12em solid rgba(255,255,255,0.18); border-radius: 0.9em; padding: 0.35em 0.8em; font-size: 1.1em; display: flex; align-items: center; gap: 0.4em; }
+  .chip b { font-size: 1.25em; color: var(--yellow); }
+  .chip canvas { width: 1.4em; height: 1.4em; }
+  .howto-box { position: absolute; left: 3.2em; bottom: 1.6em; background: rgba(15, 18, 55, 0.66); border-radius: 1em; padding: 0.7em 1.1em; font-size: 1.02em; display: grid; grid-template-columns: auto auto; gap: 0.35em 1.4em; }
+  .howto-box div { white-space: nowrap; }
+  .peek { position: absolute; right: 2em; bottom: 1.6em; width: 25em; background: rgba(15, 18, 55, 0.7); border-radius: 1em; padding: 0.6em 0.9em 0.7em; }
+  .peek-h { font-weight: 700; font-size: 1.05em; margin-bottom: 0.3em; color: var(--yellow); display: flex; justify-content: space-between; }
+
+  /* ---------- missions rows */
+  .mission { display: flex; align-items: center; gap: 0.6em; background: rgba(255,255,255,0.08); border-radius: 0.8em; padding: 0.5em 0.7em; margin: 0.4em 0; text-align: left; }
+  .mission.compact { padding: 0.25em 0.5em; margin: 0.25em 0; font-size: 0.88em; }
+  .m-check { width: 1.6em; height: 1.6em; border-radius: 50%; border: 0.15em solid rgba(255,255,255,0.5); display: flex; align-items: center; justify-content: center; flex: none; font-weight: 700; }
+  .mission.done .m-check { background: var(--green); border-color: var(--green); color: #053b1a; }
+  .mission.done .m-text { opacity: 0.75; }
+  .m-body { flex: 1; min-width: 0; }
+  .m-text { font-size: 1.05em; margin-bottom: 0.25em; }
+  .m-bar { height: 0.55em; background: rgba(0,0,0,0.35); border-radius: 1em; overflow: hidden; }
+  .m-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--yellow), var(--orange)); border-radius: 1em; }
+  .mission.done .m-bar i { background: var(--green); }
+  .m-num { font-weight: 700; font-size: 0.95em; opacity: 0.9; flex: none; }
+
+  /* ---------- panels */
+  .panel { background: linear-gradient(170deg, var(--navy2), var(--navy)); border: 0.2em solid rgba(255,255,255,0.18); border-radius: 1.5em; box-shadow: 0 1.2em 3em rgba(0,0,0,0.45); padding: 1.3em 1.8em; text-align: center; animation: popIn 0.35s cubic-bezier(.2,1.6,.4,1); }
+  .panel h2 { margin: 0 0 0.3em; font-size: 2.6em; line-height: 1; color: var(--yellow); text-shadow: var(--outline), 0 0.1em 0 var(--navy); }
+  .center { display: flex; align-items: center; justify-content: center; }
+  #pause { background: rgba(10, 12, 40, 0.5); }
+  #pause .sg-btn { display: block; width: 80%; margin: 0.45em auto; }
+  #pause .panel { width: 30em; }
+  .pmiss { margin-top: 0.7em; }
+  .tiny { font-size: 0.95em; opacity: 0.8; margin-top: 0.6em; }
+
+  /* ---------- game over */
+  #over { background: radial-gradient(ellipse at center, rgba(10,12,40,0.25), rgba(10,12,40,0.6)); }
+  #overPanel { width: 38em; padding: 1em 1.8em 1.1em; position: relative; }
+  #overPanel.best { border-color: var(--yellow); box-shadow: 0 0 0 0.3em rgba(255,210,63,0.35), 0 1.2em 3em rgba(0,0,0,0.45); }
+  #overTitle { font-size: 3.6em; font-weight: 700; color: var(--orange); text-shadow: var(--outline), 0 0.1em 0 var(--navy); line-height: 1; animation: wobble 0.9s ease-out; }
+  .score-label { font-size: 1em; opacity: 0.75; letter-spacing: 0.15em; margin-top: 0.3em; }
+  #overScore { font-size: 4em; font-weight: 700; line-height: 1.05; text-shadow: 0 0.08em 0 rgba(0,0,0,0.35); }
+  #newBest { display: inline-block; background: linear-gradient(90deg, #ffd23f, #ff9f1c); color: #4a2500; font-weight: 700; font-size: 1.5em; padding: 0.1em 0.9em; border-radius: 999px; animation: bestPop 0.6s cubic-bezier(.2,1.8,.4,1), pulse 0.8s 0.6s ease-in-out infinite; box-shadow: 0 0.15em 0 #b35c00; }
+  .stats { display: flex; justify-content: center; gap: 0.7em; margin: 0.6em 0 0.4em; }
+  .stat { background: rgba(255,255,255,0.1); border-radius: 0.8em; padding: 0.35em 0.8em; min-width: 8em; }
+  .stat b { display: block; font-size: 1.5em; color: var(--yellow); }
+  .stat span { font-size: 0.85em; opacity: 0.8; }
+  #levelUp { background: rgba(34, 211, 107, 0.2); border: 0.12em solid var(--green); border-radius: 0.8em; padding: 0.45em 0.8em; margin: 0.4em 0; font-size: 1.05em; }
+  #levelUp .pill { font-size: 1em; }
+  #nextGoal { margin: 0.5em 0 0.2em; font-size: 1em; }
+  #nextGoal .ng-text { margin-bottom: 0.25em; }
+  #nextGoal .m-bar { height: 0.7em; }
+  .btns { margin-top: 0.6em; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; }
+  #ui .sg-btn.go { font-size: 1.8em; background: linear-gradient(#6dffa6, #19c95c); color: #053b1a; box-shadow: 0 0.16em 0 #0a7a35; }
+  .wallet { position: absolute; right: 1em; top: 0.8em; font-size: 1.05em; opacity: 0.9; display: flex; align-items: center; gap: 0.2em; }
+  .wallet canvas { width: 1.2em; height: 1.2em; }
+
+  /* ---------- shop */
+  #shop { background: linear-gradient(270deg, rgba(20,24,70,0.7) 0%, rgba(20,24,70,0.45) 55%, rgba(20,24,70,0) 75%); }
+  #shopPanel { position: absolute; right: max(3.9em, 64px); top: 1.4em; bottom: 1.4em; width: 46em; display: flex; flex-direction: column; padding: 1em 1.3em; text-align: left; }
+  .shop-head { display: flex; align-items: center; gap: 0.8em; margin-bottom: 0.5em; }
+  .shop-head h2 { margin: 0; font-size: 2.3em; }
+  .shop-head .wallet { position: static; margin-left: auto; font-size: 1.5em; font-weight: 700; color: var(--yellow); }
+  .tabs { display: flex; gap: 0.4em; margin-bottom: 0.7em; }
+  .tab { font: inherit; font-weight: 700; font-size: 1.15em; border: none; border-radius: 0.8em 0.8em 0.3em 0.3em; padding: 0.35em 1em; background: rgba(255,255,255,0.12); color: #fff; cursor: pointer; }
+  .tab.on { background: var(--yellow); color: var(--navy); }
+  #shopBody { flex: 1; overflow: hidden; }
+  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.6em; }
+  .grid.boards { grid-template-columns: repeat(3, 1fr); }
+  .card { background: rgba(255,255,255,0.1); border: 0.15em solid transparent; border-radius: 1em; padding: 0.35em 0.3em 0.5em; text-align: center; cursor: pointer; transition: transform 0.1s; display: flex; flex-direction: column; align-items: center; }
+  .card:hover { transform: translateY(-0.15em); background: rgba(255,255,255,0.16); }
+  .card.sel { border-color: #fff; }
+  .card.eq { border-color: var(--green); background: rgba(34,211,107,0.18); }
+  .card .portrait { width: 6.8em; height: 6.8em; }
+  .grid.boards .portrait { width: 8.5em; height: 8.5em; }
+  .card.locked .portrait { filter: saturate(0.85); }
+  .c-name { font-weight: 700; font-size: 1em; margin: 0.1em 0 0.35em; white-space: nowrap; }
+  .tag { display: inline-block; font-weight: 700; font-size: 0.95em; padding: 0.3em 0.8em; border-radius: 999px; }
+  .tag.eq { background: var(--green); color: #053b1a; }
+  .ups .up { display: flex; align-items: center; gap: 1em; background: rgba(255,255,255,0.1); border-radius: 1em; padding: 0.7em 1em; margin-bottom: 0.7em; }
+  .ups .up > canvas { width: 4.2em; height: 4.2em; }
+  .up-body { flex: 1; }
+  .up-name { font-weight: 700; font-size: 1.4em; }
+  .up-desc { opacity: 0.85; margin: 0.1em 0 0.35em; }
+  .pips { display: flex; gap: 0.3em; }
+  .pips i { width: 2.2em; height: 0.7em; border-radius: 0.4em; background: rgba(0,0,0,0.35); }
+  .pips i.on { background: linear-gradient(90deg, var(--yellow), var(--orange)); }
+  .shop-tip { opacity: 0.75; font-size: 0.95em; margin-top: 0.3em; }
+
+  /* ---------- missions screen */
+  #missions { background: rgba(10, 12, 40, 0.45); }
+  #missions .panel { width: 40em; }
+  .mult-big { display: flex; align-items: center; justify-content: center; gap: 0.6em; font-size: 1.3em; margin: 0.2em 0 0.6em; }
+  .mult-big .pill { font-size: 1.4em; }
+
+  /* ---------- HUD */
+  #hud { position: absolute; inset: 0; }
+  .hud-score { position: absolute; left: 1.1em; top: 0.6em; }
+  #score { font-size: 3.1em; font-weight: 700; line-height: 1; text-shadow: var(--outline), 0 0.09em 0 var(--navy); }
+  .hud-row { display: flex; gap: 0.5em; align-items: center; margin-top: 0.25em; }
+  .pill { display: inline-block; background: var(--yellow); color: #3a2a00; border-radius: 999px; padding: 0.02em 0.55em; font-weight: 700; font-size: 1.3em; box-shadow: 0 0.13em 0 rgba(0,0,0,0.3); }
+  .pill.hot { background: linear-gradient(90deg, #ff4d6d, #ff9f1c); color: #fff; animation: pulse 0.5s ease-in-out infinite alternate; }
+  #dist { font-size: 1.25em; font-weight: 700; text-shadow: var(--outline); }
+  #coinBox { position: absolute; right: 118px; top: 12px; display: flex; align-items: center; gap: 0.3em; background: rgba(15,18,55,0.55); border-radius: 999px; padding: 0.1em 0.8em 0.1em 0.25em; font-size: 1.7em; font-weight: 700; }
+  #coinBox canvas { width: 1.35em; height: 1.35em; }
+  #coinBox.bump { animation: bump 0.18s ease-out; }
+  #powers { position: absolute; left: 1.1em; top: 7.6em; display: flex; flex-direction: column; gap: 0.45em; }
+  .pw { display: none; align-items: center; gap: 0.4em; background: rgba(15,18,55,0.55); border-radius: 999px; padding: 0.2em 0.7em 0.2em 0.25em; animation: popIn 0.3s cubic-bezier(.2,1.6,.4,1); }
+  .pw.on { display: flex; }
+  .pw canvas { width: 2.4em; height: 2.4em; }
+  .pw-bar { width: 7em; height: 0.7em; background: rgba(0,0,0,0.4); border-radius: 1em; overflow: hidden; }
+  .pw-bar i { display: block; height: 100%; background: linear-gradient(90deg, #6dffa6, #19c95c); transform-origin: left center; }
+  .pw.low .pw-bar i { background: linear-gradient(90deg, #ff4d6d, #ff9f1c); }
+  .pw.low canvas { animation: blink 0.3s steps(2) infinite; }
+  #pop { position: absolute; left: 0; right: 0; top: 24%; text-align: center; font-size: 3.2em; font-weight: 700; color: #fff; text-shadow: var(--outline), 0 0.1em 0 var(--navy); opacity: 0; pointer-events: none; }
+  #pop.show { animation: popText 1.3s ease-out forwards; }
+  #pop.warn { color: #ff5a5f; }
+  #pop.good, #pop.sneakers { color: #6dffa6; }
+  #pop.gold, #pop.doubler, #pop.best { color: var(--yellow); }
+  #pop.best { font-size: 4.2em; }
+  #pop.magnet { color: #ff6b75; }
+  #pop.blue { color: #6fd0ff; }
+  #hint { position: absolute; left: 50%; bottom: 4.5%; transform: translateX(-50%); background: #fff; color: var(--navy); font-weight: 700; font-size: 1.7em; padding: 0.35em 0.9em; border-radius: 1em; box-shadow: 0 0.2em 0 rgba(0,0,0,0.3); white-space: nowrap; }
+  #hint.show { animation: hintIn 0.4s cubic-bezier(.2,1.6,.4,1), hintBob 0.6s 0.4s ease-in-out infinite alternate; }
+  #hint .sg-key { background: var(--yellow); box-shadow: 0 0.18em 0 #c79a00; }
+  #toasts { position: absolute; left: 50%; top: 0.7em; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 0.4em; }
+  .toast { background: rgba(20, 150, 80, 0.92); border: 0.12em solid #6dffa6; border-radius: 999px; padding: 0.35em 1.1em; font-size: 1.15em; white-space: nowrap; animation: toastIn 0.4s cubic-bezier(.2,1.6,.4,1); transition: opacity 0.5s, transform 0.5s; }
+  .toast.mile { background: rgba(40, 90, 220, 0.92); border-color: #8fc2ff; }
+  #pop.zone { color: #fff; font-size: 4em; letter-spacing: 0.04em; }
+  .toast.out { opacity: 0; transform: translateY(-1em); }
+  #flash { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(255,40,60,0) 45%, rgba(255,40,60,0.75) 100%); opacity: 0; pointer-events: none; }
+  #flash.on { animation: flash 0.55s ease-out; }
+  #danger { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(255,40,60,0) 60%, rgba(255,40,60,0.35) 100%); opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+  #danger.on { opacity: 1; animation: blinkSoft 0.5s ease-in-out infinite alternate; }
+  #pauseBtn { right: 62px; font-family: inherit; font-weight: 700; font-size: 18px; letter-spacing: -1px; }
+  #nogl[hidden], #pauseBtn[hidden] { display: none; }
+  #nogl { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 22px; padding: 30px; background: var(--navy); z-index: 50; }
+
+  @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+  @keyframes logoFloat { 0%, 100% { transform: rotate(-5deg) translateY(0); } 50% { transform: rotate(-4deg) translateY(-0.25em); } }
+  @keyframes popIn { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes bump { 0% { transform: scale(1); } 50% { transform: scale(1.14); } 100% { transform: scale(1); } }
+  @keyframes popText { 0% { opacity: 0; transform: scale(0.4); } 12% { opacity: 1; transform: scale(1.15); } 22% { transform: scale(1); } 75% { opacity: 1; transform: scale(1) translateY(0); } 100% { opacity: 0; transform: scale(1) translateY(-0.6em); } }
+  @keyframes hintIn { from { transform: translateX(-50%) scale(0.5); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+  @keyframes hintBob { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-0.25em); } }
+  @keyframes toastIn { from { transform: translateY(-1.2em) scale(0.8); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes flash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes blink { 50% { opacity: 0.3; } }
+  @keyframes blinkSoft { from { opacity: 0.55; } to { opacity: 1; } }
+  @keyframes wobble { 0% { transform: scale(0.3) rotate(-10deg); } 40% { transform: scale(1.2) rotate(4deg); } 60% { transform: scale(0.95) rotate(-2deg); } 100% { transform: scale(1) rotate(0); } }
+  @keyframes bestPop { from { transform: scale(0.2); } to { transform: scale(1); } }
+  @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-0.3em); } 75% { transform: translateX(0.3em); } }
+</style>
+</head>
+<body>
+<canvas id="gl" tabindex="0"></canvas>
+<div id="ui">
+  <div id="flash"></div>
+  <div id="danger"></div>
+
+  <div id="hud" hidden>
+    <div class="hud-score">
+      <div id="score">0</div>
+      <div class="hud-row"><span id="mult" class="pill">x1</span><span id="dist">0 m</span></div>
+    </div>
+    <div id="coinBox"><canvas data-icon="coin" width="64" height="64"></canvas><span id="coins">0</span></div>
+    <div id="powers"></div>
+    <div id="pop" class="pop"></div>
+    <div id="hint" hidden></div>
+    <div id="toasts"></div>
+  </div>
+
+  <section id="title" class="screen">
+    <div class="title-left">
+      <div class="logo"><span class="l1">RAIL</span><span class="l2">RUSH</span></div>
+      <div class="tagline">Dodge trains. Grab coins. Run forever!</div>
+      <div class="playrow"><button id="playBtn" class="sg-btn play">&#9654; PLAY</button><span class="orpress">or press <span class="sg-key">Space</span></span></div>
+      <div class="row">
+        <button id="shopBtn" class="sg-btn secondary"><svg viewBox="0 0 24 24"><path fill="#1d2340" d="M3 4h2.2l2.1 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 1.9-1.4L21 8H7"/><path d="M3 4h2.2l2.1 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 1.9-1.4L21 8H7" fill="none" stroke="#1d2340" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/><circle cx="9.5" cy="20" r="1.8" fill="#1d2340"/><circle cx="17" cy="20" r="1.8" fill="#1d2340"/></svg>Shop</button>
+        <button id="missionsBtn" class="sg-btn secondary"><svg viewBox="0 0 24 24"><path fill="#ffb800" stroke="#1d2340" stroke-width="1.8" stroke-linejoin="round" d="M12 2.5l2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17.1l-5.9 3.2 1.3-6.5-4.9-4.5 6.6-.8z"/></svg>Missions <span class="badge" id="tMissions"></span></button>
+      </div>
+      <div class="chips">
+        <div class="chip"><span>Best</span><b id="tBest">0</b></div>
+        <div class="chip"><canvas data-icon="coin" width="64" height="64"></canvas><b id="tCoins">0</b></div>
+        <div class="chip"><span>Multiplier</span><b id="tMult">x1</b></div>
+      </div>
+    </div>
+    <div class="howto-box">
+      <div><span class="sg-key">&larr;</span><span class="sg-key">&rarr;</span> or <span class="sg-key">A</span><span class="sg-key">D</span> Switch lanes</div>
+      <div><span class="sg-key">&uarr;</span><span class="sg-key">W</span><span class="sg-key">Space</span> Jump</div>
+      <div><span class="sg-key">&darr;</span><span class="sg-key">S</span> Roll (and drop fast)</div>
+      <div><span class="sg-key">Drag</span> Swipe with the mouse</div>
+    </div>
+    <div class="peek">
+      <div class="peek-h"><span>Missions</span><span>complete all 3 for a bigger multiplier</span></div>
+      <div id="tMissionPeek"></div>
+    </div>
+  </section>
+
+  <section id="missions" class="screen center" hidden>
+    <div class="panel">
+      <h2>Missions</h2>
+      <div class="mult-big">Score multiplier <span class="pill" id="mMult">x1</span> &rarr; <span class="pill hot" id="mNext">x2</span></div>
+      <div id="mList"></div>
+      <div class="tiny">Finish all 3 to raise your multiplier forever and win <b id="mReward">100</b> coins!</div>
+      <div class="btns"><button id="mBack" class="sg-btn">Got it!</button></div>
+    </div>
+  </section>
+
+  <section id="shop" class="screen" hidden>
+    <div id="shopPanel" class="panel">
+      <div class="shop-head">
+        <button id="sBack" class="sg-btn secondary small">&larr; Back</button>
+        <h2>Shop</h2>
+        <div class="wallet"><canvas data-icon="coin" width="64" height="64"></canvas><span id="sCoins">0</span></div>
+      </div>
+      <div class="tabs">
+        <button class="tab on" data-tab="outfits">Outfits</button>
+        <button class="tab" data-tab="boards">Hoverboards</button>
+        <button class="tab" data-tab="ups">Power-ups</button>
+      </div>
+      <div id="shopBody"></div>
+      <div class="shop-tip">Click a card to try it on. Earn coins by running!</div>
+    </div>
+  </section>
+
+  <section id="pause" class="screen center" hidden>
+    <div class="panel">
+      <h2>Paused</h2>
+      <button id="resumeBtn" class="sg-btn go">&#9654; Resume</button>
+      <button id="restartBtn" class="sg-btn secondary">Restart</button>
+      <button id="pMenuBtn" class="sg-btn secondary">Menu</button>
+      <div id="pMissions" class="pmiss"></div>
+      <div class="tiny"><span class="sg-key">P</span> or <span class="sg-key">Esc</span> to resume</div>
+    </div>
+  </section>
+
+  <section id="over" class="screen center" hidden>
+    <div id="overPanel" class="panel">
+      <div class="wallet"><canvas data-icon="coin" width="64" height="64"></canvas><span id="oTotal">0</span></div>
+      <div id="overTitle">BONK!</div>
+      <div class="score-label">SCORE</div>
+      <div id="overScore">0</div>
+      <div id="newBest" hidden>&#9733; NEW BEST! &#9733;</div>
+      <div class="stats">
+        <div class="stat"><b id="oCoins">0</b><span>coins</span></div>
+        <div class="stat"><b id="oDist">0 m</b><span>distance</span></div>
+        <div class="stat"><b id="oBest">0</b><span>best</span></div>
+      </div>
+      <div id="levelUp" hidden></div>
+      <div id="oMissions"></div>
+      <div id="nextGoal" hidden></div>
+      <div class="btns">
+        <button id="againBtn" class="sg-btn go">&#9654; Play Again</button>
+        <button id="oShop" class="sg-btn secondary">Shop</button>
+        <button id="oMenu" class="sg-btn secondary">Menu</button>
+      </div>
+      <div class="tiny">Press <span class="sg-key">Space</span> or <span class="sg-key">R</span> to run again</div>
+    </div>
+  </section>
+
+  <canvas id="confetti"></canvas>
+</div>
+<button id="pauseBtn" class="sg-mute" type="button" aria-label="Pause" hidden><svg viewBox="0 0 20 20" width="18" height="18"><rect x="4" y="3" width="4.2" height="14" rx="1.2" fill="#fff"/><rect x="11.8" y="3" width="4.2" height="14" rx="1.2" fill="#fff"/></svg></button>
+<div id="nogl" hidden>Rail Rush needs 3D graphics (WebGL), which this browser has turned off.</div>
+
+<script src="../../lib/three/three.min.js"></script>
+<script src="../../shared/kit.js"></script>
+<script src="models.js"></script>
+<script src="audio.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

@@ -167,21 +167,21 @@
     for (var i = 0; i < n; i++) this.movers.push({ type: 'plank', x: x0 + w * (i + 0.5), y: y0, len: w + 2, a: 0 });
     return this.pit(len, 240);
   };
-  // platform ferrying across a spike pit (moves between the two rims)
-  B.ferry = function (len, pw, period, phase) {
+  // platform that waits for you, carries you across a spike pit, then waits for you to ride off
+  B.ferry = function (len, pw, time) {
     var x0 = this.x, y0 = this.y, mi = this.movers.length;
-    this.movers.push({ type: 'platform', bx: x0 + pw / 2 + 4, by: y0, dx: len - pw - 8, dy: 0, period: period || 5, phase: phase || 0, len: pw, a: 0 });
-    this.bot.push({ x0: x0 - 240, x1: x0 - 5, wait: function (w) { var p = w.moverF(mi).p; return !(p > 0.02 && p < 0.2); } });
-    this.bot.push({ x0: x0 + 40, x1: x0 + len - pw / 2 + 30, wait: function (w) { var p = w.moverF(mi).p; return !(p > 0.5 && p < 0.76); } });
+    this.movers.push({ type: 'platform', bx: x0 + pw / 2 + 4, by: y0, dx: len - pw - 8, dy: 0, time: time || 2.2, len: pw, a: 0 });
+    this.bot.push({ x0: x0 - 300, x1: x0 + 60, v: 330, wait: function (w) { return w.movers[mi].st !== 0; } });
+    this.bot.push({ x0: x0 + 60, x1: x0 + len - pw / 2 + 30, wait: function (w) { return w.movers[mi].st !== 2; } });
     this.shapes.push({ type: 'rail', x1: x0, x2: x0 + len, y: y0 });
     return this.pit(len, 240);
   };
-  // lift: platform in a shaft that carries you up `rise` px to a ledge
-  B.lift = function (pw, rise, period, phase) {
+  // lift: waits at the bottom, carries you up `rise` px to a ledge
+  B.lift = function (pw, rise, time) {
     var x0 = this.x, y0 = this.y, mi = this.movers.length;
-    this.movers.push({ type: 'platform', bx: x0 + pw / 2 + 3, by: y0, dx: 0, dy: -rise, period: period || 5, phase: phase || 0, len: pw, a: 0, lift: true });
-    this.bot.push({ x0: x0 - 240, x1: x0 - 5, wait: function (w) { var p = w.moverF(mi).p; return !(p > 0.02 && p < 0.2); } });
-    this.bot.push({ x0: x0 + 20, x1: x0 + pw, wait: function (w) { var p = w.moverF(mi).p; return !(p > 0.5 && p < 0.76); } });
+    this.movers.push({ type: 'platform', bx: x0 + pw / 2 + 3, by: y0, dx: 0, dy: -rise, time: time || 1.6, len: pw, a: 0, lift: true });
+    this.bot.push({ x0: x0 - 300, x1: x0 + 60, v: 330, wait: function (w) { return w.movers[mi].st !== 0; } });
+    this.bot.push({ x0: x0 + 60, x1: x0 + pw, wait: function (w) { return w.movers[mi].st !== 2; } });
     this.pit(pw + 6, 60, rise);
     this.shapes[this.shapes.length - 1].shaft = true;
     return this;
@@ -220,8 +220,9 @@
   B.botHint = function (h) { this.bot.push(h); return this; };
   B.finish = function () {
     this.finishX = this.x + 60;
-    this.flat(1100);
+    this.flat(1300);
     this.rise(3000);
+    this.flat(3000);
     return this;
   };
 
@@ -238,7 +239,7 @@
     }
     for (i = 0; i < this.extra.length; i++) L.segs.push(this.extra[i]);
     var minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
-    for (i = 1; i < c.length; i++) { minX = Math.min(minX, c[i].x); maxX = Math.max(maxX, c[i].x); minY = Math.min(minY, c[i].y); maxY = Math.max(maxY, c[i].y); }
+    for (i = 1; i < c.length - 2; i++) { minX = Math.min(minX, c[i].x); maxX = Math.max(maxX, c[i].x); minY = Math.min(minY, c[i].y); maxY = Math.max(maxY, c[i].y); }
     L.minX = minX; L.maxX = maxX; L.minY = minY; L.maxY = maxY; L.killY = maxY + 700;
     // grid
     L.cell0 = Math.floor((minX - 400) / CELL);
@@ -314,8 +315,8 @@
     this.bike = {
       x: 0, y: 0, a: 0, vx: 0, vy: 0, w: 0, M: 3.2, I: 3.2 * 30 * 30,
       wheels: [
-        { x: 0, y: 0, vx: 0, vy: 0, s: 0, rot: 0, r: WHEEL_R, m: 1, ms: 0.6, air: 1, comp: 0, impact: 0, kind: 'g' },
-        { x: 0, y: 0, vx: 0, vy: 0, s: 0, rot: 0, r: WHEEL_R, m: 1, ms: 0.6, air: 1, comp: 0, impact: 0, kind: 'g' }
+        { x: 0, y: 0, vx: 0, vy: 0, s: 0, rot: 0, r: WHEEL_R, m: 1, ms: 0.6, air: 1, comp: 0, impact: 0, gk: 'g', bit: 1 },
+        { x: 0, y: 0, vx: 0, vy: 0, s: 0, rot: 0, r: WHEEL_R, m: 1, ms: 0.6, air: 1, comp: 0, impact: 0, gk: 'g', bit: 2 }
       ]
     };
     this.bike.wheels[0].anc = ANCHORS[0]; this.bike.wheels[1].anc = ANCHORS[1];
@@ -375,7 +376,7 @@
   };
 
   W.makeMover = function (d) {
-    var m = { type: d.type, d: d, x: d.x != null ? d.x : d.bx, y: d.y != null ? d.y : d.by, a: d.a || 0, vx: 0, vy: 0, w: 0, st: 0, t: 0, len: d.len, touched: false, gone: false };
+    var m = { type: d.type, d: d, x: d.x != null ? d.x : d.bx, y: d.y != null ? d.y : d.by, a: d.a || 0, vx: 0, vy: 0, w: 0, st: 0, t: 0, len: d.len, touched: false, gone: false, on: 0, onT: 0 };
     m.seg = mkSeg(-1, 0, 1, 0, d.type === 'plank' ? 'w' : d.type === 'seesaw' ? 'w' : 'm');
     m.seg.mover = m;
     m.I = 3.2 * d.len * d.len / 12;
@@ -402,27 +403,26 @@
           if (m.y > d.y + 500) m.gone = true;
         }
       } else if (m.type === 'platform') {
-        var pf = platF(this.simT, d);
-        m.x = d.bx + d.dx * pf.f; m.y = d.by + d.dy * pf.f; m.vx = d.dx * pf.fv; m.vy = d.dy * pf.fv;
+        // 0 wait at start, 1 moving out, 2 wait at end, 3 moving back
+        var f = 0, fv = 0;
+        if (m.st === 0) { if (m.onT > 0.3 && !this.crashed) { m.st = 1; m.t = 0; this.events.push({ type: 'lift', x: m.x, y: m.y }); } }
+        else if (m.st === 1 || m.st === 3) {
+          m.t += h;
+          var u = Math.min(1, m.t / d.time);
+          f = u * u * (3 - 2 * u); fv = 6 * u * (1 - u) / d.time;
+          if (m.st === 3) { f = 1 - f; fv = -fv; }
+          if (u >= 1) { m.st = m.st === 1 ? 2 : 0; m.t = 0; if (m.st === 2) this.events.push({ type: 'liftStop', x: m.x, y: m.y }); }
+        } else if (m.st === 2) {
+          f = 1;
+          if (m.on) m.t = 0; else m.t += h;
+          if (m.t > 1.5) { m.st = 3; m.t = 0; }
+        }
+        if (m.st === 2) f = 1;
+        m.x = d.bx + d.dx * f; m.y = d.by + d.dy * f; m.vx = d.dx * fv; m.vy = d.dy * fv;
       }
       this.updateMoverSeg(m);
     }
   };
-  // Platform motion: wait at the start, glide over, wait at the end, glide back.
-  var PF = { f: 0, fv: 0, p: 0 };
-  function platF(t, d) {
-    var p = t / d.period + d.phase; p -= Math.floor(p);
-    var f, fv;
-    if (p < 0.3) { f = 0; fv = 0; }
-    else if (p < 0.5) { var u = (p - 0.3) * 5; f = u * u * (3 - 2 * u); fv = 6 * u * (1 - u) * 5 / d.period; }
-    else if (p < 0.8) { f = 1; fv = 0; }
-    else { var q = (p - 0.8) * 5; f = 1 - q * q * (3 - 2 * q); fv = -6 * q * (1 - q) * 5 / d.period; }
-    PF.f = f; PF.fv = fv; PF.p = p;
-    return PF;
-  }
-  // phase info for platform i — handy for the bot
-  W.moverF = function (i) { var r = platF(this.simT, this.movers[i].d); return { f: r.f, p: r.p }; };
-
   function segTest(s, x, y, r, out) {
     var px = x - s.x1, py = y - s.y1;
     var side = px * s.nx + py * s.ny;
@@ -544,6 +544,7 @@
         if (c.pen <= 0) continue;
       }
       var s = c.seg, nx = c.nx, ny = c.ny;
+      if (s.k === 'b' && isBike && this.bounceCd > 0) continue;
       wh.x += nx * c.pen; wh.y += ny * c.pen;
       surfVel(s, c.px, c.py, SV);
       var rvx = wh.vx - SV[0], rvy = wh.vy - SV[1];
@@ -560,14 +561,15 @@
       var jt = -slip / (1 / wh.m + 1 / wh.ms), lim = mu * jn + 0.02;
       if (jt > lim) jt = lim; else if (jt < -lim) jt = -lim;
       wh.vx += jt / wh.m * tx; wh.vy += jt / wh.m * ty; wh.s -= jt / wh.ms;
-      wh.air = 0; wh.kind = s.k; wh.nx = nx; wh.ny = ny;
+      wh.air = 0; wh.gk = s.k; wh.nx = nx; wh.ny = ny;
       touched = true;
       var m = s.mover;
       if (m) {
         if (m.type === 'seesaw') {
           var fx = -(jn * nx + jt * tx) * (isBike ? 2.4 : 1), fy = -(jn * ny + jt * ty) * (isBike ? 2.4 : 1);
           m.w += ((c.px - m.x) * fy - (c.py - m.y) * fx) / m.I;
-        } else if (m.type === 'plank' && m.st === 0) { m.st = 1; m.t = 0; this.events.push({ type: 'creak', x: m.x, y: m.y }); }
+        } else if (m.type === 'platform') { if (isBike) m.on |= wh.bit; }
+        else if (m.type === 'plank' && m.st === 0) { m.st = 1; m.t = 0; this.events.push({ type: 'creak', x: m.x, y: m.y }); }
       }
       if (isBike && s.loop && !this.crashed) {
         var sp = Math.sqrt(this.bike.vx * this.bike.vx + this.bike.vy * this.bike.vy);
@@ -585,10 +587,9 @@
   W.bounce = function (s) {
     if (this.bounceCd > 0 || this.crashed) return;
     this.bounceCd = 0.35;
-    var b = this.bike, vy = -s.power, vx = Math.max(b.vx, 320);
-    var dvx = vx - b.vx, dvy = vy - b.vy;
-    b.vx += dvx; b.vy += dvy; b.w *= 0.3;
-    for (var i = 0; i < 2; i++) { b.wheels[i].vx += dvx; b.wheels[i].vy += dvy; }
+    var b = this.bike, vy = -s.power, vx = clamp(b.vx, 380, 560);
+    b.vx = vx; b.vy = vy; b.w *= 0.3;
+    for (var i = 0; i < 2; i++) { var wh = b.wheels[i]; wh.vx = vx - b.w * (wh.y - b.y); wh.vy = vy + b.w * (wh.x - b.x); }
     if (s.ref) s.ref.t = 0;
     this.events.push({ type: 'bounce', x: (s.x1 + s.x2) / 2, y: s.y1 });
   };
@@ -661,13 +662,24 @@
         var rel = b.a - Math.atan2(gw.nx || 0, -(gw.ny || -1));
         while (rel > Math.PI) rel -= 2 * Math.PI;
         while (rel < -Math.PI) rel += 2 * Math.PI;
-        if (rel * lean > 0) acc *= clamp(1 - (Math.abs(rel) - 0.35) / 0.5, 0.3, 1);
+        if (rel * lean > 0) {
+          // leaning back: easy wheelies; leaning forward: only a small stoppie, never over the bars
+          if (lean > 0) acc *= clamp(1 - (Math.abs(rel) - 0.2) / 0.3, 0, 1);
+          else acc *= clamp(1 - (Math.abs(rel) - 0.35) / 0.5, 0.2, 1);
+        }
         else acc *= 0.8;
       }
       var dw = clamp(lean * maxW - b.w, -acc * h, acc * h);
       if (lean * dw > 0) this.spin(dw);
     } else if (!grounded && !this.crashed) {
       this.spin(-b.w * 0.5 * h);
+    } else if (grounded && !this.crashed) {
+      // hands off while standing on the tail / nose: tip back onto the wheels
+      var gw2 = rear.air < 0.05 ? rear : front;
+      var rel2 = b.a - Math.atan2(gw2.nx || 0, -(gw2.ny || -1));
+      while (rel2 > Math.PI) rel2 -= 2 * Math.PI;
+      while (rel2 < -Math.PI) rel2 += 2 * Math.PI;
+      if (Math.abs(rel2) > 0.9 && Math.abs(rel2) < 2.2 && b.w * rel2 >= -1.5) this.pivotSpin(-Math.sign(rel2) * 14 * h, gw2.x, gw2.y);
     }
     // integrate
     b.x += b.vx * h; b.y += b.vy * h; b.a += b.w * h;
@@ -681,6 +693,7 @@
       n = this.collide(b.x + lx, b.y + ly, sp.r);
       for (var k = 0; k < n; k++) {
         c = this.contacts[k];
+        if (c.seg.k === 'b' && this.bounceCd > 0) continue;
         if (c.seg.k === 's' && !this.crashed) this.crash('spikes');
         var imp = resolveRigid(b, lx, ly, c, 0.05, 0.45);
         if (imp > 0) this.chassisHit = 0.08;
@@ -709,6 +722,13 @@
     }
   };
 
+  // rotate the bike around a point (e.g. the wheel touching the ground)
+  W.pivotSpin = function (dw, px, py) {
+    var b = this.bike;
+    b.w += dw; b.vx += -dw * (b.y - py); b.vy += dw * (b.x - px);
+    for (var i = 0; i < 2; i++) { var wh = b.wheels[i]; wh.vx += -dw * (wh.y - py); wh.vy += dw * (wh.x - px); }
+  };
+
   W.stepRoller = function (r, h) {
     if (r.dead) return;
     r.t += h;
@@ -722,6 +742,11 @@
       if (was > 0.2 && r.kind === 'boulder' && r.impact > 250) this.events.push({ type: 'rumble', x: r.x, y: r.y, v: r.impact });
     } else r.air += h;
     r.s *= (1 - (r.kind === 'log' ? 1.2 : 0.05) * h);
+    // boulders are pushed along by the course: they never stop chasing you
+    if (r.kind === 'boulder' && r.air < 0.1) {
+      if (r.vx < 430) { r.vx += 900 * h; r.s = Math.max(r.s, r.vx); }
+      else if (r.vx > 760) { var k = 1 - 3 * h; r.vx *= k; r.vy *= k; r.s *= k; }
+    }
     // vs bike wheels
     var b = this.bike;
     for (var i = 0; i < 2; i++) {
@@ -830,7 +855,9 @@
     if (!this.started && !this.finished && (inp.gas || inp.brake || inp.lean)) { this.started = true; this.events.push({ type: 'start' }); }
     for (i = 0; i < 2; i++) b.wheels[i].impact = 0;
     this.loopStick = 0;
+    for (i = 0; i < this.movers.length; i++) this.movers[i].on = 0;
     for (i = 0; i < SUB; i++) this.substep(inp);
+    for (i = 0; i < this.movers.length; i++) { var mv = this.movers[i]; mv.onT = mv.on === 3 ? mv.onT + DT : 0; }
     if (this.bounceCd > 0) this.bounceCd -= DT;
     if (this.boostCd > 0) this.boostCd -= DT;
     if (this.chassisHit > 0) this.chassisHit -= DT;

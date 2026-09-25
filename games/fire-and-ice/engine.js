@@ -61,7 +61,7 @@
             } else if (o.t === 'lever') {
               w.levers.push({ x: x * T, y: y * T, ch: o.ch, on: !!o.on, ang: o.on ? 1 : -1 });
             } else if (o.t === 'portal') {
-              w.portals.push({ key: c, to: o.to, x: x * T, y: (y - 1) * T, w: T, h: 2 * T, color: o.color || '#c77dff', spin: 0 });
+              w.portals.push({ key: c, to: o.to, x: x * T, y: (y - 1) * T, w: T, h: 2 * T, color: o.only === 'fire' ? '#ff7b2e' : o.only === 'ice' ? '#3cc8ff' : (o.color || '#c77dff'), only: o.only || null, spin: 0 });
             } else {
               var e = ext[c];
               if (!e) ext[c] = { x0: x, y0: y, x1: x, y1: y };
@@ -76,7 +76,7 @@
       var tw = e.x1 - e.x0 + 1, th = e.y1 - e.y0 + 1;
       if (o.t === 'mover' || o.t === 'gate') {
         var m = {
-          style: o.style || (o.t === 'gate' ? 'gate' : 'plat'), ch: o.ch || null, inv: !!o.inv,
+          style: o.style || (o.t === 'gate' ? 'gate' : 'plat'), ch: o.ch || null, inv: !!o.inv, auto: !!o.auto,
           x: e.x0 * T, y: e.y0 * T, w: tw * T, h: th * T,
           ax: e.x0 * T, ay: e.y0 * T, bx: (e.x0 + (o.dx || 0)) * T, by: (e.y0 + (o.dy || 0)) * T,
           speed: o.speed || (o.t === 'gate' ? 170 : 95), pause: o.pause == null ? 0.7 : o.pause,
@@ -89,7 +89,8 @@
         w.movers.push(m);
       } else if (o.t === 'fan') {
         for (var fx = e.x0; fx <= e.x1; fx++) { w.tiles[e.y0 * W + fx] = S; w.fanTile[e.y0 * W + fx] = 1; }
-        w.fans.push({ x: e.x0 * T, y: e.y0 * T, w: tw * T, top: (e.y0 - o.h) * T, ch: o.ch || null, inv: !!o.inv, on: true, spin: 0, power: 1 });
+        w.fans.push({ x: e.x0 * T, y: e.y0 * T, w: tw * T, top: (e.y0 - o.h) * T, ch: o.ch || null, inv: !!o.inv, on: true, spin: 0, power: 1,
+          cycle: o.cycle || 0, onFor: o.onFor || 0, phase: o.phase || 0 });
       } else {
         throw new Error('bad object type ' + o.t);
       }
@@ -103,8 +104,9 @@
     w.players = [w.ice, w.fire];
     // initial channels & mover placement
     computeChannels(w);
+    w.fans.forEach(function (f) { f.power = f.on ? 1 : 0; });
     w.movers.forEach(function (m) {
-      if (m.ch) {
+      if (m.ch && !m.auto) {
         var on = !!w.chan[m.ch]; if (m.inv) on = !on;
         if (on) { m.x = m.fx = m.bx; m.y = m.fy = m.by; }
       }
@@ -311,8 +313,10 @@
   }
   function updateMover2(w, m, dt) {
     var toB;
-    if (m.ch) { toB = !!w.chan[m.ch]; if (m.inv) toB = !toB; }
+    if (m.ch && !m.auto) { toB = !!w.chan[m.ch]; if (m.inv) toB = !toB; }
     else {
+      // auto platforms ping-pong; powered ones (auto + ch) only while their colour is on
+      if (m.ch && (!w.chan[m.ch]) !== m.inv) { m.moving = false; return; }
       if (m.wait > 0) { m.wait -= dt; m.moving = false; return; }
       toB = m.goB;
     }
@@ -320,7 +324,7 @@
     var dx = tx - m.fx, dy = ty - m.fy, d = Math.sqrt(dx * dx + dy * dy);
     if (d < 0.001) {
       m.fx = m.x = tx; m.fy = m.y = ty;
-      if (!m.ch) { m.goB = !m.goB; m.wait = m.pause; }
+      if (!m.ch || m.auto) { m.goB = !m.goB; m.wait = m.pause; }
       if (m.moving) w.events.push({ t: 'moverStop', m: m });
       m.moving = false;
       return;
@@ -361,6 +365,13 @@
     for (i = 0; i < w.fans.length; i++) {
       var f = w.fans[i];
       f.on = f.ch ? (!!ch[f.ch] !== f.inv) : true;
+      if (f.cycle) {
+        // timed fans blink on and off; f.warn is true just before they switch off
+        var ph = ((w.t + f.phase) % f.cycle + f.cycle) % f.cycle;
+        f.on = f.on && ph < f.onFor;
+        f.ph = ph;
+        f.warn = f.on && ph > f.onFor - 0.6;
+      }
     }
   }
 
@@ -482,6 +493,7 @@
     for (var i = 0; i < w.portals.length; i++) {
       var P = w.portals[i];
       if (!P.dest) continue;
+      if (P.only && e.kind !== P.only) continue; // elemental portals only take their own hero
       if (cx > P.x + 5 && cx < P.x + P.w - 5 && cy > P.y + 4 && cy < P.y + P.h) {
         var D = P.dest;
         var nx = Math.round(D.x + (T - e.w) / 2), ny = D.y + D.h - e.h;
@@ -489,6 +501,7 @@
         e.x = nx; e.y = ny;
         if (blockerAt(w, e, e.x, e.y, false)) { e.x = old.x; e.y = old.y; continue; }
         e.rx = 0; e.ry = 0; e.portalLock = D;
+        if (e.vy < 0) e.vy = 0; // no bouncing straight back in
         w.events.push({ t: 'portal', e: e, from: P, to: D, ox: old.x, oy: old.y });
         return;
       }
@@ -556,12 +569,18 @@
       lvr.ang += ((lvr.on ? 1 : -1) - lvr.ang) * Math.min(1, dt * 14);
     }
     computeChannels(w);
+    for (i = 0; i < w.fans.length; i++) {
+      var fn = w.fans[i];
+      fn.power += ((fn.on ? 1 : 0) - fn.power) * Math.min(1, dt * 5);
+      fn.spin += fn.power * dt * 30;
+    }
     for (i = 0; i < w.buttons.length; i++) {
       var bt = w.buttons[i];
       bt.amt += ((bt.down ? 1 : 0) - bt.amt) * Math.min(1, dt * 20);
     }
     ['fire', 'ice'].forEach(function (k) {
       var ex = w.exits[k], p = w[k];
+      if (!ex) return;
       var o = p.alive && p.atDoor;
       if (o && !ex.occupied) w.events.push({ t: 'door', kind: k });
       ex.occupied = o;

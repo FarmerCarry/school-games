@@ -10,6 +10,8 @@
  *                                            at = run toward tx and take off when passing column `at`)
  *   ['I'|'F', 'walk', dir, frames]           hold a direction for n frames
  *   ['I'|'F', 'hop']                          jump straight up without steering
+ *   ['I'|'F', 'float', tx, row]               steer toward tx until feet are above `row` (fans)
+ *   ['I'|'F', 'enter', dir]                   walk until a portal teleports you
  *   ['wait', frames]
  *   ['until', function (w) { return bool }]
  *   ['par', [cmds...], [cmds...]]            run two lists at the same time
@@ -58,6 +60,21 @@
       if (c[2] > 0) inp.r = true; else inp.l = true;
       return false;
     }
+    if (c[1] === 'enter') {
+      // walk in direction c[2] until a portal zaps us somewhere else
+      if (st.px != null && Math.abs(p.x - st.px) + Math.abs(p.y - st.py) > 40) return true;
+      st.px = p.x; st.py = p.y;
+      if (c[2] > 0) inp.r = true; else inp.l = true;
+      return false;
+    }
+    if (c[1] === 'float') {
+      // steer toward tx (while riding wind) until feet are above row c[3]
+      tgt = c[2] * T + T / 2; d = tgt - cx;
+      if (p.y + p.h <= c[3] * T && Math.abs(d) < 8) return true;
+      var sdf = p.vx * p.vx / (2 * 1200) + 1;
+      if (Math.abs(d) > 2 && (Math.abs(d) > sdf || Math.sign(p.vx) !== Math.sign(d))) { if (d > 0) inp.r = true; else inp.l = true; }
+      return false;
+    }
     if (c[1] === 'hop') {
       if (st.f >= 1 && st.f < 40) inp.j = true;
       if (!p.grounded) st.left = true;
@@ -86,6 +103,7 @@
       var hold = o.hold == null ? 40 : o.hold;
       if (fj >= 1 && fj < hold + 1) inp.j = true;
       if (!p.grounded) st.left = true;
+      if (p.inFan && fj > 5) return true;
       if (fj >= 1 + (o.delay || 0) || (st.f0 && !o.delay)) {
         var sd2 = p.vx * p.vx / (2 * 1200) + 2;
         if (Math.abs(d) > 3 && (Math.abs(d) > sd2 || Math.sign(p.vx) !== Math.sign(d))) { if (d > 0) inp.r = true; else inp.l = true; }

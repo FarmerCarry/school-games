@@ -122,7 +122,6 @@
             wall = d < 2 ? 0 : d < 4 + dirtD ? 1 : 2;
           } else {
             id = d === 0 ? (bio === 'snow' ? B.SNOW_GRASS : B.GRASS) : d < dirtD ? B.DIRT : B.STONE;
-            if (bio === 'snow' && d > 0 && d < 3 && rnd() < 0.5) id = B.SNOW;
             wall = d < 2 ? 0 : d < dirtD ? 1 : 2;
           }
           if (y >= H - 1) id = B.BEDROCK;
@@ -181,7 +180,7 @@
     vein(B.COPPER_ORE, 130, [3, 7], 72, 142);
     vein(B.IRON_ORE, 100, [3, 6], 86, 146);
     vein(B.GOLD_ORE, 50, [3, 5], 106, 147);
-    vein(B.DIAMOND_ORE, 30, [2, 4], 124, 148);
+    vein(B.DIAMOND_ORE, 40, [2, 4], 122, 148);
     vein(B.CLAY, 40, [5, 10], 55, 80);
     // surface grass fix where caves exposed dirt to sky: turn top dirt into grass
     for (x = 0; x < W; x++) {
@@ -195,7 +194,7 @@
     // water in oceans / low beaches
     for (x = 0; x < W; x++) {
       var ed = Math.min(x, W - 1 - x);
-      if (ed > 60) continue;
+      if (ed > 60 || this.surf[x] <= SEA) continue;
       for (y = SEA; y < H; y++) { if (t[y * W + x] !== 0) break; t[y * W + x] = B.WATER; }
     }
     // vegetation

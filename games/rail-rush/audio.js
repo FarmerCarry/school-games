@@ -144,6 +144,7 @@
       for (var i = 0; i < 10; i++) voice(c, A.master, t + i * 0.035, { f: mtof(84 + (i * 5) % 12), dur: 0.05, vol: 0.07, type: 'square' });
       voice(c, A.master, t + 0.38, { f: mtof(96), dur: 0.3, vol: 0.1, type: 'triangle' });
     },
+    edge: function () { var c = ctx(); if (!c) return; voice(c, A.master, c.currentTime, { f: 130, to: 90, dur: 0.08, vol: 0.16, type: 'triangle' }); },
     close: function () { var c = ctx(); if (!c) return; var t = c.currentTime; nz(c, A.master, t, { bp: 800, to: 3000, q: 2, dur: 0.35, vol: 0.18 }); }
   };
   RR.sfx = S;

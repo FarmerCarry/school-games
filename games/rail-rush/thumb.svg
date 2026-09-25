@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f8fff"/>
+      <stop offset="0.55" stop-color="#8fd3ff"/>
+      <stop offset="1" stop-color="#fff1d0"/>
+    </linearGradient>
+    <radialGradient id="burst" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff6c9" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#fff6c9" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bed" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c9b8a4"/>
+      <stop offset="1" stop-color="#9c8672"/>
+    </linearGradient>
+    <linearGradient id="train" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff6b75"/>
+      <stop offset="1" stop-color="#d9303f"/>
+    </linearGradient>
+    <linearGradient id="trainSide" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e84552"/>
+      <stop offset="1" stop-color="#b3202e"/>
+    </linearGradient>
+    <linearGradient id="blueTrain" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5aa0ff"/>
+      <stop offset="1" stop-color="#2a6fe0"/>
+    </linearGradient>
+    <radialGradient id="coin" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#fff3a0"/>
+      <stop offset="0.6" stop-color="#ffcc1a"/>
+      <stop offset="1" stop-color="#e59400"/>
+    </radialGradient>
+  </defs>
+
+  <!-- sky -->
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <g opacity="0.35" fill="#ffffff">
+    <path d="M250 150 L140 -20 L190 -20 Z"/>
+    <path d="M250 150 L260 -20 L310 -20 Z"/>
+    <path d="M250 150 L380 -20 L420 30 Z"/>
+    <path d="M250 150 L420 110 L420 160 Z"/>
+    <path d="M250 150 L20 -20 L70 -20 Z"/>
+  </g>
+  <circle cx="250" cy="150" r="120" fill="url(#burst)"/>
+  <!-- clouds -->
+  <g fill="#ffffff">
+    <ellipse cx="62" cy="120" rx="34" ry="14"/><ellipse cx="80" cy="110" rx="20" ry="14"/>
+    <ellipse cx="340" cy="92" rx="30" ry="11"/><ellipse cx="352" cy="84" rx="16" ry="11"/>
+  </g>
+
+  <!-- skyline -->
+  <g>
+    <rect x="0" y="120" width="42" height="120" fill="#ff8fa3"/>
+    <rect x="36" y="150" width="40" height="90" fill="#ffd166"/>
+    <rect x="72" y="132" width="34" height="108" fill="#06d6a0"/>
+    <rect x="102" y="160" width="36" height="80" fill="#b8a1ff"/>
+    <rect x="262" y="150" width="38" height="90" fill="#4cc9f0"/>
+    <rect x="296" y="118" width="44" height="122" fill="#ff9f1c"/>
+    <rect x="336" y="140" width="64" height="100" fill="#f78c6b"/>
+    <g fill="#ffffff" opacity="0.75">
+      <rect x="8" y="132" width="9" height="12"/><rect x="24" y="132" width="9" height="12"/><rect x="8" y="154" width="9" height="12"/><rect x="24" y="154" width="9" height="12"/>
+      <rect x="44" y="160" width="9" height="12"/><rect x="60" y="160" width="9" height="12"/><rect x="80" y="144" width="8" height="11"/><rect x="93" y="144" width="8" height="11"/>
+      <rect x="306" y="130" width="9" height="12"/><rect x="322" y="130" width="9" height="12"/><rect x="306" y="152" width="9" height="12"/><rect x="322" y="152" width="9" height="12"/>
+      <rect x="348" y="152" width="10" height="12"/><rect x="366" y="152" width="10" height="12"/><rect x="384" y="152" width="10" height="12"/>
+      <rect x="270" y="162" width="9" height="11"/><rect x="284" y="162" width="9" height="11"/>
+    </g>
+  </g>
+
+  <!-- ground: platforms + track bed in perspective -->
+  <path d="M0 240 L400 240 L400 400 L0 400 Z" fill="#8fd46e"/>
+  <path d="M150 240 L250 240 L400 330 L400 400 L0 400 L0 330 Z" fill="#efe2cf"/>
+  <path d="M168 240 L232 240 L400 372 L400 400 L0 400 L0 372 Z" fill="url(#bed)"/>
+  <!-- sleepers -->
+  <g fill="#8a5a3c">
+    <path d="M150 250 L250 250 L252 253 L148 253 Z"/>
+    <path d="M136 262 L264 262 L267 266 L133 266 Z"/>
+    <path d="M118 278 L282 278 L286 284 L114 284 Z"/>
+    <path d="M94 300 L306 300 L312 308 L88 308 Z"/>
+    <path d="M60 330 L340 330 L348 341 L52 341 Z"/>
+    <path d="M12 372 L388 372 L398 387 L2 387 Z"/>
+  </g>
+  <!-- rails -->
+  <g stroke="#e6ecf3" stroke-width="4" stroke-linecap="round">
+    <line x1="176" y1="240" x2="40" y2="400"/>
+    <line x1="189" y1="240" x2="118" y2="400"/>
+    <line x1="211" y1="240" x2="282" y2="400"/>
+    <line x1="224" y1="240" x2="360" y2="400"/>
+  </g>
+
+  <!-- blue train far right lane -->
+  <g>
+    <path d="M232 186 L262 186 L268 244 L226 244 Z" fill="url(#blueTrain)"/>
+    <rect x="234" y="194" width="26" height="14" rx="3" fill="#1f2a44"/>
+    <rect x="232" y="218" width="30" height="4" fill="#ffd23f"/>
+    <circle cx="238" cy="232" r="3" fill="#fff6b0"/><circle cx="256" cy="232" r="3" fill="#fff6b0"/>
+  </g>
+
+  <!-- big red train, left lane, coming at you -->
+  <g>
+    <path d="M18 128 L42 118 L42 340 L10 360 Z" fill="url(#trainSide)"/>
+    <path d="M42 118 L150 118 Q158 118 158 126 L158 334 L42 334 Z" fill="url(#train)"/>
+    <rect x="42" y="112" width="108" height="10" rx="4" fill="#eceff4"/>
+    <rect x="52" y="136" width="96" height="70" rx="12" fill="#1f2a44"/>
+    <path d="M60 146 L86 146 L70 196 L58 196 Z" fill="#7fb3ff" opacity="0.55"/>
+    <rect x="42" y="226" width="116" height="16" fill="#ffffff"/>
+    <rect x="42" y="244" width="116" height="5" fill="#ffd23f"/>
+    <circle cx="66" cy="282" r="13" fill="#fff6b0" stroke="#ffd23f" stroke-width="4"/>
+    <circle cx="134" cy="282" r="13" fill="#fff6b0" stroke="#ffd23f" stroke-width="4"/>
+    <circle cx="66" cy="282" r="26" fill="#fffbe0" opacity="0.35"/>
+    <circle cx="134" cy="282" r="26" fill="#fffbe0" opacity="0.35"/>
+    <rect x="36" y="318" width="128" height="22" rx="6" fill="#2b2d42"/>
+    <rect x="86" y="264" width="28" height="12" rx="3" fill="#ffffff"/>
+  </g>
+
+  <!-- coin arc -->
+  <g stroke="#b86b00" stroke-width="3">
+    <ellipse cx="190" cy="140" rx="15" ry="16" fill="url(#coin)"/>
+    <ellipse cx="226" cy="108" rx="15" ry="16" fill="url(#coin)"/>
+    <ellipse cx="272" cy="96" rx="15" ry="16" fill="url(#coin)"/>
+    <ellipse cx="342" cy="122" rx="15" ry="16" fill="url(#coin)"/>
+  </g>
+  <g fill="#fff6c9">
+    <rect x="187" y="131" width="5" height="18" rx="2"/><rect x="223" y="99" width="5" height="18" rx="2"/>
+    <rect x="269" y="87" width="5" height="18" rx="2"/><rect x="339" y="113" width="5" height="18" rx="2"/>
+  </g>
+
+  <!-- runner kid mid-jump -->
+  <g transform="translate(300 206) rotate(8)">
+    <ellipse cx="0" cy="120" rx="34" ry="8" fill="#000" opacity="0.18"/>
+    <!-- legs -->
+    <path d="M-12 30 L-30 58 L-18 76" fill="none" stroke="#3056c9" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M12 30 L26 62 L40 58" fill="none" stroke="#3056c9" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="-34" y="70" width="30" height="16" rx="7" fill="#ff3b5c" stroke="#1b1f4b" stroke-width="3"/>
+    <rect x="34" y="48" width="16" height="30" rx="7" fill="#ff3b5c" stroke="#1b1f4b" stroke-width="3"/>
+    <!-- arms up -->
+    <path d="M-20 -8 L-44 -34 L-48 -58" fill="none" stroke="#ff7a1a" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M20 -8 L42 -28 L58 -46" fill="none" stroke="#ff7a1a" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="-48" cy="-62" r="10" fill="#f5c79c" stroke="#1b1f4b" stroke-width="3"/>
+    <circle cx="61" cy="-50" r="10" fill="#f5c79c" stroke="#1b1f4b" stroke-width="3"/>
+    <!-- body -->
+    <rect x="-26" y="-16" width="52" height="52" rx="14" fill="#ff7a1a" stroke="#1b1f4b" stroke-width="4"/>
+    <rect x="-26" y="26" width="52" height="10" rx="4" fill="#ffd23f"/>
+    <rect x="-13" y="8" width="26" height="10" rx="3" fill="#ffd23f"/>
+    <!-- head -->
+    <circle cx="0" cy="-42" r="29" fill="#f5c79c" stroke="#1b1f4b" stroke-width="4"/>
+    <path d="M-29 -48 Q-28 -80 0 -80 Q28 -80 29 -48 Z" fill="#e63946" stroke="#1b1f4b" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M-34 -50 L10 -50 L14 -44 L-30 -44 Z" fill="#ffffff" stroke="#1b1f4b" stroke-width="3" stroke-linejoin="round"/>
+    <ellipse cx="-10" cy="-36" rx="4.5" ry="6.5" fill="#1b1f2f"/>
+    <ellipse cx="11" cy="-36" rx="4.5" ry="6.5" fill="#1b1f2f"/>
+    <circle cx="-11.5" cy="-38.5" r="1.6" fill="#fff"/><circle cx="9.5" cy="-38.5" r="1.6" fill="#fff"/>
+    <path d="M-9 -24 Q0 -15 10 -24 Z" fill="#7a1f2b"/>
+    <ellipse cx="-19" cy="-27" rx="5" ry="3" fill="#ff9aa2"/><ellipse cx="20" cy="-27" rx="5" ry="3" fill="#ff9aa2"/>
+  </g>
+  <!-- speed streaks -->
+  <g stroke="#ffffff" stroke-width="5" stroke-linecap="round" opacity="0.85">
+    <line x1="228" y1="232" x2="252" y2="226"/>
+    <line x1="222" y1="252" x2="250" y2="246"/>
+    <line x1="232" y1="272" x2="256" y2="266"/>
+  </g>
+
+  <!-- logo -->
+  <g font-family="'Arial Black', 'Segoe UI Black', 'Fredoka', Impact, sans-serif" font-weight="900" text-anchor="middle" stroke="#1b1f4b" stroke-linejoin="round" paint-order="stroke" transform="rotate(-6 200 60)">
+    <text x="106" y="80" font-size="68" fill="#ffd23f" stroke-width="16" textLength="146" lengthAdjust="spacingAndGlyphs">RAIL</text>
+    <text x="286" y="80" font-size="68" fill="#ff7a1a" stroke-width="16" textLength="166" lengthAdjust="spacingAndGlyphs">RUSH</text>
+  </g>
+</svg>

@@ -95,6 +95,7 @@
           continue;
         }
         g.drawImage(TEX[id], px, py);
+        if (id === B.LEAVES || id === B.PINE_LEAVES) leafEdges(g, wd, x, y, px, py);
         if (d.solid && d.opaque && !d.noEdge) {
           g.fillStyle = 'rgba(0,0,0,0.35)';
           if (!solidOp(wd, x, y - 1)) { if (id === B.GRASS || id === B.SNOW_GRASS) { g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(px, py, 16, 1); g.fillStyle = 'rgba(0,0,0,0.35)'; } else g.fillRect(px, py, 16, 1); }
@@ -105,6 +106,27 @@
       }
     }
   };
+  function isLeafy(id) { return id === B.LEAVES || id === B.PINE_LEAVES || id === B.TRUNK || (BLOCKS[id].solid && BLOCKS[id].opaque); }
+  // Bumpy, rounded canopy edges where leaves meet open air.
+  function leafEdges(g, wd, x, y, px, py) {
+    var up = !isLeafy(wd.get(x, y - 1)), dn = !isLeafy(wd.get(x, y + 1)), lf = !isLeafy(wd.get(x - 1, y)), rt = !isLeafy(wd.get(x + 1, y));
+    var h = (x * 73856093 ^ y * 19349663) >>> 0;
+    for (var k = 0; k < 16; k++) {
+      var d = ((h >> (k % 13)) & 3) === 0 ? 2 : (((h >> (k % 11)) & 1) ? 1 : 0);
+      if (up && d) g.clearRect(px + k, py, 1, d);
+      if (dn && d) g.clearRect(px + k, py + 16 - d, 1, d);
+      if (lf && d) g.clearRect(px, py + k, d, 1);
+      if (rt && d) g.clearRect(px + 16 - d, py + k, d, 1);
+    }
+    var c = [[up && lf, 0, 0], [up && rt, 12, 0], [dn && lf, 0, 12], [dn && rt, 12, 12]];
+    for (var i = 0; i < 4; i++) if (c[i][0]) {
+      var ox = c[i][1], oy = c[i][2], fx = ox === 0, fy = oy === 0;
+      for (var yy = 0; yy < 4; yy++) for (var xx = 0; xx < 4; xx++) {
+        var dx = fx ? xx : 3 - xx, dy = fy ? yy : 3 - yy;
+        if (dx + dy < 4) g.clearRect(px + ox + xx, py + oy + yy, 1, 1);
+      }
+    }
+  }
   function solidOp(wd, x, y) {
     if (x < 0 || x >= W || y < 0 || y >= H) return true;
     var d = BLOCKS[wd.tiles[y * W + x]]; return d.solid && d.opaque;
@@ -156,6 +178,7 @@
         var light = sl > bl ? sl : bl;
         if (pg > light) light = pg;
         if (amb > light) light = amb;
+        light = Math.sqrt(light) * 0.55 + light * 0.45;
         var dark = 1 - light;
         var r, g, bb, a;
         if (bl > sl && bl > 0.25) {
@@ -254,52 +277,51 @@
   var glowCyan = (function () { var c = mkCanvas(128, 128), g = c.getContext('2d'); var gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(120,255,255,0.8)'); gr.addColorStop(0.4, 'rgba(60,220,255,0.3)'); gr.addColorStop(1, 'rgba(40,200,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return c; })();
   BW.glowWarm = glowWarm; BW.glowCyan = glowCyan;
 
+  // Paints the sky BEHIND whatever is already on ctx (destination-over), front-most layer first.
   R.drawSky = function (ctx, camX, camY, vw, vh, tod, time) {
     var sk = BW.skyAt(tod), env = BW.envAt(tod);
     var VW = vw * TS, VH = vh * TS;
-    var gr = ctx.createLinearGradient(0, 0, 0, VH);
-    gr.addColorStop(0, rgb(sk.top)); gr.addColorStop(1, rgb(sk.bot));
-    ctx.fillStyle = gr; ctx.fillRect(0, 0, VW, VH);
-    // horizon position on screen (world y ~ 60)
     var hy = (58 - camY) * TS * 0.55 + VH * 0.3;
-    // stars
-    if (env.night > 0.05) {
-      ctx.fillStyle = '#fff';
-      for (var i = 0; i < stars.length; i++) {
-        var st = stars[i];
-        var tw = 0.6 + 0.4 * Math.sin(time * 2 + st[3]);
-        ctx.globalAlpha = env.night * tw;
-        var sx = ((st[0] - camX * 2) % VW + VW) % VW, sy = st[1] - (camY - 40) * 1.5;
-        if (sy < hy + 40) ctx.fillRect(sx, sy, st[2], st[2]);
-      }
-      ctx.globalAlpha = 1;
-    }
-    // sun & moon on an arc
-    var sunA = (tod / 0.58) * Math.PI; // 0..PI during day
-    if (tod < 0.6) this.drawSun(ctx, VW * 0.5 - Math.cos(sunA) * VW * 0.42, hy + 40 - Math.sin(sunA) * (hy + 10) * 0.95, env);
-    var mt = (tod - 0.56) / 0.44;
-    if (mt > 0 && mt < 1) {
-      var ma = mt * Math.PI;
-      this.drawMoon(ctx, VW * 0.5 - Math.cos(ma) * VW * 0.42, hy + 40 - Math.sin(ma) * (hy + 10) * 0.9);
-    }
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-over';
+    // parallax ridges (near first)
+    var farCol = lerpC(lerpC(sk.bot, [120, 150, 200], 0.45), [20, 26, 60], env.night * 0.6);
+    var nearCol = lerpC(lerpC(sk.bot, [70, 140, 90], 0.65), [14, 26, 40], env.night * 0.7);
+    this.drawRidge(ctx, nearRidge, camX * TS * 0.2, hy + 70, VW, VH, rgb(nearCol), 1100);
+    this.drawRidge(ctx, farRidge, camX * TS * 0.08, hy - 10, VW, VH, rgb(farCol), 1400);
+    if (env.sunset > 0.02) { ctx.fillStyle = 'rgba(255,140,90,' + (env.sunset * 0.25) + ')'; ctx.fillRect(0, 0, VW, VH); }
     // clouds
-    var cloudA = 0.95 - env.night * 0.55;
-    for (var c = 0; c < 9; c++) {
+    ctx.globalAlpha = 0.95 - env.night * 0.55;
+    for (var c = 8; c >= 0; c--) {
       var img = clouds[c % clouds.length];
       var span = VW + 400;
       var cx = ((c * 347 + time * (6 + c % 3 * 3) - camX * TS * 0.18) % span + span) % span - 300;
       var cy = 30 + (c * 71) % 150 - (camY - 50) * TS * 0.12;
       var sc = 0.6 + (c % 4) * 0.18;
-      ctx.globalAlpha = cloudA;
+      if (cy > VH || cy + 110 * sc < 0) continue;
       ctx.drawImage(img, cx, cy, 260 * sc, 110 * sc);
     }
     ctx.globalAlpha = 1;
-    if (env.sunset > 0.02) { ctx.fillStyle = 'rgba(255,140,90,' + (env.sunset * 0.25) + ')'; ctx.fillRect(0, 0, VW, VH); }
-    // parallax ridges
-    var farCol = lerpC(lerpC(sk.bot, [120, 150, 200], 0.45), [20, 26, 60], env.night * 0.6);
-    var nearCol = lerpC(lerpC(sk.bot, [70, 140, 90], 0.65), [14, 26, 40], env.night * 0.7);
-    this.drawRidge(ctx, farRidge, camX * TS * 0.08, hy - 10, VW, VH, rgb(farCol), 1400);
-    this.drawRidge(ctx, nearRidge, camX * TS * 0.2, hy + 70, VW, VH, rgb(nearCol), 1100);
+    // sun & moon on an arc
+    var mt = (tod - 0.56) / 0.44;
+    if (mt > 0 && mt < 1) { var ma = mt * Math.PI; this.drawMoon(ctx, VW * 0.5 - Math.cos(ma) * VW * 0.42, hy + 40 - Math.sin(ma) * (hy + 10) * 0.9); }
+    var sunA = (tod / 0.58) * Math.PI;
+    if (tod < 0.6) this.drawSun(ctx, VW * 0.5 - Math.cos(sunA) * VW * 0.42, hy + 40 - Math.sin(sunA) * (hy + 10) * 0.95, env);
+    // stars
+    if (env.night > 0.05) {
+      ctx.fillStyle = '#fff';
+      for (var i = 0; i < stars.length; i++) {
+        var st = stars[i];
+        ctx.globalAlpha = env.night * (0.6 + 0.4 * Math.sin(time * 2 + st[3]));
+        var sx = ((st[0] - camX * 2) % VW + VW) % VW, sy = st[1] - (camY - 40) * 1.5;
+        if (sy < hy + 40 && sy > -4) ctx.fillRect(sx, sy, st[2], st[2]);
+      }
+      ctx.globalAlpha = 1;
+    }
+    var gr = ctx.createLinearGradient(0, 0, 0, VH);
+    gr.addColorStop(0, rgb(sk.top)); gr.addColorStop(1, rgb(sk.bot));
+    ctx.fillStyle = gr; ctx.fillRect(0, 0, VW, VH);
+    ctx.restore();
   };
   R.drawRidge = function (ctx, pts, off, base, VW, VH, col, period) {
     ctx.fillStyle = col;
@@ -317,21 +339,18 @@
     ctx.fill();
   };
   R.drawSun = function (ctx, x, y, env) {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.5;
-    ctx.drawImage(glowWarm, x - 110, y - 110, 220, 220);
-    ctx.restore();
-    ctx.fillStyle = env.sunset > 0.3 ? '#ffb347' : '#ffe45c';
-    ctx.fillRect(x - 30, y - 30, 60, 60);
     ctx.fillStyle = env.sunset > 0.3 ? '#ffd27a' : '#fff4a8';
     ctx.fillRect(x - 22, y - 22, 44, 44);
+    ctx.fillStyle = env.sunset > 0.3 ? '#ffb347' : '#ffe45c';
+    ctx.fillRect(x - 30, y - 30, 60, 60);
+    ctx.globalAlpha = 0.55;
+    ctx.drawImage(glowWarm, x - 110, y - 110, 220, 220);
+    ctx.globalAlpha = 1;
   };
   R.drawMoon = function (ctx, x, y) {
-    ctx.save(); ctx.globalAlpha = 0.25; ctx.globalCompositeOperation = 'lighter';
-    ctx.drawImage(glowCyan, x - 80, y - 80, 160, 160); ctx.restore();
-    ctx.fillStyle = '#eef2ff'; ctx.fillRect(x - 24, y - 24, 48, 48);
     ctx.fillStyle = '#c8d0ea'; ctx.fillRect(x - 12, y - 14, 12, 12); ctx.fillRect(x + 6, y + 4, 10, 10); ctx.fillRect(x - 16, y + 8, 7, 7);
+    ctx.fillStyle = '#eef2ff'; ctx.fillRect(x - 24, y - 24, 48, 48);
+    ctx.globalAlpha = 0.3; ctx.drawImage(glowCyan, x - 80, y - 80, 160, 160); ctx.globalAlpha = 1;
   };
 
   // ------------------------------------------------------------ sprites

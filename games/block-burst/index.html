@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>انفجار المكعبات</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+
+<div id="ui">
+  <!-- ================= TITLE ================= -->
+  <section id="scrTitle" class="scr">
+    <div class="logo">
+      <div class="logo-blocks" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div>
+      <div class="logo-top">انفجار</div>
+      <div class="logo-bot">المكعبات</div>
+    </div>
+
+    <div class="modes">
+      <button type="button" class="mode classic" id="btnClassic">
+        <span class="mode-art art-classic" aria-hidden="true"></span>
+        <span class="mode-name">كلاسيكي</span>
+        <span class="mode-sub" id="classicSub">الأفضل: 0</span>
+        <span class="mode-go" id="classicGo">▶ العب</span>
+        <span class="mode-key"><span class="sg-key">Enter</span></span>
+      </button>
+      <button type="button" class="mode adv" id="btnAdv">
+        <span class="mode-art art-adv" aria-hidden="true"></span>
+        <span class="mode-name">مغامرة</span>
+        <span class="mode-sub" id="advSub"><i class="st"></i> 0 / 60</span>
+        <span class="mode-go">▶ 20 مرحلة</span>
+        <span class="mode-key"><span class="sg-key">A</span></span>
+      </button>
+    </div>
+    <button type="button" class="newgame" id="btnNew" hidden>🔄 لعبة كلاسيكية جديدة</button>
+
+    <div class="skins-card">
+      <div class="skins-h">أشكال المكعبات</div>
+      <div class="skins" id="skins"></div>
+    </div>
+
+    <div class="howto">
+      <span class="hk"><span class="sg-key">اسحب</span> القطع إلى اللوحة</span>
+      <span class="hk">املأ صفًا أو عمودًا لتفجيره 💥</span>
+      <span class="hk"><span dir="ltr"><span class="sg-key">P</span><span class="sg-key">Esc</span></span> إيقاف</span>
+      <span class="hk"><span class="sg-key">M</span> الصوت</span>
+    </div>
+  </section>
+
+  <!-- ================= ADVENTURE MAP ================= -->
+  <section id="scrMap" class="scr" hidden>
+    <div class="map-head">
+      <button type="button" class="back" id="btnMapBack">→ رجوع <span class="sg-key">Esc</span></button>
+      <div class="map-title">المغامرة</div>
+      <div class="map-stars"><i class="st big"></i> <b id="mapStars">0</b> / 60</div>
+    </div>
+    <div class="worlds" id="worlds"></div>
+  </section>
+
+  <!-- ================= HUD ================= -->
+  <section id="hud" class="scr" hidden>
+    <button type="button" class="hbtn" id="btnPause" aria-label="إيقاف مؤقت"><span class="ico-pause"></span></button>
+  </section>
+
+  <!-- ================= PAUSE ================= -->
+  <section id="scrPause" class="scr ovl" hidden>
+    <div class="panel">
+      <h2>استراحة</h2>
+      <div class="col">
+        <button type="button" class="pbtn g" id="btnResume">▶ تابع اللعب <span class="sg-key">P</span></button>
+        <button type="button" class="pbtn" id="btnRestart">🔄 من جديد <span class="sg-key">R</span></button>
+        <button type="button" class="pbtn" id="btnMusic">🎵 الموسيقى: <b id="musicState">تعمل</b></button>
+        <button type="button" class="pbtn" id="btnPauseMenu">🏠 القائمة</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= GAME OVER (classic) ================= -->
+  <section id="scrOver" class="scr ovl" hidden>
+    <div class="panel wide">
+      <h2 id="overHead">لا مساحة!</h2>
+      <div class="newbest" id="overNewBest" hidden>🏆 رقم قياسي جديد!</div>
+      <div class="bigscore" id="overScore">0</div>
+      <div class="stats">
+        <div class="sbox"><label>الأفضل</label><b id="overBest">0</b></div>
+        <div class="sbox"><label>صفوف ممسوحة</label><b id="overLines">0</b></div>
+        <div class="sbox"><label>أكبر كومبو</label><b id="overCombo">0</b></div>
+      </div>
+      <div class="unlockbar" id="overUnlock"></div>
+      <div class="col row">
+        <button type="button" class="pbtn g" id="btnAgain">🔄 العب مجددًا <span class="sg-key">Enter</span></button>
+        <button type="button" class="pbtn" id="btnOverMenu">🏠 القائمة <span class="sg-key">Esc</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LEVEL WIN ================= -->
+  <section id="scrWin" class="scr ovl" hidden>
+    <div class="panel wide">
+      <h2 id="winHead">أحسنت!</h2>
+      <div class="winsub" id="winSub">المرحلة 1 مكتملة</div>
+      <div class="bigstars" id="winStars"><i></i><i></i><i></i></div>
+      <div class="stats">
+        <div class="sbox"><label>النقاط</label><b id="winScore">0</b></div>
+        <div class="sbox"><label>القطع المستخدمة</label><b id="winMoves">0</b></div>
+      </div>
+      <div class="starhint" id="winHint"></div>
+      <div class="unlockbar" id="winUnlock"></div>
+      <div class="col row">
+        <button type="button" class="pbtn g" id="btnNext">التالي ◀ <span class="sg-key">Enter</span></button>
+        <button type="button" class="pbtn" id="btnReplay">🔄 إعادة <span class="sg-key">R</span></button>
+        <button type="button" class="pbtn" id="btnWinMap">🗺️ الخريطة <span class="sg-key">Esc</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LEVEL FAIL ================= -->
+  <section id="scrFail" class="scr ovl" hidden>
+    <div class="panel">
+      <h2 id="failHead">نفدت الحركات!</h2>
+      <div class="winsub" id="failSub">كنت قريبًا جدًا!</div>
+      <div class="failgoal" id="failGoal"></div>
+      <div class="col">
+        <button type="button" class="pbtn g" id="btnRetry">🔄 حاول مجددًا <span class="sg-key">Enter</span></button>
+        <button type="button" class="pbtn" id="btnFailMap">🗺️ الخريطة <span class="sg-key">Esc</span></button>
+      </div>
+    </div>
+  </section>
+
+  <div id="toast" hidden></div>
+</div>
+
+<canvas id="fx"></canvas>
+<button type="button" class="sg-mute music-btn" id="btnMusicTop" aria-label="الموسيقى"></button>
+
+<script src="../../shared/kit.js"></script>
+<script src="core.js"></script>
+<script src="rules.js"></script>
+<script src="levels.js"></script>
+<script src="art.js"></script>
+<script src="audio.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

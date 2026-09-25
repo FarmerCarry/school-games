@@ -28,21 +28,26 @@
 <!-- TITLE -->
 <div id="title" class="ov">
   <div class="tbox">
-    <div class="logo"><span class="l1">NEON</span><span class="l2">SLOPE</span></div>
-    <div class="tag">Roll fast &middot; Dodge red &middot; Fly off ramps!</div>
-    <button id="btnPlay" class="nbtn play" type="button"><i class="tri"></i>PLAY</button>
-    <div class="trow">
-      <button id="btnShop" class="nbtn cyan" type="button">SHOP <span class="pill"><i class="gemico"></i><span id="tGems">0</span></span></button>
+    <div class="ttop">
+      <div class="logo"><span class="l1">NEON</span><span class="l2">SLOPE</span></div>
+      <div class="tag">Roll fast &middot; Dodge red &middot; Fly off ramps!</div>
     </div>
-    <div class="howto">
-      <span><span class="sg-key">←</span><span class="sg-key">→</span> or <span class="sg-key">A</span><span class="sg-key">D</span> steer</span>
-      <span class="sep"></span>
-      <span><i class="redblk"></i> red = bonk!</span>
-      <span class="sep"></span>
-      <span><i class="gemico"></i> grab gems</span>
+    <div class="tbot">
+      <div class="trow">
+        <div class="tstat"><div class="tl">BEST</div><div class="tv"><span id="tBest">0</span><small>m</small></div></div>
+        <button id="btnPlay" class="nbtn play" type="button"><i class="tri"></i>PLAY</button>
+        <button id="btnShop" class="nbtn cyan shopbtn" type="button"><span>SHOP</span><span class="pill"><i class="gemico"></i><span id="tGems">0</span></span></button>
+      </div>
+      <div class="howto">
+        <span><span class="sg-key">&larr;</span><span class="sg-key">&rarr;</span> or <span class="sg-key">A</span><span class="sg-key">D</span> steer</span>
+        <span class="sep"></span>
+        <span><i class="redblk"></i>red = bonk!</span>
+        <span class="sep"></span>
+        <span><i class="gemico"></i>grab gems, buy skins</span>
+        <span class="sep"></span>
+        <span><span class="sg-key">Space</span> play</span>
+      </div>
     </div>
-    <div class="tstats">BEST <b id="tBest">0</b> m <span id="tSkin"></span></div>
-    <div class="presskey">press <span class="sg-key">Space</span> to play</div>
   </div>
 </div>
 
@@ -52,6 +57,7 @@
     <h2 class="ptitle">PAUSED</h2>
     <button id="btnResume" class="nbtn play small" type="button">RESUME</button>
     <button id="btnRestart" class="nbtn cyan" type="button">RESTART</button>
+    <div id="pMissions" class="mlist small"></div>
     <div class="prow">
       <button id="btnMusic" class="nbtn ghost" type="button">MUSIC: ON</button>
       <button id="btnMenu" class="nbtn ghost" type="button">MENU</button>
@@ -63,16 +69,25 @@
 <!-- GAME OVER -->
 <div id="over" class="ov dim" hidden>
   <div class="panel over">
-    <h2 id="oTitle" class="ptitle">BONK!</h2>
-    <div id="oSub">You hit a red block</div>
-    <div class="odist"><span id="oDist">0</span><small>m</small></div>
-    <div id="oBest"></div>
-    <div class="ogems">
-      <div><i class="gemico"></i> +<b id="oGemRun">0</b> <span>gems</span></div>
-      <div>+<b id="oGemBonus">0</b> <span>distance bonus</span></div>
-      <div class="tot"><i class="gemico"></i> <b id="oGemTot">0</b></div>
+    <div class="ocols">
+      <div class="ocol">
+        <h2 id="oTitle" class="ptitle">BONK!</h2>
+        <div id="oSub">You hit a red block</div>
+        <div class="odist"><span id="oDist">0</span><small>m</small></div>
+        <div id="oBest"></div>
+        <div class="ogems">
+          <div class="gl"><span>Gems grabbed</span><b>+<span id="oGemRun">0</span></b></div>
+          <div class="gl"><span>Distance bonus</span><b>+<span id="oGemBonus">0</span></b></div>
+          <div class="gl" id="oMisRow"><span>Missions</span><b>+<span id="oGemMis">0</span></b></div>
+          <div class="gl tot"><span><i class="gemico"></i>Your gems</span><b id="oGemTot">0</b></div>
+        </div>
+      </div>
+      <div class="ocol right">
+        <div class="mhead">MISSIONS</div>
+        <div id="oMissions" class="mlist"></div>
+        <div id="oUnlock"><canvas id="oUnlockCv" width="96" height="96"></canvas><div><div id="oUnlockTxt"></div><div class="bar"><div id="oUnlockFill"></div></div></div></div>
+      </div>
     </div>
-    <div id="oUnlock"><canvas id="oUnlockCv" width="96" height="96"></canvas><div><div id="oUnlockTxt"></div><div class="bar"><div id="oUnlockFill"></div></div></div></div>
     <div class="obtns">
       <button id="btnAgain" class="nbtn play small" type="button">PLAY AGAIN</button>
       <button id="btnOShop" class="nbtn cyan" type="button">SHOP</button>

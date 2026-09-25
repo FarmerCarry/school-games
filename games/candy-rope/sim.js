@@ -21,10 +21,10 @@
     EAT_R: 64,           // candy centre -> Munch centre distance that feeds him
     BUBBLE_R: 46,        // catch distance for a bubble item
     BUB_RISE: -118,      // px/s rise speed inside a bubble
-    PUFF_RANGE: 470,
+    PUFF_RANGE: 560,
     PUFF_CONE: 0.72,     // half angle (rad)
     PUFF_POWER: 640,
-    BOUNCE_MIN: 800,
+    BOUNCE_MIN: 850,
     SPIKE_PAD: 9,
     SEG: 16              // visual rope segment length
   };
@@ -201,7 +201,7 @@
     if (c.alive && d < C.PUFF_RANGE) {
       var ang = d < 1 ? 0 : Math.acos(Math.max(-1, Math.min(1, (ox * dx + oy * dy) / d)));
       if (ang < C.PUFF_CONE || d < 50) {
-        var f = C.PUFF_POWER * (1 - 0.55 * d / C.PUFF_RANGE) * (c.bubble ? 0.8 : 1);
+        var f = C.PUFF_POWER * (1 - 0.55 * d / C.PUFF_RANGE) * (c.bubble ? 0.55 : 1);
         c.vx += dx * f; c.vy += dy * f; hit = true;
       }
     }
@@ -229,7 +229,7 @@
       // integrate
       if (c.bubble) {
         c.bubbleT += h;
-        c.vx *= (1 - 1.1 * h);
+        c.vx *= (1 - 0.9 * h);
         c.vy += (C.BUB_RISE - c.vy) * Math.min(1, 2.6 * h);
       } else {
         c.vy += C.GRAV * h;
@@ -261,7 +261,8 @@
           var vn = c.vx * tp.nx + c.vy * tp.ny;
           if (vn < 0) {
             var out = Math.max(-vn * 0.95, C.BOUNCE_MIN);
-            c.vx += tp.nx * (out - vn); c.vy += tp.ny * (out - vn);
+            var tx = c.vx - tp.nx * vn, ty = c.vy - tp.ny * vn; // tangential part, partly kept
+            c.vx = tp.nx * out + tx * 0.6; c.vy = tp.ny * out + ty * 0.6;
             c.x += tp.nx * (c.r + 6 - sd); c.y += tp.ny * (c.r + 6 - sd);
             tp.anim = 1;
             if (c.bubble) { c.bubble = false; emit(w, 'pop', c.x, c.y, { auto: true }); }
@@ -292,7 +293,7 @@
         var bb = w.bubbles[i];
         if (!bb.used && dist(c.x, c.y, bb.x, bb.y) < C.BUBBLE_R) {
           bb.used = true;
-          if (!c.bubble) { c.bubble = true; c.bubbleT = 0; c.vy *= 0.35; c.vx *= 0.6; }
+          if (!c.bubble) { c.bubble = true; c.bubbleT = 0; c.vy *= 0.2; c.vx *= 0.3; }
           emit(w, 'bubble', bb.x, bb.y, { i: i });
         }
       }

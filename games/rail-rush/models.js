@@ -103,8 +103,15 @@
 
   /* ------------------------------------------------- track chunks */
   // Returns { main, win } geometries for one 40 m chunk (z -20..20).
-  RR.buildChunk = function (seed) {
-    var r = mulberry(seed * 7919 + 13);
+  RR.ZONES = [
+    { name: 'Downtown', grass: '#7fcf5a', gantry: ['#ff7a1a', '#3a86ff', '#ef476f'] },
+    { name: 'Sunny Beach', grass: '#ffe3a6', gantry: ['#1fb6ff', '#ff6fb5', '#ffd23f'] },
+    { name: 'Green Hills', grass: '#86d95e', gantry: ['#ff7a1a', '#9b5de5', '#06d6a0'] }
+  ];
+  RR.buildChunk = function (seed, zone) {
+    zone = zone || 0;
+    var Z = RR.ZONES[zone];
+    var r = mulberry(seed * 7919 + 13 + zone * 1013);
     var b = new Builder(), w = new Builder();
     var L = RR.CHUNK, hz = L / 2;
     function R(a, c) { return a + r() * (c - a); }
@@ -127,7 +134,7 @@
       b.box('#efe2cf', side * 6.05, -0.4, 0, 2.9, 0.9, L, 0.85);
       b.box('#ffcf3a', side * 4.75, 0.5, 0, 0.3, 0.02, L);
       // grass strip
-      b.box('#7fcf5a', side * 9.6, -0.4, 0, 4.6, 0.75, L);
+      b.box(Z.grass, side * 9.6, -0.4, 0, 4.6, 0.75, L);
       // wall or fence at the back of the platform
       if (fenceKind === 0) {
         b.box('#e07a5f', side * 7.55, 0.5, 0, 0.35, 0.9, L, 0.8);
@@ -144,6 +151,8 @@
         b.box('#4a5568', side * 5.95, 4.6, lz, 1.0, 0.12, 0.14);
         w.box('#fff3c4', side * 5.55, 4.4, lz, 0.4, 0.2, 0.3);
       }
+      if (zone === 1) { beachSide(b, w, side, r, L); return; }
+      if (zone === 2) { hillSide(b, w, side, r, L); return; }
       // trees on grass strip
       var tz = -hz + R(2, 6);
       while (tz < hz - 2) {
@@ -218,7 +227,7 @@
     // catenary gantry
     if (r() < 0.7) {
       var gz = R(-12, 12);
-      var gc = pick(['#ff7a1a', '#3a86ff', '#ef476f']);
+      var gc = pick(Z.gantry);
       b.box('#56627a', -4.25, 0.5, gz, 0.35, 9.4, 0.35);
       b.box('#56627a', 4.25, 0.5, gz, 0.35, 9.4, 0.35);
       b.box(gc, 0, 9.5, gz, 9.2, 0.5, 0.5);
@@ -229,6 +238,125 @@
     }
     return { main: b.geometry(), win: w.geometry() };
   };
+
+  function palm(b, x, z, h, r) {
+    var lean = (r() - 0.5) * 0.5, segs = 5, px = x, py = 0.3;
+    for (var i = 0; i < segs; i++) {
+      var sh = h / segs;
+      b.add(GEO.cyl6, i % 2 ? '#a87444' : '#8b5a33', px, py + sh / 2, z, 0.42 - i * 0.04, sh * 1.05, 0.42 - i * 0.04, 0, 0, -lean * (i / segs));
+      px += Math.sin(lean * (i / segs)) * sh; py += sh;
+    }
+    for (var k = 0; k < 6; k++) {
+      var a = k / 6 * Math.PI * 2 + r();
+      b.add(GEO.cone4, k % 2 ? '#2fb84f' : '#3fd464', px + Math.cos(a) * 1.4, py - 0.5, z + Math.sin(a) * 1.4, 0.22, 3.0, 0.95, 0, -a, -(Math.PI / 2 + 0.35));
+    }
+    b.add(GEO.ico, '#6b4423', px + 0.2, py - 0.3, z + 0.1, 0.35, 0.35, 0.35);
+    b.add(GEO.ico, '#6b4423', px - 0.2, py - 0.35, z - 0.15, 0.35, 0.35, 0.35);
+  }
+  function hipHouse(b, w, cx, cz, wd, dp, h, col, roof, side, r) {
+    b.box(col, cx, 0.35, cz, dp, h, wd, 0.75);
+    b.add(GEO.cone4, roof, cx, 0.35 + h + 1.1, cz, dp * 1.45, 2.2, wd * 1.45, 0, Math.PI / 4, 0, 0.8);
+    // windows toward the track and toward the camera
+    var ry = side > 0 ? -Math.PI / 2 : Math.PI / 2, inner = cx - side * dp / 2 - side * 0.03;
+    var floors = Math.max(1, Math.floor((h - 0.6) / 2.3));
+    for (var f = 0; f < floors; f++) {
+      for (var c = 0; c < 2; c++) {
+        w.add(GEO.plane, r() < 0.3 ? '#8c97b5' : '#e9eefc', inner, 1.6 + f * 2.3, cz - wd / 4 + c * wd / 2, 1.0, 1.1, 1, 0, ry, 0);
+      }
+      w.add(GEO.plane, '#e9eefc', cx, 1.6 + f * 2.3, cz + wd / 2 + 0.03, 1.0, 1.1, 1);
+    }
+    b.box('#7a4a2a', inner + side * 0.02, 0.35, cz, 0.08, 1.9, 0.9);
+  }
+  function beachSide(b, w, side, r, L) {
+    var hz = L / 2;
+    function R(a, c) { return a + r() * (c - a); }
+    if (side < 0) {
+      // sand, surf and sea
+      b.box('#ffe3a6', -24, -0.4, 0, 24, 0.72, L);
+      b.box('#ffffff', -36.2, -0.4, 0, 0.8, 0.6, L);
+      b.box('#3ec5f0', -186, -0.9, 0, 300, 1.0, L, 0.9);
+      b.box('#8fe3ff', -45, -0.38, 0, 16, 0.02, L);
+      var uz = -hz + R(2, 6);
+      while (uz < hz - 3) {
+        var ux = R(-30, -14), uc = ['#ff4d6d', '#ffd23f', '#3a86ff', '#06d6a0', '#ff9f1c'][Math.floor(r() * 5)];
+        b.add(GEO.cyl6, '#ffffff', ux, 1.25, uz, 0.12, 2.5, 0.12);
+        b.add(GEO.cone6, uc, ux, 2.55, uz, 3.2, 0.9, 3.2, 0, r(), 0, 0.85);
+        b.add(GEO.cone6, '#ffffff', ux, 2.62, uz, 1.3, 0.75, 1.3, 0, r(), 0);
+        b.box(uc, ux + 1.4, 0.33, uz + R(-0.5, 0.5), 1.0, 0.04, 2.0);
+        uz += R(7, 12);
+      }
+      for (var p = 0; p < 3; p++) palm(b, R(-13, -9), -hz + 5 + p * 13 + R(-2, 2), R(6, 8.5), r);
+      if (r() < 0.5) {
+        var bx = R(-80, -50), bz = R(-12, 12);
+        b.box('#ffffff', bx, -0.6, bz, 3, 1.2, 7, 0.8);
+        b.add(GEO.cone4, r() < 0.5 ? '#ff4d6d' : '#ffd23f', bx, 4.2, bz, 0.4, 6.5, 4.5, 0, 0, 0);
+      }
+      if (r() < 0.4) {
+        var lx = R(-26, -18), lz = R(-10, 10);
+        [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) { b.box('#ffffff', lx + q[0] * 0.9, 0.3, lz + q[1] * 0.9, 0.2, 3.2, 0.2); });
+        b.box('#ff4d6d', lx, 3.4, lz, 2.4, 1.4, 2.4, 0.8);
+        b.add(GEO.cone4, '#ffffff', lx, 4.6, lz, 3.4, 1.0, 3.4, 0, Math.PI / 4, 0);
+      }
+    } else {
+      // promenade + beach houses
+      b.box('#ffe3a6', 32, -0.4, 0, 40, 0.8, L);
+      var z = hz - R(0, 2);
+      var cols = ['#ffadad', '#a0c4ff', '#caffbf', '#fdffb6', '#ffc6ff', '#9bf6ff', '#ffd6a5'];
+      while (z > -hz + 5) {
+        var wd = R(6, 9), dp = R(6, 9), h = R(3.5, 7.5);
+        if (z - wd < -hz) break;
+        hipHouse(b, w, 13 + dp / 2 + R(0, 2), z - wd / 2, wd, dp, h, cols[Math.floor(r() * cols.length)], ['#e76f51', '#2a9d8f', '#3a86ff', '#9b5de5'][Math.floor(r() * 4)], 1, r);
+        z -= wd + R(2, 5);
+      }
+      for (var q = 0; q < 3; q++) palm(b, R(9, 11.5), -hz + 6 + q * 13 + R(-2, 2), R(6, 8), r);
+      if (r() < 0.5) {
+        var kz = R(-14, 14);
+        b.box('#ffffff', 10.5, 0.35, kz, 1.8, 1.6, 2.4);
+        for (var a = 0; a < 4; a++) b.box(a % 2 ? '#ffffff' : '#ff6fb5', 10.2, 2.2, kz - 1.05 + a * 0.7, 2.6, 0.12, 0.7, 0, 0, 0, 0.3);
+        b.add(GEO.cone6, '#ffcf99', 10.5, 2.9, kz, 0.5, 0.8, 0.5, Math.PI, 0, 0);
+        b.add(GEO.ico1, '#ff9ec7', 10.5, 3.45, kz, 0.6, 0.6, 0.6);
+      }
+    }
+  }
+  function hillSide(b, w, side, r, L) {
+    var hz = L / 2;
+    function R(a, c) { return a + r() * (c - a); }
+    b.box('#86d95e', side * 32, -0.4, 0, 40, 0.8, L);
+    // rolling hills far away
+    for (var i = 0; i < 2; i++) {
+      var hs = R(28, 46);
+      b.add(GEO.ico1, ['#5cc451', '#6fd35f', '#4fb548'][Math.floor(r() * 3)], side * R(48, 70), -hs * 0.18, R(-hz, hz), hs * 1.3, hs * 0.55, hs, 0, r() * 3, 0, 0.8);
+    }
+    // picket fence
+    for (var f = 0; f < 14; f++) b.box('#ffffff', side * 12.2, 0.35, -hz + 1.5 + f * 2.9, 0.12, 1.0, 0.18);
+    b.box('#ffffff', side * 12.2, 0.95, 0, 0.08, 0.12, L);
+    // houses
+    var z = hz - R(0, 3);
+    var cols = ['#fff3e0', '#ffd6a5', '#caffbf', '#bde0fe', '#ffc8dd', '#fdffb6'];
+    while (z > -hz + 6) {
+      var wd = R(6, 8.5), dp = R(6, 8.5), h = R(3.2, 5.2);
+      if (z - wd < -hz) break;
+      hipHouse(b, w, side * (15 + dp / 2 + R(0, 3)), z - wd / 2, wd, dp, h, cols[Math.floor(r() * cols.length)], ['#d62828', '#e76f51', '#6d597a', '#355070'][Math.floor(r() * 4)], side, r);
+      z -= wd + R(4, 8);
+    }
+    // round trees and flowers
+    var tz = -hz + R(1, 4);
+    while (tz < hz - 1) {
+      var tx = side * R(8.6, 11.2), th = R(1.2, 2), ts = R(2, 3.2);
+      b.box('#8b5a3c', tx, 0.35, tz, 0.3, th, 0.3);
+      b.add(GEO.ico1, ['#3fbf5f', '#56d364', '#2fa84f', '#7ed957'][Math.floor(r() * 4)], tx, 0.35 + th + ts * 0.35, tz, ts, ts * 0.95, ts, 0, r() * 3, 0, 0.7);
+      tz += R(3.5, 7);
+    }
+    for (var fl = 0; fl < 10; fl++) {
+      b.box(['#ff4d6d', '#ffd23f', '#ffffff', '#c77dff'][Math.floor(r() * 4)], side * R(8.2, 11.8), 0.36, R(-hz, hz), 0.25, 0.12, 0.25);
+    }
+    if (r() < 0.35) {
+      var mx = side * R(26, 34), mz = R(-10, 10);
+      b.add(GEO.cone6, '#f4f1de', mx, 5, mz, 3, 10, 3, 0, 0, 0, 0.8);
+      b.box('#e63946', mx, 9.6, mz, 1.6, 1.6, 1.6);
+      for (var bl = 0; bl < 4; bl++) b.add(GEO.box, '#ffffff', mx - side * 0.9, 10.4, mz, 0.15, 7, 0.9, bl * Math.PI / 2 + 0.4, 0, 0);
+    }
+  }
 
   /* ------------------------------------------------------- trains */
   var TRAIN_STYLES = [
@@ -432,6 +560,18 @@
     });
   };
 
+  RR.ringCanvas = function () {
+    return canvasTex(128, function (g, s) {
+      var gr = g.createRadialGradient(s / 2, s / 2, s * 0.28, s / 2, s / 2, s / 2);
+      gr.addColorStop(0, 'rgba(255,255,255,0)');
+      gr.addColorStop(0.55, 'rgba(255,255,255,0.15)');
+      gr.addColorStop(0.78, 'rgba(255,255,255,1)');
+      gr.addColorStop(0.86, 'rgba(255,255,255,0.5)');
+      gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr;
+      g.fillRect(0, 0, s, s);
+    });
+  };
   RR.shadowCanvas = function () {
     return canvasTex(64, function (g, s) {
       var gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
@@ -551,9 +691,6 @@
       g.fillStyle = '#fff6c9'; g.fillRect(-4 * u, -20 * u, 8 * u, 34 * u);
     }
     g.restore();
-  };
-  RR.iconDataURL = function (type, size, bubble) {
-    return canvasTex(size || 96, function (g, s) { RR.drawIcon(g, type, s, bubble); }).toDataURL();
   };
 
   /* ------------------------------------------------------ particles */
@@ -726,7 +863,7 @@
     var A = {};
     A.cap = group(headG, 0, 0.4, 0);
     part(DOME, M.cap, A.cap, 0, 0, 0.01, 0.62, 0.48, 0.6);
-    part(BOX, M.brim, A.cap, 0, 0.0, -0.33, 0.44, 0.04, 0.26);
+    part(BOX, M.brim, A.cap, 0, 0.0, -0.36, 0.46, 0.045, 0.32).rotation.x = -0.18;
     part(SPH, M.brim, A.cap, 0, 0.24, 0.01, 0.07, 0.05, 0.07);
     part(BOX, M.brim, A.cap, 0, 0.06, 0.29, 0.18, 0.06, 0.04);
     A.backpack = group(torso, 0, 0.24, 0.2);

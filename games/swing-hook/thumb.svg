@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2eaefc"/>
+      <stop offset="1" stop-color="#bff0ff"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d95ff"/>
+      <stop offset="1" stop-color="#1f5fd6"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff7a8" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#fff7a8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <circle cx="335" cy="62" r="80" fill="url(#glow)"/>
+  <circle cx="335" cy="62" r="50" fill="#fff39a" opacity="0.35"/>
+  <circle cx="335" cy="62" r="36" fill="#fff39a"/>
+  <!-- clouds -->
+  <g fill="#fff" opacity="0.95">
+    <circle cx="60" cy="70" r="24"/><circle cx="88" cy="58" r="30"/><circle cx="118" cy="72" r="22"/><rect x="60" y="70" width="60" height="24" rx="12"/>
+    <circle cx="300" cy="170" r="16"/><circle cx="320" cy="160" r="21"/><circle cx="342" cy="172" r="15"/><rect x="300" y="170" width="44" height="17" rx="8"/>
+  </g>
+  <!-- hills -->
+  <path d="M0 300 C60 262 120 262 190 290 C260 318 320 262 400 276 L400 400 L0 400Z" fill="#8fe38a"/>
+  <path d="M0 322 C80 300 150 318 230 312 C300 306 350 290 400 300 L400 400 L0 400Z" fill="#4fc760"/>
+  <!-- other hooks -->
+  <g stroke="#23244a" stroke-width="5">
+    <circle cx="62" cy="168" r="11" fill="#fff"/>
+    <circle cx="356" cy="236" r="11" fill="#fff"/>
+  </g>
+  <circle cx="62" cy="168" r="4.5" fill="#ff4fa3"/>
+  <circle cx="356" cy="236" r="4.5" fill="#ff4fa3"/>
+  <!-- rainbow trail -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M-20 340 C50 310 140 272 228 252" stroke="#ff3b3b" stroke-width="13" transform="translate(0 -24)"/>
+    <path d="M-20 340 C50 310 140 272 228 252" stroke="#ff9a1f" stroke-width="13" transform="translate(0 -12)"/>
+    <path d="M-20 340 C50 310 140 272 228 252" stroke="#ffe03a" stroke-width="13"/>
+    <path d="M-20 340 C50 310 140 272 228 252" stroke="#35d45f" stroke-width="13" transform="translate(0 12)"/>
+    <path d="M-20 340 C50 310 140 272 228 252" stroke="#1fa8ff" stroke-width="13" transform="translate(0 24)"/>
+    <path d="M-20 340 C50 310 140 272 228 252" stroke="#9b5cff" stroke-width="13" transform="translate(0 36)"/>
+  </g>
+  <!-- rope -->
+  <line x1="262" y1="66" x2="215" y2="160" stroke="#23244a" stroke-width="9" stroke-linecap="round"/>
+  <line x1="262" y1="66" x2="215" y2="160" stroke="#fff3c4" stroke-width="4.5" stroke-linecap="round"/>
+  <!-- main hook -->
+  <circle cx="262" cy="62" r="30" fill="#ffe14d" opacity="0.45"/>
+  <circle cx="262" cy="62" r="17" fill="#ffe14d" stroke="#23244a" stroke-width="6"/>
+  <circle cx="262" cy="62" r="7" fill="#ff4fa3"/>
+  <!-- stick figure (rotated, flying) -->
+  <g transform="translate(236 250) rotate(-32) scale(2.5)" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <g stroke="#23163f" stroke-width="11">
+      <path d="M0 -12 L-12 -6 L-23 -1"/>
+      <path d="M-3 12 L-8 24 L-14 35"/>
+      <path d="M3 12 L9 23 L16 33"/>
+      <path d="M0 -12 L6 -24 L12 -35"/>
+      <path d="M0 -12 L0 12" stroke-width="14"/>
+    </g>
+    <circle cx="0" cy="-25" r="15.5" fill="#23163f"/>
+    <path d="M0 -12 L-12 -6 L-23 -1" stroke="#c4337a" stroke-width="6.5"/>
+    <path d="M-3 12 L-8 24 L-14 35" stroke="#c4337a" stroke-width="6.5"/>
+    <path d="M0 -12 L0 12" stroke="#ff4fa3" stroke-width="9"/>
+    <path d="M3 12 L9 23 L16 33" stroke="#ff4fa3" stroke-width="6.5"/>
+    <path d="M0 -12 L6 -24 L12 -35" stroke="#ff4fa3" stroke-width="6.5"/>
+    <circle cx="12" cy="-35" r="3.6" fill="#ffc4e1"/>
+    <circle cx="-23" cy="-1" r="3.6" fill="#ffc4e1"/>
+    <circle cx="0" cy="-25" r="12.5" fill="#ffc4e1"/>
+    <circle cx="-5" cy="-31" r="3.2" fill="#fff" opacity="0.6"/>
+    <circle cx="-4.6" cy="-26.5" r="4" fill="#fff" stroke="#23163f" stroke-width="1.4"/>
+    <circle cx="4.6" cy="-26.5" r="4" fill="#fff" stroke="#23163f" stroke-width="1.4"/>
+    <circle cx="-3.4" cy="-27.5" r="2.1" fill="#23163f"/>
+    <circle cx="5.8" cy="-27.5" r="2.1" fill="#23163f"/>
+    <path d="M-4.5 -20 A4.5 4.5 0 0 0 4.5 -20 Z" fill="#23163f"/>
+    <circle cx="-8" cy="-21" r="2.2" fill="#ff5a8c" opacity="0.4"/>
+    <circle cx="8" cy="-21" r="2.2" fill="#ff5a8c" opacity="0.4"/>
+    <path d="M6 -36 L14 -42 L15 -32 Z M6 -36 L-1 -43 L-2 -33 Z" fill="#ffe14d" stroke="#23163f" stroke-width="2.5"/>
+    <circle cx="6" cy="-36" r="2.6" fill="#ffe14d" stroke="#23163f" stroke-width="2.5"/>
+  </g>
+  <!-- speed sparkles -->
+  <g fill="#fff">
+    <path d="M300 120 l5 12 l12 5 l-12 5 l-5 12 l-5 -12 l-12 -5 l12 -5z"/>
+    <path d="M110 150 l3 8 l8 3 l-8 3 l-3 8 l-3 -8 l-8 -3 l8 -3z"/>
+    <path d="M330 290 l3 8 l8 3 l-8 3 l-3 8 l-3 -8 l-8 -3 l8 -3z"/>
+  </g>
+  <!-- water -->
+  <path d="M0 338 Q25 328 50 338 T100 338 T150 338 T200 338 T250 338 T300 338 T350 338 T400 338 L400 400 L0 400Z" fill="#8fd0ff"/>
+  <path d="M0 348 Q25 338 50 348 T100 348 T150 348 T200 348 T250 348 T300 348 T350 348 T400 348 L400 400 L0 400Z" fill="url(#sea)"/>
+  <!-- logo -->
+  <g font-family="'Arial Black', 'Segoe UI Black', 'Fredoka', Impact, sans-serif" font-weight="900" text-anchor="middle" transform="rotate(-5 200 356)">
+    <text x="200" y="378" font-size="56" textLength="350" lengthAdjust="spacingAndGlyphs" fill="#2a1747" stroke="#2a1747" stroke-width="16" stroke-linejoin="round">SWING HOOK</text>
+    <text x="200" y="372" font-size="56" textLength="350" lengthAdjust="spacingAndGlyphs" fill="#2a1747" stroke="#2a1747" stroke-width="16" stroke-linejoin="round">SWING HOOK</text>
+    <text x="200" y="372" font-size="56" textLength="350" lengthAdjust="spacingAndGlyphs" fill="#ffd21f">SWING <tspan fill="#ff4fa3">HOOK</tspan></text>
+  </g>
+</svg>

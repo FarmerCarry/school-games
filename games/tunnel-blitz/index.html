@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tunnel Blitz</title>
+<title>نفق السرعة</title>
 <link rel="stylesheet" href="../../shared/game.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -13,42 +13,42 @@
 <div id="ui">
   <!-- TITLE -->
   <div id="title" class="screen">
-    <div class="logo" aria-label="Tunnel Blitz">
-      <div class="l1">TUNNEL</div>
-      <div class="l2">BLITZ</div>
+    <div class="logo" aria-label="نفق السرعة">
+      <div class="l1">نفق</div>
+      <div class="l2">السرعة</div>
     </div>
     <div class="pills">
-      <span class="pill"><span class="ico-trophy"></span>BEST <b id="tBest">0 m</b></span>
-      <span class="pill">TOP ZONE <b id="tZone">1</b></span>
+      <span class="pill"><span class="ico-trophy"></span>أفضل نتيجة <b id="tBest">0 م</b></span>
+      <span class="pill">أعلى منطقة <b id="tZone">1</b></span>
       <span class="pill"><i class="orb"></i><b id="tOrbs">0</b></span>
     </div>
-    <button id="playBtn" class="sg-btn bigplay" type="button">PLAY</button>
+    <button id="playBtn" class="sg-btn bigplay" type="button">العب!</button>
     <div class="howto">
-      <div><span class="sg-key">&larr;</span><span class="sg-key">&rarr;</span> or <span class="sg-key">A</span><span class="sg-key">D</span> spin the tunnel</div>
+      <div><span dir="ltr"><span class="sg-key">&larr;</span><span class="sg-key">&rarr;</span></span> أو <span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> لتدوير النفق</div>
       <div class="dot"></div>
-      <div>or hold <span class="sg-key">Click</span> on the left / right side</div>
+      <div>أو اضغط مطوّلًا بـ<span class="sg-key">الفأرة</span> يمينًا أو يسارًا</div>
       <div class="dot"></div>
-      <div>Slip through the gaps and grab <i class="orb"></i> orbs!</div>
+      <div>مُرّ من الفتحات واجمع <i class="orb"></i> كرات الضوء!</div>
     </div>
-    <button id="hangarBtn" class="corner cleft" type="button"><span class="ico-ship"></span>HANGAR<span class="badge" id="hangarBadge" hidden>!</span></button>
-    <button id="missionsBtn" class="corner cright" type="button"><span class="ico-target"></span>MISSIONS<span class="badge" id="missionBadge" hidden></span></button>
+    <button id="hangarBtn" class="corner cleft" type="button"><span class="ico-ship"></span>المتجر<span class="badge" id="hangarBadge" hidden>!</span></button>
+    <button id="missionsBtn" class="corner cright" type="button"><span class="ico-target"></span>المهمات<span class="badge" id="missionBadge" hidden></span></button>
   </div>
 
-  <!-- HANGAR -->
+  <!-- SHOP -->
   <div id="hangar" class="screen modal" hidden>
     <div class="sg-panel wide">
       <div class="phead">
-        <h2>HANGAR</h2>
+        <h2>المتجر</h2>
         <div class="tabs">
-          <button class="tab on" data-tab="ships" type="button">Ships</button>
-          <button class="tab" data-tab="tunnels" type="button">Tunnels</button>
+          <button class="tab on" data-tab="ships" type="button">المركبات</button>
+          <button class="tab" data-tab="tunnels" type="button">الأنفاق</button>
         </div>
         <div class="bank"><i class="orb"></i><b id="hOrbs">0</b></div>
       </div>
       <div id="grid" class="grid"></div>
       <div class="pfoot">
-        <span class="hint">Grab orbs in the tunnel and finish missions to earn more!</span>
-        <button class="sg-btn secondary back" type="button">Back <span class="sg-key">Esc</span></button>
+        <span class="hint">اجمع كرات الضوء في النفق وأنجز المهمات لتربح المزيد!</span>
+        <button class="sg-btn secondary back" type="button">رجوع <span class="sg-key">Esc</span></button>
       </div>
     </div>
   </div>
@@ -57,14 +57,14 @@
   <div id="missions" class="screen modal" hidden>
     <div class="sg-panel wide mpanel">
       <div class="phead">
-        <h2>MISSIONS</h2>
-        <div class="mcount" id="mCount">0 / 0 done</div>
+        <h2>المهمات</h2>
+        <div class="mcount" id="mCount"></div>
         <div class="bank"><i class="orb"></i><b id="mOrbs">0</b></div>
       </div>
       <div id="mList" class="mlist"></div>
       <div class="pfoot">
-        <span class="hint">Finish a mission to unlock the next one. Rewards are paid instantly!</span>
-        <button class="sg-btn secondary back" type="button">Back <span class="sg-key">Esc</span></button>
+        <span class="hint">أنجز مهمة لتظهر المهمة التالية. الجائزة تصلك فورًا!</span>
+        <button class="sg-btn secondary back" type="button">رجوع <span class="sg-key">Esc</span></button>
       </div>
     </div>
   </div>
@@ -72,27 +72,27 @@
   <!-- PAUSE -->
   <div id="pause" class="screen dim" hidden>
     <div class="sg-panel">
-      <h2 class="ptitle">PAUSED</h2>
+      <h2 class="ptitle">استراحة</h2>
       <div class="pbtns">
-        <button id="resumeBtn" class="sg-btn good" type="button">Resume</button>
-        <button id="restartBtn" class="sg-btn" type="button">Restart</button>
-        <button id="menuBtn1" class="sg-btn secondary" type="button">Menu</button>
+        <button id="resumeBtn" class="sg-btn good" type="button">تابِع</button>
+        <button id="restartBtn" class="sg-btn" type="button">من جديد</button>
+        <button id="menuBtn1" class="sg-btn secondary" type="button">القائمة</button>
       </div>
-      <div class="hint"><span class="sg-key">P</span> / <span class="sg-key">Esc</span> resume &nbsp; <span class="sg-key">R</span> restart</div>
+      <div class="hint"><span dir="ltr"><span class="sg-key">P</span> / <span class="sg-key">Esc</span></span> للمتابعة &nbsp;&nbsp; <span class="sg-key">R</span> من جديد</div>
     </div>
   </div>
 
   <!-- GAME OVER -->
   <div id="over" class="screen dim" hidden>
     <div class="sg-panel overpanel">
-      <div class="crash">CRASHED!</div>
-      <div class="newbest" id="oNewBest" hidden>NEW BEST!</div>
-      <div class="bigscore"><span id="oScore">0</span><small> m</small></div>
-      <div class="oline" id="oLine">Best 0 m</div>
+      <div class="crash">اصطدمت!</div>
+      <div class="newbest" id="oNewBest" hidden>رقم قياسي جديد!</div>
+      <div class="bigscore"><span id="oScore" dir="ltr">0</span><small> م</small></div>
+      <div class="oline" id="oLine"></div>
       <div class="ostats">
-        <div class="ostat"><b id="oZone">1</b><span>zone</span></div>
-        <div class="ostat"><b><i class="orb"></i><span id="oOrbs">0</span></b><span>orbs</span></div>
-        <div class="ostat"><b id="oClose">0</b><span>close calls</span></div>
+        <div class="ostat"><b id="oZone">1</b><span>المنطقة</span></div>
+        <div class="ostat"><b><i class="orb"></i><em id="oOrbs">0</em></b><span>كرات الضوء</span></div>
+        <div class="ostat"><b id="oClose">0</b><span>على الحافة</span></div>
       </div>
       <div id="oMissions" class="omissions"></div>
       <div class="unlock" id="oUnlock">
@@ -100,18 +100,18 @@
         <div class="ubar"><div class="ufill" id="oUnlockFill"></div></div>
       </div>
       <div class="pbtns">
-        <button id="againBtn" class="sg-btn" type="button">Play again</button>
-        <button id="hangarBtn2" class="sg-btn secondary" type="button">Hangar</button>
-        <button id="menuBtn2" class="sg-btn secondary" type="button">Menu</button>
+        <button id="againBtn" class="sg-btn" type="button">العب مجددًا</button>
+        <button id="hangarBtn2" class="sg-btn secondary" type="button">المتجر</button>
+        <button id="menuBtn2" class="sg-btn secondary" type="button">القائمة</button>
       </div>
-      <div class="hint"><span class="sg-key">Space</span> / <span class="sg-key">Enter</span> / <span class="sg-key">R</span> play again</div>
+      <div class="hint"><span dir="ltr"><span class="sg-key">مسافة</span> / <span class="sg-key">Enter</span> / <span class="sg-key">R</span></span> للعب مجددًا</div>
     </div>
   </div>
 
   <div id="toasts"></div>
 </div>
 
-<button id="pauseBtn" class="pausebtn" type="button" aria-label="Pause" hidden><span></span><span></span></button>
+<button id="pauseBtn" class="pausebtn" type="button" aria-label="استراحة" hidden><span></span><span></span></button>
 
 <script src="../../shared/kit.js"></script>
 <script src="data.js"></script>

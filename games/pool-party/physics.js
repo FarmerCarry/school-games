@@ -159,7 +159,8 @@
 
   /* -------------------------------------------------------------------- shot */
   // angle in radians, speed px/s, spinX = side (-1 left .. 1 right), spinY = -1 draw .. 1 follow
-  P.shoot = function (st, angle, speed, spinX, spinY) {
+  P.shoot = function (st, angle, speed, spinX, spinY, isBreak) {
+    st.breakShot = !!isBreak; st.broke = false;
     var cue = P.ball(st, 0);
     var dx = Math.cos(angle), dy = Math.sin(angle);
     cue.vx = dx * speed; cue.vy = dy * speed;
@@ -274,6 +275,7 @@
       var push = (2 * R - d) / 2 + 0.001;
       a.x -= nx * push; a.y -= ny * push; b.x += nx * push; b.y += ny * push;
     }
+    if (st.breakShot && !st.broke && (a.n === 0 || b.n === 0)) { st.broke = true; explode(st, vr); }
     if (st.shot) {
       st.shot.hits++;
       if (st.shot.first < 0) {
@@ -281,6 +283,31 @@
       }
     }
     emit(st, 'ball', a, b, vr, a.x + nx * R, a.y + ny * R);
+  }
+
+  // Arcade break: when the cue ball first meets the rack, burst the whole pack apart.
+  function explode(st, v) {
+    var cx = 0, cy = 0, n = 0, i, b, rnd = st.rand || Math.random;
+    for (i = 0; i < st.balls.length; i++) { b = st.balls[i]; if (b.on && b.n !== 0) { cx += b.x; cy += b.y; n++; } }
+    if (!n) return;
+    cx /= n; cy /= n;
+    var cue = null;
+    for (i = 0; i < st.balls.length; i++) if (st.balls[i].n === 0) cue = st.balls[i];
+    var fx = cx - cue.x, fy = cy - cue.y, fl = Math.sqrt(fx * fx + fy * fy) || 1;
+    fx /= fl; fy /= fl;
+    var ox = cx - fx * 45, oy = cy - fy * 45;
+    var k = Math.min(1, v / P.MAX_SPEED);
+    for (i = 0; i < st.balls.length; i++) {
+      b = st.balls[i];
+      if (!b.on || b.n === 0) continue;
+      var dx = b.x - ox, dy = b.y - oy, dl = Math.sqrt(dx * dx + dy * dy);
+      if (dl > 120) continue;
+      dx /= dl; dy /= dl;
+      var ang = (rnd() - 0.5) * 0.5, ca = Math.cos(ang), sa = Math.sin(ang);
+      var ex = dx * ca - dy * sa, ey = dx * sa + dy * ca;
+      var mag = v * (0.2 + 0.3 * rnd()) * (0.5 + 0.5 * k);
+      b.vx += ex * mag; b.vy += ey * mag;
+    }
   }
 
   function potBall(st, b, pi) {

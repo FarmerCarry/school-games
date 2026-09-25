@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#fff4b8"/>
+      <stop offset="0.55" stop-color="#ffd166"/>
+      <stop offset="1" stop-color="#ff9f43"/>
+    </radialGradient>
+    <pattern id="chk" width="48" height="48" patternUnits="userSpaceOnUse" x="4">
+      <rect width="48" height="48" fill="#fff1d6"/>
+      <rect width="24" height="24" fill="#ffdcad"/>
+      <rect x="24" y="24" width="24" height="24" fill="#ffdcad"/>
+    </pattern>
+    <clipPath id="tailClip"><ellipse cx="-12" cy="0" rx="15" ry="8"/></clipPath>
+    <symbol id="banana" viewBox="0 0 64 64">
+      <g stroke="#4a2e1f" stroke-width="3" stroke-linejoin="round">
+        <path transform="translate(30 38) rotate(-31.5)" d="M-2-25C22-14 20 16-6 24C9 10 9-10-2-25Z" fill="#ffd23a"/>
+        <path transform="translate(32 38) rotate(-3)" d="M-2-25C22-14 20 16-6 24C9 10 9-10-2-25Z" fill="#ffe14a"/>
+        <path transform="translate(34 38) rotate(25.7)" d="M-2-25C22-14 20 16-6 24C9 10 9-10-2-25Z" fill="#ffd23a"/>
+      </g>
+    </symbol>
+    <symbol id="corn" viewBox="0 0 64 64">
+      <ellipse cx="32" cy="28" rx="12" ry="23" fill="#ffd23f" stroke="#4a2e1f" stroke-width="3"/>
+      <g fill="#fff09a"><circle cx="27" cy="14" r="2.2"/><circle cx="33" cy="14" r="2.2"/><circle cx="37" cy="20" r="2.2"/><circle cx="29" cy="20" r="2.2"/><circle cx="26" cy="26" r="2.2"/><circle cx="33" cy="26" r="2.2"/><circle cx="38" cy="31" r="2.2"/><circle cx="29" cy="32" r="2.2"/></g>
+      <path d="M32 58Q10 50 12 22Q22 40 34 44Z" fill="#63c54a" stroke="#4a2e1f" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M32 58Q54 50 52 24Q42 40 30 44Z" fill="#4fae3a" stroke="#4a2e1f" stroke-width="3" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="egg" viewBox="0 0 64 64">
+      <path d="M32 8C50 8 52 40 50 44C47 58 17 58 14 44C12 40 14 8 32 8Z" fill="#fff4e0" stroke="#4a2e1f" stroke-width="3"/>
+      <ellipse cx="25" cy="22" rx="4" ry="7" fill="#fff" transform="rotate(17 25 22)"/>
+    </symbol>
+    <symbol id="milk" viewBox="0 0 64 64">
+      <rect x="24" y="4" width="16" height="10" rx="3" fill="#3d8bfd" stroke="#4a2e1f" stroke-width="3"/>
+      <path d="M25 14H39L46 26V56Q46 60 42 60H22Q18 60 18 56V26Z" fill="#fbfdff" stroke="#4a2e1f" stroke-width="3" stroke-linejoin="round"/>
+      <rect x="19.5" y="32" width="25" height="15" fill="#6fb1ff"/>
+      <path d="M32 34Q38 42 32 45Q26 42 32 34Z" fill="#fff"/>
+    </symbol>
+    <symbol id="apple" viewBox="0 0 64 64">
+      <path d="M32 18C44 8 60 18 54 38C50 54 40 60 32 55C24 60 14 54 10 38C4 18 20 8 32 18Z" fill="#ff4b4b" stroke="#4a2e1f" stroke-width="3"/>
+      <path d="M32 18Q33 10 37 5" stroke="#6b4a2a" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M35 10Q46 2 52 9Q44 16 35 10Z" fill="#5cc44a" stroke="#4a2e1f" stroke-width="2"/>
+      <ellipse cx="21" cy="28" rx="4" ry="7" fill="#fff" opacity="0.75" transform="rotate(23 21 28)"/>
+    </symbol>
+    <symbol id="popcorn" viewBox="0 0 64 64">
+      <g stroke="#4a2e1f" stroke-width="2.5" fill="#fffdf5"><circle cx="20" cy="20" r="7.5" fill="#fff3c4"/><circle cx="32" cy="14" r="7.5"/><circle cx="44" cy="20" r="7.5"/><circle cx="26" cy="26" r="7.5" fill="#fff3c4"/><circle cx="38" cy="26" r="7.5"/><circle cx="15" cy="28" r="7.5"/><circle cx="49" cy="28" r="7.5" fill="#fff3c4"/></g>
+      <path d="M12 28H52L46 60H18Z" fill="#fff" stroke="#4a2e1f" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M14 28H21L20 60H15ZM28 28H35L32 60H27ZM42 28H49L44 60H39Z" fill="#ff4d5e"/>
+      <path d="M12 28H52L46 60H18Z" fill="none" stroke="#4a2e1f" stroke-width="3" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="ice" viewBox="0 0 64 64">
+      <path d="M18 30H46L32 62Z" fill="#f0b467" stroke="#4a2e1f" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M22 36L38 44M26 46L36 38M30 54L34 50" stroke="#c98a3e" stroke-width="2"/>
+      <path d="M14 30A18 18 0 0 1 50 30Q46 38 42 32Q38 40 33 33Q27 40 23 32Q18 37 14 30Z" fill="#ff8fbf" stroke="#4a2e1f" stroke-width="3" stroke-linejoin="round"/>
+      <circle cx="34" cy="7" r="5" fill="#e8203a" stroke="#4a2e1f" stroke-width="2.5"/>
+    </symbol>
+    <symbol id="coin" viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="28" fill="#e59a00" stroke="#8a5200" stroke-width="3"/>
+      <circle cx="30" cy="30" r="24" fill="#ffd23f"/>
+      <circle cx="30" cy="30" r="18" fill="none" stroke="#f0ae10" stroke-width="3"/>
+      <path d="M30 20L32.6 26.4L39.5 27L34.2 31.4L35.9 38L30 34.4L24.1 38L25.8 31.4L20.5 27L27.4 26.4Z" fill="#fff3a0" stroke="#d08a00" stroke-width="2" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <g fill="#ffffff" opacity="0.22">
+    <path d="M200 190L150-20H250Z"/><path d="M200 190L420 60V170Z"/><path d="M200 190L420 290V400H370Z"/>
+    <path d="M200 190L-20 60V170Z"/><path d="M200 190L-20 290V400H30Z"/>
+  </g>
+
+  <!-- back wall + floor -->
+  <rect x="0" y="236" width="400" height="60" fill="#fdf0dc"/>
+  <rect x="0" y="276" width="400" height="12" fill="#2ec4b6"/>
+  <rect x="0" y="272" width="400" height="4" fill="#ffd23f"/>
+  <rect x="0" y="228" width="400" height="12" fill="#e07a5f" stroke="#4a2e1f" stroke-width="3"/>
+  <rect x="0" y="292" width="400" height="108" fill="url(#chk)"/>
+  <path d="M0 292H400" stroke="#4a2e1f" stroke-width="3"/>
+
+  <!-- shelf left -->
+  <g stroke="#4a2e1f" stroke-width="3" stroke-linejoin="round">
+    <rect x="-10" y="262" width="96" height="34" rx="6" fill="#fffaf0"/>
+    <rect x="-10" y="290" width="96" height="34" rx="6" fill="#ff7070"/>
+  </g>
+  <use href="#apple" x="-4" y="252" width="30" height="30"/>
+  <use href="#apple" x="22" y="252" width="30" height="30"/>
+  <use href="#apple" x="48" y="252" width="30" height="30"/>
+
+  <!-- coins bursting -->
+  <use href="#coin" x="22" y="150" width="40" height="40"/>
+  <use href="#coin" x="60" y="98" width="30" height="30"/>
+  <use href="#coin" x="248" y="128" width="34" height="34"/>
+  <use href="#coin" x="352" y="220" width="30" height="30"/>
+  <use href="#coin" x="36" y="208" width="26" height="26"/>
+
+  <!-- bunny customer -->
+  <g transform="translate(318 330) scale(1.95)" stroke="#4a2e1f" stroke-linejoin="round" stroke-linecap="round">
+    <ellipse cx="0" cy="0" rx="18" ry="6" fill="#000" opacity="0.18" stroke="none"/>
+    <ellipse cx="-8" cy="-3" rx="7" ry="4.5" fill="#e3ddd6" stroke-width="2.5"/>
+    <ellipse cx="8" cy="-3" rx="7" ry="4.5" fill="#e3ddd6" stroke-width="2.5"/>
+    <ellipse cx="0" cy="-22" rx="16" ry="17" fill="#fbf6f0" stroke-width="3"/>
+    <ellipse cx="-16" cy="-21" rx="5" ry="7" fill="#fbf6f0" stroke-width="2.5" transform="rotate(17 -16 -21)"/>
+    <ellipse cx="16" cy="-21" rx="5" ry="7" fill="#fbf6f0" stroke-width="2.5" transform="rotate(-17 16 -21)"/>
+    <use href="#popcorn" x="-13" y="-38" width="17" height="17" stroke="none"/>
+    <use href="#milk" x="0" y="-38" width="17" height="17" stroke="none"/>
+    <path d="M-14-20H14L11-8H-11Z" fill="#d9a066" stroke-width="2.5"/>
+    <g transform="translate(0 -50)">
+      <ellipse cx="-8" cy="-30" rx="6.5" ry="17" fill="#fbf6f0" stroke-width="3" transform="rotate(-10 -8 -30)"/>
+      <ellipse cx="8" cy="-30" rx="6.5" ry="17" fill="#fbf6f0" stroke-width="3" transform="rotate(10 8 -30)"/>
+      <ellipse cx="-8" cy="-29" rx="3" ry="12" fill="#ffb7c9" stroke="none" transform="rotate(-10 -8 -29)"/>
+      <ellipse cx="8" cy="-29" rx="3" ry="12" fill="#ffb7c9" stroke="none" transform="rotate(10 8 -29)"/>
+      <circle cx="0" cy="0" r="19" fill="#fbf6f0" stroke-width="3"/>
+      <g stroke="none">
+        <ellipse cx="-9" cy="-2" rx="2.9" ry="3.6" fill="#231a1a"/><ellipse cx="5" cy="-2" rx="2.9" ry="3.6" fill="#231a1a"/>
+        <circle cx="-7.8" cy="-3.4" r="1.3" fill="#fff"/><circle cx="6.2" cy="-3.4" r="1.3" fill="#fff"/>
+        <path d="M-4.5 4H0.5L-2 7Z" fill="#ff8fb0"/>
+        <ellipse cx="-14" cy="5" rx="4" ry="2.5" fill="#ff6e8c" opacity="0.45"/><ellipse cx="10" cy="5" rx="4" ry="2.5" fill="#ff6e8c" opacity="0.45"/>
+      </g>
+      <path d="M-5.4 8.9A3.5 3.5 0 0 0 1.4 8.9" fill="none" stroke="#3a2218" stroke-width="2"/>
+      <path d="M12-16L5-21V-11ZM12-16L19-21V-11Z" fill="#ff5d8f" stroke-width="2"/>
+    </g>
+  </g>
+  <!-- thought bubble -->
+  <g stroke="#4a2e1f" stroke-width="4">
+    <circle cx="306" cy="148" r="6" fill="#fff" stroke-width="3"/>
+    <circle cx="318" cy="130" r="9" fill="#fff" stroke-width="3"/>
+    <rect x="300" y="52" width="80" height="70" rx="28" fill="#fff"/>
+  </g>
+  <use href="#ice" x="312" y="58" width="58" height="58"/>
+
+  <!-- raccoon hero -->
+  <g transform="translate(162 334) scale(2.5)" stroke="#4a2e1f" stroke-linejoin="round" stroke-linecap="round">
+    <ellipse cx="0" cy="0" rx="18" ry="6" fill="#000" opacity="0.18" stroke="none"/>
+    <g transform="translate(-12 -14) rotate(-52)">
+      <ellipse cx="-12" cy="0" rx="15" ry="8" fill="#9ea3b5" stroke="none"/>
+      <g clip-path="url(#tailClip)" fill="#4b4f63" stroke="none"><rect x="-24" y="-9" width="4.5" height="18"/><rect x="-15" y="-9" width="4.5" height="18"/><rect x="-6" y="-9" width="4.5" height="18"/></g>
+      <ellipse cx="-12" cy="0" rx="15" ry="8" fill="none" stroke-width="3"/>
+    </g>
+    <ellipse cx="-8" cy="-3" rx="7" ry="4.5" fill="#8c91a3" stroke-width="2.5"/>
+    <ellipse cx="8" cy="-6" rx="7" ry="4.5" fill="#8c91a3" stroke-width="2.5"/>
+    <ellipse cx="0" cy="-22" rx="16" ry="17" fill="#9ea3b5" stroke-width="3"/>
+    <ellipse cx="0" cy="-18" rx="10" ry="10" fill="#eef0f5" stroke="none"/>
+    <path d="M-10-30H10L12-8Q0-4-12-8Z" fill="#1fb5a8" stroke-width="2.5"/>
+    <path d="M-8-30L-7-38M8-30L7-38" stroke="#1fb5a8" stroke-width="3.5"/>
+    <rect x="-6" y="-21" width="12" height="8" rx="2" fill="#ffd23f" stroke-width="1.5"/>
+    <ellipse cx="-15" cy="-36" rx="5" ry="7" fill="#9ea3b5" stroke-width="2.5" transform="rotate(25 -15 -36)"/>
+    <ellipse cx="15" cy="-36" rx="5" ry="7" fill="#9ea3b5" stroke-width="2.5" transform="rotate(-25 15 -36)"/>
+    <g transform="translate(0 -50)">
+      <path d="M-17-6L-15-24L-4-16Z" fill="#9ea3b5" stroke-width="3"/>
+      <path d="M17-6L15-24L4-16Z" fill="#9ea3b5" stroke-width="3"/>
+      <path d="M-14-10L-13-19L-8-15Z M14-10L13-19L8-15Z" fill="#4b4f63" stroke="none"/>
+      <circle cx="0" cy="0" r="19" fill="#9ea3b5" stroke-width="3"/>
+      <g stroke="none">
+        <ellipse cx="-7.5" cy="-2" rx="8" ry="6.5" fill="#4b4f63" transform="rotate(9 -7.5 -2)"/>
+        <ellipse cx="7.5" cy="-2" rx="8" ry="6.5" fill="#4b4f63" transform="rotate(-9 7.5 -2)"/>
+        <ellipse cx="-7.5" cy="-2" rx="3.1" ry="3.9" fill="#231a1a"/><ellipse cx="7.5" cy="-2" rx="3.1" ry="3.9" fill="#231a1a"/>
+        <circle cx="-6.2" cy="-3.6" r="1.5" fill="#fff"/><circle cx="8.8" cy="-3.6" r="1.5" fill="#fff"/>
+        <ellipse cx="0" cy="7" rx="9" ry="6.5" fill="#eef0f5"/>
+        <ellipse cx="0" cy="3.5" rx="3.5" ry="2.5" fill="#231a1a"/>
+        <ellipse cx="-12" cy="5" rx="4" ry="2.5" fill="#ff6e8c" opacity="0.45"/><ellipse cx="12" cy="5" rx="4" ry="2.5" fill="#ff6e8c" opacity="0.45"/>
+      </g>
+      <path d="M-13-10Q-7-13-2-9M13-10Q7-13 2-9" fill="none" stroke="#fff" stroke-width="3"/>
+      <path d="M3.4 8.9A3.5 3.5 0 0 1-3.4 8.9" fill="none" stroke="#3a2218" stroke-width="2"/>
+      <path d="M-17-8A17 17 0 0 1 17-8Z" fill="#ff4d5e" stroke-width="3"/>
+      <ellipse cx="0" cy="-8" rx="21" ry="5" fill="#e02e45" stroke-width="3"/>
+      <circle cx="0" cy="-25" r="3" fill="#ffd23f" stroke-width="2"/>
+    </g>
+  </g>
+  <!-- the big wobbly stack -->
+  <use href="#corn" x="128" y="100" width="64" height="64"/>
+  <use href="#milk" x="134" y="58" width="62" height="62"/>
+  <use href="#banana" x="140" y="22" width="64" height="64"/>
+  <use href="#popcorn" x="150" y="-10" width="62" height="62"/>
+  <!-- logo -->
+  <g font-family="Arial Black, Segoe UI Black, Arial, sans-serif" font-weight="900" text-anchor="middle" stroke="#4a2e1f" stroke-linejoin="round" paint-order="stroke">
+    <text x="200" y="382" font-size="52" textLength="364" lengthAdjust="spacingAndGlyphs" stroke-width="13" fill="#4a2e1f" transform="translate(0 5)">CRITTER MART</text>
+    <text x="200" y="382" font-size="52" textLength="364" lengthAdjust="spacingAndGlyphs" stroke-width="13"><tspan fill="#ffcf3f">CRITTER </tspan><tspan fill="#ff7a59">MART</tspan></text>
+  </g>
+</svg>

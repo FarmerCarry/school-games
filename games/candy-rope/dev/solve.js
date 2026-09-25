@@ -37,21 +37,24 @@ function actionPool(L) {
   return { cuts: cuts, pops: (L.bubbles || []).length, blowers: (L.blowers || []).length };
 }
 
-function randomPlan(L, pool) {
-  var plan = [], f = ri(0, 90);
-  var cuts = pool.cuts.slice();
-  var pops = pool.pops;
-  var nPuff = pool.blowers ? ri(0, 7) : 0;
-  var bag = [];
-  // cut a random subset (usually most) of the ropes
-  cuts.forEach(function (k) { if (rnd() < 0.85) bag.push(['cut', k]); });
-  for (var i = 0; i < pops; i++) if (rnd() < 0.8) bag.push(['pop']);
-  for (i = 0; i < nPuff; i++) bag.push(['puff', ri(0, pool.blowers - 1)]);
-  // shuffle
-  for (i = bag.length - 1; i > 0; i--) { var j = ri(0, i); var t = bag[i]; bag[i] = bag[j]; bag[j] = t; }
-  for (i = 0; i < bag.length; i++) {
-    plan.push([f].concat(bag[i]));
-    f += rnd() < 0.2 ? ri(0, 8) : ri(4, 110);
+// One rollout: simulate, and at random moments apply a random action that is valid right then.
+function rollout(L, pool) {
+  var w = Sim.create(L, { visual: false }), plan = [];
+  var maxActs = pool.cuts.length + pool.pops + (pool.blowers ? 8 : 0) + 1;
+  while (w.state === 'play' && w.frame < 1500 && plan.length < maxActs) {
+    var lastPuff = plan.length && plan[plan.length - 1][1] === 'puff';
+    var wait = lastPuff && rnd() < 0.6 ? ri(9, 14) : rnd() < 0.25 ? ri(0, 6) : rnd() < 0.7 ? ri(3, 90) : ri(60, 300);
+    for (var i = 0; i < wait && w.state === 'play'; i++) { Sim.step(w); w.events.length = 0; }
+    if (w.state !== 'play') break;
+    var opts = [];
+    w.ropes.forEach(function (r) { opts.push(['cut', r.key]); });
+    if (w.candy.bubble) { opts.push(['pop']); opts.push(['pop']); }
+    for (i = 0; i < pool.blowers; i++) opts.push(['puff', i]);
+    if (!opts.length) { if (!w.rings.some(function (g) { return !g.used; }) && !w.bubbles.some(function (b) { return !b.used; })) break; continue; }
+    if (rnd() < 0.08) break;
+    var a = lastPuff && rnd() < 0.6 ? plan[plan.length - 1].slice(1) : opts[ri(0, opts.length - 1)];
+    plan.push([w.frame].concat(a));
+    Sim.act(w, a);
   }
   return plan;
 }
@@ -79,11 +82,23 @@ function robust(L, plan, needStars, J, trials) {
   return ok / trials;
 }
 
+// drop actions that don't matter (keeps hints clean)
+function prune(L, plan) {
+  if (!plan) return plan;
+  var base = Sim.run(L, plan);
+  for (var i = plan.length - 1; i >= 0; i--) {
+    var p = plan.slice(0, i).concat(plan.slice(i + 1));
+    var r = Sim.run(L, p);
+    if (r.state === base.state && r.stars >= base.stars) plan = p;
+  }
+  return plan;
+}
+
 function solveLevel(L) {
   var pool = actionPool(L);
   var best = null, bestS = -1, winners = [], threeStars = [];
   for (var t = 0; t < TRIES; t++) {
-    var plan = randomPlan(L, pool);
+    var plan = rollout(L, pool);
     var r = Sim.run(L, plan);
     var s = score(r);
     if (r.state === 'won') { winners.push({ plan: plan, stars: r.stars }); if (r.stars === 3) threeStars.push(plan); }
@@ -113,6 +128,7 @@ function solveLevel(L) {
     if (rb > r3 || !plan3) { r3 = rb; plan3 = p; }
   });
   var bestRes = best ? Sim.run(L, best) : null;
+  plan3 = prune(L, plan3); winPlan = prune(L, winPlan);
   return {
     won: winners.length > 0, winRate: winners.length / TRIES, stars: bestRes && bestRes.state === 'won' ? bestRes.stars : -1,
     winRob: winRob, r3: r3, plan: plan3 || best, winPlan: winPlan

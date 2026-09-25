@@ -18,6 +18,7 @@
   var ASSIST = 360;      // swing "pump" acceleration
   var RELEASE_BOOST = 1.07;
   var MINLEN = 70;
+  var CATCH_KEEP = 0.9;
   var TAU = Math.PI * 2;
 
   var uid = 1;
@@ -29,7 +30,7 @@
     var L = {
       name: def.name || '', def: def,
       hooks: [], walls: [], pads: [], bumpers: [], saws: [], spinners: [], rings: [], stars: [],
-      finish: def.finish, sea: num(def.sea, 1000),
+      finish: def.finish, sea: num(def.sea, 900),
       start: { x: def.start[0], y: def.start[1] },
       launch: { vx: def.launch ? def.launch[0] : 520, vy: def.launch ? def.launch[1] : -380 },
       minX: 0, maxX: def.finish + 400, endless: !!def.endless
@@ -93,7 +94,7 @@
     return {
       L: L, t: 0, st: 'ready',
       x: L.start.x, y: L.start.y, vx: 0, vy: 0, ang: 0, av: 0,
-      hook: null, len: 0, target: null,
+      hook: null, len: 0, target: null, slack: false,
       timer: 0, flips: 0, spin: 0, combo: 0, maxX: L.start.x,
       rh: {}, lastBounce: -9, lastThud: -9, grounded: 0, deadKind: '',
       ev: []
@@ -132,7 +133,7 @@
   function attach(w, h) {
     var dx = w.x - h.cx, dy = w.y - h.cy;
     var d = Math.sqrt(dx * dx + dy * dy);
-    w.hook = h; w.len = Math.max(MINLEN, d); w.combo = 0;
+    w.hook = h; w.len = Math.max(MINLEN, d); w.combo = 0; w.slack = true;
     h.hitT = w.t;
     w.ev.push({ type: 'grab', x: h.cx, y: h.cy, h: h, sp: speed(w) });
   }
@@ -172,6 +173,7 @@
     if (w.st === 'dead') { w.t += dt; updateMovers(L, w.t); return; }
 
     // Rope input (once per step, responsive and deterministic).
+    updateMovers(L, w.t);
     if (w.st === 'play') {
       if (!w.hook) w.target = findTarget(w);
       if (hold && !w.hook && w.target) attach(w, w.target);
@@ -220,8 +222,19 @@
       if (d > w.len) {
         w.x = hk.cx + nx * w.len; w.y = hk.cy + ny * w.len;
         vn = w.vx * nx + w.vy * ny;
-        if (vn > 0) { w.vx -= nx * vn; w.vy -= ny * vn; }
-      }
+        if (vn > 0) {
+          var before = Math.sqrt(w.vx * w.vx + w.vy * w.vy);
+          w.vx -= nx * vn; w.vy -= ny * vn;
+          if (w.slack) {
+            // rope snaps taut: keep most of the speed as swing (feels powerful)
+            var tv = Math.sqrt(w.vx * w.vx + w.vy * w.vy), want = before * CATCH_KEEP;
+            if (tv > 1 && want > tv) { w.vx *= want / tv; w.vy *= want / tv; }
+            else if (tv <= 1 && want > 1) { var qx = -ny, qy = nx; if (qx < 0) { qx = -qx; qy = -qy; } w.vx = qx * want; w.vy = qy * want; }
+            w.ev.push({ type: 'taut', x: w.x, y: w.y });
+          }
+        }
+        w.slack = false;
+      } else if (d < w.len - 4) w.slack = true;
       // body faces the hook; spin follows the swing
       var omega = (dx * w.vy - dy * w.vx) / (d * d);
       var targ = Math.atan2(-dx, dy);
@@ -335,11 +348,20 @@
       if (dx * dx + dy * dy < 22 * 22) { die(w, 'poof'); return; }
     }
 
-    // --- speed rings
+    // --- speed rings (with a gentle magnet so kids hit them)
     for (i = 0; i < L.rings.length; i++) {
       o = L.rings[i];
       dx = w.x - o.x; dy = w.y - o.y;
-      if (dx * dx + dy * dy > o.r * o.r) continue;
+      d2 = dx * dx + dy * dy;
+      if (d2 > o.r * o.r) {
+        var mr = o.r * 2.6;
+        if (d2 < mr * mr && !w.hook && !(w.rh[o.id] != null && w.t - w.rh[o.id] < 0.6)) {
+          d = Math.sqrt(d2);
+          var pull = 5200 * (1 - d / mr) * h / d;
+          w.vx -= dx * pull; w.vy -= dy * pull;
+        }
+        continue;
+      }
       if (w.rh[o.id] != null && w.t - w.rh[o.id] < 0.6) continue;
       w.rh[o.id] = w.t; o.hitT = w.t;
       sp = Math.sqrt(w.vx * w.vx + w.vy * w.vy) || 1;

@@ -279,13 +279,12 @@
       P(g, x, y, shade(col, f));
     }
   }
-  function leaves(g, pal, holes, snow) {
-    for (var y = 0; y < 16; y++) for (var x = 0; x < 16; x++) {
-      if (r() < holes) continue;
-      P(g, x, y, pick(pal));
-    }
-    for (var i = 0; i < 6; i++) { var x0 = ri(14), y0 = ri(14); P(g, x0, y0, shade(pal[0], 1.25)); P(g, x0 + 1, y0, shade(pal[0], 1.15)); }
-    if (snow) for (i = 0; i < 10; i++) { P(g, ri(16), ri(6), '#f4fbff'); }
+  function leaves(g, base, light, dark, hi, snow) {
+    R4(g, 0, 0, 16, 16, base);
+    for (var i = 0; i < 10; i++) { var x = ri(14), y = ri(14); R4(g, x, y, 2 + ri(2), 2, dark); }
+    for (i = 0; i < 12; i++) { var x2 = ri(14), y2 = ri(14); R4(g, x2, y2, 3, 2, light); R4(g, x2 + 1, y2 - 1, 1, 1, light); P(g, x2, y2, hi); }
+    for (i = 0; i < 4; i++) P(g, ri(16), ri(16), shade(dark, 0.8));
+    if (snow) for (i = 0; i < 7; i++) { var sx = ri(14), sy = ri(10); R4(g, sx, sy, 2, 1, '#f4fbff'); P(g, sx, sy + 1, '#dcecf8'); }
   }
 
   var TEX = [];
@@ -312,8 +311,8 @@
   T(B.SAND, sand);
   T(B.TRUNK, function (g) { bark(g, 3, 10); R4(g, 3, 0, 1, 16, '#4a2f16'); R4(g, 12, 0, 1, 16, '#4a2f16'); });
   T(B.LOG, function (g) { bark(g, 0, 16); R4(g, 0, 0, 16, 1, '#4a2f16'); R4(g, 0, 15, 16, 1, '#4a2f16'); });
-  T(B.LEAVES, function (g) { leaves(g, ['#3fa535', '#2f8f2b', '#4fbf40', '#37982f', '#46b03a'], 0.07); });
-  T(B.PINE_LEAVES, function (g) { leaves(g, ['#23703a', '#1d6232', '#2a7f42', '#1f6a36'], 0.06, true); });
+  T(B.LEAVES, function (g) { leaves(g, '#3a9e32', '#56c244', '#2a7a25', '#86e070'); });
+  T(B.PINE_LEAVES, function (g) { leaves(g, '#22703a', '#2f8a4a', '#185a2c', '#4aa860', true); });
   T(B.PLANKS, planks);
   T(B.COAL_ORE, function (g) { ore(g, '#2a2a2e', '#55555e', '#1a1a1e', 6); });
   T(B.COPPER_ORE, function (g) { ore(g, '#e07a3c', '#ffc08a', '#a8521f', 5); });

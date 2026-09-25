@@ -711,12 +711,14 @@
         ctx.strokeStyle = OUT; ctx.lineWidth = 4.5; line(ctx, x - w / 2 + 12, y - 2, x + w / 2 - 12, y - 2);
         ctx.fillStyle = '#e4ecff';
         for (var ck = 0; ck < n; ck++) { var cx3 = x - w / 2 + 24 + ck * (w - 48) / (n - 1); ell(ctx, cx3 + 6, y + 36, 16, 6); ctx.fill(); }
-        // little propellers
+        // little propellers keep the cloud afloat
         [-1, 1].forEach(function (s) {
-          var px2 = x + s * (w / 2 - 34), py = y + 58;
-          ctx.strokeStyle = OUT; ctx.lineWidth = 4; line(ctx, px2, y + 44, px2, py);
-          var sp = Math.cos(T * 30 + s);
-          ell(ctx, px2, py + 3, 22 * Math.abs(sp) + 2, 4); fs(ctx, '#ffd23f', OUT, 3);
+          var px2 = x + s * (w / 2 - 50), py = y + 72;
+          rrect(ctx, px2 - 9, y + 50, 18, 20, 5); fs(ctx, '#ff8fb1', OUT, 3.5);
+          var sp = Math.cos(T * 28 + s);
+          ell(ctx, px2 - 16 * sp, py + 4, 16 * Math.abs(sp) + 3, 5); fs(ctx, '#ffd23f', OUT, 3);
+          ell(ctx, px2 + 16 * sp, py + 4, 16 * Math.abs(sp) + 3, 5); fs(ctx, '#7de3ff', OUT, 3);
+          circ(ctx, px2, py + 4, 4.5); fs(ctx, '#ffffff', OUT, 2.5);
         });
         break;
       }

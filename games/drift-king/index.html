@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ملك الانزلاق</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+
+<div id="uiwrap"><div id="ui">
+  <button id="btnPause" class="hudbtn" type="button" aria-label="إيقاف مؤقت" hidden><b></b><b></b></button>
+
+  <!-- TITLE -->
+  <section id="title" class="screen">
+    <div class="logo">
+      <svg class="crown" viewBox="0 0 120 80" aria-hidden="true">
+        <path d="M10 70 L6 18 L34 42 L60 6 L86 42 L114 18 L110 70 Z" fill="#ffd23f" stroke="#7a3c00" stroke-width="6" stroke-linejoin="round"/>
+        <rect x="10" y="60" width="100" height="14" rx="5" fill="#ffb300" stroke="#7a3c00" stroke-width="6"/>
+        <circle cx="60" cy="44" r="8" fill="#ff4d8d"/><circle cx="32" cy="52" r="5" fill="#35e0ff"/><circle cx="88" cy="52" r="5" fill="#35e0ff"/>
+      </svg>
+      <h1 class="logotext">ملك الانزلاق</h1>
+      <div class="tag">زر واحد... انزلق في السماء ولا تسقط!</div>
+    </div>
+
+    <div class="tside tright">
+      <div class="statcard">
+        <div class="stl">أفضل نتيجة</div>
+        <div class="stv" id="tBest">0</div>
+      </div>
+      <div class="statcard coins">
+        <i class="coin"></i><span id="tCoins">0</span>
+      </div>
+      <button id="btnGarage" class="nbtn blue" type="button">
+        <svg viewBox="0 0 40 24" class="ico"><path d="M4 16 L7 8 Q9 5 13 5 L25 5 Q29 5 31 8 L35 12 Q38 13 38 16 L38 18 L2 18 L2 17 Z" fill="#fff"/><circle cx="11" cy="18" r="4" fill="#2d2a3e"/><circle cx="30" cy="18" r="4" fill="#2d2a3e"/></svg>
+        المرآب
+        <span class="badge" id="garageBadge" hidden>!</span>
+      </button>
+      <button id="btnGift" class="nbtn pink" type="button">
+        <svg viewBox="0 0 30 30" class="ico"><rect x="4" y="12" width="22" height="15" rx="2" fill="#fff"/><rect x="2" y="8" width="26" height="6" rx="2" fill="#fff"/><rect x="13" y="8" width="4" height="19" fill="#ff4d8d"/><path d="M15 8 Q8 0 6 5 Q6 9 15 8 Q22 0 24 5 Q24 9 15 8" fill="#fff"/></svg>
+        <span id="giftLabel">هدية!</span>
+      </button>
+    </div>
+
+    <div class="tside tleft">
+      <div class="card missions">
+        <div class="cardh">المهمات</div>
+        <div id="tMissions"></div>
+      </div>
+    </div>
+
+    <div class="tbottom">
+      <button id="btnPlay" class="playbtn" type="button"><span class="tri"></span>العب</button>
+      <div class="howto">
+        <span><span dir="ltr"><span class="sg-key">مسافة</span></span> أو <span class="mouse">انقر</span> اضغط مع الاستمرار للالتفاف</span>
+        <span class="sep"></span>
+        <span>اترك الزر لتلتف للجهة الأخرى</span>
+        <span class="sep"></span>
+        <span><i class="coin sm"></i> اجمع العملات واشترِ سيارات</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- GARAGE -->
+  <section id="garage" class="screen dim" hidden>
+    <div class="panel wide">
+      <div class="gtop">
+        <h2 class="ptitle">المرآب</h2>
+        <div class="statcard coins small"><i class="coin"></i><span id="gCoins">0</span></div>
+        <button id="btnGarageClose" class="nbtn ghost" type="button">رجوع <span dir="ltr"><span class="sg-key">Esc</span></span></button>
+      </div>
+      <div id="grid" class="grid"></div>
+    </div>
+  </section>
+
+  <!-- PAUSE -->
+  <section id="pause" class="screen dim" hidden>
+    <div class="panel">
+      <h2 class="ptitle">استراحة</h2>
+      <div class="col">
+        <button id="btnResume" class="playbtn small" type="button"><span class="tri"></span>تابع</button>
+        <button id="btnRestart" class="nbtn blue" type="button">ابدأ من جديد</button>
+        <button id="btnMusic" class="nbtn ghost" type="button">الموسيقى: تعمل</button>
+        <button id="btnMenu" class="nbtn ghost" type="button">القائمة</button>
+      </div>
+      <div class="phint"><span dir="ltr"><span class="sg-key">P</span></span> متابعة &nbsp; <span dir="ltr"><span class="sg-key">R</span></span> من جديد &nbsp; <span dir="ltr"><span class="sg-key">M</span></span> الصوت</div>
+    </div>
+  </section>
+
+  <!-- GAME OVER -->
+  <section id="over" class="screen dim" hidden>
+    <div class="panel over">
+      <div id="oRibbon" class="ribbon" hidden>رقم قياسي جديد!</div>
+      <h2 id="oTitle" class="ptitle">إلى الغيوم!</h2>
+      <div class="oscore" id="oScore">0</div>
+      <div class="obest" id="oBest">الأفضل: 0</div>
+      <div class="ostats">
+        <div><b id="oDist">0</b><span>المسافة</span></div>
+        <div><b id="oPerf">0</b><span>ممتاز</span></div>
+        <div><b id="oCombo">0</b><span>أطول سلسلة</span></div>
+        <div class="c"><b><i class="coin sm"></i><span id="oCoins">0</span></b><span>عملات</span></div>
+      </div>
+      <div id="oNext" class="onext"></div>
+      <div id="oMissions" class="omissions"></div>
+      <div class="orow">
+        <button id="btnAgain" class="playbtn small" type="button"><span class="tri"></span>العب مجددًا</button>
+        <button id="btnOverGarage" class="nbtn blue" type="button">المرآب</button>
+        <button id="btnOverMenu" class="nbtn ghost" type="button">القائمة</button>
+      </div>
+      <div class="phint"><span dir="ltr"><span class="sg-key">مسافة</span></span> أو <span dir="ltr"><span class="sg-key">R</span></span> للعب مجددًا</div>
+    </div>
+  </section>
+
+  <!-- GIFT -->
+  <section id="gift" class="screen dim" hidden>
+    <div class="panel giftp">
+      <h2 class="ptitle" id="giftTitle">صندوق هدايا!</h2>
+      <div id="giftBox" class="giftbox"><div class="lid"></div><div class="boxb"></div><div class="rib"></div></div>
+      <div id="giftAmount" class="giftamt" hidden><i class="coin"></i>+<span>0</span></div>
+      <div id="giftHint" class="phint">انقر على الصندوق لفتحه!</div>
+      <button id="btnGiftOk" class="playbtn small" type="button" hidden>رائع!</button>
+    </div>
+  </section>
+
+  <div id="toast" class="toast"></div>
+</div></div>
+
+<script src="../../shared/kit.js"></script>
+<script src="sim.js"></script>
+<script src="cars.js"></script>
+<script src="audio.js"></script>
+<script src="render.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

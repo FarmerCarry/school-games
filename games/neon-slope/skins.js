@@ -187,27 +187,35 @@
     { id: 'glow', name: 'Glow', price: 0, fx: null, desc: 'Matches your ball' },
     { id: 'sparkle', name: 'Sparkle', price: 40, fx: 'sparkle', colors: ['#ffffff', '#bff8ff'] },
     { id: 'fire', name: 'Fire', price: 90, fx: 'fire', colors: ['#fff27a', '#ff9a1f', '#ff3b1f'] },
+    { id: 'snow', name: 'Snowfall', price: 120, fx: 'snow', colors: ['#ffffff', '#dff6ff'] },
     { id: 'confetti', name: 'Confetti', price: 150, fx: 'confetti', colors: ['#ff4fbf', '#3ff0ff', '#ffd93b', '#7dff3a', '#a855ff'] },
-    { id: 'rainbow', name: 'Rainbow', price: 220, fx: null, rainbow: true },
-    { id: 'stars', name: 'Star Dust', price: 300, fx: 'stars', colors: ['#ffe14d', '#ffffff'] },
-    { id: 'lightning', name: 'Lightning', req: 1200, fx: 'zap', colors: ['#bfe8ff', '#6fb6ff', '#ffffff'] }
+    { id: 'bubbles', name: 'Bubbles', price: 190, fx: 'bubbles', colors: ['#7fd8ff', '#bff0ff', '#ffffff'] },
+    { id: 'rainbow', name: 'Rainbow', price: 240, fx: null, rainbow: true },
+    { id: 'toxic', name: 'Toxic Goo', price: 280, fx: 'toxic', colors: ['#7dff3a', '#b6ff3a', '#2fd35f'] },
+    { id: 'stars', name: 'Star Dust', price: 340, fx: 'stars', colors: ['#ffe14d', '#ffffff'] },
+    { id: 'lightning', name: 'Lightning', req: 1200, fx: 'zap', colors: ['#bfe8ff', '#6fb6ff', '#ffffff'] },
+    { id: 'plasma', name: 'Plasma', req: 2000, fx: 'zap', colors: ['#ff3fd0', '#b46bff', '#ffffff'] }
   ];
 
   var cache = {};
   function patternCanvas(skin) {
     if (cache[skin.id]) return cache[skin.id];
     var c = document.createElement('canvas'); c.width = W; c.height = H;
-    var g = c.getContext('2d');
+    var g = c.getContext('2d', { willReadFrequently: true });
     skin.draw(g);
     cache[skin.id] = c;
     return c;
   }
+  var dataCache = {};
+  function patternData(skin) {
+    if (!dataCache[skin.id]) dataCache[skin.id] = patternCanvas(skin).getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+    return dataCache[skin.id];
+  }
 
   // Draw a shaded ball preview of a skin into a canvas (square).
   function previewBall(canvas, skin, spin) {
-    var size = canvas.width, g = canvas.getContext('2d');
-    var src = patternCanvas(skin);
-    var sd = src.getContext('2d').getImageData(0, 0, W, H).data;
+    var size = canvas.width, g = canvas.getContext('2d', { willReadFrequently: true });
+    var sd = patternData(skin);
     var rad = size * 0.4, cx = size / 2, cy = size / 2;
     g.clearRect(0, 0, size, size);
     // outer glow
@@ -252,7 +260,7 @@
 
   // Trail swatch: a glowing streak plus a small dot for the ball.
   function previewTrail(canvas, trail, ballSkin) {
-    var size = canvas.width, g = canvas.getContext('2d');
+    var size = canvas.width, g = canvas.getContext('2d', { willReadFrequently: true });
     g.clearRect(0, 0, size, size);
     var cols = trail.rainbow ? ['#ff3b3b', '#ffd93b', '#7dff3a', '#3ff0ff', '#a855ff'] :
       (trail.colors || [ballSkin.glow, ballSkin.glow]);

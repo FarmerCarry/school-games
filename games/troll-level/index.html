@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>المراحل الماكرة</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="cv" tabindex="0"></canvas>
+
+<button id="btn-pause" class="hudbtn" type="button" aria-label="إيقاف مؤقت" hidden>
+  <span></span><span></span>
+</button>
+
+<div id="ui">
+  <!-- ============ TITLE ============ -->
+  <section id="scr-title" class="scr">
+    <div class="logo">
+      <span class="w1">المراحل</span>
+      <span class="w2">الماكرة</span>
+    </div>
+    <div class="tag">المرحلة تحاول خداعك... توقّع ما لا تتوقعه!</div>
+
+    <div class="title-bottom">
+      <div class="card howto">
+        <h3>طريقة اللعب</h3>
+        <div class="krow"><span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span> أو <span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> حركة</div>
+        <div class="krow"><span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">W</span></span> أو <span class="sg-key">مسافة</span> قفز</div>
+        <div class="krow"><span class="sg-key">R</span> إعادة سريعة <span class="sg-key">P</span> إيقاف</div>
+      </div>
+
+      <div class="menu">
+        <button class="bigbtn" id="btn-play" type="button">العب!</button>
+        <div class="menu-row">
+          <button class="midbtn" id="btn-levels" type="button">المراحل</button>
+          <button class="midbtn pink" id="btn-skins" type="button">الشخصيات</button>
+        </div>
+        <div class="enter-hint">أو اضغط <span class="sg-key">Enter</span></div>
+      </div>
+
+      <div class="card prog">
+        <h3>تقدّمك</h3>
+        <div class="pstars"><span class="star-ico">★</span> <b id="t-stars">0</b><small id="t-stars-max">/72</small></div>
+        <div class="prow">المراحل: <b id="t-levels">0/24</b></div>
+        <div class="prow">كل السقطات: <b id="t-deaths">0</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LEVEL SELECT ============ -->
+  <section id="scr-select" class="scr dim" hidden>
+    <div class="sel-head">
+      <button class="backbtn" id="btn-sel-back" type="button">→ رجوع</button>
+      <h2>اختر المرحلة</h2>
+      <div class="sel-stars"><span class="star-ico">★</span> <b id="s-stars">0</b>/<span id="s-stars-max">72</span></div>
+    </div>
+    <div id="worlds"></div>
+    <div class="sel-foot">أكمل مرحلة لتفتح التالية. اجمع 3 نجوم بإنهاء المرحلة بلا أي سقطة!</div>
+  </section>
+
+  <!-- ============ SKINS ============ -->
+  <section id="scr-skins" class="scr dim" hidden>
+    <div class="sel-head">
+      <button class="backbtn" id="btn-skin-back" type="button">→ رجوع</button>
+      <h2>الشخصيات</h2>
+      <div class="sel-stars"><span class="star-ico">★</span> <b id="k-stars">0</b></div>
+    </div>
+    <div id="skins"></div>
+    <div class="sel-foot">اجمع النجوم لتفتح شخصيات جديدة!</div>
+  </section>
+
+  <!-- ============ PAUSE ============ -->
+  <section id="scr-pause" class="scr dim" hidden>
+    <div class="panel">
+      <h2>استراحة</h2>
+      <div class="pause-info" id="p-info"></div>
+      <button class="bigbtn small" id="btn-resume" type="button">تابع</button>
+      <div class="menu-row">
+        <button class="midbtn" id="btn-restart" type="button">أعد المرحلة</button>
+        <button class="midbtn" id="btn-p-levels" type="button">المراحل</button>
+        <button class="midbtn pink" id="btn-p-menu" type="button">القائمة</button>
+      </div>
+      <div class="enter-hint dark"><span class="sg-key">P</span> تابع · <span class="sg-key">R</span> إعادة</div>
+    </div>
+  </section>
+
+  <!-- ============ LEVEL COMPLETE ============ -->
+  <section id="scr-win" class="scr" hidden>
+    <div class="panel win">
+      <div class="win-lvl" id="w-lvl"></div>
+      <h2 id="w-title">أحسنت!</h2>
+      <div class="win-sub" id="w-sub"></div>
+      <div class="stars3"><span class="st" id="st1">★</span><span class="st" id="st2">★</span><span class="st" id="st3">★</span></div>
+      <div class="win-stats">
+        <div><small>السقطات</small><b id="w-deaths">0</b></div>
+        <div><small>أفضل نتيجة</small><b id="w-best">0</b></div>
+      </div>
+      <div class="newbest" id="w-newbest" hidden>رقم قياسي جديد!</div>
+      <div class="unlock" id="w-unlock" hidden></div>
+      <button class="bigbtn small" id="btn-next" type="button">التالي</button>
+      <div class="menu-row">
+        <button class="midbtn" id="btn-replay" type="button">أعد</button>
+        <button class="midbtn pink" id="btn-w-levels" type="button">المراحل</button>
+      </div>
+      <div class="enter-hint dark"><span class="sg-key">Enter</span> التالي · <span class="sg-key">R</span> أعد</div>
+    </div>
+  </section>
+
+  <!-- ============ THE END ============ -->
+  <section id="scr-end" class="scr dim" hidden>
+    <div class="panel win">
+      <h2>لقد هزمت الملك الماكر!</h2>
+      <div class="win-sub">أنهيت كل المراحل الماكرة. أنت بطل حقيقي!</div>
+      <div class="win-stats">
+        <div><small>النجوم</small><b id="e-stars">0</b></div>
+        <div><small>كل السقطات</small><b id="e-deaths">0</b></div>
+      </div>
+      <div class="win-sub small" id="e-tip">عُد واجمع 3 نجوم في كل مرحلة لتفتح كل الشخصيات!</div>
+      <div class="menu-row">
+        <button class="midbtn" id="btn-e-levels" type="button">المراحل</button>
+        <button class="midbtn pink" id="btn-e-menu" type="button">القائمة</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="../../shared/kit.js"></script>
+<script src="engine.js"></script>
+<script src="levels.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
