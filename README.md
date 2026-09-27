@@ -9,10 +9,11 @@ games are in Arabic, laid out right-to-left.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores and progress are saved in each browser (localStorage) only.
 
-## The games (26)
+## The games (27)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
+| أصابع البرق | Lightning Fingers (typing test, English + Arabic) | 1 | تحديات |
 | عدّاء السكة | Rail Rush | 1 | جري |
 | منحدر النيون | Neon Slope | 1 | جري، أركيد |
 | نفق السرعة | Tunnel Blitz | 1 | جري، أركيد |
@@ -41,6 +42,11 @@ games are in Arabic, laid out right-to-left.
 | ساحة الثعابين | Snake Arena | 1 | تحدي الروبوتات، أركيد |
 
 Every game saves best scores and unlocks in the browser, and has a title screen, P/Esc pause and a 🔊 mute button.
+
+**أصابع البرق (typing test)** works like Monkeytype: time (15/30/60 s), words (10/25/50) or
+sentences, in English or Arabic, with the same WPM/accuracy formulas. For a class race, click
+**تحدٍّ للصف**, pick a test and write the 4-digit code on the board; every student who enters that
+code gets exactly the same words. Tab starts a new test.
 
 ## Putting it online (GitHub Pages, free)
 
