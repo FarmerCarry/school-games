@@ -288,7 +288,32 @@
     return iconCache[name];
   };
   A.icon = function (c, name, x, y, size) { c.drawImage(A.iconCanvas(name), x - size / 2, y - size / 2, size, size); };
-  A.iconURL = function (name) { try { return A.iconCanvas(name).toDataURL(); } catch (e) { return ''; } };
+  // PNG data URLs for the DOM <img> icons. Reading pixels back from a (GPU) canvas stalls the main
+  // thread until the GPU catches up, and that stall - not the drawing or the PNG encoding - is what
+  // made startup slow (one stall per icon). So: copy the finished icon canvases 1:1 side by side onto
+  // ONE canvas, read that back ONCE, then PNG-encode each 96x96 cell from a CPU-only canvas.
+  // The icons are still drawn on their own 96x96 canvases by iconCanvas() (raster results depend on
+  // the canvas size, so they must not be drawn onto the strip directly) and the pixels are only
+  // copied, so every image is identical to what toDataURL() gave before. Memoized per name.
+  var urlCache = {};
+  A.iconURLs = function (names) {
+    var todo = [];
+    names.forEach(function (n) { if (!urlCache.hasOwnProperty(n) && todo.indexOf(n) < 0) todo.push(n); });
+    if (todo.length) {
+      try {
+        var strip = makeCanvas(96 * todo.length, 96), c = strip.getContext('2d');
+        todo.forEach(function (n, i) { c.drawImage(A.iconCanvas(n), 96 * i, 0); });
+        var px = c.getImageData(0, 0, strip.width, 96);
+        var cell = makeCanvas(96, 96), cc = cell.getContext('2d', { willReadFrequently: true });
+        todo.forEach(function (n, i) { cc.putImageData(px, -96 * i, 0); urlCache[n] = cell.toDataURL(); });
+      } catch (e) { /* fall back to one icon at a time below */ }
+    }
+    return names.map(A.iconURL);
+  };
+  A.iconURL = function (name) {
+    if (!urlCache.hasOwnProperty(name)) { try { urlCache[name] = A.iconCanvas(name).toDataURL(); } catch (e) { return ''; } }
+    return urlCache[name];
+  };
 
   /* ---------------------------------------------------------- critters */
   var SP = A.SPECIES = {

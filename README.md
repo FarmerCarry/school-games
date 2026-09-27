@@ -56,6 +56,27 @@ Every game saves best scores and unlocks in the browser, and has a title screen,
    Every later change pushed to `main` (for example hiding a game) goes live automatically.
    Share that link with your class.
 
+### The fast version (recommended for PCs with slow hard disks)
+
+Every push to `main` automatically builds a faster copy of the site into the **`gh-pages`**
+branch (see `.github/workflows/build.yml` and `tools/build.mjs`). It looks and plays exactly
+the same, but:
+
+- each game is **one file** instead of 10–13, and the home page is one file with all pictures
+  built in, so a slow hard disk has far fewer files to read;
+- after the first visit, every PC keeps the whole site in an **offline cache**: games open
+  without asking the server, still work if the internet drops, and after an update each PC
+  downloads only the files that changed;
+- it can be **installed as an app** (the install icon in Chrome/Edge's address bar).
+
+To use it: **Settings → Pages → Branch: `gh-pages`, folder `/ (root)` → Save** (once).
+Keep editing `main` as usual (for example `js/catalog.js`); the fast copy rebuilds itself
+about a minute later. If a build ever fails, the previous version simply stays online.
+
+Going back is always safe: switch Pages back to **`main`**. The `sw.js` file in `main` is an
+"off switch" — any PC that has the offline cache removes it on its next visit and uses the
+normal site again.
+
 If the school web filter blocks it, ask IT to allow that address. The site contains no ads and
 makes no outside requests, so it's an easy one to approve.
 
@@ -83,10 +104,21 @@ shared/game.css           shared game page styles + the Fredoka font
 lib/three/                three.js r159 (MIT) for the 3D games
 docs/GAME_SPEC.md         the rules every game follows
 tools/playtest.mjs        headless Chromium playtest harness (Playwright)
+tools/build.mjs           builds the fast version (one file per game + offline cache)
 ```
 
 Preview locally over http with any static server, for example `npx serve .`.
 Test a game automatically with `node tools/playtest.mjs <slug>`.
+
+Performance and the fast build:
+
+```
+npm install                      # once (esbuild, used only by the build)
+node tools/build.mjs             # fast build into _site/ (what gh-pages serves)
+SG_ROOT=_site node tools/check-all.mjs   # smoke-test the fast build
+node tools/test-offline.mjs      # end-to-end test of the offline cache
+node tools/perf.mjs [slug]       # files, load/script time, stutters, memory, saves per page
+```
 
 ## Credits and licenses
 

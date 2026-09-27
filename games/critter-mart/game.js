@@ -2542,8 +2542,11 @@
   }
 
   /* ========================================================= boot */
+  // encode all DOM icons in one batch (one GPU readback instead of one per icon, see art.js)
+  var iconImgs = document.querySelectorAll('[data-icon]');
+  A.iconURLs(CM.UPGRADES.map(function (u) { return u.icon; }).concat(Array.prototype.map.call(iconImgs, function (im) { return im.getAttribute('data-icon'); })));
   buildUpgPanel();
-  Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (im) { im.src = A.iconURL(im.getAttribute('data-icon')); });
+  Array.prototype.forEach.call(iconImgs, function (im) { im.src = A.iconURL(im.getAttribute('data-icon')); });
   buildWorld();
   R.welcome = offlineEarnings();
   titleInfo();

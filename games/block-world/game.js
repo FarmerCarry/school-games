@@ -1266,6 +1266,8 @@
   var selSlot = meta.lastSlot || 1;
   function show(el, on) { el.hidden = !on; }
   function enterPlay() {
+    // Still behind the loading screen: give the creative palette its icons (cheap CPU canvases).
+    if (G.gm === 'creative') fillPalette();
     G.mode = 'play';
     show(titleEl, false); show(newEl, false); show(loadEl, false); show(pauseEl, false); show(invEl, false);
     pauseBtn.hidden = false;
@@ -1445,11 +1447,23 @@
   var PALETTE = [];
   Object.keys(ITEMS).forEach(function (k) { var it = ITEMS[k]; if (it.place && TEX[it.place]) PALETTE.push(+k); });
   PALETTE.sort(function (a, b) { return a - b; });
+  // The few icons that still need a GPU read-back (glass, ice, door) are built here at page load,
+  // exactly where the old palette code built them: the GPU queue is nearly empty now, whereas
+  // later (after the title screen has been drawing) each read-back waits for the whole backlog.
+  BW.warmGPUIcons();
+  // Palette icons get their src when a creative world starts (fillPalette), not at page load.
+  var palImgs = [], palFilled = false;
+  function fillPalette() {
+    if (palFilled) return;
+    palFilled = true;
+    palImgs.forEach(function (o) { o[0].src = BW.iconURL(o[1]); });
+  }
   PALETTE.forEach(function (id) {
     var d = document.createElement('div');
     d.className = 'islot pal';
     d.title = BW.itemName(id);
-    d.innerHTML = '<img draggable="false" src="' + BW.iconURL(id) + '">';
+    d.innerHTML = '<img draggable="false">';
+    palImgs.push([d.firstChild, id]);
     d.addEventListener('mousedown', function (e) {
       e.preventDefault();
       G.inv[G.sel] = { id: id, n: BW.maxStack(id) };
@@ -1485,6 +1499,7 @@
   function openInv() {
     if (G.mode !== 'play') return;
     G.mode = 'inv';
+    if (G.gm === 'creative') fillPalette();
     nearStations();
     invEl.classList.toggle('creative', G.gm === 'creative');
     show(invEl, true);

@@ -12,16 +12,32 @@
   var $ = function (id) { return document.getElementById(id); };
 
   /* ================================================================ save */
+  // Every write goes through put(), which skips a key whose JSON is unchanged since
+  // this page last read or wrote it (fewer disk writes; same keys and format).
+  var saved = {}, MISSING = {};
+  function rd(key, fallback) {
+    var v = store.get(key, MISSING);
+    if (v === MISSING) return fallback;
+    try { saved[key] = JSON.stringify(v); } catch (e) { /* ignore */ }
+    return v;
+  }
+  function put(key, value) {
+    var s;
+    try { s = JSON.stringify(value); } catch (e) { s = null; }
+    if (s != null && saved[key] === s) return;
+    saved[key] = s;
+    store.set(key, value);
+  }
   var save = {
-    best: +store.get('best', 0) || 0,
-    coins: +store.get('coins', 0) || 0,
-    owned: store.get('owned', null),
-    sel: store.get('sel', 'chick'),
-    stats: store.get('stats', null),
-    missions: store.get('missions', null),
-    tiers: store.get('tiers', null),
-    giftAt: +store.get('giftAt', 0) || 0,
-    seen: store.get('seen', null)
+    best: +rd('best', 0) || 0,
+    coins: +rd('coins', 0) || 0,
+    owned: rd('owned', null),
+    sel: rd('sel', 'chick'),
+    stats: rd('stats', null),
+    missions: rd('missions', null),
+    tiers: rd('tiers', null),
+    giftAt: +rd('giftAt', 0) || 0,
+    seen: rd('seen', null)
   };
   if (!Array.isArray(save.owned)) save.owned = ['chick'];
   save.owned = save.owned.filter(function (id) { return !!CHAR_BY[id]; });
@@ -32,9 +48,9 @@
   if (!save.tiers || typeof save.tiers !== 'object') save.tiers = {};
   if (!save.seen || typeof save.seen !== 'object') save.seen = { chick: 1 };
   function persist() {
-    store.set('best', save.best); store.set('coins', save.coins); store.set('owned', save.owned); store.set('sel', save.sel);
-    store.set('stats', save.stats); store.set('missions', save.missions); store.set('tiers', save.tiers);
-    store.set('giftAt', save.giftAt); store.set('seen', save.seen);
+    put('best', save.best); put('coins', save.coins); put('owned', save.owned); put('sel', save.sel);
+    put('stats', save.stats); put('missions', save.missions); put('tiers', save.tiers);
+    put('giftAt', save.giftAt); put('seen', save.seen);
   }
   function has(id) { return save.owned.indexOf(id) >= 0; }
 
@@ -450,7 +466,7 @@
   var bestAtStart = 0, bestAnnounced = false, milestoneNext = 25, lastTheme = 0, deathT = 0, overT = 0, warnT = 0, nearRec = null;
   var godMode = false, shakeP = 0, newBestRun = false;
   var TIPS = { road: 'انتظر حتى تمرّ السيارات، ثم اقفز!', river: 'قف على الجذوع… الماء خطر!', rail: 'الضوء الأحمر يعني أن القطار قادم!' };
-  var tipsSeen = {}, tipT = 0, tipRuns = +store.get('tipRuns', 0) || 0;
+  var tipsSeen = {}, tipT = 0, tipRuns = +rd('tipRuns', 0) || 0;
   function showTip(kind) {
     if (tipRuns >= 3 || tipsSeen[kind]) return;
     tipsSeen[kind] = 1;
@@ -658,7 +674,7 @@
     var c = L.coin, val = c.big ? 5 : 1;
     give(c.m); c.m = null;
     runCoins += val; save.coins += val; save.stats.coinsAll += val;
-    store.set('coins', save.coins);
+    put('coins', save.coins);
     Kit.sfx.coin();
     burst(c.c, 0.5, -L.row, 10, c.big ? [0x7ff0ff, 0xffffff, 0x3fb8e0] : [0xffd23f, 0xfff3a0, 0xff9f1a], { speed: 2.6, up: 4, size: 0.1, life: 0.5 });
     popup('+' + val, c.c, 1.0, -L.row, 'gold');
@@ -909,6 +925,7 @@
     applyPlayer();
     applyCamera();
     renderer.render(scene, cam);
+    if (warmDraw) { warmDraw = false; scene.remove(warmGroup); warmGroup = null; }
     drawConfetti(rdt);
     if (state === 'title') placeCharpick();
     if (state === 'over' && overCount < score) {
@@ -921,7 +938,11 @@
   var ui = $('ui'), fxc = $('fx'), fctx = fxc.getContext('2d');
   var SCREENS = ['title', 'pause', 'over', 'chars', 'machine'];
   function showScreen(id) { SCREENS.forEach(function (s) { $(s).hidden = s !== id; }); }
+  var warnOn = null;
   function setWarn(on) {
+    on = !!on;
+    if (on === warnOn) return;
+    warnOn = on;
     $('warn').classList.toggle('on', !!on);
     $('vignette').style.opacity = on ? '1' : '0';
   }
@@ -1009,7 +1030,7 @@
     if (state !== 'dying') return;
     state = 'over'; overT = 0;
     save.stats.games++;
-    tipRuns++; store.set('tipRuns', tipRuns);
+    tipRuns++; put('tipRuns', tipRuns);
     missionEvent('games', 1);
     missionEvent('score', score, true);
     missionEvent('coinsRun', runCoins, true);
@@ -1067,7 +1088,7 @@
     if (!Array.isArray(save.missions)) save.missions = [];
     save.missions = save.missions.filter(function (m) { return m && MT[m.t] && !m.done && m.n > 0; });
     while (save.missions.length < 3) save.missions.push(newMission());
-    store.set('missions', save.missions);
+    put('missions', save.missions);
   }
   function missionEvent(type, amount, isMax) {
     var ms = save.missions;
@@ -1137,7 +1158,7 @@
   }
   function selectChar(id) {
     if (!has(id)) return;
-    save.sel = id; store.set('sel', id);
+    save.sel = id; put('sel', id);
     if (!P.dead) {
       setCharModel(id);
       P.jump = 1; P.idle = 2.5;
@@ -1175,6 +1196,48 @@
     return thumbCache[key];
   }
 
+  /* ------------------------------------------------- idle-time warm-up */
+  // Three shaders are first needed in the middle of a run: the rail signal light
+  // (off and on) and the best-score line + sign. Building a shader on first use
+  // froze the game for a moment while the child was dodging cars. Here they are
+  // built ahead of time, while a menu is shown and the browser is idle. Nothing
+  // appears on screen: the warm-up objects use copies of the real materials with
+  // colour and depth writes switched off, and they are drawn for one frame only.
+  var warmGroup = null, warmDraw = false;
+  function warmCompile() {
+    warmGroup = new THREE.Group();
+    [[geo('light'), matLightOff], [geo('light'), matLightOn], [bestLine.geometry, bestLine.material], [null, bestSign.material]].forEach(function (e) {
+      var m = e[1].clone();
+      m.colorWrite = false; m.depthWrite = false;
+      var o = e[0] ? new THREE.Mesh(e[0], m) : new THREE.Sprite(m);
+      o.frustumCulled = false;
+      warmGroup.add(o);
+    });
+    // Starts the shader builds; where the browser can build shaders in the background
+    // (KHR_parallel_shader_compile) the promise resolves once they are ready.
+    // Without that extension compileAsync() would only log a console warning, so the
+    // plain compile() (same work) is used instead.
+    if (renderer.extensions.has('KHR_parallel_shader_compile')) return renderer.compileAsync(warmGroup, cam, scene);
+    renderer.compile(warmGroup, cam, scene);
+    return null;
+  }
+  function warmDrawOnce() { if (warmGroup) { scene.add(warmGroup); warmDraw = true; } } // render() draws it once, then removes it
+  var warmSteps = [warmCompile, warmDrawOnce];
+  function warmLater(ms) {
+    setTimeout(function () {
+      if (window.requestIdleCallback) window.requestIdleCallback(warmNext, { timeout: 1000 });
+      else warmNext();
+    }, ms);
+  }
+  function warmNext() {
+    if (!warmSteps.length) return;
+    if (state === 'play' || state === 'dying') { warmLater(1000); return; } // never during a run
+    var r = null;
+    try { r = warmSteps.shift()(); } catch (e) { /* shaders are then built on first use, as before */ }
+    if (r && r.then) r.then(function () { warmLater(100); }, function () { warmLater(100); });
+    else warmLater(300);
+  }
+
   /* ------------------------------------------------------- characters */
   function openChars(from) { prevScreen = from; state = 'chars'; renderChars(); showScreen('chars'); Kit.sfx.click(); }
   function lockHint(c) {
@@ -1200,7 +1263,7 @@
   }
   function closeChars() {
     save.owned.forEach(function (id) { save.seen[id] = 1; });
-    store.set('seen', save.seen);
+    put('seen', save.seen);
     state = prevScreen === 'over' ? 'over' : 'title';
     showScreen(state);
     if (state === 'title') refreshTitle();
@@ -1261,7 +1324,7 @@
     Kit.sfx.click();
   }
   function playPrize() {
-    if (lastPrize && has(lastPrize)) { save.sel = lastPrize; store.set('sel', lastPrize); save.seen[lastPrize] = 1; }
+    if (lastPrize && has(lastPrize)) { save.sel = lastPrize; put('sel', lastPrize); save.seen[lastPrize] = 1; }
     $('mReveal').hidden = true;
     restart();
   }
@@ -1301,6 +1364,7 @@
   refreshTitle();
   showScreen('title');
   Kit.loop(update, render);
+  warmLater(3000);
   if (document.fonts && document.fonts.load) {
     document.fonts.load('700 40px Fredoka', 'بب').then(function () { onResize(); placeBestMark(); }, function () { /* ignore */ });
   }

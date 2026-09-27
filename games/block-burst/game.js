@@ -623,35 +623,93 @@
     if (lv.score) { tot += 10; got += 10 * Math.min(1, run.score / lv.score); }
     return tot ? got / tot : 0;
   }
-  var gemURL = {};
+  // Gem icons: the 128px gem sprite copied 1:1 (same pixels as the old
+  // Art.gemSprite(kind).toDataURL()). Made lazily, as before, one batch per screen.
+  function gemThumb(kind) {
+    return { key: 'gem:' + kind, size: Art.RES, draw: function (g) { g.drawImage(Art.gemSprite(kind), 0, 0); } };
+  }
   function gemIcon(kind) {
-    if (!gemURL[kind]) { try { gemURL[kind] = Art.gemSprite(kind).toDataURL(); } catch (e) { gemURL[kind] = ''; } }
-    return gemURL[kind];
+    var t = gemThumb(kind);
+    makeThumbs([t]);
+    return thumbURL[t.key];
   }
   function remainingGoalHTML() {
-    var lv = run.level, out = [];
-    if (run.goalGems) for (var k in run.goalGems) if (run.goalGems[k] > 0) out.push('<span class="gi" style="background-image:url(' + gemIcon(k) + ')"></span> ' + run.goalGems[k]);
+    var lv = run.level, out = [], need = [];
+    if (run.goalGems) for (var k in run.goalGems) if (run.goalGems[k] > 0) need.push(gemThumb(k));
+    makeThumbs(need);
+    if (run.goalGems) for (k in run.goalGems) if (run.goalGems[k] > 0) out.push('<span class="gi" style="background-image:url(' + gemIcon(k) + ')"></span> ' + run.goalGems[k]);
     if (lv.score && run.score < lv.score) out.push('النقاط ' + run.score + ' / ' + lv.score);
     return out.length ? 'بقي: ' + out.join(' &nbsp; ') : '';
   }
 
   /* ------------------------------------------------------------ title */
-  function blockURL(skinIdx, color, gem, size) {
-    var cv = document.createElement('canvas'); cv.width = cv.height = size;
-    cv.getContext('2d').drawImage(Art.block(skinIdx, color, gem), 0, 0, size, size);
-    return cv.toDataURL();
+  /* DOM thumbnails (CSS background-image data URLs, exactly as before).
+   * The old code called canvas.toDataURL() once per image, and re-encoded the
+   * logo/mode images on EVERY title rebuild (boot, each game over, each return to
+   * the menu, each skin click). Every toDataURL is a synchronous GPU flush +
+   * readback: the main thread stalls until the GPU has drawn everything queued.
+   * Now all missing thumbnails of a screen are drawn exactly as before (same sizes,
+   * same drawImage calls) into integer-aligned tiles of ONE shared canvas, read
+   * back ONCE (one stall instead of up to 11), and each tile is PNG-encoded from a
+   * CPU-only canvas (no GPU work). The resulting data URLs decode to the very same
+   * pixels as the old ones and are memoized by key, so rebuilding a screen with
+   * the same skin costs no readback at all. */
+  var thumbURL = {};
+  function makeThumbs(list) {
+    var todo = [], seen = {}, W = 0, H = 1, i, t;
+    for (i = 0; i < list.length; i++) {
+      t = list[i];
+      if (thumbURL[t.key] != null || seen[t.key]) continue;
+      seen[t.key] = 1; t.x = W; W += t.size + 2; H = Math.max(H, t.size); todo.push(t);
+    }
+    if (!todo.length) return;
+    var data = null;
+    try {
+      var at = document.createElement('canvas'); at.width = W; at.height = H;
+      var g = at.getContext('2d');
+      for (i = 0; i < todo.length; i++) { g.setTransform(1, 0, 0, 1, todo[i].x, 0); todo[i].draw(g, todo[i].size); }
+      data = g.getImageData(0, 0, W, H);
+    } catch (e) { data = null; }
+    for (i = 0; i < todo.length; i++) {
+      t = todo[i];
+      try {
+        var cv = document.createElement('canvas'); cv.width = cv.height = t.size;
+        var cg = cv.getContext('2d', { willReadFrequently: true });
+        if (data) cg.putImageData(data, -t.x, 0, t.x, 0, t.size, t.size);
+        else t.draw(cg, t.size);
+        thumbURL[t.key] = cv.toDataURL();
+      } catch (e) { thumbURL[t.key] = ''; }
+    }
   }
-  function artURL(cells, size, gemAt) {
-    var cv = document.createElement('canvas'); cv.width = cv.height = size;
-    var g = cv.getContext('2d'), cs = size / 4;
-    cells.forEach(function (c, i) { g.drawImage(Art.block(save.skin, c[2], gemAt === i ? c[3] : 0), c[1] * cs, c[0] * cs, cs, cs); });
-    return cv.toDataURL();
+  function blockThumb(skinIdx, color, gem, size) {
+    return { key: 'blk:' + skinIdx + ':' + color + ':' + gem + ':' + size, size: size, draw: function (g) {
+      g.drawImage(Art.block(skinIdx, color, gem), 0, 0, size, size);
+    } };
   }
+  function artThumb(name, cells, size, gemAt) {
+    var sk = save.skin;
+    return { key: 'art:' + name + ':' + sk, size: size, draw: function (g) {
+      var cs = size / 4;
+      cells.forEach(function (c, i) { g.drawImage(Art.block(sk, c[2], gemAt === i ? c[3] : 0), c[1] * cs, c[0] * cs, cs, cs); });
+    } };
+  }
+  function skinThumb(i) {
+    return { key: 'skin:' + i, size: 116, draw: function (g) {
+      g.drawImage(Art.block(i, 1, 0), 0, 0, 58, 58); g.drawImage(Art.block(i, 4, 0), 58, 0, 58, 58);
+      g.drawImage(Art.block(i, 6, 0), 0, 58, 58, 58); g.drawImage(Art.block(i, 3, 0), 58, 58, 58, 58);
+    } };
+  }
+  var ART_CLASSIC = [[1, 0, 6], [1, 1, 6], [1, 2, 6], [2, 1, 6], [3, 0, 3], [3, 1, 3], [3, 2, 1], [3, 3, 1], [2, 3, 1], [0, 3, 5]];
+  var ART_ADV = [[0, 1, 4], [1, 0, 2], [1, 1, 8, 1], [1, 2, 2], [2, 1, 4], [3, 0, 7, 3], [3, 1, 7], [3, 2, 5], [2, 3, 5, 2], [3, 3, 5]];
   function buildTitle() {
+    var logo = [1, 3, 6].map(function (col) { return blockThumb(save.skin, col, 0, 96); });
+    var artC = artThumb('classic', ART_CLASSIC, 160), artA = artThumb('adv', ART_ADV, 160, 2);
+    // one batch for the whole title screen (only the first time per skin)
+    makeThumbs(logo.concat([artC, artA], Art.SKINS.map(function (s, i) { return skinThumb(i); })));
     var bl = document.querySelectorAll('.logo-blocks i');
-    [1, 3, 6].forEach(function (col, i) { if (bl[i]) bl[i].style.backgroundImage = 'url(' + blockURL(save.skin, col, 0, 96) + ')'; });
-    document.querySelector('.art-classic').style.backgroundImage = 'url(' + artURL([[1, 0, 6], [1, 1, 6], [1, 2, 6], [2, 1, 6], [3, 0, 3], [3, 1, 3], [3, 2, 1], [3, 3, 1], [2, 3, 1], [0, 3, 5]], 160) + ')';
-    document.querySelector('.art-adv').style.backgroundImage = 'url(' + artURL([[0, 1, 4], [1, 0, 2], [1, 1, 8, 1], [1, 2, 2], [2, 1, 4], [3, 0, 7, 3], [3, 1, 7], [3, 2, 5], [2, 3, 5, 2], [3, 3, 5]], 160, 2) + ')';
+    logo.forEach(function (t, i) { if (bl[i]) bl[i].style.backgroundImage = 'url(' + thumbURL[t.key] + ')'; });
+    document.querySelector('.art-classic').style.backgroundImage = 'url(' + thumbURL[artC.key] + ')';
+    document.querySelector('.art-adv').style.backgroundImage = 'url(' + thumbURL[artA.key] + ')';
     var saved = store.get('run', null), cont = saved && saved.mode === 'classic' && saved.score > 0;
     $('classicSub').textContent = cont ? 'النقاط الآن: ' + saved.score : 'الأفضل: ' + Kit.fmt(save.best);
     $('classicGo').textContent = cont ? '▶ تابع' : '▶ العب';
@@ -681,20 +739,17 @@
       box.appendChild(b);
     });
   }
-  var skinPrevCache = {};
   function skinPreview(i) {
-    if (skinPrevCache[i]) return skinPrevCache[i];
-    var cv = document.createElement('canvas'); cv.width = cv.height = 116;
-    var g = cv.getContext('2d');
-    g.drawImage(Art.block(i, 1, 0), 0, 0, 58, 58); g.drawImage(Art.block(i, 4, 0), 58, 0, 58, 58);
-    g.drawImage(Art.block(i, 6, 0), 0, 58, 58, 58); g.drawImage(Art.block(i, 3, 0), 58, 58, 58, 58);
-    return (skinPrevCache[i] = cv.toDataURL());
+    var t = skinThumb(i);
+    makeThumbs([t]);
+    return thumbURL[t.key];
   }
 
   function buildMap() {
     var box = $('worlds'); box.innerHTML = '';
     $('mapStars').textContent = totalStars();
     var nxt = nextLevelIdx();
+    makeThumbs(LV.WORLDS.map(function (w, wi) { return gemThumb([1, 2, 4, 3][wi % 4]); })); // one batch
     LV.WORLDS.forEach(function (w, wi) {
       var d = document.createElement('div'); d.className = 'world';
       d.style.background = 'linear-gradient(180deg, ' + w.color + ', ' + w.dark + ')';

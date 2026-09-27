@@ -340,7 +340,10 @@
   };
 
   // Formats 12345 -> "12,345".
-  Kit.fmt = function (n) { return Math.floor(n).toLocaleString('en-US'); };
+  // One shared formatter: toLocaleString() builds a new ICU formatter on every call,
+  // which is slow when a HUD formats numbers every frame.
+  var numFmt = (typeof Intl !== 'undefined' && Intl.NumberFormat) ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }) : null;
+  Kit.fmt = function (n) { n = Math.floor(n); return numFmt ? numFmt.format(n) : n.toLocaleString('en-US'); };
 
   window.Kit = Kit;
 })();
