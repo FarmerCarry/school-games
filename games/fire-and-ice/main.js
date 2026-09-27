@@ -57,13 +57,57 @@
   var flash = 0;
   var lastPush = 0, lastFanSnd = 0;
   var toasts = [];
+  var rArm = -9;               // time of the first R tap (R must be tapped twice to restart mid-level)
 
   function mkAnim() { return { sx: 1, sy: 1, vs: 0, run: 0, blink: 0, bt: 2, face: 1, air: false, vy: 0, push: 0, happy: false, lean: 0, ember: 0 }; }
 
   /* ----------------------------------------------------------- sound */
   var A = Kit.audio;
-  function tone(o) { A.tone(o); }
-  function noise(o) { A.noise(o); }
+  // Own tiny synth (same options as Kit.audio.tone/noise) so the sounds stay soft:
+  // square/saw tones pass a low-pass filter (no fizzy buzz), noise fades in over 3 ms
+  // (no click at the start) and never plays past the end of its buffer.
+  var noiseBuf = null;
+  function tone(o) {
+    var ctx = A.ctx;
+    if (!ctx || A.muted) return;
+    var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur || 0.12, vol = o.vol == null ? 0.3 : o.vol;
+    var type = o.type || 'square';
+    var osc = ctx.createOscillator(), g = ctx.createGain(), node = osc;
+    osc.type = type;
+    osc.frequency.setValueAtTime(o.freq || 440, t0);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+    if (type === 'square' || type === 'sawtooth') {
+      var f = ctx.createBiquadFilter();
+      f.type = 'lowpass'; f.Q.value = 0.6;
+      f.frequency.value = Math.min(5000, Math.max(o.freq || 440, o.to || 0) * 3.5);
+      osc.connect(f); node = f;
+    }
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.005));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    node.connect(g); g.connect(A.master);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }
+  function noise(o) {
+    var ctx = A.ctx;
+    if (!ctx || A.muted) return;
+    if (!noiseBuf) {
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur || 0.25, vol = o.vol == null ? 0.3 : o.vol;
+    var src = ctx.createBufferSource(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+    src.buffer = noiseBuf; src.loop = true;
+    f.type = o.band ? 'bandpass' : 'lowpass';
+    f.frequency.setValueAtTime(o.filter || 4000, t0);
+    if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.003));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(A.master);
+    src.start(t0, Math.random() * 0.5); src.stop(t0 + dur + 0.03);
+  }
   var SFX = {
     jump: function (k) {
       if (k === 'fire') { tone({ freq: 240, to: 520, type: 'square', dur: 0.12, vol: 0.08 }); noise({ dur: 0.08, vol: 0.05, filter: 2400, to: 900 }); }
@@ -82,13 +126,13 @@
     lever: function () { tone({ freq: 520, type: 'square', dur: 0.03, vol: 0.08 }); tone({ freq: 780, type: 'square', dur: 0.05, vol: 0.08, delay: 0.05 }); noise({ dur: 0.06, vol: 0.06, filter: 3000 }); },
     mover: function () { noise({ dur: 0.35, vol: 0.05, filter: 420, to: 160 }); tone({ freq: 70, to: 90, type: 'sawtooth', dur: 0.3, vol: 0.03 }); },
     moverStop: function () { tone({ freq: 95, to: 55, type: 'triangle', dur: 0.1, vol: 0.12 }); },
-    push: function () { noise({ dur: 0.1, vol: 0.05, filter: 700, to: 300 }); },
+    push: function () { noise({ dur: 0.12, vol: 0.045, filter: 600, to: 250, attack: 0.01 }); },
     portal: function () { tone({ freq: 300, to: 1500, type: 'sine', dur: 0.22, vol: 0.12 }); tone({ freq: 1500, to: 600, type: 'sine', dur: 0.2, vol: 0.08, delay: 0.12 }); },
     bonk: function () { tone({ freq: 210, to: 150, type: 'square', dur: 0.05, vol: 0.05 }); },
-    fan: function () { noise({ dur: 0.3, vol: 0.06, filter: 2500, to: 700 }); },
+    fan: function () { noise({ dur: 0.45, vol: 0.045, filter: 1100, to: 380, attack: 0.08 }); },
     door: function () { tone({ freq: 660, type: 'sine', dur: 0.1, vol: 0.14 }); tone({ freq: 990, type: 'sine', dur: 0.16, vol: 0.14, delay: 0.08 }); },
     die: function (cause) {
-      if (cause === 'lava') { noise({ dur: 0.7, vol: 0.28, filter: 6000, to: 700 }); tone({ freq: 700, to: 180, type: 'triangle', dur: 0.5, vol: 0.18 }); }
+      if (cause === 'lava') { noise({ dur: 0.7, vol: 0.24, filter: 3200, to: 500 }); tone({ freq: 700, to: 180, type: 'triangle', dur: 0.5, vol: 0.18 }); }
       else if (cause === 'water') { noise({ dur: 0.6, vol: 0.28, filter: 2200, to: 250 }); tone({ freq: 380, to: 90, type: 'sawtooth', dur: 0.45, vol: 0.08 }); }
       else { tone({ freq: 220, to: 55, type: 'square', dur: 0.3, vol: 0.12 }); noise({ dur: 0.35, vol: 0.25, filter: 700, to: 120 }); tone({ freq: 120, to: 300, type: 'sine', dur: 0.15, vol: 0.12, delay: 0.25 }); }
       [392, 330, 262].forEach(function (f, i) { tone({ freq: f, type: 'triangle', dur: 0.18, vol: 0.14, delay: 0.35 + i * 0.13 }); });
@@ -96,7 +140,7 @@
     win: function () { [523, 659, 784, 1047, 784, 1047, 1319].forEach(function (f, i) { tone({ freq: f, type: 'triangle', dur: 0.16, vol: 0.22, delay: i * 0.09 }); }); },
     star: function (i) { var f = [880, 1109, 1319][i] || 1319; tone({ freq: f, type: 'triangle', dur: 0.3, vol: 0.2 }); tone({ freq: f * 2, type: 'sine', dur: 0.2, vol: 0.07, delay: 0.05 }); },
     swap: function () { tone({ freq: 620, to: 1000, type: 'sine', dur: 0.09, vol: 0.14 }); },
-    click: function () { Kit.sfx.click(); },
+    click: function () { tone({ freq: 660, type: 'square', dur: 0.05, vol: 0.13 }); },
     locked: function () { tone({ freq: 200, to: 140, type: 'square', dur: 0.12, vol: 0.08 }); }
   };
 
@@ -165,7 +209,7 @@
     ptr.pressed = false; ptr.released = false;
   }
   function startLevel(i) {
-    levelIdx = i;
+    levelIdx = i; rArm = -9;
     bot = null;
     world = FI.build(LEVELS[i], i);
     R.prepare(world, view.scale * view.dpr);
@@ -451,11 +495,13 @@
         fx.add({ x: p.x + p.w / 2 + (Math.random() - 0.5) * 18, y: p.y - 4 + Math.random() * 10, vx: (Math.random() - 0.5) * 20, vy: -10, life: 0.6, size: 2, color: '#e8fbff', g: 30, shape: 2 });
       }
     }
-    if (p.pushing && time - lastPush > 0.14 && p.grounded) {
+    if (p.pushing && time - lastPush > 0.22 && p.grounded) {
       lastPush = time; SFX.push();
       fx.burst(p.x + p.w / 2 + p.pushing * 20, p.y + p.h - 2, { count: 2, color: '#c9ad85', speed: 60, angle: -Math.PI / 2, spread: 1.5, life: 0.3, size: 2.5, g: 200 });
     }
-    if (p.inFan && time - lastFanSnd > 0.6) { lastFanSnd = time; SFX.fan(); }
+    // a soft whoosh when entering a fan, then only now and then (not a constant hiss)
+    if (p.inFan && (!a.wasInFan || time - lastFanSnd > 1.3) && time - lastFanSnd > 0.35) { lastFanSnd = time; SFX.fan(); }
+    a.wasInFan = p.inFan;
   }
   function ambientWorld(w, dt) {
     // embers off lava, occasional drips
@@ -503,7 +549,12 @@
     var w = world;
     if (w.state === 'play') {
       if (K.pressed('KeyP') || K.pressed('Escape')) { pause(); return; }
-      if (K.pressed('KeyR')) { restart(); return; }
+      // Two kids share the keyboard and R sits right next to the ice player's W/D keys:
+      // one stray tap must not wipe the level, so mid-level R needs a second tap.
+      if (K.pressed('KeyR')) {
+        if (time - rArm < 1.6) { rArm = -9; restart(); return; }
+        rArm = time; SFX.click();
+      }
       if (save.solo && (K.pressed('Tab') || K.pressed('ShiftLeft') || K.pressed('ShiftRight'))) {
         soloActive = soloActive === 'fire' ? 'ice' : 'fire';
         SFX.swap();
@@ -735,7 +786,7 @@
     // key reminder
     g.font = '600 14px ' + R.FONT; g.fillStyle = 'rgba(255,240,210,0.65)';
     g.direction = 'rtl'; g.textAlign = 'left';
-    var keysTxt = 'R إعادة  ·  P إيقاف';
+    var keysTxt = 'R مرتين إعادة  ·  P إيقاف';
     if (10 + pw + 14 + g.measureText(keysTxt).width < 555) g.fillText(keysTxt, 10 + pw + 14, 25);
     // timer
     var under = w.t <= def.par;
@@ -754,6 +805,17 @@
     g.font = '700 18px ' + R.FONT; g.textAlign = 'left'; g.fillStyle = '#fff'; g.direction = 'ltr';
     g.fillText(w.gemsGot.fire + '/' + w.gemsTotal.fire, 996, 24);
     g.fillText(w.gemsGot.ice + '/' + w.gemsTotal.ice, 1082, 24);
+    // "press R again" hint
+    if (w.state === 'play' && time - rArm < 1.6) {
+      var rt = 'اضغط R مرة أخرى لإعادة المرحلة';
+      g.font = '700 20px ' + R.FONT; g.direction = 'rtl';
+      var rw = g.measureText(rt).width + 44;
+      g.globalAlpha = Math.min(1, (1.6 - (time - rArm)) * 4);
+      pill(g, 640 - rw / 2, 60, rw, 38);
+      g.textAlign = 'center'; g.fillStyle = '#ffe066';
+      g.fillText(rt, 640, 80);
+      g.globalAlpha = 1;
+    }
     // solo banner
     if (save.solo && w.state === 'play') {
       var who = soloActive === 'fire' ? 'النار' : 'الجليد';
@@ -792,8 +854,8 @@
     g.lineWidth = 8; g.strokeStyle = 'rgba(0,0,0,0.5)';
     g.direction = 'rtl';
     g.strokeText('خريطة المعبد', 640, 50);
-    var tg = g.createLinearGradient(0, 28, 0, 72); tg.addColorStop(0, '#ffe27a'); tg.addColorStop(1, '#ff9a2b');
-    g.fillStyle = tg; g.fillText('خريطة المعبد', 640, 50);
+    if (!mapGrad.title) { mapGrad.title = g.createLinearGradient(0, 28, 0, 72); mapGrad.title.addColorStop(0, '#ffe27a'); mapGrad.title.addColorStop(1, '#ff9a2b'); }
+    g.fillStyle = mapGrad.title; g.fillText('خريطة المعبد', 640, 50);
     // star total
     pill(g, 30, 26, 170, 42);
     g.font = '700 22px ' + R.FONT; g.fillStyle = '#ffd230'; g.direction = 'ltr'; g.textAlign = 'center';
@@ -825,10 +887,11 @@
       var ring = best ? (best.stars === 3 ? '#ffd230' : best.stars === 2 ? '#dfe7f2' : '#e0955a') : unlocked ? '#b98a4e' : '#5a5a60';
       g.fillStyle = '#2a170a'; g.beginPath(); g.arc(n.x, y, r + 4, 0, Math.PI * 2); g.fill();
       g.fillStyle = ring; g.beginPath(); g.arc(n.x, y, r, 0, Math.PI * 2); g.fill();
-      var inner = g.createLinearGradient(0, y - r, 0, y + r);
-      if (unlocked) { var fireish = i % 2 === 0; inner.addColorStop(0, fireish ? '#ff9a3c' : '#5cc8ff'); inner.addColorStop(1, fireish ? '#d9380f' : '#1d63d6'); }
-      else { inner.addColorStop(0, '#77757a'); inner.addColorStop(1, '#46444a'); }
-      g.fillStyle = inner; g.beginPath(); g.arc(n.x, y, r - 6, 0, Math.PI * 2); g.fill();
+      // cached unit gradients (drawn scaled): no new gradient objects every frame
+      g.save(); g.translate(n.x, y); g.scale((r - 6) / 32, (r - 6) / 32);
+      g.fillStyle = nodeGrad(g, unlocked ? (i % 2 === 0 ? 'fire' : 'ice') : 'lock');
+      g.beginPath(); g.arc(0, 0, 32, 0, Math.PI * 2); g.fill();
+      g.restore();
       g.fillStyle = 'rgba(255,255,255,0.25)'; g.beginPath(); g.ellipse(n.x - 8, y - r * 0.42, r * 0.45, r * 0.2, -0.3, 0, Math.PI * 2); g.fill();
       if (unlocked) {
         g.font = '700 ' + (sel ? 34 : 30) + 'px ' + R.FONT; g.fillStyle = '#fff'; g.direction = 'ltr'; g.textAlign = 'center';
@@ -876,6 +939,12 @@
     g.fillStyle = 'rgba(255,240,210,0.6)'; g.font = '500 14px ' + R.FONT;
     g.fillText('الأسهم للاختيار · Enter للعب', 640, 712);
     g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+  }
+  var mapGrad = {};
+  var NODE_COLS = { fire: ['#ff9a3c', '#d9380f'], ice: ['#5cc8ff', '#1d63d6'], lock: ['#77757a', '#46444a'] };
+  function nodeGrad(g, k) {
+    if (!mapGrad[k]) { var gr = g.createLinearGradient(0, -38, 0, 38); gr.addColorStop(0, NODE_COLS[k][0]); gr.addColorStop(1, NODE_COLS[k][1]); mapGrad[k] = gr; }
+    return mapGrad[k];
   }
   function btn(g, b, label, hov, bg, ink) {
     var y = b.y + (hov ? -2 : 0);
@@ -949,7 +1018,11 @@
     },
     solo: function (v) { setSolo(v); },
     stars: totalStars,
-    particles: function () { return fx.count(); }
+    particles: function () { return fx.count(); },
+    sfx: SFX,
+    music: function () { updateMusic(); },
+    // ms per frame for update + render (to find slow drawing)
+    bench: function (n) { n = n || 120; var t0 = performance.now(); for (var i = 0; i < n; i++) { update(1 / 60); render(); } return +((performance.now() - t0) / n).toFixed(2); }
   };
 
   goTitle();

@@ -3,8 +3,51 @@
   'use strict';
   var A = Kit.audio;
   var enabled = true;
-  function T(o) { if (enabled) A.tone(o); }
-  function N(o) { if (enabled) A.noise(o); }
+  // Own tiny synth (same options as Kit.audio.tone/noise) so sounds stay soft: square/saw
+  // tones pass a low-pass filter (no fizzy buzz), noise fades in over 3 ms (no click) and
+  // loops its buffer so long bursts (the crowd cheer) never cut off abruptly.
+  var noiseBuf = null;
+  function T(o) {
+    var ctx = A.ctx;
+    if (!enabled || !ctx || A.muted) return;
+    var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur || 0.12, vol = o.vol == null ? 0.3 : o.vol;
+    var type = o.type || 'square';
+    var osc = ctx.createOscillator(), g = ctx.createGain(), node = osc;
+    osc.type = type;
+    osc.frequency.setValueAtTime(o.freq || 440, t0);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+    if (type === 'square' || type === 'sawtooth') {
+      var f = ctx.createBiquadFilter();
+      f.type = 'lowpass'; f.Q.value = 0.6;
+      f.frequency.value = Math.min(5000, Math.max(o.freq || 440, o.to || 0) * 3.5);
+      osc.connect(f); node = f;
+    }
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.005));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    node.connect(g); g.connect(A.master);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }
+  function N(o) {
+    var ctx = A.ctx;
+    if (!enabled || !ctx || A.muted) return;
+    if (!noiseBuf) {
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur || 0.25, vol = o.vol == null ? 0.3 : o.vol;
+    var src = ctx.createBufferSource(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+    src.buffer = noiseBuf; src.loop = true;
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(o.filter || 4000, t0);
+    if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.003));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(A.master);
+    src.start(t0, Math.random() * 0.5); src.stop(t0 + dur + 0.03);
+  }
   function rnd(a, b) { return a + Math.random() * (b - a); }
 
   var SFX = {
@@ -54,8 +97,8 @@
       [[392, 370], [370, 349], [349, 330], [330, 247]].forEach(function (n, i) { T({ freq: n[0], to: n[1], type: 'triangle', dur: i === 3 ? 0.7 : 0.26, vol: 0.28, delay: i * 0.3 }); });
     },
     cheer: function (big) {
-      N({ dur: big ? 1.4 : 0.8, vol: big ? 0.16 : 0.1, filter: 2200, to: 700 });
-      for (var i = 0; i < (big ? 10 : 5); i++) N({ dur: 0.03, vol: 0.12, filter: 5000, delay: rnd(0.05, big ? 1.0 : 0.6) });
+      N({ dur: big ? 1.4 : 0.8, vol: big ? 0.15 : 0.09, filter: 1800, to: 600, attack: 0.12 });
+      for (var i = 0; i < (big ? 10 : 5); i++) N({ dur: 0.03, vol: 0.09, filter: 3200, delay: rnd(0.05, big ? 1.0 : 0.6) });
     },
     ooh: function () { T({ freq: 330, to: 250, type: 'triangle', dur: 0.5, vol: 0.1 }); T({ freq: 415, to: 320, type: 'triangle', dur: 0.5, vol: 0.07 }); },
     siren: function () { [0, 0.25].forEach(function (d) { T({ freq: 600, to: 950, type: 'square', dur: 0.2, vol: 0.08, delay: d }); }); },
@@ -95,20 +138,22 @@
     var root = ROOTS[bar];
     if (st === 0 || st === 7 || st === 10) note(ctx, dest, 150, t, 0.2, 'sine', 0.55, 45);
     if (st === 4 || st === 12) note(ctx, dest, 1500, t, 0.035, 'square', 0.06, 900);
-    if (st % 2 === 1) note(ctx, dest, 5200, t, 0.02, 'square', 0.015);
+    if (st % 2 === 1) note(ctx, dest, 3100, t, 0.025, 'triangle', 0.02, 2400);
     if (st === 0 || st === 3 || st === 6 || st === 8 || st === 11 || st === 14) {
       var bf = 65.41 * Math.pow(2, (root + (st === 8 ? 12 : 0)) / 12);
       note(ctx, dest, bf, t, 0.16, 'triangle', 0.3);
     }
     var m = MEL[bar][st];
-    if (m >= 0 && music.lead) note(ctx, dest, 523.25 * Math.pow(2, SCALE[m] / 12), t, 0.13, 'square', 0.045);
+    if (m >= 0 && music.lead) note(ctx, dest, 523.25 * Math.pow(2, SCALE[m] / 12), t, 0.14, 'triangle', 0.075);
   }
 
   music.update = function () {
     var ctx = A.ctx;
     if (!ctx || !music.want || !music.on) return;
     if (!music.gain) {
-      music.gain = ctx.createGain(); music.gain.gain.value = 0.32; music.gain.connect(A.master);
+      var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3800; lp.Q.value = 0.5;
+      lp.connect(A.master);
+      music.gain = ctx.createGain(); music.gain.gain.value = 0.32; music.gain.connect(lp);
     }
     var step = 60 / music.tempo / 4;
     if (music.next < ctx.currentTime) music.next = ctx.currentTime + 0.05;
