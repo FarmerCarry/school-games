@@ -80,7 +80,8 @@
   ];
 
   // Mission descriptions (Arabic). Numbers stay as Western digits.
-  function num(n) { return n.toLocaleString('en-US'); }
+  var NUMFMT = new Intl.NumberFormat('en-US');
+  function num(n) { return NUMFMT.format(n); }
   // Arabic counted nouns: 1 -> singular + "واحدة", 2 -> dual (no digit), 3-10 -> plural, 11+ -> singular.
   // forms = [one, two, few, many]
   TB.count = function (n, forms) {
