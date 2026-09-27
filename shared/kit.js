@@ -73,7 +73,7 @@
   audio.setMuted = function (m) {
     audio.muted = !!m;
     siteStore.set('muted', audio.muted);
-    if (audio.master) audio.master.gain.value = audio.muted ? 0 : 0.5;
+    if (audio.master) audio.master.gain.setTargetAtTime(audio.muted ? 0 : 0.5, audio.ctx.currentTime, 0.015);
     muteListeners.forEach(function (fn) { fn(audio.muted); });
   };
   audio.toggleMute = function () { audio.setMuted(!audio.muted); return audio.muted; };
@@ -92,6 +92,7 @@
     var vol = opts.vol == null ? 0.3 : opts.vol;
     var osc = ctx.createOscillator();
     var g = ctx.createGain();
+    g.gain.value = 0; // start silent: avoids a click before the envelope begins
     osc.type = opts.type || 'square';
     osc.frequency.setValueAtTime(opts.freq || 440, t0);
     if (opts.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, opts.to), t0 + dur);
@@ -119,7 +120,9 @@
     var src = ctx.createBufferSource();
     src.buffer = noiseBuf;
     var g = ctx.createGain();
-    g.gain.setValueAtTime(opts.vol == null ? 0.3 : opts.vol, t0);
+    g.gain.value = 0;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(opts.vol == null ? 0.3 : opts.vol, t0 + 0.003);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     var node = src;
     if (opts.filter) {

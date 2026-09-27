@@ -41,7 +41,7 @@ html, body { background: #07021a; }
 #hZoneLbl { white-space: nowrap; }
 #hZoneLbl { font-size: calc(var(--u) * 2); font-weight: 700; line-height: 1.3; color: #fff; text-shadow: 0 0 8px var(--zc, var(--pink)); }
 #hZoneBar { height: calc(var(--u) * 0.9); border-radius: 99px; background: rgba(255,255,255,0.15); margin-top: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.3); }
-#hZoneFill { height: 100%; width: 0; background: var(--zc, var(--pink)); box-shadow: 0 0 10px var(--zc, var(--pink)); border-radius: 99px; }
+#hZoneFill { height: 100%; width: 100%; transform: translateX(100%); will-change: transform; background: var(--zc, var(--pink)); box-shadow: 0 0 10px var(--zc, var(--pink)); border-radius: 99px; }
 #hGems {
   position: absolute; right: calc(var(--u) * 1 + 112px); top: 10px; height: max(42px, calc(var(--u) * 2.9)); padding: 0 14px;
   display: flex; align-items: center; font-weight: 700; font-size: max(24px, calc(var(--u) * 1.9)); color: #fff;

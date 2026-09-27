@@ -1454,8 +1454,13 @@
       hZoneLbl.textContent = 'المنطقة ' + (st.zone + 1) + ' · ' + info.name;
       hud.style.setProperty('--zc', info.prism ? '#ff3fd0' : info.c);
     }
-    var zp = ((ball.d - START_D) % ZONE_LEN) / ZONE_LEN;
-    hZoneFill.style.width = (zp * 100).toFixed(1) + '%';
+    // slide a full-width fill instead of changing its width: no page layout every frame
+    var zp = Math.round(((ball.d - START_D) % ZONE_LEN) / ZONE_LEN * 500) / 5;
+    if (zp !== lastHud.zp) {
+      lastHud.zp = zp;
+      if (lastHud.zs == null) lastHud.zs = getComputedStyle(hZoneFill).direction === 'rtl' ? 1 : -1;
+      hZoneFill.style.transform = 'translateX(' + (lastHud.zs * (100 - zp)).toFixed(1) + '%)';
+    }
     var html = '';
     if (ball.shield) html += '<div class="pw" style="color:#3ff0ff">درع</div>';
     if (ball.magnet > 0) html += '<div class="pw" style="color:#c48bff">مغناطيس <div class="pbar"><i style="width:' + (ball.magnet * 10).toFixed(0) + '%"></i></div></div>';
@@ -1544,7 +1549,7 @@
   }
   function resumeGame() {
     if (st.mode !== 'paused') return;
-    st.mode = 'play'; show('pause', false); SND.setMusic(st.zone >= 2 ? 3 : 2);
+    st.mode = 'play'; show('pause', false); SND.setMusic(st.zone >= 2 ? 3 : 2, true);
   }
   function misValue(m) {
     var dist = Math.max(0, Math.floor(ball.d - START_D)), rs = st.rs || { gems: 0, air: 0, near: 0, power: 0 };
@@ -1785,6 +1790,28 @@
   window.addEventListener('resize', resize);
   resize();
 
+
+  // Safety net for weak integrated graphics: if play runs clearly below ~40 fps for a few
+  // seconds (median frame > 24 ms in two 2-second windows in a row), render fewer pixels.
+  // It only ever steps down (at most to 60 percent of the start), so a PC that holds 60 fps
+  // never changes. Disabled under automated testing.
+  var dres = { ratio: DPR, min: DPR * 0.6, buf: new Float32Array(120), n: 0, last: 0, bad: 0 };
+  function dynRes(now, playing) {
+    if (!playing || navigator.webdriver || dres.ratio <= dres.min + 0.01) { dres.last = 0; dres.n = 0; return; }
+    if (dres.last) { var d = now - dres.last; if (d > 0 && d < 250) dres.buf[dres.n++] = d; }
+    dres.last = now;
+    if (dres.n < 120) return;
+    dres.n = 0;
+    var med = Array.prototype.slice.call(dres.buf).sort(function (a, b) { return a - b; })[60];
+    dres.bad = med > 24 ? dres.bad + 1 : 0;
+    if (dres.bad >= 2) {
+      dres.bad = 0;
+      dres.ratio = Math.max(dres.min, dres.ratio * 0.8);
+      renderer.setPixelRatio(dres.ratio);
+      resize();
+    }
+  }
+
   /* ============================================================== LOOP */
   var lastT = 0;
   function frame(now) {
@@ -1794,6 +1821,7 @@
     if (dt > 0.1) dt = 0.1;
     if (document.hidden) return;
     handleInput();
+    dynRes(now, st.mode === 'play');
     var steps = Math.max(1, Math.ceil(dt * 60 - 0.05)), h = dt / steps;
     for (var i = 0; i < steps; i++) update(h);
     course.updateMatrixWorld();
@@ -1863,6 +1891,14 @@
       document.fonts.load('700 60px Fredoka', 'بم').then(function () { if (st.bestD) drawBestSign(save.best); }, function () {});
     }
   } catch (e) { /* ignore */ }
+  // Compile every material now, hidden objects included, so the first run, shield, magnet
+  // or crash doesn't freeze the game for a moment while the graphics card builds a shader.
+  (function warmShaders() {
+    var hidden = [];
+    scene.traverse(function (o) { if (!o.visible) { hidden.push(o); o.visible = true; } });
+    try { renderer.compile(scene, camera); } catch (e) { /* ignore */ }
+    for (var i = 0; i < hidden.length; i++) hidden[i].visible = false;
+  })();
   showTitle();
   requestAnimationFrame(frame);
 })();
