@@ -76,71 +76,78 @@
   /* ----------------------------------------------------------------- audio */
   var A = Kit.audio;
   var sfx = {
-    grab: function () { A.tone({ freq: 700, to: 1500, type: 'triangle', dur: 0.07, vol: 0.18 }); A.noise({ dur: 0.05, vol: 0.07, filter: 7000, to: 2500 }); },
+    grab: function () { A.tone({ freq: 700, to: 1500, type: 'triangle', dur: 0.07, vol: 0.18 }); A.noise({ dur: 0.05, vol: 0.05, filter: 5000, to: 2000 }); },
     whoosh: function (sp) {
       var v = Kit.clamp(sp / 1700, 0.15, 1);
-      A.noise({ dur: 0.25 + 0.2 * v, vol: 0.12 + 0.25 * v, filter: 900 + 3000 * v, to: 220 });
-      A.tone({ freq: 240 + 260 * v, to: 120, type: 'sine', dur: 0.22, vol: 0.07 });
+      A.noise({ dur: 0.22 + 0.18 * v, vol: 0.08 + 0.14 * v, filter: 700 + 1600 * v, to: 200 });
+      A.tone({ freq: 240 + 260 * v, to: 120, type: 'sine', dur: 0.22, vol: 0.08 });
     },
-    launch: function () { A.tone({ freq: 160, to: 700, type: 'sine', dur: 0.25, vol: 0.3 }); A.noise({ dur: 0.3, vol: 0.15, filter: 2500, to: 300 }); },
+    launch: function () { A.tone({ freq: 160, to: 700, type: 'sine', dur: 0.25, vol: 0.3 }); A.noise({ dur: 0.3, vol: 0.12, filter: 2000, to: 300 }); },
     boing: function (v) {
       var p = Kit.clamp(v / 1400, 0.7, 1.4);
       A.tone({ freq: 130 * p, to: 560 * p, type: 'sine', dur: 0.24, vol: 0.34 });
       A.tone({ freq: 260 * p, to: 980 * p, type: 'triangle', dur: 0.16, vol: 0.12, delay: 0.03 });
     },
     bumper: function () {
-      A.tone({ freq: 740, type: 'square', dur: 0.06, vol: 0.1 }); A.tone({ freq: 1110, type: 'square', dur: 0.1, vol: 0.1, delay: 0.05 });
+      A.tone({ freq: 740, type: 'triangle', dur: 0.07, vol: 0.16 }); A.tone({ freq: 1110, type: 'triangle', dur: 0.11, vol: 0.15, delay: 0.05 });
       A.tone({ freq: 170, to: 460, type: 'sine', dur: 0.16, vol: 0.28 });
     },
     flip: function (c) {
       var f = 523 * Math.pow(1.1225, Math.min(c, 8) * 2 - 2);
-      A.tone({ freq: f, to: f * 1.5, type: 'square', dur: 0.09, vol: 0.1 });
+      A.tone({ freq: f, to: f * 1.5, type: 'triangle', dur: 0.1, vol: 0.16 });
       A.tone({ freq: f * 1.5, type: 'triangle', dur: 0.16, vol: 0.16, delay: 0.07 });
       if (c >= 2) A.tone({ freq: f * 2, type: 'triangle', dur: 0.2, vol: 0.12, delay: 0.14 });
     },
     ring: function () {
       [784, 1047, 1319, 1568].forEach(function (f, i) { A.tone({ freq: f, type: 'sine', dur: 0.12, vol: 0.16, delay: i * 0.04 }); });
-      A.noise({ dur: 0.45, vol: 0.22, filter: 4000, to: 300 });
+      A.noise({ dur: 0.4, vol: 0.13, filter: 3000, to: 300 });
     },
-    poof: function () { A.noise({ dur: 0.35, vol: 0.35, filter: 2600, to: 150 }); A.tone({ freq: 520, to: 110, type: 'triangle', dur: 0.32, vol: 0.28 }); },
+    poof: function () { A.noise({ dur: 0.35, vol: 0.3, filter: 2000, to: 150 }); A.tone({ freq: 520, to: 110, type: 'triangle', dur: 0.32, vol: 0.28 }); },
     splash: function () {
-      A.noise({ dur: 0.7, vol: 0.4, filter: 1600, to: 90 }); A.tone({ freq: 650, to: 180, type: 'sine', dur: 0.16, vol: 0.16 });
+      A.noise({ dur: 0.7, vol: 0.34, filter: 1400, to: 90 }); A.tone({ freq: 650, to: 180, type: 'sine', dur: 0.16, vol: 0.16 });
       A.tone({ freq: 1300, to: 1700, type: 'sine', dur: 0.05, vol: 0.08, delay: 0.25 }); A.tone({ freq: 1100, to: 1500, type: 'sine', dur: 0.05, vol: 0.07, delay: 0.38 });
     },
     thud: function (v) { A.tone({ freq: 150, to: 70, type: 'triangle', dur: 0.09, vol: Kit.clamp(v / 2200, 0.06, 0.3) }); },
     star: function (i) { var f = [784, 988, 1175][i] || 1175; A.tone({ freq: f, type: 'triangle', dur: 0.22, vol: 0.28 }); A.tone({ freq: f * 2, type: 'sine', dur: 0.3, vol: 0.12, delay: 0.05 }); },
-    win: function () { Kit.sfx.win(); A.noise({ dur: 0.25, vol: 0.2, filter: 5000, to: 1000 }); },
-    click: function () { Kit.sfx.click(); },
-    unlock: function () { Kit.sfx.power(); },
+    win: function () {
+      [523, 659, 784, 1047, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.18, vol: 0.26, delay: i * 0.1 }); A.tone({ freq: f / 2, type: 'sine', dur: 0.18, vol: 0.1, delay: i * 0.1 }); });
+      A.noise({ dur: 0.25, vol: 0.12, filter: 3500, to: 800 });
+    },
+    click: function () { A.tone({ freq: 660, to: 880, type: 'triangle', dur: 0.06, vol: 0.16 }); },
+    unlock: function () { [523, 659, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.12, vol: 0.2, delay: i * 0.06 }); }); },
     tick: function () { A.tone({ freq: 1200, type: 'sine', dur: 0.03, vol: 0.06 }); }
   };
-  // Continuous wind noise that rises with speed.
+  // Air rush that rises with speed: deep brown noise through a low-pass (a soft "whoom",
+  // not a hiss), only when you are really flying, and well under the music.
   var wind = null;
   function ensureWind() {
     var c = A.ctx;
     if (!c || wind || !A.master) return;
     try {
       var len = c.sampleRate * 2, buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0), last = 0;
-      for (var i = 0; i < len; i++) { last = last * 0.96 + (Math.random() * 2 - 1) * 0.04; d[i] = last * 6; }
+      for (var i = 0; i < len; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.5; }
       var src = c.createBufferSource(); src.buffer = buf; src.loop = true;
-      var f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 500; f.Q.value = 0.8;
+      var f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 250; f.Q.value = 0.6;
       var g = c.createGain(); g.gain.value = 0;
       src.connect(f); f.connect(g); g.connect(A.master); src.start();
-      wind = { f: f, g: g };
+      wind = { f: f, g: g, lv: -1 };
     } catch (e) { wind = { f: null, g: null, broken: true }; }
   }
   function updateWind(sp, on) {
     if (!wind) ensureWind();
     if (!wind || wind.broken || !A.ctx) return;
+    var lv = on ? Kit.clamp((sp - 700) / 1500, 0, 1) : 0;
+    lv = Math.round(lv * 20) / 20; // only touch the audio graph when it really changes
+    if (lv === wind.lv) return;
+    wind.lv = lv;
     var t = A.ctx.currentTime;
-    var target = on ? Kit.clamp((sp - 350) / 1700, 0, 1) * 0.5 : 0;
-    wind.g.gain.setTargetAtTime(target, t, 0.08);
-    wind.f.frequency.setTargetAtTime(250 + sp * 0.9, t, 0.1);
+    wind.g.gain.setTargetAtTime(0.12 * lv * lv, t, 0.1);
+    wind.f.frequency.setTargetAtTime(220 + 600 * lv, t, 0.12);
   }
 
   /* ----------------------------------------------------------------- music */
-  // A tiny cheerful sequencer (bass + chord stabs + arpeggio), scheduled ahead
-  // with WebAudio time. Different key and chords per world.
+  // A small cheerful band (kick, clap, hats, bass, chord stabs, echoing arpeggio),
+  // scheduled ahead with WebAudio time. Different key and chords per world.
   var MUSIC = [
     { root: 60, prog: [0, 7, 9, 5], minor: [false, false, true, false], bpm: 124 },   // C G Am F
     { root: 65, prog: [0, 5, 7, 5], minor: [false, false, false, false], bpm: 132 },  // F Bb C Bb
@@ -148,20 +155,65 @@
     { root: 62, prog: [0, 10, 8, 7], minor: [true, false, false, true], bpm: 112 }    // Dm C Bb Am
   ];
   var music = { on: false, next: 0, step: 0, song: 0 };
+  var mbus = null;
   function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  function musicBus(c) {
+    if (mbus && mbus.c === c) return mbus;
+    var out = c.createGain(); out.gain.value = 0.9;
+    var hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 40;
+    var comp = c.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.knee.value = 12; comp.ratio.value = 3; comp.attack.value = 0.006; comp.release.value = 0.2;
+    out.connect(hp); hp.connect(comp); comp.connect(A.master);
+    var echo = c.createGain();
+    var dl = c.createDelay(1), dlp = c.createBiquadFilter(), fb = c.createGain(), wet = c.createGain();
+    dlp.type = 'lowpass'; dlp.frequency.value = 2200; fb.gain.value = 0.28; wet.gain.value = 0.25;
+    echo.connect(out); echo.connect(dl); dl.connect(dlp); dlp.connect(fb); fb.connect(dl); dlp.connect(wet); wet.connect(out);
+    var nb = c.createBuffer(1, c.sampleRate / 2, c.sampleRate), nd = nb.getChannelData(0);
+    for (var i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    mbus = { c: c, out: out, echo: echo, dl: dl, nb: nb };
+    return mbus;
+  }
+  function mNote(c, t, type, f, dur, vol, lp, dest) {
+    var o = c.createOscillator(), g = c.createGain(), n = o;
+    o.type = type; o.frequency.value = f;
+    if (lp) { var fl = c.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = lp; o.connect(fl); n = fl; }
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+    g.gain.setValueAtTime(vol, t + dur * 0.5); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    n.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.02);
+  }
+  function mNoise(c, t, dur, vol, type, freq) {
+    var s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = mbus.nb; f.type = type; f.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(mbus.out); s.start(t, Math.random() * 0.3); s.stop(t + dur + 0.02);
+  }
+  function mKick(c, t, v) {
+    var o = c.createOscillator(), g = c.createGain();
+    o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(50, t + 0.09);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    o.connect(g); g.connect(mbus.out); o.start(t); o.stop(t + 0.22);
+  }
   function musicTick() {
     var c = A.ctx;
     if (!c || A.muted || !music.on) { if (c) music.next = Math.max(music.next, c.currentTime); return; }
+    var mb = musicBus(c);
     var sg = MUSIC[music.song], spb = 60 / sg.bpm / 2; // eighth notes
     if (music.next < c.currentTime) music.next = c.currentTime + 0.05;
-    while (music.next < c.currentTime + 0.25) {
-      var st = music.step, bar = Math.floor(st / 8) % 4, e = st % 8, d = music.next - c.currentTime;
+    if (mb.spb !== spb) { mb.spb = spb; mb.dl.delayTime.setTargetAtTime(spb * 1.5, c.currentTime, 0.05); }
+    while (music.next < c.currentTime + 0.2) {
+      var st = music.step, bar = Math.floor(st / 8) % 4, e = st % 8, t = music.next;
       var r = sg.root + sg.prog[bar], third = sg.minor[bar] ? 3 : 4;
-      if (e === 0 || e === 3 || e === 6) A.tone({ freq: mtof(r - 24), type: 'triangle', dur: spb * 1.6, vol: 0.13, delay: d });
+      var full = Math.floor(st / 32) % 4 !== 0; // every 4th phrase is a lighter breather
+      if (e === 0 || e === 4 || (full && e === 7 && bar === 3)) mKick(c, t, 0.5);
+      if (full && (e === 2 || e === 6)) mNoise(c, t, 0.12, 0.16, 'bandpass', 1900);
+      if (e === 0 || e === 3 || e === 6) mNote(c, t, 'triangle', mtof(r - 24), spb * 1.6, 0.16, 0, mb.out);
       var arp = [0, third, 7, 12, 7, third, 12, 7 + 12][e];
-      A.tone({ freq: mtof(r + arp), type: 'square', dur: spb * 0.7, vol: 0.022, delay: d });
-      if (e === 2 || e === 6) { A.tone({ freq: mtof(r + 12 + third), type: 'triangle', dur: spb * 0.9, vol: 0.035, delay: d }); }
-      if (e % 2 === 1) A.noise({ dur: 0.03, vol: 0.025, filter: 9000, delay: d });
+      mNote(c, t, 'square', mtof(r + arp), spb * 0.8, 0.045, 2000, mb.echo);
+      if (e === 2 || e === 6) {
+        mNote(c, t, 'triangle', mtof(r + 12 + third), spb * 0.9, 0.05, 0, mb.out);
+        mNote(c, t, 'triangle', mtof(r + 19), spb * 0.9, 0.035, 0, mb.out);
+      }
+      if (e % 2 === 1) mNoise(c, t, 0.035, 0.05, 'highpass', 7500);
       music.next += spb; music.step++;
     }
   }

@@ -107,7 +107,7 @@
 
   // Can all pieces be placed (in some order, with line clears)? budget bounds the search.
   function canPlaceAll(mask, shapes, budget) {
-    var st = { left: budget || 30000 };
+    var st = typeof budget === 'object' && budget ? budget : { left: budget || 30000 };
     function rec(m, list) {
       if (!list.length) return true;
       for (var k = 0; k < list.length; k++) {
@@ -174,7 +174,10 @@
     var rng = opts.rng || Math.random, d = opts.difficulty || 0, help = opts.help == null ? 0.4 : opts.help;
     var fillRatio = filled(mask) / 64;
     var bestSet = null, bestScore = -1;
-    for (var attempt = 0; attempt < 40; attempt++) {
+    // Total search budget for this deal: on a jammed board 40 full searches could stall the
+    // frame the last piece is dropped on (~70 ms); cap the whole deal to a few ms.
+    var total = 120000;
+    for (var attempt = 0; attempt < 40 && total > 0; attempt++) {
       // soften difficulty on later attempts
       var dd = attempt > 20 ? d * 0.4 : d;
       var set = [];
@@ -192,7 +195,10 @@
       }
       // shuffle
       for (var i = set.length - 1; i > 0; i--) { var q = Math.floor(rng() * (i + 1)); var t = set[i]; set[i] = set[q]; set[q] = t; }
-      if (canPlaceAll(mask, set, 25000)) return set;
+      var st = { left: Math.min(25000, total) };
+      var ok = canPlaceAll(mask, set, st);
+      total -= Math.min(25000, total) - Math.max(0, st.left);
+      if (ok && st.left >= 0) return set;
       var sc = 0;
       for (i = 0; i < 3; i++) if (anyFit(mask, set[i])) sc++;
       if (sc > bestScore) { bestScore = sc; bestSet = set; }

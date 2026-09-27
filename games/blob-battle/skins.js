@@ -544,20 +544,28 @@
   /* ------------------------------------------------ shared blob renderer
      Draws a jiggly blob with skin at (x,y) radius r on ctx (screen space).
      o: { skin, color, t, phase, wob, sx, sy (squash), rot, lx, ly, blink, mouth, pts } */
+  // The outline is a closed quadratic spline through the jiggle points, so even a small blob
+  // drawn with few points stays round and soft instead of showing polygon corners.
+  var PX = new Float64Array(64), PY = new Float64Array(64);
   BB.blobPath = function (c, x, y, r, o) {
     var n = o.pts || Math.max(14, Math.min(56, Math.round(r / 2.2)));
+    if (n > 60) n = 60;
     var t = o.t, ph = o.phase || 0, w = (o.wob || 0), sa = o.sa || 0, sq = o.sq || 0;
     var ca = Math.cos(sa), sn = Math.sin(sa);
-    c.beginPath();
-    for (var i = 0; i <= n; i++) {
+    for (var i = 0; i < n; i++) {
       var a = i / n * TAU;
       var k = 1 + w * (0.55 * Math.sin(a * 3 + t * 5.3 + ph) + 0.45 * Math.sin(a * 5 - t * 4.1 + ph * 2)) + 0.012 * Math.sin(a * 7 + t * 3 + ph);
       var px = Math.cos(a) * r * k, py = Math.sin(a) * r * k;
       // squash/stretch along direction sa
       var u = px * ca + py * sn, v = -px * sn + py * ca;
       u *= 1 + sq; v *= 1 - sq * 0.6;
-      px = u * ca - v * sn; py = u * sn + v * ca;
-      if (i === 0) c.moveTo(x + px, y + py); else c.lineTo(x + px, y + py);
+      PX[i] = x + u * ca - v * sn; PY[i] = y + u * sn + v * ca;
+    }
+    c.beginPath();
+    c.moveTo((PX[n - 1] + PX[0]) / 2, (PY[n - 1] + PY[0]) / 2);
+    for (i = 0; i < n; i++) {
+      var j = i + 1 < n ? i + 1 : 0;
+      c.quadraticCurveTo(PX[i], PY[i], (PX[i] + PX[j]) / 2, (PY[i] + PY[j]) / 2);
     }
     c.closePath();
   };

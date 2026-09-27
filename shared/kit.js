@@ -73,7 +73,7 @@
   audio.setMuted = function (m) {
     audio.muted = !!m;
     siteStore.set('muted', audio.muted);
-    if (audio.master) audio.master.gain.value = audio.muted ? 0 : 0.5;
+    if (audio.master) audio.master.gain.setTargetAtTime(audio.muted ? 0 : 0.5, audio.ctx.currentTime, 0.015);
     muteListeners.forEach(function (fn) { fn(audio.muted); });
   };
   audio.toggleMute = function () { audio.setMuted(!audio.muted); return audio.muted; };
@@ -92,6 +92,7 @@
     var vol = opts.vol == null ? 0.3 : opts.vol;
     var osc = ctx.createOscillator();
     var g = ctx.createGain();
+    g.gain.value = 0; // start silent: avoids a click before the envelope begins
     osc.type = opts.type || 'square';
     osc.frequency.setValueAtTime(opts.freq || 440, t0);
     if (opts.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, opts.to), t0 + dur);
@@ -119,7 +120,9 @@
     var src = ctx.createBufferSource();
     src.buffer = noiseBuf;
     var g = ctx.createGain();
-    g.gain.setValueAtTime(opts.vol == null ? 0.3 : opts.vol, t0);
+    g.gain.value = 0;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(opts.vol == null ? 0.3 : opts.vol, t0 + 0.003);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     var node = src;
     if (opts.filter) {
@@ -135,17 +138,17 @@
 
   // Ready-made effects. Call e.g. Kit.sfx.coin().
   Kit.sfx = {
-    click: function () { audio.tone({ freq: 660, type: 'square', dur: 0.05, vol: 0.15 }); },
+    click: function () { audio.tone({ freq: 660, type: 'triangle', dur: 0.05, vol: 0.15 }); },
     coin: function () {
-      audio.tone({ freq: 988, type: 'square', dur: 0.07, vol: 0.18 });
-      audio.tone({ freq: 1319, type: 'square', dur: 0.16, vol: 0.18, delay: 0.07 });
+      audio.tone({ freq: 988, type: 'triangle', dur: 0.07, vol: 0.18 });
+      audio.tone({ freq: 1319, type: 'triangle', dur: 0.16, vol: 0.18, delay: 0.07 });
     },
-    jump: function () { audio.tone({ freq: 300, to: 700, type: 'square', dur: 0.14, vol: 0.18 }); },
+    jump: function () { audio.tone({ freq: 300, to: 700, type: 'triangle', dur: 0.14, vol: 0.18 }); },
     land: function () { audio.tone({ freq: 160, to: 80, type: 'triangle', dur: 0.08, vol: 0.25 }); },
     hit: function () { audio.noise({ dur: 0.15, vol: 0.35, filter: 1800, to: 300 }); audio.tone({ freq: 180, to: 60, type: 'sawtooth', dur: 0.15, vol: 0.2 }); },
     pop: function () { audio.tone({ freq: 500, to: 1200, type: 'sine', dur: 0.08, vol: 0.3 }); },
     boom: function () { audio.noise({ dur: 0.6, vol: 0.5, filter: 1200, to: 60 }); },
-    power: function () { [523, 659, 784, 1047].forEach(function (f, i) { audio.tone({ freq: f, type: 'square', dur: 0.09, vol: 0.15, delay: i * 0.06 }); }); },
+    power: function () { [523, 659, 784, 1047].forEach(function (f, i) { audio.tone({ freq: f, type: 'triangle', dur: 0.09, vol: 0.15, delay: i * 0.06 }); }); },
     win: function () { [523, 659, 784, 1047, 784, 1047].forEach(function (f, i) { audio.tone({ freq: f, type: 'triangle', dur: 0.16, vol: 0.3, delay: i * 0.1 }); }); },
     lose: function () { [392, 330, 262, 196].forEach(function (f, i) { audio.tone({ freq: f, type: 'triangle', dur: 0.22, vol: 0.3, delay: i * 0.15 }); }); },
     whoosh: function () { audio.noise({ dur: 0.25, vol: 0.2, filter: 3000, to: 400 }); }

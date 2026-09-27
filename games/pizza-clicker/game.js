@@ -225,7 +225,9 @@
     if (imgCache[key]) return imgCache[key];
     var c = document.createElement('canvas');
     c.width = c.height = size * 2;
-    var x = c.getContext('2d');
+    // willReadFrequently keeps this small canvas on the CPU, so toDataURL() below does not have to
+    // wait for a GPU readback (that stall cost ~1 s at startup on slow machines).
+    var x = c.getContext('2d', { willReadFrequently: true });
     x.scale(2, 2);
     draw(x, size);
     imgCache[key] = c.toDataURL();
@@ -239,32 +241,57 @@
 
   /* ============================================================ sound */
   var A = K.audio;
+  // One oscillator note with an instant attack and exponential decay; the optional low-pass
+  // keeps saw/square colours soft (raw square waves get shrill when heard hundreds of times).
+  function note(f, to, type, dur, vol, delay, cutoff) {
+    var ac = A.ctx;
+    if (!ac || A.muted || !(vol > 0)) return;
+    var t0 = ac.currentTime + (delay || 0);
+    var o = ac.createOscillator(), g = ac.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(f, t0);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    var out = o;
+    if (cutoff) { var lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cutoff; lp.Q.value = 0.4; o.connect(lp); out = lp; }
+    out.connect(g); g.connect(A.master);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+  var lastClickSnd = 0;
   var snd = {
+    // Soft doughy "plop", purely tonal (no noise layer: at 8-16 clicks a second any noise burst
+    // turns into constant static). Small random pitch variation, a gentle rise with the combo
+    // (capped low), and quieter when clicks pile up so long sessions don't get tiring.
     click: function (n) {
-      var f = 330 + Math.min(n, 60) * 9 + Math.random() * 30;
-      A.tone({ freq: f, to: f * 1.7, type: 'sine', dur: 0.08, vol: 0.28 });
-      A.noise({ dur: 0.05, vol: 0.08, filter: 2600, to: 600 });
+      var t = performance.now(), gap = t - lastClickSnd;
+      lastClickSnd = t;
+      var k = gap < 70 ? 0.6 : gap < 140 ? 0.8 : 1;
+      var f = (300 + Math.min(n, 40) * 5) * (0.93 + Math.random() * 0.14);
+      note(f, f * 1.45, 'sine', 0.07, 0.22 * k);
+      note(f * 2.01, f * 2.6, 'triangle', 0.035, 0.05 * k);
     },
     buy: function () {
-      A.tone({ freq: 880, type: 'square', dur: 0.06, vol: 0.12 });
-      A.tone({ freq: 1320, type: 'square', dur: 0.12, vol: 0.12, delay: 0.06 });
-      A.tone({ freq: 140, to: 70, type: 'triangle', dur: 0.12, vol: 0.25 });
+      note(1047, null, 'triangle', 0.08, 0.14);
+      note(1568, null, 'triangle', 0.16, 0.14, 0.06);
+      note(140, 70, 'triangle', 0.12, 0.22);
     },
-    no: function () { A.tone({ freq: 170, to: 120, type: 'square', dur: 0.16, vol: 0.1 }); },
-    upgrade: function () { K.sfx.power(); },
-    ach: function () { [784, 988, 1175, 1568].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.18, vol: 0.22, delay: i * 0.08 }); }); },
-    goldAppear: function () { [1568, 2093, 2637, 3136].forEach(function (f, i) { A.tone({ freq: f, type: 'sine', dur: 0.12, vol: 0.1, delay: i * 0.06 }); }); },
-    goldClick: function () { K.sfx.win(); A.noise({ dur: 0.3, vol: 0.12, filter: 5000, to: 1500 }); },
-    goldMiss: function () { A.tone({ freq: 700, to: 300, type: 'sine', dur: 0.3, vol: 0.1 }); },
-    catchRain: function (n) { A.tone({ freq: 600 + n * 30, to: 900 + n * 40, type: 'sine', dur: 0.08, vol: 0.22 }); },
-    combo: function () { [659, 880, 1175].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.08, vol: 0.12, delay: i * 0.05 }); }); },
-    ui: function () { K.sfx.click(); },
+    no: function () { note(200, 150, 'triangle', 0.16, 0.18); },
+    upgrade: function () { [523, 659, 784, 1047].forEach(function (f, i) { note(f, null, 'triangle', 0.12, 0.17, i * 0.06); }); note(2093, null, 'sine', 0.25, 0.05, 0.24); },
+    ach: function () { [784, 988, 1175, 1568].forEach(function (f, i) { note(f, null, 'triangle', 0.2, 0.2, i * 0.08); }); },
+    goldAppear: function () { [1047, 1319, 1568, 2093].forEach(function (f, i) { note(f, null, 'sine', 0.16, 0.09, i * 0.07); }); },
+    goldClick: function () { K.sfx.win(); A.noise({ dur: 0.3, vol: 0.07, filter: 5000, to: 1500 }); },
+    goldMiss: function () { note(700, 300, 'sine', 0.3, 0.1); },
+    catchRain: function (n) { note(600 + Math.min(n, 26) * 25, 900 + Math.min(n, 26) * 35, 'sine', 0.09, 0.2); },
+    combo: function () { [659, 880, 1175].forEach(function (f, i) { note(f, null, 'triangle', 0.1, 0.16, i * 0.05); }); },
+    ui: function () { note(700, 560, 'triangle', 0.05, 0.14); },
     rebirth: function () {
-      A.tone({ freq: 200, to: 1600, type: 'sawtooth', dur: 1.1, vol: 0.12 });
-      [523, 659, 784, 1047, 1319, 1568].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.25, vol: 0.25, delay: 0.9 + i * 0.1 }); });
-      A.noise({ dur: 0.8, vol: 0.3, filter: 1500, to: 80, delay: 0.9 });
+      note(200, 1600, 'sawtooth', 1.1, 0.12, 0, 1800);
+      [523, 659, 784, 1047, 1319, 1568].forEach(function (f, i) { note(f, null, 'triangle', 0.28, 0.22, 0.9 + i * 0.1); });
+      A.noise({ dur: 0.8, vol: 0.25, filter: 1500, to: 80, delay: 0.9 });
     },
-    collect: function () { [523, 659, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.1, vol: 0.14, delay: i * 0.05 }); }); }
+    collect: function () { [523, 659, 784, 1047].forEach(function (f, i) { note(f, null, 'triangle', 0.12, 0.18, i * 0.05); }); }
   };
 
   /* ============================================================ fx */
@@ -424,6 +451,9 @@
   }
 
   /* ============================================================ shop UI */
+  // Writing textContent always replaces the text node (a DOM mutation + relayout), even when the
+  // text is the same, so HUD/shop labels refreshed 10x a second only write when they change.
+  function setText(el, t) { if (el._t !== t) { el._t = t; el.textContent = t; } }
   var listEl = $('list'), upsEl = $('ups');
   var rows = [];
   function buildShop() {
@@ -500,7 +530,7 @@
       var no = S.pizzas < cost;
       if (row.no !== no) { row.no = no; row.el.classList.toggle('no', no); }
     }
-    $('bNote').textContent = S.totalOwned ? 'لديك ' + S.totalOwned : '';
+    setText($('bNote'), S.totalOwned ? 'لديك ' + S.totalOwned : '');
     // upgrades
     var avail = [];
     for (i = 0; i < PZ.UPGRADES.length; i++) {
@@ -529,7 +559,7 @@
         });
       }
     }
-    $('upsNote').textContent = avail.length ? String(avail.length) : '';
+    setText($('upsNote'), avail.length ? String(avail.length) : '');
     Array.prototype.forEach.call(upsEl.querySelectorAll('.up'), function (b) {
       var u = PZ.UPG[b.getAttribute('data-id')];
       var ok = S.pizzas >= u.cost;
@@ -601,7 +631,7 @@
     // badges
     var na = S.achCount - S.seenAch;
     var ab = $('achBadge');
-    ab.hidden = na <= 0; if (na > 0) ab.textContent = '+' + na;
+    ab.hidden = na <= 0; if (na > 0) setText(ab, '+' + na);
     var ns = false;
     for (var k in S.skins) if (!S.seenSkins[k]) ns = true;
     $('skinBadge').hidden = !ns;
@@ -1397,7 +1427,7 @@
     rebirth: function () { doRebirth(); return S.crusts; },
     openRebirth: openRebirth, openAch: openAch, openSkins: openSkins, closeModal: closeModal,
     offline: function (sec) { openOffline(sec, offlineGain(sec)); },
-    save: save, fmt: PZ.fmt,
+    save: save, fmt: PZ.fmt, snd: snd,
     setTime: function (sec) { save(); S.t = Date.now() - sec * 1000; store.set('save', S); noSave = true; }
   };
 })();

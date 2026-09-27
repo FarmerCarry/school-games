@@ -62,7 +62,8 @@
     document.body.insertAdjacentHTML('beforeend', '<div class="sg-overlay"><div class="sg-panel"><h1 class="sg-title">عذرًا!</h1><p class="sg-sub">هذا الجهاز لا يدعم الرسوم ثلاثية الأبعاد.</p></div></div>');
     return;
   }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  var basePR = Math.min(window.devicePixelRatio || 1, 1.5);
+  renderer.setPixelRatio(basePR);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   var scene = new THREE.Scene();
@@ -432,32 +433,106 @@
   function clearParts() { for (var i = 0; i < PMAX; i++) parts[i].on = false; pIM.count = 0; }
 
   /* ============================================================== sound */
+  // Own tiny synth (instead of Kit.audio.tone/noise): every gain starts silent BEFORE its note
+  // too, so notes never click, and timbres are soft (triangle/sine/filtered) because the hop
+  // sound alone is heard hundreds of times per session. Goes through Kit.audio.master (mute).
+  var sfxBus = null, nBuf = null;
+  function actx() {
+    var c = A.ctx;
+    if (!c || A.muted || !A.master) return null;
+    if (!sfxBus || sfxBus.context !== c) { sfxBus = c.createGain(); sfxBus.gain.value = 1; sfxBus.connect(A.master); }
+    return c;
+  }
+  function tone(o) {
+    var c = actx(); if (!c) return;
+    var t0 = c.currentTime + (o.delay || 0), dur = o.dur || 0.12, vol = o.vol == null ? 0.2 : o.vol;
+    var osc = c.createOscillator(), g = c.createGain(), node = osc;
+    osc.type = o.type || 'triangle';
+    osc.frequency.setValueAtTime(o.freq, t0);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t0 + (o.slide || dur));
+    if (o.detune) osc.detune.value = o.detune;
+    if (o.lp) { var f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = o.lp; osc.connect(f); node = f; }
+    g.gain.value = 0;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.005));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    node.connect(g); g.connect(sfxBus);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }
+  function noise(o) {
+    var c = actx(); if (!c) return;
+    if (!nBuf) {
+      nBuf = c.createBuffer(1, c.sampleRate, c.sampleRate);
+      var d = nBuf.getChannelData(0);
+      for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    var t0 = c.currentTime + (o.delay || 0), dur = o.dur || 0.25, vol = o.vol == null ? 0.3 : o.vol;
+    var src = c.createBufferSource(); src.buffer = nBuf;
+    var f = c.createBiquadFilter(); f.type = o.type || 'lowpass';
+    f.frequency.setValueAtTime(o.filter || 2000, t0);
+    if (o.q) f.Q.value = o.q;
+    if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t0 + dur);
+    var g = c.createGain();
+    g.gain.value = 0;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.004));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(sfxBus);
+    src.start(t0, Math.random() * 0.5); src.stop(t0 + dur + 0.03);
+  }
+  // soft bell "ding" (sine + two quick partials)
+  function bell(f, dur, vol, delay) {
+    tone({ freq: f, type: 'sine', dur: dur, vol: vol, delay: delay, attack: 0.003 });
+    tone({ freq: f * 2, type: 'sine', dur: dur * 0.5, vol: vol * 0.3, delay: delay, attack: 0.002 });
+    tone({ freq: f * 3.01, type: 'sine', dur: dur * 0.22, vol: vol * 0.12, delay: delay, attack: 0.002 });
+  }
   var S = {
     hop: function () {
+      // soft cartoon "boop"; each character keeps its own pitch and a hint of its own voice
       var c = CHAR_BY[save.sel].snd, f = c[0] * (0.94 + Math.random() * 0.12);
-      A.tone({ freq: f, to: f * 1.6, type: c[1], dur: 0.07, vol: c[1] === 'sine' ? 0.2 : 0.1 });
+      tone({ freq: f, to: f * 1.6, type: 'triangle', dur: 0.085, vol: 0.2 });
+      if (c[1] === 'square' || c[1] === 'sawtooth') tone({ freq: f, to: f * 1.6, type: c[1], dur: 0.06, vol: 0.045, lp: 2000 });
+      else tone({ freq: f * 2, to: f * 3.2, type: 'sine', dur: 0.05, vol: c[1] === 'sine' ? 0.07 : 0.04 });
+      noise({ filter: 1600, dur: 0.035, vol: 0.05 });
     },
-    land: function () { A.tone({ freq: 150, to: 90, type: 'triangle', dur: 0.05, vol: 0.18 }); },
-    bump: function () { A.tone({ freq: 190, to: 110, type: 'triangle', dur: 0.09, vol: 0.3 }); A.noise({ dur: 0.05, vol: 0.08, filter: 700 }); },
-    log: function () { A.tone({ freq: 240, to: 150, type: 'triangle', dur: 0.08, vol: 0.3 }); A.noise({ dur: 0.06, vol: 0.08, filter: 900 }); },
-    pad: function () { A.tone({ freq: 300, to: 560, type: 'sine', dur: 0.12, vol: 0.25 }); },
-    splash: function () { A.noise({ dur: 0.55, vol: 0.35, filter: 3200, to: 300 }); A.tone({ freq: 720, to: 160, type: 'sine', dur: 0.35, vol: 0.28 }); },
+    land: function () { tone({ freq: 150, to: 90, type: 'triangle', dur: 0.06, vol: 0.18 }); },
+    bump: function () { tone({ freq: 190, to: 110, type: 'triangle', dur: 0.09, vol: 0.3 }); noise({ dur: 0.05, vol: 0.08, filter: 700 }); },
+    log: function () { tone({ freq: 240, to: 150, type: 'triangle', dur: 0.08, vol: 0.28 }); tone({ freq: 620, to: 520, type: 'sine', dur: 0.04, vol: 0.06 }); noise({ dur: 0.06, vol: 0.08, filter: 900 }); },
+    pad: function () { tone({ freq: 300, to: 560, type: 'sine', dur: 0.12, vol: 0.25 }); },
+    splash: function () {
+      noise({ dur: 0.55, vol: 0.32, filter: 3000, to: 300 }); tone({ freq: 720, to: 160, type: 'sine', dur: 0.35, vol: 0.26 });
+      for (var i = 0; i < 4; i++) tone({ freq: 500 + i * 140, to: 1100 + i * 200, type: 'sine', dur: 0.06, vol: 0.06, delay: 0.25 + i * 0.09 + Math.random() * 0.04 });
+    },
     squash: function () {
-      A.noise({ dur: 0.2, vol: 0.35, filter: 1600, to: 200 });
-      A.tone({ freq: 240, to: 55, type: 'sawtooth', dur: 0.22, vol: 0.2 });
-      A.tone({ freq: 392, type: 'square', dur: 0.13, vol: 0.1, delay: 0.08 }); A.tone({ freq: 494, type: 'square', dur: 0.15, vol: 0.1, delay: 0.08 });
+      noise({ dur: 0.2, vol: 0.34, filter: 1600, to: 200 });
+      tone({ freq: 240, to: 55, type: 'triangle', dur: 0.22, vol: 0.26 });
+      tone({ freq: 392, type: 'sawtooth', dur: 0.15, vol: 0.06, delay: 0.08, lp: 1400, attack: 0.02 }); tone({ freq: 494, type: 'sawtooth', dur: 0.17, vol: 0.06, delay: 0.08, lp: 1400, attack: 0.02 });
     },
-    bell: function () { A.tone({ freq: 1560, type: 'triangle', dur: 0.12, vol: 0.13 }); A.tone({ freq: 1170, type: 'triangle', dur: 0.1, vol: 0.06, delay: 0.01 }); },
+    bell: function () { tone({ freq: 1560, type: 'triangle', dur: 0.12, vol: 0.12 }); tone({ freq: 1170, type: 'triangle', dur: 0.1, vol: 0.06, delay: 0.01 }); },
     train: function () {
-      A.noise({ dur: 1.2, vol: 0.28, filter: 900, to: 150 });
-      A.tone({ freq: 523, to: 494, type: 'square', dur: 0.6, vol: 0.07 }); A.tone({ freq: 659, to: 622, type: 'square', dur: 0.6, vol: 0.07 });
+      noise({ dur: 1.2, vol: 0.26, filter: 900, to: 150 });
+      tone({ freq: 523, to: 494, type: 'sawtooth', dur: 0.6, vol: 0.06, lp: 1500, attack: 0.03 }); tone({ freq: 659, to: 622, type: 'sawtooth', dur: 0.6, vol: 0.06, lp: 1500, attack: 0.03 });
     },
-    boom: function () { A.noise({ dur: 0.6, vol: 0.45, filter: 1400, to: 80 }); A.tone({ freq: 300, to: 60, type: 'sawtooth', dur: 0.35, vol: 0.2 }); },
-    eagle: function () { A.tone({ freq: 1500, to: 850, type: 'sawtooth', dur: 0.5, vol: 0.12 }); A.tone({ freq: 1900, to: 1100, type: 'square', dur: 0.4, vol: 0.05, delay: 0.06 }); },
-    warn: function () { A.tone({ freq: 880, type: 'square', dur: 0.06, vol: 0.08 }); },
-    near: function () { A.noise({ dur: 0.25, vol: 0.22, filter: 3000, to: 400 }); A.tone({ freq: 700, to: 1100, type: 'sine', dur: 0.12, vol: 0.12 }); },
-    mission: function () { [660, 880, 1175].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.1, vol: 0.13, delay: i * 0.08 }); }); },
-    crank: function () { for (var i = 0; i < 6; i++) A.tone({ freq: 300 + i * 40, type: 'square', dur: 0.03, vol: 0.12, delay: i * 0.12 }); }
+    boom: function () { noise({ dur: 0.6, vol: 0.42, filter: 1400, to: 80 }); tone({ freq: 300, to: 60, type: 'sawtooth', dur: 0.35, vol: 0.18, lp: 1200 }); },
+    eagle: function () { tone({ freq: 1500, to: 850, type: 'sawtooth', dur: 0.5, vol: 0.1, lp: 2800 }); tone({ freq: 1900, to: 1100, type: 'triangle', dur: 0.4, vol: 0.06, delay: 0.06 }); },
+    warn: function () { tone({ freq: 880, type: 'triangle', dur: 0.08, vol: 0.12 }); tone({ freq: 1760, type: 'sine', dur: 0.05, vol: 0.03 }); },
+    near: function () { noise({ type: 'bandpass', dur: 0.25, vol: 0.2, filter: 2200, to: 500, q: 0.8 }); tone({ freq: 700, to: 1100, type: 'sine', dur: 0.12, vol: 0.12 }); },
+    mission: function () { [660, 880, 1175].forEach(function (f, i) { tone({ freq: f, type: 'triangle', dur: 0.12, vol: 0.13, delay: i * 0.08 }); bell(f * 2, 0.1, 0.03, i * 0.08); }); },
+    crank: function () { for (var i = 0; i < 6; i++) { tone({ freq: 300 + i * 40, type: 'triangle', dur: 0.035, vol: 0.14, delay: i * 0.12 }); noise({ type: 'bandpass', filter: 2500, q: 2, dur: 0.02, vol: 0.06, delay: i * 0.12 }); } },
+    honk: function (f) { tone({ freq: f, type: 'sawtooth', dur: 0.17, vol: 0.06, lp: 1400, attack: 0.015 }); tone({ freq: f * 1.26, type: 'sawtooth', dur: 0.17, vol: 0.06, lp: 1400, attack: 0.015 }); },
+    // a car zooming past close by
+    zoom: function (big, vol) {
+      noise({ type: 'bandpass', filter: big ? 500 : 800, to: big ? 180 : 300, q: 0.9, dur: big ? 0.4 : 0.3, vol: vol, attack: 0.05 });
+      tone({ freq: big ? 110 : 160, to: big ? 70 : 100, type: 'triangle', dur: 0.25, vol: vol * 0.4, attack: 0.04 });
+    },
+    click: function () { tone({ freq: 880, to: 1250, type: 'triangle', dur: 0.06, vol: 0.13 }); },
+    coin: function (big) { bell(1175, 0.09, 0.14); bell(1760, 0.22, 0.14, 0.055); if (big) bell(2349, 0.3, 0.07, 0.12); },
+    milestone: function () { bell(784, 0.12, 0.13); bell(1047, 0.25, 0.13, 0.08); },
+    pop: function () { tone({ freq: 500, to: 1200, type: 'sine', dur: 0.08, vol: 0.25 }); },
+    whoosh: function () { noise({ type: 'bandpass', dur: 0.28, vol: 0.22, filter: 1000, to: 300, q: 0.8 }); },
+    power: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone({ freq: f, type: 'triangle', dur: 0.12, vol: 0.14, delay: i * 0.06 }); }); bell(2093, 0.35, 0.05, 0.24); },
+    win: function () { [523, 659, 784, 1047, 784, 1047].forEach(function (f, i) { tone({ freq: f, type: 'triangle', dur: 0.18, vol: 0.26, delay: i * 0.1 }); }); bell(2093, 0.5, 0.06, 0.5); },
+    lose: function () { tone({ freq: 392, to: 262, type: 'triangle', dur: 0.3, vol: 0.2 }); }
   };
 
   /* ============================================================== state */
@@ -508,13 +583,27 @@
   }
 
   function wrapObj(o) { if (o.x - o.len / 2 > 18) o.x -= 36; else if (o.x + o.len / 2 < -18) o.x += 36; }
+  var zoomCD = 0;
   function updateLanes(dt) {
+    zoomCD -= dt;
     for (var r = laneMin; r <= laneMax; r++) {
       var L = lanes[r], i;
       if (!L) continue;
-      if (L.vehicles) for (i = 0; i < L.vehicles.length; i++) {
-        var v = L.vehicles[i];
-        v.x += L.v * dt; wrapObj(v); v.m.position.x = v.x;
+      if (L.vehicles) {
+        // cars zooming past right next to the player make a quick "vroom" (like the real game)
+        var zr = state === 'play' && !P.dead && Math.abs(r - P.row) <= 1;
+        for (i = 0; i < L.vehicles.length; i++) {
+          var v = L.vehicles[i];
+          v.x += L.v * dt; wrapObj(v); v.m.position.x = v.x;
+          if (zr) {
+            var sd = v.x > P.x ? 1 : -1;
+            if (v.sd && sd !== v.sd && zoomCD <= 0 && Math.abs(v.x - P.x) < 3) {
+              zoomCD = 0.2;
+              S.zoom(v.t === 'truck' || v.t === 'bus', (r === P.row ? 0.15 : 0.1) * Kit.clamp(Math.abs(L.v) / 5, 0.7, 1.3));
+            }
+            v.sd = sd;
+          } else v.sd = 0;
+        }
       }
       if (L.logs) for (i = 0; i < L.logs.length; i++) {
         var o = L.logs[i];
@@ -653,21 +742,21 @@
     if (th !== lastTheme) {
       lastTheme = th; newWorld = true;
       showBanner('عالم جديد!', THEMES[th].name);
-      Kit.sfx.power(); confetti(40);
+      S.power(); confetti(40);
     }
     if (maxRow >= milestoneNext) {
       if (!newWorld) {
         var w = MILESTONE_WORDS[Math.min(MILESTONE_WORDS.length - 1, Math.floor(milestoneNext / 25) - 1)];
         popup(milestoneNext + '', P.x, 1.6, P.z, 'big');
         popup(w, P.x, 2.4, P.z, 'gold');
-        A.tone({ freq: 784, type: 'square', dur: 0.08, vol: 0.12 }); A.tone({ freq: 1047, type: 'square', dur: 0.14, vol: 0.12, delay: 0.08 });
+        S.milestone();
       }
       milestoneNext += 25;
     }
     if (!bestAnnounced && bestAtStart > 0 && score > bestAtStart) {
       bestAnnounced = true;
       popup('رقم قياسي جديد!', P.x, 2.0, P.z, 'big');
-      Kit.sfx.power(); confetti(70);
+      S.power(); confetti(70);
     }
   }
   function collectCoin(L) {
@@ -675,7 +764,7 @@
     give(c.m); c.m = null;
     runCoins += val; save.coins += val; save.stats.coinsAll += val;
     put('coins', save.coins);
-    Kit.sfx.coin();
+    S.coin(c.big);
     burst(c.c, 0.5, -L.row, 10, c.big ? [0x7ff0ff, 0xffffff, 0x3fb8e0] : [0xffd23f, 0xfff3a0, 0xff9f1a], { speed: 2.6, up: 4, size: 0.1, life: 0.5 });
     popup('+' + val, c.c, 1.0, -L.row, 'gold');
     updateHUD(true);
@@ -704,7 +793,7 @@
       if (dx > v.len / 2 && dx < v.len / 2 + 2.2) {
         honkCD = 1.2;
         var f = v.t === 'truck' || v.t === 'bus' ? 220 : v.t === 'van' ? 523 : 392;
-        A.tone({ freq: f, type: 'square', dur: 0.16, vol: 0.07 }); A.tone({ freq: f * 1.26, type: 'square', dur: 0.16, vol: 0.07 });
+        S.honk(f);
         return;
       }
     }
@@ -797,7 +886,7 @@
       var k = Math.min(1, E.t / 0.6), e = k * k;
       eagle.position.set(E.sx + (P.x - E.sx) * e, E.sy + (1.35 - E.sy) * e, E.sz + (P.z - E.sz) * e);
       if (k >= 1) {
-        E.phase = 1; E.t = 0; shake(0.3); Kit.sfx.whoosh();
+        E.phase = 1; E.t = 0; shake(0.3); S.whoosh();
         burst(P.x, 0.6, P.z, 14, ['#8a5a33', '#ffffff', '#6b4426'], { speed: 3, up: 4, size: 0.12, life: 0.7 });
       }
     } else {
@@ -901,7 +990,7 @@
     K.endFrame();
   }
 
-  function applyPlayer() {
+  function applyPlayer(rdt) {
     pGroup.position.set(P.x, P.y, P.z);
     if (!P.dead) {
       var sx = 1, sy = 1;
@@ -912,7 +1001,29 @@
       var d = P.face - pGroup.rotation.y;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
-      pGroup.rotation.y += d * 0.4;
+      pGroup.rotation.y += d * (1 - Math.exp(-(rdt || 1 / 60) * 30));
+    }
+  }
+
+
+  // Safety net for weak integrated graphics: if play runs clearly below ~40 fps for a few
+  // seconds (median frame > 24 ms in two 2-second windows in a row), render fewer pixels.
+  // It only ever steps down (at most to 60 percent of the start), so a PC that holds 60 fps
+  // never changes. Disabled under automated testing.
+  var dres = { ratio: basePR, min: basePR * 0.6, buf: new Float32Array(120), n: 0, last: 0, bad: 0 };
+  function dynRes(now, playing) {
+    if (!playing || navigator.webdriver || dres.ratio <= dres.min + 0.01) { dres.last = 0; dres.n = 0; return; }
+    if (dres.last) { var d = now - dres.last; if (d > 0 && d < 250) dres.buf[dres.n++] = d; }
+    dres.last = now;
+    if (dres.n < 120) return;
+    dres.n = 0;
+    var med = Array.prototype.slice.call(dres.buf).sort(function (a, b) { return a - b; })[60];
+    dres.bad = med > 24 ? dres.bad + 1 : 0;
+    if (dres.bad >= 2) {
+      dres.bad = 0;
+      dres.ratio = Math.max(dres.min, dres.ratio * 0.8);
+      renderer.setPixelRatio(dres.ratio);
+      onResize();
     }
   }
 
@@ -920,9 +1031,10 @@
   function render() {
     var now = performance.now(), rdt = Math.min(0.05, (now - lastR) / 1000);
     lastR = now;
+    dynRes(now, state === 'play');
     if (decoDirty) rebuildDeco();
     bestSign.visible = !titleLike(); // on the menu it would sit half-hidden under the missions box
-    applyPlayer();
+    applyPlayer(rdt);
     applyCamera();
     renderer.render(scene, cam);
     if (warmDraw) { warmDraw = false; scene.remove(warmGroup); warmGroup = null; }
@@ -1017,11 +1129,11 @@
     $('hud').hidden = false;
     $('hint').hidden = started;
     updateHUD();
-    Kit.sfx.click();
+    S.click();
     try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
-  function pauseGame() { if (state !== 'play') return; state = 'paused'; setWarn(false); $('pScore').textContent = score; showScreen('pause'); Kit.sfx.click(); }
-  function resumeGame() { if (state !== 'paused') return; state = 'play'; showScreen(null); Kit.sfx.click(); K.reset(); }
+  function pauseGame() { if (state !== 'play') return; state = 'paused'; setWarn(false); $('pScore').textContent = score; showScreen('pause'); S.click(); }
+  function resumeGame() { if (state !== 'paused') return; state = 'play'; showScreen(null); S.click(); K.reset(); }
   function restart() { resetWorld(0); state = 'title'; startGame(); }
   function toMenu() { resetWorld(0); state = 'title'; $('hud').hidden = true; showScreen('title'); refreshTitle(); }
 
@@ -1060,9 +1172,9 @@
     $('oGift').hidden = !giftReady();
     $('oMachine').hidden = !(save.coins >= 100 && machineLeft().length);
     showScreen('over');
-    if (newBestRun && score > 0) { Kit.sfx.win(); confetti(140); }
-    else A.tone({ freq: 392, to: 262, type: 'triangle', dur: 0.3, vol: 0.2 });
-    if (unlocked.length) { confetti(80); Kit.sfx.power(); }
+    if (newBestRun && score > 0) { S.win(); confetti(140); }
+    else S.lose();
+    if (unlocked.length) { confetti(80); S.power(); }
   }
 
   /* ---------------------------------------------------------- missions */
@@ -1127,7 +1239,7 @@
     if (!giftReady()) return;
     var n = Kit.randInt(15, 35);
     save.coins += n; save.giftAt = Date.now(); persist();
-    Kit.sfx.power(); confetti(60);
+    S.power(); confetti(60);
     showBanner('هدية!', 'ربحت ' + n + ' عملة');
     $('oGift').hidden = true; $('tGift').hidden = true;
     $('oMachine').hidden = !(save.coins >= 100 && machineLeft().length);
@@ -1239,7 +1351,7 @@
   }
 
   /* ------------------------------------------------------- characters */
-  function openChars(from) { prevScreen = from; state = 'chars'; renderChars(); showScreen('chars'); Kit.sfx.click(); }
+  function openChars(from) { prevScreen = from; state = 'chars'; renderChars(); showScreen('chars'); S.click(); }
   function lockHint(c) {
     if (c.src === 'score') return 'صل إلى 100 نقطة';
     if (c.src === 'splash') return 'اسقط في الماء 10 مرات';
@@ -1267,7 +1379,7 @@
     state = prevScreen === 'over' ? 'over' : 'title';
     showScreen(state);
     if (state === 'title') refreshTitle();
-    Kit.sfx.click();
+    S.click();
   }
 
   /* ---------------------------------------------------- prize machine */
@@ -1276,7 +1388,7 @@
   function openMachine(from) {
     prevScreen = from; state = 'machine';
     $('mReveal').hidden = true; $('gBall').className = 'g-ball';
-    refreshMachine(); showScreen('machine'); Kit.sfx.click();
+    refreshMachine(); showScreen('machine'); S.click();
   }
   function refreshMachine() {
     var left = machineLeft();
@@ -1303,25 +1415,25 @@
     void knob.offsetWidth;
     knob.classList.add('turn'); g.classList.add('shake');
     ball.style.background = 'linear-gradient(180deg, ' + pick.color + ' 0 50%, #fff 50% 100%)';
-    setTimeout(function () { ball.classList.add('drop'); Kit.sfx.pop(); }, 800);
+    setTimeout(function () { ball.classList.add('drop'); S.pop(); }, 800);
     setTimeout(function () {
       pulling = false;
       if (state !== 'machine') { refreshMachine(); return; }
       $('mImg').src = thumb(pick.id, false);
       $('mName').textContent = pick.name;
       $('mReveal').hidden = false;
-      Kit.sfx.win(); confetti(120);
+      S.win(); confetti(120);
       refreshMachine();
     }, 1700);
   }
-  function closeReveal() { $('mReveal').hidden = true; $('gBall').className = 'g-ball'; refreshMachine(); Kit.sfx.click(); }
+  function closeReveal() { $('mReveal').hidden = true; $('gBall').className = 'g-ball'; refreshMachine(); S.click(); }
   function closeMachine() {
     if (pulling) return;
     state = prevScreen === 'over' ? 'over' : 'title';
     showScreen(state);
     if (state === 'title') refreshTitle();
     else $('oMachine').hidden = !(save.coins >= 100 && machineLeft().length);
-    Kit.sfx.click();
+    S.click();
   }
   function playPrize() {
     if (lastPrize && has(lastPrize)) { save.sel = lastPrize; put('sel', lastPrize); save.seen[lastPrize] = 1; }
@@ -1363,7 +1475,24 @@
   resetWorld(0);
   refreshTitle();
   showScreen('title');
-  Kit.loop(update, render);
+  // Variable-step loop: every displayed frame runs the simulation for exactly the time that
+  // passed (split into sub-steps of at most 1/60 s). A fixed 60 Hz step without interpolation
+  // made cars and the camera judder whenever a frame got 0 or 2 updates (and constantly on
+  // 75/144 Hz screens).
+  (function () {
+    var last = 0;
+    function frame(t) {
+      requestAnimationFrame(frame);
+      var dt = last ? Math.min(0.1, (t - last) / 1000) : 1 / 60;
+      last = t;
+      if (document.hidden || dt <= 0) return;
+      var n = Math.max(1, Math.ceil(dt * 60 - 0.05)), h = dt / n;
+      for (var i = 0; i < n; i++) update(h);
+      render();
+    }
+    document.addEventListener('visibilitychange', function () { last = 0; });
+    requestAnimationFrame(frame);
+  })();
   warmLater(3000);
   if (document.fonts && document.fonts.load) {
     document.fonts.load('700 40px Fredoka', 'بب').then(function () { onResize(); placeBestMark(); }, function () { /* ignore */ });
@@ -1480,6 +1609,7 @@
       return { calls: i.render.calls, tris: i.render.triangles, geometries: i.memory.geometries, lanes: laneMax - laneMin + 1, particles: pIM.count, meshes: scene.children.length };
     },
     checkPaths: checkPaths,
+    sfx: S,
     bot: bot,
     // Run the simulation synchronously (for automated tests on slow machines).
     step: function (sec, fn) { var n = Math.round((sec || 0.1) * 60); for (var i = 0; i < n; i++) { if (fn) fn(i); update(1 / 60); } render(); return state; },

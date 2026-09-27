@@ -255,9 +255,10 @@
       case 'halo': {
         var hb = Math.sin(T * 3) * 3;
         ctx.save(); ctx.translate(0, -18 + hb);
-        ctx.shadowColor = '#fff38a'; ctx.shadowBlur = 14;
-        ell(ctx, 0, 0, 26, 7); ctx.strokeStyle = '#ffe14a'; ctx.lineWidth = 7; ctx.stroke();
-        ctx.shadowBlur = 0;
+        // soft glow from two wide translucent strokes (shadowBlur is slow on integrated graphics)
+        ell(ctx, 0, 0, 26, 7); ctx.strokeStyle = 'rgba(255,243,138,0.22)'; ctx.lineWidth = 19; ctx.stroke();
+        ctx.lineWidth = 12; ctx.stroke();
+        ctx.strokeStyle = '#ffe14a'; ctx.lineWidth = 7; ctx.stroke();
         ell(ctx, 0, 0, 26, 7); ctx.strokeStyle = '#fff8c4'; ctx.lineWidth = 2.5; ctx.stroke();
         ctx.restore();
         break;

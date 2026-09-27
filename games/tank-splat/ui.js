@@ -424,7 +424,7 @@
       if (app.resShown < app.resCoins && app.resT > 0.4) {
         app.resShown = Math.min(app.resCoins, app.resShown + Math.max(1, Math.ceil(app.resCoins * dt * 1.2)));
         $('resCoins').textContent = '+' + app.resShown;
-        if (Math.random() < 0.5) S.pop();
+        S.coin();
       }
     }
     Kit.keys.endFrame();
@@ -493,6 +493,7 @@
       return true;
     },
     show: function (n) { show(n); return app.screen; },
+    bench: function (n) { n = n || 120; var t0 = performance.now(); for (var i = 0; i < n; i++) { update(1 / 60); render(); } return +((performance.now() - t0) / n).toFixed(2); },
     sim: function (sec) { for (var i = 0; i < sec * 60; i++) update(1 / 60); return this.state(); },
     reset: function () { ['coins', 'stars', 'hats', 'splats', 'equip', 'free', 'stats'].forEach(function (k) { store.remove(k); }); }
   };

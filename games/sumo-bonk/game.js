@@ -52,8 +52,11 @@
   var DIFF_LV = { easy: 1, medium: 2, hard: 3 };
   var DIFF_AR = { easy: 'السهل', medium: 'المتوسط', hard: 'الصعب' };
   function medals() { var n = 0; for (var i = 0; i < 8; i++) n += save.beaten[i] || 0; return n; }
-  function persist() {
-    ['stars', 'wins', 'special', 'picks', 'mode', 'diff', 'streak', 'bestStreak', 'matches', 'bonks', 'music', 'seenHats', 'beaten'].forEach(function (k) { store.set(k, save[k]); });
+  var SAVE_KEYS = ['stars', 'wins', 'special', 'picks', 'mode', 'diff', 'streak', 'bestStreak', 'matches', 'bonks', 'music', 'seenHats', 'beaten'];
+  // persist() writes everything (end of a match); persist('picks') just one key, so flicking
+  // through wrestlers and hats on the select screen doesn't rewrite 13 keys per key press.
+  function persist(only) {
+    (only ? [only] : SAVE_KEYS).forEach(function (k) { store.set(k, save[k]); });
   }
   function hatUnlocked(i) {
     var h = HATS[i]; if (!h) return false;
@@ -1266,7 +1269,7 @@
   var pvCtx = [];
   function toSelect(m) {
     if (m) mode = m;
-    save.mode = mode; persist();
+    if (save.mode !== mode) { save.mode = mode; persist('mode'); }
     scr = 'select';
     // make sure picks are valid
     if (!hatUnlocked(save.picks.h0)) save.picks.h0 = 0;
@@ -1329,18 +1332,18 @@
     save.picks[key] = v;
     if (mode === 1 && v === cpuPick.sumo) rollCpu();
     pv[i].sqV += 5; pv[i].leanV += d * 4;
-    SFX.tick(); refreshSelectNames(); persist();
+    SFX.tick(); refreshSelectNames(); persist('picks');
   }
   function cycleHat(i, d) {
     var key = 'h' + i, v = save.picks[key], n = HATS.length;
     for (var k = 0; k < n; k++) { v = (v + d + n) % n; if (hatUnlocked(v)) break; }
     save.picks[key] = v;
     pv[i].sqV -= 4; pv[i].hatV += d * 6;
-    SFX.tick(); refreshSelectNames(); persist();
+    SFX.tick(); refreshSelectNames(); persist('picks');
   }
   function setDiff(d) {
     if (!diffUnlocked(d)) { SFX.locked(); var b = $('d-' + d); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); return; }
-    diff = d; save.diff = d; persist(); SFX.click(); rollCpu(); buildSelect();
+    diff = d; save.diff = d; persist('diff'); SFX.click(); rollCpu(); buildSelect();
   }
   var rivalsCtx = null, rivalPv = [];
   for (var rp = 0; rp < 8; rp++) { rivalPv.push(newPlayer(rp)); rivalPv[rp].sumo = rp; rivalPv[rp].hat = 0; }
@@ -1507,7 +1510,7 @@
     });
   });
   function paintMusic() { btnMusic.textContent = '♫'; btnMusic.style.opacity = save.music ? '1' : '0.45'; btnMusic.title = save.music ? 'الموسيقى تعمل' : 'الموسيقى متوقفة'; }
-  onClick('bMusic', function () { save.music = !save.music; MUSIC.on = save.music; persist(); paintMusic(); });
+  onClick('bMusic', function () { save.music = !save.music; MUSIC.on = save.music; persist('music'); paintMusic(); });
   btnMusic.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
   btnPause.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
   paintMusic();

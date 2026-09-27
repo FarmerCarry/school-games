@@ -818,6 +818,7 @@
     stumble();
   }
 
+  var POW_KEYS = ['magnet', 'sneakers', 'doubler', 'board'];
   function stepPlay(dt) {
     var intro = S.mode === 'intro';
     // speed
@@ -827,16 +828,17 @@
     S.speed = target * S.slow * (0.25 + 0.75 * ramp);
     if (intro) { S.introT += dt; if (S.introT >= 0.7) S.mode = 'play'; }
     // power timers
-    ['magnet', 'sneakers', 'doubler', 'board'].forEach(function (k) {
-      if (POW[k] > 0) {
-        POW[k] -= dt;
-        if (POW[k] <= 0) {
-          POW[k] = 0;
-          if (k === 'board') { runner.board.visible = false; P.invuln = Math.max(P.invuln, 0.3); }
+    for (var pi = 0; pi < POW_KEYS.length; pi++) {
+      var pwk = POW_KEYS[pi];
+      if (POW[pwk] > 0) {
+        POW[pwk] -= dt;
+        if (POW[pwk] <= 0) {
+          POW[pwk] = 0;
+          if (pwk === 'board') { runner.board.visible = false; P.invuln = Math.max(P.invuln, 0.3); }
           sfx.powerEnd();
         }
       }
-    });
+    }
     P.stumbleT = Math.max(0, P.stumbleT - dt);
     P.stumbleAnim = Math.max(0, P.stumbleAnim - dt);
     P.invuln = Math.max(0, P.invuln - dt);
@@ -1108,13 +1110,14 @@
   }
 
   /* ============================================================ render */
-  var dummy = new T.Object3D();
+  var dummy = new T.Object3D(), moversBuf = [];
   var camPos = new T.Vector3(0, 2, 5), camLook = new T.Vector3(0, 1, 0), tmpV = new T.Vector3(), tmpL = new T.Vector3();
   var lastT = performance.now();
   function render(alpha) {
     var now = performance.now(), rdt = Math.min(0.1, (now - lastT) / 1000);
     lastT = now;
     var playing = S.mode === 'play' || S.mode === 'intro';
+    dynRes(now, playing && !S.hold);
     var a = playing ? alpha : 1;
     var pDr = S.prevPD + (S.pD - S.prevPD) * a;
     var xr = P.px + (P.x - P.px) * a, yr = P.py + (P.y - P.py) * a;
@@ -1139,7 +1142,9 @@
     }
     // coins
     var spin = S.t * 3.2, n = 0, movers = null;
-    for (var mo = 0; mo < obstacles.length; mo++) if (obstacles[mo].moving && obstacles[mo].active) (movers || (movers = [])).push(obstacles[mo]);
+    moversBuf.length = 0;
+    for (var mo = 0; mo < obstacles.length; mo++) if (obstacles[mo].moving && obstacles[mo].active) moversBuf.push(obstacles[mo]);
+    if (moversBuf.length) movers = moversBuf;
     for (var ci2 = 0; ci2 < coins.length; ci2++) {
       var co = coins[ci2], z = pDr - co.d;
       if (z < -220 || z > 12) continue;
@@ -1292,6 +1297,28 @@
 
     renderer.render(scene, camera);
     renderHUD();
+  }
+
+
+  // Safety net for weak integrated graphics: if play runs clearly below ~40 fps for a few
+  // seconds (median frame > 24 ms in two 2-second windows in a row), render fewer pixels.
+  // It only ever steps down (at most to 60 percent of the start), so a PC that holds 60 fps
+  // never changes. Disabled under automated testing.
+  var dres = { ratio: PR, min: PR * 0.6, buf: new Float32Array(120), n: 0, last: 0, bad: 0 };
+  function dynRes(now, playing) {
+    if (!playing || navigator.webdriver || dres.ratio <= dres.min + 0.01) { dres.last = 0; dres.n = 0; return; }
+    if (dres.last) { var d = now - dres.last; if (d > 0 && d < 250) dres.buf[dres.n++] = d; }
+    dres.last = now;
+    if (dres.n < 120) return;
+    dres.n = 0;
+    var med = Array.prototype.slice.call(dres.buf).sort(function (a, b) { return a - b; })[60];
+    dres.bad = med > 24 ? dres.bad + 1 : 0;
+    if (dres.bad >= 2) {
+      dres.bad = 0;
+      dres.ratio = Math.max(dres.min, dres.ratio * 0.8);
+      renderer.setPixelRatio(dres.ratio);
+      layout();
+    }
   }
 
   function hiddenByTrain(co, movers) {
@@ -1555,7 +1582,7 @@
     S.mode = 'paused';
     $('pMissions').innerHTML = save.missions.map(function (m) { return missionRow(m, true); }).join('');
     show('pause');
-    music.stop();
+    music.pause();
     sfx.click();
   }
   function resume() {

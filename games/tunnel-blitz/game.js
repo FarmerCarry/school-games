@@ -140,20 +140,36 @@
   var A = Kit.audio;
   var Mus = (function () {
     var ac = null, out = null, nb = null, on = false, mode = 'title', bpm = 110, nextT = 0, step = 0;
-    var intensity = 0, key = 0, kicks = [], wind = null, windG = null;
+    var intensity = 0, key = 0, kicks = [], wind = null, windG = null, windF = null, windLvl = -1, echo = null;
     function ensure() {
       ac = A.ctx;
       if (!ac || !A.master) return false;
       if (!out) {
-        out = ac.createGain(); out.gain.value = 0.55; out.connect(A.master);
+        // music bus: cut useless sub rumble, then a gentle compressor so the mix is full but never clips
+        out = ac.createGain(); out.gain.value = 0.85;
+        var hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 40; hp.Q.value = 0.7;
+        var comp = ac.createDynamicsCompressor();
+        comp.threshold.value = -16; comp.knee.value = 12; comp.ratio.value = 3.5; comp.attack.value = 0.006; comp.release.value = 0.2;
+        out.connect(hp); hp.connect(comp); comp.connect(A.master);
+        // a soft echo for the synth plucks (makes them sound like a real track)
+        echo = ac.createGain(); echo.gain.value = 1;
+        var dl = ac.createDelay(1); dl.delayTime.value = 0.3;
+        var dlp = ac.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 2400;
+        var fb = ac.createGain(); fb.gain.value = 0.3;
+        var wet = ac.createGain(); wet.gain.value = 0.22;
+        echo.connect(out); echo.connect(dl); dl.connect(dlp); dlp.connect(fb); fb.connect(dl); dlp.connect(wet); wet.connect(out);
+        echo.dl = dl;
         nb = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
         var d = nb.getChannelData(0);
         for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-        // continuous wind that follows how fast you spin
-        wind = ac.createBufferSource(); wind.buffer = nb; wind.loop = true;
-        var bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7;
+        // Air rush while you spin. Brown noise (deep "whoosh", no hiss) through a low-pass
+        // that opens up the faster you spin; silent when you are not turning.
+        var bn = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), bd = bn.getChannelData(0), last = 0;
+        for (i = 0; i < bd.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; bd[i] = last * 3.5; }
+        wind = ac.createBufferSource(); wind.buffer = bn; wind.loop = true;
+        windF = ac.createBiquadFilter(); windF.type = 'lowpass'; windF.frequency.value = 300; windF.Q.value = 0.6;
         windG = ac.createGain(); windG.gain.value = 0;
-        wind.connect(bp); bp.connect(windG); windG.connect(A.master);
+        wind.connect(windF); windF.connect(windG); windG.connect(A.master);
         wind.start();
       }
       return true;
@@ -165,8 +181,12 @@
     }
     function kick(t, v) {
       var o = ac.createOscillator(), g = ac.createGain();
-      o.type = 'sine'; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.13);
-      env(g, t, v, 0.24); o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.26);
+      o.type = 'sine'; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.1);
+      env(g, t, v, 0.22); o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.24);
+      // tiny click so the beat is heard on small speakers too
+      var c = ac.createOscillator(), cg = ac.createGain();
+      c.type = 'triangle'; c.frequency.setValueAtTime(1100, t); c.frequency.exponentialRampToValueAtTime(180, t + 0.025);
+      env(cg, t, v * 0.2, 0.03); c.connect(cg); cg.connect(out); c.start(t); c.stop(t + 0.05);
       kicks.push(t); if (kicks.length > 12) kicks.shift();
     }
     function noiseHit(t, v, dur, type, freq, q) {
@@ -179,35 +199,49 @@
     function bass(t, hz, dur, v) {
       var o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
       o.type = 'sawtooth'; o.frequency.value = hz;
-      f.type = 'lowpass'; f.Q.value = 6; f.frequency.setValueAtTime(1500, t); f.frequency.exponentialRampToValueAtTime(220, t + dur);
+      f.type = 'lowpass'; f.Q.value = 4; f.frequency.setValueAtTime(1300, t); f.frequency.exponentialRampToValueAtTime(220, t + dur);
       env(g, t, v, dur); o.connect(f); f.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.02);
     }
-    function pluck(t, hz, dur, v, type) {
+    function pluck(t, hz, dur, v, type, cutoff) {
       var o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
       o.type = type; o.frequency.value = hz;
-      f.type = 'lowpass'; f.frequency.value = 3200;
-      env(g, t, v, dur); o.connect(f); f.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.02);
+      f.type = 'lowpass'; f.frequency.setValueAtTime(cutoff || 3000, t); f.frequency.exponentialRampToValueAtTime(700, t + dur);
+      env(g, t, v, dur); o.connect(f); f.connect(g); g.connect(echo); o.start(t); o.stop(t + dur + 0.02);
+    }
+    function pad(t, hzs, dur, v) { // warm chord under the drop
+      for (var i = 0; i < hzs.length; i++) {
+        var o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
+        o.type = 'sawtooth'; o.frequency.value = hzs[i]; o.detune.value = (i - 1) * 7;
+        f.type = 'lowpass'; f.frequency.value = 1100; f.Q.value = 0.5;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.08);
+        g.gain.setValueAtTime(v, t + dur * 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(f); f.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.02);
+      }
     }
     var PROG = [[0, 0], [-4, 1], [3, 1], [-2, 1]];
-    var MEL = [0, 2, 1, 3, 2, 1, 0, 3];
+    // three melodies that take turns every 8 bars, so long runs don't loop the same 8 notes
+    var MELS = [[0, 2, 1, 3, 2, 1, 0, 3], [3, 2, 0, 1, 2, 3, 2, 1], [0, 1, 2, 3, 3, 2, 1, 2]];
+    var ARPS = [[0, 1, 2, 3], [0, 2, 1, 3], [3, 2, 1, 0]];
     function hz(semi) { return 55 * Math.pow(2, semi / 12); }
     function schedule(s, t) {
       var bar = Math.floor(s / 16), st = s % 16, ch = PROG[bar % 4];
       var root = ch[0] + key, tones = [root, root + (ch[1] ? 4 : 3), root + 7, root + 12];
-      var sp = 60 / bpm / 4;
+      var sp = 60 / bpm / 4, ph = Math.floor(bar / 8) % 3, MEL = MELS[ph], ARP = ARPS[ph];
       if (mode === 'game') {
-        if (st % 4 === 0) kick(t, 0.85);
-        if (st % 4 === 2) noiseHit(t, 0.12, 0.05, 'highpass', 7000);
-        if (intensity >= 3 && st % 2 === 1) noiseHit(t, 0.045, 0.03, 'highpass', 8000);
-        if (intensity >= 2 && (st === 4 || st === 12)) noiseHit(t, 0.28, 0.13, 'bandpass', 1600, 0.8);
-        if (st % 2 === 0) bass(t, hz((st % 4 === 2 ? root + 12 : root) + 12), sp * 1.7, 0.2);
-        if (intensity >= 1) pluck(t, hz(tones[(st + bar) % 4] + 36), sp * 0.9, 0.045, 'square');
-        if (intensity >= 4 && st % 4 === 0) pluck(t, hz(tones[MEL[(st / 4 + bar * 4) % 8]] + 48), sp * 3.4, 0.05, 'triangle');
+        if (st % 4 === 0) kick(t, 0.72);
+        if (st % 4 === 2) noiseHit(t, 0.1, 0.05, 'highpass', 7000);
+        if (intensity >= 3 && st % 2 === 1) noiseHit(t, 0.04, 0.03, 'highpass', 8000);
+        if (intensity >= 2 && (st === 4 || st === 12)) noiseHit(t, 0.24, 0.13, 'bandpass', 1800, 0.8);
+        if (st % 2 === 0) bass(t, hz((st % 4 === 2 ? root + 12 : root) + 12), sp * 1.7, 0.17);
+        if (intensity >= 1) pluck(t, hz(tones[ARP[(st + bar) % 4]] + 36), sp * 0.9, 0.06, 'square', 2600);
+        else if (st % 2 === 0) pluck(t, hz(tones[ARP[(st / 2) % 4]] + 36), sp * 1.6, 0.06, 'triangle', 3000);
+        if (intensity >= 4 && st % 4 === 0) pluck(t, hz(tones[MEL[(st / 4 + bar * 4) % 8]] + 48), sp * 3.4, 0.075, 'triangle', 4000);
+        if (intensity >= 2 && st === 0) pad(t, [hz(tones[0] + 24), hz(tones[1] + 24), hz(tones[2] + 24)], sp * 15.5, intensity >= 4 ? 0.035 : 0.026);
       } else {
-        if (st === 0 || st === 8) kick(t, 0.45);
-        if (st % 4 === 2) noiseHit(t, 0.05, 0.04, 'highpass', 7000);
-        if (st % 2 === 0) pluck(t, hz(tones[(st / 2) % 4] + 36), sp * 1.8, 0.05, 'triangle');
-        if (st === 0) bass(t, hz(root + 12), sp * 8, 0.15);
+        if (st === 0 || st === 8) kick(t, 0.4);
+        if (st % 4 === 2) noiseHit(t, 0.045, 0.04, 'highpass', 7000);
+        if (st % 2 === 0) pluck(t, hz(tones[(st / 2) % 4] + 36), sp * 1.8, 0.06, 'triangle', 3000);
+        if (st === 0) bass(t, hz(root + 12), sp * 8, 0.13);
       }
     }
     return {
@@ -218,7 +252,10 @@
         mode = m; on = true;
       },
       stop: function () { on = false; kicks.length = 0; },
-      set: function (b, i, k) { bpm = b; intensity = i; key = k; },
+      set: function (b, i, k) {
+        bpm = b; intensity = i; key = k;
+        if (echo && ac) echo.dl.delayTime.setTargetAtTime(Math.min(0.9, 60 / bpm * 0.75), ac.currentTime, 0.05);
+      },
       tick: function () {
         if (!ensure()) return;
         var now = ac.currentTime;
@@ -226,9 +263,15 @@
         if (nextT < now - 0.2) nextT = now + 0.05;
         while (nextT < now + 0.12) { schedule(step, nextT); nextT += 60 / bpm / 4; step++; }
       },
+      // level 0..1 = how hard you are spinning
       wind: function (level) {
         if (!windG || !ac) return;
-        windG.gain.setTargetAtTime(A.muted ? 0 : level, ac.currentTime, 0.05);
+        if (A.muted) level = 0;
+        level = Math.round(level * 20) / 20; // only touch the audio graph when it really changes
+        if (level === windLvl) return;
+        windLvl = level;
+        windG.gain.setTargetAtTime(0.09 * level * level, ac.currentTime, 0.06);
+        windF.frequency.setTargetAtTime(220 + 520 * level, ac.currentTime, 0.08);
       },
       sinceKick: function () {
         if (!ac || !on || A.muted) return -1;
@@ -253,30 +296,30 @@
     whoosh: function () { A.noise({ dur: 0.14, vol: 0.05, filter: 2600, to: 400 }); },
     shieldGet: function () { [392, 523, 659, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.1, vol: 0.2, delay: i * 0.045 }); }); },
     shieldBreak: function () {
-      A.noise({ dur: 0.35, vol: 0.35, filter: 6000, to: 400 });
-      A.tone({ freq: 900, to: 200, type: 'square', dur: 0.25, vol: 0.12 });
+      A.noise({ dur: 0.35, vol: 0.28, filter: 4000, to: 400 });
+      A.tone({ freq: 900, to: 200, type: 'triangle', dur: 0.25, vol: 0.18 });
       for (var i = 0; i < 5; i++) A.tone({ freq: rnd(2500, 4200), type: 'triangle', dur: 0.06, vol: 0.06, delay: 0.03 + i * 0.03 });
     },
     crash: function () {
-      A.noise({ dur: 0.75, vol: 0.55, filter: 2600, to: 70 });
-      A.tone({ freq: 330, to: 38, type: 'sawtooth', dur: 0.7, vol: 0.2 });
+      A.noise({ dur: 0.7, vol: 0.42, filter: 2000, to: 70 });
+      A.tone({ freq: 300, to: 40, type: 'triangle', dur: 0.6, vol: 0.32 });
       for (var i = 0; i < 8; i++) A.tone({ freq: rnd(2000, 4400), type: 'triangle', dur: 0.07, vol: 0.07, delay: 0.02 + i * 0.035 });
     },
     zone: function () {
-      A.tone({ freq: 200, to: 1200, type: 'sawtooth', dur: 0.45, vol: 0.07 });
-      A.noise({ dur: 0.5, vol: 0.12, filter: 500, to: 7000 });
+      A.tone({ freq: 200, to: 1200, type: 'triangle', dur: 0.45, vol: 0.12 });
+      A.noise({ dur: 0.5, vol: 0.1, filter: 400, to: 3500 });
       [523, 659, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.3, vol: 0.13, delay: 0.32 + i * 0.02 }); });
     },
     go: function () {
-      A.tone({ freq: 523, type: 'square', dur: 0.08, vol: 0.14 });
-      A.tone({ freq: 1047, type: 'square', dur: 0.2, vol: 0.14, delay: 0.09 });
-      A.noise({ dur: 0.4, vol: 0.12, filter: 800, to: 6000 });
+      A.tone({ freq: 523, type: 'triangle', dur: 0.1, vol: 0.2 });
+      A.tone({ freq: 1047, type: 'triangle', dur: 0.22, vol: 0.2, delay: 0.09 });
+      A.noise({ dur: 0.4, vol: 0.1, filter: 600, to: 3500 });
     },
-    newBest: function () { [659, 784, 988, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.12, vol: 0.12, delay: i * 0.07 }); }); },
+    newBest: function () { [659, 784, 988, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.14, vol: 0.18, delay: i * 0.07 }); }); },
     mission: function () { [784, 988, 1175, 1568].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.14, vol: 0.22, delay: i * 0.08 }); }); },
-    buy: function () { [988, 1319, 1568, 1976, 2637].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.08, vol: 0.12, delay: i * 0.05 }); }); },
-    deny: function () { A.tone({ freq: 160, type: 'square', dur: 0.18, vol: 0.14 }); A.tone({ freq: 120, type: 'square', dur: 0.2, vol: 0.12, delay: 0.1 }); },
-    click: function () { Kit.sfx.click(); },
+    buy: function () { [988, 1319, 1568, 1976, 2637].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.1, vol: 0.17, delay: i * 0.05 }); }); },
+    deny: function () { A.tone({ freq: 180, type: 'triangle', dur: 0.16, vol: 0.2 }); A.tone({ freq: 130, type: 'triangle', dur: 0.2, vol: 0.18, delay: 0.1 }); },
+    click: function () { A.tone({ freq: 660, to: 880, type: 'triangle', dur: 0.06, vol: 0.16 }); },
     equip: function () { Kit.sfx.pop(); },
     pause: function () { A.tone({ freq: 660, to: 330, type: 'triangle', dur: 0.15, vol: 0.18 }); },
     resume: function () { A.tone({ freq: 330, to: 660, type: 'triangle', dur: 0.15, vol: 0.18 }); }
@@ -1293,9 +1336,9 @@
     var rm = rotMaxFor(G.v);
     if (inp !== 0 && inp !== G.lastInp) G.squash = 1;
     G.lastInp = inp;
-    G.rotVel += (inp * rm - G.rotVel) * (1 - Math.exp(-dt * 16));
+    G.rotVel += (inp * rm - G.rotVel) * (1 - Math.exp(-dt * (inp === 0 ? 20 : 24))); // snappy: full spin speed in ~0.1 s, quick stop
     G.rot += G.rotVel * dt;
-    Mus.wind(0.07 * Math.abs(G.rotVel) / rm);
+    Mus.wind(Math.min(1, Math.abs(G.rotVel) / rm));
     // drift sparks off the wing tip when spinning hard
     if (Math.abs(G.rotVel) > rm * 0.7 && Math.random() < 0.6) {
       var sgn = G.rotVel > 0 ? 1 : -1;

@@ -18,10 +18,15 @@
     rgbCache[hex] = c;
     return c;
   }
+  // Shades are cached (k quantised to 1/64) so drawing a car every frame builds no new strings.
+  var shadeCache = {};
   function shade(hex, k) {
+    var q = Math.round(k * 64), tab = shadeCache[hex] || (shadeCache[hex] = {}), hit = tab[q];
+    if (hit) return hit;
     var c = rgb(hex);
+    k = q / 64;
     var r = Math.min(255, c[0] * k) | 0, g = Math.min(255, c[1] * k) | 0, b = Math.min(255, c[2] * k) | 0;
-    return 'rgb(' + r + ',' + g + ',' + b + ')';
+    return (tab[q] = 'rgb(' + r + ',' + g + ',' + b + ')');
   }
   function mix(h1, h2, t) {
     var a = rgb(h1), b = rgb(h2);
@@ -314,7 +319,8 @@
 
   var tmpV = [];
   for (var q = 0; q < 64; q++) tmpV.push([0, 0, 0, 0, 0]);
-  var order = [];
+  var order = [], orderPool = [], ccTmp = [0, 0, 0, 0, 0];
+  function byD(a, b) { return a.d - b.d; }
 
   // Draw a car.
   //  o: { x, y (screen px of ground point under car centre), S (px per unit),
@@ -342,13 +348,15 @@
     }
     var parts = car.parts;
     order.length = 0;
-    var cc = [0, 0, 0, 0, 0];
+    var cc = ccTmp;
     for (var k = 0; k < parts.length; k++) {
       var pt = parts[k];
       tf(pt.c, cc);
-      order.push({ p: pt, d: cc[0] * VX + cc[1] * VY + cc[2] * VZ, sx: cc[3], sy: cc[4] });
+      var oe = orderPool[k] || (orderPool[k] = { p: null, d: 0, sx: 0, sy: 0 });
+      oe.p = pt; oe.d = cc[0] * VX + cc[1] * VY + cc[2] * VZ; oe.sx = cc[3]; oe.sy = cc[4];
+      order.push(oe);
     }
-    order.sort(function (a, b) { return a.d - b.d; });
+    order.sort(byD);
     if (o.alpha != null) ctx.globalAlpha = o.alpha;
     ctx.lineJoin = 'round';
     ctx.lineWidth = Math.max(1, S * 0.025);

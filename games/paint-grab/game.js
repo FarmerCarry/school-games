@@ -64,36 +64,51 @@
 
   /* ============================================================ sound */
   var A = Kit.audio;
+  // Sound design notes: no raw square waves (they buzz and click on laptop speakers), no
+  // bright noise bursts (a 6 kHz noise tail on big captures used to hiss), and bigger
+  // captures get a deeper, heavier "whomp" so they *feel* bigger instead of just longer.
+  var lastWarnS = -1;
   var S = {
     leave: function () { A.tone({ freq: 380, to: 620, type: 'sine', dur: 0.1, vol: 0.09 }); },
     capture: function (g) {
       var n = g > 900 ? 6 : g > 350 ? 5 : g > 120 ? 4 : g > 30 ? 3 : 2;
-      A.tone({ freq: 260, to: 1000, type: 'sine', dur: 0.12, vol: 0.28 });
+      var big = Math.min(1, g / 900);
+      A.tone({ freq: 260, to: 1000, type: 'sine', dur: 0.12, vol: 0.24 });
       var notes = [523, 659, 784, 1047, 1319, 1568];
-      for (var i = 0; i < n; i++) A.tone({ freq: notes[i], type: 'triangle', dur: 0.14, vol: 0.14, delay: 0.05 + i * 0.055 });
-      if (n >= 5) A.noise({ dur: 0.4, vol: 0.08, filter: 6000, to: 2000, delay: 0.1 });
+      for (var i = 0; i < n; i++) A.tone({ freq: notes[i], type: 'triangle', dur: 0.14 + (i === n - 1 ? 0.12 : 0), vol: 0.13 + big * 0.04, delay: 0.05 + i * 0.055 });
+      if (n >= 4) {
+        // soft low "whomp" + a sparkle an octave up for the big ones
+        A.tone({ freq: 150, to: 55, type: 'sine', dur: 0.3 + big * 0.2, vol: 0.2 + big * 0.18, attack: 0.01 });
+        A.tone({ freq: notes[n - 1] * 2, type: 'sine', dur: 0.25, vol: 0.05 + big * 0.04, delay: 0.08 + n * 0.055 });
+      }
     },
     kill: function () {
       A.tone({ freq: 240, to: 70, type: 'triangle', dur: 0.22, vol: 0.4 });
-      A.noise({ dur: 0.2, vol: 0.25, filter: 2400, to: 300 });
-      A.tone({ freq: 880, type: 'square', dur: 0.06, vol: 0.1, delay: 0.14 });
-      A.tone({ freq: 1320, type: 'square', dur: 0.14, vol: 0.1, delay: 0.2 });
+      A.noise({ dur: 0.16, vol: 0.2, filter: 1500, to: 250 });
+      A.tone({ freq: 880, type: 'triangle', dur: 0.08, vol: 0.16, delay: 0.14 });
+      A.tone({ freq: 1320, type: 'triangle', dur: 0.18, vol: 0.16, delay: 0.2 });
     },
-    poof: function (v) { A.noise({ dur: 0.3, vol: 0.18 * v, filter: 1600, to: 200 }); A.tone({ freq: 500, to: 150, type: 'sine', dur: 0.18, vol: 0.12 * v }); },
+    poof: function (v) { A.noise({ dur: 0.25, vol: 0.16 * v, filter: 1200, to: 200 }); A.tone({ freq: 500, to: 150, type: 'sine', dur: 0.18, vol: 0.12 * v }); },
     die: function () {
-      A.noise({ dur: 0.45, vol: 0.4, filter: 2000, to: 100 });
+      A.noise({ dur: 0.4, vol: 0.34, filter: 1500, to: 100 });
       [440, 370, 311, 262].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.2, vol: 0.25, delay: 0.15 + i * 0.13 }); });
     },
-    warn: function () { A.tone({ freq: 1040, type: 'square', dur: 0.05, vol: 0.05 }); A.tone({ freq: 780, type: 'square', dur: 0.05, vol: 0.05, delay: 0.07 }); },
-    tick: function () { A.tone({ freq: 1250, type: 'square', dur: 0.04, vol: 0.07 }); },
-    milestone: function () { [659, 784, 988, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.1, vol: 0.12, delay: i * 0.07 }); }); },
+    // danger beeps: soft two-note triangle "uh-oh", never faster than 2.5 per second
+    warn: function () {
+      var t = A.ctx ? A.ctx.currentTime : 0;
+      if (t - lastWarnS < 0.38) return;
+      lastWarnS = t;
+      A.tone({ freq: 880, type: 'triangle', dur: 0.07, vol: 0.09 }); A.tone({ freq: 660, type: 'triangle', dur: 0.08, vol: 0.09, delay: 0.08 });
+    },
+    tick: function () { A.tone({ freq: 1175, type: 'triangle', dur: 0.06, vol: 0.12 }); },
+    milestone: function () { [659, 784, 988, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.12, vol: 0.17, delay: i * 0.07 }); }); },
     star: function (i) { A.tone({ freq: [784, 988, 1319][i] || 988, type: 'triangle', dur: 0.3, vol: 0.28 }); A.tone({ freq: ([784, 988, 1319][i] || 988) * 1.5, type: 'sine', dur: 0.3, vol: 0.12, delay: 0.06 }); },
-    click: function () { Kit.sfx.click(); },
+    click: function () { A.tone({ freq: 620, to: 880, type: 'triangle', dur: 0.06, vol: 0.16 }); },
     start: function () { [392, 523, 659, 784].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.12, vol: 0.2, delay: i * 0.08 }); }); },
     win: function () { Kit.sfx.win(); },
     lose: function () { Kit.sfx.lose(); },
     unlock: function () { [784, 988, 1175, 1568].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.16, vol: 0.2, delay: 0.4 + i * 0.09 }); }); },
-    nope: function () { A.tone({ freq: 200, to: 140, type: 'square', dur: 0.12, vol: 0.12 }); }
+    nope: function () { A.tone({ freq: 220, to: 150, type: 'triangle', dur: 0.14, vol: 0.2 }); }
   };
 
   /* ============================================================ textures */
@@ -593,7 +608,7 @@
     if (th.d < 7) {
       threat = th;
       warnT -= dt;
-      if (warnT <= 0) { warnT = 0.45; S.warn(); }
+      if (warnT <= 0) { warnT = 0.6; S.warn(); }
     } else warnT = 0;
   }
 
@@ -1266,6 +1281,7 @@
     die: function () { if (player && player.alive) { world.pending.push({ v: player.id, k: 0, r: 'self' }); world.resolve(); } },
     unlockArenas: function () { save.stars.forEach(function (s) { s[0] = s[1] = 1; }); persist(); },
     reset: function () { store.remove('save'); location.reload(); },
+    sfx: S,
     fps: 0
   };
 

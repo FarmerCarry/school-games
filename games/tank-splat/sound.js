@@ -11,8 +11,50 @@
     lastT[name] = now;
     return true;
   }
-  function tone(o) { if (S.enabled) A.tone(o); }
-  function noise(o) { if (S.enabled) A.noise(o); }
+  // Own tiny synth (same options as Kit.audio.tone/noise) so sounds stay soft: square/saw
+  // tones pass a low-pass filter (no fizzy buzz) and noise fades in over 3 ms (no click).
+  var noiseBuf = null;
+  function tone(o) {
+    var ctx = A.ctx;
+    if (!S.enabled || !ctx || A.muted) return;
+    var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur || 0.12, vol = o.vol == null ? 0.3 : o.vol;
+    var type = o.type || 'square';
+    var osc = ctx.createOscillator(), g = ctx.createGain(), node = osc;
+    osc.type = type;
+    osc.frequency.setValueAtTime(o.freq || 440, t0);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+    if (type === 'square' || type === 'sawtooth') {
+      var f = ctx.createBiquadFilter();
+      f.type = 'lowpass'; f.Q.value = 0.6;
+      f.frequency.value = Math.min(5000, Math.max(o.freq || 440, o.to || 0) * 3.5);
+      osc.connect(f); node = f;
+    }
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.005));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    node.connect(g); g.connect(A.master);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }
+  function noise(o) {
+    var ctx = A.ctx;
+    if (!S.enabled || !ctx || A.muted) return;
+    if (!noiseBuf) {
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur || 0.25, vol = o.vol == null ? 0.3 : o.vol;
+    var src = ctx.createBufferSource(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+    src.buffer = noiseBuf; src.loop = true;
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(o.filter || 4000, t0);
+    if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.003));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(A.master);
+    src.start(t0, Math.random() * 0.5); src.stop(t0 + dur + 0.03);
+  }
 
   S.fire = function (pitch) {
     if (!gate('fire', 30)) return;
@@ -33,7 +75,7 @@
     tone({ freq: 900, to: 1500, type: 'sine', dur: 0.05, vol: 0.1 });
   };
   S.splat = function () {
-    noise({ dur: 0.4, vol: 0.5, filter: 3000, to: 180 });
+    noise({ dur: 0.4, vol: 0.45, filter: 2400, to: 180 });
     tone({ freq: 240, to: 55, type: 'sawtooth', dur: 0.28, vol: 0.18 });
     tone({ freq: 1300, to: 700, type: 'sine', dur: 0.05, vol: 0.12, delay: 0.12 });
     tone({ freq: 1100, to: 600, type: 'sine', dur: 0.05, vol: 0.1, delay: 0.2 });
@@ -82,6 +124,7 @@
     [392, 330, 262, 196].forEach(function (f, i) { tone({ freq: f, type: 'triangle', dur: 0.22, vol: 0.26, delay: i * 0.15 }); });
   };
   S.click = function () { tone({ freq: 660, type: 'square', dur: 0.05, vol: 0.12 }); };
+  S.coin = function () { if (gate('coin', 85)) tone({ freq: 1568 + Math.random() * 120, type: 'triangle', dur: 0.06, vol: 0.07 }); };
   S.hover = function () { if (gate('hover', 60)) tone({ freq: 880, type: 'sine', dur: 0.03, vol: 0.05 }); };
   S.buy = function () {
     tone({ freq: 988, type: 'square', dur: 0.07, vol: 0.16 });

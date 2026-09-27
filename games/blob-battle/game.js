@@ -13,7 +13,68 @@
   var ctx = view.ctx;
   var ptr = Kit.pointer(view);
   var store = Kit.store('blob-battle');
-  var A = Kit.audio;
+  var A = softAudio(Kit.audio);
+
+  // Softer synth on top of Kit.audio (same options as Kit.audio.tone / .noise):
+  // square and sawtooth tones pass through a gentle low-pass so they chirp instead of buzz,
+  // every tone and noise burst fades in over a few ms (no clicks), and noise can be band-passed.
+  function softAudio(K) {
+    var bufs = [];
+    function noiseBuf(ctx) {
+      for (var i = 0; i < bufs.length; i++) if (bufs[i].c === ctx) return bufs[i].b;
+      var b = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), d = b.getChannelData(0);
+      for (var j = 0; j < d.length; j++) d[j] = Math.random() * 2 - 1;
+      bufs.push({ c: ctx, b: b }); if (bufs.length > 3) bufs.shift();
+      return b;
+    }
+    return {
+      get ctx() { return K.ctx; },
+      get muted() { return K.muted; },
+      unlock: function () { return K.unlock(); },
+      tone: function (o) {
+        var ctx = K.ctx;
+        if (!ctx || K.muted) return;
+        var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur || 0.12, vol = o.vol == null ? 0.3 : o.vol;
+        var type = o.type || 'triangle', f0 = o.freq || 440;
+        var osc = ctx.createOscillator(), g = ctx.createGain(), out = osc;
+        osc.type = type;
+        osc.frequency.setValueAtTime(f0, t0);
+        if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+        if (o.detune) osc.detune.setValueAtTime(o.detune, t0);
+        if (o.lp || type === 'square' || type === 'sawtooth') {
+          var f = ctx.createBiquadFilter();
+          f.type = 'lowpass'; f.Q.value = 0.6;
+          f.frequency.setValueAtTime(o.lp || Math.min(8000, Math.max(f0, o.to || 0) * 3.2 + 300), t0);
+          osc.connect(f); out = f;
+        }
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.006));
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        out.connect(g); g.connect(K.master);
+        osc.start(t0); osc.stop(t0 + dur + 0.03);
+      },
+      noise: function (o) {
+        var ctx = K.ctx;
+        if (!ctx || K.muted) return;
+        var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur || 0.25, vol = o.vol == null ? 0.3 : o.vol;
+        var src = ctx.createBufferSource(), g = ctx.createGain(), out = src;
+        src.buffer = noiseBuf(ctx);
+        if (o.filter) {
+          var f = ctx.createBiquadFilter();
+          f.type = o.band ? 'bandpass' : 'lowpass';
+          f.Q.value = o.band || 0.7;
+          f.frequency.setValueAtTime(o.filter, t0);
+          if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t0 + dur);
+          src.connect(f); out = f;
+        }
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.004));
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        out.connect(g); g.connect(K.master);
+        src.start(t0, Math.random() * Math.max(0, 0.9 - dur)); src.stop(t0 + dur + 0.03);
+      }
+    };
+  }
 
   /* ================================================================ config */
   var MAXC = 16, MIN_SPLIT = 36, EJ_MIN = 34, EJ_COST = 16, EJ_MASS = 12, VM = 100, BS = 100;
@@ -218,7 +279,7 @@
       var nc = newCell(o, c.x + ux * c.r * 0.3, c.y + uy * c.r * 0.3, h);
       var v = launchDist(h) * 4.5;
       nc.bx = ux * v; nc.by = uy * v; nc.vx = c.vx; nc.vy = c.vy; nc.dr = c.r * 0.6;
-      nc.splitT = c.splitT = T; nc.wob = 0.14; c.wob = 0.12; nc.lx = ux; nc.ly = uy; nc.phase = c.phase + 1.7;
+      nc.splitT = c.splitT = T; nc.wob = 0.09; c.wob = 0.08; nc.lx = ux; nc.ly = uy; nc.phase = c.phase + 1.7;
       var mt = T + mergeTime(h * 2);
       c.mergeAt = mt; nc.mergeAt = mt;
       did++;
@@ -410,7 +471,8 @@
       var ll = Math.min(1, d / 60);
       c.lx += (dx / d * ll - c.lx) * Math.min(1, dt * 6);
       c.ly += (dy / d * ll - c.ly) * Math.min(1, dt * 6);
-      c.wob += (0.028 - c.wob) * Math.min(1, dt * 2.5);
+      if (c.wob > 0.12) c.wob = 0.12;
+      c.wob += (0.028 - c.wob) * Math.min(1, dt * 3.2);
       c.mouth = Math.max(0, c.mouth - dt * 3);
       c.blinkT -= dt;
       if (c.blinkT < 0) { c.blink = 1; if (c.blinkT < -0.13) { c.blink = 0; c.blinkT = rand(2, 5); } }
@@ -479,8 +541,9 @@
       }
       if (got) {
         c.mouth = Math.min(1, c.mouth + 0.35 * got); c.r = radius(c.m);
-        if (c.o === player && T - pelletSndT > 0.05) {
-          pelletSndT = T; pelletStreak = Math.min(pelletStreak + 1, 24);
+        // at most ~11 plips a second however many pellets you swallow (it used to machine-gun at 20/s)
+        if (c.o === player && T - pelletSndT > 0.09) {
+          pelletSndT = T; pelletStreak = (pelletStreak + 1) % 14;
           sfx.pellet(pelletStreak);
         }
       }
@@ -784,25 +847,37 @@
   }
 
   /* ================================================================ sound */
+  // Pellet "plips" walk up and back down a pentatonic scale while you keep eating,
+  // so a long feeding streak sounds like a little tune instead of one ever-rising beep.
+  var PENTA = [523, 587, 659, 784, 880, 1047, 1175, 1319];
   var sfx = {
-    pellet: function (n) { A.tone({ freq: 520 + n * 28, type: 'sine', dur: 0.045, vol: 0.07 }); },
-    gold: function () { Kit.sfx.coin(); },
+    pellet: function (n) {
+      n = n % 14; var f = PENTA[n < 8 ? n : 14 - n];
+      A.tone({ freq: f, to: f * 1.18, type: 'sine', dur: 0.06, vol: 0.05 + Math.random() * 0.015 });
+    },
+    gold: function () {
+      A.tone({ freq: 1319, type: 'triangle', dur: 0.07, vol: 0.16 });
+      A.tone({ freq: 1760, type: 'sine', dur: 0.18, vol: 0.14, delay: 0.06 });
+    },
     gulp: function (m) {
       var f = Math.max(140, 460 - m * 0.8);
       A.tone({ freq: f, to: f * 0.35, type: 'sine', dur: 0.2, vol: 0.34 });
       A.tone({ freq: 880, to: 1500, type: 'triangle', dur: 0.09, vol: 0.14, delay: 0.07 });
     },
-    combo: function (n) { for (var i = 0; i < Math.min(n, 5); i++) A.tone({ freq: 660 * Math.pow(1.19, i), type: 'square', dur: 0.07, vol: 0.09, delay: 0.1 + i * 0.05 }); },
-    split: function () { A.noise({ dur: 0.18, vol: 0.16, filter: 2800, to: 500 }); A.tone({ freq: 280, to: 720, type: 'triangle', dur: 0.14, vol: 0.2 }); },
-    eject: function () { A.tone({ freq: 760, to: 320, type: 'square', dur: 0.05, vol: 0.06 }); },
+    combo: function (n) { for (var i = 0; i < Math.min(n, 5); i++) A.tone({ freq: 660 * Math.pow(1.19, i), type: 'triangle', dur: 0.08, vol: 0.13, delay: 0.1 + i * 0.05 }); },
+    split: function () { A.noise({ dur: 0.18, vol: 0.14, filter: 2400, to: 600, band: 0.8 }); A.tone({ freq: 280, to: 720, type: 'triangle', dur: 0.14, vol: 0.2 }); },
+    eject: function () { A.tone({ freq: 700, to: 340, type: 'triangle', dur: 0.06, vol: 0.08 }); },
     merge: function () { A.tone({ freq: 240, to: 520, type: 'sine', dur: 0.16, vol: 0.2 }); },
-    virusPop: function () { A.noise({ dur: 0.45, vol: 0.4, filter: 1600, to: 90 }); A.tone({ freq: 300, to: 60, type: 'sawtooth', dur: 0.3, vol: 0.15 }); },
-    virusShoot: function () { A.tone({ freq: 200, to: 900, type: 'square', dur: 0.2, vol: 0.14 }); },
+    virusPop: function () { A.noise({ dur: 0.45, vol: 0.3, filter: 1400, to: 90 }); A.tone({ freq: 300, to: 60, type: 'sawtooth', dur: 0.3, vol: 0.15 }); },
+    virusShoot: function () { A.tone({ freq: 200, to: 900, type: 'square', dur: 0.2, vol: 0.12 }); },
     ouch: function () { A.tone({ freq: 500, to: 180, type: 'triangle', dur: 0.2, vol: 0.25 }); },
-    eaten: function () { A.noise({ dur: 0.3, vol: 0.3, filter: 1200, to: 100 }); Kit.sfx.lose(); },
-    unlock: function () { Kit.sfx.power(); },
-    fanfare: function () { Kit.sfx.win(); },
-    click: function () { Kit.sfx.click(); }
+    eaten: function () {
+      A.noise({ dur: 0.3, vol: 0.24, filter: 1200, to: 100 });
+      [392, 330, 262, 196].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.22, vol: 0.28, delay: i * 0.15 }); });
+    },
+    unlock: function () { [523, 659, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.1, vol: 0.18, delay: i * 0.06 }); }); },
+    fanfare: function () { [523, 659, 784, 1047, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.16, vol: 0.28, delay: i * 0.1 }); }); },
+    click: function () { A.tone({ freq: 660, type: 'triangle', dur: 0.05, vol: 0.15 }); }
   };
 
   /* ================================================================ flow */
@@ -814,13 +889,15 @@
       prevBestAll: stats.best, bestToast: false, wasKing: false, kingRun: 0, newSkins: [], newArena: -1, checkT: 0.4, hintSplit: false };
     comboN = 0; timeScale = 1; confetti.length = 0; round.danger = 0;
     state = 'play'; show(null);
-    toast(AR.name, AR.theme.border);
-    toast('كُل الحبوب لتكبر!', '#ffffff');
+    toast(AR.name, AR.theme.border); toasts[toasts.length - 1].hint = true;
+    toast('كُل الحبوب لتكبر!', '#ffffff'); toasts[toasts.length - 1].hint = true;
     Kit.keys.reset();
     sfx.split();
   }
   function startDying() {
     state = 'dying'; dyingT = 0; timeScale = 0.35;
+    // drop leftover start-of-round hints so they don't pop up over the results (unlock toasts stay)
+    for (var ti = toasts.length - 1; ti >= 0; ti--) if (toasts[ti].hint) toasts.splice(ti, 1);
     sfx.eaten(); shake.add(12);
     stats.rounds++;
     var alive = T - round.t0;
@@ -1423,6 +1500,7 @@
         cells: cells.length, pellets: pCount, viruses: viruses.length, ejected: ejected.length, particles: parts.length, zoom: +cam.z.toFixed(3),
         skin: selSkin.id, unlocked: countUnlocked(), stats: stats };
     },
+    sfx: sfx,
     setMass: function (m) { if (player && player.alive) { player.cells[0].m = m; player.cells[0].r = radius(m); } },
     kill: function () {
       if (!player || !player.alive) return false;

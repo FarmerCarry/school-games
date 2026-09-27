@@ -112,21 +112,22 @@
 
   /* ------------------------------------------------------------- sound */
   var A = Kit.audio;
+  // Soft, rounded effects (triangle/sine) so they sit on top of the music instead of buzzing over it.
   var sfx = {
-    jump: function () { A.tone({ freq: 520, to: 780, type: 'square', dur: 0.05, vol: 0.05 }); },
-    land: function (p) { A.tone({ freq: 140, to: 70, type: 'triangle', dur: 0.06, vol: 0.08 + 0.1 * p }); },
-    pad: function () { A.tone({ freq: 300, to: 1100, type: 'square', dur: 0.16, vol: 0.12 }); A.tone({ freq: 600, to: 1600, type: 'sine', dur: 0.2, vol: 0.12 }); },
-    orb: function () { A.tone({ freq: 880, type: 'sine', dur: 0.18, vol: 0.2 }); A.tone({ freq: 1320, type: 'sine', dur: 0.22, vol: 0.14, delay: 0.04 }); },
-    portal: function () { A.noise({ dur: 0.35, vol: 0.18, filter: 4000, to: 300 }); A.tone({ freq: 200, to: 800, type: 'sine', dur: 0.3, vol: 0.12 }); },
-    star: function () { [1047, 1319, 1568, 2093].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.1, vol: 0.1, delay: i * 0.05 }); }); },
-    die: function () { A.noise({ dur: 0.45, vol: 0.45, filter: 2400, to: 120 }); A.tone({ freq: 300, to: 50, type: 'sawtooth', dur: 0.3, vol: 0.16 }); },
-    bump: function () { A.tone({ freq: 180, to: 120, type: 'square', dur: 0.05, vol: 0.06 }); },
+    jump: function () { A.tone({ freq: 420, to: 640, type: 'triangle', dur: 0.06, vol: 0.07 }); },
+    land: function (p) { if (p > 0.15) A.tone({ freq: 150, to: 70, type: 'sine', dur: 0.07, vol: 0.06 + 0.12 * p }); },
+    pad: function () { A.tone({ freq: 300, to: 1100, type: 'triangle', dur: 0.18, vol: 0.16 }); A.tone({ freq: 600, to: 1600, type: 'sine', dur: 0.2, vol: 0.1 }); },
+    orb: function () { A.tone({ freq: 880, type: 'sine', dur: 0.18, vol: 0.18 }); A.tone({ freq: 1320, type: 'sine', dur: 0.22, vol: 0.12, delay: 0.04 }); },
+    portal: function () { A.noise({ dur: 0.3, vol: 0.12, filter: 2600, to: 300 }); A.tone({ freq: 200, to: 800, type: 'sine', dur: 0.3, vol: 0.14 }); },
+    star: function () { [1047, 1319, 1568, 2093].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.14, vol: 0.14, delay: i * 0.05 }); }); },
+    die: function () { A.noise({ dur: 0.4, vol: 0.32, filter: 1800, to: 90 }); A.tone({ freq: 260, to: 45, type: 'triangle', dur: 0.32, vol: 0.26 }); },
+    bump: function () { A.tone({ freq: 180, to: 120, type: 'triangle', dur: 0.06, vol: 0.1 }); },
     best: function () { [784, 988, 1175, 1568].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.14, vol: 0.2, delay: 0.25 + i * 0.07 }); }); },
-    win: function () { [523, 659, 784, 1047, 784, 1047, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.16, vol: 0.13, delay: i * 0.09 }); }); },
-    click: function () { A.tone({ freq: 660, to: 990, type: 'square', dur: 0.06, vol: 0.1 }); },
-    nope: function () { A.tone({ freq: 220, to: 160, type: 'square', dur: 0.12, vol: 0.1 }); },
+    win: function () { [523, 659, 784, 1047, 784, 1047, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.2, vol: 0.2, delay: i * 0.09 }); A.tone({ freq: f / 2, type: 'sine', dur: 0.2, vol: 0.08, delay: i * 0.09 }); }); },
+    click: function () { A.tone({ freq: 660, to: 990, type: 'triangle', dur: 0.06, vol: 0.14 }); },
+    nope: function () { A.tone({ freq: 220, to: 160, type: 'triangle', dur: 0.14, vol: 0.16 }); },
     cp: function () { A.tone({ freq: 660, type: 'triangle', dur: 0.08, vol: 0.14 }); A.tone({ freq: 990, type: 'triangle', dur: 0.12, vol: 0.14, delay: 0.06 }); },
-    firework: function () { A.noise({ dur: 0.5, vol: 0.14, filter: 3000, to: 200, delay: Math.random() * 0.1 }); }
+    firework: function () { A.noise({ dur: 0.45, vol: 0.09, filter: 1600, to: 120, delay: Math.random() * 0.1 }); }
   };
 
   /* --------------------------------------------------------- particles */
@@ -516,6 +517,7 @@
     if (!G.practice && G.sessionAtt % 12 === 0) toast('صعبة؟ جرّب وضع التدريب: اضغط P ثم «وضع التدريب»');
   }
 
+  var lastBumpT = -1;
   function popup(big, small, col) { G.popups.push({ big: big, small: small, col: col, t: 0, life: 1.6 }); }
 
   function handleEvents(s) {
@@ -566,7 +568,7 @@
           }
           sfx.star();
           break;
-        case 'bump': sfx.bump(); break;
+        case 'bump': if (menuT - lastBumpT > 0.15) { lastBumpT = menuT; sfx.bump(); } break;
         case 'die': killPlayer(); break;
         case 'win': winLevel(); break;
       }
@@ -1037,7 +1039,7 @@
   function drawPlayer(s, x, y, camX, gy, rot, sqx, sqy, look, t) {
     var cx = (x + 0.5 - camX) * U, cy = gy - (y + 0.5) * U;
     // trail
-    var tr = s === G.s ? G.trail : null;
+    var tr = s === G.s && !G.won ? G.trail : null;
     if (tr && tr.length > 4) {
       ctx.strokeStyle = look.c2; ctx.lineCap = 'round';
       for (var i = 2; i < tr.length; i += 2) {
@@ -1218,10 +1220,13 @@
       drawParts(camX2, gy2, false);
       ctx.restore();
       if (scene === 'title') {
-        var lg = document.querySelector('.logo');
-        if (lg) lg.style.transform = 'rotate(-4deg) scale(' + (1 + 0.05 * bi2.pulse).toFixed(3) + ')';
-        var pb = $('b-play');
-        if (pb) pb.style.transform = 'scale(' + (1 + 0.05 * bi2.pulse).toFixed(3) + ')';
+        // only touch the DOM when the value changes (avoids a style recalc every frame)
+        var pk = (1 + 0.05 * bi2.pulse).toFixed(3);
+        if (pk !== titlePulse) {
+          titlePulse = pk;
+          if (logoEl) logoEl.style.transform = 'rotate(-4deg) scale(' + pk + ')';
+          if (playEl) playEl.style.transform = 'scale(' + pk + ')';
+        }
       }
       if (scene === 'garage') drawPreview(look, t, bi2);
     }
@@ -1230,6 +1235,7 @@
     drawPopups();
   }
 
+  var logoEl = document.querySelector('.logo'), playEl = $('b-play'), titlePulse = '';
   var pvc = $('preview'), pctx = pvc.getContext('2d');
   function drawPreview(look, t, bi) {
     pctx.setTransform(1, 0, 0, 1, 0, 0);

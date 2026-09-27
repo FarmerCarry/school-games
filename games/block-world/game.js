@@ -45,45 +45,108 @@
   var LEFT = ['KeyA', 'ArrowLeft'], RIGHT = ['KeyD', 'ArrowRight'], UP = ['KeyW', 'ArrowUp'], JUMP = ['Space', 'KeyW', 'ArrowUp'], DOWN = ['KeyS', 'ArrowDown', 'ShiftLeft'];
 
   // ---------------------------------------------------------------- sound
+  // Block sounds are short bursts of soft (pink) noise through a band-pass filter plus a small
+  // tonal "body". Every hit starts at a random point of a 2 s noise buffer and nudges the filter
+  // and pitch a little, so repeated mining/footsteps never sound like the same sample looping.
+  var nzBuf = null;
+  function noiseBuf(ctx) {
+    if (nzBuf) return nzBuf;
+    var len = ctx.sampleRate * 2, b0 = 0, b1 = 0, b2 = 0, mx = 0, i;
+    nzBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+    var d = nzBuf.getChannelData(0);
+    for (i = 0; i < len; i++) {
+      var w = Math.random() * 2 - 1;
+      b0 = 0.99765 * b0 + w * 0.0990460; b1 = 0.96300 * b1 + w * 0.2965164; b2 = 0.57000 * b2 + w * 1.0526913;
+      d[i] = b0 + b1 + b2 + w * 0.1848;
+      if (Math.abs(d[i]) > mx) mx = Math.abs(d[i]);
+    }
+    for (i = 0; i < len; i++) d[i] /= mx;
+    return nzBuf;
+  }
+  function rnd(a) { return 1 - a + Math.random() * a * 2; }
+  // Noise hit: { f: filter Hz, q, type ('bandpass'|'lowpass'), to: filter slide, dur, vol, attack, delay }
+  function hit(o) {
+    var ctx = A.ctx;
+    if (!ctx || A.muted) return;
+    var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur, fq = o.f * rnd(0.12);
+    var src = ctx.createBufferSource(); src.buffer = noiseBuf(ctx);
+    var f = ctx.createBiquadFilter(); f.type = o.type || 'bandpass'; f.Q.value = o.q || 1;
+    f.frequency.setValueAtTime(fq, t0);
+    if (o.to) f.frequency.exponentialRampToValueAtTime(o.to * fq / o.f, t0 + dur);
+    var g = ctx.createGain(), v = o.vol * rnd(0.1);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(v, t0 + (o.attack || 0.003));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(A.master);
+    src.start(t0, Math.random() * 1.6); src.stop(t0 + dur + 0.03);
+  }
+  // Tone with an optional low-pass (takes the buzz out of square/sawtooth voices) and a soft attack.
+  function tn(o) {
+    var ctx = A.ctx;
+    if (!ctx || A.muted) return;
+    var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur, k = o.exact ? 1 : rnd(0.04);
+    var osc = ctx.createOscillator(); osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(o.f * k, t0);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to * k, t0 + dur);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(o.vol, t0 + (o.attack || 0.004));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    var node = osc;
+    if (o.cut) { var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = o.cut; lp.Q.value = 0.7; osc.connect(lp); node = lp; }
+    node.connect(g); g.connect(A.master);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }
   var SND = {
+    // One "tick" of a material being hit (mining), stepped on or placed. v scales the loudness.
     mat: function (mat, v) {
       v = v || 1;
       switch (mat) {
-        case 'dirt': A.noise({ dur: 0.08, vol: 0.28 * v, filter: 900, to: 250 }); break;
-        case 'stone': A.noise({ dur: 0.06, vol: 0.22 * v, filter: 3200, to: 900 }); A.tone({ freq: 190, to: 120, type: 'square', dur: 0.04, vol: 0.05 * v }); break;
-        case 'wood': A.tone({ freq: 230, to: 150, type: 'triangle', dur: 0.07, vol: 0.22 * v }); A.noise({ dur: 0.05, vol: 0.1 * v, filter: 1600 }); break;
-        case 'sand': A.noise({ dur: 0.1, vol: 0.18 * v, filter: 5200, to: 1800 }); break;
-        case 'leaf': A.noise({ dur: 0.07, vol: 0.13 * v, filter: 6500, to: 2500 }); break;
-        case 'glass': A.tone({ freq: 1900, to: 1500, type: 'sine', dur: 0.06, vol: 0.09 * v }); break;
-        case 'wool': A.noise({ dur: 0.08, vol: 0.16 * v, filter: 700 }); break;
-        case 'snow': A.noise({ dur: 0.09, vol: 0.17 * v, filter: 2600, to: 700 }); break;
-        case 'metal': A.tone({ freq: 880, to: 700, type: 'square', dur: 0.05, vol: 0.06 * v }); A.noise({ dur: 0.04, vol: 0.1 * v, filter: 4000 }); break;
-        case 'water': A.noise({ dur: 0.2, vol: 0.15 * v, filter: 1400, to: 300 }); break;
-        default: A.noise({ dur: 0.06, vol: 0.15 * v, filter: 2000 });
+        case 'dirt': hit({ f: 650, q: 0.9, dur: 0.09, vol: 0.9 * v }); tn({ f: 150, to: 85, dur: 0.07, vol: 0.22 * v }); break;
+        case 'stone': hit({ f: 1500, q: 1.4, dur: 0.065, vol: 0.85 * v }); hit({ f: 3000, q: 2.5, dur: 0.025, vol: 0.3 * v }); tn({ f: 240, to: 170, type: 'triangle', dur: 0.045, vol: 0.14 * v }); break;
+        case 'wood': tn({ f: 270, to: 195, type: 'triangle', dur: 0.075, vol: 0.38 * v }); tn({ f: 540, to: 420, dur: 0.04, vol: 0.1 * v }); hit({ f: 900, q: 1.3, dur: 0.05, vol: 0.4 * v }); break;
+        case 'sand': hit({ f: 1500, q: 0.7, dur: 0.12, vol: 0.6 * v, attack: 0.014 }); hit({ f: 450, type: 'lowpass', dur: 0.08, vol: 0.35 * v }); break;
+        case 'leaf': hit({ f: 2000, q: 0.8, dur: 0.08, vol: 0.65 * v, attack: 0.008 }); hit({ f: 850, q: 1, dur: 0.06, vol: 0.5 * v, delay: 0.015 }); break;
+        case 'glass': tn({ f: 1900, to: 1500, dur: 0.06, vol: 0.09 * v }); hit({ f: 3500, q: 3, dur: 0.03, vol: 0.2 * v }); break;
+        case 'wool': hit({ f: 500, type: 'lowpass', dur: 0.09, vol: 0.7 * v, attack: 0.012 }); break;
+        case 'snow': hit({ f: 1200, q: 0.8, dur: 0.1, vol: 0.6 * v, attack: 0.016 }); hit({ f: 400, type: 'lowpass', dur: 0.06, vol: 0.25 * v }); break;
+        case 'metal': tn({ f: 880, to: 760, type: 'triangle', dur: 0.09, vol: 0.12 * v }); tn({ f: 1320, dur: 0.06, vol: 0.05 * v }); hit({ f: 2600, q: 3, dur: 0.03, vol: 0.3 * v }); break;
+        case 'water': hit({ f: 900, type: 'lowpass', to: 260, dur: 0.22, vol: 0.6 * v, attack: 0.02 }); tn({ f: 320, to: 620, dur: 0.07, vol: 0.08 * v }); break;
+        default: hit({ f: 1100, q: 1, dur: 0.06, vol: 0.6 * v });
       }
     },
+    // Block breaks: a bigger crunch of its material, a low thud and a small bright pop.
     brk: function (mat) {
-      SND.mat(mat, 1.5);
-      if (mat === 'glass') { [2400, 3100, 2700].forEach(function (f, i) { A.tone({ freq: f, to: f * 0.7, type: 'sine', dur: 0.1, vol: 0.08, delay: i * 0.03 }); }); }
-      A.tone({ freq: 420, to: 820, type: 'sine', dur: 0.07, vol: 0.14, delay: 0.02 });
+      SND.mat(mat, 1.35);
+      if (mat !== 'glass' && mat !== 'metal') hit({ f: mat === 'stone' ? 900 : 600, q: 0.7, dur: 0.16, vol: 0.35, delay: 0.03, attack: 0.012 }); // crumble tail
+      tn({ f: 120, to: 60, dur: 0.12, vol: 0.22 });
+      if (mat === 'glass') { [2400, 3100, 2700].forEach(function (f, i) { tn({ f: f, to: f * 0.7, dur: 0.12, vol: 0.07, delay: i * 0.035 }); }); }
+      tn({ f: 480, to: 900, dur: 0.06, vol: 0.08, delay: 0.03 });
     },
-    place: function (mat) { A.tone({ freq: 150, to: 90, type: 'triangle', dur: 0.08, vol: 0.28 }); SND.mat(mat, 0.6); },
-    pickup: function (combo) { var f = 700 + Math.min(combo, 12) * 55; A.tone({ freq: f, to: f * 1.4, type: 'square', dur: 0.06, vol: 0.09 }); },
-    step: function (mat) { if (mat === 'stone' || mat === 'metal') A.noise({ dur: 0.03, vol: 0.06, filter: 2400 }); else if (mat === 'wood') A.tone({ freq: 160, to: 120, type: 'triangle', dur: 0.04, vol: 0.07 }); else A.noise({ dur: 0.04, vol: 0.07, filter: mat === 'sand' || mat === 'snow' ? 3500 : 1000 }); },
-    jump: function () { A.tone({ freq: 260, to: 520, type: 'square', dur: 0.1, vol: 0.08 }); },
-    land: function (v) { A.tone({ freq: 130, to: 60, type: 'triangle', dur: 0.1, vol: 0.18 * v }); A.noise({ dur: 0.08, vol: 0.12 * v, filter: 800 }); },
-    craft: function () { A.tone({ freq: 660, type: 'triangle', dur: 0.08, vol: 0.2 }); A.tone({ freq: 990, type: 'triangle', dur: 0.14, vol: 0.2, delay: 0.07 }); A.tone({ freq: 1320, type: 'sine', dur: 0.12, vol: 0.12, delay: 0.14 }); },
-    quest: function () { [523, 659, 784, 1047, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.18, vol: 0.22, delay: i * 0.08 }); }); A.tone({ freq: 1568, type: 'sine', dur: 0.5, vol: 0.14, delay: 0.42 }); },
-    bonk: function () { A.tone({ freq: 160, to: 110, type: 'square', dur: 0.09, vol: 0.1 }); },
-    oink: function () { A.tone({ freq: 240, to: 170, type: 'sawtooth', dur: 0.12, vol: 0.08 }); A.tone({ freq: 250, to: 180, type: 'sawtooth', dur: 0.12, vol: 0.08, delay: 0.14 }); },
-    cluck: function () { A.tone({ freq: 950, to: 620, type: 'square', dur: 0.05, vol: 0.06 }); A.tone({ freq: 1000, to: 650, type: 'square', dur: 0.05, vol: 0.06, delay: 0.08 }); A.tone({ freq: 1200, to: 700, type: 'square', dur: 0.08, vol: 0.06, delay: 0.16 }); },
-    baa: function () { [440, 410, 440, 400].forEach(function (f, i) { A.tone({ freq: f, type: 'sawtooth', dur: 0.07, vol: 0.06, delay: i * 0.06 }); }); },
-    snip: function () { A.noise({ dur: 0.03, vol: 0.2, filter: 8000 }); A.noise({ dur: 0.03, vol: 0.2, filter: 8000, delay: 0.08 }); },
-    splash: function () { A.noise({ dur: 0.35, vol: 0.22, filter: 1600, to: 250 }); },
-    door: function () { A.tone({ freq: 320, to: 210, type: 'triangle', dur: 0.08, vol: 0.14 }); A.noise({ dur: 0.05, vol: 0.08, filter: 1200 }); },
-    click: function () { A.tone({ freq: 700, type: 'square', dur: 0.04, vol: 0.08 }); },
-    grow: function () { [523, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'sine', dur: 0.12, vol: 0.12, delay: i * 0.06 }); }); },
-    timber: function () { A.noise({ dur: 0.5, vol: 0.3, filter: 1200, to: 120 }); A.tone({ freq: 200, to: 60, type: 'triangle', dur: 0.4, vol: 0.2 }); }
+    place: function (mat) { tn({ f: 160, to: 90, type: 'triangle', dur: 0.08, vol: 0.3 }); SND.mat(mat, 0.75); },
+    pickup: function (combo) { var f = 700 + Math.min(combo, 12) * 55; tn({ f: f, to: f * 1.5, dur: 0.07, vol: 0.13, exact: true }); tn({ f: f * 2, dur: 0.05, vol: 0.03, delay: 0.02, exact: true }); },
+    // Footsteps: soft and low (they play ~5 times a second while running).
+    step: function (mat) {
+      if (mat === 'wood') tn({ f: 190, to: 140, type: 'triangle', dur: 0.045, vol: 0.12 });
+      else if (mat === 'stone' || mat === 'metal') hit({ f: 1100, q: 1.2, dur: 0.035, vol: 0.28 });
+      else if (mat === 'sand' || mat === 'snow') hit({ f: 1100, q: 0.8, dur: 0.06, vol: 0.28, attack: 0.012 });
+      else if (mat === 'leaf' || mat === 'wool') hit({ f: 700, q: 0.8, dur: 0.05, vol: 0.2, attack: 0.008 });
+      else hit({ f: 480, q: 0.9, dur: 0.05, vol: 0.34 });
+    },
+    jump: function () { tn({ f: 260, to: 520, type: 'triangle', dur: 0.11, vol: 0.12 }); },
+    land: function (v) { tn({ f: 130, to: 60, type: 'triangle', dur: 0.1, vol: 0.22 * v }); hit({ f: 420, type: 'lowpass', dur: 0.09, vol: 0.5 * v }); },
+    craft: function () { tn({ f: 660, type: 'triangle', dur: 0.08, vol: 0.2, exact: true }); tn({ f: 990, type: 'triangle', dur: 0.14, vol: 0.2, delay: 0.07, exact: true }); tn({ f: 1320, dur: 0.12, vol: 0.12, delay: 0.14, exact: true }); hit({ f: 700, q: 1, dur: 0.06, vol: 0.4 }); },
+    quest: function () { [523, 659, 784, 1047, 1319].forEach(function (f, i) { tn({ f: f, type: 'triangle', dur: 0.18, vol: 0.22, delay: i * 0.08, exact: true }); }); [1047, 1319, 1568].forEach(function (f) { tn({ f: f, dur: 0.7, vol: 0.07, delay: 0.42, attack: 0.02, exact: true }); }); },
+    bonk: function () { tn({ f: 170, to: 110, type: 'triangle', dur: 0.1, vol: 0.2 }); hit({ f: 800, q: 1.5, dur: 0.04, vol: 0.3 }); },
+    oink: function () { tn({ f: 240, to: 170, type: 'sawtooth', cut: 900, dur: 0.12, vol: 0.14 }); tn({ f: 250, to: 180, type: 'sawtooth', cut: 900, dur: 0.12, vol: 0.14, delay: 0.14 }); },
+    cluck: function () { tn({ f: 950, to: 620, type: 'square', cut: 1800, dur: 0.05, vol: 0.08 }); tn({ f: 1000, to: 650, type: 'square', cut: 1800, dur: 0.05, vol: 0.08, delay: 0.08 }); tn({ f: 1200, to: 700, type: 'square', cut: 1800, dur: 0.08, vol: 0.08, delay: 0.16 }); },
+    baa: function () { [440, 410, 440, 400].forEach(function (f, i) { tn({ f: f, type: 'sawtooth', cut: 1400, dur: 0.08, vol: 0.09, delay: i * 0.06 }); }); },
+    snip: function () { hit({ f: 4200, q: 2, dur: 0.03, vol: 0.35 }); hit({ f: 4200, q: 2, dur: 0.03, vol: 0.35, delay: 0.08 }); },
+    splash: function () { hit({ f: 1300, type: 'lowpass', to: 250, dur: 0.35, vol: 0.7, attack: 0.01 }); tn({ f: 300, to: 700, dur: 0.1, vol: 0.08 }); },
+    door: function () { tn({ f: 320, to: 210, type: 'triangle', dur: 0.08, vol: 0.18 }); hit({ f: 800, q: 1.2, dur: 0.05, vol: 0.35 }); },
+    click: function () { tn({ f: 700, to: 820, type: 'triangle', dur: 0.045, vol: 0.12, exact: true }); },
+    grow: function () { [523, 784, 1047].forEach(function (f, i) { tn({ f: f, dur: 0.14, vol: 0.13, delay: i * 0.06, exact: true }); }); },
+    timber: function () { hit({ f: 700, q: 0.8, to: 120, dur: 0.5, vol: 0.8, attack: 0.01 }); tn({ f: 200, to: 60, type: 'triangle', dur: 0.4, vol: 0.25 }); SND.mat('wood', 1.3); }
   };
   // Gentle ambient music: sparse pentatonic notes.
   var music = { t: 3 };
@@ -461,10 +524,10 @@
     if (id === B.TALLGRASS) return [];
     return d.drop ? [d.drop] : [];
   }
-  function breakBlock(x, y, fx) {
+  function breakBlock(x, y, fx, noDrop) {
     var wd = G.world, id = wd.get(x, y), d = BLOCKS[id];
     if (!id || d.liquid) return;
-    var surv = G.gm === 'survival';
+    var surv = G.gm === 'survival' && !noDrop;
     if (id === B.TRUNK) { fellTree(x, y); return; }
     if (id === B.DOOR_T) { if (wd.get(x, y + 1) === B.DOOR_B) { breakBlock(x, y + 1, fx); return; } }
     wd.set(x, y, 0);
@@ -577,18 +640,22 @@
       var id = G.world.get(tx, ty), d = BLOCKS[id];
       if (inReach && id && !d.liquid && d.hard !== Infinity) {
         var pk = bestPick();
-        if (d.tier > pk.tool) {
+        // Like the real game, plain stone can be punched out slowly by hand (it drops nothing), so a
+        // player who falls into a pit can always dig out. Ores still need the right pickaxe.
+        var punch = d.tier > pk.tool && d.tier <= 1 && (id === B.STONE || id === B.SANDSTONE);
+        if (d.tier > pk.tool && !punch) {
           mine.prog = 0;
           if (mine.hintT <= 0) { var deep = P.y + P.h > G.world.surf[clamp(Math.floor(P.x), 0, W - 1)] + 4 && pk.tool === 0; tip('تحتاج إلى ' + PICK_FOR_TIER[Math.min(3, d.tier)] + ' لتحفر ' + d.name + '!' + (deep ? ' عالق؟ اضغط P ثم «العودة للبداية»' : '')); SND.bonk(); mine.hintT = 1.2; shake.add(1); burst(tx + 0.5, ty + 0.5, ['#ffffff'], 3, 3, 0.12); }
         } else {
           if (mine.x !== tx || mine.y !== ty) { mine.x = tx; mine.y = ty; mine.prog = 0; mine.sndT = 0; }
           var spd = d.tier === 0 && pk.tool > 0 ? 1 + (pk.speed - 1) * 0.6 : pk.speed;
           var tNeed = G.gm === 'creative' ? 0.12 : Math.max(0.08, d.hard / spd);
+          if (punch) { tNeed = d.hard * 4; if (mine.hintT <= 0) { tip('بلا معول يتكسّر ' + d.name + ' ببطء ولن تحصل عليه - اصنع ' + PICK_FOR_TIER[1] + '!'); mine.hintT = 5; } }
           mine.prog += dt / tNeed;
           P.swingT = 0.15;
           mine.sndT -= dt;
           if (mine.sndT <= 0) { mine.sndT = 0.2; SND.mat(d.mat, 0.8); for (var k = 0; k < 3; k++) part(tx + 0.5 + (Math.random() - 0.5) * 0.8, ty + 0.5 + (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 5, -Math.random() * 4, 0.35, 0.14, d.cols[k % d.cols.length], 30); }
-          if (mine.prog >= 1) { breakBlock(tx, ty); mine.prog = 0; mine.x = -1; }
+          if (mine.prog >= 1) { breakBlock(tx, ty, true, punch); mine.prog = 0; mine.x = -1; }
         }
       } else { mine.prog = 0; mine.x = -1; }
     } else { mine.prog = Math.max(0, mine.prog - dt * 2); if (mine.prog === 0) mine.x = -1; }
@@ -1645,6 +1712,6 @@
     surfaceY: surfaceY,
     get guide() { return guide; },
     render: function () { render(); }, update: function (dt) { update(dt || 1 / 60); },
-    B: B, I: I
+    B: B, I: I, sfx: SND
   };
 })();

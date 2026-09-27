@@ -630,7 +630,7 @@
         var wx = car.x + lx * cy - ly * sy, wy = car.y + lx * sy + ly * cy;
         if (slip > 0.1 && !car.air && car.z < 0.05) {
           if (!G.model.hover && lastRear[w]) addSkid(lastRear[w][0], lastRear[w][1], wx, wy);
-          lastRear[w] = [wx, wy];
+          if (lastRear[w]) { lastRear[w][0] = wx; lastRear[w][1] = wy; } else lastRear[w] = [wx, wy];
           if (Math.random() < Math.min(0.9, slip * 2.2)) emitSmoke(wx, wy, slip);
         } else lastRear[w] = null;
       }

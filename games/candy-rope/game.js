@@ -65,15 +65,77 @@
   if (prog.hat >= Art.HATS.length || Art.HATS[prog.hat].need > totalStars()) prog.hat = 0;
 
   /* ------------------------------------------------------------ sound */
-  var A = Kit.audio;
+  // Softer synth on top of Kit.audio (same options as Kit.audio.tone / .noise):
+  // square and sawtooth tones pass through a gentle low-pass so they chirp instead of buzz,
+  // every tone and noise burst fades in over a few ms (no clicks), and noise can be band-passed.
+  function softAudio(K) {
+    var bufs = [];
+    function noiseBuf(ctx) {
+      for (var i = 0; i < bufs.length; i++) if (bufs[i].c === ctx) return bufs[i].b;
+      var b = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), d = b.getChannelData(0);
+      for (var j = 0; j < d.length; j++) d[j] = Math.random() * 2 - 1;
+      bufs.push({ c: ctx, b: b }); if (bufs.length > 3) bufs.shift();
+      return b;
+    }
+    return {
+      get ctx() { return K.ctx; },
+      get muted() { return K.muted; },
+      unlock: function () { return K.unlock(); },
+      tone: function (o) {
+        var ctx = K.ctx;
+        if (!ctx || K.muted) return;
+        var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur || 0.12, vol = o.vol == null ? 0.3 : o.vol;
+        var type = o.type || 'triangle', f0 = o.freq || 440;
+        var osc = ctx.createOscillator(), g = ctx.createGain(), out = osc;
+        osc.type = type;
+        osc.frequency.setValueAtTime(f0, t0);
+        if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+        if (o.detune) osc.detune.setValueAtTime(o.detune, t0);
+        if (o.lp || type === 'square' || type === 'sawtooth') {
+          var f = ctx.createBiquadFilter();
+          f.type = 'lowpass'; f.Q.value = 0.6;
+          f.frequency.setValueAtTime(o.lp || Math.min(8000, Math.max(f0, o.to || 0) * 3.2 + 300), t0);
+          osc.connect(f); out = f;
+        }
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.006));
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        out.connect(g); g.connect(K.master);
+        osc.start(t0); osc.stop(t0 + dur + 0.03);
+      },
+      noise: function (o) {
+        var ctx = K.ctx;
+        if (!ctx || K.muted) return;
+        var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur || 0.25, vol = o.vol == null ? 0.3 : o.vol;
+        var src = ctx.createBufferSource(), g = ctx.createGain(), out = src;
+        src.buffer = noiseBuf(ctx);
+        if (o.filter) {
+          var f = ctx.createBiquadFilter();
+          f.type = o.band ? 'bandpass' : 'lowpass';
+          f.Q.value = o.band || 0.7;
+          f.frequency.setValueAtTime(o.filter, t0);
+          if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t0 + dur);
+          src.connect(f); out = f;
+        }
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.004));
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        out.connect(g); g.connect(K.master);
+        src.start(t0, Math.random() * Math.max(0, 0.9 - dur)); src.stop(t0 + dur + 0.03);
+      }
+    };
+  }
+  var A = softAudio(Kit.audio);
   var SFX = {
     cut: function () {
-      A.noise({ dur: 0.12, vol: 0.22, filter: 7000, to: 1800 });
-      A.tone({ freq: 1500, to: 700, type: 'triangle', dur: 0.08, vol: 0.12 });
+      // crisp "snip": a band-passed swish plus a short pluck, slightly different every time
+      var v = 0.9 + Math.random() * 0.2;
+      A.noise({ dur: 0.11, vol: 0.2, filter: 4200 * v, to: 1500, band: 1.1, attack: 0.002 });
+      A.tone({ freq: 1400 * v, to: 650 * v, type: 'triangle', dur: 0.08, vol: 0.12 });
     },
     star: function (n) {
       var f = [784, 988, 1175][clamp(n - 1, 0, 2)];
-      A.tone({ freq: f, type: 'square', dur: 0.08, vol: 0.13 });
+      A.tone({ freq: f, type: 'triangle', dur: 0.08, vol: 0.16 });
       A.tone({ freq: f * 1.5, type: 'sine', dur: 0.22, vol: 0.2, delay: 0.06 });
       A.tone({ freq: f * 2, type: 'sine', dur: 0.18, vol: 0.08, delay: 0.12 });
     },
@@ -86,11 +148,11 @@
     pop: function () { A.tone({ freq: 500, to: 1400, type: 'sine', dur: 0.07, vol: 0.3 }); A.noise({ dur: 0.06, vol: 0.18, filter: 5000 }); },
     puff: function () { A.noise({ dur: 0.32, vol: 0.32, filter: 1600, to: 250 }); A.tone({ freq: 140, to: 70, type: 'sine', dur: 0.2, vol: 0.2 }); },
     bounce: function () { A.tone({ freq: 160, to: 540, type: 'sine', dur: 0.2, vol: 0.32 }); A.tone({ freq: 90, to: 240, type: 'triangle', dur: 0.16, vol: 0.18 }); },
-    spike: function () { A.noise({ dur: 0.3, vol: 0.4, filter: 3500, to: 200 }); A.tone({ freq: 420, to: 90, type: 'square', dur: 0.22, vol: 0.14 }); },
+    spike: function () { A.noise({ dur: 0.3, vol: 0.3, filter: 2600, to: 200 }); A.tone({ freq: 420, to: 90, type: 'square', dur: 0.22, vol: 0.14 }); },
     eat: function () {
       for (var i = 0; i < 3; i++) {
-        A.noise({ dur: 0.07, vol: 0.3, filter: 1400, delay: i * 0.17 });
-        A.tone({ freq: 190, to: 110, type: 'square', dur: 0.07, vol: 0.12, delay: i * 0.17 });
+        A.noise({ dur: 0.07, vol: 0.26, filter: 1400, delay: i * 0.17 });
+        A.tone({ freq: 190 - i * 12, to: 110, type: 'triangle', dur: 0.08, vol: 0.2, delay: i * 0.17 });
       }
       [523, 659, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.14, vol: 0.26, delay: 0.55 + i * 0.08 }); });
       A.tone({ freq: 1319, type: 'sine', dur: 0.4, vol: 0.18, delay: 0.87 });
@@ -101,8 +163,8 @@
       A.tone({ freq: 247, to: 175, type: 'triangle', dur: 0.6, vol: 0.28, delay: 0.6 });
     },
     ooh: function () { A.tone({ freq: 330, to: 520, type: 'sine', dur: 0.22, vol: 0.12 }); },
-    click: function () { A.tone({ freq: 700, type: 'square', dur: 0.04, vol: 0.1 }); A.tone({ freq: 1050, type: 'sine', dur: 0.06, vol: 0.08, delay: 0.03 }); },
-    winStar: function (i) { A.tone({ freq: 660 * Math.pow(1.26, i), type: 'square', dur: 0.1, vol: 0.14 }); A.tone({ freq: 1320 * Math.pow(1.26, i), type: 'sine', dur: 0.3, vol: 0.16, delay: 0.05 }); },
+    click: function () { A.tone({ freq: 700, type: 'triangle', dur: 0.04, vol: 0.12 }); A.tone({ freq: 1050, type: 'sine', dur: 0.06, vol: 0.08, delay: 0.03 }); },
+    winStar: function (i) { A.tone({ freq: 660 * Math.pow(1.26, i), type: 'triangle', dur: 0.1, vol: 0.18 }); A.tone({ freq: 1320 * Math.pow(1.26, i), type: 'sine', dur: 0.3, vol: 0.16, delay: 0.05 }); },
     unlock: function () { [784, 988, 1175, 1568].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.14, vol: 0.22, delay: i * 0.07 }); }); },
     whoosh: function () { A.noise({ dur: 0.18, vol: 0.12, filter: 4000, to: 900 }); }
   };
@@ -1182,6 +1244,7 @@
     unlockAll: function () { for (var i = 0; i < NL; i++) if (prog.stars[i] < 0) prog.stars[i] = 3; save(); },
     resetSave: function () { store.remove('prog'); },
     swipe: function (x0, y0, x1, y1) { swipe(x0, y0, x1, y1); },
+    sfx: SFX,
     loop: loop,
     bench: function (n) { n = n || 30; var t0 = performance.now(); for (var i = 0; i < n; i++) render(); var t1 = performance.now(); for (i = 0; i < n; i++) update(1 / 60); return { renderMs: (t1 - t0) / n, updateMs: (performance.now() - t1) / n }; }
   };

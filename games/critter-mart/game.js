@@ -5,7 +5,7 @@
   var ITEMS = CM.ITEMS, TAU = Math.PI * 2, OUT = A.OUT;
   var VW = 1280, VH = 720, ZOOM = 0.85;
   var canvas = document.getElementById('game');
-  var view = K.fit(canvas, VW, VH);
+  var view = K.fit(canvas, VW, VH, { maxDpr: 1.5 });
   var ctx = view.ctx;
   var ptr = K.pointer(view);
   var store = K.store('critter-mart');
@@ -76,40 +76,73 @@
 
   /* ========================================================= audio */
   function tone(o) { au.tone(o); }
+  // Note with instant attack + exponential decay, optionally low-passed (keeps square/saw soft).
+  function note(f, to, type, dur, vol, delay, cutoff) {
+    var ac = au.ctx;
+    if (!ac || au.muted || !(vol > 0.002)) return;
+    var t0 = ac.currentTime + (delay || 0);
+    var o = ac.createOscillator(), g = ac.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(f, t0);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    var out = o;
+    if (cutoff) { var lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cutoff; lp.Q.value = 0.4; o.connect(lp); out = lp; }
+    out.connect(g); g.connect(au.master);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+  // How loud a sound made somewhere in the store is, heard from where the player stands:
+  // full volume nearby, fading to a faint murmur across the map (so busy helpers and far
+  // registers don't fill the speakers with beeps).
+  function near(x, y) {
+    var d = Math.sqrt(d2(P.x, P.y, x, y));
+    return d < 380 ? 1 : d > 1300 ? 0.12 : 1 - 0.88 * (d - 380) / 920;
+  }
+  var lastTake = 0;
   var SFX = {
-    pick: function (n) { tone({ freq: 480 + n * 50, to: 760 + n * 60, type: 'sine', dur: 0.09, vol: 0.22 }); },
-    stock: function (n) { tone({ freq: 760 + (n % 8) * 40, to: 1200 + (n % 8) * 40, type: 'triangle', dur: 0.07, vol: 0.2 }); },
-    full: function () { tone({ freq: 240, to: 150, type: 'square', dur: 0.12, vol: 0.1 }); },
-    take: function () { tone({ freq: 620, to: 930, type: 'sine', dur: 0.06, vol: 0.09 }); },
-    beep: function () { tone({ freq: 1560, type: 'square', dur: 0.045, vol: 0.06 }); },
-    ching: function () {
-      tone({ freq: 1319, type: 'triangle', dur: 0.1, vol: 0.2 });
-      tone({ freq: 1760, type: 'triangle', dur: 0.28, vol: 0.2, delay: 0.08 });
-      au.noise({ dur: 0.07, vol: 0.08, filter: 7000 });
+    pick: function (n) { note(480 + Math.min(n, 16) * 45, 760 + Math.min(n, 16) * 55, 'sine', 0.09, 0.2); },
+    stock: function (n) { note(760 + (n % 8) * 40, 1200 + (n % 8) * 40, 'triangle', 0.07, 0.18); },
+    full: function () { note(240, 160, 'triangle', 0.14, 0.16); },
+    take: function (k) {
+      var t = performance.now(); if (t - lastTake < 70) return; lastTake = t;
+      note(620, 930, 'sine', 0.06, 0.09 * (k == null ? 1 : k));
     },
-    coins: function (n) { n = Math.min(n, 8); for (var i = 0; i < n; i++) tone({ freq: 1250 + i * 110, type: 'square', dur: 0.05, vol: 0.07, delay: i * 0.045 }); },
-    pay: function (p) { tone({ freq: 320 + p * 760, type: 'triangle', dur: 0.05, vol: 0.12 }); },
+    beep: function (k) { k = k == null ? 1 : k; note(1480, null, 'sine', 0.06, 0.08 * k); note(2960, null, 'sine', 0.03, 0.015 * k); },
+    ching: function (k) {
+      k = k == null ? 1 : k;
+      note(1319, null, 'triangle', 0.1, 0.2 * k);
+      note(1760, null, 'triangle', 0.3, 0.2 * k, 0.08);
+      note(2637, null, 'sine', 0.25, 0.05 * k, 0.08);
+    },
+    coins: function (n) { n = Math.min(n, 8); for (var i = 0; i < n; i++) note(1250 + i * 110, null, 'triangle', 0.07, 0.1, i * 0.045); },
+    pay: function (p) { note(320 + p * 760, null, 'triangle', 0.05, 0.11); },
     unlock: function () {
-      [523, 659, 784, 1047, 1319].forEach(function (f, i) { tone({ freq: f, type: 'triangle', dur: 0.2, vol: 0.22, delay: i * 0.07 }); });
-      tone({ freq: 1568, type: 'sine', dur: 0.5, vol: 0.12, delay: 0.36 });
-      au.noise({ dur: 0.3, vol: 0.12, filter: 5000, to: 600 });
+      [523, 659, 784, 1047, 1319].forEach(function (f, i) { note(f, null, 'triangle', 0.22, 0.2, i * 0.07); });
+      note(1568, null, 'sine', 0.5, 0.12, 0.36);
+      au.noise({ dur: 0.3, vol: 0.08, filter: 3500, to: 500 });
     },
-    level: function () { [392, 523, 659, 784, 659, 784, 1047].forEach(function (f, i) { tone({ freq: f, type: 'square', dur: 0.12, vol: 0.12, delay: i * 0.09 }); }); },
-    upgrade: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone({ freq: f, type: 'square', dur: 0.09, vol: 0.13, delay: i * 0.055 }); }); },
-    trash: function () { au.noise({ dur: 0.18, vol: 0.12, filter: 2500, to: 300 }); },
-    happy: function () { tone({ freq: 880, to: 1100, type: 'sine', dur: 0.08, vol: 0.1 }); tone({ freq: 1175, to: 1400, type: 'sine', dur: 0.1, vol: 0.1, delay: 0.09 }); },
-    sad: function () { tone({ freq: 420, to: 300, type: 'triangle', dur: 0.25, vol: 0.12 }); },
-    click: function () { tone({ freq: 700, type: 'square', dur: 0.04, vol: 0.12 }); },
-    no: function () { tone({ freq: 200, to: 140, type: 'square', dur: 0.14, vol: 0.12 }); },
-    step: function () { au.noise({ dur: 0.03, vol: 0.025, filter: 900 }); },
-    rush: function () { [659, 784, 988, 784, 988, 1319].forEach(function (f, i) { tone({ freq: f, type: 'square', dur: 0.08, vol: 0.12, delay: i * 0.07 }); }); },
-    hire: function () { [784, 988, 1175].forEach(function (f, i) { tone({ freq: f, type: 'sine', dur: 0.14, vol: 0.18, delay: i * 0.08 }); }); }
+    level: function () { [392, 523, 659, 784, 659, 784, 1047].forEach(function (f, i) { note(f, null, 'triangle', 0.15, 0.17, i * 0.09); }); },
+    upgrade: function () { [523, 659, 784, 1047].forEach(function (f, i) { note(f, null, 'triangle', 0.12, 0.17, i * 0.055); }); },
+    trash: function () { au.noise({ dur: 0.18, vol: 0.1, filter: 1800, to: 300 }); note(160, 90, 'triangle', 0.12, 0.14); },
+    happy: function (k) { k = k == null ? 1 : k; note(880, 1100, 'sine', 0.08, 0.1 * k); note(1175, 1400, 'sine', 0.1, 0.1 * k, 0.09); },
+    sad: function (k) { note(420, 300, 'triangle', 0.25, 0.12 * (k == null ? 1 : k)); },
+    click: function () { note(700, 560, 'triangle', 0.05, 0.14); },
+    no: function () { note(200, 140, 'triangle', 0.16, 0.18); },
+    step: function () { au.noise({ dur: 0.03, vol: 0.02, filter: 700 }); },
+    rush: function () { [659, 784, 988, 784, 988, 1319].forEach(function (f, i) { note(f, null, 'triangle', 0.1, 0.16, i * 0.07); }); },
+    hire: function () { [784, 988, 1175].forEach(function (f, i) { note(f, null, 'sine', 0.14, 0.18, i * 0.08); }); }
   };
 
-  // Cozy background tune (tiny step sequencer).
+  // Cozy background tune (tiny step sequencer). Form A A B A so the loop is ~70 s instead of
+  // repeating the same 17 s phrase all recess; soft woodblock ticks instead of a noise hi-hat.
   var MUS = { next: 0, step: 0 };
   var MEL = [72, -1, 76, 79, 81, -1, 79, 76, 74, -1, 76, 74, 72, -1, 67, -1, 69, -1, 72, 74, 76, -1, 74, 72, 74, -1, 72, 69, 67, -1, -1, -1,
     72, -1, 76, 79, 81, -1, 84, 81, 79, -1, 76, 79, 81, -1, 79, -1, 76, -1, 74, 72, 74, -1, 76, 74, 72, -1, 67, 69, 72, -1, -1, -1];
+  var MELB = [67, -1, 72, -1, 76, 74, 72, -1, 71, -1, 74, -1, 79, -1, 74, -1, 72, -1, 69, 72, 76, -1, 72, -1, 71, -1, 67, 71, 76, -1, -1, -1,
+    69, -1, 72, -1, 77, 76, 74, 72, 76, -1, 72, -1, 67, -1, 72, -1, 74, -1, 71, 74, 79, -1, 77, -1, 74, -1, 76, 74, 71, -1, -1, -1];
+  var FORM = [MEL, MEL, MELB, MEL];
   var BASS = [48, 55, 45, 52, 41, 48, 43, 50];
   function mfreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
   function musicTick() {
@@ -118,12 +151,12 @@
     var spb = 60 / (R.rush > 0 ? 138 : 112) / 2;
     if (MUS.next < ac.currentTime) MUS.next = ac.currentTime + 0.05;
     while (MUS.next < ac.currentTime + 0.2) {
-      var dl = MUS.next - ac.currentTime, st = MUS.step % 64;
-      var m = MEL[st];
+      var dl = MUS.next - ac.currentTime, st = MUS.step % 64, sec = FORM[((MUS.step / 64) | 0) % FORM.length];
+      var m = sec[st];
       if (m > 0) tone({ freq: mfreq(m), type: 'triangle', dur: spb * 1.6, vol: 0.045, delay: dl, attack: 0.01 });
       if (st % 8 === 0) tone({ freq: mfreq(BASS[(st / 8) | 0]), type: 'sine', dur: spb * 6, vol: 0.08, delay: dl, attack: 0.02 });
       if (st % 8 === 4) tone({ freq: mfreq(BASS[(st / 8) | 0] + 7), type: 'sine', dur: spb * 3, vol: 0.05, delay: dl, attack: 0.02 });
-      if (st % 2 === 1) au.noise({ dur: 0.03, vol: 0.012, filter: 9000, delay: dl });
+      if (st % 2 === 1) note(st % 4 === 3 ? 1900 : 1600, null, 'sine', 0.025, 0.018, dl);
       MUS.next += spb; MUS.step++;
     }
   }
@@ -563,7 +596,7 @@
             var type = sh.item;
             c.basket.push(type); c.incoming = (c.incoming || 0) + 1;
             (function (cc, tp) { fly('item', tp, sp0.x, sp0.y - 14, function () { return { x: cc.x, y: cc.y - 30 }; }, 0.35, 40, 26, function () { cc.incoming = Math.max(0, cc.incoming - 1); }); })(c, type);
-            SFX.take();
+            SFX.take(near(c.x, c.y));
             c.wi++; c.takeT = 0.4;
             if (c.wi >= c.wants.length || c.wants[c.wi] !== type) { c.state = 'waitfly'; c.flyT = 0.4; }
           }
@@ -572,7 +605,7 @@
           if (c.wait > 38) {
             c.mood = Math.max(0, c.mood - 0.45);
             floatText(c.x, c.y - 100, 'أين ' + ITEMS[c.wants[c.wi]].al + '؟', '#ffb3b3', 22);
-            SFX.sad();
+            SFX.sad(near(c.x, c.y));
             var skip = c.wants[c.wi];
             while (c.wi < c.wants.length && c.wants[c.wi] === skip) c.wi++;
             nextWant(c);
@@ -1153,7 +1186,7 @@
         var it = c.basket.pop();
         c.paid += priceOf(it) * (R.rush > 0 ? 1.5 : 1);
         fly('item', it, c.x, c.y - 30, { x: reg.x - 40, y: reg.y - 50 }, 0.2, 30, 24, null);
-        SFX.beep(); reg.scan = 0.12;
+        SFX.beep(playerHere ? 1 : near(reg.x, reg.y)); reg.scan = 0.12;
         reg.serveT = playerHere ? 0.14 : 0.42 / helperMult();
       } else {
         var value = Math.max(1, Math.round(c.paid));
@@ -1161,14 +1194,14 @@
         reg.ching = 0.5;
         R.income += value;
         S.stats.served++;
-        SFX.ching();
+        SFX.ching(playerHere ? 1 : near(reg.x, reg.y));
         floatText(reg.x - 30, reg.y - 90, '+' + value, '#ffe14a', 30);
         var n = Math.min(10, 2 + Math.floor(value / 5));
         for (var i = 0; i < n; i++) fly('coin', null, reg.x - 40, reg.y - 60, { x: reg.d.pile.x + rnd(-14, 14), y: reg.d.pile.y - rnd(0, 10) }, 0.35 + i * 0.04, rnd(50, 90), 20, null);
         c.mood = Math.min(1, c.mood + 0.5);
         if (playerHere) praiseSale(reg);
         burst(c.x, c.y - 110, 1, { speed: 10, up: 60, life: 1.0, size: 22, color: '#ff5d8f', g: -30, shape: 'heart' });
-        SFX.happy();
+        SFX.happy(playerHere ? 1 : near(reg.x, reg.y));
         reg.queue.shift();
         c.basket.length = 0;
         leave(c);
@@ -2225,7 +2258,7 @@
       var b = R.banners[i], t = b.t, life = b.life;
       var inT = Math.min(1, t / 0.35), outT = Math.max(0, (t - (life - 0.4)) / 0.4);
       var sc2 = easeOutBack(inT) * (1 - outT * 0.3), al = 1 - outT;
-      var yy = 150 + i * 88;
+      var yy = 150 + i * 100;
       c.save(); c.globalAlpha = al; c.translate(VW / 2, yy); c.scale(sc2, sc2);
       c.font = '700 44px Fredoka, sans-serif'; c.textAlign = 'center';
       c.lineWidth = 10; c.strokeStyle = OUT; c.strokeText(dir(c, b.text), 0, 0);
@@ -2370,11 +2403,16 @@
 
   // Upgrade panel
   var upgRows = {};
+  function iconEl(name) {
+    var cv = document.createElement('canvas'); cv.width = cv.height = 96; cv.className = 'cm-icon';
+    try { cv.getContext('2d').drawImage(A.iconCanvas(name), 0, 0); } catch (e) { /* ignore */ }
+    return cv;
+  }
   function buildUpgPanel() {
     el.upgList.innerHTML = '';
     CM.UPGRADES.forEach(function (u, i) {
       var row = document.createElement('button'); row.type = 'button'; row.className = 'cm-upg-row';
-      var img = document.createElement('img'); img.src = A.iconURL(u.icon); img.alt = '';
+      var img = iconEl(u.icon);
       var mid = document.createElement('div'); mid.className = 'cm-upg-mid';
       var nm = document.createElement('div'); nm.className = 'cm-upg-name'; nm.textContent = u.name;
       var ds = document.createElement('div'); ds.className = 'cm-upg-desc'; ds.textContent = u.desc;
@@ -2542,11 +2580,14 @@
   }
 
   /* ========================================================= boot */
-  // encode all DOM icons in one batch (one GPU readback instead of one per icon, see art.js)
-  var iconImgs = document.querySelectorAll('[data-icon]');
-  A.iconURLs(CM.UPGRADES.map(function (u) { return u.icon; }).concat(Array.prototype.map.call(iconImgs, function (im) { return im.getAttribute('data-icon'); })));
+  // DOM icons are small <canvas> copies of the cached icon canvases. Copying canvas to canvas stays
+  // on the GPU; the old PNG data-URL route had to read pixels back (getImageData/toDataURL), which
+  // stalled startup for seconds on slow machines.
+  Array.prototype.forEach.call(document.querySelectorAll('img[data-icon]'), function (im) {
+    var cv = iconEl(im.getAttribute('data-icon'));
+    im.parentNode.replaceChild(cv, im);
+  });
   buildUpgPanel();
-  Array.prototype.forEach.call(iconImgs, function (im) { im.src = A.iconURL(im.getAttribute('data-icon')); });
   buildWorld();
   R.welcome = offlineEarnings();
   titleInfo();
@@ -2603,6 +2644,7 @@
     setTut: function (n) { S.tut = n; },
     spawn: function () { spawnCustomer(false); },
     rush: function () { R.rushT = 0.01; },
-    praise: function (n) { for (var i = 0; i < (n || 2); i++) praiseSale(R.registers[0]); return R.combo; }
+    praise: function (n) { for (var i = 0; i < (n || 2); i++) praiseSale(R.registers[0]); return R.combo; },
+    sfx: SFX
   };
 })();
