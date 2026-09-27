@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>أصابع البرق</title>
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="t-dark">
+<div id="app">
+  <header id="top" class="chrome">
+    <div class="logo" aria-label="أصابع البرق"><span class="bolt">⚡</span><span class="lt">أصابع البرق</span></div>
+    <nav class="tools">
+      <button type="button" class="tb" id="bTeacher" title="أنشئ رمز تحدٍّ يكتبه الجميع">🏆 <span>تحدٍّ للصف</span></button>
+      <button type="button" class="tb" id="bCode" title="اكتب رمز التحدي الذي كتبه المعلم">🔢 <span>أدخل رمزًا</span></button>
+      <button type="button" class="tb" id="bProg" title="نتائجك وأرقامك القياسية">📈 <span>تقدّمك</span></button>
+      <i class="tsep"></i>
+      <button type="button" class="tb ic" id="bKbd" title="مساعد لوحة المفاتيح" aria-pressed="false">⌨️</button>
+      <button type="button" class="tb ic lbl" id="bSound" title="أصوات المفاتيح" aria-pressed="false">🎹 <span id="bSoundLbl">أصوات المفاتيح</span></button>
+      <button type="button" class="tb ic" id="bTheme" title="المظهر: داكن / فاتح">🌙</button>
+    </nav>
+  </header>
+
+  <div id="bar" class="chrome">
+    <div class="grp" id="gLang">
+      <button type="button" class="opt" data-lang="en">English</button>
+      <button type="button" class="opt" data-lang="ar">العربية</button>
+    </div>
+    <i class="sep"></i>
+    <div class="grp" id="gMode">
+      <button type="button" class="opt" data-mode="time">⏱️ وقت</button>
+      <button type="button" class="opt" data-mode="words">🔤 كلمات</button>
+      <button type="button" class="opt" data-mode="sentences">📜 جمل</button>
+    </div>
+    <i class="sep"></i>
+    <div class="grp" id="gAmt"></div>
+    <i class="sep"></i>
+    <div class="grp">
+      <button type="button" class="opt chk" id="bLenient" title="اقبل ا بدل أ/إ/آ، و ه بدل ة، و ي بدل ى/ئ، و و بدل ؤ"><span class="box"></span>تساهل في الهمزات</button>
+    </div>
+  </div>
+
+  <main id="stage">
+    <section id="testView">
+      <div id="chTag" hidden><span>🏆 تحدي الصف</span><b id="chCode" dir="ltr"></b><span id="chDesc"></span><button type="button" id="chExit" title="الخروج من التحدي">✕</button></div>
+      <div id="live"><span id="timer"></span><span id="liveWpm" dir="rtl"></span><span id="hint" dir="rtl">ابدأ الكتابة وسيبدأ الوقت ⚡</span></div>
+      <div id="wordsBox">
+        <div id="clip"><div id="words"></div></div>
+        <div id="unfocus" hidden><span>👆 انقر هنا للمتابعة</span></div>
+        <div id="caps" hidden>⇪ زر <span class="sg-key">Caps Lock</span> مفعّل!</div>
+      </div>
+      <div id="warn" hidden></div>
+      <div id="kbd" hidden></div>
+    </section>
+
+    <section id="resView" hidden>
+      <div class="rtop">
+        <div class="bigs">
+          <div class="st"><div class="lbl">السرعة <small>wpm</small></div><div class="num" id="rWpm">0</div></div>
+          <div class="st"><div class="lbl">الدقة <small>acc</small></div><div class="num" id="rAcc">0%</div></div>
+        </div>
+        <div class="graph">
+          <canvas id="chart"></canvas>
+          <div class="legend"><span class="lg w">السرعة</span><span class="lg r">السرعة الخام</span><span class="lg e">أخطاء</span></div>
+        </div>
+      </div>
+      <div class="rmid">
+        <div class="st sm"><div class="lbl">نوع الاختبار</div><div class="val" id="rType"></div></div>
+        <div class="st sm"><div class="lbl">السرعة الخام <small>raw</small></div><div class="val" id="rRaw"></div></div>
+        <div class="st sm"><div class="lbl">الأحرف</div><div class="val chars" id="rChars">
+          <b class="kc" title="صحيحة: أحرف الكلمات المكتوبة صحيحًا مع المسافات (مثل Monkeytype)">0</b><b class="ki" title="خاطئة: أحرف كُتبت خطأً">0</b><b class="kx" title="زائدة: أحرف كُتبت بعد نهاية الكلمة">0</b><b class="km" title="ناقصة: أحرف لم تُكتب">0</b>
+          <small class="kc">صحيحة</small><small class="ki">خاطئة</small><small class="kx">زائدة</small><small class="km">ناقصة</small>
+        </div></div>
+        <div class="st sm"><div class="lbl">الثبات</div><div class="val" id="rCons"></div></div>
+        <div class="st sm"><div class="lbl">الوقت</div><div class="val" id="rTime"></div></div>
+      </div>
+      <div class="rbot">
+        <div class="badge" id="rBadge"></div>
+        <div class="pb" id="rPb"></div>
+        <div class="rcode" id="rCode" hidden><span>رمز التحدي</span><b dir="ltr" id="rCodeNum"></b></div>
+      </div>
+      <div class="rbtns">
+        <button type="button" class="btn main" id="bNext"><span id="bNextLbl">اختبار جديد</span> <span class="sg-key">Tab</span></button>
+        <button type="button" class="btn" id="bRepeat">🔁 أعد نفس الكلمات</button>
+        <button type="button" class="btn" id="bLeave" hidden>اختبار جديد</button>
+      </div>
+    </section>
+  </main>
+
+  <footer id="foot" class="chrome">
+    <button type="button" id="progMini" title="تقدّمك">
+      <canvas id="spark"></canvas>
+      <span id="progTxt"></span>
+    </button>
+    <div class="hints">
+      <span><span class="sg-key">Tab</span> <span id="tabHint">اختبار جديد</span></span>
+      <span><span class="sg-key">Esc</span> الإعدادات</span>
+      <span><span dir="ltr"><span class="sg-key">Alt</span>+<span class="sg-key">Shift</span></span> لغة لوحة المفاتيح</span>
+    </div>
+  </footer>
+</div>
+
+<!-- Teacher: make a class challenge code -->
+<div class="modal" id="mTeacher" hidden>
+  <div class="card wide">
+    <button type="button" class="x" data-close>✕</button>
+    <h2>🏆 تحدٍّ للصف</h2>
+    <div id="tPick">
+      <p class="sub">اختر نوع التحدي، وسيظهر رمز من 4 أرقام تكتبه على السبورة.</p>
+      <div class="presets" id="presets"></div>
+    </div>
+    <div id="tShow" hidden>
+      <div class="bigcode" dir="ltr" id="tCode"></div>
+      <div class="cdesc" id="tDesc"></div>
+      <p class="sub">يضغط الطلاب <b>«🔢 أدخل رمزًا»</b> ويكتبون هذا الرمز، فتظهر للجميع الكلمات نفسها تمامًا.</p>
+      <div class="mbtns">
+        <button type="button" class="btn main" id="tPlay">▶ جرّب التحدي هنا</button>
+        <button type="button" class="btn" id="tAgain">🎲 رمز آخر</button>
+        <button type="button" class="btn" id="tBack">↩ نوع آخر</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Student: enter a challenge code -->
+<div class="modal" id="mCode" hidden>
+  <div class="card">
+    <button type="button" class="x" data-close>✕</button>
+    <h2>🔢 أدخل رمز التحدي</h2>
+    <div class="digits" dir="ltr" id="cDigits"><span></span><span></span><span></span><span></span></div>
+    <div class="cdesc" id="cDesc">اكتب الأرقام الأربعة التي كتبها المعلم</div>
+    <div class="pad" dir="ltr" id="cPad"></div>
+    <div class="mbtns"><button type="button" class="btn main" id="cGo" disabled>▶ ابدأ التحدي <span class="sg-key">Enter</span></button></div>
+  </div>
+</div>
+
+<!-- Progress -->
+<div class="modal" id="mProg" hidden>
+  <div class="card wide">
+    <button type="button" class="x" data-close>✕</button>
+    <h2>📈 تقدّمك</h2>
+    <div class="pgrid">
+      <div class="pchart"><canvas id="progChart"></canvas><div class="psub" id="progSub"></div></div>
+      <div class="plist">
+        <h3>🏅 أرقامك القياسية</h3>
+        <div id="pbList"></div>
+      </div>
+    </div>
+    <h3>🕒 آخر النتائج</h3>
+    <div id="histList"></div>
+    <div class="mbtns"><button type="button" class="btn danger" id="pReset">🗑️ امسح نتائجي</button></div>
+  </div>
+</div>
+
+<canvas id="fx"></canvas>
+
+<script src="../../shared/kit.js"></script>
+<script src="words.js"></script>
+<script src="engine.js"></script>
+<script src="kbd.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
