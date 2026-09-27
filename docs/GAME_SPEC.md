@@ -85,7 +85,11 @@ A game may only use files from its own folder plus these shared ones:
 8. **Fast.** Loads in about a second. Aim for a smooth 60 fps on an ordinary school PC with
    integrated graphics. No huge textures and no unbounded arrays; reuse objects and cap particles.
    With three.js, cap `devicePixelRatio` at 1.5 and keep draw calls low.
-9. **No console errors** at any point: loading, playing, pausing, dying, restarting,
+9. **Fast-build friendly.** Load your files with plain `<script src="…"></script>` and
+   `<link rel="stylesheet" href="…">` tags (no extra attributes) — `tools/build.mjs` inlines
+   them into one file per game. Don't read canvases back with `toDataURL`/`getImageData` in
+   loops or every frame (each read waits for the graphics card); make images once and reuse them.
+10. **No console errors** at any point: loading, playing, pausing, dying, restarting,
    resizing or reloading.
 
 ## What makes it fun (the quality bar)
