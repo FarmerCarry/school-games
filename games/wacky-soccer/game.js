@@ -155,27 +155,6 @@
     }
   }
 
-  /* ============================================================ ambience */
-  var amb = null;
-  function ambSet(level) {
-    var c = Kit.audio.ctx;
-    if (!c || !Kit.audio.master) return;
-    if (!amb) {
-      try {
-        var buf = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = buf.getChannelData(0), last = 0;
-        for (var i = 0; i < d.length; i++) { last = last * 0.96 + (Math.random() * 2 - 1) * 0.04; d[i] = last * 6; }
-        var src = c.createBufferSource(); src.buffer = buf; src.loop = true;
-        var f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 650; f.Q.value = 0.5;
-        var g = c.createGain(); g.gain.value = 0;
-        src.connect(f); f.connect(g); g.connect(Kit.audio.master); src.start();
-        amb = { g: g, level: -1 };
-      } catch (e) { amb = { g: null, level: 0 }; return; }
-    }
-    if (!amb.g || Math.abs(amb.level - level) < 0.004) return;
-    amb.level = level;
-    try { amb.g.gain.setTargetAtTime(level, c.currentTime, 0.25); } catch (e) { /* ignore */ }
-  }
-
   /* =============================================================== world */
   var world = null, match = null, T = 0;
   var cam = { x: W / 2, y: H / 2, z: 1 };
@@ -302,6 +281,7 @@
         var s = WS.goalCheck(b);
         if (s >= 0) { onGoal(s, b); break; }
         if (b.roofT > 1.1) { poofBall(b); }
+        nearMiss(b, dt, silent);
         // a ball nobody reaches for a while hops back into play
         if (Math.abs(b.vx) + Math.abs(b.vy) < 25 && b.y + b.r > G - 3) b.stillT += dt; else b.stillT = 0;
         if (b.stillT > 4.5) {
@@ -333,6 +313,18 @@
         else startRoulette();
       } else if (m.phase === 'roulette') stepRoulette(dt);
       else if (m.phase === 'end' && m.t >= 1.9 && state === 'play') showResult();
+    }
+  }
+  // The crowd goes "ooooh!" when a fast ball flies close past a goal without going in.
+  var oohCd = 0;
+  function nearMiss(b, dt, silent) {
+    oohCd -= dt;
+    var d = Math.min(b.x, W - b.x);
+    var fast = b.vx * b.vx + b.vy * b.vy > 380 * 380;
+    if (d < GOAL_D + 90 && b.y > BAR_Y - 70 && fast) b.danger = 0.7;
+    else if (b.danger > 0) {
+      b.danger -= dt;
+      if (b.danger <= 0 && d > GOAL_D + 60 && oohCd <= 0 && !silent) { oohCd = 4; S.ooh(); }
     }
   }
   function holdBalls() {
@@ -471,9 +463,9 @@
       if (p.side === side) { p.mood = 1; p.moodT = 3; } else { p.mood = -1; p.moodT = 3; }
     }
     if (m.mode === 'demo') return;
-    S.goal(); S.whistle(1);
-    // tracking & achievements
     var human = humanSide(side);
+    S.goal(human); S.whistle(1);
+    // tracking & achievements
     if (m.mode !== '2p') {
       if (side === 0) { m.coins += 2; }
       var diff = m.score[1] - m.score[0];
@@ -1375,8 +1367,7 @@
       stepMatch(dt);
     }
     if (state !== 'play' && state !== 'over') hype = lerp(hype, 0.25, 0.02);
-    var inMatch = (state === 'play' || state === 'over') && match && match.mode !== 'demo';
-    ambSet(inMatch ? 0.02 + hype * 0.05 : state === 'pause' ? 0 : 0.008);
+
     Kit.keys.endFrame();
     pointer.endFrame();
   }

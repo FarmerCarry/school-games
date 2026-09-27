@@ -666,7 +666,7 @@
     } else un.hidden = true;
     $('trOk').classList.add('nav');
     setFocus($('trOk'));
-    S.win(); setTimeout(function () { S.cheer(true); }, 400);
+    S.win();
   }
   $('trOk').addEventListener('click', function () { S.click(); tour = null; match = null; openCups(); });
 

@@ -86,8 +86,8 @@
     var hy = shy - 3 * this.s - this.headR;
     setPt(p, 'head', this.wx(this.dir * 3 * this.s, hy), this.wy(this.dir * 3 * this.s, hy), init);
     for (var i = 0; i < 2; i++) {
-      var f = this.footLocal(i);
-      setPt(p, 'f' + i, this.wx(f.x, f.y), this.wy(f.x, f.y), init);
+      var Lg = this.legs[i], fx = this.dir * Math.sin(Lg.phi) * this.legLen, fy = this.hipOff + Math.cos(Lg.phi) * this.legLen;
+      setPt(p, i ? 'f1' : 'f0', this.wx(fx, fy), this.wy(fx, fy), init);
     }
     // analytic point velocities (rigid body + leg swing)
     for (var k in p) {
@@ -229,14 +229,19 @@
     this.av += (rx * jy - ry * jx) / this.I;
   };
   // contact circles in local coords
+  // Reuses one array per player (this runs hundreds of times per frame during the CPU lookahead,
+  // so allocating fresh arrays here caused garbage-collector hitches).
   Player.prototype.circles = function () {
-    var s = this.s, f0 = this.footLocal(0), f1 = this.footLocal(1);
-    var shy = this.hipOff - this.torso;
-    return [
-      [f0.x, f0.y, this.footR, 'f'], [f1.x, f1.y, this.footR, 'f'],
-      [0, this.hipOff, 13 * s, 'b'], [0, shy, 15 * s, 'b'],
-      [this.dir * 3 * s, shy - 3 * s - this.headR, this.headR, 'h']
-    ];
+    var s = this.s, shy = this.hipOff - this.torso, cs = this._cs;
+    if (!cs) cs = this._cs = [[0, 0, 0, 'f'], [0, 0, 0, 'f'], [0, 0, 0, 'b'], [0, 0, 0, 'b'], [0, 0, 0, 'h']];
+    for (var i = 0; i < 2; i++) {
+      var L = this.legs[i], c = cs[i];
+      c[0] = this.dir * Math.sin(L.phi) * this.legLen; c[1] = this.hipOff + Math.cos(L.phi) * this.legLen; c[2] = this.footR;
+    }
+    cs[2][0] = 0; cs[2][1] = this.hipOff; cs[2][2] = 13 * s;
+    cs[3][0] = 0; cs[3][1] = shy; cs[3][2] = 15 * s;
+    cs[4][0] = this.dir * 3 * s; cs[4][1] = shy - 3 * s - this.headR; cs[4][2] = this.headR;
+    return cs;
   };
   Player.prototype.collideStatic = function (h) {
     var P = this.world.P;
@@ -330,13 +335,14 @@
   // shapes for ball collision: [type, ax, ay, bx, by, r, avx, avy, bvx, bvy, part]
   Player.prototype.shapes = function (out) {
     var p = this.pts, s = this.s;
-    out.length = 0;
-    out.push(['c', p.head.x, p.head.y, 0, 0, this.headR, p.head.vx, p.head.vy, 0, 0, 'head']);
-    out.push(['s', p.hip.x, p.hip.y, p.sh.x, p.sh.y, 16 * s, p.hip.vx, p.hip.vy, p.sh.vx, p.sh.vy, 'body']);
-    out.push(['s', p.hip.x, p.hip.y, p.f0.x, p.f0.y, 9 * s, p.hip.vx, p.hip.vy, p.f0.vx, p.f0.vy, 'leg0']);
-    out.push(['s', p.hip.x, p.hip.y, p.f1.x, p.f1.y, 9 * s, p.hip.vx, p.hip.vy, p.f1.vx, p.f1.vy, 'leg1']);
-    out.push(['c', p.f0.x, p.f0.y, 0, 0, this.footR + 2 * s, p.f0.vx, p.f0.vy, 0, 0, 'foot0']);
-    out.push(['c', p.f1.x, p.f1.y, 0, 0, this.footR, p.f1.vx, p.f1.vy, 0, 0, 'foot1']);
+    // the inner arrays are reused between calls (no per-step garbage)
+    out.length = 6;
+    shp(out, 0, 'c', p.head.x, p.head.y, 0, 0, this.headR, p.head.vx, p.head.vy, 0, 0, 'head');
+    shp(out, 1, 's', p.hip.x, p.hip.y, p.sh.x, p.sh.y, 16 * s, p.hip.vx, p.hip.vy, p.sh.vx, p.sh.vy, 'body');
+    shp(out, 2, 's', p.hip.x, p.hip.y, p.f0.x, p.f0.y, 9 * s, p.hip.vx, p.hip.vy, p.f0.vx, p.f0.vy, 'leg0');
+    shp(out, 3, 's', p.hip.x, p.hip.y, p.f1.x, p.f1.y, 9 * s, p.hip.vx, p.hip.vy, p.f1.vx, p.f1.vy, 'leg1');
+    shp(out, 4, 'c', p.f0.x, p.f0.y, 0, 0, this.footR + 2 * s, p.f0.vx, p.f0.vy, 0, 0, 'foot0');
+    shp(out, 5, 'c', p.f1.x, p.f1.y, 0, 0, this.footR, p.f1.vx, p.f1.vy, 0, 0, 'foot1');
     return out;
   };
 
@@ -616,11 +622,19 @@
   // crossbar/roof segment of goal g (0 = left, 1 = right)
   var SEG = [[-10, BAR_Y - 8, GOAL_D, BAR_Y], [W + 10, BAR_Y - 8, W - GOAL_D, BAR_Y]];
   WS.barSeg = function (g) { return SEG[g]; };
+  // Returns a shared scratch object: callers read x/y/t right away (no allocation per call).
+  var CQ = { x: 0, y: 0, t: 0 };
   function closestOnSeg(px, py, ax, ay, bx, by) {
     var dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
     var t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
     t = t < 0 ? 0 : t > 1 ? 1 : t;
-    return { x: ax + dx * t, y: ay + dy * t, t: t };
+    CQ.x = ax + dx * t; CQ.y = ay + dy * t; CQ.t = t;
+    return CQ;
+  }
+  function shp(out, i, type, ax, ay, bx, by, r, avx, avy, bvx, bvy, part) {
+    var a = out[i];
+    if (!a) a = out[i] = [];
+    a[0] = type; a[1] = ax; a[2] = ay; a[3] = bx; a[4] = by; a[5] = r; a[6] = avx; a[7] = avy; a[8] = bvx; a[9] = bvy; a[10] = part;
   }
   function wrapAng(a) { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
