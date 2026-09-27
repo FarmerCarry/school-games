@@ -54,7 +54,7 @@
   function artK() { return Math.min(2.5, Math.round(view.scale * view.dpr * 100) / 100); }
 
   var SCR = ['scrTitle', 'scrMap', 'hud', 'scrPause', 'scrOver', 'scrWin', 'scrFail'];
-  function show(ids) { SCR.forEach(function (s) { $(s).hidden = ids.indexOf(s) < 0; }); }
+  function show(ids) { SCR.forEach(function (s) { $(s).hidden = ids.indexOf(s) < 0; }); Snd.music.duck(ids.indexOf('scrPause') >= 0); }
 
   Kit.muteButton();
   var musicBtn = $('btnMusicTop');
@@ -406,7 +406,10 @@
     var fx = clamp((p.x - tl.x) / (sh.w * tc), 0.1, 0.9), fy = clamp((p.y - tl.y) / (sh.h * tc), 0.1, 0.9);
     drag = { slot: s, fx: fx, fy: fy, x: tl.x, y: tl.y, scale: tc / C, sticky: false, t0: time, sx: p.x, sy: p.y, r: -1, c: -1, valid: false, pv: null };
     moveDrag(p);
-    drag.x = tl.x; drag.y = tl.y; // start from tray position, glide to cursor
+    // The piece tracks the pointer exactly (no trailing lag); only the jump from its tray spot
+    // to the grab position eases out over the first moments of the drag.
+    drag.ox = tl.x - drag.tx; drag.oy = tl.y - drag.ty;
+    drag.x = tl.x; drag.y = tl.y;
     Snd.pick();
     canvas.style.cursor = 'grabbing';
   }
@@ -474,6 +477,12 @@
       if (drag.r >= 0) { Snd.bad(); } else Snd.back();
     }
     drag = null; hl.fill(0); canvas.style.cursor = 'default';
+  }
+  function dragFollow() {
+    if (!drag) return;
+    if (drag.bomb) { drag.x = drag.tx; drag.y = drag.ty; return; }
+    var k = clamp((time - drag.t0) / 0.14, 0, 1); k = 1 - (1 - k) * (1 - k) * (1 - k);
+    drag.x = drag.tx + (drag.ox || 0) * (1 - k); drag.y = drag.ty + (drag.oy || 0) * (1 - k);
   }
   function cancelDrag() { if (drag) { if (!drag.bomb) slots[drag.slot].ret = { x: drag.x, y: drag.y, scale: drag.scale, t: 0 }; drag = null; hl.fill(0); canvas.style.cursor = 'default'; } }
 
@@ -815,8 +824,7 @@
     if (drag) {
       var target = drag.bomb ? 1 : 1;
       drag.scale += (target - drag.scale) * Math.min(1, dt * 18);
-      drag.x += (drag.tx - drag.x) * Math.min(1, dt * 28);
-      drag.y += (drag.ty - drag.y) * Math.min(1, dt * 28);
+      dragFollow();
       if (drag.bomb && Math.random() < dt * 30) spark(drag.x + 22, drag.y - 30, '#ffd21f', 1, 80, { kind: 2, life: 0.3, size: 6, g: -100 });
     }
     for (i = dying.length - 1; i >= 0; i--) {
@@ -1042,6 +1050,7 @@
   }
   function drawDragged() {
     if (!drag) return;
+    dragFollow(); // use the newest pointer position even if no update tick ran this frame
     if (drag.bomb) { drawBombIcon(drag.x, drag.y - 20, 40, false, 1.1 + 0.05 * Math.sin(time * 20)); return; }
     var p = run.tray[drag.slot], cs = C * drag.scale;
     // drop shadow

@@ -168,35 +168,55 @@
   var PENTA = [0, 2, 4, 7, 9];
   function log2(v) { return Math.round(Math.log(v) / Math.LN2); }
   function noteFreq(k) { var i = Math.max(0, k - 1); return 261.63 * Math.pow(2, (12 * Math.floor(i / 5) + PENTA[i % 5]) / 12); }
+  // All sounds are tonal (no noise bursts): soft sine/triangle voices with gentle attacks, and
+  // merges play notes of a pentatonic scale that climb with the tile value, so bigger merges ring
+  // higher and several merges in one move become a little rising arpeggio.
+  function tn(o) {
+    var ctx = A.ctx;
+    if (!ctx || A.muted) return;
+    var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur;
+    var osc = ctx.createOscillator(); osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(o.f, t0);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t0 + Math.min(dur, o.glide || dur));
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(o.vol, t0 + (o.attack || 0.006));
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(A.master);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }
+  var slideN = 0;
   var sfx = {
-    slide: function () { A.noise({ dur: 0.07, vol: 0.05, filter: 1800, to: 500 }); },
+    // a soft wooden "tock" (two alternating pitches so fast play doesn't sound like a machine gun)
+    slide: function () { var f = (slideN++ & 1) ? 196 : 220; tn({ f: f * 1.5, to: f, dur: 0.07, vol: 0.065, glide: 0.03 }); tn({ f: f * 3, dur: 0.03, vol: 0.015, type: 'triangle' }); },
     merge: function (v, i) {
-      var k = log2(v), f = noteFreq(k), d = i * 0.045;
-      A.tone({ freq: f * 0.72, to: f, type: 'triangle', dur: 0.17, vol: 0.3, delay: d });
-      A.tone({ freq: f * 2, type: 'sine', dur: 0.14, vol: k >= 5 ? 0.13 : 0.07, delay: d + 0.012 });
-      if (k >= 6) A.tone({ freq: f * 1.5, type: 'square', dur: 0.09, vol: 0.05, delay: d + 0.05 });
-      if (k >= 8 && f * 3 < 6000) A.tone({ freq: f * 3, type: 'sine', dur: 0.3, vol: 0.08, delay: d + 0.08 });
-      if (k >= 9) A.noise({ dur: 0.18, vol: 0.06, filter: 7000, to: 2500, delay: d });
+      if (i > 3) return; // 4 notes are plenty for one move
+      var k = log2(v), f = noteFreq(k), d = i * 0.05;
+      tn({ f: f * 0.75, to: f, type: 'triangle', dur: 0.2, vol: 0.26, delay: d, glide: 0.04 });
+      tn({ f: f * 2, dur: 0.16, vol: k >= 5 ? 0.1 : 0.06, delay: d + 0.012 });
+      if (k >= 6) tn({ f: f * 1.5, dur: 0.22, vol: 0.06, delay: d + 0.04, attack: 0.02 });
+      if (k >= 8 && f * 3 < 6000) tn({ f: f * 3, dur: 0.35, vol: 0.05, delay: d + 0.08, attack: 0.02 });
+      if (k >= 9) [4, 5, 6].forEach(function (m, j) { tn({ f: f * m, dur: 0.12, vol: 0.025, delay: d + 0.1 + j * 0.05 }); });
     },
-    spawn: function () { A.tone({ freq: 1250, to: 1600, type: 'sine', dur: 0.045, vol: 0.05 }); },
-    blocked: function () { A.tone({ freq: 140, to: 80, type: 'triangle', dur: 0.12, vol: 0.28 }); A.noise({ dur: 0.06, vol: 0.06, filter: 600 }); },
-    undo: function () { A.tone({ freq: 900, to: 300, type: 'sine', dur: 0.22, vol: 0.2 }); A.noise({ dur: 0.2, vol: 0.06, filter: 900, to: 3000 }); },
-    combo: function (n) { for (var i = 0; i < Math.min(n, 5); i++) A.tone({ freq: 660 * Math.pow(1.19, i), type: 'square', dur: 0.07, vol: 0.07, delay: 0.1 + i * 0.05 }); },
+    spawn: function () { tn({ f: 1250, to: 1600, dur: 0.05, vol: 0.035 }); },
+    blocked: function () { tn({ f: 140, to: 90, type: 'triangle', dur: 0.12, vol: 0.28 }); },
+    undo: function () { tn({ f: 900, to: 320, dur: 0.24, vol: 0.18 }); tn({ f: 1350, to: 480, dur: 0.18, vol: 0.05, delay: 0.03 }); },
+    combo: function (n) { for (var i = 0; i < Math.min(n, 5); i++) tn({ f: 660 * Math.pow(1.19, i), type: 'triangle', dur: 0.1, vol: 0.09, delay: 0.12 + i * 0.05 }); },
     milestone: function (v) {
       var f = noteFreq(Math.min(log2(v), 12)) / 2;
-      [1, 1.26, 1.5, 2].forEach(function (m, i) { A.tone({ freq: f * m, type: 'triangle', dur: 0.2, vol: 0.22, delay: i * 0.08 }); });
-      A.tone({ freq: f * 4, type: 'sine', dur: 0.5, vol: 0.1, delay: 0.32 });
+      [1, 1.26, 1.5, 2].forEach(function (m, i) { tn({ f: f * m, type: 'triangle', dur: 0.22, vol: 0.22, delay: i * 0.08 }); });
+      [2, 2.52, 3].forEach(function (m) { tn({ f: f * m, dur: 0.7, vol: 0.05, delay: 0.32, attack: 0.03 }); });
     },
-    click: function () { A.tone({ freq: 700, to: 900, type: 'square', dur: 0.05, vol: 0.1 }); },
-    start: function () { [523, 659, 784].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.12, vol: 0.2, delay: i * 0.06 }); }); },
+    click: function () { tn({ f: 700, to: 900, type: 'triangle', dur: 0.06, vol: 0.12 }); },
+    start: function () { [523, 659, 784].forEach(function (f, i) { tn({ f: f, type: 'triangle', dur: 0.12, vol: 0.2, delay: i * 0.06 }); }); },
     win: function () {
-      [523, 659, 784, 1047, 784, 1047, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.2, vol: 0.28, delay: i * 0.11 }); A.tone({ freq: f / 2, type: 'square', dur: 0.1, vol: 0.06, delay: i * 0.11 }); });
-      A.noise({ dur: 0.8, vol: 0.12, filter: 8000, to: 2000, delay: 0.7 });
+      [523, 659, 784, 1047, 784, 1047, 1319].forEach(function (f, i) { tn({ f: f, type: 'triangle', dur: 0.2, vol: 0.26, delay: i * 0.11 }); tn({ f: f / 2, dur: 0.16, vol: 0.08, delay: i * 0.11 }); });
+      [1047, 1319, 1568, 2093].forEach(function (f, i) { tn({ f: f, dur: 0.9, vol: 0.05, delay: 0.8 + i * 0.04, attack: 0.04 }); });
     },
-    lose: function () { [392, 330, 262, 196].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.24, vol: 0.26, delay: i * 0.15 }); }); },
-    unlock: function () { [784, 988, 1175, 1568].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.09, vol: 0.1, delay: i * 0.07 }); }); },
-    best: function () { [659, 880, 1109, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.14, vol: 0.2, delay: i * 0.07 }); }); },
-    deny: function () { A.tone({ freq: 220, to: 160, type: 'square', dur: 0.12, vol: 0.12 }); }
+    lose: function () { [392, 330, 262, 196].forEach(function (f, i) { tn({ f: f, type: 'triangle', dur: 0.26, vol: 0.24, delay: i * 0.15 }); }); },
+    unlock: function () { [784, 988, 1175, 1568].forEach(function (f, i) { tn({ f: f, type: 'triangle', dur: 0.12, vol: 0.14, delay: i * 0.07 }); }); },
+    best: function () { [659, 880, 1109, 1319].forEach(function (f, i) { tn({ f: f, type: 'triangle', dur: 0.16, vol: 0.2, delay: i * 0.07 }); }); },
+    deny: function () { tn({ f: 220, to: 160, type: 'triangle', dur: 0.14, vol: 0.2 }); }
   };
 
   /* ============================================================ sprites */
@@ -1037,7 +1057,7 @@
         max: G.board ? G.board.maxTile() : 0, values: G.board ? G.board.values() : null, theme: save.theme, best: save.best, bestTile: save.bestTile, parts: fx.parts.length };
     },
     set: function (vals) { if (!G.board || !validVals(vals, G.N)) return false; G.board.load(vals, now, 0.01); G.dead = false; G.maxT = G.board.maxTile(); refreshHUD(); saveGame(); return true; },
-    move: doMove, undo: undo, pause: pause, menu: toMenu, setTheme: setTheme,
+    move: doMove, undo: undo, pause: pause, menu: toMenu, setTheme: setTheme, sfx: sfx,
     bench: function (n) { n = n || 100; var t = performance.now(); for (var i = 0; i < n; i++) render(); return (performance.now() - t) / n; },
     unlockAll: function () { save.bestTile = Math.max(save.bestTile, 2048); store.set('bestTile', save.bestTile); refreshTitle(); },
     nearWin: function () {
