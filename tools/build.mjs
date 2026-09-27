@@ -208,7 +208,14 @@ self.addEventListener('install', function (event) {
       await cache.put(url, new Response(body, { status: 200, headers: headers }));
     }
     async function worker() { while (next < paths.length) await one(paths[next++]); }
-    await Promise.all([worker(), worker(), worker(), worker()]);
+    try {
+      await Promise.all([worker(), worker(), worker(), worker()]);
+    } catch (e) {
+      // Don't leave a half-filled cache on the disk; the current version keeps working and
+      // the update is retried on the next visit.
+      await caches.delete(CACHE);
+      throw e;
+    }
     await self.skipWaiting();
   })());
 });
