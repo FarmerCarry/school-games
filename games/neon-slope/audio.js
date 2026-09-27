@@ -24,13 +24,18 @@
       NA.noiseBuf = c.createBuffer(1, len, c.sampleRate);
       var d = NA.noiseBuf.getChannelData(0);
       for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-      // continuous rolling rumble
+      // Continuous rolling rumble: soft, low "brown" noise (not white hiss), made loopable
+      // without a click, and kept well below the music.
       try {
-        var src = c.createBufferSource(); src.buffer = NA.noiseBuf; src.loop = true;
-        var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 500; bp.Q.value = 0.7;
+        var rl = c.sampleRate * 3, rb = c.createBuffer(1, rl, c.sampleRate), rd = rb.getChannelData(0), last = 0, j;
+        for (j = 0; j < rl; j++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; rd[j] = last * 3.5; }
+        var drift = rd[rl - 1] - rd[0];
+        for (j = 0; j < rl; j++) rd[j] -= drift * j / (rl - 1);
+        var src = c.createBufferSource(); src.buffer = rb; src.loop = true;
+        var lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 140; lp.Q.value = 0.5;
         var g = c.createGain(); g.gain.value = 0;
-        src.connect(bp); bp.connect(g); g.connect(NA.sfxBus); src.start();
-        NA.roll = { g: g, f: bp };
+        src.connect(lp); lp.connect(g); g.connect(NA.sfxBus); src.start();
+        NA.roll = { g: g, f: lp };
       } catch (e) { NA.roll = null; }
     }
     return c;
@@ -159,8 +164,8 @@
     var c = ctx();
     if (!c || !NA.roll) return;
     var t = c.currentTime;
-    NA.roll.g.gain.setTargetAtTime(A.muted ? 0 : amount * 0.16, t, 0.05);
-    NA.roll.f.frequency.setTargetAtTime(250 + speed * 22, t, 0.1);
+    NA.roll.g.gain.setTargetAtTime(A.muted ? 0 : amount * 0.09, t, 0.08);
+    NA.roll.f.frequency.setTargetAtTime(Math.min(420, 110 + Math.abs(speed) * 6), t, 0.15);
   };
 
   /* -------------------------------------------------------------- sfx */

@@ -1283,7 +1283,7 @@
       if (st.hintT <= 0 || (st.t > 1.5 && Math.abs(b.vx) > 3)) { st.hintT = 0; $('hHint').classList.remove('show'); }
     }
     var speedN = clamp(b.vz / 38, 0, 1);
-    SND.rollSound(b.grounded ? 0.35 + speedN * 0.65 : 0.08, b.vz);
+    SND.rollSound(b.grounded ? 0.35 + speedN * 0.65 : 0, b.vz);
   }
 
   var CALLOUTS = { ramp: 'منصة قفز! طِر عاليًا!', narrow: 'طريق ضيق!', stairs: 'درجات!', holes: 'انتبه للحفر!', gates: 'ابحث عن الفتحة!',
