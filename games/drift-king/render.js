@@ -66,10 +66,15 @@
   }
   function wrapPos(v, span) { return ((v % span) + span) % span; }
 
+  var skyG = null, skyKey = '';
   function drawSky(ctx, p, time) {
-    var g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, p.top); g.addColorStop(1, p.bot);
-    ctx.fillStyle = g;
+    // only rebuild the gradient when the colours change (zone transitions)
+    if (p.top + p.bot !== skyKey || !skyG) {
+      skyKey = p.top + p.bot;
+      skyG = ctx.createLinearGradient(0, 0, 0, H);
+      skyG.addColorStop(0, p.top); skyG.addColorStop(1, p.bot);
+    }
+    ctx.fillStyle = skyG;
     ctx.fillRect(0, 0, W, H);
     if (!bg) makeBg();
     // stars
@@ -521,7 +526,15 @@
   }
 
   /* -------------------------------------------------------- main draw */
-  var drawList = [];
+  // depth-sorted draw list built from pooled entries (no per-frame object allocations)
+  var drawList = [], dlPool = [], dlN = 0;
+  function dl(d, k, o, side) {
+    var e = dlPool[dlN] || (dlPool[dlN] = { d: 0, k: 0, o: null, side: 0 });
+    dlN++;
+    e.d = d; e.k = k; e.o = o; e.side = side || 0;
+    drawList.push(e);
+  }
+  function byDepth(a, b) { return a.d - b.d; }
   DK.drawWorld = function (ctx, G) {
     var p = G.pal = blendPal(G.skyDist);
     setCam(G.cam, G.shake.x, G.shake.y);
@@ -535,7 +548,7 @@
     if (G.bestFlag) drawFlag(ctx, G.bestFlag, G.time);
     drawSkids(ctx, G.skids);
     // depth sorted objects
-    drawList.length = 0;
+    drawList.length = 0; dlN = 0;
     var i, c;
     var coins = G.road.coins;
     for (i = 0; i < coins.length; i++) {
@@ -543,25 +556,25 @@
       if (c.taken) continue;
       var X = sx(c.x, c.y), Y = sy(c.x, c.y, c.z);
       if (X < -40 || X > W + 40 || Y < -40 || Y > H + 40) continue;
-      drawList.push({ d: c.x + c.y, k: 0, o: c });
+      dl(c.x + c.y, 0, c);
     }
     var items = G.road.items;
     for (i = 0; i < items.length; i++) {
       var it = items[i];
       var lx = DK.LX[it.dir], ly = DK.LY[it.dir], h = it.w / 2 + 0.15;
-      drawList.push({ d: it.x + it.y + (lx + ly) * h, k: 1, o: it, side: 1 });
-      drawList.push({ d: it.x + it.y - (lx + ly) * h, k: 1, o: it, side: -1 });
-      drawList.push({ d: it.x + it.y + 0.01, k: 2, o: it });
+      dl(it.x + it.y + (lx + ly) * h, 1, it, 1);
+      dl(it.x + it.y - (lx + ly) * h, 1, it, -1);
+      dl(it.x + it.y + 0.01, 2, it);
     }
     if (G.bestFlag) {
       var bf = G.bestFlag, side = bf.seg.dir === 0 ? 1 : -1;
       var pp = DK.Road.prototype.point(bf.seg, bf.s, side * (bf.seg.w / 2 + 0.2));
-      drawList.push({ d: pp.x + pp.y, k: 3, o: bf });
+      dl(pp.x + pp.y, 3, bf);
     }
     var parts = G.parts;
-    for (i = 0; i < parts.length; i++) if (parts[i].life > 0) drawList.push({ d: parts[i].x + parts[i].y + parts[i].z * 0.3, k: 4, o: parts[i] });
-    if (!(falling && car.fall.behind)) drawList.push({ d: car.x + car.y + 0.05, k: 5 });
-    drawList.sort(function (a, b) { return a.d - b.d; });
+    for (i = 0; i < parts.length; i++) if (parts[i].life > 0) dl(parts[i].x + parts[i].y + parts[i].z * 0.3, 4, parts[i]);
+    if (!(falling && car.fall.behind)) dl(car.x + car.y + 0.05, 5, null);
+    drawList.sort(byDepth);
     for (i = 0; i < drawList.length; i++) {
       var e = drawList[i];
       switch (e.k) {

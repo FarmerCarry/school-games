@@ -22,25 +22,44 @@
     return b;
   }
 
+  // Engine: a mellow sawtooth + triangle sub through a soft low-pass (a purr, not a buzz).
+  // Tyre squeal: a TONAL "eeee" (triangle, ~800-1300 Hz) with a slow wobble and a fast rubbery
+  // flutter, band-limited so it never gets shrill, plus just a touch of low grit.
+  // (A plain band-passed white-noise loop sounds like hiss/static, so it is not used.)
   S.startEngine = function (pitch) {
     var c = ctx();
     if (!c || !A.master) return;
     S.stopEngine(true);
     try {
       var o1 = c.createOscillator(), o2 = c.createOscillator();
-      var f = c.createBiquadFilter(), g = c.createGain();
-      o1.type = 'sawtooth'; o2.type = 'square';
-      f.type = 'lowpass'; f.frequency.value = 520; f.Q.value = 2;
+      var f = c.createBiquadFilter(), g = c.createGain(), m2 = c.createGain();
+      o1.type = 'sawtooth'; o2.type = 'triangle';
+      f.type = 'lowpass'; f.frequency.value = 480; f.Q.value = 0.9;
+      m2.gain.value = 0.8;
       g.gain.value = 0.0001;
-      o1.connect(f); o2.connect(f); f.connect(g); g.connect(A.master);
+      o1.connect(f); o2.connect(m2); m2.connect(f); f.connect(g); g.connect(A.master);
       o1.start(); o2.start();
-      g.gain.setTargetAtTime(0.045, c.currentTime, 0.2);
-      var src = c.createBufferSource(); src.buffer = noiseBuffer(c); src.loop = true;
-      var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1900; bp.Q.value = 4;
-      var g2 = c.createGain(); g2.gain.value = 0;
-      src.connect(bp); bp.connect(g2); g2.connect(A.master); src.start();
+      g.gain.setTargetAtTime(0.05, c.currentTime, 0.2);
+      // squeal
+      var so = c.createOscillator(), wob = c.createOscillator(), flt = c.createOscillator();
+      var wg = c.createGain(), fg = c.createGain(), bp = c.createBiquadFilter(), lp = c.createBiquadFilter(), g2 = c.createGain();
+      so.type = 'triangle'; so.frequency.value = 900;
+      wob.type = 'sine'; wob.frequency.value = 5.5; wg.gain.value = 22;
+      flt.type = 'sine'; flt.frequency.value = 31; fg.gain.value = 14;
+      wob.connect(wg); wg.connect(so.frequency); flt.connect(fg); fg.connect(so.frequency);
+      bp.type = 'bandpass'; bp.frequency.value = 1000; bp.Q.value = 1.2;
+      lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 0.5;
+      g2.gain.value = 0;
+      so.connect(bp); bp.connect(lp); lp.connect(g2);
+      // grit: noise low-passed well below the hiss range, very quiet
+      var src = c.createBufferSource(); src.buffer = S._nb || (S._nb = noiseBuffer(c)); src.loop = true;
+      var nf = c.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = 900; nf.Q.value = 0.3;
+      var ng = c.createGain(); ng.gain.value = 0.12;
+      src.connect(nf); nf.connect(ng); ng.connect(g2);
+      g2.connect(A.master);
+      so.start(); wob.start(); flt.start(); src.start();
       eng = { o1: o1, o2: o2, f: f, g: g, pitch: pitch || 1 };
-      scr = { src: src, bp: bp, g: g2 };
+      scr = { so: so, wob: wob, flt: flt, src: src, bp: bp, g: g2, on: 0 };
     } catch (e) { eng = null; scr = null; }
   };
 
@@ -48,14 +67,18 @@
     var c = ctx();
     if (!c || !eng) return;
     var t = c.currentTime;
-    var base = (55 + speed * 7 + Math.abs(slip) * 30 + (air ? 25 : 0)) * eng.pitch;
-    eng.o1.frequency.setTargetAtTime(base, t, 0.05);
-    eng.o2.frequency.setTargetAtTime(base * 0.5, t, 0.05);
-    eng.f.frequency.setTargetAtTime(400 + speed * 40, t, 0.1);
     var sl = Math.abs(slip);
-    var sv = air ? 0 : Math.max(0, Math.min(1, (sl - 0.12) * 2.2)) * 0.13;
-    scr.g.gain.setTargetAtTime(sv, t, 0.04);
-    scr.bp.frequency.setTargetAtTime(1500 + sl * 1500, t, 0.05);
+    var base = (52 + speed * 6.5 + sl * 26 + (air ? 30 : 0)) * eng.pitch;
+    eng.o1.frequency.setTargetAtTime(base, t, 0.06);
+    eng.o2.frequency.setTargetAtTime(base * 0.5, t, 0.06);
+    eng.f.frequency.setTargetAtTime(360 + speed * 38 + sl * 250, t, 0.1);
+    var k = air ? 0 : Math.max(0, Math.min(1, (sl - 0.12) * 2.2));
+    // fade in a little slower than it fades out, so short wiggles don't "chirp"
+    scr.g.gain.setTargetAtTime(k * 0.06, t, k > scr.on ? 0.06 : 0.05);
+    scr.on = k;
+    var sf = 820 + sl * 420 + speed * 12;
+    scr.so.frequency.setTargetAtTime(sf, t, 0.08);
+    scr.bp.frequency.setTargetAtTime(sf * 1.1, t, 0.08);
   };
 
   S.stopEngine = function (now) {
@@ -71,7 +94,10 @@
     }
     if (scr) {
       var s = scr; scr = null;
-      try { s.g.gain.setTargetAtTime(0, t, 0.02); s.src.stop(t + 0.2); } catch (er) { /* ignore */ }
+      try {
+        s.g.gain.setTargetAtTime(0, t, 0.02);
+        s.src.stop(t + 0.2); s.so.stop(t + 0.2); s.wob.stop(t + 0.2); s.flt.stop(t + 0.2);
+      } catch (er) { /* ignore */ }
     }
   };
 
@@ -82,7 +108,12 @@
     [60, 64, 67, 72], [57, 60, 64, 69], [53, 57, 60, 65], [55, 59, 62, 67],
     [60, 64, 67, 72], [57, 60, 64, 69], [53, 57, 60, 65], [55, 59, 62, 71]
   ];
-  var ARP = [0, 1, 2, 3, 2, 1, 2, 3];
+  var ARP = [0, 1, 2, 3, 2, 1, 2, 3], ARP2 = [0, 2, 1, 3, 1, 2, 0, 3];
+  // a soft tune that joins in on every other pass of the loop so it doesn't get repetitive
+  var LEAD = [
+    [76, -1, 79, -1, 76, 74, 72, -1], [72, -1, 76, -1, 74, 72, 69, -1], [69, 72, 77, -1, 76, -1, 72, -1], [74, -1, 71, 74, 79, -1, -1, -1],
+    [84, -1, 79, -1, 76, -1, 79, 81], [79, -1, 76, -1, 72, -1, 76, -1], [77, -1, 76, -1, 74, -1, 72, -1], [71, -1, 74, -1, 79, -1, 83, -1]
+  ];
   function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
   function note(freq, t, dur, type, vol, dest) {
     var c = ctx();
@@ -107,13 +138,16 @@
   function schedule() {
     var c = ctx();
     if (!c || !musicGain) return;
+    // hidden tab: timers are throttled to ~1/s, which would play the loop in choppy bits
+    if (document.hidden) { nextNote = 0; return; }
     if (nextNote < c.currentTime - 0.2) nextNote = c.currentTime + 0.05;
     while (nextNote < c.currentTime + 0.25) {
       var bar = Math.floor(step / 8) % 8, s8 = step % 8;
-      var ch = CHORDS[bar];
+      var ch = CHORDS[bar], pass = Math.floor(step / 64) % 2;
       if (!A.muted) {
         if (s8 === 0 || s8 === 3 || s8 === 6) note(mtof(ch[0] - 24), nextNote, SPB * 1.6, 'triangle', 0.32, musicGain);
-        note(mtof(ch[ARP[s8]] + 12), nextNote, SPB * 0.9, 'square', 0.045, musicGain);
+        note(mtof(ch[(pass ? ARP2 : ARP)[s8]] + 12), nextNote, SPB * 0.9, 'square', pass ? 0.035 : 0.045, musicGain);
+        if (pass && LEAD[bar][s8] > 0) note(mtof(LEAD[bar][s8]), nextNote, SPB * 1.6, 'triangle', 0.1, musicGain);
         if (s8 % 2 === 1) hat(nextNote, 0.06, musicGain);
         if (s8 === 4) note(mtof(ch[2] + 12), nextNote, SPB * 1.8, 'triangle', 0.09, musicGain);
       }

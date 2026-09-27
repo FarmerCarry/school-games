@@ -127,7 +127,9 @@
   /* ------------------------------------------------------------ popups */
   var pops = [], wpops = [];
   function bigPop(text, sub, color) {
-    pops.push({ text: text, sub: sub || '', color: color || '#ffd23f', t: 0, life: 1.5 });
+    // the newest message takes the centre; older ones slide up out of its way and fade out quickly
+    for (var i = 0; i < pops.length; i++) { var o = pops[i]; o.life = Math.min(o.life, Math.max(o.t + 0.45, o.life * 0.8)); o.slot++; }
+    pops.push({ text: text, sub: sub || '', color: color || '#ffd23f', t: 0, life: 1.5, slot: 0, y: 200 });
     if (pops.length > 3) pops.shift();
   }
   function worldPop(text, x, y, color, size) {
@@ -436,6 +438,10 @@
   btn('btnGarageBack', function () { if (garageFrom === 'levels') goLevels(); else goTitle(); });
   btn('btnResume', resume);
   btn('btnRestart', restartLevel);
+  btn('btnMusic', function () { MMA.setMusic(!MMA.musicOn()); store.set('music', MMA.musicOn()); paintMusicBtn(); });
+  function paintMusicBtn() { $('btnMusic').textContent = '🎵 الموسيقى: ' + (MMA.musicOn() ? 'تعمل' : 'متوقفة'); }
+  MMA.setMusic(store.get('music', true) !== false);
+  paintMusicBtn();
   btn('btnPauseLevels', function () { sel = levelIdx; demo = false; startDemo(); goLevels(); });
   btn('btnNext', nextLevel);
   btn('btnRetry', function () { startLevel(levelIdx); });
@@ -577,6 +583,7 @@
   var lastInp = { gas: false, brake: false, lean: 0 };
   function update(dt) {
     clock += dt;
+    MMA.music(state === 'complete' ? 0.35 : state === 'paused' ? 0.55 : 1);
     if (state === 'play') {
       var inp = readInput();
       lastInp = inp;
@@ -621,7 +628,7 @@
       var tl = lastInp.lean || 0;
       lean += (tl - lean) * Math.min(1, dt * 10);
       crouch = Math.max(0, crouch - dt * 3);
-      for (var p = pops.length - 1; p >= 0; p--) { pops[p].t += dt; if (pops[p].t > pops[p].life) pops.splice(p, 1); }
+      for (var p = pops.length - 1; p >= 0; p--) { var bp = pops[p]; bp.t += dt; bp.y += ((200 - bp.slot * 118) - bp.y) * Math.min(1, dt * 15); if (bp.t > bp.life) pops.splice(p, 1); }
       for (p = wpops.length - 1; p >= 0; p--) { wpops[p].t += dt; if (wpops[p].t > wpops[p].life) wpops.splice(p, 1); }
       if (bonusFlash > 0) bonusFlash -= dt;
       if (hurry > 0) hurry -= dt;
@@ -825,7 +832,7 @@
     for (var i = 0; i < pops.length; i++) {
       var p = pops[i], k = p.t / p.life;
       var sc = p.t < 0.18 ? 0.3 + (p.t / 0.18) * 1.0 : p.t < 0.3 ? 1.3 - (p.t - 0.18) / 0.12 * 0.3 : 1;
-      var y = 200 + i * 10 - (k > 0.7 ? (k - 0.7) * 120 : 0);
+      var y = p.y - (k > 0.7 ? (k - 0.7) * 120 : 0);
       ctx.save(); ctx.translate(640, y); ctx.scale(sc, sc); ctx.rotate(-0.04);
       ctx.globalAlpha = k > 0.8 ? (1 - k) * 5 : 1;
       outlined(p.text, 0, 0, 64, p.color, 'center', 12);
