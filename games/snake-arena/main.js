@@ -263,7 +263,7 @@
   var MILESTONES = [50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000];
   var HINTS = [
     { from: 1.5, to: 7, txt: 'وجّه الثعبان بالفأرة وكُل النقاط المضيئة', games: 3 },
-    { from: 8, to: 14, txt: 'اضغط مطولًا على الفأرة أو مسافة للتسريع!', games: 3 },
+    { from: 8, to: 14, txt: 'اضغط مطولًا على الفأرة أو مسافة أو ↑ للتسريع!', games: 3 },
     { from: 16, to: 22, txt: 'اجعل الثعابين تصطدم بجسمك لتفرقعها!', games: 4 },
     { from: 26, to: 31, txt: 'التقط الفقاعات الملوّنة لتحصل على قوى خارقة', games: 2 }
   ];
@@ -324,7 +324,7 @@
       var dx = mouse.x - sx, dy = mouse.y - sy;
       if (dx * dx + dy * dy > 64) p.want = Math.atan2(dy, dx);
     }
-    p.boostWant = mouse.down || K.down('Space');
+    p.boostWant = mouse.down || K.anyDown(['Space', 'ArrowUp', 'KeyW']); // ↑/W: boost without leaving the arrow keys
   }
 
   function updateCamera(dt) {

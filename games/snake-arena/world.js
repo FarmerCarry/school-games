@@ -398,10 +398,10 @@
     return n;
   }
 
-  function findSpawn(minFromPlayer, clearR) {
+  function findSpawn(minFromPlayer, clearR, maxFrac) {
     var p = W.player && W.player.alive ? W.player : null;
     for (var t = 0; t < 40; t++) {
-      var a = Math.random() * 6.283185307, d = Math.sqrt(Math.random()) * (R * 0.82);
+      var a = Math.random() * 6.283185307, d = Math.sqrt(Math.random()) * (R * (maxFrac || 0.82));
       var x = Math.cos(a) * d, y = Math.sin(a) * d;
       if (p && (x - p.hx) * (x - p.hx) + (y - p.hy) * (y - p.hy) < minFromPlayer * minFromPlayer) continue;
       if (hitTest(x, y, clearR, -1, 1) !== -1) continue;
@@ -460,7 +460,9 @@
   W.spawnPlayer = function (name, skin, eyes) {
     var p = W.player;
     // clear space around the chosen spot so the start is always fair
-    var sp = findSpawn(0, 520);
+    // ...and never right next to the deadly rim (a spawn at 0.82 R could reach the edge in
+    // about 2 s if the first mouse move pointed outwards)
+    var sp = findSpawn(0, 520, 0.6);
     p.init(sp.x, sp.y, Math.atan2(-sp.y, -sp.x) + rand(-0.8, 0.8), 10, name, skin, eyes);
     rank();
   };

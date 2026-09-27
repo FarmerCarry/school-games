@@ -33,7 +33,7 @@
     var id = this.agents.length;
     var a = {
       id: id, isPlayer: !!def.isPlayer, name: def.name || '', skin: def.skin || null,
-      x: 0, y: 0, ang: 0, target: 0, speed: this.baseSpeed * (def.speedMul || 1), turn: def.turn || 8,
+      x: 0, y: 0, lx: 0, ly: 0, ang: 0, target: 0, speed: this.baseSpeed * (def.speedMul || 1), turn: def.turn || 8,
       alive: false, home: true, trail: [], pts: [], cx: 0, cy: 0, cells: 0, sumX: 0, sumY: 0,
       kills: 0, respawnT: 0, trailStart: 0, personality: def.personality || 'greedy',
       brain: null, maxCells: 0, deaths: 0, spawnTime: 0, brake: 0
@@ -166,6 +166,7 @@
         }
         sx = Math.cos(a.ang) * step; sy = Math.sin(a.ang) * step;
       }
+      a.lx = a.x; a.ly = a.y;          // last position (inside the cell we are leaving)
       a.x = nx; a.y = ny;
       var cx = nx | 0, cy = ny | 0;
       if (cx !== a.cx || cy !== a.cy) {
@@ -203,12 +204,16 @@
         a.home = false;
         a.trailStart = this.time;
         a.pts.length = 0;
-        a.pts.push(pcx + 0.5, pcy + 0.5);
+        a.pts.push(a.lx, a.ly);
         this.events.push({ type: 'leave', id: a.id });
       }
       this.trail[c] = a.id;
       a.trail.push(c);
-      a.pts.push(cx + 0.5, cy + 0.5);
+      // The drawn trail follows the real head path (smooth curves like the real game); the
+      // grid cells above stay the source of truth for cuts and captures. Cell centres here
+      // made every diagonal or curved run look like a jagged staircase.
+      var L = a.pts.length, qx = a.pts[L - 2] - a.x, qy = a.pts[L - 1] - a.y;
+      if (qx * qx + qy * qy > 0.2) a.pts.push(a.x, a.y);
     }
   };
 
