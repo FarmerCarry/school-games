@@ -288,7 +288,9 @@
   }
 
   var TEX = [];
-  function T(id, fn) { var c = canvas(16); var g = c.getContext('2d'); seed = 1000 + id * 7919; fn(g); TEX[id] = c; return c; }
+  // GEN[id] = [painter, seed]: lets BW.iconURL repaint a texture on a CPU canvas (see below).
+  var GEN = {};
+  function T(id, fn) { var c = canvas(16); var g = c.getContext('2d'); seed = 1000 + id * 7919; GEN[id] = [fn, seed]; fn(g); TEX[id] = c; return c; }
   T(B.DIRT, dirt);
   T(B.GRASS, function (g) {
     dirt(g);
@@ -427,7 +429,7 @@
   for (w = 0; w < 11; w++) (function (w) { T(B.WOOL + w, function (g) { wool(g, WOOL_COLS[w]); }); })(w);
 
   // Item-only icons
-  function IT(id, fn) { var c = canvas(16); var g = c.getContext('2d'); seed = 5000 + id * 131; fn(g); TEX[id] = c; }
+  function IT(id, fn) { var c = canvas(16); var g = c.getContext('2d'); seed = 5000 + id * 131; GEN[id] = [fn, seed]; fn(g); TEX[id] = c; }
   IT(I.STICK, function (g) { for (var i = 0; i < 11; i++) { R4(g, 3 + i, 13 - i, 2, 2, '#8a5f38'); P(g, 3 + i, 13 - i, '#b88a58'); } });
   IT(I.COAL, function (g) { R4(g, 3, 4, 10, 9, '#2a2a2e'); R4(g, 4, 3, 7, 11, '#2a2a2e'); R4(g, 2, 6, 12, 5, '#2a2a2e'); R4(g, 5, 5, 3, 2, '#55555e'); P(g, 9, 9, '#44444c'); P(g, 5, 5, '#77777f'); });
   function ingot(g, c, hi, dark) {
@@ -488,15 +490,36 @@
   })();
 
   // Icon data-URLs for the DOM inventory (32px, crisp).
+  // Reading pixels back from a GPU canvas (toDataURL on a canvas fed by the GPU-backed TEX)
+  // stalls the main thread until the GPU has caught up with everything queued so far -
+  // hundreds of ms at startup or in the middle of play. So opaque icons are repainted from
+  // their seeded painter onto CPU canvases (willReadFrequently) instead: same pixels, same
+  // PNG, no GPU round-trip. Textures with translucent fills or smoothed drawImage (glass,
+  // ice, water, door) keep the GPU path so their blending stays exactly as before.
   var iconCache = {};
+  var GPU_ICON = {}; GPU_ICON[B.GLASS] = GPU_ICON[B.WATER] = GPU_ICON[B.ICE] = GPU_ICON[I.DOOR] = 1;
+  function cpuCtx(c) { try { return c.getContext('2d', { willReadFrequently: true }); } catch (e) { return c.getContext('2d'); } }
   BW.iconURL = function (id) {
     if (iconCache[id]) return iconCache[id];
-    var c = canvas(32), g = c.getContext('2d');
-    g.imageSmoothingEnabled = false;
-    if (TEX[id]) g.drawImage(TEX[id], 0, 0, 32, 32);
+    var c = canvas(32), g, gen = GEN[id];
+    if (TEX[id] && (!gen || GPU_ICON[id])) {
+      g = c.getContext('2d');
+      g.imageSmoothingEnabled = false;
+      g.drawImage(TEX[id], 0, 0, 32, 32);
+    } else {
+      g = cpuCtx(c);
+      g.imageSmoothingEnabled = false;
+      if (gen) {
+        var t = canvas(16), keep = seed;
+        seed = gen[1]; gen[0](cpuCtx(t)); seed = keep;
+        g.drawImage(t, 0, 0, 32, 32);
+      }
+    }
     try { iconCache[id] = c.toDataURL(); } catch (e) { iconCache[id] = ''; }
     return iconCache[id];
   };
+  // Builds the few GPU-path icons ahead of time; game.js calls it once at page load.
+  BW.warmGPUIcons = function () { for (var id in GPU_ICON) if (ITEMS[id]) BW.iconURL(+id); };
   BW.itemName = function (id) { if (id === FLOWER) return 'أي زهرة'; var it = ITEMS[id]; return it ? it.name : '?'; };
   BW.maxStack = function (id) { var it = ITEMS[id]; return it && it.max ? it.max : 99; };
 })();
