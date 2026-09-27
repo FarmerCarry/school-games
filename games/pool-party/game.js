@@ -111,64 +111,94 @@
     src.connect(f); f.connect(g); g.connect(Kit.audio.master);
     src.start(t0); src.stop(t0 + dur + 0.02);
   }
+  // One short oscillator "ping" with an instant attack and exponential decay. Unlike
+  // Kit.audio.tone it can go through a low-pass filter, so square/saw colours stay soft.
+  function ping(f, to, type, dur, vol, delay, cutoff) {
+    var c = actx(); if (!c || vol <= 0) return;
+    var t0 = c.currentTime + (delay || 0);
+    var o = c.createOscillator(), g = c.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(f, t0);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    var out = o;
+    if (cutoff) { var lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cutoff; lp.Q.value = 0.5; o.connect(lp); out = lp; }
+    out.connect(g); g.connect(Kit.audio.master);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+  // Phenolic ball-on-ball "clack": a very short bright transient plus two inharmonic
+  // partials that ring for a few ms. No pitch sweep (a sweep sounds like a laser "pew").
+  // Harder hits are louder AND brighter; every hit is slightly different.
+  function clackSynth(k, delay) {
+    var j = 0.92 + Math.random() * 0.16;
+    var f1 = (2050 + 700 * k) * j;
+    noise(0.012, 0.55 * k, 3400 + 1800 * k, 2.2, 'bandpass', delay);
+    ping(f1, f1 * 0.97, 'sine', 0.035 + 0.02 * k, 0.26 * k, delay);
+    ping(f1 * 1.71, null, 'sine', 0.018, 0.1 * k, delay);
+    if (k > 0.35) ping(820 * j, null, 'sine', 0.022, 0.14 * k, delay);
+  }
   var lastClack = 0, lastThud = 0;
   var SFX = {
     clack: function (v) {
       if (quiet()) return;
       var now = performance.now();
       if (now - lastClack < 22) return; lastClack = now;
-      var vol = clamp(v / 1400, 0.05, 1);
-      tone(2600 + Math.random() * 500, 1700, 'triangle', 0.04, 0.32 * vol);
-      tone(5200, 4200, 'sine', 0.02, 0.12 * vol);
-      noise(0.03, 0.5 * vol, 3500, 1.2, 'bandpass');
+      var k = clamp(Math.pow(v / 1500, 0.75), 0.07, 1);
+      clackSynth(k, 0);
     },
     thud: function (v) {
       if (quiet()) return;
       var now = performance.now();
       if (now - lastThud < 30) return; lastThud = now;
       var vol = clamp(v / 1200, 0.04, 0.8);
-      tone(150, 70, 'sine', 0.11, 0.35 * vol);
-      noise(0.06, 0.35 * vol, 500, 0.8, 'lowpass');
+      ping(150, 75, 'sine', 0.11, 0.35 * vol);
+      noise(0.05, 0.3 * vol, 450, 0.8, 'lowpass');
     },
     pocket: function () {
       if (quiet()) return;
-      tone(110, 50, 'sine', 0.25, 0.45);
-      noise(0.28, 0.4, 900, 0.7, 'lowpass', 0, 150);
-      tone(900, 700, 'triangle', 0.03, 0.12, 0.07);
-      tone(760, 600, 'triangle', 0.03, 0.1, 0.13);
-      tone(640, 500, 'triangle', 0.03, 0.08, 0.18);
+      // leather/rubber "thunk" as the ball drops, then it knocks along the ball return
+      ping(105, 55, 'sine', 0.22, 0.42);
+      noise(0.16, 0.34, 700, 0.7, 'lowpass', 0, 140);
+      clackSynth(0.22, 0.09 + Math.random() * 0.02);
+      clackSynth(0.14, 0.2 + Math.random() * 0.04);
+      clackSynth(0.08, 0.3 + Math.random() * 0.05);
     },
     cue: function (p) {
       if (quiet()) return;
-      noise(0.05, 0.25 + 0.5 * p, 1800, 1, 'bandpass');
-      tone(520, 260, 'sine', 0.07, 0.25 + 0.2 * p);
-      if (p > 0.8) noise(0.12, 0.5, 2500, 0.6, 'highpass');
+      // leather tip on the cue ball: a short woody "tock", with more body on power shots
+      noise(0.02, 0.22 + 0.4 * p, 1500 + 900 * p, 1.4, 'bandpass');
+      ping(640 + 120 * p, 560, 'sine', 0.04, 0.2 + 0.15 * p);
+      ping(140, 90, 'sine', 0.07, 0.12 + 0.25 * p);
+      if (p > 0.8) clackSynth(0.9, 0);
     },
     tick: function (p) {
-      if (quiet()) return; tone(260 + 700 * p, null, 'square', 0.025, 0.05); },
+      if (quiet()) return; ping(300 + 600 * p, null, 'triangle', 0.03, 0.06); },
     place: function () {
-      if (quiet()) return; tone(420, 900, 'sine', 0.09, 0.25); },
+      if (quiet()) return; ping(420, 820, 'sine', 0.09, 0.2); },
     foul: function () {
-      if (quiet()) return; tone(200, 150, 'sawtooth', 0.22, 0.18); tone(150, 100, 'sawtooth', 0.3, 0.18, 0.2); },
+      if (quiet()) return;
+      ping(330, 300, 'sawtooth', 0.2, 0.14, 0, 900); ping(247, 208, 'sawtooth', 0.34, 0.14, 0.18, 800); },
     turn: function () {
-      if (quiet()) return; tone(660, null, 'sine', 0.1, 0.18); tone(990, null, 'sine', 0.16, 0.18, 0.09); },
+      if (quiet()) return; ping(660, null, 'sine', 0.12, 0.16); ping(990, null, 'sine', 0.18, 0.16, 0.09); },
     good: function (k) {
       if (quiet()) return;
       var base = 523 * Math.pow(1.122, Math.min(k, 8));
-      tone(base, null, 'triangle', 0.1, 0.22); tone(base * 1.26, null, 'triangle', 0.1, 0.22, 0.07); tone(base * 1.5, null, 'triangle', 0.16, 0.22, 0.14);
+      ping(base, null, 'triangle', 0.12, 0.2); ping(base * 1.26, null, 'triangle', 0.12, 0.2, 0.07); ping(base * 1.5, null, 'triangle', 0.2, 0.2, 0.14);
     },
-    coin: function () { tone(988, null, 'square', 0.07, 0.12); tone(1319, null, 'square', 0.14, 0.12, 0.07); },
+    coin: function () { ping(988, null, 'triangle', 0.09, 0.16); ping(1319, null, 'triangle', 0.18, 0.16, 0.07); },
     cheer: function () {
-      noise(1.2, 0.18, 1200, 0.5, 'bandpass', 0, 2400);
-      noise(0.9, 0.12, 2400, 0.5, 'bandpass', 0.25, 1400);
+      noise(1.1, 0.14, 1100, 0.5, 'bandpass', 0, 2200);
+      noise(0.8, 0.09, 2000, 0.5, 'bandpass', 0.25, 1300);
       Kit.sfx.win && actx() && Kit.sfx.win();
     },
     lose: function () { actx() && Kit.sfx.lose(); },
-    star: function (i) { tone(880 * Math.pow(1.26, i), null, 'triangle', 0.18, 0.28); tone(1760 * Math.pow(1.26, i), null, 'sine', 0.12, 0.1, 0.05); },
-    click: function () { tone(660, null, 'square', 0.05, 0.12); },
+    star: function (i) { ping(880 * Math.pow(1.26, i), null, 'triangle', 0.2, 0.26); ping(1760 * Math.pow(1.26, i), null, 'sine', 0.14, 0.08, 0.05); },
+    click: function () { ping(700, 560, 'triangle', 0.05, 0.14); },
     whoosh: function () { noise(0.25, 0.2, 2500, 0.8, 'bandpass', 0, 600); },
-    buy: function () { [784, 988, 1175, 1568].forEach(function (f, i) { tone(f, null, 'square', 0.08, 0.12, i * 0.06); }); },
-    nope: function () { tone(220, 180, 'square', 0.12, 0.12); }
+    buy: function () { [784, 988, 1175, 1568].forEach(function (f, i) { ping(f, null, 'triangle', 0.1, 0.16, i * 0.06); }); },
+    nope: function () { ping(220, 180, 'sawtooth', 0.14, 0.12, 0, 700); }
   };
 
   /* =============================================================== FX */
@@ -1582,7 +1612,8 @@
     trick: function (i) { newTrick(i); show('game'); },
     coins: function (n) { save.coins = n; persist(); },
     say: function (k) { say(k); if (G && G.say) G.say.t = 0; },
-    banner: function (t, s) { banner(t, s, '#ff6b6b', 3); }
+    banner: function (t, s) { banner(t, s, '#ff6b6b', 3); },
+    sfx: SFX
   };
 
   /* =============================================================== go */

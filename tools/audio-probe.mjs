@@ -157,7 +157,9 @@ function flatness(s0) {
   for (let k = lo; k < hi; k++) { const p = re[k] * re[k] + im[k] * im[k] + 1e-12; lg += Math.log(p); ar += p; n++; }
   return Math.exp(lg / n) / (ar / n);
 }
-secs.forEach((x, i) => { let f = 0, c = 0; for (let s0 = i * sr; s0 + 4096 <= (i + 1) * sr; s0 += 4096) { f += flatness(s0); c++; } x.noisy = c ? f / c : 0; });
+// Only windows where something is audible count (silence would score as "noise").
+function winRms(s0) { let q = 0; for (let i = s0; i < s0 + 4096; i++) q += all[i] * all[i]; return Math.sqrt(q / 4096); }
+secs.forEach((x, i) => { let f = 0, c = 0; for (let s0 = i * sr; s0 + 4096 <= (i + 1) * sr; s0 += 4096) { if (winRms(s0) < 0.003) continue; f += flatness(s0); c++; } x.noisy = c ? f / c : 0; });
 
 // Quietest 100 ms window per second -> noise floor
 let floor = Infinity;
