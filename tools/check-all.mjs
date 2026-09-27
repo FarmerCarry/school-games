@@ -14,9 +14,11 @@ import vm from 'node:vm';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// SG_ROOT=_site tests the fast build made by tools/build.mjs instead of the source files.
+const ROOT = process.env.SG_ROOT ? path.resolve(REPO, process.env.SG_ROOT) : REPO;
 const sandbox = { window: {} };
-vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'js/catalog.js'), 'utf8'), sandbox);
+vm.runInNewContext(fs.readFileSync(path.join(REPO, 'js/catalog.js'), 'utf8'), sandbox);
 const games = sandbox.window.GAMES;
 const only = process.argv[2];
 
@@ -66,7 +68,7 @@ for (const g of games) {
   ];
   const out = `/tmp/check-all/${g.slug}`;
   try {
-    const raw = execFileSync('node', [path.join(ROOT, 'tools/playtest.mjs'), g.slug, '--out', out, '--actions-json', JSON.stringify(actions)],
+    const raw = execFileSync('node', [path.join(REPO, 'tools/playtest.mjs'), g.slug, '--out', out, '--actions-json', JSON.stringify(actions)],
       { encoding: 'utf8', timeout: 120000 });
     const r = JSON.parse(raw);
     for (const e of r.pageErrors) add(g.slug, 'page error: ' + e.split('\n')[0]);

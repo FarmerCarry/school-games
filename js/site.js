@@ -250,6 +250,12 @@
     s = Math.min(s, 80 / Math.max(1, longest * 0.55));
     return Math.max(8, Math.round(s * 10) / 10);
   }
+  // The fast build (tools/build.mjs) inlines every thumbnail as window.SG_THUMBS so the
+  // home page needs no extra files; the plain source site loads games/<slug>/thumb.svg.
+  function thumbSrc(slug) {
+    var t = window.SG_THUMBS;
+    return (t && t[slug]) || 'games/' + esc(slug) + '/thumb.svg';
+  }
   function tileHTML(g, opts) {
     opts = opts || {};
     var cls = 'tile' + (opts.big ? ' big' : '') + (opts.cls ? ' ' + opts.cls : '');
@@ -260,7 +266,7 @@
       ' style="--c:' + g.color + ';--c2:' + deepen(g.color, 0.45) + ';--fbs:' + fbSize(g.title) + 'cqw" aria-label="' + esc(g.title) + '">' +
       '<span class="art">' +
         '<span class="fb" aria-hidden="true"><span class="fb-emoji">' + catEmoji(g) + '</span><span class="fb-title">' + esc(g.title) + '</span></span>' +
-        '<img src="games/' + esc(g.slug) + '/thumb.svg" alt="" loading="lazy" decoding="async" draggable="false"' +
+        '<img src="' + thumbSrc(g.slug) + '" alt="" loading="lazy" decoding="async" draggable="false"' +
         ' onload="this.parentNode.parentNode.classList.add(\'loaded\')"' +
         ' onerror="this.parentNode.parentNode.classList.add(\'noimg\');this.parentNode.removeChild(this)">' +
       '</span>' +
@@ -916,6 +922,29 @@
     }
   }
 
+  /* --------------------------------------------- warm up a game on hover */
+  // Hovering (or focusing) a tile for a moment fetches that game's page in the background,
+  // so it opens instantly on click. Only over http(s); once the offline cache (sw.js) has
+  // the game this is answered locally and costs nothing.
+  var warmed = {}, warmTimer = 0;
+  function warmGame(slug) {
+    if (!slug || warmed[slug] || !/^https?:$/.test(location.protocol)) return;
+    warmed[slug] = true;
+    var l = document.createElement('link');
+    l.rel = 'prefetch';
+    l.href = 'games/' + encodeURIComponent(slug) + '/index.html';
+    document.head.appendChild(l);
+  }
+  function tileFrom(e) { var t = e.target; return t && t.closest ? t.closest('.tile[data-slug]') : null; }
+  function watchTiles() {
+    document.addEventListener('pointerover', function (e) {
+      var t = tileFrom(e);
+      clearTimeout(warmTimer);
+      if (t) warmTimer = setTimeout(function () { warmGame(t.getAttribute('data-slug')); }, 120);
+    }, { passive: true });
+    document.addEventListener('focusin', function (e) { var t = tileFrom(e); if (t) warmGame(t.getAttribute('data-slug')); });
+  }
+
   function init() {
     try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (e) { /* ignore */ }
     drawLogo();
@@ -967,6 +996,7 @@
       }, 120);
     });
     lastW = window.innerWidth;
+    watchTiles();
     render();
   }
 

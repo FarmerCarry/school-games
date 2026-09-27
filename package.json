@@ -1,0 +1,13 @@
+{
+  "name": "school-games",
+  "private": true,
+  "description": "Build tools for the ألعاب الفسحة games site (the site itself needs no build to run).",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "check": "node tools/check-all.mjs",
+    "perf": "node tools/perf.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

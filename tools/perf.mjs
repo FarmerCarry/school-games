@@ -27,7 +27,9 @@ const require = createRequire(import.meta.url);
 let playwright;
 try { playwright = require('playwright'); } catch (e) { playwright = require('/opt/node22/lib/node_modules/playwright'); }
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// SG_ROOT=_site tests the fast build made by tools/build.mjs instead of the source files.
+const ROOT = process.env.SG_ROOT ? path.resolve(REPO, process.env.SG_ROOT) : REPO;
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json'
@@ -39,7 +41,7 @@ const only = [];
 for (let i = 0; i < argv.length; i++) { if (argv[i] === '--json') jsonOut = argv[++i]; else only.push(argv[i]); }
 
 const sandbox = { window: {} };
-vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'js/catalog.js'), 'utf8'), sandbox);
+vm.runInNewContext(fs.readFileSync(path.join(REPO, 'js/catalog.js'), 'utf8'), sandbox);
 let targets = ['portal', ...sandbox.window.GAMES.map(g => g.slug)];
 if (only.length) targets = targets.filter(t => only.includes(t));
 
