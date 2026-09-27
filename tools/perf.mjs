@@ -7,7 +7,8 @@
  *   node tools/perf.mjs --json out.json also write the raw numbers
  *
  * Per page it reports:
- *   files / KB        requests and bytes a cold load needs (every file = one disk read on
+ *   --latency <ms>    delay every file by <ms> (to mimic a slow disk or a busy network)
+ *   files / KB        files downloaded and bytes a cold load needs (every file = one disk read on
  *                     a slow HDD, so fewer files matters more than fewer bytes)
  *   loadMs            navigation start -> load event
  *   scriptMs          main-thread script time during load
@@ -36,9 +37,13 @@ const MIME = {
 };
 
 const argv = process.argv.slice(2);
-let jsonOut = null;
+let jsonOut = null, latency = 0;
 const only = [];
-for (let i = 0; i < argv.length; i++) { if (argv[i] === '--json') jsonOut = argv[++i]; else only.push(argv[i]); }
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === '--json') jsonOut = argv[++i];
+  else if (argv[i] === '--latency') latency = +argv[++i];   // ms added to every file (slow disk / busy network)
+  else only.push(argv[i]);
+}
 
 const sandbox = { window: {} };
 vm.runInNewContext(fs.readFileSync(path.join(REPO, 'js/catalog.js'), 'utf8'), sandbox);
@@ -49,11 +54,11 @@ const server = http.createServer((req, res) => {
   let fp = path.join(ROOT, decodeURIComponent(req.url.split('?')[0].split('#')[0]));
   if (!fp.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
   if (fs.existsSync(fp) && fs.statSync(fp).isDirectory()) fp = path.join(fp, 'index.html');
-  fs.readFile(fp, (err, data) => {
+  fs.readFile(fp, (err, data) => setTimeout(() => {
     if (err) { res.writeHead(404); res.end(); return; }
     res.writeHead(200, { 'content-type': MIME[path.extname(fp)] || 'application/octet-stream', 'cache-control': 'max-age=600' });
     res.end(data);
-  });
+  }, latency));
 });
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const origin = `http://127.0.0.1:${server.address().port}`;
@@ -76,8 +81,9 @@ async function measure(target) {
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Network.enable');
   await cdp.send('Performance.enable');
-  const reqs = new Map();
-  cdp.on('Network.loadingFinished', e => reqs.set(e.requestId, e.encodedDataLength));
+  const reqs = new Map(), real = new Set();
+  cdp.on('Network.requestWillBeSent', e => { if (/^https?:/.test(e.request.url)) real.add(e.requestId); });
+  cdp.on('Network.loadingFinished', e => { if (real.has(e.requestId)) reqs.set(e.requestId, e.encodedDataLength); });
   const errors = [];
   page.on('pageerror', e => errors.push(String(e).split('\n')[0]));
 
