@@ -25,6 +25,7 @@
     ORBV: 21, ORB_PINK: 15.5, ORB_BLUE: 8,
     R_UP: 44, R_DOWN: 40, R_VMAX: 8.5,
     SNAP: 0.3, BUF: 6, COYOTE: 20, // COYOTE counted in substeps (5 ticks)
+    BUMPV: 2, // only a real knock against a ceiling makes a 'bump' event (not sliding along it)
     HAZ: 0.15, INNER: 0.3, SIDE: 0.04,
     ORB_R: 1.05, STAR_R: 0.95,
     TIERS: [0.75, 1, 1.25, 1.5]
@@ -135,7 +136,7 @@
     if (s.y < 0) {
       s.y = 0;
       if (g > 0) { if (s.vy <= 0) { s.vy = 0; s.onGround = true; } }
-      else { if (s.vy < 0) { s.vy = 0; ev(s, 'bump'); } }
+      else { if (s.vy < 0) { if (s.vy < -P.BUMPV) ev(s, 'bump'); s.vy = 0; } }
     }
 
     var c0 = Math.floor(s.x) - 1, c1 = Math.floor(s.x + 1);
@@ -151,11 +152,11 @@
         if (ax2 <= o.x1 || ax1 >= o.x2 || s.y + 1 <= o.y1 || s.y >= o.y2) continue;
         if (g > 0) {
           if (s.vy <= 0 && py >= o.y2 - P.SNAP) { s.y = o.y2; s.vy = 0; s.onGround = true; }
-          else if (s.vy > 0 && py + 1 <= o.y1 + P.SNAP) { s.y = o.y1 - 1; s.vy = 0; ev(s, 'bump'); }
+          else if (s.vy > 0 && py + 1 <= o.y1 + P.SNAP) { s.y = o.y1 - 1; if (s.vy > P.BUMPV) ev(s, 'bump'); s.vy = 0; }
           else if (innerHit(s, o)) { die(s, o); return; }
         } else {
           if (s.vy >= 0 && py + 1 <= o.y1 + P.SNAP) { s.y = o.y1 - 1; s.vy = 0; s.onGround = true; }
-          else if (s.vy < 0 && py >= o.y2 - P.SNAP) { s.y = o.y2; s.vy = 0; ev(s, 'bump'); }
+          else if (s.vy < 0 && py >= o.y2 - P.SNAP) { s.y = o.y2; if (s.vy < -P.BUMPV) ev(s, 'bump'); s.vy = 0; }
           else if (innerHit(s, o)) { die(s, o); return; }
         }
       }

@@ -98,16 +98,19 @@
     this.ctx = ctx;
     this.out = ctx.createGain();
     this.out.gain.value = 1;
+    // cut the inaudible sub rumble (it only eats headroom and makes the compressor pump)
+    var hp = ctx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 38; hp.Q.value = 0.7;
     var comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -14; comp.knee.value = 10; comp.ratio.value = 4;
-    comp.attack.value = 0.004; comp.release.value = 0.15;
-    this.out.connect(comp); comp.connect(A.master);
-    // pulse waves for the chiptune sound
+    comp.threshold.value = -16; comp.knee.value = 12; comp.ratio.value = 3.5;
+    comp.attack.value = 0.006; comp.release.value = 0.18;
+    this.out.connect(hp); hp.connect(comp); comp.connect(A.master);
+    // pulse waves for the chiptune sound (fewer harmonics = rounder, less buzzy)
     this.waves = {};
     var self = this;
     [['pulse12', 0.125], ['pulse25', 0.25], ['pulse50', 0.5]].forEach(function (p) {
-      var n = 32, re = new Float32Array(n), im = new Float32Array(n);
-      for (var k = 1; k < n; k++) { re[k] = 0; im[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * p[1]); }
+      var n = 24, re = new Float32Array(n), im = new Float32Array(n);
+      for (var k = 1; k < n; k++) { re[k] = 0; im[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * p[1]) * (1 - k / (n + 4)); }
       try { self.waves[p[0]] = ctx.createPeriodicWave(re, im); } catch (e) { self.waves[p[0]] = null; }
     });
     var len = ctx.sampleRate;
@@ -115,6 +118,14 @@
     var d = this.noise.getChannelData(0), seed = rng(99);
     for (var i = 0; i < len; i++) d[i] = seed() * 2 - 1;
     return true;
+  };
+
+  // Sound leaves the speakers a little after it is scheduled (audio buffers).
+  // Scheduling that much earlier keeps what you HEAR in sync with what you SEE.
+  Music.prototype.latency = function () {
+    var c = this.ctx; if (!c) return 0;
+    var l = (c.outputLatency || 0) + (c.baseLatency || 0);
+    return l > 0 && l < 0.2 ? l : 0;
   };
 
   Music.prototype.play = function (song, fromTime, vol) {
@@ -126,23 +137,37 @@
     this.bus = ctx.createGain();
     this.bus.gain.setValueAtTime(this.vol, ctx.currentTime);
     this.bus.connect(this.out);
-    this.anchor = ctx.currentTime + 0.03 - fromTime;
+    // lead goes through a soft filter and a dotted-eighth echo: sounds "produced", costs 4 nodes
+    this.lead = ctx.createGain(); this.lead.gain.value = 1;
+    var tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 4400; tone.Q.value = 0.5;
+    var dl = ctx.createDelay(1); dl.delayTime.value = Math.min(0.9, song.stepDur * 3);
+    var dlp = ctx.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 2200;
+    var fb = ctx.createGain(); fb.gain.value = 0.3;
+    var wet = ctx.createGain(); wet.gain.value = song.chill ? 0.3 : 0.24;
+    this.lead.connect(tone); tone.connect(this.bus);
+    tone.connect(dl); dl.connect(dlp); dlp.connect(fb); fb.connect(dl); dlp.connect(wet); wet.connect(this.bus);
+    this.fx = [this.lead, tone, dl, dlp, fb, wet];
+    this.anchor = ctx.currentTime + 0.03 - fromTime - this.latency();
     this.nextStep = Math.max(0, Math.ceil(fromTime / song.stepDur - 0.001));
+    this.firstStep = this.nextStep; // never drop the downbeat, even with a large output latency
     this.playing = true;
     this.schedule();
   };
 
   Music.prototype.stop = function (fade) {
     if (!this.bus || !this.ctx) { this.playing = false; return; }
-    var b = this.bus, t = this.ctx.currentTime;
+    var b = this.bus, fx = this.fx, t = this.ctx.currentTime;
     fade = fade == null ? 0.05 : fade;
     try {
       b.gain.cancelScheduledValues(t);
       b.gain.setValueAtTime(b.gain.value, t);
       b.gain.linearRampToValueAtTime(0, t + fade);
     } catch (e) { /* ignore */ }
-    setTimeout(function () { try { b.disconnect(); } catch (e) { /* ignore */ } }, (fade + 0.4) * 1000);
-    this.bus = null;
+    setTimeout(function () {
+      try { b.disconnect(); } catch (e) { /* ignore */ }
+      if (fx) fx.forEach(function (n) { try { n.disconnect(); } catch (e) { /* ignore */ } });
+    }, (fade + 0.4) * 1000);
+    this.bus = null; this.fx = null; this.lead = null;
     this.playing = false;
   };
 
@@ -151,35 +176,36 @@
     if (!this.playing || !this.ctx) return;
     var now = this.ctx.currentTime;
     if (songTime != null) {
-      var drift = (now - this.anchor) - songTime;
+      var drift = (now - this.latency() - this.anchor) - songTime;
       if (Math.abs(drift) > 0.06) {
-        this.anchor = now - songTime;
+        this.anchor = now - this.latency() - songTime;
         this.nextStep = Math.max(this.nextStep, Math.ceil(songTime / this.song.stepDur));
       } else this.anchor += drift * 0.02;
     }
     this.schedule();
   };
 
-  Music.prototype.time = function () { return this.ctx ? this.ctx.currentTime - this.anchor : 0; };
+  // song position the player is HEARING right now
+  Music.prototype.time = function () { return this.ctx ? this.ctx.currentTime - this.latency() - this.anchor : 0; };
 
   Music.prototype.schedule = function () {
     var ctx = this.ctx, song = this.song, now = ctx.currentTime;
     var guard = 0;
     while (this.anchor + this.nextStep * song.stepDur < now + 0.12 && guard++ < 64) {
       var t = this.anchor + this.nextStep * song.stepDur;
-      if (t >= now - 0.02) this.step(this.nextStep, Math.max(t, now));
+      if (t >= now - 0.02 || this.nextStep === this.firstStep) this.step(this.nextStep, Math.max(t, now));
       this.nextStep++;
     }
   };
 
   /* ---------------------------------------------------------- instruments */
-  Music.prototype.env = function (t, vol, a, dur, rel) {
+  Music.prototype.env = function (t, vol, a, dur, rel, dest) {
     var g = this.ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(vol, t + a);
     g.gain.setValueAtTime(vol, t + Math.max(a, dur - rel));
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    g.connect(this.bus);
+    g.connect(dest || this.bus);
     return g;
   };
   Music.prototype.osc = function (type, freq, t, dur, vol, opts) {
@@ -187,30 +213,42 @@
     var ctx = this.ctx, o = ctx.createOscillator();
     if (this.waves[type]) o.setPeriodicWave(this.waves[type]); else o.type = (type.indexOf('pulse') === 0 ? 'square' : type);
     o.frequency.setValueAtTime(freq, t);
+    if (opts.detune) o.detune.setValueAtTime(opts.detune, t);
     if (opts.to) o.frequency.exponentialRampToValueAtTime(opts.to, t + (opts.slide || dur));
-    var g = this.env(t, vol, opts.a || 0.004, dur, opts.rel || 0.03);
+    var g = this.env(t, vol, opts.a || 0.004, dur, opts.rel || 0.03, opts.lead ? (this.lead || this.bus) : null);
     var node = o;
     if (opts.lp) {
-      var f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = opts.lp; f.Q.value = opts.q || 1;
+      var f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = opts.q || 1;
+      f.frequency.setValueAtTime(opts.lp, t);
+      if (opts.lpTo) f.frequency.exponentialRampToValueAtTime(opts.lpTo, t + dur);
       o.connect(f); node = f;
     }
     node.connect(g);
     o.start(t); o.stop(t + dur + 0.02);
   };
-  Music.prototype.noiseHit = function (t, dur, vol, type, freq) {
+  Music.prototype.noiseHit = function (t, dur, vol, type, freq, q) {
     var ctx = this.ctx, s = ctx.createBufferSource();
     s.buffer = this.noise;
-    var f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq;
+    var f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; if (q) f.Q.value = q;
     var g = ctx.createGain();
-    g.gain.setValueAtTime(vol, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.002);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     s.connect(f); f.connect(g); g.connect(this.bus);
     s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.02);
   };
-  Music.prototype.kick = function (t, v) { this.osc('sine', 160, t, 0.24, 0.95 * v, { to: 42, slide: 0.11, a: 0.002, rel: 0.1 }); };
-  Music.prototype.snare = function (t, v) { this.noiseHit(t, 0.14, 0.42 * v, 'highpass', 1400); this.osc('triangle', 210, t, 0.09, 0.3 * v, { to: 140 }); };
-  Music.prototype.hat = function (t, v, open) { this.noiseHit(t, open ? 0.16 : 0.035, (open ? 0.11 : 0.13) * v, 'highpass', 7500); };
-  Music.prototype.crash = function (t) { this.noiseHit(t, 1.1, 0.16, 'highpass', 3500); };
+  // punchy kick: short pitch-dropping body + a tiny click so it is heard on small speakers too
+  Music.prototype.kick = function (t, v) {
+    this.osc('sine', 150, t, 0.2, 0.66 * v, { to: 50, slide: 0.09, a: 0.002, rel: 0.08 });
+    this.osc('triangle', 1100, t, 0.025, 0.16 * v, { to: 180, a: 0.001, rel: 0.015 });
+  };
+  Music.prototype.snare = function (t, v) { this.noiseHit(t, 0.15, 0.36 * v, 'bandpass', 2600, 0.6); this.osc('triangle', 200, t, 0.09, 0.26 * v, { to: 150 }); };
+  Music.prototype.hat = function (t, v, open) { this.noiseHit(t, open ? 0.14 : 0.03, (open ? 0.09 : 0.12) * v, 'highpass', 7000); };
+  Music.prototype.crash = function (t) { this.noiseHit(t, 1.0, 0.1, 'highpass', 4500); };
+  // warm chord pad (filtered saw) that makes the songs sound full
+  Music.prototype.pad = function (t, notes, dur, vol) {
+    for (var i = 0; i < notes.length; i++) this.osc('sawtooth', mtof(notes[i]), t, dur, vol, { a: 0.06, rel: dur * 0.35, lp: 1300, lpTo: 700, q: 0.5, detune: (i - 1) * 6 });
+  };
 
   Music.prototype.step = function (n, t) {
     var song = this.song, sc = song.scale;
@@ -244,13 +282,19 @@
     // ---- bass
     var root = note(0, -1);
     if (song.style === 'drive') {
-      if (st % 2 === 0) this.osc('pulse50', mtof(root + (st % 8 === 6 ? 12 : 0)), t, sd * 1.6, 0.16, { lp: 900 });
+      if (st % 2 === 0) this.osc('pulse50', mtof(root + (st % 8 === 6 ? 12 : 0)), t, sd * 1.6, 0.17, { lp: 1100, lpTo: 380, q: 2 });
     } else if (song.style === 'walk') {
-      if (st % 4 === 0) { var w = [0, 7, 12, 7][st / 4]; this.osc('triangle', mtof(root + w), t, sd * 3.5, 0.34); }
+      if (st % 4 === 0) { var w = [0, 7, 12, 7][st / 4]; this.osc('triangle', mtof(root + w), t, sd * 3.5, 0.27); }
     } else {
-      if (st % 2 === 0) this.osc('triangle', mtof(root + ((st / 2) % 2 ? 12 : 0)), t, sd * 1.8, 0.32);
+      if (st % 2 === 0) this.osc('triangle', mtof(root + ((st / 2) % 2 ? 12 : 0)), t, sd * 1.8, 0.25);
     }
-    if (sec === 2 && st % 4 === 0) this.osc('pulse25', mtof(root), t, sd * 2, 0.06, { lp: 600 });
+    if (sec === 2 && st % 4 === 0) this.osc('pulse25', mtof(root), t, sd * 2, 0.05, { lp: 700 });
+
+    // ---- chord pad (one per bar; softer in the verse, fuller in the drop)
+    if (st === 0 && !song.chill) {
+      var pv = sec === 0 ? 0.022 : sec === 2 ? 0.034 : 0.026;
+      this.pad(t, [note(0, 0), note(2, 0), note(4, 0)], sd * 15.5, pv);
+    }
 
     // ---- lead
     if (sec >= 1) {
@@ -259,15 +303,17 @@
       for (var i = 0; i < notes.length; i++) {
         if (notes[i].step !== st) continue;
         var m = note(notes[i].deg, 1);
-        var vol = song.chill ? 0.07 : 0.1;
-        this.osc(song.lead, mtof(m), t, sd * notes[i].len * 0.95, vol, { rel: 0.05 });
-        if (sec === 2 && !song.chill) this.osc('pulse12', mtof(m + 12), t + sd * 0.5, sd * notes[i].len * 0.8, 0.035, { rel: 0.05 });
+        var vol = song.chill ? 0.085 : 0.13;
+        var nd = sd * notes[i].len * 0.95;
+        this.osc(song.lead, mtof(m), t, nd, vol, { rel: 0.05, lead: true });
+        // the drop: a second, slightly detuned voice makes the lead wide and bright
+        if (sec === 2 && !song.chill) this.osc('pulse50', mtof(m), t, nd, 0.05, { rel: 0.05, lead: true, detune: 9, lp: 2600 });
       }
     }
     // ---- arpeggio in the drop
     if (sec === 2 || (sec === 3 && !song.chill)) {
       var arp = [0, 2, 4, 7][st % 4];
-      this.osc('pulse12', mtof(note(arp, 0)), t, sd * 0.9, sec === 2 ? 0.05 : 0.035);
+      this.osc('pulse12', mtof(note(arp, 0)), t, sd * 0.9, sec === 2 ? 0.045 : 0.03, { lp: 2400 });
     }
     if (song.chill && sec >= 1 && st % 8 === 0) {
       // soft chord pad
