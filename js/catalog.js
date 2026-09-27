@@ -12,6 +12,7 @@ window.SITE = {
 };
 
 window.CATEGORIES = [
+  { id: 'challenge', label: 'تحديات', icon: '🏆' },
   { id: 'running', label: 'جري', icon: '🏃' },
   { id: 'racing', label: 'سباقات', icon: '🏎️' },
   { id: 'two-player', label: 'لاعبان', icon: '👥' },
@@ -27,6 +28,9 @@ window.CATEGORIES = [
 // Key labels: arrows and letters as printed on the keyboard; 'مسافة' = Space,
 // 'انقر' = click, 'الفأرة' = mouse, 'اسحب' = drag.
 window.GAMES = [
+  { slug: 'typing-test', title: 'أصابع البرق', en: 'Lightning Fingers typing test monkeytype keyboard', cats: ['challenge'], players: '1', color: '#ffc400', hot: true,
+    blurb: 'اختبر سرعتك في الكتابة بالعربية والإنجليزية وتحدَّ زملاءك!',
+    controls: [{ keys: ['⌨️'], action: 'اكتب الكلمات كما تظهر' }, { keys: ['Tab'], action: 'اختبار جديد' }, { keys: ['Alt', 'Shift'], action: 'تبديل لغة لوحة المفاتيح' }] },
   { slug: 'rail-rush', title: 'عدّاء السكة', en: 'Rail Rush', cats: ['running'], players: '1', color: '#ff7a1a', hot: true,
     blurb: 'اركض فوق القطارات، تفادَ الحواجز واجمع كل العملات!',
     controls: [{ keys: ['←', '→', 'A', 'D'], action: 'غيّر المسار' }, { keys: ['↑', 'W', 'مسافة'], action: 'اقفز' }, { keys: ['↓', 'S'], action: 'تدحرج (وانزل بسرعة من الهواء)' }, { keys: ['اسحب', 'الفأرة'], action: 'اسحب بالفأرة للتحرك والقفز والتدحرج' }] },
