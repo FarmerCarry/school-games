@@ -167,30 +167,105 @@
   }
 
   /* ------------------------------------------------------------ sound */
-  var A = Kit.audio, lastBlip = 0;
+  // Softer synth on top of Kit.audio (same options as Kit.audio.tone / .noise):
+  // square and sawtooth tones pass through a gentle low-pass so they chirp instead of buzz,
+  // every tone and noise burst fades in over a few ms (no clicks), and noise can be band-passed.
+  function softAudio(K) {
+    var bufs = [];
+    function noiseBuf(ctx) {
+      for (var i = 0; i < bufs.length; i++) if (bufs[i].c === ctx) return bufs[i].b;
+      var b = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), d = b.getChannelData(0);
+      for (var j = 0; j < d.length; j++) d[j] = Math.random() * 2 - 1;
+      bufs.push({ c: ctx, b: b }); if (bufs.length > 3) bufs.shift();
+      return b;
+    }
+    return {
+      get ctx() { return K.ctx; },
+      get muted() { return K.muted; },
+      unlock: function () { return K.unlock(); },
+      tone: function (o) {
+        var ctx = K.ctx;
+        if (!ctx || K.muted) return;
+        var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur || 0.12, vol = o.vol == null ? 0.3 : o.vol;
+        var type = o.type || 'triangle', f0 = o.freq || 440;
+        var osc = ctx.createOscillator(), g = ctx.createGain(), out = osc;
+        osc.type = type;
+        osc.frequency.setValueAtTime(f0, t0);
+        if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+        if (o.detune) osc.detune.setValueAtTime(o.detune, t0);
+        if (o.lp || type === 'square' || type === 'sawtooth') {
+          var f = ctx.createBiquadFilter();
+          f.type = 'lowpass'; f.Q.value = 0.6;
+          f.frequency.setValueAtTime(o.lp || Math.min(8000, Math.max(f0, o.to || 0) * 3.2 + 300), t0);
+          osc.connect(f); out = f;
+        }
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.006));
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        out.connect(g); g.connect(K.master);
+        osc.start(t0); osc.stop(t0 + dur + 0.03);
+      },
+      noise: function (o) {
+        var ctx = K.ctx;
+        if (!ctx || K.muted) return;
+        var t0 = ctx.currentTime + (o.delay || 0), dur = o.dur || 0.25, vol = o.vol == null ? 0.3 : o.vol;
+        var src = ctx.createBufferSource(), g = ctx.createGain(), out = src;
+        src.buffer = noiseBuf(ctx);
+        if (o.filter) {
+          var f = ctx.createBiquadFilter();
+          f.type = o.band ? 'bandpass' : 'lowpass';
+          f.Q.value = o.band || 0.7;
+          f.frequency.setValueAtTime(o.filter, t0);
+          if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t0 + dur);
+          src.connect(f); out = f;
+        }
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + (o.attack || 0.004));
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        out.connect(g); g.connect(K.master);
+        src.start(t0, Math.random() * Math.max(0, 0.9 - dur)); src.stop(t0 + dur + 0.03);
+      }
+    };
+  }
+  var A = softAudio(Kit.audio), lastBlip = 0;
   var sfx = {
-    click: function () { A.tone({ freq: 700, type: 'square', dur: 0.05, vol: 0.12 }); },
-    dash: function () { A.noise({ dur: 0.12, vol: 0.12, filter: 2500, to: 6000 }); A.tone({ freq: 240, to: 520, type: 'square', dur: 0.07, vol: 0.06 }); },
-    stop: function () { A.tone({ freq: 150, to: 70, type: 'triangle', dur: 0.08, vol: 0.28 }); },
-    bump: function () { A.tone({ freq: 110, to: 90, type: 'square', dur: 0.05, vol: 0.08 }); },
-    dot: function (n) {
-      var now = A.ctx ? A.ctx.currentTime : 0;
-      if (now - lastBlip < 0.028) return;
-      lastBlip = now;
-      A.tone({ freq: 520 * Math.pow(2, Math.min(n, 30) / 20), type: 'square', dur: 0.045, vol: 0.07 });
+    click: function () { A.tone({ freq: 700, type: 'triangle', dur: 0.05, vol: 0.14 }); },
+    // a tonal "fwip" (rising chirp + a whisper of air) instead of a burst of static on every dash
+    dash: function () {
+      var v = 0.94 + Math.random() * 0.12;
+      A.tone({ freq: 300 * v, to: 820 * v, type: 'triangle', dur: 0.08, vol: 0.1 });
+      A.tone({ freq: 240 * v, to: 520 * v, type: 'square', dur: 0.06, vol: 0.05 });
+      A.noise({ dur: 0.07, vol: 0.035, filter: 2600, to: 3800, band: 2 });
     },
-    coin: function () { Kit.sfx.coin(); },
-    power: function () { Kit.sfx.power(); },
-    hit: function () { Kit.sfx.hit(); A.tone({ freq: 420, to: 90, type: 'sawtooth', dur: 0.35, vol: 0.14 }); },
-    shieldBreak: function () { A.noise({ dur: 0.3, vol: 0.25, filter: 6000, to: 800 }); A.tone({ freq: 1200, to: 300, type: 'triangle', dur: 0.25, vol: 0.15 }); },
-    exit: function () { [523, 659, 784, 1047, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.1, vol: 0.13, delay: i * 0.06 }); }); },
+    stop: function () { A.tone({ freq: 150, to: 70, type: 'triangle', dur: 0.08, vol: 0.28 }); },
+    bump: function () { A.tone({ freq: 110, to: 90, type: 'square', dur: 0.05, vol: 0.09 }); },
+    dot: function (n) {
+      // arcade pickup blips that climb while you chain dots; at most ~25 per second so fast dashes never buzz
+      var now = A.ctx ? A.ctx.currentTime : 0;
+      if (now - lastBlip < 0.04) return;
+      lastBlip = now;
+      A.tone({ freq: 520 * Math.pow(2, Math.min(n, 30) / 20), type: 'square', dur: 0.045, vol: 0.06 });
+    },
+    coin: function () {
+      A.tone({ freq: 988, type: 'square', dur: 0.07, vol: 0.16 });
+      A.tone({ freq: 1319, type: 'square', dur: 0.16, vol: 0.16, delay: 0.07 });
+    },
+    power: function () { [523, 659, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.09, vol: 0.14, delay: i * 0.06 }); }); },
+    hit: function () {
+      A.noise({ dur: 0.15, vol: 0.26, filter: 1800, to: 300 });
+      A.tone({ freq: 180, to: 60, type: 'sawtooth', dur: 0.15, vol: 0.18 });
+      A.tone({ freq: 420, to: 90, type: 'sawtooth', dur: 0.35, vol: 0.13 });
+    },
+    shieldBreak: function () { A.noise({ dur: 0.3, vol: 0.2, filter: 4500, to: 800 }); A.tone({ freq: 1200, to: 300, type: 'triangle', dur: 0.25, vol: 0.15 }); },
+    exit: function () { [523, 659, 784, 1047, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.1, vol: 0.14, delay: i * 0.06 }); }); },
     star: function (i) { A.tone({ freq: [880, 1109, 1319][i] || 1319, type: 'triangle', dur: 0.25, vol: 0.28 }); A.tone({ freq: ([880, 1109, 1319][i] || 1319) * 2, type: 'sine', dur: 0.3, vol: 0.1, delay: 0.05 }); },
-    lose: function () { Kit.sfx.lose(); },
+    lose: function () { [392, 330, 262, 196].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.22, vol: 0.28, delay: i * 0.15 }); }); },
+    win: function () { [523, 659, 784, 1047, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.16, vol: 0.28, delay: i * 0.1 }); }); },
     goo: function () { A.tone({ freq: 90, to: 50, type: 'sine', dur: 0.5, vol: 0.3 }); A.noise({ dur: 0.5, vol: 0.2, filter: 600, to: 100 }); },
-    milestone: function () { [659, 784, 988, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.12, vol: 0.12, delay: i * 0.08 }); }); },
-    buy: function () { Kit.sfx.power(); A.tone({ freq: 1568, type: 'triangle', dur: 0.3, vol: 0.15, delay: 0.25 }); },
-    no: function () { A.tone({ freq: 200, to: 150, type: 'square', dur: 0.15, vol: 0.12 }); },
-    trap: function () { A.tone({ freq: 900, to: 1400, type: 'square', dur: 0.05, vol: 0.05 }); A.tone({ freq: 900, to: 1400, type: 'square', dur: 0.05, vol: 0.05, delay: 0.12 }); }
+    milestone: function () { [659, 784, 988, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.12, vol: 0.13, delay: i * 0.08 }); }); },
+    buy: function () { sfx.power(); A.tone({ freq: 1568, type: 'triangle', dur: 0.3, vol: 0.15, delay: 0.25 }); },
+    no: function () { A.tone({ freq: 200, to: 150, type: 'square', dur: 0.15, vol: 0.13 }); },
+    trap: function () { A.tone({ freq: 900, to: 1400, type: 'square', dur: 0.05, vol: 0.06 }); A.tone({ freq: 900, to: 1400, type: 'square', dur: 0.05, vol: 0.06, delay: 0.12 }); }
   };
 
   /* ----------------------------------------------------------- helpers */
@@ -1332,7 +1407,7 @@
       var wx = G.mx + Math.random() * COLS * G.tile, wy = G.cam + Math.random() * H * 0.5;
       fx.burst(wx, wy, { count: 24, colors: ['#ffe600', '#ff3fa4', '#34f5ff', '#b6ff3a', '#fff'], speed: 380, life: 1.2, size: 8, gravity: 400 });
     }
-    Kit.sfx.win();
+    sfx.win();
   }
   function goNext() {
     if (G.levelN >= LEVELS.length) { openLevels(); return; }
@@ -1580,6 +1655,7 @@
   window.__game = {
     get state() { return { screen: G.screen, mode: G.mode, phase: G.phase, level: G.levelN, hearts: G.hearts, dots: G.dotsGot, dotsTotal: G.dotsTotal, coins: G.coinsGot, time: Math.round(G.time * 10) / 10, height: G.maxHeight, gooGap: Math.round((G.gooY - P.y) * 10) / 10, px: P.cx, py: P.cy, moving: P.moving, particles: fx.list.length, saveCoins: save.coins, bats: G.world ? G.world.bats.length : 0, rows: G.world ? Object.keys(G.world.rows).length : 0 }; },
     save: save,
+    sfx: sfx,
     skip: function (n) { startLevel(n); },
     endless: function () { startEndless(); },
     win: function () { if (G.screen === 'play' && G.mode === 'level') reachExit(); },
