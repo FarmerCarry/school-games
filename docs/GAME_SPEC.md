@@ -63,7 +63,9 @@ A game may only use files from its own folder plus these shared ones:
 2. **Nothing external.** No CDNs, web fonts from the internet, analytics, iframes or links out.
    All art is drawn in code (canvas, SVG, CSS, three.js geometry). Sound is synthesized with
    WebAudio (`Kit.sfx` / `Kit.audio.tone` / `Kit.audio.noise`, or your own synth code).
-3. **Kid-safe.** Cartoon only: no blood, gore, guns, scary horror, bad words, romance or chat.
+3. **Kid-safe.** Cartoon only: no blood, gore, realistic guns, scary horror, bad words, romance or chat.
+   Shooter games (the teacher asked for one) use chunky, colourful **toy paint/foam/water blasters**:
+   hits make paint splats, a defeated character pops into paint/confetti and respawns.
    "Defeat" means splats, poofs, confetti and bonks. Characters are cute or silly.
 4. **Fills the frame.** The page is shown in an iframe of about 1100×620, and fullscreen at
    1920×1080. Use a fixed logical resolution (16:9 is best, e.g. 1280×720) scaled to fit with

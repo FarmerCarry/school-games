@@ -13,6 +13,7 @@ window.SITE = {
 
 window.CATEGORIES = [
   { id: 'challenge', label: 'تحديات', icon: '🏆' },
+  { id: 'shooter', label: 'تصويب', icon: '🎯' },
   { id: 'running', label: 'جري', icon: '🏃' },
   { id: 'racing', label: 'سباقات', icon: '🏎️' },
   { id: 'two-player', label: 'لاعبان', icon: '👥' },
@@ -28,6 +29,9 @@ window.CATEGORIES = [
 // Key labels: arrows and letters as printed on the keyboard; 'مسافة' = Space,
 // 'انقر' = click, 'الفأرة' = mouse, 'اسحب' = drag.
 window.GAMES = [
+  { slug: 'splat-strike', title: 'ضربة الطلاء', en: 'Splat Strike paintball shooter fps', cats: ['shooter', 'battle'], players: '1', color: '#ff3d8b', hot: true,
+    blurb: 'معركة طلاء ثلاثية الأبعاد! صوّب ولطّخ الروبوتات واربح المباراة!',
+    controls: [{ keys: ['W', 'A', 'S', 'D'], action: 'تحرّك' }, { keys: ['الفأرة'], action: 'صوّب' }, { keys: ['انقر'], action: 'أطلق الطلاء' }, { keys: ['مسافة'], action: 'قفز' }] },
   { slug: 'typing-test', title: 'أصابع البرق', en: 'Lightning Fingers typing test monkeytype keyboard', cats: ['challenge'], players: '1', color: '#ffc400', hot: true,
     blurb: 'اختبر سرعتك في الكتابة بالعربية والإنجليزية وتحدَّ زملاءك!',
     tip: 'اضغط <b>Tab</b> لاختبار جديد، و<b>Alt + Shift</b> لتبديل لغة لوحة المفاتيح بين العربية والإنجليزية.',

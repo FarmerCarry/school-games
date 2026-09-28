@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>ضربة الطلاء</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="gl" tabindex="0"></canvas>
+<div id="ui">
+  <!-- ===================== HUD ===================== -->
+  <div id="hud" hidden>
+    <canvas id="drips"></canvas>
+    <div id="lowhp"></div>
+    <div id="scope" hidden><div class="scope-hole"></div><i class="sl h"></i><i class="sl v"></i><b></b></div>
+    <div id="tags"></div>
+    <div id="xhair"><i class="xl l"></i><i class="xl r"></i><i class="xl t"></i><i class="xl b"></i><b class="dot"></b></div>
+    <div id="hitmark"><i></i><i></i><i></i><i></i></div>
+    <div id="arc"></div>
+    <div id="dmgdir"><i></i><i></i><i></i><i></i></div>
+    <div id="nums"></div>
+    <div id="topbar">
+      <div id="timer">4:00</div>
+      <div id="scorebar"></div>
+    </div>
+    <div id="mapbox"><canvas id="minimap" width="160" height="160"></canvas></div>
+    <div id="feed"></div>
+    <div id="callout"></div>
+    <div id="toast"></div>
+    <div id="bigmsg"></div>
+    <div id="hint"></div>
+    <div id="hpbox">
+      <div class="hp-top"><span class="hp-ico">&#10084;</span><span id="hpNum">100</span></div>
+      <div class="bar"><i id="hpBar"></i></div>
+    </div>
+    <div id="ammobox">
+      <div id="wpnName">رشّاش الفقاعات</div>
+      <div class="ammo"><span id="ammoNum">30</span><span class="res">/ <span id="ammoRes">150</span></span></div>
+      <div id="slots"><span class="slot" data-w="0">1</span><span class="slot" data-w="1">2</span><span class="slot" data-w="2">3</span><span class="slot bal"><span class="bl-ico"></span><span id="balN">2</span></span></div>
+    </div>
+    <div id="powerBox" hidden><span class="star">&#9733;</span> طلاء خارق &times;2 <b id="powT">12</b></div>
+    <div id="dead" hidden>
+      <div class="dead-t">تلطّخت!</div>
+      <div id="deadBy"></div>
+      <div class="dead-n">تعود بعد <b id="deadN">2</b></div>
+    </div>
+    <div id="lockHint" hidden>انقر داخل اللعبة لتثبيت الفأرة</div>
+    <div id="board" hidden></div>
+  </div>
+
+  <!-- ===================== TITLE ===================== -->
+  <section id="title" class="screen">
+    <div class="wallet"><span class="coin"></span><b id="tCoins">0</b></div>
+    <div class="lvl"><span>المستوى <b id="tLevel">1</b></span><div class="xpbar"><i id="tXp"></i></div></div>
+    <div class="tpanel">
+      <div class="logo"><span class="l1">ضربة</span><span class="l2">الطلاء</span></div>
+      <div class="tagline">معركة طلاء ثلاثية الأبعاد! صوّب، لطّخ، واربح!</div>
+      <div class="playrow"><button id="playBtn" class="sg-btn play" type="button">&#9654; العب</button><span class="orpress">أو اضغط <span class="sg-key">Enter</span></span></div>
+      <div class="opt-h">طريقة اللعب</div>
+      <div class="seg" id="modeSeg">
+        <button type="button" data-v="ffa">&#127919; الكل ضد الكل</button>
+        <button type="button" data-v="team">&#129309; فرق 5 ضد 5</button>
+      </div>
+      <div class="opt-h">الساحة</div>
+      <div class="maps" id="mapSeg"></div>
+      <div class="opt-h">الصعوبة</div>
+      <div class="seg" id="diffSeg">
+        <button type="button" data-v="0">&#128578; سهل</button>
+        <button type="button" data-v="1">&#128526; عادي</button>
+        <button type="button" data-v="2">&#128293; صعب</button>
+      </div>
+      <div class="trow">
+        <button id="lockerBtn" class="sg-btn secondary" type="button">&#127912; الخزانة</button>
+        <button id="setBtn" class="sg-btn secondary" type="button">&#9881;&#65039; الإعدادات</button>
+        <button id="howBtn" class="sg-btn secondary" type="button">&#10067; كيف ألعب</button>
+      </div>
+    </div>
+    <div class="records" id="records"></div>
+  </section>
+
+  <!-- ===================== LOCKER ===================== -->
+  <section id="locker" class="screen" hidden>
+    <div class="lpanel panel">
+      <div class="lhead">
+        <button id="lBack" class="sg-btn secondary small" type="button">&rarr; رجوع</button>
+        <h2>الخزانة</h2>
+        <div class="wallet in"><span class="coin"></span><b id="lCoins">0</b></div>
+      </div>
+      <div class="tabs" id="lTabs">
+        <button type="button" class="tab on" data-t="colors">&#128167; الألوان</button>
+        <button type="button" class="tab" data-t="hats">&#127913; القبعات</button>
+        <button type="button" class="tab" data-t="skins">&#127912; طلاء البخّاخ</button>
+        <button type="button" class="tab" data-t="wpn">&#128166; بخّاخك الأول</button>
+      </div>
+      <div id="lGrid" class="grid"></div>
+      <div class="ltip" id="lTip">اربح العملات في المباريات لتفتح أشياء جديدة!</div>
+    </div>
+  </section>
+
+  <!-- ===================== SETTINGS ===================== -->
+  <section id="settings" class="screen center" hidden>
+    <div class="panel spanel">
+      <h2>الإعدادات</h2>
+      <div class="srow"><label>حساسية الفأرة</label><input id="sSens" type="range" min="0.2" max="3" step="0.05"><b id="sSensV">1.0</b></div>
+      <div class="srow"><label>مجال الرؤية</label><input id="sFov" type="range" min="60" max="95" step="1"><b id="sFovV">72</b></div>
+      <div class="srow"><label>عكس حركة الفأرة للأعلى والأسفل</label><button class="tog" id="sInv" type="button"></button></div>
+      <div class="srow"><label>جودة الرسوميات</label><div class="seg small" id="sQual"><button type="button" data-v="auto">تلقائي</button><button type="button" data-v="high">عالية</button><button type="button" data-v="low">منخفضة</button></div></div>
+      <div class="srow"><label>الموسيقى</label><button class="tog" id="sMus" type="button"></button></div>
+      <div class="srow"><label>أرقام الضرر</label><button class="tog" id="sNums" type="button"></button></div>
+      <div class="srow"><label>اهتزاز الكاميرا عند المشي</label><button class="tog" id="sBob" type="button"></button></div>
+      <div class="snote" id="sNote"></div>
+      <button id="sBack" class="sg-btn go" type="button">تم</button>
+    </div>
+  </section>
+
+  <!-- ===================== HOW TO ===================== -->
+  <section id="howto" class="screen center" hidden>
+    <div class="panel hpanel">
+      <h2>كيف ألعب؟</h2>
+      <div class="hgrid">
+        <div><span dir="ltr"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></span> تحرّك</div>
+        <div><span class="sg-key">الفأرة</span> صوّب</div>
+        <div><span class="sg-key">انقر</span> أطلق الطلاء</div>
+        <div><span class="sg-key">مسافة</span> اقفز</div>
+        <div><span class="sg-key">Shift</span> اركض بسرعة</div>
+        <div><span dir="ltr"><span class="sg-key">1</span><span class="sg-key">2</span><span class="sg-key">3</span></span> أو العجلة: غيّر البخّاخ</div>
+        <div><span class="sg-key">R</span> أعد تعبئة الطلاء</div>
+        <div><span class="sg-key">G</span> أو الزر الأيمن: بالون طلاء</div>
+        <div><span class="sg-key">الزر الأيمن</span> مع القنّاص: تكبير</div>
+        <div><span class="sg-key">Tab</span> جدول النتائج</div>
+        <div><span dir="ltr"><span class="sg-key">P</span><span class="sg-key">Esc</span></span> استراحة</div>
+        <div><span class="sg-key">M</span> الصوت</div>
+      </div>
+      <div class="htips">
+        <div>&#127919; الإصابة في الرأس تلطّخ أسرع!</div>
+        <div><span class="pk hp">&#10084;</span> القلب يعيد صحتك &nbsp; <span class="pk am"><svg viewBox="0 0 24 24" width="0.95em" height="0.95em" aria-hidden="true" style="vertical-align:-0.12em"><path d="M4.5 8.5h15l-1.7 11.7a2.2 2.2 0 0 1-2.2 1.8H8.4a2.2 2.2 0 0 1-2.2-1.8z" fill="#fff"/><path d="M5 8.5c0-3.2 3.2-5.5 7-5.5s7 2.3 7 5.5" fill="none" stroke="#fff" stroke-width="1.9"/><path d="M4.9 8.5h14.2l-.4 3c-1.8 1.1-2.9-.6-4.5.6-1.4 1.1-2.4 2.8-3.9.5-1-1.5-2.5-.6-4.9-.9z" fill="#ff3d8b"/></svg></span> علبة الطلاء تملأ ذخيرتك &nbsp; <span class="pk pw">&#9733;</span> النجمة: طلاء خارق &times;2</div>
+        <div>&#128737;&#65039; بعد عودتك تحميك فقاعة لثانيتين.</div>
+      </div>
+      <button id="hBack" class="sg-btn go" type="button">فهمت!</button>
+    </div>
+  </section>
+
+  <!-- ===================== PAUSE ===================== -->
+  <section id="pause" class="screen center" hidden>
+    <div class="panel ppanel">
+      <h2>استراحة</h2>
+      <button id="resumeBtn" class="sg-btn go" type="button">&#9654; تابع</button>
+      <button id="restartBtn" class="sg-btn secondary" type="button">ابدأ من جديد</button>
+      <button id="pSetBtn" class="sg-btn secondary" type="button">الإعدادات</button>
+      <button id="pMenuBtn" class="sg-btn secondary" type="button">القائمة</button>
+      <div class="tiny">انقر في أي مكان أو اضغط <span class="sg-key">P</span> للمتابعة</div>
+      <div class="tiny warn" id="pLockMsg" hidden>انقر مرة أخرى لتثبيت الفأرة</div>
+    </div>
+  </section>
+
+  <!-- ===================== RESULTS ===================== -->
+  <section id="over" class="screen" hidden>
+    <div id="podTags"></div>
+    <div class="opanel panel">
+      <div id="oTitle">فزت!</div>
+      <div id="oSub"></div>
+      <div id="oBest" hidden>&#9733; رقم قياسي جديد! &#9733;</div>
+      <div class="ostats" id="oStats"></div>
+      <div class="oreward">
+        <div class="ocoins"><span class="coin"></span> <b id="oCoins">+0</b></div>
+        <div class="oxp"><span>المستوى <b id="oLevel">1</b></span><div class="xpbar"><i id="oXp"></i></div><span id="oXpT"></span></div>
+      </div>
+      <div id="oLevelUp" hidden></div>
+      <div class="btns">
+        <button id="againBtn" class="sg-btn go" type="button">&#9654; العب مجددًا</button>
+        <button id="oMenuBtn" class="sg-btn secondary" type="button">القائمة</button>
+      </div>
+      <div class="tiny">اضغط <span class="sg-key">Enter</span> أو <span class="sg-key">R</span> لتلعب مجددًا</div>
+    </div>
+  </section>
+</div>
+<button id="pauseBtn" class="sg-mute" type="button" aria-label="إيقاف مؤقت" hidden><svg viewBox="0 0 20 20" width="18" height="18"><rect x="4" y="3" width="4.2" height="14" rx="1.2" fill="#fff"/><rect x="11.8" y="3" width="4.2" height="14" rx="1.2" fill="#fff"/></svg></button>
+<div id="nogl" hidden>لعبة ضربة الطلاء تحتاج إلى رسوميات ثلاثية الأبعاد (WebGL)، وهي مُطفأة في هذا المتصفح.</div>
+
+<script src="../../lib/three/three.min.js"></script>
+<script src="../../shared/kit.js"></script>
+<script src="world.js"></script>
+<script src="maps.js"></script>
+<script src="models.js"></script>
+<script src="audio.js"></script>
+<script src="fx.js"></script>
+<script src="bots.js"></script>
+<script src="core.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>

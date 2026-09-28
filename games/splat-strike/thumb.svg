@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="75%">
+      <stop offset="0" stop-color="#8fe0ff"/>
+      <stop offset="0.55" stop-color="#5aa8ff"/>
+      <stop offset="1" stop-color="#4b47c8"/>
+    </radialGradient>
+    <radialGradient id="body" cx="38%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#ff9fcb"/>
+      <stop offset="0.6" stop-color="#ff5fa2"/>
+      <stop offset="1" stop-color="#d93a82"/>
+    </radialGradient>
+    <radialGradient id="belly" cx="45%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#ffe3f0"/>
+      <stop offset="1" stop-color="#ffc0dc"/>
+    </radialGradient>
+    <radialGradient id="tank" cx="35%" cy="30%" r="70%">
+      <stop offset="0" stop-color="#fff7b0"/>
+      <stop offset="0.5" stop-color="#ffe14d"/>
+      <stop offset="1" stop-color="#e0a800"/>
+    </radialGradient>
+    <linearGradient id="gun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6fd6ff"/>
+      <stop offset="1" stop-color="#2b8fe0"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <!-- floor -->
+  <path d="M0 318 Q200 290 400 318 L400 400 L0 400 Z" fill="#7ccd5c"/>
+  <path d="M0 336 Q200 312 400 336 L400 400 L0 400 Z" fill="#6cc24a"/>
+  <!-- background paint splats -->
+  <g fill="#ffd23f" opacity="0.95">
+    <path d="M330 120c14-10 34-2 36 14 16 2 22 22 8 32 6 16-10 28-24 20-8 14-30 12-34-4-16 2-24-18-12-28-8-14 10-30 26-34z"/>
+    <circle cx="378" cy="104" r="6"/><circle cx="316" cy="186" r="5"/><circle cx="390" cy="160" r="4"/>
+  </g>
+  <g fill="#3ddc84" opacity="0.9">
+    <path d="M40 150c10-12 30-8 32 6 14 0 18 18 6 26 4 14-12 22-22 14-10 10-28 4-26-10-14-2-16-20-4-26-4-12 4-14 14-10z"/>
+    <circle cx="22" cy="140" r="5"/><circle cx="84" cy="196" r="4"/>
+  </g>
+  <g fill="#b06bff" opacity="0.85">
+    <path d="M330 262c10-8 26-2 26 10 12 2 14 16 4 22 2 12-10 18-18 12-8 8-22 2-20-10-12-2-12-16-2-22-2-8 4-14 10-12z"/>
+  </g>
+  <!-- paint blob flying + splat -->
+  <path d="M292 214 Q330 204 372 196" stroke="#ff5fa2" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.45"/>
+  <ellipse cx="352" cy="199" rx="20" ry="13" fill="#ff5fa2" transform="rotate(-12 352 199)"/>
+  <circle cx="345" cy="194" r="4" fill="#ffc0dc"/>
+  <circle cx="386" cy="186" r="5" fill="#ff5fa2"/><circle cx="378" cy="214" r="4" fill="#ff5fa2"/>
+  <!-- shadow -->
+  <ellipse cx="170" cy="338" rx="92" ry="16" fill="#2f7a2a" opacity="0.35"/>
+  <!-- feet -->
+  <ellipse cx="136" cy="330" rx="30" ry="15" fill="#d93a82" stroke="#1b1f4b" stroke-width="5"/>
+  <ellipse cx="200" cy="330" rx="30" ry="15" fill="#d93a82" stroke="#1b1f4b" stroke-width="5"/>
+  <!-- body -->
+  <ellipse cx="168" cy="262" rx="88" ry="74" fill="url(#body)" stroke="#1b1f4b" stroke-width="6"/>
+  <ellipse cx="160" cy="276" rx="52" ry="46" fill="url(#belly)"/>
+  <!-- head -->
+  <circle cx="160" cy="160" r="70" fill="url(#body)" stroke="#1b1f4b" stroke-width="6"/>
+  <!-- cap -->
+  <path d="M96 138 Q100 72 162 70 Q222 72 226 136 Z" fill="#ff4d4d" stroke="#1b1f4b" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M188 128 Q240 118 262 138 Q232 146 200 142 Z" fill="#d93636" stroke="#1b1f4b" stroke-width="5" stroke-linejoin="round"/>
+  <circle cx="162" cy="72" r="8" fill="#fff" stroke="#1b1f4b" stroke-width="4"/>
+  <!-- goggles strap + lenses -->
+  <path d="M92 146 Q160 130 228 144 L228 160 Q160 146 92 162 Z" fill="#ffd23f" stroke="#1b1f4b" stroke-width="5" stroke-linejoin="round"/>
+  <g stroke="#1b1f4b" stroke-width="5">
+    <circle cx="136" cy="150" r="17" fill="#8fe8ff"/>
+    <circle cx="184" cy="150" r="17" fill="#8fe8ff"/>
+  </g>
+  <circle cx="130" cy="144" r="5" fill="#fff"/><circle cx="178" cy="144" r="5" fill="#fff"/>
+  <!-- eyes -->
+  <ellipse cx="140" cy="186" rx="17" ry="20" fill="#fff" stroke="#1b1f4b" stroke-width="4"/>
+  <ellipse cx="184" cy="186" rx="17" ry="20" fill="#fff" stroke="#1b1f4b" stroke-width="4"/>
+  <circle cx="146" cy="190" r="10" fill="#1d1f33"/><circle cx="190" cy="190" r="10" fill="#1d1f33"/>
+  <circle cx="150" cy="185" r="4" fill="#fff"/><circle cx="194" cy="185" r="4" fill="#fff"/>
+  <!-- cheeks + smile -->
+  <ellipse cx="118" cy="210" rx="11" ry="7" fill="#ff8fb0"/>
+  <ellipse cx="206" cy="210" rx="11" ry="7" fill="#ff8fb0"/>
+  <path d="M146 212 Q164 232 182 212" fill="#7a1f3d" stroke="#1b1f4b" stroke-width="4" stroke-linejoin="round"/>
+  <!-- toy blaster -->
+  <g stroke="#1b1f4b" stroke-width="5" stroke-linejoin="round">
+    <rect x="178" y="236" width="96" height="38" rx="14" fill="url(#gun)"/>
+    <rect x="200" y="236" width="14" height="38" fill="#ffffff" stroke-width="0"/>
+    <rect x="232" y="236" width="14" height="38" fill="#ffffff" stroke-width="0"/>
+    <rect x="178" y="236" width="96" height="38" rx="14" fill="none"/>
+    <rect x="272" y="244" width="26" height="22" rx="6" fill="#ff5fa2"/>
+    <rect x="294" y="240" width="12" height="30" rx="5" fill="#ffd23f"/>
+    <rect x="198" y="272" width="22" height="30" rx="8" fill="#2b2f4a"/>
+    <circle cx="232" cy="222" r="24" fill="url(#tank)"/>
+    <rect x="224" y="192" width="16" height="10" rx="3" fill="#ff5fa2"/>
+  </g>
+  <circle cx="224" cy="214" r="7" fill="#fff" opacity="0.8"/>
+  <!-- mittens -->
+  <circle cx="200" cy="292" r="17" fill="#ff5fa2" stroke="#1b1f4b" stroke-width="5"/>
+  <circle cx="258" cy="280" r="16" fill="#ff5fa2" stroke="#1b1f4b" stroke-width="5"/>
+  <!-- title -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl" stroke="#1b1f4b" stroke-linejoin="round" paint-order="stroke" transform="rotate(-5 200 60)">
+    <text x="300" y="76" font-size="62" fill="#ff5fa2" stroke-width="16">ضربة</text>
+    <text x="126" y="84" font-size="62" fill="#ffd23f" stroke-width="16">الطلاء</text>
+  </g>
+</svg>
