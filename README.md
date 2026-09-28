@@ -9,11 +9,12 @@ games are in Arabic, laid out right-to-left.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores and progress are saved in each browser (localStorage) only.
 
-## The games (27)
+## The games (28)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
 | أصابع البرق | Lightning Fingers (typing test, English + Arabic) | 1 | تحديات |
+| ضربة الطلاء | Splat Strike (3D paint-blaster arena vs bots) | 1 | تصويب، تحدي الروبوتات |
 | عدّاء السكة | Rail Rush | 1 | جري |
 | منحدر النيون | Neon Slope | 1 | جري، أركيد |
 | نفق السرعة | Tunnel Blitz | 1 | جري، أركيد |
@@ -47,6 +48,12 @@ Every game saves best scores and unlocks in the browser, and has a title screen,
 sentences, in English or Arabic, with the same WPM/accuracy formulas. For a class race, click
 **تحدٍّ للصف**, pick a test and write the 4-digit code on the board; every student who enters that
 code gets exactly the same words. Tab starts a new test.
+
+**ضربة الطلاء (shooter)** is a first-person arena game in the style of Krunker / Shell Shockers,
+made school-friendly: toy paint blasters, cute round "splat buddies", and paint splats instead of
+anything violent. Free-for-all or 5 v 5 teams against bots (easy / normal / hard) on three maps,
+with coins to unlock colours and hats. Click the game to capture the mouse; Esc gives it back
+and pauses.
 
 ## Putting it online (GitHub Pages, free)
 
