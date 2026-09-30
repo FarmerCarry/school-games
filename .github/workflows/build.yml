@@ -36,8 +36,6 @@ jobs:
         run: npx playwright install --with-deps --no-shell chromium
       - name: Test build and harness helpers
         run: npm run test:tooling
-      - name: Diagnose the first CI-only smoke failure
-        run: npm run check -- tunnel-blitz
       - name: Smoke-test all source games
         run: npm run check
       - name: Test source gameplay regressions
