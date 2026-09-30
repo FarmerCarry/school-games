@@ -814,13 +814,22 @@
     if (capsEl.hidden === on) capsEl.hidden = !on;
   }
   window.addEventListener('keyup', updateCaps, true);
+  Kit.keys.captureTab(function () { return !modal && !kbnav && (screen === 'test' || screen === 'results'); });
   function onKey(e) {
     var k = e.key;
     if (k == null) return;
+    if (Kit.keys.isNativeTarget(e.target)) {
+      if (k === 'Escape' && modal) { modalKey(e); return; }
+      if (k !== 'Escape' || !Kit.keys.acceptsEvent(e)) {
+        if (kbnav && /^Arrow/.test(k)) navKey(e);
+        return;
+      }
+    }
+    if (k === 'Tab' && !Kit.keys.acceptsEvent(e)) return;
     stroke = { swallow: true, sounded: false, lamAlef: false };
     Kit.audio.unlock();
     updateCaps(e);
-    if (k === 'Tab') e.preventDefault(); // never let Tab move the focus out of the game frame
+    if (k === 'Tab') e.preventDefault(); // restart shortcut on the test/results surface
     if (modal) { modalKey(e); return; }
     if (e.isComposing || k === 'Process' || k === 'Dead') return;
     if (!unfocusEl.hidden) {
@@ -869,6 +878,7 @@
   window.addEventListener('keydown', onKey, true);
   // Fallback for keys whose keydown had no usable e.key (see "stroke" above).
   window.addEventListener('keypress', function (e) {
+    if (Kit.keys.isNativeTarget(e.target)) return;
     if (e.defaultPrevented) return;
     var k = e.key, lamAlef = false;
     if (!k || !isText(k)) {

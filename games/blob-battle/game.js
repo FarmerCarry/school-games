@@ -495,6 +495,7 @@
               big.m += sm.m; big.r = radius(big.m); big.wob += 0.1; big.mouth = 0.6;
               sm.dead = true; anyDead = true;
               if (o === player) sfx.merge();
+              if (a.dead) break; // its mass now belongs to b; do not merge it again
             } else if (d < (a.r + b.r) * 1.6) {
               var pull = Math.min(d, 90 * dt);
               a.x += dx / d * pull * (b.m / (a.m + b.m)); a.y += dy / d * pull * (b.m / (a.m + b.m));
@@ -516,7 +517,8 @@
   var pelletSndT = 0, pelletStreak = 0;
   function eatPellets() {
     for (var ci = 0; ci < cells.length; ci++) {
-      var c = cells[ci], r = c.r, r2 = r * r;
+      var c = cells[ci]; if (c.dead) continue;
+      var r = c.r, r2 = r * r;
       var x0 = clamp(Math.floor((c.x - r) / BS), 0, GW - 1), x1 = clamp(Math.floor((c.x + r) / BS), 0, GW - 1);
       var y0 = clamp(Math.floor((c.y - r) / BS), 0, GW - 1), y1 = clamp(Math.floor((c.y + r) / BS), 0, GW - 1);
       var got = 0;
@@ -579,7 +581,7 @@
       if (e.dead) continue;
       for (var j = 0; j < cells.length; j++) {
         var c = cells[j];
-        if (c.m < 20 || (c.o === e.o && T - e.t < 0.35)) continue;
+        if (c.dead || c.m < 20 || (c.o === e.o && T - e.t < 0.35)) continue;
         var ddx = e.x - c.x, ddy = e.y - c.y, lim = c.r - e.r * 0.3;
         if (ddx * ddx + ddy * ddy < lim * lim) {
           c.m += e.m; c.r = radius(c.m); c.mouth = 1; e.dead = true;
@@ -989,15 +991,15 @@
     ARENAS.forEach(function (a, i) {
       var un = arenaUnlocked(i);
       var b = document.createElement('button');
-      b.type = 'button'; b.tabIndex = -1;
+      b.type = 'button';
       b.className = 'arena' + (i === arenaIdx ? ' sel' : '') + (un ? '' : ' locked');
       b.style.setProperty('--ac', a.theme.border);
       var best = stats['best' + (i + 1)];
       var sub = un ? (best > 0 ? 'أفضل حجم: ' + Kit.fmt(best) : 'جديدة! جرّبها') : '🔒 اكبَر حتى ' + a.need.m + ' في ' + ARENAS[a.need.a].name;
       b.innerHTML = '<span class="adot">' + (un ? (i + 1) : '🔒') + '</span><span class="atx"><b>' + a.name +
         ' <span class="diff">' + a.diff + '</span></b><small>' + sub + '</small></span>';
-      b.addEventListener('click', function () {
-        b.blur();
+      b.addEventListener('click', function (e) {
+        if (e.detail > 0) b.blur();
         if (!arenaUnlocked(i)) { sfx.ouch(); return; }
         sfx.click();
         if (arenaIdx !== i) { arenaIdx = i; store.set('arena', i); buildWorld(false); }
@@ -1020,7 +1022,7 @@
     BB.SKINS.forEach(function (s) {
       var un = skinUnlocked(s);
       var b = document.createElement('button');
-      b.type = 'button'; b.tabIndex = -1;
+      b.type = 'button';
       b.className = 'sk' + (un ? '' : ' locked') + (s === selSkin ? ' sel' : '');
       var c2 = document.createElement('canvas'); c2.width = c2.height = 120;
       drawSkinIcon(c2, s, !un);
@@ -1031,8 +1033,8 @@
         $('skinInfo').innerHTML = '<b>' + esc(s.name) + '</b> — ' + (un ? '<span class="have">' + (s === selSkin ? 'هذا شكلك ✔' : 'انقر لتختاره') + '</span>' : '<span class="req">🔒 ' + esc(skinReq(s)) + '</span>');
       };
       b.addEventListener('mouseenter', info);
-      b.addEventListener('click', function () {
-        b.blur();
+      b.addEventListener('click', function (e) {
+        if (e.detail > 0) b.blur();
         if (!un) { sfx.ouch(); info(); return; }
         selSkin = s; browse = s.index; store.set('skin', s.id); sfx.click();
         buildSkinGrid(); info();
@@ -1051,7 +1053,7 @@
 
   function btn(id, fn) {
     var b = $(id);
-    b.addEventListener('click', function (e) { e.stopPropagation(); b.blur(); A.unlock(); fn(); });
+    b.addEventListener('click', function (e) { e.stopPropagation(); if (e.detail > 0) b.blur(); A.unlock(); fn(); });
   }
   btn('btnPlay', function () { if (state === 'title') { sfx.click(); startGame(); } });
   btn('skPrev', function () { browseSkin(-1); });

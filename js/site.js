@@ -19,6 +19,7 @@
 
   /* ------------------------------------------------------------ strings */
   var T = {
+    exitHint: 'اضغط <b>Shift + Tab</b> من مساحة اللعب للعودة إلى أزرار اللعبة خارج الإطار.',
     home: 'الرئيسية',
     hot: 'الأكثر حماسًا الآن',
     recent: 'تابع اللعب',
@@ -698,7 +699,7 @@
           '</div>' +
         '</div>' +
         '<aside class="play-side" id="playSide">' + controlsHTML(g) +
-          '<div class="card tip"><h3>💡 ' + T.tip + '</h3><p>' + T.tip1 + '</p><p>' + T.tip2 + '</p><p>' + (g.tip || T.tip3) + '</p></div>' +
+          '<div class="card tip"><h3>💡 ' + T.tip + '</h3><p>' + T.tip1 + ' ' + T.exitHint + '</p><p>' + T.tip2 + '</p><p>' + (g.tip || T.tip3) + '</p></div>' +
         '</aside>' +
       '</div>' +
       sectionHTML('💖', T.more, gridHTML(more));
@@ -706,8 +707,10 @@
 
   /* -------------------------------------------------------- play logic */
   var current = null;   // current play slug
+  var portalFocus = false;
   function frameEl() { return $('#stage iframe'); }
   function focusGame() {
+    if (portalFocus) return;
     var f = frameEl();
     if (!f) return;
     var a = document.activeElement;
@@ -715,7 +718,22 @@
     try { f.focus({ preventScroll: true }); } catch (e) { try { f.focus(); } catch (e2) { /* ignore */ } }
     try { if (f.contentWindow) f.contentWindow.focus(); } catch (e) { /* ignore */ }
   }
+  function activateGame() { portalFocus = false; focusGame(); }
+  function focusPortal() {
+    var target = $('#favBtn') || $('#logo');
+    if (target) {
+      try { target.focus({ preventScroll: true }); } catch (e) { target.focus(); }
+    }
+  }
+  function onGameMessage(e) {
+    var f = frameEl();
+    if (!f || e.source !== f.contentWindow || e.data !== 'sg:focus-portal') return;
+    portalFocus = true;
+    exitFullscreen();
+    focusPortal();
+  }
   function mountFrame(slug) {
+    portalFocus = false;
     var stage = $('#stage');
     if (!stage) return;
     var old = frameEl();
@@ -760,6 +778,7 @@
   function toggleFullscreen() {
     var stage = $('#stage');
     if (!stage) return;
+    portalFocus = false;
     try {
       if (isFullscreen()) { exitFullscreen(); return; }
       var fn = stage.requestFullscreen || stage.webkitRequestFullscreen;
@@ -779,7 +798,7 @@
       $('.pb-lbl', b).textContent = lbl;
       b.title = lbl;
     }
-    setTimeout(focusGame, 50);
+    setTimeout(function () { if (portalFocus) focusPortal(); else focusGame(); }, 50);
   }
   function heartBurst(btn) {
     var r = btn.getBoundingClientRect();
@@ -799,8 +818,8 @@
     pushRecent(slug);
     mountFrame(slug);
     var stage = $('#stage');
-    stage.addEventListener('mousedown', focusGame);
-    stage.addEventListener('click', focusGame);
+    stage.addEventListener('mousedown', activateGame);
+    stage.addEventListener('click', activateGame);
     $('#favBtn').addEventListener('click', function (e) {
       var on = toggleFav(slug);
       var b = this;
@@ -812,7 +831,7 @@
       b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
       if (on) { heartBurst(b); toast(T.favAdded); } else toast(T.favRemoved);
       // After a mouse click the keys go back to the game (so Space doesn't press this button again).
-      if (e.detail) focusGame();
+      if (e.detail) activateGame();
     });
     $('#restartBtn').addEventListener('click', function () {
       var b = this;
@@ -907,12 +926,12 @@
   function onKey(e) {
     var t = e.target;
     var inField = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
-    // A focused button or link keeps Space/Enter for itself (keyboard users).
-    var onControl = t && (t.tagName === 'BUTTON' || t.tagName === 'A') && (e.key === ' ' || e.key === 'Spacebar');
+    // Native controls keep their own keyboard behavior and focus.
+    var onControl = t && t.closest && t.closest('button, a[href], input, textarea, select, [role="button"], [role="slider"]');
     if (current && !inField && !onControl && SCROLL_KEYS[e.key]) {
       // In the play view keys belong to the game, never to page scrolling.
       e.preventDefault();
-      focusGame();
+      activateGame();
       return;
     }
     // "/" focuses the search box (the same key is "ظ" on an Arabic keyboard).
@@ -958,7 +977,7 @@
     if (skip) skip.addEventListener('click', function (e) {
       e.preventDefault();
       var target = current ? $('#favBtn') : $('#app .tile, #app a, #app button');
-      if (current) focusGame();
+      if (current) activateGame();
       else if (target) target.focus();
     });
 
@@ -985,6 +1004,7 @@
     $('#surprise').addEventListener('click', surprise);
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('hashchange', render);
+    window.addEventListener('message', onGameMessage);
     document.addEventListener('fullscreenchange', onFsChange);
     document.addEventListener('webkitfullscreenchange', onFsChange);
     var rt = 0, lastW = 0;

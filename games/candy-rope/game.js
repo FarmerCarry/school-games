@@ -609,6 +609,7 @@
   window.addEventListener('blur', up);
 
   window.addEventListener('keydown', function (e) {
+    if (!Kit.keys.acceptsEvent(e)) return;
     if (e.repeat) return;
     var k = e.code;
     var go = k === 'Enter' || k === 'Space' || k === 'NumpadEnter';
@@ -642,7 +643,7 @@
 
   function btn(id, fn) {
     var b = $(id);
-    b.addEventListener('click', function (e) { e.stopPropagation(); fn(); b.blur(); });
+    b.addEventListener('click', function (e) { e.stopPropagation(); fn(); if (e.detail > 0) b.blur(); });
   }
   btn('tPlay', playPressed);
   btn('tLevels', function () { SFX.click(); openBoxes(); });

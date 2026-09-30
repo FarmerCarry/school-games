@@ -188,7 +188,7 @@
   function show(node, on) { node.hidden = !on; }
   function click(id, fn) {
     var b = $(id);
-    b.addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); DK.snd.ensureMusic(); DK.snd.click(); fn(); b.blur(); });
+    b.addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); DK.snd.ensureMusic(); DK.snd.click(); fn(); if (e.detail > 0) b.blur(); });
   }
   var toastTimer = 0;
   function toast(text, coin) {

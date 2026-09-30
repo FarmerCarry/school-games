@@ -1830,6 +1830,7 @@
   /* ----------------------------------------------------- input */
   var KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', Space: 'up', ArrowDown: 'down', KeyS: 'down' };
   window.addEventListener('keydown', function (e) {
+    if (!Kit.keys.acceptsEvent(e)) return;
     if (e.repeat) return;
     var code = e.code;
     if (code === 'Space' || code === 'Enter') e.preventDefault();
@@ -1891,7 +1892,7 @@
       e.stopPropagation();
       sfx.click();
       fn();
-      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      if (e.detail > 0 && document.activeElement && document.activeElement.blur) document.activeElement.blur();
     });
   }
   btn('playBtn', startRun);
@@ -1905,13 +1906,13 @@
   btn('againBtn', function () { if (performance.now() - overAnim.shownAt > 250) startRun(); });
   btn('oShop', function () { goTitle(); openShop(); });
   btn('oMenu', goTitle);
-  $('pauseBtn').addEventListener('click', function (e) { e.stopPropagation(); pause(); this.blur(); });
+  $('pauseBtn').addEventListener('click', function (e) { e.stopPropagation(); pause(); if (e.detail > 0) this.blur(); });
   $('pauseBtn').addEventListener('pointerdown', function (e) { e.stopPropagation(); });
   document.querySelectorAll('.tab').forEach(function (t) {
     t.addEventListener('click', function () { sfx.click(); shopTab = t.getAttribute('data-tab'); preview = null; runner.setOutfit(outfitById(save.outfit)); runner.board.visible = shopTab === 'boards'; if (shopTab === 'boards') runner.setBoard(boardById(save.board)); renderShop(); });
   });
   $('shopBody').addEventListener('click', shopClick);
-  document.querySelectorAll('.sg-btn').forEach(function (b) { b.setAttribute('tabindex', '-1'); b.addEventListener('mouseenter', function () { sfx.hover(); }); });
+  document.querySelectorAll('.sg-btn').forEach(function (b) { b.addEventListener('mouseenter', function () { sfx.hover(); }); });
   function openMissions() { S.menu = 'missions'; refreshMissionsScreen(); show('missions'); }
   function closeMissions() { S.menu = 'title'; refreshTitle(); show('title'); }
 

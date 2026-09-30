@@ -35,11 +35,8 @@
     return Kit.pick(pool).id;
   }
 
-  // Space/Enter must not also "click" a focused DOM button (we handle keys ourselves).
-  window.addEventListener('keydown', function (e) {
-    if ((e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') && e.target && e.target.tagName === 'BUTTON') e.preventDefault();
-  }, true);
-  ui.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) b.blur(); });
+  // Mouse clicks return focus to the game; keyboard activation keeps button focus.
+  ui.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b && e.detail > 0) b.blur(); });
 
   /* -------------------------------------------------------- keyboard nav */
   var focusEl = null;

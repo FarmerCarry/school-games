@@ -960,6 +960,7 @@
   }
 
   window.addEventListener('keydown', function (e) {
+    if (!Kit.keys.acceptsEvent(e)) return;
     if (e.repeat) return;
     var c = e.code;
     if (mode === 'title') {
@@ -986,10 +987,10 @@
       clickPizza(CX + K.rand(-R * 0.5, R * 0.5), CY + K.rand(-R * 0.5, R * 0.3));
     }
   });
-  // stop buttons from keeping focus (so Space never re-triggers them)
+  // Mouse clicks return focus to the game; keyboard activation keeps button focus.
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('button');
-    if (b) b.blur();
+    if (b && e.detail > 0) b.blur();
   });
 
   $('bPlay').addEventListener('click', startGame);

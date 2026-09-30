@@ -1399,7 +1399,7 @@
   function playNext() { startLevel(nextLevelIndex()); }
 
   function btn(id, fn) {
-    $(id).addEventListener('click', function (e) { e.preventDefault(); A.unlock(); sfx.click(); fn(); this.blur(); });
+    $(id).addEventListener('click', function (e) { e.preventDefault(); A.unlock(); sfx.click(); fn(); if (e.detail > 0) this.blur(); });
   }
   btn('btnPlay', playNext);
   btn('btnLevels', function () { openLevels(worldOf(Math.min(save.unlocked, LEVELS.length) - 1)); });

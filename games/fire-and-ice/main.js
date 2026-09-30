@@ -545,6 +545,8 @@
     ptr.endFrame();
   }
 
+  K.captureTab(function () { return mode === 'play' && world && world.state === 'play' && save.solo; });
+
   function updatePlay(dt) {
     var w = world;
     if (w.state === 'play') {
@@ -973,7 +975,7 @@
 
   /* ---------------------------------------------------------- wiring */
   function on(id, fn) {
-    $(id).addEventListener('click', function (e) { e.stopPropagation(); A.unlock(); fn(); this.blur(); });
+    $(id).addEventListener('click', function (e) { e.stopPropagation(); A.unlock(); fn(); if (e.detail > 0) this.blur(); });
   }
   on('playBtn', function () { SFX.click(); startLevel(continueLevel()); });
   on('mapBtn', function () { SFX.click(); goMap(); });

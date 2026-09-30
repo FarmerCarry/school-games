@@ -115,7 +115,7 @@
     mouse.down = false;
     sfx.boostHum(false);
     showScreen('pause');
-    $('pBest').textContent = Kit.fmt(Math.max(stats.bestLen, W.player.mass));
+    $('pBest').textContent = Kit.fmt(Math.max(stats.bestLen, Math.floor(W.player.peakMass)));
     $('pLen').textContent = Kit.fmt(W.player.mass);
   }
   function resume() {
@@ -129,7 +129,7 @@
   function projected() {
     var r = G.run, p = W.player, st = {};
     for (var k2 in stats) st[k2] = stats[k2];
-    var len = r.deathLen || Math.floor(p.mass);
+    var len = Math.floor(p.peakMass);
     st.bestLen = Math.max(stats.bestLen, len);
     st.totalKills = stats.totalKills + r.kills;
     st.bestKills = Math.max(stats.bestKills, r.kills);
@@ -377,7 +377,8 @@
     for (var l = 0; l < 2; l++) for (i = 0; i < lists[l].length; i++) before[lists[l][i].id] = unlocked(lists[l][i]);
     var oldBest = stats.bestLen;
     commitRun();
-    var newBest = r.deathLen > oldBest && stats.games > 1;
+    var peakLen = Math.floor(W.player.peakMass);
+    var newBest = peakLen > oldBest && stats.games > 1;
 
     G.state = 'over'; G.overT = 0;
     showScreen('over');
@@ -390,8 +391,8 @@
     $('oTime').textContent = fmtTime(r.t);
     $('oBestV').textContent = Kit.fmt(stats.bestLen);
     // "so close!" hook when the run nearly beat the record
-    var gap = oldBest - r.deathLen;
-    $('oClose').textContent = !newBest && oldBest > 0 && gap > 0 && r.deathLen >= oldBest * 0.6 ? 'ينقصك ' + Kit.fmt(gap) + ' فقط!' : '';
+    var gap = oldBest - peakLen;
+    $('oClose').textContent = !newBest && oldBest > 0 && gap > 0 && peakLen >= oldBest * 0.6 ? 'ينقصك ' + Kit.fmt(gap) + ' فقط!' : '';
 
     // new unlocks
     var ul = $('oUnlocks'); ul.innerHTML = '';
@@ -469,8 +470,8 @@
         bar.appendChild(fill); b.appendChild(bar);
         var lock = document.createElement('div'); lock.className = 'lock'; b.appendChild(lock);
       }
-      b.addEventListener('click', function () {
-        b.blur();
+      b.addEventListener('click', function (e) {
+        if (e.detail > 0) b.blur();
         if (!unlocked(sk)) { b.classList.remove('nope'); void b.offsetWidth; b.classList.add('nope'); sfx.warn(); return; }
         prefs.skin = sk.id; savePrefs(); sfx.select();
         skinCards.forEach(function (x) { x.el.classList.toggle('sel', x.id === prefs.skin); });
@@ -491,8 +492,8 @@
         var lk = document.createElement('div'); lk.className = 'req'; lk.textContent = SA.reqText(ey.req); b.appendChild(lk);
         var lock = document.createElement('div'); lock.className = 'lock'; b.appendChild(lock);
       }
-      b.addEventListener('click', function () {
-        b.blur();
+      b.addEventListener('click', function (e) {
+        if (e.detail > 0) b.blur();
         if (!unlocked(ey)) { b.classList.remove('nope'); void b.offsetWidth; b.classList.add('nope'); sfx.warn(); return; }
         prefs.eyes = ey.id; savePrefs(); sfx.select();
         eyeCards.forEach(function (x) { x.el.classList.toggle('sel', x.id === prefs.eyes); });
@@ -522,7 +523,7 @@
   /* ---------------------------------------------------------- DOM wiring */
   function onBtn(id, fn) {
     var b = $(id);
-    b.addEventListener('click', function (e) { e.stopPropagation(); b.blur(); Kit.audio.unlock(); fn(); });
+    b.addEventListener('click', function (e) { e.stopPropagation(); if (e.detail > 0) b.blur(); Kit.audio.unlock(); fn(); });
   }
   onBtn('btnPlay', startGame);
   onBtn('btnSkins', function () { openSkins('title'); });

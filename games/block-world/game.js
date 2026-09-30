@@ -287,6 +287,7 @@
   // Creative flight: double tap Space. Measured on real key-press times so it also works when frames are slow.
   var flyTap = false, lastSpaceMs = -1e9;
   window.addEventListener('keydown', function (e) {
+    if (!Kit.keys.acceptsEvent(e)) return;
     if (e.code !== 'Space' || e.repeat || G.mode !== 'play' || G.gm !== 'creative') return;
     var now = (window.performance && performance.now) ? performance.now() : Date.now();
     if (now - lastSpaceMs < 350) { flyTap = true; lastSpaceMs = -1e9; } else lastSpaceMs = now;
@@ -1367,7 +1368,7 @@
   $('resumeBtn').onclick = function () { resume(); };
   $('homeBtn').onclick = function () { var sp = spawnPoint(); P.x = sp.x; P.y = sp.y; P.vx = P.vy = 0; P.flying = false; resume(); SND.grow(); burst(P.x + 0.35, P.y + 1, ['#ffffff', '#bfe9ff', '#ffd93d'], 20, 6, 0.2); };
   $('quitBtn').onclick = function () { saveGame(); toTitle(); };
-  pauseBtn.addEventListener('click', function (e) { e.stopPropagation(); if (G.mode === 'play') pause(); else if (G.mode === 'pause') resume(); pauseBtn.blur(); });
+  pauseBtn.addEventListener('click', function (e) { e.stopPropagation(); if (G.mode === 'play') pause(); else if (G.mode === 'pause') resume(); if (e.detail > 0) pauseBtn.blur(); });
   pauseBtn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
   function renderPause() {
     var qs = questsFor(G.gm), html = '';
@@ -1380,6 +1381,7 @@
     $('pauseName').textContent = G.name + ' · ' + (G.gm === 'creative' ? 'إبداع' : 'مغامرة');
   }
   window.addEventListener('keydown', function (e) {
+    if (!Kit.keys.acceptsEvent(e)) return;
     if (G.mode === 'pause' && (e.code === 'KeyP' || e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space') && !e.repeat) { e.preventDefault(); resume(); }
     else if (G.mode === 'master' && (e.code === 'Enter' || e.code === 'Space') && !e.repeat) { e.preventDefault(); closeMaster(); }
     else if (G.mode === 'newworld' && !e.repeat) {

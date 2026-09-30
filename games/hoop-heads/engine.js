@@ -571,7 +571,12 @@
     }
     b.fire = false;
     m.phase = 'score'; m.phaseT = m.demo ? 1.1 : 1.6; m.nextPoss = def.idx;
-    if (att.score >= m.target || m.overtime || (m.timeUp && att.score !== def.score)) { m.ended = true; m.winner = att.idx; m.phaseT = 1.2; slowmo(m, 1.2, 0.35); }
+    var won = att.score >= m.target || m.overtime;
+    if (won || (m.timeUp && att.score !== def.score)) {
+      m.ended = true;
+      m.winner = won || att.score > def.score ? att.idx : def.idx;
+      m.phaseT = 1.2; slowmo(m, 1.2, 0.35);
+    }
     if (m.tip === 'dunk' && b.dunk) m.tipDone = true;
   }
 

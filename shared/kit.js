@@ -159,9 +159,25 @@
   // Kit.keys.pressed('Space')      -> true once per press; call Kit.keys.endFrame()
   //                                   at the end of every update step to clear it.
   // Kit.keys.anyDown(['KeyA','ArrowLeft'])
-  var held = {}, hit = {};
-  var BLOCK = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Space: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1, Tab: 1 };
+  var held = {}, hit = {}, tabCapture = null;
+  var BLOCK = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Space: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1 };
+  function nativeKeyTarget(target) {
+    return !!(target && (target.isContentEditable || (target.closest && target.closest('button, a[href], input, textarea, select, [role="button"], [role="slider"]'))));
+  }
+  function acceptsKeyEvent(e) {
+    if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return false;
+    if (nativeKeyTarget(e.target)) {
+      // Escape closes a game's menu/pause overlay even when one of its buttons
+      // has focus. Text fields and selects retain their own Escape behavior.
+      return e.code === 'Escape' && !e.target.isContentEditable && !!(e.target.closest && e.target.closest('button, [role="button"]'));
+    }
+    return e.code !== 'Tab' || (!e.shiftKey && tabCapture && tabCapture());
+  }
   Kit.keys = {
+    isNativeTarget: nativeKeyTarget,
+    acceptsEvent: acceptsKeyEvent,
+    // Only games with a Tab action reserve it, and only while that action is available.
+    captureTab: function (active) { tabCapture = active; },
     down: function (code) { return !!held[code]; },
     pressed: function (code) { return !!hit[code]; },
     anyDown: function (codes) { for (var i = 0; i < codes.length; i++) if (held[codes[i]]) return true; return false; },
@@ -170,13 +186,25 @@
     reset: function () { held = {}; hit = {}; }
   };
   window.addEventListener('keydown', function (e) {
-    if (BLOCK[e.code]) e.preventDefault();
+    // Shift+Tab from the game surface returns to the portal. Native controls keep
+    // their ordinary Tab order; standalone game pages keep browser navigation.
+    if (e.code === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !nativeKeyTarget(e.target) && window.parent !== window) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      Kit.keys.reset();
+      try { if (document.pointerLockElement) document.exitPointerLock(); } catch (err) { /* ignore */ }
+      window.parent.postMessage('sg:focus-portal', '*');
+      return;
+    }
+    if (!acceptsKeyEvent(e)) { if (e.code === 'Tab') Kit.keys.reset(); return; }
+    if (BLOCK[e.code] || e.code === 'Tab') e.preventDefault();
     audio.unlock();
     if (!held[e.code]) hit[e.code] = true;
     held[e.code] = true;
-  });
-  window.addEventListener('keyup', function (e) { held[e.code] = false; });
-  window.addEventListener('blur', function () { held = {}; });
+  }, true);
+  window.addEventListener('keyup', function (e) { held[e.code] = false; }, true);
+  window.addEventListener('blur', Kit.keys.reset);
+  window.addEventListener('focusin', function (e) { if (nativeKeyTarget(e.target)) Kit.keys.reset(); });
 
   // Any click/tap unlocks audio and makes sure the game frame has keyboard focus.
   window.addEventListener('pointerdown', function () { audio.unlock(); try { window.focus(); } catch (e) { /* ignore */ } }, true);
@@ -333,11 +361,11 @@
     function paint() { b.textContent = audio.muted ? '🔇' : '🔊'; }
     paint();
     audio.onMuteChange(paint);
-    b.addEventListener('click', function (e) { e.stopPropagation(); audio.unlock(); audio.toggleMute(); b.blur(); });
+    b.addEventListener('click', function (e) { e.stopPropagation(); audio.unlock(); audio.toggleMute(); if (e.detail > 0) b.blur(); });
     b.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
     document.body.appendChild(b);
     if (opts.key !== false) {
-      window.addEventListener('keydown', function (e) { if (e.code === 'KeyM' && !e.repeat) audio.toggleMute(); });
+      window.addEventListener('keydown', function (e) { if (Kit.keys.acceptsEvent(e) && e.code === 'KeyM' && !e.repeat) audio.toggleMute(); });
     }
     return b;
   };

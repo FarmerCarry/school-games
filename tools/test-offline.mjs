@@ -12,33 +12,45 @@
  *   4. stale server copy: if the server still sends an old file, the update is refused and
  *      the previous version keeps working
  *   5. kill switch (tools/build.mjs --kill-sw): the worker removes itself and its cache
- * Exits non-zero on the first failure. Leaves _site/ rebuilt as it was at the start.
+ * Tests an isolated copy of _site, so the validated release artifact is unchanged.
+ * Exits non-zero if any check fails.
  */
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import os from 'node:os';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-let playwright;
-try { playwright = require('playwright'); } catch (e) { playwright = require('/opt/node22/lib/node_modules/playwright'); }
+import { launchChromium } from './browser.mjs';
+import { MIME } from './test-server.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SITE = path.join(REPO, '_site');
+const BUILD = path.join(REPO, '_site');
+if (!fs.existsSync(path.join(BUILD, 'sw.js'))) throw new Error('Run npm run build before npm run test:offline');
+const TEMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-offline-'));
+const SITE = path.join(TEMP_ROOT, 'site');
+fs.cpSync(BUILD, SITE, { recursive: true });
 const BASE = '/school-games/';
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json' };
+const ORIGINAL_SW = fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8');
+const ORIGINAL_FILES = JSON.parse(ORIGINAL_SW.match(/FILES = (\{.*\});/)[1]);
+const ORIGINAL_GAME = fs.readFileSync(path.join(SITE, 'games/merge-2048/index.html'), 'utf8');
+const hash = data => crypto.createHash('sha256').update(data).digest('hex').slice(0, 16);
 
 let staleFile = null, staleBody = null;   // simulate a CDN still serving an old copy
 const hits = [];
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
   hits.push(u.pathname + u.search);
-  if (!u.pathname.startsWith(BASE)) { res.writeHead(404); res.end(); return; }
-  let rel = decodeURIComponent(u.pathname.slice(BASE.length)) || 'index.html';
+  let rel;
+  if (u.pathname === '/favicon.ico' || u.pathname === BASE + 'favicon.ico') rel = 'favicon.svg';
+  else if (u.pathname.startsWith(BASE)) {
+    try { rel = decodeURIComponent(u.pathname.slice(BASE.length)) || 'index.html'; }
+    catch { res.writeHead(400); res.end(); return; }
+  } else { res.writeHead(404); res.end(); return; }
   if (rel.endsWith('/')) rel += 'index.html';
-  const fp = path.join(SITE, rel);
+  const fp = path.resolve(SITE, rel);
+  const relative = path.relative(SITE, fp);
+  if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) { res.writeHead(403); res.end(); return; }
   if (staleFile === rel) { res.writeHead(200, { 'content-type': MIME[path.extname(fp)] }); res.end(staleBody); return; }
   fs.readFile(fp, (err, data) => {
     if (err) { res.writeHead(404); res.end(); return; }
@@ -48,18 +60,34 @@ const server = http.createServer((req, res) => {
 });
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const origin = `http://127.0.0.1:${server.address().port}`;
-const build = (...a) => execFileSync('node', [path.join(REPO, 'tools/build.mjs'), ...a], { cwd: REPO, encoding: 'utf8' });
+// Simulate a new published version in the temporary copy only. Use the same
+// manifest order and hashing as build.mjs, without touching source or _site.
+function publishUpdate(marker) {
+  const rel = 'games/merge-2048/index.html';
+  const game = path.join(SITE, rel);
+  const body = ORIGINAL_GAME.replace('</body>', `<!-- ${marker} -->\n</body>`);
+  fs.writeFileSync(game, body);
+  const files = { ...ORIGINAL_FILES, [rel]: hash(body) };
+  const version = hash(JSON.stringify(files));
+  fs.writeFileSync(path.join(SITE, 'sw.js'), ORIGINAL_SW
+    .replace(/VERSION = "[0-9a-f]+"/, 'VERSION = ' + JSON.stringify(version))
+    .replace(/FILES = \{.*\};/, 'FILES = ' + JSON.stringify(files) + ';'));
+  return version;
+}
 const swVersion = () => fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8').match(/VERSION = "([0-9a-f]+)"/)[1];
 const fileCount = () => Object.keys(JSON.parse(fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8').match(/FILES = (\{.*\});/)[1])).length;
 
 let failed = false;
 function check(ok, msg) { console.log((ok ? '✓ ' : '✗ ') + msg); if (!ok) failed = true; }
 
-const browser = await playwright.chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const browser = await launchChromium();
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push(String(e).split('\n')[0]));
+page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+page.on('requestfailed', r => errors.push(r.url() + ' :: ' + r.failure()?.errorText));
+page.on('response', r => { if (r.status() >= 400) errors.push(r.url() + ' :: HTTP ' + r.status()); });
 
 async function swState() {
   return page.evaluate(async () => {
@@ -77,10 +105,13 @@ async function waitFor(fn, ms = 60000) {
 }
 async function openGame(slug) {
   await page.evaluate(s => { location.hash = '#/play/' + s; }, slug);
-  const ok = await waitFor(async () => page.evaluate(() => {
+  const ok = await waitFor(async () => page.evaluate(s => {
     const f = document.querySelector('#stage iframe');
-    try { return !!(f && f.contentDocument && f.contentDocument.readyState === 'complete' && f.contentDocument.querySelector('canvas, .sg-overlay, button')); } catch (e) { return false; }
-  }), 30000);
+    try {
+      return !!(f && f.contentWindow.location.pathname.endsWith('/games/' + s + '/index.html') &&
+        f.contentDocument.readyState === 'complete' && f.contentDocument.querySelector('canvas, .sg-overlay, button'));
+    } catch (e) { return false; }
+  }, slug), 30000);
   return ok;
 }
 
@@ -105,12 +136,8 @@ try {
   await ctx.setOffline(false);
   check(errors.length === 0, 'no page errors so far' + (errors.length ? ': ' + errors.join(' | ') : ''));
 
-  // 3. update: change one game, rebuild, only that file should be downloaded
-  const gameFile = path.join(REPO, 'games/merge-2048/index.html');
-  const orig = fs.readFileSync(gameFile, 'utf8');
-  fs.writeFileSync(gameFile, orig.replace('</body>', '<!-- sw update test -->\n</body>'));
-  try { build(); } finally { fs.writeFileSync(gameFile, orig); }
-  const v2 = swVersion();
+  // 3. publish a changed game in the temporary site; only that file is downloaded
+  const v2 = publishUpdate('sw update test');
   hits.length = 0;
   await page.reload({ waitUntil: 'load' });
   const updated = await waitFor(async () => { const s = await swState(); return s.caches['sg-' + v2] === fileCount() && !s.caches['sg-' + v1]; });
@@ -120,9 +147,7 @@ try {
   check(await openGame('merge-2048'), 'updated game loads');
 
   // 4. stale copy on the server: the update must be refused, the current version keeps working
-  fs.writeFileSync(gameFile, orig.replace('</body>', '<!-- stale test -->\n</body>'));
-  let staleVersion;
-  try { build(); staleVersion = swVersion(); } finally { fs.writeFileSync(gameFile, orig); }
+  const staleVersion = publishUpdate('stale test');
   staleFile = 'games/merge-2048/index.html';
   staleBody = 'old content from a stale server';
   await page.goto(origin + BASE, { waitUntil: 'load' });
@@ -133,7 +158,7 @@ try {
   staleFile = null;
 
   // 5. kill switch
-  build('--kill-sw');
+  fs.writeFileSync(path.join(SITE, 'sw.js'), fs.readFileSync(path.join(REPO, 'sw.js')));
   await page.goto(origin + BASE, { waitUntil: 'load' });
   const gone = await waitFor(async () => { const st = await swState(); return !st.active && Object.keys(st.caches).length === 0; });
   check(gone, 'kill switch removes the worker and its caches');
@@ -141,8 +166,9 @@ try {
 } catch (e) {
   check(false, 'test crashed: ' + e.message);
 } finally {
-  build();   // leave a normal build behind
   await browser.close();
-  server.close();
+  await new Promise(r => server.close(r));
+  if (path.dirname(path.resolve(TEMP_ROOT)) !== path.resolve(os.tmpdir())) throw new Error('unexpected offline test directory');
+  fs.rmSync(TEMP_ROOT, { recursive: true, force: true });
 }
 process.exit(failed ? 1 : 0);

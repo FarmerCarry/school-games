@@ -1464,8 +1464,8 @@
   on('mBack', closeMachine);
   on('mOk', closeReveal);
   on('mUse', playPrize);
-  // Never leave a button focused (Space/Enter would click it again).
-  document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('button'); if (b) b.blur(); }, true);
+  // Mouse clicks return focus to the game; keyboard activation keeps button focus.
+  document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('button'); if (b && e.detail > 0) b.blur(); }, true);
   canvas.addEventListener('pointerdown', function (e) { if (state === 'play' && e.button === 0) tryHop(0, 1); });
   document.addEventListener('visibilitychange', function () { if (document.hidden && state === 'play') pauseGame(); });
   window.addEventListener('blur', function () { if (state === 'play' && started) pauseGame(); });

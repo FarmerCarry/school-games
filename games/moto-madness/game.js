@@ -429,7 +429,7 @@
 
   /* --------------------------------------------------------- buttons */
   function btn(id, fn) {
-    $(id).addEventListener('click', function (e) { e.currentTarget.blur(); MMA.click(); fn(); });
+    $(id).addEventListener('click', function (e) { if (e.detail > 0) e.currentTarget.blur(); MMA.click(); fn(); });
   }
   btn('btnPlay', function () { goLevels(); });
   btn('btnGarage', function () { goGarage('title'); });
@@ -446,10 +446,11 @@
   btn('btnNext', nextLevel);
   btn('btnRetry', function () { startLevel(levelIdx); });
   btn('btnCLevels', function () { sel = levelIdx; startDemo(); goLevels(); });
-  $('pauseBtn').addEventListener('click', function (e) { e.currentTarget.blur(); pause(); });
+  $('pauseBtn').addEventListener('click', function (e) { if (e.detail > 0) e.currentTarget.blur(); pause(); });
   $('pauseBtn').addEventListener('pointerdown', function (e) { e.stopPropagation(); });
 
   window.addEventListener('keydown', function (e) {
+    if (!Kit.keys.acceptsEvent(e)) return;
     var c = e.code;
     if (e.repeat && c !== 'ArrowLeft' && c !== 'ArrowRight' && c !== 'ArrowUp' && c !== 'ArrowDown') return;
     var ok = c === 'Enter' || c === 'Space' || c === 'NumpadEnter';

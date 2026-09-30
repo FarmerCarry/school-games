@@ -55,43 +55,51 @@ anything violent. Free-for-all or 5 v 5 teams against bots (easy / normal / hard
 with coins to unlock colours and hats. Click the game to capture the mouse; Esc gives it back
 and pauses.
 
-## Putting it online (GitHub Pages, free)
+## Putting it online (GitHub Pages)
 
-1. Merge this branch into `main` (already done if you're reading this on `main`).
-2. **If the repository is private:** on GitHub's free plan, Pages only works for public
-   repositories. Open **Settings** → **General**, scroll to the bottom (**Danger Zone**) →
-   **Change visibility** → **Public**. The repo contains only the games (no passwords, no
-   student data), so this is safe. (With a paid GitHub plan you can skip this step.)
-3. On GitHub, open the repo → **Settings** → **Pages**.
-4. Under **Build and deployment**, choose **Deploy from a branch**, then branch **`main`** and
-   folder **`/ (root)`**, and click **Save**.
-5. After a minute the site is live at `https://<your-username>.github.io/school-games/`.
-   Every later change pushed to `main` (for example hiding a game) goes live automatically.
-   Share that link with your class.
+1. Open the repository's **Settings > Pages**. Under **Build and deployment**, set
+   **Source** to **GitHub Actions**. This is a one-time setting; the workflow publishes
+   the tested fast build directly.
+2. Merge this branch into `main`.
+3. Open **Actions > Build fast site** to follow the checks and deployment. You can
+   also select **Run workflow** on `main` after changing the Pages setting.
+4. After a successful deployment, the site is live at
+   `https://<your-username>.github.io/school-games/`. Share that link with your class.
 
-### The fast version (recommended for PCs with slow hard disks)
+Pages is available for public repositories on GitHub Free and for private repositories
+on eligible paid plans. See [GitHub's Pages workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
-Every push to `main` automatically builds a faster copy of the site into the **`gh-pages`**
-branch (see `.github/workflows/build.yml` and `tools/build.mjs`). It looks and plays exactly
-the same, but:
+Pull requests run the same checks without publishing. Pushes to `main` and manual runs
+on `main` publish only after source tests, built-site tests and offline tests pass
+(`.github/workflows/build.yml`). A failed check leaves the previous deployment online.
+Keep editing `main` as usual, including `js/catalog.js` when hiding or featuring games.
+In branch protection, require **Test source and fast build** before merging.
 
-- each game is **one file** instead of 10–13, and the home page is one file with all pictures
-  built in, so a slow hard disk has far fewer files to read;
-- after the first visit, every PC keeps the whole site in an **offline cache**: games open
-  without asking the server, still work if the internet drops, and after an update each PC
-  downloads only the files that changed;
-- it can be **installed as an app** (the install icon in Chrome/Edge's address bar).
+### The fast version (for PCs with slow hard disks)
 
-To use it: **Settings → Pages → Branch: `gh-pages`, folder `/ (root)` → Save** (once).
-Keep editing `main` as usual (for example `js/catalog.js`); the fast copy rebuilds itself
-about a minute later. If a build ever fails, the previous version simply stays online.
+`tools/build.mjs` creates `_site/`, the version the workflow tests and deploys.
+It preserves the games' Arabic interface, artwork and gameplay:
 
-Going back is always safe: switch Pages back to **`main`**. The `sw.js` file in `main` is an
-"off switch" — any PC that has the offline cache removes it on its next visit and uses the
-normal site again.
+- each game's scripts and styles are folded into one HTML file, and the portal's
+  pictures are embedded; fonts and Three.js stay shared to avoid duplication;
+- after the first visit, each PC keeps the site in an **offline cache**: games open
+  without contacting the server, work when the connection drops, and updates download
+  only changed files;
+- it can be **installed as an app** from Chrome or Edge's address bar.
 
-If the school web filter blocks it, ask IT to allow that address. The site contains no ads and
-makes no outside requests, so it's an easy one to approve.
+The build is designed to reduce asset requests and disk reads. School-HDD loading gains
+have not been measured yet. Compare cold and cached visits on a representative school PC
+with fixed settings, and record time until playable, request count, frame times and input
+response. Clearing the browser cache does not reproduce a genuinely cold disk.
+Compare settled title and gameplay screenshots too, and check Arabic readability and
+gameplay manually before accepting a performance change.
+
+The builder also supports `node tools/build.mjs --kill-sw` for a cache-removal release.
+Its worker removes existing registrations and caches; the offline suite tests this switch.
+The source `sw.js` provides the same off switch when serving the unbuilt site.
+
+If the school web filter blocks the site, ask IT to allow its address. The games contain
+no ads and make no outside requests.
 
 ### Running it without the internet
 
@@ -120,18 +128,48 @@ tools/playtest.mjs        headless Chromium playtest harness (Playwright)
 tools/build.mjs           builds the fast version (one file per game + offline cache)
 ```
 
-Preview locally over http with any static server, for example `npx serve .`.
-Test a game automatically with `node tools/playtest.mjs <slug>`.
+The site itself runs as plain HTML/CSS/JS. Node 22, esbuild and Playwright are development
+tools; they are not included in the published games.
 
-Performance and the fast build:
+Install the pinned dependencies and Chromium once:
 
+```sh
+npm ci
+npx playwright install chromium
 ```
-npm install                      # once (esbuild, used only by the build)
-node tools/build.mjs             # fast build into _site/ (what gh-pages serves)
-SG_ROOT=_site node tools/check-all.mjs   # smoke-test the fast build
-node tools/test-offline.mjs      # end-to-end test of the offline cache
-node tools/perf.mjs [slug]       # files, load/script time, stutters, memory, saves per page
+
+On Linux, use `npx playwright install --with-deps chromium` to install Chromium's system
+dependencies as well. If Chromium is already installed in a managed environment, set
+`PLAYWRIGHT_EXECUTABLE_PATH` to its executable instead of downloading another browser.
+
+Preview locally over HTTP with any static server, for example `npx serve .`.
+Test one source game with `node tools/playtest.mjs <slug>`.
+
+Run the release checks locally:
+
+```sh
+npm run test:tooling             # build and browser-harness helper tests
+npm run check                    # smoke-test every source game
+npm run test:regressions          # focused gameplay and portal assertions
+npm run build                    # fast build into _site/
+SG_ROOT=_site npm run check
+SG_ROOT=_site npm run test:regressions
+npm run test:offline              # install, offline use, updates, stale files, kill switch
 ```
+
+For the two `SG_ROOT` commands in Windows PowerShell:
+
+```powershell
+$env:SG_ROOT = '_site'
+npm run check
+npm run test:regressions
+Remove-Item Env:SG_ROOT
+```
+
+The offline tests use temporary copies so the verified `_site/` output remains unchanged.
+Use `node tools/perf.mjs [slug]` to inspect requests, load/script time, stutters, memory
+and save activity. Browser checks catch specific regressions; they do not measure
+school-HDD performance or judge how enjoyable a game feels.
 
 ## Credits and licenses
 

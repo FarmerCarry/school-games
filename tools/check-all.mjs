@@ -10,6 +10,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import vm from 'node:vm';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -21,9 +22,11 @@ const sandbox = { window: {} };
 vm.runInNewContext(fs.readFileSync(path.join(REPO, 'js/catalog.js'), 'utf8'), sandbox);
 const games = sandbox.window.GAMES;
 const only = process.argv[2];
+const artifactDir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-check-'));
 
 const problems = [];
 const add = (slug, msg) => problems.push(`${slug}: ${msg}`);
+if (only && !games.some(g => g.slug === only)) add(only, 'unknown game slug');
 
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
@@ -66,15 +69,22 @@ for (const g of games) {
     { resize: [1100, 620] }, { wait: 500 }, { resize: [1920, 1080] }, { wait: 800 }, { shot: 'big' },
     { reload: true }, { wait: 1200 }
   ];
-  const out = `/tmp/check-all/${g.slug}`;
+  const out = path.join(artifactDir, g.slug);
+  let raw;
   try {
-    const raw = execFileSync('node', [path.join(REPO, 'tools/playtest.mjs'), g.slug, '--out', out, '--actions-json', JSON.stringify(actions)],
+    raw = execFileSync(process.execPath, [path.join(REPO, 'tools/playtest.mjs'), g.slug, '--out', out, '--actions-json', JSON.stringify(actions)],
       { encoding: 'utf8', timeout: 120000 });
+  } catch (e) {
+    // Failed playtests still print their complete JSON diagnostics.
+    raw = e.stdout;
+    if (!raw) { add(g.slug, 'harness crashed: ' + String(e.message).split('\n')[0]); continue; }
+  }
+  try {
     const r = JSON.parse(raw);
     for (const e of r.pageErrors) add(g.slug, 'page error: ' + e.split('\n')[0]);
     for (const e of r.consoleErrors) add(g.slug, 'console error: ' + e);
     for (const e of r.externalRequests) add(g.slug, 'external request: ' + e);
-    for (const e of r.failedRequests) if (!e.includes('favicon')) add(g.slug, 'failed request: ' + e);
+    for (const e of r.failedRequests) add(g.slug, 'failed request: ' + e);
     for (const n of r.notes) add(g.slug, n);
     console.log(`${r.ok ? '✓' : '✗'} ${g.slug}  (screens in ${out})`);
   } catch (e) {

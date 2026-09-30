@@ -2395,6 +2395,7 @@
   el.pauseBtn.addEventListener('click', function (e) { e.stopPropagation(); pauseGame(); });
   el.pauseBtn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
   window.addEventListener('keydown', function (e) {
+    if (!Kit.keys.acceptsEvent(e)) return;
     if (R.mode === 'confirm') {
       if (e.code === 'Escape' || e.code === 'KeyN') { $('noBtn').click(); }
       else if (e.code === 'KeyY') { $('yesBtn').click(); }

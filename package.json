@@ -5,9 +5,14 @@
   "scripts": {
     "build": "node tools/build.mjs",
     "check": "node tools/check-all.mjs",
+    "test": "npm run test:tooling && npm run check && npm run test:regressions",
+    "test:tooling": "node --test tools/test-tooling.mjs",
+    "test:regressions": "node tools/regressions.mjs",
+    "test:offline": "node tools/test-offline.mjs",
     "perf": "node tools/perf.mjs"
   },
   "devDependencies": {
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "playwright": "1.63.0"
   }
 }

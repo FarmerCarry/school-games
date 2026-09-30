@@ -934,6 +934,7 @@
 
   /* ============================================================== input */
   window.addEventListener('keydown', function (e) {
+    if (!Kit.keys.acceptsEvent(e)) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     var k = e.code;
     var go = k === 'Enter' || k === 'NumpadEnter' || k === 'Space';
@@ -990,7 +991,7 @@
   window.addEventListener('blur', function () { drag = null; });
   document.addEventListener('click', function (e) {
     var b = e.target && e.target.closest && e.target.closest('button');
-    if (b) b.blur();
+    if (b && e.detail > 0) b.blur();
   });
   document.addEventListener('visibilitychange', function () { if (document.hidden && G.screen === 'play') pause(); });
 

@@ -477,8 +477,7 @@
   /* ---- buttons */
   function btn(id, fn) {
     var el = $(id);
-    el.setAttribute('tabindex', '-1');
-    el.addEventListener('click', function (e) { e.stopPropagation(); sfx.click(); fn(); if (el.blur) el.blur(); });
+    el.addEventListener('click', function (e) { e.stopPropagation(); sfx.click(); fn(); if (e.detail > 0 && el.blur) el.blur(); });
     el.addEventListener('mouseenter', function () { sfx.hover(); });
   }
   btn('playBtn', startMatch);
@@ -495,9 +494,8 @@
   btn('oMenuBtn', goTitle);
   // "click anywhere": the backdrop, the panel, its title and text all resume; only the buttons do their own thing
   $('pause').addEventListener('click', function (e) { if (!(e.target.closest && e.target.closest('button, input, a, label, select'))) resume(); });
-  $('pauseBtn').addEventListener('click', function (e) { e.stopPropagation(); pause(); this.blur(); });
+  $('pauseBtn').addEventListener('click', function (e) { e.stopPropagation(); pause(); if (e.detail > 0) this.blur(); });
   $('pauseBtn').addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-  document.querySelectorAll('.seg button, .tab').forEach(function (b) { b.setAttribute('tabindex', '-1'); });
 
   /* ================================================================ HUD */
   var H$ = {
@@ -1281,6 +1279,7 @@
   }
 
   /* ================================================================ LOOP */
+  Kit.keys.captureTab(function () { return UI.state === 'play' && !UI.paused; });
   var perf = { upd: 0, ren: 0, frame: 0, frames: 0 };
   function update(dt) {
     var t0 = performance.now();

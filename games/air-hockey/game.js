@@ -1359,11 +1359,11 @@
   }
 
   // ---- wiring
-  function btn(id, fn) { $(id).addEventListener('click', function (e) { e.currentTarget.blur(); fn(); }); }
+  function btn(id, fn) { $(id).addEventListener('click', function (e) { if (e.detail > 0) e.currentTarget.blur(); fn(); }); }
   btn('tab1', function () { save.mode = 1; persist(); S.ui(); buildTitle(); });
   btn('tab2', function () { save.mode = 2; persist(); S.ui(); buildTitle(); });
   Array.prototype.forEach.call(document.querySelectorAll('.seg.g'), function (b) {
-    b.addEventListener('click', function () { save.goals = +b.getAttribute('data-g'); persist(); S.ui(); b.blur(); buildTitle(); });
+    b.addEventListener('click', function (e) { save.goals = +b.getAttribute('data-g'); persist(); S.ui(); if (e.detail > 0) b.blur(); buildTitle(); });
   });
   btn('chaosBtn', function () { save.chaos = !save.chaos; persist(); if (save.chaos) S.power(); else S.ui(); buildTitle(); });
   btn('btnPlay', startGame);
@@ -1372,7 +1372,7 @@
   btn('shopBack', function () { S.uiBack(); show('scr-title'); buildTitle(); });
   btn('awBack', function () { S.uiBack(); show('scr-title'); buildTitle(); });
   Array.prototype.forEach.call(document.querySelectorAll('#scr-shop .tab'), function (b) {
-    b.addEventListener('click', function () { shopKind = b.getAttribute('data-k'); S.ui(); b.blur(); buildShop(); });
+    b.addEventListener('click', function (e) { shopKind = b.getAttribute('data-k'); S.ui(); if (e.detail > 0) b.blur(); buildShop(); });
   });
   btn('btnResume', function () { pause(false); });
   btn('btnRestart', startGame);
@@ -1380,12 +1380,13 @@
   btn('btnAgain', startGame);
   btn('btnMenu2', function () { S.uiBack(); goTitle(); });
   $('pauseBtn').addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-  $('pauseBtn').addEventListener('click', function (e) { e.currentTarget.blur(); pause(!st.paused); });
+  $('pauseBtn').addEventListener('click', function (e) { if (e.detail > 0) e.currentTarget.blur(); pause(!st.paused); });
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه'); // shared helper sets an English label
   muteBtn.title = 'الصوت (M)';
 
   window.addEventListener('keydown', function (e) {
+    if (!Kit.keys.acceptsEvent(e)) return;
     if (e.repeat) return;
     var c = e.code;
     var titleOpen = !$('scr-title').hidden, overOpen = !$('scr-over').hidden;

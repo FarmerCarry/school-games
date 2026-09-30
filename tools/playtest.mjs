@@ -23,29 +23,23 @@
  *   {"hold": "ArrowLeft", "ms": 600}     hold a key for ms
  *   {"holdMany": ["ArrowRight","ArrowUp"], "ms": 600}   hold several keys together
  *   {"eval": "window.someState"}         evaluate JS in the page, result goes in report.evals
+ *   {"assert": "window.someState > 0"}   fail if the page expression is false
  *   {"fps": 2000}                        measure requestAnimationFrame rate over ms
  *   {"resize": [800, 600]}               change the viewport size
  *   {"reload": true}                     reload the page (tests saved progress)
  *   {"repeat": 5, "do": [ ...actions ]}  repeat a block
  */
-import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-let playwright;
-try { playwright = require('playwright'); } catch (e) { playwright = require('/opt/node22/lib/node_modules/playwright'); }
+import { launchChromium } from './browser.mjs';
+import { startTestServer } from './test-server.mjs';
+import { reportPassed } from './playtest-report.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // SG_ROOT=_site tests the fast build made by tools/build.mjs instead of the source files.
 const ROOT = process.env.SG_ROOT ? path.resolve(REPO, process.env.SG_ROOT) : REPO;
-const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
-  '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
-  '.woff2': 'font/woff2', '.woff': 'font/woff', '.ico': 'image/x-icon', '.txt': 'text/plain', '.md': 'text/plain'
-};
 
 function parseArgs(argv) {
   const a = { _: [] };
@@ -63,7 +57,7 @@ if (!slug && !args.path) {
   process.exit(2);
 }
 const pagePath = args.path || `/games/${slug}/index.html`;
-const outDir = path.resolve(args.out || path.join('/tmp', 'playtest', slug || 'page'));
+const outDir = args.out ? path.resolve(args.out) : fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-playtest-'));
 fs.mkdirSync(outDir, { recursive: true });
 const [vw, vh] = (args.size || '1280x720').split('x').map(Number);
 
@@ -71,46 +65,34 @@ let actions = [{ wait: 1200 }, { shot: 'loaded' }];
 if (args.actions) actions = JSON.parse(fs.readFileSync(args.actions, 'utf8'));
 if (args['actions-json']) actions = JSON.parse(args['actions-json']);
 
-const server = http.createServer((req, res) => {
-  const u = decodeURIComponent(req.url.split('?')[0].split('#')[0]);
-  let fp = path.join(ROOT, u);
-  if (!fp.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
-  if (fs.existsSync(fp) && fs.statSync(fp).isDirectory()) fp = path.join(fp, 'index.html');
-  fs.readFile(fp, (err, data) => {
-    if (err) { res.writeHead(404); res.end('not found'); return; }
-    res.writeHead(200, { 'content-type': MIME[path.extname(fp)] || 'application/octet-stream', 'cache-control': 'no-store' });
-    res.end(data);
-  });
-});
-
-await new Promise(r => server.listen(0, '127.0.0.1', r));
-const port = server.address().port;
-const origin = `http://127.0.0.1:${port}`;
+const { origin, close: closeServer } = await startTestServer(ROOT);
 
 const report = {
   url: origin + pagePath, consoleErrors: [], consoleWarnings: [], pageErrors: [],
   failedRequests: [], externalRequests: [], screenshots: [], evals: [], fps: [], notes: []
 };
 
-const browser = await playwright.chromium.launch({
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required']
-});
-const context = await browser.newContext({ viewport: { width: vw, height: vh } });
-const page = await context.newPage();
+let browser, page;
 
-page.on('console', msg => {
-  const t = msg.type();
-  const text = msg.text();
-  if (t === 'error') report.consoleErrors.push(text);
-  else if (t === 'warning') report.consoleWarnings.push(text);
-});
-page.on('pageerror', err => report.pageErrors.push(String(err && err.stack || err)));
-page.on('requestfailed', r => report.failedRequests.push(r.url() + ' :: ' + (r.failure() && r.failure().errorText)));
-page.on('request', r => {
-  const url = r.url();
-  if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:')) report.externalRequests.push(url);
-});
-page.on('response', r => { if (r.status() >= 400) report.failedRequests.push(r.url() + ' :: HTTP ' + r.status()); });
+async function openBrowser() {
+  browser = await launchChromium({ args: ['--autoplay-policy=no-user-gesture-required'] });
+  const context = await browser.newContext({ viewport: { width: vw, height: vh } });
+  page = await context.newPage();
+
+  page.on('console', msg => {
+    const t = msg.type();
+    const text = msg.text();
+    if (t === 'error') report.consoleErrors.push(text);
+    else if (t === 'warning') report.consoleWarnings.push(text);
+  });
+  page.on('pageerror', err => report.pageErrors.push(String(err && err.stack || err)));
+  page.on('requestfailed', r => report.failedRequests.push(r.url() + ' :: ' + (r.failure() && r.failure().errorText)));
+  page.on('request', r => {
+    const url = r.url();
+    if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:')) report.externalRequests.push(url);
+  });
+  page.on('response', r => { if (r.status() >= 400) report.failedRequests.push(r.url() + ' :: HTTP ' + r.status()); });
+}
 
 const keyName = k => (k === 'Space' || k === ' ') ? ' ' : k;
 
@@ -146,7 +128,9 @@ async function run(list) {
       for (const k of a.holdMany) await page.keyboard.up(keyName(k));
     } else if (a.eval) {
       try { report.evals.push({ expr: a.eval, value: await page.evaluate(a.eval) }); }
-      catch (e) { report.evals.push({ expr: a.eval, error: String(e) }); }
+      catch (e) { report.evals.push({ expr: a.eval, error: String(e) }); report.notes.push('eval failed: ' + a.eval); }
+    } else if (a.assert) {
+      if (!await page.evaluate(a.assert)) report.notes.push('assertion failed: ' + a.assert);
     } else if (a.fps) {
       const fps = await page.evaluate(ms => new Promise(res => {
         let n = 0; const t0 = performance.now();
@@ -157,18 +141,20 @@ async function run(list) {
     } else if (a.resize) await page.setViewportSize({ width: a.resize[0], height: a.resize[1] });
     else if (a.reload) await page.reload();
     else if (a.repeat) { for (let i = 0; i < a.repeat; i++) await run(a.do || []); }
+    else report.notes.push('unknown action: ' + JSON.stringify(a));
   }
 }
 
 try {
+  await openBrowser();
   await page.goto(origin + pagePath, { waitUntil: 'load', timeout: 20000 });
   await run(actions);
 } catch (e) {
   report.notes.push('harness error: ' + String(e));
+} finally {
+  if (browser) await browser.close();
+  await closeServer();
 }
-
-await browser.close();
-server.close();
-report.ok = report.pageErrors.length === 0 && report.consoleErrors.length === 0 && report.externalRequests.length === 0 &&
-  report.failedRequests.filter(f => !f.includes('favicon')).length === 0;
+report.ok = reportPassed(report);
 console.log(JSON.stringify(report, null, 2));
+process.exitCode = report.ok ? 0 : 1;
