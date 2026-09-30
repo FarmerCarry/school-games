@@ -156,5 +156,6 @@ try {
   await closeServer();
 }
 report.ok = reportPassed(report);
+fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));
 process.exitCode = report.ok ? 0 : 1;

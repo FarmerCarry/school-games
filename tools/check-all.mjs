@@ -25,7 +25,12 @@ const only = process.argv[2];
 const artifactDir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-check-'));
 
 const problems = [];
-const add = (slug, msg) => problems.push(`${slug}: ${msg}`);
+const add = (slug, msg) => {
+  const problem = `${slug}: ${msg}`;
+  problems.push(problem);
+  // Print as soon as a game finishes, so interrupted CI runs keep diagnostics.
+  console.error(problem);
+};
 if (only && !games.some(g => g.slug === only)) add(only, 'unknown game slug');
 
 function walk(dir) {
