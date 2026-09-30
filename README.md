@@ -135,11 +135,12 @@ Install the pinned dependencies and Chromium once:
 
 ```sh
 npm ci
-npx playwright install chromium
+npx playwright install --no-shell chromium
 ```
 
-On Linux, use `npx playwright install --with-deps chromium` to install Chromium's system
-dependencies as well. If Chromium is already installed in a managed environment, set
+The checks use full Chromium's headless mode to match the desktop browser's renderer.
+On Linux, use `npx playwright install --with-deps --no-shell chromium` to install Chromium's
+system dependencies as well. If Chromium is already installed in a managed environment, set
 `PLAYWRIGHT_EXECUTABLE_PATH` to its executable instead of downloading another browser.
 
 Preview locally over HTTP with any static server, for example `npx serve .`.

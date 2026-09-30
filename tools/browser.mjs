@@ -10,7 +10,8 @@ export function launchChromium(options = {}) {
   const { args = [], ...rest } = options;
   const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH;
   return chromium.launch({
-    ...(executablePath ? { executablePath } : {}),
+    // Exercise desktop Chrome's renderer through its new headless mode.
+    ...(executablePath ? { executablePath } : { channel: 'chromium' }),
     ...rest,
     args: [...new Set([...GRAPHICS_ARGS, ...args])]
   });

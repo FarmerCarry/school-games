@@ -72,7 +72,7 @@ const report = {
   failedRequests: [], externalRequests: [], screenshots: [], evals: [], fps: [], notes: []
 };
 
-let browser, page;
+let browser, page, actionInProgress;
 
 async function openBrowser() {
   browser = await launchChromium({ args: ['--autoplay-policy=no-user-gesture-required'] });
@@ -98,6 +98,7 @@ const keyName = k => (k === 'Space' || k === ' ') ? ' ' : k;
 
 async function run(list) {
   for (const a of list) {
+    actionInProgress = a;
     if (a.wait != null) await page.waitForTimeout(a.wait);
     else if (a.shot) {
       const p = path.join(outDir, a.shot + '.png');
@@ -150,7 +151,7 @@ try {
   await page.goto(origin + pagePath, { waitUntil: 'load', timeout: 20000 });
   await run(actions);
 } catch (e) {
-  report.notes.push('harness error: ' + String(e));
+  report.notes.push('harness error during ' + JSON.stringify(actionInProgress || { navigation: pagePath }) + ': ' + String(e));
 } finally {
   if (browser) await browser.close();
   await closeServer();
