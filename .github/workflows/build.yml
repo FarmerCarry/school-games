@@ -1,8 +1,5 @@
-# Builds the fast version of the site (tools/build.mjs) and publishes it to the gh-pages
-# branch on every push to main. GitHub Pages serves the gh-pages branch.
-# Editing anything on main (for example hiding a game in js/catalog.js) goes live about a
-# minute later. If this ever fails, the previous version simply stays online.
-name: Build fast site
+# Validate the source and optimized site, then publish the tested Pages artifact.
+name: Build and deploy games
 
 on:
   push:
@@ -10,15 +7,18 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: build-fast-site
-  cancel-in-progress: true
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,15 +26,35 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: node tools/build.mjs --out _site
-      - name: Publish to the gh-pages branch
-        working-directory: _site
+      - run: npx playwright install --with-deps chromium
+      - name: Test source regressions
+        run: npm test
+      - run: npm run build
+      - name: Test optimized regressions
+        run: npm test
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init -q -b gh-pages
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "Fast build of ${GITHUB_SHA::7}"
-          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+          SG_ROOT: _site
+      - name: Smoke-test every optimized game
+        run: npm run check
+        env:
+          SG_ROOT: _site
+      - name: Verify offline installation and updates
+        run: npm run test:offline
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy tested site
+        id: deployment
+        uses: actions/deploy-pages@v4

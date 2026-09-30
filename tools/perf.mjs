@@ -22,11 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-let playwright;
-try { playwright = require('playwright'); } catch (e) { playwright = require('/opt/node22/lib/node_modules/playwright'); }
+import { launchChromium } from './browser.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // SG_ROOT=_site tests the fast build made by tools/build.mjs instead of the source files.
@@ -48,6 +44,11 @@ for (let i = 0; i < argv.length; i++) {
 const sandbox = { window: {} };
 vm.runInNewContext(fs.readFileSync(path.join(REPO, 'js/catalog.js'), 'utf8'), sandbox);
 let targets = ['portal', ...sandbox.window.GAMES.map(g => g.slug)];
+const unknown = only.filter(t => !targets.includes(t));
+if (unknown.length) {
+  console.error('Unknown performance target: ' + unknown.join(', '));
+  process.exit(1);
+}
 if (only.length) targets = targets.filter(t => only.includes(t));
 
 const server = http.createServer((req, res) => {
@@ -63,7 +64,7 @@ const server = http.createServer((req, res) => {
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const origin = `http://127.0.0.1:${server.address().port}`;
 
-const browser = await playwright.chromium.launch({
+const browser = await launchChromium({
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-precise-memory-info', '--js-flags=--expose-gc']
 });
 

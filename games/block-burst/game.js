@@ -488,6 +488,7 @@
 
   /* ------------------------------------------------------------ keyboard */
   window.addEventListener('keydown', function (e) {
+    if (!Kit.isGameKeyEvent(e)) return;
     var k = e.code;
     if (k === 'Enter' || k === 'Space' || k === 'NumpadEnter') e.preventDefault();
     if (e.repeat) return;

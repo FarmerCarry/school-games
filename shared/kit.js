@@ -40,7 +40,7 @@
         } catch (e) { return fallback; }
       },
       set: function (key, value) {
-        try { window.localStorage.setItem(prefix + key, JSON.stringify(value)); } catch (e) { /* ignore */ }
+        try { window.localStorage.setItem(prefix + key, JSON.stringify(value)); return true; } catch (e) { return false; }
       },
       remove: function (key) {
         try { window.localStorage.removeItem(prefix + key); } catch (e) { /* ignore */ }
@@ -160,7 +160,17 @@
   //                                   at the end of every update step to clear it.
   // Kit.keys.anyDown(['KeyA','ArrowLeft'])
   var held = {}, hit = {};
-  var BLOCK = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Space: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1, Tab: 1 };
+  var scrollBlocked = new WeakSet();
+  // Native controls own their keys. A later game listener can still use a
+  // scroll key whose default was prevented by Kit itself.
+  Kit.isGameKeyEvent = function (e) {
+    if (e.isComposing || e.ctrlKey || e.altKey || e.metaKey || (e.defaultPrevented && !scrollBlocked.has(e))) return false;
+    var t = e.target;
+    return !(t && (t.isContentEditable || (t.closest && t.closest('button, input, textarea, select, option, a[href], summary, [role="button"], [role="link"], [role="textbox"], [role="combobox"], [role="slider"], [role="spinbutton"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"], [role="menuitem"]'))));
+  };
+  // Tab stays available for menu navigation and leaving an embedded game.
+  // Games with a Tab action can handle it while their playing surface is active.
+  var BLOCK = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Space: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1 };
   Kit.keys = {
     down: function (code) { return !!held[code]; },
     pressed: function (code) { return !!hit[code]; },
@@ -170,13 +180,14 @@
     reset: function () { held = {}; hit = {}; }
   };
   window.addEventListener('keydown', function (e) {
-    if (BLOCK[e.code]) e.preventDefault();
     audio.unlock();
+    if (!Kit.isGameKeyEvent(e)) return;
+    if (BLOCK[e.code]) { scrollBlocked.add(e); e.preventDefault(); }
     if (!held[e.code]) hit[e.code] = true;
     held[e.code] = true;
   });
   window.addEventListener('keyup', function (e) { held[e.code] = false; });
-  window.addEventListener('blur', function () { held = {}; });
+  window.addEventListener('blur', function () { held = {}; hit = {}; });
 
   // Any click/tap unlocks audio and makes sure the game frame has keyboard focus.
   window.addEventListener('pointerdown', function () { audio.unlock(); try { window.focus(); } catch (e) { /* ignore */ } }, true);
@@ -337,7 +348,7 @@
     b.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
     document.body.appendChild(b);
     if (opts.key !== false) {
-      window.addEventListener('keydown', function (e) { if (e.code === 'KeyM' && !e.repeat) audio.toggleMute(); });
+      window.addEventListener('keydown', function (e) { if (Kit.isGameKeyEvent(e) && e.code === 'KeyM' && !e.repeat) audio.toggleMute(); });
     }
     return b;
   };

@@ -555,7 +555,8 @@
         if (time - rArm < 1.6) { rArm = -9; restart(); return; }
         rArm = time; SFX.click();
       }
-      if (save.solo && (K.pressed('Tab') || K.pressed('ShiftLeft') || K.pressed('ShiftRight'))) {
+      var tabSwitch = K.pressed('Tab') && !K.anyDown(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight']);
+      if (save.solo && gameSurfaceFocused() && (tabSwitch || K.pressed('ShiftLeft') || K.pressed('ShiftRight'))) {
         soloActive = soloActive === 'fire' ? 'ice' : 'fire';
         SFX.swap();
         var sp = w[soloActive];
@@ -972,6 +973,12 @@
   }
 
   /* ---------------------------------------------------------- wiring */
+  function gameSurfaceFocused() { return document.activeElement === canvas || document.activeElement === document.body; }
+  window.addEventListener('keydown', function (e) {
+    if (!Kit.isGameKeyEvent(e)) return;
+    if (e.code === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey &&
+        mode === 'play' && world && world.state === 'play' && save.solo && gameSurfaceFocused()) e.preventDefault();
+  });
   function on(id, fn) {
     $(id).addEventListener('click', function (e) { e.stopPropagation(); A.unlock(); fn(); this.blur(); });
   }

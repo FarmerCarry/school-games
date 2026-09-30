@@ -5,9 +5,13 @@
   "scripts": {
     "build": "node tools/build.mjs",
     "check": "node tools/check-all.mjs",
-    "perf": "node tools/perf.mjs"
+    "perf": "node tools/perf.mjs",
+    "test": "node --test --test-concurrency=1 tools/tests/*.test.mjs",
+    "browsers:install": "playwright install chromium",
+    "test:offline": "node tools/test-offline.mjs"
   },
   "devDependencies": {
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "playwright": "1.62.1"
   }
 }

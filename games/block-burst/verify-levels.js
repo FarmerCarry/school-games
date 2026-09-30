@@ -1,17 +1,30 @@
 #!/usr/bin/env node
 /*
  * Block Burst level checker (dev tool, not loaded by the game).
- *   node games/block-burst/verify-levels.js [runs=200] [--classic]
+ *   node games/block-burst/verify-levels.js [runs=200] [--classic] [--report-balance]
  * Plays every adventure level with a greedy bot and a sloppier "kid" bot over many
  * seeds, reports win rates and move counts, and checks board sanity.
+ * By default balance thresholds also fail verification. --report-balance
+ * reports those thresholds as warnings; invalid boards and zero smart-bot
+ * wins still fail. --classic only reports endless-mode score distributions.
  */
 'use strict';
 var Core = require('./core.js');
 var Rules = require('./rules.js');
 var Lv = require('./levels.js');
 
-var runs = +process.argv[2] || 200;
-var classic = process.argv.indexOf('--classic') >= 0;
+var args = process.argv.slice(2);
+var runArgs = args.filter(function (a) { return /^\d+$/.test(a); });
+var runs = runArgs.length ? +runArgs[0] : 200;
+var classic = args.indexOf('--classic') >= 0;
+var reportBalance = args.indexOf('--report-balance') >= 0;
+var ONLY = process.env.ONLY ? process.env.ONLY.split(',').map(Number) : null;
+if (runArgs.length > 1 || !Number.isSafeInteger(runs) || runs < 1 ||
+    args.some(function (a) { return a !== '--classic' && a !== '--report-balance' && !/^\d+$/.test(a); }) ||
+    (ONLY && ONLY.some(function (n) { return !Number.isInteger(n) || n < 1 || n > Lv.LEVELS.length; }))) {
+  console.error('Usage: node games/block-burst/verify-levels.js [positive run count] [--classic] [--report-balance]; ONLY selects level numbers 1-' + Lv.LEVELS.length);
+  process.exit(2);
+}
 
 var BIG = [Core.BY_ID.sq30, Core.BY_ID.five0, Core.BY_ID.five1, Core.BY_ID.rect0, Core.BY_ID.rect1];
 
@@ -143,8 +156,7 @@ if (classic) {
   process.exit(0);
 }
 
-var bad = 0;
-var ONLY = process.env.ONLY ? process.env.ONLY.split(",").map(Number) : null;
+var bad = 0, balanceWarnings = 0;
 Lv.LEVELS.forEach(function (lv, idx) {
   if (ONLY && ONLY.indexOf(idx + 1) < 0) return;
   // sanity: no full lines at start
@@ -159,13 +171,20 @@ Lv.LEVELS.forEach(function (lv, idx) {
       play(run, skill);
       if (run.result === 'win') { wins++; mv.push(run.moves); }
     }
-    out.push({ skill: skill, win: Math.round(wins / runs * 100), p25: pct(mv, 0.25), p50: pct(mv, 0.5), p90: pct(mv, 0.9) });
+    out.push({ skill: skill, wins: wins, win: Math.round(wins / runs * 100), p25: pct(mv, 0.25), p50: pct(mv, 0.5), p90: pct(mv, 0.9) });
   });
   var g = out[0], k = out[1];
-  var flag = (g.win < 97 || k.win < 70) ? '  <-- CHECK' : '';
-  if (flag) bad++;
+  var flag = '';
+  if (!g.wins) { bad++; flag = '  <-- FAIL: no smart-bot wins'; }
+  else if (g.win < 97 || k.win < 70) {
+    balanceWarnings++;
+    flag = reportBalance ? '  <-- BALANCE WARNING' : '  <-- BALANCE FAIL';
+  }
   console.log('L' + (idx + 1) + ' stars=' + lv.stars.join('/') + (lv.moves ? ' limit=' + lv.moves : '') +
     ' | bot win ' + g.win + '% moves p25/50/90 ' + g.p25 + '/' + g.p50 + '/' + g.p90 +
     ' | kid win ' + k.win + '% p50/90 ' + k.p50 + '/' + k.p90 + flag);
 });
-console.log(bad ? bad + ' issue(s)' : 'all levels OK');
+var failures = bad + (reportBalance ? 0 : balanceWarnings);
+console.log(failures ? failures + ' issue(s)' : 'all required checks OK');
+if (balanceWarnings) console.log(balanceWarnings + ' balance threshold(s) ' + (reportBalance ? 'reported as warnings (--report-balance)' : 'failed (strict default)'));
+process.exitCode = failures ? 1 : 0;

@@ -228,37 +228,33 @@
     }
     var trailLen = tr.length;
     tr.length = 0; a.pts.length = 0;
-    // label 4-connected components of cells not owned by `id`; keep the biggest, fill the rest
+    // Enclosed regions can be larger than the outside. Keep the biggest region
+    // touching the board edge; smaller edge regions retain the wall-cut rule.
     var comp = this.comp, q = this.queue;
     comp.fill(0);
     var ncomp = 0, best = 0, bestSize = 0;
     for (var s = 0; s < NN; s++) {
       if (owner[s] === id || comp[s] !== 0) continue;
       ncomp++;
-      var head = 0, tail = 0;
+      var head = 0, tail = 0, touchesEdge = false;
       comp[s] = ncomp; q[tail++] = s;
       while (head < tail) {
         c = q[head++];
         var x = c % N;
+        if (x === 0 || x === N - 1 || c < N || c >= NN - N) touchesEdge = true;
         var nb;
         if (x > 0) { nb = c - 1; if (comp[nb] === 0 && owner[nb] !== id) { comp[nb] = ncomp; q[tail++] = nb; } }
         if (x < N - 1) { nb = c + 1; if (comp[nb] === 0 && owner[nb] !== id) { comp[nb] = ncomp; q[tail++] = nb; } }
         if (c >= N) { nb = c - N; if (comp[nb] === 0 && owner[nb] !== id) { comp[nb] = ncomp; q[tail++] = nb; } }
         if (c < NN - N) { nb = c + N; if (comp[nb] === 0 && owner[nb] !== id) { comp[nb] = ncomp; q[tail++] = nb; } }
       }
-      if (tail > bestSize) { bestSize = tail; best = ncomp; }
+      if (touchesEdge && tail > bestSize) { bestSize = tail; best = ncomp; }
     }
-    var victims = {};
-    if (ncomp > 1) {
-      for (s = 0; s < NN; s++) {
-        if (comp[s] && comp[s] !== best) {
-          var o = owner[s];
-          if (o) victims[o] = 1;
-          this.setOwner(s, id); changed.push(s);
-        }
+    // With no exterior left, even a single remaining region is enclosed.
+    for (s = 0; s < NN; s++) {
+      if (comp[s] && comp[s] !== best) {
+        this.setOwner(s, id); changed.push(s);
       }
-    } else {
-      for (i = 0; i < changed.length; i++) { /* trail cells may still have taken land */ }
     }
     // anyone swallowed completely?
     for (i = 1; i < this.agents.length; i++) {

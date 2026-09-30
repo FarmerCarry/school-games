@@ -539,10 +539,6 @@
   on('btn-pause', pause);
   on('btn-music', function () { M.on = !M.on; store.set('music', M.on); paintMusic(); S.click(); });
   paintMusic();
-  // Enter on a focused button must not fire twice (button click + our key handler).
-  window.addEventListener('keydown', function (e) {
-    if ((e.code === 'Enter' || e.code === 'NumpadEnter') && e.target && e.target.tagName === 'BUTTON') e.preventDefault();
-  }, true);
   var muteBtn = K.muteButton();
   muteBtn.title = 'الصوت (M)';
 

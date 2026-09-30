@@ -1,0 +1,235 @@
+import assert from 'node:assert/strict';
+import { after, before, test } from 'node:test';
+import http from 'node:http';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+
+const { chromium } = createRequire(import.meta.url)('playwright');
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
+const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
+let browser, server, origin;
+
+before(async () => {
+  server = http.createServer(async (req, res) => {
+    try {
+      const pathname = new URL(req.url, 'http://localhost').pathname;
+      if (pathname === '/snake-test-away') { res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><title>Away</title>'); return; }
+      let file = path.resolve(root, '.' + decodeURIComponent(pathname));
+      if (file !== root && !file.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
+      if ((await fs.stat(file)).isDirectory()) file = path.join(file, 'index.html');
+      res.writeHead(200, { 'content-type': mime[path.extname(file)] || 'application/octet-stream' }).end(await fs.readFile(file));
+    } catch { res.writeHead(404).end(); }
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  origin = `http://127.0.0.1:${server.address().port}`;
+  browser = await chromium.launch({
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+    // Playwright disables this normal browser lifecycle by default.
+    ignoreDefaultArgs: ['--disable-back-forward-cache'],
+    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
+  });
+});
+
+after(async () => {
+  if (browser) await browser.close();
+  if (server) await new Promise(resolve => server.close(resolve));
+});
+
+async function gamePage(t) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
+  await page.addInitScript(() => {
+    window.cacheRestores = 0;
+    addEventListener('pageshow', e => { if (e.persisted) window.cacheRestores++; });
+    let seed = 123456789;
+    Math.random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+    // Exercise the actual update function while keeping simulation time deterministic.
+    let kit;
+    Object.defineProperty(window, 'Kit', {
+      configurable: true,
+      get: () => kit,
+      set(value) {
+        kit = value;
+        kit.loop = update => {
+          window.stepGame = (count = 1) => { for (let i = 0; i < count; i++) update(1 / 60); };
+          return { stop() {} };
+        };
+      }
+    });
+  });
+  await page.goto(`${origin}/games/snake-arena/`);
+  await page.waitForFunction(() => window.__game && window.stepGame && performance.now() > 300);
+  await page.evaluate(() => document.getElementById('btnPlay').click());
+  assert.equal(await page.evaluate(() => __game.state), 'play');
+  return page;
+}
+
+async function backThroughCache(page) {
+  const previous = await page.evaluate(() => window.cacheRestores);
+  await page.goto(`${origin}/snake-test-away`);
+  // A BFCache restoration does not fire a new load event.
+  await page.goBack({ waitUntil: 'commit' });
+  await page.waitForFunction(n => window.cacheRestores === n + 1, previous);
+}
+
+async function stats(page) {
+  return page.evaluate(() => ({ current: __game.stats, stored: Kit.store('snake-arena').get('stats') }));
+}
+
+async function assertStats(page, expected) {
+  const value = await stats(page);
+  assert.deepEqual(value.current, expected);
+  assert.deepEqual(value.stored, expected);
+}
+
+const empty = { bestLen: 0, totalKills: 0, bestKills: 0, games: 0, bestTime: 0, totalFood: 0, bestRank: 0, powerups: 0, top1Time: 0 };
+
+for (const trigger of ['KeyP', 'Escape', 'button']) {
+  test(`Snake Arena ${trigger} pauses before a boundary collision and resumes into game over`, async t => {
+    const page = await gamePage(t);
+    const before = await page.evaluate(() => {
+      const p = SA.world.player;
+      p.hx = SA.world.R - p.r * 0.35 - 0.1; p.hy = 0; p.ang = p.want = 0; p.protect = 9999;
+      SA.game.kb = true; SA.game.kbMouse.x = innerWidth / 2; SA.game.kbMouse.y = innerHeight / 2;
+      return { x: p.hx, worldTime: SA.world.time };
+    });
+    const paused = await page.evaluate(trigger => {
+      if (trigger === 'button') document.getElementById('btnPause').click();
+      else window.dispatchEvent(new KeyboardEvent('keydown', { code: trigger }));
+      stepGame(120);
+      if (trigger !== 'button') window.dispatchEvent(new KeyboardEvent('keyup', { code: trigger }));
+      return { state: __game.state, alive: SA.world.player.alive, x: SA.world.player.hx, worldTime: SA.world.time };
+    }, trigger);
+    assert.deepEqual(paused, { state: 'paused', alive: true, ...before });
+    const after = await page.evaluate(() => {
+      document.getElementById('btnResume').click();
+      stepGame();
+      const collisionState = __game.state;
+      stepGame(120);
+      return { collisionState, state: __game.state, alive: SA.world.player.alive, overVisible: !document.getElementById('over').hidden, games: __game.stats.games };
+    });
+    assert.deepEqual(after, { collisionState: 'dying', state: 'over', alive: false, overVisible: true, games: 1 });
+  });
+}
+
+test('Snake Arena repeated BFCache checkpoints merge progress once, including final records and unlocks', async t => {
+  const page = await gamePage(t);
+  // Seed earned run totals to isolate checkpoint accounting from random arena encounters.
+  await page.evaluate(() => {
+    Object.assign(SA.game.run, { t: 5.1, kills: 2, food: 10.7, powerups: 1, bestRank: 6, top1T: 2 });
+    __game.setMass(100);
+    document.getElementById('btnPause').click();
+  });
+  const first = { bestLen: 100, totalKills: 2, bestKills: 2, games: 1, bestTime: 5, totalFood: 10, bestRank: 6, powerups: 1, top1Time: 2 };
+  await backThroughCache(page);
+  await assertStats(page, first);
+  await backThroughCache(page);
+  await assertStats(page, first);
+  assert.deepEqual(await page.evaluate(() => {
+    document.getElementById('btnResume').click();
+    __game.god();
+    SA.game.run.unlockT = 0;
+    stepGame();
+    return { sunny: !!SA.game.run.announced.sunny, bee: !!SA.game.run.announced.bee };
+  }), { sunny: false, bee: false });
+
+  await page.evaluate(() => {
+    Object.assign(SA.game.run, { t: 10.9, kills: 4, food: 20.1, powerups: 2, bestRank: 4, top1T: 6 });
+    __game.setMass(200);
+    document.getElementById('btnPause').click();
+  });
+  const second = { bestLen: 200, totalKills: 4, bestKills: 4, games: 1, bestTime: 10, totalFood: 20, bestRank: 4, powerups: 2, top1Time: 6 };
+  await backThroughCache(page);
+  await assertStats(page, second);
+  await page.evaluate(() => {
+    document.getElementById('btnResume').click();
+    Object.assign(SA.game.run, { t: 12.2, kills: 5, food: 21.9, powerups: 3, bestRank: 4, top1T: 6 });
+    __game.setMass(150); // Boosting below the checkpoint peak must not lower the record.
+    __game.killPlayer();
+    stepGame(120);
+  });
+  const final = { bestLen: 200, totalKills: 5, bestKills: 5, games: 1, bestTime: 12, totalFood: 21, bestRank: 4, powerups: 3, top1Time: 6 };
+  assert.equal(await page.evaluate(() => __game.state), 'over');
+  await assertStats(page, final);
+  assert.deepEqual(await page.evaluate(() => ({
+    bee: SA.reqMet(SA.SKINS.find(s => s.id === 'bee').req, __game.stats),
+    sunny: SA.reqMet(SA.SKINS.find(s => s.id === 'sunny').req, __game.stats)
+  })), { bee: true, sunny: false });
+  await backThroughCache(page);
+  await assertStats(page, final);
+  await page.evaluate(() => { document.getElementById('btnOMenu').click(); stepGame(180); });
+  await backThroughCache(page);
+  await assertStats(page, final);
+  await page.reload();
+  await assertStats(page, final);
+});
+
+test('Snake Arena a cached short run remains eligible after resuming, while quick restarts stay excluded', async t => {
+  const page = await gamePage(t);
+  await page.evaluate(() => {
+    SA.game.run.t = 2;
+    __game.setMass(99);
+    document.getElementById('btnPause').click();
+  });
+  await backThroughCache(page);
+  assert.deepEqual(await page.evaluate(() => __game.stats), empty);
+  await page.evaluate(() => {
+    document.getElementById('btnResume').click();
+    Object.assign(SA.game.run, { t: 3.1, kills: 1, food: 2.7, powerups: 1, bestRank: 7 });
+    document.getElementById('btnPause').click();
+    SA.game.lastStart = 0;
+    document.getElementById('btnRestart').click();
+  });
+  const earned = { bestLen: 99, totalKills: 1, bestKills: 1, games: 1, bestTime: 3, totalFood: 2, bestRank: 7, powerups: 1, top1Time: 0 };
+  await assertStats(page, earned);
+  await page.evaluate(() => {
+    SA.game.run.t = 2;
+    __game.setMass(500);
+    document.getElementById('btnPause').click();
+    SA.game.lastStart = 0;
+    document.getElementById('btnRestart').click();
+    document.getElementById('btnPause').click();
+    document.getElementById('btnMenu').click();
+    stepGame(120);
+  });
+  await backThroughCache(page);
+  await assertStats(page, earned);
+});
+
+test('Snake Arena cached runs finalized by restart and menu count once and retain earlier records', async t => {
+  const page = await gamePage(t);
+  await page.evaluate(() => {
+    Object.assign(SA.game.run, { t: 5, kills: 3, food: 10.5, powerups: 2, bestRank: 2, top1T: 3 });
+    __game.setMass(400);
+    document.getElementById('btnPause').click();
+  });
+  await backThroughCache(page);
+  await page.evaluate(() => {
+    Object.assign(SA.game.run, { t: 6, kills: 4, food: 12.5, powerups: 3 });
+    SA.game.lastStart = 0;
+    document.getElementById('btnRestart').click();
+    Object.assign(SA.game.run, { t: 3.5, kills: 1, food: 5.7, powerups: 1, bestRank: 9, top1T: 0 });
+    __game.setMass(20);
+    document.getElementById('btnPause').click();
+  });
+  await backThroughCache(page);
+  await backThroughCache(page);
+  const checkpoint = { bestLen: 400, totalKills: 5, bestKills: 4, games: 2, bestTime: 6, totalFood: 17, bestRank: 2, powerups: 4, top1Time: 3 };
+  await assertStats(page, checkpoint);
+  await page.evaluate(() => {
+    Object.assign(SA.game.run, { t: 4, kills: 2, food: 6.2, powerups: 2 });
+    document.getElementById('btnMenu').click();
+    stepGame(180);
+  });
+  const final = { ...checkpoint, totalKills: 6, totalFood: 18, powerups: 5 };
+  await assertStats(page, final);
+  await backThroughCache(page);
+  await page.evaluate(() => { SA.game.lastStart = 0; document.getElementById('btnPlay').click(); });
+  await assertStats(page, final);
+});

@@ -35,10 +35,7 @@
     return Kit.pick(pool).id;
   }
 
-  // Space/Enter must not also "click" a focused DOM button (we handle keys ourselves).
-  window.addEventListener('keydown', function (e) {
-    if ((e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') && e.target && e.target.tagName === 'BUTTON') e.preventDefault();
-  }, true);
+  // Kit leaves native button activation separate from the canvas shortcuts.
   ui.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) b.blur(); });
 
   /* -------------------------------------------------------- keyboard nav */
