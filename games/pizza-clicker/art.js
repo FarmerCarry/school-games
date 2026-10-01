@@ -293,11 +293,25 @@
 
   function hand(c, x, y, s) {
     c.save(); c.translate(x, y); c.scale(s / 100, s / 100);
-    rr(c, -8, -44, 16, 44, 8); fs(c, '#fff', OL, 4);
-    rr(c, -24, -12, 48, 46, 16); fs(c, '#fff', OL, 4);
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    // Pointing index finger: the thumb is on the left, all three curled fingers on the right.
+    c.beginPath();
+    c.moveTo(-18, 4); c.lineTo(-18, -36);
+    c.quadraticCurveTo(-18, -44, -10, -44); c.quadraticCurveTo(-2, -44, -2, -36);
+    c.lineTo(-2, -12);
+    c.quadraticCurveTo(-2, -18, 6, -18); c.quadraticCurveTo(14, -18, 14, -10);
+    c.quadraticCurveTo(14, -14, 21, -14); c.quadraticCurveTo(28, -14, 28, -6);
+    c.quadraticCurveTo(28, -10, 34, -8); c.quadraticCurveTo(40, -6, 40, 2);
+    c.lineTo(40, 14); c.quadraticCurveTo(40, 25, 28, 34);
+    c.lineTo(-8, 34); c.quadraticCurveTo(-17, 31, -23, 22);
+    c.lineTo(-37, 4); c.quadraticCurveTo(-43, -4, -36, -9);
+    c.quadraticCurveTo(-30, -13, -24, -5); c.lineTo(-18, 4);
+    c.closePath(); fs(c, '#fff', OL, 4);
+    // Creases separate the curled middle, ring and little fingers.
     c.strokeStyle = OL; c.lineWidth = 3;
-    c.beginPath(); c.moveTo(8, -8); c.lineTo(8, 8); c.moveTo(-8, -6); c.lineTo(-8, 8); c.stroke();
-    rr(c, -20, 30, 40, 12, 4); fs(c, '#ff4d4d', OL, 3);
+    c.beginPath(); c.moveTo(-2, -12); c.lineTo(-2, 5);
+    c.moveTo(14, -10); c.lineTo(14, 7); c.moveTo(28, -6); c.lineTo(28, 9); c.stroke();
+    rr(c, -10, 30, 40, 12, 4); fs(c, '#ff4d4d', OL, 3);
     c.restore();
   }
   function trophy(c, x, y, s, col) {
