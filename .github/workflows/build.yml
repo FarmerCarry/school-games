@@ -55,7 +55,7 @@ jobs:
       - name: Smoke-test all source games
         run: npm run check
       - name: Test source, build safety and harness regressions
-        run: npm test
+        run: node tools/ci-run.mjs npm test
       - name: Build the fast site
         run: npm run build
       - name: Smoke-test all built games
@@ -63,7 +63,7 @@ jobs:
         env:
           SG_ROOT: _site
       - name: Test optimized gameplay and harness regressions
-        run: npm test
+        run: node tools/ci-run.mjs npm test
         env:
           SG_ROOT: _site
       - name: Test offline installation, updates and the kill switch
