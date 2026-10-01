@@ -78,7 +78,7 @@
     if (lastFocus && !lastFocus.hidden && lastFocus.offsetParent) lastFocus.focus({preventScroll:true});
     else canvas.focus({preventScroll:true});
   }
-  function openModal(mode) {
+  function openModal(mode, focus) {
     if (!modalMode) lastFocus = document.activeElement;
     modalMode = mode; $('modal').hidden = false;
     $('panel').className = 'panel ' + mode + '-panel';
@@ -93,7 +93,7 @@
     if (mode === 'result' || mode === 'upgrades') renderUpgrades();
     if (mode === 'worlds') renderWorlds();
     controls();
-    (mode === 'result' ? $('again') : mode === 'pause' ? $('resume') : $('close-modal')).focus({preventScroll:true});
+    if (focus !== false) (mode === 'result' ? $('again') : mode === 'pause' ? $('resume') : $('close-modal')).focus({preventScroll:true});
   }
   function menu() {
     s.phase = 'title'; closeModal(); resetScene(); stats(); controls();
@@ -103,10 +103,13 @@
     closeModal(); resetScene(); s.phase = 'ready'; meterTime = -.48; meter = .08;
     stats(); controls(); canvas.focus({preventScroll:true}); announce('أوقف المؤشر في المنتصف واضرب الكرة');
   }
-  function pause() {
-    if (modalMode === 'pause') { closeModal(); return; }
+  function pause(focus) {
     if (modalMode || s.phase === 'title' || s.phase === 'result') return;
-    paused = true; openModal('pause');
+    paused = true; openModal('pause', focus);
+  }
+  function togglePause() {
+    if (modalMode === 'pause') closeModal();
+    else pause();
   }
   function burst(x,y,color,count) {
     if (reducedMotion) count = Math.min(4, count);
@@ -254,41 +257,34 @@
     A.draw(ctx,s);
   }
 
-  button('play',start);button('hit',strike);button('pause',pause);button('resume',closeModal);
+  button('play',start);button('hit',strike);button('pause',togglePause);button('resume',closeModal);
   button('restart',start);button('again',start);button('menu',menu);button('close-modal',closeModal);
   button('open-worlds',function(){openModal('worlds');});button('open-upgrades',function(){openModal('upgrades');});
   button('flight-hint',toggleSpeed);
   canvas.addEventListener('pointerdown',function(e){if(e.button===0)strike();});
   window.addEventListener('keydown',function(e) {
-    if(e.repeat) return;
+    if(e.repeat || e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return;
+    // The modal focuses a button when opened. Keep its advertised P/R shortcuts
+    // without intercepting native Enter/Space activation or editable controls.
+    var modalShortcut = ((modalMode==='pause' && e.code==='KeyP') || (modalMode==='result' && e.code==='KeyR')) &&
+      !e.defaultPrevented && !e.target.isContentEditable && e.target.closest && e.target.closest('button');
+    if(!K.isGameKeyEvent(e) && !modalShortcut) return;
     if(e.code==='Escape'||e.code==='KeyP') {
       e.preventDefault();
-      if(modalMode==='upgrades'||modalMode==='worlds') closeModal();else pause();return;
+      if(modalMode==='upgrades'||modalMode==='worlds') closeModal();else togglePause();return;
     }
     if(e.code==='KeyR' && s.phase==='result') {e.preventDefault();start();return;}
     if(e.code==='Space'||e.code==='Enter') {
-      // Let a focused button keep its normal keyboard activation.
-      if(e.target.tagName==='BUTTON') {
-        if(e.code==='Space') { e.preventDefault(); e.target.click(); }
-        return;
-      }
       e.preventDefault();
       if(modalMode==='result')start();
       else if(!modalMode) {
         if(s.phase==='title')start();else if(s.phase==='flight')toggleSpeed();else strike();
       }
     }
-    if(e.code==='Tab') {
-      var focusables=Array.prototype.filter.call((modalMode?$('modal'):ui).querySelectorAll('button'),function(b){return !b.disabled && b.offsetParent;});
-      var index=focusables.indexOf(document.activeElement);
-      e.preventDefault();
-      if(focusables.length) {
-        var nextIndex=index<0?(e.shiftKey?focusables.length-1:0):(index+(e.shiftKey?-1:1)+focusables.length)%focusables.length;
-        focusables[nextIndex].focus();
-      }
-    }
   });
-  document.addEventListener('visibilitychange',function(){if(document.hidden)pause();});
-  window.addEventListener('blur',function(){if(!document.hidden)pause();});
+  // Losing the frame must neither resume an existing pause nor pull focus back
+  // from the portal into the newly displayed pause dialog.
+  document.addEventListener('visibilitychange',function(){if(document.hidden)pause(false);});
+  window.addEventListener('blur',function(){if(!document.hidden)pause(false);});
   resetScene(); stats(); controls(); K.loop(step,render);
 })();
