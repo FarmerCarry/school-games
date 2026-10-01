@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import vm from 'node:vm';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,17 +21,27 @@ const ROOT = process.env.SG_ROOT ? path.resolve(REPO, process.env.SG_ROOT) : REP
 const sandbox = { window: {} };
 vm.runInNewContext(fs.readFileSync(path.join(REPO, 'js/catalog.js'), 'utf8'), sandbox);
 const games = sandbox.window.GAMES;
-const only = process.argv[2];
-const artifactDir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-check-'));
+const only = process.argv.slice(2);
 
+if (!Array.isArray(games) || !games.length) {
+  console.error('No games were found in the catalog.');
+  process.exit(1);
+}
+const unknown = only.filter(slug => !games.some(g => g.slug === slug));
+if (unknown.length) {
+  console.error('Unknown game selection: ' + unknown.join(', '));
+  process.exit(1);
+}
+const selected = only.length ? games.filter(g => only.includes(g.slug)) : games;
+
+const artifactDir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-check-'));
 const problems = [];
 const add = (slug, msg) => {
   const problem = `${slug}: ${msg}`;
   problems.push(problem);
-  // Print as soon as a game finishes, so interrupted CI runs keep diagnostics.
+  // Print immediately so interrupted CI runs retain each game's diagnostics.
   console.error(problem);
 };
-if (only && !games.some(g => g.slug === only)) add(only, 'unknown game slug');
 
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
@@ -42,8 +52,7 @@ function walk(dir) {
 const folders = fs.readdirSync(path.join(ROOT, 'games')).filter(f => fs.statSync(path.join(ROOT, 'games', f)).isDirectory());
 for (const f of folders) if (!games.find(g => g.slug === f)) add(f, 'folder has no catalog entry');
 
-for (const g of games) {
-  if (only && g.slug !== only) continue;
+for (const g of selected) {
   const dir = path.join(ROOT, 'games', g.slug);
   if (!fs.existsSync(path.join(dir, 'index.html'))) { add(g.slug, 'missing index.html'); continue; }
   const thumb = path.join(dir, 'thumb.svg');
@@ -75,25 +84,24 @@ for (const g of games) {
     { reload: true }, { wait: 1200 }
   ];
   const out = path.join(artifactDir, g.slug);
-  let raw;
+  const previousProblems = problems.length;
+  const child = spawnSync(process.execPath, [path.join(REPO, 'tools/playtest.mjs'), g.slug, '--out', out, '--actions-json', JSON.stringify(actions)],
+    { encoding: 'utf8', timeout: 120000 });
   try {
-    raw = execFileSync(process.execPath, [path.join(REPO, 'tools/playtest.mjs'), g.slug, '--out', out, '--actions-json', JSON.stringify(actions)],
-      { encoding: 'utf8', timeout: 120000 });
-  } catch (e) {
-    // Failed playtests still print their complete JSON diagnostics.
-    raw = e.stdout;
-    if (!raw) { add(g.slug, 'harness crashed: ' + String(e.message).split('\n')[0]); continue; }
-  }
-  try {
-    const r = JSON.parse(raw);
+    // A failed playtest still writes its report. Keep its useful diagnostics
+    // rather than replacing them with a generic subprocess exception.
+    const r = JSON.parse(child.stdout);
     for (const e of r.pageErrors) add(g.slug, 'page error: ' + e.split('\n')[0]);
     for (const e of r.consoleErrors) add(g.slug, 'console error: ' + e);
     for (const e of r.externalRequests) add(g.slug, 'external request: ' + e);
     for (const e of r.failedRequests) add(g.slug, 'failed request: ' + e);
+    for (const e of r.harnessErrors || []) add(g.slug, 'harness error: ' + e.split('\n')[0]);
     for (const n of r.notes) add(g.slug, n);
+    if ((!r.ok || child.status !== 0) && problems.length === previousProblems) add(g.slug, 'playtest failed');
     console.log(`${r.ok ? '✓' : '✗'} ${g.slug}  (screens in ${out})`);
   } catch (e) {
-    add(g.slug, 'harness crashed: ' + String(e.message).split('\n')[0]);
+    const reason = child.error?.message || child.stderr?.trim() || String(e.message);
+    add(g.slug, 'harness crashed: ' + reason.split('\n')[0]);
   }
 }
 

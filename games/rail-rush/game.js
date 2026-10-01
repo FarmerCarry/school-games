@@ -1830,7 +1830,7 @@
   /* ----------------------------------------------------- input */
   var KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', Space: 'up', ArrowDown: 'down', KeyS: 'down' };
   window.addEventListener('keydown', function (e) {
-    if (!Kit.keys.acceptsEvent(e)) return;
+    if (!Kit.isGameKeyEvent(e)) return;
     if (e.repeat) return;
     var code = e.code;
     if (code === 'Space' || code === 'Enter') e.preventDefault();

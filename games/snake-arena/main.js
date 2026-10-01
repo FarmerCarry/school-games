@@ -101,7 +101,8 @@
     G.run = {
       t: 0, kills: 0, combo: 0, lastKillT: -99, food: 0, powerups: 0, bestRank: 99, top1T: 0,
       said: {}, milestone: 0, eatAcc: 0, eatT: 0, warnT: 0, unlockT: 0, announced: {},
-      deathLen: 0, deathRank: 0, killer: null, reason: ''
+      checkpoint: { kills: 0, food: 0, powerups: 0, counted: false },
+      peakLen: Math.floor(p.mass), deathLen: 0, deathRank: 0, killer: null, reason: ''
     };
     showScreen(null);
     toast('انطلق!', '#8dff3a', 'كُل النقاط المضيئة لتكبر', 56, 1.6);
@@ -115,7 +116,7 @@
     mouse.down = false;
     sfx.boostHum(false);
     showScreen('pause');
-    $('pBest').textContent = Kit.fmt(Math.max(stats.bestLen, Math.floor(W.player.peakMass)));
+    $('pBest').textContent = Kit.fmt(Math.max(stats.bestLen, recordLength()));
     $('pLen').textContent = Kit.fmt(W.player.mass);
   }
   function resume() {
@@ -126,35 +127,45 @@
   }
 
   /* ------------------------------------------------------- unlock checks */
+  function recordLength() {
+    var r = G.run;
+    r.peakLen = Math.max(r.peakLen, Math.floor(W.player.mass), Math.floor(W.player.peakMass));
+    return r.peakLen;
+  }
   function projected() {
-    var r = G.run, p = W.player, st = {};
+    var r = G.run, st = {};
     for (var k2 in stats) st[k2] = stats[k2];
-    var len = Math.floor(p.peakMass);
-    st.bestLen = Math.max(stats.bestLen, len);
-    st.totalKills = stats.totalKills + r.kills;
+    if (!r || r.committed) return st;
+    var cp = r.checkpoint;
+    st.bestLen = Math.max(stats.bestLen, recordLength());
+    st.totalKills = stats.totalKills + r.kills - cp.kills;
     st.bestKills = Math.max(stats.bestKills, r.kills);
-    st.games = stats.games + 1;
+    st.games = stats.games + (cp.counted ? 0 : 1);
     st.bestTime = Math.max(stats.bestTime, Math.floor(r.t));
-    st.totalFood = stats.totalFood + Math.floor(r.food);
+    st.totalFood = stats.totalFood + Math.floor(r.food) - cp.food;
     st.bestRank = r.bestRank < 99 ? (stats.bestRank ? Math.min(stats.bestRank, r.bestRank) : r.bestRank) : stats.bestRank;
-    st.powerups = stats.powerups + r.powerups;
+    st.powerups = stats.powerups + r.powerups - cp.powerups;
     st.top1Time = Math.max(stats.top1Time, Math.floor(r.top1T));
     return st;
   }
-  // Adds this run to the saved stats exactly once (game over, or leaving a run early via
-  // pause -> restart / menu, or closing the page), so progress is never thrown away.
-  function commitRun() {
+  // A pagehide checkpoint may resume from the back/forward cache. Add only progress
+  // since the previous checkpoint, and finalize only on game over / restart / menu.
+  function commitRun(finalize) {
     var r = G.run;
     if (!r || r.committed) return false;
-    r.committed = true;
-    if (W.player.alive && r.t < 3) return false; // an instant restart doesn't count as a round
+    if (W.player.alive && r.t < 3) {
+      if (finalize !== false) r.committed = true;
+      return false; // an instant restart doesn't count as a round
+    }
     var st = projected();
     for (var kk in st) stats[kk] = st[kk];
+    r.checkpoint = { kills: r.kills, food: Math.floor(r.food), powerups: r.powerups, counted: true };
+    if (finalize !== false) r.committed = true;
     saveStats();
     return true;
   }
   window.addEventListener('pagehide', function () {
-    if (G.state === 'play' || G.state === 'paused' || G.state === 'dying') commitRun();
+    if (G.state === 'play' || G.state === 'paused' || G.state === 'dying') commitRun(false);
   });
 
   function liveUnlockCheck() {
@@ -215,6 +226,7 @@
   function playerDied(e) {
     var p = W.player, r = G.run;
     if (!r || G.state !== 'play') return;
+    recordLength(); // The fatal tick does not reach runTick().
     G.state = 'dying'; G.dieT = 0;
     r.deathLen = Math.floor(p.mass);
     var above = 0;
@@ -269,6 +281,7 @@
   ];
   function runTick(dt) {
     var r = G.run, p = W.player, h = G.hud;
+    recordLength();
     r.t += dt;
     var rank = W.rankOf(p);
     h.rank = rank;
@@ -377,8 +390,7 @@
     for (var l = 0; l < 2; l++) for (i = 0; i < lists[l].length; i++) before[lists[l][i].id] = unlocked(lists[l][i]);
     var oldBest = stats.bestLen;
     commitRun();
-    var peakLen = Math.floor(W.player.peakMass);
-    var newBest = peakLen > oldBest && stats.games > 1;
+    var newBest = r.peakLen > oldBest && stats.games > 1;
 
     G.state = 'over'; G.overT = 0;
     showScreen('over');
@@ -391,8 +403,8 @@
     $('oTime').textContent = fmtTime(r.t);
     $('oBestV').textContent = Kit.fmt(stats.bestLen);
     // "so close!" hook when the run nearly beat the record
-    var gap = oldBest - peakLen;
-    $('oClose').textContent = !newBest && oldBest > 0 && gap > 0 && peakLen >= oldBest * 0.6 ? 'ينقصك ' + Kit.fmt(gap) + ' فقط!' : '';
+    var gap = oldBest - r.peakLen;
+    $('oClose').textContent = !newBest && oldBest > 0 && gap > 0 && r.peakLen >= oldBest * 0.6 ? 'ينقصك ' + Kit.fmt(gap) + ' فقط!' : '';
 
     // new unlocks
     var ul = $('oUnlocks'); ul.innerHTML = '';
@@ -554,7 +566,7 @@
     } else if (G.state === 'skins') {
       if (K.anyPressed(['Escape', 'Enter'])) closeSkins();
     } else if (G.state === 'play') {
-      if (K.anyPressed(['KeyP', 'Escape'])) pauseGame();
+      if (K.anyPressed(['KeyP', 'Escape'])) { pauseGame(); K.endFrame(); return; }
     } else if (G.state === 'paused') {
       if (K.anyPressed(['KeyP', 'Escape', 'Enter'])) resume();
       else if (K.pressed('KeyR')) startGame();

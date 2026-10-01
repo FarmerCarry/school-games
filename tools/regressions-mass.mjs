@@ -107,12 +107,13 @@ export function testMass({ root = REPO } = {}) {
   const nodes = new Map(), toasts = [];
   let writes = 0;
   const c = { W, SA, Math, stats, G: { state: 'play', run: { t: 5, kills: 1, food: 990,
-    powerups: 0, bestRank: 99, top1T: 0, deathLen: 20, announced: {} } }, mouse: {},
+    powerups: 0, bestRank: 99, top1T: 0, peakLen: 10, deathLen: 20, announced: {},
+    checkpoint: { kills: 0, food: 0, powerups: 0, counted: false } } }, mouse: {},
     sfx: new Proxy({}, { get: () => noop }), R: { floatText: noop }, showScreen: noop,
     Kit: { fmt: String }, toast: (...args) => toasts.push(args), saveStats: () => writes++,
     $: id => { if (!nodes.has(id)) nodes.set(id, {}); return nodes.get(id); } };
   vm.createContext(c);
-  vm.runInContext(['unlocked', 'projected', 'pauseGame', 'liveUnlockCheck', 'commitRun'].map(name => sourceFunction(main, name)).join('\n'), c);
+  vm.runInContext(['unlocked', 'recordLength', 'projected', 'pauseGame', 'liveUnlockCheck', 'commitRun'].map(name => sourceFunction(main, name)).join('\n'), c);
   const original = JSON.stringify(stats);
   assert.equal(c.projected().bestLen, 1000);
   c.liveUnlockCheck();

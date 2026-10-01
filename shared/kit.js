@@ -40,7 +40,7 @@
         } catch (e) { return fallback; }
       },
       set: function (key, value) {
-        try { window.localStorage.setItem(prefix + key, JSON.stringify(value)); } catch (e) { /* ignore */ }
+        try { window.localStorage.setItem(prefix + key, JSON.stringify(value)); return true; } catch (e) { return false; }
       },
       remove: function (key) {
         try { window.localStorage.removeItem(prefix + key); } catch (e) { /* ignore */ }
@@ -160,19 +160,25 @@
   //                                   at the end of every update step to clear it.
   // Kit.keys.anyDown(['KeyA','ArrowLeft'])
   var held = {}, hit = {}, tabCapture = null;
-  var BLOCK = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Space: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1 };
+  var scrollBlocked = new WeakSet();
   function nativeKeyTarget(target) {
-    return !!(target && (target.isContentEditable || (target.closest && target.closest('button, a[href], input, textarea, select, [role="button"], [role="slider"]'))));
+    return !!(target && (target.isContentEditable || (target.closest && target.closest('button, input, textarea, select, option, a[href], summary, [role="button"], [role="link"], [role="textbox"], [role="combobox"], [role="slider"], [role="spinbutton"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"], [role="menuitem"]'))));
   }
   function acceptsKeyEvent(e) {
-    if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return false;
+    // Later game listeners may consume a scroll key prevented by Kit itself,
+    // while keys already handled by a UI listener stay out of gameplay.
+    if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey || (e.defaultPrevented && !scrollBlocked.has(e))) return false;
     if (nativeKeyTarget(e.target)) {
       // Escape closes a game's menu/pause overlay even when one of its buttons
       // has focus. Text fields and selects retain their own Escape behavior.
-      return e.code === 'Escape' && !e.target.isContentEditable && !!(e.target.closest && e.target.closest('button, [role="button"]'));
+      return e.code === 'Escape' && !e.target.isContentEditable && !!(e.target.closest && e.target.closest('button, [role="button"]')) && !e.target.closest('input, textarea, select, option, [role="textbox"], [role="combobox"], [role="slider"], [role="spinbutton"]');
     }
-    return e.code !== 'Tab' || (!e.shiftKey && tabCapture && tabCapture());
+    return e.code !== 'Tab' || !!(!e.shiftKey && tabCapture && tabCapture());
   }
+  Kit.isGameKeyEvent = acceptsKeyEvent;
+  // Tab stays available for menu navigation and leaving an embedded game.
+  // Games with a Tab action can handle it while their playing surface is active.
+  var BLOCK = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Space: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1 };
   Kit.keys = {
     isNativeTarget: nativeKeyTarget,
     acceptsEvent: acceptsKeyEvent,
@@ -188,20 +194,21 @@
   window.addEventListener('keydown', function (e) {
     // Shift+Tab from the game surface returns to the portal. Native controls keep
     // their ordinary Tab order; standalone game pages keep browser navigation.
-    if (e.code === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !nativeKeyTarget(e.target) && window.parent !== window) {
+    if (e.code === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && !e.defaultPrevented && !nativeKeyTarget(e.target) && window.parent !== window) {
       e.preventDefault();
       e.stopImmediatePropagation();
       Kit.keys.reset();
       try { if (document.pointerLockElement) document.exitPointerLock(); } catch (err) { /* ignore */ }
       window.parent.postMessage('sg:focus-portal', '*');
-      return;
     }
-    if (!acceptsKeyEvent(e)) { if (e.code === 'Tab') Kit.keys.reset(); return; }
-    if (BLOCK[e.code] || e.code === 'Tab') e.preventDefault();
+  }, true);
+  window.addEventListener('keydown', function (e) {
     audio.unlock();
+    if (!acceptsKeyEvent(e)) { if (e.code === 'Tab') Kit.keys.reset(); return; }
+    if (BLOCK[e.code] || e.code === 'Tab') { scrollBlocked.add(e); e.preventDefault(); }
     if (!held[e.code]) hit[e.code] = true;
     held[e.code] = true;
-  }, true);
+  });
   window.addEventListener('keyup', function (e) { held[e.code] = false; }, true);
   window.addEventListener('blur', Kit.keys.reset);
   window.addEventListener('focusin', function (e) { if (nativeKeyTarget(e.target)) Kit.keys.reset(); });
@@ -365,7 +372,7 @@
     b.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
     document.body.appendChild(b);
     if (opts.key !== false) {
-      window.addEventListener('keydown', function (e) { if (Kit.keys.acceptsEvent(e) && e.code === 'KeyM' && !e.repeat) audio.toggleMute(); });
+      window.addEventListener('keydown', function (e) { if (Kit.isGameKeyEvent(e) && e.code === 'KeyM' && !e.repeat) audio.toggleMute(); });
     }
     return b;
   };

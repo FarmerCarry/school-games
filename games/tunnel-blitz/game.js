@@ -1676,7 +1676,7 @@
   });
 
   window.addEventListener('keydown', function (e) {
-    if (!Kit.keys.acceptsEvent(e)) return;
+    if (!Kit.isGameKeyEvent(e)) return;
     var c = e.code;
     if (c === 'Enter' || c === 'Space') e.preventDefault();
     if (!Mus.on && G.state === 'title') { A.unlock(); Mus.play('title'); Mus.set(104, 0, 0); }

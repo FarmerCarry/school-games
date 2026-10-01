@@ -1233,7 +1233,7 @@
   }
 
   window.addEventListener('keydown', function (e) {
-    if (!Kit.keys.acceptsEvent(e)) return;
+    if (!Kit.isGameKeyEvent(e)) return;
     var c = e.code;
     if (e.repeat && c !== 'ArrowLeft' && c !== 'ArrowRight') return;
     var go = c === 'Enter' || c === 'Space' || c === 'NumpadEnter';

@@ -55,51 +55,49 @@ anything violent. Free-for-all or 5 v 5 teams against bots (easy / normal / hard
 with coins to unlock colours and hats. Click the game to capture the mouse; Esc gives it back
 and pauses.
 
-## Putting it online (GitHub Pages)
+## Putting it online (GitHub Pages, free)
 
-1. Open the repository's **Settings > Pages**. Under **Build and deployment**, set
-   **Source** to **GitHub Actions**. This is a one-time setting; the workflow publishes
-   the tested fast build directly.
-2. Merge this branch into `main`.
-3. Open **Actions > Build fast site** to follow the checks and deployment. You can
-   also select **Run workflow** on `main` after changing the Pages setting.
-4. After a successful deployment, the site is live at
-   `https://<your-username>.github.io/school-games/`. Share that link with your class.
+1. Push the changes to `main`.
+2. **If the repository is private:** on GitHub's free plan, Pages only works for public
+   repositories. Open **Settings** → **General**, scroll to the bottom (**Danger Zone**) →
+   **Change visibility** → **Public**. The repo contains only the games (no passwords, no
+   student data), so this is safe. (With a paid GitHub plan you can skip this step.)
+3. On GitHub, open the repo → **Settings** → **Pages**.
+4. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+5. Open **Actions** → **Build and deploy games**. A push to `main` starts it automatically;
+   after changing the Pages setting, you can also select **Run workflow** on `main`.
+6. When the deployment succeeds, share `https://<your-username>.github.io/school-games/`
+   with your class. Students do not need GitHub accounts. Every later push to `main`
+   runs the checks and deploys the tested version.
 
-Pages is available for public repositories on GitHub Free and for private repositories
-on eligible paid plans. See [GitHub's Pages workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+### The fast version (recommended for PCs with slow hard disks)
 
-Pull requests run the same checks without publishing. Pushes to `main` and manual runs
-on `main` publish only after source tests, built-site tests and offline tests pass
-(`.github/workflows/build.yml`). A failed check leaves the previous deployment online.
-Keep editing `main` as usual, including `js/catalog.js` when hiding or featuring games.
-In branch protection, require **Test source and fast build** before merging.
+The GitHub Actions workflow tests pull requests and builds the faster copy into `_site/`.
+Only a tested `main` build deploys; pull requests validate changes without publishing them.
+The workflow
+deploys that folder directly with GitHub's Pages artifact and deployment actions
+(see `.github/workflows/build.yml` and `tools/build.mjs`). It looks and plays exactly
+the same, but:
 
-### The fast version (for PCs with slow hard disks)
+- each game is **one file** instead of 10–13, and the home page is one file with all pictures
+  built in, so a slow hard disk has far fewer files to read;
+- after the first visit, every PC keeps the whole site in an **offline cache**: games open
+  without asking the server, still work if the internet drops, and after an update each PC
+  downloads only the files that changed;
+- it can be **installed as an app** (the install icon in Chrome/Edge's address bar).
 
-`tools/build.mjs` creates `_site/`, the version the workflow tests and deploys.
-It preserves the games' Arabic interface, artwork and gameplay:
+To use it: **Settings → Pages → Source: GitHub Actions** (once). If you previously
+selected the `gh-pages` branch, switch that setting to GitHub Actions.
+Keep editing `main` as usual (for example `js/catalog.js`); the fast copy deploys after
+the regression, smoke, and offline checks pass. If a check or build fails, the previous
+deployment stays online. No `gh-pages` branch or personal access token is needed.
 
-- each game's scripts and styles are folded into one HTML file, and the portal's
-  pictures are embedded; fonts and Three.js stay shared to avoid duplication;
-- after the first visit, each PC keeps the site in an **offline cache**: games open
-  without contacting the server, work when the connection drops, and updates download
-  only changed files;
-- it can be **installed as an app** from Chrome or Edge's address bar.
+Going back is always safe: switch Pages back to **`main`**. The `sw.js` file in `main` is an
+"off switch" — any PC that has the offline cache removes it on its next visit and uses the
+normal site again.
 
-The build is designed to reduce asset requests and disk reads. School-HDD loading gains
-have not been measured yet. Compare cold and cached visits on a representative school PC
-with fixed settings, and record time until playable, request count, frame times and input
-response. Clearing the browser cache does not reproduce a genuinely cold disk.
-Compare settled title and gameplay screenshots too, and check Arabic readability and
-gameplay manually before accepting a performance change.
-
-The builder also supports `node tools/build.mjs --kill-sw` for a cache-removal release.
-Its worker removes existing registrations and caches; the offline suite tests this switch.
-The source `sw.js` provides the same off switch when serving the unbuilt site.
-
-If the school web filter blocks the site, ask IT to allow its address. The games contain
-no ads and make no outside requests.
+If the school web filter blocks it, ask IT to allow that address. The site contains no ads and
+makes no outside requests, so it's an easy one to approve.
 
 ### Running it without the internet
 
@@ -128,49 +126,76 @@ tools/playtest.mjs        headless Chromium playtest harness (Playwright)
 tools/build.mjs           builds the fast version (one file per game + offline cache)
 ```
 
-The site itself runs as plain HTML/CSS/JS. Node 22, esbuild and Playwright are development
-tools; they are not included in the published games.
+Use Node.js 22 or newer (the CI workflow uses Node 22), then install the pinned
+development tools and Chromium once:
 
-Install the pinned dependencies and Chromium once:
-
-```sh
+```
 npm ci
-npx playwright install --no-shell chromium
+npm run browsers:install          # downloads Playwright's Chromium
+# Linux machines missing browser libraries: npx playwright install --with-deps --no-shell chromium
 ```
 
-The checks use full Chromium's headless mode to match the desktop browser's renderer.
-On Linux, use `npx playwright install --with-deps --no-shell chromium` to install Chromium's
-system dependencies as well. If Chromium is already installed in a managed environment, set
-`PLAYWRIGHT_EXECUTABLE_PATH` to its executable instead of downloading another browser.
+Preview locally over HTTP with any static server, for example `python3 -m http.server 8000`.
+Test a game automatically with `node tools/playtest.mjs <slug>`. Failed browser actions,
+evaluations, page errors, or missing assets return a nonzero exit status.
+If Chromium is already installed, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its absolute
+executable path instead of downloading another browser (for example `/usr/bin/chromium`).
+`PLAYWRIGHT_EXECUTABLE_PATH` is also supported. Tests use the full Chromium browser in
+headless mode through the shared launcher; the install command includes that browser.
 
-Preview locally over HTTP with any static server, for example `npx serve .`.
-Test one source game with `node tools/playtest.mjs <slug>`.
+Performance and the fast build:
 
-Run the release checks locally:
-
-```sh
-npm run test:tooling             # build and browser-harness helper tests
-npm run check                    # smoke-test every source game
-npm run test:regressions          # focused gameplay and portal assertions
-npm run build                    # fast build into _site/
-SG_ROOT=_site npm run check
-SG_ROOT=_site npm run test:regressions
-npm run test:offline              # install, offline use, updates, stale files, kill switch
+```
+npm test                        # deterministic bug regressions and browser checks
+npm run test:unit                # the regression files under tools/tests/
+npm run test:tooling             # shared build and browser-harness helpers
+npm run test:regressions         # additional gameplay and portal keyboard checks
+npm run check                   # smoke-test all 28 source games
+npm run build                   # fast build into _site/ (the Pages artifact)
+SG_ROOT=_site npm test           # run regressions against the optimized games
+SG_ROOT=_site npm run check      # smoke-test all 28 optimized games
+npm run test:offline             # cache installation, offline games, updates, and kill switch
+node tools/perf.mjs [slug]       # files, load/script time, stutters, memory, saves per page
 ```
 
-For the two `SG_ROOT` commands in Windows PowerShell:
+The offline tests use disposable working copies, so their simulated updates leave the
+checkout and existing `_site/` output intact. The browser regression suite uses isolated
+profiles and test saves; it does not overwrite your normal browser progress.
+Smoke runs keep per-game screenshots and a `report.json` in a separate temporary directory.
+Failures print diagnostics immediately, including the browser action that failed.
 
-```powershell
-$env:SG_ROOT = '_site'
-npm run check
-npm run test:regressions
-Remove-Item Env:SG_ROOT
+The builder accepts new or empty output directories and recognized generated builds.
+It refuses source directories, Git metadata, symlinks, tracked files, and unrelated files
+added to an output directory. Custom output uses `node tools/build.mjs --out <directory>`.
+Builds are staged before replacement, so a failed build preserves the previous output.
+The generated ownership marker is excluded from the offline cache.
+
+Regression tests cover storage exhaustion and failed-save recovery, inventory conservation
+across reloads, pending completion screens, actual browser Back cache restoration, native
+keyboard controls, and game rules. Additive save fields remain compatible with older saves.
+
+If you add or remove games or cached assets, regenerate the committed emergency switch
+so its legacy-cache cleanup knows the current file paths:
+
+```
+node tools/build.mjs --out .work/kill-switch --kill-sw
+cp .work/kill-switch/sw.js sw.js
 ```
 
-The offline tests use temporary copies so the verified `_site/` output remains unchanged.
-Use `node tools/perf.mjs [slug]` to inspect requests, load/script time, stutters, memory
-and save activity. Browser checks catch specific regressions; they do not measure
-school-HDD performance or judge how enjoyable a game feels.
+Level-specific verifiers live beside their games. Swing Hook exits nonzero for unsolved
+levels or failed solution replays. Block Burst's default check also fails its statistical
+balance thresholds:
+
+```
+node games/swing-hook/verify-levels.js
+node games/block-burst/verify-levels.js
+node games/block-burst/verify-levels.js --report-balance
+```
+
+The last command reports balance thresholds as warnings while still failing invalid boards
+and levels with no successful smart-bot runs. The existing levels currently have balance
+warnings; report mode is useful for inspecting them without treating those warnings as
+proof a level is impossible.
 
 ## Credits and licenses
 

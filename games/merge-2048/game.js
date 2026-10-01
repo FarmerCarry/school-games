@@ -72,7 +72,9 @@
     var d = loadSaved(N);
     if (!d) return null;
     var any = false; for (var i = 0; i < d.v.length; i++) if (d.v[i]) any = true;
-    return any && d.m > 0 && canMoveVals(d.v, N) ? d : null;
+    // An unacknowledged victory still needs its result screen, even when
+    // the winning move also filled the last available space.
+    return any && d.m > 0 && (canMoveVals(d.v, N) || (d.w && !d.k)) ? d : null;
   }
 
   /* ============================================================== board */
@@ -561,12 +563,14 @@
       G.startBest = save.best[N];
       save.games++; store.set('games', save.games);
     }
-    G.dead = false; G.winPending = false; G.maxT = G.board.maxTile(); G.newBest = G.startBest > 0 && G.score > G.startBest;
+    G.dead = !G.board.canMove(); G.deadAt = now + 0.3;
+    G.winPending = G.won && !G.keep; G.maxT = G.board.maxTile(); G.newBest = G.startBest > 0 && G.score > G.startBest;
     G.shownScore = G.score;
     setScreen('play');
     refreshHUD(true);
     saveGame();
     sfx.start();
+    if (G.winPending) later(0.45, showWin);
   }
 
   function saveGame() {
@@ -678,7 +682,10 @@
     G.board.grid.forEach(function (t) { if (t) t.born = now - SPAWN * 0.55; });
     G.score = h.s; G.shownScore = G.score;
     G.dead = false; G.maxT = G.board.maxTile();
-    if (!G.keep && G.maxT < WIN[G.N]) G.won = false;
+    // Undo can restore a winning board while its first result is still pending.
+    // Rebuild that result from the restored board, preserving acknowledgement.
+    if (!G.keep) G.won = G.maxT >= WIN[G.N];
+    G.winPending = G.won && !G.keep;
     if (G.screen === 'over') setScreen('play');
     sfx.undo();
     for (var i = 0; i < 18; i++) {
@@ -687,6 +694,7 @@
     }
     refreshHUD(true);
     saveGame();
+    if (G.winPending) later(0.45, showWin);
   }
 
   function restart() { sfx.click(); startGame(G.N, true); }
@@ -934,7 +942,7 @@
 
   /* ============================================================== input */
   window.addEventListener('keydown', function (e) {
-    if (!Kit.keys.acceptsEvent(e)) return;
+    if (!Kit.isGameKeyEvent(e)) return;
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     var k = e.code;
     var go = k === 'Enter' || k === 'NumpadEnter' || k === 'Space';
@@ -996,7 +1004,16 @@
   document.addEventListener('visibilitychange', function () { if (document.hidden && G.screen === 'play') pause(); });
 
   function play(fresh) { sfx.click(); startGame(save.size, fresh); }
-  function on(id, fn) { $(id).addEventListener('click', function (e) { e.stopPropagation(); fn(); }); }
+  function on(id, fn) {
+    $(id).addEventListener('click', function (e) {
+      e.stopPropagation(); fn();
+      // Pointer HUD actions return to the board; keyboard activation keeps
+      // the control focused so Tab and a second confirmation still work.
+      if (e.detail > 0 && G.screen === 'play' && $('hud').contains(e.currentTarget)) {
+        try { canvas.focus({ preventScroll: true }); } catch (err) { /* ignore */ }
+      }
+    });
+  }
   on('btnPlay', function () { play(false); });
   on('btnNewT', function () { play(true); });
   on('btnUndo', undo);

@@ -5,9 +5,15 @@ import path from 'node:path';
 
 function stateOfGame() {
   const g = window.__game;
+  if (!g && window.GolfArt && document.getElementById('title-screen')) {
+    // Golf exposes its screens in the DOM instead of a production debug API.
+    // A leaked shortcut can start a shot or open an overlay, both observable here.
+    const screens = ['title-screen', 'swing-controls', 'flight-hint', 'modal', 'pause-content', 'result-content', 'worlds-content', 'upgrades-content'];
+    return JSON.stringify(Object.fromEntries(screens.map(id => [id, !document.getElementById(id).hidden])));
+  }
   let state = typeof g.state === 'function' ? g.state() : g.state;
   if (state && typeof state === 'object') return JSON.stringify({ screen: state.screen, phase: state.phase, ui: state.ui, paused: state.paused, modal: state.modal });
-  return state ?? g.mode ?? null;
+  return state ?? g.mode ?? g.screen ?? null;
 }
 
 // Check the real event listeners of every game, including handlers outside Kit.
@@ -22,7 +28,9 @@ export async function testNativeControls({ browser, origin, repo }) {
     page.on('pageerror', e => errors.push(e.message));
     try {
       await page.goto(`${origin}/games/${slug}/`, { waitUntil: 'load' });
-      await page.waitForFunction(() => !!window.__game && !!window.Kit);
+      await page.waitForFunction(slug => !!window.Kit && (slug === 'skybound-golf'
+        ? !!window.GolfArt && !!window.GolfPhysics && !!document.getElementById('title-screen')
+        : !!window.__game), slug);
       await page.evaluate(() => {
         const panel = document.createElement('div');
         panel.id = 'regression-controls';
@@ -152,6 +160,16 @@ export async function testGameTab({ browser, origin }) {
     await page.locator('#btnResume').focus();
     await page.keyboard.press('Escape');
     assert.equal((await page.evaluate(() => __game.state())).paused, false, 'Escape resumes from a focused pause-menu button');
+    await page.goto(`${origin}/games/merge-2048/`);
+    await page.waitForFunction(() => !!window.__game);
+    await page.locator('#btnPlay').focus();
+    await page.keyboard.press('Enter');
+    await page.locator('#btnPause').focus();
+    await page.keyboard.press('Escape');
+    assert.equal((await page.evaluate(() => __game.state())).screen, 'pause', '2048 Escape pauses from a focused HUD button');
+    await page.locator('#btnResume').focus();
+    await page.keyboard.press('Escape');
+    assert.equal((await page.evaluate(() => __game.state())).screen, 'play', '2048 Escape resumes from a focused pause-menu button');
     await page.goto(`${origin}/games/fire-and-ice/`);
     await page.waitForFunction(() => !!window.__game);
     await page.evaluate(() => { __game.solo(true); __game.load(1); document.activeElement?.blur(); });
@@ -175,6 +193,9 @@ export async function testGameTab({ browser, origin }) {
     const moved = await page.evaluate(() => ({ fire: __game.world.fire.x, ice: __game.world.ice.x }));
     assert.ok(moved.ice < positions.ice, `after Tab, movement controls the ice character: ${JSON.stringify({ positions, moved })}`);
     assert.equal(moved.fire, positions.fire, 'switching characters leaves fire in place');
+    // Exercise the supported drag-to-look fallback without depending on a
+    // headless operating-system pointer-lock grant.
+    await page.addInitScript(() => { HTMLCanvasElement.prototype.requestPointerLock = undefined; });
     await page.goto(`${origin}/games/splat-strike/`);
     await page.waitForFunction(() => !!window.__game);
     await page.locator('#setBtn').click();

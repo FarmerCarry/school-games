@@ -378,7 +378,7 @@
   function pause() { if (app.screen === 'game') { S.click(); show('pause'); } }
 
   window.addEventListener('keydown', function (e) {
-    if (!Kit.keys.acceptsEvent(e)) return;
+    if (!Kit.isGameKeyEvent(e)) return;
     if (e.code === 'Slash' || e.code === 'Quote' || (e.code === 'Backspace' && app.screen !== 'title')) e.preventDefault();
     if (e.repeat) return;
     var k = e.code, sc = app.screen;

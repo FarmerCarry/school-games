@@ -88,7 +88,7 @@
   var GAMES = (Array.isArray(window.GAMES) ? window.GAMES : []).filter(function (g) {
     return g && typeof g.slug === 'string' && g.slug && !g.hidden;
   });
-  var BY_SLUG = {};
+  var BY_SLUG = Object.create(null);
   GAMES.forEach(function (g) {
     BY_SLUG[g.slug] = g;
     if (!Array.isArray(g.cats)) g.cats = [];
@@ -96,7 +96,7 @@
     g.title = String(g.title || g.slug);
     g.color = /^#[0-9a-f]{3,8}$/i.test(g.color || '') ? g.color : '#4f7cff';
   });
-  var CAT_BY_ID = {};
+  var CAT_BY_ID = Object.create(null);
   ALL_CATS.forEach(function (c) { if (c && c.id) CAT_BY_ID[c.id] = c; });
   // Only categories that actually have (visible) games.
   var CATS = ALL_CATS.filter(function (c) {
@@ -448,7 +448,7 @@
   }
   var MULTI_WORDS = ' لاعبان لاعبين اثنان اثنين صديق صديقك صديقي اصدقاء ضد جماعي 2 two player players friend friends multiplayer versus 2p';
   var HOT_WORDS = ' رائج رائجه مشهور مشهوره حماس hot popular';
-  var INDEX = {};
+  var INDEX = Object.create(null);
   function idx(g) {
     if (INDEX[g.slug]) return INDEX[g.slug];
     var cats = g.cats.map(function (id) { return CAT_BY_ID[id] ? CAT_BY_ID[id].label + ' ' + id : id; }).join(' ');
@@ -945,7 +945,7 @@
   // Hovering (or focusing) a tile for a moment fetches that game's page in the background,
   // so it opens instantly on click. Only over http(s); once the offline cache (sw.js) has
   // the game this is answered locally and costs nothing.
-  var warmed = {}, warmTimer = 0;
+  var warmed = Object.create(null), warmTimer = 0;
   function warmGame(slug) {
     if (!slug || warmed[slug] || !/^https?:$/.test(location.protocol)) return;
     warmed[slug] = true;

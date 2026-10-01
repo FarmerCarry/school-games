@@ -40,6 +40,11 @@ for (let i = 0; i < argv.length; i++) {
 const sandbox = { window: {} };
 vm.runInNewContext(fs.readFileSync(path.join(REPO, 'js/catalog.js'), 'utf8'), sandbox);
 let targets = ['portal', ...sandbox.window.GAMES.map(g => g.slug)];
+const unknown = only.filter(t => !targets.includes(t));
+if (unknown.length) {
+  console.error('Unknown performance target: ' + unknown.join(', '));
+  process.exit(1);
+}
 if (only.length) targets = targets.filter(t => only.includes(t));
 
 const { origin, close: closeServer } = await startTestServer(ROOT, { latency, cacheControl: 'max-age=600' });

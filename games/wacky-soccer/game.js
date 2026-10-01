@@ -1315,7 +1315,7 @@
 
   /* ----------------------------------------------------------- keyboard */
   window.addEventListener('keydown', function (e) {
-    if (!Kit.keys.acceptsEvent(e)) return;
+    if (!Kit.isGameKeyEvent(e)) return;
     if (e.repeat) return;
     var c = e.code;
     var go = c === 'Enter' || c === 'NumpadEnter' || c === 'Space';

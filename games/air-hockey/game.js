@@ -1386,7 +1386,7 @@
   muteBtn.title = 'الصوت (M)';
 
   window.addEventListener('keydown', function (e) {
-    if (!Kit.keys.acceptsEvent(e)) return;
+    if (!Kit.isGameKeyEvent(e)) return;
     if (e.repeat) return;
     var c = e.code;
     var titleOpen = !$('scr-title').hidden, overOpen = !$('scr-over').hidden;

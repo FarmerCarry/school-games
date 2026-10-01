@@ -609,7 +609,7 @@
   window.addEventListener('blur', up);
 
   window.addEventListener('keydown', function (e) {
-    if (!Kit.keys.acceptsEvent(e)) return;
+    if (!Kit.isGameKeyEvent(e)) return;
     if (e.repeat) return;
     var k = e.code;
     var go = k === 'Enter' || k === 'Space' || k === 'NumpadEnter';

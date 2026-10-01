@@ -1,174 +1,297 @@
 #!/usr/bin/env node
 /*
- * End-to-end test of the offline cache (sw.js) in the fast build.
+ * Browser regression tests for build caching, offline loading, updates, scope isolation,
+ * migration from shared legacy caches, and the emergency switch.
  *
- *   node tools/build.mjs && node tools/test-offline.mjs
+ *   node tools/test-offline.mjs
+ *   node tools/test-offline.mjs --scopes-only  # focus on migration and isolation
  *
- * Serves _site/ under /school-games/ (like GitHub Pages) and checks, in a real Chromium:
- *   1. first visit: the service worker installs and stores every file of the build
- *   2. offline: the portal and several games (2D and 3D) still load, with no errors
- *   3. update: after a new build, only the changed files are downloaded, the new version
- *      takes over and the old cache is deleted
- *   4. stale server copy: if the server still sends an old file, the update is refused and
- *      the previous version keeps working
- *   5. kill switch (tools/build.mjs --kill-sw): the worker removes itself and its cache
- * Tests an isolated copy of _site, so the validated release artifact is unchanged.
- * Exits non-zero if any check fails.
+ * Builds and changes only a disposable copy under the OS temporary directory. The
+ * checkout and any existing _site/ build remain untouched, even when a check fails.
  */
+import assert from 'node:assert/strict';
 import http from 'node:http';
 import fs from 'node:fs';
-import path from 'node:path';
 import os from 'node:os';
-import crypto from 'node:crypto';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from './browser.mjs';
-import { MIME } from './test-server.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const BUILD = path.join(REPO, '_site');
-if (!fs.existsSync(path.join(BUILD, 'sw.js'))) throw new Error('Run npm run build before npm run test:offline');
-const TEMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-offline-'));
-const SITE = path.join(TEMP_ROOT, 'site');
-fs.cpSync(BUILD, SITE, { recursive: true });
+const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-offline-'));
+const SOURCE = path.join(WORK, 'source');
 const BASE = '/school-games/';
-const ORIGINAL_SW = fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8');
-const ORIGINAL_FILES = JSON.parse(ORIGINAL_SW.match(/FILES = (\{.*\});/)[1]);
-const ORIGINAL_GAME = fs.readFileSync(path.join(SITE, 'games/merge-2048/index.html'), 'utf8');
-const hash = data => crypto.createHash('sha256').update(data).digest('hex').slice(0, 16);
-
-let staleFile = null, staleBody = null;   // simulate a CDN still serving an old copy
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json' };
+const mounts = new Map();
 const hits = [];
+let stalePath = null;
+let browser;
 const server = http.createServer((req, res) => {
-  const u = new URL(req.url, 'http://x');
+  const u = new URL(req.url, 'http://localhost');
   hits.push(u.pathname + u.search);
-  let rel;
-  if (u.pathname === '/favicon.ico' || u.pathname === BASE + 'favicon.ico') rel = 'favicon.svg';
-  else if (u.pathname.startsWith(BASE)) {
-    try { rel = decodeURIComponent(u.pathname.slice(BASE.length)) || 'index.html'; }
-    catch { res.writeHead(400); res.end(); return; }
-  } else { res.writeHead(404); res.end(); return; }
+  // A page outside every worker's scope can inspect registrations during forced
+  // navigation by the kill switch without losing its JavaScript execution context.
+  if (u.pathname === '/inspect/') {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<!doctype html><title>Offline test inspector</title>');
+    return;
+  }
+  const base = [...mounts.keys()].sort((a, b) => b.length - a.length).find(p => u.pathname.startsWith(p));
+  if (!base) { res.writeHead(404); res.end(); return; }
+  let rel = decodeURIComponent(u.pathname.slice(base.length)) || 'index.html';
   if (rel.endsWith('/')) rel += 'index.html';
-  const fp = path.resolve(SITE, rel);
-  const relative = path.relative(SITE, fp);
-  if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) { res.writeHead(403); res.end(); return; }
-  if (staleFile === rel) { res.writeHead(200, { 'content-type': MIME[path.extname(fp)] }); res.end(staleBody); return; }
+  const root = mounts.get(base);
+  const fp = path.resolve(root, rel);
+  if (!fp.startsWith(root + path.sep)) { res.writeHead(403); res.end(); return; }
+  if (u.pathname === stalePath) {
+    res.writeHead(200, { 'content-type': MIME[path.extname(fp)] || 'text/plain' });
+    res.end('old content from a stale server');
+    return;
+  }
   fs.readFile(fp, (err, data) => {
     if (err) { res.writeHead(404); res.end(); return; }
-    res.writeHead(200, { 'content-type': MIME[path.extname(fp)] || 'application/octet-stream', 'cache-control': 'max-age=600' });
+    res.writeHead(200, { 'content-type': MIME[path.extname(fp)] || 'application/octet-stream', 'cache-control': 'no-store' });
     res.end(data);
   });
 });
-await new Promise(r => server.listen(0, '127.0.0.1', r));
-const origin = `http://127.0.0.1:${server.address().port}`;
-// Simulate a new published version in the temporary copy only. Use the same
-// manifest order and hashing as build.mjs, without touching source or _site.
-function publishUpdate(marker) {
-  const rel = 'games/merge-2048/index.html';
-  const game = path.join(SITE, rel);
-  const body = ORIGINAL_GAME.replace('</body>', `<!-- ${marker} -->\n</body>`);
-  fs.writeFileSync(game, body);
-  const files = { ...ORIGINAL_FILES, [rel]: hash(body) };
-  const version = hash(JSON.stringify(files));
-  fs.writeFileSync(path.join(SITE, 'sw.js'), ORIGINAL_SW
-    .replace(/VERSION = "[0-9a-f]+"/, 'VERSION = ' + JSON.stringify(version))
-    .replace(/FILES = \{.*\};/, 'FILES = ' + JSON.stringify(files) + ';'));
-  return version;
+
+function check(condition, message) {
+  assert.ok(condition, message);
+  console.log('✓ ' + message);
 }
-const swVersion = () => fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8').match(/VERSION = "([0-9a-f]+)"/)[1];
-const fileCount = () => Object.keys(JSON.parse(fs.readFileSync(path.join(SITE, 'sw.js'), 'utf8').match(/FILES = (\{.*\});/)[1])).length;
-
-let failed = false;
-function check(ok, msg) { console.log((ok ? '✓ ' : '✗ ') + msg); if (!ok) failed = true; }
-
-const browser = await launchChromium();
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-const page = await ctx.newPage();
-const errors = [];
-page.on('pageerror', e => errors.push(String(e).split('\n')[0]));
-page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-page.on('requestfailed', r => errors.push(r.url() + ' :: ' + r.failure()?.errorText));
-page.on('response', r => { if (r.status() >= 400) errors.push(r.url() + ' :: HTTP ' + r.status()); });
-
-async function swState() {
+function build(name, ...args) {
+  execFileSync(process.execPath, [path.join(SOURCE, 'tools/build.mjs'), ...args], { cwd: SOURCE, encoding: 'utf8' });
+  const dir = path.join(WORK, name);
+  fs.cpSync(path.join(SOURCE, '_site'), dir, { recursive: true });
+  const sw = fs.readFileSync(path.join(dir, 'sw.js'), 'utf8');
+  const version = sw.match(/VERSION = "([0-9a-f]+)"/)?.[1];
+  const files = JSON.parse(sw.match(/(?:FILES|OWN_FILES) = (\{.*\}|\[.*\]);/)[1]);
+  return { dir, version, files, count: Object.keys(files).length };
+}
+const cachePrefix = scope => 'sg-v2-' + encodeURIComponent(scope) + '|';
+const cacheName = (scope, build) => cachePrefix(scope) + build.version;
+async function state(inspector, scope) {
+  return inspector.evaluate(async scope => {
+    const reg = await navigator.serviceWorker.getRegistration(scope);
+    const cachesByName = {};
+    for (const name of await caches.keys()) {
+      if (name.startsWith('sg-')) cachesByName[name] = (await (await caches.open(name)).keys()).length;
+    }
+    return { active: reg?.scope === scope && !!reg.active, caches: cachesByName };
+  }, scope);
+}
+async function waitFor(predicate, message, timeout = 30000) {
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    if (await predicate()) return;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error('Timed out: ' + message);
+}
+async function installed(inspector, scope, build) {
+  await waitFor(async () => {
+    const s = await state(inspector, scope);
+    return s.active && s.caches[cacheName(scope, build)] === build.count;
+  }, 'install ' + scope);
+}
+async function update(page) {
+  // Observe the worker's terminal install state instead of relying on a fixed delay.
   return page.evaluate(async () => {
-    const reg = await navigator.serviceWorker.getRegistration();
-    const names = (await caches.keys()).filter(k => k.startsWith('sg-'));
-    const counts = {};
-    for (const n of names) counts[n] = (await (await caches.open(n)).keys()).length;
-    return { active: !!(reg && reg.active), controlled: !!navigator.serviceWorker.controller, caches: counts };
+    const registration = await navigator.serviceWorker.getRegistration();
+    let worker = registration.installing;
+    const found = () => { worker = registration.installing; };
+    registration.addEventListener('updatefound', found);
+    try { await registration.update(); worker ||= registration.installing; }
+    finally { registration.removeEventListener('updatefound', found); }
+    if (!worker) return registration.active?.state;
+    return new Promise(resolve => {
+      const changed = () => {
+        if (['activated', 'redundant'].includes(worker.state)) resolve(worker.state);
+      };
+      worker.addEventListener('statechange', changed);
+      changed();
+    });
   });
 }
-async function waitFor(fn, ms = 60000) {
-  const t0 = Date.now();
-  while (Date.now() - t0 < ms) { if (await fn()) return true; await page.waitForTimeout(250); }
-  return false;
+async function offlineReload(context, pages) {
+  await context.setOffline(true);
+  try {
+    for (const page of pages) {
+      await page.reload({ waitUntil: 'load' });
+      assert.ok(await page.locator('#app .tile img').count() > 20, 'offline portal tiles');
+    }
+  } finally { await context.setOffline(false); }
 }
-async function openGame(slug) {
-  await page.evaluate(s => { location.hash = '#/play/' + s; }, slug);
-  const ok = await waitFor(async () => page.evaluate(s => {
-    const f = document.querySelector('#stage iframe');
-    try {
-      return !!(f && f.contentWindow.location.pathname.endsWith('/games/' + s + '/index.html') &&
-        f.contentDocument.readyState === 'complete' && f.contentDocument.querySelector('canvas, .sg-overlay, button'));
-    } catch (e) { return false; }
-  }, slug), 30000);
-  return ok;
+async function openOfflineGame(page, slug) {
+  const url = new URL('games/' + slug + '/index.html', page.url()).href;
+  const [frame, response] = await Promise.all([
+    page.waitForEvent('framenavigated', { predicate: frame => frame.parentFrame() === page.mainFrame() && frame.url() === url }),
+    page.waitForResponse(response => response.url() === url && response.request().resourceType() === 'document'),
+    page.evaluate(slug => { location.hash = '#/play/' + slug; }, slug)
+  ]);
+  assert.equal(response.status(), 200, slug + ' returns a successful document response');
+  assert.ok(response.fromServiceWorker(), slug + ' document comes from the offline worker');
+  await frame.waitForLoadState('load');
+  assert.ok(await frame.locator('canvas, .sg-overlay, button').count() > 0, slug + ' initializes its game document');
+}
+async function kill(inspector, page, scope, killBuild) {
+  const base = new URL(scope).pathname;
+  mounts.set(base, killBuild.dir);
+  const navigated = page.waitForEvent('framenavigated', { predicate: frame => frame === page.mainFrame() });
+  // Updating from the stable inspector avoids the kill switch's forced navigation
+  // interrupting the evaluate call on a controlled application page.
+  await inspector.evaluate(async scope => {
+    const registration = await navigator.serviceWorker.getRegistration(scope);
+    await registration.update();
+  }, scope);
+  await waitFor(async () => {
+    const s = await state(inspector, scope);
+    return !s.active && !Object.keys(s.caches).some(name => name.startsWith(cachePrefix(scope)));
+  }, 'kill switch ' + scope);
+  await navigated;
+  await page.waitForLoadState('load');
 }
 
 try {
-  const v1 = swVersion(), n1 = fileCount();
-  // 1. first visit
-  await page.goto(origin + BASE, { waitUntil: 'load' });
-  const installed = await waitFor(async () => { const s = await swState(); return s.active && s.caches['sg-' + v1] === n1; });
-  check(installed, `first visit stores all ${n1} files (version ${v1})`);
-  await page.reload({ waitUntil: 'load' });
-  check((await swState()).controlled, 'page is served by the offline cache after reload');
-
-  // 2. offline
-  await ctx.setOffline(true);
-  await page.reload({ waitUntil: 'load' });
-  const tiles = await page.evaluate(() => document.querySelectorAll('#app .tile img').length);
-  check(tiles > 20, `portal works offline (${tiles} tiles with pictures)`);
-  for (const slug of ['rail-rush', 'merge-2048', 'fire-and-ice', 'road-hopper', 'block-world']) {
-    check(await openGame(slug), `offline: ${slug} loads`);
+  fs.mkdirSync(path.join(SOURCE, 'tools'), { recursive: true });
+  for (const dir of ['games', 'js', 'css', 'shared', 'lib', 'icons']) {
+    fs.cpSync(path.join(REPO, dir), path.join(SOURCE, dir), { recursive: true });
   }
-  await page.evaluate(() => { location.hash = '#/'; });
-  await ctx.setOffline(false);
-  check(errors.length === 0, 'no page errors so far' + (errors.length ? ': ' + errors.join(' | ') : ''));
+  for (const file of ['index.html', 'manifest.webmanifest', 'favicon.svg', 'tools/build.mjs']) {
+    fs.copyFileSync(path.join(REPO, file), path.join(SOURCE, file));
+  }
+  fs.symlinkSync(path.join(REPO, 'node_modules'), path.join(SOURCE, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+  const v1 = build('v1');
+  const gameFile = path.join(SOURCE, 'games/merge-2048/index.html');
+  const original = fs.readFileSync(gameFile, 'utf8');
+  fs.writeFileSync(gameFile, original.replace('</body>', '<!-- offline update regression -->\n</body>'));
+  const v2 = build('v2');
+  fs.writeFileSync(gameFile, original.replace('</body>', '<!-- stale update regression -->\n</body>'));
+  const v3 = build('v3');
+  const killBuild = build('kill', '--kill-sw');
+  assert.equal(fs.readFileSync(path.join(REPO, 'sw.js'), 'utf8'), fs.readFileSync(path.join(killBuild.dir, 'sw.js'), 'utf8'), 'root kill switch matches its generator');
 
-  // 3. publish a changed game in the temporary site; only that file is downloaded
-  const v2 = publishUpdate('sw update test');
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  browser = await launchChromium({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await context.addInitScript(() => {
+    if (window === window.top) return;
+    // This suite checks offline resources and script initialization. Continuous 3D
+    // rendering is covered by the game smoke tests and can starve iframe load events
+    // when several SwiftShader browser suites share a CPU. Defer game animation
+    // frames while keeping normal scripts, resource loads, timers, and portal behavior.
+    let nextFrame = 0;
+    window.requestAnimationFrame = () => ++nextFrame;
+    window.cancelAnimationFrame = () => {};
+  });
+  const inspector = await context.newPage();
+  await inspector.goto(origin + '/inspect/');
+  if (!process.argv.includes('--scopes-only')) {
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    mounts.set(BASE, v1.dir);
+    await page.goto(origin + BASE, { waitUntil: 'load' });
+    await installed(inspector, origin + BASE, v1);
+    check(true, `first visit stores all ${v1.count} files`);
+    await offlineReload(context, [page]);
+    await context.setOffline(true);
+    for (const slug of ['rail-rush', 'merge-2048', 'fire-and-ice', 'road-hopper', 'block-world']) {
+      await openOfflineGame(page, slug);
+      check(true, 'offline game loads: ' + slug);
+    }
+    await page.evaluate(() => { location.hash = '#/'; });
+    await context.setOffline(false);
+
+    mounts.set(BASE, v2.dir);
+    hits.length = 0;
+    await update(page);
+    await installed(inspector, origin + BASE, v2);
+    const downloads = hits.filter(url => url.includes('?sg='));
+    check(downloads.length === 1 && downloads[0].startsWith(BASE + 'games/merge-2048/index.html?'), 'update downloads only the changed file');
+    check(!(await state(inspector, origin + BASE)).caches[cacheName(origin + BASE, v1)], 'update removes only its old scoped cache');
+
+    mounts.set(BASE, v3.dir);
+    stalePath = BASE + 'games/merge-2048/index.html';
+    check(await update(page) === 'redundant', 'stale server bytes cause the new worker to fail installation');
+    const afterStale = await state(inspector, origin + BASE);
+    check(!afterStale.caches[cacheName(origin + BASE, v3)] && afterStale.caches[cacheName(origin + BASE, v2)] === v2.count, 'failed update removes its partial cache and retains the previous complete version');
+    await offlineReload(context, [page]);
+    stalePath = null;
+    await kill(inspector, page, origin + BASE, killBuild);
+    check(true, 'kill switch unregisters its worker and removes its scoped cache');
+    check(errors.length === 0, 'offline game initialization and updates have no page errors: ' + errors.join(' | '));
+  }
+
+  // Same-origin deployments must stay independent even when their build hashes match.
+  // '-' survives encodeURIComponent, so a namespace delimiter of '-' would make
+  // this child cache look like one of the parent's old versions during cleanup.
+  const scopeA = origin + '/a/', scopeB = origin + '/a/-child/';
+  mounts.set('/a/', v1.dir); mounts.set('/a/-child/', v1.dir);
+  const a = await context.newPage(), b = await context.newPage();
+  await a.goto(scopeA); await installed(inspector, scopeA, v1);
+  await b.goto(scopeB); await installed(inspector, scopeB, v1);
+  await offlineReload(context, [a, b]);
+  const both = await state(inspector, scopeA);
+  check(both.caches[cacheName(scopeA, v1)] === v1.count && both.caches[cacheName(scopeB, v1)] === v1.count, 'same-version mounts have independent complete offline caches');
+  mounts.set('/a/-child/', v2.dir);
+  await update(b); await installed(inspector, scopeB, v2);
+  await offlineReload(context, [a, b]);
+  check((await state(inspector, scopeA)).caches[cacheName(scopeA, v1)] === v1.count, 'updating one mount preserves the other mount offline');
+  mounts.set('/a/', v2.dir);
+  await update(a); await installed(inspector, scopeA, v2);
+  await offlineReload(context, [a, b]);
+  check((await state(inspector, scopeB)).caches[cacheName(scopeB, v2)] === v2.count, 'updating a parent mount preserves its hyphen-prefixed child offline');
+  await kill(inspector, a, scopeA, killBuild);
+  await offlineReload(context, [b]);
+  check((await state(inspector, scopeB)).caches[cacheName(scopeB, v2)] === v2.count, 'killing one mount preserves the other mount offline');
+
+  // Old cache names contained only a build hash. Seed one shared legacy cache with
+  // two nested scopes and prove migration/cleanup never consume the other mount.
+  const legacyA = origin + '/legacy/', legacyB = origin + '/legacy/child/';
+  mounts.set('/legacy/', v1.dir); mounts.set('/legacy/child/', v1.dir);
+  const legacyName = 'sg-' + v1.version;
+  async function seedLegacy(corrupt = false) {
+    await inspector.evaluate(async ({ name, scopes, files, corrupt }) => {
+      const cache = await caches.open(name);
+      for (const scope of scopes) {
+        for (const [file, hash] of Object.entries(files)) {
+          const url = new URL(file, scope).href;
+          const response = await fetch(url);
+          const headers = new Headers(response.headers);
+          headers.set('x-sg-hash', hash);
+          const body = corrupt && scope === scopes[0] && file === 'games/merge-2048/index.html'
+            ? 'corrupted legacy bytes with an unchanged hash header' : await response.arrayBuffer();
+          await cache.put(url, new Response(body, { headers }));
+        }
+      }
+    }, { name: legacyName, scopes: [legacyA, legacyB], files: v1.files, corrupt });
+  }
+  await seedLegacy(true);
   hits.length = 0;
-  await page.reload({ waitUntil: 'load' });
-  const updated = await waitFor(async () => { const s = await swState(); return s.caches['sg-' + v2] === fileCount() && !s.caches['sg-' + v1]; });
-  check(updated && v2 !== v1, `update to ${v2} installed and the old cache was deleted`);
-  const downloaded = hits.filter(h => h.includes('?sg='));
-  check(downloaded.length === 1 && downloaded[0].includes('games/merge-2048/index.html'), `update downloaded only the changed file (${downloaded.join(', ') || 'none'})`);
-  check(await openGame('merge-2048'), 'updated game loads');
+  const legacyPageA = await context.newPage();
+  await legacyPageA.goto(legacyA); await installed(inspector, legacyA, v1);
+  await waitFor(async () => (await state(inspector, legacyA)).caches[legacyName] === v1.count, 'legacy cleanup preserves nested scope');
+  const migratedDownloads = hits.filter(url => url.includes('?sg='));
+  check(migratedDownloads.length === 1 && migratedDownloads[0].startsWith('/legacy/games/merge-2048/index.html?'), 'legacy migration reuses verified bytes and refetches a corrupt entry');
+  check((await state(inspector, legacyA)).caches[legacyName] === v1.count, 'legacy migration preserves every nested deployment entry');
+  const legacyPageB = await context.newPage();
+  await legacyPageB.goto(legacyB); await installed(inspector, legacyB, v1);
+  await waitFor(async () => !(await state(inspector, legacyB)).caches[legacyName], 'empty legacy cache removed');
+  await offlineReload(context, [legacyPageA, legacyPageB]);
+  check(true, 'both migrated deployments work offline and the empty legacy cache is removed');
 
-  // 4. stale copy on the server: the update must be refused, the current version keeps working
-  const staleVersion = publishUpdate('stale test');
-  staleFile = 'games/merge-2048/index.html';
-  staleBody = 'old content from a stale server';
-  await page.goto(origin + BASE, { waitUntil: 'load' });
-  await page.waitForTimeout(4000);
-  let s = await swState();
-  check(!s.caches['sg-' + staleVersion] && s.caches['sg-' + v2] === fileCount(), 'stale server copy rejected; previous version still complete');
-  check(await openGame('merge-2048'), 'game still loads from the previous version');
-  staleFile = null;
-
-  // 5. kill switch
-  fs.writeFileSync(path.join(SITE, 'sw.js'), fs.readFileSync(path.join(REPO, 'sw.js')));
-  await page.goto(origin + BASE, { waitUntil: 'load' });
-  const gone = await waitFor(async () => { const st = await swState(); return !st.active && Object.keys(st.caches).length === 0; });
-  check(gone, 'kill switch removes the worker and its caches');
-  check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
-} catch (e) {
-  check(false, 'test crashed: ' + e.message);
+  await seedLegacy();
+  await kill(inspector, legacyPageA, legacyA, killBuild);
+  const legacyRemainder = await inspector.evaluate(async name => (await (await caches.open(name)).keys()).map(request => request.url), legacyName);
+  check(legacyRemainder.length === v1.count && legacyRemainder.every(url => url.startsWith(legacyB)), 'kill switch removes only its exact legacy file URLs');
+  await offlineReload(context, [legacyPageB]);
+  check(true, 'nested deployment stays offline after its parent deployment is killed');
+  console.log('\nAll offline regression checks passed.');
 } finally {
-  await browser.close();
-  await new Promise(r => server.close(r));
-  if (path.dirname(path.resolve(TEMP_ROOT)) !== path.resolve(os.tmpdir())) throw new Error('unexpected offline test directory');
-  fs.rmSync(TEMP_ROOT, { recursive: true, force: true });
+  if (browser) await browser.close();
+  await new Promise(resolve => server.close(resolve));
+  fs.rmSync(WORK, { recursive: true, force: true });
 }
-process.exit(failed ? 1 : 0);
