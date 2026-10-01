@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ضربة إلى الفضاء</title>
+  <link rel="stylesheet" href="../../shared/game.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game" tabindex="0" aria-label="ملعب ضربة إلى الفضاء"></canvas>
+  <main id="ui">
+    <div class="wallet" aria-label="العملات"><span class="coin" aria-hidden="true">★</span><b id="coins">0</b></div>
+    <div id="world-label" class="world-label">المروج</div>
+    <div class="tools">
+      <button id="pause" class="round-button" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden><i class="pause-icon" aria-hidden="true"></i></button>
+    </div>
+    <div id="distance" class="distance" hidden><strong id="meters">0</strong><span>متر</span></div>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <div id="best" class="best">أفضل مسافة: <bdi id="best-meters">0</bdi> متر</div>
+
+    <section id="title-screen" class="title-screen">
+      <h1><span>ضربة إلى</span><strong>الفضاء</strong></h1>
+      <p class="tagline">ضربة صغيرة… رحلة كبيرة!</p>
+      <button id="play" class="button primary play" type="button">العب الآن <span class="play-icon" aria-hidden="true"></span></button>
+      <div class="title-actions"><button id="open-worlds" class="button cream" type="button">العوالم</button><button id="open-upgrades" class="button cream" type="button">التطويرات</button></div>
+      <p class="howto">انقر أو اضغط <span class="key">مسافة</span> في منتصف المؤشر<br>طر أبعد، واجمع العملات، وطوّر ضربتك!</p>
+      <div id="journey" class="journey"></div>
+    </section>
+
+    <div id="swing-controls" class="swing-controls" hidden>
+      <div class="meter-panel">
+        <div id="meter-track" class="meter-track" role="meter" aria-label="توقيت الضربة" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="sweet-zone" class="sweet-zone"></div><div id="needle" class="needle"></div>
+        </div>
+        <p id="meter-hint">انقر في المنتصف لضربة مثالية</p>
+      </div>
+      <button id="hit" class="button primary hit" type="button">اضرب</button>
+    </div>
+    <button id="flight-hint" class="flight-hint" type="button" hidden>سرّع الرحلة · مسافة</button>
+
+    <section id="modal" class="modal" hidden aria-modal="true" role="dialog" aria-labelledby="modal-heading">
+      <div id="panel" class="panel">
+        <button id="close-modal" class="close-button" type="button" aria-label="رجوع">×</button>
+        <h2 id="modal-heading"></h2>
+        <div id="result-content" hidden>
+          <p id="result-note" class="result-note"></p>
+          <div class="result-distance"><b id="result-meters">0</b><span>متر</span></div>
+          <div id="result-coins" class="result-coins"></div>
+          <p id="result-unlock" class="result-unlock" hidden></p>
+        </div>
+        <div id="worlds-content" class="worlds" hidden></div>
+        <div id="upgrades-content" hidden>
+          <p class="shop-hint">كل تطوير يقربك من الفضاء</p>
+          <div id="upgrades" class="upgrades"></div>
+        </div>
+        <div id="pause-content" hidden><p class="pause-copy">خذ نفسًا… ضربتك تنتظرك!</p><button id="resume" class="button primary" type="button">تابع اللعب</button><button id="restart" class="button cream" type="button">ابدأ من جديد</button></div>
+        <div class="modal-actions"><button id="again" class="button primary" type="button" hidden>ضربة أخرى</button><button id="menu" class="button text-button" type="button">القائمة الرئيسية</button></div>
+        <p id="modal-tip" class="modal-tip"></p>
+      </div>
+    </section>
+    <p id="announce" class="sr-only" aria-live="polite"></p>
+  </main>
+  <script src="../../shared/kit.js"></script>
+  <script src="physics.js"></script>
+  <script src="art.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
