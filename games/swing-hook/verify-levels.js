@@ -87,6 +87,11 @@ var args = process.argv.slice(2);
 var json = args.indexOf('--json') >= 0;
 var flipMode = args.indexOf('--flips') >= 0;
 var only = args.filter(function (a) { return /^\d+$/.test(a); }).map(Number);
+if (args.some(function (a) { return a !== '--json' && a !== '--flips' && !/^\d+$/.test(a); }) ||
+    only.some(function (n) { return n < 1 || n > LEVELS.length; })) {
+  console.error('Usage: node games/swing-hook/verify-levels.js [level numbers 1-' + LEVELS.length + '] [--json] [--flips]');
+  process.exit(2);
+}
 var results = {};
 var allOk = true;
 LEVELS.forEach(function (def, i) {
@@ -111,3 +116,4 @@ LEVELS.forEach(function (def, i) {
 });
 if (json) console.log(JSON.stringify(results));
 console.log(allOk ? 'ALL LEVELS COMPLETABLE' : 'SOME LEVELS FAILED');
+process.exitCode = allOk ? 0 : 1;

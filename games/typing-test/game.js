@@ -4,7 +4,7 @@
  * How it works (short version):
  *   - Input: one window keydown listener reads e.key. A key may insert several characters at once
  *     (the Arabic لا key: e.key "لا", or — as Chrome on Windows does — keydown "Unidentified" followed
- *     by two keypress events ل + ا, handled as ONE keystroke). No hidden <input> (Kit blocks Space).
+ *     by two keypress events ل + ا, handled as ONE keystroke). No hidden <input> is needed.
  *   - Words: every word is a flex item; its letters are plain INLINE spans (so Arabic letters stay
  *     joined while each one gets its own colour). A keystroke only touches the affected span.
  *     Ligatures (one glyph for two letters, e.g. لا) are split with zero-width joiners whenever the
@@ -807,6 +807,9 @@
     if (k.length === 1) return k.charCodeAt(0) >= 32;
     return k.length <= 4 && /^[؀-ۿﭐ-ﻼ]+$/.test(k);
   }
+  function onControl(target) {
+    return Kit.keys.isNativeTarget(target);
+  }
   // Caps Lock warning (English tests only): follows the real state on every key, Caps Lock included.
   function updateCaps(e) {
     if (!T || T.lang !== 'en' || screen !== 'test' || !e.getModifierState) return;
@@ -814,29 +817,47 @@
     if (capsEl.hidden === on) capsEl.hidden = !on;
   }
   window.addEventListener('keyup', updateCaps, true);
+  Kit.keys.captureTab(function () { return !modal && !kbnav && screen === 'test'; });
   function onKey(e) {
     var k = e.key;
     if (k == null) return;
+    if (Kit.keys.isNativeTarget(e.target)) {
+      if (k === 'Escape' && modal) { modalKey(e); return; }
+      if (k !== 'Escape' || !Kit.keys.acceptsEvent(e)) {
+        if (kbnav) navKey(e);
+        return;
+      }
+    }
+    if (k === 'Tab' && !Kit.keys.acceptsEvent(e)) return;
     stroke = { swallow: true, sounded: false, lamAlef: false };
     Kit.audio.unlock();
     updateCaps(e);
-    if (k === 'Tab') e.preventDefault(); // never let Tab move the focus out of the game frame
     if (modal) { modalKey(e); return; }
     if (e.isComposing || k === 'Process' || k === 'Dead') return;
+    // Only the typing surface owns the restart shortcut. Shift+Tab and Tab
+    // on menus/results retain normal browser focus traversal, including out
+    // of the iframe. Esc also exposes the settings navigation below.
+    if (k === 'Tab') {
+      if (screen === 'test' && !kbnav && !onControl(e.target) &&
+          !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        if (!e.repeat) quickRestart();
+      }
+      return;
+    }
     if (!unfocusEl.hidden) {
       setUnfocused(false);
       if (isText(k) || k === 'Backspace' || k === 'Enter') e.preventDefault();
       return;
     }
     if (screen === 'results') {
-      if (k === 'Tab' || k === 'Enter') {
+      if (k === 'Enter') {
         e.preventDefault();
         if (!e.repeat && performance.now() - finishedAt > 300) quickRestart();
       } else if (k === 'Escape') { e.preventDefault(); quickRestart(); }
       else if (isText(k) || k === 'Backspace') e.preventDefault();
       return;
     }
-    if (k === 'Tab') { if (!e.repeat) quickRestart(); return; }
     if (k === 'Escape') {
       e.preventDefault();
       if (T.phase === 'running') newTest({ repeat: true }); // abandon: same words, settings bar back
@@ -870,6 +891,7 @@
   // Fallback for keys whose keydown had no usable e.key (see "stroke" above).
   window.addEventListener('keypress', function (e) {
     if (e.defaultPrevented) return;
+    if (onControl(e.target)) return;
     var k = e.key, lamAlef = false;
     if (!k || !isText(k)) {
       k = e.charCode >= 32 ? String.fromCharCode(e.charCode) : '';
@@ -949,6 +971,10 @@
     modal = id;
     $(id).hidden = false;
     body.classList.remove('typing');
+    // Start before the modal's controls so Tab reaches its close button,
+    // while typing a challenge code followed by Enter keeps its shortcut.
+    $(id).setAttribute('tabindex', '-1');
+    $(id).focus();
   }
   function closeModal() {
     if (!modal) return;
@@ -971,7 +997,12 @@
   function modalKey(e) {
     var k = e.key;
     if (k === 'Escape') { e.preventDefault(); closeModal(); return; }
-    if (k === 'Tab' || k === ' ') { e.preventDefault(); return; }
+    if (k === 'Tab') return;
+    if (onControl(e.target) && (k === 'Enter' || k === ' ' || k === 'Spacebar')) {
+      e.stopPropagation();
+      return;
+    }
+    if (k === ' ') { e.preventDefault(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     var d = digitOf(e);
     if (modal === 'mTeacher') {

@@ -1487,7 +1487,7 @@
   }
 
   // buttons
-  function onClick(id, fn) { $(id).addEventListener('click', function (e) { e.preventDefault(); Kit.audio.unlock(); fn(e); this.blur(); }); }
+  function onClick(id, fn) { $(id).addEventListener('click', function (e) { e.preventDefault(); Kit.audio.unlock(); fn(e); if (e.detail > 0) this.blur(); }); }
   onClick('b1p', function () { SFX.click(); toSelect(1); });
   onClick('b2p', function () { SFX.click(); toSelect(2); });
   onClick('bFight', function () { SFX.click(); startMatch(); });
@@ -1506,7 +1506,7 @@
       e.preventDefault(); Kit.audio.unlock();
       var a = b.getAttribute('data-arr').split(','), i = +a[1], d = +a[2];
       if (a[0] === 's') cycleSumo(i, d); else cycleHat(i, d);
-      b.blur();
+      if (e.detail > 0) b.blur();
     });
   });
   function paintMusic() { btnMusic.textContent = '♫'; btnMusic.style.opacity = save.music ? '1' : '0.45'; btnMusic.title = save.music ? 'الموسيقى تعمل' : 'الموسيقى متوقفة'; }

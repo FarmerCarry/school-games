@@ -66,7 +66,7 @@
   }
   function toggleMusic() { save.music = !save.music; store.set('music', save.music); paintMusic(); Snd.button(); }
   musicBtn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-  musicBtn.addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); toggleMusic(); startMusic(); musicBtn.blur(); });
+  musicBtn.addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); toggleMusic(); startMusic(); if (e.detail > 0) musicBtn.blur(); });
   paintMusic();
   function startMusic() { if (Kit.audio.ctx) Snd.music.start(); }
 
@@ -488,6 +488,7 @@
 
   /* ------------------------------------------------------------ keyboard */
   window.addEventListener('keydown', function (e) {
+    if (!Kit.isGameKeyEvent(e)) return;
     var k = e.code;
     if (k === 'Enter' || k === 'Space' || k === 'NumpadEnter') e.preventDefault();
     if (e.repeat) return;
@@ -738,8 +739,8 @@
         nm.className = 'need';
         nm.textContent = s.need.stars ? s.need.stars + ' ★' : 'الأفضل ' + s.need.best;
       }
-      b.addEventListener('click', function () {
-        b.blur();
+      b.addEventListener('click', function (e) {
+        if (e.detail > 0) b.blur();
         if (!skinUnlocked(i)) { Snd.bad(); toast(s.need.stars ? 'اجمع ' + starsTxt(s.need.stars) + ' في المغامرة لفتحه' : 'سجّل ' + ptsTxt(s.need.best) + ' في الكلاسيكي لفتحه'); return; }
         save.skin = i; store.set('skin', i);
         if (save.seen.indexOf(i) < 0) { save.seen.push(i); store.set('seenSkins', save.seen); }
@@ -776,8 +777,8 @@
         var st = '';
         for (var s = 0; s < 3; s++) st += '<i' + (s < save.adv[idx] ? ' class="on"' : '') + '></i>';
         b.innerHTML = '<span class="ln">' + (idx + 1) + '</span><span class="lk">' + kind + '</span><span class="ls">' + st + '</span>';
-        b.addEventListener('click', function () {
-          b.blur();
+        b.addEventListener('click', function (e) {
+          if (e.detail > 0) b.blur();
           if (!open) { Snd.bad(); toast('أكمل المرحلة السابقة أولًا'); return; }
           startLevel(idx);
         });
@@ -789,7 +790,7 @@
   }
 
   /* ------------------------------------------------------------ buttons */
-  function onClick(id, fn) { $(id).addEventListener('click', function (e) { e.currentTarget.blur(); Kit.audio.unlock(); fn(); }); }
+  function onClick(id, fn) { $(id).addEventListener('click', function (e) { if (e.detail > 0) e.currentTarget.blur(); Kit.audio.unlock(); fn(); }); }
   onClick('btnClassic', function () { startClassic(false); });
   onClick('btnNew', function () { store.remove('run'); startClassic(true); });
   onClick('btnAdv', openMap);
