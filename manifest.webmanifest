@@ -1,0 +1,17 @@
+{
+  "name": "ألعاب الفسحة",
+  "short_name": "ألعاب الفسحة",
+  "description": "ألعاب مجانية للطلاب المتميزين",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#bfe5ff",
+  "theme_color": "#bfe5ff",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="75%">
+      <stop offset="0" stop-color="#e9fff4"/>
+      <stop offset="1" stop-color="#9fe3c8"/>
+    </radialGradient>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+      <path d="M28 0H0V28" fill="none" stroke="#7fd0b0" stroke-width="2" opacity="0.55"/>
+    </pattern>
+    <radialGradient id="big" cx="38%" cy="32%" r="70%">
+      <stop offset="0" stop-color="#7ff5e6"/>
+      <stop offset="1" stop-color="#17b8a8"/>
+    </radialGradient>
+    <radialGradient id="pink" cx="38%" cy="32%" r="70%">
+      <stop offset="0" stop-color="#ffb3d6"/>
+      <stop offset="1" stop-color="#ff4f9a"/>
+    </radialGradient>
+    <radialGradient id="org" cx="38%" cy="32%" r="70%">
+      <stop offset="0" stop-color="#ffe08a"/>
+      <stop offset="1" stop-color="#ff9a1a"/>
+    </radialGradient>
+    <radialGradient id="bush" cx="38%" cy="32%" r="70%">
+      <stop offset="0" stop-color="#a6f58a"/>
+      <stop offset="1" stop-color="#3cbf4f"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" rx="0" fill="url(#bg)"/>
+  <rect width="400" height="400" fill="url(#grid)"/>
+
+  <!-- pellets -->
+  <g>
+    <circle cx="44" cy="52" r="9" fill="#ff5c8a"/><circle cx="330" cy="40" r="9" fill="#2fb5ff"/>
+    <circle cx="370" cy="130" r="8" fill="#ffb31a"/><circle cx="24" cy="170" r="8" fill="#8e5cff"/>
+    <circle cx="196" cy="34" r="8" fill="#3ddc84"/><circle cx="120" cy="110" r="7" fill="#f368e0"/>
+    <circle cx="262" cy="96" r="7" fill="#ff7a3d"/><circle cx="380" cy="238" r="8" fill="#12c9b5"/>
+    <circle cx="150" cy="60" r="6" fill="#2fb5ff"/><circle cx="92" cy="30" r="6" fill="#ffb31a"/>
+    <path d="M300 170 l6 12 13 2 -9 9 2 13 -12 -6 -12 6 2 -13 -9 -9 13 -2z" fill="#ffd23f" stroke="#d18a00" stroke-width="3" stroke-linejoin="round"/>
+  </g>
+
+  <!-- spiky bush -->
+  <g transform="translate(62 262)">
+    <path d="M0-58 L9-44 24-54 26-37 43-40 38-24 56-18 44-6 58 6 42 14 50 30 33 32 32 50 17 42 8 58 0 44 -8 58 -17 42 -32 50 -33 32 -50 30 -42 14 -58 6 -44 -6 -56 -18 -38 -24 -43 -40 -26 -37 -24 -54 -9 -44Z" fill="#2fae4a" stroke="#1a7331" stroke-width="4" stroke-linejoin="round"/>
+    <circle r="42" fill="url(#bush)"/>
+    <circle cx="-11" cy="-4" r="5" fill="#16401f"/><circle cx="11" cy="-4" r="5" fill="#16401f"/>
+    <path d="M-17-14 L-6-10 M17-14 L6-10 M-7 12 L-3 9 1 12 5 9 8 12" stroke="#16401f" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- small orange blob (fleeing) -->
+  <g transform="translate(330 186)">
+    <circle r="30" fill="url(#org)" stroke="#b86400" stroke-width="4"/>
+    <ellipse cx="-9" cy="-6" rx="7" ry="9" fill="#fff" stroke="#23263a" stroke-width="2"/>
+    <ellipse cx="9" cy="-6" rx="7" ry="9" fill="#fff" stroke="#23263a" stroke-width="2"/>
+    <circle cx="-7" cy="-3" r="3.5" fill="#23263a"/><circle cx="11" cy="-3" r="3.5" fill="#23263a"/>
+    <ellipse cx="1" cy="12" rx="6" ry="7" fill="#5a1030"/>
+    <path d="M34-24 q8-4 12 2 M38-6 q8 0 10 6" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- pink blob (about to be eaten) -->
+  <g transform="translate(270 238)">
+    <circle r="40" fill="url(#pink)" stroke="#b8246a" stroke-width="5"/>
+    <ellipse cx="-24" cy="-22" rx="10" ry="6" fill="#fff" opacity="0.45" transform="rotate(-35 -24 -22)"/>
+    <ellipse cx="-12" cy="-6" rx="9" ry="11" fill="#fff" stroke="#23263a" stroke-width="2"/>
+    <ellipse cx="12" cy="-6" rx="9" ry="11" fill="#fff" stroke="#23263a" stroke-width="2"/>
+    <circle cx="-15" cy="-4" r="4.5" fill="#23263a"/><circle cx="9" cy="-4" r="4.5" fill="#23263a"/>
+    <ellipse cx="-2" cy="18" rx="9" ry="10" fill="#5a1030"/>
+    <path d="M-30-34 q-6-10 2-16 M30-34 q6-10 -2-16" stroke="#23263a" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- big hero blob -->
+  <g transform="translate(160 206)">
+    <path d="M0-112 C62-114 112-66 110 0 C112 64 62 112 0 110 C-64 114 -112 62 -110 0 C-114 -62 -62 -110 0-112Z" fill="url(#big)" stroke="#0d7f75" stroke-width="8"/>
+    <ellipse cx="-48" cy="-56" rx="30" ry="16" fill="#fff" opacity="0.4" transform="rotate(-35 -48 -56)"/>
+    <ellipse cx="-22" cy="-30" rx="22" ry="25" fill="#fff" stroke="#23263a" stroke-width="3"/>
+    <ellipse cx="34" cy="-30" rx="22" ry="25" fill="#fff" stroke="#23263a" stroke-width="3"/>
+    <circle cx="-12" cy="-26" r="11" fill="#23263a"/><circle cx="44" cy="-26" r="11" fill="#23263a"/>
+    <circle cx="-15" cy="-30" r="4" fill="#fff"/><circle cx="41" cy="-30" r="4" fill="#fff"/>
+    <path d="M-20 14 Q30 70 82 8 Z" fill="#5a1030" stroke="#23263a" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M-6 20 l8 10 8 -10 Z M50 16 l8 10 7 -12 Z" fill="#fff"/>
+    <ellipse cx="34" cy="44" rx="16" ry="8" fill="#ff6b8a"/>
+    <ellipse cx="-50" cy="8" rx="14" ry="8" fill="#ff7aa2" opacity="0.5"/>
+    <!-- crown -->
+    <path d="M-34-106 L-38-146 -18-124 0-156 18-124 38-146 34-106Z" fill="#ffd23f" stroke="#b87b00" stroke-width="5" stroke-linejoin="round"/>
+    <circle cx="0" cy="-122" r="6" fill="#ff4f5e"/>
+  </g>
+
+  <!-- title -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
+    <text x="200" y="377" font-size="58" fill="#1d2340" stroke="#1d2340" stroke-width="16" stroke-linejoin="round">معركة الهلام</text>
+    <text x="200" y="370" font-size="58" fill="#ffd23f" stroke="#1d2340" stroke-width="9" stroke-linejoin="round" paint-order="stroke">معركة الهلام</text>
+  </g>
+</svg>

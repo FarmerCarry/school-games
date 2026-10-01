@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2aa8ff"/>
+      <stop offset="1" stop-color="#9fe0ff"/>
+    </linearGradient>
+    <linearGradient id="pitch" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5fd068"/>
+      <stop offset="1" stop-color="#2f9a40"/>
+    </linearGradient>
+    <radialGradient id="shine" cx="0.35" cy="0.3" r="0.75">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.6"/>
+      <stop offset="0.5" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.25"/>
+    </radialGradient>
+    <clipPath id="torso"><rect x="-30" y="-46" width="60" height="92" rx="16"/></clipPath>
+    <clipPath id="ballc"><circle cx="0" cy="0" r="33"/></clipPath>
+  </defs>
+
+  <!-- sky + rays -->
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <g fill="#ffffff" opacity="0.18">
+    <path d="M300 230 L140 0 L220 0 Z"/><path d="M300 230 L300 0 L380 0 Z"/><path d="M300 230 L400 60 L400 150 Z"/><path d="M300 230 L20 0 L80 0 Z"/>
+  </g>
+
+  <!-- stands -->
+  <rect y="178" width="400" height="80" fill="#4a5aa6"/>
+  <rect y="178" width="400" height="10" fill="#e8eef9"/>
+  <g fill="#ff5a5f"><rect x="0" y="178" width="20" height="6"/><rect x="40" y="178" width="20" height="6"/><rect x="80" y="178" width="20" height="6"/><rect x="120" y="178" width="20" height="6"/><rect x="160" y="178" width="20" height="6"/><rect x="200" y="178" width="20" height="6"/><rect x="240" y="178" width="20" height="6"/><rect x="280" y="178" width="20" height="6"/><rect x="320" y="178" width="20" height="6"/><rect x="360" y="178" width="20" height="6"/></g>
+  <g>
+    <circle cx="12" cy="202" r="8" fill="#ffd23f"/><circle cx="34" cy="206" r="8" fill="#ff8fb1"/><circle cx="56" cy="200" r="8" fill="#3ddc84"/><circle cx="78" cy="205" r="8" fill="#fff"/><circle cx="100" cy="199" r="8" fill="#ff9f1c"/><circle cx="122" cy="204" r="8" fill="#9b5de5"/><circle cx="144" cy="200" r="8" fill="#ffd23f"/><circle cx="166" cy="206" r="8" fill="#ff5a5f"/><circle cx="188" cy="200" r="8" fill="#00c2a8"/><circle cx="210" cy="205" r="8" fill="#fff"/><circle cx="232" cy="199" r="8" fill="#ff8fb1"/><circle cx="254" cy="204" r="8" fill="#3ddc84"/><circle cx="276" cy="200" r="8" fill="#ffd23f"/><circle cx="298" cy="206" r="8" fill="#9b5de5"/><circle cx="320" cy="200" r="8" fill="#ff5a5f"/><circle cx="342" cy="205" r="8" fill="#fff"/><circle cx="364" cy="199" r="8" fill="#ff9f1c"/><circle cx="386" cy="204" r="8" fill="#3ddc84"/>
+    <circle cx="22" cy="228" r="8" fill="#ff5a5f"/><circle cx="46" cy="232" r="8" fill="#ffd23f"/><circle cx="70" cy="226" r="8" fill="#4fc3f7"/><circle cx="94" cy="231" r="8" fill="#ff8fb1"/><circle cx="118" cy="227" r="8" fill="#fff"/><circle cx="142" cy="232" r="8" fill="#3ddc84"/><circle cx="166" cy="226" r="8" fill="#ff9f1c"/><circle cx="190" cy="231" r="8" fill="#9b5de5"/><circle cx="214" cy="227" r="8" fill="#ffd23f"/><circle cx="238" cy="232" r="8" fill="#ff5a5f"/><circle cx="262" cy="226" r="8" fill="#fff"/><circle cx="286" cy="231" r="8" fill="#00c2a8"/><circle cx="310" cy="227" r="8" fill="#ff8fb1"/><circle cx="334" cy="232" r="8" fill="#ffd23f"/><circle cx="358" cy="226" r="8" fill="#3ddc84"/><circle cx="382" cy="231" r="8" fill="#ff5a5f"/>
+  </g>
+  <rect y="244" width="400" height="16" fill="#ffd23f"/>
+  <rect x="130" y="244" width="140" height="16" fill="#3ddc84"/>
+  <rect x="270" y="244" width="130" height="16" fill="#ff5a5f"/>
+  <rect y="258" width="400" height="4" fill="#1d1a2e"/>
+
+  <!-- pitch -->
+  <rect y="262" width="400" height="138" fill="url(#pitch)"/>
+  <path d="M0 262 L60 262 L20 400 L0 400 Z M120 262 L180 262 L160 400 L100 400 Z M240 262 L300 262 L320 400 L260 400 Z M360 262 L400 262 L400 400 L380 400 Z" fill="#fff" opacity="0.08"/>
+  <path d="M0 276 H400" stroke="#fff" stroke-width="3" opacity="0.85"/>
+  <ellipse cx="200" cy="336" rx="110" ry="34" fill="none" stroke="#fff" stroke-width="3" opacity="0.85"/>
+
+  <!-- goal (right) -->
+  <g>
+    <path d="M338 262 L396 256 L396 384 L338 378 Z" fill="#fff" opacity="0.25"/>
+    <g stroke="#fff" stroke-width="1.6" opacity="0.8">
+      <path d="M338 274 L396 268 M338 290 L396 284 M338 306 L396 300 M338 322 L396 316 M338 338 L396 332 M338 354 L396 348 M338 370 L396 364"/>
+      <path d="M346 262 V380 M356 261 V381 M366 260 V382 M376 259 V383 M386 258 V384"/>
+    </g>
+    <path d="M404 250 L338 258 L338 382" fill="none" stroke="#1d1a2e" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M404 250 L338 258 L338 382" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- shadow -->
+  <ellipse cx="128" cy="382" rx="52" ry="9" fill="#000" opacity="0.2"/>
+  <ellipse cx="300" cy="384" rx="26" ry="6" fill="#000" opacity="0.15"/>
+
+  <!-- back arm -->
+  <path d="M132 246 L166 262 L186 244" fill="none" stroke="#1d1a2e" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M132 246 L166 262 L186 244" fill="none" stroke="#e8b88f" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="188" cy="242" r="8" fill="#e8b88f" stroke="#1d1a2e" stroke-width="3.5"/>
+
+  <!-- standing leg -->
+  <path d="M130 300 L118 338 L112 372" fill="none" stroke="#1d1a2e" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M130 300 L118 338 L112 372" fill="none" stroke="#e8b88f" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M117 344 L112 372" fill="none" stroke="#ffb627" stroke-width="14" stroke-linecap="round"/>
+  <ellipse cx="122" cy="376" rx="20" ry="11" fill="#3b2413" stroke="#1d1a2e" stroke-width="4"/>
+
+  <!-- torso (leaning back) -->
+  <g transform="translate(128 262) rotate(-22)">
+    <rect x="-30" y="-46" width="60" height="92" rx="16" fill="#ffb627"/>
+    <g clip-path="url(#torso)">
+      <rect x="-40" y="-12" width="80" height="22" fill="#8b4a1c"/>
+      <rect x="-40" y="28" width="80" height="24" fill="#8b4a1c"/>
+    </g>
+    <text x="0" y="-18" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" font-size="22" fill="#fff" stroke="#1d1a2e" stroke-width="3" paint-order="stroke" text-anchor="middle">10</text>
+    <rect x="-30" y="-46" width="60" height="92" rx="16" fill="none" stroke="#1d1a2e" stroke-width="5"/>
+  </g>
+
+  <!-- kicking leg -->
+  <path d="M142 300 L196 296 L244 262" fill="none" stroke="#1d1a2e" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M142 300 L196 296 L244 262" fill="none" stroke="#e8b88f" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M142 300 L172 298" fill="none" stroke="#8b4a1c" stroke-width="20" stroke-linecap="round"/>
+  <path d="M214 284 L244 262" fill="none" stroke="#ffb627" stroke-width="14" stroke-linecap="round"/>
+  <path d="M190 256 A 80 80 0 0 1 250 238" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+  <g transform="translate(252 254) rotate(-36)">
+    <ellipse cx="0" cy="0" rx="21" ry="12" fill="#3b2413" stroke="#1d1a2e" stroke-width="4"/>
+    <rect x="-12" y="6" width="20" height="3" fill="#fff" opacity="0.8"/>
+  </g>
+
+  <!-- impact burst -->
+  <path d="M274 234 L286 222 L284 238 L298 236 L286 246 L296 258 L280 252 L274 266 L270 250 L256 254 L266 242 L256 230 Z" fill="#fff6c9" stroke="#1d1a2e" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- front arm (flailing up) -->
+  <path d="M116 234 L82 214 L66 176" fill="none" stroke="#1d1a2e" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M116 234 L82 214 L66 176" fill="none" stroke="#e8b88f" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M116 234 L96 222" fill="none" stroke="#ffb627" stroke-width="15" stroke-linecap="round"/>
+  <circle cx="65" cy="173" r="8" fill="#e8b88f" stroke="#1d1a2e" stroke-width="3.5"/>
+
+  <!-- head -->
+  <g transform="translate(108 196) rotate(-14)">
+    <path d="M-40 -6 L-44 -30 L-30 -26 L-30 -50 L-14 -38 L-4 -60 L8 -40 L24 -54 L26 -32 L44 -38 L36 -12 Z" fill="#6b3b1f" stroke="#1d1a2e" stroke-width="4" stroke-linejoin="round"/>
+    <circle cx="0" cy="0" r="38" fill="#e8b88f" stroke="#1d1a2e" stroke-width="5"/>
+    <circle cx="-12" cy="4" r="7" fill="#d9a47a" stroke="#1d1a2e" stroke-width="3"/>
+    <circle cx="38" cy="4" r="6" fill="#d9a47a" stroke="#1d1a2e" stroke-width="3"/>
+    <circle cx="22" cy="16" r="6" fill="#ff5a78" opacity="0.35"/>
+    <ellipse cx="22" cy="24" rx="9" ry="11" fill="#7a1f2b" stroke="#1d1a2e" stroke-width="3.5"/>
+    <ellipse cx="22" cy="30" rx="5" ry="3" fill="#ff8fb1"/>
+    <circle cx="8" cy="-10" r="14" fill="#fff" stroke="#1d1a2e" stroke-width="3.5"/>
+    <circle cx="32" cy="-12" r="12.5" fill="#fff" stroke="#1d1a2e" stroke-width="3.5"/>
+    <circle cx="16" cy="-15" r="6.5" fill="#1d1a2e"/>
+    <circle cx="38" cy="-17" r="6" fill="#1d1a2e"/>
+    <circle cx="14" cy="-17" r="2.2" fill="#fff"/>
+    <circle cx="36" cy="-19" r="2" fill="#fff"/>
+  </g>
+
+  <!-- ball + speed lines -->
+  <g stroke="#fff" stroke-width="6" stroke-linecap="round" opacity="0.85">
+    <path d="M262 206 L240 214"/><path d="M270 188 L252 190"/>
+  </g>
+  <g transform="translate(312 200) rotate(20)">
+    <g clip-path="url(#ballc)">
+      <rect x="-35" y="-35" width="70" height="70" fill="#fff"/>
+      <path d="M0 -12 L11 -4 L7 10 L-7 10 L-11 -4 Z" fill="#23233a"/>
+      <path d="M0 -40 L10 -32 L6 -22 L-6 -22 L-10 -32 Z M30 -14 L38 -4 L34 8 L26 4 L24 -8 Z M-30 -14 L-24 -8 L-26 4 L-34 8 L-38 -4 Z M18 26 L26 20 L32 30 L24 40 L14 36 Z M-18 26 L-14 36 L-24 40 L-32 30 L-26 20 Z" fill="#23233a"/>
+      <path d="M0 -12 V-22 M11 -4 L24 -8 M-11 -4 L-24 -8 M7 10 L18 26 M-7 10 L-18 26" stroke="#23233a" stroke-width="3"/>
+    </g>
+    <circle cx="0" cy="0" r="33" fill="url(#shine)" stroke="#1d1a2e" stroke-width="5"/>
+  </g>
+
+  <!-- confetti -->
+  <g>
+    <rect x="228" y="150" width="10" height="6" fill="#ff5a5f" transform="rotate(30 233 153)"/>
+    <rect x="360" y="170" width="10" height="6" fill="#ffd23f" transform="rotate(-20 365 173)"/>
+    <rect x="30" y="250" width="10" height="6" fill="#9b5de5" transform="rotate(50 35 253)"/>
+    <rect x="352" y="232" width="9" height="5" fill="#3ddc84" transform="rotate(10 356 234)"/>
+    <rect x="200" y="160" width="9" height="5" fill="#4fc3f7" transform="rotate(-40 204 162)"/>
+    <rect x="18" y="170" width="9" height="5" fill="#ff8fb1" transform="rotate(20 22 172)"/>
+  </g>
+
+  <!-- title -->
+  <g direction="rtl" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" stroke="#1d1a2e" stroke-linejoin="round" paint-order="stroke">
+    <text x="200" y="70" font-size="58" fill="#ffffff" stroke-width="13" transform="rotate(-4 200 60)">كرة القدم</text>
+    <text x="206" y="140" font-size="64" fill="#ffd23f" stroke-width="14" transform="rotate(3 200 120)">المجنونة!</text>
+  </g>
+</svg>

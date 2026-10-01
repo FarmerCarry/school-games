@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a0f8a"/>
+      <stop offset="0.65" stop-color="#6a1fd6"/>
+      <stop offset="1" stop-color="#ff4fb8"/>
+    </linearGradient>
+    <linearGradient id="gr" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b1bb3"/>
+      <stop offset="1" stop-color="#150a4a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff6a0" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#fff6a0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" rx="0" fill="url(#bg)"/>
+  <!-- sun burst rays -->
+  <g opacity="0.16" fill="#ffffff">
+    <path d="M250 150 L420 40 L420 110 Z"/>
+    <path d="M250 150 L420 190 L420 260 Z"/>
+    <path d="M250 150 L300 -20 L360 -20 Z"/>
+    <path d="M250 150 L120 -20 L180 -20 Z"/>
+  </g>
+  <!-- equalizer bars -->
+  <g fill="#b98bff" opacity="0.35">
+    <rect x="6" y="220" width="26" height="80"/><rect x="40" y="185" width="26" height="115"/>
+    <rect x="74" y="240" width="26" height="60"/><rect x="108" y="200" width="26" height="100"/>
+    <rect x="300" y="210" width="26" height="90"/><rect x="334" y="170" width="26" height="130"/>
+    <rect x="368" y="230" width="26" height="70"/>
+  </g>
+  <!-- outlined background squares -->
+  <g fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="7">
+    <rect x="18" y="110" width="60" height="60" transform="rotate(20 48 140)"/>
+    <circle cx="350" cy="95" r="34"/>
+  </g>
+  <!-- ground -->
+  <rect x="0" y="300" width="400" height="100" fill="url(#gr)"/>
+  <g fill="none" stroke="#7cf3ff" stroke-opacity="0.25" stroke-width="4">
+    <rect x="-20" y="312" width="84" height="84"/><rect x="76" y="312" width="84" height="84"/>
+    <rect x="172" y="312" width="84" height="84"/><rect x="268" y="312" width="84" height="84"/><rect x="364" y="312" width="84" height="84"/>
+  </g>
+  <rect x="0" y="294" width="400" height="12" fill="#7cf3ff" opacity="0.35"/>
+  <rect x="0" y="297" width="400" height="6" fill="#7cf3ff"/>
+  <!-- block -->
+  <rect x="300" y="236" width="64" height="64" fill="#150b45" stroke="#7cf3ff" stroke-width="6"/>
+  <rect x="316" y="252" width="32" height="32" fill="none" stroke="#7cf3ff" stroke-opacity="0.4" stroke-width="3"/>
+  <!-- spikes -->
+  <g stroke-linejoin="round">
+    <path d="M150 300 L178 240 L206 300 Z" fill="#150b45" stroke="#ff5ad1" stroke-width="7"/>
+    <path d="M206 300 L234 240 L262 300 Z" fill="#150b45" stroke="#ff5ad1" stroke-width="7"/>
+  </g>
+  <!-- jump pad -->
+  <path d="M22 300 A32 16 0 0 1 86 300 Z" fill="#ffe14d" stroke="#1b1033" stroke-width="5"/>
+  <!-- trail -->
+  <path d="M40 270 Q110 120 180 138" fill="none" stroke="#ffe14d" stroke-opacity="0.35" stroke-width="34" stroke-linecap="round"/>
+  <path d="M60 255 Q115 140 172 142" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="10" stroke-linecap="round"/>
+  <!-- glow + cube -->
+  <circle cx="212" cy="140" r="90" fill="url(#glow)"/>
+  <g transform="rotate(-18 212 140)">
+    <rect x="160" y="88" width="104" height="104" rx="4" fill="#ffd93b" stroke="#1b1033" stroke-width="9"/>
+    <rect x="180" y="108" width="64" height="64" fill="#35e0ff"/>
+    <rect x="165" y="93" width="94" height="12" fill="#ffffff" opacity="0.35"/>
+    <circle cx="195" cy="132" r="10" fill="#1b1033"/><circle cx="192" cy="128" r="3.6" fill="#fff"/>
+    <circle cx="229" cy="132" r="10" fill="#1b1033"/><circle cx="226" cy="128" r="3.6" fill="#fff"/>
+    <path d="M192 152 Q212 172 232 152" fill="none" stroke="#1b1033" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <!-- music notes -->
+  <g fill="#ffffff" stroke="#1b1033" stroke-width="4" stroke-linejoin="round">
+    <path d="M318 150 v-44 l26 -8 v40" fill="none" stroke="#1b1033" stroke-width="12" stroke-linecap="round"/>
+    <path d="M318 150 v-44 l26 -8 v40" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+    <ellipse cx="310" cy="152" rx="11" ry="8.5"/>
+    <ellipse cx="336" cy="140" rx="11" ry="8.5"/>
+    <path d="M84 90 v-34" fill="none" stroke="#1b1033" stroke-width="11" stroke-linecap="round"/>
+    <path d="M84 90 v-34 q12 4 16 16" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="76" cy="92" rx="10" ry="8"/>
+  </g>
+  <!-- logo -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl" transform="rotate(-5 200 360)">
+    <text x="200" y="376" font-size="64" fill="#16063f" stroke="#16063f" stroke-width="16" stroke-linejoin="round">قفزة الإيقاع</text>
+    <text x="200" y="369" font-size="64" fill="#16063f" stroke="#16063f" stroke-width="16" stroke-linejoin="round">قفزة الإيقاع</text>
+    <text x="200" y="367" font-size="64"><tspan fill="#ffe14d">قفزة</tspan> <tspan fill="#3df2ff">الإيقاع</tspan></text>
+  </g>
+</svg>

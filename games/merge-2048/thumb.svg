@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+<defs>
+<radialGradient id="bg" cx="0.5" cy="0.42" r="0.75"><stop offset="0" stop-color="#9d83ff"/><stop offset="0.55" stop-color="#6541e6"/><stop offset="1" stop-color="#2e1488"/></radialGradient>
+<radialGradient id="glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#fff6b0" stop-opacity=".95"/><stop offset=".45" stop-color="#ffd23f" stop-opacity=".45"/><stop offset="1" stop-color="#ffd23f" stop-opacity="0"/></radialGradient>
+<linearGradient id="gG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffcf2e"/><stop offset="1" stop-color="#ffc400"/></linearGradient>
+<linearGradient id="gB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#60a0ff"/><stop offset="1" stop-color="#3d8bff"/></linearGradient>
+<linearGradient id="gP" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c56dff"/><stop offset="1" stop-color="#b84dff"/></linearGradient>
+<linearGradient id="gR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff547f"/><stop offset="1" stop-color="#ff2e63"/></linearGradient>
+<linearGradient id="gO" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff9f60"/><stop offset="1" stop-color="#ff8a3d"/></linearGradient>
+<linearGradient id="gC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff5d9"/><stop offset="1" stop-color="#fff3d1"/></linearGradient>
+</defs>
+<rect width="400" height="400" fill="url(#bg)"/>
+<path d="M200,150 L800,150 L788,267Z M200,150 L754,380 L699,483Z M200,150 L624,574 L533,649Z M200,150 L430,704 L317,738Z M200,150 L200,750 L83,738Z M200,150 L-30,704 L-133,649Z M200,150 L-224,574 L-299,483Z M200,150 L-354,380 L-388,267Z M200,150 L-400,150 L-388,33Z M200,150 L-354,-80 L-299,-183Z M200,150 L-224,-274 L-133,-349Z M200,150 L-30,-404 L83,-438Z M200,150 L200,-450 L317,-438Z M200,150 L430,-404 L533,-349Z M200,150 L624,-274 L699,-183Z M200,150 L754,-80 L788,33Z" fill="#ffffff" opacity=".09"/>
+<circle cx="40" cy="60" r="26" fill="#fff" opacity=".1"/>
+<circle cx="360" cy="40" r="18" fill="#fff" opacity=".1"/>
+<circle cx="350" cy="330" r="30" fill="#fff" opacity=".1"/>
+<circle cx="30" cy="330" r="16" fill="#fff" opacity=".1"/>
+<circle cx="300" cy="110" r="10" fill="#fff" opacity=".1"/>
+<circle cx="200" cy="150" r="150" fill="url(#glow)"/>
+<rect x="212" y="34" width="12" height="6" rx="2" fill="#ffd23f" transform="rotate(18 218 37)"/>
+<rect x="284" y="58" width="12" height="6" rx="2" fill="#4fdc7a" transform="rotate(93 290 61)"/>
+<rect x="308" y="39" width="12" height="6" rx="2" fill="#4fb8ff" transform="rotate(129 314 42)"/>
+<rect x="119" y="29" width="12" height="6" rx="2" fill="#ffffff" transform="rotate(22 125 32)"/>
+<rect x="45" y="133" width="12" height="6" rx="2" fill="#ffd23f" transform="rotate(23 51 136)"/>
+<rect x="292" y="227" width="12" height="6" rx="2" fill="#4fdc7a" transform="rotate(15 298 230)"/>
+<rect x="299" y="73" width="12" height="6" rx="2" fill="#4fb8ff" transform="rotate(57 305 76)"/>
+<rect x="332" y="41" width="12" height="6" rx="2" fill="#ffffff" transform="rotate(147 338 44)"/>
+<rect x="309" y="213" width="12" height="6" rx="2" fill="#ff4f9a" transform="rotate(12 315 216)"/>
+<rect x="123" y="33" width="12" height="6" rx="2" fill="#ffd23f" transform="rotate(142 129 36)"/>
+<rect x="78" y="158" width="12" height="6" rx="2" fill="#4fdc7a" transform="rotate(107 84 161)"/>
+<rect x="83" y="286" width="12" height="6" rx="2" fill="#4fb8ff" transform="rotate(30 89 289)"/>
+<rect x="302" y="167" width="12" height="6" rx="2" fill="#ffffff" transform="rotate(143 308 170)"/>
+<rect x="359" y="102" width="12" height="6" rx="2" fill="#ff4f9a" transform="rotate(26 365 105)"/>
+<g transform="translate(58 70) rotate(-16) translate(-32.0 -32.0)">
+<rect x="-5" y="-5" width="74" height="74" rx="15.88" fill="#22123f"/>
+<rect y="5.1" width="64" height="58.9" rx="10.9" fill="#b2aa92"/>
+<rect width="64" height="58.9" rx="10.9" fill="url(#gC)"/>
+<rect x="5.1" y="3.5" width="53.8" height="21.2" rx="8.2" fill="#fff" opacity=".3"/>
+<ellipse cx="12.8" cy="10.9" rx="3.2" ry="2.0" fill="#fff" opacity=".8" transform="rotate(-28 12.8 10.9)"/>
+<text x="32.0" y="46.1" font-size="40" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#000" opacity=".22">2</text>
+<text x="32.0" y="43.8" font-size="40" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#8a5a2b">2</text>
+</g>
+<g transform="translate(345 82) rotate(14) translate(-35.0 -35.0)">
+<rect x="-5" y="-5" width="80" height="80" rx="16.9" fill="#22123f"/>
+<rect y="5.6" width="70" height="64.4" rx="11.9" fill="#b2612b"/>
+<rect width="70" height="64.4" rx="11.9" fill="url(#gO)"/>
+<rect x="5.6" y="3.9" width="58.8" height="23.2" rx="8.9" fill="#fff" opacity=".3"/>
+<ellipse cx="14.0" cy="11.9" rx="3.5" ry="2.2" fill="#fff" opacity=".8" transform="rotate(-28 14.0 11.9)"/>
+<text x="35.0" y="50.5" font-size="44" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#000" opacity=".22">8</text>
+<text x="35.0" y="48.0" font-size="44" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#ffffff">8</text>
+</g>
+<g transform="translate(352 208) rotate(-10) translate(-29.0 -29.0)">
+<rect x="-5" y="-5" width="68" height="68" rx="14.860000000000001" fill="#22123f"/>
+<rect y="4.6" width="58" height="53.4" rx="9.9" fill="#b22045"/>
+<rect width="58" height="53.4" rx="9.9" fill="url(#gR)"/>
+<rect x="4.6" y="3.2" width="48.7" height="19.2" rx="7.4" fill="#fff" opacity=".3"/>
+<ellipse cx="11.6" cy="9.9" rx="2.9" ry="1.9" fill="#fff" opacity=".8" transform="rotate(-28 11.6 9.9)"/>
+<text x="29.0" y="39.5" font-size="30" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#000" opacity=".22">64</text>
+<text x="29.0" y="37.5" font-size="30" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#ffffff">64</text>
+</g>
+<g transform="translate(46 196) rotate(10) translate(-29.0 -29.0)">
+<rect x="-5" y="-5" width="68" height="68" rx="14.860000000000001" fill="#22123f"/>
+<rect y="4.6" width="58" height="53.4" rx="9.9" fill="#8136b2"/>
+<rect width="58" height="53.4" rx="9.9" fill="url(#gP)"/>
+<rect x="4.6" y="3.2" width="48.7" height="19.2" rx="7.4" fill="#fff" opacity=".3"/>
+<ellipse cx="11.6" cy="9.9" rx="2.9" ry="1.9" fill="#fff" opacity=".8" transform="rotate(-28 11.6 9.9)"/>
+<text x="29.0" y="36.3" font-size="21" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#000" opacity=".22">256</text>
+<text x="29.0" y="34.2" font-size="21" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#ffffff">256</text>
+</g>
+<line x1="16" y1="252" x2="66" y2="244" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".75"/>
+<line x1="22" y1="274" x2="74" y2="262" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".75"/>
+<line x1="384" y1="252" x2="334" y2="244" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".75"/>
+<line x1="378" y1="274" x2="326" y2="262" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".75"/>
+<g transform="translate(110 250) rotate(-12) translate(-48.0 -48.0)">
+<rect x="-5" y="-5" width="106" height="106" rx="21.32" fill="#22123f"/>
+<rect y="7.7" width="96" height="88.3" rx="16.3" fill="#2b61b2"/>
+<rect width="96" height="88.3" rx="16.3" fill="url(#gB)"/>
+<rect x="7.7" y="5.3" width="80.6" height="31.8" rx="12.2" fill="#fff" opacity=".3"/>
+<ellipse cx="19.2" cy="16.3" rx="4.8" ry="3.1" fill="#fff" opacity=".8" transform="rotate(-28 19.2 16.3)"/>
+<text x="48.0" y="57.6" font-size="28" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#000" opacity=".22">1024</text>
+<text x="48.0" y="54.2" font-size="28" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#ffffff">1024</text>
+</g>
+<g transform="translate(290 250) rotate(12) translate(-48.0 -48.0)">
+<rect x="-5" y="-5" width="106" height="106" rx="21.32" fill="#22123f"/>
+<rect y="7.7" width="96" height="88.3" rx="16.3" fill="#2b61b2"/>
+<rect width="96" height="88.3" rx="16.3" fill="url(#gB)"/>
+<rect x="7.7" y="5.3" width="80.6" height="31.8" rx="12.2" fill="#fff" opacity=".3"/>
+<ellipse cx="19.2" cy="16.3" rx="4.8" ry="3.1" fill="#fff" opacity=".8" transform="rotate(-28 19.2 16.3)"/>
+<text x="48.0" y="57.6" font-size="28" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#000" opacity=".22">1024</text>
+<text x="48.0" y="54.2" font-size="28" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#ffffff">1024</text>
+</g>
+<polygon points="200.0,212.0 209.1,236.9 234.0,246.0 209.1,255.1 200.0,280.0 190.9,255.1 166.0,246.0 190.9,236.9" fill="#ffffff" opacity="0.95"/>
+<g transform="translate(200 142) rotate(-6) translate(-84.0 -84.0)">
+<rect x="-5" y="-5" width="178" height="178" rx="33.56" fill="#22123f"/>
+<rect y="13.4" width="168" height="154.6" rx="28.6" fill="#b28900"/>
+<rect width="168" height="154.6" rx="28.6" fill="url(#gG)"/>
+<rect x="13.4" y="9.2" width="141.1" height="55.6" rx="21.4" fill="#fff" opacity=".3"/>
+<ellipse cx="33.6" cy="28.6" rx="8.4" ry="5.4" fill="#fff" opacity=".8" transform="rotate(-28 33.6 28.6)"/>
+<text x="84.0" y="101.2" font-size="50" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#000" opacity=".22">2048</text>
+<text x="84.0" y="95.3" font-size="50" font-family="'Arial Rounded MT Bold','Arial Black','Segoe UI Black',Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#ffffff">2048</text>
+</g>
+<polygon points="282.0,46.0 286.3,57.7 298.0,62.0 286.3,66.3 282.0,78.0 277.7,66.3 266.0,62.0 277.7,57.7" fill="#ffffff" opacity="1"/>
+<polygon points="118.0,65.0 121.0,73.0 129.0,76.0 121.0,79.0 118.0,87.0 115.0,79.0 107.0,76.0 115.0,73.0" fill="#ffffff" opacity="1"/>
+<polygon points="292.0,188.0 294.7,195.3 302.0,198.0 294.7,200.7 292.0,208.0 289.3,200.7 282.0,198.0 289.3,195.3" fill="#ffffff" opacity="1"/>
+<polygon points="104.0,202.0 106.1,207.9 112.0,210.0 106.1,212.1 104.0,218.0 101.9,212.1 96.0,210.0 101.9,207.9" fill="#ffffff" opacity="1"/>
+<polygon points="220.0,35.0 222.4,41.6 229.0,44.0 222.4,46.4 220.0,53.0 217.6,46.4 211.0,44.0 217.6,41.6" fill="#ffffff" opacity="1"/>
+<g transform="rotate(-4 200 340)">
+<text x="200" y="362" font-size="86" font-family="'Segoe UI',Tahoma,Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#22123f" stroke="#22123f" stroke-width="22" stroke-linejoin="round">دمج</text>
+<text x="200" y="355" font-size="86" font-family="'Segoe UI',Tahoma,Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#ffffff" stroke="#22123f" stroke-width="12" stroke-linejoin="round" paint-order="stroke">دمج</text>
+</g>
+</svg>

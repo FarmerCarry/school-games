@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="75%">
+      <stop offset="0" stop-color="#8a4dff"/>
+      <stop offset="0.55" stop-color="#4a1f8f"/>
+      <stop offset="1" stop-color="#1a1250"/>
+    </radialGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="brd" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a2a8a"/>
+      <stop offset="1" stop-color="#1a1245"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff" stop-opacity="1"/>
+      <stop offset="0.35" stop-color="#fff6a8" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#ffd21f" stop-opacity="0"/>
+    </radialGradient>
+    <symbol id="b" viewBox="0 0 60 60">
+      <rect x="1.5" y="1.5" width="57" height="57" rx="9" fill="#1b0f3a"/>
+      <rect x="3" y="3" width="54" height="54" rx="8" fill="currentColor"/>
+      <path d="M3 3H57L47 13H13Z" fill="#fff" opacity="0.55"/>
+      <path d="M3 3L13 13V47L3 57Z" fill="#fff" opacity="0.28"/>
+      <path d="M57 3V57L47 47V13Z" fill="#000" opacity="0.2"/>
+      <path d="M3 57H57L47 47H13Z" fill="#000" opacity="0.38"/>
+      <rect x="13" y="13" width="34" height="34" fill="url(#face)"/>
+      <ellipse cx="25" cy="21" rx="14" ry="6" fill="#fff" opacity="0.35" transform="rotate(-28 25 21)"/>
+      <circle cx="16" cy="16" r="2.8" fill="#fff"/>
+    </symbol>
+    <symbol id="cell" viewBox="0 0 60 60">
+      <rect x="4" y="4" width="52" height="52" rx="9" fill="#2b2166"/>
+      <rect x="4" y="4" width="52" height="13" rx="7" fill="#000" opacity="0.2"/>
+    </symbol>
+    <symbol id="gem" viewBox="-50 -50 100 100">
+      <path d="M-50 -12L-28 -42H28L50 -12L0 50Z" fill="#ff2d55" stroke="#1b0f3a" stroke-width="9" stroke-linejoin="round"/>
+      <path d="M-28 -42H28L16 -12H-16Z" fill="#ffb3c2"/>
+      <path d="M-50 -12L-28 -42L-16 -12Z" fill="#ff7a93"/>
+      <path d="M50 -12L28 -42L16 -12Z" fill="#e0103c"/>
+      <path d="M-50 -12H-16L0 50Z" fill="#ff5a78"/>
+      <path d="M16 -12H50L0 50Z" fill="#b80a30"/>
+      <path d="M-18 -34l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" fill="#fff"/>
+    </symbol>
+    <symbol id="spark" viewBox="-10 -10 20 20">
+      <path d="M0 -10L2.5 -2.5L10 0L2.5 2.5L0 10L-2.5 2.5L-10 0L-2.5 -2.5Z" fill="#fff"/>
+    </symbol>
+  </defs>
+
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <!-- sun rays -->
+  <g transform="translate(200 170)" fill="#fff" opacity="0.07">
+    <path d="M0 0L-30 -300H30Z"/><path d="M0 0L-30 -300H30Z" transform="rotate(30)"/><path d="M0 0L-30 -300H30Z" transform="rotate(60)"/>
+    <path d="M0 0L-30 -300H30Z" transform="rotate(90)"/><path d="M0 0L-30 -300H30Z" transform="rotate(120)"/><path d="M0 0L-30 -300H30Z" transform="rotate(150)"/>
+    <path d="M0 0L-30 -300H30Z" transform="rotate(180)"/><path d="M0 0L-30 -300H30Z" transform="rotate(210)"/><path d="M0 0L-30 -300H30Z" transform="rotate(240)"/>
+    <path d="M0 0L-30 -300H30Z" transform="rotate(270)"/><path d="M0 0L-30 -300H30Z" transform="rotate(300)"/><path d="M0 0L-30 -300H30Z" transform="rotate(330)"/>
+  </g>
+
+  <!-- board -->
+  <g transform="translate(196 166) scale(0.92) rotate(-6) translate(-128 -128)">
+    <rect x="-14" y="-6" width="284" height="284" rx="26" fill="#000" opacity="0.35"/>
+    <rect x="-14" y="-14" width="284" height="284" rx="26" fill="url(#brd)" stroke="#1b0f3a" stroke-width="6"/>
+    <g id="grid">
+      <use xlink:href="#cell" x="0" y="0" width="32" height="32"/><use xlink:href="#cell" x="32" y="0" width="32" height="32"/><use xlink:href="#cell" x="64" y="0" width="32" height="32"/><use xlink:href="#cell" x="96" y="0" width="32" height="32"/><use xlink:href="#cell" x="128" y="0" width="32" height="32"/><use xlink:href="#cell" x="160" y="0" width="32" height="32"/><use xlink:href="#cell" x="192" y="0" width="32" height="32"/><use xlink:href="#cell" x="224" y="0" width="32" height="32"/>
+    </g>
+    <use xlink:href="#grid" y="32"/><use xlink:href="#grid" y="64"/><use xlink:href="#grid" y="96"/><use xlink:href="#grid" y="128"/><use xlink:href="#grid" y="160"/><use xlink:href="#grid" y="192"/><use xlink:href="#grid" y="224"/>
+    <!-- placed blocks -->
+    <use xlink:href="#b" x="0" y="64" width="32" height="32" color="#3b7bff"/>
+    <use xlink:href="#b" x="0" y="96" width="32" height="32" color="#3b7bff"/>
+    <use xlink:href="#b" x="192" y="64" width="32" height="32" color="#3ddc5a"/>
+    <use xlink:href="#b" x="224" y="64" width="32" height="32" color="#3ddc5a"/>
+    <use xlink:href="#b" x="224" y="96" width="32" height="32" color="#3ddc5a"/>
+    <use xlink:href="#b" x="32" y="160" width="32" height="32" color="#a64dff"/>
+    <use xlink:href="#b" x="0" y="160" width="32" height="32" color="#a64dff"/>
+    <use xlink:href="#b" x="0" y="192" width="32" height="32" color="#ff8a1f"/>
+    <use xlink:href="#b" x="0" y="224" width="32" height="32" color="#ff8a1f"/>
+    <use xlink:href="#b" x="32" y="224" width="32" height="32" color="#ff8a1f"/>
+    <use xlink:href="#b" x="64" y="224" width="32" height="32" color="#ff3b5c"/>
+    <use xlink:href="#b" x="96" y="224" width="32" height="32" color="#ff3b5c"/>
+    <use xlink:href="#b" x="96" y="192" width="32" height="32" color="#ff3b5c"/>
+    <use xlink:href="#b" x="160" y="192" width="32" height="32" color="#1fd1e8"/>
+    <use xlink:href="#b" x="192" y="192" width="32" height="32" color="#1fd1e8"/>
+    <use xlink:href="#b" x="192" y="224" width="32" height="32" color="#1fd1e8"/>
+    <use xlink:href="#b" x="224" y="224" width="32" height="32" color="#ffd21f"/>
+    <use xlink:href="#b" x="224" y="160" width="32" height="32" color="#ff5fc8"/>
+    <use xlink:href="#b" x="192" y="160" width="32" height="32" color="#ff5fc8"/>
+    <use xlink:href="#b" x="128" y="96" width="32" height="32" color="#ffd21f"/>
+    <use xlink:href="#b" x="96" y="32" width="32" height="32" color="#3b7bff"/>
+    <!-- exploding row (row 4) -->
+    <rect x="-18" y="126" width="292" height="36" rx="18" fill="#fff" opacity="0.9"/>
+    <use xlink:href="#b" x="0" y="128" width="32" height="32" color="#ffe680"/>
+    <use xlink:href="#b" x="32" y="128" width="32" height="32" color="#ffe680"/>
+    <use xlink:href="#b" x="64" y="128" width="32" height="32" color="#ffe680"/>
+    <use xlink:href="#b" x="192" y="128" width="32" height="32" color="#ffe680"/>
+    <use xlink:href="#b" x="224" y="128" width="32" height="32" color="#ffe680"/>
+  </g>
+
+  <!-- burst -->
+  <circle cx="200" cy="170" r="70" fill="url(#glow)"/>
+  <g fill="#ffd21f" stroke="#1b0f3a" stroke-width="4" stroke-linejoin="round">
+    <path d="M200 110l14 34 36-8-22 30 30 22-37 5 3 37-26-26-26 26 3-37-37-5 30-22-22-30 36 8z" fill="#fff6a8"/>
+  </g>
+  <!-- flying shards -->
+  <use xlink:href="#b" x="112" y="84" width="34" height="34" color="#ff3b5c" transform="rotate(-24 129 101)"/>
+  <use xlink:href="#b" x="262" y="92" width="30" height="30" color="#3ddc5a" transform="rotate(28 277 107)"/>
+  <use xlink:href="#b" x="286" y="176" width="26" height="26" color="#1fd1e8" transform="rotate(-18 299 189)"/>
+  <use xlink:href="#b" x="96" y="182" width="24" height="24" color="#ffd21f" transform="rotate(22 108 194)"/>
+  <use xlink:href="#gem" x="176" y="140" width="48" height="48"/>
+  <use xlink:href="#spark" x="150" y="118" width="22" height="22"/>
+  <use xlink:href="#spark" x="240" y="198" width="18" height="18"/>
+  <use xlink:href="#spark" x="252" y="126" width="14" height="14"/>
+  <use xlink:href="#spark" x="130" y="160" width="14" height="14"/>
+  <use xlink:href="#spark" x="330" y="60" width="20" height="20"/>
+  <use xlink:href="#spark" x="54" y="96" width="16" height="16"/>
+
+  <!-- dragged T piece + hand -->
+  <g transform="translate(290 22) rotate(10) scale(0.82)">
+    <rect x="4" y="8" width="102" height="68" rx="12" fill="#000" opacity="0.25"/>
+    <use xlink:href="#b" x="0" y="0" width="34" height="34" color="#a64dff"/>
+    <use xlink:href="#b" x="34" y="0" width="34" height="34" color="#a64dff"/>
+    <use xlink:href="#b" x="68" y="0" width="34" height="34" color="#a64dff"/>
+    <use xlink:href="#b" x="34" y="34" width="34" height="34" color="#a64dff"/>
+  </g>
+  <g transform="translate(332 66) rotate(-20) scale(0.9)" stroke="#1b0f3a" stroke-width="5" stroke-linejoin="round" fill="#fff">
+    <rect x="-7" y="-2" width="16" height="38" rx="8"/>
+    <rect x="-16" y="22" width="46" height="38" rx="15"/>
+  </g>
+
+  <!-- title -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
+    <text x="200" y="352" font-size="64" fill="#1b0f3a" stroke="#1b0f3a" stroke-width="16" stroke-linejoin="round" transform="rotate(-4 200 340)">انفجار</text>
+    <text x="200" y="346" font-size="64" fill="#ffd21f" stroke="#1b0f3a" stroke-width="10" stroke-linejoin="round" paint-order="stroke" transform="rotate(-4 200 340)">انفجار</text>
+    <text x="200" y="393" font-size="44" fill="#1b0f3a" stroke="#1b0f3a" stroke-width="13" stroke-linejoin="round" transform="rotate(-2 200 380)">المكعبات</text>
+    <text x="200" y="389" font-size="44" fill="#ffffff" stroke="#1b0f3a" stroke-width="8" stroke-linejoin="round" paint-order="stroke" transform="rotate(-2 200 380)">المكعبات</text>
+  </g>
+</svg>

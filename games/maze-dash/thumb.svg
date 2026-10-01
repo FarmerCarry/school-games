@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#3a1172"/>
+      <stop offset="1" stop-color="#0b0319"/>
+    </radialGradient>
+    <linearGradient id="goo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b6ff3a"/>
+      <stop offset="1" stop-color="#3fa80f"/>
+    </linearGradient>
+    <linearGradient id="trail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffe600" stop-opacity="0"/>
+      <stop offset="1" stop-color="#ffe600" stop-opacity="0.85"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" rx="0" fill="url(#bg)"/>
+
+  <!-- maze walls (neon edged) -->
+  <g fill="#2c0d5c" stroke="#ffe600" stroke-width="6" stroke-linejoin="round">
+    <path d="M-10 104 H150 V150 H-10 Z"/>
+    <path d="M250 104 H410 V150 H250 Z"/>
+    <path d="M-10 262 H100 V410 H-10 Z"/>
+    <path d="M214 252 H300 V330 H214 Z"/>
+    <path d="M350 236 H410 V410 H350 Z"/>
+  </g>
+  <g fill="#3d1880">
+    <rect x="30" y="120" width="16" height="16"/>
+    <rect x="290" y="122" width="14" height="14"/>
+    <rect x="40" y="300" width="16" height="16"/>
+    <rect x="240" y="280" width="18" height="18"/>
+  </g>
+  <!-- spikes -->
+  <g fill="#ff3f6c">
+    <path d="M252 252 l12 -16 l12 16 z M276 252 l12 -16 l12 16 z"/>
+    <path d="M100 290 l16 10 l-16 10 z M100 320 l16 10 l-16 10 z"/>
+  </g>
+
+  <!-- dots -->
+  <g fill="#ffe600">
+    <rect x="316" y="236" width="10" height="10"/>
+    <rect x="316" y="270" width="10" height="10"/>
+    <rect x="316" y="304" width="10" height="10"/>
+    <rect x="195" y="122" width="10" height="10"/>
+      </g>
+
+  <!-- coin -->
+  <g transform="translate(325 188)">
+    <ellipse cx="0" cy="3" rx="15" ry="17" fill="#b87300"/>
+    <ellipse cx="0" cy="0" rx="15" ry="17" fill="#ffd400"/>
+    <rect x="-4" y="-8" width="8" height="16" fill="#fff6a8"/>
+  </g>
+
+  <!-- bat -->
+  <g transform="translate(158 300)">
+    <path d="M-10 -4 L-42 -20 L-34 6 L-24 0 L-16 10 Z" fill="#6a2cc9"/>
+    <path d="M10 -4 L42 -20 L34 6 L24 0 L16 10 Z" fill="#6a2cc9"/>
+    <circle r="17" fill="#8e4dff"/>
+    <path d="M-12 -8 L-8 -22 L-3 -13 Z M12 -8 L8 -22 L3 -13 Z" fill="#8e4dff"/>
+    <circle cx="-6" cy="-2" r="5" fill="#ffe600"/>
+    <circle cx="6" cy="-2" r="5" fill="#ffe600"/>
+    <circle cx="-5" cy="-1" r="2.4" fill="#1a0830"/>
+    <circle cx="7" cy="-1" r="2.4" fill="#1a0830"/>
+    <path d="M-4 7 L-2 12 L0 7 Z M4 7 L2 12 L0 7 Z" fill="#fff"/>
+  </g>
+
+  <!-- dash trail + speed lines -->
+  <rect x="60" y="176" width="130" height="50" rx="20" fill="url(#trail)" transform="translate(0 0)"/>
+  <g stroke="#ffffff" stroke-width="5" stroke-linecap="round" opacity="0.8">
+    <line x1="30" y1="186" x2="80" y2="186"/>
+    <line x1="10" y1="206" x2="70" y2="206"/>
+    <line x1="40" y1="224" x2="90" y2="224"/>
+  </g>
+
+  <!-- hero blob (stretched, dashing right) -->
+  <g transform="translate(228 200) scale(1.18 0.86)">
+    <rect x="-44" y="-40" width="88" height="86" rx="28" fill="#b88a00"/>
+    <rect x="-44" y="-44" width="88" height="82" rx="28" fill="#ffe600"/>
+    <rect x="-30" y="-36" width="28" height="10" rx="5" fill="#fff" opacity="0.45"/>
+    <rect x="-40" y="-20" width="80" height="32" rx="13" fill="#1a1030"/>
+    <circle cx="-12" cy="-4" r="9" fill="#fff"/>
+    <circle cx="20" cy="-4" r="9" fill="#fff"/>
+    <circle cx="-8" cy="-4" r="5" fill="#1a1030"/>
+    <circle cx="24" cy="-4" r="5" fill="#1a1030"/>
+    <path d="M-2 22 a8 8 0 0 0 16 0 z" fill="#ff5a8a"/>
+  </g>
+  <!-- impact sparks -->
+  <g fill="#ffffff">
+    <path d="M292 176 l10 -12 l2 14 z"/>
+    <path d="M296 204 l16 0 l-12 8 z"/>
+    <path d="M290 228 l12 10 l-14 2 z"/>
+  </g>
+
+  <!-- rising goo -->
+  <path d="M0 352 Q25 336 50 350 T100 348 T150 352 T200 344 T250 352 T300 346 T350 352 T400 344 V400 H0 Z" fill="url(#goo)"/>
+  <circle cx="60" cy="376" r="6" fill="#e6ffc8" opacity="0.7"/>
+  <circle cx="300" cy="382" r="5" fill="#e6ffc8" opacity="0.7"/>
+  <circle cx="176" cy="372" r="5" fill="#1a4a00"/>
+  <circle cx="224" cy="372" r="5" fill="#1a4a00"/>
+  <path d="M188 382 a12 10 0 0 0 24 0 z" fill="#1a4a00"/>
+
+  <!-- logo -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
+    <text x="200" y="66" font-size="54" fill="#5a1596" stroke="#5a1596" stroke-width="14" stroke-linejoin="round">اندفاع المتاهة</text>
+    <text x="200" y="62" font-size="54" fill="#ffe600" stroke="#1a0830" stroke-width="4" stroke-linejoin="round" paint-order="stroke">اندفاع المتاهة</text>
+  </g>
+</svg>
