@@ -3,6 +3,7 @@ import { after, before, test } from 'node:test';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+import vm from 'node:vm';
 import { launchChromium } from '../browser.mjs';
 import { fileURLToPath } from 'node:url';
 
@@ -143,6 +144,10 @@ test('typing restart shortcut leaves controls, modals and Shift+Tab navigable', 
 });
 
 test('all game favicons resolve under a repository subpath', async () => {
+  const catalog = { window: {} };
+  vm.runInNewContext(await fs.readFile(path.join(repo, 'js/catalog.js'), 'utf8'), catalog);
+  const expectedCount = catalog.window.GAMES.length;
+  assert.ok(expectedCount > 0, 'the source catalog contains games');
   const games = await fs.readdir(path.join(root, 'games'), { withFileTypes: true });
   let count = 0;
   for (const game of games.filter(entry => entry.isDirectory())) {
@@ -157,7 +162,7 @@ test('all game favicons resolve under a repository subpath', async () => {
     assert.equal((await fetch(iconUrl)).status, 200, game.name);
     count++;
   }
-  assert.equal(count, 28);
+  assert.equal(count, expectedCount, 'every catalog game has a working local favicon');
 });
 
 test('Fire and Ice retains solo Tab switching and Shift+Tab can leave play', async t => {
