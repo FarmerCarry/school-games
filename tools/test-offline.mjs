@@ -198,7 +198,7 @@ try {
     check(true, `first visit stores all ${v1.count} files`);
     await offlineReload(context, [page]);
     await context.setOffline(true);
-    for (const slug of ['rail-rush', 'merge-2048', 'fire-and-ice', 'road-hopper', 'block-world']) {
+    for (const slug of ['rail-rush', 'merge-2048', 'fire-and-ice', 'road-hopper', 'block-world', 'skybound-golf']) {
       await openOfflineGame(page, slug);
       check(true, 'offline game loads: ' + slug);
     }
