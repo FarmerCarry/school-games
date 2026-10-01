@@ -7,9 +7,9 @@
  *   node tools/perf.mjs --json out.json also write the raw numbers
  *
  * Per page it reports:
- *   --latency <ms>    delay every file by <ms> (to mimic a slow disk or a busy network)
- *   files / KB        files downloaded and bytes a cold load needs (every file = one disk read on
- *                     a slow HDD, so fewer files matters more than fewer bytes)
+ *   --latency <ms>    synthetic response delay; this does not benchmark a real HDD
+ *   files / KB        HTTP files and bytes in a fresh browser context; filesystem caching
+ *                     and hardware still need separate measurements on a school PC
  *   loadMs            navigation start -> load event
  *   scriptMs          main-thread script time during load
  *   longTasks         main-thread tasks > 50 ms during a ~20 s scripted play session (stutters)
@@ -17,54 +17,40 @@
  *   heapMB / +MB      JS heap after load, and growth after 20 s of play (after forced GC)
  *   saves/min, KB     localStorage writes per minute during play, and total bytes written
  */
-import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-let playwright;
-try { playwright = require('playwright'); } catch (e) { playwright = require('/opt/node22/lib/node_modules/playwright'); }
+import { launchChromium } from './browser.mjs';
+import { startTestServer } from './test-server.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // SG_ROOT=_site tests the fast build made by tools/build.mjs instead of the source files.
 const ROOT = process.env.SG_ROOT ? path.resolve(REPO, process.env.SG_ROOT) : REPO;
-const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json'
-};
 
 const argv = process.argv.slice(2);
 let jsonOut = null, latency = 0;
 const only = [];
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === '--json') jsonOut = argv[++i];
-  else if (argv[i] === '--latency') latency = +argv[++i];   // ms added to every file (slow disk / busy network)
+  else if (argv[i] === '--latency') latency = +argv[++i];
   else only.push(argv[i]);
 }
 
 const sandbox = { window: {} };
 vm.runInNewContext(fs.readFileSync(path.join(REPO, 'js/catalog.js'), 'utf8'), sandbox);
 let targets = ['portal', ...sandbox.window.GAMES.map(g => g.slug)];
+const unknown = only.filter(t => !targets.includes(t));
+if (unknown.length) {
+  console.error('Unknown performance target: ' + unknown.join(', '));
+  process.exit(1);
+}
 if (only.length) targets = targets.filter(t => only.includes(t));
 
-const server = http.createServer((req, res) => {
-  let fp = path.join(ROOT, decodeURIComponent(req.url.split('?')[0].split('#')[0]));
-  if (!fp.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
-  if (fs.existsSync(fp) && fs.statSync(fp).isDirectory()) fp = path.join(fp, 'index.html');
-  fs.readFile(fp, (err, data) => setTimeout(() => {
-    if (err) { res.writeHead(404); res.end(); return; }
-    res.writeHead(200, { 'content-type': MIME[path.extname(fp)] || 'application/octet-stream', 'cache-control': 'max-age=600' });
-    res.end(data);
-  }, latency));
-});
-await new Promise(r => server.listen(0, '127.0.0.1', r));
-const origin = `http://127.0.0.1:${server.address().port}`;
+const { origin, close: closeServer } = await startTestServer(ROOT, { latency, cacheControl: 'max-age=600' });
 
-const browser = await playwright.chromium.launch({
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-precise-memory-info', '--js-flags=--expose-gc']
+const browser = await launchChromium({
+  args: ['--enable-precise-memory-info', '--js-flags=--expose-gc']
 });
 
 const INIT = () => {
@@ -148,5 +134,6 @@ for (const t of targets) {
     `saves/min=${r.savesPerMin} (${r.saveKB}KB)${r.errors.length ? ' ERR ' + r.errors[0] : ''}`);
 }
 await browser.close();
-server.close();
+await closeServer();
 if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify(rows, null, 1));
+process.exitCode = rows.some(row => row.error || row.errors.length) ? 1 : 0;

@@ -18,7 +18,7 @@
       owned: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], ups: {}, ach: {}, crusts: 0, rebirths: 0, golden: 0,
       skin: 'classic', skins: { classic: 1 }, seenSkins: { classic: 1 }, bestCombo: 0, rainCaught: 0,
       skinChanged: false, awayCollected: false, t: Date.now(), playTime: 0, buyAmt: 1, seenAch: 0,
-      tut: 0
+      tut: 0, pendingOffline: 0, pendingOfflineSeconds: 0
     };
   }
   function num(v, d) { return typeof v === 'number' && isFinite(v) && v >= 0 ? v : d; }
@@ -856,7 +856,14 @@
     return m ? hrs(h) + ' و' + mins(m) : hrs(h);
   }
   function offlineGain(sec) { return S.ppsBase * Math.min(sec, 3 * 3600) * 0.5; }
-  function openOffline(sec, amt) {
+  function queueOffline(sec) {
+    var amt = offlineGain(sec);
+    if (amt < 1) return;
+    S.pendingOffline += amt;
+    S.pendingOfflineSeconds += Math.min(sec, 3 * 3600);
+  }
+  function openOffline() {
+    var sec = S.pendingOfflineSeconds, amt = S.pendingOffline;
     var html = '<h2>مرحبًا بعودتك!</h2>' +
       '<p>أثناء غيابك (' + fmtDuration(Math.min(sec, 3 * 3600)) + ') صنع فريقك:</p>' +
       '<div class="bignum">' + plus(PZ.fmt(amt)) + ' بيتزا</div>' +
@@ -864,10 +871,13 @@
       '<div class="row"><button class="btn" data-act="take" data-primary="1" type="button">اجمعها! 🍕</button></div>' +
       '<div class="keyhint"><span class="sg-key">Enter</span></div>';
     openModal('offline', html, 600, function () {
-      gain(amt, false); S.awayCollected = true;
-      closeModal(); snd.collect(); toppingBurst(CX, CY, 40, 520); shake(6);
-      floatText(CX, CY - 60, '+' + PZ.fmt(amt), { size: 44, color: '#7dff9a', life: 1.6 });
+      // Consume the saved balance, so reopening/reloading the notice cannot lose or duplicate it.
+      var collected = S.pendingOffline;
+      S.pendingOffline = 0; S.pendingOfflineSeconds = 0;
+      gain(collected, false); S.awayCollected = true;
       save();
+      closeModal(); snd.collect(); toppingBurst(CX, CY, 40, 520); shake(6);
+      floatText(CX, CY - 60, '+' + PZ.fmt(collected), { size: 44, color: '#7dff9a', life: 1.6 });
     });
   }
   function openResetConfirm() {
@@ -906,10 +916,10 @@
     if (!started) {
       started = true;
       var sec = (Date.now() - S.t) / 1000;
-      if (sec > 60 && S.ppsBase > 0) {
-        var amt = offlineGain(sec);
-        if (amt >= 1) openOffline(sec, amt);
-      }
+      if (sec > 60 && S.ppsBase > 0) queueOffline(sec);
+      // Persist the pending earnings together with their cutoff before showing the notice.
+      save();
+      if (S.pendingOffline > 0) openOffline();
     }
     S.t = Date.now();
   }
@@ -960,6 +970,7 @@
   }
 
   window.addEventListener('keydown', function (e) {
+    if (!Kit.isGameKeyEvent(e)) return;
     if (e.repeat) return;
     var c = e.code;
     if (mode === 'title') {
@@ -986,10 +997,10 @@
       clickPizza(CX + K.rand(-R * 0.5, R * 0.5), CY + K.rand(-R * 0.5, R * 0.3));
     }
   });
-  // stop buttons from keeping focus (so Space never re-triggers them)
+  // Mouse clicks return focus to the game; keyboard activation keeps button focus.
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('button');
-    if (b) b.blur();
+    if (b && e.detail > 0) b.blur();
   });
 
   $('bPlay').addEventListener('click', startGame);
@@ -1426,7 +1437,7 @@
     click: function (n) { for (var i = 0; i < (n || 1); i++) { clickTimes.length = 0; clickPizza(CX, CY); } return S.pizzas; },
     rebirth: function () { doRebirth(); return S.crusts; },
     openRebirth: openRebirth, openAch: openAch, openSkins: openSkins, closeModal: closeModal,
-    offline: function (sec) { openOffline(sec, offlineGain(sec)); },
+    offline: function (sec) { queueOffline(sec); save(); openOffline(); },
     save: save, fmt: PZ.fmt, snd: snd,
     setTime: function (sec) { save(); S.t = Date.now() - sec * 1000; store.set('save', S); noSave = true; }
   };

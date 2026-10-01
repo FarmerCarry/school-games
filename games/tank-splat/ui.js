@@ -370,14 +370,15 @@
     if (!b) return;
     Kit.audio.unlock();
     ACTS[b.getAttribute('data-act')]();
-    b.blur();
+    if (e.detail > 0) b.blur();
   });
   ui.addEventListener('mouseover', function (e) { var b = e.target.closest('.btn'); if (b && b !== app.hoverEl) { app.hoverEl = b; S.hover(); } });
-  $('pauseBtn').addEventListener('click', function (e) { e.stopPropagation(); pause(); this.blur(); });
+  $('pauseBtn').addEventListener('click', function (e) { e.stopPropagation(); pause(); if (e.detail > 0) this.blur(); });
 
   function pause() { if (app.screen === 'game') { S.click(); show('pause'); } }
 
   window.addEventListener('keydown', function (e) {
+    if (!Kit.isGameKeyEvent(e)) return;
     if (e.code === 'Slash' || e.code === 'Quote' || (e.code === 'Backspace' && app.screen !== 'title')) e.preventDefault();
     if (e.repeat) return;
     var k = e.code, sc = app.screen;

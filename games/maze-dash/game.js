@@ -149,12 +149,12 @@
     try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
   function hideAll() { for (var k in screens) screens[k].hidden = true; }
-  // Buttons must not keep focus (Enter would click them again).
+  // Mouse clicks return focus to the game; keyboard activation keeps button focus.
   Array.prototype.forEach.call(document.querySelectorAll('button'), function (b) {
     b.addEventListener('mousedown', function (e) { e.preventDefault(); });
   });
   function on(id, fn) {
-    $(id).addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); sfx.click(); fn(); this.blur(); });
+    $(id).addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); sfx.click(); fn(); if (e.detail > 0) this.blur(); });
   }
 
   var toastTimer = 0, toastQueue = [];

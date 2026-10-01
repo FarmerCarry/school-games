@@ -44,9 +44,21 @@
     }
     for (i = 0; i < st.balls.length; i++) if (st.balls[i].on && lv.targets.indexOf(st.balls[i].n) >= 0) remaining++;
     if (lv.eightLast) {
-      var eightDown = false;
+      var eightDown = false, eightPot = null, eightIndex = -1;
       for (i = 0; i < st.balls.length; i++) if (st.balls[i].n === 8 && !st.balls[i].on) eightDown = true;
       if (eightDown && remaining > 0) return { status: 'fail', reason: 'الكرة 8 يجب أن تكون الأخيرة!' };
+      for (i = 0; i < shot.pots.length; i++) if (shot.pots[i].n === 8) { eightPot = shot.pots[i]; eightIndex = i; }
+      if (eightDown) {
+        for (i = 0; i < shot.pots.length; i++) {
+          var targetPot = shot.pots[i];
+          if (targetPot.n === 8 || lv.targets.indexOf(targetPot.n) < 0) continue;
+          // Targets absent from this shot were cleared earlier. Current-shot
+          // targets must precede the 8 strictly; simultaneous pots do not count.
+          var beforeEight = eightPot && (Number.isFinite(targetPot.t) && Number.isFinite(eightPot.t)
+            ? targetPot.t < eightPot.t : i < eightIndex);
+          if (!beforeEight) return { status: 'fail', reason: 'الكرة 8 يجب أن تكون الأخيرة!' };
+        }
+      }
     }
     if (remaining === 0) return { status: 'win' };
     if (prog.shotsUsed >= lv.shots) return { status: 'fail', reason: lv.shots === 1 ? 'حاول مرة أخرى، أنت تستطيع!' : 'انتهت الضربات! حاول مجددًا.' };

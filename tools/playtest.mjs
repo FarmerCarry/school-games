@@ -23,30 +23,23 @@
  *   {"hold": "ArrowLeft", "ms": 600}     hold a key for ms
  *   {"holdMany": ["ArrowRight","ArrowUp"], "ms": 600}   hold several keys together
  *   {"eval": "window.someState"}         evaluate JS in the page, result goes in report.evals
+ *   {"assert": "window.someState === 1"} require a truthy result or fail the playtest
  *   {"fps": 2000}                        measure requestAnimationFrame rate over ms
  *   {"resize": [800, 600]}               change the viewport size
  *   {"reload": true}                     reload the page (tests saved progress)
  *   {"repeat": 5, "do": [ ...actions ]}  repeat a block
  */
-import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-let playwright;
-try { playwright = require('playwright'); } catch (e) { playwright = require('/opt/node22/lib/node_modules/playwright'); }
+import { launchChromium } from './browser.mjs';
+import { startTestServer } from './test-server.mjs';
+import { reportPassed } from './playtest-report.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // SG_ROOT=_site tests the fast build made by tools/build.mjs instead of the source files.
 const ROOT = process.env.SG_ROOT ? path.resolve(REPO, process.env.SG_ROOT) : REPO;
-const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
-  '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
-  '.woff2': 'font/woff2', '.woff': 'font/woff', '.ico': 'image/x-icon', '.txt': 'text/plain', '.md': 'text/plain'
-};
-
 function parseArgs(argv) {
   const a = { _: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -63,7 +56,7 @@ if (!slug && !args.path) {
   process.exit(2);
 }
 const pagePath = args.path || `/games/${slug}/index.html`;
-const outDir = path.resolve(args.out || path.join('/tmp', 'playtest', slug || 'page'));
+const outDir = args.out ? path.resolve(args.out) : fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-playtest-'));
 fs.mkdirSync(outDir, { recursive: true });
 const [vw, vh] = (args.size || '1280x720').split('x').map(Number);
 
@@ -71,51 +64,20 @@ let actions = [{ wait: 1200 }, { shot: 'loaded' }];
 if (args.actions) actions = JSON.parse(fs.readFileSync(args.actions, 'utf8'));
 if (args['actions-json']) actions = JSON.parse(args['actions-json']);
 
-const server = http.createServer((req, res) => {
-  const u = decodeURIComponent(req.url.split('?')[0].split('#')[0]);
-  let fp = path.join(ROOT, u);
-  if (!fp.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
-  if (fs.existsSync(fp) && fs.statSync(fp).isDirectory()) fp = path.join(fp, 'index.html');
-  fs.readFile(fp, (err, data) => {
-    if (err) { res.writeHead(404); res.end('not found'); return; }
-    res.writeHead(200, { 'content-type': MIME[path.extname(fp)] || 'application/octet-stream', 'cache-control': 'no-store' });
-    res.end(data);
-  });
-});
-
-await new Promise(r => server.listen(0, '127.0.0.1', r));
-const port = server.address().port;
-const origin = `http://127.0.0.1:${port}`;
+const { origin, close: closeServer } = await startTestServer(ROOT);
 
 const report = {
   url: origin + pagePath, consoleErrors: [], consoleWarnings: [], pageErrors: [],
-  failedRequests: [], externalRequests: [], screenshots: [], evals: [], fps: [], notes: []
+  failedRequests: [], externalRequests: [], screenshots: [], evals: [], fps: [], notes: [], harnessErrors: []
 };
 
-const browser = await playwright.chromium.launch({
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required']
-});
-const context = await browser.newContext({ viewport: { width: vw, height: vh } });
-const page = await context.newPage();
-
-page.on('console', msg => {
-  const t = msg.type();
-  const text = msg.text();
-  if (t === 'error') report.consoleErrors.push(text);
-  else if (t === 'warning') report.consoleWarnings.push(text);
-});
-page.on('pageerror', err => report.pageErrors.push(String(err && err.stack || err)));
-page.on('requestfailed', r => report.failedRequests.push(r.url() + ' :: ' + (r.failure() && r.failure().errorText)));
-page.on('request', r => {
-  const url = r.url();
-  if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:')) report.externalRequests.push(url);
-});
-page.on('response', r => { if (r.status() >= 400) report.failedRequests.push(r.url() + ' :: HTTP ' + r.status()); });
+let browser, page, actionInProgress;
 
 const keyName = k => (k === 'Space' || k === ' ') ? ' ' : k;
 
 async function run(list) {
   for (const a of list) {
+    actionInProgress = a;
     if (a.wait != null) await page.waitForTimeout(a.wait);
     else if (a.shot) {
       const p = path.join(outDir, a.shot + '.png');
@@ -123,13 +85,9 @@ async function run(list) {
       report.screenshots.push(p);
     } else if (a.click) await page.mouse.click(a.click[0], a.click[1]);
     else if (a.rclick) await page.mouse.click(a.rclick[0], a.rclick[1], { button: 'right' });
-    else if (a.clickText) {
-      try { await page.getByText(a.clickText, { exact: false }).first().click({ timeout: 3000 }); }
-      catch (e) { report.notes.push('clickText failed: ' + a.clickText); }
-    } else if (a.clickSel) {
-      try { await page.locator(a.clickSel).first().click({ timeout: 3000 }); }
-      catch (e) { report.notes.push('clickSel failed: ' + a.clickSel); }
-    } else if (a.move) await page.mouse.move(a.move[0], a.move[1], { steps: a.steps || 5 });
+    else if (a.clickText) await page.getByText(a.clickText, { exact: false }).first().click({ timeout: 3000 });
+    else if (a.clickSel) await page.locator(a.clickSel).first().click({ timeout: 3000 });
+    else if (a.move) await page.mouse.move(a.move[0], a.move[1], { steps: a.steps || 5 });
     else if (a.drag) {
       await page.mouse.move(a.drag[0][0], a.drag[0][1]);
       await page.mouse.down();
@@ -146,7 +104,10 @@ async function run(list) {
       for (const k of a.holdMany) await page.keyboard.up(keyName(k));
     } else if (a.eval) {
       try { report.evals.push({ expr: a.eval, value: await page.evaluate(a.eval) }); }
-      catch (e) { report.evals.push({ expr: a.eval, error: String(e) }); }
+      catch (e) { report.evals.push({ expr: a.eval, error: String(e) }); throw e; }
+    } else if (a.assert) {
+      const value = await page.evaluate(a.assert);
+      if (!value) throw new Error('Assertion failed: ' + (a.message || a.assert));
     } else if (a.fps) {
       const fps = await page.evaluate(ms => new Promise(res => {
         let n = 0; const t0 = performance.now();
@@ -156,19 +117,38 @@ async function run(list) {
       report.fps.push(Math.round(fps));
     } else if (a.resize) await page.setViewportSize({ width: a.resize[0], height: a.resize[1] });
     else if (a.reload) await page.reload();
-    else if (a.repeat) { for (let i = 0; i < a.repeat; i++) await run(a.do || []); }
+    else if (a.repeat != null) { for (let i = 0; i < a.repeat; i++) await run(a.do || []); }
+    else throw new Error('Unknown playtest action: ' + JSON.stringify(a));
   }
 }
 
 try {
+  browser = await launchChromium({
+    args: ['--autoplay-policy=no-user-gesture-required']
+  });
+  const context = await browser.newContext({ viewport: { width: vw, height: vh } });
+  page = await context.newPage();
+  page.on('console', msg => {
+    if (msg.type() === 'error') report.consoleErrors.push(msg.text());
+    else if (msg.type() === 'warning') report.consoleWarnings.push(msg.text());
+  });
+  page.on('pageerror', err => report.pageErrors.push(String(err && err.stack || err)));
+  page.on('requestfailed', r => report.failedRequests.push(r.url() + ' :: ' + (r.failure() && r.failure().errorText)));
+  page.on('request', r => {
+    const url = r.url();
+    if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:')) report.externalRequests.push(url);
+  });
+  page.on('response', r => { if (r.status() >= 400) report.failedRequests.push(r.url() + ' :: HTTP ' + r.status()); });
   await page.goto(origin + pagePath, { waitUntil: 'load', timeout: 20000 });
   await run(actions);
 } catch (e) {
-  report.notes.push('harness error: ' + String(e));
+  report.harnessErrors.push('harness error during ' + JSON.stringify(actionInProgress || { navigation: pagePath }) + ': ' + String(e));
+} finally {
+  if (browser) await browser.close();
+  await closeServer();
 }
 
-await browser.close();
-server.close();
-report.ok = report.pageErrors.length === 0 && report.consoleErrors.length === 0 && report.externalRequests.length === 0 &&
-  report.failedRequests.filter(f => !f.includes('favicon')).length === 0;
+report.ok = report.harnessErrors.length === 0 && reportPassed(report);
+fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));
+process.exitCode = report.ok ? 0 : 1;

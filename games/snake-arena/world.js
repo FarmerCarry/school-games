@@ -136,7 +136,7 @@
   }
   Snake.prototype.init = function (x, y, ang, mass, name, skin, eyes) {
     this.hx = x; this.hy = y; this.ang = ang; this.want = ang; this.look = ang;
-    this.mass = mass; this.r = SA.massToR(mass); this.tn = massToN(mass);
+    this.mass = mass; this.peakMass = mass; this.r = SA.massToR(mass); this.tn = massToN(mass);
     this.name = name; this.skin = skin; this.eyes = eyes;
     this.s = 0; this.n = this.tn; this.frac = 0;
     // lay the body behind the head along a gentle curve
@@ -159,6 +159,7 @@
   Snake.prototype.pointY = function (i) { var a = this.s + i; if (a >= CAP) a -= CAP; return this.py[a]; };
   Snake.prototype.grow = function (v) {
     this.mass += v;
+    this.peakMass = Math.max(this.peakMass, this.mass);
     this.r = SA.massToR(this.mass);
     this.tn = massToN(this.mass);
   };

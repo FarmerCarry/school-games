@@ -1497,7 +1497,7 @@
   Array.prototype.forEach.call(document.querySelectorAll('button'), function (b) {
     b.addEventListener('mousedown', function (e) { e.preventDefault(); });
   });
-  function onClick(id, fn) { $(id).addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); fn(); this.blur(); }); }
+  function onClick(id, fn) { $(id).addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); fn(); if (e.detail > 0) this.blur(); }); }
 
   var mute = Kit.muteButton();
   mute.setAttribute('aria-label', 'تشغيل الصوت أو كتمه'); mute.title = 'الصوت (M)';

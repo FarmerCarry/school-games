@@ -14,18 +14,13 @@
  * --wav also writes the recording so a person can listen to it.
  * Actions use the same format as tools/playtest.mjs (a default play script is used if omitted).
  */
-import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-let playwright;
-try { playwright = require('playwright'); } catch (e) { playwright = require('/opt/node22/lib/node_modules/playwright'); }
+import { launchChromium } from './browser.mjs';
+import { startTestServer } from './test-server.mjs';
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = process.env.SG_ROOT ? path.resolve(REPO, process.env.SG_ROOT) : REPO;
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.png': 'image/png' };
 
 const argv = process.argv.slice(2);
 const slug = argv[0];
@@ -40,13 +35,7 @@ if (opt('--actions-json')) actions = JSON.parse(opt('--actions-json'));
 const wavOut = opt('--wav');
 if (!slug) { console.error('usage: node tools/audio-probe.mjs <slug> [--actions f.json] [--wav out.wav]'); process.exit(2); }
 
-const server = http.createServer((req, res) => {
-  let fp = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
-  if (fp.endsWith('/')) fp += 'index.html';
-  fs.readFile(fp, (e, d) => { if (e) { res.writeHead(404); res.end(); return; } res.writeHead(200, { 'content-type': MIME[path.extname(fp)] || 'application/octet-stream' }); res.end(d); });
-});
-await new Promise(r => server.listen(0, '127.0.0.1', r));
-const origin = `http://127.0.0.1:${server.address().port}`;
+const { origin, close: closeServer } = await startTestServer(ROOT);
 
 // Injected before the game: route everything that reaches ctx.destination through a recorder.
 const INIT = () => {
@@ -88,11 +77,14 @@ const INIT = () => {
   }
 };
 
-const browser = await playwright.chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
+const browser = await launchChromium({ args: ['--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 await page.addInitScript(INIT);
 const errors = [];
 page.on('pageerror', e => errors.push(String(e).split('\n')[0]));
+page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+page.on('requestfailed', r => errors.push(r.url() + ' :: ' + r.failure()?.errorText));
+page.on('response', r => { if (r.status() >= 400) errors.push(r.url() + ' :: HTTP ' + r.status()); });
 await page.goto(`${origin}/games/${slug}/index.html`, { waitUntil: 'load' });
 const key = k => (k === 'Space' || k === ' ') ? ' ' : k;
 const nodeSamples = [];
@@ -112,9 +104,10 @@ async function run(list) {
 await run(actions);
 const data = await page.evaluate(() => window.__probe ? { chunks: window.__probe.chunks, sr: window.__probe.sr, maxSources: window.__probe.maxSources, sources: window.__probe.sources } : null);
 await browser.close();
-server.close();
+await closeServer();
+process.exitCode = errors.length ? 1 : 0;
 
-if (!data || !data.chunks.length) { console.log(`${slug}: no audio recorded (the game never produced sound)`); process.exit(0); }
+if (!data || !data.chunks.length) { console.log(`${slug}: no audio recorded (the game never produced sound)${errors.length ? '; errors: ' + errors.join(' | ') : ''}`); process.exit(errors.length ? 1 : 0); }
 const sr = data.sr;
 const all = new Float32Array(data.chunks.reduce((a, c) => a + c.length, 0));
 let o = 0; for (const c of data.chunks) { all.set(c, o); o += c.length; }

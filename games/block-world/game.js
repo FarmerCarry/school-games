@@ -164,13 +164,13 @@
   var meta = store.get('meta', null) || {};
   if (!meta.slots || meta.slots.length !== 3) meta.slots = [null, null, null];
   meta.totalStars = meta.totalStars || 0; meta.skin = meta.skin || 0; meta.lastSlot = meta.lastSlot || 1;
-  function saveMeta() { store.set('meta', meta); }
+  function saveMeta() { return store.set('meta', meta); }
 
   var G = {
     mode: 'title', slot: 0, gm: 'survival', name: '', world: null, rend: null,
     inv: [], sel: 0, cursor: null, stats: null, done: {}, tod: 0.1, time: 0, play: 0,
     animals: [], items: [], saplings: [], cam: { x: 230, y: 45 }, spawn: { x: 250, y: 50 },
-    hint: null, toasts: [], banner: null, lastBiome: '', lastZone: '', saveT: 0, savedFlash: 0,
+    hint: null, toasts: [], banner: null, lastBiome: '', lastZone: '', saveT: 0, savedFlash: 0, saveError: null,
     nearTable: false, nearFurnace: false, masterShown: false, questT: 0, selPop: 0, selName: 0,
     openDoors: {}, titleT: 0
   };
@@ -287,6 +287,7 @@
   // Creative flight: double tap Space. Measured on real key-press times so it also works when frames are slow.
   var flyTap = false, lastSpaceMs = -1e9;
   window.addEventListener('keydown', function (e) {
+    if (!Kit.isGameKeyEvent(e)) return;
     if (e.code !== 'Space' || e.repeat || G.mode !== 'play' || G.gm !== 'creative') return;
     var now = (window.performance && performance.now) ? performance.now() : Date.now();
     if (now - lastSpaceMs < 350) { flyTap = true; lastSpaceMs = -1e9; } else lastSpaceMs = now;
@@ -748,39 +749,67 @@
     if (boxHits(P.x, P.y, P.w, P.h, false)) { var sp = spawnPoint(); P.x = sp.x; P.y = sp.y; }
     G.inv = emptyInv();
     (data.inv || []).forEach(function (s, i) { if (s && ITEMS[s.id] && i < 36) G.inv[i] = { id: s.id, n: s.n }; });
-    G.sel = data.sel || 0; G.cursor = null;
+    G.sel = data.sel || 0;
+    G.cursor = data.cursor && ITEMS[data.cursor.id] && data.cursor.n > 0 ? { id: data.cursor.id, n: data.cursor.n } : null;
     G.stats = Object.assign(newStats(), data.stats || {});
     G.done = data.done || {}; G.tod = data.tod || 0.1; G.play = data.play || 0;
     G.saplings = data.saplings || []; G.masterShown = !!data.master;
     G.animals = (data.animals || []).map(function (o) { var a = makeAnimal(o.t, o.x, o.y); a.sheared = !!o.s; a.regrow = o.s ? 40 : 0; return a; });
+    G.items = Array.isArray(data.items) ? data.items.filter(function (it) {
+      return it && Number.isInteger(it.id) && ITEMS[it.id] && Number.isInteger(it.n) && it.n > 0 &&
+        ['x', 'y', 'vx', 'vy', 'age', 'delay', 'bob'].every(function (k) { return typeof it[k] === 'number' && isFinite(it[k]); }) &&
+        it.age >= 0 && it.age <= 300;
+    }).map(function (it) {
+      return { id: it.id, n: it.n, x: it.x, y: it.y, vx: it.vx, vy: it.vy, age: it.age, delay: it.delay, bob: it.bob };
+    }) : [];
     G.lastBiome = ''; G.lastZone = '';
     enterPlay();
+    if (G.cursor) openInv();
     G.toasts.push({ title: 'أهلًا بعودتك!', text: G.name + ' - ★ ' + ltr(starCount() + ' / ' + questsFor(G.gm).length), icon: G.gm === 'creative' ? B.WOOL + 4 : I.PICK_WOOD, t: 0, dur: 3, soft: true });
     return true;
   }
   function saveGame() {
-    if (!G.slot || !G.world || !P) return;
-    // A stack held on the mouse cursor (backpack open) is saved as if it were back in the bag,
-    // without disturbing the drag that is in progress.
+    if (!G.slot || !G.world || !P) return false;
+    // Keep the held stack separate: pickups can fill its old slot while the backpack is open.
     var invSave = G.inv.map(function (s) { return s ? { id: s.id, n: s.n } : null; });
-    if (G.cursor) {
-      var cn = G.cursor.n, cmx = BW.maxStack(G.cursor.id), ci;
-      for (ci = 0; ci < 36 && cn > 0; ci++) { var cs = invSave[ci]; if (cs && cs.id === G.cursor.id && cs.n < cmx) { var ck = Math.min(cn, cmx - cs.n); cs.n += ck; cn -= ck; } }
-      for (ci = 0; ci < 36 && cn > 0; ci++) if (!invSave[ci]) { invSave[ci] = { id: G.cursor.id, n: cn }; cn = 0; }
-    }
     var data = {
-      v: 1, gm: G.gm, name: G.name, world: G.world.serialize(), spawn: G.spawn,
+      v: 2, gm: G.gm, name: G.name, world: G.world.serialize(), spawn: G.spawn,
       p: { x: +P.x.toFixed(2), y: +P.y.toFixed(2) },
-      inv: invSave,
+      inv: invSave, cursor: G.cursor ? { id: G.cursor.id, n: G.cursor.n } : null,
       sel: G.sel, stats: G.stats, done: G.done, tod: +G.tod.toFixed(4), play: Math.round(G.play),
-      saplings: G.saplings, master: G.masterShown,
+      saplings: G.saplings, master: G.masterShown, savedAt: Date.now(), totalStars: meta.totalStars,
+      items: G.items.map(function (it) {
+        return { id: it.id, n: it.n, x: it.x, y: it.y, vx: it.vx, vy: it.vy, age: it.age, delay: it.delay, bob: it.bob };
+      }),
       animals: G.animals.map(function (a) { return { t: a.type, x: +(a.x + a.w / 2).toFixed(2), y: +(a.y + a.h).toFixed(2), s: a.sheared ? 1 : 0 }; })
     };
-    store.set('slot' + G.slot, data);
+    if (!store.set('slot' + G.slot, data)) return showSaveError('world');
     meta.slots[G.slot - 1] = { name: G.name, gm: G.gm, stars: starCount(), max: questsFor(G.gm).length, play: Math.round(G.play), last: Date.now() };
     meta.lastSlot = G.slot;
-    saveMeta();
+    if (!saveMeta()) return showSaveError('meta');
+    G.saveError = null;
+    saveErrorEl.hidden = true;
     G.savedFlash = 1.6;
+    return true;
+  }
+
+  // The world record is authoritative when a previous metadata write failed.
+  function recoverSlotMetadata() {
+    var changed = false;
+    for (var slot = 1; slot <= 3; slot++) {
+      var data = store.get('slot' + slot, null), old = meta.slots[slot - 1];
+      if (!data || !data.world) continue;
+      var newerStars = typeof data.totalStars === 'number' && isFinite(data.totalStars) && data.totalStars > meta.totalStars;
+      if (!newerStars && old && (!data.savedAt || old.last >= data.savedAt)) continue;
+      try { BW.World.load(data.world); } catch (e) { continue; }
+      if (newerStars) meta.totalStars = data.totalStars;
+      var gm = data.gm === 'creative' ? 'creative' : 'survival', quests = questsFor(gm), done = data.done || {};
+      meta.slots[slot - 1] = { name: fixName(data.name || 'عالمي'), gm: gm,
+        stars: quests.filter(function (q) { return !!done[q.id]; }).length, max: quests.length,
+        play: data.play || 0, last: data.savedAt || (old && old.last) || 0 };
+      changed = true;
+    }
+    if (changed) saveMeta();
   }
   // World names: "<place> <thing>" e.g. وادي الشمس (Sunny Valley).
   var ADJ = ['الشمس', 'الطحالب', 'البريق', 'الدفء', 'النسيم', 'القيقب', 'الحصى', 'قوس قزح', 'الضباب', 'العسل', 'البرسيم', 'النجوم', 'القفز', 'النعناع'];
@@ -1328,6 +1357,25 @@
 
   // ============================================================ DOM UI
   var titleEl = $('title'), pauseEl = $('pause'), invEl = $('inv'), newEl = $('newworld'), loadEl = $('loading'), masterEl = $('master');
+  var saveErrorEl = document.createElement('div'), saveErrorText = document.createElement('span');
+  saveErrorEl.id = 'saveError'; saveErrorEl.hidden = true; saveErrorEl.dir = 'rtl';
+  saveErrorEl.setAttribute('role', 'alert');
+  saveErrorEl.style.cssText = 'position:fixed;bottom:12px;left:50%;transform:translateX(-50%);max-width:calc(100% - 24px);width:620px;box-sizing:border-box;padding:12px 18px;border-radius:16px;background:#472134;color:white;z-index:200;font:700 18px var(--sg-font);text-align:center;box-shadow:0 4px 12px #0008';
+  saveErrorEl.appendChild(saveErrorText);
+  var saveRetry = document.createElement('button');
+  saveRetry.id = 'saveRetry'; saveRetry.className = 'sg-btn secondary'; saveRetry.type = 'button';
+  saveRetry.textContent = 'حاول الحفظ مجددًا'; saveRetry.style.cssText = 'font-size:16px;margin:8px 12px 0';
+  saveRetry.onclick = function (e) {
+    e.stopPropagation(); saveGame();
+    if (e.detail > 0) saveRetry.blur();
+  };
+  saveErrorEl.appendChild(saveRetry); document.body.appendChild(saveErrorEl);
+  function showSaveError(kind) {
+    G.savedFlash = 0; G.saveError = kind;
+    saveErrorText.textContent = kind === 'meta' ? 'تم حفظ العالم، لكن تعذر تحديث قائمة العوالم. حاول مجددًا.' : 'تعذر حفظ العالم. مساحة التخزين ممتلئة أو غير متاحة. حاول مجددًا.';
+    saveErrorEl.hidden = false;
+    return false;
+  }
   var pauseBtn = $('pausebtn');
   var titleBusy = false;
   var selSlot = meta.lastSlot || 1;
@@ -1344,6 +1392,7 @@
     K.reset(); M.left = M.right = false; flyTap = false;
   }
   function toTitle() {
+    G.saveError = null; G.savedFlash = 0; saveErrorEl.hidden = true;
     G.mode = 'title';
     G.slot = 0;
     show(pauseEl, false); show(invEl, false); show(masterEl, false);
@@ -1366,8 +1415,8 @@
   function resume() { show(pauseEl, false); G.mode = 'play'; K.reset(); M.left = M.right = false; }
   $('resumeBtn').onclick = function () { resume(); };
   $('homeBtn').onclick = function () { var sp = spawnPoint(); P.x = sp.x; P.y = sp.y; P.vx = P.vy = 0; P.flying = false; resume(); SND.grow(); burst(P.x + 0.35, P.y + 1, ['#ffffff', '#bfe9ff', '#ffd93d'], 20, 6, 0.2); };
-  $('quitBtn').onclick = function () { saveGame(); toTitle(); };
-  pauseBtn.addEventListener('click', function (e) { e.stopPropagation(); if (G.mode === 'play') pause(); else if (G.mode === 'pause') resume(); pauseBtn.blur(); });
+  $('quitBtn').onclick = function () { if (saveGame()) toTitle(); };
+  pauseBtn.addEventListener('click', function (e) { e.stopPropagation(); if (G.mode === 'play') pause(); else if (G.mode === 'pause') resume(); if (e.detail > 0) pauseBtn.blur(); });
   pauseBtn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
   function renderPause() {
     var qs = questsFor(G.gm), html = '';
@@ -1380,6 +1429,7 @@
     $('pauseName').textContent = G.name + ' · ' + (G.gm === 'creative' ? 'إبداع' : 'مغامرة');
   }
   window.addEventListener('keydown', function (e) {
+    if (!Kit.isGameKeyEvent(e)) return;
     if (G.mode === 'pause' && (e.code === 'KeyP' || e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space') && !e.repeat) { e.preventDefault(); resume(); }
     else if (G.mode === 'master' && (e.code === 'Enter' || e.code === 'Space') && !e.repeat) { e.preventDefault(); closeMaster(); }
     else if (G.mode === 'newworld' && !e.repeat) {
@@ -1396,7 +1446,7 @@
   }
   function closeMaster() { show(masterEl, false); G.mode = 'play'; K.reset(); }
   $('masterKeep').onclick = closeMaster;
-  $('masterMenu').onclick = function () { show(masterEl, false); G.mode = 'play'; saveGame(); toTitle(); };
+  $('masterMenu').onclick = function () { if (saveGame()) toTitle(); };
 
   // ----- title
   function fmtTime(s) {
@@ -1682,6 +1732,7 @@
   G.spawn = { x: 250, y: 0 };
   var titleAnimals = spawnAnimals(BW.mulberry(99));
   P = makePlayer(250, 40);
+  recoverSlotMetadata();
   activeSkinFix();
   toTitle();
   rend.warm(G.cam.x, G.cam.y, VTW, VTH);

@@ -995,11 +995,11 @@
       var st = save.stars[i];
       b.innerHTML = '<div class="anum">' + (i + 1) + '</div><canvas width="360" height="184"></canvas><div class="aname">' + ar.name + '</div><div class="astars">' + starSvg(st[0]) + starSvg(st[1]) + starSvg(st[2]) + '</div>' +
         (arenaUnlocked(i) ? '' : '<div class="alock">' + LOCK_SVG + '<span style="font-size:21px">' + ar.name + '</span><span style="opacity:.8">اجمع نجمتين في الساحة ' + i + '</span></div>');
-      b.addEventListener('click', function () {
+      b.addEventListener('click', function (e) {
         if (!arenaUnlocked(i)) { S.nope(); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); return; }
         S.click();
         if (arenaIdx !== i) { arenaIdx = i; save.arena = i; persist(); toTitle(); }
-        b.blur();
+        if (e.detail > 0) b.blur();
       });
       box.appendChild(b);
       drawArenaIcon(b.querySelector('canvas'), ar, i);
@@ -1204,7 +1204,7 @@
   }
 
   /* ============================================================ input wiring */
-  function btn(id, fn) { var b = $(id); b.addEventListener('click', function (e) { e.stopPropagation(); A.unlock(); fn(); b.blur(); }); }
+  function btn(id, fn) { var b = $(id); b.addEventListener('click', function (e) { e.stopPropagation(); A.unlock(); fn(); if (e.detail > 0) b.blur(); }); }
   btn('bPlay', function () { S.click(); startMatch(); });
   btn('bSkins', function () { S.click(); openSkins(); });
   btn('skDone', function () { S.click(); closeSkins(); });
@@ -1217,7 +1217,7 @@
   $('bPause').addEventListener('pointerdown', function (e) { e.stopPropagation(); });
   var tabs = document.querySelectorAll('.tab');
   for (var ti = 0; ti < tabs.length; ti++) (function (t) {
-    t.addEventListener('click', function () { S.click(); skTab = t.getAttribute('data-tab'); buildSkinGrid(); t.blur(); });
+    t.addEventListener('click', function (e) { S.click(); skTab = t.getAttribute('data-tab'); buildSkinGrid(); if (e.detail > 0) t.blur(); });
   })(tabs[ti]);
 
   function changeArena(d) {
@@ -1233,6 +1233,7 @@
   }
 
   window.addEventListener('keydown', function (e) {
+    if (!Kit.isGameKeyEvent(e)) return;
     var c = e.code;
     if (e.repeat && c !== 'ArrowLeft' && c !== 'ArrowRight') return;
     var go = c === 'Enter' || c === 'Space' || c === 'NumpadEnter';

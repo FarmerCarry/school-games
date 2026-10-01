@@ -18,13 +18,28 @@
   function freshSave() {
     return { v: 1, coins: 0, un: {}, paid: {}, up: {}, shelves: {}, mach: {}, piles: {}, carry: [],
       stats: { earned: 0, served: 0, play: 0 }, last: 0, rate: 0, tut: 0, lvl: 1,
-      px: CM.START.x, py: CM.START.y, done: false };
+      px: CM.START.x, py: CM.START.y, done: false, pendingOffline: 0,
+      helperCarry: {}, recoveryCarry: [], finalePending: false, completionTime: null, finaleWasBest: false };
+  }
+  function validCarry(carry) {
+    return Array.isArray(carry) ? carry.filter(function (type) { return typeof type === 'string' && Object.prototype.hasOwnProperty.call(ITEMS, type); }) : [];
   }
   function loadSave() {
     var s = store.get('save', null), f = freshSave();
     if (!s || typeof s !== 'object' || s.v !== 1) return f;
     for (var k in f) if (s[k] === undefined || s[k] === null) s[k] = f[k];
     if (typeof s.coins !== 'number' || !isFinite(s.coins)) s.coins = 0;
+    if (typeof s.pendingOffline !== 'number' || !isFinite(s.pendingOffline) || s.pendingOffline < 0) s.pendingOffline = 0;
+    var helpers = Object.create(null);
+    if (s.helperCarry && typeof s.helperCarry === 'object') Object.keys(s.helperCarry).forEach(function (id) { helpers[id] = validCarry(s.helperCarry[id]); });
+    s.helperCarry = helpers; s.recoveryCarry = validCarry(s.recoveryCarry);
+    if (typeof s.completionTime !== 'number' || !isFinite(s.completionTime) || s.completionTime < 0) s.completionTime = null;
+    s.finalePending = !!s.finalePending; s.finaleWasBest = !!s.finaleWasBest;
+    // Older saves could retain the final purchase but lose its runtime-only delay.
+    if (!s.done && CM.UNLOCKS.some(function (d) { return d.final && s.un[d.id]; })) {
+      s.finalePending = true;
+      if (s.completionTime === null) s.completionTime = s.stats.play;
+    }
     return s;
   }
   var META = store.get('meta', null) || {};
@@ -41,7 +56,7 @@
     expanded: false, cam: { x: CM.START.x, y: CM.START.y }, spawnT: 2, rushT: 150, rush: 0,
     banners: [], hint: null, hintT: 0, idleT: 0, disp: S.coins, coinBump: 0, lvl: 1,
     timeScale: 1, bot: false, saveT: 0, incomeT: 0, income: 0, welcome: 0, chicks: [],
-    firstCust: false, finaleT: -1, dl: [], shake: K.shake(), lastAction: 0
+    firstCust: false, finaleT: -1, recoveryCarry: [], dl: [], shake: K.shake(), lastAction: 0
   };
   var P = { x: S.px, y: S.py, vx: 0, vy: 0, look: 0, back: false, phase: 0, moving: false, stack: [],
     tick: 0, sway: 0, squash: 1, path: null, pi: 0, pad: null, padT: 0, fullT: 0, onDesk: false, stepT: 0,
@@ -271,6 +286,12 @@
     R.objs = []; R.byId = {}; R.npcs = []; R.shelves = []; R.machines = []; R.producers = []; R.registers = []; R.decor = {};
     R.expanded = false; R.chicks = [];
     CM.UNLOCKS.forEach(function (d) { if (isUnlocked(d.id)) buildObj(d, false); });
+    R.recoveryCarry = S.recoveryCarry.slice();
+    // Keep merchandise whose original helper is unavailable until a compatible
+    // shelf or machine has room. The next save moves it out of helperCarry once.
+    Object.keys(S.helperCarry).forEach(function (id) {
+      if (!R.npcs.some(function (h) { return h.type === 'helper' && h.role === 'farmer' && h.id === id; })) R.recoveryCarry = R.recoveryCarry.concat(S.helperCarry[id]);
+    });
     rebuildStatic();
     R.lvl = levelFor(unlockedCount());
     // restore carried stack
@@ -487,9 +508,11 @@
 
   function spawnHelper(role, reg, instant, d) {
     var home = role === 'cashier' ? reg.d.cashier : { x: 690, y: 1560 };
-    var h = { type: 'helper', role: role, sp: role === 'farmer' ? 'frog' : 'cat', reg: reg,
+    var id = role === 'farmer' ? d.id : 'cashier:' + reg.id;
+    var carried = role === 'farmer' ? S.helperCarry[id] || [] : [];
+    var h = { id: id, type: 'helper', role: role, sp: role === 'farmer' ? 'frog' : 'cat', reg: reg,
       x: d ? d.x : home.x + 60, y: d ? d.y : home.y + 40, speed: 150, look: 0, back: false, phase: 0, moving: false,
-      stack: [], state: 'idle', thinkT: Math.random(), t: Math.random() * 10, pop: instant ? 99 : 0, gT: 0, waitT: 0,
+      stack: carried.map(function (type) { return { type: type, f: 1 }; }), state: 'idle', thinkT: carried.length ? 0 : Math.random(), t: Math.random() * 10, pop: instant ? 99 : 0, gT: 0, waitT: 0,
       hat: role === 'farmer' ? 'straw' : 'visor', k: 'critter', dy: 0, blinkT: rnd(1, 4), sway: 0, home: home };
     if (role === 'farmer') { h.overalls = ['#3d8bfd', '#9b6bff', '#ff8c42'][R.npcs.filter(function (n) { return n.role === 'farmer'; }).length % 3]; }
     else { h.apron = '#1fb5a8'; h.pocket = '#fff'; reg.helper = h; }
@@ -780,17 +803,6 @@
           }
         }
         break;
-      case 'dump':
-        if (npcMove(h, dt)) {
-          var dst = h.dumpTo;
-          while (h.stack.length) {
-            var it2 = h.stack.pop();
-            if (dst && giveTo(dst, it2.type, h.x, h.y - 80)) continue;
-            burst(h.x, h.y - 60, 5, { speed: 120, life: 0.4, colors: ['#cccccc', '#ffffff'] });
-          }
-          h.state = 'idle'; h.thinkT = 0.3;
-        }
-        break;
     }
   }
   function topIndexOf(stack, type) {
@@ -799,11 +811,23 @@
   }
   function depositAnywhere(h) {
     var type = h.stack[h.stack.length - 1].type, dst = null;
-    R.shelves.forEach(function (s) { if (!dst && accepts(s, type)) dst = s; });
-    R.machines.forEach(function (m) { if (!dst && accepts(m, type)) dst = m; });
-    if (dst) { var p = dstPoint(dst); h.dumpTo = dst; goTo(h, p.x, p.y); }
-    else { h.dumpTo = null; var tr = R.byId.trash; goTo(h, tr.x + 40, tr.y); }
-    h.state = 'dump';
+    R.shelves.forEach(function (s) { if (!dst && accepts(s, type) && s.count + s.res < s.cap) dst = s; });
+    R.machines.forEach(function (m) { if (!dst && accepts(m, type) && m.inCount + m.res < m.cap) dst = m; });
+    if (!dst) { h.path = null; h.state = 'idle'; h.thinkT = 0.5; return; }
+    var count = h.stack.filter(function (s) { return s.type === type; }).length;
+    var capacity = dst.cap - (dst.kind === 'shelf' ? dst.count : dst.inCount) - dst.res;
+    var n = Math.min(count, capacity);
+    h.task = { dst: dst, type: type, n: n };
+    dst.res += n;
+    var p = dstPoint(dst); goTo(h, p.x, p.y); h.state = 'toDst';
+  }
+  function recoverStock() {
+    for (var i = R.recoveryCarry.length - 1; i >= 0; i--) {
+      var type = R.recoveryCarry[i], dst = null;
+      R.shelves.forEach(function (s) { if (!dst && accepts(s, type)) dst = s; });
+      R.machines.forEach(function (m) { if (!dst && accepts(m, type)) dst = m; });
+      if (dst && giveTo(dst, type, dst.x, dst.y - 30)) R.recoveryCarry.splice(i, 1);
+    }
   }
 
   /* ========================================================= player */
@@ -1033,7 +1057,7 @@
     if (d.id === 'cornField' && S.tut < 5) setTut(5);
     if (d.id === 'cornShelf') setTut(6);
     checkLevel();
-    if (d.final) { R.finaleT = 2.2; }
+    if (d.final && !S.done) { S.completionTime = S.stats.play; S.finalePending = true; R.finaleT = 2.2; }
     saveGame();
     return o;
   }
@@ -1245,6 +1269,7 @@
   function step(dt) {
     R.t += dt;
     S.stats.play += dt;
+    recoverStock();
     updatePlayer(dt);
     interact(dt);
     updatePads(dt);
@@ -2344,21 +2369,24 @@
     K.keys.reset();
     R.cam.x = P.x; R.cam.y = P.y - 40; camUpdate(0, true);
     if (R.welcome > 0) { setMode('welcome'); $('welcomeAmt').textContent = K.fmt(R.welcome); }
+    else if (S.finalePending) showFinale();
     if (S.tut === 0 && P.stack.length === 0) banner('أهلًا في سوق الحيوانات!', 'هيا نربح العملات!', '#ffd23f', 2.6);
   }
   function closeWelcome() {
-    if (R.welcome > 0) {
-      S.coins += R.welcome; S.stats.earned += R.welcome;
-      for (var i = 0; i < 12; i++) fly('coin', null, VW / 2 + rnd(-100, 100), VH / 2 + rnd(-40, 40), { x: 50, y: 42 }, 0.5 + i * 0.05, rnd(60, 160), 28, function () { R.coinBump = 1; }, true);
-      SFX.coins(8);
+    if (S.pendingOffline > 0) {
+      S.coins += S.pendingOffline; S.stats.earned += S.pendingOffline;
+      S.pendingOffline = 0;
       R.welcome = 0;
       saveGame();
+      for (var i = 0; i < 12; i++) fly('coin', null, VW / 2 + rnd(-100, 100), VH / 2 + rnd(-40, 40), { x: 50, y: 42 }, 0.5 + i * 0.05, rnd(60, 160), 28, function () { R.coinBump = 1; }, true);
+      SFX.coins(8);
     }
     setMode('play');
+    if (S.finalePending) showFinale();
   }
   function pauseGame() { if (R.mode !== 'play') return; saveGame(); setMode('pause'); $('musicBtn').textContent = 'الموسيقى: ' + (META.music ? 'تعمل' : 'متوقفة'); }
   function resumeGame() { SFX.click(); setMode('play'); K.keys.reset(); }
-  function toMenu() { saveGame(); setMode('title'); titleInfo(); }
+  function toMenu() { if (R.mode === 'finale') acknowledgeFinale(); saveGame(); setMode('title'); titleInfo(); }
   var confirmFrom = 'title';
   function askNewStore() { confirmFrom = R.mode; setMode('confirm'); }
   function newStore() {
@@ -2369,16 +2397,22 @@
     setMode('title'); titleInfo();
   }
   function showFinale() {
-    var t = S.stats.play;
-    var isBest = !S.cheat && (!META.best || t < META.best);
-    if (!S.done) { if (isBest) META.best = t; S.done = true; saveMeta(); saveGame(); }
+    R.finaleT = -1;
+    var t = S.completionTime === null ? S.stats.play : S.completionTime;
+    if (!S.done) {
+      S.completionTime = t; S.finalePending = true;
+      S.finaleWasBest = !S.cheat && (!META.best || t < META.best);
+      if (S.finaleWasBest) META.best = t;
+      S.done = true; saveMeta(); saveGame();
+    }
     $('finStats').innerHTML = '<div><b>' + fmtTime(t) + '</b><span>الوقت</span></div><div><b>' + K.fmt(S.stats.served) + '</b><span>زبون سعيد</span></div><div><b>' + K.fmt(S.stats.earned) + '</b><span>عملة ربحتها</span></div>';
-    show($('finBest'), isBest);
+    show($('finBest'), S.finaleWasBest);
     setMode('finale');
     SFX.level(); setTimeout(function () { K.sfx.win(); }, 700);
     confetti(R.cam.x, R.cam.y - 200, 120);
   }
-  function closeFinale() { setMode('play'); banner('تابع البيع!', 'سوقك هو الأفضل في المدينة!', '#ffd23f', 2.4); }
+  function acknowledgeFinale() { S.finalePending = false; R.finaleT = -1; saveGame(); }
+  function closeFinale() { acknowledgeFinale(); setMode('play'); banner('تابع البيع!', 'سوقك هو الأفضل في المدينة!', '#ffd23f', 2.4); }
 
   $('playBtn').addEventListener('click', startPlay);
   $('newBtn').addEventListener('click', function () { SFX.click(); askNewStore(); });
@@ -2395,6 +2429,7 @@
   el.pauseBtn.addEventListener('click', function (e) { e.stopPropagation(); pauseGame(); });
   el.pauseBtn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
   window.addEventListener('keydown', function (e) {
+    if (!K.isGameKeyEvent(e)) return;
     if (R.mode === 'confirm') {
       if (e.code === 'Escape' || e.code === 'KeyN') { $('noBtn').click(); }
       else if (e.code === 'KeyY') { $('yesBtn').click(); }
@@ -2421,7 +2456,12 @@
       var cost = document.createElement('div'); cost.className = 'cm-upg-cost';
       var key = document.createElement('span'); key.className = 'sg-key cm-upg-key'; key.textContent = (i + 1);
       row.appendChild(key); row.appendChild(img); row.appendChild(mid); row.appendChild(cost);
-      row.addEventListener('click', function () { buyUpgrade(u.id); });
+      row.addEventListener('click', function (e) {
+        buyUpgrade(u.id);
+        // Pointer shoppers return to movement immediately. Keyboard shoppers
+        // keep their place in the upgrade controls for Enter/Space and Tab.
+        if (e.detail > 0 && R.mode === 'play') canvas.focus({ preventScroll: true });
+      });
       row.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
       el.upgList.appendChild(row);
       upgRows[u.id] = { row: row, pips: pips, cost: cost, last: '' };
@@ -2453,10 +2493,13 @@
     if (R.noSave) return;
     S.px = Math.round(P.x); S.py = Math.round(P.y);
     S.carry = P.stack.map(function (s) { return s.type; });
+    S.helperCarry = {};
+    R.npcs.forEach(function (h) { if (h.type === 'helper' && h.role === 'farmer') S.helperCarry[h.id] = h.stack.map(function (s) { return s.type; }); });
+    S.recoveryCarry = R.recoveryCarry.slice();
     S.shelves = {}; R.shelves.forEach(function (s) { S.shelves[s.id] = s.count; });
     S.mach = {}; R.machines.forEach(function (m) { S.mach[m.id] = { i: m.inCount, o: m.outCount }; });
     S.piles = {}; R.registers.forEach(function (r) { S.piles[r.id] = Math.floor(r.pile); });
-    // customers carrying items walk away when the page closes; nothing else to store
+    // Customers carrying items walk away when the page closes.
     S.last = Date.now();
     S.coins = Math.floor(S.coins);
     store.set('save', S);
@@ -2589,7 +2632,10 @@
   });
   buildUpgPanel();
   buildWorld();
-  R.welcome = offlineEarnings();
+  S.pendingOffline += offlineEarnings();
+  R.welcome = S.pendingOffline;
+  // Save both the pending balance and its cutoff before the welcome screen can be dismissed.
+  saveGame();
   titleInfo();
   setMode('title');
   if (document.fonts && document.fonts.load) {
@@ -2605,6 +2651,9 @@
         customers: custs.length, helpers: R.npcs.length - custs.length, stack: P.stack.map(function (s) { return s.type; }),
         pads: R.pads.map(function (p) { return p.d.id + ':' + p.paid + '/' + p.d.cost; }), up: S.up, player: { x: Math.round(P.x), y: Math.round(P.y) },
         served: S.stats.served, earned: S.stats.earned, play: Math.round(S.stats.play), rush: R.rush > 0, done: S.done,
+        finalePending: S.finalePending, completionTime: S.completionTime,
+        helperStacks: R.npcs.filter(function (h) { return h.type === 'helper' && h.role === 'farmer'; }).map(function (h) { return { id: h.id, state: h.state, stack: h.stack.map(function (s) { return s.type; }) }; }),
+        recoveryCarry: R.recoveryCarry.slice(),
         shelves: R.shelves.map(function (s) { return s.item + ':' + s.count; }), piles: R.registers.map(function (r) { return Math.floor(r.pile); }), parts: PARTS.length, fly: FLY.length };
     },
     give: function (n) { S.coins += n; },

@@ -232,6 +232,7 @@
   document.addEventListener('pointerlockerror', function () { if (!lock.promise) onLockFail(); });
 
   /* ================================================================ INPUT */
+  function gameSurfaceFocused() { return document.activeElement === canvas || document.activeElement === document.body; }
   var mouse = { left: false, leftP: false, right: false, wheel: 0, dx: 0, dy: 0, avg: 0, dropped: false };
   function look(dx, dy) {
     var p = G.player;
@@ -477,8 +478,7 @@
   /* ---- buttons */
   function btn(id, fn) {
     var el = $(id);
-    el.setAttribute('tabindex', '-1');
-    el.addEventListener('click', function (e) { e.stopPropagation(); sfx.click(); fn(); if (el.blur) el.blur(); });
+    el.addEventListener('click', function (e) { e.stopPropagation(); sfx.click(); fn(); if (e.detail > 0 && el.blur) el.blur(); });
     el.addEventListener('mouseenter', function () { sfx.hover(); });
   }
   btn('playBtn', startMatch);
@@ -495,9 +495,8 @@
   btn('oMenuBtn', goTitle);
   // "click anywhere": the backdrop, the panel, its title and text all resume; only the buttons do their own thing
   $('pause').addEventListener('click', function (e) { if (!(e.target.closest && e.target.closest('button, input, a, label, select'))) resume(); });
-  $('pauseBtn').addEventListener('click', function (e) { e.stopPropagation(); pause(); this.blur(); });
+  $('pauseBtn').addEventListener('click', function (e) { e.stopPropagation(); pause(); if (e.detail > 0) this.blur(); });
   $('pauseBtn').addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-  document.querySelectorAll('.seg button, .tab').forEach(function (b) { b.setAttribute('tabindex', '-1'); });
 
   /* ================================================================ HUD */
   var H$ = {
@@ -1241,7 +1240,8 @@
     updateTags(dt);
     mmT -= dt; if (mmT <= 0) { mmT = 0.1; drawMinimap(); }
     // scoreboard while Tab is held; at the end it opens after the "match over" banner has been read
-    var showB = !paused && (Kit.keys.down('Tab') || (G.over && G.endT > 1.1 && !UI.resultsShown));
+    var boardKey = Kit.keys.down('Tab') && gameSurfaceFocused() && !Kit.keys.anyDown(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight']);
+    var showB = !paused && (boardKey || (G.over && G.endT > 1.1 && !UI.resultsShown));
     if (showB !== !H$.board.hidden) { H$.board.hidden = !showB; hudEl.classList.toggle('boardon', showB); }
     if (showB) { boardT -= dt; if (boardT <= 0) { boardT = 0.3; H$.board.innerHTML = boardHTML(); } } else boardT = 0;
   }
@@ -1281,6 +1281,7 @@
   }
 
   /* ================================================================ LOOP */
+  Kit.keys.captureTab(function () { return UI.state === 'play' && !UI.paused && !G.over && gameSurfaceFocused(); });
   var perf = { upd: 0, ren: 0, frame: 0, frames: 0 };
   function update(dt) {
     var t0 = performance.now();

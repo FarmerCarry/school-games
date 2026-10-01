@@ -1,40 +1,92 @@
-# Builds the fast version of the site (tools/build.mjs) and publishes it to the gh-pages
-# branch on every push to main. GitHub Pages serves the gh-pages branch.
-# Editing anything on main (for example hiding a game in js/catalog.js) goes live about a
-# minute later. If this ever fails, the previous version simply stays online.
+# Test source and the fast build before publishing the verified _site artifact.
+# GitHub Actions is the recommended Pages source. Existing main:/ sites also work,
+# but their separate built-in Pages workflow can publish source before these checks.
 name: Build fast site
 
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: build-fast-site
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  checks:
+    name: Test source and fast build
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pages: read
     steps:
       - uses: actions/checkout@v4
+      - name: Verify GitHub Pages publishing source
+        if: >-
+          (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+          (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: site } = await github.rest.repos.getPages(context.repo);
+            const source = site.source || {};
+            const configuration = JSON.stringify({ build_type: site.build_type, source });
+            core.info(`Current Pages configuration: ${configuration}`);
+            if (site.build_type === 'workflow') return;
+            if (site.build_type === 'legacy' && source.branch === 'main' && source.path === '/') {
+              core.warning('Pages publishes from main. This main-origin deployment is supported, but the separate built-in Pages workflow can publish source before checks pass. Select GitHub Actions as the Pages source to make all updates depend on these checks. No settings were changed.');
+              return;
+            }
+            core.setFailed(`This workflow deploys from main and supports Pages source GitHub Actions or main:/(root). Found ${configuration}. No settings were changed.`);
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: node tools/build.mjs --out _site
-      - name: Publish to the gh-pages branch
-        working-directory: _site
+      - name: Install development tools
+        run: npm ci
+      - name: Install Chromium and its system dependencies
+        run: npx playwright install --with-deps --no-shell chromium
+      - name: Smoke-test all source games
+        run: npm run check
+      - name: Test source, build safety and harness regressions
+        run: npm test
+      - name: Build the fast site
+        run: npm run build
+      - name: Smoke-test all built games
+        run: npm run check
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init -q -b gh-pages
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "Fast build of ${GITHUB_SHA::7}"
-          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+          SG_ROOT: _site
+      - name: Test optimized gameplay and harness regressions
+        run: npm test
+        env:
+          SG_ROOT: _site
+      - name: Test offline installation, updates and the kill switch
+        run: npm run test:offline
+      - name: Upload the verified fast site
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy verified fast site
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

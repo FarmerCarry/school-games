@@ -1653,7 +1653,7 @@
 
   /* ------------------------------------------------------------- input */
   function onBtn(id, fn) {
-    $(id).addEventListener('click', function (e) { e.stopPropagation(); A.unlock(); fn(); blurActive(); });
+    $(id).addEventListener('click', function (e) { e.stopPropagation(); A.unlock(); fn(); if (e.detail > 0) blurActive(); });
   }
   onBtn('playBtn', function () { Sfx.click(); startGame(); });
   onBtn('hangarBtn', function () { Sfx.click(); openHangar(); });
@@ -1671,11 +1671,12 @@
   });
   document.querySelectorAll('.tab').forEach(function (t) {
     t.addEventListener('click', function (e) {
-      e.stopPropagation(); hangarTab = t.getAttribute('data-tab'); Sfx.click(); renderHangar(); blurActive();
+      e.stopPropagation(); hangarTab = t.getAttribute('data-tab'); Sfx.click(); renderHangar(); if (e.detail > 0) blurActive();
     });
   });
 
   window.addEventListener('keydown', function (e) {
+    if (!Kit.isGameKeyEvent(e)) return;
     var c = e.code;
     if (c === 'Enter' || c === 'Space') e.preventDefault();
     if (!Mus.on && G.state === 'title') { A.unlock(); Mus.play('title'); Mus.set(104, 0, 0); }
