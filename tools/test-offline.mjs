@@ -71,15 +71,18 @@ function build(name, ...args) {
 }
 const cachePrefix = scope => 'sg-v2-' + encodeURIComponent(scope) + '|';
 const cacheName = (scope, build) => cachePrefix(scope) + build.version;
-async function state(inspector, scope) {
-  return inspector.evaluate(async scope => {
+async function state(inspector, scope, countNames = []) {
+  return inspector.evaluate(async ({ scope, countNames }) => {
     const reg = await navigator.serviceWorker.getRegistration(scope);
-    const cachesByName = {};
-    for (const name of await caches.keys()) {
-      if (name.startsWith('sg-')) cachesByName[name] = (await (await caches.open(name)).keys()).length;
+    const names = (await caches.keys()).filter(name => name.startsWith('sg-'));
+    const counts = {};
+    // Opening a deleted cache recreates it. Cleanup observers must only list
+    // names; count entries only in the specific caches expected to remain live.
+    for (const name of countNames) {
+      if (names.includes(name)) counts[name] = (await (await caches.open(name)).keys()).length;
     }
-    return { active: reg?.scope === scope && !!reg.active, caches: cachesByName };
-  }, scope);
+    return { active: reg?.scope === scope && !!reg.active, caches: names, counts };
+  }, { scope, countNames });
 }
 async function waitFor(predicate, message, timeout = 30000) {
   const end = Date.now() + timeout;
@@ -90,9 +93,10 @@ async function waitFor(predicate, message, timeout = 30000) {
   throw new Error('Timed out: ' + message);
 }
 async function installed(inspector, scope, build) {
+  const name = cacheName(scope, build);
   await waitFor(async () => {
-    const s = await state(inspector, scope);
-    return s.active && s.caches[cacheName(scope, build)] === build.count;
+    const s = await state(inspector, scope, [name]);
+    return s.active && s.counts[name] === build.count;
   }, 'install ' + scope);
 }
 async function update(page) {
@@ -147,7 +151,7 @@ async function kill(inspector, page, scope, killBuild) {
   }, scope);
   await waitFor(async () => {
     const s = await state(inspector, scope);
-    return !s.active && !Object.keys(s.caches).some(name => name.startsWith(cachePrefix(scope)));
+    return !s.active && !s.caches.some(name => name.startsWith(cachePrefix(scope)));
   }, 'kill switch ' + scope);
   await navigated;
   await page.waitForLoadState('load');
@@ -188,6 +192,23 @@ try {
   });
   const inspector = await context.newPage();
   await inspector.goto(origin + '/inspect/');
+  // Reproduce a worker deleting a cache between the observer's names snapshot
+  // and its next operation. Reading lifecycle state must not recreate that cache.
+  const observerScope = origin + '/inspect/';
+  const observerCache = cachePrefix(observerScope) + 'observer-regression';
+  await inspector.evaluate(async name => {
+    const cache = await caches.open(name);
+    await cache.put('/inspect/asset', new Response('fixture'));
+    const originalKeys = caches.keys.bind(caches);
+    caches.keys = async () => {
+      const names = await originalKeys();
+      await caches.delete(name);
+      caches.keys = originalKeys;
+      return names;
+    };
+  }, observerCache);
+  await state(inspector, observerScope);
+  check(!(await state(inspector, observerScope)).caches.includes(observerCache), 'cleanup observation never recreates a deleted cache');
   if (!process.argv.includes('--scopes-only')) {
     const page = await context.newPage();
     const errors = [];
@@ -211,13 +232,13 @@ try {
     await installed(inspector, origin + BASE, v2);
     const downloads = hits.filter(url => url.includes('?sg='));
     check(downloads.length === 1 && downloads[0].startsWith(BASE + 'games/merge-2048/index.html?'), 'update downloads only the changed file');
-    check(!(await state(inspector, origin + BASE)).caches[cacheName(origin + BASE, v1)], 'update removes only its old scoped cache');
+    check(!(await state(inspector, origin + BASE)).caches.includes(cacheName(origin + BASE, v1)), 'update removes only its old scoped cache');
 
     mounts.set(BASE, v3.dir);
     stalePath = BASE + 'games/merge-2048/index.html';
     check(await update(page) === 'redundant', 'stale server bytes cause the new worker to fail installation');
-    const afterStale = await state(inspector, origin + BASE);
-    check(!afterStale.caches[cacheName(origin + BASE, v3)] && afterStale.caches[cacheName(origin + BASE, v2)] === v2.count, 'failed update removes its partial cache and retains the previous complete version');
+    const afterStale = await state(inspector, origin + BASE, [cacheName(origin + BASE, v2)]);
+    check(!afterStale.caches.includes(cacheName(origin + BASE, v3)) && afterStale.counts[cacheName(origin + BASE, v2)] === v2.count, 'failed update removes its partial cache and retains the previous complete version');
     await offlineReload(context, [page]);
     stalePath = null;
     await kill(inspector, page, origin + BASE, killBuild);
@@ -234,19 +255,19 @@ try {
   await a.goto(scopeA); await installed(inspector, scopeA, v1);
   await b.goto(scopeB); await installed(inspector, scopeB, v1);
   await offlineReload(context, [a, b]);
-  const both = await state(inspector, scopeA);
-  check(both.caches[cacheName(scopeA, v1)] === v1.count && both.caches[cacheName(scopeB, v1)] === v1.count, 'same-version mounts have independent complete offline caches');
+  const both = await state(inspector, scopeA, [cacheName(scopeA, v1), cacheName(scopeB, v1)]);
+  check(both.counts[cacheName(scopeA, v1)] === v1.count && both.counts[cacheName(scopeB, v1)] === v1.count, 'same-version mounts have independent complete offline caches');
   mounts.set('/a/-child/', v2.dir);
   await update(b); await installed(inspector, scopeB, v2);
   await offlineReload(context, [a, b]);
-  check((await state(inspector, scopeA)).caches[cacheName(scopeA, v1)] === v1.count, 'updating one mount preserves the other mount offline');
+  check((await state(inspector, scopeA, [cacheName(scopeA, v1)])).counts[cacheName(scopeA, v1)] === v1.count, 'updating one mount preserves the other mount offline');
   mounts.set('/a/', v2.dir);
   await update(a); await installed(inspector, scopeA, v2);
   await offlineReload(context, [a, b]);
-  check((await state(inspector, scopeB)).caches[cacheName(scopeB, v2)] === v2.count, 'updating a parent mount preserves its hyphen-prefixed child offline');
+  check((await state(inspector, scopeB, [cacheName(scopeB, v2)])).counts[cacheName(scopeB, v2)] === v2.count, 'updating a parent mount preserves its hyphen-prefixed child offline');
   await kill(inspector, a, scopeA, killBuild);
   await offlineReload(context, [b]);
-  check((await state(inspector, scopeB)).caches[cacheName(scopeB, v2)] === v2.count, 'killing one mount preserves the other mount offline');
+  check((await state(inspector, scopeB, [cacheName(scopeB, v2)])).counts[cacheName(scopeB, v2)] === v2.count, 'killing one mount preserves the other mount offline');
 
   // Old cache names contained only a build hash. Seed one shared legacy cache with
   // two nested scopes and prove migration/cleanup never consume the other mount.
@@ -273,13 +294,13 @@ try {
   hits.length = 0;
   const legacyPageA = await context.newPage();
   await legacyPageA.goto(legacyA); await installed(inspector, legacyA, v1);
-  await waitFor(async () => (await state(inspector, legacyA)).caches[legacyName] === v1.count, 'legacy cleanup preserves nested scope');
+  await waitFor(async () => (await state(inspector, legacyA, [legacyName])).counts[legacyName] === v1.count, 'legacy cleanup preserves nested scope');
   const migratedDownloads = hits.filter(url => url.includes('?sg='));
   check(migratedDownloads.length === 1 && migratedDownloads[0].startsWith('/legacy/games/merge-2048/index.html?'), 'legacy migration reuses verified bytes and refetches a corrupt entry');
-  check((await state(inspector, legacyA)).caches[legacyName] === v1.count, 'legacy migration preserves every nested deployment entry');
+  check((await state(inspector, legacyA, [legacyName])).counts[legacyName] === v1.count, 'legacy migration preserves every nested deployment entry');
   const legacyPageB = await context.newPage();
   await legacyPageB.goto(legacyB); await installed(inspector, legacyB, v1);
-  await waitFor(async () => !(await state(inspector, legacyB)).caches[legacyName], 'empty legacy cache removed');
+  await waitFor(async () => !(await state(inspector, legacyB)).caches.includes(legacyName), 'empty legacy cache removed');
   await offlineReload(context, [legacyPageA, legacyPageB]);
   check(true, 'both migrated deployments work offline and the empty legacy cache is removed');
 

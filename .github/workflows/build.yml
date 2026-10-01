@@ -1,5 +1,6 @@
 # Test source and the fast build before publishing the verified _site artifact.
-# In repository Settings > Pages, select GitHub Actions as the publishing source.
+# GitHub Actions is the recommended Pages source. Existing main:/ sites also work,
+# but their separate built-in Pages workflow can publish source before these checks.
 name: Build fast site
 
 on:
@@ -26,6 +27,23 @@ jobs:
       pages: read
     steps:
       - uses: actions/checkout@v4
+      - name: Verify GitHub Pages publishing source
+        if: >-
+          (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+          (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: site } = await github.rest.repos.getPages(context.repo);
+            const source = site.source || {};
+            const configuration = JSON.stringify({ build_type: site.build_type, source });
+            core.info(`Current Pages configuration: ${configuration}`);
+            if (site.build_type === 'workflow') return;
+            if (site.build_type === 'legacy' && source.branch === 'main' && source.path === '/') {
+              core.warning('Pages publishes from main. This main-origin deployment is supported, but the separate built-in Pages workflow can publish source before checks pass. Select GitHub Actions as the Pages source to make all updates depend on these checks. No settings were changed.');
+              return;
+            }
+            core.setFailed(`This workflow deploys from main and supports Pages source GitHub Actions or main:/(root). Found ${configuration}. No settings were changed.`);
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -50,9 +68,6 @@ jobs:
           SG_ROOT: _site
       - name: Test offline installation, updates and the kill switch
         run: npm run test:offline
-      - name: Configure GitHub Pages
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        uses: actions/configure-pages@v5
       - name: Upload the verified fast site
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
