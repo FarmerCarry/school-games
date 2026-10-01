@@ -9,7 +9,7 @@ games are in Arabic, laid out right-to-left.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores and progress are saved in each browser (localStorage) only.
 
-## The games (28)
+## The games (29)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -29,6 +29,7 @@ games are in Arabic, laid out right-to-left.
 | سلة الرؤوس الكبيرة | Hoop Heads | 1-2 | رياضة، لاعبان |
 | كرة القدم المجنونة | Wacky Soccer | 1-2 | رياضة، لاعبان |
 | حفلة البلياردو | Pool Party | 1-2 | رياضة |
+| ضربة إلى الفضاء | Skybound Golf | 1 | رياضة، أركيد |
 | سوق الحيوانات | Critter Mart | 1 | بناء وإدارة |
 | إمبراطورية البيتزا | Pizza Empire | 1 | بناء وإدارة |
 | عالم المكعبات | Block World | 1 | بناء وإدارة، أركيد |
@@ -43,6 +44,10 @@ games are in Arabic, laid out right-to-left.
 | ساحة الثعابين | Snake Arena | 1 | تحدي الروبوتات، أركيد |
 
 Every game saves best scores and unlocks in the browser, and has a title screen, P/Esc pause and a 🔊 mute button.
+
+**ضربة إلى الفضاء (Skybound Golf)** is a one-button distance golf game. Time a swing with
+Space or a click, bounce across the course, and earn coins for power, bounce and flight upgrades.
+Reach a green for a putting challenge and bonus coins. Best distance and upgrades save locally.
 
 **أصابع البرق (typing test)** works like Monkeytype: time (15/30/60 s), words (10/25/50) or
 sentences, in English or Arabic, with the same WPM/accuracy formulas. For a class race, click
@@ -159,10 +164,10 @@ npm test                        # deterministic bug regressions and browser chec
 npm run test:unit                # the regression files under tools/tests/
 npm run test:tooling             # shared build and browser-harness helpers
 npm run test:regressions         # additional gameplay and portal keyboard checks
-npm run check                   # smoke-test all 28 source games
+npm run check                   # smoke-test all source games
 npm run build                   # fast build into _site/ (the Pages artifact)
 SG_ROOT=_site npm test           # run regressions against the optimized games
-SG_ROOT=_site npm run check      # smoke-test all 28 optimized games
+SG_ROOT=_site npm run check      # smoke-test all optimized games
 npm run test:offline             # cache installation, offline games, updates, and kill switch
 node tools/perf.mjs [slug]       # files, load/script time, stutters, memory, saves per page
 ```
