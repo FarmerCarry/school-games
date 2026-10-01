@@ -68,19 +68,20 @@ and pauses.
    **Change visibility** → **Public**. The repo contains only the games (no passwords, no
    student data), so this is safe. (With a paid GitHub plan you can skip this step.)
 3. On GitHub, open the repo → **Settings** → **Pages**.
-4. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-5. Open **Actions** → **Build and deploy games**. A push to `main` starts it automatically;
+4. Under **Build and deployment**, **GitHub Actions** is the recommended **Source**.
+   An existing site publishing from the `main` branch's **/(root)** folder also works
+   without changing its settings, with the update limitation explained below.
+5. Open **Actions** → **Build fast site**. A push to `main` starts it automatically;
    after changing the Pages setting, you can also select **Run workflow** on `main`.
 6. When the deployment succeeds, share `https://<your-username>.github.io/school-games/`
    with your class. Students do not need GitHub accounts. Every later push to `main`
-   runs the checks and deploys the tested version.
+   runs the checks and deploys the tested fast version.
 
 ### The fast version (recommended for PCs with slow hard disks)
 
 The GitHub Actions workflow tests pull requests and builds the faster copy into `_site/`.
-Only a tested `main` build deploys; pull requests validate changes without publishing them.
-The workflow
-deploys that folder directly with GitHub's Pages artifact and deployment actions
+This workflow deploys only a tested `main` build; pull requests validate changes without
+publishing them. It deploys that folder directly with GitHub's Pages artifact and deployment actions
 (see `.github/workflows/build.yml` and `tools/build.mjs`). It looks and plays exactly
 the same, but:
 
@@ -91,15 +92,23 @@ the same, but:
   downloads only the files that changed;
 - it can be **installed as an app** (the install icon in Chrome/Edge's address bar).
 
-To use it: **Settings → Pages → Source: GitHub Actions** (once). If you previously
-selected the `gh-pages` branch, switch that setting to GitHub Actions.
-Keep editing `main` as usual (for example `js/catalog.js`); the fast copy deploys after
-the regression, smoke, and offline checks pass. If a check or build fails, the previous
-deployment stays online. No `gh-pages` branch or personal access token is needed.
+For updates that publish only after checks pass, use **Settings → Pages → Source:
+GitHub Actions**. Keep editing `main` as usual (for example `js/catalog.js`); the fast
+copy deploys after the regression, smoke, and offline checks pass. With this publishing
+source, failed checks leave the previous deployment online.
 
-Going back is always safe: switch Pages back to **`main`**. The `sw.js` file in `main` is an
-"off switch" — any PC that has the offline cache removes it on its next visit and uses the
-normal site again.
+An existing **Deploy from a branch → main → /(root)** site is also compatible because
+this workflow deploys from `main`. However, GitHub's separate built-in Pages workflow
+can publish the ordinary source version immediately after a push, even if these checks
+later fail. Selecting **GitHub Actions** as the source removes that independent publish
+path. The workflow checks the current Pages setting without changing it; other source
+branches or folders are rejected. No `gh-pages` branch or personal access token is needed.
+
+To return to the ordinary source version, first open **Actions → Build fast site** and
+choose **Disable workflow** from its menu, then set Pages to **Deploy from a branch →
+main → /(root)**. Disabling the workflow prevents a later fast build from replacing it.
+The `sw.js` file in `main` is an "off switch": PCs remove the offline cache on their next
+visit and use the normal site again.
 
 If the school web filter blocks it, ask IT to allow that address. The site contains no ads and
 makes no outside requests, so it's an easy one to approve.
