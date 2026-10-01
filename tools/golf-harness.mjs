@@ -1,7 +1,13 @@
 // Test-only observation of the real game. No production debug globals.
 export function installGolfHarness({ manual = true } = {}) {
   let kit, art;
-  window.golfProbe = { draws: 0, saves: 0, ready: 0 };
+  window.golfProbe = { draws: 0, saves: 0, ready: 0, canvases: [] };
+  const createElement = Document.prototype.createElement;
+  Document.prototype.createElement = function (...args) {
+    const element = createElement.apply(this, args);
+    if (String(args[0]).toLowerCase() === 'canvas') golfProbe.canvases.push(element);
+    return element;
+  };
   const setItem = Storage.prototype.setItem;
   Storage.prototype.setItem = function(k,v) {
     if (k.includes('skybound-golf')) golfProbe.saves++;

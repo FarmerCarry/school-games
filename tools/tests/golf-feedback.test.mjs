@@ -9,8 +9,8 @@ const repo=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 let browser,server;
 before(async()=>{server=await startTestServer(process.env.SG_ROOT?path.resolve(repo,process.env.SG_ROOT):repo);browser=await launchChromium();});
 after(async()=>{await browser?.close();await server?.close();});
-async function game(t,reducedMotion='no-preference') {
-  const context=await browser.newContext({viewport:{width:995,height:560},reducedMotion});
+async function game(t,reducedMotion='no-preference',deviceScaleFactor=1) {
+  const context=await browser.newContext({viewport:{width:995,height:560},reducedMotion,deviceScaleFactor});
   await context.addInitScript(installGolfHarness,{manual:true});
   const page=await context.newPage(),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
@@ -95,5 +95,23 @@ test('Golf real UI shots across worlds/upgrades preserve 60Hz results at normal 
     assert.equal(result.r,.7,'visual ball sizing must not change collision radius');
     assert(['putting','result'].includes(result.phase));
     assert.equal(result.saves,result.phase==='result'?1:0);
+  }
+});
+
+
+test('Golf keeps one small scenery surface across worlds and high-DPR resizes',async t=>{
+  const page=await game(t,'no-preference',2);
+  for (const viewport of [{width:995,height:560},{width:1920,height:1080},{width:1100,height:620}]) {
+    await page.setViewportSize(viewport);
+    const caches=await page.evaluate(()=>{
+      for(let i=0;i<16;i++) {
+        golfState.world=i%4;golfState.course=GolfPhysics.createCourse(i%4);
+        advanceGolfFrames(1);
+      }
+      return golfProbe.canvases.map(c=>({bytes:c.width*c.height*4,attached:c.isConnected}));
+    });
+    assert.equal(caches.length,1,'reuse the same surface instead of accumulating world/DPR variants');
+    assert(caches[0].bytes<=1024*1024,'distant scenery stays under a 1MiB backing-store budget');
+    assert.equal(caches[0].attached,false);
   }
 });

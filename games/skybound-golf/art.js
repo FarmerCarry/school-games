@@ -98,19 +98,22 @@
     }
   }
 
-  // One logical-resolution backdrop, reused across frames and replaced on world
-  // change: 1280 * 720 * 4 = 3,686,400 bytes (independent of DPR/distance).
+  // One half-resolution distant backdrop, reused across worlds and frames.
+  // 640 * 360 * 4 = 921,600 backing bytes, independent of DPR/distance.
+  // Keeping this opaque and small avoids a large first-paint surface transfer;
+  // the foreground and ball are still drawn at the full fitted resolution.
   // Distant scenery is deliberately still; physics/camera/foreground stay live.
   var backdrop = null, backdropWorld = -1;
   function scenery(c, p, world) {
-    if (!backdrop) { backdrop = document.createElement('canvas'); backdrop.width = W; backdrop.height = H; }
+    if (!backdrop) { backdrop = document.createElement('canvas'); backdrop.width = W / 2; backdrop.height = H / 2; }
     if (backdropWorld !== world) {
-      var b = backdrop.getContext('2d');
+      var b = backdrop.getContext('2d', {alpha:false});
+      b.setTransform(.5,0,0,.5,0,0);
       background(b, {cam:{x:-45,y:0,zoom:1},time:0}, p, world);
       b.fillStyle = world === 3 ? 'rgba(40,45,83,.20)' : 'rgba(242,247,222,.27)';
       b.fillRect(0,0,W,H); backdropWorld = world;
     }
-    c.drawImage(backdrop,0,0);
+    c.drawImage(backdrop,0,0,W,H);
   }
 
   function flower(c, x, y, size, p, moon) {
