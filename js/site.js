@@ -53,6 +53,7 @@
     favOn: 'في المفضلة',
     favAdded: 'أُضيفت إلى ألعابك المفضلة ❤️',
     favRemoved: 'أُزيلت من المفضلة',
+    favTemporary: 'تعذّر الحفظ؛ التغيير مؤقت حتى تحديث الصفحة.',
     restart: 'أعد التشغيل',
     fs: 'ملء الشاشة',
     fsExit: 'خروج من ملء الشاشة',
@@ -112,6 +113,7 @@
   /* --------------------------------------------------------- storage */
   var KEY_RECENT = 'sg:site:recent';
   var KEY_FAVS = 'sg:site:favs';
+  var temporaryFavs = null;
   function loadList(key) {
     try {
       var v = JSON.parse(window.localStorage.getItem(key) || '[]');
@@ -119,23 +121,26 @@
     } catch (e) { return []; }
   }
   function saveList(key, list) {
-    try { window.localStorage.setItem(key, JSON.stringify(list)); } catch (e) { /* ignore */ }
+    try { window.localStorage.setItem(key, JSON.stringify(list)); return true; } catch (e) { return false; }
   }
   function known(list) { return list.filter(function (s) { return !!BY_SLUG[s]; }); }
   function getRecent() { return known(loadList(KEY_RECENT)); }
-  function getFavs() { return known(loadList(KEY_FAVS)); }
-  function isFav(slug) { return loadList(KEY_FAVS).indexOf(slug) >= 0; }
+  function loadFavs() { return temporaryFavs || loadList(KEY_FAVS); }
+  function getFavs() { return known(loadFavs()); }
+  function isFav(slug) { return loadFavs().indexOf(slug) >= 0; }
   function pushRecent(slug) {
     var list = loadList(KEY_RECENT).filter(function (s) { return s !== slug; });
     list.unshift(slug);
     saveList(KEY_RECENT, list.slice(0, 12));
   }
   function toggleFav(slug) {
-    var list = loadList(KEY_FAVS);
+    var list = loadFavs().slice();
     var i = list.indexOf(slug);
     if (i >= 0) list.splice(i, 1); else list.unshift(slug);
-    saveList(KEY_FAVS, list);
-    return i < 0;
+    var saved = saveList(KEY_FAVS, list);
+    // Keep failed changes usable across routes, and retry them on the next toggle.
+    temporaryFavs = saved ? null : list;
+    return { on: i < 0, saved: saved };
   }
 
   /* ---------------------------------------------------------- helpers */
@@ -821,7 +826,7 @@
     stage.addEventListener('mousedown', activateGame);
     stage.addEventListener('click', activateGame);
     $('#favBtn').addEventListener('click', function (e) {
-      var on = toggleFav(slug);
+      var result = toggleFav(slug), on = result.on;
       var b = this;
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', on);
@@ -829,7 +834,8 @@
       $('.heart', b).textContent = on ? '❤️' : '🤍';
       $('.pb-lbl', b).textContent = on ? T.favOn : T.fav;
       b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
-      if (on) { heartBurst(b); toast(T.favAdded); } else toast(T.favRemoved);
+      if (on) heartBurst(b);
+      toast(result.saved ? (on ? T.favAdded : T.favRemoved) : T.favTemporary);
       // After a mouse click the keys go back to the game (so Space doesn't press this button again).
       if (e.detail) activateGame();
     });
@@ -869,6 +875,8 @@
     var route = parseRoute();
     var app = $('#app');
     var body = document.body;
+    var active = document.activeElement;
+    var moveFocus = !typing && active && ($('#chips').contains(active) || app.contains(active));
     if (current && route.name !== 'play') exitFullscreen();
     body.className = 'route-' + route.name;
     $('#chips').innerHTML = chipsHTML(route);
@@ -904,6 +912,15 @@
     layout();
     if (current) setupPlay(current);
     if (!typing) window.scrollTo(0, 0);
+    // A replaced navigation link must not leave keyboard users at the document root.
+    // The heading announces the destination; the next Tab reaches its games.
+    if (!current && moveFocus) {
+      var heading = $('h1, h2', app);
+      if (heading) {
+        heading.setAttribute('tabindex', '-1');
+        try { heading.focus({ preventScroll: true }); } catch (e) { heading.focus(); }
+      }
+    }
     typing = false;
   }
 
