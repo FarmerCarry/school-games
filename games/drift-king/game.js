@@ -9,26 +9,48 @@
   var GIFT_MS = 8 * 60 * 1000;
 
   /* ------------------------------------------------------------- save */
-  var save = {
-    best: store.get('best', 0),
-    bestDist: store.get('bestDist', 0),
-    coins: store.get('coins', 0),
-    owned: store.get('owned', ['red']),
-    car: store.get('car', 'red'),
-    runs: store.get('runs', 0),
-    done: store.get('done', []),
-    giftAt: store.get('giftAt', 0),
-    gems: store.get('gems', 0),
-    music: store.get('music', true)
-  };
-  if (!Array.isArray(save.owned) || save.owned.indexOf('red') < 0) save.owned = ['red'];
-  if (!Array.isArray(save.done)) save.done = [];
-  if (save.owned.indexOf(save.car) < 0) save.car = 'red';
-  function persist() {
-    store.set('best', save.best); store.set('bestDist', save.bestDist); store.set('coins', save.coins);
-    store.set('owned', save.owned); store.set('car', save.car); store.set('runs', save.runs);
-    store.set('done', save.done); store.set('giftAt', save.giftAt); store.set('gems', save.gems);
-    store.set('music', save.music);
+  function savedNumber(value, fractional) {
+    var n = typeof value === 'number' || typeof value === 'string' ? Number(value) : 0;
+    if (!isFinite(n) || n < 0) return 0;
+    n = Math.min(n, Number.MAX_SAFE_INTEGER);
+    return fractional ? n : Math.floor(n);
+  }
+  function savedIds(value, known) {
+    return Array.isArray(value) ? value.filter(function (id, i) {
+      return typeof id === 'string' && known.indexOf(id) >= 0 && value.indexOf(id) === i;
+    }) : [];
+  }
+  function normalizeSave(data) {
+    var owned = savedIds(data.owned, DK.CARS.map(function (car) { return car.id; }));
+    if (owned.indexOf('red') < 0) owned.unshift('red');
+    return {
+      v: 1,
+      best: savedNumber(data.best), bestDist: savedNumber(data.bestDist, true),
+      coins: savedNumber(data.coins), owned: owned,
+      car: owned.indexOf(data.car) >= 0 ? data.car : 'red',
+      runs: savedNumber(data.runs),
+      done: savedIds(data.done, MISSIONS.map(function (m) { return m.id; })),
+      giftAt: savedNumber(data.giftAt), gems: savedNumber(data.gems),
+      music: typeof data.music === 'boolean' ? data.music : true
+    };
+  }
+  function loadSave() {
+    var data = store.get('save', null);
+    if (!data || typeof data !== 'object' || Array.isArray(data) || data.v !== 1) {
+      data = {};
+      ['best', 'bestDist', 'coins', 'owned', 'car', 'runs', 'done', 'giftAt', 'gems', 'music'].forEach(function (key) {
+        data[key] = store.get(key, null);
+      });
+    }
+    return normalizeSave(data);
+  }
+  // A single setItem is atomic. Legacy keys remain untouched: a failed first
+  // write cannot damage old progress; after success this record is authoritative.
+  function persist(next) { return store.set('save', next || save); }
+  function commitSave(next) {
+    if (!persist(next)) return false;
+    for (var key in next) save[key] = next[key];
+    return true;
   }
 
   /* ---------------------------------------------------------- missions */
@@ -58,6 +80,7 @@
     { id: 'z5', text: 'انطلق حتى فجر الحلوى', type: 'zone', n: 5, r: 250 },
     { id: 's4000', text: 'اجمع 4000 نقطة في جولة', type: 'score', n: 4000, r: 400 }
   ];
+  var save = loadSave();
   function activeMissions() {
     var out = [];
     for (var k = 0; k < MISSIONS.length && out.length < 3; k++) if (save.done.indexOf(MISSIONS[k].id) < 0) out.push(MISSIONS[k]);
@@ -394,13 +417,20 @@
   function garageClick(car) {
     Kit.audio.unlock();
     var owned = save.owned.indexOf(car.id) >= 0;
+    var next = normalizeSave(save);
+    next.car = car.id;
     if (owned) {
-      save.car = car.id; G.model = car; persist(); DK.snd.click(); refreshGarage();
+      if (!commitSave(next)) { DK.snd.deny(); toast('تعذّر حفظ الاختيار. حاول مرة أخرى.'); return; }
+      G.model = car; DK.snd.click(); refreshGarage();
       return;
     }
     if (save.coins >= car.price) {
-      save.coins -= car.price; save.owned.push(car.id); save.car = car.id; G.model = car;
-      persist(); DK.snd.buy(); toast('سيارة جديدة: ' + car.name + '!');
+      next.coins -= car.price; next.owned.push(car.id);
+      if (!commitSave(next)) {
+        DK.snd.deny(); toast('تعذّر الحفظ. لم تُخصم العملات، حاول مرة أخرى.');
+        return;
+      }
+      G.model = car; DK.snd.buy(); toast('سيارة جديدة: ' + car.name + '!');
       burstConfetti(60);
       checkMissions(null);
       refreshGarage();

@@ -332,6 +332,43 @@ function toRel(url) {
 function hex(buf) {
   return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
 }
+async function fetchVerified(p) {
+  var url = new URL(p, SCOPE).href;
+  var res = await fetch(url + '?sg=' + FILES[p], { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + p);
+  var body = await res.arrayBuffer();
+  var got = hex(await crypto.subtle.digest('SHA-256', body)).slice(0, 16);
+  if (got !== FILES[p]) throw new Error('stale copy of ' + p);
+  var headers = new Headers(res.headers);
+  headers.set('x-sg-hash', FILES[p]);
+  return new Response(body, { status: 200, headers: headers });
+}
+
+// CacheStorage can be cleared while this worker stays registered. An unchanged
+// worker will not install again, so a miss also repairs the other missing files.
+// Keep verified entries if repair is interrupted; a later miss can retry it.
+var repairing = null;
+function repairCache(cache) {
+  if (repairing) return repairing;
+  var paths = Object.keys(FILES), next = 0;
+  async function worker() {
+    while (next < paths.length) {
+      var p = paths[next++], url = new URL(p, SCOPE).href;
+      if (!(await cache.match(url))) await cache.put(url, await fetchVerified(p));
+    }
+  }
+  // Wait for every worker before ending the event, even if one fetch fails.
+  repairing = Promise.allSettled([worker(), worker(), worker(), worker()]).then(function (results) {
+    // The server may have moved on and no longer have this version's bytes.
+    // Ask for its new worker instead of mixing those bytes into this cache.
+    if (results.some(function (result) { return result.status === 'rejected'; })) {
+      return self.registration.update().catch(function () {});
+    }
+  }).then(function () {
+    repairing = null;
+  });
+  return repairing;
+}
 
 // Install: keep unchanged files from the previous cache, download only the changed ones
 // (straight from the network, checked against their hash), then take over right away.
@@ -352,14 +389,7 @@ self.addEventListener('install', function (event) {
           if (oldHash === FILES[p]) { await cache.put(url, hit); return; }
         }
       }
-      var res = await fetch(url + '?sg=' + FILES[p], { cache: 'no-store' });
-      if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + p);
-      var body = await res.arrayBuffer();
-      var got = hex(await crypto.subtle.digest('SHA-256', body)).slice(0, 16);
-      if (got !== FILES[p]) throw new Error('stale copy of ' + p);
-      var headers = new Headers(res.headers);
-      headers.set('x-sg-hash', FILES[p]);
-      await cache.put(url, new Response(body, { status: 200, headers: headers }));
+      await cache.put(url, await fetchVerified(p));
     }
     async function worker() { while (next < paths.length) await one(paths[next++]); }
     try {
@@ -390,11 +420,30 @@ self.addEventListener('fetch', function (event) {
   if (req.method !== 'GET') return;
   var rel = toRel(req.url);
   if (!rel) return;
-  event.respondWith((async function () {
-    var hit = await caches.match(new URL(rel, SCOPE).href, { cacheName: CACHE });
+  var repairTarget;
+  var response = (async function () {
+    var url = new URL(rel, SCOPE).href;
+    // Hold the cache handle before fetching: if an update deletes this version
+    // during recovery, late writes must not reopen its obsolete cache by name.
+    var cache = await caches.open(CACHE);
+    var hit = await cache.match(url);
     if (hit) return hit;
-    return fetch(req);
-  })());
+    // Never put newer or stale network bytes into the active version's cache.
+    var res = await fetchVerified(rel);
+    repairTarget = cache;
+    try { await repairTarget.put(url, res.clone()); } catch (e) { /* storage may be full */ }
+    return res;
+  })();
+  event.respondWith(response);
+  // Respond as soon as the requested file is verified; keep repairing the rest
+  // in the background so the next offline visit includes unvisited games too.
+  event.waitUntil(response.then(function () {
+    if (repairTarget) return repairCache(repairTarget);
+  }).catch(function () {
+    // A rejected old-version navigation may never reach the portal's register
+    // call. Check for a replacement here so the next reload can recover too.
+    return self.registration.update().catch(function () {});
+  }));
 });
 `;
 }

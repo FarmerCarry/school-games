@@ -57,6 +57,60 @@ async function openGame(page, slug) {
   return page.frames().find(frame => frame.url().endsWith(`/games/${slug}/index.html`));
 }
 
+test('favorites remain consistent during failed saves and persist after recovery', async t => {
+  const page = await newPage(t);
+  await page.goto(`${origin}${base}`);
+  await page.evaluate(() => localStorage.setItem('sg:site:favs', JSON.stringify(['pool-party'])));
+  await openGame(page, 'air-hockey');
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'sg:site:favs') throw new DOMException('Storage is full', 'QuotaExceededError');
+      return original.call(this, key, value);
+    };
+    window.restoreFavoriteStorage = () => { Storage.prototype.setItem = original; };
+  });
+  const favorite = page.locator('#favBtn');
+  await favorite.click();
+  assert.equal(await favorite.getAttribute('aria-pressed'), 'true');
+  assert.match(await page.locator('#toast').textContent(), /تعذّر الحفظ/, 'failed saves explain that the change is temporary');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:site:favs'))), ['pool-party'], 'a failed write leaves previous favorites intact');
+  await favorite.click();
+  assert.equal(await favorite.getAttribute('aria-pressed'), 'false', 'a second click removes the temporary favorite');
+  await favorite.click();
+  await page.locator('#logo').click();
+  const favorites = page.locator('.mine .cat-sec').last();
+  await favorites.locator('.tile[data-slug="air-hockey"]').waitFor();
+  assert.equal(await favorites.locator('.tile').count(), 2, 'home includes both saved and temporary favorites');
+  await favorites.locator('.tile[data-slug="air-hockey"]').click();
+  await page.waitForFunction(() => document.querySelector('#stage iframe')?.contentWindow?.Kit);
+  assert.equal(await favorite.getAttribute('aria-pressed'), 'true', 'temporary state survives portal navigation');
+  await favorite.click();
+  assert.equal(await favorite.getAttribute('aria-pressed'), 'false');
+  await page.evaluate(() => window.restoreFavoriteStorage());
+  await favorite.click();
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:site:favs'))), ['air-hockey', 'pool-party'], 'a later successful write persists the current state');
+  assert.doesNotMatch(await page.locator('#toast').textContent(), /تعذّر الحفظ/);
+  await page.reload();
+  assert.equal(await favorite.getAttribute('aria-pressed'), 'true', 'successfully saved favorites survive reload');
+});
+
+test('category navigation transfers focus to its heading and search keeps typing focus', async t => {
+  const page = await newPage(t);
+  await page.goto(`${origin}${base}`);
+  const category = page.locator('#chips a').nth(1);
+  const destination = await category.getAttribute('href');
+  await category.focus();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(hash => location.hash === hash && document.body.className === 'route-cat', destination);
+  assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('#app h1')), true, 'the category heading receives focus after its navigation link is replaced');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('#app .tile')), true, 'Tab continues into the category games');
+  await page.locator('#q').fill('pool');
+  await page.waitForFunction(() => document.body.className === 'route-search');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'q', 'live search does not steal focus while typing');
+});
+
 test('inherited object names show the missing-route page', async t => {
   const page = await newPage(t);
   for (const route of ['play/__proto__', 'play/constructor', 'play/toString', 'c/__proto__', 'c/constructor']) {
