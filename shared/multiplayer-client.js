@@ -51,11 +51,11 @@
           joined = true; attempt = 0; ownId = message.id;
           remember(message); status('online');
         }
-        // Expired sessions can join afresh; a fast reload may briefly race the
-        // old connection closing. Bound that retry without evicting another tab.
+        // Hosted connections can linger until the server heartbeat clears them.
+        // Use the normal bounded retry window without evicting another tab.
         if (message.type === 'error' && !joined) {
           var expired = message.code === 'invalid-session' && !!saved.token;
-          var closingOldTab = message.code === 'session-active' && attempt < 2;
+          var closingOldTab = message.code === 'session-active' && !!saved.token && attempt < 8;
           if (expired) {
             delete saved.token;
             try { sessionStorage.removeItem(key); } catch (_) { /* Optional. */ }
