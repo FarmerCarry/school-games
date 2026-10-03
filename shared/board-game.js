@@ -9,6 +9,7 @@
   var name = '', connection = 'idle', pendingMove = false, pendingInvite = false, paused = false;
   var aiTimer = null, moveTimer = null, abandonedMatch = null, hiddenPaused = false;
   var cells = [], moveButtons = [];
+  var fallingCell = null, dropTimer = null, liveMatch = false;
 
   app.classList.add(game);
   app.innerHTML = '<header class="game-header"><div><h1>' + title + '</h1><p>' +
@@ -49,6 +50,27 @@
   }
   function clearThinking() { clearTimeout(aiTimer); aiTimer = null; }
   function clearMove() { clearTimeout(moveTimer); moveTimer = null; pendingMove = false; }
+  function stopDrop() {
+    clearTimeout(dropTimer); dropTimer = null;
+    if (fallingCell) {
+      fallingCell.classList.remove('dropping');
+      fallingCell.style.removeProperty('--drop-from');
+      fallingCell = null;
+    }
+  }
+  function dropDisc() {
+    stopDrop();
+    if (!isConnect || document.hidden || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var cell = cells[state.last];
+    if (!cell || !state.board[state.last]) return;
+    var top = cells[state.last % 7].getBoundingClientRect();
+    var target = cell.getBoundingClientRect();
+    if (!target.height) return;
+    cell.style.setProperty('--drop-from', (top.top - target.bottom) + 'px');
+    fallingCell = cell;
+    cell.classList.add('dropping');
+    dropTimer = setTimeout(stopDrop, 340);
+  }
   function finished() { return !!(state.winner || state.draw); }
   function mine() {
     if (mode !== 'online' || !match) return 1;
@@ -68,7 +90,7 @@
   }
   var client = SGMultiplayer.create({ game: game, onStatus: function (value) {
     connection = value;
-    if (value !== 'online') { players = []; invitation = null; pendingInvite = false; clearMove(); }
+    if (value !== 'online') { players = []; invitation = null; pendingInvite = false; clearMove(); stopDrop(); liveMatch = false; }
     renderLobby(); renderBoard();
   }, onMessage: receive });
 
@@ -109,8 +131,9 @@
       next = (next + direction + moveButtons.length) % moveButtons.length;
     }
   }
-  function renderBoard() {
+  function renderBoard(animateLast) {
     if (!client) return;
+    if (fallingCell && (paused || document.hidden || mode === 'lobby' || !state.board[Number(fallingCell.dataset.cell)])) stopDrop();
     app.dataset.mode = mode;
     el('gameBoard').dataset.moves = String(state.moves);
     el('gameBoard').dataset.turn = String(state.turn);
@@ -156,6 +179,7 @@
     el('rematchButton').disabled = mode === 'online' && (connection !== 'online' || !everyoneHere() || asked);
     el('rematchButton').textContent = asked ? 'ننتظر موافقة زميلك…' : 'العب مرة أخرى';
     if (mode === 'online' && finished() && !asked && (match.rematch || []).length) el('rematchButton').textContent = 'زميلك يريد جولة أخرى — هيا!';
+    if (animateLast) dropDisc();
     el('pcButton').disabled = mode === 'online';
     el('pcButton').textContent = mode === 'computer' ? 'جولة جديدة ضد الكمبيوتر' : 'العب ضد الكمبيوتر';
   }
@@ -254,12 +278,15 @@
         return;
       }
       var wasFinished = mode === 'online' && finished(), previousMoves = mode === 'online' ? state.moves : -1;
+      // Presence updates and restored boards must not replay an old move.
+      var animateMove = liveMatch && mode === 'online' && match.id === message.id &&
+        message.state.moves === state.moves + 1 && !state.board[message.state.last];
       clearThinking(); clearMove(); paused = false; hiddenPaused = false; invitation = null; pendingInvite = false;
-      match = message; state = message.state; mode = 'online';
+      match = message; state = message.state; mode = 'online'; liveMatch = true;
       showNotice('');
       if (finished() && !wasFinished) sound(state.winner === mine());
       else if (state.moves > previousMoves && previousMoves >= 0) sound(false);
-      renderLobby(); renderBoard();
+      renderLobby(); renderBoard(animateMove);
     } else if (message.type === 'error') {
       clearMove(); pendingInvite = false;
       showNotice(errorMessages[message.code] || 'لم تنجح المحاولة. جرّب مجدداً بعد قليل.');
@@ -279,7 +306,7 @@
     }
     var next = rules.play(state, move);
     if (!next) return;
-    state = next; sound(finished() && state.winner === 1); renderBoard(); scheduleComputer();
+    state = next; sound(finished() && state.winner === 1); renderBoard(true); scheduleComputer();
   }
   function scheduleComputer() {
     clearThinking();
@@ -288,7 +315,7 @@
       aiTimer = null;
       if (mode !== 'computer' || paused || document.hidden || finished()) return;
       var next = rules.play(state, rules.chooseMove(state));
-      if (next) { state = next; sound(false); renderBoard(); }
+      if (next) { state = next; sound(false); renderBoard(true); }
     }, 420);
   }
   function startComputer() {
@@ -349,7 +376,7 @@
     else if (!document.hidden && hiddenPaused) { hiddenPaused = false; pause(false); }
     renderBoard();
   });
-  window.addEventListener('pagehide', function () { clearThinking(); clearMove(); client.disconnect(false); });
+  window.addEventListener('pagehide', function () { clearThinking(); clearMove(); stopDrop(); client.disconnect(false); });
   window.addEventListener('pageshow', function (event) { if (event.persisted) { if (client.canResume()) client.connect(client.savedName()); scheduleComputer(); } });
   makeBoard(); renderSound();
   name = client.savedName(); el('playerName').value = name;
