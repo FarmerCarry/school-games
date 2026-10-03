@@ -141,7 +141,7 @@ test('source, Git metadata, repository-root and outside destinations preserve ev
   f.write('.git/canary', 'keep Git metadata');
   f.write('docs/canary.md', 'keep documentation');
   const before = snapshot(f.root);
-  for (const out of ['games', 'games/demo', 'games/new-build', 'js', 'shared', 'tools', 'docs', '.git', '.git/objects', '.', '..']) {
+  for (const out of ['games', 'games/demo', 'games/new-build', 'js', 'shared', 'tools', 'docs', 'multiplayer-server', '.git', '.git/objects', '.', '..']) {
     refused(run(f, ['--out', out]));
     assert.deepEqual(snapshot(f.root), before, out);
   }

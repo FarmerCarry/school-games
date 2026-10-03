@@ -4,15 +4,17 @@ A light, ad-free games website **in Arabic** for 4th and 5th graders: a small Po
 with original browser games, all written from scratch for this site. The site and all of its
 games are in Arabic, laid out right-to-left.
 
-- **No ads, no accounts, no chat, no tracking, no links to other sites.**
-- **Nothing loads from the internet.** Every game, sound, font and picture lives in this repo.
+- **No ads, no email/password accounts, no chat, no analytics, no links to other sites.**
+- Every game, sound, font and picture lives in this repo. Optional online board-game lobbies connect only to the configured multiplayer service.
 - **Made for Windows PCs with a mouse and keyboard.**
-- Scores and progress are saved in each browser (localStorage) only.
+- Scores and progress are saved in each browser (localStorage) only. Online display names, invitations and matches are temporary server memory; reconnect credentials stay in the browser tab's session storage.
 
-## The games (29)
+## The games (31)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
+| أربعة على التوالي | Connect 4 | 1-2 | ألغاز، لاعبان عبر الإنترنت |
+| إكس أو | Tic-tac-toe | 1-2 | ألغاز، لاعبان عبر الإنترنت |
 | أصابع البرق | Lightning Fingers (typing test, English + Arabic) | 1 | تحديات |
 | ضربة الطلاء | Splat Strike (3D paint-blaster arena vs bots) | 1 | تصويب، تحدي الروبوتات |
 | عدّاء السكة | Rail Rush | 1 | جري |
@@ -43,7 +45,26 @@ games are in Arabic, laid out right-to-left.
 | لوّن الأرض | Paint Grab | 1 | تحدي الروبوتات |
 | ساحة الثعابين | Snake Arena | 1 | تحدي الروبوتات، أركيد |
 
-Every game saves best scores and unlocks in the browser, and has a title screen, P/Esc pause and a 🔊 mute button.
+The original arcade games save best scores and unlocks in the browser, and have a title screen, P/Esc pause and a 🔊 mute button. The two board games use a compact board and game-specific lobby; online matches cannot be paused by one player.
+
+### Connect 4 and tic-tac-toe
+
+Each game has its **own** player list. Enter a display name, invite an available player,
+accept or decline invitations, and play or request a rematch. Leaving a game removes
+you from its live list. Brief connection interruptions allow the same tab to reconnect.
+**Play against the computer works without the online service or an internet connection.**
+
+The site stays on GitHub Pages. Cross-PC play additionally needs the small service in
+[`multiplayer-server/`](multiplayer-server/README.md), deployed separately, and its secure
+WebSocket URL in `shared/multiplayer-config.js`. The committed URL is empty until a real
+service is available; no demo players or simulated online matches are shown. See the
+server README for setup, hosting, origin restrictions, capacity and restart behavior.
+
+Only these two games load the multiplayer client. There is no site-wide player list,
+framework, external asset, polling loop, or recurring localStorage write for presence.
+The fast build bundles each new game into one HTML file, with the existing shared fonts.
+The offline cache will store the two additional game files on the next site update.
+The school network must permit the configured service's HTTPS/WebSocket address.
 
 **ضربة إلى الفضاء (Skybound Golf)** is a one-button distance golf game. Time a swing with
 Space or a click, bounce across the course, and earn coins for power, bounce and flight upgrades.
@@ -110,8 +131,9 @@ main → /(root)**. Disabling the workflow prevents a later fast build from repl
 The `sw.js` file in `main` is an "off switch": PCs remove the offline cache on their next
 visit and use the normal site again.
 
-If the school web filter blocks it, ask IT to allow that address. The site contains no ads and
-makes no outside requests, so it's an easy one to approve.
+If the school web filter blocks it, ask IT to allow that address. The site contains no ads.
+Online board-game play also needs the separately configured multiplayer address; ordinary
+games and computer opponents do not use that service.
 
 ### Running it without the internet
 
@@ -145,6 +167,7 @@ development tools and Chromium once:
 
 ```
 npm ci
+npm ci --prefix multiplayer-server # only needed to develop/test the online board games
 npm run browsers:install          # downloads Playwright's Chromium
 # Linux machines missing browser libraries: npx playwright install --with-deps --no-shell chromium
 ```
@@ -169,6 +192,8 @@ npm run build                   # fast build into _site/ (the Pages artifact)
 SG_ROOT=_site npm test           # run regressions against the optimized games
 SG_ROOT=_site npm run check      # smoke-test all optimized games
 npm run test:offline             # cache installation, offline games, updates, and kill switch
+npm run test:multiplayer         # real server + independent-browser lobby/match checks
+SG_ROOT=_site node tools/test-multiplayer.mjs # same flows in the single-file fast build
 node tools/perf.mjs [slug]       # files, load/script time, stutters, memory, saves per page
 ```
 
