@@ -5,6 +5,14 @@ import path from 'node:path';
 
 function stateOfGame() {
   const g = window.__game;
+  const board = document.getElementById('boardApp');
+  if (!g && board) {
+    // The board games expose real UI state in the DOM, with no debug API.
+    const surface = document.getElementById('gameBoard');
+    return JSON.stringify({ mode: board.dataset.mode, moves: surface.dataset.moves,
+      turn: surface.dataset.turn, winner: surface.dataset.winner,
+      paused: !document.getElementById('pauseLayer').hidden });
+  }
   if (!g && window.GolfArt && document.getElementById('title-screen')) {
     // Golf exposes its screens in the DOM instead of a production debug API.
     // A leaked shortcut can start a shot or open an overlay, both observable here.
@@ -30,7 +38,7 @@ export async function testNativeControls({ browser, origin, repo }) {
       await page.goto(`${origin}/games/${slug}/`, { waitUntil: 'load' });
       await page.waitForFunction(slug => !!window.Kit && (slug === 'skybound-golf'
         ? !!window.GolfArt && !!window.GolfPhysics && !!document.getElementById('title-screen')
-        : !!window.__game), slug);
+        : !!window.__game || !!document.getElementById('gameBoard')?.dataset.moves), slug);
       await page.evaluate(() => {
         const panel = document.createElement('div');
         panel.id = 'regression-controls';

@@ -50,12 +50,16 @@ jobs:
           cache: npm
       - name: Install development tools
         run: npm ci
+      - name: Install isolated multiplayer server dependencies
+        run: npm ci --prefix multiplayer-server
       - name: Install Chromium and its system dependencies
         run: npx playwright install --with-deps --no-shell chromium
       - name: Smoke-test all source games
         run: npm run check
       - name: Test source, build safety and harness regressions
         run: node tools/ci-run.mjs npm test
+      - name: Test multiplayer server and source game lobbies
+        run: npm run test:multiplayer
       - name: Build the fast site
         run: npm run build
       - name: Smoke-test all built games
@@ -64,6 +68,10 @@ jobs:
           SG_ROOT: _site
       - name: Test optimized gameplay and harness regressions
         run: node tools/ci-run.mjs npm test
+        env:
+          SG_ROOT: _site
+      - name: Test multiplayer in the single-file fast build
+        run: node tools/test-multiplayer.mjs
         env:
           SG_ROOT: _site
       - name: Test offline installation, updates and the kill switch

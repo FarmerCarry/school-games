@@ -138,6 +138,14 @@ async function openOfflineGame(page, slug) {
   assert.ok(response.fromServiceWorker(), slug + ' document comes from the offline worker');
   await frame.waitForLoadState('load');
   assert.ok(await frame.locator('canvas, .sg-overlay, button').count() > 0, slug + ' initializes its game document');
+  if (slug === 'connect-four' || slug === 'tic-tac-toe') {
+    await frame.locator('#pcButton').click();
+    await frame.locator('#gameBoard [data-move="3"]').click();
+    // This suite deliberately disables iframe animation frames; the board's AI
+    // uses a timer, so observe it with timer polling rather than Playwright's RAF.
+    await frame.waitForFunction(() => document.getElementById('gameBoard').dataset.moves === '2', undefined, { polling: 50 });
+    assert.equal(await frame.locator('#boardApp').getAttribute('data-mode'), 'computer', slug + ' computer opponent plays entirely from cache');
+  }
 }
 async function kill(inspector, page, scope, killBuild) {
   const base = new URL(scope).pathname;
@@ -223,7 +231,7 @@ try {
     check(true, `first visit stores all ${v1.count} files`);
     await offlineReload(context, [page]);
     await context.setOffline(true);
-    for (const slug of ['rail-rush', 'merge-2048', 'fire-and-ice', 'road-hopper', 'block-world', 'skybound-golf']) {
+    for (const slug of ['rail-rush', 'merge-2048', 'fire-and-ice', 'road-hopper', 'block-world', 'skybound-golf', 'connect-four', 'tic-tac-toe']) {
       await openOfflineGame(page, slug);
       check(true, 'offline game loads: ' + slug);
     }

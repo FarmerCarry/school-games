@@ -29,6 +29,14 @@ window.CATEGORIES = [
 // Key labels: arrows and letters as printed on the keyboard; 'مسافة' = Space,
 // 'انقر' = click, 'الفأرة' = mouse, 'اسحب' = drag.
 window.GAMES = [
+  { slug: 'connect-four', title: 'أربعة على التوالي', en: 'Connect 4 Connect Four online multiplayer', cats: ['two-player', 'puzzle'], players: '1-2', color: '#4389ff',
+    blurb: 'اجمع 4 قطع متتالية! العب ضد الكمبيوتر أو ادعُ زميلًا من داخل اللعبة.',
+    tip: 'لكل لعبة قائمة لاعبين خاصة بها. اللعب ضد الكمبيوتر يعمل دون إنترنت؛ اللعب مع زميل يحتاج اتصالًا.',
+    controls: [{ keys: ['الفأرة'], action: 'اختر عمودًا لإسقاط قطعتك' }, { keys: ['←', '→', 'Enter'], action: 'اختر عمودًا ثم العب' }] },
+  { slug: 'tic-tac-toe', title: 'إكس أو', en: 'Tic Tac Toe noughts crosses online multiplayer', cats: ['two-player', 'puzzle'], players: '1-2', color: '#b688ff',
+    blurb: 'ثلاث علامات في صف واحد! تحدَّ الكمبيوتر أو زميلًا ينتظرك داخل اللعبة.',
+    tip: 'اكتب اسم العرض لتظهر لزملائك داخل إكس أو. يمكنك اللعب ضد الكمبيوتر دون إنترنت.',
+    controls: [{ keys: ['الفأرة'], action: 'اختر مربعًا فارغًا' }, { keys: ['←', '↑', '→', '↓', 'Enter'], action: 'اختر مربعًا ثم العب' }] },
   { slug: 'splat-strike', title: 'ضربة الطلاء', en: 'Splat Strike paintball shooter fps', cats: ['shooter', 'battle'], players: '1', color: '#ff3d8b', hot: true,
     blurb: 'معركة طلاء ثلاثية الأبعاد! صوّب ولطّخ الروبوتات واربح المباراة!',
     controls: [{ keys: ['W', 'A', 'S', 'D'], action: 'تحرّك' }, { keys: ['الفأرة'], action: 'صوّب' }, { keys: ['انقر'], action: 'أطلق الطلاء' }, { keys: ['مسافة'], action: 'قفز' }] },

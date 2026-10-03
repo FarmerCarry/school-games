@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+<rect width="400" height="400" rx="45" fill="#10142b"/>
+<circle cx="48" cy="55" r="43" fill="#1d284b"/><circle cx="367" cy="344" r="72" fill="#1d284b"/>
+<g transform="translate(45 49) rotate(5 155 150)">
+<rect x="-4" y="14" width="318" height="318" rx="29" fill="#090e23"/>
+<rect width="310" height="310" rx="25" fill="#1b2b50" stroke="#426ca9" stroke-width="4"/>
+<g fill="#2b436a"><rect x="13" y="13" width="88" height="88" rx="13"/><rect x="111" y="13" width="88" height="88" rx="13"/><rect x="209" y="13" width="88" height="88" rx="13"/><rect x="13" y="111" width="88" height="88" rx="13"/><rect x="111" y="111" width="88" height="88" rx="13"/><rect x="209" y="111" width="88" height="88" rx="13"/><rect x="13" y="209" width="88" height="88" rx="13"/><rect x="111" y="209" width="88" height="88" rx="13"/><rect x="209" y="209" width="88" height="88" rx="13"/></g>
+<g stroke="#ffca45" stroke-width="15" stroke-linecap="round"><path d="m35 35 44 44m0-44L35 79M133 133l44 44m0-44-44 44m98 54 44 44m0-44-44 44m0-240 44 44m0-44-44 44"/></g>
+<g stroke="#ff6474" fill="none" stroke-width="14"><circle cx="155" cy="57" r="23"/><circle cx="57" cy="155" r="23"/><circle cx="155" cy="253" r="23"/></g>
+<path d="m39 39 232 232" stroke="white" stroke-width="7" stroke-linecap="round" opacity=".8"/>
+</g><path d="m50 31 4 12 12 4-12 4-4 12-4-12-12-4 12-4Z" fill="#ffca45"/>
+</svg>
