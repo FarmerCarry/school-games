@@ -5,6 +5,9 @@ services:
     name: school-games-multiplayer
     runtime: node
     plan: free
+    region: frankfurt
+    # Deploy updates between classes: restarting clears active matches.
+    autoDeployTrigger: 'off'
     buildCommand: npm ci --prefix multiplayer-server
     startCommand: npm --prefix multiplayer-server start
     healthCheckPath: /health

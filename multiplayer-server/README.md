@@ -29,6 +29,15 @@ first connection; see [Render's free-service limits](https://render.com/docs/fre
 An always-on host is preferable if the lobby must be ready immediately at recess.
 No service has been provisioned by adding this file.
 
+The Blueprint selects Frankfurt and disables automatic deployments so a code push
+does not restart students' active matches. Deploy future backend updates manually
+between classes. The initial deployment still runs when the service is created.
+
+During the pilot, select `feat/per-game-multiplayer` as the Blueprint branch; after
+the multiplayer changes are merged, the service can follow `main`. Once Render
+shows the service as live, copy its public `https://...onrender.com` URL for the
+website configuration. No API key or student accounts are needed for this setup.
+
 Run this directory on a Node host that supports long-lived WebSocket connections, with the **repository root** as its source/build directory so `shared/board-rules.js` is available.
 
 | Setting | Value |
