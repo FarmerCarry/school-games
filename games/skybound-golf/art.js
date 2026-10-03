@@ -37,7 +37,7 @@
   }
 
   function background(c, s, p, world) {
-    var cam = s.cam || { x: -45, y: 0, zoom: 1 }, t = s.time || 0;
+    var cam = s.cam || { x: -45, y: 0, zoom: 1 }, t = s.reducedMotion ? 0 : (s.time || 0);
     var up = clamp(cam.y * 1.1, 0, 310), pan = cam.x * .38;
     var grad = c.createLinearGradient(0, 0, 0, H); grad.addColorStop(0, p.sky[0]); grad.addColorStop(1, p.sky[1]); c.fillStyle = grad; c.fillRect(0, 0, W, H);
     if (world === 3) {
@@ -96,6 +96,24 @@
       var alpha = clamp((up - 120) / 400, 0, .4); c.fillStyle = 'rgba(23,41,98,' + alpha + ')'; c.fillRect(0, 0, W, H);
       for (var a = 0; a < 26; a++) { c.globalAlpha = alpha; circle(c, hash(a + 351) * W, hash(a + 45) * 300, 1.5, '#ffffff'); } c.globalAlpha = 1;
     }
+  }
+
+  // One half-resolution distant backdrop, reused across worlds and frames.
+  // 640 * 360 * 4 = 921,600 backing bytes, independent of DPR/distance.
+  // Keeping this opaque and small avoids a large first-paint surface transfer;
+  // the foreground and ball are still drawn at the full fitted resolution.
+  // Distant scenery is deliberately still; physics/camera/foreground stay live.
+  var backdrop = null, backdropWorld = -1;
+  function scenery(c, p, world) {
+    if (!backdrop) { backdrop = document.createElement('canvas'); backdrop.width = W / 2; backdrop.height = H / 2; }
+    if (backdropWorld !== world) {
+      var b = backdrop.getContext('2d', {alpha:false});
+      b.setTransform(.5,0,0,.5,0,0);
+      background(b, {cam:{x:-45,y:0,zoom:1},time:0}, p, world);
+      b.fillStyle = world === 3 ? 'rgba(40,45,83,.20)' : 'rgba(242,247,222,.27)';
+      b.fillRect(0,0,W,H); backdropWorld = world;
+    }
+    c.drawImage(backdrop,0,0,W,H);
   }
 
   function flower(c, x, y, size, p, moon) {
@@ -163,7 +181,8 @@
       ellipse(c, rx - 14 * cam.zoom, ry + 38 * cam.zoom, 3 * cam.zoom, 2.2 * cam.zoom, world === 3 ? '#5c6285' : '#8b4c2e');
     }
     c.restore();
-    line(c, points, p.edge, 20 * cam.zoom); line(c, points.map(function (a) { return [a[0], a[1] - 4 * cam.zoom]; }), p.grass, 13 * cam.zoom);
+    line(c, points, p.soilDark, Math.max(14,24 * cam.zoom));
+    line(c, points, p.edge, Math.max(11,20 * cam.zoom)); line(c, points.map(function (a) { return [a[0], a[1] - 3 * cam.zoom]; }), p.grass, Math.max(7,12 * cam.zoom));
     if (scale > 1.8) {
       for (var decor = Math.floor(min / 9); decor < max / 9 + 1; decor++) {
         var dx = decor * 9 + hash(decor + 880) * 7, xx = tr.sx(dx), yy = tr.sy(h(dx)) - 3 * cam.zoom;
@@ -176,7 +195,7 @@
       var x = tr.sx(f.x), y = tr.sy(h(f.x)), width = Math.max(8, (f.width || 8) * scale), z = cam.zoom;
       if (f.type === 'green') {
         ellipse(c, x, y - 2 * z, width * .5, 5.8 * z, world === 3 ? '#dedaee' : '#c6ed63');
-        flag(c, tr.sx(f.holeX == null ? f.x : f.holeX), tr.sy(h(f.holeX == null ? f.x : f.holeX)), z, s.time || 0, world);
+        flag(c, tr.sx(f.holeX == null ? f.x : f.holeX), tr.sy(h(f.holeX == null ? f.x : f.holeX)), z, s.reducedMotion ? 0 : (s.time || 0), world);
       } else if (f.type === 'sand') {
         ellipse(c, x, y + z, width * .53, 6 * z, '#d5a562'); ellipse(c, x, y - z, width * .5, 5.5 * z, '#ffe2a0');
         line(c, [[x - width * .31, y - z], [x - width * .18, y - 2 * z]], '#fff1bb', 2 * z);
@@ -184,7 +203,7 @@
         c.save(); c.translate(x, y); c.scale(z, z); ellipse(c, 0, 1, width / z * .58, 5, 'rgba(44,75,65,.2)');
         pill(c, -width / z * .5, -8, width / z, 10, 4, '#257d86'); pill(c, -width / z * .53, -11, width / z * 1.06, 7, 3, '#ffe45a');
         for (var b = -1; b <= 1; b++) line(c, [[b * 12 - 3, -12], [b * 12, -16], [b * 12 + 3, -12]], '#fff9c9', 2); c.restore();
-      } else if (f.type === 'tree') tree(c, x, y, (f.height || 16) * scale, p, world, f.x, s.time || 0);
+      } else if (f.type === 'tree') tree(c, x, y, (f.height || 16) * scale, p, world, f.x, s.reducedMotion ? 0 : (s.time || 0));
     });
     if (s.best > 12 && tr.sx(s.best) > -30 && tr.sx(s.best) < W + 30) {
       var bx = tr.sx(s.best), by = tr.sy(h(s.best)); c.save(); c.setLineDash([4, 6]); line(c, [[bx, by - 10], [bx, by - 86 * Math.max(.5, cam.zoom)]], '#fbefaa', 2); c.restore();
@@ -250,9 +269,9 @@
   }
 
   function golfBall(c, x, y, r, time, bright) {
-    r = Math.max(5, r);
+    r = Math.max(2, r);
     if (bright) { c.globalAlpha = .2; circle(c, x, y, r + 7, '#fffbd9'); c.globalAlpha = .08; circle(c, x, y, r + 15, '#fffbd9'); c.globalAlpha = 1; }
-    circle(c, x, y + 1, r + 1, '#678f99'); circle(c, x, y, r, '#fffef3');
+    circle(c, x, y, r + 3, '#fff9db'); circle(c, x, y, r + 1.8, '#24464d'); circle(c, x, y, r, '#fffef3');
     c.save(); c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.clip();
     c.beginPath(); c.arc(x - r * .22, y - r * .3, r * 1.1, .2, Math.PI * .8); c.lineTo(x + r, y + r); c.lineTo(x - r, y + r); c.fillStyle = '#dce8e5'; c.fill();
     if (r > 5.8) { circle(c, x - r * .3, y - r * .25, r * .12, '#bcd5d9'); circle(c, x + r * .36, y - r * .32, r * .11, '#bcd5d9'); circle(c, x + r * .12, y + r * .3, r * .11, '#bcd5d9'); circle(c, x - r * .41, y + r * .42, r * .095, '#bcd5d9'); }
@@ -261,7 +280,7 @@
 
   function flight(c, s, tr) {
     var ball = s.ball; if (!ball) return;
-    var t = s.time || 0, x = tr.sx(ball.x), y = tr.sy(ball.y), r = Math.max(5.4, (ball.r || .7) * tr.scale), trail = s.trail || [];
+    var t = s.reducedMotion ? 0 : (s.time || 0), x = tr.sx(ball.x), y = tr.sy(ball.y), r = Math.max(8, (ball.r || .7) * tr.scale), trail = s.trail || [];
     if (trail.length > 1) {
       c.save(); c.lineCap = 'round';
       for (var i = 1; i < trail.length; i++) {
@@ -273,8 +292,8 @@
     var gy = tr.sy(tr.height(ball.x)), gap = Math.max(0, ball.y - tr.height(ball.x));
     if (gap < 25) { c.globalAlpha = .2 * (1 - gap / 25); ellipse(c, x, gy - 2, r * (1.6 + gap * .04), r * .37, '#275c4d'); c.globalAlpha = 1; }
     if (s.phase === 'ready' || s.phase === 'title') { line(c, [[x, gy - 1], [x, y + r]], '#d9914d', 3 * Math.max(.6, s.cam.zoom)); line(c, [[x - 4, y + r], [x + 4, y + r]], '#f0c278', 2); }
-    golfBall(c, x, y, r, t, s.phase === 'flight');
-    if (s.phase === 'flight' && s.quality >= .9) {
+    golfBall(c, x, y, r, t, s.phase === 'flight' && !s.reducedMotion);
+    if (s.phase === 'flight' && s.quality >= .9 && !s.reducedMotion) {
       c.save(); c.translate(x, y); c.rotate(t * 2); c.globalAlpha = .7;
       for (var n = 0; n < 4; n++) { c.rotate(Math.PI * .5); shape(c, [[r + 7, 0], [r + 13, -2], [r + 19, 0], [r + 13, 2]], '#fff8bf'); } c.restore();
     }
@@ -284,17 +303,23 @@
   }
 
   function particles(c, s, tr) {
+    if (s.impact && !s.reducedMotion) {
+      var impact = s.impact, progress = impact.age / .32;
+      c.globalAlpha = (1-progress)*.7;
+      c.beginPath(); c.ellipse(tr.sx(impact.x),tr.sy(impact.y),8+progress*(12+impact.strength*16),3+progress*6,0,0,Math.PI*2);
+      c.strokeStyle = '#fff4ba'; c.lineWidth = 2; c.stroke(); c.globalAlpha = 1;
+    }
     (s.particles || []).forEach(function (p) {
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
       c.globalAlpha = clamp(p.life / (p.max || p.life || 1), 0, 1);
       var x = tr.sx(p.x), y = tr.sy(p.y), size = Math.max(1.2, (p.size || 1) * tr.scale);
-      if (p.square) { c.save(); c.translate(x, y); c.rotate((s.time || 0) * (p.vx || 1)); c.fillStyle = p.color || '#fff6bd'; c.fillRect(-size, -size, size * 2, size * 2); c.restore(); }
+      if (p.square) { c.save(); c.translate(x, y); c.rotate((s.reducedMotion ? 0 : (s.time || 0)) * (p.vx || 1)); c.fillStyle = p.color || '#fff6bd'; c.fillRect(-size, -size, size * 2, size * 2); c.restore(); }
       else circle(c, x, y, size, p.color || '#fff6bd');
     }); c.globalAlpha = 1;
   }
 
   function putting(c, s, p, world) {
-    var putt = s.putt || { x: .1, target: .82 }, time = s.time || 0, x = 220 + 850 * (putt.ballX == null ? (putt.x == null ? .1 : putt.x) : putt.ballX), hole = 220 + 850 * (putt.target == null ? .82 : putt.target);
+    var putt = s.putt || { x: .1, target: .82 }, time = s.reducedMotion ? 0 : (s.time || 0), x = 220 + 850 * (putt.ballX == null ? (putt.x == null ? .1 : putt.x) : putt.ballX), hole = 220 + 850 * (putt.target == null ? .82 : putt.target);
     var yy = 510;
     c.fillStyle = p.soil; c.fillRect(0, yy, W, H - yy);
     c.beginPath(); c.moveTo(0, yy); c.bezierCurveTo(240, yy - 6, 1130, yy - 6, W, yy); c.lineTo(W, H); c.lineTo(0, H); c.closePath(); c.fillStyle = p.soil; c.fill();
@@ -308,8 +333,10 @@
     ellipse(c, hole, yy - 6, 13, 4, '#304743');
     golfer(c, 220 + 850 * Math.min(putt.start == null ? .12 : putt.start, .27) - 75, yy - 10, 1.3, time, s.phase === 'putt-roll' ? (s.shotAge || 0) : 0, true);
     if (!putt.sunk) golfBall(c, x, yy - 16, 8, time, s.phase === 'putt-roll');
-    if (putt.sunk) {
-      for (var n = 0; n < 8; n++) { var angle = n * Math.PI / 4 + time * .5, rr = 23 + Math.sin(time * 6) * 5; circle(c, hole + Math.cos(angle) * rr, yy - 33 + Math.sin(angle) * rr, 3.5, n % 2 ? '#ffe56e' : '#fffad4'); }
+    if (putt.sunk && putt.hold < .38) {
+      var drop = s.reducedMotion ? 1 : clamp(putt.hold / .38,0,1);
+      c.save(); c.beginPath(); c.rect(hole-20,yy-40,40,34); c.clip();
+      golfBall(c,hole,yy-16+drop*19,8*(1-drop*.65),0,false); c.restore();
     }
   }
 
@@ -321,17 +348,21 @@
     var scale = 5 * cam.zoom;
     var tr = { scale: scale, sx: function (x) { return (x - cam.x) * scale; }, sy: function (y) { return BASE - (y - cam.y) * scale; }, height: function (x) { return window.GolfPhysics && s.course ? window.GolfPhysics.heightAt(s.course, x) : 0; } };
     c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.globalAlpha = 1;
-    background(c, s, p, world);
-    if (s.phase === 'putting' || s.phase === 'putt-roll' || s.putt && s.putt.active) putting(c, s, p, world);
+    scenery(c, p, world);
+    if (s.phase === 'putting' || s.phase === 'putt-roll' || s.putt && s.putt.active) {
+      c.save();
+      var settle = s.reducedMotion ? 0 : (1-(s.putt.arrival || 0))*10;
+      c.translate(0,settle); putting(c, s, p, world); c.restore();
+    }
     else {
       terrain(c, s, p, world, tr);
       var gx = tr.sx(-7), gy = tr.sy(tr.height(-7));
       if (s.phase === 'title') {
-        golfer(c, 280, gy - 3, 1.8, s.time || 0, 0, false);
+        golfer(c, 280, gy - 3, 1.8, s.reducedMotion ? 0 : (s.time || 0), 0, false);
         // Title's miniature tee ball keeps the illustration self-contained.
         line(c, [[395, gy - 2], [395, gy - 14]], '#d99a54', 4); golfBall(c, 395, gy - 23, 9, 0, false);
       } else {
-        if (gx > -150 && gx < W + 100) golfer(c, gx - 22 * cam.zoom, gy - 2 * cam.zoom, cam.zoom, s.time || 0, s.phase === 'flight' ? (s.shotAge || 0) : 0, false);
+        if (gx > -150 && gx < W + 100) golfer(c, gx - 22 * cam.zoom, gy - 2 * cam.zoom, cam.zoom, s.reducedMotion ? 0 : (s.time || 0), s.phase === 'flight' ? (s.shotAge || 0) : 0, false);
         flight(c, s, tr);
       }
       particles(c, s, tr);
