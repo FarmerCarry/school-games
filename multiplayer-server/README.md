@@ -27,7 +27,9 @@ health endpoint and browser origin below. Review the selected plan before creati
 the service. Render's free service can sleep while unused, so allow for a delayed
 first connection; see [Render's free-service limits](https://render.com/docs/free).
 An always-on host is preferable if the lobby must be ready immediately at recess.
-No service has been provisioned by adding this file.
+Adding this file alone does not provision a service. The school-games deployment
+uses `https://school-games-multiplayer.onrender.com`, configured in
+`shared/multiplayer-config.js` with the `wss://` scheme and `/ws` path.
 
 The Blueprint selects Frankfurt and disables automatic deployments so a code push
 does not restart students' active matches. Deploy future backend updates manually

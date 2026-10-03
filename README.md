@@ -56,8 +56,9 @@ you from its live list. Brief connection interruptions allow the same tab to rec
 
 The site stays on GitHub Pages. Cross-PC play additionally needs the small service in
 [`multiplayer-server/`](multiplayer-server/README.md), deployed separately, and its secure
-WebSocket URL in `shared/multiplayer-config.js`. The committed URL is empty until a real
-service is available; no demo players or simulated online matches are shown. See the
+WebSocket URL in `shared/multiplayer-config.js`. This site uses
+`wss://school-games-multiplayer.onrender.com/ws`; no demo players or simulated online
+matches are shown. Set the URL to an empty string to disable online play. See the
 server README for setup, hosting, origin restrictions, capacity and restart behavior.
 
 Only these two games load the multiplayer client. There is no site-wide player list,
