@@ -2,6 +2,7 @@
 /* Browser checks for both shared-PC board games and their computer opponents.
  * node tools/test-board-games.mjs
  * SG_ROOT=_site node tools/test-board-games.mjs
+ * node tools/test-board-games.mjs --portal-only # focus on embedding and layout
  * Set SG_BOARD_SCREENSHOTS to a directory outside the checkout for evidence.
  */
 import assert from 'node:assert/strict';
@@ -40,10 +41,10 @@ async function moves(scope, count) {
 async function mode(scope, value) {
   await waitFor(async () => await scope.locator('#boardApp').getAttribute('data-mode') === value, value + ' mode');
 }
-async function screenshot(page, name) {
+async function screenshot(page, name, fullPage = true) {
   if (!process.env.SG_BOARD_SCREENSHOTS) return;
   fs.mkdirSync(process.env.SG_BOARD_SCREENSHOTS, { recursive: true });
-  await page.screenshot({ path: path.join(process.env.SG_BOARD_SCREENSHOTS, name + '.png'), fullPage: true });
+  await page.screenshot({ path: path.join(process.env.SG_BOARD_SCREENSHOTS, name + '.png'), fullPage });
 }
 async function fits(scope, selectors, label) {
   for (const selector of selectors) {
@@ -337,11 +338,17 @@ async function portalAndMobile() {
     await page.locator(`#stage iframe[src*="${game}"]`).waitFor();
     const frame = page.frameLocator('#stage iframe');
     await mode(frame, 'menu');
+    await page.evaluate(() => document.fonts.ready);
+    // fitStage measures the portal toolbar. Repeated resize must not feed its
+    // wrapped text height back into an ever smaller, unusable game iframe.
+    await page.setViewportSize({ width: 1100, height: 619 });
+    await page.setViewportSize({ width: 1100, height: 620 });
+    await page.waitForTimeout(180);
     await fits(frame, ['#localButton', '#pcButton', '#gameBoard', '#turnLine'], game + ' embedded chooser');
     await start(frame);
     await sequence(frame, WIN[game]);
     await fits(frame, ['#gameBoard', '#rematchButton', '#leaveMatch'], game + ' embedded result');
-    await screenshot(page, 'portal-' + game + '-local');
+    await screenshot(page, 'portal-' + game + '-local', false);
     await frame.locator('#leaveMatch').click();
     await start(frame, 'computer');
     await move(frame, 0).click();
@@ -377,13 +384,15 @@ try {
   console.log('Shared-PC board browser checks (' + (path.relative(REPO, ROOT) || 'source') + ')');
   site = await startTestServer(ROOT);
   browser = await launchChromium();
-  for (const game of GAMES) {
-    await localRounds(game);
-    await keyboardAndLifecycle(game);
-    await computerRounds(game);
-    await standaloneAndOffline(game);
+  if (!process.argv.includes('--portal-only')) {
+    for (const game of GAMES) {
+      await localRounds(game);
+      await keyboardAndLifecycle(game);
+      await computerRounds(game);
+      await standaloneAndOffline(game);
+    }
+    await animation();
   }
-  await animation();
   await portalAndMobile();
   assert.deepEqual(errors, [], 'no browser exceptions');
   console.log('\nAll shared-PC board checks passed; no WebSockets, external requests, online scripts or browser exceptions.');
