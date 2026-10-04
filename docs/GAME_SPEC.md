@@ -4,12 +4,9 @@ Players are **4th and 5th graders (ages 9–11)** on **Windows PCs with a mouse 
 at school, as a reward. Every game is **original and written from scratch** for this site:
 no copied code or art, no ads, no network calls, no links to other sites.
 
-**Online board-game exception:** Connect 4 (`connect-four`) and tic-tac-toe
-(`tic-tac-toe`) may connect to the configured WebSocket service after a student joins
-that game's lobby. This is an explicit requested feature. Their computer opponents
-must still work offline and from `file://`. Never load the online client on the portal
-or the other games. No chat, email/password signup, external assets, or site-wide lobby.
-Names and match state are ephemeral; never put service credentials into the site.
+**Board games:** Connect 4 (`connect-four`) and tic-tac-toe (`tic-tac-toe`) offer
+two players taking turns on the same PC and a computer opponent. Both modes must
+work offline and from `file://`, without player names, accounts, or a game server.
 
 The aim is **fun**: the kind of game a 10-year-old picks on Poki or CrazyGames and asks for
 "one more round". These are not educational games.
@@ -62,9 +59,9 @@ A game may only use files from its own folder plus these shared ones:
 | `../../shared/game.css`             | base page styles, the Fredoka font, overlay/panel/button/keycap classes |
 | `../../lib/three/three.min.js`      | three.js r159 (classic script, gives `window.THREE`) for 3D games |
 
-The two board games also share `board-rules.js`, `board-game.js`, `board-game.css`,
-`multiplayer-client.js` and `multiplayer-config.js` from `shared/`. These are classic
-scripts/styles inlined by the fast build and are not loaded by other games.
+The two board games also share `board-rules.js`, `board-game.js` and `board-game.css`
+from `shared/`. These are classic scripts/styles inlined by the fast build and are
+not loaded by other games.
 
 ## Hard rules
 
@@ -105,12 +102,13 @@ scripts/styles inlined by the fast build and are not loaded by other games.
 10. **No console errors** at any point: loading, playing, pausing, dying, restarting,
    resizing or reloading.
 
-For the online board games, rule 2 permits only the configured multiplayer connection.
-Rule 5's shared keyboard requirement is replaced by separate-PC play or a computer
-opponent. A player cannot pause an online match with P/Esc; computer play may pause.
+The board games use a compact DOM board and a two-choice mode menu in place of
+rule 6's arcade title screen. In local two-player mode, players share the same mouse
+or keyboard and take turns, so rule 5 does not require separate controls. Show whose
+turn it is, stop moves after a win or draw, and alternate the starter on rematches.
 Board columns stay physically left-to-right even when surrounding controls are RTL.
-The interface updates on moves/presence changes, not through a continuous render loop.
-Disconnect old game subscriptions on navigation; reconnects must not duplicate players.
+The interface updates on moves and mode changes rather than a continuous render loop.
+Cancel pending computer moves when leaving or restarting a round.
 
 ## What makes it fun (the quality bar)
 

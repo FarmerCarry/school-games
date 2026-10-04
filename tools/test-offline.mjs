@@ -139,6 +139,12 @@ async function openOfflineGame(page, slug) {
   await frame.waitForLoadState('load');
   assert.ok(await frame.locator('canvas, .sg-overlay, button').count() > 0, slug + ' initializes its game document');
   if (slug === 'connect-four' || slug === 'tic-tac-toe') {
+    await frame.locator('#localButton').click();
+    await frame.locator('#gameBoard [data-move="0"]').click();
+    await frame.locator('#gameBoard [data-move="1"]').click();
+    assert.equal(await frame.locator('#gameBoard').getAttribute('data-moves'), '2', slug + ' takes both local turns from cache');
+    assert.equal(await frame.locator('#boardApp').getAttribute('data-mode'), 'local', slug + ' shared-PC play works entirely from cache');
+    await frame.locator('#leaveMatch').click();
     await frame.locator('#pcButton').click();
     await frame.locator('#gameBoard [data-move="3"]').click();
     // This suite deliberately disables iframe animation frames; the board's AI
