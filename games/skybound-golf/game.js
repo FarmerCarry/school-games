@@ -14,7 +14,7 @@
     cam:{x:-45,y:0,zoom:1}, ball:null, trail:[], particles:[], shotAge:0,
     quality:0, best:save.best, putt:null, impact:null, reducedMotion:reducedMotion };
   var modalMode = '', paused = false, meterTime = 0, meter = 0, toastTime = 0;
-  var finishDelay = -1, resultCommitted = false, speed = 1, uiClock = 0;
+  var finishDelay = -1, shotResult = null, speed = 1, uiClock = 0;
   var renderDirty = true, renderedTime = -1;
   var lastFocus = null, lastDistance = -1, lastAriaValue = -1;
   var mute = K.muteButton(); ui.appendChild(mute);
@@ -55,7 +55,7 @@
     s.world = save.world; s.course = P.createCourse(save.world);
     s.cam = {x:-45,y:0,zoom:1}; s.ball = {x:0,y:P.heightAt(s.course,0)+.7,r:.7,vx:0,vy:0,maxX:0};
     s.trail = []; s.particles = []; s.putt = null; s.impact = null; s.shotAge = 10; s.quality = 0;
-    resultCommitted = false; finishDelay = -1; speed = 1; lastDistance = -1;
+    shotResult = null; finishDelay = -1; speed = 1; lastDistance = -1;
     toastTime = 0; $('toast').hidden = true;
   }
   function controls() {
@@ -152,14 +152,23 @@
     s.shotAge = 10; meterTime = -.5; s.putt.arrival = 0;
     toast('وصلت إلى منطقة الحفرة!',1.7); controls();
   }
-  function finish(sunk,putted) {
-    if(resultCommitted) return;
-    resultCommitted = true; finishDelay = -1; toastTime = 0; $('toast').hidden = true;
+  function commitResult(sunk) {
+    if(shotResult) return shotResult;
     var distance = Math.floor(s.ball.maxX), oldBest = save.best;
     var earned = P.reward(distance,sunk,s.ball.perfect);
+    shotResult = {distance:distance,oldBest:oldBest,earned:earned,sunk:sunk};
     save.coins = Math.min(9999999,save.coins+earned);
     save.best = Math.max(save.best,distance); save.shots++; if(sunk) save.holes++;
-    persist(); stats(); s.phase = 'result'; openModal('result');
+    persist(); stats();
+    return shotResult;
+  }
+  function finish(sunk,putted) {
+    if(s.phase==='result') return;
+    var result = commitResult(sunk);
+    var distance = result.distance, oldBest = result.oldBest, earned = result.earned;
+    sunk = result.sunk;
+    finishDelay = -1; toastTime = 0; $('toast').hidden = true;
+    s.phase = 'result'; openModal('result');
     var record = distance > oldBest;
     $('modal-heading').textContent = sunk ? 'في الحفرة!' : record ? 'رقم قياسي جديد!' : 'رحلة جميلة!';
     $('result-note').textContent = sunk ? 'تسديدة ممتازة… مكافأة إضافية!' : putted ? puttFeedback() : s.ball.surface==='sand' ? 'الرمال أوقفت الكرة… الضربة القادمة أبعد!' : 'طوّر ضربتك وانطلق أبعد';
@@ -212,6 +221,9 @@
   }
   function outcome(sunk) {
     s.putt.sunk = sunk; s.putt.rolling = false; s.putt.hold = 0;
+    // The putt is complete. Save it before the optional animation can be
+    // interrupted by leaving, reloading, or restarting the game.
+    commitResult(sunk);
     s.phase = 'outcome'; speed = 1;
     toast(sunk ? 'في الحفرة!' : puttFeedback(), 1.2); controls();
   }

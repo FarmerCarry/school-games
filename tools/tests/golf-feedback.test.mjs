@@ -28,19 +28,24 @@ async function putt(page) {
   });
   assert.equal(await page.evaluate(()=>golfState.phase),'putting');
 }
+async function completePutt(page,offset=0) {
+  await putt(page);
+  await page.locator('#hit').click();
+  await page.evaluate(offset=>{
+    const p=golfState.putt;
+    // Reproducible putts using the original deceleration and cup rules.
+    p.x=.12;p.v=Math.sqrt(2*1.6*(p.target-.12+offset));
+    for(let i=0;i<200 && golfState.phase==='putt-roll';i++) golfTick(1/60);
+  },offset);
+  assert.equal(await page.evaluate(()=>golfState.phase),'outcome');
+}
+const savedProgress = page => page.evaluate(()=>JSON.parse(localStorage.getItem('sg:skybound-golf:progress')));
 for(const [name,offset,expected] of [['short',-.3,'لم تصل'],['overshoot',.2,'تجاوزت'],['close',-.04,'قريبة جدًا'],['cup',0,'في الحفرة']]) {
   test(`Golf ${name} feedback holds, pauses, skips once and repeats without duplicate saves`,async t=>{
-    const page=await game(t);await putt(page);
-    await page.locator('#hit').click();
-    await page.evaluate(offset=>{
-      const p=golfState.putt;
-      // Reproducible putts using the original deceleration and cup rules.
-      p.x=.12;p.v=Math.sqrt(2*1.6*(p.target-.12+offset));
-      for(let i=0;i<200 && golfState.phase==='putt-roll';i++) golfTick(1/60);
-    },offset);
-    assert.equal(await page.evaluate(()=>golfState.phase),'outcome');
+    const page=await game(t);await completePutt(page,offset);
     assert.match(await page.locator('#toast').textContent(),new RegExp(expected));
-    assert.equal(await page.evaluate(()=>golfProbe.saves),0,'hold does not save');
+    assert.equal(await page.evaluate(()=>golfProbe.saves),1,'completed putt saves before its animation');
+    const completed = await savedProgress(page);
     await page.locator('#pause').click();
     await page.evaluate(()=>golfRender());
     const frozen=await page.evaluate(()=>({hold:golfState.putt.hold,draws:golfProbe.draws}));
@@ -50,14 +55,38 @@ for(const [name,offset,expected] of [['short',-.3,'لم تصل'],['overshoot',.2
     await page.locator('#continue').focus();await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(()=>golfState.phase),'result');
     assert.equal(await page.evaluate(()=>golfProbe.saves),1);
+    assert.match(await page.locator('#result-note').textContent(),new RegExp(name==='cup'?'تسديدة ممتازة':expected));
+    assert.equal(await page.locator('#modal-heading').textContent(),name==='cup'?'في الحفرة!':'رقم قياسي جديد!');
     await page.evaluate(()=>advanceGolfFrames(120));
     assert.equal(await page.evaluate(()=>golfProbe.saves),1);
+    assert.deepEqual(await savedProgress(page),completed,'showing the result never awards the shot twice');
     await page.locator('#again').click();
     assert.equal(await page.evaluate(()=>golfState.putt),null);
     await page.locator('#hit').click();await page.locator('#pause').click();await page.locator('#restart').click();
     assert.equal(await page.evaluate(()=>golfState.phase),'ready');
     assert.equal(await page.evaluate(()=>golfProbe.saves),1);
   });
+}
+for(const [name,offset,holes] of [['cup',0,1],['miss',-.3,0]]) {
+  for(const exit of ['reload','menu','restart']) {
+    test(`Golf completed ${name} survives ${exit} during its outcome animation`,async t=>{
+      const page=await game(t);await completePutt(page,offset);
+      const completed=await savedProgress(page);
+      assert(completed && completed.coins>0,'earned coins are durable before the result screen');
+      assert.equal(completed.shots,1);assert.equal(completed.holes,holes);
+      assert.equal(completed.best,await page.evaluate(()=>Math.floor(golfState.ball.maxX)));
+      if(exit!=='reload') {
+        await page.locator('#pause').click();
+        await page.locator('#'+exit).click();
+        assert.equal(await page.evaluate(()=>golfState.phase),exit==='menu'?'title':'ready');
+        assert.equal(await page.evaluate(()=>golfProbe.saves),1);
+        assert.deepEqual(await savedProgress(page),completed);
+      }
+      await page.reload();
+      assert.deepEqual(await savedProgress(page),completed,'reloading preserves exactly one completed shot');
+      assert.equal(await page.evaluate(()=>golfProbe.saves),0,'loading a saved outcome does not re-award it');
+    });
+  }
 }
 test('Golf needle aligns with original LTR target and reduced motion still completes a cup',async t=>{
   const page=await game(t,'reduce');
