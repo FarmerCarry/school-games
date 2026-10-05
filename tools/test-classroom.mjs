@@ -10,20 +10,19 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchChromium } from './browser.mjs';
 import { runScenario } from './game-scenarios.mjs';
+import { copyClassroomSite } from './classroom-files.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = process.env.SG_ROOT ? path.resolve(REPO, process.env.SG_ROOT) : REPO;
 const artifactDir = path.resolve(process.env.SG_ARTIFACT_DIR || path.join(REPO, '.work', 'classroom'));
 fs.mkdirSync(artifactDir, { recursive: true });
-const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-classroom-'));
+// Expand Windows 8.3 temp aliases (RUNNER~1) before constructing file URLs.
+const temporary = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-classroom-')));
 const folder = path.join(temporary, 'ألعاب المدرسة', 'Downloaded games with spaces');
 fs.mkdirSync(folder, { recursive: true });
-// Only distributable assets are needed. Never copy git history, node_modules,
-// test artifacts or a nested build into the classroom download.
-for (const name of ['index.html', 'favicon.svg', 'manifest.webmanifest', 'sw.js', 'games', 'css', 'js', 'shared', 'lib', 'icons']) {
-  const source = path.join(ROOT, name);
-  if (fs.existsSync(source)) fs.cpSync(source, path.join(folder, name), { recursive: true });
-}
+const inventory = copyClassroomSite(ROOT, folder, {mode: process.env.SG_ROOT ? 'build' : 'source'});
+fs.writeFileSync(path.join(artifactDir, 'download-inventory.json'), JSON.stringify({ root: ROOT, folder, files: inventory }, null, 2) + '\n');
+console.log(`Verified ${inventory.length} downloaded files at ${folder}`);
 
 const cases = [], errors = [];
 let browser;
@@ -41,7 +40,7 @@ try {
   browser = await launchChromium();
   for (const deniedStorage of [false, true]) {
     const label = deniedStorage ? 'storage-blocked' : 'normal';
-    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block', reducedMotion: 'reduce' });
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block', reducedMotion: 'reduce', offline: true });
     try {
       if (deniedStorage) {
         await context.addInitScript(() => {
@@ -56,11 +55,17 @@ try {
       page.setDefaultTimeout(10000);
       page.on('pageerror', error => errors.push(`${label}: ${error.message}`));
       page.on('console', message => { if (message.type() === 'error') errors.push(`${label}: ${message.text()}`); });
-      page.on('requestfailed', request => errors.push(`${label}: ${request.url()}: ${request.failure()?.errorText}`));
+      page.on('requestfailed', request => {
+        let disk = '';
+        if (request.url().startsWith('file:')) {
+          try { disk = fs.existsSync(fileURLToPath(request.url())) ? ' (file exists on disk)' : ' (file missing on disk)'; }
+          catch (error) { disk = ' (invalid file URL: ' + error.message + ')'; }
+        }
+        errors.push(`${label}: ${request.url()}: ${request.failure()?.errorText}${disk}`);
+      });
       page.on('request', request => {
         if (/^https?:/.test(request.url())) errors.push(`${label}: external request ${request.url()}`);
       });
-      await context.route(/^https?:/, route => route.abort());
 
       await check(page, label + '-portal', async () => {
         await page.goto(pathToFileURL(path.join(folder, 'index.html')).href);

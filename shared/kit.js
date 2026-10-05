@@ -51,12 +51,15 @@
 
   /* --------------------------------------------------------- preferences */
   // System default, with an explicit local override shared by every game.
+  // Classroom preferences are transient, including when file:// gives each
+  // game a separate storage area. Personal settings never inherit the preset.
+  var classroomMode = false;
   var motionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   var motionListeners = [];
   function validMotion(value) { return value === 'reduce' || value === 'full' ? value : 'system'; }
   Kit.motion = {
     preference: validMotion(siteStore.get('motion', 'system')),
-    reduced: function () { return this.preference === 'reduce' || (this.preference === 'system' && !!(motionQuery && motionQuery.matches)); },
+    reduced: function () { return classroomMode || this.preference === 'reduce' || (this.preference === 'system' && !!(motionQuery && motionQuery.matches)); },
     setPreference: function (value) { this.preference = validMotion(value); siteStore.set('motion', this.preference); paintMotion(); },
     onChange: function (fn) { motionListeners.push(fn); return function () { var i = motionListeners.indexOf(fn); if (i !== -1) motionListeners.splice(i, 1); }; }
   };
@@ -121,6 +124,10 @@
     if (message.type === 'sg:pause') suspend(message.reason || 'portal');
     else if (message.type === 'sg:request-ready' && ready && !failed) Kit.ready();
     else if (message.type === 'sg:preferences') {
+      if (typeof message.classroom === 'boolean') {
+        classroomMode = message.classroom;
+        paintMotion(); paintAudio();
+      }
       if (typeof message.quiet === 'boolean') audio.setMuted(message.quiet);
       if (typeof message.motionPreference === 'string') Kit.motion.setPreference(message.motionPreference);
       else if (typeof message.reducedMotion === 'boolean') Kit.motion.setPreference(message.reducedMotion ? 'reduce' : 'full');
@@ -130,7 +137,8 @@
   /* --------------------------------------------------------------- audio */
   // Synthesised sound effects (no audio files). The AudioContext is created
   // lazily on the first user gesture, as browsers require.
-  var audio = { ctx: null, master: null, muted: !!siteStore.get('muted', false) };
+  var personalMuted = !!siteStore.get('muted', false);
+  var audio = { ctx: null, master: null, muted: personalMuted };
   Kit.audio = audio;
 
   audio.unlock = function () {
@@ -148,21 +156,24 @@
     return audio.ctx;
   };
 
-  audio.setMuted = function (m) {
-    audio.muted = !!m;
-    siteStore.set('muted', audio.muted);
+  function paintAudio() {
+    audio.muted = classroomMode || personalMuted;
     if (audio.master) audio.master.gain.setTargetAtTime(audio.muted ? 0 : 0.5, audio.ctx.currentTime, 0.015);
     muteListeners.forEach(function (fn) { fn(audio.muted); });
+  }
+  audio.setMuted = function (m) {
+    personalMuted = !!m;
+    siteStore.set('muted', personalMuted);
+    paintAudio();
   };
-  audio.toggleMute = function () { audio.setMuted(!audio.muted); return audio.muted; };
+  audio.toggleMute = function () { if (!classroomMode) audio.setMuted(!personalMuted); return audio.muted; };
   var muteListeners = [];
   audio.onMuteChange = function (fn) { muteListeners.push(fn); };
   window.addEventListener('storage', function (e) {
     if (e.key === 'sg:site:motion' || e.key === null) { Kit.motion.preference = validMotion(siteStore.get('motion', 'system')); paintMotion(); }
     if (e.key === 'sg:site:muted' || e.key === null) {
-      audio.muted = !!siteStore.get('muted', false);
-      if (audio.master) audio.master.gain.setTargetAtTime(audio.muted ? 0 : 0.5, audio.ctx.currentTime, 0.015);
-      muteListeners.forEach(function (fn) { fn(audio.muted); });
+      personalMuted = !!siteStore.get('muted', false);
+      paintAudio();
     }
   });
 
@@ -455,7 +466,11 @@
     b.type = 'button';
     b.setAttribute('aria-label', 'كتم الصوت');
     b.title = opts.key === false ? 'الصوت' : 'الصوت (M)';
-    function paint() { b.textContent = audio.muted ? '🔇' : '🔊'; b.setAttribute('aria-pressed', String(audio.muted)); }
+    function paint() {
+      b.textContent = audio.muted ? '🔇' : '🔊'; b.setAttribute('aria-pressed', String(audio.muted));
+      b.disabled = classroomMode;
+      b.title = classroomMode ? 'الصوت مكتوم في وضع الصف' : (opts.key === false ? 'الصوت' : 'الصوت (M)');
+    }
     paint();
     audio.onMuteChange(paint);
     b.addEventListener('click', function (e) { e.stopPropagation(); audio.unlock(); audio.toggleMute(); if (e.detail > 0) b.blur(); });

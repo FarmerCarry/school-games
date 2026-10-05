@@ -139,7 +139,8 @@ estimate for choosing a game, not a time limit; `inputStyle` describes its contr
 Returning from a game restores the originating tile and browsing position.
 
 The classroom controls offer quiet sound, reduced effects, and an optional session
-timer. When time expires, the game pauses behind a handoff prompt; it is not closed
+timer. The quiet/effects preset is temporary and preserves each game's personal
+preferences. When time expires, the game pauses behind a handoff prompt; it is not closed
 or reset. Resume is explicit. Games also pause when focus leaves their playing
 window, including Shift+Tab back to the portal and leaving fullscreen.
 

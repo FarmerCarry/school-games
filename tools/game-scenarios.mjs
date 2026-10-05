@@ -1,6 +1,7 @@
 /* Real UI smoke scenarios. Debug hooks are read-only here: starting, moving,
  * pausing and restarting all go through the same controls as a player. */
 import assert from 'node:assert/strict';
+import { clickControl } from './ui-input.mjs';
 
 const g = 'window.__game';
 const select = (expr, fields) => `(() => { const s = ${expr}; return [${fields.map(f => `s.${f}`).join(',')}]; })()`;
@@ -10,7 +11,7 @@ const hold = (key = 'ArrowRight', ms = 220) => async page => {
   await page.waitForTimeout(ms);
   await page.keyboard.up(key);
 };
-const click = selector => async page => { await page.locator(selector).first().click({ timeout: 5000 }); };
+const click = selector => page => clickControl(page, selector);
 const sequence = (...steps) => async page => { for (const step of steps) await step(page); };
 const move = async page => { await page.mouse.move(400, 220, { steps: 8 }); await page.waitForTimeout(240); };
 const defaults = (start, active, snapshot, input, pause, paused, restart, reset, extra = {}) =>
@@ -148,8 +149,11 @@ export async function runScenario(page, slug, { mode = 'smoke' } = {}) {
   const inputSnapshot = s.inputSnapshot || s.snapshot;
   const before = await evaluate(page,`JSON.stringify(${inputSnapshot})`);
   await performInput(page,slug);
-  const after = await evaluate(page,`JSON.stringify(${inputSnapshot})`);
-  assert.notEqual(after,before,`${slug}: primary input must change gameplay (${before})`);
+  // Software-rendered CI can deliver the next simulation/HUD update late.
+  // Require observable input progress, waiting within the same bounded gate
+  // as startup, rather than assuming it must be painted after 120 ms.
+  await requireState(page,`JSON.stringify(${inputSnapshot}) !== ${JSON.stringify(before)}`,
+    `${slug}: primary input must change gameplay (${before})`);
   checks.push('Primary input changes gameplay');
   if (mode === 'performance') return {slug,checks};
   if (!s.noPause) {

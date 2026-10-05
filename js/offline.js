@@ -4,7 +4,7 @@
   var status = document.getElementById('offlineStatus');
   var retry = document.getElementById('offlineRetry');
   if (!status || !retry) return;
-  var registration = null, starting = false, checking = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0;
+  var registration = null, starting = false, checking = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0, observedWorker = null;
   function paint(state, text, canRetry) {
     status.hidden = false;
     status.setAttribute('data-state', state);
@@ -41,11 +41,17 @@
       catch (e) { finish(e); }
     });
   }
+  function hasWorker(owner) {
+    return owner && [owner.active, owner.installing, owner.waiting].some(function (worker) {
+      return worker && worker.state !== 'redundant';
+    });
+  }
   async function inspect(repair) {
     if (checking) { queued = true; queuedRepair = queuedRepair || !!repair; return; }
     if (!registration) return start();
-    var worker = registration.active;
+    var owner = registration, worker = owner.active;
     if (!worker) {
+      if (repair && !hasWorker(owner)) return start();
       paint('preparing', 'جارٍ تجهيز الألعاب للعمل دون إنترنت…', true);
       return;
     }
@@ -53,52 +59,68 @@
     paint('checking', repair ? 'جارٍ إصلاح النسخة المحفوظة…' : 'جارٍ التحقق من الألعاب المحفوظة…', false);
     try {
       var result = await ask(worker, repair);
-      if (worker !== registration.active) { queued = true; return; }
+      if (owner !== registration || worker !== owner.active) { queued = true; return; }
       if (result.ready && result.count === result.total && result.total > 0) {
         paint('ready', registration.installing ? 'جاهز دون إنترنت — جارٍ تنزيل تحديث' : 'جاهز دون إنترنت', false);
       } else {
         paint('unavailable', 'النسخة دون إنترنت غير مكتملة — اتصل بالإنترنت ثم أعد المحاولة', true);
       }
     } catch (e) {
-      paint('unavailable', 'تعذّر التأكد من النسخة دون إنترنت — أعد المحاولة', true);
+      if (owner !== registration || worker !== owner.active) queued = true;
+      else paint('unavailable', 'تعذّر التأكد من النسخة دون إنترنت — أعد المحاولة', true);
     } finally {
       checking = false;
       retry.disabled = false;
       if (queued) { var repairNext = queuedRepair; queued = queuedRepair = false; inspect(repairNext); }
     }
   }
-  function observe(worker) {
+  function observe(owner, worker) {
+    if (owner !== registration) return;
     if (!worker) return;
+    observedWorker = worker;
     clearTimeout(installingTimer);
     installingTimer = setTimeout(function () {
-      if (!registration.active) paint('unavailable', 'لم يكتمل تنزيل الألعاب بعد — أعد المحاولة عند الاتصال', true);
+      if (owner !== registration || worker !== observedWorker) return;
+      if (!owner.active) paint('unavailable', 'لم يكتمل تنزيل الألعاب بعد — أعد المحاولة عند الاتصال', true);
     }, 45000);
     worker.addEventListener('statechange', function () {
+      if (owner !== registration || worker !== observedWorker) return;
       if (worker.state === 'activated') { clearTimeout(installingTimer); inspect(false); }
       else if (worker.state === 'redundant') {
         clearTimeout(installingTimer);
-        if (registration.active) inspect(false);
+        if (owner.active) inspect(false);
         else paint('unavailable', 'تعذّر تجهيز الألعاب دون إنترنت — أعد المحاولة', true);
       }
     });
   }
   async function start() {
     if (starting) return;
-    if (registration) return inspect(false);
+    if (hasWorker(registration)) return inspect(false);
+    // A failed first install can remove the browser's registration while this
+    // page still holds its now-empty object. Register again instead of updating it.
+    registration = null;
+    observedWorker = null;
+    clearTimeout(installingTimer);
     starting = true;
     paint('preparing', 'جارٍ تجهيز الألعاب للعمل دون إنترنت…', false);
     try {
-      registration = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
-      registration.addEventListener('updatefound', function () { observe(registration.installing); });
-      observe(registration.installing);
-      if (registration.active) inspect(false);
+      var owner = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
+      registration = owner;
+      owner.addEventListener('updatefound', function () { observe(owner, owner.installing); });
+      observe(owner, owner.installing);
+      if (owner.active) inspect(false);
     } catch (e) { paint('unavailable', 'تعذّر تجهيز الألعاب دون إنترنت — أعد المحاولة', true); }
     finally { starting = false; }
   }
-  retry.addEventListener('click', function () {
-    if (!registration) { start(); return; }
+  retry.addEventListener('click', async function () {
+    if (starting) return;
+    var owner = registration;
+    if (!hasWorker(owner)) return start();
     // Keep a working old version usable while a newer complete version installs.
-    registration.update().catch(function () {}).then(function () { inspect(true); });
+    try { await owner.update(); } catch (e) { /* Inspect the surviving worker, or register again if installation failed. */ }
+    if (owner !== registration) return;
+    if (!hasWorker(owner)) return start();
+    inspect(true);
   });
   navigator.serviceWorker.addEventListener('controllerchange', function () { inspect(false); });
   window.addEventListener('online', function () { inspect(true); });

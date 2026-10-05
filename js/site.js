@@ -771,7 +771,6 @@
   var classroomOn = false;
   var sessionDeadline = 0;
   var sessionExpired = false;
-  var savedPreferences = null;
   var hadFullscreen = false;
   function routeHash() { return location.hash || '#/'; }
   function frameEl() { return $('#stage iframe'); }
@@ -782,8 +781,9 @@
     if (f && f.contentWindow) f.contentWindow.postMessage(message, location.protocol === 'file:' ? '*' : location.origin);
   }
   function sendPreferences() {
-    if (classroomOn) postGame({ type: 'sg:preferences', quiet: true, reducedMotion: true, motionPreference: 'reduce' });
-    else if (savedPreferences) postGame({ type: 'sg:preferences', quiet: savedPreferences.quiet, motionPreference: savedPreferences.motion });
+    // A temporary preset must not overwrite each game's personal settings.
+    // Always clear it too: file:// may give every game its own storage area.
+    postGame({ type: 'sg:preferences', classroom: classroomOn });
   }
   function focusGame() {
     if (portalFocus) return;
@@ -796,7 +796,8 @@
   }
   function activateGame() { portalFocus = false; focusGame(); }
   function focusPortal() {
-    var target = (sessionExpired && $('#sessionEnd')) || $('#favBtn') || $('#logo');
+    var handoff = $('#sessionHandoff'), failure = $('#stageMsg');
+    var target = (handoff && !handoff.hidden && $('#sessionEnd')) || (failure && !failure.hidden && $('#gameRetry')) || $('#favBtn') || $('#logo');
     if (target) {
       try { target.focus({ preventScroll: true }); } catch (e) { target.focus(); }
     }
@@ -813,7 +814,6 @@
     }
     var type = e.data && e.data.type;
     if (type === 'sg:ready') {
-      if (f.dataset.failed === 'true') return;
       clearTimeout(readyTimer);
       frameReady = true;
       if (!sessionExpired) f.removeAttribute('inert');
@@ -827,13 +827,16 @@
     if (frameEl() !== f) return;
     clearTimeout(readyTimer);
     frameReady = false;
-    f.dataset.failed = 'true';
     $('#stage').classList.remove('loading');
     $('#stage').setAttribute('aria-busy', 'false');
     $('#stageMsg').hidden = false;
-    f.style.visibility = 'hidden';
-    f.setAttribute('inert', '');
-    f.setAttribute('tabindex', '-1');
+    // Dispose the browsing context, including timers, audio and pending saves.
+    // Merely hiding a game after a runtime error leaves its simulation alive.
+    f.parentNode.removeChild(f);
+    portalFocus = true;
+    var handoff = $('#sessionHandoff');
+    if (handoff) handoff.hidden = true;
+    focusPortal();
   }
   function mountFrame(slug) {
     clearTimeout(readyTimer);
@@ -907,18 +910,12 @@
   }
   function setClassroom(on) {
     classroomOn = !!on;
-    if (classroomOn && !savedPreferences) savedPreferences = { quiet: !!storedPreference('muted', false), motion: storedPreference('motion', 'system') };
     writePreference('classroom', classroomOn);
-    if (classroomOn) writePreference('classroomPrior', savedPreferences);
-    if (classroomOn || savedPreferences) {
-      writePreference('muted', classroomOn ? true : savedPreferences.quiet);
-      writePreference('motion', classroomOn ? 'reduce' : savedPreferences.motion);
-    }
     document.documentElement.setAttribute('data-sg-motion', classroomOn ? 'reduce' : storedPreference('motion', 'system'));
     sendPreferences();
-    if (!classroomOn) savedPreferences = null;
   }
   function showHandoff() {
+    if (!frameReady || !frameEl()) return;
     postGame({ type: 'sg:pause', reason: 'session-ended' });
     var overlay = $('#sessionHandoff');
     if (!overlay) return;
@@ -954,8 +951,6 @@
   }
   function setupClassroom() {
     classroomOn = !!storedPreference('classroom', false);
-    savedPreferences = classroomOn ? storedPreference('classroomPrior', { quiet: false, motion: 'system' }) : null;
-    if (!savedPreferences || typeof savedPreferences !== 'object') savedPreferences = null;
     $('#classroomMode').checked = classroomOn;
     document.documentElement.setAttribute('data-sg-motion', classroomOn ? 'reduce' : storedPreference('motion', 'system'));
     $('#classroomMode').addEventListener('change', function () { setClassroom(this.checked); });

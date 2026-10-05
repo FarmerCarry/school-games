@@ -33,15 +33,18 @@ async function embeddedGame(t, slug) {
       }
     });
   });
-  await page.goto(`${server.origin}/`);
-  await page.setContent(`<button id="outside">Portal</button><script>
+  // A dedicated same-origin parent keeps portal timers and event handlers out
+  // of these game lifecycle tests, including in the built-site test run.
+  const fixtureUrl = `${server.origin}/lifecycle-test`;
+  await page.route(fixtureUrl, route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><button id="outside">Portal</button><script>
     window.gameMessages = [];
     addEventListener('message', e => {
       if (e.source !== document.querySelector('iframe').contentWindow) return;
       gameMessages.push(e.data);
       if(e.data === 'sg:focus-portal') document.querySelector('#outside').focus();
     });
-  </script><iframe src="${server.origin}/games/${slug}/index.html"></iframe>`);
+  </script><iframe width="1280" height="720" src="${server.origin}/games/${slug}/index.html"></iframe>` }));
+  await page.goto(fixtureUrl);
   const frame = page.frames().find(f => f.parentFrame());
   await frame.waitForFunction(() => window.__game && window.stepGame);
   await page.waitForFunction(() => gameMessages.some(m => m.type === 'sg:ready'));
@@ -53,7 +56,7 @@ const games = [
     snapshot: () => ({ paused: __game.state.paused, x: __game.state.x, y: __game.state.y, attempts: __game.state.attempt }),
     paused: state => state.paused === true },
   { slug: 'air-hockey', start: () => document.querySelector('#btnPlay').click(), resume: '#btnResume',
-    snapshot: () => { const s = __game.state(); return { paused: s.paused, pucks: s.pucks, mallets: s.mallets, score: s.score, scene: s.scene }; },
+    snapshot: () => { const s = __game.state(); return { paused: s.paused, time: __game.st.t, pucks: s.pucks, mallets: s.mallets, score: s.score, scene: s.scene }; },
     paused: state => state.paused === true },
   { slug: 'blob-battle', start: () => document.querySelector('#btnPlay').click(), resume: '#btnResume',
     snapshot: () => { const s = __game.info(); return { state: s.state, T: s.T, player: s.player, mass: s.mass }; },

@@ -4,8 +4,9 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import vm from 'node:vm';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchChromium } from '../browser.mjs';
+import { clickControl } from '../ui-input.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -125,9 +126,71 @@ test('explicit startup failure offers recovery without waiting for timeout', asy
   await page.route('**/games/air-hockey/index.html', route => route.fulfill({ contentType: 'text/html', body: '<script>parent.postMessage({type:"sg:error",version:1,message:"startup failed"}, location.origin)</script>' }));
   await page.goto(`${origin}/#/play/air-hockey`);
   await page.locator('#stageMsg').waitFor({ state: 'visible' });
-  assert.equal(await page.locator('#stage iframe').getAttribute('inert'), '');
+  assert.equal(await page.locator('#stage iframe').count(), 0, 'failed browsing context is disposed');
   await page.locator('#stageMsg a').click();
   await page.waitForFunction(() => document.body.className === 'route-home');
+});
+
+test('a runtime failure disposes the game and rejects stale messages before retrying', async t => {
+  const page = await pageFor(t);
+  await page.clock.install();
+  let requests = 0;
+  await page.route('**/games/air-hockey/index.html', route => {
+    requests++;
+    return route.fulfill({ contentType: 'text/html', body: '<script>setInterval(function(){parent.runtimeTicks=(parent.runtimeTicks||0)+1},10);parent.postMessage({type:"sg:ready",version:1},location.origin)</script>' });
+  });
+  const frame = await openGame(page);
+  await page.clock.fastForward(50);
+  await page.evaluate(() => { window.failedWindow = document.querySelector('#stage iframe').contentWindow; });
+  await frame.evaluate(() => parent.postMessage({ type: 'sg:error', version: 1, message: 'runtime failure' }, location.origin));
+  await page.locator('#stageMsg').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#stage iframe').count(), 0);
+  const ticks = await page.evaluate(() => window.runtimeTicks);
+  await page.clock.fastForward(1000);
+  assert.equal(await page.evaluate(() => window.runtimeTicks), ticks, 'failed game timers have stopped');
+  await page.locator('#gameRetry').click();
+  await page.waitForFunction(() => document.querySelector('#stage').getAttribute('aria-busy') === 'false' && document.querySelector('#stageMsg').hidden);
+  await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { source: window.failedWindow, origin: location.origin, data: { type: 'sg:error', version: 1 } })));
+  assert.equal(await page.locator('#stageMsg').isVisible(), false, 'the removed game cannot fail its replacement');
+  assert.equal(await page.locator('#stage iframe').count(), 1);
+  assert.equal(requests, 2);
+});
+
+test('classroom changes stay transient across file games with separate saved preferences', async t => {
+  const page = await pageFor(t);
+  // Browsers differ in file:// storage scoping. Force per-path preference keys
+  // so this regression stays covered even when a browser shares file storage.
+  await page.addInitScript(() => {
+    const get = Storage.prototype.getItem, set = Storage.prototype.setItem;
+    const scoped = key => /^sg:site:(muted|motion)$/.test(key) ? location.pathname + ':' + key : key;
+    Storage.prototype.getItem = function (key) { return get.call(this, scoped(key)); };
+    Storage.prototype.setItem = function (key, value) { return set.call(this, scoped(key), value); };
+    if (location.pathname.includes('/games/air-hockey/') && localStorage.getItem('sg:site:motion') === null) {
+      localStorage.setItem('sg:site:muted', 'false'); localStorage.setItem('sg:site:motion', '"full"');
+    }
+    if (location.pathname.includes('/games/pool-party/') && localStorage.getItem('sg:site:motion') === null) {
+      localStorage.setItem('sg:site:muted', 'true'); localStorage.setItem('sg:site:motion', '"system"');
+    }
+  });
+  await page.goto(pathToFileURL(path.join(root, 'index.html')).href + '#/play/air-hockey');
+  await page.waitForFunction(() => document.querySelector('#stage').getAttribute('aria-busy') === 'false' && document.querySelector('#stageMsg').hidden);
+  let frame = page.frames().find(item => item.url().includes('/games/air-hockey/'));
+  assert.equal(await frame.evaluate(() => Kit.audio.muted || Kit.motion.reduced()), false);
+  await page.locator('#classroom summary').click();
+  await page.locator('#classroomMode').check();
+  await frame.waitForFunction(() => Kit.audio.muted && Kit.motion.reduced());
+  assert.deepEqual(await frame.evaluate(() => [localStorage.getItem('sg:site:muted'), localStorage.getItem('sg:site:motion')]), ['false', '"full"']);
+  await page.evaluate(() => { location.hash = '#/play/pool-party'; });
+  await page.waitForFunction(() => document.querySelector('#stage iframe')?.src.includes('/pool-party/') && document.querySelector('#stage').getAttribute('aria-busy') === 'false');
+  frame = page.frames().find(item => item.url().includes('/games/pool-party/'));
+  await frame.waitForFunction(() => Kit.audio.muted && Kit.motion.reduced());
+  await page.locator('#classroomMode').uncheck();
+  await frame.waitForFunction(() => Kit.audio.muted && !Kit.motion.reduced());
+  await page.evaluate(() => { location.hash = '#/play/air-hockey'; });
+  await page.waitForFunction(() => document.querySelector('#stage iframe')?.src.includes('/air-hockey/') && document.querySelector('#stage').getAttribute('aria-busy') === 'false');
+  frame = page.frames().find(item => item.url().includes('/games/air-hockey/'));
+  await frame.waitForFunction(() => !Kit.audio.muted && !Kit.motion.reduced());
+  assert.equal(await frame.evaluate(() => Kit.motion.preference), 'full', 'the original game keeps its personal motion preference');
 });
 
 test('selected and hovered category chips and fullscreen controls meet normal text contrast', async t => {
@@ -157,7 +220,7 @@ test('classroom preset reaches the game and timed handoff pauses without replaci
   await frame.waitForFunction(() => Kit.audio.muted && Kit.motion.reduced());
   await page.locator('#sessionMinutes').selectOption('5');
   await page.locator('#sessionStart').click();
-  await frame.locator('#btnPlay').click();
+  await clickControl(frame, '#btnPlay');
   await frame.evaluate(() => { window.handoffSentinel = 'same-session'; });
   await page.clock.fastForward(300001);
   await page.locator('#sessionHandoff').waitFor({ state: 'visible' });
@@ -179,7 +242,7 @@ test('leaving portal fullscreen pauses the still-visible game', async t => {
   const frame = await openGame(page);
   await page.locator('#fsBtn').click();
   await page.waitForFunction(() => document.fullscreenElement === document.querySelector('#stage'));
-  await frame.locator('#btnPlay').click();
+  await clickControl(frame, '#btnPlay');
   await page.evaluate(() => document.exitFullscreen());
   await frame.waitForFunction(() => window.__game.state().paused);
   const position = await frame.evaluate(() => window.__game.state().pucks);

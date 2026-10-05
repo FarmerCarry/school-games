@@ -143,6 +143,8 @@ startup error handling reports failures; it must not manufacture a ready signal.
 
 Use `Kit.motion.reduced()` for custom camera shake or decorative motion. The shared
 shake, particles, CSS and mute control already honor preferences and accessibility.
+The portal's classroom preset temporarily overrides sound and effects without
+writing each game's personal preferences; disabling it restores those preferences.
 Handle `Kit.store(...).set(...) === false`; `Kit.saveStatus({ retry: saveGame })` provides
 a consistent Arabic warning and retry button. Clear it only after all pending writes
 succeed. Preserve existing saved progress when a write or reset fails.

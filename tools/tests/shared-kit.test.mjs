@@ -77,7 +77,7 @@ test('focus, visibility and portal escape clear held inputs before semantic paus
 test('foreign windows cannot pause a game or change its preferences', () => {
   const h = harness(); let pauses = 0;
   h.Kit.lifecycle({pause() { pauses++; }});
-  for (const data of [{type: 'sg:pause'}, {type: 'sg:preferences', quiet: true, reducedMotion: true}]) h.window.emit('message', {source: {}, data});
+  for (const data of [{type: 'sg:pause'}, {type: 'sg:preferences', quiet: true, reducedMotion: true}, {type: 'sg:preferences', classroom: true}]) h.window.emit('message', {source: {}, data});
   assert.equal(pauses, 0); assert.equal(h.Kit.audio.muted, false); assert.equal(h.Kit.motion.reduced(), false);
 });
 
@@ -109,6 +109,49 @@ test('mute toggle exposes persisted state and follows mouse, shortcut and storag
   h.window.emit('keydown', {code: 'KeyM'}); assert.equal(button.getAttribute('aria-pressed'), 'true');
   h.values.set('sg:site:muted', 'false'); h.window.emit('storage', {key: 'sg:site:muted'});
   assert.equal(button.getAttribute('aria-pressed'), 'false');
+});
+
+test('classroom preset is transient across independent game storage and restores personal preferences', () => {
+  const a = harness({stored: {'sg:site:motion': '"full"', 'sg:site:muted': 'false'}});
+  const b = harness({reduce: true, stored: {'sg:site:motion': '"system"', 'sg:site:muted': 'true'}});
+  const originals = [a, b].map(h => Object.fromEntries(h.values));
+  const button = a.Kit.muteButton();
+  const apply = (h, classroom) => h.window.emit('message', {source: h.window.parent, data: {type: 'sg:preferences', classroom}});
+  for (const h of [a, b]) {
+    apply(h, true);
+    assert.equal(h.Kit.audio.muted, true);
+    assert.equal(h.Kit.motion.reduced(), true);
+    h.Kit.audio.toggleMute();
+    assert.equal(h.Kit.audio.muted, true, 'mute shortcut cannot undo classroom quiet');
+  }
+  assert.equal(button.disabled, true);
+  // The portal disables the preset while B is open. A is later recreated,
+  // exactly as separate file:// game storage behaves on a downloaded site.
+  apply(b, false);
+  assert.equal(b.Kit.audio.muted, true, 'B keeps its personal mute preference');
+  assert.equal(b.Kit.motion.preference, 'system');
+  assert.equal(b.Kit.motion.reduced(), true, 'B still follows its system preference');
+  const revisitedA = harness({stored: Object.fromEntries(a.values)});
+  apply(revisitedA, false);
+  assert.equal(revisitedA.Kit.audio.muted, false);
+  assert.equal(revisitedA.Kit.motion.reduced(), false);
+  assert.deepEqual([a, b].map(h => Object.fromEntries(h.values)), originals, 'classroom never writes personal preferences');
+  apply(a, false);
+  assert.equal(a.Kit.audio.muted, false);
+  assert.equal(button.disabled, false);
+  assert.equal(button.getAttribute('aria-pressed'), 'false');
+});
+
+test('personal storage changes during classroom mode take effect after the override ends', () => {
+  const h = harness();
+  const apply = classroom => h.window.emit('message', {source: h.window.parent, data: {type: 'sg:preferences', classroom}});
+  apply(true);
+  h.values.set('sg:site:motion', '"full"'); h.values.set('sg:site:muted', 'false');
+  h.window.emit('storage', {key: null});
+  assert.equal(h.Kit.audio.muted, true); assert.equal(h.Kit.motion.reduced(), true);
+  apply(false);
+  assert.equal(h.Kit.audio.muted, false); assert.equal(h.Kit.motion.reduced(), false);
+  assert.equal(h.Kit.motion.preference, 'full');
 });
 
 test('save failure stays visible across failed retries and clears only after confirmed success', () => {

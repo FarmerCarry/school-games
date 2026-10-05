@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
+import { clickControl } from '../ui-input.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -41,7 +42,7 @@ async function game(t) {
     } });
   });
   await page.goto(`${origin}/games/pizza-clicker/`);
-  await page.locator('#bPlay').click();
+  await clickControl(page, '#bPlay');
   return page;
 }
 
@@ -92,7 +93,7 @@ test('focus-loss pause preserves idle credit once and menu return cannot count i
   await page.locator('#bMenu').click();
   const fromMenu = await page.evaluate(() => __game.S.pizzas);
   assert.ok(fromMenu > collected);
-  await page.locator('#bPlay').click();
+  await clickControl(page, '#bPlay');
   await page.evaluate(() => advanceAway(60));
   await page.locator('#bPause').click();
   await page.locator('#bResume').click();
