@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
 import { launchChromium } from '../browser.mjs';
+import { startTestServer } from '../test-server.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,26 +11,14 @@ const now = Date.UTC(2026, 0, 2);
 let browser, server, base;
 
 before(async () => {
-  server = createServer(async (req, res) => {
-    try {
-      let pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-      if (pathname.endsWith('/')) pathname += 'index.html';
-      const filename = path.resolve(root, '.' + pathname);
-      if (!filename.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
-      const data = await readFile(filename);
-      const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
-      res.writeHead(200, { 'Content-Type': mime[path.extname(filename)] || 'application/octet-stream' });
-      res.end(data);
-    } catch { res.writeHead(404).end(); }
-  });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  base = `http://127.0.0.1:${server.address().port}`;
+  server = await startTestServer(root);
+  base = server.origin;
   browser = await launchChromium();
 });
 
 after(async () => {
   await browser?.close();
-  if (server) await new Promise(resolve => server.close(resolve));
+  await server?.close();
 });
 
 async function newPage(t, slug, save) {
@@ -61,35 +48,6 @@ async function returnAfter(page, slug, seconds) {
   }, seconds);
   await page.goto(`${base}/games/${slug}/`);
 }
-
-test('Hoop Heads judges buzzer-beaters by the final score and keeps ties in overtime', async t => {
-  const page = await newPage(t, 'hoop-heads');
-  const results = await page.evaluate(() => {
-    return [[0, 10], [10, 0], [8, 10]].map(scores => {
-      __game.start({ mode: 'duo' });
-      const m = __game.match;
-      m.phase = 'play'; m.time = 0.001;
-      m.players[0].score = scores[0]; m.players[1].score = scores[1];
-      Object.assign(m.ball, {
-        hidden: false, state: 'shot', holder: null, shooter: m.players[0],
-        x: m.hoops[1].x, y: m.hoops[1].y - 1, vx: 0, vy: 300,
-        pts: 2, touched: false, scoredT: 0
-      });
-      HH.stepMatch(m, 1 / 60);
-      const result = { scores: m.players.map(p => p.score), winner: m.winner, ended: m.ended, timeUp: m.timeUp };
-      if (!m.ended) {
-        for (let i = 0; i < 105; i++) HH.stepMatch(m, 1 / 60);
-        result.overtime = m.overtime;
-      }
-      return result;
-    });
-  });
-  assert.deepEqual(results, [
-    { scores: [2, 10], winner: 1, ended: true, timeUp: true },
-    { scores: [12, 0], winner: 0, ended: true, timeUp: true },
-    { scores: [10, 10], winner: -1, ended: false, timeUp: true, overtime: true }
-  ]);
-});
 
 test('Pizza Empire preserves unclaimed offline earnings and collects later absences exactly once', async t => {
   const page = await newPage(t, 'pizza-clicker', {

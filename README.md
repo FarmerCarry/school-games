@@ -136,7 +136,7 @@ Everything works straight from the folder. You can also put the folder on a shar
 Everything the home page shows comes from **`js/catalog.js`**:
 
 - **Hide a game:** add `hidden: true` to its entry.
-- **Feature a game** in the "🔥 Hot right now" row: set `hot: true`.
+- **Feature a game** first in the catalog: set `hot: true`.
 - **Rename the site:** change `name` in `window.SITE` (currently "ألعاب الفسحة").
 
 ## For developers
@@ -175,11 +175,13 @@ Performance and the fast build:
 ```
 npm test                        # deterministic bug regressions and browser checks
 npm run test:unit                # the regression files under tools/tests/
-npm run test:tooling             # shared build and browser-harness helpers
+npm run test:shared              # source-independent rules, build safety and tool fixtures
+npm run test:browser             # gameplay and portal checks for the selected SG_ROOT
+npm run test:tooling             # server, report and audio-probe helper checks
 npm run test:regressions         # additional gameplay and portal keyboard checks
 npm run check                   # smoke-test all source games
 npm run build                   # fast build into _site/ (the Pages artifact)
-SG_ROOT=_site npm test           # run regressions against the optimized games
+SG_ROOT=_site npm run test:browser # run gameplay/portal regressions against optimized games
 SG_ROOT=_site npm run check      # smoke-test all optimized games
 npm run test:offline             # cache installation, offline games, updates, and kill switch
 npm run test:board-games         # local turns, computer opponents, rematches and controls
@@ -192,6 +194,21 @@ checkout and existing `_site/` output intact. The browser regression suite uses 
 profiles and test saves; it does not overwrite your normal browser progress.
 Smoke runs keep per-game screenshots and a `report.json` in a separate temporary directory.
 Failures print diagnostics immediately, including the browser action that failed.
+
+CI runs source-independent rules, asset-optimizer/budget tests, build-safety checks and
+harness fixtures once. It runs gameplay, portal, smoke and board-game browser checks
+against both source and the optimized build, then checks offline installation and updates.
+`npm test` still runs the complete regression set for the selected root. The suite selector
+discovers every `tools/tests/*.test.mjs` file; new tests default to both source/build passes.
+Only tests explicitly listed as source-independent in `tools/test-suite.mjs` run once.
+The shared suite includes browser-based harness fixtures, so it also needs Chromium.
+
+`node tools/audio-probe.mjs <slug>` records game sound. Custom `--actions` files or
+`--actions-json` lists support `wait`, `click`, `move`, `press`, `hold`, `drag`, `eval`
+and nested `repeat`/`do`, using the playtest action format. `hold` accepts `ms`, while
+`move` and `drag` accept `steps`. Other playtest actions (such as `clickSel`, `holdMany`,
+`assert`, `shot` and `reload`) are rejected before the browser opens, including inside
+repeat blocks. Invalid values and unknown action fields also fail with a nonzero status.
 
 The builder accepts new or empty output directories and recognized generated builds.
 It refuses source directories, Git metadata, symlinks, tracked files, and unrelated files

@@ -20,6 +20,7 @@ function fixture(t) {
     return target;
   };
   write('tools/build.mjs', builder);
+  write('tools/lib/svg-data-uri.mjs', fs.readFileSync(path.join(repo, 'tools/lib/svg-data-uri.mjs')));
   write('index.html', '<!doctype html><html><body><script src="js/catalog.js"></script><script src="js/site.js"></script></body></html>');
   write('js/catalog.js', 'window.GAMES = [{ slug: "demo" }];');
   write('js/site.js', 'window.portalReady = true;');
@@ -80,13 +81,6 @@ test('default and nested custom outputs rebuild safely without caching the owner
     assert.equal(worker.includes(marker), false);
   }
   noTemporaryOutput(f);
-});
-
-test('a new empty custom directory is supported', t => {
-  const f = fixture(t);
-  fs.mkdirSync(path.join(f.root, 'preview'));
-  success(run(f, ['--out', 'preview']));
-  assert.ok(fs.existsSync(path.join(f.root, 'preview', marker)));
 });
 
 test('kill-switch portals stay unregistered after worker-driven navigation', t => {

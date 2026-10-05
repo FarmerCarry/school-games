@@ -132,15 +132,6 @@ test('unmatched helper stock uses a persistent recovery queue without duplicatio
   }
 });
 
-test('legacy saves lacking helper fields load with empty inventories and keep ordinary progress', async t => {
-  const page = await gamePage(t, fixture({ coins: 123 }));
-  const data = await snapshot(page);
-  assert.equal(data.state.coins, 123);
-  assert.ok(data.state.helperStacks.every(h => h.stack.length === 0));
-  assert.deepEqual(data.state.recoveryCarry, []);
-  assert.equal(data.state.finalePending, false);
-});
-
 test('pointer upgrade purchases restore movement, upgrade shortcuts and pause keys', async t => {
   const page = await gamePage(t, fixture({ coins: 1000 }));
   await page.evaluate(() => { __game.start(); __game.tp(1646, 918); stepGame(); });

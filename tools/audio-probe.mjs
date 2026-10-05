@@ -12,7 +12,8 @@
  *   nodes            live audio sources (growing without end = a sound leak)
  * and flags: CLIPPING, CONSTANT HISS, LOUD, NEVER QUIET, NODE LEAK.
  * --wav also writes the recording so a person can listen to it.
- * Actions use the same format as tools/playtest.mjs (a default play script is used if omitted).
+ * Supports the playtest subset: wait, click, move, press, hold, drag, eval, repeat/do.
+ * Other actions fail before opening the browser. A default play script is used if omitted.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,10 +31,45 @@ let actions = [
   { repeat: 8, do: [{ hold: 'ArrowRight', ms: 500 }, { press: 'ArrowUp' }, { hold: 'ArrowLeft', ms: 500 }, { press: 'Space' }, { move: [400, 300] }, { click: [700, 420] }, { wait: 300 }] },
   { wait: 2000 }
 ];
-if (opt('--actions')) actions = JSON.parse(fs.readFileSync(opt('--actions'), 'utf8'));
-if (opt('--actions-json')) actions = JSON.parse(opt('--actions-json'));
 const wavOut = opt('--wav');
 if (!slug) { console.error('usage: node tools/audio-probe.mjs <slug> [--actions f.json] [--wav out.wav]'); process.exit(2); }
+
+function validateActions(list, location = 'actions') {
+  const fail = message => { throw new Error(`${location}: ${message}`); };
+  if (!Array.isArray(list)) fail('expected an array');
+  const duration = value => Number.isFinite(value) && value >= 0;
+  const point = value => Array.isArray(value) && value.length === 2 && value.every(Number.isFinite);
+  const text = value => typeof value === 'string' && value.length > 0;
+  const validators = {
+    wait: duration, click: point, move: point, press: text, hold: text, eval: text,
+    drag: value => Array.isArray(value) && value.length === 2 && value.every(point),
+    repeat: value => Number.isInteger(value) && value >= 0
+  };
+  for (const [index, action] of list.entries()) {
+    const at = `${location}[${index}]`;
+    if (!action || typeof action !== 'object' || Array.isArray(action)) fail(`[${index}] expected an action object`);
+    const operations = Object.keys(action).filter(name => Object.hasOwn(validators, name));
+    if (operations.length !== 1) fail(`[${index}] expected one supported action (${Object.keys(validators).join(', ')}); received: ${Object.keys(action).join(', ') || 'empty object'}`);
+    const operation = operations[0];
+    const extras = operation === 'hold' ? ['ms'] : operation === 'repeat' ? ['do'] : ['move', 'drag'].includes(operation) ? ['steps'] : [];
+    for (const name of Object.keys(action)) {
+      if (name !== operation && !extras.includes(name)) fail(`[${index}] unsupported field "${name}" for ${operation}`);
+    }
+    if (!validators[operation](action[operation])) fail(`[${index}] invalid ${operation} value`);
+    if ('ms' in action && !duration(action.ms)) fail(`[${index}] ms must be a nonnegative number`);
+    if ('steps' in action && (!Number.isInteger(action.steps) || action.steps < 1)) fail(`[${index}] steps must be a positive integer`);
+    if (operation === 'repeat') validateActions(action.do, `${at}.do`);
+  }
+}
+
+try {
+  if (opt('--actions')) actions = JSON.parse(fs.readFileSync(opt('--actions'), 'utf8'));
+  if (opt('--actions-json')) actions = JSON.parse(opt('--actions-json'));
+  validateActions(actions);
+} catch (error) {
+  console.error('audio-probe: ' + error.message);
+  process.exit(2);
+}
 
 const { origin, close: closeServer } = await startTestServer(ROOT);
 
@@ -77,34 +113,40 @@ const INIT = () => {
   }
 };
 
-const browser = await launchChromium({ args: ['--autoplay-policy=no-user-gesture-required'] });
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-await page.addInitScript(INIT);
+let browser, page, data;
 const errors = [];
-page.on('pageerror', e => errors.push(String(e).split('\n')[0]));
-page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-page.on('requestfailed', r => errors.push(r.url() + ' :: ' + r.failure()?.errorText));
-page.on('response', r => { if (r.status() >= 400) errors.push(r.url() + ' :: HTTP ' + r.status()); });
-await page.goto(`${origin}/games/${slug}/index.html`, { waitUntil: 'load' });
 const key = k => (k === 'Space' || k === ' ') ? ' ' : k;
 const nodeSamples = [];
 async function run(list) {
   for (const a of list) {
     if (a.wait != null) await page.waitForTimeout(a.wait);
     else if (a.click) await page.mouse.click(a.click[0], a.click[1]);
-    else if (a.move) await page.mouse.move(a.move[0], a.move[1], { steps: 4 });
+    else if (a.move) await page.mouse.move(a.move[0], a.move[1], { steps: a.steps ?? 4 });
     else if (a.press) await page.keyboard.press(key(a.press));
-    else if (a.hold) { await page.keyboard.down(key(a.hold)); await page.waitForTimeout(a.ms || 300); await page.keyboard.up(key(a.hold)); }
-    else if (a.drag) { await page.mouse.move(...a.drag[0]); await page.mouse.down(); await page.mouse.move(...a.drag[1], { steps: 15 }); await page.mouse.up(); }
+    else if (a.hold) { await page.keyboard.down(key(a.hold)); await page.waitForTimeout(a.ms ?? 300); await page.keyboard.up(key(a.hold)); }
+    else if (a.drag) { await page.mouse.move(...a.drag[0]); await page.mouse.down(); await page.mouse.move(...a.drag[1], { steps: a.steps ?? 15 }); await page.mouse.up(); }
     else if (a.eval) await page.evaluate(a.eval);
-    else if (a.repeat) for (let i = 0; i < a.repeat; i++) await run(a.do || []);
+    else if (a.repeat != null) for (let i = 0; i < a.repeat; i++) await run(a.do);
     nodeSamples.push(await page.evaluate(() => window.__probe ? window.__probe.sources : 0));
   }
 }
-await run(actions);
-const data = await page.evaluate(() => window.__probe ? { chunks: window.__probe.chunks, sr: window.__probe.sr, maxSources: window.__probe.maxSources, sources: window.__probe.sources } : null);
-await browser.close();
-await closeServer();
+try {
+  browser = await launchChromium({ args: ['--autoplay-policy=no-user-gesture-required'] });
+  page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  await page.addInitScript(INIT);
+  page.on('pageerror', e => errors.push(String(e).split('\n')[0]));
+  page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+  page.on('requestfailed', r => errors.push(r.url() + ' :: ' + r.failure()?.errorText));
+  page.on('response', r => { if (r.status() >= 400) errors.push(r.url() + ' :: HTTP ' + r.status()); });
+  await page.goto(`${origin}/games/${slug}/index.html`, { waitUntil: 'load' });
+  await run(actions);
+  data = await page.evaluate(() => window.__probe ? { chunks: window.__probe.chunks, sr: window.__probe.sr, maxSources: window.__probe.maxSources, sources: window.__probe.sources } : null);
+} catch (error) {
+  errors.push(String(error));
+} finally {
+  await browser?.close();
+  await closeServer();
+}
 process.exitCode = errors.length ? 1 : 0;
 
 if (!data || !data.chunks.length) { console.log(`${slug}: no audio recorded (the game never produced sound)${errors.length ? '; errors: ' + errors.join(' | ') : ''}`); process.exit(errors.length ? 1 : 0); }

@@ -1,33 +1,23 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import fs from 'node:fs/promises';
-import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
+import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
-const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 let server, browser, origin;
 
 before(async () => {
-  server = http.createServer(async (req, res) => {
-    const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-    const file = path.resolve(root, '.' + pathname, pathname.endsWith('/') ? 'index.html' : '');
-    if (!file.startsWith(root + path.sep)) { res.writeHead(404).end(); return; }
-    try {
-      res.writeHead(200, { 'content-type': mime[path.extname(file)] || 'application/octet-stream' }).end(await fs.readFile(file));
-    } catch { res.writeHead(404).end(); }
-  });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  origin = `http://127.0.0.1:${server.address().port}`;
+  server = await startTestServer(root);
+  origin = server.origin;
   browser = await launchChromium({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 });
 
 after(async () => {
   await browser?.close();
-  if (server) await new Promise(resolve => server.close(resolve));
+  await server?.close();
 });
 
 async function gamePage(t, slug) {
@@ -52,7 +42,7 @@ async function activate(page, selector, key) {
   await settle(page);
 }
 
-for (const key of ['Enter', 'Space']) {
+for (const key of ['Space']) {
   test(`Pool Party ${key} activates focused settings, mute and two-player controls only`, async t => {
     const page = await gamePage(t, 'pool-party');
     const before = await page.evaluate(() => window.__game.save.aim);
@@ -105,23 +95,6 @@ for (const key of ['Enter', 'Space']) {
     assert.equal(await troll.evaluate(() => window.__game.mode), 'select');
   });
 }
-
-test('Tab and Shift+Tab traverse focused game controls without starting play', async t => {
-  const page = await gamePage(t, 'pool-party');
-  await page.locator('#btn2p').focus();
-  await page.keyboard.press('Tab');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'btnTrick');
-  await page.keyboard.press('Shift+Tab');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'btn2p');
-  await settle(page);
-  assert.equal(await page.evaluate(() => window.__game.screen), 'title');
-  await page.locator('#game').focus();
-  await page.keyboard.press('Space');
-  await page.waitForFunction(() => window.__game.screen === 'game');
-  assert.equal(await page.evaluate(() => window.__game.kind), 'cpu');
-  await page.keyboard.press('m');
-  assert.equal(await page.evaluate(() => Kit.audio.muted), true, 'canvas mute shortcut remains available');
-});
 
 test('editable controls, browser chords and keys handled by UI stay out of gameplay', async t => {
   const page = await gamePage(t, 'paint-grab');

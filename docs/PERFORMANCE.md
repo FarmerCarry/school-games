@@ -1,0 +1,154 @@
+# Performance guardrails
+
+Run `npm run build`, then `npm run perf:assets`. The budget check measures the
+actual optimized files in `_site`; it does not build or change them. To retain
+the measurements, run:
+
+```sh
+npm run perf:assets -- --report artifacts/asset-budgets.json
+```
+
+Use `--root <directory>` to check another build output and `--config <file>` to
+test a proposed budget file. Relative paths resolve from the repository root.
+The JSON report includes each measurement's files, current bytes, limit, pass
+status, and all failures. Missing measurements have `bytes: null` rather than
+an invented zero; newly added assets without a limit have `limitBytes: null`
+and fail coverage. In GitHub Actions, `provenance` records the commit SHA,
+repository, run ID, and run attempt from the runner environment so the artifact
+can be matched to a deployment. Local reports are labeled `environment: local`.
+Invalid inputs and exceeded limits exit nonzero.
+
+## What the limits cover
+
+All limits in `tools/asset-budgets.json` are **uncompressed on-disk bytes**.
+They are deterministic for a given build. They are not gzip/Brotli transfer
+sizes, JavaScript execution time, or a browser's total network traffic.
+
+- Portal: the single built `index.html`, including inlined thumbnails, styles,
+  catalog, and scripts.
+- Games: each built `games/<slug>/index.html`, including its inlined code and
+  styles. The source catalog is checked every run, including hidden entries.
+  Added games need an explicit limit; missing games and obsolete limits fail.
+- Shared library: `lib/three/three.min.js`, counted once in its own measurement.
+- Fonts: each shipped WOFF/WOFF2/TTF/OTF/EOT file has an explicit limit. Added or
+  removed fonts require a matching budget update. License text is not a font.
+- Offline precache: the sum of every unique file named in the generated
+  service worker's `FILES` manifest, including icons and the web manifest.
+  The checker parses its JSON declaration without executing the service worker,
+  rejects malformed/unsafe paths, and requires the portal, games, shared library,
+  and fonts to remain in that manifest. Files must exist inside the output root;
+  symlinks and non-file assets fail.
+
+The offline total is the whole installation footprint, **not the initial page
+payload**. A visit loads a particular page and its dependencies; the worker
+separately fills the offline cache. Unchanged files may be reused on updates.
+Files outside `FILES` (such as licenses, the worker itself, and build metadata)
+are not included in the precache total. Source thumbnails remain editable SVGs;
+the optimized release embeds them in the portal and omits redundant separate
+copies. This guard checks size and coverage; the offline tests still
+verify worker behavior and content integrity.
+
+## Initial baseline and headroom
+
+The game, library, and font limits were calibrated from the minified build of
+commit `4b07e0c` on 2026-10-05. Game limits use that size plus 12%, rounded up to
+the next 1,000 bytes. The portal and offline limits were explicitly tightened
+after the cleanup below, rather than automatically regenerated. The portal has
+about 9% headroom; the other limits retain about 12–14%. Exact bytes can differ
+slightly between Windows and Linux builds.
+
+| Measurement | Observed bytes | Limit bytes |
+| --- | ---: | ---: |
+| Portal after cleanup | 329,101 | 360,000 |
+| three.js | 667,803 | 750,000 |
+| Baloo Arabic 500 | 22,324 | 25,000 |
+| Baloo Arabic 700 | 22,276 | 25,000 |
+| Fredoka Latin 500 | 16,248 | 18,500 |
+| Fredoka Latin 700 | 15,900 | 18,000 |
+| Offline precache after cleanup, 42 files | 4,446,236 | 5,000,000 |
+
+There are 31 independently budgeted games. These limits give small features room
+while catching large unreviewed growth. They are not updated automatically and
+do not claim that every smaller increase is harmless.
+
+## Cleanup decisions
+
+The fresh homepage now creates 31 catalog cards instead of 108 repeated cards.
+A returning player can see up to six additional recent games, and the play page
+offers at most six related games instead of the other 30. A regular CSS grid
+replaces the mosaic placement solver. Category and favorites routes retain
+stable keyboard order, while the search input keeps focus during filtering.
+
+Rail Rush, Critter Mart, Wacky Soccer, and Block World retain their last paused
+scene after effects settle, then redraw on resize/state changes, canvas restoration, late fonts, and resume.
+Block World saves once when an active game is hidden. Critter Mart retains its
+three-second checkpoint interval and resets that interval after a successful
+critical save, avoiding a second immediate checkpoint. Tests verify redraw and
+save counts; these are not claims about school-PC frame rates.
+
+The thumbnail encoder preserves SVG text and significant whitespace while using
+less percent-encoding. Pixel comparisons cover all 31 images. The uncompressed
+portal decreases from 367,646 to 329,101 bytes (about 10%); compressed transfer
+savings are smaller. Removing separate thumbnail copies reduces the release
+artifact size, not the offline precache size, since they were never precached.
+
+Keep the single-file game and portal packaging unless repeated measurements on
+representative hardware justify changing it. External thumbnails and shared
+helpers trade fewer repeated bytes for more file requests. Preserve relative
+paths, atomic verified offline updates, and downloaded-folder use when evaluating
+that tradeoff. The source-independent tests run once in CI; browser gameplay
+tests still run against both source and optimized output.
+
+### Local comparison, 5 October 2026
+
+Seven alternating pairs of fresh Edge 154 contexts at 1280×900, localhost,
+without CPU/network throttling and with service workers blocked, produced these
+medians. Readiness is fonts ready plus two animation frames; it does not wait
+for every offscreen thumbnail. Physical disk caches were not cleared.
+
+| Portal measure | Main `4b07e0c` | Cleanup |
+| --- | ---: | ---: |
+| Fresh catalog cards | 108 | 31 |
+| DOM elements | 1,185 | 365 |
+| Script work | 15.3 ms | 4.8 ms |
+| Layout work | 96.1 ms | 63.4 ms |
+| Fonts + two frames ready | 321.4 ms | 272.1 ms |
+| Load event | 148.6 ms | 185.5 ms |
+
+The cleanup does less page work; these mixed timing results do not establish
+an overall load-time improvement or predict classroom performance.
+
+Packaging alternatives were tested separately in five rotating runs per
+profile with gzip, default hardware rendering, and both local and simulated
+1 Mbps / 75 ms latency / 4× CPU slowdown. External thumbnails improved the
+throttled complete-gallery median from 2,016 to 1,680 ms, but local loading
+changed from 263 to 283 ms and cold homepage requests increased from 6 to 37.
+External shared kit/CSS saved about 398 KB across the offline cache and reduced
+throttled second-game loading from 257 to 221 ms, while first-game loading rose
+from 497 to 563 ms with three requests instead of one. All candidates worked
+offline and from downloaded folders. These tradeoffs do not justify changing
+the one-file default without representative classroom measurements.
+
+## CI, review, and deployed performance
+
+The build workflow runs this check immediately after building, on pull requests
+and main. A failed check blocks this workflow's deployment. The
+`asset-performance-budgets` artifact is uploaded whenever a report exists,
+including on budget failures, so reviewers can compare current bytes and limits.
+Pages must use **GitHub Actions** as its publishing source for this workflow to
+gate publication; a separate legacy branch-based Pages deployment can publish
+independently of these checks.
+
+When a check fails, inspect the changed assets first: unexpected inlining,
+duplicate dependencies, font variants, or unoptimized content can explain growth.
+For an intentional addition, propose the smallest justified limit change with
+the before/after report, user benefit, and loading/offline cost in the PR.
+New games and fonts need explicit entries and an offline-total review. Removing
+assets should remove their entries. Never raise every limit just to make CI pass.
+
+This workflow cannot detect live timing regressions, CDN/cache behavior, or slow
+frames on school PCs. Browser timing measurements complement byte budgets and
+should compare the same routes, cold/warm cache state, viewport, hardware, and
+build across runs. Headless Chromium often uses software rendering; its frame
+rate is **not school-PC FPS**. Confirm rendering improvements on representative
+school hardware, and keep the existing gameplay, browser, and offline checks.

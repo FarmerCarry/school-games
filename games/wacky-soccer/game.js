@@ -73,7 +73,9 @@
   var canvas = $('game'), uiEl = $('ui');
   var view = Kit.fit(canvas, W, H, { onResize: onResize });
   var ctx = view.ctx;
+  canvas.addEventListener('contextrestored', function () { view.resize(); });
   function onResize(v) {
+    frameDirty = true;
     uiEl.style.left = canvas.style.left; uiEl.style.top = canvas.style.top;
     uiEl.style.transform = 'scale(' + v.scale + ')';
     ART.setScale(Math.min(2, Math.max(0.5, v.scale * v.dpr)));
@@ -114,6 +116,8 @@
     pops.push({ text: text, x: clamp(x, 140, W - 140), y: clamp(y, 150, H - 60), t: 0, life: 1.1, color: color || '#ffd23f', size: size || 40 });
   }
   function updateFx(dt) {
+    // Paint the last clearing frame too, then let a paused field stay still.
+    if (parts.length || pops.length || shake.power > 0 || flash > 0) frameDirty = true;
     for (var i = parts.length - 1; i >= 0; i--) {
       var p = parts[i];
       p.life -= dt;
@@ -522,13 +526,18 @@
 
   /* ================================================================ draw */
   function bgKey(P) { return (P.sky === 'space' ? 'space' : 'day') + (P.ice ? '-ice' : ''); }
+  var frameDirty = true, paintedState = '';
   function render() {
-    ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
-    if (!world) { ctx.fillStyle = '#39b7ff'; ctx.fillRect(0, 0, W, H); return; }
+    if (!world) { ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0); ctx.fillStyle = '#39b7ff'; ctx.fillRect(0, 0, W, H); return; }
     var m = match, P = world.P;
     // camera
     var tz = 1, tx = W / 2, ty = H / 2;
     if (m && m.phase === 'goal' && m.t < 1.25 && m.goalBall && m.mode !== 'demo') { tz = 1.4; tx = m.goalBall.x; ty = m.goalBall.y - 40; }
+    var settling = Math.abs(cam.z - tz) > 0.0001 || Math.abs(cam.x - tx) > 0.01 || Math.abs(cam.y - ty) > 0.01 ||
+      m && (m.wob[0] > 0.001 || m.wob[1] > 0.001);
+    if (state === 'pause' && paintedState === state && !frameDirty && !settling) return;
+    frameDirty = false; paintedState = state;
+    ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
     var k = 0.12;
     cam.z = lerp(cam.z, tz, k); cam.x = lerp(cam.x, tx, k); cam.y = lerp(cam.y, ty, k);
     var hw = W / 2 / cam.z, hh = H / 2 / cam.z;
@@ -561,7 +570,7 @@
       ART.drawGoalFront(ctx, g, wob ? Math.sin(T * 30) * wob : 0, P.bouncy, m && m.teams[g] ? m.teams[g].shirt : '#ff5a5f');
     }
     if (m) { m.wob[0] *= 0.9; m.wob[1] *= 0.9; }
-    if (P.wind) drawWindFx();
+    if (P.wind && state !== 'pause') drawWindFx();
     drawParts();
     drawPops();
     ctx.restore();

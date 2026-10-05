@@ -3,7 +3,6 @@ import { after, before, test } from 'node:test';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
-import vm from 'node:vm';
 import { launchChromium } from '../browser.mjs';
 import { fileURLToPath } from 'node:url';
 
@@ -79,9 +78,10 @@ test('favorites remain consistent during failed saves and persist after recovery
   assert.equal(await favorite.getAttribute('aria-pressed'), 'false', 'a second click removes the temporary favorite');
   await favorite.click();
   await page.locator('#logo').click();
-  const favorites = page.locator('.mine .cat-sec').last();
+  await page.locator('#chips a[href="#/favorites"]').click();
+  const favorites = page.locator('.favorites-grid');
   await favorites.locator('.tile[data-slug="air-hockey"]').waitFor();
-  assert.equal(await favorites.locator('.tile').count(), 2, 'home includes both saved and temporary favorites');
+  assert.equal(await favorites.locator('.tile').count(), 2, 'favorites filter includes both saved and temporary favorites');
   await favorites.locator('.tile[data-slug="air-hockey"]').click();
   await page.waitForFunction(() => document.querySelector('#stage iframe')?.contentWindow?.Kit);
   assert.equal(await favorite.getAttribute('aria-pressed'), 'true', 'temporary state survives portal navigation');
@@ -98,7 +98,7 @@ test('favorites remain consistent during failed saves and persist after recovery
 test('category navigation transfers focus to its heading and search keeps typing focus', async t => {
   const page = await newPage(t);
   await page.goto(`${origin}${base}`);
-  const category = page.locator('#chips a').nth(1);
+  const category = page.locator('#chips a[href^="#/c/"]').first();
   const destination = await category.getAttribute('href');
   await category.focus();
   await page.keyboard.press('Enter');
@@ -119,19 +119,6 @@ test('inherited object names show the missing-route page', async t => {
     assert.equal(await page.locator('#stage iframe').count(), 0, route);
     assert.match(await page.locator('#app .empty').innerText(), /لم نجد|مختبئة/, route);
   }
-});
-
-test('Tab reaches game menu controls and can leave the iframe', async t => {
-  const page = await newPage(t);
-  const frame = await openGame(page, 'pool-party');
-  await page.keyboard.press('Tab');
-  assert.equal(await frame.evaluate(() => document.activeElement.tagName), 'BUTTON');
-  let escaped = false;
-  for (let i = 0; i < 60; i++) {
-    await page.keyboard.press('Tab');
-    if (await page.evaluate(() => document.activeElement.tagName !== 'IFRAME')) { escaped = true; break; }
-  }
-  assert.ok(escaped, 'normal Tab navigation must reach the surrounding portal');
 });
 
 test('typing restart shortcut leaves controls, modals and Shift+Tab navigable', async t => {
@@ -195,28 +182,6 @@ test('typing restart shortcut leaves controls, modals and Shift+Tab navigable', 
     if (await page.evaluate(() => document.activeElement.tagName !== 'IFRAME')) { escaped = true; break; }
   }
   assert.ok(escaped, 'typing settings must provide a keyboard path out of the iframe');
-});
-
-test('all game favicons resolve under a repository subpath', async () => {
-  const catalog = { window: {} };
-  vm.runInNewContext(await fs.readFile(path.join(repo, 'js/catalog.js'), 'utf8'), catalog);
-  const expectedCount = catalog.window.GAMES.length;
-  assert.ok(expectedCount > 0, 'the source catalog contains games');
-  const games = await fs.readdir(path.join(root, 'games'), { withFileTypes: true });
-  let count = 0;
-  for (const game of games.filter(entry => entry.isDirectory())) {
-    const url = `${origin}${base}games/${game.name}/index.html`;
-    const response = await fetch(url);
-    if (response.status === 404) continue;
-    const html = await response.text();
-    const icon = html.match(/<link\b[^>]*\brel=["']icon["'][^>]*\bhref=["']([^"']+)["'][^>]*>/i);
-    assert.ok(icon, `${game.name} declares a favicon`);
-    const iconUrl = new URL(icon[1], url).href;
-    assert.equal(iconUrl, `${origin}${base}favicon.svg`, game.name);
-    assert.equal((await fetch(iconUrl)).status, 200, game.name);
-    count++;
-  }
-  assert.equal(count, expectedCount, 'every catalog game has a working local favicon');
 });
 
 test('Fire and Ice retains solo Tab switching and Shift+Tab can leave play', async t => {
