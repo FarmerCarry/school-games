@@ -18,14 +18,17 @@
   // --------------------------------------------------------------- canvas
   var canvas = $('game');
   var ui = $('ui');
+  var renderDirty = true;
   var view = Kit.fit(canvas, VW, VH, {
     smooth: false,
     onResize: function (v) {
       var r = canvas.style;
       ui.style.left = r.left; ui.style.top = r.top;
       ui.style.transform = 'scale(' + v.scale + ')';
+      renderDirty = true;
     }
   });
+  canvas.addEventListener('contextrestored', function () { view.resize(); });
   var shake = Kit.shake();
 
   // ---------------------------------------------------------------- input
@@ -797,6 +800,7 @@
     G.saveError = null;
     saveErrorEl.hidden = true;
     G.savedFlash = 1.6;
+    renderDirty = true;
     return true;
   }
 
@@ -937,9 +941,13 @@
       ambient(dt);
     }
     // shared fx
+    // Finish transient effects, including their final clearing frame, before freezing a menu backdrop.
+    if (shake.power || shake.x || shake.y || texts.length || confetti.length || G.toasts.length ||
+        G.hint || G.banner || placePop || G.selPop > 0 || G.selName > 0 || G.savedFlash > 0) renderDirty = true;
     shake.update(dt);
     for (i = 0; i < PMAX; i++) {
       var p = parts[i]; if (!p.on) continue;
+      renderDirty = true;
       p.life -= dt; if (p.life <= 0) { p.on = false; continue; }
       p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
       if (p.kind === 0 && p.g > 0 && G.world.solid(Math.floor(p.x), Math.floor(p.y))) { p.vy *= -0.3; p.vx *= 0.6; p.y -= p.vy * dt * 2; }
@@ -951,7 +959,7 @@
     if (G.banner) { G.banner.t -= dt; if (G.banner.t <= 0) G.banner = null; }
     if (placePop) { placePop.t -= dt; if (placePop.t <= 0) placePop = null; }
     G.selPop = Math.max(0, G.selPop - dt * 4); G.selName = Math.max(0, G.selName - dt); G.savedFlash = Math.max(0, G.savedFlash - dt);
-    for (i = 0; i < 36; i++) if (slotBump[i] > 0) slotBump[i] = Math.max(0, slotBump[i] - dt * 4);
+    for (i = 0; i < 36; i++) if (slotBump[i] > 0) { renderDirty = true; slotBump[i] = Math.max(0, slotBump[i] - dt * 4); }
     K.endFrame(); M.lp = M.rp = false; M.wheel = 0;
   }
   function ambient(dt) {
@@ -964,12 +972,19 @@
   }
 
   // --------------------------------------------------------------- render
-  var titleFrame = 0;
+  var titleDrawTime = 0, renderedMode = '';
   function render() {
     var ctx = view.ctx, S = view.scale * view.dpr;
     if (!G.world) return;
-    // The title backdrop pans slowly: redraw it at half rate to keep the menu light.
-    if (G.mode === 'title' || G.mode === 'newworld') { titleFrame++; if (titleFrame % 2) return; }
+    if (G.mode !== renderedMode) renderDirty = true;
+    var frozen = G.mode === 'pause' || G.mode === 'master' || G.mode === 'newworld';
+    if (frozen && !renderDirty) return;
+    // Keep the slow title pan near 30 Hz, including on high-refresh displays.
+    if (G.mode === 'title') {
+      var now = performance.now(), elapsed = now - titleDrawTime, interval = 1000 / 30;
+      if (!renderDirty && elapsed < interval) return;
+      titleDrawTime = now - (elapsed % interval);
+    }
     var cx = G.cam.x + shake.x / TS, cy = G.cam.y + shake.y / TS;
     cx = Math.round(cx * TS * S) / (TS * S); cy = Math.round(cy * TS * S) / (TS * S);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -991,6 +1006,9 @@
     drawTexts(ctx, cx, cy);
     if ((G.mode === 'play' || G.mode === 'inv' || G.mode === 'pause') ) { drawCursor(ctx, cx, cy); drawHUD(ctx); }
     drawConfetti(ctx);
+    renderedMode = G.mode;
+    // A spent budget may have left stale visible chunks; finish those before freezing.
+    renderDirty = budget.n <= 0;
   }
   // Sky is soft and slow-moving: render it at half resolution, refresh only when needed.
   var skyCv = document.createElement('canvas'), skyCtx = skyCv.getContext('2d'), skyState = { n: 0, cx: -99, cy: -99 };
@@ -1379,6 +1397,7 @@
   saveErrorEl.appendChild(saveRetry); document.body.appendChild(saveErrorEl);
   function showSaveError(kind) {
     G.savedFlash = 0; G.saveError = kind;
+    renderDirty = true;
     saveErrorText.textContent = kind === 'meta' ? 'تم حفظ العالم، لكن تعذر تحديث قائمة العوالم. حاول مجددًا.' : 'تعذر حفظ العالم. مساحة التخزين ممتلئة أو غير متاحة. حاول مجددًا.';
     saveErrorEl.hidden = false;
     return false;
@@ -1757,11 +1776,10 @@
   muteBtn.title = 'الصوت (M)';
   Kit.loop(update, render);
   // Cached HUD panels may have been drawn before the Arabic font finished loading: redraw them once it has.
-  try { if (document.fonts && document.fonts.load) document.fonts.load('700 20px Fredoka', 'عالم').then(function () { panelCache = {}; }, function () {}); } catch (e) { /* ignore */ }
+  try { if (document.fonts && document.fonts.load) document.fonts.load('700 20px Fredoka', 'عالم').then(function () { panelCache = {}; renderDirty = true; }, function () {}); } catch (e) { /* ignore */ }
   function persist() { if (G.slot && (G.mode === 'play' || G.mode === 'inv' || G.mode === 'pause' || G.mode === 'master')) saveGame(); }
   window.addEventListener('pagehide', persist);
   window.addEventListener('beforeunload', persist);
-  document.addEventListener('visibilitychange', function () { if (document.hidden) { persist(); if (G.mode === 'play') pause(); } });
 
   // Debug hook for automated checks.
   window.__game = {
@@ -1781,6 +1799,10 @@
     render: function () { render(); }, update: function (dt) { update(dt || 1 / 60); },
     B: B, I: I, sfx: SND
   };
-  Kit.lifecycle({ pause: pause, reset: function () { M.left = M.right = M.lp = M.rp = false; M.wheel = 0; flyTap = false; } });
+  Kit.lifecycle({ pause: function (reason) {
+    // Pausing already persists the world; use a single path for tab hiding.
+    if (G.mode === 'play' || G.mode === 'inv') pause();
+    else if (reason === 'hidden') persist();
+  }, reset: function () { M.left = M.right = M.lp = M.rp = false; M.wheel = 0; flyTap = false; } });
   Kit.ready();
 })();

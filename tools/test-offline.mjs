@@ -172,11 +172,11 @@ async function kill(inspector, page, scope, killBuild) {
 }
 
 try {
-  fs.mkdirSync(path.join(SOURCE, 'tools'), { recursive: true });
+  fs.mkdirSync(path.join(SOURCE, 'tools/lib'), { recursive: true });
   for (const dir of ['games', 'js', 'css', 'shared', 'lib', 'icons']) {
     fs.cpSync(path.join(REPO, dir), path.join(SOURCE, dir), { recursive: true });
   }
-  for (const file of ['index.html', 'manifest.webmanifest', 'favicon.svg', 'tools/build.mjs']) {
+  for (const file of ['index.html', 'manifest.webmanifest', 'favicon.svg', 'tools/build.mjs', 'tools/lib/svg-data-uri.mjs']) {
     fs.copyFileSync(path.join(REPO, file), path.join(SOURCE, file));
   }
   fs.symlinkSync(path.join(REPO, 'node_modules'), path.join(SOURCE, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');

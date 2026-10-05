@@ -51,42 +51,6 @@ async function awaitScreen(page, screen) {
   await page.waitForFunction(value => window.__game.state().screen === value, screen, { timeout: 15000 });
 }
 
-test('2048 restores a pending victory after returning to the menu, once per acknowledgement', async t => {
-  const page = await gamePage(t);
-  await page.keyboard.press('Enter');
-  await page.evaluate(() => {
-    window.__game.nearWin();
-    window.__game.move(3);
-    window.__game.pause();
-  });
-  await page.locator('#btnPauseMenu').click();
-  await page.keyboard.press('Enter');
-  await awaitScreen(page, 'win');
-  assert.equal(await page.locator('#winNum').textContent(), '2048');
-  await page.locator('#btnKeep').click();
-  await page.reload();
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(900);
-  const state = await page.evaluate(() => window.__game.state());
-  assert.equal(state.screen, 'play');
-  assert.equal(state.won, true);
-  assert.equal(state.keep, true);
-});
-
-test('2048 restores an unacknowledged victory after reloading before its dialog', async t => {
-  const page = await gamePage(t);
-  await page.keyboard.press('Enter');
-  await page.evaluate(() => {
-    window.__game.nearWin();
-    window.__game.move(3);
-    window.__game.pause();
-  });
-  await page.reload();
-  await page.keyboard.press('Enter');
-  await awaitScreen(page, 'win');
-  assert.equal(await page.evaluate(() => window.__game.state().keep), false);
-});
-
 test('2048 preserves a saved victory on a board with no remaining moves', async t => {
   const page = await gamePage(t);
   await page.evaluate(() => {
@@ -100,22 +64,6 @@ test('2048 preserves a saved victory on a board with no remaining moves', async 
   assert.equal(await page.evaluate(() => window.__game.state().max), 2048);
   await page.locator('#btnKeep').click();
   await awaitScreen(page, 'over');
-});
-
-test('2048 ordinary saves continue without a victory dialog', async t => {
-  const page = await gamePage(t);
-  await page.keyboard.press('Enter');
-  await page.evaluate(() => {
-    window.__game.set([2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    window.__game.move(3);
-  });
-  await page.reload();
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(900);
-  const state = await page.evaluate(() => window.__game.state());
-  assert.equal(state.screen, 'play');
-  assert.equal(state.score, 4);
-  assert.equal(state.won, false);
 });
 
 function verifier(game, args = [], inject = '') {

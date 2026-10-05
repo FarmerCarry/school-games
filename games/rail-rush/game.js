@@ -419,6 +419,7 @@
       if (pickMats[tp]) { pickMats[tp].map.dispose(); pickMats[tp].map = tex; pickMats[tp].needsUpdate = true; }
       else pickMats[tp] = new T.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
     });
+    renderDirty = true;
   }
   makePickMats();
   var spritePool = [];
@@ -1112,12 +1113,20 @@
   /* ============================================================ render */
   var dummy = new T.Object3D(), moversBuf = [];
   var camPos = new T.Vector3(0, 2, 5), camLook = new T.Vector3(0, 1, 0), tmpV = new T.Vector3(), tmpL = new T.Vector3();
-  var lastT = performance.now();
+  var lastT = performance.now(), renderDirty = true;
+  canvas.addEventListener('webglcontextrestored', function () { renderDirty = true; });
   function render(alpha) {
     var now = performance.now(), rdt = Math.min(0.1, (now - lastT) / 1000);
     lastT = now;
     var playing = S.mode === 'play' || S.mode === 'intro';
     dynRes(now, playing && !S.hold);
+    // A paused world only needs another frame after a visible change. Keep the
+    // frame clocks current so resuming does not count idle time as slow play.
+    if (S.mode === 'paused') {
+      if (!renderDirty) return;
+      rdt = 0;
+    }
+    renderDirty = false;
     var a = playing ? alpha : 1;
     var pDr = S.prevPD + (S.pD - S.prevPD) * a;
     var xr = P.px + (P.x - P.px) * a, yr = P.py + (P.y - P.py) * a;
@@ -1360,6 +1369,7 @@
   /* ================================================================ UI */
   var ui = $('ui');
   function layout() {
+    renderDirty = true;
     var w = window.innerWidth, h = window.innerHeight;
     renderer.setSize(w, h, false);
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
@@ -1580,6 +1590,7 @@
     if (S.mode !== 'play' && S.mode !== 'intro') return;
     pausedFrom = S.mode;
     S.mode = 'paused';
+    renderDirty = true;
     $('pMissions').innerHTML = save.missions.map(function (m) { return missionRow(m, true); }).join('');
     show('pause');
     music.pause();

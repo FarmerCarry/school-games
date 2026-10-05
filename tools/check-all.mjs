@@ -14,6 +14,7 @@ import os from 'node:os';
 import vm from 'node:vm';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { svgDataUri } from './lib/svg-data-uri.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // SG_ROOT=_site tests the fast build made by tools/build.mjs instead of the source files.
@@ -46,6 +47,28 @@ const add = (slug, msg) => {
   console.error(problem);
 };
 
+// Release thumbnails are embedded in the portal. Check every entry against its
+// editable source, so omitting the unused separate copies cannot hide missing or
+// stale artwork. Source/ZIP checks continue to validate the separate SVG files.
+const built = ROOT !== REPO && !fs.existsSync(path.join(ROOT, 'js/catalog.js'));
+let embeddedThumbs;
+if (built) {
+  try {
+    const portal = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    const table = portal.match(/window\.SG_THUMBS=(\{[^\r\n]*\});/);
+    if (!table) throw new Error('missing embedded thumbnail table');
+    embeddedThumbs = JSON.parse(table[1]);
+    for (const g of games) {
+      const source = path.join(REPO, 'games', g.slug, 'thumb.svg');
+      if (!Object.hasOwn(embeddedThumbs, g.slug)) add(g.slug, 'missing embedded thumbnail');
+      else if (!fs.existsSync(source) || embeddedThumbs[g.slug] !== svgDataUri(fs.readFileSync(source, 'utf8'))) {
+        add(g.slug, 'embedded thumbnail does not match its source');
+      }
+    }
+    for (const slug of Object.keys(embeddedThumbs)) if (!games.some(g => g.slug === slug)) add(slug, 'embedded thumbnail has no catalog entry');
+  } catch (error) { add('portal', 'invalid embedded thumbnails: ' + error.message); }
+}
+
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
     d.isDirectory() ? walk(path.join(dir, d.name)) : [path.join(dir, d.name)]);
@@ -58,7 +81,7 @@ for (const f of folders) if (!games.find(g => g.slug === f)) add(f, 'folder has 
 for (const g of selected) {
   const dir = path.join(ROOT, 'games', g.slug);
   if (!fs.existsSync(path.join(dir, 'index.html'))) { add(g.slug, 'missing index.html'); continue; }
-  const thumb = path.join(dir, 'thumb.svg');
+  const thumb = path.join(built ? REPO : ROOT, 'games', g.slug, 'thumb.svg');
   if (!fs.existsSync(thumb)) add(g.slug, 'missing thumb.svg');
   else {
     const svg = fs.readFileSync(thumb, 'utf8');

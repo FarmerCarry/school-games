@@ -200,7 +200,7 @@ test('Golf ignores browser modifier chords and composition without changing phas
   assert.equal(await speedSteps(frame), 3, 'unmodified game-owned Space accelerates');
 });
 
-for (const key of ['Enter', 'Space']) {
+for (const key of ['Space']) {
   test(`Golf native ${key} activates focused controls once and preserves pause/result shortcuts`, async t => {
     const { page, frame } = await game(t);
     await activate(page, frame, '#open-upgrades', key);

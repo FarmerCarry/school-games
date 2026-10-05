@@ -16,7 +16,7 @@
     <div class="tools">
       <button id="pause" class="round-button" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden><i class="pause-icon" aria-hidden="true"></i></button>
     </div>
-    <div id="distance" class="distance" hidden><strong id="meters">0</strong><span>متر</span></div>
+    <div id="distance" class="distance" hidden><strong id="meters" dir="ltr">0</strong><span>متر</span></div>
     <div id="toast" class="toast" role="status" hidden></div>
     <div id="best" class="best">أفضل مسافة: <bdi id="best-meters">0</bdi> متر</div>
 
@@ -25,8 +25,8 @@
       <p class="tagline">ضربة صغيرة… رحلة كبيرة!</p>
       <button id="play" class="button primary play" type="button">العب الآن <span class="play-icon" aria-hidden="true"></span></button>
       <div class="title-actions"><button id="open-worlds" class="button cream" type="button">العوالم</button><button id="open-upgrades" class="button cream" type="button">التطويرات</button></div>
-      <p class="howto">انقر أو اضغط <span class="key">مسافة</span> في منتصف المؤشر<br>طر أبعد، واجمع العملات، وطوّر ضربتك!</p>
-      <div id="journey" class="journey"></div>
+      <div class="instructions"><p class="howto">انقر أو اضغط <span class="key">مسافة</span> في منتصف المؤشر<br>طر أبعد، واجمع العملات، وطوّر ضربتك!</p>
+      <div id="journey" class="journey"></div></div>
     </section>
 
     <div id="swing-controls" class="swing-controls" hidden>
@@ -40,13 +40,15 @@
     </div>
     <button id="flight-hint" class="flight-hint" type="button" hidden>سرّع الرحلة · مسافة</button>
 
+    <button id="continue" class="flight-hint" type="button" hidden>عرض النتيجة · مسافة</button>
+
     <section id="modal" class="modal" hidden aria-modal="true" role="dialog" aria-labelledby="modal-heading">
       <div id="panel" class="panel">
         <button id="close-modal" class="close-button" type="button" aria-label="رجوع">×</button>
         <h2 id="modal-heading"></h2>
         <div id="result-content" hidden>
           <p id="result-note" class="result-note"></p>
-          <div class="result-distance"><b id="result-meters">0</b><span>متر</span></div>
+          <div class="result-distance"><b id="result-meters" dir="ltr">0</b><span>متر</span></div>
           <div id="result-coins" class="result-coins"></div>
           <p id="result-unlock" class="result-unlock" hidden></p>
         </div>

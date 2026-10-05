@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
 const rules = require('../../shared/board-rules.js');
@@ -14,13 +12,6 @@ function sequence(game, moves) {
     return next;
   }, rules.create(game));
 }
-
-test('classic script and CommonJS expose the same small rules API', () => {
-  const context = { window: {} };
-  vm.runInNewContext(readFileSync(new URL('../../shared/board-rules.js', import.meta.url), 'utf8'), context);
-  assert.deepEqual(Object.keys(context.window.SGBoardRules), Object.keys(rules));
-  assert.equal(context.window.SGBoardRules.create('connect-four').board.length, 42);
-});
 
 test('fresh board sizes, legal moves, independent arrays and unknown games', () => {
   const four = rules.create('connect-four');

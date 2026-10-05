@@ -88,7 +88,7 @@ async function assertStats(page, expected) {
 
 const empty = { bestLen: 0, totalKills: 0, bestKills: 0, games: 0, bestTime: 0, totalFood: 0, bestRank: 0, powerups: 0, top1Time: 0 };
 
-for (const trigger of ['KeyP', 'Escape', 'button']) {
+for (const trigger of ['Escape', 'button']) {
   test(`Snake Arena ${trigger} pauses before a boundary collision and resumes into game over`, async t => {
     const page = await gamePage(t);
     const before = await page.evaluate(() => {

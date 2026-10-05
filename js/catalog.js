@@ -3,7 +3,7 @@
  * The site is in Arabic, so titles, blurbs and control descriptions are Arabic.
  *
  * To hide a game: set `hidden: true` on its entry.
- * To feature a game in the "Hot right now" row: set `hot: true`.
+ * To feature a game first in the catalog: set `hot: true`.
  * Plain script (not JSON) so the site also works when opened from a folder.
  */
 window.SITE = {

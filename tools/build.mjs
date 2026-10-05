@@ -27,6 +27,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { svgDataUri } from './lib/svg-data-uri.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
@@ -251,18 +252,12 @@ try {
   for (const slug of gameDirs) {
     const html = inlinePage(path.join(ROOT, 'games', slug, 'index.html'));
     write(`games/${slug}/index.html`, html);
-    if (fs.existsSync(path.join(ROOT, 'games', slug, 'thumb.svg'))) copy(`games/${slug}/thumb.svg`);
     report.push([`games/${slug}/index.html`, Buffer.byteLength(html)]);
   }
   const missing = catalogSlugs.filter(s => !gameDirs.includes(s));
   if (missing.length) console.warn('warning: catalog games without a folder:', missing.join(', '));
 
   /* -------------------------------------------------------------- portal */
-  function svgDataUri(svg) {
-    const min = svg.replace(/<\?xml[^>]*>/, '').replace(/<!--[\s\S]*?-->/g, '').replace(/\s+/g, ' ').trim();
-    // Minimal percent-encoding: safe inside an HTML attribute, still compresses well.
-    return 'data:image/svg+xml,' + min.replace(/[%#"&<>]|[^\x00-\x7F]/gu, c => encodeURIComponent(c));
-  }
   const thumbs = {};
   for (const slug of gameDirs) {
     const f = path.join(ROOT, 'games', slug, 'thumb.svg');
@@ -287,13 +282,14 @@ try {
   write('.nojekyll', '');
 
   /* ------------------------------------------------------ service worker */
-  // Everything a visit can need, with content hashes (thumb.svg files are inlined in the portal).
+  // Everything a visit can need, with content hashes. Thumbnail SVGs exist only
+  // inside the portal in the release; the editable sources retain separate files.
   const precache = {};
   (function walk(dir) {
     for (const e of fs.readdirSync(path.join(OUT, dir), { withFileTypes: true })) {
       const rel = dir ? dir + '/' + e.name : e.name;
       if (e.isDirectory()) { walk(rel); continue; }
-      if (/(^|\/)(thumb\.svg|LICENSE[^/]*|\.nojekyll)$/.test(rel)) continue;
+      if (/(^|\/)(LICENSE[^/]*|\.nojekyll)$/.test(rel)) continue;
       precache[rel] = hash(fs.readFileSync(path.join(OUT, rel)));
     }
   })('');

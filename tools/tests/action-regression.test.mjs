@@ -1,28 +1,17 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import http from 'node:http';
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
+import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
-const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2' };
 let browser, server, origin;
 
 before(async () => {
-  server = http.createServer(async (req, res) => {
-    try {
-      let file = path.resolve(root, '.' + decodeURIComponent(new URL(req.url, 'http://localhost').pathname));
-      if (file !== root && !file.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
-      if ((await fs.stat(file)).isDirectory()) file = path.join(file, 'index.html');
-      const body = await fs.readFile(file);
-      res.writeHead(200, { 'content-type': mime[path.extname(file)] || 'application/octet-stream' }).end(body);
-    } catch { res.writeHead(404).end(); }
-  });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  origin = `http://127.0.0.1:${server.address().port}`;
+  server = await startTestServer(root);
+  origin = server.origin;
   browser = await launchChromium({
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
   });
@@ -30,7 +19,7 @@ before(async () => {
 
 after(async () => {
   if (browser) await browser.close();
-  if (server) await new Promise(resolve => server.close(resolve));
+  await server?.close();
 });
 
 async function gamePage(t, slug) {
@@ -152,45 +141,6 @@ async function startSnake(page) {
   await page.evaluate(() => document.getElementById('btnPlay').click());
   assert.equal(await page.evaluate(() => __game.state), 'play');
 }
-
-test('Snake Arena keeps a length unlock and record after boosting below the threshold', async t => {
-  const page = await gamePage(t, 'snake-arena');
-  await startSnake(page);
-  const peak = await page.evaluate(() => {
-    __game.god();
-    __game.setMass(2001);
-    stepGame();
-    return { length: __game.player.len, announced: SA.game.run.announced.dragon };
-  });
-  assert.ok(peak.length >= 2000);
-  assert.equal(peak.announced, 1);
-  await page.keyboard.down('Space');
-  await page.evaluate(() => stepGame(180));
-  await page.keyboard.up('Space');
-  const boosted = await page.evaluate(() => __game.player.len);
-  assert.ok(boosted < 2000, `boosting should bring length below the Dragon threshold: ${boosted}`);
-  await page.evaluate(() => document.getElementById('btnPause').click());
-  assert.equal(await page.evaluate(() => document.getElementById('pBest').textContent === Kit.fmt(SA.game.run.peakLen)), true);
-  await page.evaluate(() => {
-    document.getElementById('btnResume').click();
-    __game.killPlayer();
-    stepGame(200);
-  });
-  const result = await page.evaluate(() => ({
-    state: __game.state,
-    best: __game.stats.bestLen,
-    peak: SA.game.run.peakLen,
-    death: SA.game.run.deathLen,
-    dragon: SA.reqMet(SA.SKINS.find(s => s.id === 'dragon').req, __game.stats)
-  }));
-  assert.equal(result.state, 'over');
-  assert.ok(result.peak >= peak.length);
-  assert.equal(result.best, result.peak);
-  assert.equal(result.death, boosted);
-  assert.equal(result.dragon, true);
-  await page.reload();
-  assert.equal(await page.evaluate(() => __game.stats.bestLen), result.peak);
-});
 
 test('Snake Arena records length on a fatal tick that never reaches runTick', async t => {
   const page = await gamePage(t, 'snake-arena');

@@ -52,18 +52,29 @@ jobs:
         run: npm ci
       - name: Install Chromium and its system dependencies
         run: npx playwright install --with-deps --no-shell chromium
-      - name: Test local board games and computer opponents
-        run: npm run test:board-games
-        env:
-          SG_BOARD_SCREENSHOTS: .work/boards-source
       - name: Smoke-test all source games
         run: npm run check
         env:
           SG_ARTIFACT_DIR: .work/smoke-source
-      - name: Test source, build safety and harness regressions
-        run: node tools/ci-run.mjs npm test
+      - name: Test shared rules, build safety and harnesses once
+        run: node tools/ci-run.mjs npm run test:shared
+      - name: Test source gameplay and portal regressions
+        run: node tools/ci-run.mjs npm run test:browser
+      - name: Test local board games and computer opponents
+        run: npm run test:board-games
+        env:
+          SG_BOARD_SCREENSHOTS: .work/boards-source
       - name: Build the fast site
         run: npm run build
+      - name: Check built asset performance budgets
+        run: npm run perf:assets -- --report artifacts/asset-budgets.json
+      - name: Upload asset performance report
+        if: always() && hashFiles('artifacts/asset-budgets.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: asset-performance-budgets
+          path: artifacts/asset-budgets.json
+          if-no-files-found: error
       - name: Test board games in the single-file fast build
         run: npm run test:board-games
         env:
@@ -74,8 +85,8 @@ jobs:
         env:
           SG_ROOT: _site
           SG_ARTIFACT_DIR: .work/smoke-built
-      - name: Test optimized gameplay and harness regressions
-        run: node tools/ci-run.mjs npm test
+      - name: Test optimized gameplay and portal regressions
+        run: node tools/ci-run.mjs npm run test:browser
         env:
           SG_ROOT: _site
       - name: Test offline installation, updates and the kill switch

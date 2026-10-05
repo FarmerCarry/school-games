@@ -66,8 +66,11 @@ test('personal games appear first and quick filters select matching games', asyn
     localStorage.setItem('sg:site:favs', '["drift-king"]');
   });
   await page.goto(origin);
-  assert.equal(await page.locator('#app > :first-child').getAttribute('class'), 'cat-rows mine');
-  assert.equal(await page.locator('.mine .cat-sec').first().locator('.tile').getAttribute('data-slug'), 'pool-party');
+  assert.equal(await page.locator('#app > :first-child .recent-grid').count(), 1, 'continue playing appears before the complete catalog');
+  assert.equal(await page.locator('.recent-grid .tile').getAttribute('data-slug'), 'pool-party');
+  await page.locator('#chips a[href="#/favorites"]').click();
+  await page.waitForFunction(() => document.body.className === 'route-favorites');
+  assert.deepEqual(await page.locator('.favorites-grid .tile').evaluateAll(tiles => tiles.map(tile => tile.dataset.slug)), ['drift-king'], 'favorites stay one click away without duplicating the catalog');
   for (const id of ['short', 'simple', 'friends']) {
     await page.locator(`#quickFilters a[href="#/quick/${id}"]`).click();
     await page.waitForFunction(id => location.hash === `#/quick/${id}` && document.body.className === 'route-quick' && document.querySelector(`#quickFilters a[href="#/quick/${id}"]`)?.getAttribute('aria-current') === 'page', id);
