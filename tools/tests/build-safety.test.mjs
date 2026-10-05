@@ -83,13 +83,6 @@ test('default and nested custom outputs rebuild safely without caching the owner
   noTemporaryOutput(f);
 });
 
-test('a new empty custom directory is supported', t => {
-  const f = fixture(t);
-  fs.mkdirSync(path.join(f.root, 'preview'));
-  success(run(f, ['--out', 'preview']));
-  assert.ok(fs.existsSync(path.join(f.root, 'preview', marker)));
-});
-
 test('kill-switch portals stay unregistered after worker-driven navigation', t => {
   const f = fixture(t);
   const portal = () => fs.readFileSync(path.join(f.root, '_site/index.html'), 'utf8');

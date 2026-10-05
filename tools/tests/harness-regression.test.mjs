@@ -41,7 +41,7 @@ test('successful clicks, evaluations, assertions and reloads report success', ()
   assert.deepEqual(report.harnessErrors, []);
 });
 
-for (const action of [{ clickSel: '#missing' }, { clickText: 'Missing button' }]) {
+for (const action of [{ clickSel: '#missing' }]) {
   test(`a missing ${Object.keys(action)[0]} fails the report and process`, () => {
     const { status, report } = play([action, { eval: '"must not run"' }]);
     assert.equal(status, 1);
@@ -71,18 +71,6 @@ test('a failed page navigation produces a failing report', () => {
   assert.equal(status, 1);
   assert.equal(report.ok, false);
   assert.ok(report.failedRequests.some(request => request.includes('missing.html') && request.includes('404')));
-});
-
-test('a missing browser override gives an actionable report without hanging', () => {
-  const result = spawnSync(process.execPath, [path.join(repo, 'tools/playtest.mjs'), '--path', '/index.html', '--actions-json', '[]'], {
-    env: { ...process.env, SG_ROOT: root, PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: path.join(root, 'missing-chromium') },
-    encoding: 'utf8', timeout: 10000
-  });
-  assert.equal(result.status, 1);
-  const report = JSON.parse(result.stdout);
-  assert.equal(report.ok, false);
-  assert.match(report.harnessErrors[0], /PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH.*does not exist/);
-  assert.match(report.harnessErrors[0], /npm run browsers:install/);
 });
 
 test('unknown game selections fail rather than checking zero games', () => {

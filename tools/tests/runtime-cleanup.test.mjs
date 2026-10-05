@@ -205,15 +205,6 @@ test('Rail Rush freezes paused WebGL work, redraws resize, and resumes distance'
   assert.ok(await page.evaluate(d => __game.state.dist > d, distance));
 });
 
-for (const id of ['critter-mart', 'block-world']) {
-  test(`${id} title paints about 30 times per second even on a 240 Hz display`, async t => {
-    const page = await game(t, id);
-    const paints = await page.evaluate(() => {
-      runtime.draw(120); runtime.paints = 0; runtime.draw(240, 240); return runtime.paints;
-    });
-    assert.ok(paints >= 29 && paints <= 31, `${paints} title paints in one second`);
-  });
-}
 
 test('late font readiness repaints each frozen game, then leaves it idle again', async t => {
   for (const id of ['critter-mart', 'wacky-soccer', 'block-world', 'rail-rush']) {

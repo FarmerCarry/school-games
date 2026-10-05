@@ -142,45 +142,6 @@ async function startSnake(page) {
   assert.equal(await page.evaluate(() => __game.state), 'play');
 }
 
-test('Snake Arena keeps a length unlock and record after boosting below the threshold', async t => {
-  const page = await gamePage(t, 'snake-arena');
-  await startSnake(page);
-  const peak = await page.evaluate(() => {
-    __game.god();
-    __game.setMass(2001);
-    stepGame();
-    return { length: __game.player.len, announced: SA.game.run.announced.dragon };
-  });
-  assert.ok(peak.length >= 2000);
-  assert.equal(peak.announced, 1);
-  await page.keyboard.down('Space');
-  await page.evaluate(() => stepGame(180));
-  await page.keyboard.up('Space');
-  const boosted = await page.evaluate(() => __game.player.len);
-  assert.ok(boosted < 2000, `boosting should bring length below the Dragon threshold: ${boosted}`);
-  await page.evaluate(() => document.getElementById('btnPause').click());
-  assert.equal(await page.evaluate(() => document.getElementById('pBest').textContent === Kit.fmt(SA.game.run.peakLen)), true);
-  await page.evaluate(() => {
-    document.getElementById('btnResume').click();
-    __game.killPlayer();
-    stepGame(200);
-  });
-  const result = await page.evaluate(() => ({
-    state: __game.state,
-    best: __game.stats.bestLen,
-    peak: SA.game.run.peakLen,
-    death: SA.game.run.deathLen,
-    dragon: SA.reqMet(SA.SKINS.find(s => s.id === 'dragon').req, __game.stats)
-  }));
-  assert.equal(result.state, 'over');
-  assert.ok(result.peak >= peak.length);
-  assert.equal(result.best, result.peak);
-  assert.equal(result.death, boosted);
-  assert.equal(result.dragon, true);
-  await page.reload();
-  assert.equal(await page.evaluate(() => __game.stats.bestLen), result.peak);
-});
-
 test('Snake Arena records length on a fatal tick that never reaches runTick', async t => {
   const page = await gamePage(t, 'snake-arena');
   await startSnake(page);

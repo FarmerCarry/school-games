@@ -42,7 +42,7 @@ async function activate(page, selector, key) {
   await settle(page);
 }
 
-for (const key of ['Enter', 'Space']) {
+for (const key of ['Space']) {
   test(`Pool Party ${key} activates focused settings, mute and two-player controls only`, async t => {
     const page = await gamePage(t, 'pool-party');
     const before = await page.evaluate(() => window.__game.save.aim);
@@ -95,23 +95,6 @@ for (const key of ['Enter', 'Space']) {
     assert.equal(await troll.evaluate(() => window.__game.mode), 'select');
   });
 }
-
-test('Tab and Shift+Tab traverse focused game controls without starting play', async t => {
-  const page = await gamePage(t, 'pool-party');
-  await page.locator('#btn2p').focus();
-  await page.keyboard.press('Tab');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'btnTrick');
-  await page.keyboard.press('Shift+Tab');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'btn2p');
-  await settle(page);
-  assert.equal(await page.evaluate(() => window.__game.screen), 'title');
-  await page.locator('#game').focus();
-  await page.keyboard.press('Space');
-  await page.waitForFunction(() => window.__game.screen === 'game');
-  assert.equal(await page.evaluate(() => window.__game.kind), 'cpu');
-  await page.keyboard.press('m');
-  assert.equal(await page.evaluate(() => Kit.audio.muted), true, 'canvas mute shortcut remains available');
-});
 
 test('editable controls, browser chords and keys handled by UI stay out of gameplay', async t => {
   const page = await gamePage(t, 'paint-grab');

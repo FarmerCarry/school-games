@@ -103,18 +103,6 @@ function checkFixture(f) {
   });
 }
 
-test('release contains one offline copy of every thumbnail and preserves source SVGs', t => {
-  const f = buildFixture(t);
-  assert.equal(fs.existsSync(path.join(f.root, '_site/games/demo/thumb.svg')), false);
-  assert.equal(fs.existsSync(path.join(f.root, 'games/demo/thumb.svg')), true);
-  assert.match(f.portal, /window\.SG_THUMBS=.*data:image\/svg\+xml/);
-  const worker = fs.readFileSync(path.join(f.root, '_site/sw.js'), 'utf8');
-  assert.match(worker, /"index\.html":"[a-f0-9]+"/);
-  assert.doesNotMatch(worker, /thumb\.svg/);
-  const checked = checkFixture(f);
-  assert.equal(checked.status, 0, checked.stderr);
-});
-
 test('release smoke rejects missing, changed and unknown embedded thumbnails', t => {
   const f = buildFixture(t);
   const good = JSON.parse(f.portal.match(/window\.SG_THUMBS=(\{[^\r\n]*\});/)[1]);

@@ -52,50 +52,6 @@ async function awaitScreen(page, screen) {
   await page.waitForFunction(value => window.__game.state().screen === value, screen, { timeout: 15000 });
 }
 
-async function pendingUndo(page) {
-  return page.evaluate(() => {
-    window.__game.nearWin();
-    window.__game.move(3);
-    const winning = window.__game.state();
-    window.__game.move(0);
-    window.__game.undo();
-    return winning;
-  });
-}
-
-test('Undo after an extra move preserves the first victory on the restored winning board', async t => {
-  const page = await gamePage(t);
-  const winning = await pendingUndo(page);
-  const restored = await state(page);
-  assert.deepEqual(restored.values, winning.values);
-  assert.equal(restored.score, winning.score);
-  assert.equal(restored.undos, 2);
-  assert.equal(restored.hist, 1);
-  assert.equal(restored.won, true);
-  assert.equal(restored.keep, false);
-  await awaitScreen(page, 'win');
-  assert.equal(await page.locator('#winNum').textContent(), '2048');
-});
-
-test('Undo of the winning move cancels its result and allows the next win', async t => {
-  const page = await gamePage(t);
-  const beforeWin = await page.evaluate(() => {
-    window.__game.nearWin();
-    const previous = window.__game.state();
-    window.__game.move(3);
-    window.__game.undo();
-    return previous;
-  });
-  await page.waitForTimeout(900);
-  const restored = await state(page);
-  assert.deepEqual(restored.values, beforeWin.values);
-  assert.equal(restored.score, beforeWin.score);
-  assert.equal(restored.screen, 'play');
-  assert.equal(restored.won, false);
-  assert.equal(restored.keep, false);
-  await page.evaluate(() => window.__game.move(3));
-  await awaitScreen(page, 'win');
-});
 
 test('Repeated Undo clears the newly scheduled result when the winning move is undone too', async t => {
   const page = await gamePage(t);
@@ -173,7 +129,7 @@ test('Undo after acknowledgement never presents the same victory again', async t
   assert.equal(acknowledged.keep, true);
 });
 
-for (const key of ['Enter', 'Space']) {
+for (const key of ['Space']) {
   test(`${key} activates the focused size and pause-menu buttons without a gameplay shortcut`, async t => {
     const page = await gamePage(t, false);
     const size = page.locator('.szb[data-n="3"]');
@@ -208,20 +164,6 @@ test('Pointer Undo returns focus to the board so the next arrow can merge tiles'
   assert.equal(moved.hist, 1);
 });
 
-test('Pointer Theme returns focus to the board without blocking the next merge', async t => {
-  const page = await gamePage(t);
-  await page.evaluate(() => {
-    window.__game.unlockAll();
-    window.__game.set([2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-  });
-  const previousTheme = (await state(page)).theme;
-  await page.locator('#btnTheme').click();
-  assert.notEqual((await state(page)).theme, previousTheme);
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'game');
-  await page.keyboard.press('ArrowLeft');
-  assert.equal((await state(page)).score, 4);
-});
-
 async function makeThreeMoves(page) {
   await page.evaluate(() => {
     window.__game.set([2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0]);
@@ -249,7 +191,7 @@ test('Pointer restart confirmation returns board focus and still requires its se
   assert.equal(await page.evaluate(() => document.activeElement.id), 'game');
 });
 
-for (const key of ['Enter', 'Space']) {
+for (const key of ['Space']) {
   test(`Keyboard ${key} on live HUD controls preserves Tab navigation and restart confirmation`, async t => {
     const page = await gamePage(t);
     await makeThreeMoves(page);

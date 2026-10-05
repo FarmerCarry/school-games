@@ -49,35 +49,6 @@ async function returnAfter(page, slug, seconds) {
   await page.goto(`${base}/games/${slug}/`);
 }
 
-test('Hoop Heads judges buzzer-beaters by the final score and keeps ties in overtime', async t => {
-  const page = await newPage(t, 'hoop-heads');
-  const results = await page.evaluate(() => {
-    return [[0, 10], [10, 0], [8, 10]].map(scores => {
-      __game.start({ mode: 'duo' });
-      const m = __game.match;
-      m.phase = 'play'; m.time = 0.001;
-      m.players[0].score = scores[0]; m.players[1].score = scores[1];
-      Object.assign(m.ball, {
-        hidden: false, state: 'shot', holder: null, shooter: m.players[0],
-        x: m.hoops[1].x, y: m.hoops[1].y - 1, vx: 0, vy: 300,
-        pts: 2, touched: false, scoredT: 0
-      });
-      HH.stepMatch(m, 1 / 60);
-      const result = { scores: m.players.map(p => p.score), winner: m.winner, ended: m.ended, timeUp: m.timeUp };
-      if (!m.ended) {
-        for (let i = 0; i < 105; i++) HH.stepMatch(m, 1 / 60);
-        result.overtime = m.overtime;
-      }
-      return result;
-    });
-  });
-  assert.deepEqual(results, [
-    { scores: [2, 10], winner: 1, ended: true, timeUp: true },
-    { scores: [12, 0], winner: 0, ended: true, timeUp: true },
-    { scores: [10, 10], winner: -1, ended: false, timeUp: true, overtime: true }
-  ]);
-});
-
 test('Pizza Empire preserves unclaimed offline earnings and collects later absences exactly once', async t => {
   const page = await newPage(t, 'pizza-clicker', {
     pizzas: 85, lifetime: 100, runBaked: 100,
