@@ -352,6 +352,7 @@ async function portalAndMobile() {
     await page.setViewportSize({ width: 1100, height: 619 });
     await page.setViewportSize({ width: 1100, height: 620 });
     await page.waitForTimeout(180);
+    await screenshot(page, 'portal-' + game + '-chooser', false);
     await fits(page, ['#stage', '#playBar'], game + ' embedded portal');
     await fits(frame, ['#localButton', '#pcButton', '#gameBoard', '#turnLine'], game + ' embedded chooser');
     await start(frame);
@@ -365,15 +366,19 @@ async function portalAndMobile() {
   }
   // This is the landscape iframe size produced by a 1100x620 laptop portal.
   // It must not select the long, stacked portrait-phone layout at width<600.
-  await page.setViewportSize({ width: 529, height: 298 });
-  for (const game of GAMES) {
-    await open(player, game);
-    await page.evaluate(() => document.fonts.ready);
-    await fits(page, ['.game-header', '#localButton', '#pcButton', '#gameBoard', '#turnLine'], game + ' small landscape chooser');
-    await start(page);
-    await sequence(page, WIN[game]);
-    await fits(page, ['.game-header', '#gameBoard', '#turnLine', '#rematchButton', '#leaveMatch'], game + ' small landscape result');
-    await screenshot(page, game + '-small-landscape');
+  for (const viewport of [{ width: 529, height: 298 }, { width: 480, height: 270 }, { width: 400, height: 225 }]) {
+    await page.setViewportSize(viewport);
+    const size = viewport.width + 'x' + viewport.height;
+    for (const game of GAMES) {
+      await open(player, game);
+      await page.evaluate(() => document.fonts.ready);
+      await screenshot(page, game + '-small-landscape-' + size + '-chooser', false);
+      await fits(page, ['.game-header', '#localButton', '#pcButton', '#gameBoard', '#turnLine'], game + ' small landscape chooser ' + size);
+      await start(page);
+      await sequence(page, WIN[game]);
+      await screenshot(page, game + '-small-landscape-' + size + '-result', false);
+      await fits(page, ['.game-header', '#gameBoard', '#turnLine', '#rematchButton', '#leaveMatch'], game + ' small landscape result ' + size);
+    }
   }
   await page.setViewportSize({ width: 692, height: 388 });
   for (const game of GAMES) {

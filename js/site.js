@@ -1053,17 +1053,19 @@
     var minW = Math.min(300, availW);
     var w = Math.floor(Math.min(availW, Math.max(minW, (window.innerHeight - fixed - 64) * 16 / 9)));
     wrap.style.width = w + 'px';
-    // Shrink monotonically: as the bar wraps it gets taller. Alternately
-    // growing and shrinking from its last height can oscillate across a wrap
-    // breakpoint and leave the final frame/bar taller than the viewport.
+    side.style.width = wide ? '' : w + 'px';
+    // Width changes can move the stage as well as wrap its toolbar. Measure
+    // the rendered bottom after each change instead of reusing its old top.
+    // Shrinking monotonically also avoids oscillating across wrap breakpoints.
     for (var pass = 0; pass < 8; pass++) {
-      var availH = window.innerHeight - fixed - bar.offsetHeight;
-      var nextW = Math.floor(Math.min(w, Math.max(minW, availH * 16 / 9)));
+      var overflow = bar.getBoundingClientRect().bottom + (window.pageYOffset || 0) - (window.innerHeight - 10);
+      if (overflow <= 0) break;
+      var nextW = Math.floor(Math.max(minW, w - overflow * 16 / 9));
       if (nextW >= w) break;
       w = nextW;
       wrap.style.width = w + 'px';
+      side.style.width = wide ? '' : w + 'px';
     }
-    side.style.width = wide ? '' : w + 'px';
   }
 
   /* ------------------------------------------------------------ render */
