@@ -354,6 +354,12 @@ async function portalAndMobile() {
     await page.waitForTimeout(180);
     await screenshot(page, 'portal-' + game + '-chooser', false);
     await fits(page, ['#stage', '#playBar'], game + ' embedded portal');
+    const stageSize = await page.locator('#stage').boundingBox();
+    assert.ok(stageSize.width >= 480 && stageSize.height >= 270, `${game}: embedded board retains usable dimensions: ${JSON.stringify(stageSize)}`);
+    const actions = await page.locator('#playBar .pbtn').evaluateAll(buttons => buttons.map(button => ({
+      top: button.offsetTop, label: button.getAttribute('aria-label')
+    })));
+    assert.ok(actions.every(action => Math.abs(action.top - actions[0].top) <= 1 && action.label), game + ': named portal controls remain in one row');
     await fits(frame, ['#localButton', '#pcButton', '#gameBoard', '#turnLine'], game + ' embedded chooser');
     await start(frame);
     await sequence(frame, WIN[game]);

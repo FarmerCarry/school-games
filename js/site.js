@@ -748,9 +748,9 @@
             '<div class="play-bar" id="playBar">' +
               '<div class="pb-info"><h1 class="pb-title">' + esc(g.title) + '</h1><div class="pb-meta">' + pl + cats + '</div></div>' +
               '<div class="pb-btns">' +
-                '<button type="button" class="pbtn fav' + (fav ? ' on' : '') + '" id="favBtn" aria-pressed="' + fav + '" title="' + (fav ? T.favOn : T.fav) + '"><span class="heart" aria-hidden="true">' + (fav ? '❤️' : '🤍') + '</span><span class="pb-lbl">' + (fav ? T.favOn : T.fav) + '</span></button>' +
-                '<button type="button" class="pbtn" id="restartBtn" title="' + T.restart + '"><span aria-hidden="true">🔄</span><span class="pb-lbl">' + T.restart + '</span></button>' +
-                '<button type="button" class="pbtn fs" id="fsBtn" title="' + T.fs + '">' + FS_ICON + '<span class="pb-lbl">' + T.fs + '</span></button>' +
+                '<button type="button" class="pbtn fav' + (fav ? ' on' : '') + '" id="favBtn" aria-pressed="' + fav + '" aria-label="' + (fav ? T.favOn : T.fav) + '" title="' + (fav ? T.favOn : T.fav) + '"><span class="heart" aria-hidden="true">' + (fav ? '❤️' : '🤍') + '</span><span class="pb-lbl">' + (fav ? T.favOn : T.fav) + '</span></button>' +
+                '<button type="button" class="pbtn" id="restartBtn" aria-label="' + T.restart + '" title="' + T.restart + '"><span aria-hidden="true">🔄</span><span class="pb-lbl">' + T.restart + '</span></button>' +
+                '<button type="button" class="pbtn fs" id="fsBtn" aria-label="' + T.fs + '" title="' + T.fs + '">' + FS_ICON + '<span class="pb-lbl">' + T.fs + '</span></button>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -906,6 +906,7 @@
       var lbl = isFullscreen() ? T.fsExit : T.fs;
       $('.pb-lbl', b).textContent = lbl;
       b.title = lbl;
+      b.setAttribute('aria-label', lbl);
     }
     setTimeout(function () { if (portalFocus) focusPortal(); else focusGame(); }, 50);
   }
@@ -1004,6 +1005,7 @@
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', on);
       b.title = on ? T.favOn : T.fav;
+      b.setAttribute('aria-label', b.title);
       $('.heart', b).textContent = on ? '❤️' : '🤍';
       $('.pb-lbl', b).textContent = on ? T.favOn : T.fav;
       b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
@@ -1052,6 +1054,7 @@
     var fixed = stageTop + (parseFloat(getComputedStyle(bar).marginTop) || 0) + 10;
     var minW = Math.min(300, availW);
     var w = Math.floor(Math.min(availW, Math.max(minW, (window.innerHeight - fixed - 64) * 16 / 9)));
+    wrap.classList.toggle('compact', w < 760);
     wrap.style.width = w + 'px';
     side.style.width = wide ? '' : w + 'px';
     // Width changes can move the stage as well as wrap its toolbar. Measure
@@ -1063,6 +1066,7 @@
       var nextW = Math.floor(Math.max(minW, w - overflow * 16 / 9));
       if (nextW >= w) break;
       w = nextW;
+      wrap.classList.toggle('compact', w < 760);
       wrap.style.width = w + 'px';
       side.style.width = wide ? '' : w + 'px';
     }

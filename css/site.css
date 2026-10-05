@@ -588,6 +588,13 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 .pbtn.pop .heart { animation: pop 0.45s cubic-bezier(.3, 1.8, .5, 1); }
 .pbtn.spin > span:first-child { animation: spin 0.5s ease; }
 .heart { display: inline-block; }
+/* A short laptop viewport produces a narrower stage than its window. Keep
+   its three actions together instead of sacrificing game space to wrapping. */
+.stage-wrap.compact .play-bar { flex-wrap: nowrap; gap: 10px; padding-inline: 12px; }
+.stage-wrap.compact .pb-info { flex: 1 1 auto; }
+.stage-wrap.compact .pb-btns { flex: 0 0 auto; flex-wrap: nowrap; gap: 6px; }
+.stage-wrap.compact .pb-lbl { display: none; }
+.stage-wrap.compact .pb-btns .pbtn { width: 42px; padding: 0; justify-content: center; }
 
 .play-side { flex: 0 0 270px; width: 270px; display: flex; flex-direction: column; gap: 16px; }
 .card {
