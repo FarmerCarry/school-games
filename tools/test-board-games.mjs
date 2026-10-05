@@ -46,13 +46,19 @@ async function screenshot(page, name, fullPage = true) {
   fs.mkdirSync(process.env.SG_BOARD_SCREENSHOTS, { recursive: true });
   await page.screenshot({ path: path.join(process.env.SG_BOARD_SCREENSHOTS, name + '.png'), fullPage });
 }
+async function dumpFitTrace(page, label) {
+  const trace = await page.evaluate(() => window.__portalFitTrace || []);
+  if (trace.length) console.error(label + ' portal fit trace:\n' + JSON.stringify(trace.slice(-60), null, 2));
+}
 async function fits(scope, selectors, label) {
   for (const selector of selectors) {
     const box = await scope.locator(selector).evaluate(element => {
       const rect = element.getBoundingClientRect();
       return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: innerWidth, height: innerHeight };
     });
-    assert.ok(box.left >= -1 && box.top >= -1 && box.right <= box.width + 1 && box.bottom <= box.height + 1,
+    const inside = box.left >= -1 && box.top >= -1 && box.right <= box.width + 1 && box.bottom <= box.height + 1;
+    if (!inside && typeof scope.evaluate === 'function') await dumpFitTrace(scope, label);
+    assert.ok(inside,
       `${label}: ${selector} fits viewport: ${JSON.stringify(box)}`);
   }
 }
@@ -339,6 +345,35 @@ async function animation() {
 async function portalAndMobile() {
   const player = await student('portal and mobile');
   const { page } = player;
+  await page.addInitScript(() => {
+    if (window !== window.parent) return;
+    const readRect = Element.prototype.getBoundingClientRect;
+    const trace = window.__portalFitTrace = [];
+    const record = entry => { trace.push(entry); if (trace.length > 120) trace.shift(); };
+    const box = element => {
+      if (!element) return null;
+      const rect = readRect.call(element);
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, bottom: rect.bottom };
+    };
+    Element.prototype.getBoundingClientRect = function () {
+      const result = readRect.call(this);
+      if (this.id === 'playBar' || this.id === 'stage') {
+        const wrap = document.getElementById('stageWrap');
+        record({
+          time: performance.now(), measured: this.id,
+          viewport: [innerWidth, innerHeight], scroll: [scrollX, scrollY],
+          styleWidth: wrap?.style.width, compact: wrap?.classList.contains('compact'),
+          stage: box(document.getElementById('stage')), wrap: box(wrap),
+          main: box(document.getElementById('playMain')), play: box(document.getElementById('play')),
+          bar: box(document.getElementById('playBar')), info: box(document.querySelector('.pb-info')),
+          buttons: box(document.querySelector('.pb-btns')),
+          caller: new Error().stack.split('\n').slice(2, 5).join('\n')
+        });
+      }
+      return result;
+    };
+    window.addEventListener('resize', () => record({ time: performance.now(), event: 'resize', viewport: [innerWidth, innerHeight], scroll: [scrollX, scrollY] }));
+  });
   for (const game of GAMES) {
     await page.goto(site.origin + '/#/play/' + game, { waitUntil: 'load' });
     await page.locator(`#stage iframe[src*="${game}"]`).waitFor();
@@ -355,6 +390,7 @@ async function portalAndMobile() {
     await screenshot(page, 'portal-' + game + '-chooser', false);
     await fits(page, ['#stage', '#playBar'], game + ' embedded portal');
     const stageSize = await page.locator('#stage').boundingBox();
+    if (stageSize.width < 480 || stageSize.height < 270) await dumpFitTrace(page, game + ' minimum embedded dimensions');
     assert.ok(stageSize.width >= 480 && stageSize.height >= 270, `${game}: embedded board retains usable dimensions: ${JSON.stringify(stageSize)}`);
     const actions = await page.locator('#playBar .pbtn').evaluateAll(buttons => buttons.map(button => ({
       top: button.offsetTop, label: button.getAttribute('aria-label')
