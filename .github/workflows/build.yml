@@ -60,6 +60,15 @@ jobs:
         run: npm run test:board-games
       - name: Build the fast site
         run: npm run build
+      - name: Check built asset performance budgets
+        run: npm run perf:assets -- --report artifacts/asset-budgets.json
+      - name: Upload asset performance report
+        if: always() && hashFiles('artifacts/asset-budgets.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: asset-performance-budgets
+          path: artifacts/asset-budgets.json
+          if-no-files-found: error
       - name: Smoke-test all built games
         run: npm run check
         env:

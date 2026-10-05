@@ -4,6 +4,7 @@
   "description": "Build tools for the ألعاب الفسحة games site (the site itself needs no build to run).",
   "scripts": {
     "build": "node tools/build.mjs",
+    "perf:assets": "node tools/asset-budgets.mjs",
     "check": "node tools/check-all.mjs",
     "perf": "node tools/perf.mjs",
     "test": "npm run test:unit && npm run test:tooling && npm run test:regressions",
