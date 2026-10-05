@@ -6,6 +6,7 @@
  * Routes (hash based):
  *   #/                home
  *   #/c/<category>    one category
+ *   #/favorites       saved favorites
  *   #/search/<text>   search results
  *   #/play/<slug>     play a game
  *
@@ -25,9 +26,8 @@
     recent: 'تابع اللعب',
     favs: 'ألعابك المفضلة',
     all: 'كل الألعاب',
-    seeAll: 'عرض الكل',
-    seeAllAria: 'عرض كل ألعاب قسم ',
-    different: 'جرّب شيئًا مختلفًا',
+    favsEmpty: 'لم تضف ألعابًا للمفضلة بعد',
+    favsPrompt: 'افتح لعبة واضغط زر القلب لحفظها هنا.',
     more: 'ألعاب أخرى ستحبها',
     toPlay: ' تنتظرك!',
     searchTitle: 'ابحث عن لعبة',
@@ -45,7 +45,7 @@
     p2Badge: 'لاعبان',
     controls: 'طريقة اللعب',
     controlsNone: 'استخدم الفأرة ولوحة المفاتيح!',
-    tip: 'نصيحة',
+    help: 'نصائح ومعلومات',
     tip1: 'المفاتيح لا تعمل؟ <b>انقر على اللعبة</b> أولًا!',
     tip2: 'اضغط <b>ملء الشاشة</b> لتكبير اللعبة.',
     tip3: 'اضغط <b>P</b> أو <b>Esc</b> للإيقاف المؤقت، وزر 🔊 لكتم الصوت.',
@@ -145,7 +145,6 @@
 
   /* ---------------------------------------------------------- helpers */
   function $(sel, root) { return (root || document).querySelector(sel); }
-  function $all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -163,10 +162,6 @@
   function deepen(hex, t) {
     var c = hexToRgb(hex), n = [28, 22, 80];
     return 'rgb(' + c.map(function (v, i) { return Math.round(v + (n[i] - v) * t); }).join(',') + ')';
-  }
-  function shuffle(a) {
-    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
-    return a;
   }
   // Emoji and variation selectors are dropped from the tab title.
   function noEmoji(s) {
@@ -262,13 +257,11 @@
     var t = window.SG_THUMBS;
     return (t && t[slug]) || 'games/' + esc(slug) + '/thumb.svg';
   }
-  function tileHTML(g, opts) {
-    opts = opts || {};
-    var cls = 'tile' + (opts.big ? ' big' : '') + (opts.cls ? ' ' + opts.cls : '');
+  function tileHTML(g) {
     var badges = '';
     if (g.hot) badges += '<b class="badge hot"><span aria-hidden="true">🔥</span>' + T.hotBadge + '</b>';
     if (isMulti(g)) badges += '<b class="badge p2"><span aria-hidden="true">👥</span>' + T.p2Badge + '</b>';
-    return '<a class="' + cls + '" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '"' +
+    return '<a class="tile" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '"' +
       ' style="--c:' + g.color + ';--c2:' + deepen(g.color, 0.45) + ';--fbs:' + fbSize(g.title) + 'cqw" aria-label="' + esc(g.title) + '">' +
       '<span class="art">' +
         '<span class="fb" aria-hidden="true"><span class="fb-emoji">' + catEmoji(g) + '</span><span class="fb-title">' + esc(g.title) + '</span></span>' +
@@ -283,154 +276,10 @@
   function gridHTML(list, cls) {
     return '<div class="grid ' + (cls || '') + '">' + list.map(function (g) { return tileHTML(g); }).join('') + '</div>';
   }
-  // Mosaic: big (2x2) tiles for hot games plus 1x1 tiles, packed in JS so there are no holes.
-  function mosaicHTML(bigs, smalls, fill) {
-    return '<div class="grid mosaic" data-fill="' + (fill ? 1 : 0) + '">' +
-      bigs.map(function (g) { return tileHTML(g, { big: true }).replace('<a ', '<a data-hot="1" '); }).join('') +
-      smalls.map(function (g) { return tileHTML(g); }).join('') +
-      '</div>';
-  }
-
   function sectionHTML(icon, title, inner, more) {
     return '<section class="sec">' +
       '<div class="sec-head"><h2><span class="sec-icon" aria-hidden="true">' + icon + '</span><span>' + esc(title) + '</span></h2>' + (more || '') + '</div>' +
       inner + '</section>';
-  }
-
-  // A section that sits in a .cat-rows grid, spanning as many columns as it has tiles (at least minSpan).
-  function rowSecHTML(icon, title, list, gridCls, minSpan) {
-    return '<section class="sec cat-sec" data-n="' + list.length + '" data-min="' + (minSpan || 1) + '">' +
-      '<div class="sec-head"><h2><span class="sec-icon" aria-hidden="true">' + icon + '</span><span class="h-txt">' + esc(title) + '</span></h2></div>' +
-      gridHTML(list, gridCls) + '</section>';
-  }
-
-  /* ------------------------------------------------------------ layout */
-  var cols = 8;
-  function packMosaic(el) {
-    // Work in the original (catalog) order, even after an earlier pass reordered the DOM.
-    var kids = Array.prototype.slice.call(el.children);
-    kids.forEach(function (k, i) { if (k.__i == null) k.__i = i; });
-    kids.sort(function (a, b) { return a.__i - b.__i; });
-    var hot = kids.filter(function (k) { return k.getAttribute('data-hot') === '1'; });
-    var plain = kids.filter(function (k) { return k.getAttribute('data-hot') !== '1'; });
-    var fill = el.getAttribute('data-fill') === '1';
-    var bigSize = cols >= 4 ? 2 : 1;
-    var C = cols;            // columns used by this mosaic (may be fewer than the grid has)
-    // B = how many hot tiles stay big (the rest are shown small), S = how many small tiles are used,
-    // v = which ordering to try (0/1 evenly spread, 2+ seeded random mixes, 'first' = bigs first).
-    function order(B, S, v) {
-      var bigs = hot.slice(0, B), smalls = hot.slice(B).concat(plain).slice(0, S);
-      var n = B + S, out = [], bi = 0, si = 0, i;
-      if (v === 'first') return { list: bigs.concat(smalls), big: B };
-      var isBig = [];
-      if (v < 2) {
-        var off = v === 0 ? 0 : 0.5;
-        for (i = 0; i < B; i++) isBig[Math.min(n - 1, Math.floor((i + off) * n / Math.max(B, 1)))] = true;
-      } else {
-        var seed = v * 9301 + C * 49297, left = B;
-        for (i = 0; i < n; i++) {
-          seed = (seed * 9301 + 49297) % 233280;
-          if (left && (seed / 233280) < left / (n - i)) { isBig[i] = true; left--; }
-        }
-      }
-      for (i = 0; i < n; i++) {
-        if (isBig[i] && bi < B) out.push(bigs[bi++]);
-        else if (si < S) out.push(smalls[si++]);
-        else out.push(bigs[bi++]);
-      }
-      return { list: out, big: B };
-    }
-    function sim(o) {
-      var grid = [], pos = [], used = 0;
-      function free(r, c, s) {
-        if (c + s > C) return false;
-        for (var y = r; y < r + s; y++) for (var x = c; x < c + s; x++) if (grid[y] && grid[y][x]) return false;
-        return true;
-      }
-      for (var i = 0; i < o.list.length; i++) {
-        var s = o.list[i].__big ? bigSize : 1;
-        var placed = false;
-        for (var r = 0; !placed; r++) {
-          for (var c = 0; c + s <= C; c++) {
-            if (free(r, c, s)) {
-              for (var y = r; y < r + s; y++) { grid[y] = grid[y] || []; for (var x = c; x < c + s; x++) grid[y][x] = 1; }
-              pos.push([r, c, s]); used += s * s; placed = true; break;
-            }
-          }
-        }
-      }
-      return { pos: pos, holes: grid.length * C - used };
-    }
-    function mark(B) { hot.forEach(function (k, i) { k.__big = i < B; }); plain.forEach(function (k) { k.__big = false; }); }
-    var best = null, bestO = null;
-    function attempt(B, S, v) {
-      mark(B);
-      var o = order(B, S, v), res = sim(o);
-      if (!best || res.holes < best.holes) { best = res; bestO = o; }
-      return res.holes === 0;
-    }
-    var done = false, d, B, S, v, poolN, minS;
-    if (!fill) {
-      // Category pages: every game must show. Use the widest block that has no
-      // holes (a hot tile may shrink to 1x1 if it must); else the full width.
-      for (d = 0; d <= hot.length && !done && bigSize > 1 && hot.length; d++) {
-        B = hot.length - d; S = plain.length + d;
-        if (!B) break;
-        for (C = cols; C >= 2 && !done; C--) {
-          best = null;
-          for (v = 0; v < 12 && !done; v++) done = attempt(B, S, v);
-        }
-        if (done) C++;
-      }
-      if (!done) { C = cols; best = null; attempt(hot.length, plain.length, 0); }
-    } else {
-      // Prefer: every hot tile big, then as many small tiles as possible, with a lively order.
-      for (d = 0; d <= 3 && d <= hot.length && !done; d++) {
-        B = hot.length - d; poolN = d + plain.length; minS = Math.min(poolN, C);
-        for (S = poolN; S >= minS && !done; S--) {
-          for (v = 0; v < 12 && !done; v++) done = attempt(B, S, v);
-        }
-      }
-      for (S = plain.length; S >= 0 && !done; S--) done = attempt(hot.length, S, 'first');
-    }
-    mark(bestO.big);
-    kids.forEach(function (k) { k.style.display = 'none'; k.classList.toggle('big', !!k.__big); });
-    bestO.list.forEach(function (k, i) {
-      var p = best.pos[i];
-      k.style.display = '';
-      k.style.gridArea = (p[0] + 1) + ' / ' + (p[1] + 1) + ' / span ' + p[2] + ' / span ' + p[2];
-    });
-    // Keep keyboard (Tab) order the same as the visual reading order (row by row, from the right).
-    bestO.list.map(function (k, i) { return [best.pos[i][0] * 100 + best.pos[i][1], k]; })
-      .sort(function (a, b) { return a[0] - b[0]; })
-      .forEach(function (x) { el.appendChild(x[1]); });
-  }
-  function layout() {
-    var app = $('#app');
-    if (!app) return;
-    var cs = getComputedStyle(app);
-    var W = app.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-    var gap = W < 760 ? 10 : 14;
-    var min = W >= 1500 ? 140 : 118;
-    cols = Math.max(3, Math.floor((W + gap) / (min + gap)));
-    var cell = Math.floor((W - gap * (cols - 1)) / cols);
-    var rs = document.documentElement.style;
-    rs.setProperty('--cols', cols);
-    rs.setProperty('--gap', gap + 'px');
-    rs.setProperty('--cell', cell + 'px');
-    $all('.mosaic', app).forEach(packMosaic);
-    $all('.one-row', app).forEach(function (el) {
-      Array.prototype.forEach.call(el.children, function (k, i) { k.style.display = i < cols ? '' : 'none'; });
-    });
-    // Short category rows sit side by side, each spanning as many columns as it has tiles.
-    $all('.cat-sec', app).forEach(function (sec) {
-      var n = Math.min(cols, Math.max(+sec.getAttribute('data-n') || 1, +sec.getAttribute('data-min') || 1));
-      sec.style.gridColumn = 'span ' + n;
-      sec.classList.toggle('narrow', n <= 2);
-      var g = $('.grid', sec);
-      if (g) g.style.gridTemplateColumns = 'repeat(' + n + ', minmax(0, 1fr))';
-    });
-    fitStage();
   }
 
   /* ------------------------------------------------------------ search */
@@ -555,6 +404,7 @@
     var head = parts[0];
     var rest = dec(parts.slice(1).join('/'));
     if (head === 'c' && rest) return { name: 'cat', id: rest };
+    if (head === 'favorites') return { name: 'favorites' };
     if (head === 'search') return { name: 'search', q: rest };
     if (head === 'play' && rest) return { name: 'play', slug: rest };
     return { name: 'home' };
@@ -563,6 +413,7 @@
   function chipsHTML(route) {
     var html = '<a class="chip' + (route.name === 'home' ? ' on' : '') + '" href="#/" style="--cc:#1c2250"' + (route.name === 'home' ? ' aria-current="page"' : '') + '>' +
       '<span class="chip-ico" aria-hidden="true">🏠</span>' + T.home + '</a>';
+    html += '<a class="chip' + (route.name === 'favorites' ? ' on' : '') + '" href="#/favorites" style="--cc:#d6246e"' + (route.name === 'favorites' ? ' aria-current="page"' : '') + '><span class="chip-ico" aria-hidden="true">❤️</span>' + T.favs + '</a>';
     CATS.forEach(function (c) {
       var on = route.name === 'cat' && route.id === c.id;
       html += '<a class="chip' + (on ? ' on' : '') + '" href="#/c/' + enc(c.id) + '" style="--cc:' + catColor(c.id) + '"' + (on ? ' aria-current="page"' : '') + '>' +
@@ -573,54 +424,39 @@
 
   function hotList() {
     var hot = GAMES.filter(function (g) { return g.hot; });
-    return hot.length ? hot : GAMES.slice(0, 12);
+    return (hot.length ? hot : GAMES).slice(0, 6);
+  }
+
+  // Stable featured-first order, shared by home and category views.
+  function featuredFirst(list) {
+    return list.filter(function (g) { return g.hot; }).concat(list.filter(function (g) { return !g.hot; }));
   }
 
   function renderHome() {
-    var html = '';
-    var hot = GAMES.filter(function (g) { return g.hot; });
-    var rest = GAMES.filter(function (g) { return !g.hot; });
     if (!GAMES.length) {
       return '<div class="empty"><div class="empty-emoji">🛠️</div><h2>' + T.soon + '</h2><p>' + T.soonSub + '</p></div>';
     }
-    var tag = SITE.tagline ? '<span class="tagline">' + esc(SITE.tagline) + '</span>' : '';
-    html += sectionHTML('🔥', T.hot, mosaicHTML(hot, rest, true), tag);
+    var recent = getRecent().slice(0, 6).map(function (s) { return BY_SLUG[s]; });
+    return (recent.length ? sectionHTML('🕹️', T.recent, gridHTML(recent, 'recent-grid')) : '') +
+      sectionHTML('🎮', T.all, gridHTML(featuredFirst(GAMES), 'catalog-grid'), '<span class="count">' + nGames(GAMES.length) + '</span>');
+  }
 
-    var recent = getRecent();
-    var favs = getFavs();
-    if (recent.length || favs.length) {
-      html += '<div class="cat-rows mine">';
-      if (recent.length) html += rowSecHTML('🕹️', T.recent, recent.map(function (s) { return BY_SLUG[s]; }), 'one-row', 3);
-      if (favs.length) html += rowSecHTML('❤️', T.favs, favs.map(function (s) { return BY_SLUG[s]; }), '', 3);
-      html += '</div>';
-    }
-    html += '<div class="cat-rows">';
-    CATS.forEach(function (c) {
-      var list = gamesIn(c.id);
-      html += '<section class="sec cat-sec" data-n="' + list.length + '">' +
-        '<div class="sec-head"><h2><a href="#/c/' + enc(c.id) + '"><span class="sec-icon" aria-hidden="true">' + esc(c.icon || '🎮') + '</span><span class="h-txt">' + esc(c.label) + '</span></a></h2>' +
-        '<a class="see-all" href="#/c/' + enc(c.id) + '" aria-label="' + esc(T.seeAllAria + c.label) + '"><span class="sa-txt">' + T.seeAll + '</span><b>' + list.length + '</b><span class="sa-arr" aria-hidden="true">‹</span></a></div>' +
-        gridHTML(list, 'one-row') + '</section>';
-    });
-    html += '</div>';
-    var abc = GAMES.slice().sort(function (a, b) { return a.title.localeCompare(b.title, 'ar'); });
-    html += sectionHTML('🎮', T.all, gridHTML(abc), '<span class="count">' + nGames(GAMES.length) + '</span>');
-    return html;
+  function renderFavorites() {
+    var list = getFavs().map(function (s) { return BY_SLUG[s]; });
+    return '<div class="banner" style="--cc:#d6246e"><span class="banner-ico" aria-hidden="true">❤️</span><div><h1>' + T.favs + '</h1><p>' + nGames(list.length) + '</p></div></div>' +
+      (list.length ? '<section class="sec">' + gridHTML(list, 'favorites-grid') + '</section>' :
+        '<div class="empty"><h2>' + T.favsEmpty + '</h2><p>' + T.favsPrompt + '</p><a class="big-btn" href="#/">' + T.back + '</a></div>');
   }
 
   function renderCat(route) {
     var c = CAT_BY_ID[route.id];
     var list = c ? gamesIn(c.id) : [];
     if (!c || !list.length) return notFound(T.noCat);
-    var hot = list.filter(function (g) { return g.hot; });
-    var rest = list.filter(function (g) { return !g.hot; });
-    var others = GAMES.filter(function (g) { return list.indexOf(g) < 0; });
     return '<div class="banner" style="--cc:' + catColor(c.id) + '">' +
         '<span class="banner-ico" aria-hidden="true">' + esc(c.icon || '🎮') + '</span>' +
         '<div><h1>' + esc(c.label) + '</h1><p>' + nGames(list.length) + T.toPlay + '</p></div>' +
       '</div>' +
-      '<section class="sec">' + mosaicHTML(hot, rest, false) + '</section>' +
-      (others.length ? sectionHTML('✨', T.different, gridHTML(shuffle(others.slice()).slice(0, 24))) : '');
+      '<section class="sec">' + gridHTML(featuredFirst(list)) + '</section>';
   }
 
   function renderSearch(route) {
@@ -630,11 +466,7 @@
       '<h1>' + (q ? '«<bdi>' + esc(q) + '</bdi>»' : T.searchTitle) + '</h1>' +
       '<p>' + (q ? (res.length ? T.found(res.length) : T.searchNone) : T.searchPrompt) + '</p></div></div>';
     if (res.length) {
-      // A few results only: suggest more games under them (one row, hot ones first).
-      var others = res.length < 8 ? GAMES.filter(function (g) { return res.indexOf(g) < 0; })
-        .sort(function (a, b) { return (b.hot ? 1 : 0) - (a.hot ? 1 : 0); }) : [];
-      return head + '<section class="sec">' + gridHTML(res) + '</section>' +
-        (others.length ? sectionHTML('💖', T.more, gridHTML(others, 'one-row')) : '');
+      return head + '<section class="sec">' + gridHTML(res) + '</section>';
     }
     if (!q) {
       var abc = GAMES.slice().sort(function (a, b) { return a.title.localeCompare(b.title, 'ar'); });
@@ -666,7 +498,7 @@
     }).join('');
     return '<div class="card controls"><h3>🎮 ' + T.controls + '</h3>' +
       (rows ? '<ul class="ctl-list">' + rows + '</ul>' : '<p class="muted">' + T.controlsNone + '</p>') +
-      (g.blurb ? '<p class="blurb">' + esc(g.blurb) + '</p>' : '') + '</div>';
+      '<p class="exit-hint">' + T.tip1 + ' ' + T.exitHint + '</p></div>';
   }
   var FS_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -683,8 +515,8 @@
     // Related: shared categories first (most overlap), then hot, then the rest.
     var more = GAMES.filter(function (o) { return o !== g; }).map(function (o) {
       var shared = o.cats.filter(function (id) { return g.cats.indexOf(id) >= 0; }).length;
-      return [shared * 10 + (o.hot ? 2 : 0) + Math.random(), o];
-    }).sort(function (a, b) { return b[0] - a[0]; }).map(function (x) { return x[1]; });
+      return [shared * 10 + (o.hot ? 2 : 0), o];
+    }).sort(function (a, b) { return b[0] - a[0]; }).slice(0, 6).map(function (x) { return x[1]; });
 
     return '<div class="play" id="play">' +
         '<div class="play-main" id="playMain">' +
@@ -704,10 +536,11 @@
           '</div>' +
         '</div>' +
         '<aside class="play-side" id="playSide">' + controlsHTML(g) +
-          '<div class="card tip"><h3>💡 ' + T.tip + '</h3><p>' + T.tip1 + ' ' + T.exitHint + '</p><p>' + T.tip2 + '</p><p>' + (g.tip || T.tip3) + '</p></div>' +
+          '<details class="card help"><summary>💡 ' + T.help + '</summary>' +
+            (g.blurb ? '<p>' + esc(g.blurb) + '</p>' : '') + '<p>' + T.tip2 + '</p><p>' + (g.tip || T.tip3) + '</p></details>' +
         '</aside>' +
       '</div>' +
-      sectionHTML('💖', T.more, gridHTML(more));
+      sectionHTML('💖', T.more, gridHTML(more, 'recommendations'));
   }
 
   /* -------------------------------------------------------- play logic */
@@ -871,6 +704,7 @@
 
   /* ------------------------------------------------------------ render */
   var typing = false;
+  var chipsKey = null;
   function render() {
     var route = parseRoute();
     var app = $('#app');
@@ -879,7 +713,11 @@
     var moveFocus = !typing && active && ($('#chips').contains(active) || app.contains(active));
     if (current && route.name !== 'play') exitFullscreen();
     body.className = 'route-' + route.name;
-    $('#chips').innerHTML = chipsHTML(route);
+    var nextChipsKey = route.name + (route.id || '');
+    if (chipsKey !== nextChipsKey) {
+      $('#chips').innerHTML = chipsHTML(route);
+      chipsKey = nextChipsKey;
+    }
     var q = $('#q');
     if (route.name !== 'search') {
       q.value = '';
@@ -899,6 +737,9 @@
       html = renderCat(route);
       var c = CAT_BY_ID[route.id];
       title = (c ? noEmoji(c.label) + ' — ' : '') + name;
+    } else if (route.name === 'favorites') {
+      html = renderFavorites();
+      title = T.favs + ' — ' + name;
     } else if (route.name === 'search') {
       html = renderSearch(route);
       title = (route.q ? T.titleSearch + route.q : T.searchTitle) + ' — ' + name;
@@ -909,7 +750,7 @@
     }
     app.innerHTML = html;
     document.title = title;
-    layout();
+    fitStage();
     if (current) setupPlay(current);
     if (!typing) window.scrollTo(0, 0);
     // A replaced navigation link must not leave keyboard users at the document root.
@@ -944,7 +785,7 @@
     var t = e.target;
     var inField = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
     // Native controls keep their own keyboard behavior and focus.
-    var onControl = t && t.closest && t.closest('button, a[href], input, textarea, select, [role="button"], [role="slider"]');
+    var onControl = t && t.closest && t.closest('button, a[href], input, textarea, select, summary, [role="button"], [role="slider"]');
     if (current && !inField && !onControl && SCROLL_KEYS[e.key]) {
       // In the play view keys belong to the game, never to page scrolling.
       e.preventDefault();
@@ -985,7 +826,7 @@
     try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (e) { /* ignore */ }
     drawLogo();
     try {
-      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fitLogo(); layout(); });
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fitLogo(); fitStage(); });
       if (document.fonts && document.fonts.load) document.fonts.load('700 36px Fredoka', SITE.name).then(fitLogo, function () {});
     } catch (e) { /* ignore */ }
     setTimeout(fitLogo, 600);
@@ -1024,15 +865,7 @@
     window.addEventListener('message', onGameMessage);
     document.addEventListener('fullscreenchange', onFsChange);
     document.addEventListener('webkitfullscreenchange', onFsChange);
-    var rt = 0, lastW = 0;
-    window.addEventListener('resize', function () {
-      fitStage();
-      clearTimeout(rt);
-      rt = setTimeout(function () {
-        if (window.innerWidth !== lastW) { lastW = window.innerWidth; layout(); } else fitStage();
-      }, 120);
-    });
-    lastW = window.innerWidth;
+    window.addEventListener('resize', fitStage);
     watchTiles();
     render();
   }

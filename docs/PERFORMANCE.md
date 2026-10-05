@@ -42,30 +42,92 @@ sizes, JavaScript execution time, or a browser's total network traffic.
 The offline total is the whole installation footprint, **not the initial page
 payload**. A visit loads a particular page and its dependencies; the worker
 separately fills the offline cache. Unchanged files may be reused on updates.
-Files outside `FILES` (such as licenses, the worker itself, build metadata, and
-separate thumbnail copies already inlined into the portal) are not included in
-the precache total. This guard checks size and coverage; the offline tests still
+Files outside `FILES` (such as licenses, the worker itself, and build metadata)
+are not included in the precache total. Source thumbnails remain editable SVGs;
+the optimized release embeds them in the portal and omits redundant separate
+copies. This guard checks size and coverage; the offline tests still
 verify worker behavior and content integrity.
 
 ## Initial baseline and headroom
 
-The initial limits were calibrated from the minified build of commit `4b07e0c`
-on 2026-10-05. Game limits are the observed size plus 12%, rounded up to the next
-1,000 bytes. The other limits use round values with about 12–14% headroom:
+The game, library, and font limits were calibrated from the minified build of
+commit `4b07e0c` on 2026-10-05. Game limits use that size plus 12%, rounded up to
+the next 1,000 bytes. The portal and offline limits were explicitly tightened
+after the cleanup below, rather than automatically regenerated. The portal has
+about 9% headroom; the other limits retain about 12–14%. Exact bytes can differ
+slightly between Windows and Linux builds.
 
 | Measurement | Observed bytes | Limit bytes |
 | --- | ---: | ---: |
-| Portal | 367,646 | 415,000 |
+| Portal after cleanup | 329,101 | 360,000 |
 | three.js | 667,803 | 750,000 |
 | Baloo Arabic 500 | 22,324 | 25,000 |
 | Baloo Arabic 700 | 22,276 | 25,000 |
 | Fredoka Latin 500 | 16,248 | 18,500 |
 | Fredoka Latin 700 | 15,900 | 18,000 |
-| Offline precache, 42 files | 4,483,644 | 5,100,000 |
+| Offline precache after cleanup, 42 files | 4,446,236 | 5,000,000 |
 
 There are 31 independently budgeted games. These limits give small features room
 while catching large unreviewed growth. They are not updated automatically and
 do not claim that every smaller increase is harmless.
+
+## Cleanup decisions
+
+The fresh homepage now creates 31 catalog cards instead of 108 repeated cards.
+A returning player can see up to six additional recent games, and the play page
+offers at most six related games instead of the other 30. A regular CSS grid
+replaces the mosaic placement solver. Category and favorites routes retain
+stable keyboard order, while the search input keeps focus during filtering.
+
+Rail Rush, Critter Mart, Wacky Soccer, and Block World retain their last paused
+scene after effects settle, then redraw on resize/state changes, canvas restoration, late fonts, and resume.
+Block World saves once when an active game is hidden. Critter Mart retains its
+three-second checkpoint interval and resets that interval after a successful
+critical save, avoiding a second immediate checkpoint. Tests verify redraw and
+save counts; these are not claims about school-PC frame rates.
+
+The thumbnail encoder preserves SVG text and significant whitespace while using
+less percent-encoding. Pixel comparisons cover all 31 images. The uncompressed
+portal decreases from 367,646 to 329,101 bytes (about 10%); compressed transfer
+savings are smaller. Removing separate thumbnail copies reduces the release
+artifact size, not the offline precache size, since they were never precached.
+
+Keep the single-file game and portal packaging unless repeated measurements on
+representative hardware justify changing it. External thumbnails and shared
+helpers trade fewer repeated bytes for more file requests. Preserve relative
+paths, atomic verified offline updates, and downloaded-folder use when evaluating
+that tradeoff. The source-independent tests run once in CI; browser gameplay
+tests still run against both source and optimized output.
+
+### Local comparison, 5 October 2026
+
+Seven alternating pairs of fresh Edge 154 contexts at 1280×900, localhost,
+without CPU/network throttling and with service workers blocked, produced these
+medians. Readiness is fonts ready plus two animation frames; it does not wait
+for every offscreen thumbnail. Physical disk caches were not cleared.
+
+| Portal measure | Main `4b07e0c` | Cleanup |
+| --- | ---: | ---: |
+| Fresh catalog cards | 108 | 31 |
+| DOM elements | 1,185 | 365 |
+| Script work | 15.3 ms | 4.8 ms |
+| Layout work | 96.1 ms | 63.4 ms |
+| Fonts + two frames ready | 321.4 ms | 272.1 ms |
+| Load event | 148.6 ms | 185.5 ms |
+
+The cleanup does less page work; these mixed timing results do not establish
+an overall load-time improvement or predict classroom performance.
+
+Packaging alternatives were tested separately in five rotating runs per
+profile with gzip, default hardware rendering, and both local and simulated
+1 Mbps / 75 ms latency / 4× CPU slowdown. External thumbnails improved the
+throttled complete-gallery median from 2,016 to 1,680 ms, but local loading
+changed from 263 to 283 ms and cold homepage requests increased from 6 to 37.
+External shared kit/CSS saved about 398 KB across the offline cache and reduced
+throttled second-game loading from 257 to 221 ms, while first-game loading rose
+from 497 to 563 ms with three requests instead of one. All candidates worked
+offline and from downloaded folders. These tradeoffs do not justify changing
+the one-file default without representative classroom measurements.
 
 ## CI, review, and deployed performance
 

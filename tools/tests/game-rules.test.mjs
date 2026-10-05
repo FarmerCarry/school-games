@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
 import { launchChromium } from '../browser.mjs';
+import { startTestServer } from '../test-server.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,22 +10,11 @@ const root = path.resolve(repo, process.env.SG_ROOT || '.');
 let server, browser, paintPage, poolPage;
 
 before(async () => {
-  server = createServer(async (req, res) => {
-    try {
-      let pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-      if (pathname.endsWith('/')) pathname += 'index.html';
-      const filename = path.resolve(root, '.' + pathname);
-      if (!filename.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
-      const data = await readFile(filename);
-      const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
-      res.writeHead(200, { 'Content-Type': mime[path.extname(filename)] || 'application/octet-stream' }).end(data);
-    } catch { res.writeHead(404).end(); }
-  });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  server = await startTestServer(root);
   browser = await launchChromium();
   const context = await browser.newContext({ serviceWorkers: 'block' });
   await context.addInitScript(() => { window.requestAnimationFrame = () => 0; });
-  const base = `http://127.0.0.1:${server.address().port}`;
+  const base = server.origin;
   [paintPage, poolPage] = await Promise.all(['paint-grab', 'pool-party'].map(async slug => {
     const page = await context.newPage();
     await page.goto(`${base}/games/${slug}/`);
@@ -67,7 +55,7 @@ before(async () => {
 
 after(async () => {
   await browser?.close();
-  if (server) await new Promise(resolve => server.close(resolve));
+  await server?.close();
 });
 
 test('Paint Grab fills a large loop reached with normal movement, not its exterior', async () => {

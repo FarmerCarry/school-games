@@ -79,9 +79,10 @@ test('favorites remain consistent during failed saves and persist after recovery
   assert.equal(await favorite.getAttribute('aria-pressed'), 'false', 'a second click removes the temporary favorite');
   await favorite.click();
   await page.locator('#logo').click();
-  const favorites = page.locator('.mine .cat-sec').last();
+  await page.locator('#chips a[href="#/favorites"]').click();
+  const favorites = page.locator('.favorites-grid');
   await favorites.locator('.tile[data-slug="air-hockey"]').waitFor();
-  assert.equal(await favorites.locator('.tile').count(), 2, 'home includes both saved and temporary favorites');
+  assert.equal(await favorites.locator('.tile').count(), 2, 'favorites filter includes both saved and temporary favorites');
   await favorites.locator('.tile[data-slug="air-hockey"]').click();
   await page.waitForFunction(() => document.querySelector('#stage iframe')?.contentWindow?.Kit);
   assert.equal(await favorite.getAttribute('aria-pressed'), 'true', 'temporary state survives portal navigation');
@@ -98,7 +99,7 @@ test('favorites remain consistent during failed saves and persist after recovery
 test('category navigation transfers focus to its heading and search keeps typing focus', async t => {
   const page = await newPage(t);
   await page.goto(`${origin}${base}`);
-  const category = page.locator('#chips a').nth(1);
+  const category = page.locator('#chips a[href^="#/c/"]').first();
   const destination = await category.getAttribute('href');
   await category.focus();
   await page.keyboard.press('Enter');

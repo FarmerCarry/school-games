@@ -7,6 +7,7 @@
   var canvas = document.getElementById('game');
   var view = K.fit(canvas, VW, VH, { maxDpr: 1.5 });
   var ctx = view.ctx;
+  canvas.addEventListener('contextrestored', function () { view.resize(); frameDirty = true; });
   var ptr = K.pointer(view);
   var store = K.store('critter-mart');
   var au = K.audio;
@@ -1662,7 +1663,8 @@
     var dl = R.dl; dl.length = 0;
     var m = 260;
     R.objs.forEach(function (o) {
-      if (o.k === 'none') return;
+      // The desk's board is drawn with the back wall, so it has no sorted sprite.
+      if (o.k === 'none' || o.k === 'desk') return;
       if (o.spots) {
         o.spots.forEach(function (s) { if (inView(s.x, s.y, m)) dl.push(s); });
         if (o.kind === 'coop' || o.kind === 'pen') { if (inView(o.x, o.y, m + 100)) dl.push(o); if (o.nests) dl.push(o.nests); if (o.crate) dl.push(o.crate); }
@@ -1674,7 +1676,7 @@
     R.walls.forEach(function (w) { dl.push(w); });
     R.chicks.forEach(function (ch) { if (inView(ch.x, ch.y, m)) dl.push(ch); });
     R.npcs.forEach(function (n) { n.dy = n.y; if (inView(n.x, n.y, m)) dl.push(n); });
-    if (R.mode !== 'title' || true) { P.k = 'player'; P.dy = P.y; dl.push(P); }
+    P.k = 'player'; P.dy = P.y; dl.push(P);
     dl.sort(function (a, b) { return a.dy - b.dy; });
     for (var i = 0; i < dl.length; i++) drawThing(c, dl[i]);
   }
@@ -1696,7 +1698,6 @@
       case 'wallfront': drawLowWallH(c, o); break;
       case 'wallv': drawLowWallV(c, o); break;
       case 'sign': drawSign(c); break;
-      case 'desk': drawDesk(c, o); break;
       case 'trash': drawTrash(c, o); break;
       case 'decor': drawDecor(c, o); break;
     }
@@ -2045,7 +2046,6 @@
     c.lineWidth = 6; c.strokeStyle = OUT; c.strokeText(dir(c, 'سوق الحيوانات'), x, y - 163 + bob);
     c.fillStyle = '#ffffff'; c.fillText('سوق الحيوانات', x, y - 163 + bob);
   }
-  function drawDesk() { /* board is drawn on the back wall */ }
   function drawTrash(c, o) {
     var x = o.x, y = o.y + 12, lid = o.lid > 0 ? o.lid * 40 : 0;
     A.ell(c, x, y, 24, 7); c.fillStyle = 'rgba(40,30,20,0.2)'; c.fill();
@@ -2308,6 +2308,7 @@
   function show(o, on) { if (on) o.removeAttribute('hidden'); else o.setAttribute('hidden', ''); }
   var titleSize = null;
   function fitUI() {
+    frameDirty = true;
     var s = Math.min(window.innerWidth / 1100, window.innerHeight / 640);
     // never let the (tall) title card run past the window edges
     var tc = document.querySelector('.cm-title-card');
@@ -2320,6 +2321,7 @@
 
   function setMode(m) {
     R.mode = m;
+    frameDirty = true;
     try { if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur(); } catch (e) { /* ignore */ }
     show(el.title, m === 'title');
     show(el.pause, m === 'pause');
@@ -2502,7 +2504,9 @@
     // Customers carrying items walk away when the page closes.
     S.last = Date.now();
     S.coins = Math.floor(S.coins);
-    store.set('save', S);
+    // A successful critical save starts a fresh checkpoint interval too.
+    // Keep the three-second loss window without saving twice around a purchase/pause.
+    if (store.set('save', S)) R.saveT = 0;
   }
   function saveMeta() { store.set('meta', META); }
   document.addEventListener('visibilitychange', function () {
@@ -2568,7 +2572,15 @@
   }
 
   /* ========================================================= loop */
+  var frameDirty = true, lastMenuFrame = 0;
   function frame() {
+    var now = performance.now();
+    if (!frameDirty && (R.mode === 'pause' || R.mode === 'confirm')) return;
+    // Title animations use elapsed time, independent of the display refresh rate.
+    var interval = 1000 / 30, elapsed = now - lastMenuFrame;
+    if (!frameDirty && R.mode === 'title' && elapsed < interval) return;
+    lastMenuFrame = R.mode === 'title' && !frameDirty ? now - elapsed % interval : now;
+    frameDirty = false;
     render();
     if (R.mode === 'title') drawHero();
   }
