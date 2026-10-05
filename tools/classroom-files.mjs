@@ -18,9 +18,13 @@ export function copyClassroomSite(root, destination, {mode = 'source'} = {}) {
   for (const name of DISTRIBUTION) {
     const source = path.join(root, name);
     if (!fs.existsSync(source)) continue;
-    fs.cpSync(source, path.join(destination, name), { recursive: true });
+    // Copy individual files rather than relying on cpSync's recursive traversal.
+    // Windows CI failed to produce nested assets despite cpSync
+    // returning successfully; the inventory caught this before browser launch.
     for (const relative of filesUnder(root, name)) {
       const copy = path.join(destination, relative);
+      fs.mkdirSync(path.dirname(copy), { recursive: true });
+      fs.copyFileSync(path.join(root, relative), copy);
       assert.ok(fs.existsSync(copy), `Downloaded fixture is missing ${relative}`);
       const original = fs.readFileSync(path.join(root, relative));
       const bytes = fs.readFileSync(copy);

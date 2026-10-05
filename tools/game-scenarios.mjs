@@ -11,6 +11,17 @@ const hold = (key = 'ArrowRight', ms = 220) => async page => {
   await page.waitForTimeout(ms);
   await page.keyboard.up(key);
 };
+const holdUntilChanged = (key, snapshot) => async page => {
+  const before = await page.evaluate(`JSON.stringify(${snapshot})`);
+  await page.keyboard.down(key);
+  try {
+    // A software-rendered frame can take longer than a short fixed key hold.
+    // Keep the real key down until the simulation consumes it; a broken
+    // control still fails the same bounded observable-state assertion.
+    await requireState(page, `JSON.stringify(${snapshot}) !== ${JSON.stringify(before)}`,
+      `${key}: held input must change gameplay (${before})`);
+  } finally { await page.keyboard.up(key); }
+};
 const click = selector => page => clickControl(page, selector);
 const sequence = (...steps) => async page => { for (const step of steps) await step(page); };
 const move = async page => { await page.mouse.move(400, 220, { steps: 8 }); await page.waitForTimeout(240); };
@@ -19,7 +30,7 @@ const defaults = (start, active, snapshot, input, pause, paused, restart, reset,
 
 export const scenarios = {
   'rail-rush': defaults(['#playBtn'], `${g}.state.mode === 'play'`, select(`${g}.state`, ['x','y','dist','score','lane']), hold('ArrowRight'), '#pauseBtn', `${g}.state.mode === 'pause' || ${g}.state.mode === 'paused'`, '#restartBtn', `${g}.state.dist < 15`),
-  'neon-slope': defaults(['#btnPlay'], `${g}.state.mode === 'play'`, select(`${g}.state`, ['x','y','dist','gemsRun']), hold('ArrowRight'), '#btnPause', `${g}.state.mode === 'paused'`, '#btnRestart', `${g}.state.dist < 15`),
+  'neon-slope': defaults(['#btnPlay'], `${g}.state.mode === 'play'`, select(`${g}.state`, ['x','y','dist','gemsRun']), holdUntilChanged('ArrowRight', `${g}.state.x`), '#btnPause', `${g}.state.mode === 'paused'`, '#btnRestart', `${g}.state.dist < 15`),
   'tunnel-blitz': defaults(['#playBtn'], `${g}.info().state === 'play'`, select(`${g}.info()`, ['rot','D','score','orbsRun']), hold('ArrowRight'), '#pauseBtn', `${g}.info().state === 'paused'`, '#restartBtn', `${g}.info().D < 15`),
   'beat-dash': defaults(['#b-play','#b-go'], `${g}.scene === 'play' && !${g}.state.paused`, select(`${g}.state`, ['x','y','pct','dead','attempt']), hold('Space', 160), '#b-pause', `${g}.state.paused`, '#b-restart', `${g}.state.pct < 5`),
   'swing-hook': defaults(['#btnPlay'], `${g}.mode === 'play'`, select(`${g}.state()`, ['x','y','timer','hooked']), hold('Space', 200), '#pauseBtn', `${g}.mode === 'pause'`, '#psRestart', `${g}.state().timer < 1`),
@@ -31,7 +42,7 @@ export const scenarios = {
   'air-hockey': defaults(['#btnPlay'], `!${g}.state().demo && !${g}.state().paused`, select(`${g}.state()`, ['pucks','mallets','score']), move, '#pauseBtn', `${g}.state().paused`, '#btnRestart', `${g}.state().score.every(n => n === 0)`),
   'hoop-heads': defaults(['[data-act="cpu"]','#selGo'], `${g}.state === 'play'`, select(`${g}.info()`, ['time','score','ball','p']), hold('ArrowRight'), '#pauseBtn', `${g}.state === 'pause'`, '#pRestart', `${g}.match.phase === 'intro' && ${g}.match.players.every(p => p.score === 0)`, { ready: `${g}.match.phase === 'play'` }),
   'wacky-soccer': defaults(['#b1p','#bGo'], `${g}.state === 'play'`, `[${g}.match.time,${g}.match.score,${g}.world.players.map(p => [p.x,p.y])]`, hold('Space'), '#bPause', `${g}.state === 'pause'`, '#bRestart', `${g}.match.phase === 'count' && ${g}.match.score.every(n => n === 0)`, { ready: `${g}.match.phase === 'play'` }),
-  'pool-party': defaults(['#btnPlay'], `${g}.screen === 'game'`, `[${g}.balls(),${g}.aim,${g}.phase]`, hold('ArrowRight'), '#pauseBtn', `${g}.screen === 'pause'`, '#pRestart', `${g}.phase === 'aim' && ${g}.balls().length === 16`, { ready: `${g}.phase === 'aim'` }),
+  'pool-party': defaults(['#btnPlay'], `${g}.screen === 'game'`, `[${g}.balls(),${g}.aim,${g}.phase]`, holdUntilChanged('ArrowRight', `${g}.aim`), '#pauseBtn', `${g}.screen === 'pause'`, '#pRestart', `${g}.phase === 'aim' && ${g}.balls().length === 16`, { ready: `${g}.phase === 'aim'` }),
   'skybound-golf': defaults(['#play'], `document.getElementById('title-screen').hidden && document.getElementById('modal').hidden`, `document.getElementById('meters').textContent`, click('#hit'), '#pause', `!document.getElementById('pause-content').hidden && !document.getElementById('modal').hidden`, '#restart', `!document.getElementById('swing-controls').hidden && document.getElementById('meters').textContent === '0'`),
   'critter-mart': defaults(['#playBtn'], `${g}.mode === 'play'`, select(`${g}.state()`, ['player','coins','play','served']), hold('ArrowRight'), '#pauseBtn', `${g}.mode === 'pause'`, '#resumeBtn', `${g}.mode === 'play'`, { persistent: true }),
   'pizza-clicker': defaults(['#bPlay'], `${g}.mode === 'play'`, `[${g}.S.pizzas,${g}.S.clicks]`, async page => { await page.mouse.click(840, 405); }, '#bPause', `${g}.mode === 'pause'`, '#bResume', `${g}.mode === 'play'`, { persistent: true }),
