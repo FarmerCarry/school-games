@@ -70,7 +70,7 @@ test('personal games appear first and quick filters select matching games', asyn
   assert.equal(await page.locator('.mine .cat-sec').first().locator('.tile').getAttribute('data-slug'), 'pool-party');
   for (const id of ['short', 'simple', 'friends']) {
     await page.locator(`#quickFilters a[href="#/quick/${id}"]`).click();
-    await page.waitForFunction(id => location.hash === `#/quick/${id}`, id);
+    await page.waitForFunction(id => location.hash === `#/quick/${id}` && document.body.className === 'route-quick' && document.querySelector(`#quickFilters a[href="#/quick/${id}"]`)?.getAttribute('aria-current') === 'page', id);
     const slugs = await page.locator('#app .tile').evaluateAll(tiles => tiles.map(tile => tile.dataset.slug));
     const expected = await page.evaluate(id => window.GAMES.filter(game => id === 'short' ? game.roundMinutes && game.roundMinutes[1] <= 3 : id === 'simple' ? game.inputStyle === 'one-button' : /[2-9]/.test(game.players)).map(game => game.slug), id);
     assert.deepEqual(slugs, expected, id);
@@ -242,10 +242,59 @@ test('leaving portal fullscreen pauses the still-visible game', async t => {
   const frame = await openGame(page);
   await page.locator('#fsBtn').click();
   await page.waitForFunction(() => document.fullscreenElement === document.querySelector('#stage'));
+  await page.waitForFunction(() => {
+    const iframe = document.querySelector('#stage iframe');
+    return iframe.clientWidth === innerWidth && iframe.clientHeight === innerHeight && iframe.contentWindow.innerWidth === innerWidth && iframe.contentWindow.innerHeight === innerHeight;
+  });
   await clickControl(frame, '#btnPlay');
+  await frame.waitForFunction(() => !window.__game.state().demo && ['countdown', 'play', 'goal'].includes(window.__game.state().scene));
   await page.evaluate(() => document.exitFullscreen());
   await frame.waitForFunction(() => window.__game.state().paused);
   const position = await frame.evaluate(() => window.__game.state().pucks);
   await frame.evaluate(() => window.__game.sim(2));
   assert.deepEqual(await frame.evaluate(() => window.__game.state().pucks), position);
+});
+
+test('portal metadata preserves board controls at classroom laptop height and numeric ranges read left-to-right', async t => {
+  const page = await pageFor(t);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const frame = await openGame(page, 'tic-tac-toe');
+  await page.evaluate(() => document.fonts.ready);
+  await frame.evaluate(() => document.fonts.ready);
+  await frame.locator('#localButton').click();
+  await frame.locator('#gameBoard [data-move="0"]').click();
+  const geometry = () => page.evaluate(() => ({
+    width: document.querySelector('#stage').getBoundingClientRect().width,
+    bottom: document.querySelector('#playBar').getBoundingClientRect().bottom,
+    height: innerHeight
+  }));
+  const initial = await geometry();
+  assert.ok(initial.bottom <= initial.height, `play bar ends at ${initial.bottom}, beyond ${initial.height}px viewport`);
+  const controls = await frame.locator('.match-actions button:visible').evaluateAll(buttons => buttons.map(button => {
+    const box = button.getBoundingClientRect();
+    return { id: button.id, top: box.top, bottom: box.bottom, left: box.left, right: box.right, width: innerWidth, height: innerHeight };
+  }));
+  assert.ok(controls.length >= 2, 'pause and change-mode controls are present during play');
+  for (const control of controls) {
+    assert.ok(control.top >= 0 && control.bottom <= control.height && control.left >= 0 && control.right <= control.width, `${control.id} is clipped: ${JSON.stringify(control)}`);
+  }
+  // Repeated layout requests at the same viewport must converge to the same
+  // frame width, rather than alternate at the play bar's wrapping breakpoint.
+  for (let i = 0; i < 4; i++) {
+    await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+    // The handler also performs a trailing fit after its 120ms debounce.
+    // Measure after that pass, not only the immediate resize callback.
+    await page.waitForTimeout(150);
+    const next = await geometry();
+    assert.ok(Math.abs(next.width - initial.width) <= 1, `frame width oscillated: ${initial.width} -> ${next.width}`);
+    assert.ok(next.bottom <= next.height, `resized play bar ends at ${next.bottom}`);
+  }
+  const range = await page.locator('.pb-meta .players').filter({ hasText: 'حوالي' }).evaluate(label => {
+    const node = label.firstChild, index = node.textContent.indexOf('1–2');
+    const first = document.createRange(), last = document.createRange();
+    first.setStart(node, index); first.setEnd(node, index + 1);
+    last.setStart(node, index + 2); last.setEnd(node, index + 3);
+    return { first: first.getBoundingClientRect().x, last: last.getBoundingClientRect().x };
+  });
+  assert.ok(range.first < range.last, `duration range is visually reversed: ${JSON.stringify(range)}`);
 });

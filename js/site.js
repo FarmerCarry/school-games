@@ -69,7 +69,9 @@
     playFriend: 'العب مع صديق',
     estimates: 'الأوقات تقريبية وتختلف حسب اللاعب؛ ألعاب الجولة القصيرة تستغرق عادة 3 دقائق أو أقل.',
     openEnded: 'لعب مفتوح',
-    duration: function (min, max) { return 'حوالي ' + min + '–' + max + ' دقائق للجولة'; },
+    // Isolate the numeric range so RTL prose keeps its low-to-high order in
+    // both the visible label and the plain-text tile tooltip.
+    duration: function (min, max) { return 'حوالي \u2066' + min + '–' + max + '\u2069 دقائق للجولة'; },
     pointer: 'الفأرة',
     keyboard: 'لوحة المفاتيح',
     mixedInput: 'الفأرة ولوحة المفاتيح',
@@ -884,7 +886,12 @@
       if (!fn) { toast(T.fsNone); return; }
       var p = fn.call(stage);
       if (p && p.then) {
-        p.then(focusGame, function () { toast(T.fsFail); });
+        p.then(function () {
+          // The promise may resolve before fullscreenchange is dispatched.
+          // Remember entry here as well so a quick exit still pauses play.
+          hadFullscreen = isFullscreen();
+          focusGame();
+        }, function () { toast(T.fsFail); });
       } else focusGame();
     } catch (e) {
       toast(T.fsFail);
@@ -1043,10 +1050,17 @@
     // Measure where the frame really starts, plus the bar's gap, and keep 10px of air below.
     var stageTop = stage.getBoundingClientRect().top + (window.pageYOffset || 0);
     var fixed = stageTop + (parseFloat(getComputedStyle(bar).marginTop) || 0) + 10;
-    var w = 0;
-    for (var pass = 0; pass < 2; pass++) {
+    var minW = Math.min(300, availW);
+    var w = Math.floor(Math.min(availW, Math.max(minW, (window.innerHeight - fixed - 64) * 16 / 9)));
+    wrap.style.width = w + 'px';
+    // Shrink monotonically: as the bar wraps it gets taller. Alternately
+    // growing and shrinking from its last height can oscillate across a wrap
+    // breakpoint and leave the final frame/bar taller than the viewport.
+    for (var pass = 0; pass < 8; pass++) {
       var availH = window.innerHeight - fixed - bar.offsetHeight;
-      w = Math.floor(Math.min(availW, Math.max(300, availH * 16 / 9)));
+      var nextW = Math.floor(Math.min(w, Math.max(minW, availH * 16 / 9)));
+      if (nextW >= w) break;
+      w = nextW;
       wrap.style.width = w + 'px';
     }
     side.style.width = wide ? '' : w + 'px';
