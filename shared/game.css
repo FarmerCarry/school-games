@@ -192,7 +192,7 @@ canvas { display: block; outline: none; }
 html[data-sg-motion="reduce"] *, html[data-sg-motion="reduce"] *::before, html[data-sg-motion="reduce"] *::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
-  transition-duration: 0.01ms !important;
+  transition: none !important;
   scroll-behavior: auto !important;
 }
 html[data-sg-motion="reduce"] .sg-btn:hover, html[data-sg-motion="reduce"] .sg-btn:active { transform: none; }

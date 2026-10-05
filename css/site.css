@@ -747,7 +747,7 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
 }
 
 
@@ -771,7 +771,7 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 .offline-status { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; margin-top: 10px; font-size: 15px; }
 .offline-status span { padding: 4px 12px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-[data-sg-motion="reduce"] *, [data-sg-motion="reduce"] *::before, [data-sg-motion="reduce"] *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+[data-sg-motion="reduce"] *, [data-sg-motion="reduce"] *::before, [data-sg-motion="reduce"] *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
 @media (max-width: 560px) {
   .play-bar { flex-wrap: wrap; justify-content: center; }
   .pb-info { flex-basis: 100%; text-align: center; }
