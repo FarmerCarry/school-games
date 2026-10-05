@@ -72,7 +72,17 @@ export const scenarios = {
     if (!point) { await page.waitForTimeout(180); return; }
     await page.mouse.move(point.x-60,point.y); await page.mouse.down();
     await page.mouse.move(point.x+60,point.y,{steps:15}); await page.mouse.up();
-  }, '#bPause', `${g}.info().state === 'pause'`, '#pRestart', `${g}.info().world.stars === 0`, { settle: 650 }),
+  }, '#bPause', `${g}.info().state === 'pause'`, '#pRestart', `${g}.info().world.stars === 0`, {
+    settle: 650,
+    beforePause: async page => {
+      // The first level is solved by the one cut already asserted above.
+      // Retry via the player's R shortcut before checking pause so success
+      // cannot race the pause click. No debug hook changes the world.
+      await page.keyboard.press('KeyR');
+      await requireState(page, `${g}.info().state === 'play' && ${g}.info().world.ropes > 0 && ${g}.info().world.stars === 0`,
+        'candy-rope: Retry must restore a fresh round before pause');
+    }
+  }),
   'maze-dash': defaults(['#btn-play'], `${g}.state.screen === 'play'`, select(`${g}.state`, ['px','py','dots','time','hearts']), hold('ArrowRight'), null, `${g}.state.screen === 'pause'`, '#btn-restart', `${g}.state.dots === 0`),
   'road-hopper': defaults(['#btnPlay'], `${g}.state === 'play'`, `${g}.player()`, hold('ArrowUp'), '#btnPause', `${g}.state === 'paused'`, '#btnRestart', `${g}.score === 0`),
   'troll-level': defaults(['#btn-play'], `${g}.mode === 'play'`, `${g}.player`, hold('ArrowRight'), '#btn-pause', `${g}.mode === 'pause'`, '#btn-restart', `${g}.mode === 'play'`),
@@ -169,6 +179,7 @@ export async function runScenario(page, slug, { mode = 'smoke' } = {}) {
   if (mode === 'performance') return {slug,checks};
   if (!s.noPause) {
     await focusSurface(page);
+    if (s.beforePause) await s.beforePause(page);
     if (typeof s.pause === 'function') await s.pause(page);
     else if (s.pause) await click(s.pause)(page); else await page.keyboard.press('Escape');
     await requireState(page,s.paused,`${slug}: Pause must open`);
