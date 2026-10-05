@@ -175,6 +175,7 @@ button:focus-visible { outline:3px solid #b7e8ff; outline-offset:4px; }
   .round-bar { min-height:18px; margin-bottom:2px; }
   .seat { font-size:11px; }
   .seat-token { width:14px; height:14px; }
+  .connect-board { box-shadow:0 3px 0 var(--board-edge),0 5px 0 #091329; }
   .board-wrap { width:min(100%,calc((100vh - 118px) * 1.16)); }
   .tic-tac-toe .board-wrap { width:min(100%,calc(100vh - 118px)); }
   .turn-line { font-size:12px; min-height:18px; margin-top:2px; }
