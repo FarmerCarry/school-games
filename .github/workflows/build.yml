@@ -52,16 +52,23 @@ jobs:
         run: npm ci
       - name: Install Chromium and its system dependencies
         run: npx playwright install --with-deps --no-shell chromium
+      - name: Test local board games and computer opponents
+        run: npm run test:board-games
+        env:
+          SG_BOARD_SCREENSHOTS: .work/boards-source
       - name: Smoke-test all source games
         run: npm run check
         env:
           SG_ARTIFACT_DIR: .work/smoke-source
       - name: Test source, build safety and harness regressions
         run: node tools/ci-run.mjs npm test
-      - name: Test local board games and computer opponents
-        run: npm run test:board-games
       - name: Build the fast site
         run: npm run build
+      - name: Test board games in the single-file fast build
+        run: npm run test:board-games
+        env:
+          SG_ROOT: _site
+          SG_BOARD_SCREENSHOTS: .work/boards-built
       - name: Smoke-test all built games
         run: npm run check
         env:
@@ -69,10 +76,6 @@ jobs:
           SG_ARTIFACT_DIR: .work/smoke-built
       - name: Test optimized gameplay and harness regressions
         run: node tools/ci-run.mjs npm test
-        env:
-          SG_ROOT: _site
-      - name: Test board games in the single-file fast build
-        run: npm run test:board-games
         env:
           SG_ROOT: _site
       - name: Test offline installation, updates and the kill switch
@@ -85,6 +88,8 @@ jobs:
           path: |
             .work/smoke-source
             .work/smoke-built
+            .work/boards-source
+            .work/boards-built
           if-no-files-found: ignore
           retention-days: 14
       - name: Upload the verified fast site

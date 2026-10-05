@@ -342,14 +342,17 @@ async function portalAndMobile() {
   for (const game of GAMES) {
     await page.goto(site.origin + '/#/play/' + game, { waitUntil: 'load' });
     await page.locator(`#stage iframe[src*="${game}"]`).waitFor();
+    await page.waitForFunction(() => document.querySelector('#stage').getAttribute('aria-busy') === 'false' && document.querySelector('#stageMsg').hidden);
     const frame = page.frameLocator('#stage iframe');
     await mode(frame, 'menu');
     await page.evaluate(() => document.fonts.ready);
+    await frame.locator('body').evaluate(() => document.fonts.ready);
     // fitStage measures the portal toolbar. Repeated resize must not feed its
     // wrapped text height back into an ever smaller, unusable game iframe.
     await page.setViewportSize({ width: 1100, height: 619 });
     await page.setViewportSize({ width: 1100, height: 620 });
     await page.waitForTimeout(180);
+    await fits(page, ['#stage', '#playBar'], game + ' embedded portal');
     await fits(frame, ['#localButton', '#pcButton', '#gameBoard', '#turnLine'], game + ' embedded chooser');
     await start(frame);
     await sequence(frame, WIN[game]);
@@ -359,6 +362,18 @@ async function portalAndMobile() {
     await start(frame, 'computer');
     await move(frame, 0).click();
     await moves(frame, 2);
+  }
+  // This is the landscape iframe size produced by a 1100x620 laptop portal.
+  // It must not select the long, stacked portrait-phone layout at width<600.
+  await page.setViewportSize({ width: 529, height: 298 });
+  for (const game of GAMES) {
+    await open(player, game);
+    await page.evaluate(() => document.fonts.ready);
+    await fits(page, ['.game-header', '#localButton', '#pcButton', '#gameBoard', '#turnLine'], game + ' small landscape chooser');
+    await start(page);
+    await sequence(page, WIN[game]);
+    await fits(page, ['.game-header', '#gameBoard', '#turnLine', '#rematchButton', '#leaveMatch'], game + ' small landscape result');
+    await screenshot(page, game + '-small-landscape');
   }
   await page.setViewportSize({ width: 692, height: 388 });
   for (const game of GAMES) {
