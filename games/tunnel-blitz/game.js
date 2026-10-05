@@ -1766,4 +1766,7 @@
   } catch (e) { /* ignore */ }
   showTitle();
   Kit.loop(update, render);
+  Kit.lifecycle({ pause: pauseGame, reset: function () { mouse.down = false; } });
+  Kit.ready();
 })();
+

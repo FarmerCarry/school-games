@@ -46,13 +46,17 @@
   /* -------------------------------------------------------------- rng */
   function mulberry(seed) {
     var a = seed >>> 0;
-    return function () {
+    function next() {
       a = (a + 0x6D2B79F5) >>> 0;
       var t = a;
       t = Math.imul(t ^ (t >>> 15), t | 1);
       t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
+    }
+    // Search branches must see the same future deals without advancing play.
+    // Keep the callable API and the original Mulberry32 sequence unchanged.
+    next.clone = function () { return mulberry(a); };
+    return next;
   }
 
   /* ------------------------------------------------------------ masks */

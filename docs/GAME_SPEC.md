@@ -131,6 +131,26 @@ chunky logo. Self-contained: no external refs, no embedded bitmaps, under about 
 
 ## Testing
 
+Register the existing semantic pause function with `Kit.lifecycle({ pause: pauseGame })`.
+It must be safe to call repeatedly, freeze active gameplay and show an explicit Resume
+choice. Use the optional `reset` callback for game-specific held mouse or movement
+state. Shared lifecycle handling covers blur, hidden tabs, portal escape and classroom
+pause requests. Do not resume automatically when focus returns.
+
+Call `Kit.ready()` only at the end of successful initialization. The portal waits for
+this signal instead of assuming that an iframe load means the game works. Shared
+startup error handling reports failures; it must not manufacture a ready signal.
+
+Use `Kit.motion.reduced()` for custom camera shake or decorative motion. The shared
+shake, particles, CSS and mute control already honor preferences and accessibility.
+Handle `Kit.store(...).set(...) === false`; `Kit.saveStatus({ retry: saveGame })` provides
+a consistent Arabic warning and retry button. Clear it only after all pending writes
+succeed. Preserve existing saved progress when a write or reset fails.
+
+Add each new game to `tools/game-scenarios.mjs` with real start/input/pause/restart
+assertions. A clean console alone is not proof of working gameplay. Keep pure engine
+and saved-state regression tests alongside those browser scenarios.
+
 `node tools/playtest.mjs <slug>` opens the game in headless Chromium, runs a scripted list of
 clicks and key presses, saves screenshots and reports console errors (see the header of
 `tools/playtest.mjs`). Look at the screenshots to check what the game actually looks like.

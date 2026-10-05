@@ -1630,4 +1630,7 @@
     render(a);
     perf.ren = perf.ren * 0.95 + (performance.now() - t0) * 0.05; perf.n++;
   });
+  Kit.lifecycle({ pause: pause });
+  Kit.ready();
 })();
+

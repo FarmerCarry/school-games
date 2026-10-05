@@ -498,4 +498,7 @@
     sim: function (sec) { for (var i = 0; i < sec * 60; i++) update(1 / 60); return this.state(); },
     reset: function () { ['coins', 'stars', 'hats', 'splats', 'equip', 'free', 'stats'].forEach(function (k) { store.remove(k); }); }
   };
+  Kit.lifecycle({ pause: pause });
+  Kit.ready();
 })();
+

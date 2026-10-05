@@ -9,7 +9,8 @@
   var view = K.fit(canvas, 1280, 720, { maxDpr: 1.5 });
   var ctx = view.ctx, storage = K.store('skybound-golf');
   var save = P.sanitizeSave(storage.get('progress', {}));
-  var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var reducedMotion = K.motion.reduced();
+  K.motion.onChange(function (reduced) { reducedMotion = reduced; });
   var s = { world:save.world, course:P.createCourse(save.world), phase:'title', time:0,
     cam:{x:-45,y:0,zoom:1}, ball:null, trail:[], particles:[], shotAge:0,
     quality:0, best:save.best, putt:null };
@@ -287,4 +288,7 @@
   document.addEventListener('visibilitychange',function(){if(document.hidden)pause(false);});
   window.addEventListener('blur',function(){if(!document.hidden)pause(false);});
   resetScene(); stats(); controls(); K.loop(step,render);
+  Kit.lifecycle({ pause: function () { pause(false); } });
+  Kit.ready();
 })();
+

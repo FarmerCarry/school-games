@@ -1392,4 +1392,7 @@
     addCoins: function (n) { save.coins += n; persist(); return save.coins; },
     reset: function () { store.remove('save'); location.reload(); }
   };
+  Kit.lifecycle({ pause: pauseGame });
+  Kit.ready();
 })();
+

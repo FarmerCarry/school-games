@@ -230,6 +230,7 @@ function inlinePage(htmlFile, extra) {
   html = html.replace(/<script\b([^>]*)>\s*<\/script>/gi, (tag, attrs) => {
     const src = (attrs.match(/\bsrc="([^"]+)"/i) || [])[1];
     if (!src || !isLocal(src) || /(^|\/)lib\/three\//.test(src)) return tag;
+    if (extra && extra.skip && extra.skip.includes(src)) return '';
     if (attrs.replace(/\bsrc="[^"]+"/i, '').trim()) throw new Error(`${htmlFile}: unsupported script attributes: ${tag}`);
     let code = jsFor(path.resolve(dir, src));
     if (extra && extra.before && extra.before[src]) code = extra.before[src] + '\n' + code;
@@ -267,12 +268,14 @@ try {
     const f = path.join(ROOT, 'games', slug, 'thumb.svg');
     if (fs.existsSync(f)) thumbs[slug] = svgDataUri(read(f));
   }
-  const REGISTER_SW = `<script>if('serviceWorker'in navigator&&/^https?:$/.test(location.protocol))addEventListener('load',function(){navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).catch(function(){})});</script>`;
   let portal = inlinePage(path.join(ROOT, 'index.html'), {
-    before: { 'js/site.js': 'window.SG_THUMBS=' + JSON.stringify(thumbs).replace(/<\//g, '<\\/') + ';' }
+    before: {
+      'js/site.js': 'window.SG_THUMBS=' + JSON.stringify(thumbs).replace(/<\//g, '<\\/') + ';',
+      'js/offline.js': 'window.SG_OFFLINE_BUILD=true;'
+    },
+    skip: KILL_SW ? ['js/offline.js'] : []
   });
-  // A kill-switch deployment must stay unregistered after its forced navigation.
-  if (!KILL_SW) portal = portal.replace('</body>', REGISTER_SW + '\n</body>');
+  // A kill-switch deployment omits the registering controller completely.
   write('index.html', portal);
   report.unshift(['index.html', Buffer.byteLength(portal)]);
 
@@ -343,6 +346,49 @@ async function fetchVerified(p) {
   headers.set('x-sg-hash', FILES[p]);
   return new Response(body, { status: 200, headers: headers });
 }
+
+// Report only a fully verified copy of this worker's version. Cache eviction or
+// damaged entries must never leave the portal claiming that all games are ready.
+var checkingStatus = null;
+async function offlineStatus(repair) {
+  if (checkingStatus) await checkingStatus;
+  var task = (async function () {
+    var paths = Object.keys(FILES), count = 0;
+    if (!(await caches.has(CACHE)) && !repair) return { ready: false, count: 0, total: paths.length, version: VERSION };
+    var cache = await caches.open(CACHE), next = 0;
+    async function inspect() {
+      while (next < paths.length) {
+        var p = paths[next++], url = new URL(p, SCOPE).href;
+        var hit = await cache.match(url), valid = false;
+        if (hit && hit.headers.get('x-sg-hash') === FILES[p]) {
+          valid = hex(await crypto.subtle.digest('SHA-256', await hit.arrayBuffer())).slice(0, 16) === FILES[p];
+        }
+        if (!valid && repair) {
+          try { await cache.put(url, await fetchVerified(p)); valid = true; }
+          catch (e) { /* Keep the old verified version; a new worker may be needed. */ }
+        }
+        if (valid) count++;
+      }
+    }
+    await Promise.all([inspect(), inspect(), inspect(), inspect()]);
+    if (repair && count !== paths.length) self.registration.update().catch(function () {});
+    // A handle can survive deletion from CacheStorage while hashing its bodies.
+    var present = await caches.has(CACHE);
+    return { ready: present && count === paths.length, count: present ? count : 0, total: paths.length, version: VERSION };
+  })();
+  checkingStatus = task.catch(function () {});
+  try { return await task; } finally { checkingStatus = null; }
+}
+self.addEventListener('message', function (event) {
+  var data = event.data, port = event.ports && event.ports[0];
+  if (!data || data.type !== 'sg:offline-status' || !port) return;
+  if (!event.source || toRel(event.source.url) !== 'index.html') return;
+  event.waitUntil(offlineStatus(data.repair === true).then(function (result) {
+    result.type = 'sg:offline-status'; result.id = data.id; port.postMessage(result);
+  }).catch(function () {
+    port.postMessage({ type: 'sg:offline-status', id: data.id, ready: false, count: 0, total: Object.keys(FILES).length, version: VERSION });
+  }));
+});
 
 // CacheStorage can be cleared while this worker stays registered. An unchanged
 // worker will not install again, so a miss also repairs the other missing files.

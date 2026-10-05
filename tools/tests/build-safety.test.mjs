@@ -20,9 +20,10 @@ function fixture(t) {
     return target;
   };
   write('tools/build.mjs', builder);
-  write('index.html', '<!doctype html><html><body><script src="js/catalog.js"></script><script src="js/site.js"></script></body></html>');
+  write('index.html', '<!doctype html><html><body><script src="js/catalog.js"></script><script src="js/site.js"></script><script src="js/offline.js"></script></body></html>');
   write('js/catalog.js', 'window.GAMES = [{ slug: "demo" }];');
   write('js/site.js', 'window.portalReady = true;');
+  write('js/offline.js', fs.readFileSync(path.join(repo, 'js/offline.js'), 'utf8'));
   write('games/demo/index.html', '<!doctype html><html><head><link rel="stylesheet" href="../../shared/game.css"></head><body><script src="game.js"></script></body></html>');
   write('games/demo/game.js', 'window.gameReady = true;');
   write('games/demo/thumb.svg', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"></svg>');

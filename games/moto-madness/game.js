@@ -867,4 +867,7 @@
     get ghost() { return ghost; },
     reset: function () { save = { stars: [], best: [], paint: 0, suit: 0, flips: 0 }; persist(); for (var i = 0; i < NL; i++) store.remove('ghost' + i); ghost = null; curSkin = skin(); }
   };
+  Kit.lifecycle({ pause: pause });
+  Kit.ready();
 })();
+

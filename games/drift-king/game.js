@@ -965,4 +965,7 @@
   // optional autopilot for automated tests
   var origHold = holdInput;
   holdInput = function () { return G.debug.autopilot && G.mode === 'play' ? DK.botHold(G.car, G.road, DK.LEAD) : origHold(); };
+  Kit.lifecycle({ pause: pauseGame, reset: function () { mouseDown = false; } });
+  Kit.ready();
 })();
+

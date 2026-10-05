@@ -206,7 +206,7 @@ async function keyboardAndLifecycle(game) {
   await page.waitForTimeout(650);
   await moves(page, 1);
   // Explicitly exercise the visibility listener while headless Chromium remains
-  // foreground. The simulated lifecycle must cancel and resume the pending AI.
+  // foreground. The pending AI stays stopped until an explicit Resume.
   const hidden = value => page.evaluate(value => {
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => value });
     document.dispatchEvent(new Event('visibilitychange'));
@@ -224,6 +224,10 @@ async function keyboardAndLifecycle(game) {
   await page.waitForTimeout(650);
   await moves(page, 1);
   await hidden(false);
+  assert.equal(await page.locator('#pauseLayer').isVisible(), true, 'returning to the tab keeps play paused');
+  await page.waitForTimeout(650);
+  await moves(page, 1);
+  await page.locator('#resumeButton').click();
   await moves(page, 2);
   await page.locator('#leaveMatch').click();
   await start(page, 'computer');
@@ -232,6 +236,8 @@ async function keyboardAndLifecycle(game) {
   await page.waitForTimeout(650);
   await moves(page, 1);
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+  assert.equal(await page.locator('#pauseLayer').isVisible(), true, 'history restoration keeps play paused');
+  await page.locator('#resumeButton').click();
   await moves(page, 2);
   await page.locator('#leaveMatch').click();
   await start(page, 'computer');

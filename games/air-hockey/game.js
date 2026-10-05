@@ -815,8 +815,10 @@
       if (!p) { var best = 1e9; st.pucks.forEach(function (q) { if (q.alive && !q.scored) { var d = Kit.dist(q.x, q.y, m.x, m.y); if (d < best) { best = d; p = q; } } }); }
       if (p) {
         p.fire = 5;
-        var sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy) || 1;
+        var sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
         var dir = side < 0 ? 1 : -1;
+        // A resting puck needs a direction before scaling its velocity.
+        if (!sp) { p.vx = dir; p.vy = 0; sp = 1; }
         if (p.vx * dir < 0) p.vx = -p.vx;
         var ns = Math.min(PMAX_FIRE, Math.max(1500, sp * 1.6));
         p.vx *= ns / sp; p.vy *= ns / sp;
@@ -832,8 +834,8 @@
 
   /* ---------------------------------------------------------- update */
   function update(dt) {
-    st.t += dt;
     if (st.paused) { Kit.keys.endFrame(); ptr.endFrame(); return; }
+    st.t += dt;
     // effects run in real time
     shake.update(dt);
     st.flash = Math.max(0, st.flash - dt * 2.5);
@@ -1439,4 +1441,6 @@
     autoplay: function (botId) { var m = st.mallets[0]; m.ctrl = 'ai'; m.bot = typeof botId === 'object' ? botId : byId(AH.BOTS, botId); m.ai.mode = 'idle'; },
     reset: function () { store.remove('save'); location.reload(); }
   };
+  Kit.lifecycle({ pause: function () { if (!st.paused) pause(true); } });
+  Kit.ready();
 })();

@@ -1031,4 +1031,7 @@
 
   goTitle();
   Kit.loop(update, render);
+  Kit.lifecycle({ pause: pause });
+  Kit.ready();
 })();
+

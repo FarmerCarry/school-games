@@ -1967,4 +1967,7 @@
     last: function () { return { pattern: gen.last, count: gen.count }; },
     tod: function (d) { S.runStart = -d; }
   };
+  Kit.lifecycle({ pause: pause, reset: function () { swipe.on = false; } });
+  Kit.ready();
 })();
+

@@ -1450,4 +1450,7 @@
     openLocker: openLocker,
     _vm: function () { return { key: vmW + '|' + (vmSkin && vmSkin.id) + '|' + vmCol, pos: vmRoot.position.toArray().map(function (v) { return +v.toFixed(3); }), rot: [vmRoot.rotation.x, vmRoot.rotation.y, vmRoot.rotation.z].map(function (v) { return +v.toFixed(3); }), verts: vmGun.geometry.attributes.position ? vmGun.geometry.attributes.position.count : 0, zoomK: VM.zoomK, swapT: G.player && G.player.swapT, reloadT: G.player && G.player.reloadT }; }
   };
+  Kit.lifecycle({ pause: pause, reset: function () { mouse.left = mouse.right = false; } });
+  Kit.ready();
 })();
+

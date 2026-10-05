@@ -9,6 +9,7 @@
   var ctx = view.ctx;
   var ptr = K.pointer(view);
   var store = K.store('critter-mart');
+  var saveStatus = K.saveStatus({ retry: saveGame }), metaSaveFailed = false;
   var au = K.audio;
   var DEF = {}; CM.UNLOCKS.forEach(function (d) { DEF[d.id] = d; });
   var UPG = {}; CM.UPGRADES.forEach(function (u) { UPG[u.id] = u; });
@@ -2386,13 +2387,20 @@
   }
   function pauseGame() { if (R.mode !== 'play') return; saveGame(); setMode('pause'); $('musicBtn').textContent = 'الموسيقى: ' + (META.music ? 'تعمل' : 'متوقفة'); }
   function resumeGame() { SFX.click(); setMode('play'); K.keys.reset(); }
-  function toMenu() { if (R.mode === 'finale') acknowledgeFinale(); saveGame(); setMode('title'); titleInfo(); }
+  function toMenu() {
+    if (R.mode === 'finale') S.finalePending = false;
+    if (!saveGame()) return;
+    setMode('title'); titleInfo();
+  }
   var confirmFrom = 'title';
   function askNewStore() { confirmFrom = R.mode; setMode('confirm'); }
   function newStore() {
-    S = freshSave(); R.welcome = 0; R.firstCust = false; R.rush = 0; R.rushT = 150; R.spawnT = 2; R.finaleT = -1;
-    store.set('save', S);
+    var next = freshSave();
+    // Keep the current store intact if the replacement cannot be persisted.
+    if (!store.set('save', next)) { saveStatus.failed(); return; }
+    S = next; R.welcome = 0; R.firstCust = false; R.rush = 0; R.rushT = 150; R.spawnT = 2; R.finaleT = -1;
     buildWorld();
+    saveGame();
     R.disp = 0;
     setMode('title'); titleInfo();
   }
@@ -2490,7 +2498,7 @@
 
   /* ========================================================= save/load */
   function saveGame() {
-    if (R.noSave) return;
+    if (R.noSave) return false;
     S.px = Math.round(P.x); S.py = Math.round(P.y);
     S.carry = P.stack.map(function (s) { return s.type; });
     S.helperCarry = {};
@@ -2502,9 +2510,17 @@
     // Customers carrying items walk away when the page closes.
     S.last = Date.now();
     S.coins = Math.floor(S.coins);
-    store.set('save', S);
+    var saved = store.set('save', S);
+    if (metaSaveFailed) metaSaveFailed = !store.set('meta', META);
+    if (!saved || metaSaveFailed) { saveStatus.failed(); return false; }
+    saveStatus.saved();
+    return true;
   }
-  function saveMeta() { store.set('meta', META); }
+  function saveMeta() {
+    metaSaveFailed = !store.set('meta', META);
+    if (metaSaveFailed) saveStatus.failed();
+    return !metaSaveFailed;
+  }
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) { if (R.mode === 'play') pauseGame(); else saveGame(); }
   });
@@ -2696,4 +2712,6 @@
     praise: function (n) { for (var i = 0; i < (n || 2); i++) praiseSale(R.registers[0]); return R.combo; },
     sfx: SFX
   };
+  K.lifecycle({ pause: pauseGame, reset: function () { mouseHeld = false; P.path = null; P.walkTo = null; P.vx = P.vy = 0; } });
+  K.ready();
 })();

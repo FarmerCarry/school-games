@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * Smoke-tests the whole site: static checks on every game folder plus a short
- * headless play session per game (load → click → mash common keys → pause).
+ * headless gameplay scenario per game (start → real input → freeze → restart).
  *
  *   node tools/check-all.mjs            all games
  *   node tools/check-all.mjs rail-rush  just one
@@ -34,7 +34,10 @@ if (unknown.length) {
 }
 const selected = only.length ? games.filter(g => only.includes(g.slug)) : games;
 
-const artifactDir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-check-'));
+const artifactDir = process.env.SG_ARTIFACT_DIR
+  ? path.resolve(process.env.SG_ARTIFACT_DIR)
+  : fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-check-'));
+fs.mkdirSync(artifactDir, {recursive: true});
 const problems = [];
 const add = (slug, msg) => {
   const problem = `${slug}: ${msg}`;
@@ -74,15 +77,8 @@ for (const g of selected) {
     if (urls) add(g.slug, `${rel}: external URL ${urls[0]}`);
   }
 
-  const actions = [
-    { wait: 1500 }, { shot: 'title' },
-    { click: [640, 360] }, { press: 'Enter' }, { press: 'Space' }, { wait: 600 },
-    { hold: 'ArrowRight', ms: 400 }, { press: 'ArrowUp' }, { hold: 'KeyD', ms: 300 }, { press: 'KeyW' },
-    { move: [500, 300] }, { drag: [[600, 500], [640, 300]] }, { wait: 1500 }, { shot: 'play' },
-    { press: 'KeyP' }, { wait: 300 }, { press: 'KeyP' }, { press: 'Escape' }, { wait: 300 }, { press: 'Escape' },
-    { resize: [1100, 620] }, { wait: 500 }, { resize: [1920, 1080] }, { wait: 800 }, { shot: 'big' },
-    { reload: true }, { wait: 1200 }
-  ];
+  const actions = [{ wait: 350 }, { shot: 'title' }, { scenario: g.slug }, { shot: 'play' },
+    { resize: [1100, 620] }, { wait: 100 }, { resize: [1920, 1080] }, { shot: 'big' }];
   const out = path.join(artifactDir, g.slug);
   const previousProblems = problems.length;
   const child = spawnSync(process.execPath, [path.join(REPO, 'tools/playtest.mjs'), g.slug, '--out', out, '--actions-json', JSON.stringify(actions)],
@@ -105,8 +101,11 @@ for (const g of selected) {
   }
 }
 
+fs.writeFileSync(path.join(artifactDir, 'summary.json'), JSON.stringify({ games: selected.map(g => g.slug), problems, ok: !problems.length }, null, 2) + '\n');
+
 if (problems.length) {
   console.log('\nProblems:\n' + problems.map(p => ' - ' + p).join('\n'));
   process.exit(1);
 }
 console.log('\nAll good ✨');
+

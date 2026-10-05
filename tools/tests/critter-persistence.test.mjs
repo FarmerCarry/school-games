@@ -43,7 +43,7 @@ function fixture(overrides = {}) {
     px: 700, py: 1750, done: false, pendingOffline: 0, ...overrides };
 }
 
-async function gamePage(t, save, meta = {}) {
+async function gamePage(t, save, meta = {}, init) {
   const context = await browser.newContext();
   const page = await context.newPage();
   const errors = [];
@@ -69,10 +69,55 @@ async function gamePage(t, save, meta = {}) {
       }
     });
   }, { save, meta });
+  if (init) await page.addInitScript(init);
   await page.goto(origin + '/games/critter-mart/');
   await page.waitForFunction(() => window.__game && window.stepGame);
   return page;
 }
+
+test('a denied save retains earned coins and purchases until retry can persist them', async t => {
+  const page = await gamePage(t, fixture({ coins: 1000 }));
+  const previous = await page.evaluate(() => localStorage.getItem('sg:critter-mart:save'));
+  await page.evaluate(() => {
+    window.restoreStorage = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'sg:critter-mart:save') throw new DOMException('blocked', 'SecurityError');
+      return window.restoreStorage.call(this, key, value);
+    };
+    __game.start(); __game.give(500); __game.tp(1646, 918); stepGame();
+  });
+  await page.locator('.cm-upg-row').first().click();
+  const earned = await page.evaluate(() => ({ coins: __game.S().coins, up: structuredClone(__game.S().up) }));
+  assert.equal(earned.up.speed, 1);
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:critter-mart:save')), previous);
+  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
+  await page.evaluate(() => { __game.pause(); document.getElementById('menuBtn').click(); });
+  assert.equal(await page.evaluate(() => __game.mode), 'pause', 'failed Save & Quit keeps the current session');
+  await page.locator('.sg-save-status button').click();
+  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
+  await page.evaluate(() => { Storage.prototype.setItem = window.restoreStorage; });
+  await page.locator('.sg-save-status button').click();
+  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').count(), 0);
+  await page.reload();
+  assert.deepEqual(await page.evaluate(() => ({ coins: __game.S().coins, up: __game.S().up })), earned);
+});
+
+test('denied metadata writes keep their warning until metadata and progress both recover', async t => {
+  const page = await gamePage(t, fixture(), {}, () => {
+    window.restoreStorage = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'sg:critter-mart:meta') throw new DOMException('blocked', 'SecurityError');
+      return window.restoreStorage.call(this, key, value);
+    };
+  });
+  await page.evaluate(() => { __game.start(); __game.pause(); document.getElementById('musicBtn').click(); });
+  assert.equal(await page.evaluate(() => __game.save()), false);
+  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
+  await page.evaluate(() => { Storage.prototype.setItem = window.restoreStorage; });
+  await page.locator('.sg-save-status button').click();
+  assert.equal(await page.evaluate(() => Kit.store('critter-mart').get('meta').music), false);
+  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').count(), 0);
+});
 
 async function snapshot(page) {
   return page.evaluate(() => ({ state: __game.state(), save: Kit.store('critter-mart').get('save'), meta: Kit.store('critter-mart').get('meta') }));

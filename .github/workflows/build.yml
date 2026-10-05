@@ -54,6 +54,8 @@ jobs:
         run: npx playwright install --with-deps --no-shell chromium
       - name: Smoke-test all source games
         run: npm run check
+        env:
+          SG_ARTIFACT_DIR: .work/smoke-source
       - name: Test source, build safety and harness regressions
         run: node tools/ci-run.mjs npm test
       - name: Test local board games and computer opponents
@@ -64,6 +66,7 @@ jobs:
         run: npm run check
         env:
           SG_ROOT: _site
+          SG_ARTIFACT_DIR: .work/smoke-built
       - name: Test optimized gameplay and harness regressions
         run: node tools/ci-run.mjs npm test
         env:
@@ -74,16 +77,64 @@ jobs:
           SG_ROOT: _site
       - name: Test offline installation, updates and the kill switch
         run: npm run test:offline
+      - name: Upload smoke-test screenshots and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gameplay-smoke-${{ github.run_attempt }}
+          path: |
+            .work/smoke-source
+            .work/smoke-built
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Upload the verified fast site
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
         with:
           path: _site
 
+  classroom-windows:
+    name: Test downloaded folder on Windows Edge
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PLAYWRIGHT_CHANNEL: msedge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install development tools
+        run: npm ci
+      - name: Ensure Microsoft Edge is available
+        run: npx playwright install msedge
+      - name: Test downloaded source with spaces and Arabic paths
+        run: node tools/test-classroom.mjs
+        env:
+          SG_ARTIFACT_DIR: .work/classroom-source
+      - name: Build the fast site
+        run: npm run build
+      - name: Test downloaded fast build with spaces and Arabic paths
+        run: node tools/test-classroom.mjs
+        env:
+          SG_ROOT: _site
+          SG_ARTIFACT_DIR: .work/classroom-built
+      - name: Upload classroom screenshots and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: classroom-windows-${{ github.run_attempt }}
+          path: |
+            .work/classroom-source
+            .work/classroom-built
+          if-no-files-found: ignore
+          retention-days: 14
+
   deploy:
     name: Deploy verified fast site
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: checks
+    needs: [checks, classroom-windows]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

@@ -1678,4 +1678,7 @@
     }
     if (G.resultLock > 0) G.resultLock -= dt;
   }, render);
+  Kit.lifecycle({ pause: pause });
+  Kit.ready();
 })();
+

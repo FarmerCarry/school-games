@@ -847,4 +847,7 @@
   goTitle();
   K.loop(update, render);
   try { document.fonts.load('700 40px Fredoka', 'ب'); } catch (e) { /* */ }
+  Kit.lifecycle({ pause: pause });
+  Kit.ready();
 })();
+

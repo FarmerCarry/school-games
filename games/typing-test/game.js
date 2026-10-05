@@ -79,7 +79,8 @@
   var tickTimer = 0;
   var lineH = 40, caretH = 30, caretW = 3;
   var clockSkew = 0;       // test hook: typeText(str, ms) advances a virtual clock
-  function now() { return performance.now() + clockSkew; }
+  var pausedAt = null;
+  function now() { return (pausedAt === null ? performance.now() : pausedAt) + clockSkew; }
   function randomSeed() { return (Math.floor(Math.random() * 4294967296) >>> 0); } // seed choice only; generation is PRNG
 
   /* ------------------------------------------------------- start a test */
@@ -87,6 +88,8 @@
   function newTest(opts) {
     opts = opts || {};
     clearTimeout(tickTimer);
+    pausedAt = null;
+    setUnfocused(false);
     var cfg;
     if (opts.code) {
       var c = E.parseCode(opts.code);
@@ -381,7 +384,7 @@
   function currentHist() { var h = T.hist.slice(0, T.cur); h.push(T.input); return h; }
   function tick() {
     clearTimeout(tickTimer);
-    if (!T || T.phase !== 'running') return;
+    if (!T || T.phase !== 'running' || pausedAt !== null) return;
     var el = (now() - T.start) / 1000;
     var n = Math.floor(el + 1e-6);
     var upto = T.mode === 'time' ? Math.min(n, T.amt) : n;
@@ -727,18 +730,23 @@
   function hideWarn() { clearTimeout(warnTimer); warnEl.hidden = true; body.classList.remove('warnOn'); }
 
   /* --------------------------------------------------------------- focus */
-  var blurTimer = 0;
   function setUnfocused(on) {
+    if (on && T && T.phase === 'running' && pausedAt === null) {
+      pausedAt = performance.now(); clearTimeout(tickTimer);
+    } else if (!on && pausedAt !== null) {
+      if (T && T.phase === 'running') T.start += performance.now() - pausedAt;
+      pausedAt = null;
+      if (T && T.phase === 'running') tick();
+    }
     unfocusEl.hidden = !on;
     wordsBox.classList.toggle('blurred', on);
     if (on) body.classList.remove('typing');
   }
-  window.addEventListener('blur', function () {
-    clearTimeout(blurTimer);
-    blurTimer = setTimeout(function () { setUnfocused(true); }, 250);
-  });
-  window.addEventListener('focus', function () { clearTimeout(blurTimer); setUnfocused(false); });
   unfocusEl.addEventListener('pointerdown', function () { setUnfocused(false); });
+  unfocusEl.setAttribute('role', 'button'); unfocusEl.tabIndex = 0;
+  unfocusEl.addEventListener('keydown', function (e) {
+    if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); setUnfocused(false); unfocusEl.blur(); }
+  });
 
   /* ------------------------------------------ keyboard navigation (Esc) */
   var kbnav = false;
@@ -846,7 +854,7 @@
       return;
     }
     if (!unfocusEl.hidden) {
-      setUnfocused(false);
+      if (k === 'Enter' || k === ' ') setUnfocused(false);
       if (isText(k) || k === 'Backspace' || k === 'Enter') e.preventDefault();
       return;
     }
@@ -1273,4 +1281,6 @@
     engine: E,
     store: { pbs: getPbs, hist: getHist }
   };
+  Kit.lifecycle({ pause: function () { if (screen === 'test') setUnfocused(true); } });
+  Kit.ready();
 })();

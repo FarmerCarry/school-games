@@ -1564,4 +1564,7 @@
   if (document.fonts && document.fonts.load) { document.fonts.load('700 40px Fredoka', 'بونغ BONK').catch(function () {}); }
   goTitle();
   Kit.loop(update, render);
+  Kit.lifecycle({ pause: function () { if (!paused) pause(true); } });
+  Kit.ready();
 })();
+

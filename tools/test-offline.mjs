@@ -235,6 +235,20 @@ try {
     await page.goto(origin + BASE, { waitUntil: 'load' });
     await installed(inspector, origin + BASE, v1);
     check(true, `first visit stores all ${v1.count} files`);
+    await page.waitForFunction(() => document.getElementById('offlineStatus')?.dataset.state === 'ready');
+    check(true, 'portal announces readiness only after verifying the complete cache');
+    // A registered worker is insufficient: an evicted file invalidates the UI
+    // readiness claim even while the current portal remains open and usable.
+    await context.setOffline(true);
+    await inspector.evaluate(async ({ name, url }) => {
+      await (await caches.open(name)).delete(url);
+    }, { name: cacheName(origin + BASE, v1), url: origin + BASE + 'games/merge-2048/index.html' });
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForFunction(() => document.getElementById('offlineStatus')?.dataset.state === 'unavailable');
+    assert.equal(await page.locator('#offlineRetry').isVisible(), true, 'incomplete cache offers a retry');
+    await context.setOffline(false);
+    await page.waitForFunction(() => document.getElementById('offlineStatus')?.dataset.state === 'ready');
+    check(true, 'cache eviction removes readiness and reconnect repairs it');
     await offlineReload(context, [page]);
     await context.setOffline(true);
     for (const slug of ['rail-rush', 'merge-2048', 'fire-and-ice', 'road-hopper', 'block-world', 'skybound-golf', 'connect-four', 'tic-tac-toe']) {

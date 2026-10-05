@@ -1901,4 +1901,7 @@
   })();
   showTitle();
   requestAnimationFrame(frame);
+  Kit.lifecycle({ pause: pauseGame });
+  Kit.ready();
 })();
+

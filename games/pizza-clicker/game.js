@@ -8,6 +8,7 @@
   var COUNTER_Y = 508;
   var TAU = Math.PI * 2;
   var store = K.store('pizza-clicker');
+  var saveStatus = K.saveStatus({ retry: save });
   var $ = function (id) { return document.getElementById(id); };
   var NB = PZ.BUILDINGS.length;
 
@@ -885,8 +886,9 @@
       '<div class="row"><button class="btn red" data-act="yes" type="button">نعم، امسح</button><button class="btn alt" data-act="no" data-primary="1" type="button">لا، تراجع</button></div>';
     openModal('reset', html, 560, function (act) {
       if (act === 'yes') {
-        store.remove('save');
-        S = fresh(); recalc();
+        var next = fresh();
+        if (!store.set('save', next)) { saveStatus.failed(); return; }
+        S = next; hiddenAt = 0; recalc();
         buffs.frenzy = buffs.click = 0; golden = null; rain.items.length = 0; rain.toSpawn = 0; goldenTimer = K.rand(22, 30);
         pizzaCacheSkin = ''; upsSig = 'x';
         rows.forEach(function (r) { r.state = ''; r.costTxt = null; r.cntTxt = null; r.no = null; });
@@ -939,6 +941,7 @@
         '<span>وقت اللعب (دقيقة)</span><b>' + mins + '</b>';
       pauseEl.hidden = false; snd.ui();
     } else if (!p && mode === 'pause') {
+      collectAway();
       mode = 'play'; pauseEl.hidden = true; snd.ui();
     }
   }
@@ -1006,7 +1009,7 @@
   $('bPlay').addEventListener('click', startGame);
   $('bPause').addEventListener('click', function () { setPause(true); });
   $('bResume').addEventListener('click', function () { setPause(false); });
-  $('bMenu').addEventListener('click', function () { save(); pauseEl.hidden = true; showTitle(); snd.ui(); });
+  $('bMenu').addEventListener('click', function () { collectAway(); if (!save()) return; pauseEl.hidden = true; showTitle(); snd.ui(); });
   $('bReset').addEventListener('click', function () { snd.ui(); openResetConfirm(); });
   $('bAch').addEventListener('click', function () { if (mode === 'play' && !modalOpen) openAch(); });
   $('bSkin').addEventListener('click', function () { if (mode === 'play' && !modalOpen) { openSkins(); snd.ui(); } });
@@ -1017,21 +1020,32 @@
 
   /* ============================================================ save */
   var noSave = false; // debug only: lets tests fake time away
-  function save() { if (noSave || !started) return; S.t = Date.now(); store.set('save', S); }
-  window.addEventListener('pagehide', save);
-  window.addEventListener('beforeunload', save);
+  function save() {
+    if (noSave || !started) return false;
+    S.t = Date.now();
+    if (!store.set('save', S)) { saveStatus.failed(); return false; }
+    saveStatus.saved();
+    return true;
+  }
+  function persist() { collectAway(); save(); }
+  window.addEventListener('pagehide', persist);
+  window.addEventListener('beforeunload', persist);
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { hiddenAt = Date.now(); if (started) save(); }
-    else if (hiddenAt && mode === 'play') {
+    if (document.hidden) { if (mode === 'play' && !hiddenAt) hiddenAt = Date.now(); if (started) save(); }
+    else collectAway();
+  });
+  function collectAway() {
+    if (hiddenAt) {
       var sec = (Date.now() - hiddenAt) / 1000;
       hiddenAt = 0;
       if (sec > 20 && S.ppsBase > 0) {
         var amt = offlineGain(sec);
         gain(amt, false);
         toast(pizzaIconURL(), 'أثناء غيابك', plus(PZ.fmt(amt)) + ' بيتزا', fmtDuration(sec));
+        save();
       }
     }
-  });
+  }
 
   /* ============================================================ update */
   var uiT = 0, achT = 0, saveT = 0, goalT = 0;
@@ -1441,4 +1455,10 @@
     save: save, fmt: PZ.fmt, snd: snd,
     setTime: function (sec) { save(); S.t = Date.now() - sec * 1000; store.set('save', S); noSave = true; }
   };
+  K.lifecycle({ pause: function () {
+    if (mode !== 'play') return;
+    if (!hiddenAt) hiddenAt = Date.now();
+    save(); setPause(true);
+  } });
+  K.ready();
 })();

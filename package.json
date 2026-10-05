@@ -6,16 +6,19 @@
     "build": "node tools/build.mjs",
     "check": "node tools/check-all.mjs",
     "perf": "node tools/perf.mjs",
-    "test": "npm run test:unit && npm run test:tooling && npm run test:regressions",
+    "test": "npm run test:unit && npm run test:tooling && npm run test:scenarios && npm run test:regressions",
     "browsers:install": "playwright install --no-shell chromium",
     "test:offline": "node tools/test-offline.mjs",
     "test:board-games": "node tools/test-board-games.mjs",
     "test:unit": "node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/github-test-reporter.mjs --test-reporter-destination=stderr tools/tests/*.test.mjs",
     "test:tooling": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/github-test-reporter.mjs --test-reporter-destination=stderr tools/test-tooling.mjs",
-    "test:regressions": "node tools/regressions.mjs"
+    "test:regressions": "node tools/regressions.mjs",
+    "test:scenarios": "node tools/test-scenarios.mjs",
+    "test:classroom": "node tools/test-classroom.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
     "playwright": "1.62.1"
   }
 }
+

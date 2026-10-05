@@ -1617,4 +1617,7 @@
     missions: function () { return save.missions; },
     rails: function () { var o = []; for (var r = laneMin; r <= laneMax; r++) { var L = lanes[r]; if (L && L.rail) o.push({ row: r, phase: L.rail.phase, t: +L.rail.t.toFixed(2), x: +L.rail.x.toFixed(1) }); } return o; }
   };
+  Kit.lifecycle({ pause: pauseGame });
+  Kit.ready();
 })();
+

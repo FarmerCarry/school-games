@@ -1,0 +1,109 @@
+/* Offline readiness belongs to verified cached bytes, not navigator.onLine. */
+(function () {
+  'use strict';
+  var status = document.getElementById('offlineStatus');
+  var retry = document.getElementById('offlineRetry');
+  if (!status || !retry) return;
+  var registration = null, starting = false, checking = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0;
+  function paint(state, text, canRetry) {
+    status.hidden = false;
+    status.setAttribute('data-state', state);
+    // Avoid repeating live announcements when focus returns to the page.
+    if (status.textContent !== text) status.textContent = text;
+    retry.hidden = !canRetry;
+    retry.disabled = checking;
+  }
+  if (location.protocol === 'file:') {
+    paint('local', 'تعمل هذه النسخة من المجلد دون إنترنت', false);
+    return;
+  }
+  // Source and emergency-switch deployments must never install an offline worker.
+  if (!window.SG_OFFLINE_BUILD) return;
+  if (!('serviceWorker' in navigator) || typeof MessageChannel === 'undefined') {
+    paint('unavailable', 'الحفظ دون إنترنت غير متاح في هذا المتصفح', false);
+    return;
+  }
+  function ask(worker, repair) {
+    return new Promise(function (resolve, reject) {
+      var channel = new MessageChannel(), id = ++sequence;
+      var timer = setTimeout(function () { finish(new Error('timeout')); }, 15000);
+      function finish(error, value) {
+        clearTimeout(timer);
+        channel.port1.close();
+        if (error) reject(error); else resolve(value);
+      }
+      channel.port1.onmessage = function (event) {
+        var data = event.data;
+        if (!data || data.type !== 'sg:offline-status' || data.id !== id) return;
+        finish(null, data);
+      };
+      try { worker.postMessage({ type: 'sg:offline-status', id: id, repair: !!repair }, [channel.port2]); }
+      catch (e) { finish(e); }
+    });
+  }
+  async function inspect(repair) {
+    if (checking) { queued = true; queuedRepair = queuedRepair || !!repair; return; }
+    if (!registration) return start();
+    var worker = registration.active;
+    if (!worker) {
+      paint('preparing', 'جارٍ تجهيز الألعاب للعمل دون إنترنت…', true);
+      return;
+    }
+    checking = true;
+    paint('checking', repair ? 'جارٍ إصلاح النسخة المحفوظة…' : 'جارٍ التحقق من الألعاب المحفوظة…', false);
+    try {
+      var result = await ask(worker, repair);
+      if (worker !== registration.active) { queued = true; return; }
+      if (result.ready && result.count === result.total && result.total > 0) {
+        paint('ready', registration.installing ? 'جاهز دون إنترنت — جارٍ تنزيل تحديث' : 'جاهز دون إنترنت', false);
+      } else {
+        paint('unavailable', 'النسخة دون إنترنت غير مكتملة — اتصل بالإنترنت ثم أعد المحاولة', true);
+      }
+    } catch (e) {
+      paint('unavailable', 'تعذّر التأكد من النسخة دون إنترنت — أعد المحاولة', true);
+    } finally {
+      checking = false;
+      retry.disabled = false;
+      if (queued) { var repairNext = queuedRepair; queued = queuedRepair = false; inspect(repairNext); }
+    }
+  }
+  function observe(worker) {
+    if (!worker) return;
+    clearTimeout(installingTimer);
+    installingTimer = setTimeout(function () {
+      if (!registration.active) paint('unavailable', 'لم يكتمل تنزيل الألعاب بعد — أعد المحاولة عند الاتصال', true);
+    }, 45000);
+    worker.addEventListener('statechange', function () {
+      if (worker.state === 'activated') { clearTimeout(installingTimer); inspect(false); }
+      else if (worker.state === 'redundant') {
+        clearTimeout(installingTimer);
+        if (registration.active) inspect(false);
+        else paint('unavailable', 'تعذّر تجهيز الألعاب دون إنترنت — أعد المحاولة', true);
+      }
+    });
+  }
+  async function start() {
+    if (starting) return;
+    if (registration) return inspect(false);
+    starting = true;
+    paint('preparing', 'جارٍ تجهيز الألعاب للعمل دون إنترنت…', false);
+    try {
+      registration = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
+      registration.addEventListener('updatefound', function () { observe(registration.installing); });
+      observe(registration.installing);
+      if (registration.active) inspect(false);
+    } catch (e) { paint('unavailable', 'تعذّر تجهيز الألعاب دون إنترنت — أعد المحاولة', true); }
+    finally { starting = false; }
+  }
+  retry.addEventListener('click', function () {
+    if (!registration) { start(); return; }
+    // Keep a working old version usable while a newer complete version installs.
+    registration.update().catch(function () {}).then(function () { inspect(true); });
+  });
+  navigator.serviceWorker.addEventListener('controllerchange', function () { inspect(false); });
+  window.addEventListener('online', function () { inspect(true); });
+  window.addEventListener('focus', function () { if (!document.hidden) inspect(false); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) inspect(false); });
+  if (document.readyState === 'complete') start();
+  else window.addEventListener('load', start, { once: true });
+}());

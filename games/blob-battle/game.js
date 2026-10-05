@@ -1498,6 +1498,7 @@
   window.__game = {
     info: function () {
       return { state: state, arena: arenaIdx, T: +T.toFixed(2), mass: player ? Math.round(player.mass) : null, playerCells: player ? player.cells.length : 0,
+        player: player && player.cells[0] ? { x: +player.cells[0].x.toFixed(2), y: +player.cells[0].y.toFixed(2) } : null,
         alive: player ? player.alive : null, rank: player ? player.rank : null, bots: owners.filter(function (o) { return o.isBot && o.alive; }).length,
         cells: cells.length, pellets: pCount, viruses: viruses.length, ejected: ejected.length, particles: parts.length, zoom: +cam.z.toFixed(3),
         skin: selSkin.id, unlocked: countUnlocked(), stats: stats };
@@ -1540,4 +1541,7 @@
       return out;
     }
   };
+  Kit.lifecycle({ pause: pauseGame });
+  Kit.ready();
 })();
+

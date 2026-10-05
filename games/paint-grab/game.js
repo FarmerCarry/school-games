@@ -1289,4 +1289,7 @@
   /* ============================================================ boot */
   toTitle();
   Kit.loop(update, render);
+  Kit.lifecycle({ pause: pauseGame });
+  Kit.ready();
 })();
+

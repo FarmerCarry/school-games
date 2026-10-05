@@ -133,6 +133,26 @@ Everything works straight from the folder. You can also put the folder on a shar
 
 ## Managing games
 
+The home page puts recent games and favorites first. The extra filters show short
+rounds, one-button games, or games for friends. `roundMinutes` in the catalog is an
+estimate for choosing a game, not a time limit; `inputStyle` describes its controls.
+Returning from a game restores the originating tile and browsing position.
+
+The classroom controls offer quiet sound, reduced effects, and an optional session
+timer. When time expires, the game pauses behind a handoff prompt; it is not closed
+or reset. Resume is explicit. Games also pause when focus leaves their playing
+window, including Shift+Tab back to the portal and leaving fullscreen.
+
+The fast site's footer shows whether every file is verified for offline use.
+“جاهز دون إنترنت” means the active version is complete; an incomplete installation
+or cleared cache offers Retry. Keep the first visit open until it is ready. A
+downloaded folder instead reports that it is running locally.
+
+Critter Mart and Pizza Empire show a persistent warning if saving is blocked or
+storage is full. Retry keeps the current session and clears the warning only after
+the pending data is saved. Block World's final celebration survives a reload until
+the player acknowledges it.
+
 Everything the home page shows comes from **`js/catalog.js`**:
 
 - **Hide a game:** add `hidden: true` to its entry.
@@ -176,6 +196,8 @@ Performance and the fast build:
 npm test                        # deterministic bug regressions and browser checks
 npm run test:unit                # the regression files under tools/tests/
 npm run test:tooling             # shared build and browser-harness helpers
+npm run test:scenarios           # prove broken Start/Pause handlers fail the gameplay checks
+npm run test:classroom           # downloaded folder, Arabic/spaced paths and denied storage
 npm run test:regressions         # additional gameplay and portal keyboard checks
 npm run check                   # smoke-test all source games
 npm run build                   # fast build into _site/ (the Pages artifact)
@@ -192,6 +214,23 @@ checkout and existing `_site/` output intact. The browser regression suite uses 
 profiles and test saves; it does not overwrite your normal browser progress.
 Smoke runs keep per-game screenshots and a `report.json` in a separate temporary directory.
 Failures print diagnostics immediately, including the browser action that failed.
+Set `SG_ARTIFACT_DIR` to retain smoke screenshots, failure DOM and the summary at a
+known path. CI uploads source/built diagnostics even on failure. Every catalog game
+has a scenario in `tools/game-scenarios.mjs` that starts it through visible controls,
+checks meaningful input, verifies pause, and restarts a round or resumes a persistent
+world. The Windows Edge job checks downloaded source and fast builds, including
+denied browser storage, and must pass before deployment.
+
+For real hardware measurements, run on the school's weakest supported Windows PC:
+
+```
+npm run perf -- --native-gpu --headed --seconds 30 rail-rush splat-strike --json report.json
+```
+
+This mode records the actual renderer, cold/warm browser startup and frame/memory
+measurements during active gameplay. Use repeated runs on the same hardware to set
+budgets; headless software-renderer CI timings are not school-PC performance claims.
+The headed run must retain focus while measuring because games now pause on blur.
 
 The builder accepts new or empty output directories and recognized generated builds.
 It refuses source directories, Git metadata, symlinks, tracked files, and unrelated files
@@ -225,6 +264,18 @@ The last command reports balance thresholds as warnings while still failing inva
 and levels with no successful smart-bot runs. The existing levels currently have balance
 warnings; report mode is useful for inspecting them without treating those warnings as
 proof a level is impossible.
+
+Block Burst's policies now have independent seeded randomness, and search clones
+preserve the simulated random state. Use `--json` for failed seeds and remaining
+goals; replay one noisy-policy attempt with:
+
+```
+ONLY=20 node games/block-burst/verify-levels.js 1 --bot=kid --seed=19007 --report-balance --json
+```
+
+The `kid` label is a noisy simulation policy, not a measurement of children. See
+[`docs/BLOCK_BURST_BALANCE.md`](docs/BLOCK_BURST_BALANCE.md) for changes, samples and
+independent holdouts. Actual student playtests remain necessary for difficulty feel.
 
 ## Credits and licenses
 

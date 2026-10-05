@@ -1091,4 +1091,7 @@
       markDead(); return true;
     }
   };
+  Kit.lifecycle({ pause: pause, reset: function () { drag = null; } });
+  Kit.ready();
 })();
+

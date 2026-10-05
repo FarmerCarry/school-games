@@ -60,8 +60,33 @@
     fsNone: 'ملء الشاشة غير متاح هنا. جرّب زر F11!',
     fsFail: 'لم يعمل ملء الشاشة. جرّب زر F11!',
     loading: 'جارٍ تحميل ',
-    building: 'هذه اللعبة ما زالت قيد البناء!',
-    buildingSub: 'جرّب لعبة أخرى من الأسفل.',
+    loadFailed: 'تعذّر تشغيل اللعبة',
+    loadFailedSub: 'أعد المحاولة، أو ارجع واختر لعبة أخرى. تقدّمك المحفوظ يبقى كما هو.',
+    retry: 'أعد المحاولة',
+    returnGames: 'العودة إلى الألعاب',
+    shortRound: 'جولة قصيرة',
+    oneButton: 'زر واحد',
+    playFriend: 'العب مع صديق',
+    estimates: 'الأوقات تقريبية وتختلف حسب اللاعب؛ ألعاب الجولة القصيرة تستغرق عادة 3 دقائق أو أقل.',
+    openEnded: 'لعب مفتوح',
+    duration: function (min, max) { return 'حوالي ' + min + '–' + max + ' دقائق للجولة'; },
+    pointer: 'الفأرة',
+    keyboard: 'لوحة المفاتيح',
+    mixedInput: 'الفأرة ولوحة المفاتيح',
+    oneButtonHint: 'زر واحد أثناء اللعب؛ قد تحتاج الفأرة لاختيار القوائم والترقيات.',
+    friendHint: 'العبوا معًا على الجهاز نفسه — دون حسابات.',
+    sessionEnded: 'انتهى وقت الجلسة',
+    sessionHandoff: 'اللعبة متوقفة. سلّم الجهاز أو تابع هذه الجولة من زر الاستئناف داخل اللعبة.',
+    handOver: 'سلّم الجهاز',
+    finishRound: 'تابع هذه الجولة',
+    startTimer: 'ابدأ المؤقّت',
+    startSession: 'ابدأ جلسة جديدة',
+    resetTimer: 'أعد ضبط المؤقّت',
+    sessionChoice: 'انتهى وقت الجلسة. اختر تسليم الجهاز أو متابعة الجولة.',
+    sessionStarted: function (minutes) { return 'بدأت جلسة ' + minutes + ' دقائق. يتوقف اللعب عند انتهاء الوقت.'; },
+    timerCancelled: 'أُلغي المؤقّت. إذا كانت اللعبة متوقفة، استأنفها من داخل اللعبة.',
+    nextPlayer: 'انتهت الجلسة. الجهاز جاهز للاعب التالي.',
+    finishHint: 'استأنف من داخل اللعبة، ثم اضغط «العودة إلى الألعاب» لتسليم الجهاز بعد الجولة.',
     titleNotFound: 'لم نجد اللعبة',
     titleSearch: 'بحث: ',
     gameFallback: 'لعبة'
@@ -103,7 +128,16 @@
   var CATS = ALL_CATS.filter(function (c) {
     return c && c.id && GAMES.some(function (g) { return g.cats.indexOf(c.id) >= 0; });
   });
-  var CAT_COLORS = ['#ff7a1a', '#ff3b6b', '#8e5bff', '#1fb86a', '#00a6ff', '#ff4fa3', '#f2a900', '#17c3b2'];
+  // White labels on these colors meet WCAG AA for normal-size text.
+  var CAT_COLORS = ['#a74200', '#b71c4a', '#6940bd', '#137a45', '#006aab', '#ae2566', '#806000', '#08776d'];
+  var QUICK = Object.create(null);
+  QUICK.short = { label: T.shortRound, icon: '⏱️', match: function (g) { return Array.isArray(g.roundMinutes) && g.roundMinutes[1] <= 3; } };
+  QUICK.simple = { label: T.oneButton, icon: '👆', match: function (g) { return g.inputStyle === 'one-button'; } };
+  QUICK.friends = { label: T.playFriend, icon: '👥', match: isMulti };
+  var INPUT_LABELS = { 'one-button': T.oneButton, pointer: T.pointer, keyboard: T.keyboard, mixed: T.mixedInput };
+  function durationLabel(g) {
+    return Array.isArray(g.roundMinutes) ? T.duration(g.roundMinutes[0], g.roundMinutes[1]) : T.openEnded;
+  }
 
   function gamesIn(catId) { return GAMES.filter(function (g) { return g.cats.indexOf(catId) >= 0; }); }
   function isMulti(g) { return /[2-9]/.test(String(g.players || '')); }
@@ -268,7 +302,7 @@
     var badges = '';
     if (g.hot) badges += '<b class="badge hot"><span aria-hidden="true">🔥</span>' + T.hotBadge + '</b>';
     if (isMulti(g)) badges += '<b class="badge p2"><span aria-hidden="true">👥</span>' + T.p2Badge + '</b>';
-    return '<a class="' + cls + '" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '"' +
+    return '<a class="' + cls + '" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '" title="' + esc(g.title + ' · ' + durationLabel(g) + ' · ' + (INPUT_LABELS[g.inputStyle] || '')) + '"' +
       ' style="--c:' + g.color + ';--c2:' + deepen(g.color, 0.45) + ';--fbs:' + fbSize(g.title) + 'cqw" aria-label="' + esc(g.title) + '">' +
       '<span class="art">' +
         '<span class="fb" aria-hidden="true"><span class="fb-emoji">' + catEmoji(g) + '</span><span class="fb-title">' + esc(g.title) + '</span></span>' +
@@ -557,6 +591,7 @@
     if (head === 'c' && rest) return { name: 'cat', id: rest };
     if (head === 'search') return { name: 'search', q: rest };
     if (head === 'play' && rest) return { name: 'play', slug: rest };
+    if (head === 'quick' && rest) return { name: 'quick', id: rest };
     return { name: 'home' };
   }
 
@@ -569,6 +604,19 @@
         '<span class="chip-ico" aria-hidden="true">' + esc(c.icon || '🎮') + '</span>' + esc(c.label) + '</a>';
     });
     return html;
+  }
+  function quickHTML(route) {
+    return Object.keys(QUICK).map(function (id) {
+      var item = QUICK[id], active = route.name === 'quick' && route.id === id;
+      return '<a class="chip' + (active ? ' on' : '') + '" style="--cc:#384d91" href="#/quick/' + id + '"' + (active ? ' aria-current="page"' : '') + '><span aria-hidden="true">' + item.icon + '</span>' + item.label + '</a>';
+    }).join('');
+  }
+  function renderQuick(route) {
+    var item = QUICK[route.id];
+    if (!item) return notFound(T.noCat);
+    var list = GAMES.filter(item.match);
+    return '<div class="banner" style="--cc:#384d91"><span class="banner-ico" aria-hidden="true">' + item.icon + '</span><div><h1>' + item.label + '</h1><p>' + T.found(list.length) + '</p></div></div>' +
+      '<p class="filter-note">' + (route.id === 'short' ? T.estimates : route.id === 'simple' ? T.oneButtonHint : T.friendHint) + '</p>' + gridHTML(list);
   }
 
   function hotList() {
@@ -584,7 +632,6 @@
       return '<div class="empty"><div class="empty-emoji">🛠️</div><h2>' + T.soon + '</h2><p>' + T.soonSub + '</p></div>';
     }
     var tag = SITE.tagline ? '<span class="tagline">' + esc(SITE.tagline) + '</span>' : '';
-    html += sectionHTML('🔥', T.hot, mosaicHTML(hot, rest, true), tag);
 
     var recent = getRecent();
     var favs = getFavs();
@@ -594,6 +641,7 @@
       if (favs.length) html += rowSecHTML('❤️', T.favs, favs.map(function (s) { return BY_SLUG[s]; }), '', 3);
       html += '</div>';
     }
+    html += sectionHTML('🔥', T.hot, mosaicHTML(hot, rest, true), tag);
     html += '<div class="cat-rows">';
     CATS.forEach(function (c) {
       var list = gamesIn(c.id);
@@ -678,7 +726,7 @@
       var c = CAT_BY_ID[id];
       return '<a class="mini-chip" href="#/c/' + enc(id) + '" style="--cc:' + catColor(id) + '"><span aria-hidden="true">' + esc(c.icon || '') + '</span> ' + esc(c.label) + '</a>';
     }).join('');
-    var pl = '<span class="players">' + playersLabel(g.players) + '</span>';
+    var pl = '<span class="players">' + playersLabel(g.players) + '</span><span class="players">⏱️ ' + durationLabel(g) + '</span><span class="players">' + esc(INPUT_LABELS[g.inputStyle] || '') + '</span>';
 
     // Related: shared categories first (most overlap), then hot, then the rest.
     var more = GAMES.filter(function (o) { return o !== g; }).map(function (o) {
@@ -686,12 +734,14 @@
       return [shared * 10 + (o.hot ? 2 : 0) + Math.random(), o];
     }).sort(function (a, b) { return b[0] - a[0]; }).map(function (x) { return x[1]; });
 
-    return '<div class="play" id="play">' +
+    return '<a class="return-games" id="backGames" href="' + esc(playReturn ? playReturn.hash : '#/') + '">‹ ' + T.returnGames + '</a>' +
+      '<div class="play" id="play">' +
         '<div class="play-main" id="playMain">' +
           '<div class="stage-wrap" id="stageWrap">' +
             '<div class="stage loading" id="stage" style="--c:' + g.color + '">' +
-              '<div class="stage-loading" aria-hidden="true"><svg viewBox="0 0 64 64" width="84" height="84">' + iconSVG() + '</svg><span>' + T.loading + esc(g.title) + '…</span></div>' +
-              '<div class="stage-msg" id="stageMsg" hidden><div class="empty-emoji">🛠️</div><b>' + T.building + '</b><span>' + T.buildingSub + '</span></div>' +
+              '<div class="stage-loading" role="status"><svg aria-hidden="true" viewBox="0 0 64 64" width="84" height="84">' + iconSVG() + '</svg><span>' + T.loading + esc(g.title) + '…</span></div>' +
+              '<div class="stage-msg" id="stageMsg" role="alert" hidden><div class="empty-emoji" aria-hidden="true">🛠️</div><b>' + T.loadFailed + '</b><span>' + T.loadFailedSub + '</span><div class="stage-actions"><button type="button" class="pbtn" id="gameRetry">' + T.retry + '</button><a class="pbtn" href="' + esc(playReturn ? playReturn.hash : '#/') + '">' + T.returnGames + '</a></div></div>' +
+              '<div class="session-handoff" id="sessionHandoff" role="dialog" aria-modal="true" aria-labelledby="sessionEndTitle" hidden><b id="sessionEndTitle">' + T.sessionEnded + '</b><p>' + T.sessionHandoff + '</p><div class="stage-actions"><button type="button" class="pbtn" id="sessionEnd">' + T.handOver + '</button><button type="button" class="pbtn" id="sessionFinish">' + T.finishRound + '</button></div></div>' +
             '</div>' +
             '<div class="play-bar" id="playBar">' +
               '<div class="pb-info"><h1 class="pb-title">' + esc(g.title) + '</h1><div class="pb-meta">' + pl + cats + '</div></div>' +
@@ -713,11 +763,32 @@
   /* -------------------------------------------------------- play logic */
   var current = null;   // current play slug
   var portalFocus = false;
+  var readyTimer = 0;
+  var frameReady = false;
+  var renderedHash = null;
+  var playReturn = null;
+  var pendingReturn = null;
+  var classroomOn = false;
+  var sessionDeadline = 0;
+  var sessionExpired = false;
+  var savedPreferences = null;
+  var hadFullscreen = false;
+  function routeHash() { return location.hash || '#/'; }
   function frameEl() { return $('#stage iframe'); }
+  // file:// uses an opaque origin, so target/source Window identity is the
+  // authentication boundary. Never accept messages from other windows.
+  function postGame(message) {
+    var f = frameEl();
+    if (f && f.contentWindow) f.contentWindow.postMessage(message, location.protocol === 'file:' ? '*' : location.origin);
+  }
+  function sendPreferences() {
+    if (classroomOn) postGame({ type: 'sg:preferences', quiet: true, reducedMotion: true, motionPreference: 'reduce' });
+    else if (savedPreferences) postGame({ type: 'sg:preferences', quiet: savedPreferences.quiet, motionPreference: savedPreferences.motion });
+  }
   function focusGame() {
     if (portalFocus) return;
     var f = frameEl();
-    if (!f) return;
+    if (!f || !frameReady || sessionExpired) return;
     var a = document.activeElement;
     if (a && a.id === 'q') return; // don't steal focus from someone typing a search
     try { f.focus({ preventScroll: true }); } catch (e) { try { f.focus(); } catch (e2) { /* ignore */ } }
@@ -725,20 +796,49 @@
   }
   function activateGame() { portalFocus = false; focusGame(); }
   function focusPortal() {
-    var target = $('#favBtn') || $('#logo');
+    var target = (sessionExpired && $('#sessionEnd')) || $('#favBtn') || $('#logo');
     if (target) {
       try { target.focus({ preventScroll: true }); } catch (e) { target.focus(); }
     }
   }
   function onGameMessage(e) {
     var f = frameEl();
-    if (!f || e.source !== f.contentWindow || e.data !== 'sg:focus-portal') return;
-    portalFocus = true;
-    exitFullscreen();
-    focusPortal();
+    if (!f || e.source !== f.contentWindow) return;
+    if (location.protocol !== 'file:' && e.origin !== location.origin) return;
+    if (e.data === 'sg:focus-portal') {
+      portalFocus = true;
+      exitFullscreen();
+      focusPortal();
+      return;
+    }
+    var type = e.data && e.data.type;
+    if (type === 'sg:ready') {
+      if (f.dataset.failed === 'true') return;
+      clearTimeout(readyTimer);
+      frameReady = true;
+      if (!sessionExpired) f.removeAttribute('inert');
+      $('#stage').classList.remove('loading');
+      $('#stage').setAttribute('aria-busy', 'false');
+      sendPreferences();
+      if (sessionExpired) showHandoff(); else focusGame();
+    } else if (type === 'sg:error') failFrame(f);
+  }
+  function failFrame(f) {
+    if (frameEl() !== f) return;
+    clearTimeout(readyTimer);
+    frameReady = false;
+    f.dataset.failed = 'true';
+    $('#stage').classList.remove('loading');
+    $('#stage').setAttribute('aria-busy', 'false');
+    $('#stageMsg').hidden = false;
+    f.style.visibility = 'hidden';
+    f.setAttribute('inert', '');
+    f.setAttribute('tabindex', '-1');
   }
   function mountFrame(slug) {
+    clearTimeout(readyTimer);
     portalFocus = false;
+    frameReady = false;
     var stage = $('#stage');
     if (!stage) return;
     var old = frameEl();
@@ -746,32 +846,23 @@
     var msg = $('#stageMsg');
     if (msg) msg.hidden = true;
     stage.classList.add('loading');
+    stage.setAttribute('aria-busy', 'true');
     var f = document.createElement('iframe');
+    f.setAttribute('inert', '');
     f.setAttribute('allow', 'fullscreen *; autoplay *');
     f.setAttribute('allowfullscreen', '');
     f.setAttribute('title', (BY_SLUG[slug] || {}).title || T.gameFallback);
     f.setAttribute('scrolling', 'no');
     f.addEventListener('load', function () {
       if (frameEl() !== f) return;
-      stage.classList.remove('loading');
-      checkMissing(f);
-      focusGame();
+      // Load only proves the HTML arrived. Kit.ready() confirms game startup.
+      postGame({ type: 'sg:request-ready' });
+      sendPreferences();
     });
+    f.addEventListener('error', function () { failFrame(f); });
     f.src = 'games/' + encodeURIComponent(slug) + '/index.html';
     stage.appendChild(f);
-  }
-  // Over http (same origin) we can tell when the game file isn't there yet.
-  function checkMissing(f) {
-    try {
-      var d = f.contentDocument;
-      if (!d || !d.body) return;
-      // Every real game page has a script or a canvas; a server's 404 page doesn't.
-      if (!d.querySelector('script, canvas')) {
-        var msg = $('#stageMsg');
-        if (msg) msg.hidden = false;
-        f.style.visibility = 'hidden';
-      }
-    } catch (e) { /* cross-origin (file://): can't tell, that's fine */ }
+    readyTimer = setTimeout(function () { failFrame(f); }, 20000);
   }
   function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
   function exitFullscreen() {
@@ -797,6 +888,9 @@
     }
   }
   function onFsChange() {
+    var fullscreen = isFullscreen();
+    if (hadFullscreen && !fullscreen) postGame({ type: 'sg:pause', reason: 'fullscreen-exit' });
+    hadFullscreen = fullscreen;
     var b = $('#fsBtn');
     if (b) {
       var lbl = isFullscreen() ? T.fsExit : T.fs;
@@ -805,7 +899,84 @@
     }
     setTimeout(function () { if (portalFocus) focusPortal(); else focusGame(); }, 50);
   }
+  function storedPreference(key, fallback) {
+    try { var value = window.localStorage.getItem('sg:site:' + key); return value === null ? fallback : JSON.parse(value); } catch (e) { return fallback; }
+  }
+  function writePreference(key, value) {
+    try { window.localStorage.setItem('sg:site:' + key, JSON.stringify(value)); } catch (e) { /* Current session still works through the frame protocol. */ }
+  }
+  function setClassroom(on) {
+    classroomOn = !!on;
+    if (classroomOn && !savedPreferences) savedPreferences = { quiet: !!storedPreference('muted', false), motion: storedPreference('motion', 'system') };
+    writePreference('classroom', classroomOn);
+    if (classroomOn) writePreference('classroomPrior', savedPreferences);
+    if (classroomOn || savedPreferences) {
+      writePreference('muted', classroomOn ? true : savedPreferences.quiet);
+      writePreference('motion', classroomOn ? 'reduce' : savedPreferences.motion);
+    }
+    document.documentElement.setAttribute('data-sg-motion', classroomOn ? 'reduce' : storedPreference('motion', 'system'));
+    sendPreferences();
+    if (!classroomOn) savedPreferences = null;
+  }
+  function showHandoff() {
+    postGame({ type: 'sg:pause', reason: 'session-ended' });
+    var overlay = $('#sessionHandoff');
+    if (!overlay) return;
+    portalFocus = true;
+    exitFullscreen();
+    overlay.hidden = false;
+    var f = frameEl();
+    if (f) f.setAttribute('inert', '');
+    $('#sessionEnd').focus({ preventScroll: true });
+  }
+  function clearSession() {
+    sessionDeadline = 0;
+    sessionExpired = false;
+    $('#sessionClock').textContent = '';
+    $('#sessionStop').hidden = true;
+    $('#sessionStart').textContent = T.startTimer;
+    var overlay = $('#sessionHandoff');
+    if (overlay) overlay.hidden = true;
+    var f = frameEl();
+    if (f && frameReady) f.removeAttribute('inert');
+  }
+  function tickSession() {
+    if (!sessionDeadline) return;
+    var left = Math.max(0, Math.ceil((sessionDeadline - Date.now()) / 1000));
+    $('#sessionClock').textContent = Math.floor(left / 60) + ':' + ('0' + left % 60).slice(-2);
+    if (!left) {
+      sessionDeadline = 0;
+      sessionExpired = true;
+      $('#sessionStatus').textContent = T.sessionChoice;
+      $('#sessionStart').textContent = T.startSession;
+      showHandoff();
+    }
+  }
+  function setupClassroom() {
+    classroomOn = !!storedPreference('classroom', false);
+    savedPreferences = classroomOn ? storedPreference('classroomPrior', { quiet: false, motion: 'system' }) : null;
+    if (!savedPreferences || typeof savedPreferences !== 'object') savedPreferences = null;
+    $('#classroomMode').checked = classroomOn;
+    document.documentElement.setAttribute('data-sg-motion', classroomOn ? 'reduce' : storedPreference('motion', 'system'));
+    $('#classroomMode').addEventListener('change', function () { setClassroom(this.checked); });
+    $('#classroom').addEventListener('toggle', fitStage);
+    $('#sessionStart').addEventListener('click', function () {
+      clearSession();
+      var minutes = Number($('#sessionMinutes').value) || 10;
+      sessionDeadline = Date.now() + minutes * 60000;
+      $('#sessionStop').hidden = false;
+      $('#sessionStart').textContent = T.resetTimer;
+      $('#sessionStatus').textContent = T.sessionStarted(minutes);
+      tickSession();
+    });
+    $('#sessionStop').addEventListener('click', function () {
+      clearSession();
+      $('#sessionStatus').textContent = T.timerCancelled;
+    });
+    setInterval(tickSession, 1000);
+  }
   function heartBurst(btn) {
+    if (classroomOn || document.documentElement.getAttribute('data-sg-motion') === 'reduce' || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
     var r = btn.getBoundingClientRect();
     for (var i = 0; i < 7; i++) {
       var h = document.createElement('span');
@@ -844,6 +1015,23 @@
       b.classList.remove('spin'); void b.offsetWidth; b.classList.add('spin');
       mountFrame(slug);
     });
+    $('#gameRetry').addEventListener('click', function () { mountFrame(slug); });
+    $('#sessionEnd').addEventListener('click', function () {
+      clearSession();
+      $('#sessionStatus').textContent = T.nextPlayer;
+      go('#/');
+    });
+    $('#sessionFinish').addEventListener('click', function () {
+      clearSession();
+      $('#sessionStatus').textContent = T.finishHint;
+      activateGame();
+    });
+    $('#sessionHandoff').addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab') return;
+      e.preventDefault();
+      var end = $('#sessionEnd'), finish = $('#sessionFinish');
+      (document.activeElement === end ? finish : end).focus();
+    });
     $('#fsBtn').addEventListener('click', toggleFullscreen);
   }
 
@@ -863,7 +1051,7 @@
     var w = 0;
     for (var pass = 0; pass < 2; pass++) {
       var availH = window.innerHeight - fixed - bar.offsetHeight;
-      w = Math.floor(Math.max(300, Math.min(availW, availH * 16 / 9)));
+      w = Math.floor(Math.min(availW, Math.max(300, availH * 16 / 9)));
       wrap.style.width = w + 'px';
     }
     side.style.width = wide ? '' : w + 'px';
@@ -876,10 +1064,18 @@
     var app = $('#app');
     var body = document.body;
     var active = document.activeElement;
-    var moveFocus = !typing && active && ($('#chips').contains(active) || app.contains(active));
+    var previousGame = current;
+    var returnState = previousGame && route.name !== 'play' && playReturn && routeHash() === playReturn.hash ? playReturn : null;
+    var moveFocus = !typing && active && ($('#chips').contains(active) || $('#quickFilters').contains(active) || app.contains(active));
+    if (route.name === 'play' && !current && renderedHash) {
+      playReturn = pendingReturn || { hash: renderedHash, scroll: window.pageYOffset || 0, slug: route.slug };
+    }
+    pendingReturn = null;
+    clearTimeout(readyTimer);
     if (current && route.name !== 'play') exitFullscreen();
     body.className = 'route-' + route.name;
     $('#chips').innerHTML = chipsHTML(route);
+    $('#quickFilters').innerHTML = quickHTML(route);
     var q = $('#q');
     if (route.name !== 'search') {
       q.value = '';
@@ -902,25 +1098,35 @@
     } else if (route.name === 'search') {
       html = renderSearch(route);
       title = (route.q ? T.titleSearch + route.q : T.searchTitle) + ' — ' + name;
+    } else if (route.name === 'quick') {
+      html = renderQuick(route);
+      title = (QUICK[route.id] ? QUICK[route.id].label + ' — ' : '') + name;
     } else {
       html = renderHome();
       var tag = noEmoji(SITE.tagline);
       title = name + (tag ? ' — ' + tag : '');
     }
     app.innerHTML = html;
+    $('#searchStatus').textContent = route.name === 'search' ? ((route.q || '').trim() ? T.found(search(route.q).length) : T.searchPrompt) : '';
     document.title = title;
     layout();
     if (current) setupPlay(current);
-    if (!typing) window.scrollTo(0, 0);
+    if (!typing) window.scrollTo(0, returnState ? returnState.scroll : 0);
     // A replaced navigation link must not leave keyboard users at the document root.
     // The heading announces the destination; the next Tab reaches its games.
-    if (!current && moveFocus) {
-      var heading = $('h1, h2', app);
+    if (!current && (moveFocus || returnState)) {
+      var returningTiles = returnState ? $all('.tile[data-slug]', app).filter(function (tile) {
+        if (tile.getAttribute('data-slug') !== returnState.slug) return false;
+        var section = tile.closest('section'), label = section && $('h2', section);
+        return !returnState.sectionLabel || (label && label.textContent === returnState.sectionLabel);
+      }) : [];
+      var heading = returningTiles[0] || $('h1, h2', app);
       if (heading) {
-        heading.setAttribute('tabindex', '-1');
+        if (!heading.matches('a[href], button')) heading.setAttribute('tabindex', '-1');
         try { heading.focus({ preventScroll: true }); } catch (e) { heading.focus(); }
       }
     }
+    renderedHash = routeHash();
     typing = false;
   }
 
@@ -973,6 +1179,13 @@
   }
   function tileFrom(e) { var t = e.target; return t && t.closest ? t.closest('.tile[data-slug]') : null; }
   function watchTiles() {
+    document.addEventListener('click', function (e) {
+      var tile = tileFrom(e);
+      if (!tile || current || e.button > 0 || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      var slug = tile.getAttribute('data-slug');
+      var section = tile.closest('section'), label = section && $('h2', section);
+      pendingReturn = { hash: routeHash(), scroll: window.pageYOffset || 0, slug: slug, sectionLabel: label ? label.textContent : '' };
+    });
     document.addEventListener('pointerover', function (e) {
       var t = tileFrom(e);
       clearTimeout(warmTimer);
@@ -1033,6 +1246,7 @@
       }, 120);
     });
     lastW = window.innerWidth;
+    setupClassroom();
     watchTiles();
     render();
   }
