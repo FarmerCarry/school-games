@@ -151,28 +151,85 @@
     return best === -Infinity ? 0 : best;
   }
 
-  function chooseMove(state) {
+  // The move that wins at once for player, or -1.
+  function immediateWin(board, spec, player) {
+    for (var i = 0; i < spec.order.length; i++) {
+      var last = landing(board, spec, spec.order[i]);
+      if (last === -1) continue;
+      board[last] = player;
+      var won = winningLine(board, spec, last, player).length;
+      board[last] = 0;
+      if (won) return spec.order[i];
+    }
+    return -1;
+  }
+
+  // Easier computers notice wins and threats only some of the time and
+  // sometimes play a casual move. 'hard' is the full deterministic search.
+  // Simulated typical kids win about half of easy games and a quarter of medium ones.
+  var levels = {
+    easy: { win: 0.65, block: 0.4, slip: 0.7, depth: 1 },
+    medium: { win: 0.9, block: 0.75, slip: 0.4, depth: 2 }
+  };
+
+  function casualMove(state, spec, skill, random) {
+    var board = state.board.slice();
+    var me = state.turn;
+    var win = immediateWin(board, spec, me);
+    var threat = immediateWin(board, spec, 3 - me);
+    if (win !== -1 && random() < skill.win) return win;
+    if (threat !== -1 && random() < skill.block) return threat;
+    if (win === -1 && threat === -1 && random() >= skill.slip) return null;
+    // A missed win or block, or a slip: any other move that does not hand
+    // over a win at once. Connect 4 prefers the middle columns.
+    var safe = [], other = [];
+    for (var i = 0; i < spec.order.length; i++) {
+      var move = spec.order[i];
+      var last = landing(board, spec, move);
+      if (last === -1 || move === win || move === threat) continue;
+      other.push(move);
+      board[last] = me;
+      if (immediateWin(board, spec, 3 - me) === -1) {
+        for (var w = spec.rows === 3 ? 1 : 4 - Math.abs(move - 3); w > 0; w--) safe.push(move);
+      }
+      board[last] = 0;
+    }
+    var pool = safe.length ? safe : other;
+    return pool.length ? pool[Math.floor(random() * pool.length)] : win !== -1 ? win : threat;
+  }
+
+  // level: 'easy', 'medium' or 'hard' (default). random is injectable for tests.
+  function chooseMove(state, level, random) {
     var spec = valid(state);
     if (!spec || state.winner || state.draw) return null;
+    var skill = Object.prototype.hasOwnProperty.call(levels, level) ? levels[level] : null;
+    random = random || Math.random;
+    if (skill) {
+      var casual = casualMove(state, spec, skill, random);
+      if (casual !== null) return casual;
+    }
     var board = state.board.slice();
     var remaining = board.length - state.moves;
-    var depth = spec.rows === 3 ? remaining : Math.min(4, remaining);
+    // evaluate() only understands Connect 4, so tic-tac-toe always searches to the end.
+    var depth = spec.rows === 3 ? remaining : Math.min(skill ? skill.depth : 4, remaining);
     var best = -Infinity;
-    var chosen = null;
+    // Easier levels need exact scores for equal moves to pick one at random.
+    var slack = skill ? 1 : 0;
+    var ties = [];
     for (var i = 0; i < spec.order.length; i++) {
       var move = spec.order[i];
       var last = landing(board, spec, move);
       if (last === -1) continue;
       board[last] = state.turn;
       var score = winningLine(board, spec, last, state.turn).length ? 100000 + depth :
-        -search(board, spec, 3 - state.turn, remaining - 1, depth - 1, -Infinity, -best);
+        -search(board, spec, 3 - state.turn, remaining - 1, depth - 1, -Infinity, slack - best);
       board[last] = 0;
       if (score > best) {
         best = score;
-        chosen = move;
-      }
+        ties = [move];
+      } else if (score === best) ties.push(move);
     }
-    return chosen;
+    return skill ? ties[Math.floor(random() * ties.length)] : ties[0];
   }
 
   return { create: create, legalMoves: legalMoves, play: play, chooseMove: chooseMove };

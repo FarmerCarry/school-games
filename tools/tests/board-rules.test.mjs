@@ -129,6 +129,72 @@ test('tic-tac-toe AI cannot lose as either player against every legal opponent m
   visit(rules.create('tic-tac-toe'), 2);
 });
 
+// A small seeded generator keeps the level checks repeatable.
+function seeded(seed) {
+  return () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
+}
+
+test('the default computer is the hard level, and unknown levels fall back to it', () => {
+  function visit(state) {
+    if (state.winner || state.draw) return;
+    const move = rules.chooseMove(state);
+    assert.equal(rules.chooseMove(state, 'hard'), move);
+    assert.equal(rules.chooseMove(state, 'expert', () => 0.5), move);
+    for (const next of rules.legalMoves(state)) visit(rules.play(state, next));
+  }
+  visit(rules.create('tic-tac-toe'));
+  const second = rules.create('tic-tac-toe');
+  second.turn = 2;
+  visit(second);
+});
+
+test('easy and medium computers always choose a legal move without changing the state', () => {
+  const random = seeded(42);
+  for (const game of ['tic-tac-toe', 'connect-four']) {
+    for (const level of ['easy', 'medium']) {
+      for (let round = 0; round < 40; round++) {
+        let state = rules.create(game);
+        state.turn = round % 2 ? 2 : 1;
+        while (!state.winner && !state.draw) {
+          const snapshot = structuredClone(state);
+          const move = rules.chooseMove(state, level, random);
+          assert.ok(rules.legalMoves(state).includes(move), `${game} ${level} chose ${move}`);
+          assert.deepEqual(state, snapshot);
+          state = rules.play(state, move);
+        }
+      }
+    }
+  }
+});
+
+test('kid-style players can beat the easy computer but rarely the hard one', () => {
+  const random = seeded(7);
+  // Wins and blocks when it can, otherwise a random move (centre columns in Connect 4).
+  function kid(state) {
+    const legal = rules.legalMoves(state);
+    const win = legal.find(move => rules.play(state, move).winner === state.turn);
+    if (win !== undefined) return win;
+    const block = legal.find(move => rules.play({ ...state, turn: 3 - state.turn }, move).winner === 3 - state.turn);
+    if (block !== undefined) return block;
+    const pool = state.game === 'connect-four' ? legal.flatMap(move => Array(4 - Math.abs(move - 3)).fill(move)) : legal;
+    return pool[Math.floor(random() * pool.length)];
+  }
+  function kidWins(game, level, rounds) {
+    let wins = 0;
+    for (let round = 0; round < rounds; round++) {
+      let state = rules.create(game);
+      state.turn = round % 2 ? 2 : 1;
+      while (!state.winner && !state.draw) state = rules.play(state, state.turn === 1 ? kid(state) : rules.chooseMove(state, level, random));
+      if (state.winner === 1) wins++;
+    }
+    return wins / rounds;
+  }
+  assert.ok(kidWins('connect-four', 'easy', 200) >= 0.25);
+  assert.ok(kidWins('connect-four', 'hard', 200) <= 0.05);
+  assert.ok(kidWins('tic-tac-toe', 'easy', 200) > 0);
+  assert.equal(kidWins('tic-tac-toe', 'hard', 100), 0);
+});
+
 test('malformed states are rejected without mutating inputs', () => {
   for (const state of [null, {}, { ...rules.create('connect-four'), board: [] },
     { ...rules.create('tic-tac-toe'), turn: 3 },
