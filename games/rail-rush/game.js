@@ -29,6 +29,7 @@
 
   /* ================================================================= save */
   var store = Kit.store('rail-rush');
+  var saveUi = Kit.saveStatus({ retry: persist });
   function defaults() {
     return {
       best: 0, bestDist: 0, coins: 0, outfit: 'rookie', owned: ['rookie'], board: 'classic', boards: ['classic'],
@@ -50,7 +51,12 @@
     d.coins = Math.max(0, d.coins | 0); d.best = Math.max(0, d.best | 0); d.mlevel = clamp(d.mlevel | 0, 0, 29);
     return d;
   })();
-  function persist() { store.set('save', save); }
+  // A failed write keeps the in-memory save, so Retry writes the whole current state.
+  function persist() {
+    if (!store.set('save', save)) { saveUi.failed(); return false; }
+    saveUi.saved();
+    return true;
+  }
   function outfitById(id) { for (var i = 0; i < RR.OUTFITS.length; i++) if (RR.OUTFITS[i].id === id) return RR.OUTFITS[i]; return RR.OUTFITS[0]; }
   function boardById(id) { for (var i = 0; i < RR.BOARDS.length; i++) if (RR.BOARDS[i].id === id) return RR.BOARDS[i]; return RR.BOARDS[0]; }
   function multBase() { return 1 + save.mlevel; }
@@ -304,6 +310,9 @@
     s.visible = true;
     return s;
   }
+  // one hidden glow from the start, so its shader is compiled at boot (see renderer.compile)
+  // instead of when the first oncoming train appears
+  glowPool.push((function () { var s = getGlow(); s.visible = false; return s; })());
 
   /* ============================================================ state */
   var S = {
@@ -440,7 +449,8 @@
 
   /* ============================================================ patterns */
   function adj(l) { return l === 0 ? (chance(0.5) ? -1 : 1) : 0; }
-  function hint(type, d) { hints.push({ type: type, d: d }); }
+  // lanes: optional list of blocked lanes; the hint only shows to a runner in one of them
+  function hint(type, d, lanes) { hints.push({ type: type, d: d, lanes: lanes }); }
   var PAT = {
     coins: function (d, L) {
       var a = L[0], b = adj(a);
@@ -451,14 +461,14 @@
     train1: function (d, L) {
       var n = randInt(1, 3), e = addTrain(L[0], d, n);
       addCoins(L[1], d + 1, Math.floor(trainLen(n) / 3.2), 3.2);
-      hint('lane', d);
+      hint('lane', d, [L[0]]);
       return e;
     },
     train2: function (d, L) {
       var e1 = addTrain(L[0], d, randInt(1, 3)), e2 = addTrain(L[1], d + rand(0, 8), randInt(1, 3));
       var e = Math.max(e1, e2);
       addCoins(L[2], d, Math.floor((e - d) / 3.4), 3.4);
-      hint('lane', d);
+      hint('lane', d, [L[0], L[1]]);
       return e;
     },
     hurdle: function (d, L, v) {
@@ -975,6 +985,8 @@
       var hn = hints[h];
       if (hn.d - S.pD < S.speed * 1.35) {
         hints.splice(h, 1);
+        // already safe: don't steer the runner into the train; a later train can teach it
+        if (hn.lanes && hn.lanes.indexOf(P.lane) < 0) continue;
         if ((save.tut[hn.type] || 0) < 2 && !S.hintsShown[hn.type]) {
           S.hintsShown[hn.type] = true;
           save.tut[hn.type] = (save.tut[hn.type] || 0) + 1;
@@ -1115,6 +1127,9 @@
   var camPos = new T.Vector3(0, 2, 5), camLook = new T.Vector3(0, 1, 0), tmpV = new T.Vector3(), tmpL = new T.Vector3();
   var lastT = performance.now(), renderDirty = true;
   canvas.addEventListener('webglcontextrestored', function () { renderDirty = true; });
+  // camera shake and confetti follow the shared reduced-motion setting (classroom preset too)
+  var reducedMotion = Kit.motion.reduced();
+  Kit.motion.onChange(function (r) { reducedMotion = r; if (r) stopConfetti(); });
   function render(alpha) {
     var now = performance.now(), rdt = Math.min(0.1, (now - lastT) / 1000);
     lastT = now;
@@ -1292,7 +1307,7 @@
     camera.position.copy(camPos);
     if (camera.position.y > tunCap) camera.position.y = tunCap;
     if (S.mode !== 'paused') S.shake = Math.max(0, S.shake - rdt * 1.6);
-    var shk = S.shake * S.shake * 1.2;
+    var shk = reducedMotion ? 0 : S.shake * S.shake * 1.2;
     camera.position.x += (Math.random() - 0.5) * shk;
     camera.position.y += (Math.random() - 0.5) * shk;
     camera.lookAt(camLook);
@@ -1454,6 +1469,7 @@
     el.className = 'pop ' + (cls || '');
     void el.offsetWidth;
     el.classList.add('show');
+    popTimer = 1.3; // the popText length; also hides the still pop-up of reduced motion
   }
   function toast(html, cls) {
     var el = document.createElement('div');
@@ -1479,19 +1495,30 @@
     hintTimer = 1.9;
   }
 
-  // confetti (2D overlay)
-  var cfx = [], cctx = $('confetti').getContext('2d');
+  // confetti (2D overlay). The full-screen canvas is hidden while empty, so it is neither
+  // cleared every tick nor blended over the 3D view every frame.
+  var cfx = [], cfEl = $('confetti'), cctx = cfEl.getContext('2d'), cfxIdle = true;
+  cfEl.style.visibility = 'hidden';
   var CONF_COLORS = ['#ffd23f', '#ff4d6d', '#3a86ff', '#06d6a0', '#ffffff', '#b35cff', '#ff9f1c'];
   function confetti(n) {
+    if (reducedMotion) return;
+    if (cfxIdle) { cfxIdle = false; cfEl.style.visibility = 'visible'; }
     var w = window.innerWidth;
     for (var i = 0; i < n; i++) {
       cfx.push({ x: rand(0, w), y: rand(-80, -10), vx: rand(-60, 60), vy: rand(120, 320), r: rand(0, 6), vr: rand(-8, 8), s: rand(6, 12), c: Kit.pick(CONF_COLORS), life: rand(2.2, 3.6) });
     }
     if (cfx.length > 400) cfx.splice(0, cfx.length - 400);
   }
+  function stopConfetti() {
+    cfx.length = 0; cfxIdle = true;
+    cfEl.width = cfEl.width; // clears the pixels
+    cfEl.style.visibility = 'hidden';
+  }
   function uiTick(dt) {
     if (hintTimer > 0) { hintTimer -= dt; if (hintTimer <= 0) $('hint').hidden = true; }
+    if (popTimer > 0) { popTimer -= dt; if (popTimer <= 0) $('pop').classList.remove('show'); }
     if (overAnim.on) tickOver(dt);
+    if (cfxIdle) return;
     // confetti
     var w = window.innerWidth, h = window.innerHeight;
     cctx.setTransform(PR, 0, 0, PR, 0, 0);
@@ -1507,6 +1534,8 @@
       cctx.fillStyle = c.c; cctx.fillRect(-c.s / 2, -c.s / 4, c.s, c.s / 2);
       cctx.restore();
     }
+    // all fallen: the canvas was just cleared, so it can go idle
+    if (!cfx.length) { cfxIdle = true; cfEl.style.visibility = 'hidden'; }
   }
 
   /* ----------------------------------------------------- missions UI */
@@ -1706,6 +1735,8 @@
     if (portraits) return;
     portraits = { outfits: {}, boards: {} };
     var pScene = new T.Scene();
+    // fog too far away to see: the portraits then reuse the main scene's shaders instead of linking new ones
+    pScene.fog = new T.Fog(0xffffff, 1e5, 2e5);
     pScene.add(new T.HemisphereLight(0xffffff, 0x8899bb, 2.4));
     var pl = new T.DirectionalLight(0xffffff, 2.2); pl.position.set(0.6, 1, 1.2); pScene.add(pl);
     var pr = RR.createRunner();
@@ -1935,6 +1966,9 @@
   layout();
   goTitle();
   camPos.set(0.7, 2.05, 6.6); camLook.set(2.05, 1.25, 0);
+  // Link every shader now, hidden ones included (hoverboard and train glows, outfit parts),
+  // so none compiles and stalls the frame in the middle of a run.
+  renderer.compile(scene, camera);
   Kit.loop(update, render);
   setTimeout(runIdleJobs, 50);
   setTimeout(function () { if (!portraits) makePortraits(); }, 1200);
