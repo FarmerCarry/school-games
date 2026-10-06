@@ -346,10 +346,11 @@ async function fetchVerified(p) {
 }
 
 // Report only a complete copy of this worker's version. Cache eviction must never
-// leave the portal claiming that all games are ready. Entries are written only
-// after fetchVerified hashed their bytes, so the portal's frequent quick checks
-// trust that label instead of re-reading the whole cache from a slow disk; a
-// full check (and Retry's repair) re-hashes every body.
+// leave the portal claiming that all games are ready. Every writer hashes the
+// bytes before caching them, so the portal's frequent quick checks trust that
+// label instead of re-reading the whole cache from a slow disk; a full check
+// (and Retry's repair) re-hashes every body. The fetch handler still replaces a
+// body that a disk error has made unreadable.
 var checkingStatus = null;
 async function offlineStatus(repair, quick) {
   if (checkingStatus) await checkingStatus;
@@ -478,7 +479,12 @@ self.addEventListener('fetch', function (event) {
     // during recovery, late writes must not reopen its obsolete cache by name.
     var cache = await caches.open(CACHE);
     var hit = await cache.match(url);
-    if (hit) return hit;
+    if (hit) {
+      // A damaged disk can keep an entry's headers around an unreadable body.
+      // Chromium drops such an entry after the failed read; download it again.
+      try { return new Response(await hit.arrayBuffer(), { status: hit.status, statusText: hit.statusText, headers: hit.headers }); }
+      catch (e) { /* unreadable: fetch a verified copy below */ }
+    }
     // Never put newer or stale network bytes into the active version's cache.
     var res = await fetchVerified(rel);
     repairTarget = cache;

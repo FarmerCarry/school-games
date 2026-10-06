@@ -655,7 +655,7 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 }
 
 /* ------------------------------------------------------------ small screens */
-@media (max-width: 1500px) {
+@media (max-width: 1640px) {
   .chips { gap: 8px; }
   .chip { height: 38px; font-size: 15.5px; gap: 5px; padding-inline: 6px 12px; }
   .chip-ico { width: 27px; height: 27px; font-size: 16px; }
@@ -665,18 +665,23 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   .topbar { gap: 10px; }
   .surprise { padding: 0 14px; }
   .surprise-text { display: none; }
-  .classroom-label { display: none; }
+  .classroom-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   .sec-head h2 { font-size: 23px; }
   .pb-lbl { display: none; }
 }
-@media (max-width: 560px) {
-  :root { --gap: 10px; --hdr: 130px; }
-  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* With the classroom pill in the bar, the search box needs its own row earlier. */
+@media (max-width: 700px) {
+  :root { --hdr: 130px; }
   .topbar { flex-wrap: wrap; gap: 4px; padding-block: 6px; }
   .logo { height: 52px; }
   .logo-svg { height: 44px; }
   .search { flex: 0 0 100%; order: 1; }
   .surprise { margin-inline-start: auto; }
+}
+@media (max-width: 560px) {
+  :root { --gap: 10px; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chips { flex-wrap: nowrap; overflow-x: auto; }
   .play-side { flex-direction: column; }
 }
 
@@ -735,17 +740,19 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 .classroom { flex: 0 0 auto; padding: 7px 14px; background: #eaf5ff; border: 1px solid #a6c7e1; border-radius: 999px; font-size: 16px; }
 .classroom summary { cursor: pointer; font-weight: 700; white-space: nowrap; list-style: none; }
 .classroom summary::-webkit-details-marker { display: none; }
-.classroom summary::after { content: ' ▾'; font-size: 0.8em; }
-.classroom[open] summary::after { content: ' ▴'; }
+.classroom summary::after { content: ' ▾' / ''; font-size: 0.8em; }
+.classroom[open] summary::after { content: ' ▴' / ''; }
 /* Open, the panel is a strip under the top bar and the page moves down by its
    height (--classroom-h, set by site.js), so it never covers a game. */
 .classroom-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; position: absolute; top: 100%; left: 0; right: 0; padding: 12px var(--pad); background: #eaf5ff; border-bottom: 1px solid #a6c7e1; box-shadow: 0 6px 12px rgba(28, 34, 80, 0.08); }
 html.classroom-open .chips, html.classroom-open .route-play .app { margin-top: var(--classroom-h, 0px); }
+html.classroom-open { scroll-padding-top: calc(var(--hdr) + var(--classroom-h, 0px) + 10px); }
 .classroom-controls label { display: inline-flex; align-items: center; gap: 8px; }
 .classroom-controls input { width: 18px; height: 18px; }
 .classroom-controls select { font: inherit; color: var(--ink); border: 1px solid #8192b6; border-radius: 8px; padding: 7px; background: #fff; }
 .classroom-controls p { flex-basis: 100%; margin: 0; font-size: 15px; }
-#sessionClock { display: inline-block; direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; margin-inline-start: 8px; }
+/* Physical margin: the LTR clock's logical start would be its far side here. */
+#sessionClock { display: inline-block; direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; margin-right: 8px; }
 #sessionClock:empty { display: none; }
 .filter-note { font-size: 17px; margin: 10px 0 20px; }
 .stage-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
