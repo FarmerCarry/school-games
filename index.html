@@ -17,23 +17,23 @@
     <span class="search-icon" aria-hidden="true">🔍</span>
     <input id="q" type="search" placeholder="ابحث عن لعبة…" aria-label="ابحث عن لعبة" spellcheck="false" autocomplete="off" maxlength="40" enterkeyhint="search">
   </form>
+  <details class="classroom" id="classroom">
+    <summary title="إعدادات الصف"><span aria-hidden="true">🏫</span> <span class="classroom-label">إعدادات الصف</span><span id="sessionClock" aria-label="الوقت المتبقي"></span></summary>
+    <div class="classroom-controls">
+      <label><input type="checkbox" id="classroomMode"> وضع الصف: صوت هادئ وحركة أقل</label>
+      <label for="sessionMinutes">وقت الجلسة</label>
+      <select id="sessionMinutes"><option value="5">5 دقائق</option><option value="10" selected>10 دقائق</option><option value="15">15 دقيقة</option><option value="20">20 دقيقة</option></select>
+      <button type="button" class="pbtn" id="sessionStart">ابدأ المؤقّت</button>
+      <button type="button" class="pbtn" id="sessionStop" hidden>ألغِ المؤقّت</button>
+      <p id="sessionStatus" role="status" aria-live="polite">يتوقف اللعب عند انتهاء الوقت لتسليم الجهاز أو متابعة الجولة.</p>
+    </div>
+  </details>
   <button class="surprise" id="surprise" type="button" title="العب لعبة عشوائية" aria-label="فاجئني! العب لعبة عشوائية">
     <span class="dice" aria-hidden="true">🎲</span><span class="surprise-text">فاجئني!</span>
   </button>
 </header>
 <nav class="chips" id="chips" aria-label="أقسام الألعاب"></nav>
 <nav class="quick-filters" id="quickFilters" aria-label="اختر طريقة اللعب"></nav>
-<details class="classroom" id="classroom">
-  <summary>🏫 إعدادات الصف <span id="sessionClock" aria-label="الوقت المتبقي"></span></summary>
-  <div class="classroom-controls">
-    <label><input type="checkbox" id="classroomMode"> وضع الصف: صوت هادئ وحركة أقل</label>
-    <label for="sessionMinutes">وقت الجلسة</label>
-    <select id="sessionMinutes"><option value="5">5 دقائق</option><option value="10" selected>10 دقائق</option><option value="15">15 دقيقة</option><option value="20">20 دقيقة</option></select>
-    <button type="button" class="pbtn" id="sessionStart">ابدأ المؤقّت</button>
-    <button type="button" class="pbtn" id="sessionStop" hidden>ألغِ المؤقّت</button>
-    <p id="sessionStatus" role="status" aria-live="polite">يتوقف اللعب عند انتهاء الوقت لتسليم الجهاز أو متابعة الجولة.</p>
-  </div>
-</details>
 <p id="searchStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
 <main class="app" id="app"></main>
 <footer class="foot">

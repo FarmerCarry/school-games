@@ -44,11 +44,19 @@ function worker() {
     exists = true;
     entries.set(scope + p, new Response(body, { headers: { 'x-sg-hash': files[p] } }));
   }
-  async function status(repair = false, from = scope) {
+  async function status(repair = false, from = scope, quick = false) {
     let result, task;
-    handlers.message({ data: { type: 'sg:offline-status', id: 9, repair }, source: { url: from },
+    handlers.message({ data: { type: 'sg:offline-status', id: 9, repair, quick }, source: { url: from },
       ports: [{ postMessage(value) { result = JSON.parse(JSON.stringify(value)); } }], waitUntil(value) { task = value; } });
     await task;
+    return result;
+  }
+  async function request(p) {
+    let response;
+    const tasks = [];
+    handlers.fetch({ request: { method: 'GET', url: scope + p }, respondWith(value) { response = value; }, waitUntil(value) { tasks.push(value); } });
+    const result = await response;
+    await Promise.all(tasks);
     return result;
   }
   function install() {
@@ -56,7 +64,7 @@ function worker() {
     handlers.install({ waitUntil(value) { task = value; } });
     return task;
   }
-  return { status, install, seed, requests, bodies, entries, scope,
+  return { status, install, seed, request, requests, bodies, entries, scope,
     setDenied(v) { denied = v; }, setFetch(fn) { fetchOverride = fn; },
     get exists() { return exists; }, get activations() { return activations; },
     get opened() { return opened; }, get updates() { return updates; } };
@@ -118,6 +126,35 @@ test('offline readiness requires valid bodies as well as saved hash headers', as
   assert.equal(repaired.ready, true);
   assert.equal(w.requests.length, 1);
   assert.match(w.requests[0], /games\/demo\/index\.html\?sg=/);
+});
+
+test('quick checks trust verified labels, still notice eviction, and repair re-reads bodies', async () => {
+  const w = worker();
+  Object.keys(w.bodies).forEach(p => w.seed(p));
+  w.seed('games/demo/index.html', 'corrupt bytes with the old hash header');
+  assert.equal((await w.status(false, w.scope, true)).ready, true, 'a quick check reads labels, not bodies');
+  assert.equal((await w.status()).count, 2, 'a full check still hashes every body');
+  w.entries.delete(w.scope + 'shared/font.woff2');
+  const quick = await w.status(false, w.scope, true);
+  assert.equal(quick.ready, false);
+  assert.equal(quick.count, 2);
+  assert.equal(w.requests.length, 0, 'a quick check never downloads');
+  assert.equal((await w.status(true, w.scope, true)).ready, true, 'repair ignores quick and re-reads every body');
+  assert.equal(w.requests.length, 2);
+});
+
+test('a cached body that can no longer be read is replaced with a verified download', async () => {
+  const w = worker();
+  Object.keys(w.bodies).forEach(p => w.seed(p));
+  assert.equal(await (await w.request('index.html')).text(), 'portal');
+  assert.equal(w.requests.length, 0, 'readable entries are served from the cache');
+  const url = w.scope + 'games/demo/index.html';
+  w.entries.set(url, { status: 200, statusText: 'OK', headers: new Headers({ 'x-sg-hash': hash('game') }),
+    clone() { return this; }, arrayBuffer() { return Promise.reject(new TypeError('Failed to fetch')); } });
+  assert.equal(await (await w.request('games/demo/index.html')).text(), 'game');
+  assert.equal(w.requests.length, 1);
+  assert.match(w.requests[0], /games\/demo\/index\.html\?sg=/);
+  assert.equal(await w.entries.get(url).clone().text(), 'game', 'the verified copy replaces the damaged entry');
 });
 
 test('retry repairs an evicted cache and offline retry never claims success', async () => {

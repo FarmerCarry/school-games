@@ -64,6 +64,7 @@
     loadFailedSub: 'أعد المحاولة، أو ارجع واختر لعبة أخرى. تقدّمك المحفوظ يبقى كما هو.',
     retry: 'أعد المحاولة',
     returnGames: 'العودة إلى الألعاب',
+    backShort: 'الألعاب',
     shortRound: 'جولة قصيرة',
     oneButton: 'زر واحد',
     playFriend: 'العب مع صديق',
@@ -294,10 +295,11 @@
     return (t && t[slug]) || 'games/' + esc(slug) + '/thumb.svg';
   }
   function tileHTML(g) {
-    var badges = '';
-    if (g.hot) badges += '<b class="badge hot"><span aria-hidden="true">🔥</span>' + T.hotBadge + '</b>';
-    if (isMulti(g)) badges += '<b class="badge p2"><span aria-hidden="true">👥</span>' + T.p2Badge + '</b>';
-    return '<a class="tile" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '" title="' + esc(g.title + ' · ' + durationLabel(g) + ' · ' + (INPUT_LABELS[g.inputStyle] || '')) + '"' +
+    // Icon-only badges keep the names drawn in the thumbnail art readable.
+    var badges = '', tip = g.title + ' · ' + durationLabel(g) + ' · ' + (INPUT_LABELS[g.inputStyle] || '');
+    if (g.hot) { badges += '<b class="badge hot" aria-hidden="true">🔥</b>'; tip += ' · ' + T.hotBadge; }
+    if (isMulti(g)) { badges += '<b class="badge p2" aria-hidden="true">👥</b>'; tip += ' · ' + T.p2Badge; }
+    return '<a class="tile" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '" title="' + esc(tip) + '"' +
       ' style="--c:' + g.color + ';--c2:' + deepen(g.color, 0.45) + ';--fbs:' + fbSize(g.title) + 'cqw" aria-label="' + esc(g.title) + '">' +
       '<span class="art">' +
         '<span class="fb" aria-hidden="true"><span class="fb-emoji">' + catEmoji(g) + '</span><span class="fb-title">' + esc(g.title) + '</span></span>' +
@@ -341,11 +343,11 @@
   var INDEX = Object.create(null);
   function idx(g) {
     if (INDEX[g.slug]) return INDEX[g.slug];
-    var cats = g.cats.map(function (id) { return CAT_BY_ID[id] ? CAT_BY_ID[id].label + ' ' + id : id; }).join(' ');
+    var cats = g.cats.map(function (id) { return CAT_BY_ID[id] ? CAT_BY_ID[id].label + ' ' + id + ' ' + (CAT_BY_ID[id].tags || '') : id; }).join(' ');
     var ix = {
       t: norm(g.title),
       en: norm((g.en || '') + ' ' + g.slug.replace(/-/g, ' ')),
-      h: norm(g.title + ' ' + (g.en || '') + ' ' + g.slug.replace(/-/g, ' ') + ' ' + (g.blurb || '') + ' ' + cats +
+      h: norm(g.title + ' ' + (g.en || '') + ' ' + g.slug.replace(/-/g, ' ') + ' ' + (g.blurb || '') + ' ' + (g.tags || '') + ' ' + cats +
         (isMulti(g) ? MULTI_WORDS : '') + (g.hot ? HOT_WORDS : ''))
     };
     ix.words = (ix.t + ' ' + ix.en).split(' ').filter(Boolean);
@@ -540,13 +542,13 @@
     var cls = 'kc' + (mouse ? ' mouse' : '') + (s.length > 2 && !mouse ? ' wide' : '');
     return '<kbd class="' + cls + '" dir="' + (ar ? 'rtl' : 'ltr') + '">' + (mouse ? '<span class="kc-ico" aria-hidden="true">🖱️</span>' : '') + '<span>' + esc(s) + '</span></kbd>';
   }
-  function controlsHTML(g) {
+  function controlsHTML(g, meta) {
     var rows = g.controls.map(function (c) {
       // Keys keep keyboard order (← → reads left to right) even on an RTL page.
       var keys = (Array.isArray(c.keys) ? c.keys : [c.keys]).map(keycap).join('');
       return '<li><span class="keys" dir="ltr">' + keys + '</span><span class="act">' + esc(c.action || '') + '</span></li>';
     }).join('');
-    return '<div class="card controls"><h3>🎮 ' + T.controls + '</h3>' +
+    return '<div class="card controls">' + (meta ? '<div class="pb-meta">' + meta + '</div>' : '') + '<h3>🎮 ' + T.controls + '</h3>' +
       (rows ? '<ul class="ctl-list">' + rows + '</ul>' : '<p class="muted">' + T.controlsNone + '</p>') +
       '<p class="exit-hint">' + T.tip1 + ' ' + T.exitHint + '</p></div>';
   }
@@ -568,8 +570,7 @@
       return [shared * 10 + (o.hot ? 2 : 0), o];
     }).sort(function (a, b) { return b[0] - a[0]; }).slice(0, 6).map(function (x) { return x[1]; });
 
-    return '<a class="return-games" id="backGames" href="' + esc(playReturn ? playReturn.hash : '#/') + '">‹ ' + T.returnGames + '</a>' +
-      '<div class="play" id="play">' +
+    return '<div class="play" id="play">' +
         '<div class="play-main" id="playMain">' +
           '<div class="stage-wrap" id="stageWrap">' +
             '<div class="stage loading" id="stage" style="--c:' + g.color + '">' +
@@ -578,7 +579,8 @@
               '<div class="session-handoff" id="sessionHandoff" role="dialog" aria-modal="true" aria-labelledby="sessionEndTitle" hidden><b id="sessionEndTitle">' + T.sessionEnded + '</b><p>' + T.sessionHandoff + '</p><div class="stage-actions"><button type="button" class="pbtn" id="sessionEnd">' + T.handOver + '</button><button type="button" class="pbtn" id="sessionFinish">' + T.finishRound + '</button></div></div>' +
             '</div>' +
             '<div class="play-bar" id="playBar">' +
-              '<div class="pb-info"><h1 class="pb-title">' + esc(g.title) + '</h1><div class="pb-meta">' + pl + cats + '</div></div>' +
+              '<a class="pbtn back" id="backGames" href="' + esc(playReturn ? playReturn.hash : '#/') + '" aria-label="' + T.returnGames + '" title="' + T.returnGames + '"><span aria-hidden="true">‹</span><span class="pb-lbl">' + T.backShort + '</span></a>' +
+              '<div class="pb-info"><h1 class="pb-title">' + esc(g.title) + '</h1></div>' +
               '<div class="pb-btns">' +
                 '<button type="button" class="pbtn fav' + (fav ? ' on' : '') + '" id="favBtn" aria-pressed="' + fav + '" aria-label="' + (fav ? T.favOn : T.fav) + '" title="' + (fav ? T.favOn : T.fav) + '"><span class="heart" aria-hidden="true">' + (fav ? '❤️' : '🤍') + '</span><span class="pb-lbl">' + (fav ? T.favOn : T.fav) + '</span></button>' +
                 '<button type="button" class="pbtn" id="restartBtn" aria-label="' + T.restart + '" title="' + T.restart + '"><span aria-hidden="true">🔄</span><span class="pb-lbl">' + T.restart + '</span></button>' +
@@ -587,7 +589,7 @@
             '</div>' +
           '</div>' +
         '</div>' +
-        '<aside class="play-side" id="playSide">' + controlsHTML(g) +
+        '<aside class="play-side" id="playSide">' + controlsHTML(g, pl + cats) +
           '<details class="card help"><summary>💡 ' + T.help + '</summary>' +
             (g.blurb ? '<p>' + esc(g.blurb) + '</p>' : '') + '<p>' + T.tip2 + '</p><p>' + (g.tip || T.tip3) + '</p></details>' +
         '</aside>' +
@@ -790,12 +792,21 @@
       showHandoff();
     }
   }
+  // The open classroom panel is a strip under the top bar. Move the page down by
+  // its height so it never covers a game, then fit the frame to what is left.
+  function syncClassroomSpace() {
+    var open = $('#classroom').open, root = document.documentElement;
+    root.classList.toggle('classroom-open', open);
+    root.style.setProperty('--classroom-h', open ? $('.classroom-controls').offsetHeight + 'px' : '0px');
+    fitStage();
+  }
   function setupClassroom() {
     classroomOn = !!storedPreference('classroom', false);
     $('#classroomMode').checked = classroomOn;
     document.documentElement.setAttribute('data-sg-motion', classroomOn ? 'reduce' : storedPreference('motion', 'system'));
     $('#classroomMode').addEventListener('change', function () { setClassroom(this.checked); });
-    $('#classroom').addEventListener('toggle', fitStage);
+    $('#classroom').addEventListener('toggle', syncClassroomSpace);
+    if (window.ResizeObserver) new ResizeObserver(function () { if ($('#classroom').open) syncClassroomSpace(); }).observe($('.classroom-controls'));
     $('#sessionStart').addEventListener('click', function () {
       clearSession();
       var minutes = Number($('#sessionMinutes').value) || 10;

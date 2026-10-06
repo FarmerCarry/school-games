@@ -184,9 +184,9 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 /* ------------------------------------------------------------ chips */
 .chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 16px var(--pad) 10px;
-  overflow-x: auto;
   max-width: 1880px;
   width: 100%;
   margin: 0 auto;
@@ -346,30 +346,31 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   overflow-wrap: break-word;
 }
 
+/* Arabic titles in the thumbnail art start at the top right, so the icon
+   badges hang off the opposite corner like notification bubbles. */
 .badges {
   position: absolute;
-  top: 8px;
-  inset-inline-start: 8px;
+  top: -7px;
+  inset-inline-end: -7px;
   display: flex;
-  gap: 5px;
+  gap: 3px;
   z-index: 2;
   pointer-events: none;
 }
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 12.5px;
-  font-weight: 700;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 15px;
   line-height: 1;
-  padding: 4px 7px 3px;
-  border-radius: 999px;
+  border-radius: 50%;
   color: #fff;
   border: 2px solid #fff;
   box-shadow: 0 2px 0 rgba(28, 34, 80, 0.25);
   white-space: nowrap;
 }
-.badge span { font-size: 0.9em; }
 .badge.hot { background: linear-gradient(180deg, #ff6a3d, #ff2d55); }
 .badge.p2 { background: linear-gradient(180deg, #8f6bff, #5b3df5); }
 
@@ -506,17 +507,19 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-  margin-top: 17px;
+  margin-top: 12px;
   padding-block: 8px;
-  padding-inline: 20px 12px;
+  padding-inline: 12px;
   border-radius: 20px;
   background: #fff;
   box-shadow: 0 4px 0 rgba(28, 34, 80, 0.10);
   min-height: 64px;
 }
-.pb-info { flex: 1 1 260px; min-width: 0; }
+.pb-info { flex: 1 1 160px; min-width: 0; }
+.pbtn.back { flex: 0 0 auto; }
 .pb-title { font-size: 26px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-block: 0.1em 0.3em; margin-block: -0.1em -0.3em; }
 .pb-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; align-items: center; }
+.controls .pb-meta { margin: 0 0 12px; }
 .players { font-size: 14px; font-weight: 700; color: var(--ink-soft); margin-inline-end: 4px; }
 .mini-chip {
   font-size: 13px;
@@ -561,7 +564,7 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 .stage-wrap.compact .pb-info { flex: 1 1 auto; }
 .stage-wrap.compact .pb-btns { flex: 0 0 auto; flex-wrap: nowrap; gap: 6px; }
 .stage-wrap.compact .pb-lbl { display: none; }
-.stage-wrap.compact .pb-btns .pbtn { width: 42px; padding: 0; justify-content: center; }
+.stage-wrap.compact .pb-btns .pbtn, .stage-wrap.compact .pbtn.back { width: 42px; padding: 0; justify-content: center; }
 
 .play-side { flex: 0 0 270px; width: 270px; display: flex; flex-direction: column; gap: 16px; }
 .card {
@@ -652,7 +655,7 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 }
 
 /* ------------------------------------------------------------ small screens */
-@media (max-width: 1180px) {
+@media (max-width: 1640px) {
   .chips { gap: 8px; }
   .chip { height: 38px; font-size: 15.5px; gap: 5px; padding-inline: 6px 12px; }
   .chip-ico { width: 27px; height: 27px; font-size: 16px; }
@@ -662,17 +665,23 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   .topbar { gap: 10px; }
   .surprise { padding: 0 14px; }
   .surprise-text { display: none; }
+  .classroom-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   .sec-head h2 { font-size: 23px; }
   .pb-lbl { display: none; }
 }
-@media (max-width: 560px) {
-  :root { --gap: 10px; --hdr: 130px; }
-  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* With the classroom pill in the bar, the search box needs its own row earlier. */
+@media (max-width: 700px) {
+  :root { --hdr: 130px; }
   .topbar { flex-wrap: wrap; gap: 4px; padding-block: 6px; }
   .logo { height: 52px; }
   .logo-svg { height: 44px; }
   .search { flex: 0 0 100%; order: 1; }
   .surprise { margin-inline-start: auto; }
+}
+@media (max-width: 560px) {
+  :root { --gap: 10px; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chips { flex-wrap: nowrap; overflow-x: auto; }
   .play-side { flex-direction: column; }
 }
 
@@ -728,15 +737,23 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 /* Session tools stay compact until a teacher opens them. */
 .quick-filters { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; max-width: 1880px; margin: 0 auto; padding: 12px var(--pad) 2px; }
 .quick-filters .chip { height: 36px; font-size: 15px; }
-.classroom { max-width: calc(1880px - var(--pad) * 2); width: calc(100% - var(--pad) * 2); margin: 10px auto 0; padding: 8px 14px; background: #eaf5ff; border: 1px solid #a6c7e1; border-radius: 14px; }
-.classroom summary { cursor: pointer; font-weight: 700; }
-.classroom-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding-top: 12px; }
+.classroom { flex: 0 0 auto; padding: 7px 14px; background: #eaf5ff; border: 1px solid #a6c7e1; border-radius: 999px; font-size: 16px; }
+.classroom summary { cursor: pointer; font-weight: 700; white-space: nowrap; list-style: none; }
+.classroom summary::-webkit-details-marker { display: none; }
+.classroom summary::after { content: ' ▾' / ''; font-size: 0.8em; }
+.classroom[open] summary::after { content: ' ▴' / ''; }
+/* Open, the panel is a strip under the top bar and the page moves down by its
+   height (--classroom-h, set by site.js), so it never covers a game. */
+.classroom-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; position: absolute; top: 100%; left: 0; right: 0; padding: 12px var(--pad); background: #eaf5ff; border-bottom: 1px solid #a6c7e1; box-shadow: 0 6px 12px rgba(28, 34, 80, 0.08); }
+html.classroom-open .chips, html.classroom-open .route-play .app { margin-top: var(--classroom-h, 0px); }
+html.classroom-open { scroll-padding-top: calc(var(--hdr) + var(--classroom-h, 0px) + 10px); }
 .classroom-controls label { display: inline-flex; align-items: center; gap: 8px; }
 .classroom-controls input { width: 18px; height: 18px; }
 .classroom-controls select { font: inherit; color: var(--ink); border: 1px solid #8192b6; border-radius: 8px; padding: 7px; background: #fff; }
 .classroom-controls p { flex-basis: 100%; margin: 0; font-size: 15px; }
-#sessionClock { display: inline-block; direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; margin-inline-start: 12px; }
-.return-games { display: inline-block; font-weight: 700; padding: 8px 4px 0; }
+/* Physical margin: the LTR clock's logical start would be its far side here. */
+#sessionClock { display: inline-block; direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; margin-right: 8px; }
+#sessionClock:empty { display: none; }
 .filter-note { font-size: 17px; margin: 10px 0 20px; }
 .stage-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
 .session-handoff { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 12px; padding: 24px; background: #10142bf5; color: #fff; text-align: center; font-size: 20px; }

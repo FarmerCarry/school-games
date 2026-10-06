@@ -4,8 +4,9 @@
   var status = document.getElementById('offlineStatus');
   var retry = document.getElementById('offlineRetry');
   if (!status || !retry) return;
-  var registration = null, starting = false, checking = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0, observedWorker = null;
+  var registration = null, starting = false, checking = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0, observedWorker = null, shown = '';
   function paint(state, text, canRetry) {
+    shown = state;
     status.hidden = false;
     status.setAttribute('data-state', state);
     // Avoid repeating live announcements when focus returns to the page.
@@ -37,7 +38,9 @@
         if (!data || data.type !== 'sg:offline-status' || data.id !== id) return;
         finish(null, data);
       };
-      try { worker.postMessage({ type: 'sg:offline-status', id: id, repair: !!repair }, [channel.port2]); }
+      // Routine checks only confirm that every verified file is still cached, so a
+      // slow disk is not re-read on each visit; Retry re-hashes every body.
+      try { worker.postMessage({ type: 'sg:offline-status', id: id, repair: !!repair, quick: !repair }, [channel.port2]); }
       catch (e) { finish(e); }
     });
   }
@@ -123,7 +126,8 @@
     inspect(true);
   });
   navigator.serviceWorker.addEventListener('controllerchange', function () { inspect(false); });
-  window.addEventListener('online', function () { inspect(true); });
+  // Reconnecting repairs an incomplete copy; a ready one only needs the quick check.
+  window.addEventListener('online', function () { inspect(shown !== 'ready'); });
   window.addEventListener('focus', function () { if (!document.hidden) inspect(false); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) inspect(false); });
   if (document.readyState === 'complete') start();

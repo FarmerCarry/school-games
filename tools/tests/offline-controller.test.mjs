@@ -113,6 +113,27 @@ test('a rejected update preserves an old active worker and repairs its cache', a
   assert.equal(old.active, active);
   assert.equal(old.updates, 1);
   assert.equal(active.requests.at(-1).repair, true);
+  assert.equal(active.requests.at(-1).quick, false, 'Retry re-hashes every cached body');
+  assert.equal(page.status['data-state'], 'ready');
+});
+
+test('routine checks are quick and reconnecting while ready does not re-hash the cache', async () => {
+  const active = worker('activated');
+  const page = controller([registration({ active })]);
+  await flush();
+  assert.equal(page.status['data-state'], 'ready');
+  assert.deepEqual([active.requests.at(-1).repair, active.requests.at(-1).quick], [false, true]);
+  page.window.emit('online');
+  await flush();
+  assert.deepEqual([active.requests.at(-1).repair, active.requests.at(-1).quick], [false, true]);
+  active.ready = false;
+  page.window.emit('focus');
+  await flush();
+  assert.equal(page.status['data-state'], 'unavailable');
+  active.ready = true;
+  page.window.emit('online');
+  await flush();
+  assert.deepEqual([active.requests.at(-1).repair, active.requests.at(-1).quick], [true, false], 'an incomplete copy is repaired on reconnect');
   assert.equal(page.status['data-state'], 'ready');
 });
 

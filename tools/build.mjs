@@ -345,13 +345,17 @@ async function fetchVerified(p) {
   return new Response(body, { status: 200, headers: headers });
 }
 
-// Report only a fully verified copy of this worker's version. Cache eviction or
-// damaged entries must never leave the portal claiming that all games are ready.
+// Report only a complete copy of this worker's version. Cache eviction must never
+// leave the portal claiming that all games are ready. Every writer hashes the
+// bytes before caching them, so the portal's frequent quick checks trust that
+// label instead of re-reading the whole cache from a slow disk; a full check
+// (and Retry's repair) re-hashes every body. The fetch handler still replaces a
+// body that a disk error has made unreadable.
 var checkingStatus = null;
-async function offlineStatus(repair) {
+async function offlineStatus(repair, quick) {
   if (checkingStatus) await checkingStatus;
   var task = (async function () {
-    var paths = Object.keys(FILES), count = 0;
+    var paths = Object.keys(FILES), count = 0, trustLabel = quick && !repair;
     if (!(await caches.has(CACHE)) && !repair) return { ready: false, count: 0, total: paths.length, version: VERSION };
     var cache = await caches.open(CACHE), next = 0;
     async function inspect() {
@@ -359,7 +363,7 @@ async function offlineStatus(repair) {
         var p = paths[next++], url = new URL(p, SCOPE).href;
         var hit = await cache.match(url), valid = false;
         if (hit && hit.headers.get('x-sg-hash') === FILES[p]) {
-          valid = hex(await crypto.subtle.digest('SHA-256', await hit.arrayBuffer())).slice(0, 16) === FILES[p];
+          valid = trustLabel || hex(await crypto.subtle.digest('SHA-256', await hit.arrayBuffer())).slice(0, 16) === FILES[p];
         }
         if (!valid && repair) {
           try { await cache.put(url, await fetchVerified(p)); valid = true; }
@@ -381,7 +385,7 @@ self.addEventListener('message', function (event) {
   var data = event.data, port = event.ports && event.ports[0];
   if (!data || data.type !== 'sg:offline-status' || !port) return;
   if (!event.source || toRel(event.source.url) !== 'index.html') return;
-  event.waitUntil(offlineStatus(data.repair === true).then(function (result) {
+  event.waitUntil(offlineStatus(data.repair === true, data.quick === true).then(function (result) {
     result.type = 'sg:offline-status'; result.id = data.id; port.postMessage(result);
   }).catch(function () {
     port.postMessage({ type: 'sg:offline-status', id: data.id, ready: false, count: 0, total: Object.keys(FILES).length, version: VERSION });
@@ -475,7 +479,12 @@ self.addEventListener('fetch', function (event) {
     // during recovery, late writes must not reopen its obsolete cache by name.
     var cache = await caches.open(CACHE);
     var hit = await cache.match(url);
-    if (hit) return hit;
+    if (hit) {
+      // A damaged disk can keep an entry's headers around an unreadable body.
+      // Chromium drops such an entry after the failed read; download it again.
+      try { return new Response(await hit.arrayBuffer(), { status: hit.status, statusText: hit.statusText, headers: hit.headers }); }
+      catch (e) { /* unreadable: fetch a verified copy below */ }
+    }
     // Never put newer or stale network bytes into the active version's cache.
     var res = await fetchVerified(rel);
     repairTarget = cache;
