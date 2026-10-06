@@ -293,7 +293,9 @@ try {
       precache[rel] = hash(fs.readFileSync(path.join(OUT, rel)));
     }
   })('');
-  const version = hash(JSON.stringify(precache));
+  // Worker-only fixes need an independent cache too. Hash a deterministic worker
+  // with an empty version to include its implementation without a self-reference.
+  const version = hash(SW_SOURCE('', precache));
   const sw = KILL_SW ? KILL_SW_SOURCE(Object.keys(precache)) : SW_SOURCE(version, precache);
   write('sw.js', sw);
   // This inventory proves ownership on the next build. Write it after precaching so
@@ -416,6 +418,7 @@ function repairCache(cache) {
 // (straight from the network, checked against their hash), then take over right away.
 self.addEventListener('install', function (event) {
   event.waitUntil((async function () {
+    var cacheExisted = await caches.has(CACHE);
     var cache = await caches.open(CACHE);
     var oldNames = (await caches.keys()).filter(function (k) { return (k.indexOf(CACHE_PREFIX) === 0 || isLegacyCache(k)) && k !== CACHE; });
     var olds = await Promise.all(oldNames.map(function (k) { return caches.open(k); }));
@@ -435,11 +438,14 @@ self.addEventListener('install', function (event) {
     }
     async function worker() { while (next < paths.length) await one(paths[next++]); }
     try {
-      await Promise.all([worker(), worker(), worker(), worker()]);
+      // Finish every writer before cleaning up a failed installation.
+      var results = await Promise.allSettled([worker(), worker(), worker(), worker()]);
+      var failed = results.find(function (result) { return result.status === 'rejected'; });
+      if (failed) throw failed.reason;
     } catch (e) {
-      // Don't leave a half-filled cache on the disk; the current version keeps working and
-      // the update is retried on the next visit.
-      await caches.delete(CACHE);
+      // Delete only a cache owned by this install. A reinstall can share a cache
+      // with a surviving active worker; its verified pages must remain usable.
+      if (!cacheExisted) await caches.delete(CACHE);
       throw e;
     }
     await self.skipWaiting();

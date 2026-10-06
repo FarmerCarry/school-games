@@ -15,7 +15,7 @@ function worker() {
   const files = Object.fromEntries(Object.entries(bodies).map(([p, b]) => [p, hash(b)]));
   const name = 'sg-v2-' + encodeURIComponent(scope) + '|test';
   const entries = new Map(), handlers = {}, requests = [];
-  let exists = false, opened = 0, denied = false, updates = 0;
+  let exists = false, opened = 0, denied = false, updates = 0, activations = 0, fetchOverride;
   const cache = {
     async match(url) { return entries.get(String(url))?.clone(); },
     async put(url, response) { entries.set(String(url), response.clone()); }
@@ -23,12 +23,19 @@ function worker() {
   const context = vm.createContext({
     URL, Response, Headers, Uint8Array, crypto: crypto.webcrypto,
     location: { origin: 'https://games.test' },
-    caches: { async has(n) { return exists && n === name; }, async open() { opened++; exists = true; return cache; } },
-    self: { registration: { scope, async update() { updates++; } }, addEventListener(name, fn) { handlers[name] = fn; } },
+    caches: {
+      async has(n) { return exists && n === name; },
+      async keys() { return exists ? [name] : []; },
+      async open() { opened++; exists = true; return cache; },
+      async delete(n) { if (n === name) exists = false; return true; }
+    },
+    self: { registration: { scope, async update() { updates++; } },
+      async skipWaiting() { activations++; }, addEventListener(name, fn) { handlers[name] = fn; } },
     async fetch(url) {
       requests.push(url);
       if (denied) throw new Error('offline');
       const p = new URL(url).pathname.slice('/school-games/'.length);
+      if (fetchOverride) return fetchOverride(p, bodies[p]);
       return new Response(bodies[p], { status: 200 });
     }
   });
@@ -44,8 +51,53 @@ function worker() {
     await task;
     return result;
   }
-  return { status, seed, requests, bodies, entries, scope, setDenied(v) { denied = v; }, get opened() { return opened; }, get updates() { return updates; } };
+  function install() {
+    let task;
+    handlers.install({ waitUntil(value) { task = value; } });
+    return task;
+  }
+  return { status, install, seed, requests, bodies, entries, scope,
+    setDenied(v) { denied = v; }, setFetch(fn) { fetchOverride = fn; },
+    get exists() { return exists; }, get activations() { return activations; },
+    get opened() { return opened; }, get updates() { return updates; } };
 }
+
+test('failed same-version installation preserves the active cache and later recovers', async () => {
+  const w = worker();
+  w.seed('index.html');
+  w.setDenied(true);
+  await assert.rejects(w.install(), /offline/);
+  assert.equal(w.exists, true, 'the surviving worker keeps its cache');
+  assert.equal(await w.entries.get(w.scope + 'index.html').clone().text(), 'portal');
+  assert.equal((await w.status()).count, 1, 'the verified portal remains available offline');
+  assert.equal(w.activations, 0, 'an incomplete install never takes over');
+  w.setDenied(false);
+  await w.install();
+  assert.equal((await w.status()).ready, true);
+  assert.equal(w.activations, 1);
+});
+
+test('failed new installation settles concurrent writes and removes its partial cache', async () => {
+  const w = worker();
+  let releaseFont, fontStarted, finished = false;
+  const started = new Promise(resolve => { fontStarted = resolve; });
+  const heldFont = new Promise(resolve => { releaseFont = resolve; });
+  w.setFetch(async (p, body) => {
+    if (p === 'games/demo/index.html') throw new Error('offline');
+    if (p === 'shared/font.woff2') { fontStarted(); await heldFont; }
+    return new Response(body);
+  });
+  const install = w.install().finally(() => { finished = true; });
+  const rejected = assert.rejects(install, /offline/);
+  await started;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(finished, false, 'cleanup waits for the in-flight writer');
+  assert.equal(w.exists, true);
+  releaseFont();
+  await rejected;
+  assert.equal(w.exists, false, 'a new partial cache is removed');
+  assert.equal(w.activations, 0);
+});
 
 test('offline readiness refuses missing and partial caches without creating them', async () => {
   const w = worker();
