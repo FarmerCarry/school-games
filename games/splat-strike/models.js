@@ -181,16 +181,6 @@
 
   /* -------------------------------------------------------------- blasters */
   var RAINBOW = [0xff5a5f, 0xff9f1c, 0xffe14d, 0x3ddc84, 0x3fb8ff, 0x9b6bff];
-  // body made of segments along z so skins can paint stripes / rainbows
-  function segBody(b, skin, x0, y0, z0, x1, y1, z1, n) {
-    for (var i = 0; i < n; i++) {
-      var za = z0 + (z1 - z0) * i / n, zb = z0 + (z1 - z0) * (i + 1) / n;
-      var c = skin.main;
-      if (skin.pat === 'stripes') c = i % 2 ? skin.acc : skin.main;
-      else if (skin.pat === 'rainbow') c = RAINBOW[i % RAINBOW.length];
-      b.box(x0, y0, Math.min(za, zb), x1, y1, Math.max(za, zb), c, { bottom: true, top: shade(c, 1.12) });
-    }
-  }
   function stripeCol(skin, i) {
     if (skin.pat === 'stripes') return i % 2 ? skin.acc : skin.main;
     if (skin.pat === 'rainbow') return RAINBOW[i % RAINBOW.length];

@@ -1575,7 +1575,6 @@
     } else cur = 'default';
     if (canvas.style.cursor !== cur) canvas.style.cursor = cur;
   });
-  document.addEventListener('visibilitychange', function () { if (document.hidden && screen === 'game') pause(); });
 
   /* =============================================================== debug hook */
   window.__game = {

@@ -23,7 +23,6 @@
       return false;
     };
   }
-  FI.solHelpers = { mv: mv, at: at, atX: atX, cx: cx };
   FI.SOLUTIONS = {
     1: [
       ['I', 'go', 5], ['I', 'jump', 8.5], ['I', 'go', 22], ['I', 'jump', 23], ['I', 'jump', 25.5], ['I', 'jump', 20],

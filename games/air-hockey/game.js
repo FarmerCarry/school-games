@@ -1411,7 +1411,6 @@
     else if (st.paused && c === 'KeyR') startGame();
     else if (st.paused && (c === 'Enter' || c === 'Space')) { e.preventDefault(); pause(false); }
   });
-  document.addEventListener('visibilitychange', function () { if (document.hidden && !st.demo && (st.scene === 'play' || st.scene === 'countdown' || st.scene === 'goal') && !st.paused) pause(true); });
 
   /* ========================================================== boot */
   goTitle();

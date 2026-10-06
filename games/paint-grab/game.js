@@ -386,8 +386,6 @@
     state = 'play'; Kit.keys.reset(); showScreen(null); canvas.focus();
   }
 
-  document.addEventListener('visibilitychange', function () { if (document.hidden && state === 'play') pauseGame(); });
-
   /* ============================================================ events from the sim */
   function onScreen(x, y, m) {
     var sx = (x * CS - cam.x) * cam.z + W / 2, sy = (y * CS - cam.y) * cam.z + H / 2;

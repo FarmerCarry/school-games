@@ -198,8 +198,6 @@
     DK.snd.ensureMusic();
   });
   window.addEventListener('pointerup', function () { mouseDown = false; });
-  window.addEventListener('blur', function () { mouseDown = false; if (G.mode === 'play') pauseGame(); });
-  document.addEventListener('visibilitychange', function () { if (document.hidden && G.mode === 'play') pauseGame(); });
   function holdInput() { return Kit.keys.down('Space') || mouseDown; }
 
   /* -------------------------------------------------------------- DOM */

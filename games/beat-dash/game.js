@@ -758,10 +758,7 @@
   }
 
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) {
-      if (scene === 'play' && !G.paused && !G.won) pauseGame();
-      else if (scene !== 'play') music.stop(0.05);
-    }
+    if (document.hidden && scene !== 'play') music.stop(0.05);
   });
 
   /* ============================================================ RENDER */

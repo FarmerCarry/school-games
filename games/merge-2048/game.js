@@ -996,12 +996,10 @@
     if (G.screen === 'play') doMove(dir);
   });
   window.addEventListener('pointerup', function () { drag = null; });
-  window.addEventListener('blur', function () { drag = null; });
   document.addEventListener('click', function (e) {
     var b = e.target && e.target.closest && e.target.closest('button');
     if (b && e.detail > 0) b.blur();
   });
-  document.addEventListener('visibilitychange', function () { if (document.hidden && G.screen === 'play') pause(); });
 
   function play(fresh) { sfx.click(); startGame(save.size, fresh); }
   function on(id, fn) {

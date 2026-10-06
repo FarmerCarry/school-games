@@ -1518,9 +1518,6 @@
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
   muteBtn.title = 'الصوت (M)';
 
-  window.addEventListener('blur', function () { if (scr === 'game' && !paused) pause(true); });
-  document.addEventListener('visibilitychange', function () { if (document.hidden && scr === 'game' && !paused) pause(true); });
-
   // mini canvases (previews + hat bar) sized for crisp drawing
   sizeMiniCanvases = function () {
     var s = view.scale * view.dpr;

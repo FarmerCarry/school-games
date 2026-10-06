@@ -204,7 +204,7 @@ npm run test:classroom           # downloaded folder, Arabic/spaced paths and de
 npm run test:regressions         # additional gameplay and portal keyboard checks
 npm run check                   # smoke-test all source games
 npm run build                   # fast build into _site/ (the Pages artifact)
-npm run perf:assets              # enforce raw, compressed and offline-cache asset budgets
+npm run perf:assets              # enforce raw-byte page, font, library and offline-cache budgets
 SG_ROOT=_site npm run test:browser # run gameplay/portal regressions against optimized games
 SG_ROOT=_site npm run check      # smoke-test all optimized games
 npm run test:offline             # cache installation, offline games, updates, and kill switch
@@ -236,13 +236,17 @@ measurements during active gameplay. Use repeated runs on the same hardware to s
 budgets; headless software-renderer CI timings are not school-PC performance claims.
 The headed run must retain focus while measuring because games now pause on blur.
 
-CI runs source-independent rules, asset-optimizer/budget tests, build-safety checks and
-harness fixtures once. It runs gameplay, portal, smoke and board-game browser checks
+CI runs source rules and level verifiers, asset-optimizer/budget tests, build-safety checks,
+offline controller/worker unit checks and harness fixtures once. It runs gameplay, portal, smoke and board-game browser checks
 against both source and the optimized build, then checks offline installation and updates.
 `npm test` still runs the complete regression set for the selected root. The suite selector
 discovers every `tools/tests/*.test.mjs` file; new tests default to both source/build passes.
 Only tests explicitly listed as source-independent in `tools/test-suite.mjs` run once.
 The shared suite includes browser-based harness fixtures, so it also needs Chromium.
+`test:browser` passes `--browser-only` to the extra gameplay regression runner because
+its source engine checks already run in the shared suite. Running `test:regressions`
+directly still covers both its source engine and browser checks; `--unit-only` remains
+available for its source engine checks without a browser.
 
 `node tools/audio-probe.mjs <slug>` records game sound. Custom `--actions` files or
 `--actions-json` lists support `wait`, `click`, `move`, `press`, `hold`, `drag`, `eval`

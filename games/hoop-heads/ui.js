@@ -523,7 +523,6 @@
   $('pResume').addEventListener('click', resume);
   $('pRestart').addEventListener('click', restart);
   $('pMenu').addEventListener('click', function () { S.click(); askConfirm('الخروج من المباراة؟', toMenu); });
-  document.addEventListener('visibilitychange', function () { if (document.hidden) pauseGame(); });
 
   function askConfirm(msg, yes) {
     confirmFrom = state; confirmYes = yes;

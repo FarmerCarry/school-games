@@ -342,6 +342,55 @@ async function animation() {
   passed('Connect 4 preserves falling animation, guards rapid input and respects reduced motion');
 }
 
+async function classroomSound() {
+  const player = await student('board classroom sound');
+  const { page } = player;
+  await page.setViewportSize({ width: 1280, height: 900 });
+  for (const game of GAMES) {
+    await page.goto(site.origin + '/#/play/' + game, { waitUntil: 'load' });
+    await page.waitForFunction(() => document.querySelector('#stage').getAttribute('aria-busy') === 'false' && document.querySelector('#stageMsg').hidden);
+    const frame = page.frames().find(item => item.url().includes('/games/' + game + '/'));
+    const sound = frame.locator('#soundButton');
+    async function assertSound(muted, locked) {
+      await frame.waitForFunction(({ muted, locked }) => {
+        const button = document.getElementById('soundButton');
+        return Kit.audio.muted === muted && button.disabled === locked;
+      }, { muted, locked });
+      assert.equal(await sound.textContent(), muted ? 'الصوت: مغلق' : 'الصوت: يعمل', game + ': sound label follows actual audio');
+      assert.equal(await sound.getAttribute('aria-pressed'), String(!muted), game + ': sound pressed state follows actual audio');
+    }
+    const savedMute = () => frame.evaluate(() => localStorage.getItem('sg:site:muted'));
+    await assertSound(false, false);
+    const originalPreference = await savedMute();
+    if (!await page.locator('#classroom').evaluate(details => details.open)) {
+      await page.locator('#classroom summary').click();
+    }
+    await page.locator('#classroomMode').check();
+    await assertSound(true, true);
+    // The keyboard shortcut cannot override the temporary classroom lock either.
+    await frame.locator('#pcButton').press('m');
+    await assertSound(true, true);
+    assert.equal(await savedMute(), originalPreference, game + ': classroom mute and M leave the personal preference intact');
+    await page.locator('#classroomMode').uncheck();
+    await assertSound(false, false);
+    assert.equal(await savedMute(), originalPreference, game + ': leaving classroom restores sound without saving its preset');
+
+    await sound.click();
+    await assertSound(true, false);
+    assert.equal(await savedMute(), 'true', game + ': sound button saves personal mute');
+    await page.locator('#classroomMode').check();
+    await assertSound(true, true);
+    await page.locator('#classroomMode').uncheck();
+    await assertSound(true, false);
+    assert.equal(await savedMute(), 'true', game + ': a personally muted game stays muted after classroom mode');
+    await sound.press('m');
+    await assertSound(false, false);
+    assert.equal(await savedMute(), 'false', game + ': M still toggles personal sound outside classroom mode');
+  }
+  await player.close();
+  passed('both board sound controls follow classroom mute, remain locked and preserve personal preferences');
+}
+
 async function portalAndMobile() {
   const player = await student('portal and mobile');
   const { page } = player;
@@ -461,6 +510,7 @@ try {
     }
     await animation();
   }
+  await classroomSound();
   await portalAndMobile();
   assert.deepEqual(errors, [], 'no browser exceptions');
   console.log('\nAll shared-PC board checks passed; no WebSockets, external requests, online scripts or browser exceptions.');
