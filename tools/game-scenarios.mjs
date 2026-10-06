@@ -35,7 +35,19 @@ export const scenarios = {
   'beat-dash': defaults(['#b-play','#b-go'], `${g}.scene === 'play' && !${g}.state.paused`, select(`${g}.state`, ['x','y','pct','dead','attempt']), hold('Space', 160), '#b-pause', `${g}.state.paused`, '#b-restart', `${g}.state.pct < 5`),
   'swing-hook': defaults(['#btnPlay'], `${g}.mode === 'play'`, select(`${g}.state()`, ['x','y','timer','hooked']), hold('Space', 200), '#pauseBtn', `${g}.mode === 'pause'`, '#psRestart', `${g}.state().timer < 1`),
   'moto-madness': defaults(['#btnPlay','.mm-tile[data-i="0"]'], `${g}.state === 'play'`, `[${g}.world.bike.x,${g}.world.bike.y,${g}.world.time]`, hold('ArrowUp', 280), '#pauseBtn', `${g}.state === 'paused'`, '#btnRestart', `!${g}.world.started`),
-  'drift-king': defaults(['#btnPlay'], `${g}.mode === 'play'`, pos(`${g}.car`), hold('Space'), '#btnPause', `${g}.mode === 'pause' || ${g}.mode === 'paused'`, '#btnRestart', `${g}.car.progress < 1`),
+  'drift-king': defaults(['#btnPlay'], `${g}.mode === 'play'`, pos(`${g}.car`), hold('Space'), '#btnPause', `${g}.mode === 'pause' || ${g}.mode === 'paused'`, '#btnRestart', `${g}.car.progress < 1`, {
+    beforePause: async page => {
+      // Nobody steers the car, so it leaves the road at the first corner about
+      // three seconds after Start, which a slow runner's pause click can miss.
+      // Begin a fresh run with the player's own P and R shortcuts first.
+      if (await evaluate(page, `${g}.mode === 'play'`)) await page.keyboard.press('KeyP');
+      await requireState(page, `${g}.mode === 'paused' || ${g}.mode === 'over'`, 'drift-king: run must pause or end before retry');
+      // The results screen ignores R for its first 0.45 s.
+      if (await evaluate(page, `${g}.mode === 'over'`)) await page.waitForTimeout(500);
+      await page.keyboard.press('KeyR');
+      await requireState(page, `${g}.mode === 'play' && ${g}.car.progress < 1`, 'drift-king: retry must start a fresh run before pause');
+    }
+  }),
   'fire-and-ice': defaults(['#playBtn'], `${g}.mode === 'play'`, `[${g}.world.fire.x,${g}.world.ice.x,${g}.world.t]`, hold('ArrowRight'), '#pauseBtn', `${g}.mode === 'paused'`, '#restartBtn', `${g}.world.t < 0.4`),
   'tank-splat': defaults(['[data-act="free"]','[data-act="startFree"]'], `${g}.app.screen === 'game'`, `${g}.app.game.tanks.map(t => [t.x,t.y,t.a,t.score,t.alive])`, hold('KeyD', 300), '#pauseBtn', `${g}.app.screen === 'pause'`, '#scr-pause [data-act="restart"]', `${g}.app.game.state === 'ready' && ${g}.app.game.tanks.every(t => t.score === 0)`, { ready: `${g}.app.game.state === 'play'` }),
   'sumo-bonk': defaults(['#b1p','#bFight'], `${g}.state.scr === 'game' && !${g}.state.paused`, select(`${g}.state`, ['players','roundT','score']), hold('ArrowUp'), '#bPause', `${g}.state.paused`, '#bRestart', `${g}.state.phase === 'intro' && ${g}.state.score.every(n => n === 0)`, { ready: `${g}.state.phase === 'fight'` }),
@@ -121,6 +133,17 @@ const inputSnapshots = {
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
+// These games move only while their key is held, so a fixed-length hold can fall
+// between two slow software-rendered frames and never be seen. The first input
+// check keeps the key down until the game reacts; repeated performance input keeps
+// the fixed hold, because a player stopped by a wall cannot change state.
+const heldKeys = {
+  'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
+  'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
+  'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'splat-strike': 'KeyW'
+};
+for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
+
 async function evaluate(page, expr) { return page.evaluate(expr); }
 async function requireState(page, expr, label) {
   try { await page.waitForFunction(expr, null, { timeout: 7000, polling: 40 }); }
@@ -152,7 +175,8 @@ export async function performInput(page, slug, {repeat = false} = {}) {
   } else if (repeat && slug === 'pool-party') {
     if (await evaluate(page,`${g}.phase === 'aim'`)) await hold('Space',650)(page);
     else await page.waitForTimeout(250);
-  } else await s.input(page);
+  } else if (!repeat && s.heldKey) await holdUntilChanged(s.heldKey, s.inputSnapshot || s.snapshot)(page);
+  else await s.input(page);
   await page.waitForTimeout(120);
 }
 export async function ensureActive(page, slug) {
