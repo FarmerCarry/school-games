@@ -37,7 +37,9 @@
         if (!data || data.type !== 'sg:offline-status' || data.id !== id) return;
         finish(null, data);
       };
-      try { worker.postMessage({ type: 'sg:offline-status', id: id, repair: !!repair }, [channel.port2]); }
+      // Routine checks only confirm that every verified file is still cached, so a
+      // slow disk is not re-read on each visit; Retry re-hashes every body.
+      try { worker.postMessage({ type: 'sg:offline-status', id: id, repair: !!repair, quick: !repair }, [channel.port2]); }
       catch (e) { finish(e); }
     });
   }

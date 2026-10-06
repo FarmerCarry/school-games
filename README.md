@@ -147,7 +147,9 @@ window, including Shift+Tab back to the portal and leaving fullscreen.
 The fast site's footer shows whether every file is verified for offline use.
 “جاهز دون إنترنت” means the active version is complete; an incomplete installation
 or cleared cache offers Retry. Keep the first visit open until it is ready. A
-downloaded folder instead reports that it is running locally.
+downloaded folder instead reports that it is running locally. Each file's bytes are
+hashed when it is cached; later visits only confirm that every verified file is
+still there, so slow disks are not re-read on every visit. Retry hashes them again.
 
 Critter Mart and Pizza Empire show a persistent warning if saving is blocked or
 storage is full. Retry keeps the current session and clears the warning only after
