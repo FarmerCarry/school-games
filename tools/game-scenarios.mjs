@@ -121,6 +121,17 @@ const inputSnapshots = {
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
+// These games move only while their key is held, so a fixed-length hold can fall
+// between two slow software-rendered frames and never be seen. The first input
+// check keeps the key down until the game reacts; repeated performance input keeps
+// the fixed hold, because a player stopped by a wall cannot change state.
+const heldKeys = {
+  'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
+  'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
+  'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'splat-strike': 'KeyW'
+};
+for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
+
 async function evaluate(page, expr) { return page.evaluate(expr); }
 async function requireState(page, expr, label) {
   try { await page.waitForFunction(expr, null, { timeout: 7000, polling: 40 }); }
@@ -152,7 +163,8 @@ export async function performInput(page, slug, {repeat = false} = {}) {
   } else if (repeat && slug === 'pool-party') {
     if (await evaluate(page,`${g}.phase === 'aim'`)) await hold('Space',650)(page);
     else await page.waitForTimeout(250);
-  } else await s.input(page);
+  } else if (!repeat && s.heldKey) await holdUntilChanged(s.heldKey, s.inputSnapshot || s.snapshot)(page);
+  else await s.input(page);
   await page.waitForTimeout(120);
 }
 export async function ensureActive(page, slug) {
