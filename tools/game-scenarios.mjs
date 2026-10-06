@@ -35,7 +35,19 @@ export const scenarios = {
   'beat-dash': defaults(['#b-play','#b-go'], `${g}.scene === 'play' && !${g}.state.paused`, select(`${g}.state`, ['x','y','pct','dead','attempt']), hold('Space', 160), '#b-pause', `${g}.state.paused`, '#b-restart', `${g}.state.pct < 5`),
   'swing-hook': defaults(['#btnPlay'], `${g}.mode === 'play'`, select(`${g}.state()`, ['x','y','timer','hooked']), hold('Space', 200), '#pauseBtn', `${g}.mode === 'pause'`, '#psRestart', `${g}.state().timer < 1`),
   'moto-madness': defaults(['#btnPlay','.mm-tile[data-i="0"]'], `${g}.state === 'play'`, `[${g}.world.bike.x,${g}.world.bike.y,${g}.world.time]`, hold('ArrowUp', 280), '#pauseBtn', `${g}.state === 'paused'`, '#btnRestart', `!${g}.world.started`),
-  'drift-king': defaults(['#btnPlay'], `${g}.mode === 'play'`, pos(`${g}.car`), hold('Space'), '#btnPause', `${g}.mode === 'pause' || ${g}.mode === 'paused'`, '#btnRestart', `${g}.car.progress < 1`),
+  'drift-king': defaults(['#btnPlay'], `${g}.mode === 'play'`, pos(`${g}.car`), hold('Space'), '#btnPause', `${g}.mode === 'pause' || ${g}.mode === 'paused'`, '#btnRestart', `${g}.car.progress < 1`, {
+    beforePause: async page => {
+      // Nobody steers the car, so it leaves the road at the first corner about
+      // three seconds after Start, which a slow runner's pause click can miss.
+      // Begin a fresh run with the player's own P and R shortcuts first.
+      if (await evaluate(page, `${g}.mode === 'play'`)) await page.keyboard.press('KeyP');
+      await requireState(page, `${g}.mode === 'paused' || ${g}.mode === 'over'`, 'drift-king: run must pause or end before retry');
+      // The results screen ignores R for its first 0.45 s.
+      if (await evaluate(page, `${g}.mode === 'over'`)) await page.waitForTimeout(500);
+      await page.keyboard.press('KeyR');
+      await requireState(page, `${g}.mode === 'play' && ${g}.car.progress < 1`, 'drift-king: retry must start a fresh run before pause');
+    }
+  }),
   'fire-and-ice': defaults(['#playBtn'], `${g}.mode === 'play'`, `[${g}.world.fire.x,${g}.world.ice.x,${g}.world.t]`, hold('ArrowRight'), '#pauseBtn', `${g}.mode === 'paused'`, '#restartBtn', `${g}.world.t < 0.4`),
   'tank-splat': defaults(['[data-act="free"]','[data-act="startFree"]'], `${g}.app.screen === 'game'`, `${g}.app.game.tanks.map(t => [t.x,t.y,t.a,t.score,t.alive])`, hold('KeyD', 300), '#pauseBtn', `${g}.app.screen === 'pause'`, '#scr-pause [data-act="restart"]', `${g}.app.game.state === 'ready' && ${g}.app.game.tanks.every(t => t.score === 0)`, { ready: `${g}.app.game.state === 'play'` }),
   'sumo-bonk': defaults(['#b1p','#bFight'], `${g}.state.scr === 'game' && !${g}.state.paused`, select(`${g}.state`, ['players','roundT','score']), hold('ArrowUp'), '#bPause', `${g}.state.paused`, '#bRestart', `${g}.state.phase === 'intro' && ${g}.state.score.every(n => n === 0)`, { ready: `${g}.state.phase === 'fight'` }),
