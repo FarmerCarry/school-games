@@ -1492,7 +1492,7 @@
   refreshTitle();
   show('scrTitle');
   Kit.loop(update, render);
-  try { document.fonts.load('700 40px Fredoka', 'ب'); } catch (e) { /* ignore */ }
+  try { document.fonts.load('700 40px Fredoka', 'ب').catch(function () { /* Use fallback fonts. */ }); } catch (e) { /* ignore */ }
 
   /* debug hook for automated checks */
   window.__game = {

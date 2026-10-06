@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
+import { clickControl } from '../ui-input.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -155,4 +156,48 @@ test('typing time freezes away from the game and requires explicit resume', asyn
   await page.locator('#unfocus').click();
   assert.equal(await page.locator('#unfocus').isVisible(), false);
   assert.equal(await page.evaluate(() => __game.state().phase), 'running');
+});
+
+test('optional font download failures preserve playable games in the real portal', async t => {
+  const cases = [
+    { slug: 'critter-mart', start: '#playBtn', playing: () => __game.mode === 'play' },
+    { slug: 'swing-hook', start: '#btnPlay', playing: () => __game.mode === 'play' },
+    { slug: 'blob-battle', start: '#btnPlay', playing: () => __game.info().state === 'play' },
+    { slug: 'maze-dash', start: '#btn-play', playing: () => __game.state.screen === 'play' },
+    { slug: 'troll-level', start: '#btn-play', playing: () => __game.mode === 'play' },
+    { slug: 'block-burst', start: '#btnClassic', playing: () => __game.state === 'play' }
+  ];
+  for (const game of cases) await t.test(game.slug, async t => {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
+    t.after(() => context.close());
+    const page = await context.newPage(), errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    let blockedFonts = 0;
+    await context.route('**/*.woff2', route => { blockedFonts++; return route.abort('failed'); });
+    // Keep the game at its title until native pointer input starts it; avoid
+    // unrelated deaths or animation timing while checking the failure path.
+    await page.addInitScript(() => {
+      let kit;
+      Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
+        kit = value;
+        kit.loop = update => { window.stepGame = () => update(1 / 60); return { stop() {} }; };
+      } });
+    });
+    await page.goto(`${server.origin}/#/play/${game.slug}`);
+    await page.waitForFunction(() => document.querySelector('#stage')?.getAttribute('aria-busy') === 'false');
+    const frame = page.frames().find(frame => frame.url().includes(`/games/${game.slug}/`));
+    assert.ok(frame, 'the portal retains the game iframe after startup');
+    await frame.evaluate(() => document.fonts.ready);
+    // Font promises and the resulting portal messages settle on separate tasks.
+    await frame.evaluate(() => new Promise(resolve => setTimeout(resolve, 0)));
+    assert.ok(blockedFonts > 0, 'the fixture actually blocks font downloads');
+    assert.equal(await frame.evaluate(() => Array.from(document.fonts).some(font => font.status === 'error')), true);
+    assert.equal(await page.locator('#stageMsg').isVisible(), false, 'fallback fonts do not display a game-failure screen');
+    assert.equal(await page.locator('#stage iframe').count(), 1);
+    await clickControl(frame, game.start);
+    await frame.waitForFunction(game.playing);
+    await frame.evaluate(() => stepGame());
+    assert.equal(await frame.evaluate(game.playing), true, 'the game can start and update with fallback fonts');
+    assert.deepEqual(errors, [], 'optional font failures produce no uncaught errors');
+  });
 });

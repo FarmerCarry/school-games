@@ -2666,7 +2666,11 @@
   setMode('title');
   if (document.fonts && document.fonts.load) {
     // make sure the Arabic half of the composite Fredoka family is ready for canvas text
-    try { document.fonts.load('700 20px Fredoka', 'سوق'); document.fonts.load('700 20px Fredoka', '0'); document.fonts.ready.then(fitUI); } catch (e) { /* ignore */ }
+    try {
+      document.fonts.load('700 20px Fredoka', 'سوق').catch(function () { /* Use fallback fonts. */ });
+      document.fonts.load('700 20px Fredoka', '0').catch(function () { /* Use fallback fonts. */ });
+      document.fonts.ready.then(fitUI);
+    } catch (e) { /* ignore */ }
   }
 
   window.__game = {

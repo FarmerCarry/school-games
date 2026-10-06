@@ -846,7 +846,7 @@
   /* ============================================================== boot */
   goTitle();
   K.loop(update, render);
-  try { document.fonts.load('700 40px Fredoka', 'ب'); } catch (e) { /* */ }
+  try { document.fonts.load('700 40px Fredoka', 'ب').catch(function () { /* Use fallback fonts. */ }); } catch (e) { /* ignore */ }
   Kit.lifecycle({ pause: pause });
   Kit.ready();
 })();
