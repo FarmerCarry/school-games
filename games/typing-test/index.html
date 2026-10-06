@@ -45,7 +45,7 @@
   <main id="stage">
     <section id="testView">
       <div id="chTag" hidden><span>🏆 تحدي الصف</span><b id="chCode" dir="ltr"></b><span id="chDesc"></span><button type="button" id="chExit" title="الخروج من التحدي">✕</button></div>
-      <div id="live"><span id="timer"></span><span id="liveWpm" dir="rtl"></span><span id="hint" dir="rtl">ابدأ الكتابة وسيبدأ الوقت ⚡</span></div>
+      <div id="live"><span id="timer"></span><span id="liveWpm" dir="rtl"></span><span id="hint" dir="rtl">ابدأ الكتابة وسيبدأ الوقت ⚡</span><div id="race" aria-hidden="true"></div></div>
       <div id="wordsBox">
         <div id="clip"><div id="words"></div></div>
         <div id="unfocus" hidden><span>👆 انقر هنا للمتابعة</span></div>
@@ -66,6 +66,11 @@
           <div class="legend"><span class="lg w">السرعة</span><span class="lg r">السرعة الخام</span><span class="lg e">أخطاء</span></div>
         </div>
       </div>
+      <div class="rbot">
+        <div class="badge" id="rBadge"></div>
+        <div class="pb" id="rPb"></div>
+        <div class="rcode" id="rCode" hidden><span>رمز التحدي</span><b dir="ltr" id="rCodeNum"></b></div>
+      </div>
       <div class="rmid">
         <div class="st sm"><div class="lbl">نوع الاختبار</div><div class="val" id="rType"></div></div>
         <div class="st sm"><div class="lbl">السرعة الخام <small>raw</small></div><div class="val" id="rRaw"></div></div>
@@ -75,11 +80,6 @@
         </div></div>
         <div class="st sm"><div class="lbl">الثبات</div><div class="val" id="rCons"></div></div>
         <div class="st sm"><div class="lbl">الوقت</div><div class="val" id="rTime"></div></div>
-      </div>
-      <div class="rbot">
-        <div class="badge" id="rBadge"></div>
-        <div class="pb" id="rPb"></div>
-        <div class="rcode" id="rCode" hidden><span>رمز التحدي</span><b dir="ltr" id="rCodeNum"></b></div>
       </div>
       <div class="rbtns">
         <button type="button" class="btn main" id="bNext"><span id="bNextLbl">اختبار جديد</span></button>
@@ -95,8 +95,8 @@
       <span id="progTxt"></span>
     </button>
     <div class="hints">
-      <span><span class="sg-key">Tab</span> <span id="tabHint">اختبار جديد</span></span>
-      <span><span class="sg-key">Esc</span> الإعدادات</span>
+      <span><span class="sg-key" id="restartKey">Tab</span> <span id="tabHint">اختبار جديد</span></span>
+      <span id="escHint"><span class="sg-key">Esc</span> الإعدادات</span>
       <span><span dir="ltr"><span class="sg-key">Alt</span>+<span class="sg-key">Shift</span></span> لغة لوحة المفاتيح</span>
     </div>
   </footer>
