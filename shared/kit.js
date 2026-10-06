@@ -2,7 +2,8 @@
  * Kit — tiny shared helper library for every game on the site.
  * Plain script (no modules) so games also work when opened from file://.
  *
- *   <script src="../../shared/kit.js"></script>
+ *   Load ../../shared/kit.js with a plain script tag before the game's own scripts.
+ *   (Keep literal script tags out of inlined files: the build rejects leftover ones.)
  *
  * Everything lives on window.Kit. Nothing here is required, but using it keeps
  * sound, saving, keyboard and screen scaling consistent across games.
