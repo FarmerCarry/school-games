@@ -18,7 +18,7 @@
  *   - --kill-sw writes a sw.js that removes itself and its cache (emergency switch).
  *     The sw.js committed at the repo root is this same off switch, so switching GitHub Pages
  *     back to the plain source site also cleans the offline cache off every PC.
- *     (Regenerate it with: node tools/build.mjs --kill-sw --out _kill && cp _kill/sw.js sw.js)
+ *     (Regenerate it with: node tools/build.mjs --kill-sw --out .work/kill-switch && cp .work/kill-switch/sw.js sw.js)
  */
 import fs from 'node:fs';
 import path from 'node:path';
