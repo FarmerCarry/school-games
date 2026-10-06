@@ -36,6 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { launchChromium } from './browser.mjs';
 import { startTestServer } from './test-server.mjs';
 import { reportPassed } from './playtest-report.mjs';
+import { runScenario, prepareScenario } from './game-scenarios.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // SG_ROOT=_site tests the fast build made by tools/build.mjs instead of the source files.
@@ -83,7 +84,8 @@ async function run(list) {
       const p = path.join(outDir, a.shot + '.png');
       await page.screenshot({ path: p });
       report.screenshots.push(p);
-    } else if (a.click) await page.mouse.click(a.click[0], a.click[1]);
+    } else if (a.scenario) report.scenario = await runScenario(page, a.scenario);
+    else if (a.click) await page.mouse.click(a.click[0], a.click[1]);
     else if (a.rclick) await page.mouse.click(a.rclick[0], a.rclick[1], { button: 'right' });
     else if (a.clickText) await page.getByText(a.clickText, { exact: false }).first().click({ timeout: 3000 });
     else if (a.clickSel) await page.locator(a.clickSel).first().click({ timeout: 3000 });
@@ -128,6 +130,7 @@ try {
   });
   const context = await browser.newContext({ viewport: { width: vw, height: vh } });
   page = await context.newPage();
+  if (actions.some(a => a.scenario)) await prepareScenario(page, slug);
   page.on('console', msg => {
     if (msg.type() === 'error') report.consoleErrors.push(msg.text());
     else if (msg.type() === 'warning') report.consoleWarnings.push(msg.text());
@@ -142,6 +145,13 @@ try {
   await page.goto(origin + pagePath, { waitUntil: 'load', timeout: 20000 });
   await run(actions);
 } catch (e) {
+  if (page) {
+    try {
+      const failurePath = path.join(outDir, 'failure.png');
+      await page.screenshot({path: failurePath}); report.screenshots.push(failurePath);
+      fs.writeFileSync(path.join(outDir, 'failure.html'), await page.content());
+    } catch (_) { /* A closed or crashed browser may have no screenshot. */ }
+  }
   report.harnessErrors.push('harness error during ' + JSON.stringify(actionInProgress || { navigation: pagePath }) + ': ' + String(e));
 } finally {
   if (browser) await browser.close();
@@ -152,3 +162,4 @@ report.ok = report.harnessErrors.length === 0 && reportPassed(report);
 fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));
 process.exitCode = report.ok ? 0 : 1;
+

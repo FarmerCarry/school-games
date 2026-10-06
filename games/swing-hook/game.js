@@ -1656,6 +1656,14 @@
   /* ------------------------------------------------------------------ boot */
   setMode('title');
   startAttract();
-  if (document.fonts && document.fonts.load) { try { document.fonts.load('700 20px Fredoka', 'بA1'); document.fonts.load('500 20px Fredoka', 'بA1'); } catch (e) { /* ignore */ } }
+  if (document.fonts && document.fonts.load) {
+    try {
+      document.fonts.load('700 20px Fredoka', 'بA1').catch(function () { /* Use fallback fonts. */ });
+      document.fonts.load('500 20px Fredoka', 'بA1').catch(function () { /* Use fallback fonts. */ });
+    } catch (e) { /* ignore */ }
+  }
   Kit.loop(function (dt) { if (mode !== 'peek') update(dt); else { time += dt; Kit.keys.endFrame(); } }, render);
+  Kit.lifecycle({ pause: pause, reset: function () { holdMouse = mouseTap = false; } });
+  Kit.ready();
 })();
+

@@ -656,4 +656,7 @@
     unlockAll: function () { stats.bestLen = 99999; stats.totalKills = 999; stats.bestKills = 99; stats.games = 99; stats.bestTime = 9999; stats.totalFood = 99999; stats.bestRank = 1; stats.powerups = 99; stats.top1Time = 999; saveStats(); refreshTitle(); },
     resetSave: function () { for (var k3 in DEF) stats[k3] = DEF[k3]; saveStats(); refreshTitle(); }
   };
+  Kit.lifecycle({ pause: pauseGame, reset: function () { mouse.down = false; } });
+  Kit.ready();
 })();
+

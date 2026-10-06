@@ -13,12 +13,15 @@
     "test:board-games": "node tools/test-board-games.mjs",
     "test:unit": "node tools/test-suite.mjs all",
     "test:shared": "node tools/test-suite.mjs shared",
-    "test:browser": "node tools/test-suite.mjs browser && npm run test:regressions",
+    "test:browser": "node tools/test-suite.mjs browser && npm run test:scenarios && npm run test:regressions",
     "test:tooling": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tools/github-test-reporter.mjs --test-reporter-destination=stderr tools/test-tooling.mjs",
-    "test:regressions": "node tools/regressions.mjs"
+    "test:regressions": "node tools/regressions.mjs",
+    "test:scenarios": "node tools/test-scenarios.mjs",
+    "test:classroom": "node tools/test-classroom.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
     "playwright": "1.62.1"
   }
 }
+

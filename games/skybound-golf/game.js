@@ -9,12 +9,20 @@
   var view = K.fit(canvas, 1280, 720, { maxDpr: 1.5 });
   var ctx = view.ctx, storage = K.store('skybound-golf');
   var save = P.sanitizeSave(storage.get('progress', {}));
-  var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var reducedMotion = K.motion.reduced();
   var s = { world:save.world, course:P.createCourse(save.world), phase:'title', time:0,
     cam:{x:-45,y:0,zoom:1}, ball:null, trail:[], particles:[], shotAge:0,
-    quality:0, best:save.best, putt:null };
+    quality:0, best:save.best, putt:null, impact:null, reducedMotion:reducedMotion };
+  K.motion.onChange(function (reduced) {
+    reducedMotion = reduced; s.reducedMotion = reduced;
+    if (reduced) s.trail = [];
+    renderDirty = true;
+  });
   var modalMode = '', paused = false, meterTime = 0, meter = 0, toastTime = 0;
-  var finishDelay = -1, resultCommitted = false, speed = 1, uiClock = 0;
+  var finishDelay = -1, shotResult = null, speed = 1, uiClock = 0;
+  var renderDirty = true, renderedTime = -1;
+  canvas.addEventListener('contextrestored', function () { view.resize(); renderDirty = true; });
+  A.onContextRestored = function () { renderDirty = true; };
   var lastFocus = null, lastDistance = -1, lastAriaValue = -1;
   var mute = K.muteButton(); ui.appendChild(mute);
   var upgradeNames = { power:'قوة الضربة', bounce:'الارتداد', glide:'الانسياب' };
@@ -26,6 +34,7 @@
   };
 
   function resize() {
+    renderDirty = true;
     var scale = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
     ui.style.left = Math.round((window.innerWidth - 1280 * scale) / 2) + 'px';
     ui.style.top = Math.round((window.innerHeight - 720 * scale) / 2) + 'px';
@@ -52,11 +61,14 @@
   function resetScene() {
     s.world = save.world; s.course = P.createCourse(save.world);
     s.cam = {x:-45,y:0,zoom:1}; s.ball = {x:0,y:P.heightAt(s.course,0)+.7,r:.7,vx:0,vy:0,maxX:0};
-    s.trail = []; s.particles = []; s.putt = null; s.shotAge = 10; s.quality = 0;
-    resultCommitted = false; finishDelay = -1; speed = 1; lastDistance = -1;
+    s.trail = []; s.particles = []; s.putt = null; s.impact = null; s.shotAge = 10; s.quality = 0;
+    shotResult = null; finishDelay = -1; speed = 1; lastDistance = -1;
     toastTime = 0; $('toast').hidden = true;
   }
   function controls() {
+    renderDirty = true;
+    ui.dataset.phase = s.phase;
+    $('continue').hidden = s.phase !== 'outcome' || !!modalMode;
     var playing = s.phase !== 'title' && s.phase !== 'result';
     $('title-screen').hidden = s.phase !== 'title' || !!modalMode;
     $('pause').hidden = !playing;
@@ -122,6 +134,7 @@
   }
   function strike() {
     if (modalMode || paused) return;
+    if (s.phase === 'outcome') { finish(!!s.putt.sunk,true); return; }
     if (s.phase === 'ready') {
       // The marked 9% central band is a forgiving perfect-shot window.
       s.quality = Math.abs(meter-.5) <= .045 ? 1 : Math.max(0,1-Math.abs(meter-.5)*2);
@@ -143,22 +156,31 @@
     var target = .62 + ((Math.floor(s.ball.maxX) % 37) / 37) * .19;
     s.putt = {active:true,x:.12,target:target,power:0,rolling:false,v:0,elapsed:0,
       targetPower:Math.sqrt(2*1.6*(target-.12))/1.8};
-    s.shotAge = 10; meterTime = -.5;
+    s.shotAge = 10; meterTime = -.5; s.putt.arrival = 0;
     toast('وصلت إلى منطقة الحفرة!',1.7); controls();
   }
-  function finish(sunk,putted) {
-    if(resultCommitted) return;
-    resultCommitted = true; finishDelay = -1;
+  function commitResult(sunk) {
+    if(shotResult) return shotResult;
     var distance = Math.floor(s.ball.maxX), oldBest = save.best;
     var earned = P.reward(distance,sunk,s.ball.perfect);
+    shotResult = {distance:distance,oldBest:oldBest,earned:earned,sunk:sunk};
     save.coins = Math.min(9999999,save.coins+earned);
     save.best = Math.max(save.best,distance); save.shots++; if(sunk) save.holes++;
-    persist(); stats(); s.phase = 'result'; openModal('result');
+    persist(); stats();
+    return shotResult;
+  }
+  function finish(sunk,putted) {
+    if(s.phase==='result') return;
+    var result = commitResult(sunk);
+    var distance = result.distance, oldBest = result.oldBest, earned = result.earned;
+    sunk = result.sunk;
+    finishDelay = -1; toastTime = 0; $('toast').hidden = true;
+    s.phase = 'result'; openModal('result');
     var record = distance > oldBest;
     $('modal-heading').textContent = sunk ? 'في الحفرة!' : record ? 'رقم قياسي جديد!' : 'رحلة جميلة!';
-    $('result-note').textContent = sunk ? 'تسديدة ممتازة… مكافأة إضافية!' : putted ? 'قريبة جدًا! جرّب قوة مختلفة في المرة القادمة' : s.ball.surface==='sand' ? 'الرمال أوقفت الكرة… الضربة القادمة أبعد!' : 'طوّر ضربتك وانطلق أبعد';
+    $('result-note').textContent = sunk ? 'تسديدة ممتازة… مكافأة إضافية!' : putted ? puttFeedback() : s.ball.surface==='sand' ? 'الرمال أوقفت الكرة… الضربة القادمة أبعد!' : 'طوّر ضربتك وانطلق أبعد';
     $('result-meters').textContent = K.fmt(distance);
-    $('result-coins').textContent = '+ ' + K.fmt(earned) + ' عملة' + (sunk ? ' · مكافأة الحفرة' : '');
+    $('result-coins').innerHTML = '<bdi dir="ltr">+ ' + K.fmt(earned) + '</bdi> عملة' + (sunk ? ' · مكافأة الحفرة' : '');
     var unlocked = P.worlds.filter(function(w) { return w.unlock>oldBest && w.unlock<=save.best; });
     $('result-unlock').hidden = !unlocked.length;
     $('result-unlock').textContent = 'عالم جديد: ' + unlocked.map(function(w){return w.name;}).join('، ') + ' — اختره من قائمة العوالم';
@@ -199,22 +221,36 @@
       b.addEventListener('click',function(){save.world=i;persist();menu();K.sfx.power();}); host.appendChild(b);
     });
   }
+  function puttFeedback() {
+    var error = s.putt.x - s.putt.target;
+    if (Math.abs(error) <= .055) return 'قريبة جدًا! عدّل القوة قليلًا';
+    return error < 0 ? 'لم تصل إلى الحفرة — جرّب قوة أكبر' : 'تجاوزت الحفرة — جرّب قوة أقل';
+  }
+  function outcome(sunk) {
+    s.putt.sunk = sunk; s.putt.rolling = false; s.putt.hold = 0;
+    // The putt is complete. Save it before the optional animation can be
+    // interrupted by leaving, reloading, or restarting the game.
+    commitResult(sunk);
+    s.phase = 'outcome'; speed = 1;
+    toast(sunk ? 'في الحفرة!' : puttFeedback(), 1.2); controls();
+  }
   function updatePutt(dt) {
     var p=s.putt, old=p.x; p.elapsed+=dt;
     var nextV=Math.max(0,p.v-1.6*dt); p.x+=(p.v+nextV)*.5*dt; p.v=nextV;
     var crossed=old<=p.target && p.x>=p.target;
     if((crossed || Math.abs(p.x-p.target)<.017) && p.v<.48) {
-      p.x=p.target; p.v=0; p.sunk=true; p.rolling=false; finish(true,true); return;
+      p.x=p.target; p.v=0; outcome(true); return;
     }
-    if(p.v<=0 || p.x>1.03 || p.elapsed>3) { p.rolling=false; finish(false,true); }
+    if(p.v<=0 || p.x>1.03 || p.elapsed>3) { outcome(false); }
   }
   function step(dt) {
-    if(paused || document.hidden) return;
+    if(paused || modalMode || document.hidden) return;
     s.time+=dt; s.shotAge+=dt;
     if(toastTime>0) {toastTime-=dt;if(toastTime<=0) $('toast').hidden=true;}
     if(!modalMode && (s.phase==='ready'||s.phase==='putting')) {
       meterTime+=dt; meter=(Math.sin(meterTime*3.6)+1)/2;
-      $('needle').style.left=(meter*100)+'%';
+      // 475px panel minus padding/borders leaves 413px of LTR travel.
+      $('needle').style.transform='translateX('+(meter*413-6)+'px)';
       var aria=Math.round(meter*10)*10;
       if(aria!==lastAriaValue) {$('meter-track').setAttribute('aria-valuenow',aria);lastAriaValue=aria;}
     }
@@ -222,15 +258,20 @@
       var events=[];
       for(var n=0;n<speed;n++) events=events.concat(P.step(s.course,s.ball,save.upgrades,dt));
       events.forEach(function(e) {
-        if(e.type==='bounce') {K.sfx.land();burst(e.x,e.y,e.surface==='sand'?'#f3cf79':'#e4f37b',8);}
+        if(e.type==='bounce') {
+          // Same synthesized landing voice, with bounded impact-dependent volume.
+          K.audio.tone({freq:160,to:80,type:'triangle',dur:.08,vol:.08+.17*e.strength});
+          s.impact = {x:e.x,y:e.y,age:0,strength:e.strength};
+          burst(e.x,e.y,e.surface==='sand'?'#f3cf79':'#e4f37b',4);
+        }
         if(e.type==='tree') {K.sfx.pop();burst(e.x,e.y,'#96d450',12);}
         if(e.type==='pad') {K.sfx.jump();burst(e.x,e.y,'#ffe76b',16);toast('قفزة إضافية!',.9);}
       });
-      s.trail.push({x:s.ball.x,y:s.ball.y}); if(s.trail.length>42) s.trail.shift();
+      if(!reducedMotion) s.trail.push({x:s.ball.x,y:s.ball.y}); if(s.trail.length>42) s.trail.shift();
       var desiredZoom=Math.max(.32,Math.min(1,120/(110+Math.max(0,s.ball.y))));
       s.cam.zoom+=(desiredZoom-s.cam.zoom)*Math.min(1,dt*3.2);
       var targetX=Math.max(-45,s.ball.x-65/s.cam.zoom);
-      var targetY=Math.max(0,s.ball.y-57/s.cam.zoom);
+      var targetY=Math.max(0,s.ball.y-68/s.cam.zoom);
       s.cam.x+=(targetX-s.cam.x)*Math.min(1,dt*6);
       s.cam.y+=(targetY-s.cam.y)*Math.min(1,dt*4);
       if(s.ball.stopped && finishDelay<0) {finishDelay=.65;controls();}
@@ -239,7 +280,13 @@
         if(finishDelay<=0) { if(s.ball.surface==='green') startPutting(); else finish(false,false); }
       }
     }
+    if(s.putt) s.putt.arrival = Math.min(1, s.putt.arrival + dt * 3);
+    if(s.phase==='outcome') {
+      s.putt.hold += dt;
+      if(s.putt.hold >= 1.1) finish(!!s.putt.sunk,true);
+    }
     if(s.phase==='putt-roll' && !modalMode) updatePutt(dt);
+    if(s.impact) { s.impact.age += dt; if(s.impact.age > .32) s.impact = null; }
     for(var i=s.particles.length-1;i>=0;i--) {
       var p=s.particles[i];p.life-=dt;
       if(p.life<=0){s.particles.splice(i,1);continue;}
@@ -253,6 +300,8 @@
     K.keys.endFrame();
   }
   function render() {
+    if (!renderDirty && (paused || modalMode || renderedTime === s.time)) return;
+    renderDirty = false; renderedTime = s.time;
     ctx.setTransform(view.scale*view.dpr,0,0,view.scale*view.dpr,0,0);
     A.draw(ctx,s);
   }
@@ -260,7 +309,7 @@
   button('play',start);button('hit',strike);button('pause',togglePause);button('resume',closeModal);
   button('restart',start);button('again',start);button('menu',menu);button('close-modal',closeModal);
   button('open-worlds',function(){openModal('worlds');});button('open-upgrades',function(){openModal('upgrades');});
-  button('flight-hint',toggleSpeed);
+  button('flight-hint',toggleSpeed);button('continue',strike);
   canvas.addEventListener('pointerdown',function(e){if(e.button===0)strike();});
   window.addEventListener('keydown',function(e) {
     if(e.repeat || e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return;
@@ -287,4 +336,7 @@
   document.addEventListener('visibilitychange',function(){if(document.hidden)pause(false);});
   window.addEventListener('blur',function(){if(!document.hidden)pause(false);});
   resetScene(); stats(); controls(); K.loop(step,render);
+  Kit.lifecycle({ pause: function () { pause(false); } });
+  Kit.ready();
 })();
+

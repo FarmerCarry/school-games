@@ -46,13 +46,19 @@ async function screenshot(page, name, fullPage = true) {
   fs.mkdirSync(process.env.SG_BOARD_SCREENSHOTS, { recursive: true });
   await page.screenshot({ path: path.join(process.env.SG_BOARD_SCREENSHOTS, name + '.png'), fullPage });
 }
+async function dumpFitTrace(page, label) {
+  const trace = await page.evaluate(() => window.__portalFitTrace || []);
+  if (trace.length) console.error(label + ' portal fit trace:\n' + JSON.stringify(trace.slice(-60), null, 2));
+}
 async function fits(scope, selectors, label) {
   for (const selector of selectors) {
     const box = await scope.locator(selector).evaluate(element => {
       const rect = element.getBoundingClientRect();
       return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: innerWidth, height: innerHeight };
     });
-    assert.ok(box.left >= -1 && box.top >= -1 && box.right <= box.width + 1 && box.bottom <= box.height + 1,
+    const inside = box.left >= -1 && box.top >= -1 && box.right <= box.width + 1 && box.bottom <= box.height + 1;
+    if (!inside && typeof scope.evaluate === 'function') await dumpFitTrace(scope, label);
+    assert.ok(inside,
       `${label}: ${selector} fits viewport: ${JSON.stringify(box)}`);
   }
 }
@@ -206,7 +212,7 @@ async function keyboardAndLifecycle(game) {
   await page.waitForTimeout(650);
   await moves(page, 1);
   // Explicitly exercise the visibility listener while headless Chromium remains
-  // foreground. The simulated lifecycle must cancel and resume the pending AI.
+  // foreground. The pending AI stays stopped until an explicit Resume.
   const hidden = value => page.evaluate(value => {
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => value });
     document.dispatchEvent(new Event('visibilitychange'));
@@ -224,6 +230,10 @@ async function keyboardAndLifecycle(game) {
   await page.waitForTimeout(650);
   await moves(page, 1);
   await hidden(false);
+  assert.equal(await page.locator('#pauseLayer').isVisible(), true, 'returning to the tab keeps play paused');
+  await page.waitForTimeout(650);
+  await moves(page, 1);
+  await page.locator('#resumeButton').click();
   await moves(page, 2);
   await page.locator('#leaveMatch').click();
   await start(page, 'computer');
@@ -232,6 +242,8 @@ async function keyboardAndLifecycle(game) {
   await page.waitForTimeout(650);
   await moves(page, 1);
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+  assert.equal(await page.locator('#pauseLayer').isVisible(), true, 'history restoration keeps play paused');
+  await page.locator('#resumeButton').click();
   await moves(page, 2);
   await page.locator('#leaveMatch').click();
   await start(page, 'computer');
@@ -333,17 +345,57 @@ async function animation() {
 async function portalAndMobile() {
   const player = await student('portal and mobile');
   const { page } = player;
+  await page.addInitScript(() => {
+    if (window !== window.parent) return;
+    const readRect = Element.prototype.getBoundingClientRect;
+    const trace = window.__portalFitTrace = [];
+    const record = entry => { trace.push(entry); if (trace.length > 120) trace.shift(); };
+    const box = element => {
+      if (!element) return null;
+      const rect = readRect.call(element);
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, bottom: rect.bottom };
+    };
+    Element.prototype.getBoundingClientRect = function () {
+      const result = readRect.call(this);
+      if (this.id === 'playBar' || this.id === 'stage') {
+        const wrap = document.getElementById('stageWrap');
+        record({
+          time: performance.now(), measured: this.id,
+          viewport: [innerWidth, innerHeight], scroll: [scrollX, scrollY],
+          styleWidth: wrap?.style.width, compact: wrap?.classList.contains('compact'),
+          stage: box(document.getElementById('stage')), wrap: box(wrap),
+          main: box(document.getElementById('playMain')), play: box(document.getElementById('play')),
+          bar: box(document.getElementById('playBar')), info: box(document.querySelector('.pb-info')),
+          buttons: box(document.querySelector('.pb-btns')),
+          caller: new Error().stack.split('\n').slice(2, 5).join('\n')
+        });
+      }
+      return result;
+    };
+    window.addEventListener('resize', () => record({ time: performance.now(), event: 'resize', viewport: [innerWidth, innerHeight], scroll: [scrollX, scrollY] }));
+  });
   for (const game of GAMES) {
     await page.goto(site.origin + '/#/play/' + game, { waitUntil: 'load' });
     await page.locator(`#stage iframe[src*="${game}"]`).waitFor();
+    await page.waitForFunction(() => document.querySelector('#stage').getAttribute('aria-busy') === 'false' && document.querySelector('#stageMsg').hidden);
     const frame = page.frameLocator('#stage iframe');
     await mode(frame, 'menu');
     await page.evaluate(() => document.fonts.ready);
+    await frame.locator('body').evaluate(() => document.fonts.ready);
     // fitStage measures the portal toolbar. Repeated resize must not feed its
     // wrapped text height back into an ever smaller, unusable game iframe.
     await page.setViewportSize({ width: 1100, height: 619 });
     await page.setViewportSize({ width: 1100, height: 620 });
     await page.waitForTimeout(180);
+    await screenshot(page, 'portal-' + game + '-chooser', false);
+    await fits(page, ['#stage', '#playBar'], game + ' embedded portal');
+    const stageSize = await page.locator('#stage').boundingBox();
+    if (stageSize.width < 480 || stageSize.height < 270) await dumpFitTrace(page, game + ' minimum embedded dimensions');
+    assert.ok(stageSize.width >= 480 && stageSize.height >= 270, `${game}: embedded board retains usable dimensions: ${JSON.stringify(stageSize)}`);
+    const actions = await page.locator('#playBar .pbtn').evaluateAll(buttons => buttons.map(button => ({
+      top: button.offsetTop, label: button.getAttribute('aria-label')
+    })));
+    assert.ok(actions.every(action => Math.abs(action.top - actions[0].top) <= 1 && action.label), game + ': named portal controls remain in one row');
     await fits(frame, ['#localButton', '#pcButton', '#gameBoard', '#turnLine'], game + ' embedded chooser');
     await start(frame);
     await sequence(frame, WIN[game]);
@@ -353,6 +405,22 @@ async function portalAndMobile() {
     await start(frame, 'computer');
     await move(frame, 0).click();
     await moves(frame, 2);
+  }
+  // This is the landscape iframe size produced by a 1100x620 laptop portal.
+  // It must not select the long, stacked portrait-phone layout at width<600.
+  for (const viewport of [{ width: 529, height: 298 }, { width: 480, height: 270 }, { width: 400, height: 225 }]) {
+    await page.setViewportSize(viewport);
+    const size = viewport.width + 'x' + viewport.height;
+    for (const game of GAMES) {
+      await open(player, game);
+      await page.evaluate(() => document.fonts.ready);
+      await screenshot(page, game + '-small-landscape-' + size + '-chooser', false);
+      await fits(page, ['.game-header', '#localButton', '#pcButton', '#gameBoard', '#turnLine'], game + ' small landscape chooser ' + size);
+      await start(page);
+      await sequence(page, WIN[game]);
+      await screenshot(page, game + '-small-landscape-' + size + '-result', false);
+      await fits(page, ['.game-header', '#gameBoard', '#turnLine', '#rematchButton', '#leaveMatch'], game + ' small landscape result ' + size);
+    }
   }
   await page.setViewportSize({ width: 692, height: 388 });
   for (const game of GAMES) {

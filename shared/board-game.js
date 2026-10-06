@@ -63,7 +63,7 @@
   }
   function dropDisc() {
     stopDrop();
-    if (!isConnect || document.hidden || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!isConnect || document.hidden || Kit.motion.reduced()) return;
     var cell = cells[state.last];
     if (!cell || !state.board[state.last]) return;
     var top = cells[state.last % 7].getBoundingClientRect();
@@ -237,7 +237,7 @@
     if (document.hidden) {
       if (mode !== 'menu' && !paused && !finished()) { hiddenPaused = true; pause(true, false); }
       stopTimers();
-    } else if (hiddenPaused) { hiddenPaused = false; pause(false, false); }
+    }
     renderBoard();
   });
   window.addEventListener('pagehide', function () {
@@ -246,8 +246,10 @@
   });
   window.addEventListener('pageshow', function (event) {
     if (!event.persisted || document.hidden) return;
-    if (hiddenPaused) { hiddenPaused = false; paused = false; }
+    // A restored page remains paused until the player explicitly resumes.
     renderBoard(); scheduleComputer();
   });
   makeBoard(); renderSound(); renderBoard();
+  Kit.lifecycle({ pause: function () { hiddenPaused = false; pause(true, false); } });
+  Kit.ready();
 }());

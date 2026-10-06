@@ -771,4 +771,7 @@
     fire: function (idx) { if (match) { var p = match.players[idx || 0]; p.fire = true; p.streak = 2; } },
     skipIntro: function () { if (match && match.phase === 'intro') match.phaseT = 0.01; }
   };
+  Kit.lifecycle({ pause: pauseGame });
+  Kit.ready();
 })();
+

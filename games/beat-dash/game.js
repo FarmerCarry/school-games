@@ -1269,4 +1269,7 @@
     ff: function (n) { for (var i = 0; i < n; i++) update(1 / 60); return this.state; },
     music: music
   };
+  Kit.lifecycle({ pause: pauseGame });
+  Kit.ready();
 })();
+

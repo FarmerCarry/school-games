@@ -24,7 +24,10 @@
   var shake = Kit.shake();
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
-  try { document.fonts.load('700 40px Fredoka', 'بـ'); document.fonts.load('500 20px Fredoka', 'بـ'); } catch (e) { /* ignore */ }
+  try {
+    document.fonts.load('700 40px Fredoka', 'بـ').catch(function () { /* Use fallback fonts. */ });
+    document.fonts.load('500 20px Fredoka', 'بـ').catch(function () { /* Use fallback fonts. */ });
+  } catch (e) { /* ignore */ }
 
   var WORLDS = [
     { name: 'سرداب الأشواك', wall: '#2c0d5c', wallHi: '#3d1880', edge: '#ffe600', floor: '#0c0419', dot: '#ffe600', spike: '#ff3f6c' },
@@ -1678,4 +1681,7 @@
     }
     if (G.resultLock > 0) G.resultLock -= dt;
   }, render);
+  Kit.lifecycle({ pause: pause });
+  Kit.ready();
 })();
+

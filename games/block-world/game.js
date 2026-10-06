@@ -174,7 +174,7 @@
     inv: [], sel: 0, cursor: null, stats: null, done: {}, tod: 0.1, time: 0, play: 0,
     animals: [], items: [], saplings: [], cam: { x: 230, y: 45 }, spawn: { x: 250, y: 50 },
     hint: null, toasts: [], banner: null, lastBiome: '', lastZone: '', saveT: 0, savedFlash: 0, saveError: null,
-    nearTable: false, nearFurnace: false, masterShown: false, questT: 0, selPop: 0, selName: 0,
+    nearTable: false, nearFurnace: false, masterShown: false, masterPending: false, masterTimer: null, questT: 0, selPop: 0, selName: 0,
     openDoors: {}, titleT: 0
   };
   var P = null; // player
@@ -690,10 +690,15 @@
       if (q.val(s) >= q.need) completeQuest(q);
     }
     // All quests done: celebrate once, as soon as the player is back in the world (not in the backpack/pause).
-    if (!G.masterShown && G.mode === 'play' && starCount() >= qs.length) {
-      G.masterShown = true;
-      var slot = G.slot;
-      setTimeout(function () { if (G.slot === slot) showMaster(); }, 1800);
+    if (!G.masterShown && starCount() >= qs.length) {
+      if (!G.masterPending) { G.masterPending = true; saveGame(); }
+      if (G.mode === 'play' && G.masterTimer === null) {
+        var world = G.world;
+        G.masterTimer = setTimeout(function () {
+          G.masterTimer = null;
+          if (G.world === world && G.masterPending) showMaster();
+        }, 1800);
+      }
     }
   }
   function starCount() { var n = 0; for (var k in G.done) if (G.done[k]) n++; return n; }
@@ -712,6 +717,7 @@
   // --------------------------------------------------------- world setup
   var rend = null;
   function startWorld(world) {
+    clearTimeout(G.masterTimer); G.masterTimer = null;
     G.world = world;
     if (!rend) { rend = new BW.Renderer(world); rend.doorOpen = function (x, y) { return !!G.openDoors[x + ',' + y]; }; }
     else rend.setWorld(world);
@@ -730,7 +736,7 @@
     var sp = spawnPoint();
     P = makePlayer(sp.x, sp.y);
     G.inv = emptyInv(); G.sel = 0; G.cursor = null;
-    G.stats = newStats(); G.done = {}; G.tod = 0.08; G.play = 0; G.saplings = []; G.masterShown = false;
+    G.stats = newStats(); G.done = {}; G.tod = 0.08; G.play = 0; G.saplings = []; G.masterShown = false; G.masterPending = false;
     G.animals = spawnAnimals(BW.mulberry(seed + 5));
     if (gm === 'creative') {
       [B.PLANKS, B.BRICKS, B.GLASS, B.STONE_BRICKS, B.WOOL + 1, B.WOOL + 3, B.WOOL + 7, B.LANTERN, I.DOOR].forEach(function (id, i) { G.inv[i] = { id: id, n: BW.maxStack(id) }; });
@@ -757,6 +763,7 @@
     G.stats = Object.assign(newStats(), data.stats || {});
     G.done = data.done || {}; G.tod = data.tod || 0.1; G.play = data.play || 0;
     G.saplings = data.saplings || []; G.masterShown = !!data.master;
+    G.masterPending = !G.masterShown && (!!data.masterPending || starCount() >= questsFor(G.gm).length);
     G.animals = (data.animals || []).map(function (o) { var a = makeAnimal(o.t, o.x, o.y); a.sheared = !!o.s; a.regrow = o.s ? 40 : 0; return a; });
     G.items = Array.isArray(data.items) ? data.items.filter(function (it) {
       return it && Number.isInteger(it.id) && ITEMS[it.id] && Number.isInteger(it.n) && it.n > 0 &&
@@ -776,11 +783,11 @@
     // Keep the held stack separate: pickups can fill its old slot while the backpack is open.
     var invSave = G.inv.map(function (s) { return s ? { id: s.id, n: s.n } : null; });
     var data = {
-      v: 2, gm: G.gm, name: G.name, world: G.world.serialize(), spawn: G.spawn,
+      v: 3, gm: G.gm, name: G.name, world: G.world.serialize(), spawn: G.spawn,
       p: { x: +P.x.toFixed(2), y: +P.y.toFixed(2) },
       inv: invSave, cursor: G.cursor ? { id: G.cursor.id, n: G.cursor.n } : null,
       sel: G.sel, stats: G.stats, done: G.done, tod: +G.tod.toFixed(4), play: Math.round(G.play),
-      saplings: G.saplings, master: G.masterShown, savedAt: Date.now(), totalStars: meta.totalStars,
+      saplings: G.saplings, master: G.masterShown, masterPending: !G.masterShown && (G.masterPending || starCount() >= questsFor(G.gm).length), savedAt: Date.now(), totalStars: meta.totalStars,
       items: G.items.map(function (it) {
         return { id: it.id, n: it.n, x: it.x, y: it.y, vx: it.vx, vy: it.vy, age: it.age, delay: it.delay, bob: it.bob };
       }),
@@ -1396,7 +1403,7 @@
     return false;
   }
   var pauseBtn = $('pausebtn');
-  var titleBusy = false;
+  var titleBusy = false, pausedInventory = false;
   var selSlot = meta.lastSlot || 1;
   function show(el, on) { el.hidden = !on; }
   function enterPlay() {
@@ -1408,6 +1415,7 @@
     G.cam.x = clamp(P.x - VTW / 2, 0, W - VTW); G.cam.y = clamp(P.y - VTH / 2, -2, H - VTH);
     rend.warm(G.cam.x, G.cam.y, VTW, VTH);
     G.saveT = 0; G.questT = 1;
+    pausedInventory = false;
     K.reset(); M.left = M.right = false; flyTap = false;
   }
   function toTitle() {
@@ -1424,14 +1432,21 @@
     show(titleEl, true);
   }
   function pause() {
-    if (G.mode !== 'play') return;
+    if (G.mode !== 'play' && G.mode !== 'inv') return;
+    pausedInventory = G.mode === 'inv';
+    if (pausedInventory) show(invEl, false);
     G.mode = 'pause';
     saveGame();
     renderPause();
     show(pauseEl, true);
     SND.click();
   }
-  function resume() { show(pauseEl, false); G.mode = 'play'; K.reset(); M.left = M.right = false; }
+  function resume() {
+    show(pauseEl, false); G.mode = pausedInventory ? 'inv' : 'play';
+    if (pausedInventory) { show(invEl, true); renderInv(); }
+    pausedInventory = false;
+    K.reset(); M.left = M.right = false;
+  }
   $('resumeBtn').onclick = function () { resume(); };
   $('homeBtn').onclick = function () { var sp = spawnPoint(); P.x = sp.x; P.y = sp.y; P.vx = P.vy = 0; P.flying = false; resume(); SND.grow(); burst(P.x + 0.35, P.y + 1, ['#ffffff', '#bfe9ff', '#ffd93d'], 20, 6, 0.2); };
   $('quitBtn').onclick = function () { if (saveGame()) toTitle(); };
@@ -1458,14 +1473,15 @@
     }
   });
   function showMaster() {
-    if (G.mode !== 'play') { G.masterShown = false; return; }
+    if (G.mode !== 'play') return;
     G.mode = 'master';
     $('masterStars').textContent = '★ ' + ltr(starCount() + ' / ' + questsFor(G.gm).length);
     show(masterEl, true); SND.quest(); confettiBurst(); confettiBurst();
   }
-  function closeMaster() { show(masterEl, false); G.mode = 'play'; K.reset(); }
+  function acknowledgeMaster() { G.masterShown = true; G.masterPending = false; return saveGame(); }
+  function closeMaster() { acknowledgeMaster(); show(masterEl, false); G.mode = 'play'; K.reset(); }
   $('masterKeep').onclick = closeMaster;
-  $('masterMenu').onclick = function () { if (saveGame()) toTitle(); };
+  $('masterMenu').onclick = function () { if (acknowledgeMaster()) toTitle(); };
 
   // ----- title
   function fmtTime(s) {
@@ -1764,7 +1780,6 @@
   function persist() { if (G.slot && (G.mode === 'play' || G.mode === 'inv' || G.mode === 'pause' || G.mode === 'master')) saveGame(); }
   window.addEventListener('pagehide', persist);
   window.addEventListener('beforeunload', persist);
-  document.addEventListener('visibilitychange', function () { if (document.hidden) { if (G.mode === 'play') pause(); else persist(); } });
 
   // Debug hook for automated checks.
   window.__game = {
@@ -1784,4 +1799,10 @@
     render: function () { render(); }, update: function (dt) { update(dt || 1 / 60); },
     B: B, I: I, sfx: SND
   };
+  Kit.lifecycle({ pause: function (reason) {
+    // Pausing already persists the world; use a single path for tab hiding.
+    if (G.mode === 'play' || G.mode === 'inv') pause();
+    else if (reason === 'hidden') persist();
+  }, reset: function () { M.left = M.right = M.lp = M.rp = false; M.wheel = 0; flyTap = false; } });
+  Kit.ready();
 })();

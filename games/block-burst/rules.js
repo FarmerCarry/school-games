@@ -30,6 +30,9 @@
       if (level.gems) { run.goalGems = {}; for (var k in level.gems) run.goalGems[k] = level.gems[k]; }
       if (level.score) run.goalScore = level.score;
       if (level.moves) run.movesLimit = level.moves;
+      // Later adventure boards can supply extra rescue bombs without changing
+      // piece difficulty or goals. Existing levels and classic keep one.
+      if (level.bombs != null) run.bombs = Math.max(0, Math.min(MAX_POWER, level.bombs | 0));
     }
     deal(run);
     return run;

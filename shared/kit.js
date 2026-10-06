@@ -49,10 +49,96 @@
   };
   var siteStore = Kit.store('site');
 
+  /* --------------------------------------------------------- preferences */
+  // System default, with an explicit local override shared by every game.
+  // Classroom preferences are transient, including when file:// gives each
+  // game a separate storage area. Personal settings never inherit the preset.
+  var classroomMode = false;
+  var motionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  var motionListeners = [];
+  function validMotion(value) { return value === 'reduce' || value === 'full' ? value : 'system'; }
+  Kit.motion = {
+    preference: validMotion(siteStore.get('motion', 'system')),
+    reduced: function () { return classroomMode || this.preference === 'reduce' || (this.preference === 'system' && !!(motionQuery && motionQuery.matches)); },
+    setPreference: function (value) { this.preference = validMotion(value); siteStore.set('motion', this.preference); paintMotion(); },
+    onChange: function (fn) { motionListeners.push(fn); return function () { var i = motionListeners.indexOf(fn); if (i !== -1) motionListeners.splice(i, 1); }; }
+  };
+  function paintMotion() {
+    var reduced = Kit.motion.reduced();
+    document.documentElement.setAttribute('data-sg-motion', reduced ? 'reduce' : 'full');
+    motionListeners.forEach(function (fn) { fn(reduced); });
+  }
+  if (motionQuery) {
+    if (motionQuery.addEventListener) motionQuery.addEventListener('change', paintMotion);
+    else if (motionQuery.addListener) motionQuery.addListener(paintMotion);
+  }
+  paintMotion();
+
+  /* ----------------------------------------------------------- lifecycle */
+  var lifecycleHandlers = [], pointerResets = [], ready = false, failed = false;
+  function tellPortal(message) {
+    if (window.parent !== window) window.parent.postMessage(message, window.location && window.location.protocol !== 'file:' ? window.location.origin : '*');
+  }
+  function suspend(reason) {
+    if (Kit.keys) Kit.keys.reset();
+    pointerResets.forEach(function (reset) { reset(); });
+    lifecycleHandlers.slice().forEach(function (hooks) {
+      if (hooks.reset) hooks.reset();
+      hooks.pause(reason);
+    });
+  }
+  // Enter the game's existing pause state. Returning focus NEVER resumes play.
+  // Games retain control of which states can pause (idle games may keep accruing).
+  Kit.lifecycle = function (hooks) {
+    if (!hooks || typeof hooks.pause !== 'function') throw new TypeError('Kit.lifecycle requires pause');
+    lifecycleHandlers.push(hooks);
+    return function () { var i = lifecycleHandlers.indexOf(hooks); if (i !== -1) lifecycleHandlers.splice(i, 1); };
+  };
+  Kit.ready = function () {
+    if (failed) return;
+    ready = true;
+    tellPortal({ type: 'sg:ready', version: 1 });
+  };
+  Kit.fail = function (error) {
+    failed = true;
+    tellPortal({ type: 'sg:error', version: 1, message: String(error && error.message || error || 'Game failed to initialize').slice(0, 240) });
+  };
+  window.addEventListener('error', function (e) {
+    // Capture script download failures as well as exceptions. Optional media do
+    // not make a successfully initialized game fail its readiness handshake.
+    if (e.message || (e.target && e.target.tagName === 'SCRIPT')) Kit.fail(e.error || e.message || 'Game script failed to load');
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) { Kit.fail(e.reason); });
+  window.addEventListener('blur', function () { suspend('blur'); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) suspend('hidden'); });
+  var wasFullscreen = !!document.fullscreenElement;
+  document.addEventListener('fullscreenchange', function () {
+    var fullscreen = !!document.fullscreenElement;
+    if (wasFullscreen && !fullscreen) suspend('fullscreen-exit');
+    wasFullscreen = fullscreen;
+  });
+  window.addEventListener('message', function (e) {
+    if (window.parent === window || e.source !== window.parent) return;
+    var message = e.data;
+    if (!message || typeof message !== 'object') return;
+    if (message.type === 'sg:pause') suspend(message.reason || 'portal');
+    else if (message.type === 'sg:request-ready' && ready && !failed) Kit.ready();
+    else if (message.type === 'sg:preferences') {
+      if (typeof message.classroom === 'boolean') {
+        classroomMode = message.classroom;
+        paintMotion(); paintAudio();
+      }
+      if (typeof message.quiet === 'boolean') audio.setMuted(message.quiet);
+      if (typeof message.motionPreference === 'string') Kit.motion.setPreference(message.motionPreference);
+      else if (typeof message.reducedMotion === 'boolean') Kit.motion.setPreference(message.reducedMotion ? 'reduce' : 'full');
+    }
+  });
+
   /* --------------------------------------------------------------- audio */
   // Synthesised sound effects (no audio files). The AudioContext is created
   // lazily on the first user gesture, as browsers require.
-  var audio = { ctx: null, master: null, muted: !!siteStore.get('muted', false) };
+  var personalMuted = !!siteStore.get('muted', false);
+  var audio = { ctx: null, master: null, muted: personalMuted };
   Kit.audio = audio;
 
   audio.unlock = function () {
@@ -70,15 +156,26 @@
     return audio.ctx;
   };
 
-  audio.setMuted = function (m) {
-    audio.muted = !!m;
-    siteStore.set('muted', audio.muted);
+  function paintAudio() {
+    audio.muted = classroomMode || personalMuted;
     if (audio.master) audio.master.gain.setTargetAtTime(audio.muted ? 0 : 0.5, audio.ctx.currentTime, 0.015);
     muteListeners.forEach(function (fn) { fn(audio.muted); });
+  }
+  audio.setMuted = function (m) {
+    personalMuted = !!m;
+    siteStore.set('muted', personalMuted);
+    paintAudio();
   };
-  audio.toggleMute = function () { audio.setMuted(!audio.muted); return audio.muted; };
+  audio.toggleMute = function () { if (!classroomMode) audio.setMuted(!personalMuted); return audio.muted; };
   var muteListeners = [];
   audio.onMuteChange = function (fn) { muteListeners.push(fn); };
+  window.addEventListener('storage', function (e) {
+    if (e.key === 'sg:site:motion' || e.key === null) { Kit.motion.preference = validMotion(siteStore.get('motion', 'system')); paintMotion(); }
+    if (e.key === 'sg:site:muted' || e.key === null) {
+      personalMuted = !!siteStore.get('muted', false);
+      paintAudio();
+    }
+  });
 
   // Play one synthesised tone.
   // opts: { freq=440, to (slide target freq), type='square'|'sine'|'triangle'|'sawtooth',
@@ -197,9 +294,9 @@
     if (e.code === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && !e.defaultPrevented && !nativeKeyTarget(e.target) && window.parent !== window) {
       e.preventDefault();
       e.stopImmediatePropagation();
-      Kit.keys.reset();
+      suspend('portal-escape');
       try { if (document.pointerLockElement) document.exitPointerLock(); } catch (err) { /* ignore */ }
-      window.parent.postMessage('sg:focus-portal', '*');
+      tellPortal('sg:focus-portal');
     }
   }, true);
   window.addEventListener('keydown', function (e) {
@@ -264,7 +361,8 @@
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerdown', function (e) { move(e); if (e.button === 2) { p.right = true; return; } p.down = true; p.pressed = true; });
     window.addEventListener('pointerup', function (e) { move(e); if (e.button === 2) { p.right = false; return; } if (p.down) p.released = true; p.down = false; });
-    window.addEventListener('blur', function () { p.down = false; p.right = false; });
+    p.reset = function () { p.down = false; p.right = false; p.pressed = false; p.released = false; };
+    pointerResets.push(p.reset);
     p.endFrame = function () { p.pressed = false; p.released = false; };
     return p;
   };
@@ -306,6 +404,7 @@
     return {
       list: list,
       burst: function (x, y, o) {
+        if (Kit.motion.reduced()) return;
         o = o || {};
         var n = o.count || 12;
         for (var i = 0; i < n; i++) {
@@ -322,6 +421,7 @@
         if (list.length > 800) list.splice(0, list.length - 800);
       },
       update: function (dt) {
+        if (Kit.motion.reduced()) { list.length = 0; return; }
         for (var i = list.length - 1; i >= 0; i--) {
           var p = list[i];
           p.life -= dt;
@@ -346,8 +446,9 @@
   // then ctx.translate(shake.x, shake.y) while drawing the world.
   Kit.shake = function () {
     var s = { x: 0, y: 0, power: 0 };
-    s.add = function (p) { s.power = Math.max(s.power, p); };
+    s.add = function (p) { if (!Kit.motion.reduced()) s.power = Math.max(s.power, p); };
     s.update = function (dt) {
+      if (Kit.motion.reduced()) { s.power = s.x = s.y = 0; return; }
       s.power = Math.max(0, s.power - dt * 40);
       s.x = (Math.random() - 0.5) * 2 * s.power;
       s.y = (Math.random() - 0.5) * 2 * s.power;
@@ -363,9 +464,13 @@
     var b = document.createElement('button');
     b.className = 'sg-mute';
     b.type = 'button';
-    b.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
+    b.setAttribute('aria-label', 'كتم الصوت');
     b.title = opts.key === false ? 'الصوت' : 'الصوت (M)';
-    function paint() { b.textContent = audio.muted ? '🔇' : '🔊'; }
+    function paint() {
+      b.textContent = audio.muted ? '🔇' : '🔊'; b.setAttribute('aria-pressed', String(audio.muted));
+      b.disabled = classroomMode;
+      b.title = classroomMode ? 'الصوت مكتوم في وضع الصف' : (opts.key === false ? 'الصوت' : 'الصوت (M)');
+    }
     paint();
     audio.onMuteChange(paint);
     b.addEventListener('click', function (e) { e.stopPropagation(); audio.unlock(); audio.toggleMute(); if (e.detail > 0) b.blur(); });
@@ -375,6 +480,35 @@
       window.addEventListener('keydown', function (e) { if (Kit.isGameKeyEvent(e) && e.code === 'KeyM' && !e.repeat) audio.toggleMute(); });
     }
     return b;
+  };
+
+  // Keep failed writes visible until the caller confirms a successful save.
+  Kit.saveStatus = function (opts) {
+    opts = opts || {};
+    var panel = document.createElement('div'), message = document.createElement('span'), retry = document.createElement('button');
+    var timer = 0, hasFailed = false;
+    panel.className = 'sg-save-status'; panel.hidden = true;
+    panel.setAttribute('role', 'status'); panel.setAttribute('aria-live', 'polite');
+    retry.type = 'button'; retry.textContent = 'أعد المحاولة';
+    retry.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+    retry.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (opts.retry) opts.retry();
+      if (e.detail > 0) retry.blur();
+    });
+    panel.appendChild(message); panel.appendChild(retry); document.body.appendChild(panel);
+    return {
+      failed: function () {
+        clearTimeout(timer); hasFailed = true; panel.hidden = false; retry.hidden = false;
+        message.textContent = 'تعذّر الحفظ — '; panel.setAttribute('data-state', 'failed');
+      },
+      saved: function () {
+        if (!hasFailed) return;
+        clearTimeout(timer); hasFailed = false; retry.hidden = true;
+        message.textContent = 'تم الحفظ'; panel.setAttribute('data-state', 'saved');
+        timer = setTimeout(function () { panel.hidden = true; }, 2500);
+      }
+    };
   };
 
   // Formats 12345 -> "12,345".

@@ -129,6 +129,34 @@ from 497 to 563 ms with three requests instead of one. All candidates worked
 offline and from downloaded folders. These tradeoffs do not justify changing
 the one-file default without representative classroom measurements.
 
+## Reviewed classroom and Golf additions, 5 October 2026
+
+The combined classroom reliability and Golf changes retain the 31-card portal,
+six recent games, six recommendations, single-file packaging, and 42-file offline
+cache. These are intentional feature costs relative to cleanup `cb8a46e`, measured
+with the same Windows minified build and gzip settings:
+
+| File | Cleanup bytes | Combined bytes | Cleanup gzip | Combined gzip | New limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Connect Four | 35,512 | 42,613 | 12,149 | 13,894 | 43,000 |
+| Tic Tac Toe | 35,490 | 42,591 | 12,149 | 13,877 | 43,000 |
+| Skybound Golf | 62,059 | 70,662 | 23,154 | 25,641 | 71,000 |
+
+Each board's 7,101-byte increase is fully accounted for by shared lifecycle,
+readiness, motion and save-status code (+3,814), shared accessibility styles
+(+1,033), compact-board layout styles (+2,267), and board-controller changes
+(-13). Each dependency remains inlined once. Golf adds the same shared code and
+styles, visible putting feedback, a bounded scenery cache, durable completed-shot
+rewards, and canvas recovery. Its compressed increase is 2,487 bytes.
+
+Only these three limits change, rounded up to the next 1,000 bytes. The portal
+remains below its unchanged 360,000-byte limit at 346,446 bytes (72,627 gzip),
+and the offline cache remains below its unchanged 5,000,000-byte limit at
+4,624,891 bytes. No new production dependency, request, font, or precached file
+is introduced. Repeated shared code across separate game pages is the existing
+downloadable single-file tradeoff; this update does not duplicate dependencies
+within a page or change that packaging decision.
+
 ## CI, review, and deployed performance
 
 The build workflow runs this check immediately after building, on pull requests

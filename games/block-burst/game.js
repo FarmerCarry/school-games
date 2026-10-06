@@ -1362,6 +1362,14 @@
   /* ------------------------------------------------------------- boot */
   buildTitle();
   show(['scrTitle']);
-  if (document.fonts && document.fonts.load) { try { document.fonts.load('700 40px Fredoka', 'بلوك'); document.fonts.load('700 40px Fredoka', '0123'); } catch (e) { /* ignore */ } }
+  if (document.fonts && document.fonts.load) {
+    try {
+      document.fonts.load('700 40px Fredoka', 'بلوك').catch(function () { /* Use fallback fonts. */ });
+      document.fonts.load('700 40px Fredoka', '0123').catch(function () { /* Use fallback fonts. */ });
+    } catch (e) { /* ignore */ }
+  }
   Kit.loop(update, render);
+  Kit.lifecycle({ pause: function () { if (state === 'play') pause(); }, reset: cancelDrag });
+  Kit.ready();
 })();
+

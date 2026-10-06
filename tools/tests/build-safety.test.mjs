@@ -21,9 +21,10 @@ function fixture(t) {
   };
   write('tools/build.mjs', builder);
   write('tools/lib/svg-data-uri.mjs', fs.readFileSync(path.join(repo, 'tools/lib/svg-data-uri.mjs')));
-  write('index.html', '<!doctype html><html><body><script src="js/catalog.js"></script><script src="js/site.js"></script></body></html>');
+  write('index.html', '<!doctype html><html><body><script src="js/catalog.js"></script><script src="js/site.js"></script><script src="js/offline.js"></script></body></html>');
   write('js/catalog.js', 'window.GAMES = [{ slug: "demo" }];');
   write('js/site.js', 'window.portalReady = true;');
+  write('js/offline.js', fs.readFileSync(path.join(repo, 'js/offline.js'), 'utf8'));
   write('games/demo/index.html', '<!doctype html><html><head><link rel="stylesheet" href="../../shared/game.css"></head><body><script src="game.js"></script></body></html>');
   write('games/demo/game.js', 'window.gameReady = true;');
   write('games/demo/thumb.svg', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"></svg>');
@@ -93,6 +94,23 @@ test('kill-switch portals stay unregistered after worker-driven navigation', t =
   assert.ok(fs.readFileSync(path.join(f.root, '_site/sw.js'), 'utf8').includes('self.registration.unregister()'));
   success(run(f));
   assert.ok(portal().includes('navigator.serviceWorker.register'));
+});
+
+test('worker-only changes get an independent cache while unchanged builds stay deterministic', t => {
+  const f = fixture(t);
+  const worker = () => fs.readFileSync(path.join(f.root, '_site/sw.js'), 'utf8');
+  const version = source => source.match(/^var VERSION = (.+);$/m)[1];
+  const files = source => source.match(/^var FILES = (.+);$/m)[1];
+  success(run(f));
+  const before = worker();
+  success(run(f));
+  assert.equal(worker(), before, 'an unchanged build must keep the same worker bytes');
+  const changedBuilder = builder.toString().replace('var checkingStatus = null;', 'var checkingStatus = null; // worker-only revision');
+  assert.notEqual(changedBuilder, builder.toString());
+  f.write('tools/build.mjs', changedBuilder);
+  success(run(f));
+  assert.equal(files(worker()), files(before), 'page and asset bytes did not change');
+  assert.notEqual(version(worker()), version(before), 'worker implementation changes must use a different cache');
 });
 
 test('legacy normal and kill-switch builds without markers are recognized', t => {

@@ -260,3 +260,54 @@ test('legacy saves without drops still load and malformed optional drops are ign
   await restore(page);
   assert.equal(await page.evaluate(() => __game.G.items.length), 0);
 });
+
+test('final quests remain pending across reloads until the celebration is acknowledged', async t => {
+  const page = await game(t, () => {
+    const original = window.setTimeout;
+    window.masterDelays = [];
+    window.setTimeout = function (fn, ms, ...args) {
+      if (ms === 1800) { window.masterDelays.push(fn); return 999999; }
+      return original(fn, ms, ...args);
+    };
+    window.runMasterDelay = () => { const pending = window.masterDelays.splice(0); pending.forEach(fn => fn()); };
+  });
+  await create(page);
+  await page.evaluate(() => { __game.completeAll(); stepGame(61); __game.save(); });
+  assert.deepEqual(await page.evaluate(() => {
+    const save = Kit.store('block-world').get('slot1');
+    return { mode: __game.G.mode, pending: save.masterPending, acknowledged: save.master };
+  }), { mode: 'play', pending: true, acknowledged: false });
+  for (let cycle = 0; cycle < 2; cycle++) {
+    await restore(page);
+    await page.evaluate(() => { stepGame(61); runMasterDelay(); });
+    assert.equal(await page.evaluate(() => __game.G.mode), 'master');
+    assert.equal(await page.locator('#master').isVisible(), true);
+    await page.evaluate(() => __game.save());
+  }
+  await page.evaluate(() => document.getElementById('masterKeep').click());
+  assert.deepEqual(await page.evaluate(() => {
+    const save = Kit.store('block-world').get('slot1');
+    return { pending: save.masterPending, acknowledged: save.master };
+  }), { pending: false, acknowledged: true });
+  await restore(page);
+  await page.evaluate(() => { stepGame(120); runMasterDelay(); });
+  assert.equal(await page.evaluate(() => __game.G.mode), 'play');
+  assert.equal(await page.locator('#master').isVisible(), false);
+});
+
+test('leaving an open backpack pauses world time and resumes the backpack explicitly', async t => {
+  const page = await game(t);
+  await create(page);
+  const before = await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' })); stepGame();
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyE' }));
+    window.dispatchEvent(new Event('blur'));
+    return { play: __game.G.play, tod: __game.G.tod };
+  });
+  assert.equal(await page.evaluate(() => __game.G.mode), 'pause');
+  await page.evaluate(() => stepGame(120));
+  assert.deepEqual(await page.evaluate(() => ({ play: __game.G.play, tod: __game.G.tod })), before);
+  await page.evaluate(() => document.getElementById('resumeBtn').click());
+  assert.equal(await page.evaluate(() => __game.G.mode), 'inv');
+  assert.equal(await page.locator('#inv').isVisible(), true);
+});

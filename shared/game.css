@@ -164,6 +164,38 @@ canvas { display: block; outline: none; }
   cursor: pointer;
 }
 .sg-mute:hover { background: rgba(0, 0, 0, 0.55); }
+.sg-mute:focus-visible { outline: 3px solid #ffcc00; outline-offset: 3px; }
+
+.sg-save-status {
+  position: fixed;
+  inset-inline: 12px;
+  bottom: 12px;
+  z-index: 1000;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
+  margin-inline: auto;
+  padding: 10px 16px;
+  border: 2px solid #ffcc00;
+  border-radius: 12px;
+  background: #10142b;
+  color: #fff;
+  direction: rtl;
+  font-size: 18px;
+  box-shadow: 0 4px 18px #0008;
+}
+.sg-save-status[hidden], .sg-save-status button[hidden] { display: none; }
+.sg-save-status button { font: inherit; font-weight: 700; color: #3a2a00; background: #ffcc00; border: 0; border-radius: 8px; padding: 5px 10px; cursor: pointer; }
+.sg-save-status button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.sg-save-status[data-state="saved"] { border-color: #3ddc84; }
+
+/* Disable decorative CSS motion; canvas gameplay still runs normally. */
+html[data-sg-motion="reduce"] *, html[data-sg-motion="reduce"] *::before, html[data-sg-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+html[data-sg-motion="reduce"] .sg-btn:hover, html[data-sg-motion="reduce"] .sg-btn:active { transform: none; }
 
 /* HUD text drawn with DOM instead of canvas (optional). */
 .sg-hud {

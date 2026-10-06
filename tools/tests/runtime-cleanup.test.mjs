@@ -145,6 +145,20 @@ test('Critter Mart critical saves reset the three-second checkpoint, but failure
     return { afterCritical, atDeadline, afterFailure: runtime.writes.length };
   });
   assert.deepEqual(writes, { afterCritical: 1, atDeadline: 2, afterFailure: 1 });
+  const hiddenWrites = await page.evaluate(() => {
+    const counts = [];
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    // The shared lifecycle hook must not duplicate the game's pause save, and
+    // an already paused game must still checkpoint when hidden again.
+    for (let i = 0; i < 2; i++) {
+      runtime.writes.length = 0;
+      document.dispatchEvent(new Event('visibilitychange'));
+      counts.push(runtime.writes.length);
+    }
+    delete document.hidden;
+    return { counts, mode: __game.mode };
+  });
+  assert.deepEqual(hiddenWrites, { counts: [1, 1], mode: 'pause' });
 });
 
 test('Wacky Soccer lets goal/wind effects settle before freezing, then resumes the match', async t => {
@@ -183,15 +197,22 @@ test('Block World hiding active play serializes and writes its world exactly onc
   await page.waitForFunction(() => __game.G.mode === 'play');
   const saved = await page.evaluate(() => {
     let serializations = 0;
+    const checkpoints = [];
     const serialize = __game.G.world.serialize;
     __game.G.world.serialize = function () { serializations++; return serialize.apply(this, arguments); };
-    runtime.writes.length = 0;
     Object.defineProperty(document, 'hidden', { configurable: true, value: true });
-    document.dispatchEvent(new Event('visibilitychange'));
+    for (let i = 0; i < 2; i++) {
+      runtime.writes.length = 0; serializations = 0;
+      document.dispatchEvent(new Event('visibilitychange'));
+      checkpoints.push({ serializations, writes: runtime.writes.length, mode: __game.G.mode, error: __game.G.saveError });
+    }
     delete document.hidden;
-    return { serializations, writes: runtime.writes.length, mode: __game.G.mode, error: __game.G.saveError };
+    return checkpoints;
   });
-  assert.deepEqual(saved, { serializations: 1, writes: 1, mode: 'pause', error: null });
+  assert.deepEqual(saved, [
+    { serializations: 1, writes: 1, mode: 'pause', error: null },
+    { serializations: 1, writes: 1, mode: 'pause', error: null }
+  ]);
 });
 
 test('Rail Rush freezes paused WebGL work, redraws resize, and resumes distance', async t => {

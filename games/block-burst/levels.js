@@ -4,6 +4,7 @@
  *        (R ruby, B sapphire, G emerald, Y topaz).
  * gems: {kind: count} to collect   score: points to reach   moves: piece limit (0 = none)
  * diff: piece difficulty 0..1   help: chance of a line-completing piece   gemRate: chance a piece carries a needed gem
+ * bombs: starting rescue bombs (default 1; maximum 3)
  * stars: [max pieces for 3 stars, max pieces for 2 stars]  (tuned with verify-levels.js)
  */
 (function (root) {
@@ -108,7 +109,7 @@
       '...gg...',
       '........'] },
     // ---------------------------------------------------------------- world 3 (move limits)
-    { gems: { 1: 4 }, moves: 22, diff: 0.2, help: 0.6, gemRate: 0.4, stars: [11, 16], board: [
+    { gems: { 1: 4 }, moves: 26, diff: 0.2, help: 0.6, gemRate: 0.4, stars: [11, 16], board: [
       '........',
       '..dd.dd.',
       '.dRddRdd',
@@ -117,7 +118,7 @@
       '...ddd..',
       '....d...',
       '........'] },
-    { score: 900, moves: 44, diff: 0.2, help: 0.55, stars: [26, 33], board: [
+    { score: 900, moves: 44, bombs: 2, diff: 0.2, help: 0.55, stars: [26, 33], board: [
       'a.b.c.d.',
       '........',
       'e.f.g.h.',
@@ -126,7 +127,7 @@
       '........',
       'e.f.g.h.',
       '........'] },
-    { gems: { 2: 4, 4: 4 }, moves: 30, diff: 0.25, help: 0.55, gemRate: 0.45, stars: [17, 23], board: [
+    { gems: { 2: 4, 4: 4 }, moves: 42, diff: 0.25, help: 0.55, gemRate: 0.45, stars: [17, 23], board: [
       'Bee..eeY',
       'e......e',
       '........',
@@ -135,7 +136,7 @@
       '........',
       'e......e',
       'Yee..eeB'] },
-    { gems: { 3: 7 }, moves: 34, diff: 0.25, help: 0.55, gemRate: 0.45, stars: [19, 25], board: [
+    { gems: { 3: 7 }, moves: 40, diff: 0.25, help: 0.55, gemRate: 0.45, stars: [19, 25], board: [
       'G.......',
       'aG......',
       'aaG.....',
@@ -144,7 +145,8 @@
       '.....Gcc',
       '......Gc',
       '.......G'] },
-    { score: 1300, moves: 62, diff: 0.3, help: 0.58, stars: [28, 38], board: [
+    // Extra rescue capacity addresses crowded boards; star targets stay unchanged.
+    { score: 1300, moves: 62, bombs: 2, diff: 0.3, help: 0.58, stars: [28, 38], board: [
       '........',
       '.hhhhhh.',
       '.h....h.',
@@ -154,7 +156,7 @@
       '.hhhhhh.',
       '........'] },
     // ---------------------------------------------------------------- world 4
-    { gems: { 1: 3, 2: 2, 3: 2, 4: 2 }, moves: 54, diff: 0.3, help: 0.58, gemRate: 0.45, stars: [26, 36], board: [
+    { gems: { 1: 3, 2: 2, 3: 2, 4: 2 }, moves: 64, bombs: 2, diff: 0.3, help: 0.58, gemRate: 0.45, stars: [26, 36], board: [
       'R.....B.',
       '.b...b..',
       '..b.b...',
@@ -163,7 +165,7 @@
       '.b...b..',
       'G.....R.',
       '........'] },
-    { score: 1700, moves: 62, diff: 0.35, help: 0.58, stars: [31, 42], board: [
+    { score: 1700, moves: 62, bombs: 2, diff: 0.35, help: 0.58, stars: [31, 42], board: [
       'cc.cc.cc',
       'c......c',
       '........',
@@ -190,7 +192,7 @@
       'fff..fff',
       'fBf..fRf',
       'fff..fff'] },
-    { gems: { 1: 4, 2: 4, 3: 4, 4: 4 }, score: 1700, moves: 78, diff: 0.42, help: 0.55, gemRate: 0.5, stars: [40, 54], board: [
+    { gems: { 1: 4, 2: 4, 3: 4, 4: 4 }, score: 1700, moves: 78, bombs: 3, diff: 0.42, help: 0.55, gemRate: 0.5, stars: [40, 54], board: [
       'Y......R',
       '.aa..bb.',
       '.aG..Bb.',

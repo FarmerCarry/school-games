@@ -1249,4 +1249,7 @@
     loop: loop,
     bench: function (n) { n = n || 30; var t0 = performance.now(); for (var i = 0; i < n; i++) render(); var t1 = performance.now(); for (i = 0; i < n; i++) update(1 / 60); return { renderMs: (t1 - t0) / n, updateMs: (performance.now() - t1) / n }; }
   };
+  Kit.lifecycle({ pause: pause, reset: up });
+  Kit.ready();
 })();
+
