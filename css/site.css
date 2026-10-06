@@ -732,13 +732,15 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 /* Session tools stay compact until a teacher opens them. */
 .quick-filters { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; max-width: 1880px; margin: 0 auto; padding: 12px var(--pad) 2px; }
 .quick-filters .chip { height: 36px; font-size: 15px; }
-.classroom { position: relative; flex: 0 0 auto; padding: 7px 14px; background: #eaf5ff; border: 1px solid #a6c7e1; border-radius: 999px; font-size: 16px; }
+.classroom { flex: 0 0 auto; padding: 7px 14px; background: #eaf5ff; border: 1px solid #a6c7e1; border-radius: 999px; font-size: 16px; }
 .classroom summary { cursor: pointer; font-weight: 700; white-space: nowrap; list-style: none; }
 .classroom summary::-webkit-details-marker { display: none; }
 .classroom summary::after { content: ' ▾'; font-size: 0.8em; }
 .classroom[open] summary::after { content: ' ▴'; }
-/* The panel opens over the page so the game keeps its vertical space. */
-.classroom-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; position: absolute; top: calc(100% + 10px); inset-inline-end: 0; z-index: 60; width: min(520px, 92vw); padding: 14px; background: #eaf5ff; border: 1px solid #a6c7e1; border-radius: 14px; box-shadow: 0 8px 24px rgba(28, 34, 80, 0.25); }
+/* Open, the panel is a strip under the top bar and the page moves down by its
+   height (--classroom-h, set by site.js), so it never covers a game. */
+.classroom-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; position: absolute; top: 100%; left: 0; right: 0; padding: 12px var(--pad); background: #eaf5ff; border-bottom: 1px solid #a6c7e1; box-shadow: 0 6px 12px rgba(28, 34, 80, 0.08); }
+html.classroom-open .chips, html.classroom-open .route-play .app { margin-top: var(--classroom-h, 0px); }
 .classroom-controls label { display: inline-flex; align-items: center; gap: 8px; }
 .classroom-controls input { width: 18px; height: 18px; }
 .classroom-controls select { font: inherit; color: var(--ink); border: 1px solid #8192b6; border-radius: 8px; padding: 7px; background: #fff; }

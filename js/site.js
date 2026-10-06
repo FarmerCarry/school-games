@@ -792,12 +792,21 @@
       showHandoff();
     }
   }
+  // The open classroom panel is a strip under the top bar. Move the page down by
+  // its height so it never covers a game, then fit the frame to what is left.
+  function syncClassroomSpace() {
+    var open = $('#classroom').open, root = document.documentElement;
+    root.classList.toggle('classroom-open', open);
+    root.style.setProperty('--classroom-h', open ? $('.classroom-controls').offsetHeight + 'px' : '0px');
+    fitStage();
+  }
   function setupClassroom() {
     classroomOn = !!storedPreference('classroom', false);
     $('#classroomMode').checked = classroomOn;
     document.documentElement.setAttribute('data-sg-motion', classroomOn ? 'reduce' : storedPreference('motion', 'system'));
     $('#classroomMode').addEventListener('change', function () { setClassroom(this.checked); });
-    $('#classroom').addEventListener('toggle', fitStage);
+    $('#classroom').addEventListener('toggle', syncClassroomSpace);
+    if (window.ResizeObserver) new ResizeObserver(function () { if ($('#classroom').open) syncClassroomSpace(); }).observe($('.classroom-controls'));
     $('#sessionStart').addEventListener('click', function () {
       clearSession();
       var minutes = Number($('#sessionMinutes').value) || 10;
