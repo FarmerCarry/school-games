@@ -3,3 +3,4 @@ node_modules/
 Thumbs.db
 .work/
 _site/
+artifacts/
