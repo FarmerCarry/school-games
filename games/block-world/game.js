@@ -40,7 +40,6 @@
   });
   window.addEventListener('mouseup', function (e) { if (e.button === 0) M.left = false; if (e.button === 2) M.right = false; });
   window.addEventListener('mousemove', function (e) { var l = view.toLogical(e.clientX, e.clientY); M.x = l.x; M.y = l.y; moveCursorEl(e); });
-  window.addEventListener('blur', function () { M.left = M.right = false; });
   canvas.addEventListener('wheel', function (e) { e.preventDefault(); M.wheel += e.deltaY > 0 ? 1 : -1; }, { passive: false });
   var K = Kit.keys;
   function kd(c) { return K.anyDown(c); }

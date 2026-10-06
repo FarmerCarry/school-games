@@ -331,11 +331,9 @@
       }
     }
   });
+  resetScene(); stats(); controls(); K.loop(step,render);
   // Losing the frame must neither resume an existing pause nor pull focus back
   // from the portal into the newly displayed pause dialog.
-  document.addEventListener('visibilitychange',function(){if(document.hidden)pause(false);});
-  window.addEventListener('blur',function(){if(!document.hidden)pause(false);});
-  resetScene(); stats(); controls(); K.loop(step,render);
   Kit.lifecycle({ pause: function () { pause(false); } });
   Kit.ready();
 })();

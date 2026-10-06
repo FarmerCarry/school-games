@@ -1777,9 +1777,6 @@
   onClick('btnPause', function () { if (st.mode === 'play') pauseGame(); else if (st.mode === 'paused') resumeGame(); });
   canvas.addEventListener('pointerdown', function () { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } });
 
-  document.addEventListener('visibilitychange', function () { if (document.hidden && st.mode === 'play') pauseGame(); });
-  window.addEventListener('blur', function () { if (st.mode === 'play') pauseGame(); });
-
   function resize() {
     var w = window.innerWidth, h = window.innerHeight;
     renderer.setSize(w, h, false);

@@ -106,8 +106,6 @@
     this.quad(x0, y0, z0, x0, y0, z1, x0, y1, z1, x0, y1, z0, side);          // -x
     return this;
   };
-  // centred box helper: centre x,z, bottom y
-  BP.cbox = function (cx, y0, cz, w, h, d, col, o) { return this.box(cx - w / 2, y0, cz - d / 2, cx + w / 2, y0 + h, cz + d / 2, col, o); };
   // cylinder / cone along +y. o: { r2 (top radius), seg, cap:true, bottom, smooth, top (colour) }
   BP.cyl = function (cx, y0, cz, r, h, col, o) {
     o = o || {};
@@ -318,7 +316,6 @@
     if (t < 0) t = 0; else if (t > 1) t = 1;
     return r.ya + (r.yb - r.ya) * t;
   };
-  WP.rampAt = function (r, x, z) { return this.rampTop(r, x - 0.001, z - 0.001, x + 0.001, z + 0.001); };
   // does the AABB overlap anything solid? (ramps count as solid below their surface)
   WP.solid = function (x0, y0, z0, x1, y1, z1) { this.sa = x0; this.sb = y0; this.sc = z0; this.sd = x1; this.se = y1; this.sf = z1; return this._solid(); };
   WP._solid = function () {
@@ -742,11 +739,6 @@
     c = goal;
     for (var i = len - 1; i >= 0; i--) { out[i] = c; c = par[c]; }
     return len;
-  };
-  // edge type between consecutive nodes (0 walk, 1 drop, 2 hop)
-  NP.edgeType = function (a, b) {
-    for (var e = this.eStart[a], ee = this.eStart[a + 1]; e < ee; e++) if (this.eTo[e] === b) return this.eType[e];
-    return 0;
   };
   SS.Nav = Nav;
 })();

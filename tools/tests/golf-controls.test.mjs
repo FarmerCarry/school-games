@@ -1,48 +1,35 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import fs from 'node:fs/promises';
-import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
+import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
 // Allows this game to be checked against its shared-library dependency before merge.
 const sharedRoot = process.env.SG_SHARED_ROOT ? path.resolve(process.env.SG_SHARED_ROOT) : root;
-const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 let browser, server, origin;
 
 before(async () => {
-  server = http.createServer(async (req, res) => {
-    const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-    if (pathname === '/golf-parent') {
-      res.writeHead(200, { 'content-type': 'text/html' }).end(`<!doctype html><html><body>
+  server = await startTestServer(root, {
+    pages: { '/golf-parent': `<!doctype html><html><body>
         <button id="before">Before game</button>
         <iframe name="golf" title="Golf" src="/games/skybound-golf/" style="display:block;width:1280px;height:720px"></iframe>
         <button id="after">After game</button>
         <script>addEventListener('message', e => {
           const frame = document.querySelector('iframe');
           if (e.source === frame.contentWindow && e.data === 'sg:focus-portal') document.getElementById('before').focus();
-        });</script></body></html>`);
-      return;
-    }
-    const base = pathname.startsWith('/shared/') ? sharedRoot : root;
-    const file = path.resolve(base, '.' + pathname, pathname.endsWith('/') ? 'index.html' : '');
-    if (!file.startsWith(base + path.sep)) { res.writeHead(403).end(); return; }
-    try {
-      const data = await fs.readFile(file);
-      res.writeHead(200, { 'content-type': mime[path.extname(file)] || 'application/octet-stream' }).end(data);
-    } catch { res.writeHead(404).end(); }
+        });</script></body></html>` },
+    mounts: { '/shared/': path.join(sharedRoot, 'shared') }
   });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  origin = `http://127.0.0.1:${server.address().port}`;
+  origin = server.origin;
   browser = await launchChromium();
 });
 
 after(async () => {
   await browser?.close();
-  if (server) await new Promise(resolve => server.close(resolve));
+  await server?.close();
 });
 
 async function game(t) {

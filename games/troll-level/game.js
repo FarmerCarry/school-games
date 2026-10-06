@@ -513,9 +513,6 @@
     if (game.li + 1 < N && save.unl < game.li + 1) { save.unl = game.li + 1; persist(); }
     startLevel(game.li + 1);
   }
-  document.addEventListener('visibilitychange', function () { if (document.hidden && mode === 'play') pause(); });
-  // Clicking outside the game frame steals the keyboard: pause instead of leaving the hero idle.
-  window.addEventListener('blur', function () { if (mode === 'play' && !game.auto) pause(); });
 
   /* ----------------------------------------------------- buttons */
   function on(id, fn) {

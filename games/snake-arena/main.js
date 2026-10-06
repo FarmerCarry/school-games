@@ -40,8 +40,6 @@
     try { cv.focus({ preventScroll: true }); } catch (err) { /* ignore */ }
   });
   window.addEventListener('pointerup', function () { mouse.down = false; });
-  window.addEventListener('blur', function () { mouse.down = false; });
-  document.addEventListener('visibilitychange', function () { if (document.hidden && G.state === 'play') pauseGame(); });
 
   /* ------------------------------------------------------------ HUD bits */
   function toast(txt, col, sub, size, dur) {

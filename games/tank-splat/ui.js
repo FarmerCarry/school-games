@@ -412,9 +412,6 @@
     }
   });
 
-  document.addEventListener('visibilitychange', function () { if (document.hidden) pause(); });
-  window.addEventListener('blur', function () { pause(); });
-
   /* ------------------------------------------------------------ loop */
   function update(dt) {
     var sc = app.screen;

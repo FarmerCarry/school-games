@@ -1713,8 +1713,6 @@
   });
   window.addEventListener('pointermove', function (e) { if (mouse.down) mouse.x = view.toLogical(e.clientX, e.clientY).x; });
   window.addEventListener('pointerup', function () { mouse.down = false; });
-  window.addEventListener('blur', function () { mouse.down = false; });
-  document.addEventListener('visibilitychange', function () { if (document.hidden) pauseGame(); });
   canvas.addEventListener('pointerdown', function () { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } });
 
   var muteBtn = Kit.muteButton();

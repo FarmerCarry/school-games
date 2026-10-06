@@ -317,8 +317,7 @@
   /* ------------------------------------------------------ canvas scaling */
   // Kit.fit(canvas, 1280, 720) makes the canvas fill the window while keeping
   // a fixed LOGICAL resolution (letterboxed, centred, sharp on HiDPI).
-  // Draw using logical coordinates after calling view.begin(ctx) each frame,
-  // or just use the returned ctx which is already scaled on every resize.
+  // Draw using logical coordinates with view.ctx, which is scaled on every resize.
   // Returns { ctx, width, height, scale, toLogical(clientX, clientY) }.
   Kit.fit = function (canvas, width, height, opts) {
     opts = opts || {};

@@ -110,7 +110,6 @@
   item(I.PICK_IRON, { name: 'معول حديدي', tool: 3, speed: 4.5, max: 1, cols: ['#e6e6ee'] });
   item(I.PICK_DIAMOND, { name: 'معول ألماسي', tool: 4, speed: 7, max: 1, cols: ['#6ff5ee'] });
   BW.ITEMS = ITEMS;
-  BW.WALL_NAMES = [null, 'dirt', 'stone', 'sandstone'];
 
   // ------------------------------------------------------------ recipes
   // st: null (hand), 'table', 'furnace'. FLOWER = any flower (-1).
@@ -213,15 +212,6 @@
   function P(g, x, y, col) { g.fillStyle = col; g.fillRect(x, y, 1, 1); }
   function R4(g, x, y, w, h, col) { g.fillStyle = col; g.fillRect(x, y, w, h); }
   function speckle(g, pal, x0, y0, w, h) { for (var y = y0; y < y0 + h; y++) for (var x = x0; x < x0 + w; x++) P(g, x, y, pick(pal)); }
-  function blobs(g, n, col, hi, sz) {
-    for (var i = 0; i < n; i++) {
-      var x = 1 + ri(13), y = 1 + ri(13);
-      var s = sz || 2;
-      R4(g, x, y, s, s, col);
-      if (r() < 0.6) P(g, x + ri(s + 1), y - 1 + ri(2), col);
-      if (hi) P(g, x, y, hi);
-    }
-  }
   var dirtPal = ['#8a5a36', '#7b4f2e', '#946340', '#86573a', '#7f5232'];
   var stonePal = ['#8e8e96', '#85858d', '#9a9aa2', '#8a8a92', '#93939b'];
   function dirt(g) { speckle(g, dirtPal, 0, 0, 16, 16); for (var i = 0; i < 6; i++) { var x = ri(15), y = ri(15); P(g, x, y, '#5f3b1f'); P(g, x + 1, y, '#6a4426'); } for (i = 0; i < 4; i++) P(g, ri(16), ri(16), '#a07048'); }

@@ -99,3 +99,26 @@ test('test server serves the site icon and reports real missing/unsafe paths', a
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('test server preserves fixture pages, alternate asset roots and cache policy', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-server-mount-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const assets = path.join(root, 'alternate');
+  fs.mkdirSync(assets);
+  fs.writeFileSync(path.join(assets, 'kit.js'), 'window.fixture = true;');
+  fs.writeFileSync(path.join(root, 'outside.js'), 'not mounted');
+  const { origin, close } = await startTestServer(root, {
+    base: '/site/', pages: { '/parent': '<!doctype html><title>Parent</title>' },
+    mounts: { '/shared/': assets }, cacheControl: null
+  });
+  t.after(close);
+  const parent = await fetch(origin + '/parent');
+  assert.equal(parent.headers.get('content-type'), 'text/html');
+  assert.match(await parent.text(), /<title>Parent<\/title>/);
+  assert.equal((await fetch(origin + '/parent/extra')).status, 404);
+  const asset = await fetch(origin + '/shared/kit.js');
+  assert.equal(asset.headers.get('content-type'), 'text/javascript');
+  assert.equal(asset.headers.get('cache-control'), null);
+  assert.equal(await asset.text(), 'window.fixture = true;');
+  assert.equal((await fetch(origin + '/shared/%2e%2e%2foutside.js')).status, 403);
+});

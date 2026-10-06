@@ -826,7 +826,6 @@
   }
 
   /* ------------------------------------------------------------- title */
-  function ownedTeams() { return WS.TEAMS.filter(function (t) { return owns('teams', t.id); }); }
   function goTitle() {
     state = 'title'; showScr('title');
     cupRun = null;
@@ -920,7 +919,6 @@
     S.click();
     refreshSelect(side);
   }
-  function needsOwn(side) { return side === 0 || sel.mode === '2p'; }
   function refreshSelect(changed) {
     $('selCoins').textContent = save.coins;
     for (var s = 0; s < 2; s++) {
@@ -1206,8 +1204,6 @@
   btn('bRestart', function () { if (lastCfg) beginMatch(lastCfg); });
   btn('bMenu', function () { goTitle(); });
   btn('bPause', function () { if (state === 'play') pauseGame(); else resumeGame(); });
-  document.addEventListener('visibilitychange', function () { if (document.hidden) pauseGame(); });
-  window.addEventListener('blur', function () { if (state === 'play' && match && match.phase === 'play') pauseGame(); });
 
   /* ------------------------------------------------------------- result */
   var resultAct = null;

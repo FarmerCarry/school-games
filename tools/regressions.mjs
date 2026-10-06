@@ -9,10 +9,15 @@ import { testNativeControls, testPortalKeyboard, testTypingTab, testGameTab } fr
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = process.env.SG_ROOT ? path.resolve(REPO, process.env.SG_ROOT) : REPO;
+const unitOnly = process.argv.includes('--unit-only');
+const browserOnly = process.argv.includes('--browser-only');
+if (unitOnly && browserOnly) throw new Error('Choose either --unit-only or --browser-only');
 console.log(`Gameplay regressions (${path.relative(REPO, ROOT) || 'source'})`);
-console.log('  ✓ Hoop Heads engine:', await testHoop({ root: REPO }));
-console.log('  ✓ Snake/Blob invariants:', await testMass({ root: REPO }));
-if (!process.argv.includes('--unit-only')) {
+if (!browserOnly) {
+  console.log('  ✓ Hoop Heads engine:', await testHoop({ root: REPO }));
+  console.log('  ✓ Snake/Blob invariants:', await testMass({ root: REPO }));
+}
+if (!unitOnly) {
   const server = await startTestServer(ROOT);
   const browser = await launchChromium();
   try {

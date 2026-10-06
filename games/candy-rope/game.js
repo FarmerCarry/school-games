@@ -606,7 +606,6 @@
   function up() { ptr.down = false; }
   window.addEventListener('pointerup', up);
   window.addEventListener('pointercancel', up);
-  window.addEventListener('blur', up);
 
   window.addEventListener('keydown', function (e) {
     if (!Kit.isGameKeyEvent(e)) return;
@@ -1222,8 +1221,6 @@
     if (G.panel) G.panelT = (G.panelT || 0) + dt; else G.panelT = 0;
     Kit.keys.endFrame();
   }, render);
-
-  document.addEventListener('visibilitychange', function () { if (document.hidden && G.state === 'play') pause(); });
 
   goTitle();
 

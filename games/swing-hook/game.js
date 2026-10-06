@@ -341,7 +341,6 @@
   });
   window.addEventListener('pointerup', function (e) { if (e.button === 0) holdMouse = false; });
   window.addEventListener('pointercancel', function () { holdMouse = false; });
-  window.addEventListener('blur', function () { holdMouse = false; });
   var mouseTap = false;
   // a tap shorter than one frame still counts as holding for one step
   function holdInput() { return holdMouse || mouseTap || Kit.keys.down('Space') || Kit.keys.pressed('Space'); }
@@ -1629,8 +1628,6 @@
     $('rsHint').innerHTML = '<span class="sg-key">Enter</span> أو <span class="sg-key">R</span> العب مرة أخرى';
     if (nb && prev > 0) { sfx.win(); confetti(w.x, w.y - 300, 70); }
   }
-
-  document.addEventListener('visibilitychange', function () { if (document.hidden && mode === 'play') pause(); });
 
   /* ------------------------------------------------------------ debug hook */
   window.__game = {

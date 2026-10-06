@@ -6,7 +6,7 @@
   var rules = window.SGBoardRules;
   var title = isConnect ? 'أربعة على التوالي' : 'إكس أو';
   var mode = 'menu', state = rules.create(game), startingSeat = 1;
-  var paused = false, hiddenPaused = false;
+  var paused = false;
   var aiTimer = null, dropTimer = null, fallingCell = null;
   var cells = [], moveButtons = [], pendingBoardFocus = null;
 
@@ -190,13 +190,13 @@
   }
   function newRound() {
     stopTimers(); pendingBoardFocus = null; state = rules.create(game); state.turn = startingSeat;
-    paused = false; hiddenPaused = false;
+    paused = false;
     renderBoard(); scheduleComputer(); focusBoard();
   }
   function start(selectedMode) { mode = selectedMode; startingSeat = 1; newRound(); }
   function leaveMatch() {
     stopTimers(); pendingBoardFocus = null; mode = 'menu'; state = rules.create(game); startingSeat = 1;
-    paused = false; hiddenPaused = false; renderBoard(); el('localButton').focus();
+    paused = false; renderBoard(); el('localButton').focus();
   }
   function pause(value, moveFocus) {
     if (mode === 'menu' || finished()) return;
@@ -207,18 +207,23 @@
   el('localButton').addEventListener('click', function () { start('local'); });
   el('pcButton').addEventListener('click', function () { start('computer'); });
   el('leaveMatch').addEventListener('click', leaveMatch);
-  el('pauseButton').addEventListener('click', function () { hiddenPaused = false; pause(true, true); });
-  el('resumeButton').addEventListener('click', function () { hiddenPaused = false; pause(false, true); });
+  el('pauseButton').addEventListener('click', function () { pause(true, true); });
+  el('resumeButton').addEventListener('click', function () { pause(false, true); });
   el('rematchButton').addEventListener('click', function () {
     if (mode === 'menu' || !finished() || fallingCell) return;
     startingSeat = 3 - startingSeat;
     newRound();
   });
+  // Keep Kit's classroom lock and preference updates, with the board's text label.
+  var soundPlaceholder = el('soundButton'), soundButton = Kit.muteButton({ key: false });
+  soundButton.id = 'soundButton'; soundButton.className = 'sound-button';
+  soundButton.removeAttribute('aria-label');
+  soundPlaceholder.parentNode.replaceChild(soundButton, soundPlaceholder);
   function renderSound() {
-    el('soundButton').textContent = Kit.audio.muted ? 'الصوت: مغلق' : 'الصوت: يعمل';
-    el('soundButton').setAttribute('aria-pressed', String(!Kit.audio.muted));
+    soundButton.textContent = Kit.audio.muted ? 'الصوت: مغلق' : 'الصوت: يعمل';
+    soundButton.setAttribute('aria-pressed', String(!Kit.audio.muted));
   }
-  el('soundButton').addEventListener('click', function () { Kit.audio.unlock(); Kit.audio.toggleMute(); renderSound(); });
+  Kit.audio.onMuteChange(renderSound);
   // A delayed disc or computer move must not steal focus from another control.
   document.addEventListener('focusin', function (event) {
     if (event.target !== document.body && moveButtons.indexOf(event.target) === -1) pendingBoardFocus = null;
@@ -227,21 +232,21 @@
     var target = event.target;
     if ((target && (target.isContentEditable || (typeof target.matches === 'function' && target.matches('input,textarea,select')))) ||
         event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.repeat) return;
-    if (event.code === 'KeyM') { Kit.audio.unlock(); Kit.audio.toggleMute(); renderSound(); }
+    if (event.code === 'KeyM') { Kit.audio.unlock(); Kit.audio.toggleMute(); }
     if ((event.code === 'KeyP' || event.code === 'Escape') && mode !== 'menu' && !finished()) {
-      event.preventDefault(); hiddenPaused = false; pause(!paused, true);
+      event.preventDefault(); pause(!paused, true);
     }
     if (event.code === 'KeyR' && finished()) el('rematchButton').click();
   });
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
-      if (mode !== 'menu' && !paused && !finished()) { hiddenPaused = true; pause(true, false); }
+      if (mode !== 'menu' && !paused && !finished()) pause(true, false);
       stopTimers();
     }
     renderBoard();
   });
   window.addEventListener('pagehide', function () {
-    if (mode !== 'menu' && !paused && !finished()) { hiddenPaused = true; paused = true; }
+    if (mode !== 'menu' && !paused && !finished()) paused = true;
     stopTimers(); renderBoard();
   });
   window.addEventListener('pageshow', function (event) {
@@ -250,6 +255,6 @@
     renderBoard(); scheduleComputer();
   });
   makeBoard(); renderSound(); renderBoard();
-  Kit.lifecycle({ pause: function () { hiddenPaused = false; pause(true, false); } });
+  Kit.lifecycle({ pause: function () { pause(true, false); } });
   Kit.ready();
 }());

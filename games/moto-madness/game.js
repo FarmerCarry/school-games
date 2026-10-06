@@ -424,8 +424,6 @@
     Kit.keys.reset();
     canvas.focus();
   }
-  document.addEventListener('visibilitychange', function () { if (document.hidden) pause(); });
-  window.addEventListener('blur', function () { if (state === 'play' && world && world.started && !world.finished) pause(); });
 
   /* --------------------------------------------------------- buttons */
   function btn(id, fn) {

@@ -997,8 +997,6 @@
   on('finalMap', function () { SFX.click(); goMap(); });
   on('pauseBtn', function () { if (mode === 'play') pause(); else if (mode === 'paused') resume(); });
   $('pauseBtn').addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-  document.addEventListener('visibilitychange', function () { if (document.hidden && mode === 'play' && world && world.state === 'play') pause(); });
-  window.addEventListener('blur', function () { if (mode === 'play' && world && world.state === 'play' && !bot) pause(); });
 
   if (document.fonts && document.fonts.load) {
     // load the Latin AND the Arabic faces of the composite Fredoka family, then redraw cached layers

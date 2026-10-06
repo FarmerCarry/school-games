@@ -1,35 +1,23 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import http from 'node:http';
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
+import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const site = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
 let server, browser, origin;
 
 before(async () => {
-  server = http.createServer((request, response) => {
-    const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
-    const file = path.resolve(site, '.' + pathname, pathname.endsWith('/') ? 'index.html' : '');
-    if (!file.startsWith(site + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
-      response.writeHead(404).end();
-      return;
-    }
-    const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
-    response.setHeader('Content-Type', mime[path.extname(file)] || 'application/octet-stream');
-    fs.createReadStream(file).pipe(response);
-  });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  origin = 'http://127.0.0.1:' + server.address().port;
+  server = await startTestServer(site);
+  origin = server.origin;
   browser = await launchChromium({ headless: true, args: ['--no-sandbox'] });
 });
 
 after(async () => {
   if (browser) await browser.close();
-  if (server) await new Promise(resolve => server.close(resolve));
+  await server?.close();
 });
 
 async function gamePage(t, start = true) {

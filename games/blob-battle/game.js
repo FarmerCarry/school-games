@@ -1070,7 +1070,6 @@
   btn('pauseBtn', function () { if (state === 'play') { sfx.click(); pauseGame(); } });
   prevCv.addEventListener('click', function () { var s = BB.SKINS[browse]; if (skinUnlocked(s)) { selSkin = s; store.set('skin', s.id); sfx.click(); refreshTitle(); prevBounce = 1; } });
   Kit.muteButton();
-  document.addEventListener('visibilitychange', function () { if (document.hidden && state === 'play') pauseGame(); });
   window.addEventListener('pagehide', saveStats);
   window.addEventListener('beforeunload', saveStats);
 

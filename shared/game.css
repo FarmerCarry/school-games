@@ -42,7 +42,6 @@
   --sg-accent: #ffcc00;
   --sg-accent-ink: #3a2a00;
   --sg-good: #3ddc84;
-  --sg-bad: #ff5a5f;
 }
 
 * { box-sizing: border-box; }
@@ -196,18 +195,6 @@ html[data-sg-motion="reduce"] *, html[data-sg-motion="reduce"] *::before, html[d
   scroll-behavior: auto !important;
 }
 html[data-sg-motion="reduce"] .sg-btn:hover, html[data-sg-motion="reduce"] .sg-btn:active { transform: none; }
-
-/* HUD text drawn with DOM instead of canvas (optional). */
-.sg-hud {
-  position: fixed;
-  top: 10px;
-  left: 14px;
-  z-index: 5;
-  font-size: 26px;
-  font-weight: 700;
-  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
-  pointer-events: none;
-}
 
 @keyframes sg-pop {
   from { transform: scale(0.85); opacity: 0; }

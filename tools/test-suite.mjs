@@ -1,4 +1,4 @@
-// Run source-independent checks once; every other test automatically covers both builds in CI.
+// Run checks that do not depend on SG_ROOT once; browser checks cover both builds in CI.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,10 @@ const suite = process.argv[2];
 if (!['all', 'shared', 'browser'].includes(suite)) throw new Error('Expected test suite: all, shared, or browser');
 const shared = new Set([
   'board-rules.test.mjs', 'build-safety.test.mjs', 'asset-budgets.test.mjs',
-  'asset-optimization.test.mjs', 'harness-regression.test.mjs'
+  'asset-optimization.test.mjs', 'harness-regression.test.mjs',
+  'balance-replay.test.mjs', 'classroom-files.test.mjs', 'offline-controller.test.mjs',
+  'offline-readiness.test.mjs', 'shared-kit.test.mjs', 'level-verifiers.test.mjs',
+  'engine-regressions.test.mjs'
 ]);
 const files = fs.readdirSync(path.join(repo, 'tools/tests')).filter(file => file.endsWith('.test.mjs')).sort();
 for (const file of shared) {

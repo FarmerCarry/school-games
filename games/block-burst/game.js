@@ -397,8 +397,7 @@
     drop(p);
   });
 
-  // leaving the frame mid-drag (alt-tab, click outside) puts the piece back instead of leaving it stuck to the cursor
-  window.addEventListener('blur', function () { if (drag && state === 'play') returnPiece(); });
+  // Return the dragged piece when the pointer gesture is cancelled.
   window.addEventListener('pointercancel', function () { if (drag && state === 'play') returnPiece(); });
   function startDrag(s, p) {
     var tl = trayTL(s), sh = run.tray[s].shape;
@@ -525,7 +524,6 @@
         break;
     }
   });
-  document.addEventListener('visibilitychange', function () { if (document.hidden && state === 'play') pause(); });
 
   /* ------------------------------------------------------------ screens */
   function pause() { cancelDrag(); state = 'pause'; show(['hud', 'scrPause']); Snd.button(); }

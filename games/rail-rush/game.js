@@ -1895,8 +1895,6 @@
   });
   window.addEventListener('pointerup', function () { swipe.on = false; });
   window.addEventListener('pointercancel', function () { swipe.on = false; });
-  document.addEventListener('visibilitychange', function () { if (document.hidden) pause(); });
-  window.addEventListener('blur', function () { pause(); });
 
   function btn(id, fn) {
     $(id).addEventListener('click', function (e) {

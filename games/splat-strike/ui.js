@@ -269,8 +269,6 @@
     e.preventDefault();   // inside the portal the wheel would otherwise scroll the whole page away from the game
     if (!UI.paused) mouse.wheel += e.deltaY > 0 ? 1 : e.deltaY < 0 ? -1 : 0;
   }, { passive: false });
-  window.addEventListener('blur', function () { mouse.left = mouse.right = false; if (UI.state === 'play') pause(); });
-  document.addEventListener('visibilitychange', function () { if (document.hidden && UI.state === 'play') pause(); });
 
   function readInput() {
     var p = G.player, K = Kit.keys;

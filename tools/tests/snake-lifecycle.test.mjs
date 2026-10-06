@@ -1,39 +1,30 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import http from 'node:http';
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
+import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
-const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 let browser, server, origin;
 
 before(async () => {
-  server = http.createServer(async (req, res) => {
-    try {
-      const pathname = new URL(req.url, 'http://localhost').pathname;
-      if (pathname === '/snake-test-away') { res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><title>Away</title>'); return; }
-      let file = path.resolve(root, '.' + decodeURIComponent(pathname));
-      if (file !== root && !file.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
-      if ((await fs.stat(file)).isDirectory()) file = path.join(file, 'index.html');
-      res.writeHead(200, { 'content-type': mime[path.extname(file)] || 'application/octet-stream' }).end(await fs.readFile(file));
-    } catch { res.writeHead(404).end(); }
+  server = await startTestServer(root, {
+    pages: { '/snake-test-away': '<!doctype html><title>Away</title>' },
+    // Keep the original server's cache headers so bfcache remains eligible.
+    cacheControl: null
   });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  origin = `http://127.0.0.1:${server.address().port}`;
+  origin = server.origin;
   browser = await launchChromium({
     // Playwright disables this normal browser lifecycle by default.
-    ignoreDefaultArgs: ['--disable-back-forward-cache'],
-    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
+    ignoreDefaultArgs: ['--disable-back-forward-cache']
   });
 });
 
 after(async () => {
   if (browser) await browser.close();
-  if (server) await new Promise(resolve => server.close(resolve));
+  await server?.close();
 });
 
 async function gamePage(t) {

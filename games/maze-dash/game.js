@@ -1587,7 +1587,6 @@
     swipe = { x: l.x, y: l.y };
   });
   window.addEventListener('pointerup', function () { swipe = null; });
-  document.addEventListener('visibilitychange', function () { if (document.hidden && G.screen === 'play') pause(); });
 
   /* ----------------------------------------------------------- autoplay */
   // Debug/test helper: plans with the same rules as tools/verify.js.

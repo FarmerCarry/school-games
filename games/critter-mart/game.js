@@ -1337,7 +1337,6 @@
     mouseHeld = true; P.repathT = 0;
   });
   window.addEventListener('pointerup', function () { mouseHeld = false; });
-  window.addEventListener('blur', function () { mouseHeld = false; });
 
   function update(dt) {
     if (DBG.noUpdate) return;
