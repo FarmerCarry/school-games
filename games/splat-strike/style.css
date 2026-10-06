@@ -199,6 +199,7 @@ body.playing #gl { cursor: crosshair; }
 .fl .ic { margin: 0 0.3em; }
 #callout { position: absolute; left: 0; right: 0; top: 22%; text-align: center; font-size: 2.6em; font-weight: 700; color: var(--yellow); text-shadow: var(--ol), 0 0.1em 0 var(--navy); opacity: 0; white-space: nowrap; }
 #callout small { display: block; font-size: 0.5em; color: #fff; }
+#callout.goal { top: 13%; font-size: 2.2em; }
 #toast { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); font-size: 1.3em; font-weight: 700; text-shadow: var(--ol); opacity: 0; white-space: nowrap; }
 #bigmsg { position: absolute; z-index: 3; left: 0; right: 0; top: 32%; text-align: center; font-size: 5em; font-weight: 700; color: #fff; text-shadow: var(--ol), 0 0.08em 0 var(--navy); opacity: 0; white-space: nowrap; }
 #hint { position: absolute; left: 50%; bottom: 7.2em; transform: translateX(-50%); background: rgba(15, 18, 55, 0.7); border-radius: 0.8em; padding: 0.25em 0.9em; font-size: 1.15em; font-weight: 700; opacity: 0; transition: opacity 0.25s; white-space: nowrap; }
