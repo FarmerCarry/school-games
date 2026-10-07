@@ -2,6 +2,9 @@
 body { background: #2a2350; }
 #c { z-index: 1; }
 #uiwrap { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 5; }
+/* confetti layer above the panels (below the mute button); only shown while pieces fly */
+#fx { z-index: 6; pointer-events: none; }
+#fx[hidden] { display: none; }
 #ui {
   position: absolute; left: 0; top: 0; width: 1280px; height: 720px;
   transform-origin: 0 0; z-index: 5; pointer-events: none;
@@ -180,7 +183,9 @@ i.coin.sm { width: 20px; height: 20px; }
 .giftbox .lid { position: absolute; left: 0; right: 0; top: 36px; height: 38px; background: #ff77aa; border-radius: 10px; z-index: 2; transition: transform .5s cubic-bezier(.3, 1.6, .5, 1); box-shadow: 0 5px 0 rgba(0, 0, 0, .15); }
 .giftbox .rib { position: absolute; left: 72px; width: 26px; top: 36px; bottom: 0; background: #ffd23f; z-index: 3; transition: transform .5s cubic-bezier(.3, 1.6, .5, 1); }
 .giftbox.open { animation: none; }
-.giftbox.open .lid, .giftbox.open .rib { transform: translateY(-120px) rotate(-25deg); opacity: 0; transition: transform .5s, opacity .5s .2s; }
+.giftbox.open .lid { transform: translateY(-120px) rotate(-25deg); opacity: 0; transition: transform .5s, opacity .5s .2s; }
+/* the ribbon stays on the open box so it still reads as a present */
+.giftbox.open .rib { top: 65px; }
 .giftamt { font-size: 64px; font-weight: 700; color: #b86e00; display: flex; justify-content: center; align-items: center; gap: 10px; direction: ltr; animation: popIn .4s cubic-bezier(.2, 1.8, .4, 1) both; }
 .giftamt i.coin { width: 52px; height: 52px; }
 
