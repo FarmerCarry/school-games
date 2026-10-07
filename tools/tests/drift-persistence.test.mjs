@@ -126,6 +126,7 @@ test('real quota failure during first migration preserves legacy coins and denie
   assert.deepEqual(await snapshot(page), { current: { v: 1, ...legacy }, stored: null, model: 'red' });
   assert.equal(await page.evaluate(() => purchaseSounds), 0, 'failed purchase must not celebrate');
   assert.match(await page.locator('#toast').textContent(), /لم تُخصم العملات/);
+  assert.equal(await page.locator('.sg-save-status').isHidden(), true, 'a rejected purchase changes nothing; its toast is enough');
   assert.equal(await page.locator('#gCoins').textContent(), '100');
   await page.reload();
   assert.deepEqual((await snapshot(page)).current, { v: 1, ...legacy });
@@ -195,11 +196,33 @@ test('a mission-save failure after purchase retains a coherent purchase and retr
   const purchase = { ...saved, coins: 40, owned: ['red', 'taxi'], car: 'taxi' };
   const rewarded = { ...purchase, coins: 80, done: [...earlierMissions, 'buy'] };
   assert.deepEqual(await snapshot(page), { current: rewarded, stored: purchase, model: 'taxi' });
+  const status = page.locator('.sg-save-status');
+  assert.equal(await status.getAttribute('data-state'), 'failed', 'the unsaved reward shows the save warning');
   await saveFromPause(page);
   assert.deepEqual((await snapshot(page)).stored, rewarded);
+  assert.equal(await status.getAttribute('data-state'), 'saved', 'a confirmed later save clears the warning');
   await page.reload();
   assert.deepEqual((await snapshot(page)).current, rewarded);
   await openGarage(page);
   await chooseCar(page, 'taxi');
   assert.deepEqual((await snapshot(page)).stored, rewarded);
+});
+
+test('a failed gift save keeps the saved record, warns, and Retry writes the gift', async t => {
+  const saved = { v: 1, ...fixture({ giftAt: 0 }) };
+  const page = await game(t, { save: saved });
+  await exhaustStorage(page);
+  // A plain click: the title's bottom row used to swallow clicks on this button.
+  await page.locator('#btnGift').click();
+  await page.locator('#giftBox').click();
+  const status = page.locator('.sg-save-status');
+  assert.equal(await status.getAttribute('data-state'), 'failed');
+  let { current, stored } = await snapshot(page);
+  assert.deepEqual(stored, saved, 'a failed write keeps the saved progress');
+  assert.ok(current.coins > saved.coins && current.giftAt > 0, 'the gift still counts in this session');
+  await page.evaluate(() => localStorage.removeItem('quota-fixture'));
+  await status.locator('button').click();
+  ({ current, stored } = await snapshot(page));
+  assert.deepEqual(stored, current);
+  assert.equal(await status.getAttribute('data-state'), 'saved');
 });
