@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
+import { installGolfHarness } from '../golf-harness.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -221,3 +222,37 @@ for (const key of ['Space']) {
     assert.equal(await phase(frame), 'ready', 'advertised R restarts with Again focused');
   });
 }
+
+// Frame-stepped game: the needle only moves when the test advances it.
+async function manualGame(t) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
+  await context.addInitScript(installGolfHarness, { manual: true });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'no browser errors'); });
+  await page.goto(`${origin}/games/skybound-golf/`);
+  await page.locator('#play').click();
+  await page.evaluate(() => advanceGolfFrames(29)); // the needle is now in the perfect band
+  return page;
+}
+
+test('Golf hit button strikes when pressed, not when the slow click is released', async t => {
+  const page = await manualGame(t);
+  const box = await page.locator('#hit').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  // A normal click holds the button for about 120 ms while the needle keeps moving.
+  await page.evaluate(() => advanceGolfFrames(7));
+  await page.mouse.up();
+  const shot = await page.evaluate(() => ({ phase: golfState.phase, quality: golfState.quality, age: golfState.shotAge }));
+  assert.equal(shot.phase, 'flight');
+  assert.equal(shot.quality, 1, 'the press time decides the shot (release time would score about 0.58)');
+  assert(Math.abs(shot.age - 7 / 60) < 1e-9, 'struck once, at the press');
+});
+
+test('Golf hit button still strikes once from the keyboard', async t => {
+  const page = await manualGame(t);
+  await page.locator('#hit').focus();
+  await page.keyboard.press('Enter');
+  assert.deepEqual(await page.evaluate(() => ({ phase: golfState.phase, quality: golfState.quality, age: golfState.shotAge })), { phase: 'flight', quality: 1, age: 0 });
+});

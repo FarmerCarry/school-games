@@ -17,6 +17,15 @@
     { id: 'moon', name: 'ملعب القمر', unlock: 1000, gravity: 7.6,
       palette: { sky: '#14253d', skyTop: '#111f37', skyBottom: '#3e5277', ground: '#65758e', grass: '#a5b7c9', hill: '#495a76', far: '#293c5b', accent: '#a4eea2' } }
   ];
+  // Cosmetic ball styles: a coin sink after the upgrades. Art lives in art.js.
+  var skins = [
+    { id: 'classic', name: 'كلاسيكية', price: 0 },
+    { id: 'gold', name: 'نجمة ذهبية', price: 400 },
+    { id: 'melon', name: 'بطيخة', price: 1200 },
+    { id: 'planet', name: 'كوكب', price: 2500 },
+    { id: 'comet', name: 'مذنّب', price: 4000 },
+    { id: 'rainbow', name: 'قوس قزح', price: 6000 }
+  ];
   var clamp = function (x, a, b) { return Math.max(a, Math.min(b, x)); };
   var finite = function (x, fallback) { return typeof x === 'number' && Number.isFinite(x) ? x : fallback; };
   var smooth = function (v) { return v * v * (3 - 2 * v); };
@@ -77,6 +86,24 @@
       for (var j = 0; j < chunk.length; j++) {
         var f = chunk[j];
         if (f.x + f.width / 2 >= minX && f.x - f.width / 2 <= maxX) out.push(f);
+      }
+    }
+    return out;
+  }
+
+  // Collectible stars float in two short columns per chunk, so any arc that
+  // crosses a column's height band can grab one. They never move the ball.
+  function stars(course, minX, maxX) {
+    minX = finite(minX, 0); maxX = finite(maxX, minX + 300);
+    var out = [], gap = 8 + course.worldIndex * 5;
+    var first = Math.max(0, Math.floor((minX - CELL) / CELL));
+    var last = Math.min(Math.floor(maxX / CELL), first + 64);
+    for (var i = first; i <= last; i++) {
+      for (var j = 0; j < 2; j++) {
+        var x = 45 + i * CELL + j * 95 + hash(course, i * 2 + j + 200) * 40, y = heightAt(course, x) + 5;
+        for (var k = 0; k < 4; k++) {
+          if (x + k * 2 >= minX && x + k * 2 <= maxX) out.push({ id: (i * 2 + j) * 4 + k, x: x + k * 2, y: y + k * gap });
+        }
       }
     }
     return out;
@@ -252,14 +279,18 @@
     var best = clamp(finite(raw.best, 0), 0, 10000);
     var world = clamp(Math.floor(finite(raw.world, 0)), 0, worlds.length - 1);
     while (world > 0 && best < worlds[world].unlock) world--;
+    var owned = skins.filter(function (k) {
+      return !k.price || (Array.isArray(raw.skins) && raw.skins.indexOf(k.id) >= 0);
+    }).map(function (k) { return k.id; });
     return { coins: clamp(Math.floor(finite(raw.coins, 0)), 0, 9999999), best: best,
       world: world, upgrades: levels(raw.upgrades),
       shots: clamp(Math.floor(finite(raw.shots, 0)), 0, 999999),
-      holes: clamp(Math.floor(finite(raw.holes, 0)), 0, 999999) };
+      holes: clamp(Math.floor(finite(raw.holes, 0)), 0, 999999),
+      skins: owned, skin: owned.indexOf(raw.skin) >= 0 ? raw.skin : 'classic' };
   }
 
-  var api = { worlds: worlds, createCourse: createCourse, heightAt: heightAt,
-    surfaceAt: surfaceAt, features: features, launch: launch, step: step,
+  var api = { worlds: worlds, skins: skins, createCourse: createCourse, heightAt: heightAt,
+    surfaceAt: surfaceAt, features: features, stars: stars, launch: launch, step: step,
     cost: cost, sanitizeSave: sanitizeSave, reward: reward, maxUpgrade: UPGRADE_MAX };
   root.GolfPhysics = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
