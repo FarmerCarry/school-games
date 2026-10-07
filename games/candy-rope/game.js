@@ -11,7 +11,8 @@
 
   var canvas = document.getElementById('cv');
   var ui = document.getElementById('ui');
-  var bg = {};
+  // A paused game keeps its last frame: it is drawn again only after a resize, a late font or a restored canvas.
+  var bg = {}, dirty = true;
   var view = Kit.fit(canvas, W, H, { maxDpr: 2, onResize: onResize });
   var ctx = view.ctx;
   var store = Kit.store('candy-rope');
@@ -28,13 +29,14 @@
   function onResize(v) {
     var r = canvas.getBoundingClientRect();
     ui.style.transform = 'translate(' + r.left + 'px,' + r.top + 'px) scale(' + v.scale + ')';
-    bg = {};
+    bg = {}; dirty = true;
   }
   onResize(view);
   if (document.fonts && document.fonts.load) {
     Promise.all([document.fonts.load('700 28px Fredoka', 'ب'), document.fonts.load('700 28px Fredoka', 'A')])
-      .then(function () { bg = {}; }, function () { /* ignore */ });
+      .then(function () { bg = {}; dirty = true; }, function () { /* ignore */ });
   }
+  canvas.addEventListener('contextrestored', function () { starSprite = null; view.resize(); });
 
   /* ------------------------------------------------------------ saving */
   var prog = (function () {
@@ -175,7 +177,7 @@
   var PMAX = 520, parts = [], pn = 0;
   for (var pi = 0; pi < PMAX; pi++) parts.push({ on: false });
   // Particles are pure decoration: none in reduced-motion / classroom mode (sounds and HUD stars stay).
-  Kit.motion.onChange(function (reduced) { if (reduced) for (var i = 0; i < PMAX; i++) parts[i].on = false; });
+  Kit.motion.onChange(function (reduced) { dirty = true; if (reduced) for (var i = 0; i < PMAX; i++) parts[i].on = false; });
   function spawn(x, y, vx, vy, life, size, color, type, g) {
     if (Kit.motion.reduced()) return null;
     var p = parts[pn]; pn = (pn + 1) % PMAX;
@@ -294,7 +296,8 @@
   var G = {
     state: 'title', level: 0, world: null, munch: newMunch(), intro: 0, introT: 0, t: 0, endT: 0, panel: false,
     hudStars: 0, slotPop: [0, 0, 0], flyers: [], hint: 0, hintItems: [], tipT: 0, tut: false, replay: null, rIdx: 0,
-    demo: false, taps: [], titleWorld: null, titleMunch: newMunch(), titleRespawn: 0, timers: [], sparkT: 0
+    demo: false, taps: [], strokes: [], titleWorld: null, titleMunch: newMunch(), titleRespawn: 0, timers: [], sparkT: 0,
+    mine: [], used: [], cue: null, job: null, cueDirty: 0
   };
   var TITLE_LEVEL = { candy: [1010, 300], munch: [960, 565], ropes: [{ x: 960, y: 84 }], stars: [] };
   function newTitleWorld() { G.titleWorld = Sim.create(TITLE_LEVEL); G.titleWorld.born = G.t; munchMood(G.titleMunch, 'idle'); }
@@ -433,15 +436,18 @@
     G.hudStars = 0; G.slotPop = [0, 0, 0]; G.flyers = [];
     G.replay = opts.replay || null; G.rIdx = 0;
     G.demo = !!opts.demo;
-    buildHint(); G.hint = opts.hint ? hintTime() : 0;
+    buildHint(); G.hint = opts.hint ? 1 : 0;
+    G.mine = []; G.used = []; G.cue = G.job = null; G.cueDirty = 24;
     G.tipT = LEVELS[i].tip && !G.demo ? 5.5 : 0;
     G.tut = i === 0 && prog.stars[0] < 0 && !G.demo;
-    if (G.demo) G.introT = 1.6; // no level-name title: the demo banner sits there
+    // no level-name title in a demo (its banner sits there) or with the hint (the player just saw the
+    // level, and the markers and the first "when" ring must be readable from the start)
+    if (G.demo || G.hint) G.introT = 1.6;
     G.munch = newMunch(); G.munch.hopv = -420;
-    trail.length = 0; G.taps.length = 0;
+    trail.length = 0; G.taps.length = 0; G.strokes.length = 0;
     for (var k = 0; k < PMAX; k++) parts[k].on = false;
     texts.length = 0;
-    $('bHint').classList.toggle('glow', (prog.fails[i] || 0) >= 2 && prog.stars[i] < 0);
+    $('bHint').classList.toggle('glow', !G.demo && !G.hint && (prog.fails[i] || 0) >= 2 && prog.stars[i] < 0);
     SFX.whoosh();
   }
   function restart() { SFX.click(); startLevel(G.level); }
@@ -449,6 +455,7 @@
   function pause() {
     if (G.state !== 'play') return;
     G.state = 'pause'; show('sPause'); SFX.click();
+    dirty = true; // draw the frozen scene once, then idle
   }
   function resume() {
     if (G.state !== 'pause') return;
@@ -524,12 +531,12 @@
   /* ------------------------------------------------------------ hint */
   function buildHint() {
     var plan = SOL[G.level], items = [], num = 0, prev = -99;
-    if (plan) plan.forEach(function (a) {
+    if (plan) plan.forEach(function (a, j) {
       var last = items[items.length - 1];
-      if (last && last.a === a[1] && last.k === a[2]) { last.n++; prev = a[0]; return; }
+      if (last && last.a === a[1] && last.k === a[2]) { last.j.push(j); prev = a[0]; return; }
       if (a[0] - prev > 3) num++; // steps a few frames apart are one move ("cut both"): same number
       prev = a[0];
-      items.push({ a: a[1], k: a[2], n: 1, num: num });
+      items.push({ a: a[1], k: a[2], j: [j], num: num }); // j: the plan steps this marker stands for
     });
     G.hintItems = items;
   }
@@ -548,34 +555,55 @@
     if (it.a === 'puff') { var b = w.blowers[it.k]; return b ? { x: b.x, y: b.y } : null; }
     return null;
   }
-  // keep the markers up until the plan's last step has had its moment
-  function hintTime() {
-    var plan = SOL[G.level], last = plan && plan.length ? plan[plan.length - 1][0] : 0;
-    return Math.max(6, (last - G.world.frame) / 60 + Math.max(0, G.intro) + 1.5);
-  }
+  // the markers stay up for the rest of the level; a step disappears once the player has done it
   function showHint() {
-    if (G.state !== 'play' || G.demo) return;
-    G.hint = hintTime(); SFX.click();
+    if (G.state !== 'play' || G.demo || G.hint) return;
+    G.hint = 1; G.cueDirty = 24; SFX.click();
     $('bHint').classList.remove('glow');
+  }
+  // The "when" ring. Plan frames only fit a player who moved exactly on time, so after every move
+  // (and when a moment is missed) Sim.shiftSearch replays copies of the world to find when the rest
+  // of the plan still wins from here. It runs about 2 ms per update; the ring shows once it is found.
+  function note(a, k) { G.mine.push([G.world.frame, a, k]); G.cueDirty = 8; G.cue = null; }
+  function startCue(w) {
+    var d = Sim.planRest(SOL[G.level] || [], G.mine), lead = G.cueDirty;
+    G.used = d.used; G.cueDirty = 0; G.cue = G.job = null;
+    if (!G.hint || G.demo || !d.rest.length) return;
+    // earliest moment: `lead` frames from now, after the markers fade in; frozen intro frames count too
+    var wait = Math.max(0, (1.55 - G.introT) * 60) + lead - Math.max(0, G.intro) * 60;
+    G.job = Sim.shiftSearch(w, d.rest, d.late, w.frame + Math.max(1, Math.round(wait)));
+    G.job.rest = d.rest;
+  }
+  function workCue() {
+    var j = G.job, t = performance.now();
+    while (performance.now() - t < 2) {
+      if (j.work()) { G.job = null; if (j.shift !== null) G.cue = { rest: j.rest, s: j.shift, f: j.rest[0][0] + j.shift }; return; }
+    }
   }
   // "watch the solution": replay the recorded plan (no stars, no fail count), then hand the level back
   function watchSolution() {
     if (!SOL[G.level]) return;
     SFX.click(); startLevel(G.level, { replay: SOL[G.level], demo: true });
   }
-  // show the replay's "hand": a swipe across the rope it cuts, a ring where it taps
+  // show the replay's "hand": a swipe across the rope it cuts, a ring where it taps. Each swipe is its
+  // own stroke; cuts up to 3 frames apart ("cut both") become one swipe through both ropes.
   function demoGesture(w, a) {
     var p = hintPos({ a: a[1], k: a[2] }, w);
     if (!p) return;
     if (a[1] !== 'cut') { G.taps.push({ x: p.x, y: p.y, t: 0 }); if (G.taps.length > 4) G.taps.shift(); return; }
-    var nx = 0.3, ny = -1, r = null;
+    var nx = 0.3, ny = -1, r = null, q = G.strokes[G.strokes.length - 1], o = p, len = 150, back = 75, dx, dy, d;
     for (var i = 0; i < w.ropes.length; i++) if (w.ropes[i].key === a[2]) r = w.ropes[i];
-    if (r && r.pts) { // swipe across the rope, not along it
+    if (q && w.frame - q.f <= 3) {
+      dx = p.x - q.p.x; dy = p.y - q.p.y; d = Math.sqrt(dx * dx + dy * dy) || 1;
+      nx = dx / d; ny = dy / d; o = q.p; len = d + 140; back = 70;
+      G.strokes.pop();
+    } else if (r && r.pts) { // swipe across the rope, not along it
       var m = Math.floor(r.pts.length / 2), q0 = r.pts[m - 1] || r.pts[m], q1 = r.pts[m + 1] || r.pts[m];
-      var dx = q1.x - q0.x, dy = q1.y - q0.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+      dx = q1.x - q0.x; dy = q1.y - q0.y; d = Math.sqrt(dx * dx + dy * dy) || 1;
       nx = -dy / d; ny = dx / d;
     }
-    for (var k = 0; k < 6; k++) { var u = k / 5 - 0.5; trail.push({ x: p.x + nx * u * 150, y: p.y + ny * u * 150, t: G.t - 0.12 + k * 0.024 }); }
+    for (var k = 0, pts = []; k < 6; k++) { d = k / 5 * len - back; pts.push({ x: o.x + nx * d, y: o.y + ny * d, t: G.t - 0.12 + k * 0.024 }); }
+    G.strokes.push({ f: w.frame, p: p, pts: pts });
   }
 
   /* ------------------------------------------------------------ input */
@@ -604,7 +632,7 @@
       for (var j = 0; j < p.length - 1; j++) {
         if (segHit(x0, y0, x1, y1, p[j].x, p[j].y, p[j + 1].x, p[j + 1].y) ||
             Sim.distToSeg((p[j].x + p[j + 1].x) / 2, (p[j].y + p[j + 1].y) / 2, x0, y0, x1, y1) < 5) {
-          Sim.cutRope(w, r, j, false);
+          if (Sim.cutRope(w, r, j, false) && w === G.world) note('cut', r.key);
           break;
         }
       }
@@ -614,9 +642,9 @@
     var w = activeWorld();
     if (!w || w.state !== 'play') return;
     var c = w.candy;
-    if (c.bubble && Sim.dist(x, y, c.x, c.y) < 64) { Sim.pop(w); return; }
+    if (c.bubble && Sim.dist(x, y, c.x, c.y) < 64) { if (Sim.pop(w) && w === G.world) note('pop'); return; }
     for (var i = 0; i < w.blowers.length; i++) {
-      if (Sim.dist(x, y, w.blowers[i].x, w.blowers[i].y) < 60) { Sim.puff(w, i); return; }
+      if (Sim.dist(x, y, w.blowers[i].x, w.blowers[i].y) < 60) { if (Sim.puff(w, i) && w === G.world) note('puff', i); return; }
     }
   }
   window.addEventListener('pointerdown', function (e) {
@@ -633,7 +661,7 @@
     var p = view.toLogical(e.clientX, e.clientY);
     if (!(G.state === 'play' && G.replay)) swipe(ptr.x, ptr.y, p.x, p.y);
     var d = Sim.dist(ptr.x, ptr.y, p.x, p.y);
-    if (d > 2 && (G.state === 'play' || G.state === 'title')) {
+    if (d > 2 && (G.state === 'play' && !G.replay || G.state === 'title')) {
       trail.push({ x: p.x, y: p.y, t: G.t });
       if (trail.length > 40) trail.shift();
       if (Math.random() < 0.6) spawn(p.x, p.y, (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60, 0.4, 4 + Math.random() * 3, Math.random() < 0.5 ? '#fff' : '#ffe14d', 2, 80);
@@ -783,11 +811,13 @@
 
   /* ------------------------------------------------------------ update */
   function update(dt) {
+    if (G.state === 'pause') return; // frozen: the clock, effects and world wait for resume
     G.t += dt;
     shake.update(dt);
     updateParts(dt);
     for (var i = texts.length - 1; i >= 0; i--) { texts[i].life -= dt; texts[i].y -= 40 * dt; if (texts[i].life <= 0) texts.splice(i, 1); }
     while (trail.length && G.t - trail[0].t > 0.22) trail.shift();
+    while (G.strokes.length && G.t - G.strokes[0].pts[5].t > 0.22) G.strokes.shift();
 
     var s = G.state;
     if (s === 'title' || s === 'boxes' || s === 'levels' || s === 'style') {
@@ -797,7 +827,6 @@
       if (G.titleRespawn > 0) { G.titleRespawn -= dt; if (G.titleRespawn <= 0) newTitleWorld(); }
       return;
     }
-    if (s === 'pause') return;
     var w = G.world;
     if (!w) return;
     if (s === 'play') {
@@ -813,13 +842,15 @@
         Sim.step(w);
       }
       if (G.tipT > 0) G.tipT -= dt;
-      if (G.hint > 0) G.hint -= dt;
+      if (G.cueDirty) startCue(w);
+      else if (G.cue && w.frame > G.cue.f + 6) G.cueDirty = 24; // moment missed: find the next one
+      if (G.job) workCue();
     } else {
       Sim.step(w);
       G.endT += dt;
       if (G.demo) {
-        // hand the same level back; the toast replaces the level-name title the player just saw
-        if (G.endT > 1.5) { startLevel(G.level); G.introT = 1.6; toast('دورك الآن!', 2000); return; }
+        // hand the same level back, with the hint on so the same markers and rings guide the player
+        if (G.endT > 1.5) { startLevel(G.level, { hint: true }); toast('دورك الآن!', 2000); return; }
       } else if (!G.panel) {
         if (s === 'won' && G.endT > 1.5) showWinPanel();
         if (s === 'lost' && G.endT > 1.1) showFailPanel();
@@ -1061,7 +1092,7 @@
     }
   }
 
-  function drawTrail() {
+  function drawTrail(trail) {
     if (trail.length < 2) return;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (var pass = 0; pass < 2; pass++) {
@@ -1152,18 +1183,20 @@
     ctx.restore();
   }
   function drawHints(w) {
-    if (G.hint > 0 && G.hintItems.length) drawHintMarkers(w);
-    if (G.hint > 0 || G.demo) drawTimingCue(w);
-  }
-  function drawHintMarkers(w) {
     // fade in as the level-name title flies away, so the title never covers them
-    var a = Math.min(1, G.hint, clamp((G.introT - 1.2) / 0.35, 0, 1));
-    if (a <= 0) return;
+    var a = clamp((G.introT - 1.2) / 0.35, 0, 1);
+    if (w.state !== 'play' || a <= 0) return;
+    if (G.hint || G.demo) drawTimingCue(w, a); // under the markers, so their numbers stay readable
+    if (G.hint) drawHintMarkers(w, a);
+  }
+  function drawHintMarkers(w, a) {
     ctx.globalAlpha = a;
     ctx.font = '700 24px Fredoka, "Segoe UI", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     var seen = {};
     for (var i = 0; i < G.hintItems.length; i++) {
-      var it = G.hintItems[i], p = hintPos(it, w);
+      var it = G.hintItems[i], left = 0;
+      for (var j = 0; j < it.j.length; j++) if (!G.used[it.j[j]]) left++;
+      var p = left && hintPos(it, w); // steps the player already did lose their marker
       if (!p) continue;
       var key = Math.round(p.x / 30) + ',' + Math.round(p.y / 30);
       var off = (seen[key] || 0); seen[key] = off + 1;
@@ -1176,7 +1209,7 @@
       ctx.beginPath(); ctx.moveTo(-8, 18); ctx.lineTo(0, 32); ctx.lineTo(8, 18); ctx.fill();
       ctx.fillStyle = '#2b1238'; ctx.fillText(String(it.num), 0, 1);
       ctx.restore();
-      var lbl = it.a === 'cut' ? 'اقطع' : it.a === 'pop' ? 'فرقع' : it.n === 2 ? 'انفخ مرتين' : it.n > 2 ? 'انفخ ' + it.n + ' مرات' : 'انفخ';
+      var lbl = it.a === 'cut' ? 'اقطع' : it.a === 'pop' ? 'فرقع' : left === 2 ? 'انفخ مرتين' : left > 2 ? 'انفخ ' + left + ' مرات' : 'انفخ';
       ctx.font = '700 18px Fredoka, "Segoe UI", sans-serif';
       ctx.lineWidth = 5; ctx.strokeStyle = '#2b1238'; ctx.strokeText(lbl, x, y - 36);
       ctx.fillStyle = '#fff'; ctx.fillText(lbl, x, y - 36);
@@ -1184,26 +1217,31 @@
     }
     ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1;
   }
-  // "when": a ring closes on the plan's next step and says "now!" at its moment, as long as
-  // the player is still on the plan's timeline (every step that was due so far, and no extra)
-  function drawTimingCue(w) {
-    var plan = SOL[G.level], next = plan && plan[w.actions];
-    if (!next || w.state !== 'play') return;
-    var due = 0;
-    while (due < plan.length && plan[due][0] + 4 < w.frame) due++;
-    var d = next[0] - w.frame, p = due === w.actions && d <= 40 ? hintPos({ a: next[1], k: next[2] }, w) : null;
-    if (!p) return;
-    var r = 22 + Math.max(0, d) * 1.5, now = d <= 6;
-    ctx.globalAlpha = clamp((40 - d) / 10, 0, 1);
-    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU);
-    ctx.lineWidth = 10; ctx.strokeStyle = '#2b1238'; ctx.stroke();
-    ctx.lineWidth = 5; ctx.strokeStyle = now ? '#7dff5a' : '#ffe14d'; ctx.stroke();
-    if (now) {
-      var ty = p.y + r + 26;
-      if (ty > H - 30) ty = p.y - r - 24;
+  // "when": a ring closes on the next step (on both ropes of a "cut both") and reaches its smallest
+  // size at the moment. It turns green with "now!" 18 frames (0.3 s) early, so a child who reacts to
+  // the green word, 250-350 ms later, still lands inside the step's window. The demo follows its own
+  // replay; the player follows the planned cue (frozen intro frames count down too).
+  function drawTimingCue(w, al) {
+    var st = G.demo ? G.replay : G.cue && G.cue.rest, i = G.demo ? G.rIdx : 0, lbl = null;
+    if (!st || !st[i]) return;
+    var d = st[i][0] + (G.demo ? 0 : G.cue.s) - w.frame + (G.intro > 0 ? Math.ceil(G.intro * 60) : 0);
+    if (d > 40) return;
+    var r = 22 + Math.max(0, d) * 1.5, now = d <= 18;
+    ctx.globalAlpha = clamp((40 - d) / 10, 0, 1) * al;
+    for (var k = i; k < st.length && st[k][0] - st[i][0] <= 3; k++) {
+      var p = hintPos({ a: st[k][1], k: st[k][2] }, w);
+      if (!p) continue;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU);
+      ctx.lineWidth = 10; ctx.strokeStyle = '#2b1238'; ctx.stroke();
+      ctx.lineWidth = 5; ctx.strokeStyle = now ? '#7dff5a' : '#ffe14d'; ctx.stroke();
+      lbl = lbl || p;
+    }
+    if (now && lbl) {
+      var ty = lbl.y + r + 26;
+      if (ty > H - 30) ty = lbl.y - r - 24;
       ctx.font = '700 30px Fredoka, "Segoe UI", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.lineJoin = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = '#2b1238'; ctx.strokeText('الآن!', p.x, ty);
-      ctx.fillStyle = '#7dff5a'; ctx.fillText('الآن!', p.x, ty);
+      ctx.lineJoin = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = '#2b1238'; ctx.strokeText('الآن!', lbl.x, ty);
+      ctx.fillStyle = '#7dff5a'; ctx.fillText('الآن!', lbl.x, ty);
       ctx.textBaseline = 'alphabetic';
     }
     ctx.globalAlpha = 1;
@@ -1263,6 +1301,8 @@
 
   function render() {
     var s = G.state;
+    if (s === 'pause' && !dirty) return;
+    dirty = false;
     ctx.save();
     ctx.direction = 'rtl'; // every canvas string is Arabic; all calls set textAlign explicitly
     if (s === 'title' || s === 'boxes' || s === 'levels' || s === 'style') {
@@ -1270,7 +1310,7 @@
       drawTitleDeco();
       ctx.translate(shake.x, shake.y);
       drawWorld(G.titleWorld, G.titleMunch, 'cardboard', 1.35, null);
-      drawParts(); drawTexts(); drawTrail();
+      drawParts(); drawTexts(); drawTrail(trail);
       ctx.restore();
       return;
     }
@@ -1283,7 +1323,8 @@
     drawHints(w);
     drawParts();
     drawTexts();
-    drawTrail();
+    drawTrail(trail);
+    for (var i = 0; i < G.strokes.length; i++) drawTrail(G.strokes[i].pts);
     drawTaps();
     drawTutorial(w);
     ctx.restore();
@@ -1325,10 +1366,10 @@
       return {
         state: G.state, level: G.level, panel: G.panel, demo: G.demo, totalStars: totalStars(), prog: prog.stars.slice(),
         world: w ? { state: w.state, frame: w.frame, stars: w.starsGot, ropes: w.ropes.length, candy: [Math.round(w.candy.x), Math.round(w.candy.y)], bubble: w.candy.bubble } : null,
-        particles: n
+        particles: n, cue: G.cue && G.cue.f, strokes: G.strokes.length
       };
     },
-    start: function (i) { startLevel(i); },
+    start: function (i, o) { startLevel(i, o); },
     world: function () { return G.world; },
     replay: function (i) { startLevel(i, { replay: SOL[i] }); },
     solution: function (i) { return SOL[i]; },

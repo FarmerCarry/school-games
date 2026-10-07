@@ -215,6 +215,10 @@
       spikes: [{ x: 640, y: 680, w: 900, a: 0 }],
       stars: [[420, 490], [720, 420], [990, 460]] },
 
+    // Finale. Its recorded 3-star line is tight: with the other steps fixed it still wins from -1..+1
+    // frames on the first cut, -4..+9 on the second and -2..+2 on the ring cut (44% when every step is
+    // up to 5 frames off). A 1-star line (cut p1 at 193, ring at 258) forgives more (about 70%). The
+    // hint re-plans each next step from the real world and aims at the middle of its winning window.
     { name: 'الهدية الكبرى',
       candy: [200, 230], munch: [1130, 170],
       ropes: [{ x: 100, y: 110 }, { x: 300, y: 110 }],
