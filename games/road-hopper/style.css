@@ -57,6 +57,11 @@ html, body { background: #9fe3ff; }
 .pop.pink { color: #ff9ed0; }
 #banner { position: absolute; left: 0; right: 0; top: 16%; text-align: center; opacity: 0; }
 #banner.show { animation: banner 2.4s ease-out forwards; }
+/* Reduced motion (and the classroom preset) shortens every animation to almost nothing,
+   which would jump these straight to their invisible last frame. Show them still
+   instead; game.js removes each popup and hides the banner on a timer. */
+html[data-sg-motion="reduce"] .pop { animation: none; }
+html[data-sg-motion="reduce"] #banner.show { animation: none; opacity: 1; }
 .b-top { font-size: 1.6em; font-weight: 700; color: #fff; text-shadow: var(--outline); }
 .b-main { font-size: 4.4em; font-weight: 700; color: var(--yellow); text-shadow: var(--outline), 0 0.08em 0 var(--navy); line-height: 1.15; }
 
@@ -148,6 +153,7 @@ html, body { background: #9fe3ff; }
 .card.sel { border-color: var(--yellow); background: rgba(255, 210, 63, 0.2); }
 .card.sel::after { content: '✓'; position: absolute; top: -0.4em; left: -0.4em; width: 1.5em; height: 1.5em; border-radius: 50%; background: var(--yellow); color: var(--navy); font-weight: 700; line-height: 1.5em; }
 .card.locked { cursor: default; }
+.card.locked img { filter: brightness(0) opacity(0.65); } /* a dark silhouette of the coloured picture */
 .card.locked:hover { transform: none; }
 .card.locked .nm { opacity: 0.75; font-size: 0.78em; }
 .card.new::before { content: 'جديد'; position: absolute; top: -0.5em; right: -0.3em; background: var(--pink); color: #fff; font-size: 0.75em; border-radius: 1em; padding: 0 0.5em; }

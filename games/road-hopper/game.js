@@ -14,7 +14,10 @@
   /* ================================================================ save */
   // Every write goes through put(), which skips a key whose JSON is unchanged since
   // this page last read or wrote it (fewer disk writes; same keys and format).
-  var saved = {}, MISSING = {};
+  // A failed write is not remembered, so the next save writes that key again, and the
+  // shared warning (with a retry button) stays up until every failed key is written.
+  var saved = {}, unsaved = {}, MISSING = {};
+  var saveUI = Kit.saveStatus({ retry: function () { persist(); put('tipRuns', tipRuns); } });
   function rd(key, fallback) {
     var v = store.get(key, MISSING);
     if (v === MISSING) return fallback;
@@ -25,8 +28,9 @@
     var s;
     try { s = JSON.stringify(value); } catch (e) { s = null; }
     if (s != null && saved[key] === s) return;
-    saved[key] = s;
-    store.set(key, value);
+    if (store.set(key, value)) { saved[key] = s; delete unsaved[key]; }
+    else { delete saved[key]; unsaved[key] = 1; }
+    if (Object.keys(unsaved).length) saveUI.failed(); else saveUI.saved();
   }
   var save = {
     best: +rd('best', 0) || 0,
@@ -227,6 +231,9 @@
   }
   function genRiver(g, L, d, rel) {
     L.type = 'river';
+    // Ground variant: bit 1 = the next row is land (the cluster ends here), so the far
+    // bank gets foam; bit 2 alternates the ripple pattern between rows.
+    L.variant = (g.left > 0 ? 0 : 1) | (L.row & 1) << 1;
     var logs = [], i;
     if (rel > 12 && Math.random() < 0.22) { // lily pads: still, one is always on the safe column
       var cols = {}; cols[g.safe] = 1;
@@ -263,7 +270,7 @@
   var lanes = {}, laneMin = 0, laneMax = -1, decoDirty = true;
   function addLane(L) {
     var th = L.theme, z = -L.row, i;
-    var variant = (L.type === 'grass' || L.type === 'road') ? L.variant : 0;
+    var variant = L.type === 'rail' ? 0 : L.variant;
     L.mesh = take('lane:' + th + ':' + L.type + ':' + variant, matVC, false, true);
     L.mesh.position.set(0, 0, z);
     if (L.vehicles) for (i = 0; i < L.vehicles.length; i++) {
@@ -897,7 +904,7 @@
   }
 
   /* ============================================================= camera */
-  function shake(p) { shakeP = Math.max(shakeP, p); }
+  function shake(p) { if (!Kit.motion.reduced()) shakeP = Math.max(shakeP, p); }
   function titleLike() { return state === 'title' || ((state === 'chars' || state === 'machine') && prevScreen === 'title'); }
   function updateCamera(dt) {
     var tm = titleLike() ? 1 : 0;
@@ -1027,10 +1034,16 @@
     }
   }
 
-  var lastR = performance.now();
+  // A paused run looks the same every frame, so it is drawn once (again after a resize,
+  // a restored canvas or late fonts) and then the graphics card is left idle. Falling
+  // confetti still finishes first.
+  var lastR = performance.now(), redraw = true;
+  canvas.addEventListener('webglcontextrestored', function () { redraw = true; });
   function render() {
     var now = performance.now(), rdt = Math.min(0.05, (now - lastR) / 1000);
     lastR = now;
+    if (state === 'paused' && !redraw && !conf.length) return;
+    redraw = false;
     dynRes(now, state === 'play');
     if (decoDirty) rebuildDeco();
     bestSign.visible = !titleLike(); // on the menu it would sit half-hidden under the missions box
@@ -1077,16 +1090,22 @@
     while (box.children.length > 10) box.removeChild(box.firstChild);
     setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 950);
   }
+  // The banner fades out by itself; the timer also hides it under reduced motion,
+  // where style.css shows it without the animation.
+  var bannerT = 0;
   function showBanner(top, main) {
     var b = $('banner');
     b.querySelector('.b-top').textContent = top;
     b.querySelector('.b-main').textContent = main;
     b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+    clearTimeout(bannerT);
+    bannerT = setTimeout(function () { b.classList.remove('show'); }, 2400);
   }
   // Confetti on a 2D overlay
   var conf = [], confDirty = false;
   var CONF_COLORS = ['#ffd23f', '#ff4d6d', '#2fd36b', '#3fb6ff', '#b36bff', '#ff8a1f', '#ffffff'];
   function confetti(n) {
+    if (Kit.motion.reduced()) return; // decorative; the popups, banner and sounds still celebrate
     var w = fxc.width, h = fxc.height;
     for (var i = 0; i < n && conf.length < 260; i++) {
       conf.push({ x: Math.random() * w, y: -20 - Math.random() * h * 0.35, vx: (Math.random() - 0.5) * 160, vy: 120 + Math.random() * 220,
@@ -1106,8 +1125,11 @@
       fctx.restore();
     }
   }
+  // Switching to reduced motion (e.g. the classroom preset) stops shake and confetti at once.
+  Kit.motion.onChange(function (reduced) { if (reduced) { shakeP = 0; conf.length = 0; redraw = true; } });
 
   function onResize() {
+    redraw = true;
     var w = window.innerWidth, h = window.innerHeight;
     renderer.setSize(w, h);
     var aspect = w / h, viewH = 11.2;
@@ -1132,7 +1154,7 @@
     S.click();
     try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
-  function pauseGame() { if (state !== 'play') return; state = 'paused'; setWarn(false); $('pScore').textContent = score; showScreen('pause'); S.click(); }
+  function pauseGame() { if (state !== 'play') return; state = 'paused'; redraw = true; setWarn(false); $('pScore').textContent = score; showScreen('pause'); S.click(); }
   function resumeGame() { if (state !== 'paused') return; state = 'play'; showScreen(null); S.click(); K.reset(); }
   function restart() { resetWorld(0); state = 'title'; startGame(); }
   function toMenu() { resetWorld(0); state = 'title'; $('hud').hidden = true; showScreen('title'); refreshTitle(); }
@@ -1281,11 +1303,11 @@
   }
 
   /* ------------------------------------------------------- thumbnails */
-  var tR = null, tScene, tCam, tMesh, thumbCache = {}, matSil = new THREE.MeshBasicMaterial({ color: 0x0f1238 });
+  // One coloured picture per character; locked cards darken it with a CSS filter.
+  var tR = null, tScene, tCam, tMesh, thumbCache = {};
   var _box = new THREE.Box3(), _size = new THREE.Vector3(), _ctr = new THREE.Vector3();
-  function thumb(id, locked) {
-    var key = id + (locked ? ':x' : '');
-    if (thumbCache[key]) return thumbCache[key];
+  function thumb(id) {
+    if (thumbCache[id]) return thumbCache[id];
     try {
       if (!tR) {
         tR = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -1300,12 +1322,12 @@
       var g = geo('char:' + id);
       g.computeBoundingBox(); _box.copy(g.boundingBox); _box.getSize(_size); _box.getCenter(_ctr);
       var sc = 0.95 / Math.max(_size.x, _size.y, _size.z);
-      tMesh.geometry = g; tMesh.material = locked ? matSil : matVC;
+      tMesh.geometry = g;
       tMesh.scale.setScalar(sc); tMesh.position.set(-_ctr.x * sc, -_ctr.y * sc, -_ctr.z * sc);
       tR.render(tScene, tCam);
-      thumbCache[key] = tR.domElement.toDataURL('image/png');
-    } catch (e) { thumbCache[key] = ''; }
-    return thumbCache[key];
+      thumbCache[id] = tR.domElement.toDataURL('image/png');
+    } catch (e) { thumbCache[id] = ''; }
+    return thumbCache[id];
   }
 
   /* ------------------------------------------------- idle-time warm-up */
@@ -1333,8 +1355,22 @@
     renderer.compile(warmGroup, cam, scene);
     return null;
   }
-  function warmDrawOnce() { if (warmGroup) { scene.add(warmGroup); warmDraw = true; } } // render() draws it once, then removes it
-  var warmSteps = [warmCompile, warmDrawOnce];
+  function warmDrawOnce() { if (warmGroup) { scene.add(warmGroup); warmDraw = true; redraw = true; } } // render() draws it once, then removes it
+  // Character pictures: drawing all 16 on the first visit to the characters screen froze
+  // the page, so they are drawn here about 8 ms' worth per idle step, 50 ms apart. Their
+  // second WebGL context is freed once every picture is cached (thumb() still draws on demand).
+  var thumbNext = 0;
+  function warmThumbs() {
+    var t0 = performance.now();
+    do thumb(CHARS[thumbNext++].id);
+    while (thumbNext < CHARS.length && performance.now() - t0 < 8);
+    if (thumbNext < CHARS.length) { warmSteps.push(warmThumbs); return 50; }
+    if (!tR) return;
+    tR.dispose();
+    if (tR.extensions.has('WEBGL_lose_context')) tR.forceContextLoss();
+    tR = null;
+  }
+  var warmSteps = [warmCompile, warmDrawOnce, warmThumbs];
   function warmLater(ms) {
     setTimeout(function () {
       if (window.requestIdleCallback) window.requestIdleCallback(warmNext, { timeout: 1000 });
@@ -1347,7 +1383,7 @@
     var r = null;
     try { r = warmSteps.shift()(); } catch (e) { /* shaders are then built on first use, as before */ }
     if (r && r.then) r.then(function () { warmLater(100); }, function () { warmLater(100); });
-    else warmLater(300);
+    else warmLater(typeof r === 'number' ? r : 300); // a step may ask for a shorter pause
   }
 
   /* ------------------------------------------------------- characters */
@@ -1364,7 +1400,7 @@
       var own = has(c.id), d = document.createElement('div');
       d.className = 'card' + (own ? '' : ' locked') + (c.id === save.sel ? ' sel' : '') + (own && !save.seen[c.id] ? ' new' : '');
       var img = document.createElement('img');
-      img.src = thumb(c.id, !own); img.alt = '';
+      img.src = thumb(c.id); img.alt = '';
       var nm = document.createElement('div');
       nm.className = 'nm'; nm.textContent = own ? c.name : lockHint(c);
       d.appendChild(img); d.appendChild(nm);
@@ -1419,7 +1455,7 @@
     setTimeout(function () {
       pulling = false;
       if (state !== 'machine') { refreshMachine(); return; }
-      $('mImg').src = thumb(pick.id, false);
+      $('mImg').src = thumb(pick.id);
       $('mName').textContent = pick.name;
       $('mReveal').hidden = false;
       S.win(); confetti(120);
