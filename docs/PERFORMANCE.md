@@ -185,6 +185,26 @@ limits (Tank Splat is closest, at 106,858 of 110,000). The portal is 348,269
 bytes and the offline cache 4,666,890 bytes, both under unchanged limits. No
 production dependency, request, font or precached file is added.
 
+The second batch fixed the other 17 games the same way. It also removes work:
+Blob Battle draws pellets from a pre-shrunk sprite sheet instead of thousands
+of arc paths, Wacky Soccer caches its crowd and limits the hard CPU's lookahead,
+Block World and Block Burst no longer stall startup on a GPU read-back, Road
+Hopper renders character thumbnails in small idle steps before the screen
+opens, then frees their WebGL context, and Air
+Hockey, Hoop Heads, Candy Rope, Sneaky Levels, Road Hopper, Snake Arena, Blob
+Battle and Pizza Empire keep their last paused frame. Two limits change:
+
+| File | Before bytes | After bytes | Before gzip | After gzip | New limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Skybound Golf | 70,849 | 78,259 | 25,468 | 27,976 | 80,000 |
+| Candy Rope | 100,468 | 107,191 | 33,325 | 35,798 | 109,000 |
+
+Golf's growth pays for a hit button that strikes on press, star pickups for
+coins along the flight, a ball-style shop for players who maxed every upgrade,
+a sky that rises into space, and record celebrations. Candy Rope's pays for
+hints that show when to cut, adjusted to the player's own timing. The other 15
+games stay inside their unchanged limits.
+
 ## CI, review, and deployed performance
 
 The build workflow runs this check immediately after building, on pull requests
