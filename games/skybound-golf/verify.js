@@ -57,7 +57,17 @@ for (let w = 0; w < 4; w++) {
   }
 }
 const clean = P.sanitizeSave({ coins: -20, best: NaN, world: 3, upgrades: { power: Infinity, bounce: 91, glide: -3 }, shots: -7 });
-assert.deepEqual(clean, { coins: 0, best: 0, world: 0, upgrades: { power: 0, bounce: 10, glide: 0 }, shots: 0, holes: 0 });
+assert.deepEqual(clean, { coins: 0, best: 0, world: 0, upgrades: { power: 0, bounce: 10, glide: 0 }, shots: 0, holes: 0, skins: ['classic'], skin: 'classic' });
+const styled = P.sanitizeSave({ skins: ['gold', 'hacked', 'gold'], skin: 'hacked' });
+assert.deepEqual([styled.skins, styled.skin], [['classic', 'gold'], 'classic'], 'unknown ball styles are dropped');
+assert.equal(P.sanitizeSave({ skins: ['comet'], skin: 'comet' }).skin, 'comet');
+assert.equal(P.sanitizeSave({ skins: 'gold', skin: 'gold' }).skin, 'classic');
+const sky = P.createCourse(3);
+assert.deepEqual(P.stars(sky, 300, 1100), P.stars(sky, 300, 1100), 'stars are deterministic');
+assert(P.stars(sky, 300, 1100).every(s => s.x >= 300 && s.x <= 1100 && s.y > P.heightAt(sky, s.x)), 'stars stay in view, above ground');
+assert(P.stars(sky, 0, 1e9).length <= 65 * 8, 'an enormous viewport query stays bounded');
+const ids = P.stars(P.createCourse(0), 0, 2000).map(s => s.id);
+assert.equal(new Set(ids).size, ids.length, 'star ids are unique');
 assert.equal(P.cost('power', 10), Infinity);
 for (const kind of ['power', 'bounce', 'glide']) {
   for (let n = 0; n < 9; n++) assert(P.cost(kind, n + 1) > P.cost(kind, n));

@@ -40,11 +40,13 @@ async function completePutt(page,offset=0) {
   assert.equal(await page.evaluate(()=>golfState.phase),'outcome');
 }
 const savedProgress = page => page.evaluate(()=>JSON.parse(localStorage.getItem('sg:skybound-golf:progress')));
+// Reaching the green saves the flight; only a sunk putt saves again, for its bonus.
+const puttSaves = name => name==='cup' ? 2 : 1;
 for(const [name,offset,expected] of [['short',-.3,'لم تصل'],['overshoot',.2,'تجاوزت'],['close',-.04,'قريبة جدًا'],['cup',0,'في الحفرة']]) {
   test(`Golf ${name} feedback holds, pauses, skips once and repeats without duplicate saves`,async t=>{
     const page=await game(t);await completePutt(page,offset);
     assert.match(await page.locator('#toast').textContent(),new RegExp(expected));
-    assert.equal(await page.evaluate(()=>golfProbe.saves),1,'completed putt saves before its animation');
+    assert.equal(await page.evaluate(()=>golfProbe.saves),puttSaves(name),'completed putt saves before its animation');
     const completed = await savedProgress(page);
     await page.locator('#pause').click();
     await page.evaluate(()=>golfRender());
@@ -54,17 +56,17 @@ for(const [name,offset,expected] of [['short',-.3,'لم تصل'],['overshoot',.2
     await page.locator('#resume').click();
     await page.locator('#continue').focus();await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(()=>golfState.phase),'result');
-    assert.equal(await page.evaluate(()=>golfProbe.saves),1);
+    assert.equal(await page.evaluate(()=>golfProbe.saves),puttSaves(name));
     assert.match(await page.locator('#result-note').textContent(),new RegExp(name==='cup'?'تسديدة ممتازة':expected));
     assert.equal(await page.locator('#modal-heading').textContent(),name==='cup'?'في الحفرة!':'رقم قياسي جديد!');
     await page.evaluate(()=>advanceGolfFrames(120));
-    assert.equal(await page.evaluate(()=>golfProbe.saves),1);
+    assert.equal(await page.evaluate(()=>golfProbe.saves),puttSaves(name));
     assert.deepEqual(await savedProgress(page),completed,'showing the result never awards the shot twice');
     await page.locator('#again').click();
     assert.equal(await page.evaluate(()=>golfState.putt),null);
     await page.locator('#hit').click();await page.locator('#pause').click();await page.locator('#restart').click();
     assert.equal(await page.evaluate(()=>golfState.phase),'ready');
-    assert.equal(await page.evaluate(()=>golfProbe.saves),1);
+    assert.equal(await page.evaluate(()=>golfProbe.saves),puttSaves(name));
   });
 }
 for(const [name,offset,holes] of [['cup',0,1],['miss',-.3,0]]) {
@@ -79,7 +81,7 @@ for(const [name,offset,holes] of [['cup',0,1],['miss',-.3,0]]) {
         await page.locator('#pause').click();
         await page.locator('#'+exit).click();
         assert.equal(await page.evaluate(()=>golfState.phase),exit==='menu'?'title':'ready');
-        assert.equal(await page.evaluate(()=>golfProbe.saves),1);
+        assert.equal(await page.evaluate(()=>golfProbe.saves),holes?2:1);
         assert.deepEqual(await savedProgress(page),completed);
       }
       await page.reload();
@@ -88,6 +90,34 @@ for(const [name,offset,holes] of [['cup',0,1],['miss',-.3,0]]) {
     });
   }
 }
+test('Golf saves a flight that reaches the green even if putting is abandoned',async t=>{
+  const page=await game(t);await putt(page);
+  const distance=await page.evaluate(()=>Math.floor(golfState.ball.maxX));
+  assert.equal(await page.evaluate(()=>golfProbe.saves),1,'the finished flight is saved on arrival at the green');
+  await page.keyboard.press('Escape');await page.locator('#restart').click();
+  assert.equal(await page.evaluate(()=>golfState.phase),'ready');
+  const saved=await savedProgress(page);
+  assert.equal(saved.best,distance);assert.equal(saved.shots,1);assert.equal(saved.holes,0);
+  assert(saved.coins>0,'the flight reward is kept');
+  assert.equal(await page.evaluate(()=>golfProbe.saves),1,'restarting never saves the shot again');
+});
+test('Golf reports a failed save and retries it from the warning',async t=>{
+  const page=await game(t);
+  await page.evaluate(()=>{
+    const setItem=Storage.prototype.setItem;
+    window.failSaves=true;
+    Storage.prototype.setItem=function(k,v){ if(window.failSaves&&k.includes('skybound-golf')) throw new Error('full'); return setItem.call(this,k,v); };
+  });
+  await page.evaluate(()=>advanceGolfFrames(29));await page.locator('#hit').click();
+  await page.evaluate(()=>{golfState.ball.stopped=true;golfState.ball.surface='grass';golfState.ball.maxX=90;for(let i=0;i<60;i++)golfTick(1/60);});
+  assert.equal(await page.evaluate(()=>golfState.phase),'result');
+  assert.equal(await page.locator('.sg-save-status').isVisible(),true,'a failed write is visible');
+  assert.equal(await savedProgress(page),null);
+  await page.evaluate(()=>{window.failSaves=false;});
+  await page.locator('.sg-save-status button').click();
+  assert.equal((await savedProgress(page)).best,90,'retry writes the kept progress');
+  assert.equal(await page.locator('.sg-save-status button').isVisible(),false);
+});
 test('Golf needle aligns with original LTR target and reduced motion still completes a cup',async t=>{
   const page=await game(t,'reduce');
   await page.evaluate(()=>advanceGolfFrames(29));
@@ -103,7 +133,7 @@ test('Golf needle aligns with original LTR target and reduced motion still compl
   await page.evaluate(()=>{const p=golfState.putt;p.v=p.targetPower*1.8;for(let i=0;i<250;i++) golfTick(1/60);});
   assert.equal(await page.evaluate(()=>golfState.phase),'result');
   assert.equal(await page.evaluate(()=>golfState.putt.sunk),true);
-  assert.equal(await page.evaluate(()=>golfProbe.saves),1);
+  assert.equal(await page.evaluate(()=>golfProbe.saves),2);
   // Classroom or system motion changes must reach the new renderer even
   // while the result modal has stopped normal frame updates.
   for (const reduced of [false, true]) {
@@ -136,7 +166,7 @@ test('Golf real UI shots across worlds/upgrades preserve 60Hz results at normal 
     assert.equal(result.actual,result.expected,`world ${world}, level ${level}, speed ${speed}`);
     assert.equal(result.r,.7,'visual ball sizing must not change collision radius');
     assert(['putting','result'].includes(result.phase));
-    assert.equal(result.saves,result.phase==='result'?1:0);
+    assert.equal(result.saves,1,'a finished flight saves once, whether or not it reaches a green');
   }
 });
 
