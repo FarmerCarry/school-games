@@ -18,9 +18,13 @@
     music: store.get('music', true) !== false,
     beaten: !!store.get('beaten', false)
   };
+  var saveStatus = Kit.saveStatus({ retry: persist });
+  // Every key is written (no short-circuit); the in-memory save stays, so Retry rewrites it all.
   function persist() {
-    store.set('unlocked', save.unlocked); store.set('best', save.best); store.set('hat', save.hat);
-    store.set('solo', save.solo); store.set('music', save.music); store.set('beaten', save.beaten);
+    var ok = [store.set('unlocked', save.unlocked), store.set('best', save.best), store.set('hat', save.hat),
+      store.set('solo', save.solo), store.set('music', save.music), store.set('beaten', save.beaten)].every(Boolean);
+    if (ok) saveStatus.saved(); else saveStatus.failed();
+    return ok;
   }
   function totalStars() {
     var s = 0;
@@ -37,6 +41,12 @@
   var ctx = view.ctx;
   var ptr = Kit.pointer(view);
   var fx = R.particles();
+  // Reduced motion / classroom preset: no ambient embers or confetti, and small
+  // bursts so jumps, gems, doors and deaths still give feedback.
+  var calm = false;
+  function setCalm(v) { calm = !!v; fx.scale = calm ? 0.3 : 1; }
+  setCalm(Kit.motion.reduced());
+  Kit.motion.onChange(setCalm);
   var shake = Kit.shake();
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'الصوت');
@@ -48,6 +58,7 @@
   var titleWorld = null;
   var anim = { fire: mkAnim(), ice: mkAnim() };
   var soloActive = 'fire';
+  var soloHintT = 0;           // seconds left of the bottom "Tab to switch" banner (solo mode)
   var time = 0;
   var deadShown = false, winShown = false, winAt = 0;
   var banner = 0;
@@ -191,6 +202,7 @@
 
   /* ----------------------------------------------------------- flow */
   function goTitle() {
+    clearWinTimers();
     mode = 'title';
     world = null; bot = null;
     showOverlay('titleScreen');
@@ -198,6 +210,7 @@
     $('pauseBtn').hidden = true;
   }
   function goMap() {
+    clearWinTimers();
     // highlight the level just played (or the next one after a win)
     if (world && (mode === 'play' || mode === 'paused')) mapSel = (world.state === 'won' && levelIdx + 1 < save.unlocked) ? levelIdx + 1 : levelIdx;
     mode = 'map';
@@ -209,6 +222,7 @@
     ptr.pressed = false; ptr.released = false;
   }
   function startLevel(i) {
+    clearWinTimers();   // a quick Next/Replay must not hear the old panel's star chimes
     levelIdx = i; rArm = -9;
     bot = null;
     world = FI.build(LEVELS[i], i);
@@ -223,6 +237,7 @@
     hideOverlays();
     $('pauseBtn').hidden = false;
     banner = 2.2;
+    soloHintT = 3;
     flash = 0.35;
     K.reset();
   }
@@ -260,6 +275,7 @@
   }
   function setSolo(v) {
     save.solo = !!v; persist(); refreshTitle(); refreshPause();
+    if (save.solo) soloHintT = 3;   // turned on from the pause menu: explain Tab again
   }
   function refreshPause() {
     $('pauseSolo').textContent = save.solo ? 'لاعب واحد: نعم' : 'لاعب واحد: لا';
@@ -275,6 +291,7 @@
   function fmtPar(t) { var m = Math.floor(t / 60), s = Math.round(t - m * 60); return m + ':' + (s < 10 ? '0' : '') + s; }
 
   var winTimers = [];
+  function clearWinTimers() { winTimers.forEach(clearTimeout); winTimers = []; }
   function showWin() {
     winShown = true;
     var def = LEVELS[levelIdx], w = world;
@@ -321,7 +338,7 @@
     $('winFinal').hidden = levelIdx < NL - 1;
     showOverlay('winScreen');
     // pop stars one by one
-    winTimers.forEach(clearTimeout); winTimers = [];
+    clearWinTimers();
     var els = box.querySelectorAll('.crit');
     crit.forEach(function (c, i) {
       winTimers.push(setTimeout(function () {
@@ -335,7 +352,7 @@
   }
   function showFinal() {
     $('finalStars').textContent = totalStars() + ' / ' + NL * 3;
-    winTimers.forEach(clearTimeout); winTimers = [];
+    clearWinTimers();
     showOverlay('finalScreen');
     SFX.win();
     for (var i = 0; i < 120; i++) confetti(Math.random() * 1280, -20 - Math.random() * 200, true);
@@ -456,6 +473,7 @@
   }
   var CONF = ['#ff5a1f', '#ffd230', '#2f9bff', '#8cf04a', '#ff6fae', '#b56cff', '#ffffff'];
   function confetti(x, y, screen) {
+    if (calm) return;
     var p = fx.add({ x: x, y: y, vx: (Math.random() - 0.5) * (screen ? 200 : 420), vy: screen ? 60 + Math.random() * 120 : -250 - Math.random() * 300,
       life: screen ? 3 + Math.random() * 1.5 : 1.6 + Math.random(), size: 3 + Math.random() * 3, color: CONF[Math.floor(Math.random() * CONF.length)], g: screen ? 90 : 520, drag: 0.8, shape: 1 });
     p.shrink = false; p.screen = !!screen;
@@ -486,7 +504,7 @@
     a.vxn = p.vx / 235;
     // ambient particles
     a.ember -= dt;
-    if (a.ember < 0 && p.alive) {
+    if (a.ember < 0 && p.alive && !calm) {
       if (p.kind === 'fire') {
         a.ember = 0.07 + Math.random() * 0.08;
         fx.add({ x: p.x + p.w / 2 + (Math.random() - 0.5) * 12, y: p.y - 8, vx: (Math.random() - 0.5) * 30 - p.vx * 0.2, vy: -40 - Math.random() * 50, life: 0.5, size: 2.2, color: Math.random() < 0.5 ? '#ffb347' : '#ffe066', g: -40, add: true });
@@ -504,6 +522,7 @@
     a.wasInFan = p.inFan;
   }
   function ambientWorld(w, dt) {
+    if (calm) return;
     // embers off lava, occasional drips
     var runs = w.deco.runs;
     for (var i = 0; i < runs.length; i++) {
@@ -551,6 +570,7 @@
     var w = world;
     if (w.state === 'play') {
       if (K.pressed('KeyP') || K.pressed('Escape')) { pause(); return; }
+      if (soloHintT > 0) soloHintT -= dt;
       // Two kids share the keyboard and R sits right next to the ice player's W/D keys:
       // one stray tap must not wipe the level, so mid-level R needs a second tap.
       if (K.pressed('KeyR')) {
@@ -560,6 +580,7 @@
       var tabSwitch = K.pressed('Tab') && !K.anyDown(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight']);
       if (save.solo && gameSurfaceFocused() && (tabSwitch || K.pressed('ShiftLeft') || K.pressed('ShiftRight'))) {
         soloActive = soloActive === 'fire' ? 'ice' : 'fire';
+        soloHintT = 3;
         SFX.swap();
         var sp = w[soloActive];
         fx.burst(sp.x + sp.w / 2, sp.y + 10, { count: 12, colors: soloActive === 'fire' ? ['#ffb347', '#fff1a8'] : ['#9ce8ff', '#fff'], speed: 150, life: 0.4, size: 2.5, g: 0, shape: 2, add: true, drag: 2 });
@@ -819,16 +840,28 @@
       g.fillText(rt, 640, 80);
       g.globalAlpha = 1;
     }
-    // solo banner
+    // solo: a chip in the top bar always says who moves; the bottom banner only shows
+    // for 3 s after a start or swap, because it sits over bottom-centre hazards
     if (save.solo && w.state === 'play') {
       var who = soloActive === 'fire' ? 'النار' : 'الجليد';
+      var heroCol = soloActive === 'fire' ? '#ffb347' : '#9ce8ff';
       g.font = '700 17px ' + R.FONT; g.direction = 'rtl';
-      var txt = 'أنت تحرّك ' + who + '   ·   Tab أو Shift للتبديل';
-      var tw = g.measureText(txt).width + 40;
-      pill(g, 640 - tw / 2, 676, tw, 34);
-      g.textAlign = 'center';
-      g.fillStyle = soloActive === 'fire' ? '#ffb347' : '#9ce8ff';
-      g.fillText(txt, 640, 695);
+      var chip = 'تحرّك: ' + who + '  ·  Tab';
+      var cw = g.measureText(chip).width + 54;
+      pill(g, 838 - cw / 2, 6, cw, 34);
+      g.fillStyle = heroCol;
+      g.beginPath(); g.arc(838 + cw / 2 - 20, 23, 7, 0, Math.PI * 2); g.fill();
+      g.textAlign = 'right';
+      g.fillText(chip, 838 + cw / 2 - 34, 24);
+      if (soloHintT > 0) {
+        var txt = 'أنت تحرّك ' + who + '   ·   Tab أو Shift للتبديل';
+        var tw = g.measureText(txt).width + 40;
+        g.globalAlpha = Math.min(1, soloHintT / 0.5);
+        pill(g, 640 - tw / 2, 676, tw, 34);
+        g.textAlign = 'center'; g.fillStyle = heroCol;
+        g.fillText(txt, 640, 695);
+        g.globalAlpha = 1;
+      }
     }
     // level banner
     if (banner > 0) {
