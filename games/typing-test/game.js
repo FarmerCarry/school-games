@@ -24,8 +24,9 @@
   var body = document.body;
 
   /* ------------------------------------------------------------ settings */
+  // First visit starts in Arabic like the rest of the site; a saved choice wins.
   var S = (function () {
-    var d = { lang: 'en', mode: 'time', amt: { time: 30, words: 25, sentences: 3 }, lenient: true, kbd: false, sound: false, theme: 'dark' };
+    var d = { lang: 'ar', mode: 'time', amt: { time: 30, words: 25, sentences: 3 }, lenient: true, kbd: false, sound: false, theme: 'dark' };
     var s = store.get('settings', null);
     if (s && typeof s === 'object') {
       if (s.lang === 'ar' || s.lang === 'en') d.lang = s.lang;
@@ -38,7 +39,17 @@
     }
     return d;
   })();
-  function saveSettings() { store.set('settings', S); }
+  function saveSettings() { save('settings', S); }
+
+  // Writes that failed stay in `pending` (the game keeps using them) until a retry succeeds.
+  var pending = {}, saveUi = null;
+  function save(key, value) { pending[key] = value; flushSaves(); }
+  function flushSaves() {
+    for (var k in pending) if (store.set(k, pending[k])) delete pending[k];
+    if (Object.keys(pending).length) (saveUi || (saveUi = Kit.saveStatus({ retry: flushSaves }))).failed();
+    else if (saveUi) saveUi.saved();
+  }
+  function saved(key, fallback) { return key in pending ? pending[key] : store.get(key, fallback); }
 
   /* ---------------------------------------------------------------- text */
   // English is wrapped in a Unicode isolate so "English · 10 كلمات" keeps its order inside Arabic text.
@@ -137,6 +148,7 @@
     wordsEl.textContent = '';
     wordsEl.style.transform = 'translateY(0px)';
     appendWords(T.gen.take(T.gen.finite ? 1000 : 100));
+    buildRace();
     wordsEl.appendChild(caret);
     caret.className = 'blink';
     measure();
@@ -408,6 +420,39 @@
     timerEl.textContent = txt;
     timerEl.className = running ? '' : 'dim';
     liveWpmEl.textContent = running && T.wpmHist.length ? Math.round(T.liveWpm) + ' ' + UNIT : '';
+    updateRace();
+  }
+
+  /* ----------------------------------------------------------- race lane */
+  // A ⚡ races along the live row: its place is the live speed, so it passes the animal badges and
+  // the 🏁 of this test type's personal best. It moves once a second with the live wpm (a CSS
+  // transform transition glides between seconds), so there is still no animation loop.
+  var raceEl = $('race'), race = null;
+  function buildRace() {
+    var pb = getPbs()[pbKey(T)], best = pb && pb.wpm > 0 ? pb.wpm : 0;
+    var max = Math.max(50, Math.ceil(best * 1.25 / 10) * 10), marks = [], html = '';
+    E.BADGES.forEach(function (b) { if (b.min) marks.push({ v: b.min, t: b.icon, n: b.name }); });
+    if (best) marks.push({ v: best, t: '🏁', n: 'رقمك القياسي: ' + Math.round(best) + ' ' + UNIT, pb: 1 });
+    marks.forEach(function (m) {
+      html += '<i class="ms' + (m.pb ? ' pbf' : '') + '" title="' + m.n + '" style="--p:' + Math.min(1, m.v / max).toFixed(3) + '">' + m.t + '</i>';
+    });
+    raceEl.style.setProperty('--p', 0); // new elements start at 0, not gliding back from the last test
+    raceEl.innerHTML = '<b class="fill"></b>' + html + '<b class="run"><i>⚡</i></b>';
+    race = { max: max, marks: marks, els: raceEl.querySelectorAll('.ms') };
+  }
+  function updateRace() {
+    if (!race) return;
+    var w = T.phase === 'running' ? T.liveWpm : 0;
+    raceEl.style.setProperty('--p', Math.min(1, w / race.max).toFixed(3));
+    // A mark pops the first time it is passed (one ding when key sounds are on), but only once
+    // the speed has settled: live wpm jumps around in the first seconds.
+    var ding = false, settled = T.wpmHist.length >= 3;
+    for (var i = 0; i < race.marks.length; i++) {
+      var el = race.els[i], on = w >= race.marks[i].v;
+      el.classList.toggle('on', on);
+      if (on && settled && !el.classList.contains('hit')) { el.classList.add('hit'); ding = true; }
+    }
+    if (ding) sound('pass');
   }
 
   /* -------------------------------------------------------------- finish */
@@ -432,17 +477,26 @@
     showResults(R);
   }
   function pbKey(o) { return o.lang + '|' + o.mode + '|' + o.amt + '|' + (o.lenient ? 'l' : 's'); }
-  function getPbs() { var p = store.get('pbs', {}); return p && typeof p === 'object' ? p : {}; }
-  function getHist() { var h = store.get('hist', []); return Array.isArray(h) ? h : []; }
+  function getPbs() { var p = saved('pbs', {}); return p && typeof p === 'object' ? p : {}; }
+  function getHist() { var h = saved('hist', []); return Array.isArray(h) ? h : []; }
   // Every finished test goes into the history (so beginners see their progress too); only results
   // with at least 75% accuracy can be personal bests. Low-accuracy entries are flagged v:0.
+  // 'tier' = the best animal badge ever reached (index in E.BADGES), so moving up can be celebrated.
+  // Saves from before it existed get it from their personal bests, so nothing old is "new".
   function record(R) {
-    var pbs = getPbs(), key = pbKey(R), old = pbs[key];
+    var pbs = getPbs(), key = pbKey(R), old = pbs[key], tier = saved('tier', null);
+    if (typeof tier !== 'number') {
+      tier = -1;
+      for (var k in pbs) if (pbs[k] && typeof pbs[k].wpm === 'number') tier = Math.max(tier, E.badge(Math.round(pbs[k].wpm)).i);
+    }
+    var got = E.badge(Math.round(R.wpm)).i;
+    R.tierUp = R.valid && got > tier && got > 0 ? got : 0; // the starting 🐢 is not a promotion
+    if (R.tierUp) save('tier', got);
     R.prevPb = old && typeof old.wpm === 'number' ? old.wpm : null;
     R.isPb = false;
     if (R.valid && (R.prevPb == null || R.wpm > R.prevPb)) {
       pbs[key] = { wpm: R.wpm, acc: R.acc, raw: R.raw, cons: R.consistency, t: R.t };
-      store.set('pbs', pbs);
+      save('pbs', pbs);
       R.isPb = true;
     }
     var h = getHist();
@@ -451,7 +505,7 @@
     if (R.code) e.code = R.code;
     h.push(e);
     while (h.length > 30) h.shift();
-    store.set('hist', h);
+    save('hist', h);
   }
 
   /* ------------------------------------------------------------- results */
@@ -460,6 +514,9 @@
     body.classList.toggle('results', s === 'results');
     testView.hidden = s !== 'test';
     resView.hidden = s !== 'results';
+    // On results Tab moves between buttons (on purpose) and Enter or Esc starts the next test.
+    $('restartKey').textContent = s === 'results' ? 'Enter' : 'Tab';
+    $('escHint').hidden = s === 'results';
   }
   function showResults(R) {
     showScreen('results');
@@ -481,7 +538,9 @@
 
     var shown = Math.round(R.wpm), b = E.badge(shown);
     var nextTxt = b.next ? 'باقي ' + speedHtml(b.next.min - shown) + ' لتصبح ' + b.next.icon + ' ' + b.next.name : 'أنت في القمة! 🌟';
-    $('rBadge').innerHTML = '<span class="be">' + b.cur.icon + '</span><div><b>' + b.cur.name + '</b><small>' + nextTxt + '</small></div>';
+    $('rBadge').className = R.tierUp ? 'badge up' : 'badge';
+    $('rBadge').innerHTML = '<span class="be">' + b.cur.icon + '</span><div><b>' + (R.tierUp ? '🎉 أصبحت ' + b.cur.name + '!' : b.cur.name) +
+      '</b><small>' + nextTxt + '</small></div>';
 
     var pb = $('rPb');
     pb.className = 'pb';
@@ -509,10 +568,14 @@
     $('bLeave').hidden = !R.code;
     drawChart(R);
     updateFoot();
-    // Sounds are OFF by default (like Monkeytype), and that includes the fanfare: a lab of 25 PCs
-    // must stay quiet unless the kids turned sounds on. The confetti always plays.
-    if (R.isPb && R.prevPb != null) { confetti(); if (S.sound) fanfare(); }
-    else if (S.sound) doneChime();
+    // Key sounds are opt-in (like Monkeytype), but a new record or a new animal gets its short
+    // fanfare anyway: the mute button and the portal's classroom mode still silence it (A.muted).
+    var big = (R.isPb && R.prevPb != null) || R.tierUp;
+    if (big) { confetti(170); fanfare(); }
+    else {
+      if (R.isPb) confetti(60); // the first result of this test type: a smaller burst
+      if (S.sound) doneChime();
+    }
   }
 
   /* --------------------------------------------------------------- chart */
@@ -1124,8 +1187,8 @@
       resetTimer = setTimeout(function () { r.classList.remove('armed'); r.textContent = '🗑️ امسح نتائجي'; }, 3000);
       return;
     }
-    store.remove('pbs'); store.remove('hist');
-    renderProgress(); updateFoot();
+    ['pbs', 'hist', 'tier'].forEach(function (k) { delete pending[k]; store.remove(k); });
+    flushSaves(); renderProgress(); updateFoot(); buildRace();
   });
 
   /* -------------------------------------------------------------- sounds */
@@ -1142,6 +1205,9 @@
       A.tone({ freq: 180, to: 110, type: 'triangle', dur: 0.06, vol: 0.16, attack: 0.002 });
     } else if (kind === 'back') {
       A.tone({ freq: 900, to: 700, type: 'sine', dur: 0.03, vol: 0.07, attack: 0.002 });
+    } else if (kind === 'pass') {
+      A.tone({ freq: 1046.5, type: 'triangle', dur: 0.12, vol: 0.07, attack: 0.005 });
+      A.tone({ freq: 1568, type: 'sine', dur: 0.18, vol: 0.05, delay: 0.07, attack: 0.005 });
     } else if (kind === 'err') {
       A.tone({ freq: 150, to: 85, type: 'sine', dur: 0.12, vol: 0.32, attack: 0.004 });
       A.tone({ freq: 310, to: 170, type: 'triangle', dur: 0.06, vol: 0.06, attack: 0.003 });
@@ -1172,7 +1238,9 @@
     var cv = fx.cv, W = Math.round(window.innerWidth * fx.dpr), H = Math.round(window.innerHeight * fx.dpr);
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; fx.ctx.setTransform(fx.dpr, 0, 0, fx.dpr, 0, 0); }
   }
-  function confetti() {
+  // n pieces; skipped with reduced motion or the classroom preset (the results text still celebrates).
+  function confetti(n) {
+    if (Kit.motion.reduced()) return;
     var cv = fx.cv, W = window.innerWidth, H = window.innerHeight;
     fx.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     cv.style.display = 'block';
@@ -1180,7 +1248,7 @@
     cv.width = 0; fxSize();
     var cols = ['#ffc400', '#ff5d6c', '#4ed98a', '#5fb0ff', '#b98bff', '#ffffff', '#ff9f43'];
     fx.parts = [];
-    for (var i = 0; i < 170; i++) {
+    for (var i = 0; i < n; i++) {
       var side = i % 3; // 0 = rain from the top, 1/2 = cannons from the bottom corners
       var p = { c: cols[i % cols.length], w: 6 + Math.random() * 6, h: 4 + Math.random() * 4, r: Math.random() * 6.28, vr: (Math.random() - 0.5) * 12 };
       if (side === 0) { p.x = Math.random() * W; p.y = -20 - Math.random() * H * 0.4; p.vx = (Math.random() - 0.5) * 120; p.vy = 60 + Math.random() * 160; }
@@ -1213,7 +1281,7 @@
       ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2 * Math.abs(Math.cos(p.r * 1.7)), p.w, p.h * Math.abs(Math.cos(p.r * 1.7)) + 1);
       ctx.restore();
     }
-    if (alive && t < fx.until) fx.raf = requestAnimationFrame(fxFrame);
+    if (alive && t < fx.until && !Kit.motion.reduced()) fx.raf = requestAnimationFrame(fxFrame); // stops if motion is reduced mid-burst
     else { ctx.clearRect(0, 0, W, H); fx.cv.style.display = 'none'; fx.parts = []; }
   }
 
