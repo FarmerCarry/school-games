@@ -215,5 +215,7 @@ button { font-family: var(--sg-font); cursor: pointer; }
 
 /* ------------------------------------------------------------ save warning
    The shared panel sits at the bottom centre, over the title's Play button and Enter hint.
-   Here it goes top-right, under the mute and pause buttons, where no screen or HUD has anything. */
-.sg-save-status { top: 62px; bottom: auto; left: auto; right: 12px; margin-inline: 0; }
+   Here it goes top-right, under the mute and pause buttons, where no screen or HUD has anything.
+   The folded badge stays there too: the shared one moves to the inline-end corner, which in RTL
+   is the left, over the leaderboard. */
+.sg-save-status, .sg-save-status[data-compact="true"] { top: 62px; bottom: auto; left: auto; right: 12px; margin-inline: 0; }
