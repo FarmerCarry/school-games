@@ -18,9 +18,13 @@
     music: store.get('music', true) !== false,
     beaten: !!store.get('beaten', false)
   };
+  var saveStatus = Kit.saveStatus({ retry: persist });
+  // Every key is written (no short-circuit); the in-memory save stays, so Retry rewrites it all.
   function persist() {
-    store.set('unlocked', save.unlocked); store.set('best', save.best); store.set('hat', save.hat);
-    store.set('solo', save.solo); store.set('music', save.music); store.set('beaten', save.beaten);
+    var ok = [store.set('unlocked', save.unlocked), store.set('best', save.best), store.set('hat', save.hat),
+      store.set('solo', save.solo), store.set('music', save.music), store.set('beaten', save.beaten)].every(Boolean);
+    if (ok) saveStatus.saved(); else saveStatus.failed();
+    return ok;
   }
   function totalStars() {
     var s = 0;
@@ -33,10 +37,21 @@
   /* ---------------------------------------------------------- canvas */
   var canvas = document.getElementById('game');
   var layersDirty = true;
-  var view = Kit.fit(canvas, R.VW, R.VH, { onResize: function () { layersDirty = true; } });
+  // While paused the frozen scene stays on the canvas; frameDirty asks for one more
+  // draw after a resize, a canvas restore, new layers or a change behind the pause panel.
+  var frameDirty = true;
+  var view = Kit.fit(canvas, R.VW, R.VH, { onResize: function () { layersDirty = true; frameDirty = true; } });
   var ctx = view.ctx;
+  // A lost and restored canvas comes back blank: re-fit it, then rebuild the layers and glows.
+  canvas.addEventListener('contextrestored', function () { R.clearGlows(); view.resize(); });
   var ptr = Kit.pointer(view);
   var fx = R.particles();
+  // Reduced motion / classroom preset: no ambient embers or confetti, and small
+  // bursts so jumps, gems, doors and deaths still give feedback.
+  var calm = false;
+  function setCalm(v) { calm = !!v; fx.scale = calm ? 0.3 : 1; }
+  setCalm(Kit.motion.reduced());
+  Kit.motion.onChange(setCalm);
   var shake = Kit.shake();
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'الصوت');
@@ -48,6 +63,9 @@
   var titleWorld = null;
   var anim = { fire: mkAnim(), ice: mkAnim() };
   var soloActive = 'fire';
+  var soloHintT = 0;           // seconds left of the "Tab to switch" hint under the top bar (solo mode)
+  var soloHintSeen = {};       // levels whose solo hint was already shown during this visit
+  var chipFlash = 0;           // seconds left of the solo chip's highlight after a swap
   var time = 0;
   var deadShown = false, winShown = false, winAt = 0;
   var banner = 0;
@@ -188,20 +206,27 @@
     overlays.forEach(function (o) { $(o).hidden = o !== id; });
   }
   function hideOverlays() { showOverlay(null); }
+  // body.fi-playing = a level is on screen with no panel over it (style.css hides the
+  // save warning then, so it never covers hazards or heroes).
+  function setPlaying(on) { document.body.classList.toggle('fi-playing', !!on); }
 
   /* ----------------------------------------------------------- flow */
   function goTitle() {
+    clearWinTimers();
     mode = 'title';
     world = null; bot = null;
+    setPlaying(false);
     showOverlay('titleScreen');
     refreshTitle();
     $('pauseBtn').hidden = true;
   }
   function goMap() {
+    clearWinTimers();
     // highlight the level just played (or the next one after a win)
     if (world && (mode === 'play' || mode === 'paused')) mapSel = (world.state === 'won' && levelIdx + 1 < save.unlocked) ? levelIdx + 1 : levelIdx;
     mode = 'map';
     world = null; bot = null;
+    setPlaying(false);
     hideOverlays();
     $('pauseBtn').hidden = true;
     mapSel = Kit.clamp(mapSel, 0, save.unlocked - 1);
@@ -209,6 +234,7 @@
     ptr.pressed = false; ptr.released = false;
   }
   function startLevel(i) {
+    clearWinTimers();   // a quick Next/Replay must not hear the old panel's star chimes
     levelIdx = i; rArm = -9;
     bot = null;
     world = FI.build(LEVELS[i], i);
@@ -221,8 +247,14 @@
     deadShown = false; winShown = false;
     mode = 'play';
     hideOverlays();
+    setPlaying(true);
     $('pauseBtn').hidden = false;
     banner = 2.2;
+    // Solo: explain Tab the first time a level starts in this visit. The top chip always
+    // says who moves, so retries and swaps do not bring the hint back.
+    soloHintT = save.solo && !soloHintSeen[i] ? 3 : 0;
+    if (soloHintT) soloHintSeen[i] = true;
+    chipFlash = 0;
     flash = 0.35;
     K.reset();
   }
@@ -230,6 +262,9 @@
   function pause() {
     if (mode !== 'play' || !world || world.state !== 'play') return;
     mode = 'paused';
+    setPlaying(false);
+    flash = 0;            // finish the level-start fade so the frozen scene is visible
+    frameDirty = true;    // draw the paused scene once, then idle
     refreshPause();
     showOverlay('pauseScreen');
     SFX.click();
@@ -238,6 +273,7 @@
     if (mode !== 'paused') return;
     mode = 'play';
     hideOverlays();
+    setPlaying(true);
     K.reset();
     SFX.click();
   }
@@ -260,6 +296,9 @@
   }
   function setSolo(v) {
     save.solo = !!v; persist(); refreshTitle(); refreshPause();
+    // turned on from the pause menu: explain Tab once when play resumes
+    if (save.solo && world) { soloHintT = 3; soloHintSeen[levelIdx] = true; }
+    frameDirty = true;    // the top chip appears or goes behind the pause panel
   }
   function refreshPause() {
     $('pauseSolo').textContent = save.solo ? 'لاعب واحد: نعم' : 'لاعب واحد: لا';
@@ -275,8 +314,10 @@
   function fmtPar(t) { var m = Math.floor(t / 60), s = Math.round(t - m * 60); return m + ':' + (s < 10 ? '0' : '') + s; }
 
   var winTimers = [];
+  function clearWinTimers() { winTimers.forEach(clearTimeout); winTimers = []; }
   function showWin() {
     winShown = true;
+    setPlaying(false);
     var def = LEVELS[levelIdx], w = world;
     var gemsAll = w.gemsGot.fire === w.gemsTotal.fire && w.gemsGot.ice === w.gemsTotal.ice;
     var fast = w.t <= def.par;
@@ -321,7 +362,7 @@
     $('winFinal').hidden = levelIdx < NL - 1;
     showOverlay('winScreen');
     // pop stars one by one
-    winTimers.forEach(clearTimeout); winTimers = [];
+    clearWinTimers();
     var els = box.querySelectorAll('.crit');
     crit.forEach(function (c, i) {
       winTimers.push(setTimeout(function () {
@@ -335,7 +376,7 @@
   }
   function showFinal() {
     $('finalStars').textContent = totalStars() + ' / ' + NL * 3;
-    winTimers.forEach(clearTimeout); winTimers = [];
+    clearWinTimers();
     showOverlay('finalScreen');
     SFX.win();
     for (var i = 0; i < 120; i++) confetti(Math.random() * 1280, -20 - Math.random() * 200, true);
@@ -352,6 +393,7 @@
   };
   function showDead() {
     deadShown = true;
+    setPlaying(false);
     var d = DEATH[world.deadCause] || DEATH.goo;
     $('deadTitle').textContent = d[0];
     $('deadTip').textContent = world.deadCause === 'goo'
@@ -456,6 +498,7 @@
   }
   var CONF = ['#ff5a1f', '#ffd230', '#2f9bff', '#8cf04a', '#ff6fae', '#b56cff', '#ffffff'];
   function confetti(x, y, screen) {
+    if (calm) return;
     var p = fx.add({ x: x, y: y, vx: (Math.random() - 0.5) * (screen ? 200 : 420), vy: screen ? 60 + Math.random() * 120 : -250 - Math.random() * 300,
       life: screen ? 3 + Math.random() * 1.5 : 1.6 + Math.random(), size: 3 + Math.random() * 3, color: CONF[Math.floor(Math.random() * CONF.length)], g: screen ? 90 : 520, drag: 0.8, shape: 1 });
     p.shrink = false; p.screen = !!screen;
@@ -486,7 +529,7 @@
     a.vxn = p.vx / 235;
     // ambient particles
     a.ember -= dt;
-    if (a.ember < 0 && p.alive) {
+    if (a.ember < 0 && p.alive && !calm) {
       if (p.kind === 'fire') {
         a.ember = 0.07 + Math.random() * 0.08;
         fx.add({ x: p.x + p.w / 2 + (Math.random() - 0.5) * 12, y: p.y - 8, vx: (Math.random() - 0.5) * 30 - p.vx * 0.2, vy: -40 - Math.random() * 50, life: 0.5, size: 2.2, color: Math.random() < 0.5 ? '#ffb347' : '#ffe066', g: -40, add: true });
@@ -504,6 +547,7 @@
     a.wasInFan = p.inFan;
   }
   function ambientWorld(w, dt) {
+    if (calm) return;
     // embers off lava, occasional drips
     var runs = w.deco.runs;
     for (var i = 0; i < runs.length; i++) {
@@ -522,25 +566,31 @@
 
   /* --------------------------------------------------------- update */
   function update(dt) {
-    time += dt;
     if (layersDirty) {
-      layersDirty = false;
+      layersDirty = false; frameDirty = true;
       if (world) R.prepare(world, view.scale * view.dpr);
       if (titleWorld) R.prepare(titleWorld, view.scale * view.dpr);
     }
     updateMusic();
+    if (mode === 'paused') {
+      // Frozen: the clock, particles, shake and toasts wait, so the scene drawn on pausing
+      // stays correct and play resumes exactly where it stopped.
+      if (K.pressed('KeyP') || K.pressed('Escape') || enterPressed()) resume();
+      else if (K.pressed('KeyR')) restart();
+      K.endFrame();
+      ptr.endFrame();
+      return;
+    }
+    time += dt;
     if (mode === 'title') updateTitle(dt);
     else if (mode === 'map') updateMap(dt);
     else if (mode === 'play') updatePlay(dt);
-    else if (mode === 'paused') {
-      if (K.pressed('KeyP') || K.pressed('Escape') || enterPressed()) resume();
-      else if (K.pressed('KeyR')) restart();
-    }
     fx.update(dt);
     shake.update(dt);
     for (var i = toasts.length - 1; i >= 0; i--) { toasts[i].life -= dt; toasts[i].y -= 40 * dt; if (toasts[i].life <= 0) toasts.splice(i, 1); }
     if (flash > 0) flash -= dt;
     if (banner > 0) banner -= dt;
+    if (chipFlash > 0) chipFlash -= dt;
     K.endFrame();
     ptr.endFrame();
   }
@@ -551,6 +601,7 @@
     var w = world;
     if (w.state === 'play') {
       if (K.pressed('KeyP') || K.pressed('Escape')) { pause(); return; }
+      if (soloHintT > 0) soloHintT -= dt;
       // Two kids share the keyboard and R sits right next to the ice player's W/D keys:
       // one stray tap must not wipe the level, so mid-level R needs a second tap.
       if (K.pressed('KeyR')) {
@@ -560,6 +611,7 @@
       var tabSwitch = K.pressed('Tab') && !K.anyDown(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight']);
       if (save.solo && gameSurfaceFocused() && (tabSwitch || K.pressed('ShiftLeft') || K.pressed('ShiftRight'))) {
         soloActive = soloActive === 'fire' ? 'ice' : 'fire';
+        chipFlash = 0.6;
         SFX.swap();
         var sp = w[soloActive];
         fx.burst(sp.x + sp.w / 2, sp.y + 10, { count: 12, colors: soloActive === 'fire' ? ['#ffb347', '#fff1a8'] : ['#9ce8ff', '#fff'], speed: 150, life: 0.4, size: 2.5, g: 0, shape: 2, add: true, drag: 2 });
@@ -569,6 +621,8 @@
     var input;
     if (bot) { input = FI.botInput(); try { bot.tick(w, input); } catch (e) { bot = null; } if (bot && bot.done()) bot = null; }
     else input = readInput();
+    // the hint has done its job once the hero the kid controls moves: fade it out
+    if (save.solo && soloHintT > 0.5) { var mine = input[soloActive]; if (mine && (mine.l || mine.r || mine.j)) soloHintT = 0.5; }
     FI.step(w, input, dt);
     handleEvents(w, false);
     updAnim(anim.fire, w.fire, dt, w);
@@ -712,6 +766,8 @@
 
   /* --------------------------------------------------------- render */
   function render() {
+    if (mode === 'paused' && !frameDirty) return;
+    frameDirty = false;
     var g = ctx;
     g.fillStyle = '#140c08';
     g.fillRect(0, 0, R.VW, R.VH);
@@ -819,16 +875,40 @@
       g.fillText(rt, 640, 80);
       g.globalAlpha = 1;
     }
-    // solo banner
+    // solo: a chip in the top bar always says who moves. After a level's first start it
+    // gets a lit outline and a "Tab or Shift" callout just under it (empty air on every
+    // level, never the hazard row at the bottom); a swap lights the outline briefly.
     if (save.solo && w.state === 'play') {
       var who = soloActive === 'fire' ? 'النار' : 'الجليد';
+      var heroCol = soloActive === 'fire' ? '#ffb347' : '#9ce8ff';
+      var hintA = soloHintT > 0 && time - rArm >= 1.6 ? Math.min(1, soloHintT / 0.5) : 0;
       g.font = '700 17px ' + R.FONT; g.direction = 'rtl';
-      var txt = 'أنت تحرّك ' + who + '   ·   Tab أو Shift للتبديل';
-      var tw = g.measureText(txt).width + 40;
-      pill(g, 640 - tw / 2, 676, tw, 34);
-      g.textAlign = 'center';
-      g.fillStyle = soloActive === 'fire' ? '#ffb347' : '#9ce8ff';
-      g.fillText(txt, 640, 695);
+      var chip = 'تحرّك: ' + who + '  ·  Tab';
+      var cw = g.measureText(chip).width + 54;
+      pill(g, 838 - cw / 2, 6, cw, 34);
+      var ringA = Math.max(hintA, Math.min(1, chipFlash / 0.3));
+      if (ringA > 0) {
+        g.globalAlpha = ringA;
+        g.strokeStyle = heroCol; g.lineWidth = 3; g.stroke();
+        g.globalAlpha = 1;
+      }
+      g.fillStyle = heroCol;
+      g.beginPath(); g.arc(838 + cw / 2 - 20, 23, 7, 0, Math.PI * 2); g.fill();
+      g.textAlign = 'right';
+      g.fillText(chip, 838 + cw / 2 - 34, 24);
+      if (hintA > 0) {
+        var txt = 'اضغط Tab أو Shift للتبديل';
+        g.font = '700 16px ' + R.FONT;
+        var tw = g.measureText(txt).width + 30;
+        g.globalAlpha = hintA;
+        g.fillStyle = 'rgba(18,10,6,0.85)';
+        g.beginPath(); g.moveTo(830, 48); g.lineTo(846, 48); g.lineTo(838, 41); g.fill();
+        R.rr(g, 838 - tw / 2, 47, tw, 30, 15); g.fill();
+        g.strokeStyle = heroCol; g.lineWidth = 2; g.stroke();
+        g.textAlign = 'center'; g.fillStyle = '#fff';
+        g.fillText(txt, 838, 63);
+        g.globalAlpha = 1;
+      }
     }
     // level banner
     if (banner > 0) {
@@ -1011,6 +1091,7 @@
     get mode() { return mode; },
     get world() { return world; },
     get save() { return save; },
+    get soloHint() { return soloHintT; },
     load: function (n) { startLevel(Kit.clamp((n | 0) - 1, 0, NL - 1)); },
     unlockAll: function () { save.unlocked = NL; persist(); },
     win: function () { if (world) { world.state = 'won'; world.events.push({ t: 'win' }); } },
