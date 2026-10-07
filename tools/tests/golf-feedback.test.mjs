@@ -94,6 +94,8 @@ test('Golf saves a flight that reaches the green even if putting is abandoned',a
   const page=await game(t);await putt(page);
   const distance=await page.evaluate(()=>Math.floor(golfState.ball.maxX));
   assert.equal(await page.evaluate(()=>golfProbe.saves),1,'the finished flight is saved on arrival at the green');
+  assert.match(await page.locator('#star-count').textContent(),/★ [1-9]/,'this flight collects a star');
+  assert.equal(await page.locator('#star-count').isVisible(),false,'on the green the toast never covers the star count');
   await page.keyboard.press('Escape');await page.locator('#restart').click();
   assert.equal(await page.evaluate(()=>golfState.phase),'ready');
   const saved=await savedProgress(page);

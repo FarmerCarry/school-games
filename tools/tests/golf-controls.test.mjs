@@ -224,9 +224,10 @@ for (const key of ['Space']) {
 }
 
 // Frame-stepped game: the needle only moves when the test advances it.
-async function manualGame(t) {
+async function manualGame(t, progress) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
   await context.addInitScript(installGolfHarness, { manual: true });
+  if (progress) await context.addInitScript(p => localStorage.setItem('sg:skybound-golf:progress', p), JSON.stringify(progress));
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'no browser errors'); });
@@ -255,4 +256,27 @@ test('Golf hit button still strikes once from the keyboard', async t => {
   await page.locator('#hit').focus();
   await page.keyboard.press('Enter');
   assert.deepEqual(await page.evaluate(() => ({ phase: golfState.phase, quality: golfState.quality, age: golfState.shotAge })), { phase: 'flight', quality: 1, age: 0 });
+});
+
+test('Golf world unlock keeps Space on the new world after buying upgrades', async t => {
+  // The perfect 300 m shot pays 120 coins: enough for one bounce and one power level.
+  const page = await manualGame(t, { world: 0, best: 200, coins: 20 });
+  await page.locator('#hit').click();
+  await page.evaluate(() => {
+    golfState.ball.stopped = true; golfState.ball.surface = 'grass'; golfState.ball.maxX = 300;
+    advanceGolfFrames(50);
+  });
+  const go = page.locator('#result-unlock button'), focused = () => go.evaluate(b => b === document.activeElement);
+  assert.equal(await focused(), true);
+  assert.match(await page.locator('#again').getAttribute('class'), /\bcream\b/, 'the new world is the only coral button');
+  // A mouse purchase leaves Space/Enter with the card's advertised action.
+  await page.locator('[data-upgrade="bounce"]').click();
+  assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+  // A keyboard purchase that disables its button falls back to the new world, not to Again.
+  await page.locator('[data-upgrade="power"]').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('[data-upgrade="power"]').isDisabled(), true);
+  assert.equal(await focused(), true);
+  await page.keyboard.press('Space');
+  assert.deepEqual(await page.evaluate(() => ({ phase: golfState.phase, world: golfState.world })), { phase: 'ready', world: 1 });
 });
