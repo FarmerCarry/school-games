@@ -129,6 +129,7 @@
     heroCv.width = Math.round(300 * px); heroCv.height = Math.round(250 * px);
     buildCaches();
     pizzaCacheSkin = '';
+    pauseDrawn = false;
   }
   function toLogical(e) {
     var r = stage.getBoundingClientRect();
@@ -317,6 +318,7 @@
     }
   }
   function confetti(n) {
+    if (K.motion.reduced()) return; // decoration only: the banner still announces the moment
     var cols = ['#ff5a5f', '#ffb13b', '#ffe14d', '#5fd35f', '#4fa3ff', '#b36bff', '#ffffff'];
     for (var i = 0; i < n; i++) spawnPart(K.rand(PX, W), K.rand(-60, -10), K.rand(-60, 60), K.rand(60, 260), K.rand(2, 3.5), K.rand(8, 14), K.pick(cols), 4, 160);
   }
@@ -325,7 +327,9 @@
     if (floats.length >= MAXF) floats.shift();
     floats.push({ x: x, y: y, vy: opt.vy || -90, life: opt.life || 1, max: opt.life || 1, text: text, size: opt.size || 30, color: opt.color || '#ffffff', rtl: !!opt.rtl, pop: 0, combo: !!opt.combo });
   }
-  function shake(p) { shakeP = Math.max(shakeP, p); }
+  // Reduced motion (or the classroom preset) keeps the kitchen still.
+  function shake(p) { if (!K.motion.reduced()) shakeP = Math.max(shakeP, p); }
+  K.motion.onChange(function (reduced) { if (reduced) shakeP = shakeX = shakeY = 0; });
 
   /* ============================================================ pizza state */
   var pz = { s: 1, sv: 0, sq: 0, sqv: 0, mood: 0, moodT: 0, blinkT: 3, blink: 0, hover: false };
@@ -725,7 +729,7 @@
       if (S.ach[a.id]) continue;
       if (a.cond(S)) {
         S.ach[a.id] = 1; got = true;
-        toast(trophyURL(true), 'كأس جديدة! (' + plus('1%') + ' إنتاج)', a.name, a.desc);
+        toast(trophyURL(true), 'كأس جديدة! (' + plus(D.achPer + '%') + ' إنتاج)', a.name, a.desc);
       }
     }
     if (got) { recalc(); snd.ach(); sparkle(1120, 140, 14); }
@@ -788,6 +792,7 @@
   function openModal(name, html, width, cb) {
     hideTip();
     modalOpen = name; modalCb = cb;
+    pauseDrawn = false; // a window can open over the pause card (skin pick, rebirth): redraw once
     mcard.style.width = width + 'px';
     mcard.innerHTML = html;
     modalEl.hidden = false;
@@ -795,6 +800,7 @@
   }
   function closeModal() {
     modalEl.hidden = true; modalOpen = null; modalCb = null; mcard.innerHTML = '';
+    pauseDrawn = false;
     snd.ui();
   }
   mcard.addEventListener('click', function (e) {
@@ -1050,13 +1056,20 @@
   /* ============================================================ update */
   var uiT = 0, achT = 0, saveT = 0, goalT = 0;
   function update(dt) {
-    now += dt;
+    // The scene clock stops while paused, so the frozen pause frame resumes without a jump.
     if (mode !== 'play') { K.keys.endFrame(); return; }
+    now += dt;
     S.playTime += dt;
-    var p = ppsNow();
+    // An open window (trophies, skins, rebirth...) holds power-up timers and pizza rain, so a kid
+    // who opens 🎨 from a toast does not lose them. Production runs at the base rate meanwhile,
+    // so leaving a window open cannot stretch a ×7 frenzy.
+    var frozen = !!modalOpen;
+    var p = frozen ? S.ppsBase : ppsNow();
     gain(p * dt, false);
-    if (buffs.frenzy > 0) buffs.frenzy = Math.max(0, buffs.frenzy - dt);
-    if (buffs.click > 0) buffs.click = Math.max(0, buffs.click - dt);
+    if (!frozen) {
+      if (buffs.frenzy > 0) buffs.frenzy = Math.max(0, buffs.frenzy - dt);
+      if (buffs.click > 0) buffs.click = Math.max(0, buffs.click - dt);
+    }
     if (now - lastClickT > 0.65) combo = 0;
 
     // golden pizza
@@ -1072,19 +1085,21 @@
       goldenTimer -= dt;
       if (goldenTimer <= 0) spawnGolden();
     }
-    // pizza rain
-    if (rain.toSpawn > 0) {
-      rain.spawnT -= dt;
-      if (rain.spawnT <= 0) {
-        rain.spawnT = 0.25;
-        rain.toSpawn--;
-        rain.items.push({ x: K.rand(PX + 50, W - 50), y: -40, vy: K.rand(170, 250), rot: Math.random() * TAU, vr: K.rand(-3, 3), R: 30 });
+    // pizza rain (it cannot be caught while a window is open, so it waits too)
+    if (!frozen) {
+      if (rain.toSpawn > 0) {
+        rain.spawnT -= dt;
+        if (rain.spawnT <= 0) {
+          rain.spawnT = 0.25;
+          rain.toSpawn--;
+          rain.items.push({ x: K.rand(PX + 50, W - 50), y: -40, vy: K.rand(170, 250), rot: Math.random() * TAU, vr: K.rand(-3, 3), R: 30 });
+        }
       }
-    }
-    for (var i = rain.items.length - 1; i >= 0; i--) {
-      var it = rain.items[i];
-      it.y += it.vy * dt; it.rot += it.vr * dt;
-      if (it.y > H + 40) rain.items.splice(i, 1);
+      for (var i = rain.items.length - 1; i >= 0; i--) {
+        var it = rain.items[i];
+        it.y += it.vy * dt; it.rot += it.vr * dt;
+        if (it.y > H + 40) rain.items.splice(i, 1);
+      }
     }
     // pizza spring
     pz.sv += (1 - pz.s) * 260 * dt - pz.sv * 14 * dt; pz.s += pz.sv * dt;
@@ -1120,8 +1135,13 @@
   }
 
   /* ============================================================ render */
+  // Behind the pause card the kitchen is drawn once and kept; resize, a restored canvas or a
+  // late font clears pauseDrawn so that frame is redrawn.
+  var pauseDrawn = false;
   function render() {
-    if (mode === 'title') { renderHero(); return; }
+    if (mode === 'title') { pauseDrawn = false; renderHero(); return; }
+    if (mode === 'pause') { if (pauseDrawn) return; pauseDrawn = true; }
+    else pauseDrawn = false;
     renderScene();
     renderFx();
     bg.style.cursor = (mode === 'play' && (pz.hover || (golden && Math.hypot(golden.x - mouse.x, golden.yy - mouse.y) < golden.R * 1.35))) ? 'pointer' : 'default';
@@ -1308,8 +1328,12 @@
     c.fillStyle = '#e8413a'; c.fillRect(x - 10 + (i % 2) * 4, y + 4, 20, 5);
   }
 
+  var fxBlank = true;
   function renderFx() {
     var c = fctx;
+    // Nothing to draw and the layer is already blank: skip the full-screen clear.
+    if (!rain.items.length && !golden && !parts.length && !floats.length) { if (fxBlank) return; fxBlank = true; }
+    else fxBlank = false;
     c.setTransform(px, 0, 0, px, 0, 0);
     c.clearRect(0, 0, W, H);
     c.save(); c.translate(shakeX, shakeY);
@@ -1425,11 +1449,13 @@
   drawHowIcons();
   resize();
   window.addEventListener('resize', resize);
+  // A restored 2D context comes back blank: rebuild the cached art and redraw.
+  [bg, fx].forEach(function (c) { c.addEventListener('contextrestored', resize); });
   refreshShop(true); refreshHud(); refreshGoal();
   newsEl.innerHTML = '<b>أخبار البيتزا:</b> ' + PZ.NEWS[0][1]; lastNews = 0; newsT = 9;
   checkAchievements();
   showTitle();
-  document.fonts && document.fonts.load && document.fonts.load('700 40px Fredoka', 'ب').catch(function () { });
+  document.fonts && document.fonts.load && document.fonts.load('700 40px Fredoka', 'ب').then(function () { pauseDrawn = false; }, function () { });
   K.loop(update, render);
 
   /* ============================================================ debug */
