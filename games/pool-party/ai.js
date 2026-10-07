@@ -198,10 +198,16 @@
                 var v = valueOf(sim, match, lv) + c.score * 40;
                 if (levelName === 'hard' && v > 90) {
                   // robustness check: does it still go in with a little wobble?
-                  var s2 = simulateShot(st, match, legal, place, c.ang + 0.004, speed, 0, sp);
-                  var s3 = simulateShot(st, match, legal, place, c.ang - 0.004, speed, 0, sp);
-                  if (!s2.res.keepTurn && !s2.res.win) v -= 60;
-                  if (!s3.res.keepTurn && !s3.res.win) v -= 60;
+                  // Queued next, one simulation per task, so no single step runs long.
+                  tasks.unshift(function () {
+                    var s2 = simulateShot(st, match, legal, place, c.ang + 0.004, speed, 0, sp);
+                    if (!s2.res.keepTurn && !s2.res.win) v -= 60;
+                  }, function () {
+                    var s3 = simulateShot(st, match, legal, place, c.ang - 0.004, speed, 0, sp);
+                    if (!s3.res.keepTurn && !s3.res.win) v -= 60;
+                    consider(v, c.ang, speed, 0, sp);
+                  });
+                  return;
                 }
                 consider(v, c.ang, speed, 0, sp);
               });

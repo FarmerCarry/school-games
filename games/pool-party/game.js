@@ -25,7 +25,16 @@
   };
   if (!Array.isArray(save.owned.cues)) save.owned.cues = ['classic'];
   if (!Array.isArray(save.owned.felts)) save.owned.felts = ['green'];
-  function persist() { for (var k in save) store.set(k, save[k]); }
+  var saveStatus = Kit.saveStatus({ retry: persist });
+  // Coins are written last and only after everything else saved, so a half-failed
+  // purchase can never store the lower total without the item it paid for.
+  function persist() {
+    var ok = true;
+    for (var k in save) if (k !== 'coins' && !store.set(k, save[k])) ok = false;
+    if (ok) ok = store.set('coins', save.coins);
+    if (ok) saveStatus.saved(); else saveStatus.failed();
+    return ok;
+  }
   function starTotal() { var t = 0; for (var i = 0; i < LV.length; i++) t += save.stars[i] || 0; return t; }
 
   var OPPS = [
@@ -77,6 +86,13 @@
   function ltr(s) { return '\u2066' + s + '\u2069'; }
   function shotsLeftTxt(n) { return n === 1 ? 'بقيت ضربة واحدة' : n === 2 ? 'بقيت ضربتان' : n === 0 ? 'لا ضربات' : 'بقيت ' + n + ' ضربات'; }
   var ptr = Kit.pointer(view);
+  // Where the last press happened. Kit.pointer keeps only the newest position, and the
+  // first pull of a drag can arrive before the next update sees the press.
+  var press = { x: 0, y: 0 };
+  window.addEventListener('pointerdown', function (e) {
+    if (e.button === 2) return;
+    var l = view.toLogical(e.clientX, e.clientY); press.x = l.x; press.y = l.y;
+  });
   var muteBtn = Kit.muteButton();
   if (muteBtn && muteBtn.setAttribute) { muteBtn.setAttribute('aria-label', 'الصوت'); muteBtn.title = 'الصوت (M)'; }
   if (document.fonts && document.fonts.load) {
@@ -524,6 +540,8 @@
     var moved = Math.abs(mx - lastPX) > 0.5 || Math.abs(my - lastPY) > 0.5;
     lastPX = mx; lastPY = my;
     var tableClick = ptrArmed && ptr.pressed && screen === 'game';
+    // judge a press where it happened, so a quick pull keeps the aim the guide showed
+    var px = tableClick ? press.x : mx, py = tableClick ? press.y : my;
 
     // fine aim with keys
     var rot = 0;
@@ -536,16 +554,16 @@
       G.aim += rot * step;
     } else G.fineHold = 0;
 
-    G.hover = G.inHand && Kit.dist(mx, my, cue.x, cue.y) < R * 2.4;
+    G.hover = G.inHand && Kit.dist(px, py, cue.x, cue.y) < R * 2.4;
     if (!G.drag) {
-      if (moved && Kit.dist(mx, my, cue.x, cue.y) > R * 1.6 && !inBar(mx, my) && !inSpin(mx, my)) {
+      if (moved && !tableClick && Kit.dist(mx, my, cue.x, cue.y) > R * 1.6 && !inBar(mx, my) && !inSpin(mx, my)) {
         G.aim = magnet(cue, Math.atan2(my - cue.y, mx - cue.x));
       }
       if (tableClick) {
-        if (inSpin(mx, my)) { G.drag = { type: 'spin' }; SFX.click(); }
-        else if (inBar(mx, my)) G.drag = { type: 'bar', y0: my };
-        else if (G.hover) { G.drag = { type: 'ball', ox: cue.x - mx, oy: cue.y - my }; SFX.click(); }
-        else G.drag = { type: 'shot', x0: mx, y0: my };
+        if (inSpin(px, py)) { G.drag = { type: 'spin' }; SFX.click(); }
+        else if (inBar(px, py)) G.drag = { type: 'bar', y0: py };
+        else if (G.hover) { G.drag = { type: 'ball', ox: cue.x - px, oy: cue.y - py }; SFX.click(); }
+        else G.drag = { type: 'shot', x0: px, y0: py };
       } else if (Kit.keys.pressed('Space') || Kit.keys.pressed('Enter')) {
         G.drag = { type: 'key', t: 0, code: Kit.keys.pressed('Space') ? 'Space' : 'Enter' };
       }
@@ -621,12 +639,20 @@
   }
 
   /* ---------------------------------------------------------- CPU */
+  // Planning gets about 6 ms per drawn frame: after a slow frame Kit.loop runs several
+  // updates back to back, and planning in each one would make the next frame slow too.
+  // render() resets it; more than 8 skips means no frame is being drawn, so plan anyway.
+  var planMs = 0, planSkips = 0;
   function cpuTurn(dt) {
     var c = G.cpu, cue = P.ball(G.st, 0);
     var fast = G.kind === 'demo' ? 1.4 : 1;
     c.t += dt * fast;
     if (c.stage === 'think') {
-      c.planner.step(3);
+      if (planMs < 6 || ++planSkips > 8) {
+        var t0 = performance.now();
+        c.planner.step(3);
+        planMs += performance.now() - t0;
+      }
       if (c.planner.done && c.t > c.planner.thinkTime) {
         c.res = c.planner.result;
         if (c.res.place) {
@@ -811,6 +837,7 @@
 
   /* =============================================================== render */
   function render() {
+    planMs = 0; planSkips = 0;
     if (needTable) { Art.renderTable(tableLayer, K, save.felt); needTable = false; }
     ctx.setTransform(K, 0, 0, K, 0, 0);
     ctx.fillStyle = '#130c33'; ctx.fillRect(0, 0, W, H);
@@ -1370,7 +1397,7 @@
       b.addEventListener('click', function (e) {
         e.stopPropagation(); Kit.audio.unlock();
         if (save.opp === o.id) { startCpu(); return; }
-        save.opp = o.id; store.set('opp', o.id); SFX.click(); buildOpps(); updatePlayLabel();
+        save.opp = o.id; persist(); SFX.click(); buildOpps(); updatePlayLabel();
       });
       box.appendChild(b);
     });
@@ -1384,7 +1411,7 @@
     aimLabels();
   }
   function aimLabels() { $('btnAim').textContent = 'خط التصويب: ' + (save.aim === 'big' ? 'طويل' : 'قصير (محترف)'); $('pAim').textContent = $('btnAim').textContent; }
-  function toggleAim() { save.aim = save.aim === 'big' ? 'pro' : 'big'; store.set('aim', save.aim); aimLabels(); }
+  function toggleAim() { save.aim = save.aim === 'big' ? 'pro' : 'big'; persist(); aimLabels(); }
 
   function startCpu() { newMatch('cpu', save.opp); show('game'); }
   on('btnPlay', startCpu);
@@ -1457,7 +1484,7 @@
       if (eq) { pr.className = 'pr eqd'; pr.textContent = 'مُختار ✓'; }
       else if (owned) { pr.className = 'pr own'; pr.textContent = 'استخدم'; }
       else if (it.trophy) { pr.className = 'pr lock'; pr.textContent = it.trophy === 'hard' ? 'اهزم زعنون!' : 'اجمع 30 ★'; }
-      else { pr.className = 'pr'; pr.innerHTML = '<span class="coin" style="width:18px;height:18px"></span>' + it.price; }
+      else { pr.className = 'pr'; pr.innerHTML = '<span class="coin sm"></span>' + it.price; }
       b.appendChild(pr);
       b.addEventListener('click', function (e) {
         e.stopPropagation(); Kit.audio.unlock();
@@ -1539,7 +1566,7 @@
       if (k.pressed('Enter') || k.pressed('Space')) startCpu();
       else if (k.pressed('ArrowLeft') || k.pressed('ArrowRight')) {
         var i = OPPS.indexOf(oppById(save.opp)) + (k.pressed('ArrowLeft') ? 1 : -1);
-        save.opp = OPPS[(i + OPPS.length) % OPPS.length].id; store.set('opp', save.opp); SFX.click(); buildOpps(); updatePlayLabel();
+        save.opp = OPPS[(i + OPPS.length) % OPPS.length].id; persist(); SFX.click(); buildOpps(); updatePlayLabel();
       }
     } else if (screen === 'game') {
       if (k.pressed('KeyP') || k.pressed('Escape')) pause();
