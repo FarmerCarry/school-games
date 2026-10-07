@@ -73,7 +73,15 @@
     return o;
   }
   HH.save = load();
-  HH.persist = function () { store.set('save', HH.save); };
+  // A failed write keeps HH.save in memory and shows the shared warning; its retry
+  // button writes the latest state. The panel is only created after a first failure.
+  var saveUI = null;
+  HH.persist = function () {
+    var ok = store.set('save', HH.save);
+    if (!ok && !saveUI) saveUI = Kit.saveStatus({ retry: HH.persist });
+    if (saveUI) { if (ok) saveUI.saved(); else saveUI.failed(); }
+    return ok;
+  };
 
   HH.charById = function (id) {
     for (var i = 0; i < HH.CHARS.length; i++) if (HH.CHARS[i].id === id) return HH.CHARS[i];

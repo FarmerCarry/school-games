@@ -114,17 +114,20 @@
 
   /* --------------------------------------------------------------- input */
   var K = Kit.keys;
+  // Held now, or tapped since the last step: a tap shorter than one (slow) frame never
+  // shows as held. ui.js calls Kit.keys.endFrame() after each step, so a tap counts once.
+  function key(code) { return K.down(code) || K.pressed(code); }
   function readHuman(m, p) {
     var i = p.inp, solo = m.mode !== 'duo';
     var L, R, J, Sh;
     if (p.idx === 0) {
-      L = K.down('KeyA') || (solo && K.down('ArrowLeft'));
-      R = K.down('KeyD') || (solo && K.down('ArrowRight'));
-      J = K.down('KeyW') || K.down('Space') || (solo && K.down('ArrowUp'));
-      Sh = K.down('KeyS') || (solo && K.down('ArrowDown'));
+      L = key('KeyA') || (solo && key('ArrowLeft'));
+      R = key('KeyD') || (solo && key('ArrowRight'));
+      J = key('KeyW') || key('Space') || (solo && key('ArrowUp'));
+      Sh = key('KeyS') || (solo && key('ArrowDown'));
     } else {
-      L = K.down('ArrowLeft'); R = K.down('ArrowRight');
-      J = K.down('ArrowUp'); Sh = K.down('ArrowDown') || K.down('Numpad0');
+      L = key('ArrowLeft'); R = key('ArrowRight');
+      J = key('ArrowUp'); Sh = key('ArrowDown') || key('Numpad0');
     }
     i.l = L; i.r = R;
     i.jumpP = J && !p.prevJump; i.jump = J;

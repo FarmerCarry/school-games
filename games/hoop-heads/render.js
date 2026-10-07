@@ -541,6 +541,28 @@
     c.restore();
   }
 
+  function drawBallArrow(c, b) {
+    c.fillStyle = '#ffd23f';
+    c.beginPath(); c.moveTo(b.x, 108); c.lineTo(b.x - 12, 128); c.lineTo(b.x + 12, 128); c.closePath(); c.fill();
+  }
+  // Long shots peak behind the scoreboard (panel, flame pips, tournament pill), so draw the
+  // ball (or its off-screen arrow) again on top there. A white ring fades in for contrast.
+  function drawBallOverHUD(c, m, info) {
+    var b = m.ball;
+    if (b.hidden) return;
+    var k = Math.min((info.mode ? 150 : 122) - (b.y - BR), b.x + BR - 330, 950 - (b.x - BR)) / (BR * 2);
+    if (k <= 0) return;
+    c.save(); c.translate(m.shake.x, m.shake.y);
+    if (b.y < -BR) drawBallArrow(c, b);
+    else {
+      if (b.fire) { c.globalAlpha = 0.5; A.circ(c, b.x, b.y, BR * 1.6); c.fillStyle = '#ff9f1c'; c.fill(); }
+      c.globalAlpha = 0.9 * Math.min(1, k); A.circ(c, b.x, b.y, BR + 3); c.fillStyle = '#fff'; c.fill();
+      c.globalAlpha = 1;
+      drawBall(c, b.x, b.y, BR, b.rot, info.ball);
+    }
+    c.restore();
+  }
+
   /* ------------------------------------------------------------- render */
   HH.render = function (c, view, m, info) {
     info = info || { tags: ['', ''], scorePop: [0, 0], sub: '', hud: true };
@@ -598,10 +620,7 @@
       });
     }
     // off-screen ball arrow
-    if (!b.hidden && b.y < -BR) {
-      c.fillStyle = '#ffd23f';
-      c.beginPath(); c.moveTo(b.x, 108); c.lineTo(b.x - 12, 128); c.lineTo(b.x + 12, 128); c.closePath(); c.fill();
-    }
+    if (!b.hidden && b.y < -BR) drawBallArrow(c, b);
     // popups
     m.popups.forEach(function (pp) {
       var k = pp.t / pp.life;
@@ -616,9 +635,10 @@
     });
     c.restore();
 
-    if (m.flash > 0) { c.fillStyle = 'rgba(255,255,255,' + (m.flash * 0.6) + ')'; c.fillRect(0, 0, W, H); }
+    if (m.flash > 0 && !Kit.motion.reduced()) { c.fillStyle = 'rgba(255,255,255,' + (m.flash * 0.6) + ')'; c.fillRect(0, 0, W, H); }
     if (!info.hud) return;
     drawHUD(c, m, info);
+    drawBallOverHUD(c, m, info);
 
     // intro / banners
     if (m.phase === 'intro') {
