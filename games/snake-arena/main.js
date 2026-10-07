@@ -10,7 +10,16 @@
   var DEF = { bestLen: 0, totalKills: 0, bestKills: 0, games: 0, bestTime: 0, totalFood: 0, bestRank: 0, powerups: 0, top1Time: 0 };
   var stats = {}, saved = store.get('stats', null), k;
   for (k in DEF) stats[k] = saved && typeof saved[k] === 'number' && isFinite(saved[k]) ? saved[k] : DEF[k];
-  function saveStats() { store.set('stats', stats); }
+  var saveStatus = Kit.saveStatus({ retry: function () { saveStats(); } });
+  // Stats and prefs are always written together, so one confirmed write leaves nothing pending.
+  function saveStats() {
+    var ok = store.set('stats', stats);
+    ok = store.set('skin', prefs.skin) && ok;
+    ok = store.set('eyes', prefs.eyes) && ok;
+    ok = store.set('name', prefs.name) && ok;
+    if (ok) saveStatus.saved(); else saveStatus.failed();
+    return ok;
+  }
 
   function byId(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
   function unlocked(item, st) { return !item.req || SA.reqMet(item.req, st || stats); }
@@ -18,7 +27,7 @@
   if (!byId(SA.SKINS, prefs.skin) || !unlocked(byId(SA.SKINS, prefs.skin))) prefs.skin = 'lime';
   if (!byId(SA.EYES, prefs.eyes) || !unlocked(byId(SA.EYES, prefs.eyes))) prefs.eyes = 'round';
   if (typeof prefs.name !== 'string' || SA.PLAYER_NAMES.indexOf(prefs.name) < 0) prefs.name = Kit.pick(SA.PLAYER_NAMES);
-  function savePrefs() { store.set('skin', prefs.skin); store.set('eyes', prefs.eyes); store.set('name', prefs.name); }
+  function savePrefs() { return saveStats(); }
   function curSkin() { return byId(SA.SKINS, prefs.skin); }
   savePrefs(); // keep the random starting name across reloads
 
@@ -103,7 +112,9 @@
       peakLen: Math.floor(p.mass), deathLen: 0, deathRank: 0, killer: null, reason: ''
     };
     showScreen(null);
-    toast('انطلق!', '#8dff3a', 'كُل النقاط المضيئة لتكبر', 56, 1.6);
+    // New players learn the one rule that ends a round before it happens (the first hint covers eating).
+    var fresh = stats.games < 3;
+    toast('انطلق!', '#8dff3a', fresh ? 'لا تدع رأسك يلمس ثعبانًا آخر!' : 'كُل النقاط المضيئة لتكبر', 56, fresh ? 2.4 : 1.6);
     sfx.start();
     try { cv.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
@@ -273,9 +284,10 @@
   var MILESTONES = [50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000];
   var HINTS = [
     { from: 1.5, to: 7, txt: 'وجّه الثعبان بالفأرة وكُل النقاط المضيئة', games: 3 },
-    { from: 8, to: 14, txt: 'اضغط مطولًا على الفأرة أو مسافة أو ↑ للتسريع!', games: 3 },
-    { from: 16, to: 22, txt: 'اجعل الثعابين تصطدم بجسمك لتفرقعها!', games: 4 },
-    { from: 26, to: 31, txt: 'التقط الفقاعات الملوّنة لتحصل على قوى خارقة', games: 2 }
+    { from: 8, to: 13, txt: 'احذر! إذا لمس رأسك ثعبانًا آخر فستفرقع', games: 3 },
+    { from: 15, to: 21, txt: 'اضغط مطولًا على الفأرة أو مسافة أو ↑ للتسريع!', games: 3 },
+    { from: 23, to: 29, txt: 'اجعل الثعابين تصطدم بجسمك لتفرقعها!', games: 4 },
+    { from: 31, to: 36, txt: 'التقط الفقاعات الملوّنة لتحصل على قوى خارقة', games: 2 }
   ];
   function runTick(dt) {
     var r = G.run, p = W.player, h = G.hud;
@@ -364,6 +376,8 @@
     }
     cam.zoom += (zt - cam.zoom) * (1 - Math.exp(-dt * 2.2));
     G.shake = Math.max(0, G.shake - dt * 45);
+    // Reduced motion / classroom preset: keep the camera steady (slow-motion and rings still mark the hit).
+    if (Kit.motion.reduced()) { G.shake = 0; cam.sx = cam.sy = 0; return; }
     cam.sx = (Math.random() - 0.5) * 2 * G.shake / cam.zoom;
     cam.sy = (Math.random() - 0.5) * 2 * G.shake / cam.zoom;
   }
@@ -394,7 +408,8 @@
     showScreen('over');
     $('oTitle').textContent = newBest ? 'رقم قياسي جديد!' : Kit.pick(['فرقعة!', 'أوووه!', 'يا خسارة!']);
     $('oTitle').className = newBest ? 'otitle gold' : 'otitle';
-    $('oSub').textContent = r.reason === 'border' ? 'لمستَ حافة الساحة' : (r.killer ? 'اصطدمتَ بـ ' + r.killer.name : 'فرقع ثعبانك!');
+    $('oSub').textContent = r.reason === 'border' ? 'لمستَ حافة الساحة' : (r.killer ? 'اصطدمتَ بـ ' + r.killer.name +
+      (stats.games <= 3 ? ' — أبعد رأسك عن أجسام الثعابين' : '') : 'فرقع ثعبانك!');
     $('oLen').textContent = Kit.fmt(r.deathLen);
     $('oRank').textContent = '#' + r.deathRank;
     $('oKills').textContent = r.kills;
@@ -425,11 +440,18 @@
     var ng = nextGoal(), nx = $('oNext');
     if (ng) {
       nx.hidden = false;
-      $('oNextTxt').textContent = 'الهدف التالي: ' + (ng.eyes ? 'عيون «' : 'شكل «') + ng.it.name + '» — ' + SA.reqText(ng.it.req);
+      // A small inline preview shows the reward without making the panel taller.
+      var nt = $('oNextTxt'), nc = document.createElement('canvas');
+      nc.width = ng.eyes ? 28 : 96; nc.height = 28;
+      if (ng.eyes) R.drawHeadPreview(nc, curSkin(), ng.it.id, 1);
+      else R.drawPreview(nc, ng.it, 'happy', 1, { r: 7, n: 22, sp: 3.4, amp: 3 });
+      nt.textContent = '';
+      nt.appendChild(nc);
+      nt.appendChild(document.createTextNode('الهدف التالي: ' + (ng.eyes ? 'عيون «' : 'شكل «') + ng.it.name + '» — ' + SA.reqText(ng.it.req)));
       $('oNextFill').style.width = Math.round(ng.p * 100) + '%';
     } else nx.hidden = true;
 
-    if (newBest) { confetti(); sfx.newBest(); }
+    if (newBest) { if (!Kit.motion.reduced()) confetti(); sfx.newBest(); }
     else if (got) sfx.unlock();
   }
 
@@ -604,9 +626,17 @@
   }
 
   var tPrev = $('tPrev'), sPrev = $('sPrev');
+  // update() freezes the world while paused, so draw that scene once and keep it.
+  // Resizing clears the canvas, so resize, context restore and late fonts redraw it.
+  var pausedDrawn = false;
+  function redrawPaused() { pausedDrawn = false; }
+  window.addEventListener('resize', redrawPaused);
+  cv.addEventListener('contextrestored', redrawPaused);
+  if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', redrawPaused);
   function render() {
-    R.drawWorld(W.ranked[0]);
     var st = G.state;
+    if (st === 'paused') { if (pausedDrawn) return; pausedDrawn = true; } else pausedDrawn = false;
+    R.drawWorld(W.ranked[0]);
     if (st === 'play' || st === 'dying' || st === 'paused') R.drawHud(G.hud);
     var t = performance.now() / 1000;
     if (st === 'title') R.drawPreview(tPrev, curSkin(), prefs.eyes, t, { r: 19, n: 46, sp: 7.4, amp: 13 });

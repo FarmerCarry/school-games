@@ -9,7 +9,9 @@
   function $(id) { return document.getElementById(id); }
   var ui = $('ui');
   var cv = $('c');
-  var view = Kit.fit(cv, W, H, { onResize: function (v) { ui.style.transform = 'scale(' + v.scale + ')'; } });
+  // A paused scene is drawn once, then again only after a resize, context restore or font load.
+  var redraw = true;
+  var view = Kit.fit(cv, W, H, { onResize: function (v) { ui.style.transform = 'scale(' + v.scale + ')'; redraw = true; } });
   var ctx = view.ctx;
   var ptr = Kit.pointer(view);
   var store = Kit.store('blob-battle');
@@ -108,7 +110,18 @@
   for (var k in DEF) if (typeof stats[k] !== 'number' || !isFinite(stats[k])) stats[k] = DEF[k];
   var seenSkins = store.get('seen', []);
   if (!Array.isArray(seenSkins)) seenSkins = [];
-  function saveStats() { store.set('stats', stats); }
+  // Every write goes through put(). A failed key stays queued and is retried with the next write
+  // (stats save every 5 s); the shared Arabic warning offers a retry button and clears only
+  // once nothing is left unsaved.
+  var unsaved = {};
+  var saveUI = Kit.saveStatus({ retry: saveStats });
+  function put(key, value) {
+    unsaved[key] = value;
+    for (var k in unsaved) if (store.set(k, unsaved[k])) delete unsaved[k];
+    if (Object.keys(unsaved).length) { saveUI.failed(); return false; }
+    saveUI.saved(); return true;
+  }
+  function saveStats() { return put('stats', stats); }
 
   function skinUnlocked(s) {
     var u = s.unlock;
@@ -133,7 +146,7 @@
   var unlockedSet = {};
   BB.SKINS.forEach(function (s) { if (skinUnlocked(s)) unlockedSet[s.id] = 1; });
   // skins unlocked before "seen" existed count as seen
-  if (!store.get('seenInit', false)) { seenSkins = Object.keys(unlockedSet); store.set('seen', seenSkins); store.set('seenInit', true); }
+  if (!store.get('seenInit', false)) { seenSkins = Object.keys(unlockedSet); put('seen', seenSkins); put('seenInit', true); }
 
   /* ================================================================ world state */
   var state = 'title';        // title | skins | play | pause | dying | over
@@ -194,8 +207,10 @@
     }
     return Kit.pick(NAMES);
   }
+  // Least crowded of a few random spots. When every sample is near a big blob (a crowded
+  // late game) it still returns the safest one, so a respawn can never fail.
   function safeSpot(minM) {
-    var best = null, bestD = -1;
+    var best = null, bestD = -Infinity;
     for (var t = 0; t < 14; t++) {
       var x = rand(150, WS - 150), y = rand(150, WS - 150), md = 1e9;
       for (var i = 0; i < cells.length; i++) {
@@ -206,7 +221,7 @@
       if (md > bestD) { bestD = md; best = { x: x, y: y }; }
       if (md > 900) break;
     }
-    return best;
+    return best || { x: rand(150, WS - 150), y: rand(150, WS - 150) };
   }
   function botSkin() {
     if (Math.random() < 0.55) return Kit.pick(BB.SKINS);
@@ -219,9 +234,9 @@
     o.aggro = clamp(AR.aggro + rand(-0.12, 0.12), 0, 1);
     o.hate = AR.hate; o.spd = AR.spd;
     o.cap = AR.caps[0] + (AR.caps[1] - AR.caps[0]) * Math.pow(Math.random(), 1.7);
+    var p = safeSpot(m * 1.2);
     o.cells.length = 0; o.alive = true; o.lastEater = null;
     o.ai.next = T + rand(0, 0.3); o.ai.splitCD = T + rand(3, 8); o.ai.food = -1; o.ai.hunter = Math.random();
-    var p = safeSpot(m * 1.2);
     newCell(o, p.x, p.y, m);
     o.tx = p.x; o.ty = p.y; o.mass = m;
   }
@@ -316,6 +331,8 @@
     var s = o.smart;
     o.ai.next = T + (0.42 - s * 0.26) + Math.random() * 0.12;
     ownerCenter(o, tmpC);
+    // safety net: a bot left alive without pieces respawns instead of breaking every frame
+    if (!tmpC.big) { o.alive = false; o.mass = 0; o.respawn = T + 1; return; }
     var cx = tmpC.x, cy = tmpC.y, me = tmpC.big, myM = me.m, myR = me.r;
     var vis = 360 + myR * 3 + s * 240;
     var fx = 0, fy = 0, threat = 0, prey = null, pScore = 0, preyD = 0, i, dx, dy, dist, edge, w, avx = 0, avy = 0;
@@ -777,7 +794,7 @@
     if (saveT <= 0) { saveT = 5; saveStats(); }
     // teaching hint: split
     if (!round.hintSplit && T - round.t0 > 20 && m > 70 && !store.get('hintSplit', false)) {
-      round.hintSplit = true; store.set('hintSplit', true);
+      round.hintSplit = true; put('hintSplit', true);
       toast('اضغط مسافة لتنقسم وتنقضّ!', '#ffffff');
     }
   }
@@ -844,9 +861,11 @@
     shake.update(dt);
   }
   function confettiBurst() {
+    if (Kit.motion.reduced()) return; // calm mode: the banner and fanfare still celebrate
     var cols = ['#ff5c8a', '#ffd23f', '#3ddc84', '#2fb5ff', '#8e5cff', '#ff7a3d'];
     for (var i = 0; i < 120; i++) confetti.push({ x: rand(0, W), y: rand(-200, -10), vx: rand(-80, 80), vy: rand(0, 160), a: rand(0, 6), va: rand(-8, 8), col: Kit.pick(cols), s: rand(6, 12), t: 0 });
   }
+  Kit.motion.onChange(function (reduced) { if (reduced) confetti.length = 0; });
 
   /* ================================================================ sound */
   // Pellet "plips" walk up and back down a pentatonic scale while you keep eating,
@@ -957,7 +976,7 @@
     show('scrTitle');
     refreshTitle();
   }
-  function pauseGame() { if (state !== 'play') return; state = 'pause'; saveStats(); show('scrPause'); Kit.keys.reset(); }
+  function pauseGame() { if (state !== 'play') return; state = 'pause'; redraw = true; saveStats(); show('scrPause'); Kit.keys.reset(); }
   function resumeGame() { if (state !== 'pause') return; state = 'play'; show(null); Kit.keys.reset(); }
 
   function show(id) {
@@ -1002,7 +1021,7 @@
         if (e.detail > 0) b.blur();
         if (!arenaUnlocked(i)) { sfx.ouch(); return; }
         sfx.click();
-        if (arenaIdx !== i) { arenaIdx = i; store.set('arena', i); buildWorld(false); }
+        if (arenaIdx !== i) { arenaIdx = i; put('arena', i); buildWorld(false); }
         refreshTitle();
       });
       el.appendChild(b);
@@ -1011,7 +1030,7 @@
   function browseSkin(d) {
     browse = (browse + d + BB.SKINS.length) % BB.SKINS.length;
     var s = BB.SKINS[browse];
-    if (skinUnlocked(s)) { selSkin = s; store.set('skin', s.id); }
+    if (skinUnlocked(s)) { selSkin = s; put('skin', s.id); }
     sfx.click(); refreshTitle();
     prevBounce = 1;
   }
@@ -1036,7 +1055,7 @@
       b.addEventListener('click', function (e) {
         if (e.detail > 0) b.blur();
         if (!un) { sfx.ouch(); info(); return; }
-        selSkin = s; browse = s.index; store.set('skin', s.id); sfx.click();
+        selSkin = s; browse = s.index; put('skin', s.id); sfx.click();
         buildSkinGrid(); info();
       });
       grid.appendChild(b);
@@ -1047,7 +1066,7 @@
     state = 'skins'; show('scrSkins'); buildSkinGrid();
     $('skinInfo').innerHTML = 'مرّر الفأرة على شكل لترى كيف تفتحه';
     seenSkins = BB.SKINS.filter(skinUnlocked).map(function (s) { return s.id; });
-    store.set('seen', seenSkins);
+    put('seen', seenSkins);
   }
   function closeSkins() { state = 'title'; show('scrTitle'); refreshTitle(); }
 
@@ -1068,7 +1087,7 @@
   var pauseBtn = $('pauseBtn');
   document.body.appendChild(pauseBtn);
   btn('pauseBtn', function () { if (state === 'play') { sfx.click(); pauseGame(); } });
-  prevCv.addEventListener('click', function () { var s = BB.SKINS[browse]; if (skinUnlocked(s)) { selSkin = s; store.set('skin', s.id); sfx.click(); refreshTitle(); prevBounce = 1; } });
+  prevCv.addEventListener('click', function () { var s = BB.SKINS[browse]; if (skinUnlocked(s)) { selSkin = s; put('skin', s.id); sfx.click(); refreshTitle(); prevBounce = 1; } });
   Kit.muteButton();
   window.addEventListener('pagehide', saveStats);
   window.addEventListener('beforeunload', saveStats);
@@ -1140,9 +1159,18 @@
   }
 
   /* ================================================================ rendering */
-  var virusCv = document.createElement('canvas'); virusCv.width = virusCv.height = 200;
-  (function paintVirus() {
-    var g = virusCv.getContext('2d'); g.translate(100, 100);
+  // Shrinking a big sprite to a few pixels with the canvas's default filter (bilinear, no
+  // mipmaps) turns its edges jagged and makes them crawl as the camera moves. So the virus, the
+  // pellets and the ground texture keep smaller copies and render() picks the copy that is shrunk
+  // at most 2x on screen. Pellet and ground copies are exact halves of the one above (an exact 2x
+  // bilinear shrink averages every 2x2 block, like a mipmap).
+  function halve(g, src, sx, sy, sw, dx, dy) { g.drawImage(src, sx, sy, sw, sw, dx, dy, sw / 2, sw / 2); }
+  var virusCvs = [200, 100, 50].map(function (n) { var c = document.createElement('canvas'); c.width = c.height = n; return c; });
+  // The smaller viruses are painted at their own size with a bolder face (b), so it stays readable.
+  function paintViruses() { paintVirus(virusCvs[0], 1); paintVirus(virusCvs[1], 1.25); paintVirus(virusCvs[2], 1.5); }
+  function paintVirus(cv, b) {
+    var g = cv.getContext('2d'), u = cv.width / 200;
+    g.setTransform(u, 0, 0, u, 100 * u, 100 * u); g.clearRect(-100, -100, 200, 200);
     var n = 22, i, a, r;
     g.beginPath();
     for (i = 0; i < n * 2; i++) { a = i / (n * 2) * TAU; r = i % 2 ? 72 : 92; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
@@ -1156,12 +1184,57 @@
     g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.ellipse(-26, -34, 20, 10, -0.6, 0, TAU); g.fill();
     // grumpy-cute face
     g.fillStyle = '#16401f';
-    g.beginPath(); g.arc(-18, -4, 7, 0, TAU); g.arc(18, -4, 7, 0, TAU); g.fill();
-    g.fillStyle = '#fff'; g.beginPath(); g.arc(-20, -7, 2.5, 0, TAU); g.arc(16, -7, 2.5, 0, TAU); g.fill();
-    g.strokeStyle = '#16401f'; g.lineWidth = 4; g.lineCap = 'round';
+    g.beginPath(); g.arc(-18, -4, 7 * b, 0, TAU); g.arc(18, -4, 7 * b, 0, TAU); g.fill();
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(-20, -7, 2.5 * b, 0, TAU); g.arc(16, -7, 2.5 * b, 0, TAU); g.fill();
+    g.strokeStyle = '#16401f'; g.lineWidth = 4 * b; g.lineCap = 'round';
     g.beginPath(); g.moveTo(-28, -18); g.lineTo(-10, -13); g.moveTo(28, -18); g.lineTo(10, -13); g.stroke();
     g.beginPath(); g.moveTo(-10, 16); g.lineTo(-4, 12); g.lineTo(2, 16); g.lineTo(8, 12); g.lineTo(12, 16); g.stroke();
-  })();
+  }
+
+  // Pellet sprites: drawing thousands of small images is much cheaper for the GPU than
+  // thousands of circle paths when the camera is zoomed out. One row per size, with cells of
+  // 64, 32, 16, 8 and 4 px holding the 16-unit box around a radius-7 pellet; a 2px clear gutter
+  // round every cell keeps the neighbouring colour out of the filter.
+  var PEL_C = [64, 32, 16, 8, 4], PEL_Y = [2, 70, 106, 126, 138];
+  var pelletCv = document.createElement('canvas'); pelletCv.width = PCOLS.length * 68; pelletCv.height = 144;
+  function paintPellets() {
+    var g = pelletCv.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pelletCv.width, pelletCv.height);
+    for (var i = 0; i < PCOLS.length; i++) {
+      var x = i * 68 + 34;
+      g.fillStyle = PCOLS[i]; g.beginPath(); g.arc(x, 34, 28, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.55)'; g.beginPath(); g.arc(x - 8.8, 25.2, 8.8, 0, TAU); g.fill();
+      for (var lv = 1; lv < PEL_C.length; lv++) halve(g, pelletCv, i * (PEL_C[lv - 1] + 4) + 2, PEL_Y[lv - 1], PEL_C[lv - 1], i * (PEL_C[lv] + 4) + 2, PEL_Y[lv]);
+    }
+  }
+  // Repaint the sprites if a GPU reset wipes them (each canvas, or the main one, may report it).
+  function paintSprites() { paintPellets(); paintViruses(); redraw = true; }
+  paintSprites();
+  virusCvs.concat(pelletCv).forEach(function (c) { c.addEventListener('contextrestored', paintSprites); });
+
+  // Ground beyond the arena edge: a 96px tile of soft darker spots, made once per arena and
+  // filled in world space so it slides past with the camera instead of being one flat colour.
+  // Halved copies (48 and 24px, scaled back up by the pattern) serve zoomed-out views.
+  var outPats = {};
+  function outPattern(th, lv) {
+    var key = th.out + lv;
+    if (!outPats[key]) {
+      var tile = document.createElement('canvas'); tile.width = tile.height = 96;
+      var g = tile.getContext('2d');
+      g.fillStyle = th.out; g.fillRect(0, 0, 96, 96);
+      g.fillStyle = 'rgba(20,40,30,0.08)';
+      [[20, 22, 10], [66, 58, 13], [32, 77, 6], [80, 15, 5]].forEach(function (d) { g.beginPath(); g.arc(d[0], d[1], d[2], 0, TAU); g.fill(); });
+      g.fillStyle = 'rgba(255,255,255,0.16)';
+      [[52, 24, 4], [12, 56, 3], [84, 86, 4]].forEach(function (d) { g.beginPath(); g.arc(d[0], d[1], d[2], 0, TAU); g.fill(); });
+      for (var i = 0; i < lv; i++) {
+        var half = document.createElement('canvas'); half.width = half.height = tile.width / 2;
+        halve(half.getContext('2d'), tile, 0, 0, tile.width, 0, 0); tile = half;
+      }
+      var pat = outPats[key] = ctx.createPattern(tile, 'repeat');
+      if (lv && pat.setTransform) pat.setTransform(new DOMMatrix([96 / tile.width, 0, 0, 96 / tile.width, 0, 0]));
+    }
+    return outPats[key];
+  }
 
   var visList = new Int32Array(MAXP);
   var drawList = [];
@@ -1218,14 +1291,26 @@
   }
 
   function render() {
+    if (state === 'pause' && !redraw) return;
+    redraw = false;
     var g = ctx, sc = view.scale * view.dpr, th = AR.theme, z = cam.z;
     g.setTransform(sc, 0, 0, sc, 0, 0);
     g.fillStyle = th.out; g.fillRect(0, 0, W, H);
     g.save();
     g.translate(W / 2 + shake.x, H / 2 + shake.y); g.scale(z, z); g.translate(-cam.x, -cam.y);
     var vx0 = cam.x - W / 2 / z, vx1 = cam.x + W / 2 / z, vy0 = cam.y - H / 2 / z, vy1 = cam.y + H / 2 / z;
-    // arena floor + grid
     var fx0 = Math.max(0, vx0), fx1 = Math.min(WS, vx1), fy0 = Math.max(0, vy0), fy1 = Math.min(WS, vy1);
+    // textured strips outside the arena (only when the view reaches past an edge)
+    if (vx0 < 0 || vy0 < 0 || vx1 > WS || vy1 > WS) {
+      g.beginPath();
+      if (vx0 < 0) g.rect(vx0, vy0, -vx0, vy1 - vy0);
+      if (vx1 > WS) g.rect(WS, vy0, vx1 - WS, vy1 - vy0);
+      if (vy0 < 0) g.rect(fx0, vy0, fx1 - fx0, -vy0);
+      if (vy1 > WS) g.rect(fx0, WS, fx1 - fx0, vy1 - WS);
+      var tile = 96 * z * sc; // on-screen size of one tile
+      g.fillStyle = outPattern(th, tile >= 48 ? 0 : tile >= 24 ? 1 : 2); g.fill();
+    }
+    // arena floor + grid
     g.fillStyle = th.bg; g.fillRect(fx0, fy0, fx1 - fx0, fy1 - fy0);
     var step = z > 0.55 ? 50 : z > 0.3 ? 100 : 200, x, y;
     g.beginPath();
@@ -1234,7 +1319,7 @@
     g.lineWidth = 2 / z; g.strokeStyle = th.grid; g.stroke();
     g.lineWidth = 14; g.strokeStyle = th.border; g.strokeRect(-7, -7, WS + 14, WS + 14);
 
-    // pellets (only visible buckets, batched by colour)
+    // pellets (only visible buckets, drawn from the sprite sheet; new ones grow in)
     var bx0 = clamp(Math.floor(vx0 / BS), 0, GW - 1), bx1 = clamp(Math.floor(vx1 / BS), 0, GW - 1);
     var by0 = clamp(Math.floor(vy0 / BS), 0, GW - 1), by1 = clamp(Math.floor(vy1 / BS), 0, GW - 1);
     var nv = 0, i, k, p;
@@ -1242,20 +1327,24 @@
       var arr = buckets[bx + by * GW];
       for (k = 0; k < arr.length; k++) visList[nv++] = arr[k];
     }
-    for (var ci = 0; ci < PCOLS.length; ci++) {
-      g.beginPath();
-      for (k = 0; k < nv; k++) {
-        p = visList[k]; if (pCol[p] !== ci || pGold[p]) continue;
-        var pr = 7 * clamp((T - pBorn[p]) * 3, 0, 1);
-        g.moveTo(pX[p] + pr, pY[p]); g.arc(pX[p], pY[p], pr, 0, TAU);
+    var pk = 2 * z * sc; // a pellet's box is ps * pk device pixels wide
+    if (8 * pk < 2) {
+      // tiny view (pellets under 2px): soft squares of the same area, batched by colour
+      for (var ci = 0; ci < PCOLS.length; ci++) {
+        g.beginPath();
+        for (k = 0; k < nv; k++) {
+          p = visList[k]; if (pCol[p] !== ci || pGold[p]) continue;
+          var hs = 6.2 * clamp((T - pBorn[p]) * 3, 0, 1);
+          g.rect(pX[p] - hs, pY[p] - hs, hs * 2, hs * 2);
+        }
+        g.fillStyle = PCOLS[ci]; g.fill();
       }
-      g.fillStyle = PCOLS[ci]; g.fill();
-    }
-    if (z > 0.3) {
-      g.fillStyle = 'rgba(255,255,255,0.55)';
-      g.beginPath();
-      for (k = 0; k < nv; k++) { p = visList[k]; if (pGold[p] || T - pBorn[p] < 0.4) continue; g.moveTo(pX[p], pY[p] - 2.2); g.arc(pX[p] - 2.2, pY[p] - 2.2, 2.2, 0, TAU); }
-      g.fill();
+    } else for (k = 0; k < nv; k++) {
+      p = visList[k]; if (pGold[p]) continue;
+      var ps = 8 * clamp((T - pBorn[p]) * 3, 0, 1); // half the 16-unit box: the radius-7 pellet plus margin
+      if (ps < 0.3) continue;
+      var pd = ps * pk, lv = pd >= 32 ? 0 : pd >= 16 ? 1 : pd >= 8 ? 2 : pd >= 4 ? 3 : 4, pc = PEL_C[lv]; // cell <= 2x the box
+      g.drawImage(pelletCv, pCol[p] * (pc + 4) + 2, PEL_Y[lv], pc, pc, pX[p] - ps, pY[p] - ps, ps * 2, ps * 2);
     }
     for (k = 0; k < nv; k++) {
       p = visList[k]; if (!pGold[p]) continue;
@@ -1300,9 +1389,9 @@
           g.restore();
         }
       } else {
-        var s = d.r / 72 * (1 + (T - d.born < 0.4 ? (0.4 - (T - d.born)) : 0));
+        var s = d.r / 72 * (1 + (T - d.born < 0.4 ? (0.4 - (T - d.born)) : 0)), vd = 200 * s * z * sc;
         g.save(); g.translate(d.x, d.y); g.rotate(Math.sin(d.rot * 2) * 0.12); g.scale(s, s);
-        g.drawImage(virusCv, -100, -100); g.restore();
+        g.drawImage(virusCvs[vd >= 100 ? 0 : vd >= 50 ? 1 : 2], -100, -100, 200, 200); g.restore();
       }
     }
     // crown on #1
@@ -1373,7 +1462,7 @@
 
   function drawHUD(g) {
     if (round && round.danger > 0.04 && state === 'play') {
-      var da = round.danger * (0.6 + 0.4 * Math.sin(realT * 12));
+      var da = round.danger * (Kit.motion.reduced() ? 0.8 : 0.6 + 0.4 * Math.sin(realT * 12)); // steady, not flashing, in calm mode
       var vg = g.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, W * 0.62);
       vg.addColorStop(0, 'rgba(255,40,60,0)'); vg.addColorStop(1, 'rgba(255,40,60,' + (0.45 * da).toFixed(3) + ')');
       g.fillStyle = vg; g.fillRect(0, 0, W, H);
@@ -1413,7 +1502,7 @@
     // ---- minimap (bottom-right)
     var ms = 150, mx = W - ms - 14, my = H - ms - 14, k = ms / WS;
     g.fillStyle = 'rgba(25,30,62,0.45)'; rrect(g, mx - 4, my - 4, ms + 8, ms + 8, 12); g.fill();
-    g.fillStyle = 'rgba(255,255,255,0.55)'; g.fillRect(mx, my, ms, ms);
+    g.fillStyle = AR.theme.bg; g.fillRect(mx, my, ms, ms); // opaque, so world pellets never show through as fake dots
     g.strokeStyle = 'rgba(40,50,90,0.2)'; g.lineWidth = 1; g.beginPath();
     for (i = 1; i < 5; i++) { g.moveTo(mx + i * ms / 5, my); g.lineTo(mx + i * ms / 5, my + ms); g.moveTo(mx, my + i * ms / 5); g.lineTo(mx + ms, my + i * ms / 5); }
     g.stroke();
@@ -1491,7 +1580,11 @@
   refreshTitle();
   show('scrTitle');
   Kit.loop(update, render);
-  try { document.fonts.load('700 40px Fredoka', 'ب').catch(function () { /* Use fallback fonts. */ }); } catch (e) { /* ignore */ }
+  cv.addEventListener('contextrestored', function () { outPats = {}; BB.clearTextures(); paintSprites(); });
+  try {
+    document.fonts.load('700 40px Fredoka', 'ب').catch(function () { /* Use fallback fonts. */ });
+    document.fonts.ready.then(function () { redraw = true; }); // late Arabic or digit fonts repaint a paused scene
+  } catch (e) { /* ignore */ }
 
   /* debug hook for automated checks */
   window.__game = {
@@ -1515,6 +1608,7 @@
     bench: function (sec) { var t0 = performance.now(); var n = Math.round(sec * 60); for (var i = 0; i < n; i++) sim(1 / 60); return ((performance.now() - t0) / n).toFixed(3) + 'ms/step'; },
     step: function (sec) { var n = Math.round(sec * 60); for (var i = 0; i < n; i++) { sim(1 / 60); fxUpdate(1 / 60); updateCam(1 / 60); } return this.info(); },
     unlockAll: function () { stats.best = 99999; ['rounds', 'roundEaten', 'virusPops', 'splitEats', 'maxTime', 'kings', 'eatenTotal', 'virusShots', 'pellets', 'arena2', 'arena3', 'kingTime', 'bestA3'].forEach(function (k) { stats[k] = 99999; }); saveStats(); checkUnlocks(); refreshTitle(); },
+    camera: function (x, y, z) { cam.x = x; cam.y = y; cam.z = z; redraw = true; },
     arena: function (i) { arenaIdx = i; store.set('arena', i); if (state === 'title') { buildWorld(false); refreshTitle(); } },
     split: function () { return player ? splitOwner(player, player.tx, player.ty) : 0; },
     nearestVirus: function () { if (!player || !player.alive) return null; var c = player.cells[0], v = viruses[0]; c.x = v.x + 5; c.y = v.y; return true; },

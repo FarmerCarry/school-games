@@ -12,14 +12,16 @@
   var reducedMotion = K.motion.reduced();
   var s = { world:save.world, course:P.createCourse(save.world), phase:'title', time:0,
     cam:{x:-45,y:0,zoom:1}, ball:null, trail:[], particles:[], shotAge:0,
-    quality:0, best:save.best, putt:null, impact:null, reducedMotion:reducedMotion };
+    quality:0, best:save.best, putt:null, impact:null, reducedMotion:reducedMotion,
+    skin:save.skin, got:{} };
   K.motion.onChange(function (reduced) {
     reducedMotion = reduced; s.reducedMotion = reduced;
     if (reduced) s.trail = [];
     renderDirty = true;
   });
   var modalMode = '', paused = false, meterTime = 0, meter = 0, toastTime = 0;
-  var finishDelay = -1, shotResult = null, speed = 1, uiClock = 0;
+  var finishDelay = -1, shotResult = null, speed = 1, uiClock = 0, starCount = 0, newWorld = -1, burstEl = null;
+  var STAR_COINS = 4; // small, so stars barely change upgrade pacing
   var renderDirty = true, renderedTime = -1;
   canvas.addEventListener('contextrestored', function () { view.resize(); renderDirty = true; });
   A.onContextRestored = function () { renderDirty = true; };
@@ -41,7 +43,10 @@
     ui.style.transform = 'scale(' + scale + ')';
   }
   window.addEventListener('resize', resize); resize();
-  function persist() { storage.set('progress', save); }
+  var saveStatus = K.saveStatus({ retry: persist });
+  function persist() {
+    if (storage.set('progress', save)) saveStatus.saved(); else saveStatus.failed();
+  }
   function announce(text) { $('announce').textContent = text; }
   function button(id, fn) {
     $(id).addEventListener('click', function () { K.audio.unlock(); K.sfx.click(); this.blur(); fn(); });
@@ -63,6 +68,7 @@
     s.cam = {x:-45,y:0,zoom:1}; s.ball = {x:0,y:P.heightAt(s.course,0)+.7,r:.7,vx:0,vy:0,maxX:0};
     s.trail = []; s.particles = []; s.putt = null; s.impact = null; s.shotAge = 10; s.quality = 0;
     shotResult = null; finishDelay = -1; speed = 1; lastDistance = -1;
+    s.got = {}; starCount = 0; $('star-count').hidden = true; newWorld = -1;
     toastTime = 0; $('toast').hidden = true;
   }
   function controls() {
@@ -98,6 +104,7 @@
     $('worlds-content').hidden = mode !== 'worlds';
     $('upgrades-content').hidden = mode !== 'upgrades' && mode !== 'result';
     $('pause-content').hidden = mode !== 'pause';
+    $('skins-content').hidden = mode !== 'upgrades';
     $('again').hidden = mode !== 'result';
     $('close-modal').hidden = mode === 'result';
     $('modal-heading').textContent = mode === 'worlds' ? 'اختر عالمك' : mode === 'upgrades' ? 'طوّر ضربتك' : mode === 'pause' ? 'استراحة قصيرة' : 'ضربة رائعة!';
@@ -111,6 +118,7 @@
     s.phase = 'title'; closeModal(); resetScene(); stats(); controls();
     $('play').focus({preventScroll:true});
   }
+  function playWorld(i) { save.world = i; persist(); start(); }
   function start() {
     closeModal(); resetScene(); s.phase = 'ready'; meterTime = -.48; meter = .08;
     stats(); controls(); canvas.focus({preventScroll:true}); announce('أوقف المؤشر في المنتصف واضرب الكرة');
@@ -150,6 +158,17 @@
       K.audio.tone({freq:650,to:340,type:'triangle',dur:.09,vol:.25}); controls();
     }
   }
+  // Stars are judged on screen: about 20 px around the drawn ball at any zoom.
+  function collectStars(fromX,fromY) {
+    var b=s.ball, reach=4/s.cam.zoom, dx=b.x-fromX, dy=b.y-fromY, length=dx*dx+dy*dy;
+    P.stars(s.course,Math.min(fromX,b.x)-reach,Math.max(fromX,b.x)+reach).forEach(function(star) {
+      var t=length ? Math.max(0,Math.min(1,((star.x-fromX)*dx+(star.y-fromY)*dy)/length)) : 0;
+      if(s.got[star.id] || Math.hypot(fromX+dx*t-star.x,fromY+dy*t-star.y)>reach) return;
+      s.got[star.id]=true; starCount++;
+      $('star-count').textContent='★ '+starCount; $('star-count').hidden=false;
+      burst(star.x,star.y,'#ffe75c',10); K.sfx.coin();
+    });
+  }
   function toggleSpeed() { if(s.phase==='flight' && !modalMode) { speed = speed===1 ? 3 : 1; controls(); } }
   function startPutting() {
     s.phase = 'putting'; speed = 1; finishDelay = -1; s.trail = []; s.particles = [];
@@ -157,15 +176,23 @@
     s.putt = {active:true,x:.12,target:target,power:0,rolling:false,v:0,elapsed:0,
       targetPower:Math.sqrt(2*1.6*(target-.12))/1.8};
     s.shotAge = 10; meterTime = -.5; s.putt.arrival = 0;
+    // The flight is complete: save it before putting, which may be abandoned.
+    commitResult(false);
     toast('وصلت إلى منطقة الحفرة!',1.7); controls();
   }
+  function earn(coins) { save.coins = Math.min(9999999,save.coins+coins); }
+  // Saves a shot once, then adds the cup bonus once if a later putt sinks it.
   function commitResult(sunk) {
-    if(shotResult) return shotResult;
-    var distance = Math.floor(s.ball.maxX), oldBest = save.best;
-    var earned = P.reward(distance,sunk,s.ball.perfect);
-    shotResult = {distance:distance,oldBest:oldBest,earned:earned,sunk:sunk};
-    save.coins = Math.min(9999999,save.coins+earned);
-    save.best = Math.max(save.best,distance); save.shots++; if(sunk) save.holes++;
+    if(shotResult && (shotResult.sunk || !sunk)) return shotResult;
+    var distance = Math.floor(s.ball.maxX), base = P.reward(distance,false,s.ball.perfect);
+    if(!shotResult) {
+      shotResult = {distance:distance,oldBest:save.best,earned:base+starCount*STAR_COINS,stars:starCount,sunk:false};
+      earn(shotResult.earned); save.best = Math.max(save.best,distance); save.shots++;
+    }
+    if(sunk) {
+      var bonus = P.reward(distance,true,s.ball.perfect)-base;
+      shotResult.earned += bonus; shotResult.sunk = true; earn(bonus); save.holes++;
+    }
     persist(); stats();
     return shotResult;
   }
@@ -180,12 +207,39 @@
     $('modal-heading').textContent = sunk ? 'في الحفرة!' : record ? 'رقم قياسي جديد!' : 'رحلة جميلة!';
     $('result-note').textContent = sunk ? 'تسديدة ممتازة… مكافأة إضافية!' : putted ? puttFeedback() : s.ball.surface==='sand' ? 'الرمال أوقفت الكرة… الضربة القادمة أبعد!' : 'طوّر ضربتك وانطلق أبعد';
     $('result-meters').textContent = K.fmt(distance);
-    $('result-coins').innerHTML = '<bdi dir="ltr">+ ' + K.fmt(earned) + '</bdi> عملة' + (sunk ? ' · مكافأة الحفرة' : '');
+    $('result-coins').innerHTML = '<bdi dir="ltr">+ ' + K.fmt(earned) + '</bdi> عملة' + (result.stars ? ' · ★ ' + result.stars : '') + (sunk ? ' · مكافأة الحفرة' : '');
     var unlocked = P.worlds.filter(function(w) { return w.unlock>oldBest && w.unlock<=save.best; });
-    $('result-unlock').hidden = !unlocked.length;
-    $('result-unlock').textContent = 'عالم جديد: ' + unlocked.map(function(w){return w.name;}).join('، ') + ' — اختره من قائمة العوالم';
-    if(record || sunk) K.sfx.win(); else K.sfx.coin();
+    var box = $('result-unlock'); box.hidden = !unlocked.length;
+    if(unlocked.length) {
+      // One click (or the focused Enter/Space) goes straight to the newest world.
+      newWorld = P.worlds.indexOf(unlocked[unlocked.length-1]);
+      box.textContent = 'عالم جديد: ' + unlocked.map(function(w){return w.name;}).join('، ') + '! ';
+      var go = document.createElement('button'); go.type = 'button'; go.className = 'button primary';
+      go.textContent = 'العب في ' + P.worlds[newWorld].name; box.appendChild(go);
+      go.addEventListener('click', function() { K.audio.unlock(); K.sfx.click(); playWorld(newWorld); });
+      go.focus({preventScroll:true});
+      $('modal-tip').textContent = 'مسافة أو Enter للعالم الجديد · R لضربة أخرى';
+    }
+    if(record || sunk) {
+      K.sfx.win();
+      if(!reducedMotion) celebrate(distance);
+    } else K.sfx.coin();
     announce($('modal-heading').textContent + '، ' + distance + ' متر، ' + earned + ' عملة');
+  }
+  // CSS-only stars and a quick count-up; the paused canvas stays idle.
+  function celebrate(distance) {
+    if(!burstEl) {
+      burstEl = document.createElement('div'); burstEl.className = 'burst'; burstEl.setAttribute('aria-hidden','true');
+      for(var i=0;i<12;i++) burstEl.innerHTML += '<i style="--a:'+i*30+'deg">★</i>';
+      $('panel').appendChild(burstEl);
+    }
+    $('panel').classList.add('celebrate');
+    var meters = $('result-meters'), began = performance.now();
+    (function count(now) {
+      var k = Math.min(1,(now-began)/600);
+      meters.textContent = K.fmt(modalMode==='result' ? distance*k*(2-k) : distance);
+      if(k<1 && modalMode==='result') requestAnimationFrame(count);
+    })(began);
   }
   function renderUpgrades() {
     var focusKind = document.activeElement && document.activeElement.dataset.upgrade;
@@ -210,6 +264,29 @@
       if(replacement && !replacement.disabled) replacement.focus({preventScroll:true});
       else (modalMode==='result'?$('again'):$('close-modal')).focus({preventScroll:true});
     }
+    renderSkins();
+  }
+  function renderSkins() {
+    var focusSkin = document.activeElement && document.activeElement.dataset.skin;
+    var host = $('skins'); host.textContent = '';
+    P.skins.forEach(function(k) {
+      var owned = save.skins.indexOf(k.id)>=0, chosen = save.skin===k.id;
+      var b = document.createElement('button'); b.type='button'; b.className='skin '+k.id; b.dataset.skin=k.id;
+      b.disabled = !owned && save.coins<k.price; b.setAttribute('aria-pressed',chosen);
+      b.innerHTML='<i aria-hidden="true"></i><strong>'+k.name+'</strong><span>'+(chosen?'مختارة':owned?'اختر':K.fmt(k.price)+' عملة')+'</span>';
+      b.addEventListener('click',function() {
+        if(save.skins.indexOf(k.id)<0) {
+          if(save.coins<k.price) return;
+          save.coins-=k.price; save.skins.push(k.id); K.sfx.power();
+        }
+        save.skin = s.skin = k.id; persist(); stats(); renderDirty = true;
+        announce('الكرة الآن: '+k.name);
+        renderUpgrades();
+      });
+      host.appendChild(b);
+    });
+    var replacement = focusSkin && host.querySelector('[data-skin="'+focusSkin+'"]');
+    if(replacement) replacement.focus({preventScroll:true});
   }
   function renderWorlds() {
     var host=$('worlds-content'); host.textContent='';
@@ -256,7 +333,9 @@
     }
     if(s.phase==='flight' && !modalMode) {
       var events=[];
+      var fromX=s.ball.x, fromY=s.ball.y;
       for(var n=0;n<speed;n++) events=events.concat(P.step(s.course,s.ball,save.upgrades,dt));
+      collectStars(fromX,fromY);
       events.forEach(function(e) {
         if(e.type==='bounce') {
           // Same synthesized landing voice, with bounded impact-dependent volume.
@@ -306,7 +385,17 @@
     A.draw(ctx,s);
   }
 
-  button('play',start);button('hit',strike);button('pause',togglePause);button('resume',closeModal);
+  button('play',start);button('pause',togglePause);button('resume',closeModal);
+  // Strike on press, like the canvas and Space: a click fires on release,
+  // when the needle has already moved past the moment the player chose.
+  $('hit').addEventListener('pointerdown',function(e) {
+    if(e.button!==0) return;
+    e.preventDefault(); K.audio.unlock(); K.sfx.click(); strike();
+  });
+  $('hit').addEventListener('click',function(e) {
+    if(e.detail!==0) return; // a pointer press has already struck
+    K.audio.unlock(); K.sfx.click(); strike();
+  });
   button('restart',start);button('again',start);button('menu',menu);button('close-modal',closeModal);
   button('open-worlds',function(){openModal('worlds');});button('open-upgrades',function(){openModal('upgrades');});
   button('flight-hint',toggleSpeed);button('continue',strike);
@@ -325,7 +414,7 @@
     if(e.code==='KeyR' && s.phase==='result') {e.preventDefault();start();return;}
     if(e.code==='Space'||e.code==='Enter') {
       e.preventDefault();
-      if(modalMode==='result')start();
+      if(modalMode==='result') { if(newWorld>=0) playWorld(newWorld); else start(); }
       else if(!modalMode) {
         if(s.phase==='title')start();else if(s.phase==='flight')toggleSpeed();else strike();
       }

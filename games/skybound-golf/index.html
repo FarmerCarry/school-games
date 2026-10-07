@@ -16,7 +16,7 @@
     <div class="tools">
       <button id="pause" class="round-button" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden><i class="pause-icon" aria-hidden="true"></i></button>
     </div>
-    <div id="distance" class="distance" hidden><strong id="meters" dir="ltr">0</strong><span>متر</span></div>
+    <div id="distance" class="distance" hidden><strong id="meters" dir="ltr">0</strong><span>متر</span><b id="star-count" class="star-count" hidden></b></div>
     <div id="toast" class="toast" role="status" hidden></div>
     <div id="best" class="best">أفضل مسافة: <bdi id="best-meters">0</bdi> متر</div>
 
@@ -57,6 +57,7 @@
           <p class="shop-hint">كل تطوير يقربك من الفضاء</p>
           <div id="upgrades" class="upgrades"></div>
         </div>
+        <div id="skins-content" hidden><h3>أشكال الكرة</h3><div id="skins" class="skins"></div></div>
         <div id="pause-content" hidden><p class="pause-copy">خذ نفسًا… ضربتك تنتظرك!</p><button id="resume" class="button primary" type="button">تابع اللعب</button><button id="restart" class="button cream" type="button">ابدأ من جديد</button></div>
         <div class="modal-actions"><button id="again" class="button primary" type="button" hidden>ضربة أخرى</button><button id="menu" class="button text-button" type="button">القائمة الرئيسية</button></div>
         <p id="modal-tip" class="modal-tip"></p>

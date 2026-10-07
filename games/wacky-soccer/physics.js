@@ -29,7 +29,7 @@
 
   /* ---------------------------------------------------------------- Player */
   function Player(world, team, side, idx, homeX, look) {
-    this.world = world;
+    this.world = world; this.ta = NaN; this.ca = 1; this.sa = 0;
     this.team = team; this.side = side; this.idx = idx; this.look = look;
     this.dir = side === 0 ? 1 : -1;          // attack direction
     this.homeX = homeX;
@@ -66,8 +66,10 @@
     this.eyes.ox = this.eyes.oy = this.eyes.vx = this.eyes.vy = 0;
   };
   // local (lx, ly) -> world
-  Player.prototype.wx = function (lx, ly) { return this.x + lx * Math.cos(this.a) - ly * Math.sin(this.a); };
-  Player.prototype.wy = function (lx, ly) { return this.y + lx * Math.sin(this.a) + ly * Math.cos(this.a); };
+  // cos/sin of the tilt are cached: these run thousands of times per frame during the CPU lookahead
+  Player.prototype.trig = function () { if (this.ta !== this.a) { this.ta = this.a; this.ca = Math.cos(this.a); this.sa = Math.sin(this.a); } };
+  Player.prototype.wx = function (lx, ly) { if (this.ta !== this.a) this.trig(); return this.x + lx * this.ca - ly * this.sa; };
+  Player.prototype.wy = function (lx, ly) { if (this.ta !== this.a) this.trig(); return this.y + lx * this.sa + ly * this.ca; };
   Player.prototype.footLocal = function (i) {
     var L = this.legs[i];
     return { x: this.dir * Math.sin(L.phi) * this.legLen, y: this.hipOff + Math.cos(L.phi) * this.legLen };
@@ -418,19 +420,21 @@
       if (d2 >= rr * rr) continue;
       var d = Math.sqrt(d2) || 0.001, nx = dx / d, ny = dy / d;
       if (d < 0.01) { nx = 0; ny = -1; }
-      // ball pinned under a player: squirt it out sideways instead of crushing it
+      // ball pinned under a player: squirt it out toward the other goal instead of crushing it
+      // (squirting it out backwards was a free own goal whenever a player landed on the ball)
       var pinned = false;
       if (ny > 0.25 && this.y + r >= G - 2) {
-        var sgn = Math.abs(dx) < r * 0.4 ? p.dir : (dx >= 0 ? 1 : -1);
-        nx = sgn * 0.95; ny = -0.31; pinned = true;
+        nx = p.dir * 0.95; ny = -0.31; pinned = true;
       }
       var pvx = s[6] + (s[8] - s[6]) * t, pvy = s[7] + (s[9] - s[7]) * t;
       if (s[0] === 'c') { pvx = s[6]; pvy = s[7]; }
       var part = s[10];
       var isLeg = part.charAt(0) === 'l' || part.charAt(0) === 'f';
       var footKick = part === 'leg0' || part === 'foot0';
-      // while the button's kick window is open, ANY touch sends the ball forward (weaker than a real foot kick)
-      var isKick = p.kickT > 0 && !p.kickHit && (footKick || WS.TUNE.anyPart);
+      // while the button's kick window is open, a touch with either leg or foot sends the ball forward
+      // (weaker than a real kick-foot kick). Head and body just bounce it: with them too, mashing the
+      // button turned the whole player into a kicker and beat pressing at the right moment.
+      var isKick = p.kickT > 0 && !p.kickHit && (footKick || (WS.TUNE.anyPart && isLeg));
       // push out (ball takes most of it)
       var pen = rr - d;
       this.x += nx * pen; this.y += ny * pen;
@@ -582,7 +586,7 @@
   };
 
   /* ----------------------------------------------- snapshot (for the CPU) */
-  var PF = ['x', 'y', 'vx', 'vy', 'a', 'av', 'kickT', 'kickHit', 'cool', 'groundT', 'lieT', 'headGround', 'idleT', 'squash', 'flail'];
+  var PF = ['x', 'y', 'vx', 'vy', 'a', 'av', 'kickT', 'kickHit', 'cool', 'groundT', 'lieT', 'headGround', 'idleT', 'squash', 'flail', 'mood', 'moodT'];
   var BF = ['x', 'y', 'vx', 'vy', 'spin', 'ang', 'lastTeam', 'touchP', 'lastT', 'graceP', 'graceT', 'roofT', 'stillT', 'squash', 'r', 'm'];
   World.prototype.snapshot = function (snap) {
     snap = snap || { p: [], b: [], w: [] };

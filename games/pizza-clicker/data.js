@@ -100,7 +100,7 @@
   U.push({ id: 'c0', kind: 'click', val: 2, tier: 0, name: 'أصابع سريعة', desc: 'ضِعف قوة النقرة!', cost: 100, cond: function (S) { return S.clicks >= 15; } });
   U.push({ id: 'c1', kind: 'click', val: 2, tier: 1, name: 'قفازات العجين', desc: 'ضِعف قوة النقرة!', cost: 800, cond: function (S) { return S.handBaked >= 300; } });
   U.push({ id: 'c2', kind: 'click', val: 2, tier: 2, name: 'يدان ذهبيتان', desc: 'ضِعف قوة النقرة!', cost: 12000, cond: function (S) { return S.handBaked >= 4000; } });
-  U.push({ id: 'c3', kind: 'pct', val: 0.01, tier: 3, name: 'لمسة الشيف', desc: 'كل نقرة تعطي أيضًا 1% من إنتاجك في الثانية', cost: 60000, cond: function (S) { return S.handBaked >= 20000; } });
+  U.push({ id: 'c3', kind: 'pct', val: 0.01, tier: 3, name: 'لمسة الشيف', desc: 'كل نقرة تعطي أيضًا 1% من إنتاجك في الثانية', cost: 6000, cond: function (S) { return S.handBaked >= 2500; } });
   U.push({ id: 'c4', kind: 'pct', val: 0.01, tier: 4, name: 'نقرة الصاروخ', desc: 'كل نقرة تعطي 1% إضافية من إنتاجك في الثانية', cost: 5e6, cond: function (S) { return S.handBaked >= 1e6; } });
   U.push({ id: 'c5', kind: 'pct', val: 0.01, tier: 5, name: 'نقرة النيزك', desc: 'كل نقرة تعطي 1% إضافية من إنتاجك في الثانية', cost: 5e8, cond: function (S) { return S.handBaked >= 1e8; } });
   U.push({ id: 'c6', kind: 'pct', val: 0.01, tier: 6, name: 'نقرة المجرة', desc: 'كل نقرة تعطي 1% إضافية من إنتاجك في الثانية', cost: 5e10, cond: function (S) { return S.handBaked >= 1e10; } });

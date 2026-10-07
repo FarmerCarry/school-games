@@ -54,7 +54,8 @@ h1 strong { display:block; font-size:112px; color:#ffe777; }
 .result-distance b { font-size:76px; }
 .result-distance span { font-size:25px; }
 .result-coins { color:#996018; font-size:27px; font-weight:700; }
-.result-unlock { margin:8px 0; background:#e1eeb2; border-radius:12px; padding:6px; color:#3c642b; font-size:21px; }
+.result-unlock { margin:8px 0; background:#e1eeb2; border-radius:12px; padding:6px; color:#3c642b; font-size:21px; animation:pop .45s ease-out; }
+.result-unlock .button { min-height:0; padding:4px 18px; margin:2px 6px; font-size:20px; border-radius:16px; box-shadow:0 4px 0 var(--edge); }
 .shop-hint { margin:10px 0; font-size:21px; color:#657256; }
 .upgrades { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:14px 0 20px; }
 .upgrade { border:2px solid #e4c88d; border-radius:22px; background:#fff8e4; padding:14px 10px 11px; text-align:center; color:var(--ink); transition:transform .12s; }
@@ -98,6 +99,33 @@ h1 strong { display:block; font-size:112px; color:#ffe777; }
 .result-panel .upgrade .explain { display:none; }
 .result-panel .modal-tip { font-size:16px; line-height:1.2; }
 .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+/* The shop also lists ball styles, so its upgrade cards are more compact. */
+.upgrades-panel .shop-hint { margin:4px 0; }
+.upgrades-panel .upgrades { margin:8px 0 12px; }
+.upgrades-panel .upgrade { padding:10px 10px 8px; line-height:1.3; }
+/* Ball styles: CSS previews of the canvas balls in art.js. */
+#skins-content h3 { margin:0 0 8px; font-size:22px; color:#235b51; }
+.skins { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-bottom:14px; }
+.skin { border:2px solid #e4c88d; border-radius:18px; background:#fff8e4; padding:8px 4px; color:var(--ink); }
+.skin[aria-pressed="true"] { border-color:#59a474; box-shadow:0 3px 0 #59a474; }
+.skin:disabled { cursor:default; opacity:.6; }
+.skin i { display:block; width:34px; height:34px; margin:0 auto 4px; border-radius:50%; border:3px solid #24464d; background:radial-gradient(circle at 35% 30%,#fff 40%,#dce8e5); }
+.skin strong { display:block; font-size:17px; line-height:1.2; }
+.skin span { display:block; font-size:16px; color:#625338; }
+.gold i { background:radial-gradient(circle at 35% 30%,#fff6b0,#ffd23f 55%,#e0a020); }
+.melon i { background:repeating-linear-gradient(100deg,#79cf55 0 6px,#2f7a3a 6px 9px); }
+.planet i { background:linear-gradient(160deg,#0000 42%,#fff1c9 42% 56%,#0000 56%),radial-gradient(circle at 35% 30%,#ffd2a0,#ff9a5a 60%,#c9643d); }
+.comet i { background:radial-gradient(circle at 35% 30%,#fff,#9fe6ff 60%,#49a8d8); }
+.rainbow i { background:conic-gradient(#ff5d5d,#ffb84d,#ffe94d,#6fdc6f,#4dc3ff,#9b7bff,#ff5d5d); }
+.star-count { display:block; margin-top:6px; font-size:26px; color:#b86d0c; }
+/* New best: stars fly out of the result card; base opacity 0 hides them
+   whenever reduced motion removes or shortens the animation. */
+.burst { position:absolute; left:50%; top:42%; pointer-events:none; }
+.burst i { position:absolute; margin:-24px 0 0 -16px; font-style:normal; font-size:40px; color:#ffc93c; text-shadow:0 2px #d58a23; opacity:0; }
+.celebrate .burst i { animation:fly .9s ease-out; }
+.celebrate h2,.celebrate .result-distance b { animation:pop .5s ease-out; }
+@keyframes fly { from { transform:rotate(var(--a)) translateY(-50px) scale(.5); opacity:1; } 70% { opacity:1; } to { transform:rotate(var(--a)) translateY(-380px) scale(1.2); opacity:0; } }
+@keyframes pop { from { transform:scale(.6); } 60% { transform:scale(1.15); } }
 @keyframes arrive { from { transform:translateY(12px) scale(.98); opacity:0; } to { transform:translateY(0) scale(1); opacity:1; } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; } }
 

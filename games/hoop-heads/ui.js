@@ -6,16 +6,21 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var canvas = $('game'), ui = $('ui');
+  var sceneDirty = true; // a still (paused) match is redrawn only when this is set
   function placeUI(v) {
+    sceneDirty = true;
     ui.style.transform = 'translate(' + canvas.style.left + ',' + canvas.style.top + ') scale(' + v.scale + ')';
   }
   var view = Kit.fit(canvas, W, H, { onResize: placeUI });
   var ctx = view.ctx;
+  canvas.addEventListener('contextrestored', function () { HH.resetBg(); view.resize(); });
   Kit.muteButton();
 
   var state = 'title', match = null, demo = null, cfg = null, tour = null;
   var confirmFrom = null, confirmYes = null, resultPrimary = null;
   var scorePop = [0, 0], youT = 0, uiT = 0, demoT = 0;
+  // Keys still being mashed from the match must not skip the result/trophy screen.
+  var resultLock = 0, RESULT_LOCK = 0.6;
   var SCREENS = ['scrTitle', 'scrSelect', 'scrCups', 'scrLadder', 'scrShop', 'scrPause', 'scrConfirm', 'scrResult', 'scrTrophy'];
 
   function show(id) {
@@ -503,7 +508,7 @@
   }
   function pauseGame() {
     if (state !== 'play') return;
-    state = 'pause'; show('scrPause');
+    state = 'pause'; show('scrPause'); sceneDirty = true;
     $('pauseKeys').innerHTML = cfg.mode === 'duo'
       ? 'اللاعب 1: <span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> حركة، <span class="sg-key">W</span> قفز، <span class="sg-key">S</span> تصويب<br>اللاعب 2: <span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span> حركة، <span class="sg-key">↑</span> قفز، <span class="sg-key">↓</span> تصويب'
       : '<span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> حركة، <span class="sg-key">W</span> قفز، <span class="sg-key">S</span> تصويب (أو الأسهم)<br>اقفز قرب السلة واضغط <span class="sg-key">S</span> = دانك!';
@@ -622,7 +627,7 @@
       };
       menu.innerHTML = 'القائمة <small dir="ltr">Esc</small>';
     }
-    state = 'result'; show('scrResult');
+    state = 'result'; show('scrResult'); resultLock = RESULT_LOCK;
     setFocus(again);
     if (c.mode === 'duo' || win) S.win(); else S.lose();
   }
@@ -651,7 +656,7 @@
     save.coins += reward;
     persist();
     var fresh = CH.filter(HH.isUnlocked).filter(function (x) { return before.indexOf(x.id) < 0; });
-    state = 'trophy'; show('scrTrophy');
+    state = 'trophy'; show('scrTrophy'); resultLock = RESULT_LOCK;
     $('trText').innerHTML = 'فزت بـ' + cp.name + '!<br><span class="coin"></span><b class="hot">+' + (reward + matchCoins) + '</b>';
     var un = $('trUnlock'); un.innerHTML = '';
     if (fresh.length) {
@@ -697,11 +702,13 @@
       case 'confirm': navKeys($('scrConfirm'), null, cfNo); break;
       case 'result':
         if (match) HH.stepMatch(match, dt);
+        if (resultLock > 0) { resultLock -= dt; break; }
         if (K.pressed('KeyR')) { resultPrimary && resultPrimary(); break; }
         navKeys($('scrResult'), resultPrimary, function () { $('rMenu').click(); });
         break;
       case 'trophy':
         if (match) HH.stepMatch(match, dt);
+        if (resultLock > 0) { resultLock -= dt; break; }
         navKeys($('scrTrophy'), function () { $('trOk').click(); }, function () { $('trOk').click(); });
         break;
     }
@@ -716,10 +723,14 @@
   var menuAnimT = 0;
   function render() {
     var m = match || demo;
-    if (m) {
+    // Only these states step the match. Otherwise (pause, confirm, the ladder between
+    // tournament matches) it is a still picture: draw it once, then after resize/restore/fonts.
+    var still = match && state !== 'play' && state !== 'result' && state !== 'trophy';
+    if (m && (sceneDirty || !still)) {
       var info = match ? matchInfo(match) : { court: save.court, ball: save.ball, hud: false };
       HH.render(ctx, view, m, info);
     }
+    sceneDirty = false;
     menuAnimT += 1;
     if (menuAnimT % 2) return; // animate menu canvases at ~30 fps
     if (state === 'title') {
@@ -736,7 +747,7 @@
   // make sure canvas text redraws once the Arabic font is ready
   if (document.fonts && document.fonts.load) {
     Promise.all([document.fonts.load('700 40px Fredoka', 'بسلة'), document.fonts.load('700 30px Fredoka', '3')]).then(function () {
-      HH.resetBg();
+      HH.resetBg(); sceneDirty = true;
       if (state === 'title') showTitle();
       else if (state === 'shop') buildShop();
     }).catch(function () {});

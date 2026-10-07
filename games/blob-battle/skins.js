@@ -387,6 +387,7 @@
     texCache[name] = cv;
     return cv;
   };
+  BB.clearTextures = function () { texCache = {}; }; // after a GPU reset wiped them
   BB.TEX = TEX;
 
   /* ------------------------------------------------ faces (drawn live)

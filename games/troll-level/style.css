@@ -177,5 +177,6 @@ button { font-family: var(--sg-font); }
 .hudbtn:hover { background: rgba(0, 0, 0, 0.55); }
 .midbtn.skip { margin-top: 12px; background: #ffe14d; font-size: 19px; }
 .midbtn.skip[hidden] { display: none; }
+#scr-end.dim { background: rgba(22, 12, 34, 0.35); } /* let the final confetti shine through */
 #scr-end .panel { width: 640px; }
 #scr-end .panel.win h2 { font-size: 50px; }

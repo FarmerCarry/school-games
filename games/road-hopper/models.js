@@ -52,6 +52,11 @@
     rr = Math.min(255, Math.round(rr * f)); gg = Math.min(255, Math.round(gg * f)); bb = Math.min(255, Math.round(bb * f));
     return (rr << 16) | (gg << 8) | bb;
   }
+  // Blend a colour toward white (f = 0..1), e.g. foam on water.
+  function pale(hex, f) {
+    var rr = (hex >> 16) & 255, gg = (hex >> 8) & 255, bb = hex & 255;
+    return (Math.round(rr + (255 - rr) * f) << 16) | (Math.round(gg + (255 - gg) * f) << 8) | Math.round(bb + (255 - bb) * f);
+  }
 
   var K = 0x23232d, W = 0xffffff, O = 0xff8a1f, PINK = 0xff9cc2, RED = 0xff4545;
   // Eye with a white sparkle. z = front surface of the head.
@@ -342,7 +347,22 @@
         L.push([x, -0.02, 0.5, 0.9, 0.03, 0.1, inside ? 0xffffff : 0xb8b8b8]);
       }
     } else if (type === 'river') {
+      // Water top is y = -0.28; detail sits 0.01 above it. A few still ripples (two
+      // patterns, bit 2 alternates them by row) and, when the next row is land (bit 1),
+      // foam along that far bank. The near bank hides the edge of the water anyway.
       sideBoxes(L, -0.9, 0.62, t.water);
+      var rip = pale(t.water, 0.3), foam = pale(t.water, 0.7), i;
+      var rips = variant & 2 ? [[-2.4, -0.12, 0.8], [1.3, 0.12, 0.6], [3.5, -0.2, 0.5], [-7.8, 0.05, 0.9], [7.4, -0.1, 0.7]]
+        : [[-3.3, 0.1, 0.6], [0.4, -0.16, 0.9], [2.9, 0.08, 0.5], [-6.6, -0.08, 0.7], [9.1, 0.1, 0.8]];
+      for (i = 0; i < rips.length; i++) {
+        var r = rips[i];
+        L.push([r[0], -0.29, r[1], r[2], 0.02, 0.05, Math.abs(r[0]) < X1 ? rip : shade(rip, 0.72)]);
+      }
+      if (variant & 1) {
+        sideBoxes(L, -0.29, 0.02, foam, -0.46, 0.08);
+        var laps = [[-3.1, 1.2, 0.17], [-0.6, 0.8, 0.13], [1.8, 1.4, 0.18], [3.9, 0.6, 0.12]];
+        for (i = 0; i < laps.length; i++) L.push([laps[i][0], -0.29, -0.5 + laps[i][2] / 2, laps[i][1], 0.02, laps[i][2], foam]);
+      }
     } else if (type === 'rail') {
       sideBoxes(L, -0.6, 0.58, t.gravel);
       for (var sx = -17.5; sx <= 17.5; sx += 0.7) L.push([sx, -0.02, 0, 0.28, 0.06, 0.86, 0x7a5236]);
@@ -430,6 +450,9 @@
     } else {
       L.push([0, -3.4, 0, lw, 3.9, 8, t.log]);
       L.push([-lw / 2 - 0.1, -3.0, 0, 0.3, 3.2, 7.2, t.logEnd]); L.push([lw / 2 + 0.1, -3.0, 0, 0.3, 3.2, 7.2, t.logEnd]);
+      // Foam around the log at the water line (its top is 0.03 above the water, so the
+      // gentle bob never sinks it); the ends show, so a drifting log pushes foam along.
+      L.push([0, -2.8, 0.25, lw + 4, 0.3, 8.6, pale(t.water, 0.8)]);
       for (var j = 0; j < len; j++) {
         var bx = -lw / 2 + 3 + j * 10;
         L.push([bx, 0.5, -1.5, 3, 0.25, 1.2, shade(t.log, 0.8)]);

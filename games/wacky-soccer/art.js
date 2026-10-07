@@ -87,23 +87,49 @@
 
   /* --------------------------------------------------------- background */
   var bgCache = {}, bgScale = 1;
-  ART.setScale = function (s) { if (s !== bgScale) { bgScale = s; bgCache = {}; } };
+  ART.setScale = function (s) { if (s !== bgScale) { bgScale = s; bgCache = {}; fanCells = null; } };
   var clouds = [];
   for (var ci = 0; ci < 6; ci++) clouds.push({ x: ci * 240 + Math.random() * 100, y: 30 + Math.random() * 70, s: 0.6 + Math.random() * 0.6, v: 6 + Math.random() * 8 });
   var stars = [];
   for (var si = 0; si < 90; si++) stars.push({ x: Math.random() * W, y: Math.random() * 460, r: 0.6 + Math.random() * 1.8, p: Math.random() * 6 });
-  var crowd = [];
+  var crowd = [], skins = ['#f2c08f', '#8d5a3b', '#c98b5e', '#f6d3b0', '#6e4630', '#e8b88f'], wavers = [];
   (function () {
     var cols = ['#ff5a5f', '#ffd23f', '#3ddc84', '#4f7cff', '#ff8fb1', '#ffffff', '#9b5de5', '#ff9f1c', '#00c2a8', '#f2f2f2'];
-    var skins = ['#f2c08f', '#8d5a3b', '#c98b5e', '#f6d3b0', '#6e4630', '#e8b88f'];
+    for (var k = 0; k < skins.length; k++) wavers.push([]);
     for (var row = 0; row < 5; row++) {
       var y = 212 + row * 50, n = 40;
       for (var i = 0; i < n; i++) {
         var x = 20 + i * (W - 40) / (n - 1) + (row % 2 ? 14 : 0) + (Math.random() - 0.5) * 8;
-        crowd.push({ x: x, y: y, row: row, c: cols[(Math.random() * cols.length) | 0], sk: skins[(Math.random() * skins.length) | 0], ph: Math.random() * TAU, sp: 0.7 + Math.random() * 0.8, arms: Math.random() < 0.5 });
+        var sk = (Math.random() * skins.length) | 0;
+        var c = { x: x, y: y, jy: y, row: row, c: cols[(Math.random() * cols.length) | 0], sk: skins[sk], ph: Math.random() * TAU, sp: 0.7 + Math.random() * 0.8, arms: Math.random() < 0.5 };
+        crowd.push(c);
+        if (c.arms) wavers[sk].push(c);   // arm-wavers grouped by skin: one stroke per skin tone
       }
     }
   })();
+  // Each fan's body + head is baked once per (shirt, skin) into one atlas canvas at the
+  // background scale, so the 200 fans are 200 drawImage calls from one texture
+  // instead of 400 path fills every frame. Cleared together with the background cache.
+  var FAN_W = 24, FAN_H = 48, FAN_COLS = 16, FAN_ROWS = 8;
+  var fanAtlas = null, fanCells = null, fanCount = 0;
+  function fanCell(col, sk) {
+    var key = col + sk, cell = fanCells && fanCells[key];
+    if (cell) return cell;
+    var cw = Math.ceil(FAN_W * bgScale), ch = Math.ceil(FAN_H * bgScale);
+    if (!fanCells || fanCount >= FAN_COLS * FAN_ROWS) {
+      fanAtlas = fanAtlas || document.createElement('canvas');
+      fanAtlas.width = cw * FAN_COLS; fanAtlas.height = ch * FAN_ROWS;   // resizing also clears it
+      fanCells = {}; fanCount = 0;
+    }
+    cell = fanCells[key] = { x: (fanCount % FAN_COLS) * cw, y: Math.floor(fanCount / FAN_COLS) * ch };
+    fanCount++;
+    var c = fanAtlas.getContext('2d');
+    // the fan's anchor (x, y) sits at (12, 25) in its cell
+    c.setTransform(bgScale, 0, 0, bgScale, cell.x, cell.y);
+    c.fillStyle = col; rr(c, 1, 21, 22, 26, 8); c.fill();
+    circle(c, 12, 12, 10); c.fillStyle = sk; c.fill();
+    return cell;
+  }
 
   function paintBg(ctx, key) {
     var space = key.indexOf('space') >= 0, ice = key.indexOf('ice') >= 0;
@@ -147,13 +173,15 @@
       ctx.fillRect(0, 196 + row * 50, W, 50);
       ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(0, 240 + row * 50, W, 6);
     }
-    // boards (fun slogans, not ads)
+    // boards (fun slogans, not ads), laid out between the goals so no slogan hides behind a net;
+    // the outer colours run on under the goals to keep the band full width
     var boards = [['#ff5a5f', 'هيا يا أبطال!'], ['#ffd23f', 'كرة مجنونة'], ['#3ddc84', 'اقفز واركل!'], ['#4f7cff', 'هدف هدف هدف'], ['#ff8fb1', 'مرح بلا حدود']];
-    var bw = W / 5;
+    var bx = GOAL_D + 12, bw = (W - 2 * bx) / 5;
     for (var b = 0; b < 5; b++) {
-      ctx.fillStyle = boards[b][0]; ctx.fillRect(b * bw, 448, bw, 40);
-      ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(b * bw, 448, bw, 8);
-      ART.text(ctx, boards[b][1], b * bw + bw / 2, 469, { size: 22, color: b === 1 ? '#3a2a00' : '#fff', stroke: 'rgba(0,0,0,0.25)', sw: 3 });
+      var b0 = b === 0 ? 0 : bx + b * bw, b1 = b === 4 ? W : bx + (b + 1) * bw;
+      ctx.fillStyle = boards[b][0]; ctx.fillRect(b0, 448, b1 - b0, 40);
+      ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(b0, 448, b1 - b0, 8);
+      ART.text(ctx, boards[b][1], bx + b * bw + bw / 2, 469, { size: 22, color: b === 1 ? '#3a2a00' : '#fff', stroke: 'rgba(0,0,0,0.25)', sw: 3 });
     }
     ctx.fillStyle = OUT; ctx.fillRect(0, 486, W, 4);
     // pitch
@@ -247,20 +275,28 @@
   };
   // hype 0..1 = how excited the crowd is; flags: team colors to wave
   ART.drawCrowd = function (ctx, t, hype, cols) {
-    for (var i = 0; i < crowd.length; i++) {
-      var c = crowd[i];
+    var sw = FAN_W * bgScale, sh = FAN_H * bgScale, i, c;
+    for (i = 0; i < crowd.length; i++) {
+      c = crowd[i];
       var jump = Math.max(0, Math.sin(t * (6 + c.sp * 4) + c.ph)) * (2 + hype * 12);
-      var y = c.y - jump;
-      var col = cols && (i % 3 === 0) ? cols[(i >> 2) % 2] : c.c;
-      ctx.fillStyle = col;
-      rr(ctx, c.x - 11, y - 4, 22, 26, 8); ctx.fill();
-      if (hype > 0.4 && c.arms) {
-        ctx.strokeStyle = c.sk; ctx.lineWidth = 5; ctx.lineCap = 'round';
-        var wv = Math.sin(t * 12 + c.ph) * 4;
-        ctx.beginPath(); ctx.moveTo(c.x - 9, y); ctx.lineTo(c.x - 15 + wv, y - 20);
-        ctx.moveTo(c.x + 9, y); ctx.lineTo(c.x + 15 - wv, y - 20); ctx.stroke();
+      c.jy = c.y - jump;
+      var cell = fanCell(cols && (i % 3 === 0) ? cols[(i >> 2) % 2] : c.c, c.sk);
+      ctx.drawImage(fanAtlas, cell.x, cell.y, sw, sh, c.x - 12, c.jy - 25, FAN_W, FAN_H);
+    }
+    // excited fans wave their arms: one path per skin tone, drawn over the fans
+    // (before, each arm went under its own head; the difference is a pixel or two)
+    if (hype > 0.4) {
+      ctx.lineWidth = 5; ctx.lineCap = 'round';
+      for (var k = 0; k < wavers.length; k++) {
+        ctx.beginPath();
+        for (i = 0; i < wavers[k].length; i++) {
+          c = wavers[k][i];
+          var wv = Math.sin(t * 12 + c.ph) * 4;
+          ctx.moveTo(c.x - 9, c.jy); ctx.lineTo(c.x - 15 + wv, c.jy - 20);
+          ctx.moveTo(c.x + 9, c.jy); ctx.lineTo(c.x + 15 - wv, c.jy - 20);
+        }
+        ctx.strokeStyle = skins[k]; ctx.stroke();
       }
-      circle(ctx, c.x, y - 13, 10); ctx.fillStyle = c.sk; ctx.fill();
     }
     // waving team scarves/flags in the crowd
     if (cols) {

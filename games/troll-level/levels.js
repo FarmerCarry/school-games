@@ -3,6 +3,8 @@
  * Maps are painted with a tiny builder: room() gives a 32x18 box with the
  * ceiling in rows 0-2 and the floor in rows 13-17; f() fills a rectangle
  * (inclusive) with a map character, s() sets one tile. See engine.js legend.
+ * A hint is a string, or a list of { before: column, text } entries picked by
+ * where the player last died (the last entry has no `before`).
  */
 (function (root) {
   'use strict';
@@ -32,10 +34,10 @@
   function hole(b, x0, x1) { return b.f(x0, 13, x1, 17, ' '); }
 
   var WORLDS = [
-    { name: 'عالم البرتقال', bg: '#ffa41b', bg2: '#ffb443', ink: '#1c1226', ink2: '#3a2a44', accent: '#ffffff' },
-    { name: 'عالم البحر', bg: '#3fe0c5', bg2: '#5deacf', ink: '#0f2350', ink2: '#26407a', accent: '#ffffff' },
-    { name: 'عالم الحلوى', bg: '#ff8fc7', bg2: '#ffa6d3', ink: '#3b1a5c', ink2: '#5a3480', accent: '#ffffff' },
-    { name: 'عالم الغابة', bg: '#c6f25a', bg2: '#d4f77c', ink: '#13402a', ink2: '#2a5e40', accent: '#ffffff' }
+    { name: 'عالم البرتقال', theme: 'sun', bg: '#ffa41b', bg2: '#ffb443', ink: '#1c1226', ink2: '#3a2a44', accent: '#ffffff' },
+    { name: 'عالم البحر', theme: 'sea', bg: '#3fe0c5', bg2: '#5deacf', ink: '#0f2350', ink2: '#26407a', accent: '#ffffff' },
+    { name: 'عالم الحلوى', theme: 'candy', bg: '#ff8fc7', bg2: '#ffa6d3', ink: '#3b1a5c', ink2: '#5a3480', accent: '#ffffff' },
+    { name: 'عالم الغابة', theme: 'forest', bg: '#c6f25a', bg2: '#d4f77c', ink: '#13402a', ink2: '#2a5e40', accent: '#ffffff' }
   ];
 
   var L = [];
@@ -373,7 +375,9 @@
 
   // 4-5: the door goes back to the start.
   L.push({
-    name: 'العودة', hint: 'الباب عاد إلى البداية! ارجع واقفز فوق الأشواك.',
+    name: 'العودة',
+    // Deaths left of column 11 are on the shy floor; later ones are about the door.
+    hint: [{ before: 11, text: 'انتبه للأرض الخجولة في البداية: اقفز فوقها!' }, { text: 'الباب عاد إلى البداية! ارجع واقفز فوق الأشواك.' }],
     map: (function () {
       var b = room();
       b.f(8, 13, 9, 17, 'b');
