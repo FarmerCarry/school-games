@@ -32,13 +32,13 @@
   }
   .amt button.on { background: #ffcc00; color: #4a1f00; box-shadow: 0 3px 0 rgba(0,0,0,0.3); }
   .sec-label { font-size: 17px; font-weight: 700; color: #ffcf8a; margin: 4px 2px 4px; display: flex; justify-content: space-between; }
-  .sec-label small { font-weight: 500; opacity: 0.75; font-size: 14px; }
+  .sec-label small { font-weight: 500; opacity: 0.75; font-size: 16px; }
   #ups {
     display: grid; grid-template-columns: repeat(7, 46px); gap: 5px; justify-content: start;
     min-height: 56px; max-height: 110px; overflow-y: auto; overflow-x: hidden; padding: 5px 5px; margin-bottom: 6px;
     background: rgba(0,0,0,0.2); border-radius: 12px;
   }
-  #ups .empty { grid-column: 1 / -1; color: #ffcf8a; opacity: 0.7; font-size: 14px; align-self: center; padding: 0 8px; }
+  #ups .empty { grid-column: 1 / -1; color: #ffcf8a; opacity: 0.9; font-size: 16px; align-self: center; padding: 0 8px; }
   .up {
     width: 46px; height: 46px; border: none; padding: 0; cursor: pointer; background: none; border-radius: 10px;
     transition: transform 0.08s, filter 0.15s, opacity 0.15s;
@@ -152,9 +152,9 @@
   }
   .toast.out { animation: tout 0.35s ease-in forwards; }
   .toast img { width: 44px; height: 44px; flex: none; }
-  .toast .tt { font-size: 14px; font-weight: 700; color: #b5462a; line-height: 1.2; }
+  .toast .tt { font-size: 15px; font-weight: 700; color: #b5462a; line-height: 1.2; }
   .toast .tn { font-size: 19px; font-weight: 700; line-height: 1.2; }
-  .toast .td { font-size: 14px; line-height: 1.2; opacity: 0.85; }
+  .toast .td { font-size: 15px; line-height: 1.2; opacity: 0.9; }
   @keyframes tin { from { transform: translateX(120px) scale(0.8); opacity: 0; } }
   @keyframes tout { to { transform: translateX(120px); opacity: 0; } }
   #banner {
@@ -212,7 +212,7 @@
   .close { position: absolute; top: 12px; left: 14px; width: 44px; height: 44px; border-radius: 50%; border: 3px solid #4a1606; background: #fff; color: #4a1f00; font: inherit; font-size: 24px; font-weight: 700; cursor: pointer; line-height: 1; box-shadow: 0 3px 0 #4a1606; }
   .close:hover { background: #ffe0d0; }
   .scroll { overflow-y: auto; }
-  .keyhint { font-size: 14px; opacity: 0.7; margin-top: 10px; }
+  .keyhint { font-size: 16px; opacity: 0.7; margin-top: 10px; }
 
   /* title */
   #title { background: #ff8a1f; overflow: hidden; flex-direction: column; justify-content: flex-start; }
@@ -249,7 +249,7 @@
   .ach { display: flex; align-items: center; gap: 8px; background: #fff; border: 3px solid #e2c090; border-radius: 14px; padding: 5px 8px; text-align: right; min-height: 66px; }
   .ach img { width: 40px; height: 40px; flex: none; }
   .ach .an { font-size: 16px; font-weight: 700; line-height: 1.2; }
-  .ach .ad { font-size: 13px; line-height: 1.25; opacity: 0.8; }
+  .ach .ad { font-size: 15px; line-height: 1.25; opacity: 0.9; }
   .ach.lock { background: #efe3cc; border-color: #d9c4a0; }
   .ach.lock .an { opacity: 0.55; }
   .achsum { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
@@ -258,7 +258,7 @@
   .skin:hover { transform: translateY(-3px); }
   .skin canvas { position: static; width: 110px; height: 110px; display: block; margin: 0 auto; }
   .skin .sn { font-size: 19px; font-weight: 700; }
-  .skin .ss { font-size: 13px; line-height: 1.25; min-height: 33px; opacity: 0.85; }
+  .skin .ss { font-size: 15px; line-height: 1.25; min-height: 38px; opacity: 0.85; }
   .skin.on { border-color: #3ddc84; background: #eafff2; box-shadow: 0 0 0 3px #3ddc84; }
   .skin.lock { cursor: default; background: #efe3cc; }
   .skin.lock:hover { transform: none; }
