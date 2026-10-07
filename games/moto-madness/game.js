@@ -53,7 +53,14 @@
   if (!Array.isArray(save.stars)) save.stars = [];
   if (!Array.isArray(save.best)) save.best = [];
   save.paint = save.paint | 0; save.suit = save.suit | 0; save.flips = save.flips | 0;
-  function persist() { store.set('save', save); }
+  if (!(save.paint >= 0 && save.paint < PAINTS.length)) save.paint = 0;
+  if (!(save.suit >= 0 && save.suit < SUITS.length)) save.suit = 0;
+  var saveStatus = Kit.saveStatus({ retry: persist });
+  function persist() {
+    if (!store.set('save', save)) { saveStatus.failed(); return false; }
+    saveStatus.saved();
+    return true;
+  }
   function totalStars() { var s = 0; for (var i = 0; i < NL; i++) s += save.stars[i] | 0; return s; }
   function unlocked(i) { return i === 0 || (save.stars[i - 1] | 0) > 0; }
   function nextLevelToPlay() { for (var i = 0; i < NL; i++) if (!(save.stars[i] > 0)) return i; return NL - 1; }
@@ -187,7 +194,7 @@
     var b = world.bike;
     cam.x = b.x + 220; cam.y = b.y - 60; cam.zoom = 0.95;
     clearParticles();
-    lean = 0; crouch = 0; finishT = 0;
+    lean = 0; crouch = 0; finishT = 0; result = null;
   }
   function startDemo() {
     var cands = [];
@@ -212,6 +219,7 @@
     world.restart();
     clearParticles();
     bannerT = 0; finishT = 0; state = 'play'; stuckT = 0; prevTime = 0; hurry = 0; rec = [];
+    if (result) { if (result.ghost) loadGhost(levelIdx); result = null; } // restarted right after finishing: race the new best
     showOverlay(null);
     var b = world.bike; cam.x = b.x + 220; cam.y = b.y - 60;
     MMA.respawn();
@@ -234,7 +242,8 @@
   var sel = 0;
   function fmt(t) {
     if (t == null) return '--';
-    var m = Math.floor(t / 60), s = t - m * 60;
+    // round to tenths first, so 9.96 s reads 0:10.0 (not 0:010.0) and 59.97 s reads 1:00.0
+    var d = Math.round(t * 10), m = Math.floor(d / 600), s = (d - m * 600) / 10;
     return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1);
   }
   function goLevels() {
@@ -347,26 +356,33 @@
   }
 
   /* ---------------------------------------------------------- complete */
-  var lastResult = null;
-  function starsFor(i, t) { var s = MM.LEVELS[i].stars; return t <= s[0] ? 3 : t <= s[1] ? 2 : 1; }
+  var result = null;
+  // judged on the time as shown (tenths), so a run that reads 0:19.8 meets "under 0:19.8"
+  function starsFor(i, t) { var s = MM.LEVELS[i].stars; t = Math.round(t * 10) / 10; return t <= s[0] ? 3 : t <= s[1] ? 2 : 1; }
+  // Saved the moment you cross the line, so R / Esc before the results panel can't lose the run.
+  function commitResult() {
+    var t = world.finalTime, i = levelIdx;
+    var r = result = { t: t, st: starsFor(i, t), before: totalStars(), prevBest: save.best[i], ghost: false };
+    r.newBest = r.prevBest == null || t < r.prevBest - 0.0001;
+    if (r.newBest) save.best[i] = Math.round(t * 100) / 100;
+    save.stars[i] = Math.max(save.stars[i] | 0, r.st);
+    save.flips += world.flips;
+    r.after = totalStars();
+    persist(); // progress first: the ghost below is the bigger, less important write
+    if (r.newBest && rec.length >= 6 && rec.length < GHOST_MAX * 3) {
+      r.ghost = true;
+      if (!store.set('ghost' + i, { d: rec })) store.remove('ghost' + i);
+    }
+  }
   function showComplete() {
     state = 'complete';
     MMA.silence();
-    var t = world.finalTime, i = levelIdx, st = starsFor(i, t);
-    var before = totalStars();
-    var prevBest = save.best[i], newBest = prevBest == null || t < prevBest - 0.0001;
-    if (newBest) {
-      save.best[i] = Math.round(t * 100) / 100;
-      if (rec.length >= 6 && rec.length < GHOST_MAX * 3) store.set('ghost' + i, { d: rec });
-    }
-    save.stars[i] = Math.max(save.stars[i] | 0, st);
-    save.flips += world.flips;
-    persist();
-    var after = totalStars();
+    var i = levelIdx, t = result.t, st = result.st, newBest = result.newBest, prevBest = result.prevBest;
+    var before = result.before, after = result.after;
     $('cTitle').textContent = i === NL - 1 ? '🏆 أنهيت كل المراحل! أنت بطل!' : 'أنهيت المرحلة!';
     $('cTime').textContent = fmt(t);
     $('cBest').innerHTML = newBest && prevBest != null ? '<span class="mm-best">رقم قياسي جديد!</span>' : (prevBest != null ? '<p class="mm-sub">أفضل وقت: ' + fmt(save.best[i]) + '</p>' : '');
-    if (newBest && rec.length >= 6) $('cBest').innerHTML += '<p class="mm-sub">👻 العب مجددًا وسابق أفضل جولة لك!</p>';
+    if (result.ghost) $('cBest').innerHTML += '<p class="mm-sub">👻 العب مجددًا وسابق أفضل جولة لك!</p>';
     var info = [];
     if (world.flips) info.push('الشقلبات: ' + world.flips + ' (وفّرت ' + world.bonus + ' ث)');
     info.push('السقطات: ' + world.crashes);
@@ -403,7 +419,6 @@
     }
     if (newBest && prevBest != null) setTimeout(function () { if (state === 'complete') Kit.sfx.power(); }, 350 + st * 330);
     if (un.length) setTimeout(function () { if (state === 'complete') MMA.unlock(); }, 500 + st * 330);
-    lastResult = { stars: st, time: t, newBest: newBest };
   }
   function nextLevel() {
     if (levelIdx < NL - 1 && unlocked(levelIdx + 1)) startLevel(levelIdx + 1);
@@ -592,13 +607,14 @@
       emitTrail(inp);
       if (world.finished) {
         finishT += dt;
+        if (!result) commitResult();
         if (finishT > 1.6) showComplete();
       }
       bannerT += dt;
       // "hurry" beep when a star time runs out
-      var s = MM.LEVELS[levelIdx].stars, cur = world.time - world.bonus;
+      var cur = world.time - world.bonus;
       if (world.started && !world.finished) {
-        if ((prevTime <= s[0] && cur > s[0]) || (prevTime <= s[1] && cur > s[1])) { hurry = 1; MMA.bonk(); }
+        if (starsFor(levelIdx, cur) < starsFor(levelIdx, prevTime)) { hurry = 1; MMA.bonk(); }
       }
       prevTime = cur;
       // stuck detection (for the "Press R" hint)
@@ -703,7 +719,7 @@
     if (!world || window.__noRender) return;
     var c = { x: cam.x + shake.x, y: cam.y + shake.y, zoom: cam.zoom };
     ctx.save();
-    MMR.drawWorld(ctx, world, c, clock, curSkin, { lean: lean, crouch: crouch, beforeBike: drawGhost, afterBike: function (g) {
+    MMR.drawWorld(ctx, world, c, clock, curSkin, { lean: lean, crouch: crouch, noSigns: demo, beforeBike: drawGhost, afterBike: function (g) {
       drawParticles(g);
       // flip meter while spinning in the air
       var w = world, bk = w.bike;
@@ -760,13 +776,12 @@
     var L = MM.LEVELS[levelIdx], w = world, cur = Math.max(0, w.time - w.bonus);
     if (w.finished) cur = w.finalTime;
     // timer
-    var tcol = cur <= L.stars[0] ? '#ffffff' : cur <= L.stars[1] ? '#ffe9a8' : '#ffc0c0';
+    var st = starsFor(levelIdx, cur), tcol = st === 3 ? '#ffffff' : st === 2 ? '#ffe9a8' : '#ffc0c0';
     var pulse = hurry > 0 ? 1 + hurry * 0.25 : 1;
     ctx.save(); ctx.translate(26, 62); ctx.scale(pulse, pulse);
     outlined(fmt(cur), 0, 0, 50, tcol, 'left', 9, 'ltr');
     ctx.restore();
     // star target
-    var st = cur <= L.stars[0] ? 3 : cur <= L.stars[1] ? 2 : 1;
     var target = st === 3 ? L.stars[0] : st === 2 ? L.stars[1] : null;
     for (var i = 0; i < 3; i++) {
       ctx.fillStyle = 'rgba(20,20,45,0.9)'; MMR.star(ctx, 40 + i * 30, 94, 15, 'rgba(20,20,45,0.85)');

@@ -1,7 +1,8 @@
 /*
  * Moto Madness — all the art, drawn in code.
  * MMR.setTheme(level) prepares cached layers / sprites for a level's theme.
- * MMR.drawWorld(ctx, world, cam, t) draws everything in the game world.
+ * MMR.drawWorld(ctx, world, cam, t, skin, extra) draws everything in the game world
+ * (extra.noSigns hides the tutorial signs, e.g. in the title-screen demo).
  * MMR.drawBike(ctx, pose, skin) draws the bike + rider (also used by the garage preview).
  */
 (function () {
@@ -249,6 +250,8 @@
   }
 
   MMR.setTheme = function (ctx, level) {
+    layers.gsy = null; // a new course: snap the parallax layers to its ground
+    if (layers.far && themeId === level.def.theme) return; // same world: keep the cached layers and sprites
     themeId = level.def.theme; T = THEMES[themeId];
     layers.far = genFar(themeId);
     layers.mid = genMid(themeId);
@@ -267,7 +270,7 @@
   MMR.themeId = function () { return themeId; };
 
   /* ------------------------------------------------------------ background */
-  function drawBackground(ctx, cam, t) {
+  function drawBackground(ctx, L, cam, t) {
     if (!layers.skyGrad) {
       var gr = ctx.createLinearGradient(0, 0, 0, 720);
       gr.addColorStop(0, T.sky[0]); gr.addColorStop(0.55, T.sky[1]); gr.addColorStop(1, T.sky[2]);
@@ -300,18 +303,29 @@
         ctx.fillRect(cx, cy, 84 * k, 30 * k);
       }
     }
-    // parallax layers
-    var yoff = -cam.y;
-    drawLayer(ctx, layers.far, cam.x * 0.12, 250 + clampN(yoff * 0.08, -80, 120));
-    drawLayer(ctx, layers.mid, cam.x * 0.3, 330 + clampN(yoff * 0.2, -150, 200));
+    // parallax layers stand on the ground line (about y 450 on flat ground) and drift less than it does
+    var gsy = groundLine(L, cam, t) - 450;
+    drawLayer(ctx, layers.far, cam.x * 0.12, clampN(50 + gsy * 0.35, -80, 300));
+    drawLayer(ctx, layers.mid, cam.x * 0.3, clampN(75 + gsy * 0.6, -60, 400));
   }
   function clampN(v, a, b) { return v < a ? a : v > b ? b : v; }
+  // Screen height of the ground around the camera. The highest of three samples ignores pits,
+  // and easing it keeps the backdrop from jumping with every bump, jump or respawn.
+  function groundLine(L, cam, t) {
+    var gy = null;
+    for (var i = -1; i <= 1; i++) { var y = MM.chainY(L.chain, cam.x + i * 360); if (y != null && (gy == null || y < gy)) gy = y; }
+    var target = gy == null ? 450 : clampN((gy - cam.y) * cam.zoom + 360, 100, 800);
+    if (layers.gsy == null || Math.abs(cam.x - layers.gx) > 600) layers.gsy = target; // new course or restart
+    else layers.gsy += (target - layers.gsy) * (1 - Math.exp(-5 * clampN(t - layers.gt, 0, 0.1)));
+    layers.gx = cam.x; layers.gt = t;
+    return layers.gsy;
+  }
   function drawLayer(ctx, c, off, y) {
     var x = -(off % LW);
     if (x > 0) x -= LW;
     for (; x < 1280; x += LW) ctx.drawImage(c, x, y, LW, LH);
-    // fill below the layer so nothing shows through
-    if (y + LH < 720) { ctx.fillStyle = c === layers.far ? T.far : T.mid2; ctx.fillRect(0, y + LH - 1, 1280, 720 - y - LH + 1); }
+    // fill below the layer, in the colour of its bottom edge, so nothing shows through and there is no seam
+    if (y + LH < 720) { ctx.fillStyle = c === layers.far ? T.far : themeId === 'factory' ? T.mid2 : T.mid; ctx.fillRect(0, y + LH - 1, 1280, 720 - y - LH + 1); }
   }
 
   /* --------------------------------------------------------------- terrain */
@@ -323,7 +337,7 @@
     while (lo < hi) { var m2 = (lo + hi + 1) >> 1; if (chain[m2].x > x1) hi = m2 - 1; else lo = m2; }
     return [a, Math.min(chain.length - 1, lo + 1)];
   }
-  function drawTerrain(ctx, L, x0, x1, yb, t) {
+  function drawTerrain(ctx, L, x0, x1, ym, yb, t) {
     var ch = L.chain, r = chainRange(ch, x0, x1), i, p, q;
     // ground fill
     ctx.beginPath();
@@ -332,11 +346,16 @@
     ctx.lineTo(ch[r[1]].x, yb);
     ctx.closePath();
     ctx.fillStyle = layers.pattern; ctx.fill();
-    // darker band just under the surface
+    // darker band just under the surface, clipped to the ground so it never spills into the sky
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.save(); ctx.clip();
+    // and the ground darkens towards the bottom of the screen, so it reads as deep earth, not a flat slab
+    var gr = ctx.createLinearGradient(0, ym, 0, yb);
+    gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.25)');
+    ctx.fillStyle = gr; ctx.fillRect(x0, ym, x1 - x0, yb - ym);
     ctx.strokeStyle = T.edge; ctx.globalAlpha = 0.35; ctx.lineWidth = 34;
     ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.restore();
     // surface strips (skip steep walls)
     var run = false;
     ctx.beginPath();
@@ -740,7 +759,7 @@
   /* ----------------------------------------------------------- whole world */
   MMR.drawWorld = function (ctx, w, cam, t, skin, extra) {
     var L = w.level, i;
-    drawBackground(ctx, cam, t);
+    drawBackground(ctx, L, cam, t);
     var hw = 640 / cam.zoom, hh = 360 / cam.zoom;
     var x0 = cam.x - hw - 60, x1 = cam.x + hw + 60, yb = cam.y + hh + 80;
     ctx.save();
@@ -756,10 +775,10 @@
     for (i = 0; i < L.shapes.length; i++) drawShapeBack(ctx, L.shapes[i], t, x0, x1);
     // flags / signs behind the bike
     for (i = 0; i < L.checkpoints.length; i++) { var c = L.checkpoints[i]; if (c.x > x0 - 100 && c.x < x1 + 100) drawFlag(ctx, c.x, c.y, i <= w.cp, t); }
-    for (i = 0; i < L.signs.length; i++) { var sg = L.signs[i]; if (sg.x > x0 - 300 && sg.x < x1 + 100) drawSign(ctx, sg); }
+    if (!(extra && extra.noSigns)) for (i = 0; i < L.signs.length; i++) { var sg = L.signs[i]; if (sg.x > x0 - 300 && sg.x < x1 + 100) drawSign(ctx, sg); }
     if (L.finishX > x0 - 200 && L.finishX < x1 + 200) drawFinish(ctx, L.finishX, MM.chainY(L.chain, L.finishX), t);
     for (i = 0; i < w.movers.length; i++) { var m = w.movers[i]; if (m.x > x0 - 400 && m.x < x1 + 400) drawMover(ctx, m, t, L); }
-    drawTerrain(ctx, L, x0, x1, yb, t);
+    drawTerrain(ctx, L, x0, x1, cam.y, yb, t);
     for (i = 0; i < L.shapes.length; i++) drawShapeFront(ctx, L.shapes[i], t, x0, x1, w);
     for (i = 0; i < w.crates.length; i++) { var cr = w.crates[i]; if (cr.x > x0 - 60 && cr.x < x1 + 60) drawCrate(ctx, cr); }
     for (i = 0; i < w.rollers.length; i++) drawRoller(ctx, w.rollers[i]);

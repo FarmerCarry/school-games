@@ -2,6 +2,8 @@
  * Moto Madness — the 20 hand-built levels (4 worlds x 5).
  * Each level is drawn by a "pen" walking right: flat, hill, kicker, pit, loop, ...
  * (see Builder in engine.js). stars: [3-star time, 2-star time] in seconds.
+ * The 3-star time is about 0.5 s under the best clean ride without flips, so it takes at
+ * least one landed flip; just holding ↑ earns 2 stars (tools/tests/moto-balance.test.mjs).
  */
 (function (root) {
   'use strict';
@@ -16,7 +18,7 @@
 
   MM.LEVELS = [
     /* ------------------------------------------------------------ GRASSLAND */
-    { name: 'أول جولة', theme: 'grass', seed: 1, stars: [23, 35], build: function (b) {
+    { name: 'أول جولة', theme: 'grass', seed: 1, stars: [19.8, 35], build: function (b) {
       b.flat(220).sign('اضغط ↑ لتنطلق!', 160).flat(620)
         .hill(600, 60).flat(300)
         .sign('← أو → لإمالة الدراجة').flat(300)
@@ -36,7 +38,7 @@
         .crates([3]).flat(300)
         .hill(900, 170).flat(400);
     } },
-    { name: 'تلال القفز', theme: 'grass', seed: 2, stars: [28, 41], build: function (b) {
+    { name: 'تلال القفز', theme: 'grass', seed: 2, stars: [24, 41], build: function (b) {
       b.flat(700).hill(800, 150).flat(400)
         .sign('اقفز فوق الأشواك!').flat(300)
         .kicker(220, 85).pit(240, 170).flat(500)
@@ -53,7 +55,7 @@
         .kicker(240, 90).pit(280, 200).flat(500)
         .hill(700, 120).flat(400);
     } },
-    { name: 'مرج الفطر', theme: 'grass', seed: 3, stars: [29, 42], build: function (b) {
+    { name: 'مرج الفطر', theme: 'grass', seed: 3, stars: [24.6, 42], build: function (b) {
       b.flat(600).sign('انطّ على الفطر!').flat(300)
         .mushroom(1100).flat(160).slope(40, 220).flat(900)
         .to(500, -220).flat(500)
@@ -69,7 +71,7 @@
         .kicker(220, 90).pit(260, 180).flat(600)
         .mushroom(1250).flat(900).crates([3, 2, 1]).flat(300);
     } },
-    { name: 'حديقة الميزان', theme: 'grass', seed: 4, stars: [26, 38], build: function (b) {
+    { name: 'حديقة الميزان', theme: 'grass', seed: 4, stars: [21.9, 38], build: function (b) {
       b.flat(600).sign('اعبر فوق الميزان الخشبي').flat(300)
         .seesaw(360).flat(600)
         .hill(600, 110).flat(400)
@@ -88,7 +90,7 @@
         .logs(3, 160).flat(300)
         .seesaw(400).flat(500);
     } },
-    { name: 'بحيرة اللفّات', theme: 'grass', seed: 5, stars: [27, 40], build: function (b) {
+    { name: 'بحيرة اللفّات', theme: 'grass', seed: 5, stars: [22.9, 40], build: function (b) {
       b.flat(500).sign('تيربو! ثم لفّة كاملة!').flat(300)
         .boost(220).loop(170).flat(400)
         .hill(800, 160).flat(500)
@@ -107,7 +109,7 @@
     } },
 
     /* --------------------------------------------------------------- DESERT */
-    { name: 'سباق الكثبان', theme: 'desert', seed: 6, stars: [33, 48], build: function (b) {
+    { name: 'سباق الكثبان', theme: 'desert', seed: 6, stars: [28.2, 48], build: function (b) {
       b.flat(700).sign('كثبان كبيرة = قفزات عالية!').flat(200)
         .hill(900, 200).flat(200).hill(1000, 260).flat(500)
         .to(500, 150).flat(400).ramp(260, 90).landing(1100, 480).flat(500)
@@ -122,7 +124,7 @@
         .hill(900, 220).hill(900, 260).flat(500)
         .kicker(240, 100).pit(340, 200).flat(600);
     } },
-    { name: 'قفزة الوادي', theme: 'desert', seed: 7, stars: [28, 41], build: function (b) {
+    { name: 'قفزة الوادي', theme: 'desert', seed: 7, stars: [23.6, 41], build: function (b) {
       b.flat(700)
         .kicker(220, 90).pit(260, 220).flat(600)
         .to(500, 180).flat(500)
@@ -140,7 +142,7 @@
         .to(600, 200).flat(400).ramp(260, 100).pit(340, 320, -120).flat(600)
         .crates([3, 3]).flat(400);
     } },
-    { name: 'الصخور المتدحرجة', theme: 'desert', seed: 8, stars: [23, 34], build: function (b) {
+    { name: 'الصخور المتدحرجة', theme: 'desert', seed: 8, stars: [19.2, 34], build: function (b) {
       b.flat(600).to(700, 250).flat(300)
         .sign('أوه لا… أسرع أسرع!').flat(300)
         .boulder(560, 420)
@@ -161,7 +163,7 @@
         .crates([3, 2, 1]).flat(500)
         .kicker(240, 100).pit(320, 220).flat(600);
     } },
-    { name: 'الجسر المتهاوي', theme: 'desert', seed: 9, stars: [22, 34], build: function (b) {
+    { name: 'الجسر المتهاوي', theme: 'desert', seed: 9, stars: [18.7, 34], build: function (b) {
       b.flat(600).sign('لا تتوقف! الجسر يسقط!').flat(300)
         .bridge(520, 7).flat(600)
         .hill(700, 140).flat(500)
@@ -177,7 +179,7 @@
         .landing(800, 260).flat(500)
         .bridge(600, 8).flat(300).bridge(600, 8).flat(600);
     } },
-    { name: 'لفّة العقرب', theme: 'desert', seed: 10, stars: [24, 36], build: function (b) {
+    { name: 'لفّة العقرب', theme: 'desert', seed: 10, stars: [20.6, 36], build: function (b) {
       b.flat(600).hill(800, 160).flat(400)
         .boost(220).loop(180).flat(400)
         .seesaw(400).flat(500)
@@ -195,7 +197,7 @@
     } },
 
     /* --------------------------------------------------------------- WINTER */
-    { name: 'يوم الثلج', theme: 'winter', seed: 11, stars: [25, 37], build: function (b) {
+    { name: 'يوم الثلج', theme: 'winter', seed: 11, stars: [20.9, 37], build: function (b) {
       b.flat(600).sign('انتبه! الجليد زلق!').flat(300)
         .ice(600).hill(700, 120).flat(500)
         .kicker(220, 90).pit(260, 200).flat(500)
@@ -211,7 +213,7 @@
         .crates([3, 2, 1]).flat(400)
         .ice(500).kicker(240, 100).pit(320, 220).flat(600);
     } },
-    { name: 'الشلال المتجمد', theme: 'winter', seed: 12, stars: [24, 35], build: function (b) {
+    { name: 'الشلال المتجمد', theme: 'winter', seed: 12, stars: [19.7, 35], build: function (b) {
       b.flat(700)
         .ramp(220, 60).drop(160).flat(700)
         .ramp(220, 60).drop(200).flat(700)
@@ -227,7 +229,7 @@
         .bridge(600, 8).flat(500)
         .ramp(240, 70).drop(200).flat(600);
     } },
-    { name: 'مصعد الجليد', theme: 'winter', seed: 13, stars: [32, 47], build: function (b) {
+    { name: 'مصعد الجليد', theme: 'winter', seed: 13, stars: [27.3, 47], build: function (b) {
       b.flat(600).sign('قف على المصعد! ↓ للفرامل').flat(500)
         .lift(300, 300).flat(700)
         .landing(700, 200).flat(300)
@@ -244,7 +246,7 @@
         .ice(400).flat(200).mushroom(1150).flat(200).slope(40, 250).flat(900)
         .landing(800, 250).flat(500);
     } },
-    { name: 'انهيار ثلجي!', theme: 'winter', seed: 14, stars: [20, 31], build: function (b) {
+    { name: 'انهيار ثلجي!', theme: 'winter', seed: 14, stars: [16.5, 31], build: function (b) {
       b.flat(600).to(800, 320).flat(300)
         .sign('كرة ثلج! لا تتوقف!').flat(300)
         .boulder(560, 460, 70)
@@ -264,7 +266,7 @@
         .crates([3, 2, 1]).flat(500)
         .kicker(240, 100).pit(320, 220).flat(600);
     } },
-    { name: 'قمة اللفّتين', theme: 'winter', seed: 15, stars: [28, 41], build: function (b) {
+    { name: 'قمة اللفّتين', theme: 'winter', seed: 15, stars: [23.5, 41], build: function (b) {
       b.flat(600).hill(800, 150).flat(400)
         .boost(220).loop(170).flat(100).boost(220).loop(180).flat(400)
         .checkpoint().flat(200)
@@ -281,7 +283,7 @@
     } },
 
     /* -------------------------------------------------------- NIGHT FACTORY */
-    { name: 'جولة الليل', theme: 'factory', seed: 16, stars: [23, 34], build: function (b) {
+    { name: 'جولة الليل', theme: 'factory', seed: 16, stars: [19.2, 34], build: function (b) {
       b.flat(600).sign('منصات التيربو = سرعة خارقة!').flat(300)
         .boost(220).kicker(240, 100).pit(560, 240).flat(600)
         .crates([3, 2, 1]).flat(300)
@@ -297,7 +299,7 @@
         .boost(220).kicker(260, 110).pit(640, 260).flat(600)
         .hill(800, 160).flat(500);
     } },
-    { name: 'ساحة المكابس', theme: 'factory', seed: 17, stars: [30, 43], build: function (b) {
+    { name: 'ساحة المكابس', theme: 'factory', seed: 17, stars: [24.6, 43], build: function (b) {
       b.flat(600).sign('قف على المكبس! ↓ للفرامل').flat(400)
         .lift(300, 320).flat(700)
         .landing(700, 240).flat(300)
@@ -313,7 +315,7 @@
         .seesaw(400).flat(500)
         .crates([3, 2, 1]).flat(400);
     } },
-    { name: 'حُفر الشرر', theme: 'factory', seed: 18, stars: [24, 35], build: function (b) {
+    { name: 'حُفر الشرر', theme: 'factory', seed: 18, stars: [20, 35], build: function (b) {
       b.flat(600)
         .kicker(220, 90).pit(280, 220).flat(500)
         .kicker(220, 90).pit(280, 220).flat(500)
@@ -329,7 +331,7 @@
         .landing(900, 300).flat(500)
         .seesaw(400).flat(600);
     } },
-    { name: 'محطّم الصناديق', theme: 'factory', seed: 19, stars: [18, 28], build: function (b) {
+    { name: 'محطّم الصناديق', theme: 'factory', seed: 19, stars: [14.5, 28], build: function (b) {
       b.flat(600).sign('حطّم الصناديق!').flat(200)
         .crates([4, 3, 2, 1]).flat(300)
         .bridge(600, 8).flat(400)
@@ -348,7 +350,7 @@
         .hill(800, 160).flat(500)
         .crates([3, 2, 1]).flat(300).crates([3, 2, 1]).flat(400);
     } },
-    { name: 'جنون الدراجات', theme: 'factory', seed: 20, stars: [34, 49], build: function (b) {
+    { name: 'جنون الدراجات', theme: 'factory', seed: 20, stars: [29.9, 49], build: function (b) {
       b.flat(600).sign('التحدي الأكبر!').flat(300)
         .boost(220).loop(180).flat(400)
         .kicker(240, 100).pit(320, 220).flat(500)
