@@ -617,8 +617,10 @@
   function refreshHud() {
     var ct = PZ.fmt(S.pizzas) + ' <span class="w">بيتزا</span>';
     if (ct !== lastCountTxt) { lastCountTxt = ct; countEl.innerHTML = ct; }
-    var rt = 'في الثانية: ' + PZ.fmtRate(ppsNow());
-    if (buffs.frenzy > 0) rt += ' <bdi class="boost" dir="ltr">×7</bdi>';
+    // An open window holds the frenzy and pays only the base rate (see update), so show that rate.
+    var held = !!modalOpen;
+    var rt = 'في الثانية: ' + PZ.fmtRate(held ? S.ppsBase : ppsNow());
+    if (buffs.frenzy > 0 && !held) rt += ' <bdi class="boost" dir="ltr">×7</bdi>';
     if (S.crusts > 0) rt += ' &nbsp;<span class="crust">🌟 ' + plus(Math.round(S.crusts * PZ.CRUST_BONUS * 100) + '%') + '</span>';
     if (rt !== lastRateTxt) { lastRateTxt = rt; rateEl.innerHTML = rt; }
     var bt = '';
@@ -934,22 +936,24 @@
   function setPause(p) {
     if (p && mode === 'play') {
       mode = 'pause'; hideTip();
-      var el = $('pauseStats');
-      var mins = Math.floor(S.playTime / 60);
-      el.innerHTML =
-        '<span>كل البيتزا التي صنعتها</span><b>' + PZ.fmt(S.lifetime) + '</b>' +
-        '<span>بيتزا في هذه الجولة</span><b>' + PZ.fmt(S.runBaked) + '</b>' +
-        '<span>بيتزا في الثانية</span><b>' + PZ.fmtRate(S.ppsBase) + '</b>' +
-        '<span>عدد النقرات</span><b>' + PZ.fmt(S.clicks) + '</b>' +
-        '<span>أطول كومبو</span><b>' + S.bestCombo + '</b>' +
-        '<span>بيتزا ذهبية</span><b>' + S.golden + '</b>' +
-        '<span>القشور الذهبية</span><b>' + PZ.fmt(S.crusts) + '</b>' +
-        '<span>وقت اللعب (دقيقة)</span><b>' + mins + '</b>';
+      fillPauseStats();
       pauseEl.hidden = false; snd.ui();
     } else if (!p && mode === 'pause') {
       collectAway();
       mode = 'play'; pauseEl.hidden = true; snd.ui();
     }
+  }
+  function fillPauseStats() {
+    var mins = Math.floor(S.playTime / 60);
+    $('pauseStats').innerHTML =
+      '<span>كل البيتزا التي صنعتها</span><b>' + PZ.fmt(S.lifetime) + '</b>' +
+      '<span>بيتزا في هذه الجولة</span><b>' + PZ.fmt(S.runBaked) + '</b>' +
+      '<span>بيتزا في الثانية</span><b>' + PZ.fmtRate(S.ppsBase) + '</b>' +
+      '<span>عدد النقرات</span><b>' + PZ.fmt(S.clicks) + '</b>' +
+      '<span>أطول كومبو</span><b>' + S.bestCombo + '</b>' +
+      '<span>بيتزا ذهبية</span><b>' + S.golden + '</b>' +
+      '<span>القشور الذهبية</span><b>' + PZ.fmt(S.crusts) + '</b>' +
+      '<span>وقت اللعب (دقيقة)</span><b>' + mins + '</b>';
   }
 
   /* ============================================================ input */
@@ -1049,6 +1053,8 @@
         gain(amt, false);
         toast(pizzaIconURL(), 'أثناء غيابك', plus(PZ.fmt(amt)) + ' بيتزا', fmtDuration(sec));
         save();
+        // Back on a paused tab: the kept frame (box stacks), HUD and pause card show the new total.
+        if (mode === 'pause') { pauseDrawn = false; refreshHud(); fillPauseStats(); }
       }
     }
   }
