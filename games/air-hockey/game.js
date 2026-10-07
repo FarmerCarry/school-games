@@ -93,7 +93,7 @@
     hitstop: 0, timeScale: 1, slowT: 0,
     flash: 0, flashCol: '#fff', zoom: 0, zoomX: G.CX, zoomY: G.CY,
     big: null, goalFlash: [0, 0],
-    earned: 0, newAwards: [], awardQ: [], matchPointShown: false, idleT: 0, winner: 0
+    earned: 0, newAwards: [], awardQ: [], awardT: 0, matchPointShown: false, idleT: 0, winner: 0
   };
   var shake = Kit.shake();
   var dbg = { ownGoals: 0, nudges: 0, goals: 0, log: [] };
@@ -187,11 +187,11 @@
     return twoPlayerSkin(side);
   }
   // 2-player mode: player 1 uses the equipped mallet; player 2 is pink, or lime when
-  // player 1's colour is already pinkish
+  // player 1's colour is already pinkish or red
   function twoPlayerSkin(side) {
     var mine = byId(AH.MALLETS, save.eq.mallet);
     if (side < 0) return mine;
-    return ['pink', 'donut', 'rainbow'].indexOf(mine.id) >= 0 ? byId(AH.MALLETS, 'lime') : byId(AH.MALLETS, 'pink');
+    return ['pink', 'melon', 'donut', 'rainbow'].indexOf(mine.id) >= 0 ? byId(AH.MALLETS, 'lime') : byId(AH.MALLETS, 'pink');
   }
   function skinColor(s) {
     if (s.kind === 'rainbow') return '#ff9ed2';
@@ -210,7 +210,7 @@
     st.score = [0, 0]; st.stats = newStats(); st.streak = { side: 0, n: 0 }; st.maxBehind = [0, 0];
     st.goalHalf = [G.GOAL, G.GOAL]; st.tiny = [0, 0]; st.powers = []; st.respawn = []; st.powerT = 4;
     st.earned = 0; st.newAwards = []; st.matchPointShown = false; st.winner = 0; st.timeScale = 1; st.slowT = 0;
-    st.big = null; st.hitstop = 0; st.idleT = 0; st.mpPending = 0; st.lastRocket = -9; st.flash = 0; st.zoom = 0;
+    st.big = null; st.hitstop = 0; st.idleT = 0; st.mpPending = 0; st.awardT = 0; st.lastRocket = -9; st.flash = 0; st.zoom = 0;
     var a = makeMallet(-1), b = makeMallet(1);
     if (demo) { a.ctrl = 'ai'; a.bot = byId(AH.BOTS, 'medium'); b.ctrl = 'ai'; b.bot = st.bot; }
     else if (st.mode === 1) { a.ctrl = 'p1solo'; b.ctrl = 'ai'; b.bot = st.bot; }
@@ -768,9 +768,9 @@
       return;
     }
     bigText(word, col, 1.4, 130, who);
-    if (st.chaos) { respawnLater(p, 1.0, scorer); }
-    else setScene('goal');
-    flushAwards();
+    // chaos mode plays on over a live rink, so rally banners wait until the puck respawns
+    if (st.chaos) { respawnLater(p, 1.0, scorer); st.awardT = 1.0; }
+    else { setScene('goal'); flushAwards(); }
     st.lastConceder = -scorer;
     var mp = st.score[0] === st.goalsToWin - 1 || st.score[1] === st.goalsToWin - 1;
     if (mp && !st.matchPointShown) { st.matchPointShown = true; st.mpPending = 1.5; }
@@ -870,6 +870,7 @@
     for (i = pops.length - 1; i >= 0; i--) { pops[i].life -= dt; pops[i].y -= dt * 40; if (pops[i].life <= 0) pops.splice(i, 1); }
     if (st.big) { st.big.t += dt; if (st.big.t > st.big.dur) st.big = null; }
     if (st.mpPending > 0) { st.mpPending -= dt; if (st.mpPending <= 0) { bigText(AH.WORDS.matchPoint, '#ff5c7a', 1.1, 96); S.matchPoint(); } }
+    if (st.awardT > 0) { st.awardT -= dt; if (st.awardT <= 0 && st.scene === 'play') flushAwards(); } // a won match lists them in the results
     st.mallets.forEach(function (m) {
       m.sq = Math.max(0, m.sq - dt * 5);
       if (m.moodT > 0) { m.moodT -= dt; if (m.moodT <= 0) m.mood = ''; }

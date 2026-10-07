@@ -38,9 +38,11 @@ async function hockey(t) {
       if (key === 'sg:air-hockey:save' && runtime.failSave) throw new DOMException('Full storage fixture', 'QuotaExceededError');
       return write.apply(this, arguments);
     };
+    // counts only the background clear that starts every frame; the goal flash overlay
+    // is also a full-canvas fill, but in the scorer's colour
     const fill = CanvasRenderingContext2D.prototype.fillRect;
     CanvasRenderingContext2D.prototype.fillRect = function (x, y, w, h) {
-      if (this.canvas.id === 'game' && x === 0 && y === 0 && w === 1280 && h === 720) runtime.paints++;
+      if (this.canvas.id === 'game' && this.fillStyle === '#050716' && x === 0 && y === 0 && w === 1280 && h === 720) runtime.paints++;
       return fill.apply(this, arguments);
     };
   });
@@ -112,4 +114,24 @@ test('Air Hockey holds mid-rally award banners for the goal and reports failed s
     return { state: document.querySelector('.sg-save-status').dataset.state, awards: JSON.parse(localStorage.getItem('sg:air-hockey:save')).awards };
   });
   assert.deepEqual(retried, { state: 'saved', awards: { rocket: 1, goal1: 1 } });
+});
+
+test('Air Hockey 2-player chaos: player 2 is lime next to melon, and rally banners wait for the respawn', async t => {
+  const page = await hockey(t);
+  const result = await page.evaluate(() => {
+    Object.assign(__game.save, { mode: 2, chaos: true });
+    __game.save.eq.mallet = 'melon';
+    document.getElementById('btnPlay').click(); runtime.step(150);
+    const banner = () => [...document.querySelectorAll('#toasts .toast')].some(el => el.textContent.includes('جائزة الاختبار'));
+    const skins = __game.st.mallets.map(m => m.skin.id);
+    __game.st.awardQ.push('جائزة الاختبار'); __game.goal(-1); runtime.step(4);
+    const atGoal = { scene: __game.st.scene, score: __game.st.score.slice(), queued: __game.st.awardQ.length, banner: banner() };
+    let frames = 4; // another chaos goal restarts the wait, so step until the queue is shown
+    while (__game.st.awardQ.length && frames < 600) { runtime.step(1); frames++; }
+    return { skins, atGoal, frames, banner: banner() };
+  });
+  assert.deepEqual(result.skins, ['melon', 'lime']);
+  assert.deepEqual(result.atGoal, { scene: 'play', score: [1, 0], queued: 1, banner: false }, 'no banner over the live rink');
+  assert.ok(result.frames >= 55 && result.frames < 600, `the banner waits about a second (${result.frames} frames)`);
+  assert.equal(result.banner, true);
 });
