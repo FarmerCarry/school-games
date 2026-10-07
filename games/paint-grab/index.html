@@ -125,7 +125,14 @@
   .obtns { display: flex; justify-content: center; gap: 14px; margin-top: 6px; }
   #bAgain { font-size: 34px; min-width: 280px; animation: pulse 1.1s ease-in-out infinite; }
   #bOverMenu { min-width: 160px; }
+  /* three buttons (a new arena is waiting) share the same row */
+  .obtns.three { gap: 10px; }
+  .obtns.three .pbtn { min-width: 0; font-size: 24px; padding: 4px 10px 8px; white-space: nowrap; }
+  .obtns.three #bAgain { min-width: 0; font-size: 26px; }
+  .obtns.three #bOverMenu { min-width: 0; }
 
+  /* save warning in the bottom-left corner, clear of the area bar, minimap and leaderboard */
+  .sg-save-status { margin-inline: 0; inset-inline-start: auto; }
   .pg-btn { right: 62px; font-weight: 700; font-family: var(--sg-font); font-size: 17px; }
   .pg-btn[hidden] { display: none; }
 </style>
@@ -202,8 +209,9 @@
       <div id="oStars"></div>
       <div id="oClose"></div>
       <div id="oUnlocks"></div>
-      <div class="obtns">
+      <div class="obtns" id="oBtns">
         <button class="pbtn g" id="bAgain" type="button">العب مجدداً <small dir="ltr">Enter</small></button>
+        <button class="pbtn y" id="bNext" type="button" hidden>الساحة التالية</button>
         <button class="pbtn" id="bOverMenu" type="button">القائمة <small dir="ltr">Esc</small></button>
       </div>
     </div>
