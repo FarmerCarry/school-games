@@ -22,13 +22,15 @@
   var view = Kit.fit(canvas, W, H, { onResize: onResize });
   var ctx = view.ctx;
   var store = Kit.store('sumo-bonk');
+  // a restored 2D canvas lost its pixels and transform: size it again (repaints the sky and mini canvases)
+  canvas.addEventListener('contextrestored', function () { view.resize(); });
 
   function onResize(v) {
     var s = v.scale;
     uiEl.style.left = v.canvas.style.left;
     uiEl.style.top = v.canvas.style.top;
     uiEl.style.transform = 'scale(' + s + ')';
-    skyDirty = true;
+    skyDirty = true; frameDirty = true;
     sizeMiniCanvases && sizeMiniCanvases();
   }
   var sizeMiniCanvases = null;
@@ -55,8 +57,15 @@
   var SAVE_KEYS = ['stars', 'wins', 'special', 'picks', 'mode', 'diff', 'streak', 'bestStreak', 'matches', 'bonks', 'music', 'seenHats', 'beaten'];
   // persist() writes everything (end of a match); persist('picks') just one key, so flicking
   // through wrestlers and hats on the select screen doesn't rewrite 13 keys per key press.
+  // A failed write shows the shared warning; until every key sticks again, each save (and the
+  // retry button) rewrites all keys from the in-memory save, which stays authoritative.
+  var saveUI = Kit.saveStatus({ retry: function () { persist(); } }), saveFailed = false;
   function persist(only) {
-    (only ? [only] : SAVE_KEYS).forEach(function (k) { store.set(k, save[k]); });
+    var ok = true;
+    (only && !saveFailed ? [only] : SAVE_KEYS).forEach(function (k) { if (store.set(k, save[k]) === false) ok = false; });
+    saveFailed = !ok;
+    if (ok) saveUI.saved(); else saveUI.failed();
+    return ok;
   }
   function hatUnlocked(i) {
     var h = HATS[i]; if (!h) return false;
@@ -134,6 +143,14 @@
   var shake = Kit.shake();
   var cam = { x: W / 2, y: H / 2, z: 1, punch: 0 };
   var hitstop = 0, timeScale = 1, slowT = 0, flash = 0, hype = 0;
+  // reduced motion / the classroom preset: no zoom punches, ring-out zoom, white flashes or confetti
+  // (Kit.shake already rests; hitstop and slow motion stay because they are gameplay timing)
+  function calm() { return Kit.motion.reduced(); }
+  Kit.motion.onChange(function (reduced) {
+    if (!reduced) return;
+    flash = 0; cam.punch = 0; frameDirty = true;
+    for (var i = 0; i < PMAX; i++) if (parts[i].kind === 'confetti') parts[i].on = false;
+  });
 
   /* ============================================================== players */
   function newPlayer(idx) {
@@ -300,7 +317,7 @@
       resetPlayer(P[i], sx, top - R - 300 - i * 30, i ? -1 : 1);
     }
     phase = 'intro'; phaseT = 0; roundT = 0; endT = 0; resolved = false; roundWinner = -1;
-    timeScale = 1; slowT = 0; popups.length = 0;
+    timeScale = 1; slowT = 0; popups.length = 0; labelA = 0;
     for (var q = 0; q < PMAX; q++) { var pq = parts[q]; if (pq.on && (pq.kind === 'snow' || pq.kind === 'leaf' || pq.kind === 'streak' || pq.kind === 'crumb')) pq.on = false; }
     cam.x = W / 2; cam.y = H / 2; cam.z = 1;
     if (!demo) {
@@ -363,7 +380,8 @@
           if (sfxOn()) SFX.tramp();
           p.sqV += bv * 0.004;
           p.canDive = true;
-          if (p.action === 'dive') { p.action = 'none'; shockwave(p, 1.3); }
+          // a belly slam bounces back up, not sideways off the trampoline with the slam's full speed
+          if (p.action === 'dive') { p.action = 'none'; vlx *= 0.3; shockwave(p, 1.3); }
           best = null;
           p.x = pl.x + lx * c - ly * s; p.y = pl.y + lx * s + ly * c;
           p.vx = vlx * c - vly * s; p.vy = vlx * s + vly * c;
@@ -485,6 +503,9 @@
     p.splashed = true; p.splashT = 0;
     var sx = clamp(p.x, 40, W - 40);
     p.floatX = clamp(p.x, 90, W - 90);
+    // two splashes on the same side get their own floaties instead of stacking on one
+    var o = P[1 - p.idx];
+    if (o.splashed && Math.abs(p.floatX - o.floatX) < 150) p.floatX = clamp(o.floatX + (o.floatX > W / 2 ? -150 : 150), 90, W - 90);
     burst('drop', sx, WATER_Y, 34, { angle: -Math.PI / 2, spread: 1.4, speed: 900, life: 1.1, size: 8, colors: ['#ffffff', '#bdf0ff', '#8fdcff'], g: 1800 });
     burst('drop', sx, WATER_Y, 14, { angle: -Math.PI / 2, spread: 2.6, speed: 420, life: 0.9, size: 6, color: '#e8fbff', g: 1400 });
     spawn('ring', sx, WATER_Y + 4, 0, 0, 0.7, 60, '#ffffff', 0, 0, 0.22);
@@ -511,7 +532,8 @@
     else { a.vy = -640; a.vx = -dir * 110; a.action = 'none'; a.canDive = true; a.noSnap = 0.1; a.grounded = false; }
     a.bxV -= dir * 120;
     var cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2 - 10;
-    hitstop = 0.06 + 0.025 * sc; shake.add(9 + 5 * sc); cam.punch = 0.045 * sc; flash = 0.18;
+    hitstop = 0.06 + 0.025 * sc; shake.add(9 + 5 * sc);
+    if (!calm()) { cam.punch = 0.045 * sc; flash = 0.18; }
     burst('star', cx, cy, 9, { speed: 520, life: 0.6, size: 13, colors: ['#ffe14a', '#ffffff', '#ffb3d9'], g: 700 });
     burst('dot', cx, cy, 10, { speed: 380, life: 0.35, size: 7, color: '#ffffff', g: 0 });
     spawn('ring', cx, cy, 0, 0, 0.3, 60, '#ffffff', 0, 0, 1);
@@ -527,7 +549,8 @@
     [a, b].forEach(function (p) { p.action = 'recover'; p.t = 0.22; p.grounded = false; p.plat = null; p.noSnap = 0.1; p.sqV += 5; p.canDive = true; });
     a.leanV -= dir * 8; b.leanV += dir * 8;
     var cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-    hitstop = 0.1; shake.add(14); flash = 0.25; cam.punch = 0.06;
+    hitstop = 0.1; shake.add(14);
+    if (!calm()) { flash = 0.25; cam.punch = 0.06; }
     burst('star', cx, cy, 14, { speed: 600, life: 0.7, size: 14, colors: ['#ffe14a', '#7de3ff', '#ffffff'], g: 500 });
     spawn('ring', cx, cy, 0, 0, 0.4, 90, '#ffffff', 0, 0, 1);
     popup('تصادم البطون!', cx, cy - 90, '#7de3ff', 56);
@@ -651,9 +674,18 @@
   /* ============================================================== player step */
   function humanInput(p) {
     var k = Kit.keys;
-    if (mode === 1) return { j: k.anyPressed(['KeyW', 'ArrowUp']), s: k.anyPressed(['KeyS', 'ArrowDown']) };
-    if (p.idx === 0) return { j: k.pressed('KeyW'), s: k.pressed('KeyS') };
+    if (mode === 1) return { j: k.anyPressed(['KeyW', 'ArrowUp', 'Space']), s: k.anyPressed(['KeyS', 'ArrowDown']) };
+    if (p.idx === 0) return { j: k.pressed('KeyW') || k.pressed('Space'), s: k.pressed('KeyS') };
     return { j: k.pressed('ArrowUp'), s: k.pressed('ArrowDown') };
+  }
+  // ←/→ and A/D do nothing in a match, so pressing them pops up the jump/attack keycaps again
+  var hint = [0, 0], hintArrows = false;
+  function updateHints(dt) {
+    hint[0] = Math.max(0, hint[0] - dt); hint[1] = Math.max(0, hint[1] - dt);
+    if (scr !== 'game' || phase !== 'fight') return;
+    var k = Kit.keys, wasd = k.anyPressed(['KeyA', 'KeyD']), arrows = k.anyPressed(['ArrowLeft', 'ArrowRight']);
+    if (mode === 1) { if (wasd || arrows) { hint[0] = 2.5; hintArrows = arrows; } }
+    else { if (wasd) hint[0] = 2.5; if (arrows) hint[1] = 2.5; }
   }
 
   function updatePlayer(p, o, dt, controls) {
@@ -688,8 +720,13 @@
         p.t -= dt; if (p.t <= 0) p.action = 'none'; break;
     }
     if (p.action === 'none' && controls && !p.out && !o.out) {
-      if (p.grounded) { if (p.jb > 0) doJump(p); else if (p.sb > 0) startWindup(p); }
-      else if (p.sb > 0 && p.canDive) startDive(p);
+      // while the rival is flying out (just bonked, or already past the ring), hold a mashed attack that
+      // would carry the human past the edge too (dash + slide, or a belly slam); the buffered press
+      // still fires if the rival lands back on the ring
+      var reach = p.grounded ? DASHV * DASH_T + (p.plat ? 250 / p.plat.fric : 0) : 140;
+      var reckless = !p.cpu && !o.grounded && (o.wasHit || !overPlatform(o.x, 0)) && !overPlatform(p.x + p.f * reach, 0);
+      if (p.grounded) { if (p.jb > 0) doJump(p); else if (p.sb > 0 && !reckless) startWindup(p); }
+      else if (p.sb > 0 && p.canDive && !reckless) startDive(p);
     }
     // forces
     if (p.action !== 'dash' && p.action !== 'dive') p.vy += GRAV * dt;
@@ -876,15 +913,17 @@
     if (demo) return;
     score[roundWinner]++;
     var w = P[roundWinner];
-    if (w.hits === 0) stats.perfect[roundWinner]++;
+    // a winner who also tumbled into the water scored on fall order, which is not a perfect round
+    var clean = w.hits === 0 && !w.out;
+    if (clean) stats.perfect[roundWinner]++;
     roundLog.push({ arena: arena.type, t: +roundT.toFixed(2), winner: roundWinner, hits: [P[0].hits, P[1].hits] }); if (roundLog.length > 300) roundLog.shift();
     var name = mode === 1 ? (roundWinner === 0 ? 'نقطة لك!' : 'نقطة للكمبيوتر!') : 'نقطة للاعب ' + (roundWinner + 1) + '!';
-    var sub = w.hits === 0 ? 'جولة مثالية!' : (score[roundWinner] === WIN_SCORE - 1 ? 'نقطة الفوز!' : '');
+    var sub = w.out ? (mode === 1 && roundWinner === 1 ? 'سقطت أولاً!' : 'الخصم سقط أولاً!') : clean ? 'جولة مثالية!' : (score[roundWinner] === WIN_SCORE - 1 ? 'نقطة الفوز!' : '');
     if (score[roundWinner] >= WIN_SCORE) { name = 'الضربة القاضية!'; sub = ''; }
     showBanner(name, sub, SUMOS[w.sumo].body, 1.6, 84);
     SFX.point();
     hudPop[roundWinner] = 1;
-    burst('confetti', W / 2 + (roundWinner ? 170 : -170), 40, 26, { angle: Math.PI / 2, spread: 2.4, speed: 300, life: 1.6, size: 12, colors: ['#ffe14a', '#ff5fae', '#7de3ff', '#8be066', '#ffffff'], g: 300 });
+    if (!calm()) burst('confetti', W / 2 + (roundWinner ? 170 : -170), 40, 26, { angle: Math.PI / 2, spread: 2.4, speed: 300, life: 1.6, size: 12, colors: ['#ffe14a', '#ff5fae', '#7de3ff', '#8be066', '#ffffff'], g: 300 });
   }
 
   function afterRound() {
@@ -960,7 +999,7 @@
     l.y = 460; l.grounded = true; l.T += dt; l.action = 'none';
     updateVis(w, l, dt); updateVis(l, w, dt);
     l.mood = mode === 2 ? 'happy' : (matchWinner === 0 ? 'dizzy' : 'sad'); l.dizzy = matchWinner === 0 && mode === 1 ? 1 : 0;
-    if (Math.random() < 0.55) spawn('confetti', rand(0, W), -10, rand(-40, 40), rand(60, 140), 5, rand(9, 15), Kit.pick(['#ffe14a', '#ff5fae', '#7de3ff', '#8be066', '#ffffff', '#b98aff']), 40, rand(0, 6), rand(-6, 6));
+    if (!calm() && Math.random() < 0.55) spawn('confetti', rand(0, W), -10, rand(-40, 40), rand(60, 140), 5, rand(9, 15), Kit.pick(['#ffe14a', '#ff5fae', '#7de3ff', '#8be066', '#ffffff', '#b98aff']), 40, rand(0, 6), rand(-6, 6));
     updateParts(dt);
     shake.update(dt);
     // count up stars
@@ -1059,7 +1098,7 @@
     }
   }
 
-  var hudPop = [0, 0];
+  var hudPop = [0, 0], labelA = 0;
   function drawKey(x, y, label, w) {
     w = w || 34;
     SA.rrect(ctx, x - w / 2, y - 15, w, 30, 7);
@@ -1087,7 +1126,8 @@
       for (var k = 0; k < WIN_SCORE; k++) {
         var x = cx + side * (52 + k * 30), filled = k < score[i];
         var r = 12 + (filled && k === score[i] - 1 ? pop * 8 : 0);
-        SA.circ(ctx, x, 38, r); SA.fs(ctx, filled ? '#ffe14a' : 'rgba(0,0,0,0.3)', OUT, 3.5);
+        // empty pips are opaque so they read the same over sky and drifting clouds
+        SA.circ(ctx, x, 38, r); SA.fs(ctx, filled ? '#ffe14a' : '#4a3a6b', OUT, 3.5);
         if (filled) SA.star(ctx, x, 39, r * 0.62, 0, '#fff7c2', null);
       }
     }
@@ -1121,12 +1161,16 @@
         continue;
       }
       if (ty < 150) ty = 150;
-      if (showKeys && !q.cpu) {
-        var k1 = mode === 1 ? 'W' : (j ? '↑' : 'W'), k2 = mode === 1 ? 'S' : (j ? '↓' : 'S');
+      // labels and keycaps fade out while a banner is up, so the words never stack on each other
+      if (labelA > 0 && (showKeys || hint[j] > 0) && !q.cpu) {
+        var arrowKeys = mode === 1 ? hintArrows : j === 1;
+        var k1 = arrowKeys ? '↑' : 'W', k2 = arrowKeys ? '↓' : 'S';
         var bob = Math.sin(T * 5) * 3;
-        SA.rrect(ctx, sx - 100, ty - 58 + bob, 200, 50, 14); SA.fs(ctx, 'rgba(255,255,255,0.92)', OUT, 3);
-        drawKey(sx + 76, ty - 33 + bob, k1); text('قفز', sx + 52, ty - 31 + bob, 19, '#2b1d3a', 'right', 0);
-        drawKey(sx - 8, ty - 33 + bob, k2); text('هجوم', sx - 32, ty - 31 + bob, 19, '#2b1d3a', 'right', 0);
+        ctx.save(); ctx.globalAlpha = labelA;
+        SA.rrect(ctx, sx - 100, ty - 66 + bob, 200, 50, 14); SA.fs(ctx, 'rgba(255,255,255,0.92)', OUT, 3);
+        drawKey(sx + 76, ty - 41 + bob, k1); text('قفز', sx + 52, ty - 39 + bob, 19, '#2b1d3a', 'right', 0);
+        drawKey(sx - 8, ty - 41 + bob, k2); text('هجوم', sx - 32, ty - 39 + bob, 19, '#2b1d3a', 'right', 0);
+        ctx.restore();
       }
       if (q.action === 'windup') {
         var ex = sx + q.f * 34, ey = ty + 40;
@@ -1134,10 +1178,12 @@
         text('!', 0, 0, 44, '#ff4f6d', 'center', 8);
         ctx.restore();
       }
-      if (q.label) {
+      if (q.label && labelA > 0) {
         var col = SUMOS[q.sumo].body;
+        ctx.save(); ctx.globalAlpha = labelA;
         ctx.beginPath(); ctx.moveTo(sx - 9, ty + 16); ctx.lineTo(sx + 9, ty + 16); ctx.lineTo(sx, ty + 27); ctx.closePath(); SA.fs(ctx, col, OUT, 3);
         text(q.label, sx, ty, 22, col, 'center', 6);
+        ctx.restore();
       }
     }
     drawBanner();
@@ -1158,7 +1204,7 @@
   function drawOver() {
     drawSkyLayer();
     // spinning rays
-    ctx.save(); ctx.translate(330, 300); ctx.rotate(T * 0.25);
+    ctx.save(); ctx.translate(330, 300); ctx.rotate(calm() ? 0 : T * 0.25);
     ctx.fillStyle = 'rgba(255,255,255,0.14)';
     for (var i = 0; i < 12; i++) { ctx.rotate(Math.PI / 6); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-70, -900); ctx.lineTo(70, -900); ctx.closePath(); ctx.fill(); }
     ctx.restore();
@@ -1179,7 +1225,12 @@
     ctx.restore();
   }
 
+  // A paused match is a still picture: paint it once, then again only after a resize,
+  // a restored canvas or a late font, instead of redrawing the same frame 60 times a second.
+  var frameDirty = true;
   function render() {
+    if (paused && !frameDirty) return;
+    frameDirty = false;
     ctx.save();
     if (scr === 'over') drawOver();
     else {
@@ -1193,7 +1244,7 @@
   /* ================================================================ camera */
   function updateCamera(dt) {
     var tx = W / 2, ty = H / 2, tz = 1;
-    if (scr === 'game' && slowT > 0) {
+    if (scr === 'game' && slowT > 0 && !calm()) {
       var f = P[0].out ? P[0] : P[1].out ? P[1] : null;
       if (f) { tz = 1.14; tx = W / 2 + (clamp(f.x, 0, W) - W / 2) * 0.35; ty = H / 2 + (clamp(f.y, 0, H) - H / 2) * 0.3; }
     }
@@ -1218,6 +1269,9 @@
     for (var i = 0; i < popups.length; i++) popups[i].t += dt;
     while (popups.length && popups[0].t > popups[0].life) popups.shift();
     if (banner) { banner.t += dt; if (banner.t > banner.life) banner = null; }
+    // player labels show during the fight, between banners (round intro, point, hurry-up)
+    labelA = clamp(labelA + (phase === 'fight' && !banner ? dt : -dt) * 6, 0, 1);
+    updateHints(dt);
     if (hitstop > 0) {
       hitstop -= dt;
       if (phase === 'fight') for (var hb = 0; hb < 2; hb++) { var hp = P[hb]; if (!hp.cpu && !hp.out) { var hi = humanInput(hp); if (hi.j) hp.jb = 0.13; if (hi.s) hp.sb = 0.13; } }
@@ -1270,6 +1324,9 @@
   function toSelect(m) {
     if (m) mode = m;
     if (save.mode !== mode) { save.mode = mode; persist('mode'); }
+    // coming from the end screen, the finished match would end again behind the select screen
+    // (awarding its stars twice and jumping back to the podium), so a demo fight replaces it
+    if (!demo) startDemo();
     scr = 'select';
     // make sure picks are valid
     if (!hatUnlocked(save.picks.h0)) save.picks.h0 = 0;
@@ -1383,9 +1440,12 @@
   }
 
   // ---- title hat collection bar
-  var hatBarDirty = true, hatBarCtx = null;
+  var hatBarDirty = true, hatBarCtx = null, hatTick = 0;
   function drawHatBar() {
     if (!hatBarCtx) return;
+    // the little hat wobbles look fine at 20 fps; a change or resize repaints straight away
+    if (!hatBarDirty && ++hatTick % 3) return;
+    hatBarDirty = false;
     var cv = hatBarCtx.canvas, s = cv.width / 900, c = hatBarCtx;
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height);
     c.setTransform(s, 0, 0, s, 0, 0);
@@ -1441,7 +1501,7 @@
 
   function pause(on) {
     if (scr !== 'game') return;
-    paused = on;
+    paused = on; frameDirty = true;
     if (on) { SFX.pause(); MUSIC.stop(); Kit.keys.reset(); showScreen('pause'); }
     else { MUSIC.play(128, false); showScreen(null); }
   }
@@ -1524,6 +1584,7 @@
     ['pv0', 'pv1'].forEach(function (id, i) { var c = $(id); c.width = Math.round(220 * s); c.height = Math.round(220 * s); pvCtx[i] = c.getContext('2d'); });
     var rv = $('rivals'); rv.width = Math.round(360 * s); rv.height = Math.round(64 * s); rivalsCtx = rv.getContext('2d');
     var hb = $('hatbar'); hb.width = Math.round(900 * s); hb.height = Math.round(96 * s); hatBarCtx = hb.getContext('2d');
+    hatBarDirty = true;
   };
   sizeMiniCanvases();
   onResize(view);
@@ -1541,6 +1602,7 @@
     save: save,
     roundLog: roundLog,
     P: P,
+    cam: cam,
     freeze: function () { hitstop = 999; },
     setArena: function (t) { forcedArena = t; },
     restartRound: function (t) { if (t) forcedArena = t; beginRound(); },
@@ -1558,7 +1620,7 @@
   };
 
   // go!
-  if (document.fonts && document.fonts.load) { document.fonts.load('700 40px Fredoka', 'بونغ BONK').catch(function () {}); }
+  if (document.fonts && document.fonts.load) { document.fonts.load('700 40px Fredoka', 'بونغ BONK').then(function () { frameDirty = true; }, function () {}); }
   goTitle();
   Kit.loop(update, render);
   Kit.lifecycle({ pause: function () { if (!paused) pause(true); } });
