@@ -279,6 +279,7 @@
   window.BBArt = {
     SKINS: SKINS, GEM_COLS: GEM_COLS, GEM_NAMES: GEM_NAMES, RES: RES,
     block: block, gemSprite: gemSprite, background: background, boardImage: boardImage,
+    clearCache: function () { cache = {}; }, // after a GPU reset: every sprite is rebuilt on its next use
     drawGem: drawGem, rr: rr, star: star, mix: mix, rgba: rgba, lighten: lighten, darken: darken
   };
 })();

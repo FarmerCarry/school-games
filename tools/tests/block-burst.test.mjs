@@ -21,7 +21,7 @@ after(async () => {
 });
 
 // The game only advances through stepGame()/drawGame(), and every canvas readback is counted.
-async function game(t, { reducedMotion = 'no-preference' } = {}) {
+async function game(t, { reducedMotion = 'no-preference', clock = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -42,6 +42,7 @@ async function game(t, { reducedMotion = 'no-preference' } = {}) {
       };
     } });
   });
+  if (clock) await page.clock.install();
   await page.goto(`${origin}/games/block-burst/`);
   await page.waitForFunction(() => window.__game && window.stepGame);
   return page;
@@ -108,12 +109,105 @@ test('failed saves warn with a retry, keep progress, and clear once a retry succ
 
 test('reduced motion skips confetti; otherwise the fx layer shows only while confetti flies', async t => {
   for (const reducedMotion of ['reduce', 'no-preference']) {
-    const page = await game(t, { reducedMotion });
+    const page = await game(t, { reducedMotion, clock: true });
     assert.equal(await fxVisibility(page), 'hidden');
     await page.evaluate(() => { __game.startLevel(0); __game.win(); stepGame(30); drawGame(); });
     assert.equal(await page.evaluate(() => __game.state), 'win');
     assert.equal(await fxVisibility(page), reducedMotion === 'reduce' ? 'hidden' : 'visible', reducedMotion);
+    // The stars light up (with their own confetti) on timeouts: fire them all before the last check.
+    await page.clock.runFor(1300);
+    assert.equal(await page.locator('#winStars .on').count(), 3);
     await page.evaluate(() => { stepGame(480); drawGame(); }); // every confetti piece has landed
     assert.equal(await fxVisibility(page), 'hidden', reducedMotion);
   }
+});
+
+test('a paused game draws until its effects settle, then only after a resize, canvas restore or resume', async t => {
+  const page = await game(t);
+  const thumb = await page.evaluate(() => {
+    // A GPU reset leaves a canvas blank: the title thumbnail repaints itself when restored.
+    const art = document.querySelector('.art-classic canvas'), painted = () => art.getContext('2d').getImageData(0, 0, 160, 160).data.some((v, i) => i % 4 === 3 && v > 0);
+    art.width = art.width;
+    const wiped = painted();
+    art.dispatchEvent(new Event('contextrestored'));
+    return { wiped, restored: painted() };
+  });
+  assert.deepEqual(thumb, { wiped: false, restored: true });
+  await page.evaluate(() => {
+    const background = BBArt.background;
+    window.paints = 0;
+    BBArt.background = function (...args) { window.paints++; return (window.lastBg = background.apply(this, args)); };
+    window.frames = n => { window.paints = 0; for (let i = 0; i < n; i++) { stepGame(); drawGame(); } return window.paints; };
+  });
+  const paused = await page.evaluate(() => {
+    __game.classic(true); stepGame(150); // the start banner has gone
+    __game.auto(1); // its score popup stays up for a second
+    document.getElementById('btnPause').click();
+    const settling = frames(10);
+    stepGame(60);
+    return { state: __game.state, settling, settled: frames(20) };
+  });
+  assert.deepEqual(paused, { state: 'pause', settling: 10, settled: 1 }, 'one last frame once the effects are over');
+  await page.setViewportSize({ width: 1000, height: 600 });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  assert.equal(await page.evaluate(() => frames(10)), 1, 'a resize draws the paused scene once');
+  const restored = await page.evaluate(() => {
+    const canvas = document.getElementById('game'), before = lastBg;
+    canvas.width = canvas.width; // a restored 2D context has lost its pixels and drawing state
+    canvas.dispatchEvent(new Event('contextrestored'));
+    return { paints: frames(10), rebuilt: lastBg !== before, scale: canvas.getContext('2d').getTransform().a };
+  });
+  assert.equal(restored.paints, 1);
+  assert.equal(restored.rebuilt, true, 'the cached background is rebuilt');
+  assert.ok(restored.scale > 0.7 && restored.scale < 0.9, `the logical transform is reapplied (${restored.scale})`);
+  await page.evaluate(() => document.getElementById('btnResume').click());
+  assert.equal(await page.evaluate(() => frames(10)), 10, 'play draws every frame again');
+});
+
+test('a classic run whose save failed is continued from the menu instead of being lost', async t => {
+  const page = await game(t);
+  await clickControl(page, '#btnClassic');
+  const run = await page.evaluate(() => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'sg:block-burst:run') throw new DOMException('full', 'QuotaExceededError');
+      return setItem.call(this, key, value);
+    };
+    __game.auto(2);
+    return { moves: __game.run.moves, score: __game.run.score };
+  });
+  const status = () => page.locator('.sg-save-status').getAttribute('data-state');
+  assert.equal(await status(), 'failed');
+  await clickControl(page, '#btnPause');
+  await clickControl(page, '#btnPauseMenu');
+  assert.equal(await page.locator('#classicSub').textContent(), 'النقاط الآن: ' + run.score);
+  await clickControl(page, '#btnClassic');
+  assert.deepEqual(await page.evaluate(() => ({ moves: __game.run.moves, score: __game.run.score })), run);
+  assert.equal(await status(), 'failed', 'the continued run is still unsaved');
+  // A new game drops that run; the warning clears only because a real write then succeeds.
+  await page.evaluate(() => __game.title());
+  await clickControl(page, '#btnNew');
+  assert.equal(await page.evaluate(() => __game.run.moves), 0);
+  assert.equal(await status(), 'saved');
+});
+
+test('the gem tip hand drags a tray piece to a spot where it fits and fills a gem row or column', async t => {
+  const page = await game(t);
+  const moves = await page.evaluate(() => {
+    let seed = 7;
+    Math.random = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+    const out = [];
+    for (const level of [0, 2]) for (let k = 0; k < 12; k++) {
+      __game.startLevel(level);
+      const m = __game.tipMove, run = __game.run;
+      if (!m) { out.push({ level, move: false }); continue; }
+      const shape = run.tray[m.slot].shape, gemAt = i => run.gems[i] > 0;
+      const fits = BBCore.fits(BBCore.maskFromBoard(run.cells), shape, m.r, m.c);
+      const gemLine = shape.cells.some(([y, x]) => [0, 1, 2, 3, 4, 5, 6, 7].some(i => gemAt((m.r + y) * 8 + i) || gemAt(i * 8 + m.c + x)));
+      out.push({ level, move: true, fits, gemLine });
+    }
+    return out;
+  });
+  assert.ok(moves.filter(m => m.move).length >= 20, JSON.stringify(moves));
+  for (const m of moves.filter(m => m.move)) assert.deepEqual(m, { level: m.level, move: true, fits: true, gemLine: true });
 });

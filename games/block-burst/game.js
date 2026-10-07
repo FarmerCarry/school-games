@@ -48,7 +48,11 @@
     return true;
   }
   function retrySaves() { Object.keys(pending).forEach(function (k) { put(k, pending[k]); }); }
-  function dropRun() { store.remove('run'); delete pending.run; if (!Object.keys(pending).length) saveUi.saved(); }
+  // The classic run to continue: one whose write failed is newer than the stored copy.
+  function savedRun() { return pending.run || store.get('run', null); }
+  // A finished or replaced run no longer needs saving. Dropping its failed write is not a
+  // confirmed save, so check storage with a real write before the warning may clear.
+  function dropRun() { store.remove('run'); if ('run' in pending) { delete pending.run; persistStats(); } }
   function persistStats() { put('stats', save.stats); }
 
   /* ------------------------------------------------------------- dom */
@@ -57,12 +61,16 @@
   var view = Kit.fit(canvas, W, H, { onResize: onResize });
   var fxView = Kit.fit(fxCanvas, W, H);
   var ctx = view.ctx, fctx = fxView.ctx;
+  var frameDirty = true; // a paused game draws only while its effects settle, then after resize/restore/fonts
   function onResize(v) {
     ui.style.left = canvas.style.left;
     ui.style.top = canvas.style.top;
     ui.style.transform = 'scale(' + v.scale + ')';
+    frameDirty = true;
   }
   onResize(view);
+  // A GPU reset (e.g. a PC waking from sleep) wipes canvases: rebuild the cached art and draw again.
+  canvas.addEventListener('contextrestored', function () { Art.clearCache(); frameDirty = true; });
   function artK() { return Math.min(2.5, Math.round(view.scale * view.dpr * 100) / 100); }
 
   var SCR = ['scrTitle', 'scrMap', 'hud', 'scrPause', 'scrOver', 'scrWin', 'scrFail'];
@@ -104,7 +112,7 @@
   var bigWord = null, banner = null, endTimer = 0, endKind = null;
   var greyList = [], greyN = 0, greyAcc = 0;
   var powerPulse = 0, goalBump = {}, comboBump = 0;
-  var hintIdle = 0;
+  var hintIdle = 0, tipMove = null; // tipMove: {slot, r, c} the gem tip shows (refreshFits)
 
   /* ----------------------------------------------------------- helpers */
   function easeOutBack(t) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
@@ -183,6 +191,38 @@
     if (!run) return;
     var f = Rules.trayFits(run);
     for (var i = 0; i < 3; i++) slots[i].fits = f.each[i];
+    tipMove = gemTip() ? gemMove() : null;
+  }
+  // The move the gem tip's hand shows: on the gem row or column closest to full that a tray
+  // piece can reach, the placement filling most of it. So the hand only points where its piece fits.
+  function gemMove() {
+    var mask = Core.maskFromBoard(run.cells), lines = [];
+    for (var a = 0; a < N; a++) {
+      var gr = false, gc = false, er = 0, ec = 0;
+      for (var b = 0; b < N; b++) {
+        if (run.gems[a * N + b]) gr = true;
+        if (run.gems[b * N + a]) gc = true;
+        if (!run.cells[a * N + b]) er++;
+        if (!run.cells[b * N + a]) ec++;
+      }
+      if (gr && er) lines.push({ row: a, empty: er });
+      if (gc && ec) lines.push({ col: a, empty: ec });
+    }
+    lines.sort(function (p, q) { return p.empty - q.empty; });
+    for (var l = 0; l < lines.length; l++) {
+      var ln = lines[l], best = null, most = 0;
+      for (var s = 0; s < 3; s++) {
+        var p = run.tray[s]; if (!p) continue;
+        for (var r = 0; r <= N - p.shape.h; r++) for (var c = 0; c <= N - p.shape.w; c++) {
+          if (!Core.fits(mask, p.shape, r, c)) continue;
+          var n = 0;
+          for (var k = 0; k < p.shape.cells.length; k++) if (ln.row != null ? r + p.shape.cells[k][0] === ln.row : c + p.shape.cells[k][1] === ln.col) n++;
+          if (n > most) { most = n; best = { slot: s, r: r, c: c }; }
+        }
+      }
+      if (best) return best;
+    }
+    return null;
   }
   function trayTL(i, sc) {
     var p = run.tray[i]; sc = sc || tcOf(p.shape);
@@ -200,7 +240,7 @@
   }
   function startClassic(fresh) {
     resetFx();
-    var saved = store.get('run', null);
+    var saved = savedRun();
     run = null;
     if (!fresh && saved && saved.mode === 'classic') run = Rules.load(saved, null);
     if (!run) { run = Rules.newRun('classic', null, Math.random); dropRun(); }
@@ -217,7 +257,7 @@
   function levelGoalText(lv) {
     var parts2 = [];
     // say how gems are collected; the short form keeps gem+score banners inside the board area
-    if (lv.gems) parts2.push(lv.score ? 'اجمع الجواهر' : 'فجّر صفوف الجواهر لتجمعها');
+    if (lv.gems) parts2.push(lv.score ? 'اجمع الجواهر' : 'فجّر صف الجوهرة أو عمودها');
     if (lv.score) parts2.push('اجمع ' + ptsTxt(lv.score));
     var s = parts2.join(' و');
     if (lv.moves) s += ' في ' + pieces(lv.moves);
@@ -372,9 +412,10 @@
 
   /* -------------------------------------------------------------- input */
   function logical(e) { return view.toLogical(e.clientX, e.clientY); }
+  function grabbable(i) { return !!run.tray[i] && slots[i].appear >= 0.6; } // a dealt piece slid in far enough
   function slotAt(p) {
     for (var i = 0; i < 3; i++) {
-      if (!run.tray[i] || slots[i].appear < 0.6) continue;
+      if (!grabbable(i)) continue;
       if (Math.abs(p.x - TX[i]) < 108 && Math.abs(p.y - TY) < 80) return i;
     }
     return -1;
@@ -687,6 +728,8 @@
   function thumbCanvas(t) {
     var cv = document.createElement('canvas'); cv.width = cv.height = t.size;
     t.draw(cv.getContext('2d'), t.size);
+    // after a GPU reset wipes it, repaint from fresh sprites (those may have been wiped too)
+    cv.addEventListener('contextrestored', function () { Art.clearCache(); t.draw(cv.getContext('2d'), t.size); });
     return cv;
   }
   function putThumb(el, t) { el.textContent = ''; el.appendChild(thumbCanvas(t)); }
@@ -715,7 +758,7 @@
     [1, 3, 6].forEach(function (col, i) { if (bl[i]) putThumb(bl[i], blockThumb(save.skin, col, 0, 96)); });
     putThumb(document.querySelector('.art-classic'), artThumb(ART_CLASSIC, 160));
     putThumb(document.querySelector('.art-adv'), artThumb(ART_ADV, 160, 2));
-    var saved = store.get('run', null), cont = saved && saved.mode === 'classic' && saved.score > 0;
+    var saved = savedRun(), cont = saved && saved.mode === 'classic' && saved.score > 0;
     $('classicSub').textContent = cont ? 'النقاط الآن: ' + saved.score : 'الأفضل: ' + Kit.fmt(save.best);
     $('classicGo').textContent = cont ? '▶ تابع' : '▶ العب';
     $('btnNew').hidden = !cont;
@@ -888,6 +931,20 @@
   var goalPos = {};
   var floaters = [];
   for (var fi = 0; fi < 14; fi++) floaters.push({ x: Math.random() * W, y: Math.random() * H, s: 30 + Math.random() * 50, v: 14 + Math.random() * 26, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.6, c: 1 + (fi % 8) });
+
+  // Paused: keep drawing while the effects behind the menu play out, then keep that last
+  // frame instead of redrawing it every frame (a resize, canvas restore or late fonts draw it once more).
+  function settled() {
+    if (confetti.length || parts.length || shards.length || popups.length || beams.length || flyGems.length || dying.length) return false;
+    if (bigWord || banner || shake.power > 0 || dispScore < run.score) return false;
+    for (var i = 0; i < 3; i++) if (slots[i].ret || slots[i].appear < 1) return false;
+    return true;
+  }
+  function draw() {
+    if (state === 'pause' && !frameDirty) return;
+    render();
+    frameDirty = state !== 'pause' || !settled();
+  }
 
   function render() {
     var k = artK();
@@ -1099,29 +1156,27 @@
     ctx.restore();
   }
   // First gem levels (1 and 3), before the first move: teach that a gem is collected by
-  // filling its row. The gems pulse (drawCells) and the hint hand points at a gem's row.
+  // filling its row or column. The gems pulse (drawCells) and the hint hand drags a tray
+  // piece to a spot where it fits and fills a gem's line (tipMove).
   function gemTip() { return runLevel >= 0 && runLevel <= 2 && run.goalGems && run.moves === 0; }
   function drawHint() {
     if (state !== 'play' || drag || !run || run.moves > 0 || hintIdle < 1.2 || banner) return;
-    var tip = gemTip();
+    var tip = gemTip(), m = tip && tipMove, i = 0;
     if (run.mode !== 'classic' && runLevel > 1 && !tip) return;
-    var i = 0;
-    while (i < 3 && (!run.tray[i] || !slots[i].fits)) i++;
-    if (i >= 3) return;
-    // gem tip: aim at the first empty cell of the gem row that is closest to full
-    var gr = -1, gc = 0, least = N + 1;
-    if (tip) for (var r = 0; r < N; r++) {
-      var empty = 0, first = -1, gem = false;
-      for (var c = 0; c < N; c++) { if (run.gems[r * N + c]) gem = true; if (!run.cells[r * N + c]) { empty++; if (first < 0) first = c; } }
-      if (gem && empty && empty < least) { least = empty; gr = r; gc = first; }
+    if (m) i = m.slot;
+    else {
+      while (i < 3 && (!run.tray[i] || !slots[i].fits)) i++;
+      if (i >= 3) return;
     }
     var t = (time * 0.7) % 1, e = easeOutCubic(Math.min(1, t * 1.4));
-    var x0 = TX[i], y0 = TY, x1 = gr >= 0 ? cellX(gc) + C / 2 : BX + C * 4, y1 = gr >= 0 ? cellY(gr) + C / 2 : BY + C * 4;
+    var x0 = TX[i], y0 = TY, x1 = BX + C * 4, y1 = BY + C * 4;
+    if (m) { var sh = run.tray[i].shape; x1 = cellX(m.c) + sh.w * C / 2; y1 = cellY(m.r) + sh.h * C / 2; }
     var hx = x0 + (x1 - x0) * e, hy = y0 + (y1 - y0) * e;
     ctx.globalAlpha = t > 0.8 ? (1 - t) / 0.2 : 1;
     drawHand(hx, hy);
     ctx.globalAlpha = 1;
-    if (gr >= 0) txt('املأ صف الجوهرة لتجمعها!', BX + C * 4, gr <= 2 ? BY + C * 6.8 : BY + C * 1.2, 36, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 9 });
+    // the text sits clear of the target spot (pieces are at most 5 cells tall)
+    if (m) txt('املأ صف الجوهرة أو عمودها!', BX + C * 4, m.r <= 1 ? BY + C * 6.8 : BY + C * 1.2, 36, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 9 });
     else txt('اسحب قطعة إلى اللوحة!', BX + C * 4, BY + C * 1.2, 36, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 9 });
   }
   function drawHand(x, y) {
@@ -1377,6 +1432,8 @@
     get state() { return state; },
     get run() { return run; },
     get level() { return runLevel; },
+    get trayReady() { return state === 'play' && [0, 1, 2].every(function (i) { return !run.tray[i] || grabbable(i); }); },
+    get tipMove() { return tipMove; },
     save: save,
     classic: function (fresh) { startClassic(!!fresh); },
     startLevel: function (i) { startLevel(i); },
@@ -1407,11 +1464,11 @@
   show(['scrTitle']);
   if (document.fonts && document.fonts.load) {
     try {
-      document.fonts.load('700 40px Fredoka', 'بلوك').catch(function () { /* Use fallback fonts. */ });
-      document.fonts.load('700 40px Fredoka', '0123').catch(function () { /* Use fallback fonts. */ });
+      Promise.all([document.fonts.load('700 40px Fredoka', 'بلوك'), document.fonts.load('700 40px Fredoka', '0123')])
+        .then(function () { frameDirty = true; }, function () { /* Use fallback fonts. */ });
     } catch (e) { /* ignore */ }
   }
-  Kit.loop(update, render);
+  Kit.loop(update, draw);
   Kit.lifecycle({ pause: function () { if (state === 'play') pause(); }, reset: cancelDrag });
   Kit.ready();
 })();
