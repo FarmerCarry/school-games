@@ -32,7 +32,9 @@
     if (!Array.isArray(save.hats)) save.hats = ['none'];
     if (!owns('teams', save.team)) save.team = 'pancake';
   })();
-  function persist() { store.set('save', save); }
+  // The whole save is one key, so any later successful write (or the retry button) stores everything.
+  var saveUi = Kit.saveStatus({ retry: persist });
+  function persist() { if (store.set('save', save) === false) saveUi.failed(); else saveUi.saved(); }
   function owns(kind, id) { return save[kind].indexOf(id) >= 0; }
 
   /* ======================================================== achievements */
@@ -73,7 +75,8 @@
   var canvas = $('game'), uiEl = $('ui');
   var view = Kit.fit(canvas, W, H, { onResize: onResize });
   var ctx = view.ctx;
-  canvas.addEventListener('contextrestored', function () { view.resize(); });
+  // a restored context may come back with blank offscreen caches (background, crowd atlas): rebuild them
+  canvas.addEventListener('contextrestored', function () { ART.setScale(0); view.resize(); });
   function onResize(v) {
     frameDirty = true;
     uiEl.style.left = canvas.style.left; uiEl.style.top = canvas.style.top;
@@ -95,6 +98,12 @@
   var parts = [], pops = [], shake = Kit.shake();
   var hitstop = 0, hype = 0, flash = 0;
   var CONF = ['#ff5a5f', '#ffd23f', '#3ddc84', '#4f7cff', '#ff8fb1', '#ffffff', '#9b5de5', '#ff9f1c'];
+  // Reduced motion (or the classroom preset): no full-screen flash, goal zoom or confetti.
+  // Kick stars, banners and sounds stay, because they tell the player what happened.
+  Kit.motion.onChange(function (reduced) {
+    if (reduced) { flash = 0; parts = parts.filter(function (p) { return p.type !== 'conf'; }); }
+    frameDirty = true;
+  });
   function spawn(type, x, y, vx, vy, life, size, color, g) {
     if (parts.length > 520) parts.shift();
     parts.push({ type: type, x: x, y: y, vx: vx, vy: vy, life: life, max: life, size: size, color: color, g: g == null ? 600 : g, rot: Math.random() * TAU, vr: rnd(-10, 10) });
@@ -106,6 +115,7 @@
     for (var i = 0; i < n; i++) { var a = Math.random() * TAU, s = rnd(0.4, 1) * (sp || 260); spawn('star', x, y, Math.cos(a) * s, Math.sin(a) * s, rnd(0.35, 0.7), rnd(7, 12), pick(cols || ['#fff', '#ffd23f']), 300); }
   }
   function confetti(x, y, n, dirx) {
+    if (Kit.motion.reduced()) return;
     for (var i = 0; i < n; i++) {
       var a = -Math.PI / 2 + rnd(-0.9, 0.9) + (dirx || 0) * 0.5, s = rnd(300, 900);
       spawn('conf', x, y, Math.cos(a) * s, Math.sin(a) * s, rnd(1.4, 2.6), rnd(8, 14), pick(CONF), 700);
@@ -222,7 +232,8 @@
     world = makeWorld(m.teams, modId, { hats: m.hats, homes: m.homes });
     for (var pi = 0; pi < world.players.length; pi++) {
       var pl = world.players[pi];
-      if (m.cpu[pl.side] && m.mode !== 'demo') pl.power = 0.45 + 0.55 * m.skill;   // weaker CPU kicks on easy levels
+      // weaker CPU kicks on easier levels (WS.cpuPower in data.js, shared with balance-sim.js)
+      if (m.cpu[pl.side] && m.mode !== 'demo') pl.power = WS.cpuPower(m.skill);
     }
     if (!m.noBall) dropBalls(world, m.goalSide >= 0 && m.mode !== 'demo' ? m.goalSide : -1);
     m.phase = 'count'; m.t = 0; m.beeps = 0; m.buf[0] = m.buf[1] = 0; m.time = 0;
@@ -240,7 +251,10 @@
 
   function stepMatch(dt) {
     var m = match, i, b;
+    // a skip press (goal/roulette) made during a hit-stop freeze still counts on the next frame
+    m.skipReq = m.skipReq || skipPressed();
     if (hitstop > 0) { hitstop -= dt; return; }
+    var skip = m.skipReq; m.skipReq = false;
     m.t += dt;
     var ts = 1;
     var silent = m.mode === 'demo' || m.mode === 'show';
@@ -278,7 +292,7 @@
       readInput(dt);
       world.step(dt);
       processEvents(silent);
-      for (i = 0; i < 2; i++) if (m.cpu[i] && m.cpu[i].update(world, dt)) teamPress(i);
+      for (i = 0; i < 2; i++) if (m.cpu[i] && m.cpu[i].update(world, dt)) { teamPress(i); if (m.cpu[1 - i]) m.cpu[1 - i].notePress(); }
       for (i = 0; i < world.balls.length; i++) {
         b = world.balls[i];
         if (!isFinite(b.x) || !isFinite(b.y)) { b.x = W / 2; b.y = 240; b.vx = b.vy = 0; }
@@ -307,7 +321,9 @@
       processEvents(silent);
       celebrate(dt);
       updateBallTrails();
-      if (m.phase === 'goal' && m.t >= (m.mode === 'demo' ? 1.6 : 2.3)) {
+      // a human press shortens the celebration and the roulette (after a short minimum)
+      skip = skip && !silent && state === 'play';
+      if (m.phase === 'goal' && (m.t >= (m.mode === 'demo' ? 1.6 : 2.3) || (skip && m.t >= 1.0))) {
         var won = m.score[0] >= m.target || m.score[1] >= m.target;
         if (m.mode === 'demo') {
           if (won) m.score = [0, 0];
@@ -315,7 +331,7 @@
           kickoff(Math.random() < 0.3 ? 'normal' : pick(pool).id);
         } else if (won) startEnd();
         else startRoulette();
-      } else if (m.phase === 'roulette') stepRoulette(dt);
+      } else if (m.phase === 'roulette') stepRoulette(skip);
       else if (m.phase === 'end' && m.t >= 1.9 && state === 'play') showResult();
     }
   }
@@ -348,6 +364,10 @@
     b.x = W / 2; b.y = 220; b.vx = rnd(-50, 50); b.vy = 0; b.roofT = 0;
     popup('الكرة تعود!', W / 2, 200, '#fff', 30);
   }
+  function skipPressed() {
+    var k = Kit.keys;
+    return k.anyPressed(['KeyW', 'ArrowUp', 'Space', 'Enter', 'NumpadEnter']) || (pointer.pressed && state === 'play');
+  }
   function readInput(dt) {
     var m = match, k = Kit.keys;
     var a = k.pressed('KeyW'), b = k.pressed('ArrowUp');
@@ -355,7 +375,7 @@
       a = a || b || k.pressed('Space') || (pointer.pressed && state === 'play');
       b = false;
     }
-    if (a) m.buf[0] = 0.14;
+    if (a) { m.buf[0] = 0.14; if (m.cpu[1]) m.cpu[1].notePress(); }
     if (b) m.buf[1] = 0.14;
     for (var s = 0; s < 2; s++) {
       if (m.buf[s] > 0 && humanSide(s)) {
@@ -461,7 +481,8 @@
     var gx = side === 0 ? W - 40 : 40;
     confetti(gx, G - 60, m.mode === 'demo' ? 50 : 110, side === 0 ? -1 : 1);
     stars(ball.x, ball.y, 16, CONF, 420);
-    shake.add(14); flash = 0.7; hype = 1;
+    shake.add(14); hype = 1;
+    if (!Kit.motion.reduced()) flash = 0.7;
     for (var i = 0; i < world.players.length; i++) {
       var p = world.players[i];
       if (p.side === side) { p.mood = 1; p.moodT = 3; } else { p.mood = -1; p.moodT = 3; }
@@ -501,7 +522,7 @@
   }
   var ROUL_SPIN = 1.6, ROUL_HOLD = 1.25;
   function reelPos(t) { return easeOutCubic(clamp(t / ROUL_SPIN, 0, 1)) * (match.reel.length - 1); }
-  function stepRoulette() {
+  function stepRoulette(skip) {
     var m = match;
     var idx = Math.floor(reelPos(m.t) + 0.5);
     if (idx !== m.reelIdx) { m.reelIdx = idx; if (!m.landed) S.tick(); }
@@ -509,7 +530,8 @@
       m.landed = true; S.tada(); shake.add(6);
       confetti(W / 2, 330, 40);
     }
-    if (m.t >= ROUL_SPIN + ROUL_HOLD) kickoff(m.next.id);
+    // the landed surprise stays readable for at least half a second (the HUD chip shows it in play too)
+    if (m.t >= ROUL_SPIN + ROUL_HOLD || (skip && m.landed && m.t >= ROUL_SPIN + 0.5)) kickoff(m.next.id);
   }
 
   /* ------------------------------------------------------------ match end */
@@ -532,7 +554,7 @@
     var m = match, P = world.P;
     // camera
     var tz = 1, tx = W / 2, ty = H / 2;
-    if (m && m.phase === 'goal' && m.t < 1.25 && m.goalBall && m.mode !== 'demo') { tz = 1.4; tx = m.goalBall.x; ty = m.goalBall.y - 40; }
+    if (m && m.phase === 'goal' && m.t < 1.25 && m.goalBall && m.mode !== 'demo' && !Kit.motion.reduced()) { tz = 1.4; tx = m.goalBall.x; ty = m.goalBall.y - 40; }
     var settling = Math.abs(cam.z - tz) > 0.0001 || Math.abs(cam.x - tx) > 0.01 || Math.abs(cam.y - ty) > 0.01 ||
       m && (m.wob[0] > 0.001 || m.wob[1] > 0.001);
     if (state === 'pause' && paintedState === state && !frameDirty && !settling) return;
@@ -1199,6 +1221,9 @@
   function resumeGame() {
     if (state !== 'pause') return;
     state = 'play'; showScr(null); $('bPause').hidden = false;
+    // the Space/Enter that resumed must not also kick or skip the goal celebration/roulette
+    Kit.keys.endFrame(); pointer.endFrame();
+    if (match) match.skipReq = false;
   }
   btn('bResume', resumeGame);
   btn('bRestart', function () { if (lastCfg) beginMatch(lastCfg); });
