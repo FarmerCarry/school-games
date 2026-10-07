@@ -61,7 +61,7 @@
     firstCust: false, finaleT: -1, recoveryCarry: [], dl: [], shake: K.shake(), lastAction: 0
   };
   var P = { x: S.px, y: S.py, vx: 0, vy: 0, look: 0, back: false, phase: 0, moving: false, stack: [],
-    tick: 0, sway: 0, squash: 1, path: null, pi: 0, pad: null, padT: 0, fullT: 0, onDesk: false, stepT: 0,
+    tick: 0, sway: 0, squash: 1, path: null, pi: 0, pad: null, padT: 0, fullT: 0, noOutT: 0, onDesk: false, stepT: 0,
     blinkT: 3, repathT: 0, walkTo: null, coinT: 0, payTickT: 0 };
 
   var lv = function (id) { return S.up[id] || 0; };
@@ -194,7 +194,8 @@
     }
   }
   var CONF = ['#ff4d5e', '#ffd23f', '#3ddc84', '#3d8bfd', '#ff8fbf', '#9b6bff', '#ff9f1c'];
-  function confetti(x, y, n) { burst(x, y, n || 60, { speed: 520, up: 260, life: 1.4, size: 9, colors: CONF, g: 700, shape: 'conf' }); }
+  // Confetti is pure decoration, so reduced motion (and the classroom preset) skips it.
+  function confetti(x, y, n) { if (K.motion.reduced()) return; burst(x, y, n || 60, { speed: 520, up: 260, life: 1.4, size: 9, colors: CONF, g: 700, shape: 'conf' }); }
 
   var FLY = [];
   // A flying thing with an arc. tgt may be an object with x/y (followed) plus dy offset.
@@ -304,7 +305,8 @@
     R.cam.x = P.x; R.cam.y = P.y;
   }
 
-  function rebuildStatic() {
+  // keepGround: the unlock added nothing to the cached ground (see drawGroundStatic).
+  function rebuildStatic(keepGround) {
     R.rects = []; R.walls = [];
     var H = CM.HALL, Wg = CM.WING, D = CM.DOOR;
     // walls: horizontal: [y, x0, x1, gapA, gapB, kind]
@@ -355,7 +357,7 @@
     });
     buildNav();
     refreshPads();
-    groundInvalidate();
+    if (!keepGround) groundInvalidate();
   }
 
   function refreshPads() {
@@ -532,8 +534,12 @@
     R.shelves.forEach(function (s) { if (types.indexOf(s.item) < 0) types.push(s.item); });
     if (!types.length) return;
     var wants = [];
-    if (first) wants = ['banana', 'banana'];
-    else {
+    if (first) {
+      // Ask only for bananas the player already has, so a one-banana first trip still sells.
+      var have = shelfFor('banana').count;
+      P.stack.forEach(function (it) { if (it.type === 'banana') have++; });
+      wants = have >= 2 ? ['banana', 'banana'] : ['banana'];
+    } else {
       // favour the newest shelves a little so the player sees demand for new stuff
       var pool = types.slice();
       var newest = R.shelves.slice(-2);
@@ -913,9 +919,27 @@
     floatText(P.x, P.y - 110 - P.stack.length * 14, 'يداك ممتلئتان!', '#ff5d5d', 26);
     SFX.full();
   }
+  // Every crop (and machine) unlocks before its shelf. Until something can take an item,
+  // the player does not pick it, so new crops never fill their hands with unsellable stock.
+  function hasOutlet(type) {
+    for (var i = 0; i < R.shelves.length; i++) if (R.shelves[i].item === type) return true;
+    for (var j = 0; j < R.machines.length; j++) if (R.machines[j].d.input === type) return true;
+    return false;
+  }
+  function shelfName(type) {
+    for (var i = 0; i < CM.UNLOCKS.length; i++) { var d = CM.UNLOCKS[i]; if (d.kind === 'shelf' && d.item === type) return d.name; }
+    return 'رف ' + ITEMS[type].al;
+  }
+  function noOutlet(type) {
+    if (P.noOutT > 0) return;
+    P.noOutT = 1.5;
+    floatText(P.x, P.y - 110 - P.stack.length * 14, 'افتح ' + shelfName(type) + ' أولًا!', '#ffd23f', 24);
+    SFX.no();
+  }
 
   function interact(dt) {
     if (P.fullT > 0) P.fullT -= dt;
+    if (P.noOutT > 0) P.noOutT -= dt;
     P.tick -= dt;
     var act = P.tick <= 0;
     if (act) P.tick = 0.075;
@@ -936,7 +960,7 @@
         var it = P.stack.splice(idx, 1)[0];
         giveTo(s, it.type, P.x, P.y - 84 - idx * 14);
         SFX.stock(s.count); R.lastAction = R.t;
-        if (S.tut === 1) setTut(2);
+        if (S.tut <= 1) setTut(2);
         return;
       }
     }
@@ -948,7 +972,8 @@
         if (ii >= 0 && m.inCount < m.cap) { var it2 = P.stack.splice(ii, 1)[0]; giveTo(m, it2.type, P.x, P.y - 84 - ii * 14); SFX.stock(m.inCount); R.lastAction = R.t; return; }
       }
       if (d2(P.x, P.y, m.outMat.x, m.outMat.y) < 52 * 52 && m.outCount > 0) {
-        if (P.stack.length >= cap) { flashFull(); }
+        if (!hasOutlet(m.d.output)) noOutlet(m.d.output);
+        else if (P.stack.length >= cap) { flashFull(); }
         else { m.outCount--; pushStack(m.d.output, m.outMat.x, m.outMat.y - 30); return; }
       }
     }
@@ -962,10 +987,11 @@
         if (dd < bd) { bd = dd; best = sp; }
       }
       if (best) {
+        if (!hasOutlet(pr.item)) { noOutlet(pr.item); continue; }
         if (P.stack.length >= cap) { flashFull(); break; }
         harvest(best);
         pushStack(pr.item, best.x, best.y - 30);
-        if (S.tut === 0 && P.stack.length >= Math.min(cap, 2)) setTut(1);
+        if (S.tut === 0) setTut(1);
         return;
       }
     }
@@ -1044,7 +1070,7 @@
     ULOG.push(Math.round(S.stats.play) + ':' + d.id);
     S.un[d.id] = true; delete S.paid[d.id];
     var o = buildObj(d, true);
-    rebuildStatic();
+    rebuildStatic(!(d.kind === 'field' || d.kind === 'orchard' || d.kind === 'coop' || d.kind === 'expand'));
     // push the player out of any new solid object
     resolve(P, 16);
     confetti(d.x, d.y - 40, 70);
@@ -1054,6 +1080,8 @@
     var sub = { field: 'امشِ إلى المحاصيل الناضجة لتقطفها', shelf: 'املأه لتبيع ' + (d.item ? ITEMS[d.item].al : ''), machine: 'أحضر ' + (d.input ? ITEMS[d.input].al : '') + ' لتصنع ' + (d.output ? ITEMS[d.output].al : ''),
       coop: 'الدجاجات تضع البيض في الأعشاش', pen: 'خذ الحليب الطازج من الصندوق', orchard: 'التفاح ينمو على الأشجار', decor: 'الزبائن يدفعون ' + Math.round((d.bonus || 0) * 100) + '% أكثر!',
       hire: d.role === 'farmer' ? 'المزارع يقطف ويملأ الرفوف عنك' : 'الكاشير يبيع للزبائن عنك', expand: 'غرفة جديدة كاملة!', desk: 'اشترِ التطويرات من هنا', register: 'ومعه كاشير خاص!' }[d.kind] || '';
+    // A new crop is not pickable until its shelf exists, so point at the shelf instead.
+    if (d.item && d.kind !== 'shelf' && !hasOutlet(d.item)) sub = 'افتح ' + shelfName(d.item) + ' لتبيع ' + ITEMS[d.item].al + '!';
     banner(d.name.replace(/!$/, '') + '!', sub, '#ffd23f', 2.6);
     if (d.kind === 'hire' || d.helper) SFX.hire();
     if (d.id === 'cornField' && S.tut < 5) setTut(5);
@@ -1127,7 +1155,9 @@
     if (cheapest && S.coins >= cheapest.d.cost - cheapest.paid) return { text: 'تستطيع أن تفتح: ' + cheapest.d.name.replace(/!$/, '') + '!', x: cheapest.x, y: cheapest.y, icon: 'star', pad: true };
     for (var j = 0; j < R.registers.length; j++) { var rg = R.registers[j]; if (rg.pile >= 20 || (S.tut < 6 && rg.pile > 0)) return { text: 'اجمع عملاتك!', x: rg.d.pile.x, y: rg.d.pile.y, icon: 'coin' }; }
     if (P.stack.length) {
-      var type = P.stack[P.stack.length - 1].type, dst = null;
+      var type = P.stack[P.stack.length - 1].type, dst = null, tr = R.byId.trash;
+      // Older saves can still carry stock that nothing accepts yet.
+      if (!hasOutlet(type)) return { text: 'ارمِ ' + ITEMS[type].al + ' في سلة المهملات!', x: tr.x + 44, y: tr.y + 2, icon: 'trash' };
       R.shelves.forEach(function (s) { if (!dst && s.item === type && s.count < s.cap) dst = s; });
       R.machines.forEach(function (m) { if (!dst && m.d.input === type && m.inCount < m.cap) dst = m; });
       if (dst) { var dp = dst.kind === 'machine' ? dst.inMat : { x: dst.x, y: dst.y - 30 }; return { text: dst.kind === 'machine' ? 'ضع ' + ITEMS[type].al + ' في ' + dst.d.name + '!' : 'املأ ' + dst.d.name + '!', x: dp.x, y: dp.y, icon: type }; }
@@ -1419,25 +1449,23 @@
     if (Math.abs(eff - GC.scale) > 0.01) { GC.scale = eff; groundInvalidate(); }
     var S0 = GC.size, cx0 = Math.floor(VR.x0 / S0), cx1 = Math.floor(VR.x1 / S0), cy0 = Math.floor(VR.y0 / S0), cy1 = Math.floor(VR.y1 / S0);
     GC.tick++;
-    var budget = 2;
-    for (var cy = cy0; cy <= cy1; cy++) for (var cx = cx0; cx <= cx1; cx++) {
-      var key = cx + ',' + cy, ch = GC.map[key];
+    if (GC.n > 40) evictChunks();
+    var budget = 2, missing = false, cy, cx, ch;
+    for (cy = cy0; cy <= cy1; cy++) for (cx = cx0; cx <= cx1; cx++) {
+      var key = cx + ',' + cy;
+      ch = GC.map[key];
       if (!ch) {
-        if (budget <= 0) {
-          // not cached yet: draw this piece directly this frame
-          var sv = [VR.x0, VR.y0, VR.x1, VR.y1];
-          VR.x0 = Math.max(sv[0], cx * S0 - 1); VR.y0 = Math.max(sv[1], cy * S0 - 1); VR.x1 = Math.min(sv[2], (cx + 1) * S0 + 1); VR.y1 = Math.min(sv[3], (cy + 1) * S0 + 1);
-          c.save(); c.beginPath(); c.rect(VR.x0, VR.y0, VR.x1 - VR.x0, VR.y1 - VR.y0); c.clip();
-          drawGroundStatic(c);
-          c.restore();
-          VR.x0 = sv[0]; VR.y0 = sv[1]; VR.x1 = sv[2]; VR.y1 = sv[3];
-          continue;
-        }
+        if (budget <= 0) { missing = true; continue; }
         budget--;
-        if (GC.n > 40) evictChunks();
         ch = GC.map[key] = { cv: makeChunk(cx, cy, eff), used: 0 }; GC.n++;
       }
       ch.used = GC.tick;
+    }
+    // Until every visible chunk is cached (a few frames after a resize or a new field), draw
+    // the whole view directly. Clipped per-chunk pieces left antialiased green seams at their edges.
+    if (missing) drawGroundStatic(c);
+    else for (cy = cy0; cy <= cy1; cy++) for (cx = cx0; cx <= cx1; cx++) {
+      ch = GC.map[cx + ',' + cy];
       c.drawImage(ch.cv, 0, 0, ch.cv.width, ch.cv.height, cx * S0, cy * S0, ch.cv.width / eff, ch.cv.height / eff);
     }
     // live bits on top of the cached ground
@@ -1563,7 +1591,7 @@
     });
     if (R.byId.desk) { var dk = R.byId.desk; mat(c, dk.x, dk.y, 90, 62, P.onDesk ? 'rgba(126,240,255,0.95)' : 'rgba(126,240,255,0.55)', P.onDesk, 'desk'); }
     var tr = R.byId.trash;
-    if (tr) mat(c, tr.x + 44, tr.y + 2, 46, 58, 'rgba(160,160,170,0.35)', false, null);
+    if (tr) mat(c, tr.x + 44, tr.y + 2, 46, 58, 'rgba(160,160,170,0.35)', false, 'trash');
     // shelf glow when carrying something that fits
     R.shelves.forEach(function (s) {
       if (s.count < s.cap && topIndexOf(P.stack, s.item) >= 0) {
