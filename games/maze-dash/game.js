@@ -41,6 +41,16 @@
     { wall: '#133d0a', wallHi: '#1d5a10', edge: '#b6ff3a', floor: '#061203', dot: '#ffe600', spike: '#ff3fa4' },
     { wall: '#46180a', wallHi: '#632610', edge: '#ff9a1f', floor: '#150703', dot: '#ffe600', spike: '#ff3fa4' }
   ];
+  // Neon glow and wall-shade colours for the cached maze layer, made once here.
+  function rgba(hex, a, f) {
+    var n = parseInt(hex.slice(1), 16), m = f || 1;
+    return 'rgba(' + Math.round((n >> 16) * m) + ',' + Math.round((n >> 8 & 255) * m) + ',' + Math.round((n & 255) * m) + ',' + a + ')';
+  }
+  WORLDS.concat(GOO_PALS).forEach(function (p) {
+    p.glow = [rgba(p.edge, 0.3), rgba(p.edge, 0.1), rgba(p.edge, 0)];
+    p.spikeGlow = [rgba(p.spike, 0.3), rgba(p.spike, 0.1), rgba(p.spike, 0)];
+    p.wallLo = rgba(p.wall, 1, 0.6);
+  });
 
   /* ------------------------------------------------------------- save */
   var save = (function () {
@@ -58,7 +68,13 @@
     s.runs = s.runs | 0;
     return s;
   })();
-  function persist() { store.set('save', save); }
+  // A blocked or full localStorage shows the shared Arabic warning with a retry
+  // button; progress stays playable in memory and Retry writes it again.
+  var saveUi = Kit.saveStatus({ retry: persist });
+  function persist() {
+    if (store.set('save', save) === false) saveUi.failed();
+    else saveUi.saved();
+  }
   function levelInfo(n) { return save.lv[n] || null; }
   function starCount(n) { var l = save.lv[n]; if (!l) return 0; return (l.s & 1 ? 1 : 0) + (l.s & 2 ? 1 : 0) + (l.s & 4 ? 1 : 0); }
   function totalStars() { var t = 0; for (var i = 1; i <= LEVELS.length; i++) t += starCount(i); return t; }
@@ -119,6 +135,7 @@
     L.traps.forEach(function (t) { w.addTrap({ x: t.x, y: t.y, off: t.off }); });
     L.puffers.forEach(function (p) { w.addPuffer({ x: p.x, y: p.y, off: p.off }); });
     L.blocks.forEach(function (b) { w.blocks.push({ x: b.x, y: b.y, dx: b.dx, dy: b.dy, fx: b.x, fy: b.y, anim: 1 }); });
+    w.h = L.h;
     return { world: w, L: L };
   }
 
@@ -325,14 +342,20 @@
     b.strokeStyle = 'rgba(180,77,255,0.12)'; b.lineWidth = 1;
     for (var x = 0; x <= W; x += 40) { b.beginPath(); b.moveTo(x + 0.5, 0); b.lineTo(x + 0.5, H); b.stroke(); }
     for (var y = 0; y <= H; y += 40) { b.beginPath(); b.moveTo(0, y + 0.5); b.lineTo(W, y + 0.5); b.stroke(); }
-    crtCanvas.width = W; crtCanvas.height = H;
-    var c = crtCanvas.getContext('2d');
-    c.fillStyle = 'rgba(0,0,0,0.13)';
-    for (y = 0; y < H; y += 3) c.fillRect(0, y, W, 1);
-    var v = c.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 1.0);
-    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
-    c.fillStyle = v; c.fillRect(0, 0, W, H);
   })();
+  // CRT scanlines + vignette at device resolution (rebuilt when the canvas size
+  // changes), so the lines stay even instead of banding at scaled window sizes.
+  function buildCrt() {
+    var cw = canvas.width, ch = canvas.height, k = view.scale * view.dpr;
+    crtCanvas.width = cw; crtCanvas.height = ch;
+    var c = crtCanvas.getContext('2d');
+    var lw = Math.max(1, Math.round(k)), gap = Math.max(lw + 1, Math.round(3 * k));
+    c.fillStyle = 'rgba(0,0,0,' + (0.13 * gap / (3 * lw)).toFixed(3) + ')';
+    for (var y = 0; y < ch; y += gap) c.fillRect(0, y, cw, lw);
+    var v = c.createRadialGradient(cw / 2, ch / 2, ch * 0.45, cw / 2, ch / 2, ch);
+    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+    c.fillStyle = v; c.fillRect(0, 0, cw, ch);
+  }
 
   /* ------------------------------------------------------------ popups */
   function popup(str, wx, wy, color, size, life) {
@@ -378,7 +401,8 @@
     resetRunState();
     G.hearts = 3;
     G.dotsTotal = r.L.dots;
-    G.tile = Math.max(38, Math.min(52, Math.floor(700 / r.L.h)));
+    // 48 px at most: 13 columns then fit between the HUD panels with the neon frame visible.
+    G.tile = Math.max(38, Math.min(48, Math.floor(700 / r.L.h)));
     G.mx = Math.round((W - COLS * G.tile) / 2);
     var wi = Math.floor((n - 1) / 10);
     G.pal = WORLDS[wi];
@@ -394,7 +418,7 @@
   function startEndless() {
     G.mode = 'endless';
     G.world = new World();
-    G.gen = MDEndless.create(G.world);
+    G.gen = G.world.gen = MDEndless.create(G.world);
     G.L = null; G.def = null;
     resetRunState();
     G.hearts = 1;
@@ -796,7 +820,7 @@
   var bgWorld = null, bgGen = null, bgCam = 0, bgHT = 0;
   function initMenuBg() {
     bgWorld = new World();
-    bgGen = MDEndless.create(bgWorld);
+    bgGen = bgWorld.gen = MDEndless.create(bgWorld);
     bgGen.startY = 400; // start "high" so the preview shows hazards
     bgGen.fill(-40);
     bgCam = -H * 0.7;
@@ -811,7 +835,9 @@
 
   /* ------------------------------------------------------------ render */
   function render() {
-    ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
+    if (!canvas.width || !canvas.height) return; // nothing to draw (and 0×0 caches cannot be drawn)
+    var k = view.scale * view.dpr;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
     ctx.drawImage(bgCanvas, 0, 0);
     if (G.screen === 'play' || G.screen === 'pause' || G.screen === 'win' || G.screen === 'fail' || G.screen === 'over') {
       ctx.save();
@@ -825,9 +851,12 @@
       ctx.fillStyle = 'rgba(7,2,16,0.35)'; ctx.fillRect(0, 0, W, H);
       drawMenuMascots();
     }
+    if (crtCanvas.width !== canvas.width || crtCanvas.height !== canvas.height) buildCrt();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(crtCanvas, 0, 0);
+    ctx.setTransform(k, 0, 0, k, 0, 0);
     if (G.freezeT > 0 && G.screen === 'play') {
-      ctx.fillStyle = 'rgba(120,220,255,' + (0.12 + 0.04 * Math.sin(G.menuT * 6)) + ')';
+      ctx.fillStyle = 'rgba(120,220,255,' + (Kit.motion.reduced() ? 0.12 : 0.12 + 0.04 * Math.sin(G.menuT * 6)) + ')';
       ctx.fillRect(0, 0, W, H);
     }
   }
@@ -855,16 +884,16 @@
     ctx.beginPath(); ctx.rect(MX, 0, mazeW, H); ctx.clip();
     ctx.translate(MX, -Math.round(cam));
     var t = G.menuT;
-    // tiles
+    // static walls, glow and floor come from the cache; traps, exits and items move
+    drawMazeLayer(world, TS, pal, y0, y1);
     for (y = y0; y <= y1; y++) {
       var row = world.rows[y];
+      if (!row) continue;
       for (x = 0; x < COLS; x++) {
-        var tt = row ? row.t[x] : T.WALL, px = x * TS, py = y * TS;
-        if (tt === T.WALL || tt === T.SPIKE) drawWall(world, x, y, px, py, TS, pal, tt === T.SPIKE);
-        else if (tt === T.TRAP) drawTrap(world, x, y, px, py, TS, pal, ht);
+        var tt = row.t[x], px = x * TS, py = y * TS;
+        if (tt === T.TRAP) drawTrap(world, x, y, px, py, TS, pal, ht);
         else if (tt === T.EXIT) drawExit(px, py, TS, t);
-        else if ((x + y) % 2 === 0) { ctx.fillStyle = 'rgba(255,255,255,0.025)'; ctx.fillRect(px, py, TS, TS); }
-        if (row && row.it[x]) drawItem(row.it[x], px, py, TS, pal, t, x, y);
+        if (row.it[x]) drawItem(row.it[x], px, py, TS, pal, t, x, y);
       }
     }
     // puffers
@@ -915,33 +944,113 @@
     return t !== T.WALL && t !== T.SPIKE;
   }
 
-  function drawWall(world, x, y, px, py, TS, pal, spike) {
-    ctx.fillStyle = pal.wall;
-    ctx.fillRect(px, py, TS, TS);
-    // pixel-art texture
-    if ((x * 7 + y * 3) % 5 === 0) { ctx.fillStyle = pal.wallHi; ctx.fillRect(px + TS * 0.2, py + TS * 0.2, TS * 0.25, TS * 0.25); }
-    else if ((x * 3 + y * 5) % 7 === 0) { ctx.fillStyle = pal.wallHi; ctx.fillRect(px + TS * 0.55, py + TS * 0.5, TS * 0.2, TS * 0.2); }
-    var e = Math.max(3, TS * 0.08), up = isOpenT(world, x, y - 1), dn = isOpenT(world, x, y + 1), lf = isOpenT(world, x - 1, y), rt = isOpenT(world, x + 1, y);
-    ctx.fillStyle = pal.edge;
-    if (up) ctx.fillRect(px, py, TS, e);
-    if (dn) ctx.fillRect(px, py + TS - e, TS, e);
-    if (lf) ctx.fillRect(px, py, e, TS);
-    if (rt) ctx.fillRect(px + TS - e, py, e, TS);
-    if (spike) {
-      ctx.fillStyle = pal.spike;
-      var n = 3, s = TS / n, hgt = TS * 0.3;
-      ctx.beginPath();
-      for (var i = 0; i < n; i++) {
-        if (up) { ctx.moveTo(px + i * s, py + e); ctx.lineTo(px + i * s + s / 2, py - hgt * 0.5); ctx.lineTo(px + (i + 1) * s, py + e); }
-        if (dn) { ctx.moveTo(px + i * s, py + TS - e); ctx.lineTo(px + i * s + s / 2, py + TS + hgt * 0.5); ctx.lineTo(px + (i + 1) * s, py + TS - e); }
-        if (lf) { ctx.moveTo(px + e, py + i * s); ctx.lineTo(px - hgt * 0.5, py + i * s + s / 2); ctx.lineTo(px + e, py + (i + 1) * s); }
-        if (rt) { ctx.moveTo(px + TS - e, py + i * s); ctx.lineTo(px + TS + hgt * 0.5, py + i * s + s / 2); ctx.lineTo(px + TS - e, py + (i + 1) * s); }
-      }
-      ctx.fill();
-      // hazard stripes on the block itself
-      ctx.fillStyle = 'rgba(255,63,108,0.35)';
-      ctx.fillRect(px + TS * 0.3, py + TS * 0.3, TS * 0.4, TS * 0.4);
+  /* ------------------------------------------------ cached maze layer */
+  // Floor, neon glow, walls, edges and spikes never change once a row exists, so
+  // they are drawn into a device-resolution canvas and copied with one drawImage
+  // per frame. Rects snap to device pixels, so tiles show no seams at scaled
+  // window sizes (such as the portal's 1100×620), and the glow costs nothing per frame.
+  var maze = { cv: document.createElement('canvas'), world: null, TS: 0, pal: null, k: 0, y0: 0, y1: -1, top: 0, w: 0, h: 0, genTop: 0 };
+  function invalidateCaches() { maze.world = null; crtCanvas.width = 0; }
+  canvas.addEventListener('contextrestored', invalidateCaches);
+  maze.cv.addEventListener('contextrestored', invalidateCaches);
+
+  function drawMazeLayer(world, TS, pal, y0, y1) {
+    var m = ctx.getTransform(), k = m.a, gen = world.gen;
+    if (maze.world !== world || maze.TS !== TS || maze.pal !== pal || maze.k !== k || y0 < maze.y0 || y1 > maze.y1 ||
+        (gen && gen.topY !== maze.genTop && maze.y0 < maze.genTop + 3)) {
+      // Level mazes are cached whole. The endless generator's next hop can still
+      // carve down to one row under its top, and a row's look depends on the row
+      // above it, so endless rows are cached from three rows under the top.
+      var lo = gen ? Math.min(y0, Math.max(y0 - 8, gen.topY + 3)) : Math.min(y0, -2);
+      buildMaze(world, TS, pal, k, lo, gen ? y1 + 2 : Math.max(y1, (world.h || 0) + 1));
     }
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(maze.cv, 0, 0, maze.w, maze.h, Math.round(m.e), Math.round(m.f) + maze.top, maze.w, maze.h);
+    ctx.restore();
+  }
+
+  function buildMaze(world, TS, pal, k, y0, y1) {
+    var cv = maze.cv, top = Math.round(y0 * TS * k);
+    var w = Math.max(1, Math.round(COLS * TS * k)), h = Math.max(1, Math.round((y1 + 1) * TS * k) - top);
+    // the height only grows, so scrolling rebuilds reuse the same canvas
+    if (cv.width !== w || cv.height < h) { cv.width = w; cv.height = h; }
+    maze.world = world; maze.TS = TS; maze.pal = pal; maze.k = k; maze.y0 = y0; maze.y1 = y1; maze.top = top; maze.w = w; maze.h = h;
+    maze.genTop = world.gen ? world.gen.topY : 0;
+    var g = cv.getContext('2d'), e = Math.max(3, TS * 0.08), walls = [], floor = [], x, y, i;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = pal.floor; g.fillRect(0, 0, w, h);
+    // One row beyond each end, so glow and spikes from neighbouring rows spill in.
+    for (y = y0 - 1; y <= y1 + 1; y++) {
+      for (x = 0; x < COLS; x++) {
+        var t = world.tile(x, y);
+        if (t === T.WALL || t === T.SPIKE) {
+          walls.push({ x: x, y: y, px: x * TS, py: y * TS, spike: t === T.SPIKE,
+            up: isOpenT(world, x, y - 1), dn: isOpenT(world, x, y + 1), lf: isOpenT(world, x - 1, y), rt: isOpenT(world, x + 1, y) });
+        } else if (t !== T.TRAP && t !== T.EXIT && (x + y) % 2 === 0) floor.push(x * TS, y * TS);
+      }
+    }
+    // Add a rect given in maze pixels, snapped to whole device pixels.
+    function R(rx, ry, rw, rh) {
+      var X = Math.round(rx * k), Y = Math.round(ry * k);
+      g.rect(X, Y - top, Math.round((rx + rw) * k) - X, Math.round((ry + rh) * k) - Y);
+    }
+    // Strips along each open side: off < 0 reaches into the open cell, off >= 0 sits inside the wall.
+    function sides(q, off, d) {
+      if (q.up) R(q.px, q.py + off, TS, d);
+      if (q.dn) R(q.px, q.py + TS - off - d, TS, d);
+      if (q.lf) R(q.px + off, q.py, d, TS);
+      if (q.rt) R(q.px + TS - off - d, q.py, d, TS);
+    }
+    // Each pass is one path and one fill, so abutting rects merge without seams.
+    function pass(style, fn) {
+      g.beginPath();
+      for (i = 0; i < walls.length; i++) fn(walls[i]);
+      g.fillStyle = style; g.fill();
+    }
+    g.beginPath();
+    for (i = 0; i < floor.length; i += 2) R(floor[i], floor[i + 1], TS, TS);
+    g.fillStyle = 'rgba(255,255,255,0.025)'; g.fill();
+    // soft neon glow fading across the floor beside every wall (spike walls glow red)
+    var gd = TS * 0.3;
+    function glow(rx, ry, rw, rh, dx, dy, cols) {
+      var X = Math.round(rx * k), Y = Math.round(ry * k) - top, X2 = Math.round((rx + rw) * k), Y2 = Math.round((ry + rh) * k) - top;
+      var gr = g.createLinearGradient(dx < 0 ? X2 : X, dy < 0 ? Y2 : Y, dx > 0 ? X2 : X, dy > 0 ? Y2 : Y);
+      gr.addColorStop(0, cols[0]); gr.addColorStop(0.4, cols[1]); gr.addColorStop(1, cols[2]);
+      g.fillStyle = gr; g.fillRect(X, Y, X2 - X, Y2 - Y);
+    }
+    for (i = 0; i < walls.length; i++) {
+      var q = walls[i], cols = q.spike ? pal.spikeGlow : pal.glow;
+      if (q.up) glow(q.px, q.py - gd, TS, gd, 0, -1, cols);
+      if (q.dn) glow(q.px, q.py + TS, TS, gd, 0, 1, cols);
+      if (q.lf) glow(q.px - gd, q.py, gd, TS, -1, 0, cols);
+      if (q.rt) glow(q.px + TS, q.py, gd, TS, 1, 0, cols);
+    }
+    pass(pal.wall, function (q) { R(q.px, q.py, TS, TS); });
+    // darker band behind the neon edge gives the walls some depth
+    pass(pal.wallLo, function (q) { sides(q, e, e); });
+    // pixel-art texture
+    pass(pal.wallHi, function (q) {
+      if ((q.x * 7 + q.y * 3) % 5 === 0) R(q.px + TS * 0.2, q.py + TS * 0.2, TS * 0.25, TS * 0.25);
+      else if ((q.x * 3 + q.y * 5) % 7 === 0) R(q.px + TS * 0.55, q.py + TS * 0.5, TS * 0.2, TS * 0.2);
+    });
+    pass(pal.edge, function (q) { sides(q, 0, e); });
+    // spike teeth (diagonal edges, so drawn in maze pixels without snapping)
+    g.setTransform(k, 0, 0, k, 0, -top);
+    var s = TS / 3, hgt = TS * 0.15;
+    pass(pal.spike, function (q) {
+      if (!q.spike) return;
+      var px = q.px, py = q.py;
+      for (var n = 0; n < 3; n++) {
+        if (q.up) { g.moveTo(px + n * s, py + e); g.lineTo(px + n * s + s / 2, py - hgt); g.lineTo(px + (n + 1) * s, py + e); }
+        if (q.dn) { g.moveTo(px + n * s, py + TS - e); g.lineTo(px + n * s + s / 2, py + TS + hgt); g.lineTo(px + (n + 1) * s, py + TS - e); }
+        if (q.lf) { g.moveTo(px + e, py + n * s); g.lineTo(px - hgt, py + n * s + s / 2); g.lineTo(px + e, py + (n + 1) * s); }
+        if (q.rt) { g.moveTo(px + TS - e, py + n * s); g.lineTo(px + TS + hgt, py + n * s + s / 2); g.lineTo(px + TS - e, py + (n + 1) * s); }
+      }
+    });
+    // hazard square on the spike block itself
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    pass('rgba(255,63,108,0.35)', function (q) { if (q.spike) R(q.px + TS * 0.3, q.py + TS * 0.3, TS * 0.4, TS * 0.4); });
   }
 
   function drawTrap(world, x, y, px, py, TS, pal, ht) {
@@ -1328,7 +1437,8 @@
     rr(ctx, bx + bw * (1 - Math.max(0.08, danger)), 124, bw * Math.max(0.08, danger), 26, 13); ctx.fill();
     var msg = !G.gooStarted ? 'ينتظرك...' : danger > 0.7 ? 'أسرع!!' : danger > 0.4 ? 'إنه يقترب!' : 'بعيد عنك';
     text(msg, LP.cx, 190, 24, danger > 0.7 ? '#ff6b9a' : '#fff', 'center');
-    if (danger > 0.7 && Math.floor(G.menuT * 4) % 2 === 0 && G.phase === 'play') {
+    // the warning frame blinks, or stays steady when motion is reduced
+    if (danger > 0.7 && (Kit.motion.reduced() || Math.floor(G.menuT * 4) % 2 === 0) && G.phase === 'play') {
       ctx.strokeStyle = 'rgba(255,63,108,0.5)'; ctx.lineWidth = 10; ctx.strokeRect(5, 5, W - 10, H - 10);
     }
     keyHints([['P', 'إيقاف'], ['R', 'إعادة'], ['M', 'الصوت']], LP.x + LP.w - 10, H - 22);
@@ -1580,6 +1690,8 @@
   });
   window.addEventListener('pointermove', function (e) {
     if (!swipe || G.screen !== 'play') return;
+    // the button came up where we never saw it (outside the window, after a blur)
+    if (!(e.buttons & 1)) { swipe = null; return; }
     var l = view.toLogical(e.clientX, e.clientY), dx = l.x - swipe.x, dy = l.y - swipe.y;
     if (dx * dx + dy * dy < 30 * 30) return;
     var d = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
@@ -1587,6 +1699,7 @@
     swipe = { x: l.x, y: l.y };
   });
   window.addEventListener('pointerup', function () { swipe = null; });
+  window.addEventListener('pointercancel', function () { swipe = null; });
 
   /* ----------------------------------------------------------- autoplay */
   // Debug/test helper: plans with the same rules as tools/verify.js.
@@ -1680,7 +1793,7 @@
     }
     if (G.resultLock > 0) G.resultLock -= dt;
   }, render);
-  Kit.lifecycle({ pause: pause });
+  Kit.lifecycle({ pause: pause, reset: function () { swipe = null; } });
   Kit.ready();
 })();
 

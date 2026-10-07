@@ -195,12 +195,14 @@ body { background: #07020f; }
   z-index: 30; background: var(--md-yel); color: var(--md-ink);
   font-weight: 700; font-size: 22px; padding: 8px 22px; border-radius: 999px;
   box-shadow: 0 6px 0 #9a6b00, 0 0 24px rgba(255, 230, 0, 0.5);
-  animation: sg-pop 0.25s ease-out; pointer-events: none; white-space: nowrap;
+  animation: md-toast-pop 0.25s ease-out; pointer-events: none; white-space: nowrap;
 }
 
 @keyframes md-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 @keyframes md-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
 @keyframes md-starpop { from { transform: scale(0.2) rotate(-40deg); } to { transform: scale(1) rotate(0); } }
+/* sg-pop with the centring translate kept, so the toast does not jump sideways */
+@keyframes md-toast-pop { from { transform: translateX(-50%) scale(0.85); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
 @keyframes md-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 
 @media (max-height: 560px) {
