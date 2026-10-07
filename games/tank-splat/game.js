@@ -27,6 +27,7 @@
   var KEY_HINT = ['W A S D  +  Q', '↑ ← ↓ →  +  /', 'I J K L  +  U'];
 
   var SPLAT_WORDS = ['طاخ!', 'بقعة!', 'لطخة!', 'سبلاش!', 'أصبت!', 'رائع!'];
+  var SELF_MSG = 'كرتك ارتدّت عليك!';
 
   /* ------------------------------------------------------------ helpers */
   function mulberry(seed) {
@@ -139,6 +140,8 @@
         burst(winner.x, winner.y, 30, [winner.pal.paint, '#fff', '#ffe14d'], 260, 5, 0.9);
       } else if (!G.demo) S.roundDraw();
       G.banner = { t: 0, winner: winner, draw: !winner };
+      // solo: the banner pill says it now, so the ribbon does not half-cover the popup
+      if (G.selfOut && G.humans === 1) G.pops = G.pops.filter(function (p) { return p.text !== SELF_MSG; });
       if (winner && winner.score >= G.target && !G.demo) {
         G.over = true;
         if (winner.human) G.coins += 30;
@@ -430,7 +433,7 @@
       if (G.demo) { /* quiet title-screen demo */ }
       else if (self) {
         // Beginners often think the bot got them: say what really happened.
-        if (t.human) { pop(Math.max(160, Math.min(W - 160, t.x)), t.y - 34, 'كرتك ارتدّت عليك!', '#ffffff', 34, 2); G.selfOut = true; }
+        if (t.human) { pop(Math.max(160, Math.min(W - 160, t.x)), t.y - 34, SELF_MSG, '#ffffff', 34, 2); G.selfOut = true; }
         else pop(t.x, t.y - 34, 'أوبس!', '#ffffff', 40, 1.2);
         if (!G.demo) S.oops();
       } else {
@@ -525,7 +528,7 @@
     function stepPops(dt) {
       for (var i = G.pops.length - 1; i >= 0; i--) {
         var p = G.pops[i];
-        p.life -= dt; if (!p.center) p.y -= dt * 30;
+        p.life -= dt; if (!p.center) p.y = Math.max(TOP + 30, p.y - dt * 30); // stays below the HUD
         if (p.life <= 0) G.pops.splice(i, 1);
       }
     }
@@ -613,9 +616,16 @@
       c.save();
       c.globalAlpha = !laser ? 0.5 : t.laser < 2 ? (Math.sin(G.time * 20) > 0 ? 0.8 : 0.3) : 0.85;
       c.lineWidth = laser ? 4 : 3; c.lineCap = 'round'; c.strokeStyle = t.pal.paint;
-      c.setLineDash([2, 10]); c.lineDashOffset = -G.time * 40;
+      c.setLineDash([2, 10]); c.lineDashOffset = Kit.motion.reduced() ? 0 : -G.time * 40;
       c.beginPath(); c.moveTo(p[0], p[1]);
-      for (var q = 2; q < p.length; q += 2) c.lineTo(p[q], p[q + 1]);
+      var ox = 0, oy = 0;
+      for (var q = 2; q < p.length; q += 2) {
+        if (q > 2 && !laser) { // guide: a shot that comes straight back is drawn beside the way out
+          var ax = p[q - 2] - p[q - 4], ay = p[q - 1] - p[q - 3], al = Math.hypot(ax, ay), bx = p[q] - p[q - 2], by = p[q + 1] - p[q - 1];
+          if (ax * bx + ay * by < -0.9 * al * Math.hypot(bx, by)) { ox = -ay / al * 10; oy = ax / al * 10; c.lineTo(p[q - 2] + ox, p[q - 1] + oy); }
+        }
+        c.lineTo(p[q] + ox, p[q + 1] + oy);
+      }
       c.stroke();
       c.setLineDash([]);
       c.restore();

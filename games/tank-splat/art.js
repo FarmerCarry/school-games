@@ -558,18 +558,19 @@
     // side (3D) pass
     c.fillStyle = th.wside;
     for (i = 0; i < rects.length; i++) { r = rects[i]; rr(c, r.x1, r.y1 + 3, r.x2 - r.x1, r.y2 - r.y1 + 3, 5); c.fill(); }
-    // top + highlight: vertical walls first, so the horizontal tops cover their
-    // highlight where walls meet (no light stripes across the junctions)
-    for (var pass = 0; pass < 2; pass++) {
-      for (i = 0; i < rects.length; i++) {
-        r = rects[i];
-        var w = r.x2 - r.x1, h = r.y2 - r.y1;
-        if ((w > h) !== (pass === 1)) continue;
-        rr(c, r.x1, r.y1, w, h, 5); c.fillStyle = th.wall; c.fill();
-        if (w > h) rr(c, r.x1 + 4, r.y1 + 2, w - 8, 3.5, 2);
-        else rr(c, r.x1 + 2, r.y1 + 4, 3.5, h - 8, 2);
-        c.fillStyle = th.wtop; c.fill();
-      }
+    // top pass
+    c.fillStyle = th.wall;
+    for (i = 0; i < rects.length; i++) { r = rects[i]; rr(c, r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1, 5); c.fill(); }
+    // highlight. A wall that starts against a wall coming from above or the
+    // left starts its highlight past it, so no light stripe crosses the joint.
+    c.fillStyle = th.wtop;
+    for (i = 0; i < rects.length; i++) {
+      r = rects[i];
+      var w = r.x2 - r.x1, h = r.y2 - r.y1, s = 4;
+      var gx = Math.round((r.x1 + m.T / 2 - m.ox) / m.cs), gy = Math.round((r.y1 + m.T / 2 - m.oy) / m.cs);
+      if (w > h) { if (gy > 0 && m.v[gy - 1][gx]) s = m.T + 1; rr(c, r.x1 + s, r.y1 + 2, w - s - 4.5, 3.5, 2); }
+      else { if (gx > 0 && m.h[gy][gx - 1]) s = m.T + 1; rr(c, r.x1 + 2, r.y1 + s, 3.5, h - s - 4.5, 2); }
+      c.fill();
     }
   }
 
