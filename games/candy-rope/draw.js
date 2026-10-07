@@ -339,10 +339,22 @@
         ctx.fillStyle = rnd() < 0.5 ? 'rgba(120,70,20,0.10)' : 'rgba(255,240,210,0.12)';
         ctx.fillRect(rnd() * W, rnd() * H, 2 + rnd() * 6, 1.5);
       }
-      // box folds
-      ctx.strokeStyle = 'rgba(110,60,15,0.18)'; ctx.lineWidth = 4;
+      // warm light on the box floor behind the play area
+      var lit = ctx.createRadialGradient(W / 2, H * 0.45, 40, W / 2, H * 0.45, W * 0.55);
+      lit.addColorStop(0, 'rgba(255,240,200,0.3)'); lit.addColorStop(1, 'rgba(255,240,200,0)');
+      ctx.fillStyle = lit; ctx.fillRect(0, 0, W, H);
+      // box flaps: darker bands with a lit edge, casting a soft shadow onto the floor
+      ctx.fillStyle = 'rgba(110,60,15,0.15)'; ctx.fillRect(0, 0, W, 60); ctx.fillRect(0, H - 50, W, 50);
+      var sh = ctx.createLinearGradient(0, 60, 0, 86);
+      sh.addColorStop(0, 'rgba(90,45,10,0.2)'); sh.addColorStop(1, 'rgba(90,45,10,0)');
+      ctx.fillStyle = sh; ctx.fillRect(0, 60, W, 26);
+      sh = ctx.createLinearGradient(0, H - 50, 0, H - 68);
+      sh.addColorStop(0, 'rgba(90,45,10,0.14)'); sh.addColorStop(1, 'rgba(90,45,10,0)');
+      ctx.fillStyle = sh; ctx.fillRect(0, H - 68, W, 18);
+      ctx.strokeStyle = 'rgba(110,60,15,0.28)'; ctx.lineWidth = 4;
       ctx.beginPath(); ctx.moveTo(0, 60); ctx.lineTo(W, 60); ctx.moveTo(0, H - 50); ctx.lineTo(W, H - 50); ctx.stroke();
-      ctx.fillStyle = 'rgba(110,60,15,0.08)'; ctx.fillRect(0, 0, W, 60); ctx.fillRect(0, H - 50, W, 50);
+      ctx.strokeStyle = 'rgba(255,240,210,0.4)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, 56); ctx.lineTo(W, 56); ctx.moveTo(0, H - 46); ctx.lineTo(W, H - 46); ctx.stroke();
       // tape
       ctx.save();
       ctx.fillStyle = 'rgba(255,248,215,0.5)';
@@ -365,6 +377,17 @@
       starPath(ctx, W - 330, 110, 20, 8, 0.2); ctx.stroke();
       ctx.font = '700 28px Fredoka, sans-serif'; ctx.fillStyle = 'rgba(80,45,10,0.2)'; ctx.textAlign = 'center'; ctx.direction = 'rtl';
       ctx.fillText('للأعلى', 140, H - 118); ctx.fillText('حلوى لذيذة', W - 140, H - 118);
+      // a few faded candy stickers near the edges, outside the middle where levels put their pieces
+      var stickers = [[70, 330, '#ffd21f'], [1225, 270, '#ff5fa2'], [430, 30, '#3ec7ff'], [75, 150, 2], [1215, 560, 0], [1222, 688, 4]];
+      stickers.forEach(function (st) {
+        var tilt = (rnd() - 0.5) * 0.8;
+        ctx.globalAlpha = 0.3; ctx.fillStyle = '#fff8e8';
+        ctx.beginPath(); ctx.arc(st[0], st[1], typeof st[2] === 'string' ? 25 : 32, 0, TAU); ctx.fill();
+        ctx.globalAlpha = 0.35;
+        if (typeof st[2] === 'string') { starPath(ctx, st[0], st[1], 20, 9, tilt); ctx.fillStyle = st[2]; ctx.fill(); }
+        else drawCandy(ctx, st[0], st[1], tilt, st[2], 0.75);
+      });
+      ctx.globalAlpha = 1;
     }
     // soft vignette
     var v = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 1.05);

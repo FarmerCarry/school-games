@@ -72,7 +72,8 @@
       candy: [330, 330], munch: [910, 585],
       ropes: [{ x: 230, y: 200 }, { x: 430, y: 200 }],
       bubbles: [[330, 600]],
-      rings: [{ x: 530, y: 230, r: 215 }],
+      // higher, wider ring: it still misses the resting candy, but catches the rising bubble more often
+      rings: [{ x: 530, y: 200, r: 234 }],
       spikes: [{ x: 445, y: 86, w: 240, a: 0 }],
       stars: [[330, 470], [530, 445], [735, 290]] },
 

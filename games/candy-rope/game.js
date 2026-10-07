@@ -46,7 +46,9 @@
     if (!p.fails || typeof p.fails !== 'object') p.fails = {};
     return p;
   })();
-  function save() { store.set('prog', prog); }
+  // A failed write keeps prog in memory and shows the shared warning with a retry button.
+  var saveUI = Kit.saveStatus({ retry: save });
+  function save() { if (store.set('prog', prog) === false) saveUI.failed(); else saveUI.saved(); }
   // Arabic star counts (accusative): 1 -> نجمة واحدة, 2 -> نجمتين, 3-10 -> N نجوم, 11+ -> N نجمة
   function nStars(n) { return n === 1 ? 'نجمة واحدة' : n === 2 ? 'نجمتين' : n >= 3 && n <= 10 ? n + ' نجوم' : n + ' نجمة'; }
   // "a / b" kept left-to-right inside Arabic text
@@ -172,7 +174,10 @@
   /* ------------------------------------------------------------ particles */
   var PMAX = 520, parts = [], pn = 0;
   for (var pi = 0; pi < PMAX; pi++) parts.push({ on: false });
+  // Particles are pure decoration: none in reduced-motion / classroom mode (sounds and HUD stars stay).
+  Kit.motion.onChange(function (reduced) { if (reduced) for (var i = 0; i < PMAX; i++) parts[i].on = false; });
   function spawn(x, y, vx, vy, life, size, color, type, g) {
+    if (Kit.motion.reduced()) return null;
     var p = parts[pn]; pn = (pn + 1) % PMAX;
     p.on = true; p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.life = life; p.max = life; p.size = size;
     p.color = color; p.type = type || 0; p.g = g == null ? 600 : g; p.rot = Math.random() * TAU; p.vr = (Math.random() - 0.5) * 10;
@@ -289,7 +294,7 @@
   var G = {
     state: 'title', level: 0, world: null, munch: newMunch(), intro: 0, introT: 0, t: 0, endT: 0, panel: false,
     hudStars: 0, slotPop: [0, 0, 0], flyers: [], hint: 0, hintItems: [], tipT: 0, tut: false, replay: null, rIdx: 0,
-    titleWorld: null, titleMunch: newMunch(), titleRespawn: 0, timers: [], sparkT: 0
+    demo: false, taps: [], titleWorld: null, titleMunch: newMunch(), titleRespawn: 0, timers: [], sparkT: 0
   };
   var TITLE_LEVEL = { candy: [1010, 300], munch: [960, 565], ropes: [{ x: 960, y: 84 }], stars: [] };
   function newTitleWorld() { G.titleWorld = Sim.create(TITLE_LEVEL); G.titleWorld.born = G.t; munchMood(G.titleMunch, 'idle'); }
@@ -427,11 +432,13 @@
     G.intro = 0.55; G.introT = 0; G.endT = 0; G.panel = false;
     G.hudStars = 0; G.slotPop = [0, 0, 0]; G.flyers = [];
     G.replay = opts.replay || null; G.rIdx = 0;
-    G.hint = opts.hint ? 6 : 0; buildHint();
-    G.tipT = LEVELS[i].tip ? 5.5 : 0;
-    G.tut = i === 0 && prog.stars[0] < 0;
+    G.demo = !!opts.demo;
+    buildHint(); G.hint = opts.hint ? hintTime() : 0;
+    G.tipT = LEVELS[i].tip && !G.demo ? 5.5 : 0;
+    G.tut = i === 0 && prog.stars[0] < 0 && !G.demo;
+    if (G.demo) G.introT = 1.6; // no level-name title: the demo banner sits there
     G.munch = newMunch(); G.munch.hopv = -420;
-    trail.length = 0;
+    trail.length = 0; G.taps.length = 0;
     for (var k = 0; k < PMAX; k++) parts[k].on = false;
     texts.length = 0;
     $('bHint').classList.toggle('glow', (prog.fails[i] || 0) >= 2 && prog.stars[i] < 0);
@@ -501,7 +508,11 @@
     $('fReason').textContent = w.reason === 'spikes' ? 'لمست الحلوى الأشواك!' : w.reason === 'float' ? 'طارت الفقاعة بعيدًا!' : 'سقطت الحلوى خارج الصندوق!';
     $('fSkip').hidden = !((prog.fails[i] || 0) >= 3 && prog.stars[i] < 0 && i + 1 < NL);
     $('fHint').hidden = !SOL[i];
+    $('fHint').innerHTML = (wantsDemo() ? 'شاهد الحل' : 'تلميح') + ' <span class="sg-key">H</span>';
   }
+  // after two misses in a row the fail panel offers to play the solution instead of a hint
+  function wantsDemo() { return (prog.fails[G.level] || 0) >= 2 && !!SOL[G.level]; }
+  function failHint() { if (wantsDemo()) watchSolution(); else restartWithHint(); }
   function skipLevel() {
     SFX.click();
     var i = G.level;
@@ -512,11 +523,13 @@
 
   /* ------------------------------------------------------------ hint */
   function buildHint() {
-    var plan = SOL[G.level], items = [];
+    var plan = SOL[G.level], items = [], num = 0, prev = -99;
     if (plan) plan.forEach(function (a) {
       var last = items[items.length - 1];
-      if (last && last.a === a[1] && last.k === a[2]) { last.n++; return; }
-      items.push({ a: a[1], k: a[2], n: 1 });
+      if (last && last.a === a[1] && last.k === a[2]) { last.n++; prev = a[0]; return; }
+      if (a[0] - prev > 3) num++; // steps a few frames apart are one move ("cut both"): same number
+      prev = a[0];
+      items.push({ a: a[1], k: a[2], n: 1, num: num });
     });
     G.hintItems = items;
   }
@@ -535,10 +548,34 @@
     if (it.a === 'puff') { var b = w.blowers[it.k]; return b ? { x: b.x, y: b.y } : null; }
     return null;
   }
+  // keep the markers up until the plan's last step has had its moment
+  function hintTime() {
+    var plan = SOL[G.level], last = plan && plan.length ? plan[plan.length - 1][0] : 0;
+    return Math.max(6, (last - G.world.frame) / 60 + Math.max(0, G.intro) + 1.5);
+  }
   function showHint() {
-    if (G.state !== 'play') return;
-    G.hint = 6; SFX.click();
+    if (G.state !== 'play' || G.demo) return;
+    G.hint = hintTime(); SFX.click();
     $('bHint').classList.remove('glow');
+  }
+  // "watch the solution": replay the recorded plan (no stars, no fail count), then hand the level back
+  function watchSolution() {
+    if (!SOL[G.level]) return;
+    SFX.click(); startLevel(G.level, { replay: SOL[G.level], demo: true });
+  }
+  // show the replay's "hand": a swipe across the rope it cuts, a ring where it taps
+  function demoGesture(w, a) {
+    var p = hintPos({ a: a[1], k: a[2] }, w);
+    if (!p) return;
+    if (a[1] !== 'cut') { G.taps.push({ x: p.x, y: p.y, t: 0 }); if (G.taps.length > 4) G.taps.shift(); return; }
+    var nx = 0.3, ny = -1, r = null;
+    for (var i = 0; i < w.ropes.length; i++) if (w.ropes[i].key === a[2]) r = w.ropes[i];
+    if (r && r.pts) { // swipe across the rope, not along it
+      var m = Math.floor(r.pts.length / 2), q0 = r.pts[m - 1] || r.pts[m], q1 = r.pts[m + 1] || r.pts[m];
+      var dx = q1.x - q0.x, dy = q1.y - q0.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+      nx = -dy / d; ny = dx / d;
+    }
+    for (var k = 0; k < 6; k++) { var u = k / 5 - 0.5; trail.push({ x: p.x + nx * u * 150, y: p.y + ny * u * 150, t: G.t - 0.12 + k * 0.024 }); }
   }
 
   /* ------------------------------------------------------------ input */
@@ -633,7 +670,7 @@
         break;
       case 'lost':
         if (k === 'KeyR' || go) { e.preventDefault(); restart(); }
-        else if (k === 'KeyH') { restartWithHint(); }
+        else if (k === 'KeyH') { failHint(); }
         else if (k === 'Escape' && G.panel) { SFX.click(); openLevels(G.box); }
         break;
     }
@@ -662,7 +699,7 @@
   btn('wNext', nextLevel);
   btn('fLevels', function () { SFX.click(); openLevels(G.box); });
   btn('fRetry', restart);
-  btn('fHint', restartWithHint);
+  btn('fHint', failHint);
   btn('fSkip', skipLevel);
 
   /* ------------------------------------------------------------ events -> juice */
@@ -721,12 +758,12 @@
           burst(e.x, e.y, 8, { speed: 200, color: '#fff', type: 2, size: 6, g: 0, life: 0.4 });
           shake.add(12);
           munchMood(m, 'sad'); m.sqv += 3;
-          if (main) { G.state = 'lost'; G.endT = 0; onLose(); later(SFX.lose, 350); }
+          if (main) { G.state = 'lost'; G.endT = 0; if (!G.demo) { onLose(); later(SFX.lose, 350); } }
           else G.titleRespawn = 1.6;
           break;
         case 'lost':
           munchMood(m, 'sad'); m.sqv += 3;
-          if (main) { G.state = 'lost'; G.endT = 0; onLose(); SFX.lose(); }
+          if (main) { G.state = 'lost'; G.endT = 0; if (!G.demo) { onLose(); SFX.lose(); } }
           else G.titleRespawn = 1.4;
           break;
         case 'eat':
@@ -736,7 +773,7 @@
           burst(w.munch.x, w.munch.y - 40, 7, { speed: 180, angle: -Math.PI / 2, spread: 1.6, color: '#ff4f7a', type: 4, size: 9, g: -120, life: 1.3 });
           floatText('لذيذ!', w.munch.x, w.munch.y < 210 ? w.munch.y + 120 : w.munch.y - 110, '#ffffff', 48);
           shake.add(6);
-          if (main) { G.state = 'won'; G.endT = 0; onWin(); }
+          if (main) { G.state = 'won'; G.endT = 0; if (!G.demo) onWin(); } // a demo earns nothing
           else G.titleRespawn = 2.2;
           break;
       }
@@ -768,7 +805,10 @@
       if (G.intro > 0) G.intro -= dt;
       else {
         if (G.replay) {
-          while (G.rIdx < G.replay.length && G.replay[G.rIdx][0] <= w.frame) { Sim.act(w, G.replay[G.rIdx].slice(1)); G.rIdx++; }
+          while (G.rIdx < G.replay.length && G.replay[G.rIdx][0] <= w.frame) {
+            if (G.demo) demoGesture(w, G.replay[G.rIdx]);
+            Sim.act(w, G.replay[G.rIdx].slice(1)); G.rIdx++;
+          }
         }
         Sim.step(w);
       }
@@ -777,7 +817,10 @@
     } else {
       Sim.step(w);
       G.endT += dt;
-      if (!G.panel) {
+      if (G.demo) {
+        // hand the same level back; the toast replaces the level-name title the player just saw
+        if (G.endT > 1.5) { startLevel(G.level); G.introT = 1.6; toast('دورك الآن!', 2000); return; }
+      } else if (!G.panel) {
         if (s === 'won' && G.endT > 1.5) showWinPanel();
         if (s === 'lost' && G.endT > 1.1) showFailPanel();
       }
@@ -790,6 +833,7 @@
       if (f.t >= 1) { G.flyers.splice(i, 1); G.hudStars++; G.slotPop[f.k] = 1; SFX.tick(f.k); }
     }
     for (i = 0; i < 3; i++) if (G.slotPop[i] > 0) G.slotPop[i] = Math.max(0, G.slotPop[i] - dt * 3);
+    for (i = G.taps.length - 1; i >= 0; i--) if ((G.taps[i].t += dt) > 0.5) G.taps.splice(i, 1);
     // ambient sparkles on stars
     G.sparkT -= dt;
     if (G.sparkT <= 0) {
@@ -834,9 +878,10 @@
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ropePath(pts);
     ctx.strokeStyle = '#4a2a0c'; ctx.lineWidth = 9; ctx.stroke();
-    ctx.strokeStyle = theme === 'gift' ? '#fff3f8' : '#f1c98a'; ctx.lineWidth = 5; ctx.stroke();
+    // candy twine: cream and red on cardboard, so the rope stands out from the brown box
+    ctx.strokeStyle = theme === 'gift' ? '#fff3f8' : '#fff4dc'; ctx.lineWidth = 5; ctx.stroke();
     ctx.setLineDash([7, 7]); ctx.lineDashOffset = 0;
-    ctx.strokeStyle = theme === 'gift' ? '#ff4f8f' : '#c07c33'; ctx.lineWidth = 5; ctx.stroke();
+    ctx.strokeStyle = theme === 'gift' ? '#ff4f8f' : '#e0473f'; ctx.lineWidth = 5; ctx.stroke();
     ctx.setLineDash([]);
     ctx.globalAlpha = 1;
   }
@@ -860,7 +905,7 @@
     ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
   }
-  function drawRing(g) {
+  function drawRing(g, theme) {
     if (g.used) return;
     ctx.save();
     ctx.fillStyle = 'rgba(255,255,255,0.10)';
@@ -871,7 +916,7 @@
     // coiled rope
     ctx.strokeStyle = '#4a2a0c'; ctx.lineWidth = 7;
     ctx.beginPath(); ctx.arc(g.x, g.y, 20, 0, TAU); ctx.stroke();
-    ctx.strokeStyle = '#f1c98a'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.strokeStyle = theme === 'gift' ? '#fff3f8' : '#fff4dc'; ctx.lineWidth = 4; ctx.stroke();
     ctx.restore();
     drawPin(g.x, g.y, !!g.move);
   }
@@ -974,7 +1019,7 @@
     for (i = 0; i < w.pins.length; i++) drawTrack(w.pins[i]);
     for (i = 0; i < w.rings.length; i++) if (!w.rings[i].used) drawTrack(w.rings[i]);
     for (i = 0; i < w.spikes.length; i++) drawTrack(w.spikes[i]);
-    for (i = 0; i < w.rings.length; i++) drawRing(w.rings[i]);
+    for (i = 0; i < w.rings.length; i++) drawRing(w.rings[i], theme);
     for (i = 0; i < w.tramps.length; i++) drawTramp(w.tramps[i]);
     for (i = 0; i < w.spikes.length; i++) drawSpikes(w.spikes[i]);
     var firstBlowerLevel = G.state === 'play' && w === G.world && hasHl(LEVELS[G.level], 'puff') && !w.actions;
@@ -1107,8 +1152,13 @@
     ctx.restore();
   }
   function drawHints(w) {
-    if (G.hint <= 0 || !G.hintItems.length) return;
-    var a = Math.min(1, G.hint);
+    if (G.hint > 0 && G.hintItems.length) drawHintMarkers(w);
+    if (G.hint > 0 || G.demo) drawTimingCue(w);
+  }
+  function drawHintMarkers(w) {
+    // fade in as the level-name title flies away, so the title never covers them
+    var a = Math.min(1, G.hint, clamp((G.introT - 1.2) / 0.35, 0, 1));
+    if (a <= 0) return;
     ctx.globalAlpha = a;
     ctx.font = '700 24px Fredoka, "Segoe UI", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     var seen = {};
@@ -1124,7 +1174,7 @@
       ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#2b1238'; ctx.lineWidth = 4;
       ctx.beginPath(); ctx.arc(0, 0, 22, 0, TAU); ctx.fill(); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(-8, 18); ctx.lineTo(0, 32); ctx.lineTo(8, 18); ctx.fill();
-      ctx.fillStyle = '#2b1238'; ctx.fillText(String(i + 1), 0, 1);
+      ctx.fillStyle = '#2b1238'; ctx.fillText(String(it.num), 0, 1);
       ctx.restore();
       var lbl = it.a === 'cut' ? 'اقطع' : it.a === 'pop' ? 'فرقع' : it.n === 2 ? 'انفخ مرتين' : it.n > 2 ? 'انفخ ' + it.n + ' مرات' : 'انفخ';
       ctx.font = '700 18px Fredoka, "Segoe UI", sans-serif';
@@ -1133,6 +1183,47 @@
       ctx.font = '700 24px Fredoka, "Segoe UI", sans-serif';
     }
     ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1;
+  }
+  // "when": a ring closes on the plan's next step and says "now!" at its moment, as long as
+  // the player is still on the plan's timeline (every step that was due so far, and no extra)
+  function drawTimingCue(w) {
+    var plan = SOL[G.level], next = plan && plan[w.actions];
+    if (!next || w.state !== 'play') return;
+    var due = 0;
+    while (due < plan.length && plan[due][0] + 4 < w.frame) due++;
+    var d = next[0] - w.frame, p = due === w.actions && d <= 40 ? hintPos({ a: next[1], k: next[2] }, w) : null;
+    if (!p) return;
+    var r = 22 + Math.max(0, d) * 1.5, now = d <= 6;
+    ctx.globalAlpha = clamp((40 - d) / 10, 0, 1);
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU);
+    ctx.lineWidth = 10; ctx.strokeStyle = '#2b1238'; ctx.stroke();
+    ctx.lineWidth = 5; ctx.strokeStyle = now ? '#7dff5a' : '#ffe14d'; ctx.stroke();
+    if (now) {
+      var ty = p.y + r + 26;
+      if (ty > H - 30) ty = p.y - r - 24;
+      ctx.font = '700 30px Fredoka, "Segoe UI", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = '#2b1238'; ctx.strokeText('الآن!', p.x, ty);
+      ctx.fillStyle = '#7dff5a'; ctx.fillText('الآن!', p.x, ty);
+      ctx.textBaseline = 'alphabetic';
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawTaps() {
+    for (var i = 0; i < G.taps.length; i++) {
+      var tp = G.taps[i], k = tp.t / 0.5;
+      ctx.globalAlpha = 1 - k; ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(tp.x, tp.y, 18 + k * 50, 0, TAU); ctx.stroke();
+      if (k < 0.5) { ctx.beginPath(); ctx.arc(tp.x, tp.y, 9, 0, TAU); ctx.fill(); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawDemoBanner() {
+    ctx.font = '700 28px Fredoka, "Segoe UI", sans-serif';
+    var txt = 'شاهد الحل', tw = ctx.measureText(txt).width + 64;
+    pill(640 - tw / 2, 12, tw, 56);
+    ctx.fillStyle = '#ffe14d'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(txt, 640, 41);
+    ctx.textBaseline = 'alphabetic';
   }
   function drawTexts() {
     ctx.textAlign = 'center'; ctx.lineJoin = 'round';
@@ -1154,7 +1245,7 @@
     ctx.save();
     ctx.globalAlpha = k;
     if (G.state === 'won') {
-      ctx.translate(cx, cy + 30); ctx.rotate(G.t * 0.3);
+      ctx.translate(cx, cy + 30); ctx.rotate(Kit.motion.reduced() ? 0 : G.t * 0.3);
       for (var i = 0; i < 12; i++) {
         ctx.fillStyle = i % 2 ? 'rgba(255,240,150,0.28)' : 'rgba(255,255,255,0.12)';
         ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 520, i * TAU / 12, (i + 1) * TAU / 12); ctx.fill();
@@ -1193,9 +1284,11 @@
     drawParts();
     drawTexts();
     drawTrail();
+    drawTaps();
     drawTutorial(w);
     ctx.restore();
     drawHud();
+    if (G.demo) drawDemoBanner();
     if (s === 'play') drawTip();
     if ((s === 'won' || s === 'lost') && G.panel) drawEndOverlay();
   }
@@ -1204,13 +1297,13 @@
   for (var di = 0; di < 7; di++) deco.push({ x: 60 + di * 190 + Math.random() * 60, y: Math.random() * 720, v: 20 + Math.random() * 25, r: Math.random() * 6, s: 0.8 + Math.random() * 0.5 });
   function drawTitleDeco() {
     ctx.globalAlpha = 0.28;
-    var ts = totalStars();
+    var ts = totalStars(), still = Kit.motion.reduced();
     for (var i = 0; i < deco.length; i++) {
       var d = deco[i];
-      var y = (d.y + G.t * d.v) % 820 - 50;
+      var y = still ? d.y : (d.y + G.t * d.v) % 820 - 50;
       var skin = i % Art.CANDIES.length;
       if (Art.CANDIES[skin].need > ts) skin = i % 2;
-      Art.drawCandy(ctx, d.x, y, d.r + G.t * 0.5, skin, d.s, G.t);
+      Art.drawCandy(ctx, d.x, y, still ? d.r : d.r + G.t * 0.5, skin, d.s, G.t);
     }
     ctx.globalAlpha = 1;
   }
@@ -1230,7 +1323,7 @@
       var w = G.world, n = 0;
       for (var i = 0; i < PMAX; i++) if (parts[i].on) n++;
       return {
-        state: G.state, level: G.level, panel: G.panel, totalStars: totalStars(), prog: prog.stars.slice(),
+        state: G.state, level: G.level, panel: G.panel, demo: G.demo, totalStars: totalStars(), prog: prog.stars.slice(),
         world: w ? { state: w.state, frame: w.frame, stars: w.starsGot, ropes: w.ropes.length, candy: [Math.round(w.candy.x), Math.round(w.candy.y)], bubble: w.candy.bubble } : null,
         particles: n
       };

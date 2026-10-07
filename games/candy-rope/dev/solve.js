@@ -8,15 +8,20 @@
  *   --tries N    random plans per level (default 6000)
  *   --write      store the best plans in ../solutions.js
  *
- * Output per level: best stars, "win%" = how often the most forgiving winning
- * plan still wins when every action is shifted by up to +-5 frames (1/12 s),
- * and "3*%" for the best 3-star plan.
+ * Output per level: best stars, "win-robust" = how often the most forgiving
+ * winning plan still wins when every action is shifted by up to +-5 frames
+ * (1/12 s), and for the recorded plan "3*-robust" (still 3 stars) and
+ * "plan-win" (still wins). The recorded plan is the 3-star line that best
+ * survives small mistakes, with every action moved to the middle of its timing
+ * window, because the game's hint and "watch the solution" demo teach it.
  */
 'use strict';
 var path = require('path');
 var fs = require('fs');
 var Sim = require(path.join(__dirname, '..', 'sim.js'));
 var LEVELS = require(path.join(__dirname, '..', 'levels.js'));
+var SOLUTIONS = [];
+try { SOLUTIONS = require(path.join(__dirname, '..', 'solutions.js')); } catch (e) { SOLUTIONS = []; }
 
 var args = process.argv.slice(2);
 var TRIES = 6000, WRITE = false, only = [];
@@ -27,7 +32,8 @@ for (var i = 0; i < args.length; i++) {
 }
 
 var seed = 12345;
-function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+// Math.imul keeps the multiply exact (a plain * loses low bits and the sequence repeats after ~18k values)
+function rnd() { seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
 function ri(a, b) { return a + Math.floor(rnd() * (b - a + 1)); }
 
 function actionPool(L) {
@@ -71,10 +77,12 @@ function mutate(plan) {
   return p;
 }
 
+// Every plan gets the same sequence of shifts, so plans are compared fairly.
 function robust(L, plan, needStars, J, trials) {
-  var ok = 0;
+  var ok = 0, js = 99991;
+  function jit() { js = (Math.imul(js, 1103515245) + 12345) & 0x7fffffff; return Math.floor(js / 0x80000000 * (2 * J + 1)) - J; }
   for (var t = 0; t < trials; t++) {
-    var p = plan.map(function (a) { var b = a.slice(); b[0] = Math.max(0, b[0] + ri(-J, J)); return b; });
+    var p = plan.map(function (a) { var b = a.slice(); b[0] = Math.max(0, b[0] + jit()); return b; });
     p.sort(function (a, b) { return a[0] - b[0]; });
     var r = Sim.run(L, p);
     if (r.state === 'won' && r.stars >= needStars) ok++;
@@ -94,7 +102,28 @@ function prune(L, plan) {
   return plan;
 }
 
-function solveLevel(L) {
+// Start the plan as early as it still works (no idle wait before the first move), then
+// move each action to the middle of its winning window, as far as it keeps needStars (it
+// and every later action shift together; an action may pass the one before it).
+function byFrame(p) { return p.slice().sort(function (a, b) { return a[0] - b[0]; }); }
+function center(L, plan, needStars) {
+  function ok(p, need) { var r = Sim.run(L, byFrame(p)); return r.state === 'won' && r.stars >= need; }
+  function shift(p, k, d) { return p.map(function (a, j) { return j < k ? a : [a[0] + d].concat(a.slice(1)); }); }
+  function range(k, need) {
+    var lo = 0, hi = 0;
+    while (lo > -20 && plan[k][0] + lo > 0 && ok(shift(plan, k, lo - 1), need)) lo--;
+    while (hi < 20 && ok(shift(plan, k, hi + 1), need)) hi++;
+    return [lo, hi];
+  }
+  while (plan[0][0] > 0 && ok(shift(plan, 0, -1), needStars)) plan = shift(plan, 0, -1);
+  for (var k = 0; k < plan.length; k++) {
+    var win = range(k, 0), keep = needStars ? range(k, needStars) : win;
+    plan = shift(plan, k, Math.min(keep[1], Math.max(keep[0], Math.round((win[0] + win[1]) / 2))));
+  }
+  return byFrame(plan);
+}
+
+function solveLevel(L, recorded) {
   var pool = actionPool(L);
   var best = null, bestS = -1, winners = [], threeStars = [];
   for (var t = 0; t < TRIES; t++) {
@@ -104,8 +133,14 @@ function solveLevel(L) {
     if (r.state === 'won') { winners.push({ plan: plan, stars: r.stars }); if (r.stars === 3) threeStars.push(plan); }
     if (s > bestS) { bestS = s; best = plan; }
   }
-  // hill-climb from the best few winners toward more stars
-  var seeds = winners.sort(function (a, b) { return b.stars - a.stars; }).slice(0, 12).map(function (w) { return w.plan; });
+  // hill-climb toward more stars from the best winner of each route (order of actions) first,
+  // so a forgiving route that random play only finished with fewer stars gets a chance too
+  var routes = {}, seeds = [], rest = [];
+  winners.sort(function (a, b) { return b.stars - a.stars; }).forEach(function (w) {
+    var sig = w.plan.map(function (a) { return a[1] + a[2]; }).join();
+    if (routes[sig]) rest.push(w.plan); else { routes[sig] = true; seeds.push(w.plan); }
+  });
+  seeds = seeds.concat(rest).slice(0, 12);
   if (!seeds.length && best) seeds = [best];
   seeds.forEach(function (sp) {
     var cur = sp, cs = score(Sim.run(L, cur));
@@ -119,19 +154,23 @@ function solveLevel(L) {
   // most forgiving winner and most forgiving 3-star plan
   var winRob = 0, winPlan = null;
   winners.slice(0, 60).forEach(function (w) {
-    var rb = robust(L, w.plan, 0, 5, 30);
-    if (rb > winRob) { winRob = rb; winPlan = w.plan; }
+    var p = center(L, prune(L, w.plan), 0), rb = robust(L, p, 0, 5, 30);
+    if (rb > winRob) { winRob = rb; winPlan = p; }
   });
-  var r3 = 0, plan3 = null;
-  threeStars.slice(0, 40).forEach(function (p) {
-    var rb = robust(L, p, 3, 5, 30);
-    if (rb > r3 || !plan3) { r3 = rb; plan3 = p; }
+  // recorded plan: the 3-star line that most often still wins (then still gets 3 stars),
+  // preferring the quicker one; the plan already recorded competes too
+  var candidates = threeStars.slice(0, 40);
+  if (recorded && Sim.run(L, recorded).stars === 3) candidates.push(recorded);
+  var r3 = 0, rWin = 0, plan3 = null, best3 = -1;
+  candidates.forEach(function (p) {
+    p = center(L, prune(L, p), 3);
+    var rw = robust(L, p, 0, 5, 100), rb = robust(L, p, 3, 5, 100), sc = rw + rb / 2 - p[p.length - 1][0] * 2e-4;
+    if (sc > best3) { best3 = sc; r3 = rb; rWin = rw; plan3 = p; }
   });
   var bestRes = best ? Sim.run(L, best) : null;
-  plan3 = prune(L, plan3); winPlan = prune(L, winPlan);
   return {
     won: winners.length > 0, winRate: winners.length / TRIES, stars: bestRes && bestRes.state === 'won' ? bestRes.stars : -1,
-    winRob: winRob, r3: r3, plan: plan3 || best, winPlan: winPlan
+    winRob: winRob, r3: r3, rWin: rWin, plan: plan3 || best, winPlan: winPlan
   };
 }
 
@@ -141,7 +180,7 @@ idx.forEach(function (i) {
   var L = LEVELS[i];
   seed = 777 + i * 31;
   var t0 = Date.now();
-  var r = solveLevel(L);
+  var r = solveLevel(L, SOLUTIONS[i]);
   results[i] = r;
   var noAct = Sim.run(L, []);
   console.log(
@@ -150,6 +189,7 @@ idx.forEach(function (i) {
     '  rand-win ' + (r.winRate * 100).toFixed(1).padStart(5) + '%' +
     '  win-robust ' + Math.round(r.winRob * 100).toString().padStart(3) + '%' +
     '  3*-robust ' + Math.round(r.r3 * 100).toString().padStart(3) + '%' +
+    '  plan-win ' + Math.round(r.rWin * 100).toString().padStart(3) + '%' +
     '  idle:' + noAct.state + (noAct.state === 'won' ? '!!' : '') +
     '  ' + (Date.now() - t0) + 'ms' +
     '\n     plan ' + JSON.stringify(r.plan)
@@ -158,13 +198,12 @@ idx.forEach(function (i) {
 
 if (WRITE) {
   var file = path.join(__dirname, '..', 'solutions.js');
-  var existing = [];
-  try { existing = require(file); } catch (e) { existing = []; }
+  var existing = SOLUTIONS.slice();
   results.forEach(function (r, i) { if (r && r.plan && r.won) existing[i] = r.plan; });
   for (var k = 0; k < LEVELS.length; k++) if (!existing[k]) existing[k] = null;
   var out = '/* Recorded solutions for every Munch Rope level: [frame, action, arg].\n' +
     ' * Generated by dev/solve.js and checked by dev/verify.js. The game uses the\n' +
-    ' * order of actions for its hint button. */\n' +
+    ' * plans for its hint (order and timing) and its "watch the solution" demo. */\n' +
     '(function (root) {\n  var S = [\n' +
     existing.slice(0, LEVELS.length).map(function (p, i) { return '    /* ' + (i + 1) + ' */ ' + JSON.stringify(p); }).join(',\n') +
     '\n  ];\n  root.MUNCH_SOLUTIONS = S;\n  if (typeof module !== \'undefined\' && module.exports) module.exports = S;\n})(typeof window !== \'undefined\' ? window : globalThis);\n';
