@@ -81,6 +81,23 @@ export function testMass({ root = REPO } = {}) {
     assert.equal(c.ejected.length, 1, 'A merged-away piece cannot consume ejected mass');
     assert.equal(o.cells[0].m, 30);
   }
+  {
+    // A crowded late game: every sample lies inside a huge blob's danger zone.
+    // Bot respawns must still get a spot instead of crashing the whole loop.
+    const WS = 3400, step = WS / 6, cells = [];
+    for (let gy = 0; gy < 6; gy++) for (let gx = 0; gx < 6; gx++) {
+      cells.push({ x: (gx + 0.5) * step, y: (gy + 0.5) * step, m: 3000, r: 4.4 * Math.sqrt(3000) + 4 });
+    }
+    let seed = 1;
+    const c = { WS, cells, Math, rand: (a, b) => { seed = (seed * 16807) % 2147483647; return a + (seed / 2147483647) * (b - a); } };
+    vm.createContext(c);
+    vm.runInContext(['radius', 'launchDist', 'safeSpot'].map(name => sourceFunction(blob, name)).join('\n'), c);
+    for (const minM of [14, 31, 103]) {
+      const spot = c.safeSpot(minM);
+      assert.ok(spot && Number.isFinite(spot.x) && Number.isFinite(spot.y), `safeSpot(${minM}) must return a spot in a crowded arena`);
+      assert.ok(spot.x >= 0 && spot.x <= WS && spot.y >= 0 && spot.y <= WS, 'The spot stays inside the arena');
+    }
+  }
 
   const snake = { window: {}, Math, performance: { now: () => 0 } };
   vm.createContext(snake);
@@ -132,7 +149,7 @@ export function testMass({ root = REPO } = {}) {
   assert.equal(p.peakMass, 10, 'Respawning must reset the prior run peak');
   W.reset('demo'); W.spawnPlayer('after demo', SA.SKINS[0], 'round');
   assert.equal(W.player.peakMass, 10, 'A world reset must not carry a peak into the next run');
-  return { blobMergeOrders: cases.length, deadCellConsumption: 'pass', snakePeakAndCommit: 'pass' };
+  return { blobMergeOrders: cases.length, deadCellConsumption: 'pass', blobCrowdedRespawn: 'pass', snakePeakAndCommit: 'pass' };
 }
 
 export async function testSnake({ page, origin }) {
