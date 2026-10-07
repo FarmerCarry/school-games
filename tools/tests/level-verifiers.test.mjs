@@ -67,3 +67,25 @@ test('Block verification passes an unmodified beginner level', () => {
   assert.match(result.stdout, /all required checks OK/);
   assert.equal(result.status, 0);
 });
+
+// Maze Dash's verifier searches every level state: exit reachable, every dot
+// collectable (the "all dots" star), no dead ends, no unavoidable timed hazard.
+function mazeVerifier(args = []) {
+  const result = spawnSync(process.execPath, [path.join(repo, 'games/maze-dash/tools/verify.js'), ...args], {
+    cwd: repo, encoding: 'utf8', timeout: 90000
+  });
+  assert.ifError(result.error);
+  return result;
+}
+
+test('Maze Dash verification proves every hand-made level can be finished with every dot', () => {
+  const result = mazeVerifier();
+  assert.match(result.stdout, /all levels OK/);
+  assert.equal(result.status, 0);
+});
+
+test('Maze Dash verification climbs a generated endless maze to 600 m', () => {
+  const result = mazeVerifier(['--endless', '1']);
+  assert.match(result.stdout, /climbable to 600 m/);
+  assert.equal(result.status, 0);
+});
