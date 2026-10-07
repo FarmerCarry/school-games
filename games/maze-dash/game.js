@@ -17,16 +17,19 @@
 
   /* ------------------------------------------------------------ setup */
   var canvas = document.getElementById('game');
-  var view = Kit.fit(canvas, W, H);
+  var frameDirty = true; // a paused game repaints only after something visible changed
+  function redraw() { frameDirty = true; }
+  var view = Kit.fit(canvas, W, H, { onResize: redraw });
   var ctx = view.ctx;
   var store = Kit.store('maze-dash');
   var fx = Kit.particles();
   var shake = Kit.shake();
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
+  // Late fonts (Arabic letters and the HUD's digits) repaint a paused frame too.
   try {
-    document.fonts.load('700 40px Fredoka', 'بـ').catch(function () { /* Use fallback fonts. */ });
-    document.fonts.load('500 20px Fredoka', 'بـ').catch(function () { /* Use fallback fonts. */ });
+    document.fonts.load('700 40px Fredoka', 'بـ0').then(redraw, function () { /* Use fallback fonts. */ });
+    document.fonts.load('500 20px Fredoka', 'بـ0').then(redraw, function () { /* Use fallback fonts. */ });
   } catch (e) { /* ignore */ }
 
   var WORLDS = [
@@ -333,7 +336,8 @@
 
   /* ------------------------------------------------ static backgrounds */
   var bgCanvas = document.createElement('canvas'), crtCanvas = document.createElement('canvas');
-  (function () {
+  // Painted once, and again when a GPU reset restores the canvases blank.
+  function paintBg() {
     bgCanvas.width = W; bgCanvas.height = H;
     var b = bgCanvas.getContext('2d');
     var g = b.createRadialGradient(W / 2, H / 2, 50, W / 2, H / 2, 800);
@@ -342,7 +346,8 @@
     b.strokeStyle = 'rgba(180,77,255,0.12)'; b.lineWidth = 1;
     for (var x = 0; x <= W; x += 40) { b.beginPath(); b.moveTo(x + 0.5, 0); b.lineTo(x + 0.5, H); b.stroke(); }
     for (var y = 0; y <= H; y += 40) { b.beginPath(); b.moveTo(0, y + 0.5); b.lineTo(W, y + 0.5); b.stroke(); }
-  })();
+  }
+  paintBg();
   // CRT scanlines + vignette at device resolution (rebuilt when the canvas size
   // changes), so the lines stay even instead of banding at scaled window sizes.
   function buildCrt() {
@@ -725,12 +730,15 @@
   var K = Kit.keys;
 
   function tick(dt) {
-    G.menuT += dt;
     if (toastTimer > 0) {
       toastTimer -= dt;
       if (toastTimer <= 0) { $('toast').hidden = true; if (toastQueue.length) toast(toastQueue.shift()); }
     }
     handleKeys();
+    // Paused: the scene, effects and popups wait for resume, so render() can
+    // keep the last frame instead of redrawing it 60 times a second.
+    if (G.screen === 'pause') return;
+    G.menuT += dt;
     if (G.screen === 'play') updatePlay(dt);
     else if (G.screen === 'title' || G.screen === 'levels' || G.screen === 'shop') updateMenuBg(dt);
     fx.update(dt);
@@ -836,6 +844,9 @@
   /* ------------------------------------------------------------ render */
   function render() {
     if (!canvas.width || !canvas.height) return; // nothing to draw (and 0×0 caches cannot be drawn)
+    // paused: drawn once, then again only after a resize, a canvas restore or late fonts
+    if (G.screen === 'pause' && !frameDirty) return;
+    frameDirty = false;
     var k = view.scale * view.dpr;
     ctx.setTransform(k, 0, 0, k, 0, 0);
     ctx.drawImage(bgCanvas, 0, 0);
@@ -950,9 +961,8 @@
   // per frame. Rects snap to device pixels, so tiles show no seams at scaled
   // window sizes (such as the portal's 1100×620), and the glow costs nothing per frame.
   var maze = { cv: document.createElement('canvas'), world: null, TS: 0, pal: null, k: 0, y0: 0, y1: -1, top: 0, w: 0, h: 0, genTop: 0 };
-  function invalidateCaches() { maze.world = null; crtCanvas.width = 0; }
-  canvas.addEventListener('contextrestored', invalidateCaches);
-  maze.cv.addEventListener('contextrestored', invalidateCaches);
+  function invalidateCaches() { maze.world = null; crtCanvas.width = 0; paintBg(); frameDirty = true; }
+  [canvas, maze.cv, bgCanvas, crtCanvas].forEach(function (c) { c.addEventListener('contextrestored', invalidateCaches); });
 
   function drawMazeLayer(world, TS, pal, y0, y1) {
     var m = ctx.getTransform(), k = m.a, gen = world.gen;
@@ -986,7 +996,9 @@
         var t = world.tile(x, y);
         if (t === T.WALL || t === T.SPIKE) {
           walls.push({ x: x, y: y, px: x * TS, py: y * TS, spike: t === T.SPIKE,
-            up: isOpenT(world, x, y - 1), dn: isOpenT(world, x, y + 1), lf: isOpenT(world, x - 1, y), rt: isOpenT(world, x + 1, y) });
+            up: isOpenT(world, x, y - 1), dn: isOpenT(world, x, y + 1), lf: isOpenT(world, x - 1, y), rt: isOpenT(world, x + 1, y),
+            // open diagonal cells, for the glow round outer corners and the edges at inner corners
+            ul: isOpenT(world, x - 1, y - 1), ur: isOpenT(world, x + 1, y - 1), dl: isOpenT(world, x - 1, y + 1), dr: isOpenT(world, x + 1, y + 1) });
         } else if (t !== T.TRAP && t !== T.EXIT && (x + y) % 2 === 0) floor.push(x * TS, y * TS);
       }
     }
@@ -1002,6 +1014,14 @@
       if (q.lf) R(q.px + off, q.py, d, TS);
       if (q.rt) R(q.px + TS - off - d, q.py, d, TS);
     }
+    // Inner corners: where two neighbours' strips meet at an open diagonal cell, this
+    // wall adds the d×d corner they both miss, so the outline has no notch.
+    function corners(q, d) {
+      if (q.ul && !q.up && !q.lf) R(q.px, q.py, d, d);
+      if (q.ur && !q.up && !q.rt) R(q.px + TS - d, q.py, d, d);
+      if (q.dl && !q.dn && !q.lf) R(q.px, q.py + TS - d, d, d);
+      if (q.dr && !q.dn && !q.rt) R(q.px + TS - d, q.py + TS - d, d, d);
+    }
     // Each pass is one path and one fill, so abutting rects merge without seams.
     function pass(style, fn) {
       g.beginPath();
@@ -1015,7 +1035,9 @@
     var gd = TS * 0.3;
     function glow(rx, ry, rw, rh, dx, dy, cols) {
       var X = Math.round(rx * k), Y = Math.round(ry * k) - top, X2 = Math.round((rx + rw) * k), Y2 = Math.round((ry + rh) * k) - top;
-      var gr = g.createLinearGradient(dx < 0 ? X2 : X, dy < 0 ? Y2 : Y, dx > 0 ? X2 : X, dy > 0 ? Y2 : Y);
+      var sx = dx < 0 ? X2 : X, sy = dy < 0 ? Y2 : Y;
+      // a side fades straight out from the wall, an outer corner fades round it
+      var gr = dx && dy ? g.createRadialGradient(sx, sy, 0, sx, sy, gd * k) : g.createLinearGradient(sx, sy, dx > 0 ? X2 : X, dy > 0 ? Y2 : Y);
       gr.addColorStop(0, cols[0]); gr.addColorStop(0.4, cols[1]); gr.addColorStop(1, cols[2]);
       g.fillStyle = gr; g.fillRect(X, Y, X2 - X, Y2 - Y);
     }
@@ -1025,16 +1047,20 @@
       if (q.dn) glow(q.px, q.py + TS, TS, gd, 0, 1, cols);
       if (q.lf) glow(q.px - gd, q.py, gd, TS, -1, 0, cols);
       if (q.rt) glow(q.px + TS, q.py, gd, TS, 1, 0, cols);
+      if (q.up && q.lf && q.ul) glow(q.px - gd, q.py - gd, gd, gd, -1, -1, cols);
+      if (q.up && q.rt && q.ur) glow(q.px + TS, q.py - gd, gd, gd, 1, -1, cols);
+      if (q.dn && q.lf && q.dl) glow(q.px - gd, q.py + TS, gd, gd, -1, 1, cols);
+      if (q.dn && q.rt && q.dr) glow(q.px + TS, q.py + TS, gd, gd, 1, 1, cols);
     }
     pass(pal.wall, function (q) { R(q.px, q.py, TS, TS); });
     // darker band behind the neon edge gives the walls some depth
-    pass(pal.wallLo, function (q) { sides(q, e, e); });
+    pass(pal.wallLo, function (q) { sides(q, e, e); corners(q, 2 * e); });
     // pixel-art texture
     pass(pal.wallHi, function (q) {
       if ((q.x * 7 + q.y * 3) % 5 === 0) R(q.px + TS * 0.2, q.py + TS * 0.2, TS * 0.25, TS * 0.25);
       else if ((q.x * 3 + q.y * 5) % 7 === 0) R(q.px + TS * 0.55, q.py + TS * 0.5, TS * 0.2, TS * 0.2);
     });
-    pass(pal.edge, function (q) { sides(q, 0, e); });
+    pass(pal.edge, function (q) { sides(q, 0, e); corners(q, e); });
     // spike teeth (diagonal edges, so drawn in maze pixels without snapping)
     g.setTransform(k, 0, 0, k, 0, -top);
     var s = TS / 3, hgt = TS * 0.15;
@@ -1471,6 +1497,7 @@
   function pause() {
     if (G.screen !== 'play') return;
     showScreen('pause');
+    frameDirty = true;
     $('pause-sub').textContent = G.mode === 'level' ? ('المرحلة ' + G.levelN + ': ' + G.def.name) : ('الهلام الصاعد · ' + G.maxHeight + ' م');
     P.buffer = -1;
   }
