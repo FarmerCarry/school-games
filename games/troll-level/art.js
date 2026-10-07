@@ -297,16 +297,19 @@
     forest: { top: '#5fc23c', line: '#a3e85e', bumps: 1, mark: 'pebble' }
   };
 
-  // Does cell (x, y) sit flush against the tiles being drawn? grp is a group
-  // drawn live, or null for the fixed ground (baked once: unrevealed '!' blocks
-  // never count, so the ground under them does not give them away).
+  // Does cell (x, y) sit flush against the tiles being drawn? Only the cell
+  // above a tile is asked; above the screen counts as fixed ceiling. grp is a
+  // group drawn live, or null for the fixed ground (baked once: unrevealed '!'
+  // blocks never count, so the ground under them does not give them away), or
+  // OPEN for fixed ground whose trap block has left (see Art.drawOpened).
+  var OPEN = {};
   function solidAt(w, grp, x, y) {
-    if (x < 0 || x >= E.COLS || y < 0 || y >= E.ROWS) return !grp;
-    var i = y * E.COLS + x, h = w.owner[i];
+    if (grp === OPEN) return false;
+    var i = y * E.COLS + x, fixed = y < 0 || !!w.grid[i], h = y < 0 ? null : w.owner[i];
     if (h && h.invis && !(grp && h.revealed)) h = null;
-    if (!grp) return !!(w.grid[i] || h);
+    if (!grp) return fixed || !!h;
     if (h) return h === grp || (h.active && h.ox === grp.ox && h.oy === grp.oy);
-    return !!w.grid[i] && !grp.ox && !grp.oy;
+    return fixed && !grp.ox && !grp.oy;
   }
 
   // Adds a rectangle whose edges sit on whole device pixels (k per logical px).
@@ -377,6 +380,26 @@
     for (var y = 0; y < E.ROWS; y++) for (var x = 0; x < E.COLS; x++) if (w.grid[y * E.COLS + x]) tiles.push({ x: x, y: y });
     drawTiles(g, w, null, tiles, 0, 0, pal, res);
     return c;
+  };
+
+  // Fixed ground under a trap block is baked without its top, as one mass with
+  // the block. Once the block has moved off or vanished, those tiles are drawn
+  // again over the baked canvas with their grass, sand or frosting.
+  var opened = [];
+  Art.drawOpened = function (ctx, w, pal, k) {
+    var n = 0, i, q, g, x, y;
+    for (i = 0; i < w.groups.length; i++) {
+      g = w.groups[i];
+      if (g.invis || (g.active && !g.ox && !g.oy)) continue;
+      for (q = 0; q < g.tiles.length; q++) {
+        x = g.tiles[q].x; y = g.tiles[q].y + 1;
+        if (y >= E.ROWS || !w.grid[y * E.COLS + x]) continue;
+        if (!opened[n]) opened[n] = {};
+        opened[n].x = x; opened[n++].y = y;
+      }
+    }
+    opened.length = n;
+    if (n) drawTiles(ctx, w, OPEN, opened, 0, 0, pal, k);
   };
 
   function twinkle(ctx, x, y, r, a) {

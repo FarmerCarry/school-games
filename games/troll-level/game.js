@@ -49,7 +49,10 @@
     }
   });
   var ctx = view.ctx;
-  cv.addEventListener('contextrestored', function () { staticDirty = true; sceneDirty = true; });
+  // A GPU reset (e.g. after sleep) can blank this canvas and the baked level
+  // canvas (see ensureStatic): rebake and redraw when either comes back.
+  function restored() { staticDirty = true; sceneDirty = true; }
+  cv.addEventListener('contextrestored', restored);
   var fx = K.particles(), shake = K.shake();
 
   /* ============================================================== sounds */
@@ -661,6 +664,10 @@
     var key = (game.demo ? 'demo' : game.li) + ':' + view.scale.toFixed(3);
     if (!staticDirty && game.staticFor === key && game.staticC) return;
     var res = Math.min(2, Math.max(0.5, view.scale * view.dpr));
+    if (!game.staticC) {
+      game.staticC = document.createElement('canvas');
+      game.staticC.addEventListener('contextrestored', restored);
+    }
     game.staticC = Art.buildStatic(w, game.pal, res, game.demo ? 99 : game.li, game.staticC);
     game.staticFor = key; game.staticRes = res; staticDirty = false;
   }
@@ -672,6 +679,15 @@
     // Exactly one canvas pixel per screen pixel: no resampling blur, and the live
     // trap tiles line up with the baked ground without a hairline.
     ctx.drawImage(sc, 0, 0, sc.width / game.staticRes, sc.height / game.staticRes);
+    // Kit.fit can round the canvas a device pixel past the baked image, and the
+    // canvas is never cleared: paint that edge like the walls.
+    var dk = view.scale * view.dpr / game.staticRes, ex = Math.round(sc.width * dk), ey = Math.round(sc.height * dk);
+    if (ex < cv.width || ey < cv.height) {
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = pal.ink;
+      ctx.fillRect(ex, 0, cv.width, cv.height); ctx.fillRect(0, ey, cv.width, cv.height);
+      ctx.restore();
+    }
+    Art.drawOpened(ctx, w, pal, view.scale * view.dpr);
     // death marks (this session)
     if (game.marks.length) {
       ctx.save(); ctx.globalAlpha = 0.35; ctx.strokeStyle = pal.ink; ctx.lineWidth = 4; ctx.lineCap = 'round';
