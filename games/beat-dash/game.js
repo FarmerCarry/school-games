@@ -446,6 +446,12 @@
   function toast(msg) { toastQ.push(msg); }
   function updateToast(dt) {
     var el = $('toast');
+    // A death popup ("رقم قياسي جديد!") sits centred just below the toast, so the toast steps aside
+    // while one is up: a showing toast goes back to the front of the queue (unless nearly done).
+    if (centrePopupUp()) {
+      if (toastT > 0) { if (toastT > 0.6) toastQ.unshift(el.textContent); toastT = 0; el.hidden = true; }
+      return;
+    }
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) el.hidden = true; return; }
     // the toast sits top-centre, so it waits while a live run keeps the cube up near the ceiling
     if (toastQ.length && !cubeHigh()) { el.textContent = toastQ.shift(); el.hidden = false; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; toastT = 2.6; }
@@ -529,7 +535,8 @@
       if (!G.practice && p >= 5) {
         popup('رقم قياسي جديد!', p + '%', '#ffe14d');
         sfx.best();
-        burst(W / 2, 250, calm() ? 20 : 40, { speed: 520, life: 1.1, size: 12, colors: ['#ffe14d', '#ff5ad1', '#3df2ff', '#7dff5a'], g: 700, screen: true, shape: 4 });
+        // the confetti is pure decoration: calm mode keeps just the popup and the sound
+        if (!calm()) burst(W / 2, 250, 40, { speed: 520, life: 1.1, size: 12, colors: ['#ffe14d', '#ff5ad1', '#3df2ff', '#7dff5a'], g: 700, screen: true, shape: 4 });
       }
     } else if (!G.practice && p >= 85) popup('قريب جدًا!', p + '%', '#ff8ad8');
     // stuck? point kids at practice mode (5th try in a row, then every 10 more, until they pass 70%)
@@ -540,10 +547,14 @@
   var lastBumpT = -1;
   // Popups during a live run (stars) sit behind the cube, which is always PLAYER_SX blocks from the left,
   // so they never hide the lane ahead, even upside down or in a rocket tunnel. Death popups sit centred,
-  // above the "المحاولة N" text of the next attempt.
+  // above the "المحاولة N" text of the next attempt and just below the toast band (toasts wait for them).
   function popup(big, small, col) {
     var live = scene === 'play' && !G.dead && !G.won;
-    G.popups.push({ big: big, small: small, col: col, t: 0, life: 1.6, x: live ? 180 : W / 2, y: live ? 200 : 150 });
+    G.popups.push({ big: big, small: small, col: col, t: 0, life: 1.6, x: live ? 180 : W / 2, y: live ? 200 : 150, centre: !live });
+  }
+  function centrePopupUp() {
+    for (var i = 0; i < G.popups.length; i++) if (G.popups[i].centre) return true;
+    return false;
   }
 
   function handleEvents(s) {
@@ -614,14 +625,16 @@
     if (!calm()) { G.flash = 0.6; G.flashCol = '#ffffff'; }
     shake.add(6);
     sfx.win();
-    for (var i = 0; i < 5; i++) firework(true);
+    // calm mode: no full-screen fireworks (the win panel and its stars still appear at once)
+    if (calm()) sfx.firework();
+    else for (var i = 0; i < 5; i++) firework(true);
   }
 
   function firework(big) {
     var x = 200 + Math.random() * (W - 400), y = 110 + Math.random() * 260;
     var th = G.L ? G.L.theme : themeNow;
     var cols = [['#ffe14d', '#fff6b0'], ['#ff5ad1', '#ffb3e6'], ['#3df2ff', '#b8fbff'], ['#7dff5a', '#d6ffc4'], [th.line, '#ffffff']][Math.floor(Math.random() * 5)];
-    burst(x, y, (big ? 46 : 34) / (calm() ? 2 : 1), { speed: 380, life: 1.2, size: 7, colors: cols, g: 260, screen: true, shape: 1, drag: 1.4 });
+    burst(x, y, big ? 46 : 34, { speed: 380, life: 1.2, size: 7, colors: cols, g: 260, screen: true, shape: 1, drag: 1.4 });
     ring(x, y, cols[0], 10, 150, 0.5, true);
     sfx.firework();
   }

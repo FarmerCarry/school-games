@@ -52,3 +52,32 @@ test('failed saves stay visible until a retry writes every key', async t => {
   });
   assert.deepEqual(retried, { state: 'saved', att: { 'neon-steps': 1 }, last: 0, attempts: 1 });
 });
+
+test('toasts wait while a death popup is up, then show in full', async t => {
+  const page = await game(t);
+  const r = await page.evaluate(() => {
+    const toast = document.getElementById('toast'), shown = () => (toast.hidden ? null : toast.textContent);
+    const untilDeath = () => { for (let n = 0; n < 2000 && !__game.ff(1).dead; n++); };
+    const during = () => { const seen = []; for (let i = 0; i < 95; i++) { __game.ff(1); seen.push(shown()); } return seen.filter(Boolean); };
+    __game.start(0, false);
+    while (__game.state.attempt < 5) __game.ff(1);
+    // The 5th death queues the practice hint; as a new best it also raises the centred popup,
+    // which sits just under the toast band. The popup lasts 1.6 s (96 ticks).
+    __game.save.best['neon-steps'] = 0;
+    untilDeath();
+    const queued = { atDeath: shown(), during: during() };
+    __game.ff(3);
+    queued.after = shown();
+    // A toast that is already showing steps aside for a new death popup and comes back afterwards.
+    __game.save.best['neon-steps'] = 0;
+    __game.skipTo(4);
+    untilDeath();
+    const showing = { atDeath: shown(), during: during() };
+    __game.ff(3);
+    showing.after = shown();
+    return { queued, showing };
+  });
+  const hint = 'صعبة؟ جرّب وضع التدريب: اضغط P ثم «وضع التدريب»';
+  assert.deepEqual(r.queued, { atDeath: null, during: [], after: hint });
+  assert.deepEqual(r.showing, { atDeath: null, during: [], after: hint });
+});
