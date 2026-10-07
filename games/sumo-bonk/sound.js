@@ -158,7 +158,8 @@
     var step = 60 / music.tempo / 4;
     if (music.next < ctx.currentTime) music.next = ctx.currentTime + 0.05;
     while (music.next < ctx.currentTime + 0.15) {
-      schedule(ctx, music.step, music.next);
+      // muted (or the classroom quiet preset): keep the beat counting but build no audio nodes
+      if (!A.muted) schedule(ctx, music.step, music.next);
       music.next += step; music.step = (music.step + 1) % 64;
     }
   };
