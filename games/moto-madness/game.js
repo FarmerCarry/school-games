@@ -94,6 +94,7 @@
     return p;
   }
   function burst(x, y, n, o) {
+    if (o.type === 3 && Kit.motion.reduced()) return; // no confetti with reduced motion; the pop-up text still celebrates
     for (var i = 0; i < n; i++) {
       var a = o.angle != null ? o.angle + (Math.random() - 0.5) * (o.spread || TAU) : Math.random() * TAU;
       var sp = (o.speed || 200) * (0.35 + Math.random() * 0.65);
@@ -130,6 +131,10 @@
     c.globalAlpha = 1;
   }
   function clearParticles() { for (var i = 0; i < PMAX; i++) P[i].on = false; pops.length = 0; wpops.length = 0; }
+  Kit.motion.onChange(function (reduced) {
+    if (reduced) for (var i = 0; i < PMAX; i++) if (P[i].type === 3) P[i].on = false;
+    redraw();
+  });
 
   /* ------------------------------------------------------------ popups */
   var pops = [], wpops = [];
@@ -370,8 +375,9 @@
     r.after = totalStars();
     persist(); // progress first: the ghost below is the bigger, less important write
     if (r.newBest && rec.length >= 6 && rec.length < GHOST_MAX * 3) {
-      r.ghost = true;
-      if (!store.set('ghost' + i, { d: rec })) store.remove('ghost' + i);
+      // a ghost that could not be written is dropped, so nobody is told to race it or races an older, slower one
+      r.ghost = store.set('ghost' + i, { d: rec });
+      if (!r.ghost) { store.remove('ghost' + i); ghost = null; }
     }
   }
   function showComplete() {
@@ -413,7 +419,7 @@
         setTimeout(function () {
           if (state !== 'complete') return;
           els[k].classList.add('on'); MMA.star(k);
-          for (var j = 0; j < 22; j++) part(640 + (k - 1) * 90, 200, (Math.random() - 0.5) * 700, -Math.random() * 500 - 100, 1.2, 10, ['#ffd23f', '#ff5ab4', '#3fb7ff', '#3ddc84'][j % 4], 3, 700);
+          if (!Kit.motion.reduced()) for (var j = 0; j < 22; j++) part(640 + (k - 1) * 90, 200, (Math.random() - 0.5) * 700, -Math.random() * 500 - 100, 1.2, 10, ['#ffd23f', '#ff5ab4', '#3fb7ff', '#3ddc84'][j % 4], 3, 700);
         }, 350 + k * 330);
       })(k);
     }
@@ -429,6 +435,7 @@
   function pause() {
     if (state !== 'play') return;
     state = 'paused';
+    frameDirty = true; // draw the paused scene once (without the in-game hints), then keep it
     showOverlay('pause');
     MMA.silence();
   }
@@ -596,7 +603,7 @@
   };
   var lastInp = { gas: false, brake: false, lean: 0 };
   function update(dt) {
-    clock += dt;
+    if (state !== 'paused') clock += dt; // clouds, snow and flags stand still while paused
     MMA.music(state === 'complete' ? 0.35 : state === 'paused' ? 0.55 : 1);
     if (state === 'play') {
       var inp = readInput();
@@ -715,8 +722,18 @@
   }
 
   /* ----------------------------------------------------------- render */
+  // A paused game keeps its last frame; it is drawn again only after a resize, a GPU reset,
+  // late fonts or a motion setting change.
+  var frameDirty = true;
+  function redraw() { frameDirty = true; }
+  window.addEventListener('resize', redraw);
+  if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', redraw);
+  // a GPU reset (e.g. after the PC wakes from sleep) wipes the canvas transform and the cached backdrop
+  canvas.addEventListener('contextrestored', function () { view.resize(); MMR.dropLayers(); redraw(); });
   function render() {
     if (!world || window.__noRender) return;
+    if (state === 'paused' && !frameDirty) return;
+    frameDirty = false;
     var c = { x: cam.x + shake.x, y: cam.y + shake.y, zoom: cam.zoom };
     ctx.save();
     MMR.drawWorld(ctx, world, c, clock, curSkin, { lean: lean, crouch: crouch, noSigns: demo, beforeBike: drawGhost, afterBike: function (g) {

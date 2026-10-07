@@ -94,3 +94,28 @@ test('Moto Madness a clean run with landed flips earns 3 stars on every level', 
     assert.ok(run.time <= stars[0] - 0.3, `${name}: flipping took ${run.time} s, 3 stars is ${stars[0]} s`);
   }
 });
+
+// The tutorial sign before 1-1's first kicker says to press ← on the ramp. A kid who does that
+// anywhere along the ramp, and lets go when the flip meter turns green or a little later,
+// lands the flip and earns 3 stars: the timing is forgiving, not frame-perfect.
+test('Moto Madness the 1-1 tutorial flip works from anywhere on the ramp', () => {
+  const kicker = MM.build(MM.LEVELS[0]).shapes.find(s => s.type === 'kicker');
+  const stars = MM.LEVELS[0].stars;
+  for (const along of [0, 0.5, 0.9]) {
+    for (const letGo of [0, 0.3]) {
+      let phase = 'ride', green = null;
+      const run = ride(0, w => {
+        const b = w.bike;
+        if (phase === 'ride' && w.grounded && b.x >= kicker.x1 + (kicker.x2 - kicker.x1) * along && b.x < kicker.x2) phase = 'ramp';
+        if (phase === 'ramp' && !w.grounded) phase = 'air';
+        if (phase === 'air' && w.grounded) phase = 'done';
+        if (phase === 'air' && green == null && Math.abs(w.bike.a - w.takeoffA) >= TAU - 1.1) green = w.time;
+        const lean = phase === 'ramp' || (phase === 'air' && (green == null || w.time - green < letGo));
+        return { gas: true, brake: false, lean: lean ? -1 : 0 };
+      });
+      const label = `pressed ${along * 100}% along the ramp, let go ${letGo} s after green`;
+      assert.ok(run.finished && run.crashes === 0 && run.flips === 1, `${label}: ${JSON.stringify(run)}`);
+      assert.ok(run.time <= stars[0] - 0.3, `${label}: took ${run.time} s, 3 stars is ${stars[0]} s`);
+    }
+  }
+});

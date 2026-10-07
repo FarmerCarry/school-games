@@ -4,6 +4,8 @@
  * (see Builder in engine.js). stars: [3-star time, 2-star time] in seconds.
  * The 3-star time is about 0.5 s under the best clean ride without flips, so it takes at
  * least one landed flip; just holding ↑ earns 2 stars (tools/tests/moto-balance.test.mjs).
+ * On 1-1 (the tutorial) and 4-2 that margin is only 0.2-0.3 s, so one landed flip in an
+ * otherwise slow or wobbly ride still earns the third star.
  */
 (function (root) {
   'use strict';
@@ -18,14 +20,14 @@
 
   MM.LEVELS = [
     /* ------------------------------------------------------------ GRASSLAND */
-    { name: 'أول جولة', theme: 'grass', seed: 1, stars: [19.8, 35], build: function (b) {
+    { name: 'أول جولة', theme: 'grass', seed: 1, stars: [20.1, 35], build: function (b) {
       b.flat(220).sign('اضغط ↑ لتنطلق!', 160).flat(620)
         .hill(600, 60).flat(300)
         .sign('← أو → لإمالة الدراجة').flat(300)
         .hill(700, 120).flat(300)
         .bumps(3, 240, 24).flat(400)
         .checkpoint().flat(160)
-        .sign('اقفز! واضغط ← في الهواء لتتشقلب').flat(420)
+        .sign('اضغط ← وأنت على المنحدر لتتشقلب!').flat(420)
         .kicker(220, 80).flat(900)
         .to(500, 130).flat(300).crates([2, 1]).flat(260)
         .to(600, -130).flat(500)
@@ -299,7 +301,7 @@
         .boost(220).kicker(260, 110).pit(640, 260).flat(600)
         .hill(800, 160).flat(500);
     } },
-    { name: 'ساحة المكابس', theme: 'factory', seed: 17, stars: [24.6, 43], build: function (b) {
+    { name: 'ساحة المكابس', theme: 'factory', seed: 17, stars: [24.8, 43], build: function (b) {
       b.flat(600).sign('قف على المكبس! ↓ للفرامل').flat(400)
         .lift(300, 320).flat(700)
         .landing(700, 240).flat(300)
