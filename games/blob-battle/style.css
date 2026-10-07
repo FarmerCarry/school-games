@@ -129,10 +129,8 @@ button { font-family: var(--sg-font); cursor: pointer; }
 }
 
 /* ------------------------------------------------------------ skins */
-.skinsPanel {
-  position: absolute; left: 50%; top: 50%; width: 1040px; margin-left: -520px;
-  transform: translateY(-50%); text-align: center; animation: sg-pop 0.25s ease-out;
-}
+/* centred by the flex .scr.center parent, so sg-pop's transform cannot shift it */
+.skinsPanel { width: 1040px; text-align: center; animation: sg-pop 0.25s ease-out; }
 .skinsPanel h2 { margin: 0 0 10px; font-size: 38px; color: #7b61ff; }
 .skinsPanel h2 small { font-size: 24px; color: #5a6190; }
 #skinGrid { display: grid; grid-template-columns: repeat(10, 88px); gap: 9px; justify-content: center; }
