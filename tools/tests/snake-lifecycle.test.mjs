@@ -247,6 +247,29 @@ test('Snake Arena warns when a save fails and clears it only after a confirmed r
   assert.deepEqual(value.stored, value.current);
 });
 
+test('Snake Arena preference saves keep newer stats from another tab but send pending stats', async t => {
+  const page = await gamePage(t);
+  const result = await page.evaluate(() => {
+    const store = Kit.store('snake-arena'), newer = { ...__game.stats, games: 7, bestLen: 321 };
+    store.set('stats', newer); // another tab finished rounds after this one loaded
+    document.getElementById('btnDice').click();
+    const kept = { stats: store.get('stats'), name: store.get('name') === __game.prefs.name };
+    // A round whose stats write fails stays pending until the next preference save.
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => { throw new DOMException('Full storage fixture', 'QuotaExceededError'); };
+    Object.assign(SA.game.run, { t: 5, kills: 1 });
+    __game.killPlayer();
+    stepGame(120);
+    Storage.prototype.setItem = setItem;
+    document.getElementById('btnDice').click();
+    return { newer, kept, current: __game.stats, stored: store.get('stats'), status: document.querySelector('.sg-save-status').dataset.state };
+  });
+  assert.deepEqual(result.kept, { stats: result.newer, name: true });
+  assert.equal(result.current.games, 1);
+  assert.deepEqual(result.stored, result.current);
+  assert.equal(result.status, 'saved');
+});
+
 test('Snake Arena draws a paused scene once, redraws it after resize or context restore, and resumes', async t => {
   const page = await gamePage(t);
   const draws = await page.evaluate(() => {
@@ -269,13 +292,20 @@ test('Snake Arena draws a paused scene once, redraws it after resize or context 
   assert.deepEqual(draws, { first: true, idle: 0, resized: true, resizedIdle: 0, restored: true, restoredIdle: 0, playing: true });
 });
 
-test('Snake Arena keeps the camera still under reduced motion', async t => {
+test('Snake Arena keeps the camera still and pops snakes with one small burst under reduced motion', async t => {
   const page = await gamePage(t);
-  const cam = await page.evaluate(() => {
+  const result = await page.evaluate(() => {
     Kit.motion.setPreference('reduce');
     SA.game.shake = 22;
     stepGame();
-    return [SA.game.shake, SA.render.cam.sx, SA.render.cam.sy];
+    const cam = [SA.game.shake, SA.render.cam.sx, SA.render.cam.sy];
+    let bursts = 0;
+    const burst = SA.render.burst;
+    SA.render.burst = function () { bursts++; return burst.apply(this, arguments); };
+    __game.trapBot(); // a bot right next to the player, well inside the camera view
+    SA.world.killSnake(SA.world.snakes[1], null, 'border');
+    stepGame();
+    return { cam, bursts };
   });
-  assert.deepEqual(cam, [0, 0, 0]);
+  assert.deepEqual(result, { cam: [0, 0, 0], bursts: 1 });
 });
