@@ -29,19 +29,25 @@
     return c;
   }
   // One cached sprite per glow colour. Callers pass fixed colours and fade with
-  // globalAlpha; past GLOW_MAX colours a sprite is used once and not kept, so a
-  // changing colour string can never fill memory with canvases.
-  var glows = {}, nGlows = 0, GLOW_MAX = 32;
-  function glow(color) {
-    if (glows[color]) return glows[color];
-    var c = makeCanvas(64, 64), g = c.getContext('2d');
+  // globalAlpha. Past GLOW_MAX colours one scratch sprite is repainted and reused,
+  // so a changing colour string can neither fill memory nor allocate every frame.
+  var glows = {}, nGlows = 0, GLOW_MAX = 32, glowScratch = null;
+  function paintGlow(c, color) {
+    var g = c.getContext('2d');
     var gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
     gr.addColorStop(0, color); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.clearRect(0, 0, 64, 64);
     g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-    if (nGlows < GLOW_MAX) { glows[color] = c; nGlows++; }
     return c;
   }
+  function glow(color) {
+    if (glows[color]) return glows[color];
+    if (nGlows < GLOW_MAX) { nGlows++; return (glows[color] = paintGlow(makeCanvas(64, 64), color)); }
+    return paintGlow(glowScratch || (glowScratch = makeCanvas(64, 64)), color);
+  }
   R.glow = glow;
+  // A restored canvas context may come back with blank offscreen sprites.
+  R.clearGlows = function () { glows = {}; nGlows = 0; glowScratch = null; };
   function drawGlow(g, color, x, y, rx, ry) {
     g.drawImage(glow(color), x - rx, y - (ry || rx), rx * 2, (ry || rx) * 2);
   }
