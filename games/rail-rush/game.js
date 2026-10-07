@@ -1403,6 +1403,7 @@
     screens.forEach(function (s) { $(s).hidden = s !== id; });
     $('hud').hidden = !(id === null || id === 'pause');
     $('pauseBtn').hidden = id !== null;
+    document.body.classList.toggle('rr-title', id === 'title'); // places the save warning (index.html)
   }
 
   // HUD
@@ -1620,6 +1621,8 @@
     pausedFrom = S.mode;
     S.mode = 'paused';
     renderDirty = true;
+    // the pause panel replaces in-run pop-ups (a still reduced-motion one would peek out until resume)
+    $('pop').classList.remove('show'); popTimer = 0;
     $('pMissions').innerHTML = save.missions.map(function (m) { return missionRow(m, true); }).join('');
     show('pause');
     music.pause();
