@@ -209,6 +209,8 @@
   function ri(n) { return Math.floor(r() * n); }
   function pick(a) { return a[ri(a.length)]; }
   function canvas(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h || w; return c; }
+  // A context that stays on the CPU, so reading it back (toDataURL) never waits for the GPU.
+  function cpuCtx(c) { try { return c.getContext('2d', { willReadFrequently: true }); } catch (e) { return c.getContext('2d'); } }
   function P(g, x, y, col) { g.fillStyle = col; g.fillRect(x, y, 1, 1); }
   function R4(g, x, y, w, h, col) { g.fillStyle = col; g.fillRect(x, y, w, h); }
   function speckle(g, pal, x0, y0, w, h) { for (var y = y0; y < y0 + h; y++) for (var x = x0; x < x0 + w; x++) P(g, x, y, pick(pal)); }
@@ -439,7 +441,12 @@
     for (var i = 0; i < 6; i++) R4(g, 4, 4 + i * 2 - (i === 0 ? 0 : 0), 8, 2, cols[i]);
     R4(g, 3, 6, 1, 7, cols[2]); R4(g, 12, 6, 1, 7, cols[3]); P(g, 5, 5, '#fff');
   });
-  IT(I.DOOR, function (g) { g.drawImage(TEX[B.DOOR_T], 0, 0, 16, 16, 3, 0, 10, 8); g.drawImage(TEX[B.DOOR_B], 0, 0, 16, 16, 3, 8, 10, 8); });
+  IT(I.DOOR, function (g) {
+    // Drawn from its own CPU canvases, not TEX, so BW.iconURL can repaint it without a GPU read-back.
+    var top = canvas(16), bot = canvas(16);
+    doorTex(cpuCtx(top), true); doorTex(cpuCtx(bot), false);
+    g.drawImage(top, 0, 0, 16, 16, 3, 0, 10, 8); g.drawImage(bot, 0, 0, 16, 16, 3, 8, 10, 8);
+  });
   function pick_(g, head, hi, dark) {
     for (var i = 0; i < 10; i++) { R4(g, 3 + i, 13 - i, 2, 2, '#7a5230'); P(g, 3 + i, 13 - i, '#a87848'); }
     // head: arc from (1,4) to (12,15)? use a curved band
@@ -482,34 +489,22 @@
   // Icon data-URLs for the DOM inventory (32px, crisp).
   // Reading pixels back from a GPU canvas (toDataURL on a canvas fed by the GPU-backed TEX)
   // stalls the main thread until the GPU has caught up with everything queued so far -
-  // hundreds of ms at startup or in the middle of play. So opaque icons are repainted from
-  // their seeded painter onto CPU canvases (willReadFrequently) instead: same pixels, same
-  // PNG, no GPU round-trip. Textures with translucent fills or smoothed drawImage (glass,
-  // ice, water, door) keep the GPU path so their blending stays exactly as before.
+  // hundreds of ms at startup or in the middle of play. So every icon is repainted from its
+  // seeded painter onto CPU canvases (willReadFrequently) instead: same pixels, same PNG,
+  // no GPU round-trip.
   var iconCache = {};
-  var GPU_ICON = {}; GPU_ICON[B.GLASS] = GPU_ICON[B.WATER] = GPU_ICON[B.ICE] = GPU_ICON[I.DOOR] = 1;
-  function cpuCtx(c) { try { return c.getContext('2d', { willReadFrequently: true }); } catch (e) { return c.getContext('2d'); } }
   BW.iconURL = function (id) {
     if (iconCache[id]) return iconCache[id];
-    var c = canvas(32), g, gen = GEN[id];
-    if (TEX[id] && (!gen || GPU_ICON[id])) {
-      g = c.getContext('2d');
-      g.imageSmoothingEnabled = false;
-      g.drawImage(TEX[id], 0, 0, 32, 32);
-    } else {
-      g = cpuCtx(c);
-      g.imageSmoothingEnabled = false;
-      if (gen) {
-        var t = canvas(16), keep = seed;
-        seed = gen[1]; gen[0](cpuCtx(t)); seed = keep;
-        g.drawImage(t, 0, 0, 32, 32);
-      }
+    var c = canvas(32), g = cpuCtx(c), gen = GEN[id];
+    g.imageSmoothingEnabled = false;
+    if (gen) {
+      var t = canvas(16), keep = seed;
+      seed = gen[1]; gen[0](cpuCtx(t)); seed = keep;
+      g.drawImage(t, 0, 0, 32, 32);
     }
     try { iconCache[id] = c.toDataURL(); } catch (e) { iconCache[id] = ''; }
     return iconCache[id];
   };
-  // Builds the few GPU-path icons ahead of time; game.js calls it once at page load.
-  BW.warmGPUIcons = function () { for (var id in GPU_ICON) if (ITEMS[id]) BW.iconURL(+id); };
   BW.itemName = function (id) { if (id === FLOWER) return 'أي زهرة'; var it = ITEMS[id]; return it ? it.name : '?'; };
   BW.maxStack = function (id) { var it = ITEMS[id]; return it && it.max ? it.max : 99; };
 })();

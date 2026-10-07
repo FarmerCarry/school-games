@@ -232,10 +232,12 @@
   }
   var confetti = [];
   function confettiBurst() {
+    if (Kit.motion.reduced()) return;
     var cols = ['#ffcc00', '#ff5a5f', '#3ddc84', '#4f7cff', '#ff8fc8', '#ffffff'];
     for (var i = 0; i < 90; i++) confetti.push({ x: VW / 2 + (Math.random() - 0.5) * 300, y: 120, vx: (Math.random() - 0.5) * 700, vy: -200 - Math.random() * 400, r: Math.random() * 6, vr: (Math.random() - 0.5) * 12, col: cols[i % cols.length], life: 2.5 + Math.random() });
     if (confetti.length > 240) confetti.splice(0, confetti.length - 240);
   }
+  Kit.motion.onChange(function (reduced) { if (reduced) confetti.length = 0; });
 
   // -------------------------------------------------------------- physics
   function makeBody(x, y, w, h) { return { x: x, y: y, w: w, h: h, vx: 0, vy: 0, onGround: false, stepOff: 0 }; }
@@ -391,7 +393,7 @@
     var list = [], wd = G.world;
     function tryAt(x, type) {
       x = Math.floor(x); var y = surfaceY(x), id = wd.get(x, y);
-      if (id !== B.GRASS && id !== B.SNOW_GRASS) return false;
+      if ((id !== B.GRASS && id !== B.SNOW_GRASS) || wd.get(x, y - 1) === B.TRUNK) return false;
       list.push(makeAnimal(type, x + 0.5, y)); return true;
     }
     tryAt(G.spawn.x + 6, 'pig') || tryAt(G.spawn.x + 7, 'pig');
@@ -621,6 +623,9 @@
   var placePop = null;
   function boxOverlap(e, tx, ty) { return e.x < tx + 1 && e.x + e.w > tx && e.y < ty + 1 && e.y + e.h > ty; }
   function tip(s) { G.hint = { s: s, t: 2.2 }; }
+  // A left press on a tree trunk or solid ground mines it even with an animal in front (the
+  // starter pig often wanders onto the guided tree); right-click still pets or shears it.
+  function minesFirst(h) { var id = G.world.get(h.x, h.y), d = BLOCKS[id]; return h.ok && id && !d.liquid && d.hard !== Infinity && (id === B.TRUNK || d.solid); }
 
   function updateHands(dt) {
     var wx = G.cam.x + M.x / TS, wy = G.cam.y + M.y / TS;
@@ -633,7 +638,7 @@
     if (M.lp && hb >= 0) { G.sel = hb; selChanged(); mine.block = true; }
     if (!M.left) mine.block = false;
     // animals
-    if ((M.lp || M.rp) && hb < 0) {
+    if ((M.rp || (M.lp && !minesFirst(G.hover))) && hb < 0) {
       var an = animalAt(wx, wy);
       if (an && Math.abs(an.x + an.w / 2 - pcx) < reach() + 1) { petAnimal(an); mine.block = true; P.swingT = 0.25; P.face = wx < pcx ? -1 : 1; M.lp = M.rp = false; return; }
     }
@@ -672,7 +677,11 @@
         P.face = wx < pcx ? -1 : 1;
         var ok = placeBlock(G.sel, tx, ty);
         placeCD = M.rp ? 0.28 : 0.13;
-        if (!ok && M.rp) { var s = G.inv[G.sel]; if (s && ITEMS[s.id] && !ITEMS[s.id].place) tip(ITEMS[s.id].tool ? 'المعول يعمل وحده - اضغط مطوّلًا بالزر الأيسر لتحفر!' : 'لا يمكنك وضع ' + ITEMS[s.id].name + ' - استعمله في الصنع (E)'); }
+        if (!ok && M.rp) {
+          var s = G.inv[G.sel], qs = questPlaceSlot();
+          if (qs >= 0) tip('اختر ' + BW.itemName(G.inv[qs].id) + ' بالضغط على ' + ltr(String(qs + 1)) + ' ثم انقر يمينًا');
+          else if (s && ITEMS[s.id] && !ITEMS[s.id].place) tip(ITEMS[s.id].tool ? 'المعول يعمل وحده - اضغط مطوّلًا بالزر الأيسر لتحفر!' : 'لا يمكنك وضع ' + ITEMS[s.id].name + ' - استعمله في الصنع (E)');
+        }
       }
     }
     if (M.wheel) { G.sel = (G.sel + (M.wheel > 0 ? 1 : -1) + 9) % 9; M.wheel = 0; selChanged(); }
@@ -997,7 +1006,11 @@
     env.ambient = 0.075;
     if (P && G.mode !== 'title') { env.px = P.x + P.w / 2; env.py = P.y + 0.8; env.pglow = 0.5; } else { env.px = -99; env.py = -99; env.pglow = 0; }
     rend.drawLight(ctx, cx, cy, VTW, VTH, env, S);
-    drawSkyCached(ctx, cx, cy, S);
+    // Two tiles below the generated surface every tile has a background wall (world.js), so
+    // when the whole view is that deep the sky is fully hidden: skip drawing it.
+    var c0 = Math.max(0, Math.floor(cx)), c1 = Math.min(W - 1, Math.ceil(cx + VTW)), ms = 0;
+    for (var col = c0; col <= c1; col++) if (G.world.surf[col] > ms) ms = G.world.surf[col];
+    if (cy < ms + 2) drawSkyCached(ctx, cx, cy, S);
     ctx.imageSmoothingEnabled = false;
     drawEmissive(ctx, cx, cy, env);
     drawParticles(ctx, cx, cy, true);
@@ -1103,6 +1116,15 @@
     for (var i = 0; i < BW.RECIPES.length; i++) if (BW.RECIPES[i].out === out) return BW.RECIPES[i];
     return null;
   }
+  // Quests that are finished by placing something: which item has to be selected first.
+  var QUEST_PLACE = { tableplace: B.TABLE, torchplace: B.TORCH, sapling: B.SAPLING, door: I.DOOR };
+  // Hotbar slot holding the current place quest's item while another slot is selected, else -1.
+  function questPlaceSlot() {
+    var q = G.gm === 'survival' && G.mode === 'play' && currentQuest(), id = q && QUEST_PLACE[q.id], cur = G.inv[G.sel];
+    if (!id || (cur && cur.id === id)) return -1;
+    for (var i = 0; i < 9; i++) if (G.inv[i] && G.inv[i].id === id) return i;
+    return -1;
+  }
   function updateGuide() {
     guide = null;
     var q = currentQuest();
@@ -1203,7 +1225,7 @@
     var h = G.hover, x = sx(h.x, cx), y = sx(h.y, cy);
     if (hotbarHit(M.x, M.y) >= 0) return;
     var an = animalAt(G.cam.x + M.x / TS, G.cam.y + M.y / TS);
-    if (an) { ctx.fillStyle = '#ff5a8a'; heart(ctx, M.x, M.y - 18, 2.5); return; }
+    if (an && !minesFirst(h)) { ctx.fillStyle = '#ff5a8a'; heart(ctx, M.x, M.y - 18, 2.5); return; }
     var id = G.world.get(h.x, h.y);
     var s = G.inv[G.sel];
     if (h.ok && !id && s && ITEMS[s.id] && ITEMS[s.id].place && TEX[ITEMS[s.id].place]) {
@@ -1280,6 +1302,14 @@
       rrect(ctx, ebx - 2 - pulse * 2, eby - 2 - pulse * 2, 74 + pulse * 4, 66 + pulse * 4, 16); ctx.stroke();
       ctx.fillStyle = '#ff5a5f'; ctx.beginPath(); ctx.arc(ebx + 66, eby + 2, 11, 0, Math.PI * 2); ctx.fill();
       txt(ctx, '!', ebx + 66, eby + 9, 17, '#fff', 'center');
+    }
+    // ...and the hotbar slot to pick when the current quest is to place an item
+    var qs = questPlaceSlot();
+    if (qs >= 0) {
+      var qsx = HB.x + qs * (HB.s + HB.g), qp = 0.5 + Math.sin(G.time * 7) * 0.5;
+      ctx.lineWidth = 3 + qp * 2; ctx.strokeStyle = 'rgba(255,204,0,' + (0.5 + qp * 0.5) + ')';
+      rrect(ctx, qsx - 3 - qp * 2, HB.y - 3 - qp * 2, HB.s + 6 + qp * 4, HB.s + 6 + qp * 4, 12); ctx.stroke();
+      if (!(G.selName > 0)) txt(ctx, 'اضغط ' + ltr(String(qs + 1)), qsx + HB.s / 2, HB.y - 14 - Math.abs(Math.sin(G.time * 5)) * 6, 18, '#ffe066', 'center');
     }
     // selected item name
     var cur = G.inv[G.sel];
@@ -1598,10 +1628,6 @@
   var PALETTE = [];
   Object.keys(ITEMS).forEach(function (k) { var it = ITEMS[k]; if (it.place && TEX[it.place]) PALETTE.push(+k); });
   PALETTE.sort(function (a, b) { return a - b; });
-  // The few icons that still need a GPU read-back (glass, ice, door) are built here at page load,
-  // exactly where the old palette code built them: the GPU queue is nearly empty now, whereas
-  // later (after the title screen has been drawing) each read-back waits for the whole backlog.
-  BW.warmGPUIcons();
   // Palette icons get their src when a creative world starts (fillPalette), not at page load.
   var palImgs = [], palFilled = false;
   function fillPalette() {
