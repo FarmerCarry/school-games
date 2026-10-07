@@ -32,7 +32,9 @@
     if (s && typeof s === 'object') for (var k in save) if (s[k] != null && typeof s[k] === typeof save[k]) save[k] = s[k];
     save.unlocked = Kit.clamp(save.unlocked | 0, 1, LEVELS.length);
   })();
-  function persist() { store.set('save', save); }
+  // A failed write keeps an Arabic warning with a retry button until a later write succeeds.
+  var saveStatus = Kit.saveStatus({ retry: persist });
+  function persist() { if (store.set('save', save) === false) saveStatus.failed(); else saveStatus.saved(); }
   function starBits(i) { return save.stars[i] | 0; }
   function popcount(b) { return (b & 1) + ((b >> 1) & 1) + ((b >> 2) & 1); }
   function totalStars() { var n = 0; for (var i = 0; i < LEVELS.length; i++) n += popcount(starBits(i)); return n; }
@@ -225,6 +227,9 @@
   /* ------------------------------------------------------------- particles */
   var PMAX = 480, parts = [], pcur = 0;
   for (var pi = 0; pi < PMAX; pi++) parts.push({ on: false });
+  // Reduced motion / classroom preset: smaller bursts, no speed lines or white flash.
+  var calm = Kit.motion.reduced();
+  Kit.motion.onChange(function (r) { calm = r; if (r) flashT = 0; });
   function P(type, x, y, vx, vy, life, size, color, g, drag) {
     var p = parts[pcur]; pcur = (pcur + 1) % PMAX;
     p.on = true; p.type = type; p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.life = life; p.max = life;
@@ -233,6 +238,7 @@
     return p;
   }
   function burst(x, y, n, o) {
+    if (calm) n = Math.ceil(n * 0.25);
     for (var i = 0; i < n; i++) {
       var a = o.angle != null ? o.angle + (Math.random() - 0.5) * (o.spread || TAU) : Math.random() * TAU;
       var sp = (o.speed || 300) * (0.35 + Math.random() * 0.65);
@@ -312,6 +318,7 @@
   var lvl = 0, endless = false, attract = false;
   var L = null, w = null, theme = THEMES[0];
   var deadT = 0, winT = 0, slow = 1, needFresh = false, readyT = 0, stuckT = 0, runT = 0;
+  var resumeWait = false;   // resumed mid-swing: the world waits until the player holds again
   var cam = { x: 0, y: 0, z: 0.9 };
   var shake = Kit.shake();
   var time = 0, squash = 0, squashV = 0, ropeT = 1, blinkT = 2;
@@ -418,7 +425,7 @@
   /* ---------------------------------------------------------- level setup */
   function useLevel(Lv) {
     L = Lv; w = Sim.create(L);
-    deadT = 0; winT = 0; slow = 1; readyT = 0; stuckT = 0; runT = 0; ropeT = 1;
+    deadT = 0; winT = 0; slow = 1; readyT = 0; stuckT = 0; runT = 0; ropeT = 1; resumeWait = false;
     squash = 0; squashV = 0;
     trailN = 0; trailI = 0;
     clearParts();
@@ -491,7 +498,7 @@
           break;
         case 'release':
           if (loud) sfx.whoosh(e.sp);
-          if (e.sp > 900) {
+          if (e.sp > 900 && !calm) {
             for (var k = 0; k < 6; k++) P('streak', w.x + (Math.random() - 0.5) * 30, w.y + (Math.random() - 0.5) * 30, w.vx * 0.6, w.vy * 0.6, 0.3, 5, 'rgba(255,255,255,0.9)', 0, 0.9);
           }
           kick(4);
@@ -603,10 +610,20 @@
     if (attract) hold = End.autopilot(w, apMem);
     else if (auto) { hold = !!auto.frames[auto.i]; auto.i++; if (auto.i >= auto.frames.length) auto = null; }
     else hold = holdInput();
+    if (resumeWait) {
+      if (hold) resumeWait = false;
+      else {
+        // still hanging on: timer and physics stay frozen, only effects settle
+        updateRag(); updateCamera(dt); updateParts(dt); updatePops(dt); shake.update(dt); updateWind(0, false);
+        blinkT -= dt; if (blinkT < -0.12) blinkT = 1.5 + Math.random() * 3;
+        return;
+      }
+    }
     if (needFresh) { if (!hold) needFresh = false; hold = false; }
     if (w.st === 'ready') readyT += dt; else runT += dt;
 
-    Sim.step(w, dt * slow, hold);
+    var sdt = dt * slow;
+    Sim.step(w, sdt, hold);
     handleEvents();
 
     if (endless) {
@@ -615,7 +632,7 @@
       if (!attract && w.st === 'play') {
         var eti = Math.floor(dist() / 250) % THEMES.length;
         if (THEMES[eti] !== theme) {
-          theme = THEMES[eti]; flashT = 0.4;
+          theme = THEMES[eti]; flashT = calm ? 0 : 0.4;
           popup(theme.name + '!', w.x + 120, w.y - 130, '#fff', 44);
           sfx.ring();
         }
@@ -648,6 +665,14 @@
     if (w.st === 'won') {
       winT += dt;
       slow = winT < 0.7 ? 0.3 : 1;
+      // Celebrate in the air instead of sinking into the sea: cancel gravity, ease off the
+      // speed, float up a little above the water and turn upright for the cheer pose.
+      // (Done here, not in sim.js, so the level verifier and recorded solutions are unchanged.)
+      var k = Math.exp(-3.5 * dt), top = L.sea - 170;
+      w.vy -= Sim.G * sdt;
+      w.vx *= k; w.vy = w.vy * k - 70 * (1 - k);
+      if (w.y > top) { w.y += (top - w.y) * (1 - Math.exp(-6 * dt)); if (w.vy > 0) w.vy = 0; }
+      w.av += (Math.atan2(-Math.sin(w.ang), Math.cos(w.ang)) * 5 - w.av) * (1 - k);
       if (winT > 0.2 && winT < 1.2 && Math.random() < 0.3) confetti(w.x + (Math.random() - 0.5) * 400, w.y - 300, 6);
       if (winT > 1.5 && mode === 'play') showResult();
     }
@@ -742,7 +767,68 @@
     }
     c.globalAlpha = 1;
     drawHills(c, th.far, 0.18, 470 + yOff, 70, 0.0035, th.hill, 1.7);
+    drawDecor(c, ti, 670 + yOff * 1.25);
     drawHills(c, th.near, 0.38, 560 + yOff * 1.5, 60, 0.005, th.hill, 4.2);
+  }
+  // Scenery between the hill layers, one look per world: trees and bushes, lollipops and
+  // gumdrops, cacti and rock arches, crystal spires. Flat shapes on a middle parallax; the
+  // ground line g sits low enough that the near hills always hide their bottoms.
+  var DECO = [
+    ['#6fcf68', '#93e184', '#a3794f'],
+    ['#ff9fd6', '#fff3fa', '#9fe3d3'],
+    ['#7f9f55', '#a0bd69', '#d46a44'],
+    ['#5242bd', '#7d6cec', '#ffffff']
+  ];
+  function drawDecor(c, ti, g) {
+    var d = DECO[ti], SLOT = 210, ox = cam.x * 0.27;
+    c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+    for (var k = Math.floor((ox - 200) / SLOT); k * SLOT < ox + W + 200; k++) {
+      var r = hash(k * 0.73 + ti * 5.1);
+      if (r < 0.15) continue; // leave a few gaps
+      var x = k * SLOT + hash(k * 1.91) * 90 - ox, s = 0.8 + hash(k * 3.7) * 0.5, big = r > 0.5;
+      c.beginPath();
+      if (ti === 0) {
+        if (big) { c.fillStyle = d[2]; c.fillRect(x - 7 * s, g - 160 * s, 14 * s, 160 * s); blob(c, x, g - 185 * s, 46 * s); blob(c, x - 34 * s, g - 150 * s, 34 * s); blob(c, x + 34 * s, g - 150 * s, 34 * s); }
+        else { blob(c, x - 34 * s, g - 100 * s, 38 * s); blob(c, x, g - 125 * s, 48 * s); blob(c, x + 36 * s, g - 98 * s, 38 * s); c.rect(x - 72 * s, g - 100 * s, 146 * s, 100 * s); }
+        c.fillStyle = d[0]; c.fill();
+        c.fillStyle = d[1]; c.beginPath(); c.arc(x - 14 * s, g - (big ? 200 : 140) * s, 15 * s, 0, TAU); c.fill();
+      } else if (ti === 1) {
+        var col = k & 1 ? d[0] : d[2];
+        if (big) {
+          c.fillStyle = d[1]; c.fillRect(x - 5 * s, g - 170 * s, 10 * s, 170 * s);
+          c.fillStyle = col; c.arc(x, g - 195 * s, 42 * s, 0, TAU); c.fill();
+          // swirl from four half circles with growing radius
+          c.strokeStyle = d[1]; c.lineWidth = 6 * s; c.beginPath();
+          for (var j = 1; j <= 4; j++) c.arc(x + (j & 1 ? 3 : -3) * s, g - 195 * s, j * 6 * s, j & 1 ? Math.PI : 0, j & 1 ? 0 : Math.PI);
+          c.stroke();
+        } else {
+          c.fillStyle = col; c.moveTo(x - 70 * s, g); c.arc(x, g - 100 * s, 70 * s, Math.PI, 0); c.lineTo(x + 70 * s, g); c.fill();
+          c.fillStyle = d[1];
+          for (var i = 0; i < 4; i++) c.fillRect(x + (i * 30 - 50) * s, g - (125 + (i & 1) * 26) * s, 7 * s, 7 * s);
+        }
+      } else if (ti === 2) {
+        if (big) {
+          c.strokeStyle = d[0]; c.lineWidth = 30 * s;
+          c.moveTo(x, g); c.lineTo(x, g - 200 * s);
+          c.moveTo(x, g - 100 * s); c.lineTo(x - 38 * s, g - 100 * s); c.lineTo(x - 38 * s, g - 150 * s);
+          c.moveTo(x, g - 120 * s); c.lineTo(x + 36 * s, g - 120 * s); c.lineTo(x + 36 * s, g - 165 * s); c.stroke();
+          c.strokeStyle = d[1]; c.lineWidth = 6 * s; c.beginPath(); c.moveTo(x - 6 * s, g - 40 * s); c.lineTo(x - 6 * s, g - 195 * s); c.stroke();
+        } else {
+          c.fillStyle = d[2]; c.moveTo(x - 80 * s, g); c.arc(x, g - 110 * s, 80 * s, Math.PI, 0); c.lineTo(x + 80 * s, g);
+          c.lineTo(x + 40 * s, g); c.arc(x, g - 100 * s, 40 * s, 0, Math.PI, true); c.lineTo(x - 40 * s, g); c.fill();
+        }
+      } else {
+        if (big) { spire(c, d, x - 30 * s, g, 130 * s, 18 * s); spire(c, d, x + 28 * s, g, 155 * s, 20 * s); spire(c, d, x, g, 230 * s, 26 * s); }
+        else { spire(c, d, x + 34 * s, g, 110 * s, 16 * s); spire(c, d, x, g, 180 * s, 22 * s); }
+        if (r > 0.7) { c.fillStyle = d[2]; drawStar(c, x, g - (big ? 290 : 235) * s, 7 * s, 0); c.fill(); }
+      }
+    }
+    c.restore();
+  }
+  function blob(c, x, y, r) { c.moveTo(x + r, y); c.arc(x, y, r, 0, TAU); }
+  function spire(c, d, x, g, h, w2) {
+    c.fillStyle = d[0]; c.beginPath(); c.moveTo(x - w2, g); c.lineTo(x - w2, g - h); c.lineTo(x, g - h - w2 * 1.5); c.lineTo(x + w2, g - h); c.lineTo(x + w2, g); c.fill();
+    c.fillStyle = d[1]; c.beginPath(); c.moveTo(x, g); c.lineTo(x, g - h - w2 * 1.5); c.lineTo(x + w2, g - h); c.lineTo(x + w2, g); c.fill();
   }
   function hash(n) { var s = Math.sin(n * 127.1) * 43758.5453; return s - Math.floor(s); }
   function drawHills(c, color, f, base, amp, freq, style, seed) {
@@ -769,7 +855,7 @@
   }
 
   function drawSpeedLines(c) {
-    if (!w || w.st !== 'play') return;
+    if (!w || w.st !== 'play' || calm) return;
     var sp = Sim.speed(w);
     if (sp < 1250) return;
     var a = Math.min(0.5, (sp - 1250) / 1500);
@@ -905,17 +991,18 @@
     drawPops(c, cam.z);
     drawWater(c, vb);
 
-    // ready prompt near player
-    if (w.st === 'ready' && !attract && mode === 'play') {
+    // prompt near the player: before the launch, and after resuming mid-swing
+    var ask = attract || mode !== 'play' ? '' : w.st === 'ready' ? 'اضغط مطولًا لتنطلق!' : resumeWait ? 'اضغط مطولًا للمتابعة!' : '';
+    if (ask) {
       var a = 0.75 + Math.sin(time * 6) * 0.25;
       c.save(); c.translate(w.x, w.y - 78 + Math.sin(time * 5) * 4); c.scale(1 / cam.z * 0.9, 1 / cam.z * 0.9);
       c.globalAlpha = a;
       c.font = '700 30px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
-      c.lineJoin = 'round'; c.lineWidth = 8; c.strokeStyle = '#2a1747'; c.strokeText('اضغط مطولًا لتنطلق!', 0, 0);
-      c.fillStyle = '#ffe14d'; c.fillText('اضغط مطولًا لتنطلق!', 0, 0);
+      c.lineJoin = 'round'; c.lineWidth = 8; c.strokeStyle = '#2a1747'; c.strokeText(ask, 0, 0);
+      c.fillStyle = '#ffe14d'; c.fillText(ask, 0, 0);
       c.restore(); c.globalAlpha = 1;
     }
-    if (tutorialRelease && w.hook && w.st === 'play' && !attract) {
+    if (tutorialRelease && w.hook && w.st === 'play' && !attract && !resumeWait) {
       var va = Math.atan2(-w.vy, w.vx);
       var good = w.vx > 150 && va > 0.35 && va < 1.3 && w.x > w.hook.cx;
       if (good) {
@@ -1273,7 +1360,7 @@
 
   /* -------------------------------------------------------------------- HUD */
   function panel(c, x, y, w2, h2) {
-    c.fillStyle = 'rgba(35,22,80,0.55)'; rr(c, x, y, w2, h2, 18); c.fill();
+    c.fillStyle = 'rgba(35,22,80,0.8)'; rr(c, x, y, w2, h2, 18); c.fill();
     c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 3; c.stroke();
   }
   // dir: 'rtl' for Arabic (default), 'ltr' for pure numbers like "3.4 / 5".
@@ -1345,7 +1432,7 @@
       if (w.st === 'ready' && readyT < 1.6 && tries <= 1) {
         var k = Math.min(1, readyT * 4), out = readyT > 1.2 ? (readyT - 1.2) / 0.4 : 0;
         c.save(); c.globalAlpha = 1 - out; c.translate(W / 2, 290 - out * 40); c.scale(0.6 + 0.4 * k + Math.sin(readyT * 20) * 0.02 * (1 - k), 0.6 + 0.4 * k);
-        text(c, 'المرحلة ' + (lvl + 1), 0, -40, 30, '#ffe14d', 'center', 'rtl');
+        text(c, 'المرحلة ' + (lvl + 1), 0, -60, 30, '#ffe14d', 'center', 'rtl');
         text(c, def.name, 0, 16, 64, '#fff', 'center', 'rtl', 1000);
         c.restore(); c.globalAlpha = 1;
       }
@@ -1370,7 +1457,12 @@
     if (m !== 'play') holdMouse = false;
   }
   function pause() { if (mode !== 'play') return; sfx.click(); setMode('pause'); updateWind(0, false); }
-  function resume() { sfx.click(); setMode('play'); needFresh = holdInput(); }
+  function resume() {
+    sfx.click(); setMode('play');
+    // Mid-swing, keep the rope: freeze until the player holds again instead of letting go.
+    resumeWait = !!(w && w.st === 'play' && w.hook && !auto);
+    needFresh = !resumeWait && holdInput();
+  }
   function toTitle() { attract = false; w = null; setMode('title'); }
 
   function refreshTitle() {
