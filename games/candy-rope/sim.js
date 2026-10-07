@@ -354,19 +354,100 @@
     return false;
   }
 
-  // Runs a whole solution headlessly. plan: [[frame, 'cut', 'p0'], ...]
-  function run(level, plan, maxFrames) {
-    var w = create(level, { visual: false });
-    var k = 0, limit = maxFrames || 1500;
-    while (w.frame < limit && w.state === 'play') {
-      while (k < plan.length && plan[k][0] <= w.frame) { act(w, plan[k].slice(1)); k++; }
+  // Steps w until it ends or reaches frame `end`, doing each plan step s frames after its own frame.
+  function play(w, plan, s, end) {
+    for (var k = 0; w.frame < end && w.state === 'play';) {
+      while (k < plan.length && plan[k][0] + s <= w.frame) act(w, plan[k++].slice(1));
       step(w);
       w.events.length = 0;
     }
+    return w;
+  }
+
+  // Runs a whole solution headlessly. plan: [[frame, 'cut', 'p0'], ...]
+  function run(level, plan, maxFrames) {
+    var w = play(create(level, { visual: false }), plan, 0, maxFrames || 1500);
     return { state: w.state, stars: w.starsGot, frame: w.frame, reason: w.reason, nearest: w.nearest };
   }
 
-  var Sim = { C: C, create: create, step: step, cut: cut, cutRope: cutRope, pop: pop, puff: puff, act: act, run: run, dist: dist, distToSeg: distToSeg, movePos: movePos };
+  // A physics-only copy of a world: shared objects (a rope's anchor is its pin or ring) stay shared.
+  function copy(w) {
+    var seen = new Map();
+    function cp(o) {
+      if (!o || typeof o !== 'object') return o;
+      var r = seen.get(o);
+      if (!r) {
+        seen.set(o, r = Array.isArray(o) ? [] : {});
+        for (var k in o) r[k] = k === 'level' || k === 'pts' || k === 'pieces' || k === 'events' ? null : cp(o[k]);
+      }
+      return r;
+    }
+    var c = cp(w);
+    c.level = w.level; c.visual = false; c.events = []; c.pieces = [];
+    return c;
+  }
+
+  // Plays plan steps, each moved by s frames, on a copy of w: 0 = lost, 1 + stars = won.
+  function tryShift(w, steps, s) {
+    w = play(copy(w), steps, s, steps[steps.length - 1][0] + s + 360);
+    return w.state === 'won' ? 1 + w.starsGot : 0;
+  }
+
+  // res: {shift: tryShift score}, tried every 2 frames. The shift to teach lies in the winning run
+  // nearest s0: the middle of its longest stretch with the most stars that is still 5+ frames wide
+  // (a child is a few frames off), else the middle of the whole run. null when nothing won.
+  function pickShift(res, s0) {
+    var s = null, k, a, b, sc, x, bx, by;
+    for (k in res) if (res[k] && (s === null || Math.abs(k - s0) < Math.abs(s - s0))) s = +k;
+    if (s === null) return null;
+    for (a = s; res[a - 2];) a -= 2;
+    for (b = s; res[b + 2];) b += 2;
+    for (sc = 4; sc > 1; sc--) {
+      x = bx = by = null;
+      for (k = a; k <= b; k += 2) {
+        if (res[k] < sc) { x = null; continue; }
+        if (x === null) x = k;
+        if (bx === null || k - x > by - bx) { bx = x; by = k; }
+      }
+      if (bx !== null && by - bx >= 4) { a = bx; b = by; break; }
+    }
+    return a + 2 * Math.round((b - a) / 4);
+  }
+
+  // Which plan steps the player's moves ([frame, action, arg], in order) did: each move takes the
+  // first unused step with the same action. late = how many frames after its step the last one came.
+  function planRest(plan, moves) {
+    var used = [], late = 0;
+    moves.forEach(function (m) {
+      for (var j = 0; j < plan.length; j++) if (!used[j] && plan[j][1] === m[1] && plan[j][2] === m[2]) { used[j] = 1; late = m[0] - plan[j][0]; return; }
+    });
+    return { used: used, late: late, rest: plan.filter(function (a, j) { return !used[j]; }) };
+  }
+
+  // When does the rest of a plan still win from world w, with every step moved by the same number of
+  // frames, none before frame `from`? Call work() (one simulation each) until it returns true; then
+  // .shift is the move to teach, or null. It tries `late` and late +-4 first and keeps `late` when all
+  // three score the same; otherwise it scans every 2 frames, 13 shifts at a time, up to 90 frames later.
+  function shiftSearch(w, rest, late, from) {
+    var base = play(copy(w), [], 0, from);
+    var lo = from - rest[0][0], s0 = Math.max(lo, late), c = s0, res = {}, q = [s0, s0 - 4, s0 + 4], wide = false;
+    var job = { shift: null, work: function () {
+      if (base.state !== 'play') return true;
+      var s = q.shift();
+      if (s !== undefined) { if (s >= lo && !(s in res)) res[s] = tryShift(base, rest, s); return false; }
+      if (!wide) {
+        wide = true;
+        if (res[s0] && res[s0] === res[s0 + 4] && (res[s0 - 4] === res[s0] || !(s0 - 4 in res))) { job.shift = s0; return true; }
+      } else if ((job.shift = pickShift(res, s0)) !== null || c > s0 + 70) return true;
+      else c += 26;
+      for (var k = 0; k <= 12; k += 2) q.push(c + k, c - k);
+      return false;
+    } };
+    return job;
+  }
+
+  var Sim = { C: C, create: create, step: step, cut: cut, cutRope: cutRope, pop: pop, puff: puff, act: act, run: run, dist: dist, distToSeg: distToSeg, movePos: movePos,
+    copy: copy, tryShift: tryShift, pickShift: pickShift, planRest: planRest, shiftSearch: shiftSearch };
   root.MunchSim = Sim;
   if (typeof module !== 'undefined' && module.exports) module.exports = Sim;
 })(typeof window !== 'undefined' ? window : globalThis);
