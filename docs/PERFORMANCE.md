@@ -157,6 +157,34 @@ is introduced. Repeated shared code across separate game pages is the existing
 downloadable single-file tradeoff; this update does not duplicate dependencies
 within a page or change that packaging decision.
 
+## Game audit fixes, 7 October 2026
+
+A per-game audit for 10–11 year olds on slow-disk, UHD 630 school PCs led to
+reviewed fixes in 13 games. Most of them cost nothing per frame, and several
+remove work: Splat Strike, Neon Slope, Swing Hook, Drift King, Sumo Bonk and
+Tank Splat now keep their last paused frame instead of redrawing it, like the
+games listed above; Fire & Ice no longer creates a new glow canvas on almost
+every frame of a button press; Rail Rush compiles its shaders at boot instead of
+in the middle of a run. Measured with the Linux minified build:
+
+| File | Before bytes | After bytes | Before gzip | After gzip | New limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Connect Four | 42,443 | 50,522 | 13,739 | 16,317 | 52,000 |
+| Tic Tac Toe | 42,421 | 50,500 | 13,714 | 16,296 | 52,000 |
+
+Each board's 8,079-byte increase buys the features the audit found missing: easy
+and medium computer levels (the old computer was unbeatable for children), a
+session score and saved wins per level, win/draw sounds and confetti, a landing
+preview, and larger boards with static gradient materials. The limit is rounded
+up to the next 1,000 bytes plus one, because Windows builds differ slightly.
+
+Every game also grows by 563 bytes: the shared save warning now folds into a
+corner badge that keeps Retry, so a PC whose storage is blocked is not covered
+for the whole session. The other changed games stay inside their unchanged
+limits (Tank Splat is closest, at 106,858 of 110,000). The portal is 348,269
+bytes and the offline cache 4,666,890 bytes, both under unchanged limits. No
+production dependency, request, font or precached file is added.
+
 ## CI, review, and deployed performance
 
 The build workflow runs this check immediately after building, on pull requests

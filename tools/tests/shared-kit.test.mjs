@@ -169,3 +169,21 @@ test('save failure stays visible across failed retries and clears only after con
   status.saved(); h.timers.filter(Boolean).forEach(fn => fn());
   assert.equal(panel.hidden, true);
 });
+
+test('a failure folds into a badge; repeated autosave failures stay folded, Retry unfolds', () => {
+  const h = harness(); let attempts = 0;
+  const status = h.Kit.saveStatus({retry() { attempts++; status.failed(); }});
+  const panel = h.document.body.children[0], retry = panel.children[1];
+  status.failed();
+  assert.equal(panel.getAttribute('data-compact'), 'false', 'a new failure shows the full message');
+  h.timers.filter(Boolean).forEach(fn => fn());
+  assert.equal(panel.getAttribute('data-compact'), 'true', 'the message folds into a corner badge');
+  assert.equal(panel.hidden, false); assert.equal(retry.hidden, false);
+  status.failed();
+  assert.equal(panel.getAttribute('data-compact'), 'true', 'a repeated autosave failure does not unfold it');
+  retry.emit('click');
+  assert.equal(attempts, 1);
+  assert.equal(panel.getAttribute('data-compact'), 'false', 'a failed Retry shows the message again');
+  status.saved();
+  assert.equal(panel.getAttribute('data-compact'), 'false');
+});

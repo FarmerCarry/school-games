@@ -12,7 +12,7 @@ const shared = new Set([
   'asset-optimization.test.mjs', 'harness-regression.test.mjs',
   'balance-replay.test.mjs', 'classroom-files.test.mjs', 'offline-controller.test.mjs',
   'offline-readiness.test.mjs', 'shared-kit.test.mjs', 'level-verifiers.test.mjs',
-  'engine-regressions.test.mjs'
+  'engine-regressions.test.mjs', 'moto-balance.test.mjs'
 ]);
 const files = fs.readdirSync(path.join(repo, 'tools/tests')).filter(file => file.endsWith('.test.mjs')).sort();
 for (const file of shared) {

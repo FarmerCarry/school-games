@@ -186,6 +186,10 @@ canvas { display: block; outline: none; }
 .sg-save-status button { font: inherit; font-weight: 700; color: #3a2a00; background: #ffcc00; border: 0; border-radius: 8px; padding: 5px 10px; cursor: pointer; }
 .sg-save-status button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 .sg-save-status[data-state="saved"] { border-color: #3ddc84; }
+/* Folded failure: a corner badge that keeps Retry and the meaning in its title. */
+.sg-save-status[data-compact="true"] { inset-inline: auto 12px; margin-inline: 0; padding: 4px 6px; font-size: 14px; }
+.sg-save-status[data-compact="true"] span { font-size: 0; }
+.sg-save-status[data-compact="true"] span::before { content: '💾'; font-size: 18px; margin-inline-end: 4px; vertical-align: middle; }
 
 /* Disable decorative CSS motion; canvas gameplay still runs normally. */
 html[data-sg-motion="reduce"] *, html[data-sg-motion="reduce"] *::before, html[data-sg-motion="reduce"] *::after {
