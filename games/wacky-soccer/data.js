@@ -91,17 +91,19 @@
     { id: 'crown', name: 'التاج', price: 250 }
   ];
 
-  // AI skill 0..1 for quick matches.
+  // AI skill 0..1 for quick matches (CPU kick power also grows with it, see kickoff() in game.js).
+  // Checked with balance-sim.js: on Easy a player who keeps pressing wins most matches and one
+  // who never presses loses more often than not.
   WS.DIFFS = [
     { id: 'easy', name: 'سهل', skill: 0.2, reward: 10, color: '#3ddc84' },
     { id: 'normal', name: 'عادي', skill: 0.55, reward: 20, color: '#ffd23f' },
-    { id: 'hard', name: 'صعب', skill: 0.88, reward: 35, color: '#ff5a5f' }
+    { id: 'hard', name: 'صعب', skill: 0.85, reward: 35, color: '#ff5a5f' }
   ];
 
   WS.CUPS = [
     { id: 'bronze', name: 'الكأس البرونزية', color: '#d98a4a', dark: '#8a4f22', skills: [0.15, 0.3, 0.45, 0.58], reward: 100 },
-    { id: 'silver', name: 'الكأس الفضية', color: '#cfd8e6', dark: '#6f7d93', skills: [0.45, 0.58, 0.7, 0.8], reward: 200 },
-    { id: 'gold', name: 'الكأس الذهبية', color: '#ffd23f', dark: '#b8860b', skills: [0.72, 0.82, 0.9, 1.0], reward: 400 }
+    { id: 'silver', name: 'الكأس الفضية', color: '#cfd8e6', dark: '#6f7d93', skills: [0.45, 0.58, 0.7, 0.78], reward: 200 },
+    { id: 'gold', name: 'الكأس الذهبية', color: '#ffd23f', dark: '#b8860b', skills: [0.7, 0.78, 0.85, 0.9], reward: 400 }
   ];
   WS.CUP_ROUNDS = ['المباراة الأولى', 'ربع النهائي', 'نصف النهائي', 'النهائي'];
 

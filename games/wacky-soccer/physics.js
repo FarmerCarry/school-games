@@ -418,11 +418,11 @@
       if (d2 >= rr * rr) continue;
       var d = Math.sqrt(d2) || 0.001, nx = dx / d, ny = dy / d;
       if (d < 0.01) { nx = 0; ny = -1; }
-      // ball pinned under a player: squirt it out sideways instead of crushing it
+      // ball pinned under a player: squirt it out toward the other goal instead of crushing it
+      // (squirting it out backwards was a free own goal whenever a player landed on the ball)
       var pinned = false;
       if (ny > 0.25 && this.y + r >= G - 2) {
-        var sgn = Math.abs(dx) < r * 0.4 ? p.dir : (dx >= 0 ? 1 : -1);
-        nx = sgn * 0.95; ny = -0.31; pinned = true;
+        nx = p.dir * 0.95; ny = -0.31; pinned = true;
       }
       var pvx = s[6] + (s[8] - s[6]) * t, pvy = s[7] + (s[9] - s[7]) * t;
       if (s[0] === 'c') { pvx = s[6]; pvy = s[7]; }
@@ -582,7 +582,7 @@
   };
 
   /* ----------------------------------------------- snapshot (for the CPU) */
-  var PF = ['x', 'y', 'vx', 'vy', 'a', 'av', 'kickT', 'kickHit', 'cool', 'groundT', 'lieT', 'headGround', 'idleT', 'squash', 'flail'];
+  var PF = ['x', 'y', 'vx', 'vy', 'a', 'av', 'kickT', 'kickHit', 'cool', 'groundT', 'lieT', 'headGround', 'idleT', 'squash', 'flail', 'mood', 'moodT'];
   var BF = ['x', 'y', 'vx', 'vy', 'spin', 'ang', 'lastTeam', 'touchP', 'lastT', 'graceP', 'graceT', 'roofT', 'stillT', 'squash', 'r', 'm'];
   World.prototype.snapshot = function (snap) {
     snap = snap || { p: [], b: [], w: [] };

@@ -1,7 +1,9 @@
 /* Wacky Soccer — CPU brain. It only decides WHEN to press the team's one button.
  * Smart part: a short lookahead. It snapshots the world, simulates "press now"
  * and "wait" for ~0.6 s and keeps whichever sends the ball further toward the
- * other goal. skill 0..1 sets how often it looks ahead, how fast it reacts,
+ * other goal. The two branches run on two ticks in a row (both from the same
+ * snapshot) so no single frame pays for the whole lookahead.
+ * skill 0..1 sets how often it looks ahead, how fast it reacts,
  * how picky it is, and how many silly random presses it makes. */
 (function () {
   'use strict';
@@ -10,7 +12,7 @@
   function CPU(side, skill) {
     this.side = side; this.skill = skill;
     this.cool = 0.4; this.pending = -1; this.think = 0.2;
-    this.snap = null; this.lastGain = 0;
+    this.snap = null; this.now = null; this.half = null; this.pressVal = 0; this.lastGain = 0;
   }
   function lerp(a, b, t) { return a + (b - a) * t; }
 
@@ -22,11 +24,21 @@
       if (this.pending < 0) { this.cool = lerp(0.85, 0.22, sk); return true; }
       return false;
     }
-    if (this.cool > 0 || this.think > 0) return false;
-    this.think = lerp(0.26, 0.07, sk) * (0.8 + Math.random() * 0.4);
-    // low skill: sometimes the CPU daydreams for a moment
-    if (Math.random() < (1 - sk) * (1 - sk) * 0.35) { this.cool = lerp(1.2, 0.3, sk) * (0.6 + Math.random() * 0.6); return false; }
-    var want = this.decide(world);
+    var want;
+    if (this.half === world) {
+      // second half of the lookahead started on the previous tick
+      var gain = this.lookaheadEnd(world);
+      this.lastGain = gain;
+      want = gain > lerp(160, 40, sk) || this.approach(world, this.mine(world));
+    } else {
+      this.half = null;   // a lookahead begun before a kickoff belongs to the old world
+      if (this.cool > 0 || this.think > 0) return false;
+      this.think = lerp(0.26, 0.07, sk) * (0.8 + Math.random() * 0.4);
+      // low skill: sometimes the CPU daydreams for a moment
+      if (Math.random() < (1 - sk) * (1 - sk) * 0.35) { this.cool = lerp(1.2, 0.3, sk) * (0.6 + Math.random() * 0.6); return false; }
+      want = this.decide(world);
+      if (this.half) return false;   // decide() started a lookahead: finish it next tick
+    }
     if (!want && Math.random() < (1 - sk) * 0.05) want = true;           // silly random press
     if (want && Math.random() < (1 - sk) * 0.45) { want = false; this.cool = lerp(0.5, 0.2, sk); }   // missed chance
     if (want) this.pending = lerp(0.34, 0.0, sk) + Math.random() * lerp(0.16, 0.02, sk);
@@ -54,11 +66,7 @@
       }
     }
     if (near) {
-      if (Math.random() < sk * sk) {
-        var gain = this.lookahead(world);
-        this.lastGain = gain;
-        return gain > lerp(160, 40, sk) || this.approach(world, me);
-      }
+      if (Math.random() < sk * sk) { this.lookaheadStart(world); return false; }
       return this.heuristic(world, me) || this.approach(world, me);
     }
     // everyone far from the ball: hop toward it now and then
@@ -124,16 +132,26 @@
     return this.value(world, x0, goal);
   };
 
-  CPU.prototype.lookahead = function (world) {
+  var LOOK_T = 0.65;
+  // tick 1: remember the situation and score "press now"
+  CPU.prototype.lookaheadStart = function (world) {
     this.snap = world.snapshot(this.snap);
     world.sim = true;
-    var T = 0.65;
-    var a = this.simulate(world, true, T);
-    world.restore(this.snap);
-    var bVal = this.simulate(world, false, T);
+    this.pressVal = this.simulate(world, true, LOOK_T);
     world.restore(this.snap);
     world.sim = false;
-    return a - bVal;
+    this.half = world;
+  };
+  // tick 2: score "wait" from the same remembered situation, then put the live match back
+  CPU.prototype.lookaheadEnd = function (world) {
+    this.now = world.snapshot(this.now);
+    world.restore(this.snap);
+    world.sim = true;
+    var waitVal = this.simulate(world, false, LOOK_T);
+    world.restore(this.now);
+    world.sim = false;
+    this.half = null;
+    return this.pressVal - waitVal;
   };
 
   // which side scored with this ball: 0 = left team scored (ball in right goal), 1 = right team, -1 none
