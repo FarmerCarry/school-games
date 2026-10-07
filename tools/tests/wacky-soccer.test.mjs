@@ -3,6 +3,7 @@ import { after, before, test } from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
@@ -113,6 +114,50 @@ test('a press shortens the goal celebration and the roulette, but not below thei
   assert.deepEqual(seen, ['play', 'goal', 'roulette', 'roulette', 'count', 'end', 'play', 'over']);
 });
 
+test('the Space that resumes a paused celebration does not also skip it', async t => {
+  const page = await game(t);
+  await clickControl(page, '#b1p');
+  await clickControl(page, '#bGo');
+  const seen = await page.evaluate(() => {
+    const m = () => __game.match;
+    const key = code => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+      window.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
+    };
+    const out = [];
+    __game.step(1.3);
+    __game.goal(0);
+    for (let i = 0; i < 600 && m().t < 1.2; i++) __game.step(1 / 60);
+    key('KeyP'); out.push(__game.state);
+    key('Space'); out.push(__game.state);
+    __game.step(0.1); out.push(m().phase);   // the banner keeps playing after the resume
+    key('Space'); __game.step(0.1); out.push(m().phase);   // a fresh press still skips it
+    return out;
+  });
+  assert.deepEqual(seen, ['pause', 'play', 'goal', 'roulette']);
+});
+
+test('kickoff gives CPU players the shared WS.cpuPower kick', async t => {
+  const page = await game(t);
+  await clickControl(page, '#b1p');
+  await clickControl(page, '#bGo');
+  const powers = await page.evaluate(() => __game.world.players.map(p => [p.side, p.power === undefined ? 1 : p.power, WS.cpuPower(__game.match.skill)]));
+  for (const [side, power, cpu] of powers) assert.equal(power, side ? cpu : 1);
+});
+
+test('a restored canvas context rebuilds the cached background and crowd atlas', async t => {
+  const page = await game(t);
+  const scales = await page.evaluate(() => {
+    const calls = [], set = WS.art.setScale;
+    WS.art.setScale = function (s) { calls.push(s); return set.apply(this, arguments); };
+    document.getElementById('game').dispatchEvent(new Event('contextrestored'));
+    return calls;
+  });
+  // scale 0 drops the caches, then the real scale is set again so they are redrawn
+  assert.equal(scales[0], 0);
+  assert.ok(scales.length >= 2 && scales[scales.length - 1] > 0, String(scales));
+});
+
 test('reduced motion keeps the goal celebration but drops its confetti', async t => {
   const page = await game(t);
   await clickControl(page, '#b1p');
@@ -161,4 +206,73 @@ test('the CPU lookahead runs one simulated branch per frame and leaves the live 
   }
   assert.ok(perFrame.every(n => n > 0 && n <= 40), `one branch per frame (${perFrame})`);
   assert.equal(cpu.half, null, 'the lookahead finished on the second frame');
+});
+
+test('an Easy CPU plays its best against a team that stands still next to the ball, and eases off when it presses', () => {
+  const { WS, world } = engine();
+  const cpu = new WS.CPU(1, 0.2), ball = world.balls[0];
+  const run = secs => { for (let i = 0; i < secs * 60; i++) cpu.update(world, 1 / 60); return cpu.sk; };
+  ball.x = 1100;                        // far from the human players (490 and 250)
+  assert.equal(run(4), 0.2, 'standing still away from the ball does not count');
+  ball.x = world.players[0].x - 60;     // behind the front player, out of the back player's reach
+  assert.equal(run(4), 0.2, 'nor does a ball they could not kick');
+  ball.x = world.players[0].x + 60;     // right next to a human player
+  assert.equal(run(1), 0.2, 'a short pause does not count');
+  assert.equal(run(1.5), 0.85);
+  cpu.notePress();
+  assert.equal(run(1 / 60), 0.2, 'one press and the gentle Easy CPU is back');
+  const hard = new WS.CPU(1, 0.85);
+  for (let i = 0; i < 300; i++) hard.update(world, 1 / 60);
+  assert.equal(hard.sk, 0.85, 'a stronger CPU keeps its own skill');
+});
+
+test('a Normal CPU plays sharper against button-mashing than against pressing at the right moment', () => {
+  const { WS, world } = engine();
+  world.balls[0].x = 1100;   // away from the human players, so standing still never counts
+  // presses every `every` seconds for `secs` seconds; returns the skill the CPU ends up using
+  const play = (cpu, every, secs) => {
+    let t = 0;
+    for (let i = 0; i < secs * 60; i++) { t += 1 / 60; if (every && t >= every) { t = 0; cpu.notePress(); } cpu.update(world, 1 / 60); }
+    return cpu.sk;
+  };
+  const normal = new WS.CPU(1, 0.55);
+  assert.equal(play(normal, 1.2, 6), 0.55, 'a press every 1.2 s is not mashing');
+  assert.ok(Math.abs(play(normal, 0.4, 3) - 0.85) < 1e-9, 'a press every 0.4 s is');
+  assert.equal(play(normal, 0, 1.2), 0.55, 'and it ends when the presses stop');
+  assert.equal(play(new WS.CPU(1, 0.85), 0.4, 5), 0.95, 'Hard tops out just below full skill');
+  assert.equal(play(new WS.CPU(1, 0.2), 0.4, 5), 0.2, 'Easy lets mashers win');
+});
+
+test('in the kick window legs and feet kick the ball forward, but head and body only bounce it', () => {
+  const { world } = engine();
+  const p = world.players[0], ball = world.balls[0];
+  const touch = part => {
+    ball.x = 600; ball.y = 400; ball.vx = -200; ball.vy = 0; ball.graceP = null;
+    p.kickT = 0.2; p.kickHit = false; world.events.length = 0;
+    // a still body part just to the right of the ball, coming at it from the front
+    ball.collidePlayer(p, [['c', ball.x - 25, ball.y, 0, 0, 10, 0, 0, 0, 0, part]]);
+    return [world.events.some(e => e.type === 'kick'), p.kickHit, Math.sign(ball.vx)];
+  };
+  assert.deepEqual(touch('foot0'), [true, true, 1]);
+  assert.deepEqual(touch('leg1'), [true, true, 1]);
+  assert.deepEqual(touch('foot1'), [true, true, 1]);
+  assert.equal(touch('head')[0], false);
+  assert.equal(touch('body')[0], false);
+  assert.equal(p.kickHit, false, 'the kick is still there for the foot');
+});
+
+test('the balance simulator runs the real engine with the game\'s CPU kick power and press hook', () => {
+  const sim = createRequire(import.meta.url)(path.join(repo, 'games/wacky-soccer/balance-sim.js'));
+  const env = sim.load(), powers = [];
+  let notes = 0;
+  const power = env.WS.cpuPower, note = env.WS.CPU.prototype.notePress;
+  env.WS.cpuPower = skill => { powers.push(skill); return power(skill); };
+  env.WS.CPU.prototype.notePress = function () { notes++; return note.call(this); };
+  const first = sim.cell(env, 'mash', 0.2, { n: 1, goals: 1, seed: 1 });
+  assert.equal(first.n, 1);
+  assert.equal(first.gf + first.ga, 1, 'one goal ends a first-to-1 match');
+  assert.ok(powers.length > 0 && powers.every(skill => skill === 0.2), 'CPU players get WS.cpuPower(skill)');
+  assert.ok(notes > 0, 'the CPU hears the simulated presses');
+  // the same match index replays the same match
+  assert.deepEqual(sim.cell(env, 'mash', 0.2, { n: 1, goals: 1, seed: 1 }), first);
 });

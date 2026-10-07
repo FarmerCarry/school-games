@@ -91,9 +91,14 @@
     { id: 'crown', name: 'التاج', price: 250 }
   ];
 
-  // AI skill 0..1 for quick matches (CPU kick power also grows with it, see kickoff() in game.js).
-  // Checked with balance-sim.js: on Easy a player who keeps pressing wins most matches and one
-  // who never presses loses more often than not.
+  // CPU kick power (1 = a human's kick) for a CPU of this skill. Used by kickoff() in game.js and balance-sim.js.
+  WS.cpuPower = function (skill) { return 0.6 + 0.4 * skill; };
+
+  // AI skill 0..1 for quick matches and cup rounds. The CPU also adapts to how you play (ai.js):
+  // it stops going easy on a team that just stands there and, from skill 0.4 up, plays sharper
+  // against button-mashing. Measured with balance-sim.js (120 seeded matches per cell, see
+  // BALANCE.md): never pressing wins 15% on Easy; mashing wins 76% / 44% / 19% and pressing when
+  // the ball reaches your foot 77-81% / 43% / 11-13% on Easy / Normal / Hard.
   WS.DIFFS = [
     { id: 'easy', name: 'سهل', skill: 0.2, reward: 10, color: '#3ddc84' },
     { id: 'normal', name: 'عادي', skill: 0.55, reward: 20, color: '#ffd23f' },
@@ -101,7 +106,7 @@
   ];
 
   WS.CUPS = [
-    { id: 'bronze', name: 'الكأس البرونزية', color: '#d98a4a', dark: '#8a4f22', skills: [0.15, 0.3, 0.45, 0.58], reward: 100 },
+    { id: 'bronze', name: 'الكأس البرونزية', color: '#d98a4a', dark: '#8a4f22', skills: [0.1, 0.25, 0.42, 0.58], reward: 100 },
     { id: 'silver', name: 'الكأس الفضية', color: '#cfd8e6', dark: '#6f7d93', skills: [0.45, 0.58, 0.7, 0.78], reward: 200 },
     { id: 'gold', name: 'الكأس الذهبية', color: '#ffd23f', dark: '#b8860b', skills: [0.7, 0.78, 0.85, 0.9], reward: 400 }
   ];

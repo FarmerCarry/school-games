@@ -75,7 +75,8 @@
   var canvas = $('game'), uiEl = $('ui');
   var view = Kit.fit(canvas, W, H, { onResize: onResize });
   var ctx = view.ctx;
-  canvas.addEventListener('contextrestored', function () { view.resize(); });
+  // a restored context may come back with blank offscreen caches (background, crowd atlas): rebuild them
+  canvas.addEventListener('contextrestored', function () { ART.setScale(0); view.resize(); });
   function onResize(v) {
     frameDirty = true;
     uiEl.style.left = canvas.style.left; uiEl.style.top = canvas.style.top;
@@ -231,8 +232,8 @@
     world = makeWorld(m.teams, modId, { hats: m.hats, homes: m.homes });
     for (var pi = 0; pi < world.players.length; pi++) {
       var pl = world.players[pi];
-      // a little weaker CPU kicks on easy levels (still hard enough to get past a player who just stands there)
-      if (m.cpu[pl.side] && m.mode !== 'demo') pl.power = 0.75 + 0.3 * m.skill;
+      // weaker CPU kicks on easier levels (WS.cpuPower in data.js, shared with balance-sim.js)
+      if (m.cpu[pl.side] && m.mode !== 'demo') pl.power = WS.cpuPower(m.skill);
     }
     if (!m.noBall) dropBalls(world, m.goalSide >= 0 && m.mode !== 'demo' ? m.goalSide : -1);
     m.phase = 'count'; m.t = 0; m.beeps = 0; m.buf[0] = m.buf[1] = 0; m.time = 0;
@@ -291,7 +292,7 @@
       readInput(dt);
       world.step(dt);
       processEvents(silent);
-      for (i = 0; i < 2; i++) if (m.cpu[i] && m.cpu[i].update(world, dt)) teamPress(i);
+      for (i = 0; i < 2; i++) if (m.cpu[i] && m.cpu[i].update(world, dt)) { teamPress(i); if (m.cpu[1 - i]) m.cpu[1 - i].notePress(); }
       for (i = 0; i < world.balls.length; i++) {
         b = world.balls[i];
         if (!isFinite(b.x) || !isFinite(b.y)) { b.x = W / 2; b.y = 240; b.vx = b.vy = 0; }
@@ -374,7 +375,7 @@
       a = a || b || k.pressed('Space') || (pointer.pressed && state === 'play');
       b = false;
     }
-    if (a) m.buf[0] = 0.14;
+    if (a) { m.buf[0] = 0.14; if (m.cpu[1]) m.cpu[1].notePress(); }
     if (b) m.buf[1] = 0.14;
     for (var s = 0; s < 2; s++) {
       if (m.buf[s] > 0 && humanSide(s)) {
@@ -1220,6 +1221,9 @@
   function resumeGame() {
     if (state !== 'pause') return;
     state = 'play'; showScr(null); $('bPause').hidden = false;
+    // the Space/Enter that resumed must not also kick or skip the goal celebration/roulette
+    Kit.keys.endFrame(); pointer.endFrame();
+    if (match) match.skipReq = false;
   }
   btn('bResume', resumeGame);
   btn('bRestart', function () { if (lastCfg) beginMatch(lastCfg); });
