@@ -18,6 +18,7 @@
   muteBtn.title = 'الصوت (M)';
 
   function layoutUI(v) {
+    frameDirty = true;   // resizing clears the canvas
     if (!uiEl) uiEl = $('ui');
     uiEl.style.transform = 'scale(' + v.scale + ')';
     uiEl.style.left = canvas.style.left;
@@ -185,10 +186,12 @@
   function clearTex() {
     topU.fill(0); shU.fill(0); miniU.fill(0);
     shown.fill(0); flashing.fill(0); need.fill(0); needN = 0;
-    topCtx.putImageData(topImg, 0, 0); shCtx.putImageData(shImg, 0, 0); miniCtx.putImageData(miniImg, 0, 0);
+    putTex();
     dirty.any = false; dirty.x0 = N; dirty.y0 = N; dirty.x1 = -1; dirty.y1 = -1;
     waves.length = 0; ringHead = ringTail = 0;
   }
+  // copies all kept pixel data to the cached canvases (also after a GPU reset blanked them)
+  function putTex() { topCtx.putImageData(topImg, 0, 0); shCtx.putImageData(shImg, 0, 0); miniCtx.putImageData(miniImg, 0, 0); }
 
   // reveal waves (fill animation) and flash ring
   var waves = [];
@@ -230,7 +233,7 @@
   // Confetti, sparkles and full-screen flashes are decoration: reduced motion (or the classroom
   // preset) turns them off. Capture waves, popups and banners stay because they carry information.
   var calm = Kit.motion.reduced();
-  Kit.motion.onChange(function (r) { calm = r; if (r) { parts.length = 0; sparts.length = 0; flashA = 0; } });
+  Kit.motion.onChange(function (r) { calm = r; frameDirty = true; if (r) { parts.length = 0; sparts.length = 0; flashA = 0; } });
   function part(x, y, o) {
     if (calm) return;
     var L = o.screen ? sparts : parts;
@@ -389,18 +392,26 @@
 
   function playerSkin() { return Art.makeSkin(save.skin.c, save.skin.f, save.skin.p); }
 
-  // Colours that look alike on the map (pink/coral, mint/turquoise, grape/violet, gold/lemon).
-  var LOOKALIKE = { 0: 6, 6: 0, 2: 8, 8: 2, 4: 9, 9: 4, 13: 3 };
+  // Colours that look alike on the map (pink/coral, mint/turquoise, grape/violet, orange/caramel,
+  // sky/blue, gold/lemon). Rainbow draws its trail, outline and minimap dot in pink.
+  var LOOKALIKE = { 0: [6], 6: [0], 2: [8], 8: [2], 4: [9], 9: [4], 5: [11], 11: [5], 1: [10], 10: [1], 12: [0, 6], 13: [3] };
   function pickBotColor() {
-    var used = {}, near = player && skins[player.id] ? LOOKALIKE[skins[player.id].colorIdx] : -1;
+    var used = {}, near = player && skins[player.id] && LOOKALIKE[skins[player.id].colorIdx] || [];
     for (var i = 1; i < skins.length; i++) {
       var a = world.agents[i];
       // newWorld picks every bot skin before anyone spawns, so unspawned bots (no deaths yet) count too
       if (skins[i] && a && (a.alive || a.isPlayer || !a.deaths)) used[skins[i].colorIdx] = 1;
     }
-    var opts = [];
-    for (var c = 0; c < PG.BOT_COLORS; c++) if (!used[c] && c !== near) opts.push(c);
-    if (!opts.length && near >= 0 && !used[near]) opts.push(near);
+    // never the player's colour or its look-alike; a colour whose look-alike another bot wears
+    // is only a second choice, so bots are told apart too while other colours are free
+    var opts = [], spare = [];
+    for (var c = 0; c < PG.BOT_COLORS; c++) {
+      if (used[c] || near.indexOf(c) >= 0) continue;
+      var twin = LOOKALIKE[c];
+      (twin && used[twin[0]] ? spare : opts).push(c);
+    }
+    if (!opts.length) opts = spare;
+    if (!opts.length) near.forEach(function (n) { if (!used[n]) opts.push(n); });
     if (!opts.length) opts = [Kit.randInt(0, PG.BOT_COLORS - 1)];
     return Kit.pick(opts);
   }
@@ -491,7 +502,7 @@
 
   function pauseGame() {
     if (state !== 'play') return;
-    state = 'pause'; showScreen('scr-pause');
+    state = 'pause'; frameDirty = true; showScreen('scr-pause');
   }
   function resumeGame() {
     if (state !== 'pause') return;
@@ -642,6 +653,8 @@
 
   /* ============================================================ update */
   function update(dt) {
+    // a paused round is frozen (effects too), so render() can keep showing its last frame
+    if (state === 'pause') { Kit.keys.endFrame(); ptr.endFrame(); return; }
     clock += dt;
     if (state === 'play' || state === 'ending' || state === 'title' || state === 'skins') {
       var simDt = dt;
@@ -797,7 +810,11 @@
   }
 
   /* ============================================================ render */
+  // A paused scene is drawn once, then again only after a resize, a canvas restore or late fonts.
+  var frameDirty = true;
   function render() {
+    if (state === 'pause' && !frameDirty) return;
+    frameDirty = false;
     flushTex();
     ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
     ctx.direction = 'ltr';
@@ -1409,6 +1426,15 @@
   };
 
   /* ============================================================ boot */
+  // After a GPU reset (a PC waking from sleep) canvases come back blank: repaint the territory from
+  // its kept pixel data, rebuild the floor tiles and arena cards, and draw the frame again.
+  function restoreCanvases() {
+    floorTiles = []; pats = makePatterns(); putTex();
+    if (state === 'title') buildTitle();
+    frameDirty = true;
+  }
+  [canvas, topCv, shCv, miniCv].forEach(function (c) { c.addEventListener('contextrestored', restoreCanvases); });
+  try { document.fonts.ready.then(function () { frameDirty = true; }); } catch (e) { /* no font loading API */ }
   toTitle();
   Kit.loop(update, render);
   Kit.lifecycle({ pause: pauseGame });
