@@ -29,9 +29,11 @@
   var save = (function () {
     var s = store.get('save', null) || {};
     function num(v, d) { return typeof v === 'number' && isFinite(v) ? v : d; }
+    // list index: a whole number inside the list, else 0 (a stale or edited save must not crash boot)
+    function idx(v, list) { return typeof v === 'number' && v % 1 === 0 && v >= 0 && v < list.length ? v : 0; }
     var o = {
       best: num(s.best, 0), kills: num(s.kills, 0), rounds: num(s.rounds, 0), wins: num(s.wins, 0),
-      stars: [], bestA: [], arena: num(s.arena, 0),
+      stars: [], bestA: [], arena: idx(s.arena, PG.ARENAS),
       skin: { c: 0, f: 0, p: 0 }, seen: s.seen && typeof s.seen === 'object' ? s.seen : null
     };
     for (var i = 0; i < PG.ARENAS.length; i++) {
@@ -39,15 +41,17 @@
       o.stars.push([st[0] ? 1 : 0, st[1] ? 1 : 0, st[2] ? 1 : 0]);
       o.bestA.push(num(s.bestA && s.bestA[i], 0));
     }
-    if (s.skin) { o.skin.c = num(s.skin.c, 0); o.skin.f = num(s.skin.f, 0); o.skin.p = num(s.skin.p, 0); }
+    if (s.skin) { o.skin.c = idx(s.skin.c, PG.COLORS); o.skin.f = idx(s.skin.f, PG.FACES); o.skin.p = idx(s.skin.p, PG.PATTERNS); }
     return o;
   })();
-  function persist() { store.set('save', save); }
+  // A failed write (full or blocked storage) keeps progress in memory and shows the shared retry note.
+  var saveUi = Kit.saveStatus({ retry: persist });
+  function persist() { if (store.set('save', save)) saveUi.saved(); else saveUi.failed(); }
   function totalStars() { var t = 0; save.stars.forEach(function (a) { t += a[0] + a[1] + a[2]; }); return t; }
   function statOf(t) {
     return t === 'best' ? save.best : t === 'kills' ? save.kills : t === 'stars' ? totalStars() : t === 'rounds' ? save.rounds : t === 'wins' ? save.wins : 0;
   }
-  function unlocked(item) { return !item.req || statOf(item.req.t) >= item.req.v; }
+  function unlocked(item) { return !!item && (!item.req || statOf(item.req.t) >= item.req.v); }
   function arenaUnlocked(i) { if (i === 0) return true; var s = save.stars[i - 1]; return s[0] + s[1] + s[2] >= 2; }
   function unlockedKeys() {
     var k = [];
@@ -57,9 +61,9 @@
     return k;
   }
   if (!save.seen) { save.seen = {}; unlockedKeys().forEach(function (k) { save.seen[k] = 1; }); }
-  if (!unlocked(PG.COLORS[save.skin.c] || {})) save.skin.c = 0;
-  if (!unlocked(PG.FACES[save.skin.f] || {})) save.skin.f = 0;
-  if (!unlocked(PG.PATTERNS[save.skin.p] || {})) save.skin.p = 0;
+  if (!unlocked(PG.COLORS[save.skin.c])) save.skin.c = 0;
+  if (!unlocked(PG.FACES[save.skin.f])) save.skin.f = 0;
+  if (!unlocked(PG.PATTERNS[save.skin.p])) save.skin.p = 0;
   if (!arenaUnlocked(save.arena)) save.arena = 0;
 
   /* ============================================================ sound */
@@ -125,27 +129,52 @@
     if (x < dirty.x0) dirty.x0 = x; if (x > dirty.x1) dirty.x1 = x;
     if (y < dirty.y0) dirty.y0 = y; if (y > dirty.y1) dirty.y1 = y;
   }
-  function paintCell(c) {
-    var id = world.owner[c], x = c % N, y = (c / N) | 0, px, py, row;
-    if (!id) {
-      for (py = 0; py < TEX; py++) { row = (y * TEX + py) * TW + x * TEX; for (px = 0; px < TEX; px++) { topU[row + px] = 0; shU[row + px] = 0; } }
-      miniU[c] = 0;
-    } else {
-      var sk = skins[id];
-      var sh = Art.shadeOf(sk, x, y);
-      for (py = 0; py < TEX; py++) { row = (y * TEX + py) * TW + x * TEX; for (px = 0; px < TEX; px++) { topU[row + px] = Art.texel(sk, x, y, px, py); shU[row + px] = sh; } }
-      miniU[c] = Art.baseOf(sk, x, y);
+  // Territory is drawn from shown[] (what the reveal wave has reached so far), never straight from
+  // world.owner. A changed cell repaints its own 4x4 block and the 8 around it at the next flush,
+  // because each block's corners depend on its neighbours (see paintBlock).
+  var shown = new Uint8Array(NN), flashing = new Uint8Array(NN);
+  var need = new Uint8Array(NN), needList = new Int32Array(NN), needN = 0;
+  function showCell(c, id, flash) {
+    shown[c] = id; flashing[c] = flash;
+    var x = c % N, y = (c / N) | 0;
+    miniU[c] = id ? Art.baseOf(skins[id], x, y) : 0;
+    for (var yy = Math.max(0, y - 1); yy <= Math.min(N - 1, y + 1); yy++) {
+      for (var xx = Math.max(0, x - 1); xx <= Math.min(N - 1, x + 1); xx++) {
+        var k = yy * N + xx;
+        if (!need[k]) { need[k] = 1; needList[needN++] = k; }
+      }
+    }
+  }
+  function paintCell(c) { showCell(c, world.owner[c], 0); }
+  function flashCell(c) { var id = world.owner[c]; if (id) showCell(c, id, 1); }
+
+  // Smooth edges at texel level: the 3 texels nearest each block corner (CORNER: quadrant 0-3,
+  // 4 = middle) take cornerOwner(). Outside corners of a territory are cut back to the floor and
+  // inside corners of a neighbouring territory are filled with its colour, so captured land gets
+  // rounded edges instead of hard 16 px stairs. The grid rules in sim.js still use whole cells.
+  var CORNER = [0, 0, 1, 1, 0, 4, 4, 1, 2, 4, 4, 3, 2, 2, 3, 3], cq = new Uint8Array(5);
+  function cornerOwner(id, h, v) { return h === v && h && h !== id ? h : id && h !== id && v !== id ? 0 : id; }
+  function paintBlock(c) {
+    var x = c % N, y = (c / N) | 0, id = shown[c], fl = flashing[c];
+    // off-map neighbours count as this cell's owner, so land stays square along the map edge
+    var up = y > 0 ? shown[c - N] : id, dn = y < N - 1 ? shown[c + N] : id;
+    var lf = x > 0 ? shown[c - 1] : id, rt = x < N - 1 ? shown[c + 1] : id;
+    cq[0] = cornerOwner(id, lf, up); cq[1] = cornerOwner(id, rt, up);
+    cq[2] = cornerOwner(id, lf, dn); cq[3] = cornerOwner(id, rt, dn); cq[4] = id;
+    for (var py = 0; py < TEX; py++) {
+      var row = (y * TEX + py) * TW + x * TEX;
+      for (var px = 0; px < TEX; px++) {
+        var o = cq[CORNER[py * TEX + px]], sk = o && skins[o];
+        if (!sk) { topU[row + px] = 0; shU[row + px] = 0; continue; }
+        topU[row + px] = fl && o === id ? Art.flashOf(sk, x, y) : Art.texel(sk, x, y, px, py);
+        shU[row + px] = Art.shadeOf(sk, x, y);
+      }
     }
     markDirty(x, y);
   }
-  function flashCell(c) {
-    var id = world.owner[c]; if (!id) return;
-    var x = c % N, y = (c / N) | 0, sk = skins[id], f = Art.flashOf(sk, x, y), sh = Art.shadeOf(sk, x, y);
-    for (var py = 0; py < TEX; py++) { var row = (y * TEX + py) * TW + x * TEX; for (var px = 0; px < TEX; px++) { topU[row + px] = f; shU[row + px] = sh; } }
-    miniU[c] = Art.baseOf(sk, x, y);
-    markDirty(x, y);
-  }
   function flushTex() {
+    for (var i = 0; i < needN; i++) { need[needList[i]] = 0; paintBlock(needList[i]); }
+    needN = 0;
     if (!dirty.any) return;
     var x = dirty.x0 * TEX, y = dirty.y0 * TEX, w = (dirty.x1 - dirty.x0 + 1) * TEX, h = (dirty.y1 - dirty.y0 + 1) * TEX;
     topCtx.putImageData(topImg, 0, 0, x, y, w, h);
@@ -155,6 +184,7 @@
   }
   function clearTex() {
     topU.fill(0); shU.fill(0); miniU.fill(0);
+    shown.fill(0); flashing.fill(0); need.fill(0); needN = 0;
     topCtx.putImageData(topImg, 0, 0); shCtx.putImageData(shImg, 0, 0); miniCtx.putImageData(miniImg, 0, 0);
     dirty.any = false; dirty.x0 = N; dirty.y0 = N; dirty.x1 = -1; dirty.y1 = -1;
     waves.length = 0; ringHead = ringTail = 0;
@@ -197,7 +227,12 @@
 
   /* ============================================================ effects */
   var parts = [], sparts = [];   // world-space and screen-space particles
+  // Confetti, sparkles and full-screen flashes are decoration: reduced motion (or the classroom
+  // preset) turns them off. Capture waves, popups and banners stay because they carry information.
+  var calm = Kit.motion.reduced();
+  Kit.motion.onChange(function (r) { calm = r; if (r) { parts.length = 0; sparts.length = 0; flashA = 0; } });
   function part(x, y, o) {
+    if (calm) return;
     var L = o.screen ? sparts : parts;
     if (L.length > 420) L.shift();
     L.push({ x: x, y: y, vx: o.vx || 0, vy: o.vy || 0, life: o.life || 0.6, max: o.life || 0.6, size: o.size || 5, color: o.color || '#fff', g: o.g == null ? 300 : o.g, kind: o.kind || 0, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 10, drag: o.drag || 0 });
@@ -252,7 +287,7 @@
   var player = null, timeLeft = PG.MATCH_TIME, matchT = 0;
   var cam = { x: MW / 2, y: MW / 2, z: 1 };
   var agentFx = [];           // per id anim state
-  var inputMode = 'keys', lastPtr = { x: 0, y: 0 };
+  var inputMode = 'keys', lastPtr = { x: 0, y: 0, t: 0 }, keysUsed = false;
   var namePool = [], nameIdx = 0;
   var lb = [], lbT = 0;
   var warnT = 0, threat = null, lastTick = -1;
@@ -263,10 +298,78 @@
   var PLAYER_START_R = 4.8;   // a roomier start base than the bots (kids need a safe spot to learn)
   var homeDir = null, homeT = 0, capCount = 0;
 
+  // Floor tile per arena: the checker plus faint themed doodads (sweets, shells, mushrooms,
+  // balloons, clouds). 256 px is 16 cells, a multiple of the 2-cell checker. Each tile is built once
+  // and the floor stays a single pattern fill, so the per-frame cost does not change.
+  var floorTiles = [], FT = 256;
+  function seeded(s) { return function () { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
+  function floorTile(i) {
+    if (floorTiles[i]) return floorTiles[i];
+    var th = PG.ARENAS[i].theme, t = mkCanvas(FT, FT), c = t.getContext('2d');
+    c.fillStyle = th.bg; c.fillRect(0, 0, FT, FT);
+    c.fillStyle = th.grid;
+    for (var y = 0; y < FT; y += CS) for (var x = (y / CS & 1) ? 0 : CS; x < FT; x += CS * 2) c.fillRect(x, y, CS, CS);
+    // doodads are drawn solid on their own layer, then laid over the checker at low opacity so they
+    // stay pale and never read as territory or trails; white details become soft cut-outs
+    var L = mkCanvas(FT, FT), d = L.getContext('2d'), rnd = seeded(i * 131 + 7), k;
+    d.lineCap = 'round'; d.lineJoin = 'round';
+    for (k = 0; k < 9; k++) {   // jittered 3x3 grid, kept clear of the tile edge so nothing is cut
+      doodad(d, i, rnd() < 0.5 ? 1 : 2, (k % 3 + 0.5) * FT / 3 + (rnd() - 0.5) * 40, ((k / 3 | 0) + 0.5) * FT / 3 + (rnd() - 0.5) * 40, 11 + rnd() * 4, (rnd() - 0.5) * 0.9, th);
+    }
+    for (k = 0; k < 5; k++) doodad(d, i, 0, 14 + rnd() * (FT - 28), 14 + rnd() * (FT - 28), 6 + rnd() * 2, rnd() * TAU, th);
+    c.globalAlpha = 0.22; c.drawImage(L, 0, 0); c.globalAlpha = 1;
+    return (floorTiles[i] = t);
+  }
+  // kind 0 = small bit, 1 and 2 = the arena's two motifs, drawn around (0,0) at size s
+  function doodad(d, arena, kind, x, y, s, rot, th) {
+    var a = th.accent, b = th.accent2, j;
+    d.save(); d.translate(x, y); d.rotate(rot);
+    d.fillStyle = kind === 2 ? b : a; d.strokeStyle = '#fff'; d.lineWidth = s * 0.16;
+    if (arena === 0) {
+      if (kind === 0) { d.strokeStyle = rot > 3 ? a : b; d.lineWidth = s * 0.5; line(d, -s * 0.6, 0, s * 0.6, 0); }   // sprinkle
+      else {   // wrapped sweet
+        d.beginPath(); d.arc(0, 0, s * 0.62, 0, TAU); d.fill();
+        d.beginPath(); d.moveTo(-s * 0.4, 0); d.lineTo(-s * 1.25, -s * 0.55); d.lineTo(-s * 1.25, s * 0.55); d.closePath();
+        d.moveTo(s * 0.4, 0); d.lineTo(s * 1.25, -s * 0.55); d.lineTo(s * 1.25, s * 0.55); d.closePath(); d.fill();
+        line(d, -s * 0.25, -s * 0.45, s * 0.05, s * 0.5); line(d, s * 0.2, -s * 0.5, s * 0.45, s * 0.2);
+      }
+    } else if (arena === 1) {
+      if (kind === 0) { d.beginPath(); d.arc(0, 0, s * 0.3, 0, TAU); d.fill(); }   // pebble
+      else if (kind === 1) {   // shell
+        d.beginPath(); d.moveTo(0, s * 0.65); d.arc(0, s * 0.65, s * 1.2, Math.PI * 1.17, Math.PI * 1.83); d.closePath(); d.fill();
+        for (j = -2; j <= 2; j++) line(d, 0, s * 0.65, Math.sin(j * 0.3) * s, s * 0.65 - Math.cos(j * 0.3) * s);
+      } else { Art.star(d, 0, 0, s, s * 0.45); d.fill(); d.strokeStyle = b; d.lineWidth = s * 0.3; d.stroke(); }   // starfish
+    } else if (arena === 2) {
+      if (kind === 0) { d.beginPath(); d.arc(0, 0, s * 0.28, 0, TAU); d.fill(); }
+      else if (kind === 1) {   // mushroom
+        d.fillStyle = '#c9a27a'; d.fillRect(-s * 0.26, -s * 0.1, s * 0.52, s * 0.85);
+        d.fillStyle = a; d.beginPath(); d.ellipse(0, -s * 0.1, s * 0.95, s * 0.72, 0, Math.PI, TAU); d.closePath(); d.fill();
+        d.fillStyle = '#fff'; d.beginPath(); d.arc(-s * 0.4, -s * 0.4, s * 0.16, 0, TAU); d.arc(s * 0.25, -s * 0.55, s * 0.13, 0, TAU); d.fill();
+      } else {   // leaf
+        d.beginPath(); d.moveTo(-s, 0); d.quadraticCurveTo(0, -s * 0.8, s, 0); d.quadraticCurveTo(0, s * 0.8, -s, 0); d.fill();
+        line(d, -s * 0.8, 0, s * 0.7, 0);
+      }
+    } else if (arena === 3) {
+      if (kind === 0) { d.fillStyle = rot > 3 ? a : b; d.fillRect(-s * 0.35, -s * 0.16, s * 0.7, s * 0.32); }   // confetti
+      else {   // balloon on a string
+        d.strokeStyle = d.fillStyle; d.lineWidth = s * 0.12; d.beginPath(); d.moveTo(0, s * 0.9); d.quadraticCurveTo(s * 0.35, s * 1.25, 0, s * 1.6); d.stroke();
+        d.beginPath(); d.ellipse(0, 0, s * 0.72, s * 0.88, 0, 0, TAU); d.fill(); d.beginPath(); d.moveTo(-s * 0.18, s * 1.02); d.lineTo(0, s * 0.8); d.lineTo(s * 0.18, s * 1.02); d.closePath(); d.fill();
+        d.fillStyle = '#fff'; d.beginPath(); d.ellipse(-s * 0.3, -s * 0.38, s * 0.14, s * 0.24, -0.5, 0, TAU); d.fill();
+      }
+    } else {
+      if (kind === 0) { d.fillStyle = b; Art.star(d, 0, 0, s * 0.55, s * 0.22); d.fill(); }   // tiny star
+      else if (kind === 1) {   // cloud
+        d.beginPath(); d.arc(-s * 0.6, s * 0.15, s * 0.45, 0, TAU); d.moveTo(s * 0.6, -s * 0.2);
+        d.arc(0, -s * 0.2, s * 0.6, 0, TAU); d.moveTo(s * 1.05, s * 0.15); d.arc(s * 0.6, s * 0.15, s * 0.45, 0, TAU);
+        d.rect(-s * 0.6, s * 0.1, s * 1.2, s * 0.5); d.fill();
+      } else { Art.star(d, 0, 0, s * 0.9, s * 0.42); d.fill(); d.strokeStyle = b; d.lineWidth = s * 0.25; d.stroke(); }   // star
+    }
+    d.restore();
+  }
+  function line(d, x0, y0, x1, y1) { d.beginPath(); d.moveTo(x0, y0); d.lineTo(x1, y1); d.stroke(); }
+
   function makePatterns() {
-    var b = mkCanvas(CS * 2, CS * 2), bc = b.getContext('2d');
-    bc.fillStyle = theme.bg; bc.fillRect(0, 0, CS * 2, CS * 2);
-    bc.fillStyle = theme.grid; bc.fillRect(CS, 0, CS, CS); bc.fillRect(0, CS, CS, CS);
+    var b = floorTile(arenaIdx);
     var o = mkCanvas(64, 64), oc = o.getContext('2d');
     oc.fillStyle = theme.out; oc.fillRect(0, 0, 64, 64);
     oc.fillStyle = theme.out2;
@@ -286,11 +389,18 @@
 
   function playerSkin() { return Art.makeSkin(save.skin.c, save.skin.f, save.skin.p); }
 
+  // Colours that look alike on the map (pink/coral, mint/turquoise, grape/violet, gold/lemon).
+  var LOOKALIKE = { 0: 6, 6: 0, 2: 8, 8: 2, 4: 9, 9: 4, 13: 3 };
   function pickBotColor() {
-    var used = {};
-    for (var i = 1; i < skins.length; i++) if (skins[i] && world.agents[i] && (world.agents[i].alive || world.agents[i].isPlayer)) used[skins[i].colorIdx] = 1;
+    var used = {}, near = player && skins[player.id] ? LOOKALIKE[skins[player.id].colorIdx] : -1;
+    for (var i = 1; i < skins.length; i++) {
+      var a = world.agents[i];
+      // newWorld picks every bot skin before anyone spawns, so unspawned bots (no deaths yet) count too
+      if (skins[i] && a && (a.alive || a.isPlayer || !a.deaths)) used[skins[i].colorIdx] = 1;
+    }
     var opts = [];
-    for (var c = 0; c < PG.BOT_COLORS; c++) if (!used[c]) opts.push(c);
+    for (var c = 0; c < PG.BOT_COLORS; c++) if (!used[c] && c !== near) opts.push(c);
+    if (!opts.length && near >= 0 && !used[near]) opts.push(near);
     if (!opts.length) opts = [Kit.randInt(0, PG.BOT_COLORS - 1)];
     return Kit.pick(opts);
   }
@@ -347,6 +457,8 @@
 
   function toTitle() {
     state = 'title';
+    // an arena unlocked by the last round (finishRound stores it in save.arena) is preselected
+    if (save.arena !== arenaIdx && arenaUnlocked(save.arena)) arenaIdx = save.arena;
     world && (world.allowRespawn = true);
     setArena(arenaIdx);
     newWorld(false);
@@ -431,7 +543,7 @@
       part(((c % N) + 0.5) * CS, (((c / N) | 0) + 0.5) * CS, { vx: 0, vy: -40, g: -30, life: 0.5 + Math.random() * 0.5, size: 6 + Math.random() * 6, color: i & 1 ? '#fff' : '#ffe45c', kind: 2 });
     }
     if (pct >= 0.05) popup(e.x, e.y - 1.5, '+' + pct.toFixed(1) + '%', sk.c.base, 26 + Math.min(30, pct * 6), 1.3);
-    if (g > 350) { shake.add(Math.min(9, 3 + g / 200)); flashA = 0.25; flashColor = '#fff'; }
+    if (g > 350) { shake.add(Math.min(9, 3 + g / 200)); if (!calm) { flashA = 0.25; flashColor = '#fff'; } }
     if (pct >= 4) banner('ضربة هائلة!', '#ff6fae', 70, 1.5, '+' + pct.toFixed(1) + '%');
     else if (pct >= 2) banner('رائع!', '#ffcf33', 64, 1.2);
     // star goals first, then % milestones (only one celebration banner per capture besides the big-hit one)
@@ -468,7 +580,8 @@
     }
     if (a === player) {
       S.die();
-      shake.add(14); flashA = 0.5; flashColor = '#ff5b6e';
+      shake.add(14);
+      if (!calm) { flashA = 0.5; flashColor = '#ff5b6e'; }
       beginEnd('death', e);
       return;
     }
@@ -590,14 +703,19 @@
     var K = Kit.keys;
     var kx = (K.anyDown(['ArrowRight', 'KeyD']) ? 1 : 0) - (K.anyDown(['ArrowLeft', 'KeyA']) ? 1 : 0);
     var ky = (K.anyDown(['ArrowDown', 'KeyS']) ? 1 : 0) - (K.anyDown(['ArrowUp', 'KeyW']) ? 1 : 0);
-    if (Math.abs(ptr.x - lastPtr.x) + Math.abs(ptr.y - lastPtr.y) > 4) { inputMode = 'mouse'; lastPtr.x = ptr.x; lastPtr.y = ptr.y; }
-    if (kx || ky) { inputMode = 'keys'; player.target = Math.atan2(ky, kx); lastPtr.x = ptr.x; lastPtr.y = ptr.y; }
-    else if (inputMode === 'mouse') {
+    if (kx || ky) { inputMode = 'keys'; keysUsed = true; player.target = Math.atan2(ky, kx); syncPtr(); return; }
+    // Once arrows/WASD have steered, a small bump of the mouse on a shared desk must not take over
+    // (the blob would swerve into its own trail): switching needs a deliberate 40 px move within
+    // 0.3 s. Players who only use the mouse still switch after 4 px.
+    if (Math.abs(ptr.x - lastPtr.x) + Math.abs(ptr.y - lastPtr.y) > (keysUsed ? 40 : 4)) { inputMode = 'mouse'; syncPtr(); }
+    else if (keysUsed && clock - lastPtr.t > 0.3) syncPtr();   // slow drift never adds up
+    if (inputMode === 'mouse') {
       var sx = (player.x * CS - cam.x) * cam.z + W / 2, sy = (player.y * CS - cam.y) * cam.z + H / 2;
       var dx = ptr.x - sx, dy = ptr.y - sy;
       if (dx * dx + dy * dy > 16 * 16) player.target = Math.atan2(dy, dx);
     }
   }
+  function syncPtr() { lastPtr.x = ptr.x; lastPtr.y = ptr.y; lastPtr.t = clock; }
 
   function updateThreat(dt) {
     threat = null;
@@ -770,10 +888,10 @@
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'ltr';
     for (i = 0; i < popups.length; i++) {
       var p = popups[i], t = p.t / p.life;
-      var sc = t < 0.15 ? 0.5 + t / 0.15 * 0.7 : t < 0.25 ? 1.2 - (t - 0.15) : 1.1;
+      var sc = calm ? 1.1 : t < 0.15 ? 0.5 + t / 0.15 * 0.7 : t < 0.25 ? 1.2 - (t - 0.15) : 1.1;
       ctx.globalAlpha = t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1;
       ctx.font = '700 ' + Math.round(p.size * sc) + 'px ' + FONT;
-      var py = p.y * CS - t * 50;
+      var py = p.y * CS - (calm ? 0 : t * 50);
       ctx.lineWidth = 7; ctx.strokeStyle = '#2b2350'; ctx.strokeText(p.text, p.x * CS, py);
       ctx.fillStyle = p.color; ctx.fillText(p.text, p.x * CS, py);
     }
@@ -863,7 +981,7 @@
     var tl = Math.ceil(Math.max(0, timeLeft)), m = Math.floor(tl / 60), s = tl % 60;
     var ts = m + ':' + (s < 10 ? '0' : '') + s;
     var low = tl <= 10;
-    var pulse = low ? 1 + Math.max(0, Math.sin(clock * 12)) * 0.08 : 1;
+    var pulse = low && !calm ? 1 + Math.max(0, Math.sin(clock * 12)) * 0.08 : 1;
     ctx.save(); ctx.translate(W / 2, 38); ctx.scale(pulse, pulse);
     panel(-78, -26, 156, 52, 26, low ? '#ffdfe3' : 'rgba(255,255,255,0.93)');
     txt(ts, 0, 2, 36, low ? '#e8414f' : '#2b2350', 'center', false);
@@ -911,7 +1029,7 @@
       ctx.font = '700 22px ' + FONT; ctx.direction = 'rtl';
       var hw = ctx.measureText(hint).width + 44;
       ctx.direction = 'ltr';
-      var hy = by - 52 + Math.sin(clock * 4) * 2;
+      var hy = by - 52 + (calm ? 0 : Math.sin(clock * 4) * 2);
       ctx.globalAlpha = 0.95;
       panel(W / 2 - hw / 2, hy, hw, 38, 19, '#fff6c9');
       ctx.globalAlpha = 1;
@@ -965,11 +1083,12 @@
   function drawBanners() {
     for (var i = 0; i < Math.min(1, banners.length); i++) {
       var b = banners[i], t = b.t / b.life;
-      var sc = b.t < 0.18 ? 0.3 + b.t / 0.18 * 0.95 : b.t < 0.3 ? 1.25 - (b.t - 0.18) / 0.12 * 0.25 : 1;
+      var sc = calm ? 1 : b.t < 0.18 ? 0.3 + b.t / 0.18 * 0.95 : b.t < 0.3 ? 1.25 - (b.t - 0.18) / 0.12 * 0.25 : 1;
       var a = t > 0.75 ? 1 - (t - 0.75) / 0.25 : 1;
-      var yy = 190 - (t > 0.75 ? (t - 0.75) * 80 : 0);
+      var yy = 190 - (t > 0.75 && !calm ? (t - 0.75) * 80 : 0);
       ctx.save(); ctx.globalAlpha = Math.max(0, a);
-      ctx.translate(W / 2, yy); ctx.scale(sc, sc); ctx.rotate(Math.sin(b.t * 6) * 0.03);
+      ctx.translate(W / 2, yy); ctx.scale(sc, sc);
+      if (!calm) ctx.rotate(Math.sin(b.t * 6) * 0.03);
       txt(b.text, 0, 0, b.size, b.color, 'center', true, 14);
       if (b.sub) txt(b.sub, 0, b.size * 0.72, 28, '#fff', 'center', true, 8);
       ctx.restore();
@@ -1010,12 +1129,11 @@
   }
 
   function drawArenaIcon(cv, ar, idx) {
-    var c = cv.getContext('2d'), w = cv.width, h = cv.height, th = ar.theme;
-    c.fillStyle = th.bg; c.fillRect(0, 0, w, h);
-    c.fillStyle = th.grid;
-    for (var y = 0; y < h; y += 24) for (var x = (y / 24 & 1) * 24; x < w; x += 48) c.fillRect(x, y, 24, 24);
+    var c = cv.getContext('2d'), w = cv.width, h = cv.height;
+    // the arena's own floor (same doodads as in play), drawn 1.5x so the card reads at its size
+    c.save(); c.scale(1.5, 1.5); c.fillStyle = c.createPattern(floorTile(idx), 'repeat'); c.fillRect(0, 0, w / 1.5, h / 1.5); c.restore();
     var cols = ['#ff6fae', '#45c1ff', '#34d994', '#ffcf33', '#a77bff'];
-    var rnd = (function (s) { return function () { s = (s * 9301 + 49297) % 233280; return s / 233280; }; })(idx * 77 + 5);
+    var rnd = seeded(idx * 77 + 5);
     for (var k = 0; k < 4; k++) {
       var col = cols[(k + idx) % cols.length];
       var bx = rnd() * (w - 120), by = rnd() * (h - 80), bw = 60 + rnd() * 70, bh = 40 + rnd() * 50;
@@ -1188,9 +1306,13 @@
       drawItemIcon(cv, tab, i);
     });
     if (any) S.unlock();
+    var nx = nextArenaReady();
+    $('bNext').hidden = !nx; $('oBtns').classList.toggle('three', nx);
     if (r.newBest) setTimeout(function () { if (state === 'over') { S.milestone(); burst(330, 160, 40, ['#ff6fae', '#ffcf33', '#45c1ff', '#34d994'], 300, { g: 400, life: 1.2, screen: true }); } }, 800);
     showScreen('scr-over');
   }
+  // the next arena is open but has never been played: offer a one-click way there
+  function nextArenaReady() { var n = arenaIdx + 1; return n < PG.ARENAS.length && arenaUnlocked(n) && !save.bestA[n]; }
   function countUp(el, target, fmt) {
     var t0 = performance.now();
     function f() {
@@ -1210,6 +1332,7 @@
   btn('bRestart', function () { S.click(); startMatch(); });
   btn('bMenu', function () { S.click(); toTitle(); });
   btn('bAgain', function () { S.click(); startMatch(); });
+  btn('bNext', function () { if (state !== 'over' || !nextArenaReady()) return; S.click(); arenaIdx++; startMatch(); });
   btn('bOverMenu', function () { S.click(); toTitle(); });
   btn('bPause', function () { pauseGame(); });
   $('bPause').addEventListener('pointerdown', function (e) { e.stopPropagation(); });
@@ -1265,6 +1388,7 @@
     time: function () { return timeLeft; },
     setTime: function (t) { timeLeft = t; },
     arena: function (i) { if (i != null) { arenaIdx = i; save.arena = i; } return arenaIdx; },
+    botColors: function () { var o = []; for (var i = 1; i < skins.length; i++) if (world.agents[i] && !world.agents[i].isPlayer && skins[i]) o.push(skins[i].colorIdx); return o; },
     // paint a square of territory for the player around its head (for testing)
     grab: function (r) {
       if (!player || !player.alive) return 0;
