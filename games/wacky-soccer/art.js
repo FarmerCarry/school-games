@@ -87,7 +87,12 @@
 
   /* --------------------------------------------------------- background */
   var bgCache = {}, bgScale = 1;
-  ART.setScale = function (s) { if (s !== bgScale) { bgScale = s; bgCache = {}; fanCells = null; } };
+  // setScale(0) (fonts ready, GPU reset) also drops the team flags (same at every scale) and the atlas canvas
+  // itself: after a GPU reset every cached canvas is blank, and a fresh one never waits for its own restore
+  ART.setScale = function (s) {
+    if (s !== bgScale) { bgScale = s; bgCache = {}; fanCells = null; }
+    if (!s) { flagCache = {}; fanAtlas = null; }
+  };
   var clouds = [];
   for (var ci = 0; ci < 6; ci++) clouds.push({ x: ci * 240 + Math.random() * 100, y: 30 + Math.random() * 70, s: 0.6 + Math.random() * 0.6, v: 6 + Math.random() * 8 });
   var stars = [];

@@ -75,8 +75,9 @@
   var canvas = $('game'), uiEl = $('ui');
   var view = Kit.fit(canvas, W, H, { onResize: onResize });
   var ctx = view.ctx;
-  // a restored context may come back with blank offscreen caches (background, crowd atlas): rebuild them
-  canvas.addEventListener('contextrestored', function () { ART.setScale(0); view.resize(); });
+  // A GPU reset (say, a PC waking from sleep) blanks every canvas. Each restored page canvas passes
+  // here: drop the offscreen caches (background, crowd atlas, team flags) and repaint the menu canvases.
+  document.addEventListener('contextrestored', function () { ART.setScale(0); view.resize(); refreshAllCanvases(); }, true);
   function onResize(v) {
     frameDirty = true;
     uiEl.style.left = canvas.style.left; uiEl.style.top = canvas.style.top;
