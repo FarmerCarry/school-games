@@ -10,6 +10,7 @@
 
   /* ============================================================ save */
   var store = Kit.store('air-hockey');
+  var saveStatus = Kit.saveStatus({ retry: persist });
   var save = (function () {
     var d = store.get('save', null);
     if (!d || typeof d !== 'object') d = {};
@@ -28,7 +29,12 @@
     d.bot = d.bot || 'easy'; d.bought = +d.bought || 0; d.matches = +d.matches || 0;
     return d;
   })();
-  function persist() { store.set('save', save); }
+  // The whole save is one key, so one confirmed write saves everything pending.
+  function persist() {
+    if (store.set('save', save) === false) { saveStatus.failed(); return false; }
+    saveStatus.saved();
+    return true;
+  }
 
   function byId(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return list[0]; }
   function botUnlocked(b) {
@@ -48,11 +54,19 @@
   var canvas = document.getElementById('game');
   var uiEl = document.getElementById('ui');
   var tableImg = null, tableKey = '';
+  var frameDirty = true; // a paused match repaints only after something visible changed
   var view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: function (v) {
     uiEl.style.transform = 'scale(' + v.scale + ')';
     uiEl.style.left = canvas.style.left; uiEl.style.top = canvas.style.top;
+    frameDirty = true;
   } });
   var ctx = view.ctx;
+  // After a GPU reset the canvas and the cached table/mallet/puck images come back blank.
+  canvas.addEventListener('contextrestored', function () {
+    view.resize(); tableKey = ''; art.clearCaches(); frameDirty = true;
+    if (!$('scr-title').hidden) buildTitle();
+    if (!$('scr-shop').hidden) buildShop();
+  });
   var ptr = Kit.pointer(view);
   var mouseMoved = false;
   window.addEventListener('pointermove', function () { mouseMoved = true; });
@@ -79,7 +93,7 @@
     hitstop: 0, timeScale: 1, slowT: 0,
     flash: 0, flashCol: '#fff', zoom: 0, zoomX: G.CX, zoomY: G.CY,
     big: null, goalFlash: [0, 0],
-    earned: 0, newAwards: [], matchPointShown: false, idleT: 0, winner: 0
+    earned: 0, newAwards: [], awardQ: [], matchPointShown: false, idleT: 0, winner: 0
   };
   var shake = Kit.shake();
   var dbg = { ownGoals: 0, nudges: 0, goals: 0, log: [] };
@@ -170,18 +184,24 @@
       if (side < 0) return byId(AH.MALLETS, save.eq.mallet);
       var b = st.bot; return { id: 'bot_' + b.id, kind: 'solid', color: b.color, ring: b.ring };
     }
-    if (side < 0) return byId(AH.MALLETS, save.eq.mallet);
-    var mine = byId(AH.MALLETS, save.eq.mallet);
-    return mine.id === 'pink' ? byId(AH.MALLETS, 'lime') : byId(AH.MALLETS, 'pink');
+    return twoPlayerSkin(side);
   }
-  function sideColor(side) {
-    var s = sideSkin(side);
+  // 2-player mode: player 1 uses the equipped mallet; player 2 is pink, or lime when
+  // player 1's colour is already pinkish
+  function twoPlayerSkin(side) {
+    var mine = byId(AH.MALLETS, save.eq.mallet);
+    if (side < 0) return mine;
+    return ['pink', 'donut', 'rainbow'].indexOf(mine.id) >= 0 ? byId(AH.MALLETS, 'lime') : byId(AH.MALLETS, 'pink');
+  }
+  function skinColor(s) {
     if (s.kind === 'rainbow') return '#ff9ed2';
     if (s.kind === 'melon') return '#ff5a6e';
     return s.color;
   }
+  function sideColor(side) { return skinColor(sideSkin(side)); }
 
   function setupMatch(demo) {
+    flushAwards(); // awards from a match that was left before its next goal
     st.demo = demo;
     st.mode = demo ? 1 : save.mode;
     st.bot = byId(AH.BOTS, save.bot);
@@ -677,19 +697,20 @@
     if (impact > 120) st.stats.hits[idx]++;
     if (sp > st.stats.fast[idx]) st.stats.fast[idx] = sp;
     if (impact > 1150) {
-      shake.add(4 + k * 7); st.flash = Math.max(st.flash, 0.12 + k * 0.1); st.flashCol = col; st.hitstop = 0.045;
+      shake.add(4 + k * 7); st.hitstop = 0.045;
+      if (!Kit.motion.reduced()) { st.flash = Math.max(st.flash, 0.12 + k * 0.1); st.flashCol = col; }
       emit(cx, cy, { count: 10, colors: ['#ffffff', col, '#fff06a'], speed: 700, life: 0.4, size: 3, kind: 1 });
     }
     var kmh = Math.round(sp * KMH);
     if (sp >= 1780 && isHuman(m.side) && st.t - (st.lastRocket || -9) > 1.5) {
       st.lastRocket = st.t;
       popup(Kit.pick(AH.WORDS.rocket) + ' ' + kmh + ' كم/س', p.x, p.y - 50, '#fff06a', 30);
-      if (kmh >= 110) award('rocket');
+      if (kmh >= 110) award('rocket', true);
     }
     if (isSave) {
       st.stats.saves[idx]++;
       popup(Kit.pick(AH.WORDS.save), m.x, m.y - 70, '#9ff0ff', 32);
-      if (isHuman(m.side) && st.stats.saves[idx] >= 5) award('keeper');
+      if (isHuman(m.side) && st.stats.saves[idx] >= 5) award('keeper', true);
     }
   }
   function onWall(p, v, x, y) {
@@ -712,7 +733,8 @@
     var gx = scorer > 0 ? G.L : G.R; // goal that was scored in
     var col = sideColor(scorer);
     st.goalFlash[ci] = 1;
-    emit(gx, p.y, { count: 60, colors: ['#ff4d6d', '#ffd23f', '#7dff6b', '#35c8ff', '#b98cff', '#ffffff'], speed: 750, life: 1.4, size: 11, drag: 2.2, kind: 2, angle: scorer > 0 ? 0 : Math.PI, spread: 2.6 });
+    var calm = Kit.motion.reduced(); // no confetti, screen flash or zoom
+    if (!calm) emit(gx, p.y, { count: 60, colors: ['#ff4d6d', '#ffd23f', '#7dff6b', '#35c8ff', '#b98cff', '#ffffff'], speed: 750, life: 1.4, size: 11, drag: 2.2, kind: 2, angle: scorer > 0 ? 0 : Math.PI, spread: 2.6 });
     emit(gx, p.y, { count: 24, colors: [col, '#ffffff'], speed: 900, life: 0.5, size: 3, kind: 1, angle: scorer > 0 ? 0 : Math.PI, spread: 2.8 });
     ring(gx, p.y, col, 240, 10);
     if (st.demo) { respawnLater(p, 0.6); return; }
@@ -721,7 +743,8 @@
     st.stats.goals[si]++;
     var scorerM = st.mallets[si], conM = st.mallets[ci];
     scorerM.mood = 'joy'; scorerM.moodT = 1.5; conM.mood = 'sad'; conM.moodT = 1.5;
-    shake.add(15); st.flash = 0.35; st.flashCol = col; st.zoom = 1; st.zoomX = gx; st.zoomY = p.y;
+    shake.add(15);
+    if (!calm) { st.flash = 0.35; st.flashCol = col; st.zoom = 1; st.zoomX = gx; st.zoomY = p.y; }
     var humanScored = isHuman(scorer);
     S.goal(humanScored || st.mode === 2);
     // streaks & words
@@ -747,6 +770,7 @@
     bigText(word, col, 1.4, 130, who);
     if (st.chaos) { respawnLater(p, 1.0, scorer); }
     else setScene('goal');
+    flushAwards();
     st.lastConceder = -scorer;
     var mp = st.score[0] === st.goalsToWin - 1 || st.score[1] === st.goalsToWin - 1;
     if (mp && !st.matchPointShown) { st.matchPointShown = true; st.mpPending = 1.5; }
@@ -910,9 +934,13 @@
   }
 
   function render() {
+    // paused: the frozen scene is drawn once, then again only after resize/restore/fonts
+    if (st.paused && !frameDirty) return;
+    frameDirty = false;
     ensureTable();
     ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
-    if (shake.power > 0.05 || st.zoom > 0) { ctx.fillStyle = '#050716'; ctx.fillRect(0, 0, W, H); }
+    // always clear: nothing from earlier frames (confetti, sparks) may stay on screen
+    ctx.fillStyle = '#050716'; ctx.fillRect(0, 0, W, H);
     ctx.save();
     ctx.translate(shake.x, shake.y);
     if (st.zoom > 0) {
@@ -993,8 +1021,14 @@
     ctx.restore();
     if (!st.demo) drawHud();
     if (st.scene === 'countdown') {
-      var hint = st.mode === 1 ? (p1Mode === 'keys' ? 'حرّك مضربك بالأسهم واضرب القرص!' : 'حرّك الفأرة لتحريك مضربك!') : 'الأزرق على اليسار · الوردي على اليمين';
-      txt(hint, W / 2, H / 2 + 150, 34, '#fff06a', 'center', { stroke: 8, sc: 'rgba(5,8,28,0.9)' });
+      var hs = { stroke: 8, sc: 'rgba(5,8,28,0.9)' };
+      if (st.mode === 1) txt(p1Mode === 'keys' ? 'حرّك مضربك بالأسهم واضرب القرص!' : 'حرّك الفأرة لتحريك مضربك!', W / 2, H / 2 + 150, 34, '#fff06a', 'center', hs);
+      else { // each player's name on their own side, in their mallet's colour
+        txt('اللاعب 1', W / 2 - 220, H / 2 + 140, 34, sideColor(-1), 'center', hs);
+        txt('اللاعب 2', W / 2 + 220, H / 2 + 140, 34, sideColor(1), 'center', hs);
+        txt('W A S D', W / 2 - 220, H / 2 + 180, 24, '#ffffff', 'center', { stroke: 6, sc: hs.sc, ltr: true });
+        txt('← ↑ ↓ →', W / 2 + 220, H / 2 + 180, 24, '#ffffff', 'center', { stroke: 6, sc: hs.sc, ltr: true });
+      }
     }
     drawBig();
     if (st.flash > 0) {
@@ -1114,20 +1148,28 @@
 
   /* ======================================================= match end */
   function addCoins(n) { save.coins += n; st.earned += n; persist(); refreshCoins(); }
-  function award(id) {
+  // Awards are saved at once. Mid-rally a banner would hide the top of the rink, so
+  // only a small popup shows and the banner waits for the next goal (flushAwards).
+  function award(id, midRally) {
     if (save.awards[id]) return;
     save.awards[id] = 1;
     var a = byId(AH.AWARDS, id);
     save.coins += AH.AWARD_COINS; st.earned += AH.AWARD_COINS;
     persist(); refreshCoins();
     st.newAwards.push(a.name);
-    // at the end of a match the results panel lists new awards as badges, so no toast there
-    if (st.scene !== 'over') toast('جائزة جديدة: ' + a.name, AH.AWARD_COINS);
     S.award();
+    // at the end of a match the results panel lists new awards as badges, so no toast there
+    if (st.scene === 'over') return;
+    if (midRally) { st.awardQ.push(a.name); popup('جائزة جديدة!', G.CX, 175, '#fff06a', 26); }
+    else toast('جائزة جديدة: ' + a.name, AH.AWARD_COINS);
+  }
+  function flushAwards() {
+    while (st.awardQ.length) toast('جائزة جديدة: ' + st.awardQ.shift(), AH.AWARD_COINS);
   }
 
   function endMatch() {
     setScene('over');
+    st.awardQ.length = 0; // the results panel lists every new award
     st.timeScale = 1; st.slowT = 0;
     var humanWon = st.mode === 2 || st.winner < 0;
     var wIdx = sideIdx(st.winner);
@@ -1209,6 +1251,7 @@
     st.mallets.forEach(function (m, i) { m.mood = i === wIdx ? 'joy' : 'sad'; m.moodT = 99; });
   }
   function celebrate() {
+    if (Kit.motion.reduced()) return;
     for (var i = 0; i < 4; i++) emit(Kit.rand(200, 1080), Kit.rand(150, 300), { count: 30, colors: ['#ff4d6d', '#ffd23f', '#7dff6b', '#35c8ff', '#b98cff', '#ffffff'], speed: 600, life: 1.8, size: 12, drag: 1.5, kind: 2 });
   }
 
@@ -1220,7 +1263,7 @@
   function refreshCoins() { var els = document.querySelectorAll('.coins'); for (var i = 0; i < els.length; i++) els[i].textContent = Kit.fmt(save.coins); }
   function toast(text, coins) {
     var t = document.createElement('div'); t.className = 'toast';
-    t.innerHTML = '<span>' + esc(text) + '</span>' + (coins ? '<span dir="ltr" style="display:inline-flex;align-items:center;gap:6px"><span class="coin" style="width:22px;height:22px"></span>+' + coins + '</span>' : '');
+    t.innerHTML = '<span>' + esc(text) + '</span>' + (coins ? '<span dir="ltr" style="display:inline-flex;align-items:center;gap:6px"><span class="coin" style="width:20px;height:20px"></span>+' + coins + '</span>' : '');
     $('toasts').appendChild(t);
     setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 3100);
   }
@@ -1246,7 +1289,7 @@
   }
   function pause(on) {
     if (st.scene === 'title' || st.demo || st.scene === 'over') return;
-    st.paused = on;
+    st.paused = on; frameDirty = true;
     show(on ? 'scr-pause' : null);
     document.body.classList.toggle('hidecur', !on && st.mode === 1);
     Kit.keys.reset();
@@ -1261,6 +1304,9 @@
     $('tab2').classList.toggle('on', save.mode === 2);
     $('bots').hidden = save.mode !== 1; $('twop').hidden = save.mode !== 2;
     $('howto1').hidden = save.mode !== 1; $('howto2').hidden = save.mode !== 2;
+    // the 2-player cards wear the colours the two mallets will have in the match
+    paintCard('.pcard.p1', skinColor(twoPlayerSkin(-1)));
+    paintCard('.pcard.p2', skinColor(twoPlayerSkin(1)));
     var gs = document.querySelectorAll('.seg.g');
     for (var i = 0; i < gs.length; i++) gs[i].classList.toggle('on', +gs[i].getAttribute('data-g') === save.goals);
     $('chaosBtn').classList.toggle('on', save.chaos);
@@ -1300,6 +1346,11 @@
       }
       art.preview(botCanvases[b.id], 'bot', b);
     });
+  }
+  function paintCard(sel, col) {
+    var el = document.querySelector(sel);
+    el.style.borderColor = col;
+    el.style.background = 'linear-gradient(' + AH.hexA(AH.darken(col, 0.45), 0.92) + ', ' + AH.hexA(AH.darken(col, 0.8), 0.95) + ')';
   }
   function cupSvg(cls) {
     return '<svg class="' + cls + '" viewBox="0 0 40 40"><path d="M10 6h20v8c0 7-4 12-10 12S10 21 10 14z" fill="#ffd23f" stroke="#b8860b" stroke-width="2"/>' +
@@ -1416,7 +1467,7 @@
   goTitle();
   Kit.loop(update, render);
   if (document.fonts && document.fonts.load) {
-    Promise.all([document.fonts.load('700 40px Fredoka', 'بهو'), document.fonts.load('700 40px Fredoka', '0123')]).then(function () { buildTitle(); }, function () { /* ignore */ });
+    Promise.all([document.fonts.load('700 40px Fredoka', 'بهو'), document.fonts.load('700 40px Fredoka', '0123')]).then(function () { frameDirty = true; buildTitle(); }, function () { /* ignore */ });
   }
 
   /* ========================================================== debug */
