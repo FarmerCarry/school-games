@@ -312,3 +312,40 @@ for (const condition of [{ name: 'a better existing record', cheat: false, best:
     assert.equal(data.save.finaleWasBest, false);
   });
 }
+
+// Every crop and machine unlocks before its shelf; picking that stock early used to fill
+// a beginner's hands with items nothing could take.
+test('new crops and machine output stay unpicked until something can take them', async t => {
+  const page = await gamePage(t, { v: 1, un: { cornField: true }, tut: 5, px: 560, py: 1320 });
+  await page.evaluate(() => { __game.start(); stepGame(30); });
+  assert.deepEqual((await snapshot(page)).state.stack, [], 'ripe corn without a shelf is not picked');
+  assert.equal(await page.evaluate(() => __game.unlockNext()), 'cornShelf');
+  await page.evaluate(() => { __game.tp(560, 1320); stepGame(30); });
+  assert.ok((await snapshot(page)).state.stack.includes('corn'), 'corn is picked once its shelf exists');
+
+  const save = fixture({ tut: 6, px: 2012, py: 1022, mach: { juicer: { i: 0, o: 3 } } });
+  delete save.un.juiceShelf;
+  const juice = await gamePage(t, save);
+  await juice.evaluate(() => { __game.start(); stepGame(30); __game.pause(); });
+  const data = await snapshot(juice);
+  assert.deepEqual(data.state.stack, [], 'juice without a juice shelf stays on the machine');
+  assert.deepEqual(data.save.mach.juicer, { i: 0, o: 3 });
+});
+
+test('a save already carrying unsellable stock is pointed to the bin', async t => {
+  const page = await gamePage(t, { v: 1, un: { cornField: true }, carry: ['banana', 'corn'], tut: 5, px: 1100, py: 1300 });
+  await page.evaluate(() => { __game.start(); stepGame(30); });
+  assert.equal(await page.evaluate(() => __game.hint()), 'ارمِ الذرة في سلة المهملات!');
+});
+
+test('a first shelf trip with one banana still brings and serves the first customer', async t => {
+  const page = await gamePage(t, null);
+  await page.evaluate(() => { __game.start(); __game.tp(660, 1057); stepGame(10); });
+  assert.deepEqual((await snapshot(page)).state.stack, ['banana']);
+  await page.evaluate(() => { __game.tp(1020, 1062); stepGame(10); });
+  assert.deepEqual((({ tut, customers }) => ({ tut, customers }))((await snapshot(page)).state), { tut: 2, customers: 1 });
+  await page.evaluate(() => { __game.tp(1540, 1434); stepGame(60 * 25); });
+  const state = (await snapshot(page)).state;
+  assert.equal(state.served, 1, 'the first customer only asks for the banana on the shelf');
+  assert.ok(state.tut >= 3);
+});
