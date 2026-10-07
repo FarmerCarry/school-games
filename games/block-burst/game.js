@@ -37,7 +37,19 @@
     return true;
   }
   if (!skinUnlocked(save.skin)) save.skin = 0;
-  function persistStats() { store.set('stats', save.stats); }
+  // Every write goes through put(). A key whose write failed stays pending (with the
+  // value it should hold) until a later write of it or the retry button succeeds; the
+  // warning clears only when nothing is pending. Progress in memory is never rolled back.
+  var saveUi = Kit.saveStatus({ retry: retrySaves }), pending = {};
+  function put(key, value) {
+    if (!store.set(key, value)) { pending[key] = value; saveUi.failed(); return false; }
+    delete pending[key];
+    if (!Object.keys(pending).length) saveUi.saved();
+    return true;
+  }
+  function retrySaves() { Object.keys(pending).forEach(function (k) { put(k, pending[k]); }); }
+  function dropRun() { store.remove('run'); delete pending.run; if (!Object.keys(pending).length) saveUi.saved(); }
+  function persistStats() { put('stats', save.stats); }
 
   /* ------------------------------------------------------------- dom */
   var $ = function (id) { return document.getElementById(id); };
@@ -64,7 +76,7 @@
     $('musicState').textContent = save.music ? 'تعمل' : 'متوقفة';
     Snd.music.setOn(save.music);
   }
-  function toggleMusic() { save.music = !save.music; store.set('music', save.music); paintMusic(); Snd.button(); }
+  function toggleMusic() { save.music = !save.music; put('music', save.music); paintMusic(); Snd.button(); }
   musicBtn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
   musicBtn.addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); toggleMusic(); startMusic(); if (e.detail > 0) musicBtn.blur(); });
   paintMusic();
@@ -131,7 +143,12 @@
   function blk(color, gem) { return Art.block(save.skin, color, gem); }
 
   /* -------------------------------------------------------- particles */
+  // Reduced motion / classroom preset: no sparks, shards or confetti. Popups, words,
+  // banners, beams and the white flash on clearing cells stay (gameplay feedback).
+  function calm() { return Kit.motion.reduced(); }
+  Kit.motion.onChange(function (reduced) { if (reduced) { parts.length = 0; shards.length = 0; confetti.length = 0; } });
   function spark(x, y, color, n, spd, opts) {
+    if (calm()) return;
     opts = opts || {};
     for (var i = 0; i < n; i++) {
       if (parts.length >= 520) parts.shift();
@@ -143,6 +160,9 @@
   }
   function popup(x, y, text, color, size) { popups.push({ x: x, y: y, text: text, color: color || '#fff', size: size || 34, t: 0 }); if (popups.length > 24) popups.shift(); }
   function confettiBurst(n, x, y) {
+    if (calm()) return;
+    // wake the fx layer on the same frame (renderFx hides it again once the confetti is gone)
+    if (!fxLive) { fxLive = true; fxCanvas.style.visibility = ''; }
     var cols = skin().pal.concat(['#ffffff']);
     for (var i = 0; i < n; i++) {
       if (confetti.length > 360) confetti.shift();
@@ -183,7 +203,7 @@
     var saved = store.get('run', null);
     run = null;
     if (!fresh && saved && saved.mode === 'classic') run = Rules.load(saved, null);
-    if (!run) { run = Rules.newRun('classic', null, Math.random); store.remove('run'); }
+    if (!run) { run = Rules.newRun('classic', null, Math.random); dropRun(); }
     runLevel = -1;
     dispScore = run.score; bestAtStart = save.best; bestCelebrated = run.score > save.best;
     introBoard(); dealAnim(); refreshFits();
@@ -196,7 +216,8 @@
   }
   function levelGoalText(lv) {
     var parts2 = [];
-    if (lv.gems) parts2.push('اجمع الجواهر');
+    // say how gems are collected; the short form keeps gem+score banners inside the board area
+    if (lv.gems) parts2.push(lv.score ? 'اجمع الجواهر' : 'فجّر صفوف الجواهر لتجمعها');
     if (lv.score) parts2.push('اجمع ' + ptsTxt(lv.score));
     var s = parts2.join(' و');
     if (lv.moves) s += ' في ' + pieces(lv.moves);
@@ -212,7 +233,7 @@
     banner = { t: 0, title: 'المرحلة ' + (idx + 1), sub: levelGoalText(LV.LEVELS[idx]), world: LV.WORLDS[LV.LEVELS[idx].world] };
     Snd.button(); startMusic();
   }
-  function restart() { if (runLevel >= 0) startLevel(runLevel); else { store.remove('run'); startClassic(true); } }
+  function restart() { if (runLevel >= 0) startLevel(runLevel); else { dropRun(); startClassic(true); } }
 
   /* ------------------------------------------------------------- place */
   function doPlace(slot, r, c) {
@@ -236,7 +257,7 @@
     afterEvent(ev);
     if (ev.refilled) dealAnim();
     refreshFits();
-    if (run.mode === 'classic' && !ev.over) store.set('run', Rules.save(run));
+    if (run.mode === 'classic' && !ev.over) put('run', Rules.save(run));
     return ev;
   }
 
@@ -286,7 +307,7 @@
       Snd.gift(); powerPulse = 1.5;
     }
     if (run.mode === 'classic' && run.score > save.best) {
-      save.best = run.score; store.set('best', save.best);
+      save.best = run.score; put('best', save.best);
       if (!bestCelebrated && bestAtStart > 0) {
         bestCelebrated = true;
         toast('🏆 رقم قياسي جديد!');
@@ -298,7 +319,7 @@
       state = 'ending'; endKind = run.level ? 'fail' : 'over'; cancelDrag();
       endTimer = ev.fail === 'moves' ? 1.0 : 99;
       if (ev.fail === 'space') startGreying();
-      if (run.mode === 'classic') store.remove('run');
+      if (run.mode === 'classic') dropRun();
       return;
     }
     if (ev.stuck) { toast('لا مكان للقطع! استخدم قوة خارقة 💣🔀', 3); Snd.stuck(); powerPulse = 3; }
@@ -336,7 +357,7 @@
     bigWord = { text: 'بوم!', sub: '', t: 0, color: '#ff8a1f', size: 96 };
     afterEvent(ev);
     refreshFits();
-    if (run.mode === 'classic' && !ev.over) store.set('run', Rules.save(run));
+    if (run.mode === 'classic' && !ev.over) put('run', Rules.save(run));
   }
   function doShuffle() {
     var ev = Rules.useShuffle(run);
@@ -346,7 +367,7 @@
     for (var i = 0; i < 3; i++) spark(TX[i], TY, '#ffffff', 10, 300, { kind: 2, life: 0.5, g: 0 });
     dealAnim(); refreshFits();
     afterEvent(ev);
-    if (run.mode === 'classic' && !ev.over) store.set('run', Rules.save(run));
+    if (run.mode === 'classic' && !ev.over) put('run', Rules.save(run));
   }
 
   /* -------------------------------------------------------------- input */
@@ -416,9 +437,15 @@
     if (drag.bomb) {
       drag.tx = p.x; drag.ty = p.y;
       var r = Math.floor((p.y - BY) / C), c = Math.floor((p.x - BX) / C);
-      var on = r >= 0 && r < N && c >= 0 && c < N;
-      if (on) { var a = Rules.bombArea(r, c); if (a.r !== drag.r || a.c !== drag.c) Snd.snap(); drag.r = a.r; drag.c = a.c; } else { drag.r = -1; drag.c = -1; }
-      drag.valid = on;
+      var on = r >= 0 && r < N && c >= 0 && c < N, filled = 0;
+      if (on) {
+        // a bomb over an empty 3x3 area would be wasted: it only counts over blocks
+        var a = Rules.bombArea(r, c);
+        for (var y = 0; y < 3; y++) for (var x = 0; x < 3; x++) if (run.cells[(a.r + y) * N + a.c + x]) filled++;
+        if ((a.r !== drag.r || a.c !== drag.c) && filled) Snd.snap();
+        drag.r = a.r; drag.c = a.c;
+      } else { drag.r = -1; drag.c = -1; }
+      drag.valid = on && filled > 0;
       return;
     }
     var sh = run.tray[drag.slot].shape;
@@ -460,7 +487,9 @@
     moveDrag(p);
     if (drag.bomb) {
       var d = drag; drag = null; canvas.style.cursor = 'default';
-      if (d.valid) doBomb(d.r + 1, d.c + 1); else Snd.back();
+      if (d.valid) doBomb(d.r + 1, d.c + 1);
+      else if (d.r >= 0) { Snd.bad(); toast('ضع القنبلة فوق المكعبات!'); } // kept, not used up
+      else Snd.back();
       return;
     }
     if (drag.valid) {
@@ -547,25 +576,28 @@
       setTimeout(function () { toast('🎉 شكل جديد: ' + got.join(' و'), 3); Snd.unlock(); }, 900);
     }
   }
-  function unlockBarHTML() {
-    var ts = totalStars(), best = save.best;
+  // The first skin still locked (only the score-unlocked ones when scoreOnly), or null.
+  function nextUnlock(scoreOnly) {
     for (var i = 0; i < Art.SKINS.length; i++) {
       var s = Art.SKINS[i];
-      if (skinUnlocked(i)) continue;
-      var have, need, label;
-      if (s.need.stars) { have = ts; need = s.need.stars; label = 'اجمع ' + starsTxt(need) + ' في المغامرة'; }
-      else { have = best; need = s.need.best; label = 'سجّل ' + ptsTxt(need) + ' في الكلاسيكي'; }
-      var pct = Math.round(Math.min(1, have / need) * 100);
-      return '🔒 الشكل التالي «' + s.name + '»: ' + label + ' (' + Math.min(have, need) + ' / ' + need + ')' +
-        '<div class="ub"><i style="width:' + pct + '%"></i></div>';
+      if (skinUnlocked(i) || (scoreOnly && !s.need.best)) continue;
+      if (s.need.stars) return { i: i, have: totalStars(), need: s.need.stars, label: 'اجمع ' + starsTxt(s.need.stars) + ' في المغامرة' };
+      return { i: i, have: save.best, need: s.need.best, label: 'سجّل ' + ptsTxt(s.need.best) + ' في الكلاسيكي' };
     }
-    return '✨ فتحت كل الأشكال! أنت بطل!';
+    return null;
+  }
+  function unlockBarHTML() {
+    var n = nextUnlock(false);
+    if (!n) return '✨ فتحت كل الأشكال! أنت بطل!';
+    var pct = Math.round(Math.min(1, n.have / n.need) * 100);
+    return '🔒 الشكل التالي «' + Art.SKINS[n.i].name + '»: ' + n.label + ' (' + Math.min(n.have, n.need) + ' / ' + n.need + ')' +
+      '<div class="ub"><i style="width:' + pct + '%"></i></div>';
   }
 
   function showOver() {
     state = 'over';
     var isBest = run.score > 0 && run.score >= save.best && (run.score > bestAtStart);
-    if (run.score > save.best) { save.best = run.score; store.set('best', save.best); }
+    if (run.score > save.best) { save.best = run.score; put('best', save.best); }
     $('overHead').textContent = run.score >= 1500 ? 'لعب رائع!' : 'لا مساحة!';
     $('overScore').textContent = Kit.fmt(0);
     $('overBest').textContent = Kit.fmt(save.best);
@@ -596,7 +628,7 @@
     var lv = LV.LEVELS[runLevel], st = Rules.stars(lv, run.moves);
     var before = unlockSnapshot();
     var prev = save.adv[runLevel] | 0;
-    if (st > prev) { save.adv[runLevel] = st; store.set('adv', save.adv); }
+    if (st > prev) { save.adv[runLevel] = st; put('adv', save.adv); }
     $('winHead').textContent = st === 3 ? 'مثالي!' : st === 2 ? 'أحسنت!' : 'نجحت!';
     $('winSub').textContent = 'المرحلة ' + (runLevel + 1) + ' مكتملة';
     $('winScore').textContent = Kit.fmt(run.score);
@@ -621,7 +653,7 @@
     $('failHead').textContent = reason === 'moves' ? 'نفدت القطع!' : 'لا مساحة!';
     var close = goalProgress() >= 0.6;
     $('failSub').textContent = close ? 'كنت قريبًا جدًا!' : 'حاول مرة أخرى، ستنجح!';
-    $('failGoal').innerHTML = remainingGoalHTML();
+    showGoalLeft($('failGoal'));
     show(['hud', 'scrFail']);
     Snd.over();
   }
@@ -631,78 +663,47 @@
     if (lv.score) { tot += 10; got += 10 * Math.min(1, run.score / lv.score); }
     return tot ? got / tot : 0;
   }
-  // Gem icons: the 128px gem sprite copied 1:1 (same pixels as the old
-  // Art.gemSprite(kind).toDataURL()). Made lazily, as before, one batch per screen.
+  // Gem icons: the 128px gem sprite copied 1:1.
   function gemThumb(kind) {
-    return { key: 'gem:' + kind, size: Art.RES, draw: function (g) { g.drawImage(Art.gemSprite(kind), 0, 0); } };
+    return { size: Art.RES, draw: function (g) { g.drawImage(Art.gemSprite(kind), 0, 0); } };
   }
-  function gemIcon(kind) {
-    var t = gemThumb(kind);
-    makeThumbs([t]);
-    return thumbURL[t.key];
-  }
-  function remainingGoalHTML() {
-    var lv = run.level, out = [], need = [];
-    if (run.goalGems) for (var k in run.goalGems) if (run.goalGems[k] > 0) need.push(gemThumb(k));
-    makeThumbs(need);
-    if (run.goalGems) for (k in run.goalGems) if (run.goalGems[k] > 0) out.push('<span class="gi" style="background-image:url(' + gemIcon(k) + ')"></span> ' + run.goalGems[k]);
-    if (lv.score && run.score < lv.score) out.push('النقاط ' + run.score + ' / ' + lv.score);
-    return out.length ? 'بقي: ' + out.join(' &nbsp; ') : '';
+  // "بقي: [gem] 3   [gem] 2   النقاط 120 / 500" (left empty when nothing is missing)
+  function showGoalLeft(box) {
+    var lv = run.level, out = [];
+    if (run.goalGems) for (var k in run.goalGems) if (run.goalGems[k] > 0) {
+      var gi = document.createElement('span'); gi.className = 'gi'; putThumb(gi, gemThumb(k));
+      out.push([gi, ' ' + run.goalGems[k]]);
+    }
+    if (lv.score && run.score < lv.score) out.push(['النقاط ' + run.score + ' / ' + lv.score]);
+    box.textContent = '';
+    if (out.length) box.append('بقي: ');
+    out.forEach(function (o, i) { if (i) box.append(' \u00a0 '); box.append.apply(box, o); });
   }
 
   /* ------------------------------------------------------------ title */
-  /* DOM thumbnails (CSS background-image data URLs, exactly as before).
-   * The old code called canvas.toDataURL() once per image, and re-encoded the
-   * logo/mode images on EVERY title rebuild (boot, each game over, each return to
-   * the menu, each skin click). Every toDataURL is a synchronous GPU flush +
-   * readback: the main thread stalls until the GPU has drawn everything queued.
-   * Now all missing thumbnails of a screen are drawn exactly as before (same sizes,
-   * same drawImage calls) into integer-aligned tiles of ONE shared canvas, read
-   * back ONCE (one stall instead of up to 11), and each tile is PNG-encoded from a
-   * CPU-only canvas (no GPU work). The resulting data URLs decode to the very same
-   * pixels as the old ones and are memoized by key, so rebuilding a screen with
-   * the same skin costs no readback at all. */
-  var thumbURL = {};
-  function makeThumbs(list) {
-    var todo = [], seen = {}, W = 0, H = 1, i, t;
-    for (i = 0; i < list.length; i++) {
-      t = list[i];
-      if (thumbURL[t.key] != null || seen[t.key]) continue;
-      seen[t.key] = 1; t.x = W; W += t.size + 2; H = Math.max(H, t.size); todo.push(t);
-    }
-    if (!todo.length) return;
-    var data = null;
-    try {
-      var at = document.createElement('canvas'); at.width = W; at.height = H;
-      var g = at.getContext('2d');
-      for (i = 0; i < todo.length; i++) { g.setTransform(1, 0, 0, 1, todo[i].x, 0); todo[i].draw(g, todo[i].size); }
-      data = g.getImageData(0, 0, W, H);
-    } catch (e) { data = null; }
-    for (i = 0; i < todo.length; i++) {
-      t = todo[i];
-      try {
-        var cv = document.createElement('canvas'); cv.width = cv.height = t.size;
-        var cg = cv.getContext('2d', { willReadFrequently: true });
-        if (data) cg.putImageData(data, -t.x, 0, t.x, 0, t.size, t.size);
-        else t.draw(cg, t.size);
-        thumbURL[t.key] = cv.toDataURL();
-      } catch (e) { thumbURL[t.key] = ''; }
-    }
+  /* DOM thumbnails: each is a small canvas on the page, drawn from the cached block and
+   * gem sprites. No pixels are read back or PNG-encoded, so building the title, a skin
+   * click or the map never makes the main thread wait for the graphics card. */
+  function thumbCanvas(t) {
+    var cv = document.createElement('canvas'); cv.width = cv.height = t.size;
+    t.draw(cv.getContext('2d'), t.size);
+    return cv;
   }
+  function putThumb(el, t) { el.textContent = ''; el.appendChild(thumbCanvas(t)); }
   function blockThumb(skinIdx, color, gem, size) {
-    return { key: 'blk:' + skinIdx + ':' + color + ':' + gem + ':' + size, size: size, draw: function (g) {
+    return { size: size, draw: function (g) {
       g.drawImage(Art.block(skinIdx, color, gem), 0, 0, size, size);
     } };
   }
-  function artThumb(name, cells, size, gemAt) {
+  function artThumb(cells, size, gemAt) {
     var sk = save.skin;
-    return { key: 'art:' + name + ':' + sk, size: size, draw: function (g) {
+    return { size: size, draw: function (g) {
       var cs = size / 4;
       cells.forEach(function (c, i) { g.drawImage(Art.block(sk, c[2], gemAt === i ? c[3] : 0), c[1] * cs, c[0] * cs, cs, cs); });
     } };
   }
   function skinThumb(i) {
-    return { key: 'skin:' + i, size: 116, draw: function (g) {
+    return { size: 116, draw: function (g) {
       g.drawImage(Art.block(i, 1, 0), 0, 0, 58, 58); g.drawImage(Art.block(i, 4, 0), 58, 0, 58, 58);
       g.drawImage(Art.block(i, 6, 0), 0, 58, 58, 58); g.drawImage(Art.block(i, 3, 0), 58, 58, 58, 58);
     } };
@@ -710,14 +711,10 @@
   var ART_CLASSIC = [[1, 0, 6], [1, 1, 6], [1, 2, 6], [2, 1, 6], [3, 0, 3], [3, 1, 3], [3, 2, 1], [3, 3, 1], [2, 3, 1], [0, 3, 5]];
   var ART_ADV = [[0, 1, 4], [1, 0, 2], [1, 1, 8, 1], [1, 2, 2], [2, 1, 4], [3, 0, 7, 3], [3, 1, 7], [3, 2, 5], [2, 3, 5, 2], [3, 3, 5]];
   function buildTitle() {
-    var logo = [1, 3, 6].map(function (col) { return blockThumb(save.skin, col, 0, 96); });
-    var artC = artThumb('classic', ART_CLASSIC, 160), artA = artThumb('adv', ART_ADV, 160, 2);
-    // one batch for the whole title screen (only the first time per skin)
-    makeThumbs(logo.concat([artC, artA], Art.SKINS.map(function (s, i) { return skinThumb(i); })));
     var bl = document.querySelectorAll('.logo-blocks i');
-    logo.forEach(function (t, i) { if (bl[i]) bl[i].style.backgroundImage = 'url(' + thumbURL[t.key] + ')'; });
-    document.querySelector('.art-classic').style.backgroundImage = 'url(' + thumbURL[artC.key] + ')';
-    document.querySelector('.art-adv').style.backgroundImage = 'url(' + thumbURL[artA.key] + ')';
+    [1, 3, 6].forEach(function (col, i) { if (bl[i]) putThumb(bl[i], blockThumb(save.skin, col, 0, 96)); });
+    putThumb(document.querySelector('.art-classic'), artThumb(ART_CLASSIC, 160));
+    putThumb(document.querySelector('.art-adv'), artThumb(ART_ADV, 160, 2));
     var saved = store.get('run', null), cont = saved && saved.mode === 'classic' && saved.score > 0;
     $('classicSub').textContent = cont ? 'النقاط الآن: ' + saved.score : 'الأفضل: ' + Kit.fmt(save.best);
     $('classicGo').textContent = cont ? '▶ تابع' : '▶ العب';
@@ -729,7 +726,7 @@
       var open = skinUnlocked(i);
       b.className = 'skin' + (i === save.skin ? ' on' : '') + (open ? '' : ' locked') + (open && save.seen.indexOf(i) < 0 ? ' fresh' : '');
       var prev = document.createElement('span'); prev.className = 'sprev';
-      prev.style.backgroundImage = 'url(' + skinPreview(i) + ')';
+      putThumb(prev, skinThumb(i));
       b.appendChild(prev);
       var nm = document.createElement('span'); nm.className = 'sname'; nm.textContent = s.name; b.appendChild(nm);
       if (!open) {
@@ -740,30 +737,24 @@
       b.addEventListener('click', function (e) {
         if (e.detail > 0) b.blur();
         if (!skinUnlocked(i)) { Snd.bad(); toast(s.need.stars ? 'اجمع ' + starsTxt(s.need.stars) + ' في المغامرة لفتحه' : 'سجّل ' + ptsTxt(s.need.best) + ' في الكلاسيكي لفتحه'); return; }
-        save.skin = i; store.set('skin', i);
-        if (save.seen.indexOf(i) < 0) { save.seen.push(i); store.set('seenSkins', save.seen); }
+        save.skin = i; put('skin', i);
+        if (save.seen.indexOf(i) < 0) { save.seen.push(i); put('seenSkins', save.seen); }
         Snd.pick(); buildTitle();
       });
       box.appendChild(b);
     });
-  }
-  function skinPreview(i) {
-    var t = skinThumb(i);
-    makeThumbs([t]);
-    return thumbURL[t.key];
   }
 
   function buildMap() {
     var box = $('worlds'); box.innerHTML = '';
     $('mapStars').textContent = totalStars();
     var nxt = nextLevelIdx();
-    makeThumbs(LV.WORLDS.map(function (w, wi) { return gemThumb([1, 2, 4, 3][wi % 4]); })); // one batch
     LV.WORLDS.forEach(function (w, wi) {
       var d = document.createElement('div'); d.className = 'world';
       d.style.background = 'linear-gradient(180deg, ' + w.color + ', ' + w.dark + ')';
       var ws = 0; for (var q = wi * 5; q < wi * 5 + 5; q++) ws += save.adv[q] | 0;
       d.innerHTML = '<h3>' + w.name + '</h3><div class="wstars"><i class="st"></i> ' + ws + ' / 15</div>';
-      var gemEl = document.createElement('div'); gemEl.className = 'wgem'; gemEl.style.backgroundImage = 'url(' + gemIcon([1, 2, 4, 3][wi % 4]) + ')'; d.appendChild(gemEl);
+      var gemEl = document.createElement('div'); gemEl.className = 'wgem'; putThumb(gemEl, gemThumb([1, 2, 4, 3][wi % 4])); d.appendChild(gemEl);
       if (!levelUnlocked(wi * 5)) d.classList.add('locked');
       var row = document.createElement('div'); row.className = 'levels';
       for (var i = wi * 5; i < wi * 5 + 5; i++) (function (idx) {
@@ -790,7 +781,7 @@
   /* ------------------------------------------------------------ buttons */
   function onClick(id, fn) { $(id).addEventListener('click', function (e) { if (e.detail > 0) e.currentTarget.blur(); Kit.audio.unlock(); fn(); }); }
   onClick('btnClassic', function () { startClassic(false); });
-  onClick('btnNew', function () { store.remove('run'); startClassic(true); });
+  onClick('btnNew', function () { dropRun(); startClassic(true); });
   onClick('btnAdv', openMap);
   onClick('btnMapBack', function () { Snd.back(); openTitle(); });
   onClick('btnPause', function () { if (state === 'play') pause(); });
@@ -888,7 +879,7 @@
   function burstCell(d) {
     var y = d.i >> 3, x = d.i & 7, cx = cellX(x) + C / 2, cy = cellY(y) + C / 2;
     var hex = skin().pal[(d.color - 1) % 8] || '#fff';
-    if (shards.length < 90) shards.push({ x: cx, y: cy, vx: (Math.random() - 0.5) * 420, vy: -250 - Math.random() * 350, rot: 0, vr: (Math.random() - 0.5) * 14, life: 0, max: 0.75, spr: blk(d.color, d.gem) });
+    if (shards.length < 90 && !calm()) shards.push({ x: cx, y: cy, vx: (Math.random() - 0.5) * 420, vy: -250 - Math.random() * 350, rot: 0, vr: (Math.random() - 0.5) * 14, life: 0, max: 0.75, spr: blk(d.color, d.gem) });
     spark(cx, cy, hex, 5, 380, { life: 0.55, size: 9 });
     spark(cx, cy, '#ffffff', 2, 260, { kind: 2, life: 0.4, size: 9, g: 200 });
   }
@@ -912,9 +903,10 @@
     drawShards();
     drawParts();
     ctx.restore();
-    drawTray();
+    drawShelf();
     drawLeftPanel();
     drawRightPanel();
+    drawTray(); // after the side cards, so long pieces in the outer slots are never hidden under them
     drawFlyGems();
     drawDragged();
     drawPopups();
@@ -924,7 +916,7 @@
     renderFx();
   }
   function drawFloaters() {
-    var dt = 1 / 60;
+    var dt = calm() ? 0 : 1 / 60; // reduced motion: the title blocks stay still
     for (var i = 0; i < floaters.length; i++) {
       var f = floaters[i];
       f.y -= f.v * dt; f.r += f.vr * dt;
@@ -938,6 +930,7 @@
   function drawCells() {
     var pcol = drag && !drag.bomb && drag.valid && drag.pv ? run.tray[drag.slot].color : 0;
     var pulse = 0.5 + 0.5 * Math.sin(time * 12);
+    var tip = gemTip(), soft = 0.15 + 0.15 * (0.5 + 0.5 * Math.sin(time * 5));
     var greyUpTo = {};
     for (var g = 0; g < greyN && g < greyList.length; g++) greyUpTo[greyList[g]] = 1;
     for (var i = 0; i < 64; i++) {
@@ -952,6 +945,9 @@
       ctx.drawImage(blk(col, run.gems[i]), x + (C - sz) / 2, y + (C - sz) / 2, sz, sz);
       if (hl[i] && pcol) {
         ctx.globalAlpha = 0.18 + 0.2 * pulse; ctx.fillStyle = '#fff';
+        Art.rr(ctx, x + 4, y + 4, C - 8, C - 8, 10); ctx.fill(); ctx.globalAlpha = 1;
+      } else if (tip && run.gems[i]) {
+        ctx.globalAlpha = soft; ctx.fillStyle = '#fff';
         Art.rr(ctx, x + 4, y + 4, C - 8, C - 8, 10); ctx.fill(); ctx.globalAlpha = 1;
       }
     }
@@ -970,9 +966,14 @@
     if (drag.bomb) {
       if (drag.r < 0) return;
       var pulse = 0.5 + 0.5 * Math.sin(time * 14);
-      ctx.fillStyle = 'rgba(255,70,40,' + (0.25 + 0.2 * pulse) + ')';
-      Art.rr(ctx, cellX(drag.c) + 2, cellY(drag.r) + 2, C * 3 - 4, C * 3 - 4, 16); ctx.fill();
-      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,230,120,' + (0.6 + 0.4 * pulse) + ')'; ctx.setLineDash([14, 10]); ctx.lineDashOffset = -time * 40; ctx.stroke(); ctx.setLineDash([]);
+      Art.rr(ctx, cellX(drag.c) + 2, cellY(drag.r) + 2, C * 3 - 4, C * 3 - 4, 16);
+      if (drag.valid) {
+        ctx.fillStyle = 'rgba(255,70,40,' + (0.25 + 0.2 * pulse) + ')'; ctx.fill();
+        ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,230,120,' + (0.6 + 0.4 * pulse) + ')'; ctx.lineDashOffset = -time * 40;
+      } else { // nothing to blow up here: still grey outline
+        ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(200,196,230,0.55)'; ctx.lineDashOffset = 0;
+      }
+      ctx.setLineDash([14, 10]); ctx.stroke(); ctx.setLineDash([]);
       return;
     }
     if (drag.r < 0) return;
@@ -1025,11 +1026,12 @@
     }
     ctx.globalAlpha = 1;
   }
-  function drawTray() {
-    // tray shelf
+  function drawShelf() {
     Art.rr(ctx, 318, 552, 644, 156, 30); ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fill();
     Art.rr(ctx, 318, 548, 644, 156, 30); ctx.fillStyle = 'rgba(27,15,58,0.55)'; ctx.fill();
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.stroke();
+  }
+  function drawTray() {
     for (var i = 0; i < 3; i++) {
       var p = run.tray[i], sl = slots[i];
       if (!p || (drag && !drag.bomb && drag.slot === i)) continue;
@@ -1096,19 +1098,31 @@
     txt(banner.sub, 0, 36, 30, '#ffffff', 'center');
     ctx.restore();
   }
+  // First gem levels (1 and 3), before the first move: teach that a gem is collected by
+  // filling its row. The gems pulse (drawCells) and the hint hand points at a gem's row.
+  function gemTip() { return runLevel >= 0 && runLevel <= 2 && run.goalGems && run.moves === 0; }
   function drawHint() {
     if (state !== 'play' || drag || !run || run.moves > 0 || hintIdle < 1.2 || banner) return;
-    if (run.mode !== 'classic' && runLevel > 1) return;
+    var tip = gemTip();
+    if (run.mode !== 'classic' && runLevel > 1 && !tip) return;
     var i = 0;
     while (i < 3 && (!run.tray[i] || !slots[i].fits)) i++;
     if (i >= 3) return;
+    // gem tip: aim at the first empty cell of the gem row that is closest to full
+    var gr = -1, gc = 0, least = N + 1;
+    if (tip) for (var r = 0; r < N; r++) {
+      var empty = 0, first = -1, gem = false;
+      for (var c = 0; c < N; c++) { if (run.gems[r * N + c]) gem = true; if (!run.cells[r * N + c]) { empty++; if (first < 0) first = c; } }
+      if (gem && empty && empty < least) { least = empty; gr = r; gc = first; }
+    }
     var t = (time * 0.7) % 1, e = easeOutCubic(Math.min(1, t * 1.4));
-    var x0 = TX[i], y0 = TY, x1 = BX + C * 4, y1 = BY + C * 4;
+    var x0 = TX[i], y0 = TY, x1 = gr >= 0 ? cellX(gc) + C / 2 : BX + C * 4, y1 = gr >= 0 ? cellY(gr) + C / 2 : BY + C * 4;
     var hx = x0 + (x1 - x0) * e, hy = y0 + (y1 - y0) * e;
     ctx.globalAlpha = t > 0.8 ? (1 - t) / 0.2 : 1;
     drawHand(hx, hy);
     ctx.globalAlpha = 1;
-    txt('اسحب قطعة إلى اللوحة!', BX + C * 4, BY + C * 1.2, 36, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 9 });
+    if (gr >= 0) txt('املأ صف الجوهرة لتجمعها!', BX + C * 4, gr <= 2 ? BY + C * 6.8 : BY + C * 1.2, 36, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 9 });
+    else txt('اسحب قطعة إلى اللوحة!', BX + C * 4, BY + C * 1.2, 36, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 9 });
   }
   function drawHand(x, y) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(-0.3);
@@ -1278,6 +1292,29 @@
       ctx.beginPath(); ctx.arc(px, 392, 11, 0, Math.PI * 2);
       ctx.fillStyle = g < left ? '#ff5fc8' : '#120a33'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#1b0f3a'; ctx.stroke();
     }
+    drawNextSkin(cx);
+  }
+  // Classic: the next score-unlocked skin with a bar that fills live as the score rises
+  // (save.best follows the run's score). Mirrors the power-ups card on the left.
+  function drawNextSkin(cx) {
+    card(RPX, 442, RPW, 266);
+    var n = nextUnlock(true);
+    if (!n) {
+      txt('أكبر كومبو', cx, 520, 26, '#ffd21f', 'center');
+      txt(String(save.stats.bestCombo | 0), cx, 590, 64, '#ffffff', 'center', { ltr: true, stroke: '#1b0f3a', sw: 10 });
+      return;
+    }
+    txt('الشكل التالي', cx, 470, 22, '#ffd21f', 'center');
+    var bs = 44, px = cx - bs, py = 490; // 2x2 preview, same colours as the title's skin buttons
+    ctx.drawImage(Art.block(n.i, 1, 0), px, py, bs, bs); ctx.drawImage(Art.block(n.i, 4, 0), px + bs, py, bs, bs);
+    ctx.drawImage(Art.block(n.i, 6, 0), px, py + bs, bs, bs); ctx.drawImage(Art.block(n.i, 3, 0), px + bs, py + bs, bs, bs);
+    txt(Art.SKINS[n.i].name, cx, 602, 24, '#ffffff', 'center');
+    var k = clamp(n.have / n.need, 0, 1), bx = RPX + 24, bw = RPW - 48;
+    Art.rr(ctx, bx, 622, bw, 26, 13); ctx.fillStyle = '#120a33'; ctx.fill();
+    if (k > 0.02) { Art.rr(ctx, bx + bw * (1 - k), 622, bw * k, 26, 13); ctx.fillStyle = '#ffd21f'; ctx.fill(); }
+    ctx.lineWidth = 3; ctx.strokeStyle = '#1b0f3a'; Art.rr(ctx, bx, 622, bw, 26, 13); ctx.stroke();
+    txt(Kit.fmt(Math.min(n.have, n.need)) + ' / ' + Kit.fmt(n.need), cx, 636, 17, '#ffffff', 'center', { ltr: true, stroke: '#1b0f3a', sw: 5 });
+    txt(n.label, cx, 680, 19, '#cfc8ff', 'center', { max: RPW - 24 });
   }
   function drawStar(x, y, r, on) {
     ctx.beginPath();
@@ -1301,7 +1338,15 @@
       ctx.drawImage(Art.gemSprite(g.kind), x - s / 2, y - s / 2, s, s);
     }
   }
+  // The full-screen #fx layer only holds confetti: once it is empty, clear it one last
+  // time and hide it, so the idle layer is neither redrawn nor blended every frame.
+  var fxLive = false;
+  fxCanvas.style.visibility = 'hidden';
   function renderFx() {
+    if (!confetti.length) {
+      if (!fxLive) return;
+      fxLive = false; fxCanvas.style.visibility = 'hidden';
+    }
     fctx.setTransform(fxView.scale * fxView.dpr, 0, 0, fxView.scale * fxView.dpr, 0, 0);
     fctx.clearRect(0, 0, W, H);
     for (var i = 0; i < confetti.length; i++) {
@@ -1353,7 +1398,7 @@
     },
     endNow: function () { if (state === 'play') { state = 'ending'; endKind = run.level ? 'fail' : 'over'; startGreying(); } },
     win: function () { if (state === 'play' && run.level) { run.result = 'win'; state = 'ending'; endKind = 'win'; endTimer = 0.1; } },
-    stars: function (arr) { save.adv = arr; store.set('adv', arr); },
+    stars: function (arr) { save.adv = arr; put('adv', arr); },
     map: openMap, title: openTitle
   };
 
