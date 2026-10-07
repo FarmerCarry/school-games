@@ -130,13 +130,15 @@
   var parts = [], PMAX = 700;
   var texts = [];
   R.burst = function (x, y, o) {
-    var n = o.n || 12;
+    var n = o.n || 12, slow = 1;
+    // Reduced motion: a few slow sparks instead of a spray (rings and float texts are unchanged).
+    if (Kit.motion.reduced()) { n = Math.min(n, 3); slow = 0.5; }
     for (var i = 0; i < n; i++) {
       if (parts.length >= PMAX) parts.shift();
-      var a = Math.random() * 6.2832, sp = (o.speed || 200) * (0.3 + Math.random() * 0.7);
+      var a = Math.random() * 6.2832, sp = (o.speed || 200) * slow * (0.3 + Math.random() * 0.7);
       parts.push({
         x: x + (o.jit ? (Math.random() - 0.5) * o.jit : 0), y: y + (o.jit ? (Math.random() - 0.5) * o.jit : 0),
-        vx: Math.cos(a) * sp + (o.vx || 0), vy: Math.sin(a) * sp + (o.vy || 0),
+        vx: Math.cos(a) * sp + (o.vx || 0) * slow, vy: Math.sin(a) * sp + (o.vy || 0) * slow,
         life: (o.life || 0.6) * (0.6 + Math.random() * 0.4), max: o.life || 0.6,
         size: (o.size || 6) * (0.6 + Math.random() * 0.7),
         col: o.cols ? o.cols[(Math.random() * o.cols.length) | 0] : (o.col || '#fff'), k: 0, drag: o.drag || 2.5

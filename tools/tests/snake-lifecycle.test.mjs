@@ -45,8 +45,9 @@ async function gamePage(t) {
       get: () => kit,
       set(value) {
         kit = value;
-        kit.loop = update => {
+        kit.loop = (update, render) => {
           window.stepGame = (count = 1) => { for (let i = 0; i < count; i++) update(1 / 60); };
+          window.renderGame = render;
           return { stop() {} };
         };
       }
@@ -221,4 +222,60 @@ test('Snake Arena cached runs finalized by restart and menu count once and retai
   await backThroughCache(page);
   await page.evaluate(() => { SA.game.lastStart = 0; document.getElementById('btnPlay').click(); });
   await assertStats(page, final);
+});
+
+test('Snake Arena warns when a save fails and clears it only after a confirmed retry', async t => {
+  const page = await gamePage(t);
+  const failed = await page.evaluate(() => {
+    window.nativeSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => { throw new DOMException('Full storage fixture', 'QuotaExceededError'); };
+    Object.assign(SA.game.run, { t: 5, kills: 1 });
+    __game.killPlayer();
+    stepGame(120);
+    const status = document.querySelector('.sg-save-status');
+    return { state: __game.state, visible: !status.hidden, status: status.dataset.state, games: __game.stats.games };
+  });
+  assert.deepEqual(failed, { state: 'over', visible: true, status: 'failed', games: 1 });
+  const retried = await page.evaluate(() => {
+    Storage.prototype.setItem = window.nativeSetItem;
+    document.querySelector('.sg-save-status button').click();
+    return document.querySelector('.sg-save-status').dataset.state;
+  });
+  assert.equal(retried, 'saved');
+  const value = await stats(page);
+  assert.equal(value.current.games, 1);
+  assert.deepEqual(value.stored, value.current);
+});
+
+test('Snake Arena draws a paused scene once, redraws it after resize or context restore, and resumes', async t => {
+  const page = await gamePage(t);
+  const draws = await page.evaluate(() => {
+    let n = 0;
+    const draw = CanvasRenderingContext2D.prototype.drawImage;
+    CanvasRenderingContext2D.prototype.drawImage = function () { if (this.canvas.id === 'cv') n++; return draw.apply(this, arguments); };
+    const frames = count => { n = 0; for (let i = 0; i < count; i++) renderGame(0); return n; };
+    stepGame(30); frames(1);
+    document.getElementById('btnPause').click();
+    const first = frames(1), idle = frames(30);
+    dispatchEvent(new Event('resize'));
+    const resized = frames(1), resizedIdle = frames(30);
+    document.getElementById('cv').dispatchEvent(new Event('contextrestored'));
+    const restored = frames(1), restoredIdle = frames(30);
+    document.getElementById('btnResume').click();
+    stepGame();
+    const playing = [frames(1), frames(1)];
+    return { first: first > 0, idle, resized: resized > 0, resizedIdle, restored: restored > 0, restoredIdle, playing: playing.every(c => c > 0) };
+  });
+  assert.deepEqual(draws, { first: true, idle: 0, resized: true, resizedIdle: 0, restored: true, restoredIdle: 0, playing: true });
+});
+
+test('Snake Arena keeps the camera still under reduced motion', async t => {
+  const page = await gamePage(t);
+  const cam = await page.evaluate(() => {
+    Kit.motion.setPreference('reduce');
+    SA.game.shake = 22;
+    stepGame();
+    return [SA.game.shake, SA.render.cam.sx, SA.render.cam.sy];
+  });
+  assert.deepEqual(cam, [0, 0, 0]);
 });
