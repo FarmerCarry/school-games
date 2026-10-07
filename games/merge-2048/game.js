@@ -9,12 +9,20 @@
   var M = window.M2048, THEMES = M.themes;
   var store = Kit.store(SLUG);
   function $(id) { return document.getElementById(id); }
+  // The latest value of every write that failed; each later save retries them,
+  // and the warning stays up until all of them are on disk.
+  var dirty = {}, saveUI = Kit.saveStatus({ retry: saveGame });
+  function put(k, v) { if (store.set(k, v)) delete dirty[k]; else dirty[k] = v; }
+  function flushSaves() {
+    Object.keys(dirty).forEach(function (k) { put(k, dirty[k]); });
+    if (Object.keys(dirty).length) saveUI.failed(); else saveUI.saved();
+  }
 
   var SLIDE = 0.1, POP = 0.24, SPAWN = 0.18;
   var SIZES = [3, 4, 5, 6];
   var SIZE_NAMES = { 3: 'تحدٍّ صعب', 4: 'كلاسيكي', 5: 'واسع', 6: 'عملاق' };
   var GAP = { 3: 0.034, 4: 0.03, 5: 0.024, 6: 0.02 };
-  var WIN = { 3: 512, 4: 2048, 5: 2048, 6: 2048 };
+  var WIN = { 3: 256, 4: 2048, 5: 2048, 6: 2048 };
   var DR = [-1, 0, 1, 0], DC = [0, 1, 0, -1]; // up, right, down, left
   var KEYDIR = { ArrowUp: 0, KeyW: 0, ArrowRight: 1, KeyD: 1, ArrowDown: 2, KeyS: 2, ArrowLeft: 3, KeyA: 3 };
   var INK = '#22123f';
@@ -52,6 +60,9 @@
 
   function unlocked(t) { return save.bestTile >= t.req; }
   function theme() { return M.byId[save.theme]; }
+  // Best tile whose theme unlocks have been announced: the HUD keeps showing a
+  // full bar for the theme just earned until its unlock toast appears.
+  var shownBest = save.bestTile;
 
   function validVals(v, N) {
     if (!Array.isArray(v) || v.length !== N * N) return false;
@@ -326,6 +337,7 @@
   function drawBG(t) {
     var th = theme();
     ctx.drawImage(bgSprite(th), 0, 0, W, H);
+    if (Kit.motion.reduced()) t = 0; // decorations hold still
     var i, d;
     if (th.deco === 'bubbles') {
       ctx.fillStyle = 'rgba(255,255,255,0.09)';
@@ -439,6 +451,7 @@
     fx.parts.push({ x: x, y: y, vx: vx, vy: vy, life: life, max: life, size: size, col: col, type: type || 0, g: grav == null ? 500 : grav, rot: Math.random() * 6.28, vr: Kit.rand(-10, 10) });
   }
   function burst(x, y, n, speed, cols, size, type, grav) {
+    if (Kit.motion.reduced()) n = Math.ceil(n / 2);
     for (var i = 0; i < n; i++) {
       var a = Math.random() * Math.PI * 2, sp = speed * Kit.rand(0.35, 1);
       part(x, y, Math.cos(a) * sp, Math.sin(a) * sp - speed * 0.2, Kit.rand(0.4, 0.8), size * Kit.rand(0.6, 1.2), cols[i % cols.length], type, grav);
@@ -446,6 +459,7 @@
   }
   function confetti(n, fromTop) {
     var cols = ['#ff4f9a', '#ffd23f', '#4fdc7a', '#4fb8ff', '#b88bff', '#ff8a3d', '#ffffff'];
+    if (Kit.motion.reduced()) n = Math.min(n, 12);
     for (var i = 0; i < n; i++) {
       if (fromTop) part(Kit.rand(0, W), Kit.rand(-120, -10), Kit.rand(-60, 60), Kit.rand(80, 260), Kit.rand(2.5, 4), Kit.rand(9, 15), cols[i % cols.length], 1, 120);
       else { var a = Kit.rand(-2.4, -0.7); var sp = Kit.rand(350, 800); part(W / 2 + Kit.rand(-80, 80), H * 0.55, Math.cos(a) * sp, Math.sin(a) * sp, Kit.rand(2, 3.5), Kit.rand(9, 15), cols[i % cols.length], 1, 420); }
@@ -472,7 +486,7 @@
     for (i = fx.floats.length - 1; i >= 0; i--) { fx.floats[i].t += dt; if (fx.floats[i].t >= fx.floats[i].max) fx.floats.splice(i, 1); }
     for (i = fx.rings.length - 1; i >= 0; i--) { fx.rings[i].t += dt; if (fx.rings[i].t >= fx.rings[i].max) fx.rings.splice(i, 1); }
     if (fx.big) { fx.big.t += dt; if (fx.big.t >= fx.big.max) fx.big = null; }
-    fx.shake = Math.max(0, fx.shake - dt * 30);
+    fx.shake = Kit.motion.reduced() ? 0 : Math.max(0, fx.shake - dt * 30);
     fx.sx = (Math.random() - 0.5) * 2 * fx.shake; fx.sy = (Math.random() - 0.5) * 2 * fx.shake;
     var damp = Math.pow(0.0005, dt);
     fx.bx *= damp; fx.by *= damp;
@@ -523,14 +537,15 @@
     var alpha = q > 0.6 ? 1 - (q - 0.6) / 0.4 : 1;
     ctx.save();
     ctx.globalAlpha = alpha;
+    var spin = Kit.motion.reduced() ? 0 : now;
     if (b.v) {
       // rays + tile
-      ctx.save(); ctx.translate(cx, cy - 40); ctx.rotate(now * 0.8);
+      ctx.save(); ctx.translate(cx, cy - 40); ctx.rotate(spin * 0.8);
       ctx.fillStyle = 'rgba(255,240,150,0.28)';
       for (var i = 0; i < 12; i++) { ctx.rotate(Math.PI / 6); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-40 * sc, -260 * sc); ctx.lineTo(40 * sc, -260 * sc); ctx.closePath(); ctx.fill(); }
       ctx.restore();
       var ts = 150;
-      drawTileAt(theme(), b.v, ts, cx, cy - 40, sc * (1 + 0.04 * Math.sin(now * 8)), sc * (1 - 0.04 * Math.sin(now * 8)));
+      drawTileAt(theme(), b.v, ts, cx, cy - 40, sc * (1 + 0.04 * Math.sin(spin * 8)), sc * (1 - 0.04 * Math.sin(spin * 8)));
       cy += 95;
     }
     ctx.translate(cx, cy); ctx.scale(sc, sc); ctx.rotate(-0.05);
@@ -548,7 +563,7 @@
 
   /* ============================================================== game */
   function startGame(N, fresh) {
-    G.N = N; save.size = N; store.set('size', N);
+    G.N = N; save.size = N; put('size', N);
     clearQueue();
     fx.parts.length = 0; fx.floats.length = 0; fx.rings.length = 0; fx.big = null;
     G.board = new Board(N);
@@ -561,7 +576,7 @@
       G.board.spawn(now + 0.1); G.board.spawn(now + 0.22);
       G.score = 0; G.undos = 3; G.hist = []; G.won = false; G.keep = false; G.moves = 0;
       G.startBest = save.best[N];
-      save.games++; store.set('games', save.games);
+      save.games++; put('games', save.games);
     }
     G.dead = !G.board.canMove(); G.deadAt = now + 0.3;
     G.winPending = G.won && !G.keep; G.maxT = G.board.maxTile(); G.newBest = G.startBest > 0 && G.score > G.startBest;
@@ -574,8 +589,8 @@
   }
 
   function saveGame() {
-    if (!G.board) return;
-    store.set('g' + G.N, { v: G.board.values(), s: G.score, u: G.undos, h: G.hist, w: G.won, k: G.keep, m: G.moves, sb: G.startBest });
+    if (G.board) put('g' + G.N, { v: G.board.values(), s: G.score, u: G.undos, h: G.hist, w: G.won, k: G.keep, m: G.moves, sb: G.startBest });
+    flushSaves();
   }
 
   function doMove(dir) {
@@ -591,7 +606,8 @@
     G.hist.push(before); if (G.hist.length > 3) G.hist.shift();
     G.moves++;
     G.score += r.gained;
-    fx.bx = DC[dir] * 3; fx.by = DR[dir] * 3;
+    // decorative push; the blocked-move bump above stays as input feedback
+    if (!Kit.motion.reduced()) { fx.bx = DC[dir] * 3; fx.by = DR[dir] * 3; }
     sfx.slide();
     b.spawn(now + SLIDE * 0.9);
     later(SLIDE * 0.9, sfx.spawn);
@@ -599,7 +615,7 @@
     if (merges.length) later(SLIDE, function () { mergeFX(merges, gained); });
 
     if (G.score > save.best[N]) {
-      save.best[N] = G.score; store.set('best', save.best);
+      save.best[N] = G.score; put('best', save.best);
       if (!G.newBest && G.startBest > 0) {
         G.newBest = true;
         later(SLIDE + 0.1, function () { toast('🏆 رقم قياسي جديد!'); sfx.best(); confetti(40, true); }, true);
@@ -610,12 +626,12 @@
       var prevMax = G.maxT; G.maxT = mx;
       if (mx >= 128 && prevMax > 0 && mx !== WIN[N]) later(SLIDE + 0.05, function () { milestone(mx); });
     }
-    if (mx > save.bt[N]) { save.bt[N] = mx; store.set('bt', save.bt); }
+    if (mx > save.bt[N]) { save.bt[N] = mx; put('bt', save.bt); }
     if (mx > save.bestTile) {
       var prev = save.bestTile;
-      save.bestTile = mx; store.set('bestTile', mx);
+      save.bestTile = mx; put('bestTile', mx);
       THEMES.forEach(function (th) {
-        if (th.req > prev && th.req <= mx) later(0.9, function () { toast('🔓 شكل جديد: «' + th.name + '»! اضغط T'); sfx.unlock(); refreshHUD(); }, true);
+        if (th.req > prev && th.req <= mx) later(0.9, function () { toast('🔓 شكل جديد: «' + th.name + '»! اضغط T'); sfx.unlock(); shownBest = Math.max(shownBest, th.req); refreshHUD(); }, true);
       });
     }
     if (mx >= WIN[N] && !G.won) {
@@ -736,7 +752,7 @@
     var hint;
     if (G.newBest) hint = 'تفوّقت على نفسك! هل تستطيع أكثر؟';
     else if (G.startBest === 0 && G.score > 0 && G.score >= save.best[N]) hint = 'سجّلت أول رقم قياسي! هل تتفوّق عليه؟';
-    else if (G.maxT >= 1024 && !G.won) hint = 'كنت قريباً جداً من 2048! 😮';
+    else if (G.maxT >= WIN[N] / 2 && !G.won) hint = 'كنت قريباً جداً من ' + WIN[N] + '! 😮';
     else if (save.best[N] > 0 && G.score >= save.best[N] * 0.85) hint = 'قريب جداً من رقمك القياسي!';
     else if (canU) hint = 'جرّب التراجع وغيّر خطتك! ↶';
     else hint = Kit.pick(['نصيحة: اجمع أكبر بلاطة في زاوية واحدة!', 'نصيحة: لا تحرّك البلاطة الكبيرة من زاويتها.', 'نصيحة: استعمل اتجاهين أو ثلاثة فقط معظم الوقت.']);
@@ -777,6 +793,16 @@
     $('goalTxt').textContent = target;
     drawIcon($('goalTile'), theme(), target);
     $('goalBar').style.width = Math.min(100, Math.round(log2(mx) / log2(target) * 100)) + '%';
+    // next theme to unlock, with this game's progress towards its tile
+    var nt = null;
+    for (i = 0; i < THEMES.length && !nt; i++) if (THEMES[i].req > shownBest) nt = THEMES[i];
+    $('nextBox').hidden = !nt;
+    if (nt) {
+      drawIcon($('nextTile'), nt, nt.icon);
+      $('nextName').textContent = nt.name;
+      $('nextReq').textContent = 'اصنع ' + nt.req;
+      $('nextBar').style.width = Math.min(100, Math.round(log2(mx) / log2(nt.req) * 100)) + '%';
+    }
     void instant;
   }
   function bumpScore(gained) {
@@ -887,15 +913,16 @@
   }
   function selectSize(n) {
     if (SIZES.indexOf(n) < 0) return;
-    save.size = n; store.set('size', n);
+    save.size = n; put('size', n); flushSaves();
     sfx.click();
     demoReset();
     refreshTitle();
   }
   function setTheme(id) {
     var th = M.byId[id]; if (!th || !unlocked(th)) return;
-    save.theme = id; store.set('theme', id);
-    if (save.seen.indexOf(id) < 0) { save.seen.push(id); store.set('seen', save.seen); }
+    save.theme = id; put('theme', id);
+    if (save.seen.indexOf(id) < 0) { save.seen.push(id); put('seen', save.seen); }
+    flushSaves();
     buildDeco();
     if (G.screen === 'title') refreshTitle(); else refreshHUD();
   }
@@ -1055,6 +1082,7 @@
   }
 
   /* =============================================================== init */
+  Kit.motion.onChange(function (reduced) { if (reduced) { fx.parts.length = 0; fx.shake = 0; } });
   buildDeco();
   buildTitle();
   demoReset();
@@ -1075,10 +1103,10 @@
     set: function (vals) { if (!G.board || !validVals(vals, G.N)) return false; G.board.load(vals, now, 0.01); G.dead = false; G.maxT = G.board.maxTile(); refreshHUD(); saveGame(); return true; },
     move: doMove, undo: undo, pause: pause, menu: toMenu, setTheme: setTheme, sfx: sfx,
     bench: function (n) { n = n || 100; var t = performance.now(); for (var i = 0; i < n; i++) render(); return (performance.now() - t) / n; },
-    unlockAll: function () { save.bestTile = Math.max(save.bestTile, 2048); store.set('bestTile', save.bestTile); refreshTitle(); },
+    unlockAll: function () { save.bestTile = shownBest = Math.max(save.bestTile, 2048); store.set('bestTile', save.bestTile); refreshTitle(); refreshHUD(); },
     nearWin: function () {
       var N = G.N, v = []; for (var i = 0; i < N * N; i++) v.push(0);
-      v[N * (N - 1)] = WIN[N] / 2; v[N * (N - 1) + 1] = WIN[N] / 2; v[N * (N - 1) + 2] = 256; v[0] = 4;
+      v[N * (N - 1)] = WIN[N] / 2; v[N * (N - 1) + 1] = WIN[N] / 2; v[N * (N - 1) + 2] = WIN[N] / 8; v[0] = 4;
       return this.set(v);
     },
     forceOver: function () {
