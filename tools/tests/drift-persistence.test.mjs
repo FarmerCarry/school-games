@@ -160,6 +160,25 @@ test('a rejected purchase cannot reappear in a later save and retry awards its m
   assert.deepEqual((await snapshot(page)).stored, expected, 'selecting an owned car must not charge or reward again');
 });
 
+test('restart or menu from pause keeps a best the run already beat without counting the run', async t => {
+  const saved = { v: 1, ...fixture() };
+  const page = await game(t, { save: saved });
+  await page.locator('#btnPlay').press('Enter');
+  await page.evaluate(() => __game.debug.skip(300));
+  await page.locator('#btnPause').click();
+  await page.locator('#btnRestart').click();
+  let { stored } = await snapshot(page);
+  assert.equal(stored.best, 300);
+  assert.ok(stored.bestDist >= 300, 'the best-distance flag moves with the record');
+  assert.equal(stored.runs, saved.runs, 'an abandoned run is not counted');
+  await page.evaluate(() => __game.debug.skip(400));
+  await page.locator('#btnPause').click();
+  await page.locator('#btnMenu').click();
+  ({ stored } = await snapshot(page));
+  assert.deepEqual([stored.best, stored.runs, stored.coins, stored.done], [400, saved.runs, saved.coins, saved.done]);
+  assert.equal(await page.locator('#tBest').textContent(), '400');
+});
+
 test('a mission-save failure after purchase retains a coherent purchase and retries the reward once', async t => {
   const saved = { v: 1, ...fixture({ done: earlierMissions }) };
   const page = await game(t, { save: saved });

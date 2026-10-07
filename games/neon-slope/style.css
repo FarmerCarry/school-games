@@ -81,6 +81,13 @@ html, body { background: #07021a; }
   animation: pop 1s ease-out forwards; }
 .pop.big { font-size: calc(var(--u) * 4.4); }
 .pop.callout { font-size: calc(var(--u) * 5); animation-name: callout; animation-duration: 1.4s; }
+/* Classroom mode / reduced motion cuts animations to their last, invisible frame, so popups
+   and banners fade in and out in place instead. Only the durations need !important to beat
+   the shared rule; the name stays overridable so the inline restart trick still works. */
+html[data-sg-motion="reduce"] .pop, html[data-sg-motion="reduce"] #banner.show { animation-name: nsFadeHold; }
+html[data-sg-motion="reduce"] .pop { animation-duration: 1s !important; }
+html[data-sg-motion="reduce"] .pop.callout { animation-duration: 1.4s !important; }
+html[data-sg-motion="reduce"] #banner.show { animation-duration: 2.2s !important; }
 
 /* ------------------------------------------------------------ overlays */
 .ov { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; }
@@ -233,6 +240,7 @@ html, body { background: #07021a; }
 @keyframes callout { 0% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; } 12% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
   75% { transform: translate(-50%, -50%) scale(1.04); opacity: 1; } 100% { transform: translate(-50%, -80%) scale(1); opacity: 0; } }
 @keyframes banner { 0% { opacity: 0; transform: scale(2); } 12% { opacity: 1; transform: scale(1); } 80% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.9) translateY(-30px); } }
+@keyframes nsFadeHold { 0% { opacity: 0; } 10%, 80% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes newBest { from { transform: scale(0) rotate(-20deg); } to { transform: scale(1) rotate(0); } }
 @keyframes wiggle { 0%, 100% { transform: rotate(-3deg) scale(1); } 50% { transform: rotate(3deg) scale(1.06); } }
 @keyframes hintBob { from { transform: translate(-50%, 0); } to { transform: translate(-50%, -8px); } }

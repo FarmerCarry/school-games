@@ -156,6 +156,8 @@
   .pw.low canvas { animation: blink 0.3s steps(2) infinite; }
   #pop { position: absolute; left: 0; right: 0; top: 24%; text-align: center; font-size: 3.2em; font-weight: 700; color: #fff; text-shadow: var(--outline), 0 0.1em 0 var(--navy); opacity: 0; pointer-events: none; }
   #pop.show { animation: popText 1.3s ease-out forwards; }
+  /* reduced motion cuts popText to 0.01 ms (shared/game.css): show it still; game.js removes .show */
+  html[data-sg-motion="reduce"] #pop.show { animation: none; opacity: 1; }
   #pop.warn { color: #ff5a5f; }
   #pop.good, #pop.sneakers { color: #6dffa6; }
   #pop.gold, #pop.doubler, #pop.best { color: var(--yellow); }

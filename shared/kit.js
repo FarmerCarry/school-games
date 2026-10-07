@@ -483,28 +483,41 @@
   };
 
   // Keep failed writes visible until the caller confirms a successful save.
+  // A failure shows its message, then folds into a small corner badge that keeps
+  // Retry, so a PC whose storage is blocked is not covered for the whole session.
   Kit.saveStatus = function (opts) {
     opts = opts || {};
     var panel = document.createElement('div'), message = document.createElement('span'), retry = document.createElement('button');
-    var timer = 0, hasFailed = false;
+    var timer = 0, foldTimer = 0, hasFailed = false, retrying = false;
     panel.className = 'sg-save-status'; panel.hidden = true;
     panel.setAttribute('role', 'status'); panel.setAttribute('aria-live', 'polite');
-    retry.type = 'button'; retry.textContent = 'أعد المحاولة';
+    retry.type = 'button'; retry.textContent = 'أعد المحاولة'; retry.title = 'تعذّر الحفظ — أعد المحاولة';
     retry.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
     retry.addEventListener('click', function (e) {
       e.stopPropagation();
-      if (opts.retry) opts.retry();
+      retrying = true;
+      try { if (opts.retry) opts.retry(); } finally { retrying = false; }
       if (e.detail > 0) retry.blur();
     });
     panel.appendChild(message); panel.appendChild(retry); document.body.appendChild(panel);
+    function fold(on) {
+      clearTimeout(foldTimer);
+      panel.setAttribute('data-compact', on ? 'true' : 'false');
+      if (!on) foldTimer = setTimeout(function () { fold(true); }, 6000);
+    }
     return {
       failed: function () {
+        // Autosaves can fail every few seconds; only a new failure or the
+        // child's own Retry unfolds the full message again.
+        var fresh = !hasFailed || retrying;
         clearTimeout(timer); hasFailed = true; panel.hidden = false; retry.hidden = false;
         message.textContent = 'تعذّر الحفظ — '; panel.setAttribute('data-state', 'failed');
+        if (fresh) fold(false);
       },
       saved: function () {
         if (!hasFailed) return;
-        clearTimeout(timer); hasFailed = false; retry.hidden = true;
+        clearTimeout(timer); clearTimeout(foldTimer); hasFailed = false; retry.hidden = true;
+        panel.setAttribute('data-compact', 'false');
         message.textContent = 'تم الحفظ'; panel.setAttribute('data-state', 'saved');
         timer = setTimeout(function () { panel.hidden = true; }, 2500);
       }

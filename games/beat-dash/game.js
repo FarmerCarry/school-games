@@ -7,6 +7,7 @@
 
   var W = 1280, H = 720, U = 56, GROUND0 = 560, PLAYER_SX = 6.2;
   var TAU = Math.PI * 2;
+  var CP_LOOK = 45; // practice auto-checkpoints need 0.75 s of safe running ahead (a kid's reaction time)
   var BD = window.BD;
 
   var canvas = document.getElementById('game');
@@ -54,7 +55,15 @@
     face: store.get('face', 0), c1: store.get('c1', 0), c2: store.get('c2', 1),
     seen: store.get('seen', null), gseen: store.get('gseen', []), last: store.get('last', 0)
   };
-  function persist(k) { store.set(k, save[k]); }
+  // A failed write stays listed until it succeeds; the in-memory save keeps this session's progress.
+  var saveStatus = Kit.saveStatus({ retry: retrySaves }), failedKeys = {};
+  function persist(k) {
+    if (store.set(k, save[k])) {
+      delete failedKeys[k];
+      if (!Object.keys(failedKeys).length) saveStatus.saved();
+    } else { failedKeys[k] = true; saveStatus.failed(); }
+  }
+  function retrySaves() { Object.keys(failedKeys).forEach(persist); }
   function popcnt(n) { var c = 0; while (n) { c += n & 1; n >>>= 1; } return c; }
   function totalStars() { var t = 0; LEVELS.forEach(function (L) { t += popcnt(save.stars[L.id] || 0); }); return t; }
   function maxStars() { var t = 0; LEVELS.forEach(function (L) { t += L.stars; }); return t; }
@@ -103,6 +112,9 @@
   /* ----------------------------------------------------------- helpers */
   function $(id) { return document.getElementById(id); }
   function lerp(a, b, t) { return a + (b - a) * t; }
+  // Reduced motion (personal setting or classroom preset): no full-screen flashes, beat pulsing or spinning shapes.
+  // Read every frame, so a change applies at once.
+  function calm() { return Kit.motion.reduced(); }
   function hash(n) { n = Math.imul(n | 0, 374761393) + 668265263 | 0; n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }
   function hexA(hex, a) {
     var h = hex.replace('#', '');
@@ -434,8 +446,15 @@
   function toast(msg) { toastQ.push(msg); }
   function updateToast(dt) {
     var el = $('toast');
+    // A death popup ("رقم قياسي جديد!") sits centred just below the toast, so the toast steps aside
+    // while one is up: a showing toast goes back to the front of the queue (unless nearly done).
+    if (centrePopupUp()) {
+      if (toastT > 0) { if (toastT > 0.6) toastQ.unshift(el.textContent); toastT = 0; el.hidden = true; }
+      return;
+    }
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) el.hidden = true; return; }
-    if (toastQ.length) { el.textContent = toastQ.shift(); el.hidden = false; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; toastT = 2.6; }
+    // the toast sits top-centre, so it waits while a live run keeps the cube up near the ceiling
+    if (toastQ.length && !cubeHigh()) { el.textContent = toastQ.shift(); el.hidden = false; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; toastT = 2.6; }
   }
 
   /* ---------------------------------------------------------- theme */
@@ -486,6 +505,11 @@
     return snap ? Math.max(0, t) : t;
   }
 
+  function cubeHigh() {
+    if (scene !== 'play' || !G.s || G.dead || G.won || G.paused) return false;
+    return GROUND0 + G.camY * U - (G.s.y + 0.5) * U < 300;
+  }
+
   function jumpHeld() { return Kit.keys.anyDown(['Space', 'ArrowUp', 'KeyW']) || ptr.down; }
   function jumpPressed() { return Kit.keys.anyPressed(['Space', 'ArrowUp', 'KeyW']) || ptr.pressed; }
 
@@ -499,7 +523,8 @@
     burst(cx, cy, 26, { speed: 11, life: 0.8, size: 0.26, colors: [look.c1, look.c2, '#ffffff'], g: -22, drag: 0.8 });
     burst(cx, cy, 20, { speed: 16, life: 0.5, size: 0.1, color: '#ffffff', g: 0, shape: 1, drag: 2 });
     ring(cx, cy, look.c1, 0.3, 2.6, 0.45);
-    shake.add(14); G.flash = 0.45; G.flashCol = '#ffffff';
+    shake.add(14);
+    if (!calm()) { G.flash = 0.45; G.flashCol = '#ffffff'; }
     sfx.die();
     music.stop(0.12);
     save.total.jumps += s.jumps - G.jumpsAtStart; G.jumpsAtStart = s.jumps; persist('total');
@@ -510,15 +535,27 @@
       if (!G.practice && p >= 5) {
         popup('رقم قياسي جديد!', p + '%', '#ffe14d');
         sfx.best();
-        burst(W / 2, 250, 40, { speed: 520, life: 1.1, size: 12, colors: ['#ffe14d', '#ff5ad1', '#3df2ff', '#7dff5a'], g: 700, screen: true, shape: 4 });
+        // the confetti is pure decoration: calm mode keeps just the popup and the sound
+        if (!calm()) burst(W / 2, 250, 40, { speed: 520, life: 1.1, size: 12, colors: ['#ffe14d', '#ff5ad1', '#3df2ff', '#7dff5a'], g: 700, screen: true, shape: 4 });
       }
     } else if (!G.practice && p >= 85) popup('قريب جدًا!', p + '%', '#ff8ad8');
-    // stuck? point kids at practice mode (every 12 tries in a row)
-    if (!G.practice && G.sessionAtt % 12 === 0) toast('صعبة؟ جرّب وضع التدريب: اضغط P ثم «وضع التدريب»');
+    // stuck? point kids at practice mode (5th try in a row, then every 10 more, until they pass 70%)
+    var tries = G.sessionAtt;
+    if (!G.practice && (tries === 5 || (tries > 5 && (tries - 5) % 10 === 0)) && (save.best[L.id] || 0) < 70) toast('صعبة؟ جرّب وضع التدريب: اضغط P ثم «وضع التدريب»');
   }
 
   var lastBumpT = -1;
-  function popup(big, small, col) { G.popups.push({ big: big, small: small, col: col, t: 0, life: 1.6 }); }
+  // Popups during a live run (stars) sit behind the cube, which is always PLAYER_SX blocks from the left,
+  // so they never hide the lane ahead, even upside down or in a rocket tunnel. Death popups sit centred,
+  // above the "المحاولة N" text of the next attempt and just below the toast band (toasts wait for them).
+  function popup(big, small, col) {
+    var live = scene === 'play' && !G.dead && !G.won;
+    G.popups.push({ big: big, small: small, col: col, t: 0, life: 1.6, x: live ? 180 : W / 2, y: live ? 200 : 150, centre: !live });
+  }
+  function centrePopupUp() {
+    for (var i = 0; i < G.popups.length; i++) if (G.popups[i].centre) return true;
+    return false;
+  }
 
   function handleEvents(s) {
     var look = myLook(), th = G.L.theme;
@@ -553,7 +590,7 @@
           break;
         case 'portal':
           G.flashes[o.id] = 1;
-          G.flash = 0.35; G.flashCol = portalCol(o.kind);
+          if (!calm()) { G.flash = 0.35; G.flashCol = portalCol(o.kind); }
           burst(o.cx, o.cy, 18, { speed: 6, life: 0.5, size: 0.15, color: portalCol(o.kind), g: 0, jy: 2.5, drag: 2 });
           shake.add(3);
           sfx.portal();
@@ -585,10 +622,12 @@
     else { save.done[L.id] = true; persist('done'); save.best[L.id] = 100; persist('best'); }
     G.winUnlocks = checkUnlocks();
     if (nextWasLocked) G.winUnlocks.unshift({ kind: 'l', i: G.li + 1 });
-    G.flash = 0.6; G.flashCol = '#ffffff';
+    if (!calm()) { G.flash = 0.6; G.flashCol = '#ffffff'; }
     shake.add(6);
     sfx.win();
-    for (var i = 0; i < 5; i++) firework(true);
+    // calm mode: no full-screen fireworks (the win panel and its stars still appear at once)
+    if (calm()) sfx.firework();
+    else for (var i = 0; i < 5; i++) firework(true);
   }
 
   function firework(big) {
@@ -602,11 +641,11 @@
 
   function practiceSafe(s) {
     var t = BD.clone(s); t.ev = null;
-    for (var i = 0; i < 18; i++) { BD.tick(G.L, t, false, false); if (t.dead) break; }
+    for (var i = 0; i < CP_LOOK; i++) { BD.tick(G.L, t, false, false); if (t.dead) break; }
     if (!t.dead) return true;
     if (s.mode === 1) {
       t = BD.clone(s); t.ev = null;
-      for (i = 0; i < 18; i++) { BD.tick(G.L, t, true, i === 0); if (t.dead) return false; }
+      for (i = 0; i < CP_LOOK; i++) { BD.tick(G.L, t, true, i === 0); if (t.dead) return false; }
       return true;
     }
     return false;
@@ -637,7 +676,7 @@
       G.wonT += dt;
       G.winX += L.speed * BD.PHYS.TIERS[s.tier] * dt;
       G.fireT -= dt;
-      if (G.fireT <= 0 && G.wonT < 6) { firework(false); G.fireT = 0.28 + Math.random() * 0.25; }
+      if (G.fireT <= 0 && G.wonT < 6 && !calm()) { firework(false); G.fireT = 0.28 + Math.random() * 0.25; }
       if (G.wonT > 1.4 && !G.winShown) showWin();
       if (G.winShown && G.wonT > 1.9) {
         if (Kit.keys.anyPressed(['Enter', 'Space'])) winNext();
@@ -781,6 +820,8 @@
     var bar = Math.floor(b / 4);
     var sec = BD.songSection(song, bar);
     var amp = sec === 0 ? 0.55 : sec === 2 ? 1 : 0.8;
+    // calm: everything that pulses or hops on the beat (and the title logo) holds still
+    if (calm()) return { pulse: 0, beat: 0, sec: sec, frac: frac };
     return { pulse: Math.exp(-frac * 5) * amp, beat: Math.floor(b), sec: sec, frac: frac };
   }
 
@@ -793,13 +834,13 @@
     // big slow shapes
     ctx.save();
     ctx.strokeStyle = th.deco; ctx.lineWidth = 8;
-    var span = 1700;
+    var span = 1700, spin = calm() ? 0 : t * 0.25;
     for (var i = 0; i < 9; i++) {
       var bx = ((i * 190 - camX * U * 0.08) % span + span) % span - 200;
       var by = 90 + (i * 137 % 5) * 72 + camY * U * 0.05;
       var sz = (70 + (i * 53 % 4) * 34) * (1 + pulse * 0.08);
       ctx.globalAlpha = 0.16 + 0.1 * pulse;
-      ctx.save(); ctx.translate(bx, by); ctx.rotate(t * 0.25 * (i % 2 ? 1 : -1) + i);
+      ctx.save(); ctx.translate(bx, by); ctx.rotate(spin * (i % 2 ? 1 : -1) + i);
       if (i % 3 === 0) { ctx.beginPath(); ctx.arc(0, 0, sz / 2, 0, TAU); ctx.stroke(); }
       else ctx.strokeRect(-sz / 2, -sz / 2, sz, sz);
       ctx.restore();
@@ -1139,7 +1180,7 @@
       var sc = k < 0.15 ? 0.5 + k / 0.15 * 0.7 : k < 0.25 ? 1.2 - (k - 0.15) : 1.1;
       var a = k > 0.75 ? 1 - (k - 0.75) / 0.25 : 1;
       ctx.save(); ctx.globalAlpha = a;
-      ctx.translate(W / 2, 200 - i * 10 - k * 20); ctx.scale(sc, sc); ctx.rotate(-0.04);
+      ctx.translate(p.x, p.y - i * 10 - k * 20); ctx.scale(sc, sc); ctx.rotate(-0.04);
       ctx.direction = 'rtl'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = '700 72px Fredoka, "Segoe UI", sans-serif';
       ctx.lineWidth = 12; ctx.strokeStyle = '#1b1033'; ctx.lineJoin = 'round';
@@ -1237,11 +1278,12 @@
   function drawPreview(look, t, bi) {
     pctx.setTransform(1, 0, 0, 1, 0, 0);
     pctx.clearRect(0, 0, 260, 260);
-    var hop = Math.abs(Math.sin(t * Math.PI * MENU_BPM / 60 / 2)) * 40 + (G.previewHop || 0) * 30;
+    var still = calm();
+    var hop = (still ? 0 : Math.abs(Math.sin(t * Math.PI * MENU_BPM / 60 / 2)) * 40) + (G.previewHop || 0) * 30;
     pctx.fillStyle = 'rgba(0,0,0,0.35)';
     pctx.beginPath(); pctx.ellipse(130, 222, 70 - hop * 0.4, 12, 0, 0, TAU); pctx.fill();
     pctx.save(); pctx.translate(130, 150 - hop);
-    pctx.rotate(Math.sin(t * 2) * 0.12);
+    if (!still) pctx.rotate(Math.sin(t * 2) * 0.12);
     BD.drawCube(pctx, 130, look.face, look.c1, look.c2, G.blink > 0 ? 1 : 0);
     pctx.restore();
   }

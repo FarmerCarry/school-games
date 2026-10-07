@@ -65,6 +65,7 @@
   SUMOS.forEach(function (s) {
     s.light = shade(s.body, 0.5); s.mid = shade(s.body, 0.22); s.dark = shade(s.body, -0.22);
     s.beltDark = shade(s.belt, -0.35); s.beltLight = shade(s.belt, 0.3); s.bandDark = shade(s.band, -0.25);
+    s.crease = shade(s.body, -0.35); s.chest = shade(s.body, -0.2);
   });
 
   // stars: needed star count. special: unlocked by an achievement instead.
@@ -444,10 +445,10 @@
     // belly
     ell(ctx, 16 + bx, 6 + by, 35, 29); ctx.fillStyle = S.mid; ctx.fill();
     ell(ctx, 10 + bx, -2 + by, 16, 10, -0.3); ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fill();
-    ctx.strokeStyle = shade(S.body, -0.35); ctx.lineWidth = 2.5;
+    ctx.strokeStyle = S.crease; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(22 + bx, 12 + by, 4, 0.2, Math.PI - 0.2); ctx.stroke();
     // chest lines
-    ctx.strokeStyle = shade(S.body, -0.2); ctx.lineWidth = 2.5;
+    ctx.strokeStyle = S.chest; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(8 + bx * 0.5, -22, 9, 0.3, Math.PI - 0.6); ctx.stroke();
     ctx.beginPath(); ctx.arc(32 + bx * 0.5, -22, 8, 0.6, Math.PI - 0.3); ctx.stroke();
     // belt (mawashi)

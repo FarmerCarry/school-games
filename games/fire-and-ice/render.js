@@ -28,17 +28,26 @@
     c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h));
     return c;
   }
-  var glows = {};
-  function glow(color) {
-    if (glows[color]) return glows[color];
-    var c = makeCanvas(64, 64), g = c.getContext('2d');
+  // One cached sprite per glow colour. Callers pass fixed colours and fade with
+  // globalAlpha. Past GLOW_MAX colours one scratch sprite is repainted and reused,
+  // so a changing colour string can neither fill memory nor allocate every frame.
+  var glows = {}, nGlows = 0, GLOW_MAX = 32, glowScratch = null;
+  function paintGlow(c, color) {
+    var g = c.getContext('2d');
     var gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
     gr.addColorStop(0, color); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.clearRect(0, 0, 64, 64);
     g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-    glows[color] = c;
     return c;
   }
+  function glow(color) {
+    if (glows[color]) return glows[color];
+    if (nGlows < GLOW_MAX) { nGlows++; return (glows[color] = paintGlow(makeCanvas(64, 64), color)); }
+    return paintGlow(glowScratch || (glowScratch = makeCanvas(64, 64)), color);
+  }
   R.glow = glow;
+  // A restored canvas context may come back with blank offscreen sprites.
+  R.clearGlows = function () { glows = {}; nGlows = 0; glowScratch = null; };
   function drawGlow(g, color, x, y, rx, ry) {
     g.drawImage(glow(color), x - rx, y - (ry || rx), rx * 2, (ry || rx) * 2);
   }
@@ -59,6 +68,19 @@
   LIQ[TL.WATER] = { top: '#9ff0ff', mid: '#2aa8ff', bot: '#0b4fb8', line: '#e8fdff', glow: 'rgba(60,170,255,0.45)', bub: '#dff8ff' };
   LIQ[TL.GOO] = { top: '#d8ff5c', mid: '#57d62f', bot: '#1f6e17', line: '#f3ffc2', glow: 'rgba(120,255,60,0.45)', bub: '#eaff9a' };
   R.LIQ = LIQ;
+
+  // Temple colours per group of 4 levels (static layers only: liquids, doors, gems
+  // and heroes never change, so hazards always look the same). brick/stone are
+  // base hue, saturation and lightness offset; the title world uses sandstone.
+  var THEMES = [
+    { bg: ['#2a1d17', '#3d2a1c'], brick: [22, 28, 0], stone: [30, 42, 0], mortar: 'rgba(60,32,12,0.35)', hi: 'rgba(255,236,190,0.45)', edge: '#2a170a',
+      grass: ['#3f8f25', '#6cc23a', '#8fe052'], flowers: ['#ffd23f', '#ff8fb1'] },   // sandstone
+    { bg: ['#14211e', '#1c3029'], brick: [170, 26, -2], stone: [160, 19, -5], mortar: 'rgba(8,40,30,0.4)', hi: 'rgba(215,255,235,0.4)', edge: '#0c2019',
+      grass: ['#2a6e2c', '#4a9e3c', '#6cc24e'], flowers: ['#fff3a0', '#ffffff'] },   // mossy jade
+    { bg: ['#1c1628', '#2a1f3a'], brick: [272, 24, -1], stone: [258, 16, -4], mortar: 'rgba(30,14,50,0.4)', hi: 'rgba(235,220,255,0.4)', edge: '#1a1026',
+      grass: ['#2c6b4c', '#46966a', '#66b98a'], flowers: ['#d4a8ff', '#ff9ad5'] }    // twilight obsidian
+  ];
+  function themeOf(w) { return THEMES[Math.floor(w.index / 4)] || THEMES[0]; }
 
   function isSolid(w, x, y) { var t = FI.tileAt(w, x, y); return t === TL.S; }
   function isAir(w, x, y) { var t = FI.tileAt(w, x, y); return t === TL.E; }
@@ -129,16 +151,16 @@
   }
 
   function drawBackground(g, w) {
-    var W = w.W * T, H = w.H * T, r = rng(99 + w.index * 31);
+    var W = w.W * T, H = w.H * T, r = rng(99 + w.index * 31), th = themeOf(w);
     var gr = g.createLinearGradient(0, 0, 0, H);
-    gr.addColorStop(0, '#2a1d17'); gr.addColorStop(1, '#3d2a1c');
+    gr.addColorStop(0, th.bg[0]); gr.addColorStop(1, th.bg[1]);
     g.fillStyle = gr; g.fillRect(0, 0, W, H);
     // big bricks
     for (var y = 0; y < H; y += 20) {
       var off = ((y / 20) % 2) * 22;
       for (var x = -off; x < W; x += 44) {
-        var l = 16 + r() * 7;
-        g.fillStyle = 'hsl(' + (22 + r() * 10) + ',' + (28 + r() * 10) + '%,' + l + '%)';
+        var l = 16 + th.brick[2] + r() * 7;
+        g.fillStyle = 'hsl(' + (th.brick[0] + r() * 10) + ',' + (th.brick[1] + r() * 10) + '%,' + l + '%)';
         g.fillRect(x + 1.5, y + 1.5, 41, 17);
         g.fillStyle = 'rgba(255,220,170,0.05)';
         g.fillRect(x + 1.5, y + 1.5, 41, 2);
@@ -212,13 +234,13 @@
   }
 
   function drawTiles(g, w) {
-    var r = rng(555 + w.index * 17);
+    var r = rng(555 + w.index * 17), th = themeOf(w);
     for (var y = 0; y < w.H; y++) {
       for (var x = 0; x < w.W; x++) {
         var t = w.tiles[y * w.W + x];
         var px = x * T, py = y * T;
         if (t === TL.S && w.fanTile[y * w.W + x]) { drawFanBase(g, px, py); continue; }
-        if (t === TL.S) drawStone(g, w, x, y, px, py, r);
+        if (t === TL.S) drawStone(g, w, x, y, px, py, r, th);
         else if (t === TL.ONE) drawPlank(g, w, x, y, px, py);
         else if (t === TL.LAVA || t === TL.WATER || t === TL.GOO) {
           // basin walls under the liquid
@@ -229,12 +251,12 @@
     // grass pass (after all stones so blades overlap neighbours nicely)
     for (y = 0; y < w.H; y++) {
       for (x = 0; x < w.W; x++) {
-        if (w.tiles[y * w.W + x] === TL.S && !w.fanTile[y * w.W + x] && isAir(w, x, y - 1) && y > 0) drawGrass(g, x * T, y * T, r);
+        if (w.tiles[y * w.W + x] === TL.S && !w.fanTile[y * w.W + x] && isAir(w, x, y - 1) && y > 0) drawGrass(g, x * T, y * T, r, th);
       }
     }
   }
 
-  function drawStone(g, w, x, y, px, py, r) {
+  function drawStone(g, w, x, y, px, py, r, th) {
     var up = !isSolid(w, x, y - 1), dn = !isSolid(w, x, y + 1), lf = !isSolid(w, x - 1, y), rt = !isSolid(w, x + 1, y);
     var edge = up || dn || lf || rt;
     var border = x === 0 || y === 0 || x === w.W - 1 || y === w.H - 1;
@@ -243,13 +265,13 @@
       // one more ring of lighter stone next to edges
       if (!isSolid(w, x, y - 2) || !isSolid(w, x - 1, y - 1) || !isSolid(w, x + 1, y - 1)) depth = 0.5;
     }
-    var L = depth === 0 ? 50 : depth === 0.5 ? 42 : 33;
+    var L = (depth === 0 ? 50 : depth === 0.5 ? 42 : 33) + th.stone[2];
     if (border && !edge) L -= 4;
     var vr = depth === 1 ? 1.5 : 4;
-    g.fillStyle = 'hsl(' + (30 + r() * 5) + ',' + (42 + r() * 6) + '%,' + (L + r() * vr) + '%)';
+    g.fillStyle = 'hsl(' + (th.stone[0] + r() * 5) + ',' + (th.stone[1] + r() * 6) + '%,' + (L + r() * vr) + '%)';
     g.fillRect(px, py, T, T);
     // masonry lines (2 bricks per tile, staggered)
-    g.fillStyle = 'rgba(60,32,12,0.35)';
+    g.fillStyle = th.mortar;
     g.fillRect(px, py + 15, T, 2);
     var vx = (y % 2) ? px + 15 : px;
     g.fillRect(vx, py, 2, 15);
@@ -258,28 +280,28 @@
     g.fillStyle = 'rgba(255,240,210,0.12)';
     for (var i = 0; i < 2; i++) g.fillRect(px + 3 + r() * 24, py + 3 + r() * 24, 2, 2);
     // bevels on exposed sides
-    if (up) { g.fillStyle = 'rgba(255,236,190,0.45)'; g.fillRect(px, py, T, 3); }
+    if (up) { g.fillStyle = th.hi; g.fillRect(px, py, T, 3); }
     if (lf) { g.fillStyle = 'rgba(255,230,180,0.25)'; g.fillRect(px, py, 3, T); }
     if (rt) { g.fillStyle = 'rgba(40,20,5,0.3)'; g.fillRect(px + T - 3, py, 3, T); }
     if (dn) { g.fillStyle = 'rgba(40,20,5,0.4)'; g.fillRect(px, py + T - 4, T, 4); }
     // outline against the background
-    g.fillStyle = '#2a170a';
+    g.fillStyle = th.edge;
     if (up) g.fillRect(px, py - 1, T, 1.5);
     if (dn) g.fillRect(px, py + T - 0.5, T, 1.5);
     if (lf) g.fillRect(px - 1, py, 1.5, T);
     if (rt) g.fillRect(px + T - 0.5, py, 1.5, T);
   }
 
-  function drawGrass(g, px, py, r) {
-    g.fillStyle = '#3f8f25'; g.fillRect(px, py - 1, T, 6);
-    g.fillStyle = '#6cc23a'; g.fillRect(px, py - 2, T, 4);
-    g.fillStyle = '#8fe052';
+  function drawGrass(g, px, py, r, th) {
+    g.fillStyle = th.grass[0]; g.fillRect(px, py - 1, T, 6);
+    g.fillStyle = th.grass[1]; g.fillRect(px, py - 2, T, 4);
+    g.fillStyle = th.grass[2];
     for (var i = 0; i < 4; i++) {
       var bx = px + 2 + r() * 28, h = 3 + r() * 4;
       g.beginPath(); g.moveTo(bx - 2, py); g.lineTo(bx, py - h); g.lineTo(bx + 2, py); g.fill();
     }
     if (r() < 0.12) {
-      g.fillStyle = r() < 0.5 ? '#ffd23f' : '#ff8fb1';
+      g.fillStyle = th.flowers[r() < 0.5 ? 0 : 1];
       var fx = px + 6 + r() * 20;
       g.beginPath(); g.arc(fx, py - 4, 2.4, 0, Math.PI * 2); g.fill();
     }
@@ -593,14 +615,16 @@
     }
   }
 
+  var BTN_GLOW = {};
   function drawButton(g, b, t) {
     var col = FI.CHAN_COLORS[b.ch] || '#fff';
     var x = b.x + T / 2, fy = b.y + T;
     var press = b.amt;
     if (press > 0.05) {
-      g.globalCompositeOperation = 'lighter';
-      drawGlow(g, hexA(col, 0.55 * press), x, fy - 4, 34, 18);
-      g.globalCompositeOperation = 'source-over';
+      // fixed colour per channel, faded with alpha (press eases every frame)
+      g.globalCompositeOperation = 'lighter'; g.globalAlpha = press;
+      drawGlow(g, BTN_GLOW[col] || (BTN_GLOW[col] = hexA(col, 0.55)), x, fy - 4, 34, 18);
+      g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
     }
     g.fillStyle = '#3a2a1c'; rr(g, x - 16, fy - 5, 32, 6, 3); g.fill();
     var h = 7 - press * 5;
@@ -883,10 +907,11 @@
       live.push(p);
       return p;
     }
-    return {
+    var api = {
+      scale: 1,   // burst size multiplier (main.js lowers it for reduced motion)
       add: add,
       burst: function (x, y, o) {
-        var n = o.count || 10;
+        var n = Math.max(1, Math.round((o.count || 10) * api.scale));
         for (var i = 0; i < n; i++) {
           var a = o.angle != null ? o.angle + (Math.random() - 0.5) * (o.spread == null ? Math.PI * 2 : o.spread) : Math.random() * Math.PI * 2;
           var sp = (o.speed || 150) * (0.35 + Math.random() * 0.65);
@@ -912,6 +937,7 @@
       clear: function () { while (live.length) pool.push(live.pop()); },
       count: function () { return live.length; }
     };
+    return api;
     function draw(g, back) {
       for (var i = 0; i < live.length; i++) {
         var p = live[i];

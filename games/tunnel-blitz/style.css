@@ -163,6 +163,9 @@ body { background: #04060f; }
 .toast.gold { background: linear-gradient(180deg, #fff27a, #ffc21a); color: #4a2400; }
 @keyframes toastIn { 0% { transform: translateY(-30px) scale(0.6); opacity: 0; } 10% { transform: translateY(0) scale(1.08); opacity: 1; }
   16% { transform: scale(1); } 85% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: translateY(-14px) scale(0.95); } }
+/* Reduced motion cuts animations to their last frame (opacity 0), which would hide every toast.
+   Show them still instead; toast() removes each one after 2.7 s. */
+html[data-sg-motion="reduce"] .toast { animation: none; }
 
 /* pause button (next to the shared mute button) */
 .pausebtn { position: fixed; top: 10px; right: 62px; z-index: 20; width: 44px; height: 44px; border-radius: 50%;

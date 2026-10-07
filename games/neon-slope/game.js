@@ -17,6 +17,9 @@
   function musicLabel() { return save.music ? 'الموسيقى: تعمل' : 'الموسيقى: متوقفة'; }
   function randInt(a, b) { return Math.floor(a + rand() * (b - a + 1)); }
   function pick(a) { return a[Math.floor(rand() * a.length)]; }
+  // Classroom mode / reduced motion: steady camera, no white flash or celebration bursts.
+  var reducedFx = Kit.motion.reduced();
+  Kit.motion.onChange(function (r) { reducedFx = r; });
 
   /* =============================================================== SAVE */
   function arr(v, d) { return Array.isArray(v) ? v.slice() : d; }
@@ -36,12 +39,17 @@
   if (save.ownedTrails.indexOf('glow') < 0) save.ownedTrails.push('glow');
   if (save.owned.indexOf(save.skin) < 0) save.skin = 'neon';
   if (save.ownedTrails.indexOf(save.trail) < 0) save.trail = 'glow';
+  var saveUi = Kit.saveStatus({ retry: persist });
+  // Writes every key even after one fails; the warning clears only when all of them succeed.
   function persist() {
-    store.set('best', save.best); store.set('gems', save.gems);
-    store.set('owned', save.owned); store.set('ownedTrails', save.ownedTrails);
-    store.set('skin', save.skin); store.set('trail', save.trail);
-    store.set('runs', save.runs); store.set('music', save.music);
-    store.set('missions', save.missions); store.set('mDone', save.mDone);
+    var ok = store.set('best', save.best);
+    ok = store.set('gems', save.gems) && ok;
+    ok = store.set('owned', save.owned) && ok; ok = store.set('ownedTrails', save.ownedTrails) && ok;
+    ok = store.set('skin', save.skin) && ok; ok = store.set('trail', save.trail) && ok;
+    ok = store.set('runs', save.runs) && ok; ok = store.set('music', save.music) && ok;
+    ok = store.set('missions', save.missions) && ok; ok = store.set('mDone', save.mDone) && ok;
+    if (ok) saveUi.saved(); else saveUi.failed();
+    return ok;
   }
   SND.setMusicOn(save.music);
 
@@ -75,15 +83,16 @@
   /* ========================================================== CONSTANTS */
   var COLS = 9, TW = 1.6, TL = 2, NR = 100, AHEAD = 88, R = 0.45, G = 34, SLOPE = 0.2, TH = 0.6;
   var ZONE_LEN = 400, START_D = 14;
+  // sky: [top, horizon + fog, sun glow]. Dark and cool, so red hazards stay the boldest thing.
   var ZONES = [
-    { name: 'النبض الوردي', c: '#ff2bd6' },
-    { name: 'المدار السماوي', c: '#19e6ff' },
-    { name: 'البرق الأخضر', c: '#7dff3a' },
-    { name: 'الدوامة البنفسجية', c: '#a855ff' },
-    { name: 'اللهب الأزرق', c: '#3d7bff' },
-    { name: 'عاصفة النعناع', c: '#3dffc5' },
-    { name: 'مملكة الجليد', c: '#d8f6ff' },
-    { name: 'عاصفة الألوان', c: '#ffffff', prism: true }
+    { name: 'النبض الوردي', c: '#ff2bd6', sky: [0x02010c, 0x1c0638, 0xff4fa0] },
+    { name: 'المدار السماوي', c: '#19e6ff', sky: [0x00060f, 0x062a3e, 0x2fd6ff] },
+    { name: 'البرق الأخضر', c: '#7dff3a', sky: [0x010a05, 0x0a2c18, 0x6dff4a] },
+    { name: 'الدوامة البنفسجية', c: '#a855ff', sky: [0x060112, 0x2a0a52, 0xa855ff] },
+    { name: 'اللهب الأزرق', c: '#3d7bff', sky: [0x00020e, 0x0a1850, 0x3d7bff] },
+    { name: 'عاصفة النعناع', c: '#3dffc5', sky: [0x000c0b, 0x053630, 0x3dffc5] },
+    { name: 'مملكة الجليد', c: '#d8f6ff', sky: [0x030c18, 0x1d4058, 0xc8f2ff] },
+    { name: 'عاصفة الألوان', c: '#ffffff', prism: true, sky: [0x000000, 0x0c0820, 0xb48cff] }
   ];
   function colX(c) { return (c - 4) * TW; }
   function span(a, b) { var m = 0; for (var c = a; c <= b; c++) m |= (1 << c); return m; }
@@ -167,9 +176,10 @@
   }, true);
 
   /* ------------------------------------------------------- background */
+  // The sky's horizon colour is the fog colour itself, so the far course always fades into it.
   var skyMat = new T.ShaderMaterial({
     side: T.BackSide, depthWrite: false, depthTest: false, fog: false,
-    uniforms: { top: { value: new T.Color(0x02010c) }, mid: { value: new T.Color(FOG_COL) }, hor: { value: new T.Color(0xff3fa4) } },
+    uniforms: { top: { value: new T.Color(0x02010c) }, mid: { value: scene.fog.color }, hor: { value: new T.Color(0xff3fa4) } },
     vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: 'uniform vec3 top; uniform vec3 mid; uniform vec3 hor; varying vec3 vP;' +
       'void main(){ float h = normalize(vP).y; vec3 c = h > 0.0 ? mix(mid, top, smoothstep(0.0, 0.45, h)) : mid;' +
@@ -255,7 +265,8 @@
   var ZERO_M = new T.Matrix4().makeScale(0, 0, 0), tmpM = new T.Matrix4(), tmpC = new T.Color();
   for (var ii = 0; ii < NI; ii++) {
     tileMesh.setMatrixAt(ii, ZERO_M); rampMesh.setMatrixAt(ii, ZERO_M);
-    tileMesh.setColorAt(ii, tmpC.set(0xffffff));
+    // Ramps never change colour; a white instance colour just lets them share the tiles' shader.
+    tileMesh.setColorAt(ii, tmpC.set(0xffffff)); rampMesh.setColorAt(ii, tmpC);
   }
   var dirty = { lo: 1e9, hi: -1 };
 
@@ -873,12 +884,24 @@
     cam.x = 0; cam.y = 0;
     for (k = 0; k < TN; k++) { trailPts[k].x = 0; trailPts[k].y = 0.07; trailPts[k].z = -ball.d + k * 0.25; }
     trailMat.opacity = 1;
-    setHorizon(st.zone);
+    setHorizon(st.zone, true);
   }
-  var HOR_BASE = new T.Color(0xff3fa4);
-  function setHorizon(z) {
-    var info = zoneInfo(z);
-    skyMat.uniforms.hor.value.set(info.prism ? '#ff3fa4' : info.c).lerp(HOR_BASE, 0.45);
+  // Each zone has its own sky. The mountains and the floor grid are drawn in zone 1's purple:
+  // tinting them by (zone fog / zone 1 fog) keeps their foot blended into the new fog and
+  // shifts their neon lines toward the zone's colour. Colours ease over about 2 seconds.
+  var HOR_BASE = new T.Color(0xff3fa4), MID0 = new T.Color(FOG_COL);
+  var zoneSky = ZONES.map(function (z) {
+    var mid = new T.Color(z.sky[1]);
+    return { top: new T.Color(z.sky[0]), mid: mid, glow: new T.Color(z.sky[2]),
+      hor: new T.Color(z.prism ? '#ff3fa4' : z.c).lerp(HOR_BASE, 0.45),
+      tint: new T.Color(mid.r / MID0.r, mid.g / MID0.g, mid.b / MID0.b) };
+  });
+  var skyGoal = zoneSky[0];
+  function setHorizon(z, snap) { skyGoal = zoneSky[z % ZONES.length]; if (snap) updateSky(1); }
+  function updateSky(k) {
+    skyMat.uniforms.top.value.lerp(skyGoal.top, k); scene.fog.color.lerp(skyGoal.mid, k);
+    skyMat.uniforms.hor.value.lerp(skyGoal.hor, k); sunGlow.material.color.lerp(skyGoal.glow, k);
+    mountains.material.color.lerp(skyGoal.tint, k); voidFloor.material.color.lerp(skyGoal.tint, k);
   }
 
   /* ========================================================== PHYSICS */
@@ -1261,14 +1284,14 @@
       st.zone = z; var info = zoneInfo(z);
       banner('المنطقة ' + (z + 1), info.name, info.prism ? '#ffffff' : info.c);
       SND.sfx.zone(); setHorizon(z);
-      burst(b.x, b.y + 1, -b.d - 3, 40, 9, 0.9, 0.8, [info.prism ? '#ff3fd0' : info.c, '#ffffff', '#ffd93b'], 3, 3);
+      if (!reducedFx) burst(b.x, b.y + 1, -b.d - 3, 40, 9, 0.9, 0.8, [info.prism ? '#ff3fd0' : info.c, '#ffffff', '#ffd93b'], 3, 3);
       if (z >= 2) SND.setMusic(3);
     }
     if (st.bestD && !st.bestPassed && b.d > st.bestD) {
       st.bestPassed = true; SND.sfx.best();
       $('hBest').textContent = 'رقم قياسي جديد!'; $('hBest').classList.add('beat');
       popup('رقم قياسي جديد!', '#ffd93b', true, b.x, b.y + 2, b.d + 3);
-      burst(b.x, b.y + 1.5, -b.d - 4, 60, 10, 1.2, 0.8, ['#ffd93b', '#ff3fd0', '#3ff0ff', '#7dff3a', '#ffffff'], 8, 4);
+      if (!reducedFx) burst(b.x, b.y + 1.5, -b.d - 4, 60, 10, 1.2, 0.8, ['#ffd93b', '#ff3fd0', '#3ff0ff', '#7dff3a', '#ffffff'], 8, 4);
     }
     var ar = getRow(Math.floor((b.d + 16) / TL));
     if (ar && ar.ch !== st.curCh) {
@@ -1406,14 +1429,14 @@
     var back = 6.2 + sp * 1.3, up = 2.55 + sp * 0.35, look = 11, lookUp = 0.95;
     if (st.mode === 'title') { back = 5.2 + Math.sin(st.t * 0.4) * 0.3; up = 1.6; lookUp = 0.15; }
     if (st.mode === 'dying' || st.mode === 'over') { var dd = Math.min(1, st.dieT); back += dd * 2.5; up += dd * 1.6; }
-    var sx = (rand() - 0.5) * st.shake, sy = (rand() - 0.5) * st.shake;
+    var shake = reducedFx ? 0 : st.shake, sx = (rand() - 0.5) * shake, sy = (rand() - 0.5) * shake;
     _cp.set(cam.x + sx, cam.y + up + sy, -(b.d - back)).applyMatrix4(course.matrixWorld);
     _cl.set(cam.x * 1.05 + b.vx * 0.05, cam.y + lookUp, -(b.d + look)).applyMatrix4(course.matrixWorld);
     camera.position.copy(_cp);
     camera.lookAt(_cl);
-    cam.roll += ((b.dead ? 0 : clamp(-b.vx * 0.007, -0.08, 0.08)) - cam.roll) * Math.min(1, dt * 6);
+    cam.roll += ((b.dead || reducedFx ? 0 : clamp(-b.vx * 0.007, -0.08, 0.08)) - cam.roll) * Math.min(1, dt * 6);
     camera.rotateZ(cam.roll);
-    var fov = fovFor(baseFovV + sp * 9 + st.fovKick);
+    var fov = fovFor(baseFovV + sp * 9 + (reducedFx ? 0 : st.fovKick));
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
     // background follows the camera
     sky.position.copy(camera.position); stars.position.copy(camera.position);
@@ -1421,11 +1444,12 @@
     sunGlow.position.set(camera.position.x, camera.position.y + 50, camera.position.z - 730);
     mountains.position.set(camera.position.x, camera.position.y + 26, camera.position.z - 680);
     mtnTex.offset.x = (b.x * 0.0004) % 1;
+    updateSky(1 - Math.exp(-dt * 1.5));
     voidFloor.position.set(Math.round(cam.x / 8) * 8, b.groundY - 34, -(Math.round(b.d / 8) * 8 + 150));
     var ps = renderer.getDrawingBufferSize(_v2).y / (2 * Math.tan(camera.fov * Math.PI / 360));
     P.mat.uniforms.uScale.value = ps * 0.5; GG.mat.uniforms.uScale.value = ps * 0.5;
     // speed lines
-    var inten = st.mode === 'play' ? clamp((b.vz - 20) / 14, 0, 1) * 0.55 + (st.fovKick > 2 ? 0.25 : 0) : 0;
+    var inten = st.mode === 'play' && !reducedFx ? clamp((b.vz - 20) / 14, 0, 1) * 0.55 + (st.fovKick > 2 ? 0.25 : 0) : 0;
     slMat.opacity += (inten - slMat.opacity) * Math.min(1, dt * 4);
     speedLines.visible = slMat.opacity > 0.02;
     if (speedLines.visible) {
@@ -1488,6 +1512,7 @@
   }
   var flashEl = $('flash');
   function flash(a) {
+    if (reducedFx) return;
     flashEl.style.transition = 'none'; flashEl.style.opacity = a;
     void flashEl.offsetWidth;
     flashEl.style.transition = 'opacity 0.5s ease-out'; flashEl.style.opacity = 0;
@@ -1544,6 +1569,7 @@
   function pauseGame() {
     if (st.mode !== 'play') return;
     st.mode = 'paused'; show('pause', true); SND.setMusic(0); SND.rollSound(0, 0);
+    st.shake = 0; renderDirty = true; // draw the paused scene once, without shake
     renderMissions($('pMissions'), true);
     $('btnMusic').textContent = musicLabel();
   }
@@ -1638,7 +1664,7 @@
     SND.sfx.over();
     if (newBest) {
       setTimeout(function () { if (st.mode === 'over') SND.sfx.best(); }, 450);
-      burst(ball.x, ball.y + 2, -ball.d - 3, 90, 12, 1.6, 0.9, ['#ffd93b', '#ff3fd0', '#3ff0ff', '#7dff3a', '#ffffff'], 7, 5);
+      if (!reducedFx) burst(ball.x, ball.y + 2, -ball.d - 3, 90, 12, 1.6, 0.9, ['#ffd93b', '#ff3fd0', '#3ff0ff', '#7dff3a', '#ffffff'], 7, 5);
     }
     SND.setMusic(1);
   }
@@ -1777,7 +1803,11 @@
   onClick('btnPause', function () { if (st.mode === 'play') pauseGame(); else if (st.mode === 'paused') resumeGame(); });
   canvas.addEventListener('pointerdown', function () { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } });
 
+  // A paused scene is drawn once, then again only after a resize, a restored context or a late font.
+  var renderDirty = true;
+  canvas.addEventListener('webglcontextrestored', function () { renderDirty = true; });
   function resize() {
+    renderDirty = true;
     var w = window.innerWidth, h = window.innerHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / Math.max(1, h);
@@ -1810,7 +1840,7 @@
   }
 
   /* ============================================================== LOOP */
-  var lastT = 0;
+  var lastT = 0, glReady = true;
   function frame(now) {
     requestAnimationFrame(frame);
     var dt = lastT ? (now - lastT) / 1000 : 1 / 60;
@@ -1819,13 +1849,19 @@
     if (document.hidden) return;
     handleInput();
     dynRes(now, st.mode === 'play');
-    var steps = Math.max(1, Math.ceil(dt * 60 - 0.05)), h = dt / steps;
-    for (var i = 0; i < steps; i++) update(h);
+    // lastT stays current while paused, so resuming does not count the idle time.
+    if (st.mode === 'paused' && !renderDirty) { K.endFrame(); return; }
+    renderDirty = false;
+    // Until the shaders are built nothing is drawn, so nothing moves either.
+    if (glReady) {
+      var steps = Math.max(1, Math.ceil(dt * 60 - 0.05)), h = dt / steps;
+      for (var i = 0; i < steps; i++) update(h);
+    }
     course.updateMatrixWorld();
     updateCamera(dt);
     if (st.mode === 'play') updateHud();
     flushInstances();
-    renderer.render(scene, camera);
+    if (glReady) renderer.render(scene, camera);
     K.endFrame();
   }
 
@@ -1885,15 +1921,25 @@
   // Canvas signs (best gate, distance markers) need the Arabic face of Fredoka loaded.
   try {
     if (document.fonts && document.fonts.load) {
-      document.fonts.load('700 60px Fredoka', 'بم').then(function () { if (st.bestD) drawBestSign(save.best); }, function () {});
+      document.fonts.load('700 60px Fredoka', 'بم').then(function () { if (st.bestD) drawBestSign(save.best); renderDirty = true; }, function () {});
     }
   } catch (e) { /* ignore */ }
   // Compile every material now, hidden objects included, so the first run, shield, magnet
   // or crash doesn't freeze the game for a moment while the graphics card builds a shader.
+  // Where the browser builds shaders in the background (KHR_parallel_shader_compile), the
+  // world is first drawn once they are ready, so the title answers clicks in the meantime.
+  // Without it, compileAsync() would only warn, so the plain compile() (same work) is used.
   (function warmShaders() {
     var hidden = [];
     scene.traverse(function (o) { if (!o.visible) { hidden.push(o); o.visible = true; } });
-    try { renderer.compile(scene, camera); } catch (e) { /* ignore */ }
+    try {
+      if (renderer.extensions.has('KHR_parallel_shader_compile')) {
+        var fin = function () { if (!glReady) { glReady = true; renderDirty = true; } };
+        glReady = false;
+        renderer.compileAsync(scene, camera).then(fin, fin);
+        setTimeout(fin, 4000);
+      } else renderer.compile(scene, camera);
+    } catch (e) { glReady = true; }
     for (var i = 0; i < hidden.length; i++) hidden[i].visible = false;
   })();
   showTitle();

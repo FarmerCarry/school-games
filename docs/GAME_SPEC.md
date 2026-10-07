@@ -143,6 +143,12 @@ startup error handling reports failures; it must not manufacture a ready signal.
 
 Use `Kit.motion.reduced()` for custom camera shake or decorative motion. The shared
 shake, particles, CSS and mute control already honor preferences and accessibility.
+The shared CSS cuts every animation to 0.01 ms under reduced motion, so an element
+that is visible only during an animation ending at opacity 0 disappears at once.
+Give such pop-ups and toasts a reduced-motion style that keeps them readable, and
+remove them with a timer rather than `animationend`.
+When a game is paused or hidden, keep its last frame instead of redrawing an unchanged
+scene every frame; redraw on resize, canvas restoration, late fonts and resume.
 The portal's classroom preset temporarily overrides sound and effects without
 writing each game's personal preferences; disabling it restores those preferences.
 Handle `Kit.store(...).set(...) === false`; `Kit.saveStatus({ retry: saveGame })` provides

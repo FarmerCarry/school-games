@@ -138,3 +138,17 @@ body { background: #140c08; }
   .fi-winbtns .sg-btn { padding: 9px 26px; font-size: 20px; margin: 4px; }
   .fi-small { margin-top: 8px; }
 }
+
+/* Save warning (Kit.saveStatus). Hidden while a level is played: at the bottom it hid the
+   hazard row and the heroes. Saves fail on the menus and result panels, which show it again,
+   at the top-left of the 1280x720 game area: under the map's star counter and clear of the
+   centred panels, the win keycap row, the map buttons and the mute/pause buttons. */
+body.fi-playing .sg-save-status { display: none; }
+.sg-save-status {
+  --fi-s: min(calc(100vw / 1280), calc(100vh / 720));
+  inset-inline: auto;
+  top: calc((100vh - 720 * var(--fi-s)) / 2 + 80 * var(--fi-s));
+  left: calc((100vw - 1280 * var(--fi-s)) / 2 + 30 * var(--fi-s));
+  right: auto; bottom: auto; margin: 0;
+  padding: 6px 12px; font-size: 15px;
+}

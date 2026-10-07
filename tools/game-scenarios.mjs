@@ -103,7 +103,8 @@ export const scenarios = {
   'snake-arena': defaults(['#btnPlay'], `${g}.state === 'play'`, select(`${g}.player`, ['x','y','len','alive']), move, '#btnPause', `${g}.state === 'paused'`, '#btnRestart', `${g}.player.alive`),
   'splat-strike': defaults(['#playBtn'], `${g}.state.ui === 'play' && !${g}.state.paused`, `[${g}.state.player,${g}.state.matchT]`, hold('KeyW'), '#pauseBtn', `${g}.state.paused`, '#restartBtn', `${g}.state.player.kills === 0 && ${g}.state.player.deaths === 0`, { ready: `${g}.state.countdown === 0`, init: () => { HTMLCanvasElement.prototype.requestPointerLock = undefined; } }),
   'typing-test': {
-    start: [async page => { await page.keyboard.press('Enter'); }], active: `${g}.state().screen === 'test'`, snapshot: select(`${g}.state()`, ['input','cur','correctKeys','incorrectKeys']),
+    // A fresh profile starts in Arabic; Playwright types non-US letters without key events, so pick English in the bar.
+    start: [click('[data-lang="en"]')], active: `${g}.state().screen === 'test'`, snapshot: select(`${g}.state()`, ['input','cur','correctKeys','incorrectKeys']),
     input: async page => { await page.keyboard.type(await page.evaluate(() => __game.words(1)[0].slice(0,3))); },
     pause: async page => { await page.evaluate(() => window.dispatchEvent(new Event('blur'))); }, paused: `${g}.state().unfocused`,
     restart: async page => { await page.keyboard.press('Enter'); await page.keyboard.press('Tab'); }, reset: `${g}.state().phase === 'ready' && ${g}.state().input === ''`

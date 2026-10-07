@@ -732,7 +732,7 @@
       var col = G.paint(v);
       fx.burst(v.x, v.y + 0.9, v.z, col, 38, 6.5, 0.12, 2.2);
       fx.burst(v.x, v.y + 1.3, v.z, [1, 1, 1], 8, 4, 0.08, 2);
-      fx.confetti(v.x, v.y + 1.1, v.z, 26, 4.5);
+      if (!Kit.motion.reduced()) fx.confetti(v.x, v.y + 1.1, v.z, 26, 4.5);   // the paint pop alone with reduced motion
       if (G.W.ray(v.x, v.y + 0.5, v.z, 0, -1, 0, 4, brh, true)) fx.decal(v.x, v.y + 0.5 - brh.t, v.z, brh.nx, brh.ny, brh.nz, 1.9, col);
     }
     ui('splat')(v, src, head, w, first, revenge);

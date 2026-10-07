@@ -63,7 +63,14 @@
     return d;
   }
   var save = loadSave();
-  function persist() { store.set('save', save); }
+  // A failed write (full or blocked storage) shows the shared warning with a retry button;
+  // the in-memory save stays intact, and the warning clears after the next good write.
+  var saveUI = Kit.saveStatus({ retry: function () { persist(); } });
+  function persist() {
+    var ok = store.set('save', save);
+    if (ok) saveUI.saved(); else saveUI.failed();
+    return ok;
+  }
 
   function shipSkin() { for (var i = 0; i < TB.SHIPS.length; i++) if (TB.SHIPS[i].id === save.ship) return TB.SHIPS[i]; return TB.SHIPS[0]; }
 
@@ -95,7 +102,7 @@
   var TMP_C = [0, 0, 0];
   function zoneCol(Z, k, time) { // main colour of a zone (rainbow zones cycle)
     if (!Z.rainbow) return Z.col;
-    return hsv(k * 22 + time * 50, 0.75, 1, TMP_C);
+    return hsv(k * 22 + time * 50, 0.9, 1, TMP_C);
   }
 
   function params(k) {
@@ -132,9 +139,12 @@
       ui.style.left = canvas.style.left;
       ui.style.top = canvas.style.top;
       ui.style.transform = 'scale(' + v.scale + ')';
+      frozen = false; // resizing clears the canvas
     }
   });
   var ctx = view.ctx;
+  // A restored 2D context has lost its pixels and transform.
+  canvas.addEventListener('contextrestored', function () { view.resize(); });
 
   /* -------------------------------------------------------------- audio */
   var A = Kit.audio;
@@ -333,7 +343,7 @@
     orbsRun: 0, closeRun: 0, streak: 0, lastCloseT: -9, lastCloseRow: -1, bestStreak: 0, shieldsRun: 0,
     orbStreak: 0, orbStreakT: 0,
     shield: false, invuln: 0, dyingT: 0, overT: 0, shake: 0, flash: 0, flashCol: [255, 255, 255],
-    squash: 0, bump: 0, fovKick: 0, beat: 0, passedBest: false, runActive: false,
+    squash: 0, bump: 0, fovKick: 0, beat: 0, passedBest: false, runActive: false, ringD: 0,
     runMissions: [], lastWhoosh: 0,
     autopilot: false, invincible: false, dispScore: 0
   };
@@ -358,8 +368,9 @@
   }
   function addBlock(d, a0, a1, o) {
     if (obs.length > 280) return;
+    // cLite: a whitened face colour so walls stand out from the same-hued tunnel
     obs.push({ d: d, len: o.len || 0.6, a0: a0, a1: a1, rIn: o.rIn == null ? 0.2 : o.rIn, spin: o.spin || 0,
-      N: o.N, c: o.c, row: gen.row, broken: 0, minGap: 9, done: false });
+      N: o.N, c: o.c, cLite: mix(o.c, WHITE, 0.25), row: gen.row, broken: 0, minGap: 9, done: false });
     obs[obs.length - 1].spin /= WS;
   }
   // A ring of blocks with the given gaps cut out. gaps: [[a0,a1], ...]
@@ -667,6 +678,9 @@
     var D = cam.D;
     var kStart = Math.floor((D + NEAR) / RING), kEnd = Math.floor((D + FAR) / RING);
     var starsStyle = style === 'stars' || style === 'galaxy';
+    // Weak rainbow tints over the dark base read as olive and brown, so the default
+    // grid paints rainbow zones stronger. Bought styles keep their own palettes.
+    var rainbowBoost = style === 'grid' ? 1.8 : 1;
     for (var k = kEnd; k >= kStart; k--) {
       var dA = k * RING, zA = dA - D, zB = zA + RING;
       var ringVisible = zA >= NEAR;
@@ -681,10 +695,10 @@
         proj(a, 1, zA); VAX[j] = px; VAY[j] = py;
         proj(a, 1, zB); VBX[j] = px; VBY[j] = py;
       }
-      var fo = fog((zA + zB) * 0.5);
+      var fo = fog((zA + zB) * 0.5), fb = fo * boost * (Z.rainbow ? rainbowBoost : 1);
       for (j = 0; j < N; j++) {
         var j2 = (j + 1) % N;
-        var s = Math.min(1, faceColor(style, j, k, N, col, time, beat) * fo * boost);
+        var s = Math.min(1, faceColor(style, j, k, N, col, time, beat) * fb);
         g.fillStyle = rgb(bg[0] + (FC[0] - bg[0]) * s, bg[1] + (FC[1] - bg[1]) * s, bg[2] + (FC[2] - bg[2]) * s);
         g.beginPath();
         g.moveTo(VAX[j], VAY[j]); g.lineTo(VAX[j2], VAY[j2]); g.lineTo(VBX[j2], VBY[j2]); g.lineTo(VBX[j], VBY[j]);
@@ -727,11 +741,12 @@
     if (zF <= NEAR || zN >= FAR) return;
     var off = o.spin * (o.d - shipD), A0 = o.a0 + off, B0 = o.a1 + off;
     var z0 = Math.max(zN, NEAR);
-    var fa = fog(z0) * Math.min(1, (FAR - z0) / 6);
+    // Obstacles come out of the fog sooner than the tunnel walls, so they read from mid-distance.
+    var fa = Math.sqrt(fog(z0)) * Math.min(1, (FAR - z0) / 6);
     if (o.broken) fa *= Math.max(0, 1 - o.broken * 4);
     if (fa <= 0.01) return;
     var c = o.c, N = o.N, arcs = arcAngles(A0, B0, N), n = arcs.length, i, a, pr;
-    var lw = clamp(5 / z0, 1, 6);
+    var lw = clamp(7 / z0, 1.5, 6);
     // inner face (long slabs only)
     if (o.len > 1 && o.rIn > 0.05) {
       var zf = Math.min(zF, FAR);
@@ -756,7 +771,7 @@
       for (i = n - 1; i >= 0; i--) { a = arcs[i]; proj(a, polyR(a, N) * o.rIn, zN); g.lineTo(px, py); }
     } else { proj(0, 0, zN); g.lineTo(px, py); }
     g.closePath();
-    g.fillStyle = rgba(c, 0.42 * fa);
+    g.fillStyle = rgba(o.cLite, 0.6 * fa);
     g.fill();
     g.globalCompositeOperation = 'lighter';
     g.strokeStyle = rgba(c, 0.35 * fa); g.lineWidth = lw * 2.6; g.stroke();
@@ -819,11 +834,15 @@
     }
   }
 
+  // The gold ring marks the record SCORE (distance + bonus): it reaches the ship exactly when
+  // floor(G.D / WS) + G.bonus passes save.best, so it slides closer as near misses add bonus.
+  function bestRingD() { return (save.best + 1 - G.bonus) * WS + ZS; }
+  function bestRingOn() { return save.best >= 55 && G.runActive; }
   function drawBestRing(g) {
-    if (save.bestD < 30 || !G.runActive) return;
-    var z = save.bestD - cam.D;
+    if (!bestRingOn()) return;
+    var z = G.ringD - cam.D;
     if (z < NEAR + 0.2 || z > FAR) return;
-    var fa = fog(z), N = ZT[zoneAt(save.bestD)].N, seg = TAU / N, v0 = PI / 2 + PI / N;
+    var fa = fog(z), N = ZT[zoneAt(G.ringD)].N, seg = TAU / N, v0 = PI / 2 + PI / N;
     g.beginPath();
     for (var j = 0; j <= N; j++) { proj(v0 + j * seg, 0.97, z); if (j) g.lineTo(px, py); else g.moveTo(px, py); }
     g.globalCompositeOperation = 'lighter';
@@ -952,8 +971,12 @@
       var b = banner, t = b.t / b.life;
       var sc = t < 0.12 ? lerp(2.2, 1, t / 0.12) : 1;
       var al = t > 0.8 ? 1 - (t - 0.8) / 0.2 : Math.min(1, t / 0.08);
+      // after a moment the banner glides up, shrinks and dims, so the tunnel centre
+      // (where the next rows come from) is clear again while the text is still showing
+      var up = clamp((t - 0.25) / 0.2, 0, 1); up = up * up * (3 - 2 * up);
+      sc *= lerp(1, 0.75, up); al = Math.min(al, lerp(1, 0.6, up));
       g.save(); g.globalAlpha = al;
-      g.translate(CX, 250); g.scale(sc, sc);
+      g.translate(CX, lerp(250, 165, up)); g.scale(sc, sc);
       textOutlined(g, b.title, 0, 0, 92, b.col, 'rgba(0,0,0,0.6)');
       if (b.sub) textOutlined(g, b.sub, 0, 70, 34, '#ffffff', 'rgba(0,0,0,0.6)');
       g.restore();
@@ -964,7 +987,14 @@
 
   /* ------------------------------------------------------------ render */
   var vignette = null;
+  // A paused scene is static, so once its effects settle it is kept instead of redrawn
+  // every frame. Resize, context restore, late fonts and motion changes draw it again.
+  var frozen = false;
+  // Reduced motion (personal setting or the classroom preset) calms shake, flashes, zoom and confetti.
+  var reduced = Kit.motion.reduced();
+  Kit.motion.onChange(function (r) { reduced = r; frozen = false; });
   function render() {
+    if (frozen && G.state === 'paused') return;
     var g = ctx;
     var shipD = G.D + ZS;
     var zk = G.zone, Z = ZT[zk];
@@ -973,12 +1003,12 @@
     var bd = G.D / WS;
     cam.bx = (Math.sin(bd * 0.011) * 0.8 + Math.sin(bd * 0.0063 + 1.3) * 0.5) * 260;
     cam.by = (Math.sin(bd * 0.0085 + 2.1) * 0.7 + Math.sin(bd * 0.0051) * 0.4) * 150;
-    cam.f = F * (1 - 0.1 * G.fovKick);
+    cam.f = F * (1 - (reduced ? 0 : 0.1 * G.fovKick));
     var bg = Z.bg;
     g.fillStyle = rgb(bg[0], bg[1], bg[2]);
     g.fillRect(0, 0, W, H);
     g.save();
-    if (G.shake > 0.1) g.translate((Math.random() - 0.5) * G.shake * 2, (Math.random() - 0.5) * G.shake * 2);
+    if (G.shake > 0.1 && !reduced) g.translate((Math.random() - 0.5) * G.shake * 2, (Math.random() - 0.5) * G.shake * 2);
     drawTunnel(g, save.tunnel, G.t, G.beat, 0);
     // light at the end of the tunnel
     var gx = CX + cam.bx * 0.85, gy = CY + cam.by * 0.85;
@@ -1016,7 +1046,7 @@
     g.restore();
     // flash
     if (G.flash > 0.01) {
-      g.fillStyle = rgba(G.flashCol, G.flash * 0.7);
+      g.fillStyle = rgba(G.flashCol, reduced ? Math.min(G.flash * 0.7, 0.2) : G.flash * 0.7);
       g.fillRect(0, 0, W, H);
     }
     if (!vignette) {
@@ -1026,16 +1056,18 @@
     g.fillStyle = vignette; g.fillRect(0, 0, W, H);
     if (G.state === 'play' || G.state === 'dying' || G.state === 'paused') drawHUD(g);
     if (G.state !== 'paused') drawPops(g);
+    // freeze once the shake, flash and zoom kick have settled
+    frozen = G.state === 'paused' && G.shake <= 0.1 && G.flash <= 0.01 && G.fovKick <= 0;
   }
   var DRAW = [];
   function farOf(o) { return o.len != null ? o.d + o.len : o.d; }
   function byFar(a, b) { return farOf(b) - farOf(a); }
   function drawBestRingOrdered(g, list, gates, gi, shipD) {
-    var bestDrawn = !(save.bestD >= 30 && G.runActive);
+    var bestDrawn = !bestRingOn();
     for (var i = 0; i < list.length; i++) {
       var o = list[i], f = farOf(o);
       while (gi >= 0 && ZT[gates[gi]].start > f) { drawGate(g, gates[gi]); gi--; }
-      if (!bestDrawn && save.bestD > f) { drawBestRing(g); bestDrawn = true; }
+      if (!bestDrawn && G.ringD > f) { drawBestRing(g); bestDrawn = true; }
       if (o.len != null) drawBlock(g, o, shipD); else drawPickup(g, o);
     }
     while (gi >= 0) { drawGate(g, gates[gi]); gi--; }
@@ -1074,6 +1106,7 @@
     G.runT = 0; G.score = 0; G.bonus = 0; G.orbsRun = 0; G.closeRun = 0; G.streak = 0; G.bestStreak = 0; G.lastCloseT = -9;
     G.lastCloseRow = -1; G.shieldsRun = 0; G.shield = false; G.invuln = 0; G.passedBest = false; G.runMissions = [];
     G.orbStreak = 0; G.zoneOrbs = 0; G.flash = 0.6; G.flashCol = ZT[1].col; G.fovKick = 1; G.dispScore = 0; G.missionTimer = 0;
+    G.ringD = bestRingD();
     PS.length = 0; pops.length = 0;
     save.runs++; persist();
     showBanner('انطلق!', ZT[1].name, rgba(ZT[1].col, 1), 1.4);
@@ -1100,8 +1133,9 @@
     var zb = Math.min(40, 5 * (k - 1));
     if (zb > 0) {
       G.orbsRun += zb; G.zoneOrbs = (G.zoneOrbs || 0) + zb;
-      pop('+' + zb, CX, 400, '#ffd23f', 54, 1.6);
-      pop('مكافأة المنطقة', CX, 450, '#fff6c0', 28, 1.6);
+      // shown under the orb counter (it floats up into it), away from the tunnel centre
+      pop('+' + zb, 96, 200, '#ffd23f', 40, 1.4);
+      pop('مكافأة المنطقة', 96, 236, '#fff6c0', 22, 1.4);
       Sfx.orb(10);
     }
     for (var i = 0; i < 40; i++) {
@@ -1259,7 +1293,8 @@
     Mus.tick();
     // beat pulse for the walls
     var sk = Mus.sinceKick();
-    if (sk >= 0) G.beat = Math.max(0, 1 - sk * 5);
+    if (G.state === 'paused') G.beat = 0; // keep the scene behind the pause panel still
+    else if (sk >= 0) G.beat = Math.max(0, 1 - sk * 5);
     else { var ph = (G.t * (G.state === 'play' ? 2.2 : 1.6)) % 1; G.beat = Math.max(0, 1 - ph * 5); }
     G.shake = Math.max(0, G.shake - dt * 45);
     G.flash = Math.max(0, G.flash - dt * 2.2);
@@ -1284,7 +1319,7 @@
         G.dispScore = Math.min(G.score, G.dispScore + Math.max(1, G.score * dt * 1.6));
         document.getElementById('oScore').textContent = Kit.fmt(G.dispScore);
       }
-      if (G.wasBest && Math.random() < dt * 14) confetti(1);
+      if (G.wasBest && !reduced && Math.random() < dt * 14) confetti(1);
     }
     if (G.state !== 'play') Mus.wind(0);
     Kit.keys.endFrame();
@@ -1364,6 +1399,8 @@
       showBanner('رقم قياسي جديد!', 'استمر!', '#ffd23f', 1.6);
       Sfx.newBest(); confetti(30);
     }
+    // ease the gold ring toward the record so a near-miss bonus slides it closer instead of jumping
+    if (!G.passedBest) G.ringD += (bestRingD() - G.ringD) * (1 - Math.exp(-dt * 6));
     if (G.invuln > 0) G.invuln -= dt;
 
     while (gen.d < G.D + FAR + 16) genStep();
@@ -1407,6 +1444,7 @@
 
   function confetti(n) {
     var cols = ['#ffd23f', '#ff5ad0', '#19e6ff', '#7dff3a', '#ffffff', '#ff7a1f'];
+    if (reduced) n = Math.min(n, 6);
     for (var i = 0; i < n; i++) {
       part(rnd(0, W), -10, rnd(-60, 60), rnd(80, 260), rnd(1.6, 2.6), rnd(7, 12), cols[i % cols.length], 3, 160, rnd(-6, 6));
     }
@@ -1724,7 +1762,8 @@
     info: function () {
       return { state: G.state, modal: G.modal, D: Math.round(G.D / WS), v: +(G.v / WS).toFixed(2), zone: G.zone, score: G.score,
         orbsRun: G.orbsRun, closeRun: G.closeRun, shield: G.shield, obs: obs.length, pick: pick.length, parts: PS.length,
-        rot: +G.rot.toFixed(2), best: save.best, orbs: save.orbs, runs: save.runs, missionsDone: save.mdone.filter(Boolean).length };
+        rot: +G.rot.toFixed(2), best: save.best, orbs: save.orbs, runs: save.runs, missionsDone: save.mdone.filter(Boolean).length,
+        ring: +((G.ringD - G.D - ZS) / WS).toFixed(2) }; // metres from the ship to the gold record ring
     },
     save: function () { return JSON.parse(JSON.stringify(save)); },
     autopilot: function (b, lagMs) { G.autopilot = b === 'sloppy' ? 'sloppy' : b !== false; G.lagN = Math.round((lagMs || 250) / 16.7); G.lagBuf = []; return G.autopilot; },
@@ -1760,6 +1799,7 @@
     if (document.fonts && document.fonts.load) {
       document.fonts.load('700 40px Fredoka', 'ب').catch(function () {});
       document.fonts.load('700 40px Fredoka', 'A0').catch(function () {});
+      if (document.fonts.ready) document.fonts.ready.then(function () { frozen = false; });
     }
   } catch (e) { /* ignore */ }
   showTitle();

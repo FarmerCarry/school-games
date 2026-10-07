@@ -134,10 +134,18 @@
       var r = canvas.style;
       ui.style.left = r.left; ui.style.top = r.top;
       ui.style.transform = 'scale(' + v.scale + ')';
+      stillMode = null;   // resizing cleared the canvas
     }
   });
   view.resize();
   var ctx = view.ctx;
+  // Confetti gets its own layer above the DOM panels, so the big rewards
+  // (new best, gift, new car) rain over the panel instead of behind it.
+  // Small flat pieces need no HiDPI pixels.
+  var fxCanvas = document.getElementById('fx');
+  var fxView = Kit.fit(fxCanvas, W, H, { maxDpr: 1 }), fx = fxView.ctx;
+  canvas.addEventListener('contextrestored', view.resize);
+  fxCanvas.addEventListener('contextrestored', fxView.resize);
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
   muteBtn.title = 'الصوت (M)';
@@ -160,6 +168,8 @@
   var flash = 0, bannerT = 0, bannerText = '', bannerSub = '';
   var hudPop = 0, comboPop = 0;
   var confetti = [];
+  var BANNER_T = 1.8;
+  Kit.motion.onChange(function (reduced) { if (reduced) { confetti.length = 0; flash = 0; } });
 
   // particle pool
   for (var pi = 0; pi < 320; pi++) G.parts.push({ life: 0 });
@@ -283,6 +293,17 @@
     DK.snd.musicLevel(0.2);
     $('btnMusic').textContent = 'الموسيقى: ' + (save.music ? 'تعمل' : 'متوقفة');
     show(el.pause, true);
+    confetti.length = 0;   // frozen pieces would sit on the pause buttons
+    persist();
+  }
+  // Restart/Menu from the pause screen keep a record the run already beat.
+  // Runs and missions still count only at game over (no farming by restarting).
+  function bankPausedRun() {
+    if (G.mode !== 'paused' || !run || !G.car) return;
+    run.score = Math.floor(G.car.progress) + run.bonus;
+    if (run.score <= save.best && G.car.progress <= save.bestDist) return;
+    save.best = Math.max(save.best, run.score);
+    save.bestDist = Math.max(save.bestDist, G.car.progress);
     persist();
   }
   function resumeGame() {
@@ -334,7 +355,7 @@
     DK.snd.stopEngine();
     DK.snd.musicLevel(0.55);
     if (newBest) {
-      setTimeout(function () { DK.snd.best(); burstConfetti(90); }, 350);
+      setTimeout(function () { DK.snd.best(); burstConfetti(90, true); }, 350);
     } else setTimeout(function () { Kit.sfx.lose(); }, 150);
     countUp($('oScore'), st.score, 700);
   }
@@ -429,7 +450,7 @@
         return;
       }
       G.model = car; DK.snd.buy(); toast('سيارة جديدة: ' + car.name + '!');
-      burstConfetti(60);
+      burstConfetti(60, true);
       checkMissions(null);
       refreshGarage();
     } else {
@@ -495,7 +516,7 @@
     ga.querySelector('span').textContent = '+' + amt;
     show(ga, true); show($('giftHint'), false); show($('btnGiftOk'), true);
     DK.snd.gift();
-    burstConfetti(80);
+    burstConfetti(80, true);
   }
   $('giftBox').addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); crackGift(); });
   function closeGift() {
@@ -509,8 +530,8 @@
   click('btnGarageClose', closeGarage);
   click('btnPause', pauseGame);
   click('btnResume', resumeGame);
-  click('btnRestart', startRun);
-  click('btnMenu', toTitle);
+  click('btnRestart', function () { bankPausedRun(); startRun(); });
+  click('btnMenu', function () { bankPausedRun(); toTitle(); });
   click('btnMusic', function () {
     save.music = !save.music; persist(); DK.snd.setMusic(save.music);
     if (save.music) DK.snd.musicLevel(0.2);
@@ -526,13 +547,17 @@
     if (G.popups.length > 12) G.popups.shift();
     G.popups.push({ text: text, sub: sub, x: x, y: y, z: z, col: col, size: size || 40, t: 0, life: life || 1.1 });
   }
-  function burstConfetti(n) {
+  // Decorative: skipped with reduced motion. top = rain gently from the top
+  // edge over a results/gift/garage panel instead of bursting mid-screen.
+  function burstConfetti(n, top) {
+    if (Kit.motion.reduced()) return;
     var cols = ['#ff4d8d', '#ffd23f', '#3ddc84', '#3d8bff', '#b36bff', '#ff9a2e'];
     for (var k = 0; k < n; k++) {
       if (confetti.length > 240) confetti.shift();
-      confetti.push({ x: W / 2 + (Math.random() - 0.5) * 300, y: H * 0.35, vx: (Math.random() - 0.5) * 900, vy: -300 - Math.random() * 600, r: Math.random() * 6, vr: (Math.random() - 0.5) * 12, c: cols[k % cols.length], life: 2.2 + Math.random(), s: 6 + Math.random() * 6 });
+      confetti.push({ x: W / 2 + (Math.random() - 0.5) * (top ? 800 : 300), y: top ? 60 : H * 0.35, vx: (Math.random() - 0.5) * 900, vy: top ? -150 - Math.random() * 350 : -300 - Math.random() * 600, fall: top ? 340 : 1e9, r: Math.random() * 6, vr: (Math.random() - 0.5) * 12, c: cols[k % cols.length], life: 2.2 + Math.random(), s: 6 + Math.random() * 6 });
     }
   }
+  function flashScreen(a) { if (!Kit.motion.reduced()) flash = a; }
   var SMOKE = {
     puff: ['#ffffff', '#f4f0ff'], pink: ['#ffd1ea', '#ffb3dc'], blue: ['#d8e6ff', '#ffffff'],
     dust: ['#e8cfa8', '#d9b88a'], sprinkle: ['#ff6fb5', '#ffd23f', '#6fd6ff', '#7ee08f', '#ffffff'],
@@ -571,9 +596,9 @@
   var stepping = false;
   function update(dt) {
     if (G.debug && G.debug.frozen && !stepping) return;
-    G.time += dt;
     var car = G.car;
     var m = G.mode;
+    if (m !== 'paused') G.time += dt;   // clouds and coins resume where they stopped
     if (m === 'play' || m === 'title' || m === 'falling' || m === 'over' || m === 'garage' || m === 'gift') {
       if (m === 'play' || m === 'falling' || m === 'title' || m === 'gift') simulate(dt);
     }
@@ -590,7 +615,7 @@
       }
       for (k = confetti.length - 1; k >= 0; k--) {
         var c = confetti[k];
-        c.life -= dt; c.vy += 900 * dt; c.vx *= 0.99; c.x += c.vx * dt; c.y += c.vy * dt; c.r += c.vr * dt;
+        c.life -= dt; c.vy = Math.min(c.fall, c.vy + 900 * dt); c.vx *= 0.99; c.x += c.vx * dt; c.y += c.vy * dt; c.r += c.vr * dt;
         if (c.life <= 0 || c.y > H + 40) confetti.splice(k, 1);
       }
     }
@@ -608,7 +633,7 @@
       if (K.pressed('KeyP') || K.pressed('Escape')) pauseGame();
     } else if (m === 'paused') {
       if (K.pressed('KeyP') || K.pressed('Escape')) resumeGame();
-      else if (K.pressed('KeyR')) startRun();
+      else if (K.pressed('KeyR')) { bankPausedRun(); startRun(); }
     } else if (m === 'over') {
       overT += dt;
       if (overT > 0.45 && (K.pressed('Space') || K.pressed('Enter') || K.pressed('KeyR') || K.pressed('NumpadEnter'))) startRun();
@@ -697,12 +722,12 @@
       if (!run.beatBest && save.best >= 50 && sc > save.best) {
         run.beatBest = true;
         popup('رقم قياسي!', car.x, car.y, 1.8, '#ffd23f', 50, null, 1.6);
-        DK.snd.best(); burstConfetti(50); flash = 0.6;
+        DK.snd.best(); burstConfetti(50); flashScreen(0.6);
       }
       var z = Math.floor(car.progress / DK.ZONE_LEN);
       if (z > run.zone) {
         run.zone = z;
-        bannerT = 2.6; bannerText = DK.zoneName(z); bannerSub = 'المنطقة ' + (z + 1) + '  •  \u2066+10\u2069';
+        bannerT = BANNER_T; bannerText = DK.zoneName(z); bannerSub = 'المنطقة ' + (z + 1) + '  •  \u2066+10\u2069';
         run.coins += 10; save.coins += 10;
         DK.snd.zone(); burstConfetti(40);
       }
@@ -776,7 +801,7 @@
           DK.snd.perfect(run.combo);
           burst(car.x, car.y, 0.4, 8 + Math.min(run.combo, 10), ['#ffe14d', '#ffffff', '#ff7ad1'], 1, 3.5, 0.55, 0.13);
           comboPop = 1; hudPop = 1;
-          if (run.combo === 5 || run.combo === 10 || run.combo === 20) { flash = 0.5; burstConfetti(30); }
+          if (run.combo === 5 || run.combo === 10 || run.combo === 20) { flashScreen(0.5); burstConfetti(30); }
         } else {
           if (run.combo >= 3) popup('انتهت السلسلة', car.x, car.y, 1.4, '#ffffff', 26, null, 0.9);
           run.combo = 0;
@@ -809,17 +834,27 @@
   }
 
   /* ---------------------------------------------------------- render */
-  var frozenDrawn = false;
+  // Under the garage, pause and (once settled) results panels nothing moves:
+  // draw the world once and keep that frame until the mode changes, a resize
+  // or context restore clears the canvas, or the font arrives.
+  var stillMode = null;   // mode whose still frame is on the canvas
+  function sceneStill() {
+    var m = G.mode, settled = flash <= 0 && !G.shake.power;
+    if (m === 'garage') return true;
+    if (m === 'paused') return settled;
+    if (m !== 'over' || overT <= 1 || !settled || G.popups.length) return false;
+    for (var k = 0; k < G.parts.length; k++) if (G.parts[k].life > 0) return false;
+    return true;
+  }
   function render() {
-    // The garage panel covers nearly the whole screen: draw the world once and
-    // keep it still underneath (saves a full-screen redraw every frame).
+    drawConfetti();
     if (G.mode === 'garage') {
       for (var k = 0; k < gCards.length; k++) if (gCards[k].car.id === save.car) drawPreview(gCards[k].cv, gCards[k].car, gYaw);
-      if (!confetti.length) {
-        if (frozenDrawn) return;
-        frozenDrawn = true;
-      }
-    } else frozenDrawn = false;
+    }
+    if (sceneStill()) {
+      if (stillMode === G.mode) return;
+      stillMode = G.mode;
+    } else stillMode = null;
     ctx.save();
     DK.drawWorld(ctx, G);
     ctx.restore();
@@ -829,13 +864,22 @@
       ctx.fillStyle = 'rgba(255,255,255,' + (flash * 0.5).toFixed(3) + ')';
       ctx.fillRect(0, 0, W, H);
     }
-    if (bannerT > 0 && (G.mode === 'play' || G.mode === 'falling')) drawBanner();
+    if (bannerOn()) drawBanner();
+  }
+  // The #fx layer is visible only while confetti is alive.
+  function drawConfetti() {
+    if (!confetti.length) {
+      if (!fxCanvas.hidden) { fx.clearRect(0, 0, W, H); fxCanvas.hidden = true; }
+      return;
+    }
+    if (fxCanvas.hidden) fxCanvas.hidden = false;
+    fx.clearRect(0, 0, W, H);
     for (var k = 0; k < confetti.length; k++) {
       var c = confetti[k];
-      ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.r);
-      ctx.globalAlpha = Math.min(1, c.life);
-      ctx.fillStyle = c.c; ctx.fillRect(-c.s / 2, -c.s / 4, c.s, c.s / 2);
-      ctx.restore();
+      fx.save(); fx.translate(c.x, c.y); fx.rotate(c.r);
+      fx.globalAlpha = Math.min(1, c.life);
+      fx.fillStyle = c.c; fx.fillRect(-c.s / 2, -c.s / 4, c.s, c.s / 2);
+      fx.restore();
     }
   }
 
@@ -859,8 +903,8 @@
     txt(Kit.fmt(sc), 0, 0, 64, '#ffffff', 'center', 'rgba(60,20,100,0.75)', 12);
     ctx.restore();
     if (save.best > 0) txt('الأفضل ' + Kit.fmt(Math.max(save.best, sc)), W / 2, 100, 20, '#ffffff', 'center', 'rgba(60,20,100,0.6)', 6);
-    // combo
-    if (run && run.combo >= 2) {
+    // combo (the zone banner takes its place for a moment)
+    if (run && run.combo >= 2 && !bannerOn()) {
       var cp = 1 + Math.max(0, comboPop) * 0.3;
       ctx.save(); ctx.translate(W / 2, 138); ctx.scale(cp, cp);
       var col = run.combo >= 10 ? '#ff7ad1' : run.combo >= 5 ? '#ffb13b' : '#ffe14d';
@@ -893,22 +937,27 @@
     ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
   }
 
+  // The zone banner is a compact ribbon in the HUD band under the score, so
+  // the road ahead stays clear while the speed climbs.
+  function bannerOn() { return bannerT > 0 && (G.mode === 'play' || G.mode === 'falling'); }
   function drawBanner() {
-    var t = 2.6 - bannerT;
+    var t = BANNER_T - bannerT;
     var a = t < 0.3 ? t / 0.3 : bannerT < 0.4 ? bannerT / 0.4 : 1;
-    var sc = t < 0.3 ? 0.6 + t / 0.3 * 0.4 + Math.sin(t / 0.3 * Math.PI) * 0.15 : 1;
+    var sc = t < 0.3 && !Kit.motion.reduced() ? 0.6 + t / 0.3 * 0.4 + Math.sin(t / 0.3 * Math.PI) * 0.15 : 1;
     ctx.save();
     ctx.globalAlpha = a;
-    ctx.translate(W / 2, 220); ctx.scale(sc, sc);
-    ctx.fillStyle = 'rgba(40,20,80,0.55)';
-    roundRect(-260, -52, 520, 104, 30); ctx.fill();
-    txt(bannerText, 0, -12, 46, '#ffe14d', 'center', 'rgba(60,20,100,0.8)', 9);
-    txt(bannerSub, 0, 32, 22, '#ffffff', 'center');
+    ctx.translate(W / 2, 150); ctx.scale(sc, sc);
+    ctx.fillStyle = 'rgba(40,20,80,0.4)';
+    roundRect(-200, -31, 400, 62, 28); ctx.fill();
+    txt(bannerText, 0, -9, 32, '#ffe14d', 'center', 'rgba(60,20,100,0.8)', 7);
+    txt(bannerSub, 0, 18, 17, '#ffffff', 'center', 'rgba(60,20,100,0.6)', 4);
     ctx.restore();
   }
 
   function drawHint() {
-    if (save.runs >= 3 || !run || run.corners >= 6) return;
+    // Hints stay until the child has once cleared about 6-8 corners in a run
+    // (best 60), with a cap so they do not linger forever.
+    if (save.best >= 60 || save.runs >= 12 || !run || run.corners >= 6) return;
     var car = G.car, road = G.road;
     if (car.state !== 'drive' || car.air) return;
     var want = DK.botHold(car, road, DK.LEAD + car.v * 0.2);
@@ -931,7 +980,8 @@
 
   /* ------------------------------------------------------------ boot */
   toTitle();
-  document.fonts && document.fonts.load && document.fonts.load('700 40px Fredoka', 'بA1').catch(function () { });
+  // a still frame drawn before the font arrived is redrawn with it
+  document.fonts && document.fonts.load && document.fonts.load('700 40px Fredoka', 'بA1').then(function () { stillMode = null; }, function () { });
   var lastEng = 0;
   Kit.loop(update, function () {
     render();
