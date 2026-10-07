@@ -166,7 +166,7 @@
   var POD_X = [0, -1.7, 1.7], POD_Y = [1.2, 0.85, 0.6];
 
   /* ---- layout */
-  var W = 1280, H = 720;
+  var W = 1280, H = 720, fs = 16;
   function layout() {
     W = window.innerWidth; H = window.innerHeight;
     renderer.setSize(W, H, false);
@@ -176,15 +176,21 @@
     camera.updateProjectionMatrix(); vmCam.updateProjectionMatrix();
     showCam.setViewOffset(W, H, W * 0.24, 0, W, H);
     podCam.setViewOffset(W, H, W * 0.2, 0, W, H);
-    var fs = 16 * Math.min(W / 1280, H / 720);
+    fs = 16 * Math.min(W / 1280, H / 720);
     uiEl.style.fontSize = fs.toFixed(2) + 'px';
     drips.width = Math.max(1, Math.round(W / 2)); drips.height = Math.max(1, Math.round(H / 2));
     dripsDirty = true;
-    // minimap backing store at its real on-screen size (9.5em box minus its border), so it stays sharp at 1080p
-    var mm = Math.max(64, Math.ceil(9.22 * fs * Math.min(window.devicePixelRatio || 1, 2)));
-    if (mm !== H$.mm.width) { H$.mm.width = H$.mm.height = mm; if (mmBg) buildMinimap(); }
+    sizeMinimap();
     mmT = 0;
     stillDrawn = false;            // setSize cleared the drawing buffer: a paused match draws its frame again
+  }
+  // minimap backing store at its real on-screen size, so it stays sharp at 1080p and in the small portal
+  // frame. The box is measured (Chrome snaps its border to whole pixels); while the HUD is hidden, 9.22em
+  // (the 9.5em box minus its border) stands in until the next match start measures it.
+  function sizeMinimap() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2), box = H$.mm.getBoundingClientRect().width;
+    var mm = Math.max(64, box > 0 ? Math.round(box * dpr) : Math.ceil(9.22 * fs * dpr));
+    if (mm !== H$.mm.width) { H$.mm.width = H$.mm.height = mm; mmT = 0; if (mmBg) buildMinimap(); }
   }
   var drips = $('drips'), dctx = drips.getContext('2d'), dripsDirty = false;
   window.addEventListener('resize', layout);
@@ -334,6 +340,7 @@
     moveConfetti(G.scene);
     G.start({ mode: save.mode, map: save.map, diff: save.diff, me: { color: myColor(), hat: save.hat, skin: mySkin(), wpn: save.wpn } });
     hudEl.hidden = false; $('pauseBtn').hidden = false;
+    sizeMinimap();                 // its box can only be measured now that the HUD shows
     setPlaying(true);
     requestLock();
     music.play('game');
@@ -524,21 +531,25 @@
   function resetHudCache() { for (var k in hudC) if (typeof hudC[k] === 'number') hudC[k] = -1; }
   var anims = {};
   function play(el, key, frames, opts) { try { if (anims[key]) anims[key].cancel(); anims[key] = el.animate(frames, opts); } catch (e) { /* old browser */ } }
+  // reduced motion: the text pops below keep their fade and timing but drop the zoom, bounce and slide
+  function calmed(frames) {
+    return calm ? frames.map(function (f) { var o = { opacity: f.opacity }; if (f.offset != null) o.offset = f.offset; return o; }) : frames;
+  }
   var hintT = 0;
   function hint(text, sec) { H$.hint.textContent = text; H$.hint.classList.add('on'); hintT = sec || 1.6; }
   function callout(text, sub, color, dur, cls) {
     H$.callout.className = cls || '';
     H$.callout.innerHTML = esc(text) + (sub ? '<small>' + esc(sub) + '</small>' : '');
     H$.callout.style.color = color || '';
-    play(H$.callout, 'co', [{ opacity: 0, transform: 'scale(0.4)' }, { opacity: 1, transform: 'scale(1.15)', offset: 0.12 }, { opacity: 1, transform: 'scale(1)', offset: 0.22 }, { opacity: 1, offset: 0.8 }, { opacity: 0, transform: 'translateY(-0.4em)' }], { duration: dur || 1500, easing: 'ease-out', fill: 'forwards' });
+    play(H$.callout, 'co', calmed([{ opacity: 0, transform: 'scale(0.4)' }, { opacity: 1, transform: 'scale(1.15)', offset: 0.12 }, { opacity: 1, transform: 'scale(1)', offset: 0.22 }, { opacity: 1, offset: 0.8 }, { opacity: 0, transform: 'translateY(-0.4em)' }]), { duration: dur || 1500, easing: 'ease-out', fill: 'forwards' });
   }
   function toast(text, color) {
     H$.toast.textContent = text; H$.toast.style.color = color || '#fff';
-    play(H$.toast, 'to', [{ opacity: 0, transform: 'translate(-50%, 0.5em)' }, { opacity: 1, transform: 'translate(-50%, 0)', offset: 0.15 }, { opacity: 1, offset: 0.75 }, { opacity: 0, transform: 'translate(-50%, -0.6em)' }], { duration: 1300, fill: 'forwards' });
+    play(H$.toast, 'to', calmed([{ opacity: 0, transform: 'translate(-50%, 0.5em)' }, { opacity: 1, transform: 'translate(-50%, 0)', offset: 0.15 }, { opacity: 1, offset: 0.75 }, { opacity: 0, transform: 'translate(-50%, -0.6em)' }]), { duration: 1300, fill: 'forwards' });
   }
   function bigmsg(text, dur, color) {
     H$.big.textContent = text; H$.big.style.color = color || '';
-    play(H$.big, 'big', [{ opacity: 0, transform: 'scale(1.8)' }, { opacity: 1, transform: 'scale(1)', offset: 0.2 }, { opacity: 1, offset: 0.7 }, { opacity: 0, transform: 'scale(0.9)' }], { duration: dur || 900, fill: 'forwards' });
+    play(H$.big, 'big', calmed([{ opacity: 0, transform: 'scale(1.8)' }, { opacity: 1, transform: 'scale(1)', offset: 0.2 }, { opacity: 1, offset: 0.7 }, { opacity: 0, transform: 'scale(0.9)' }]), { duration: dur || 900, fill: 'forwards' });
   }
   // kill feed
   function feed(src, v, head, w) {
@@ -957,6 +968,9 @@
   function updateCamera(dt, alpha) {
     var p = G.player;
     if (UI.state === 'play' && p) {
+      // zoom and FOV ease in over a few frames; paused, they settle at once, because the frame kept
+      // behind the pause panel must not stay half scoped in (pausing drops the sniper scope)
+      var ease = UI.paused ? 1 : dt;
       if (p.alive) {
         var x = p.px + (p.x - p.px) * alpha, y = p.py + (p.y - p.py) * alpha, z = p.pz + (p.z - p.pz) * alpha;
         p.stepUp *= Math.exp(-14 * dt); if (Math.abs(p.stepUp) < 0.002) p.stepUp = 0;
@@ -972,9 +986,9 @@
         camera.rotation.set(p.pitch + p.rp + (calm ? 0 : VM.punch) + (Math.random() - 0.5) * sh, camYaw + (Math.random() - 0.5) * sh, 0);
         // FOV: sprint kick, sniper zoom
         var target = save.set.fov + (p.sprinting && !calm ? 7 : 0);
-        VM.zoomK += ((p.zoom ? 1 : 0) - VM.zoomK) * Math.min(1, dt * 14);
+        VM.zoomK += ((p.zoom ? 1 : 0) - VM.zoomK) * Math.min(1, ease * 14);
         target = target / (1 + (WEAPONS[2].zoom - 1) * VM.zoomK);
-        if (Math.abs(fovCur - target) > 0.01) { fovCur += (target - fovCur) * Math.min(1, dt * 10); camera.fov = fovCur; camera.updateProjectionMatrix(); }
+        if (Math.abs(fovCur - target) > 0.01) { fovCur += (target - fovCur) * Math.min(1, ease * 10); camera.fov = fovCur; camera.updateProjectionMatrix(); }
       } else {
         // splatted: float up and look at whoever did it
         deathCam.t += dt;
@@ -991,7 +1005,7 @@
         camYaw = yaw;
         camera.rotation.set(pit, yaw, 0.12 * k);
         VM.zoomK = 0;
-        if (Math.abs(fovCur - save.set.fov) > 0.01) { fovCur += (save.set.fov - fovCur) * Math.min(1, dt * 10); camera.fov = fovCur; camera.updateProjectionMatrix(); }
+        if (Math.abs(fovCur - save.set.fov) > 0.01) { fovCur += (save.set.fov - fovCur) * Math.min(1, ease * 10); camera.fov = fovCur; camera.updateProjectionMatrix(); }
       }
     } else if (UI.state === 'title' || UI.state === 'locker' || UI.state === 'settings' || UI.state === 'howto') {
       titleA += dt * 0.045;
