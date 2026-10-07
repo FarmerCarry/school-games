@@ -31,6 +31,7 @@
 
   var canvas = $('game'), ui = $('ui');
   var sprites = {}, spriteN = 0, bgCache = {}, boardCache = {};
+  var frameDirty = true; // the paused board is drawn once, then only after a visible change
   var view = Kit.fit(canvas, W, H, { onResize: onResize });
   var ctx = view.ctx;
 
@@ -40,7 +41,7 @@
     ui.style.transform = 'scale(' + v.scale + ')';
     clearCaches();
   }
-  function clearCaches() { sprites = {}; spriteN = 0; bgCache = {}; boardCache = {}; }
+  function clearCaches() { sprites = {}; spriteN = 0; bgCache = {}; boardCache = {}; frameDirty = true; }
 
   /* ================================================================ save */
   function num(v, d) { v = Number(v); return isFinite(v) && v >= 0 ? v : d; }
@@ -118,6 +119,11 @@
     var i = e[(Math.random() * e.length) | 0], N = this.N;
     var t = { v: v || (Math.random() < 0.9 ? 2 : 4), r: (i / N) | 0, c: i % N, fr: (i / N) | 0, fc: i % N, t0: -9, born: at, pop: -9 };
     this.grid[i] = t; return t;
+  };
+  // Ends every running slide, spawn and pop, so a paused frame shows the real board.
+  Board.prototype.settle = function (t) {
+    this.ghosts.length = 0;
+    this.grid.forEach(function (q) { if (q) { q.fr = q.r; q.fc = q.c; q.pop = Math.min(q.pop, t - POP); q.born = Math.min(q.born, t - SPAWN); } });
   };
   Board.prototype.maxTile = function () { var m = 0; this.grid.forEach(function (t) { if (t && t.v > m) m = t.v; }); return m; };
   Board.prototype.canMove = function () { return canMoveVals(this.values(), this.N); };
@@ -570,7 +576,8 @@
     var d = fresh ? null : liveSave(N);
     if (d) {
       G.board.load(d.v, now + 0.05, 0.03);
-      G.score = d.s; G.undos = d.u; G.hist = d.h; G.won = d.w; G.keep = d.k; G.moves = d.m;
+      // A 3x3 save from before its goal became 256 may already hold the goal tile.
+      G.score = d.s; G.undos = d.u; G.hist = d.h; G.won = d.w || G.board.maxTile() >= WIN[N]; G.keep = d.k; G.moves = d.m;
       G.startBest = d.sb;
     } else {
       G.board.spawn(now + 0.1); G.board.spawn(now + 0.22);
@@ -631,7 +638,10 @@
       var prev = save.bestTile;
       save.bestTile = mx; put('bestTile', mx);
       THEMES.forEach(function (th) {
-        if (th.req > prev && th.req <= mx) later(0.9, function () { toast('🔓 شكل جديد: «' + th.name + '»! اضغط T'); sfx.unlock(); shownBest = Math.max(shownBest, th.req); refreshHUD(); }, true);
+        if (th.req > prev && th.req <= mx) later(0.9, function () {
+          // may wait behind a record toast: the HUD moves on when this one shows
+          toast({ text: '🔓 شكل جديد: «' + th.name + '»! اضغط T', show: function () { sfx.unlock(); shownBest = Math.max(shownBest, th.req); refreshHUD(); } });
+        }, true);
       });
     }
     if (mx >= WIN[N] && !G.won) {
@@ -717,7 +727,7 @@
 
   /* ============================================================ screens */
   function setScreen(s) {
-    G.screen = s;
+    G.screen = s; frameDirty = true;
     $('scrTitle').hidden = s !== 'title';
     $('hud').hidden = s === 'title';
     $('scrPause').hidden = s !== 'pause';
@@ -728,7 +738,14 @@
     try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
 
-  function pause() { if (G.screen !== 'play') return; sfx.click(); setScreen('pause'); }
+  function pause() {
+    if (G.screen !== 'play') return;
+    sfx.click();
+    // the kept paused frame shows the settled board, without shake or bump
+    fx.shake = fx.sx = fx.sy = fx.bx = fx.by = 0;
+    G.board.settle(now);
+    setScreen('pause');
+  }
   function resume() {
     if (G.screen !== 'pause') return;
     sfx.click(); setScreen('play');
@@ -798,7 +815,7 @@
     for (i = 0; i < THEMES.length && !nt; i++) if (THEMES[i].req > shownBest) nt = THEMES[i];
     $('nextBox').hidden = !nt;
     if (nt) {
-      drawIcon($('nextTile'), nt, nt.icon);
+      drawIcon($('nextTile'), nt, nt.req); // the tile to make, in the new look
       $('nextName').textContent = nt.name;
       $('nextReq').textContent = 'اصنع ' + nt.req;
       $('nextBar').style.width = Math.min(100, Math.round(log2(mx) / log2(nt.req) * 100)) + '%';
@@ -809,6 +826,8 @@
     var box = $('scoreBox');
     box.classList.remove('bump'); void box.offsetWidth; box.classList.add('bump');
     if (gained > 0) {
+      // still pops share one spot, so the newest replaces the others
+      if (Kit.motion.reduced()) box.querySelectorAll('.plus').forEach(function (p) { box.removeChild(p); });
       var el = document.createElement('div');
       el.className = 'plus'; el.textContent = '+' + gained;
       box.appendChild(el);
@@ -827,12 +846,14 @@
     c.setTransform(1, 0, 0, 1, 0, 0);
   }
 
+  // A toast is text, or { text, show } where show() runs when the text appears.
   var toastQ = [], toastBusy = false, toastT1 = 0, toastT2 = 0;
   function toast(text, now2) {
     if (now2) {
-      // replace whatever is showing right now (used for quick theme switching)
-      toastQ.length = 0; clearTimeout(toastT1); clearTimeout(toastT2);
-      toastQ.push(text); nextToast(); return;
+      // replace whatever is showing right now (used for quick theme switching);
+      // unlock news still follows, since its show() moves the HUD on
+      toastQ = toastQ.filter(function (q) { return q.show; }); clearTimeout(toastT1); clearTimeout(toastT2);
+      toastQ.unshift(text); nextToast(); return;
     }
     toastQ.push(text);
     if (!toastBusy) nextToast();
@@ -841,7 +862,9 @@
     var el = $('toast');
     if (!toastQ.length) { toastBusy = false; return; }
     toastBusy = true;
-    el.textContent = toastQ.shift();
+    var q = toastQ.shift();
+    el.textContent = q.text || q;
+    if (q.show) q.show();
     el.classList.add('show');
     toastT1 = setTimeout(function () { el.classList.remove('show'); toastT2 = setTimeout(nextToast, 380); }, 2100);
   }
@@ -1061,6 +1084,7 @@
 
   /* =============================================================== loop */
   function update(dt) {
+    if (G.screen === 'pause') return; // frozen: effects and pending news wait for Resume
     now += dt;
     for (var i = 0; i < queue.length; i++) {
       if (queue[i].at <= now) { var q = queue[i]; queue.splice(i, 1); i--; q.fn(); }
@@ -1080,19 +1104,27 @@
     drawFX();
     ctx.restore();
   }
+  function frame() {
+    // A paused game keeps its last frame until a resize, restore, font or motion change.
+    if (G.screen === 'pause' && !frameDirty) return;
+    frameDirty = false;
+    render();
+  }
 
   /* =============================================================== init */
-  Kit.motion.onChange(function (reduced) { if (reduced) { fx.parts.length = 0; fx.shake = 0; } });
+  Kit.motion.onChange(function (reduced) { frameDirty = true; if (reduced) { fx.parts.length = 0; fx.shake = 0; } });
   buildDeco();
   buildTitle();
   demoReset();
   setScreen('title');
-  function fontsReady() { clearCaches(); renderThemeIcons(); if (G.board) refreshHUD(); }
+  // Late fonts, or a GPU reset that blanks the canvas and its scale, need fresh tile art.
+  function repaintArt() { clearCaches(); renderThemeIcons(); if (G.board) refreshHUD(); }
+  canvas.addEventListener('contextrestored', function () { view.resize(); repaintArt(); });
   if (document.fonts && document.fonts.load) {
-    Promise.all([document.fonts.load('700 40px Fredoka', '2048'), document.fonts.load('700 40px Fredoka', 'دمج')]).then(fontsReady, function () {});
-    if (document.fonts.ready) document.fonts.ready.then(fontsReady, function () {});
+    Promise.all([document.fonts.load('700 40px Fredoka', '2048'), document.fonts.load('700 40px Fredoka', 'دمج')]).then(repaintArt, function () {});
+    if (document.fonts.ready) document.fonts.ready.then(repaintArt, function () {});
   }
-  Kit.loop(update, render);
+  Kit.loop(update, frame);
 
   /* ============================================================== debug */
   window.__game = {
