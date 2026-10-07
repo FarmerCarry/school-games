@@ -175,37 +175,207 @@
   }
 
   /* --------------------------------------------------------- world */
-  Art.buildStatic = function (w, pal, res) {
-    var c = document.createElement('canvas');
+  var TAU = Math.PI * 2;
+  // Seeded random numbers, so a level's scenery is the same every time it is drawn.
+  function rng(s) {
+    s = Math.imul(s + 1, 0x9e3779b1) >>> 0;
+    return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  }
+  // A fixed number in [0, 1) per tile, so a moving trap tile carries exactly the
+  // same marks as the ground it pretends to be.
+  function hash(x, y, k) {
+    var h = Math.imul(x * 73 + y * 151 + k * 31 + 7, 0x9e3779b1);
+    h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+    return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
+  }
+  function blob(g, x, y, r) { g.moveTo(x + r, y); g.arc(x, y, r, 0, TAU); }
+  function stripes(g, pal) {
+    g.fillStyle = pal.bg2; g.globalAlpha = 0.55; g.beginPath();
+    for (var k = -E.H; k < E.W + E.H; k += 120) { g.moveTo(k, 0); g.lineTo(k + 50, 0); g.lineTo(k + 50 - E.H, E.H); g.lineTo(k - E.H, E.H); g.closePath(); }
+    g.fill();
+  }
+  // Slanted light beams from the top of the screen.
+  function beams(g, r, a) {
+    g.fillStyle = '#ffffff'; g.globalAlpha = a; g.beginPath();
+    for (var i = 0; i < 5; i++) {
+      var x = i * 290 + r() * 160, bw = 40 + r() * 60;
+      g.moveTo(x, 0); g.lineTo(x + bw, 0); g.lineTo(x + bw * 2 - 240, E.H); g.lineTo(x - 240, E.H); g.closePath();
+    }
+    g.fill();
+  }
+
+  // Big, soft, low-contrast scenery for each world. It is baked into the static
+  // canvas once per level (no per-frame cost) and sits behind every tile, so it
+  // never changes how traps, spikes or the player read. Stems and trunks run to
+  // the bottom of the screen, so they never float above a pit.
+  var SCENERY = {
+    // Orange world: a sunburst, a soft sun, puffy clouds and low dunes.
+    sun: function (g, pal, r) {
+      var cx = 160 + r() * 960, cy = 165, i, a, x;
+      g.fillStyle = pal.bg2; g.globalAlpha = 0.6; g.beginPath();
+      for (i = 0; i < 16; i++) { a = i * Math.PI / 8; g.moveTo(cx, cy); g.arc(cx, cy, 1500, a, a + Math.PI / 16); g.closePath(); }
+      g.fill();
+      g.fillStyle = '#fff1a8'; g.globalAlpha = 0.3; g.beginPath(); blob(g, cx, cy, 104); g.fill();
+      g.globalAlpha = 0.5; g.beginPath(); blob(g, cx, cy, 68); g.fill();
+      g.fillStyle = '#ffffff'; g.globalAlpha = 0.32; g.beginPath();
+      for (i = 0; i < 4; i++) {
+        x = 90 + i * 320 + r() * 150; a = 0.7 + r() * 0.5; var y = 200 + r() * 140;
+        blob(g, x, y, 34 * a); blob(g, x + 36 * a, y + 10 * a, 24 * a); blob(g, x - 36 * a, y + 12 * a, 22 * a);
+        g.moveTo(x + 60 * a, y + 22 * a); g.ellipse(x, y + 22 * a, 60 * a, 13 * a, 0, 0, TAU);
+      }
+      g.fill();
+      g.fillStyle = '#ff9408'; g.globalAlpha = 0.45; g.beginPath(); g.moveTo(0, E.H);
+      for (x = 0; x <= E.W; x += 32) g.lineTo(x, 470 - Math.sin(x / 190 + cx) * 26 - Math.sin(x / 71) * 8);
+      g.lineTo(E.W, E.H); g.fill();
+    },
+    // Sea world: light from the surface, slow wave lines, weed and bubbles.
+    sea: function (g, pal, r) {
+      var i, x, y, h;
+      beams(g, r, 0.13);
+      g.strokeStyle = pal.bg2; g.lineWidth = 12; g.lineCap = 'round'; g.globalAlpha = 0.9; g.beginPath();
+      for (y = 200; y < 500; y += 95) { h = r() * 6; g.moveTo(0, y); for (x = 16; x <= E.W; x += 16) g.lineTo(x, y + Math.sin(x / 64 + h) * 8); }
+      g.stroke();
+      g.strokeStyle = '#2cc9ad'; g.lineWidth = 9; g.globalAlpha = 0.55; g.beginPath();
+      for (i = 0; i < 10; i++) {
+        x = 30 + r() * 1220; h = 50 + r() * 90;
+        g.moveTo(x, E.H); g.lineTo(x, 525); g.bezierCurveTo(x + 22, 525 - h * 0.35, x - 22, 525 - h * 0.65, x + 6, 525 - h);
+      }
+      g.stroke();
+      g.strokeStyle = '#ffffff'; g.lineWidth = 3; g.globalAlpha = 0.45; g.beginPath();
+      for (i = 0; i < 24; i++) blob(g, r() * E.W, 140 + r() * 360, 4 + r() * 11);
+      g.stroke();
+    },
+    // Candy world: candy-cane stripes, giant lollipops and sprinkles.
+    candy: function (g, pal, r) {
+      var i, x, y, s, a;
+      stripes(g, pal);
+      for (i = 0; i < 4; i++) {
+        x = 120 + i * 320 + r() * 80; y = 210 + r() * 120; s = 42 + r() * 22;
+        g.fillStyle = '#ffffff'; g.globalAlpha = 0.35; g.beginPath();
+        g.rect(x - 5, y, 10, E.H - y); blob(g, x, y, s); g.fill();
+        g.strokeStyle = pal.bg; g.lineWidth = 8; g.globalAlpha = 0.75; g.beginPath();
+        for (a = 0; a < 16; a += 0.3) g.lineTo(x + Math.cos(a) * a * s / 17, y + Math.sin(a) * a * s / 17);
+        g.stroke();
+      }
+      g.lineWidth = 6; g.lineCap = 'round'; g.globalAlpha = 0.55;
+      for (i = 0; i < 4; i++) {
+        g.strokeStyle = SPRINKLES[i]; g.beginPath();
+        for (s = 0; s < 9; s++) {
+          x = r() * E.W; y = 130 + r() * 380; a = r() * Math.PI;
+          g.moveTo(x - Math.cos(a) * 7, y - Math.sin(a) * 7); g.lineTo(x + Math.cos(a) * 7, y + Math.sin(a) * 7);
+        }
+        g.stroke();
+      }
+    },
+    // Forest world: soft sunbeams, two rows of round trees and drifting leaves.
+    forest: function (g, pal, r) {
+      var i, x, h, c;
+      beams(g, r, 0.16);
+      for (i = 0; i < 2; i++) {
+        g.fillStyle = i ? '#b2e248' : '#ffffff'; g.globalAlpha = i ? 0.75 : 0.3; g.beginPath();
+        for (x = -30 + r() * 80; x < E.W + 40; x += 110 + r() * 110) {
+          h = 150 + r() * 130 - i * 70; c = 40 + r() * 26 - i * 6;
+          g.rect(x - 7, 520 - h, 14, h + 200);
+          blob(g, x, 520 - h, c); blob(g, x - c * 0.7, 520 - h + c * 0.45, c * 0.68); blob(g, x + c * 0.7, 520 - h + c * 0.45, c * 0.68);
+        }
+        g.fill();
+      }
+      g.fillStyle = '#86c934'; g.globalAlpha = 0.5; g.beginPath();
+      for (i = 0; i < 16; i++) { x = r() * E.W; h = 130 + r() * 300; g.moveTo(x, h); g.ellipse(x, h, 10, 4, r() * Math.PI, 0, TAU); }
+      g.fill();
+    }
+  };
+
+  // How each world dresses its ground: the band on exposed tops, optional bumps,
+  // drips or a bright top line, and the small marks inside the ground
+  // (stroke = drawn as lines of that width).
+  var SPRINKLES = ['#ff8fc7', '#ffe14d', '#7ff5e0', '#ffffff'];
+  var GROUND = {
+    sun: { top: '#c4561f', line: '#ffc46b', bumps: 1, mark: 'pebble' },
+    sea: { top: '#ffe2a0', bumps: 1, mark: 'ring', stroke: 2.5 },
+    candy: { top: '#fff3f9', drips: 1, mark: 'sprinkle', stroke: 5 },
+    forest: { top: '#5fc23c', line: '#a3e85e', bumps: 1, mark: 'pebble' }
+  };
+
+  // Does cell (x, y) sit flush against the tiles being drawn? grp is a group
+  // drawn live, or null for the fixed ground (baked once: unrevealed '!' blocks
+  // never count, so the ground under them does not give them away).
+  function solidAt(w, grp, x, y) {
+    if (x < 0 || x >= E.COLS || y < 0 || y >= E.ROWS) return !grp;
+    var i = y * E.COLS + x, h = w.owner[i];
+    if (h && h.invis && !(grp && h.revealed)) h = null;
+    if (!grp) return !!(w.grid[i] || h);
+    if (h) return h === grp || (h.active && h.ox === grp.ox && h.oy === grp.oy);
+    return !!w.grid[i] && !grp.ox && !grp.oy;
+  }
+
+  // Adds a rectangle whose edges sit on whole device pixels (k per logical px).
+  // Such edges are not anti-aliased, so baked and live tiles match pixel for pixel.
+  function prect(ctx, x, y, w, h, k) {
+    var x0 = Math.round(x * k) / k, y0 = Math.round(y * k) / k;
+    ctx.rect(x0, y0, Math.round((x + w) * k) / k - x0, Math.round((y + h) * k) / k - y0);
+  }
+
+  // Every solid tile, fixed or part of a trap, is drawn by this one routine, so a
+  // fake block or shy floor looks exactly like the real ground. Each layer is one
+  // path with pixel-snapped edges, so tiles never show seams between them.
+  function drawTiles(ctx, w, grp, tiles, ox, oy, pal, k) {
+    var st = GROUND[pal.theme] || GROUND.sun, n = tiles.length;
+    var i, b, x, y, px, py, l, r, v, c, m, list;
+    ctx.save();
+    ctx.fillStyle = pal.ink; ctx.beginPath();
+    for (i = 0; i < n; i++) prect(ctx, tiles[i].x * T + ox, tiles[i].y * T + oy, T, T, k);
+    ctx.fill();
+    // the themed top on every exposed top (and an optional bright line above it)
+    for (c = 0; c < (st.line ? 2 : 1); c++) {
+      ctx.fillStyle = c ? st.line : st.top; ctx.beginPath(); m = 0;
+      for (i = 0; i < n; i++) {
+        x = tiles[i].x; y = tiles[i].y;
+        if (solidAt(w, grp, x, y - 1)) continue;
+        px = x * T + ox; py = y * T + oy; m++;
+        prect(ctx, px, py, T, c ? 2 : 6, k);
+        if (c) continue;
+        if (st.bumps) for (b = 0; b < 4; b++) { ctx.moveTo(px + b * 10 + 10, py + 5); ctx.arc(px + b * 10 + 5, py + 5, 5, 0, Math.PI); }
+        if (st.drips) for (b = 0; b < 2; b++) {
+          v = hash(x, y, b); var dx = px + 7 + b * 18 + v * 8, dl = 4 + v * 12;
+          prect(ctx, dx - 3, py + 4, 6, dl, k); ctx.moveTo(dx + 3, py + 4 + dl); ctx.arc(dx, py + 4 + dl, 3, 0, Math.PI);
+        }
+      }
+      if (!m) break; // nothing exposed (skip empty fills for live groups)
+      ctx.fill();
+    }
+    // small marks inside the ground, on a checkerboard like the original dots
+    list = st.mark === 'sprinkle' ? SPRINKLES : [pal.ink2];
+    ctx.globalAlpha = 0.45; ctx.lineCap = 'round'; ctx.lineWidth = st.stroke || 1;
+    for (c = 0; c < list.length; c++) {
+      ctx.beginPath(); m = 0;
+      for (i = 0; i < n; i++) {
+        x = tiles[i].x; y = tiles[i].y;
+        if ((x + y) % 2 || !solidAt(w, grp, x, y - 1)) continue;
+        v = hash(x, y, 5);
+        if (list.length > 1 && Math.floor(v * list.length) !== c) continue;
+        m++; px = x * T + ox + 10 + v * 20; py = y * T + oy + 10 + hash(x, y, 6) * 20;
+        if (st.mark === 'ring') blob(ctx, px, py, 3 + v * 3);
+        else if (st.mark === 'sprinkle') { l = Math.cos(v * 9) * 5; r = Math.sin(v * 9) * 5; ctx.moveTo(px - l, py - r); ctx.lineTo(px + l, py + r); }
+        else { ctx.moveTo(px + 4 + v * 3, py); ctx.ellipse(px, py, 4 + v * 3, 3 + v, 0, 0, TAU); } // pebble
+      }
+      if (!m) continue;
+      if (st.stroke) { ctx.strokeStyle = list[c]; ctx.stroke(); } else { ctx.fillStyle = list[c]; ctx.fill(); }
+    }
+    ctx.restore();
+  }
+
+  // Bakes the scenery and fixed ground of a level. Pass the previous canvas to
+  // reuse it instead of allocating a new full-screen canvas each time.
+  Art.buildStatic = function (w, pal, res, seed, c) {
+    c = c || document.createElement('canvas');
     c.width = Math.round(E.W * res); c.height = Math.round(E.H * res);
-    var g = c.getContext('2d');
+    var g = c.getContext('2d'), tiles = [];
     g.setTransform(res, 0, 0, res, 0, 0);
     g.fillStyle = pal.bg; g.fillRect(0, 0, E.W, E.H);
-    // soft diagonal stripes
-    g.save();
-    g.fillStyle = pal.bg2; g.globalAlpha = 0.55;
-    for (var k = -E.H; k < E.W + E.H; k += 120) {
-      g.beginPath(); g.moveTo(k, 0); g.lineTo(k + 50, 0); g.lineTo(k + 50 - E.H, E.H); g.lineTo(k - E.H, E.H); g.closePath(); g.fill();
-    }
-    g.restore();
-    // solids
-    var x, y;
-    g.fillStyle = pal.ink;
-    for (y = 0; y < E.ROWS; y++) for (x = 0; x < E.COLS; x++) if (w.grid[y * E.COLS + x]) g.fillRect(x * T, y * T, T + 0.5, T + 0.5);
-    // top highlight on exposed edges
-    g.fillStyle = pal.ink2;
-    for (y = 0; y < E.ROWS; y++) for (x = 0; x < E.COLS; x++) {
-      if (!w.grid[y * E.COLS + x]) continue;
-      if (y > 0 && !w.grid[(y - 1) * E.COLS + x] && !w.owner[(y - 1) * E.COLS + x]) g.fillRect(x * T, y * T, T + 0.5, 5);
-    }
-    // subtle dotted texture inside big solid areas so they don't look flat
-    g.fillStyle = pal.ink2; g.globalAlpha = 0.45;
-    for (y = 1; y < E.ROWS; y++) for (x = 0; x < E.COLS; x++) {
-      if (!w.grid[y * E.COLS + x] || !w.grid[(y - 1) * E.COLS + x]) continue;
-      if ((x + y) % 2) continue;
-      g.beginPath(); g.arc(x * T + 20, y * T + 20, 3, 0, Math.PI * 2); g.fill();
-    }
-    g.globalAlpha = 1;
+    g.save(); (SCENERY[pal.theme] || stripes)(g, pal, rng(seed || 0)); g.restore();
+    for (var y = 0; y < E.ROWS; y++) for (var x = 0; x < E.COLS; x++) if (w.grid[y * E.COLS + x]) tiles.push({ x: x, y: y });
+    drawTiles(g, w, null, tiles, 0, 0, pal, res);
     return c;
   };
 
@@ -217,7 +387,8 @@
     ctx.fill(); ctx.restore();
   }
 
-  Art.drawGroups = function (ctx, w, pal, t) {
+  // k: device pixels per logical pixel of ctx (for pixel-snapped tile edges).
+  Art.drawGroups = function (ctx, w, pal, t, k) {
     for (var i = 0; i < w.groups.length; i++) {
       var g = w.groups[i];
       if (!g.active) continue;
@@ -234,22 +405,11 @@
       var jx = 0, jy = 0;
       if (g.shakeT > 0) { jx = Math.sin(t * 90 + i) * 2.5; jy = Math.cos(t * 70 + i) * 1.5; }
       var tiles = g.tiles;
-      ctx.fillStyle = pal.ink;
-      for (var k = 0; k < tiles.length; k++) {
-        var tx = tiles[k].x * T + g.ox + jx, ty = tiles[k].y * T + g.oy + jy;
-        ctx.fillRect(tx - 0.5, ty - 0.5, T + 1, T + 1);
-      }
-      ctx.fillStyle = pal.ink2;
-      for (k = 0; k < tiles.length; k++) {
-        var tl = tiles[k];
-        var above = (tl.y - 1) * E.COLS + tl.x;
-        var sameAbove = w.owner[above] === g || (g.oy === 0 && g.ox === 0 && w.grid[above]);
-        if (!sameAbove) ctx.fillRect(tl.x * T + g.ox + jx, tl.y * T + g.oy + jy, T + 0.5, 5);
-      }
+      drawTiles(ctx, w, g, tiles, g.ox + jx, g.oy + jy, pal, k);
       if (g.invis) {
         ctx.save();
         ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.setLineDash([6, 5]); ctx.lineWidth = 2;
-        for (k = 0; k < tiles.length; k++) ctx.strokeRect(tiles[k].x * T + g.ox + 3, tiles[k].y * T + g.oy + 3, T - 6, T - 6);
+        for (q = 0; q < tiles.length; q++) ctx.strokeRect(tiles[q].x * T + g.ox + 3, tiles[q].y * T + g.oy + 3, T - 6, T - 6);
         ctx.restore();
       }
     }

@@ -22,9 +22,15 @@
     last: Math.max(0, Math.min(N - 1, +store.get('last', 0) || 0)),
     ended: !!store.get('ended', false)
   };
+  // Writes everything (the music setting too). If storage refuses a write, the
+  // shared warning offers a retry; it clears only once every key is saved.
+  var saveUi = K.saveStatus({ retry: persist });
   function persist() {
-    store.set('best', save.best); store.set('stars', save.stars); store.set('total', save.total);
-    store.set('unl', save.unl); store.set('skin', save.skin); store.set('last', save.last); store.set('ended', save.ended);
+    var ok = true;
+    ['best', 'stars', 'total', 'unl', 'skin', 'last', 'ended'].forEach(function (k) { if (store.set(k, save[k]) === false) ok = false; });
+    if (store.set('music', M.on) === false) ok = false;
+    if (ok) saveUi.saved(); else saveUi.failed();
+    return ok;
   }
   function starCount() { var s = 0; for (var i = 0; i < N; i++) s += save.stars[i] || 0; return s; }
   function doneCount() { var s = 0; for (var i = 0; i < N; i++) if (save.best[i] != null) s++; return s; }
@@ -33,14 +39,17 @@
 
   /* ============================================================== canvas */
   var cv = $('cv'), ui = $('ui');
-  var staticDirty = true;
+  // staticDirty: rebake the level canvas. sceneDirty: a still menu/pause scene
+  // needs one more frame (see render).
+  var staticDirty = true, sceneDirty = true;
   var view = K.fit(cv, 1280, 720, {
     onResize: function (v) {
       ui.style.transform = 'translate(' + cv.style.left + ',' + cv.style.top + ') scale(' + v.scale + ')';
-      staticDirty = true;
+      staticDirty = true; sceneDirty = true;
     }
   });
   var ctx = view.ctx;
+  cv.addEventListener('contextrestored', function () { staticDirty = true; sceneDirty = true; });
   var fx = K.particles(), shake = K.shake();
 
   /* ============================================================== sounds */
@@ -152,7 +161,7 @@
   function show(id) {
     SCREENS.forEach(function (s) { $(s).hidden = s !== id; });
     $('btn-pause').hidden = id !== null;
-    guardT = 0.25;
+    guardT = 0.25; sceneDirty = true;
     try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) { /* */ }
   }
 
@@ -168,7 +177,10 @@
   }
   function playTarget() {
     if (doneCount() >= N) return save.last;
-    for (var i = 0; i <= save.unl; i++) if (save.best[i] == null) return i;
+    // Look forward from the last level played first, so a skipped level does not
+    // come back through Continue (it stays in the level select as "new").
+    for (var i = save.last; i <= save.unl; i++) if (save.best[i] == null) return i;
+    for (i = 0; i <= save.unl; i++) if (save.best[i] == null) return i;
     return Math.min(save.unl, N - 1);
   }
 
@@ -267,9 +279,10 @@
   var game = {
     world: null, demo: false, li: 0, pal: WORLDS[0], deaths: 0, t: 0, winT: -1, deadT: 0,
     vis: { sx: 1, sy: 1, sc: 1, blink: 0 }, msg: null, msgT: 0, introT: 0, flash: 0, flashC: '#fff',
-    marks: [], staticC: null, staticFor: null, auto: null, autoF: 0, prevJ: false,
-    botInputs: null, botF: 0, demoWait: 0, revLabelT: 0
+    marks: [], staticC: null, staticFor: null, staticRes: 1, auto: null, autoF: 0, prevJ: false,
+    botInputs: null, botF: 0, demoWait: 0, revLabelT: 0, endT: 3
   };
+  var CONFETTI = ['#ffe14d', '#ff4d6d', '#3fe0c5', '#ffffff', '#8b5cf6'];
 
   function makeWorld(def, demo) {
     var w = new E.World(def, { emit: function (type, d) { onEvent(type, d, demo); } });
@@ -296,7 +309,7 @@
   function startDemo() {
     game.demo = true; game.pal = WORLDS[0]; game.winT = -1; game.marks.length = 0;
     game.world = makeWorld(LV.DEMO, true);
-    game.staticFor = null; game.msg = null;
+    game.msg = null; // the baked 'demo' canvas stays valid: same map every loop
     game.botInputs = E.parseInputs(LV.DEMO.bots[0]); game.botF = 0; game.demoWait = 1.0;
     fx.clear();
   }
@@ -327,7 +340,8 @@
         break;
       case 'die':
         if (!demo) {
-          game.deaths++; save.total++; store.set('total', save.total);   // only this changed: one small write per death
+          game.deaths++; save.total++;   // only this changed: one small write per death
+          if (store.set('total', save.total) === false) saveUi.failed();
           var pool = Math.random() < 0.55 && CAUSE[d.cause] ? CAUSE[d.cause] : TAUNT;
           var m = K.pick(pool);
           if (game.deaths === 5) m = '5 سقطات! المرحلة تضحك عليك!';
@@ -342,7 +356,7 @@
         fx.burst(d.x, d.y, { count: 22, colors: [skin.body, pal.ink, '#ffffff'], speed: 420, life: 0.7, size: 9, gravity: 900 });
         fx.burst(d.x, d.y, { count: 10, colors: ['#ffe14d', '#ffffff'], speed: 260, life: 0.5, size: 6, gravity: 400 });
         shake.add(demo ? 5 : 11);
-        game.flash = 0.35; game.flashC = '#ffffff';
+        game.flash = 0.35; game.flashC = '#ffffff';   // drawn only with full motion (see render)
         break;
       case 'respawn':
         game.vis.sc = 0.2; game.vis.sx = 1; game.vis.sy = 1;
@@ -419,7 +433,7 @@
       case 'win':
         game.winT = 0;
         var dx = d.d.x + (d.d.g ? d.d.g.ox : 0) + 20, dy = d.d.y + (d.d.g ? d.d.g.oy : 0) + 30;
-        fx.burst(dx, dy, { count: 40, colors: ['#ffe14d', '#ff4d6d', '#3fe0c5', '#ffffff', '#8b5cf6'], speed: 520, life: 1.1, size: 9, gravity: 700 });
+        fx.burst(dx, dy, { count: 40, colors: CONFETTI, speed: 520, life: 1.1, size: 9, gravity: 700 });
         shake.add(4);
         if (loud) S.win();
         break;
@@ -491,7 +505,8 @@
     $('e-deaths').textContent = K.fmt(save.total);
     $('e-tip').textContent = starCount() >= MAXSTARS ? 'جمعت كل النجوم! أنت أمهر لاعب في المدرسة!' : 'عُد واجمع 3 نجوم في كل مرحلة لتفتح كل الشخصيات!';
     S.cheer();
-    for (var i = 0; i < 6; i++) fx.burst(200 + i * 180, 200, { count: 20, colors: ['#ffe14d', '#ff4d6d', '#3fe0c5', '#ffffff'], speed: 500, life: 1.4, size: 9, gravity: 600 });
+    for (var i = 0; i < 6; i++) fx.burst(200 + i * 180, 200, { count: 20, colors: CONFETTI, speed: 500, life: 1.4, size: 9, gravity: 600 });
+    game.endT = 0; // update() keeps the confetti coming for 3 seconds
   }
 
   /* ----------------------------------------------------- pause */
@@ -534,7 +549,7 @@
   on('btn-e-levels', function () { S.click(); goSelect(); });
   on('btn-e-menu', function () { S.click(); goTitle(); });
   on('btn-pause', pause);
-  on('btn-music', function () { M.on = !M.on; store.set('music', M.on); paintMusic(); S.click(); });
+  on('btn-music', function () { M.on = !M.on; persist(); paintMusic(); S.click(); });
   paintMusic();
   var muteBtn = K.muteButton();
   muteBtn.title = 'الصوت (M)';
@@ -601,7 +616,7 @@
         game.winT += dt;
         if (game.winT > 0.9 && mode === 'play') levelWon();
       }
-    } else if (game.demo && w && (mode === 'title' || mode === 'select' || mode === 'skins')) {
+    } else if (game.demo && w && mode === 'title') {   // under the level/skin menus it waits
       if (game.demoWait > 0) game.demoWait -= dt;
       else {
         var b = game.botInputs[game.botF++] || 'R';
@@ -612,6 +627,10 @@
       }
     } else if (mode === 'win' || mode === 'end') {
       if (w) w.step({});
+      if (mode === 'end' && game.endT < 3) {   // a fresh confetti burst every 0.35 s
+        var e0 = game.endT; game.endT += dt;
+        if (Math.floor(game.endT / 0.35) > Math.floor(e0 / 0.35)) fx.burst(K.rand(80, 1200), K.rand(100, 260), { count: 18, colors: CONFETTI, speed: 480, life: 1.3, size: 9, gravity: 600 });
+      }
     }
 
     // visuals
@@ -642,14 +661,17 @@
     var key = (game.demo ? 'demo' : game.li) + ':' + view.scale.toFixed(3);
     if (!staticDirty && game.staticFor === key && game.staticC) return;
     var res = Math.min(2, Math.max(0.5, view.scale * view.dpr));
-    game.staticC = Art.buildStatic(w, game.pal, res);
-    game.staticFor = key; staticDirty = false;
+    game.staticC = Art.buildStatic(w, game.pal, res, game.demo ? 99 : game.li, game.staticC);
+    game.staticFor = key; game.staticRes = res; staticDirty = false;
   }
 
   function drawWorld() {
     var w = game.world, pal = game.pal, t = game.t;
     ensureStatic();
-    ctx.drawImage(game.staticC, 0, 0, E.W, E.H);
+    var sc = game.staticC;
+    // Exactly one canvas pixel per screen pixel: no resampling blur, and the live
+    // trap tiles line up with the baked ground without a hairline.
+    ctx.drawImage(sc, 0, 0, sc.width / game.staticRes, sc.height / game.staticRes);
     // death marks (this session)
     if (game.marks.length) {
       ctx.save(); ctx.globalAlpha = 0.35; ctx.strokeStyle = pal.ink; ctx.lineWidth = 4; ctx.lineCap = 'round';
@@ -661,7 +683,7 @@
     }
     if (!game.demo && game.li === 0) drawTutorial();
     Art.drawGZones(ctx, w, pal, t);
-    Art.drawGroups(ctx, w, pal, t);
+    Art.drawGroups(ctx, w, pal, t, view.scale * view.dpr);
     Art.drawSpikes(ctx, w, pal);
     Art.drawSprings(ctx, w, pal);
     for (var k = 0; k < w.doors.length; k++) {
@@ -731,6 +753,14 @@
     ctx.restore();
   }
 
+  // A hint list picks the entry for where the player last died (see levels.js).
+  function hintText(hint) {
+    if (typeof hint === 'string') return hint;
+    var m = game.marks[game.marks.length - 1], col = m ? m.x / T : 0;
+    for (var i = 0; i < hint.length - 1; i++) if (col < hint[i].before) return hint[i].text;
+    return hint[hint.length - 1].text;
+  }
+
   function drawHUD() {
     var w = game.world, pal = game.pal;
     // death counter (left, next to the pause button)
@@ -769,7 +799,7 @@
     }
     // hint after a few deaths
     if (game.deaths >= HINT_AFTER && LEVELS[game.li].hint) {
-      var h = 'تلميح: ' + LEVELS[game.li].hint;
+      var h = 'تلميح: ' + hintText(LEVELS[game.li].hint);
       var size = 22, hw = tw(h, size) + 40;
       while (hw > 1220 && size > 14) { size--; hw = tw(h, size) + 40; }
       Art.rr(ctx, 640 - hw / 2, 672, hw, 38, 19);
@@ -791,8 +821,22 @@
     }
   }
 
+  // Pause and the menus cover a scene that stops changing once its effects
+  // settle: draw it once more, then only after sceneDirty (a screen change,
+  // resize, canvas restore or late font).
+  var STILL = { pause: 1, select: 1, skins: 1, end: 1 };
+  function settled() {
+    var v = game.vis;
+    return !fx.list.length && game.flash <= 0 && !shake.power && game.msgT <= 0 && game.introT <= 0 &&
+      Math.abs(v.sc - 1) + Math.abs(v.sx - 1) + Math.abs(v.sy - 1) < 0.01;
+  }
+
   function render() {
     var w = game.world;
+    if (STILL[mode] && settled()) {
+      if (!sceneDirty) return;
+      sceneDirty = false;
+    } else sceneDirty = true;
     ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
     if (!w) { ctx.fillStyle = '#1c1226'; ctx.fillRect(0, 0, 1280, 720); return; }
     ctx.save();
@@ -804,7 +848,8 @@
       var p = w.p;
       bubble(game.msg, p.x + PH.w / 2, p.y - 40, 22, Math.min(1, game.msgT * 4));
     }
-    if (game.flash > 0) {
+    // full-screen flash: decorative, so classroom mode and reduced motion skip it
+    if (game.flash > 0 && !K.motion.reduced()) {
       ctx.save(); ctx.globalAlpha = Math.min(0.5, game.flash); ctx.fillStyle = game.flashC; ctx.fillRect(0, 0, 1280, 720); ctx.restore();
     }
   }
@@ -843,7 +888,10 @@
   /* ============================================================== boot */
   goTitle();
   K.loop(update, render);
-  try { document.fonts.load('700 40px Fredoka', 'ب').catch(function () { /* Use fallback fonts. */ }); } catch (e) { /* ignore */ }
+  try {
+    document.fonts.addEventListener('loadingdone', function () { sceneDirty = true; });
+    document.fonts.load('700 40px Fredoka', 'ب').catch(function () { /* Use fallback fonts. */ });
+  } catch (e) { /* ignore */ }
   Kit.lifecycle({ pause: pause });
   Kit.ready();
 })();
