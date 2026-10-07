@@ -212,3 +212,8 @@ button { font-family: var(--sg-font); cursor: pointer; }
 .rbtn:hover { background: rgba(20, 26, 56, 0.7); }
 .rbtn[hidden] { display: none; }
 .sg-mute { background: rgba(20, 26, 56, 0.45); }
+
+/* ------------------------------------------------------------ save warning
+   The shared panel sits at the bottom centre, over the title's Play button and Enter hint.
+   Here it goes top-right, under the mute and pause buttons, where no screen or HUD has anything. */
+.sg-save-status { top: 62px; bottom: auto; left: auto; right: 12px; margin-inline: 0; }
