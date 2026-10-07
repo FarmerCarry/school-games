@@ -33,25 +33,7 @@
   art.buildTable = function (th, k) {
     var c = mk(G.W * k, G.H * k), x = c.getContext('2d');
     x.scale(k, k);
-    // backdrop
-    var bg = x.createRadialGradient(G.CX, G.CY, 100, G.CX, G.CY, 820);
-    bg.addColorStop(0, th.bg1); bg.addColorStop(1, th.bg2);
-    x.fillStyle = bg; x.fillRect(0, 0, G.W, G.H);
     var i, j;
-    if (th.stars) {
-      for (i = 0; i < 90; i++) {
-        x.fillStyle = 'rgba(255,255,255,' + (0.2 + Math.random() * 0.6) + ')';
-        var sx = Math.random() * G.W, sy = Math.random() * G.H;
-        x.fillRect(sx, sy, 2, 2);
-      }
-    }
-    // stadium light strip at top
-    for (i = 0; i < 32; i++) {
-      var lx = 30 + i * 39.4;
-      var cols = [th.a, th.mid, th.b, th.line];
-      x.fillStyle = hexA(cols[i % 4], 0.22);
-      x.beginPath(); x.arc(lx, 8, 5, 0, Math.PI * 2); x.fill();
-    }
     // rim (outer frame)
     var pad = 16;
     x.save();
@@ -77,7 +59,9 @@
     x.fillStyle = tb; x.fillRect(G.CX, G.T, G.R - G.CX, G.B - G.T);
     // air holes
     x.fillStyle = th.dot;
-    for (i = G.L + 22; i < G.R; i += 29) for (j = G.T + 20; j < G.B; j += 29) { x.beginPath(); x.arc(i, j, 1.6, 0, Math.PI * 2); x.fill(); }
+    x.beginPath();
+    for (i = G.L + 22; i < G.R; i += 29) for (j = G.T + 20; j < G.B; j += 29) { x.moveTo(i + 1.6, j); x.arc(i, j, 1.6, 0, Math.PI * 2); }
+    x.fill();
     // markings (glowing)
     x.lineCap = 'round';
     function glowStroke(col, w, blur) {
@@ -104,6 +88,28 @@
     rrect(x, G.L - 4, G.T - 4, G.R - G.L + 8, G.B - G.T + 8, G.CR + 4);
     x.save(); x.shadowColor = th.line; x.shadowBlur = 26; x.strokeStyle = th.line; x.lineWidth = 7; x.stroke(); x.stroke(); x.restore();
     x.strokeStyle = 'rgba(255,255,255,0.8)'; x.lineWidth = 2; x.stroke();
+    // Backdrop, painted last and underneath (each draw goes behind what is there).
+    // Some GPU rasterizers wipe the strip above the rink while drawing the clipped
+    // glow lines; painted first, the backdrop there was lost and the strip see-through.
+    x.globalCompositeOperation = 'destination-over';
+    // stadium light strip at top
+    for (i = 0; i < 32; i++) {
+      var lx = 30 + i * 39.4;
+      var cols = [th.a, th.mid, th.b, th.line];
+      x.fillStyle = hexA(cols[i % 4], 0.22);
+      x.beginPath(); x.arc(lx, 8, 5, 0, Math.PI * 2); x.fill();
+    }
+    if (th.stars) {
+      for (i = 0; i < 90; i++) {
+        x.fillStyle = 'rgba(255,255,255,' + (0.2 + Math.random() * 0.6) + ')';
+        var sx = Math.random() * G.W, sy = Math.random() * G.H;
+        x.fillRect(sx, sy, 2, 2);
+      }
+    }
+    var bg = x.createRadialGradient(G.CX, G.CY, 100, G.CX, G.CY, 820);
+    bg.addColorStop(0, th.bg1); bg.addColorStop(1, th.bg2);
+    x.fillStyle = bg; x.fillRect(0, 0, G.W, G.H);
+    x.globalCompositeOperation = 'source-over';
     return c;
   };
 
@@ -345,6 +351,9 @@
     puckCache[p.id] = c;
     return c;
   };
+  // Forget cached sprites (after a GPU reset they come back blank); they rebuild on demand.
+  art.clearCaches = function () { malletCache = {}; puckCache = {}; };
+
   function star(x, cx, cy, ro, ri, n) {
     x.beginPath();
     for (var i = 0; i < n * 2; i++) {
