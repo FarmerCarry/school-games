@@ -127,6 +127,15 @@ test('Hoop Heads draws a paused match once, redraws on resize or restore, and re
     return { same: JSON.stringify(transform()) === JSON.stringify(before), renders: hh.renders };
   });
   assert.deepEqual(restored, { same: true, renders: 1 });
+  // Paused mid score flash, then the classroom preset turns reduced motion on.
+  const motion = await page.evaluate(() => {
+    __game.match.flash = 0.3; Kit.motion.setPreference('reduce');
+    hh.renders = 0; hh.step(30);
+    const reduced = hh.renders;
+    Kit.motion.setPreference('full'); hh.step(1);
+    return reduced;
+  });
+  assert.equal(motion, 1, 'a motion change redraws the still frame once');
   const confirm = await page.evaluate(() => {
     document.getElementById('pMenu').click();
     hh.renders = 0; hh.step(30);
@@ -144,6 +153,24 @@ test('Hoop Heads draws a paused match once, redraws on resize or restore, and re
   assert.deepEqual(resumed, { renders: 60, moved: true });
 });
 
+test('Hoop Heads withdrawing from a cup after a win drops the old match', async t => {
+  const page = await hoop(t);
+  const result = await page.evaluate(() => {
+    __game.tour(0, 0, 'robo');
+    document.getElementById('ladGo').click(); __game.endNow(0); hh.untilResult();
+    document.getElementById('rAgain').click(); // the ladder, with the won match still behind it
+    const ladder = __game.state;
+    document.getElementById('ladBack').click(); document.getElementById('cfYes').click();
+    // A late redraw of the cups screen used to read the dropped tournament and throw.
+    document.getElementById('game').dispatchEvent(new Event('contextrestored'));
+    hh.renders = 0; hh.step(2);
+    document.getElementById('cupsBack').click();
+    const clock = __game.demo.clock; hh.step(2);
+    return { ladder, match: __game.match, renders: hh.renders, state: __game.state, demo: __game.demo.clock > clock };
+  });
+  assert.deepEqual(result, { ladder: 'ladder', match: null, renders: 4, state: 'title', demo: true });
+});
+
 test('Hoop Heads draws a high ball over the scoreboard and skips the flash for reduced motion', async t => {
   const page = await hoop(t);
   const result = await page.evaluate(() => {
@@ -155,16 +182,21 @@ test('Hoop Heads draws a high ball over the scoreboard and skips the flash for r
     b.trail.length = 0;
     hh.draw(1);
     const ball = pixel(484, 58);
+    // A fire ball half below the scoreboard: its glow on the sky beside it is painted once.
+    Object.assign(b, { x: 640, y: 118, fire: true });
+    hh.draw(1); const glow = pixel(618, 122);
     b.hidden = true;
-    hh.draw(1); const plain = pixel(640, 250);
+    hh.draw(1); const plain = pixel(640, 250), sky = pixel(618, 122);
     m.flash = 1; Kit.motion.setPreference('reduce');
     hh.draw(1); const reduced = pixel(640, 250);
     Kit.motion.setPreference('full');
     hh.draw(1); const flashed = pixel(640, 250);
-    return { ball, plain, reduced, flashed };
+    return { ball, glow, sky, plain, reduced, flashed };
   });
   const [r, , b] = result.ball;
   assert.ok(r > 180 && b < 130, `the ball is drawn over the HUD (got rgb ${result.ball})`);
+  const once = [255, 159, 28].map((v, i) => (v + result.sky[i]) / 2); // #ff9f1c at 0.5 alpha
+  assert.ok(once.every((v, i) => Math.abs(v - result.glow[i]) <= 4), `one glow (got rgb ${result.glow}, want ${once})`);
   assert.deepEqual(result.reduced, result.plain, 'reduced motion draws no full-screen flash');
   assert.notDeepEqual(result.flashed, result.plain, 'full motion keeps the flash');
 });
