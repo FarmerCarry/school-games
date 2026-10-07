@@ -93,24 +93,64 @@ test('Block World tells the player which hotbar slot holds the item a place ques
   const page = await adventure(t);
   const result = await page.evaluate(() => {
     const G = __game.G, P = __game.player, B = BW.B;
+    const press = code => { window.dispatchEvent(new KeyboardEvent('keydown', { code })); stepGame(); window.dispatchEvent(new KeyboardEvent('keyup', { code })); };
+    const slotDown = el => el.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+    const bag = document.getElementById('bag'), hot = document.getElementById('hot'), hotTip = document.getElementById('hotTip');
     ['logs', 'planks', 'table'].forEach(id => { G.done[id] = true; });
+    // A full hotbar sends the crafted table to the backpack (slot 10).
     G.inv.fill(null);
-    __game.give(B.LOG, 3);
+    for (let i = 0; i < 9; i++) G.inv[i] = { id: B.LOG, n: 1 };
     __game.give(B.TABLE, 1);
     G.sel = 0;
     stepGame(30);
     const px = Math.floor(P.x + P.w / 2), ground = __game.surfaceY(px + 2);
+    // Right-clicking a spot where the selected logs cannot go points to the backpack.
+    clickAt(px + 2.5, ground + 0.5, 2, 2);
+    const bagHint = G.hint && G.hint.s;
+    // The backpack marks the table and says to move it to the hotbar, until it is there.
+    press('KeyE');
+    const inBag = { mode: G.mode, marked: bag.children[0].classList.contains('qslot'), tip: hotTip.textContent };
+    slotDown(bag.children[0]); slotDown(hot.children[1]);
+    const moved = { table: G.inv[1] && G.inv[1].id === B.TABLE, marks: document.querySelectorAll('.qslot').length, tip: hotTip.textContent };
+    press('KeyE');
+    G.hint = null;
     // Right-clicking a spot where the selected logs cannot go names the slot to press.
     clickAt(px + 2.5, ground + 0.5, 2, 2);
     const hint = G.hint && G.hint.s;
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit2' }));
-    stepGame();
-    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Digit2' }));
+    press('Digit2');
     clickAt(px + 2.5, ground - 0.5, 2, 2);
-    return { hint, sel: G.sel, placed: G.stats.placed[B.TABLE] || 0 };
+    return { bagHint, inBag, moved, hint, sel: G.sel, placed: G.stats.placed[B.TABLE] || 0 };
   });
+  assert.match(result.bagHint, /الحقيبة/);
+  assert.match(result.bagHint, /طاولة الصنع/);
+  assert.equal(result.inBag.mode, 'inv');
+  assert.equal(result.inBag.marked, true);
+  assert.match(result.inBag.tip, /طاولة الصنع/);
+  assert.deepEqual(result.moved, { table: true, marks: 0, tip: '' });
   assert.match(result.hint, /طاولة الصنع/);
   assert.match(result.hint, /2/);
   assert.equal(result.sel, 1);
   assert.equal(result.placed, 1);
+});
+
+test('Block World redraws a kept pause frame when reduced motion clears its confetti', async t => {
+  const page = await adventure(t);
+  const paints = await page.evaluate(() => {
+    const G = __game.G, B = BW.B, ctx = document.getElementById('game').getContext('2d'), clear = ctx.clearRect;
+    let n = 0;
+    ctx.clearRect = function () { n++; return clear.apply(this, arguments); };
+    // Finishing the planks quest throws confetti; pause while it is still falling.
+    __game.give(B.LOG, 1);
+    __game.craftId(B.PLANKS);
+    G.toasts.length = 0;
+    document.getElementById('pausebtn').click();
+    stepGame(30);
+    for (let i = 0; i < 20; i++) __game.render();
+    n = 0; __game.render();
+    const settled = n;
+    Kit.motion.setPreference('reduce');
+    n = 0; __game.render();
+    return { settled, reduced: n };
+  });
+  assert.deepEqual(paints, { settled: 0, reduced: 1 });
 });

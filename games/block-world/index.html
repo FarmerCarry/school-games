@@ -107,6 +107,8 @@
   .islot img { width: 38px; height: 38px; image-rendering: pixelated; pointer-events: none; }
   .islot span { position: absolute; right: 4px; bottom: 1px; font-size: 16px; font-weight: 700; text-shadow: 0 2px 0 #000; pointer-events: none; }
   .islot.selected { border-color: #ffcc00; background: rgba(255,204,0,.2); }
+  .islot.qslot { border-color: #ffcc00; box-shadow: 0 0 0 2px rgba(255,204,0,.35), 0 0 16px rgba(255,204,0,.35); animation: qglow 1.2s ease-in-out infinite; }
+  #hotTip { color: #ffe066; font-size: 16px; font-weight: 700; }
   #hot { margin-top: 14px; padding-top: 12px; border-top: 2px dashed rgba(255,255,255,.18); }
   .lbl { font-size: 14px; opacity: .7; margin: 6px 0 4px; }
   #invPick { margin-top: 14px; font-size: 16px; display: flex; align-items: center; gap: 8px; min-height: 36px; }
@@ -233,7 +235,7 @@
         <h3 class="creaOnly">🧱 كل المكعبات <small style="font-size:15px;opacity:.75">- انقر لتضعه في الشريط</small></h3>
         <div class="grid" id="bag"></div>
         <div id="palette"></div>
-        <div class="lbl">الشريط السريع</div>
+        <div class="lbl">الشريط السريع <span id="hotTip"></span></div>
         <div class="grid" id="hot"></div>
         <div id="invPick" class="survOnly"></div>
         <div class="tips survOnly">انقر لتحمل الأغراض أو تضعها · نقرة يمين تأخذ النصف · <span dir="ltr">Shift</span>+نقرة تنقل بين الحقيبة والشريط</div>
