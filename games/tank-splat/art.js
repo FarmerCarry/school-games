@@ -13,14 +13,14 @@
     { id: 'yellow', main: '#ffc61f', dark: '#c98600', light: '#ffe79a', paint: '#ffb800', name: 'الأصفر' }
   ];
 
-  // Maze themes: floor tiles, wall colours, outside colour.
+  // Maze themes: floor tiles, wall colours, outside colour, floor decorations.
   var THEMES = [
-    { name: 'ساحة الألعاب', f1: '#fff7e6', f2: '#fcefd2', dot: '#f3dfb8', wall: '#7c62ff', wtop: '#a894ff', wside: '#5238cf', bg: '#5a45d8', bg2: '#6a55e6' },
-    { name: 'أرض الحلوى', f1: '#fff1f7', f2: '#ffe3ef', dot: '#ffcfe2', wall: '#ff5fa8', wtop: '#ff9ccb', wside: '#d63584', bg: '#e0458f', bg2: '#ec5a9e' },
-    { name: 'شاطئ الرمال', f1: '#fff9df', f2: '#fcf0c4', dot: '#f2e2a4', wall: '#15b8b1', wtop: '#6fe0d9', wside: '#0c8b86', bg: '#10a4c8', bg2: '#21b4d6' },
-    { name: 'مصنع الشوكولاتة', f1: '#fff5ea', f2: '#fbe8d5', dot: '#f2d6bb', wall: '#9a5a36', wtop: '#c98a5f', wside: '#6e3c20', bg: '#7a4527', bg2: '#8a5433' },
-    { name: 'مختبر العلماء', f1: '#f4f7fd', f2: '#e7edf9', dot: '#d8e1f3', wall: '#4d5c8f', wtop: '#8391c4', wside: '#323e69', bg: '#2e3960', bg2: '#38446e' },
-    { name: 'غروب البرتقال', f1: '#fffaf0', f2: '#fff0d8', dot: '#ffe0b3', wall: '#ff8a2b', wtop: '#ffb870', wside: '#d4600d', bg: '#e8661a', bg2: '#f27a2c' }
+    { name: 'ساحة الألعاب', f1: '#fff7e6', f2: '#fcefd2', dot: '#f3dfb8', wall: '#7c62ff', wtop: '#a894ff', wside: '#5238cf', bg: '#5a45d8', bg2: '#6a55e6', deco: 'grass' },
+    { name: 'أرض الحلوى', f1: '#fff1f7', f2: '#ffe3ef', dot: '#ffcfe2', wall: '#ff5fa8', wtop: '#ff9ccb', wside: '#d63584', bg: '#e0458f', bg2: '#ec5a9e', deco: 'candy' },
+    { name: 'شاطئ الرمال', f1: '#fff9df', f2: '#fcf0c4', dot: '#f2e2a4', wall: '#15b8b1', wtop: '#6fe0d9', wside: '#0c8b86', bg: '#10a4c8', bg2: '#21b4d6', deco: 'beach' },
+    { name: 'مصنع الشوكولاتة', f1: '#fff5ea', f2: '#fbe8d5', dot: '#f2d6bb', wall: '#9a5a36', wtop: '#c98a5f', wside: '#6e3c20', bg: '#7a4527', bg2: '#8a5433', deco: 'choco' },
+    { name: 'مختبر العلماء', f1: '#f4f7fd', f2: '#e7edf9', dot: '#d8e1f3', wall: '#4d5c8f', wtop: '#8391c4', wside: '#323e69', bg: '#2e3960', bg2: '#38446e', deco: 'lab' },
+    { name: 'غروب البرتقال', f1: '#fffaf0', f2: '#fff0d8', dot: '#ffe0b3', wall: '#ff8a2b', wtop: '#ffb870', wside: '#d4600d', bg: '#e8661a', bg2: '#f27a2c', deco: 'sun' }
   ];
 
   var HATS = [
@@ -425,7 +425,68 @@
   }
 
   /* ------------------------------------------------------------ maze */
-  function drawFloor(c, m, th) {
+  // One faint themed floor decoration at (x, y). No dark outlines and nothing
+  // shaped like a paint ball, so the balls stay the easiest thing to see.
+  var SPRINKLES = ['#ff4f9a', '#3fb8ff', '#ffc61f', '#5fd36a', '#a66bff'];
+  function drawDeco(c, kind, x, y, rnd) {
+    var v = rnd(), a = rnd() * Math.PI * 2, i, ra;
+    c.save(); c.translate(x, y);
+    if (kind === 'grass') {
+      if (v < 0.6) { // grass tuft
+        c.strokeStyle = '#4fae3c'; c.lineWidth = 3;
+        c.beginPath(); c.moveTo(-5, 5); c.quadraticCurveTo(-5, -1, -9, -6); c.moveTo(0, 5); c.lineTo(0, -8);
+        c.moveTo(5, 5); c.quadraticCurveTo(5, -1, 9, -6); c.stroke();
+      } else { // little flower
+        c.rotate(a); c.fillStyle = '#ff6fae';
+        for (i = 0; i < 5; i++) { circle(c, Math.cos(i * 1.2566) * 5, Math.sin(i * 1.2566) * 5, 3.6); c.fill(); }
+        circle(c, 0, 0, 2.8); c.fillStyle = '#ffb000'; c.fill();
+      }
+    } else if (kind === 'candy') { // sprinkles
+      c.lineWidth = 4;
+      for (i = 0; i < 3; i++) {
+        var sx = (rnd() - 0.5) * 24, sy = (rnd() - 0.5) * 24, dx = Math.cos(a + i * 2) * 4.5, dy = Math.sin(a + i * 2) * 4.5;
+        c.strokeStyle = SPRINKLES[(rnd() * SPRINKLES.length) | 0];
+        c.beginPath(); c.moveTo(sx - dx, sy - dy); c.lineTo(sx + dx, sy + dy); c.stroke();
+      }
+    } else if (kind === 'beach') {
+      if (v < 0.35) { // starfish
+        c.rotate(a); c.fillStyle = c.strokeStyle = '#ff7043'; c.lineWidth = 3;
+        star(c, 0, 0, 11, 4.5); c.fill(); c.stroke();
+      } else if (v < 0.7) { // shell
+        c.rotate(a * 0.2 - 0.6); c.fillStyle = '#f08a4b';
+        c.beginPath(); c.moveTo(0, 6); c.arc(0, 6, 12, Math.PI * 1.12, Math.PI * 1.88); c.closePath(); c.fill();
+        c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.beginPath();
+        for (i = 1; i < 5; i++) { ra = Math.PI * (1.12 + i * 0.152); c.moveTo(0, 6); c.lineTo(Math.cos(ra) * 11, 6 + Math.sin(ra) * 11); }
+        c.stroke();
+      } else { // ripples
+        c.strokeStyle = '#1aa9bd'; c.lineWidth = 2.5; c.beginPath();
+        c.moveTo(-13, -3); c.quadraticCurveTo(-6.5, -9, 0, -3); c.quadraticCurveTo(6.5, 3, 13, -3);
+        c.moveTo(-8, 5); c.quadraticCurveTo(-2, -1, 4, 5); c.quadraticCurveTo(8, 9, 11, 5); c.stroke();
+      }
+    } else if (kind === 'choco') { // cocoa bean
+      c.rotate(a); c.fillStyle = '#8a4a26';
+      c.beginPath(); c.ellipse(0, 0, 9, 5.5, 0, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = '#fff5ea'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(-6, 0); c.quadraticCurveTo(0, 2.5, 6, 0); c.stroke();
+    } else if (kind === 'lab') { // atom
+      c.rotate(a); c.strokeStyle = '#3d5cc4'; c.lineWidth = 2;
+      for (i = 0; i < 3; i++) { c.beginPath(); c.ellipse(0, 0, 13, 4.5, i * Math.PI / 3, 0, Math.PI * 2); c.stroke(); }
+      circle(c, 0, 0, 2.6); c.fillStyle = '#ff4f9a'; c.fill();
+    } else if (kind === 'sun') {
+      if (v < 0.6) { // little sun
+        c.fillStyle = c.strokeStyle = '#ff8a1f'; c.lineWidth = 2.5;
+        circle(c, 0, 0, 6); c.fill(); c.beginPath();
+        for (i = 0; i < 8; i++) { ra = a + i * Math.PI / 4; c.moveTo(Math.cos(ra) * 9, Math.sin(ra) * 9); c.lineTo(Math.cos(ra) * 13, Math.sin(ra) * 13); }
+        c.stroke();
+      } else { // seagull
+        c.strokeStyle = '#b8642c'; c.lineWidth = 2.5;
+        c.beginPath(); c.moveTo(-9, 0); c.quadraticCurveTo(-4.5, -6, 0, 0); c.quadraticCurveTo(4.5, -6, 9, 0); c.stroke();
+      }
+    }
+    c.restore();
+  }
+
+  // rnd: seeded random, so a resize redraws the same decorations.
+  function drawFloor(c, m, th, rnd) {
     var cs = m.cs;
     c.fillStyle = th.bg; c.fillRect(0, 0, 1280, 720);
     // diagonal stripes on the outside
@@ -453,6 +514,35 @@
         circle(c, x0 + cx * cs + cs / 2, y0 + cy * cs + cs / 2, 2.5); c.fill();
       }
     }
+    // themed decorations, kept faint (alpha 0.3)
+    rnd = rnd || Math.random;
+    c.save();
+    c.beginPath(); c.rect(x0, y0, w, h); c.clip();
+    c.globalAlpha = 0.3; c.lineCap = 'round'; c.lineJoin = 'round';
+    c.beginPath();
+    if (th.deco === 'choco') { // chocolate-bar grooves
+      for (ty = 0; ty < m.rows * 2; ty++) {
+        for (tx = 0; tx < m.cols * 2; tx++) {
+          var gx = x0 + tx * hs + hs - 5, gy = y0 + ty * hs + hs - 5;
+          c.moveTo(gx - hs + 10, gy); c.lineTo(gx, gy); c.lineTo(gx, gy - hs + 10);
+        }
+      }
+      c.strokeStyle = '#a0643c'; c.lineWidth = 2; c.stroke();
+    } else if (th.deco === 'lab') { // blueprint grid
+      for (var gl = 0; gl <= m.cols * 4; gl++) { c.moveTo(x0 + gl * hs / 2, y0); c.lineTo(x0 + gl * hs / 2, y0 + h); }
+      for (gl = 0; gl <= m.rows * 4; gl++) { c.moveTo(x0, y0 + gl * hs / 2); c.lineTo(x0 + w, y0 + gl * hs / 2); }
+      c.strokeStyle = '#6f8fdc'; c.lineWidth = 1; c.stroke();
+    }
+    // 0-2 per cell, in opposite quarters so they never pile up on the centre dot
+    for (cy = 0; cy < m.rows; cy++) {
+      for (cx = 0; cx < m.cols; cx++) {
+        var n = rnd() < 0.3 ? 0 : rnd() < 0.75 ? 1 : 2, q = (rnd() * 4) | 0;
+        for (var d = 0; d < n; d++, q = (q + 2) % 4) {
+          drawDeco(c, th.deco, x0 + cx * cs + (q % 2 + 0.25 + rnd() * 0.5) * hs, y0 + cy * cs + ((q >> 1) + 0.25 + rnd() * 0.5) * hs, rnd);
+        }
+      }
+    }
+    c.restore();
   }
 
   function drawWalls(c, m, th, shadowOnly) {
@@ -468,17 +558,18 @@
     // side (3D) pass
     c.fillStyle = th.wside;
     for (i = 0; i < rects.length; i++) { r = rects[i]; rr(c, r.x1, r.y1 + 3, r.x2 - r.x1, r.y2 - r.y1 + 3, 5); c.fill(); }
-    // top pass
-    c.fillStyle = th.wall;
-    for (i = 0; i < rects.length; i++) { r = rects[i]; rr(c, r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1, 5); c.fill(); }
-    // highlight
-    c.fillStyle = th.wtop;
-    for (i = 0; i < rects.length; i++) {
-      r = rects[i];
-      var w = r.x2 - r.x1, h = r.y2 - r.y1;
-      if (w > h) rr(c, r.x1 + 4, r.y1 + 2, w - 8, 3.5, 2);
-      else rr(c, r.x1 + 2, r.y1 + 4, 3.5, h - 8, 2);
-      c.fill();
+    // top + highlight: vertical walls first, so the horizontal tops cover their
+    // highlight where walls meet (no light stripes across the junctions)
+    for (var pass = 0; pass < 2; pass++) {
+      for (i = 0; i < rects.length; i++) {
+        r = rects[i];
+        var w = r.x2 - r.x1, h = r.y2 - r.y1;
+        if ((w > h) !== (pass === 1)) continue;
+        rr(c, r.x1, r.y1, w, h, 5); c.fillStyle = th.wall; c.fill();
+        if (w > h) rr(c, r.x1 + 4, r.y1 + 2, w - 8, 3.5, 2);
+        else rr(c, r.x1 + 2, r.y1 + 4, 3.5, h - 8, 2);
+        c.fillStyle = th.wtop; c.fill();
+      }
     }
   }
 
