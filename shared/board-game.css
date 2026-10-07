@@ -31,11 +31,13 @@ button:focus-visible { outline:3px solid #b7e8ff; outline-offset:4px; }
 .level-box { display:flex; flex-direction:column; gap:8px; margin-top:-8px; }
 .level-choices { display:flex; gap:6px; }
 .level-choices button { flex:1; min-height:38px; padding:4px; border:2px solid #3a4568; border-radius:11px; background:#232c4a; color:#d3d9ed; font-size:15px; font-weight:700; white-space:nowrap; }
-.level-choices button:hover { border-color:#7584b8; }
+.level-choices button:not(:disabled):hover { border-color:#7584b8; }
+.level-choices button:disabled { opacity:.6; }
 .level-choices [aria-pressed="true"] { background:var(--amber); border-color:var(--amber); color:#332608; }
 .level-choices .won::after { content:' ★'; color:#ffd75e; }
 .level-choices [aria-pressed="true"].won::after { color:#b86e00; }
 .level-tally { margin:0; color:var(--muted); font-size:14px; line-height:1.5; }
+.level-tally span { display:inline-block; white-space:nowrap; }
 .board-area { display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:0; min-height:0; }
 .round-bar { display:flex; gap:18px; align-items:center; justify-content:center; width:100%; min-height:39px; margin-bottom:12px; }
 .seat { display:flex; align-items:center; gap:8px; color:#aeb9d4; font-size:17px; line-height:1.5; }
@@ -63,9 +65,9 @@ button:focus-visible { outline:3px solid #b7e8ff; outline-offset:4px; }
 @keyframes disc-fall { from { transform:translateY(var(--drop-from)); } to { transform:translateY(0); } }
 .cell.last:not(.dropping)::before { animation:squash .3s ease-out; transform-origin:50% 100%; }
 @keyframes squash { 35% { scale:1.1 .84; } }
-.cell.winning { box-shadow:0 0 0 3px #fff,0 0 18px 5px #ffffffb0; }
-.cell.winning::before { outline:3px solid white; outline-offset:-5px; }
-/* The winning line pulses once the last disc has landed. */
+/* The winning line lights up and pulses once the last disc has landed. */
+.settled .cell.winning { box-shadow:0 0 0 3px #fff,0 0 18px 5px #ffffffb0; }
+.settled .cell.winning::before { outline:3px solid white; outline-offset:-5px; }
 .settled .winning { z-index:1; animation:win-pulse .6s 3 ease-in-out; }
 @keyframes win-pulse { 50% { scale:1.12; } }
 .cell.last::after { content:''; position:absolute; width:13%; height:13%; border-radius:50%; background:#fff9; top:43.5%; left:43.5%; }
@@ -78,7 +80,7 @@ button:focus-visible { outline:3px solid #b7e8ff; outline-offset:4px; }
 .tic-cell.last::before,.tic-cell.last::after { animation:mark-pop .25s cubic-bezier(.3,1.7,.6,1); }
 @keyframes mark-pop { from { scale:.4; } }
 .tic-cell.winning { background:linear-gradient(#2c8a74,#1d6457); outline:3px solid #a6ffe0; outline-offset:-3px; box-shadow:0 0 22px #5dffc080; }
-.tic-cell.last { box-shadow:inset 0 0 0 2px #7d90bc; }
+.tic-cell.last:not(.winning) { box-shadow:inset 0 0 0 2px #7d90bc; }
 .tic-tac-toe .board-wrap { width:min(100%,calc(100vh - 320px),600px); }
 .turn-line { font-size:21px; min-height:33px; font-weight:700; margin:18px 0 0; text-align:center; line-height:1.5; }
 .board-hint { color:var(--muted); font-size:14px; margin:2px 0 0; text-align:center; line-height:1.5; }
@@ -86,6 +88,8 @@ button:focus-visible { outline:3px solid #b7e8ff; outline-offset:4px; }
 .match-actions .button { min-height:36px; font-size:16px; padding:7px 14px; }
 .pause-layer { position:absolute; inset:0; background:#111a38ed; border-radius:21px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; z-index:2; }
 .pause-layer h2 { margin:0; font-size:28px; line-height:1.5; }
+/* Kit's failed-save warning waits in the side menu's corner, clear of the match buttons under the board. */
+.board-app~.sg-save-status { inset-inline:12px auto; margin-inline:0; }
 .confetti { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:3; }
 .confetti i { position:absolute; left:50%; top:50%; width:12px; height:17px; margin:-8px 0 0 -6px; border-radius:2px; background:hsl(var(--h),95%,62%); opacity:0; animation:confetti 1.2s var(--d) forwards; }
 @keyframes confetti {
@@ -126,6 +130,8 @@ button:focus-visible { outline:3px solid #b7e8ff; outline-offset:4px; }
   .match-actions { min-height:33px; margin-top:7px; gap:8px; }
   .match-actions .button { min-height:32px; font-size:14px; padding:5px 10px; }
   .pause-layer h2 { font-size:23px; }
+  .board-app~.sg-save-status { bottom:8px; padding:6px 12px; font-size:15px; }
+  .sg-save-status button { padding:3px 8px; }
 }
 @media (max-height:420px) and (min-width:601px) {
   .board-app { padding:8px 14px; gap:6px; }
@@ -194,16 +200,19 @@ button:focus-visible { outline:3px solid #b7e8ff; outline-offset:4px; }
   .versus { font-size:12px; }
   .board-wrap { width:min(100%,calc((100vh - 146px) * 1.16)); }
   .tic-tac-toe .board-wrap { width:min(100%,calc(100vh - 146px)); }
-  .connect-board { padding:7px; gap:4px; border-radius:12px; }
+  /* A shallower board edge keeps the turn line below it readable. */
+  .connect-board { padding:7px; gap:4px; border-radius:12px; box-shadow:inset 0 3px 0 #ffffff40,0 5px 0 var(--board-edge),0 8px 0 #091329; }
   .column { gap:4px; }
-  .tic-board { padding:7px; gap:6px; border-radius:14px; }
+  .tic-board { padding:7px; gap:6px; border-radius:14px; box-shadow:0 5px 0 #0b1023; }
   .tic-cell { border-radius:8px; }
-  .turn-line { font-size:14px; line-height:1.5; min-height:21px; margin-top:4px; }
+  .turn-line { font-size:14px; line-height:1.5; min-height:21px; margin-top:8px; }
   .match-actions { min-height:0; margin-top:6px; gap:8px; }
   .match-actions .button { min-height:32px; font-size:13px; padding:4px 8px; }
   .pause-layer { gap:8px; }
   .pause-layer h2 { font-size:20px; }
   .pause-layer .button { min-height:32px; font-size:14px; padding:4px 10px; }
+  .board-app~.sg-save-status { inset-inline-start:8px; bottom:6px; padding:4px 8px; font-size:13px; }
+  .sg-save-status button { padding:2px 6px; }
 }
 @media (min-width:400px) and (max-width:600px) and (min-height:225px) and (max-height:259px) and (min-aspect-ratio:4/3) {
   .board-app { padding:6px 10px; gap:4px; }
@@ -213,7 +222,7 @@ button:focus-visible { outline:3px solid #b7e8ff; outline-offset:4px; }
   .round-bar { min-height:18px; margin-bottom:2px; }
   .seat { font-size:11px; }
   .seat-token { width:14px; height:14px; }
-  .connect-board { box-shadow:0 3px 0 var(--board-edge),0 5px 0 #091329; }
+  .connect-board { box-shadow:inset 0 3px 0 #ffffff40,0 3px 0 var(--board-edge),0 5px 0 #091329; }
   .board-wrap { width:min(100%,calc((100vh - 118px) * 1.16)); }
   .tic-tac-toe .board-wrap { width:min(100%,calc(100vh - 118px)); }
   .turn-line { font-size:12px; min-height:18px; margin-top:2px; }

@@ -7,7 +7,7 @@
   var title = isConnect ? 'أربعة على التوالي' : 'إكس أو';
   var mode = 'menu', state = rules.create(game), startingSeat = 1;
   var paused = false;
-  var aiTimer = null, dropTimer = null, fallingCell = null, confetti = null, confettiTimer = null;
+  var aiTimer = null, dropTimer = null, fallingCell = null, confetti = null, confettiTimer = null, unlanded = false;
   var cells = [], moveButtons = [], pendingBoardFocus = null;
   var levels = ['easy', 'medium', 'hard'], levelNames = { easy: 'سهل', medium: 'متوسط', hard: 'صعب' };
   var store = Kit.store(game), saveStatus = Kit.saveStatus({ retry: saveProgress });
@@ -23,7 +23,7 @@
       '<div><h2 id="modeTitle">كيف تريد أن تلعب؟</h2><p id="modeDescription" class="mode-description">اختر طريقة اللعب وابدأ فوراً.</p></div>' +
       '<div id="levelBox" class="level-box"><div class="level-choices" role="group" aria-label="مستوى الكمبيوتر">' + levels.map(function (name) {
         return '<button type="button" data-level="' + name + '">' + levelNames[name] + '</button>';
-      }).join('') + '</div><p id="levelTally" class="level-tally"></p></div>' +
+      }).join('') + '</div><p id="levelTally" class="level-tally">انتصاراتك: <span id="levelWins"></span></p></div>' +
       '<div id="modeChoices" class="mode-choices"><button id="localButton" class="button" type="button">لاعبان على نفس الجهاز</button>' +
         '<button id="pcButton" class="button secondary" type="button">العب ضد الكمبيوتر</button></div>' +
       '<div class="player-guide"><p><span class="guide-token one" aria-hidden="true">' + (isConnect ? '' : 'X') + '</span><span id="guide1">اللاعب الأول</span><span>' + (isConnect ? 'الأصفر' : 'إكس') + '</span></p>' +
@@ -99,12 +99,22 @@
   function clearThinking() { clearTimeout(aiTimer); aiTimer = null; }
   function stopDrop() {
     clearTimeout(dropTimer); dropTimer = null;
-    if (!fallingCell) return;
+    if (!fallingCell) return false;
     fallingCell.classList.remove('dropping');
     fallingCell.style.removeProperty('--drop-from');
     fallingCell = null;
+    return true;
   }
-  function stopTimers() { clearThinking(); stopDrop(); clearConfetti(); }
+  // A final disc cut short by a hidden page keeps its result sound and celebration for later.
+  function stopTimers(keepRound) {
+    var cut = stopDrop() && finished();
+    clearThinking(); clearConfetti();
+    unlanded = !!keepRound && (unlanded || cut);
+  }
+  function landLater() {
+    if (!unlanded || document.hidden) return;
+    unlanded = false; landed();
+  }
   function canMove() {
     return mode !== 'menu' && !finished() && !paused && !fallingCell && !document.hidden &&
       (mode === 'local' || state.turn === 1);
@@ -207,6 +217,8 @@
       if (disabled && document.activeElement === button) pendingBoardFocus = i;
       button.disabled = disabled;
     });
+    // The level changes between rounds, so a misclick never throws away a round in progress.
+    var levelLocked = mode === 'computer' && !finished() && state.board.indexOf(1) !== -1;
     [1, 2].forEach(function (seat) {
       el('seat' + seat).classList.toggle('active', mode !== 'menu' && state.turn === seat && !finished());
       el('seat' + seat + 'Name').textContent = playerLabel(seat);
@@ -216,12 +228,13 @@
     el('modeChoices').hidden = mode !== 'menu';
     el('levelBox').hidden = mode !== 'computer';
     levelButtons.forEach(function (button) {
+      button.disabled = levelLocked;
       button.setAttribute('aria-pressed', String(button.dataset.level === level));
       button.classList.toggle('won', progress.wins[button.dataset.level] > 0);
     });
-    el('levelTally').textContent = 'انتصاراتك: ' + levels.map(function (name) { return levelNames[name] + '\u00a0' + progress.wins[name]; }).join(' · ');
+    el('levelWins').textContent = levels.map(function (name) { return levelNames[name] + '\u00a0' + progress.wins[name]; }).join(' · ');
     el('modeTitle').textContent = mode === 'menu' ? 'كيف تريد أن تلعب؟' : mode === 'local' ? 'لاعبان على نفس الجهاز' : 'العب ضد الكمبيوتر';
-    el('modeDescription').textContent = mode === 'menu' ? 'اختر طريقة اللعب وابدأ فوراً.' : mode === 'local' ? 'تبادلا الأدوار باستخدام نفس الفأرة.' : 'اختر مستوى الكمبيوتر:';
+    el('modeDescription').textContent = mode === 'menu' ? 'اختر طريقة اللعب وابدأ فوراً.' : mode === 'local' ? 'تبادلا الأدوار باستخدام نفس الفأرة.' : levelLocked ? 'أنهِ الجولة لتغيير المستوى.' : 'اختر مستوى الكمبيوتر:';
     var turnText, hint = isConnect ? 'اضغط على أي عمود لإسقاط قرصك.' : 'اضغط على مربع فارغ لوضع علامتك.';
     if (mode === 'menu') {
       turnText = 'اختر طريقة اللعب للبدء';
@@ -272,7 +285,7 @@
   }
   function start(selectedMode) { mode = selectedMode; startingSeat = 1; score = { 1: 0, 2: 0 }; newRound(); }
   function setLevel(value) {
-    if (value === level) return;
+    if (value === level || (!finished() && state.board.indexOf(1) !== -1)) return;
     level = value; saveProgress(); start('computer');
   }
   function leaveMatch() {
@@ -327,18 +340,18 @@
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
       if (mode !== 'menu' && !paused && !finished()) pause(true, false);
-      stopTimers();
+      stopTimers(true);
     }
-    renderBoard();
+    renderBoard(); landLater();
   });
   window.addEventListener('pagehide', function () {
     if (mode !== 'menu' && !paused && !finished()) paused = true;
-    stopTimers(); renderBoard();
+    stopTimers(true); renderBoard();
   });
   window.addEventListener('pageshow', function (event) {
     if (!event.persisted || document.hidden) return;
     // A restored page remains paused until the player explicitly resumes.
-    renderBoard(); scheduleComputer();
+    renderBoard(); scheduleComputer(); landLater();
   });
   makeBoard(); renderSound(); renderBoard();
   Kit.lifecycle({ pause: function () { pause(true, false); } });
