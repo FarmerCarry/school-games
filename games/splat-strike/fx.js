@@ -143,7 +143,7 @@
     this.shields.renderOrder = 2;
     scene.add(this.shields);
     /* ---- balloon arc preview */
-    this.arc = inst(new T.SphereGeometry(0.05, 6, 4), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }), 40, false);
+    this.arc = inst(new T.SphereGeometry(0.07, 6, 4), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }), 40, false);
     scene.add(this.arc);
     var rg = new T.RingGeometry(0.75, 0.95, 24); rg.rotateX(-Math.PI / 2);
     // forceSinglePass: a transparent double-sided material would otherwise be drawn in two passes that

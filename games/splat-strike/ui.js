@@ -41,7 +41,14 @@
   if (save.ownC.indexOf(save.color) < 0) save.color = 'pink';
   if (save.ownH.indexOf(save.hat) < 0) save.hat = 'cap';
   if (save.ownS.indexOf(save.skin) < 0) save.skin = 'classic';
-  function persist() { store.set('data', save); }
+  // a refused write (full or locked-down storage) shows Kit's Arabic warning with a retry button;
+  // the save object stays as it is, so a retry writes the same coins and unlocks
+  var saveStatus = Kit.saveStatus({ retry: persist });
+  function persist() {
+    if (store.set('data', save) === false) { saveStatus.failed(); return false; }
+    saveStatus.saved();
+    return true;
+  }
   function myColor() { return SS.byId(SS.COLORS, save.color).c; }
   function mySkin() { return SS.byId(SS.SKINS, save.skin); }
   music.enabled = save.set.music;
@@ -51,7 +58,10 @@
   var LQ = /[?&]lq\b/.test(location.search);
   var renderer;
   try {
-    var aa = save.set.qual === 'high' || (save.set.qual === 'auto' && !LQ && !save.set.aaOff && window.innerWidth * Math.min(window.devicePixelRatio || 1, 1.25) <= 1600);
+    // anti-aliasing is fixed for the life of the context, so judge it by the widest the canvas can get:
+    // the portal's fullscreen button grows this same canvas from the small frame to the whole screen
+    var maxW = Math.max(window.innerWidth, (window.screen && window.screen.width) || 0);
+    var aa = save.set.qual === 'high' || (save.set.qual === 'auto' && !LQ && !save.set.aaOff && maxW * Math.min(window.devicePixelRatio || 1, 1.25) <= 1600);
     renderer = new T.WebGLRenderer({ canvas: canvas, antialias: aa, powerPreference: 'high-performance' });
   } catch (e) { $('nogl').hidden = false; $('title').hidden = true; return; }
   renderer.autoClear = false;
@@ -166,9 +176,15 @@
     camera.updateProjectionMatrix(); vmCam.updateProjectionMatrix();
     showCam.setViewOffset(W, H, W * 0.24, 0, W, H);
     podCam.setViewOffset(W, H, W * 0.2, 0, W, H);
-    uiEl.style.fontSize = (16 * Math.min(W / 1280, H / 720)).toFixed(2) + 'px';
+    var fs = 16 * Math.min(W / 1280, H / 720);
+    uiEl.style.fontSize = fs.toFixed(2) + 'px';
     drips.width = Math.max(1, Math.round(W / 2)); drips.height = Math.max(1, Math.round(H / 2));
     dripsDirty = true;
+    // minimap backing store at its real on-screen size (9.5em box minus its border), so it stays sharp at 1080p
+    var mm = Math.max(64, Math.ceil(9.22 * fs * Math.min(window.devicePixelRatio || 1, 2)));
+    if (mm !== H$.mm.width) { H$.mm.width = H$.mm.height = mm; if (mmBg) buildMinimap(); }
+    mmT = 0;
+    stillDrawn = false;            // setSize cleared the drawing buffer: a paused match draws its frame again
   }
   var drips = $('drips'), dctx = drips.getContext('2d'), dripsDirty = false;
   window.addEventListener('resize', layout);
@@ -510,10 +526,11 @@
   function play(el, key, frames, opts) { try { if (anims[key]) anims[key].cancel(); anims[key] = el.animate(frames, opts); } catch (e) { /* old browser */ } }
   var hintT = 0;
   function hint(text, sec) { H$.hint.textContent = text; H$.hint.classList.add('on'); hintT = sec || 1.6; }
-  function callout(text, sub, color) {
+  function callout(text, sub, color, dur, cls) {
+    H$.callout.className = cls || '';
     H$.callout.innerHTML = esc(text) + (sub ? '<small>' + esc(sub) + '</small>' : '');
     H$.callout.style.color = color || '';
-    play(H$.callout, 'co', [{ opacity: 0, transform: 'scale(0.4)' }, { opacity: 1, transform: 'scale(1.15)', offset: 0.12 }, { opacity: 1, transform: 'scale(1)', offset: 0.22 }, { opacity: 1, offset: 0.8 }, { opacity: 0, transform: 'translateY(-0.4em)' }], { duration: 1500, easing: 'ease-out', fill: 'forwards' });
+    play(H$.callout, 'co', [{ opacity: 0, transform: 'scale(0.4)' }, { opacity: 1, transform: 'scale(1.15)', offset: 0.12 }, { opacity: 1, transform: 'scale(1)', offset: 0.22 }, { opacity: 1, offset: 0.8 }, { opacity: 0, transform: 'translateY(-0.4em)' }], { duration: dur || 1500, easing: 'ease-out', fill: 'forwards' });
   }
   function toast(text, color) {
     H$.toast.textContent = text; H$.toast.style.color = color || '#fff';
@@ -595,32 +612,36 @@
     var d = dirs[dirI]; dirI = (dirI + 1) % dirs.length;
     d.t = 0; d.x = src.x; d.z = src.z; d.src = src;
   }
-  // minimap background per map
+  // minimap background per map. Everything is laid out on a 160-unit square and scaled to the canvas's
+  // real pixel size (set in layout), so it stays sharp at any window size.
   var mmBg = null, mmS = 160 / 44, mctx = H$.mm.getContext('2d'), mmT = 0;
+  var MM_DEF = { floor: 'rgba(200,220,255,0.25)', low: 'rgba(150,160,220,0.6)', mid: 'rgba(80,90,170,0.8)', high: 'rgba(40,44,110,0.85)', ramp: 'rgba(120,110,210,0.7)' };
   function buildMinimap() {
-    var c = document.createElement('canvas'); c.width = c.height = 160;
-    var g = c.getContext('2d'), Wd = G.W, s = mmS, o = 22;
-    g.fillStyle = 'rgba(200,220,255,0.25)'; g.fillRect((o - 20) * s, (o - 20) * s, 40 * s, 40 * s);
+    var c = document.createElement('canvas'), k = H$.mm.width / 160; c.width = c.height = H$.mm.width;
+    var g = c.getContext('2d'), Wd = G.W, s = mmS, o = 22, P = G.map.def.mm || MM_DEF;
+    g.scale(k, k);
+    g.fillStyle = P.floor; g.fillRect((o - 20) * s, (o - 20) * s, 40 * s, 40 * s);
     for (var i = 0; i < Wd.boxes.length; i++) {
       var b = Wd.boxes[i];
       if (b.noShot && b.noDecal && b.y1 > 10) continue;
       if (b.y0 > 3.5 || b.y1 - b.y0 < 0.1 && b.y1 < 0.3) continue;
       var hgt = b.y1;
-      g.fillStyle = hgt > 2.2 ? 'rgba(40,44,110,0.85)' : hgt > 0.9 ? 'rgba(80,90,170,0.8)' : 'rgba(150,160,220,0.6)';
+      g.fillStyle = hgt > 2.2 ? P.high : hgt > 0.9 ? P.mid : P.low;
       g.fillRect((b.x0 + o) * s, (b.z0 + o) * s, Math.max(1, (b.x1 - b.x0) * s), Math.max(1, (b.z1 - b.z0) * s));
     }
-    for (var r = 0; r < Wd.ramps.length; r++) { var R = Wd.ramps[r]; g.fillStyle = 'rgba(120,110,210,0.7)'; g.fillRect((R.x0 + o) * s, (R.z0 + o) * s, (R.x1 - R.x0) * s, (R.z1 - R.z0) * s); }
+    for (var r = 0; r < Wd.ramps.length; r++) { var R = Wd.ramps[r]; g.fillStyle = P.ramp; g.fillRect((R.x0 + o) * s, (R.z0 + o) * s, (R.x1 - R.x0) * s, (R.z1 - R.z0) * s); }
     mmBg = c;
   }
   function drawMinimap() {
     var p = G.player; if (!p || !mmBg) return;
-    var g = mctx, s = mmS, o = 22;
+    var g = mctx, s = mmS, o = 22, k = H$.mm.width / 160;
+    g.setTransform(k, 0, 0, k, 0, 0);
     g.clearRect(0, 0, 160, 160);
     g.save();
     g.translate(80, 80); g.rotate(p.yaw);
     var px = camera.position.x, pz = camera.position.z;
     g.translate(-(px + o) * s, -(pz + o) * s);
-    g.drawImage(mmBg, 0, 0);
+    g.drawImage(mmBg, 0, 0, 160, 160);
     for (var i = 0; i < G.pickups.length; i++) {
       var q = G.pickups[i]; if (!q.active) continue;
       g.fillStyle = q.type === 'hp' ? '#ff3d6e' : q.type === 'ammo' ? '#3fb8ff' : '#ffc61a';
@@ -719,7 +740,10 @@
       bigmsg('3', 900);
       sfx.count(3);
       streakShown = 0;
-      if (save.matches < 3) setTimeout(function () { if (UI.state === 'play') hint('W A S D للحركة • انقر لتطلق • G بالون طلاء • R تعبئة', 6); }, 1200);
+      // say once how a match is won, higher up so it clears the countdown digits (nobody can splat yet)
+      if (G.mode === 'team') callout('أول فريق يصل إلى ' + ltr(G.target) + ' لطخة يفوز!', 'أو الفريق الأعلى عند انتهاء الوقت', '#ffd23f', 3000, 'goal');
+      else callout('أول من يصل إلى ' + ltr(G.target) + ' لطخة يفوز!', 'أو صاحب أكثر اللطخات عند انتهاء الوقت', '#ffd23f', 3000, 'goal');
+      if (save.matches < 3) setTimeout(function () { if (UI.state === 'play') hint('حرّك الفأرة للتصويب • W A S D للحركة • انقر لتطلق • G بالون طلاء • R تعبئة', 6); }, 1200);
     },
     countdown: function (c) {
       if (G.demo) return;
@@ -924,6 +948,11 @@
   /* ================================================================ CAMERA + VIEW MODEL */
   var deathCam = { t: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, killer: null };
   var fovCur = save.set.fov, titleA = 0.6, dollSpin = 0;
+  // reduced motion (own setting or the classroom preset): no camera shake, recoil jolt, landing dip,
+  // sprint FOV kick or confetti (core.js skips it on splats too). The view-model kick, paint pops and
+  // sniper zoom stay.
+  var calm = Kit.motion.reduced();
+  Kit.motion.onChange(function (r) { calm = r; });
   var QY = new T.Vector3();
   function updateCamera(dt, alpha) {
     var p = G.player;
@@ -935,14 +964,14 @@
         springs(dt);
         var hs = Math.sqrt(p.vx * p.vx + p.vz * p.vz);
         var bob = save.set.bob && p.grounded ? Math.sin(p.walk * 2.2) * 0.035 * Math.min(1, hs / 6) : 0;
-        camera.position.set(x, y + SS.EYE_H + p.stepUp + VM.dip * 0.25 + bob, z);
+        camera.position.set(x, y + SS.EYE_H + p.stepUp + (calm ? 0 : VM.dip * 0.25) + bob, z);
         VM.punch *= Math.exp(-12 * dt);
         VM.shake *= Math.exp(-7 * dt);
-        var sh = VM.shake * 0.04;
+        var sh = calm ? 0 : VM.shake * 0.04;
         camYaw = p.yaw + p.ry;
-        camera.rotation.set(p.pitch + p.rp + VM.punch + (Math.random() - 0.5) * sh, camYaw + (Math.random() - 0.5) * sh, 0);
+        camera.rotation.set(p.pitch + p.rp + (calm ? 0 : VM.punch) + (Math.random() - 0.5) * sh, camYaw + (Math.random() - 0.5) * sh, 0);
         // FOV: sprint kick, sniper zoom
-        var target = save.set.fov + (p.sprinting ? 7 : 0);
+        var target = save.set.fov + (p.sprinting && !calm ? 7 : 0);
         VM.zoomK += ((p.zoom ? 1 : 0) - VM.zoomK) * Math.min(1, dt * 14);
         target = target / (1 + (WEAPONS[2].zoom - 1) * VM.zoomK);
         if (Math.abs(fovCur - target) > 0.01) { fovCur += (target - fovCur) * Math.min(1, dt * 10); camera.fov = fovCur; camera.updateProjectionMatrix(); }
@@ -1153,9 +1182,19 @@
     fx.arc.count = n; SS.upload(fx.arc.instanceMatrix, n * 16);
     fx.ring.visible = hit;
     if (hit) {
-      fx.ring.position.set(x + arh.nx * 0.03, y + arh.ny * 0.03, z + arh.nz * 0.03);
-      QY.set(arh.nx, arh.ny, arh.nz);
-      fx.ring.quaternion.setFromUnitVectors(UPV, QY);
+      if (arh.ny < 0.6) {
+        // a wall, post or underside: an upright ring would stand like a big white arch in front of the
+        // target, so lay it on the floor at the foot of the wall, a little fainter
+        var wx = x + arh.nx * 0.3, wz = z + arh.nz * 0.3;
+        fx.ring.position.set(wx, G.W.ground(wx, wz, 0.1, y) + 0.03, wz);
+        fx.ring.quaternion.identity();
+        fx.ring.material.opacity = 0.55;
+      } else {
+        fx.ring.position.set(x + arh.nx * 0.03, y + arh.ny * 0.03, z + arh.nz * 0.03);
+        QY.set(arh.nx, arh.ny, arh.nz);
+        fx.ring.quaternion.setFromUnitVectors(UPV, QY);
+        fx.ring.material.opacity = 0.8;
+      }
       var r = SS.BALLOON.radius / 0.95 * 0.9; fx.ring.scale.set(r, r, r);
     }
   }
@@ -1258,7 +1297,7 @@
       d.g.rotation.y = Math.PI - POD_X[i] * 0.18 + Math.sin(podT * 0.8 + i) * 0.25;
     }
     podConfT -= dt;
-    if (podConfT <= 0 && podT < 12) { podConfT = 0.35; fx.confetti((Math.random() - 0.5) * 5, 5.5, (Math.random() - 0.5) * 2, 10, 2); }
+    if (podConfT <= 0 && podT < 12 && !calm) { podConfT = 0.35; fx.confetti((Math.random() - 0.5) * 5, 5.5, (Math.random() - 0.5) * 2, 10, 2); }
     fx.update(dt, 0, 0, 0);
     if (coinAnim) {
       coinAnim.t += dt;
@@ -1309,9 +1348,18 @@
     K.endFrame();
     perf.upd += performance.now() - t0;
   }
-  var lastR = performance.now();
+  // A paused match keeps its last frame on the canvas (autoClear is off and a frame with no GL calls
+  // presents nothing new), so the 3D world is drawn once at pause and again only after a resize, a
+  // restored GL context or the tab coming back. The settings panel opened from pause keeps drawing,
+  // so a field-of-view change shows right away. lastR stays current, so resuming has no time jump.
+  var lastR = performance.now(), stillDrawn = false, setEl = $('settings');
+  canvas.addEventListener('webglcontextrestored', function () { stillDrawn = false; });
+  document.addEventListener('visibilitychange', function () { stillDrawn = false; });
   function render(alpha) {
     var t0 = performance.now(), dt = Math.min(0.1, (t0 - lastR) / 1000); lastR = t0;
+    var still = UI.state === 'play' && UI.paused && setEl.hidden;
+    if (still && stillDrawn) { music.pump(); return; }
+    stillDrawn = still;
     renderer.info.reset();
     renderer.clear();
     if (UI.state === 'over') renderPodium(dt);

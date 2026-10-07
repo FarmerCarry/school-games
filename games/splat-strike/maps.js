@@ -616,13 +616,18 @@
     return m;
   }
 
+  // mm: minimap colours in the map's own palette (floor, cover by height low / mid / high, ramps);
+  // kept away from the pink, blue and yellow of the buddy and pickup dots drawn on top
   SS.MAPS = [
     { id: 'playground', name: 'ساحة المدرسة', icon: '🏫', build: playground,
-      sky: [0x3d9bff, 0x9fd4ff, 0xe4f5ff], fog: [0xd6efff, 30, 95], hemi: [0xeaf6ff, 0x9bbf7a, 1.9], sun: [0xfff2dc, 2.3, -0.5, 1, 0.35], step: 'grass' },
+      sky: [0x3d9bff, 0x9fd4ff, 0xe4f5ff], fog: [0xd6efff, 30, 95], hemi: [0xeaf6ff, 0x9bbf7a, 1.9], sun: [0xfff2dc, 2.3, -0.5, 1, 0.35], step: 'grass',
+      mm: { floor: 'rgba(125,215,100,0.6)', low: 'rgba(210,245,175,0.8)', mid: 'rgba(40,140,70,0.88)', high: 'rgba(20,75,45,0.92)', ramp: 'rgba(160,225,120,0.85)' } },
     { id: 'factory', name: 'مصنع الحلوى', icon: '🍭', build: factory,
-      sky: [0x7d6bff, 0xc6a8ff, 0xffe0f0], fog: [0xf6dcef, 30, 95], hemi: [0xfff0fa, 0xc99aa8, 1.9], sun: [0xfff0e6, 2.2, 0.4, 1, 0.5], step: 'tile' },
+      sky: [0x7d6bff, 0xc6a8ff, 0xffe0f0], fog: [0xf6dcef, 30, 95], hemi: [0xfff0fa, 0xc99aa8, 1.9], sun: [0xfff0e6, 2.2, 0.4, 1, 0.5], step: 'tile',
+      mm: { floor: 'rgba(200,160,255,0.45)', low: 'rgba(240,215,255,0.75)', mid: 'rgba(135,85,210,0.88)', high: 'rgba(75,35,130,0.92)', ramp: 'rgba(175,130,240,0.8)' } },
     { id: 'snowfort', name: 'قلعة الثلج', icon: '⛄', build: snowfort,
-      sky: [0x5f9dff, 0xb7d6ff, 0xf2f8ff], fog: [0xe6f1ff, 28, 90], hemi: [0xf0f7ff, 0xb4c3e0, 2.0], sun: [0xfffaf0, 2.1, -0.4, 1, -0.5], step: 'snow', snow: true }
+      sky: [0x5f9dff, 0xb7d6ff, 0xf2f8ff], fog: [0xe6f1ff, 28, 90], hemi: [0xf0f7ff, 0xb4c3e0, 2.0], sun: [0xfffaf0, 2.1, -0.4, 1, -0.5], step: 'snow', snow: true,
+      mm: { floor: 'rgba(240,248,255,0.55)', low: 'rgba(205,225,245,0.85)', mid: 'rgba(120,150,195,0.9)', high: 'rgba(55,75,120,0.92)', ramp: 'rgba(175,200,230,0.85)' } }
   ];
   SS.MapKit = MapKit;
 })();
