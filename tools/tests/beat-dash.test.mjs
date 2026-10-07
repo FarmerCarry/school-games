@@ -11,13 +11,35 @@ let browser, server;
 before(async () => { server = await startTestServer(root); browser = await launchChromium(); });
 after(async () => { await browser?.close(); await server?.close(); });
 
-async function game(t) {
+async function game(t, { loop = false } = {}) {
   const context = await browser.newContext({ serviceWorkers: 'block' });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'game should not throw'); });
   // The test drives __game.ff() itself, so the real loop must not advance play.
-  await page.addInitScript(() => { window.requestAnimationFrame = () => 0; });
+  await page.addInitScript(loop => {
+    if (!loop) { window.requestAnimationFrame = () => 0; return; }
+    // Or capture the loop, so the test steps update + render itself and counts scene paints.
+    let kit, update, render;
+    const runtime = window.runtime = { paints: 0 };
+    runtime.step = n => { for (let i = 0; i < n; i++) { update(1 / 60); render(0.5); } };
+    Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
+      kit = value;
+      kit.loop = (u, r) => { update = u; render = r; return { stop() {} }; };
+    } });
+    // A read-back can move an accelerated canvas to the CPU rasterizer mid-test; start it there
+    // so two draws of the same scene compare equal pixel for pixel.
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, opts) {
+      return getContext.call(this, type, type === '2d' ? { ...opts, willReadFrequently: true } : opts);
+    };
+    // every scene paint starts with the full-canvas background gradient
+    const fill = CanvasRenderingContext2D.prototype.fillRect;
+    CanvasRenderingContext2D.prototype.fillRect = function (x, y, w, h) {
+      if (this.canvas.id === 'game' && this.fillStyle instanceof CanvasGradient && !x && !y && w === 1280 && h === 720) runtime.paints++;
+      return fill.apply(this, arguments);
+    };
+  }, loop);
   await page.goto(server.origin + '/games/beat-dash/index.html');
   await page.waitForFunction(() => window.__game && window.Kit);
   return page;
@@ -80,4 +102,37 @@ test('toasts wait while a death popup is up, then show in full', async t => {
   const hint = 'صعبة؟ جرّب وضع التدريب: اضغط P ثم «وضع التدريب»';
   assert.deepEqual(r.queued, { atDeath: null, during: [], after: hint });
   assert.deepEqual(r.showing, { atDeath: null, during: [], after: hint });
+});
+
+test('a paused run is drawn once with its effects held still, then only on resize, restore or motion change', async t => {
+  const page = await game(t, { loop: true });
+  await page.evaluate(() => document.fonts.ready);
+  const paused = await page.evaluate(() => {
+    const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
+    const pixels = () => ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const paintsIn = n => { runtime.paints = 0; runtime.step(n); return runtime.paints; };
+    __game.start(0, false);
+    // With no input the cube dies at the first spike; pause while its burst, ring, flash and shake are live.
+    for (let n = 0; n < 2000 && !__game.state.dead; n++) __game.ff(1);
+    runtime.step(3);
+    document.getElementById('b-pause').click();
+    const first = paintsIn(60), picture = pixels(), idle = paintsIn(120);
+    canvas.width = canvas.width; // a restored 2D context has lost its pixels and drawing state
+    canvas.dispatchEvent(new Event('contextrestored'));
+    // the redrawn frame is the same picture: nothing moved during the 2 paused seconds
+    const restored = paintsIn(30), same = pixels().every((v, i) => v === picture[i]), settled = paintsIn(30);
+    Kit.motion.setPreference('reduce');
+    const motion = paintsIn(30);
+    return { first, idle, restored, same, settled, motion, attempt: __game.state.attempt };
+  });
+  assert.deepEqual(paused, { first: 1, idle: 0, restored: 1, same: true, settled: 0, motion: 1, attempt: 1 });
+  await page.setViewportSize({ width: 1000, height: 600 });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  assert.equal(await page.evaluate(() => { runtime.paints = 0; runtime.step(30); return runtime.paints; }), 1, 'a resize redraws the paused frame once');
+  const resumed = await page.evaluate(() => {
+    document.getElementById('b-resume').click();
+    runtime.paints = 0; runtime.step(40);
+    return { paints: runtime.paints, attempt: __game.state.attempt, paused: __game.state.paused };
+  });
+  assert.deepEqual(resumed, { paints: 40, attempt: 2, paused: false }, 'resume draws every frame and the next try starts');
 });
