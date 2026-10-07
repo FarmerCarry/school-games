@@ -11,6 +11,7 @@
   var HIT_R = 17;
   var OWN_GRACE = 0.3; // s: a brand-new ball can't splat its own tank (point-blank wall shots)
   var CORNERS = [[15, 15], [15, -15], [-15, 15], [-15, -15]];
+  var LASER_AIM = { r: BALL_R, bounces: 3, len: 1000 }, GUIDE_AIM = { r: BALL_R, bounces: 1, len: 300 };
 
   var CONTROLS = [
     { fwd: ['KeyW'], back: ['KeyS'], left: ['KeyA'], right: ['KeyD'], fire: ['KeyQ', 'Space'] },
@@ -53,7 +54,8 @@
       maze: null, theme: null, themeIdx: Math.floor(Math.random() * A.THEMES.length),
       round: 0, state: 'ready', timer: 0, time: 0, shakeP: 0, shx: 0, shy: 0,
       slow: 0, spectate: 0, over: false, winner: null, coins: 0, onEnd: opts.onEnd || null,
-      humans: 0, firstRound: true, banner: null, laserPts: [], lastSplatBy: null
+      humans: 0, firstRound: true, banner: null, laserPts: [], lastSplatBy: null,
+      guide: !!opts.guide, selfOut: false
     };
     var humanCount = 0;
     opts.players.forEach(function (p) { if (p.human) humanCount++; });
@@ -89,7 +91,7 @@
       G.maze = M.generate(cols, rows, cs, ox, oy, 0.22 + Math.random() * 0.12);
       G.balls.length = 0; G.crates.length = 0; G.pops.length = 0; G.splats.length = 0; G.dots.length = 0;
       G.crateT = 3 + Math.random() * 2;
-      G.spectate = 0; G.skipSpectate = false; G.slow = 0; G.endT = 0; G.banner = null;
+      G.spectate = 0; G.skipSpectate = false; G.slow = 0; G.endT = 0; G.banner = null; G.selfOut = false;
       placeTanks();
       G.state = 'ready'; G.timer = G.demo ? 0.6 : (G.round === 1 ? 2.2 : 1.5);
       if (!G.demo) S.beep();
@@ -151,9 +153,12 @@
       if (G.slow > 0) { G.slow -= dt; sdt = dt * 0.3; }
       if (G.state === 'play' && G.spectate > 0) sdt = dt * 2.2;
 
-      // shake
-      G.shakeP = Math.max(0, G.shakeP - dt * 38);
-      G.shx = (Math.random() - 0.5) * 2 * G.shakeP; G.shy = (Math.random() - 0.5) * 2 * G.shakeP;
+      // shake (off with reduced motion or the classroom preset)
+      if (Kit.motion.reduced()) { G.shakeP = 0; G.shx = 0; G.shy = 0; }
+      else {
+        G.shakeP = Math.max(0, G.shakeP - dt * 38);
+        G.shx = (Math.random() - 0.5) * 2 * G.shakeP; G.shy = (Math.random() - 0.5) * 2 * G.shakeP;
+      }
 
       if (G.state === 'ready') {
         G.timer -= dt;
@@ -183,7 +188,7 @@
         }
       } else if (G.state === 'matchEnd') {
         G.tanks.forEach(function (t) { animTank(t, dt); });
-        if (Math.random() < 0.25) {
+        if (Math.random() < 0.25 && !Kit.motion.reduced()) {
           var wt = G.matchWinner;
           burst(Math.random() * W, -10, 3, ['#ff4f63', '#ffc61f', '#3fd15d', '#3b8cff', '#a64dff', wt ? wt.pal.paint : '#fff'], 120, 6, 2.5, 220);
         }
@@ -424,7 +429,9 @@
       var self = killer === t;
       if (G.demo) { /* quiet title-screen demo */ }
       else if (self) {
-        pop(t.x, t.y - 34, 'أوبس!', '#ffffff', 40, 1.2);
+        // Beginners often think the bot got them: say what really happened.
+        if (t.human) { pop(Math.max(160, Math.min(W - 160, t.x)), t.y - 34, 'كرتك ارتدّت عليك!', '#ffffff', 34, 2); G.selfOut = true; }
+        else pop(t.x, t.y - 34, 'أوبس!', '#ffffff', 40, 1.2);
         if (!G.demo) S.oops();
       } else {
         killer.splats++;
@@ -493,6 +500,7 @@
 
     /* -------------------------------------------------------- effects */
     function burst(x, y, n, colors, speed, size, life, grav) {
+      if (Kit.motion.reduced()) n = Math.ceil(n / 3); // fewer flying bits, same feedback
       for (var i = 0; i < n; i++) {
         if (G.parts.length > 450) G.parts.shift();
         var a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.7);
@@ -556,7 +564,7 @@
     var k = layers.k;
     if (!layers.floor) { layers.floor = mkLayer(); layers.paint = mkLayer(); layers.walls = mkLayer(); }
     var fc = sizeLayer(layers.floor, k);
-    A.drawFloor(fc, G.maze, G.theme);
+    A.drawFloor(fc, G.maze, G.theme, mulberry(G.maze.seed)); // same decorations after a resize
     sizeLayer(layers.paint, k);
     G.splats.forEach(drawSplatRec);
     G.dots.forEach(drawDotRec);
@@ -593,16 +601,18 @@
     var i, t;
     // crates
     for (i = 0; i < G.crates.length; i++) { var k = G.crates[i]; A.drawCrate(c, k.x, k.y, k.pw, k.t, easeBack(k.pop)); }
-    // laser aim lines
+    // laser aim lines (and the beginner guide, which the laser replaces)
     for (i = 0; i < G.tanks.length; i++) {
       t = G.tanks[i];
-      if (!t.alive || t.laser <= 0 || G.state !== 'play') continue;
-      var mx = t.x, my = t.y;
-      M.trace(G.maze, mx, my, t.a, { r: BALL_R, bounces: 3, len: 1000 }, G.laserPts);
+      if (!t.alive || G.state !== 'play') continue;
+      var laser = t.laser > 0;
+      // Campaign stages 1-2 show a faint one-bounce guide, so beginners see a wall shot come back.
+      if (!laser && !(G.guide && t.human)) continue;
+      M.trace(G.maze, t.x, t.y, t.a, laser ? LASER_AIM : GUIDE_AIM, G.laserPts);
       var p = G.laserPts;
       c.save();
-      c.globalAlpha = t.laser < 2 ? (Math.sin(G.time * 20) > 0 ? 0.8 : 0.3) : 0.85;
-      c.lineWidth = 4; c.lineCap = 'round'; c.strokeStyle = t.pal.paint;
+      c.globalAlpha = !laser ? 0.5 : t.laser < 2 ? (Math.sin(G.time * 20) > 0 ? 0.8 : 0.3) : 0.85;
+      c.lineWidth = laser ? 4 : 3; c.lineCap = 'round'; c.strokeStyle = t.pal.paint;
       c.setLineDash([2, 10]); c.lineDashOffset = -G.time * 40;
       c.beginPath(); c.moveTo(p[0], p[1]);
       for (var q = 2; q < p.length; q += 2) c.lineTo(p[q], p[q + 1]);
@@ -741,6 +751,10 @@
       var mw = Math.max(420, c.measureText(msg).width + 120);
       ribbon(c, 0, 0, mw, 100, col);
       text(c, msg, 0, 2, 54, '#fff', 'center', '#2a2240', 10);
+      if (G.selfOut && G.humans === 1) {
+        A.rr(c, -210, 72, 420, 42, 21); c.fillStyle = 'rgba(42,34,64,0.85)'; c.fill();
+        text(c, 'انتبه: كراتك ترتدّ وتلطّخك!', 0, 93, 24, '#fff', 'center');
+      }
       c.restore();
     }
   }

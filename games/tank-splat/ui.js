@@ -4,6 +4,7 @@
   var A = window.TS_ART, S = window.TS_SND, TG = window.TS_GAME;
   var W = 1280, H = 720;
   var store = Kit.store('tank-splat');
+  var saveStatus = Kit.saveStatus({ retry: persist });
 
   /* ------------------------------------------------------------ data */
   var BOTS = [
@@ -12,8 +13,9 @@
   ];
   var DIFF_NAME = { easy: 'سهل', medium: 'متوسط', hard: 'صعب' };
   var STAGES = [
-    { name: 'أول لطخة', bots: [['easy', 0]], target: 3 },
-    { name: 'صديقان مشاغبان', bots: [['easy', 1], ['easy', 2]], target: 3 },
+    // guide: a faint aim line that shows how a ball bounces back (first two stages only)
+    { name: 'أول لطخة', bots: [['easy', 0]], target: 3, guide: true },
+    { name: 'صديقان مشاغبان', bots: [['easy', 1], ['easy', 2]], target: 3, guide: true },
     { name: 'الخصم الذكي', bots: [['medium', 3]], target: 3 },
     { name: 'معركة الحلوى', bots: [['easy', 8], ['medium', 4]], target: 3 },
     { name: 'ثلاثي الألوان', bots: [['medium', 5], ['medium', 1]], target: 3 },
@@ -37,9 +39,12 @@
   if (!Array.isArray(save.hats)) save.hats = [0];
   if (!Array.isArray(save.splats)) save.splats = [0];
   if (!Array.isArray(save.equip) || save.equip.length !== 3) save.equip = [{ hat: 0, splat: 0 }, { hat: 0, splat: 0 }, { hat: 0, splat: 0 }];
+  // Stops at the first failed write and saves coins last, so a half-saved
+  // purchase can never keep the price but lose the item. Retry writes everything.
   function persist() {
-    store.set('coins', save.coins); store.set('stars', save.stars); store.set('hats', save.hats);
-    store.set('splats', save.splats); store.set('equip', save.equip); store.set('free', save.free); store.set('stats', save.stats);
+    var ok = ['stars', 'hats', 'splats', 'equip', 'free', 'stats', 'coins'].every(function (k) { return store.set(k, save[k]); });
+    if (ok) saveStatus.saved(); else saveStatus.failed();
+    return ok;
   }
   function totalStars() { return save.stars.reduce(function (a, b) { return a + b; }, 0); }
   function unlockedStage() { var i = 0; while (i < STAGES.length - 1 && save.stars[i] > 0) i++; return i; }
@@ -48,14 +53,22 @@
   var cv = document.getElementById('cv');
   var ui = document.getElementById('ui');
   var app = { screen: 'title', game: null, demo: null, match: null, lock: 0, campSel: 0, shopSlot: 0, shopKind: 'hat', resT: 0 };
+  var frameDirty = true; // the paused scene is drawn once, then again only when this is set
   var view = Kit.fit(cv, W, H, {
     onResize: function (v) {
       ui.style.left = cv.style.left; ui.style.top = cv.style.top;
       ui.style.transform = 'scale(' + v.scale + ')';
       TG.setQuality(v.scale * v.dpr, app.screen === 'game' || app.screen === 'pause' || app.screen === 'result' ? app.game : app.demo);
+      frameDirty = true;
     }
   });
   var ctx = view.ctx;
+  // After a GPU reset the canvases come back blank: rebuild the cached layers and redraw.
+  cv.addEventListener('contextrestored', function () {
+    var g = app.screen === 'game' || app.screen === 'pause' || app.screen === 'result' ? app.game : app.demo;
+    view.resize();
+    if (g) g.rebuildLayers();
+  });
   Kit.muteButton({ key: false });
   cv.addEventListener('pointerdown', function () { cv.focus(); });
 
@@ -76,6 +89,7 @@
   /* ------------------------------------------------------------ screens */
   function show(name) {
     app.screen = name;
+    frameDirty = true;
     ['title', 'camp', 'free', 'shop', 'pause', 'result'].forEach(function (s) { $('scr-' + s).hidden = s !== name; });
     $('pauseBtn').hidden = name !== 'game';
     app.lock = performance.now() + 250;
@@ -104,7 +118,7 @@
       var bd = BOTS[b[1]];
       players.push({ bot: b[0], slot: k + 1, name: bd.name, hat: bd.hat, splat: k % 3 });
     });
-    app.match = { kind: 'camp', stage: i, players: players, target: st.target };
+    app.match = { kind: 'camp', stage: i, players: players, target: st.target, guide: !!st.guide };
     beginMatch();
   }
   function freePlayers() {
@@ -124,7 +138,7 @@
   }
   function beginMatch() {
     var mt = app.match;
-    app.game = TG.create({ players: mt.players, target: mt.target, stage: mt.stage, onEnd: onMatchEnd });
+    app.game = TG.create({ players: mt.players, target: mt.target, stage: mt.stage, guide: mt.guide, onEnd: onMatchEnd });
     S.click();
     show('game');
   }
@@ -430,6 +444,9 @@
 
   function render() {
     var sc = app.screen;
+    // Nothing moves while paused: keep the last frame until a resize, a restored canvas or the font load.
+    if (sc === 'pause' && !frameDirty) return;
+    frameDirty = false;
     var g = (sc === 'game' || sc === 'pause' || sc === 'result') ? app.game : app.demo;
     if (!g) return;
     g.render(ctx);
@@ -459,7 +476,7 @@
   show('title');
   Kit.loop(update, render);
   // Redraw once the Arabic web font is ready (canvas text uses it).
-  if (document.fonts && document.fonts.load) document.fonts.load('700 40px Fredoka', 'ب').then(function () { bindCounts(); }, function () {});
+  if (document.fonts && document.fonts.load) document.fonts.load('700 40px Fredoka', 'ب').then(function () { bindCounts(); frameDirty = true; }, function () {});
 
   /* ------------------------------------------------------------ debug hook */
   window.__game = {

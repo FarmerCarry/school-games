@@ -41,7 +41,8 @@
       var w = internal[i];
       if (w[0] === 0) h[w[1]][w[2]] = 0; else v[w[1]][w[2]] = 0;
     }
-    var m = { cols: cols, rows: rows, cs: cs, ox: ox, oy: oy, h: h, v: v, T: T, rects: [] };
+    // seed: lets the floor art redraw the same decorations after a resize
+    var m = { cols: cols, rows: rows, cs: cs, ox: ox, oy: oy, h: h, v: v, T: T, rects: [], seed: (Math.random() * 1e9) | 0 };
     buildRects(m);
     return m;
   }
