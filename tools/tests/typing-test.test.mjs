@@ -55,17 +55,67 @@ test('results footer names the real restart key and new animals are celebrated o
   assert.equal(fast.tierUp, 4);
   assert.equal(await page.evaluate(() => localStorage.getItem('sg:typing-test:tier')), '4');
   assert.match(await page.locator('#rBadge').textContent(), /أصبحت/);
+  // Mid-pulse the new-animal card keeps its inset ring and adds the glow (an outer-only keyframe swapped them).
+  const pulse = await page.evaluate(() => {
+    const badge = document.getElementById('rBadge');
+    badge.className = 'badge'; void badge.offsetWidth; badge.className = 'badge up'; // (re)start the 1.2 s pulse
+    const a = badge.getAnimations()[0];
+    a.pause(); a.currentTime = 600;
+    return getComputedStyle(badge).boxShadow;
+  });
+  assert.ok(pulse.includes('inset') && pulse.split('rgb').length === 3, pulse);
+});
+
+test('race marks light up when the gliding ⚡ reaches them, and run forwards in English', async t => {
+  const page = await game(t);
+  // Words mode counts finished words only: the ⚡ waits at 0, then one tick puts it at 12 wpm, past the 🐇 (10).
+  const cross = () => page.evaluate(() => {
+    __game.start({ lang: 'en', mode: 'words', amt: 25, seed: 1 });
+    const word = __game.words(1)[0], race = document.getElementById('race'), rabbit = race.querySelector('.ms');
+    __game.typeText(word.slice(0, -1), 1000);
+    const p0 = +race.style.getPropertyValue('--p');
+    __game.typeText(word.slice(-1), 1000);
+    return { p0, p: +race.style.getPropertyValue('--p'), mark: +rabbit.style.getPropertyValue('--p'), cls: rabbit.className,
+      light: parseFloat(rabbit.style.transitionDelay), pop: parseFloat(rabbit.style.animationDelay),
+      turned: [...race.querySelectorAll('.ms')].map(m => getComputedStyle(m).transform !== 'none') };
+  });
+  const r = await cross();
+  assert.match(r.cls, /\bon\b.*\bhit\b/);
+  const reach = 0.9 * (r.mark - r.p0) / (r.p - r.p0); // the 0.9 s glide is linear
+  assert.ok(r.p0 < r.mark && r.mark < r.p && Math.abs(r.light - reach) < 0.02 && r.pop === r.light, JSON.stringify(r));
+  assert.deepEqual(r.turned, [true, true, true, false], 'the animals turn to run left-to-right, the rocket does not');
+  await page.evaluate(() => Kit.motion.setPreference('reduce'));
+  const still = await cross();
+  assert.deepEqual([still.light, still.pop], [0, 0], 'no glide to wait for with reduced motion');
+  assert.equal(await page.evaluate(() => { __game.start({ lang: 'ar' }); return document.querySelectorAll('#race .lf').length; }), 3);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#race .lf')).transform), 'none', 'Arabic runs right-to-left');
+});
+
+// Boxes the save warning overlaps among the footer hints, the progress text and the results buttons.
+const coveredBy = page => page.evaluate(() => {
+  const s = document.querySelector('.sg-save-status').getBoundingClientRect(), range = document.createRange();
+  range.selectNodeContents(document.getElementById('progTxt'));
+  const boxes = { hints: document.querySelector('.hints').getBoundingClientRect(), progress: range.getBoundingClientRect(),
+    buttons: document.querySelector('.rbtns').getBoundingClientRect() };
+  return Object.keys(boxes).filter(k => { const b = boxes[k]; return b.width && b.left < s.right && s.left < b.right && b.top < s.bottom && s.top < b.bottom; });
 });
 
 test('denied saves keep the result in this session and recover on retry', async t => {
   const page = await game(t);
+  await page.setViewportSize({ width: 1100, height: 620 }); // the portal's frame: the tightest footer
+  await page.evaluate(() => document.fonts.ready); // text widths decide the overlaps below
   await page.evaluate(() => {
     window.restoreStorage = Storage.prototype.setItem;
     Storage.prototype.setItem = function () { throw new DOMException('full', 'QuotaExceededError'); };
   });
+  await page.locator('#bSound').click(); // a setting that cannot be saved: the warning opens on the test screen
+  assert.deepEqual(await coveredBy(page), [], 'the warning leaves the Tab hint readable');
   const result = await typeTest(page, 300);
   assert.equal(result.isPb, true);
   assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
+  assert.deepEqual(await coveredBy(page), [], 'the warning sits between the hints and the progress text');
+  await page.evaluate(() => document.querySelector('.sg-save-status').setAttribute('data-compact', 'true')); // folded after 6 s
+  assert.deepEqual(await coveredBy(page), [], 'the folded badge leaves the Alt+Shift hint readable');
   assert.equal(await page.evaluate(() => localStorage.getItem('sg:typing-test:hist')), null);
   assert.equal(await page.evaluate(() => __game.store.hist().length), 1, 'the progress window still shows the result');
   await page.evaluate(() => { Storage.prototype.setItem = window.restoreStorage; });
