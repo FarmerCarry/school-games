@@ -77,6 +77,13 @@ test('denied saves warn, keep progress in memory and clear only after a full ret
     return [(box.top - cv.top) / s, (box.bottom - cv.top) / s];
   });
   assert.ok(top > 56 && bottom < 120, `while playing, the warning waits on the ceiling under the HUD, clear of the hint bar (${top}-${bottom})`);
+  for (const [width, height] of [[1100, 620], [900, 520]]) {
+    await page.setViewportSize({ width, height });
+    const gap = await page.evaluate(() => document.querySelector('.sg-save-status').getBoundingClientRect().top
+      - document.getElementById('btn-pause').getBoundingClientRect().bottom);
+    assert.ok(gap >= 3, `the warning stays clear of the pause button at ${width}x${height} (${gap})`);
+  }
+  await page.setViewportSize({ width: 1366, height: 768 });
   await page.evaluate(() => { __game.win(); stepGame(120); });
   assert.equal(await page.evaluate(() => __game.mode), 'win');
   assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
