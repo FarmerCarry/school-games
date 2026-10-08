@@ -303,6 +303,7 @@
     if (kind !== 'demo') {
       // Play stats: a real match is a round (never the attract demo).
       Kit.stats.round(kind === 'cpu' ? 'vs-' + G.opp.id : 'pvp');
+      coach();
       banner(kind === 'cpu' ? 'أنت تبدأ!' : 'اللاعب 1 يبدأ!', 'حطّم المثلث بضربة قوية!', '#ffe45c');
       if (kind === 'cpu') { say('start'); G.say.t = -1.2; }
     }
@@ -313,7 +314,10 @@
     G.level = idx; G.lv = LV[idx]; G.attempts = 1;
     G.players = [{ name: 'أنت', avatar: 'you', cpu: null }];
     resetTrick(true);
+    coach();
   }
+  // The first-time coach: drawTips' hints while save.shots < 4.
+  function coach() { if (save.shots < 4) Kit.stats.tutorial('start'); }
   // Play stats: each trick attempt is a round, won or lost.
   function resetTrick(first) {
     Kit.stats.round('trick-' + (G.level + 1));
@@ -435,7 +439,7 @@
     G.cueAlpha = 1;
     G.stats.shots[G.turn]++;
     if (G.kind === 'trick') G.prog.shotsUsed++;
-    if (G.kind !== 'demo' && !G.players[G.turn].cpu) { save.shots++; }
+    if (G.kind !== 'demo' && !G.players[G.turn].cpu && ++save.shots === 4) Kit.stats.tutorial('done');
   }
 
   /* =============================================================== update */

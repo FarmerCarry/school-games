@@ -121,7 +121,7 @@
   function playWorld(i) { save.world = i; persist(); start(); }
   // Play stats: each shot is a round of its world; it ends when the shot is saved.
   function start() {
-    closeModal(); resetScene(); K.stats.round(P.worlds[s.world].id); s.phase = 'ready'; meterTime = -.48; meter = .08;
+    closeModal(); resetScene(); Kit.stats.round(P.worlds[s.world].id); s.phase = 'ready'; meterTime = -.48; meter = .08;
     stats(); controls(); canvas.focus({preventScroll:true}); announce('أوقف المؤشر في المنتصف واضرب الكرة');
   }
   function pause(focus) {
@@ -133,7 +133,7 @@
     else pause();
   }
   // The child watches the flight: keep engaged time running, at most once a second.
-  function busy() { if (s.time > busyAt) { busyAt = s.time + 1; K.stats.busy(); } }
+  function busy() { if (s.time > busyAt) { busyAt = s.time + 1; Kit.stats.busy(); } }
   function burst(x,y,color,count) {
     if (reducedMotion) count = Math.min(4, count);
     for (var i=0;i<count;i++) {
@@ -150,7 +150,7 @@
       // The marked 9% central band is a forgiving perfect-shot window.
       s.quality = Math.abs(meter-.5) <= .045 ? 1 : Math.max(0,1-Math.abs(meter-.5)*2);
       s.ball = P.launch(s.course,save.upgrades,s.quality); s.phase = 'flight'; s.shotAge = 0;
-      K.sfx.whoosh(); K.audio.tone({freq:240,to:90,type:'triangle',dur:.1,vol:.4}); busy();
+      K.sfx.whoosh(); K.audio.tone({freq:240,to:90,type:'triangle',dur:.1,vol:.4});
       if(s.ball.perfect) { K.sfx.power(); toast('ضربة مثالية!',1.6); burst(0,2,'#ffe75c',24); }
       else toast(s.quality>.7 ? 'ضربة قوية!' : 'هيا… طر!',1.1);
       controls();
@@ -191,7 +191,7 @@
       var distance = Math.floor(s.ball.maxX), perfect = s.ball.perfect;
       shotResult = {distance:distance,perfect:perfect,oldBest:save.best,earned:P.reward(distance,false,perfect)+starCount*STAR_COINS,stars:starCount,sunk:false};
       earn(shotResult.earned); save.best = Math.max(save.best,distance); save.shots++;
-      K.stats.end('end',distance);
+      Kit.stats.end('end',distance);
     }
     if(sunk) {
       // The cup bonus uses the saved flight, not the ball's current state.
