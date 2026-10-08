@@ -221,6 +221,17 @@ test('Blob Battle warns about failed saves, keeps them queued, and clears the wa
   await page.evaluate(() => { document.getElementById('btnPlay').click(); runtime.step(30); document.getElementById('pauseBtn').click(); });
   assert.equal(await panel(), 'failed', 'a failed stats save keeps the warning');
   assert.equal(await page.evaluate(() => localStorage.getItem('sg:blob-battle:skin')), null);
+  // The message and the badge it folds into after 6 s both stay top-right, clear of the
+  // leaderboard at the top-left of the HUD (1280x720 logical, x 14-246).
+  const spots = await page.evaluate(() => {
+    const el = document.querySelector('.sg-save-status'), c = document.getElementById('c').getBoundingClientRect();
+    return ['false', 'true'].map(compact => {
+      el.setAttribute('data-compact', compact);
+      const r = el.getBoundingClientRect();
+      return { compact, right: Math.round(innerWidth - r.right), top: Math.round(r.top), clearOfBoard: r.left > c.left + 246 * c.width / 1280 };
+    });
+  });
+  assert.deepEqual(spots, [{ compact: 'false', right: 12, top: 62, clearOfBoard: true }, { compact: 'true', right: 12, top: 62, clearOfBoard: true }]);
 
   await page.evaluate(() => { runtime.failSave = false; document.querySelector('.sg-save-status button').click(); });
   assert.equal(await panel(), 'saved', 'a successful retry confirms the save');
