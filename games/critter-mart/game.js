@@ -58,10 +58,10 @@
     expanded: false, cam: { x: CM.START.x, y: CM.START.y }, spawnT: 2, rushT: 150, rush: 0,
     banners: [], hint: null, hintT: 0, idleT: 0, disp: S.coins, coinBump: 0, lvl: 1,
     timeScale: 1, bot: false, saveT: 0, incomeT: 0, income: 0, welcome: 0, chicks: [],
-    firstCust: false, finaleT: -1, recoveryCarry: [], dl: [], shake: K.shake(), lastAction: 0
+    firstCust: false, finaleT: -1, recoveryCarry: [], dl: [], shake: K.shake(), lastAction: 0, noOutSaid: {}
   };
   var P = { x: S.px, y: S.py, vx: 0, vy: 0, look: 0, back: false, phase: 0, moving: false, stack: [],
-    tick: 0, sway: 0, squash: 1, path: null, pi: 0, pad: null, padT: 0, fullT: 0, noOutT: 0, onDesk: false, stepT: 0,
+    tick: 0, sway: 0, squash: 1, path: null, pi: 0, pad: null, padT: 0, fullT: 0, onDesk: false, atBin: false, binJunk: false, stepT: 0,
     blinkT: 3, repathT: 0, walkTo: null, coinT: 0, payTickT: 0 };
 
   var lv = function (id) { return S.up[id] || 0; };
@@ -930,16 +930,17 @@
     for (var i = 0; i < CM.UNLOCKS.length; i++) { var d = CM.UNLOCKS[i]; if (d.kind === 'shelf' && d.item === type) return d.name; }
     return 'رف ' + ITEMS[type].al;
   }
+  // Said once per item until the next unlock: crops sit beside the dirt path and machine output
+  // mats in the wing's aisle, so repeating it nagged every time the player walked past.
   function noOutlet(type) {
-    if (P.noOutT > 0) return;
-    P.noOutT = 1.5;
+    if (R.noOutSaid[type]) return;
+    R.noOutSaid[type] = true;
     floatText(P.x, P.y - 110 - P.stack.length * 14, 'افتح ' + shelfName(type) + ' أولًا!', '#ffd23f', 24);
     SFX.no();
   }
 
   function interact(dt) {
     if (P.fullT > 0) P.fullT -= dt;
-    if (P.noOutT > 0) P.noOutT -= dt;
     P.tick -= dt;
     var act = P.tick <= 0;
     if (act) P.tick = 0.075;
@@ -950,6 +951,11 @@
       if (reg.pile > 0 && d2(P.x, P.y, pp.x, pp.y) < 75 * 75) collectPile(reg);
     });
     P.onDesk = !!(R.byId.desk && d2(P.x, P.y, R.byId.desk.x, R.byId.desk.y) < 48 * 48);
+    // Older saves can carry crops nothing takes yet (the bin hint points here). A bin visit
+    // that starts with such junk throws only the junk, keeping the sellable stock under it.
+    var tr = R.byId.trash, atBin = !!(tr && d2(P.x, P.y, tr.x, tr.y) < 58 * 58);
+    if (atBin && !P.atBin) P.binJunk = P.stack.some(function (it) { return !hasOutlet(it.type); });
+    P.atBin = atBin;
     if (!act) return;
     // shelves
     for (var i = 0; i < R.shelves.length; i++) {
@@ -996,10 +1002,11 @@
       }
     }
     // trash
-    var tr = R.byId.trash;
-    if (tr && P.stack.length && d2(P.x, P.y, tr.x, tr.y) < 58 * 58) {
-      var t0 = P.stack.pop();
-      fly('item', t0.type, P.x, P.y - 84 - P.stack.length * 14, { x: tr.x, y: tr.y - 30 }, 0.3, 60, 28, function () {
+    var ti = P.stack.length - 1;
+    if (atBin && P.binJunk) while (ti >= 0 && hasOutlet(P.stack[ti].type)) ti--;
+    if (atBin && ti >= 0) {
+      var t0 = P.stack.splice(ti, 1)[0];
+      fly('item', t0.type, P.x, P.y - 84 - ti * 14, { x: tr.x, y: tr.y - 30 }, 0.3, 60, 28, function () {
         tr.lid = 0.3; burst(tr.x, tr.y - 36, 6, { speed: 140, up: 100, life: 0.4, colors: ['#9bd88a', '#ffffff'] });
       });
       SFX.trash();
@@ -1069,6 +1076,7 @@
   function doUnlock(d) {
     ULOG.push(Math.round(S.stats.play) + ':' + d.id);
     S.un[d.id] = true; delete S.paid[d.id];
+    R.noOutSaid = {};
     var o = buildObj(d, true);
     rebuildStatic(!(d.kind === 'field' || d.kind === 'orchard' || d.kind === 'coop' || d.kind === 'expand'));
     // push the player out of any new solid object
