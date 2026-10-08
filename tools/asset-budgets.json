@@ -1,6 +1,7 @@
 {
   "format": 1,
   "portalBytes": 360000,
+  "teacherBytes": 87000,
   "gameHtmlBytes": {
     "air-hockey": 116000,
     "beat-dash": 125000,

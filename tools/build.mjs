@@ -12,6 +12,7 @@
  *   - each game becomes ONE html file: its CSS/JS plus shared/kit.js and shared/game.css are
  *     minified and inlined. Fonts and three.js stay shared files (cached once for all games).
  *   - the portal becomes one html file with its CSS, JS, the catalog and all thumbnails inlined.
+ *   - teacher.html (local play statistics) becomes one html file the same way, without thumbnails.
  *   - sw.js: an offline cache. After the first visit the whole site is stored on the PC, pages
  *     open without asking the server, and it still works if the internet drops. Each build
  *     changes sw.js, so PCs download only the files that changed.
@@ -274,6 +275,13 @@ try {
   write('index.html', portal);
   report.unshift(['index.html', Buffer.byteLength(portal)]);
 
+  /* -------------------------------------------------------- teacher page */
+  // Local play statistics (docs/PLAY_STATS.md). One file with the catalog inlined,
+  // precached like the portal so a teacher can open it offline on each PC. It never
+  // registers the worker, and it is not a game, so it stays out of `report`.
+  const teacher = inlinePage(path.join(ROOT, 'teacher.html'));
+  write('teacher.html', teacher);
+
   /* --------------------------------------------------------- static files */
   const statics = ['favicon.svg', 'manifest.webmanifest', 'lib/three/three.min.js', 'lib/three/LICENSE'];
   for (const f of fs.readdirSync(path.join(ROOT, 'shared/fonts'))) statics.push('shared/fonts/' + f);
@@ -308,6 +316,7 @@ try {
   console.log(`built ${gameDirs.length} games + portal into ${posix(path.relative(ROOT, DEST))}/ (minify ${MINIFY ? 'on' : 'off'})`);
   console.log(`offline cache: ${Object.keys(precache).length} files, ${(total / 1048576).toFixed(2)} MB, version ${version}${KILL_SW ? ' (KILL SWITCH sw.js)' : ''}`);
   for (const [f, b] of report.slice(0, 1)) console.log(`  ${f}: ${(b / 1024).toFixed(0)} KB`);
+  console.log(`  teacher.html: ${(Buffer.byteLength(teacher) / 1024).toFixed(0)} KB`);
   const gb = report.slice(1).map(r => r[1]);
   console.log(`  games: ${(Math.min(...gb) / 1024).toFixed(0)}–${(Math.max(...gb) / 1024).toFixed(0)} KB each (one file per game)`);
 } finally {

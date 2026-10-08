@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Downloaded-folder checks, including spaces/Arabic paths and unavailable storage.
+/* Downloaded-folder checks, including spaces/Arabic paths, unavailable storage and the teacher page.
  * PLAYWRIGHT_CHANNEL=msedge node tools/test-classroom.mjs
  * SG_ROOT=_site node tools/test-classroom.mjs
  */
@@ -78,6 +78,38 @@ try {
         await frame.locator('#localButton').click();
         await frame.locator('#gameBoard [data-move="0"]').click();
         await frame.waitForFunction(() => document.getElementById('gameBoard').dataset.moves === '1');
+      });
+
+      // The teacher statistics page from the same folder: it reads this folder's
+      // storage, exports files, and explains itself when storage is blocked.
+      await check(page, label + '-teacher', async () => {
+        await page.goto(pathToFileURL(path.join(folder, 'teacher.html')).href);
+        await page.waitForFunction(() => document.getElementById('source')?.dataset.copy === 'folder');
+        if (deniedStorage) {
+          assert.ok(await page.locator('#storageMsg').isVisible(), 'blocked storage is explained');
+          assert.ok(await page.locator('#exportXlsx').isDisabled(), 'exports need readable storage');
+          return;
+        }
+        // One day record in the storage format the portal writes (docs/PLAY_STATS.md).
+        await page.evaluate(() => {
+          localStorage.setItem('sg:site:stats:d:2025-09-01', JSON.stringify({ v: 1, d: '2025-09-01', s: { calm: 1 },
+            g: { 'tic-tac-toe': { o: 2, e: 95000, hh: { 10: 95000 }, b: [1, 1, 0, 0], lv: { duo: [2, 0, 0, 1, 1, 0, 90000, 0, 0, 0, 1, 0] } } } }));
+        });
+        await page.reload();
+        await page.locator('input[name="period"][value="all"]').check();
+        // The portal's own recorder may add today's tic-tac-toe session to the same row.
+        const row = page.locator('#gameTable tr[data-game="tic-tac-toe"]');
+        await row.waitFor();
+        assert.ok(Number(await row.getAttribute('data-sessions')) >= 1, 'the seeded session of a minute or more is shown');
+        const [json] = await Promise.all([page.waitForEvent('download'), page.locator('#exportJson').click()]);
+        assert.match(json.suggestedFilename(), /^play-stats_pc[a-z]{4}_\d{4}-\d{2}-\d{2}\.json$/);
+        const exported = JSON.parse(fs.readFileSync(await json.path(), 'utf8'));
+        assert.equal(exported.format, 'sg-play-stats');
+        assert.equal(exported.pc.copy, 'folder');
+        assert.ok(exported.tables.games.some(row => row.game === 'tic-tac-toe' && row.date === '2025-09-01' && row.seconds === 95));
+        const [workbook] = await Promise.all([page.waitForEvent('download'), page.locator('#exportXlsx').click()]);
+        assert.match(workbook.suggestedFilename(), /^play-stats_pc[a-z]{4}_\d{4}-\d{2}-\d{2}\.xlsx$/);
+        assert.equal(fs.readFileSync(await workbook.path()).subarray(0, 4).toString('latin1'), 'PK\u0003\u0004', 'the workbook is a ZIP package');
       });
 
       for (const slug of ['tic-tac-toe', 'connect-four', 'air-hockey', 'merge-2048', 'pizza-clicker']) {

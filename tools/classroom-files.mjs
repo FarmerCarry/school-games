@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DISTRIBUTION = ['index.html', 'favicon.svg', 'manifest.webmanifest', 'sw.js', 'games', 'css', 'js', 'shared', 'lib', 'icons'];
+const DISTRIBUTION = ['index.html', 'teacher.html', 'favicon.svg', 'manifest.webmanifest', 'sw.js', 'games', 'css', 'js', 'shared', 'lib', 'icons'];
 function filesUnder(root, relative = '') {
   const absolute = path.join(root, relative);
   if (!fs.statSync(absolute).isDirectory()) return [relative];
@@ -32,9 +32,10 @@ export function copyClassroomSite(root, destination, {mode = 'source'} = {}) {
       inventory.push({ path: relative.split(path.sep).join('/'), bytes: bytes.length });
     }
   }
-  const requiredFiles = ['index.html', 'games/tic-tac-toe/index.html'];
-  // The optimized build embeds portal scripts/styles in index.html.
-  if (mode === 'source') requiredFiles.push('css/site.css', 'js/catalog.js', 'js/site.js');
+  // The teacher statistics page ships too: a downloaded folder keeps its own statistics.
+  const requiredFiles = ['index.html', 'teacher.html', 'games/tic-tac-toe/index.html'];
+  // The optimized build embeds portal and teacher scripts/styles in their pages.
+  if (mode === 'source') requiredFiles.push('css/site.css', 'js/catalog.js', 'js/site.js', 'css/teacher.css', 'js/teacher.js');
   for (const required of requiredFiles) {
     assert.ok(inventory.some(file => file.path === required), `Distribution is missing ${required}`);
   }
