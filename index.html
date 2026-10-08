@@ -25,6 +25,8 @@
       <select id="sessionMinutes"><option value="5">5 دقائق</option><option value="10" selected>10 دقائق</option><option value="15">15 دقيقة</option><option value="20">20 دقيقة</option></select>
       <button type="button" class="pbtn" id="sessionStart">ابدأ المؤقّت</button>
       <button type="button" class="pbtn" id="sessionStop" hidden>ألغِ المؤقّت</button>
+      <a class="pbtn" id="statsLink" href="teacher.html" target="_blank" rel="noopener"><span aria-hidden="true">📊</span> إحصاءات هذا الجهاز</a>
+      <span class="stats-off" id="statsOff" hidden>الإحصاءات متوقفة</span>
       <p id="sessionStatus" role="status" aria-live="polite">يتوقف اللعب عند انتهاء الوقت لتسليم الجهاز أو متابعة الجولة.</p>
     </div>
   </details>
@@ -43,6 +45,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <noscript><p class="noscript">شغّل JavaScript في المتصفح لتلعب الألعاب.</p></noscript>
 <script src="js/catalog.js"></script>
+<script src="js/stats.js"></script>
 <script src="js/site.js"></script>
 <script src="js/offline.js"></script>
 </body>

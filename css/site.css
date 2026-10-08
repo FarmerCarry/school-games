@@ -751,6 +751,8 @@ html.classroom-open { scroll-padding-top: calc(var(--hdr) + var(--classroom-h, 0
 .classroom-controls input { width: 18px; height: 18px; }
 .classroom-controls select { font: inherit; color: var(--ink); border: 1px solid #8192b6; border-radius: 8px; padding: 7px; background: #fff; }
 .classroom-controls p { flex-basis: 100%; margin: 0; font-size: 15px; }
+/* Shown only while a teacher has stopped the local play statistics. */
+.stats-off { padding: 4px 12px; border-radius: 999px; background: #fff1c2; color: #5c4200; font-weight: 700; font-size: 15px; }
 /* Physical margin: the LTR clock's logical start would be its far side here. */
 #sessionClock { display: inline-block; direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; margin-right: 8px; }
 #sessionClock:empty { display: none; }
