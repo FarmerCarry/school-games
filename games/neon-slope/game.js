@@ -1551,8 +1551,14 @@
     refreshTitle();
     SND.setMusic(1); SND.rollSound(0, 0);
   }
+  // A slow PC can still be building shaders when Play is pressed (see warmShaders). The title
+  // then stays up with a loading label, and the run starts as soon as it can be drawn.
+  var playBtn = $('btnPlay'), playQueued = false;
+  function queuePlay(on) { playQueued = on; playBtn.classList.toggle('loading', on); }
   function startRun() {
     if (shopOpen) return;
+    if (!glReady) { if (!playQueued) { queuePlay(true); SND.sfx.click(); } return; }
+    queuePlay(false);
     bankRun();
     resetWorld(false, dbg.startAt || 0);
     rollMissions(); persist();
@@ -1728,6 +1734,7 @@
   var shopTab = 'balls', shopFrom = 'title';
   function openShop() {
     if (st.mode !== 'title' && st.mode !== 'over') return;
+    queuePlay(false);
     shopOpen = true; shopFrom = st.mode;
     show('shop', true); show('title', false); show('over', false);
     renderShop();
@@ -1858,7 +1865,7 @@
       for (var i = 0; i < steps; i++) update(h);
     }
     course.updateMatrixWorld();
-    updateCamera(dt);
+    updateCamera(st.mode === 'paused' ? 0 : dt); // a paused redraw keeps the camera and sky still
     if (st.mode === 'play') updateHud();
     flushInstances();
     if (glReady) renderer.render(scene, camera);
@@ -1927,14 +1934,15 @@
   // Compile every material now, hidden objects included, so the first run, shield, magnet
   // or crash doesn't freeze the game for a moment while the graphics card builds a shader.
   // Where the browser builds shaders in the background (KHR_parallel_shader_compile), the
-  // world is first drawn once they are ready, so the title answers clicks in the meantime.
+  // world is first drawn once they are ready, so the title answers clicks in the meantime
+  // and a Play pressed meanwhile starts the run then.
   // Without it, compileAsync() would only warn, so the plain compile() (same work) is used.
   (function warmShaders() {
     var hidden = [];
     scene.traverse(function (o) { if (!o.visible) { hidden.push(o); o.visible = true; } });
     try {
       if (renderer.extensions.has('KHR_parallel_shader_compile')) {
-        var fin = function () { if (!glReady) { glReady = true; renderDirty = true; } };
+        var fin = function () { if (!glReady) { glReady = true; renderDirty = true; if (playQueued) startRun(); } };
         glReady = false;
         renderer.compileAsync(scene, camera).then(fin, fin);
         setTimeout(fin, 4000);
@@ -1944,7 +1952,8 @@
   })();
   showTitle();
   requestAnimationFrame(frame);
-  Kit.lifecycle({ pause: pauseGame });
+  // A Play still waiting for shaders is dropped too, so a run never starts unattended.
+  Kit.lifecycle({ pause: pauseGame, reset: function () { queuePlay(false); } });
   Kit.ready();
 })();
 

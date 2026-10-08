@@ -37,6 +37,15 @@ async function game(t, { parallelCompile = false } = {}) {
       }
     };
     ns.count = count => { ns.paints = 0; ns.step(count); return ns.paints; };
+    // Reads the last drawn frame back; call it in the same task that drew the frame.
+    ns.hash = () => {
+      const gl = document.getElementById('gl').getContext('webgl2') || document.getElementById('gl').getContext('webgl');
+      const px = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+      gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      let h = 0;
+      for (let i = 0; i < px.length; i++) h = (h * 31 + px[i]) | 0;
+      return h;
+    };
     for (const type of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
       if (!type) continue;
       const clear = type.prototype.clear;
@@ -68,8 +77,9 @@ async function game(t, { parallelCompile = false } = {}) {
 
 test('Neon Slope draws a paused scene once, redraws resize and context restore, then resumes', async t => {
   const page = await game(t);
-  assert.equal(await page.evaluate(() => { __game.start(); return ns.count(60); }), 60);
-  await page.evaluate(() => document.getElementById('btnPause').click());
+  // Steering just before the pause leaves the camera easing towards the ball.
+  assert.equal(await page.evaluate(() => { __game.start(); const n = ns.count(50); __game.dir = 1; return n + ns.count(10); }), 60);
+  await page.evaluate(() => { __game.dir = null; document.getElementById('btnPause').click(); });
   const dist = await page.evaluate(() => __game.state.dist);
   assert.equal(await page.evaluate(() => __game.state.mode), 'paused');
   assert.equal(await page.evaluate(() => ns.count(1)), 1, 'pausing draws the scene once');
@@ -77,8 +87,12 @@ test('Neon Slope draws a paused scene once, redraws resize and context restore, 
 
   await page.setViewportSize({ width: 1000, height: 600 });
   await page.waitForFunction(() => ns.resized, null, { polling: 50 });
-  assert.equal(await page.evaluate(() => ns.count(30)), 1, 'resize redraws once');
+  const [drawn, shown] = await page.evaluate(() => [ns.count(30), ns.hash()]);
+  assert.equal(drawn, 1, 'resize redraws once');
   assert.equal(await page.evaluate(() => ns.count(60)), 0);
+  // Another redraw must not ease the camera or sky of the frozen scene any further.
+  await page.evaluate(() => dispatchEvent(new Event('resize')));
+  assert.deepEqual(await page.evaluate(() => [ns.count(1), ns.hash()]), [1, shown], 'a paused redraw shows the same frame');
 
   await page.evaluate(() => new Promise(resolve => {
     const canvas = document.getElementById('gl'), gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
@@ -110,6 +124,8 @@ test('Neon Slope popups and banners stay visible, without movement, in reduced m
   };
   const settle = () => page.waitForFunction(() => document.getAnimations().every(a => !a.pending), null, { polling: 50 });
   await page.evaluate(() => { __game.start(); ns.step(30); });
+  // A gameplay popup started during those frames must not be counted with _fx()'s six.
+  await settle();
   const full = await page.evaluate(fx);
   assert.equal(full.length, 6);
   assert.ok(full.every(a => a.name !== 'nsFadeHold'), 'full motion keeps the moving animations');
@@ -140,22 +156,32 @@ test('Neon Slope shows the save warning on failed writes and keeps progress afte
   assert.equal(await page.evaluate(() => __game.state.gems), gems);
 });
 
-test('Neon Slope waits for background shader builds before drawing or moving', async t => {
+// What the player sees: the game mode, which screens are up, and whether Play shows its loading label.
+const screens = () => ({ mode: __game.state.mode, title: !document.getElementById('title').hidden,
+  hud: !document.getElementById('hud').hidden, loading: getComputedStyle(document.querySelector('#btnPlay .ld')).display !== 'none' });
+
+test('Neon Slope keeps the title, with a loading Play button, until background shader builds finish', async t => {
   const page = await game(t, { parallelCompile: true });
   assert.equal(await page.evaluate(() => ns.count(10)), 0, 'nothing is drawn while shaders build');
-  assert.equal(await page.evaluate(() => document.getElementById('title').hidden), false);
-  await page.evaluate(() => document.getElementById('btnPlay').click());
-  assert.equal(await page.evaluate(() => { ns.step(20); return __game.state.mode; }), 'play', 'the title answers clicks meanwhile');
-  assert.equal(await page.evaluate(() => ns.paints + __game.state.dist), 0, 'the run waits for the first frame');
+  assert.deepEqual(await page.evaluate(screens), { mode: 'title', title: true, hud: false, loading: false });
+  // Losing focus drops a waiting Play, so the run does not start unattended.
+  await page.evaluate(() => { document.getElementById('btnPlay').click(); dispatchEvent(new Event('blur')); ns.step(5); });
+  assert.deepEqual(await page.evaluate(screens), { mode: 'title', title: true, hud: false, loading: false });
+  await page.evaluate(() => { document.getElementById('btnPlay').click(); ns.step(20); });
+  assert.deepEqual(await page.evaluate(screens), { mode: 'title', title: true, hud: false, loading: true }, 'Play waits, and says so');
+  assert.equal(await page.evaluate(() => ns.paints + __game.state.dist), 0);
   await page.evaluate(() => { ns.shadersDone = true; });
   await page.waitForFunction(() => ns.count(1) === 1, null, { polling: 50, timeout: 5000 });
+  assert.deepEqual(await page.evaluate(screens), { mode: 'play', title: false, hud: true, loading: false }, 'the first drawn frame is the run');
   assert.equal(await page.evaluate(() => ns.count(60)), 60);
   assert.ok(await page.evaluate(() => __game.state.dist > 0 && __game.state.mode === 'play'));
 });
 
-test('Neon Slope starts drawing after the fallback timer if shader builds never report', async t => {
+test('Neon Slope starts drawing, and a waiting Play, after the fallback timer if shader builds never report', async t => {
   const page = await game(t, { parallelCompile: true });
   assert.equal(await page.evaluate(() => ns.count(10)), 0);
   assert.equal(await page.evaluate(() => typeof ns.fallback), 'function');
+  await page.evaluate(() => { document.getElementById('btnPlay').click(); });
   assert.equal(await page.evaluate(() => { ns.fallback(); return ns.count(10); }), 10);
+  assert.deepEqual(await page.evaluate(screens), { mode: 'play', title: false, hud: true, loading: false });
 });
