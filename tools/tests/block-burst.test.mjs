@@ -191,23 +191,59 @@ test('a classic run whose save failed is continued from the menu instead of bein
   assert.equal(await status(), 'saved');
 });
 
-test('the gem tip hand drags a tray piece to a spot where it fits and fills a gem row or column', async t => {
+test('the first-move hint drags a tray piece to where it fits; its text covers no gem and not that piece', async t => {
   const page = await game(t);
   const moves = await page.evaluate(() => {
     let seed = 7;
     Math.random = () => (seed = seed * 16807 % 2147483647) / 2147483647;
-    const out = [];
-    for (const level of [0, 2]) for (let k = 0; k < 12; k++) {
+    const N = 8, out = [], range = [...Array(N).keys()];
+    const inLine = (line, [y, x]) => (line.row != null ? y === line.row : x === line.col);
+    for (const level of [0, 1, 2]) for (let k = 0; k < 16; k++) {
       __game.startLevel(level);
-      const m = __game.tipMove, run = __game.run;
-      if (!m) { out.push({ level, move: false }); continue; }
-      const shape = run.tray[m.slot].shape, gemAt = i => run.gems[i] > 0;
-      const fits = BBCore.fits(BBCore.maskFromBoard(run.cells), shape, m.r, m.c);
-      const gemLine = shape.cells.some(([y, x]) => [0, 1, 2, 3, 4, 5, 6, 7].some(i => gemAt((m.r + y) * 8 + i) || gemAt(i * 8 + m.c + x)));
-      out.push({ level, move: true, fits, gemLine });
+      const m = __game.hint, run = __game.run, mask = BBCore.maskFromBoard(run.cells), all = [];
+      run.tray.forEach((p, slot) => {
+        if (p) for (let r = 0; r <= N - p.shape.h; r++) for (let c = 0; c <= N - p.shape.w; c++) {
+          if (BBCore.fits(mask, p.shape, r, c)) all.push({ slot, r, c, h: p.shape.h, cells: p.shape.cells.map(([y, x]) => [r + y, c + x]) });
+        }
+      });
+      const move = m && all.find(p => p.slot === m.slot && p.r === m.r && p.c === m.c);
+      if (!move) { out.push({ level, fits: false }); continue; }
+      const res = { level, fits: true, gem: !!m.gem };
+      // the text row holds no gem and is not a row the hand's piece lands on
+      res.textClear = range.every(x => !run.gems[m.textRow * N + x]) && (m.textRow < m.r || m.textRow >= m.r + move.h);
+      if (level === 1) {
+        // no gems: a spot in a row or column that already holds blocks (the board centre is filled)
+        res.byBlocks = move.cells.some(([y, x]) => range.some(b => run.cells[y * N + b] || run.cells[b * N + x]));
+      } else {
+        // the gem row or column with the fewest empty cells that a piece can reach, filled as far as any piece can
+        const lines = [];
+        for (const a of range) for (const line of [{ row: a }, { col: a }]) {
+          const idx = range.map(b => (line.row != null ? a * N + b : b * N + a));
+          const empty = idx.filter(i => !run.cells[i]).length;
+          const most = Math.max(0, ...all.map(p => p.cells.filter(cell => inLine(line, cell)).length));
+          if (idx.some(i => run.gems[i]) && empty && most) lines.push({ key: JSON.stringify(line), empty, most });
+        }
+        const target = lines.find(l => l.key === JSON.stringify(m.line));
+        res.target = !!target && target.empty === Math.min(...lines.map(l => l.empty)) &&
+          move.cells.filter(cell => inLine(m.line, cell)).length === target.most;
+        res.textTop = m.textRow === 1;
+      }
+      out.push(res);
     }
     return out;
   });
-  assert.ok(moves.filter(m => m.move).length >= 20, JSON.stringify(moves));
-  for (const m of moves.filter(m => m.move)) assert.deepEqual(m, { level: m.level, move: true, fits: true, gemLine: true });
+  const expected = m => (m.level === 1 ? { level: 1, fits: true, gem: false, textClear: true, byBlocks: true }
+    : { level: m.level, fits: true, gem: true, textClear: true, target: true, textTop: m.textTop });
+  for (const m of moves) assert.deepEqual(m, expected(m), JSON.stringify(moves));
+  assert.ok(moves.filter(m => m.level === 0).every(m => m.textTop), 'level 1 keeps its tip text at the top');
+  assert.ok(moves.filter(m => m.level === 2 && m.textTop).length >= 12, 'level 3 mostly keeps its tip text at the top');
+  // The hint draws its text on that row.
+  const drawn = await page.evaluate(() => {
+    const ys = [], fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (s, x, y) { if (/^(املأ|اسحب)/.test(s)) ys.push(y); return fill.apply(this, arguments); };
+    __game.startLevel(2); stepGame(170); drawGame();
+    CanvasRenderingContext2D.prototype.fillText = fill;
+    return { ys, row: __game.hint.textRow };
+  });
+  assert.deepEqual(drawn.ys, [34 + 62 * (drawn.row + 0.5)]);
 });

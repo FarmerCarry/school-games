@@ -112,7 +112,7 @@
   var bigWord = null, banner = null, endTimer = 0, endKind = null;
   var greyList = [], greyN = 0, greyAcc = 0;
   var powerPulse = 0, goalBump = {}, comboBump = 0;
-  var hintIdle = 0, tipMove = null; // tipMove: {slot, r, c} the gem tip shows (refreshFits)
+  var hintIdle = 0, hint = null; // hint: the move the first-move hint shows (refreshFits)
 
   /* ----------------------------------------------------------- helpers */
   function easeOutBack(t) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
@@ -191,12 +191,42 @@
     if (!run) return;
     var f = Rules.trayFits(run);
     for (var i = 0; i < 3; i++) slots[i].fits = f.each[i];
-    tipMove = gemTip() ? gemMove() : null;
+    hint = hintShown() ? (gemTip() && gemMove()) || plainMove() : null;
   }
-  // The move the gem tip's hand shows: on the gem row or column closest to full that a tray
-  // piece can reach, the placement filling most of it. So the hand only points where its piece fits.
+
+  /* -------------------------------------------------------------- hint */
+  // Before the first move the hint hand drags a tray piece to a spot where it really fits,
+  // and its text goes on a board row that holds no gem and none of that piece.
+  var TEXT_ROWS = [1, 6, 0, 7, 2, 5, 3, 4]; // nearest an edge first
+  function textRank(sh, r) {
+    for (var k = 0; k < TEXT_ROWS.length; k++) {
+      var row = TEXT_ROWS[k], free = row < r || row >= r + sh.h;
+      for (var c = 0; free && c < N; c++) if (run.gems[row * N + c]) free = false;
+      if (free) return k;
+    }
+    return k;
+  }
+  // The fitting placement with the highest score(shape, r, c) > 0; on a tie, the one that
+  // leaves a text row nearest an edge, then the first found.
+  function bestMove(score) {
+    var mask = Core.maskFromBoard(run.cells), best = null;
+    for (var s = 0; s < 3; s++) {
+      var p = run.tray[s]; if (!p) continue;
+      for (var r = 0; r <= N - p.shape.h; r++) for (var c = 0; c <= N - p.shape.w; c++) {
+        if (!Core.fits(mask, p.shape, r, c)) continue;
+        var v = score(p.shape, r, c, mask);
+        if (v <= 0 || (best && v < best.v)) continue;
+        var tr = textRank(p.shape, r);
+        if (!best || v > best.v || tr < best.tr) best = { slot: s, r: r, c: c, v: v, tr: tr };
+      }
+    }
+    if (best) best.textRow = best.tr < TEXT_ROWS.length ? TEXT_ROWS[best.tr] : 1;
+    return best;
+  }
+  // Gem tip: on the gem row or column closest to full that a tray piece can reach, the
+  // placement filling most of it.
   function gemMove() {
-    var mask = Core.maskFromBoard(run.cells), lines = [];
+    var lines = [];
     for (var a = 0; a < N; a++) {
       var gr = false, gc = false, er = 0, ec = 0;
       for (var b = 0; b < N; b++) {
@@ -210,19 +240,26 @@
     }
     lines.sort(function (p, q) { return p.empty - q.empty; });
     for (var l = 0; l < lines.length; l++) {
-      var ln = lines[l], best = null, most = 0;
-      for (var s = 0; s < 3; s++) {
-        var p = run.tray[s]; if (!p) continue;
-        for (var r = 0; r <= N - p.shape.h; r++) for (var c = 0; c <= N - p.shape.w; c++) {
-          if (!Core.fits(mask, p.shape, r, c)) continue;
-          var n = 0;
-          for (var k = 0; k < p.shape.cells.length; k++) if (ln.row != null ? r + p.shape.cells[k][0] === ln.row : c + p.shape.cells[k][1] === ln.col) n++;
-          if (n > most) { most = n; best = { slot: s, r: r, c: c }; }
-        }
-      }
-      if (best) return best;
+      var ln = lines[l], best = bestMove(function (sh, r, c) {
+        var n = 0;
+        for (var k = 0; k < sh.cells.length; k++) if (ln.row != null ? r + sh.cells[k][0] === ln.row : c + sh.cells[k][1] === ln.col) n++;
+        return n;
+      });
+      if (best) { best.gem = true; best.line = ln.row != null ? { row: ln.row } : { col: ln.col }; return best; }
     }
     return null;
+  }
+  // Otherwise: a placement that clears lines, else one next to the blocks already in its
+  // rows and columns (an empty board: the centre), so it never points at filled cells.
+  function plainMove() {
+    return bestMove(function (sh, r, c, mask) {
+      var near = 0; // blocks already in the rows and columns the piece spans
+      for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+        if ((mask[y] & (1 << x)) && ((y >= r && y < r + sh.h) || (x >= c && x < c + sh.w))) near++;
+      }
+      var off = Math.abs(r + sh.h / 2 - N / 2) + Math.abs(c + sh.w / 2 - N / 2); // 0..8
+      return Core.linesIfPlaced(mask, sh, r, c) * 1000 + near * 10 + 9 - off;
+    });
   }
   function trayTL(i, sc) {
     var p = run.tray[i]; sc = sc || tcOf(p.shape);
@@ -1157,27 +1194,19 @@
   }
   // First gem levels (1 and 3), before the first move: teach that a gem is collected by
   // filling its row or column. The gems pulse (drawCells) and the hint hand drags a tray
-  // piece to a spot where it fits and fills a gem's line (tipMove).
+  // piece to a spot where it fits and fills a gem's line (gemMove).
   function gemTip() { return runLevel >= 0 && runLevel <= 2 && run.goalGems && run.moves === 0; }
+  // Classic and the first two levels show the hand before the first move; later levels only the gem tip.
+  function hintShown() { return run.moves === 0 && (run.mode === 'classic' || runLevel <= 1 || gemTip()); }
   function drawHint() {
-    if (state !== 'play' || drag || !run || run.moves > 0 || hintIdle < 1.2 || banner) return;
-    var tip = gemTip(), m = tip && tipMove, i = 0;
-    if (run.mode !== 'classic' && runLevel > 1 && !tip) return;
-    if (m) i = m.slot;
-    else {
-      while (i < 3 && (!run.tray[i] || !slots[i].fits)) i++;
-      if (i >= 3) return;
-    }
-    var t = (time * 0.7) % 1, e = easeOutCubic(Math.min(1, t * 1.4));
-    var x0 = TX[i], y0 = TY, x1 = BX + C * 4, y1 = BY + C * 4;
-    if (m) { var sh = run.tray[i].shape; x1 = cellX(m.c) + sh.w * C / 2; y1 = cellY(m.r) + sh.h * C / 2; }
+    if (state !== 'play' || drag || !run || !hint || !hintShown() || hintIdle < 1.2 || banner || !run.tray[hint.slot]) return;
+    var sh = run.tray[hint.slot].shape, t = (time * 0.7) % 1, e = easeOutCubic(Math.min(1, t * 1.4));
+    var x0 = TX[hint.slot], y0 = TY, x1 = cellX(hint.c) + sh.w * C / 2, y1 = cellY(hint.r) + sh.h * C / 2;
     var hx = x0 + (x1 - x0) * e, hy = y0 + (y1 - y0) * e;
     ctx.globalAlpha = t > 0.8 ? (1 - t) / 0.2 : 1;
     drawHand(hx, hy);
     ctx.globalAlpha = 1;
-    // the text sits clear of the target spot (pieces are at most 5 cells tall)
-    if (m) txt('املأ صف الجوهرة أو عمودها!', BX + C * 4, m.r <= 1 ? BY + C * 6.8 : BY + C * 1.2, 36, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 9 });
-    else txt('اسحب قطعة إلى اللوحة!', BX + C * 4, BY + C * 1.2, 36, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 9 });
+    txt(hint.gem ? 'املأ صف الجوهرة أو عمودها!' : 'اسحب قطعة إلى اللوحة!', BX + C * 4, cellY(hint.textRow) + C / 2, 36, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 9 });
   }
   function drawHand(x, y) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(-0.3);
@@ -1433,7 +1462,7 @@
     get run() { return run; },
     get level() { return runLevel; },
     get trayReady() { return state === 'play' && [0, 1, 2].every(function (i) { return !run.tray[i] || grabbable(i); }); },
-    get tipMove() { return tipMove; },
+    get hint() { return hint; },
     save: save,
     classic: function (fresh) { startClassic(!!fresh); },
     startLevel: function (i) { startLevel(i); },
