@@ -132,12 +132,18 @@ test('open windows hold power-up timers and pizza rain, and pay only base produc
     __game.openAch();
     const before = __game.S.pizzas;
     stepGame(60);
-    return { left, base, gained: __game.S.pizzas - before, held: __game.buffs.frenzy };
+    const held = { gained: __game.S.pizzas - before, left: __game.buffs.frenzy };
+    const heldRate = document.getElementById('rate').textContent, baseTxt = PZ.fmtRate(__game.S.ppsBase);
+    __game.closeModal(); stepGame(8);
+    return { left, base, gained: held.gained, held: held.left, heldRate, baseTxt,
+      rate: document.getElementById('rate').textContent, boostTxt: PZ.fmtRate(__game.S.ppsBase * 7) };
   });
   assert.ok(frenzy.base > 0);
   assert.equal(frenzy.held, frenzy.left, 'the frenzy timer waits while a window is open');
   assert.ok(frenzy.gained > frenzy.base * 0.9 && frenzy.gained < frenzy.base * 1.5,
     `a window open during a frenzy pays the base rate (${frenzy.gained} vs ${frenzy.base}/s)`);
+  assert.ok(frenzy.heldRate.includes(frenzy.baseTxt) && !frenzy.heldRate.includes('×7'), `the HUD shows the held base rate (${frenzy.heldRate})`);
+  assert.ok(frenzy.rate.includes(frenzy.boostTxt) && frenzy.rate.includes('×7'), `the HUD shows the frenzy again after closing (${frenzy.rate})`);
 });
 
 test('a paused kitchen is drawn once and redrawn only after a resize, restore or window change', async t => {
@@ -174,4 +180,24 @@ test('a paused kitchen is drawn once and redrawn only after a resize, restore or
 
   await page.locator('#bResume').click();
   assert.ok(await page.evaluate(() => playFrames(30)) >= 30, 'resumed play draws every frame');
+
+  // A tab that returns while auto-paused credits the away pizzas: the kept frame, HUD and card update.
+  const away = await page.evaluate(() => {
+    let clock = Date.now(); Date.now = () => clock;
+    window.dispatchEvent(new Event('blur'));
+    const mode = __game.mode; playFrames(2);
+    const settled = playFrames(30);
+    const lifetime = __game.S.lifetime;
+    clock += 600 * 1000;
+    document.dispatchEvent(new Event('visibilitychange'));
+    return { mode, settled, gained: __game.S.lifetime - lifetime, paints: playFrames(30), after: playFrames(60),
+      hud: document.getElementById('count').textContent, stats: document.getElementById('pauseStats').textContent,
+      pizzas: __game.fmt(__game.S.pizzas), total: __game.fmt(__game.S.lifetime) };
+  });
+  assert.equal(away.mode, 'pause');
+  assert.equal(away.settled, 0);
+  assert.ok(away.gained > 0, 'the away pizzas are credited on return');
+  assert.ok(away.paints > 0 && away.paints <= 4 && away.after === 0, `the return repaints the paused frame once (${away.paints})`);
+  assert.ok(away.hud.includes(away.pizzas), `the HUD shows the new count (${away.hud})`);
+  assert.ok(away.stats.includes(away.total), 'the pause card shows the new total');
 });
