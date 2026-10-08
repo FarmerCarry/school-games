@@ -37,7 +37,7 @@ const NETWORK = [
 
 // Files that Node verifiers and regression tests load with a stub Kit (engines,
 // physics, rules, simulations, level data, verifiers and developer tools).
-const ENGINE = /(?:^|\/)(?:engine|physics|sim\w*|rules|core|levels|data|ai|endless|board-rules|verify[\w-]*|solutions)\.js$|^games\/[^/]+\/(?:dev|tools)\//;
+const ENGINE = /(?:^|\/)(?:engine|physics|sim\w*|balance-sim|rules|core|levels|data|ai|endless|board-rules|verify[\w-]*|solutions)\.js$|^games\/[^/]+\/(?:dev|tools)\/|^games\/snake-arena\/world\.js$/;
 
 // TODO(play-stats game batch): list every catalog slug here once the games call
 // Kit.stats, so a game that stops reporting rounds fails. Empty until then.
@@ -68,7 +68,8 @@ test('engine, simulation, level and verifier files never call Kit.stats', () => 
   const engines = [...gameFiles, ...walk(path.join(repo, 'shared'))].filter(file => file.endsWith('.js') && ENGINE.test(rel(file)));
   // Guard the pattern itself: these known simulation files must stay covered.
   for (const known of ['games/pool-party/physics.js', 'games/candy-rope/sim.js', 'games/block-burst/core.js',
-    'games/maze-dash/endless.js', 'games/fire-and-ice/verify-levels.js', 'games/candy-rope/dev/solve.js', 'shared/board-rules.js']) {
+    'games/maze-dash/endless.js', 'games/fire-and-ice/verify-levels.js', 'games/candy-rope/dev/solve.js', 'shared/board-rules.js',
+    'games/wacky-soccer/balance-sim.js', 'games/snake-arena/world.js']) {
     assert.ok(engines.some(file => rel(file) === known), 'engine scan covers ' + known);
   }
   const found = engines.filter(file => /\bKit\s*\.\s*stats\b/.test(read(file))).map(rel);

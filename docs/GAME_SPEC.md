@@ -177,8 +177,9 @@ statistics. The contract is `docs/PLAY_STATS.md`; in short, each game reports it
   restart, next level). Free-play games call `Kit.stats.round('main')` when play starts.
   A new `round()` while one is open counts the open round as a quit.
 - `Kit.stats.end(result, score)` when it ends: `'win'`, `'lose'`, `'draw'` or `'end'`, with an
-  optional score ≥ 0 for endless runs. Two-player modes on one PC report only `'end'` or
-  `'draw'`. Automatic respawns inside a level are not new rounds.
+  optional score ≥ 0 (any round may carry one: distance, stars, points; endless runs end
+  with `'end'` and a score). Two-player modes on one PC (`'duo'`, `'local'`, `'pvp'`) report
+  only `'end'` or `'draw'`. Automatic respawns inside a level are not new rounds.
 - `Kit.stats.tutorial('start')` / `('done')` for a first-time tutorial or coach,
   `Kit.stats.busy()` at passive moments the child watches (at most about once per
   second, never per frame), and `Kit.stats.frame(ms)` only in games with their own

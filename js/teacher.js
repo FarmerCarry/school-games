@@ -60,14 +60,14 @@
   var DAYS = ['يوم واحد', 'يومان', 'أيام', 'يومًا'];
   var VISITS = ['زيارة واحدة', 'زيارتان', 'زيارات', 'زيارة'];
   var PCS = ['جهاز واحد', 'جهازان', 'أجهزة', 'جهازًا'];
-  var FILES = ['ملف واحد', 'ملفان', 'ملفات', 'ملفًا'];
+  var FILES = ['ملف واحد', 'ملفين', 'ملفات', 'ملفًا'];
 
   // The read-me sheet explains every exported column. Shared columns are written
   // once here; a table can override a column whose meaning differs there.
   var HELP = {
     pc: 'معرّف الجهاز: الحرفان pc وبعدهما أحرف عشوائية. لا يدل على أي طالب.',
     pc_label: 'اسم الجهاز الذي كتبه المعلم في صفحة الإحصاءات (مثل: جهاز 7).',
-    copy: 'نسخة الموقع: web للموقع على الإنترنت، وfolder لمجلد منزَّل. لكل نسخة إحصاءاتها الخاصة.',
+    copy: 'نسخة الموقع: web للموقع على الإنترنت، وfolder لمجلد منزَّل. يحفظ الموقع والمجلد المنزَّل إحصاءاتٍ منفصلة.',
     date: 'اليوم حسب ساعة الجهاز، نصًّا بالشكل YYYY-MM-DD.',
     seconds: 'وقت اللعب الفعلي بالثواني: يُحسب فقط عندما يستخدم الطفل الفأرة أو لوحة المفاتيح.',
     sessions: 'مرات اللعب: مرات فتح اللعبة واللعب فيها دقيقة أو أكثر.',
@@ -438,12 +438,12 @@
 
   function summary(t, from, to) {
     var keep = function (r) { return (!from || r.date >= from) && (!to || r.date <= to); };
-    var games = {}, s = { seconds: 0, sessions: 0, short: 0, calm: 0, fs: 0, mute: 0, src: {}, pcs: {}, games: [] };
+    var games = Object.create(null), s = { seconds: 0, sessions: 0, short: 0, calm: 0, fs: 0, mute: 0, src: {}, pcs: {}, games: [] };
     SOURCES.forEach(function (k) { s.src[k] = 0; });
     function game(r) {
       return games[r.game] || (games[r.game] = { game: r.game, name: r.game_name, seconds: 0, sessions: 0, short: 0,
         opens: 0, days: 0, ns: 0, errors: 0, timeouts: 0, loads: 0, loadSum: 0, loadMax: 0, f: [0, 0, 0, 0],
-        tu: [0, 0], favDate: {}, fav: {}, levels: {} });
+        tu: [0, 0], favDate: Object.create(null), fav: Object.create(null), levels: Object.create(null) });
     }
     t.days.filter(keep).forEach(function (r) {
       s.calm += r.calm_on; s.fs += r.fullscreen; s.mute += r.mute_toggles; s.pcs[r.pc] = 1;
@@ -457,7 +457,7 @@
       g.f[0] += r.frames_smooth; g.f[1] += r.frames_ok; g.f[2] += r.frames_choppy; g.f[3] += r.frames_stall;
       g.tu[0] += r.tutorial_shown; g.tu[1] += r.tutorial_done;
       // ❤ follows each PC's latest day in the period.
-      if (!own(g.favDate, r.pc) || r.date >= g.favDate[r.pc]) { g.favDate[r.pc] = r.date; g.fav[r.pc] = r.hearted ? 1 : 0; }
+      if (!(r.pc in g.favDate) || r.date >= g.favDate[r.pc]) { g.favDate[r.pc] = r.date; g.fav[r.pc] = r.hearted ? 1 : 0; }
       SOURCES.forEach(function (k) { s.src[k] += r['from_' + k]; });
     });
     t.levels.filter(keep).forEach(function (r) {
@@ -481,19 +481,24 @@
   }
 
   // Where they stop: within ONE game, the 3 levels with the highest gave up ÷
-  // visits among levels with at least 5 visits. No absolute threshold.
+  // visits among levels with at least 5 visits. No absolute threshold. Only
+  // levels that can be won or lost count: free play, endless runs and
+  // two-player modes end without a winner, so leaving them is not giving up.
   function stuck(levels) {
-    return levels.filter(function (l) { return l.visits >= 5 && l.gaveUp > 0; }).sort(function (a, b) {
+    return levels.filter(function (l) {
+      return l.visits >= 5 && l.gaveUp > 0 && l.wins + l.losses > 0 && l.level !== '_other';
+    }).sort(function (a, b) {
       return b.gaveUp / b.visits - a.gaveUp / a.visits || b.visits - a.visits || (a.level < b.level ? -1 : 1);
     }).slice(0, 3);
   }
 
-  // Win share only with wins + losses + draws ≥ 5; endless ids (no results, but
-  // scores) show the average and best score instead.
+  // Win share only with wins + losses + draws ≥ 5 and at least one win or loss
+  // (two-player modes only ever draw or end); endless ids show the average and
+  // best score instead.
   function levelResult(l) {
-    var played = l.wins + l.losses + l.draws;
-    if (played >= 5) return { win: l.wins / played };
-    if (!played && l.scoreCount) return { avg: l.scoreSum / l.scoreCount, best: l.scoreMax };
+    var decided = l.wins + l.losses, played = decided + l.draws;
+    if (decided && played >= 5) return { win: l.wins / played };
+    if (!decided && l.scoreCount) return { avg: l.scoreSum / l.scoreCount, best: l.scoreMax };
     return null;
   }
 
@@ -767,7 +772,7 @@
     function levelName(id) { return id === '_other' ? 'مراحل أخرى' : bdi(id, true); }
     function empty(text) { return '<p class="empty">' + text + '</p>'; }
     function pct(x) { return Math.round(x * 100) + '%'; }
-    function say(id, text) { $(id).textContent = text; }
+    function say(id, text, bad) { $(id).textContent = text; $(id).classList.toggle('bad', !!bad); }
 
     /* ------------------------------------------------------- the view */
     function view(now) {
@@ -825,7 +830,9 @@
         html += '</tbody></table></div><button type="button" class="btn" id="backLocal">العودة إلى هذا الجهاز وحده</button>';
       }
       if (state.ignored.length) {
-        html += '<p class="warn" id="ignoredFiles">لم نستطع قراءة ' + count(state.ignored.length, FILES) + ' لأنها ليست ملفات إحصاءات صالحة: ' +
+        var n = state.ignored.length;
+        html += '<p class="warn" id="ignoredFiles">لم نستطع قراءة ' + count(n, FILES) +
+          (n === 1 ? ' لأنه ليس ملف إحصاءات صالحًا: ' : n === 2 ? ' لأنهما ليسا ملفَّي إحصاءات صالحَين: ' : ' لأنها ليست ملفات إحصاءات صالحة: ') +
           state.ignored.map(function (n) { return bdi(n); }).join('، ') + '</p>';
       }
       box.innerHTML = html;
@@ -838,7 +845,7 @@
       where = COPY === 'folder' ? 'الأرقام من مجلد منزَّل على هذا الجهاز: ' + bdi(dir, true)
         : 'الأرقام من نسخة الموقع على الإنترنت: ' + bdi(location.origin + dir, true);
       var since = state.days.length ? state.days[0].d : state.meta.since;
-      var html = '<span>' + where + '. لكل نسخة إحصاءاتها الخاصة، فافتح هذه الصفحة من النسخة التي يلعب منها الأطفال.</span>';
+      var html = '<span>' + where + '. يحفظ الموقع على الإنترنت والمجلد المنزَّل إحصاءاتٍ منفصلة، فافتح هذه الصفحة بالطريقة نفسها التي يفتح بها الأطفال الألعاب.</span>';
       if (state.ok) {
         html += '<span>' + (since ? 'البيانات منذ ' + showDate(since) : 'لا توجد بيانات بعد') +
           (state.days.length ? ' · الأيام المحفوظة: ' + state.days.length : '') + '</span>' +
@@ -1018,7 +1025,7 @@
     /* ---------------------------------------------------------- actions */
     function write(statusId, change, done) {
       try { updateMeta(change); say(statusId, done); }
-      catch (e) { say(statusId, 'تعذّر الحفظ في هذا المتصفح.'); }
+      catch (e) { say(statusId, 'تعذّر الحفظ في هذا المتصفح.', true); }
       load();
       render();
     }
@@ -1086,7 +1093,7 @@
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         var input = form.querySelector('input');
-        if (!same(input.value, word)) { say(statusId, 'الكلمة غير صحيحة. اكتب «' + word + '» كما هي.'); input.focus(); return; }
+        if (!same(input.value, word)) { say(statusId, 'الكلمة غير صحيحة. اكتب «' + word + '» كما هي.', true); input.focus(); return; }
         input.value = '';
         form.hidden = true;
         action();
@@ -1122,10 +1129,15 @@
     });
     $('clearBtn').addEventListener('click', function () { say('clearStatus', ''); ask($('clearConfirm')); });
     confirmWith($('clearConfirm'), 'امسح', 'clearStatus', function () {
-      try { clearStats(store); } catch (e) { /* reported below if the settings write fails too */ }
-      // The portal drops anything it recorded before this moment; the next
-      // record it writes sets a new start date.
-      write('clearStatus', function (raw) { raw.clearedAt = Date.now(); delete raw.since; }, 'مُسحت إحصاءات هذا الجهاز.');
+      // Save the moment first: the portal drops anything it recorded before it,
+      // even if it writes between the two steps. Its next record sets a new start date.
+      try {
+        updateMeta(function (raw) { raw.clearedAt = Date.now(); delete raw.since; });
+        clearStats(store);
+        say('clearStatus', 'مُسحت إحصاءات هذا الجهاز.');
+      } catch (e) { say('clearStatus', 'تعذّر الحفظ في هذا المتصفح.', true); }
+      load();
+      render();
     });
     document.addEventListener('click', function (e) {
       var link = e.target.closest ? e.target.closest('[data-open]') : null;
@@ -1144,6 +1156,9 @@
       clearTimeout(refresh);
       refresh = setTimeout(function () { load(); render(); }, 500);
     });
+
+    // A page restored from the back/forward cache missed storage events.
+    window.addEventListener('pageshow', function (e) { if (e.persisted) { load(); render(); } });
 
     load();
     render();

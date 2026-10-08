@@ -316,8 +316,13 @@ test('periods, summaries and where children stop', () => {
   assert.deepEqual(api.levelResult(candy.levels[0]), { win: 1 / 6 });
   assert.deepEqual(api.levelResult(week.games[1].levels[0]), { avg: 1000, best: 1800 });
   assert.deepEqual(api.stuck(week.games[1].levels), [], 'a level nobody gave up on is not listed');
-  const many = ['A', 'B', 'C', 'D'].map((level, i) => ({ level, visits: 10, gaveUp: i + 1 }));
+  const many = ['A', 'B', 'C', 'D'].map((level, i) => ({ level, visits: 10, gaveUp: i + 1, wins: 1, losses: 1 }));
   assert.deepEqual(api.stuck(many).map(l => l.level), ['D', 'C', 'B'], 'three highest give-up shares within one game');
+  // Free play, endless runs and two-player modes end without a winner, and the
+  // folded '_other' row is not one level: leaving them is not giving up.
+  const unranked = [{ level: 'main', visits: 9, gaveUp: 9, wins: 0, losses: 0 }, { level: '_other', visits: 9, gaveUp: 9, wins: 2, losses: 5 }];
+  assert.deepEqual(api.stuck(unranked), []);
+  assert.equal(api.levelResult({ wins: 0, losses: 0, draws: 7, scoreCount: 0 }), null, 'draws alone show no win share');
   assert.equal(api.verdict(candy.f, candy.loads, candy.loadSum), 'smooth');
   assert.equal(api.verdict([500, 50, 0, 0], 0, 0), '', 'under 600 counted frames');
   assert.equal(api.verdict([500, 300, 150, 0], 1, 1000), 'slow');

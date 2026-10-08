@@ -225,6 +225,7 @@ td.heart { color: var(--pink); }
 .confirm { margin-top: 8px; padding: 10px; border-radius: 12px; background: var(--warn-bg); }
 .confirm label { display: block; margin-bottom: 6px; }
 .status { min-height: 1.6em; font-weight: 700; color: var(--green); }
+.status.bad { color: var(--red); }
 #combined .btn { margin-top: 6px; }
 
 @media (max-width: 600px) {

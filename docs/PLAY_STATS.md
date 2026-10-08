@@ -42,16 +42,16 @@ shared/kit.js                         js/stats.js + js/site.js             js/te
 Rules for games:
 
 * **Ids** come from the game's own list and **start with a letter**: `'L3'`, `'w1-4'`,
-  `'cpu-easy'`, `'2p'`, `'arena2'`, `'endless'`, `'main'`. Never `'1-4'` (Excel turns it
-  into a date). Never put typed text, names or codes in an id; typing-test challenge
+  `'cpu-easy'`, `'duo'`, `'arena2'`, `'endless'`, `'main'`. Never `'1-4'` (Excel turns it
+  into a date) or `'2p'`. Never put typed text, names or codes in an id; typing-test challenge
   tests use the plain id `'code'`. The portal drops ids that do not match
   `^[A-Za-z][A-Za-z0-9_:.-]{0,23}$` or that contain three digits in a row.
 * **One round is one try the child would call a try.** Automatic respawns inside a level
   (troll-level, swing-hook checkpoints, moto-madness crashes) are not new rounds; a game
   that restarts the level after each death (beat-dash attempts) may report each attempt.
 * **Results:** single-player levels and matches report `'win'` or `'lose'` (or `'draw'`).
-  Endless runs report `'end'` with a score. **Two-player modes on one PC** (`'2p'`,
-  `'local'`, `'pvp'`, `'duo'`) report only `'end'` or `'draw'`, never a winner.
+  Endless runs report `'end'` with a score. **Two-player modes on one PC** (`'duo'`,
+  `'local'`, `'pvp'`) report only `'end'` or `'draw'`, never a winner.
 * Calling `round()` while a round is open records the open one as a **quit**. A round
   still open when the child leaves is a quit too. `end()` with no open round is ignored.
 * Never report demo or attract modes, solution replays, bot-only matches, balance
