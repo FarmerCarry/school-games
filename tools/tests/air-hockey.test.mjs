@@ -157,25 +157,33 @@ test('Air Hockey 1-player HUD shows the player in blue when the mallet matches t
   assert.deepEqual(result.score, ['rgb(53, 200, 255)', 'rgb(255, 92, 122)'], 'the results use the same colours');
 });
 
-test('Air Hockey save warning stays off the rink, the score plates and the title hints', async t => {
-  const page = await hockey(t, { width: 1100, height: 620 });
+// 1100x620 is the portal frame on a 1920x1080 screen; 798x449 is the portal on 1366x768 or
+// 1024x768 with a bookmarks bar, where the warning shrinks with the game
+for (const [width, height] of [[1100, 620], [798, 449]]) test(`Air Hockey save warning stays off the rink, the score plates and the hints at ${width}x${height}`, async t => {
+  const page = await hockey(t, { width, height });
+  await page.evaluate(() => document.fonts.ready); // the warning's size follows its text
   const rects = await page.evaluate(() => {
     const box = el => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; };
-    const status = document.querySelector('.sg-save-status');
-    runtime.failSave = true; document.getElementById('tab1').click();
+    const status = document.querySelector('.sg-save-status'), click = id => document.getElementById(id).click();
+    runtime.failSave = true; click('tab1');
     const title = { warn: box(status), hints: ['howto1', 'btnPlay', 'btnShop', 'btnAwards'].map(id => box(document.getElementById(id))), coins: box(document.querySelector('.coinbar')) };
-    runtime.failSave = false; status.querySelector('button').click();
-    document.getElementById('btnPlay').click(); runtime.step(150);
+    click('btnAwards'); status.setAttribute('data-compact', 'true');
+    const awards = { warn: box(status), hints: [...document.querySelectorAll('#scr-awards .hdr > *, #awGrid > .aw')].map(box) };
+    click('awBack'); runtime.failSave = false; status.querySelector('button').click();
+    click('btnPlay'); runtime.step(150);
     runtime.failSave = true; __game.goal(-1); runtime.step(4);
     const game = box(document.getElementById('game')), k = (game.r - game.l) / 1280;
-    // free corner: left of the score plates (x 170) and above the rink's rim (y 96)
+    // free corner: left of the score plates (x 170, the player's name starts at 188) and above the rink's rim (y 96)
     const corner = { r: game.l + 170 * k, b: game.t + 96 * k };
     const open = box(status);
     status.setAttribute('data-compact', 'true');
-    return { title, corner, open, folded: box(status), state: status.dataset.state };
+    return { title, awards, corner, open, folded: box(status), state: status.dataset.state };
   });
   const apart = (a, b) => a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t;
-  for (const hint of [...rects.title.hints, rects.title.coins]) assert.ok(apart(rects.title.warn, hint), `title warning ${JSON.stringify(rects.title.warn)} clears ${JSON.stringify(hint)}`);
+  for (const screen of [rects.title, rects.awards]) {
+    assert.ok(screen.hints.length >= 4);
+    for (const hint of [...screen.hints, screen.coins].filter(Boolean)) assert.ok(apart(screen.warn, hint), `warning ${JSON.stringify(screen.warn)} clears ${JSON.stringify(hint)}`);
+  }
   assert.equal(rects.state, 'failed');
   for (const r of [rects.open, rects.folded]) {
     assert.ok(r.l >= 0 && r.t >= 0 && r.r <= rects.corner.r && r.b <= rects.corner.b, `match warning ${JSON.stringify(r)} fits the corner ${JSON.stringify(rects.corner)}`);

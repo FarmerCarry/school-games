@@ -155,12 +155,17 @@
 
   /* Save warning: the shared bottom-centre spot covers the rink, the title's how-to bar and the
      results hint. It wraps into the empty corner left of the score plates instead; on the title
-     (coins top-left) it sits beside the mute button, and shop and awards keep the bottom. */
-  .sg-save-status, .sg-save-status[data-compact="true"] { top: 8px; bottom: auto; inset-inline: auto 8px; margin-inline: 0; }
-  .sg-save-status:not([data-compact="true"]) { max-width: 124px; padding: 4px 8px; font-size: 16px; line-height: 1.4; text-align: center; }
-  .sg-save-status button { padding: 2px 8px; }
+     (coins top-left) it sits beside the mute button, the shop keeps the bottom and awards use the
+     header gap. --u is 1px down to a game scale of 0.84 (--k), then shrinks with the game, so in
+     the portal on 1366x768 or 1024x768 it still clears the player's name and the rink. */
+  .sg-save-status, .sg-save-status[data-compact="true"] { --k: min(100vw / 1280, 100vh / 720); --u: min(1px, 100vw / 1078, 100vh / 606);
+    top: calc(8 * var(--u)); bottom: auto; inset-inline: auto calc(8 * var(--u)); margin-inline: 0; padding: calc(4 * var(--u)) calc(6 * var(--u)); font-size: calc(14 * var(--u)); }
+  .sg-save-status:not([data-compact="true"]) { max-width: calc(124 * var(--u)); padding-inline: calc(8 * var(--u)); font-size: calc(16 * var(--u)); line-height: 1.4; text-align: center; }
+  .sg-save-status button { padding: calc(2 * var(--u)) calc(8 * var(--u)); }
+  .sg-save-status[data-compact="true"] span::before { font-size: calc(18 * var(--u)); margin-inline-end: calc(4 * var(--u)); }
   body:has(#scr-title:not([hidden])) .sg-save-status { inset-inline: 62px auto; }
-  body:has(#scr-shop:not([hidden])) .sg-save-status, body:has(#scr-awards:not([hidden])) .sg-save-status { top: auto; bottom: 12px; }
+  body:has(#scr-shop:not([hidden])) .sg-save-status { top: auto; bottom: calc(12 * var(--u)); }
+  body:has(#scr-awards:not([hidden])) .sg-save-status { top: calc(50vh - 310 * var(--k)); inset-inline: auto calc(50vw - 450 * var(--k)); }
 </style>
 </head>
 <body>

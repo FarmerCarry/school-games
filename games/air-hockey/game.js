@@ -199,7 +199,8 @@
     return s.color;
   }
   // 1-player mode: these mallets share their bot's colour, so the player's HUD plate, goal
-  // text and results use the default blue to tell the two sides apart
+  // text and results use the default blue to tell the two sides apart. Picked by eye: when a
+  // mallet skin or bot is added or recoloured, compare every skin with every bot again.
   var BOT_CLASH = { easy: 'lime', medium: 'gold', insane: 'melon' };
   function sideColor(side) {
     if (side < 0 && st.mode === 1 && BOT_CLASH[st.bot.id] === save.eq.mallet) return '#35c8ff';
