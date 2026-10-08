@@ -220,6 +220,8 @@
       var go = document.createElement('button'); go.type = 'button'; go.className = 'button primary';
       go.textContent = 'العب في ' + P.worlds[newWorld].name; box.appendChild(go);
       go.addEventListener('click', function() { K.audio.unlock(); K.sfx.click(); playWorld(newWorld); });
+      // A held Enter that just bought an upgrade must not carry on into the new world.
+      go.addEventListener('keydown', function(e) { if(e.repeat) e.preventDefault(); });
       go.focus({preventScroll:true});
       $('modal-tip').textContent = 'مسافة أو Enter للعالم الجديد · R لضربة أخرى';
     }
@@ -265,9 +267,10 @@
       host.appendChild(b);
     });
     if(focusKind) {
-      var replacement=host.querySelector('[data-upgrade="'+focusKind+'"]');
-      if(replacement && !replacement.disabled) replacement.focus({preventScroll:true});
-      else (modalMode!=='result'?$('close-modal'):newWorld>=0?$('result-unlock').querySelector('button'):$('again')).focus({preventScroll:true});
+      // On the unlock card a keyboard purchase hands Space/Enter back to the new world.
+      var replacement=host.querySelector('[data-upgrade="'+focusKind+'"]'), go=modalMode==='result' && newWorld>=0 && $('result-unlock').querySelector('button');
+      if(replacement && !replacement.disabled && !go) replacement.focus({preventScroll:true});
+      else (go || (modalMode==='result'?$('again'):$('close-modal'))).focus({preventScroll:true});
     }
     renderSkins();
   }
