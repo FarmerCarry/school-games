@@ -1203,10 +1203,11 @@
     var sh = run.tray[hint.slot].shape, t = (time * 0.7) % 1, e = easeOutCubic(Math.min(1, t * 1.4));
     var x0 = TX[hint.slot], y0 = TY, x1 = cellX(hint.c) + sh.w * C / 2, y1 = cellY(hint.r) + sh.h * C / 2;
     var hx = x0 + (x1 - x0) * e, hy = y0 + (y1 - y0) * e;
+    // text first: on row 7 the hand passes through it on its way up from the tray
+    txt(hint.gem ? 'املأ صف الجوهرة أو عمودها!' : 'اسحب قطعة إلى اللوحة!', BX + C * 4, cellY(hint.textRow) + C / 2, 36, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 9 });
     ctx.globalAlpha = t > 0.8 ? (1 - t) / 0.2 : 1;
     drawHand(hx, hy);
     ctx.globalAlpha = 1;
-    txt(hint.gem ? 'املأ صف الجوهرة أو عمودها!' : 'اسحب قطعة إلى اللوحة!', BX + C * 4, cellY(hint.textRow) + C / 2, 36, '#ffffff', 'center', { stroke: '#1b0f3a', sw: 9 });
   }
   function drawHand(x, y) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(-0.3);
