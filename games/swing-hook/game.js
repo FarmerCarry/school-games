@@ -448,6 +448,9 @@
     tutorialRelease = i < 2;
     tries = 1;
     setMode('play');
+    // Play statistics: one try per start or restart (falls respawn inside the try).
+    Kit.stats.round('L' + (i + 1));
+    if (tutorialRelease && !starBits(1)) Kit.stats.tutorial('start'); // the release coach, first time
   }
   function startEndless() {
     endless = true; attract = false;
@@ -459,6 +462,7 @@
     needFresh = holdInput();
     tutorialRelease = false;
     setMode('play');
+    Kit.stats.round('endless');
   }
   function startAttract() {
     attract = true; endless = true;
@@ -474,6 +478,7 @@
     tries++;
     needFresh = holdInput();
     setMode('play');
+    Kit.stats.round('L' + (lvl + 1));
   }
   function respawn() {
     // quick respawn after a bonk / splash
@@ -508,7 +513,10 @@
             for (var k = 0; k < 6; k++) P('streak', w.x + (Math.random() - 0.5) * 30, w.y + (Math.random() - 0.5) * 30, w.vx * 0.6, w.vy * 0.6, 0.3, 5, 'rgba(255,255,255,0.9)', 0, 0.9);
           }
           kick(4);
-          if (endless || lvl !== 0) tutorialRelease = false;
+          if (endless || lvl !== 0) {
+            if (tutorialRelease && !attract && !starBits(1)) Kit.stats.tutorial('done'); // the coach clears
+            tutorialRelease = false;
+          }
           break;
         case 'bounce':
           if (loud) { if (e.kind === 'bumper') sfx.bumper(); else sfx.boing(e.v); }
@@ -1664,6 +1672,7 @@
     $('rsBest').hidden = !newBest;
     $('rsBest').textContent = 'رقم قياسي جديد!';
     var n = popcount(got);
+    Kit.stats.end('win', n); // once: mode is now 'result' (never the attract run, which has no finish)
     $('rsTitle').textContent = lvl === LEVELS.length - 1 ? 'بطل الخطّاف!' : lvl % 6 === 5 ? 'أنهيت العالم!' : n === 3 ? 'مثالي!' : n === 2 ? 'أرجحة رائعة!' : 'اجتزت المرحلة!';
     var labels = ['الوصول', 'خلال ' + def.par + ' ث', flipCount(def.flips)];
     var html = '';
@@ -1721,6 +1730,7 @@
   }
   function endlessOver() {
     var d = dist(), prev = save.endless, nb = d > prev;
+    Kit.stats.end('end', d); // a real run only: the attract run restarts itself instead
     if (nb) save.endless = d;
     persist();
     setMode('result');
