@@ -169,6 +169,40 @@ test('a paused game keeps its last frame and redraws only for resize, fonts and 
   assert.equal((await state(page)).mode, 'play');
 });
 
+test('the scene clock stops while paused and calm motion holds the launch prompt still', async t => {
+  const page = await gamePage(t);
+  await page.evaluate(() => {
+    // The aim guide's dash offset is -40 x the scene clock; the prompt's alpha and lift show its bob.
+    const proto = CanvasRenderingContext2D.prototype, dash = Object.getOwnPropertyDescriptor(proto, 'lineDashOffset');
+    const translate = proto.translate, strokeText = proto.strokeText;
+    let lift = 0;
+    window.probe = { clock: 0, prompts: [] };
+    Object.defineProperty(proto, 'lineDashOffset', { configurable: true, get: dash.get, set(v) { if (v) probe.clock = -v / 40; dash.set.call(this, v); } });
+    proto.translate = function (x, y) { lift = y; return translate.apply(this, arguments); };
+    proto.strokeText = function (text) {
+      if (text === 'اضغط مطولًا لتنطلق!') probe.prompts.push([+this.globalAlpha.toFixed(3), +lift.toFixed(2)]);
+      return strokeText.apply(this, arguments);
+    };
+    __game.start(0); runFrames(5);
+  });
+  await page.keyboard.press('KeyP');
+  const paused = await page.evaluate(() => { runFrames(1); return probe.clock; });
+  assert.equal((await state(page)).mode, 'pause');
+  await page.evaluate(() => runFrames(60));
+  await page.keyboard.press('KeyP');
+  const resumed = await page.evaluate(() => { runFrames(1); return probe.clock; });
+  assert.equal((await state(page)).mode, 'play');
+  assert.ok(Math.abs(resumed - paused) <= 1.01 / 60, `waves and twinkles carry on from the paused frame (${paused} -> ${resumed})`);
+
+  const prompts = reduce => page.evaluate(reduce => {
+    if (reduce) Kit.motion.setPreference('reduce');
+    probe.prompts = []; runFrames(6);
+    return new Set(probe.prompts.map(String)).size;
+  }, reduce);
+  assert.ok(await prompts(false) > 1, 'the prompt bobs with full motion');
+  assert.equal(await prompts(true), 1, 'reduced motion keeps the prompt still');
+});
+
 test('the hero celebrates above the water after crossing the finish', async t => {
   const page = await gamePage(t);
   await page.evaluate(input => { __game.start(0); __game.script(input); }, levelOneInput());

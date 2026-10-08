@@ -575,7 +575,8 @@
 
   /* ------------------------------------------------------------------ update */
   function update(dt) {
-    time += dt;
+    // the scene clock (waves, twinkles, bobbing prompts) stops with the kept pause frame
+    if (mode !== 'pause') time += dt;
     setMusic(mode !== 'pause', Math.max(0, THEMES.indexOf(theme)));
     musicTick();
     var kp = Kit.keys.pressed;
@@ -1002,8 +1003,9 @@
     // prompt near the player: before the launch, and after resuming mid-swing
     var ask = attract || mode !== 'play' ? '' : w.st === 'ready' ? 'اضغط مطولًا لتنطلق!' : resumeWait ? 'اضغط مطولًا للمتابعة!' : '';
     if (ask) {
-      var a = 0.75 + Math.sin(time * 6) * 0.25;
-      c.save(); c.translate(w.x, w.y - 78 + Math.sin(time * 5) * 4); c.scale(1 / cam.z * 0.9, 1 / cam.z * 0.9);
+      // calm motion: a steady prompt, no pulse or bob
+      var a = calm ? 1 : 0.75 + Math.sin(time * 6) * 0.25;
+      c.save(); c.translate(w.x, w.y - 78 + (calm ? 0 : Math.sin(time * 5) * 4)); c.scale(1 / cam.z * 0.9, 1 / cam.z * 0.9);
       c.globalAlpha = a;
       c.font = '700 30px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
       c.lineJoin = 'round'; c.lineWidth = 8; c.strokeStyle = '#2a1747'; c.strokeText(ask, 0, 0);
