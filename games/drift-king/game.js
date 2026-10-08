@@ -285,6 +285,9 @@
     G.model = DK.carById(save.car);
     newWorld((Math.random() * 1e9) | 0);
     G.mode = 'play';
+    // play stats: each run is a round; the hold/release coach starts on a fresh save
+    Kit.stats.round('run');
+    if (!save.runs && save.best < 60) Kit.stats.tutorial('start');
     run = { score: 0, bonus: 0, coins: 0, gems: 0, combo: 0, maxCombo: 0, perfects: 0, jumps: 0, zone: 0, corners: 0, missionCoins: 0, beatBest: false, coinStreak: 0, coinStreakT: 0 };
     armed = !holdInput();
     overT = 0; fallT = 0; poofed = false; bannerT = 0;
@@ -335,6 +338,7 @@
     show(el.btnPause, false);
     var st = run;
     st.score = Math.floor(G.car.progress) + st.bonus;
+    Kit.stats.end('end', st.score);
     save.runs++;
     var prevBest = save.best;
     // Celebrate a new best, but not a tiny first score of a few points.
@@ -807,7 +811,8 @@
     switch (e.t) {
       case 'corner':
         if (!play) break;
-        run.corners++;
+        // the coach is done the first time a run clears 6 corners while its hints still show
+        if (++run.corners === 6 && save.best < 60 && save.runs < 12) Kit.stats.tutorial('done');
         if (e.q === 'perfect') {
           run.combo++; run.perfects++;
           run.maxCombo = Math.max(run.maxCombo, run.combo);
