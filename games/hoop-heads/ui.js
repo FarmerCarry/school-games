@@ -14,6 +14,7 @@
   var view = Kit.fit(canvas, W, H, { onResize: placeUI });
   var ctx = view.ctx;
   canvas.addEventListener('contextrestored', function () { HH.resetBg(); view.resize(); });
+  Kit.motion.onChange(function () { sceneDirty = true; }); // a still frame drops its flash
   Kit.muteButton();
 
   var state = 'title', match = null, demo = null, cfg = null, tour = null;
@@ -429,7 +430,7 @@
   $('ladGo').addEventListener('click', ladGo);
   $('ladBack').addEventListener('click', function () {
     S.click();
-    askConfirm('الانسحاب من البطولة؟', function () { tour = null; openCups(); });
+    askConfirm('الانسحاب من البطولة؟', function () { tour = null; match = null; openCups(); });
   });
 
   /* ================================================================== SHOP */

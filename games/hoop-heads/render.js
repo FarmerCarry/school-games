@@ -545,12 +545,15 @@
     c.fillStyle = '#ffd23f';
     c.beginPath(); c.moveTo(b.x, 108); c.lineTo(b.x - 12, 128); c.lineTo(b.x + 12, 128); c.closePath(); c.fill();
   }
-  // Long shots peak behind the scoreboard (panel, flame pips, tournament pill), so draw the
-  // ball (or its off-screen arrow) again on top there. A white ring fades in for contrast.
+  // Long shots peak behind the scoreboard (panel, flame pips, tournament pill), so there the
+  // ball (or its off-screen arrow) is drawn on top of it instead. A white ring fades in for contrast.
+  function hudOverlap(b, info) {
+    return info.hud ? Math.min((info.mode ? 150 : 122) - (b.y - BR), b.x + BR - 330, 950 - (b.x - BR)) / (BR * 2) : 0;
+  }
   function drawBallOverHUD(c, m, info) {
     var b = m.ball;
     if (b.hidden) return;
-    var k = Math.min((info.mode ? 150 : 122) - (b.y - BR), b.x + BR - 330, 950 - (b.x - BR)) / (BR * 2);
+    var k = hudOverlap(b, info);
     if (k <= 0) return;
     c.save(); c.translate(m.shake.x, m.shake.y);
     if (b.y < -BR) drawBallArrow(c, b);
@@ -598,7 +601,7 @@
     }
     if (b.hidden) {
       if (m.phase === 'intro') drawBall(c, 640, 470 + Math.sin(t * 5) * 8, BR, t * 2, info.ball);
-    } else {
+    } else if (hudOverlap(b, info) <= 0) { // near the scoreboard drawBallOverHUD draws it once, glow and all
       if (b.fire) { c.globalAlpha = 0.5; A.circ(c, b.x, b.y, BR * 1.6); c.fillStyle = '#ff9f1c'; c.fill(); c.globalAlpha = 1; }
       drawBall(c, b.x, b.y, BR, b.rot, info.ball);
     }
