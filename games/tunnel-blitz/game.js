@@ -1109,6 +1109,7 @@
     G.ringD = bestRingD();
     PS.length = 0; pops.length = 0;
     save.runs++; persist();
+    Kit.stats.round('endless');
     showBanner('انطلق!', ZT[1].name, rgba(ZT[1].col, 1), 1.4);
     Sfx.go();
     Mus.play('game'); musicForZone(1);
@@ -1220,6 +1221,8 @@
     part(SHIP_X, SHIP_Y, 0, 0, 0.9, 420, oc, 4);
     Sfx.crash();
     Mus.stop(); Mus.wind(0);
+    // play stats: a crash ends the run (quits from pause or menu are counted by Kit)
+    Kit.stats.end('end', G.score);
     finalizeRun();
   }
 
