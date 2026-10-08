@@ -10,10 +10,15 @@
   var DEF = { bestLen: 0, totalKills: 0, bestKills: 0, games: 0, bestTime: 0, totalFood: 0, bestRank: 0, powerups: 0, top1Time: 0 };
   var stats = {}, saved = store.get('stats', null), k;
   for (k in DEF) stats[k] = saved && typeof saved[k] === 'number' && isFinite(saved[k]) ? saved[k] : DEF[k];
-  var saveStatus = Kit.saveStatus({ retry: function () { saveStats(); } });
-  // Stats and prefs are always written together, so one confirmed write leaves nothing pending.
-  function saveStats() {
-    var ok = store.set('stats', stats);
+  var saveStatus = Kit.saveStatus({ retry: function () { savePrefs(); } });
+  // Stats are written only after a round adds progress, so changing skin here never overwrites
+  // newer stats from another tab. A failed stats write stays pending and goes out with the next
+  // save of either kind, so one confirmed write leaves nothing pending.
+  var statsPending = false;
+  function saveStats() { statsPending = true; return savePrefs(); }
+  function savePrefs() {
+    var ok = !statsPending || store.set('stats', stats);
+    if (ok) statsPending = false;
     ok = store.set('skin', prefs.skin) && ok;
     ok = store.set('eyes', prefs.eyes) && ok;
     ok = store.set('name', prefs.name) && ok;
@@ -27,7 +32,6 @@
   if (!byId(SA.SKINS, prefs.skin) || !unlocked(byId(SA.SKINS, prefs.skin))) prefs.skin = 'lime';
   if (!byId(SA.EYES, prefs.eyes) || !unlocked(byId(SA.EYES, prefs.eyes))) prefs.eyes = 'round';
   if (typeof prefs.name !== 'string' || SA.PLAYER_NAMES.indexOf(prefs.name) < 0) prefs.name = Kit.pick(SA.PLAYER_NAMES);
-  function savePrefs() { return saveStats(); }
   function curSkin() { return byId(SA.SKINS, prefs.skin); }
   savePrefs(); // keep the random starting name across reloads
 
@@ -67,6 +71,7 @@
   function showScreen(id) {
     for (var i = 0; i < screens.length; i++) $(screens[i]).hidden = screens[i] !== id;
     $('btnPause').hidden = id !== null;
+    document.body.setAttribute('data-screen', id || 'play'); // places the save warning (index.html)
   }
 
   function refreshTitle() {
@@ -199,7 +204,8 @@
     var cols = s.skin.rainbow ? SA.RAINBOW : s.skin.colors;
     var dx = s.hx - cam.x, dy = s.hy - cam.y, near = Math.sqrt(dx * dx + dy * dy) < 1400 / cam.zoom;
     if (near) {
-      var cnt = Math.min(16, 4 + Math.floor(s.n / 40));
+      // Reduced motion: no spray along the body (its food trail still shows where it popped).
+      var cnt = Kit.motion.reduced() ? 0 : Math.min(16, 4 + Math.floor(s.n / 40));
       for (i = 0; i < cnt; i++) {
         var j = Math.floor(i * (s.n - 1) / (cnt - 1));
         R.burst(s.pointX(j), s.pointY(j), { n: 4, cols: cols, speed: 240, life: 0.7, size: Math.min(12, s.r * 0.4), jit: s.r });
@@ -283,7 +289,7 @@
   /* ------------------------------------------------------------ game tick */
   var MILESTONES = [50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000];
   var HINTS = [
-    { from: 1.5, to: 7, txt: 'وجّه الثعبان بالفأرة وكُل النقاط المضيئة', games: 3 },
+    { from: 2.5, to: 7, txt: 'وجّه الثعبان بالفأرة وكُل النقاط المضيئة', games: 3 }, // after the 2.4 s start toast
     { from: 8, to: 13, txt: 'احذر! إذا لمس رأسك ثعبانًا آخر فستفرقع', games: 3 },
     { from: 15, to: 21, txt: 'اضغط مطولًا على الفأرة أو مسافة أو ↑ للتسريع!', games: 3 },
     { from: 23, to: 29, txt: 'اجعل الثعابين تصطدم بجسمك لتفرقعها!', games: 4 },
@@ -440,9 +446,9 @@
     var ng = nextGoal(), nx = $('oNext');
     if (ng) {
       nx.hidden = false;
-      // A small inline preview shows the reward without making the panel taller.
+      // A small inline preview shows the reward; .next is wide enough to keep every goal on one line.
       var nt = $('oNextTxt'), nc = document.createElement('canvas');
-      nc.width = ng.eyes ? 28 : 96; nc.height = 28;
+      nc.width = ng.eyes ? 36 : 96; nc.height = ng.eyes ? 36 : 28;
       if (ng.eyes) R.drawHeadPreview(nc, curSkin(), ng.it.id, 1);
       else R.drawPreview(nc, ng.it, 'happy', 1, { r: 7, n: 22, sp: 3.4, amp: 3 });
       nt.textContent = '';
