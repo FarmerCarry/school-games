@@ -611,6 +611,10 @@
   var hadFullscreen = false;
   function routeHash() { return location.hash || '#/'; }
   function frameEl() { return $('#stage iframe'); }
+  // Local play statistics (js/stats.js, docs/PLAY_STATS.md). Never let them break play.
+  function stat(name, a, b) {
+    try { window.SGStats[name](a, b); } catch (e) { /* statistics are optional */ }
+  }
   // file:// uses an opaque origin, so target/source Window identity is the
   // authentication boundary. Never accept messages from other windows.
   function postGame(message) {
@@ -641,8 +645,10 @@
   }
   function onGameMessage(e) {
     var f = frameEl();
-    if (!f || e.source !== f.contentWindow) return;
     if (location.protocol !== 'file:' && e.origin !== location.origin) return;
+    // The recorder also accepts sg:stats from a game removed under 2 s ago.
+    stat('msg', e.source, e.data);
+    if (!f || e.source !== f.contentWindow) return;
     if (e.data === 'sg:focus-portal') {
       portalFocus = true;
       exitFullscreen();
@@ -658,10 +664,11 @@
       $('#stage').setAttribute('aria-busy', 'false');
       sendPreferences();
       if (sessionExpired) showHandoff(); else focusGame();
-    } else if (type === 'sg:error') failFrame(f);
+    } else if (type === 'sg:error') failFrame(f, 'x');
   }
-  function failFrame(f) {
+  function failFrame(f, kind) {
     if (frameEl() !== f) return;
+    stat('fail', kind);
     clearTimeout(readyTimer);
     frameReady = false;
     $('#stage').classList.remove('loading');
@@ -669,6 +676,7 @@
     $('#stageMsg').hidden = false;
     // Dispose the browsing context, including timers, audio and pending saves.
     // Merely hiding a game after a runtime error leaves its simulation alive.
+    stat('gone');
     f.parentNode.removeChild(f);
     portalFocus = true;
     var handoff = $('#sessionHandoff');
@@ -682,7 +690,7 @@
     var stage = $('#stage');
     if (!stage) return;
     var old = frameEl();
-    if (old) old.parentNode.removeChild(old);
+    if (old) { stat('gone'); old.parentNode.removeChild(old); }
     var msg = $('#stageMsg');
     if (msg) msg.hidden = true;
     stage.classList.add('loading');
@@ -702,7 +710,8 @@
     f.addEventListener('error', function () { failFrame(f); });
     f.src = 'games/' + encodeURIComponent(slug) + '/index.html';
     stage.appendChild(f);
-    readyTimer = setTimeout(function () { failFrame(f); }, 20000);
+    stat('mount', f.contentWindow);
+    readyTimer = setTimeout(function () { failFrame(f, 't'); }, 20000);
   }
   function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
   function exitFullscreen() {
@@ -725,6 +734,7 @@
           // The promise may resolve before fullscreenchange is dispatched.
           // Remember entry here as well so a quick exit still pauses play.
           hadFullscreen = isFullscreen();
+          if (hadFullscreen) stat('set', 'fs');
           focusGame();
         }, function () { toast(T.fsFail); });
       } else focusGame();
@@ -753,6 +763,7 @@
   }
   function setClassroom(on) {
     classroomOn = !!on;
+    if (classroomOn) stat('set', 'calm');
     writePreference('classroom', classroomOn);
     document.documentElement.setAttribute('data-sg-motion', classroomOn ? 'reduce' : storedPreference('motion', 'system'));
     sendPreferences();
@@ -838,6 +849,7 @@
     }
   }
   function setupPlay(slug) {
+    stat('open', slug, !renderedHash);
     pushRecent(slug);
     mountFrame(slug);
     var stage = $('#stage');
@@ -973,6 +985,9 @@
       var tag = noEmoji(SITE.tagline);
       title = name + (tag ? ' — ' + tag : '');
     }
+    // Leaving the game or switching games closes its session; a re-render of
+    // the same game only replaces the frame.
+    stat(current && current === previousGame ? 'gone' : 'close');
     app.innerHTML = html;
     $('#searchStatus').textContent = route.name === 'search' ? ((route.q || '').trim() ? T.found(search(route.q).length) : T.searchPrompt) : '';
     document.title = title;
@@ -1009,6 +1024,7 @@
     var g = pool[Math.floor(Math.random() * pool.length)] || GAMES[0];
     var b = $('#surprise');
     b.classList.remove('roll'); void b.offsetWidth; b.classList.add('roll');
+    stat('tag', g.slug, 'surprise');
     go('#/play/' + enc(g.slug));
   }
 
@@ -1093,7 +1109,7 @@
     $('#searchForm').addEventListener('submit', function (e) {
       e.preventDefault();
       var res = search(q.value);
-      if (res.length === 1) { q.blur(); go('#/play/' + enc(res[0].slug)); return; }
+      if (res.length === 1) { q.blur(); stat('tag', res[0].slug, 'search'); go('#/play/' + enc(res[0].slug)); return; }
       // Several results: hand keyboard focus to the first one.
       var first = $('#app .tile');
       if (res.length && first) first.focus(); else q.blur();
