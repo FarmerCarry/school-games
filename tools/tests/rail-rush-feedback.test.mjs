@@ -174,6 +174,11 @@ test('Rail Rush keeps the save warning clear of the title how-to box and the run
   });
   assert.ok(hinted, 'the change-lane hint is showing');
   assert.deepEqual(await clashes(['#hint', '.hud-score', '#coinBox']), [], 'run');
+  // the portal's smallest view: the warning's text shrinks with the stage, clear of the longest hint
+  await page.setViewportSize({ width: 764, height: 430 });
+  await page.waitForFunction(() => document.getElementById('ui').style.fontSize === '9.55px');
+  await page.evaluate(() => { document.getElementById('hint').textContent = 'اصعد المنحدر واركض فوق القطارات!'; });
+  assert.deepEqual(await clashes(['#hint', '.hud-score', '#coinBox']), [], 'run at 764x430');
 });
 
 test('Rail Rush shows the change-lane hint only when the first train blocks the runner', async t => {
@@ -197,4 +202,23 @@ test('Rail Rush shows the change-lane hint only when the first train blocks the 
   const inTheWay = await trial(true);
   assert.equal(inTheWay.lane, inTheWay.trainLane);
   assert.deepEqual([inTheWay.seen, inTheWay.tut], [true, 1], 'the lane hint teaches a runner who is in the way');
+  // the hint stays up behind the pause panel, but its bob (like the x2 pulse) waits for resume
+  const looping = () => page.evaluate(() => document.getAnimations()
+    .filter(a => a.effect.getTiming().iterations === Infinity).map(a => a.animationName + ' ' + a.playState).sort());
+  assert.ok(await page.evaluate(() => {
+    __game.restart(); __game.skip(70);
+    const lane = __game.near('train').lane;
+    if (lane !== 0) __game.act(lane < 0 ? 'left' : 'right');
+    const hint = document.getElementById('hint');
+    for (let i = 0; i < 40 && hint.hidden; i++) rr.step(6);
+    __game.power('doubler'); rr.step(1, true);
+    return !hint.hidden;
+  }), 'the lane hint shows again on the second run');
+  assert.deepEqual(await looping(), ['hintBob running', 'pulse running']);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => __game.state.mode), 'paused');
+  assert.equal(await page.evaluate(() => document.getElementById('hint').hidden), false);
+  assert.deepEqual(await looping(), ['hintBob paused', 'pulse paused']);
+  await page.keyboard.press('Escape');
+  assert.deepEqual(await looping(), ['hintBob running', 'pulse running']);
 });
