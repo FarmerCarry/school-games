@@ -1135,6 +1135,7 @@
   /* ========================================================= tutorial + hints */
   function setTut(n) {
     if (n <= S.tut) return;
+    if (n > 3 && S.tut < 4) Kit.stats.tutorial('done'); // the 4 guided steps are finished
     S.tut = n;
     if (n === 2 && !R.firstCust) { R.firstCust = true; spawnCustomer(true); R.spawnT = 7; }
   }
@@ -2365,6 +2366,8 @@
     show(el.finale, m === 'finale');
     show(el.confirm, m === 'confirm');
     show(el.pauseBtn, m === 'play');
+    // Play statistics: back on the title (menu or a new store) ends the session; ignored when none is open.
+    if (m === 'title') Kit.stats.end('end');
     if (m !== 'play') { show(el.upg, false); upgVisible = false; }
     mouseHeld = false;
   }
@@ -2401,6 +2404,8 @@
   function fmtTime(sec) { var m = Math.floor(sec / 60), s = Math.floor(sec % 60); return m + ':' + (s < 10 ? '0' : '') + s; }
 
   function startPlay() {
+    Kit.stats.round('main');
+    if (S.tut < 4) Kit.stats.tutorial('start');
     au.unlock();
     SFX.click();
     setMode('play');
