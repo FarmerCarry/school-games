@@ -37,6 +37,11 @@ async function game(t, { clock = false } = {}) {
     const fill = CanvasRenderingContext2D.prototype.fillRect;
     CanvasRenderingContext2D.prototype.fillRect = function (x, y, w, h) {
       if (this.canvas.id === 'c' && x === 0 && y === 0 && w === 1280 && h === 720) runtime.paints++;
+      // centres of the confetti pieces on the #fx layer, in 1280x720 units
+      if (this.canvas.id === 'fx' && runtime.pieces) {
+        const m = this.getTransform(), k = Math.hypot(m.a, m.b);
+        runtime.pieces.push([m.e / k, m.f / k]);
+      }
       return fill.apply(this, arguments);
     };
     // the scale each world-canvas font size was last drawn at (the HUD draws after the world)
@@ -107,4 +112,20 @@ test('Drift King replays a new best without its celebration raining onto the new
   await page.locator('#btnAgain').click();   // before the celebration starts
   await page.clock.runFor(1000);
   assert.deepEqual([await confetti(), await page.evaluate(() => bestSounds)], [false, sounds], 'replay cancels the pending celebration');
+});
+
+test('Drift King in-play confetti (combo x5, beating the best) stays out of the HUD band', async t => {
+  const page = await game(t);
+  const result = await page.evaluate(() => {
+    __game.debug.start(); __game.debug.autopilot = true; runtime.step(5);
+    runtime.pieces = [];
+    for (let i = 0; i < 5; i++) __game.car.events.push({ t: 'corner', q: 'perfect' });
+    runtime.step(40);
+    const combo = runtime.pieces.splice(0);
+    __game.debug.save.best = 60; __game.debug.skip(100); runtime.step(40);
+    // the score, best, combo and zone ribbon sit at x 440-840 above y 190
+    const band = list => list.filter(([x, y]) => x > 440 && x < 840 && y < 190).length;
+    return { combo: [combo.length > 0, band(combo)], best: [runtime.pieces.length > 0, band(runtime.pieces)] };
+  });
+  assert.deepEqual(result, { combo: [true, 0], best: [true, 0] });
 });

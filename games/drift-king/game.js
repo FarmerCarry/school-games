@@ -559,8 +559,9 @@
   }
   // Decorative: skipped with reduced motion. 'top' rains gently from the top
   // edge over a results/gift/garage panel instead of bursting mid-screen;
-  // 'sides' pops from both ends of the zone ribbon (400 px wide at y 150) and
-  // only moves outwards, so no piece crosses its text.
+  // 'sides' (every in-play burst) pops from both ends of the zone ribbon
+  // (400 px wide at y 150) and only moves outwards, so no piece crosses the
+  // score, best, combo or zone text in the HUD band.
   function burstConfetti(n, from) {
     if (Kit.motion.reduced()) return;
     var cols = ['#ff4d8d', '#ffd23f', '#3ddc84', '#3d8bff', '#b36bff', '#ff9a2e'], top = from === 'top';
@@ -740,7 +741,7 @@
       if (!run.beatBest && save.best >= 50 && sc > save.best) {
         run.beatBest = true;
         popup('رقم قياسي!', car.x, car.y, 1.8, '#ffd23f', 50, null, 1.6);
-        DK.snd.best(); burstConfetti(50); flashScreen(0.6);
+        DK.snd.best(); burstConfetti(50, 'sides'); flashScreen(0.6);
       }
       var z = Math.floor(car.progress / DK.ZONE_LEN);
       if (z > run.zone) {
@@ -819,7 +820,7 @@
           DK.snd.perfect(run.combo);
           burst(car.x, car.y, 0.4, 8 + Math.min(run.combo, 10), ['#ffe14d', '#ffffff', '#ff7ad1'], 1, 3.5, 0.55, 0.13);
           comboPop = 1; hudPop = 1;
-          if (run.combo === 5 || run.combo === 10 || run.combo === 20) { flashScreen(0.5); burstConfetti(30); }
+          if (run.combo === 5 || run.combo === 10 || run.combo === 20) { flashScreen(0.5); burstConfetti(30, 'sides'); }
         } else {
           if (run.combo >= 3) popup('انتهت السلسلة', car.x, car.y, 1.4, '#ffffff', 26, null, 0.9);
           run.combo = 0;

@@ -226,3 +226,26 @@ test('a failed gift save keeps the saved record, warns, and Retry writes the gif
   assert.deepEqual(stored, current);
   assert.equal(await status.getAttribute('data-state'), 'saved');
 });
+
+test('on a 4:3 screen the save warning keeps clear of the how-to line and the garage prices', async t => {
+  const page = await game(t, { save: { v: 1, ...fixture() } });
+  await page.setViewportSize({ width: 1024, height: 768 });
+  // timer polling: requestAnimationFrame is stubbed by the fixture
+  await page.waitForFunction(() => document.getElementById('c').style.width === '1024px', null, { polling: 50 });
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => { throw new DOMException('fixture', 'QuotaExceededError'); };
+    __game.debug.addCoins(0);
+  });
+  const covered = selector => page.evaluate(selector => {
+    // settle the panel's pop-in; the looping title animations are far from the warning
+    for (const a of document.getAnimations()) if (a.effect.getComputedTiming().endTime !== Infinity) a.finish();
+    const b = document.querySelector('.sg-save-status:not([hidden])').getBoundingClientRect();
+    return [...document.querySelectorAll(selector)].filter(e => {
+      const r = e.getBoundingClientRect();
+      return r.left < b.right && b.left < r.right && r.top < b.bottom && b.top < r.bottom;
+    }).length;
+  }, selector);
+  assert.equal(await covered('.howto, #btnPlay, .card.missions'), 0);
+  await openGarage(page);
+  assert.equal(await covered('#grid .gname, #grid .nbtn'), 0);
+});

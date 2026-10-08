@@ -211,9 +211,17 @@ i.coin.sm { width: 20px; height: 20px; }
 .toast.show { transform: translate(-50%, 0); opacity: 1; }
 .toast.top { bottom: auto; top: 50px; transform: translate(-50%, -30px); }
 .toast.top.show { transform: translate(-50%, 0); }
-/* Shared save warning: the full message starts bottom-left, above the title's
-   how-to line and clear of the mission toast, then folds into the corner badge. */
-html .sg-save-status:not([data-compact="true"]) { inset-inline: auto 12px; margin-inline: 0; bottom: 80px; }
+/* Shared save warning: the full message starts bottom-left, 84 logical px above the
+   bottom of the letterboxed 1280x720 game area (above the title's how-to line and clear
+   of the mission toast on 16:9, 16:10 and 4:3 screens), then folds into the corner badge.
+   In the garage every spot in the game area is a car card, so there it keeps the shared
+   bottom edge: under the price buttons, or in the letterbox. */
+html .sg-save-status:not([data-compact="true"]) {
+  --dk-s: min(calc(100vw / 1280), calc(100vh / 720));
+  inset-inline: auto 12px; margin-inline: 0;
+  bottom: calc((100vh - 720 * var(--dk-s)) / 2 + 84 * var(--dk-s));
+}
+html:has(#garage:not([hidden])) .sg-save-status:not([data-compact="true"]) { bottom: 12px; }
 .mis.just .chk { animation: pulse .5s ease-in-out 3; }
 .mis.just .mr { color: #1a9a55; }
 .mis.just .mt { text-decoration: none; opacity: 1; color: #1a9a55; }
