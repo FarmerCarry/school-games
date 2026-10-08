@@ -145,17 +145,31 @@ test('kickoff gives CPU players the shared WS.cpuPower kick', async t => {
   for (const [side, power, cpu] of powers) assert.equal(power, side ? cpu : 1);
 });
 
-test('a restored canvas context rebuilds the cached background and crowd atlas', async t => {
+test('a restored canvas context rebuilds the cached background, crowd atlas, team flags and menu pictures', async t => {
   const page = await game(t);
-  const scales = await page.evaluate(() => {
-    const calls = [], set = WS.art.setScale;
-    WS.art.setScale = function (s) { calls.push(s); return set.apply(this, arguments); };
+  const seen = await page.evaluate(() => {
+    const scales = [], set = WS.art.setScale;
+    WS.art.setScale = function (s) { scales.push(s); return set.apply(this, arguments); };
+    // the cached flag canvas is the image drawFlag hands to drawImage
+    const flag = () => {
+      let image;
+      const ctx = new Proxy({}, { get: (o, k) => k === 'drawImage' ? i => { image = i; } : () => {} });
+      WS.art.drawFlag(ctx, WS.TEAMS[0], 0, 0, 54, 36, 0, 0);
+      return image;
+    };
+    const before = flag(), cached = flag() === before;
     document.getElementById('game').dispatchEvent(new Event('contextrestored'));
-    return calls;
+    // a GPU reset also blanks the title's cup picture; its own restore event repaints it
+    const cups = document.getElementById('tCups'), c = cups.getContext('2d');
+    c.clearRect(0, 0, cups.width, cups.height);
+    cups.dispatchEvent(new Event('contextrestored'));
+    const painted = c.getImageData(0, 0, cups.width, cups.height).data.some(v => v > 0);
+    return { scales, cached, rebuilt: flag() !== before, painted };
   });
   // scale 0 drops the caches, then the real scale is set again so they are redrawn
-  assert.equal(scales[0], 0);
-  assert.ok(scales.length >= 2 && scales[scales.length - 1] > 0, String(scales));
+  assert.equal(seen.scales[0], 0);
+  assert.ok(seen.scales.length >= 2 && seen.scales[1] > 0, String(seen.scales));
+  assert.deepEqual([seen.cached, seen.rebuilt, seen.painted], [true, true, true]);
 });
 
 test('reduced motion keeps the goal celebration but drops its confetti', async t => {
