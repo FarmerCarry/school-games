@@ -1,4 +1,4 @@
-// Browser checks for the board games' computer levels, mid-round level choice, session score,
+// Browser checks for the board games' computer levels, level choice during and after a round, session score,
 // saved wins against the computer, win celebration and failed-save warning.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
@@ -35,6 +35,7 @@ async function openBoard(t, { reducedMotion = 'reduce', init, game = 'tic-tac-to
 const moves = (page, count) => page.waitForFunction(count => document.getElementById('gameBoard').dataset.moves === String(count), count);
 const pressed = page => page.locator('[data-level][aria-pressed="true"]').getAttribute('data-level');
 const saved = page => page.evaluate(key => JSON.parse(localStorage.getItem(key)), KEY);
+const marked = (page, mark) => page.locator(`[data-level].${mark}`).evaluateAll(buttons => buttons.map(button => button.dataset.level));
 // Confetti removes itself after 1.5 s, so record it as it appears instead of
 // counting it after several awaits on a slow runner.
 const watchConfetti = page => page.evaluate(() => {
@@ -108,6 +109,14 @@ test('wins against the computer score once, are saved and suggest the next level
   assert.equal(await page.locator('#boardHint').textContent(), 'جاهز لتحدي المستوى المتوسط؟');
   assert.equal(await page.locator('#score1').textContent(), '2');
   assert.deepEqual((await saved(page)).wins, { easy: 2, medium: 0, hard: 0 });
+  // Taking up the challenge on the finished screen keeps the result until the rematch.
+  await page.locator('[data-level="medium"]').click();
+  assert.equal(await page.locator('#gameBoard').getAttribute('data-winner'), '1');
+  assert.equal(await page.locator('#turnLine').textContent(), 'فزت! أحسنت اللعب!');
+  assert.equal(await page.locator('#boardHint').textContent(), 'تبدأ أنت الجولة التالية.', 'the challenge hint gives way once medium waits');
+  await page.locator('#rematchButton').click();
+  await moves(page, 0);
+  assert.deepEqual([await pressed(page), await marked(page, 'pending')], ['medium', []]);
 
   await page.reload();
   await page.locator('#pcButton').click();
@@ -174,7 +183,9 @@ test('a level picked mid-round starts with the next round and keeps the session 
   await page.locator('[data-level="hard"]').click();
   assert.equal(await pressed(page), 'hard');
   assert.equal((await saved(page)).level, 'hard');
-  assert.equal(await page.locator('#modeDescription').textContent(), 'المستوى الصعب يبدأ من الجولة التالية.');
+  assert.equal(await page.locator('#modeDescription').textContent(), 'يبدأ «صعب» في الجولة التالية.');
+  // Small frames hide that note, so the buttons alone show which level is still being played.
+  assert.deepEqual([await marked(page, 'pending'), await marked(page, 'playing')], [['hard'], ['easy']]);
   assert.equal(await page.locator('#gameBoard').getAttribute('data-moves'), '2', 'the round continues');
   // The easy computer never blocks with this random value; the hard one would.
   await play(page, [1, 2]);
@@ -184,13 +195,14 @@ test('a level picked mid-round starts with the next round and keeps the session 
   await moves(page, 1);
   assert.equal(await page.locator('#gameBoard [data-move="4"]').evaluate(cell => cell.classList.contains('two')), true, 'the hard computer opens in the centre');
   assert.equal(await page.locator('#modeDescription').textContent(), 'اختر مستوى الكمبيوتر:');
+  assert.deepEqual(await marked(page, 'playing'), []);
   await page.locator('[data-level="medium"]').click();
   assert.equal(await pressed(page), 'medium');
   await moves(page, 0);
   assert.equal(await page.locator('#score1').textContent(), '1', 'an untouched round restarts on the new level and keeps the score');
 });
 
-test('a level picked while the winning disc falls waits, so the win still celebrates', async t => {
+test('a level picked while the winning disc falls or after it lands waits, so the win still celebrates', async t => {
   const page = await openBoard(t, { game: 'connect-four', init: () => { Math.random = () => 0.99; } });
   await page.locator('#pcButton').click();
   await play(page, [0, 0, 0]);
@@ -205,7 +217,17 @@ test('a level picked while the winning disc falls waits, so the win still celebr
   await page.waitForFunction(() => window.confettiSeen.pieces === 24);
   assert.equal(await page.locator('#gameBoard').getAttribute('data-winner'), '1');
   assert.equal(await pressed(page), 'medium');
-  assert.equal(await page.locator('#modeDescription').textContent(), 'المستوى المتوسط يبدأ من الجولة التالية.');
+  assert.equal(await page.locator('#modeDescription').textContent(), 'يبدأ «متوسط» في الجولة التالية.');
+  // The note stays on one line in every side-menu width, so the level buttons do not jump under the cursor.
+  for (const [width, height] of [[1100, 620], [960, 540], [692, 388]]) {
+    await page.setViewportSize({ width, height });
+    assert.equal(await page.locator('#modeDescription').evaluate(note => note.offsetHeight < parseFloat(getComputedStyle(note).lineHeight) * 1.5), true, `one line at ${width}x${height}`);
+  }
+  // A level picked after the disc has landed waits as well.
+  await page.locator('[data-level="hard"]').click();
+  assert.equal(await page.locator('#gameBoard').getAttribute('data-winner'), '1');
+  assert.equal(await page.locator('#turnLine').textContent(), 'جديد! هزمت الكمبيوتر السهل!');
+  assert.deepEqual([await marked(page, 'pending'), await marked(page, 'playing')], [['hard'], ['easy']]);
 });
 
 test('the failed-save warning leaves the match controls and turn line clear', async t => {

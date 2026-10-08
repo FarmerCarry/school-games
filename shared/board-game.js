@@ -229,10 +229,13 @@
     levelButtons.forEach(function (button) {
       button.setAttribute('aria-pressed', String(button.dataset.level === level));
       button.classList.toggle('won', progress.wins[button.dataset.level] > 0);
+      // A level that waits for the next round is only ringed; the level being played stays lit.
+      button.classList.toggle('pending', level !== roundLevel && button.dataset.level === level);
+      button.classList.toggle('playing', level !== roundLevel && button.dataset.level === roundLevel);
     });
     el('levelWins').textContent = levels.map(function (name) { return levelNames[name] + '\u00a0' + progress.wins[name]; }).join(' · ');
     el('modeTitle').textContent = mode === 'menu' ? 'كيف تريد أن تلعب؟' : mode === 'local' ? 'لاعبان على نفس الجهاز' : 'العب ضد الكمبيوتر';
-    el('modeDescription').textContent = mode === 'menu' ? 'اختر طريقة اللعب وابدأ فوراً.' : mode === 'local' ? 'تبادلا الأدوار باستخدام نفس الفأرة.' : level !== roundLevel ? 'المستوى ال' + levelNames[level] + ' يبدأ من الجولة التالية.' : 'اختر مستوى الكمبيوتر:';
+    el('modeDescription').textContent = mode === 'menu' ? 'اختر طريقة اللعب وابدأ فوراً.' : mode === 'local' ? 'تبادلا الأدوار باستخدام نفس الفأرة.' : level !== roundLevel ? 'يبدأ «' + levelNames[level] + '» في الجولة التالية.' : 'اختر مستوى الكمبيوتر:';
     var turnText, hint = isConnect ? 'اضغط على أي عمود لإسقاط قرصك.' : 'اضغط على مربع فارغ لوضع علامتك.';
     if (mode === 'menu') {
       turnText = 'اختر طريقة اللعب للبدء';
@@ -242,7 +245,7 @@
         state.winner !== 1 ? 'فاز الكمبيوتر… جرّب مرة أخرى!' : firstWin ? 'جديد! هزمت الكمبيوتر ال' + levelNames[roundLevel] + '!' : 'فزت! أحسنت اللعب!';
       hint = mode === 'computer' && startingSeat === 2 ? 'تبدأ أنت الجولة التالية.' : 'يبدأ ' + playerLabel(3 - startingSeat) + ' الجولة التالية.';
       var nextLevel = levels[levels.indexOf(roundLevel) + 1];
-      if (mode === 'computer' && state.winner === 1 && nextLevel && progress.wins[roundLevel] >= 2 && !progress.wins[nextLevel]) hint = 'جاهز لتحدي المستوى ال' + levelNames[nextLevel] + '؟';
+      if (mode === 'computer' && level === roundLevel && state.winner === 1 && nextLevel && progress.wins[roundLevel] >= 2 && !progress.wins[nextLevel]) hint = 'جاهز لتحدي المستوى ال' + levelNames[nextLevel] + '؟';
     } else if (paused) { turnText = 'اللعبة متوقفة مؤقتاً'; hint = 'اضغط «متابعة اللعب» عندما تكون جاهزاً.'; }
     else if (mode === 'local') turnText = 'دور ' + playerLabel(state.turn) + ' — ' + tokenLabel(state.turn);
     else turnText = state.turn === 1 ? (isConnect ? 'دورك! اختر عموداً' : 'دورك! اختر مربعاً') : 'الكمبيوتر يفكّر…';
@@ -282,12 +285,12 @@
     renderBoard(); scheduleComputer(); focusBoard();
   }
   function start(selectedMode) { mode = selectedMode; startingSeat = 1; score = { 1: 0, 2: 0 }; newRound(); }
-  // Once the player has moved (or while the final disc falls) a new level waits for the next round,
+  // Once the player has moved, including any finished round, a new level waits for the next round,
   // so a misclick never throws away a round or its celebration. The session score is kept.
   function setLevel(value) {
     if (value === level) return;
     level = value; saveProgress();
-    if (finished() ? fallingCell : state.board.indexOf(1) !== -1) renderBoard();
+    if (state.board.indexOf(1) !== -1) renderBoard();
     else { startingSeat = 1; newRound(); }
   }
   function leaveMatch() {
