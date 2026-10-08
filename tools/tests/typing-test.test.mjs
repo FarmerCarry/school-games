@@ -87,8 +87,10 @@ test('race marks light up when the gliding ⚡ reaches them, and run forwards in
   await page.evaluate(() => Kit.motion.setPreference('reduce'));
   const still = await cross();
   assert.deepEqual([still.light, still.pop], [0, 0], 'no glide to wait for with reduced motion');
-  assert.equal(await page.evaluate(() => { __game.start({ lang: 'ar' }); return document.querySelectorAll('#race .lf').length; }), 3);
-  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#race .lf')).transform), 'none', 'Arabic runs right-to-left');
+  assert.deepEqual(await page.evaluate(() => {
+    __game.start({ lang: 'ar' });
+    return [...document.querySelectorAll('#race .ms')].map(m => getComputedStyle(m).transform !== 'none');
+  }), [false, false, false, true], 'Arabic runs right-to-left: the animals face it as drawn, the rocket turns');
 });
 
 // Boxes the save warning overlaps among the footer hints, the progress text and the results buttons.
@@ -116,11 +118,29 @@ test('denied saves keep the result in this session and recover on retry', async 
   assert.deepEqual(await coveredBy(page), [], 'the warning sits between the hints and the progress text');
   await page.evaluate(() => document.querySelector('.sg-save-status').setAttribute('data-compact', 'true')); // folded after 6 s
   assert.deepEqual(await coveredBy(page), [], 'the folded badge leaves the Alt+Shift hint readable');
+  // A sloppy result (accuracy under 75%) under that record gets the longest footer line: open or folded,
+  // the warning still sits clear of it, on results and back on the test screen.
+  const sloppy = await page.evaluate(() => {
+    __game.start({ lang: 'en', mode: 'words', amt: 10, seed: 1 });
+    __game.typeText(__game.words(10).map((w, i) => i % 3 ? w.replace(/./g, 'q') : w).join(' '), 250);
+    return __game.results();
+  });
+  assert.equal(sloppy.valid, false);
+  for (const screen of ['results', 'test']) {
+    if (screen === 'test') await page.evaluate(() => __game.start({}));
+    assert.equal(await page.evaluate(() => __game.state().screen), screen);
+    assert.match(await page.locator('#progTxt').textContent(), /آخر نتيجة \d+ · رقمك القياسي هنا \d+$/);
+    for (const compact of ['false', 'true']) {
+      await page.evaluate(c => document.querySelector('.sg-save-status').setAttribute('data-compact', c), compact);
+      assert.deepEqual(await coveredBy(page), [], `${screen}, folded: ${compact}`);
+    }
+  }
+  assert.match(await page.locator('#progMini').getAttribute('title'), /الدقة \d+%/, 'the accuracy note moves to the tooltip');
   assert.equal(await page.evaluate(() => localStorage.getItem('sg:typing-test:hist')), null);
-  assert.equal(await page.evaluate(() => __game.store.hist().length), 1, 'the progress window still shows the result');
+  assert.equal(await page.evaluate(() => __game.store.hist().length), 2, 'the progress window still shows the results');
   await page.evaluate(() => { Storage.prototype.setItem = window.restoreStorage; });
   await page.locator('.sg-save-status button').click();
   assert.equal(await page.locator('.sg-save-status[data-state="failed"]').count(), 0);
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:typing-test:hist')).length), 1);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:typing-test:hist')).length), 2);
   assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:typing-test:pbs'))['en|words|10|l']));
 });
