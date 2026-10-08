@@ -339,6 +339,10 @@
     show(null);
     moveConfetti(G.scene);
     G.start({ mode: save.mode, map: save.map, diff: save.diff, me: { color: myColor(), hat: save.hat, skin: mySkin(), wpn: save.wpn } });
+    // play stats: every real match start (play, again, restart) opens a round, e.g. 'ffa:factory:d1' (the title demo never does);
+    // the controls hint shows in the first 3 matches
+    Kit.stats.round(G.mode + ':' + SS.MAPS[G.mapIdx].id + ':d' + G.diff);
+    if (save.matches < 3) Kit.stats.tutorial('start');
     hudEl.hidden = false; $('pauseBtn').hidden = false;
     sizeMinimap();                 // its box can only be measured now that the HUD shows
     setPlaying(true);
@@ -858,6 +862,9 @@
     },
     matchEnding: function () {
       var R = G.results();
+      // play stats: once per real match end (demo matches never end, headless simulations skip ui hooks, the autopilot is a test bot):
+      // the player's team or first place wins, a tie (for first) is a draw; score = the player's splats
+      if (!G.player.autopilot) Kit.stats.end(R.win === 1 ? 'win' : (R.team ? !R.win : R.place === 1) ? 'draw' : 'lose', G.player.kills);
       bigmsg('انتهت المباراة!', 1600, '#ffd23f');
       $('pauseBtn').hidden = true;
       sfx.roundEnd(R.win === 1);
@@ -916,6 +923,7 @@
     if (best) save.bestSplats = p.kills;
     if (p.best > save.bestStreak) save.bestStreak = p.best;
     save.matches++; if (won) save.wins++;
+    if (save.matches == 3) Kit.stats.tutorial('done');   // play stats: the controls hint stops after 3 matches
     save.coins += coins;
     save.xp += xp;
     var ups = 0, bonus = 0;
