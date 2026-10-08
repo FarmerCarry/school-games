@@ -22,7 +22,7 @@
   var modalMode = '', paused = false, meterTime = 0, meter = 0, toastTime = 0;
   var finishDelay = -1, shotResult = null, speed = 1, uiClock = 0, starCount = 0, newWorld = -1, burstEl = null;
   var STAR_COINS = 4; // small, so stars barely change upgrade pacing
-  var renderDirty = true, renderedTime = -1;
+  var renderDirty = true, renderedTime = -1, busyAt = 0;
   canvas.addEventListener('contextrestored', function () { view.resize(); renderDirty = true; });
   A.onContextRestored = function () { renderDirty = true; };
   var lastFocus = null, lastDistance = -1, lastAriaValue = -1;
@@ -119,8 +119,9 @@
     $('play').focus({preventScroll:true});
   }
   function playWorld(i) { save.world = i; persist(); start(); }
+  // Play stats: each shot is a round of its world; it ends when the shot is saved.
   function start() {
-    closeModal(); resetScene(); s.phase = 'ready'; meterTime = -.48; meter = .08;
+    closeModal(); resetScene(); Kit.stats.round(P.worlds[s.world].id); s.phase = 'ready'; meterTime = -.48; meter = .08;
     stats(); controls(); canvas.focus({preventScroll:true}); announce('أوقف المؤشر في المنتصف واضرب الكرة');
   }
   function pause(focus) {
@@ -131,6 +132,8 @@
     if (modalMode === 'pause') closeModal();
     else pause();
   }
+  // The child watches the flight: keep engaged time running, at most once a second.
+  function busy() { if (s.time > busyAt) { busyAt = s.time + 1; Kit.stats.busy(); } }
   function burst(x,y,color,count) {
     if (reducedMotion) count = Math.min(4, count);
     for (var i=0;i<count;i++) {
@@ -188,6 +191,7 @@
       var distance = Math.floor(s.ball.maxX), perfect = s.ball.perfect;
       shotResult = {distance:distance,perfect:perfect,oldBest:save.best,earned:P.reward(distance,false,perfect)+starCount*STAR_COINS,stars:starCount,sunk:false};
       earn(shotResult.earned); save.best = Math.max(save.best,distance); save.shots++;
+      Kit.stats.end('end',distance);
     }
     if(sunk) {
       // The cup bonus uses the saved flight, not the ball's current state.
@@ -345,6 +349,7 @@
       for(var n=0;n<speed;n++) events=events.concat(P.step(s.course,s.ball,save.upgrades,dt));
       collectStars(fromX,fromY);
       events.forEach(function(e) {
+        busy(); // bounce, tree, pad or stop: under 20 s apart in every world
         if(e.type==='bounce') {
           // Same synthesized landing voice, with bounded impact-dependent volume.
           K.audio.tone({freq:160,to:80,type:'triangle',dur:.08,vol:.08+.17*e.strength});
