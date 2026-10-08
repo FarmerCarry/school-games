@@ -226,3 +226,48 @@ test('a failed gift save keeps the saved record, warns, and Retry writes the gif
   assert.deepEqual(stored, current);
   assert.equal(await status.getAttribute('data-state'), 'saved');
 });
+
+test('on a 4:3 screen and in small portal frames the save warning keeps clear of the how-to line, garage prices and results buttons', async t => {
+  const page = await game(t, { save: { v: 1, ...fixture() } });
+  const resize = async (width, height) => {
+    await page.setViewportSize({ width, height });
+    // timer polling: requestAnimationFrame is stubbed by the fixture
+    await page.waitForFunction(width => document.getElementById('c').style.width === width + 'px', width, { polling: 50 });
+  };
+  await resize(1024, 768);
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => { throw new DOMException('fixture', 'QuotaExceededError'); };
+    __game.debug.addCoins(0);
+  });
+  // the full message (as in the 6 s after a failure, however slow the run) or the folded badge
+  const covered = (selector, compact = false) => page.evaluate(async ([selector, compact]) => {
+    await document.fonts.ready;
+    const panel = document.querySelector('.sg-save-status:not([hidden])');
+    panel.setAttribute('data-compact', String(compact));
+    // settle the panel's pop-in; the looping title animations are far from the warning
+    for (const a of document.getAnimations()) if (a.effect.getComputedTiming().endTime !== Infinity) a.finish();
+    const b = panel.getBoundingClientRect();
+    return [...document.querySelectorAll(selector)].filter(e => {
+      const r = e.getBoundingClientRect();
+      return r.left < b.right && b.left < r.right && r.top < b.bottom && b.top < r.bottom;
+    }).length;
+  }, [selector, compact]);
+  const both = async selector => [await covered(selector), await covered(selector, true)];
+  const title = '.howto, #btnPlay, .card.missions', cars = '#grid .gname, #grid .nbtn';
+  assert.equal(await covered(title), 0);
+  await openGarage(page);
+  assert.equal(await covered(cars), 0);
+  // the portal's game frame on 1280x720 and 1280x1024 screens, and on 1366x768 at 125 %
+  for (const [width, height] of [[942, 530], [789, 444]]) {
+    await resize(width, height);
+    assert.deepEqual(await both(cars), [0, 0], `garage at ${width}x${height}`);
+  }
+  await page.locator('#btnGarageClose').click();
+  assert.deepEqual(await both(title), [0, 0], 'title at 789x444');
+  assert.equal(await page.evaluate(() => {
+    __game.debug.start(); __game.debug.skip(40);
+    for (let i = 0; i < 1200 && __game.mode !== 'over'; i++) __game.debug.stepN(1);
+    return __game.mode;
+  }), 'over');
+  assert.deepEqual(await both('#over button'), [0, 0], 'results at 789x444');
+});
