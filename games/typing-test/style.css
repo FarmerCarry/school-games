@@ -129,7 +129,7 @@ body.warnOn #hint { visibility: hidden; } /* the toast banner covers the live ro
 #race .ms.on { filter: none; opacity: 1; text-shadow: 0 0 0.45rem rgba(255, 196, 0, 0.95); }
 #race .ms.hit { animation: msPop 0.5s cubic-bezier(.2, 1.8, .4, 1); }
 #race .pbf { top: -0.55rem; font-size: 1.1rem; filter: none; opacity: 0.8; } /* the flag stands above the track */
-#live[dir="ltr"] #race .lf { transform: scaleX(-1); } /* left-facing emoji animals: turn them to run left-to-right */
+#live[dir="ltr"] #race .lf, #live[dir="rtl"] #race .rf { transform: scaleX(-1); } /* emoji turned to face the way the lane runs */
 @keyframes msPop { 40% { scale: 1.7; } } /* `scale`, so the pop keeps the mirroring transform */
 #race .run { position: absolute; inset: 0; inset-inline-end: 1.6rem; z-index: 1; transform: translateX(calc(var(--p) * var(--d) * 100%)); transition: transform 0.9s linear; }
 #race .run i { inset-inline-start: 0; font-size: 1.6rem; text-shadow: 0 0 0.5rem rgba(255, 196, 0, 0.7); }

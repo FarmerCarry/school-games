@@ -429,6 +429,7 @@
   // transform transition glides between seconds), so there is still no animation loop.
   var raceEl = $('race'), race = null;
   var LEFT_FACING = '🐇🐎🐆'; // emoji animals drawn facing left (style.css .lf mirrors them in English)
+  var RIGHT_FACING = '🚀'; // and the rocket points right (.rf mirrors it in Arabic)
   function buildRace() {
     var pb = getPbs()[pbKey(T)], best = pb && pb.wpm > 0 ? pb.wpm : 0;
     var max = Math.max(50, Math.ceil(best * 1.25 / 10) * 10), marks = [], html = '';
@@ -436,7 +437,7 @@
     if (best) marks.push({ v: best, t: '🏁', n: 'رقمك القياسي: ' + Math.round(best) + ' ' + UNIT, pb: 1 });
     marks.forEach(function (m) {
       m.p = Math.min(1, m.v / max);
-      html += '<i class="ms' + (m.pb ? ' pbf' : LEFT_FACING.indexOf(m.t) >= 0 ? ' lf' : '') + '" title="' + m.n + '" style="--p:' + m.p.toFixed(3) + '">' + m.t + '</i>';
+      html += '<i class="ms' + (m.pb ? ' pbf' : LEFT_FACING.indexOf(m.t) >= 0 ? ' lf' : RIGHT_FACING.indexOf(m.t) >= 0 ? ' rf' : '') + '" title="' + m.n + '" style="--p:' + m.p.toFixed(3) + '">' + m.t + '</i>';
     });
     raceEl.style.setProperty('--p', 0); // new elements start at 0, not gliding back from the last test
     raceEl.innerHTML = '<b class="fill"></b>' + html + '<b class="run"><i>⚡</i></b>';
@@ -723,12 +724,14 @@
     if (h.length) drawLine($('spark'), wpms(h), { low: lows(h) });
   }
   function updateFoot() {
-    var h = getHist(), txt = $('progTxt'), spark = $('spark');
+    var h = getHist(), txt = $('progTxt'), spark = $('spark'), last = h[h.length - 1];
     spark.style.display = h.length ? '' : 'none';
-    if (!h.length) { txt.textContent = '📈 تقدّمك: لا نتائج بعد، ابدأ الكتابة!'; return; }
-    var pb = T ? getPbs()[pbKey(T)] : null, last = h[h.length - 1];
-    txt.textContent = '📈 تقدّمك · آخر نتيجة ' + Math.round(last.wpm) +
-      (last.v === 0 ? ' (الدقة ' + Math.floor(last.acc) + '%)' : '') + (pb ? ' · رقمك القياسي هنا ' + Math.round(pb.wpm) : '');
+    // A low-accuracy result keeps its note in the tooltip only: a longer line would reach the middle
+    // of the footer, under the save warning. Results explain it and the spark draws that dot hollow.
+    $('progMini').title = last && last.v === 0 ? 'تقدّمك · آخر نتيجة: الدقة ' + Math.floor(last.acc) + '%، أقل من 75%، لذلك لا تُحسب رقمًا قياسيًا' : 'تقدّمك';
+    if (!last) { txt.textContent = '📈 تقدّمك: لا نتائج بعد، ابدأ الكتابة!'; return; }
+    var pb = T ? getPbs()[pbKey(T)] : null;
+    txt.textContent = '📈 تقدّمك · آخر نتيجة ' + Math.round(last.wpm) + (pb ? ' · رقمك القياسي هنا ' + Math.round(pb.wpm) : '');
     drawSpark();
   }
 
