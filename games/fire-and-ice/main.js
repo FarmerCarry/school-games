@@ -72,6 +72,7 @@
   var mapSel = Math.min(save.unlocked, NL) - 1;
   var mapHover = -1;
   var bot = null;
+  var stat = '';               // play statistics: the open level's mode, '' for a bot run
   var flash = 0;
   var lastPush = 0, lastFanSnd = 0;
   var toasts = [];
@@ -233,10 +234,14 @@
     // the click that opened the map must not also press a level node underneath it
     ptr.pressed = false; ptr.released = false;
   }
-  function startLevel(i) {
+  function startLevel(i, b) {
     clearWinTimers();   // a quick Next/Replay must not hear the old panel's star chimes
     levelIdx = i; rArm = -9;
     bot = null;
+    // Play statistics: every try is a round (start, Retry, Replay, Next). The mode is
+    // kept from the start, as solo can be switched mid-level. Bot runs are not reported.
+    stat = b ? '' : save.solo ? 'solo' : 'duo';
+    if (stat) Kit.stats.round('L' + (i + 1) + ':' + stat);
     world = FI.build(LEVELS[i], i);
     R.prepare(world, view.scale * view.dpr);
     layersDirty = false;
@@ -334,6 +339,8 @@
     var newHats = R.HATS.filter(function (h) { return h.stars > starsBefore && h.stars <= starsAfter; });
     if (newHats.length) save.hat = newHats[newHats.length - 1].id;
     persist();
+    // Two children on one PC report a neutral end, never a win; the stars are the score.
+    if (stat) Kit.stats.end(stat == 'solo' ? 'win' : 'end', stars);
 
     var medal = ['bronze', 'silver', 'gold'][stars - 1];
     $('winMedal').className = 'medal ' + medal;
@@ -470,7 +477,9 @@
         }
         case 'die': {
           var p = e.p, cx = p.x + p.w / 2, cy = p.y + p.h / 2;
-          if (!quiet) SFX.die(e.cause);
+          // A solo death ends the try (Retry starts a new round). A duo death is not a
+          // result: the Retry or the departure records it as a quit.
+          if (!quiet) { SFX.die(e.cause); if (stat == 'solo') Kit.stats.end('lose'); }
           shake.add(9);
           if (e.cause === 'lava') {
             fx.burst(cx, cy, { count: 26, colors: ['#ffffff', '#dfe8ee', '#c7d3dc'], speed: 140, life: 1.1, size: 7, g: -160, drag: 1.5 });
@@ -1097,7 +1106,7 @@
     win: function () { if (world) { world.state = 'won'; world.events.push({ t: 'win' }); } },
     bot: function (n) {
       if (!FI.Runner || !FI.SOLUTIONS) return 'load bot.js + solutions.js first';
-      startLevel(n - 1); bot = new FI.Runner(FI.SOLUTIONS[n]); banner = 0; return 'running';
+      startLevel(n - 1, 1); bot = new FI.Runner(FI.SOLUTIONS[n]); banner = 0; return 'running';
     },
     solo: function (v) { setSolo(v); },
     stars: totalStars,
