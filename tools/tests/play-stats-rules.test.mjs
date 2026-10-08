@@ -39,9 +39,15 @@ const NETWORK = [
 // physics, rules, simulations, level data, verifiers and developer tools).
 const ENGINE = /(?:^|\/)(?:engine|physics|sim\w*|balance-sim|rules|core|levels|data|ai|endless|board-rules|verify[\w-]*|solutions)\.js$|^games\/[^/]+\/(?:dev|tools)\/|^games\/snake-arena\/world\.js$/;
 
-// TODO(play-stats game batch): list every catalog slug here once the games call
-// Kit.stats, so a game that stops reporting rounds fails. Empty until then.
-const REQUIRE_ROUND_REPORTS = [];
+// Every game reports its rounds, so a game that stops calling Kit.stats fails here.
+const REQUIRE_ROUND_REPORTS = [
+  'air-hockey', 'beat-dash', 'blob-battle', 'block-burst', 'block-world', 'candy-rope',
+  'connect-four', 'critter-mart', 'drift-king', 'fire-and-ice', 'hoop-heads', 'maze-dash',
+  'merge-2048', 'moto-madness', 'neon-slope', 'paint-grab', 'pizza-clicker', 'pool-party',
+  'rail-rush', 'road-hopper', 'skybound-golf', 'snake-arena', 'splat-strike', 'sumo-bonk',
+  'swing-hook', 'tank-splat', 'tic-tac-toe', 'troll-level', 'tunnel-blitz', 'typing-test',
+  'wacky-soccer'
+];
 
 test('no network APIs in Kit, the portal, the teacher page or any game', () => {
   assert.ok(fs.existsSync(path.join(repo, 'teacher.html')), 'the teacher page is covered');

@@ -308,6 +308,16 @@ Never add two exports of the same PC and day. The local PC counts as one more so
 keyed by its id. The page lists each PC's first and last day and flags files that share
 an id but not a label.
 
+### Known limits
+
+* A round the child leaves through the game's own pause menu stays open until the next
+  round starts or the child leaves the game, so a little menu time is added to that
+  round's time (it is still counted as a quit).
+* Some games show their first-time coach again after a reload until it is completed, so
+  "tutorial shown" can be higher than the number of children who saw it.
+* Numbers come from one browser profile on one PC. Clearing site data, a roaming or
+  temporary school profile, or a different browser starts from zero.
+
 ## 5. Step 2 with Microsoft 365 (later)
 
 Step 1's files are the input; they do not need to change.
