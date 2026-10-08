@@ -811,10 +811,11 @@
 
   /* ============================================================ render */
   // A paused scene is drawn once, then again only after a resize, a canvas restore or late fonts.
-  var frameDirty = true;
+  var frameDirty = true, restoreDue = false;
   function render() {
     if (state === 'pause' && !frameDirty) return;
     frameDirty = false;
+    if (restoreDue) { restoreDue = false; restoreCanvases(); }
     flushTex();
     ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
     ctx.direction = 'ltr';
@@ -1147,6 +1148,7 @@
 
   function drawArenaIcon(cv, ar, idx) {
     var c = cv.getContext('2d'), w = cv.width, h = cv.height;
+    cv.repaint = function () { drawArenaIcon(cv, ar, idx); };   // after a GPU reset
     // the arena's own floor (same doodads as in play), drawn 1.5x so the card reads at its size
     c.save(); c.scale(1.5, 1.5); c.fillStyle = c.createPattern(floorTile(idx), 'repeat'); c.fillRect(0, 0, w / 1.5, h / 1.5); c.restore();
     var cols = ['#ff6fae', '#45c1ff', '#34d994', '#ffcf33', '#a77bff'];
@@ -1229,6 +1231,7 @@
   }
   function drawItemIcon(cv, tab, i) {
     var c = cv.getContext('2d');
+    cv.repaint = function () { drawItemIcon(cv, tab, i); };   // after a GPU reset
     if (tab === 'p') {
       var sk = Art.makeSkin(save.skin.c, save.skin.f, i);
       Art.drawSwatch(cv, sk, 8);
@@ -1426,14 +1429,18 @@
   };
 
   /* ============================================================ boot */
-  // After a GPU reset (a PC waking from sleep) canvases come back blank: repaint the territory from
-  // its kept pixel data, rebuild the floor tiles and arena cards, and draw the frame again.
+  // After a GPU reset (a PC waking from sleep) every canvas comes back blank, each at its own moment.
+  // The main ones wait for the next frame, so the repaint runs once: the territory from its kept pixel
+  // data, the floor tiles and patterns, and the arena cards and skin/unlock icons in place (keyboard
+  // focus stays). An icon that comes back later repaints itself. The pattern preview is rebuilt when
+  // next shown; the skin button and preview redraw every frame.
   function restoreCanvases() {
-    floorTiles = []; pats = makePatterns(); putTex();
-    if (state === 'title') buildTitle();
-    frameDirty = true;
+    floorTiles = []; pats = makePatterns(); putTex(); prevKey = '';
+    var q = uiEl.querySelectorAll('canvas');
+    for (var i = 0; i < q.length; i++) if (q[i].repaint) q[i].repaint();
   }
-  [canvas, topCv, shCv, miniCv].forEach(function (c) { c.addEventListener('contextrestored', restoreCanvases); });
+  [canvas, topCv, shCv, miniCv].forEach(function (c) { c.addEventListener('contextrestored', function () { restoreDue = frameDirty = true; }); });
+  uiEl.addEventListener('contextrestored', function (e) { if (e.target.repaint) e.target.repaint(); }, true);
   try { document.fonts.ready.then(function () { frameDirty = true; }); } catch (e) { /* no font loading API */ }
   toTitle();
   Kit.loop(update, render);

@@ -109,6 +109,77 @@ test('Paint Grab freezes a paused round and paints it once, then only after resi
   assert.deepEqual(resumed, { state: 'play', paints: 5, ticking: true }, 'play repaints every frame again');
 });
 
+test('Paint Grab repaints arena cards, skin icons, the pattern preview and unlock icons once after a GPU reset', async t => {
+  const page = await paintGrab(t);
+  await page.evaluate(() => {
+    // blanks every canvas as a GPU reset does, reports the restore on the given canvases (default:
+    // all of them, as Chrome does) and steps one frame; returns how many canvases the repaint made
+    window.reset = only => {
+      const all = [...runtime.canvases], made = all.length;
+      all.forEach(c => { c.width = c.width; });
+      (only || all).forEach(c => c.dispatchEvent(new Event('contextrestored')));
+      runtime.step(1);
+      return runtime.canvases.size - made;
+    };
+    // share of a canvas (or of a band of its rows) that holds paint
+    window.ink = (c, y0 = 0, y1 = c.height) => {
+      const d = c.getContext('2d').getImageData(0, y0, c.width, y1 - y0).data;
+      let n = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i]) n++;
+      return n / (d.length / 4);
+    };
+    window.inks = selector => [...document.querySelectorAll(selector)].map(c => ink(c));
+  });
+
+  const title = await page.evaluate(() => {
+    runtime.step(2);
+    const card = document.querySelector('.arena');
+    card.focus();
+    const once = reset([document.getElementById('game')]), all = reset();
+    return { once, all, cards: inks('#arenas canvas'), button: ink(document.getElementById('skinBtnCv')) > 0, focus: document.activeElement === card };
+  });
+  assert.ok(title.once > 0, 'the restore rebuilds the floor tiles');
+  assert.deepEqual(title, { once: title.once, all: title.once, cards: [1, 1, 1, 1, 1], button: true, focus: true },
+    'four canvases reporting the restore cost one repaint, and the arena cards are repainted in place');
+
+  const skins = await page.evaluate(() => {
+    document.getElementById('bSkins').click();
+    document.querySelector('.tab[data-tab="p"]').click();
+    runtime.step(2);
+    const item = document.querySelector('#skGrid button');
+    item.focus();
+    reset();
+    return { icons: inks('#skGrid canvas'), floor: ink(document.getElementById('skPrev'), 400, 520), focus: document.activeElement === item };
+  });
+  assert.ok(skins.icons.length >= 6);
+  assert.deepEqual(skins, { icons: skins.icons.map(() => 1), floor: 1, focus: true }, 'the open skins screen gets its pattern icons and preview floor back');
+
+  const reopened = await page.evaluate(() => {
+    document.getElementById('skDone').click();
+    runtime.step(1);
+    reset();
+    document.getElementById('bSkins').click();
+    runtime.step(1);
+    return ink(document.getElementById('skPrev'), 400, 520);
+  });
+  assert.equal(reopened, 1, 'a reset elsewhere does not leave the pattern preview floor blank');
+
+  const over = await page.evaluate(() => {
+    document.getElementById('skDone').click();
+    document.getElementById('bPlay').click();
+    __game.grab(12); __game.die(); runtime.step(100);
+    const state = __game.state, icons = [...document.querySelectorAll('#oUnlocks canvas')];
+    // as seen after a real GPU crash: the main canvases come back and the frame repaints while an
+    // unlock icon is still lost (what is drawn on it is dropped), and the icon comes back 10 ms later
+    reset([...runtime.canvases].filter(c => !icons.includes(c)));
+    icons.forEach(c => { c.width = c.width; });
+    icons.forEach(c => c.dispatchEvent(new Event('contextrestored')));
+    return { state, icons: inks('#oUnlocks canvas') };
+  });
+  assert.ok(over.icons.length >= 1, 'the first round unlocks something');
+  assert.deepEqual(over, { state: 'over', icons: over.icons.map(() => 1) }, 'an unlock icon that comes back late repaints itself');
+});
+
 test('Paint Grab keeps bots off a rainbow player\'s pink and coral and spreads look-alike bot colours', async t => {
   const page = await paintGrab(t);
   const { rounds, title } = await page.evaluate(() => {
