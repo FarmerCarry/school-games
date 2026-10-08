@@ -276,8 +276,8 @@
     if (o.hat && dead < 0.5) drawHat(c, o.hat, o.x - 2 * Math.cos(o.a) * sc, o.y - 2 * Math.sin(o.a) * sc - 7 * sc, 0.9 * sc, o.t);
 
     // shield bubble
-    if (o.shield > 0) {
-      var pulse = 1 + Math.sin((o.t || 0) * 8) * 0.04;
+    if (o.shield > 0) { // reduced motion: no gentle pulse, but the expiry flicker stays
+      var pulse = Kit.motion.reduced() ? 1 : 1 + Math.sin((o.t || 0) * 8) * 0.04;
       var fade = o.shield < 2 ? (Math.sin((o.t || 0) * 20) > 0 ? 1 : 0.35) : 1;
       c.save(); c.globalAlpha = fade;
       circle(c, o.x, o.y, 30 * pulse * sc);

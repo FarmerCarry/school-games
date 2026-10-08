@@ -642,7 +642,7 @@
         if ((pass === 0) === t.alive) continue;
         A.drawTank(c, {
           x: t.x, y: t.y, a: t.a, pal: t.pal, hat: t.hat, sq: t.sq, recoil: t.recoil, tread: t.tread, t: G.time,
-          blink: t.blink > 0, dead: t.alive ? 0 : t.dead, paint: t.paint, blobs: t.blobs, shield: t.alive ? t.shield : 0,
+          blink: t.blink > 0 && !Kit.motion.reduced(), dead: t.alive ? 0 : t.dead, paint: t.paint, blobs: t.blobs, shield: t.alive ? t.shield : 0,
           flash: t.flash, scale: easeBack(t.scale)
         });
       }
