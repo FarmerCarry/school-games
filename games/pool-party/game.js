@@ -301,6 +301,8 @@
     G.aim = 0;
     startTurn(true);
     if (kind !== 'demo') {
+      // Play stats: a real match is a round (never the attract demo).
+      Kit.stats.round(kind === 'cpu' ? 'vs-' + G.opp.id : 'pvp');
       banner(kind === 'cpu' ? 'أنت تبدأ!' : 'اللاعب 1 يبدأ!', 'حطّم المثلث بضربة قوية!', '#ffe45c');
       if (kind === 'cpu') { say('start'); G.say.t = -1.2; }
     }
@@ -312,7 +314,9 @@
     G.players = [{ name: 'أنت', avatar: 'you', cpu: null }];
     resetTrick(true);
   }
+  // Play stats: each trick attempt is a round, won or lost.
   function resetTrick(first) {
+    Kit.stats.round('trick-' + (G.level + 1));
     G.st = LV.makeState(G.lv, P);
     wireState(G.st);
     G.prog = { shotsUsed: 0 };
@@ -696,7 +700,10 @@
     } else if (c.stage === 'pull') {
       var target = powerFromSpeed(c.res.speed);
       G.power = target * Math.min(1, c.t / 0.45);
-      if (c.t > 0.6) { G.aim = c.res.angle; strike(c.res.angle, c.res.speed, c.res.spinX, c.res.spinY); }
+      if (c.t > 0.6) {
+        G.aim = c.res.angle; strike(c.res.angle, c.res.speed, c.res.spinX, c.res.spinY);
+        if (G.kind === 'cpu') Kit.stats.busy(); // the child watches the CPU shot
+      }
     }
   }
 
@@ -796,6 +803,8 @@
     G.phase = 'over'; G.overT = 0; G.winner = winner; G.loseReason = reason;
     if (G.kind === 'demo') return;
     var humanWon = G.kind === 'pvp' || !G.players[winner].cpu;
+    // Two players on one PC: no winner is reported.
+    Kit.stats.end(G.kind === 'pvp' ? 'end' : humanWon ? 'win' : 'lose');
     if (humanWon) { SFX.cheer(); confettiBurst(160); shake.add(6); }
     else SFX.lose();
     banner(G.kind === 'cpu' && !G.players[winner].cpu ? 'فزت!' : winTxt(G.players[winner]), reason || '', humanWon ? '#ffe45c' : '#9fdcff', 2);
@@ -831,6 +840,7 @@
       var stars = G.attempts === 1 ? 3 : G.attempts <= 3 ? 2 : 1;
       var prev = save.stars[G.level] || 0;
       G.newStars = stars; G.prevStars = prev;
+      Kit.stats.end('win', stars);
       G.coinsEarned = Math.max(0, stars - prev) * 15;
       if (stars > prev) save.stars[G.level] = stars;
       save.coins += G.coinsEarned;
@@ -842,7 +852,7 @@
       return;
     }
     if (r.status === 'fail') {
-      G.phase = 'fail'; G.failT = 0;
+      G.phase = 'fail'; G.failT = 0; Kit.stats.end('lose');
       SFX.foul();
       banner('لم تنجح!', r.reason, '#ff8a8a', 1.6);
       soClose(G.lv.targets);
@@ -850,7 +860,7 @@
     }
     // keep going
     var cue = P.ball(G.st, 0);
-    if (!cue.on) { G.phase = 'fail'; G.failT = 0; return; }
+    if (!cue.on) { G.phase = 'fail'; G.failT = 0; Kit.stats.end('lose'); return; }
     var left = G.lv.shots - G.prog.shotsUsed;
     if (shot.pots.length) float('رائع! ' + shotsLeftTxt(left), P.CX, P.CY + 60, '#fff', 30);
     else float(shotsLeftTxt(left), P.CX, P.CY + 60, '#ffd0e6', 30);
