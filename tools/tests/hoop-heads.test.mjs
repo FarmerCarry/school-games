@@ -52,7 +52,7 @@ async function hoop(t) {
     await document.fonts.ready;
     await new Promise(resolve => setTimeout(resolve, 50));
     const draw = HH.render;
-    HH.render = function () { hh.renders++; return draw.apply(this, arguments); };
+    HH.render = function (c, v, m, info) { hh.renders++; hh.info = info; return draw.apply(this, arguments); };
   });
   return page;
 }
@@ -158,17 +158,21 @@ test('Hoop Heads withdrawing from a cup after a win drops the old match', async 
   const result = await page.evaluate(() => {
     __game.tour(0, 0, 'robo');
     document.getElementById('ladGo').click(); __game.endNow(0); hh.untilResult();
+    // The won match keeps its own number behind the result and ladder, even after a redraw.
+    const hud = [hh.info.mode];
     document.getElementById('rAgain').click(); // the ladder, with the won match still behind it
     const ladder = __game.state;
+    document.getElementById('game').dispatchEvent(new Event('contextrestored')); hh.step(1);
+    hud.push(hh.info.tags[1]);
     document.getElementById('ladBack').click(); document.getElementById('cfYes').click();
     // A late redraw of the cups screen used to read the dropped tournament and throw.
     document.getElementById('game').dispatchEvent(new Event('contextrestored'));
     hh.renders = 0; hh.step(2);
     document.getElementById('cupsBack').click();
     const clock = __game.demo.clock; hh.step(2);
-    return { ladder, match: __game.match, renders: hh.renders, state: __game.state, demo: __game.demo.clock > clock };
+    return { hud, ladder, match: __game.match, renders: hh.renders, state: __game.state, demo: __game.demo.clock > clock };
   });
-  assert.deepEqual(result, { ladder: 'ladder', match: null, renders: 4, state: 'title', demo: true });
+  assert.deepEqual(result, { hud: ['الكأس البرونزية • المباراة 1 من 5', 'الخصم 1 من 5'], ladder: 'ladder', match: null, renders: 4, state: 'title', demo: true });
 });
 
 test('Hoop Heads draws a high ball over the scoreboard and skips the flash for reduced motion', async t => {
