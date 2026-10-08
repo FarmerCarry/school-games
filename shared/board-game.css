@@ -31,8 +31,7 @@ button:focus-visible { outline:3px solid #b7e8ff; outline-offset:4px; }
 .level-box { display:flex; flex-direction:column; gap:8px; margin-top:-8px; }
 .level-choices { display:flex; gap:6px; }
 .level-choices button { flex:1; min-height:38px; padding:4px; border:2px solid #3a4568; border-radius:11px; background:#232c4a; color:#d3d9ed; font-size:15px; font-weight:700; white-space:nowrap; }
-.level-choices button:not(:disabled):hover { border-color:#7584b8; }
-.level-choices button:disabled { opacity:.6; }
+.level-choices button:hover { border-color:#7584b8; }
 .level-choices [aria-pressed="true"] { background:var(--amber); border-color:var(--amber); color:#332608; }
 .level-choices .won::after { content:' ★'; color:#ffd75e; }
 .level-choices [aria-pressed="true"].won::after { color:#b86e00; }

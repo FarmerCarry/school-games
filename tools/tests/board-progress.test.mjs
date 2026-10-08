@@ -1,4 +1,4 @@
-// Browser checks for the board games' computer levels, level lock, session score,
+// Browser checks for the board games' computer levels, mid-round level choice, session score,
 // saved wins against the computer, win celebration and failed-save warning.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
@@ -167,25 +167,45 @@ test('a winning disc cut short by a hidden tab celebrates when the player comes 
   assert.equal(await page.locator('.confetti i').count(), 0, 'returning again does not repeat it');
 });
 
-test('the level changes only between rounds, never in the middle of one', async t => {
+test('a level picked mid-round starts with the next round and keeps the session score', async t => {
   const page = await openBoard(t, { init: () => { Math.random = () => 0.99; } });
   await page.locator('#pcButton').click();
   await play(page, [0]);
-  assert.equal(await page.locator('[data-level]:disabled').count(), 3, 'the level is locked once the player has moved');
-  assert.equal(await page.locator('#modeDescription').textContent(), 'أنهِ الجولة لتغيير المستوى.');
-  await page.locator('[data-level="hard"]').evaluate(button => { button.disabled = false; button.click(); });
-  assert.equal(await pressed(page), 'easy', 'a forced click is ignored too');
+  await page.locator('[data-level="hard"]').click();
+  assert.equal(await pressed(page), 'hard');
+  assert.equal((await saved(page)).level, 'hard');
+  assert.equal(await page.locator('#modeDescription').textContent(), 'المستوى الصعب يبدأ من الجولة التالية.');
   assert.equal(await page.locator('#gameBoard').getAttribute('data-moves'), '2', 'the round continues');
+  // The easy computer never blocks with this random value; the hard one would.
   await play(page, [1, 2]);
-  assert.equal(await page.locator('#gameBoard').getAttribute('data-winner'), '1');
-  assert.equal(await page.locator('[data-level]:disabled').count(), 0, 'a finished round unlocks the level');
+  assert.equal(await page.locator('#gameBoard').getAttribute('data-winner'), '1', 'the round finishes on easy');
+  assert.deepEqual((await saved(page)).wins, { easy: 1, medium: 0, hard: 0 }, 'the win counts for the level played');
   await page.locator('#rematchButton').click();
   await moves(page, 1);
-  assert.equal(await page.locator('[data-level]:disabled').count(), 0, 'the computer opening a round does not lock it');
+  assert.equal(await page.locator('#gameBoard [data-move="4"]').evaluate(cell => cell.classList.contains('two')), true, 'the hard computer opens in the centre');
+  assert.equal(await page.locator('#modeDescription').textContent(), 'اختر مستوى الكمبيوتر:');
   await page.locator('[data-level="medium"]').click();
   assert.equal(await pressed(page), 'medium');
   await moves(page, 0);
-  assert.equal(await page.locator('#score1').textContent(), '0', 'a new level starts a fresh match');
+  assert.equal(await page.locator('#score1').textContent(), '1', 'an untouched round restarts on the new level and keeps the score');
+});
+
+test('a level picked while the winning disc falls waits, so the win still celebrates', async t => {
+  const page = await openBoard(t, { game: 'connect-four', init: () => { Math.random = () => 0.99; } });
+  await page.locator('#pcButton').click();
+  await play(page, [0, 0, 0]);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await watchConfetti(page);
+  const falling = await page.evaluate(() => {
+    document.querySelector('#gameBoard [data-move="0"]').click();
+    document.querySelector('[data-level="medium"]').click();
+    return document.querySelectorAll('#gameBoard .dropping').length;
+  });
+  assert.equal(falling, 1, 'the level was picked mid-fall');
+  await page.waitForFunction(() => window.confettiSeen.pieces === 24);
+  assert.equal(await page.locator('#gameBoard').getAttribute('data-winner'), '1');
+  assert.equal(await pressed(page), 'medium');
+  assert.equal(await page.locator('#modeDescription').textContent(), 'المستوى المتوسط يبدأ من الجولة التالية.');
 });
 
 test('the failed-save warning leaves the match controls and turn line clear', async t => {
