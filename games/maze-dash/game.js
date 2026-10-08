@@ -415,6 +415,10 @@
     G.pal = WORLDS[wi];
     resetPlayer(r.L.start.x, r.L.start.y);
     G.firstMoveDone = false;
+    // Play statistics: every level try (play, retry, restart, next) is a round.
+    // Level 1's first-move arrows are the tutorial until level 1 is first won.
+    if (n === 1 && !save.lv[1]) Kit.stats.tutorial('start');
+    Kit.stats.round('L' + n);
     G.cam = camTarget();
     if (TIPS[n]) banner(TIPS[n], n === 1 ? 6 : 4.2);
     else banner(G.def.name, 2.2, '#fff');
@@ -438,6 +442,7 @@
     G.height = 0; G.maxHeight = 0; G.nextMilestone = 50;
     G.bestLine = save.bestH; G.beatBest = false; G.bonus = 0;
     G.firstMoveDone = false;
+    Kit.stats.round('endless');
     G.cam = camTarget();
     banner(save.runs < 2 ? 'اصعد بسرعة! الهلام يرتفع!' : 'انطلق!', 3);
     hideAll();
@@ -476,7 +481,11 @@
       P.bumpT = 0.12; P.sx = D.dx ? 0.85 : 1.1; P.sy = D.dy ? 0.85 : 1.1; sfx.bump();
       return;
     }
-    if (!G.firstMoveDone) { G.firstMoveDone = true; if (G.mode === 'endless') G.gooStarted = true; }
+    if (!G.firstMoveDone) {
+      G.firstMoveDone = true;
+      if (G.mode === 'endless') G.gooStarted = true;
+      else if (G.levelN === 1 && !save.lv[1]) Kit.stats.tutorial('done');
+    }
     if (G.world.tile(P.cx, P.cy) !== T.TRAP) { P.safeX = P.cx; P.safeY = P.cy; }
     P.dir = d; P.moving = true; P.buffer = -1;
     G.dotsInDash = 0;
@@ -1520,6 +1529,7 @@
     if (!prev.done && n % 10 === 0 && n < LEVELS.length) toast('فتحت عالمًا جديدًا: ' + WORLDS[n / 10].name + '!');
     $('win-kicker').textContent = 'المرحلة ' + n + ' · ' + G.def.name;
     var nStars = got.filter(Boolean).length;
+    Kit.stats.end('win', nStars);
     $('win-title').textContent = nStars === 3 ? 'مثالي!' : nStars === 2 ? 'رائع جدًا!' : nStars === 1 ? 'أحسنت!' : 'نجحت!';
     $('win-par-lbl').textContent = 'أسرع من ' + fmtTime(G.def.par);
     var starEls = document.querySelectorAll('#win-stars .md-star');
@@ -1560,11 +1570,13 @@
     var pct = G.dotsTotal ? Math.round(G.dotsGot / G.dotsTotal * 100) : 0;
     $('fail-sub').textContent = pct >= 60 ? 'كدت تنجح! جمعت ' + pct + '% من النقاط.' : 'لا بأس! كل بطل يتعثر أحيانًا.';
     sfx.lose();
+    Kit.stats.end('lose');
     showScreen('fail');
     G.resultLock = 0.5;
   }
   function showOver() {
     var score = scoreNow();
+    Kit.stats.end('end', score);
     var isBest = score > save.bestScore;
     var hBefore = save.bestH;
     save.runs++;

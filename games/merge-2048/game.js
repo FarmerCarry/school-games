@@ -588,6 +588,9 @@
     G.dead = !G.board.canMove(); G.deadAt = now + 0.3;
     G.winPending = G.won && !G.keep; G.maxT = G.board.maxTile(); G.newBest = G.startBest > 0 && G.score > G.startBest;
     G.shownScore = G.score;
+    // Play statistics: a new or resumed board is a round 's'+N; it ends with
+    // 'win' at the first goal tile, else at game over ('end' after a win).
+    Kit.stats.round('s' + N);
     setScreen('play');
     refreshHUD(true);
     saveGame();
@@ -646,6 +649,7 @@
     }
     if (mx >= WIN[N] && !G.won) {
       G.won = true; G.winPending = true;
+      Kit.stats.end('win', G.score);
       later(0.45, showWin);
     }
     if (!b.canMove()) markDead();
@@ -757,6 +761,7 @@
 
   function showOver() {
     var N = G.N;
+    Kit.stats.end(G.won ? 'end' : 'lose', G.score);
     setScreen('over');
     $('overScore').textContent = Kit.fmt(G.score);
     $('overBestVal').textContent = Kit.fmt(save.best[N]);
