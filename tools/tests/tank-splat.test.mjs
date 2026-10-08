@@ -170,35 +170,47 @@ test('reduced motion stops the screen shake and decorative motion', async t => {
     const name = __game.app.game.tanks[0].name + '@';
     const tags = () => { runtime.textYs.length = 0; runtime.draw(1); return runtime.textYs.filter(e => e.startsWith(name)).join(); };
     const before = tags(); runtime.step(0.25);
-    // splatted tanks' spiral eyes stop turning
-    const eyes = t => {
+    // splatted tanks' spiral eyes, the flower, propeller and antenna hats and the shield's pulse stop
+    const tank = (t, o) => {
       const cv = document.createElement('canvas'); cv.width = cv.height = 80;
-      TS_ART.drawTank(cv.getContext('2d'), { x: 40, y: 40, a: 0, pal: TS_ART.PAL[1], t, dead: 1 });
+      TS_ART.drawTank(cv.getContext('2d'), Object.assign({ x: 40, y: 50, a: 0, pal: TS_ART.PAL[1], t }, o));
       return cv.toDataURL();
     };
-    const still = eyes(0) === eyes(0.4);
-    Kit.motion.setPreference('full'); const turning = eyes(0) !== eyes(0.4); Kit.motion.setPreference('reduce');
+    const moving = () => [{ dead: 1 }, { hat: 4 }, { hat: 5 }, { hat: 6 }, { shield: 5 }].map(o => tank(0, o) !== tank(0.2, o));
+    const still = moving();
+    Kit.motion.setPreference('full'); const turning = moving(); Kit.motion.setPreference('reduce');
     return [before === tags(), still, turning];
-  }), [true, true, true]);
+  }), [true, [false, false, false, false, false], [true, true, true, true, true]]);
   await startQuietStage(page, 0);
+  // the maze tanks' routine blink: [tanks drawn, any drawn blinking]
+  const blinking = () => page.evaluate(() => {
+    const drawTank = TS_ART.drawTank, seen = [];
+    TS_ART.drawTank = (c, o) => { seen.push(!!o.blink); return drawTank(c, o); };
+    __game.app.game.tanks.forEach(t => { t.blink = 0.1; }); runtime.draw(1);
+    TS_ART.drawTank = drawTank;
+    return [seen.length > 1, seen.includes(true)];
+  });
   assert.deepEqual(await page.evaluate(() => {
     const g = __game.app.game; g.shakeP = 13; runtime.step(0.05); runtime.draw(1); return [g.shakeP, g.shx, g.shy, runtime.dashOffset];
   }), [0, 0, 0, 0]);
+  assert.deepEqual(await blinking(), [true, false], 'maze tanks hold their eyes open');
   assert.deepEqual(await page.evaluate(() => {
     Kit.motion.setPreference('full');
     const g = __game.app.game; g.shakeP = 13; runtime.step(1 / 60); runtime.draw(1); return [g.shakeP > 0, runtime.dashOffset < 0];
   }), [true, true], 'shake and marching guide dots return with full motion');
+  assert.deepEqual(await blinking(), [true, true], 'blinks return with full motion');
 
-  // The result screen's winner tank neither drops in nor hops.
+  // The result screen's winner tank neither drops in, hops nor blinks.
   await page.evaluate(() => Kit.motion.setPreference('reduce'));
   assert.deepEqual(await page.evaluate(() => {
     const drawTank = TS_ART.drawTank, ys = [];
-    TS_ART.drawTank = (c, o) => { if (o.scale === 2.5) ys.push(o.y); return drawTank(c, o); };
+    TS_ART.drawTank = (c, o) => { if (o.scale === 2.5) ys.push(o.y, !!o.blink); return drawTank(c, o); };
     for (let n = 0; n < 60 && __game.app.screen !== 'result'; n++) { __game.winRound(); runtime.step(0.5); }
-    runtime.draw(1); runtime.step(0.3); runtime.draw(1);
+    // first frames (drop-in, hop), then a blink moment (resT a multiple of 3)
+    runtime.draw(1); runtime.step(0.3); runtime.draw(1); __game.app.resT = 3; runtime.draw(1);
     TS_ART.drawTank = drawTank;
     return [__game.app.screen, ys];
-  }), ['result', [250, 250]]);
+  }), ['result', [250, false, 250, false, 250, false]]);
 });
 
 test('wall highlights stay unbroken where walls meet', async t => {
