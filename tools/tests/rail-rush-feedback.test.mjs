@@ -101,6 +101,12 @@ test('Rail Rush keeps pop-ups readable under reduced motion and skips confetti',
   assert.equal((await popState(page)).opacity, '1', 'still readable after one second');
   await page.evaluate(() => rr.step(30));
   assert.deepEqual(await popState(page), { text: 'انتبه!', show: false, opacity: '0', animation: 'none' });
+  // pausing clears a still pop-up rather than leaving it up behind the pause panel
+  await page.evaluate(() => { __game.power('board'); __game.god = false; __game.crash(); __game.god = true; });
+  assert.equal((await popState(page)).show, true);
+  await page.evaluate(() => document.getElementById('pauseBtn').click());
+  assert.equal(await page.evaluate(() => __game.state.mode), 'paused');
+  assert.deepEqual(await popState(page), { text: 'اللوح أنقذك!', show: false, opacity: '0', animation: 'none' });
 });
 
 test('Rail Rush animates pop-ups and confetti with full motion, then hides the overlays', async t => {
@@ -138,6 +144,36 @@ test('Rail Rush reports a failed save and clears the warning after a retry', asy
   await page.reload();
   await page.waitForFunction(() => window.__game);
   assert.equal(await page.evaluate(() => __game.save.coins), 500);
+});
+
+test('Rail Rush keeps the save warning clear of the title how-to box and the run hint', async t => {
+  // reduced motion: the hint is measured at its resting size, not mid-animation
+  const page = await railRush(t, { reducedMotion: 'reduce' });
+  // the full warning, then the badge it folds into after 6 s (a real-time timer, so set here)
+  const clashes = sels => page.evaluate(sels => {
+    const panel = document.querySelector('.sg-save-status'), out = [];
+    for (const compact of ['false', 'true']) {
+      panel.dataset.compact = compact;
+      const a = panel.getBoundingClientRect();
+      for (const s of sels) {
+        const b = document.querySelector(s).getBoundingClientRect();
+        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) out.push(s + (compact === 'true' ? ' (badge)' : ''));
+      }
+    }
+    return out;
+  }, sels);
+  await page.evaluate(() => { rr.failSave = true; __game.give(1); });
+  assert.deepEqual(await clashes(['.title-left', '.howto-box', '.peek']), [], 'title screen');
+  const hinted = await page.evaluate(() => {
+    __game.god = true; __game.restart(); __game.skip(70);
+    const lane = __game.near('train').lane;
+    if (lane !== 0) __game.act(lane < 0 ? 'left' : 'right');
+    const hint = document.getElementById('hint');
+    for (let i = 0; i < 40 && hint.hidden; i++) rr.step(6);
+    return !hint.hidden;
+  });
+  assert.ok(hinted, 'the change-lane hint is showing');
+  assert.deepEqual(await clashes(['#hint', '.hud-score', '#coinBox']), [], 'run');
 });
 
 test('Rail Rush shows the change-lane hint only when the first train blocks the runner', async t => {
