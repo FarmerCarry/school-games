@@ -28,7 +28,7 @@ async function game(t, entries = {}) {
   await page.addInitScript(entries => {
     for (const [key, value] of Object.entries(entries)) localStorage.setItem('sg:tank-splat:' + key, JSON.stringify(value));
     let kit, update, render;
-    const runtime = window.runtime = { failKeys: [], layerDraws: 0, texts: [], dashes: 0, dashPath: [], dashOffset: null };
+    const runtime = window.runtime = { failKeys: [], layerDraws: 0, texts: [], textYs: [], dashes: 0, dashPath: [], dashOffset: null };
     runtime.step = seconds => { for (let i = 0; i < Math.round(seconds * 60); i++) update(1 / 60); };
     runtime.draw = count => { for (let i = 0; i < count; i++) render(0); };
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
@@ -47,8 +47,8 @@ async function game(t, entries = {}) {
       if (this.canvas.id === 'cv' && img instanceof HTMLCanvasElement) runtime.layerDraws++;
       return drawImage.apply(this, arguments);
     };
-    proto.fillText = function (text) {
-      if (this.canvas.id === 'cv') runtime.texts.push(text);
+    proto.fillText = function (text, x, y) {
+      if (this.canvas.id === 'cv') { runtime.texts.push(text); runtime.textYs.push(text + '@' + y); }
       return fillText.apply(this, arguments);
     };
     // Records the points of the last dashed (guide or laser) path on the game canvas.
@@ -109,19 +109,30 @@ test('the first two stages show an aim guide and explain a self-splat', async t 
   await startQuietStage(page, 0);
   assert.equal(await page.evaluate(() => __game.app.game.guide), true);
   assert.ok(await page.evaluate(() => { runtime.dashes = 0; runtime.draw(1); return runtime.dashes; }) > 0, 'guide line drawn');
-  // A shot straight at a wall comes back 10 px beside the way out instead of hidden under it.
+  // A shot straight at a wall comes back 10 px beside the way out instead of hidden under it. With the
+  // nose at the wall that bounce is under the tank, so an arrow on the wall points back at it instead.
   assert.deepEqual(await page.evaluate(() => {
-    const g = __game.app.game, m = g.maze, t = g.tanks[0];
-    for (let cell = 0; cell < m.cols * m.rows; cell++) for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
-      const c = TS_MAZE.cellCenter(m, cell), hit = TS_MAZE.raycast(m, c.x, c.y, Math.cos(a), Math.sin(a), 7, 1000);
-      if (!hit || hit.t < 60 || hit.t > 240) continue;
-      t.x = c.x; t.y = c.y; t.a = a; runtime.draw(1);
-      const end = runtime.dashPath[runtime.dashPath.length - 1], headOn = runtime.dashPath.length;
-      const side = Math.abs((end[0] - t.x) * Math.sin(a) - (end[1] - t.y) * Math.cos(a));
-      t.a = a + 0.5; runtime.draw(1);
-      return [headOn, Math.round(side), runtime.dashPath.length <= 2];
+    const g = __game.app.game, m = g.maze, t = g.tanks[0], home = [t.x, t.y, t.a], drawBounce = TS_ART.drawBounce, marks = [];
+    TS_ART.drawBounce = (...args) => { marks.push(args.slice(1, 3)); return drawBounce(...args); };
+    try {
+      for (let cell = 0; cell < m.cols * m.rows; cell++) for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+        const c = TS_MAZE.cellCenter(m, cell), ux = Math.cos(a), uy = Math.sin(a), hit = TS_MAZE.raycast(m, c.x, c.y, ux, uy, 7, 1000);
+        const d = hit && hit.t; // copied: raycast reuses its result object
+        if (!d || d < 60 || d > 240) continue;
+        t.x = c.x; t.y = c.y; t.a = a; runtime.draw(1);
+        const end = runtime.dashPath[runtime.dashPath.length - 1], headOn = runtime.dashPath.length;
+        const side = Math.abs((end[0] - t.x) * uy - (end[1] - t.y) * ux), marked = marks.length;
+        t.a = a + 0.5; runtime.draw(1);
+        const angled = runtime.dashPath.length <= 2 && marks.length === 0;
+        t.x = c.x + ux * (d - 12); t.y = c.y + uy * (d - 12); t.a = a; runtime.draw(1);
+        const mark = marks[marks.length - 1], wall = mark && Math.round(Math.hypot(mark[0] - (t.x + ux * 19), mark[1] - (t.y + uy * 19)));
+        return [headOn, Math.round(side), marked, angled, marks.length, wall];
+      }
+    } finally {
+      // the self-splat check below needs the tank back at its spawn, away from the bot
+      TS_ART.drawBounce = drawBounce; [t.x, t.y, t.a] = home;
     }
-  }), [3, 10, true]);
+  }), [3, 10, 0, true, 1, 0]);
 
   // The player's own ball comes back at them.
   await page.evaluate(() => {
@@ -153,6 +164,22 @@ test('the first two stages show an aim guide and explain a self-splat', async t 
 test('reduced motion stops the screen shake and decorative motion', async t => {
   const page = await game(t);
   await page.evaluate(() => Kit.motion.setPreference('reduce'));
+  assert.deepEqual(await page.evaluate(() => {
+    // countdown name tags stay put
+    __game.start(0);
+    const name = __game.app.game.tanks[0].name + '@';
+    const tags = () => { runtime.textYs.length = 0; runtime.draw(1); return runtime.textYs.filter(e => e.startsWith(name)).join(); };
+    const before = tags(); runtime.step(0.25);
+    // splatted tanks' spiral eyes stop turning
+    const eyes = t => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 80;
+      TS_ART.drawTank(cv.getContext('2d'), { x: 40, y: 40, a: 0, pal: TS_ART.PAL[1], t, dead: 1 });
+      return cv.toDataURL();
+    };
+    const still = eyes(0) === eyes(0.4);
+    Kit.motion.setPreference('full'); const turning = eyes(0) !== eyes(0.4); Kit.motion.setPreference('reduce');
+    return [before === tags(), still, turning];
+  }), [true, true, true]);
   await startQuietStage(page, 0);
   assert.deepEqual(await page.evaluate(() => {
     const g = __game.app.game; g.shakeP = 13; runtime.step(0.05); runtime.draw(1); return [g.shakeP, g.shx, g.shy, runtime.dashOffset];
@@ -176,20 +203,26 @@ test('reduced motion stops the screen shake and decorative motion', async t => {
 
 test('wall highlights stay unbroken where walls meet', async t => {
   const page = await game(t);
-  // 2x2 maze: a wall from the left border ends where a wall down to the bottom starts.
   const px = await page.evaluate(() => {
-    const m = { cols: 2, rows: 2, cs: 60, ox: 20, oy: 20, T: 10, h: [[1, 1], [1, 0], [1, 1]], v: [[1, 0, 1], [1, 1, 1]], rects: [
-      { x1: 15, x2: 145, y1: 15, y2: 25 }, { x1: 15, x2: 85, y1: 75, y2: 85 }, { x1: 15, x2: 145, y1: 135, y2: 145 },
-      { x1: 15, x2: 25, y1: 15, y2: 145 }, { x1: 75, x2: 85, y1: 75, y2: 145 }, { x1: 135, x2: 145, y1: 15, y2: 145 }] };
-    const cv = document.createElement('canvas'); cv.width = cv.height = 160;
-    const c = cv.getContext('2d'), th = TS_ART.THEMES[0];
-    TS_ART.drawWalls(c, m, th, false);
-    const at = (x, y) => { const d = c.getImageData(x, y, 1, 1).data; return '#' + [d[0], d[1], d[2]].map(n => n.toString(16).padStart(2, '0')).join(''); };
-    const name = col => col === th.wtop ? 'light' : col === th.wall ? 'top' : col;
-    return [at(18, 80), at(22, 78), at(78, 82), at(78, 100)].map(name);
+    const th = TS_ART.THEMES[0], name = col => col === th.wtop ? 'light' : col === th.wall ? 'top' : col;
+    const walls = (h, v, rects, points) => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 160;
+      const c = cv.getContext('2d');
+      TS_ART.drawWalls(c, { cols: 2, rows: 2, cs: 60, ox: 20, oy: 20, T: 10, h, v, rects }, th, false);
+      return points.map(([x, y]) => name('#' + [...c.getImageData(x, y, 1, 1).data.slice(0, 3)].map(n => n.toString(16).padStart(2, '0')).join('')));
+    };
+    const border = [{ x1: 15, x2: 145, y1: 15, y2: 25 }, { x1: 15, x2: 145, y1: 135, y2: 145 }, { x1: 15, x2: 25, y1: 15, y2: 145 }, { x1: 135, x2: 145, y1: 15, y2: 145 }];
+    return [
+      // 2x2 maze: a wall from the left border ends where a wall down to the bottom starts
+      walls([[1, 1], [1, 0], [1, 1]], [[1, 0, 1], [1, 1, 1]], border.concat({ x1: 15, x2: 85, y1: 75, y2: 85 }, { x1: 75, x2: 85, y1: 75, y2: 145 }),
+        [[18, 80], [22, 78], [78, 82], [78, 100]]),
+      // a '+' in the middle: the cross wall's light runs through, the up-down wall's stops above it and starts again past it
+      walls([[1, 1], [1, 1], [1, 1]], [[1, 1, 1], [1, 1, 1]], border.concat({ x1: 15, x2: 145, y1: 75, y2: 85 }, { x1: 75, x2: 85, y1: 15, y2: 145 }),
+        [[78, 60], [78, 78], [70, 78], [100, 78], [78, 83], [78, 90]])
+    ];
   });
   // left border light through the joint; the joining walls' light starts past it
-  assert.deepEqual(px, ['light', 'top', 'top', 'light']);
+  assert.deepEqual(px, [['light', 'top', 'top', 'light'], ['light', 'light', 'light', 'light', 'top', 'light']]);
 });
 
 test('floor decorations are themed and identical when redrawn', async t => {
