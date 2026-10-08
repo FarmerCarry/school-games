@@ -94,7 +94,9 @@ test('Block World tells the player which hotbar slot holds the item a place ques
   const result = await page.evaluate(() => {
     const G = __game.G, P = __game.player, B = BW.B;
     const press = code => { window.dispatchEvent(new KeyboardEvent('keydown', { code })); stepGame(); window.dispatchEvent(new KeyboardEvent('keyup', { code })); };
-    const slotDown = el => el.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+    const slotDown = (el, shiftKey = false) => el.dispatchEvent(new MouseEvent('mousedown', { button: 0, shiftKey, bubbles: true }));
+    const slotUp = el => el.dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true }));
+    const state = () => ({ cursor: G.cursor && G.cursor.id, table: G.inv[1] && G.inv[1].id === B.TABLE, marks: document.querySelectorAll('.qslot').length, drop: hot.classList.contains('qdrop'), tip: hotTip.textContent });
     const bag = document.getElementById('bag'), hot = document.getElementById('hot'), hotTip = document.getElementById('hotTip');
     ['logs', 'planks', 'table'].forEach(id => { G.done[id] = true; });
     // A full hotbar sends the crafted table to the backpack (slot 10).
@@ -110,8 +112,19 @@ test('Block World tells the player which hotbar slot holds the item a place ques
     // The backpack marks the table and says to move it to the hotbar, until it is there.
     press('KeyE');
     const inBag = { mode: G.mode, marked: bag.children[0].classList.contains('qslot'), tip: hotTip.textContent };
-    slotDown(bag.children[0]); slotDown(hot.children[1]);
-    const moved = { table: G.inv[1] && G.inv[1].id === B.TABLE, marks: document.querySelectorAll('.qslot').length, tip: hotTip.textContent };
+    // Click, click: while the table is held (a press and release on its own slot keeps it held),
+    // the note stays and the hotbar is marked; clicking hotbar slot 2 swaps it with the logs there.
+    slotDown(bag.children[0]); slotUp(bag.children[0]);
+    const held = state();
+    slotDown(hot.children[1]); slotUp(hot.children[1]);
+    const moved = state();
+    // Put the logs down, send the table back to the backpack (Shift+click) and drag it instead:
+    // a press on its slot released over hotbar slot 2 puts it there.
+    slotDown(bag.children[0]); slotUp(bag.children[0]);
+    slotDown(hot.children[1], true);
+    const backInBag = { marked: bag.children[1].classList.contains('qslot'), tip: hotTip.textContent };
+    slotDown(bag.children[1]); slotUp(hot.children[1]);
+    const dragged = state();
     press('KeyE');
     G.hint = null;
     // Right-clicking a spot where the selected logs cannot go names the slot to press.
@@ -119,14 +132,21 @@ test('Block World tells the player which hotbar slot holds the item a place ques
     const hint = G.hint && G.hint.s;
     press('Digit2');
     clickAt(px + 2.5, ground - 0.5, 2, 2);
-    return { bagHint, inBag, moved, hint, sel: G.sel, placed: G.stats.placed[B.TABLE] || 0 };
+    return { ids: { table: B.TABLE, log: B.LOG }, bagHint, inBag, held, moved, backInBag, dragged, hint, sel: G.sel, placed: G.stats.placed[B.TABLE] || 0 };
   });
   assert.match(result.bagHint, /الحقيبة/);
   assert.match(result.bagHint, /طاولة الصنع/);
   assert.equal(result.inBag.mode, 'inv');
   assert.equal(result.inBag.marked, true);
-  assert.match(result.inBag.tip, /طاولة الصنع/);
-  assert.deepEqual(result.moved, { table: true, marks: 0, tip: '' });
+  assert.match(result.inBag.tip, /انقر على طاولة الصنع ثم/);
+  assert.equal(result.held.cursor, result.ids.table);
+  assert.equal(result.held.marks, 0);
+  assert.equal(result.held.drop, true);
+  assert.match(result.held.tip, /انقر على خانة هنا لتضع طاولة الصنع/);
+  assert.deepEqual(result.moved, { cursor: result.ids.log, table: true, marks: 0, drop: false, tip: '' });
+  assert.equal(result.backInBag.marked, true);
+  assert.match(result.backInBag.tip, /طاولة الصنع/);
+  assert.deepEqual(result.dragged, { cursor: null, table: true, marks: 0, drop: false, tip: '' });
   assert.match(result.hint, /طاولة الصنع/);
   assert.match(result.hint, /2/);
   assert.equal(result.sel, 1);
@@ -147,10 +167,11 @@ test('Block World redraws a kept pause frame when reduced motion clears its conf
     stepGame(30);
     for (let i = 0; i < 20; i++) __game.render();
     n = 0; __game.render();
-    const settled = n;
+    const settled = n, live = __game.confettiCount;
     Kit.motion.setPreference('reduce');
     n = 0; __game.render();
-    return { settled, reduced: n };
+    return { settled, live, reduced: n, left: __game.confettiCount };
   });
-  assert.deepEqual(paints, { settled: 0, reduced: 1 });
+  assert.ok(paints.live > 0, 'confetti should still be falling when reduced motion is switched on');
+  assert.deepEqual({ settled: paints.settled, reduced: paints.reduced, left: paints.left }, { settled: 0, reduced: 1, left: 0 });
 });

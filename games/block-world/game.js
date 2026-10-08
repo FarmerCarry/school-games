@@ -680,7 +680,7 @@
         placeCD = M.rp ? 0.28 : 0.13;
         if (!ok && M.rp) {
           var s = G.inv[G.sel], qs = questPlaceSlot();
-          if (qs >= 9) tip('افتح الحقيبة (E) واسحب ' + BW.itemName(G.inv[qs].id) + ' إلى الشريط السريع');
+          if (qs >= 9) tip('افتح الحقيبة (E) وانقل ' + BW.itemName(G.inv[qs].id) + ' إلى الشريط السريع');
           else if (qs >= 0) tip('اختر ' + BW.itemName(G.inv[qs].id) + ' بالضغط على ' + ltr(String(qs + 1)) + ' ثم انقر يمينًا');
           else if (s && ITEMS[s.id] && !ITEMS[s.id].place) tip(ITEMS[s.id].tool ? 'المعول يعمل وحده - اضغط مطوّلًا بالزر الأيسر لتحفر!' : 'لا يمكنك وضع ' + ITEMS[s.id].name + ' - استعمله في الصنع (E)');
         }
@@ -1120,10 +1120,11 @@
   }
   // Quests that are finished by placing something: which item has to be selected first.
   var QUEST_PLACE = { tableplace: B.TABLE, torchplace: B.TORCH, sapling: B.SAPLING, door: I.DOOR };
+  function questPlaceItem() { var q = G.gm === 'survival' && currentQuest(); return (q && QUEST_PLACE[q.id]) || 0; }
   // Slot holding the current place quest's item while another slot is selected, else -1. Hotbar
   // slots (0-8) come first; 9-35 means it is still in the backpack (a full hotbar).
   function questPlaceSlot() {
-    var q = G.gm === 'survival' && currentQuest(), id = q && QUEST_PLACE[q.id], cur = G.inv[G.sel];
+    var id = questPlaceItem(), cur = G.inv[G.sel];
     if (!id || (cur && cur.id === id)) return -1;
     for (var i = 0; i < 36; i++) if (G.inv[i] && G.inv[i].id === id) return i;
     return -1;
@@ -1618,12 +1619,24 @@
   // ----- inventory
   var invDirty = true;
   var bagEl = $('bag'), hotEl = $('hot'), palEl = $('palette'), craftEl = $('craftList'), curEl = $('cursorStack');
-  var slotEls = [];
+  var slotEls = [], pressFrom = -1;
   function mkSlot(i) {
     var d = document.createElement('div');
     d.className = 'islot';
     d.innerHTML = '<img draggable="false"><span></span>';
-    d.addEventListener('mousedown', function (e) { e.preventDefault(); slotClick(i, e); });
+    d.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      var held = G.cursor;
+      slotClick(i, e);
+      pressFrom = e.button === 0 && !held && G.cursor ? i : -1;
+    });
+    // Children often drag: a press that picks a stack up and is released over another slot
+    // puts it there, just like the second click would.
+    d.addEventListener('mouseup', function (e) {
+      var from = pressFrom;
+      pressFrom = -1;
+      if (e.button === 0 && from >= 0 && from !== i && G.cursor && G.mode === 'inv') slotClick(i, e);
+    });
     d.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     slotEls[i] = d;
     return d;
@@ -1695,11 +1708,16 @@
     K.reset(); M.left = M.right = false;
   }
   $('invClose').onclick = closeInv;
+  window.addEventListener('mouseup', function () { pressFrom = -1; });
   function renderInv() {
     invDirty = false;
-    // A place quest's item still in the backpack: mark it and say where it has to go.
-    var qs = questPlaceSlot();
-    $('hotTip').textContent = qs >= 9 ? '★ اسحب ' + BW.itemName(G.inv[qs].id) + ' إلى هنا' : '';
+    // A place quest's item still in the backpack: mark it and say how to bring it to the hotbar,
+    // also while it is held on the cursor (picked up, not put down yet; a saved cursor too).
+    var qid = questPlaceItem(), qs = questPlaceSlot(), c = G.cursor, cur = G.inv[G.sel];
+    var inHot = (qs >= 0 && qs < 9) || (qid && cur && cur.id === qid), held = qid && c && c.id === qid && !inHot;
+    if (held) qs = -1;
+    $('hotTip').textContent = held ? '★ انقر على خانة هنا لتضع ' + BW.itemName(qid) : qs >= 9 ? '★ انقر على ' + BW.itemName(G.inv[qs].id) + ' ثم على خانة هنا' : '';
+    hotEl.classList.toggle('qdrop', !!held);
     for (var i = 0; i < 36; i++) {
       var el = slotEls[i], s = G.inv[i], img = el.firstChild, sp = el.lastChild;
       var src = s ? BW.iconURL(s.id) : '';
@@ -1830,6 +1848,7 @@
     craftId: function (id, n) { var r = BW.RECIPES.filter(function (r) { return r.out === id; })[0]; return r ? craft(r, n || 1) : 0; },
     surfaceY: surfaceY,
     get guide() { return guide; },
+    get confettiCount() { return confetti.length; },
     render: function () { render(); }, update: function (dt) { update(dt || 1 / 60); },
     B: B, I: I, sfx: SND
   };
