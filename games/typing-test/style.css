@@ -123,11 +123,14 @@ body.warnOn #hint { visibility: hidden; } /* the toast banner covers the live ro
 #race::before, #race .fill { content: ''; position: absolute; inset-inline: 0.8rem; top: 0.95rem; height: 0.3rem; border-radius: 0.15rem; background: var(--bg3); }
 #race .fill { background: var(--main); opacity: 0.6; transform: scaleX(var(--p)); transform-origin: var(--o); transition: transform 0.9s linear; }
 #race i { position: absolute; top: 0; width: 1.6rem; text-align: center; font-style: normal; }
-#race .ms { inset-inline-start: calc(var(--p) * (100% - 1.6rem)); filter: grayscale(1); opacity: 0.55; }
-#race .ms.on { filter: none; opacity: 1; }
+/* game.js delays a mark's light-up and pop until the gliding ⚡ reaches it. Lit marks also glow,
+   since the white 🐇 looks almost the same in grey. */
+#race .ms { inset-inline-start: calc(var(--p) * (100% - 1.6rem)); filter: grayscale(1); opacity: 0.55; transition: filter 0.2s, opacity 0.2s, text-shadow 0.2s; }
+#race .ms.on { filter: none; opacity: 1; text-shadow: 0 0 0.45rem rgba(255, 196, 0, 0.95); }
 #race .ms.hit { animation: msPop 0.5s cubic-bezier(.2, 1.8, .4, 1); }
 #race .pbf { top: -0.55rem; font-size: 1.1rem; filter: none; opacity: 0.8; } /* the flag stands above the track */
-@keyframes msPop { 40% { transform: scale(1.7); } }
+#live[dir="ltr"] #race .lf { transform: scaleX(-1); } /* left-facing emoji animals: turn them to run left-to-right */
+@keyframes msPop { 40% { scale: 1.7; } } /* `scale`, so the pop keeps the mirroring transform */
 #race .run { position: absolute; inset: 0; inset-inline-end: 1.6rem; z-index: 1; transform: translateX(calc(var(--p) * var(--d) * 100%)); transition: transform 0.9s linear; }
 #race .run i { inset-inline-start: 0; font-size: 1.6rem; text-shadow: 0 0 0.5rem rgba(255, 196, 0, 0.7); }
 
@@ -250,9 +253,11 @@ body.challenge #warn { top: 2.9rem; } /* below the challenge chip, never over it
 .badge .be { font-size: 3.4rem; line-height: 1; animation: badgeIn 0.7s cubic-bezier(.2, 1.8, .4, 1); }
 .badge b { display: block; font-size: 1.45rem; color: var(--text); }
 .badge small { display: block; color: var(--sub); font-size: 0.95rem; margin-top: 0.15rem; }
-.badge.up { box-shadow: inset 0 0 0 0.15rem var(--main); animation: pbGlow 1.2s ease-in-out 3; } /* a new animal */
+.badge.up { box-shadow: inset 0 0 0 0.15rem var(--main); animation: upGlow 1.2s ease-in-out 3; } /* a new animal */
 .badge.up b { color: var(--main); }
 @keyframes badgeIn { from { transform: scale(0) rotate(-40deg); } to { transform: none; } }
+/* pbGlow's outer glow alone can't blend with the inset ring (they'd swap, not pulse): keep both */
+@keyframes upGlow { 50% { transform: scale(1.04); box-shadow: inset 0 0 0 0.15rem var(--main), 0 0 2rem rgba(255, 196, 0, 0.6); } }
 .pb { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; background: var(--bg2); border-radius: 1rem; padding: 0.5rem 1rem; font-size: 1.15rem; font-weight: 600; color: var(--sub); }
 .pb.new { background: var(--main); color: var(--main-ink); font-size: 1.5rem; font-weight: 700; animation: pbGlow 1.2s ease-in-out 3; }
 .pb .warn { color: var(--err); }
@@ -282,6 +287,12 @@ body.challenge #warn { top: 2.9rem; } /* below the challenge chip, never over it
 #progMini:hover { background: var(--bg2); color: var(--text); }
 #spark { width: 8rem; height: 2rem; display: block; }
 .hints { display: flex; gap: 1.2rem; }
+/* The shared save warning, sized in rem like the page, so at 1100×620 it fits between the key hints
+   and the progress text instead of covering the Tab hint; folded, it stays there (the corners hold
+   the Alt+Shift hint and the progress line). */
+html .sg-save-status { bottom: 0.7rem; padding: 0.35rem 0.9rem; border-radius: 0.7rem; font-size: 1.05rem; }
+html .sg-save-status button { padding: 0.2rem 0.6rem; border-radius: 0.5rem; }
+html .sg-save-status[data-compact="true"] { inset-inline: 0; margin-inline: auto; }
 
 /* ------------------------------------------------------------- modals */
 .modal { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(10, 11, 14, 0.62); animation: fade 0.18s ease-out; }
