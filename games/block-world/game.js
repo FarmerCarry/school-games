@@ -237,7 +237,8 @@
     for (var i = 0; i < 90; i++) confetti.push({ x: VW / 2 + (Math.random() - 0.5) * 300, y: 120, vx: (Math.random() - 0.5) * 700, vy: -200 - Math.random() * 400, r: Math.random() * 6, vr: (Math.random() - 0.5) * 12, col: cols[i % cols.length], life: 2.5 + Math.random() });
     if (confetti.length > 240) confetti.splice(0, confetti.length - 240);
   }
-  Kit.motion.onChange(function (reduced) { if (reduced) confetti.length = 0; });
+  // Also redraw a kept pause/menu frame, which could otherwise go on showing frozen confetti.
+  Kit.motion.onChange(function (reduced) { if (reduced) { confetti.length = 0; renderDirty = true; } });
 
   // -------------------------------------------------------------- physics
   function makeBody(x, y, w, h) { return { x: x, y: y, w: w, h: h, vx: 0, vy: 0, onGround: false, stepOff: 0 }; }
@@ -679,7 +680,8 @@
         placeCD = M.rp ? 0.28 : 0.13;
         if (!ok && M.rp) {
           var s = G.inv[G.sel], qs = questPlaceSlot();
-          if (qs >= 0) tip('اختر ' + BW.itemName(G.inv[qs].id) + ' بالضغط على ' + ltr(String(qs + 1)) + ' ثم انقر يمينًا');
+          if (qs >= 9) tip('افتح الحقيبة (E) وانقل ' + BW.itemName(G.inv[qs].id) + ' إلى الشريط السريع');
+          else if (qs >= 0) tip('اختر ' + BW.itemName(G.inv[qs].id) + ' بالضغط على ' + ltr(String(qs + 1)) + ' ثم انقر يمينًا');
           else if (s && ITEMS[s.id] && !ITEMS[s.id].place) tip(ITEMS[s.id].tool ? 'المعول يعمل وحده - اضغط مطوّلًا بالزر الأيسر لتحفر!' : 'لا يمكنك وضع ' + ITEMS[s.id].name + ' - استعمله في الصنع (E)');
         }
       }
@@ -1118,11 +1120,13 @@
   }
   // Quests that are finished by placing something: which item has to be selected first.
   var QUEST_PLACE = { tableplace: B.TABLE, torchplace: B.TORCH, sapling: B.SAPLING, door: I.DOOR };
-  // Hotbar slot holding the current place quest's item while another slot is selected, else -1.
+  function questPlaceItem() { var q = G.gm === 'survival' && currentQuest(); return (q && QUEST_PLACE[q.id]) || 0; }
+  // Slot holding the current place quest's item while another slot is selected, else -1. Hotbar
+  // slots (0-8) come first; 9-35 means it is still in the backpack (a full hotbar).
   function questPlaceSlot() {
-    var q = G.gm === 'survival' && G.mode === 'play' && currentQuest(), id = q && QUEST_PLACE[q.id], cur = G.inv[G.sel];
+    var id = questPlaceItem(), cur = G.inv[G.sel];
     if (!id || (cur && cur.id === id)) return -1;
-    for (var i = 0; i < 9; i++) if (G.inv[i] && G.inv[i].id === id) return i;
+    for (var i = 0; i < 36; i++) if (G.inv[i] && G.inv[i].id === id) return i;
     return -1;
   }
   function updateGuide() {
@@ -1146,8 +1150,9 @@
     if (!guide || G.mode !== 'play' || mine.prog > 0) return;
     var t = G.time, x = sx(guide.x, cx), y = sx(guide.y, cy);
     if (x < -40 || x > VW + 40 || y < -80 || y > VH + 40) return;
-    var bob = Math.abs(Math.sin(t * 5)) * 10;
-    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,220,60,' + (0.55 + Math.sin(t * 8) * 0.35) + ')';
+    // Reduced motion keeps the arrow and outline, standing still.
+    var still = Kit.motion.reduced(), bob = still ? 0 : Math.abs(Math.sin(t * 5)) * 10;
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,220,60,' + (still ? 0.9 : 0.55 + Math.sin(t * 8) * 0.35) + ')';
     ctx.strokeRect(x - 1, y - 1, TS + 2, TS + 2);
     // down arrow above the tile
     var ax = x + TS / 2, ay = y - 10 - bob;
@@ -1294,22 +1299,23 @@
     ctx.font = '700 17px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.direction = 'ltr'; ctx.fillStyle = '#1d2340'; ctx.fillText('E', ex + 35, by + 26);
     txt(ctx, 'الصنع', ex + 35, by + 53, 13, '#fff', 'center');
     });
-    // pulse the crafting badge when the current quest's item can be crafted right now
-    var qr = questRecipe();
-    if (qr && hasIngredients(qr) && !(ITEMS[qr.out].max === 1 && countItem(qr.out) > 0)) {
-      var ebx = HB.x + 9 * (HB.s + HB.g) + 18, eby = HB.y - 6, pulse = 0.5 + Math.sin(G.time * 7) * 0.5;
+    // pulse the crafting badge when the current quest's item can be crafted right now, or when the
+    // item a place quest needs is still in the backpack (reduced motion: a still, full-strength outline)
+    var still = Kit.motion.reduced(), qr = questRecipe(), qs = G.mode === 'play' ? questPlaceSlot() : -1;
+    if ((qr && hasIngredients(qr) && !(ITEMS[qr.out].max === 1 && countItem(qr.out) > 0)) || qs >= 9) {
+      var ebx = HB.x + 9 * (HB.s + HB.g) + 18, eby = HB.y - 6, pulse = still ? 1 : 0.5 + Math.sin(G.time * 7) * 0.5;
       ctx.lineWidth = 3 + pulse * 2; ctx.strokeStyle = 'rgba(255,204,0,' + (0.5 + pulse * 0.5) + ')';
       rrect(ctx, ebx - 2 - pulse * 2, eby - 2 - pulse * 2, 74 + pulse * 4, 66 + pulse * 4, 16); ctx.stroke();
       ctx.fillStyle = '#ff5a5f'; ctx.beginPath(); ctx.arc(ebx + 66, eby + 2, 11, 0, Math.PI * 2); ctx.fill();
       txt(ctx, '!', ebx + 66, eby + 9, 17, '#fff', 'center');
+      if (qs >= 9) txt(ctx, 'اضغط E', ebx + 35, eby - 16 - (still ? 0 : Math.abs(Math.sin(G.time * 5)) * 6), 18, '#ffe066', 'center');
     }
     // ...and the hotbar slot to pick when the current quest is to place an item
-    var qs = questPlaceSlot();
-    if (qs >= 0) {
-      var qsx = HB.x + qs * (HB.s + HB.g), qp = 0.5 + Math.sin(G.time * 7) * 0.5;
+    if (qs >= 0 && qs < 9) {
+      var qsx = HB.x + qs * (HB.s + HB.g), qp = still ? 1 : 0.5 + Math.sin(G.time * 7) * 0.5;
       ctx.lineWidth = 3 + qp * 2; ctx.strokeStyle = 'rgba(255,204,0,' + (0.5 + qp * 0.5) + ')';
       rrect(ctx, qsx - 3 - qp * 2, HB.y - 3 - qp * 2, HB.s + 6 + qp * 4, HB.s + 6 + qp * 4, 12); ctx.stroke();
-      if (!(G.selName > 0)) txt(ctx, 'اضغط ' + ltr(String(qs + 1)), qsx + HB.s / 2, HB.y - 14 - Math.abs(Math.sin(G.time * 5)) * 6, 18, '#ffe066', 'center');
+      if (!(G.selName > 0)) txt(ctx, 'اضغط ' + ltr(String(qs + 1)), qsx + HB.s / 2, HB.y - 14 - (still ? 0 : Math.abs(Math.sin(G.time * 5)) * 6), 18, '#ffe066', 'center');
     }
     // selected item name
     var cur = G.inv[G.sel];
@@ -1613,12 +1619,24 @@
   // ----- inventory
   var invDirty = true;
   var bagEl = $('bag'), hotEl = $('hot'), palEl = $('palette'), craftEl = $('craftList'), curEl = $('cursorStack');
-  var slotEls = [];
+  var slotEls = [], pressFrom = -1;
   function mkSlot(i) {
     var d = document.createElement('div');
     d.className = 'islot';
     d.innerHTML = '<img draggable="false"><span></span>';
-    d.addEventListener('mousedown', function (e) { e.preventDefault(); slotClick(i, e); });
+    d.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      var held = G.cursor;
+      slotClick(i, e);
+      pressFrom = e.button === 0 && !held && G.cursor ? i : -1;
+    });
+    // Children often drag: a press that picks a stack up and is released over another slot
+    // puts it there, just like the second click would.
+    d.addEventListener('mouseup', function (e) {
+      var from = pressFrom;
+      pressFrom = -1;
+      if (e.button === 0 && from >= 0 && from !== i && G.cursor && G.mode === 'inv') slotClick(i, e);
+    });
     d.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     slotEls[i] = d;
     return d;
@@ -1690,8 +1708,16 @@
     K.reset(); M.left = M.right = false;
   }
   $('invClose').onclick = closeInv;
+  window.addEventListener('mouseup', function () { pressFrom = -1; });
   function renderInv() {
     invDirty = false;
+    // A place quest's item still in the backpack: mark it and say how to bring it to the hotbar,
+    // also while it is held on the cursor (picked up, not put down yet; a saved cursor too).
+    var qid = questPlaceItem(), qs = questPlaceSlot(), c = G.cursor, cur = G.inv[G.sel];
+    var inHot = (qs >= 0 && qs < 9) || (qid && cur && cur.id === qid), held = qid && c && c.id === qid && !inHot;
+    if (held) qs = -1;
+    $('hotTip').textContent = held ? '★ انقر على خانة هنا لتضع ' + BW.itemName(qid) : qs >= 9 ? '★ انقر على ' + BW.itemName(G.inv[qs].id) + ' ثم على خانة هنا' : '';
+    hotEl.classList.toggle('qdrop', !!held);
     for (var i = 0; i < 36; i++) {
       var el = slotEls[i], s = G.inv[i], img = el.firstChild, sp = el.lastChild;
       var src = s ? BW.iconURL(s.id) : '';
@@ -1699,6 +1725,7 @@
       img.style.visibility = s ? 'visible' : 'hidden';
       sp.textContent = s && s.n > 1 && G.gm === 'survival' ? s.n : '';
       el.classList.toggle('selected', i === G.sel);
+      el.classList.toggle('qslot', i === qs && qs >= 9);
       el.title = s ? BW.itemName(s.id) : '';
     }
     renderCursor();
@@ -1821,6 +1848,7 @@
     craftId: function (id, n) { var r = BW.RECIPES.filter(function (r) { return r.out === id; })[0]; return r ? craft(r, n || 1) : 0; },
     surfaceY: surfaceY,
     get guide() { return guide; },
+    get confettiCount() { return confetti.length; },
     render: function () { render(); }, update: function (dt) { update(dt || 1 / 60); },
     B: B, I: I, sfx: SND
   };
