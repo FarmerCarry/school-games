@@ -76,6 +76,29 @@ test('Splat Strike keeps its paused frame, redraws after a resize or from settin
   assert.ok(await page.evaluate(m => !__game.state.paused && __game.state.matchT > m, matchT));
 });
 
+test('Splat Strike settles the sniper zoom before it keeps the paused frame', async t => {
+  // a fake clock gives each frame 1/60 s, as on a school PC (slow headless frames would hide the bug)
+  const page = await game(t, { init: () => {
+    const now = performance.now.bind(performance);
+    window.clock = null;
+    performance.now = () => window.clock ?? now();
+  } });
+  const view = await page.evaluate(() => {
+    const step = n => { for (let i = 0; i < n; i++) { clock += 1000 / 60; runtime.step(1); } };
+    clock = performance.now();
+    __game.save.wpn = 2;
+    __game.start({ skipCountdown: true }); __game.god = true; __game.botsFrozen = true; step(30);
+    document.getElementById('gl').dispatchEvent(new MouseEvent('mousedown', { button: 2 }));
+    step(30);
+    const scoped = SS.G.camera.fov;
+    __game.pause(); step(1);
+    return { scoped, fov: SS.G.camera.fov, zoomK: __game._vm().zoomK, normal: __game.save.set.fov };
+  });
+  assert.ok(view.scoped < 30, `the sniper scope zooms in (fov ${view.scoped})`);
+  assert.equal(view.fov, view.normal, 'the kept paused frame has the normal field of view');
+  assert.equal(view.zoomK, 0, 'and shows the blaster, not a zoomed view without the scope');
+});
+
 test('Splat Strike shows the save warning when a write is refused and its retry saves the same progress', async t => {
   const page = await game(t, { init: () => {
     const write = Storage.prototype.setItem;
@@ -99,7 +122,7 @@ test('Splat Strike shows the save warning when a write is refused and its retry 
 test('Splat Strike keeps the camera steady and skips confetti when motion is reduced', async t => {
   for (const preference of ['full', 'reduce']) {
     const page = await game(t);
-    const { jitter, confetti } = await page.evaluate(pref => {
+    const { jitter, confetti, moving } = await page.evaluate(pref => {
       Kit.motion.setPreference(pref);
       __game.start({ skipCountdown: true }); __game.botsFrozen = true; runtime.step(5);
       const G = SS.G, p = G.player;
@@ -116,14 +139,19 @@ test('Splat Strike keeps the camera steady and skips confetti when motion is red
       const bot = G.ents.find(e => e.bot && e.alive);
       bot.shield = 0;
       G.damage(bot, 999, p, false, 0, 1, 0);
-      return { jitter: most, confetti };
+      // text pops (countdown, goal and "first splat" callouts, +1 toast) that zoom, bounce or slide
+      const moving = ['bigmsg', 'callout', 'toast'].filter(id => document.getElementById(id).getAnimations()
+        .some(a => a.effect.getKeyframes().some(k => k.transform)));
+      return { jitter: most, confetti, moving };
     }, preference);
     if (preference === 'reduce') {
       assert.equal(jitter, 0, 'no camera shake with reduced motion');
       assert.equal(confetti, 0, 'a splat pops into paint only');
+      assert.deepEqual(moving, [], 'text pops only fade in and out');
     } else {
       assert.ok(jitter > 0, 'a hit still shakes the camera with full motion');
       assert.equal(confetti, 1, 'a splat pops into paint and confetti');
+      assert.deepEqual(moving, ['bigmsg', 'callout', 'toast']);
     }
   }
 });
@@ -161,17 +189,28 @@ test('Splat Strike lays the balloon aim ring on the floor when the throw hits a 
 
 test('Splat Strike states the goal at match start and sizes its minimap to the screen', async t => {
   const page = await game(t, { viewport: { width: 1920, height: 1080 } });
+  // the backing store matches the minimap's real box (its border snaps to whole pixels) within rounding
+  const minimap = () => page.evaluate(() => { const mm = document.getElementById('minimap'); return { width: mm.width, shown: mm.getBoundingClientRect().width }; });
+  const sharp = mm => assert.ok(Math.abs(mm.width - mm.shown) <= 0.5, `minimap backing store ${mm.width} px matches its ${mm.shown} px box`);
+  const resize = async (width, height) => {
+    await page.setViewportSize({ width, height });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  };
   const start = await page.evaluate(() => {
     __game.start({ mode: 'ffa' }); runtime.step(2);
-    const mm = document.getElementById('minimap');
-    return { goal: document.getElementById('callout').textContent, target: SS.G.target, width: mm.width, shown: mm.clientWidth };
+    return { goal: document.getElementById('callout').textContent, target: SS.G.target };
   });
   assert.match(start.goal, /يفوز/);
   assert.ok(start.goal.includes(String(start.target)), start.goal);
-  assert.ok(Math.abs(start.width - start.shown) <= 3, `minimap backing store ${start.width} px matches its ${start.shown} px box`);
-  await page.setViewportSize({ width: 1100, height: 620 });
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-  const small = await page.evaluate(() => { const mm = document.getElementById('minimap'); return { width: mm.width, shown: mm.clientWidth }; });
-  assert.ok(small.width < start.width && Math.abs(small.width - small.shown) <= 3, JSON.stringify(small));
+  const big = await minimap();
+  sharp(big);
+  await resize(1100, 620);             // the portal frame
+  const small = await minimap();
+  assert.ok(small.width < big.width, JSON.stringify(small));
+  sharp(small);
+  // resized on the title screen, where the HUD (and its minimap box) is hidden: the next match measures it
+  await page.evaluate(() => __game.menu());
+  await resize(960, 540);
   assert.match(await page.evaluate(() => { __game.start({ mode: 'team' }); return document.getElementById('callout').textContent; }), /فريق/);
+  sharp(await minimap());
 });
