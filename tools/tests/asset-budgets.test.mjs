@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { checkAssetBudgets } from '../asset-budgets.mjs';
 
 const hash = '0123456789abcdef';
-const measuredFiles = ['index.html', 'games/alpha/index.html', 'lib/three/three.min.js', 'shared/fonts/test.woff2'];
+const measuredFiles = ['index.html', 'teacher.html', 'games/alpha/index.html', 'lib/three/three.min.js', 'shared/fonts/test.woff2'];
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-asset-budgets-'));
@@ -19,7 +19,7 @@ function fixture(t) {
     fs.writeFileSync(target, contents);
     return target;
   };
-  const config = { format: 1, portalBytes: 100, gameHtmlBytes: { alpha: 100 }, threeBytes: 100, fontBytes: { 'test.woff2': 100 }, precacheBytes: 1000 };
+  const config = { format: 1, portalBytes: 100, teacherBytes: 100, gameHtmlBytes: { alpha: 100 }, threeBytes: 100, fontBytes: { 'test.woff2': 100 }, precacheBytes: 1000 };
   const manifest = Object.fromEntries(measuredFiles.map(file => [file, hash]));
   const configPath = write('asset-budgets.json', JSON.stringify(config));
   const catalogPath = write('catalog.js', "window.GAMES=[{slug:'alpha'}];");
@@ -60,12 +60,12 @@ test('exact boundaries pass and precache counts every manifest entry determinist
   f.write('extra.json', Buffer.alloc(37));
   f.manifest['extra.json'] = hash;
   f.saveManifest();
-  f.config.precacheBytes = 437;
+  f.config.precacheBytes = 537;
   f.saveConfig();
   const report = run(f);
   assert.equal(report.passed, true, report.failures.join('\n'));
   assert.deepEqual(report.failures, []);
-  assert.equal(report.metrics.length, 5);
+  assert.equal(report.metrics.length, 6);
   for (const file of measuredFiles) {
     const metric = metricFor(report, file);
     assert.equal(typeof metric.name, 'string');
@@ -76,22 +76,22 @@ test('exact boundaries pass and precache counts every manifest entry determinist
   const total = report.metrics.find(metric => metric.files.includes('extra.json'));
   assert.ok(total);
   assert.deepEqual([...total.files].sort(), [...measuredFiles, 'extra.json'].sort());
-  assert.equal(total.bytes, 437);
-  assert.equal(total.limitBytes, 437);
+  assert.equal(total.bytes, 537);
+  assert.equal(total.limitBytes, 537);
   assert.equal(total.passed, true);
   assert.deepEqual(run(f), report);
 });
 
 test('total precache budget fails even when every individual asset passes', t => {
   const f = fixture(t);
-  f.config.precacheBytes = 399;
+  f.config.precacheBytes = 499;
   f.saveConfig();
   const report = rejected(f);
   for (const file of measuredFiles) assert.equal(metricFor(report, file).passed, true);
   const failures = report.metrics.filter(metric => !metric.passed);
   assert.equal(failures.length, 1);
-  assert.equal(failures[0].bytes, 400);
-  assert.equal(failures[0].limitBytes, 399);
+  assert.equal(failures[0].bytes, 500);
+  assert.equal(failures[0].limitBytes, 499);
 });
 
 test('new hidden catalog games and fonts require their own reviewed budgets', t => {
@@ -118,7 +118,7 @@ test('new hidden catalog games and fonts require their own reviewed budgets', t 
 });
 
 test('missing measured assets and extra missing manifest entries return failures', async t => {
-  for (const file of ['shared/fonts/test.woff2']) await t.test(file, t => {
+  for (const file of ['shared/fonts/test.woff2', 'teacher.html']) await t.test(file, t => {
     const f = fixture(t);
     fs.unlinkSync(path.join(f.root, file));
     rejected(f, file);
@@ -146,7 +146,7 @@ test('missing measured assets and extra missing manifest entries return failures
 test('invalid JSON and incomplete or incorrectly shaped config are rejected', t => {
   const f = fixture(t);
   const invalid = ['{', 'null', '[]', '{}', JSON.stringify({ ...f.config, format: 2 }), JSON.stringify({ ...f.config, gameHtmlBytes: [] }), JSON.stringify({ ...f.config, fontBytes: null })];
-  for (const key of ['portalBytes', 'gameHtmlBytes', 'threeBytes', 'fontBytes', 'precacheBytes']) {
+  for (const key of ['portalBytes', 'teacherBytes', 'gameHtmlBytes', 'threeBytes', 'fontBytes', 'precacheBytes']) {
     const partial = { ...f.config };
     delete partial[key];
     invalid.push(JSON.stringify(partial));
@@ -159,7 +159,7 @@ test('invalid JSON and incomplete or incorrectly shaped config are rejected', t 
 
 test('all budget fields reject infinity, NaN, negative, string and null values', t => {
   const f = fixture(t);
-  for (const field of ['portalBytes', 'alpha', 'threeBytes', 'test.woff2', 'precacheBytes']) {
+  for (const field of ['portalBytes', 'teacherBytes', 'alpha', 'threeBytes', 'test.woff2', 'precacheBytes']) {
     for (const value of ['1e999', 'NaN', '-1', '"100"', 'null']) {
       const contents = JSON.stringify(f.config).replace('"' + field + '":' + (field === 'precacheBytes' ? '1000' : '100'), '"' + field + '":' + value);
       f.write('asset-budgets.json', contents);
@@ -248,11 +248,11 @@ test('missing inputs and malformed catalogs produce reports rather than throwing
 test('multiple budget failures are reported together with usable numeric measurements', t => {
   const f = fixture(t);
   for (const file of measuredFiles) f.write(file, Buffer.alloc(110));
-  f.config.precacheBytes = 400;
+  f.config.precacheBytes = 500;
   f.saveConfig();
   const report = rejected(f);
-  assert.equal(report.metrics.filter(metric => !metric.passed).length, 5);
-  assert.ok(report.failures.length >= 5);
+  assert.equal(report.metrics.filter(metric => !metric.passed).length, 6);
+  assert.ok(report.failures.length >= 6);
   for (const metric of report.metrics) {
     assert.ok(Number.isFinite(metric.bytes));
     assert.ok(Number.isFinite(metric.limitBytes));

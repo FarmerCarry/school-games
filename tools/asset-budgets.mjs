@@ -35,13 +35,13 @@ function assetPath(root, file, directory = false) {
 }
 
 function validateConfig(config) {
-  const keys = ['format', 'portalBytes', 'gameHtmlBytes', 'threeBytes', 'fontBytes', 'precacheBytes'];
+  const keys = ['format', 'portalBytes', 'teacherBytes', 'gameHtmlBytes', 'threeBytes', 'fontBytes', 'precacheBytes'];
   if (!object(config) || config.format !== 1 || Object.keys(config).length !== keys.length ||
       keys.some(key => !Object.hasOwn(config, key))) throw new Error('invalid budget config: expected format 1 and all documented keys');
   const budget = (value, label) => {
     if (!Number.isSafeInteger(value) || value <= 0) throw new Error('invalid positive finite integer byte limit: ' + label);
   };
-  for (const key of ['portalBytes', 'threeBytes', 'precacheBytes']) budget(config[key], key);
+  for (const key of ['portalBytes', 'teacherBytes', 'threeBytes', 'precacheBytes']) budget(config[key], key);
   for (const [key, pattern] of [['gameHtmlBytes', SLUG], ['fontBytes', FONT]]) {
     if (!object(config[key]) || !Object.keys(config[key]).length) throw new Error('invalid empty budget map: ' + key);
     for (const [name, value] of Object.entries(config[key])) {
@@ -120,6 +120,7 @@ export function checkAssetBudgets({ root, configPath, catalogPath }) {
       if (complete && limitBytes !== null && !passed) fail(name + ': ' + bytes + ' bytes exceeds limit ' + limitBytes + ' by ' + (bytes - limitBytes));
     };
     measure('portal', ['index.html'], config.portalBytes);
+    measure('teacher', ['teacher.html'], config.teacherBytes);
     for (const slug of slugs) {
       // New games still get measured, but require an explicit reviewed limit.
       measure('game:' + slug, ['games/' + slug + '/index.html'], config.gameHtmlBytes[slug] ?? null);
@@ -130,7 +131,7 @@ export function checkAssetBudgets({ root, configPath, catalogPath }) {
     }
 
     const files = precacheFiles(fs.readFileSync(assetPath(root, 'sw.js'), 'utf8'));
-    const required = ['index.html', 'lib/three/three.min.js', ...slugs.map(slug => 'games/' + slug + '/index.html'),
+    const required = ['index.html', 'teacher.html', 'lib/three/three.min.js', ...slugs.map(slug => 'games/' + slug + '/index.html'),
       ...Object.keys(config.fontBytes).map(name => 'shared/fonts/' + name)];
     for (const file of required) if (!files.includes(file)) fail('required asset missing from FILES: ' + file);
     measure('offline-precache', files, config.precacheBytes);
