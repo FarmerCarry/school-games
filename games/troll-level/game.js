@@ -294,6 +294,10 @@
 
   function startLevel(i) {
     i = Math.max(0, Math.min(N - 1, i));
+    // Play statistics: a round is a level visit (deaths respawn and R keeps the deaths).
+    // The level 1 keycaps are the tutorial until level 1 is first won.
+    if (!i && save.best[0] == null) Kit.stats.tutorial('start');
+    Kit.stats.round('L' + (i + 1));
     game.li = i; game.demo = false;
     game.pal = WORLDS[Math.floor(i / PER)];
     game.deaths = 0; game.marks.length = 0; game.winT = -1; game.auto = null;
@@ -463,6 +467,8 @@
     var prev = save.best[i];
     var newBest = prev != null && d < prev;
     var first = prev == null;
+    // Play statistics (not for a __game.solve replay): the stars are the score.
+    if (!game.auto) { if (!i && first) Kit.stats.tutorial('done'); Kit.stats.end('win', stars); }
     if (prev == null || d < prev) save.best[i] = d;
     save.stars[i] = Math.max(save.stars[i] || 0, stars);
     var unlockedNext = false;
