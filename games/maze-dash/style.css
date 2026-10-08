@@ -198,6 +198,11 @@ body { background: #07020f; }
   animation: md-toast-pop 0.25s ease-out; pointer-events: none; white-space: nowrap;
 }
 
+/* Kit's "could not save" panel. Saves fail on the result cards, and at the bottom
+   centre it covered their buttons in a small portal frame. Here it sits bottom-left,
+   beside the centred cards over the dimmed key hints, where it later folds to a badge. */
+.sg-save-status { inset-inline: auto 12px; margin-inline: 0; padding: 8px 12px; font-size: 16px; }
+
 @keyframes md-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 @keyframes md-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
 @keyframes md-starpop { from { transform: scale(0.2) rotate(-40deg); } to { transform: scale(1) rotate(0); } }
@@ -213,5 +218,5 @@ body { background: #07020f; }
 /* Fullscreen on big monitors: scale the DOM menus with the canvas. */
 @media (min-width: 1500px) and (min-height: 880px) {
   .md-overlay > * { zoom: 1.35; }
-  .md-toast { zoom: 1.35; }
+  .md-toast, .sg-save-status { zoom: 1.35; }
 }
