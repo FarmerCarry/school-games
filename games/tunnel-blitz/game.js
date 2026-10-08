@@ -1396,6 +1396,8 @@
     G.score = Math.floor(G.D / WS) + G.bonus;
     if (!G.passedBest && save.best >= 100 && G.score > save.best) {
       G.passedBest = true;
+      // a near-miss bonus can break the record before the easing ring catches up: meet the ship now
+      G.ringD = Math.min(G.ringD, G.D + ZS);
       showBanner('رقم قياسي جديد!', 'استمر!', '#ffd23f', 1.6);
       Sfx.newBest(); confetti(30);
     }
@@ -1770,6 +1772,7 @@
     invincible: function (b) { G.invincible = b !== false; return G.invincible; },
     setBest: function (m) { save.best = m; save.bestD = m * WS; persist(); return m; },
     addOrbs: function (n) { save.orbs += n; persist(); return save.orbs; },
+    nearMiss: function () { if (G.state === 'play') nearMiss(); return G.closeRun; }, // as if a row was just dodged closely
     skipZone: function () {
       if (G.state !== 'play') return false;
       var nz = ZT[G.zone + 1];
