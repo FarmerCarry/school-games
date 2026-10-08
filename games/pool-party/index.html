@@ -64,7 +64,8 @@
   .row { display: flex; gap: 14px; margin-top: 22px; align-items: center; }
   .howto { position: absolute; bottom: 14px; display: flex; gap: 22px; font-size: 17px; color: #fff; background: rgba(0,0,0,0.4); padding: 8px 20px; border-radius: 999px; }
   .howto span.k { display: inline-flex; align-items: center; gap: 4px; }
-  /* the full failed-save warning would cover the how-to-play row, so the title shows it at the top */
+  /* the full failed-save warning would cover the how-to-play row, so the title shows it at the top;
+     carried into play it stays at the bottom, over the ball tray until it folds, not the turn marker */
   body:has(#scr-title:not([hidden])) .sg-save-status:not([data-compact="true"]) { top: 12px; bottom: auto; }
   .chip { font-size: 16px; }
 
