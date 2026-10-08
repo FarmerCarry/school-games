@@ -11,8 +11,8 @@ codes, Snake Arena's player name), free-text error messages, screenshots, mouse 
 or key sequences. Several children share one PC and two-player modes mix players, so
 the numbers describe **games on a PC**. With fixed seating a PC can stand for one child,
 so exports leave out anything finer than a day (their hours table has no dates and lists
-a game's hour only when it was played on at least 3 days), and the PC label must not be
-a name.
+a game's hour only when it was played then on at least 3 days, and not on every day the
+game was played), and the PC label must not be a name.
 
 ## How it fits together
 
@@ -52,10 +52,12 @@ Rules for games:
   (troll-level, swing-hook checkpoints, moto-madness crashes) are not new rounds; a game
   that restarts the level after each death (beat-dash attempts) may report each attempt.
 * **Results:** single-player levels and matches report `'win'` or `'lose'` (or `'draw'`).
-  Endless runs report `'end'` with a score; so does a merge-2048 board that fills up (it
-  reports `'win'` when the goal tile is first reached). **Two-player modes on one PC**
-  (`'duo'`, `'local'`, `'pvp'`) report only `'end'` or `'draw'`, never a winner; the
-  teacher page relies on these three ids.
+  Endless runs report `'end'` with a score; so does a merge-2048 board when it fills up.
+  A 2048 board has no winner: it is kept between visits, and the goal tile is a moment
+  inside the round, not its end. **Two-player modes on one PC** (`'duo'`, `'local'`,
+  `'pvp'`, or a level id ending in `:duo`, `:local` or `:pvp`, such as fire-and-ice's
+  co-op `'L4:duo'`) report only `'end'` or `'draw'`, never a winner; the teacher page
+  relies on these ids.
 * Calling `round()` while a round is open records the open one as a **quit**. A round
   still open when the child leaves is a quit too. `end()` with no open round is ignored.
 * Never report demo or attract modes, solution replays, bot-only matches, balance
@@ -265,11 +267,14 @@ Arabic, right to left, Western digits. Fixed note at the top: **«الأرقام
    minutes beside it), **كم يلعبون** (actual play time and average session),
    **متى يلعبون** (bars by hour), **أين يتوقفون** (the levels children give up on most).
    A session's time is written before its length (a hidden page writes, the session
-   stays open), so a game with play time but no closed session yet, for example when 📊
-   is opened while a child is still playing, gets the note «مرة لعب ما زالت مفتوحة،
-   وتظهر هنا بعد إغلاق اللعبة» instead of «no game was played a minute», and its row
-   says «ما زالت مفتوحة». The average session uses only game-day rows that have closed
-   sessions. Times under 60 seconds read «أقل من دقيقة», never «دقيقة واحدة».
+   stays open), so a game with play time today on this PC but no closed session yet, for
+   example when 📊 is opened while a child is still playing, gets the note «مرة لعب ما
+   زالت مفتوحة، وتظهر هنا بعد إغلاق اللعبة» instead of «no game was played a minute»,
+   and its row says «ما زالت مفتوحة». Rows of other days or other PCs' files with time
+   and no session (a failed load, a session closed by another page or begun before a
+   clear) will never close, so they get no note. The average session uses only game-day
+   rows that have closed sessions. Times under 60 seconds read «أقل من دقيقة», never
+   «دقيقة واحدة».
 2. A table per game with at most six columns: وقت اللعب الفعلي، مرات اللعب، خرجوا
    بسرعة، أيام اللعب، ❤، and a link to that game's levels. أيام اللعب counts distinct
    dates, so with several PCs together it never exceeds the days in the period; the cell
@@ -278,11 +283,14 @@ Arabic, right to left, Western digits. Fixed note at the top: **«الأرقام
    *gave up ÷ visits* among levels with at least 5 visits. Levels are compared only
    within the same game; there is no absolute "hard" threshold. In one view (period and
    PCs), a level is **winnable** when it was won or lost and never ended neutrally
-   (`'end'`), or when it was only started and left (no `'end'`, no `'draw'`) in a game
-   that has such a level. Two-player ids (`duo`, `local`, `pvp`) and `'_other'` never
-   are. So win-or-quit games such as troll-level (a death respawns inside the level)
-   show the levels children abandon, while free play, endless runs, merge-2048 boards
-   and two-player modes never appear. A winnable level shows its **win share** as
+   (`'end'`), or when it was only started and left (no `'end'`, no `'draw'`) and its id
+   has the shape of such a level of the same game, digits aside (`'L#'`, `'w#-#'`,
+   `'stage#'`). Two-player ids (`duo`, `local`, `pvp`, or ending in `:duo`, `:local`,
+   `:pvp`) and `'_other'` never are. So win-or-quit games such as troll-level,
+   moto-madness and swing-hook (a death respawns inside the level) show the levels
+   children abandon, while free play, endless runs (block-burst `'classic'`, maze-dash
+   and swing-hook `'endless'`, even beside won levels), merge-2048 boards and two-player
+   modes never appear. A winnable level shows its **win share** as
    «فازوا في N من M محاولات», where tries M = wins + losses + draws + quits, only when
    M ≥ 5. Other ids with scores show the average and best score instead. In the levels
    tables the gave-up figure appears only for winnable levels; others show «—». Ids are
@@ -330,7 +338,7 @@ additive (sums and counts, no averages), so they add up correctly in Excel pivot
 | days | pc, pc_label, copy, date, seconds, sessions, short_sessions, calm_on, fullscreen, mute_toggles, day_complete, exported_at |
 | games | pc, pc_label, copy, date, game, game_name, opens, sessions, short_sessions, sessions_1_5, sessions_5_15, sessions_15_plus, never_started, seconds, hearted, rounds, wins, losses, draws, ends, quits, tutorial_shown, tutorial_done, loads, load_ms_sum, load_ms_max, loads_skipped, errors, timeouts, frames_smooth, frames_ok, frames_choppy, frames_stall, from_featured, from_catalog, from_recent, from_favorites, from_category, from_quick, from_search, from_related, from_surprise, from_reload, from_history, from_direct, day_complete, exported_at |
 | levels | pc, pc_label, copy, date, game, game_name, level, starts, visits, gave_up, wins, losses, draws, ends, quits, seconds, score_sum, score_count, score_max, day_complete, exported_at |
-| hours | pc, pc_label, copy, game, game_name, hour, seconds, days, exported_at (summed over all exported days: no dates; only rows with `days` ≥ 3) |
+| hours | pc, pc_label, copy, game, game_name, hour, seconds, days, exported_at (summed over all exported days: no dates; only rows with `days` ≥ 3 and below the game's number of exported days with play) |
 
 `copy` is `web` or `folder`. `sessions` counts sessions of at least a minute;
 `short_sessions` those under a minute. `seconds` is rounded from milliseconds per row.
@@ -338,10 +346,14 @@ additive (sums and counts, no averages), so they add up correctly in Excel pivot
 can be won or lost (section 3).
 
 **Hours and privacy.** An `hours` row is exported only when that game was played in that
-hour on at least 3 of the exported days; rows below that are left out, so with the dated
-`games` table nobody can tell which child (with fixed seating) played what in which
-lesson. A first export or one soon after a clear may therefore have no `hours` rows. The
-page's own hours chart still uses all local days. The read-me sheet says so.
+hour on at least 3 of the exported days, and not on every exported day the game was
+played (for example a weekly lab lesson at the same hour); other rows are left out. So no
+row, read beside the dated `games` table, gives the hour of a single date. This is a
+limit, not a guarantee: the table still shows when games are usually played, and with
+fixed seating someone comparing seconds closely might narrow things down, so keep the
+files like other class records. A first export or one soon after a clear may have no
+`hours` rows. The page's own hours chart still uses all local days. The read-me sheet
+says so.
 
 * **Excel workbook** `play-stats_<pc>_<YYYY-MM-DD>.xlsx`: one file per click, written by a
   small built-in ZIP writer (no library). Sheets `اقرأني` (an Arabic explanation of every
@@ -398,8 +410,11 @@ Step 1's files are the input; they do not need to change.
   hidden pages, delta merging across two tabs, clear and stop, blocked storage, the time
   of rounds left open (`om`), and `pruned`.
 * `tools/tests/teacher-page.test.mjs`: the page with seeded records, the workbook and
-  JSON exports, combining, clear and stop, blocked storage, winnable levels, the export
+  JSON exports, combining, clear and stop, blocked storage, winnable levels (id shapes,
+  block-burst `'classic'`, fire-and-ice `'L4:duo'`, merge-2048 boards), the export
   reminder, the hours rule and games still open.
+* `tools/tests/merge-progress.test.mjs`: a merge-2048 board is one round; the goal tile
+  reports nothing and a full board reports `'end'` with the score.
 * `tools/tests/play-stats-rules.test.mjs` (node only): no network APIs in Kit, portal,
   teacher page or games; no `Kit.stats` in engine or simulation files; every game calls
   `Kit.stats.round` and `Kit.stats.end`; literal ids follow the id rule.

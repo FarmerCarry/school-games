@@ -29,7 +29,7 @@
   var MAX = 1e12;                           // ceiling for any stored number
   var CAP = 307200;                         // the portal keeps all stats keys under 300 KB
   var HOUR_DAYS = 3;                        // an hours row is exported only for 3 days or more
-  var TWO_PLAYER = /^(?:duo|local|pvp)$/;   // ids of two-player modes on one PC (no winner)
+  var TWO_PLAYER = /(?:^|:)(?:duo|local|pvp)$/; // two-player modes on one PC (no winner): 'duo', 'L4:duo'
   var SOURCES = ['featured', 'catalog', 'recent', 'favorites', 'category', 'quick', 'search', 'related',
     'surprise', 'reload', 'history', 'direct'];
   var BASE = ['pc', 'pc_label', 'copy'];
@@ -128,14 +128,15 @@
     levels: { seconds: 'وقت اللعب الفعلي بالثواني داخل هذه المرحلة.' },
     hours: {
       seconds: 'وقت اللعب الفعلي بالثواني في هذه الساعة، مجموعًا على كل الأيام في الملف.',
-      days: 'الأيام التي لُعبت فيها اللعبة في هذه الساعة: 3 أو أكثر دائمًا، لأن الساعات الأقل لا تُصدَّر.'
+      days: 'الأيام التي لُعبت فيها اللعبة في هذه الساعة: 3 أو أكثر دائمًا، وأقل من كل الأيام التي لُعبت فيها اللعبة في الملف. ' +
+        'ولا تُصدَّر الساعات الأخرى.'
     }
   };
   var TABLE_HELP = {
     days: 'صف لكل يوم.',
     games: 'صف لكل لعبة في كل يوم.',
     levels: 'صف لكل مرحلة من لعبة في كل يوم.',
-    hours: 'صف لكل لعبة وساعة لُعبت فيها في 3 أيام أو أكثر، مجموعًا على كل الأيام في الملف (بلا تاريخ).'
+    hours: 'صف لكل لعبة وساعة لُعبت فيها في 3 أيام أو أكثر، لا في كل أيامها، مجموعًا على كل الأيام في الملف (بلا تاريخ).'
   };
 
   /* ------------------------------------------------------ small helpers */
@@ -307,7 +308,7 @@
   // The four export tables (format sg-play-stats v1) from the stored days.
   // info: { pc, label, copy, exportedAt, today, names }.
   function tables(days, info) {
-    var t = { days: [], games: [], levels: [], hours: [] }, hours = {};
+    var t = { days: [], games: [], levels: [], hours: [] }, hours = {}, played = Object.create(null);
     var common = { pc: info.pc, pc_label: info.label, copy: info.copy, exported_at: info.exportedAt };
     days.slice().sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; }).forEach(function (rec) {
       var done = rec.d < info.today ? 1 : 0, ms = 0, sessions = 0, short = 0;
@@ -330,6 +331,7 @@
           x.ms += g.hh[h];
           x.days++;
         });
+        if (Object.keys(g.hh).length) played[slug] = (played[slug] || 0) + 1;
         var v = {
           date: rec.d, game: slug, game_name: name, opens: g.o, sessions: g.b[1] + g.b[2] + g.b[3],
           short_sessions: g.b[0], sessions_1_5: g.b[1], sessions_5_15: g.b[2], sessions_15_plus: g.b[3],
@@ -347,11 +349,13 @@
         fullscreen: rec.s.fs, mute_toggles: rec.s.mute, day_complete: done
       }));
     });
-    // A game and hour played on fewer than 3 days is left out: with the dated games
-    // table it could tell who played in which lesson on a PC with fixed seating.
+    // A game and hour is left out when played on fewer than 3 days, or on every day
+    // the game was played (a weekly lesson, say): with the dated games table either
+    // would give the hour of a date, so who played in which lesson on a PC with
+    // fixed seating.
     Object.keys(hours).sort().forEach(function (key) {
       var x = hours[key];
-      if (x.days < HOUR_DAYS) return;
+      if (x.days < HOUR_DAYS || x.days >= played[x.game]) return;
       t.hours.push(row('hours', common, {
         game: x.game, game_name: gameName(info.names, x.game), hour: x.hour, seconds: secs(x.ms), days: x.days
       }));
@@ -457,14 +461,15 @@
   // closedSeconds: play time of the game rows that have closed sessions, so the
   // average session leaves out a session that is still open (its time is written
   // before its length is). days: distinct dates, even when several PCs are combined.
-  function summary(t, from, to) {
+  // live: { pc, date } of this PC today, when its own records are in the view.
+  function summary(t, from, to, live) {
     var keep = function (r) { return (!from || r.date >= from) && (!to || r.date <= to); };
     var games = Object.create(null), s = { seconds: 0, closedSeconds: 0, sessions: 0, short: 0, calm: 0, fs: 0, mute: 0,
       src: {}, pcs: {}, games: [] };
     SOURCES.forEach(function (k) { s.src[k] = 0; });
     function game(r) {
       return games[r.game] || (games[r.game] = { game: r.game, name: r.game_name, seconds: 0, closedSeconds: 0, sessions: 0,
-        short: 0, opens: 0, days: 0, dates: Object.create(null), pcs: Object.create(null), ns: 0, errors: 0, timeouts: 0,
+        short: 0, opens: 0, days: 0, dates: Object.create(null), pcs: Object.create(null), live: 0, ns: 0, errors: 0, timeouts: 0,
         loads: 0, loadSum: 0, loadMax: 0, f: [0, 0, 0, 0], tu: [0, 0], favDate: Object.create(null), fav: Object.create(null),
         levels: Object.create(null) });
     }
@@ -476,6 +481,7 @@
       s.pcs[r.pc] = 1;
       g.seconds += r.seconds; g.sessions += r.sessions; g.short += r.short_sessions; g.opens += r.opens;
       if (r.sessions + r.short_sessions > 0) g.closedSeconds += r.seconds;
+      if (live && r.pc === live.pc && r.date === live.date && r.seconds > 0) g.live = 1;
       g.dates[r.date] = 1; g.pcs[r.pc] = 1;
       g.ns += r.never_started; g.errors += r.errors; g.timeouts += r.timeouts;
       g.loads += r.loads; g.loadSum += r.load_ms_sum; g.loadMax = Math.max(g.loadMax, r.load_ms_max);
@@ -498,8 +504,10 @@
       g.levels = markWinnable(Object.keys(g.levels).sort().map(function (id) { return g.levels[id]; }));
       g.days = Object.keys(g.dates).length;
       g.pcs = Object.keys(g.pcs).length;
-      // Play time but no closed session yet: a session is still open (or its length went to another day).
-      g.open = g.seconds > 0 && g.sessions + g.short === 0;
+      // Play time today on this PC but no closed session in the view: a session is
+      // still open. Other rows with time and no session (a failed load, a session
+      // closed by another page or begun before a clear) will never close: no note.
+      g.open = !!g.live && g.sessions + g.short === 0;
       s.seconds += g.seconds; s.closedSeconds += g.closedSeconds; s.sessions += g.sessions; s.short += g.short;
       return g;
     }).sort(function (a, b) {
@@ -511,17 +519,21 @@
 
   // Marks the levels of ONE game (in one view) that children can win or lose
   // (l.winnable): a level that was won or lost and never ended without a winner,
-  // or a level that was only left (no neutral end, no draw) in a game that has
-  // such a level. So win-or-quit games such as troll-level, where a death
-  // respawns inside the level, show the levels children abandon. Free play,
-  // endless runs, merge-2048 boards and two-player modes end without a winner
-  // ('end' or 'draw'), so leaving them is not giving up; the folded '_other'
-  // row is many levels.
+  // or a level that was only left (no neutral end, no draw) whose id has the
+  // shape of such a level, digits aside ('L#', 'w#-#', 'stage#'). So win-or-quit
+  // games such as troll-level, where a death respawns inside the level, show the
+  // levels children abandon, while a 'classic', 'endless', 'main' or 'run' left
+  // beside won levels does not. Free play, endless runs, merge-2048 boards and
+  // two-player modes ('duo', 'L4:duo') end without a winner ('end' or 'draw'),
+  // so leaving them is not giving up; the folded '_other' row is many levels.
   function markWinnable(levels) {
+    var shape = function (id) { return id.replace(/[0-9]+/g, '#'); };
     var decided = function (l) { return l.wins + l.losses > 0 && !l.ends && !TWO_PLAYER.test(l.level); };
-    var game = levels.some(decided);
+    var shapes = Object.create(null);
+    levels.forEach(function (l) { if (decided(l)) shapes[shape(l.level)] = 1; });
     levels.forEach(function (l) {
-      l.winnable = l.level !== '_other' && !TWO_PLAYER.test(l.level) && (decided(l) || game && !l.ends && !l.draws);
+      l.winnable = l.level !== '_other' && !TWO_PLAYER.test(l.level) &&
+        (decided(l) || !!shapes[shape(l.level)] && !l.ends && !l.draws);
     });
     return levels;
   }
@@ -660,8 +672,9 @@
       ['ملاحظة', 'الأرقام لكل جهاز وليست لكل طالب، ولم تُرسل إلى أي مكان.'],
       ['ما في الملف', 'كل الأيام المحفوظة على هذا الجهاز وقت التصدير، لا الفترة المعروضة في الصفحة فقط.'],
       ['مدة الحفظ', KEEP + ' لذلك صدّر الملف كل أسبوع.'],
-      ['الخصوصية', 'لا يحتوي الملف على أسماء ولا على أي نص كتبه الأطفال. جدول hours بلا تواريخ، وفيه فقط الساعات التي لُعبت فيها ' +
-        'اللعبة في 3 أيام أو أكثر؛ تُترك الساعات الأقل حتى لا يُعرف من لعب في حصة معينة.'],
+      ['الخصوصية', 'لا يحتوي الملف على أسماء ولا على أي نص كتبه الأطفال. جدول hours بلا تواريخ، وفيه فقط الساعة التي لُعبت فيها ' +
+        'اللعبة في 3 أيام أو أكثر، ولكن ليس في كل الأيام التي لُعبت فيها اللعبة في الملف. لذلك لا يدل صف وحده على ساعة يوم معيّن. ' +
+        'ومع ذلك يبيّن الجدول الساعات المعتادة للعب، فاحفظ الملف كما تحفظ سجلات الصف.'],
       ['الدمج', 'عند جمع ملفات عدة أجهزة: لكل جهاز (pc) ويوم (date) استخدم صفوف الملف الذي فيه أحدث exported_at فقط، ' +
         'ولا تجمع ملفين من الجهاز نفسه لليوم نفسه. في جدول hours استخدم أحدث ملف لكل جهاز.'],
       ['المتوسطات', 'كل الأرقام مجاميع وأعداد يمكن جمعها. احسب المتوسط بقسمة المجموع على العدد، ' +
@@ -854,7 +867,8 @@
     function render() {
       var now = new Date(), today = dateKey(now), v = view(now);
       var period = (document.querySelector('input[name="period"]:checked') || {}).value || 'week';
-      var range = periodRange(period, today), s = summary(v.tables, range.from, range.to);
+      var range = periodRange(period, today);
+      var s = summary(v.tables, range.from, range.to, state.ok ? { pc: state.meta.id, date: today } : null);
       var hours = v.combined ? hoursFromRows(v.tables.hours) : hoursFromDays(state.days, range.from, range.to);
       $('range').innerHTML = range.from ? 'من ' + showDate(range.from) + ' إلى ' + showDate(range.to) : 'كل الأيام المحفوظة';
       renderNotices(today, v.combined);
@@ -949,7 +963,7 @@
       $('cardHours').innerHTML = last < 0 ? empty('لا يوجد لعب في هذه الفترة.') :
         '<div class="hours" role="img" aria-label="أكثر ساعة لعبًا تبدأ ' + hours.indexOf(max) + ':00">' + html + '</div>' +
         '<p class="hint">وقت اللعب الفعلي حسب الساعة' + (combined ? '. عند عرض عدة أجهزة تشمل الساعات كل الأيام في الملفات، ' +
-          'وفيها فقط الساعات التي لُعبت فيها كل لعبة في 3 أيام أو أكثر.' : '.') + '</p>';
+          'وفيها فقط الساعات التي لُعبت فيها كل لعبة في 3 أيام أو أكثر، لا في كل أيامها.' : '.') + '</p>';
 
       var items = [];
       s.games.forEach(function (g) {

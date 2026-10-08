@@ -177,8 +177,8 @@ two-player modes mix players.
   tutorials are in folded sections below. «Where they stop» lists only levels that can be
   won or lost, with «فازوا في N من M محاولات» (tries include leaving the level); free play,
   endless runs, 2048 boards and two-player modes are left out, and runs and boards show
-  their average and best score in the levels table instead. A game that is still open
-  shows its time with the note «مرة لعب ما زالت مفتوحة» until it is closed.
+  their average and best score in the levels table instead. A game still open on this PC
+  today shows its time with the note «مرة لعب ما زالت مفتوحة» until it is closed.
 - **Name the PC:** type a short label such as «جهاز 7». Never type a child's name.
 - **Export to Excel:** press **تصدير ملف Excel**. Each click saves one workbook,
   `play-stats_<pc>_<date>.xlsx`, with every stored day: an Arabic read-me sheet (اقرأني)
@@ -189,7 +189,8 @@ two-player modes mix players.
   three-quarters full and nothing was exported for a week, when days were removed for
   space before they were exported, or when the oldest day not yet exported is more than
   100 days old. For privacy the `hours` table has no dates and lists a game's hour only
-  when it was played on at least 3 days.
+  when it was played then on at least 3 days, and not on every day the game was played.
+  It still shows when games are usually played, so keep the files like class records.
 - **Combine PCs:** press **فتح ملفات من أجهزة أخرى** and choose the JSON files from other
   PCs to see them together. Nothing from those files is saved. In Excel, put the
   workbooks in one folder and use **Data → Get Data → From Folder**. Drop rows where `pc`

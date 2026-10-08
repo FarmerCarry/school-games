@@ -303,14 +303,21 @@ test('tables: one row per day, game, level and game-hour, with additive numbers'
   assert.deepEqual(json.pc, { id: 'pcabcd', label: 'جهاز 7', copy: 'web' });
 });
 
-test('hours rows are exported only for a game and hour played on at least 3 days', () => {
+test('hours rows are exported only for a game and hour played on at least 3 days, but not on all its days', () => {
   const rec = (d, hh) => api.parseDay(d, day(d, { 'candy-rope': { o: 1, e: 1, hh, b: [1, 0, 0, 0] } }));
-  const days = [rec('2026-10-05', { 9: 60000, 10: 60000 }), rec('2026-10-06', { 9: 30000 }), rec('2026-10-07', { 9: 90000, 10: 1000 })];
+  const days = [rec('2026-10-05', { 9: 60000, 10: 60000 }), rec('2026-10-06', { 9: 30000 }), rec('2026-10-07', { 9: 90000, 10: 1000 }),
+    rec('2026-10-08', { 11: 20000 })];
   assert.deepEqual(api.tables(days, info).hours.map(r => [r.game, r.hour, r.seconds, r.days]), [['candy-rope', 9, 180, 3]],
-    'hour 10, played on 2 days, is left out');
+    'hour 10, played on 2 days, and hour 11, on 1 day, are left out');
   assert.deepEqual(api.tables(days.slice(1), info).hours, [], 'a short export has no hours rows at all');
+  // A weekly lesson: every day the game was played includes 9:00, so each date's hour could be read back.
+  const lesson = days.slice(0, 3);
+  assert.deepEqual(api.tables(lesson, info).hours, [], 'hour 9 on all 3 days of the game is left out');
+  // A day the game was only opened, with no play time, does not make the hour any less telling.
+  const opened = api.parseDay('2026-10-08', day('2026-10-08', { 'candy-rope': { o: 1, e: 0, ns: 1 } }));
+  assert.deepEqual(api.tables([...lesson, opened], info).hours, []);
   // The page's own hours chart still uses every local day.
-  assert.deepEqual(api.hoursFromDays(days, '', '').slice(9, 11), [180, 61]);
+  assert.deepEqual(api.hoursFromDays(days, '', '').slice(9, 12), [180, 61, 20]);
 });
 
 test('durations: under a minute is never «دقيقة واحدة»', () => {
@@ -354,7 +361,8 @@ test('periods, summaries and where children stop', () => {
 });
 
 // A level counts when children can win or lose it: it was won or lost and never
-// ended without a winner, or it was only left in a game that has such levels.
+// ended without a winner, or it was only left and its id has the shape of such a
+// level of the same game (digits aside).
 test('where they stop: winnable levels only, with quits counted as tries', () => {
   const L = (level, o) => ({ level, starts: 0, visits: 0, gaveUp: 0, wins: 0, losses: 0, draws: 0, ends: 0, quits: 0, seconds: 0,
     scoreSum: 0, scoreCount: 0, scoreMax: 0, ...o });
@@ -364,18 +372,40 @@ test('where they stop: winnable levels only, with quits counted as tries', () =>
   assert.deepEqual(troll.map(l => l.winnable), [true, true]);
   assert.deepEqual(api.stuck(troll).map(l => [l.level, l.gaveUp, l.visits]), [['L2', 5, 5]], 'the level everyone abandons is shown');
   assert.deepEqual([api.levelResult(troll[0]), api.levelResult(troll[1])], [{ win: 1, wins: 5, tries: 5 }, { win: 0, wins: 0, tries: 5 }]);
-  // merge-2048: a full board is a neutral end, even on a board size whose goal tile was reached once.
-  const merge = api.markWinnable([L('s3', { starts: 9, visits: 9, wins: 1, ends: 3, quits: 5, gaveUp: 5, scoreSum: 4000, scoreCount: 4, scoreMax: 1800 }),
-    L('s4', { starts: 6, visits: 6, quits: 6, gaveUp: 6 })]);
+  // moto-madness ids are 'w#-#': a stage only left counts beside a won one.
+  assert.deepEqual(flags([L('w1-1', { wins: 3 }), L('w1-3', { quits: 5 }), L('w2-1', { quits: 1 })]),
+    [['w1-1', true], ['w1-3', true], ['w2-1', true]]);
+  // merge-2048 reports a board only as a neutral end when it fills up; the goal tile is not a win. One 3x3
+  // board reached 256 and was left, five 4x4 boards were left, another filled up: no board counts.
+  const merge = api.markWinnable([L('s3', { starts: 9, visits: 9, ends: 4, quits: 5, gaveUp: 5, scoreSum: 4000, scoreCount: 4, scoreMax: 1800 }),
+    L('s4', { starts: 5, visits: 5, quits: 5, gaveUp: 5 })]);
   assert.deepEqual(merge.map(l => l.winnable), [false, false]);
   assert.deepEqual(api.stuck(merge), []);
   assert.deepEqual(api.levelResult(merge[0]), { avg: 1000, best: 1800 }, 'a board shows its average and best score');
+  assert.deepEqual(flags([L('s3', { quits: 1 }), L('s4', { quits: 5 })]), [['s3', false], ['s4', false]], 'boards only left');
+  // block-burst: a saved classic run is continued and reports 'end' only at game over, so a day of
+  // classic visits that were all left is not giving up, even beside a won level.
+  const burst = api.markWinnable([L('L1', { starts: 1, visits: 1, wins: 1 }),
+    L('classic', { starts: 5, visits: 5, quits: 5, gaveUp: 5, seconds: 10134 })]);
+  assert.deepEqual(burst.map(l => l.winnable), [true, false]);
+  assert.deepEqual(api.stuck(burst), []);
+  // maze-dash and swing-hook: an endless run only left beside won levels; swing-hook's abandoned level still counts.
+  assert.deepEqual(flags([L('L1', { wins: 2 }), L('L2', { quits: 6 }), L('endless', { starts: 6, visits: 6, quits: 6, gaveUp: 6 })]),
+    [['L1', true], ['L2', true], ['endless', false]]);
+  assert.deepEqual(flags([L('L3', { losses: 2 }), L('endless', { quits: 5 }), L('main', { quits: 5 }), L('run', { quits: 5 })]),
+    [['L3', true], ['endless', false], ['main', false], ['run', false]]);
+  // fire-and-ice: co-op levels are 'L#:duo' (the default mode) and never count; a solo level only left does.
+  const fire = api.markWinnable([L('L1:solo', { starts: 2, visits: 2, wins: 2 }), L('L4:duo', { starts: 5, visits: 5, quits: 5, gaveUp: 5 }),
+    L('L4:solo', { starts: 5, visits: 5, quits: 5, gaveUp: 5 }), L('L2:duo', { ends: 3 })]);
+  assert.deepEqual(fire.map(l => [l.level, l.winnable]), [['L1:solo', true], ['L4:duo', false], ['L4:solo', true], ['L2:duo', false]]);
+  assert.deepEqual(api.stuck(fire).map(l => l.level), ['L4:solo']);
   // Free play and endless runs: games with nothing to win, whether rounds ended or were left.
   assert.deepEqual(flags([L('main', { starts: 6, visits: 6, ends: 1, quits: 5, gaveUp: 5 })]), [['main', false]]);
   assert.deepEqual(flags([L('endless', { starts: 7, visits: 7, quits: 7, gaveUp: 7 })]), [['endless', false]]);
   // Two-player modes never count, even when only left beside matches against the computer.
   assert.deepEqual(flags([L('local', { starts: 6, visits: 6, quits: 6, gaveUp: 6 }), L('cpu-easy', { starts: 6, visits: 6, wins: 3, losses: 2, draws: 1 }),
-    L('duo', { quits: 5 }), L('pvp', { wins: 2 })]), [['local', false], ['cpu-easy', true], ['duo', false], ['pvp', false]]);
+    L('duo', { quits: 5 }), L('pvp', { wins: 2 }), L('m1:local', { wins: 1 }), L('m1:pvp', { losses: 1 }), L('duos', { wins: 1 })]),
+    [['local', false], ['cpu-easy', true], ['duo', false], ['pvp', false], ['m1:local', false], ['m1:pvp', false], ['duos', true]]);
   // A level that was only left counts in a game with won or lost levels, unless it ever ended neutrally or in a draw.
   assert.deepEqual(flags([L('L1', { wins: 2 }), L('L2', { quits: 3 }), L('L3', { quits: 3, ends: 1 }), L('L4', { quits: 3, draws: 1 }),
     L('L5', { losses: 1, draws: 4 })]), [['L1', true], ['L2', true], ['L3', false], ['L4', false], ['L5', true]]);
@@ -392,14 +422,27 @@ test('combined days count distinct dates; averages leave out sessions still open
   const week = api.summary(api.combine([local, other]).tables, '2026-10-04', '2026-10-08');
   const candy = week.games.find(g => g.game === 'candy-rope');
   assert.deepEqual([candy.days, candy.pcs, week.pcs], [2, 2, 2], 'two dates on two PCs are two play days');
-  // Today a game is open: 3 minutes of play, no closed session yet.
+  // Today a game is open on this PC: 3 minutes of play, no closed session yet.
+  const live = { pc: 'pcabcd', date: '2026-10-08' };
   const open = api.parseDay('2026-10-08', day('2026-10-08', {
     'connect-four': { o: 1, e: 180000, hh: { 10: 180000 }, b: [0, 0, 0, 0] },
     'candy-rope': { o: 2, e: 240000, hh: { 9: 240000 }, b: [0, 2, 0, 0] }
   }));
-  const s = api.summary(api.tables([open], info), '2026-10-08', '2026-10-08');
+  const s = api.summary(api.tables([open], info), '2026-10-08', '2026-10-08', live);
   assert.deepEqual(s.games.map(g => [g.game, g.open]), [['candy-rope', false], ['connect-four', true]]);
   assert.deepEqual([s.seconds, s.closedSeconds, s.sessions], [420, 240, 2], 'the average is 240 s over 2 sessions, not 420 s');
+  // Time and no session on a past day (a load timeout, then Retry and a long play), or in another
+  // PC's file, will never close: no «still open» there.
+  const failed = api.parseDay('2026-10-06', day('2026-10-06', { 'troll-level': { o: 1, e: 600000, hh: { 9: 600000 }, b: [0, 0, 0, 0], t: 1 } }));
+  const past = api.summary(api.tables([failed, open], info), '2026-10-04', '2026-10-08', live);
+  assert.deepEqual(past.games.map(g => [g.game, g.open]), [['candy-rope', false], ['troll-level', false], ['connect-four', true]]);
+  const elsewhere = api.readImport(JSON.stringify(otherPcFile('جهاز 9', '2026-10-08T10:00:00+03:00', ['2026-10-08'],
+    [['2026-10-08', 'tic-tac-toe', 300, 0]], [])), names);
+  const both = api.summary(api.combine([{ pc: { id: 'pcabcd', label: 'جهاز 7', copy: 'web' }, exported_at: EXPORTED_AT,
+    tables: api.tables([open], info), local: true }, elsewhere]).tables, '2026-10-08', '2026-10-08', live);
+  assert.deepEqual(both.games.map(g => [g.game, g.open]), [['candy-rope', false], ['tic-tac-toe', false], ['connect-four', true]]);
+  assert.equal(api.summary(api.tables([open], info), '2026-10-08', '2026-10-08', null).games.some(g => g.open), false,
+    'without this PC\'s own records, nothing is open');
 });
 
 test('the export reminder: days removed for space, a nearly full PC, or an old day not exported', () => {
@@ -684,10 +727,17 @@ test('clearing needs the typed word and removes only sg:site:stats: keys; stop a
 test('a game still open and days removed for space are explained, not hidden', async t => {
   // Opened from 🏫 while connect-four is still open: 3 minutes of play, no closed session yet.
   // The portal removed 2 October for space; the last export was on 1 October.
+  // On 6 October neon-slope had a load timeout, then Retry and 10 minutes of play: no length, never open.
+  // On 5 October block-burst's saved classic run and fire-and-ice's co-op L4 were left 5 times each.
   const entries = {
     'sg:site:stats:d:2026-10-08': day('2026-10-08', { 'connect-four': { o: 1, e: 180000, hh: { 10: 180000 }, b: [0, 0, 0, 0] } }),
+    'sg:site:stats:d:2026-10-06': day('2026-10-06', { 'neon-slope': { o: 1, e: 600000, hh: { 9: 600000 }, b: [0, 0, 0, 0], t: 1 } }),
     'sg:site:stats:d:2026-10-05': day('2026-10-05', { 'troll-level': { o: 5, e: 400000, hh: { 9: 400000 }, b: [0, 5, 0, 0],
-      lv: { L1: [5, 5, 0, 0, 0, 0, 200000, 15, 3, 5, 5, 0], L2: [5, 0, 0, 0, 0, 5, 150000, 0, 0, 0, 5, 5] } } }),
+      lv: { L1: [5, 5, 0, 0, 0, 0, 200000, 15, 3, 5, 5, 0], L2: [5, 0, 0, 0, 0, 5, 150000, 0, 0, 0, 5, 5] } },
+    'block-burst': { o: 5, e: 300000, hh: { 9: 300000 }, b: [0, 5, 0, 0],
+      lv: { L1: [1, 1, 0, 0, 0, 0, 30000, 500, 500, 1, 1, 0], classic: [5, 0, 0, 0, 0, 5, 10134, 0, 0, 0, 5, 5] } },
+    'fire-and-ice': { o: 6, e: 360000, hh: { 10: 360000 }, b: [0, 6, 0, 0],
+      lv: { 'L1:solo': [1, 1, 0, 0, 0, 0, 40000, 3, 3, 1, 1, 0], 'L4:duo': [5, 0, 0, 0, 0, 5, 200000, 0, 0, 0, 5, 5] } } }),
     'sg:site:statsmeta': JSON.stringify({ pc: { id: 'pcabcd' }, lastExport: new Date('2026-10-01T12:00:00+03:00').getTime(), pruned: '2026-10-02' })
   };
   const page = await teacherPage(t, { entries });
@@ -697,9 +747,17 @@ test('a game still open and days removed for space are explained, not hidden', a
   assert.equal(await gameRow(page, 'connect-four').locator('td').nth(1).textContent(), '0ما زالت مفتوحة');
   assert.match(await page.locator('#reminder').textContent(),
     /^تذكير: امتلأت مساحة الإحصاءات على هذا الجهاز، فحُذفت أيام قديمة لم تُصدَّر، آخرها 2\/10\/2026\. صدّر ملف Excel الآن\. .*أيهما أسبق/);
-  // The week: troll-level's L2, which all five children left, is where they stop.
+  // The week: troll-level's L2, which all five children left, is where they stop; block-burst's
+  // classic run and fire-and-ice's co-op level are not, though both games won a level.
   await page.locator('input[name="period"][value="week"]').check();
+  assert.deepEqual(await page.locator('#cardStuck li').evaluateAll(items => items.map(li => li.dataset.game + ' ' + li.dataset.level)),
+    ['troll-level L2']);
   assert.match(await page.locator('#cardStuck').textContent(), /المرحلة أو الوضع L2 — توقفوا عندها 5 من 5 زيارات/);
+  assert.deepEqual(await page.locator('#stuck .stuck').evaluateAll(divs => divs.map(d => d.dataset.game)), ['troll-level']);
+  assert.deepEqual(await page.locator('#levels tr[data-winnable="0"]').evaluateAll(rows => rows.map(r => r.dataset.level)),
+    ['L4:duo', 'classic'], 'their gave-up cells show «—»');
+  assert.equal(await gameRow(page, 'neon-slope').locator('.open-note').count(), 0, 'a past session that failed is not open');
+  assert.equal(await gameRow(page, 'connect-four').locator('.open-note').count(), 1);
   assert.match(await page.locator('#stuck li[data-level="L2"]').textContent(), /فازوا في 0 من 5 محاولات/);
   assert.match(await page.locator('#lv-troll-level tr[data-level="L1"]').textContent(), /فازوا في 5 من 5 محاولات/);
   assert.match(await page.locator('#cardTop').textContent(), /5 مرات.*مرة لعب ما زالت مفتوحة/s);

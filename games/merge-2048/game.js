@@ -588,9 +588,9 @@
     G.dead = !G.board.canMove(); G.deadAt = now + 0.3;
     G.winPending = G.won && !G.keep; G.maxT = G.board.maxTile(); G.newBest = G.startBest > 0 && G.score > G.startBest;
     G.shownScore = G.score;
-    // Play statistics: a new or resumed board is a round 's'+N; it ends with
-    // 'win' at the first goal tile, else as a neutral 'end' with the score when
-    // the board fills up (a full board is the natural end, not a loss).
+    // Play statistics: a new or resumed board is a round 's'+N. A board has no
+    // winner and is kept between visits, so it ends only as a neutral 'end' with
+    // the score when it fills up; the goal tile is a moment inside the round.
     Kit.stats.round('s' + N);
     setScreen('play');
     refreshHUD(true);
@@ -650,7 +650,6 @@
     }
     if (mx >= WIN[N] && !G.won) {
       G.won = true; G.winPending = true;
-      Kit.stats.end('win', G.score);
       later(0.45, showWin);
     }
     if (!b.canMove()) markDead();
