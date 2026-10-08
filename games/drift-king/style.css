@@ -95,6 +95,9 @@ i.coin.sm { width: 20px; height: 20px; }
 .mis.done .mt { text-decoration: line-through; opacity: .6; }
 
 .tbottom { position: absolute; bottom: 20px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+/* the full-width row overlaps the gift button's lower half: only its contents take clicks */
+#title > .tbottom { pointer-events: none; }
+.tbottom > * { pointer-events: auto; }
 .playbtn {
   display: inline-flex; align-items: center; justify-content: center; gap: 16px;
   font-size: 50px; font-weight: 700; color: #fff; background: linear-gradient(#4be38f, #22b566);
@@ -208,6 +211,9 @@ i.coin.sm { width: 20px; height: 20px; }
 .toast.show { transform: translate(-50%, 0); opacity: 1; }
 .toast.top { bottom: auto; top: 50px; transform: translate(-50%, -30px); }
 .toast.top.show { transform: translate(-50%, 0); }
+/* Shared save warning: the full message starts bottom-left, above the title's
+   how-to line and clear of the mission toast, then folds into the corner badge. */
+html .sg-save-status:not([data-compact="true"]) { inset-inline: auto 12px; margin-inline: 0; bottom: 80px; }
 .mis.just .chk { animation: pulse .5s ease-in-out 3; }
 .mis.just .mr { color: #1a9a55; }
 .mis.just .mt { text-decoration: none; opacity: 1; color: #1a9a55; }
