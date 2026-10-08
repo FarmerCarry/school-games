@@ -428,31 +428,44 @@
   // the 🏁 of this test type's personal best. It moves once a second with the live wpm (a CSS
   // transform transition glides between seconds), so there is still no animation loop.
   var raceEl = $('race'), race = null;
+  var LEFT_FACING = '🐇🐎🐆'; // emoji animals drawn facing left (style.css .lf mirrors them in English)
+  var RIGHT_FACING = '🚀'; // and the rocket points right (.rf mirrors it in Arabic)
   function buildRace() {
     var pb = getPbs()[pbKey(T)], best = pb && pb.wpm > 0 ? pb.wpm : 0;
     var max = Math.max(50, Math.ceil(best * 1.25 / 10) * 10), marks = [], html = '';
     E.BADGES.forEach(function (b) { if (b.min) marks.push({ v: b.min, t: b.icon, n: b.name }); });
     if (best) marks.push({ v: best, t: '🏁', n: 'رقمك القياسي: ' + Math.round(best) + ' ' + UNIT, pb: 1 });
     marks.forEach(function (m) {
-      html += '<i class="ms' + (m.pb ? ' pbf' : '') + '" title="' + m.n + '" style="--p:' + Math.min(1, m.v / max).toFixed(3) + '">' + m.t + '</i>';
+      m.p = Math.min(1, m.v / max);
+      html += '<i class="ms' + (m.pb ? ' pbf' : LEFT_FACING.indexOf(m.t) >= 0 ? ' lf' : RIGHT_FACING.indexOf(m.t) >= 0 ? ' rf' : '') + '" title="' + m.n + '" style="--p:' + m.p.toFixed(3) + '">' + m.t + '</i>';
     });
     raceEl.style.setProperty('--p', 0); // new elements start at 0, not gliding back from the last test
     raceEl.innerHTML = '<b class="fill"></b>' + html + '<b class="run"><i>⚡</i></b>';
-    race = { max: max, marks: marks, els: raceEl.querySelectorAll('.ms') };
+    race = { max: max, marks: marks, els: raceEl.querySelectorAll('.ms'), p: 0 };
   }
   function updateRace() {
     if (!race) return;
-    var w = T.phase === 'running' ? T.liveWpm : 0;
-    raceEl.style.setProperty('--p', Math.min(1, w / race.max).toFixed(3));
+    var w = T.phase === 'running' ? T.liveWpm : 0, p = Math.min(1, w / race.max), p0 = race.p;
+    race.p = p;
+    raceEl.style.setProperty('--p', p.toFixed(3));
     // A mark pops the first time it is passed (one ding when key sounds are on), but only once
-    // the speed has settled: live wpm jumps around in the first seconds.
-    var ding = false, settled = T.wpmHist.length >= 3;
+    // the speed has settled: live wpm jumps around in the first seconds. Lighting up, the pop and
+    // the ding wait until the ⚡ reaches the mark in its linear 0.9 s glide from p0 to p.
+    var ding = -1, settled = T.wpmHist.length >= 3, glide = p !== p0 && !Kit.motion.reduced();
     for (var i = 0; i < race.marks.length; i++) {
-      var el = race.els[i], on = w >= race.marks[i].v;
-      el.classList.toggle('on', on);
-      if (on && settled && !el.classList.contains('hit')) { el.classList.add('hit'); ding = true; }
+      var el = race.els[i], m = race.marks[i], on = w >= m.v, dl = 0;
+      if (on !== el.classList.contains('on')) {
+        if (glide) dl = Math.min(0.9, Math.max(0, 0.9 * (m.p - p0) / (p - p0)));
+        el.style.transitionDelay = dl.toFixed(2) + 's';
+        el.classList.toggle('on', on);
+      }
+      if (on && settled && !el.classList.contains('hit')) {
+        el.style.animationDelay = dl.toFixed(2) + 's';
+        el.classList.add('hit');
+        ding = ding < 0 ? dl : Math.min(ding, dl);
+      }
     }
-    if (ding) sound('pass');
+    if (ding >= 0) sound('pass', ding);
   }
 
   /* -------------------------------------------------------------- finish */
@@ -711,12 +724,14 @@
     if (h.length) drawLine($('spark'), wpms(h), { low: lows(h) });
   }
   function updateFoot() {
-    var h = getHist(), txt = $('progTxt'), spark = $('spark');
+    var h = getHist(), txt = $('progTxt'), spark = $('spark'), last = h[h.length - 1];
     spark.style.display = h.length ? '' : 'none';
-    if (!h.length) { txt.textContent = '📈 تقدّمك: لا نتائج بعد، ابدأ الكتابة!'; return; }
-    var pb = T ? getPbs()[pbKey(T)] : null, last = h[h.length - 1];
-    txt.textContent = '📈 تقدّمك · آخر نتيجة ' + Math.round(last.wpm) +
-      (last.v === 0 ? ' (الدقة ' + Math.floor(last.acc) + '%)' : '') + (pb ? ' · رقمك القياسي هنا ' + Math.round(pb.wpm) : '');
+    // A low-accuracy result keeps its note in the tooltip only: a longer line would reach the middle
+    // of the footer, under the save warning. Results explain it and the spark draws that dot hollow.
+    $('progMini').title = last && last.v === 0 ? 'تقدّمك · آخر نتيجة: الدقة ' + Math.floor(last.acc) + '%، أقل من 75%، لذلك لا تُحسب رقمًا قياسيًا' : 'تقدّمك';
+    if (!last) { txt.textContent = '📈 تقدّمك: لا نتائج بعد، ابدأ الكتابة!'; return; }
+    var pb = T ? getPbs()[pbKey(T)] : null;
+    txt.textContent = '📈 تقدّمك · آخر نتيجة ' + Math.round(last.wpm) + (pb ? ' · رقمك القياسي هنا ' + Math.round(pb.wpm) : '');
     drawSpark();
   }
 
@@ -1193,7 +1208,8 @@
 
   /* -------------------------------------------------------------- sounds */
   // Soft, short tones only (no noise, no square waves). At most one sound per keystroke.
-  function sound(kind) {
+  // delay (s, optional): when the 'pass' ding plays.
+  function sound(kind, delay) {
     if (!S.sound) return;
     var A = Kit.audio;
     if (!A.ctx || A.muted) return;
@@ -1206,8 +1222,9 @@
     } else if (kind === 'back') {
       A.tone({ freq: 900, to: 700, type: 'sine', dur: 0.03, vol: 0.07, attack: 0.002 });
     } else if (kind === 'pass') {
-      A.tone({ freq: 1046.5, type: 'triangle', dur: 0.12, vol: 0.07, attack: 0.005 });
-      A.tone({ freq: 1568, type: 'sine', dur: 0.18, vol: 0.05, delay: 0.07, attack: 0.005 });
+      var d = delay || 0;
+      A.tone({ freq: 1046.5, type: 'triangle', dur: 0.12, vol: 0.07, delay: d, attack: 0.005 });
+      A.tone({ freq: 1568, type: 'sine', dur: 0.18, vol: 0.05, delay: d + 0.07, attack: 0.005 });
     } else if (kind === 'err') {
       A.tone({ freq: 150, to: 85, type: 'sine', dur: 0.12, vol: 0.32, attack: 0.004 });
       A.tone({ freq: 310, to: 170, type: 'triangle', dur: 0.06, vol: 0.06, attack: 0.003 });

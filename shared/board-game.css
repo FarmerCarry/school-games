@@ -31,11 +31,13 @@ button:focus-visible { outline:3px solid #b7e8ff; outline-offset:4px; }
 .level-box { display:flex; flex-direction:column; gap:8px; margin-top:-8px; }
 .level-choices { display:flex; gap:6px; }
 .level-choices button { flex:1; min-height:38px; padding:4px; border:2px solid #3a4568; border-radius:11px; background:#232c4a; color:#d3d9ed; font-size:15px; font-weight:700; white-space:nowrap; }
-.level-choices button:not(:disabled):hover { border-color:#7584b8; }
-.level-choices button:disabled { opacity:.6; }
-.level-choices [aria-pressed="true"] { background:var(--amber); border-color:var(--amber); color:#332608; }
+.level-choices button:hover { border-color:#7584b8; }
+.level-choices [aria-pressed="true"],.level-choices .playing { background:var(--amber); border-color:var(--amber); color:#332608; }
+/* A level picked mid-round gets a dashed ring until the next round starts, even where its note is hidden. */
+.level-choices button.pending { background:#232c4a; border:2px dashed var(--amber); color:var(--amber); }
 .level-choices .won::after { content:' ★'; color:#ffd75e; }
-.level-choices [aria-pressed="true"].won::after { color:#b86e00; }
+.level-choices :is([aria-pressed="true"],.playing).won::after { color:#b86e00; }
+.level-choices .pending.won::after { color:inherit; }
 .level-tally { margin:0; color:var(--muted); font-size:14px; line-height:1.5; }
 .level-tally span { display:inline-block; white-space:nowrap; }
 .board-area { display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:0; min-height:0; }

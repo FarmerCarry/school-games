@@ -214,6 +214,8 @@ for (const key of ['Space']) {
     await activate(page, frame, '[data-upgrade="power"]', key);
     assert.equal(await phase(frame), 'result', 'native upgrade activation must not restart the round');
     assert.equal(await frame.evaluate(() => Kit.store('skybound-golf').get('progress').upgrades.power), before + 1);
+    assert.equal(await frame.evaluate(() => document.activeElement === document.querySelector('#result-unlock button')), true,
+      'a keyboard purchase on the unlock card hands Space back to the new world');
     await activate(page, frame, '#again', key);
     assert.equal(await phase(frame), 'ready');
     await activate(page, frame, '#hit', key);
@@ -224,9 +226,10 @@ for (const key of ['Space']) {
 }
 
 // Frame-stepped game: the needle only moves when the test advances it.
-async function manualGame(t) {
+async function manualGame(t, progress) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
   await context.addInitScript(installGolfHarness, { manual: true });
+  if (progress) await context.addInitScript(p => localStorage.setItem('sg:skybound-golf:progress', p), JSON.stringify(progress));
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'no browser errors'); });
@@ -255,4 +258,39 @@ test('Golf hit button still strikes once from the keyboard', async t => {
   await page.locator('#hit').focus();
   await page.keyboard.press('Enter');
   assert.deepEqual(await page.evaluate(() => ({ phase: golfState.phase, quality: golfState.quality, age: golfState.shotAge })), { phase: 'flight', quality: 1, age: 0 });
+});
+
+test('Golf world unlock keeps Space on the new world after buying upgrades', async t => {
+  // The perfect 300 m shot pays 120 coins: with 80 saved, enough for two bounce levels and one power level.
+  const page = await manualGame(t, { world: 0, best: 200, coins: 80 });
+  await page.locator('#hit').click();
+  await page.evaluate(() => {
+    golfState.ball.stopped = true; golfState.ball.surface = 'grass'; golfState.ball.maxX = 300;
+    advanceGolfFrames(50);
+  });
+  const go = page.locator('#result-unlock button'), focused = () => go.evaluate(b => b === document.activeElement);
+  assert.equal(await focused(), true);
+  assert.match(await page.locator('#again').getAttribute('class'), /\bcream\b/, 'the new world is the only coral button');
+  // A keyboard purchase returns to the new world even when the upgrade stays
+  // affordable, and a held Enter neither buys again nor opens the world.
+  const bounce = () => page.evaluate(() => Kit.store('skybound-golf').get('progress').upgrades.bounce);
+  await page.locator('[data-upgrade="bounce"]').focus();
+  await page.keyboard.down('Enter');
+  await page.keyboard.down('Enter');
+  await page.keyboard.up('Enter');
+  assert.equal(await bounce(), 1);
+  assert.equal(await page.locator('[data-upgrade="bounce"]').isDisabled(), false);
+  assert.equal(await focused(), true);
+  assert.equal(await page.evaluate(() => golfState.phase), 'result');
+  // A mouse purchase leaves Space/Enter with the card's advertised action.
+  await page.locator('[data-upgrade="bounce"]').click();
+  assert.equal(await bounce(), 2);
+  assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+  // A keyboard purchase that disables its button falls back to the new world, not to Again.
+  await page.locator('[data-upgrade="power"]').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('[data-upgrade="power"]').isDisabled(), true);
+  assert.equal(await focused(), true);
+  await page.keyboard.press('Space');
+  assert.deepEqual(await page.evaluate(() => ({ phase: golfState.phase, world: golfState.world })), { phase: 'ready', world: 1 });
 });

@@ -108,7 +108,7 @@
   #oUnlocks[hidden] { display: none; }
   .unl { display: flex; flex-direction: column; align-items: center; gap: 0; font-size: 15px; background: rgba(125, 252, 255, 0.15); border: 2px solid #7dfcff;
     border-radius: 14px; padding: 4px 10px; font-weight: 700; color: #7dfcff; animation: pop .5s .3s both cubic-bezier(.2, 1.6, .4, 1); }
-  .next { margin: 6px auto 4px; max-width: 460px; font-size: 15px; color: #e8e0ff; }
+  .next { margin: 6px auto 4px; max-width: 500px; font-size: 15px; color: #e8e0ff; }
   .next[hidden] { display: none; }
   #oNextTxt canvas { display: inline-block; vertical-align: middle; margin-inline-end: 6px; }
   .pbar { height: 12px; background: rgba(0, 0, 0, 0.4); border-radius: 99px; overflow: hidden; margin-top: 4px; }
@@ -148,6 +148,18 @@
   .card.nope { animation: nope .35s; }
   @keyframes nope { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
   .sfoot { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 8px; }
+
+  /* ---------- shared save warning: beside the centred menus instead of over their lower buttons,
+     and at the top during play, where the bottom corners hold the length box and the minimap. */
+  body .sg-save-status { inset-inline: auto 12px; margin-inline: 0; }
+  /* Narrow frames: wrap Retry under the message so it stays left of the title panel's key hints
+     (328px = half the widest title panel, 608px, plus a 12px gap on each side). */
+  body[data-screen="title"] .sg-save-status { max-width: max(150px, calc(50vw - 328px)); text-align: center; }
+  /* In play only Retry takes clicks (a press elsewhere still reaches the canvas to boost), and the
+     folded badge waits beside the pause button instead of where the cursor goes to steer up. */
+  body[data-screen="play"] .sg-save-status { top: 12px; bottom: auto; inset-inline: 12px; margin-inline: auto; pointer-events: none; }
+  body[data-screen="play"] .sg-save-status button { pointer-events: auto; }
+  body[data-screen="play"] .sg-save-status[data-compact="true"] { top: 9px; inset-inline: 114px auto; margin-inline: 0; }
 
   /* ---------- confetti */
   #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 30; overflow: hidden; }

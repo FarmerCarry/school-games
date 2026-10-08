@@ -20,7 +20,8 @@ after(async () => {
   await server?.close();
 });
 
-// Opens Moto Madness with the frame loop under test control: __game.step(n) advances it.
+// Opens Moto Madness with the frame loop under test control: __game.step(n) advances it,
+// and __loop.update / __loop.render run one frame of the real loop.
 async function game(t, initialSave) {
   const context = await browser.newContext(), page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -28,7 +29,10 @@ async function game(t, initialSave) {
   await page.addInitScript(([key, value]) => {
     if (value && !sessionStorage.getItem('seeded')) { localStorage.setItem(key, value); sessionStorage.setItem('seeded', '1'); }
     let kit;
-    Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(v) { kit = v; kit.loop = () => ({ stop() {} }); } });
+    Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(v) {
+      kit = v;
+      kit.loop = (update, render) => { window.__loop = { update, render }; return { stop() {} }; };
+    } });
   }, [KEY, initialSave ? JSON.stringify(initialSave) : null]);
   await page.goto(`${origin}/games/moto-madness/`);
   await page.waitForFunction(() => window.__game && __game.state === 'title');
@@ -94,6 +98,86 @@ test('Moto Madness shows a retry warning when progress cannot be saved, and keep
   assert.equal(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).stars[0], KEY), stars);
 });
 
+test('Moto Madness only offers a ghost race when the ghost could be saved', async t => {
+  const page = await game(t);
+  await page.evaluate(() => {
+    localStorage.setItem('sg:moto-madness:ghost0', JSON.stringify({ d: [150, -44, 0, 160, -44, 0] })); // an older run
+    window.realSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (k === 'sg:moto-madness:ghost0') throw new DOMException('full', 'QuotaExceededError');
+      return window.realSetItem.call(this, k, v);
+    };
+    __game.start(0);
+  });
+  assert.ok(await page.evaluate(() => __game.ghost), 'the older ghost is raced first');
+  await crossLine(page);
+  await page.evaluate(() => __game.step(120));
+  assert.equal(await page.evaluate(() => __game.state), 'complete');
+  assert.doesNotMatch(await page.locator('#cBest').textContent(), /👻/);
+  const after = await page.evaluate(key => ({
+    ghost: __game.ghost, stored: localStorage.getItem('sg:moto-madness:ghost0'), stars: JSON.parse(localStorage.getItem(key)).stars[0]
+  }), KEY);
+  assert.deepEqual([after.ghost, after.stored], [null, null], 'the older, slower ghost is dropped');
+  assert.ok(after.stars > 0, 'progress is still saved');
+});
+
+test('Moto Madness keeps its paused frame and repaints it only when needed', async t => {
+  const page = await game(t);
+  await page.evaluate(() => {
+    let paints = 0;
+    const fill = CanvasRenderingContext2D.prototype.fillRect;
+    CanvasRenderingContext2D.prototype.fillRect = function (x, y, w, h) {
+      if (this.canvas.id === 'game' && x === 0 && y === 0 && w === 1280 && h === 720) paints++; // the sky
+      return fill.apply(this, arguments);
+    };
+    window.frames = n => { paints = 0; for (let i = 0; i < n; i++) { __loop.update(1 / 60); __loop.render(0); } return paints; };
+    __game.start(0);
+  });
+  assert.equal(await page.evaluate(() => frames(3)), 3, 'a running game paints every frame');
+  await page.keyboard.press('KeyP');
+  assert.equal(await page.evaluate(() => __game.state), 'paused');
+  assert.equal(await page.evaluate(() => frames(20)), 1, 'pausing paints the scene once, then keeps it');
+  await page.setViewportSize({ width: 1000, height: 600 });
+  await page.evaluate(() => new Promise(requestAnimationFrame));
+  assert.equal(await page.evaluate(() => frames(5)), 1, 'a resize repaints the paused scene once');
+  // A GPU reset wipes the canvas and its scale; the cached backdrop canvases are painted again.
+  const reset = await page.evaluate(() => {
+    const canvas = document.getElementById('game'), ctx = canvas.getContext('2d'), scale = ctx.getTransform().a;
+    let made = 0;
+    const create = document.createElement.bind(document);
+    document.createElement = (name, opts) => { if (String(name).toLowerCase() === 'canvas') made++; return create(name, opts); };
+    canvas.width = canvas.width;
+    canvas.dispatchEvent(new Event('contextrestored'));
+    return { paints: frames(5), made, scale, after: ctx.getTransform().a };
+  });
+  assert.equal(reset.paints, 1, 'a restored canvas repaints the paused scene once');
+  assert.ok(reset.made > 0, 'the backdrop layers are painted again');
+  assert.equal(reset.after, reset.scale, 'the canvas scale is restored');
+  await page.keyboard.press('KeyP');
+  assert.equal(await page.evaluate(() => __game.state), 'play');
+  assert.equal(await page.evaluate(() => frames(3)), 3, 'a resumed game paints every frame');
+});
+
+test('Moto Madness leaves out the finish confetti with reduced motion', async t => {
+  const page = await game(t);
+  // each confetti piece is drawn rotated; the bike adds only a few rotations
+  const rotations = () => page.evaluate(() => {
+    let n = 0;
+    const rotate = CanvasRenderingContext2D.prototype.rotate;
+    CanvasRenderingContext2D.prototype.rotate = function () { if (this.canvas.id === 'game') n++; return rotate.apply(this, arguments); };
+    __game.start(0);
+    __game.finish();
+    for (let i = 0; i < 120 && !__game.world.finished; i++) __game.step(1, { gas: true });
+    __game.step(3);
+    n = 0; __loop.render(0);
+    CanvasRenderingContext2D.prototype.rotate = rotate;
+    return n;
+  });
+  assert.ok(await rotations() > 50, 'confetti flies at the finish');
+  await page.evaluate(() => Kit.motion.setPreference('reduce'));
+  assert.ok(await rotations() < 20, 'no confetti with reduced motion');
+});
+
 test('Moto Madness opens the garage with a corrupt saved paint or suit', async t => {
   const page = await game(t, { stars: [3], best: [20], paint: 99, suit: -2, flips: 1 });
   await page.keyboard.press('KeyG');
@@ -115,4 +199,30 @@ test('Moto Madness reuses the backdrop between levels of the same world', async 
   assert.equal(made.same, 0, 'the next grass level keeps the grass backdrop');
   assert.equal(made.retry, 0, 'retrying keeps the backdrop');
   assert.ok(made.desert > 0, 'a new world draws its own backdrop');
+});
+
+// The game's own stuck rule: a short ← tap with ↑ held leaves the bike in a wheelie against
+// the first lift's end wall on 4-2, one wheel on the lift, so the lift never starts. The game
+// must still treat that as stuck and send the rider back (moto-balance replays the same rule).
+test('Moto Madness rescues a bike stuck in a wheelie against a waiting lift', async t => {
+  const page = await game(t);
+  const run = await page.evaluate(() => {
+    __game.start(16);
+    const w = __game.world, ride = (n, lean) => __game.step(n, { gas: true, brake: false, lean });
+    const m = w.movers[0], lift = [m.x - m.len / 2, m.x + m.len / 2], crash = w.crash, crashes = [];
+    // note why and where each crash happens, so a pit or the press spikes cannot pass for the rescue
+    w.crash = function (why) { if (!this.crashed && !this.finished) crashes.push({ why, x: Math.round(this.bike.x) }); return crash.apply(this, arguments); };
+    for (let i = 0; i < 600 && w.bike.x < 600; i++) ride(1, 0);
+    ride(18, -1);
+    ride(3 * 60, 0);
+    const stuckAt = Math.round(w.bike.x), crashesBefore = crashes.length;
+    ride(5 * 60, 0);
+    return { lift, stuckAt, crashesBefore, crashes, state: __game.state };
+  });
+  assert.equal(run.crashesBefore, 0, `the bike stands against the lift wall: ${JSON.stringify(run)}`);
+  assert.ok(run.stuckAt > run.lift[0] && run.stuckAt < run.lift[1], `the bike stands on the first lift: ${JSON.stringify(run)}`);
+  assert.equal(run.state, 'play');
+  assert.ok(run.crashes.length >= 1, `still stuck after 8 s of ↑: ${JSON.stringify(run)}`);
+  assert.equal(run.crashes[0].why, 'stuck', `the first crash is the rescue: ${JSON.stringify(run)}`);
+  assert.ok(Math.abs(run.crashes[0].x - run.stuckAt) <= 60, `the rescue comes at the lift wall: ${JSON.stringify(run)}`);
 });

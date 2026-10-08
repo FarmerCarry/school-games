@@ -121,6 +121,13 @@ html[data-sg-motion="reduce"] #banner.show { animation-duration: 2.2s !important
   background: linear-gradient(180deg, #b6ff6a, #1fd36b); color: #06351a; text-shadow: 0 2px 0 rgba(255,255,255,0.4);
   box-shadow: 0 0 26px rgba(125,255,58,0.8), 0 7px 0 #0b6a33; animation: pulse 1.2s ease-in-out infinite; }
 .nbtn.play.small { font-size: calc(var(--u) * 3); padding: calc(var(--u) * 0.9) calc(var(--u) * 4); }
+/* Play pressed while a slow PC still builds the graphics: same button size, loading label. */
+#btnPlay { position: relative; }
+#btnPlay .ld { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; font-size: 0.6em; white-space: nowrap;
+  animation: blink 1s ease-in-out infinite; }
+#btnPlay.loading { animation: none; cursor: progress; }
+#btnPlay.loading .go { visibility: hidden; }
+#btnPlay.loading .ld { display: flex; }
 .nbtn .tri { display: inline-block; width: 0; height: 0; border-left: 0.7em solid currentColor; border-top: 0.42em solid transparent; border-bottom: 0.42em solid transparent; margin-inline-end: 0.35em; vertical-align: 0.02em; }
 .pill { display: inline-flex; align-items: center; margin-inline-start: 0.4em; padding: 0 0.5em; border-radius: 99px; background: rgba(0,0,0,0.3); font-size: 0.9em; }
 .trow { display: flex; align-items: center; justify-content: center; gap: calc(var(--u) * 2); }
@@ -231,7 +238,7 @@ html[data-sg-motion="reduce"] #banner.show { animation-duration: 2.2s !important
 /* ------------------------------------------------------------ anims */
 @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 @keyframes bump { 0% { transform: scale(1.3); } 100% { transform: scale(1); } }
-@keyframes blink { 50% { opacity: 0.25; } }
+@keyframes blink { 50% { opacity: 0.5; } }
 @keyframes flicker { 0%, 92%, 96%, 100% { opacity: 1; } 94% { opacity: 0.6; } 95% { opacity: 1; } 97% { opacity: 0.7; } }
 @keyframes logoIn { from { transform: skewX(-8deg) scale(0.4); opacity: 0; } to { transform: skewX(-8deg) scale(1); opacity: 1; } }
 @keyframes panelIn { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }

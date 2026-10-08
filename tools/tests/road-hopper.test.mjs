@@ -20,15 +20,16 @@ after(async () => {
 
 // The game runs its own requestAnimationFrame loop; the page captures it so a test
 // can drive frames by hand (waits therefore poll on a timer, not on frames) and count WebGL clears of the main canvas (one or more per
-// drawn scene). `idle: false` keeps the idle-time warm-up from running at all.
-async function game(t, { reducedMotion = 'no-preference', idle = true } = {}) {
+// drawn scene). `idle: false` keeps the idle-time warm-up from running at all;
+// `failPictures: n` makes the first n character pictures fail.
+async function game(t, { reducedMotion = 'no-preference', idle = true, failPictures = 0 } = {}) {
   const context = await browser.newContext({ viewport: { width: 960, height: 540 }, reducedMotion });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.text()); });
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  await page.addInitScript(idle => {
-    const rh = window.rh = { queue: [], now: 1000, clears: 0, pictures: 0, lost: 0, resizes: 0, failKeys: null };
+  await page.addInitScript(([idle, failPictures]) => {
+    const rh = window.rh = { queue: [], now: 1000, clears: 0, pictures: 0, lost: 0, resizes: 0, failKeys: null, failPictures };
     addEventListener('resize', () => rh.resizes++);
     window.requestAnimationFrame = cb => rh.queue.push(cb);
     rh.frames = n => {
@@ -57,7 +58,11 @@ async function game(t, { reducedMotion = 'no-preference', idle = true } = {}) {
       };
     }
     const toDataURL = HTMLCanvasElement.prototype.toDataURL;
-    HTMLCanvasElement.prototype.toDataURL = function () { rh.pictures++; return toDataURL.apply(this, arguments); };
+    HTMLCanvasElement.prototype.toDataURL = function () {
+      rh.pictures++;
+      if (rh.failPictures > 0) { rh.failPictures--; throw new DOMException('Picture fixture', 'SecurityError'); }
+      return toDataURL.apply(this, arguments);
+    };
     const write = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key) {
       const short = key.replace('sg:road-hopper:', '');
@@ -66,7 +71,7 @@ async function game(t, { reducedMotion = 'no-preference', idle = true } = {}) {
       }
       return write.apply(this, arguments);
     };
-  }, idle);
+  }, [idle, failPictures]);
   await page.goto(`${server.origin}/games/road-hopper/`);
   await page.waitForFunction(() => window.__game, null, { polling: 50 });
   return page;
@@ -171,16 +176,28 @@ test('failed saves show the warning, retry every failed key, and clear only once
 });
 
 test('character pictures are drawn in idle time, reused by the characters screen, then their context is freed', async t => {
-  const page = await game(t);
+  // The first picture fails during the warm-up: the characters screen draws it again
+  // in a new context, which is freed afterwards too.
+  const page = await game(t, { failPictures: 1 });
   await page.waitForFunction(() => rh.pictures === 16 && rh.lost === 1, null, { polling: 100, timeout: 90000 });
   const opened = await page.evaluate(() => {
     document.getElementById('btnChars').click();
-    const imgs = [...document.querySelectorAll('#cGrid img')];
+    const imgs = [...document.querySelectorAll('#cGrid img')], locked = getComputedStyle(document.querySelector('.card.locked img'));
     return {
       state: __game.state, pictures: rh.pictures, cards: imgs.length,
-      drawn: imgs.every(img => img.src.startsWith('data:image/png')),
-      locked: getComputedStyle(document.querySelector('.card.locked img')).filter
+      drawn: imgs.every(img => img.src.startsWith('data:image/png')), draggable: imgs.some(img => img.draggable),
+      locked: locked.filter, lockedPointer: locked.pointerEvents
     };
   });
-  assert.deepEqual(opened, { state: 'chars', pictures: 16, cards: 16, drawn: true, locked: 'brightness(0) opacity(0.65)' });
+  assert.deepEqual(opened, {
+    state: 'chars', pictures: 17, cards: 16, drawn: true, draggable: false,
+    locked: 'brightness(0) opacity(0.65)', lockedPointer: 'none'
+  });
+  await page.waitForFunction(() => rh.lost === 2, null, { polling: 50, timeout: 10000 });
+  const reopened = await page.evaluate(() => {
+    document.getElementById('cBack').click();
+    document.getElementById('btnChars').click();
+    return { state: __game.state, pictures: rh.pictures, lost: rh.lost };
+  });
+  assert.deepEqual(reopened, { state: 'chars', pictures: 17, lost: 2 });
 });

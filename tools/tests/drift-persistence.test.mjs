@@ -126,6 +126,7 @@ test('real quota failure during first migration preserves legacy coins and denie
   assert.deepEqual(await snapshot(page), { current: { v: 1, ...legacy }, stored: null, model: 'red' });
   assert.equal(await page.evaluate(() => purchaseSounds), 0, 'failed purchase must not celebrate');
   assert.match(await page.locator('#toast').textContent(), /لم تُخصم العملات/);
+  assert.equal(await page.locator('.sg-save-status').isHidden(), true, 'a rejected purchase changes nothing; its toast is enough');
   assert.equal(await page.locator('#gCoins').textContent(), '100');
   await page.reload();
   assert.deepEqual((await snapshot(page)).current, { v: 1, ...legacy });
@@ -195,11 +196,78 @@ test('a mission-save failure after purchase retains a coherent purchase and retr
   const purchase = { ...saved, coins: 40, owned: ['red', 'taxi'], car: 'taxi' };
   const rewarded = { ...purchase, coins: 80, done: [...earlierMissions, 'buy'] };
   assert.deepEqual(await snapshot(page), { current: rewarded, stored: purchase, model: 'taxi' });
+  const status = page.locator('.sg-save-status');
+  assert.equal(await status.getAttribute('data-state'), 'failed', 'the unsaved reward shows the save warning');
   await saveFromPause(page);
   assert.deepEqual((await snapshot(page)).stored, rewarded);
+  assert.equal(await status.getAttribute('data-state'), 'saved', 'a confirmed later save clears the warning');
   await page.reload();
   assert.deepEqual((await snapshot(page)).current, rewarded);
   await openGarage(page);
   await chooseCar(page, 'taxi');
   assert.deepEqual((await snapshot(page)).stored, rewarded);
+});
+
+test('a failed gift save keeps the saved record, warns, and Retry writes the gift', async t => {
+  const saved = { v: 1, ...fixture({ giftAt: 0 }) };
+  const page = await game(t, { save: saved });
+  await exhaustStorage(page);
+  // A plain click: the title's bottom row used to swallow clicks on this button.
+  await page.locator('#btnGift').click();
+  await page.locator('#giftBox').click();
+  const status = page.locator('.sg-save-status');
+  assert.equal(await status.getAttribute('data-state'), 'failed');
+  let { current, stored } = await snapshot(page);
+  assert.deepEqual(stored, saved, 'a failed write keeps the saved progress');
+  assert.ok(current.coins > saved.coins && current.giftAt > 0, 'the gift still counts in this session');
+  await page.evaluate(() => localStorage.removeItem('quota-fixture'));
+  await status.locator('button').click();
+  ({ current, stored } = await snapshot(page));
+  assert.deepEqual(stored, current);
+  assert.equal(await status.getAttribute('data-state'), 'saved');
+});
+
+test('on a 4:3 screen and in small portal frames the save warning keeps clear of the how-to line, garage prices and results buttons', async t => {
+  const page = await game(t, { save: { v: 1, ...fixture() } });
+  const resize = async (width, height) => {
+    await page.setViewportSize({ width, height });
+    // timer polling: requestAnimationFrame is stubbed by the fixture
+    await page.waitForFunction(width => document.getElementById('c').style.width === width + 'px', width, { polling: 50 });
+  };
+  await resize(1024, 768);
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => { throw new DOMException('fixture', 'QuotaExceededError'); };
+    __game.debug.addCoins(0);
+  });
+  // the full message (as in the 6 s after a failure, however slow the run) or the folded badge
+  const covered = (selector, compact = false) => page.evaluate(async ([selector, compact]) => {
+    await document.fonts.ready;
+    const panel = document.querySelector('.sg-save-status:not([hidden])');
+    panel.setAttribute('data-compact', String(compact));
+    // settle the panel's pop-in; the looping title animations are far from the warning
+    for (const a of document.getAnimations()) if (a.effect.getComputedTiming().endTime !== Infinity) a.finish();
+    const b = panel.getBoundingClientRect();
+    return [...document.querySelectorAll(selector)].filter(e => {
+      const r = e.getBoundingClientRect();
+      return r.left < b.right && b.left < r.right && r.top < b.bottom && b.top < r.bottom;
+    }).length;
+  }, [selector, compact]);
+  const both = async selector => [await covered(selector), await covered(selector, true)];
+  const title = '.howto, #btnPlay, .card.missions', cars = '#grid .gname, #grid .nbtn';
+  assert.equal(await covered(title), 0);
+  await openGarage(page);
+  assert.equal(await covered(cars), 0);
+  // the portal's game frame on 1280x720 and 1280x1024 screens, and on 1366x768 at 125 %
+  for (const [width, height] of [[942, 530], [789, 444]]) {
+    await resize(width, height);
+    assert.deepEqual(await both(cars), [0, 0], `garage at ${width}x${height}`);
+  }
+  await page.locator('#btnGarageClose').click();
+  assert.deepEqual(await both(title), [0, 0], 'title at 789x444');
+  assert.equal(await page.evaluate(() => {
+    __game.debug.start(); __game.debug.skip(40);
+    for (let i = 0; i < 1200 && __game.mode !== 'over'; i++) __game.debug.stepN(1);
+    return __game.mode;
+  }), 'over');
+  assert.deepEqual(await both('#over button'), [0, 0], 'results at 789x444');
 });

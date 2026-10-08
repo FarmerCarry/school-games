@@ -46,7 +46,14 @@
   }
   // A single setItem is atomic. Legacy keys remain untouched: a failed first
   // write cannot damage old progress; after success this record is authoritative.
-  function persist(next) { return store.set('save', next || save); }
+  // Every write is the whole record, so one confirmed write clears the warning.
+  // A rejected purchase (commitSave) changes nothing and has its own toast.
+  var saveStatus = Kit.saveStatus({ retry: function () { persist(); } });
+  function persist(next) {
+    var ok = store.set('save', next || save);
+    if (ok) saveStatus.saved(); else if (!next) saveStatus.failed();
+    return ok;
+  }
   function commitSave(next) {
     if (!persist(next)) return false;
     for (var key in next) save[key] = next[key];
@@ -258,6 +265,7 @@
 
   /* ------------------------------------------------------------ flow */
   function toTitle() {
+    clearTimeout(overTimer);
     G.mode = 'title';
     DK.snd.stopEngine();
     DK.snd.musicLevel(0.55);
@@ -270,6 +278,8 @@
 
   function startRun() {
     Kit.audio.unlock();
+    // a quick replay must not bring the results celebration onto the new road
+    clearTimeout(overTimer); confetti.length = 0;
     show(el.title, false); show(el.over, false); show(el.pause, false); show(el.garage, false); show(el.gift, false);
     show(el.btnPause, true);
     G.model = DK.carById(save.car);
@@ -315,7 +325,7 @@
     DK.snd.musicLevel(0.4);
   }
 
-  var overMissions = [];
+  var overMissions = [], overTimer = 0;
   var FALL_TITLES = ['إلى الغيوم!', 'طِرتَ بعيدًا!', 'أوووه!', 'بوووم في الغيوم!', 'انزلاق أكثر من اللازم!'];
   function gameOver() {
     G.mode = 'over';
@@ -355,8 +365,8 @@
     DK.snd.stopEngine();
     DK.snd.musicLevel(0.55);
     if (newBest) {
-      setTimeout(function () { DK.snd.best(); burstConfetti(90, true); }, 350);
-    } else setTimeout(function () { Kit.sfx.lose(); }, 150);
+      overTimer = setTimeout(function () { DK.snd.best(); burstConfetti(90, 'top'); }, 350);
+    } else overTimer = setTimeout(function () { Kit.sfx.lose(); }, 150);
     countUp($('oScore'), st.score, 700);
   }
   function countUp(node, target, ms) {
@@ -450,7 +460,7 @@
         return;
       }
       G.model = car; DK.snd.buy(); toast('سيارة جديدة: ' + car.name + '!');
-      burstConfetti(60, true);
+      burstConfetti(60, 'top');
       checkMissions(null);
       refreshGarage();
     } else {
@@ -516,7 +526,7 @@
     ga.querySelector('span').textContent = '+' + amt;
     show(ga, true); show($('giftHint'), false); show($('btnGiftOk'), true);
     DK.snd.gift();
-    burstConfetti(80, true);
+    burstConfetti(80, 'top');
   }
   $('giftBox').addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); crackGift(); });
   function closeGift() {
@@ -547,14 +557,23 @@
     if (G.popups.length > 12) G.popups.shift();
     G.popups.push({ text: text, sub: sub, x: x, y: y, z: z, col: col, size: size || 40, t: 0, life: life || 1.1 });
   }
-  // Decorative: skipped with reduced motion. top = rain gently from the top
-  // edge over a results/gift/garage panel instead of bursting mid-screen.
-  function burstConfetti(n, top) {
+  // Decorative: skipped with reduced motion. 'top' rains gently from the top
+  // edge over a results/gift/garage panel instead of bursting mid-screen;
+  // 'sides' (every in-play burst) pops from both ends of the zone ribbon
+  // (400 px wide at y 150) and only moves outwards, so no piece crosses the
+  // score, best, combo or zone text in the HUD band.
+  function burstConfetti(n, from) {
     if (Kit.motion.reduced()) return;
-    var cols = ['#ff4d8d', '#ffd23f', '#3ddc84', '#3d8bff', '#b36bff', '#ff9a2e'];
+    var cols = ['#ff4d8d', '#ffd23f', '#3ddc84', '#3d8bff', '#b36bff', '#ff9a2e'], top = from === 'top';
     for (var k = 0; k < n; k++) {
       if (confetti.length > 240) confetti.shift();
-      confetti.push({ x: W / 2 + (Math.random() - 0.5) * (top ? 800 : 300), y: top ? 60 : H * 0.35, vx: (Math.random() - 0.5) * 900, vy: top ? -150 - Math.random() * 350 : -300 - Math.random() * 600, fall: top ? 340 : 1e9, r: Math.random() * 6, vr: (Math.random() - 0.5) * 12, c: cols[k % cols.length], life: 2.2 + Math.random(), s: 6 + Math.random() * 6 });
+      var p = { x: W / 2 + (Math.random() - 0.5) * (top ? 800 : 300), y: top ? 60 : H * 0.35, vx: (Math.random() - 0.5) * 900, vy: top ? -150 - Math.random() * 350 : -300 - Math.random() * 600, fall: top ? 340 : 1e9, r: Math.random() * 6, vr: (Math.random() - 0.5) * 12, c: cols[k % cols.length], life: 2.2 + Math.random(), s: 6 + Math.random() * 6 };
+      if (from === 'sides') {
+        var side = k < n / 2 ? -1 : 1;
+        p.x = W / 2 + side * (215 + Math.random() * 30); p.y = 150;
+        p.vx = side * (40 + Math.random() * 200); p.vy = -150 - Math.random() * 400;
+      }
+      confetti.push(p);
     }
   }
   function flashScreen(a) { if (!Kit.motion.reduced()) flash = a; }
@@ -722,14 +741,14 @@
       if (!run.beatBest && save.best >= 50 && sc > save.best) {
         run.beatBest = true;
         popup('رقم قياسي!', car.x, car.y, 1.8, '#ffd23f', 50, null, 1.6);
-        DK.snd.best(); burstConfetti(50); flashScreen(0.6);
+        DK.snd.best(); burstConfetti(50, 'sides'); flashScreen(0.6);
       }
       var z = Math.floor(car.progress / DK.ZONE_LEN);
       if (z > run.zone) {
         run.zone = z;
         bannerT = BANNER_T; bannerText = DK.zoneName(z); bannerSub = 'المنطقة ' + (z + 1) + '  •  \u2066+10\u2069';
         run.coins += 10; save.coins += 10;
-        DK.snd.zone(); burstConfetti(40);
+        DK.snd.zone(); burstConfetti(40, 'sides');
       }
       if ((G.time * 60 | 0) % 30 === 0) checkMissions(run);
       if (!G.bestFlag && save.bestDist > 40) {
@@ -801,7 +820,7 @@
           DK.snd.perfect(run.combo);
           burst(car.x, car.y, 0.4, 8 + Math.min(run.combo, 10), ['#ffe14d', '#ffffff', '#ff7ad1'], 1, 3.5, 0.55, 0.13);
           comboPop = 1; hudPop = 1;
-          if (run.combo === 5 || run.combo === 10 || run.combo === 20) { flashScreen(0.5); burstConfetti(30); }
+          if (run.combo === 5 || run.combo === 10 || run.combo === 20) { flashScreen(0.5); burstConfetti(30, 'sides'); }
         } else {
           if (run.combo >= 3) popup('انتهت السلسلة', car.x, car.y, 1.4, '#ffffff', 26, null, 0.9);
           run.combo = 0;
@@ -841,7 +860,7 @@
   function sceneStill() {
     var m = G.mode, settled = flash <= 0 && !G.shake.power;
     if (m === 'garage') return true;
-    if (m === 'paused') return settled;
+    if (m === 'paused') return settled && hudPop <= 0 && comboPop <= 0;   // HUD pops shrink back first
     if (m !== 'over' || overT <= 1 || !settled || G.popups.length) return false;
     for (var k = 0; k < G.parts.length; k++) if (G.parts[k].life > 0) return false;
     return true;

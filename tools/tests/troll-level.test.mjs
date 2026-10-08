@@ -20,9 +20,10 @@ after(async () => {
 });
 
 // The game's loop is stepped by hand (update + render), so the checks do not
-// depend on how fast the software renderer draws frames.
-async function game(t) {
-  const context = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+// depend on how fast the software renderer draws frames. stepGame(n, true)
+// renders only the last of the n frames.
+async function game(t, options = {}) {
+  const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, ...options });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
@@ -31,7 +32,9 @@ async function game(t) {
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (update, render) => {
-        window.stepGame = (n = 1) => { for (let i = 0; i < n; i++) { update(1 / 60); render(0); } };
+        window.stepGame = (n = 1, drawLast = false) => {
+          for (let i = 0; i < n; i++) { update(1 / 60); if (!drawLast || i === n - 1) render(0); }
+        };
         return { stop() {} };
       };
     } });
@@ -68,6 +71,19 @@ test('denied saves warn, keep progress in memory and clear only after a full ret
     };
   });
   await clickControl(page, '#btn-play');
+  const [top, bottom] = await page.evaluate(() => {
+    const box = document.querySelector('.sg-save-status').getBoundingClientRect();
+    const cv = document.getElementById('cv').getBoundingClientRect(), s = cv.width / 1280;
+    return [(box.top - cv.top) / s, (box.bottom - cv.top) / s];
+  });
+  assert.ok(top > 56 && bottom < 120, `while playing, the warning waits on the ceiling under the HUD, clear of the hint bar (${top}-${bottom})`);
+  for (const [width, height] of [[1100, 620], [900, 520]]) {
+    await page.setViewportSize({ width, height });
+    const gap = await page.evaluate(() => document.querySelector('.sg-save-status').getBoundingClientRect().top
+      - document.getElementById('btn-pause').getBoundingClientRect().bottom);
+    assert.ok(gap >= 3, `the warning stays clear of the pause button at ${width}x${height} (${gap})`);
+  }
+  await page.setViewportSize({ width: 1366, height: 768 });
   await page.evaluate(() => { __game.win(); stepGame(120); });
   assert.equal(await page.evaluate(() => __game.mode), 'win');
   assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
@@ -122,4 +138,44 @@ test('a settled pause stops redrawing until a resize, and reduced motion skips t
   await page.evaluate(() => { Kit.motion.setPreference('full'); __game.start(0); });
   await dieOnce();
   assert.ok(await page.evaluate(() => flashes) > 0, 'full motion keeps the death flash');
+});
+
+test('the floor under the elevator gets its frosting top only once the elevator lifts', async t => {
+  const page = await game(t);
+  // Level 14: the elevator rests on the candy floor at columns 20-22 (floor top y = 520).
+  const floorTop = () => page.evaluate(() => {
+    const cv = document.getElementById('cv'), k = cv.width / 1280;
+    return [...cv.getContext('2d').getImageData(Math.round(860 * k), Math.round(523 * k), 1, 1).data].slice(0, 3);
+  });
+  await page.evaluate(() => { __game.start(13); stepGame(1); });
+  assert.ok(Math.max(...await floorTop()) < 128, 'under the resting elevator the floor is one dark mass with it');
+  await page.evaluate(() => { __game.solve(); stepGame(200, true); });
+  assert.ok((await page.evaluate(() => __game.player.y)) < 11, 'the player rides the elevator up');
+  assert.ok(Math.min(...await floorTop()) > 200, 'the uncovered floor shows its white frosting');
+});
+
+test('the canvas edge past the baked level is painted when the canvas rounds up', async t => {
+  // At 125% Windows scaling this canvas is 1623 device pixels wide, one more than the baked level.
+  const page = await game(t, { viewport: { width: 1536, height: 730 }, deviceScaleFactor: 1.25 });
+  const edge = await page.evaluate(() => {
+    __game.start(0); stepGame(1);
+    const cv = document.getElementById('cv');
+    return [...cv.getContext('2d').getImageData(cv.width - 1, 300, 1, 1).data];
+  });
+  assert.deepEqual(edge, [0x1c, 0x12, 0x26, 255], 'the last column is wall coloured, not transparent');
+});
+
+test('the baked level canvas is rebaked when its context comes back', async t => {
+  const page = await game(t);
+  const alpha = await page.evaluate(() => {
+    const ctx = document.getElementById('cv').getContext('2d'), draw = ctx.drawImage;
+    ctx.drawImage = function (image) { window.baked = image; return draw.apply(this, arguments); };
+    __game.start(0); stepGame(1);
+    const centre = () => baked.getContext('2d').getImageData(baked.width >> 1, baked.height >> 1, 1, 1).data[3];
+    baked.width = baked.width; // a GPU reset leaves the canvas blank
+    const lost = centre();
+    baked.dispatchEvent(new Event('contextrestored')); stepGame(1);
+    return [lost, centre()];
+  });
+  assert.deepEqual(alpha, [0, 255], 'the level background is painted again');
 });

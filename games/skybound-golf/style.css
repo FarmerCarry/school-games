@@ -118,6 +118,9 @@ h1 strong { display:block; font-size:112px; color:#ffe777; }
 .comet i { background:radial-gradient(circle at 35% 30%,#fff,#9fe6ff 60%,#49a8d8); }
 .rainbow i { background:conic-gradient(#ff5d5d,#ffb84d,#ffe94d,#6fdc6f,#4dc3ff,#9b7bff,#ff5d5d); }
 .star-count { display:block; margin-top:6px; font-size:26px; color:#b86d0c; }
+/* Stars are caught in flight; on the green the toast would cover the count,
+   and the result card lists them anyway. */
+#ui:not([data-phase="flight"]) .star-count { display:none; }
 /* New best: stars fly out of the result card; base opacity 0 hides them
    whenever reduced motion removes or shortens the animation. */
 .burst { position:absolute; left:50%; top:42%; pointer-events:none; }

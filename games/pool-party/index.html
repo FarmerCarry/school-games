@@ -43,9 +43,10 @@
   .coinbar .pill span { direction: rtl; }
   .pill { background: rgba(0,0,0,0.45); border: 2px solid rgba(255,255,255,0.2); border-radius: 999px; padding: 6px 14px 6px 10px; font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 8px; color: #fff; }
   .coin { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6a8, #ffc400 55%, #d98e00); box-shadow: inset 0 0 0 3px #e0a000; display: inline-block; position: relative; }
-  .coin::after { content: ''; position: absolute; left: 8px; top: 6px; width: 10px; height: 14px; border-radius: 3px; border: 2px solid #b57400; }
+  /* pseudo-elements are content-box unless told otherwise; border-box keeps the mark centred */
+  .coin::after { content: ''; position: absolute; left: 6px; top: 4px; width: 14px; height: 18px; box-sizing: border-box; border-radius: 3px; border: 2px solid #b57400; }
   .coin.sm { width: 18px; height: 18px; box-shadow: inset 0 0 0 2px #e0a000; }
-  .coin.sm::after { left: 5px; top: 4px; width: 6px; height: 9px; border-width: 1.5px; border-radius: 2px; }
+  .coin.sm::after { left: 5px; top: 3px; width: 8px; height: 12px; border-width: 1.5px; border-radius: 2px; }
   .opps { display: flex; gap: 22px; margin-top: 22px; }
   .opp { width: 236px; height: 232px; border-radius: 24px; background: rgba(20,14,56,0.85); border: 4px solid rgba(255,255,255,0.15); cursor: pointer; color: #fff;
     display: flex; flex-direction: column; align-items: center; padding-top: 10px; position: relative; transition: transform .12s ease, border-color .12s; font-family: var(--sg-font); }
@@ -63,6 +64,9 @@
   .row { display: flex; gap: 14px; margin-top: 22px; align-items: center; }
   .howto { position: absolute; bottom: 14px; display: flex; gap: 22px; font-size: 17px; color: #fff; background: rgba(0,0,0,0.4); padding: 8px 20px; border-radius: 999px; }
   .howto span.k { display: inline-flex; align-items: center; gap: 4px; }
+  /* the full failed-save warning would cover the how-to-play row, so the title shows it at the top;
+     carried into play it stays at the bottom, over the ball tray until it folds, not the turn marker */
+  body:has(#scr-title:not([hidden])) .sg-save-status:not([data-compact="true"]) { top: 12px; bottom: auto; }
   .chip { font-size: 16px; }
 
   /* panels */

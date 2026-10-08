@@ -255,3 +255,43 @@ test('reduced motion drops the decorative particles but keeps the game playable'
   assert.equal(result.cleared, 0);
   assert.deepEqual([result.state, result.particles], ['won', 0]);
 });
+
+test('in classroom / reduced motion the hint bulb still glows after two misses, as a still ring', async t => {
+  const page = await game(t);
+  await page.evaluate(() => Kit.motion.setPreference('reduce'));
+  await loseLevel5(page);
+  await page.keyboard.press('KeyR');
+  await loseLevel5(page);
+  await page.keyboard.press('KeyR');
+  const bulb = await page.evaluate(() => {
+    const b = document.getElementById('bHint'), cs = getComputedStyle(b);
+    return { glow: b.classList.contains('glow'), animation: cs.animationName, shadow: cs.boxShadow };
+  });
+  assert.equal(bulb.glow, true);
+  assert.equal(bulb.animation, 'none');
+  assert.match(bulb.shadow, /rgba\(255, 225, 77, 0\.9\) 0px 0px 0px 5px/);
+});
+
+test('in play the unfolded save warning sits above the level tip and lets cuts and taps through', async t => {
+  const page = await game(t);
+  const r = await page.evaluate(() => {
+    Storage.prototype.setItem = function () { throw new DOMException('full', 'QuotaExceededError'); };
+    __game.start(2); step(30);
+    __game.unlockAll(); // a save that fails while the tip is on screen
+    const s = document.querySelector('.sg-save-status'), b = s.getBoundingClientRect(), btn = s.querySelector('button').getBoundingClientRect();
+    const c = document.getElementById('cv').getBoundingClientRect();
+    const r = {
+      compact: s.dataset.compact, bottom: b.bottom, tipTop: c.top + 648 * c.height / 720,
+      through: document.elementFromPoint(b.right - 8, b.top + b.height / 2).id,
+      retry: document.elementFromPoint(btn.left + btn.width / 2, btn.top + btn.height / 2).tagName
+    };
+    document.getElementById('bPause').click();
+    r.menuGap = innerHeight - s.getBoundingClientRect().bottom;
+    return r;
+  });
+  assert.equal(r.compact, 'false');
+  assert.ok(r.bottom <= r.tipTop, `warning bottom ${r.bottom} must clear the tip at ${r.tipTop}`);
+  assert.equal(r.through, 'cv', 'the panel passes clicks to the canvas');
+  assert.equal(r.retry, 'BUTTON');
+  assert.equal(r.menuGap, 12, 'menus keep the shared spot');
+});

@@ -11,8 +11,9 @@
   var cells = [], moveButtons = [], pendingBoardFocus = null;
   var levels = ['easy', 'medium', 'hard'], levelNames = { easy: 'سهل', medium: 'متوسط', hard: 'صعب' };
   var store = Kit.store(game), saveStatus = Kit.saveStatus({ retry: saveProgress });
-  var progress = loadProgress(), level = progress.level;
-  // The session score lasts until the mode or level changes; computer wins are saved.
+  // The chosen (saved) level and the one this round is played at: a level picked mid-round waits for the next round.
+  var progress = loadProgress(), level = progress.level, roundLevel = level;
+  // The session score lasts until the mode changes; computer wins are saved.
   var score = { 1: 0, 2: 0 }, firstWin = false;
 
   document.documentElement.classList.add(game);
@@ -60,8 +61,8 @@
     if (!state.winner) return;
     score[state.winner]++;
     if (mode !== 'computer' || state.winner !== 1) return;
-    firstWin = progress.wins[level] === 0;
-    progress.wins[level]++;
+    firstWin = progress.wins[roundLevel] === 0;
+    progress.wins[roundLevel]++;
     saveProgress();
   }
   // Sound and celebration once a mark appears or a disc lands.
@@ -217,8 +218,6 @@
       if (disabled && document.activeElement === button) pendingBoardFocus = i;
       button.disabled = disabled;
     });
-    // The level changes between rounds, so a misclick never throws away a round in progress.
-    var levelLocked = mode === 'computer' && !finished() && state.board.indexOf(1) !== -1;
     [1, 2].forEach(function (seat) {
       el('seat' + seat).classList.toggle('active', mode !== 'menu' && state.turn === seat && !finished());
       el('seat' + seat + 'Name').textContent = playerLabel(seat);
@@ -228,23 +227,25 @@
     el('modeChoices').hidden = mode !== 'menu';
     el('levelBox').hidden = mode !== 'computer';
     levelButtons.forEach(function (button) {
-      button.disabled = levelLocked;
       button.setAttribute('aria-pressed', String(button.dataset.level === level));
       button.classList.toggle('won', progress.wins[button.dataset.level] > 0);
+      // A level that waits for the next round is only ringed; the level being played stays lit.
+      button.classList.toggle('pending', level !== roundLevel && button.dataset.level === level);
+      button.classList.toggle('playing', level !== roundLevel && button.dataset.level === roundLevel);
     });
     el('levelWins').textContent = levels.map(function (name) { return levelNames[name] + '\u00a0' + progress.wins[name]; }).join(' · ');
     el('modeTitle').textContent = mode === 'menu' ? 'كيف تريد أن تلعب؟' : mode === 'local' ? 'لاعبان على نفس الجهاز' : 'العب ضد الكمبيوتر';
-    el('modeDescription').textContent = mode === 'menu' ? 'اختر طريقة اللعب وابدأ فوراً.' : mode === 'local' ? 'تبادلا الأدوار باستخدام نفس الفأرة.' : levelLocked ? 'أنهِ الجولة لتغيير المستوى.' : 'اختر مستوى الكمبيوتر:';
+    el('modeDescription').textContent = mode === 'menu' ? 'اختر طريقة اللعب وابدأ فوراً.' : mode === 'local' ? 'تبادلا الأدوار باستخدام نفس الفأرة.' : level !== roundLevel ? 'يبدأ «' + levelNames[level] + '» في الجولة التالية.' : 'اختر مستوى الكمبيوتر:';
     var turnText, hint = isConnect ? 'اضغط على أي عمود لإسقاط قرصك.' : 'اضغط على مربع فارغ لوضع علامتك.';
     if (mode === 'menu') {
       turnText = 'اختر طريقة اللعب للبدء';
       hint = isConnect ? 'أفقياً، عمودياً أو قطرياً… أول 4 يفوز!' : 'أفقياً، عمودياً أو قطرياً… أول 3 يفوز!';
     } else if (finished()) {
       turnText = state.draw ? 'تعادل! جولة أخرى؟' : mode === 'local' ? 'فاز ' + playerLabel(state.winner) + ' — ' + tokenLabel(state.winner) + '!' :
-        state.winner !== 1 ? 'فاز الكمبيوتر… جرّب مرة أخرى!' : firstWin ? 'جديد! هزمت الكمبيوتر ال' + levelNames[level] + '!' : 'فزت! أحسنت اللعب!';
+        state.winner !== 1 ? 'فاز الكمبيوتر… جرّب مرة أخرى!' : firstWin ? 'جديد! هزمت الكمبيوتر ال' + levelNames[roundLevel] + '!' : 'فزت! أحسنت اللعب!';
       hint = mode === 'computer' && startingSeat === 2 ? 'تبدأ أنت الجولة التالية.' : 'يبدأ ' + playerLabel(3 - startingSeat) + ' الجولة التالية.';
-      var nextLevel = levels[levels.indexOf(level) + 1];
-      if (mode === 'computer' && state.winner === 1 && nextLevel && progress.wins[level] >= 2 && !progress.wins[nextLevel]) hint = 'جاهز لتحدي المستوى ال' + levelNames[nextLevel] + '؟';
+      var nextLevel = levels[levels.indexOf(roundLevel) + 1];
+      if (mode === 'computer' && level === roundLevel && state.winner === 1 && nextLevel && progress.wins[roundLevel] >= 2 && !progress.wins[nextLevel]) hint = 'جاهز لتحدي المستوى ال' + levelNames[nextLevel] + '؟';
     } else if (paused) { turnText = 'اللعبة متوقفة مؤقتاً'; hint = 'اضغط «متابعة اللعب» عندما تكون جاهزاً.'; }
     else if (mode === 'local') turnText = 'دور ' + playerLabel(state.turn) + ' — ' + tokenLabel(state.turn);
     else turnText = state.turn === 1 ? (isConnect ? 'دورك! اختر عموداً' : 'دورك! اختر مربعاً') : 'الكمبيوتر يفكّر…';
@@ -271,7 +272,7 @@
     aiTimer = setTimeout(function () {
       aiTimer = null;
       if (mode !== 'computer' || paused || document.hidden || finished() || state.turn !== 2) return;
-      var next = rules.play(state, rules.chooseMove(state, level));
+      var next = rules.play(state, rules.chooseMove(state, roundLevel));
       if (!next) return;
       state = next;
       if (finished()) scoreRound();
@@ -280,13 +281,17 @@
   }
   function newRound() {
     stopTimers(); pendingBoardFocus = null; state = rules.create(game); state.turn = startingSeat;
-    paused = false; firstWin = false;
+    paused = false; firstWin = false; roundLevel = level;
     renderBoard(); scheduleComputer(); focusBoard();
   }
   function start(selectedMode) { mode = selectedMode; startingSeat = 1; score = { 1: 0, 2: 0 }; newRound(); }
+  // Once the player has moved, including any finished round, a new level waits for the next round,
+  // so a misclick never throws away a round or its celebration. The session score is kept.
   function setLevel(value) {
-    if (value === level || (!finished() && state.board.indexOf(1) !== -1)) return;
-    level = value; saveProgress(); start('computer');
+    if (value === level) return;
+    level = value; saveProgress();
+    if (state.board.indexOf(1) !== -1) renderBoard();
+    else { startingSeat = 1; newRound(); }
   }
   function leaveMatch() {
     stopTimers(); pendingBoardFocus = null; mode = 'menu'; state = rules.create(game); startingSeat = 1; score = { 1: 0, 2: 0 };

@@ -1318,6 +1318,9 @@
         tCam = new THREE.OrthographicCamera(-0.6, 0.6, 0.6, -0.6, 0.1, 20);
         tCam.position.set(-1.7, 1.5, -2.8); tCam.lookAt(0, 0, 0);
         tMesh = new THREE.Mesh(geo('char:chick'), matVC); tScene.add(tMesh);
+        // Made again after the warm-up freed it (to redraw a picture that failed then):
+        // free it once this screen has drawn its pictures.
+        if (thumbNext >= CHARS.length) setTimeout(freeThumbs, 0);
       }
       var g = geo('char:' + id);
       g.computeBoundingBox(); _box.copy(g.boundingBox); _box.getSize(_size); _box.getCenter(_ctr);
@@ -1328,6 +1331,12 @@
       thumbCache[id] = tR.domElement.toDataURL('image/png');
     } catch (e) { thumbCache[id] = ''; }
     return thumbCache[id];
+  }
+  function freeThumbs() {
+    if (!tR) return;
+    tR.dispose();
+    if (tR.extensions.has('WEBGL_lose_context')) tR.forceContextLoss();
+    tR = null;
   }
 
   /* ------------------------------------------------- idle-time warm-up */
@@ -1358,17 +1367,15 @@
   function warmDrawOnce() { if (warmGroup) { scene.add(warmGroup); warmDraw = true; redraw = true; } } // render() draws it once, then removes it
   // Character pictures: drawing all 16 on the first visit to the characters screen froze
   // the page, so they are drawn here about 8 ms' worth per idle step, 50 ms apart. Their
-  // second WebGL context is freed once every picture is cached (thumb() still draws on demand).
+  // second WebGL context is freed once every picture is cached (thumb() still draws on
+  // demand, then frees it again).
   var thumbNext = 0;
   function warmThumbs() {
     var t0 = performance.now();
     do thumb(CHARS[thumbNext++].id);
     while (thumbNext < CHARS.length && performance.now() - t0 < 8);
     if (thumbNext < CHARS.length) { warmSteps.push(warmThumbs); return 50; }
-    if (!tR) return;
-    tR.dispose();
-    if (tR.extensions.has('WEBGL_lose_context')) tR.forceContextLoss();
-    tR = null;
+    freeThumbs();
   }
   var warmSteps = [warmCompile, warmDrawOnce, warmThumbs];
   function warmLater(ms) {
@@ -1400,7 +1407,7 @@
       var own = has(c.id), d = document.createElement('div');
       d.className = 'card' + (own ? '' : ' locked') + (c.id === save.sel ? ' sel' : '') + (own && !save.seen[c.id] ? ' new' : '');
       var img = document.createElement('img');
-      img.src = thumb(c.id); img.alt = '';
+      img.src = thumb(c.id); img.alt = ''; img.draggable = false; // a slightly moved click still selects
       var nm = document.createElement('div');
       nm.className = 'nm'; nm.textContent = own ? c.name : lockHint(c);
       d.appendChild(img); d.appendChild(nm);

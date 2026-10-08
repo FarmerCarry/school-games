@@ -82,11 +82,14 @@ test('reduced motion keeps toasts visible and calms the crash shake and flash', 
     if (mode === 'reduce') assert.deepEqual(toast, { opacity: '1', animation: 'none' }, 'purchase toast is shown still');
     else assert.equal(toast.animation, 'toastIn', 'full motion keeps the toast animation');
     await play(page);
-    const run = await page.evaluate(() => {
-      for (let i = 0; i < 3600 && __game.info().state === 'play'; i++) tb.step(1);
-      tb.shaken = 0; tb.maxFlash = 0; tb.step(90);
+    // Each painted frame costs slow software-GPU time, so the flight to the crash is not painted.
+    // Full motion only has to show the crash shake and flash; reduced motion is painted until both
+    // have settled (about half a second) to prove it stays calm. Then the game-over screen opens.
+    const run = await page.evaluate(painted => {
+      for (let i = 0; i < 3600 && __game.info().state === 'play'; i++) tb.step(1, false);
+      tb.shaken = 0; tb.maxFlash = 0; tb.step(painted); tb.step(90 - painted, false);
       return { state: __game.info().state, shaken: tb.shaken, maxFlash: tb.maxFlash };
-    });
+    }, mode === 'reduce' ? 40 : 5);
     assert.equal(run.state, 'over', `${mode}: the run ends in a crash`);
     if (mode === 'reduce') {
       assert.equal(run.shaken, 0, 'no camera shake');
@@ -102,7 +105,7 @@ test('a paused scene is painted once, repainted for resize and context restore, 
   const page = await game(t);
   await play(page);
   const distance = await page.evaluate(() => {
-    tb.step(60); document.getElementById('pauseBtn').click(); tb.step(60);
+    tb.step(60, false); document.getElementById('pauseBtn').click(); tb.step(60);
     return __game.info().D;
   });
   assert.equal(await page.evaluate(() => { tb.paints = 0; tb.step(120); return tb.paints; }), 0, 'settled pause paints nothing');
@@ -122,8 +125,8 @@ test('a paused scene is painted once, repainted for resize and context restore, 
   assert.deepEqual(restored, { paints: 1, same: true, visible: true });
   assert.equal(await page.evaluate(() => { Kit.motion.setPreference('reduce'); tb.paints = 0; tb.step(10); Kit.motion.setPreference('system'); return tb.paints; }), 1, 'motion change repaints');
   assert.equal(await page.evaluate(() => __game.info().D), distance, 'pause keeps the run still');
-  await page.evaluate(() => { document.getElementById('resumeBtn').click(); tb.paints = 0; tb.step(60); });
-  assert.equal(await page.evaluate(() => tb.paints), 60);
+  await page.evaluate(() => { document.getElementById('resumeBtn').click(); tb.paints = 0; tb.step(10); });
+  assert.equal(await page.evaluate(() => tb.paints), 10);
   assert.ok(await page.evaluate(d => __game.info().D > d, distance));
 });
 
@@ -143,22 +146,34 @@ test('a denied save warns, keeps progress in memory, and clears after a retry', 
 });
 
 test('the gold ring reaches the ship in the frame the record is broken', async t => {
-  const page = await game(t);
-  await page.evaluate(() => __game.setBest(150));
-  await play(page);
-  assert.equal(await page.evaluate(() => __game.info().ring), 151);
-  const crossing = await page.evaluate(() => {
-    __game.invincible(true); __game.autopilot(true);
-    let prev = __game.info();
-    for (let i = 0; i < 3600 && prev.score <= 150; i++) {
-      tb.step(1, false);
-      const now = __game.info();
-      if (now.score > 150) return { before: prev.ring, at: now.ring, score: now.score };
-      prev = now;
+  // nearMissAt: 0 breaks the record by distance; otherwise a near miss at that score jumps past it.
+  for (const nearMissAt of [0, 142]) {
+    const page = await game(t);
+    await page.evaluate(() => __game.setBest(150));
+    await play(page);
+    assert.equal(await page.evaluate(() => __game.info().ring), 151);
+    const crossing = await page.evaluate(nearMissAt => {
+      __game.invincible(true); __game.autopilot(true);
+      let prev = __game.info();
+      for (let i = 0; i < 3600 && prev.score <= 150; i++) {
+        // A near miss adds its bonus after this frame's record check, so the record breaks next frame.
+        if (nearMissAt && prev.score >= nearMissAt && !prev.closeRun) __game.nearMiss();
+        tb.step(1, false);
+        const now = __game.info();
+        if (now.score > 150) return { before: prev.ring, at: now.ring, D: now.D, closeRun: now.closeRun };
+        prev = now;
+      }
+      return null;
+    }, nearMissAt);
+    const how = nearMissAt ? 'bonus' : 'distance';
+    assert.ok(crossing, `${how}: the run passes the record`);
+    if (nearMissAt) {
+      assert.ok(crossing.closeRun === 1 && crossing.D < 150, `the bonus broke the record (${JSON.stringify(crossing)})`);
+      assert.ok(crossing.before > 5, `ring was well ahead before the bonus (${crossing.before} m)`);
+    } else {
+      assert.equal(crossing.closeRun, 0, 'the record is crossed by distance alone');
+      assert.ok(crossing.before > 0, `ring was still ahead before the record (${crossing.before} m)`);
     }
-    return null;
-  });
-  assert.ok(crossing, 'the run passes the record');
-  assert.ok(crossing.before > 0, `ring was still ahead before the record (${crossing.before} m)`);
-  assert.ok(crossing.at <= 0.5 && crossing.at > -1.5, `ring is at the ship when the record breaks (${crossing.at} m)`);
+    assert.ok(crossing.at <= 0.5 && crossing.at > -1.5, `${how}: ring is at the ship when the record breaks (${crossing.at} m)`);
+  }
 });

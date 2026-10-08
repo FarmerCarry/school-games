@@ -14,6 +14,10 @@
   var uiEl = document.getElementById('ui');
   var view = Kit.fit(canvas, W, H, { onResize: layoutUI });
   var ctx = view.ctx;
+  // A paused run is drawn once (see render); this marks when it must be drawn again.
+  var frameDirty = true;
+  // after a GPU reset the canvas comes back blank (render sets the transform every frame)
+  canvas.addEventListener('contextrestored', function () { frameDirty = true; });
   var ptr = Kit.pointer(view);
   var store = Kit.store('beat-dash');
   var music = new BD.Music();
@@ -22,6 +26,7 @@
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
 
   function layoutUI(v) {
+    frameDirty = true;
     var r = canvas.style;
     uiEl.style.left = r.left; uiEl.style.top = r.top;
     uiEl.style.transform = 'scale(' + v.scale + ')';
@@ -213,6 +218,14 @@
   };
   var demo = { s: null, L: demoL, camY: 0, rot: 0, trail: [], t: 0 };
   var menuT = 0, sel = 0, themeNow = LEVELS[0].theme, themeFade = null;
+  // Calm mode switched on mid-effect: the flash and the screen-space fireworks/confetti stop at once.
+  Kit.motion.onChange(function (reduced) {
+    if (reduced) {
+      G.flash = 0;
+      for (var i = parts.length - 1; i >= 0; i--) if (parts[i].screen) { parts[i] = parts[parts.length - 1]; parts.pop(); }
+    }
+    frameDirty = true;
+  });
 
   /* ============================================================ SCREENS */
   var screens = { title: $('scr-title'), select: $('scr-select'), garage: $('scr-garage'), pause: $('scr-pause'), win: $('scr-win') };
@@ -368,6 +381,8 @@
   function pauseGame() {
     if (scene !== 'play' || G.paused || G.won) return;
     G.paused = true; music.stop(0.08);
+    // the still paused frame is drawn without a half-faded flash or a shake offset
+    G.flash = 0; shake.power = shake.x = shake.y = 0; frameDirty = true;
     show('pause');
     $('pause-level').textContent = G.L.def.name + (G.practice ? ' — تدريب' : '') + ' — المحاولة ' + G.sessionAtt;
     var bn = save.best[G.L.id] || 0, bp = save.bestP[G.L.id] || 0;
@@ -758,6 +773,14 @@
 
   /* ============================================================ UPDATE */
   function update(dt) {
+    // Paused: only the pause keys and the toast run. Particles, pop-ups, flashes and the
+    // menuT-driven bob/swirl hold still, so the paused frame never needs redrawing.
+    if (scene === 'play' && G.paused) {
+      updatePlay(dt);
+      updateToast(dt);
+      Kit.keys.endFrame(); ptr.endFrame();
+      return;
+    }
     menuT += dt;
     if (themeFade) { themeFade.t += dt * 2.5; if (themeFade.t >= 1) themeFade = null; }
     if (scene === 'play') updatePlay(dt);
@@ -1205,6 +1228,13 @@
   }
 
   function render(alpha) {
+    // A paused run is a still picture: draw it once, then again only after a resize,
+    // a restored canvas, a late font or a motion-setting change.
+    if (scene === 'play' && G.paused) {
+      if (!frameDirty) return;
+      alpha = 1; // the last simulated tick, so every redraw is the same picture
+    }
+    frameDirty = false;
     var t = menuT;
     var th = curTheme();
     ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
@@ -1291,6 +1321,8 @@
   /* ============================================================ BOOT */
   Kit.loop(update, render);
   goTitle();
+  // canvas text (HUD, attempt count, pop-ups) uses the rounded font: repaint a paused frame once it arrives
+  if (document.fonts && document.fonts.load) document.fonts.load('700 40px Fredoka', 'المحاولة 0%').then(function () { frameDirty = true; }, function () {});
 
   // Debug / test hook
   window.__game = {

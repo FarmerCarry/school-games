@@ -25,15 +25,24 @@
   };
   if (!Array.isArray(save.owned.cues)) save.owned.cues = ['classic'];
   if (!Array.isArray(save.owned.felts)) save.owned.felts = ['green'];
-  var saveStatus = Kit.saveStatus({ retry: persist });
-  // Coins are written last and only after everything else saved, so a half-failed
-  // purchase can never store the lower total without the item it paid for.
+  var saveStatus = Kit.saveStatus({ retry: persist }), unsaved = false;
+  // Keys are written in dependency order and the save stops at the first failure: items
+  // before the coins that paid for them, and coins before the wins and stars that gate
+  // one-time rewards. A half-failed save then never stores a lower total without its
+  // item, or a used-up first-win or star reward without its coins.
+  var SAVE_ORDER = ['owned', 'cue', 'felt', 'coins'];
+  for (var sk in save) if (SAVE_ORDER.indexOf(sk) < 0) SAVE_ORDER.push(sk);
   function persist() {
-    var ok = true;
-    for (var k in save) if (k !== 'coins' && !store.set(k, save[k])) ok = false;
-    if (ok) ok = store.set('coins', save.coins);
-    if (ok) saveStatus.saved(); else saveStatus.failed();
-    return ok;
+    unsaved = !SAVE_ORDER.every(function (k) { return store.set(k, save[k]); });
+    if (unsaved) saveStatus.failed(); else saveStatus.saved();
+    return !unsaved;
+  }
+  // A setting writes only its own key, so picking an opponent in an older second tab
+  // cannot overwrite coins and trophies saved by another tab. After a failure, write it all.
+  function persistKey(k) {
+    if (unsaved) return persist();
+    if (store.set(k, save[k])) return true;
+    unsaved = true; saveStatus.failed(); return false;
   }
   function starTotal() { var t = 0; for (var i = 0; i < LV.length; i++) t += save.stars[i] || 0; return t; }
 
@@ -61,17 +70,22 @@
   var ui = $('ui');
   var tableLayer = document.createElement('canvas');
   var needTable = true, K = 1;
+  var frameDirty = true;     // a paused game keeps its last frame until something visible changes
   var sprites = [];
   for (var sn = 0; sn <= 15; sn++) sprites.push(Art.makeSprite(sn));
   Art.buildNumberTextures('bold Arial, sans-serif');
   var view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: function (v) {
     K = v.scale * v.dpr;
-    needTable = true;
+    needTable = true; frameDirty = true;
     if (avatarCache) for (var ak in avatarCache) delete avatarCache[ak];
     for (var i = 0; i < sprites.length; i++) sprites[i].dirty = true;
     ui.style.transform = 'translate(' + canvas.style.left + ',' + canvas.style.top + ') scale(' + v.scale + ')';
   } });
   var ctx = view.ctx;
+  // After a GPU reset (for example when the PC wakes from sleep) Chrome gives canvases
+  // back empty: reapply the scale and rebuild the cached drawings, the table included.
+  canvas.addEventListener('contextrestored', function () { view.resize(); });
+  tableLayer.addEventListener('contextrestored', function () { needTable = true; frameDirty = true; });
   // Arabic text must be drawn right-to-left, but pure number text ("3/10", "75%") left-to-right,
   // so every fillText/strokeText on the game canvas picks its direction from the string.
   var AR_RE = /[\u0600-\u06FF]/;
@@ -99,7 +113,7 @@
     document.fonts.load('700 20px Fredoka').then(function () {
       Art.buildNumberTextures(Art.font);
       for (var i = 0; i < sprites.length; i++) sprites[i].dirty = true;
-      needTable = true;
+      needTable = true; frameDirty = true;
     }, function () {});
   }
 
@@ -230,6 +244,7 @@
     if (rings.length > 40) rings.shift();
   }
   function confettiBurst(n) {
+    if (Kit.motion.reduced()) return;   // the banner, cheer and coins still celebrate
     var cols = ['#ff3b8d', '#ffe45c', '#3ec5ff', '#3ddc84', '#b48cff', '#ff8a00'];
     for (var i = 0; i < n; i++) {
       confetti.push({ x: Math.random() * W, y: -20 - Math.random() * 300, vx: (Math.random() - 0.5) * 120, vy: 120 + Math.random() * 180,
@@ -237,6 +252,11 @@
     }
     if (confetti.length > 400) confetti.splice(0, confetti.length - 400);
   }
+  // Reduced motion (or the classroom preset) switched on mid-celebration or mid-zoom.
+  Kit.motion.onChange(function (reduced) {
+    if (reduced) { confetti.length = 0; if (G) G.zoom = 1; }
+    frameDirty = true;
+  });
 
   /* =============================================================== game state */
   var G = null;              // current session
@@ -416,18 +436,19 @@
 
   /* =============================================================== update */
   function update(dt) {
-    time += dt;
     handleScreenKeys();
     if (!ptr.down) ptrArmed = true;
-    if (screen !== 'pause' && G) {
-      updateGame(dt);
-    }
-    fx.update(dt); shake.update(dt);
-    for (var i = floats.length - 1; i >= 0; i--) { floats[i].t += dt; if (floats[i].t > floats[i].dur) floats.splice(i, 1); }
-    for (i = rings.length - 1; i >= 0; i--) { rings[i].t += dt; if (rings[i].t > rings[i].dur) rings.splice(i, 1); }
-    for (i = confetti.length - 1; i >= 0; i--) {
-      var c = confetti[i]; c.t += dt; c.x += c.vx * dt; c.y += c.vy * dt; c.a += c.va * dt; c.vx += Math.sin(time * 3 + i) * 8 * dt;
-      if (c.y > H + 30) confetti.splice(i, 1);
+    // While paused the whole scene holds still, so render() can keep its last frame.
+    if (screen !== 'pause') {
+      time += dt;
+      if (G) updateGame(dt);
+      fx.update(dt); shake.update(dt);
+      for (var i = floats.length - 1; i >= 0; i--) { floats[i].t += dt; if (floats[i].t > floats[i].dur) floats.splice(i, 1); }
+      for (i = rings.length - 1; i >= 0; i--) { rings[i].t += dt; if (rings[i].t > rings[i].dur) rings.splice(i, 1); }
+      for (i = confetti.length - 1; i >= 0; i--) {
+        var c = confetti[i]; c.t += dt; c.x += c.vx * dt; c.y += c.vy * dt; c.a += c.va * dt; c.vx += Math.sin(time * 3 + i) * 8 * dt;
+        if (c.y > H + 30) confetti.splice(i, 1);
+      }
     }
     Kit.keys.endFrame(); ptr.endFrame();
   }
@@ -499,7 +520,8 @@
       }
     }
     G.timeScale += (want - G.timeScale) * Math.min(1, dt * 10);
-    var zt = focus ? 1.12 : 1;
+    // the slow motion stays with reduced motion, the camera zoom does not
+    var zt = focus && !Kit.motion.reduced() ? 1.12 : 1;
     G.zoom += (zt - G.zoom) * Math.min(1, dt * 6);
     if (focus) { G.zx += (focus.x - G.zx) * Math.min(1, dt * 8); G.zy += (focus.y - G.zy) * Math.min(1, dt * 8); }
     var sdt = dt * G.timeScale;
@@ -838,6 +860,8 @@
   /* =============================================================== render */
   function render() {
     planMs = 0; planSkips = 0;
+    if (screen === 'pause' && !frameDirty) return;
+    frameDirty = false;
     if (needTable) { Art.renderTable(tableLayer, K, save.felt); needTable = false; }
     ctx.setTransform(K, 0, 0, K, 0, 0);
     ctx.fillStyle = '#130c33'; ctx.fillRect(0, 0, W, H);
@@ -1353,7 +1377,7 @@
   /* =============================================================== screens (DOM) */
   var SCREENS = ['scr-title', 'scr-levels', 'scr-shop', 'scr-pause', 'scr-over', 'scr-done'];
   function show(name) {
-    screen = name;
+    screen = name; frameDirty = true;
     SCREENS.forEach(function (id) { $(id).hidden = id !== 'scr-' + name; });
     $('pauseBtn').hidden = name !== 'game';
     ptrArmed = false;
@@ -1397,7 +1421,7 @@
       b.addEventListener('click', function (e) {
         e.stopPropagation(); Kit.audio.unlock();
         if (save.opp === o.id) { startCpu(); return; }
-        save.opp = o.id; persist(); SFX.click(); buildOpps(); updatePlayLabel();
+        save.opp = o.id; persistKey('opp'); SFX.click(); buildOpps(); updatePlayLabel();
       });
       box.appendChild(b);
     });
@@ -1411,7 +1435,7 @@
     aimLabels();
   }
   function aimLabels() { $('btnAim').textContent = 'خط التصويب: ' + (save.aim === 'big' ? 'طويل' : 'قصير (محترف)'); $('pAim').textContent = $('btnAim').textContent; }
-  function toggleAim() { save.aim = save.aim === 'big' ? 'pro' : 'big'; persist(); aimLabels(); }
+  function toggleAim() { save.aim = save.aim === 'big' ? 'pro' : 'big'; persistKey('aim'); aimLabels(); frameDirty = true; }
 
   function startCpu() { newMatch('cpu', save.opp); show('game'); }
   on('btnPlay', startCpu);
@@ -1566,7 +1590,7 @@
       if (k.pressed('Enter') || k.pressed('Space')) startCpu();
       else if (k.pressed('ArrowLeft') || k.pressed('ArrowRight')) {
         var i = OPPS.indexOf(oppById(save.opp)) + (k.pressed('ArrowLeft') ? 1 : -1);
-        save.opp = OPPS[(i + OPPS.length) % OPPS.length].id; persist(); SFX.click(); buildOpps(); updatePlayLabel();
+        save.opp = OPPS[(i + OPPS.length) % OPPS.length].id; persistKey('opp'); SFX.click(); buildOpps(); updatePlayLabel();
       }
     } else if (screen === 'game') {
       if (k.pressed('KeyP') || k.pressed('Escape')) pause();
@@ -1616,6 +1640,9 @@
     get save() { return JSON.parse(JSON.stringify(save)); },
     get level() { return G && G.level; },
     get attempts() { return G && G.attempts; },
+    get zoom() { return G && G.zoom; },
+    get timeScale() { return G && G.timeScale; },
+    get confetti() { return confetti.length; },
     balls: function () { return G ? G.st.balls.filter(function (b) { return b.on; }).map(function (b) { return [b.n, Math.round(b.x), Math.round(b.y)]; }) : []; },
     // aim the human at the best makeable shot (for automated tests)
     autoAim: function () {

@@ -27,13 +27,26 @@ after(async () => {
   await server?.close();
 });
 
-async function gamePage(t) {
+async function gamePage(t, { deferFonts = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1100, height: 620 } });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  await page.addInitScript(() => {
+  await page.addInitScript(deferFonts => {
+    if (deferFonts) {
+      // Font loads resolve only when the test says so.
+      const load = document.fonts.load.bind(document.fonts);
+      const gate = new Promise(resolve => { window.releaseFonts = resolve; });
+      document.fonts.load = (...args) => load(...args).then(value => gate.then(() => value));
+    }
+    // Count full scene paints: every frame starts by filling the whole sky.
+    window.paints = 0;
+    const fill = CanvasRenderingContext2D.prototype.fillRect;
+    CanvasRenderingContext2D.prototype.fillRect = function (x, y, w, h) {
+      if (this.canvas.id === 'game' && x === 0 && y === 0 && w === 1280 && h === 720) window.paints++;
+      return fill.apply(this, arguments);
+    };
     // Run the real update function in fixed steps under test control.
     let kit;
     Object.defineProperty(window, 'Kit', {
@@ -43,11 +56,13 @@ async function gamePage(t) {
         kit = value;
         kit.loop = (update, render) => {
           window.stepGame = (count = 1) => { for (let i = 0; i < count; i++) update(1 / 60); render(0); };
+          // One update and one render per animation frame, like Kit.loop at 60 Hz.
+          window.runFrames = count => { for (let i = 0; i < count; i++) { update(1 / 60); render(0); } };
           return { stop() {} };
         };
       }
     });
-  });
+  }, deferFonts);
   await page.goto(`${server.origin}/games/swing-hook/`);
   await page.waitForFunction(() => window.__game && window.stepGame);
   return page;
@@ -75,7 +90,8 @@ test('resuming from pause mid-swing keeps the rope until the player holds again'
   // Losing focus resets held keys; the Resume button then waits, frozen, for a new hold.
   await page.evaluate(() => { dispatchEvent(new Event('blur')); stepGame(1); });
   await page.keyboard.up('Space');
-  assert.equal((await state(page)).mode, 'pause');
+  const paused = await state(page);
+  assert.equal(paused.mode, 'pause');
   await page.evaluate(() => { document.getElementById('psResume').click(); stepGame(30); });
   const frozen = await state(page);
   assert.equal(frozen.mode, 'play');
@@ -83,6 +99,7 @@ test('resuming from pause mid-swing keeps the rope until the player holds again'
   await page.evaluate(() => stepGame(30));
   s = await state(page);
   assert.deepEqual([s.x, s.y, s.timer], [frozen.x, frozen.y, frozen.timer], 'the swing waits for the player');
+  assert.deepEqual(s.cam, paused.cam, 'the view holds still while the swing waits');
 
   await page.keyboard.down('Space');
   await page.evaluate(() => stepGame(6));
@@ -96,6 +113,94 @@ test('resuming from pause mid-swing keeps the rope until the player holds again'
   await page.evaluate(() => { document.getElementById('psRestart').click(); stepGame(2); });
   s = await state(page);
   assert.deepEqual([s.mode, s.st, s.timer], ['play', 'ready', 0]);
+});
+
+test('a mouse button held through a P pause keeps the swing going, like Space', async t => {
+  const page = await gamePage(t);
+  await page.evaluate(() => { document.getElementById('btnPlay').click(); stepGame(1); });
+  await page.mouse.move(550, 360);
+  await page.mouse.down();
+  await page.evaluate(() => { for (let i = 0; i < 120 && !__game.state().hooked; i++) stepGame(1); });
+  const hooked = await state(page);
+  assert.equal(hooked.hooked, true);
+  await page.keyboard.press('KeyP');
+  await page.evaluate(() => stepGame(1));
+  assert.equal((await state(page)).mode, 'pause');
+  await page.keyboard.press('KeyP');
+  await page.evaluate(() => stepGame(4));
+  const s = await state(page);
+  assert.equal(s.mode, 'play');
+  assert.equal(s.hooked, true);
+  assert.ok(s.timer > hooked.timer, 'the swing continues without a second press');
+  await page.mouse.up();
+});
+
+test('a paused game keeps its last frame and redraws only for resize, fonts and context restore', async t => {
+  const page = await gamePage(t, { deferFonts: true });
+  const paintsDuring = count => page.evaluate(n => { paints = 0; runFrames(n); return paints; }, count);
+  await page.evaluate(() => { document.getElementById('btnPlay').click(); runFrames(20); });
+  await page.keyboard.press('KeyP');
+  assert.equal(await paintsDuring(1), 1, 'pausing draws the frozen scene once');
+  assert.equal((await state(page)).mode, 'pause');
+  assert.equal(await paintsDuring(60), 0, 'then nothing is redrawn while paused');
+
+  await page.setViewportSize({ width: 1000, height: 600 });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  assert.equal(await paintsDuring(10), 1, 'a resize redraws the paused scene once');
+
+  await page.evaluate(async () => { releaseFonts(); await document.fonts.ready; await new Promise(resolve => setTimeout(resolve, 0)); });
+  assert.equal(await paintsDuring(10), 1, 'a late font redraws the paused scene once');
+
+  const restored = await page.evaluate(() => {
+    const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
+    const transform = () => Array.from(ctx.getTransform().toFloat64Array());
+    const before = transform();
+    // A restored 2D context has lost both its pixels and its drawing state.
+    canvas.width = canvas.width;
+    canvas.dispatchEvent(new Event('contextrestored'));
+    paints = 0; runFrames(10);
+    // (No pixel read-back: on the software GPU it costs seconds. The paint count shows the redraw.)
+    return { same: JSON.stringify(transform()) === JSON.stringify(before), paints };
+  });
+  assert.deepEqual(restored, { same: true, paints: 1 }, 'a restored canvas gets its scale back and is redrawn');
+
+  await page.keyboard.press('KeyP');
+  assert.equal(await paintsDuring(10), 10, 'resuming draws every frame again');
+  assert.equal((await state(page)).mode, 'play');
+});
+
+test('the scene clock stops while paused and calm motion holds the launch prompt still', async t => {
+  const page = await gamePage(t);
+  await page.evaluate(() => {
+    // The aim guide's dash offset is -40 x the scene clock; the prompt's alpha and lift show its bob.
+    const proto = CanvasRenderingContext2D.prototype, dash = Object.getOwnPropertyDescriptor(proto, 'lineDashOffset');
+    const translate = proto.translate, strokeText = proto.strokeText;
+    let lift = 0;
+    window.probe = { clock: 0, prompts: [] };
+    Object.defineProperty(proto, 'lineDashOffset', { configurable: true, get: dash.get, set(v) { if (v) probe.clock = -v / 40; dash.set.call(this, v); } });
+    proto.translate = function (x, y) { lift = y; return translate.apply(this, arguments); };
+    proto.strokeText = function (text) {
+      if (text === 'اضغط مطولًا لتنطلق!') probe.prompts.push([+this.globalAlpha.toFixed(3), +lift.toFixed(2)]);
+      return strokeText.apply(this, arguments);
+    };
+    __game.start(0); runFrames(5);
+  });
+  await page.keyboard.press('KeyP');
+  const paused = await page.evaluate(() => { runFrames(1); return probe.clock; });
+  assert.equal((await state(page)).mode, 'pause');
+  await page.evaluate(() => runFrames(60));
+  await page.keyboard.press('KeyP');
+  const resumed = await page.evaluate(() => { runFrames(1); return probe.clock; });
+  assert.equal((await state(page)).mode, 'play');
+  assert.ok(Math.abs(resumed - paused) <= 1.01 / 60, `waves and twinkles carry on from the paused frame (${paused} -> ${resumed})`);
+
+  const prompts = reduce => page.evaluate(reduce => {
+    if (reduce) Kit.motion.setPreference('reduce');
+    probe.prompts = []; runFrames(6);
+    return new Set(probe.prompts.map(String)).size;
+  }, reduce);
+  assert.ok(await prompts(false) > 1, 'the prompt bobs with full motion');
+  assert.equal(await prompts(true), 1, 'reduced motion keeps the prompt still');
 });
 
 test('the hero celebrates above the water after crossing the finish', async t => {

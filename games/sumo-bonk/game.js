@@ -218,8 +218,13 @@
   }
   var arena = makeArena('classic');
 
-  function platTopAt(x) {
-    for (var i = 0; i < arena.plats.length; i++) { var pl = arena.plats[i]; if (Math.abs(x - pl.x) <= pl.w / 2 + 2) return pl.y; }
+  function platAt(x) {
+    for (var i = 0; i < arena.plats.length; i++) { var pl = arena.plats[i]; if (Math.abs(x - pl.x) <= pl.w / 2 + 2) return pl; }
+    return null;
+  }
+  function platTopAt(x) { var pl = platAt(x); return pl ? pl.y : null; }
+  function pillarAt(x) {
+    for (var i = 0; i < arena.plats.length; i++) { var pl = arena.plats[i]; if (pl.y + pl.h > WATER_Y && Math.abs(x - pl.x) < pl.w / 2) return pl; }
     return null;
   }
   function overPlatform(x, margin) {
@@ -437,6 +442,15 @@
     if (sfxOn()) SFX.dash();
     burst('dust', p.x - p.dir * 30, p.y + R - 6, 7, { angle: p.dir > 0 ? Math.PI : 0, spread: 0.9, speed: 260, life: 0.45, size: 10, color: 'rgba(255,255,255,0.85)', g: -30 });
   }
+  // how far a belly slam started now carries sideways: the dive down to the platform below (it falls
+  // at 250 px/s speeding up to DIVE_VY, so about 0.1 s + height / DIVE_VY), then the faceplant slide,
+  // or on the trampoline the drift of the bounce back up; at least 140 px, as a tilted plank keeps
+  // sliding the slammer downhill
+  function slamReach(p) {
+    var pl = platAt(p.x) || arena.plats[0];
+    var fallT = 0.1 + Math.max(0, pl.y + (p.x - pl.x) * Math.tan(pl.a) - p.y - R) / DIVE_VY;
+    return Math.max(140, DIVE_VX * fallT + (pl.bounce ? 200 : 190 / pl.fric));
+  }
   function startDive(p) {
     p.action = 'dive'; p.dir = p.f; p.vx = p.dir * DIVE_VX; p.vy = Math.max(p.vy, 250); p.canDive = false; p.sb = 0;
     p.leanV += p.dir * 10;
@@ -503,9 +517,17 @@
     p.splashed = true; p.splashT = 0;
     var sx = clamp(p.x, 40, W - 40);
     p.floatX = clamp(p.x, 90, W - 90);
-    // two splashes on the same side get their own floaties instead of stacking on one
+    // two splashes on the same side get their own floaties instead of stacking on one; a spot in
+    // front of a stone pillar (gap arena) tries the other side, then moves past the pillar
     var o = P[1 - p.idx];
-    if (o.splashed && Math.abs(p.floatX - o.floatX) < 150) p.floatX = clamp(o.floatX + (o.floatX > W / 2 ? -150 : 150), 90, W - 90);
+    if (o.splashed && Math.abs(p.floatX - o.floatX) < 150) {
+      var d = o.floatX > W / 2 ? -1 : 1, fx = clamp(o.floatX + d * 150, 90, W - 90), pl = pillarAt(fx);
+      if (pl) {
+        var back = clamp(o.floatX - d * 150, 90, W - 90);
+        fx = Math.abs(back - o.floatX) >= 150 && !pillarAt(back) ? back : pl.x + d * (pl.w / 2 + 60);
+      }
+      p.floatX = clamp(fx, 90, W - 90);
+    }
     burst('drop', sx, WATER_Y, 34, { angle: -Math.PI / 2, spread: 1.4, speed: 900, life: 1.1, size: 8, colors: ['#ffffff', '#bdf0ff', '#8fdcff'], g: 1800 });
     burst('drop', sx, WATER_Y, 14, { angle: -Math.PI / 2, spread: 2.6, speed: 420, life: 0.9, size: 6, color: '#e8fbff', g: 1400 });
     spawn('ring', sx, WATER_Y + 4, 0, 0, 0.7, 60, '#ffffff', 0, 0, 0.22);
@@ -723,7 +745,7 @@
       // while the rival is flying out (just bonked, or already past the ring), hold a mashed attack that
       // would carry the human past the edge too (dash + slide, or a belly slam); the buffered press
       // still fires if the rival lands back on the ring
-      var reach = p.grounded ? DASHV * DASH_T + (p.plat ? 250 / p.plat.fric : 0) : 140;
+      var reach = p.grounded ? DASHV * DASH_T + (p.plat ? 250 / p.plat.fric : 0) : slamReach(p);
       var reckless = !p.cpu && !o.grounded && (o.wasHit || !overPlatform(o.x, 0)) && !overPlatform(p.x + p.f * reach, 0);
       if (p.grounded) { if (p.jb > 0) doJump(p); else if (p.sb > 0 && !reckless) startWindup(p); }
       else if (p.sb > 0 && p.canDive && !reckless) startDive(p);
@@ -972,7 +994,7 @@
       if (diff === 'medium' && save.wins.medium === 1) unlockedDiff = DIFF_AR.hard;
     }
     persist();
-    overData = { newMedal: newMedal, humanWon: humanWon, earned: earned, newHats: newHats, newStreak: newStreak, unlockedDiff: unlockedDiff, t: 0, shown: 0 };
+    overData = { newMedal: newMedal, humanWon: humanWon, earned: earned, newHats: newHats, newStreak: newStreak, unlockedDiff: unlockedDiff, t: 0, shown: 0, spaceT: 0 };
     // set up the victory scene
     var w = P[matchWinner], l = P[1 - matchWinner];
     resetPlayer(w, 330, 350, 1); resetPlayer(l, 560, 460, -1);
@@ -990,7 +1012,7 @@
   function overStep(dt) {
     T += dt;
     var w = P[matchWinner], l = P[1 - matchWinner];
-    overData.t += dt;
+    overData.t += dt; overData.spaceT += dt;
     var hop = Math.max(0, Math.sin(overData.t * 4.2));
     var wasG = w.grounded;
     w.y = 350 - hop * 44; w.grounded = hop < 0.02; w.vx = 0; w.vy = 0; w.T += dt; w.action = 'win';
@@ -1136,17 +1158,6 @@
     text(String(roundNo), cx, 39, 26, '#2b1d3a', 'center', 0);
     text(arena.name, cx, 82, 18, '#ffffff', 'center', 5);
 
-    // wind indicator
-    if (arena.type === 'windy' && (Math.abs(arena.windTarget) > 0 || arena.windWarn)) {
-      var dir = arena.windWarn ? arena.windNext : Math.sign(arena.windTarget);
-      var blink = arena.windWarn ? (Math.sin(T * 20) > 0 ? 1 : 0.35) : 1;
-      ctx.save(); ctx.globalAlpha = blink; ctx.translate(cx, 122); ctx.scale(dir, 1);
-      ctx.beginPath(); ctx.moveTo(-60, -10); ctx.lineTo(20, -10); ctx.lineTo(20, -24); ctx.lineTo(56, 0); ctx.lineTo(20, 24); ctx.lineTo(20, 10); ctx.lineTo(-60, 10); ctx.closePath();
-      SA.fs(ctx, arena.windWarn ? '#ffe14a' : '#ffffff', OUT, 4);
-      ctx.restore();
-      text(arena.windWarn ? 'الريح ستتغير!' : 'ريح قوية', cx, 158, 18, '#ffffff', 'center', 5);
-    }
-
     // labels + tutorial keycaps over players
     var showKeys = roundNo === 1 && phase === 'fight' && roundT > 0.5 && roundT < 6 && (firstMatch || score[0] + score[1] === 0);
     for (var j = 0; j < 2; j++) {
@@ -1160,9 +1171,11 @@
         ctx.beginPath(); ctx.moveTo(ax, 104); ctx.lineTo(ax - 14, 128); ctx.lineTo(ax + 14, 128); ctx.closePath(); SA.fs(ctx, SUMOS[q.sumo].body, OUT, 3);
         continue;
       }
-      if (ty < 150) ty = 150;
-      // labels and keycaps fade out while a banner is up, so the words never stack on each other
-      if (labelA > 0 && (showKeys || hint[j] > 0) && !q.cpu) {
+      // labels and keycaps fade out while a banner is up, so the words never stack on each other;
+      // a high jump stops the keycap bubble below the arena name, and the label below the bubble
+      var bubble = labelA > 0 && (showKeys || hint[j] > 0) && !q.cpu;
+      ty = Math.max(ty, bubble ? 166 : 150);
+      if (bubble) {
         var arrowKeys = mode === 1 ? hintArrows : j === 1;
         var k1 = arrowKeys ? '↑' : 'W', k2 = arrowKeys ? '↓' : 'S';
         var bob = Math.sin(T * 5) * 3;
@@ -1185,6 +1198,16 @@
         text(q.label, sx, ty, 22, col, 'center', 6);
         ctx.restore();
       }
+    }
+    // wind indicator, drawn over the player labels so a jump near the middle never hides it
+    if (arena.type === 'windy' && (Math.abs(arena.windTarget) > 0 || arena.windWarn)) {
+      var dir = arena.windWarn ? arena.windNext : Math.sign(arena.windTarget);
+      var blink = arena.windWarn ? (Math.sin(T * 20) > 0 ? 1 : 0.35) : 1;
+      ctx.save(); ctx.globalAlpha = blink; ctx.translate(cx, 122); ctx.scale(dir, 1);
+      ctx.beginPath(); ctx.moveTo(-60, -10); ctx.lineTo(20, -10); ctx.lineTo(20, -24); ctx.lineTo(56, 0); ctx.lineTo(20, 24); ctx.lineTo(20, 10); ctx.lineTo(-60, 10); ctx.closePath();
+      SA.fs(ctx, arena.windWarn ? '#ffe14a' : '#ffffff', OUT, 4);
+      ctx.restore();
+      text(arena.windWarn ? 'الريح ستتغير!' : 'ريح قوية', cx, 158, 18, '#ffffff', 'center', 5);
     }
     drawBanner();
   }
@@ -1538,6 +1561,12 @@
       if (k.anyPressed(['KeyP', 'Escape'])) { pause(!paused); return; }
       if (paused && k.pressed('KeyR')) { SFX.click(); pause(false); startMatch(); return; }
     } else if (scr === 'over') {
+      // Space is also player 1's jump: a press within 0.6 s of the previous one (or of the podium
+      // appearing) is a child still mashing jump, so it can't skip the podium; a calm press plays again
+      if (k.pressed('Space') && overData) {
+        if (overData.spaceT < 0.6) ok = k.anyPressed(['Enter', 'NumpadEnter']);
+        overData.spaceT = 0;
+      }
       if (overData && overData.t > 0.6) {
         if (ok || k.pressed('KeyR')) { SFX.click(); again(); }
         else if (k.pressed('KeyC')) { SFX.click(); toSelect(mode); }

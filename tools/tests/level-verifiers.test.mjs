@@ -84,8 +84,9 @@ test('Maze Dash verification proves every hand-made level can be finished with e
   assert.equal(result.status, 0);
 });
 
-test('Maze Dash verification climbs a generated endless maze to 600 m', () => {
-  const result = mazeVerifier(['--endless', '1']);
-  assert.match(result.stdout, /climbable to 600 m/);
+// Fixed seeds keep this check the same on every run; a failure names the seed to replay.
+test('Maze Dash verification climbs seeded endless mazes to 600 m', () => {
+  const result = mazeVerifier(['--endless', '3', '--seed', '1']);
+  assert.match(result.stdout, /\(seeds 1\.\.3\) climbable to 600 m/);
   assert.equal(result.status, 0);
 });

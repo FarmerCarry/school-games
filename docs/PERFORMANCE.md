@@ -205,6 +205,29 @@ a sky that rises into space, and record celebrations. Candy Rope's pays for
 hints that show when to cut, adjusted to the player's own timing. The other 15
 games stay inside their unchanged limits.
 
+A third pass, on 8 October, worked through the reviewers' remaining notes on
+both batches and changed 30 games (Fire & Ice needed nothing). It removes more
+per-frame work: Beat Dash, Block Burst, Paint Grab, Maze Dash, Merge 2048, Moto
+Madness and Pool Party now keep their last paused frame, Swing Hook's kept
+frame is complete, and Moto Madness skips a far-hill fill hidden behind the
+near hills. Games that cache painted canvases (Moto Madness, Wacky Soccer,
+Block Burst, Paint Grab, Maze Dash, Sneaky Levels and others) repaint them
+after a GPU reset instead of staying blank. The slowest browser tests got
+faster: Sumo Bonk's regression test by about 10 times and Tunnel Blitz's by
+about 6. The changed games grew by 636 bytes on average (19,093 in total). One
+limit changes:
+
+| File | Before bytes | After bytes | Before gzip | After gzip | New limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Sneaky Levels | 101,529 | 102,589 | 34,290 | 34,718 | 104,000 |
+
+Sneaky Levels' growth repaints the themed floor top under a trap block once
+the block moves away, paints the canvas edge the baked level does not reach,
+restores the baked level after a GPU reset, and keeps the save warning clear
+of the hint bar and pause button; it had only 411 bytes left under the old
+limit. The other games stay inside their unchanged limits, and the offline
+cache is 4,727,825 of 5,000,000 bytes.
+
 ## CI, review, and deployed performance
 
 The build workflow runs this check immediately after building, on pull requests

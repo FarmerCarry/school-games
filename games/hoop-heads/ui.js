@@ -14,6 +14,7 @@
   var view = Kit.fit(canvas, W, H, { onResize: placeUI });
   var ctx = view.ctx;
   canvas.addEventListener('contextrestored', function () { HH.resetBg(); view.resize(); });
+  Kit.motion.onChange(function () { sceneDirty = true; }); // a still frame drops its flash
   Kit.muteButton();
 
   var state = 'title', match = null, demo = null, cfg = null, tour = null;
@@ -424,12 +425,13 @@
   function ladGo() { S.click(); startTourMatch(); }
   function startTourMatch() {
     var cp = tour.cup;
-    startMatch({ mode: 'tour', p1: tour.char, p2: tour.opps[tour.stage], lv: cp.lv[tour.stage], len: 60, target: 11 });
+    // the HUD reads cfg.stage: a win moves tour.stage on while the result and ladder still show this match
+    startMatch({ mode: 'tour', stage: tour.stage, p1: tour.char, p2: tour.opps[tour.stage], lv: cp.lv[tour.stage], len: 60, target: 11 });
   }
   $('ladGo').addEventListener('click', ladGo);
   $('ladBack').addEventListener('click', function () {
     S.click();
-    askConfirm('الانسحاب من البطولة؟', function () { tour = null; openCups(); });
+    askConfirm('الانسحاب من البطولة؟', function () { tour = null; match = null; openCups(); });
   });
 
   /* ================================================================== SHOP */
@@ -489,7 +491,7 @@
   function matchInfo(m) {
     var c = cfg, tags, marks, mode = '', sub = 'الأول إلى ' + m.target;
     if (c.mode === 'duo') { tags = ['اللاعب 1', 'اللاعب 2']; marks = ['1', '2']; }
-    else if (c.mode === 'tour') { tags = ['أنت', 'الخصم ' + (tour.stage + 1) + ' من 5']; marks = ['أنت', null]; mode = tour.cup.name + ' • المباراة ' + (tour.stage + 1) + ' من 5'; }
+    else if (c.mode === 'tour') { tags = ['أنت', 'الخصم ' + (c.stage + 1) + ' من 5']; marks = ['أنت', null]; mode = tour.cup.name + ' • المباراة ' + (c.stage + 1) + ' من 5'; }
     else { tags = ['أنت', 'كمبيوتر • ' + HH.DIFF_NAMES[c.lv]]; marks = ['أنت', null]; }
     var w = m.winner, winText = '';
     if (w >= 0) winText = c.mode === 'duo' ? ('فاز اللاعب ' + (w + 1) + '!') : (w === 0 ? 'فزت!' : 'خسرت!');

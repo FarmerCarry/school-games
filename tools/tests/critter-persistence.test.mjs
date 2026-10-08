@@ -317,8 +317,11 @@ for (const condition of [{ name: 'a better existing record', cheat: false, best:
 // a beginner's hands with items nothing could take.
 test('new crops and machine output stay unpicked until something can take them', async t => {
   const page = await gamePage(t, { v: 1, un: { cornField: true }, tut: 5, px: 560, py: 1320 });
-  await page.evaluate(() => { __game.start(); stepGame(30); });
+  const countNo = () => { window.noCount = 0; const no = __game.sfx.no; __game.sfx.no = () => { window.noCount++; no(); }; };
+  await page.evaluate(countNo);
+  await page.evaluate(() => { __game.start(); stepGame(60 * 4); });
   assert.deepEqual((await snapshot(page)).state.stack, [], 'ripe corn without a shelf is not picked');
+  assert.equal(await page.evaluate(() => window.noCount), 1, 'the "open the shelf first" warning does not repeat');
   assert.equal(await page.evaluate(() => __game.unlockNext()), 'cornShelf');
   await page.evaluate(() => { __game.tp(560, 1320); stepGame(30); });
   assert.ok((await snapshot(page)).state.stack.includes('corn'), 'corn is picked once its shelf exists');
@@ -326,16 +329,22 @@ test('new crops and machine output stay unpicked until something can take them',
   const save = fixture({ tut: 6, px: 2012, py: 1022, mach: { juicer: { i: 0, o: 3 } } });
   delete save.un.juiceShelf;
   const juice = await gamePage(t, save);
-  await juice.evaluate(() => { __game.start(); stepGame(30); __game.pause(); });
+  await juice.evaluate(countNo);
+  await juice.evaluate(() => { __game.start(); stepGame(60 * 2); __game.pause(); });
   const data = await snapshot(juice);
   assert.deepEqual(data.state.stack, [], 'juice without a juice shelf stays on the machine');
   assert.deepEqual(data.save.mach.juicer, { i: 0, o: 3 });
+  assert.equal(await juice.evaluate(() => window.noCount), 1);
 });
 
-test('a save already carrying unsellable stock is pointed to the bin', async t => {
+test('a save already carrying unsellable stock is pointed to the bin, which keeps the sellable stock', async t => {
   const page = await gamePage(t, { v: 1, un: { cornField: true }, carry: ['banana', 'corn'], tut: 5, px: 1100, py: 1300 });
   await page.evaluate(() => { __game.start(); stepGame(30); });
   assert.equal(await page.evaluate(() => __game.hint()), 'ارمِ الذرة في سلة المهملات!');
+  await page.evaluate(() => { __game.tp(900, 1320); stepGame(30); });
+  assert.deepEqual((await snapshot(page)).state.stack, ['banana'], 'following the hint throws only the corn');
+  await page.evaluate(() => { __game.tp(1100, 1300); stepGame(); __game.tp(900, 1320); stepGame(30); });
+  assert.deepEqual((await snapshot(page)).state.stack, [], 'a later visit still empties sellable stock');
 });
 
 test('a first shelf trip with one banana still brings and serves the first customer', async t => {

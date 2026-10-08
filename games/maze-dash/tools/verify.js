@@ -2,7 +2,7 @@
 /*
  * Maze Dash level verifier (development tool, not loaded by the game).
  *   node games/maze-dash/tools/verify.js [levelNumber] [--map]
- *   node games/maze-dash/tools/verify.js --endless [runs]
+ *   node games/maze-dash/tools/verify.js --endless [runs] [--seed n]
  * Checks every level parses (13 wide, rectangular, one start, one exit) and
  * that a greedy planner using the real dash rules can collect every dot and
  * coin and reach the exit; moving blocks are simulated exactly. Timed hazards
@@ -10,7 +10,8 @@
  * player can make must have safe moments to start it (a bat that patrols
  * along the whole corridor you must dash through is a guaranteed hit).
  * --endless generates random "Rising Goo" mazes and checks that each one can
- * be climbed to 600 m and has no unavoidable hazard on any dash.
+ * be climbed to 600 m and has no unavoidable hazard on any dash. Run k uses
+ * seed n + k (n is random without --seed), so a reported maze can be replayed.
  * The in-browser autoplayer (window.__game.autoplay) re-checks each level with
  * real hazard timing.
  */
@@ -19,7 +20,9 @@ const path = require('path');
 const fs = require('fs');
 const vm = require('vm');
 const dir = path.join(__dirname, '..');
-const ctx = { console, Math, Object, Array, JSON, Uint8Array };
+// The game files get their own Math, so --endless can seed Math.random.
+const ctxMath = Object.create(Math);
+const ctx = { console, Math: ctxMath, Object, Array, JSON, Uint8Array };
 ctx.window = ctx;
 vm.createContext(ctx);
 for (const f of ['core.js', 'levels.js', 'endless.js']) vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f });
@@ -37,6 +40,13 @@ function hazardAt(H, x, y, t) {
 // Fraction of start times (over 20 s) at which this dash gets through untouched.
 function dashSafeFraction(H, x, y, d, len) {
   const D = C.DIRS[d], dur = len / TM.DASH_SPEED;
+  // Only bats whose patrol comes within reach of the dash's box, and puffers
+  // beside it, can hit it; skipping the rest keeps --endless fast.
+  const x0 = Math.min(x, x + D.dx * len), x1 = Math.max(x, x + D.dx * len), y0 = Math.min(y, y + D.dy * len), y1 = Math.max(y, y + D.dy * len);
+  const rad = TM.BAT_RADIUS + TM.PLAYER_RADIUS, near = (ax0, ax1, ay0, ay1, r) => ax1 >= x0 - r && ax0 <= x1 + r && ay1 >= y0 - r && ay0 <= y1 + r;
+  H = { trapMap: H.trapMap,
+    bats: H.bats.filter(b => b.axis === 0 ? near(b.min, b.max, b.y, b.y, rad) : near(b.x, b.x, b.min, b.max, rad)),
+    puffers: H.puffers.filter(p => near(p.x, p.x, p.y, p.y, 1)) };
   let ok = 0, n = 0;
   for (let t0 = 0; t0 < 20; t0 += 0.05) {
     n++; let bad = null;
@@ -48,8 +58,12 @@ function dashSafeFraction(H, x, y, d, len) {
 
 if (process.argv.includes('--endless')) {
   const runs = Number(process.argv[process.argv.indexOf('--endless') + 1]) || 20, HEIGHT = 600, K = C.key;
+  const seedArg = process.argv.indexOf('--seed'), seed0 = seedArg > 0 ? Number(process.argv[seedArg + 1]) >>> 0 : Math.random() * 2 ** 31 >>> 0;
   let bad = 0;
   for (let run = 0; run < runs; run++) {
+    // mulberry32: a small, well-mixed seeded generator
+    let a = (seed0 + run) >>> 0;
+    ctxMath.random = () => { a = a + 0x6D2B79F5 >>> 0; let t = Math.imul(a ^ a >>> 15, a | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
     const w = { rows: {}, bats: [], traps: [], puffers: [], trapMap: {}, pufMap: {},
       ensureRow(y) { let r = this.rows[y]; if (!r) { r = { t: new Uint8Array(13).fill(C.T.WALL), it: new Uint8Array(13), lock: new Uint8Array(13) }; this.rows[y] = r; } return r; },
       addBat(b) { this.bats.push(b); }, addTrap(t) { this.traps.push(t); this.trapMap[K(t.x, t.y)] = t; }, addPuffer(p) { this.puffers.push(p); this.pufMap[K(p.x, p.y)] = p; } };
@@ -66,9 +80,9 @@ if (process.argv.includes('--endless')) {
         const k = K(m.x, m.y); if (!seen.has(k)) { seen.add(k); q.push([m.x, m.y]); }
       }
     }
-    if (top > -HEIGHT || stuck) { bad++; console.log(`run ${run}: reached ${-top} m, ${stuck} dash(es) with an unavoidable hazard`); }
+    if (top > -HEIGHT || stuck) { bad++; console.log(`run ${run} (--seed ${seed0 + run}): reached ${-top} m, ${stuck} dash(es) with an unavoidable hazard`); }
   }
-  console.log(bad ? `${bad}/${runs} endless mazes with problems` : `all ${runs} endless mazes climbable to ${HEIGHT} m with no unavoidable hazards`);
+  console.log(bad ? `${bad}/${runs} endless mazes with problems (seeds ${seed0}..${seed0 + runs - 1})` : `all ${runs} endless mazes (seeds ${seed0}..${seed0 + runs - 1}) climbable to ${HEIGHT} m with no unavoidable hazards`);
   process.exit(bad ? 1 : 0);
 }
 const only = process.argv[2] && !process.argv[2].startsWith('--') ? Number(process.argv[2]) : null;

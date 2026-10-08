@@ -10,14 +10,20 @@
   var TAU = Math.PI * 2;
   var canvas = document.getElementById('game');
   var ui = document.getElementById('ui');
+  // A paused game keeps its last frame: it is drawn again only after a mode change,
+  // a resize, a late font or a restored canvas.
+  var frameDirty = true;
   function layoutUI(v) {
     ui.style.left = canvas.style.left;
     ui.style.top = canvas.style.top;
     ui.style.transform = 'scale(' + v.scale + ')';
+    frameDirty = true;
   }
   var view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: layoutUI });
   var ctx = view.ctx;
   layoutUI(view);
+  // a GPU reset (e.g. after sleep) clears the canvas and its scale: set them up again
+  canvas.addEventListener('contextrestored', function () { view.resize(); });
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
   muteBtn.title = 'الصوت (M)';
@@ -229,7 +235,7 @@
   for (var pi = 0; pi < PMAX; pi++) parts.push({ on: false });
   // Reduced motion / classroom preset: smaller bursts, no speed lines or white flash.
   var calm = Kit.motion.reduced();
-  Kit.motion.onChange(function (r) { calm = r; if (r) flashT = 0; });
+  Kit.motion.onChange(function (r) { calm = r; if (r) flashT = 0; frameDirty = true; });
   function P(type, x, y, vx, vy, life, size, color, g, drag) {
     var p = parts[pcur]; pcur = (pcur + 1) % PMAX;
     p.on = true; p.type = type; p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.life = life; p.max = life;
@@ -569,7 +575,8 @@
 
   /* ------------------------------------------------------------------ update */
   function update(dt) {
-    time += dt;
+    // the scene clock (waves, twinkles, bobbing prompts) stops with the kept pause frame
+    if (mode !== 'pause') time += dt;
     setMusic(mode !== 'pause', Math.max(0, THEMES.indexOf(theme)));
     musicTick();
     var kp = Kit.keys.pressed;
@@ -613,8 +620,8 @@
     if (resumeWait) {
       if (hold) resumeWait = false;
       else {
-        // still hanging on: timer and physics stay frozen, only effects settle
-        updateRag(); updateCamera(dt); updateParts(dt); updatePops(dt); shake.update(dt); updateWind(0, false);
+        // still hanging on: timer, physics and camera stay frozen, only effects settle
+        updateRag(); updateParts(dt); updatePops(dt); shake.update(dt); updateWind(0, false);
         blinkT -= dt; if (blinkT < -0.12) blinkT = 1.5 + Math.random() * 3;
         return;
       }
@@ -717,6 +724,8 @@
 
   /* ----------------------------------------------------------------- render */
   function render() {
+    if (mode === 'pause' && !frameDirty) return;
+    frameDirty = false;
     var c = ctx;
     if (!w) { c.fillStyle = '#38b8ff'; c.fillRect(0, 0, W, H); return; }
     if (L) Sim.updateMovers(L, w.t);
@@ -994,8 +1003,9 @@
     // prompt near the player: before the launch, and after resuming mid-swing
     var ask = attract || mode !== 'play' ? '' : w.st === 'ready' ? 'اضغط مطولًا لتنطلق!' : resumeWait ? 'اضغط مطولًا للمتابعة!' : '';
     if (ask) {
-      var a = 0.75 + Math.sin(time * 6) * 0.25;
-      c.save(); c.translate(w.x, w.y - 78 + Math.sin(time * 5) * 4); c.scale(1 / cam.z * 0.9, 1 / cam.z * 0.9);
+      // calm motion: a steady prompt, no pulse or bob
+      var a = calm ? 1 : 0.75 + Math.sin(time * 6) * 0.25;
+      c.save(); c.translate(w.x, w.y - 78 + (calm ? 0 : Math.sin(time * 5) * 4)); c.scale(1 / cam.z * 0.9, 1 / cam.z * 0.9);
       c.globalAlpha = a;
       c.font = '700 30px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl';
       c.lineJoin = 'round'; c.lineWidth = 8; c.strokeStyle = '#2a1747'; c.strokeText(ask, 0, 0);
@@ -1454,9 +1464,15 @@
     screens.forEach(function (s) { $('scr-' + s).hidden = s !== m; });
     $('pauseBtn').hidden = m !== 'play';
     if (m === 'title') refreshTitle();
-    if (m !== 'play') holdMouse = false;
+    // A mouse button held through a pause keeps holding, like Space (release and blur clear it).
+    if (m !== 'play' && m !== 'pause') holdMouse = false;
+    frameDirty = true;
   }
-  function pause() { if (mode !== 'play') return; sfx.click(); setMode('pause'); updateWind(0, false); }
+  function pause() {
+    if (mode !== 'play') return;
+    sfx.click(); setMode('pause'); updateWind(0, false);
+    flashT = 0; // the kept pause frame (and the wait after it) must not hold the theme-change flash
+  }
   function resume() {
     sfx.click(); setMode('play');
     // Mid-swing, keep the rope: freeze until the player holds again instead of letting go.
@@ -1747,7 +1763,7 @@
   startAttract();
   if (document.fonts && document.fonts.load) {
     try {
-      document.fonts.load('700 20px Fredoka', 'بA1').catch(function () { /* Use fallback fonts. */ });
+      document.fonts.load('700 20px Fredoka', 'بA1').then(function () { frameDirty = true; }, function () { /* Use fallback fonts. */ });
       document.fonts.load('500 20px Fredoka', 'بA1').catch(function () { /* Use fallback fonts. */ });
     } catch (e) { /* ignore */ }
   }

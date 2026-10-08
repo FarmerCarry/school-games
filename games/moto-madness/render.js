@@ -36,9 +36,12 @@
   };
   MMR.THEMES = THEMES;
   var T = THEMES.grass, themeId = 'grass';
-  var layers = { far: null, mid: null, pattern: null, sprites: [] };
+  var layers = { far: null, mid: null, pattern: null, sprites: [] }, layersFor = null; // the theme they were painted for
 
-  function mkCanvas(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  // Every cached canvas is painted once, so a GPU reset that blanks one repaints them all on the next frame.
+  function dropLayers() { layersFor = null; }
+  MMR.dropLayers = dropLayers;
+  function mkCanvas(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; c.addEventListener('contextrestored', dropLayers); return c; }
   function circle(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); }
   function rrect(g, x, y, w, h, r) {
     g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
@@ -251,8 +254,11 @@
 
   MMR.setTheme = function (ctx, level) {
     layers.gsy = null; // a new course: snap the parallax layers to its ground
-    if (layers.far && themeId === level.def.theme) return; // same world: keep the cached layers and sprites
     themeId = level.def.theme; T = THEMES[themeId];
+    if (layersFor !== themeId) paintLayers(ctx); // same world: keep the cached layers and sprites
+  };
+  function paintLayers(ctx) {
+    layersFor = themeId;
     layers.far = genFar(themeId);
     layers.mid = genMid(themeId);
     layers.pattern = genPattern(ctx);
@@ -265,7 +271,7 @@
     for (i = 0; i < 7; i++) layers.clouds.push([R() * 2400, 40 + R() * 200, 0.6 + R() * 0.7]);
     layers.flakes = [];
     for (i = 0; i < 80; i++) layers.flakes.push([R() * 1280, R() * 720, 0.5 + R(), R() * 6]);
-  };
+  }
   MMR.theme = function () { return T; };
   MMR.themeId = function () { return themeId; };
 
@@ -304,9 +310,10 @@
       }
     }
     // parallax layers stand on the ground line (about y 450 on flat ground) and drift less than it does
-    var gsy = groundLine(L, cam, t) - 450;
-    drawLayer(ctx, layers.far, cam.x * 0.12, clampN(50 + gsy * 0.35, -80, 300));
-    drawLayer(ctx, layers.mid, cam.x * 0.3, clampN(75 + gsy * 0.6, -60, 400));
+    var gsy = groundLine(L, cam, t) - 450, yf = clampN(50 + gsy * 0.35, -80, 300), ym = clampN(75 + gsy * 0.6, -60, 400);
+    // the far layer's fill only shows above the solid part of the mid layer (hills from y 368, the city's base from 380)
+    drawLayer(ctx, layers.far, cam.x * 0.12, yf, ym + (themeId === 'factory' ? 382 : 370));
+    drawLayer(ctx, layers.mid, cam.x * 0.3, ym, 720);
   }
   function clampN(v, a, b) { return v < a ? a : v > b ? b : v; }
   // Screen height of the ground around the camera. The highest of three samples ignores pits,
@@ -320,12 +327,13 @@
     layers.gx = cam.x; layers.gt = t;
     return layers.gsy;
   }
-  function drawLayer(ctx, c, off, y) {
+  function drawLayer(ctx, c, off, y, fillTo) {
     var x = -(off % LW);
     if (x > 0) x -= LW;
     for (; x < 1280; x += LW) ctx.drawImage(c, x, y, LW, LH);
     // fill below the layer, in the colour of its bottom edge, so nothing shows through and there is no seam
-    if (y + LH < 720) { ctx.fillStyle = c === layers.far ? T.far : themeId === 'factory' ? T.mid2 : T.mid; ctx.fillRect(0, y + LH - 1, 1280, 720 - y - LH + 1); }
+    fillTo = Math.min(720, fillTo);
+    if (y + LH < fillTo) { ctx.fillStyle = c === layers.far ? T.far : themeId === 'factory' ? T.mid2 : T.mid; ctx.fillRect(0, y + LH - 1, 1280, fillTo - y - LH + 1); }
   }
 
   /* --------------------------------------------------------------- terrain */
@@ -759,6 +767,7 @@
   /* ----------------------------------------------------------- whole world */
   MMR.drawWorld = function (ctx, w, cam, t, skin, extra) {
     var L = w.level, i;
+    if (layersFor !== themeId) paintLayers(ctx);
     drawBackground(ctx, L, cam, t);
     var hw = 640 / cam.zoom, hh = 360 / cam.zoom;
     var x0 = cam.x - hw - 60, x1 = cam.x + hw + 60, yb = cam.y + hh + 80;

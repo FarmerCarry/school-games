@@ -60,6 +60,9 @@ export const scenarios = {
   'pizza-clicker': defaults(['#bPlay'], `${g}.mode === 'play'`, `[${g}.S.pizzas,${g}.S.clicks]`, async page => { await page.mouse.click(840, 405); }, '#bPause', `${g}.mode === 'pause'`, '#bResume', `${g}.mode === 'play'`, { persistent: true }),
   'block-world': defaults(['#playBtn','#modeCrea'], `${g}.G.mode === 'play'`, `[${g}.player.x,${g}.player.y,${g}.G.tod]`, hold('ArrowRight'), '#pausebtn', `${g}.G.mode === 'pause'`, '#resumeBtn', `${g}.G.mode === 'play'`, { persistent: true, startIf: ['true', `${g}.G.mode === 'newworld'`] }),
   'block-burst': defaults(['#btnClassic'], `${g}.state === 'play'`, `[${g}.run.cells,${g}.run.score]`, async page => {
+    // A dealt piece can be grabbed only once it has slid into the tray. After Start or a new
+    // deal that takes several frames, and a software-rendered frame can take hundreds of ms.
+    await page.waitForFunction(() => __game.trayReady || __game.state !== 'play', null, { timeout: 7000, polling: 40 }).catch(() => {});
     const sh = await page.evaluate(() => {
       const mask = BBCore.maskFromBoard(__game.run.cells);
       for (let slot=0;slot<3;slot++) {
@@ -73,7 +76,7 @@ export const scenarios = {
     await page.mouse.move([410,640,870][sh.slot],628); await page.mouse.down();
     await page.mouse.move(392 + sh.c*62 + sh.w*31,34 + sh.r*62 + sh.h*31 + 18,{steps:12});
     await page.waitForTimeout(180); await page.mouse.up();
-  }, '#btnPause', `${g}.state === 'pause'`, '#btnRestart', `${g}.run.score === 0`, { settle: 650 }),
+  }, '#btnPause', `${g}.state === 'pause'`, '#btnRestart', `${g}.run.score === 0`),
   'merge-2048': defaults(['#btnPlay'], `${g}.state().screen === 'play'`, select(`${g}.state()`, ['values','score','hist']), sequence(hold('ArrowLeft',80),hold('ArrowDown',80),hold('ArrowRight',80)), '#btnPause', `${g}.state().screen === 'pause'`, '#btnPauseRestart', `${g}.state().score === 0 && ${g}.state().hist === 0`),
   'candy-rope': defaults(['#tPlay'], `${g}.info().state === 'play'`, `${g}.info().world`, async page => {
     const point = await page.evaluate(() => {
