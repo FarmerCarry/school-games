@@ -175,6 +175,17 @@ button { font-family: var(--sg-font); }
 .hudbtn[hidden] { display: none; }
 .hudbtn span { display: block; width: 5px; height: 16px; background: #ffffff; border-radius: 2px; }
 .hudbtn:hover { background: rgba(0, 0, 0, 0.55); }
+/* Save warning (Kit.saveStatus). While a level is played (the pause button shows)
+   it sits on the ceiling at the top left of the 1280x720 game area, under the pause
+   button, instead of over the hint bar and the skip tip at the bottom. A little
+   smaller there, so it stays on the ceiling in the 1100x620 portal frame too. */
+#btn-pause:not([hidden]) ~ .sg-save-status {
+  --tl-s: min(calc(100vw / 1280), calc(100vh / 720));
+  inset-inline: auto; bottom: auto; margin: 0;
+  left: calc((100vw - 1280 * var(--tl-s)) / 2 + 12 * var(--tl-s));
+  top: calc((100vh - 720 * var(--tl-s)) / 2 + 64 * var(--tl-s));
+}
+#btn-pause:not([hidden]) ~ .sg-save-status:not([data-compact="true"]) { padding: 5px 12px; font-size: 16px; line-height: 1.2; }
 .midbtn.skip { margin-top: 12px; background: #ffe14d; font-size: 19px; }
 .midbtn.skip[hidden] { display: none; }
 #scr-end.dim { background: rgba(22, 12, 34, 0.35); } /* let the final confetti shine through */
