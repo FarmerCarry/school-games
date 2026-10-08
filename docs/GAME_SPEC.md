@@ -55,7 +55,7 @@ A game may only use files from its own folder plus these shared ones:
 
 | Path (from the game folder)          | What it is                                                    |
 |-------------------------------------|---------------------------------------------------------------|
-| `../../shared/kit.js`               | helpers: sound, saving, keys, mouse, canvas scaling, loop, particles |
+| `../../shared/kit.js`               | helpers: sound, saving, keys, mouse, canvas scaling, loop, particles, local play statistics |
 | `../../shared/game.css`             | base page styles, the Fredoka font, overlay/panel/button/keycap classes |
 | `../../lib/three/three.min.js`      | three.js r159 (classic script, gives `window.THREE`) for 3D games |
 
@@ -68,7 +68,9 @@ not loaded by other games.
 1. **Classic scripts only.** No `type="module"`, no `import`, no `fetch()`/XHR of local files.
    The whole site has to work when someone double-clicks `index.html` from a folder (`file://`).
    Put level data in JS files or inline.
-2. **Nothing external.** No CDNs, web fonts from the internet, analytics, iframes or links out.
+2. **Nothing external.** No CDNs, web fonts from the internet, online or third-party analytics,
+   iframes or links out. Play statistics stay on the PC: a game passes counts to the portal only
+   through `Kit.stats` (see "Play statistics" below) and never adds another reporting channel.
    All art is drawn in code (canvas, SVG, CSS, three.js geometry). Sound is synthesized with
    WebAudio (`Kit.sfx` / `Kit.audio.tone` / `Kit.audio.noise`, or your own synth code).
 3. **Kid-safe.** Cartoon only: no blood, gore, realistic guns, scary horror, bad words, romance or chat.
@@ -162,3 +164,28 @@ and saved-state regression tests alongside those browser scenarios.
 `node tools/playtest.mjs <slug>` opens the game in headless Chromium, runs a scripted list of
 clicks and key presses, saves screenshots and reports console errors (see the header of
 `tools/playtest.mjs`). Look at the screenshots to check what the game actually looks like.
+
+## Play statistics (Kit.stats)
+
+Teachers see local statistics for each PC: which games children choose, how long they
+really play, where they stop, and how smoothly games run. Kit measures engaged time,
+frame smoothness and mute toggles by itself and posts small counts to the portal, which
+stores them on that PC. Nothing is sent over the network and a game stores nothing for
+statistics. The contract is `docs/PLAY_STATS.md`; in short, each game reports its rounds:
+
+- `Kit.stats.round(id)` when a level, round, run or match starts (first play, retry,
+  restart, next level). Free-play games call `Kit.stats.round('main')` when play starts.
+  A new `round()` while one is open counts the open round as a quit.
+- `Kit.stats.end(result, score)` when it ends: `'win'`, `'lose'`, `'draw'` or `'end'`, with an
+  optional score ≥ 0 for endless runs. Two-player modes on one PC report only `'end'` or
+  `'draw'`. Automatic respawns inside a level are not new rounds.
+- `Kit.stats.tutorial('start')` / `('done')` for a first-time tutorial or coach,
+  `Kit.stats.busy()` at passive moments the child watches (at most about once per
+  second, never per frame), and `Kit.stats.frame(ms)` only in games with their own
+  `requestAnimationFrame` loop.
+
+Ids come from the game's own list and start with a letter (`'L3'`, `'w1-4'`, `'cpu-easy'`,
+`'endless'`). Never put typed text, names or codes in an id. Never report demo or attract
+modes, replays, bot-only matches or test runs. Put the calls in the UI layer (`game.js`,
+`main.js`, `ui.js`, `shared/board-game.js`), never in engine, physics, rules, simulation or
+level files, or in functions that Node tests load or call with a stub Kit.
