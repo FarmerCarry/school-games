@@ -15,22 +15,25 @@ function seeded(seed) {
   return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
 }
 
+// The game's own lift rule (isOnLift in game.js): on a lift means both wheels on it, or it is moving.
+const onLift = m => m.on === 3 || (m.on && (m.st === 1 || m.st === 3));
+
 // Plays level i to the finish, with the game's own "stuck for 6 s: back to the checkpoint" rule.
 function ride(i, rider) {
   const random = Math.random;
   Math.random = seeded(1234 + i); // crashes and crates use Math.random; keep runs repeatable
   try {
     const w = new MM.World(MM.build(MM.LEVELS[i]));
-    let stuckX = 0, stuckT = 0;
+    let stuckX = 0, stuckT = 0, rescues = 0;
     for (let frame = 0; frame < 90 * 60 && !w.finished; frame++) {
       const inp = rider(w);
       w.step(inp);
-      if (Math.abs(w.bike.x - stuckX) > 60 || w.crashed || w.movers.some(m => m.on)) { stuckX = w.bike.x; stuckT = 0; }
+      if (Math.abs(w.bike.x - stuckX) > 60 || w.crashed || w.movers.some(onLift)) { stuckX = w.bike.x; stuckT = 0; }
       else stuckT += 1 / 60;
-      if (stuckT > 6 && inp.gas) { w.crash('stuck'); stuckT = 0; }
+      if (stuckT > 6 && inp.gas) { w.crash('stuck'); stuckT = 0; rescues++; }
     }
     // the game judges stars on the time as shown, in tenths
-    return { finished: w.finished, time: Math.round(w.finalTime * 10) / 10, crashes: w.crashes, flips: w.flips };
+    return { finished: w.finished, time: Math.round(w.finalTime * 10) / 10, crashes: w.crashes, flips: w.flips, rescues };
   } finally {
     Math.random = random;
   }
@@ -118,4 +121,17 @@ test('Moto Madness the 1-1 tutorial flip works from anywhere on the ramp', () =>
       assert.ok(run.time <= stars[0] - 0.3, `${label}: took ${run.time} s, 3 stars is ${stars[0]} s`);
     }
   }
+});
+
+// A short ← tap while holding ↑ can leave the bike in a wheelie against a waiting lift's end wall,
+// with only the rear wheel on it. The lift waits for both wheels, so the bike would stand there
+// for good; the stuck rule must still see it and send the rider back to the checkpoint.
+test('Moto Madness a wheelie into a waiting lift still gets rescued', () => {
+  let t0 = null;
+  const run = ride(16, w => {
+    if (t0 == null && w.bike.x >= 600) t0 = w.time;
+    return { gas: true, brake: false, lean: t0 != null && w.time - t0 < 0.3 ? -1 : 0 };
+  });
+  assert.ok(run.finished, `4-2 with a 0.3 s ← tap at x 600 must finish: ${JSON.stringify(run)}`);
+  assert.ok(run.rescues >= 1, `the bike should have been stuck at the lift: ${JSON.stringify(run)}`);
 });

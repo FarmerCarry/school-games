@@ -594,7 +594,16 @@
 
   /* ----------------------------------------------------------- update */
   var auto = false, chaser = null, stuckX = 0, stuckT = 0;
-  function isOnLift() { for (var i = 0; i < world.movers.length; i++) if (world.movers[i].on) return true; return false; }
+  // Riding a lift or ferry: both wheels on it, or it is moving. A waiting lift starts only once
+  // both wheels are on it, so one wheel on it (a wheelie against its end wall) still counts as
+  // stuck and gets the "press R" hint and the rescue.
+  function isOnLift() {
+    for (var i = 0; i < world.movers.length; i++) {
+      var m = world.movers[i];
+      if (m.on === 3 || (m.on && (m.st === 1 || m.st === 3))) return true;
+    }
+    return false;
+  }
   var readInput = function () {
     if (auto) return MM.autopilot(world, { flips: true });
     var K = Kit.keys;

@@ -200,3 +200,23 @@ test('Moto Madness reuses the backdrop between levels of the same world', async 
   assert.equal(made.retry, 0, 'retrying keeps the backdrop');
   assert.ok(made.desert > 0, 'a new world draws its own backdrop');
 });
+
+// The game's own stuck rule: a short ← tap with ↑ held leaves the bike in a wheelie against
+// the first lift's end wall on 4-2, one wheel on the lift, so the lift never starts. The game
+// must still treat that as stuck and send the rider back (moto-balance replays the same rule).
+test('Moto Madness rescues a bike stuck in a wheelie against a waiting lift', async t => {
+  const page = await game(t);
+  const run = await page.evaluate(() => {
+    __game.start(16);
+    const w = __game.world, ride = (n, lean) => __game.step(n, { gas: true, brake: false, lean });
+    for (let i = 0; i < 600 && w.bike.x < 600; i++) ride(1, 0);
+    ride(18, -1);
+    ride(3 * 60, 0);
+    const stuckAt = Math.round(w.bike.x), crashesBefore = w.crashes;
+    ride(5 * 60, 0);
+    return { stuckAt, crashesBefore, crashes: w.crashes, state: __game.state };
+  });
+  assert.equal(run.crashesBefore, 0, `the bike stands against the lift wall: ${JSON.stringify(run)}`);
+  assert.equal(run.state, 'play');
+  assert.ok(run.crashes >= 1, `still stuck after 8 s of ↑: ${JSON.stringify(run)}`);
+});
