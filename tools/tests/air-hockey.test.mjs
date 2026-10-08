@@ -29,6 +29,16 @@ async function hockey(t, viewport = { width: 1280, height: 720 }) {
     const runtime = window.runtime = { paints: 0, failSave: false };
     runtime.step = n => { for (let i = 0; i < n; i++) { update(1 / 60); render(0); } };
     runtime.pointer = (x, y) => window.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y }));
+    // __game.goal(-1) shoots from 30 px out; a bot guarding its goal mouth can still block that
+    // shot, so the bot is moved off the shot's line and frozen until the goal has counted.
+    // If the bot has just scored, its goal pause runs out first so there is a live puck to shoot.
+    runtime.scoreGoal = () => {
+      const live = () => __game.st.scene === 'play' && __game.st.pucks.some(p => p.alive && !p.scored);
+      for (let i = 0; i < 300 && !live(); i++) runtime.step(1);
+      __game.goal(-1);
+      const puck = __game.st.pucks.find(p => p.alive && !p.scored), bot = __game.st.mallets[1];
+      Object.assign(bot, { y: puck.y - 220, vx: 0, vy: 0, avx: 0, avy: 0, frozen: 9 });
+    };
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (u, r) => { update = u; render = r; return { stop() {} }; };
@@ -104,7 +114,7 @@ test('Air Hockey holds mid-rally award banners for the goal and reports failed s
   });
   assert.deepEqual(rally, { scene: 'play', saved: true, queued: 1, toasts: 0 });
   const goal = await page.evaluate(() => {
-    runtime.failSave = true; __game.goal(-1); runtime.step(4);
+    runtime.failSave = true; runtime.scoreGoal(); runtime.step(4);
     const status = document.querySelector('.sg-save-status');
     return { scene: __game.st.scene, queued: __game.st.awardQ.length, toasts: document.querySelectorAll('#toasts .toast').length, failed: !status.hidden && status.dataset.state };
   });
@@ -147,7 +157,7 @@ test('Air Hockey 1-player HUD shows the player in blue when the mallet matches t
       return { you: seen['أنت'], bot: seen[__game.st.bot.name], skin: __game.st.mallets[0].skin.id };
     };
     const plain = play('melon', 'easy'), clash = play('melon', 'insane');
-    runtime.step(150); __game.setScore(6, 0); __game.goal(-1);
+    runtime.step(150); __game.setScore(6, 0); runtime.scoreGoal();
     for (let i = 0; i < 400 && __game.st.scene !== 'over'; i++) runtime.step(1);
     const score = [...document.querySelectorAll('#ovScore > span:not(.dash)')].map(el => el.style.color);
     return { plain, clash, score };
@@ -171,7 +181,7 @@ for (const [width, height] of [[1100, 620], [798, 449]]) test(`Air Hockey save w
     const awards = { warn: box(status), hints: [...document.querySelectorAll('#scr-awards .hdr > *, #awGrid > .aw')].map(box) };
     click('awBack'); runtime.failSave = false; status.querySelector('button').click();
     click('btnPlay'); runtime.step(150);
-    runtime.failSave = true; __game.goal(-1); runtime.step(4);
+    runtime.failSave = true; runtime.scoreGoal(); runtime.step(4);
     const game = box(document.getElementById('game')), k = (game.r - game.l) / 1280;
     // free corner: left of the score plates (x 170, the player's name starts at 188) and above the rink's rim (y 96)
     const corner = { r: game.l + 170 * k, b: game.t + 96 * k };
