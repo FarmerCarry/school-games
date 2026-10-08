@@ -27,11 +27,12 @@ after(async () => { await browser?.close(); await server?.close(); });
 // A stand-in game loads nothing. It says it is ready unless told not to, posts
 // what the test asks for, and sends `window.last` when it is removed (as Kit
 // does on pagehide).
-function standIn(ready) {
+function standIn(ready, extra = '') {
   return `<!doctype html><meta charset="utf-8"><title>stand-in</title><script>
 window.send = function (data) { parent.postMessage(data, '*'); };
 addEventListener('pagehide', function () { if (window.last) send(window.last); });
 ${ready ? "send({ type: 'sg:ready', version: 1 });" : ''}
+${extra}
 </script>`;
 }
 
@@ -51,14 +52,16 @@ async function newPage(state) {
 async function setup(t, { ready = true, storage = true, time = START, clock = true } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', timezoneId: 'Asia/Riyadh' });
   t.after(() => context.close());
-  const state = { context, ready, clock, errors: [], requests: [] };
+  const state = { context, ready, clock, errors: [], requests: [], clears: 0 };
   await context.route('**/games/*/index.html', route => route.fulfill({ contentType: 'text/html', body: standIn(state.ready) }));
+  // stats.js swallows every storage error, so a throwing clear() would go unseen: count calls instead.
+  await context.exposeBinding('sgTestClear', () => { state.clears++; });
   await context.route('**/seed.html', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>seed</title>' }));
   await context.addInitScript(() => {
     // A ping posted after a game message is handled after it (same source, same order).
     addEventListener('message', e => { if (e.data && e.data.type === 'test:ping') window.lastPing = e.data.n; });
     addEventListener('storage', e => { if (e.key === 'sg:site:statsmeta') window.metaEvents = (window.metaEvents || 0) + 1; });
-    Storage.prototype.clear = function () { throw new Error('localStorage.clear() must never be used'); };
+    Storage.prototype.clear = function () { window.sgTestClear(); };
   });
   if (!storage) {
     await context.addInitScript(() => {
@@ -77,6 +80,7 @@ async function setup(t, { ready = true, storage = true, time = START, clock = tr
   t.after(() => {
     assert.deepEqual(state.errors, [], 'no page or console errors');
     assert.deepEqual(state.requests, [], 'nothing goes over the network');
+    assert.equal(state.clears, 0, 'localStorage.clear() is never used');
   });
   return state;
 }
@@ -263,6 +267,8 @@ test('launch sources come from the clicked tile, or from how the play page was r
     return slug;
   };
   const featured = await launch('#/', 'route-home', '.catalog-grid .tile:has(.badge.hot)');
+  // The hot list of a not-found play page has no related games.
+  const missing = await launch('#/play/no-such-game', 'route-missing', '#app .tile:has(.badge.hot)');
   await launch('#/', 'route-home', '.catalog-grid .tile[data-slug="tunnel-blitz"]');
   await launch('#/', 'route-home', '.recent-grid .tile[data-slug="maze-dash"]');
   await launch('#/favorites', 'route-favorites', '.favorites-grid .tile[data-slug="pool-party"]');
@@ -300,9 +306,10 @@ test('launch sources come from the clicked tile, or from how the play page was r
   }
   const totals = {};
   for (const g of Object.values(record.g)) for (const [source, n] of Object.entries(g.src)) totals[source] = (totals[source] || 0) + n;
-  assert.deepEqual(totals, { direct: 1, featured: 1, catalog: 1, recent: 1, favorites: 1, category: 1, quick: 1, search: 2, related: 1, surprise: 1, history: 1, reload: 1 });
+  assert.deepEqual(totals, { direct: 1, featured: 2, catalog: 1, recent: 1, favorites: 1, category: 1, quick: 1, search: 2, related: 1, surprise: 1, history: 1, reload: 1 });
   assert.equal(record.g['drift-king'].src.direct, 1);
-  assert.equal(record.g[featured].src.featured, 1);
+  assert.ok(record.g[featured].src.featured >= 1);
+  assert.ok(record.g[missing].src.featured >= 1);
   assert.equal(record.g['tunnel-blitz'].src.catalog, 1);
   assert.equal(record.g['maze-dash'].src.recent, 1);
   assert.equal(record.g['pool-party'].src.favorites, 1);
@@ -313,7 +320,7 @@ test('launch sources come from the clicked tile, or from how the play page was r
   assert.equal(record.g[related].src.related, 1);
   assert.deepEqual([record.g[surprise].src.history, record.g[surprise].src.reload], [1, 1]);
   assert.ok(record.g[surprise].src.surprise >= 1);
-  assert.equal(Object.values(record.g).reduce((n, g) => n + g.o, 0), 13);
+  assert.equal(Object.values(record.g).reduce((n, g) => n + g.o, 0), 14);
 });
 
 test('a hidden page writes but keeps its session; otherwise writes wait about a minute', async t => {
@@ -354,6 +361,8 @@ test('load time counts only a session\'s first frame, and only while the page st
   const { page, context } = state;
   await page.goto(origin + '/#/play/air-hockey');
   let game = await playing(page, 'air-hockey');
+  // The PC's clock is set back while the game loads (a time sync after a cold boot).
+  await context.clock.setSystemTime(new Date(+START - 600e3));
   await context.clock.runFor(1500);
   await post(page, game, { type: 'sg:ready', version: 1 });
   await post(page, game, { type: 'sg:ready', version: 1 });
@@ -370,7 +379,7 @@ test('load time counts only a session\'s first frame, and only while the page st
 
   const record = await read(page);
   const a = record.g['air-hockey'], b = record.g['maze-dash'];
-  assert.deepEqual([a.l, a.lb, a.ls], [[1, 1500, 1500], [0, 1, 0, 0, 0], 0], 'a doubled sg:ready and a restart are not loads');
+  assert.deepEqual([a.l, a.lb, a.ls], [[1, 1500, 1500], [0, 1, 0, 0, 0], 0], 'a doubled sg:ready, a restart and a clock change do not count');
   assert.deepEqual([b.l, b.lb, b.ls], [[0, 0, 0], [0, 0, 0, 0, 0], 1], 'a load while hidden is skipped');
   assert.deepEqual([a.b, b.b], [[1, 0, 0, 0], [1, 0, 0, 0]]);
 });
@@ -499,19 +508,34 @@ test('a session left open by a crash or power cut is closed on the next load', a
   const day = await first.page.evaluate(k => localStorage.getItem(k), 'sg:site:stats:d:' + DAY);
   assert.equal(Object.keys(JSON.parse(live)).length, 1);
 
-  // The same PC after a power cut: no pagehide ever ran.
+  // The same PC after a power cut: no pagehide ever ran. Damaged or foreign
+  // entries are dropped one by one; the valid ones are still closed.
+  const entries = {
+    ...JSON.parse(live),
+    proto: { g: 'constructor', t: +START, e: 70000, r: 1 },
+    time: { g: 'maze-dash', t: 'soon', e: 70000, r: 1 },
+    path: { g: '../maze-dash', t: +START, e: 70000, r: 1 },
+    text: 'text',
+    other: { g: 'tic-tac-toe', t: +START + 5000, e: 400000, r: 1, i: 'L3', q: '', p: 'L3' }
+  };
   const second = await setup(t, { time: new Date(+START + 3600e3) });
   await second.page.goto(origin + '/seed.html');
-  await second.page.evaluate(([live, day, key]) => { localStorage.setItem('sg:site:stats:live', live); localStorage.setItem(key, day); }, [live, day, 'sg:site:stats:d:' + DAY]);
+  await second.page.evaluate(([live, day, key]) => { localStorage.setItem('sg:site:stats:live', live); localStorage.setItem(key, day); }, [JSON.stringify(entries), day, 'sg:site:stats:d:' + DAY]);
   await second.page.goto(origin + '/#/');
+  // Another portal page might still be playing: entries are closed only when no page answers within 1.5 s.
+  assert.equal(Object.keys(await read(second.page, LIVE)).length, 7, 'the leftovers wait for the answers');
+  await second.context.clock.runFor(1500);
   const record = await read(second.page);
   checkRecord(record, DAY);
+  assert.deepEqual(Object.keys(record.g).sort(), ['air-hockey', 'tic-tac-toe']);
   const g = record.g['air-hockey'];
   assert.deepEqual([g.o, g.e, g.b, g.ns], [1, 90000, [0, 1, 0, 0], 0]);
   assert.deepEqual(g.lv, {
     L5: [1, 0, 1, 0, 0, 0, 30000, 0, 0, 0, 1, 1],
     L6: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1]
   });
+  const other = record.g['tic-tac-toe'];
+  assert.deepEqual([other.o, other.e, other.b, other.lv], [0, 0, [0, 0, 1, 0], { L3: [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1] }]);
   assert.deepEqual(await read(second.page, LIVE), {});
 });
 
@@ -550,6 +574,20 @@ test('storage stays bounded: 120 newest days, 300 KB in all, 16 KB a day, one re
   await play('air-hockey', [stats(2000)]);
   keys = await dayKeys();
   assert.deepEqual([keys.length, keys[0]], [119, 'sg:site:stats:d:2026-06-08']);
+  assert.equal((await read(page)).g['air-hockey'].e, 3000);
+
+  // Any other failure removes nothing: those numbers are simply not kept.
+  await page.evaluate(() => {
+    const set = Storage.prototype.setItem;
+    let fail = true;
+    Storage.prototype.setItem = function (key, value) {
+      if (fail && key.startsWith('sg:site:stats:d:')) { fail = false; throw new DOMException('Write refused', 'InvalidStateError'); }
+      return set.call(this, key, value);
+    };
+  });
+  await play('air-hockey', [stats(4000)]);
+  keys = await dayKeys();
+  assert.deepEqual([keys.length, keys[0]], [119, 'sg:site:stats:d:2026-06-08'], 'no day is removed');
   assert.equal((await read(page)).g['air-hockey'].e, 3000);
 
   // Many level ids in one day fold into '_other'; nothing else is lost.
@@ -608,4 +646,108 @@ test('numbers are filed under the local date and hour they were recorded, with s
   assert.deepEqual([a.o, a.e, a.hh, a.b, a.fav], [1, 30000, { 23: 30000 }, [1, 0, 0, 0], 1], 'the session length goes to the day it opened');
   assert.deepEqual([b.o, b.e, b.hh, b.b, b.fav], [0, 20000, { 0: 20000 }, [0, 0, 0, 0], 1]);
   assert.deepEqual([a.lv.L1, b.lv.L1], [[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0], [0, 1, 0, 0, 0, 0, 50000, 0, 0, 0, 0, 0]]);
+});
+
+test('a portal page that loads closes only leftover sessions, never one still playing in another page', async t => {
+  const state = await setup(t);
+  const { page, context } = state;
+  const other = await newPage(state);
+  await page.goto(origin + '/#/play/air-hockey');
+  const game = await playing(page, 'air-hockey');
+  await post(page, game, stats(45000, [['s', 'L1']], 'L1'));
+  await context.clock.runFor(60000);
+  // Left over from a crash: an entry no page will answer for.
+  await page.evaluate(k => {
+    const live = JSON.parse(localStorage.getItem(k));
+    live.dead = { g: 'maze-dash', t: Date.now() - 600e3, e: 30000, r: 1, n: Date.now() - 300e3 };
+    localStorage.setItem(k, JSON.stringify(live));
+  }, LIVE);
+  await context.clock.runFor(5000);
+  // A second portal page opens (a middle click on a tile, say). The playing page answers its ping.
+  await other.goto(origin + '/#/');
+  await other.waitForFunction(k => {
+    const live = JSON.parse(localStorage.getItem(k));
+    return Object.values(live).some(s => s && s.g === 'air-hockey' && s.n >= live.ping);
+  }, LIVE);
+  await context.clock.runFor(1500);
+  const live = await read(other, LIVE);
+  assert.deepEqual(Object.values(live).map(s => s.g), ['air-hockey'], 'only the leftover was closed');
+  assert.equal(live.ping, undefined);
+  let record = await read(other);
+  assert.deepEqual([record.g['maze-dash'].b, record.g['air-hockey'].b], [[1, 0, 0, 0], [0, 0, 0, 0]]);
+
+  await post(page, game, stats(60000, [['w', 'L1', 50000]], ''));
+  await leave(state);
+  record = await read(page);
+  checkRecord(record, DAY);
+  const g = record.g['air-hockey'];
+  assert.deepEqual([g.o, g.e, g.b, g.lv.L1], [1, 105000, [0, 1, 0, 0], [1, 1, 0, 0, 0, 0, 50000, 0, 0, 0, 1, 0]], 'one session, no false short session or gave up');
+  assert.deepEqual(await read(page, LIVE), {});
+});
+
+test('a session open while collection was stopped files no length and no gave up', async t => {
+  const state = await setup(t);
+  const { page } = state;
+  const other = await newPage(state);
+  await other.goto(origin + '/seed.html');
+  const setOff = async off => {
+    const seen = await page.evaluate(() => window.metaEvents || 0);
+    await other.evaluate(([k, off]) => localStorage.setItem(k, JSON.stringify({ off })), [META, off]);
+    await page.waitForFunction(n => (window.metaEvents || 0) > n, seen);
+  };
+  await page.goto(origin + '/#/play/air-hockey');
+  let game = await playing(page, 'air-hockey');
+  // Stopped and resumed during the session: rounds from the stopped time end no visit.
+  await post(page, game, stats(10000, [['s', 'L1'], ['l', 'L1', 9000]], ''));
+  await setOff(true);
+  await post(page, game, stats(20000, [['s', 'L2'], ['l', 'L2', 9000]], ''));
+  await setOff(false);
+  await post(page, game, stats(30000, [['s', 'L3'], ['w', 'L3', 25000], ['s', 'L4']], 'L4'));
+  // Written within a minute; a stop drops only what is not written yet.
+  await state.context.clock.runFor(60000);
+  // Opened while stopped, played after collection resumed.
+  await setOff(true);
+  await go(page, '#/play/maze-dash');
+  game = await playing(page, 'maze-dash');
+  await setOff(false);
+  await post(page, game, stats(90000, [['s', 'L1']], 'L1'));
+  await leave(state);
+
+  const record = await read(page);
+  checkRecord(record, DAY);
+  const a = record.g['air-hockey'], b = record.g['maze-dash'];
+  assert.deepEqual([a.o, a.e, a.b], [0, 30000, [0, 0, 0, 0]]);
+  assert.deepEqual(a.lv, {
+    L3: [1, 1, 0, 0, 0, 0, 25000, 0, 0, 0, 1, 0],
+    L4: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]
+  });
+  assert.deepEqual([b.o, b.e, b.b, b.ns, b.lv], [0, 90000, [0, 0, 0, 0], 0, { L1: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0] }]);
+  assert.deepEqual(await read(page, LIVE), {});
+});
+
+test('a removed game is let go of after 2 s, so its document and heap can be freed', async t => {
+  const state = await setup(t);
+  const { page, context } = state;
+  // A stand-in game with a large heap (about 20 MB).
+  await context.route('**/games/drift-king/index.html', route => route.fulfill({
+    contentType: 'text/html', body: standIn(true, 'window.big = Array.from({ length: 1e6 }, function (_, i) { return { i: i }; });')
+  }));
+  const cdp = await context.newCDPSession(page);
+  const heap = async () => {
+    await cdp.send('HeapProfiler.collectGarbage');
+    return (await cdp.send('Runtime.getHeapUsage')).usedSize;
+  };
+  await page.goto(origin + '/#/');
+  await page.waitForFunction(() => document.body.className === 'route-home');
+  const base = await heap();
+  await go(page, '#/play/drift-king');
+  // Only booleans come back: a handle to anything in the game would keep it alive.
+  await page.waitForFunction(() => !!document.querySelector('#stage iframe')?.contentWindow?.big && document.querySelector('#stage').getAttribute('aria-busy') === 'false');
+  const game = await heap() - base;
+  assert.ok(game > 15e6, 'the stand-in game holds its heap: ' + game);
+  await click(page, '#logo');
+  await page.waitForFunction(() => document.body.className === 'route-home');
+  await context.clock.runFor(2000);
+  const left = await heap() - base;
+  assert.ok(left < game / 4, `the removed game's heap is freed: ${left} of ${game} bytes left`);
 });

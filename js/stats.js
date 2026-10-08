@@ -6,6 +6,19 @@
  * Nothing leaves this PC: no network, no names, no typed text, no error text.
  * Every storage call is guarded and nothing is logged; js/site.js calls the
  * window.SGStats methods through its own try/catch as well.
+ *
+ * A session, also the value of its entry in sg:site:stats:live:
+ *   g slug, t opened (Date.now()), e engaged ms, r a frame sent sg:ready,
+ *   f a frame failed (sg:error or timeout), m a frame was mounted,
+ *   i id of the last started round, q how that round ended ('' while it is open),
+ *   p the current frame's open round, n when the entry was written (Date.now()),
+ *   w the entry was written once, x it files no length and no gave up (another
+ *   page closed it, or collection was stopped during it), c closed, d finished;
+ *   o only on a session left over from a crash: its open round, now a quit.
+ * A frame: w its window (let go of 2 s after removal), s its session,
+ *   t mounted (performance.now()), l its load is timed (a session's first frame),
+ *   v the page stayed visible while it loaded, r it sent sg:ready,
+ *   o its open round from its last sg:stats, d that round is settled.
  */
 (function () {
   'use strict';
@@ -21,11 +34,15 @@
   function now() { return Date.now(); }
   // A stored value, or undefined when it is missing, damaged or storage is blocked.
   function get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { /* no value */ } }
+  // A stored object as a plain object, whatever was stored.
+  function getObj(k) { return Object.assign({}, get(k)); }
   function isObj(o) { return !!o && typeof o == 'object'; }
   function zeros(n) { for (var a = []; n--;) a.push(0); return a; }
   function num(v, top) { return v > 0 && v < 1 / 0 ? min(Math.round(v), top) : 0; }
+  // A name that is safe as a key: it matches `re` and no plain lookup reaches Object.prototype.
+  function key(v, re) { return typeof v == 'string' && re.test(v) && !(v in Object.prototype); }
   // Level ids come from each game's own list; anything else could be typed text.
-  function ok(id) { return typeof id == 'string' && /^(?!.*\d{3})[A-Za-z][\w:.-]{0,23}$/.test(id) && !(id in Object.prototype); }
+  function ok(id) { return key(id, /^(?!.*\d{3})[A-Za-z][\w:.-]{0,23}$/); }
 
   /* ------------------------------------------------------------ deltas */
   // The delta for a game (or, without a slug, the day) at time t, filed under the
@@ -56,6 +73,9 @@
   function gaveUp(s, t) { if (s.q == 'l' || s.q == 'q') level(delta(s.g, t), s.i)[11]++; }
   function round(s, x, t) {
     var c = x[0], id = x[1], score = x[3], g = delta(s.g, t), i = { s: 0, w: 1, l: 2, d: 3, e: 4, q: 5 }[c], a;
+    // While collection is stopped the session forgets its rounds: nothing from
+    // that time can be given up or end a visit later.
+    if (off) return s.i = s.q = 0;
     if (c == 't') { i = { start: 0, done: 1 }[id]; if (i >= 0) g.tu[i]++; return; }
     if (!(i >= 0) || !ok(id)) return;
     a = level(g, id);
@@ -86,7 +106,7 @@
     s.d = 1;
     quitGone(s, t);
     if (s.o) round(s, ['q', s.o], t);   // a session left over from a crash
-    // Closed by another tab, or begun before a teacher cleared the numbers: no length.
+    // Closed by another tab, stopped meanwhile, or begun before a teacher cleared the numbers: no length.
     if (!s.x && s.t >= cleared) {
       gaveUp(s, t);
       g = delta(s.g, s.t);   // the length goes to the day the session opened
@@ -101,12 +121,14 @@
   }
   // The current frame is being removed: keep its window for 2 s for its last sg:stats.
   function drop() {
-    var f = cur, t = now();
+    var f = cur;
     if (!f) return;
     cur = 0;
-    f.u = t + 2000;
-    gone = gone.filter(function (x) { return x.u > t; }).concat(f);
+    gone.push(f);
     setTimeout(safe(settle), 1000, f);
+    // Then let go of the window. Holding it would keep the removed game's whole
+    // document and heap alive, and the next game's garbage collections would walk it.
+    setTimeout(function () { f.w = 0; gone = gone.filter(function (x) { return x != f; }); }, 2000);
   }
   function close() {
     var s = sess;
@@ -120,16 +142,18 @@
   /* ----------------------------------------------------------- storage */
   // statsmeta: stopped collection drops everything, a clear drops older deltas.
   function meta() {
-    var m = get(META) || {}, el = doc.getElementById('statsOff');
-    off = !!m.off;
+    var m = getObj(META), el = doc.getElementById('statsOff');
+    off = m.off ? 1 : 0;
     cleared = +new Date(m.clearedAt) || 0;
     if (off || since && cleared > since) { D = {}; since = 0; }
+    // A session that was open while collection stopped files no length or gave up.
+    if (off && sess) sess.x = 1;
     if (el) el.hidden = !off;
     return m;
   }
   // Keep the newest 120 day records and all stats keys under 300 KB; `extra` frees one more day.
-  function prune(ls, extra) {
-    for (var days = [], total = 0, i = ls.length, k, n; i--;) {
+  function prune(extra) {
+    for (var ls = localStorage, days = [], total = 0, i = ls.length, k, n; i--;) {
       k = ls.key(i);
       if (!k.indexOf(PRE)) {
         total += n = k.length + ls.getItem(k).length;
@@ -142,10 +166,15 @@
       total -= k[1];
     }
   }
-  // A full storage gives up its oldest day and tries once more.
-  function put(ls, k, v) {
-    try { ls.setItem(k, v); } catch (e) { prune(ls, 1); ls.setItem(k, v); }
+  // A full storage gives up its oldest day and tries once more; other failures give up.
+  function put(k, v) {
+    try { localStorage.setItem(k, v); } catch (e) {
+      if (!/quota/i.test(e.name)) throw e;
+      prune(1);
+      localStorage.setItem(k, v);
+    }
   }
+  function putLive(live) { put(LIVE, str(live)); }
   // A day stays under 16 KB: each game keeps its first 64, 32, 16… level ids of
   // the day and the extra ones fold into '_other'.
   function fit(r) {
@@ -158,38 +187,43 @@
     }
     return s;
   }
+  // Mirror the open session so the next portal load can close it after a crash or
+  // a power cut. A page whose written entry is gone was closed by another page.
+  function mirror() {
+    var live = getObj(LIVE);
+    if (sess && sess.w && !live[tab]) sess.x = 1;
+    if (sess && !sess.x) { sess.p = cur && cur.o; sess.n = now(); live[tab] = sess; } else delete live[tab];
+    putLive(live);
+    if (sess) sess.w = 1;
+  }
   // getItem, check, add the deltas, setItem, forget the deltas: open tabs add up.
   function flush() {
-    var m = meta(), ls, d, k, r, g, favs, live;
+    var m = meta(), d, k, r, g, favs;
     clearTimeout(timer);
     timer = 0;
-    if (!since) return;
     try {
-      ls = localStorage;
-      g = m.pc = m.pc || {};
-      if (!g.id) {
-        g.id = 'pc' + [].map.call(crypto.getRandomValues(new Uint8Array(4)), function (b) { return (b % 26 + 10).toString(36); }).join('');
-        m.since = m.since || Object.keys(D).sort()[0];
-        put(ls, META, str(m));
-      }
-      favs = get('sg:site:favs');
-      for (d in D) {
-        r = get(k = DAY + d);
-        // add() replaces a damaged part with a fresh one.
-        if (!r || r.v !== 1 || r.d !== d) r = { v: 1, d: d, s: {}, g: {} };
-        add(r, D[d]);
-        for (g in r.g) {
-          if (isObj(r.g[g])) r.g[g].fav = +(isArr(favs) && favs.indexOf(g) >= 0);
-          else delete r.g[g];
+      if (since) {
+        g = m.pc = isObj(m.pc) ? m.pc : {};
+        if (!g.id) {
+          g.id = 'pc' + [].map.call(crypto.getRandomValues(new Uint8Array(4)), function (b) { return (b % 26 + 10).toString(36); }).join('');
+          m.since = m.since || Object.keys(D).sort()[0];
+          put(META, str(m));
         }
-        put(ls, k, fit(r));
+        favs = get('sg:site:favs');
+        for (d in D) {
+          r = get(k = DAY + d);
+          // add() replaces a damaged part with a fresh one.
+          if (!r || r.v !== 1 || r.d !== d) r = { v: 1, d: d, s: {}, g: {} };
+          add(r, D[d]);
+          for (g in r.g) {
+            if (isObj(r.g[g])) r.g[g].fav = +(isArr(favs) && favs.indexOf(g) >= 0);
+            else delete r.g[g];
+          }
+          put(k, fit(r));
+        }
+        prune();
       }
-      // Mirror the open session so the next load can close it after a crash or a power cut.
-      live = get(LIVE) || {};
-      if (sess && sess.w && !live[tab]) sess.x = 1;
-      if (sess && !sess.x) { sess.p = cur && cur.o; live[tab] = sess; sess.w = 1; } else delete live[tab];
-      put(ls, LIVE, str(live));
-      prune(ls);
+      mirror();
     } catch (e) { /* statistics are simply not kept */ }
     D = {};
     since = 0;
@@ -216,14 +250,14 @@
         try { if (performance.getEntriesByType('navigation')[0].type == 'reload') src = 'reload'; } catch (e) { /* direct */ }
       }
       tag = 0;
-      sess = { g: slug, t: t, e: 0 };
+      sess = { g: slug, t: t, e: 0, x: off };
       g.o++;
       g.src[src] = (g.src[src] || 0) + 1;
     },
     close: close,
     gone: drop,
     mount: function (win) {
-      if (sess) { cur = { w: win, s: sess, t: now(), f: !sess.m, v: !doc.hidden }; sess.m = 1; }
+      if (sess) { cur = { w: win, s: sess, t: performance.now(), l: !sess.m, v: !doc.hidden }; sess.m = 1; }
     },
     // A failure (x: sg:error, t: timeout) keeps the session but takes it out of the length buckets.
     fail: function (kind) {
@@ -238,16 +272,17 @@
     msg: function (win, d) {
       var t = now(), f = cur && cur.w === win && cur, type = d && d.type, s, g, ms, i;
       if (!f) {
-        gone.forEach(function (x) { if (x.w === win && t < x.u) f = x; });
+        gone.forEach(function (x) { if (x.w === win) f = x; });
         if (!f || type != 'sg:stats') return;
       }
       s = f.s;
       if (type == 'sg:ready' && !f.r) {
         f.r = s.r = 1;
         // Load time: a session's first frame only, and only if the page stayed visible.
-        if (f.f) {
+        // A monotonic clock, so setting the PC's clock meanwhile cannot spoil it.
+        if (f.l) {
           g = delta(s.g, t);
-          ms = t - f.t;
+          ms = num(performance.now() - f.t, 6e5);
           if (f.v) {
             g.l[0]++; g.l[1] += ms; g.l[2] = max(g.l[2], ms);
             for (i = 0; i < 4 && ms >= 1e3 << i; i++);
@@ -271,17 +306,18 @@
       }
     }
   };
-  for (var name in api) api[name] = safe(api[name]);
+  for (var k in api) api[k] = safe(api[k]);
   window.SGStats = api;
 
   /* --------------------------------------------------------- listeners */
   // Launch source of a tile click. Capture phase, so play-page tiles count too.
+  // Home tiles and the hot list of a not-found page are featured (🔥) or catalog.
   doc.addEventListener('click', safe(function (e) {
     var a = e.target.closest('.tile[data-slug]'), m;
     if (!a || e.button || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-    m = /(recent|favorites)-grid|(catalog)|#\/(quick|search)\/|(#\/c\/)/.exec(a.parentNode.className + location.hash) || [];
+    m = /(recent|favorites)-grid|(recommendations)|#\/(quick|search)\/|(#\/c\/)/.exec(a.parentNode.className + location.hash) || [];
     tag = { g: a.getAttribute('data-slug'), t: now(),
-      s: m[1] || m[3] || (m[2] ? (a.querySelector('.hot') ? 'featured' : 'catalog') : m[4] ? 'category' : 'related') };
+      s: m[1] || m[3] || (m[2] ? 'related' : m[4] ? 'category' : a.querySelector('.hot') ? 'featured' : 'catalog') };
   }), true);
   // Hiding the page (another tab, a locked screen) only writes; a hidden load is not timed.
   doc.addEventListener('visibilitychange', safe(function () {
@@ -294,22 +330,40 @@
     if (!e.persisted) { close(); gone.forEach(settle); }
     flush();
   }));
-  // Stop and clear from the teacher page take effect at once.
-  addEventListener('storage', safe(meta));
-
-  // First close sessions left open by a crash, a killed tab or a power cut.
-  safe(function () {
-    var live, k, x;
+  // Stop and clear from the teacher page take effect at once. A portal page that
+  // has just loaded pings the live key, and a page that is still playing answers
+  // by writing its entry again, so its session is not closed as a leftover.
+  addEventListener('storage', safe(function (e) {
     meta();
-    live = get(LIVE);
-    localStorage.removeItem(LIVE);
-    for (k in live) {
-      x = live[k];
-      if (isObj(x) && /^[a-z][\w-]*$/.test(x.g)) {
+    if (e.key == LIVE && sess && sess.w && (JSON.parse(e.newValue) || 0).ping > sess.n) mirror();
+  }));
+
+  // Close sessions left open by a crash, a killed tab or a power cut: the entries
+  // that did not answer the ping within 1.5 s. Pages that are frozen or in the
+  // back-forward cache cannot answer either; their next write finds the entry gone.
+  function sweep(t) {
+    var live = getObj(LIVE), old = [], k, x;
+    // A newer ping belongs to a page that loaded later.
+    for (k in live) if (k != tab && !((x = live[k]) && x.n >= t) && (k != 'ping' || x == t)) { old.push(x); delete live[k]; }
+    putLive(live);
+    // Damaged or foreign entries are dropped one by one.
+    old.forEach(safe(function (x) {
+      if (key(x.g, /^[a-z][\w-]*$/) && (x.t = num(x.t, 8e15))) {
         x.e = num(x.e, 9e15);
         x.o = ok(x.p) && x.p;
         x.q = ok(x.i) && x.q;
         finish(x);
+      }
+    }));
+  }
+  safe(function () {
+    var live = getObj(LIVE), t = now(), k;
+    meta();
+    for (k in live) {
+      if (isObj(live[k])) {
+        live.ping = t;
+        putLive(live);
+        return setTimeout(safe(sweep), 1500, t);
       }
     }
   })();
