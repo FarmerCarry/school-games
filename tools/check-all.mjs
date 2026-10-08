@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /*
- * Smoke-tests the whole site: static checks on every game folder plus a short
- * headless gameplay scenario per game (start → real input → freeze → restart).
+ * Smoke-tests the whole site: static checks on every game folder and the root
+ * pages and portal scripts (no modules, no network APIs, no external URLs), plus a
+ * short headless gameplay scenario per game (start → real input → freeze → restart).
  *
  *   node tools/check-all.mjs            all games
  *   node tools/check-all.mjs rail-rush  just one
@@ -74,6 +75,24 @@ function walk(dir) {
     d.isDirectory() ? walk(path.join(dir, d.name)) : [path.join(dir, d.name)]);
 }
 
+// Nothing on the site goes over the network (play statistics stay on each PC),
+// so the same static checks cover games and the root pages and portal scripts.
+const NETWORK = /\bfetch\s*\(|XMLHttpRequest|sendBeacon|\bWebSocket\b|\bEventSource\b/;
+function staticChecks(label, file) {
+  const src = fs.readFileSync(file, 'utf8');
+  const rel = path.relative(ROOT, file);
+  if (/type\s*=\s*["']module["']/.test(src)) add(label, `${rel}: uses ES modules`);
+  if (/^\s*import\s[\w{*]/m.test(src)) add(label, `${rel}: import statement`);
+  if (NETWORK.test(src)) add(label, `${rel}: network API (${src.match(NETWORK)[0]})`);
+  const urls = src.match(/(?:src|href)\s*=\s*["']https?:\/\/[^"']+/g);
+  if (urls) add(label, `${rel}: external URL ${urls[0]}`);
+}
+const rootFiles = fs.readdirSync(ROOT).filter(name => name.endsWith('.html')).map(name => path.join(ROOT, name));
+if (fs.existsSync(path.join(ROOT, 'js'))) {
+  rootFiles.push(...fs.readdirSync(path.join(ROOT, 'js')).filter(name => name.endsWith('.js')).map(name => path.join(ROOT, 'js', name)));
+}
+for (const file of rootFiles) staticChecks(path.basename(file), file);
+
 // Catalog <-> folders
 const folders = fs.readdirSync(path.join(ROOT, 'games')).filter(f => fs.statSync(path.join(ROOT, 'games', f)).isDirectory());
 for (const f of folders) if (!games.find(g => g.slug === f)) add(f, 'folder has no catalog entry');
@@ -89,16 +108,7 @@ for (const g of selected) {
     if (!/viewBox="0 0 400 400"/.test(svg)) add(g.slug, 'thumb.svg viewBox is not 0 0 400 400');
     if (/<image|href="http/.test(svg)) add(g.slug, 'thumb.svg references external/bitmap content');
   }
-  for (const file of walk(dir)) {
-    if (!/\.(html|js|css)$/.test(file)) continue;
-    const src = fs.readFileSync(file, 'utf8');
-    const rel = path.relative(ROOT, file);
-    if (/type\s*=\s*["']module["']/.test(src)) add(g.slug, `${rel}: uses ES modules`);
-    if (/^\s*import\s[\w{*]/m.test(src)) add(g.slug, `${rel}: import statement`);
-    if (/\bfetch\s*\(|XMLHttpRequest/.test(src)) add(g.slug, `${rel}: fetch/XHR`);
-    const urls = src.match(/(?:src|href)\s*=\s*["']https?:\/\/[^"']+/g);
-    if (urls) add(g.slug, `${rel}: external URL ${urls[0]}`);
-  }
+  for (const file of walk(dir)) if (/\.(html|js|css)$/.test(file)) staticChecks(g.slug, file);
 
   const actions = [{ wait: 350 }, { shot: 'title' }, { scenario: g.slug }, { shot: 'play' },
     { resize: [1100, 620] }, { wait: 100 }, { resize: [1920, 1080] }, { shot: 'big' }];

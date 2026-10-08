@@ -334,6 +334,10 @@
 
   function startMatch() {
     demo = false; scr = 'game'; paused = false;
+    // Play statistics: a match is one round (demo fights never get here); a new match while one
+    // is open counts it as a quit. The first match on this PC shows the keycap bubbles.
+    if (firstMatch) Kit.stats.tutorial('start');
+    Kit.stats.round(mode === 1 ? 'cpu-' + diff : 'pvp');
     score = [0, 0]; roundNo = 1; bag = [];
     stats = { bonks: [0, 0], perfect: [0, 0], draws: 0 };
     P[0].sumo = save.picks.s0; P[0].hat = hatUnlocked(save.picks.h0) ? save.picks.h0 : 0;
@@ -982,6 +986,9 @@
     earned = Math.max(1, earned);
     save.stars += earned;
     save.matches++;
+    // two players on one PC report no winner; vs the CPU the score is the child's points
+    if (firstMatch) Kit.stats.tutorial('done');
+    if (mode === 1) Kit.stats.end(matchWinner ? 'lose' : 'win', score[0]); else Kit.stats.end('end');
     save.bonks += stats.bonks[0] + (mode === 2 ? stats.bonks[1] : 0);
     var newHats = [];
     HATS.forEach(function (h, i) {

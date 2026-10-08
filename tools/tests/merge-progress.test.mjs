@@ -186,6 +186,45 @@ test('The 3x3 challenge is won at 256 and its game-over hint names that goal', a
   assert.equal(await page.locator('#overHint').textContent(), 'كنت قريباً جداً من 256! 😮');
 });
 
+// Play statistics (docs/PLAY_STATS.md): a board has no winner and is kept between visits, so
+// it is one round that ends only as a neutral 'end' with the score; the goal tile reports nothing.
+test('A board is one statistics round: the goal tile reports nothing and a full board ends neutrally', async t => {
+  const page = await gamePage(t);
+  await page.evaluate(() => {
+    window.statCalls = [];
+    for (const name of ['round', 'end']) {
+      const call = Kit.stats[name];
+      Kit.stats[name] = (...args) => { window.statCalls.push([name, ...args]); return call.apply(Kit.stats, args); };
+    }
+  });
+  await page.keyboard.press('Digit3');
+  await page.keyboard.press('Enter');
+  await page.evaluate(() => {
+    window.__game.set([0, 0, 0, 0, 0, 0, 128, 128, 4]);
+    window.__game.move(3);
+  });
+  await awaitScreen(page, 'win');
+  assert.deepEqual(await page.evaluate(() => window.statCalls), [['round', 's3']], 'reaching 256 ends no round');
+  // The child keeps going on the same board until it fills up.
+  await page.locator('#btnKeep').click();
+  await page.evaluate(() => {
+    window.__game.set([2, 4, 2, 4, 2, 16, 0, 256, 8]);
+    window.__game.move(3);
+  });
+  await awaitScreen(page, 'over');
+  const { score } = await state(page);
+  assert.deepEqual(await page.evaluate(() => window.statCalls), [['round', 's3'], ['end', 'end', score]]);
+  // A new board is a new round; leaving one after its goal tile is a quit, never a win.
+  await page.keyboard.press('KeyR');
+  await page.evaluate(() => {
+    window.__game.set([0, 0, 0, 0, 0, 0, 128, 128, 4]);
+    window.__game.move(3);
+  });
+  await awaitScreen(page, 'win');
+  await page.keyboard.press('KeyR');
+  assert.deepEqual((await page.evaluate(() => window.statCalls)).slice(2), [['round', 's3'], ['round', 's3']]);
+});
+
 test('Reduced motion keeps merge feedback but trims celebration particles', async t => {
   const page = await gamePage(t);
   await page.evaluate(() => Kit.motion.setPreference('reduce'));

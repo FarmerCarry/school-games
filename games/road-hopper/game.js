@@ -552,6 +552,7 @@
   function showTip(kind) {
     if (tipRuns >= 3 || tipsSeen[kind]) return;
     tipsSeen[kind] = 1;
+    if (!tipRuns) Kit.stats.tutorial('start');
     var h = $('hint');
     h.textContent = TIPS[kind]; h.hidden = false; tipT = 3;
   }
@@ -1146,6 +1147,7 @@
     if (state !== 'title') return;
     A.unlock();
     state = 'play';
+    Kit.stats.round('endless');
     if (!P.hop && !P.log) { P.y = 0; P.jump = 0; } // the title idle-hop could leave the critter floating
     showScreen(null);
     $('hud').hidden = false;
@@ -1164,7 +1166,9 @@
     if (state !== 'dying') return;
     state = 'over'; overT = 0;
     save.stats.games++;
-    tipRuns++; put('tipRuns', tipRuns);
+    if (++tipRuns === 3) Kit.stats.tutorial('done');
+    put('tipRuns', tipRuns);
+    Kit.stats.end('end', score);
     missionEvent('games', 1);
     missionEvent('score', score, true);
     missionEvent('coinsRun', runCoins, true);
@@ -1524,9 +1528,10 @@
     var last = 0;
     function frame(t) {
       requestAnimationFrame(frame);
-      var dt = last ? Math.min(0.1, (t - last) / 1000) : 1 / 60;
+      var ms = last && t - last, dt = last ? Math.min(0.1, ms / 1000) : 1 / 60;
       last = t;
       if (document.hidden || dt <= 0) return;
+      if (state === 'play') Kit.stats.frame(ms); // raw frame time (0 on the first frame)
       var n = Math.max(1, Math.ceil(dt * 60 - 0.05)), h = dt / n;
       for (var i = 0; i < n; i++) update(h);
       render();

@@ -385,6 +385,11 @@
   function startTest(t) {
     T.phase = 'running';
     T.start = t;
+    // Play stats: one round per test, from the first key to finish(); a test left or replaced
+    // before that is a quit. The id is the test type only ('ar-time-30', 'en-words-25',
+    // 'ar-sent-5'); a class challenge is the plain 'code', never the code or anything typed.
+    var id = T.code ? 'code' : T.lang + '-' + T.mode.replace('ences', '') + '-' + T.amt;
+    Kit.stats.round(id);
     caret.className = '';
     body.classList.add('typing');
     hintEl.hidden = true;
@@ -482,6 +487,7 @@
     R.lang = T.lang; R.mode = T.mode; R.amt = T.amt; R.lenient = T.lenient; R.code = T.code; R.seed = T.seed;
     R.t = Date.now();
     R.valid = R.acc >= 75 && R.wpm > 0;
+    Kit.stats.end('end', Math.round(R.wpm)); // play stats: score = speed (finish runs once per test)
     record(R);
     lastResult = R;
     finishedAt = performance.now();

@@ -80,7 +80,10 @@
   function tellPortal(message) {
     if (window.parent !== window) window.parent.postMessage(message, window.location && window.location.protocol !== 'file:' ? window.location.origin : '*');
   }
+  // Window capture listeners run before any game listener can stop the event.
+  function listen(type, fn) { window.addEventListener(type, fn, true); }
   function suspend(reason) {
+    sendStats(true);
     if (Kit.keys) Kit.keys.reset();
     pointerResets.forEach(function (reset) { reset(); });
     lifecycleHandlers.slice().forEach(function (hooks) {
@@ -97,6 +100,8 @@
   };
   Kit.ready = function () {
     if (failed) return;
+    // The first call starts the one statistics timer; repeats (sg:request-ready) do not.
+    if (!ready) statsTimer();
     ready = true;
     tellPortal({ type: 'sg:ready', version: 1 });
   };
@@ -104,11 +109,11 @@
     failed = true;
     tellPortal({ type: 'sg:error', version: 1, message: String(error && error.message || error || 'Game failed to initialize').slice(0, 240) });
   };
-  window.addEventListener('error', function (e) {
+  listen('error', function (e) {
     // Capture script download failures as well as exceptions. Optional media do
     // not make a successfully initialized game fail its readiness handshake.
     if (e.message || (e.target && e.target.tagName === 'SCRIPT')) Kit.fail(e.error || e.message || 'Game script failed to load');
-  }, true);
+  });
   window.addEventListener('unhandledrejection', function (e) { Kit.fail(e.reason); });
   window.addEventListener('blur', function () { suspend('blur'); });
   document.addEventListener('visibilitychange', function () { if (document.hidden) suspend('hidden'); });
@@ -134,6 +139,73 @@
       else if (typeof message.reducedMotion === 'boolean') Kit.motion.setPreference(message.reducedMotion ? 'reduce' : 'full');
     }
   });
+
+  /* ---------------------------------------------------------- play stats */
+  // Local-only play statistics (docs/PLAY_STATS.md). Kit only counts, and posts
+  // small deltas to the portal, which checks and stores them. Kit stores nothing,
+  // posts only after Kit.ready() while embedded, and never uses the network.
+  // Engaged time: a key press or click arms the game and starts or extends a
+  // 20 s window; mouse moves, the wheel and Kit.stats.busy() only extend an open
+  // window. Every pause and pagehide cuts the window and disarms the game.
+  // Every Kit.stats call is safe before Kit.ready(), standalone and with any argument.
+  // No window is open (from/until unset) before the first key press or click.
+  var perf = window.performance, from, until, roundMs, engaged = 0, mutes = 0;
+  var frames = [0, 0, 0, 0], events = [], roundId = '', tutorials = {};
+  // Whole milliseconds (an int32 holds 24 days of performance.now()).
+  function clock() { return perf ? perf.now() | 0 : Date.now(); }
+  function text(value, length) { try { return String(value).slice(0, length); } catch (e) { return ''; } }
+  function tally() {
+    var t = clock(), x = t < until ? t : until;
+    if (x > from) { engaged += x - from; if (roundId) roundMs += x - from; from = x; }
+    return t;
+  }
+  function engage(extendOnly) {
+    var t = tally();
+    if (!extendOnly || t < until) { from = t; until = t + 20000; }
+  }
+  // Paused games and idle menus draw cheap frames: count only engaged play in a round.
+  // Buckets: smooth <= 20 ms, ok <= 34 ms, choppy <= 250 ms, stall.
+  function countFrame(ms) {
+    try { if (ms > 0 && roundId && clock() < until) frames[ms > 20 ? ms > 34 ? ms > 250 ? 3 : 2 : 1 : 0]++; } catch (e) { /* ignore */ }
+  }
+  function sendStats(cut) {
+    tally();
+    if (cut) until = 0;
+    if (ready && (engaged || mutes || events.length || frames.some(Number))) { // something changed
+      // om: the engaged ms so far in the round open now, for the portal to keep if it is left open.
+      tellPortal({ type: 'sg:stats', version: 1, e: engaged, f: frames, m: mutes, r: events, o: roundId, om: roundId ? roundMs : 0 });
+      engaged = mutes = 0; frames.fill(0); events = [];
+    }
+  }
+  function statsTimer() { setTimeout(function () { if (!failed) { sendStats(); statsTimer(); } }, 10000); }
+  // As the argument, the event object means "cut" for pagehide and "extend only" for moves.
+  listen('pagehide', sendStats);
+  listen('pointermove', engage);
+  listen('wheel', engage);
+  Kit.stats = {
+    round: function (id) {
+      id = text(id, 24);
+      tally();
+      // A new round while one is open records the open one as a quit.
+      if (roundId) events.push(['q', roundId, roundMs]);
+      events.push(['s', roundId = id]);
+      roundMs = 0;
+      sendStats();
+    },
+    end: function (result, score) {
+      if (!roundId) return;
+      tally();
+      events.push([text(result, 1), roundId, roundMs].concat(Number.isFinite(score) ? score : []));
+      roundId = '';
+      sendStats();
+    },
+    tutorial: function (step) {
+      step = text(step, 24);
+      if (!tutorials[step]) { tutorials[step] = 1; if (events.push(['t', step]) >= 32) sendStats(); }
+    },
+    busy: function () { engage(1); },
+    frame: countFrame
+  };
 
   /* --------------------------------------------------------------- audio */
   // Synthesised sound effects (no audio files). The AudioContext is created
@@ -167,7 +239,8 @@
     siteStore.set('muted', personalMuted);
     paintAudio();
   };
-  audio.toggleMute = function () { if (!classroomMode) audio.setMuted(!personalMuted); return audio.muted; };
+  // Only the child's own toggles (button or M) count for statistics, not setMuted().
+  audio.toggleMute = function () { if (!classroomMode) { audio.setMuted(!personalMuted); mutes++; } return audio.muted; };
   var muteListeners = [];
   audio.onMuteChange = function (fn) { muteListeners.push(fn); };
   window.addEventListener('storage', function (e) {
@@ -289,7 +362,8 @@
     endFrame: function () { hit = {}; },
     reset: function () { held = {}; hit = {}; }
   };
-  window.addEventListener('keydown', function (e) {
+  listen('keydown', function (e) {
+    engage();
     // Shift+Tab from the game surface returns to the portal. Native controls keep
     // their ordinary Tab order; standalone game pages keep browser navigation.
     if (e.code === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && !e.defaultPrevented && !nativeKeyTarget(e.target) && window.parent !== window) {
@@ -299,7 +373,7 @@
       try { if (document.pointerLockElement) document.exitPointerLock(); } catch (err) { /* ignore */ }
       tellPortal('sg:focus-portal');
     }
-  }, true);
+  });
   window.addEventListener('keydown', function (e) {
     audio.unlock();
     if (!acceptsKeyEvent(e)) { if (e.code === 'Tab') Kit.keys.reset(); return; }
@@ -307,12 +381,13 @@
     if (!held[e.code]) hit[e.code] = true;
     held[e.code] = true;
   });
-  window.addEventListener('keyup', function (e) { held[e.code] = false; }, true);
+  listen('keyup', function (e) { held[e.code] = false; });
   window.addEventListener('blur', Kit.keys.reset);
   window.addEventListener('focusin', function (e) { if (nativeKeyTarget(e.target)) Kit.keys.reset(); });
 
-  // Any click/tap unlocks audio and makes sure the game frame has keyboard focus.
-  window.addEventListener('pointerdown', function () { audio.unlock(); try { window.focus(); } catch (e) { /* ignore */ } }, true);
+  // Any click/tap arms engaged time, unlocks audio and makes sure the game frame
+  // has keyboard focus.
+  listen('pointerdown', function () { engage(); audio.unlock(); try { window.focus(); } catch (e) { /* ignore */ } });
   window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
   /* ------------------------------------------------------ canvas scaling */
@@ -379,11 +454,12 @@
     function frame(t) {
       if (!handle.running) return;
       rafId = requestAnimationFrame(frame);
-      if (!last) last = t;
-      var dt = Math.min(0.25, (t - last) / 1000);
+      // The first frame after starting or showing the page has no frame time.
+      var ms = last ? t - last : 0;
       last = t;
       if (document.hidden) return;
-      acc += dt;
+      countFrame(ms);
+      acc += Math.min(0.25, ms / 1000);
       var n = 0;
       while (acc >= step && n < 8) { update(step); acc -= step; n++; }
       if (n === 8) acc = 0;

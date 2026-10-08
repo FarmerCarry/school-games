@@ -209,10 +209,15 @@
     setWorld(demoIdx, true);
     world.started = true;
   }
+  // Play statistics: every real start or restart is one try at 'w<world>-<n>' (a restart
+  // mid-run counts as a quit); crashes respawn inside the try. The menu demo never reports.
+  function statRound() { Kit.stats.round('w' + ((levelIdx / 5 | 0) + 1) + '-' + (levelIdx % 5 + 1)); }
   function startLevel(i) {
     levelIdx = i;
     setWorld(i, false);
     state = 'play';
+    statRound();
+    if (!i && !save.stars[0]) Kit.stats.tutorial('start'); // level 1 teaches with its signs
     bannerT = 0; prevTime = 0; hurry = 0; stuckT = 0;
     rec = []; loadGhost(i);
     showOverlay(null);
@@ -221,6 +226,7 @@
     canvas.focus();
   }
   function restartLevel() {
+    statRound();
     world.restart();
     clearParticles();
     bannerT = 0; finishT = 0; state = 'play'; stuckT = 0; prevTime = 0; hurry = 0; rec = [];
@@ -368,6 +374,9 @@
   function commitResult() {
     var t = world.finalTime, i = levelIdx;
     var r = result = { t: t, st: starsFor(i, t), before: totalStars(), prevBest: save.best[i], ghost: false };
+    // only called from update() while state === 'play', once per finish (never by the demo)
+    Kit.stats.end('win', r.st);
+    if (!i && !save.stars[0]) Kit.stats.tutorial('done');
     r.newBest = r.prevBest == null || t < r.prevBest - 0.0001;
     if (r.newBest) save.best[i] = Math.round(t * 100) / 100;
     save.stars[i] = Math.max(save.stars[i] | 0, r.st);

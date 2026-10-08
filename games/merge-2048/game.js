@@ -588,6 +588,10 @@
     G.dead = !G.board.canMove(); G.deadAt = now + 0.3;
     G.winPending = G.won && !G.keep; G.maxT = G.board.maxTile(); G.newBest = G.startBest > 0 && G.score > G.startBest;
     G.shownScore = G.score;
+    // Play statistics: a new or resumed board is a round 's'+N. A board has no
+    // winner and is kept between visits, so it ends only as a neutral 'end' with
+    // the score when it fills up; the goal tile is a moment inside the round.
+    Kit.stats.round('s' + N);
     setScreen('play');
     refreshHUD(true);
     saveGame();
@@ -757,6 +761,7 @@
 
   function showOver() {
     var N = G.N;
+    Kit.stats.end('end', G.score);
     setScreen('over');
     $('overScore').textContent = Kit.fmt(G.score);
     $('overBestVal').textContent = Kit.fmt(save.best[N]);

@@ -906,6 +906,8 @@
   function startGame() {
     A.unlock();
     buildWorld(true);
+    // Play stats: every run start (play, again, restart); debug autoplay never reports.
+    if (!autoMode) Kit.stats.round('arena' + (arenaIdx + 1));
     round = { t0: T, maxMass: START_MASS, bestRank: 99, eaten: 0, pellets: 0, killer: null, prevBest: stats['best' + (arenaIdx + 1)],
       prevBestAll: stats.best, bestToast: false, wasKing: false, kingRun: 0, newSkins: [], newArena: -1, checkT: 0.4, hintSplit: false };
     comboN = 0; timeScale = 1; confetti.length = 0; round.danger = 0;
@@ -921,6 +923,7 @@
     for (var ti = toasts.length - 1; ti >= 0; ti--) if (toasts[ti].hint) toasts.splice(ti, 1);
     sfx.eaten(); shake.add(12);
     stats.rounds++;
+    if (!autoMode) Kit.stats.end('end', Math.floor(round.maxMass)); // endless: peak mass is the score
     var alive = T - round.t0;
     round.alive = alive;
     checkUnlocks();
@@ -1616,7 +1619,7 @@
     auto: function (mode, rounds, maxSec) {
       var out = [];
       for (var r = 0; r < rounds; r++) {
-        startGame(); autoMode = mode; var t0 = T, nextT = 0, peak = 0;
+        autoMode = mode; startGame(); var t0 = T, nextT = 0, peak = 0;
         while (state === 'play' && T - t0 < maxSec) {
           if (T >= nextT) {
             nextT = T + 0.2;

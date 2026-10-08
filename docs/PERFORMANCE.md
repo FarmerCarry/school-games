@@ -26,6 +26,8 @@ sizes, JavaScript execution time, or a browser's total network traffic.
 
 - Portal: the single built `index.html`, including inlined thumbnails, styles,
   catalog, and scripts.
+- Teacher page: the single built `teacher.html` (play statistics), including its
+  inlined catalog, styles and script. It is precached but only teachers open it.
 - Games: each built `games/<slug>/index.html`, including its inlined code and
   styles. The source catalog is checked every run, including hidden entries.
   Added games need an explicit limit; missing games and obsolete limits fail.
@@ -227,6 +229,46 @@ restores the baked level after a GPU reset, and keeps the save warning clear
 of the hint bar and pause button; it had only 411 bytes left under the old
 limit. The other games stay inside their unchanged limits, and the offline
 cache is 4,727,825 of 5,000,000 bytes.
+
+## Local play statistics, 8 October 2026
+
+Teachers asked which games children choose, how long they really play, where they
+stop, and how smoothly the school PCs run each game. The answer is counted on each
+PC only (`docs/PLAY_STATS.md`): nothing is sent over the network. The costs:
+
+* **Every game** gains the shared `Kit.stats` counter (+876 bytes of Kit, including
+  the open round's time `om` in each message) and its own few calls (+56 to +332
+  bytes): about 1 KB per game in total. Per frame it
+  adds a subtraction, a few comparisons and an increment, and only while a child
+  is actually playing. It writes nothing: games post a small message to the portal
+  at most every 10 seconds and when a round starts or ends.
+* **The portal** grows by 6,412 bytes (the recorder) to 354,681 of 360,000. It
+  writes one small day record (usually 1–5 KB; 4–6 KB on a busy computer-lab PC) when
+  a game closes, when the page is hidden, and otherwise at most once a minute while
+  something changed. All stats keys stay under 300 KB and 120 days, whichever comes
+  first, so they never crowd out game saves; a busy lab PC may therefore keep only
+  2–3 months, and the teacher page warns before and after days are removed for space.
+* **The teacher page** is one new precached file, 82,405 bytes (26,892 gzip), with
+  its own limit of 87,000. Children's pages do not load it.
+* The offline cache grows from 4,727,825 to 4,849,157 of 5,000,000 bytes.
+
+Nine games had less than 1,000 bytes left after this, so their limits rise to the
+next 1,000 bytes plus one, as before:
+
+| File | Before bytes | After bytes | Before gzip | After gzip | New limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Paint Grab | 105,908 | 106,974 | 37,048 | 37,590 | 108,000 |
+| Connect Four | 50,716 | 51,728 | 16,370 | 16,930 | 53,000 |
+| Tic Tac Toe | 50,694 | 51,706 | 16,347 | 16,902 | 53,000 |
+| Skybound Golf | 78,700 | 79,703 | 28,139 | 28,678 | 81,000 |
+| Candy Rope | 107,559 | 108,622 | 35,925 | 36,508 | 110,000 |
+| Sneaky Levels | 102,589 | 103,608 | 34,718 | 35,277 | 105,000 |
+| Merge 2048 | 76,510 | 77,467 | 25,978 | 26,480 | 79,000 |
+| Lightning Fingers | 101,354 | 102,356 | 35,210 | 35,756 | 104,000 |
+| Tank Splat | 108,017 | 109,092 | 36,241 | 36,892 | 111,000 |
+
+The other 22 games and the portal stay inside their unchanged limits. No request,
+font, library or third-party code is added.
 
 ## CI, review, and deployed performance
 

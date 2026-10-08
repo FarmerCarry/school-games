@@ -55,6 +55,7 @@
   var uiEl = document.getElementById('ui');
   var tableImg = null, tableKey = '';
   var frameDirty = true; // a paused match repaints only after something visible changed
+  var simulated = 0; // set by __game.sim/bench/autoplay: play statistics stop for that page
   var view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: function (v) {
     uiEl.style.transform = 'scale(' + v.scale + ')';
     uiEl.style.left = canvas.style.left; uiEl.style.top = canvas.style.top;
@@ -769,6 +770,12 @@
     var won = st.score[si] >= st.goalsToWin;
     if (won) {
       st.winner = scorer;
+      // Play statistics: counted here, not in endMatch(), so Restart or Menu during the slow-motion
+      // ending keeps the result (the title demo returned above). Two players report no winner.
+      if (!simulated) {
+        if (st.mode > 1) Kit.stats.end('end');
+        else Kit.stats.end(scorer < 0 ? 'win' : 'lose', st.score[0]); // score: the player's goals
+      }
       bigText(word, col, 1.8, 130, who);
       st.timeScale = 0.3; st.slowT = 1.3;
       setScene('ending');
@@ -1290,6 +1297,8 @@
     st.paused = false;
     show(null);
     setupMatch(false);
+    // Every real match starts here (Play, Again, Restart, Enter/R); a new one replaces an open one as a quit.
+    if (!simulated) Kit.stats.round(st.mode > 1 ? 'duo' : 'cpu-' + st.bot.id);
     $('pauseBtn').hidden = false;
     if (st.mode === 1) document.body.classList.add('hidecur'); else document.body.classList.remove('hidecur');
     p1Mode = 'mouse'; mouseMoved = true;
@@ -1493,10 +1502,10 @@
     power: function (id, side) { applyPower({ x: G.CX, y: G.CY, def: byId(AH.POWERS, id) }, side || -1, null); },
     spawnPower: spawnPower,
     dbg: dbg,
-    bench: function (n) { var t0 = performance.now(); for (var i = 0; i < n; i++) render(); var t1 = performance.now(); for (i = 0; i < n; i++) update(1 / 60); return { renderMs: +((t1 - t0) / n).toFixed(2), updateMs: +((performance.now() - t1) / n).toFixed(2) }; },
+    bench: function (n) { simulated = 1; var t0 = performance.now(); for (var i = 0; i < n; i++) render(); var t1 = performance.now(); for (i = 0; i < n; i++) update(1 / 60); return { renderMs: +((t1 - t0) / n).toFixed(2), updateMs: +((performance.now() - t1) / n).toFixed(2) }; },
     // run the simulation synchronously (no rendering) for balance tests
-    sim: function (sec) { var n = Math.round(sec * 60); for (var i = 0; i < n; i++) update(1 / 60); return this.state(); },
-    autoplay: function (botId) { var m = st.mallets[0]; m.ctrl = 'ai'; m.bot = typeof botId === 'object' ? botId : byId(AH.BOTS, botId); m.ai.mode = 'idle'; },
+    sim: function (sec) { simulated = 1; var n = Math.round(sec * 60); for (var i = 0; i < n; i++) update(1 / 60); return this.state(); },
+    autoplay: function (botId) { simulated = 1; var m = st.mallets[0]; m.ctrl = 'ai'; m.bot = typeof botId === 'object' ? botId : byId(AH.BOTS, botId); m.ai.mode = 'idle'; },
     reset: function () { store.remove('save'); location.reload(); }
   };
   Kit.lifecycle({ pause: function () { if (!st.paused) pause(true); } });

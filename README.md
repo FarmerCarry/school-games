@@ -4,10 +4,12 @@ A light, ad-free games website **in Arabic** for 4th and 5th graders: a small Po
 with original browser games, all written from scratch for this site. The site and all of its
 games are in Arabic, laid out right-to-left.
 
-- **No ads, no email/password accounts, no chat, no analytics, no links to other sites.**
+- **No ads, no email/password accounts, no chat, no online tracking or third-party analytics, no links to other sites.**
+  Play statistics are counted on each PC only and are never sent anywhere (see
+  [Play statistics](#play-statistics-local-only)).
 - Every game, sound, font and picture lives in this repo. All games run locally in the browser.
 - **Made for Windows PCs with a mouse and keyboard.**
-- Scores and progress are saved in each browser (localStorage) only.
+- Scores, progress and the anonymous play statistics are saved in each browser (localStorage) only.
 
 ## The games (31)
 
@@ -156,6 +158,52 @@ storage is full. Retry keeps the current session and clears the warning only aft
 the pending data is saved. Block World's final celebration survives a reload until
 the player acknowledges it.
 
+### Play statistics (local only)
+
+Each PC counts which games children open, how long they really play (only while they
+use the mouse or keyboard), where they stop in a game, and whether the games run
+smoothly on that PC. The numbers stay in that browser's storage. There is no server,
+no upload and no tracking script. Names, typed text and class codes are never recorded.
+The numbers describe **a PC, not a child**: several children share a PC, and
+two-player modes mix players.
+
+- **Open:** 🏫 إعدادات الصف → 📊 إحصاءات هذا الجهاز (or open `teacher.html`). It opens
+  in a new tab, so a running game is not interrupted. It works offline and from a
+  downloaded folder. The web copy and a downloaded folder keep separate statistics, so
+  open the page the same way the children open the games.
+- **Read:** choose a period (اليوم، هذا الأسبوع، آخر 30 يومًا، الكل). Four cards answer
+  which games they play most, how long, at what time and where they stop. A table lists
+  each game. Device status, how children reach the games, settings and first-time
+  tutorials are in folded sections below. «Where they stop» lists only levels that can be
+  won or lost, with «فازوا في N من M محاولات» (tries include leaving the level); free play,
+  endless runs, 2048 boards and two-player modes are left out, and runs and boards show
+  their average and best score in the levels table instead. A game still open on this PC
+  today shows its time with the note «مرة لعب ما زالت مفتوحة» until it is closed.
+- **Name the PC:** type a short label such as «جهاز 7». Never type a child's name.
+- **Export to Excel:** press **تصدير ملف Excel**. Each click saves one workbook,
+  `play-stats_<pc>_<date>.xlsx`, with every stored day: an Arabic read-me sheet (اقرأني)
+  and the tables `days`, `games`, `levels` and `hours`. **تصدير JSON** saves the same
+  data as a `.json` file. Export every week: old days are removed when the statistics
+  space (300 KB) fills or after 120 days, whichever comes first, and a busy computer-lab
+  PC may keep only 2–3 months. The page shows a reminder when the space is more than
+  three-quarters full and nothing was exported for a week, when days were removed for
+  space before they were exported, or when the oldest day not yet exported is more than
+  100 days old. For privacy the `hours` table has no dates and lists a game's hour only
+  when it was played then on at least 3 days, and not on every day the game was played.
+  It still shows when games are usually played, so keep the files like class records.
+- **Combine PCs:** press **فتح ملفات من أجهزة أخرى** and choose the JSON files from other
+  PCs to see them together. Nothing from those files is saved. In Excel, put the
+  workbooks in one folder and use **Data → Get Data → From Folder**. Drop rows where `pc`
+  is empty (an empty table keeps one blank row). For each `pc` and `date`, keep only the
+  rows from the file with the newest `exported_at`; never add two exports of the same PC
+  and day.
+- **Stop or clear:** stop collecting (type «أوقف» to confirm) or clear this PC's
+  statistics (type «امسح»). Clearing never removes game progress, the PC name or the
+  stop setting. Clearing the browser's site data also deletes the statistics.
+
+The page has no password. A child who opens it could stop or clear the statistics,
+so both actions need a typed word. The formats are in [`docs/PLAY_STATS.md`](docs/PLAY_STATS.md).
+
 Everything the home page shows comes from **`js/catalog.js`**:
 
 - **Hide a game:** add `hidden: true` to its entry.
@@ -167,11 +215,15 @@ Everything the home page shows comes from **`js/catalog.js`**:
 ```
 index.html, css/, js/     the portal (plain HTML/CSS/JS, no build step)
 js/catalog.js             list of games, categories and site name
+js/stats.js               the portal's local play-statistics recorder
+teacher.html              teacher page: this PC's play statistics and Excel/JSON exports
+css/teacher.css, js/teacher.js   its styles and script (pure parts in window.SGTeacher)
 games/<slug>/             one folder per game (index.html + thumb.svg + its own files)
-shared/kit.js             tiny helper library all games use (sound, saving, input, scaling)
+shared/kit.js             tiny helper library all games use (sound, saving, input, scaling, play statistics)
 shared/game.css           shared game page styles + the Fredoka font
 lib/three/                three.js r159 (MIT) for the 3D games
 docs/GAME_SPEC.md         the rules every game follows
+docs/PLAY_STATS.md        play statistics: what is counted, storage and export formats
 tools/playtest.mjs        headless Chromium playtest harness (Playwright)
 tools/build.mjs           builds the fast version (one file per game + offline cache)
 ```
@@ -202,7 +254,7 @@ npm run test:shared              # source-independent rules, build safety and to
 npm run test:browser             # gameplay and portal checks for the selected SG_ROOT
 npm run test:tooling             # server, report and audio-probe helper checks
 npm run test:scenarios           # prove broken Start/Pause handlers fail the gameplay checks
-npm run test:classroom           # downloaded folder, Arabic/spaced paths and denied storage
+npm run test:classroom           # downloaded folder, Arabic/spaced paths, denied storage, teacher page
 npm run test:regressions         # additional gameplay and portal keyboard checks
 npm run check                   # smoke-test all source games
 npm run build                   # fast build into _site/ (the Pages artifact)

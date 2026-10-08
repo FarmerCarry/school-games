@@ -481,6 +481,9 @@
 
   function startMatch() {
     if (!arenaUnlocked(arenaIdx)) return;
+    // play stats: every start (play, again, restart, next arena) opens a round; the coach line shows in the first 3 rounds
+    Kit.stats.round('arena' + (arenaIdx + 1));
+    if (save.rounds < 3) Kit.stats.tutorial('start');
     save.arena = arenaIdx; persist();
     setArena(arenaIdx);
     newWorld(true);
@@ -544,7 +547,8 @@
   function onPlayerCapture(e) {
     var g = e.gained, pct = g * 100 / NN, sk = skins[player.id];
     S.capture(g);
-    if (g > 0) capCount++;
+    // the coach line stops after 2 captures (play stats: tutorial done)
+    if (g > 0 && ++capCount > 1 && save.rounds < 3) Kit.stats.tutorial('done');
     var hx = e.x * CS, hy = e.y * CS;
     burst(hx, hy, 12 + Math.min(30, g / 12 | 0), [sk.c.base, sk.c.light, '#fff', '#ffcf33'], 260 + Math.min(300, g), { g: 200, life: 0.8 });
     // sparkles over captured area
@@ -643,6 +647,10 @@
     if (peak > save.bestA[arenaIdx]) save.bestA[arenaIdx] = Math.round(peak * 10) / 10;
     save.kills += en.kills; save.rounds++;
     if (got[2]) save.wins++;
+    // play stats: the coach line stops after 3 rounds (sent with the result); first place when time is up
+    // (or full domination) wins, anything else loses; score = peak territory %
+    if (save.rounds == 3) Kit.stats.tutorial('done');
+    Kit.stats.end(got[2] ? 'win' : 'lose', peak | 0);
     var afterKeys = unlockedKeys(), newUnl = afterKeys.filter(function (k) { return beforeKeys.indexOf(k) < 0; });
     var arenaUnl = !beforeArenaNext && arenaIdx + 1 < PG.ARENAS.length && arenaUnlocked(arenaIdx + 1);
     if (arenaUnl) save.arena = arenaIdx + 1;

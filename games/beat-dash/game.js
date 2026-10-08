@@ -508,6 +508,9 @@
     G.trail.length = 0; G.rot = 0; G.sqx = G.sqy = 1; G.flashes = {};
     G.lastCpTick = s.tick;
     G.attemptX = s.x;
+    // play stats: each attempt (first try, restart, auto-respawn) is a round; a new one marks an open
+    // try as quit. Level 1's signs are the tutorial until its first win. Autoplay replays never report.
+    if (!G.auto) { if (!G.li && !save.done[L.id]) Kit.stats.tutorial('start'); Kit.stats.round(L.id + (G.practice ? ':practice' : '')); }
     music.play(L.song, s.tick / 60);
     checkUnlocks().forEach(function (u) { toast(itemName(u)); });
   }
@@ -544,6 +547,7 @@
     music.stop(0.12);
     save.total.jumps += s.jumps - G.jumpsAtStart; G.jumpsAtStart = s.jumps; persist('total');
     var p = pct(s);
+    if (!G.auto) Kit.stats.end('lose', p); // score: % of the level reached
     var key = G.practice ? 'bestP' : 'best';
     if (p > (save[key][L.id] || 0)) {
       save[key][L.id] = p; persist(key);
@@ -631,6 +635,7 @@
   function winLevel() {
     var L = G.L, s = G.s;
     var nextWasLocked = G.li + 1 < LEVELS.length && !levelUnlocked(G.li + 1);
+    if (!G.auto) { if (!G.li && !G.practice && !save.done[L.id]) Kit.stats.tutorial('done'); Kit.stats.end('win', 100); }
     G.won = true; G.wonT = 0; G.winX = s.x; G.fireT = 0;
     save.total.jumps += s.jumps - G.jumpsAtStart; G.jumpsAtStart = s.jumps; persist('total');
     if (G.practice) { save.doneP[L.id] = true; persist('doneP'); save.bestP[L.id] = 100; persist('bestP'); }
@@ -1333,7 +1338,8 @@
     levels: LEVELS.map(function (L) { return { id: L.id, name: L.name, length: L.finishX, seconds: +(L.finishX / L.speed).toFixed(1) }; }),
     start: function (i, practice) { G.auto = null; startLevel(i, !!practice); },
     // replay a recorded input string ('0'/'1' per 60 Hz tick) from the start of level i
-    autoplay: function (i, inputs, practice) { startLevel(i, !!practice); G.auto = inputs; },
+    // (G.auto is set first, so a replay never reports play stats)
+    autoplay: function (i, inputs, practice) { G.auto = inputs; startLevel(i, !!practice); },
     // jump forward to a percentage (debug only; uses a clean state at that x)
     skipTo: function (p) { if (!G.s) return; var s = G.s; s.x = G.L.finishX * p / 100; s.px = s.x; s.y = 0; s.py = 0; s.vy = 0; s.onGround = true; },
     // run n game ticks right now (debug / automated tests)

@@ -440,6 +440,9 @@
     G.mine = []; G.used = []; G.cue = G.job = null; G.cueDirty = 24;
     G.tipT = LEVELS[i].tip && !G.demo ? 5.5 : 0;
     G.tut = i === 0 && prog.stars[0] < 0 && !G.demo;
+    // play stats: every real try (first play, retry, next, hint, after a demo); never a solution replay.
+    // A restart in mid-level opens a new round, which Kit records as a quit of the open one.
+    if (!G.replay) { Kit.stats.round('L' + (i + 1)); if (G.tut) Kit.stats.tutorial('start'); }
     // no level-name title in a demo (its banner sits there) or with the hint (the player just saw the
     // level, and the markers and the first "when" ring must be readable from the start)
     if (G.demo || G.hint) G.introT = 1.6;
@@ -469,6 +472,7 @@
     var boxWas = BOXES.map(function (b, bi) { return boxUnlocked(bi); });
     if (s > prev) prog.stars[i] = s;
     prog.fails[i] = 0;
+    if (!G.replay) Kit.stats.end('win', s); // score: the stars of this try
     save();
     var after = totalStars();
     var unlocks = [];
@@ -506,6 +510,7 @@
   function onLose() {
     var i = G.level;
     prog.fails[i] = (prog.fails[i] || 0) + 1; save();
+    if (!G.replay) Kit.stats.end('lose');
   }
   function showFailPanel() {
     G.panel = true; show('sFail');
@@ -742,6 +747,7 @@
           SFX.cut();
           burst(e.x, e.y, 10, { speed: 220, colors: ['#fff', '#ffe14d', '#e9b872'], type: 2, size: 5, g: 200, life: 0.5 });
           burst(e.x, e.y, 6, { speed: 140, color: '#9b6a35', size: 3, life: 0.5 });
+          if (G.tut && main && !G.replay) Kit.stats.tutorial('done'); // the first cut of level 1, not on the title
           G.tut = false;
           if (G.tipT > 1) G.tipT = 1;
           break;

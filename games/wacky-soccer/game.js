@@ -1050,10 +1050,16 @@
       cfg = { mode: 'cup', teams: [WS.teamById(cupRun.team), WS.teamById(cupRun.opps[cupRun.round])], skill: cup.skills[cupRun.round], target: WS.CUP_GOALS, cupRound: cupRun.round };
     }
     cfg.first = save.stats.matches < 3 || mode === '2p';
+    // play-stats round id, kept with the config so Restart and Again repeat it
+    cfg.sid = mode === 'cpu' ? 'cpu-' + WS.DIFFS[cfg.diff].id : mode === 'cup' ? 'cup-' + WS.CUPS[cupRun.id].id + '-r' + (cupRun.round + 1) : 'duo';
     lastCfg = cfg;
     beginMatch(cfg);
   }
+  // Every real match starts here (new, restart, again); demo and showcase matches never do.
+  // The first 3 matches show the kickoff key hints: that is the first-time coach.
   function beginMatch(cfg) {
+    Kit.stats.round(cfg.sid);
+    if (save.stats.matches < 3) Kit.stats.tutorial('start');
     newMatch(cfg);
     parts.length = 0; pops.length = 0;
     state = 'play'; showScr(null);
@@ -1240,6 +1246,9 @@
     var lines = [];
     var coins = 0;
     save.stats.matches++;
+    // showResult runs once per match (state 'play' -> 'over'); two players report no winner
+    if (m.mode === '2p') Kit.stats.end('end'); else Kit.stats.end(win ? 'win' : 'lose', m.score[0]);
+    if (save.stats.matches === 3) Kit.stats.tutorial('done');
     var oHead = $('oHead');
     if (m.mode === '2p') {
       coins = 10;

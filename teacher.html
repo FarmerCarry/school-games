@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>إحصاءات اللعب | ألعاب الفسحة</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="css/teacher.css">
+</head>
+<body>
+<header class="top">
+  <h1>📊 إحصاءات هذا الجهاز</h1>
+  <a class="home" href="index.html">🏠 العودة إلى الألعاب</a>
+</header>
+<main class="wrap" id="teacherApp">
+  <p class="note" role="note">الأرقام لكل جهاز وليست لكل طالب، ولا تُرسل إلى أي مكان.</p>
+  <p class="notice warn" id="storageMsg" hidden>لا يسمح هذا المتصفح للصفحة بقراءة التخزين المحلي، لذلك لا تظهر إحصاءات هذا الجهاز. يمكنك فتح ملفات من أجهزة أخرى لعرضها.</p>
+  <p class="notice warn" id="stoppedMsg" hidden>جمع الإحصاءات متوقف على هذا الجهاز. يمكنك استئنافه من «الأدوات» أسفل الصفحة.</p>
+  <p class="notice" id="reminder" hidden></p>
+  <div class="notice combined" id="combined" hidden></div>
+  <p class="source" id="source"></p>
+
+  <fieldset class="period">
+    <legend>الفترة</legend>
+    <label><input type="radio" name="period" value="today"> اليوم</label>
+    <label><input type="radio" name="period" value="week" checked> هذا الأسبوع</label>
+    <label><input type="radio" name="period" value="month"> آخر 30 يومًا</label>
+    <label><input type="radio" name="period" value="all"> الكل</label>
+    <span class="range" id="range"></span>
+  </fieldset>
+
+  <section class="cards" aria-label="الإجابات">
+    <article class="card"><h2>أكثر الألعاب لعبًا</h2><p class="hint">حسب مرات اللعب (دقيقة أو أكثر)</p><div id="cardTop"></div></article>
+    <article class="card"><h2>كم يلعبون</h2><div id="cardTime"></div></article>
+    <article class="card"><h2>متى يلعبون</h2><div id="cardHours"></div></article>
+    <article class="card"><h2>أين يتوقفون</h2><p class="hint">المراحل التي يتوقف عندها الأطفال أكثر من غيرها</p><div id="cardStuck"></div></article>
+  </section>
+
+  <section class="panel" aria-labelledby="gamesTitle">
+    <h2 id="gamesTitle">الألعاب</h2>
+    <div id="gameTable"></div>
+    <h3>معاني الكلمات</h3>
+    <dl class="words">
+      <dt>وقت اللعب الفعلي</dt><dd>يُحسب فقط عندما يستخدم الطفل الفأرة أو لوحة المفاتيح.</dd>
+      <dt>مرات اللعب</dt><dd>مرات فتح اللعبة واللعب فيها دقيقة أو أكثر.</dd>
+      <dt>خرجوا بسرعة</dt><dd>مرات خرج فيها الطفل قبل دقيقة.</dd>
+      <dt>أيام اللعب</dt><dd>أيام لُعبت فيها اللعبة على هذا الجهاز. عند عرض عدة أجهزة معًا يُحسب كل يوم مرة واحدة.</dd>
+      <dt>توقفوا عند هذه المرحلة</dt><dd>خسروا أو تركوا المرحلة ثم انتقلوا إلى غيرها. يظهر فقط في المراحل التي يُفاز فيها أو يُخسر.</dd>
+      <dt>سلس / مقبول / بطيء</dt><dd>سرعة الرسم وزمن التحميل على هذا الجهاز.</dd>
+    </dl>
+  </section>
+
+  <section class="panel" id="stuckSection" aria-labelledby="stuckTitle">
+    <h2 id="stuckTitle">أين يتوقفون</h2>
+    <p class="hint">لكل لعبة: المراحل الثلاث التي توقف عندها الأطفال أكثر من غيرها، من بين المراحل التي زاروها 5 مرات أو أكثر. تُقارن المراحل داخل اللعبة نفسها فقط. لا يظهر هنا اللعب الحر واللعب بلا نهاية ولوحات دمج 2048 ولعب طفلين على جهاز واحد، لأنها تنتهي بلا فائز. «فازوا في 3 من 10 محاولات»: المحاولات هي مرات الفوز والخسارة والتعادل وترك المرحلة قبل نهايتها، وتظهر عندما تكون 5 أو أكثر.</p>
+    <div id="stuck"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="levelsTitle">
+    <h2 id="levelsTitle">مراحل كل لعبة وأوضاعها</h2>
+    <p class="hint">«—» في عمود «توقفوا عند هذه المرحلة»: مرحلة أو وضع ينتهي بلا فائز (لعب حر، لعب بلا نهاية، لوحة في دمج 2048، طفلان على جهاز واحد)، فتركه ليس توقفًا. وتظهر فيه النتائج بدل الفوز.</p>
+    <div id="levels"></div>
+  </section>
+
+  <details class="panel" id="deviceSection">
+    <summary>حالة الجهاز</summary>
+    <p class="hint">سلس / مقبول / بطيء: سرعة الرسم وزمن التحميل على هذا الجهاز. تظهر «—» عندما تكون الإطارات المحسوبة أقل من 600.</p>
+    <div id="device"></div>
+    <div id="hardware"></div>
+  </details>
+  <details class="panel">
+    <summary>كيف يصلون إلى الألعاب</summary>
+    <div id="sources"></div>
+  </details>
+  <details class="panel">
+    <summary>الإعدادات</summary>
+    <p class="hint">عدد المرات التي استُخدم فيها كل إعداد.</p>
+    <div id="settings"></div>
+  </details>
+  <details class="panel">
+    <summary>الشرح الأول</summary>
+    <p class="hint">الشرح الأول الذي ظهر أو اكتمل على هذا الجهاز.</p>
+    <div id="tutorials"></div>
+  </details>
+
+  <section class="panel tools" aria-labelledby="toolsTitle">
+    <h2 id="toolsTitle">الأدوات</h2>
+    <div class="tool">
+      <label class="title" for="pcLabel">اسم هذا الجهاز</label>
+      <div class="row"><input id="pcLabel" type="text" maxlength="16" placeholder="جهاز 7" autocomplete="off" spellcheck="false"><button type="button" class="btn" id="saveLabel">احفظ الاسم</button></div>
+      <p class="hint">حتى 16 حرفًا. لا تكتب أسماء التلاميذ.</p>
+      <p class="status" id="labelStatus" role="status"></p>
+    </div>
+    <div class="tool">
+      <h3>التصدير</h3>
+      <div class="row"><button type="button" class="btn main" id="exportXlsx">تصدير ملف Excel</button><button type="button" class="btn" id="exportJson">تصدير JSON</button></div>
+      <p class="hint">يحتوي كل ملف على كل الأيام المحفوظة على هذا الجهاز، لا الفترة المعروضة فقط. <span id="lastExport"></span></p>
+      <p class="status" id="exportStatus" role="status"></p>
+    </div>
+    <div class="tool">
+      <h3>أجهزة أخرى</h3>
+      <div class="row"><button type="button" class="btn" id="openFiles">فتح ملفات من أجهزة أخرى</button><input type="file" id="files" accept=".json,application/json" multiple hidden></div>
+      <p class="hint">اختر ملفات JSON صدّرتها أجهزة أخرى لتراها معًا. لا يُحفظ منها شيء.</p>
+    </div>
+    <div class="tool">
+      <h3>جمع الإحصاءات</h3>
+      <p id="stopState"></p>
+      <div class="row"><button type="button" class="btn" id="stopBtn">أوقف جمع الإحصاءات</button><button type="button" class="btn" id="resumeBtn" hidden>استأنف جمع الإحصاءات</button></div>
+      <form class="confirm" id="stopConfirm" hidden>
+        <label for="stopWord">لن يسجّل هذا الجهاز إحصاءات جديدة حتى تستأنف الجمع. اكتب «أوقف» للتأكيد:</label>
+        <div class="row"><input id="stopWord" type="text" autocomplete="off" spellcheck="false"><button type="submit" class="btn danger">تأكيد</button><button type="button" class="btn" data-cancel>إلغاء</button></div>
+      </form>
+      <p class="status" id="stopStatus" role="status"></p>
+    </div>
+    <div class="tool">
+      <h3>مسح الإحصاءات</h3>
+      <div class="row"><button type="button" class="btn danger" id="clearBtn">امسح إحصاءات هذا الجهاز</button></div>
+      <form class="confirm" id="clearConfirm" hidden>
+        <label for="clearWord" id="clearText"></label>
+        <div class="row"><input id="clearWord" type="text" autocomplete="off" spellcheck="false"><button type="submit" class="btn danger">تأكيد</button><button type="button" class="btn" data-cancel>إلغاء</button></div>
+      </form>
+      <p class="status" id="clearStatus" role="status"></p>
+    </div>
+  </section>
+</main>
+<noscript><p class="note">شغّل JavaScript في المتصفح لترى الإحصاءات.</p></noscript>
+<script src="js/catalog.js"></script>
+<script src="js/teacher.js"></script>
+</body>
+</html>

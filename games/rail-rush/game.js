@@ -1600,6 +1600,10 @@
     Kit.keys.reset();
   }
   function startRun() {
+    // Play statistics: every run (play, again, restart) is a round; a new one while a run is
+    // open counts that run as a quit. The first runs of a fresh save play the scripted intro.
+    if (!save.runs) Kit.stats.tutorial('start');
+    Kit.stats.round('run');
     resetPlayer(); resetRun();
     runner.board.visible = false;
     runner.setOutfit(outfitById(save.outfit));
@@ -1651,6 +1655,9 @@
     save.totals.boards += run.boards;
     save.totals.runs += 1;
     save.runs += 1;
+    // the intro patterns stop after 3 finished runs; the run ends with its distance in metres
+    if (save.runs == 3) Kit.stats.tutorial('done');
+    Kit.stats.end('end', Math.floor(run.dist));
     var score = run.score, newBest = score > save.best;
     var prevBest = save.best;
     if (newBest) save.best = score;
