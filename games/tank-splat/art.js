@@ -248,7 +248,7 @@
     if (dead > 0.3) {
       c.strokeStyle = INK; c.lineWidth = 2;
       for (var e = -1; e <= 1; e += 2) {
-        c.save(); c.translate(2, e * 5); c.rotate((o.t || 0) * 6 * e);
+        c.save(); c.translate(2, e * 5); c.rotate(Kit.motion.reduced() ? 0 : (o.t || 0) * 6 * e);
         c.beginPath();
         for (var q = 0; q < 14; q++) { var aa = q * 0.7, rad = q * 0.3; c.lineTo(Math.cos(aa) * rad, Math.sin(aa) * rad); }
         c.stroke(); c.restore();
@@ -558,19 +558,36 @@
     // side (3D) pass
     c.fillStyle = th.wside;
     for (i = 0; i < rects.length; i++) { r = rects[i]; rr(c, r.x1, r.y1 + 3, r.x2 - r.x1, r.y2 - r.y1 + 3, 5); c.fill(); }
-    // top + highlight: vertical walls first, so the horizontal tops cover their
-    // highlight where walls meet (no light stripes across the junctions)
-    for (var pass = 0; pass < 2; pass++) {
-      for (i = 0; i < rects.length; i++) {
-        r = rects[i];
-        var w = r.x2 - r.x1, h = r.y2 - r.y1;
-        if ((w > h) !== (pass === 1)) continue;
-        rr(c, r.x1, r.y1, w, h, 5); c.fillStyle = th.wall; c.fill();
-        if (w > h) rr(c, r.x1 + 4, r.y1 + 2, w - 8, 3.5, 2);
-        else rr(c, r.x1 + 2, r.y1 + 4, 3.5, h - 8, 2);
-        c.fillStyle = th.wtop; c.fill();
+    // top pass
+    c.fillStyle = th.wall;
+    for (i = 0; i < rects.length; i++) { r = rects[i]; rr(c, r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1, 5); c.fill(); }
+    // highlight. A wall that starts against a wall coming from above or the
+    // left starts its highlight past it, so no light stripe crosses the joint.
+    c.fillStyle = th.wtop;
+    for (i = 0; i < rects.length; i++) {
+      r = rects[i];
+      var w = r.x2 - r.x1, h = r.y2 - r.y1, s = 4;
+      var gx = Math.round((r.x1 + m.T / 2 - m.ox) / m.cs), gy = Math.round((r.y1 + m.T / 2 - m.oy) / m.cs);
+      if (w > h) { if (gy > 0 && m.v[gy - 1][gx]) s = m.T + 1; rr(c, r.x1 + s, r.y1 + 2, w - s - 4.5, 3.5, 2); }
+      else {
+        if (gx > 0 && m.h[gy][gx - 1]) s = m.T + 1;
+        // at a '+' joint the horizontal wall's light runs through, so this one stops and starts again past it
+        for (var k = gy + 1, y0 = r.y1 + s, jy; (jy = m.oy + k * m.cs) < r.y2 - m.T; k++) {
+          if (m.h[k][gx - 1] && m.h[k][gx]) { rr(c, r.x1 + 2, y0, 3.5, jy + 0.5 - y0, 2); c.fill(); y0 = jy + m.T / 2 + 1; }
+        }
+        rr(c, r.x1 + 2, y0, 3.5, r.y2 - 4.5 - y0, 2);
       }
+      c.fill();
     }
+  }
+
+  // Beginner guide: an arrow at the wall in front of the barrel, pointing back at the tank.
+  function drawBounce(c, x, y, ux, uy) {
+    c.save(); c.translate(x, y); c.rotate(Math.atan2(uy, ux));
+    c.beginPath(); c.moveTo(5, -8); c.lineTo(-4, 0); c.lineTo(5, 8);
+    c.lineCap = c.lineJoin = 'round'; c.lineWidth = 8; c.strokeStyle = INK; c.stroke();
+    c.lineWidth = 4; c.strokeStyle = '#fff'; c.stroke();
+    c.restore();
   }
 
   /* ------------------------------------------------------------ trophy */
@@ -616,6 +633,6 @@
     rr: rr, circle: circle, star: star, heart: heart,
     drawTank: drawTank, drawHat: drawHat, drawSplat: drawSplat, drawBall: drawBall,
     drawCrate: drawCrate, drawPowerIcon: drawPowerIcon, drawFloor: drawFloor, drawWalls: drawWalls,
-    drawTrophy: drawTrophy
+    drawTrophy: drawTrophy, drawBounce: drawBounce
   };
 })();

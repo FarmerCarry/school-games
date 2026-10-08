@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
 
-// Paint Tanks (tank-splat): saving, beginner help, reduced motion, floor art and paused redraws.
+// Paint Tanks (tank-splat): saving, beginner help, reduced motion, floor and wall art and paused redraws.
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
 let browser, server;
@@ -28,7 +28,7 @@ async function game(t, entries = {}) {
   await page.addInitScript(entries => {
     for (const [key, value] of Object.entries(entries)) localStorage.setItem('sg:tank-splat:' + key, JSON.stringify(value));
     let kit, update, render;
-    const runtime = window.runtime = { failKeys: [], layerDraws: 0, texts: [], dashes: 0 };
+    const runtime = window.runtime = { failKeys: [], layerDraws: 0, texts: [], textYs: [], dashes: 0, dashPath: [], dashOffset: null };
     runtime.step = seconds => { for (let i = 0; i < Math.round(seconds * 60); i++) update(1 / 60); };
     runtime.draw = count => { for (let i = 0; i < count; i++) render(0); };
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
@@ -41,18 +41,29 @@ async function game(t, entries = {}) {
       return write.apply(this, arguments);
     };
     const proto = CanvasRenderingContext2D.prototype, drawImage = proto.drawImage, fillText = proto.fillText, setLineDash = proto.setLineDash;
+    const lineTo = proto.lineTo, dashOffset = Object.getOwnPropertyDescriptor(proto, 'lineDashOffset');
+    let dashing = false;
     proto.drawImage = function (img) {
       if (this.canvas.id === 'cv' && img instanceof HTMLCanvasElement) runtime.layerDraws++;
       return drawImage.apply(this, arguments);
     };
-    proto.fillText = function (text) {
-      if (this.canvas.id === 'cv') runtime.texts.push(text);
+    proto.fillText = function (text, x, y) {
+      if (this.canvas.id === 'cv') { runtime.texts.push(text); runtime.textYs.push(text + '@' + y); }
       return fillText.apply(this, arguments);
     };
+    // Records the points of the last dashed (guide or laser) path on the game canvas.
     proto.setLineDash = function (dash) {
-      if (this.canvas.id === 'cv' && dash.length) runtime.dashes++;
+      if (this.canvas.id === 'cv') { dashing = dash.length > 0; if (dashing) { runtime.dashes++; runtime.dashPath = []; } }
       return setLineDash.apply(this, arguments);
     };
+    proto.lineTo = function (x, y) {
+      if (dashing && this.canvas.id === 'cv') runtime.dashPath.push([x, y]);
+      return lineTo.apply(this, arguments);
+    };
+    Object.defineProperty(proto, 'lineDashOffset', { configurable: true, get: dashOffset.get, set(value) {
+      if (this.canvas.id === 'cv') runtime.dashOffset = value;
+      dashOffset.set.call(this, value);
+    } });
   }, entries);
   await page.goto(`${server.origin}/games/tank-splat/`);
   await page.waitForFunction(() => window.__game && window.runtime);
@@ -98,6 +109,30 @@ test('the first two stages show an aim guide and explain a self-splat', async t 
   await startQuietStage(page, 0);
   assert.equal(await page.evaluate(() => __game.app.game.guide), true);
   assert.ok(await page.evaluate(() => { runtime.dashes = 0; runtime.draw(1); return runtime.dashes; }) > 0, 'guide line drawn');
+  // A shot straight at a wall comes back 10 px beside the way out instead of hidden under it. With the
+  // nose at the wall that bounce is under the tank, so an arrow on the wall points back at it instead.
+  assert.deepEqual(await page.evaluate(() => {
+    const g = __game.app.game, m = g.maze, t = g.tanks[0], home = [t.x, t.y, t.a], drawBounce = TS_ART.drawBounce, marks = [];
+    TS_ART.drawBounce = (...args) => { marks.push(args.slice(1, 3)); return drawBounce(...args); };
+    try {
+      for (let cell = 0; cell < m.cols * m.rows; cell++) for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+        const c = TS_MAZE.cellCenter(m, cell), ux = Math.cos(a), uy = Math.sin(a), hit = TS_MAZE.raycast(m, c.x, c.y, ux, uy, 7, 1000);
+        const d = hit && hit.t; // copied: raycast reuses its result object
+        if (!d || d < 60 || d > 240) continue;
+        t.x = c.x; t.y = c.y; t.a = a; runtime.draw(1);
+        const end = runtime.dashPath[runtime.dashPath.length - 1], headOn = runtime.dashPath.length;
+        const side = Math.abs((end[0] - t.x) * uy - (end[1] - t.y) * ux), marked = marks.length;
+        t.a = a + 0.5; runtime.draw(1);
+        const angled = runtime.dashPath.length <= 2 && marks.length === 0;
+        t.x = c.x + ux * (d - 12); t.y = c.y + uy * (d - 12); t.a = a; runtime.draw(1);
+        const mark = marks[marks.length - 1], wall = mark && Math.round(Math.hypot(mark[0] - (t.x + ux * 19), mark[1] - (t.y + uy * 19)));
+        return [headOn, Math.round(side), marked, angled, marks.length, wall];
+      }
+    } finally {
+      // the self-splat check below needs the tank back at its spawn, away from the bot
+      TS_ART.drawBounce = drawBounce; [t.x, t.y, t.a] = home;
+    }
+  }), [3, 10, 0, true, 1, 0]);
 
   // The player's own ball comes back at them.
   await page.evaluate(() => {
@@ -107,12 +142,18 @@ test('the first two stages show an aim guide and explain a self-splat', async t 
     t.active++;
     runtime.step(0.3);
   });
-  assert.deepEqual(await page.evaluate(() => [__game.app.game.selfOut, __game.app.game.pops.some(p => p.text === 'كرتك ارتدّت عليك!')]), [true, true]);
-  await page.evaluate(() => runtime.step(2));
+  const selfPop = () => page.evaluate(() => __game.app.game.pops.some(p => p.text === 'كرتك ارتدّت عليك!'));
+  assert.deepEqual([await page.evaluate(() => __game.app.game.selfOut), await selfPop()], [true, true]);
+  await page.evaluate(() => runtime.step(1));
   assert.equal(await page.evaluate(() => __game.app.game.state), 'roundEnd');
+  assert.equal(await selfPop(), false, 'the banner pill replaces the popup');
   assert.ok(await page.evaluate(() => { runtime.texts.length = 0; runtime.draw(1); return runtime.texts.includes('انتبه: كراتك ترتدّ وتلطّخك!'); }));
   await page.evaluate(() => runtime.step(2.5));
   assert.deepEqual(await page.evaluate(() => [__game.app.game.round, __game.app.game.selfOut]), [2, false]);
+  assert.equal(await page.evaluate(() => {
+    const g = __game.app.game, p = { x: 640, y: 120, text: 'x', color: '#fff', size: 30, life: 3, max: 3 };
+    g.pops.push(p); runtime.step(2); return p.y;
+  }), 100, 'popups stop rising below the HUD');
 
   await startQuietStage(page, 2);
   assert.equal(await page.evaluate(() => __game.app.game.guide), false);
@@ -120,17 +161,68 @@ test('the first two stages show an aim guide and explain a self-splat', async t 
   assert.equal(await page.evaluate(() => { __game.startFree(1, 1); return __game.app.game.guide; }), false);
 });
 
-test('reduced motion stops the screen shake', async t => {
+test('reduced motion stops the screen shake and decorative motion', async t => {
   const page = await game(t);
   await page.evaluate(() => Kit.motion.setPreference('reduce'));
-  await startQuietStage(page, 2);
   assert.deepEqual(await page.evaluate(() => {
-    const g = __game.app.game; g.shakeP = 13; runtime.step(0.05); return [g.shakeP, g.shx, g.shy];
-  }), [0, 0, 0]);
-  assert.ok(await page.evaluate(() => {
+    // countdown name tags stay put
+    __game.start(0);
+    const name = __game.app.game.tanks[0].name + '@';
+    const tags = () => { runtime.textYs.length = 0; runtime.draw(1); return runtime.textYs.filter(e => e.startsWith(name)).join(); };
+    const before = tags(); runtime.step(0.25);
+    // splatted tanks' spiral eyes stop turning
+    const eyes = t => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 80;
+      TS_ART.drawTank(cv.getContext('2d'), { x: 40, y: 40, a: 0, pal: TS_ART.PAL[1], t, dead: 1 });
+      return cv.toDataURL();
+    };
+    const still = eyes(0) === eyes(0.4);
+    Kit.motion.setPreference('full'); const turning = eyes(0) !== eyes(0.4); Kit.motion.setPreference('reduce');
+    return [before === tags(), still, turning];
+  }), [true, true, true]);
+  await startQuietStage(page, 0);
+  assert.deepEqual(await page.evaluate(() => {
+    const g = __game.app.game; g.shakeP = 13; runtime.step(0.05); runtime.draw(1); return [g.shakeP, g.shx, g.shy, runtime.dashOffset];
+  }), [0, 0, 0, 0]);
+  assert.deepEqual(await page.evaluate(() => {
     Kit.motion.setPreference('full');
-    const g = __game.app.game; g.shakeP = 13; runtime.step(1 / 60); return g.shakeP;
-  }) > 0, 'shake returns with full motion');
+    const g = __game.app.game; g.shakeP = 13; runtime.step(1 / 60); runtime.draw(1); return [g.shakeP > 0, runtime.dashOffset < 0];
+  }), [true, true], 'shake and marching guide dots return with full motion');
+
+  // The result screen's winner tank neither drops in nor hops.
+  await page.evaluate(() => Kit.motion.setPreference('reduce'));
+  assert.deepEqual(await page.evaluate(() => {
+    const drawTank = TS_ART.drawTank, ys = [];
+    TS_ART.drawTank = (c, o) => { if (o.scale === 2.5) ys.push(o.y); return drawTank(c, o); };
+    for (let n = 0; n < 60 && __game.app.screen !== 'result'; n++) { __game.winRound(); runtime.step(0.5); }
+    runtime.draw(1); runtime.step(0.3); runtime.draw(1);
+    TS_ART.drawTank = drawTank;
+    return [__game.app.screen, ys];
+  }), ['result', [250, 250]]);
+});
+
+test('wall highlights stay unbroken where walls meet', async t => {
+  const page = await game(t);
+  const px = await page.evaluate(() => {
+    const th = TS_ART.THEMES[0], name = col => col === th.wtop ? 'light' : col === th.wall ? 'top' : col;
+    const walls = (h, v, rects, points) => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 160;
+      const c = cv.getContext('2d');
+      TS_ART.drawWalls(c, { cols: 2, rows: 2, cs: 60, ox: 20, oy: 20, T: 10, h, v, rects }, th, false);
+      return points.map(([x, y]) => name('#' + [...c.getImageData(x, y, 1, 1).data.slice(0, 3)].map(n => n.toString(16).padStart(2, '0')).join('')));
+    };
+    const border = [{ x1: 15, x2: 145, y1: 15, y2: 25 }, { x1: 15, x2: 145, y1: 135, y2: 145 }, { x1: 15, x2: 25, y1: 15, y2: 145 }, { x1: 135, x2: 145, y1: 15, y2: 145 }];
+    return [
+      // 2x2 maze: a wall from the left border ends where a wall down to the bottom starts
+      walls([[1, 1], [1, 0], [1, 1]], [[1, 0, 1], [1, 1, 1]], border.concat({ x1: 15, x2: 85, y1: 75, y2: 85 }, { x1: 75, x2: 85, y1: 75, y2: 145 }),
+        [[18, 80], [22, 78], [78, 82], [78, 100]]),
+      // a '+' in the middle: the cross wall's light runs through, the up-down wall's stops above it and starts again past it
+      walls([[1, 1], [1, 1], [1, 1]], [[1, 1, 1], [1, 1, 1]], border.concat({ x1: 15, x2: 145, y1: 75, y2: 85 }, { x1: 75, x2: 85, y1: 15, y2: 145 }),
+        [[78, 60], [78, 78], [70, 78], [100, 78], [78, 83], [78, 90]])
+    ];
+  });
+  // left border light through the joint; the joining walls' light starts past it
+  assert.deepEqual(px, [['light', 'top', 'top', 'light'], ['light', 'light', 'light', 'light', 'top', 'light']]);
 });
 
 test('floor decorations are themed and identical when redrawn', async t => {

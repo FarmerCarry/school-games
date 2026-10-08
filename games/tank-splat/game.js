@@ -27,6 +27,7 @@
   var KEY_HINT = ['W A S D  +  Q', '↑ ← ↓ →  +  /', 'I J K L  +  U'];
 
   var SPLAT_WORDS = ['طاخ!', 'بقعة!', 'لطخة!', 'سبلاش!', 'أصبت!', 'رائع!'];
+  var SELF_MSG = 'كرتك ارتدّت عليك!';
 
   /* ------------------------------------------------------------ helpers */
   function mulberry(seed) {
@@ -139,6 +140,8 @@
         burst(winner.x, winner.y, 30, [winner.pal.paint, '#fff', '#ffe14d'], 260, 5, 0.9);
       } else if (!G.demo) S.roundDraw();
       G.banner = { t: 0, winner: winner, draw: !winner };
+      // solo: the banner pill says it now, so the ribbon does not half-cover the popup
+      if (G.selfOut && G.humans === 1) G.pops = G.pops.filter(function (p) { return p.text !== SELF_MSG; });
       if (winner && winner.score >= G.target && !G.demo) {
         G.over = true;
         if (winner.human) G.coins += 30;
@@ -430,7 +433,7 @@
       if (G.demo) { /* quiet title-screen demo */ }
       else if (self) {
         // Beginners often think the bot got them: say what really happened.
-        if (t.human) { pop(Math.max(160, Math.min(W - 160, t.x)), t.y - 34, 'كرتك ارتدّت عليك!', '#ffffff', 34, 2); G.selfOut = true; }
+        if (t.human) { pop(Math.max(160, Math.min(W - 160, t.x)), t.y - 34, SELF_MSG, '#ffffff', 34, 2); G.selfOut = true; }
         else pop(t.x, t.y - 34, 'أوبس!', '#ffffff', 40, 1.2);
         if (!G.demo) S.oops();
       } else {
@@ -525,7 +528,7 @@
     function stepPops(dt) {
       for (var i = G.pops.length - 1; i >= 0; i--) {
         var p = G.pops[i];
-        p.life -= dt; if (!p.center) p.y -= dt * 30;
+        p.life -= dt; if (!p.center) p.y = Math.max(TOP + 30, p.y - dt * 30); // stays below the HUD
         if (p.life <= 0) G.pops.splice(i, 1);
       }
     }
@@ -602,6 +605,7 @@
     // crates
     for (i = 0; i < G.crates.length; i++) { var k = G.crates[i]; A.drawCrate(c, k.x, k.y, k.pw, k.t, easeBack(k.pop)); }
     // laser aim lines (and the beginner guide, which the laser replaces)
+    var mk = false, mx = 0, my = 0, mux = 0, muy = 0; // point-blank bounce marker, drawn over the tank
     for (i = 0; i < G.tanks.length; i++) {
       t = G.tanks[i];
       if (!t.alive || G.state !== 'play') continue;
@@ -613,9 +617,20 @@
       c.save();
       c.globalAlpha = !laser ? 0.5 : t.laser < 2 ? (Math.sin(G.time * 20) > 0 ? 0.8 : 0.3) : 0.85;
       c.lineWidth = laser ? 4 : 3; c.lineCap = 'round'; c.strokeStyle = t.pal.paint;
-      c.setLineDash([2, 10]); c.lineDashOffset = -G.time * 40;
+      c.setLineDash([2, 10]); c.lineDashOffset = Kit.motion.reduced() ? 0 : -G.time * 40;
       c.beginPath(); c.moveTo(p[0], p[1]);
-      for (var q = 2; q < p.length; q += 2) c.lineTo(p[q], p[q + 1]);
+      var ox = 0, oy = 0;
+      for (var q = 2; q < p.length; q += 2) {
+        if (q > 2 && !laser) { // guide: a shot that comes straight back is drawn beside the way out
+          var ax = p[q - 2] - p[q - 4], ay = p[q - 1] - p[q - 3], al = Math.hypot(ax, ay), bx = p[q] - p[q - 2], by = p[q + 1] - p[q - 1];
+          if (ax * bx + ay * by < -0.9 * al * Math.hypot(bx, by)) {
+            ox = -ay / al * 10; oy = ax / al * 10; c.lineTo(p[q - 2] + ox, p[q - 1] + oy);
+            // nose at the wall: the bounce hides under the tank, so mark the wall with an arrow back
+            if (al < 34) { mk = true; mux = ax / al; muy = ay / al; mx = p[q - 2] + mux * BALL_R; my = p[q - 1] + muy * BALL_R; }
+          }
+        }
+        c.lineTo(p[q] + ox, p[q + 1] + oy);
+      }
       c.stroke();
       c.setLineDash([]);
       c.restore();
@@ -632,6 +647,7 @@
         });
       }
     }
+    if (mk) A.drawBounce(c, mx, my, mux, muy);
     // balls
     for (i = 0; i < G.balls.length; i++) {
       var b = G.balls[i], sp = Math.hypot(b.vx, b.vy);
@@ -652,7 +668,7 @@
     if (G.state === 'ready' && !G.demo) {
       for (i = 0; i < G.tanks.length; i++) {
         t = G.tanks[i];
-        var bob = Math.sin(G.time * 6 + i) * 3;
+        var bob = Kit.motion.reduced() ? 0 : Math.sin(G.time * 6 + i) * 3;
         text(c, t.name, t.x, t.y - 44 + bob, 22, '#fff', 'center', t.pal.dark, 6);
         c.fillStyle = t.pal.dark;
         c.beginPath(); c.moveTo(t.x - 7, t.y - 31 + bob); c.lineTo(t.x + 7, t.y - 31 + bob); c.lineTo(t.x, t.y - 23 + bob); c.closePath(); c.fill();
@@ -686,13 +702,13 @@
 
   /* ------------------------------------------------------------ HUD */
   function drawHud(c, G) {
-    var n = G.tanks.length, gap = 12;
+    var n = G.tanks.length, gap = 12, rm = Kit.motion.reduced();
     var bw = Math.min(250, (W - 170 - (n - 1) * gap) / n), bh = 54;
     var total = n * bw + (n - 1) * gap, x0 = W / 2 + total / 2;
     for (var i = 0; i < n; i++) {
       var t = G.tanks[i];
       var x = x0 - (i + 1) * bw - i * gap, y = 8;
-      var hl = G.state === 'roundEnd' && G.winner === t ? 1 + Math.sin(G.time * 12) * 0.04 : 1;
+      var hl = G.state === 'roundEnd' && G.winner === t ? 1 + (rm ? 0.03 : Math.sin(G.time * 12) * 0.04) : 1; // reduced: still, a bit bigger
       c.save();
       c.translate(x + bw / 2, y + bh / 2); c.scale(hl, hl); c.translate(-(x + bw / 2), -(y + bh / 2));
       A.rr(c, x, y + 4, bw, bh, 18); c.fillStyle = 'rgba(0,0,0,0.25)'; c.fill();
