@@ -44,8 +44,11 @@ export const scenarios = {
       await requireState(page, `${g}.mode === 'paused' || ${g}.mode === 'over'`, 'drift-king: run must pause or end before retry');
       // The results screen ignores R for its first 0.45 s.
       if (await evaluate(page, `${g}.mode === 'over'`)) await page.waitForTimeout(500);
+      // A fresh run builds a new car. Checking for it, not for a distance under
+      // one, cannot miss the new run when a slow frame carries the car past 1.
+      await page.evaluate(() => { window.sgRetryCar = window.__game.car; });
       await page.keyboard.press('KeyR');
-      await requireState(page, `${g}.mode === 'play' && ${g}.car.progress < 1`, 'drift-king: retry must start a fresh run before pause');
+      await requireState(page, `${g}.mode === 'play' && ${g}.car !== window.sgRetryCar`, 'drift-king: retry must start a fresh run before pause');
     }
   }),
   'fire-and-ice': defaults(['#playBtn'], `${g}.mode === 'play'`, `[${g}.world.fire.x,${g}.world.ice.x,${g}.world.t]`, hold('ArrowRight'), '#pauseBtn', `${g}.mode === 'paused'`, '#restartBtn', `${g}.world.t < 0.4`),
