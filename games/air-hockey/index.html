@@ -152,6 +152,15 @@
   #pauseBtn:hover { background: rgba(0,0,0,0.55); }
   #pauseBtn[hidden] { display: none; }
   #pauseBtn i { display: block; width: 5px; height: 16px; background: #fff; border-radius: 2px; }
+
+  /* Save warning: the shared bottom-centre spot covers the rink, the title's how-to bar and the
+     results hint. It wraps into the empty corner left of the score plates instead; on the title
+     (coins top-left) it sits beside the mute button, and shop and awards keep the bottom. */
+  .sg-save-status, .sg-save-status[data-compact="true"] { top: 8px; bottom: auto; inset-inline: auto 8px; margin-inline: 0; }
+  .sg-save-status:not([data-compact="true"]) { max-width: 124px; padding: 4px 8px; font-size: 16px; line-height: 1.4; text-align: center; }
+  .sg-save-status button { padding: 2px 8px; }
+  body:has(#scr-title:not([hidden])) .sg-save-status { inset-inline: 62px auto; }
+  body:has(#scr-shop:not([hidden])) .sg-save-status, body:has(#scr-awards:not([hidden])) .sg-save-status { top: auto; bottom: 12px; }
 </style>
 </head>
 <body>

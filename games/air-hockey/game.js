@@ -198,7 +198,13 @@
     if (s.kind === 'melon') return '#ff5a6e';
     return s.color;
   }
-  function sideColor(side) { return skinColor(sideSkin(side)); }
+  // 1-player mode: these mallets share their bot's colour, so the player's HUD plate, goal
+  // text and results use the default blue to tell the two sides apart
+  var BOT_CLASH = { easy: 'lime', medium: 'gold', insane: 'melon' };
+  function sideColor(side) {
+    if (side < 0 && st.mode === 1 && BOT_CLASH[st.bot.id] === save.eq.mallet) return '#35c8ff';
+    return skinColor(sideSkin(side));
+  }
 
   function setupMatch(demo) {
     flushAwards(); // awards from a match that was left before its next goal
@@ -686,7 +692,7 @@
     if (m.ai && m.ctrl === 'ai') m.ai.contact = true;
     var idx = sideIdx(m.side);
     p.last = m.side; p.bank = 0;
-    var col = sideColor(m.side);
+    var col = skinColor(m.skin); // sparks match the mallet on the rink
     var cx = m.x + nx * m.r, cy = m.y + ny * m.r;
     var k = Math.min(1, impact / 1600);
     m.sq = Math.min(1, 0.25 + k); m.sqAng = Math.atan2(ny, nx);
