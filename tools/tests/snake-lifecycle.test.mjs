@@ -236,6 +236,36 @@ test('Snake Arena warns when a save fails and clears it only after a confirmed r
     return { state: __game.state, visible: !status.hidden, status: status.dataset.state, games: __game.stats.games };
   });
   assert.deepEqual(failed, { state: 'over', visible: true, status: 'failed', games: 1 });
+  // In play the folded badge waits beside the pause button, and a press beside Retry still reaches the canvas.
+  const play = await page.evaluate(() => {
+    SA.game.lastStart = 0;
+    document.getElementById('btnAgain').click();
+    const status = document.querySelector('.sg-save-status');
+    status.dataset.compact = 'true'; // what the 6 s fold timer does
+    const r = status.getBoundingClientRect(), b = status.querySelector('button').getBoundingClientRect();
+    const pause = document.getElementById('btnPause').getBoundingClientRect();
+    const at = (x, y) => { const e = document.elementFromPoint(x, y); return e.id || e.tagName; };
+    return { state: __game.state, besidePause: r.left > innerWidth / 2 && r.right <= pause.left && r.bottom < 62,
+      icon: at(r.right - 6, r.top + r.height / 2), retry: at(b.left + b.width / 2, b.top + b.height / 2) };
+  });
+  assert.deepEqual(play, { state: 'play', besidePause: true, icon: 'cv', retry: 'BUTTON' });
+  // A narrow frame wraps the full warning so it stays clear of the title's key hints and stats.
+  await page.setViewportSize({ width: 960, height: 540 });
+  const covered = await page.evaluate(async () => {
+    Kit.motion.setPreference('reduce'); // one-shot animations, so the panel can be measured at full size
+    document.getElementById('btnPause').click();
+    document.getElementById('btnMenu').click();
+    document.getAnimations().forEach(a => a.finish());
+    await Promise.all(['500 16px Fredoka', '700 16px Fredoka'].map(font => document.fonts.load(font, 'بP')));
+    const status = document.querySelector('.sg-save-status');
+    status.dataset.compact = 'false';
+    const r = status.getBoundingClientRect();
+    return [...document.querySelectorAll('#title .howto > span, #title .stat')].filter(e => {
+      const q = e.getBoundingClientRect();
+      return q.right > r.left && q.left < r.right && q.bottom > r.top && q.top < r.bottom;
+    }).map(e => e.textContent);
+  });
+  assert.deepEqual(covered, []);
   const retried = await page.evaluate(() => {
     Storage.prototype.setItem = window.nativeSetItem;
     document.querySelector('.sg-save-status button').click();
