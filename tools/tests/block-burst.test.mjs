@@ -237,13 +237,15 @@ test('the first-move hint drags a tray piece to where it fits; its text covers n
   for (const m of moves) assert.deepEqual(m, expected(m), JSON.stringify(moves));
   assert.ok(moves.filter(m => m.level === 0).every(m => m.textTop), 'level 1 keeps its tip text at the top');
   assert.ok(moves.filter(m => m.level === 2 && m.textTop).length >= 12, 'level 3 mostly keeps its tip text at the top');
-  // The hint draws its text on that row.
+  // The hint draws its text on that row, under the hand (the hand is the only rotate(-0.3)).
   const drawn = await page.evaluate(() => {
-    const ys = [], fill = CanvasRenderingContext2D.prototype.fillText;
-    CanvasRenderingContext2D.prototype.fillText = function (s, x, y) { if (/^(املأ|اسحب)/.test(s)) ys.push(y); return fill.apply(this, arguments); };
+    const ys = [], order = [], proto = CanvasRenderingContext2D.prototype, fill = proto.fillText, rot = proto.rotate;
+    proto.fillText = function (s, x, y) { if (/^(املأ|اسحب)/.test(s)) { ys.push(y); order.push('text'); } return fill.apply(this, arguments); };
+    proto.rotate = function (a) { if (a === -0.3) order.push('hand'); return rot.apply(this, arguments); };
     __game.startLevel(2); stepGame(170); drawGame();
-    CanvasRenderingContext2D.prototype.fillText = fill;
-    return { ys, row: __game.hint.textRow };
+    proto.fillText = fill; proto.rotate = rot;
+    return { ys, order, row: __game.hint.textRow };
   });
   assert.deepEqual(drawn.ys, [34 + 62 * (drawn.row + 0.5)]);
+  assert.deepEqual(drawn.order, ['text', 'hand']);
 });
