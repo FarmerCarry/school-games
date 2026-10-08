@@ -20,10 +20,10 @@ after(async () => {
   await server?.close();
 });
 
-async function gamePage(t, init) {
+async function gamePage(t, ...inits) {
   const context = await browser.newContext();
   t.after(() => context.close());
-  if (init) await context.addInitScript(init);
+  for (const init of inits) await context.addInitScript(init);
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -42,6 +42,20 @@ const manualFrames = () => {
   window.requestAnimationFrame = callback => callbacks.push(callback);
   window.runFrames = count => {
     for (let i = 0; i < count; i++) { time += 1000 / 60; callbacks.splice(0).forEach(callback => callback(time)); }
+  };
+};
+// Timers fire only when a test calls runTimers(ms), in due order, so toasts need no real waiting.
+const manualTimers = () => {
+  const timers = new Map();
+  let time = 0, id = 0;
+  window.setTimeout = (callback, ms = 0) => { timers.set(++id, { at: time + ms, callback }); return id; };
+  window.clearTimeout = handle => timers.delete(handle);
+  window.runTimers = ms => {
+    const end = time + ms;
+    for (let due; (due = [...timers].filter(([, timer]) => timer.at <= end).sort((a, b) => a[1].at - b[1].at)[0]);) {
+      timers.delete(due[0]); time = due[1].at; due[1].callback();
+    }
+    time = end;
   };
 };
 const nextBox = page => page.evaluate(() => ({
@@ -111,20 +125,24 @@ test('The HUD shows the next theme and switches after its unlock is announced', 
 });
 
 test('A theme unlock waiting behind a record toast moves the HUD on only when it shows', async t => {
-  const page = await gamePage(t, manualFrames);
-  await page.evaluate(() => Kit.store('merge-2048').set('best', { 4: 8 }));
-  await page.reload();
+  // A best score from an earlier game, so beating it shows the record toast.
+  const page = await gamePage(t, manualFrames, manualTimers, () => localStorage.setItem('sg:merge-2048:best', '{"4":8}'));
   await page.keyboard.press('Enter');
-  const waiting = await page.evaluate(() => {
+  const [waiting, between, shown] = await page.evaluate(() => {
+    const texts = () => ['toast', 'nextName'].map(id => document.getElementById(id).textContent);
     window.__game.set([64, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     window.__game.move(3);
     runFrames(90); // 1.5 s: the record toast is up and the unlock (0.9 s) is queued behind it
-    return [document.getElementById('toast').textContent, document.getElementById('nextName').textContent];
+    const waiting = texts();
+    runTimers(2300); // the record toast is sliding away
+    const between = texts();
+    runTimers(200); // 0.38 s after it left, the unlock takes its place
+    return [waiting, between, texts()];
   });
   assert.deepEqual(waiting, ['🏆 رقم قياسي جديد!', 'حلوى']);
-  // Toasts run on timers; poll on an interval because animation frames are manual here.
-  await page.waitForFunction(() => document.getElementById('nextName').textContent === 'تطوّر', null, { polling: 50, timeout: 15000 });
-  assert.match(await page.locator('#toast').textContent(), /^🔓 شكل جديد: «حلوى»/);
+  assert.equal(between[1], 'حلوى');
+  assert.match(shown[0], /^🔓 شكل جديد: «حلوى»/);
+  assert.equal(shown[1], 'تطوّر');
 });
 
 test('A 3x3 save from before the 256 goal that already holds 256 resumes into the win screen', async t => {
@@ -202,7 +220,7 @@ test('Reduced motion keeps merge feedback but trims celebration particles', asyn
   assert.ok((await state(page)).parts <= 40, 'win confetti is capped');
 });
 
-test('A paused board is drawn once, settled, redrawn after resize or context restore, and resumes its effects', async t => {
+test('A paused board is drawn once, settled, redrawn after resize, context restore or a theme change, and resumes its effects', async t => {
   const page = await gamePage(t, manualFrames);
   await page.keyboard.press('Enter');
   const result = await page.evaluate(() => {
@@ -225,10 +243,14 @@ test('A paused board is drawn once, settled, redrawn after resize or context res
     const resized = frames(1), resizedIdle = frames(30);
     document.getElementById('game').dispatchEvent(new Event('contextrestored'));
     const restored = frames(1), restoredIdle = frames(30);
+    window.__game.unlockAll();
+    document.getElementById('btnTheme').click(); // Tab still reaches the HUD behind the pause panel
+    const themed = frames(1), themedIdle = frames(30), theme = window.__game.state().theme;
     document.getElementById('btnResume').click();
     const playing = [frames(1), frames(10)];
     return { first: first > 0, settled: shown === board, idle, parts, resized: resized > 0, resizedIdle, restored: restored > 0, restoredIdle,
-      playing: playing.every(count => count > 0), burst: window.__game.state().parts > 0 };
+      themed: themed > 0, themedIdle, theme, playing: playing.every(count => count > 0), burst: window.__game.state().parts > 0 };
   });
-  assert.deepEqual(result, { first: true, settled: true, idle: 0, parts: 0, resized: true, resizedIdle: 0, restored: true, restoredIdle: 0, playing: true, burst: true });
+  assert.deepEqual(result, { first: true, settled: true, idle: 0, parts: 0, resized: true, resizedIdle: 0, restored: true, restoredIdle: 0,
+    themed: true, themedIdle: 0, theme: 'candy', playing: true, burst: true });
 });

@@ -947,6 +947,7 @@
     if (save.seen.indexOf(id) < 0) { save.seen.push(id); put('seen', save.seen); }
     flushSaves();
     buildDeco();
+    frameDirty = true; // the HUD button still works while paused: show the new look there too
     if (G.screen === 'title') refreshTitle(); else refreshHUD();
   }
   function cycleTheme() {
