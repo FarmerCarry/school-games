@@ -113,8 +113,10 @@ test('Block World tells the player which hotbar slot holds the item a place ques
     press('KeyE');
     const inBag = { mode: G.mode, marked: bag.children[0].classList.contains('qslot'), tip: hotTip.textContent };
     // Click, click: while the table is held (a press and release on its own slot keeps it held),
-    // the note stays and the hotbar is marked; clicking hotbar slot 2 swaps it with the logs there.
+    // the note stays and the hotbar is marked (dashed, but the selected slot 1 keeps its solid
+    // border); clicking hotbar slot 2 swaps it with the logs there.
     slotDown(bag.children[0]); slotUp(bag.children[0]);
+    const borders = [0, 1].map(i => getComputedStyle(hot.children[i]).borderTopStyle);
     const held = state();
     slotDown(hot.children[1]); slotUp(hot.children[1]);
     const moved = state();
@@ -132,7 +134,7 @@ test('Block World tells the player which hotbar slot holds the item a place ques
     const hint = G.hint && G.hint.s;
     press('Digit2');
     clickAt(px + 2.5, ground - 0.5, 2, 2);
-    return { ids: { table: B.TABLE, log: B.LOG }, bagHint, inBag, held, moved, backInBag, dragged, hint, sel: G.sel, placed: G.stats.placed[B.TABLE] || 0 };
+    return { ids: { table: B.TABLE, log: B.LOG }, bagHint, inBag, held, borders, moved, backInBag, dragged, hint, sel: G.sel, placed: G.stats.placed[B.TABLE] || 0 };
   });
   assert.match(result.bagHint, /الحقيبة/);
   assert.match(result.bagHint, /طاولة الصنع/);
@@ -142,6 +144,7 @@ test('Block World tells the player which hotbar slot holds the item a place ques
   assert.equal(result.held.cursor, result.ids.table);
   assert.equal(result.held.marks, 0);
   assert.equal(result.held.drop, true);
+  assert.deepEqual(result.borders, ['solid', 'dashed']);
   assert.match(result.held.tip, /انقر على خانة هنا لتضع طاولة الصنع/);
   assert.deepEqual(result.moved, { cursor: result.ids.log, table: true, marks: 0, drop: false, tip: '' });
   assert.equal(result.backInBag.marked, true);
