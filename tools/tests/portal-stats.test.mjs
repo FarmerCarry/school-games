@@ -13,7 +13,7 @@ const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : rep
 const DAY = '2026-10-08';
 const START = new Date('2026-10-08T09:00:00+03:00');
 const LIVE = 'sg:site:stats:live', META = 'sg:site:statsmeta';
-const GAME_KEYS = ['o', 'e', 'hh', 'b', 'ns', 'src', 'l', 'lb', 'ls', 'x', 't', 'f', 'tu', 'fav', 'lv'];
+const GAME_KEYS = ['o', 'e', 'hh', 'b', 'ns', 'src', 'l', 'ls', 'x', 't', 'f', 'tu', 'fav', 'lv'];
 const SOURCES = ['featured', 'catalog', 'recent', 'favorites', 'category', 'quick', 'search', 'related', 'surprise', 'reload', 'history', 'direct'];
 let browser, server, origin, pings = 0;
 
@@ -125,7 +125,7 @@ function checkRecord(record, day) {
   for (const [slug, g] of Object.entries(record.g)) {
     assert.deepEqual(Object.keys(g), GAME_KEYS, slug);
     for (const key of ['o', 'e', 'ns', 'ls', 'x', 't']) assert.ok(count(g[key]), slug + '.' + key);
-    for (const [key, length] of [['b', 4], ['l', 3], ['lb', 5], ['f', 4], ['tu', 2]]) {
+    for (const [key, length] of [['b', 4], ['l', 3], ['f', 4], ['tu', 2]]) {
       assert.ok(Array.isArray(g[key]) && g[key].length === length && g[key].every(count), slug + '.' + key);
     }
     assert.ok(g.fav === 0 || g.fav === 1);
@@ -149,8 +149,8 @@ test('a session spans restarts and re-renders, quits open rounds and matches the
   await game.evaluate(() => { window.last = { type: 'sg:stats', version: 1, e: 5000, f: [0, 0, 0, 0], m: 0, r: [['w', 'L2', 9000, 120]], o: '' }; });
   await click(page, '#restartBtn');
   game = await playing(page, 'air-hockey');
-  await post(page, game, stats(10000, [['s', 'L3']], 'L3'));
-  // A same-page re-render replaces the frame too; the open L3 becomes a quit.
+  await post(page, game, stats(10000, [['s', 'L3']], 'L3', { om: 6000 }));
+  // A same-page re-render replaces the frame too; the open L3 becomes a quit with its 6 s so far (om).
   await page.evaluate(() => dispatchEvent(new HashChangeEvent('hashchange')));
   game = await playing(page, 'air-hockey');
   await post(page, game, stats(15000, [['s', 'L3'], ['l', 'L3', 4000]], ''));
@@ -166,13 +166,13 @@ test('a session spans restarts and re-renders, quits open rounds and matches the
   assert.deepEqual(g.b, [0, 1, 0, 0], 'one closed session of 75 s');
   assert.equal(g.ns, 0);
   assert.deepEqual(g.src, { catalog: 1 });
-  assert.deepEqual([g.l, g.lb, g.ls], [[1, 0, 0], [1, 0, 0, 0, 0], 0], 'only the first frame is timed');
+  assert.deepEqual([g.l, g.ls], [[1, 0, 0], 0], 'only the first frame is timed');
   assert.deepEqual(g.f, [100, 10, 1, 0]);
   assert.deepEqual(record.s, { calm: 0, fs: 0, mute: 2 });
   assert.deepEqual(g.lv, {
     L1: [1, 1, 0, 0, 0, 0, 20000, 950, 950, 1, 1, 0],
     L2: [1, 1, 0, 0, 0, 0, 9000, 120, 120, 1, 1, 0],
-    L3: [2, 0, 1, 0, 0, 1, 4000, 0, 0, 0, 1, 1]
+    L3: [2, 0, 1, 0, 0, 1, 6000 + 4000, 0, 0, 0, 1, 1]
   });
   const meta = await read(page, META);
   assert.match(meta.pc.id, /^pc[a-z]{4}$/, 'the PC id is made on the first write');
@@ -186,7 +186,7 @@ test('late messages after Back are credited to the game that sent them, never to
   await page.goto(origin + '/#/');
   await click(page, '.catalog-grid .tile[data-slug="air-hockey"]');
   let game = await playing(page, 'air-hockey');
-  await post(page, game, stats(45000, [['s', 'L3']], 'L3'));
+  await post(page, game, stats(45000, [['s', 'L3']], 'L3', { om: 30000 }));
   const related = await page.evaluate(() => document.querySelector('.recommendations .tile').dataset.slug);
   await click(page, '.recommendations .tile');
   game = await playing(page, related);
@@ -211,7 +211,10 @@ test('late messages after Back are credited to the game that sent them, never to
   assert.deepEqual(record.g['tic-tac-toe'].src, { history: 1 }, 'a stale tile click is not used');
   const a = record.g['air-hockey'], b = record.g[related];
   assert.deepEqual([a.o, a.src, a.e, a.b, a.f], [2, { catalog: 1, history: 1 }, 45000, [2, 0, 0, 0], [0, 0, 0, 0]], 'nothing from the departed game reaches the next session');
-  assert.deepEqual(a.lv, { L3: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1] }, 'the open round became a quit');
+  // Changed on purpose: a quit the portal makes used to file 0 ms, so a free-play or
+  // endless round left open (the usual session) showed no time in the levels table.
+  // Now it keeps the engaged ms the frame's last message reported for it (om).
+  assert.deepEqual(a.lv, { L3: [1, 0, 0, 0, 0, 1, 30000, 0, 0, 0, 1, 1] }, 'the open round became a quit with its 30 s so far');
   assert.deepEqual([b.o, b.src, b.e, b.b, b.f], [1, { related: 1 }, 45000, [1, 0, 0, 0], [3, 0, 0, 0]]);
   assert.deepEqual(b.lv, { w1: [1, 0, 1, 0, 0, 0, 40000, 0, 0, 0, 1, 1] }, 'its last loss arrived after removal');
   assert.equal(record.s.mute, 1);
@@ -359,6 +362,11 @@ test('a hidden page writes but keeps its session; otherwise writes wait about a 
 test('load time counts only a session\'s first frame, and only while the page stayed visible', async t => {
   const state = await setup(t, { ready: false });
   const { page, context } = state;
+  // A record written before load buckets (lb) were dropped: still read and added to.
+  await page.goto(origin + '/seed.html');
+  await page.evaluate(day => localStorage.setItem('sg:site:stats:d:' + day, JSON.stringify({ v: 1, d: day, s: { calm: 0, fs: 0, mute: 0 },
+    g: { 'maze-dash': { o: 3, e: 0, hh: {}, b: [3, 0, 0, 0], ns: 0, src: {}, l: [3, 900, 400], lb: [3, 0, 0, 0, 0], ls: 0, x: 0, t: 0,
+      f: [0, 0, 0, 0], tu: [0, 0], fav: 0, lv: {} } } })), DAY);
   await page.goto(origin + '/#/play/air-hockey');
   let game = await playing(page, 'air-hockey');
   // The PC's clock is set back while the game loads (a time sync after a cold boot).
@@ -379,9 +387,9 @@ test('load time counts only a session\'s first frame, and only while the page st
 
   const record = await read(page);
   const a = record.g['air-hockey'], b = record.g['maze-dash'];
-  assert.deepEqual([a.l, a.lb, a.ls], [[1, 1500, 1500], [0, 1, 0, 0, 0], 0], 'a doubled sg:ready, a restart and a clock change do not count');
-  assert.deepEqual([b.l, b.lb, b.ls], [[0, 0, 0], [0, 0, 0, 0, 0], 1], 'a load while hidden is skipped');
-  assert.deepEqual([a.b, b.b], [[1, 0, 0, 0], [1, 0, 0, 0]]);
+  assert.deepEqual([a.l, a.ls, 'lb' in a], [[1, 1500, 1500], 0, false], 'a doubled sg:ready, a restart and a clock change do not count');
+  assert.deepEqual([b.l, b.ls, b.lb], [[3, 900, 400], 1, [3, 0, 0, 0, 0]], 'a load while hidden is skipped; old load buckets stay as they were');
+  assert.deepEqual([a.b, b.b], [[1, 0, 0, 0], [4, 0, 0, 0]]);
 });
 
 test('two portal pages add up, and stop and clear from another page take effect at once', async t => {
@@ -502,7 +510,7 @@ test('messages from other windows, and from a removed game after 2 s, are ignore
 test('a session left open by a crash or power cut is closed on the next load', async t => {
   const first = await setup(t);
   await first.page.goto(origin + '/#/play/air-hockey');
-  await post(first.page, await playing(first.page, 'air-hockey'), stats(90000, [['s', 'L5'], ['l', 'L5', 30000], ['s', 'L6']], 'L6'));
+  await post(first.page, await playing(first.page, 'air-hockey'), stats(90000, [['s', 'L5'], ['l', 'L5', 30000], ['s', 'L6']], 'L6', { om: 20000 }));
   await first.context.clock.runFor(60000);
   const live = await first.page.evaluate(k => localStorage.getItem(k), LIVE);
   const day = await first.page.evaluate(k => localStorage.getItem(k), 'sg:site:stats:d:' + DAY);
@@ -516,26 +524,29 @@ test('a session left open by a crash or power cut is closed on the next load', a
     time: { g: 'maze-dash', t: 'soon', e: 70000, r: 1 },
     path: { g: '../maze-dash', t: +START, e: 70000, r: 1 },
     text: 'text',
-    other: { g: 'tic-tac-toe', t: +START + 5000, e: 400000, r: 1, i: 'L3', q: '', p: 'L3' }
+    other: { g: 'tic-tac-toe', t: +START + 5000, e: 400000, r: 1, i: 'L3', q: '', p: 'L3', u: 7000 },
+    big: { g: 'maze-dash', t: +START + 5000, e: 1000, r: 1, i: 'L1', q: '', p: 'L1', u: 1e99 }
   };
   const second = await setup(t, { time: new Date(+START + 3600e3) });
   await second.page.goto(origin + '/seed.html');
   await second.page.evaluate(([live, day, key]) => { localStorage.setItem('sg:site:stats:live', live); localStorage.setItem(key, day); }, [JSON.stringify(entries), day, 'sg:site:stats:d:' + DAY]);
   await second.page.goto(origin + '/#/');
   // Another portal page might still be playing: entries are closed only when no page answers within 1.5 s.
-  assert.equal(Object.keys(await read(second.page, LIVE)).length, 7, 'the leftovers wait for the answers');
+  assert.equal(Object.keys(await read(second.page, LIVE)).length, 8, 'the leftovers wait for the answers');
   await second.context.clock.runFor(1500);
   const record = await read(second.page);
   checkRecord(record, DAY);
-  assert.deepEqual(Object.keys(record.g).sort(), ['air-hockey', 'tic-tac-toe']);
+  assert.deepEqual(Object.keys(record.g).sort(), ['air-hockey', 'maze-dash', 'tic-tac-toe']);
   const g = record.g['air-hockey'];
   assert.deepEqual([g.o, g.e, g.b, g.ns], [1, 90000, [0, 1, 0, 0], 0]);
+  // The open round's time so far was mirrored with the session (u, from om).
   assert.deepEqual(g.lv, {
     L5: [1, 0, 1, 0, 0, 0, 30000, 0, 0, 0, 1, 1],
-    L6: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1]
+    L6: [1, 0, 0, 0, 0, 1, 20000, 0, 0, 0, 1, 1]
   });
   const other = record.g['tic-tac-toe'];
-  assert.deepEqual([other.o, other.e, other.b, other.lv], [0, 0, [0, 0, 1, 0], { L3: [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1] }]);
+  assert.deepEqual([other.o, other.e, other.b, other.lv], [0, 0, [0, 0, 1, 0], { L3: [0, 0, 0, 0, 0, 1, 7000, 0, 0, 0, 0, 1] }]);
+  assert.equal(record.g['maze-dash'].lv.L1[6], 108e5, 'a stored round time is clamped to 3 hours');
   assert.deepEqual(await read(second.page, LIVE), {});
 });
 
@@ -561,6 +572,7 @@ test('storage stays bounded: 120 newest days, 300 KB in all, 16 KB a day, one re
   let keys = await dayKeys();
   assert.equal(keys.length, 120, 'the newest 120 day records are kept');
   assert.deepEqual([keys[0], keys.at(-1)], ['sg:site:stats:d:2026-06-07', 'sg:site:stats:d:' + DAY]);
+  assert.equal((await read(page, META)).pruned, undefined, 'the 120-day limit alone records no removal for space');
 
   // A full storage: the oldest day goes and the write is tried once more.
   await page.evaluate(() => {
@@ -575,6 +587,7 @@ test('storage stays bounded: 120 newest days, 300 KB in all, 16 KB a day, one re
   keys = await dayKeys();
   assert.deepEqual([keys.length, keys[0]], [119, 'sg:site:stats:d:2026-06-08']);
   assert.equal((await read(page)).g['air-hockey'].e, 3000);
+  assert.equal((await read(page, META)).pruned, '2026-06-07', 'a day removed for space is remembered for the teacher page');
 
   // Any other failure removes nothing: those numbers are simply not kept.
   await page.evaluate(() => {
@@ -618,6 +631,12 @@ test('storage stays bounded: 120 newest days, 300 KB in all, 16 KB a day, one re
   keys = await dayKeys();
   assert.equal(keys.at(-1), 'sg:site:stats:d:' + DAY);
   assert.ok(keys[0] > 'sg:site:stats:d:2026-06-20', 'the oldest days went first: ' + keys[0]);
+  // The seeded days are consecutive, so the newest one removed is the day before the oldest kept.
+  const kept = new Date(keys[0].slice(-10) + 'T00:00:00Z');
+  kept.setUTCDate(kept.getUTCDate() - 1);
+  const meta = await read(page, META);
+  assert.equal(meta.pruned, kept.toISOString().slice(0, 10), 'statsmeta names the newest day removed for space');
+  assert.match(meta.pc.id, /^pc[a-z]{4}$/, 'the rest of statsmeta is kept');
 });
 
 test('numbers are filed under the local date and hour they were recorded, with settings and hearts', async t => {

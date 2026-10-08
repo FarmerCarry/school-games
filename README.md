@@ -174,18 +174,28 @@ two-player modes mix players.
 - **Read:** choose a period (اليوم، هذا الأسبوع، آخر 30 يومًا، الكل). Four cards answer
   which games they play most, how long, at what time and where they stop. A table lists
   each game. Device status, how children reach the games, settings and first-time
-  tutorials are in folded sections below.
+  tutorials are in folded sections below. «Where they stop» lists only levels that can be
+  won or lost, with «فازوا في N من M محاولات» (tries include leaving the level); free play,
+  endless runs, 2048 boards and two-player modes are left out, and runs and boards show
+  their average and best score in the levels table instead. A game that is still open
+  shows its time with the note «مرة لعب ما زالت مفتوحة» until it is closed.
 - **Name the PC:** type a short label such as «جهاز 7». Never type a child's name.
 - **Export to Excel:** press **تصدير ملف Excel**. Each click saves one workbook,
   `play-stats_<pc>_<date>.xlsx`, with every stored day: an Arabic read-me sheet (اقرأني)
   and the tables `days`, `games`, `levels` and `hours`. **تصدير JSON** saves the same
-  data as a `.json` file. Export regularly: a PC keeps only its newest 120 days, and the
-  page shows a reminder when the oldest day not yet exported is more than 100 days old.
+  data as a `.json` file. Export every week: old days are removed when the statistics
+  space (300 KB) fills or after 120 days, whichever comes first, and a busy computer-lab
+  PC may keep only 2–3 months. The page shows a reminder when the space is more than
+  three-quarters full and nothing was exported for a week, when days were removed for
+  space before they were exported, or when the oldest day not yet exported is more than
+  100 days old. For privacy the `hours` table has no dates and lists a game's hour only
+  when it was played on at least 3 days.
 - **Combine PCs:** press **فتح ملفات من أجهزة أخرى** and choose the JSON files from other
   PCs to see them together. Nothing from those files is saved. In Excel, put the
-  workbooks in one folder and use **Data → Get Data → From Folder**. For each `pc` and
-  `date`, keep only the rows from the file with the newest `exported_at`; never add two
-  exports of the same PC and day.
+  workbooks in one folder and use **Data → Get Data → From Folder**. Drop rows where `pc`
+  is empty (an empty table keeps one blank row). For each `pc` and `date`, keep only the
+  rows from the file with the newest `exported_at`; never add two exports of the same PC
+  and day.
 - **Stop or clear:** stop collecting (type «أوقف» to confirm) or clear this PC's
   statistics (type «امسح»). Clearing never removes game progress, the PC name or the
   stop setting. Clearing the browser's site data also deletes the statistics.

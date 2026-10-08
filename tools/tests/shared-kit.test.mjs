@@ -218,7 +218,7 @@ test('stats: key presses and clicks open 20 s engaged windows that merge; moves,
   h.Kit.ready();
   h.window.emit('pointermove'); h.window.emit('wheel'); h.Kit.stats.busy();
   clock.now = 9000; h.Kit.stats.round('L1');
-  assert.deepEqual(lastStats(h), {type: 'sg:stats', version: 1, e: 0, f: [0, 0, 0, 0], m: 0, r: [['s', 'L1']], o: 'L1'}, 'moves, the wheel and busy() never open a window');
+  assert.deepEqual(lastStats(h), {type: 'sg:stats', version: 1, e: 0, f: [0, 0, 0, 0], m: 0, r: [['s', 'L1']], o: 'L1', om: 0}, 'moves, the wheel and busy() never open a window');
   key();                                                          // open until 29 000
   clock.now = 19000; h.window.emit('pointermove');                // until 39 000
   clock.now = 30000; h.window.emit('wheel');                      // until 50 000
@@ -227,7 +227,7 @@ test('stats: key presses and clicks open 20 s engaged windows that merge; moves,
   clock.now = 100000; h.window.emit('pointerdown', {button: 0});  // a new window until 120 000
   clock.now = 104000; key();                                      // overlapping windows merge: until 124 000
   clock.now = 110000; h.Kit.stats.end('win');
-  assert.deepEqual(lastStats(h), {type: 'sg:stats', version: 1, e: 56000 + 10000, f: [0, 0, 0, 0], m: 0, r: [['w', 'L1', 66000]], o: ''});
+  assert.deepEqual(lastStats(h), {type: 'sg:stats', version: 1, e: 56000 + 10000, f: [0, 0, 0, 0], m: 0, r: [['w', 'L1', 66000]], o: '', om: 0});
   clock.now = 200000; key();
   clock.now = 260000; h.Kit.stats.round('L2');
   assert.equal(lastStats(h).e, 14000 + 20000, 'each window ends 20 s after its last input');
@@ -239,7 +239,7 @@ test('stats: every pause and pagehide cuts the window at once, posts, and disarm
     h.Kit.ready(); h.Kit.stats.round('main'); h.sent.length = 0;
     h.window.emit('pointerdown', {button: 0});
     clock.now = 8000; pause(h);
-    assert.deepEqual(statsOf(h), [{type: 'sg:stats', version: 1, e: 3000, f: [0, 0, 0, 0], m: 0, r: [], o: 'main'}], reason);
+    assert.deepEqual(statsOf(h), [{type: 'sg:stats', version: 1, e: 3000, f: [0, 0, 0, 0], m: 0, r: [], o: 'main', om: 3000}], reason);
     clock.now = 9000; h.window.emit('pointermove'); h.window.emit('wheel'); h.Kit.stats.busy(); h.Kit.stats.frame(16);
     clock.now = 20000; runTimers(h);
     assert.equal(statsOf(h).length, 1, `${reason}: a disarmed game counts nothing for mouse moves, the wheel or busy()`);
@@ -274,6 +274,25 @@ test('stats: round() records an open round as a quit, end() needs an open round,
     // Kit does not clean or clamp; the portal checks ids, codes and numbers.
     [0, [['W', 'x'.repeat(24), 0, -3]], ''],
     [0, [['s', '12']], '12']
+  ]);
+});
+
+// om lets the portal keep the time of a round the child leaves open (Back, a portal
+// restart, a reload): Kit puts a round's ms on its end or 'q' event only.
+test('stats: every message carries om, the engaged ms so far in the round open now (0 when none)', () => {
+  const clock = {now: 0}, h = harness({clock});
+  h.Kit.ready(); h.window.emit('keydown', {code: 'KeyA'});         // open until 20 000
+  clock.now = 1000; h.Kit.stats.round('L1');                       // 1 s engaged before the round
+  clock.now = 4000; runTimers(h);                                  // the 10 s timer: 3 s into L1
+  clock.now = 6000; h.window.emit('blur');                         // a pause cuts the window: 5 s
+  h.window.emit('keydown', {code: 'KeyA'}); clock.now = 7500; h.Kit.stats.round('L2');
+  clock.now = 9000; h.Kit.stats.end('win');
+  assert.deepEqual(statsOf(h).map(m => [m.e, m.r, m.o, m.om]), [
+    [1000, [['s', 'L1']], 'L1', 0],
+    [3000, [], 'L1', 3000],
+    [2000, [], 'L1', 5000],
+    [1500, [['q', 'L1', 6500], ['s', 'L2']], 'L2', 0],
+    [1500, [['w', 'L2', 1500]], '', 0]
   ]);
 });
 
@@ -352,10 +371,10 @@ test('stats: nothing is posted at load or before Kit.ready(); afterwards round()
   h.window.emit('keydown', {code: 'KeyA'}); clock.now = 3300; h.window.emit('pagehide');
   h.window.emit('pagehide'); h.window.emit('blur');
   assert.deepEqual(statsOf(h), [
-    {type: 'sg:stats', version: 1, e: 2500, f: [0, 0, 0, 0], m: 0, r: [['s', 'L1'], ['w', 'L1', 2000, 7], ['s', 'L2']], o: 'L2'},
-    {type: 'sg:stats', version: 1, e: 500, f: [0, 0, 0, 0], m: 0, r: [['l', 'L2', 500]], o: ''},
-    {type: 'sg:stats', version: 1, e: 200, f: [0, 0, 0, 0], m: 1, r: [], o: ''},
-    {type: 'sg:stats', version: 1, e: 100, f: [0, 0, 0, 0], m: 0, r: [], o: ''}
+    {type: 'sg:stats', version: 1, e: 2500, f: [0, 0, 0, 0], m: 0, r: [['s', 'L1'], ['w', 'L1', 2000, 7], ['s', 'L2']], o: 'L2', om: 0},
+    {type: 'sg:stats', version: 1, e: 500, f: [0, 0, 0, 0], m: 0, r: [['l', 'L2', 500]], o: '', om: 0},
+    {type: 'sg:stats', version: 1, e: 200, f: [0, 0, 0, 0], m: 1, r: [], o: '', om: 0},
+    {type: 'sg:stats', version: 1, e: 100, f: [0, 0, 0, 0], m: 0, r: [], o: '', om: 0}
   ], 'repeated pauses with nothing new post nothing');
 });
 
@@ -392,7 +411,8 @@ test('stats: every call is safe with any argument, and every payload survives JS
   assert.ok(statsOf(h).length > odd.length);
   assert.deepEqual(h.clones, h.sent, 'structured clones match the JSON copies');
   for (const m of statsOf(h)) {
-    assert.deepEqual(Object.keys(m), ['type', 'version', 'e', 'f', 'm', 'r', 'o']);
+    assert.deepEqual(Object.keys(m), ['type', 'version', 'e', 'f', 'm', 'r', 'o', 'om']);
+    assert.ok(Number.isInteger(m.om) && m.om >= 0 && (m.o || !m.om), 'om is whole milliseconds, 0 with no open round');
     assert.ok(m.r.every(event => typeof event[0] === 'string' && event[0].length <= 1 && event.length <= 4));
     assert.ok(m.r.every(event => event.slice(1).every(v => typeof v === 'string' ? v.length <= 24 : Number.isFinite(v))));
   }

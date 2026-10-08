@@ -589,7 +589,8 @@
     G.winPending = G.won && !G.keep; G.maxT = G.board.maxTile(); G.newBest = G.startBest > 0 && G.score > G.startBest;
     G.shownScore = G.score;
     // Play statistics: a new or resumed board is a round 's'+N; it ends with
-    // 'win' at the first goal tile, else at game over ('end' after a win).
+    // 'win' at the first goal tile, else as a neutral 'end' with the score when
+    // the board fills up (a full board is the natural end, not a loss).
     Kit.stats.round('s' + N);
     setScreen('play');
     refreshHUD(true);
@@ -761,7 +762,7 @@
 
   function showOver() {
     var N = G.N;
-    Kit.stats.end(G.won ? 'end' : 'lose', G.score);
+    Kit.stats.end('end', G.score);
     setScreen('over');
     $('overScore').textContent = Kit.fmt(G.score);
     $('overBestVal').textContent = Kit.fmt(save.best[N]);

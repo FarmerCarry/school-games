@@ -65,6 +65,7 @@ a { color: #0a63b8; }
 :focus-visible { outline: 4px solid var(--pink); outline-offset: 2px; }
 button, input { font: inherit; color: inherit; }
 bdi[dir="ltr"] { unicode-bidi: isolate; }
+bdi.id { white-space: nowrap; }
 
 .top {
   display: flex;

@@ -62,6 +62,7 @@ const META = { pc: { id: 'pcabcd', label: 'جهاز 7' }, off: false, since: '20
 function seed() {
   return {
     'sg:site:stats:d:2026-10-08': day('2026-10-08', {
+      // lb (load buckets) is no longer recorded; older records that have it still read.
       'candy-rope': { o: 4, e: 1260431, hh: { 9: 840212, 10: 420219 }, b: [1, 1, 2, 0], ns: 1,
         src: { recent: 2, category: 1, direct: 1 }, l: [4, 5230, 2100], lb: [2, 2, 0, 0, 0], ls: 0, x: 1, t: 0,
         f: [8120, 960, 44, 2], tu: [1, 1], fav: 1,
@@ -261,8 +262,10 @@ test('stored day records are checked field by field; foreign or broken values ar
   const odd = api.parseDay('2026-10-08', day('2026-10-08', { 'tic-tac-toe': { e: Infinity, o: '3', b: 'x', lv: { L1: 'x', L2: [1, -1, 1e99] }, fav: 'yes' } }));
   assert.deepEqual(odd.g['tic-tac-toe'], { o: 0, e: 0, hh: {}, b: [0, 0, 0, 0], ns: 0, src: {}, l: [0, 0, 0], ls: 0, x: 0, t: 0,
     f: [0, 0, 0, 0], tu: [0, 0], fav: 0, lv: { L2: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } });
-  assert.deepEqual(api.parseMeta('{"pc":{"id":"PC-1","label":"=x"},"off":"yes"}'), { raw: { pc: { id: 'PC-1', label: '=x' }, off: 'yes' },
-    id: '', label: 'x', off: false, offSince: 0, clearedAt: 0, since: '', lastExport: 0 });
+  assert.deepEqual(api.parseMeta('{"pc":{"id":"PC-1","label":"=x"},"off":"yes","pruned":"2026-02-30"}'), {
+    raw: { pc: { id: 'PC-1', label: '=x' }, off: 'yes', pruned: '2026-02-30' },
+    id: '', label: 'x', off: false, offSince: 0, clearedAt: 0, since: '', lastExport: 0, pruned: '' });
+  assert.equal(api.parseMeta('{"pruned":"2026-07-14"}').pruned, '2026-07-14');
 });
 
 test('PC labels: at most 16 characters, no leading = + - @, no control characters', () => {
@@ -293,11 +296,26 @@ test('tables: one row per day, game, level and game-hour, with additive numbers'
     ['2026-10-08', 'candy-rope', 'L3', 6, 4, 96], ['2026-10-08', 'candy-rope', 'L4', 2, 1, 30], ['2026-10-08', 'rail-rush', 'endless', 6, 0, 250]]);
   const endless = t.levels.at(-1);
   assert.deepEqual([endless.ends, endless.score_sum, endless.score_count, endless.score_max], [6, 6000, 6, 1800]);
-  assert.deepEqual(t.hours.map(r => [r.game, r.hour, r.seconds, r.days]), [['candy-rope', 9, 840, 1], ['candy-rope', 10, 420, 1],
-    ['candy-rope', 11, 600, 1], ['merge-2048', 8, 120, 1], ['rail-rush', 10, 300, 1], ['tic-tac-toe', 12, 900, 1]]);
+  // Every seeded game and hour was played on fewer than 3 days: no hours row is exported.
+  assert.deepEqual(t.hours, []);
   const json = api.exportJson(t, info);
   assert.deepEqual(Object.keys(json), ['format', 'v', 'pc', 'exported_at', 'tables']);
   assert.deepEqual(json.pc, { id: 'pcabcd', label: 'جهاز 7', copy: 'web' });
+});
+
+test('hours rows are exported only for a game and hour played on at least 3 days', () => {
+  const rec = (d, hh) => api.parseDay(d, day(d, { 'candy-rope': { o: 1, e: 1, hh, b: [1, 0, 0, 0] } }));
+  const days = [rec('2026-10-05', { 9: 60000, 10: 60000 }), rec('2026-10-06', { 9: 30000 }), rec('2026-10-07', { 9: 90000, 10: 1000 })];
+  assert.deepEqual(api.tables(days, info).hours.map(r => [r.game, r.hour, r.seconds, r.days]), [['candy-rope', 9, 180, 3]],
+    'hour 10, played on 2 days, is left out');
+  assert.deepEqual(api.tables(days.slice(1), info).hours, [], 'a short export has no hours rows at all');
+  // The page's own hours chart still uses every local day.
+  assert.deepEqual(api.hoursFromDays(days, '', '').slice(9, 11), [180, 61]);
+});
+
+test('durations: under a minute is never «دقيقة واحدة»', () => {
+  assert.deepEqual([0, 1, 30, 59.9, 60, 89, 150, 3720, 7200].map(api.duration),
+    ['0', 'أقل من دقيقة', 'أقل من دقيقة', 'أقل من دقيقة', 'دقيقة واحدة', 'دقيقة واحدة', '3 دقائق', 'ساعة واحدة ودقيقتان', 'ساعتان']);
 });
 
 test('periods, summaries and where children stop', () => {
@@ -312,17 +330,19 @@ test('periods, summaries and where children stop', () => {
   assert.deepEqual(week.games.map(g => [g.game, g.seconds, g.sessions, g.short, g.days, g.hearted]),
     [['candy-rope', 1860, 4, 1, 2, 1], ['rail-rush', 300, 1, 1, 1, 0]]);
   const candy = week.games[0];
+  assert.deepEqual(candy.levels.map(l => [l.level, l.winnable]), [['L3', true], ['L4', true]]);
   assert.deepEqual(api.stuck(candy.levels).map(l => [l.level, l.gaveUp, l.visits]), [['L3', 6, 8]], 'L4 has under 5 visits');
-  assert.deepEqual(api.levelResult(candy.levels[0]), { win: 1 / 6 });
+  // L3: 1 win, 5 losses and 2 quits are 8 tries.
+  assert.deepEqual(api.levelResult(candy.levels[0]), { win: 1 / 8, wins: 1, tries: 8 });
+  assert.equal(api.levelResult(candy.levels[1]), null, 'under 5 tries');
+  assert.equal(week.games[1].levels[0].winnable, false);
   assert.deepEqual(api.levelResult(week.games[1].levels[0]), { avg: 1000, best: 1800 });
-  assert.deepEqual(api.stuck(week.games[1].levels), [], 'a level nobody gave up on is not listed');
-  const many = ['A', 'B', 'C', 'D'].map((level, i) => ({ level, visits: 10, gaveUp: i + 1, wins: 1, losses: 1 }));
+  assert.deepEqual(api.stuck(week.games[1].levels), [], 'an endless run is never a place children stop');
+  const many = api.markWinnable(['A', 'B', 'C', 'D'].map((level, i) => ({ level, visits: 10, gaveUp: i + 1, wins: 1, losses: 1, draws: 0, ends: 0, quits: 0 })));
   assert.deepEqual(api.stuck(many).map(l => l.level), ['D', 'C', 'B'], 'three highest give-up shares within one game');
-  // Free play, endless runs and two-player modes end without a winner, and the
-  // folded '_other' row is not one level: leaving them is not giving up.
-  const unranked = [{ level: 'main', visits: 9, gaveUp: 9, wins: 0, losses: 0 }, { level: '_other', visits: 9, gaveUp: 9, wins: 2, losses: 5 }];
-  assert.deepEqual(api.stuck(unranked), []);
-  assert.equal(api.levelResult({ wins: 0, losses: 0, draws: 7, scoreCount: 0 }), null, 'draws alone show no win share');
+  // The folded '_other' row is not one level.
+  assert.deepEqual(api.stuck(api.markWinnable([{ level: '_other', visits: 9, gaveUp: 9, wins: 2, losses: 5, draws: 0, ends: 0, quits: 2 }])), []);
+  assert.equal(api.levelResult({ level: 'local', wins: 0, losses: 0, draws: 7, ends: 0, quits: 0, scoreCount: 0 }), null, 'draws alone show no win share');
   assert.equal(api.verdict(candy.f, candy.loads, candy.loadSum), 'smooth');
   assert.equal(api.verdict([500, 50, 0, 0], 0, 0), '', 'under 600 counted frames');
   assert.equal(api.verdict([500, 300, 150, 0], 1, 1000), 'slow');
@@ -331,6 +351,78 @@ test('periods, summaries and where children stop', () => {
   assert.deepEqual(hours.map(Math.round).slice(8, 13), [0, 840, 720, 600, 0]);
   assert.equal(api.oldestUnexported(days, 0), '2026-06-01');
   assert.equal(api.oldestUnexported(days, new Date(2026, 9, 6, 12).getTime()), '2026-10-06');
+});
+
+// A level counts when children can win or lose it: it was won or lost and never
+// ended without a winner, or it was only left in a game that has such levels.
+test('where they stop: winnable levels only, with quits counted as tries', () => {
+  const L = (level, o) => ({ level, starts: 0, visits: 0, gaveUp: 0, wins: 0, losses: 0, draws: 0, ends: 0, quits: 0, seconds: 0,
+    scoreSum: 0, scoreCount: 0, scoreMax: 0, ...o });
+  const flags = levels => api.markWinnable(levels).map(l => [l.level, l.winnable]);
+  // troll-level: a death respawns inside the level, so every level is won or left.
+  const troll = api.markWinnable([L('L1', { starts: 5, visits: 5, wins: 5 }), L('L2', { starts: 5, visits: 5, quits: 5, gaveUp: 5 })]);
+  assert.deepEqual(troll.map(l => l.winnable), [true, true]);
+  assert.deepEqual(api.stuck(troll).map(l => [l.level, l.gaveUp, l.visits]), [['L2', 5, 5]], 'the level everyone abandons is shown');
+  assert.deepEqual([api.levelResult(troll[0]), api.levelResult(troll[1])], [{ win: 1, wins: 5, tries: 5 }, { win: 0, wins: 0, tries: 5 }]);
+  // merge-2048: a full board is a neutral end, even on a board size whose goal tile was reached once.
+  const merge = api.markWinnable([L('s3', { starts: 9, visits: 9, wins: 1, ends: 3, quits: 5, gaveUp: 5, scoreSum: 4000, scoreCount: 4, scoreMax: 1800 }),
+    L('s4', { starts: 6, visits: 6, quits: 6, gaveUp: 6 })]);
+  assert.deepEqual(merge.map(l => l.winnable), [false, false]);
+  assert.deepEqual(api.stuck(merge), []);
+  assert.deepEqual(api.levelResult(merge[0]), { avg: 1000, best: 1800 }, 'a board shows its average and best score');
+  // Free play and endless runs: games with nothing to win, whether rounds ended or were left.
+  assert.deepEqual(flags([L('main', { starts: 6, visits: 6, ends: 1, quits: 5, gaveUp: 5 })]), [['main', false]]);
+  assert.deepEqual(flags([L('endless', { starts: 7, visits: 7, quits: 7, gaveUp: 7 })]), [['endless', false]]);
+  // Two-player modes never count, even when only left beside matches against the computer.
+  assert.deepEqual(flags([L('local', { starts: 6, visits: 6, quits: 6, gaveUp: 6 }), L('cpu-easy', { starts: 6, visits: 6, wins: 3, losses: 2, draws: 1 }),
+    L('duo', { quits: 5 }), L('pvp', { wins: 2 })]), [['local', false], ['cpu-easy', true], ['duo', false], ['pvp', false]]);
+  // A level that was only left counts in a game with won or lost levels, unless it ever ended neutrally or in a draw.
+  assert.deepEqual(flags([L('L1', { wins: 2 }), L('L2', { quits: 3 }), L('L3', { quits: 3, ends: 1 }), L('L4', { quits: 3, draws: 1 }),
+    L('L5', { losses: 1, draws: 4 })]), [['L1', true], ['L2', true], ['L3', false], ['L4', false], ['L5', true]]);
+  assert.deepEqual(api.levelResult(L('L5', { winnable: true, wins: 1, losses: 1, draws: 2, quits: 1 })), { win: 0.2, wins: 1, tries: 5 },
+    'tries are wins, losses, draws and quits');
+});
+
+test('combined days count distinct dates; averages leave out sessions still open', () => {
+  const { days } = api.readStore(fakeStorage(seed()));
+  const local = { pc: { id: 'pcabcd', label: 'جهاز 7', copy: 'web' }, exported_at: EXPORTED_AT, tables: api.tables(days, info), local: true };
+  // Another PC played candy-rope on 6 and 8 October too.
+  const other = api.readImport(JSON.stringify(otherPcFile('جهاز 9', '2026-10-08T10:00:00+03:00', ['2026-10-06', '2026-10-08'],
+    [['2026-10-06', 'candy-rope', 600, 1], ['2026-10-08', 'candy-rope', 600, 1]], [])), names);
+  const week = api.summary(api.combine([local, other]).tables, '2026-10-04', '2026-10-08');
+  const candy = week.games.find(g => g.game === 'candy-rope');
+  assert.deepEqual([candy.days, candy.pcs, week.pcs], [2, 2, 2], 'two dates on two PCs are two play days');
+  // Today a game is open: 3 minutes of play, no closed session yet.
+  const open = api.parseDay('2026-10-08', day('2026-10-08', {
+    'connect-four': { o: 1, e: 180000, hh: { 10: 180000 }, b: [0, 0, 0, 0] },
+    'candy-rope': { o: 2, e: 240000, hh: { 9: 240000 }, b: [0, 2, 0, 0] }
+  }));
+  const s = api.summary(api.tables([open], info), '2026-10-08', '2026-10-08');
+  assert.deepEqual(s.games.map(g => [g.game, g.open]), [['candy-rope', false], ['connect-four', true]]);
+  assert.deepEqual([s.seconds, s.closedSeconds, s.sessions], [420, 240, 2], 'the average is 240 s over 2 sessions, not 420 s');
+});
+
+test('the export reminder: days removed for space, a nearly full PC, or an old day not exported', () => {
+  const days = ['2026-06-01', '2026-10-01', '2026-10-08'].map(d => ({ d, s: {}, g: {} }));
+  const meta = o => ({ lastExport: 0, pruned: '', ...o });
+  const at = (m, d) => new Date(2026, m - 1, d, 12).getTime();
+  const recent = days.slice(1);
+  assert.equal(api.reminder(recent, meta({ lastExport: at(10, 2) }), 1000, '2026-10-08'), null);
+  // (c) The oldest day not exported is more than 100 days old.
+  assert.deepEqual(api.reminder(days, meta(), 1000, '2026-10-08'), { pruned: '', used: 0, oldest: '2026-06-01', age: 129 });
+  // (b) The portal removed a day for space that the last export did not cover completely.
+  assert.equal(api.reminder(recent, meta({ pruned: '2026-07-14' }), 1000, '2026-10-08').pruned, '2026-07-14', 'never exported');
+  assert.equal(api.reminder(recent, meta({ pruned: '2026-10-02', lastExport: at(10, 2) }), 1000, '2026-10-08').pruned, '2026-10-02');
+  assert.equal(api.reminder(recent, meta({ pruned: '2026-10-01', lastExport: at(10, 2) }), 1000, '2026-10-08'), null, 'exported before it went');
+  // (a) Over 75 % of the 300 KB cap, unless an export in the last 7 days already holds the oldest days.
+  assert.equal(api.reminder(recent, meta(), 230400, '2026-10-08'), null, 'exactly 75 %');
+  assert.equal(api.reminder(recent, meta(), 245760, '2026-10-08').used, 0.8);
+  assert.equal(api.reminder(recent, meta({ lastExport: at(10, 2) }), 245760, '2026-10-08'), null, 'exported 6 days ago');
+  assert.equal(api.reminder(recent, meta({ lastExport: at(10, 1) }), 245760, '2026-10-08').used, 0.8, 'exported 7 days ago');
+  // readStore counts every stats key as the portal does, and nothing else.
+  const record = day('2026-10-08', {});
+  const store = fakeStorage({ 'sg:site:stats:d:2026-10-08': record, 'sg:site:statsmeta': '{}', 'sg:site:stats:live': '{}', other: 'x'.repeat(99) });
+  assert.equal(api.readStore(store).bytes, 'sg:site:stats:d:2026-10-08'.length + record.length + 'sg:site:statsmeta{}'.length + 'sg:site:stats:live{}'.length);
 });
 
 test('combining keeps only the newest export of each PC and day, and of each PC\'s hours', () => {
@@ -375,6 +467,9 @@ test('the workbook is a stored ZIP of well-formed parts: RTL sheets, an Arabic r
   for (const table of Object.keys(CONTRACT)) assert.deepEqual(back[table], t[table], table + ' rows survive the round trip');
   const empty = checkWorkbook(api.xlsx(api.tables([], info), info, new Date(2026, 9, 8, 10, 30)));
   for (const table of Object.keys(CONTRACT)) assert.deepEqual(empty[table], [], 'an empty ' + table + ' table keeps a valid range');
+  const readme = unescapeXml(unzip(api.xlsx(t, info)).get('xl/worksheets/sheet1.xml'));
+  for (const text of ['عندما تمتلئ مساحة الإحصاءات أو بعد 120 يومًا، أيهما أسبق', 'شهرين أو ثلاثة', 'في 3 أيام أو أكثر',
+    'احذف الصفوف التي يكون فيها pc فارغًا']) assert.ok(readme.includes(text), 'the read-me says: ' + text);
   // Text that looks like XML or a formula stays plain text.
   const tricky = { ...info, label: '<b>&"x"' };
   const trickyRead = checkWorkbook(api.xlsx(api.tables(days, tricky), tricky));
@@ -440,13 +535,17 @@ test('seeded records show the right numbers, and the period choice changes them'
   assert.match(await page.locator('#cardTime').textContent(), /36 دقيقة.*متوسط مرة اللعب: 5 دقائق.*مرات اللعب: 5 · خرجوا بسرعة: 2/s);
   assert.match(await page.locator('#cardTop li').first().textContent(), /4 مرات · 31 دقيقة/);
   assert.deepEqual(await page.locator('#cardHours .hour').evaluateAll(bars => bars.map(b => b.dataset.hour)), ['9', '10', '11']);
-  assert.match(await page.locator('#cardStuck li').textContent(), /L3.*توقفوا عندها 6 من 8 زيارات/);
+  assert.match(await page.locator('#cardStuck li').textContent(), /المرحلة أو الوضع L3 — توقفوا عندها 6 من 8 زيارات/);
   assert.deepEqual(await page.locator('#stuck li').evaluateAll(items => items.map(i => [i.dataset.level, i.dataset.gaveUp, i.dataset.visits])), [['L3', '6', '8']]);
-  assert.match(await page.locator('#stuck li').textContent(), /الفوز 17%/);
+  assert.match(await page.locator('#stuck li').textContent(), /^المرحلة أو الوضع L3: .*فازوا في 1 من 8 محاولات$/);
+  assert.equal(await page.locator('#lv-candy-rope tr[data-level="L3"] td').nth(2).textContent(), '6');
   // The game name opens that game's levels.
   await gameRow(page, 'rail-rush').locator('a').click();
   assert.equal(await page.locator('#lv-rail-rush').getAttribute('open'), '');
   assert.match(await page.locator('#lv-rail-rush tr[data-level="endless"]').textContent(), /متوسط النتيجة 1,000 · أفضل نتيجة 1,800/);
+  // Leaving an endless run is not giving up: no figure in that column.
+  assert.deepEqual(await page.locator('#lv-rail-rush tr[data-level="endless"] td').allTextContents(), ['6', '6', '—', 'متوسط النتيجة 1,000 · أفضل نتيجة 1,800', '4 دقائق']);
+  assert.equal(await page.locator('#lv-rail-rush thead th').first().textContent(), 'المرحلة أو الوضع');
   // Device status, launch sources, settings and the first-time tutorial.
   await page.locator('#deviceSection summary').click();
   assert.equal(await page.locator('#device tr[data-game="candy-rope"]').getAttribute('data-verdict'), 'smooth');
@@ -458,7 +557,7 @@ test('seeded records show the right numbers, and the period choice changes them'
   assert.deepEqual(await page.locator('#tutorials tr[data-game="candy-rope"] td').allTextContents(), ['1', '1']);
   // Source and reminder: the oldest day (1 June) has never been exported.
   assert.match(await page.locator('#source').textContent(), /نسخة الموقع على الإنترنت.*البيانات منذ 1\/6\/2026 · الأيام المحفوظة: 5.*اسم الجهاز: جهاز 7 · المعرّف: pcabcd/s);
-  assert.match(await page.locator('#reminder').textContent(), /قبل 129 يومًا/);
+  assert.match(await page.locator('#reminder').textContent(), /قبل 129 يومًا.*عندما تمتلئ مساحة الإحصاءات أو بعد 120 يومًا، أيهما أسبق.*شهرين أو ثلاثة/);
 
   for (const [period, numbers, total] of [['today', [1260, 3, 1, 1], 1560], ['month', [1860, 4, 1, 2], 3060], ['all', [1860, 4, 1, 2], 3180]]) {
     await page.locator(`input[name="period"][value="${period}"]`).check();
@@ -494,7 +593,9 @@ test('exports download every stored day with the right names and the contract fo
     [['2026-06-01', 1], ['2026-09-20', 1], ['2026-10-02', 1], ['2026-10-06', 1], ['2026-10-08', 0]]);
   assert.deepEqual(exported.tables.games.map(r => r.game), ['merge-2048', 'tic-tac-toe', 'candy-rope', 'candy-rope', 'rail-rush']);
   assert.equal(exported.tables.games.find(r => r.game === 'tic-tac-toe').game_name, names['tic-tac-toe']);
-  assert.equal(exported.tables.hours.length, 6);
+  // Each seeded game and hour was played on fewer than 3 days: left out of the files, still on the page.
+  assert.deepEqual(exported.tables.hours, []);
+  assert.ok(await page.locator('#cardHours .hour').count() > 0);
   assert.ok(hardware.length > 3);
   for (const text of [JSON.stringify(exported), workbookBytes.toString('utf8')]) {
     assert.equal(text.includes(hardware), false, 'the graphics chip is never exported');
@@ -518,6 +619,8 @@ test('files from other PCs are viewed together: the newest export per PC and day
   // 1860 s here, plus 600 s on 4 October and the newer 1800 s (not 1200 + 1800) on 5 October.
   assert.deepEqual(await rowNumbers(page, 'candy-rope'), [4260, 8, 1, 4]);
   assert.deepEqual(await rowNumbers(page, 'tic-tac-toe'), [300, 1, 0, 1]);
+  assert.equal(await gameRow(page, 'candy-rope').locator('td').nth(3).textContent(), '4على جهازين');
+  assert.equal(await gameRow(page, 'tic-tac-toe').locator('td').nth(3).textContent(), '1على جهاز واحد');
   assert.match(await page.locator('#combined tr[data-pc="pcabcd"]').textContent(), /جهاز 7.*هذا الجهاز.*1\/6\/2026.*8\/10\/2026/s);
   const other = page.locator('#combined tr[data-pc="pcwxyz"]');
   assert.match(await other.textContent(), /4\/10\/2026.*6\/10\/2026/s);
@@ -531,7 +634,7 @@ test('files from other PCs are viewed together: the newest export per PC and day
 });
 
 test('clearing needs the typed word and removes only sg:site:stats: keys; stop and resume set the settings', async t => {
-  const page = await teacherPage(t);
+  const page = await teacherPage(t, { entries: { ...seed(), 'sg:site:statsmeta': JSON.stringify({ ...META, pruned: '2026-05-30' }) } });
   // Name this PC: the label rules apply.
   await page.locator('#pcLabel').fill('=+مختبر الحاسوب الكبير رقم 12');
   const label = api.cleanLabel(await page.locator('#pcLabel').inputValue());
@@ -576,6 +679,47 @@ test('clearing needs the typed word and removes only sg:site:stats: keys; stop a
   assert.match(await page.locator('#clearStatus').textContent(), /مُسحت/);
   assert.equal(await page.locator('#gameTable tbody tr').count(), 0);
   assert.match(await page.locator('#source').textContent(), /لا توجد بيانات بعد/);
+});
+
+test('a game still open and days removed for space are explained, not hidden', async t => {
+  // Opened from 🏫 while connect-four is still open: 3 minutes of play, no closed session yet.
+  // The portal removed 2 October for space; the last export was on 1 October.
+  const entries = {
+    'sg:site:stats:d:2026-10-08': day('2026-10-08', { 'connect-four': { o: 1, e: 180000, hh: { 10: 180000 }, b: [0, 0, 0, 0] } }),
+    'sg:site:stats:d:2026-10-05': day('2026-10-05', { 'troll-level': { o: 5, e: 400000, hh: { 9: 400000 }, b: [0, 5, 0, 0],
+      lv: { L1: [5, 5, 0, 0, 0, 0, 200000, 15, 3, 5, 5, 0], L2: [5, 0, 0, 0, 0, 5, 150000, 0, 0, 0, 5, 5] } } }),
+    'sg:site:statsmeta': JSON.stringify({ pc: { id: 'pcabcd' }, lastExport: new Date('2026-10-01T12:00:00+03:00').getTime(), pruned: '2026-10-02' })
+  };
+  const page = await teacherPage(t, { entries });
+  await page.locator('input[name="period"][value="today"]').check();
+  assert.equal(await page.locator('#cardTop').textContent(), 'مرة لعب ما زالت مفتوحة، وتظهر هنا بعد إغلاق اللعبة.');
+  assert.match(await page.locator('#cardTime').textContent(), /^3 دقائق.*متوسط مرة اللعب: —.*مرات اللعب: 0 · خرجوا بسرعة: 0.*ما زالت مفتوحة/s);
+  assert.equal(await gameRow(page, 'connect-four').locator('td').nth(1).textContent(), '0ما زالت مفتوحة');
+  assert.match(await page.locator('#reminder').textContent(),
+    /^تذكير: امتلأت مساحة الإحصاءات على هذا الجهاز، فحُذفت أيام قديمة لم تُصدَّر، آخرها 2\/10\/2026\. صدّر ملف Excel الآن\. .*أيهما أسبق/);
+  // The week: troll-level's L2, which all five children left, is where they stop.
+  await page.locator('input[name="period"][value="week"]').check();
+  assert.match(await page.locator('#cardStuck').textContent(), /المرحلة أو الوضع L2 — توقفوا عندها 5 من 5 زيارات/);
+  assert.match(await page.locator('#stuck li[data-level="L2"]').textContent(), /فازوا في 0 من 5 محاولات/);
+  assert.match(await page.locator('#lv-troll-level tr[data-level="L1"]').textContent(), /فازوا في 5 من 5 محاولات/);
+  assert.match(await page.locator('#cardTop').textContent(), /5 مرات.*مرة لعب ما زالت مفتوحة/s);
+  assert.match(await page.locator('#cardTime').textContent(), /متوسط مرة اللعب: دقيقة واحدة/, '400 s over 5 closed sessions');
+  // An export covers the removed day's successors: the reminder goes away.
+  await Promise.all([page.waitForEvent('download'), page.locator('#exportJson').click()]);
+  assert.equal(await page.locator('#reminder').isHidden(), true);
+  // A nearly full PC (over 75 % of 300 KB) not exported for a week is reminded too.
+  await page.evaluate(() => {
+    localStorage.setItem('sg:site:stats:d:2026-09-30', JSON.stringify({ v: 1, d: '2026-09-30', s: {}, g: {}, pad: 'x'.repeat(240000) }));
+    const meta = JSON.parse(localStorage.getItem('sg:site:statsmeta'));
+    localStorage.setItem('sg:site:statsmeta', JSON.stringify({ ...meta, pruned: undefined, lastExport: meta.lastExport - 8 * 864e5 }));
+  });
+  await page.reload();
+  await page.waitForFunction(() => !document.getElementById('reminder').hidden);
+  const used = await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('sg:site:stats'))
+    .reduce((n, k) => n + k.length + localStorage.getItem(k).length, 0) / 307200);
+  assert.ok(used > 0.75 && used < 0.85, String(used));
+  assert.match(await page.locator('#reminder').textContent(),
+    new RegExp('^تذكير: مساحة الإحصاءات على هذا الجهاز ممتلئة بنسبة ' + Math.round(used * 100) + '%\\. صدّر ملف Excel الآن\\. '));
 });
 
 test('blocked storage is explained; other PCs\' files still open', async t => {
