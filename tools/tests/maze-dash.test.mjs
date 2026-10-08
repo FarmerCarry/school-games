@@ -77,6 +77,18 @@ test('a failed save warns with a retry, and the retry writes the progress', asyn
   assert.equal(await page.evaluate(() => __game.state.screen), 'win');
   assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
   assert.equal(await page.evaluate(() => localStorage.getItem('sg:maze-dash:save')), null);
+  // Bottom-left beside the result card; bottom-right in play and pause, clear of the tip box.
+  const side = () => page.evaluate(() => {
+    const r = document.querySelector('.sg-save-status').getBoundingClientRect();
+    return r.right < innerWidth / 2 ? 'left' : r.left > innerWidth / 2 ? 'right' : 'middle';
+  });
+  assert.equal(await side(), 'left');
+  await page.evaluate(() => { document.getElementById('btn-next').click(); stepGame(2); });
+  assert.equal(await page.evaluate(() => __game.state.screen), 'play');
+  assert.equal(await side(), 'right');
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  assert.equal(await page.evaluate(() => __game.state.screen), 'pause');
+  assert.equal(await side(), 'right');
   await page.evaluate(() => { Storage.prototype.setItem = window.restoreStorage; });
   await page.locator('.sg-save-status button').click();
   assert.equal(await page.locator('.sg-save-status[data-state="saved"]').isVisible(), true);

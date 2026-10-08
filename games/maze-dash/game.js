@@ -166,12 +166,14 @@
   /* -------------------------------------------------------- dom refs */
   function $(id) { return document.getElementById(id); }
   var screens = { title: $('scr-title'), levels: $('scr-levels'), shop: $('scr-shop'), pause: $('scr-pause'), win: $('scr-win'), fail: $('scr-fail'), over: $('scr-over') };
+  // The screen name also goes on <body>, where style.css picks the save warning's corner.
   function showScreen(name) {
     for (var k in screens) screens[k].hidden = (k !== name);
-    G.screen = name;
+    G.screen = document.body.dataset.mdScreen = name;
     try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
-  function hideAll() { for (var k in screens) screens[k].hidden = true; }
+  // No overlay left: back to the maze.
+  function hideAll() { for (var k in screens) screens[k].hidden = true; G.screen = document.body.dataset.mdScreen = 'play'; }
   // Mouse clicks return focus to the game; keyboard activation keeps button focus.
   Array.prototype.forEach.call(document.querySelectorAll('button'), function (b) {
     b.addEventListener('mousedown', function (e) { e.preventDefault(); });
@@ -416,7 +418,7 @@
     G.cam = camTarget();
     if (TIPS[n]) banner(TIPS[n], n === 1 ? 6 : 4.2);
     else banner(G.def.name, 2.2, '#fff');
-    hideAll(); G.screen = 'play';
+    hideAll();
     try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
 
@@ -438,7 +440,7 @@
     G.firstMoveDone = false;
     G.cam = camTarget();
     banner(save.runs < 2 ? 'اصعد بسرعة! الهلام يرتفع!' : 'انطلق!', 3);
-    hideAll(); G.screen = 'play';
+    hideAll();
     try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
 
@@ -1501,7 +1503,7 @@
     $('pause-sub').textContent = G.mode === 'level' ? ('المرحلة ' + G.levelN + ': ' + G.def.name) : ('الهلام الصاعد · ' + G.maxHeight + ' م');
     P.buffer = -1;
   }
-  function resume() { hideAll(); G.screen = 'play'; K.reset(); try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  function resume() { hideAll(); K.reset(); try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
 
   function showWin() {
     var n = G.levelN, prev = save.lv[n] || { done: 0, s: 0, t: 0 };
