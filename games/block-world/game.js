@@ -697,7 +697,7 @@
     for (var i = 0; i < qs.length; i++) {
       var q = qs[i];
       if (G.done[q.id]) continue;
-      if (q.val(s) >= q.need) completeQuest(q);
+      if (q.val(s) >= q.need) { completeQuest(q); if (q.id === 'logs') Kit.stats.tutorial('done'); }
     }
     // All quests done: celebrate once, as soon as the player is back in the world (not in the backpack/pause).
     if (!G.masterShown && starCount() >= qs.length) {
@@ -1445,6 +1445,9 @@
     // Still behind the loading screen: give the creative palette its icons (cheap CPU canvases).
     if (G.gm === 'creative') fillPalette();
     G.mode = 'play';
+    // Play statistics: a session in this world, in its mode; the tree guide is the tutorial.
+    Kit.stats.round(G.gm);
+    if (G.gm === 'survival' && !G.done.logs) Kit.stats.tutorial('start');
     show(titleEl, false); show(newEl, false); show(loadEl, false); show(pauseEl, false); show(invEl, false);
     pauseBtn.hidden = false;
     G.cam.x = clamp(P.x - VTW / 2, 0, W - VTW); G.cam.y = clamp(P.y - VTH / 2, -2, H - VTH);
@@ -1454,6 +1457,7 @@
     K.reset(); M.left = M.right = false; flyTap = false;
   }
   function toTitle() {
+    Kit.stats.end('end');
     G.saveError = null; G.savedFlash = 0; saveErrorEl.hidden = true;
     G.mode = 'title';
     G.slot = 0;
