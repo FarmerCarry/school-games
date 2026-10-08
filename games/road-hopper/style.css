@@ -153,7 +153,8 @@ html[data-sg-motion="reduce"] #banner.show { animation: none; opacity: 1; }
 .card.sel { border-color: var(--yellow); background: rgba(255, 210, 63, 0.2); }
 .card.sel::after { content: '✓'; position: absolute; top: -0.4em; left: -0.4em; width: 1.5em; height: 1.5em; border-radius: 50%; background: var(--yellow); color: var(--navy); font-weight: 700; line-height: 1.5em; }
 .card.locked { cursor: default; }
-.card.locked img { filter: brightness(0) opacity(0.65); } /* a dark silhouette of the coloured picture */
+/* A dark silhouette of the coloured picture, which cannot be dragged out or opened on its own */
+.card.locked img { filter: brightness(0) opacity(0.65); pointer-events: none; }
 .card.locked:hover { transform: none; }
 .card.locked .nm { opacity: 0.75; font-size: 0.78em; }
 .card.new::before { content: 'جديد'; position: absolute; top: -0.5em; right: -0.3em; background: var(--pink); color: #fff; font-size: 0.75em; border-radius: 1em; padding: 0 0.5em; }

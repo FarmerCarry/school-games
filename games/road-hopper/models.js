@@ -450,9 +450,11 @@
     } else {
       L.push([0, -3.4, 0, lw, 3.9, 8, t.log]);
       L.push([-lw / 2 - 0.1, -3.0, 0, 0.3, 3.2, 7.2, t.logEnd]); L.push([lw / 2 + 0.1, -3.0, 0, 0.3, 3.2, 7.2, t.logEnd]);
-      // Foam around the log at the water line (its top is 0.03 above the water, so the
-      // gentle bob never sinks it); the ends show, so a drifting log pushes foam along.
-      L.push([0, -2.8, 0.25, lw + 4, 0.3, 8.6, pale(t.water, 0.8)]);
+      // Foam around the log at the water line. Its top is 0.03 above the water: the gentle
+      // idle bob never sinks it, the deeper dip after a landing briefly does (the landing
+      // splash covers that). It shows 0.1 past each end; the +x end lies in the log's
+      // shadow, where a wider strip looked like a grey stone step.
+      L.push([0, -2.8, 0.25, lw + 2, 0.3, 8.6, pale(t.water, 0.8)]);
       for (var j = 0; j < len; j++) {
         var bx = -lw / 2 + 3 + j * 10;
         L.push([bx, 0.5, -1.5, 3, 0.25, 1.2, shade(t.log, 0.8)]);
