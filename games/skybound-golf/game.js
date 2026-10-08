@@ -184,13 +184,14 @@
   // Saves a shot once, then adds the cup bonus once if a later putt sinks it.
   function commitResult(sunk) {
     if(shotResult && (shotResult.sunk || !sunk)) return shotResult;
-    var distance = Math.floor(s.ball.maxX), base = P.reward(distance,false,s.ball.perfect);
     if(!shotResult) {
-      shotResult = {distance:distance,oldBest:save.best,earned:base+starCount*STAR_COINS,stars:starCount,sunk:false};
+      var distance = Math.floor(s.ball.maxX), perfect = s.ball.perfect;
+      shotResult = {distance:distance,perfect:perfect,oldBest:save.best,earned:P.reward(distance,false,perfect)+starCount*STAR_COINS,stars:starCount,sunk:false};
       earn(shotResult.earned); save.best = Math.max(save.best,distance); save.shots++;
     }
     if(sunk) {
-      var bonus = P.reward(distance,true,s.ball.perfect)-base;
+      // The cup bonus uses the saved flight, not the ball's current state.
+      var bonus = P.reward(shotResult.distance,true,shotResult.perfect)-P.reward(shotResult.distance,false,shotResult.perfect);
       shotResult.earned += bonus; shotResult.sunk = true; earn(bonus); save.holes++;
     }
     persist(); stats();
@@ -210,6 +211,8 @@
     $('result-coins').innerHTML = '<bdi dir="ltr">+ ' + K.fmt(earned) + '</bdi> عملة' + (result.stars ? ' · ★ ' + result.stars : '') + (sunk ? ' · مكافأة الحفرة' : '');
     var unlocked = P.worlds.filter(function(w) { return w.unlock>oldBest && w.unlock<=save.best; });
     var box = $('result-unlock'); box.hidden = !unlocked.length;
+    // While a new world is offered, its button is the only coral (default) one.
+    $('again').className = 'button ' + (unlocked.length ? 'cream' : 'primary');
     if(unlocked.length) {
       // One click (or the focused Enter/Space) goes straight to the newest world.
       newWorld = P.worlds.indexOf(unlocked[unlocked.length-1]);
@@ -250,9 +253,11 @@
       b.disabled = maxed || save.coins<price;
       b.innerHTML='<span class="upgrade-icon" aria-hidden="true"><svg viewBox="0 0 34 34">'+icons[kind]+'</svg></span><strong>'+upgradeNames[kind]+'</strong><span class="level">المستوى <bdi dir="ltr">'+level+' / 10</bdi></span><span class="price">'+(maxed?'مكتمل':K.fmt(price)+' عملة')+'</span><span class="explain">'+upgradeExplain[kind]+'</span>';
       b.setAttribute('aria-label',upgradeNames[kind]+', المستوى '+level+(maxed?'، مكتمل':', تطوير مقابل '+price+' عملة'+(save.coins<price?'، العملات غير كافية':'')));
-      b.addEventListener('click',function() {
+      b.addEventListener('click',function(e) {
         var currentPrice=P.cost(kind,save.upgrades[kind]);
         if(save.upgrades[kind]>=10 || save.coins<currentPrice) return;
+        // After a mouse purchase, Space/Enter keep the card's advertised action.
+        if(e.detail) this.blur();
         save.coins-=currentPrice; save.upgrades[kind]++; persist(); stats(); K.sfx.power();
         announce('تم تطوير '+upgradeNames[kind]+' إلى المستوى '+save.upgrades[kind]);
         renderUpgrades();
@@ -262,7 +267,7 @@
     if(focusKind) {
       var replacement=host.querySelector('[data-upgrade="'+focusKind+'"]');
       if(replacement && !replacement.disabled) replacement.focus({preventScroll:true});
-      else (modalMode==='result'?$('again'):$('close-modal')).focus({preventScroll:true});
+      else (modalMode!=='result'?$('close-modal'):newWorld>=0?$('result-unlock').querySelector('button'):$('again')).focus({preventScroll:true});
     }
     renderSkins();
   }

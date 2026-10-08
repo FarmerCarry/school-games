@@ -122,7 +122,7 @@
   // the foreground and ball are still drawn at the full fitted resolution.
   // As the ball climbs and the camera zooms out, the cached hills sink, the
   // revealed sky reuses the cache's top row, and the sky darkens into space.
-  var backdrop = null, backdropWorld = -1;
+  var backdrop = null, backdropWorld = -1, nightFade = null;
   function scenery(c, s, p, world, flying) {
     if (!backdrop) {
       backdrop = document.createElement('canvas'); backdrop.width = W / 2; backdrop.height = H / 2;
@@ -144,17 +144,22 @@
     c.drawImage(backdrop, 0, dy, W, H);
     var night = clamp((up - 90) / 400, 0, .4);
     if (world !== 3 && night) {
-      var dark = c.createLinearGradient(0, 0, 0, H * .8); dark.addColorStop(0, 'rgba(23,41,98,' + night + ')'); dark.addColorStop(1, 'rgba(23,41,98,0)');
-      c.fillStyle = dark; c.fillRect(0, 0, W, H);
+      // One gradient for every night level (globalAlpha scales it), filled
+      // only where it is visible.
+      if (!nightFade) { nightFade = c.createLinearGradient(0, 0, 0, H * .8); nightFade.addColorStop(0, '#172962'); nightFade.addColorStop(1, 'rgba(23,41,98,0)'); }
+      c.globalAlpha = night; c.fillStyle = nightFade; c.fillRect(0, 0, W, H * .8); c.globalAlpha = 1;
     }
     if (world === 3 ? dy : night > .1) {
       // Stars fade in high up; on the moon they fill the sky above the cache.
+      // Three brightness groups, one path each, instead of a fill per star.
       c.fillStyle = '#fffbe4';
-      for (var a = 0; a < 30; a++) {
-        var sy = world === 3 ? dy - hash(a + 45) * 420 : hash(a + 45) * 300;
-        if (sy < 0) continue;
-        c.globalAlpha = world === 3 ? .3 + hash(a + 9) * .5 : (night - .1) * 2.5;
-        circle(c, hash(a + 351) * W, sy, 1.4);
+      for (var g = 0; g < 3; g++) {
+        c.beginPath();
+        for (var a = g; a < 30; a += 3) {
+          var sx = hash(a + 351) * W, sy = world === 3 ? dy - hash(a + 45) * 420 : hash(a + 45) * 300;
+          if (sy >= 0) { c.moveTo(sx + 1.4, sy); c.arc(sx, sy, 1.4, 0, Math.PI * 2); }
+        }
+        c.globalAlpha = world === 3 ? .35 + g * .2 : (night - .1) * 2.5; c.fill();
       }
       c.globalAlpha = 1;
     }
