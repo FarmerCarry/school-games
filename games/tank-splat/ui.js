@@ -138,6 +138,10 @@
   }
   function beginMatch() {
     var mt = app.match;
+    // Play stats: every match start (first play, retry, restart, next stage) is one round;
+    // the aim guide of the first stages is the tutorial until stage 1 is won.
+    Kit.stats.round(mt.kind === 'camp' ? 'stage' + (mt.stage + 1) : 'free');
+    if (mt.stage === 0 && !save.stars[0]) Kit.stats.tutorial('start');
     app.game = TG.create({ players: mt.players, target: mt.target, stage: mt.stage, guide: mt.guide, onEnd: onMatchEnd });
     S.click();
     show('game');
@@ -165,7 +169,10 @@
       else if (firstWin && mt.stage < STAGES.length - 1) note = 'فتحت المرحلة التالية!';
       else if (firstWin) note = 'أنت بطل البطولة كلها!';
       else if (newStars > 0) note = 'نجوم جديدة!';
+      if (firstWin && !mt.stage) Kit.stats.tutorial('done');
     }
+    // Solo matches win or lose; two or three children on one PC only end. Skips __game.autoplay matches.
+    if (!human.bot) Kit.stats.end(solo ? won ? 'win' : 'lose' : 'end');
     persist();
 
     // fill result card
