@@ -84,8 +84,11 @@
     $('tUnl').textContent = u + '/' + SA.SKINS.length;
   }
 
+  // commitRun() plus play stats: the new-player hints are done once a third run counts.
+  function commitShown() { var g = stats.games; commitRun(); if (g < 3 && stats.games > 2) Kit.stats.tutorial('done'); }
+
   function toMenu() {
-    commitRun();
+    commitShown();
     W.reset('demo');
     R.clearFx();
     G.state = 'title'; G.timeScale = 1; G.slowT = 0;
@@ -100,7 +103,7 @@
     var now = performance.now();
     if (now - G.lastStart < 250) return;
     G.lastStart = now;
-    commitRun();
+    commitShown();
     Kit.audio.unlock();
     W.reset('play');
     W.spawnPlayer(prefs.name, curSkin(), prefs.eyes);
@@ -119,6 +122,9 @@
     showScreen(null);
     // New players learn the one rule that ends a round before it happens (the first hint covers eating).
     var fresh = stats.games < 3;
+    // Play stats: every run start (play, again, restart; a live run becomes a quit).
+    Kit.stats.round('endless');
+    if (fresh) Kit.stats.tutorial('start');
     toast('انطلق!', '#8dff3a', fresh ? 'لا تدع رأسك يلمس ثعبانًا آخر!' : 'كُل النقاط المضيئة لتكبر', 56, fresh ? 2.4 : 1.6);
     sfx.start();
     try { cv.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
@@ -244,6 +250,7 @@
     recordLength(); // The fatal tick does not reach runTick().
     G.state = 'dying'; G.dieT = 0;
     r.deathLen = Math.floor(p.mass);
+    Kit.stats.end('end', r.deathLen); // play stats: the run's score is its length at death
     var above = 0;
     for (var i = 0; i < W.snakes.length; i++) if (W.snakes[i].alive && W.snakes[i].mass > p.mass) above++;
     r.deathRank = above + 1;
@@ -407,7 +414,7 @@
     var before = {}, lists = [SA.SKINS, SA.EYES];
     for (var l = 0; l < 2; l++) for (i = 0; i < lists[l].length; i++) before[lists[l][i].id] = unlocked(lists[l][i]);
     var oldBest = stats.bestLen;
-    commitRun();
+    commitShown();
     var newBest = r.peakLen > oldBest && stats.games > 1;
 
     G.state = 'over'; G.overT = 0;
