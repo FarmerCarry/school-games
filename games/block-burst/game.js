@@ -112,7 +112,7 @@
   var bigWord = null, banner = null, endTimer = 0, endKind = null;
   var greyList = [], greyN = 0, greyAcc = 0;
   var powerPulse = 0, goalBump = {}, comboBump = 0;
-  var hintIdle = 0, hint = null; // hint: the move the first-move hint shows (refreshFits)
+  var hintIdle = 0, hint = null, tut; // hint: the move the first-move hint shows (refreshFits); tut: the hand was shown (stats)
 
   /* ----------------------------------------------------------- helpers */
   function easeOutBack(t) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
@@ -287,6 +287,7 @@
     save.stats.games++; persistStats();
     overUnlockBefore = unlockSnapshot();
     state = 'play'; show(['hud']);
+    Kit.stats.round('classic'); // new, restarted or continued classic run
     banner = run.moves ? { t: 0, title: 'تابع اللعب!', sub: 'النقاط: ' + run.score } : { t: 0, title: 'كلاسيكي', sub: 'املأ الصفوف والأعمدة لتفجيرها!' };
     Snd.button(); startMusic();
     checkStuck();
@@ -307,6 +308,7 @@
     dispScore = 0;
     introBoard(); dealAnim(); refreshFits();
     state = 'play'; show(['hud']);
+    Kit.stats.round('L' + (idx + 1));
     banner = { t: 0, title: 'المرحلة ' + (idx + 1), sub: levelGoalText(LV.LEVELS[idx]), world: LV.WORLDS[LV.LEVELS[idx].world] };
     Snd.button(); startMusic();
   }
@@ -317,6 +319,7 @@
     var piece = run.tray[slot];
     var ev = Rules.place(run, slot, r, c);
     hintIdle = 0;
+    if (tut) Kit.stats.tutorial('done'); // first placement after the drag hand was shown
     if (banner && banner.t < 2.0) banner.t = 2.0;
     var s = piece.shape, cx = 0, cy = 0;
     for (var k = 0; k < s.cells.length; k++) {
@@ -391,6 +394,8 @@
         Snd.newBest(); confettiBurst(60);
       }
     }
+    // The run's one end (play stops here); a level reports win/lose, classic its points.
+    if (ev.win || ev.over) Kit.stats.end(ev.win ? 'win' : run.level ? 'lose' : 'end', run.score);
     if (ev.win) { state = 'ending'; endKind = 'win'; endTimer = 1.1; cancelDrag(); return; }
     if (ev.over) {
       state = 'ending'; endKind = run.level ? 'fail' : 'over'; cancelDrag();
@@ -1200,6 +1205,7 @@
   function hintShown() { return run.moves === 0 && (run.mode === 'classic' || runLevel <= 1 || gemTip()); }
   function drawHint() {
     if (state !== 'play' || drag || !run || !hint || !hintShown() || hintIdle < 1.2 || banner || !run.tray[hint.slot]) return;
+    if (!tut) Kit.stats.tutorial(tut = 'start');
     var sh = run.tray[hint.slot].shape, t = (time * 0.7) % 1, e = easeOutCubic(Math.min(1, t * 1.4));
     var x0 = TX[hint.slot], y0 = TY, x1 = cellX(hint.c) + sh.w * C / 2, y1 = cellY(hint.r) + sh.h * C / 2;
     var hx = x0 + (x1 - x0) * e, hy = y0 + (y1 - y0) * e;
