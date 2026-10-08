@@ -11,14 +11,16 @@
  *   g slug, t opened (Date.now()), e engaged ms, r a frame sent sg:ready,
  *   f a frame failed (sg:error or timeout), m a frame was mounted,
  *   i id of the last started round, q how that round ended ('' while it is open),
- *   p the current frame's open round, n when the entry was written (Date.now()),
+ *   p the current frame's open round, u its engaged ms so far,
+ *   n when the entry was written (Date.now()),
  *   w the entry was written once, x it files no length and no gave up (another
  *   page closed it, or collection was stopped during it), c closed, d finished;
  *   o only on a session left over from a crash: its open round, now a quit.
  * A frame: w its window (let go of 2 s after removal), s its session,
  *   t mounted (performance.now()), l its load is timed (a session's first frame),
  *   v the page stayed visible while it loaded, r it sent sg:ready,
- *   o its open round from its last sg:stats, d that round is settled.
+ *   o its open round and u that round's engaged ms so far (o and om of its last
+ *   sg:stats), d that round is settled.
  */
 (function () {
   'use strict';
@@ -54,7 +56,7 @@
       if (!off) { D[k] = day; since = since || now(); }
     }
     return !slug ? day : day.g[slug] || (day.g[slug] = {
-      o: 0, e: 0, hh: {}, b: zeros(4), ns: 0, src: {}, l: zeros(3), lb: zeros(5), ls: 0,
+      o: 0, e: 0, hh: {}, b: zeros(4), ns: 0, src: {}, l: zeros(3), ls: 0,
       x: 0, t: 0, f: zeros(4), tu: zeros(2), fav: 0, lv: {}
     });
   }
@@ -93,9 +95,10 @@
       s.q = '';
     }
   }
-  // The last known open round of a replaced or departed frame becomes a quit.
+  // The last known open round of a replaced or departed frame becomes a quit,
+  // with the engaged ms its last message reported for it.
   function quitOpen(f, t) {
-    if (!f.d) { f.d = 1; if (f.o) round(f.s, ['q', f.o], t); }
+    if (!f.d) { f.d = 1; if (f.o) round(f.s, ['q', f.o, f.u], t); }
   }
   function quitGone(s, t) { gone.forEach(function (f) { if (f.s == s) quitOpen(f, t); }); }
 
@@ -105,7 +108,7 @@
     if (s.d) return;
     s.d = 1;
     quitGone(s, t);
-    if (s.o) round(s, ['q', s.o], t);   // a session left over from a crash
+    if (s.o) round(s, ['q', s.o, s.u], t);   // a session left over from a crash
     // Closed by another tab, stopped meanwhile, or begun before a teacher cleared the numbers: no length.
     if (!s.x && s.t >= cleared) {
       gaveUp(s, t);
@@ -152,8 +155,10 @@
     return m;
   }
   // Keep the newest 120 day records and all stats keys under 300 KB; `extra` frees one more day.
+  // A day removed for space, not by the 120-day limit, is remembered in statsmeta
+  // ('pruned', the newest such date), so the teacher page can warn about it.
   function prune(extra) {
-    for (var ls = localStorage, days = [], total = 0, i = ls.length, k, n; i--;) {
+    for (var ls = localStorage, days = [], total = 0, i = ls.length, k, n, p, m; i--;) {
       k = ls.key(i);
       if (!k.indexOf(PRE)) {
         total += n = k.length + ls.getItem(k).length;
@@ -164,7 +169,9 @@
       k = days.shift();
       ls.removeItem(k[0]);
       total -= k[1];
+      if (days.length < 120) p = k[0].slice(DAY.length);
     }
+    if (p && !((m = getObj(META)).pruned >= p)) { m.pruned = p; ls.setItem(META, str(m)); }
   }
   // A full storage gives up its oldest day and tries once more; other failures give up.
   function put(k, v) {
@@ -192,7 +199,7 @@
   function mirror() {
     var live = getObj(LIVE);
     if (sess && sess.w && !live[tab]) sess.x = 1;
-    if (sess && !sess.x) { sess.p = cur && cur.o; sess.n = now(); live[tab] = sess; } else delete live[tab];
+    if (sess && !sess.x) { sess.p = cur && cur.o; sess.u = cur && cur.u; sess.n = now(); live[tab] = sess; } else delete live[tab];
     putLive(live);
     if (sess) sess.w = 1;
   }
@@ -283,11 +290,7 @@
         if (f.l) {
           g = delta(s.g, t);
           ms = num(performance.now() - f.t, 6e5);
-          if (f.v) {
-            g.l[0]++; g.l[1] += ms; g.l[2] = max(g.l[2], ms);
-            for (i = 0; i < 4 && ms >= 1e3 << i; i++);
-            g.lb[i]++;
-          } else g.ls++;
+          if (f.v) { g.l[0]++; g.l[1] += ms; g.l[2] = max(g.l[2], ms); } else g.ls++;
         }
       }
       if (type == 'sg:stats' && d.version === 1) {
@@ -302,6 +305,7 @@
         delta(0, t).s.mute += num(d.m, 100);
         if (isArr(d.r)) d.r.slice(0, 100).forEach(function (x) { if (isArr(x)) round(s, x, t); });
         f.o = ok(d.o) && d.o;
+        f.u = d.om;
         if (f != cur) settle(f);
       }
     }

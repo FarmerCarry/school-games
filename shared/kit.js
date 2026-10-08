@@ -172,7 +172,8 @@
     tally();
     if (cut) until = 0;
     if (ready && (engaged || mutes || events.length || frames.some(Number))) { // something changed
-      tellPortal({ type: 'sg:stats', version: 1, e: engaged, f: frames, m: mutes, r: events, o: roundId });
+      // om: the engaged ms so far in the round open now, for the portal to keep if it is left open.
+      tellPortal({ type: 'sg:stats', version: 1, e: engaged, f: frames, m: mutes, r: events, o: roundId, om: roundId ? roundMs : 0 });
       engaged = mutes = 0; frames.fill(0); events = [];
     }
   }

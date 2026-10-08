@@ -27,6 +27,9 @@
   var LEVEL = /^[A-Za-z][A-Za-z0-9_:.-]{0,23}$/;
   var PC_ID = /^pc[a-z]{4,8}$/;            // the portal makes 'pc' + 4 letters
   var MAX = 1e12;                           // ceiling for any stored number
+  var CAP = 307200;                         // the portal keeps all stats keys under 300 KB
+  var HOUR_DAYS = 3;                        // an hours row is exported only for 3 days or more
+  var TWO_PLAYER = /(?:^|:)(?:duo|local|pvp)$/; // two-player modes on one PC (no winner): 'duo', 'L4:duo'
   var SOURCES = ['featured', 'catalog', 'recent', 'favorites', 'category', 'quick', 'search', 'related',
     'surprise', 'reload', 'history', 'direct'];
   var BASE = ['pc', 'pc_label', 'copy'];
@@ -60,6 +63,12 @@
   var DAYS = ['يوم واحد', 'يومان', 'أيام', 'يومًا'];
   var VISITS = ['زيارة واحدة', 'زيارتان', 'زيارات', 'زيارة'];
   var PCS = ['جهاز واحد', 'جهازان', 'أجهزة', 'جهازًا'];
+  var ON_PCS = ['جهاز واحد', 'جهازين', 'أجهزة', 'جهازًا'];
+  var TRIES = ['محاولة واحدة', 'محاولتين', 'محاولات', 'محاولة'];
+  // How long a PC keeps its days (js/stats.js prune()): on the page and the read-me sheet.
+  var KEEP = 'تُحذف الأيام القديمة عندما تمتلئ مساحة الإحصاءات أو بعد 120 يومًا، أيهما أسبق، ' +
+    'وقد لا يحفظ جهاز في مختبر حاسوب مزدحم إلا شهرين أو ثلاثة.';
+  var OPEN_NOTE = 'مرة لعب ما زالت مفتوحة، وتظهر هنا بعد إغلاق اللعبة.';
   var FILES = ['ملف واحد', 'ملفين', 'ملفات', 'ملفًا'];
 
   // The read-me sheet explains every exported column. Shared columns are written
@@ -106,7 +115,8 @@
     level: 'معرّف المرحلة أو الوضع في اللعبة (مثل L3). القيمة _other تجمع المراحل الزائدة.',
     starts: 'مرات بدء هذه المرحلة.',
     visits: 'زيارات المرحلة: بدء بعد مرحلة أخرى، أو أول بدء في مرة اللعب.',
-    gave_up: 'توقفوا عند هذه المرحلة: خسروا أو تركوا المرحلة ثم انتقلوا إلى غيرها.',
+    gave_up: 'توقفوا عند هذه المرحلة: خسروا أو تركوا المرحلة ثم انتقلوا إلى غيرها. له معنى فقط في المراحل التي يُفاز فيها أو يُخسر، ' +
+      'لا في اللعب الحر أو اللعب بلا نهاية أو لعب طفلين على جهاز واحد.',
     score_sum: 'مجموع النتائج (مثل الأمتار أو النقاط).',
     score_count: 'الجولات التي لها نتيجة. متوسط النتيجة = score_sum ÷ score_count.',
     score_max: 'أفضل نتيجة.',
@@ -118,14 +128,15 @@
     levels: { seconds: 'وقت اللعب الفعلي بالثواني داخل هذه المرحلة.' },
     hours: {
       seconds: 'وقت اللعب الفعلي بالثواني في هذه الساعة، مجموعًا على كل الأيام في الملف.',
-      days: 'الأيام التي لُعبت فيها اللعبة في هذه الساعة.'
+      days: 'الأيام التي لُعبت فيها اللعبة في هذه الساعة: 3 أو أكثر دائمًا، وأقل من كل الأيام التي لُعبت فيها اللعبة في الملف. ' +
+        'ولا تُصدَّر الساعات الأخرى.'
     }
   };
   var TABLE_HELP = {
     days: 'صف لكل يوم.',
     games: 'صف لكل لعبة في كل يوم.',
     levels: 'صف لكل مرحلة من لعبة في كل يوم.',
-    hours: 'صف لكل لعبة وساعة، مجموعًا على كل الأيام في الملف (بلا تاريخ).'
+    hours: 'صف لكل لعبة وساعة لُعبت فيها في 3 أيام أو أكثر، لا في كل أيامها، مجموعًا على كل الأيام في الملف (بلا تاريخ).'
   };
 
   /* ------------------------------------------------------ small helpers */
@@ -192,10 +203,11 @@
     if (n === 2) return forms[1];
     return fmt(n) + ' ' + (n >= 3 && n <= 10 ? forms[2] : forms[3]);
   }
+  // Under a minute is always «أقل من دقيقة», never «دقيقة واحدة», so it matches «خرجوا بسرعة».
   function duration(sec) {
     if (sec <= 0) return '0';
+    if (sec < 60) return 'أقل من دقيقة';
     var m = Math.round(sec / 60);
-    if (m < 1) return 'أقل من دقيقة';
     if (m < 60) return count(m, MINUTES);
     var h = Math.floor(m / 60);
     m %= 60;
@@ -253,22 +265,26 @@
       offSince: time(raw.offSince),
       clearedAt: time(raw.clearedAt),
       since: validDate(raw.since) ? raw.since : time(raw.since) ? dateKey(new Date(time(raw.since))) : '',
-      lastExport: time(raw.lastExport)
+      lastExport: time(raw.lastExport),
+      pruned: validDate(raw.pruned) ? raw.pruned : ''   // the newest day the portal removed for space
     };
   }
 
   // Reads every stats key. Throws when storage is blocked; callers catch it.
+  // bytes: the size of all stats keys, counted as the portal counts its 300 KB cap.
   function readStore(ls) {
-    var keys = [], days = [];
+    var keys = [], days = [], bytes = 0;
     for (var i = 0; i < ls.length; i++) {
       var key = ls.key(i);
-      if (typeof key === 'string' && DAY_KEY.test(key)) keys.push(key);
+      if (typeof key !== 'string') continue;
+      if (key.indexOf('sg:site:stats') === 0) bytes += key.length + String(ls.getItem(key)).length;
+      if (DAY_KEY.test(key)) keys.push(key);
     }
     keys.sort().forEach(function (key) {
       var day = parseDay(DAY_KEY.exec(key)[1], ls.getItem(key));
       if (day) days.push(day);
     });
-    return { days: days, meta: parseMeta(ls.getItem(META_KEY)) };
+    return { days: days, meta: parseMeta(ls.getItem(META_KEY)), bytes: bytes };
   }
 
   // Removes only keys that start with sg:site:stats: (never sg:site:statsmeta).
@@ -292,7 +308,7 @@
   // The four export tables (format sg-play-stats v1) from the stored days.
   // info: { pc, label, copy, exportedAt, today, names }.
   function tables(days, info) {
-    var t = { days: [], games: [], levels: [], hours: [] }, hours = {};
+    var t = { days: [], games: [], levels: [], hours: [] }, hours = {}, played = Object.create(null);
     var common = { pc: info.pc, pc_label: info.label, copy: info.copy, exported_at: info.exportedAt };
     days.slice().sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; }).forEach(function (rec) {
       var done = rec.d < info.today ? 1 : 0, ms = 0, sessions = 0, short = 0;
@@ -315,6 +331,7 @@
           x.ms += g.hh[h];
           x.days++;
         });
+        if (Object.keys(g.hh).length) played[slug] = (played[slug] || 0) + 1;
         var v = {
           date: rec.d, game: slug, game_name: name, opens: g.o, sessions: g.b[1] + g.b[2] + g.b[3],
           short_sessions: g.b[0], sessions_1_5: g.b[1], sessions_5_15: g.b[2], sessions_15_plus: g.b[3],
@@ -332,8 +349,13 @@
         fullscreen: rec.s.fs, mute_toggles: rec.s.mute, day_complete: done
       }));
     });
+    // A game and hour is left out when played on fewer than 3 days, or on every day
+    // the game was played (a weekly lesson, say): with the dated games table either
+    // would give the hour of a date, so who played in which lesson on a PC with
+    // fixed seating.
     Object.keys(hours).sort().forEach(function (key) {
       var x = hours[key];
+      if (x.days < HOUR_DAYS || x.days >= played[x.game]) return;
       t.hours.push(row('hours', common, {
         game: x.game, game_name: gameName(info.names, x.game), hour: x.hour, seconds: secs(x.ms), days: x.days
       }));
@@ -436,14 +458,20 @@
     return { from: '', to: '' };
   }
 
-  function summary(t, from, to) {
+  // closedSeconds: play time of the game rows that have closed sessions, so the
+  // average session leaves out a session that is still open (its time is written
+  // before its length is). days: distinct dates, even when several PCs are combined.
+  // live: { pc, date } of this PC today, when its own records are in the view.
+  function summary(t, from, to, live) {
     var keep = function (r) { return (!from || r.date >= from) && (!to || r.date <= to); };
-    var games = Object.create(null), s = { seconds: 0, sessions: 0, short: 0, calm: 0, fs: 0, mute: 0, src: {}, pcs: {}, games: [] };
+    var games = Object.create(null), s = { seconds: 0, closedSeconds: 0, sessions: 0, short: 0, calm: 0, fs: 0, mute: 0,
+      src: {}, pcs: {}, games: [] };
     SOURCES.forEach(function (k) { s.src[k] = 0; });
     function game(r) {
-      return games[r.game] || (games[r.game] = { game: r.game, name: r.game_name, seconds: 0, sessions: 0, short: 0,
-        opens: 0, days: 0, ns: 0, errors: 0, timeouts: 0, loads: 0, loadSum: 0, loadMax: 0, f: [0, 0, 0, 0],
-        tu: [0, 0], favDate: Object.create(null), fav: Object.create(null), levels: Object.create(null) });
+      return games[r.game] || (games[r.game] = { game: r.game, name: r.game_name, seconds: 0, closedSeconds: 0, sessions: 0,
+        short: 0, opens: 0, days: 0, dates: Object.create(null), pcs: Object.create(null), live: 0, ns: 0, errors: 0, timeouts: 0,
+        loads: 0, loadSum: 0, loadMax: 0, f: [0, 0, 0, 0], tu: [0, 0], favDate: Object.create(null), fav: Object.create(null),
+        levels: Object.create(null) });
     }
     t.days.filter(keep).forEach(function (r) {
       s.calm += r.calm_on; s.fs += r.fullscreen; s.mute += r.mute_toggles; s.pcs[r.pc] = 1;
@@ -452,7 +480,10 @@
       var g = game(r);
       s.pcs[r.pc] = 1;
       g.seconds += r.seconds; g.sessions += r.sessions; g.short += r.short_sessions; g.opens += r.opens;
-      g.days++; g.ns += r.never_started; g.errors += r.errors; g.timeouts += r.timeouts;
+      if (r.sessions + r.short_sessions > 0) g.closedSeconds += r.seconds;
+      if (live && r.pc === live.pc && r.date === live.date && r.seconds > 0) g.live = 1;
+      g.dates[r.date] = 1; g.pcs[r.pc] = 1;
+      g.ns += r.never_started; g.errors += r.errors; g.timeouts += r.timeouts;
       g.loads += r.loads; g.loadSum += r.load_ms_sum; g.loadMax = Math.max(g.loadMax, r.load_ms_max);
       g.f[0] += r.frames_smooth; g.f[1] += r.frames_ok; g.f[2] += r.frames_choppy; g.f[3] += r.frames_stall;
       g.tu[0] += r.tutorial_shown; g.tu[1] += r.tutorial_done;
@@ -470,8 +501,14 @@
     s.games = Object.keys(games).map(function (k) {
       var g = games[k];
       g.hearted = Object.keys(g.fav).filter(function (pc) { return g.fav[pc]; }).length;
-      g.levels = Object.keys(g.levels).sort().map(function (id) { return g.levels[id]; });
-      s.seconds += g.seconds; s.sessions += g.sessions; s.short += g.short;
+      g.levels = markWinnable(Object.keys(g.levels).sort().map(function (id) { return g.levels[id]; }));
+      g.days = Object.keys(g.dates).length;
+      g.pcs = Object.keys(g.pcs).length;
+      // Play time today on this PC but no closed session in the view: a session is
+      // still open. Other rows with time and no session (a failed load, a session
+      // closed by another page or begun before a clear) will never close: no note.
+      g.open = !!g.live && g.sessions + g.short === 0;
+      s.seconds += g.seconds; s.closedSeconds += g.closedSeconds; s.sessions += g.sessions; s.short += g.short;
       return g;
     }).sort(function (a, b) {
       return b.sessions - a.sessions || b.seconds - a.seconds || (a.game < b.game ? -1 : 1);
@@ -480,26 +517,44 @@
     return s;
   }
 
+  // Marks the levels of ONE game (in one view) that children can win or lose
+  // (l.winnable): a level that was won or lost and never ended without a winner,
+  // or a level that was only left (no neutral end, no draw) whose id has the
+  // shape of such a level, digits aside ('L#', 'w#-#', 'stage#'). So win-or-quit
+  // games such as troll-level, where a death respawns inside the level, show the
+  // levels children abandon, while a 'classic', 'endless', 'main' or 'run' left
+  // beside won levels does not. Free play, endless runs, merge-2048 boards and
+  // two-player modes ('duo', 'L4:duo') end without a winner ('end' or 'draw'),
+  // so leaving them is not giving up; the folded '_other' row is many levels.
+  function markWinnable(levels) {
+    var shape = function (id) { return id.replace(/[0-9]+/g, '#'); };
+    var decided = function (l) { return l.wins + l.losses > 0 && !l.ends && !TWO_PLAYER.test(l.level); };
+    var shapes = Object.create(null);
+    levels.forEach(function (l) { if (decided(l)) shapes[shape(l.level)] = 1; });
+    levels.forEach(function (l) {
+      l.winnable = l.level !== '_other' && !TWO_PLAYER.test(l.level) &&
+        (decided(l) || !!shapes[shape(l.level)] && !l.ends && !l.draws);
+    });
+    return levels;
+  }
+
   // Where they stop: within ONE game, the 3 levels with the highest gave up ÷
-  // visits among levels with at least 5 visits. No absolute threshold. Only
-  // levels that can be won or lost count: free play, endless runs and
-  // two-player modes end without a winner, so leaving them is not giving up.
+  // visits among winnable levels with at least 5 visits. No absolute threshold.
   function stuck(levels) {
     return levels.filter(function (l) {
-      return l.visits >= 5 && l.gaveUp > 0 && l.wins + l.losses > 0 && l.level !== '_other';
+      return l.winnable && l.visits >= 5 && l.gaveUp > 0;
     }).sort(function (a, b) {
       return b.gaveUp / b.visits - a.gaveUp / a.visits || b.visits - a.visits || (a.level < b.level ? -1 : 1);
     }).slice(0, 3);
   }
 
-  // Win share only with wins + losses + draws ≥ 5 and at least one win or loss
-  // (two-player modes only ever draw or end); endless ids show the average and
-  // best score instead.
+  // Winnable levels: wins out of tries (wins + losses + draws + quits), with at
+  // least 5 tries, so a level children leave counts against it. Other levels with
+  // scores (endless runs, merge-2048 boards) show the average and best score.
   function levelResult(l) {
-    var decided = l.wins + l.losses, played = decided + l.draws;
-    if (decided && played >= 5) return { win: l.wins / played };
-    if (!decided && l.scoreCount) return { avg: l.scoreSum / l.scoreCount, best: l.scoreMax };
-    return null;
+    var tries = l.wins + l.losses + l.draws + l.quits;
+    if (l.winnable) return tries >= 5 ? { win: l.wins / tries, wins: l.wins, tries: tries } : null;
+    return l.scoreCount ? { avg: l.scoreSum / l.scoreCount, best: l.scoreMax } : null;
   }
 
   // One verdict per game from frame times and load times. Below 600 counted
@@ -539,6 +594,22 @@
     var from = lastExport ? dateKey(new Date(lastExport)) : '';
     for (var i = 0; i < days.length; i++) if (days[i].d >= from) return days[i].d;
     return '';
+  }
+
+  // Why the page asks the teacher to export now, or null. The portal removes the
+  // oldest days when the stats keys pass 300 KB or there are more than 120 days:
+  //   pruned: the newest day it removed for space, when the last export did not
+  //           cover that day completely (or there was no export);
+  //   used:   the share of the 300 KB in use, when it is over 75 % and nothing was
+  //           exported in the last 7 days (a full PC stays full after an export);
+  //   age:    days since the oldest day not exported yet, when over 100.
+  function reminder(days, meta, bytes, today) {
+    var since = meta.lastExport ? dateKey(new Date(meta.lastExport)) : '';
+    var oldest = oldestUnexported(days, meta.lastExport), age = oldest ? daysBetween(oldest, today) : 0;
+    var r = { pruned: meta.pruned && meta.pruned >= since ? meta.pruned : '',
+      used: bytes > 0.75 * CAP && (!since || daysBetween(since, today) >= 7) ? bytes / CAP : 0,
+      oldest: age > 100 ? oldest : '', age: age > 100 ? age : 0 };
+    return r.pruned || r.used || r.age ? r : null;
   }
 
   /* --------------------------------------------------------- xlsx writer */
@@ -600,10 +671,16 @@
       ['وقت التصدير', info.exportedAt],
       ['ملاحظة', 'الأرقام لكل جهاز وليست لكل طالب، ولم تُرسل إلى أي مكان.'],
       ['ما في الملف', 'كل الأيام المحفوظة على هذا الجهاز وقت التصدير، لا الفترة المعروضة في الصفحة فقط.'],
+      ['مدة الحفظ', KEEP + ' لذلك صدّر الملف كل أسبوع.'],
+      ['الخصوصية', 'لا يحتوي الملف على أسماء ولا على أي نص كتبه الأطفال. جدول hours بلا تواريخ، وفيه فقط الساعة التي لُعبت فيها ' +
+        'اللعبة في 3 أيام أو أكثر، ولكن ليس في كل الأيام التي لُعبت فيها اللعبة في الملف. لذلك لا يدل صف وحده على ساعة يوم معيّن. ' +
+        'ومع ذلك يبيّن الجدول الساعات المعتادة للعب، فاحفظ الملف كما تحفظ سجلات الصف.'],
       ['الدمج', 'عند جمع ملفات عدة أجهزة: لكل جهاز (pc) ويوم (date) استخدم صفوف الملف الذي فيه أحدث exported_at فقط، ' +
         'ولا تجمع ملفين من الجهاز نفسه لليوم نفسه. في جدول hours استخدم أحدث ملف لكل جهاز.'],
       ['المتوسطات', 'كل الأرقام مجاميع وأعداد يمكن جمعها. احسب المتوسط بقسمة المجموع على العدد، ' +
         'مثل load_ms_sum ÷ loads أو score_sum ÷ score_count.'],
+      ['الجداول الفارغة', 'يحتاج جدول Excel إلى صف بيانات واحد على الأقل، لذلك يبقى في الجدول الذي لا بيانات فيه صف فارغ. ' +
+        'عند جمع الملفات في Power Query احذف الصفوف التي يكون فيها pc فارغًا.'],
       [null, null]
     ];
     var headings = [0];
@@ -723,9 +800,9 @@
     FORMAT: FORMAT, PREFIX: PREFIX, META_KEY: META_KEY, COLUMNS: COLUMNS, SOURCES: SOURCES,
     parseDay: parseDay, parseMeta: parseMeta, readStore: readStore, clearStats: clearStats, cleanLabel: cleanLabel,
     tables: tables, exportJson: exportJson, readImport: readImport, combine: combine, periodRange: periodRange,
-    summary: summary, stuck: stuck, levelResult: levelResult, verdict: verdict, hoursFromDays: hoursFromDays,
-    hoursFromRows: hoursFromRows, oldestUnexported: oldestUnexported, xlsx: xlsx, zip: zip, crc32: crc32,
-    localIso: localIso, dateKey: dateKey, addDays: addDays, names: names
+    summary: summary, markWinnable: markWinnable, stuck: stuck, levelResult: levelResult, verdict: verdict,
+    hoursFromDays: hoursFromDays, hoursFromRows: hoursFromRows, oldestUnexported: oldestUnexported, reminder: reminder,
+    duration: duration, xlsx: xlsx, zip: zip, crc32: crc32, localIso: localIso, dateKey: dateKey, addDays: addDays, names: names
   };
   window.SGTeacher = api;
   if (typeof document !== 'undefined' && document.getElementById('teacherApp')) init();
@@ -736,16 +813,16 @@
     var NAMES = names(window.GAMES);
     var COPY = location.protocol === 'file:' ? 'folder' : 'web';
     var XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    var state = { ok: false, days: [], meta: parseMeta(null), files: [], ignored: [] };
+    var state = { ok: false, days: [], meta: parseMeta(null), bytes: 0, files: [], ignored: [] };
     var store = null, refresh = 0;
 
     function load() {
       try {
         store = window.localStorage;
         var r = readStore(store);
-        state.ok = true; state.days = r.days; state.meta = r.meta;
+        state.ok = true; state.days = r.days; state.meta = r.meta; state.bytes = r.bytes;
       } catch (e) {
-        state.ok = false; state.days = []; state.meta = parseMeta(null);
+        state.ok = false; state.days = []; state.meta = parseMeta(null); state.bytes = 0;
       }
     }
     function newId() {
@@ -769,7 +846,8 @@
     }
     function bdi(s, ltr) { return '<bdi' + (ltr ? ' dir="ltr"' : '') + '>' + esc(s) + '</bdi>'; }
     function showDate(key) { return key ? bdi(+key.slice(8, 10) + '/' + +key.slice(5, 7) + '/' + key.slice(0, 4), true) : '—'; }
-    function levelName(id) { return id === '_other' ? 'مراحل أخرى' : bdi(id, true); }
+    // An id such as cpu-easy stays on one line (it would break at the hyphen, right to left).
+    function levelName(id) { return id === '_other' ? 'مراحل أخرى' : '<bdi dir="ltr" class="id">' + esc(id) + '</bdi>'; }
     function empty(text) { return '<p class="empty">' + text + '</p>'; }
     function pct(x) { return Math.round(x * 100) + '%'; }
     function say(id, text, bad) { $(id).textContent = text; $(id).classList.toggle('bad', !!bad); }
@@ -789,7 +867,8 @@
     function render() {
       var now = new Date(), today = dateKey(now), v = view(now);
       var period = (document.querySelector('input[name="period"]:checked') || {}).value || 'week';
-      var range = periodRange(period, today), s = summary(v.tables, range.from, range.to);
+      var range = periodRange(period, today);
+      var s = summary(v.tables, range.from, range.to, state.ok ? { pc: state.meta.id, date: today } : null);
       var hours = v.combined ? hoursFromRows(v.tables.hours) : hoursFromDays(state.days, range.from, range.to);
       $('range').innerHTML = range.from ? 'من ' + showDate(range.from) + ' إلى ' + showDate(range.to) : 'كل الأيام المحفوظة';
       renderNotices(today, v.combined);
@@ -808,11 +887,13 @@
     function renderNotices(today, combined) {
       $('storageMsg').hidden = state.ok;
       $('stoppedMsg').hidden = !(state.ok && state.meta.off);
-      var oldest = state.ok ? oldestUnexported(state.days, state.meta.lastExport) : '', age = oldest ? daysBetween(oldest, today) : 0;
-      $('reminder').hidden = age <= 100;
-      if (age > 100) {
-        $('reminder').innerHTML = 'تذكير: أقدم يوم لم يُصدَّر بعد هو ' + showDate(oldest) + ' (قبل ' + count(age, DAYS) +
-          '). صدّر ملف Excel الآن، لأن الأيام القديمة تُحذف بعد 120 يومًا.';
+      var r = state.ok ? reminder(state.days, state.meta, state.bytes, today) : null, why = [];
+      $('reminder').hidden = !r;
+      if (r) {
+        if (r.pruned) why.push('امتلأت مساحة الإحصاءات على هذا الجهاز، فحُذفت أيام قديمة لم تُصدَّر، آخرها ' + showDate(r.pruned) + '.');
+        else if (r.used) why.push('مساحة الإحصاءات على هذا الجهاز ممتلئة بنسبة ' + pct(Math.min(r.used, 1)) + '.');
+        if (r.age) why.push('أقدم يوم لم يُصدَّر بعد هو ' + showDate(r.oldest) + ' (قبل ' + count(r.age, DAYS) + ').');
+        $('reminder').innerHTML = 'تذكير: ' + why.join(' ') + ' صدّر ملف Excel الآن. ' + KEEP;
       }
       var box = $('combined'), html = '';
       if (combined) {
@@ -857,17 +938,21 @@
     }
 
     function renderCards(s, hours, combined) {
+      // A game with play time but no closed session yet (the teacher opened 📊 while
+      // it is still open) gets a note instead of «no game was played a minute».
       var top = s.games.filter(function (g) { return g.sessions > 0; }).slice(0, 5);
-      $('cardTop').innerHTML = top.length ? '<ol>' + top.map(function (g) {
+      var open = s.games.some(function (g) { return g.open; }) ? '<p class="hint open-note">' + OPEN_NOTE + '</p>' : '';
+      $('cardTop').innerHTML = (top.length ? '<ol>' + top.map(function (g) {
         return '<li data-game="' + esc(g.game) + '"><span class="name">' + esc(g.name) + '</span> <span class="num">' +
           count(g.sessions, TIMES) + ' · ' + duration(g.seconds) + '</span></li>';
-      }).join('') + '</ol>' : empty('لم تُلعب أي لعبة دقيقة أو أكثر في هذه الفترة.');
+      }).join('') + '</ol>' : open ? '' : empty('لم تُلعب أي لعبة دقيقة أو أكثر في هذه الفترة.')) + open;
 
+      // The average leaves out play time that has no closed session yet.
       var closed = s.sessions + s.short;
       $('cardTime').innerHTML = s.seconds > 0 || closed ? '<p class="big" data-seconds="' + s.seconds + '">' + duration(s.seconds) + '</p>' +
-        '<p>وقت اللعب الفعلي</p><p>متوسط مرة اللعب: <strong>' + (closed ? duration(s.seconds / closed) : '—') + '</strong></p>' +
-        '<p>مرات اللعب: <strong>' + fmt(s.sessions) + '</strong> · خرجوا بسرعة: <strong>' + fmt(s.short) + '</strong></p>'
-        : empty('لا يوجد لعب في هذه الفترة.');
+        '<p>وقت اللعب الفعلي</p><p>متوسط مرة اللعب: <strong>' + (closed ? duration(s.closedSeconds / closed) : '—') + '</strong></p>' +
+        '<p>مرات اللعب: <strong>' + fmt(s.sessions) + '</strong> · خرجوا بسرعة: <strong>' + fmt(s.short) + '</strong></p>' +
+        (closed ? '' : open) : empty('لا يوجد لعب في هذه الفترة.');
 
       var first = 24, last = -1, max = 0, html = '';
       hours.forEach(function (v, h) { if (v > 0) { first = Math.min(first, h); last = h; max = Math.max(max, v); } });
@@ -877,14 +962,15 @@
       }
       $('cardHours').innerHTML = last < 0 ? empty('لا يوجد لعب في هذه الفترة.') :
         '<div class="hours" role="img" aria-label="أكثر ساعة لعبًا تبدأ ' + hours.indexOf(max) + ':00">' + html + '</div>' +
-        '<p class="hint">وقت اللعب الفعلي حسب الساعة' + (combined ? '. عند عرض عدة أجهزة تشمل الساعات كل الأيام في الملفات.' : '.') + '</p>';
+        '<p class="hint">وقت اللعب الفعلي حسب الساعة' + (combined ? '. عند عرض عدة أجهزة تشمل الساعات كل الأيام في الملفات، ' +
+          'وفيها فقط الساعات التي لُعبت فيها كل لعبة في 3 أيام أو أكثر، لا في كل أيامها.' : '.') + '</p>';
 
       var items = [];
       s.games.forEach(function (g) {
         var l = stuck(g.levels)[0];
         if (l && items.length < 3) {
           items.push('<li data-game="' + esc(g.game) + '" data-level="' + esc(l.level) + '"><span class="name">' + esc(g.name) +
-            '</span>: المرحلة ' + levelName(l.level) + ' — توقفوا عندها ' + fmt(l.gaveUp) + ' من ' + count(l.visits, VISITS) + '</li>');
+            '</span>: المرحلة أو الوضع ' + levelName(l.level) + ' — توقفوا عندها ' + fmt(l.gaveUp) + ' من ' + count(l.visits, VISITS) + '</li>');
         }
       });
       $('cardStuck').innerHTML = items.length ? '<ul>' + items.join('') + '</ul><a href="#stuckSection">التفاصيل</a>'
@@ -895,21 +981,25 @@
       if (!s.games.length) { $('gameTable').innerHTML = empty('لا يوجد لعب في هذه الفترة.'); return; }
       var html = '<div class="scroll"><table class="games"><thead><tr><th scope="col">اللعبة</th><th scope="col">وقت اللعب الفعلي</th>' +
         '<th scope="col">مرات اللعب</th><th scope="col">خرجوا بسرعة</th><th scope="col">أيام اللعب</th><th scope="col">❤</th></tr></thead><tbody>';
+      // Several PCs together: a date counts once, and the cell says on how many PCs.
       s.games.forEach(function (g) {
         var heart = g.hearted ? (s.pcs > 1 ? '❤ ' + g.hearted : '❤') : '';
         html += '<tr data-game="' + esc(g.game) + '" data-seconds="' + g.seconds + '" data-sessions="' + g.sessions + '" data-short="' +
-          g.short + '" data-days="' + g.days + '"><th scope="row">' + (g.levels.length ? '<a href="#lv-' + esc(g.game) +
-          '" data-open="lv-' + esc(g.game) + '" title="مراحل هذه اللعبة">' + esc(g.name) + '</a>' : esc(g.name)) + '</th><td>' +
-          duration(g.seconds) + '</td><td>' + fmt(g.sessions) + '</td><td>' + fmt(g.short) + '</td><td>' + fmt(g.days) +
+          g.short + '" data-days="' + g.days + '" data-pcs="' + g.pcs + '"><th scope="row">' + (g.levels.length ? '<a href="#lv-' +
+          esc(g.game) + '" data-open="lv-' + esc(g.game) + '" title="مراحل هذه اللعبة أو أوضاعها">' + esc(g.name) + '</a>' : esc(g.name)) +
+          '</th><td>' + duration(g.seconds) + '</td><td>' + fmt(g.sessions) +
+          (g.open ? '<span class="small open-note" title="' + OPEN_NOTE + '">ما زالت مفتوحة</span>' : '') + '</td><td>' +
+          fmt(g.short) + '</td><td>' + fmt(g.days) + (s.pcs > 1 ? '<span class="small">على ' + count(g.pcs, ON_PCS) + '</span>' : '') +
           '</td><td class="heart">' + heart + '</td></tr>';
       });
-      $('gameTable').innerHTML = html + '</tbody></table></div><p class="hint">اضغط اسم اللعبة لترى مراحلها.</p>';
+      $('gameTable').innerHTML = html + '</tbody></table></div><p class="hint">اضغط اسم اللعبة لترى مراحلها أو أوضاعها.</p>';
     }
 
     function resultText(l) {
       var r = levelResult(l);
       if (!r) return '—';
-      return r.avg !== undefined ? 'متوسط النتيجة ' + fmt(r.avg) + ' · أفضل نتيجة ' + fmt(r.best) : 'الفوز ' + pct(r.win);
+      return r.avg !== undefined ? 'متوسط النتيجة ' + fmt(r.avg) + ' · أفضل نتيجة ' + fmt(r.best)
+        : 'فازوا في ' + fmt(r.wins) + ' من ' + count(r.tries, TRIES);
     }
 
     function renderStuck(s) {
@@ -919,7 +1009,7 @@
         if (!top.length) return;
         html += '<div class="stuck" data-game="' + esc(g.game) + '"><h3>' + esc(g.name) + '</h3><ol>';
         top.forEach(function (l) {
-          html += '<li data-level="' + esc(l.level) + '" data-gave-up="' + l.gaveUp + '" data-visits="' + l.visits + '">المرحلة ' +
+          html += '<li data-level="' + esc(l.level) + '" data-gave-up="' + l.gaveUp + '" data-visits="' + l.visits + '">المرحلة أو الوضع ' +
             levelName(l.level) + ': توقفوا عندها ' + fmt(l.gaveUp) + ' من ' + count(l.visits, VISITS) +
             '<span class="meter"><span style="width:' + pct(l.gaveUp / l.visits) + '"></span></span>' +
             (levelResult(l) ? '<span class="small">' + resultText(l) + '</span>' : '') + '</li>';
@@ -935,12 +1025,14 @@
       s.games.forEach(function (g) {
         if (!g.levels.length) return;
         html += '<details id="lv-' + esc(g.game) + '"' + (open['lv-' + g.game] ? ' open' : '') + '><summary>' + esc(g.name) + ' (' +
-          g.levels.length + ')</summary><div class="scroll"><table><thead><tr><th scope="col">المرحلة</th><th scope="col">مرات البدء</th>' +
+          g.levels.length + ')</summary><div class="scroll"><table><thead><tr><th scope="col">المرحلة أو الوضع</th><th scope="col">مرات البدء</th>' +
           '<th scope="col">الزيارات</th><th scope="col">توقفوا عند هذه المرحلة</th><th scope="col">الفوز أو النتيجة</th>' +
           '<th scope="col">وقت اللعب الفعلي</th></tr></thead><tbody>';
+        // Giving up means something only where children can win or lose.
         g.levels.forEach(function (l) {
-          html += '<tr data-level="' + esc(l.level) + '"><th scope="row">' + levelName(l.level) + '</th><td>' + fmt(l.starts) + '</td><td>' +
-            fmt(l.visits) + '</td><td>' + fmt(l.gaveUp) + '</td><td>' + resultText(l) + '</td><td>' + duration(l.seconds) + '</td></tr>';
+          html += '<tr data-level="' + esc(l.level) + '" data-winnable="' + (l.winnable ? 1 : 0) + '"><th scope="row">' + levelName(l.level) +
+            '</th><td>' + fmt(l.starts) + '</td><td>' + fmt(l.visits) + '</td><td>' + (l.winnable ? fmt(l.gaveUp) : '—') + '</td><td>' +
+            resultText(l) + '</td><td>' + duration(l.seconds) + '</td></tr>';
         });
         html += '</tbody></table></div></details>';
       });
@@ -1132,7 +1224,7 @@
       // Save the moment first: the portal drops anything it recorded before it,
       // even if it writes between the two steps. Its next record sets a new start date.
       try {
-        updateMeta(function (raw) { raw.clearedAt = Date.now(); delete raw.since; });
+        updateMeta(function (raw) { raw.clearedAt = Date.now(); delete raw.since; delete raw.pruned; });
         clearStats(store);
         say('clearStatus', 'مُسحت إحصاءات هذا الجهاز.');
       } catch (e) { say('clearStatus', 'تعذّر الحفظ في هذا المتصفح.', true); }
