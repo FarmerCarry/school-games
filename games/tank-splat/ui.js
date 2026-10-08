@@ -454,14 +454,14 @@
   }
 
   function drawTrophyScene(G) {
-    var c = ctx, t = app.resT, rm = Kit.motion.reduced(); // reduced: no drop-in, hopping or turning rays
+    var c = ctx, t = app.resT, rm = Kit.motion.reduced(); // reduced: no drop-in, hopping, blinking or turning rays
     c.fillStyle = 'rgba(30,18,70,0.6)'; c.fillRect(0, 0, W, H);
     var w = G.matchWinner || G.tanks[0];
     var s = rm ? 1 : TG.easeBack(Math.min(1, t * 2));
     A.drawTrophy(c, 330, 470, 1.25 * s, rm ? 0 : t);
     var hop = rm ? 0 : Math.abs(Math.sin(t * 4));
     var bounce = hop * 14, sq = rm ? 0 : Math.max(0, 1 - hop * 3) * 0.6;
-    A.drawTank(c, { x: 330, y: 250 - bounce - (1 - s) * 300, a: -Math.PI / 2, pal: w.pal, hat: w.hat, t: t, scale: 2.5, sq: sq, blink: (t % 3) < 0.12 });
+    A.drawTank(c, { x: 330, y: 250 - bounce - (1 - s) * 300, a: -Math.PI / 2, pal: w.pal, hat: w.hat, t: t, scale: 2.5, sq: sq, blink: !rm && (t % 3) < 0.12 });
     // the others watch from below
     var others = G.tanks.filter(function (x) { return x !== w; });
     others.forEach(function (o, i) {

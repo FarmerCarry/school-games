@@ -170,16 +170,17 @@ test('reduced motion stops the screen shake and decorative motion', async t => {
     const name = __game.app.game.tanks[0].name + '@';
     const tags = () => { runtime.textYs.length = 0; runtime.draw(1); return runtime.textYs.filter(e => e.startsWith(name)).join(); };
     const before = tags(); runtime.step(0.25);
-    // splatted tanks' spiral eyes stop turning
-    const eyes = t => {
+    // splatted tanks' spiral eyes and the flower, propeller and antenna hats stop turning
+    const tank = (t, o) => {
       const cv = document.createElement('canvas'); cv.width = cv.height = 80;
-      TS_ART.drawTank(cv.getContext('2d'), { x: 40, y: 40, a: 0, pal: TS_ART.PAL[1], t, dead: 1 });
+      TS_ART.drawTank(cv.getContext('2d'), Object.assign({ x: 40, y: 50, a: 0, pal: TS_ART.PAL[1], t }, o));
       return cv.toDataURL();
     };
-    const still = eyes(0) === eyes(0.4);
-    Kit.motion.setPreference('full'); const turning = eyes(0) !== eyes(0.4); Kit.motion.setPreference('reduce');
+    const moving = () => [{ dead: 1 }, { hat: 4 }, { hat: 5 }, { hat: 6 }].map(o => tank(0, o) !== tank(0.4, o));
+    const still = moving();
+    Kit.motion.setPreference('full'); const turning = moving(); Kit.motion.setPreference('reduce');
     return [before === tags(), still, turning];
-  }), [true, true, true]);
+  }), [true, [false, false, false, false], [true, true, true, true]]);
   await startQuietStage(page, 0);
   assert.deepEqual(await page.evaluate(() => {
     const g = __game.app.game; g.shakeP = 13; runtime.step(0.05); runtime.draw(1); return [g.shakeP, g.shx, g.shy, runtime.dashOffset];
@@ -189,16 +190,16 @@ test('reduced motion stops the screen shake and decorative motion', async t => {
     const g = __game.app.game; g.shakeP = 13; runtime.step(1 / 60); runtime.draw(1); return [g.shakeP > 0, runtime.dashOffset < 0];
   }), [true, true], 'shake and marching guide dots return with full motion');
 
-  // The result screen's winner tank neither drops in nor hops.
+  // The result screen's winner tank neither drops in, hops nor blinks.
   await page.evaluate(() => Kit.motion.setPreference('reduce'));
   assert.deepEqual(await page.evaluate(() => {
     const drawTank = TS_ART.drawTank, ys = [];
-    TS_ART.drawTank = (c, o) => { if (o.scale === 2.5) ys.push(o.y); return drawTank(c, o); };
+    TS_ART.drawTank = (c, o) => { if (o.scale === 2.5) ys.push(o.y, !!o.blink); return drawTank(c, o); };
     for (let n = 0; n < 60 && __game.app.screen !== 'result'; n++) { __game.winRound(); runtime.step(0.5); }
-    runtime.draw(1); runtime.step(0.3); runtime.draw(1);
+    __game.app.resT = 3; runtime.draw(1); runtime.step(0.3); runtime.draw(1);
     TS_ART.drawTank = drawTank;
     return [__game.app.screen, ys];
-  }), ['result', [250, 250]]);
+  }), ['result', [250, false, 250, false]]);
 });
 
 test('wall highlights stay unbroken where walls meet', async t => {

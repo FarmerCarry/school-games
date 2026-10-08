@@ -67,9 +67,10 @@
 
   /* ------------------------------------------------------------ hats */
   // Hats are drawn upright (not rotated with the tank). (x, y) = top of turret.
+  // Reduced motion: the flower, propeller and antenna hold their resting pose.
   function drawHat(c, id, x, y, s, t) {
     if (!id) return;
-    t = t || 0;
+    t = Kit.motion.reduced() ? 0 : (t || 0);
     c.save();
     c.translate(x, y);
     c.scale(s, s);
