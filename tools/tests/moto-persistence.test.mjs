@@ -209,14 +209,20 @@ test('Moto Madness rescues a bike stuck in a wheelie against a waiting lift', as
   const run = await page.evaluate(() => {
     __game.start(16);
     const w = __game.world, ride = (n, lean) => __game.step(n, { gas: true, brake: false, lean });
+    const m = w.movers[0], lift = [m.x - m.len / 2, m.x + m.len / 2], crash = w.crash, crashes = [];
+    // note why and where each crash happens, so a pit or the press spikes cannot pass for the rescue
+    w.crash = function (why) { if (!this.crashed && !this.finished) crashes.push({ why, x: Math.round(this.bike.x) }); return crash.apply(this, arguments); };
     for (let i = 0; i < 600 && w.bike.x < 600; i++) ride(1, 0);
     ride(18, -1);
     ride(3 * 60, 0);
-    const stuckAt = Math.round(w.bike.x), crashesBefore = w.crashes;
+    const stuckAt = Math.round(w.bike.x), crashesBefore = crashes.length;
     ride(5 * 60, 0);
-    return { stuckAt, crashesBefore, crashes: w.crashes, state: __game.state };
+    return { lift, stuckAt, crashesBefore, crashes, state: __game.state };
   });
   assert.equal(run.crashesBefore, 0, `the bike stands against the lift wall: ${JSON.stringify(run)}`);
+  assert.ok(run.stuckAt > run.lift[0] && run.stuckAt < run.lift[1], `the bike stands on the first lift: ${JSON.stringify(run)}`);
   assert.equal(run.state, 'play');
-  assert.ok(run.crashes >= 1, `still stuck after 8 s of ↑: ${JSON.stringify(run)}`);
+  assert.ok(run.crashes.length >= 1, `still stuck after 8 s of ↑: ${JSON.stringify(run)}`);
+  assert.equal(run.crashes[0].why, 'stuck', `the first crash is the rescue: ${JSON.stringify(run)}`);
+  assert.ok(Math.abs(run.crashes[0].x - run.stuckAt) <= 60, `the rescue comes at the lift wall: ${JSON.stringify(run)}`);
 });
