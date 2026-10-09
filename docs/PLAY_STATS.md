@@ -376,8 +376,10 @@ says so.
   right to left; numbers are numbers, ids and labels are text. It opens on any Windows
   locale without separator or encoding problems. An Excel table needs one data row, so
   a table with no rows keeps one blank row; the read-me sheet tells the Power Query step
-  to drop rows where `pc` is empty. The read-me also says how long a PC keeps its days
-  and why some hours are missing.
+  to drop rows where `pc` is empty. The read-me also says how long a PC keeps its days,
+  that they live in one browser profile (another browser, a roaming or temporary
+  profile, or cleared site data starts from zero), why some hours are missing and how
+  to combine files (newest export per `pc` and `date`; for `hours`, per PC).
 * **JSON** `play-stats_<pc>_<YYYY-MM-DD>.json`:
   `{ format: 'sg-play-stats', v: 1, pc: { id, label, copy }, exported_at, tables: { days: [...], games: [...], levels: [...], hours: [...] } }`,
   each table an array of flat objects with the columns above.

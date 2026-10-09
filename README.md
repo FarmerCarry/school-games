@@ -203,10 +203,16 @@ two-player modes mix players.
   workbooks in one folder and use **Data → Get Data → From Folder**. Drop rows where `pc`
   is empty (an empty table keeps one blank row). For each `pc` and `date`, keep only the
   rows from the file with the newest `exported_at`; never add two exports of the same PC
-  and day.
+  and day. The `hours` table has no dates (each file sums all its days), so for it keep
+  only each PC's newest export.
 - **Stop or clear:** stop collecting (type «أوقف» to confirm) or clear this PC's
   statistics (type «امسح»). Clearing never removes game progress, the PC name or the
-  stop setting. Clearing the browser's site data also deletes the statistics.
+  stop setting.
+- **One browser profile on one PC:** the statistics live in the browser profile the
+  children use on that PC. A roaming school profile, a temporary one that is reset at
+  sign-out, another browser, or clearing the browser's site data starts again from zero.
+  Use the same browser and a profile that stays on the PC, and export before a PC is
+  reset.
 
 The page has no password. A child who opens it could stop or clear the statistics,
 so both actions need a typed word. The formats are in [`docs/PLAY_STATS.md`](docs/PLAY_STATS.md).
