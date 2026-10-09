@@ -1,6 +1,8 @@
 // A small ZIP writer for the offline download made by tools/build.mjs. No library:
 // Node's raw deflate, a table CRC-32 and one fixed timestamp, so the same files
 // always give the same ZIP bytes. No ZIP64: the site is far below 4 GB and 65,535 files.
+// js/teacher.js has its own stored-only writer for the Excel export; it cannot share
+// this one, because the teacher page is a plain browser script without modules or zlib.
 import zlib from 'node:zlib';
 
 const CRC_TABLE = new Int32Array(256).map((_, n) => {

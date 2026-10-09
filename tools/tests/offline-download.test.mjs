@@ -19,6 +19,16 @@ const FOLDER = 'school-games/';
 // 1 January 1980 00:00 in MS-DOS format: the same bytes on every build.
 const DOS_TIME = 0, DOS_DATE = 33;
 
+// CRC-32 bit by bit: no table shared with the writer, and no zlib.crc32 (Node 22.2+).
+function checksum(bytes) {
+  let crc = -1;
+  for (let i = 0; i < bytes.length; i++) {
+    crc ^= bytes[i];
+    for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ -1) >>> 0;
+}
+
 // Reads a ZIP without data descriptors, encryption, ZIP64 or a comment (all that the
 // writer may produce) and refuses gaps or hidden data between its parts.
 function readZip(bytes) {
@@ -52,7 +62,7 @@ function readZip(bytes) {
     const body = buf.subarray(from, from + packed);
     const data = method === 8 ? zlib.inflateRawSync(body) : Buffer.from(body);
     assert.equal(data.length, length, name + ': uncompressed size');
-    assert.equal(zlib.crc32(data), crc, name + ': CRC-32');
+    assert.equal(checksum(data), crc, name + ': CRC-32');
     entries.push({ name, data, flags, method, time, date });
     next = from + packed;
     p += 46 + nameLength + buf.readUInt16LE(p + 30) + buf.readUInt16LE(p + 32);
@@ -70,7 +80,7 @@ function filesUnder(root, rel = '') {
 }
 
 test('the ZIP writer keeps exact bytes with checked CRC-32s, fixed dates and UTF-8 names only where needed', () => {
-  assert.equal(crc32(Buffer.from('123456789')), 0xcbf43926, 'standard CRC-32 check value');
+  for (const sum of [crc32, checksum]) assert.equal(sum(Buffer.from('123456789')), 0xcbf43926, 'standard CRC-32 check value');
   let noise = Buffer.alloc(0);
   while (noise.length < 4096) noise = Buffer.concat([noise, crypto.createHash('sha256').update(noise).digest()]);
   const files = [
@@ -85,7 +95,7 @@ test('the ZIP writer keeps exact bytes with checked CRC-32s, fixed dates and UTF
   assert.deepEqual(entries.map(entry => entry.name), files.map(file => file.name));
   entries.forEach((entry, i) => {
     assert.ok(entry.data.equals(files[i].data), entry.name + ' round-trips');
-    assert.equal(crc32(files[i].data), zlib.crc32(files[i].data), entry.name + ' CRC-32 agrees with zlib');
+    assert.equal(crc32(files[i].data), checksum(files[i].data), entry.name + ' CRC-32 agrees with the bitwise one');
     assert.deepEqual([entry.time, entry.date], [DOS_TIME, DOS_DATE], entry.name + ' has the fixed date');
   });
   // Text shrinks; random bytes, empty and tiny files are stored as they are.

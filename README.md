@@ -140,13 +140,17 @@ Download the fast version as one ZIP file (under 2 MB):
 1. Right-click the downloaded file → **Extract All…** (Arabic Windows: **استخراج الكل…**) →
    **Extract**. Do not open `index.html` from inside the ZIP window: Windows then opens
    that one file on its own, and the games cannot load.
-2. Open the extracted `school-games` folder and double-click `index.html`.
+2. Windows extracts into a new folder named after the file, `school-games-offline`, and
+   opens it. Inside it, open the `school-games` folder and double-click `index.html`.
 
-Everything works straight from the folder, without internet or installation. You can copy
-the folder to other PCs, a USB stick or a shared drive.
+Everything works straight from the `school-games` folder, without internet or installation.
+You can copy that folder to other PCs, a USB stick or a shared drive.
 
-**Updating:** the folder never updates itself. For new games and fixes, download the ZIP
-again, delete the old `school-games` folder and extract the new one in the same place.
+**Updating:** the folder never updates itself. For new games and fixes, delete the old ZIP
+and the old `school-games-offline` folder, then download and extract the ZIP again as above,
+so the games are back in the same place. (If the old ZIP is still there, the new download
+and its folder get ` (1)` added to their names.) Replace any copies of the `school-games`
+folder on other PCs, USB sticks or shared drives with the new one too.
 Saved progress and play statistics stay, because the browser keeps them, not the folder.
 The ZIP is part of the fast version, so it is there only while GitHub Pages publishes it.
 
