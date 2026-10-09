@@ -16,8 +16,8 @@ function stateOfGame() {
   if (!g && window.GolfArt && document.getElementById('title-screen')) {
     // Golf exposes its screens in the DOM instead of a production debug API.
     // A leaked shortcut can start a shot or open an overlay, both observable here.
-    const screens = ['title-screen', 'swing-controls', 'flight-hint', 'modal', 'pause-content', 'result-content', 'worlds-content', 'upgrades-content'];
-    return JSON.stringify(Object.fromEntries(screens.map(id => [id, !document.getElementById(id).hidden])));
+    const screens = ['title-screen', 'hud', 'modal', 'pause-content', 'result-content', 'worlds-content', 'shop-content'];
+    return JSON.stringify({ phase: document.getElementById('ui').dataset.phase, ...Object.fromEntries(screens.map(id => [id, !document.getElementById(id).hidden])) });
   }
   let state = typeof g.state === 'function' ? g.state() : g.state;
   if (state && typeof state === 'object') return JSON.stringify({ screen: state.screen, phase: state.phase, ui: state.ui, paused: state.paused, modal: state.modal });

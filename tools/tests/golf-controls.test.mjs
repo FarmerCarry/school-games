@@ -33,66 +33,37 @@ after(async () => {
   await server?.close();
 });
 
+// The real game in the portal's iframe, with its own animation loop.
 async function game(t) {
   const context = await browser.newContext({ viewport: { width: 1360, height: 920 }, serviceWorkers: 'block' });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'no browser errors'); });
-  await page.addInitScript(() => {
-    // Observe the real renderer state and update function without adding a
-    // production debug API or replacing the game's animation loop/physics.
-    let kit, art, physics;
-    Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
-      kit = value;
-      const loop = kit.loop;
-      kit.loop = (update, render, options) => {
-        window.advanceGolf = update;
-        return loop(update, render, options);
-      };
-    } });
-    Object.defineProperty(window, 'GolfArt', { configurable: true, get: () => art, set(value) {
-      art = value;
-      const draw = art.draw;
-      art.draw = (ctx, state) => { window.golfState = state; return draw(ctx, state); };
-    } });
-    Object.defineProperty(window, 'GolfPhysics', { configurable: true, get: () => physics, set(value) {
-      physics = value;
-      const step = physics.step;
-      window.physicsSteps = 0;
-      physics.step = (...args) => { window.physicsSteps++; return step(...args); };
-    } });
-  });
+  await page.addInitScript(installGolfHarness, { manual: false });
   await page.goto(`${origin}/golf-parent`);
   const frame = page.frame({ name: 'golf' });
-  await frame.waitForFunction(() => window.golfState && window.advanceGolf);
+  await frame.waitForFunction(() => window.golfState && window.golfTick);
   return { page, frame };
 }
 
-async function phase(frame) { return frame.evaluate(() => golfState.phase); }
-async function ball(frame) { return frame.evaluate(() => ({ x: golfState.ball.x, y: golfState.ball.y, time: golfState.ball.time })); }
+const phase = frame => frame.evaluate(() => golfState.phase);
+const ball = frame => frame.evaluate(() => ({ x: golfState.ball.x, y: golfState.ball.y, time: golfState.ball.time }));
 async function startFlight(frame) {
   await frame.locator('#play').click();
-  await frame.locator('#hit').click();
+  await frame.locator('#game').click({ position: { x: 600, y: 300 } });
   await frame.waitForFunction(() => golfState.phase === 'flight' && golfState.ball.x > 0);
 }
 async function activate(page, frame, selector, key) {
   await frame.locator(selector).focus();
   await page.keyboard.press(key);
 }
-async function speedSteps(frame) {
-  return frame.evaluate(() => {
-    physicsSteps = 0;
-    advanceGolf(1 / 60);
-    return physicsSteps;
-  });
-}
-async function result(frame) {
-  await frame.evaluate(() => {
-    golfState.ball.stopped = true;
-    golfState.ball.surface = 'grass';
-    golfState.ball.maxX = 1000;
-    for (let i = 0; i < 50; i++) advanceGolf(1 / 60);
-  });
+async function result(frame, distance = 1000) {
+  await frame.evaluate(distance => {
+    const b = golfState.ball; b.done = true; b.reason = 'rest'; b.maxX = distance;
+  }, distance);
+  await frame.waitForFunction(() => golfState.phase === 'landed');
+  await frame.evaluate(() => document.getElementById('game').focus());
+  await frame.page().keyboard.press('Space');
   assert.equal(await phase(frame), 'result');
 }
 
@@ -121,7 +92,7 @@ test('Golf lifecycle pauses are idempotent and never steal focus back from the p
   await page.waitForTimeout(250);
   assert.deepEqual(await ball(frame), frozen, 'repeated blur/visibility events must not resume the ball');
   await frame.locator('#resume').click();
-  await frame.waitForFunction(x => golfState.ball.x !== x, frozen.x);
+  await frame.waitForFunction(x => golfState.ball.x !== x || golfState.ball.done, frozen.x);
 });
 
 test('Golf manually paused flight remains paused when focus leaves and returns', async t => {
@@ -137,7 +108,7 @@ test('Golf manually paused flight remains paused when focus leaves and returns',
   assert.equal(await frame.locator('#pause-content').isVisible(), true);
   await page.keyboard.press('KeyP');
   assert.equal(await frame.locator('#modal').isVisible(), false, 'advertised P resumes with Resume focused');
-  await frame.waitForFunction(x => golfState.ball.x !== x, frozen.x);
+  await frame.waitForFunction(x => golfState.ball.x !== x || golfState.ball.done, frozen.x);
 });
 
 for (const direction of ['forward', 'backward']) {
@@ -160,7 +131,7 @@ for (const direction of ['forward', 'backward']) {
   });
 }
 
-test('Golf ignores browser modifier chords and composition without changing phase or flight speed', async t => {
+test('Golf ignores browser modifier chords and composition', async t => {
   const { page, frame } = await game(t);
   await frame.locator('#game').focus();
   const keys = ['Control+Space', 'Alt+Space', 'Meta+Space'];
@@ -171,61 +142,61 @@ test('Golf ignores browser modifier chords and composition without changing phas
   await page.keyboard.press('Space');
   for (const key of keys) {
     await page.keyboard.press(key);
-    assert.equal(await phase(frame), 'ready', `${key} must not strike the ball`);
+    assert.equal(await phase(frame), 'ready', `${key} must not swing`);
   }
   await frame.evaluate(() => document.getElementById('game').dispatchEvent(new KeyboardEvent('keydown', {
     code: 'Space', key: ' ', bubbles: true, cancelable: true, isComposing: true
   })));
   assert.equal(await phase(frame), 'ready');
   await page.keyboard.press('Space');
-  assert.equal(await phase(frame), 'flight');
-  assert.equal(await speedSteps(frame), 1);
+  await frame.waitForFunction(() => golfState.phase === 'flight' && golfState.ball.vy > 5);
   for (const key of keys) {
     await page.keyboard.press(key);
-    assert.equal(await speedSteps(frame), 1, `${key} must not accelerate flight`);
+    assert.equal(await frame.evaluate(() => golfState.ball.rocketsLeft), 1, `${key} must not fire a rocket`);
   }
   await page.keyboard.press('Space');
-  assert.equal(await speedSteps(frame), 3, 'unmodified game-owned Space accelerates');
+  assert.equal(await frame.evaluate(() => golfState.ball.rocketsLeft), 0, 'unmodified Space fires the rocket');
 });
 
-for (const key of ['Space']) {
-  test(`Golf native ${key} activates focused controls once and preserves pause/result shortcuts`, async t => {
-    const { page, frame } = await game(t);
-    await activate(page, frame, '#open-upgrades', key);
-    assert.equal(await phase(frame), 'title');
-    assert.equal(await frame.locator('#upgrades-content').isVisible(), true);
-    await page.keyboard.press('Escape');
-    await activate(page, frame, '#play', key);
-    assert.equal(await phase(frame), 'ready');
-    await activate(page, frame, '#hit', key);
-    assert.equal(await phase(frame), 'flight');
-    await activate(page, frame, '#flight-hint', key);
-    assert.equal(await speedSteps(frame), 3, 'native activation changes speed exactly once');
-    await activate(page, frame, '#pause', key);
-    assert.equal(await frame.locator('#pause-content').isVisible(), true);
-    await page.keyboard.press('Escape');
-    assert.equal(await frame.locator('#modal').isVisible(), false);
-    await frame.locator('#game').focus();
-    await page.keyboard.press('Escape');
-    await activate(page, frame, '#resume', key);
-    assert.equal(await frame.locator('#modal').isVisible(), false);
-    await result(frame);
-    const before = await frame.evaluate(() => Kit.store('skybound-golf').get('progress').upgrades.power);
-    await activate(page, frame, '[data-upgrade="power"]', key);
-    assert.equal(await phase(frame), 'result', 'native upgrade activation must not restart the round');
-    assert.equal(await frame.evaluate(() => Kit.store('skybound-golf').get('progress').upgrades.power), before + 1);
-    assert.equal(await frame.evaluate(() => document.activeElement === document.querySelector('#result-unlock button')), true,
-      'a keyboard purchase on the unlock card hands Space back to the new world');
-    await activate(page, frame, '#again', key);
-    assert.equal(await phase(frame), 'ready');
-    await activate(page, frame, '#hit', key);
-    await result(frame);
-    await page.keyboard.press('KeyR');
-    assert.equal(await phase(frame), 'ready', 'advertised R restarts with Again focused');
-  });
-}
+test('Golf native Space activates focused controls once and keeps the pause and result shortcuts', async t => {
+  const { page, frame } = await game(t);
+  await activate(page, frame, '#open-shop', 'Space');
+  assert.equal(await phase(frame), 'title');
+  assert.equal(await frame.locator('#shop-content').isVisible(), true);
+  await page.keyboard.press('Escape');
+  assert.equal(await frame.locator('#modal').isVisible(), false);
+  await activate(page, frame, '#open-worlds', 'Space');
+  assert.equal(await frame.locator('#worlds-content').isVisible(), true);
+  await page.keyboard.press('Escape');
+  await activate(page, frame, '#play', 'Space');
+  assert.equal(await phase(frame), 'ready');
+  await activate(page, frame, '#game', 'Space');
+  await frame.waitForFunction(() => golfState.phase === 'flight');
+  await activate(page, frame, '#pause', 'Space');
+  assert.equal(await frame.locator('#pause-content').isVisible(), true);
+  await page.keyboard.press('Escape');
+  assert.equal(await frame.locator('#modal').isVisible(), false);
+  await frame.locator('#game').focus();
+  await page.keyboard.press('Escape');
+  await activate(page, frame, '#resume', 'Space');
+  assert.equal(await frame.locator('#modal').isVisible(), false);
+  await result(frame);
+  const before = await frame.evaluate(() => Kit.store('skybound-golf').get('progress').upgrades.power);
+  await activate(page, frame, '[data-upgrade="power"]', 'Space');
+  assert.equal(await phase(frame), 'result', 'buying an upgrade must not restart the round');
+  assert.equal(await frame.evaluate(() => Kit.store('skybound-golf').get('progress').upgrades.power), before + 1);
+  assert.equal(await frame.evaluate(() => document.activeElement === document.querySelector('#result-unlock button')), true,
+    'a keyboard purchase on the unlock card hands Space back to the new world');
+  await activate(page, frame, '#again', 'Space');
+  assert.equal(await phase(frame), 'ready');
+  await activate(page, frame, '#game', 'Space');
+  await frame.waitForFunction(() => golfState.phase === 'flight');
+  await result(frame, 50);
+  await page.keyboard.press('KeyR');
+  assert.equal(await phase(frame), 'ready', 'advertised R plays again with Again focused');
+});
 
-// Frame-stepped game: the needle only moves when the test advances it.
+// Frame-stepped game: the gauge only moves when the test advances it.
 async function manualGame(t, progress) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
   await context.addInitScript(installGolfHarness, { manual: true });
@@ -235,42 +206,33 @@ async function manualGame(t, progress) {
   t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'no browser errors'); });
   await page.goto(`${origin}/games/skybound-golf/`);
   await page.locator('#play').click();
-  await page.evaluate(() => advanceGolfFrames(29)); // the needle is now in the perfect band
+  await page.evaluate(() => advanceGolfFrames(39)); // the club is at the top of the gold zone
   return page;
 }
 
-test('Golf hit button strikes when pressed, not when the slow click is released', async t => {
+test('Golf strikes from the keyboard once, at the moment of the press', async t => {
   const page = await manualGame(t);
-  const box = await page.locator('#hit').boundingBox();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  // A normal click holds the button for about 120 ms while the needle keeps moving.
-  await page.evaluate(() => advanceGolfFrames(7));
-  await page.mouse.up();
-  const shot = await page.evaluate(() => ({ phase: golfState.phase, quality: golfState.quality, age: golfState.shotAge }));
-  assert.equal(shot.phase, 'flight');
-  assert.equal(shot.quality, 1, 'the press time decides the shot (release time would score about 0.58)');
-  assert(Math.abs(shot.age - 7 / 60) < 1e-9, 'struck once, at the press');
-});
-
-test('Golf hit button still strikes once from the keyboard', async t => {
-  const page = await manualGame(t);
-  await page.locator('#hit').focus();
+  await page.locator('#game').focus();
+  const pressed = await page.evaluate(() => golfState.gauge.value);
   await page.keyboard.press('Enter');
-  assert.deepEqual(await page.evaluate(() => ({ phase: golfState.phase, quality: golfState.quality, age: golfState.shotAge })), { phase: 'flight', quality: 1, age: 0 });
+  await page.evaluate(() => advanceGolfFrames(8));
+  assert.deepEqual(await page.evaluate(() => ({ phase: golfState.phase, power: golfState.ball.power, grade: golfState.ball.grade })),
+    { phase: 'flight', power: pressed, grade: 'perfect' });
 });
 
 test('Golf world unlock keeps Space on the new world after buying upgrades', async t => {
-  // The perfect 300 m shot pays 120 coins: with 80 saved, enough for two bounce levels and one power level.
-  const page = await manualGame(t, { world: 0, best: 200, coins: 80 });
-  await page.locator('#hit').click();
+  // A 300 m shot pays 30+ coins: with 80 saved, enough for two bounce levels and one power level.
+  const page = await manualGame(t, { v: 2, world: 0, best: 200, bests: { meadow: 200 }, coins: 80, shots: 5, tips: 2 });
+  await page.keyboard.press('Space');
   await page.evaluate(() => {
-    golfState.ball.stopped = true; golfState.ball.surface = 'grass'; golfState.ball.maxX = 300;
-    advanceGolfFrames(50);
+    advanceGolfFrames(20);
+    const b = golfState.ball; b.done = true; b.reason = 'rest'; b.maxX = 300;
+    advanceGolfFrames(2);
   });
+  await page.keyboard.press('Space');
   const go = page.locator('#result-unlock button'), focused = () => go.evaluate(b => b === document.activeElement);
   assert.equal(await focused(), true);
-  assert.match(await page.locator('#again').getAttribute('class'), /\bcream\b/, 'the new world is the only coral button');
+  assert.match(await page.locator('#again').getAttribute('class'), /\bsecondary\b/, 'the new world is the main button');
   // A keyboard purchase returns to the new world even when the upgrade stays
   // affordable, and a held Enter neither buys again nor opens the world.
   const bounce = () => page.evaluate(() => Kit.store('skybound-golf').get('progress').upgrades.bounce);
