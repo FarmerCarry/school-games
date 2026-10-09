@@ -158,12 +158,15 @@ const inputSeen = {
   'drift-king': `${g}.car.state === 'drive' && ${g}.car.turning > 0.5`,
   // Until the first gas, brake or lean starts the run, the bike only settles on its brakes.
   'moto-madness': `${g}.world.started && ${g}.world.bike.x > sgInput.before + 40`,
-  // The CPU's bonks stun player 1; only player 1's own attack key starts a wind-up or dash.
-  'sumo-bonk': `!${g}.P[0].cpu && ['windup','dash'].includes(${g}.P[0].action)`,
+  // The CPU's bonks stun player 1; only player 1's own attack key starts a wind-up and
+  // dash on the ground, or in the air a belly slam that ends in a faceplant.
+  'sumo-bonk': `!${g}.P[0].cpu && ['windup','dash','dive','faceplant'].includes(${g}.P[0].action)`,
   // Body pushes and steals move player 1 too; only the held key runs it right.
   'hoop-heads': `${g}.match.players[0].inp.r && ${g}.match.players[0].vx > 150`,
-  // Ragdolls wobble and a fallen one gets up by itself; only the button kicks the whole team at once.
-  'wacky-soccer': `${g}.match.phase === 'play' && ${g}.world.players.filter(p => p.side === 0).every(p => p.kickT > 0)`,
+  // Ragdolls wobble, and a fallen one gets up by itself with a kick (both can at once).
+  // Only the button kicks the whole team and tells the CPU the team pressed: the CPU's
+  // count of seconds since the last press starts at 2 and drops to 0 only then.
+  'wacky-soccer': `${g}.match.phase === 'play' && ${g}.match.cpu[1].since < 1 && ${g}.world.players.filter(p => p.side === 0).every(p => p.kickT > 0)`,
   // The blob follows the pointer, which rests on the centred Play button below it:
   // without input it drifts straight down. The input points up and left of it.
   'blob-battle': `${g}.info().player.x < sgInput.before.x - 20 && ${g}.info().player.y < sgInput.before.y - 20`
