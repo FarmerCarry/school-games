@@ -257,6 +257,15 @@ test('a Normal CPU plays sharper against button-mashing than against pressing at
   assert.equal(play(new WS.CPU(1, 0.2), 0.4, 5), 0.2, 'Easy lets mashers win');
 });
 
+test('no cup round is harder than Hard, where the capped mash rule still pays off for timing (BALANCE.md)', () => {
+  const { WS } = engine();
+  const hard = WS.DIFFS.find(d => d.id === 'hard').skill;
+  for (const cup of WS.CUPS) {
+    assert.ok(cup.skills.every(skill => skill <= hard), `${cup.id}: ${cup.skills}`);
+    assert.ok(cup.skills.every((skill, i) => i === 0 || skill >= cup.skills[i - 1]), `${cup.id}: no round is easier than the one before`);
+  }
+});
+
 test('in the kick window legs and feet kick the ball forward, but head and body only bounce it', () => {
   const { world } = engine();
   const p = world.players[0], ball = world.balls[0];

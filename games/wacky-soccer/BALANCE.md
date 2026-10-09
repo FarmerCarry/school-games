@@ -29,8 +29,11 @@ judge how difficult and how fun the levels feel for 10–11 year olds.
 ```sh
 # 60 matches per cell, first to 5, the three quick-match levels
 node games/wacky-soccer/balance-sim.js --n 60 --seed 9000 --pol idle,mash,kid,timed,smart
-# the four bronze-cup rounds (first to 3)
+# the four bronze-cup rounds (first to 3); also --cup silver, --cup gold
 node games/wacky-soccer/balance-sim.js --n 60 --seed 9000 --cup bronze --pol mash,kid,timed
+# every silver and gold skill once, plus 0.9 (the old gold final). These are the
+# same cells as --cup: rounds with the same skill play the same seeded matches
+node games/wacky-soccer/balance-sim.js --n 60 --seed 9000 --goals 3 --skills 0.45,0.58,0.7,0.78,0.85,0.9
 ```
 
 Match *i* of a cell always uses the same seed, so policies and code versions
@@ -38,6 +41,9 @@ play paired matches. One match changes the whole run, so cells still differ by
 about ±6 points at N = 60. Compare at N ≥ 60, and check a second seed before
 trusting a difference under 10 points. `--from`/`--n` run a slice of a cell, so
 cells can run in parallel. `--json` prints totals.
+
+Seeds 9000 and 5000 are the measuring seeds. Seeds 1000 and 3000 are holdout
+seeds: check a change on them only after choosing it on the measuring seeds.
 
 Simulated players:
 
@@ -87,9 +93,77 @@ Each seed on its own (before → after):
 | 5000 | Normal | 17% → 3% | 73% → 42% | 35% → 47% | 48% → 42% | 67% → 75% |
 | 5000 | Hard | 0% → 3% | 30% → 17% | 8% → 12% | 17% → 10% | 18% → 33% |
 
+Seed 9000 alone misses the Hard gap target (mash − kid 12), so Hard was
+re-measured later on the holdout seeds, 60 matches each. The game code was the
+same, and seeds 9000 and 5000 gave the same numbers as above:
+
+| Seeds | mash | kid | timed | mash − kid | mash − timed |
+|---|---:|---:|---:|---:|---:|
+| 9000 | 22% | 10% | 17% | 12 | 5 |
+| 5000 | 17% | 12% | 10% | 5 | 7 |
+| 1000 | 17% | 8% | 3% | 9 | 14 |
+| 3000 | 15% | 8% | 12% | 7 | 3 |
+| 9000 + 5000 | 19% | 11% | 13% | 8 | 6 |
+| 1000 + 3000 (holdout) | 16% | 8% | 8% | 8 | 8 |
+
+Both pairs of seeds meet the Hard targets. One seed in each pair misses a gap
+(seed 9000 for kid, seed 1000 for timed). That is the usual swing of a 60-match
+cell, not a miss of Hard itself, so Hard is unchanged.
+
 In the real page, a player who never presses won 3 of 20 Easy matches after this
 pass. The review measured 10 of 20 before. Both runs used `__game.step` and were
 not seeded.
+
+## Silver and gold cups
+
+Their CPUs get the same mash rule, so their rounds use the quick-match targets
+for the CPU they face:
+
+- Every round with skill above 0.4: mashing beats pressing at the right moment
+  (kid and timed) by 10 points or less, as on Normal and Hard.
+- A masher wins between Hard's 15% and Normal's 60%, and 15–30% in a round as
+  strong as Hard (0.85).
+- A player who never presses wins 30% or less.
+
+Cup matches are first to 3, so one goal counts for more than in a quick match.
+For a given seed, a cup cell depends only on its skill, so rounds with the same
+skill (silver 2 and bronze 4, silver 3 and gold 1, silver 4 and gold 2) are one
+row.
+
+Measuring seeds 9000 and 5000, 120 matches per cell:
+
+| Skill | Rounds | idle | mash | kid | timed | smart | mash − kid | mash − timed |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 0.45 | silver 1 | 18% | 56% | 53% | 59% | 73% | 3 | -3 |
+| 0.58 | silver 2 (bronze 4) | 12% | 39% | 47% | 51% | 69% | -8 | -12 |
+| 0.7 | silver 3, gold 1 | 15% | 40% | 33% | 34% | 60% | 7 | 6 |
+| 0.78 | silver 4, gold 2 | 7% | 25% | 15% | 27% | 56% | 10 | -2 |
+| 0.85 | gold 3, now also gold 4 | 11% | 22% | 23% | 23% | 42% | -1 | -1 |
+| 0.9 | gold 4 before | 1% | 24% | 9% | 20% | 28% | **15** | 4 |
+
+Holdout seeds 1000 and 3000, 120 matches per cell:
+
+| Skill | mash | kid | timed | mash − kid | mash − timed |
+|---|---:|---:|---:|---:|---:|
+| 0.45 | 58% | 61% | 58% | -3 | 0 |
+| 0.58 | 47% | 43% | 46% | 4 | 1 |
+| 0.7 | 28% | 28% | 37% | 0 | -9 |
+| 0.78 | 29% | 21% | 29% | 8 | 0 |
+| 0.85 | 21% | 15% | 21% | 6 | 0 |
+| 0.9 | 25% | 13% | 13% | **12** | **12** |
+
+The 0.58 row gives the same numbers as bronze round 4 above, so the code had not
+changed since that pass.
+
+The silver cup meets every target on both pairs of seeds and is unchanged. The
+gold final did not: a CPU above Hard gains little from the mash rule, because
+the rule stops at 0.95. A 0.9 CPU plays only 0.05 sharper against a masher,
+while a 0.85 CPU plays 0.1 sharper. In the 0.9 final the kid won 9–13% and the
+masher 24–25%. Even the smart player won only 28%. So the gold final is now 0.85,
+like the semi-final and Hard: mash − kid is -1 and 6, mash − timed -1 and 0, and
+smart wins 42%. The gold cup stays the hardest cup, with three rounds against
+CPUs of 0.78 or more. `tools/tests/wacky-soccer.test.mjs` checks that no cup
+round is stronger than Hard and that no round is easier than the one before.
 
 ## Why the old balance failed
 
@@ -133,13 +207,20 @@ standing-still rule.
 
 ## Known limits and follow-up
 
-- One cell per seed still misses a target: Hard mash − kid is 12 for seed 9000
-  (5 for seed 5000, 8 pooled).
+- A single seed of 60 matches can still miss a gap target that both pairs of
+  seeds meet: Hard mash − kid is 12 for seed 9000 and mash − timed 14 for seed
+  1000. In the cups, seed 5000 gives mash − kid 18 and mash − timed 21 at skill
+  0.7, and mash − kid 19 at 0.78. Judge a change on two seeds pooled, then check
+  it on the holdout seeds.
 - Normal kid moved 48% → 38% for seed 9000 but 35% → 47% for seed 5000 (42% →
   43% pooled). Sloppy presses no longer turn into kicks off the head or body.
   Watch this in a playtest.
-- Silver and gold cups were not re-measured. Their CPUs also get the mash rule,
-  capped at 0.95.
+- Silver round 4 and gold round 2 (0.78) are closest to the gap limit: mash − kid
+  is 10 on the measuring seeds and 8 on the holdout seeds.
+- The gold semi-final and final are now both 0.85 (Hard), so the cup's last round
+  is no harder than the one before it. A final at 0.88 meets the gap target only
+  narrowly (mash − kid about 9 on the measuring seeds), so it was not used; try it
+  again only with the holdout seeds.
 - **Follow-up:** run a classroom playtest of Easy, Normal and the bronze cup with
   real players. Check that children who press when the ball arrives, and who hop
   toward it, feel the game is fair. Then decide whether a visible cue is needed,
