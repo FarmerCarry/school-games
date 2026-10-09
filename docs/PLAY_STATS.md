@@ -316,10 +316,14 @@ Arabic, right to left, Western digits. Fixed note at the top: **«الأرقام
    (`showSaveFilePicker`: Edge and Chrome, and only in a secure context, which includes
    https, `localhost` and `file://` pages but not plain http from another computer), the
    page writes the file itself: closing the dialog or a failed write records nothing and
-   says the file was not saved. Elsewhere, or when the browser refuses the dialog (for
-   example a school policy), the file is downloaded and the page asks whether it was
-   saved; only «نعم، حُفظ الملف» records the export, since a page cannot see whether a
-   download's own Save As window was cancelled.
+   says the file was not saved. Chromium reports a dialog blocked by a school policy
+   (`AllowFileSelectionDialogs`) exactly like a cancel (`AbortError`), so the message
+   after a closed dialog has a «تنزيل الملف بدلًا من ذلك» button. That button, other
+   browsers and any other refusal of the dialog download the file instead, and the page
+   asks whether it was saved; only «نعم، حُفظ الملف» records the export, since a page
+   cannot see whether a download's own Save As window was cancelled. Export clicks are
+   ignored while a save dialog is open (the browser refuses a second one), and the status
+   names the file as the teacher saved it.
 6. A reminder to export when (a) the stats keys use more than about 75 % of the 300 KB
    cap and nothing was exported in the last 7 days (a full PC stays full after an
    export, so the reminder would otherwise never go away), (b) the portal removed a day
@@ -407,13 +411,14 @@ an id but not a label.
 
 Step 1's files are the input; they do not need to change.
 
-* **No code, no network from the site:** each week, on each PC, open 📊 → تصدير ملف
-  Excel and save into one shared OneDrive or SharePoint folder (Edge and Chrome open a
-  save dialog, which starts in the folder used last time; in other browsers turn on "Ask
-  where to save each file" and answer «نعم» once the file is saved). One Excel workbook or Power BI report reads the folder
-  (Get Data → From SharePoint Folder → combine the `days`, `games`, `levels`, `hours`
-  tables), drops rows where `pc` is empty (the blank row of an empty table), keeps the
-  newest `exported_at` per `pc` and `date`, and refreshes in one click.
+* **No code, no network from the site:** each week, on each PC, open 📊 → تصدير ملف Excel
+  and save into one shared OneDrive or SharePoint folder (Edge and Chrome open a save
+  dialog, which starts in the folder used last time; in other browsers turn on "Ask where
+  to save each file" and answer «نعم» once the file is saved). One Excel workbook or
+  Power BI report reads the folder (Get Data → From SharePoint Folder → combine the
+  `days`, `games`, `levels`, `hours` tables), drops rows where `pc` is empty (the blank
+  row of an empty table), keeps the newest `exported_at` per `pc` and `date`, and
+  refreshes in one click.
 * **Automatic collection** would need a Power Automate flow with an HTTP trigger (a
   premium licence) or an Azure Function, plus the school web filter allowing it. Any
   upload would send this same JSON **from teacher.html only**, so games and the portal
@@ -427,12 +432,12 @@ Step 1's files are the input; they do not need to change.
   clock: sessions, late messages from removed frames, restart, failure, launch sources,
   hidden pages, delta merging across two tabs, clear and stop, blocked storage, the time
   of rounds left open (`om`), and `pruned`.
-* `tools/tests/teacher-page.test.mjs`: the page with seeded records, the workbook and
-  JSON exports (saved through a stand-in save dialog; a closed dialog, a failed write
-  and an unconfirmed download count nothing), combining, clear and stop, blocked
-  storage, winnable levels (id shapes,
-  block-burst `'classic'`, fire-and-ice `'L4:duo'`, merge-2048 boards), the export
-  reminder, the hours rule and games still open.
+* `tools/tests/teacher-page.test.mjs`: the page with seeded records, the workbook and JSON
+  exports (saved through a stand-in save dialog; a closed dialog, a failed write and an
+  unconfirmed download count nothing; the download offered after a closed dialog; one
+  dialog at a time; a renamed file), combining, clear and stop, blocked storage, winnable
+  levels (id shapes, block-burst `'classic'`, fire-and-ice `'L4:duo'`, merge-2048 boards),
+  the export reminder, the hours rule and games still open.
 * `tools/tests/merge-progress.test.mjs`: a merge-2048 board is one round; the goal tile
   reports nothing and a full board reports `'end'` with the score.
 * `tools/tests/play-stats-rules.test.mjs` (node only): no network APIs in Kit, portal,
