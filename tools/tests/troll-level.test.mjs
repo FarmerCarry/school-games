@@ -61,6 +61,36 @@ test('Continue moves on past a skipped level instead of sending the player back'
   assert.equal(await where(page), 'play:1', 'the skipped level stays in the level select');
 });
 
+test('a save from before the space world continues into it, and its levels play through to the end', async t => {
+  const page = await game(t);
+  await page.evaluate(() => {
+    // All 24 old levels won; back then level 24 was the last one to unlock.
+    const set = (key, value) => localStorage.setItem('sg:troll-level:' + key, JSON.stringify(value));
+    set('best', Array(24).fill(0)); set('stars', Array(24).fill(3)); set('unl', 23); set('last', 23); set('ended', true);
+  });
+  await page.reload();
+  await page.waitForFunction(() => window.__game && window.stepGame);
+  assert.equal(await page.evaluate(() => __game.save.unl), 24, 'beating level 24 unlocks level 25');
+  assert.equal(await page.locator('#t-levels').textContent(), '24/30');
+  assert.equal(await page.locator('#t-stars-max').textContent(), '/90');
+  assert.equal(await page.locator('#btn-play').textContent(), 'تابع!');
+  await clickControl(page, '#btn-play');
+  assert.equal(await where(page), 'play:24', 'Continue opens the first space level');
+  // Each new level is won through the real game loop (sounds, HUD and traps included).
+  for (let i = 24; i < 30; i++) {
+    await page.evaluate(i => { __game.start(i); __game.solve(); }, i);
+    await page.evaluate(() => { for (let f = 0; f < 120 && __game.mode === 'play'; f++) stepGame(10, true); });
+    assert.equal(await where(page), `win:${i}`, `level ${i + 1} is won by its recorded solution`);
+  }
+  assert.equal(await page.locator('#w-lvl').textContent(), 'عالم الفضاء · المرحلة 30');
+  await clickControl(page, '#btn-next');
+  assert.equal(await page.evaluate(() => __game.mode), 'end');
+  assert.equal(await page.locator('#e-stars').textContent(), '90/90');
+  await clickControl(page, '#btn-e-levels');
+  assert.equal(await page.locator('#worlds .wrow').count(), 5);
+  assert.equal(await page.locator('#worlds .lv:not(.locked)').count(), 30);
+});
+
 test('denied saves warn, keep progress in memory and clear only after a full retry', async t => {
   const page = await game(t);
   await page.evaluate(() => {

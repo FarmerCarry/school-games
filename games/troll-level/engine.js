@@ -100,7 +100,7 @@
     this.groups = []; this.gmap = {};
     this.spikes = []; this.doors = []; this.springs = []; this.saws = []; this.gz = [];
     this.triggers = []; this.timers = []; this.ticks = []; this.flipWarn = 0;
-    this.gs = 1; this.revT = 0; this.winDoor = null;
+    this.gs = 1; this.gk = 1; this.revT = 0; this.winDoor = null;
     var start = { x: 2, y: 12 };
     for (y = 0; y < ROWS; y++) {
       var row = map[y] || '';
@@ -179,7 +179,7 @@
       pop: function (delay) {
         if (delay) { w.timers.push({ t: delay, f: function () { ctl.pop(0); } }); return ctl; }
         var any = false;
-        list.forEach(function (s) { if (s.target === 0) any = true; s.target = 1; s.speed = 16; });
+        list.forEach(function (s) { if (s.target < 1) any = true; s.target = 1; s.speed = 16; });
         if (any && list.length) w.emit('pop', { x: list[0].x + T / 2, y: list[0].y + T / 2 });
         return ctl;
       },
@@ -233,6 +233,8 @@
       },
       wake: function (s) { if (!s.active) { s.active = true; w.emit('saw', { s: s }); } },
       flip: function () { w.flip(); },
+      // Scale gravity (moon levels): jumps go higher and fall slower.
+      gravity: function (k) { w.gk = k; },
       reverse: function (s) { w.revT = s; w.emit('reverse', { t: s }); },
       msg: function (text) { w.emit('msg', { text: text }); },
       shake: function (a) { w.emit('shake', { a: a }); },
@@ -498,7 +500,7 @@
     }
     if (p.jumping && !inp.jh && p.vy * gs < -PH.cut) p.vy = -PH.cut * gs;
     if (p.vy * gs >= 0) p.jumping = false;
-    p.vy += PH.g * gs * DT;
+    p.vy += PH.g * gs * this.gk * DT;
     if (p.vy * gs > PH.maxFall) p.vy = PH.maxFall * gs;
 
     this.moveX(p.vx * DT);

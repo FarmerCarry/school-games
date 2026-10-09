@@ -18,7 +18,8 @@
     { id: 'crown', name: 'الملك', stars: 40, body: '#ffffff' },
     { id: 'alien', name: 'الفضائي', stars: 50, body: '#8dff8a' },
     { id: 'gold', name: 'الذهبي', stars: 60, body: '#ffd23f' },
-    { id: 'rainbow', name: 'قوس قزح', stars: 72, body: '#ff6b6b' }
+    { id: 'rainbow', name: 'قوس قزح', stars: 72, body: '#ff6b6b' },
+    { id: 'astro', name: 'رائد الفضاء', stars: 90, body: '#ffffff' }
   ];
   Art.skinById = function (id) {
     for (var i = 0; i < Art.SKINS.length; i++) if (Art.SKINS[i].id === id) return Art.SKINS[i];
@@ -171,6 +172,14 @@
     } else if (id === 'rainbow') {
       ctx.fillStyle = '#ffffff';
       Art.star(ctx, face * -8, top - 2, 5, '#ffffff', ink, 2);
+    } else if (id === 'astro') {
+      // a glass helmet with a shine and a little antenna
+      ctx.beginPath(); ctx.moveTo(face * 9, top - 4); ctx.lineTo(face * 13, top - 13); ctx.stroke();
+      ctx.fillStyle = '#ff4d6d'; ctx.beginPath(); ctx.arc(face * 13, top - 14, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, -21, 22, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(170,225,255,0.3)'; ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(0, -21, 16, -2.7, -1.9); ctx.stroke();
     }
   }
 
@@ -283,6 +292,24 @@
       g.fillStyle = '#86c934'; g.globalAlpha = 0.5; g.beginPath();
       for (i = 0; i < 16; i++) { x = r() * E.W; h = 130 + r() * 300; g.moveTo(x, h); g.ellipse(x, h, 10, 4, r() * Math.PI, 0, TAU); }
       g.fill();
+    },
+    // Space world: twinkling stars, a ringed planet and a crescent moon.
+    space: function (g, pal, r) {
+      var i, x, y, s, px = 140 + r() * 400, mx = px + 380 + r() * 300, my = 170 + r() * 80;
+      g.fillStyle = '#ffffff'; g.globalAlpha = 0.6; g.beginPath();
+      for (i = 0; i < 46; i++) {
+        x = r() * E.W; y = 130 + r() * 400; s = 3 + r() * 6;
+        g.moveTo(x, y - s); g.lineTo(x + s / 4, y - s / 4); g.lineTo(x + s, y); g.lineTo(x + s / 4, y + s / 4);
+        g.lineTo(x, y + s); g.lineTo(x - s / 4, y + s / 4); g.lineTo(x - s, y); g.lineTo(x - s / 4, y - s / 4); g.closePath();
+      }
+      g.fill();
+      g.fillStyle = pal.bg2; g.globalAlpha = 1; g.beginPath(); blob(g, px, 250, 78); g.fill();
+      g.strokeStyle = '#ffffff'; g.lineWidth = 10; g.globalAlpha = 0.35;
+      g.beginPath(); g.ellipse(px, 250, 130, 26, -0.25, 0, TAU); g.stroke();
+      // crescent: the outer circle's left side, back along an offset circle (c = the angle where they meet)
+      var c = Math.atan2(Math.sqrt(52 * 52 - 22 * 22), 22);
+      g.fillStyle = '#fff6c9'; g.globalAlpha = 0.6; g.beginPath();
+      g.arc(mx, my, 52, c, TAU - c); g.arc(mx + 44, my, 52, Math.PI + c, Math.PI - c, true); g.fill();
     }
   };
 
@@ -294,7 +321,8 @@
     sun: { top: '#c4561f', line: '#ffc46b', bumps: 1, mark: 'pebble' },
     sea: { top: '#ffe2a0', bumps: 1, mark: 'ring', stroke: 2.5 },
     candy: { top: '#fff3f9', drips: 1, mark: 'sprinkle', stroke: 5 },
-    forest: { top: '#5fc23c', line: '#a3e85e', bumps: 1, mark: 'pebble' }
+    forest: { top: '#5fc23c', line: '#a3e85e', bumps: 1, mark: 'pebble' },
+    space: { top: '#d6ccff', line: '#ffffff', mark: 'ring', stroke: 2.5 }
   };
 
   // Does cell (x, y) sit flush against the tiles being drawn? Only the cell

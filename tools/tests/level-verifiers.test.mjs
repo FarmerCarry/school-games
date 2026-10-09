@@ -68,6 +68,17 @@ test('Block verification passes an unmodified beginner level', () => {
   assert.equal(result.status, 0);
 });
 
+// Sneaky Levels replays a recorded solution per level through its engine and
+// checks that just holding right never wins (every level has a trap).
+test('Sneaky Levels verification wins every level with its recorded solution', () => {
+  const result = spawnSync(process.execPath, [path.join(repo, 'games/troll-level/verify.js')], {
+    cwd: repo, encoding: 'utf8', timeout: 30000
+  });
+  assert.ifError(result.error);
+  assert.match(result.stdout, /ALL LEVELS BEATABLE/);
+  assert.equal(result.status, 0);
+});
+
 // Maze Dash's verifier searches every level state: exit reachable, every dot
 // collectable (the "all dots" star), no dead ends, no unavoidable timed hazard.
 function mazeVerifier(args = []) {

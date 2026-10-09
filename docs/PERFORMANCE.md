@@ -270,6 +270,28 @@ next 1,000 bytes plus one, as before:
 The other 22 games and the portal stay inside their unchanged limits. No request,
 font, library or third-party code is added.
 
+## Sneaky Levels space world, 9 October 2026
+
+Sneaky Levels gains a fifth world, عالم الفضاء, with six new levels (25–30): a
+bridge that appears only when the player stands still, a shell game with three
+doors, moon gravity where a full jump floats up into the ceiling spikes, spiky
+blocks fired from the walls, a floor that grows spikes under a player who stops,
+and a final level that mixes them. It also adds a space backdrop, an astronaut
+character for all 90 stars, a moon-gravity label and sound, and a save fix so a
+player who already won level 24 continues into level 25. Measured with the Linux
+minified build:
+
+| File | Before bytes | After bytes | Before gzip | After gzip | New limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Sneaky Levels | 103,608 | 109,836 | 35,608 | 37,418 | 111,000 |
+
+The growth is mostly the six level maps and scripts, their Arabic messages and
+hints, and their recorded solutions. Per frame the new levels cost what the old
+ones do: the backdrop is baked once per level, and the scripted traps are a few
+comparisons. The limit is the next 1,000 bytes plus one, as before. No request,
+font, library or precached file is added; the offline cache grows from 4,849,792
+to 4,856,020 of 5,000,000 bytes.
+
 ## CI, review, and deployed performance
 
 The build workflow runs this check immediately after building, on pull requests
