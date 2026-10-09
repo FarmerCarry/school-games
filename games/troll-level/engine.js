@@ -326,7 +326,7 @@
     var p = this.p;
     var riding = this.state === 'play' && p.onGround && p.ground === g && dy * this.gs <= 0.0001;
     g.ox += dx; g.oy += dy;
-    if (this.state !== 'play') return;
+    if (this.state !== 'play' || g.fake) return; // a fake group passes through the player
     if (riding) {
       this.moveX(dx, g);
       p.y += dy;

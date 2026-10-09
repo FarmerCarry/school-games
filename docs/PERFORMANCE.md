@@ -283,14 +283,14 @@ minified build:
 
 | File | Before bytes | After bytes | Before gzip | After gzip | New limit |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Sneaky Levels | 103,608 | 109,836 | 35,608 | 37,418 | 111,000 |
+| Sneaky Levels | 103,608 | 109,997 | 35,277 | 37,135 | 111,000 |
 
 The growth is mostly the six level maps and scripts, their Arabic messages and
 hints, and their recorded solutions. Per frame the new levels cost what the old
 ones do: the backdrop is baked once per level, and the scripted traps are a few
 comparisons. The limit is the next 1,000 bytes plus one, as before. No request,
 font, library or precached file is added; the offline cache grows from 4,849,792
-to 4,856,020 of 5,000,000 bytes.
+to 4,856,181 of 5,000,000 bytes.
 
 ## CI, review, and deployed performance
 

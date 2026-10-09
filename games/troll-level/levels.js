@@ -44,8 +44,10 @@
     slide(L, d, (xa + xb) / 2, 9, h, function () { slide(L, d, xb, 12, h); });
     L.sfx('whoosh');
   }
-  // A spiky block in a wall flies across the room (and stays off screen).
-  function shoot(L, ch, dx, speed) { L.g(ch).move(dx, 0, speed, 0.3); L.sfx('buzz'); }
+  // A spiky block in a wall flies across the room (and stays off screen). In flight
+  // only its spikes are solid to you: a player who lands on it falls through, and
+  // is not carried away.
+  function shoot(L, ch, dx, speed) { L.g(ch).setFake().move(dx, 0, speed, 0.3); L.sfx('buzz'); }
   // Where a group's first tile is now, in tiles.
   function gx(L, g) { return g.tiles[0].x + g.ox / L.T; }
 
@@ -466,10 +468,15 @@
     map: room().s(2, 12, 'P').s(11, 12, 'E').s(16, 12, 'D').s(21, 12, 'E').done(),
     script: function (L) {
       var X = [11, 16, 21], at = [L.fakes[0], L.door, L.fakes[1]];
+      var dropped = false;
       L.fakes.forEach(function (d) { d.y = -3 * L.T; }); // waiting above the screen
       L.onX(5, function () {
+        dropped = true;
         L.msg('ثلاثة أبواب! أين الحقيقي؟');
         slide(L, L.fakes[0], 11, 12, 24); slide(L, L.fakes[1], 21, 12, 24);
+      });
+      // the shuffle waits for the 2.2 s level title card, so no swap hides behind it
+      L.when(function () { return dropped && L.t() > 2.2; }, function () {
         [[1, 2], [0, 1], [2, 0], [1, 2], [0, 2]].forEach(function (q, k) {
           L.after(0.8 + k * 0.75, function () {
             var d = at[q[0]];
@@ -530,8 +537,10 @@
     })(),
     script: function (L) {
       var a = L.g('a'), b = L.g('b'), sp = L.sp(1), still = 0;
+      // only standing over a spike strip counts (a spike's sharp part is 24 px wide)
+      var onStrip = function () { return sp.list.some(function (s) { return Math.abs(L.px() * L.T - s.x - 20) < 25; }); };
       L.world.ticks.push(function () {
-        still = L.grounded() && !L.on('a') && Math.abs(L.world.p.vx) < 30 && L.px() > 4.5 ? still + 1 : 0;
+        still = L.grounded() && !L.on('a') && Math.abs(L.world.p.vx) < 30 && onStrip() ? still + 1 : 0;
         if (still > 55) sp.pop();
         else if (still > 12) sp.list.forEach(function (s) { s.target = 0.4; s.speed = 3; }); // a warning peek
         else if (!still && sp.list[0].target) sp.hide();
