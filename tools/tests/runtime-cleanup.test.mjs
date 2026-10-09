@@ -30,7 +30,11 @@ async function game(t, id, { deferFonts = false } = {}) {
     if (deferFonts) {
       const fonts = document.fonts;
       const nativeLoad = fonts.load.bind(fonts);
-      const nativeReady = Object.getOwnPropertyDescriptor(FontFaceSet.prototype, 'ready').get;
+      // Some Chromium builds do not expose the FontFaceSet global, so take the
+      // native getter from document.fonts' own prototype chain instead.
+      let proto = Object.getPrototypeOf(fonts), nativeReady;
+      while (proto && !(nativeReady = Object.getOwnPropertyDescriptor(proto, 'ready')?.get)) proto = Object.getPrototypeOf(proto);
+      if (!nativeReady) throw new Error('document.fonts has no native ready getter');
       const gate = new Promise(resolve => { runtime.releaseFonts = resolve; });
       runtime.waitNativeFonts = () => nativeReady.call(fonts);
       fonts.load = (...args) => nativeLoad(...args).then(value => gate.then(() => value));
