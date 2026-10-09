@@ -20,6 +20,10 @@ for (const f of ['engine.js', 'levels.js', 'bot.js', 'solutions.js']) {
 const FI = ctx.FI;
 const only = process.argv[2] && !process.argv[2].startsWith('--') ? Number(process.argv[2]) : null;
 const showMap = process.argv.includes('--map');
+if (only !== null && !(Number.isInteger(only) && only >= 1 && only <= FI.LEVELS.length)) {
+  console.error(`Usage: node games/fire-and-ice/verify-levels.js [level number 1-${FI.LEVELS.length}] [--map]`);
+  process.exit(2);
+}
 let fails = 0;
 FI.LEVELS.forEach((def, i) => {
   const n = i + 1;
@@ -60,4 +64,5 @@ FI.LEVELS.forEach((def, i) => {
     (w.deadCause ? ' cause=' + w.deadCause : '') + (err ? ' ERR ' + err : '') +
     (gemsOk ? '' : ' missing: ' + w.gems.filter(g => !g.got).map(g => g.kind[0] + '(' + ((g.x - 16) / 32) + ',' + ((g.y - 16) / 32) + ')').join(' ')));
 });
+console.log(fails ? `${fails} LEVEL(S) FAILED` : 'ALL LEVELS SOLVED');
 process.exit(fails ? 1 : 0);
