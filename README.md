@@ -183,7 +183,12 @@ two-player modes mix players.
 - **Export to Excel:** press **تصدير ملف Excel**. Each click saves one workbook,
   `play-stats_<pc>_<date>.xlsx`, with every stored day: an Arabic read-me sheet (اقرأني)
   and the tables `days`, `games`, `levels` and `hours`. **تصدير JSON** saves the same
-  data as a `.json` file. Export every week: old days are removed when the statistics
+  data as a `.json` file. Edge and Chrome open a save dialog: choose the folder (for
+  example the shared OneDrive folder) and save. Closing the dialog saves nothing, and
+  the page says so. In other browsers, or when the page is opened over plain `http://`
+  from another computer, the file is downloaded and the page asks «هل حُفظ؟»: press
+  **نعم، حُفظ الملف** only once the file is saved. An export counts (and the reminder
+  below goes away) only when the file is saved. Export every week: old days are removed when the statistics
   space (300 KB) fills or after 120 days, whichever comes first, and a busy computer-lab
   PC may keep only 2–3 months. The page shows a reminder when the space is more than
   three-quarters full and nothing was exported for a week, when days were removed for

@@ -814,7 +814,7 @@
     var COPY = location.protocol === 'file:' ? 'folder' : 'web';
     var XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     var state = { ok: false, days: [], meta: parseMeta(null), bytes: 0, files: [], ignored: [] };
-    var store = null, refresh = 0;
+    var store = null, refresh = 0, pending = null;
 
     function load() {
       try {
@@ -1133,20 +1133,54 @@
       setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
     }
 
+    // An export counts (lastExport, which quiets the reminder) only once its file
+    // is saved. Edge and Chrome show their save dialog (showSaveFilePicker, offered
+    // only in a secure context: https, localhost or a file:// page), so a cancelled
+    // dialog saves and counts nothing. Without that dialog (other browsers, plain
+    // http from another computer) or when the browser refuses it, the file is
+    // downloaded and the teacher confirms that it was saved.
+    function counted(when, text) {
+      try { updateMeta(function (raw) { raw.lastExport = when; }); } catch (e) { /* the file is saved all the same */ }
+      say('exportStatus', text);
+      load();
+      render();
+    }
+    function asking(job) { pending = job; $('exportAsk').hidden = !job; }
+
     // Every export holds all stored days, not just the period on screen.
     function exportAs(kind) {
       if (!state.ok) return;
       var now = new Date(), id = state.meta.id;
-      try { id = updateMeta(function (raw) { raw.lastExport = now.getTime(); }); }
-      catch (e) { id = id || newId(); }
-      load();
-      var info = localInfo(now);
+      if (!id) {
+        try { id = updateMeta(function () {}); } catch (e) { id = newId(); }
+        load();
+      }
+      var info = localInfo(now), accept = {};
       info.pc = id;
-      var t = tables(state.days, info), name = 'play-stats_' + id + '_' + info.today;
-      if (kind === 'xlsx') download(name + '.xlsx', xlsx(t, info, now), XLSX_TYPE);
-      else download(name + '.json', utf8(JSON.stringify(exportJson(t, info))), 'application/json');
-      say('exportStatus', 'نُزِّل الملف ' + name + '.' + kind + ' (' + count(state.days.length, DAYS) + ').');
-      render();
+      var t = tables(state.days, info), name = 'play-stats_' + id + '_' + info.today + '.' + kind;
+      var type = kind === 'xlsx' ? XLSX_TYPE : 'application/json';
+      var bytes = kind === 'xlsx' ? xlsx(t, info, now) : utf8(JSON.stringify(exportJson(t, info)));
+      var what = name + ' (' + count(state.days.length, DAYS) + ')';
+      accept[type] = ['.' + kind];
+      asking(null);
+      say('exportStatus', '');
+      if (typeof window.showSaveFilePicker !== 'function') { fallback(); return; }
+      window.showSaveFilePicker({ suggestedName: name, id: 'play-stats', types: [{ description: kind === 'xlsx' ? 'Excel' : 'JSON', accept: accept }] })
+        .then(function (file) {
+          return file.createWritable().then(function (out) {
+            return out.write(bytes).then(function () { return out.close(); });
+          }).then(function () { counted(now.getTime(), 'حُفظ الملف ' + what + '.'); }, function () {
+            say('exportStatus', 'تعذّر حفظ الملف ' + name + ' في المكان المختار، فلم يُسجَّل التصدير. جرّب مرة أخرى أو اختر مجلدًا آخر.', true);
+          });
+        }, function (e) {
+          if (e && e.name === 'AbortError') say('exportStatus', 'لم يُحفظ الملف لأن نافذة الحفظ أُغلقت، فلم يُسجَّل التصدير.', true);
+          else fallback();
+        });
+      function fallback() {
+        download(name, bytes, type);
+        say('exportStatus', 'بدأ تنزيل الملف ' + what + '.');
+        asking({ when: now.getTime(), what: what });
+      }
     }
 
     function openFiles(chosen) {
@@ -1210,6 +1244,15 @@
     $('pcLabel').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('saveLabel').click(); });
     $('exportXlsx').addEventListener('click', function () { exportAs('xlsx'); });
     $('exportJson').addEventListener('click', function () { exportAs('json'); });
+    $('exportYes').addEventListener('click', function () {
+      var job = pending;
+      asking(null);
+      if (job) counted(job.when, 'سُجّل تصدير الملف ' + job.what + '.');
+    });
+    $('exportNo').addEventListener('click', function () {
+      asking(null);
+      say('exportStatus', 'لم يُسجَّل التصدير. صدّر الملف مرة أخرى واحفظه.', true);
+    });
     $('openFiles').addEventListener('click', function () { $('files').click(); });
     $('files').addEventListener('change', function () { openFiles($('files').files || []); });
     $('stopBtn').addEventListener('click', function () { say('stopStatus', ''); ask($('stopConfirm')); });

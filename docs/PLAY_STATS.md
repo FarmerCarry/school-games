@@ -305,6 +305,15 @@ Arabic, right to left, Western digits. Fixed note at the top: **«الأرقام
    «أوقف»), clear this PC's statistics (type «امسح»; removes only keys that start with
    `sg:site:stats:`, never the id, label or stop setting). While collection is stopped,
    the 🏫 strip shows «الإحصاءات متوقفة».
+   **An export counts only once its file is saved** (`lastExport`, which the reminder
+   uses, is the moment the file was made). Where the browser offers pages a save dialog
+   (`showSaveFilePicker`: Edge and Chrome, and only in a secure context, which includes
+   https, `localhost` and `file://` pages but not plain http from another computer), the
+   page writes the file itself: closing the dialog or a failed write records nothing and
+   says the file was not saved. Elsewhere, or when the browser refuses the dialog (for
+   example a school policy), the file is downloaded and the page asks whether it was
+   saved; only «نعم، حُفظ الملف» records the export, since a page cannot see whether a
+   download's own Save As window was cancelled.
 6. A reminder to export when (a) the stats keys use more than about 75 % of the 300 KB
    cap and nothing was exported in the last 7 days (a full PC stays full after an
    export, so the reminder would otherwise never go away), (b) the portal removed a day
@@ -391,8 +400,9 @@ an id but not a label.
 Step 1's files are the input; they do not need to change.
 
 * **No code, no network from the site:** each week, on each PC, open 📊 → تصدير ملف
-  Excel and save into one shared OneDrive or SharePoint folder (turn on Edge's "Ask
-  where to save each file"). One Excel workbook or Power BI report reads the folder
+  Excel and save into one shared OneDrive or SharePoint folder (Edge and Chrome open a
+  save dialog, which starts in the folder used last time; in other browsers turn on "Ask
+  where to save each file" and answer «نعم» once the file is saved). One Excel workbook or Power BI report reads the folder
   (Get Data → From SharePoint Folder → combine the `days`, `games`, `levels`, `hours`
   tables), drops rows where `pc` is empty (the blank row of an empty table), keeps the
   newest `exported_at` per `pc` and `date`, and refreshes in one click.
@@ -410,7 +420,9 @@ Step 1's files are the input; they do not need to change.
   hidden pages, delta merging across two tabs, clear and stop, blocked storage, the time
   of rounds left open (`om`), and `pruned`.
 * `tools/tests/teacher-page.test.mjs`: the page with seeded records, the workbook and
-  JSON exports, combining, clear and stop, blocked storage, winnable levels (id shapes,
+  JSON exports (saved through a stand-in save dialog; a closed dialog, a failed write
+  and an unconfirmed download count nothing), combining, clear and stop, blocked
+  storage, winnable levels (id shapes,
   block-burst `'classic'`, fire-and-ice `'L4:duo'`, merge-2048 boards), the export
   reminder, the hours rule and games still open.
 * `tools/tests/merge-progress.test.mjs`: a merge-2048 board is one round; the goal tile
