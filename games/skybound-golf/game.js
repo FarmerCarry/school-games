@@ -35,15 +35,20 @@
   // The second press of a double-click lands on whatever the first one
   // revealed (the canvas, a world card, an upgrade). Ignore it there.
   var lastClick = null;
+  // Shop buttons are rebuilt after each purchase, so a control is known by
+  // its id or item, not by its element: quick repeat buys still count.
+  function control(el) {
+    return el.id || (el.dataset && (el.dataset.upgrade || el.dataset.skin)) || el;
+  }
   function strayPress(e, target) {
-    return !!(lastClick && e.timeStamp - lastClick.t < 500 && target !== lastClick.target &&
+    return !!(lastClick && e.timeStamp - lastClick.t < 500 && control(target) !== lastClick.target &&
       Math.abs(e.clientX - lastClick.x) < 16 && Math.abs(e.clientY - lastClick.y) < 16);
   }
   ui.addEventListener('click', function (e) {
     if (!e.detail) return;
     var target = e.target.closest ? e.target.closest('button') || e.target : e.target;
     if (strayPress(e, target)) { e.preventDefault(); e.stopPropagation(); return; }
-    lastClick = { t: e.timeStamp, x: e.clientX, y: e.clientY, target: target };
+    lastClick = { t: e.timeStamp, x: e.clientX, y: e.clientY, target: control(target) };
   }, true);
   var saveStatus = K.saveStatus({ retry: persist });
 

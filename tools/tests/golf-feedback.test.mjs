@@ -171,6 +171,14 @@ test('Golf: the second press of a double-click never acts on what the first one 
   assert.equal(await phase(page), 'flight', 'a separate click still swings');
 });
 
+test('Golf: quick repeat clicks on one upgrade each buy a level', async t => {
+  const page = await game(t, { play: false, progress: { v: 2, coins: 400, shots: 3, tips: 2 } });
+  await page.locator('#open-shop').click();
+  await page.locator('[data-upgrade="power"]').click();
+  await page.locator('[data-upgrade="power"]').click({ clickCount: 2 });
+  assert.equal((await saved(page)).upgrades.power, 3, 'a rebuilt card is still the same control');
+});
+
 test('Golf: the mute button works while a menu is open', async t => {
   const page = await game(t);
   await page.keyboard.press('Escape');
