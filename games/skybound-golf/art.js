@@ -676,7 +676,6 @@
       fillCircle(c, 0, 0, r * 0.35, '#ffffff');
     }
     c.restore();
-    fillCircle(c, 0, 0, r, 'rgba(0,0,0,0)');
     c.beginPath(); c.arc(0, 0, r * 0.98, 0.3, 2.2); c.lineWidth = r * 0.22; c.strokeStyle = 'rgba(36,19,63,0.18)'; c.stroke();
     circle(c, 0, 0, r); inked(c, Math.max(2.5, r * 0.2));
     c.beginPath(); c.ellipse(-r * 0.38, -r * 0.42, r * 0.28, r * 0.17, -0.7, 0, TAU); c.fillStyle = 'rgba(255,255,255,0.85)'; c.fill();
@@ -690,7 +689,7 @@
   function ballLayer(c, s) {
     var b = s.ball;
     if (!b) return;
-    var k = view.k, r = ballRadius(), sk = SKINS[s.skin] || SKINS.classic;
+    var r = ballRadius(), sk = SKINS[s.skin] || SKINS.classic;
     var X = sx(b.x), Y = sy(b.y - b.r) - r;
     if (b.hole && b.done) return;
     // Shadow on the ground
@@ -750,11 +749,10 @@
 
   function tee(c, s) {
     if (s.ball && s.phase !== 'ready' && s.phase !== 'title' && s.phase !== 'swing') return;
-    var k = view.k, X = sx(0), Y = sy(P.heightAt(s.course, 0)), r = ballRadius();
+    var X = sx(0), Y = sy(P.heightAt(s.course, 0)), r = ballRadius();
     c.beginPath(); c.moveTo(X - r * 0.6, Y - r * 0.55); c.lineTo(X + r * 0.6, Y - r * 0.55); c.lineTo(X + 2, Y + 4); c.lineTo(X - 2, Y + 4); c.closePath();
     c.fillStyle = '#ffd23f'; c.fill(); inked(c, 2.5);
-    if (!s.ball || s.phase !== 'swing') drawBall(c, s.skin, X, Y - r * 0.55 - r + 1, r, 0);
-    else if (s.phase === 'swing') drawBall(c, s.skin, X, Y - r * 0.55 - r + 1, r, 0);
+    drawBall(c, s.skin, X, Y - r * 0.55 - r + 1, r, 0);
   }
 
   function landing(c, s) {
@@ -775,7 +773,7 @@
 
   /* ------------------------------------------------- particles & text */
   function particles(c, s) {
-    var list = s.particles, k = view.k;
+    var list = s.particles;
     for (var n = 0; n < list.length; n++) {
       var p = list[n], f = p.t / p.life, X = sx(p.x), Y = sy(p.y);
       if (X < -40 || X > W + 40 || Y < -40 || Y > H + 40) continue;
@@ -875,6 +873,5 @@
     drawBall(ctx, skin, size / 2, size / 2, size * (skin === 'planet' ? 0.26 : 0.36), 0.3);
   }
 
-  window.GolfArt = { draw: draw, preview: preview, PPM: PPM, W: W, H: H, gaugeAngle: gaugeAngle, ADDRESS: ADDRESS,
-    view: view, skins: SKINS, trailColor: function (skin) { return (SKINS[skin] || SKINS.classic)[2]; } };
+  window.GolfArt = { draw: draw, preview: preview, PPM: PPM, gaugeAngle: gaugeAngle, ADDRESS: ADDRESS };
 })();

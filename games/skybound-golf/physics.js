@@ -43,8 +43,7 @@
     green: { e: -0.08, keep: 0.85, roll: 4.5 },
     sand: { e: -0.3, keep: 0.45, roll: 26 },
     ice: { e: -0.06, keep: 0.98, roll: 1.2 },
-    pad: { e: 0, keep: 0.9, roll: 6 },
-    water: { e: 0, keep: 0.8, roll: 6 }
+    pad: { e: 0, keep: 0.9, roll: 6 }
   };
   var PROPS = {
     tree: { lift: 6.2, r: 2.5, k: 0.35 },

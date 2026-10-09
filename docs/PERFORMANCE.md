@@ -270,6 +270,25 @@ next 1,000 bytes plus one, as before:
 The other 22 games and the portal stay inside their unchanged limits. No request,
 font, library or third-party code is added.
 
+## Rebuilt Skybound Golf, 9 October 2026
+
+ضربة إلى الفضاء was rewritten from scratch with new art and game feel: a swing
+gauge drawn around the golfer, rockets and timed super bounces in flight, five
+worlds with parallax backdrops, boost rings, balloons, props and an altitude
+goal. Everything is still drawn live on one canvas with no images and no cached
+bitmaps. It loads the same files as before: `physics.js`, `art.js`, `game.js`
+and `style.css`, plus the shared Kit and styles.
+
+| File | Before bytes | After bytes | Before gzip | After gzip | New limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Skybound Golf | 79,703 | 108,880 | 28,678 | 37,600 | 112,000 |
+
+The new page sits in the middle of the other games (about 50 to 230 KB). Its
+thumbnail is smaller (5,958 instead of 7,369 bytes), so the portal stays at
+353,215 of 360,000 bytes. The offline cache grows from 4,849,792 to 4,877,642
+of 5,000,000 bytes. In headless software rendering at 1280 × 720 a frame's
+draw, including rasterization, takes about 7.5 to 9 ms (median) during a flight.
+
 ## CI, review, and deployed performance
 
 The build workflow runs this check immediately after building, on pull requests
