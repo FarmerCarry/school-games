@@ -56,7 +56,12 @@
     related: 'ألعاب أخرى ستحبها', surprise: 'زر فاجئني 🎲', reload: 'تحديث الصفحة',
     history: 'زرّا الرجوع والتقدم في المتصفح', direct: 'رابط مباشر'
   };
-  var VERDICTS = { smooth: 'سلس', ok: 'مقبول', slow: 'بطيء' };
+  var VERDICTS = { smooth: 'سلس', ok: 'مقبول', slow: 'بطيء', unmeasured: 'لا تُقاس' };
+  // Games with no steady drawing loop while playing (board games move pieces with
+  // CSS, typing-test redraws on key presses) count no frames, since only Kit.loop and
+  // Kit.stats.frame count them: the device status says so instead of «—».
+  // tools/tests/play-stats-rules.test.mjs keeps this list equal to those games.
+  var NO_FRAMES = ['connect-four', 'tic-tac-toe', 'typing-test'];
   var MINUTES = ['دقيقة واحدة', 'دقيقتان', 'دقائق', 'دقيقة'];
   var HOURS = ['ساعة واحدة', 'ساعتان', 'ساعات', 'ساعة'];
   var TIMES = ['مرة واحدة', 'مرتان', 'مرات', 'مرة'];
@@ -108,7 +113,8 @@
     loads_skipped: 'مرات تحميل لم تُقس لأن الصفحة كانت مخفية.',
     errors: 'أخطاء أوقفت اللعبة.',
     timeouts: 'مرات لم تُحمَّل فيها اللعبة خلال 20 ثانية.',
-    frames_smooth: 'إطارات رُسمت في 20 ملّي ثانية أو أقل (سلسة).',
+    frames_smooth: 'إطارات رُسمت في 20 ملّي ثانية أو أقل (سلسة). تبقى أعمدة frames_ صفرًا في الألعاب التي لا ترسم حركة مستمرة: ' +
+      NO_FRAMES.join('، ') + '.',
     frames_ok: 'إطارات رُسمت في أكثر من 20 حتى 34 ملّي ثانية (مقبولة).',
     frames_choppy: 'إطارات رُسمت في أكثر من 34 حتى 250 ملّي ثانية (متقطعة).',
     frames_stall: 'إطارات استغرقت أكثر من 250 ملّي ثانية (توقف).',
@@ -802,7 +808,7 @@
     tables: tables, exportJson: exportJson, readImport: readImport, combine: combine, periodRange: periodRange,
     summary: summary, markWinnable: markWinnable, stuck: stuck, levelResult: levelResult, verdict: verdict,
     hoursFromDays: hoursFromDays, hoursFromRows: hoursFromRows, oldestUnexported: oldestUnexported, reminder: reminder,
-    duration: duration, xlsx: xlsx, zip: zip, crc32: crc32, localIso: localIso, dateKey: dateKey, addDays: addDays, names: names
+    NO_FRAMES: NO_FRAMES, duration: duration, xlsx: xlsx, zip: zip, crc32: crc32, localIso: localIso, dateKey: dateKey, addDays: addDays, names: names
   };
   window.SGTeacher = api;
   if (typeof document !== 'undefined' && document.getElementById('teacherApp')) init();
@@ -1040,17 +1046,21 @@
     }
 
     function renderDevice(s) {
+      var unmeasured = [];
       var rows = s.games.map(function (g) {
-        var v = verdict(g.f, g.loads, g.loadSum);
-        return '<tr data-game="' + esc(g.game) + '" data-verdict="' + (v || 'none') + '"><th scope="row">' + esc(g.name) + '</th><td class="v-' +
-          (v || 'none') + '">' + (v ? VERDICTS[v] : '—') + '</td><td>' + (g.loads ? (g.loadSum / g.loads / 1000).toFixed(1) + ' ث' : '—') +
+        var v = NO_FRAMES.indexOf(g.game) < 0 ? verdict(g.f, g.loads, g.loadSum) || 'none' : 'unmeasured';
+        if (v === 'unmeasured') unmeasured.push('«' + esc(g.name) + '»');
+        return '<tr data-game="' + esc(g.game) + '" data-verdict="' + v + '"><th scope="row">' + esc(g.name) + '</th><td class="v-' +
+          v + '">' + (VERDICTS[v] || '—') + '</td><td>' + (g.loads ? (g.loadSum / g.loads / 1000).toFixed(1) + ' ث' : '—') +
           '</td><td>' + (g.loads ? (g.loadMax / 1000).toFixed(1) + ' ث' : '—') + '</td><td>' + fmt(g.ns) + '</td><td>' +
           fmt(g.errors + g.timeouts) + '</td></tr>';
       });
       $('device').innerHTML = rows.length ? '<div class="scroll"><table><thead><tr><th scope="col">اللعبة</th><th scope="col">الحالة</th>' +
         '<th scope="col">متوسط التحميل</th><th scope="col">أطول تحميل</th><th scope="col">لم تبدأ</th>' +
         '<th scope="col" title="أخطاء أوقفت اللعبة ومرات لم تُحمَّل خلال 20 ثانية">أخطاء</th></tr></thead><tbody>' + rows.join('') +
-        '</tbody></table></div>' : empty('لا يوجد لعب في هذه الفترة.');
+        '</tbody></table></div>' + (unmeasured.length ? '<p class="hint" id="unmeasured">«لا تُقاس»: ' + unmeasured.join('، ') +
+        ' لا ترسم حركة مستمرة أثناء اللعب، فلا تُقاس فيها سرعة الرسم. زمن التحميل والأخطاء تُحسب لها كغيرها.</p>' : '')
+        : empty('لا يوجد لعب في هذه الفترة.');
     }
 
     function renderBars(entries, label) {

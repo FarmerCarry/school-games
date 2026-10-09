@@ -126,3 +126,18 @@ test('every game calls Kit.stats.round and Kit.stats.end', () => {
     assert.ok(typeof why === 'string' && why.length > 10, slug + ': say why it reports no rounds');
   }
 });
+
+// Only Kit.loop and Kit.stats.frame count frames (games alias Kit as K). The teacher
+// page shows «لا تُقاس» instead of a device verdict for the games that use neither.
+test('the teacher page lists exactly the games that count no frames', () => {
+  const page = { window: {} };
+  vm.runInNewContext(read(path.join(repo, 'js/teacher.js')), page);
+  const counts = slug => {
+    const dir = path.join(repo, 'games', slug), html = read(path.join(dir, 'index.html'));
+    const files = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)].map(match => path.resolve(dir, match[1]))
+      .filter(file => fs.existsSync(file) && rel(file) !== 'shared/kit.js' && !/\/lib\/three\//.test(rel(file)));
+    return [html, ...files.map(read)].some(text => /\b(?:Kit|K)\.(?:loop|stats\.frame)\s*\(/.test(text));
+  };
+  assert.deepEqual([...page.window.SGTeacher.NO_FRAMES].sort(), allGames.filter(slug => !counts(slug)),
+    'NO_FRAMES in js/teacher.js lists the games without Kit.loop or Kit.stats.frame');
+});

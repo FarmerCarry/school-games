@@ -79,7 +79,12 @@ Rules for games:
   while the game is engaged, armed and a round is open. Its raw time goes into one of
   four buckets: smooth ≤ 20 ms, ok ≤ 34 ms, choppy ≤ 250 ms, stall > 250 ms. The first
   frame after the loop starts or the page becomes visible is skipped. Cost per frame:
-  a subtraction, a few comparisons and an increment.
+  a subtraction, a few comparisons and an increment. Games with no steady drawing loop
+  while playing (connect-four and tic-tac-toe move pieces with CSS; typing-test redraws
+  on key presses and runs `requestAnimationFrame` only for short bursts of effects)
+  count no frames: counting those bursts would judge the effects, not the PC. The
+  teacher page lists them in `NO_FRAMES` (js/teacher.js), and the rules test keeps that
+  list equal to the games that call neither `Kit.loop` nor `Kit.stats.frame`.
 * **Mute toggles** (the in-game sound button or M).
 * **Round time**: the engaged milliseconds inside each round.
 
@@ -296,7 +301,8 @@ Arabic, right to left, Western digits. Fixed note at the top: **«الأرقام
    tables the gave-up figure appears only for winnable levels; others show «—». Ids are
    labelled «المرحلة أو الوضع», since many are modes, difficulties or board sizes.
 4. Collapsed sections: **حالة الجهاز** (one verdict per game, سلس / مقبول / بطيء, from
-   frames and load times, shown as "—" under 600 counted frames; errors; this PC's
+   frames and load times, shown as "—" under 600 counted frames, and as «لا تُقاس» with
+   a note under the table for the games that count no frames; errors; this PC's
    cores, memory, screen and graphics chip, shown but never exported), **كيف يصلون إلى
    الألعاب**, **الإعدادات**, **الشرح الأول** ("first-time tutorial shown / completed on
    this PC").
@@ -431,5 +437,7 @@ Step 1's files are the input; they do not need to change.
   teacher page or games; no `Kit.stats` in engine or simulation files; every game calls
   `Kit.stats.round` and `Kit.stats.end` (the games come from `js/catalog.js` and the
   `games/` folders, so a new game is checked without editing the test; a game allowed
-  not to report must be listed there with its reason); literal ids follow the id rule.
+  not to report must be listed there with its reason); the teacher page's `NO_FRAMES`
+  lists exactly the games without `Kit.loop` or `Kit.stats.frame`; literal ids follow
+  the id rule.
 * The build, offline, budget and downloaded-folder tests include `teacher.html`.

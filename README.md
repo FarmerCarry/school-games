@@ -174,7 +174,9 @@ two-player modes mix players.
 - **Read:** choose a period (اليوم، هذا الأسبوع، آخر 30 يومًا، الكل). Four cards answer
   which games they play most, how long, at what time and where they stop. A table lists
   each game. Device status, how children reach the games, settings and first-time
-  tutorials are in folded sections below. «Where they stop» lists only levels that can be
+  tutorials are in folded sections below. Device status rates each game سلس / مقبول /
+  بطيء from drawing speed and load time; Connect Four, Tic Tac Toe and Lightning Fingers
+  have no steady drawing loop, so they show «لا تُقاس» (their load times still show). «Where they stop» lists only levels that can be
   won or lost, with «فازوا في N من M محاولات» (tries include leaving the level); free play,
   endless runs, 2048 boards and two-player modes are left out, and runs and boards show
   their average and best score in the levels table instead. A game still open on this PC

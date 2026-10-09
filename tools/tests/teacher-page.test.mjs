@@ -512,7 +512,9 @@ test('the workbook is a stored ZIP of well-formed parts: RTL sheets, an Arabic r
   for (const table of Object.keys(CONTRACT)) assert.deepEqual(empty[table], [], 'an empty ' + table + ' table keeps a valid range');
   const readme = unescapeXml(unzip(api.xlsx(t, info)).get('xl/worksheets/sheet1.xml'));
   for (const text of ['عندما تمتلئ مساحة الإحصاءات أو بعد 120 يومًا، أيهما أسبق', 'شهرين أو ثلاثة', 'في 3 أيام أو أكثر',
-    'احذف الصفوف التي يكون فيها pc فارغًا']) assert.ok(readme.includes(text), 'the read-me says: ' + text);
+    'احذف الصفوف التي يكون فيها pc فارغًا', 'لا ترسم حركة مستمرة: connect-four، tic-tac-toe، typing-test.']) {
+    assert.ok(readme.includes(text), 'the read-me says: ' + text);
+  }
   // Text that looks like XML or a formula stays plain text.
   const tricky = { ...info, label: '<b>&"x"' };
   const trickyRead = checkWorkbook(api.xlsx(api.tables(days, tricky), tricky));
@@ -627,6 +629,7 @@ test('seeded records show the right numbers, and the period choice changes them'
   await page.locator('#deviceSection summary').click();
   assert.equal(await page.locator('#device tr[data-game="candy-rope"]').getAttribute('data-verdict'), 'smooth');
   assert.equal(await page.locator('#device tr[data-game="rail-rush"] td').first().textContent(), '—');
+  assert.equal(await page.locator('#unmeasured').count(), 0, 'both games count frames');
   await page.locator('#hardware dl').waitFor();
   assert.match(await page.locator('#hardware').textContent(), /أنوية المعالج.*الشاشة.*شريحة الرسوم/s);
   assert.deepEqual(await page.locator('#sources li').evaluateAll(items => items.map(i => i.dataset.key).sort()), ['category', 'direct', 'featured', 'recent']);
@@ -827,6 +830,10 @@ test('a game still open and days removed for space are explained, not hidden', a
   assert.equal(await page.locator('#cardTop').textContent(), 'مرة لعب ما زالت مفتوحة، وتظهر هنا بعد إغلاق اللعبة.');
   assert.match(await page.locator('#cardTime').textContent(), /^3 دقائق.*متوسط مرة اللعب: —.*مرات اللعب: 0 · خرجوا بسرعة: 0.*ما زالت مفتوحة/s);
   assert.equal(await gameRow(page, 'connect-four').locator('td').nth(1).textContent(), '0ما زالت مفتوحة');
+  // A board game draws no steady frames: its device status says so instead of «—».
+  const device = page.locator('#device tr[data-game="connect-four"]');
+  assert.deepEqual([await device.getAttribute('data-verdict'), await device.locator('td').first().textContent()], ['unmeasured', 'لا تُقاس']);
+  assert.match(await page.locator('#unmeasured').textContent(), /^«لا تُقاس»: «أربعة على التوالي» لا ترسم حركة مستمرة أثناء اللعب، فلا تُقاس فيها سرعة الرسم\./);
   assert.match(await page.locator('#reminder').textContent(),
     /^تذكير: امتلأت مساحة الإحصاءات على هذا الجهاز، فحُذفت أيام قديمة لم تُصدَّر، آخرها 2\/10\/2026\. صدّر ملف Excel الآن\. .*أيهما أسبق/);
   // The week: troll-level's L2, which all five children left, is where they stop; block-burst's

@@ -183,7 +183,9 @@ statistics. The contract is `docs/PLAY_STATS.md`; in short, each game reports it
 - `Kit.stats.tutorial('start')` / `('done')` for a first-time tutorial or coach,
   `Kit.stats.busy()` at passive moments the child watches (at most about once per
   second, never per frame), and `Kit.stats.frame(ms)` only in games with their own
-  `requestAnimationFrame` loop.
+  `requestAnimationFrame` loop. A game that uses neither `Kit.loop` nor
+  `Kit.stats.frame` (no steady drawing loop while playing) belongs in `NO_FRAMES` in
+  `js/teacher.js`, so the teacher page says its smoothness is not measured.
 
 Ids come from the game's own list and start with a letter (`'L3'`, `'w1-4'`, `'cpu-easy'`,
 `'endless'`). Never put typed text, names or codes in an id. Never report demo or attract
