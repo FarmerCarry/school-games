@@ -417,5 +417,7 @@ Step 1's files are the input; they do not need to change.
   reports nothing and a full board reports `'end'` with the score.
 * `tools/tests/play-stats-rules.test.mjs` (node only): no network APIs in Kit, portal,
   teacher page or games; no `Kit.stats` in engine or simulation files; every game calls
-  `Kit.stats.round` and `Kit.stats.end`; literal ids follow the id rule.
+  `Kit.stats.round` and `Kit.stats.end` (the games come from `js/catalog.js` and the
+  `games/` folders, so a new game is checked without editing the test; a game allowed
+  not to report must be listed there with its reason); literal ids follow the id rule.
 * The build, offline, budget and downloaded-folder tests include `teacher.html`.
