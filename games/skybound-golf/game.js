@@ -48,7 +48,13 @@
     if (!e.detail) return;
     var target = e.target.closest ? e.target.closest('button') || e.target : e.target;
     if (strayPress(e, target)) { e.preventDefault(); e.stopPropagation(); return; }
-    lastClick = { t: e.timeStamp, x: e.clientX, y: e.clientY, target: control(target) };
+    // Only a button press that changes what is under the pointer can be
+    // followed by a stray second press; clicks on empty space never arm this.
+    if (target.tagName !== 'BUTTON') return;
+    var press = lastClick = { t: e.timeStamp, x: e.clientX, y: e.clientY, target: control(target) };
+    setTimeout(function () {
+      if (lastClick === press && target.isConnected && target.offsetParent) lastClick = null;
+    }, 0);
   }, true);
   var saveStatus = K.saveStatus({ retry: persist });
 

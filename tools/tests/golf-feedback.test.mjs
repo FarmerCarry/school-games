@@ -171,6 +171,24 @@ test('Golf: the second press of a double-click never acts on what the first one 
   assert.equal(await phase(page), 'flight', 'a separate click still swings');
 });
 
+test('Golf: a click on empty menu space never blocks the next real click', async t => {
+  const page = await game(t, { play: false, progress: { v: 2, coins: 400, shots: 3, tips: 2 } });
+  await page.locator('#open-shop').click();
+  const card = await page.locator('[data-upgrade="bounce"]').boundingBox();
+  await page.mouse.click(card.x + card.width + 3, card.y + 20); // the gap beside the card
+  await page.mouse.click(card.x + card.width - 4, card.y + 20);
+  assert.equal((await saved(page)).upgrades.bounce, 1);
+  // A button that stays where it was (mute) does not arm the guard either.
+  await page.keyboard.press('Escape');
+  await page.locator('#play').click();
+  await page.evaluate(() => advanceGolfFrames(39));
+  const mute = await page.locator('.sg-mute').boundingBox();
+  await page.mouse.click(mute.x + mute.width / 2, mute.y + mute.height / 2);
+  await page.mouse.click(mute.x + mute.width / 2, mute.y + mute.height + 8); // just below it, on the canvas
+  await page.evaluate(() => advanceGolfFrames(6));
+  assert.equal(await phase(page), 'flight');
+});
+
 test('Golf: quick repeat clicks on one upgrade each buy a level', async t => {
   const page = await game(t, { play: false, progress: { v: 2, coins: 400, shots: 3, tips: 2 } });
   await page.locator('#open-shop').click();
@@ -261,16 +279,18 @@ test('Golf: reduced motion keeps play complete without shake, flash, hit-stop, h
   await page.evaluate(n => advanceGolfFrames(n), PEAK);
   await page.keyboard.press('Space');
   const frames = await page.evaluate(() => {
-    const seen = [];
+    const seen = [], xs = [];
     for (let i = 0; i < 20; i++) {
       golfTick(1 / 60);
       seen.push([golfState.shake.x, golfState.shake.y, golfState.flash, golfState.golfer.jump, golfState.trail.length]);
+      xs.push(golfState.phase === 'flight' ? golfState.ball.x : null);
     }
-    return { seen, grade: golfState.ball.grade, x: golfState.ball.x };
+    return { seen, xs, grade: golfState.ball.grade };
   });
   assert.equal(frames.grade, 'perfect');
   assert(frames.seen.every(f => f.every(v => v === 0)), JSON.stringify(frames.seen));
-  assert(frames.x > 2, 'no hit-stop holds the ball');
+  const contact = frames.xs.findIndex(x => x !== null);
+  assert(contact >= 0 && frames.xs[contact + 1] > 0, 'no hit-stop holds the ball: ' + JSON.stringify(frames.xs));
   await page.evaluate(() => advanceGolfFrames(40));
   assert.deepEqual(await page.evaluate(() => [golfState.trail.length, golfState.shake.x, golfState.shake.y, golfState.flash]), [0, 0, 0, 0]);
   await land(page);

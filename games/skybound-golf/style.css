@@ -26,9 +26,10 @@ b { font-weight: 700; }
 .button:hover { transform: translateY(-3px); filter: brightness(1.06); box-shadow: 0 9px 0 var(--ink), inset 0 -6px 0 rgba(0, 0, 0, 0.14), inset 0 4px 0 rgba(255, 255, 255, 0.45); }
 .button:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--ink), inset 0 -4px 0 rgba(0, 0, 0, 0.14); }
 /* The hover lift and press drop move a button by up to 7 px; this invisible
-   margin keeps a press near its edge on the button, so the click still lands. */
+   margin (7 px past the 4 px border) keeps a press near its edge on the
+   button, so the click still lands. */
 .button, .upgrade { position: relative; }
-.button::after, .upgrade::after { content: ''; position: absolute; left: 0; right: 0; top: -7px; bottom: -7px; }
+.button::after, .upgrade::after { content: ''; position: absolute; left: 0; right: 0; top: -11px; bottom: -11px; }
 html[data-sg-motion="reduce"] .button:hover, html[data-sg-motion="reduce"] .button:active,
 html[data-sg-motion="reduce"] .upgrade:not(:disabled):hover, html[data-sg-motion="reduce"] .upgrade:not(:disabled):active { transform: none; }
 .primary { background: linear-gradient(#ffe85c, #ffb21a); }
@@ -155,6 +156,8 @@ html[data-sg-motion="reduce"] .upgrade:not(:disabled):hover, html[data-sg-motion
 .skin:disabled { opacity: 0.55; cursor: default; }
 .result-panel .upgrades { margin-top: 8px; }
 .result-panel .shop-wallet { right: auto; left: 22px; }
+/* The heading keeps clear of the wallet on both sides, even at 9,999,999 coins. */
+.result-panel h2 { font-size: 40px; padding: 0 176px; }
 .result-panel .upgrade { padding: 6px 6px 8px; }
 .result-panel .upgrade .upgrade-icon { width: 44px; height: 44px; padding: 5px; }
 .result-panel .upgrade strong { font-size: 19px; }
