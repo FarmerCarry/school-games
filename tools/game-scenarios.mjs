@@ -153,6 +153,9 @@ const inputSeen = {
   // A stationary pointer steers the snake too. Only ← → switch to key steering,
   // and while → is held the snake steers 1.2 rad clockwise of its heading.
   'snake-arena': `SA.game.kb && Math.sin(SA.world.player.want - SA.world.player.ang) > 0.5`,
+  // Unsteered, the car drives straight until it falls off at the first corner and its
+  // heading spins as it falls. Only holding Space turns it on the road.
+  'drift-king': `${g}.car.state === 'drive' && ${g}.car.turning > 0.5`,
   // Until the first gas, brake or lean starts the run, the bike only settles on its brakes.
   'moto-madness': `${g}.world.started && ${g}.world.bike.x > sgInput.before + 40`,
   // The CPU's bonks stun player 1; only player 1's own attack key starts a wind-up or dash.
