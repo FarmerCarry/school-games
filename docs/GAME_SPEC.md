@@ -158,8 +158,11 @@ a consistent Arabic warning and retry button. Clear it only after all pending wr
 succeed. Preserve existing saved progress when a write or reset fails.
 
 Add each new game to `tools/game-scenarios.mjs` with real start/input/pause/restart
-assertions. A clean console alone is not proof of working gameplay. Keep pure engine
-and saved-state regression tests alongside those browser scenarios.
+assertions. A clean console alone is not proof of working gameplay. The input check
+must watch something only the player's input causes: if the watched state also
+changes without input (a clock, a snake that keeps going, a push from a computer
+player), give the scenario an `inputSeen` condition. Keep pure engine and saved-state regression tests
+alongside those browser scenarios.
 
 `node tools/playtest.mjs <slug>` opens the game in headless Chromium, runs a scripted list of
 clicks and key presses, saves screenshots and reports console errors (see the header of
