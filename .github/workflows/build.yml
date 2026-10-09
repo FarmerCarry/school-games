@@ -81,7 +81,7 @@ jobs:
             echo "Block Burst and this workflow are unchanged since $base; the full balance check is skipped."
           else
             [ -n "${changed:-}" ] && printf 'Changed since %s:\n%s\n' "$base" "$changed"
-            node games/block-burst/verify-levels.js
+            node tools/ci-run.mjs node games/block-burst/verify-levels.js
           fi
       - name: Test source gameplay and portal regressions
         run: node tools/ci-run.mjs npm run test:browser
