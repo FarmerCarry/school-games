@@ -238,7 +238,9 @@ test('late font readiness repaints each frozen game, then leaves it idle again',
       await page.evaluate(() => { document.getElementById('playBtn').click(); document.getElementById('modeSurv').click(); });
       await page.waitForFunction(() => __game.G.mode === 'play');
     }
-    await page.evaluate(id => {
+    // Count only the 60 frames drawn here: a page timer can paint between two
+    // evaluate calls (Rail Rush draws its shop portraits 1.2 s after load).
+    const frozen = await page.evaluate(id => {
       if (id === 'critter-mart') { __game.start(); __game.pause(); }
       if (id === 'wacky-soccer') {
         document.getElementById('b1p').click(); document.getElementById('bGo').click(); document.getElementById('bPause').click();
@@ -246,8 +248,9 @@ test('late font readiness repaints each frozen game, then leaves it idle again',
       if (id === 'block-world') document.getElementById('pausebtn').click();
       if (id === 'rail-rush') { __game.restart(); document.getElementById('pauseBtn').click(); }
       runtime.step(600, false); runtime.draw(120); runtime.paints = 0; runtime.draw(60);
+      return runtime.paints;
     }, id);
-    assert.equal(await page.evaluate(() => runtime.paints), 0, `${id} is frozen before font callbacks`);
+    assert.equal(frozen, 0, `${id} is frozen before font callbacks`);
     await page.evaluate(async () => {
       runtime.releaseFonts();
       await document.fonts.ready;
