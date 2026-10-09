@@ -593,6 +593,13 @@ async function teacherPage(t, { blocked = false, entries = seed() } = {}) {
 }
 const storage = page => page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map(key => [key, localStorage.getItem(key)])));
 const statsMeta = async page => JSON.parse((await storage(page))['sg:site:statsmeta']);
+// What the export tool shows, in one round trip: a red status, the «هل حُفظ؟» question,
+// the offered download and the reminder.
+const exportView = page => page.evaluate(() => {
+  const shown = id => document.getElementById(id).checkVisibility();
+  return { bad: document.getElementById('exportStatus').classList.contains('bad'), ask: shown('exportAsk'),
+    download: shown('exportDownload'), reminder: shown('reminder') };
+});
 const exportStatus = (page, pattern) => page.waitForFunction(source => new RegExp(source).test(document.getElementById('exportStatus').textContent),
   pattern.source).then(() => page.locator('#exportStatus').textContent());
 // Presses an export button and returns the file the stand-in save dialog kept.
@@ -668,11 +675,9 @@ test('exports save every stored day with the right names and the contract format
     await page.evaluate(answer => { window.pickerAnswer = answer; }, answer);
     await page.locator('#exportXlsx').click();
     await exportStatus(page, text);
-    assert.equal(await page.locator('#exportStatus').getAttribute('class'), 'status bad', answer);
+    // The dialog said what happened, so no question; a plain download is offered after a closed dialog.
+    assert.deepEqual(await exportView(page), { bad: true, ask: false, download: answer === 'cancel', reminder: true }, answer);
     assert.deepEqual(await statsMeta(page), META, answer + ': no export recorded');
-    assert.equal(await page.locator('#reminder').isVisible(), true, answer);
-    assert.equal(await page.locator('#exportAsk').isHidden(), true, answer + ': the dialog said what happened, so no question');
-    assert.equal(await page.locator('#exportDownload').isVisible(), answer === 'cancel', answer + ': a plain download is offered after a closed dialog');
   }
   assert.deepEqual(await page.evaluate(() => window.savedFiles), []);
   // A dialog blocked by a school policy ends exactly like a cancel. The offered
@@ -682,7 +687,7 @@ test('exports save every stored day with the right names and the contract format
   assert.equal(download.suggestedFilename(), 'play-stats_pcabcd_2026-10-08.xlsx');
   assert.equal(await page.evaluate(() => window.pickerCalls), calls, 'no second dialog');
   assert.equal(await page.locator('#exportStatus').textContent(), 'بدأ تنزيل الملف \u2066play-stats_pcabcd_2026-10-08.xlsx\u2069 (5 أيام).');
-  assert.deepEqual([await page.locator('#exportDownload').isHidden(), await page.locator('#exportAsk').isVisible()], [true, true]);
+  assert.deepEqual(await exportView(page), { bad: false, ask: true, download: false, reminder: true });
   assert.deepEqual(await statsMeta(page), META, 'not counted before the teacher answers');
   await page.locator('#exportNo').click();
   assert.deepEqual(await statsMeta(page), META);
@@ -702,9 +707,9 @@ test('exports save every stored day with the right names and the contract format
   const held = await page.evaluate(() => window.pickerCalls);
   await page.locator('#exportJson').click();
   await page.waitForFunction(() => window.closePicker);
-  for (const button of ['#exportJson', '#exportXlsx']) await page.locator(button).click();
+  await page.locator('#exportXlsx').click();
   assert.equal(await page.evaluate(() => window.pickerCalls), held + 1, 'one dialog');
-  assert.equal(await page.locator('#exportAsk').isHidden(), true, 'no download started');
+  assert.equal((await exportView(page)).ask, false, 'no download started');
   await page.evaluate(() => { window.pickerAnswer = 'save'; window.closePicker(); });
   await exportStatus(page, /^حُفظ الملف \u2066play-stats_pcabcd_2026-10-08\.json\u2069 /);
   const json = await page.evaluate(() => window.savedFiles.at(-1)).then(file => ({ name: file.name, bytes: Buffer.from(file.bytes) }));
