@@ -26,10 +26,12 @@
   //   Art.SCENERY[theme](g, pal, rnd) and Art.GROUND[theme]: a world's baked backdrop and ground look;
   //   Art.SFX[name](A): a sound for L.sfx(name), A = Kit.audio;
   //   Art.EV[type](d, ui): a world's own engine event (w.emit), ui = { fx, shake, say, sfx, pal, loud };
+  //   Art.CAUSE[cause]: Arabic death texts for a world's own w.die(cause);
+  //   a group with g.own is drawn by its plug-in, not as ground (boxes, coloured blocks...);
   //   Art.mod({ bake(g, w, pal), draw(ctx, w, pal, t, k), front(ctx, w, pal, t), hud(ctx, w, pal, t, ui) }):
   //     bake draws once into the level canvas, draw with the traps, front over the player,
   //     hud with the HUD (ui = { txt, bubble, rr }).
-  Art.ACC = {}; Art.SFX = {}; Art.EV = {}; Art.MODS = [];
+  Art.ACC = {}; Art.SFX = {}; Art.EV = {}; Art.CAUSE = {}; Art.MODS = [];
   Art.mod = function (m) { Art.MODS.push(m); return m; };
   Art.skinById = function (id) {
     for (var i = 0; i < Art.SKINS.length; i++) if (Art.SKINS[i].id === id) return Art.SKINS[i];
@@ -433,7 +435,7 @@
     var n = 0, i, q, g, x, y;
     for (i = 0; i < w.groups.length; i++) {
       g = w.groups[i];
-      if (g.invis || (g.active && !g.ox && !g.oy)) continue;
+      if (g.invis || g.own || (g.active && !g.ox && !g.oy)) continue;
       for (q = 0; q < g.tiles.length; q++) {
         x = g.tiles[q].x; y = g.tiles[q].y + 1;
         if (y >= E.ROWS || !w.grid[y * E.COLS + x]) continue;
@@ -468,6 +470,7 @@
         }
         continue;
       }
+      if (g.own) continue;
       var jx = 0, jy = 0;
       if (g.shakeT > 0) { jx = Math.sin(t * 90 + i) * 2.5; jy = Math.cos(t * 70 + i) * 1.5; }
       var tiles = g.tiles;

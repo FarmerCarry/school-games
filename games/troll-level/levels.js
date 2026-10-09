@@ -8,6 +8,10 @@
  * Worlds 6 and later live in their own files (w6-ice.js ...): each registers its
  * mechanic with the engine and art plug-ins, then calls TrollLevels.addWorld().
  * A level's `sol` is its recorded solution (solutions.js holds levels 1-30's).
+ * Optional level fields read by game.js: msg, winMsg, hint, fakeHint (shown until
+ * the real hint is due), pal (borrow world pal's look), hudName and card ([small,
+ * big] title card lines) to pretend to be another level, noIntro (no title card),
+ * noPill (no death counter in the HUD).
  */
 (function (root) {
   'use strict';

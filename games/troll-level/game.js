@@ -298,7 +298,7 @@
 
   /* ============================================================== game state */
   var game = {
-    world: null, demo: false, li: 0, pal: WORLDS[0], deaths: 0, t: 0, winT: -1, deadT: 0,
+    world: null, demo: false, li: 0, pal: WORLDS[0], deaths: 0, tries: 0, visitT: 0, t: 0, winT: -1, deadT: 0,
     vis: { sx: 1, sy: 1, sc: 1, blink: 0 }, msg: null, msgT: 0, introT: 0, flash: 0, flashC: '#fff',
     marks: [], staticC: null, staticFor: null, staticRes: 1, auto: null, autoF: 0, prevJ: false,
     botInputs: null, botF: 0, demoWait: 0, revLabelT: 0, endT: 3
@@ -317,9 +317,10 @@
     if (!i && save.best[0] == null) Kit.stats.tutorial('start');
     Kit.stats.round('L' + (i + 1));
     game.li = i; game.demo = false;
-    game.pal = WORLDS[WOF[i]];
-    game.deaths = 0; game.marks.length = 0; game.winT = -1; game.auto = null;
-    game.msg = null; game.msgT = 0; game.introT = 2.2; game.flash = 0;
+    // A level may borrow another world's look (pal: a world index) or skip its title card.
+    game.pal = WORLDS[LEVELS[i].pal != null ? LEVELS[i].pal : WOF[i]];
+    game.deaths = 0; game.tries = 0; game.visitT = 0; game.marks.length = 0; game.winT = -1; game.auto = null;
+    game.msg = null; game.msgT = 0; game.introT = LEVELS[i].noIntro ? 0 : 2.2; game.flash = 0;
     fx.clear();
     game.world = makeWorld(LEVELS[i], false);
     game.staticFor = null;
@@ -365,13 +366,14 @@
         break;
       case 'die':
         if (!demo) {
-          game.deaths++; save.total++;   // only this changed: one small write per death
+          game.deaths++; game.tries++; save.total++;   // only this changed: one small write per death
           if (store.set('total', save.total) === false) saveUi.failed();
-          var pool = Math.random() < 0.55 && CAUSE[d.cause] ? CAUSE[d.cause] : TAUNT;
+          var causes = CAUSE[d.cause] || Art.CAUSE[d.cause];
+          var pool = Math.random() < 0.55 && causes ? causes : TAUNT;
           var m = K.pick(pool);
           if (game.deaths === 5) m = '5 سقطات! المرحلة تضحك عليك!';
           else if (game.deaths === 10) m = '10 سقطات! لا تستسلم يا بطل!';
-          else if (game.deaths === HINT_AFTER) m = 'خذ تلميحًا... انظر للأسفل!';
+          else if (game.tries === HINT_AFTER) m = 'خذ تلميحًا... انظر للأسفل!';
           say(m, 1.7);
           if (game.marks.length > 40) game.marks.shift();
           game.marks.push({ x: d.x, y: d.y });
@@ -545,13 +547,15 @@
     if (mode !== 'play' || game.winT >= 0) return;
     mode = 'pause'; show('scr-pause');
     $('p-info').textContent = 'المرحلة ' + (game.li + 1) + ': ' + LEVELS[game.li].name + ' · السقطات: ' + game.deaths;
-    $('btn-skip').hidden = !(game.deaths >= SKIP_AFTER && game.li < N - 1);
+    $('btn-skip').hidden = !(game.tries >= SKIP_AFTER && game.li < N - 1);
     S.click();
     guardT = 0.08; // a quick second P/Esc should resume right away
   }
   function resume() { if (mode !== 'pause') return; mode = 'play'; show(null); K.keys.reset(); S.click(); }
   function restart() {
     if (!game.world || game.demo) return;
+    // A restart counts as a try (some levels block you without killing), not as a death.
+    if (game.winT < 0) game.tries++;
     game.world.reset(); game.vis.sc = 0.3; game.winT = -1;
     mode = 'play'; show(null); S.respawn(); K.keys.reset();
   }
@@ -643,6 +647,7 @@
         inp = { l: kk.anyDown(KL), r: kk.anyDown(KR), jh: kk.anyDown(KJ), jp: kk.anyPressed(KJ) };
       }
       w.step(inp);
+      if (game.winT < 0) game.visitT += dt;
       if (game.winT >= 0) {
         game.winT += dt;
         if (game.winT > 0.9 && mode === 'play') levelWon();
@@ -810,19 +815,21 @@
   }
 
   function drawHUD() {
-    var w = game.world, pal = game.pal;
-    // death counter (left, next to the pause button)
-    var dtext = 'السقطات: ' + game.deaths;
-    var dw = tw(dtext, 26) + 64;
-    Art.rr(ctx, 64, 12, dw, 44, 22); ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fill();
-    // little splat icon
-    ctx.fillStyle = '#ff4d6d';
-    ctx.beginPath(); ctx.arc(90, 34, 11, 0, Math.PI * 2); ctx.fill();
-    for (var i = 0; i < 6; i++) { var an = i / 6 * Math.PI * 2 + 0.3; ctx.beginPath(); ctx.arc(90 + Math.cos(an) * 13, 34 + Math.sin(an) * 13, 4, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(84, 29, 3, 3); ctx.fillRect(93, 29, 3, 3);
-    txt(dtext, 110, 35, 26, '#ffffff', 'left');
-    // level name (center)
-    var name = 'المرحلة ' + (game.li + 1) + ': ' + LEVELS[game.li].name;
+    var w = game.world, pal = game.pal, lv = LEVELS[game.li];
+    // death counter (left, next to the pause button); a level may take it over (noPill)
+    if (!lv.noPill) {
+      var dtext = 'السقطات: ' + game.deaths;
+      var dw = tw(dtext, 26) + 64;
+      Art.rr(ctx, 64, 12, dw, 44, 22); ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fill();
+      // little splat icon
+      ctx.fillStyle = '#ff4d6d';
+      ctx.beginPath(); ctx.arc(90, 34, 11, 0, Math.PI * 2); ctx.fill();
+      for (var i = 0; i < 6; i++) { var an = i / 6 * Math.PI * 2 + 0.3; ctx.beginPath(); ctx.arc(90 + Math.cos(an) * 13, 34 + Math.sin(an) * 13, 4, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(84, 29, 3, 3); ctx.fillRect(93, 29, 3, 3);
+      txt(dtext, 110, 35, 26, '#ffffff', 'left');
+    }
+    // level name (center); hudName lets a level pretend to be another
+    var name = lv.hudName || 'المرحلة ' + (game.li + 1) + ': ' + lv.name;
     txt(name, 640, 36, 30, '#ffffff', 'center', { stroke: pal.ink, lw: 6 });
     // world chip + best (right, left of the mute button)
     var best = save.best[game.li];
@@ -847,9 +854,10 @@
       bubble(game.msg, 640, 170, 28, a, pop);
     }
     for (var m = 0; m < Art.MODS.length; m++) if (Art.MODS[m].hud) Art.MODS[m].hud(ctx, w, pal, game.t, HUDUI);
-    // hint after a few deaths
-    if (game.deaths >= HINT_AFTER && LEVELS[game.li].hint) {
-      var h = 'تلميح: ' + hintText(LEVELS[game.li].hint);
+    // hint after a few tries (deaths or restarts) or 40 s in the level; a fakeHint shows until then
+    var hint = game.tries >= HINT_AFTER || game.visitT > 40 ? lv.hint : lv.fakeHint;
+    if (hint) {
+      var h = 'تلميح: ' + hintText(hint);
       var size = 22, hw = tw(h, size) + 40;
       while (hw > 1220 && size > 14) { size--; hw = tw(h, size) + 40; }
       Art.rr(ctx, 640 - hw / 2, 672, hw, 38, 19);
@@ -858,15 +866,16 @@
       txt(h, 640, 692, size, pal.ink, 'center');
     }
     // skip offer
-    if (game.deaths >= SKIP_AFTER && game.li < N - 1) {
+    if (game.tries >= SKIP_AFTER && game.li < N - 1) {
       txt('عالق؟ اضغط P لتتخطى المرحلة', 640, 648, 18, 'rgba(255,255,255,0.9)', 'center', { stroke: pal.ink, lw: 4, w: 500 });
     }
     // level intro card
     if (game.introT > 0) {
       var ia = Math.min(1, game.introT * 2.5), s = 1 + Math.max(0, game.introT - 1.9) * 1.2;
       ctx.save(); ctx.globalAlpha = ia; ctx.translate(640, 330); ctx.scale(s, s);
-      txt('المرحلة ' + (game.li + 1), 0, -34, 40, '#ffffff', 'center', { stroke: pal.ink, lw: 10 });
-      txt(LEVELS[game.li].name, 0, 22, 64, '#ffe14d', 'center', { stroke: pal.ink, lw: 12 });
+      // card: [small line, big line] lets a level fake its title card
+      txt(lv.card ? lv.card[0] : 'المرحلة ' + (game.li + 1), 0, -34, 40, '#ffffff', 'center', { stroke: pal.ink, lw: 10 });
+      txt(lv.card ? lv.card[1] : lv.name, 0, 22, 64, '#ffe14d', 'center', { stroke: pal.ink, lw: 12 });
       ctx.restore();
     }
   }
@@ -925,7 +934,7 @@
       var d = w.door; w.p.x = d.x + (d.g ? d.g.ox : 0) + 7; w.p.y = d.y + (d.g ? d.g.oy : 0) + 20; w.p.vx = 0; w.p.vy = 0;
       return true;
     },
-    setDeaths: function (n) { game.deaths = n; return n; },
+    setDeaths: function (n) { game.deaths = n; game.tries = Math.max(game.tries, n); return n; },
     // Replays every recorded solution through the engine (headless, instant).
     verifyAll: function () {
       return LEVELS.map(function (lv, i) { return solution(i) ? E.simulate(lv, solution(i)).result : 'none'; }).join(',');
