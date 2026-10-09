@@ -1172,17 +1172,18 @@
       var t = tables(state.days, info), name = 'play-stats_' + id + '_' + info.today + '.' + kind;
       var type = kind === 'xlsx' ? XLSX_TYPE : 'application/json';
       var bytes = kind === 'xlsx' ? xlsx(t, info, now) : utf8(JSON.stringify(exportJson(t, info)));
-      var what = name + ' (' + count(state.days.length, DAYS) + ')';
+      // The file name is isolated left to right, so the status line never reorders it.
+      var file = '\u2066' + name + '\u2069', what = file + ' (' + count(state.days.length, DAYS) + ')';
       accept[type] = ['.' + kind];
       asking(null);
       say('exportStatus', '');
       if (typeof window.showSaveFilePicker !== 'function') { fallback(); return; }
       window.showSaveFilePicker({ suggestedName: name, id: 'play-stats', types: [{ description: kind === 'xlsx' ? 'Excel' : 'JSON', accept: accept }] })
-        .then(function (file) {
-          return file.createWritable().then(function (out) {
+        .then(function (handle) {
+          return handle.createWritable().then(function (out) {
             return out.write(bytes).then(function () { return out.close(); });
           }).then(function () { counted(now.getTime(), 'حُفظ الملف ' + what + '.'); }, function () {
-            say('exportStatus', 'تعذّر حفظ الملف ' + name + ' في المكان المختار، فلم يُسجَّل التصدير. جرّب مرة أخرى أو اختر مجلدًا آخر.', true);
+            say('exportStatus', 'تعذّر حفظ الملف ' + file + ' في المكان المختار، فلم يُسجَّل التصدير. جرّب مرة أخرى أو اختر مجلدًا آخر.', true);
           });
         }, function (e) {
           if (e && e.name === 'AbortError') say('exportStatus', 'لم يُحفظ الملف لأن نافذة الحفظ أُغلقت، فلم يُسجَّل التصدير.', true);

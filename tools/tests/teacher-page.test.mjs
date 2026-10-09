@@ -656,7 +656,7 @@ test('exports save every stored day with the right names and the contract format
   const hardware = await page.locator('#hardware dd').last().textContent();
   // A closed save dialog or a file that cannot be written: nothing saved, no export counted, the reminder stays.
   for (const [answer, text] of [['cancel', /^لم يُحفظ الملف لأن نافذة الحفظ أُغلقت، فلم يُسجَّل التصدير\.$/],
-    ['fail', /^تعذّر حفظ الملف play-stats_pcabcd_2026-10-08\.xlsx في المكان المختار، فلم يُسجَّل التصدير\./]]) {
+    ['fail', /^تعذّر حفظ الملف \u2066play-stats_pcabcd_2026-10-08\.xlsx\u2069 في المكان المختار، فلم يُسجَّل التصدير\./]]) {
     await page.evaluate(answer => { window.pickerAnswer = answer; }, answer);
     await page.locator('#exportXlsx').click();
     await exportStatus(page, text);
@@ -671,7 +671,8 @@ test('exports save every stored day with the right names and the contract format
   assert.equal(workbook.name, 'play-stats_pcabcd_2026-10-08.xlsx');
   assert.deepEqual(await page.evaluate(() => window.pickerOptions), { suggestedName: workbook.name, id: 'play-stats',
     types: [{ description: 'Excel', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
-  assert.equal(await page.locator('#exportStatus').textContent(), 'حُفظ الملف play-stats_pcabcd_2026-10-08.xlsx (5 أيام).');
+  assert.equal(await page.locator('#exportStatus').textContent(), 'حُفظ الملف \u2066play-stats_pcabcd_2026-10-08.xlsx\u2069 (5 أيام).',
+    'the file name is isolated left to right');
   const workbookBytes = workbook.bytes;
   const tablesFromXlsx = checkWorkbook(workbookBytes);
   const json = await saveFile(page, '#exportJson');
@@ -715,7 +716,7 @@ test('without a save dialog, an export counts only after the teacher confirms th
   const id = first.suggestedFilename().match(/^play-stats_(pc[a-z]{4})_2026-10-08\.json$/)?.[1];
   assert.ok(id, first.suggestedFilename());
   assert.equal(JSON.parse(read(await first.path())).pc.id, id);
-  assert.equal(await page.locator('#exportStatus').textContent(), `بدأ تنزيل الملف play-stats_${id}_2026-10-08.json (5 أيام).`);
+  assert.equal(await page.locator('#exportStatus').textContent(), `بدأ تنزيل الملف \u2066play-stats_${id}_2026-10-08.json\u2069 (5 أيام).`);
   assert.equal(await page.locator('#exportAsk').isVisible(), true);
   assert.deepEqual(await statsMeta(page), { pc: { id } }, 'not counted before the teacher answers');
   await page.locator('#exportNo').click();
@@ -730,7 +731,7 @@ test('without a save dialog, an export counts only after the teacher confirms th
   assert.deepEqual(await statsMeta(page), { pc: { id } });
   await page.locator('#exportYes').click();
   assert.deepEqual(await statsMeta(page), { pc: { id }, lastExport: NOW.getTime() });
-  assert.equal(await page.locator('#exportStatus').textContent(), `سُجّل تصدير الملف play-stats_${id}_2026-10-08.xlsx (5 أيام).`);
+  assert.equal(await page.locator('#exportStatus').textContent(), `سُجّل تصدير الملف \u2066play-stats_${id}_2026-10-08.xlsx\u2069 (5 أيام).`);
   assert.equal(await page.locator('#exportAsk').isHidden(), true);
   assert.equal(await page.locator('#reminder').isHidden(), true);
   assert.match(await page.locator('#lastExport').textContent(), /آخر تصدير: 8\/10\/2026/);
