@@ -45,13 +45,18 @@ export const scenarios = {
       // Begin a fresh run with the player's own P and R shortcuts first.
       if (await evaluate(page, `${g}.mode === 'play'`)) await page.keyboard.press('KeyP');
       await requireState(page, `${g}.mode === 'paused' || ${g}.mode === 'over'`, 'drift-king: run must pause or end before retry');
-      // The results screen ignores R for its first 0.45 s.
-      if (await evaluate(page, `${g}.mode === 'over'`)) await page.waitForTimeout(500);
       // A fresh run builds a new car. Checking for it, not for a distance under
       // one, cannot miss the new run when a slow frame carries the car past 1.
       await page.evaluate(() => { window.sgRetryCar = window.__game.car; });
-      await page.keyboard.press('KeyR');
-      await requireState(page, `${g}.mode === 'play' && ${g}.car !== window.sgRetryCar`, 'drift-king: retry must start a fresh run before pause');
+      const fresh = `${g}.mode === 'play' && ${g}.car !== window.sgRetryCar`;
+      // The results screen ignores R for its first 0.45 s of game time. A frame
+      // advances the game at most 8 steps (0.13 s), so on a slow runner that is
+      // longer than any fixed real-time wait: press R until the fresh run starts.
+      for (let i = 0; i < 12 && !(await evaluate(page, fresh)); i++) {
+        await page.keyboard.press('KeyR');
+        await page.waitForTimeout(500);
+      }
+      await requireState(page, fresh, 'drift-king: retry must start a fresh run before pause');
     }
   }),
   'fire-and-ice': defaults(['#playBtn'], `${g}.mode === 'play'`, `[${g}.world.fire.x,${g}.world.ice.x,${g}.world.t]`, hold('ArrowRight'), '#pauseBtn', `${g}.mode === 'paused'`, '#restartBtn', `${g}.world.t < 0.4`),
