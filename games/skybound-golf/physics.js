@@ -275,7 +275,7 @@
       mode: 'air', done: false, reason: null, time: 0, maxX: 0, maxY: y, power: power, grade: g, perfect: perfect,
       rockets: rocketsOf(u), rocketsLeft: rocketsOf(u), armed: false, armAge: 0, combo: 0, bestCombo: 0,
       supers: 0, bounces: 0, skips: 0, coins: 0, gems: 0, pops: 0, rings: 0, got: {}, used: {},
-      lastPad: -1, lastProp: -1, propAt: 0, lateUntil: -1, lateOut: 0, space: false, hole: false, ace: false, surface: null, trackVy: 0 };
+      lastPad: -1, lateUntil: -1, lateOut: 0, space: false, hole: false, ace: false, surface: null, trackVy: 0 };
   }
 
   // Seconds until the ball meets the ground on its current arc, or null when
@@ -447,16 +447,15 @@
         ball.vx -= (1 + o.k) * vn * nx; ball.vy -= (1 + o.k) * vn * ny;
         if (o.k < 1) { ball.vx *= 0.85; ball.vy *= 0.85; }
         if (ball.mode === 'roll') ball.mode = 'air';
-        // A ball resting on a crown slides off forwards instead of perching.
-        if (ny > 0.5 && -vn < 3) ball.vx += 3;
-        // A rattle or a soft touch makes no sound; a separate rebound a moment
-        // later is heard again.
-        var repeat = -vn < 3 || (ball.lastProp === o.id && ball.time - ball.propAt < 0.12);
-        ball.lastProp = o.id;
-        if (!repeat) {
-          ball.propAt = ball.time;
-          events.push({ type: 'prop', id: o.id, x: ball.x - nx * ball.r, y: ball.y - ny * ball.r, prop: o.type, strength: Math.min(1, -vn / 25) });
+        // A ball resting on a crown slides off downhill on whichever side it
+        // is, at least 2 m/s along the surface. This only tops up a slow
+        // slide, so it never adds energy to a ball already moving away.
+        if (ny > 0.5 && -vn < 3) {
+          var side = nx < -0.05 ? -1 : 1, sx = ny * side, sy = -nx * side, along = ball.vx * sx + ball.vy * sy;
+          if (along < 2) { ball.vx += (2 - along) * sx; ball.vy += (2 - along) * sy; }
         }
+        // A soft touch or a rattle makes no sound; every real rebound does.
+        if (-vn >= 3) events.push({ type: 'prop', id: o.id, x: ball.x - nx * ball.r, y: ball.y - ny * ball.r, prop: o.type, strength: Math.min(1, -vn / 25) });
       }
     }
   }

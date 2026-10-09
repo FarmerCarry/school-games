@@ -41,6 +41,8 @@
     return el.id || (el.dataset && (el.dataset.upgrade || el.dataset.skin)) || el;
   }
   function strayPress(e, target) {
+    // A button still showing where it was (mute, a shop card) revealed nothing.
+    if (lastClick && lastClick.el.isConnected && lastClick.el.offsetParent) return false;
     return !!(lastClick && e.timeStamp - lastClick.t < 500 && control(target) !== lastClick.target &&
       Math.abs(e.clientX - lastClick.x) < 16 && Math.abs(e.clientY - lastClick.y) < 16);
   }
@@ -50,11 +52,7 @@
     if (strayPress(e, target)) { e.preventDefault(); e.stopPropagation(); return; }
     // Only a button press that changes what is under the pointer can be
     // followed by a stray second press; clicks on empty space never arm this.
-    if (target.tagName !== 'BUTTON') return;
-    var press = lastClick = { t: e.timeStamp, x: e.clientX, y: e.clientY, target: control(target) };
-    setTimeout(function () {
-      if (lastClick === press && target.isConnected && target.offsetParent) lastClick = null;
-    }, 0);
+    if (target.tagName === 'BUTTON') lastClick = { t: e.timeStamp, x: e.clientX, y: e.clientY, target: control(target), el: target };
   }, true);
   var saveStatus = K.saveStatus({ retry: persist });
 
