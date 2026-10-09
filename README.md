@@ -32,7 +32,7 @@ games are in Arabic, laid out right-to-left.
 | هوكي الهواء | Air Hockey | 1-2 | لاعبان، رياضة |
 | سلة الرؤوس الكبيرة | Hoop Heads | 1-2 | رياضة، لاعبان |
 | كرة القدم المجنونة | Wacky Soccer | 1-2 | رياضة، لاعبان |
-| حفلة البلياردو | Pool Party | 1-2 | رياضة |
+| حفلة البلياردو | Pool Party | 1-2 | رياضة، لاعبان |
 | ضربة إلى الفضاء | Skybound Golf | 1 | رياضة، أركيد |
 | سوق الحيوانات | Critter Mart | 1 | بناء وإدارة |
 | إمبراطورية البيتزا | Pizza Empire | 1 | بناء وإدارة |
@@ -101,7 +101,7 @@ publishing them. It deploys that folder directly with GitHub's Pages artifact an
 (see `.github/workflows/build.yml` and `tools/build.mjs`). It looks and plays exactly
 the same, but:
 
-- each game is **one file** instead of 10–13, and the home page is one file with all pictures
+- each game is **one file** instead of 6–13, and the home page is one file with all pictures
   built in, so a slow hard disk has far fewer files to read;
 - after the first visit, every PC keeps the whole site in an **offline cache**: games open
   without asking the server, still work if the internet drops, and after an update each PC
@@ -265,6 +265,7 @@ shared/game.css           shared game page styles + the Fredoka font
 lib/three/                three.js r159 (MIT) for the 3D games
 docs/GAME_SPEC.md         the rules every game follows
 docs/PLAY_STATS.md        play statistics: what is counted, storage and export formats
+docs/PERFORMANCE.md       size limits per game, slow-disk rules and how the fast build is measured
 tools/playtest.mjs        headless Chromium playtest harness (Playwright)
 tools/build.mjs           builds the fast version (one file per game + offline cache + offline ZIP)
 ```
@@ -382,9 +383,9 @@ node games/block-burst/verify-levels.js --report-balance
 ```
 
 The last command reports balance thresholds as warnings while still failing invalid boards
-and levels with no successful smart-bot runs. The existing levels currently have balance
-warnings; report mode is useful for inspecting them without treating those warnings as
-proof a level is impossible.
+and levels with no successful smart-bot runs. All current levels pass the default check;
+report mode is useful while changing levels, to see every threshold without treating a
+warning as proof that a level is impossible.
 
 Block Burst's policies now have independent seeded randomness, and search clones
 preserve the simulated random state. Use `--json` for failed seeds and remaining
@@ -400,7 +401,9 @@ independent holdouts. Actual student playtests remain necessary for difficulty f
 
 ## Credits and licenses
 
-- Games, art, sounds and site: original work made for this project.
+- Games, art, sounds and site: original work made for this project. أصابع البرق computes
+  its results with the same published rules as Monkeytype (WPM, raw, accuracy, consistency),
+  so students' scores are comparable; the code is our own.
 - [three.js](https://threejs.org) r159, MIT license (`lib/three/LICENSE`).
 - Fredoka font (Latin) and Baloo Bhaijaan 2 font (Arabic), SIL Open Font License
   (`shared/fonts/LICENSE-*.txt`).
