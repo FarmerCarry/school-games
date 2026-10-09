@@ -32,12 +32,31 @@
   }
   // A bottomless hole from col x0..x1.
   function hole(b, x0, x1) { return b.f(x0, 13, x1, 17, ' '); }
+  // Moves a standing door to (tx, ty) without doorTo's giggle (a shuffle makes many moves).
+  function slide(L, d, tx, ty, speed, then) {
+    d.m = { tx: tx * L.T, ty: ty * L.T - 20, speed: speed * L.T, delay: 0, then: then || null };
+  }
+  // Doors d (at column xa) and e (at xb) on row 12 trade places in s seconds:
+  // d hops over the top, e slides along the floor.
+  function swapDoors(L, d, e, xa, xb, s) {
+    var n = Math.abs(xb - xa), h = 2 * Math.sqrt(n * n / 4 + 9) / s;
+    slide(L, e, xa, 12, n / s);
+    slide(L, d, (xa + xb) / 2, 9, h, function () { slide(L, d, xb, 12, h); });
+    L.sfx('whoosh');
+  }
+  // A spiky block in a wall flies across the room (and stays off screen). In flight
+  // only its spikes are solid to you: a player who lands on it falls through, and
+  // is not carried away.
+  function shoot(L, ch, dx, speed) { L.g(ch).setFake().move(dx, 0, speed, 0.3); L.sfx('buzz'); }
+  // Where a group's first tile is now, in tiles.
+  function gx(L, g) { return g.tiles[0].x + g.ox / L.T; }
 
   var WORLDS = [
     { name: 'عالم البرتقال', theme: 'sun', bg: '#ffa41b', bg2: '#ffb443', ink: '#1c1226', ink2: '#3a2a44', accent: '#ffffff' },
     { name: 'عالم البحر', theme: 'sea', bg: '#3fe0c5', bg2: '#5deacf', ink: '#0f2350', ink2: '#26407a', accent: '#ffffff' },
     { name: 'عالم الحلوى', theme: 'candy', bg: '#ff8fc7', bg2: '#ffa6d3', ink: '#3b1a5c', ink2: '#5a3480', accent: '#ffffff' },
-    { name: 'عالم الغابة', theme: 'forest', bg: '#c6f25a', bg2: '#d4f77c', ink: '#13402a', ink2: '#2a5e40', accent: '#ffffff' }
+    { name: 'عالم الغابة', theme: 'forest', bg: '#c6f25a', bg2: '#d4f77c', ink: '#13402a', ink2: '#2a5e40', accent: '#ffffff' },
+    { name: 'عالم الفضاء', theme: 'space', bg: '#9d8cff', bg2: '#ae9fff', ink: '#1b1446', ink2: '#382d70', accent: '#ffffff' }
   ];
 
   var L = [];
@@ -402,7 +421,7 @@
   // 4-6: the sneaky king — a bit of everything.
   L.push({
     name: 'الملك الماكر', hint: 'الباب الأول مزيف، النطّاطة فخ، الجسر ينهار، والتحكم ينعكس!',
-    msg: 'المرحلة الأخيرة... حظًا سعيدًا!',
+    msg: 'المرحلة الأخيرة... أو هكذا تظن!',
     map: (function () {
       var b = room();
       b.f(1, 3, 30, 4, '#').f(10, 5, 15, 5, 'v');
@@ -415,6 +434,150 @@
       L.when(function () { return L.grounded() && L.px() >= 21 && L.px() < 23.5; }, function () { L.reverse(1.6); });
       L.onX(23.5, function () { L.sp(1).pop(); });
       L.onX(24.5, function () { L.doorTo(L.door, 30, 12, 10); L.msg('امسكني!'); });
+    }
+  });
+
+  /* ======================= WORLD 5 — space ======================= */
+
+  // 5-1: no way across... until you stand still at the edge for a moment.
+  L.push({
+    name: 'الصبر', hint: 'أحيانًا يكون الحل ألا تفعل شيئًا! قف عند الحافة ولا تتحرك.',
+    msg: 'لا يوجد طريق... استسلم!',
+    map: (function () {
+      var b = room();
+      pit(b, 8, 24);
+      b.f(8, 13, 24, 13, 'a');
+      return b.s(2, 12, 'P').s(28, 12, 'D').done();
+    })(),
+    script: function (L) {
+      var a = L.g('a'), still = 0;
+      a.active = false;
+      L.world.ticks.push(function () {
+        if (a.active) return;
+        // standing still near the edge for 1.5 s (90 steps) brings the bridge
+        still = L.grounded() && Math.abs(L.world.p.vx) < 20 && L.px() > 5 ? still + 1 : 0;
+        if (still > 90) { a.show(); L.world.reveal(a); L.msg('حسنًا... هذا جسر لصبرك!'); }
+      });
+    }
+  });
+
+  // 5-2: the shell game — two fake doors drop in and shuffle with the real one.
+  L.push({
+    name: 'لعبة الأبواب', hint: 'راقب الباب الحقيقي ولا ترمش! ثم اقفز فوق الأبواب المزيفة.',
+    msg: 'باب واحد فقط؟ سهل!',
+    map: room().s(2, 12, 'P').s(11, 12, 'E').s(16, 12, 'D').s(21, 12, 'E').done(),
+    script: function (L) {
+      var X = [11, 16, 21], at = [L.fakes[0], L.door, L.fakes[1]];
+      var dropped = false;
+      L.fakes.forEach(function (d) { d.y = -3 * L.T; }); // waiting above the screen
+      L.onX(5, function () {
+        dropped = true;
+        L.msg('ثلاثة أبواب! أين الحقيقي؟');
+        slide(L, L.fakes[0], 11, 12, 24); slide(L, L.fakes[1], 21, 12, 24);
+      });
+      // the shuffle waits for the 2.2 s level title card, so no swap hides behind it
+      L.when(function () { return dropped && L.t() > 2.2; }, function () {
+        [[1, 2], [0, 1], [2, 0], [1, 2], [0, 2]].forEach(function (q, k) {
+          L.after(0.8 + k * 0.75, function () {
+            var d = at[q[0]];
+            swapDoors(L, d, at[q[1]], X[q[0]], X[q[1]], 0.6);
+            at[q[0]] = at[q[1]]; at[q[1]] = d;
+          });
+        });
+        L.after(4.6, function () { L.msg('اختر!'); });
+      });
+    }
+  });
+
+  // 5-3: moon gravity — a full jump floats you up into the ceiling spikes.
+  L.push({
+    name: 'القمر', hint: 'على القمر القفزة عالية جدًا! اضغط القفز ضغطة قصيرة.',
+    map: (function () {
+      var b = room();
+      pit(b, 6, 7);
+      b.f(12, 3, 30, 6, '#').f(14, 7, 18, 7, 'v').f(20, 7, 26, 7, 'v');
+      pit(b, 15, 17); pit(b, 21, 25);
+      return b.s(2, 12, 'P').s(28, 12, 'D').done();
+    })(),
+    script: function (L) {
+      L.onX(11, function () { L.gravity(0.4); L.msg('أهلًا بك على القمر!'); L.sfx('moon'); });
+    }
+  });
+
+  // 5-4: the walls shoot spiky blocks — jump the low ones, stay down for the high one.
+  // Then the door runs back to the start, and the left wall shoots too.
+  L.push({
+    name: 'الشوك الطائر', hint: 'المنخفضة: اقفز. العالية: لا تقفز! والباب يهرب... فارجع واقفز فوق الأخيرة.',
+    msg: 'ما هذا الصوت في الجدار؟',
+    map: room().s(30, 12, 'a').s(29, 12, '<').s(30, 11, 'b').s(29, 11, '<').s(1, 12, 'c').s(2, 12, '>')
+      .s(4, 12, 'P').s(28, 12, 'D').done(),
+    script: function (L) {
+      var a = L.g('a'), b = L.g('b');
+      L.onX(7, function () { shoot(L, 'a', -33, 10); });
+      // each block waits until the one before has gone past you
+      L.when(function () { return gx(L, a) < L.px() - 1 && L.px() >= 10; }, function () { shoot(L, 'b', -33, 10); });
+      L.when(function () { return gx(L, b) < L.px() - 1 && L.px() >= 20; }, function () {
+        var d = L.door;
+        L.doorTo(d, 28, 5, 18, 0, function () { L.doorTo(d, 6, 5, 18, 0, function () { L.doorTo(d, 6, 12, 18); }); });
+        L.msg('إلى البداية!');
+        L.after(0.8, function () { shoot(L, 'c', 33, 12); });
+      });
+    }
+  });
+
+  // 5-5: the floor hates waiting — stand still and the spikes come out.
+  L.push({
+    name: 'لا تقف!', hint: 'لا تقف أبدًا! وأنت تنتظر المنصة أو المكبس، اقفز في مكانك.',
+    msg: 'تعلّمت الصبر؟ انسَه! هنا لا تقف أبدًا!',
+    map: (function () {
+      var b = room();
+      pit(b, 10, 19);
+      b.f(17, 13, 19, 13, 'a').f(23, 3, 24, 8, 'b').f(5, 12, 9, 12, '1').f(20, 12, 22, 12, '1').f(25, 12, 27, 12, '1');
+      return b.s(2, 12, 'P').s(29, 12, 'D').done();
+    })(),
+    script: function (L) {
+      var a = L.g('a'), b = L.g('b'), sp = L.sp(1), still = 0;
+      // only standing over a spike strip counts (a spike's sharp part is 24 px wide)
+      var onStrip = function () { return sp.list.some(function (s) { return Math.abs(L.px() * L.T - s.x - 20) < 25; }); };
+      L.world.ticks.push(function () {
+        still = L.grounded() && !L.on('a') && Math.abs(L.world.p.vx) < 30 && onStrip() ? still + 1 : 0;
+        if (still > 55) sp.pop();
+        else if (still > 12) sp.list.forEach(function (s) { s.target = 0.4; s.speed = 3; }); // a warning peek
+        else if (!still && sp.list[0].target) sp.hide();
+      });
+      var ride = function () { a.move(-7, 0, 3, 1, function () { a.move(7, 0, 3, 1, ride); }); };
+      L.onX(5, ride);
+      var slam = function () {
+        b.move(0, 4, 14, 1.2, function () {
+          L.sfx('slam'); L.shake(5);
+          b.move(0, -4, 4, 1.4, slam);
+        });
+      };
+      slam();
+    }
+  });
+
+  // 5-6: the sneaky king returns — a bit of everything from space.
+  L.push({
+    name: 'عودة الملك الماكر',
+    // Deaths left of column 17 are on the shy floor or the moon pit; later ones are at the doors.
+    hint: [{ before: 17, text: 'الأرض خجولة في البداية، وعلى القمر اضغط القفز ضغطة قصيرة.' }, { text: 'البابان يتبادلان مكانيهما! راقب الحقيقي، واقفز فوق الشوكة الطائرة.' }],
+    msg: 'لقد عدت! هذه المرة لن تنجو!',
+    winMsg: 'مستحيل! هزمتني مرة أخرى!',
+    map: (function () {
+      var b = room();
+      b.f(4, 13, 5, 17, 'b').f(9, 3, 30, 6, '#').f(11, 7, 16, 7, 'v');
+      pit(b, 12, 15);
+      return b.s(30, 12, 'a').s(29, 12, '<').s(2, 12, 'P').s(21, 12, 'E').s(26, 12, 'D').done();
+    })(),
+    script: function (L) {
+      L.when(function () { return L.on('b'); }, function () { L.g('b').drop(0.05); });
+      L.onX(8, function () { L.gravity(0.4); L.msg('القمر مرة أخرى!'); L.sfx('moon'); });
+      L.onX(19, function () {
+        swapDoors(L, L.door, L.fakes[0], 26, 21, 0.7);
+        shoot(L, 'a', -33, 12);
+        L.msg('هيهي! أين الباب الآن؟');
+      });
     }
   });
 
