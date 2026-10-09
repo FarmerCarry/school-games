@@ -512,7 +512,10 @@ test('the workbook is a stored ZIP of well-formed parts: RTL sheets, an Arabic r
   for (const table of Object.keys(CONTRACT)) assert.deepEqual(empty[table], [], 'an empty ' + table + ' table keeps a valid range');
   const readme = unescapeXml(unzip(api.xlsx(t, info)).get('xl/worksheets/sheet1.xml'));
   for (const text of ['عندما تمتلئ مساحة الإحصاءات أو بعد 120 يومًا، أيهما أسبق', 'شهرين أو ثلاثة', 'في 3 أيام أو أكثر',
-    'احذف الصفوف التي يكون فيها pc فارغًا']) assert.ok(readme.includes(text), 'the read-me says: ' + text);
+    'احذف الصفوف التي يكون فيها pc فارغًا', 'لا ترسم حركة مستمرة: connect-four، tic-tac-toe، typing-test.',
+    'تبدأ من الصفر في متصفح آخر', 'في جدول hours استخدم أحدث ملف لكل جهاز']) {
+    assert.ok(readme.includes(text), 'the read-me says: ' + text);
+  }
   // Text that looks like XML or a formula stays plain text.
   const tricky = { ...info, label: '<b>&"x"' };
   const trickyRead = checkWorkbook(api.xlsx(api.tables(days, tricky), tricky));
@@ -529,10 +532,40 @@ before(async () => {
 after(async () => { await browser?.close(); await server?.close(); });
 
 const OWN_FILES = /^\/(?:teacher\.html|favicon\.(?:svg|ico)|js\/(?:catalog|teacher)\.js|css\/teacher\.css|shared\/fonts\/[\w.-]+\.woff2)$/;
+// Edge and Chrome save exports through their save dialog (showSaveFilePicker), which
+// headless Chromium closes at once. A stand-in dialog answers as window.pickerAnswer
+// says ('save', 'cancel', 'refuse', 'fail', or 'hold' to stay open until
+// window.closePicker() is called), saves under window.pickerName when one is set (the
+// teacher renamed the file), refuses a second dialog while one is open, as Chrome
+// does, and keeps each saved file in window.savedFiles.
 async function teacherPage(t, { blocked = false, entries = seed() } = {}) {
   if (!browser) browser = await launchChromium();
   const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, serviceWorkers: 'block', timezoneId: 'Asia/Riyadh', acceptDownloads: true });
   t.after(() => context.close());
+  await context.addInitScript(() => {
+    let open = false;
+    window.pickerAnswer = 'save';
+    window.pickerCalls = 0;
+    window.savedFiles = [];
+    window.showSaveFilePicker = async options => {
+      window.pickerCalls++;
+      if (open) throw new DOMException('File picker already active.', 'NotAllowedError');
+      open = true;
+      if (window.pickerAnswer === 'hold') await new Promise(resolve => { window.closePicker = resolve; });
+      open = false;
+      const answer = window.pickerAnswer, name = window.pickerName || options.suggestedName;
+      window.pickerOptions = options;
+      if (answer === 'cancel') throw new DOMException('The user aborted a request.', 'AbortError');
+      if (answer === 'refuse') throw new DOMException('Must be handling a user gesture to show a file picker.', 'SecurityError');
+      return { name, createWritable: async () => {
+        if (answer === 'fail') throw new DOMException('The file is open in another program.', 'NoModificationAllowedError');
+        const parts = [];
+        return { write: async data => { parts.push(data); }, close: async () => {
+          window.savedFiles.push({ name, bytes: [...new Uint8Array(await new Blob(parts).arrayBuffer())] });
+        } };
+      } };
+    };
+  });
   if (blocked) {
     await context.addInitScript(() => {
       for (const method of ['getItem', 'setItem', 'removeItem']) {
@@ -559,6 +592,25 @@ async function teacherPage(t, { blocked = false, entries = seed() } = {}) {
   return page;
 }
 const storage = page => page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map(key => [key, localStorage.getItem(key)])));
+const statsMeta = async page => JSON.parse((await storage(page))['sg:site:statsmeta']);
+// What the export tool shows, in one round trip: a red status, the «هل حُفظ؟» question,
+// the offered download and the reminder.
+const exportView = page => page.evaluate(() => {
+  const shown = id => document.getElementById(id).checkVisibility();
+  return { bad: document.getElementById('exportStatus').classList.contains('bad'), ask: shown('exportAsk'),
+    download: shown('exportDownload'), reminder: shown('reminder') };
+});
+const exportStatus = (page, pattern) => page.waitForFunction(source => new RegExp(source).test(document.getElementById('exportStatus').textContent),
+  pattern.source).then(() => page.locator('#exportStatus').textContent());
+// Presses an export button and returns the file the stand-in save dialog kept.
+async function saveFile(page, button) {
+  const count = await page.evaluate(() => window.savedFiles.length);
+  await page.locator(button).click();
+  await page.waitForFunction(n => window.savedFiles.length > n, count);
+  await exportStatus(page, /^حُفظ الملف /);
+  const file = await page.evaluate(() => window.savedFiles.at(-1));
+  return { name: file.name, bytes: Buffer.from(file.bytes) };
+}
 const gameRow = (page, slug) => page.locator(`#gameTable tr[data-game="${slug}"]`);
 const rowNumbers = (page, slug) => gameRow(page, slug).evaluate(row => ['seconds', 'sessions', 'short', 'days'].map(name => Number(row.dataset[name])));
 
@@ -593,6 +645,7 @@ test('seeded records show the right numbers, and the period choice changes them'
   await page.locator('#deviceSection summary').click();
   assert.equal(await page.locator('#device tr[data-game="candy-rope"]').getAttribute('data-verdict'), 'smooth');
   assert.equal(await page.locator('#device tr[data-game="rail-rush"] td').first().textContent(), '—');
+  assert.equal(await page.locator('#unmeasured').count(), 0, 'both games count frames');
   await page.locator('#hardware dl').waitFor();
   assert.match(await page.locator('#hardware').textContent(), /أنوية المعالج.*الشاشة.*شريحة الرسوم/s);
   assert.deepEqual(await page.locator('#sources li').evaluateAll(items => items.map(i => i.dataset.key).sort()), ['category', 'direct', 'featured', 'recent']);
@@ -611,18 +664,58 @@ test('seeded records show the right numbers, and the period choice changes them'
   assert.deepEqual(await page.locator('#settings li .num').allTextContents(), ['3', '3', '2']);
 });
 
-test('exports download every stored day with the right names and the contract format', async t => {
+test('exports save every stored day with the right names and the contract format; a closed save dialog counts nothing', async t => {
   const page = await teacherPage(t);
   // This PC's hardware is shown on the page but never exported.
   await page.locator('#deviceSection summary').click();
   const hardware = await page.locator('#hardware dd').last().textContent();
-  const [workbook] = await Promise.all([page.waitForEvent('download'), page.locator('#exportXlsx').click()]);
-  assert.equal(workbook.suggestedFilename(), 'play-stats_pcabcd_2026-10-08.xlsx');
-  const workbookBytes = fs.readFileSync(await workbook.path());
+  // A file that cannot be written or a closed save dialog: nothing saved, no export counted, the reminder stays.
+  for (const [answer, text] of [['fail', /^تعذّر حفظ الملف \u2066play-stats_pcabcd_2026-10-08\.xlsx\u2069 في المكان المختار، فلم يُسجَّل التصدير\./],
+    ['cancel', /^لم يُحفظ الملف: أُغلقت نافذة الحفظ أو لم تظهر، فلم يُسجَّل التصدير\.$/]]) {
+    await page.evaluate(answer => { window.pickerAnswer = answer; }, answer);
+    await page.locator('#exportXlsx').click();
+    await exportStatus(page, text);
+    // The dialog said what happened, so no question; a plain download is offered after a closed dialog.
+    assert.deepEqual(await exportView(page), { bad: true, ask: false, download: answer === 'cancel', reminder: true }, answer);
+    assert.deepEqual(await statsMeta(page), META, answer + ': no export recorded');
+  }
+  assert.deepEqual(await page.evaluate(() => window.savedFiles), []);
+  // A dialog blocked by a school policy ends exactly like a cancel. The offered
+  // download needs no dialog and counts only after «نعم».
+  const calls = await page.evaluate(() => window.pickerCalls);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#exportDownload').click()]);
+  assert.equal(download.suggestedFilename(), 'play-stats_pcabcd_2026-10-08.xlsx');
+  assert.equal(await page.evaluate(() => window.pickerCalls), calls, 'no second dialog');
+  assert.equal(await page.locator('#exportStatus').textContent(), 'بدأ تنزيل الملف \u2066play-stats_pcabcd_2026-10-08.xlsx\u2069 (5 أيام).');
+  assert.deepEqual(await exportView(page), { bad: false, ask: true, download: false, reminder: true });
+  assert.deepEqual(await statsMeta(page), META, 'not counted before the teacher answers');
+  await page.locator('#exportNo').click();
+  assert.deepEqual(await statsMeta(page), META);
+  // The teacher may rename the file in the dialog: the status names the saved file.
+  await page.evaluate(() => { window.pickerAnswer = 'save'; window.pickerName = 'week 41.xlsx'; });
+  const workbook = await saveFile(page, '#exportXlsx');
+  assert.equal(workbook.name, 'week 41.xlsx');
+  assert.deepEqual(await page.evaluate(() => window.pickerOptions), { suggestedName: 'play-stats_pcabcd_2026-10-08.xlsx', id: 'play-stats',
+    types: [{ description: 'Excel', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
+  assert.equal(await page.locator('#exportStatus').textContent(), 'حُفظ الملف \u2066week 41.xlsx\u2069 (5 أيام).',
+    'the chosen name, isolated left to right');
+  const workbookBytes = workbook.bytes;
   const tablesFromXlsx = checkWorkbook(workbookBytes);
-  const [json] = await Promise.all([page.waitForEvent('download'), page.locator('#exportJson').click()]);
-  assert.equal(json.suggestedFilename(), 'play-stats_pcabcd_2026-10-08.json');
-  const exported = JSON.parse(read(await json.path()));
+  // More clicks while the dialog is still open do nothing: Chrome would refuse a
+  // second dialog, and that error must not start a download behind the open one.
+  await page.evaluate(() => { window.pickerAnswer = 'hold'; window.pickerName = ''; window.closePicker = null; });
+  const held = await page.evaluate(() => window.pickerCalls);
+  await page.locator('#exportJson').click();
+  await page.waitForFunction(() => window.closePicker);
+  await page.locator('#exportXlsx').click();
+  assert.equal(await page.evaluate(() => window.pickerCalls), held + 1, 'one dialog');
+  assert.equal((await exportView(page)).ask, false, 'no download started');
+  await page.evaluate(() => { window.pickerAnswer = 'save'; window.closePicker(); });
+  await exportStatus(page, /^حُفظ الملف \u2066play-stats_pcabcd_2026-10-08\.json\u2069 /);
+  const json = await page.evaluate(() => window.savedFiles.at(-1)).then(file => ({ name: file.name, bytes: Buffer.from(file.bytes) }));
+  assert.equal(json.name, 'play-stats_pcabcd_2026-10-08.json');
+  assert.deepEqual((await page.evaluate(() => window.pickerOptions)).types, [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]);
+  const exported = JSON.parse(json.bytes.toString('utf8'));
   assert.deepEqual(Object.keys(exported), ['format', 'v', 'pc', 'exported_at', 'tables']);
   assert.deepEqual([exported.format, exported.v, exported.exported_at], ['sg-play-stats', 1, EXPORTED_AT]);
   assert.deepEqual(exported.pc, { id: 'pcabcd', label: 'جهاز 7', copy: 'web' });
@@ -643,9 +736,40 @@ test('exports download every stored day with the right names and the contract fo
   for (const text of [JSON.stringify(exported), workbookBytes.toString('utf8')]) {
     assert.equal(text.includes(hardware), false, 'the graphics chip is never exported');
   }
-  // The export is remembered (the reminder goes away); the PC's id and settings stay.
-  const meta = JSON.parse((await storage(page))['sg:site:statsmeta']);
-  assert.deepEqual(meta, { ...META, lastExport: NOW.getTime() });
+  // The saved export is remembered (the reminder goes away); the PC's id and settings stay.
+  assert.deepEqual(await statsMeta(page), { ...META, lastExport: NOW.getTime() });
+  assert.equal(await page.locator('#reminder').isHidden(), true);
+  assert.match(await page.locator('#lastExport').textContent(), /آخر تصدير: 8\/10\/2026/);
+});
+
+// Other browsers and plain http (not a secure context) have no save dialog, and the
+// browser may refuse it with an error other than a cancel: the file is downloaded and
+// counts only when the teacher confirms it was saved.
+test('without a save dialog, an export counts only after the teacher confirms the file was saved', async t => {
+  // A PC without an id yet: the first export makes one, and keeps it even before it counts.
+  const page = await teacherPage(t, { entries: { ...seed(), 'sg:site:statsmeta': '{}' } });
+  await page.evaluate(() => { window.pickerAnswer = 'refuse'; });
+  const [first] = await Promise.all([page.waitForEvent('download'), page.locator('#exportJson').click()]);
+  const id = first.suggestedFilename().match(/^play-stats_(pc[a-z]{4})_2026-10-08\.json$/)?.[1];
+  assert.ok(id, first.suggestedFilename());
+  assert.equal(JSON.parse(read(await first.path())).pc.id, id);
+  assert.equal(await page.locator('#exportStatus').textContent(), `بدأ تنزيل الملف \u2066play-stats_${id}_2026-10-08.json\u2069 (5 أيام).`);
+  assert.equal(await page.locator('#exportAsk').isVisible(), true);
+  assert.deepEqual(await statsMeta(page), { pc: { id } }, 'not counted before the teacher answers');
+  await page.locator('#exportNo').click();
+  assert.equal(await page.locator('#exportAsk').isHidden(), true);
+  assert.match(await page.locator('#exportStatus').textContent(), /^لم يُسجَّل التصدير\./);
+  assert.deepEqual(await statsMeta(page), { pc: { id } });
+  assert.equal(await page.locator('#reminder').isVisible(), true);
+  // No dialog at all: the same question, and «نعم» counts the export made at that moment.
+  await page.evaluate(() => { delete window.showSaveFilePicker; });
+  const [second] = await Promise.all([page.waitForEvent('download'), page.locator('#exportXlsx').click()]);
+  assert.equal(second.suggestedFilename(), `play-stats_${id}_2026-10-08.xlsx`);
+  assert.deepEqual(await statsMeta(page), { pc: { id } });
+  await page.locator('#exportYes').click();
+  assert.deepEqual(await statsMeta(page), { pc: { id }, lastExport: NOW.getTime() });
+  assert.equal(await page.locator('#exportStatus').textContent(), `سُجّل تصدير الملف \u2066play-stats_${id}_2026-10-08.xlsx\u2069 (5 أيام).`);
+  assert.equal(await page.locator('#exportAsk').isHidden(), true);
   assert.equal(await page.locator('#reminder').isHidden(), true);
   assert.match(await page.locator('#lastExport').textContent(), /آخر تصدير: 8\/10\/2026/);
 });
@@ -745,6 +869,10 @@ test('a game still open and days removed for space are explained, not hidden', a
   assert.equal(await page.locator('#cardTop').textContent(), 'مرة لعب ما زالت مفتوحة، وتظهر هنا بعد إغلاق اللعبة.');
   assert.match(await page.locator('#cardTime').textContent(), /^3 دقائق.*متوسط مرة اللعب: —.*مرات اللعب: 0 · خرجوا بسرعة: 0.*ما زالت مفتوحة/s);
   assert.equal(await gameRow(page, 'connect-four').locator('td').nth(1).textContent(), '0ما زالت مفتوحة');
+  // A board game draws no steady frames: its device status says so instead of «—».
+  const device = page.locator('#device tr[data-game="connect-four"]');
+  assert.deepEqual([await device.getAttribute('data-verdict'), await device.locator('td').first().textContent()], ['unmeasured', 'لا تُقاس']);
+  assert.match(await page.locator('#unmeasured').textContent(), /^«لا تُقاس»: «أربعة على التوالي» لا ترسم حركة مستمرة أثناء اللعب، فلا تُقاس فيها سرعة الرسم\./);
   assert.match(await page.locator('#reminder').textContent(),
     /^تذكير: امتلأت مساحة الإحصاءات على هذا الجهاز، فحُذفت أيام قديمة لم تُصدَّر، آخرها 2\/10\/2026\. صدّر ملف Excel الآن\. .*أيهما أسبق/);
   // The week: troll-level's L2, which all five children left, is where they stop; block-burst's
@@ -762,8 +890,8 @@ test('a game still open and days removed for space are explained, not hidden', a
   assert.match(await page.locator('#lv-troll-level tr[data-level="L1"]').textContent(), /فازوا في 5 من 5 محاولات/);
   assert.match(await page.locator('#cardTop').textContent(), /5 مرات.*مرة لعب ما زالت مفتوحة/s);
   assert.match(await page.locator('#cardTime').textContent(), /متوسط مرة اللعب: دقيقة واحدة/, '400 s over 5 closed sessions');
-  // An export covers the removed day's successors: the reminder goes away.
-  await Promise.all([page.waitForEvent('download'), page.locator('#exportJson').click()]);
+  // A saved export covers the removed day's successors: the reminder goes away.
+  await saveFile(page, '#exportJson');
   assert.equal(await page.locator('#reminder').isHidden(), true);
   // A nearly full PC (over 75 % of 300 KB) not exported for a week is reminded too.
   await page.evaluate(() => {

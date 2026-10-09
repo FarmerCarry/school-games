@@ -39,15 +39,15 @@ const NETWORK = [
 // physics, rules, simulations, level data, verifiers and developer tools).
 const ENGINE = /(?:^|\/)(?:engine|physics|sim\w*|balance-sim|rules|core|levels|data|ai|endless|board-rules|verify[\w-]*|solutions)\.js$|^games\/[^/]+\/(?:dev|tools)\/|^games\/snake-arena\/world\.js$/;
 
-// Every game reports its rounds, so a game that stops calling Kit.stats fails here.
-const REQUIRE_ROUND_REPORTS = [
-  'air-hockey', 'beat-dash', 'blob-battle', 'block-burst', 'block-world', 'candy-rope',
-  'connect-four', 'critter-mart', 'drift-king', 'fire-and-ice', 'hoop-heads', 'maze-dash',
-  'merge-2048', 'moto-madness', 'neon-slope', 'paint-grab', 'pizza-clicker', 'pool-party',
-  'rail-rush', 'road-hopper', 'skybound-golf', 'snake-arena', 'splat-strike', 'sumo-bonk',
-  'swing-hook', 'tank-splat', 'tic-tac-toe', 'troll-level', 'tunnel-blitz', 'typing-test',
-  'wacky-soccer'
-];
+// Every game: each catalog entry (hidden ones too) and each folder in games/, so a
+// new game that never calls Kit.stats fails here without editing this file.
+const folders = fs.readdirSync(path.join(repo, 'games'), { withFileTypes: true })
+  .filter(entry => entry.isDirectory()).map(entry => entry.name);
+const allGames = [...new Set([...slugs, ...folders])].sort();
+
+// Games allowed not to report rounds, each with the reason (docs/PLAY_STATS.md).
+// None today: every game has rounds, levels, runs or a free-play 'main' round.
+const NO_ROUND_REPORTS = new Map([]);
 
 test('no network APIs in Kit, the portal, the teacher page or any game', () => {
   assert.ok(fs.existsSync(path.join(repo, 'teacher.html')), 'the teacher page is covered');
@@ -108,11 +108,36 @@ test('round ids are ids from the game, never typed text, names or codes', () => 
   assert.deepEqual(problems, []);
 });
 
-test('games listed as reporting rounds call Kit.stats.round and Kit.stats.end', () => {
-  for (const slug of REQUIRE_ROUND_REPORTS) {
-    assert.ok(slugs.includes(slug), 'unknown game in the list: ' + slug);
+test('every game calls Kit.stats.round and Kit.stats.end', () => {
+  assert.ok(allGames.length >= 31, 'the game list comes from js/catalog.js and games/');
+  for (const slug of allGames) {
+    assert.ok(slugs.includes(slug), slug + ' has a folder in games/ but no entry in js/catalog.js');
+    assert.ok(fs.existsSync(path.join(repo, 'games', slug, 'index.html')), slug + ' is in js/catalog.js but has no games/' + slug + '/index.html');
     const text = uiScripts(slug).map(read).join('\n');
-    assert.match(text, /Kit\.stats\.round\(/, slug + ' starts rounds');
-    assert.match(text, /Kit\.stats\.end\(/, slug + ' ends rounds');
+    const reports = /Kit\.stats\.round\(/.test(text) && /Kit\.stats\.end\(/.test(text);
+    if (NO_ROUND_REPORTS.has(slug)) assert.equal(reports, false, slug + ' reports rounds now: remove it from NO_ROUND_REPORTS');
+    else {
+      assert.match(text, /Kit\.stats\.round\(/, slug + ' starts rounds');
+      assert.match(text, /Kit\.stats\.end\(/, slug + ' ends rounds');
+    }
   }
+  for (const [slug, why] of NO_ROUND_REPORTS) {
+    assert.ok(allGames.includes(slug), 'unknown game in NO_ROUND_REPORTS: ' + slug);
+    assert.ok(typeof why === 'string' && why.length > 10, slug + ': say why it reports no rounds');
+  }
+});
+
+// Only Kit.loop and Kit.stats.frame count frames (games alias Kit as K). The teacher
+// page shows «لا تُقاس» instead of a device verdict for the games that use neither.
+test('the teacher page lists exactly the games that count no frames', () => {
+  const page = { window: {} };
+  vm.runInNewContext(read(path.join(repo, 'js/teacher.js')), page);
+  const counts = slug => {
+    const dir = path.join(repo, 'games', slug), html = read(path.join(dir, 'index.html'));
+    const files = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)].map(match => path.resolve(dir, match[1]))
+      .filter(file => fs.existsSync(file) && rel(file) !== 'shared/kit.js' && !/\/lib\/three\//.test(rel(file)));
+    return [html, ...files.map(read)].some(text => /\b(?:Kit|K)\.(?:loop|stats\.frame)\s*\(/.test(text));
+  };
+  assert.deepEqual([...page.window.SGTeacher.NO_FRAMES].sort(), allGames.filter(slug => !counts(slug)),
+    'NO_FRAMES in js/teacher.js lists the games without Kit.loop or Kit.stats.frame');
 });

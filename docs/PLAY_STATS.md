@@ -79,7 +79,12 @@ Rules for games:
   while the game is engaged, armed and a round is open. Its raw time goes into one of
   four buckets: smooth ≤ 20 ms, ok ≤ 34 ms, choppy ≤ 250 ms, stall > 250 ms. The first
   frame after the loop starts or the page becomes visible is skipped. Cost per frame:
-  a subtraction, a few comparisons and an increment.
+  a subtraction, a few comparisons and an increment. Games with no steady drawing loop
+  while playing (connect-four and tic-tac-toe move pieces with CSS; typing-test redraws
+  on key presses and runs `requestAnimationFrame` only for short bursts of effects)
+  count no frames: counting those bursts would judge the effects, not the PC. The
+  teacher page lists them in `NO_FRAMES` (js/teacher.js), and the rules test keeps that
+  list equal to the games that call neither `Kit.loop` nor `Kit.stats.frame`.
 * **Mute toggles** (the in-game sound button or M).
 * **Round time**: the engaged milliseconds inside each round.
 
@@ -296,7 +301,8 @@ Arabic, right to left, Western digits. Fixed note at the top: **«الأرقام
    tables the gave-up figure appears only for winnable levels; others show «—». Ids are
    labelled «المرحلة أو الوضع», since many are modes, difficulties or board sizes.
 4. Collapsed sections: **حالة الجهاز** (one verdict per game, سلس / مقبول / بطيء, from
-   frames and load times, shown as "—" under 600 counted frames; errors; this PC's
+   frames and load times, shown as "—" under 600 counted frames, and as «لا تُقاس» with
+   a note under the table for the games that count no frames; errors; this PC's
    cores, memory, screen and graphics chip, shown but never exported), **كيف يصلون إلى
    الألعاب**, **الإعدادات**, **الشرح الأول** ("first-time tutorial shown / completed on
    this PC").
@@ -305,6 +311,19 @@ Arabic, right to left, Western digits. Fixed note at the top: **«الأرقام
    «أوقف»), clear this PC's statistics (type «امسح»; removes only keys that start with
    `sg:site:stats:`, never the id, label or stop setting). While collection is stopped,
    the 🏫 strip shows «الإحصاءات متوقفة».
+   **An export counts only once its file is saved** (`lastExport`, which the reminder
+   uses, is the moment the file was made). Where the browser offers pages a save dialog
+   (`showSaveFilePicker`: Edge and Chrome, and only in a secure context, which includes
+   https, `localhost` and `file://` pages but not plain http from another computer), the
+   page writes the file itself: closing the dialog or a failed write records nothing and
+   says the file was not saved. Chromium reports a dialog blocked by a school policy
+   (`AllowFileSelectionDialogs`) exactly like a cancel (`AbortError`), so the message
+   after a closed dialog has a «تنزيل الملف بدلًا من ذلك» button. That button, other
+   browsers and any other refusal of the dialog download the file instead, and the page
+   asks whether it was saved; only «نعم، حُفظ الملف» records the export, since a page
+   cannot see whether a download's own Save As window was cancelled. Export clicks are
+   ignored while a save dialog is open (the browser refuses a second one), and the status
+   names the file as the teacher saved it.
 6. A reminder to export when (a) the stats keys use more than about 75 % of the 300 KB
    cap and nothing was exported in the last 7 days (a full PC stays full after an
    export, so the reminder would otherwise never go away), (b) the portal removed a day
@@ -361,8 +380,10 @@ says so.
   right to left; numbers are numbers, ids and labels are text. It opens on any Windows
   locale without separator or encoding problems. An Excel table needs one data row, so
   a table with no rows keeps one blank row; the read-me sheet tells the Power Query step
-  to drop rows where `pc` is empty. The read-me also says how long a PC keeps its days
-  and why some hours are missing.
+  to drop rows where `pc` is empty. The read-me also says how long a PC keeps its days,
+  that they live in one browser profile (another browser, a roaming or temporary
+  profile, or cleared site data starts from zero), why some hours are missing and how
+  to combine files (newest export per `pc` and `date`; for `hours`, per PC).
 * **JSON** `play-stats_<pc>_<YYYY-MM-DD>.json`:
   `{ format: 'sg-play-stats', v: 1, pc: { id, label, copy }, exported_at, tables: { days: [...], games: [...], levels: [...], hours: [...] } }`,
   each table an array of flat objects with the columns above.
@@ -390,12 +411,14 @@ an id but not a label.
 
 Step 1's files are the input; they do not need to change.
 
-* **No code, no network from the site:** each week, on each PC, open 📊 → تصدير ملف
-  Excel and save into one shared OneDrive or SharePoint folder (turn on Edge's "Ask
-  where to save each file"). One Excel workbook or Power BI report reads the folder
-  (Get Data → From SharePoint Folder → combine the `days`, `games`, `levels`, `hours`
-  tables), drops rows where `pc` is empty (the blank row of an empty table), keeps the
-  newest `exported_at` per `pc` and `date`, and refreshes in one click.
+* **No code, no network from the site:** each week, on each PC, open 📊 → تصدير ملف Excel
+  and save into one shared OneDrive or SharePoint folder (Edge and Chrome open a save
+  dialog, which starts in the folder used last time; in other browsers turn on "Ask where
+  to save each file" and answer «نعم» once the file is saved). One Excel workbook or
+  Power BI report reads the folder (Get Data → From SharePoint Folder → combine the
+  `days`, `games`, `levels`, `hours` tables), drops rows where `pc` is empty (the blank
+  row of an empty table), keeps the newest `exported_at` per `pc` and `date`, and
+  refreshes in one click.
 * **Automatic collection** would need a Power Automate flow with an HTTP trigger (a
   premium licence) or an Azure Function, plus the school web filter allowing it. Any
   upload would send this same JSON **from teacher.html only**, so games and the portal
@@ -409,13 +432,19 @@ Step 1's files are the input; they do not need to change.
   clock: sessions, late messages from removed frames, restart, failure, launch sources,
   hidden pages, delta merging across two tabs, clear and stop, blocked storage, the time
   of rounds left open (`om`), and `pruned`.
-* `tools/tests/teacher-page.test.mjs`: the page with seeded records, the workbook and
-  JSON exports, combining, clear and stop, blocked storage, winnable levels (id shapes,
-  block-burst `'classic'`, fire-and-ice `'L4:duo'`, merge-2048 boards), the export
-  reminder, the hours rule and games still open.
+* `tools/tests/teacher-page.test.mjs`: the page with seeded records, the workbook and JSON
+  exports (saved through a stand-in save dialog; a closed dialog, a failed write and an
+  unconfirmed download count nothing; the download offered after a closed dialog; one
+  dialog at a time; a renamed file), combining, clear and stop, blocked storage, winnable
+  levels (id shapes, block-burst `'classic'`, fire-and-ice `'L4:duo'`, merge-2048 boards),
+  the export reminder, the hours rule and games still open.
 * `tools/tests/merge-progress.test.mjs`: a merge-2048 board is one round; the goal tile
   reports nothing and a full board reports `'end'` with the score.
 * `tools/tests/play-stats-rules.test.mjs` (node only): no network APIs in Kit, portal,
   teacher page or games; no `Kit.stats` in engine or simulation files; every game calls
-  `Kit.stats.round` and `Kit.stats.end`; literal ids follow the id rule.
+  `Kit.stats.round` and `Kit.stats.end` (the games come from `js/catalog.js` and the
+  `games/` folders, so a new game is checked without editing the test; a game allowed
+  not to report must be listed there with its reason); the teacher page's `NO_FRAMES`
+  lists exactly the games without `Kit.loop` or `Kit.stats.frame`; literal ids follow
+  the id rule.
 * The build, offline, budget and downloaded-folder tests include `teacher.html`.
