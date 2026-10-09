@@ -447,10 +447,14 @@
         ball.vx -= (1 + o.k) * vn * nx; ball.vy -= (1 + o.k) * vn * ny;
         if (o.k < 1) { ball.vx *= 0.85; ball.vy *= 0.85; }
         if (ball.mode === 'roll') ball.mode = 'air';
-        // A ball rattling against the same prop makes one sound, not many.
-        var repeat = ball.lastProp === o.id && ball.time - ball.propAt < 0.35;
-        ball.lastProp = o.id; ball.propAt = ball.time;
-        if (!repeat) events.push({ type: 'prop', id: o.id, x: ball.x - nx * ball.r, y: ball.y - ny * ball.r, prop: o.type, strength: Math.min(1, -vn / 25) });
+        // A ball rattling against the same prop makes one sound, not many; a
+        // separate rebound a moment later is heard again.
+        var repeat = ball.lastProp === o.id && ball.time - ball.propAt < 0.12;
+        ball.lastProp = o.id;
+        if (!repeat) {
+          ball.propAt = ball.time;
+          events.push({ type: 'prop', id: o.id, x: ball.x - nx * ball.r, y: ball.y - ny * ball.r, prop: o.type, strength: Math.min(1, -vn / 25) });
+        }
       }
     }
   }
