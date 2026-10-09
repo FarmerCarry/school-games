@@ -822,7 +822,7 @@
     var COPY = location.protocol === 'file:' ? 'folder' : 'web';
     var XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     var state = { ok: false, days: [], meta: parseMeta(null), bytes: 0, files: [], ignored: [] };
-    var store = null, refresh = 0, pending = null;
+    var store = null, refresh = 0, pending = null, saving = false, again = '';
 
     function load() {
       try {
@@ -1148,9 +1148,11 @@
     // An export counts (lastExport, which quiets the reminder) only once its file
     // is saved. Edge and Chrome show their save dialog (showSaveFilePicker, offered
     // only in a secure context: https, localhost or a file:// page), so a cancelled
-    // dialog saves and counts nothing. Without that dialog (other browsers, plain
-    // http from another computer) or when the browser refuses it, the file is
-    // downloaded and the teacher confirms that it was saved.
+    // dialog saves and counts nothing. A dialog blocked by a school policy fails
+    // exactly like a cancel, so that message offers a plain download as well.
+    // Without the dialog (other browsers, plain http from another computer), or
+    // when the browser refuses it with another error, the file is downloaded and
+    // the teacher confirms that it was saved.
     function counted(when, text) {
       try { updateMeta(function (raw) { raw.lastExport = when; }); } catch (e) { /* the file is saved all the same */ }
       say('exportStatus', text);
@@ -1158,10 +1160,14 @@
       render();
     }
     function asking(job) { pending = job; $('exportAsk').hidden = !job; }
+    function offer(kind) { again = kind; $('exportDownload').hidden = !kind; }
 
-    // Every export holds all stored days, not just the period on screen.
-    function exportAs(kind) {
-      if (!state.ok) return;
+    // Every export holds all stored days, not just the period on screen. plain
+    // downloads the file without the save dialog.
+    function exportAs(kind, plain) {
+      // One save dialog at a time: the browser refuses a second one, and that
+      // error would start a surprise download.
+      if (!state.ok || saving) return;
       var now = new Date(), id = state.meta.id;
       if (!id) {
         try { id = updateMeta(function () {}); } catch (e) { id = newId(); }
@@ -1172,23 +1178,30 @@
       var t = tables(state.days, info), name = 'play-stats_' + id + '_' + info.today + '.' + kind;
       var type = kind === 'xlsx' ? XLSX_TYPE : 'application/json';
       var bytes = kind === 'xlsx' ? xlsx(t, info, now) : utf8(JSON.stringify(exportJson(t, info)));
-      // The file name is isolated left to right, so the status line never reorders it.
-      var file = '\u2066' + name + '\u2069', what = file + ' (' + count(state.days.length, DAYS) + ')';
+      // File names are isolated left to right, so the status line never reorders them.
+      var shown = function (file) { return '\u2066' + file + '\u2069'; };
+      var held = ' (' + count(state.days.length, DAYS) + ')', what = shown(name) + held;
       accept[type] = ['.' + kind];
       asking(null);
+      offer('');
       say('exportStatus', '');
-      if (typeof window.showSaveFilePicker !== 'function') { fallback(); return; }
+      if (plain || typeof window.showSaveFilePicker !== 'function') { fallback(); return; }
+      saving = true;
       window.showSaveFilePicker({ suggestedName: name, id: 'play-stats', types: [{ description: kind === 'xlsx' ? 'Excel' : 'JSON', accept: accept }] })
         .then(function (handle) {
+          // The name the teacher chose in the dialog.
+          var file = shown(handle.name || name);
           return handle.createWritable().then(function (out) {
             return out.write(bytes).then(function () { return out.close(); });
-          }).then(function () { counted(now.getTime(), 'حُفظ الملف ' + what + '.'); }, function () {
+          }).then(function () { counted(now.getTime(), 'حُفظ الملف ' + file + held + '.'); }, function () {
             say('exportStatus', 'تعذّر حفظ الملف ' + file + ' في المكان المختار، فلم يُسجَّل التصدير. جرّب مرة أخرى أو اختر مجلدًا آخر.', true);
           });
         }, function (e) {
-          if (e && e.name === 'AbortError') say('exportStatus', 'لم يُحفظ الملف لأن نافذة الحفظ أُغلقت، فلم يُسجَّل التصدير.', true);
-          else fallback();
-        });
+          if (!e || e.name !== 'AbortError') { fallback(); return; }
+          say('exportStatus', 'لم يُحفظ الملف: أُغلقت نافذة الحفظ أو لم تظهر، فلم يُسجَّل التصدير.', true);
+          offer(kind);
+        })
+        .then(function () { saving = false; }, function () { saving = false; });
       function fallback() {
         download(name, bytes, type);
         say('exportStatus', 'بدأ تنزيل الملف ' + what + '.');
@@ -1257,6 +1270,7 @@
     $('pcLabel').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('saveLabel').click(); });
     $('exportXlsx').addEventListener('click', function () { exportAs('xlsx'); });
     $('exportJson').addEventListener('click', function () { exportAs('json'); });
+    $('exportDownload').addEventListener('click', function () { exportAs(again, true); });
     $('exportYes').addEventListener('click', function () {
       var job = pending;
       asking(null);
