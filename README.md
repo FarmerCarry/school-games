@@ -374,7 +374,10 @@ cp .work/kill-switch/sw.js sw.js
 
 Level-specific verifiers live beside their games. Swing Hook exits nonzero for unsolved
 levels or failed solution replays. Block Burst's default check also fails its statistical
-balance thresholds:
+balance thresholds. On every change CI runs the Sneaky Levels, Maze Dash, Fire & Ice and
+Skybound Golf verifiers, and Swing Hook and Block Burst on one level
+(`tools/tests/level-verifiers.test.mjs`). Block Burst's full balance check (about 4
+minutes) runs whenever `games/block-burst/` or the workflow changes:
 
 ```
 node games/swing-hook/verify-levels.js
