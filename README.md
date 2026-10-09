@@ -106,7 +106,9 @@ the same, but:
 - after the first visit, every PC keeps the whole site in an **offline cache**: games open
   without asking the server, still work if the internet drops, and after an update each PC
   downloads only the files that changed;
-- it can be **installed as an app** (the install icon in Chrome/Edge's address bar).
+- it can be **installed as an app** (the install icon in Chrome/Edge's address bar);
+- it is also published as **one ZIP** for PCs without internet (see
+  [Running it without the internet](#running-it-without-the-internet)).
 
 For updates that publish only after checks pass, use **Settings → Pages → Source:
 GitHub Actions**. Keep editing `main` as usual (for example `js/catalog.js`); the fast
@@ -130,8 +132,31 @@ If the school web filter blocks it, ask IT to allow that address. The site conta
 
 ### Running it without the internet
 
-Download the repo (**Code → Download ZIP**), unzip it, and double-click `index.html`.
-Everything works straight from the folder. You can also put the folder on a shared drive.
+Download the fast version as one ZIP file (under 2 MB):
+**<https://farmercarry.github.io/school-games/school-games-offline.zip>**
+(a copy of the site published from your own account has it at
+`https://<your-username>.github.io/school-games/school-games-offline.zip`).
+
+1. Right-click the downloaded file → **Extract All…** (Arabic Windows: **استخراج الكل…**) →
+   **Extract**. Do not open `index.html` from inside the ZIP window: Windows then opens
+   that one file on its own, and the games cannot load.
+2. Windows extracts into a new folder named after the file, `school-games-offline`, and
+   opens it. Inside it, open the `school-games` folder and double-click `index.html`.
+
+Everything works straight from the `school-games` folder, without internet or installation.
+You can copy that folder to other PCs, a USB stick or a shared drive.
+
+**Updating:** the folder never updates itself. For new games and fixes, delete the old ZIP
+and the old `school-games-offline` folder, then download and extract the ZIP again as above,
+so the games are back in the same place. (If the old ZIP is still there, the new download
+and its folder get ` (1)` added to their names.) Replace any copies of the `school-games`
+folder on other PCs, USB sticks or shared drives with the new one too.
+Saved progress and play statistics stay, because the browser keeps them, not the folder.
+The ZIP is part of the fast version, so it is there only while GitHub Pages publishes it.
+
+For developers, GitHub's **Code → Download ZIP** gives the editable source instead. It also
+runs from a folder, but each game loads several separate files (slower on slow hard
+disks), and it includes the development tools and documentation.
 
 ## Managing games
 
@@ -241,7 +266,7 @@ lib/three/                three.js r159 (MIT) for the 3D games
 docs/GAME_SPEC.md         the rules every game follows
 docs/PLAY_STATS.md        play statistics: what is counted, storage and export formats
 tools/playtest.mjs        headless Chromium playtest harness (Playwright)
-tools/build.mjs           builds the fast version (one file per game + offline cache)
+tools/build.mjs           builds the fast version (one file per game + offline cache + offline ZIP)
 ```
 
 Use Node.js 22 or newer (the CI workflow uses Node 22), then install the pinned
@@ -273,7 +298,7 @@ npm run test:scenarios           # prove broken Start/Pause handlers fail the ga
 npm run test:classroom           # downloaded folder, Arabic/spaced paths, denied storage, teacher page
 npm run test:regressions         # additional gameplay and portal keyboard checks
 npm run check                   # smoke-test all source games
-npm run build                   # fast build into _site/ (the Pages artifact)
+npm run build                   # fast build into _site/ (the Pages artifact, with the offline ZIP)
 npm run perf:assets              # enforce raw-byte page, font, library and offline-cache budgets
 SG_ROOT=_site npm run test:browser # run gameplay/portal regressions against optimized games
 SG_ROOT=_site npm run check      # smoke-test all optimized games
@@ -292,8 +317,9 @@ Set `SG_ARTIFACT_DIR` to retain smoke screenshots, failure DOM and the summary a
 known path. CI uploads source/built diagnostics even on failure. Every catalog game
 has a scenario in `tools/game-scenarios.mjs` that starts it through visible controls,
 checks meaningful input, verifies pause, and restarts a round or resumes a persistent
-world. The Windows Edge job checks downloaded source and fast builds, including
-denied browser storage, and must pass before deployment.
+world. The Windows Edge job checks the downloaded source and the offline ZIP of the
+fast build, unzipped with PowerShell, including denied browser storage, and must pass
+before deployment.
 
 For real hardware measurements, run on the school's weakest supported Windows PC:
 
@@ -329,7 +355,9 @@ The builder accepts new or empty output directories and recognized generated bui
 It refuses source directories, Git metadata, symlinks, tracked files, and unrelated files
 added to an output directory. Custom output uses `node tools/build.mjs --out <directory>`.
 Builds are staged before replacement, so a failed build preserves the previous output.
-The generated ownership marker is excluded from the offline cache.
+The generated ownership marker and the offline ZIP are excluded from the offline cache.
+The ZIP (`tools/lib/zip.mjs`, no library) holds every other built file except `.nojekyll`
+inside one `school-games/` folder, with fixed dates, so unchanged builds give the same bytes.
 
 Regression tests cover storage exhaustion and failed-save recovery, inventory conservation
 across reloads, pending completion screens, actual browser Back cache restoration, native

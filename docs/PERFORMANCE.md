@@ -50,6 +50,13 @@ the optimized release embeds them in the portal and omits redundant separate
 copies. This guard checks size and coverage; the offline tests still
 verify worker behavior and content integrity.
 
+The teachers' offline download, `school-games-offline.zip` (README, “Running it
+without the internet”), is outside `FILES` too: children's PCs never fetch it and
+it does not count toward the precache total. It has no limit of its own because
+the precache limit already bounds it: it holds the precached files plus `sw.js`
+and three license texts, and each file is deflated only when that makes it
+smaller. When added it was 1,672,696 bytes for 47 files of 4,873,082 bytes.
+
 ## Initial baseline and headroom
 
 The game, library, and font limits were calibrated from the minified build of
