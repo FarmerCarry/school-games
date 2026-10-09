@@ -133,10 +133,14 @@ jobs:
           SG_ARTIFACT_DIR: .work/classroom-source
       - name: Build the fast site
         run: npm run build
-      - name: Test downloaded fast build with spaces and Arabic paths
+      # Test the teachers' offline download (README) as they get it: unzipped on Windows.
+      # tools/tests/offline-download.test.mjs proves it holds the built files byte for byte.
+      - name: Unzip the offline download
+        run: Expand-Archive -Path _site/school-games-offline.zip -DestinationPath .work/offline-download
+      - name: Test the unzipped fast build with spaces and Arabic paths
         run: node tools/test-classroom.mjs
         env:
-          SG_ROOT: _site
+          SG_ROOT: .work/offline-download/school-games
           SG_ARTIFACT_DIR: .work/classroom-built
       - name: Upload classroom screenshots and reports
         if: always()
