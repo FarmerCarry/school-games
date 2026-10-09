@@ -6,7 +6,13 @@
 (function () {
   'use strict';
   var K = window.Kit, E = window.TrollEngine, LV = window.TrollLevels, Art = window.TrollArt;
-  var LEVELS = LV.LEVELS, WORLDS = LV.WORLDS, PER = LV.PER_WORLD, N = LEVELS.length, MAXSTARS = N * 3;
+  var LEVELS = LV.LEVELS, WORLDS = LV.WORLDS, N = LEVELS.length, MAXSTARS = N * 3;
+  // Worlds differ in size: FIRST[w] is world w's first level index (FIRST[WORLDS.length] = N),
+  // WOF[i] the world of level i.
+  var FIRST = [], WOF = [];
+  WORLDS.forEach(function (wd, w) { FIRST.push(WOF.length); for (var k = 0; k < wd.n; k++) WOF.push(w); });
+  FIRST.push(WOF.length);
+  function solution(i) { return LEVELS[i].sol || (window.TrollSolutions || [])[i]; }
   var T = E.T, PH = E.PH, FONT = Art.FONT;
   var $ = function (id) { return document.getElementById(id); };
 
@@ -196,6 +202,7 @@
     mode = 'select'; show('scr-select');
     selIdx = Math.min(save.last, save.unl);
     buildSelect();
+    scrollSel();
     if (!game.demo) startDemo();
   }
   function buildSelect() {
@@ -206,12 +213,12 @@
       var row = document.createElement('div'); row.className = 'wrow';
       var lab = document.createElement('div'); lab.className = 'wlabel';
       lab.style.background = pal.bg; lab.style.color = pal.ink; lab.style.borderColor = pal.ink;
-      var ws = 0; for (var q = w * PER; q < (w + 1) * PER; q++) ws += save.stars[q] || 0;
+      var ws = 0; for (var q = FIRST[w]; q < FIRST[w + 1]; q++) ws += save.stars[q] || 0;
       lab.innerHTML = '<span></span><small></small>';
       lab.firstChild.textContent = pal.name;
-      lab.lastChild.textContent = '★ ' + ws + '/' + (PER * 3);
+      lab.lastChild.textContent = '★ ' + ws + '/' + (pal.n * 3);
       row.appendChild(lab);
-      for (var k = 0; k < PER; k++) row.appendChild(levelTile(w * PER + k, pal));
+      for (var k = FIRST[w]; k < FIRST[w + 1]; k++) row.appendChild(levelTile(k, pal));
       box.appendChild(row);
     }
     markSel();
@@ -242,13 +249,21 @@
     var list = document.querySelectorAll('#worlds .lv');
     for (var i = 0; i < list.length; i++) list[i].classList.toggle('focus', +list[i].dataset.i === selIdx);
   }
+  // Keep the chosen level's world row in view (the list scrolls).
+  function scrollSel() {
+    var box = $('worlds'), el = box.querySelector('.lv.focus');
+    if (!el) return;
+    var row = el.parentNode, top = row.offsetTop - 14, bot = row.offsetTop + row.offsetHeight + 12;
+    if (top < box.scrollTop) box.scrollTop = top;
+    else if (bot > box.scrollTop + box.clientHeight) box.scrollTop = bot - box.clientHeight;
+  }
 
   /* ----------------------------------------------------- skins */
   function goSkins() {
     mode = 'skins'; show('scr-skins');
     $('k-stars').textContent = starCount();
     var box = $('skins'); box.innerHTML = '';
-    Art.SKINS.forEach(function (sk) {
+    Art.SKINS.slice().sort(function (a, b) { return a.stars - b.stars; }).forEach(function (sk) {
       var d = document.createElement('div'); d.className = 'skin';
       var un = skinUnlocked(sk);
       if (!un) d.classList.add('locked');
@@ -302,7 +317,7 @@
     if (!i && save.best[0] == null) Kit.stats.tutorial('start');
     Kit.stats.round('L' + (i + 1));
     game.li = i; game.demo = false;
-    game.pal = WORLDS[Math.floor(i / PER)];
+    game.pal = WORLDS[WOF[i]];
     game.deaths = 0; game.marks.length = 0; game.winT = -1; game.auto = null;
     game.msg = null; game.msgT = 0; game.introT = 2.2; game.flash = 0;
     fx.clear();
@@ -423,6 +438,7 @@
       case 'sfx':
         var sf = d.name === 'slam' ? S.thud : S[d.name];
         if (loud && sf) sf();
+        else if (loud && Art.SFX[d.name]) Art.SFX[d.name](A);
         break;
       case 'bonk':
         fx.burst(d.x, d.y, { count: 5, color: '#ffe14d', speed: 140, life: 0.35, size: 5, gravity: 200 });
@@ -448,6 +464,8 @@
         shake.add(4);
         if (loud) S.win();
         break;
+      default: // a world plug-in's own event
+        if (Art.EV[type]) Art.EV[type](d, { fx: fx, shake: shake, say: say, sfx: function (n) { if (loud) (S[n] || Art.SFX[n] && function () { Art.SFX[n](A); } || function () {})(); }, pal: pal, loud: loud, demo: demo });
     }
   }
   function dustUnder(g) {
@@ -481,7 +499,7 @@
     var starsAfter = starCount();
 
     mode = 'win'; show('scr-win');
-    $('w-lvl').textContent = WORLDS[Math.floor(i / PER)].name + ' · المرحلة ' + (i + 1);
+    $('w-lvl').textContent = WORLDS[WOF[i]].name + ' · المرحلة ' + (i + 1);
     $('w-title').textContent = K.pick(WIN_TITLES);
     $('w-sub').textContent = LEVELS[i].winMsg || (d === 0 ? 'بلا أي سقطة! مذهل!' : K.pick(WIN_SUBS));
     $('w-deaths').textContent = d;
@@ -489,7 +507,7 @@
     $('w-newbest').hidden = !newBest;
     var un = [];
     Art.SKINS.forEach(function (sk) { if (sk.stars > starsBefore && sk.stars <= starsAfter) un.push('شخصية جديدة: ' + sk.name + '!'); });
-    if (unlockedNext && (i + 1) % PER === 0) un.unshift('فتحت ' + WORLDS[(i + 1) / PER].name + '!');
+    if (unlockedNext && WOF[i + 1] !== WOF[i]) un.unshift('فتحت ' + WORLDS[WOF[i + 1]].name + '!');
     $('w-unlock').hidden = !un.length;
     $('w-unlock').textContent = un.join(' · ');
     var last = i === N - 1;
@@ -577,14 +595,14 @@
       if (kk.anyPressed(KOK)) { S.click(); startLevel(playTarget()); }
       else if (kk.pressed('KeyL')) { S.click(); goSelect(); }
     } else if (mode === 'select') {
-      var w = Math.floor(selIdx / PER), c = selIdx % PER, moved = false;
-      if (kk.anyPressed(['ArrowLeft', 'KeyA'])) { c = Math.min(PER - 1, c + 1); moved = true; }   // RTL: left = next
+      var w = WOF[selIdx], c = selIdx - FIRST[w], moved = false;
+      if (kk.anyPressed(['ArrowLeft', 'KeyA'])) { c++; moved = true; }   // RTL: left = next
       if (kk.anyPressed(['ArrowRight', 'KeyD'])) { c = Math.max(0, c - 1); moved = true; }
       if (kk.anyPressed(['ArrowUp', 'KeyW'])) { w = Math.max(0, w - 1); moved = true; }
       if (kk.anyPressed(['ArrowDown', 'KeyS'])) { w = Math.min(WORLDS.length - 1, w + 1); moved = true; }
       if (moved) {
-        var ni = w * PER + c;
-        if (ni <= save.unl) { selIdx = ni; markSel(); S.click(); } else S.nope();
+        var ni = FIRST[w] + Math.min(c, WORLDS[w].n - 1);
+        if (ni <= save.unl) { selIdx = ni; markSel(); scrollSel(); S.click(); } else S.nope();
       }
       if (kk.anyPressed(KOK)) { S.click(); startLevel(selIdx); }
       if (kk.pressed('Escape')) { S.click(); goTitle(); }
@@ -710,6 +728,7 @@
     if (!game.demo && game.li === 0) drawTutorial();
     Art.drawGZones(ctx, w, pal, t);
     Art.drawGroups(ctx, w, pal, t, view.scale * view.dpr);
+    for (var m = 0; m < Art.MODS.length; m++) if (Art.MODS[m].draw) Art.MODS[m].draw(ctx, w, pal, t, view.scale * view.dpr);
     Art.drawSpikes(ctx, w, pal);
     Art.drawSprings(ctx, w, pal);
     for (var k = 0; k < w.doors.length; k++) {
@@ -725,6 +744,7 @@
     }
     for (k = 0; k < w.saws.length; k++) Art.drawSaw(ctx, w.saws[k], pal);
     drawPlayer();
+    for (m = 0; m < Art.MODS.length; m++) if (Art.MODS[m].front) Art.MODS[m].front(ctx, w, pal, t);
     fx.draw(ctx);
   }
 
@@ -779,6 +799,8 @@
     ctx.restore();
   }
 
+  var HUDUI = { txt: txt, bubble: bubble, rr: Art.rr, game: game };
+
   // A hint list picks the entry for where the player last died (see levels.js).
   function hintText(hint) {
     if (typeof hint === 'string') return hint;
@@ -804,7 +826,7 @@
     txt(name, 640, 36, 30, '#ffffff', 'center', { stroke: pal.ink, lw: 6 });
     // world chip + best (right, left of the mute button)
     var best = save.best[game.li];
-    var rtext = best == null ? WORLDS[Math.floor(game.li / PER)].name : 'أقل سقطات: ' + best;
+    var rtext = best == null ? WORLDS[WOF[game.li]].name : 'أقل سقطات: ' + best;
     txt(rtext, 1200, 35, 22, 'rgba(255,255,255,0.85)', 'right', { w: 500 });
     // reversed controls
     if (w.revT > 0) {
@@ -824,6 +846,7 @@
       var a = Math.min(1, game.msgT * 4), pop = 1 + Math.max(0, game.msgT - 1.5) * 0.4;
       bubble(game.msg, 640, 170, 28, a, pop);
     }
+    for (var m = 0; m < Art.MODS.length; m++) if (Art.MODS[m].hud) Art.MODS[m].hud(ctx, w, pal, game.t, HUDUI);
     // hint after a few deaths
     if (game.deaths >= HINT_AFTER && LEVELS[game.li].hint) {
       var h = 'تلميح: ' + hintText(LEVELS[game.li].hint);
@@ -891,9 +914,9 @@
     start: function (i) { startLevel(i); return mode; },
     // Replay the recorded solution for the current level in real time (see solutions.js).
     solve: function () {
-      if (mode !== 'play' || !window.TrollSolutions) return false;
+      if (mode !== 'play' || !solution(game.li)) return false;
       game.world.attempt = 0; game.world.reset();
-      game.auto = E.parseInputs(window.TrollSolutions[game.li]); game.autoF = 0; game.prevJ = false;
+      game.auto = E.parseInputs(solution(game.li)); game.autoF = 0; game.prevJ = false;
       return true;
     },
     // Instantly win the current level (skips the trap).
@@ -905,8 +928,7 @@
     setDeaths: function (n) { game.deaths = n; return n; },
     // Replays every recorded solution through the engine (headless, instant).
     verifyAll: function () {
-      if (!window.TrollSolutions) return 'no solutions';
-      return LEVELS.map(function (lv, i) { return E.simulate(lv, window.TrollSolutions[i]).result; }).join(',');
+      return LEVELS.map(function (lv, i) { return solution(i) ? E.simulate(lv, solution(i)).result : 'none'; }).join(',');
     },
     unlockAll: function () { save.unl = N - 1; persist(); if (mode === 'select') buildSelect(); return true; },
     resetSave: function () { ['best', 'stars', 'total', 'unl', 'skin', 'last', 'ended'].forEach(function (k) { store.remove(k); }); location.reload(); }

@@ -5,6 +5,9 @@
  * (inclusive) with a map character, s() sets one tile. See engine.js legend.
  * A hint is a string, or a list of { before: column, text } entries picked by
  * where the player last died (the last entry has no `before`).
+ * Worlds 6 and later live in their own files (w6-ice.js ...): each registers its
+ * mechanic with the engine and art plug-ins, then calls TrollLevels.addWorld().
+ * A level's `sol` is its recorded solution (solutions.js holds levels 1-30's).
  */
 (function (root) {
   'use strict';
@@ -52,11 +55,11 @@
   function gx(L, g) { return g.tiles[0].x + g.ox / L.T; }
 
   var WORLDS = [
-    { name: 'عالم البرتقال', theme: 'sun', bg: '#ffa41b', bg2: '#ffb443', ink: '#1c1226', ink2: '#3a2a44', accent: '#ffffff' },
-    { name: 'عالم البحر', theme: 'sea', bg: '#3fe0c5', bg2: '#5deacf', ink: '#0f2350', ink2: '#26407a', accent: '#ffffff' },
-    { name: 'عالم الحلوى', theme: 'candy', bg: '#ff8fc7', bg2: '#ffa6d3', ink: '#3b1a5c', ink2: '#5a3480', accent: '#ffffff' },
-    { name: 'عالم الغابة', theme: 'forest', bg: '#c6f25a', bg2: '#d4f77c', ink: '#13402a', ink2: '#2a5e40', accent: '#ffffff' },
-    { name: 'عالم الفضاء', theme: 'space', bg: '#9d8cff', bg2: '#ae9fff', ink: '#1b1446', ink2: '#382d70', accent: '#ffffff' }
+    { name: 'عالم البرتقال', n: 6, theme: 'sun', bg: '#ffa41b', bg2: '#ffb443', ink: '#1c1226', ink2: '#3a2a44', accent: '#ffffff' },
+    { name: 'عالم البحر', n: 6, theme: 'sea', bg: '#3fe0c5', bg2: '#5deacf', ink: '#0f2350', ink2: '#26407a', accent: '#ffffff' },
+    { name: 'عالم الحلوى', n: 6, theme: 'candy', bg: '#ff8fc7', bg2: '#ffa6d3', ink: '#3b1a5c', ink2: '#5a3480', accent: '#ffffff' },
+    { name: 'عالم الغابة', n: 6, theme: 'forest', bg: '#c6f25a', bg2: '#d4f77c', ink: '#13402a', ink2: '#2a5e40', accent: '#ffffff' },
+    { name: 'عالم الفضاء', n: 6, theme: 'space', bg: '#9d8cff', bg2: '#ae9fff', ink: '#1b1446', ink2: '#382d70', accent: '#ffffff' }
   ];
 
   var L = [];
@@ -593,5 +596,16 @@
     bots: ['R400', 'R63 RJ20 R400', 'R63 RJ20 R78 RJ20 R400']
   };
 
-  root.TrollLevels = { WORLDS: WORLDS, LEVELS: L, PER_WORLD: 6, DEMO: DEMO };
+  // A world file adds its world (with n = its level count) and its levels in play order.
+  function addWorld(world, levels) {
+    if (levels.length !== world.n) throw new Error(world.name + ': ' + levels.length + ' levels, n = ' + world.n);
+    WORLDS.push(world);
+    levels.forEach(function (lv) { L.push(lv); });
+  }
+
+  root.TrollLevels = {
+    WORLDS: WORLDS, LEVELS: L, DEMO: DEMO, addWorld: addWorld,
+    // map helpers for world files
+    B: { room: room, pit: pit, hole: hole, slide: slide, swapDoors: swapDoors, shoot: shoot, gx: gx }
+  };
 })(typeof window !== 'undefined' ? window : globalThis);

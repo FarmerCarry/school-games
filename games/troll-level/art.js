@@ -21,6 +21,16 @@
     { id: 'rainbow', name: 'قوس قزح', stars: 72, body: '#ff6b6b' },
     { id: 'astro', name: 'رائد الفضاء', stars: 90, body: '#ffffff' }
   ];
+  // Plug-ins from world files (w6-ice.js ...), all optional:
+  //   Art.ACC[skinId](ctx, face, t, ink, top): a new skin's accessory (push the skin on Art.SKINS);
+  //   Art.SCENERY[theme](g, pal, rnd) and Art.GROUND[theme]: a world's baked backdrop and ground look;
+  //   Art.SFX[name](A): a sound for L.sfx(name), A = Kit.audio;
+  //   Art.EV[type](d, ui): a world's own engine event (w.emit), ui = { fx, shake, say, sfx, pal, loud };
+  //   Art.mod({ bake(g, w, pal), draw(ctx, w, pal, t, k), front(ctx, w, pal, t), hud(ctx, w, pal, t, ui) }):
+  //     bake draws once into the level canvas, draw with the traps, front over the player,
+  //     hud with the HUD (ui = { txt, bubble, rr }).
+  Art.ACC = {}; Art.SFX = {}; Art.EV = {}; Art.MODS = [];
+  Art.mod = function (m) { Art.MODS.push(m); return m; };
   Art.skinById = function (id) {
     for (var i = 0; i < Art.SKINS.length; i++) if (Art.SKINS[i].id === id) return Art.SKINS[i];
     return Art.SKINS[0];
@@ -172,6 +182,8 @@
     } else if (id === 'rainbow') {
       ctx.fillStyle = '#ffffff';
       Art.star(ctx, face * -8, top - 2, 5, '#ffffff', ink, 2);
+    } else if (Art.ACC[id]) {
+      Art.ACC[id](ctx, face, t, ink, top);
     } else if (id === 'astro') {
       // a glass helmet with a shine and a little antenna
       ctx.beginPath(); ctx.moveTo(face * 9, top - 4); ctx.lineTo(face * 13, top - 13); ctx.stroke();
@@ -316,6 +328,7 @@
   // How each world dresses its ground: the band on exposed tops, optional bumps,
   // drips or a bright top line, and the small marks inside the ground
   // (stroke = drawn as lines of that width).
+  Art.SCENERY = SCENERY;
   var SPRINKLES = ['#ff8fc7', '#ffe14d', '#7ff5e0', '#ffffff'];
   var GROUND = {
     sun: { top: '#c4561f', line: '#ffc46b', bumps: 1, mark: 'pebble' },
@@ -324,6 +337,7 @@
     forest: { top: '#5fc23c', line: '#a3e85e', bumps: 1, mark: 'pebble' },
     space: { top: '#d6ccff', line: '#ffffff', mark: 'ring', stroke: 2.5 }
   };
+  Art.GROUND = GROUND;
 
   // Does cell (x, y) sit flush against the tiles being drawn? Only the cell
   // above a tile is asked; above the screen counts as fixed ceiling. grp is a
@@ -407,6 +421,7 @@
     g.save(); (SCENERY[pal.theme] || stripes)(g, pal, rng(seed || 0)); g.restore();
     for (var y = 0; y < E.ROWS; y++) for (var x = 0; x < E.COLS; x++) if (w.grid[y * E.COLS + x]) tiles.push({ x: x, y: y });
     drawTiles(g, w, null, tiles, 0, 0, pal, res);
+    for (var m = 0; m < Art.MODS.length; m++) if (Art.MODS[m].bake) { g.save(); Art.MODS[m].bake(g, w, pal); g.restore(); }
     return c;
   };
 
