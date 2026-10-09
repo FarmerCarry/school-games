@@ -294,7 +294,7 @@ npm run test:unit                # the regression files under tools/tests/
 npm run test:shared              # source-independent rules, build safety and tool fixtures
 npm run test:browser             # gameplay and portal checks for the selected SG_ROOT
 npm run test:tooling             # server, report and audio-probe helper checks
-npm run test:scenarios           # prove broken Start/Pause handlers fail the gameplay checks
+npm run test:scenarios           # prove inert Start/Pause buttons or input fail the gameplay checks
 npm run test:classroom           # downloaded folder, Arabic/spaced paths, denied storage, teacher page
 npm run test:regressions         # additional gameplay and portal keyboard checks
 npm run check                   # smoke-test all source games

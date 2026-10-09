@@ -11,16 +11,19 @@ const hold = (key = 'ArrowRight', ms = 220) => async page => {
   await page.waitForTimeout(ms);
   await page.keyboard.up(key);
 };
-const holdUntilChanged = (key, snapshot) => async page => {
-  const before = await page.evaluate(`JSON.stringify(${snapshot})`);
+const holdUntil = (key, expr, label) => async page => {
   await page.keyboard.down(key);
   try {
     // A software-rendered frame can take longer than a short fixed key hold.
     // Keep the real key down until the simulation consumes it; a broken
     // control still fails the same bounded observable-state assertion.
-    await requireState(page, `JSON.stringify(${snapshot}) !== ${JSON.stringify(before)}`,
-      `${key}: held input must change gameplay (${before})`);
+    await requireState(page, expr, label);
   } finally { await page.keyboard.up(key); }
+};
+const holdUntilChanged = (key, snapshot) => async page => {
+  const before = await page.evaluate(`JSON.stringify(${snapshot})`);
+  await holdUntil(key, `JSON.stringify(${snapshot}) !== ${JSON.stringify(before)}`,
+    `${key}: held input must change gameplay (${before})`)(page);
 };
 const click = selector => page => clickControl(page, selector);
 const sequence = (...steps) => async page => { for (const step of steps) await step(page); };
@@ -53,7 +56,7 @@ export const scenarios = {
   }),
   'fire-and-ice': defaults(['#playBtn'], `${g}.mode === 'play'`, `[${g}.world.fire.x,${g}.world.ice.x,${g}.world.t]`, hold('ArrowRight'), '#pauseBtn', `${g}.mode === 'paused'`, '#restartBtn', `${g}.world.t < 0.4`),
   'tank-splat': defaults(['[data-act="free"]','[data-act="startFree"]'], `${g}.app.screen === 'game'`, `${g}.app.game.tanks.map(t => [t.x,t.y,t.a,t.score,t.alive])`, hold('KeyD', 300), '#pauseBtn', `${g}.app.screen === 'pause'`, '#scr-pause [data-act="restart"]', `${g}.app.game.state === 'ready' && ${g}.app.game.tanks.every(t => t.score === 0)`, { ready: `${g}.app.game.state === 'play'` }),
-  'sumo-bonk': defaults(['#b1p','#bFight'], `${g}.state.scr === 'game' && !${g}.state.paused`, select(`${g}.state`, ['players','roundT','score']), hold('ArrowUp'), '#bPause', `${g}.state.paused`, '#bRestart', `${g}.state.phase === 'intro' && ${g}.state.score.every(n => n === 0)`, { ready: `${g}.state.phase === 'fight'` }),
+  'sumo-bonk': defaults(['#b1p','#bFight'], `${g}.state.scr === 'game' && !${g}.state.paused`, select(`${g}.state`, ['players','roundT','score']), hold('ArrowDown'), '#bPause', `${g}.state.paused`, '#bRestart', `${g}.state.phase === 'intro' && ${g}.state.score.every(n => n === 0)`, { ready: `${g}.state.phase === 'fight'` }),
   'air-hockey': defaults(['#btnPlay'], `!${g}.state().demo && !${g}.state().paused`, select(`${g}.state()`, ['pucks','mallets','score']), move, '#pauseBtn', `${g}.state().paused`, '#btnRestart', `${g}.state().score.every(n => n === 0)`),
   'hoop-heads': defaults(['[data-act="cpu"]','#selGo'], `${g}.state === 'play'`, select(`${g}.info()`, ['time','score','ball','p']), hold('ArrowRight'), '#pauseBtn', `${g}.state === 'pause'`, '#pRestart', `${g}.match.phase === 'intro' && ${g}.match.players.every(p => p.score === 0)`, { ready: `${g}.match.phase === 'play'` }),
   'wacky-soccer': defaults(['#b1p','#bGo'], `${g}.state === 'play'`, `[${g}.match.time,${g}.match.score,${g}.world.players.map(p => [p.x,p.y])]`, hold('Space'), '#bPause', `${g}.state === 'pause'`, '#bRestart', `${g}.match.phase === 'count' && ${g}.match.score.every(n => n === 0)`, { ready: `${g}.match.phase === 'play'` }),
@@ -125,29 +128,61 @@ for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
 
 // Compare the part controlled by this input separately from the broader snapshot
 // used to catch simulation advancing while paused. A running clock is not proof
-// that a movement control works.
+// that a movement control works, and neither is a player that moves by itself.
 const inputSnapshots = {
   'rail-rush': `${g}.state.lane`, 'neon-slope': `${g}.state.x`, 'tunnel-blitz': `${g}.info().rot`,
   'beat-dash': `${g}.state.y`, 'drift-king': `${g}.car.head`, 'fire-and-ice': `${g}.world.fire.x`,
   'moto-madness': `${g}.world.bike.x`, 'tank-splat': `${g}.app.game.tanks[0].a`,
-  'sumo-bonk': `[${g}.state.players[0].y,${g}.state.players[0].action]`,
+  'sumo-bonk': `${g}.state.players[0].action`,
   'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`,
-  'wacky-soccer': `${g}.world.players.filter(p => p.side === 0).map(p => p.y)`,
+  'wacky-soccer': `${g}.world.players.filter(p => p.side === 0).map(p => p.kickT)`,
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
+  // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
+  'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`,
   'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
+// In these games the controlled player also moves or changes by itself, so any
+// change of its state is no proof that the input works. Each condition is
+// something only the player's input causes; sgInput.before is the input snapshot
+// taken just before the input.
+const inputSeen = {
+  // A stationary pointer steers the snake too. Only ← → switch to key steering,
+  // and while → is held the snake steers 1.2 rad clockwise of its heading.
+  'snake-arena': `SA.game.kb && Math.sin(SA.world.player.want - SA.world.player.ang) > 0.5`,
+  // Unsteered, the car drives straight until it falls off at the first corner and its
+  // heading spins as it falls. Only holding Space turns it on the road.
+  'drift-king': `${g}.car.state === 'drive' && ${g}.car.turning > 0.5`,
+  // Until the first gas, brake or lean starts the run, the bike only settles on its brakes.
+  'moto-madness': `${g}.world.started && ${g}.world.bike.x > sgInput.before + 40`,
+  // The CPU's bonks stun player 1; only player 1's own attack key starts a wind-up and
+  // dash on the ground, or in the air a belly slam that ends in a faceplant.
+  'sumo-bonk': `!${g}.P[0].cpu && ['windup','dash','dive','faceplant'].includes(${g}.P[0].action)`,
+  // Body pushes and steals move player 1 too; only the held key runs it right.
+  'hoop-heads': `${g}.match.players[0].inp.r && ${g}.match.players[0].vx > 150`,
+  // Ragdolls wobble, and a fallen one gets up by itself with a kick (both can at once).
+  // Only the button kicks the whole team and tells the CPU the team pressed: the CPU's
+  // count of seconds since the last press starts at 2 and drops to 0 only then.
+  'wacky-soccer': `${g}.match.phase === 'play' && ${g}.match.cpu[1].since < 1 && ${g}.world.players.filter(p => p.side === 0).every(p => p.kickT > 0)`,
+  // The blob follows the pointer, which rests on the centred Play button below it:
+  // without input it drifts straight down. The input points up and left of it.
+  'blob-battle': `${g}.info().player.x < sgInput.before.x - 20 && ${g}.info().player.y < sgInput.before.y - 20`
+};
+for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
+
 // These games move only while their key is held, so a fixed-length hold can fall
 // between two slow software-rendered frames and never be seen. The first input
 // check keeps the key down until the game reacts; repeated performance input keeps
-// the fixed hold, because a player stopped by a wall cannot change state.
+// the fixed hold, because a player stopped by a wall cannot change state. Snake
+// Arena's repeated input stays the pointer; its checked input is key steering.
 const heldKeys = {
   'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
   'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
-  'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'splat-strike': 'KeyW'
+  'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'splat-strike': 'KeyW',
+  'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 
@@ -157,6 +192,25 @@ async function requireState(page, expr, label) {
   catch (error) { throw new Error(`${label}: ${expr}`, { cause: error }); }
 }
 async function focusSurface(page) { await page.evaluate(() => { document.activeElement?.blur(); window.Kit?.keys.reset(); }); }
+// From just before the first input, check on every animation frame for the
+// scenario's input condition (by default: its input snapshot changed) and latch
+// it, so a jump or kick that is over before the next poll still counts.
+async function watchInput(page, s) {
+  const snapshot = s.inputSnapshot || s.snapshot;
+  const seen = s.inputSeen || `JSON.stringify(${snapshot}) !== sgInput.json`;
+  const before = await evaluate(page, `(() => {
+    const json = JSON.stringify(${snapshot});
+    const watch = window.sgInput = { json, before: json === undefined ? undefined : JSON.parse(json), seen: false };
+    const check = () => {
+      if (window.sgInput !== watch) return;
+      try { watch.seen = !!(${seen}); } catch { /* A player who is gone has not reacted. */ }
+      if (!watch.seen) requestAnimationFrame(check);
+    };
+    check();
+    return json;
+  })()`);
+  return { before, seen };
+}
 export async function prepareScenario(page, slug) {
   const s = scenarios[slug];
   assert.ok(s, `No gameplay scenario for ${slug}`);
@@ -173,6 +227,7 @@ async function start(page, slug, s) {
 export async function performInput(page, slug, {repeat = false} = {}) {
   const s = scenarios[slug];
   await focusSurface(page);
+  const watch = repeat ? null : await watchInput(page, s);
   if (repeat && (slug === 'connect-four' || slug === 'tic-tac-toe')) {
     const legal = page.locator('[data-move]:enabled');
     if (await legal.count()) await legal.first().click();
@@ -182,9 +237,11 @@ export async function performInput(page, slug, {repeat = false} = {}) {
   } else if (repeat && slug === 'pool-party') {
     if (await evaluate(page,`${g}.phase === 'aim'`)) await hold('Space',650)(page);
     else await page.waitForTimeout(250);
-  } else if (!repeat && s.heldKey) await holdUntilChanged(s.heldKey, s.inputSnapshot || s.snapshot)(page);
+  } else if (watch && s.heldKey) await holdUntil(s.heldKey, 'window.sgInput.seen',
+    `${s.heldKey}: held input must change gameplay (${watch.before}): ${watch.seen}`)(page);
   else await s.input(page);
   await page.waitForTimeout(120);
+  return watch;
 }
 export async function ensureActive(page, slug) {
   const s = scenarios[slug];
@@ -198,14 +255,12 @@ export async function runScenario(page, slug, { mode = 'smoke' } = {}) {
   assert.ok(s, `No gameplay scenario for ${slug}`);
   const checks = [];
   await start(page,slug,s); checks.push('Start reaches active gameplay');
-  const inputSnapshot = s.inputSnapshot || s.snapshot;
-  const before = await evaluate(page,`JSON.stringify(${inputSnapshot})`);
-  await performInput(page,slug);
+  const watch = await performInput(page,slug);
   // Software-rendered CI can deliver the next simulation/HUD update late.
   // Require observable input progress, waiting within the same bounded gate
   // as startup, rather than assuming it must be painted after 120 ms.
-  await requireState(page,`JSON.stringify(${inputSnapshot}) !== ${JSON.stringify(before)}`,
-    `${slug}: primary input must change gameplay (${before})`);
+  await requireState(page,'window.sgInput.seen',
+    `${slug}: primary input must change gameplay (${watch.before}): ${watch.seen}`);
   checks.push('Primary input changes gameplay');
   if (mode === 'performance') return {slug,checks};
   if (!s.noPause) {
