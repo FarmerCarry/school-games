@@ -132,30 +132,34 @@ for (const direction of ['forward', 'backward']) {
 }
 
 test('Golf ignores browser modifier chords and composition', async t => {
-  const { page, frame } = await game(t);
-  await frame.locator('#game').focus();
+  // Frame-stepped, so the ball cannot pass its apex between presses.
+  const page = await manualGame(t, null, false);
+  await page.locator('#game').focus();
   const keys = ['Control+Space', 'Alt+Space', 'Meta+Space'];
+  const phase = () => page.evaluate(() => golfState.phase);
   for (const key of keys) {
     await page.keyboard.press(key);
-    assert.equal(await phase(frame), 'title', `${key} must not start a round`);
+    assert.equal(await phase(), 'title', `${key} must not start a round`);
   }
   await page.keyboard.press('Space');
   for (const key of keys) {
     await page.keyboard.press(key);
-    assert.equal(await phase(frame), 'ready', `${key} must not swing`);
+    assert.equal(await phase(), 'ready', `${key} must not swing`);
   }
-  await frame.evaluate(() => document.getElementById('game').dispatchEvent(new KeyboardEvent('keydown', {
+  await page.evaluate(() => document.getElementById('game').dispatchEvent(new KeyboardEvent('keydown', {
     code: 'Space', key: ' ', bubbles: true, cancelable: true, isComposing: true
   })));
-  assert.equal(await phase(frame), 'ready');
+  assert.equal(await phase(), 'ready');
+  await page.evaluate(() => advanceGolfFrames(39));
   await page.keyboard.press('Space');
-  await frame.waitForFunction(() => golfState.phase === 'flight' && golfState.ball.vy > 5);
+  await page.evaluate(() => advanceGolfFrames(20));
+  assert.deepEqual(await page.evaluate(() => [golfState.phase, golfState.ball.vy > 5]), ['flight', true]);
   for (const key of keys) {
     await page.keyboard.press(key);
-    assert.equal(await frame.evaluate(() => golfState.ball.rocketsLeft), 1, `${key} must not fire a rocket`);
+    assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 1, `${key} must not fire a rocket`);
   }
   await page.keyboard.press('Space');
-  assert.equal(await frame.evaluate(() => golfState.ball.rocketsLeft), 0, 'unmodified Space fires the rocket');
+  assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 0, 'unmodified Space fires the rocket');
 });
 
 test('Golf native Space activates focused controls once and keeps the pause and result shortcuts', async t => {
@@ -197,7 +201,7 @@ test('Golf native Space activates focused controls once and keeps the pause and 
 });
 
 // Frame-stepped game: the gauge only moves when the test advances it.
-async function manualGame(t, progress) {
+async function manualGame(t, progress, play = true) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
   await context.addInitScript(installGolfHarness, { manual: true });
   if (progress) await context.addInitScript(p => localStorage.setItem('sg:skybound-golf:progress', p), JSON.stringify(progress));
@@ -205,6 +209,7 @@ async function manualGame(t, progress) {
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'no browser errors'); });
   await page.goto(`${origin}/games/skybound-golf/`);
+  if (!play) return page;
   await page.locator('#play').click();
   await page.evaluate(() => advanceGolfFrames(39)); // the club is at the top of the gold zone
   return page;
@@ -214,10 +219,12 @@ test('Golf strikes from the keyboard once, at the moment of the press', async t 
   const page = await manualGame(t);
   await page.locator('#game').focus();
   const pressed = await page.evaluate(() => golfState.gauge.value);
-  await page.keyboard.press('Enter');
-  await page.evaluate(() => advanceGolfFrames(8));
-  assert.deepEqual(await page.evaluate(() => ({ phase: golfState.phase, power: golfState.ball.power, grade: golfState.ball.grade })),
-    { phase: 'flight', power: pressed, grade: 'perfect' });
+  await page.keyboard.down('Enter');
+  await page.evaluate(() => advanceGolfFrames(7)); // the gauge would have moved on by the release
+  await page.keyboard.up('Enter');
+  await page.evaluate(() => advanceGolfFrames(3));
+  assert.deepEqual(await page.evaluate(() => ({ phase: golfState.phase, power: golfState.ball.power, grade: golfState.ball.grade, rockets: golfState.ball.rocketsLeft })),
+    { phase: 'flight', power: pressed, grade: 'perfect', rockets: 1 });
 });
 
 test('Golf world unlock keeps Space on the new world after buying upgrades', async t => {

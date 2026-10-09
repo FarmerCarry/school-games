@@ -47,6 +47,7 @@ test('Golf: a swing at the top of the backswing is perfect, then the hit freezes
   await page.evaluate(() => advanceGolfFrames(5));
   const hit = await page.evaluate(() => ({ phase: golfState.phase, grade: golfState.ball.grade, x: golfState.ball.x }));
   assert.deepEqual(hit, { phase: 'flight', grade: 'perfect', x: 0 });
+  assert(await page.evaluate(() => golfState.flash > 0.3), 'a perfect hit flashes');
   await page.evaluate(() => advanceGolfFrames(4));
   assert.equal(await page.evaluate(() => golfState.ball.x), 0, 'hit-stop holds the ball');
   await page.evaluate(() => advanceGolfFrames(10));
@@ -64,28 +65,38 @@ test('Golf: the canvas strikes on press, not when a slow click is released', asy
   await page.evaluate(() => advanceGolfFrames(7));
   await page.mouse.up();
   await page.evaluate(() => advanceGolfFrames(3));
-  assert.equal(await page.evaluate(() => golfState.ball.power), pressed);
+  assert.deepEqual(await page.evaluate(() => [golfState.ball.power, golfState.ball.rocketsLeft, golfState.ball.rockets, golfState.ball.armed]),
+    [pressed, 1, 1, false], 'struck once, at the press; the release fires nothing');
 });
 
 test('Golf: one button in flight fires a rocket in the air and a super bounce near the ground', async t => {
-  const page = await game(t);
+  const page = await game(t, { progress: { v: 2, shots: 3, tips: 0, upgrades: { rockets: 1 } } });
   await swing(page);
   await page.evaluate(() => advanceGolfFrames(20));
   const vy = await page.evaluate(() => golfState.ball.vy);
+  assert.match(await page.locator('#hint').textContent(), /صاروخ/);
   await page.keyboard.press('Space');
   const rocket = await page.evaluate(() => ({ left: golfState.ball.rocketsLeft, vy: golfState.ball.vy, flame: golfState.flame > 0 }));
-  assert.deepEqual([rocket.left, rocket.flame], [0, true]);
+  assert.deepEqual([rocket.left, rocket.flame], [1, true]);
   assert(rocket.vy > vy + 10, 'the rocket kicks the ball upwards');
-  assert.match(await page.locator('#rockets').getAttribute('aria-label'), /0 من 1/);
-  // Wait for the landing target to turn gold, then press.
-  await page.evaluate(() => { for (let i = 0; i < 2000 && !(golfState.reticle && golfState.reticle.t < 0.15); i++) golfTick(1 / 60); });
+  assert.match(await page.locator('#rockets').getAttribute('aria-label'), /1 من 2/);
+  // Press a little early as the landing target appears: a good super bounce,
+  // so the first-time hints stay on screen.
+  await page.evaluate(() => { for (let i = 0; i < 2000 && !(golfState.reticle && golfState.reticle.t < 0.45); i++) golfTick(1 / 60); });
   await page.keyboard.press('Space');
   assert.equal(await page.evaluate(() => golfState.ball.armed), true);
-  await page.evaluate(() => { for (let i = 0; i < 30 && !golfState.ball.supers; i++) golfTick(1 / 60); });
+  await page.evaluate(() => { for (let i = 0; i < 40 && !golfState.ball.supers; i++) golfTick(1 / 60); });
   assert.equal(await page.evaluate(() => golfState.ball.supers), 1, 'the landing becomes a super bounce');
-  assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 0, 'no rocket is spent near the ground');
+  assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 1, 'arming a landing never spends the rocket in hand');
+  await page.evaluate(() => advanceGolfFrames(3));
   await page.keyboard.press('Space');
-  assert.equal(await page.evaluate(() => golfState.ball.armed || golfState.ball.done || golfState.ball.vy > 0), true, 'an empty press does no harm');
+  assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 0, 'on the way up the button is a rocket again');
+  const hint = await page.locator('#hint').textContent();
+  assert.match(hint, /قرب الأرض/);
+  assert.doesNotMatch(hint, /صاروخ/, 'with no rockets left the hint stops offering one');
+  const before = await page.evaluate(() => ({ vx: golfState.ball.vx, vy: golfState.ball.vy, armed: golfState.ball.armed }));
+  await page.keyboard.press('Space');
+  assert.deepEqual(await page.evaluate(() => ({ vx: golfState.ball.vx, vy: golfState.ball.vy, armed: golfState.ball.armed })), before, 'an empty press on the way up changes nothing');
 });
 
 for (const exit of ['reload', 'menu', 'restart']) {
@@ -108,6 +119,66 @@ for (const exit of ['reload', 'menu', 'restart']) {
     assert.equal(await page.evaluate(() => golfProbe.saves), 0, 'loading never awards it again');
   });
 }
+
+test('Golf: the result card opens by itself shortly after the landing', async t => {
+  const page = await game(t);
+  await swing(page);
+  await land(page);
+  await page.evaluate(() => advanceGolfFrames(60));
+  assert.equal(await phase(page), 'landed', 'the landing shows first');
+  await page.evaluate(() => advanceGolfFrames(60));
+  assert.equal(await phase(page), 'result');
+  assert.equal(await page.evaluate(() => golfProbe.saves), 1);
+});
+
+test('Golf: a held Space or Enter opens the result card but never skips past it', async t => {
+  for (const key of ['Space', 'Enter']) {
+    const page = await game(t);
+    await swing(page);
+    await land(page);
+    await page.keyboard.down(key);
+    assert.equal(await phase(page), 'result');
+    for (let i = 0; i < 3; i++) await page.keyboard.down(key); // auto-repeat
+    await page.keyboard.up(key);
+    assert.equal(await phase(page), 'result', key + ' held: the card stays');
+    await page.close();
+  }
+});
+
+test('Golf: a held Enter on an upgrade buys one level', async t => {
+  const page = await game(t, { play: false, progress: { v: 2, coins: 400, shots: 3, tips: 2 } });
+  await page.locator('#open-shop').click();
+  await page.locator('[data-upgrade="power"]').focus();
+  await page.keyboard.down('Enter');
+  for (let i = 0; i < 4; i++) await page.keyboard.down('Enter');
+  await page.keyboard.up('Enter');
+  assert.equal((await saved(page)).upgrades.power, 1);
+  assert.equal(await page.locator('#shop-content').isVisible(), true, 'the shop stays open');
+});
+
+test('Golf: the second press of a double-click never acts on what the first one revealed', async t => {
+  const page = await game(t, { play: false, progress: { v: 2, best: 300, bests: { meadow: 300 }, world: 0, shots: 3, tips: 2 } });
+  await page.locator('#open-worlds').dblclick();
+  assert.equal(await page.locator('#worlds-content').isVisible(), true, 'the world picker stays open');
+  assert.equal(await page.evaluate(() => golfState.world), 0, 'no world was chosen');
+  await page.keyboard.press('Escape');
+  await page.locator('#play').dblclick();
+  await page.evaluate(() => advanceGolfFrames(10));
+  assert.deepEqual(await page.evaluate(() => [golfState.phase, golfState.ball]), ['ready', null], 'no stray swing');
+  await page.evaluate(n => advanceGolfFrames(n), PEAK);
+  await page.locator('#game').click({ position: { x: 200, y: 200 } });
+  await page.evaluate(() => advanceGolfFrames(6));
+  assert.equal(await phase(page), 'flight', 'a separate click still swings');
+});
+
+test('Golf: the mute button works while a menu is open', async t => {
+  const page = await game(t);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#pause-content').isVisible(), true);
+  const muted = await page.evaluate(() => Kit.audio.muted);
+  await page.locator('.sg-mute').click();
+  assert.equal(await page.evaluate(() => Kit.audio.muted), !muted);
+});
 
 test('Golf: Space skips the landing to the result, which never awards twice; R plays again', async t => {
   const page = await game(t);
@@ -177,9 +248,21 @@ test('Golf: real shots in every world match the physics at 60 Hz', async t => {
   }
 });
 
-test('Golf: reduced motion keeps play complete without shake, flash or trails', async t => {
+test('Golf: reduced motion keeps play complete without shake, flash, hit-stop, hops or trails', async t => {
   const page = await game(t, { reducedMotion: 'reduce' });
-  await swing(page);
+  await page.evaluate(n => advanceGolfFrames(n), PEAK);
+  await page.keyboard.press('Space');
+  const frames = await page.evaluate(() => {
+    const seen = [];
+    for (let i = 0; i < 20; i++) {
+      golfTick(1 / 60);
+      seen.push([golfState.shake.x, golfState.shake.y, golfState.flash, golfState.golfer.jump, golfState.trail.length]);
+    }
+    return { seen, grade: golfState.ball.grade, x: golfState.ball.x };
+  });
+  assert.equal(frames.grade, 'perfect');
+  assert(frames.seen.every(f => f.every(v => v === 0)), JSON.stringify(frames.seen));
+  assert(frames.x > 2, 'no hit-stop holds the ball');
   await page.evaluate(() => advanceGolfFrames(40));
   assert.deepEqual(await page.evaluate(() => [golfState.trail.length, golfState.shake.x, golfState.shake.y, golfState.flash]), [0, 0, 0, 0]);
   await land(page);
@@ -214,9 +297,13 @@ test('Golf: a paused scene stays idle, and a lost canvas is repainted once', asy
     canvas.dispatchEvent(new Event('contextrestored'));
     golfRender(); const repaint = golfProbe.draws - before.draws - idle;
     for (let i = 0; i < 30; i++) golfRender();
-    return { idle, repaint, settled: golfProbe.draws - before.draws - idle - repaint, same: state() === before.state };
+    const settled = golfProbe.draws - before.draws - idle - repaint;
+    document.fonts.dispatchEvent(new Event('loadingdone'));
+    golfRender(); golfRender();
+    const fonts = golfProbe.draws - before.draws - idle - repaint - settled;
+    return { idle, repaint, settled, fonts, same: state() === before.state };
   });
-  assert.deepEqual(result, { idle: 0, repaint: 1, settled: 0, same: true });
+  assert.deepEqual(result, { idle: 0, repaint: 1, settled: 0, fonts: 1, same: true }, 'late fonts repaint the kept frame once');
 });
 
 test('Golf: a save from the first version keeps its coins, refunds its upgrades and keeps its balls', async t => {

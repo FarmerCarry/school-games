@@ -119,11 +119,12 @@
       c.restore();
       circle(c, x, y, 58); inked(c, 4);
     } else if (th.sun === 'rainbow') {
+      var fade = c.globalAlpha;
       for (var r = 0; r < RAINBOW.length; r++) {
         c.beginPath(); c.arc(1060, y + 150, 210 - r * 14, Math.PI, TAU);
-        c.lineWidth = 14; c.strokeStyle = RAINBOW[r]; c.globalAlpha = 0.45 * (1 - a); c.stroke();
+        c.lineWidth = 14; c.strokeStyle = RAINBOW[r]; c.globalAlpha = 0.45 * fade; c.stroke();
       }
-      c.globalAlpha = 1 - a;
+      c.globalAlpha = fade;
       fillCircle(c, 1090, y - 20, 40, '#fff6c8');
     } else {
       var big = th.sun === 'bigsun', pale = th.sun === 'pale';
@@ -167,7 +168,7 @@
   };
 
   function ridge(c, offset, base, amp, wl, fn, color, outline) {
-    if (base - amp > H) return;
+    if (base - amp * 1.2 > H) return;
     var f = SHAPES[fn];
     c.beginPath(); c.moveTo(-20, H + 20);
     for (var x = -20; x <= W + 32; x += 16) c.lineTo(x, base - amp * f((x + offset) / wl));
@@ -181,7 +182,7 @@
     var farY = 455 + lift * 0.12, midY = 515 + lift * 0.25, nearY = 575 + lift * 0.42;
     clouds(c, s, 0);
     ridge(c, x * 0.06, farY, 120, 260, th.farFn, th.far);
-    if (th.farFn === 'peaks' && farY - 120 < H) snowCaps(c, x * 0.06, farY, 120, 260, s.world === 4 ? '#6a62a6' : '#ffffff');
+    if (th.farFn === 'peaks' && farY - 120 * 1.2 < H) snowCaps(c, x * 0.06, farY, 120, 260, s.world === 4 ? '#6a62a6' : '#ffffff');
     ridge(c, x * 0.16 + 300, midY, 70, 150, th.midFn, th.mid);
     decor(c, th.decor, x * 0.16 + 300, midY, 70, 150, th.midFn, mix(th.mid, INK, 0.25), s.world);
     clouds(c, s, 1);
@@ -363,7 +364,7 @@
   /* ---------------------------------------------------------- objects */
   function pad(c, s, f, world) {
     var k = view.k, X = sx(f.x), Y = sy(f.level), w = f.hw * k * 1.1;
-    var pulse = s.padPulse && s.padPulse.x === f.x ? clamp(1 - s.padPulse.t / 0.35, 0, 1) : 0;
+    var pulse = !s.reduced && s.padPulse && s.padPulse.x === f.x ? clamp(1 - s.padPulse.t / 0.35, 0, 1) : 0;
     var squash = 1 - pulse * 0.45 + (pulse > 0 ? Math.sin(pulse * 12) * 0.12 * pulse : 0);
     c.save(); c.translate(X, Y);
     if (world === 0) {
@@ -389,7 +390,7 @@
   function prop(c, s, o) {
     var k = view.k, X = sx(o.x), G = sy(o.ground), C = sy(o.ground + o.lift), R = o.r * k;
     if (X < -R * 2 || X > W + R * 2) return;
-    var hit = s.propHit && s.propHit.id === o.id ? clamp(1 - s.propHit.t / 0.4, 0, 1) : 0;
+    var hit = !s.reduced && s.propHit && s.propHit.id === o.id ? clamp(1 - s.propHit.t / 0.4, 0, 1) : 0;
     var wob = hit ? Math.sin(hit * 20) * 0.08 * hit : 0;
     c.save(); c.translate(X, G); c.rotate(wob); c.translate(-X, -G);
     if (o.type === 'tree') {
@@ -510,11 +511,11 @@
 
   // Distance posts, the world best flag and the next world's gate.
   function markers(c, s) {
-    var k = view.k, step = k > 14 ? 50 : k > 7 ? 100 : 250;
+    var k = view.k, step = k > 14 ? 50 : k > 7 ? 100 : 250, h = clamp(k * 2.2, 26, 54), bw = clamp(k * 1.9, 30, 52);
     c.font = '700 ' + Math.round(clamp(k * 0.75, 13, 22)) + 'px Fredoka';
     c.textAlign = 'center'; c.textBaseline = 'middle';
-    for (var d = Math.max(step, Math.ceil(view.minX / step) * step); d < view.maxX + 4; d += step) {
-      var X = sx(d), G = sy(P.heightAt(s.course, d)), h = clamp(k * 2.2, 26, 54), bw = clamp(k * 1.9, 30, 52);
+    for (var d = Math.max(step, Math.ceil((view.minX - bw / 2 / k) / step) * step); d < view.maxX + 4; d += step) {
+      var X = sx(d), G = sy(P.heightAt(s.course, d));
       c.beginPath(); c.moveTo(X, G); c.lineTo(X, G - h); c.lineWidth = 4; c.strokeStyle = '#8a5a35'; c.stroke();
       c.beginPath(); c.roundRect(X - bw / 2, G - h - bw * 0.42, bw, bw * 0.55, 6); c.fillStyle = '#fff5dc'; c.fill(); inked(c, 2.5);
       c.fillStyle = INK; c.fillText(String(d), X, G - h - bw * 0.14);
@@ -525,11 +526,12 @@
 
   function banner(c, s, x, text, bg, fg) {
     var X = sx(x);
-    if (X < -160 || X > W + 160) return;
-    var k = view.k, G = sy(P.heightAt(s.course, x)), h = clamp(k * 5, 70, 140);
-    c.beginPath(); c.moveTo(X, G); c.lineTo(X, G - h); c.lineWidth = 5; c.strokeStyle = '#f4f1ff'; c.stroke(); inked(c, 1.5);
+    if (X < -400 || X > W + 10) return;
     c.font = '700 20px Fredoka'; c.direction = 'rtl';
     var w = c.measureText(text).width + 26;
+    if (X + w < -4) { c.direction = 'ltr'; return; }
+    var k = view.k, G = sy(P.heightAt(s.course, x)), h = clamp(k * 5, 70, 140);
+    c.beginPath(); c.moveTo(X, G); c.lineTo(X, G - h); c.lineWidth = 5; c.strokeStyle = '#f4f1ff'; c.stroke(); inked(c, 1.5);
     c.beginPath(); c.moveTo(X, G - h); c.lineTo(X + w, G - h); c.lineTo(X + w - 10, G - h + 17); c.lineTo(X + w, G - h + 34); c.lineTo(X, G - h + 34); c.closePath();
     c.fillStyle = bg; c.fill(); inked(c, 3);
     c.fillStyle = fg; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(text, X + w / 2 - 4, G - h + 18);
@@ -713,7 +715,7 @@
     }
     // Rocket flame
     if (s.flame > 0) {
-      var sp = Math.hypot(b.vx, b.vy) || 1, ux = b.vx / sp, uy = -b.vy / sp, fl = r * (2.2 + Math.sin(s.time * 50) * 0.4) * clamp(s.flame / 0.25, 0.3, 1);
+      var sp = Math.hypot(b.vx, b.vy) || 1, ux = b.vx / sp, uy = -b.vy / sp, fl = r * (2.2 + (s.reduced ? 0 : Math.sin(s.time * 50) * 0.4)) * clamp(s.flame / 0.25, 0.3, 1);
       c.beginPath(); c.moveTo(X - uy * r * 0.7, Y + ux * r * 0.7); c.lineTo(X - ux * (r + fl), Y - uy * (r + fl)); c.lineTo(X + uy * r * 0.7, Y - ux * r * 0.7); c.closePath();
       c.fillStyle = '#ff7a1a'; c.fill(); inked(c, 2.5);
       c.beginPath(); c.moveTo(X - uy * r * 0.4, Y + ux * r * 0.4); c.lineTo(X - ux * (r + fl * 0.6), Y - uy * (r + fl * 0.6)); c.lineTo(X + uy * r * 0.4, Y - ux * r * 0.4); c.closePath();

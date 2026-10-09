@@ -27,6 +27,24 @@
   var coinStreak = 0, lastCoinAt = -9, busyAt = 0, gaugeHot = false, emptyWarned = false, unlockSeen = false;
   var renderDirty = true, renderedTime = -1, hud = { meters: -1, coins: -1, alt: -1, rockets: '' };
   var mute = K.muteButton(); ui.appendChild(mute);
+  // A held Space or Enter must not keep pressing the button that a screen
+  // change has just focused: one key press, one action.
+  ui.addEventListener('keydown', function (e) {
+    if (e.repeat && (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') && e.target.closest && e.target.closest('button')) e.preventDefault();
+  }, true);
+  // The second press of a double-click lands on whatever the first one
+  // revealed (the canvas, a world card, an upgrade). Ignore it there.
+  var lastClick = null;
+  function strayPress(e, target) {
+    return !!(lastClick && e.timeStamp - lastClick.t < 500 && target !== lastClick.target &&
+      Math.abs(e.clientX - lastClick.x) < 16 && Math.abs(e.clientY - lastClick.y) < 16);
+  }
+  ui.addEventListener('click', function (e) {
+    if (!e.detail) return;
+    var target = e.target.closest ? e.target.closest('button') || e.target : e.target;
+    if (strayPress(e, target)) { e.preventDefault(); e.stopPropagation(); return; }
+    lastClick = { t: e.timeStamp, x: e.clientX, y: e.clientY, target: target };
+  }, true);
   var saveStatus = K.saveStatus({ retry: persist });
 
   K.motion.onChange(function (value) {
@@ -65,6 +83,8 @@
   function persist() { if (storage.set('progress', save)) saveStatus.saved(); else saveStatus.failed(); }
   function announce(text) { $('announce').textContent = text; }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  // An LTR isolate keeps '+5' and '×3' in order inside right-to-left text.
+  function ltr(text) { return '\u2066' + text + '\u2069'; }
   function worldId() { return P.worlds[s.world].id; }
   function button(id, fn) {
     $(id).addEventListener('click', function (e) { K.audio.unlock(); K.sfx.click(); if (e.detail) this.blur(); fn(); });
@@ -343,7 +363,7 @@
     var words = { perfect: 'ضربة مثالية!', great: 'ضربة قوية!', good: 'جيدة!', weak: 'ضعيفة…' };
     popup(words[g], 2, by + 4.5, g === 'perfect' ? '#ffd000' : g === 'great' ? '#ff8a1a' : '#ffffff', g === 'perfect' ? 52 : 40);
     kick(g === 'perfect' ? 14 : g === 'great' ? 8 : 4, g === 'perfect' ? 0.55 : 0.2);
-    if (g === 'perfect') s.golfer.jumpT = 0.001;
+    if (g === 'perfect' && !reduced) s.golfer.jumpT = 0.001;
     controls();
   }
   function flightPress() {
@@ -351,6 +371,7 @@
     if (!b || b.done) return;
     var r = P.press(s.course, b, save.upgrades);
     if (r.type === 'rocket') {
+      hint();
       s.flame = 0.45; sfx.rocket(); kick(7, 0.12);
       var sp = Math.hypot(b.vx, b.vy) || 1;
       burst('flame', b.x, b.y, 16, { angle: Math.atan2(-b.vy, -b.vx), spread: 1.2, speed: 16, size: 14, life: 0.5, g: -2 });
@@ -376,16 +397,16 @@
       coinStreak = s.time - lastCoinAt < 0.7 ? coinStreak + 1 : 0; lastCoinAt = s.time;
       sfx.coin(coinStreak, e.gem);
       burst('spark', e.x, e.y, e.gem ? 8 : 4, { speed: 7, size: e.gem ? 12 : 8, color: e.gem ? '#e9a6ff' : '#ffe14d', g: 4, life: 0.4 });
-      if (e.gem) popup('+5', e.x, e.y + 1, '#e9a6ff', 34);
+      if (e.gem) popup(ltr('+5'), e.x, e.y + 1, '#e9a6ff', 34);
       var chip = $('run-coins').parentNode; chip.classList.remove('bump'); void chip.offsetWidth; chip.classList.add('bump');
     } else if (e.type === 'ring') {
       sfx.ring(); kick(5, 0.15);
       burst('ring', e.x, e.y, 1, { speed: 0, size: 110, color: '#ffd000', life: 0.45, g: 0 });
-      popup('تسارع! +3', e.x, e.y + 4, '#ffb020', 36);
+      popup('تسارع! ' + ltr('+3'), e.x, e.y + 4, '#ffb020', 36);
     } else if (e.type === 'balloon') {
       sfx.pop(); kick(4);
       burst('confetti', e.x, e.y, 16, { speed: 12, size: 12, colors: CONFETTI, life: 0.9, g: 14 });
-      popup('بوب! +2', e.x, e.y + 3, '#ffffff', 34);
+      popup('بوب! ' + ltr('+2'), e.x, e.y + 3, '#ffffff', 34);
     } else if (e.type === 'prop') {
       var soft = e.prop === 'puff' || e.prop === 'crystal';
       sfx.bonk(soft); kick(4 + e.strength * 6);
@@ -409,12 +430,12 @@
       if (perfect) hitStop = Math.max(hitStop, reduced ? 0 : 0.05);
       burst('ring', e.x, e.y + 0.3, 1, { speed: 0, size: perfect ? 120 : 70, color: perfect ? '#ffd000' : '#ffffff', life: 0.45, g: 0 });
       burst('spark', e.x, e.y + 0.3, perfect ? 12 : 5, { speed: 14, size: 11, color: perfect ? '#ffd000' : '#ffffff', angle: -Math.PI / 2, spread: 2.2, g: 10, life: 0.6 });
-      popup(perfect ? 'قفزة خارقة!' + (e.combo > 1 ? ' ×' + e.combo : '') : 'قفزة جيدة', e.x, e.y + 4, perfect ? '#ffd000' : '#ffffff', perfect ? 44 : 32);
+      popup(perfect ? 'قفزة خارقة!' + (e.combo > 1 ? ' ' + ltr('×' + e.combo) : '') : 'قفزة جيدة', e.x, e.y + 4, perfect ? '#ffd000' : '#ffffff', perfect ? 44 : 32);
       if (perfect && save.tips < 2) { save.tips = 2; Kit.stats.tutorial('done'); hint(); }
     } else if (e.type === 'skip') {
       sfx.skip(); kick(4);
       burst('dust', e.x, e.y, 10, { speed: 9, size: 9, color: '#9fe3ff', angle: -Math.PI / 2, spread: 1.6, g: 20, life: 0.6 });
-      popup('قفزة على الماء!' + (e.count > 1 ? ' ×' + e.count : ''), e.x, e.y + 4, '#7fd4ff', 34);
+      popup('قفزة على الماء!' + (e.count > 1 ? ' ' + ltr('×' + e.count) : ''), e.x, e.y + 4, '#7fd4ff', 34);
     } else if (e.type === 'splash') {
       sfx.splash(); kick(8);
       burst('dust', e.x, e.y, 18, { speed: 14, size: 12, color: '#7fd4ff', angle: -Math.PI / 2, spread: 1.2, g: 26, life: 0.9 });
@@ -486,8 +507,6 @@
       var go = document.createElement('button'); go.type = 'button'; go.className = 'button primary';
       go.textContent = 'العب هناك'; box.appendChild(go);
       go.addEventListener('click', function () { A2.unlock(); K.sfx.click(); playWorld(newWorld); });
-      // A held Enter that just bought an upgrade must not carry on into the new world.
-      go.addEventListener('keydown', function (e) { if (e.repeat) e.preventDefault(); });
       go.focus({ preventScroll: true });
       $('modal-tip').textContent = 'مسافة أو Enter: العالم الجديد · R: ضربة أخرى';
     }
@@ -579,7 +598,7 @@
       var v = s.phase === 'ready' ? 0.5 - 0.5 * Math.cos(gaugeT * Math.PI * 2 / GAUGE_PERIOD) : 0;
       s.gauge.value = v;
       // On the title the golfer lines up the ball with a small waggle.
-      g.angle = s.phase === 'ready' ? A.gaugeAngle(v) : A.ADDRESS + 0.12 + 0.08 * Math.sin(s.time * 2.4);
+      g.angle = s.phase === 'ready' ? A.gaugeAngle(v) : A.ADDRESS + 0.12 + (reduced ? 0 : 0.08 * Math.sin(s.time * 2.4));
       var hot = s.phase === 'ready' && v >= P.bands.perfect;
       if (hot && !gaugeHot) sfx.gauge();
       gaugeHot = hot;
@@ -638,7 +657,7 @@
   button('open-shop', function () { openModal('shop'); }); button('open-worlds', function () { openModal('worlds'); });
   // Act on press, like Space: a click fires on release, after the gauge has moved on.
   canvas.addEventListener('pointerdown', function (e) {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || strayPress(e, canvas)) return;
     e.preventDefault(); A2.unlock(); canvas.focus({ preventScroll: true }); action();
   });
   window.addEventListener('keydown', function (e) {
@@ -666,5 +685,11 @@
   // Losing the frame must neither resume an existing pause nor pull focus back
   // from the portal into the newly opened pause dialog.
   K.lifecycle({ pause: function () { pause(false); } });
+  // Canvas text drawn before the fonts arrived is repainted, even while paused.
+  if (document.fonts && document.fonts.addEventListener) {
+    document.fonts.addEventListener('loadingdone', function () { renderDirty = true; });
+    if (document.fonts.load) Promise.all([document.fonts.load('700 40px Fredoka', 'ب'), document.fonts.load('700 40px Fredoka', '0')])
+      .then(function () { renderDirty = true; }, function () {});
+  }
   K.ready();
 })();

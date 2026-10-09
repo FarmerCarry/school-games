@@ -195,8 +195,9 @@
     return f;
   }
 
-  var BLEND = 5;
+  var BLEND = 5, LIMIT = 1e7;
   function heightAt(course, x) {
+    x = clamp(finite(x, 0), -LIMIT, LIMIT);
     var h = baseHeight(course, x);
     var i = Math.floor(x / CHUNK);
     for (var j = i - 1; j <= i + 1; j++) {
@@ -217,6 +218,7 @@
   }
 
   function surfaceAt(course, x) {
+    x = clamp(finite(x, 0), -LIMIT, LIMIT);
     var i = Math.floor(x / CHUNK);
     for (var j = i - 1; j <= i + 1; j++) {
       if (j < 0) continue;
@@ -234,7 +236,7 @@
 
   // Everything a renderer needs between two x positions (a bounded query).
   function features(course, minX, maxX) {
-    minX = finite(minX, 0); maxX = finite(maxX, minX + 200);
+    minX = clamp(finite(minX, 0), -LIMIT, LIMIT); maxX = clamp(finite(maxX, minX + 200), -LIMIT, LIMIT);
     var out = { flats: [], props: [], coins: [], rings: [], balloons: [] };
     if (maxX < minX) return out;
     var first = Math.max(0, Math.floor((minX - 12) / CHUNK)), last = Math.min(Math.floor((maxX + 12) / CHUNK), first + 40);
@@ -373,24 +375,31 @@
     if (ball.armed && -vn > 4) {
       // Each super bounce in a run is a little weaker, so chains always end.
       var tire = Math.pow(0.92, ball.supers);
-      if (ball.armAge <= PERFECT_WINDOW) { quality = 'perfect'; e = Math.max(e, (0.86 + u.bounce * 0.008) * tire); keep = Math.max(keep, 0.95); ball.combo++; }
+      if (ball.armAge <= PERFECT_WINDOW) { quality = 'perfect'; e = Math.max(e, (0.86 + u.bounce * 0.008) * tire); keep = Math.max(keep, 0.95); }
       else { quality = 'good'; e = Math.max(e, e + 0.1 * tire); keep = Math.max(keep, 0.9); }
       if (type === 'sand') e = Math.min(e, 0.32);
-      kind = 'super'; ball.supers++;
-      ball.bestCombo = Math.max(ball.bestCombo, ball.combo);
-    } else ball.combo = 0;
-    if (quality === 'good') ball.combo = 0;
+    }
     ball.armed = false;
     ball.bounces++;
     var out = -vn * e;
     if (out < 2.6) {
+      // Too gentle to leave the ground, armed or not: it rolls, and no super
+      // bounce is counted or paid.
+      ball.combo = 0;
       ball.mode = 'roll';
       ball.vx = Math.max(-4, vt * keep) * tx;
-      ball.vy = 0; ball.trackVy = 0;
+      // Track the ground's own vertical speed, so a downslope is not taken
+      // for a crest on the next step.
+      ball.vy = 0; ball.trackVy = ball.vx * slopeAt(course, ball.x);
       ball.y = heightAt(course, ball.x) + ball.r;
       events.push({ type: 'roll', x: ball.x, y: ball.y, surface: type });
       return;
     }
+    if (quality) {
+      kind = 'super'; ball.supers++;
+      ball.combo = quality === 'perfect' ? ball.combo + 1 : 0;
+      ball.bestCombo = Math.max(ball.bestCombo, ball.combo);
+    } else ball.combo = 0;
     ball.vx = vt * keep * tx + out * nx;
     ball.vy = vt * keep * ty + out * ny;
     if (kind === 'bounce' && type !== 'sand') { ball.lateUntil = ball.time + LATE_WINDOW; ball.lateOut = out; }
@@ -431,15 +440,17 @@
       for (n = 0; n < c.props.length; n++) {
         o = c.props[n];
         var px = o.x, py = o.ground + o.lift, dx = ball.x - px, dy = ball.y - py, d = Math.hypot(dx, dy);
-        if (d > o.r + ball.r || d === 0 || (ball.lastProp === o.id && ball.time - ball.propAt < 0.35)) continue;
-        ball.lastProp = o.id; ball.propAt = ball.time;
+        if (d > o.r + ball.r || d === 0) continue;
         var nx = dx / d, ny = dy / d, vn = ball.vx * nx + ball.vy * ny;
         ball.x = px + nx * (o.r + ball.r + 0.01); ball.y = py + ny * (o.r + ball.r + 0.01);
         if (vn >= 0) continue;
         ball.vx -= (1 + o.k) * vn * nx; ball.vy -= (1 + o.k) * vn * ny;
         if (o.k < 1) { ball.vx *= 0.85; ball.vy *= 0.85; }
         if (ball.mode === 'roll') ball.mode = 'air';
-        events.push({ type: 'prop', id: o.id, x: ball.x - nx * ball.r, y: ball.y - ny * ball.r, prop: o.type, strength: Math.min(1, -vn / 25) });
+        // A ball rattling against the same prop makes one sound, not many.
+        var repeat = ball.lastProp === o.id && ball.time - ball.propAt < 0.35;
+        ball.lastProp = o.id; ball.propAt = ball.time;
+        if (!repeat) events.push({ type: 'prop', id: o.id, x: ball.x - nx * ball.r, y: ball.y - ny * ball.r, prop: o.type, strength: Math.min(1, -vn / 25) });
       }
     }
   }

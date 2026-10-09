@@ -26,6 +26,9 @@ function shot(world = 0, upgrades = {}, power = 1, bot = 'idle') {
     events.push(...P.step(course, ball, upgrades, 1 / 60));
     assert(Number.isFinite(ball.x) && Number.isFinite(ball.y), 'finite coordinates');
     if (!ball.done) assert(ball.y >= P.heightAt(course, ball.x) + ball.r - 1e-6, 'the ball never sinks into the ground');
+    for (const o of P.features(course, ball.x - 6, ball.x + 6).props) {
+      assert(Math.hypot(ball.x - o.x, ball.y - o.ground - o.lift) >= o.r + ball.r - 0.02, `the ball never sinks into a ${o.type}`);
+    }
   }
   assert(ball.done, 'every shot ends');
   assert(ball.time <= 55.02, 'bounded flight duration');
@@ -70,6 +73,21 @@ while (!mash.done && !(mash.vy < 0 && P.predictImpact(course, mash, P.ARM_WINDOW
 assert.equal(P.press(course, mash, {}).type, 'arm');
 assert.equal(P.press(course, mash, {}).type, 'armed', 'only the first press of a landing counts');
 assert.equal(mash.rocketsLeft, 1, 'mashing near the ground never spends rockets');
+// A landing too gentle to leave the ground rolls, and is not paid as a super bounce.
+const gentle = P.launch(course, {}, 1);
+Object.assign(gentle, { x: 30, y: P.heightAt(course, 30) + gentle.r + 0.05, vx: 3, vy: -5.5, time: 2 });
+assert.equal(P.press(course, gentle, {}).type, 'arm');
+gentle.armAge = 0.3;
+assert.deepEqual(P.step(course, gentle, {}, 1 / 60).map(e => e.type), ['roll']);
+assert.deepEqual([gentle.supers, gentle.combo, P.reward(gentle).bonus], [0, 0, 5]);
+// Landing on a downslope rolls on smoothly instead of hopping and braking.
+const slope = P.createCourse(4), roller = P.launch(slope, {}, 0.35);
+let rolls = 0;
+while (!roller.done) rolls += P.step(slope, roller, {}, P.pace(roller) / 60).filter(e => e.type === 'roll').length;
+assert(rolls <= 2 && roller.maxX > 90, `a rolling ball keeps its speed downhill (${rolls} rolls, ${Math.round(roller.maxX)} m)`);
+// Absurd coordinates return instead of looping forever.
+for (const x of [1e18, -1e18, 7.3e17]) assert(Number.isFinite(P.heightAt(course, x)) && P.surfaceType(course, x));
+assert(Array.isArray(P.features(course, 1e18, 1e18 + 100).coins));
 const late = P.launch(course, {}, 1);
 let bounced = false;
 while (!late.done && !bounced) bounced = P.step(course, late, {}, 1 / 60).some(e => e.type === 'bounce');

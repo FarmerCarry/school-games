@@ -284,8 +284,8 @@ and `style.css`, plus the shared Kit and styles.
 | Skybound Golf | 79,703 | 108,880 | 28,678 | 37,600 | 112,000 |
 
 The new page sits in the middle of the other games (about 50 to 230 KB). Its
-thumbnail is smaller (5,958 instead of 7,369 bytes), so the portal stays at
-353,215 of 360,000 bytes. The offline cache grows from 4,849,792 to 4,877,642
+thumbnail is smaller (5,958 instead of 7,369 bytes), so the portal shrinks from
+354,681 to 353,215 of 360,000 bytes. The offline cache grows from 4,849,792 to 4,877,642
 of 5,000,000 bytes. In headless software rendering at 1280 × 720 a frame's
 draw, including rasterization, takes about 7.5 to 9 ms (median) during a flight.
 

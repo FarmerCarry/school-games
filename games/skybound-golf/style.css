@@ -25,6 +25,12 @@ b { font-weight: 700; }
   transition: transform 0.08s, box-shadow 0.08s, filter 0.08s; line-height: 1.15; }
 .button:hover { transform: translateY(-3px); filter: brightness(1.06); box-shadow: 0 9px 0 var(--ink), inset 0 -6px 0 rgba(0, 0, 0, 0.14), inset 0 4px 0 rgba(255, 255, 255, 0.45); }
 .button:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--ink), inset 0 -4px 0 rgba(0, 0, 0, 0.14); }
+/* The hover lift and press drop move a button by up to 7 px; this invisible
+   margin keeps a press near its edge on the button, so the click still lands. */
+.button, .upgrade { position: relative; }
+.button::after, .upgrade::after { content: ''; position: absolute; left: 0; right: 0; top: -7px; bottom: -7px; }
+html[data-sg-motion="reduce"] .button:hover, html[data-sg-motion="reduce"] .button:active,
+html[data-sg-motion="reduce"] .upgrade:not(:disabled):hover, html[data-sg-motion="reduce"] .upgrade:not(:disabled):active { transform: none; }
 .primary { background: linear-gradient(#ffe85c, #ffb21a); }
 .secondary { background: linear-gradient(#6ff6e6, #1fb5c6); }
 .text-button { border: 0; box-shadow: none; background: transparent; color: #d9d2ff; font-size: 22px; min-height: 48px; text-decoration: underline 2px; text-underline-offset: 6px; }
@@ -59,7 +65,7 @@ b { font-weight: 700; }
   border: 4px solid var(--ink); box-shadow: 0 5px 0 var(--ink), inset 0 3px 0 rgba(255, 255, 255, 0.25); color: #fff; }
 .pause-button { position: absolute; top: 22px; right: 24px; }
 .pause-icon { width: 22px; height: 24px; border-left: 8px solid #fff; border-right: 8px solid #fff; border-radius: 2px; }
-.sg-mute { position: absolute; top: 22px; right: 100px; left: auto; z-index: 21; font-size: 24px; padding: 0; pointer-events: auto; }
+.sg-mute { position: absolute; top: 22px; right: 100px; left: auto; z-index: 26; font-size: 24px; padding: 0; pointer-events: auto; }
 .sg-mute:hover, .round-button:hover { filter: brightness(1.15); }
 #ui[data-phase="title"] .sg-mute { right: 24px; }
 .toast { position: absolute; top: 200px; left: 50%; transform: translateX(-50%); padding: 12px 34px; border-radius: 26px; white-space: nowrap;
@@ -103,7 +109,7 @@ b { font-weight: 700; }
 
 /* Result */
 .result-note { margin: 0; font-size: 22px; color: #e6e0ff; }
-.result-distance { display: flex; justify-content: center; align-items: baseline; gap: 10px; direction: ltr; line-height: 1; margin: 2px 0 4px; }
+.result-distance { display: flex; justify-content: center; align-items: baseline; gap: 10px; line-height: 1; margin: 2px 0 4px; }
 .result-distance b { font-size: 92px; color: #fff; -webkit-text-stroke: 12px var(--ink); paint-order: stroke fill; text-shadow: 0 7px 0 var(--ink); }
 .result-distance span { font-size: 28px; font-weight: 700; }
 .result-coins { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 4px 0 6px; }
@@ -148,6 +154,7 @@ b { font-weight: 700; }
 .skin[aria-pressed="true"] span { color: #fff; }
 .skin:disabled { opacity: 0.55; cursor: default; }
 .result-panel .upgrades { margin-top: 8px; }
+.result-panel .shop-wallet { right: auto; left: 22px; }
 .result-panel .upgrade { padding: 6px 6px 8px; }
 .result-panel .upgrade .upgrade-icon { width: 44px; height: 44px; padding: 5px; }
 .result-panel .upgrade strong { font-size: 19px; }
@@ -161,12 +168,13 @@ b { font-weight: 700; }
 .world-option::before { content: ''; position: absolute; left: -10%; right: -10%; bottom: -30px; height: 110px; border-radius: 50% 50% 0 0; background: var(--ground); border-top: 4px solid var(--ink); }
 .world-option > * { position: relative; }
 .world-option strong { font-size: 19px; line-height: 1.15; min-height: 44px; display: flex; align-items: flex-end; justify-content: center; -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill; }
-.world-option span { font-size: 15px; font-weight: 700; -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; }
+.world-option span { margin-top: 4px; font-size: 15px; font-weight: 700; -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; }
 .world-icon { position: absolute; top: 26px; left: 50%; width: 72px; height: 72px; margin-left: -36px; }
 .world-option:not(:disabled) .world-icon { animation: float 2.6s ease-in-out infinite; }
 .world-option.selected { outline: 5px solid var(--gold); outline-offset: 3px; }
 .world-option:disabled { cursor: default; filter: grayscale(0.85) brightness(0.7); }
-.world-option:not(:disabled):hover { transform: translateY(-4px); }
+.world-option:not(:disabled):hover { filter: brightness(1.12); }
+.world-option.selected:focus-visible { outline-color: #fff; }
 
 @keyframes bump { 50% { transform: scale(1.18); } }
 @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
