@@ -3,7 +3,8 @@
  *   - seeded PRNG + word generation (challenge codes must give EXACTLY the same words on every PC,
  *     so nothing in the generation path may use Math.random)
  *   - lenient hamza matching
- *   - Monkeytype's result formulas (countChars / wpm / raw / acc / consistency)
+ *   - results by the same published rules as Monkeytype (character counts, wpm, raw, acc,
+ *     consistency), so scores are comparable; our own implementation
  * Exposed as window.TTEngine. Runs in the browser and in Node (vm) for tests.
  */
 (function () {
@@ -164,10 +165,10 @@
     return k;
   };
 
-  /* ------------------------------------------------- Monkeytype formulas */
+  /* ------------------------------------------- results (Monkeytype rules) */
   E.roundTo2 = function (n) { return Math.round((n + Number.EPSILON) * 100) / 100; };
 
-  // Port of Monkeytype's countChars(). hist = typed input per word (last entry = the word being
+  // Counts characters by Monkeytype's rules. hist = typed input per word (last entry = the word being
   // typed when the test ended, possibly ''), words = target words.
   E.countChars = function (hist, words, mode, lenient) {
     var correctWordChars = 0, correctChars = 0, incorrectChars = 0, extraChars = 0, missedChars = 0, spaces = 0, correctSpaces = 0;

@@ -138,7 +138,7 @@ counts as 0.
 
 ## 2. Portal side: the recorder (js/stats.js, called from js/site.js)
 
-The recorder is at most about 5 KB minified (the portal has 11.7 KB of budget left).
+The recorder is about 6 KB minified; the portal's current size and limit are in docs/PERFORMANCE.md.
 
 ### Sessions
 

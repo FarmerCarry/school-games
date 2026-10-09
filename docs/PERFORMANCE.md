@@ -62,8 +62,9 @@ smaller. When added it was 1,672,696 bytes for 47 files of 4,873,082 bytes.
 The game, library, and font limits were calibrated from the minified build of
 commit `4b07e0c` on 2026-10-05. Game limits use that size plus 12%, rounded up to
 the next 1,000 bytes. The portal and offline limits were explicitly tightened
-after the cleanup below, rather than automatically regenerated. The portal has
-about 9% headroom; the other limits retain about 12–14%. Exact bytes can differ
+after the cleanup below, rather than automatically regenerated. At calibration the
+portal had about 9% headroom and the other limits about 12–14%; later additions
+used most of it (see “Headroom on 9 October 2026” below). Exact bytes can differ
 slightly between Windows and Linux builds.
 
 | Measurement | Observed bytes | Limit bytes |
@@ -298,6 +299,45 @@ ones do: the backdrop is baked once per level, and the scripted traps are a few
 comparisons. The limit is the next 1,000 bytes plus one, as before. No request,
 font, library or precached file is added; the offline cache grows from 4,849,792
 to 4,856,181 of 5,000,000 bytes.
+
+## Headroom on 9 October 2026
+
+After the play statistics, the Sneaky Levels space world, the offline ZIP and the
+other fixes of 8–9 October, all 39 measurements pass, but most limits are close.
+20 of the 31 games, the portal, the teacher page and the offline cache have less
+than 5% left (`npm run perf:assets` on main, Linux build):
+
+| Measurement | Bytes | Limit | Left | Left % |
+| --- | ---: | ---: | ---: | ---: |
+| troll-level | 109,997 | 111,000 | 1,003 | 0.9% |
+| teacher | 86,177 | 87,000 | 823 | 0.9% |
+| paint-grab | 106,974 | 108,000 | 1,026 | 0.9% |
+| candy-rope | 108,622 | 110,000 | 1,378 | 1.3% |
+| portal | 354,681 | 360,000 | 5,319 | 1.5% |
+| typing-test | 102,356 | 104,000 | 1,644 | 1.6% |
+| skybound-golf | 79,703 | 81,000 | 1,297 | 1.6% |
+| tank-splat | 109,092 | 111,000 | 1,908 | 1.7% |
+| merge-2048 | 77,438 | 79,000 | 1,562 | 2.0% |
+| maze-dash | 112,588 | 115,000 | 2,412 | 2.1% |
+| snake-arena | 95,813 | 98,000 | 2,187 | 2.2% |
+| connect-four | 51,728 | 53,000 | 1,272 | 2.4% |
+| tic-tac-toe | 51,706 | 53,000 | 1,294 | 2.4% |
+| offline-precache | 4,859,293 | 5,000,000 | 140,707 | 2.8% |
+| block-burst | 113,446 | 117,000 | 3,554 | 3.0% |
+| blob-battle | 102,716 | 106,000 | 3,284 | 3.1% |
+| swing-hook | 108,467 | 112,000 | 3,533 | 3.2% |
+| air-hockey | 112,314 | 116,000 | 3,686 | 3.2% |
+| drift-king | 108,750 | 113,000 | 4,250 | 3.8% |
+| fire-and-ice | 120,945 | 126,000 | 5,055 | 4.0% |
+| road-hopper | 111,927 | 117,000 | 5,073 | 4.3% |
+| tunnel-blitz | 97,320 | 102,000 | 4,680 | 4.6% |
+| neon-slope | 123,902 | 130,000 | 6,098 | 4.7% |
+
+A small change to one of these files may now need its limit raised (to the next
+1,000 bytes plus one, as above). Do that knowingly: each raise makes the first load
+on a slow school disk a little slower, and the offline cache has about 140 KB left
+for the whole site, so a new game or font would need room made elsewhere first.
+Earlier sections keep the sizes measured when each change landed.
 
 ## CI, review, and deployed performance
 
