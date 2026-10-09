@@ -31,8 +31,8 @@ judge how difficult and how fun the levels feel for 10–11 year olds.
 node games/wacky-soccer/balance-sim.js --n 60 --seed 9000 --pol idle,mash,kid,timed,smart
 # the four bronze-cup rounds (first to 3); also --cup silver, --cup gold
 node games/wacky-soccer/balance-sim.js --n 60 --seed 9000 --cup bronze --pol mash,kid,timed
-# every silver and gold skill once. These are the same cells as --cup: rounds with
-# the same skill play the same seeded matches
+# every silver and gold skill once, plus 0.9 (the old gold final). These are the
+# same cells as --cup: rounds with the same skill play the same seeded matches
 node games/wacky-soccer/balance-sim.js --n 60 --seed 9000 --goals 3 --skills 0.45,0.58,0.7,0.78,0.85,0.9
 ```
 
@@ -217,6 +217,10 @@ standing-still rule.
   Watch this in a playtest.
 - Silver round 4 and gold round 2 (0.78) are closest to the gap limit: mash − kid
   is 10 on the measuring seeds and 8 on the holdout seeds.
+- The gold semi-final and final are now both 0.85 (Hard), so the cup's last round
+  is no harder than the one before it. A final at 0.88 meets the gap target only
+  narrowly (mash − kid about 9 on the measuring seeds), so it was not used; try it
+  again only with the holdout seeds.
 - **Follow-up:** run a classroom playtest of Easy, Normal and the bronze cup with
   real players. Check that children who press when the ball arrives, and who hop
   toward it, feel the game is fair. Then decide whether a visible cue is needed,
