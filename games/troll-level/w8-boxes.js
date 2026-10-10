@@ -531,7 +531,10 @@
 
   // 8-6: a key in each box (world 7's keys). It hops out onto the floor 2 tiles on,
   // and a moving key opens any lock it touches: over the lock floor, that is the
-  // floor under you. The boxes sit on row 10, below the title card.
+  // floor under you. The boxes sit on row 10, below the title card. The hop is
+  // fast and flat: it opens the lock about 11 frames after the bonk, while you are
+  // still in the air (a second jump can't catch the key first), and it stays below
+  // the title card's text.
   LEVELS.push({
     name: 'صندوق المفتاح',
     msg: 'مفتاح في الصندوق!',
@@ -546,7 +549,7 @@
       // each key waits off the screen until its box is hit
       var hop = function (k) {
         k.x = -9 * T;
-        return function (b) { k.x = b.x * T; k.y = b.y * T; L.keyTo(k, b.x + 2, 12, 9, 0, null, 2.5); };
+        return function (b) { k.x = b.x * T; k.y = b.y * T; L.keyTo(k, b.x + 2, 12, 16, 0, null, 1); };
       };
       L.box(14, 10, hop(L.key(0)), { msg: 'مفتاح!' });
       L.box(23, 10, hop(L.key(1)), { msg: 'مفتاح!' });
