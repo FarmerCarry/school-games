@@ -158,8 +158,12 @@ a consistent Arabic warning and retry button. Clear it only after all pending wr
 succeed. Preserve existing saved progress when a write or reset fails.
 
 Add each new game to `tools/game-scenarios.mjs` with real start/input/pause/restart
-assertions. A clean console alone is not proof of working gameplay. Keep pure engine
-and saved-state regression tests alongside those browser scenarios.
+assertions. A clean console alone is not proof of working gameplay. The input check
+must watch something only the player's input causes: if the watched state also
+changes without input (a clock, a snake that keeps going, a push from a computer
+player), give the scenario an `inputSeen` condition. `node tools/test-scenarios.mjs <slug>`
+checks that the input check fails when the input does nothing. Keep pure engine and
+saved-state regression tests alongside those browser scenarios.
 
 `node tools/playtest.mjs <slug>` opens the game in headless Chromium, runs a scripted list of
 clicks and key presses, saves screenshots and reports console errors (see the header of
@@ -183,7 +187,9 @@ statistics. The contract is `docs/PLAY_STATS.md`; in short, each game reports it
 - `Kit.stats.tutorial('start')` / `('done')` for a first-time tutorial or coach,
   `Kit.stats.busy()` at passive moments the child watches (at most about once per
   second, never per frame), and `Kit.stats.frame(ms)` only in games with their own
-  `requestAnimationFrame` loop.
+  `requestAnimationFrame` loop. A game that uses neither `Kit.loop` nor
+  `Kit.stats.frame` (no steady drawing loop while playing) belongs in `NO_FRAMES` in
+  `js/teacher.js`, so the teacher page says its smoothness is not measured.
 
 Ids come from the game's own list and start with a letter (`'L3'`, `'w1-4'`, `'cpu-easy'`,
 `'endless'`). Never put typed text, names or codes in an id. Never report demo or attract

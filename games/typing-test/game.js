@@ -12,7 +12,7 @@
  *   - Caret: a separate absolutely-positioned bar inside #words, placed from ONE Range rect of the
  *     next letter per keystroke (RTL: right edge of the next letter; LTR: left edge).
  *   - Lines: #words is translated up one line at a time so the active word stays on line 2.
- *   - Stats: TTEngine (engine.js) ports Monkeytype's formulas. Challenge codes seed a PRNG.
+ *   - Stats: TTEngine (engine.js) uses Monkeytype's result rules. Challenge codes seed a PRNG.
  */
 (function () {
   'use strict';

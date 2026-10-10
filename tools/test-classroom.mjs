@@ -96,6 +96,10 @@ try {
             g: { 'tic-tac-toe': { o: 2, e: 95000, hh: { 10: 95000 }, b: [1, 1, 0, 0], lv: { duo: [2, 0, 0, 1, 1, 0, 90000, 0, 0, 0, 1, 0] } } } }));
         });
         await page.reload();
+        // A file:// page is a secure context, so Edge offers its save dialog, which a
+        // headless browser closes at once. Check the download path instead (the dialog
+        // is covered by tools/tests/teacher-page.test.mjs).
+        await page.evaluate(() => { delete window.showSaveFilePicker; });
         await page.locator('input[name="period"][value="all"]').check();
         // The portal's own recorder may add today's tic-tac-toe session to the same row.
         const row = page.locator('#gameTable tr[data-game="tic-tac-toe"]');
@@ -107,6 +111,10 @@ try {
         assert.equal(exported.format, 'sg-play-stats');
         assert.equal(exported.pc.copy, 'folder');
         assert.ok(exported.tables.games.some(row => row.game === 'tic-tac-toe' && row.date === '2025-09-01' && row.seconds === 95));
+        // The download counts as an export only once the teacher confirms it was saved.
+        assert.match(await page.locator('#lastExport').textContent(), /لم يُصدَّر شيء/);
+        await page.locator('#exportYes').click();
+        assert.match(await page.locator('#lastExport').textContent(), /آخر تصدير/);
         const [workbook] = await Promise.all([page.waitForEvent('download'), page.locator('#exportXlsx').click()]);
         assert.match(workbook.suggestedFilename(), /^play-stats_pc[a-z]{4}_\d{4}-\d{2}-\d{2}\.xlsx$/);
         assert.equal(fs.readFileSync(await workbook.path()).subarray(0, 4).toString('latin1'), 'PK\u0003\u0004', 'the workbook is a ZIP package');

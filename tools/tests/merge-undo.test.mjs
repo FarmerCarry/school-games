@@ -161,6 +161,26 @@ async function makeThreeMoves(page) {
   });
 }
 
+// makeThreeMoves spawns random tiles, so a fixed arrow can be a no-op (e.g. ArrowDown when every
+// tile already rests on the bottom edge or a full column has no pair). Pick one that moves.
+function movingArrow(values) {
+  const n = Math.sqrt(values.length);
+  for (const [key, dr, dc] of [['ArrowDown', 1, 0], ['ArrowUp', -1, 0], ['ArrowLeft', 0, -1], ['ArrowRight', 0, 1]]) {
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+      const v = values[r * n + c], tr = r + dr, tc = c + dc;
+      if (!v || tr < 0 || tr >= n || tc < 0 || tc >= n) continue;
+      const next = values[tr * n + tc];
+      if (!next || next === v) return key;
+    }
+  }
+  throw new Error(`no arrow moves this board: ${values.join()}`);
+}
+
+test('movingArrow avoids a no-op arrow on the board that once failed CI', () => {
+  assert.equal(movingArrow([0, 0, 0, 4, 0, 0, 0, 2, 0, 0, 0, 8, 2, 0, 0, 2]), 'ArrowUp');
+  assert.equal(movingArrow([2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 'ArrowDown');
+});
+
 test('Pointer restart confirmation returns board focus and still requires its second activation', async t => {
   const page = await gamePage(t);
   await makeThreeMoves(page);
@@ -169,7 +189,7 @@ test('Pointer restart confirmation returns board focus and still requires its se
   assert.deepEqual((await state(page)).values, previous.values);
   assert.equal(await page.locator('#btnRestart').evaluate(button => button.classList.contains('warn')), true);
   assert.equal(await page.evaluate(() => document.activeElement.id), 'game');
-  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press(movingArrow(previous.values));
   assert.notDeepEqual((await state(page)).values, previous.values);
   await page.locator('#btnRestart').click();
   const restarted = await state(page);

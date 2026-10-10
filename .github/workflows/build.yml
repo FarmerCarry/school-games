@@ -60,6 +60,29 @@ jobs:
           SG_ARTIFACT_DIR: .work/smoke-source
       - name: Test shared rules, build safety and harnesses once
         run: node tools/ci-run.mjs npm run test:shared
+      - name: Verify Block Burst balance when its levels or rules change
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          FORCED: ${{ github.event.forced }}
+        run: |
+          # Seeded play of every level against every balance threshold takes about
+          # 4 minutes, so it runs only when its inputs change: the game's folder
+          # (levels, rules, verifier) or this workflow. A pull request compares its
+          # merge commit with the base branch, a push the commit it replaced. A
+          # manual run, new branch, force push or unfetchable commit runs it.
+          base=
+          if [ "$EVENT" = pull_request ]; then
+            git fetch --no-tags --quiet --depth=2 origin "$GITHUB_SHA" && base=HEAD^1
+          elif [ "$EVENT" = push ] && [ "$FORCED" != true ] && [ -n "${BEFORE//0/}" ]; then
+            git fetch --no-tags --quiet --depth=1 origin "$BEFORE" && base=$BEFORE
+          fi
+          if [ -n "$base" ] && changed=$(git diff --name-only "$base" HEAD -- games/block-burst .github/workflows/build.yml) && [ -z "$changed" ]; then
+            echo "Block Burst and this workflow are unchanged since $base; the full balance check is skipped."
+          else
+            [ -n "${changed:-}" ] && printf 'Changed since %s:\n%s\n' "$base" "$changed"
+            node tools/ci-run.mjs node games/block-burst/verify-levels.js
+          fi
       - name: Test source gameplay and portal regressions
         run: node tools/ci-run.mjs npm run test:browser
       - name: Test local board games and computer opponents
@@ -133,10 +156,14 @@ jobs:
           SG_ARTIFACT_DIR: .work/classroom-source
       - name: Build the fast site
         run: npm run build
-      - name: Test downloaded fast build with spaces and Arabic paths
+      # Test the teachers' offline download (README) as they get it: unzipped on Windows.
+      # tools/tests/offline-download.test.mjs proves it holds the built files byte for byte.
+      - name: Unzip the offline download
+        run: Expand-Archive -Path _site/school-games-offline.zip -DestinationPath .work/offline-download
+      - name: Test the unzipped fast build with spaces and Arabic paths
         run: node tools/test-classroom.mjs
         env:
-          SG_ROOT: _site
+          SG_ROOT: .work/offline-download/school-games
           SG_ARTIFACT_DIR: .work/classroom-built
       - name: Upload classroom screenshots and reports
         if: always()

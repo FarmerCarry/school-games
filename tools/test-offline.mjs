@@ -172,11 +172,10 @@ async function kill(inspector, page, scope, killBuild) {
 }
 
 try {
-  fs.mkdirSync(path.join(SOURCE, 'tools/lib'), { recursive: true });
-  for (const dir of ['games', 'js', 'css', 'shared', 'lib', 'icons']) {
+  for (const dir of ['games', 'js', 'css', 'shared', 'lib', 'icons', 'tools/lib']) {
     fs.cpSync(path.join(REPO, dir), path.join(SOURCE, dir), { recursive: true });
   }
-  for (const file of ['index.html', 'teacher.html', 'manifest.webmanifest', 'favicon.svg', 'tools/build.mjs', 'tools/lib/svg-data-uri.mjs']) {
+  for (const file of ['index.html', 'teacher.html', 'manifest.webmanifest', 'favicon.svg', 'tools/build.mjs']) {
     fs.copyFileSync(path.join(REPO, file), path.join(SOURCE, file));
   }
   fs.symlinkSync(path.join(REPO, 'node_modules'), path.join(SOURCE, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
@@ -235,6 +234,8 @@ try {
     await page.goto(origin + BASE, { waitUntil: 'load' });
     await installed(inspector, origin + BASE, v1);
     check(true, `first visit stores all ${v1.count} files`);
+    check(fs.existsSync(path.join(v1.dir, 'school-games-offline.zip')) && !Object.hasOwn(v1.files, 'school-games-offline.zip') &&
+      !hits.some(hit => hit.includes('school-games-offline.zip')), 'the offline cache never downloads the offline ZIP');
     await page.waitForFunction(() => document.getElementById('offlineStatus')?.dataset.state === 'ready');
     check(true, 'portal announces readiness only after verifying the complete cache');
     // A registered worker is insufficient: an evicted file invalidates the UI

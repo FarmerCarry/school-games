@@ -105,10 +105,13 @@
     { id: 'hard', name: 'صعب', skill: 0.85, reward: 35, color: '#ff5a5f' }
   ];
 
+  // No cup round is above Hard (0.85). The mash rule tops out at 0.95, so above Hard it barely
+  // sharpens the CPU: in a 0.9 gold final mashing beat pressing when the ball arrives (the kid
+  // bot) by 15 points, and by 12 on holdout seeds (BALANCE.md). The gold final is as strong as Hard.
   WS.CUPS = [
     { id: 'bronze', name: 'الكأس البرونزية', color: '#d98a4a', dark: '#8a4f22', skills: [0.1, 0.25, 0.42, 0.58], reward: 100 },
     { id: 'silver', name: 'الكأس الفضية', color: '#cfd8e6', dark: '#6f7d93', skills: [0.45, 0.58, 0.7, 0.78], reward: 200 },
-    { id: 'gold', name: 'الكأس الذهبية', color: '#ffd23f', dark: '#b8860b', skills: [0.7, 0.78, 0.85, 0.9], reward: 400 }
+    { id: 'gold', name: 'الكأس الذهبية', color: '#ffd23f', dark: '#b8860b', skills: [0.7, 0.78, 0.85, 0.85], reward: 400 }
   ];
   WS.CUP_ROUNDS = ['المباراة الأولى', 'ربع النهائي', 'نصف النهائي', 'النهائي'];
 

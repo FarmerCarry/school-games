@@ -84,7 +84,7 @@ function buildFixture(t) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, content);
   };
-  for (const file of ['tools/build.mjs', 'tools/check-all.mjs', 'tools/lib/svg-data-uri.mjs']) write(file, fs.readFileSync(path.join(repo, file)));
+  for (const file of ['tools/build.mjs', 'tools/check-all.mjs', 'tools/lib/svg-data-uri.mjs', 'tools/lib/zip.mjs']) write(file, fs.readFileSync(path.join(repo, file)));
   write('index.html', '<!doctype html><body><script src="js/catalog.js"></script><script src="js/site.js"></script></body>');
   write('js/catalog.js', 'window.GAMES=[{slug:"demo"}];');
   write('js/site.js', 'window.ready=true;');
