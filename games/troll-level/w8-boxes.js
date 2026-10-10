@@ -404,14 +404,15 @@
           }
           ctx.drawImage(tally.c, 64, 62, 110, 40);
         }
-        // Nattoot pops up beside every speech bubble in his world
+        // Nattoot pops up beside every speech bubble in his world (one step further
+        // out in a level with world 7's keys, whose host stands by the bubble too)
         if (pal.theme !== 'toys' || !gm.msg || gm.msgT <= 0) return;
         if (gm.msg !== hostMsg) { hostMsg = gm.msg; ctx.font = '700 28px ' + Art.FONT; hostW = ctx.measureText(hostMsg).width + 44; }
         if (!host) nattoot(pal.ink);
         var pop = 1 + Math.max(0, gm.msgT - 1.5) * 0.4, k = pop / 2.6;
         ctx.save();
         ctx.globalAlpha = Math.min(1, gm.msgT * 4);
-        ctx.translate(Math.min(1240, 640 + hostW * pop / 2 + 38), 178 + Math.sin(t * 9) * 2); ctx.rotate(Math.sin(t * 5) * 0.1);
+        ctx.translate(Math.min(1240, 640 + hostW * pop / 2 + (w.keys ? 96 : 38)), 178 + Math.sin(t * 9) * 2); ctx.rotate(Math.sin(t * 5) * 0.1);
         ctx.drawImage(host, -96 * k, -110 * k, 192 * k, 192 * k);
         ctx.restore();
       }
@@ -528,22 +529,33 @@
     sol: 'R144 _20 J20 _10 R150'
   });
 
-  // 8-6 (stand-in until world 7's keys): the box over the bridge drops the bridge
-  // (row 10, so it shows below the title card).
+  // 8-6: a key in each box (world 7's keys). It hops out onto the floor 2 tiles on,
+  // and a moving key opens any lock it touches: over the lock floor, that is the
+  // floor under you. The boxes sit on row 10, below the title card. The hop is
+  // fast and flat: it opens the lock about 11 frames after the bonk, while you are
+  // still in the air (a second jump can't catch the key first), and it stays below
+  // the title card's text.
   LEVELS.push({
-    name: 'صندوق البوابة',
-    msg: 'مفتاح البوابة في الصندوق!',
-    hint: 'لا تضرب الصندوق فوق الجسر! اضرب الصندوق القريب من البوابة.',
+    name: 'صندوق المفتاح',
+    msg: 'مفتاح في الصندوق!',
+    hint: 'لا تضرب الصندوق فوق الأرض المقفلة! خذ المفتاح من الصندوق قرب الباب.',
     map: (function () {
       var b = room();
-      pit(b, 12, 17);
-      return b.f(12, 13, 17, 13, 'a').f(25, 10, 25, 12, 'b').s(14, 10, '?').s(23, 10, '?').s(2, 12, 'P').s(28, 12, 'D').done();
+      pit(b, 12, 17).f(12, 13, 17, 13, '%');
+      return b.s(14, 10, '?').s(14, 9, 'K').s(23, 10, '?').s(23, 9, 'K').s(2, 12, 'P').s(28, 12, 'L').done();
     })(),
     script: function (L) {
-      L.box(14, 10, function () { L.g('a').drop(0.05); }, { msg: 'أوبس!' });
-      L.box(23, 10, function () { L.g('b').hide(); }, { msg: 'افتح يا صندوق!' });
+      var lock = L.world.locks[0];
+      // each key waits off the screen until its box is hit
+      var hop = function (k) {
+        k.x = -9 * T;
+        return function (b) { k.x = b.x * T; k.y = b.y * T; L.keyTo(k, b.x + 2, 12, 16, 0, null, 1); };
+      };
+      L.box(14, 10, hop(L.key(0)), { msg: 'مفتاح!' });
+      L.box(23, 10, hop(L.key(1)), { msg: 'مفتاح!' });
+      L.when(function () { return !lock.active; }, function () { L.msg('أوبس!'); });
     },
-    sol: 'R166 J20 _30 R100'
+    sol: 'R167 J20 _30 R100'
   });
 
   // 8-7: the box flips gravity: walk on the ceiling to the hanging door.
