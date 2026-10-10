@@ -20,20 +20,30 @@
  *   L.keyFake(k)                          the key bites (dies 'key')
  *   L.keyIn(k, ch)                        freeze the key in lettered group ch (an ice
  *                                         cube): it rides it and pops out once the
- *                                         group has fallen more than 2 tiles or is gone
+ *                                         group has fallen more than 2 tiles or is gone,
+ *                                         lost if spikes are under it, else floating
+ *                                         up at the height it was frozen at
  *   L.onKey(fn)                           fn(k) when you pick up key k
  *   L.held(), L.give(n)                   keys in your hands
- *   L.need(door, n)                       a padlocked door needs n keys
+ *   L.need(d, n)                          a padlocked door needs n keys; L.need(g, 1)
+ *                                         marks lock g as on the way to the exit
  *   L.lock(ch)                            lettered group ch becomes a lock
  * Lock groups carry g.lock, so other plug-ins can tell them apart.
+ * A lock under your feet that a key opens drops you at once (no coyote jump).
+ * The HUD shows a slot for each key the way to the exit needs (its padlock plus
+ * the locks marked on the way). When the keys you hold or can still get fall short
+ * of that, the host says so once a life ('nokeys') and points at R.
  * A key given k.back = s seconds comes back home that long after it is lost
- * (used up by a lock while moving, on spikes or off the screen).
+ * (used up by a lock while moving, on spikes or off the screen): never into your
+ * hands, frozen again if it lived in a group (once that group is back), and the
+ * lock it used up closes again.
  */
 (function (root) {
   'use strict';
   var E = root.TrollEngine, LV = root.TrollLevels, Art = root.TrollArt;
   var T = E.T, COLS = E.COLS, ROWS = E.ROWS, DT = E.DT, PH = E.PH, overlap = E.overlap;
   var GOLD = '#ffd23f', TAU = Math.PI * 2, NB = [1, 0, -1, 0, 0, 1, 0, -1];
+  var NOKEYS = 'المفاتيح لا تكفي! اضغط R';
 
   /* ================================================================ engine */
   // Keys, locks and padlocks met while a map is parsed; init hands them to the world.
@@ -42,7 +52,7 @@
   function newKey(x, y) {
     return {
       x: x * T, y: y * T, hx: x * T, hy: y * T, taken: false, gone: false, fake: false, bit: false,
-      m: null, fly: false, vx: 0, vy: 0, back: 0, bt: 0, inside: null, oy0: 0
+      m: null, fly: false, vx: 0, vy: 0, back: 0, bt: 0, inside: null, cube: null, oy0: 0, opened: null
     };
   }
 
@@ -81,8 +91,26 @@
       w.emit('unlock', { d: d });
       return;
     }
-    if (w.t - d.lt > 0.1) w.emit('locked', { d: d }); // once per touch
+    if (w.t - d.lt > 0.1) w.emit('locked', { d: d, out: w.keysOut }); // once per touch
     d.lt = w.t;
+  }
+
+  // Keys the way to the exit still needs: its padlock, plus the closed locks marked on the way.
+  function needed(w) {
+    var n = 0, i, d, g;
+    for (i = 0; i < w.doors.length; i++) { d = w.doors[i]; if (d.pad && d.fake && d.need > n) n = d.need; }
+    for (i = 0; i < w.locks.length; i++) { g = w.locks[i]; if (g.need && g.active) n += g.need; }
+    return n;
+  }
+  // Keys in your hands, plus the real ones still to pick up (a lost key that comes back counts).
+  function keysLeft(w) {
+    var n = w.held, i, k;
+    for (i = 0; i < w.keys.length; i++) { k = w.keys[i]; if (!k.taken && !k.fake && (!k.gone || k.back)) n++; }
+    return n;
+  }
+  // Called whenever a key is used up: can the level still be won? (after() tells you.)
+  function checkKeys(w) {
+    if (!w.keysOut && keysLeft(w) < needed(w)) w.keysOut = true;
   }
 
   // The first closed lock overlapping the box, or null.
@@ -96,14 +124,21 @@
     }
     return null;
   }
-  function open(w, g) { g.hide(); w.emit('unlock', { g: g }); }
+  function open(w, g) { g.hide(); w.emit('unlock', { g: g }); checkKeys(w); }
 
   function lose(w, k) {
     k.gone = true; k.m = null; k.fly = false; k.bt = k.back;
     w.emit('keylost', { k: k });
+    checkKeys(w);
   }
+  // A lost key's time is up. It waits while you are within a tile of its spot (or
+  // its group is away), so it never lands in your hands.
   function home(w, k) {
+    var g = k.cube, p = w.p;
+    if (g && (!g.active || g.ox || g.oy) || overlap(p.x, p.y, PH.w, PH.h, k.hx - T, k.hy - T, 3 * T, 3 * T)) { k.bt = DT; return; }
     k.gone = false; k.x = k.hx; k.y = k.hy; k.vx = k.vy = 0;
+    if (g) { k.inside = g; k.oy0 = 0; }
+    if (k.opened) { k.opened.show(); k.opened = null; }
     w.emit('keyback', { k: k });
   }
 
@@ -123,12 +158,15 @@
     if (m.s === 1) { k.m = null; if (m.then) m.then(); }
   }
 
-  // A key frozen in a group (an ice cube) rides it and can't be taken; once the
-  // group has fallen more than 2 tiles, or is gone, it pops out (a hop up) and floats.
-  function ride(k) {
+  // A key frozen in a group (an ice cube) rides it and can't be taken. Once the group
+  // has fallen more than 2 tiles, or is gone, it pops out: onto the spikes under it if
+  // there are any (lost), else it hops up, out of the hole, and floats.
+  function ride(w, k) {
     var g = k.inside;
     k.x = k.hx + g.ox; k.y = k.hy + g.oy;
-    if (!g.active || g.oy - k.oy0 > 2 * T) { k.inside = null; moveKey(k, k.x, k.y - T, 5 * T); }
+    if (g.active && g.oy - k.oy0 <= 2 * T) return;
+    k.inside = null;
+    if (spikesUnder(w, k)) lose(w, k); else moveKey(k, k.x, Math.min(k.y - T, k.hy + k.oy0), 5 * T);
   }
 
   // Solid for keys: fixed ground and groups resting in place (an opened lock is not).
@@ -165,6 +203,17 @@
     }
     return false;
   }
+  // Are spikes the first thing under the key's middle?
+  function spikesUnder(w, k) {
+    var c = Math.floor((k.x + 20) / T), r, i, s;
+    for (r = Math.floor((k.y + 20) / T); r < ROWS && !solidAt(w, c, r); r++) {
+      for (i = 0; i < w.spikes.length; i++) {
+        s = w.spikes[i];
+        if (!s.g && s.out >= 0.5 && s.x === c * T && s.y === r * T) return true;
+      }
+    }
+    return false;
+  }
 
   E.mod({
     chars: ['K', 'L', '%'],
@@ -180,7 +229,7 @@
       var f = found;
       if (!f) return;
       found = null;
-      w.keys = f.keys; w.locks = f.locks; w.held = 0; w.keyFn = null;
+      w.keys = f.keys; w.locks = f.locks; w.held = 0; w.keyFn = null; w.keysOut = false; w.outT = 0;
       for (var i = 0; i < f.pads.length; i += 2) w.doors.push(padlock(w, f.pads[i], f.pads[i + 1]));
     },
     api: function (L, w) {
@@ -192,7 +241,7 @@
       // the key moves into the first tile of group ch, which becomes its home
       L.keyIn = function (k, ch) {
         var g = w.gmap[ch];
-        k.inside = g; k.oy0 = g.oy;
+        k.inside = k.cube = g; k.oy0 = g.oy;
         k.x = g.tiles[0].x * T + g.ox; k.y = g.tiles[0].y * T + g.oy; k.hx = k.x - g.ox; k.hy = k.y - g.oy;
       };
       L.onKey = function (fn) { w.keyFn = fn; };
@@ -208,10 +257,10 @@
         var k = ks[i];
         if (k.taken) continue;
         if (k.gone) { if (k.bt > 0 && (k.bt -= DT) <= 0) home(w, k); continue; }
-        if (k.inside) { ride(k); continue; }
+        if (k.inside) { ride(w, k); continue; }
         if (k.m) slide(k); else if (k.fly) fly(w, k); else continue;
         // a moving key opens the first lock it touches and is used up
-        if ((g = touchLock(w, k.x + 5, k.y + 3, 30, 38))) { open(w, g); lose(w, k); }
+        if ((g = touchLock(w, k.x + 5, k.y + 3, 30, 38))) { open(w, g); if (k.back) k.opened = g; lose(w, k); }
         else if (k.y > E.H || onSpikes(w, k)) lose(w, k);
       }
     },
@@ -226,8 +275,18 @@
         w.emit('key', { k: k });
         if (w.keyFn) w.keyFn(k);
       }
-      // each key in your hands opens one lock you touch (the box grown by 1 px)
-      while (w.held > 0 && (g = touchLock(w, p.x - 1, p.y - 1, PH.w + 2, PH.h + 2))) { w.held--; open(w, g); }
+      // each key in your hands opens one lock you touch (the box grown by 1 px); one
+      // under your feet drops you at once, with no coyote jump off it
+      while (w.held > 0 && (g = touchLock(w, p.x - 1, p.y - 1, PH.w + 2, PH.h + 2))) {
+        w.held--; open(w, g);
+        if (p.ground === g) { p.onGround = false; p.ground = null; p.coy = 0; }
+      }
+      // out of keys: the host says so once you have stood for 0.4 s, so not in the
+      // moment before you fall to your death
+      if (w.keysOut && w.outT >= 0) {
+        w.outT = p.onGround ? w.outT + DT : 0;
+        if (w.outT > 0.4) { w.outT = -1; w.emit('nokeys', {}); }
+      }
     }
   });
 
@@ -384,11 +443,9 @@
     for (i = 0; i < n; i++) stamp(ctx, S.key, trail[i].x, trail[i].y + 11, 0.7, Math.PI / 2 + Math.sin(t * 5 + i * 2) * 0.2);
   }
 
-  // HUD: a slot for each key the locked exit needs (or you hold), under the death counter.
+  // HUD: a slot for each key the way to the exit needs (or you hold), under the death counter.
   function drawSlots(ctx, w, S, ui) {
-    var need = 0, n, i, d;
-    for (i = 0; i < w.doors.length; i++) { d = w.doors[i]; if (d.pad && d.fake && d.need > need) need = d.need; }
-    n = Math.max(1, need, w.held);
+    var n = Math.max(1, needed(w), w.held), i;
     ui.rr(ctx, 64, 62, 22 + n * 36, 40, 20); ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fill();
     for (i = 0; i < n; i++) {
       ctx.globalAlpha = i < w.held ? 1 : 0.35;
@@ -515,7 +572,8 @@
       ui.shake.add(3);
       ui.sfx('unlock');
     };
-    Art.EV.locked = function (d, ui) { ui.say('مقفول!', 1.2); ui.sfx('locked'); };
+    Art.EV.locked = function (d, ui) { ui.say(d.out ? NOKEYS : 'مقفول!', d.out ? 2.5 : 1.2); ui.sfx('locked'); };
+    Art.EV.nokeys = function (d, ui) { ui.say(NOKEYS, 3); ui.sfx('nope'); };
     Art.EV.bite = function (d, ui) { ui.sfx('chomp'); };
     Art.EV.keylost = function (d, ui) {
       ui.fx.burst(d.k.x + 20, d.k.y + 20, { count: 10, colors: [GOLD, ui.pal.ink], speed: 180, life: 0.5, size: 6, gravity: 300 });
@@ -638,14 +696,17 @@
     hint: 'تحتاج مفتاحين: واحد للجدار وواحد للباب. اقفز فوق الأرض المقفلة!',
     map: (function () {
       var b = room();
-      pit(b, 15, 16).f(15, 13, 16, 13, '%').f(25, 10, 25, 12, '%');
+      pit(b, 15, 16).f(15, 13, 16, 13, '%').f(25, 10, 25, 12, 'w');
       return b.s(2, 12, 'P').s(4, 12, 'K').s(10, 10, 'K').s(28, 12, 'L').done();
     })(),
+    // the wall is on the way, so the HUD shows two key slots from the start
+    script: function (L) { L.need(L.lock('w'), 1); },
     sol: 'R46 RJ20 R28 RJ20 R300'
   });
 
   // 7-8 (stand-in for "key in an ice cube"): the key runs away from you. Scare it
-  // from the right and it runs into the wall; from the left it dives into the lock.
+  // from the right and it runs into the wall; from the left it dives into the lock,
+  // and 1 s later it is home again with the lock closed.
   LEVELS.push({
     name: 'المفتاح الخائف', msg: 'هذا المفتاح خوّاف جدًا!',
     hint: 'المفتاح يهرب بعيدًا عنك! اقفز فوقه ليهرب نحو الجدار.',
@@ -669,17 +730,18 @@
     sol: 'R50 RJ20 R10 L130 R102 RJ20 R300'
   });
 
-  // 7-9: a gift key... but the steps over the pit are locks.
+  // 7-9: a gift key... but the steps over the pit are locks. Bump the lock floating
+  // over the path to get rid of it (walking under it keeps the gift).
   LEVELS.push({
     name: 'هدية مسمومة', msg: 'هدية لك! مفتاح مجاني!',
-    hint: 'الهدية فخ! امشِ إلى القفل الصغير ليأخذ مفتاحك، ثم اصعد الدرجات.',
+    hint: 'الهدية فخ! اقفز تحت القفل الطائر ليأكل مفتاحك، ثم اصعد الدرجات.',
     map: (function () {
       var b = room();
       pit(b, 15, 22).f(17, 12, 18, 12, '%').f(20, 10, 21, 10, '%').f(23, 8, 30, 12, '#');
-      return b.s(2, 12, 'P').s(9, 12, '%').s(27, 7, 'D').done();
+      return b.s(2, 12, 'P').s(9, 9, '%').s(27, 7, 'D').done();
     })(),
     script: function (L) { L.give(1); },
-    sol: 'R98 RJ20 R12 RJ20 R10 RJ20 R200'
+    sol: 'R40 RJ20 R35 RJ20 R12 RJ20 R10 RJ20 R200'
   });
 
   // 7-10: the castle finale. Two keys, a fake one, a guard saw, and the door flies home.
@@ -690,7 +752,7 @@
     map: (function () {
       var b = room();
       pit(b, 10, 11).f(10, 13, 11, 13, '%').f(18, 11, 19, 12, '#');
-      return b.s(2, 12, 'P').s(6, 10, 'K').s(18, 10, 'K').s(6, 12, 'K').s(28, 12, 'L').done();
+      return b.s(2, 12, 'P').s(5, 10, 'K').s(18, 10, 'K').s(5, 12, 'K').s(28, 12, 'L').done();
     })(),
     script: function (L) {
       var d = L.doors[0], k2 = L.key(1);
@@ -707,7 +769,7 @@
         L.msg('نسيت شيئًا؟');
       });
     },
-    sol: 'R12 RJ20 R18 RJ20 R44 RJ20 R64 L44 LJ20 L10 LJ20 L22 LJ20 L18 LJ20 L100'
+    sol: 'R8 RJ20 R24 RJ20 R44 RJ20 R64 L44 LJ20 L10 LJ20 L22 LJ20 L18 LJ20 L100'
   });
 
   LV.addWorld({ name: 'عالم المفاتيح', n: 10, theme: 'castle', bg: '#ff9e7a', bg2: '#ffb396', ink: '#3a1636', ink2: '#5a2c52', accent: '#ffffff' }, LEVELS);
