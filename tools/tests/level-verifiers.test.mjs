@@ -6,8 +6,8 @@ import { spawnSync } from 'node:child_process';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-function verifier(game, args = [], inject = '') {
-  const script = path.join(repo, 'games', game, 'verify-levels.js');
+function verifier(game, args = [], inject = '', file = 'verify-levels.js') {
+  const script = path.join(repo, 'games', game, file);
   const program = `process.argv = [process.execPath, ${JSON.stringify(script)}, ...${JSON.stringify(args)}];\n${inject}\nrequire(${JSON.stringify(script)});`;
   const result = spawnSync(process.execPath, ['-e', program], {
     cwd: repo, encoding: 'utf8', timeout: 30000,
@@ -32,6 +32,7 @@ test('Swing verification succeeds when a selected real level is solved and repla
 test('verifiers reject invalid level or run selections instead of checking nothing', () => {
   assert.equal(verifier('swing-hook', ['999']).status, 2);
   assert.equal(verifier('block-burst', ['0']).status, 2);
+  assert.equal(verifier('fire-and-ice', ['999']).status, 2);
 });
 
 test('Block verification keeps balance thresholds strict unless report mode is explicitly selected', () => {
@@ -68,6 +69,17 @@ test('Block verification passes an unmodified beginner level', () => {
   assert.equal(result.status, 0);
 });
 
+// Sneaky Levels replays a recorded solution per level through its engine and
+// checks that just holding right never wins (every level has a trap).
+test('Sneaky Levels verification wins every level with its recorded solution', () => {
+  const result = spawnSync(process.execPath, [path.join(repo, 'games/troll-level/verify.js')], {
+    cwd: repo, encoding: 'utf8', timeout: 30000
+  });
+  assert.ifError(result.error);
+  assert.match(result.stdout, /ALL LEVELS BEATABLE/);
+  assert.equal(result.status, 0);
+});
+
 // Maze Dash's verifier searches every level state: exit reachable, every dot
 // collectable (the "all dots" star), no dead ends, no unavoidable timed hazard.
 function mazeVerifier(args = []) {
@@ -88,5 +100,40 @@ test('Maze Dash verification proves every hand-made level can be finished with e
 test('Maze Dash verification climbs seeded endless mazes to 600 m', () => {
   const result = mazeVerifier(['--endless', '3', '--seed', '1']);
   assert.match(result.stdout, /\(seeds 1\.\.3\) climbable to 600 m/);
+  assert.equal(result.status, 0);
+});
+
+// Fire & Ice replays its scripted two-player solutions through the real engine:
+// both players reach their doors with every gem, inside each level's par time.
+test('Fire & Ice verification fails when the engine cannot finish a level', () => {
+  const result = verifier('fire-and-ice', ['1'], `const vm = require('vm'), run = vm.runInContext;
+    vm.runInContext = (code, ctx, options) => {
+      const value = run(code, ctx, options);
+      if (options.filename === 'engine.js') ctx.FI.step = () => {};
+      return value;
+    };`);
+  assert.match(result.stdout, /^L1 .* FAIL state=play/m);
+  assert.match(result.stdout, /1 LEVEL\(S\) FAILED/);
+  assert.equal(result.status, 1);
+});
+
+test('Fire & Ice verification solves every level with every gem within par', () => {
+  const result = verifier('fire-and-ice');
+  assert.doesNotMatch(result.stdout, /FAIL/);
+  assert.match(result.stdout, /ALL LEVELS SOLVED/);
+  assert.equal(result.status, 0);
+});
+
+// Skybound Golf checks its shot physics (every shot stops above the terrain),
+// upgrade progression, world unlocks and save sanitizing.
+test('Skybound Golf verification fails when a shot never comes to rest', () => {
+  const result = verifier('skybound-golf', [], `require('./games/skybound-golf/physics.js').step = () => [];`, 'verify.js');
+  assert.match(result.stderr, /every shot terminates/);
+  assert.equal(result.status, 1);
+});
+
+test('Skybound Golf verification passes its physics, progression and save checks', () => {
+  const result = verifier('skybound-golf', [], '', 'verify.js');
+  assert.equal(JSON.parse(result.stdout).status, 'PASS');
   assert.equal(result.status, 0);
 });

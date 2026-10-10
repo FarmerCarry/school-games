@@ -62,6 +62,12 @@ async function setup(t, { ready = true, storage = true, time = START, clock = tr
     addEventListener('message', e => { if (e.data && e.data.type === 'test:ping') window.lastPing = e.data.n; });
     addEventListener('storage', e => { if (e.key === 'sg:site:statsmeta') window.metaEvents = (window.metaEvents || 0) + 1; });
     Storage.prototype.clear = function () { window.sgTestClear(); };
+    // Every flush ends by rewriting the live key, so counting those writes shows when one finished.
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'sg:site:stats:live') window.sgLiveWrites = (window.sgLiveWrites || 0) + 1;
+      return setItem.call(this, key, value);
+    };
   });
   if (!storage) {
     await context.addInitScript(() => {
@@ -101,11 +107,13 @@ async function post(page, frame, data) {
   await page.waitForFunction(n => window.lastPing === n, n);
 }
 async function leave(state, page = state.page) {
+  const writes = await page.evaluate(() => window.sgLiveWrites || 0);
   await click(page, '#logo');
   await page.waitForFunction(() => document.body.className === 'route-home');
   // A departed game's open round is settled after 1 s without its last message.
   if (state.clock) await state.context.clock.runFor(1000);
-  else await new Promise(resolve => setTimeout(resolve, 1100));
+  // On the real clock, wait for that settle's write instead of racing its timer on a busy runner.
+  else await page.waitForFunction(n => window.sgLiveWrites > n, writes, { timeout: 10000 });
 }
 // Every stored day record, summed by game (for tests on the real clock).
 const readAll = page => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('sg:site:stats:d:')).map(k => JSON.parse(localStorage.getItem(k))));

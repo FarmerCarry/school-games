@@ -59,6 +59,11 @@ without weakening the gates or treating these policies as real children.
 
 ## Regression coverage
 
+CI runs the full `node games/block-burst/verify-levels.js` (about 4 minutes)
+whenever a pull request or push changes `games/block-burst/` or the build
+workflow; other changes run only the quick level-1 check in
+`tools/tests/level-verifiers.test.mjs`.
+
 `tools/tests/balance-replay.test.mjs` verifies seeded sequence compatibility,
 independent search branches, deterministic policies, replayable failed seeds and
 saved rescue inventory. It also covers Air Hockey's stationary fire-power launch,

@@ -16,6 +16,9 @@
  *   - sw.js: an offline cache. After the first visit the whole site is stored on the PC, pages
  *     open without asking the server, and it still works if the internet drops. Each build
  *     changes sw.js, so PCs download only the files that changed.
+ *   - school-games-offline.zip: this whole build in one school-games/ folder, for PCs that
+ *     run it from a folder without internet (unzip, double-click index.html). It is not
+ *     precached, so children's PCs never download it.
  *   - --kill-sw writes a sw.js that removes itself and its cache (emergency switch).
  *     The sw.js committed at the repo root is this same off switch, so switching GitHub Pages
  *     back to the plain source site also cleans the offline cache off every PC.
@@ -29,6 +32,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { svgDataUri } from './lib/svg-data-uri.mjs';
+import { zip } from './lib/zip.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
@@ -45,6 +49,9 @@ const isLocal = u => !/^(?:[a-z]+:|\/\/|#|\/)/i.test(u);
 
 const OUTPUT_MARKER = '.school-games-build.json';
 const OUTPUT_PRODUCER = 'school-games/tools/build.mjs';
+// The README links to this file on the published site; keep the names stable.
+const OFFLINE_ZIP = 'school-games-offline.zip';
+const OFFLINE_FOLDER = 'school-games';
 const SOURCE_DIRS = new Set(['.git', '.github', '.agents', '.aws', '.codex', 'games', 'js', 'css', 'shared', 'lib', 'icons', 'tools', 'docs', 'node_modules', 'multiplayer-server']);
 const filesystemName = name => process.platform === 'win32' ? name.toLowerCase() : name;
 
@@ -306,6 +313,20 @@ try {
   const version = hash(SW_SOURCE('', precache));
   const sw = KILL_SW ? KILL_SW_SOURCE(Object.keys(precache)) : SW_SOURCE(version, precache);
   write('sw.js', sw);
+
+  /* ---------------------------------------------------- offline download */
+  // The same fast site as one ZIP for PCs without internet (README, "Running it
+  // without the internet"): unzip, then double-click index.html. Everything sits in
+  // one folder, so unzipping spills no files; its name is ASCII because Windows'
+  // built-in extractor may ignore the ZIP's UTF-8 name flag. It holds every file the
+  // site serves, licenses included. sw.js stays (the off switch in a --kill-sw build):
+  // a folder opened from disk never registers it (js/offline.js stops on file:), and
+  // a copy on a local web server then caches itself like the website. .nojekyll (for
+  // GitHub Pages) and the ownership marker (written below) stay out. It is zipped
+  // after FILES was listed, so the offline cache never downloads the ZIP itself.
+  const zipped = outputTree(OUT).files.filter(f => f !== '.nojekyll').sort();
+  const download = zip(zipped.map(f => ({ name: OFFLINE_FOLDER + '/' + f, data: fs.readFileSync(path.join(OUT, f)) })));
+  write(OFFLINE_ZIP, download);
   // This inventory proves ownership on the next build. Write it after precaching so
   // development bookkeeping never becomes part of the offline site's file list.
   write(OUTPUT_MARKER, JSON.stringify({ producer: OUTPUT_PRODUCER, format: 1, files: outputTree(OUT).files.sort() }, null, 2) + '\n');
@@ -315,6 +336,7 @@ try {
   publishOutput();
   console.log(`built ${gameDirs.length} games + portal into ${posix(path.relative(ROOT, DEST))}/ (minify ${MINIFY ? 'on' : 'off'})`);
   console.log(`offline cache: ${Object.keys(precache).length} files, ${(total / 1048576).toFixed(2)} MB, version ${version}${KILL_SW ? ' (KILL SWITCH sw.js)' : ''}`);
+  console.log(`offline download: ${OFFLINE_ZIP}, ${zipped.length} files in ${OFFLINE_FOLDER}/, ${(download.length / 1048576).toFixed(2)} MB`);
   for (const [f, b] of report.slice(0, 1)) console.log(`  ${f}: ${(b / 1024).toFixed(0)} KB`);
   console.log(`  teacher.html: ${(Buffer.byteLength(teacher) / 1024).toFixed(0)} KB`);
   const gb = report.slice(1).map(r => r[1]);

@@ -30,7 +30,7 @@ function shot(world = 0, upgrades = {}, power = 1, bot = 'idle') {
       assert(Math.hypot(ball.x - o.x, ball.y - o.ground - o.lift) >= o.r + ball.r - 0.02, `the ball never sinks into a ${o.type}`);
     }
   }
-  assert(ball.done, 'every shot ends');
+  assert(ball.done, 'every shot terminates');
   assert(ball.time <= 55.02, 'bounded flight duration');
   assert.equal(events.filter(e => e.type === 'stop').length, 1, 'one result per shot');
   assert.equal(new Set(events.filter(e => e.type === 'coin').map(e => e.id)).size, events.filter(e => e.type === 'coin').length, 'each coin is collected once');

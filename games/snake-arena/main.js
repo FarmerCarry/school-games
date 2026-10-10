@@ -38,7 +38,7 @@
   /* -------------------------------------------------------------- state */
   var G = {
     state: 'title', timeScale: 1, slowT: 0, shake: 0, run: null, overT: 0, dieT: 0,
-    skinsFrom: 'title', demoFocus: null, kb: false, kbMouse: { x: 0, y: 0 }, lastStart: 0,
+    skinsFrom: 'title', demoFocus: null, kb: false, kbMouse: { x: 0, y: 0 }, lastStart: -1e9,
     hud: { toasts: [], feed: [], lenPulse: 0, warn: 0, hint: null, hintA: 0, kills: 0, rank: 1 }
   };
   SA.game = G;
@@ -101,6 +101,7 @@
 
   function startGame() {
     var now = performance.now();
+    // Ignore a double press, not the first one (performance.now() starts near 0 at page load).
     if (now - G.lastStart < 250) return;
     G.lastStart = now;
     commitShown();

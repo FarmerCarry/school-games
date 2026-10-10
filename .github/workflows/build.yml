@@ -20,18 +20,20 @@ concurrency:
 jobs:
   checks:
     name: Test source and fast build
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest becomes Ubuntu 26 from 19 October 2026. Move on deliberately,
+    # once Playwright's --with-deps install supports the new image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read
       pages: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify GitHub Pages publishing source
         if: >-
           (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
           (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const { data: site } = await github.rest.repos.getPages(context.repo);
@@ -44,7 +46,7 @@ jobs:
               return;
             }
             core.setFailed(`This workflow deploys from main and supports Pages source GitHub Actions or main:/(root). Found ${configuration}. No settings were changed.`);
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -58,6 +60,29 @@ jobs:
           SG_ARTIFACT_DIR: .work/smoke-source
       - name: Test shared rules, build safety and harnesses once
         run: node tools/ci-run.mjs npm run test:shared
+      - name: Verify Block Burst balance when its levels or rules change
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          FORCED: ${{ github.event.forced }}
+        run: |
+          # Seeded play of every level against every balance threshold takes about
+          # 4 minutes, so it runs only when its inputs change: the game's folder
+          # (levels, rules, verifier) or this workflow. A pull request compares its
+          # merge commit with the base branch, a push the commit it replaced. A
+          # manual run, new branch, force push or unfetchable commit runs it.
+          base=
+          if [ "$EVENT" = pull_request ]; then
+            git fetch --no-tags --quiet --depth=2 origin "$GITHUB_SHA" && base=HEAD^1
+          elif [ "$EVENT" = push ] && [ "$FORCED" != true ] && [ -n "${BEFORE//0/}" ]; then
+            git fetch --no-tags --quiet --depth=1 origin "$BEFORE" && base=$BEFORE
+          fi
+          if [ -n "$base" ] && changed=$(git diff --name-only "$base" HEAD -- games/block-burst .github/workflows/build.yml) && [ -z "$changed" ]; then
+            echo "Block Burst and this workflow are unchanged since $base; the full balance check is skipped."
+          else
+            [ -n "${changed:-}" ] && printf 'Changed since %s:\n%s\n' "$base" "$changed"
+            node tools/ci-run.mjs node games/block-burst/verify-levels.js
+          fi
       - name: Test source gameplay and portal regressions
         run: node tools/ci-run.mjs npm run test:browser
       - name: Test local board games and computer opponents
@@ -70,7 +95,7 @@ jobs:
         run: npm run perf:assets -- --report artifacts/asset-budgets.json
       - name: Upload asset performance report
         if: always() && hashFiles('artifacts/asset-budgets.json') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: asset-performance-budgets
           path: artifacts/asset-budgets.json
@@ -93,7 +118,7 @@ jobs:
         run: npm run test:offline
       - name: Upload smoke-test screenshots and reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: gameplay-smoke-${{ github.run_attempt }}
           path: |
@@ -105,7 +130,7 @@ jobs:
           retention-days: 14
       - name: Upload the verified fast site
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
@@ -116,8 +141,8 @@ jobs:
     env:
       PLAYWRIGHT_CHANNEL: msedge
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -131,14 +156,18 @@ jobs:
           SG_ARTIFACT_DIR: .work/classroom-source
       - name: Build the fast site
         run: npm run build
-      - name: Test downloaded fast build with spaces and Arabic paths
+      # Test the teachers' offline download (README) as they get it: unzipped on Windows.
+      # tools/tests/offline-download.test.mjs proves it holds the built files byte for byte.
+      - name: Unzip the offline download
+        run: Expand-Archive -Path _site/school-games-offline.zip -DestinationPath .work/offline-download
+      - name: Test the unzipped fast build with spaces and Arabic paths
         run: node tools/test-classroom.mjs
         env:
-          SG_ROOT: _site
+          SG_ROOT: .work/offline-download/school-games
           SG_ARTIFACT_DIR: .work/classroom-built
       - name: Upload classroom screenshots and reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: classroom-windows-${{ github.run_attempt }}
           path: |
@@ -151,7 +180,7 @@ jobs:
     name: Deploy verified fast site
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: [checks, classroom-windows]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       pages: write
@@ -162,4 +191,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

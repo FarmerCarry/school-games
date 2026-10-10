@@ -56,7 +56,12 @@
     related: 'ألعاب أخرى ستحبها', surprise: 'زر فاجئني 🎲', reload: 'تحديث الصفحة',
     history: 'زرّا الرجوع والتقدم في المتصفح', direct: 'رابط مباشر'
   };
-  var VERDICTS = { smooth: 'سلس', ok: 'مقبول', slow: 'بطيء' };
+  var VERDICTS = { smooth: 'سلس', ok: 'مقبول', slow: 'بطيء', unmeasured: 'لا تُقاس' };
+  // Games with no steady drawing loop while playing (board games move pieces with
+  // CSS, typing-test redraws on key presses) count no frames, since only Kit.loop and
+  // Kit.stats.frame count them: the device status says so instead of «—».
+  // tools/tests/play-stats-rules.test.mjs keeps this list equal to those games.
+  var NO_FRAMES = ['connect-four', 'tic-tac-toe', 'typing-test'];
   var MINUTES = ['دقيقة واحدة', 'دقيقتان', 'دقائق', 'دقيقة'];
   var HOURS = ['ساعة واحدة', 'ساعتان', 'ساعات', 'ساعة'];
   var TIMES = ['مرة واحدة', 'مرتان', 'مرات', 'مرة'];
@@ -108,7 +113,8 @@
     loads_skipped: 'مرات تحميل لم تُقس لأن الصفحة كانت مخفية.',
     errors: 'أخطاء أوقفت اللعبة.',
     timeouts: 'مرات لم تُحمَّل فيها اللعبة خلال 20 ثانية.',
-    frames_smooth: 'إطارات رُسمت في 20 ملّي ثانية أو أقل (سلسة).',
+    frames_smooth: 'إطارات رُسمت في 20 ملّي ثانية أو أقل (سلسة). تبقى أعمدة frames_ صفرًا في الألعاب التي لا ترسم حركة مستمرة: ' +
+      NO_FRAMES.join('، ') + '.',
     frames_ok: 'إطارات رُسمت في أكثر من 20 حتى 34 ملّي ثانية (مقبولة).',
     frames_choppy: 'إطارات رُسمت في أكثر من 34 حتى 250 ملّي ثانية (متقطعة).',
     frames_stall: 'إطارات استغرقت أكثر من 250 ملّي ثانية (توقف).',
@@ -672,6 +678,8 @@
       ['ملاحظة', 'الأرقام لكل جهاز وليست لكل طالب، ولم تُرسل إلى أي مكان.'],
       ['ما في الملف', 'كل الأيام المحفوظة على هذا الجهاز وقت التصدير، لا الفترة المعروضة في الصفحة فقط.'],
       ['مدة الحفظ', KEEP + ' لذلك صدّر الملف كل أسبوع.'],
+      ['مكان الحفظ', 'تُحفظ الأرقام في ملف تعريف واحد للمتصفح على هذا الجهاز. وتبدأ من الصفر في متصفح آخر، أو مع ملف تعريف مدرسي ' +
+        'متجوّل أو مؤقت يُمسح عند الخروج، أو بعد مسح بيانات المواقع في المتصفح.'],
       ['الخصوصية', 'لا يحتوي الملف على أسماء ولا على أي نص كتبه الأطفال. جدول hours بلا تواريخ، وفيه فقط الساعة التي لُعبت فيها ' +
         'اللعبة في 3 أيام أو أكثر، ولكن ليس في كل الأيام التي لُعبت فيها اللعبة في الملف. لذلك لا يدل صف وحده على ساعة يوم معيّن. ' +
         'ومع ذلك يبيّن الجدول الساعات المعتادة للعب، فاحفظ الملف كما تحفظ سجلات الصف.'],
@@ -802,7 +810,7 @@
     tables: tables, exportJson: exportJson, readImport: readImport, combine: combine, periodRange: periodRange,
     summary: summary, markWinnable: markWinnable, stuck: stuck, levelResult: levelResult, verdict: verdict,
     hoursFromDays: hoursFromDays, hoursFromRows: hoursFromRows, oldestUnexported: oldestUnexported, reminder: reminder,
-    duration: duration, xlsx: xlsx, zip: zip, crc32: crc32, localIso: localIso, dateKey: dateKey, addDays: addDays, names: names
+    NO_FRAMES: NO_FRAMES, duration: duration, xlsx: xlsx, zip: zip, crc32: crc32, localIso: localIso, dateKey: dateKey, addDays: addDays, names: names
   };
   window.SGTeacher = api;
   if (typeof document !== 'undefined' && document.getElementById('teacherApp')) init();
@@ -814,7 +822,7 @@
     var COPY = location.protocol === 'file:' ? 'folder' : 'web';
     var XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     var state = { ok: false, days: [], meta: parseMeta(null), bytes: 0, files: [], ignored: [] };
-    var store = null, refresh = 0;
+    var store = null, refresh = 0, pending = null, saving = false, again = '';
 
     function load() {
       try {
@@ -1040,17 +1048,21 @@
     }
 
     function renderDevice(s) {
+      var unmeasured = [];
       var rows = s.games.map(function (g) {
-        var v = verdict(g.f, g.loads, g.loadSum);
-        return '<tr data-game="' + esc(g.game) + '" data-verdict="' + (v || 'none') + '"><th scope="row">' + esc(g.name) + '</th><td class="v-' +
-          (v || 'none') + '">' + (v ? VERDICTS[v] : '—') + '</td><td>' + (g.loads ? (g.loadSum / g.loads / 1000).toFixed(1) + ' ث' : '—') +
+        var v = NO_FRAMES.indexOf(g.game) < 0 ? verdict(g.f, g.loads, g.loadSum) || 'none' : 'unmeasured';
+        if (v === 'unmeasured') unmeasured.push('«' + esc(g.name) + '»');
+        return '<tr data-game="' + esc(g.game) + '" data-verdict="' + v + '"><th scope="row">' + esc(g.name) + '</th><td class="v-' +
+          v + '">' + (VERDICTS[v] || '—') + '</td><td>' + (g.loads ? (g.loadSum / g.loads / 1000).toFixed(1) + ' ث' : '—') +
           '</td><td>' + (g.loads ? (g.loadMax / 1000).toFixed(1) + ' ث' : '—') + '</td><td>' + fmt(g.ns) + '</td><td>' +
           fmt(g.errors + g.timeouts) + '</td></tr>';
       });
       $('device').innerHTML = rows.length ? '<div class="scroll"><table><thead><tr><th scope="col">اللعبة</th><th scope="col">الحالة</th>' +
         '<th scope="col">متوسط التحميل</th><th scope="col">أطول تحميل</th><th scope="col">لم تبدأ</th>' +
         '<th scope="col" title="أخطاء أوقفت اللعبة ومرات لم تُحمَّل خلال 20 ثانية">أخطاء</th></tr></thead><tbody>' + rows.join('') +
-        '</tbody></table></div>' : empty('لا يوجد لعب في هذه الفترة.');
+        '</tbody></table></div>' + (unmeasured.length ? '<p class="hint" id="unmeasured">«لا تُقاس»: ' + unmeasured.join('، ') +
+        ' لا ترسم حركة مستمرة أثناء اللعب، فلا تُقاس فيها سرعة الرسم. زمن التحميل والأخطاء تُحسب لها كغيرها.</p>' : '')
+        : empty('لا يوجد لعب في هذه الفترة.');
     }
 
     function renderBars(entries, label) {
@@ -1133,20 +1145,68 @@
       setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
     }
 
-    // Every export holds all stored days, not just the period on screen.
-    function exportAs(kind) {
-      if (!state.ok) return;
-      var now = new Date(), id = state.meta.id;
-      try { id = updateMeta(function (raw) { raw.lastExport = now.getTime(); }); }
-      catch (e) { id = id || newId(); }
+    // An export counts (lastExport, which quiets the reminder) only once its file
+    // is saved. Edge and Chrome show their save dialog (showSaveFilePicker, offered
+    // only in a secure context: https, localhost or a file:// page), so a cancelled
+    // dialog saves and counts nothing. A dialog blocked by a school policy fails
+    // exactly like a cancel, so that message offers a plain download as well.
+    // Without the dialog (other browsers, plain http from another computer), or
+    // when the browser refuses it with another error, the file is downloaded and
+    // the teacher confirms that it was saved.
+    function counted(when, text) {
+      try { updateMeta(function (raw) { raw.lastExport = when; }); } catch (e) { /* the file is saved all the same */ }
+      say('exportStatus', text);
       load();
-      var info = localInfo(now);
-      info.pc = id;
-      var t = tables(state.days, info), name = 'play-stats_' + id + '_' + info.today;
-      if (kind === 'xlsx') download(name + '.xlsx', xlsx(t, info, now), XLSX_TYPE);
-      else download(name + '.json', utf8(JSON.stringify(exportJson(t, info))), 'application/json');
-      say('exportStatus', 'نُزِّل الملف ' + name + '.' + kind + ' (' + count(state.days.length, DAYS) + ').');
       render();
+    }
+    function asking(job) { pending = job; $('exportAsk').hidden = !job; }
+    function offer(kind) { again = kind; $('exportDownload').hidden = !kind; }
+
+    // Every export holds all stored days, not just the period on screen. plain
+    // downloads the file without the save dialog.
+    function exportAs(kind, plain) {
+      // One save dialog at a time: the browser refuses a second one, and that
+      // error would start a surprise download.
+      if (!state.ok || saving) return;
+      var now = new Date(), id = state.meta.id;
+      if (!id) {
+        try { id = updateMeta(function () {}); } catch (e) { id = newId(); }
+        load();
+      }
+      var info = localInfo(now), accept = {};
+      info.pc = id;
+      var t = tables(state.days, info), name = 'play-stats_' + id + '_' + info.today + '.' + kind;
+      var type = kind === 'xlsx' ? XLSX_TYPE : 'application/json';
+      var bytes = kind === 'xlsx' ? xlsx(t, info, now) : utf8(JSON.stringify(exportJson(t, info)));
+      // File names are isolated left to right, so the status line never reorders them.
+      var shown = function (file) { return '\u2066' + file + '\u2069'; };
+      var held = ' (' + count(state.days.length, DAYS) + ')', what = shown(name) + held;
+      accept[type] = ['.' + kind];
+      asking(null);
+      offer('');
+      say('exportStatus', '');
+      if (plain || typeof window.showSaveFilePicker !== 'function') { fallback(); return; }
+      saving = true;
+      window.showSaveFilePicker({ suggestedName: name, id: 'play-stats', types: [{ description: kind === 'xlsx' ? 'Excel' : 'JSON', accept: accept }] })
+        .then(function (handle) {
+          // The name the teacher chose in the dialog.
+          var file = shown(handle.name || name);
+          return handle.createWritable().then(function (out) {
+            return out.write(bytes).then(function () { return out.close(); });
+          }).then(function () { counted(now.getTime(), 'حُفظ الملف ' + file + held + '.'); }, function () {
+            say('exportStatus', 'تعذّر حفظ الملف ' + file + ' في المكان المختار، فلم يُسجَّل التصدير. جرّب مرة أخرى أو اختر مجلدًا آخر.', true);
+          });
+        }, function (e) {
+          if (!e || e.name !== 'AbortError') { fallback(); return; }
+          say('exportStatus', 'لم يُحفظ الملف: أُغلقت نافذة الحفظ أو لم تظهر، فلم يُسجَّل التصدير.', true);
+          offer(kind);
+        })
+        .then(function () { saving = false; }, function () { saving = false; });
+      function fallback() {
+        download(name, bytes, type);
+        say('exportStatus', 'بدأ تنزيل الملف ' + what + '.');
+        asking({ when: now.getTime(), what: what });
+      }
     }
 
     function openFiles(chosen) {
@@ -1210,6 +1270,16 @@
     $('pcLabel').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('saveLabel').click(); });
     $('exportXlsx').addEventListener('click', function () { exportAs('xlsx'); });
     $('exportJson').addEventListener('click', function () { exportAs('json'); });
+    $('exportDownload').addEventListener('click', function () { exportAs(again, true); });
+    $('exportYes').addEventListener('click', function () {
+      var job = pending;
+      asking(null);
+      if (job) counted(job.when, 'سُجّل تصدير الملف ' + job.what + '.');
+    });
+    $('exportNo').addEventListener('click', function () {
+      asking(null);
+      say('exportStatus', 'لم يُسجَّل التصدير. صدّر الملف مرة أخرى واحفظه.', true);
+    });
     $('openFiles').addEventListener('click', function () { $('files').click(); });
     $('files').addEventListener('change', function () { openFiles($('files').files || []); });
     $('stopBtn').addEventListener('click', function () { say('stopStatus', ''); ask($('stopConfirm')); });

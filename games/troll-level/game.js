@@ -22,6 +22,8 @@
     last: Math.max(0, Math.min(N - 1, +store.get('last', 0) || 0)),
     ended: !!store.get('ended', false)
   };
+  // A won level unlocks the next one, also in saves from before a world was added.
+  for (var q = 0; q < N - 1; q++) if (save.best[q] != null && save.unl <= q) save.unl = q + 1;
   // Writes everything (the music setting too). If storage refuses a write, the
   // shared warning offers a retry; it clears only once every key is saved.
   var saveUi = K.saveStatus({ retry: persist });
@@ -85,6 +87,7 @@
     sparkle: function () { [1319, 1568, 2093].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.1, vol: 0.12, delay: i * 0.06 }); }); },
     raspberry: function () { A.tone({ freq: 110, to: 70, type: 'sawtooth', dur: 0.45, vol: 0.2 }); A.tone({ freq: 116, to: 74, type: 'square', dur: 0.45, vol: 0.08 }); },
     elevator: function () { A.tone({ freq: 200, to: 420, type: 'triangle', dur: 0.6, vol: 0.12 }); },
+    moon: function () { [392, 523, 659, 784].forEach(function (f, i) { A.tone({ freq: f, to: f * 1.5, type: 'sine', dur: 0.35, vol: 0.12, delay: i * 0.09 }); }); },
     whoosh: function () { A.noise({ dur: 0.22, vol: 0.14, filter: 2500, to: 400 }); },
     poof: function () { A.noise({ dur: 0.2, vol: 0.2, filter: 1600, to: 300 }); A.tone({ freq: 600, to: 200, type: 'sine', dur: 0.12, vol: 0.12 }); },
     win: function () { [523, 659, 784, 1047, 1319].forEach(function (f, i) { A.tone({ freq: f, type: 'square', dur: 0.12, vol: 0.12, delay: i * 0.075 }); A.tone({ freq: f / 2, type: 'triangle', dur: 0.14, vol: 0.18, delay: i * 0.075 }); }); },
@@ -418,7 +421,8 @@
         shake.add(d.a);
         break;
       case 'sfx':
-        if (loud) { if (d.name === 'slam') S.thud(); else if (d.name === 'elevator') S.elevator(); }
+        var sf = d.name === 'slam' ? S.thud : S[d.name];
+        if (loud && sf) sf();
         break;
       case 'bonk':
         fx.burst(d.x, d.y, { count: 5, color: '#ffe14d', speed: 140, life: 0.35, size: 5, gravity: 200 });
@@ -806,6 +810,7 @@
     if (w.revT > 0) {
       bubble('التحكم معكوس! ' + w.revT.toFixed(1), 640, 92, 24, 1, 1 + 0.06 * Math.sin(game.t * 18));
     }
+    if (w.gk < 1) bubble('جاذبية القمر: القفزة أعلى!', 640, 92, 22, 1);
     // auto gravity flip timer
     if (w.flipWarn) {
       var left = w.flipWarn - (w.t % w.flipWarn), k = left / w.flipWarn;

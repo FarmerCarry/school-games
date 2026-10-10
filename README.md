@@ -32,7 +32,7 @@ games are in Arabic, laid out right-to-left.
 | هوكي الهواء | Air Hockey | 1-2 | لاعبان، رياضة |
 | سلة الرؤوس الكبيرة | Hoop Heads | 1-2 | رياضة، لاعبان |
 | كرة القدم المجنونة | Wacky Soccer | 1-2 | رياضة، لاعبان |
-| حفلة البلياردو | Pool Party | 1-2 | رياضة |
+| حفلة البلياردو | Pool Party | 1-2 | رياضة، لاعبان |
 | ضربة إلى الفضاء | Skybound Golf | 1 | رياضة، أركيد |
 | سوق الحيوانات | Critter Mart | 1 | بناء وإدارة |
 | إمبراطورية البيتزا | Pizza Empire | 1 | بناء وإدارة |
@@ -105,12 +105,14 @@ publishing them. It deploys that folder directly with GitHub's Pages artifact an
 (see `.github/workflows/build.yml` and `tools/build.mjs`). It looks and plays exactly
 the same, but:
 
-- each game is **one file** instead of 10–13, and the home page is one file with all pictures
+- each game is **one file** instead of 6–13, and the home page is one file with all pictures
   built in, so a slow hard disk has far fewer files to read;
 - after the first visit, every PC keeps the whole site in an **offline cache**: games open
   without asking the server, still work if the internet drops, and after an update each PC
   downloads only the files that changed;
-- it can be **installed as an app** (the install icon in Chrome/Edge's address bar).
+- it can be **installed as an app** (the install icon in Chrome/Edge's address bar);
+- it is also published as **one ZIP** for PCs without internet (see
+  [Running it without the internet](#running-it-without-the-internet)).
 
 For updates that publish only after checks pass, use **Settings → Pages → Source:
 GitHub Actions**. Keep editing `main` as usual (for example `js/catalog.js`); the fast
@@ -134,8 +136,31 @@ If the school web filter blocks it, ask IT to allow that address. The site conta
 
 ### Running it without the internet
 
-Download the repo (**Code → Download ZIP**), unzip it, and double-click `index.html`.
-Everything works straight from the folder. You can also put the folder on a shared drive.
+Download the fast version as one ZIP file (under 2 MB):
+**<https://farmercarry.github.io/school-games/school-games-offline.zip>**
+(a copy of the site published from your own account has it at
+`https://<your-username>.github.io/school-games/school-games-offline.zip`).
+
+1. Right-click the downloaded file → **Extract All…** (Arabic Windows: **استخراج الكل…**) →
+   **Extract**. Do not open `index.html` from inside the ZIP window: Windows then opens
+   that one file on its own, and the games cannot load.
+2. Windows extracts into a new folder named after the file, `school-games-offline`, and
+   opens it. Inside it, open the `school-games` folder and double-click `index.html`.
+
+Everything works straight from the `school-games` folder, without internet or installation.
+You can copy that folder to other PCs, a USB stick or a shared drive.
+
+**Updating:** the folder never updates itself. For new games and fixes, delete the old ZIP
+and the old `school-games-offline` folder, then download and extract the ZIP again as above,
+so the games are back in the same place. (If the old ZIP is still there, the new download
+and its folder get ` (1)` added to their names.) Replace any copies of the `school-games`
+folder on other PCs, USB sticks or shared drives with the new one too.
+Saved progress and play statistics stay, because the browser keeps them, not the folder.
+The ZIP is part of the fast version, so it is there only while GitHub Pages publishes it.
+
+For developers, GitHub's **Code → Download ZIP** gives the editable source instead. It also
+runs from a folder, but each game loads several separate files (slower on slow hard
+disks), and it includes the development tools and documentation.
 
 ## Managing games
 
@@ -178,32 +203,48 @@ two-player modes mix players.
 - **Read:** choose a period (اليوم، هذا الأسبوع، آخر 30 يومًا، الكل). Four cards answer
   which games they play most, how long, at what time and where they stop. A table lists
   each game. Device status, how children reach the games, settings and first-time
-  tutorials are in folded sections below. «Where they stop» lists only levels that can be
-  won or lost, with «فازوا في N من M محاولات» (tries include leaving the level); free play,
-  endless runs, 2048 boards and two-player modes are left out, and runs and boards show
-  their average and best score in the levels table instead. A game still open on this PC
-  today shows its time with the note «مرة لعب ما زالت مفتوحة» until it is closed.
+  tutorials are in folded sections below. Device status rates each game سلس / مقبول / بطيء
+  from drawing speed and load time; Connect Four, Tic Tac Toe and Lightning Fingers have
+  no steady drawing loop, so they show «لا تُقاس» (their load times still show).
+  «Where they stop» lists only levels that can be won or lost, with
+  «فازوا في N من M محاولات» (tries include leaving the level); free play, endless runs,
+  2048 boards and two-player modes are left out, and runs and boards show their average
+  and best score in the levels table instead. A game still open on this PC today shows its
+  time with the note «مرة لعب ما زالت مفتوحة» until it is closed.
 - **Name the PC:** type a short label such as «جهاز 7». Never type a child's name.
 - **Export to Excel:** press **تصدير ملف Excel**. Each click saves one workbook,
   `play-stats_<pc>_<date>.xlsx`, with every stored day: an Arabic read-me sheet (اقرأني)
-  and the tables `days`, `games`, `levels` and `hours`. **تصدير JSON** saves the same
-  data as a `.json` file. Export every week: old days are removed when the statistics
-  space (300 KB) fills or after 120 days, whichever comes first, and a busy computer-lab
-  PC may keep only 2–3 months. The page shows a reminder when the space is more than
-  three-quarters full and nothing was exported for a week, when days were removed for
-  space before they were exported, or when the oldest day not yet exported is more than
-  100 days old. For privacy the `hours` table has no dates and lists a game's hour only
-  when it was played then on at least 3 days, and not on every day the game was played.
-  It still shows when games are usually played, so keep the files like class records.
+  and the tables `days`, `games`, `levels` and `hours`. **تصدير JSON** saves the same data
+  as a `.json` file. Edge and Chrome open a save dialog: choose the folder (for example
+  the shared OneDrive folder) and save. Closing the dialog saves nothing, and the page
+  says so. If the dialog never opens (a school policy can block it), press
+  **تنزيل الملف بدلًا من ذلك** under that message. That button, other browsers and a page
+  opened over plain `http://` from another computer download the file instead, and the
+  page asks «هل حُفظ؟»: press **نعم، حُفظ الملف** only once the file is saved. An export
+  counts (and the reminder below goes away) only when the file is saved. Export every
+  week: old days are removed when the statistics space (300 KB) fills or after 120 days,
+  whichever comes first, and a busy computer-lab PC may keep only 2–3 months. The page
+  shows a reminder when the space is more than three-quarters full and nothing was
+  exported for a week, when days were removed for space before they were exported, or when
+  the oldest day not yet exported is more than 100 days old. For privacy the `hours` table
+  has no dates and lists a game's hour only when it was played then on at least 3 days,
+  and not on every day the game was played. It still shows when games are usually played,
+  so keep the files like class records.
 - **Combine PCs:** press **فتح ملفات من أجهزة أخرى** and choose the JSON files from other
   PCs to see them together. Nothing from those files is saved. In Excel, put the
   workbooks in one folder and use **Data → Get Data → From Folder**. Drop rows where `pc`
   is empty (an empty table keeps one blank row). For each `pc` and `date`, keep only the
   rows from the file with the newest `exported_at`; never add two exports of the same PC
-  and day.
+  and day. The `hours` table has no dates (each file sums all its days), so for it keep
+  only each PC's newest export.
 - **Stop or clear:** stop collecting (type «أوقف» to confirm) or clear this PC's
   statistics (type «امسح»). Clearing never removes game progress, the PC name or the
-  stop setting. Clearing the browser's site data also deletes the statistics.
+  stop setting.
+- **One browser profile on one PC:** the statistics live in the browser profile the
+  children use on that PC. A roaming school profile, a temporary one that is reset at
+  sign-out, another browser, or clearing the browser's site data starts again from zero.
+  Use the same browser and a profile that stays on the PC, and export before a PC is
+  reset.
 
 The page has no password. A child who opens it could stop or clear the statistics,
 so both actions need a typed word. The formats are in [`docs/PLAY_STATS.md`](docs/PLAY_STATS.md).
@@ -228,8 +269,9 @@ shared/game.css           shared game page styles + the Fredoka font
 lib/three/                three.js r159 (MIT) for the 3D games
 docs/GAME_SPEC.md         the rules every game follows
 docs/PLAY_STATS.md        play statistics: what is counted, storage and export formats
+docs/PERFORMANCE.md       size limits per game, slow-disk rules and how the fast build is measured
 tools/playtest.mjs        headless Chromium playtest harness (Playwright)
-tools/build.mjs           builds the fast version (one file per game + offline cache)
+tools/build.mjs           builds the fast version (one file per game + offline cache + offline ZIP)
 ```
 
 Use Node.js 22 or newer (the CI workflow uses Node 22), then install the pinned
@@ -257,11 +299,11 @@ npm run test:unit                # the regression files under tools/tests/
 npm run test:shared              # source-independent rules, build safety and tool fixtures
 npm run test:browser             # gameplay and portal checks for the selected SG_ROOT
 npm run test:tooling             # server, report and audio-probe helper checks
-npm run test:scenarios           # prove broken Start/Pause handlers fail the gameplay checks
+npm run test:scenarios           # prove inert Start/Pause buttons or input fail the gameplay checks
 npm run test:classroom           # downloaded folder, Arabic/spaced paths, denied storage, teacher page
 npm run test:regressions         # additional gameplay and portal keyboard checks
 npm run check                   # smoke-test all source games
-npm run build                   # fast build into _site/ (the Pages artifact)
+npm run build                   # fast build into _site/ (the Pages artifact, with the offline ZIP)
 npm run perf:assets              # enforce raw-byte page, font, library and offline-cache budgets
 SG_ROOT=_site npm run test:browser # run gameplay/portal regressions against optimized games
 SG_ROOT=_site npm run check      # smoke-test all optimized games
@@ -280,8 +322,9 @@ Set `SG_ARTIFACT_DIR` to retain smoke screenshots, failure DOM and the summary a
 known path. CI uploads source/built diagnostics even on failure. Every catalog game
 has a scenario in `tools/game-scenarios.mjs` that starts it through visible controls,
 checks meaningful input, verifies pause, and restarts a round or resumes a persistent
-world. The Windows Edge job checks downloaded source and fast builds, including
-denied browser storage, and must pass before deployment.
+world. The Windows Edge job checks the downloaded source and the offline ZIP of the
+fast build, unzipped with PowerShell, including denied browser storage, and must pass
+before deployment.
 
 For real hardware measurements, run on the school's weakest supported Windows PC:
 
@@ -317,7 +360,9 @@ The builder accepts new or empty output directories and recognized generated bui
 It refuses source directories, Git metadata, symlinks, tracked files, and unrelated files
 added to an output directory. Custom output uses `node tools/build.mjs --out <directory>`.
 Builds are staged before replacement, so a failed build preserves the previous output.
-The generated ownership marker is excluded from the offline cache.
+The generated ownership marker and the offline ZIP are excluded from the offline cache.
+The ZIP (`tools/lib/zip.mjs`, no library) holds every other built file except `.nojekyll`
+inside one `school-games/` folder, with fixed dates, so unchanged builds give the same bytes.
 
 Regression tests cover storage exhaustion and failed-save recovery, inventory conservation
 across reloads, pending completion screens, actual browser Back cache restoration, native
@@ -333,7 +378,10 @@ cp .work/kill-switch/sw.js sw.js
 
 Level-specific verifiers live beside their games. Swing Hook exits nonzero for unsolved
 levels or failed solution replays. Block Burst's default check also fails its statistical
-balance thresholds:
+balance thresholds. On every change CI runs the Sneaky Levels, Maze Dash, Fire & Ice and
+Skybound Golf verifiers, and Swing Hook and Block Burst on one level
+(`tools/tests/level-verifiers.test.mjs`). Block Burst's full balance check (about 4
+minutes) runs whenever `games/block-burst/` or the workflow changes:
 
 ```
 node games/swing-hook/verify-levels.js
@@ -342,9 +390,9 @@ node games/block-burst/verify-levels.js --report-balance
 ```
 
 The last command reports balance thresholds as warnings while still failing invalid boards
-and levels with no successful smart-bot runs. The existing levels currently have balance
-warnings; report mode is useful for inspecting them without treating those warnings as
-proof a level is impossible.
+and levels with no successful smart-bot runs. All current levels pass the default check;
+report mode is useful while changing levels, to see every threshold without treating a
+warning as proof that a level is impossible.
 
 Block Burst's policies now have independent seeded randomness, and search clones
 preserve the simulated random state. Use `--json` for failed seeds and remaining
@@ -360,7 +408,9 @@ independent holdouts. Actual student playtests remain necessary for difficulty f
 
 ## Credits and licenses
 
-- Games, art, sounds and site: original work made for this project.
+- Games, art, sounds and site: original work made for this project. أصابع البرق computes
+  its results with the same published rules as Monkeytype (WPM, raw, accuracy, consistency),
+  so students' scores are comparable; the code is our own.
 - [three.js](https://threejs.org) r159, MIT license (`lib/three/LICENSE`).
 - Fredoka font (Latin) and Baloo Bhaijaan 2 font (Arabic), SIL Open Font License
   (`shared/fonts/LICENSE-*.txt`).

@@ -3,7 +3,7 @@
  *   node games/troll-level/verify.js            -> replay every solution
  *   node games/troll-level/verify.js 7 map      -> print level 7's map
  *   node games/troll-level/verify.js 7 trace "R60 RJ20"  -> trace a custom input
- * Each level's solution must WIN, and the naive "hold right" run should die
+ * Each level's solution must WIN, and the naive "hold right" run must not win
  * (so every level actually has a trap).
  */
 'use strict';
@@ -45,8 +45,8 @@ LV.forEach((lv, i) => {
   const sol = SOL[i];
   const r = sol ? E.simulate(lv, sol) : { result: 'nosolution' };
   const naive = E.simulate(lv, 'R900', { extra: 0 });
-  const ok = r.result === 'win';
-  if (!ok) bad++;
+  if (r.result !== 'win') bad++;
+  if (naive.result === 'win') bad++;
   console.log(`${String(i + 1).padStart(2)} ${lv.name.padEnd(16)} solution:${r.result}${r.result === 'win' ? ' ' + r.seconds + 's' : ' ' + (r.cause || '') + ' @' + (r.x || 0).toFixed(2) + ',' + (r.y || 0).toFixed(2)}  naive-right:${naive.result}${naive.cause ? '(' + naive.cause + ')' : ''}`);
 });
 console.log(bad ? `\n${bad} PROBLEM(S)` : '\nALL LEVELS BEATABLE');
