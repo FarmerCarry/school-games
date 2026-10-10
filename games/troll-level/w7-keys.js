@@ -131,11 +131,13 @@
     w.emit('keylost', { k: k });
     checkKeys(w);
   }
-  // A lost key's time is up. It waits while you are within a tile of its spot (or
-  // its group is away), so it never lands in your hands.
+  // A lost key's time is up. A loose key waits while you are within a tile of its
+  // spot, so it never lands in your hands. A key that lives in a group can't be
+  // taken while frozen, so it waits only for the group to be home and freezes back
+  // in that same frame, before you can kick the group off again.
   function home(w, k) {
     var g = k.cube, p = w.p;
-    if (g && (!g.active || g.ox || g.oy) || overlap(p.x, p.y, PH.w, PH.h, k.hx - T, k.hy - T, 3 * T, 3 * T)) { k.bt = DT; return; }
+    if (g ? !g.active || g.ox || g.oy : overlap(p.x, p.y, PH.w, PH.h, k.hx - T, k.hy - T, 3 * T, 3 * T)) { k.bt = DT; return; }
     k.gone = false; k.x = k.hx; k.y = k.hy; k.vx = k.vy = 0;
     if (g) { k.inside = g; k.oy0 = 0; }
     if (k.opened) { k.opened.show(); k.opened = null; }
@@ -727,26 +729,33 @@
   // 7-8: the key is frozen in a world 6 ice cube. Kicked right it drops into the
   // spike pit and the key breaks on the spikes (both come back after 1 s); kicked
   // left it falls into the safe dip, and the key hops out and floats over it.
-  // The dip has a step (col 5 is 2 deep), so nobody is stuck down there. The K
-  // above the cube is only the key's map spot: the script freezes it into the cube.
+  // The dip has a step (col 5 is 2 deep), so nobody is stuck down there. The cube
+  // stands 4 tiles past the dip, so even a late jump over the dip lands short of
+  // it. The K above it is only the key's map spot: the script freezes it in.
+  // A life that ends with the key broken starts with the joke again (the first
+  // break comes as the title card fades, and the death taunt follows at once).
+  var broke = false;
   LEVELS.push({
     name: 'مفتاح في الثلج', msg: 'المفتاح متجمد! اركله نحو الباب!',
     hint: 'لا تركل المكعب نحو الشوك! اقفز فوقه واركله يسارًا إلى الحفرة.',
     map: (function () {
       var b = room();
       b.f(5, 13, 6, 14, ' ').s(6, 15, ' ');
-      pit(b, 15, 17);
-      return b.s(2, 12, 'P').s(10, 12, 'a').s(10, 11, 'K').s(28, 12, 'L').done();
+      pit(b, 16, 18);
+      return b.s(2, 12, 'P').s(11, 12, 'a').s(11, 11, 'K').s(28, 12, 'L').done();
     })(),
     script: function (L) {
       var k = L.key(0);
+      if (L.attempt && broke) L.msg('هههه! الشوك كسر المفتاح!');
+      broke = false;
+      L.world.ticks.push(function () { broke = k.gone; });
       L.cube('a', { home: true });
       L.keyIn(k, 'a');
       k.back = 1;
       L.when(function () { return k.gone; }, function () { L.msg('هههه! انكسر المفتاح!'); });
       L.when(function () { return !!k.m; }, function () { L.msg('ماذا؟! كيف عرفت؟!'); });
     },
-    sol: 'R10 RJ20 R16 RJ20 R14 L40 _30 L40 RJ20 R57 RJ20 R300'
+    sol: 'R12 RJ20 R22 RJ20 R20 L50 _30 L40 RJ20 R65 RJ20 R300'
   });
 
   // 7-9: a gift key... but the steps over the pit are locks. Bump the lock floating
