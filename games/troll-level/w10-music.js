@@ -6,10 +6,11 @@
  * '[' red blocks start solid, ']' blue blocks start as ghosts (dashed outlines you
  * pass through). Every real jump (from the ground or in coyote time) swaps the two
  * colours; springs, falling and being carried never do. A colour that turns solid
- * while you are inside one of its blocks waits (it blinks) until you have left that
- * block, so a ghost layer you jump up through turns solid under your feet. Touching
- * blocks of one colour form one block for that rule. Spikes, springs and doors that
- * stand on a coloured block (or are tinted) exist only while that colour is solid.
+ * while you are inside one of its blocks (or under one of its pistons) waits (it
+ * blinks) until you have left, so a ghost layer you jump up through turns solid
+ * under your feet. Touching blocks of one colour form one block for that rule.
+ * Spikes, springs and doors that stand on a coloured block (or are tinted) exist
+ * only while that colour is solid.
  * Script API:
  *   L.tint(what, 'red'|'blue')  a group letter (its blocks swap too, even while it
  *                               moves: pistons), or a door, spring, spike, L.sp(n)
@@ -34,9 +35,14 @@
     return w.mus;
   }
 
+  // A piston (g.sweep) also counts the space below it, which it stamps through, so
+  // it never turns solid over your head.
   function inside(w, g) {
-    var p = w.p, tl = g.tiles;
-    for (var i = 0; i < tl.length; i++) if (E.overlap(p.x, p.y, PH.w, PH.h, tl[i].x * T + g.ox, tl[i].y * T + g.oy, T, T)) return true;
+    var p = w.p, tl = g.tiles, y;
+    for (var i = 0; i < tl.length; i++) {
+      y = tl[i].y * T + g.oy;
+      if (E.overlap(p.x, p.y, PH.w, PH.h, tl[i].x * T + g.ox, y, T, g.sweep ? E.H - y : T)) return true;
+    }
     return false;
   }
 
@@ -75,10 +81,11 @@
 
   function sync(w, m) {
     for (var i = 0; i < m.att.length; i++) {
-      var o = m.att[i], on = o.mcol ? o.mcol === m.on : o.g.active && !o.g.fake;
+      // a door that L.doorTo took off its block (o.g = null) leaves the colour too
+      var o = m.att[i], on = o.mcol ? o.mcol === m.on : !o.g || (o.g.active && !o.g.fake), b;
       if (o.mk === 'spike') {
-        // a spike, like a block, never appears inside you
-        if (on && !o.out) { var b = w.spikeBox(o); on = !E.overlap(w.p.x, w.p.y, PH.w, PH.h, b[0], b[1], b[2], b[3]); }
+        // a spike, like a block, never appears inside you: test where it will stand
+        if (on && !o.out) { o.out = 1; b = w.spikeBox(o); o.out = 0; on = !E.overlap(w.p.x, w.p.y, PH.w, PH.h, b[0], b[1], b[2], b[3]); }
         if (on) { if (o.target !== 1) { o.target = 1; o.speed = 16; } } else o.out = o.target = 0;
       } else park(o.mk === 'door' ? w.doors : w.springs, o, on);
     }
@@ -451,9 +458,11 @@
   var LEVELS = [];
 
   // A piston that rests on the floor and only pops up for a moment (too short to
-  // run under it), first after `first` seconds.
+  // run under a 3-wide one), first after `first` seconds. Its colour never turns
+  // solid while you stand under it (see inside).
   function stamp(L, ch, first) {
     var g = L.g(ch);
+    g.sweep = true;
     var go = function () {
       g.move(0, 6, 24, 0.05, function () {
         L.sfx('slam'); L.shake(3);
@@ -491,14 +500,15 @@
     sol: 'R60 RJ20 R20 RJ20 R120'
   });
 
-  // 10-3: ghost stairs: jump toward the dashed step and your jump makes it solid.
+  // 10-3: ghost stairs: jump toward the dashed step and your jump makes it solid. The
+  // steps touch and are 3 wide: a standing jump reaches the next one, a runner has time.
   LEVELS.push({
     name: 'الدرج العجيب',
     msg: 'درج سهل... اصعد!',
     hint: 'اقفز نحو الدرجة الباهتة! قفزتك تجعلها صلبة.',
-    map: room().s(8, 12, '[').f(10, 11, 11, 12, ']').f(13, 9, 14, 12, '[').f(16, 7, 17, 12, ']').f(19, 5, 30, 12, '#')
+    map: room().s(8, 12, '[').f(9, 11, 11, 12, ']').f(12, 9, 14, 12, '[').f(15, 7, 17, 12, ']').f(18, 5, 30, 12, '#')
       .s(2, 12, 'P').s(27, 4, 'D').done(),
-    sol: 'R40 RJ20 R20 RJ20 R16 RJ20 R16 RJ20 R160'
+    sol: 'R40 RJ20 R10 RJ20 R14 RJ20 R16 RJ20 R160'
   });
 
   // 10-4: the spring throws you over the wall, but springs never swap the colours.
@@ -537,11 +547,11 @@
     sol: 'R20 RJ20 R30 RJ20 R60'
   });
 
-  // 10-7: pistons are coloured blocks too: jump under one and it turns into a ghost.
+  // 10-7: pistons are coloured blocks too: jump in front of one and it turns into a ghost.
   LEVELS.push({
     name: 'المكبس الشبح',
     msg: 'مكابس؟ تذكّر المرحلة 16!',
-    hint: 'لا تنتظر المكبس! اقفز تحته فيصبح شبحًا.',
+    hint: 'لا تنتظر المكبس! اقفز أمامه فيصبح شبحًا.',
     map: room().f(8, 3, 10, 6, 'a').f(15, 3, 17, 6, 'b').f(22, 3, 24, 6, 'c').s(2, 12, 'P').s(28, 12, 'D').done(),
     script: function (L) {
       L.tint('a', 'red'); L.tint('b', 'blue'); L.tint('c', 'red');
@@ -550,32 +560,36 @@
     sol: 'R50 RJ20 R30 RJ20 R30 RJ20 R100'
   });
 
-  // 10-8: the metronome plays: the colours swap every second and jumps don't count.
+  // 10-8: the metronome plays: the colours swap every 1.5 s and jumps don't count.
+  // The bridges are 6 wide, too wide to jump, so you must walk each one in its colour's
+  // beat, from a white pillar; the first one is a ghost until the music starts.
   LEVELS.push({
     name: 'المترونوم',
     msg: 'استمع جيدًا...',
     hint: 'هنا الألوان تتبدل وحدها. انتظر على الأبيض، ثم امشِ بعد النغمة.',
     map: (function () {
       var b = room();
-      pit(b, 7, 24);
-      b.f(7, 13, 10, 13, '[').f(13, 13, 16, 13, ']').f(19, 13, 22, 13, '[');
-      b.f(11, 13, 12, 16, '#').f(17, 13, 18, 16, '#').f(23, 13, 24, 16, '#');
-      return b.s(28, 13, ']').s(28, 12, 'D').s(2, 12, 'P').done();
+      pit(b, 5, 26);
+      b.f(5, 13, 10, 13, ']').f(13, 13, 18, 13, '[').f(21, 13, 26, 13, ']');
+      b.f(11, 13, 12, 16, '#').f(19, 13, 20, 16, '#');
+      return b.s(30, 12, 'D').s(2, 12, 'P').done();
     })(),
     script: function (L) {
-      // jumps never count here; the first swap comes once the title card has gone
-      L.tempo(1, 3);
+      // jumps never count here; the first swap comes once the title card has gone.
+      // The door stands on white floor and comes with the red notes.
+      L.tint(L.door, 'red');
+      L.tempo(1.5, 3);
       L.when(function () { return L.t() > 2.2; }, function () { L.msg('تكتوك يعزف الآن!'); });
-      L.when(function () { return L.t() > 3 && L.world.p.jumping; }, function () { L.msg('قفزك لا يبدّل شيئًا هنا!'); });
+      L.when(function () { return L.t() > 2.2 && L.world.p.jumping; }, function () { L.msg('قفزك لا يبدّل شيئًا هنا!'); });
     },
-    sol: 'R78 _96 R48 _12 R48 _12 R60'
+    sol: 'R15 _165 R56 _34 R60 _30 R120'
   });
 
   // 10-9: a saw chases you over red and blue bridges: every jump brings the next one.
   LEVELS.push({
     name: 'سباق الإيقاع',
     msg: 'اركض مع الإيقاع!',
-    hint: 'اقفز من قطعة إلى قطعة بلا توقف: كل قفزة تُظهر القطعة التالية.',
+    hint: 'اقفز فور هبوطك على كل قطعة! القفزة من الحافة تطير فوق التالية.',
     map: (function () {
       var b = room();
       pit(b, 6, 29);
@@ -584,7 +598,8 @@
     })(),
     script: function (L) {
       var s = L.saw({ x: -1, y: 9, mode: 'chase', speed: 5.2, active: false });
-      L.onX(3, function () { L.wake(s); L.msg('هل سمعت شيئًا؟'); });
+      // it wakes with a buzz, not a message, so the level's message stays up
+      L.onX(5, function () { L.wake(s); });
     },
     sol: 'R30 RJ20 R18 RJ20 R18 RJ20 R18 RJ20 R18 RJ20 R18 RJ20 R60'
   });
@@ -599,8 +614,8 @@
       var b = room();
       pit(b, 26, 30);
       b.s(4, 12, '[').f(6, 11, 7, 12, ']').f(9, 9, 10, 12, '[').f(11, 9, 12, 12, '#');
-      b.f(15, 3, 16, 6, 'a').f(20, 3, 21, 6, 'b').f(28, 12, 29, 12, '[');
-      return b.s(28, 11, 'D').s(2, 12, 'P').done();
+      b.f(14, 3, 16, 6, 'a').f(19, 3, 21, 6, 'b').f(28, 12, 29, 12, '[');
+      return b.s(29, 11, 'D').s(2, 12, 'P').done();
     })(),
     script: function (L) {
       L.tint('a', 'red'); L.tint('b', 'blue');
@@ -613,7 +628,7 @@
         L.after(1, function () { L.swap(); L.sfx('crash'); L.msg('الملك: دوري!'); L.shake(6); });
       });
     },
-    sol: 'R11 RJ20 R8 RJ20 R15 _119 R61 RJ20 R24 _5 J10 _22 RJ20 R9'
+    sol: 'R11 RJ20 R8 RJ20 R15 _119 R48 RJ20 R16 _20 J10 _30 R28 RJ20 R20'
   });
 
   root.TrollLevels.addWorld({ name: 'عالم الموسيقى', n: LEVELS.length, theme: 'music', bg: '#6ff0b0', bg2: '#8ff5c4', ink: '#0e3330', ink2: '#23524a', accent: '#ffffff' }, LEVELS);

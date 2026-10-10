@@ -513,21 +513,23 @@
     sol: 'R60 _10 J10 _30 L20 _5 J10 _30 L35 J10 _30 L30 LJ20 L100 R30'
   });
 
-  // 8-5: three boxes: a saw, a spring and a bite.
+  // 8-5: three boxes: a saw, a spring and a bite. They sit on row 10, below the
+  // title card's text, and the spring bounces you up right of the speech bubble.
   LEVELS.push({
     name: 'الصناديق الثلاثة',
     msg: 'ثلاث هدايا! اختر واحدة...',
     hint: 'صندوق واحد فقط فيه النطّاطة: الأوسط! لا تضرب الآخرين.',
-    map: room().f(18, 8, 30, 12, '#').s(9, 9, '?').s(13, 9, '?').s(16, 9, '?').s(26, 7, 'D').s(2, 12, 'P').done(),
+    map: room().f(25, 8, 30, 12, '#').s(16, 10, '?').s(20, 10, '?').s(23, 10, '?').s(28, 7, 'D').s(2, 12, 'P').done(),
     script: function (L) {
-      L.box(9, 9, 'saw', { msg: 'منشار! اهرب!' });
-      L.box(13, 9, 'spring', { msg: 'نطّاطة!' });
-      L.box(16, 9, 'bite', { msg: 'عضّة!' });
+      L.box(16, 10, 'saw', { msg: 'منشار! اهرب!' });
+      L.box(20, 10, 'spring', { msg: 'نطّاطة!' });
+      L.box(23, 10, 'bite', { msg: 'عضّة!' });
     },
-    sol: 'R85 _20 J20 _10 R150'
+    sol: 'R144 _20 J20 _10 R150'
   });
 
-  // 8-6 (stand-in until world 7's keys): the box over the bridge drops the bridge.
+  // 8-6 (stand-in until world 7's keys): the box over the bridge drops the bridge
+  // (row 10, so it shows below the title card).
   LEVELS.push({
     name: 'صندوق البوابة',
     msg: 'مفتاح البوابة في الصندوق!',
@@ -535,11 +537,11 @@
     map: (function () {
       var b = room();
       pit(b, 12, 17);
-      return b.f(12, 13, 17, 13, 'a').f(25, 10, 25, 12, 'b').s(14, 9, '?').s(23, 9, '?').s(2, 12, 'P').s(28, 12, 'D').done();
+      return b.f(12, 13, 17, 13, 'a').f(25, 10, 25, 12, 'b').s(14, 10, '?').s(23, 10, '?').s(2, 12, 'P').s(28, 12, 'D').done();
     })(),
     script: function (L) {
-      L.box(14, 9, function () { L.g('a').drop(0.05); }, { msg: 'أوبس!' });
-      L.box(23, 9, function () { L.g('b').hide(); }, { msg: 'افتح يا صندوق!' });
+      L.box(14, 10, function () { L.g('a').drop(0.05); }, { msg: 'أوبس!' });
+      L.box(23, 10, function () { L.g('b').hide(); }, { msg: 'افتح يا صندوق!' });
     },
     sol: 'R166 J20 _30 R100'
   });
@@ -558,13 +560,14 @@
     sol: 'R45 J20 _60 R102 RJ20 R300'
   });
 
-  // 8-8: the moon box (hit it again for more moon), and ten boxes that end the moon.
+  // 8-8: the moon box (hit it again for more moon), and ten boxes that end the moon,
+  // spiked on top so a moon jump from the moon box cannot land on them and walk across.
   LEVELS.push({
     name: 'صندوق القمر',
     msg: 'صندوق القمر يجعلك تطير!',
-    hint: 'على القمر لا تضغط القفز طويلًا! إذا ضربت الصناديق انتهى القمر.',
+    hint: 'اضغط القفز ضغطة متوسطة: الطويلة تضرب الصناديق والقصيرة لا تكفي!',
     map: (function () {
-      var b = room().f(14, 12, 18, 12, '^').f(12, 6, 21, 6, '?');
+      var b = room().f(14, 12, 18, 12, '^').f(12, 6, 21, 6, '?').f(12, 5, 21, 5, '^');
       return b.s(5, 9, '?').s(2, 12, 'P').s(28, 12, 'D').done();
     })(),
     script: function (L) {
@@ -591,6 +594,8 @@
   });
 
   // 8-10: the King Box: hit 1 wakes a saw, hit 2 raises the stairs, hit 3 drops the King.
+  // The top step is 3 wide to catch a full jump; the spikes are too wide for one
+  // jump, so you need the two hidden boxes against the ledge.
   LEVELS.push({
     name: 'ملك الصناديق',
     msg: 'هذا ملك الصناديق! اضربه إن استطعت!',
@@ -598,14 +603,14 @@
     hint: 'اضرب الصندوق الكبير مرتين فقط، اصعد الدرج، واقفز إلى اللمعة.',
     map: (function () {
       var b = room();
-      b.f(9, 9, 10, 10, '?').s(12, 12, 'a').f(13, 11, 13, 12, 'b').f(14, 10, 14, 12, 'c').f(15, 9, 15, 12, 'd').f(16, 8, 17, 12, 'e');
-      b.f(18, 12, 21, 12, '^').f(22, 8, 30, 12, '#').s(21, 9, '0');
+      b.f(9, 9, 10, 10, '?').s(12, 12, 'a').f(13, 11, 13, 12, 'b').f(14, 10, 14, 12, 'c').f(15, 9, 15, 12, 'd').f(16, 8, 18, 12, 'e');
+      b.f(19, 12, 24, 12, '^').f(25, 8, 30, 12, '#').f(23, 9, 24, 9, '0');
       return b.s(2, 12, 'P').s(27, 7, 'D').done();
     })(),
     script: function (L) {
       L.box(9, 9, ['saw', 'stairs', 'fall'], { size: 2, speed: 3, stairs: 'abcde', msg: ['آخ! منشاري!', 'درج سحري!', 'غضبت!'] });
     },
-    sol: 'R55 J10 _30 J10 _30 R20 RJ20 _10 RJ20 _10 RJ14 _30 R5 RJ20 R20 RJ20 R100'
+    sol: 'R55 J10 _30 J10 _30 R20 RJ20 _10 RJ20 _10 RJ14 _30 R16 RJ20 R24 RJ20 R100'
   });
 
   root.TrollLevels.addWorld({ name: 'عالم الألعاب', n: LEVELS.length, theme: 'toys', bg: '#ffd84d', bg2: '#ffe47f', ink: '#2e1a52', ink2: '#4a3478', accent: '#ffffff' }, LEVELS);

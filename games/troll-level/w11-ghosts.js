@@ -7,8 +7,8 @@
  * it). Ghosts drift toward you, through walls, only while your back is turned;
  * look at one and it freezes and hides its eyes. Touching a ghost is "بوو!".
  * Map: 'H' a sleeping ghost (its script wakes it); '&' a haunted stone, solid
- * only while you face right: it fades as soon as you turn, even under your feet,
- * and comes back only once you have left its place.
+ * only while you face right: it fades as soon as you turn and lets go once it is
+ * half gone, even under your feet; it comes back only once you have left its place.
  * Script API:
  *   L.ghosts                 the map's ghosts, in reading order
  *   L.ghost({ x, y, speed, active, hidden, costume, door })  a ghost at tile
@@ -17,7 +17,8 @@
  *                            first moves; 'bubo' is the giant host (3x3 tiles, x, y
  *                            his middle tile): he carries `door` toward you while
  *                            your back is turned and hides it while you look.
- *   L.wakeGhost(gh)
+ *   L.wakeGhost(gh, delay)   it appears now and drifts `delay` s later (0), so a
+ *                            ghost popping out close by gives you time to turn.
  *   L.haunt(door or ch, speed)  a door or group that creeps toward you while you
  *                            look away; a group you stand on drifts the way your
  *                            back points. Groups stop at walls, doors glide over all.
@@ -36,7 +37,7 @@
   // a state from before the reset is dropped.
   function state(w) {
     if (!w.gh || w.gh.groups !== w.groups) {
-      w.gh = { groups: w.groups, ghosts: [], movers: [], doors: [], stones: null, runs: [], dir: 0, dark: false, every: 0, next: 0, flash: 0 };
+      w.gh = { groups: w.groups, ghosts: [], movers: [], doors: [], stones: null, runs: [], dir: 0, dark: false, every: 0, next: 0, flashAt: -9 };
     }
     return w.gh;
   }
@@ -124,11 +125,13 @@
     h.moving = true;
   }
 
+  // The stones fade as soon as you look back and let go 5 frames later, when
+  // they are half gone, so a quick tap back and forth is forgiven.
   function stoneStep(w, s) {
     var g = s.stones, want = w.p.face === g.haunt, was = g.fake;
-    if (!want) g.fake = true;
-    else if (g.fake && !overlapsPlayer(w, g)) g.fake = false; // never back inside you
-    g.alpha = E.approach(g.alpha, g.fake ? 0 : 1, DT * 7);
+    g.alpha = E.approach(g.alpha, want && !g.fake ? 1 : 0, DT * 7);
+    if (!want && g.alpha < 0.5) g.fake = true;
+    else if (want && g.fake && !overlapsPlayer(w, g)) g.fake = false; // never back inside you
     if (g.fake !== was) w.emit(g.fake ? 'stoneFade' : 'stoneBack', { g: g });
   }
 
@@ -158,10 +161,11 @@
     api: function (L, w) {
       L.ghosts = w.gh ? w.gh.ghosts : NONE;
       L.ghost = function (o) { return makeGhost(state(w), o); };
-      L.wakeGhost = function (gh) {
+      L.wakeGhost = function (gh, delay) {
         if (gh.active) return;
-        gh.active = true; gh.hidden = false;
+        gh.hidden = false;
         w.emit('ghostWake', { x: gh.x, y: gh.y });
+        if (delay) L.after(delay, function () { gh.active = true; }); else gh.active = true;
       };
       L.haunt = function (d, speed) {
         var s = state(w);
@@ -188,10 +192,9 @@
       for (i = 0; i < s.ghosts.length; i++) ghostStep(w, s.ghosts[i], cx, cy);
       for (i = 0; i < s.doors.length; i++) doorStep(w, s.doors[i], cx);
       for (i = 0; i < s.movers.length; i++) { moverStep(w, s.movers[i], cx); if (w.state !== 'play') return; }
-      if (s.flash > 0) s.flash -= DT;
       if (s.every) {
         s.next -= DT;
-        if (s.next <= 0) { s.next += s.every; s.flash = FLASH; w.emit('thunder', {}); }
+        if (s.next <= 0) { s.next += s.every; s.flashAt = w.t; w.emit('thunder', {}); }
       }
     },
     phys: function (w, p, P, dir) { if (w.gh) w.gh.dir = dir; },
@@ -490,7 +493,7 @@
         for (i = 0; i < s.ghosts.length; i++) if (!s.ghosts[i].hidden) drawGhost(ctx, w, s.ghosts[i], pal, t);
       },
       front: function (ctx, w, pal, t) {
-        var s = w.gh, i, gh, d;
+        var s = w.gh, i, gh, d, fl;
         if (!s) return;
         for (i = 0; i < s.doors.length; i++) drawShyDoor(ctx, w, s.doors[i], pal, t);
         // the giant's hands hold his door from the front while he carries it
@@ -502,10 +505,12 @@
           ctx.fill(); ctx.stroke();
         }
         if (!s.dark) return;
-        // lightning lifts the dark (and flashes, unless motion is reduced); so does a death, to show what got you
-        if (s.flash > 0 || w.state === 'dead') {
-          if (s.flash > 0 && !root.Kit.motion.reduced()) {
-            ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.45 * s.flash / FLASH; ctx.fillRect(-40, -40, E.W + 80, E.H + 80); ctx.globalAlpha = 1;
+        // lightning lifts the dark (and flashes, unless motion is reduced); so does a death, to show what got you.
+        // The flash is timed by the world clock, which keeps running after a win, so it fades out then too.
+        fl = FLASH - (w.t - s.flashAt);
+        if (fl > 0 || w.state === 'dead') {
+          if (fl > 0 && !root.Kit.motion.reduced()) {
+            ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.45 * fl / FLASH; ctx.fillRect(-40, -40, E.W + 80, E.H + 80); ctx.globalAlpha = 1;
           }
           return;
         }
@@ -549,7 +554,7 @@
     };
     Art.SFX.hauntFade = function (A) { A.tone({ freq: 700, to: 300, type: 'sine', dur: 0.2, vol: 0.07 }); };
     Art.SFX.hauntBack = function (A) { A.tone({ freq: 300, to: 650, type: 'sine', dur: 0.16, vol: 0.06 }); };
-    Art.CAUSE.boo = ['بوو! أخافك الشبح!', 'الشبح كان خلفك!'];
+    Art.CAUSE.boo = ['بوو! أخافك الشبح!', 'الأشباح لا تحب العناق!'];
 
     // The ghost skin: a pale sheet with a wavy white hem over the feet and a
     // little curl of tail behind.
@@ -586,8 +591,8 @@
       L.when(function () { return L.px() >= 6 && L.t() > 2.2; }, function () { L.wakeGhost(gh); L.msg('لا تلتفت! لا يوجد شيء خلفك!'); });
       L.world.ticks.push(function () {
         if (a.active || !gh.active) return;
-        // 2 s standing still once the ghost is out: it reaches you first unless you look at it
-        still = L.grounded() && Math.abs(L.world.p.vx) < 20 && L.px() > 6 ? still + 1 : 0;
+        // 2 s standing still once the ghost is out, wherever you stop: it reaches you first unless you look at it
+        still = L.grounded() && Math.abs(L.world.p.vx) < 20 ? still + 1 : 0;
         if (still > 120) { a.show(); L.world.reveal(a); L.msg('حسنًا... جسر للشجعان!'); }
       });
     },
@@ -686,8 +691,9 @@
     map: room().s(2, 12, 'P').s(24, 12, 'D').done(),
     script: function (L) {
       var a = L.ghost({ x: 12, y: 12, costume: 'door', speed: 2 }), b = L.ghost({ x: 18, y: 12, costume: 'door', speed: 2 });
-      // woken quietly: until they move they are just doors
-      L.when(function () { return L.px() >= 4 && L.t() > 2.2; }, function () { a.active = b.active = true; });
+      // woken quietly once the title card is gone (a back turned at the start brings them
+      // too); until they move they are just doors
+      L.when(function () { return L.t() > 2.2; }, function () { a.active = b.active = true; });
       L.when(function () { return a.moved || b.moved; }, function () { L.sfx('boo'); L.msg('بوو! خدعناك!'); });
     },
     sol: 'R30 _110 L2 _40 R27 RJ20 R25 RJ20 R300'
@@ -697,18 +703,22 @@
   LEVELS.push({
     name: 'انظر بالعكس',
     msg: 'الأعمدة مرة أخرى؟ سهلة!',
-    hint: 'التحكم معكوس: لتنظر إلى الشبح خلفك اضغط يمينًا!',
+    hint: 'التحكم معكوس: اضغط يمينًا لتنظر إلى الشبح، وانتظر حتى يعود العمود.',
     map: (function () {
       var b = room();
       pit(b, 9, 24);
       // level 10's pillars, the first and last one tile wider: a look back with reversed keys steps you left
-      b.f(11, 13, 13, 16, '#').f(16, 13, 18, 16, '#').f(21, 13, 23, 16, '#');
+      b.f(11, 13, 13, 16, '#').f(16, 13, 18, 16, 'a').f(21, 13, 23, 16, '#');
       return b.s(2, 12, 'P').s(28, 12, 'D').done();
     })(),
     script: function (L) {
-      // the ghost comes out behind you as the controls flip, so it arrives while they are still reversed
-      var gh = L.ghost({ x: 4, y: 11, hidden: true });
-      L.when(function () { return L.grounded() && L.px() >= 11 && L.px() < 14; }, function () { L.reverse(2.5); L.wakeGhost(gh); });
+      // the ghost comes out behind you as the controls flip, and the middle pillar sinks out of
+      // reach until they flip back, so you cannot hop away: it arrives while the keys are reversed
+      var gh = L.ghost({ x: 4, y: 11, hidden: true }), mid = L.g('a');
+      L.when(function () { return L.grounded() && L.px() > 10.5 && L.px() < 14.5; }, function () {
+        L.reverse(2.5); L.wakeGhost(gh); mid.move(0, 3, 6);
+        L.when(function () { return L.world.revT <= 0; }, function () { mid.move(0, -3, 6); });
+      });
       L.when(function () { return L.grounded() && L.px() >= 21 && L.px() < 24; }, function () { L.reverse(2.5); });
     },
     sol: 'R45 RJ20 R14 _20 R2 _150 R10 RJ20 R20 RJ20 R10 _20 R2 _170 R10 RJ20 R300'
@@ -727,7 +737,8 @@
     script: function (L) {
       var gh = L.ghost({ x: 1, y: 11, hidden: true });
       L.onX(3, function () { lightsOut(L); });
-      L.when(function () { return L.px() >= 4 && L.t() > 2.2; }, function () { L.wakeGhost(gh); });
+      // it pops out only 3 tiles behind you, so it waits a moment before it drifts
+      L.when(function () { return L.px() >= 4 && L.t() > 2.2; }, function () { L.wakeGhost(gh, 0.6); });
     },
     sol: 'R50 RJ20 R16 RJ20 R16 RJ20 R10 L2 _60 R10 RJ20 R300'
   });
@@ -737,7 +748,10 @@
     name: 'قصر بوبو',
     msg: 'أهلًا في قصري! الباب معي... هيهي',
     winMsg: 'بوو!... لماذا تضحك؟ أنا مخيف!',
-    hint: 'لا تلتفت على الحجارة، واكشف الأبواب، وفي النهاية أدر ظهرك لبوبو.',
+    hint: [
+      { before: 4, text: 'شبح خلفك! انظر إليه فيتجمد، ثم اقفز على الحجارة.' },
+      { text: 'لا تلتفت على الحجارة، واكشف الأبواب، وفي النهاية أدر ظهرك لبوبو.' }
+    ],
     map: (function () {
       var b = room();
       pit(b, 4, 14);
@@ -747,11 +761,12 @@
       var chaser = L.ghost({ x: 1, y: 10, hidden: true });
       var a = L.ghost({ x: 19, y: 12, costume: 'door', speed: 2 }), b = L.ghost({ x: 24, y: 12, costume: 'door', speed: 2 });
       var bubo = L.ghost({ x: 29, y: 11, costume: 'bubo', speed: 3, door: L.door });
-      L.when(function () { return L.px() >= 3 && L.t() > 2.2; }, function () { L.wakeGhost(chaser); });
+      // it pops out close behind a child waiting at the edge, so it waits a moment before it drifts
+      L.when(function () { return L.px() >= 3 && L.t() > 2.2; }, function () { L.wakeGhost(chaser, 0.6); });
       L.when(function () { return L.on('&') && L.px() > 10; }, function () { L.sfx('boo'); L.shake(4); L.msg('انظر خلفك!'); });
       L.when(function () { return L.px() >= 15; }, function () { a.active = b.active = true; });
-      // Bubo stirs once both doors are behind you (sooner, a back turned at the start would bring his door over everything)
-      L.when(function () { return L.px() > b.x / L.T + 1; }, function () { bubo.active = true; L.msg('لن تأخذ بابي! هيهي'); });
+      // Bubo stirs as soon as you are past both doors (sooner, a back turned at the start would bring his door over everything)
+      L.when(function () { return L.px() > b.x / L.T + 0.5; }, function () { bubo.active = true; L.msg('لن تأخذ بابي! هيهي'); });
     },
     sol: 'R4 RJ20 R18 RJ20 R18 RJ20 R4 L2 _20 R10 RJ20 R19 RJ20 R10 L2 _200'
   });

@@ -11,7 +11,9 @@
  * When your centre enters a portal you come out just outside its partner's face,
  * at its centre, at max(the speed you had into the entry face, 300 px/s) out of
  * the exit face; the sideways speed stays only when both faces lie on one axis.
- * So the further you fall into a floor portal, the higher it throws you.
+ * So the further you fall into a floor portal, the higher it throws you. But
+ * falling back into the portal you just flew out of never throws you faster than
+ * it did: a bounce gains a little each time and would grow into a fling by itself.
  * Script API:
  *   L.portal(ch)          { moveTo(x, y, speed), hop(list, every, onLand), open(), close() }
  *                         moves the portal (its top-left tile to tile x, y at speed
@@ -37,13 +39,13 @@
 
   // The exit velocity and normal of the last exitRule call (reused, no garbage).
   var OUT = { vx: 0, vy: 0, nx: 0, ny: 0 };
-  function exitRule(a, b, vx, vy) {
+  function exitRule(a, b, vx, vy, cap) {
     var n = NORM[a.face], nx, ny;
     if (n) { nx = n[0]; ny = n[1]; }
     // a floating entry meets you head-on, along the way you mostly move
     else if (Math.abs(vy) >= Math.abs(vx)) { nx = 0; ny = vy >= 0 ? -1 : 1; }
     else { nx = vx > 0 ? -1 : 1; ny = 0; }
-    var into = -(vx * nx + vy * ny), sp = Math.max(into, MIN);
+    var into = -(vx * nx + vy * ny), sp = Math.max(Math.min(into, cap), MIN);
     var m = NORM[b.face], ex = m ? m[0] : -nx, ey = m ? m[1] : -ny;
     var keep = (ex === 0) === (nx === 0);
     OUT.vx = ex * sp + (keep ? vx + into * nx : 0);
@@ -87,7 +89,7 @@
 
   function warpPlayer(w, s, a) {
     var p = w.p, b = a.pair, x0 = p.x + PH.w / 2, y0 = p.y + PH.h / 2;
-    exitRule(a, b, p.vx, p.vy);
+    exitRule(a, b, p.vx, p.vy, a === p.wq ? p.wsp : Infinity);
     place(b, PH.w, PH.h);
     p.x = AT.x; p.y = AT.y; p.vx = OUT.vx; p.vy = OUT.vy;
     // no jump cut (it would clip a fling) and no late coyote jump
@@ -95,6 +97,8 @@
     p.pcool = b;
     w.emit('warp', { x0: x0, y0: y0, x1: p.x + PH.w / 2, y1: p.y + PH.h / 2, col: b.col, nx: OUT.nx, door: false });
     var sp = Math.abs(OUT.nx ? OUT.vx : OUT.vy);
+    // the mouth you flew out of and how fast, until you land (see exitRule's cap)
+    p.wq = b; p.wsp = sp;
     for (var i = 0; i < s.hooks.length; i++) s.hooks[i](a, b, sp);
   }
 
@@ -106,7 +110,7 @@
     if (d.pcool) { if (inside(d.pcool, cx, cy)) return; d.pcool = null; }
     var a = hit(s, cx, cy);
     if (!a) return;
-    exitRule(a, a.pair, d.vx, d.vy);
+    exitRule(a, a.pair, d.vx, d.vy, DOOR_MAX);
     place(a.pair, 40, 60);
     d.x = AT.x; d.y = AT.y; d.vx = OUT.vx; d.vy = OUT.vy; d.pcool = a.pair;
     w.emit('warp', { x0: cx, y0: cy, x1: d.x + 20, y1: d.y + 30, col: a.pair.col, nx: OUT.nx, door: true });
@@ -198,6 +202,7 @@
       var s = w.portals, p = w.p;
       if (!s) return;
       var cx = p.x + PH.w / 2, cy = p.y + PH.h / 2;
+      if (p.onGround) p.wq = null;
       if (p.pcool) { if (inside(p.pcool, cx, cy)) return; p.pcool = null; }
       var a = hit(s, cx, cy);
       if (a) warpPlayer(w, s, a);
@@ -457,10 +462,10 @@
   LEVELS.push({
     name: 'الحفرة السحرية',
     msg: 'مستحيل الدخول!',
-    hint: 'الحفرة هي الطريق! وعندما تسقط في الصندوق اضغط يسارًا.',
+    hint: 'الحفرة هي الطريق! اترك زر اليمين وأنت تسقط فيها.',
     map: (function () {
       var b = room();
-      b.f(21, 4, 29, 5, '#').f(21, 6, 21, 12, '#').f(29, 6, 29, 12, '#').s(24, 5, '}').f(26, 12, 28, 12, '^');
+      b.f(21, 4, 29, 5, '#').f(21, 6, 21, 12, '#').f(29, 6, 29, 12, '#').s(24, 5, '}').f(27, 12, 28, 12, '^');
       return b.f(10, 13, 12, 13, 'a').f(10, 14, 12, 14, '{').s(22, 12, 'D').s(2, 12, 'P').done();
     })(),
     script: function (L) {
@@ -472,21 +477,22 @@
     sol: 'R80 L60'
   });
 
-  // 9-4: a floor hole and a ceiling portal make an endless fall past two ledges.
+  // 9-4: a floor hole and a ceiling portal make an endless fall past two ledges,
+  // right of the speech bubble so Sahsouh never hides where you come out.
   LEVELS.push({
     name: 'سقوط لا ينتهي',
     msg: 'حفرة صغيرة... ماذا تخبّئ؟',
     hint: 'وأنت تسقط اضغط يسارًا لتهبط على رف الباب.',
     map: (function () {
       var b = room();
-      b.f(16, 9, 19, 9, '#').f(21, 9, 24, 9, '#').f(21, 8, 24, 8, '^');
-      return b.s(20, 13, '(').s(20, 3, ')').s(17, 8, 'D').s(2, 12, 'P').done();
+      b.f(21, 9, 24, 9, '#').f(26, 9, 29, 9, '#').f(26, 8, 29, 8, '^');
+      return b.s(25, 13, '(').s(25, 3, ')').s(22, 8, 'D').s(2, 12, 'P').done();
     })(),
     script: function (L) {
       var n = 0;
       L.onWarp(function () { if (++n === 3) L.msg('وييييي! إلى الأبد!'); });
     },
-    sol: 'R150 L40'
+    sol: 'R190 L40'
   });
 
   // 9-5: walk into the well and the portal only hops you; fall in from high up
@@ -498,7 +504,7 @@
     map: (function () {
       var b = room();
       b.f(5, 11, 6, 11, '#').f(8, 9, 9, 9, '#').f(11, 7, 13, 7, '#');
-      b.f(14, 13, 16, 13, ' ').f(14, 14, 16, 14, '(').f(17, 7, 17, 11, '#').f(19, 12, 20, 12, '^');
+      b.f(14, 13, 16, 13, ' ').f(14, 14, 16, 14, '(').f(17, 3, 17, 11, '#').f(19, 12, 20, 12, '^');
       return b.s(22, 13, ')').s(23, 12, '^').f(24, 9, 30, 12, '#').s(28, 8, 'D').s(2, 12, 'P').done();
     })(),
     script: function (L) {
@@ -516,7 +522,7 @@
   LEVELS.push({
     name: 'البوابة القافزة',
     msg: 'بوابة واحدة... إلى أين توصل؟',
-    hint: 'انتظر قبل البوابة وراقب! ادخل بعد صوت الجرس.',
+    hint: 'انتظر وراقب البوابة! ادخل الحفرة عندما تكون عند الباب.',
     map: (function () {
       var b = room();
       b.f(14, 12, 21, 12, '^').f(23, 9, 30, 12, '#');
@@ -535,6 +541,8 @@
   LEVELS.push({
     name: 'تبديل الألوان',
     msg: 'الأصفر يوصلك إلى الباب. سهل!',
+    // the wizard swaps 0.65 s in, so no title card hides it
+    noIntro: true,
     hint: 'الساحر يبدّل البوابات مرة واحدة. دعه يبدّلها ثم ادخل الوردية.',
     map: (function () {
       var b = room();
@@ -570,10 +578,10 @@
   LEVELS.push({
     name: 'الباب الدوّار',
     msg: 'الباب قريب جدًا اليوم!',
-    hint: 'لا تلحق بالباب! قف على المنصة تحت بوابة السقف وانتظره.',
+    hint: 'لا تلحق بالباب! قف في وسط المنصة تحت بوابة السقف وانتظره.',
     map: (function () {
       var b = room();
-      pit(b, 21, 26);
+      pit(b, 21, 25);
       return b.s(24, 16, '(').s(24, 3, ')').f(23, 12, 25, 12, '#').s(14, 12, 'D').s(2, 12, 'P').done();
     })(),
     script: function (L) {
@@ -589,15 +597,17 @@
   // 9-10: the ping-pong, the fling, and a fake door that sends you home.
   LEVELS.push({
     name: 'برج الساحر',
-    msg: 'آخر مرحلة! أهلًا بك في برجي!',
+    msg: 'آخر مرحلة في عالمي! أهلًا بك في برجي!',
     winMsg: 'هزمت سحسوح! أنت سيّد البوابات!',
     hint: 'بعد البوابة الأولى لا تضغط يمينًا، واسقط من البرج في البوابة الوردية.',
     map: (function () {
       var b = room();
       b.f(8, 3, 8, 12, '#').s(7, 12, '(').s(30, 12, ')');
       b.f(27, 11, 27, 12, '#').f(26, 9, 26, 12, '#').f(21, 7, 25, 12, '#');
-      b.f(18, 13, 20, 13, ' ').f(18, 14, 20, 14, '{').f(17, 7, 17, 12, '#');
-      b.f(13, 10, 16, 12, '#').s(14, 10, '}').f(9, 6, 12, 12, '#');
+      b.f(18, 13, 20, 13, ' ').f(18, 14, 20, 14, '{').f(17, 3, 17, 12, '#');
+      // the pink exit fills the floor below the plateau: a fling that misses it
+      // falls back in and is thrown again
+      b.f(13, 11, 16, 12, '#').f(13, 10, 16, 10, '}').f(9, 6, 12, 12, '#');
       return b.s(10, 5, 'E').s(4, 12, 'D').s(2, 12, 'P').done();
     })(),
     script: function (L) {

@@ -25,8 +25,9 @@
  *   L.fall(p, delay, crumble) shake for delay s, then fall and land; with crumble,
  *                            every tile left over a hole drops when you stand on it
  *                            (a falling card's light number line just pops).
- *   L.pill(x, y)             the death counter flies out of the HUD to (x, y),
- *                            2 tiles long plus 1 per death in this visit (up to 6).
+ *   L.pill(x, y)             the death counter flies out of the HUD to (x, y) and is
+ *                            solid once there; 2 tiles long plus 1 per death in this
+ *                            visit (up to 6).
  *   L.fakeWin(x, y)          a painted copy of the win screen (10 x 4 tiles, uneven).
  *   L.credits(lines, { cols, speed, every, top, pre })  rising end-credit lines, in
  *                            turn in each column (pre: s already rolled); a line
@@ -256,7 +257,9 @@
         state(w).pillOut = true;
         show(w, p);
         g.ox = 64 - x * T; g.oy = 14 - y * T; // where the HUD draws it
-        g.moveTo(0, 0, 28);
+        // it flies through you (its path crosses the floor by the pit)
+        g.fake = true;
+        g.moveTo(0, 0, 28, 0, function () { g.fake = false; w.pushOut(g); });
         return p;
       };
       L.fakeWin = function (x, y) {
@@ -783,7 +786,9 @@
     sol: 'R30 _20 J12 R26 RJ20 R140'
   });
 
-  // 12-3: three heavy words fall one after another and stack into stairs.
+  // 12-3: three heavy words fall one after another and stack into stairs. He runs
+  // out of breath: each word is a tile shorter and all end at the ledge, so the
+  // stairs are solid (no hole under a step to get shut in by the wall).
   LEVELS.push({
     name: 'كلام ثقيل',
     msg: 'الباب فوق؟ اقفز إذن... هاها!',
@@ -795,8 +800,8 @@
     script: function (L) {
       L.onX(17, function () {
         L.msg('اسقط! اسقط! اسقط!');
-        [20, 21, 22].forEach(function (x, k) {
-          L.after(k * 1.5, function () { L.say('اسقط!', x, 5, { style: 'heavy' }); });
+        ['اسقطططططط!', 'اسقطططط!', 'اسقط!'].forEach(function (text, k) {
+          L.after(k * 1.5, function () { L.say(text, 20 + k, 5, { style: 'heavy' }); });
         });
       });
     },
@@ -876,9 +881,13 @@
       return b.f(20, 7, 24, 7, '#').s(22, 6, 'U').s(2, 12, 'P').s(27, 12, 'D').done();
     })(),
     script: function (L) {
-      L.onX(3.5, function () { L.pill(10, 13); L.msg('سقطاتك تبني الجسر!'); });
+      // in the first life it waits for the title card to go, so the opening line is
+      // read and the counter's flight is seen (a sprinter falls in once first)
+      L.when(function () { return L.px() >= 3.5 && (L.attempt || L.t() > 2.2); }, function () {
+        L.pill(10, 13); L.msg('سقطاتك تبني الجسر!');
+      });
     },
-    sol: 'R54 _30 R26 RJ20 R100'
+    sol: 'R54 _120 R26 RJ20 R100'
   });
 
   // 12-8: level 1 again (orange, same title)... but its floor remembers you.
@@ -947,7 +956,8 @@
       L.throne('a');
       L.door.crown = true;
       if (ph === 0) {
-        L.onX(4.6, function () { L.sp(1).pop(); L.msg('تذكرها؟'); });
+        // (a sprinter in the first life skips the quip: the opening line stays up)
+        L.onX(4.6, function () { L.sp(1).pop(); if (L.attempt || L.t() > 3) L.msg('تذكرها؟'); });
         said.push(L.say('بلا بلا', 11, 11, { life: 0 }), L.say('آه', 15, 11, { style: 'shout', life: 0 }), L.say('بلا بلا', 17, 11, { life: 0 }));
         L.when(function () { return L.cp() >= 1; }, function () {
           said.forEach(L.unsay); said.length = 0;
@@ -955,9 +965,12 @@
         });
       }
       if (ph < 2) {
+        // the heavy word lands at cols 25-27, on or beside you: col 28 under the
+        // throne stays free, so from the right any jump there is capped by the
+        // throne and steps onto the word (no slot too low to jump into)
         L.onBonk(function (n) {
           if (n === 1) said.push(L.say('توقف! توقف!', 15, 9, { life: 0 }));
-          else if (n === 2) said.push(L.say('كفى! كفى!', 10, 7, { life: 0 }), L.say('اسقط!', Math.round(L.px() - 1.5), 11, { style: 'heavy' }));
+          else if (n === 2) said.push(L.say('كفى! كفى!', 10, 7, { life: 0 }), L.say('اسقط!', 25, 11, { style: 'heavy' }));
           else if (n === 3) { said.push(L.say('يا مزعج!!', 5, 5, { life: 0 })); L.msg('حسنًا! حسنًا! اصعد!'); }
           else L.msg('كفى! كرسيّي!');
         });
@@ -977,7 +990,7 @@
         L.doorTo(L.door, 29, 4, 9, 0, function () { L.msg('لا... أنا متعب. ادخل.'); });
       });
     },
-    sol: 'R26 RJ20 R4 _10 RJ20 R4 _7 R14 RJ20 R10 _7 R76 _7 J12 _19 J12 _7 L20 _7 RJ12 _25 R10 _7 J8 _7 L14 LJ20 L10 _11 LJ20 L14 _7 L20 LJ20 L10 _7 L20 LJ20 L10 _7 L60 _154 R60 RJ20 R10 _20 R18 RJ20 R16 _40 R10 RJ20 R60'
+    sol: 'R26 RJ20 R4 _10 RJ20 R4 _7 R14 RJ20 R10 _7 R76 _7 J12 _19 J12 _7 L30 _30 RJ12 R26 _7 J8 _7 L14 LJ20 L10 _11 LJ20 L14 _7 L20 LJ20 L10 _7 L20 LJ20 L10 _7 L60 _154 R60 RJ20 R10 _20 R18 RJ20 R16 _40 R10 RJ20 R60'
   });
 
   root.TrollLevels.addWorld({ name: 'عالم الملك الماكر', n: LEVELS.length, theme: 'royal', bg: '#ff6b7a', bg2: '#ff8892', ink: '#2a0f1a', ink2: '#4b2434', accent: '#ffffff' }, LEVELS);
