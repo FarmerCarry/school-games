@@ -10,37 +10,40 @@
 </head>
 <body>
   <canvas id="game" tabindex="0" aria-label="ملعب ضربة إلى الفضاء"></canvas>
-  <main id="ui">
-    <div class="wallet" aria-label="العملات"><span class="coin" aria-hidden="true">★</span><b id="coins">0</b></div>
-    <div id="world-label" class="world-label">المروج</div>
-    <div class="tools">
-      <button id="pause" class="round-button" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden><i class="pause-icon" aria-hidden="true"></i></button>
+  <main id="ui" data-phase="title">
+    <div id="hud" class="hud" hidden>
+      <div class="hud-left">
+        <div class="chip run-coins" aria-label="عملات هذه الضربة"><i class="coin-ico" aria-hidden="true"></i><b id="run-coins">0</b></div>
+        <div id="rockets" class="rockets" aria-label="الصواريخ"></div>
+      </div>
+      <div id="distance" class="distance"><b id="meters" dir="ltr">0</b><span>متر</span></div>
+      <div id="altimeter" class="altimeter" aria-hidden="true">
+        <span class="alt-goal">الفضاء</span>
+        <div class="alt-track"><div id="alt-fill" class="alt-fill"></div><i id="alt-ball" class="alt-ball"></i></div>
+        <span class="alt-value"><b id="alt-meters">0</b> م</span>
+      </div>
+      <p id="hint" class="hint" hidden></p>
     </div>
-    <div id="distance" class="distance" hidden><strong id="meters" dir="ltr">0</strong><span>متر</span><b id="star-count" class="star-count" hidden></b></div>
+    <button id="pause" class="round-button pause-button" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden><i class="pause-icon" aria-hidden="true"></i></button>
     <div id="toast" class="toast" role="status" hidden></div>
-    <div id="best" class="best">أفضل مسافة: <bdi id="best-meters">0</bdi> متر</div>
 
     <section id="title-screen" class="title-screen">
-      <h1><span>ضربة إلى</span><strong>الفضاء</strong></h1>
-      <p class="tagline">ضربة صغيرة… رحلة كبيرة!</p>
-      <button id="play" class="button primary play" type="button">العب الآن <span class="play-icon" aria-hidden="true"></span></button>
-      <div class="title-actions"><button id="open-worlds" class="button cream" type="button">العوالم</button><button id="open-upgrades" class="button cream" type="button">التطويرات</button></div>
-      <div class="instructions"><p class="howto">انقر أو اضغط <span class="key">مسافة</span> في منتصف المؤشر<br>طر أبعد، واجمع العملات، وطوّر ضربتك!</p>
-      <div id="journey" class="journey"></div></div>
-    </section>
-
-    <div id="swing-controls" class="swing-controls" hidden>
-      <div class="meter-panel">
-        <div id="meter-track" class="meter-track" role="meter" aria-label="توقيت الضربة" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-          <div id="sweet-zone" class="sweet-zone"></div><div id="needle" class="needle"></div>
-        </div>
-        <p id="meter-hint">انقر في المنتصف لضربة مثالية</p>
+      <h1 class="logo"><span class="logo-top">ضربة إلى</span><span class="logo-main">الفضاء</span></h1>
+      <div class="title-stats">
+        <span class="chip"><i class="coin-ico" aria-hidden="true"></i><b id="coins">0</b></span>
+        <span class="chip">أفضل مسافة: <b id="best-meters" dir="ltr">0</b> م</span>
       </div>
-      <button id="hit" class="button primary hit" type="button">اضرب</button>
-    </div>
-    <button id="flight-hint" class="flight-hint" type="button" hidden>سرّع الرحلة · مسافة</button>
-
-    <button id="continue" class="flight-hint" type="button" hidden>عرض النتيجة · مسافة</button>
+      <button id="play" class="button primary play" type="button">العب<i class="play-icon" aria-hidden="true"></i></button>
+      <div class="title-actions">
+        <button id="open-shop" class="button secondary" type="button">المتجر</button>
+        <button id="open-worlds" class="button secondary" type="button">العوالم <small id="world-label"></small></button>
+      </div>
+      <ul class="howto">
+        <li><span dir="ltr"><span class="sg-key">مسافة</span> <span class="sg-key">انقر</span></span> اضرب عندما يصل المضرب إلى <b class="gold">الذهبي</b></li>
+        <li>في الهواء: <b>صاروخ</b> · قرب الأرض: <b>قفزة خارقة</b></li>
+      </ul>
+      <p id="journey" class="journey"></p>
+    </section>
 
     <section id="modal" class="modal" hidden aria-modal="true" role="dialog" aria-labelledby="modal-heading">
       <div id="panel" class="panel">
@@ -52,14 +55,21 @@
           <div id="result-coins" class="result-coins"></div>
           <p id="result-unlock" class="result-unlock" hidden></p>
         </div>
-        <div id="worlds-content" class="worlds" hidden></div>
-        <div id="upgrades-content" hidden>
-          <p class="shop-hint">كل تطوير يقربك من الفضاء</p>
+        <div id="shop-content" hidden>
+          <div class="shop-wallet chip"><i class="coin-ico" aria-hidden="true"></i><b id="shop-coins">0</b></div>
           <div id="upgrades" class="upgrades"></div>
+          <div id="skins-content"><h3>شكل الكرة</h3><div id="skins" class="skins"></div></div>
         </div>
-        <div id="skins-content" hidden><h3>أشكال الكرة</h3><div id="skins" class="skins"></div></div>
-        <div id="pause-content" hidden><p class="pause-copy">خذ نفسًا… ضربتك تنتظرك!</p><button id="resume" class="button primary" type="button">تابع اللعب</button><button id="restart" class="button cream" type="button">ابدأ من جديد</button></div>
-        <div class="modal-actions"><button id="again" class="button primary" type="button" hidden>ضربة أخرى</button><button id="menu" class="button text-button" type="button">القائمة الرئيسية</button></div>
+        <div id="worlds-content" class="worlds" hidden></div>
+        <div id="pause-content" hidden>
+          <p class="pause-copy">خذ نفسًا… الكرة تنتظرك!</p>
+          <button id="resume" class="button primary" type="button">تابع اللعب</button>
+          <button id="restart" class="button secondary" type="button">ضربة جديدة</button>
+        </div>
+        <div class="modal-actions">
+          <button id="again" class="button primary" type="button" hidden>ضربة أخرى</button>
+          <button id="menu" class="button text-button" type="button">القائمة الرئيسية</button>
+        </div>
         <p id="modal-tip" class="modal-tip"></p>
       </div>
     </section>

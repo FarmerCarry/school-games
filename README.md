@@ -61,9 +61,13 @@ Choose **العب مرة أخرى** after a round; the starting player alternate
 The fast build bundles each game into one HTML file, with the existing shared fonts,
 and the offline cache updates the games on the next site visit.
 
-**ضربة إلى الفضاء (Skybound Golf)** is a one-button distance golf game. Time a swing with
-Space or a click, bounce across the course, and earn coins for power, bounce and flight upgrades.
-Reach a green for a putting challenge and bonus coins. Best distance and upgrades save locally.
+**ضربة إلى الفضاء (Skybound Golf)** is a one-button golf launcher. Press Space or click when the
+backswing reaches the gold zone, then use the same button in flight: in the air it fires a rocket,
+just before landing it makes a super bounce (also across water). Collect coins, pop balloons, fly
+through boost rings and roll into a hole for a bonus. Coins buy power, bounce, rocket and magnet
+upgrades and ball styles; longer shots unlock five worlds from the meadow to the moon, and rockets
+can carry the ball to the edge of space. Progress saves locally; saves from the earlier version keep
+their coins, best distance and balls, and get their upgrade coins back.
 
 **أصابع البرق (typing test)** works like Monkeytype: time (15/30/60 s), words (10/25/50) or
 sentences, in English or Arabic, with the same WPM/accuracy formulas. For a class race, click

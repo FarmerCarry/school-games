@@ -339,6 +339,27 @@ on a slow school disk a little slower, and the offline cache has about 140 KB le
 for the whole site, so a new game or font would need room made elsewhere first.
 Earlier sections keep the sizes measured when each change landed.
 
+## Rebuilt Skybound Golf, 9 October 2026
+
+ضربة إلى الفضاء was rewritten from scratch with new art and game feel: a swing
+gauge drawn around the golfer, rockets and timed super bounces in flight, five
+worlds with parallax backdrops, boost rings, balloons, props and an altitude
+goal. Everything is still drawn live on one canvas with no images and no cached
+bitmaps. It loads the same files as before: `physics.js`, `art.js`, `game.js`
+and `style.css`, plus the shared Kit and styles.
+
+| File | Before bytes | After bytes | Before gzip | After gzip | New limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Skybound Golf | 79,703 | 110,614 | 28,678 | 38,186 | 112,000 |
+
+The new page sits in the middle of the other games (about 50 to 230 KB). Its
+thumbnail is smaller (5,958 instead of 7,369 bytes), so the portal shrinks from
+354,681 to 353,215 of 360,000 bytes. Measured against main after the headroom
+review above, the offline cache grows by 29,584 bytes, from 4,859,293 to 4,888,877
+of 5,000,000, which leaves 111,123 bytes (2.2%) for the whole site. In headless
+software rendering at 1280 × 720 a frame's draw, including rasterization, takes
+about 7.5 to 9 ms (median) during a flight.
+
 ## CI, review, and deployed performance
 
 The build workflow runs this check immediately after building, on pull requests
