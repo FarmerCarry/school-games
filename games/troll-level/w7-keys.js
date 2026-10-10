@@ -22,7 +22,7 @@
  *                                         cube): it rides it and pops out once the
  *                                         group has fallen more than 2 tiles or is gone,
  *                                         lost if spikes are under it, else floating
- *                                         up at the height it was frozen at
+ *                                         up at the height it was frozen at ('keypop')
  *   L.onKey(fn)                           fn(k) when you pick up key k
  *   L.held(), L.give(n)                   keys in your hands
  *   L.need(d, n)                          a padlocked door needs n keys; L.need(g, 1)
@@ -166,7 +166,9 @@
     k.x = k.hx + g.ox; k.y = k.hy + g.oy;
     if (g.active && g.oy - k.oy0 <= 2 * T) return;
     k.inside = null;
-    if (spikesUnder(w, k)) lose(w, k); else moveKey(k, k.x, Math.min(k.y - T, k.hy + k.oy0), 5 * T);
+    if (spikesUnder(w, k)) { lose(w, k); return; }
+    moveKey(k, k.x, Math.min(k.y - T, k.hy + k.oy0), 5 * T);
+    w.emit('keypop', { k: k });
   }
 
   // Solid for keys: fixed ground and groups resting in place (an opened lock is not).
@@ -389,12 +391,24 @@
       cx = k.x + 20; cy = k.y + 20;
       if (k.bit) { drawBite(ctx, S, cx, cy, ink); continue; }
       if (k.m || k.fly) { stamp(ctx, S.key, cx, cy, 1, Math.sin(t * 30) * 0.25); continue; }
-      if (!k.inside) cy += Math.sin(t * 3 + k.hx * 0.07) * 3; // a frozen key keeps still
+      if (k.inside) { drawFrozen(ctx, S, k, t); continue; }
+      cy += Math.sin(t * 3 + k.hx * 0.07) * 3;
       stamp(ctx, S.key, cx, cy, 1, 0);
       s = Math.sin(t * (k.fake ? 6 : 3) + k.hx);
       stamp(ctx, S.spark, cx - 12, cy - 11, (k.fake ? 0.6 : 0.4) + s * 0.2, 0);
       if (k.fake) stamp(ctx, S.spark, cx + 13, cy + 8, 0.3 - s * 0.2, 0);
     }
+  }
+  // A key frozen in an ice cube keeps still: a little smaller and tilted, under a
+  // frosty glaze with a shine, so it reads as inside the ice, not on it.
+  function drawFrozen(ctx, S, k, t) {
+    var x = k.x, y = k.y;
+    stamp(ctx, S.key, x + 20, y + 21, 0.8, -0.5);
+    Art.rr(ctx, x + 5, y + 5, 30, 30, 6);
+    ctx.fillStyle = 'rgba(223,247,255,0.45)'; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x + 10, y + 31); ctx.lineTo(x + 20, y + 19); ctx.moveTo(x + 24, y + 31); ctx.lineTo(x + 29, y + 25);
+    ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.stroke();
+    stamp(ctx, S.spark, x + 29, y + 11, 0.4 + Math.sin(t * 3 + k.hx) * 0.2, 0);
   }
   // The fake key that bit: big, with a mouthful of teeth and two eyes on its bow.
   function drawBite(ctx, S, cx, cy, ink) {
@@ -582,6 +596,12 @@
       ui.fx.burst(d.k.x + 20, d.k.y + 20, { count: 10, color: '#ffffff', speed: 150, life: 0.45, size: 5, gravity: -100 });
       ui.say('المفتاح عاد!', 1.4); ui.sfx('sparkle');
     };
+    // a frozen key breaks out of its ice cube: chips of ice and a twinkle
+    Art.EV.keypop = function (d, ui) {
+      ui.fx.burst(d.k.x + 20, d.k.y + 20, { count: 12, colors: ['#ffffff', '#bff0ff', GOLD], speed: 220, life: 0.5, size: 6, gravity: 300 });
+      ui.shake.add(2);
+      ui.sfx('sparkle');
+    };
     Art.mod({
       // the sprites are painted while the level is baked, not during its first frame
       bake: function (g, w, pal) { if (w.keys) sprites(pal.ink); },
@@ -704,30 +724,29 @@
     sol: 'R46 RJ20 R28 RJ20 R300'
   });
 
-  // 7-8 (stand-in for "key in an ice cube"): the key runs away from you. Scare it
-  // from the right and it runs into the wall; from the left it dives into the lock,
-  // and 1 s later it is home again with the lock closed.
+  // 7-8: the key is frozen in a world 6 ice cube. Kicked right it drops into the
+  // spike pit and the key breaks on the spikes (both come back after 1 s); kicked
+  // left it falls into the safe dip, and the key hops out and floats over it.
+  // The dip has a step (col 5 is 2 deep), so nobody is stuck down there. The K
+  // above the cube is only the key's map spot: the script freezes it into the cube.
   LEVELS.push({
-    name: 'المفتاح الخائف', msg: 'هذا المفتاح خوّاف جدًا!',
-    hint: 'المفتاح يهرب بعيدًا عنك! اقفز فوقه ليهرب نحو الجدار.',
+    name: 'مفتاح في الثلج', msg: 'المفتاح متجمد! اركله نحو الباب!',
+    hint: 'لا تركل المكعب نحو الشوك! اقفز فوقه واركله يسارًا إلى الحفرة.',
     map: (function () {
       var b = room();
-      pit(b, 15, 16).f(15, 13, 16, 13, '%');
-      return b.s(2, 12, 'P').s(11, 12, 'K').s(28, 12, 'L').done();
+      b.f(5, 13, 6, 14, ' ').s(6, 15, ' ');
+      pit(b, 15, 17);
+      return b.s(2, 12, 'P').s(10, 12, 'a').s(10, 11, 'K').s(28, 12, 'L').done();
     })(),
     script: function (L) {
       var k = L.key(0);
+      L.cube('a', { home: true });
+      L.keyIn(k, 'a');
       k.back = 1;
-      // at home it is scared: it flees from you when you come within 1.4 tiles
-      L.world.ticks.push(function () {
-        if (k.taken || k.gone || k.fly || k.x !== k.hx || k.y !== k.hy) return;
-        var dx = L.px() - k.x / L.T - 0.5, dy = L.py() - k.y / L.T - 0.5;
-        if (dx * dx + dy * dy > 1.4 * 1.4) return;
-        L.keyThrow(k, dx > 0 ? -9 : 9, -3);
-        L.msg('المفتاح خاف منك! هاها!');
-      });
+      L.when(function () { return k.gone; }, function () { L.msg('هههه! انكسر المفتاح!'); });
+      L.when(function () { return !!k.m; }, function () { L.msg('ماذا؟! كيف عرفت؟!'); });
     },
-    sol: 'R50 RJ20 R10 L130 R102 RJ20 R300'
+    sol: 'R10 RJ20 R16 RJ20 R14 L40 _30 L40 RJ20 R57 RJ20 R300'
   });
 
   // 7-9: a gift key... but the steps over the pit are locks. Bump the lock floating
