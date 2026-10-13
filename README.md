@@ -11,7 +11,7 @@ games are in Arabic, laid out right-to-left.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores, progress and the anonymous play statistics are saved in each browser (localStorage) only.
 
-## The games (31)
+## The games (32)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -20,6 +20,7 @@ games are in Arabic, laid out right-to-left.
 | أصابع البرق | Lightning Fingers (typing test, English + Arabic) | 1 | تحديات |
 | ضربة الطلاء | Splat Strike (3D paint-blaster arena vs bots) | 1 | تصويب، تحدي الروبوتات |
 | عدّاء السكة | Rail Rush | 1 | جري |
+| الديناصور ثلاثي الأبعاد | Dino 3D | 1 | جري، أركيد |
 | منحدر النيون | Neon Slope | 1 | جري، أركيد |
 | نفق السرعة | Tunnel Blitz | 1 | جري، أركيد |
 | قفزة الإيقاع | Beat Dash | 1 | جري، أركيد |
@@ -48,6 +49,12 @@ games are in Arabic, laid out right-to-left.
 | ساحة الثعابين | Snake Arena | 1 | تحدي الروبوتات، أركيد |
 
 The original arcade games save best scores and unlocks in the browser, and have a title screen, P/Esc pause and a 🔊 mute button. The two board games use a compact board with local two-player and computer modes.
+
+**الديناصور ثلاثي الأبعاد (Dino 3D)** is a voxel desert endless runner. Jump with Space or Up,
+hold for a higher jump, and crouch or descend quickly with Down or Ctrl. Avoid cacti and birds
+as the pace increases and the desert changes from day to night. P/Esc pauses, R retries after
+a crash, and the best score saves locally. Its original geometry and synthesized sounds use
+the bundled Three.js library and work offline, including the downloaded Windows folder.
 
 ### Connect 4 and tic-tac-toe
 

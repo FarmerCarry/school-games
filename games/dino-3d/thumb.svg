@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+ <defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#e8b762"/><stop offset="1" stop-color="#f8d892"/></linearGradient><linearGradient id="river" x2="1" y2="1"><stop stop-color="#55caca"/><stop offset="1" stop-color="#249ba9"/></linearGradient></defs>
+ <path fill="url(#sky)" d="M0 0h400v400H0z"/>
+ <path fill="#dba754" d="M0 141h42v-18h57v21h46v-37h51v17h38v29h58v-34h62v26h46v255H0z"/>
+ <path fill="#efc578" d="m0 264 284-132 116 65v203H0z"/>
+ <path fill="#d7a14d" d="m0 332 302-153 98 52v169H0z"/>
+ <path fill="#f5d292" d="m16 400 280-199 16 9L47 400z"/>
+ <path fill="url(#river)" d="M0 273 247 149l18 10L0 369z"/>
+ <path fill="#f7dda7" d="m0 266 245-122 8 5L0 285zm0 109 265-216 11 7L13 400H0z"/>
+ <path fill="#9fe1d6" d="m0 309 40-19 5 3-39 20zm79-25 28-18 5 3-28 19zm32-51 21-11 5 3-21 12z"/>
+ <path fill="#d5a15a" d="m264 247 16-9 10 6-16 10zm59-3 14-8 12 7-14 8zm20 58 16-9 9 6-16 9z"/>
+ <ellipse cx="194" cy="339" rx="85" ry="20" fill="#8c703e" opacity=".2"/>
+ <!-- An original isometric voxel T-rex, looking along the desert track. -->
+ <path fill="#337440" d="m113 272-24 11-35-27-18-1-10-17 26-5 28 18 27 1 30 15z"/>
+ <path fill="#64aa4b" d="m36 238 17-6 28 18 27 1 29 16-24 12-24-15-18-1-20-15z"/>
+ <path fill="#4b9042" d="m119 230 68-24 49 35-15 72-70 11-45-38z"/>
+ <path fill="#6fb254" d="m119 230 68-24 49 35-62 25-68-25z"/>
+ <path fill="#397a3c" d="m174 266 62-25-15 72-49 19z"/>
+ <path fill="#4c9446" d="m172 217-1-48 38-23 48 28-2 64-49 25z"/>
+ <path fill="#86bc60" d="m172 217 34 22v24l-34-20z"/>
+ <path fill="#63a94b" d="m159 158 5-59 59-24 57 30-1 59-61 26z"/>
+ <path fill="#80bd5a" d="m164 99 59-24 57 30-62 28z"/>
+ <path fill="#468c40" d="m218 133 62-28-1 59-61 26z"/>
+ <path fill="#61a64a" d="m232 132 49-20 43 21-1 45-59 26-32-24z"/>
+ <path fill="#7bbb57" d="m232 132 49-20 43 21-62 28z"/>
+ <path fill="#3b803d" d="m262 161 62-28-1 45-59 26z"/>
+ <path fill="#284f32" d="m265 185 58-25v7l-58 26z"/>
+ <path fill="#f5efc8" d="m239 137 18-8v24l-18 8z"/>
+ <path fill="#1d382b" d="m248 137 9-4v15l-9 4z"/>
+ <path fill="#2c5b34" d="m306 143 8-3v7l-8 3z"/>
+ <path fill="#e1dfae" d="m272 186 7-3v9l-7 3z"/>
+ <path fill="#35793c" d="m203 230 23-9 10 14-1 20 17-7 6 10-30 13-19-15z"/>
+ <path fill="#75ae52" d="m203 230 23-9 10 14-23 10z"/>
+ <path fill="#d2d69e" d="m251 249 6-3 6 9-6 3z"/>
+ <path fill="#377a3e" d="m169 295 26 13-5 29 24 11-3 16-50 1-11-15 10-29z"/>
+ <path fill="#6cae4d" d="m150 285 29 3 16 20-24 10-21-14z"/>
+ <path fill="#4e9544" d="m133 285 23 14-11 28-18 12-35-4-1-15 28-2z"/>
+ <path fill="#cbd194" d="m163 352 10 1v10h-10zm18 1 10-1v11h-10zm-88-29 8 1v8l-8-1z"/>
+ <!-- Flowering cactus marks the next jump. -->
+ <path fill="#337e49" d="m335 276 15-7v-78l-15 7z"/>
+ <path fill="#65a965" d="m325 191 10 7v78l-10-7z"/>
+ <path fill="#78b674" d="m325 191 15-7 10 7-15 7z"/>
+ <path fill="#448e54" d="m333 242-25-12v-32l10 6v20l15 6zm15-10 21-10v-35l-11 5v25l-10 5z"/>
+ <path fill="#e990ac" d="m324 188 14-7 14 7-15 7z"/>
+ <path fill="#f5b6bf" d="m330 181 9-4 8 5-9 5z"/>
+ <path fill="#fff4d2" d="m57 69 9-15 10 15-10 7zm277-22 5-10 6 10-6 6z"/>
+</svg>

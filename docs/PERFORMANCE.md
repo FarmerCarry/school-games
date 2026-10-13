@@ -341,6 +341,40 @@ Earlier sections keep the sizes measured when each change landed.
 
 ## CI, review, and deployed performance
 
+### Dino 3D addition — 13 October 2026
+
+Measured on Windows with the same pinned build dependencies. The before column
+is a fresh build of `ba0bee64b5f47bd999f49e71545cc0d27380d891`, not the older
+9 October figures above. Local checkout line endings can make these totals
+slightly different from the Linux CI build.
+
+| Measurement | Before (bytes) | After (bytes) | Limit (bytes) |
+| --- | ---: | ---: | ---: |
+| Portal | 354,734 | 358,987 | 360,000 (unchanged) |
+| Teacher | 86,313 | 87,098 | 88,000 (was 87,000) |
+| Dino 3D built HTML | — | 50,277 | 55,000 (new) |
+| Shared Three.js | 667,803 | 667,803 | 750,000 (unchanged) |
+| Offline precache | 4,864,759 | 4,920,074 | 5,000,000 (unchanged) |
+
+The new game reuses the existing Three.js and fonts. Original merged voxel
+geometry, instanced scenery, pooled obstacles and synthesized sound add no
+model, texture, music, or font downloads. The portal includes the thumbnail;
+both the portal and teacher page include the new catalog entry. Only the
+teacher allowance rises, by 1,000 bytes, because its catalog grows by 785 bytes.
+All 40 asset measurements pass and offline headroom is 79,926 bytes.
+
+A representative running scene uses 26–28 draw calls, roughly 14,100 triangles,
+and no textures. A synthetic recycling check of 200 batches of eight alternating
+cacti/birds settles at 26 geometries; the bird-heavy reduced-detail scene uses
+51 draw calls. Pixel ratio is capped at 1.5 (1 in reduced-detail mode), particles
+are bounded, and paused scenes redraw only when dirty. These resource counts
+are not a school-PC frame-rate benchmark.
+
+A local desktop-GPU run measured JavaScript heap after explicit garbage
+collection at 5.31 MB after 30 seconds and 5.36 MB after 60 seconds, across 18
+restarts through the game controls. This short observation is consistent with
+the scene resources settling; it is not a classroom-hardware memory guarantee.
+
 The build workflow runs this check immediately after building, on pull requests
 and main. A failed check blocks this workflow's deployment. The
 `asset-performance-budgets` artifact is uploaded whenever a report exists,
