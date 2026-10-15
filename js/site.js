@@ -611,6 +611,11 @@
   var hadFullscreen = false;
   function routeHash() { return location.hash || '#/'; }
   function frameEl() { return $('#stage iframe'); }
+  // A paused game, its title/menu and the classroom handoff still own a session.
+  // Include the pending route so a launch cannot race an offline refresh check.
+  window.SGUpdateSafe = function () {
+    return renderedHash !== null && !current && !frameEl() && parseRoute().name !== 'play';
+  };
   // Local play statistics (js/stats.js, docs/PLAY_STATS.md). Never let them break play.
   function stat(name, a, b) {
     try { window.SGStats[name](a, b); } catch (e) { /* statistics are optional */ }
@@ -1010,6 +1015,7 @@
     }
     renderedHash = routeHash();
     typing = false;
+    window.dispatchEvent(new Event('sg:sessionchange'));
   }
 
   /* ------------------------------------------------------------ events */

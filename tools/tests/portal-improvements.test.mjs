@@ -41,6 +41,77 @@ function contrast(a, b) {
 }
 const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number);
 
+async function mockCompletedUpdate(page) {
+  await page.addInitScript(() => {
+    window.SG_OFFLINE_BUILD = true;
+    window.SG_OFFLINE_VERSION = 'open-page';
+    const mock = window.offlineUpdateTest = { hold: false, pending: [] };
+    const active = new EventTarget(); active.state = 'activated';
+    active.postMessage = (request, ports) => {
+      const reply = () => ports[0].postMessage({ type: 'sg:offline-status', id: request.id,
+        ready: true, count: 3, total: 3, version: 'completed-next-build' });
+      if (mock.hold) mock.pending.push(reply); else reply();
+    };
+    const owner = Object.assign(new EventTarget(), { active, installing: null, waiting: null, update: async () => {} });
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true,
+      value: Object.assign(new EventTarget(), { register: async () => owner }) });
+  });
+}
+
+test('verified update waits through real game menus, play, pause and classroom handoff', async t => {
+  const page = await pageFor(t);
+  await mockCompletedUpdate(page);
+  await page.clock.install();
+  const frame = await openGame(page);
+  await frame.evaluate(() => { window.updateProgress = 'same-live-game'; });
+  assert.equal(await page.evaluate(() => SGUpdateSafe()), false, 'title/menu still owns the iframe session');
+  assert.equal(await page.locator('#offlineUpdate').isHidden(), true);
+  await clickControl(frame, '#btnPlay');
+  await frame.waitForFunction(() => !__game.state().demo && ['countdown', 'play', 'goal'].includes(__game.state().scene));
+  assert.equal(await page.locator('#offlineUpdate').isHidden(), true);
+  await frame.locator('#pauseBtn').click();
+  await frame.waitForFunction(() => __game.state().paused);
+  assert.equal(await page.evaluate(() => SGUpdateSafe()), false, 'paused match is not a safe refresh');
+  await page.locator('#classroom summary').click();
+  await page.locator('#sessionMinutes').selectOption('5');
+  await page.locator('#sessionStart').click();
+  await page.clock.fastForward(300001);
+  await page.locator('#sessionHandoff').waitFor({ state: 'visible' });
+  assert.equal(await page.evaluate(() => SGUpdateSafe()), false, 'handoff dialog keeps the game session');
+  assert.equal(await page.locator('#offlineUpdate').isHidden(), true);
+  assert.equal(await frame.evaluate(() => window.updateProgress), 'same-live-game');
+  await page.locator('#sessionEnd').click();
+  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+  assert.equal(await page.evaluate(() => SGUpdateSafe()), true);
+  assert.equal(await page.locator('#stage iframe').count(), 0);
+  assert.equal(await page.locator('#offlineRefresh').innerText(), 'حدّث الصفحة الآن');
+});
+
+test('refresh verification cannot discard a game launched while the status reply is pending', async t => {
+  const page = await pageFor(t);
+  await mockCompletedUpdate(page);
+  await page.goto(origin);
+  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+  await page.evaluate(() => { window.offlineUpdateTest.hold = true; window.refreshRaceSentinel = 'same-document'; });
+  await page.locator('#offlineRefresh').click();
+  await page.waitForFunction(() => offlineUpdateTest.pending.length > 0);
+  assert.equal(await page.evaluate(() => {
+    location.hash = '#/play/air-hockey';
+    return SGUpdateSafe();
+  }), false, 'pending play route is unsafe even before hashchange renders it');
+  await page.waitForFunction(() => document.querySelector('#stage')?.getAttribute('aria-busy') === 'false');
+  const frame = page.frames().find(frame => frame.url().includes('/games/air-hockey/'));
+  await frame.evaluate(() => { window.updateProgress = 'preserved-after-await'; });
+  await page.evaluate(() => offlineUpdateTest.pending.splice(0).forEach(reply => reply()));
+  await page.waitForFunction(() => !document.getElementById('offlineRefresh').disabled);
+  assert.equal(await page.evaluate(() => refreshRaceSentinel), 'same-document');
+  assert.equal(await frame.evaluate(() => window.updateProgress), 'preserved-after-await');
+  assert.equal(await page.locator('#offlineUpdate').isHidden(), true);
+  await page.locator('#backGames').click();
+  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+  assert.equal(await page.evaluate(() => refreshRaceSentinel), 'same-document', 'safe close still requires explicit fresh consent');
+});
+
 test('every catalog game declares useful duration/input metadata and Pool Party supports friends', async () => {
   const context = { window: {} };
   vm.runInNewContext(await fs.readFile(path.join(repo, 'js/catalog.js'), 'utf8'), context);

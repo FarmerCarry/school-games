@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -117,11 +118,12 @@ test('kill-switch portals stay unregistered after worker-driven navigation', t =
 test('worker-only changes get an independent cache while unchanged builds stay deterministic', t => {
   const f = fixture(t);
   const worker = () => fs.readFileSync(path.join(f.root, '_site/sw.js'), 'utf8');
+  const portal = () => fs.readFileSync(path.join(f.root, '_site/index.html'), 'utf8');
   const zipped = () => fs.readFileSync(path.join(f.root, '_site', download));
   const version = source => source.match(/^var VERSION = (.+);$/m)[1];
   const files = source => source.match(/^var FILES = (.+);$/m)[1];
   success(run(f));
-  const before = worker(), beforeZip = zipped();
+  const before = worker(), beforeZip = zipped(), beforePortal = portal();
   success(run(f));
   assert.equal(worker(), before, 'an unchanged build must keep the same worker bytes');
   assert.deepEqual(zipped(), beforeZip, 'an unchanged build must keep the same offline download bytes');
@@ -129,7 +131,21 @@ test('worker-only changes get an independent cache while unchanged builds stay d
   assert.notEqual(changedBuilder, builder.toString());
   f.write('tools/build.mjs', changedBuilder);
   success(run(f));
-  assert.equal(files(worker()), files(before), 'page and asset bytes did not change');
+  const after = worker(), afterPortal = portal();
+  const beforeFiles = JSON.parse(files(before)), afterFiles = JSON.parse(files(after));
+  assert.deepEqual(Object.keys(afterFiles).sort(), Object.keys(beforeFiles).sort(), 'worker-only updates preserve the complete file inventory');
+  const withoutPortal = entries => Object.fromEntries(Object.entries(entries).filter(([name]) => name !== 'index.html'));
+  assert.deepEqual(withoutPortal(afterFiles), withoutPortal(beforeFiles), 'every non-portal asset hash remains identical');
+  assert.notEqual(afterFiles['index.html'], beforeFiles['index.html'], 'the portal carries the new build identity');
+  const identity = /window\.SG_OFFLINE_VERSION="([0-9a-f]{16})";/g;
+  for (const [page, source, manifest] of [[beforePortal, before, beforeFiles], [afterPortal, after, afterFiles]]) {
+    assert.equal((page.match(/window\.SG_OFFLINE_VERSION=/g) || []).length, 1, 'exactly one page identity assignment');
+    const values = [...page.matchAll(identity)];
+    assert.equal(values.length, 1, 'page identity is one deterministic 16-hex value');
+    assert.equal(values[0][1], JSON.parse(version(source)), 'each portal identifies its own worker version');
+    assert.equal(crypto.createHash('sha256').update(page).digest('hex').slice(0, 16), manifest['index.html'], 'the manifest verifies the final served portal bytes');
+  }
+  assert.equal(afterPortal.replace(identity, ''), beforePortal.replace(identity, ''), 'only the identity assignment changes in a worker-only portal update');
   assert.notEqual(version(worker()), version(before), 'worker implementation changes must use a different cache');
 });
 

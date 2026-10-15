@@ -27,34 +27,55 @@
     c.direction = 'ltr';
   }
   HH.text = text;
+  var fitCache = new Map();
   function fitSize(c, s, size, maxW, weight) {
+    var key = JSON.stringify([s, size, maxW, weight || 700]);
+    if (fitCache.has(key)) return fitCache.get(key);
     c.font = (weight || 700) + ' ' + size + 'px Fredoka';
     c.direction = AR.test(s) ? 'rtl' : 'ltr';
     var w = c.measureText(s).width;
     c.direction = 'ltr';
-    return w > maxW ? Math.max(10, Math.floor(size * maxW / w)) : size;
+    var fitted = w > maxW ? Math.max(10, Math.floor(size * maxW / w)) : size;
+    if (fitCache.size === 32) fitCache.delete(fitCache.keys().next().value);
+    fitCache.set(key, fitted);
+    return fitted;
   }
   HH.fitSize = fitSize;
 
   /* ---------------------------------------------------------- ball skins */
-  function seams(c, r, col, lw) {
+  // Vector caches stay sharp at every scale/DPR and need no pixel buffers.
+  // A path's beginPath is a no-op while a single existing art shape is recorded.
+  function artPath(draw) {
+    var p = new Path2D(); p.beginPath = function () {};
+    draw(p); delete p.beginPath; return p;
+  }
+  var ballPaths = new Map(), hudPaths = null;
+  function ballGeometry(r) {
+    if (ballPaths.has(r)) return ballPaths.get(r);
+    var paths = { circle: artPath(function (p) { A.circ(p, 0, 0, r); }), seams: [
+      artPath(function (p) { p.moveTo(-r, 0); p.lineTo(r, 0); }),
+      artPath(function (p) { p.moveTo(0, -r); p.lineTo(0, r); }),
+      artPath(function (p) { p.arc(-r * 1.25, 0, r * 0.95, -0.85, 0.85); }),
+      artPath(function (p) { p.arc(r * 1.25, 0, r * 0.95, Math.PI - 0.85, Math.PI + 0.85); })
+    ] };
+    if (ballPaths.size === 8) ballPaths.delete(ballPaths.keys().next().value);
+    ballPaths.set(r, paths); return paths;
+  }
+  function seams(c, paths, col, lw) {
     c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round';
-    c.beginPath(); c.moveTo(-r, 0); c.lineTo(r, 0); c.stroke();
-    c.beginPath(); c.moveTo(0, -r); c.lineTo(0, r); c.stroke();
-    c.beginPath(); c.arc(-r * 1.25, 0, r * 0.95, -0.85, 0.85); c.stroke();
-    c.beginPath(); c.arc(r * 1.25, 0, r * 0.95, Math.PI - 0.85, Math.PI + 0.85); c.stroke();
+    // Keep four separate strokes: combining translucent neon seams changes intersections.
+    paths.seams.forEach(function (p) { c.stroke(p); });
   }
   function drawBall(c, x, y, r, rot, skin) {
     c.save(); c.translate(x, y); c.rotate(rot || 0);
-    var g;
-    A.circ(c, 0, 0, r);
+    var g, paths = ballGeometry(r);
     switch (skin) {
       case 'neon':
-        c.fillStyle = '#16123a'; c.fill();
-        c.save(); A.circ(c, 0, 0, r); c.clip();
-        seams(c, r, 'rgba(0,240,255,0.35)', r * 0.34); seams(c, r, '#6ff7ff', r * 0.12);
+        c.fillStyle = '#16123a'; c.fill(paths.circle);
+        c.save(); c.clip(paths.circle);
+        seams(c, paths, 'rgba(0,240,255,0.35)', r * 0.34); seams(c, paths, '#6ff7ff', r * 0.12);
         c.restore();
-        A.circ(c, 0, 0, r); c.lineWidth = r * 0.14; c.strokeStyle = '#ff4df0'; c.stroke();
+        c.lineWidth = r * 0.14; c.strokeStyle = '#ff4df0'; c.stroke(paths.circle);
         break;
       case 'beach':
         var cols = ['#ff4d4d', '#fff', '#2f9bff', '#fff', '#ffd23f', '#fff'];
@@ -63,41 +84,41 @@
         break;
       case 'smile':
         g = c.createRadialGradient(-r * 0.3, -r * 0.4, r * 0.1, 0, 0, r); g.addColorStop(0, '#fff27a'); g.addColorStop(1, '#ffb31a');
-        c.fillStyle = g; c.fill();
+        c.fillStyle = g; c.fill(paths.circle);
         c.fillStyle = INK;
         A.ell(c, -r * 0.32, -r * 0.2, r * 0.11, r * 0.18); c.fill(); A.ell(c, r * 0.32, -r * 0.2, r * 0.11, r * 0.18); c.fill();
         c.beginPath(); c.arc(0, r * 0.05, r * 0.5, 0.35, Math.PI - 0.35); c.lineWidth = r * 0.12; c.strokeStyle = INK; c.lineCap = 'round'; c.stroke();
         break;
       case 'melon':
-        c.fillStyle = '#5fd35a'; c.fill();
-        c.save(); A.circ(c, 0, 0, r); c.clip();
+        c.fillStyle = '#5fd35a'; c.fill(paths.circle);
+        c.save(); c.clip(paths.circle);
         c.strokeStyle = '#1f7a2a'; c.lineWidth = r * 0.22;
         for (var k = -2; k <= 2; k++) { c.beginPath(); c.moveTo(k * r * 0.45, -r); c.quadraticCurveTo(k * r * 0.6, 0, k * r * 0.45, r); c.stroke(); }
         c.restore();
         break;
       case 'rainbow':
         var rc = ['#ff4d4d', '#ff9f1c', '#ffd23f', '#3ddc84', '#2f9bff', '#9b5cff'];
-        c.save(); A.circ(c, 0, 0, r); c.clip();
+        c.save(); c.clip(paths.circle);
         for (var j = 0; j < 6; j++) { c.fillStyle = rc[j]; c.fillRect(-r, -r + j * r / 3, r * 2, r / 3 + 1); }
         c.restore();
         break;
       case 'galaxy':
         g = c.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.1, 0, 0, r); g.addColorStop(0, '#c07aff'); g.addColorStop(0.6, '#4a1f9e'); g.addColorStop(1, '#1a0b45');
-        c.fillStyle = g; c.fill();
+        c.fillStyle = g; c.fill(paths.circle);
         c.fillStyle = '#fff';
         [[0.3, -0.4, 0.09], [-0.45, 0.2, 0.07], [0.1, 0.45, 0.06], [-0.2, -0.5, 0.05], [0.55, 0.2, 0.05]].forEach(function (s) { A.star(c, s[0] * r, s[1] * r, s[2] * r * 2.2); c.fill(); });
         break;
       case 'gold':
         g = c.createLinearGradient(-r, -r, r, r); g.addColorStop(0, '#fff6b0'); g.addColorStop(0.5, '#ffc93a'); g.addColorStop(1, '#b07a00');
-        c.fillStyle = g; c.fill();
-        c.save(); A.circ(c, 0, 0, r); c.clip(); seams(c, r, '#8a5a00', r * 0.1); c.restore();
+        c.fillStyle = g; c.fill(paths.circle);
+        c.save(); c.clip(paths.circle); seams(c, paths, '#8a5a00', r * 0.1); c.restore();
         break;
       default:
         g = c.createRadialGradient(-r * 0.3, -r * 0.4, r * 0.1, 0, 0, r); g.addColorStop(0, '#ffab5e'); g.addColorStop(1, '#e8611a');
-        c.fillStyle = g; c.fill();
-        c.save(); A.circ(c, 0, 0, r); c.clip(); seams(c, r, '#3a1a0a', r * 0.1); c.restore();
+        c.fillStyle = g; c.fill(paths.circle);
+        c.save(); c.clip(paths.circle); seams(c, paths, '#3a1a0a', r * 0.1); c.restore();
     }
-    A.circ(c, 0, 0, r); c.lineWidth = r * 0.11; c.strokeStyle = INK; c.stroke();
+    c.lineWidth = r * 0.11; c.strokeStyle = INK; c.stroke(paths.circle);
     c.restore();
     // fixed highlight (does not rotate)
     c.globalAlpha = 0.35; c.fillStyle = '#fff';
@@ -256,7 +277,9 @@
     bgKey = key;
     return bgCanvas;
   }
-  HH.resetBg = function () { bgKey = ''; }; // redraw the cached court once web fonts are ready
+  HH.resetBg = function () {
+    bgKey = ''; fitCache.clear(); ballPaths.clear(); hudPaths = null;
+  }; // fonts/context restoration invalidate; vector paths adapt to scale/DPR
   HH.drawCourtPreview = function (c, courtId, w, h) {
     c.save(); c.scale(w / W, h / H); (COURT_DRAW[courtId] || COURT_DRAW.street)(c); c.restore();
   };
@@ -488,16 +511,22 @@
     var a = m.players[0], b = m.players[1];
     var cx = 640, y = 12, pw = 620, ph = 82;
     // panel
-    A.rr(c, cx - pw / 2, y, pw, ph, 22); A.fs(c, 'rgba(16,14,44,0.86)', 0);
-    c.lineWidth = 3; c.strokeStyle = 'rgba(255,255,255,0.25)'; c.stroke();
+    if (!hudPaths) hudPaths = [
+      artPath(function (p) { A.rr(p, 330, 12, 620, 82, 22); }),
+      artPath(function (p) { A.rr(p, 338, 20, 232, 66, 16); }),
+      artPath(function (p) { A.rr(p, 710, 20, 232, 66, 16); }),
+      artPath(function (p) { A.rr(p, 510, 120, 260, 28, 14); })
+    ];
+    c.fillStyle = 'rgba(16,14,44,0.86)'; c.fill(hudPaths[0]);
+    c.lineWidth = 3; c.strokeStyle = 'rgba(255,255,255,0.25)'; c.stroke(hudPaths[0]);
     // team plates
     [a, b].forEach(function (p, i) {
       var team = TEAM[i];
       var sx = i === 0 ? cx - pw / 2 + 8 : cx + pw / 2 - 8 - 232;
-      A.rr(c, sx, y + 8, 232, ph - 16, 16); A.fs(c, team.main, 0);
+      c.fillStyle = team.main; c.fill(hudPaths[i + 1]);
       c.fillStyle = 'rgba(255,255,255,0.15)'; c.fillRect(sx + 10, y + 12, 212, 4);
       // head icon
-      c.save(); A.rr(c, sx, y + 8, 232, ph - 16, 16); c.clip();
+      c.save(); c.clip(hudPaths[i + 1]);
       var hx = i === 0 ? sx + 32 : sx + 200;
       drawHead(c, p.ch, hx, y + 50, 26, i === 0 ? 1 : -1, { t: p.t, mood: p.mood, blink: p.blink });
       c.restore();
@@ -528,7 +557,7 @@
     text(c, info.sub, cx, y + 66, 14, 'rgba(255,255,255,0.75)', 'center');
     if (info.mode) {
       var ms = fitSize(c, info.mode, 18, 300);
-      A.rr(c, cx - 130, y + ph + 26, 260, 28, 14); A.fs(c, 'rgba(16,14,44,0.7)', 0);
+      c.fillStyle = 'rgba(16,14,44,0.7)'; c.fill(hudPaths[3]);
       text(c, info.mode, cx, y + ph + 41, ms, '#ffd23f', 'center');
     }
   }

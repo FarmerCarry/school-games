@@ -100,6 +100,20 @@ jobs:
           name: asset-performance-budgets
           path: artifacts/asset-budgets.json
           if-no-files-found: error
+      - name: Measure software-rendered startup and active frames (informational)
+        continue-on-error: true
+        timeout-minutes: 8
+        run: node tools/perf.mjs --samples 5 --seconds 5 --json artifacts/runtime-performance.json portal hoop-heads splat-strike
+        env:
+          SG_ROOT: _site
+      - name: Upload informational runtime performance report
+        if: always() && hashFiles('artifacts/runtime-performance.json') != ''
+        uses: actions/upload-artifact@v6
+        with:
+          name: runtime-performance-software-${{ github.sha }}
+          path: artifacts/runtime-performance.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Test board games in the single-file fast build
         run: npm run test:board-games
         env:

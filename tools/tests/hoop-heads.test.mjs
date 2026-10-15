@@ -20,7 +20,7 @@ after(async () => {
 
 // Hoop Heads with the test driving its loop: hh.step(n) runs n fixed updates, each
 // followed by a render, and hh.draw(n) only renders. hh.renders counts scene draws.
-async function hoop(t) {
+async function hoop(t, { fontGate } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -45,15 +45,18 @@ async function hoop(t) {
       return write.apply(this, arguments);
     };
   });
-  await page.goto(`${server.origin}/games/hoop-heads/`);
+  if (fontGate) await page.route('**/*.woff2', async route => { await fontGate; await route.continue(); });
+  await page.goto(`${server.origin}/games/hoop-heads/`, { waitUntil: fontGate ? 'domcontentloaded' : 'load' });
   await page.waitForFunction(() => window.__game && window.HH);
   // Late fonts redraw once; let that happen before counting scene draws.
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    await new Promise(resolve => setTimeout(resolve, 50));
+  await page.evaluate(async waitForFonts => {
+    if (waitForFonts) {
+      await document.fonts.ready;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
     const draw = HH.render;
     HH.render = function (c, v, m, info) { hh.renders++; hh.info = info; return draw.apply(this, arguments); };
-  });
+  }, !fontGate);
   return page;
 }
 
@@ -203,4 +206,89 @@ test('Hoop Heads draws a high ball over the scoreboard and skips the flash for r
   assert.ok(once.every((v, i) => Math.abs(v - result.glow[i]) <= 4), `one glow (got rgb ${result.glow}, want ${once})`);
   assert.deepEqual(result.reduced, result.plain, 'reduced motion draws no full-screen flash');
   assert.notDeepEqual(result.flashed, result.plain, 'full motion keeps the flash');
+});
+
+test('Hoop Heads bounds vector/fit caches, reuses them across resize and invalidates after restoration', async t => {
+  const page = await hoop(t);
+  const bounds = await page.evaluate(() => {
+    const NativePath = Path2D;
+    hh.paths = 0;
+    window.Path2D = class extends NativePath { constructor() { super(); hh.paths++; } };
+    const c = document.createElement('canvas').getContext('2d');
+    HH.resetBg();
+    for (let r = 10; r < 18; r++) HH.drawBall(c, 50, 50, r, 0, 'classic');
+    const first = hh.paths;
+    for (let r = 10; r < 18; r++) HH.drawBall(c, 50, 50, r, 1.2, 'neon');
+    const warm = hh.paths - first;
+    HH.drawBall(c, 50, 50, 18, 0, 'classic');
+    const ninth = hh.paths;
+    HH.drawBall(c, 50, 50, 10, 0, 'classic');
+    const eviction = hh.paths - ninth;
+    let measurements = 0, width = 200;
+    c.measureText = () => { measurements++; return { width }; };
+    HH.resetBg();
+    for (let n = 0; n < 32; n++) HH.fitSize(c, 'label' + n, 24, 100);
+    HH.fitSize(c, 'label0', 24, 100); const initialFits = measurements;
+    HH.fitSize(c, 'label32', 24, 100); HH.fitSize(c, 'label0', 24, 100);
+    const evictedFits = measurements - initialFits;
+    width = 100;
+    const cached = HH.fitSize(c, 'label0', 24, 100);
+    HH.resetBg(); const refreshed = HH.fitSize(c, 'label0', 24, 100);
+    __game.start({ mode: 'duo' }); __game.skipIntro(); hh.step(1);
+    __game.save.court = 'roof';
+    const scene = document.getElementById('game').getContext('2d'), drawImage = scene.drawImage;
+    scene.drawImage = function (image) { hh.background = image; return drawImage.apply(this, arguments); };
+    hh.draw(1); hh.roofPixels = hh.background.toDataURL();
+    hh.paths = 0; hh.draw(30); const steady = hh.paths;
+    return { first, warm, eviction, initialFits, evictedFits, cached, refreshed, steady };
+  });
+  assert.deepEqual(bounds, { first: 40, warm: 0, eviction: 5, initialFits: 32, evictedFits: 2, cached: 12, refreshed: 24, steady: 0 });
+  await page.setViewportSize({ width: 1279, height: 719 });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  const sameBucket = await page.evaluate(() => {
+    hh.paths = 0; hh.draw(1);
+    return { reusedPaths: hh.paths === 0, sameBackground: hh.background.toDataURL() === hh.roofPixels };
+  });
+  assert.deepEqual(sameBucket, { reusedPaths: true, sameBackground: true }, 'same-bucket resize preserves the cached star field');
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  const resized = await page.evaluate(() => {
+    hh.paths = 0; hh.draw(1); const rebuilt = hh.paths; hh.paths = 0; hh.draw(30);
+    return { rebuilt, steady: hh.paths, backgroundWidth: hh.background.width };
+  });
+  assert.deepEqual(resized, { rebuilt: 0, steady: 0, backgroundWidth: 1920 }, 'vectors remain sharp while the court follows its scale key');
+  const restored = await page.evaluate(() => {
+    const cv = document.getElementById('game'); cv.width = cv.width;
+    cv.dispatchEvent(new Event('contextrestored'));
+    hh.paths = 0; hh.draw(1); const rebuilt = hh.paths; hh.paths = 0; hh.draw(30);
+    return { rebuilt, steady: hh.paths };
+  });
+  assert.deepEqual(restored, { rebuilt: 9, steady: 0 });
+});
+
+test('Hoop Heads late local fonts invalidate warmed HUD text fits before repainting', async t => {
+  let release;
+  const fontGate = new Promise(resolve => { release = resolve; });
+  t.after(() => release());
+  const page = await hoop(t, { fontGate });
+  const before = await page.evaluate(() => {
+    hh.widthReads = 0;
+    const c = document.getElementById('game').getContext('2d'), measure = c.measureText;
+    c.measureText = function () { hh.widthReads++; return measure.apply(this, arguments); };
+    __game.start({ mode: 'duo' }); __game.skipIntro(); hh.step(1);
+    const fonts = document.fonts.check('700 30px Fredoka', 'روبو A');
+    hh.widthReads = 0; hh.draw(30);
+    return { fonts, steady: hh.widthReads };
+  });
+  assert.deepEqual(before, { fonts: false, steady: 0 });
+  release();
+  await page.evaluate(async () => { await document.fonts.ready; await new Promise(resolve => setTimeout(resolve, 50)); });
+  const after = await page.evaluate(() => {
+    hh.widthReads = 0; hh.draw(1); const rebuilt = hh.widthReads;
+    hh.widthReads = 0; hh.draw(30);
+    return { fonts: document.fonts.check('700 30px Fredoka', 'روبو A'), rebuilt, steady: hh.widthReads };
+  });
+  assert.equal(after.fonts, true);
+  assert.ok(after.rebuilt > 0, 'font readiness recomputes the formerly cached text widths');
+  assert.equal(after.steady, 0);
 });

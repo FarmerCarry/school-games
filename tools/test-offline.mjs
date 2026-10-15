@@ -180,6 +180,8 @@ try {
   }
   fs.symlinkSync(path.join(REPO, 'node_modules'), path.join(SOURCE, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   const v1 = build('v1');
+  const repeat = build('v1-repeat');
+  check(v1.version === repeat.version && fs.readFileSync(path.join(v1.dir, 'index.html')).equals(fs.readFileSync(path.join(repeat.dir, 'index.html'))) && fs.readFileSync(path.join(v1.dir, 'sw.js')).equals(fs.readFileSync(path.join(repeat.dir, 'sw.js'))), 'unchanged builds have identical page metadata and verified worker bytes');
   const gameFile = path.join(SOURCE, 'games/merge-2048/index.html');
   const original = fs.readFileSync(gameFile, 'utf8');
   fs.writeFileSync(gameFile, original.replace('</body>', '<!-- offline update regression -->\n</body>'));
@@ -238,6 +240,10 @@ try {
       !hits.some(hit => hit.includes('school-games-offline.zip')), 'the offline cache never downloads the offline ZIP');
     await page.waitForFunction(() => document.getElementById('offlineStatus')?.dataset.state === 'ready');
     check(true, 'portal announces readiness only after verifying the complete cache');
+    check(await page.evaluate(version => window.SG_OFFLINE_VERSION === version && document.getElementById('offlineUpdate').hidden, v1.version), 'genuine first install has matching page/worker identity and no false update prompt');
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForFunction(() => document.getElementById('offlineStatus').dataset.state === 'ready');
+    check(await page.locator('#offlineUpdate').isHidden(), 'unchanged verified worker does not offer an update');
     // A registered worker is insufficient: an evicted file invalidates the UI
     // readiness claim even while the current portal remains open and usable.
     await context.setOffline(true);
@@ -301,19 +307,65 @@ try {
     check(await page.evaluate(async url => (await fetch(url)).ok, missingGame), 'a failed cache repair can retry with verified server bytes');
     await installed(inspector, origin + BASE, v1);
 
+    const otherTab = await context.newPage();
+    await otherTab.goto(origin + BASE);
+    await otherTab.evaluate(() => { window.updateTabSentinel = 'unconsenting-tab'; });
+    await openOfflineGame(page, 'connect-four');
+    const liveGame = page.frames().find(frame => frame.url().includes('/games/connect-four/'));
+    await liveGame.evaluate(() => { window.updateGameSentinel = 'same-game'; });
+    await page.evaluate(() => { window.updateTabSentinel = 'consenting-tab'; });
     mounts.set(BASE, v2.dir);
     hits.length = 0;
     await update(page);
     await installed(inspector, origin + BASE, v2);
     const downloads = hits.filter(url => url.includes('?sg='));
-    check(downloads.length === 1 && downloads[0].startsWith(BASE + 'games/merge-2048/index.html?'), 'update downloads only the changed file');
+    check(downloads.length === 2 && downloads.some(url => url.startsWith(BASE + 'games/merge-2048/index.html?')) && downloads.some(url => url.startsWith(BASE + 'index.html?')), 'update downloads only the changed game and portal build identity');
     check(!(await state(inspector, origin + BASE)).caches.includes(cacheName(origin + BASE, v1)), 'update removes only its old scoped cache');
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await otherTab.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await otherTab.locator('#offlineUpdate').waitFor({ state: 'visible' });
+    check(await page.locator('#offlineUpdate').isHidden() && await liveGame.evaluate(() => window.updateGameSentinel === 'same-game' && document.getElementById('gameBoard').dataset.moves === '2'), 'completed worker upgrade preserves the actual game and defers the refresh action');
+    await page.locator('#backGames').click();
+    await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+    check(await page.locator('#offlineRefresh').innerText() === 'حدّث الصفحة الآن', 'safe game close reveals an explicit Arabic refresh action');
+    if (process.env.SG_OFFLINE_EVIDENCE) {
+      fs.mkdirSync(process.env.SG_OFFLINE_EVIDENCE, { recursive: true });
+      for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+        await page.setViewportSize(viewport);
+        await page.evaluate(async () => {
+          await document.fonts.ready;
+          await Promise.all([...document.querySelectorAll('.tile img')].filter(img => {
+            const box = img.getBoundingClientRect(); return box.bottom > 0 && box.top < innerHeight;
+          }).map(img => img.decode()));
+        });
+        await page.waitForFunction(() => [...document.querySelectorAll('.tile img')].filter(img => {
+          const box = img.getBoundingClientRect(); return box.bottom > 0 && box.top < innerHeight;
+        }).every(img => img.complete && img.naturalWidth > 0 && img.closest('.tile').classList.contains('loaded') && getComputedStyle(img).opacity === '1'));
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        check(await page.locator('#offlineUpdate').evaluate(el => {
+          const box = el.getBoundingClientRect(), button = document.getElementById('offlineRefresh').getBoundingClientRect();
+          return box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight && button.left >= box.left && button.right <= box.right;
+        }), `settled Arabic update prompt and button fit ${viewport.width}px viewport`);
+        await page.screenshot({ path: path.join(process.env.SG_OFFLINE_EVIDENCE, viewport.width === 1280 ? 'phase5-update-ready.png' : 'phase5-update-narrow.png') });
+      }
+    }
+    await context.setOffline(true);
+    try {
+      await Promise.all([page.waitForEvent('load'), page.locator('#offlineRefresh').click()]);
+      await page.waitForFunction(() => document.getElementById('offlineStatus').dataset.state === 'ready');
+      check(await page.evaluate(version => window.SG_OFFLINE_VERSION === version && !window.updateTabSentinel && document.getElementById('offlineUpdate').hidden, v2.version), 'explicit refresh adopts the complete verified upgrade while offline without prompting again');
+      check(await otherTab.evaluate(() => window.updateTabSentinel === 'unconsenting-tab' && !document.getElementById('offlineUpdate').hidden), 'refresh changes only the consenting tab; the other tab keeps its document');
+    } finally { await context.setOffline(false); }
+    await otherTab.close();
 
     mounts.set(BASE, v3.dir);
     stalePath = BASE + 'games/merge-2048/index.html';
     check(await update(page) === 'redundant', 'stale server bytes cause the new worker to fail installation');
     const afterStale = await state(inspector, origin + BASE, [cacheName(origin + BASE, v2)]);
     check(!afterStale.caches.includes(cacheName(origin + BASE, v3)) && afterStale.counts[cacheName(origin + BASE, v2)] === v2.count, 'failed update removes its partial cache and retains the previous complete version');
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForFunction(() => document.getElementById('offlineStatus').dataset.state === 'ready');
+    check(await page.locator('#offlineUpdate').isHidden(), 'failed upgrade never offers the incomplete version as an update');
     await offlineReload(context, [page]);
     stalePath = null;
     await kill(inspector, page, origin + BASE, killBuild);
