@@ -51,9 +51,12 @@ games are in Arabic, laid out right-to-left.
 The original arcade games save best scores and unlocks in the browser, and have a title screen, P/Esc pause and a 🔊 mute button. The two board games use a compact board with local two-player and computer modes.
 
 **الديناصور ثلاثي الأبعاد (Dino 3D)** is a voxel desert endless runner. Jump with Space or Up,
-hold for a higher jump, and crouch or descend quickly with Down or Ctrl. Avoid cacti and birds
-as the pace increases and the desert changes from day to night. P/Esc pauses, R retries after
-a crash, and the best score saves locally. Its original geometry and synthesized sounds use
+hold for a higher jump, and crouch or descend quickly with Down or Ctrl. Jump over low birds
+and crouch under middle-height birds as the pace increases and the desert changes from day
+to night. Enter a four-digit course code to practise the same obstacle layout or share it with
+classmates using the same game version. P/Esc pauses; R retries the same course from pause
+or after a crash, and a separate button chooses a new course. The best score saves locally.
+Its original geometry and synthesized sounds use
 the bundled Three.js library and work offline, including the downloaded Windows folder.
 
 ### Connect 4 and tic-tac-toe
