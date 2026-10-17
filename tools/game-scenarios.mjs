@@ -66,7 +66,7 @@ export const scenarios = {
   'hoop-heads': defaults(['[data-act="cpu"]','#selGo'], `${g}.state === 'play'`, select(`${g}.info()`, ['time','score','ball','p']), hold('ArrowRight'), '#pauseBtn', `${g}.state === 'pause'`, '#pRestart', `${g}.match.phase === 'intro' && ${g}.match.players.every(p => p.score === 0)`, { ready: `${g}.match.phase === 'play'` }),
   'wacky-soccer': defaults(['#b1p','#bGo'], `${g}.state === 'play'`, `[${g}.match.time,${g}.match.score,${g}.world.players.map(p => [p.x,p.y])]`, hold('Space'), '#bPause', `${g}.state === 'pause'`, '#bRestart', `${g}.match.phase === 'count' && ${g}.match.score.every(n => n === 0)`, { ready: `${g}.match.phase === 'play'` }),
   'pool-party': defaults(['#btnPlay'], `${g}.screen === 'game'`, `[${g}.balls(),${g}.aim,${g}.phase]`, holdUntilChanged('ArrowRight', `${g}.aim`), '#pauseBtn', `${g}.screen === 'pause'`, '#pRestart', `${g}.phase === 'aim' && ${g}.balls().length === 16`, { ready: `${g}.phase === 'aim'` }),
-  'skybound-golf': defaults(['#play'], `document.getElementById('title-screen').hidden && document.getElementById('modal').hidden`, `document.getElementById('meters').textContent`, click('#hit'), '#pause', `!document.getElementById('pause-content').hidden && !document.getElementById('modal').hidden`, '#restart', `!document.getElementById('swing-controls').hidden && document.getElementById('meters').textContent === '0'`),
+  'skybound-golf': defaults(['#play'], `document.getElementById('title-screen').hidden && document.getElementById('modal').hidden`, `document.getElementById('meters').textContent`, click('#game'), '#pause', `!document.getElementById('pause-content').hidden && !document.getElementById('modal').hidden`, '#restart', `document.getElementById('ui').dataset.phase === 'ready' && document.getElementById('meters').textContent === '0'`),
   'critter-mart': defaults(['#playBtn'], `${g}.mode === 'play'`, select(`${g}.state()`, ['player','coins','play','served']), hold('ArrowRight'), '#pauseBtn', `${g}.mode === 'pause'`, '#resumeBtn', `${g}.mode === 'play'`, { persistent: true }),
   'pizza-clicker': defaults(['#bPlay'], `${g}.mode === 'play'`, `[${g}.S.pizzas,${g}.S.clicks]`, async page => { await page.mouse.click(840, 405); }, '#bPause', `${g}.mode === 'pause'`, '#bResume', `${g}.mode === 'play'`, { persistent: true }),
   'block-world': defaults(['#playBtn','#modeCrea'], `${g}.G.mode === 'play'`, `[${g}.player.x,${g}.player.y,${g}.G.tod]`, hold('ArrowRight'), '#pausebtn', `${g}.G.mode === 'pause'`, '#resumeBtn', `${g}.G.mode === 'play'`, { persistent: true, startIf: ['true', `${g}.G.mode === 'newworld'`] }),
@@ -237,7 +237,9 @@ export async function performInput(page, slug, {repeat = false} = {}) {
     const legal = page.locator('[data-move]:enabled');
     if (await legal.count()) await legal.first().click();
   } else if (repeat && slug === 'skybound-golf') {
-    if (await page.locator('#hit').isVisible()) await click('#hit')(page);
+    // One button: swing on the tee, then rockets and super bounces in flight.
+    if (['ready', 'flight'].includes(await evaluate(page, `document.getElementById('ui').dataset.phase`)) &&
+      await evaluate(page, `document.getElementById('modal').hidden`)) await click('#game')(page);
     else await page.waitForTimeout(250);
   } else if (repeat && slug === 'pool-party') {
     if (await evaluate(page,`${g}.phase === 'aim'`)) await hold('Space',650)(page);
