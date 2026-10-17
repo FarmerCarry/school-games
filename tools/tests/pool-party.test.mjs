@@ -23,12 +23,16 @@ after(async () => {
 // 1280x720 makes page pixels equal the game's logical pixels. The loop is stepped
 // by hand so pointer events can land between two updates, as they do in Chrome.
 // stepGame only updates; play(n) also draws, and `paints` counts drawn frames.
-async function game(t) {
+async function game(t, saved = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  await page.addInitScript(() => {
+  await page.addInitScript(saved => {
+    for (const [key, value] of Object.entries(saved)) {
+      const name = 'sg:pool-party:' + key;
+      if (localStorage.getItem(name) === null) localStorage.setItem(name, JSON.stringify(value));
+    }
     let kit;
     window.paints = 0;
     window.restorable = [];
@@ -50,7 +54,7 @@ async function game(t) {
       if (type === 'contextrestored') window.restorable.push(this);
       return listen.apply(this, arguments);
     };
-  });
+  }, saved);
   await page.goto(`${origin}/games/pool-party/`);
   await page.waitForFunction(() => window.__game && window.stepGame);
   return page;
@@ -262,4 +266,101 @@ test('reduced motion skips confetti and the pot zoom but keeps the slow motion',
   await page.evaluate(() => Kit.motion.setPreference('reduce'));
   assert.equal(await page.evaluate(() => __game.confetti), 0, 'switching to reduced motion clears falling confetti');
   assert.deepEqual(await shot(), { zoom: false, slow: true, phase: 'won', confetti: 0 });
+});
+
+// Use the actual spin control, mouse aim and power-bar drag. Only the game clock
+// is stepped; no debug shot, forced win, aim setter or direct state edit is used.
+async function positionShot(page, { target, power, spin }) {
+  await page.mouse.move(1204, 330 - spin * 52 * .78);
+  await page.mouse.down();
+  await page.evaluate(() => stepGame(1));
+  await page.mouse.up();
+  await page.evaluate(() => stepGame(1));
+  await page.mouse.move(target[0], target[1]);
+  await page.evaluate(() => stepGame(1));
+  await page.mouse.move(84, 245);
+  await page.mouse.down();
+  await page.evaluate(() => stepGame(1));
+  await page.mouse.move(84, 245 + power * 350 * .8);
+  await page.evaluate(() => stepGame(1));
+  assert.ok(Math.abs(await page.evaluate(() => __game.power) - power) < .005);
+  await page.mouse.up();
+  await page.evaluate(() => stepGame(1));
+  assert.equal(await page.evaluate(() => __game.phase), 'strike');
+  return page.evaluate(() => {
+    for (let i = 0; i < 1200; i++) {
+      stepGame(1);
+      if (__game.phase === 'won' || __game.phase === 'fail') { play(1); return __game.phase; }
+    }
+    return __game.phase;
+  });
+}
+
+test('both position puzzles are solvable through normal controls and save append-only progress once', async t => {
+  const oldStars = Array(10).fill(3);
+  const page = await game(t, { stars: oldStars, coins: 450 });
+  await clickControl(page, '#btnTrick');
+  const cards = page.locator('#lvgrid .lvl');
+  assert.equal(await cards.count(), 12);
+  assert.equal(await page.locator('#lvStars').textContent(), '30/36');
+  assert.equal(await cards.nth(10).getAttribute('class'), 'lvl');
+  assert.match(await cards.nth(11).getAttribute('class'), /locked/);
+  await cards.nth(10).click();
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await positionShot(page, { target: [900, 450], power: .43, spin: -.95 }), 'won');
+  await page.evaluate(() => play(100));
+  assert.equal(await page.evaluate(() => __game.screen), 'done');
+  assert.match(await page.locator('#dBadges').textContent(), /أوقفت البيضاء داخل الدائرة/);
+  assert.deepEqual(await page.evaluate(() => __game.save.stars), [...oldStars, 3]);
+  assert.equal(await stored(page, 'coins'), 495);
+  await clickControl(page, '#dNext');
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await page.evaluate(() => __game.level), 11);
+  assert.equal(await positionShot(page, { target: [380, 450], power: .4, spin: .7 }), 'won');
+  await page.evaluate(() => play(100));
+  assert.deepEqual(await page.evaluate(() => __game.save.stars), [...oldStars, 3, 3]);
+  assert.equal(await stored(page, 'coins'), 540);
+  assert.equal(await page.locator('#dNext').isVisible(), false, 'the final puzzle has no nonexistent next level');
+  await clickControl(page, '#dRetry');
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await positionShot(page, { target: [380, 450], power: .4, spin: .7 }), 'won');
+  assert.equal(await stored(page, 'coins'), 540, 'replaying earned stars must not mint more coins');
+  await page.reload();
+  await page.waitForFunction(() => window.__game);
+  assert.deepEqual(await page.evaluate(() => __game.save.stars), [...oldStars, 3, 3]);
+  assert.equal(await page.evaluate(() => __game.save.coins), 540);
+});
+
+test('potting without position explains the miss and leaves progress locked', async t => {
+  const page = await game(t, { stars: Array(10).fill(3), coins: 450 });
+  await clickControl(page, '#btnTrick');
+  await page.locator('#lvgrid .lvl').nth(10).click();
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await positionShot(page, { target: [900, 450], power: .43, spin: 0 }), 'fail');
+  const drawn = await page.evaluate(() => {
+    const texts = [], ctx = document.getElementById('game').getContext('2d'), original = ctx.fillText;
+    ctx.fillText = function (text, ...args) { texts.push(text); return original.call(this, text, ...args); };
+    try { play(1); } finally { ctx.fillText = original; }
+    return texts.join('\n');
+  });
+  assert.match(drawn, /دخلت الكرة! لكن مركز البيضاء خارج الدائرة/);
+  assert.equal(await page.evaluate(() => __game.balls().some(b => b[0] === 1)), false, 'the object ball was potted');
+  assert.deepEqual(await page.evaluate(() => __game.save.stars), Array(10).fill(3));
+  assert.equal(await stored(page, 'coins'), 450);
+});
+
+test('an old thirty-star save retains galaxy felt selection after new puzzles are added', async t => {
+  const page = await game(t, { stars: Array(10).fill(3), coins: 450 });
+  await clickControl(page, '#btnShop');
+  const galaxy = page.locator('#shopFelts .item').last();
+  assert.equal(await galaxy.locator('.pr').textContent(), 'استخدم');
+  await galaxy.click();
+  assert.equal(await page.evaluate(() => __game.save.felt), 'galaxy');
+  assert.equal(await stored(page, 'felt'), 'galaxy');
+  assert.equal(await stored(page, 'coins'), 450);
+  await page.reload();
+  await page.waitForFunction(() => window.__game);
+  assert.equal(await page.evaluate(() => __game.save.felt), 'galaxy');
+  await clickControl(page, '#btnShop');
+  assert.equal(await page.locator('#shopFelts .item').last().locator('.pr').textContent(), 'مُختار ✓');
 });

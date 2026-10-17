@@ -92,7 +92,7 @@ window.GAMES = [
     blurb: 'زرّ واحد، أرجل مجنونة، ومفاجأة غريبة بعد كل هدف!',
     controls: [{ keys: ['W'], action: 'اللاعب 1: قفز وركل' }, { keys: ['↑'], action: 'اللاعب 2: قفز وركل' }, { keys: ['مسافة', 'انقر'], action: 'قفز وركل (لاعب واحد)' }] },
   { slug: 'pool-party', roundMinutes: [5, 10], inputStyle: 'pointer', title: 'حفلة البلياردو', en: 'Pool Party', cats: ['sports', 'two-player'], players: '1-2', color: '#1abc9c',
-    blurb: 'حطّم المثلث، أدخل الكرات بضربات مذهلة واهزم القرش زعنون!',
+    blurb: 'اهزم زعنون، أو أتقن 12 تحديًا للضربات والدوران ومكان وقوف البيضاء!',
     controls: [{ keys: ['الفأرة'], action: 'صوّب' }, { keys: ['اسحب'], action: 'اسحب للخلف ثم اترك لتضرب' }, { keys: ['←', '→'], action: 'تصويب دقيق (مع Shift أبطأ)' }, { keys: ['مسافة', 'Enter'], action: 'اضغط مطوّلًا لشحن القوة ثم اترك للضرب' }, { keys: ['انقر'], action: 'اختر الدوران، أو اسحب الكرة البيضاء عندما تكون بيدك' }] },
   { slug: 'skybound-golf', roundMinutes: [1, 2], inputStyle: 'one-button', title: 'ضربة إلى الفضاء', en: 'Skybound Golf golf space rocket distance', tags: 'جولف قولف فضاء صاروخ', cats: ['sports', 'arcade'], players: '1', color: '#8a5cff', hot: true,
     blurb: 'اضرب الكرة نحو الفضاء! أطلق الصواريخ، اقفز قفزات خارقة، اجمع العملات وطوّر ضربتك حتى القمر!',

@@ -127,6 +127,14 @@ try {
           assert.ok(result.checks.length, 'the game completes observable gameplay checks');
         });
       }
+      await check(page, label + '-pool-party', async () => {
+        await page.goto(pathToFileURL(path.join(folder, 'games', 'pool-party', 'index.html')).href);
+        await page.locator('#btnTrick').click();
+        assert.equal(await page.locator('#lvgrid .lvl').count(), 12, 'all twelve trick-shot puzzles are available in the downloaded menu');
+        await page.locator('#lvBack').click();
+        const result = await runScenario(page, 'pool-party', { mode: 'performance' });
+        assert.ok(result.checks.length, 'Pool completes observable gameplay checks after leaving the puzzle menu');
+      });
     } finally { await context.close(); }
   }
 } catch (error) {
