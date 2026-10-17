@@ -7,11 +7,22 @@ button:focus-visible { outline:3px solid #254b55; outline-offset:5px; }
 #scene:focus-visible { outline:none; }
 .screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:4; pointer-events:none; }
 .screen button { pointer-events:auto; }
+.screen input { pointer-events:auto; }
 .ready { align-items:flex-start; justify-content:flex-start; padding:clamp(45px,12vh,120px) 7vw 20px; }
 .intro { text-align:center; width:380px; max-width:48vw; }
 h1 { font-size:clamp(34px,5.5vw,65px); line-height:1.1; margin:0 0 18px; font-weight:700; }
 h1 span { font-size:.67em; }
 .description { font-size:clamp(15px,2vw,21px); margin:0 0 18px; }
+.course-controls { display:flex; align-items:center; justify-content:center; gap:10px; }
+.course-controls label { font-size:17px; font-weight:700; pointer-events:auto; }
+#course-code { width:86px; border:2px solid #53634c; border-radius:4px; padding:5px; color:var(--ink); background:#fff3d4; font:700 22px monospace; text-align:center; letter-spacing:2px; }
+#course-code:focus-visible { outline:3px solid #254b55; outline-offset:3px; }
+#course-code[aria-invalid] { border-color:#8f251f; }
+.course-controls .text-button { margin:0; font-size:16px; }
+.course-help { font-size:14px; line-height:1.4; margin:9px 0 13px; }
+#course-error { color:#8f251f; font-weight:700; }
+.course-tag { position:absolute; bottom:16px; left:18px; z-index:5; background:#fff3d4; border-radius:3px; padding:6px 10px; margin:0; font-size:15px; }
+.course-tag b { display:inline-block; margin-inline-start:7px; font:700 18px monospace; letter-spacing:1px; }
 .dino-button { display:inline-flex; align-items:center; justify-content:center; gap:12px; border:0; border-bottom:5px solid #487323; background:var(--green); color:#172e12; min-width:178px; padding:10px 28px; font-size:29px; font-weight:700; cursor:pointer; box-shadow:4px 4px 0 #39592125; }
 .dino-button:hover { background:#659f26; }
 .dino-button:active { transform:translateY(3px); border-bottom-width:2px; margin-bottom:3px; }
@@ -71,7 +82,8 @@ body[data-mode="playing"] .quality-button { display:none; }
   .over { padding-top:18vh; }
 }
 @media (max-height:470px) {
-  .ready { padding-top:28px; }
+  .ready { padding-top:18px; }
+  .course-help { margin:4px 0; }
   h1 { font-size:36px; margin-bottom:8px; }
   .description { margin-bottom:10px; }
   .instructions { margin-top:9px; }

@@ -18,8 +18,17 @@
 <main id="ready-screen" class="screen ready">
   <div class="intro">
     <h1>الديناصور<br><span>ثلاثي الأبعاد</span></h1>
-    <p class="description">اقفز فوق الصبّار، وانحنِ تحت الطيور!</p>
-    <button id="play" class="dino-button" type="button">العب<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16l13-8z"/></svg></button>
+    <p class="description">اقفز فوق الصبّار والطيور المنخفضة، وانحنِ تحت الطيور المتوسطة!</p>
+    <form id="course-form" novalidate>
+      <div class="course-controls">
+        <label for="course-code">رمز المسار</label>
+        <input id="course-code" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" dir="ltr" aria-describedby="course-help course-error">
+        <button id="new-course" class="text-button" type="button">مسار جديد</button>
+      </div>
+      <p id="course-help" class="course-help">أربعة أرقام لمسار تتدرّب عليه. شارك الرمز مع أصدقائك في النسخة نفسها من اللعبة.</p>
+      <p id="course-error" class="course-help" role="alert" hidden>اكتب رمزًا من أربعة أرقام، مثل 0042.</p>
+      <button id="play" class="dino-button" type="submit">العب المسار<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16l13-8z"/></svg></button>
+    </form>
     <div class="instructions">
       <p><span dir="ltr"><kbd class="sg-key">مسافة</kbd> <kbd class="sg-key">↑</kbd></span> قفز</p>
       <p><span dir="ltr"><kbd class="sg-key">↓</kbd> <kbd class="sg-key">Ctrl</kbd></span> انحناء</p>
@@ -32,9 +41,10 @@
   <div class="dialog">
     <h2 id="pause-title">استراحة</h2>
     <button id="resume" class="dino-button" type="button">تابع اللعب</button>
-    <button id="restart" class="text-button" type="button">ابدأ من جديد</button>
+    <button id="restart" class="text-button" type="button">أعد المسار نفسه</button>
+    <button id="new-course-paused" class="text-button" type="button">العب مسارًا جديدًا</button>
     <button id="pause-menu" class="text-button" type="button">القائمة</button>
-    <p class="small-help"><kbd class="sg-key">P</kbd> متابعة <span>·</span> <kbd class="sg-key">M</kbd> كتم الصوت</p>
+    <p class="small-help"><kbd class="sg-key">P</kbd> متابعة <span>·</span> <kbd class="sg-key">R</kbd> إعادة المسار</p>
   </div>
 </section>
 <section id="over-screen" class="screen over" aria-labelledby="over-title" hidden>
@@ -42,10 +52,13 @@
     <h2 id="over-title">انتهت الجولة!</h2>
     <p id="record" hidden>رقم قياسي جديد!</p>
     <p class="result">النقاط <b id="final-score" dir="ltr">0</b></p>
-    <button id="retry" class="dino-button retry-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.2 6.4A9 9 0 1 0 21 15h-3.2a6 6 0 1 1-1-6.5L13 12h9V3z"/></svg><span>العب مجددًا</span></button>
+    <button id="retry" class="dino-button retry-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.2 6.4A9 9 0 1 0 21 15h-3.2a6 6 0 1 1-1-6.5L13 12h9V3z"/></svg><span>أعد المسار نفسه</span></button>
+    <button id="new-course-over" class="text-button" type="button">العب مسارًا جديدًا</button>
     <button id="menu" class="text-button" type="button">القائمة</button>
+    <p class="small-help"><kbd class="sg-key">R</kbd> إعادة المسار</p>
   </div>
 </section>
+<p id="course-tag" class="course-tag" hidden>المسار <b id="active-course" dir="ltr"></b></p>
 <button id="quality" class="quality-button" type="button" aria-pressed="false">الرسوم: كاملة</button>
 <div id="context-notice" role="status" hidden>توقفت الرسوم مؤقتًا. انتظر لحظة لاستعادتها.</div>
 <section id="error-screen" class="screen error" hidden>

@@ -170,6 +170,53 @@ test('30, 60 and 120 Hz produce the same jump and score progression', () => {
   }
 });
 
+test('classroom courses preserve obstacle order and spacing across controls and frame rates', () => {
+  const patterns = [() => ({}), () => ({ jump: true }),
+    t => ({ jump: Math.floor(t * 30 + 1e-7) % 23 < 2 }),
+    t => { const f = Math.floor(t * 30 + 1e-7); return { jump: f % 37 < 22, duck: f % 55 >= 48 }; }];
+  function trace(seed, hz, input) {
+    const engine = createEngine(seed), seen = new Map(), samples = [];
+    function observe() {
+      for (const o of engine.state.obstacles) {
+        if (!seen.has(o.id)) {
+          const { id, type, variant, width, height, depth, bottom } = o;
+          seen.set(id, { id, type, variant, width, height, depth, bottom, position: engine.state.distance - o.z });
+        }
+        // Record the original collider first, then bypass death only to sample
+        // generation beyond the bird/score thresholds under different controls.
+        // This does not substitute for the collision-enabled playability test.
+        o.bottom = 1000;
+      }
+    }
+    for (let frame = 0; frame < hz * 120; frame++) {
+      observe(); engine.step(1 / hz, input(frame / hz));
+      if ((frame + 1) % (hz * 10) === 0) {
+        const { elapsed, distance, score, speed, points, night } = engine.state;
+        samples.push({ elapsed, distance, score, speed, points, night });
+      }
+    }
+    observe();
+    assert.equal(engine.state.alive, true);
+    return { obstacles: [...seen.values()], samples };
+  }
+  for (const seed of [1, 11, 2026, 10000]) {
+    const expected = trace(seed, 120, patterns[0]);
+    assert.ok(expected.obstacles.some(o => o.type === 'bird'), 'compare the late bird selection too');
+    for (const hz of [30, 60, 120]) for (const input of patterns) {
+      const actual = trace(seed, hz, input);
+      assert.deepEqual(actual.samples, expected.samples, `seed ${seed}, ${hz} Hz: score and course clocks`);
+      assert.equal(actual.obstacles.length, expected.obstacles.length);
+      actual.obstacles.forEach(({ position, ...shape }, i) => {
+        const { position: target, ...targetShape } = expected.obstacles[i];
+        assert.deepEqual(shape, targetShape, `seed ${seed}, ${hz} Hz: original obstacle ${i}`);
+        assert.ok(Math.abs(position - target) < 1e-8, `seed ${seed}, ${hz} Hz: course position ${i}`);
+        if (i) assert.ok(Math.abs((position - actual.obstacles[i - 1].position) -
+          (target - expected.obstacles[i - 1].position)) < 1e-8, 'same obstacle gap');
+      });
+    }
+  }
+});
+
 test('long runs have bounded obstacles, safe recovery gaps, birds only after their threshold, and a night cycle', () => {
   const engine = createEngine(79);
   const seen = new Set();
