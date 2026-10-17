@@ -178,6 +178,17 @@ downloaded folder instead reports that it is running locally. Each file's bytes 
 hashed when it is cached; later visits only confirm that every verified file is
 still there, so slow disks are not re-read on every visit. Retry hashes them again.
 
+When a newer complete version is cached, returning to the games list offers
+“حدّث الصفحة الآن”. Refresh is explicit and affects only that tab; running or paused
+games, game menus and the classroom handoff keep their session. The action verifies
+readiness again and defers if a game opened during that check. It also works offline.
+The first installation never shows an update prompt. A game-only update includes the
+changed game and the portal's new build identity. Pages opened before this feature
+need an ordinary reload/navigation to acquire the prompt.
+
+See [Performance evidence and measurement](docs/PERFORMANCE.md) for retained/reverted
+experiments, exact byte costs, reproducible measurement commands and timing limits.
+
 Critter Mart and Pizza Empire show a persistent warning if saving is blocked or
 storage is full. Retry keeps the current session and clears the warning only after
 the pending data is saved. Block World's final celebration survives a reload until

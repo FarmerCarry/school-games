@@ -311,6 +311,14 @@ try {
   // Worker-only fixes need an independent cache too. Hash a deterministic worker
   // with an empty version to include its implementation without a self-reference.
   const version = hash(SW_SOURCE('', precache));
+  // Derive identity before embedding it, then hash the final served bytes. This
+  // lets an old open portal recognize a newer worker without a recursive hash.
+  if (!KILL_SW) {
+    portal = portal.replace('window.SG_OFFLINE_BUILD=true;', 'window.SG_OFFLINE_BUILD=true;window.SG_OFFLINE_VERSION=' + JSON.stringify(version) + ';');
+    write('index.html', portal);
+    precache['index.html'] = hash(portal);
+    report[0][1] = Buffer.byteLength(portal);
+  }
   const sw = KILL_SW ? KILL_SW_SOURCE(Object.keys(precache)) : SW_SOURCE(version, precache);
   write('sw.js', sw);
 

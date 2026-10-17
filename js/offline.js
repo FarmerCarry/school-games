@@ -4,7 +4,20 @@
   var status = document.getElementById('offlineStatus');
   var retry = document.getElementById('offlineRetry');
   if (!status || !retry) return;
+  var update = document.getElementById('offlineUpdate'), refresh = document.getElementById('offlineRefresh');
+  var pageVersion = window.SG_OFFLINE_VERSION, availableVersion = null, refreshing = false;
   var registration = null, starting = false, checking = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0, observedWorker = null, shown = '';
+  function safeToRefresh() { return typeof window.SGUpdateSafe === 'function' && window.SGUpdateSafe(); }
+  function showUpdate() {
+    if (!update || !refresh) return;
+    update.hidden = !availableVersion || !safeToRefresh();
+    refresh.disabled = checking || refreshing;
+  }
+  function complete(result) { return result.ready && result.count === result.total && result.total > 0; }
+  function remember(result) {
+    availableVersion = complete(result) && typeof pageVersion === 'string' && typeof result.version === 'string' &&
+      result.version && result.version !== pageVersion ? result.version : null;
+  }
   function paint(state, text, canRetry) {
     shown = state;
     status.hidden = false;
@@ -13,6 +26,7 @@
     if (status.textContent !== text) status.textContent = text;
     retry.hidden = !canRetry;
     retry.disabled = checking;
+    showUpdate();
   }
   if (location.protocol === 'file:') {
     paint('local', 'تعمل هذه النسخة من المجلد دون إنترنت', false);
@@ -54,6 +68,7 @@
     if (!registration) return start();
     var owner = registration, worker = owner.active;
     if (!worker) {
+      availableVersion = null;
       if (repair && !hasWorker(owner)) return start();
       paint('preparing', 'جارٍ تجهيز الألعاب للعمل دون إنترنت…', true);
       return;
@@ -63,17 +78,19 @@
     try {
       var result = await ask(worker, repair);
       if (owner !== registration || worker !== owner.active) { queued = true; return; }
-      if (result.ready && result.count === result.total && result.total > 0) {
+      remember(result);
+      if (complete(result)) {
         paint('ready', registration.installing ? 'جاهز دون إنترنت — جارٍ تنزيل تحديث' : 'جاهز دون إنترنت', false);
       } else {
         paint('unavailable', 'النسخة دون إنترنت غير مكتملة — اتصل بالإنترنت ثم أعد المحاولة', true);
       }
     } catch (e) {
       if (owner !== registration || worker !== owner.active) queued = true;
-      else paint('unavailable', 'تعذّر التأكد من النسخة دون إنترنت — أعد المحاولة', true);
+      else { availableVersion = null; paint('unavailable', 'تعذّر التأكد من النسخة دون إنترنت — أعد المحاولة', true); }
     } finally {
       checking = false;
       retry.disabled = false;
+      showUpdate();
       if (queued) { var repairNext = queuedRepair; queued = queuedRepair = false; inspect(repairNext); }
     }
   }
@@ -102,6 +119,7 @@
     // A failed first install can remove the browser's registration while this
     // page still holds its now-empty object. Register again instead of updating it.
     registration = null;
+    availableVersion = null;
     observedWorker = null;
     clearTimeout(installingTimer);
     starting = true;
@@ -125,6 +143,26 @@
     if (!hasWorker(owner)) return start();
     inspect(true);
   });
+  if (refresh) refresh.addEventListener('click', async function () {
+    if (checking || refreshing || !availableVersion || !safeToRefresh()) return;
+    var owner = registration, worker = owner && owner.active, expected = availableVersion;
+    if (!worker) return;
+    refreshing = true;
+    showUpdate();
+    try {
+      var result = await ask(worker, false);
+      if (owner !== registration || worker !== owner.active) { inspect(false); return; }
+      remember(result);
+      if (!complete(result)) paint('unavailable', 'النسخة دون إنترنت غير مكتملة — اتصل بالإنترنت ثم أعد المحاولة', true);
+      // Verification can yield while a game opens. Never discard that new session,
+      // and reload only this tab after its own explicit consent.
+      if (availableVersion === expected && safeToRefresh()) location.reload();
+    } catch (e) {
+      if (owner !== registration || worker !== owner.active) inspect(false);
+      else { availableVersion = null; paint('unavailable', 'تعذّر التأكد من النسخة دون إنترنت — أعد المحاولة', true); }
+    } finally { refreshing = false; showUpdate(); }
+  });
+  window.addEventListener('sg:sessionchange', showUpdate);
   navigator.serviceWorker.addEventListener('controllerchange', function () { inspect(false); });
   // Reconnecting repairs an incomplete copy; a ready one only needs the quick check.
   window.addEventListener('online', function () { inspect(shown !== 'ready'); });
