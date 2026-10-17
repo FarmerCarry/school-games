@@ -19,6 +19,14 @@ function stateOfGame() {
     const screens = ['title-screen', 'hud', 'modal', 'pause-content', 'result-content', 'worlds-content', 'shop-content'];
     return JSON.stringify({ phase: document.getElementById('ui').dataset.phase, ...Object.fromEntries(screens.map(id => [id, !document.getElementById(id).hidden])) });
   }
+  if (!g && window.Dino3DGame) {
+    // Dino's visible screens and score reflect start/pause/restart without
+    // depending on private engine state or an additional production debug API.
+    const screens = ['ready-screen', 'pause-screen', 'over-screen'];
+    return JSON.stringify({ mode: document.body.dataset.mode,
+      screens: Object.fromEntries(screens.map(id => [id, !document.getElementById(id).hidden])),
+      score: document.getElementById('score').textContent });
+  }
   let state = typeof g.state === 'function' ? g.state() : g.state;
   if (state && typeof state === 'object') return JSON.stringify({ screen: state.screen, phase: state.phase, ui: state.ui, paused: state.paused, modal: state.modal });
   return state ?? g.mode ?? g.screen ?? null;
@@ -29,65 +37,72 @@ function stateOfGame() {
 export async function testNativeControls({ browser, origin, repo }) {
   const catalog = { window: {} };
   vm.runInNewContext(fs.readFileSync(path.join(repo, 'js/catalog.js'), 'utf8'), catalog);
+  // Every catalog entry must pass; unsupported games fail readiness rather than
+  // silently dropping out of native keyboard coverage.
   for (const { slug } of catalog.window.GAMES) {
-    const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-    const page = await context.newPage();
-    const errors = [];
-    page.on('pageerror', e => errors.push(e.message));
-    try {
-      await page.goto(`${origin}/games/${slug}/`, { waitUntil: 'load' });
-      await page.waitForFunction(slug => !!window.Kit && (slug === 'skybound-golf'
-        ? !!window.GolfArt && !!window.GolfPhysics && !!document.getElementById('title-screen')
-        : !!window.__game || !!document.getElementById('gameBoard')?.dataset.moves), slug);
-      await page.evaluate(() => {
-        const panel = document.createElement('div');
-        panel.id = 'regression-controls';
-        panel.style.cssText = 'position:fixed;left:0;top:0;z-index:2147483647;background:white;padding:8px';
-        panel.innerHTML = '<button id="regression-button" type="button">test</button><input id="regression-text" type="text"><input id="regression-range" type="range" min="0" max="10" value="5" step="1">';
-        document.body.appendChild(panel);
-        window.__nativeClicks = 0;
-        document.getElementById('regression-button').addEventListener('click', () => window.__nativeClicks++);
-        Kit.keys.reset();
-      });
-      const before = await page.evaluate(stateOfGame);
-      await page.locator('#regression-button').focus();
-      await page.keyboard.press('Space');
-      await page.keyboard.press('Enter');
-      assert.equal(await page.evaluate(() => window.__nativeClicks), 2, `${slug}: Space and Enter each activate a native button once`);
-      await page.keyboard.press('Tab');
-      assert.equal(await page.evaluate(() => document.activeElement.id), 'regression-text', `${slug}: Tab reaches the next control`);
-      const muted = await page.evaluate(() => Kit.audio.muted);
-      await page.keyboard.type('mp');
-      assert.equal(await page.locator('#regression-text').inputValue(), 'mp', `${slug}: text fields receive game hotkey letters`);
-      assert.equal(await page.evaluate(() => Kit.audio.muted), muted, `${slug}: typing M does not mute the game`);
-      assert.equal(await page.evaluate(stateOfGame), before, `${slug}: native controls do not start, pause, or restart the game`);
-      await page.locator('#regression-range').focus();
-      await page.keyboard.press('ArrowRight');
-      assert.notEqual(await page.locator('#regression-range').inputValue(), '5', `${slug}: native slider arrow works`);
-      await page.keyboard.press('Home');
-      assert.equal(await page.locator('#regression-range').inputValue(), '0', `${slug}: native slider Home works`);
-      await page.keyboard.press('End');
-      assert.equal(await page.locator('#regression-range').inputValue(), '10', `${slug}: native slider End works`);
-      assert.equal(await page.evaluate(() => Kit.keys.anyDown(['Space', 'Enter', 'KeyM', 'KeyP', 'ArrowRight', 'Home', 'End', 'Tab'])), false, `${slug}: control keys stay out of gameplay state`);
-      const surface = await page.evaluate(() => {
-        document.getElementById('regression-controls').remove();
-        Kit.keys.reset();
-        const event = new KeyboardEvent('keydown', { code: 'ArrowRight', key: 'ArrowRight', bubbles: true, cancelable: true });
-        window.dispatchEvent(event);
-        const result = { prevented: event.defaultPrevented, held: Kit.keys.down('ArrowRight') };
-        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowRight', key: 'ArrowRight' }));
-        result.released = !Kit.keys.down('ArrowRight');
-        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight', key: 'ArrowRight', cancelable: true }));
-        window.dispatchEvent(new Event('blur'));
-        result.clearOnBlur = !Kit.keys.down('ArrowRight') && !Kit.keys.pressed('ArrowRight');
-        return result;
-      });
-      assert.deepEqual(surface, { prevented: true, held: true, released: true, clearOnBlur: true }, `${slug}: surface input still works and resets`);
-      assert.deepEqual(errors, [], `${slug}: no browser exceptions`);
-      console.log(`  ✓ ${slug}: native controls and surface input`);
-    } finally { await context.close(); }
+    await testNativeControlGame({ browser, origin, slug });
   }
   return catalog.window.GAMES.length;
+}
+
+export async function testNativeControlGame({ browser, origin, slug }) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  try {
+    await page.goto(`${origin}/games/${slug}/`, { waitUntil: 'load' });
+    await page.waitForFunction(slug => !!window.Kit && (slug === 'skybound-golf'
+      ? !!window.GolfArt && !!window.GolfPhysics && !!document.getElementById('title-screen')
+      : slug === 'dino-3d' ? !!window.Dino3DGame
+      : !!window.__game || !!document.getElementById('gameBoard')?.dataset.moves), slug);
+    await page.evaluate(() => {
+      const panel = document.createElement('div');
+      panel.id = 'regression-controls';
+      panel.style.cssText = 'position:fixed;left:0;top:0;z-index:2147483647;background:white;padding:8px';
+      panel.innerHTML = '<button id="regression-button" type="button">test</button><input id="regression-text" type="text"><input id="regression-range" type="range" min="0" max="10" value="5" step="1">';
+      document.body.appendChild(panel);
+      window.__nativeClicks = 0;
+      document.getElementById('regression-button').addEventListener('click', () => window.__nativeClicks++);
+      Kit.keys.reset();
+    });
+    const before = await page.evaluate(stateOfGame);
+    await page.locator('#regression-button').focus();
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => window.__nativeClicks), 2, `${slug}: Space and Enter each activate a native button once`);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'regression-text', `${slug}: Tab reaches the next control`);
+    const muted = await page.evaluate(() => Kit.audio.muted);
+    await page.keyboard.type('mp');
+    assert.equal(await page.locator('#regression-text').inputValue(), 'mp', `${slug}: text fields receive game hotkey letters`);
+    assert.equal(await page.evaluate(() => Kit.audio.muted), muted, `${slug}: typing M does not mute the game`);
+    assert.equal(await page.evaluate(stateOfGame), before, `${slug}: native controls do not start, pause, or restart the game`);
+    await page.locator('#regression-range').focus();
+    await page.keyboard.press('ArrowRight');
+    assert.notEqual(await page.locator('#regression-range').inputValue(), '5', `${slug}: native slider arrow works`);
+    await page.keyboard.press('Home');
+    assert.equal(await page.locator('#regression-range').inputValue(), '0', `${slug}: native slider Home works`);
+    await page.keyboard.press('End');
+    assert.equal(await page.locator('#regression-range').inputValue(), '10', `${slug}: native slider End works`);
+    assert.equal(await page.evaluate(() => Kit.keys.anyDown(['Space', 'Enter', 'KeyM', 'KeyP', 'ArrowRight', 'Home', 'End', 'Tab'])), false, `${slug}: control keys stay out of gameplay state`);
+    const surface = await page.evaluate(() => {
+      document.getElementById('regression-controls').remove();
+      Kit.keys.reset();
+      const event = new KeyboardEvent('keydown', { code: 'ArrowRight', key: 'ArrowRight', bubbles: true, cancelable: true });
+      window.dispatchEvent(event);
+      const result = { prevented: event.defaultPrevented, held: Kit.keys.down('ArrowRight') };
+      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowRight', key: 'ArrowRight' }));
+      result.released = !Kit.keys.down('ArrowRight');
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight', key: 'ArrowRight', cancelable: true }));
+      window.dispatchEvent(new Event('blur'));
+      result.clearOnBlur = !Kit.keys.down('ArrowRight') && !Kit.keys.pressed('ArrowRight');
+      return result;
+    });
+    assert.deepEqual(surface, { prevented: true, held: true, released: true, clearOnBlur: true }, `${slug}: surface input still works and resets`);
+    assert.deepEqual(errors, [], `${slug}: no browser exceptions`);
+    console.log(`  ✓ ${slug}: native controls and surface input`);
+  } finally { await context.close(); }
 }
 
 async function focusSurface(frame) {

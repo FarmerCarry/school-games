@@ -32,6 +32,7 @@ const defaults = (start, active, snapshot, input, pause, paused, restart, reset,
   ({ start: start.map(click), active, snapshot, input, pause, paused, restart, reset, ...extra });
 
 export const scenarios = {
+  'dino-3d': defaults(['#play'], `window.Dino3DGame.mode === 'playing'`, `[window.Dino3DGame.state.score,window.Dino3DGame.state.distance,window.Dino3DGame.state.player]`, hold('Space', 180), '#pause-button', `window.Dino3DGame.mode === 'paused'`, '#restart', `window.Dino3DGame.state.score < 10`),
   'rail-rush': defaults(['#playBtn'], `${g}.state.mode === 'play'`, select(`${g}.state`, ['x','y','dist','score','lane']), hold('ArrowRight'), '#pauseBtn', `${g}.state.mode === 'pause' || ${g}.state.mode === 'paused'`, '#restartBtn', `${g}.state.dist < 15`),
   'neon-slope': defaults(['#btnPlay'], `${g}.state.mode === 'play'`, select(`${g}.state`, ['x','y','dist','gemsRun']), holdUntilChanged('ArrowRight', `${g}.state.x`), '#btnPause', `${g}.state.mode === 'paused'`, '#btnRestart', `${g}.state.dist < 15`),
   'tunnel-blitz': defaults(['#playBtn'], `${g}.info().state === 'play'`, select(`${g}.info()`, ['rot','D','score','orbsRun']), hold('ArrowRight'), '#pauseBtn', `${g}.info().state === 'paused'`, '#restartBtn', `${g}.info().D < 15`),
@@ -135,6 +136,7 @@ for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
 // used to catch simulation advancing while paused. A running clock is not proof
 // that a movement control works, and neither is a player that moves by itself.
 const inputSnapshots = {
+  'dino-3d': 'window.Dino3DGame.inputJumps',
   'rail-rush': `${g}.state.lane`, 'neon-slope': `${g}.state.x`, 'tunnel-blitz': `${g}.info().rot`,
   'beat-dash': `${g}.state.y`, 'drift-king': `${g}.car.head`, 'fire-and-ice': `${g}.world.fire.x`,
   'moto-madness': `${g}.world.bike.x`, 'tank-splat': `${g}.app.game.tanks[0].a`,
@@ -184,6 +186,7 @@ for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen 
 // the fixed hold, because a player stopped by a wall cannot change state. Snake
 // Arena's repeated input stays the pointer; its checked input is key steering.
 const heldKeys = {
+  'dino-3d': 'Space',
   'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
   'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
   'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'splat-strike': 'KeyW',
@@ -222,7 +225,7 @@ export async function prepareScenario(page, slug) {
   if (s.init) await page.addInitScript(s.init);
 }
 async function start(page, slug, s) {
-  await requireState(page, '!!window.Kit && (!!window.__game || !!document.getElementById("boardApp") || !!window.GolfArt)', `${slug}: initialized`);
+  await requireState(page, '!!window.Kit && (!!window.__game || !!document.getElementById("boardApp") || !!window.GolfArt || !!window.Dino3DGame)', `${slug}: initialized`);
   for (let i=0;i<s.start.length;i++) if (!s.startIf || await evaluate(page,s.startIf[i])) await s.start[i](page);
   await focusSurface(page);
   await requireState(page,s.active,`${slug}: Start must reach gameplay`);
