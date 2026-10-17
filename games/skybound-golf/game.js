@@ -545,7 +545,7 @@
     if (meters !== hud.meters) { $('meters').textContent = K.fmt(meters); hud.meters = meters; }
     var coins = b ? P.reward({ coins: b.coins, gems: b.gems, rings: b.rings, pops: b.pops }).coins : 0;
     if (coins !== hud.coins) { $('run-coins').textContent = K.fmt(coins); hud.coins = coins; }
-    var alt = b ? Math.max(0, Math.floor(b.y - P.heightAt(s.course, b.x))) : 0;
+    var alt = b ? Math.max(0, Math.floor(b.y)) : 0;
     if (alt !== hud.alt) {
       hud.alt = alt; $('alt-meters').textContent = K.fmt(alt);
       var f = Math.min(1, alt / P.SPACE);

@@ -99,6 +99,39 @@ test('Golf: one button in flight fires a rocket in the air and a super bounce ne
   assert.deepEqual(await page.evaluate(() => ({ vx: golfState.ball.vx, vy: golfState.ball.vy, armed: golfState.ball.armed })), before, 'an empty press on the way up changes nothing');
 });
 
+test('Golf: pressing at the first gold landing cue awards a perfect bounce', async t => {
+  const page = await game(t);
+  await swing(page, 19);
+  await page.evaluate(() => {
+    for (let i = 0; i < 2000 && !(golfState.reticle && golfState.reticle.t <= GolfPhysics.PERFECT_WINDOW + 1e-9); i++) golfTick(1 / 60);
+    golfRender();
+  });
+  assert(await page.evaluate(() => golfState.reticle && golfState.hints), 'the gold landing cue is visible');
+  await page.keyboard.press('Space');
+  await page.evaluate(() => { for (let i = 0; i < 100 && !golfState.ball.supers; i++) golfTick(1 / 60); golfRender(); });
+  assert.equal(await page.evaluate(() => golfState.ball.combo), 1, 'the advertised perfect press starts a combo');
+  assert(await page.evaluate(() => golfState.popups.some(p => p.text === 'قفزة خارقة!')));
+});
+
+test('Golf: reaching the space line also fills the altitude goal', async t => {
+  const page = await game(t, { reducedMotion: 'reduce', progress: {
+    v: 2, shots: 9, upgrades: { power: 8, bounce: 8, rockets: 4, magnet: 4 }
+  } });
+  await swing(page);
+  for (let n = 0; n < 5; n++) {
+    await page.evaluate(() => advanceGolfFrames(9));
+    await page.keyboard.press('Space');
+  }
+  await page.evaluate(() => {
+    for (let i = 0; i < 1200 && !golfState.ball.space && !golfState.ball.done; i++) golfTick(1 / 60);
+    golfRender();
+  });
+  assert(await page.evaluate(() => golfState.ball.space), 'a natural rocket flight reaches space');
+  assert.match(await page.locator('#toast').textContent(), /حافة الفضاء/);
+  assert(Number(await page.locator('#alt-meters').textContent()) >= 250, 'the altitude reaches the same 250 m goal');
+  assert.equal(await page.locator('#alt-fill').evaluate(el => el.style.height), '286px', 'the space progress bar is full');
+});
+
 for (const exit of ['reload', 'menu', 'restart']) {
   test(`Golf: a finished shot is saved once on landing and survives ${exit}`, async t => {
     const page = await game(t);

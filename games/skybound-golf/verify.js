@@ -68,6 +68,24 @@ const timed = shot(0, {}, 1, 'timed'), idle = shot(0, {}, 1, 'idle');
 assert(timed.ball.supers >= 2, 'timed presses make super bounces');
 assert(timed.events.some(e => e.type === 'super' && e.quality === 'perfect'), 'a press just before landing is perfect');
 assert(timed.ball.maxX > idle.ball.maxX, 'super bounces carry the ball further');
+// The first gold landing cue must award a perfect bounce, including the
+// 200 ms boundary; pressing earlier must still award only a good bounce.
+for (const power of [0.5, 0.72, 0.8]) for (const window of [P.PERFECT_WINDOW, 0.4]) {
+  const c = P.createCourse(0), b = P.launch(c, {}, power);
+  let prediction, hit;
+  for (let frame = 0; frame < 2000 && !b.done; frame++) {
+    prediction = b.vy < 0 ? P.predictImpact(c, b, P.ARM_WINDOW) : null;
+    if (prediction && prediction.t <= window + 1e-9) break;
+    P.step(c, b, {}, 1 / 60);
+  }
+  assert(prediction && !b.done, 'the first landing has a timing cue');
+  assert.equal(P.press(c, b, {}).type, 'arm');
+  for (let frame = 0; frame < 100 && !b.done && !hit; frame++) {
+    hit = P.step(c, b, {}, 1 / 60).find(e => e.type === 'super');
+  }
+  assert.equal(hit && hit.quality, window === P.PERFECT_WINDOW ? 'perfect' : 'good',
+    `the landing cue agrees with the awarded bounce at swing power ${power}`);
+}
 const mash = P.launch(course, {}, 1);
 while (!mash.done && !(mash.vy < 0 && P.predictImpact(course, mash, P.ARM_WINDOW))) P.step(course, mash, {}, 1 / 60);
 assert.equal(P.press(course, mash, {}).type, 'arm');

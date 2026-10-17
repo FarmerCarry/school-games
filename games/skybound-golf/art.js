@@ -735,7 +735,7 @@
   function reticle(c, s) {
     var rt = s.reticle;
     if (!rt) return;
-    var X = sx(rt.x), Y = sy(rt.y), perfect = rt.t <= P.PERFECT_WINDOW, armed = s.ball && s.ball.armed;
+    var X = sx(rt.x), Y = sy(rt.y), perfect = P.perfectTiming(rt.t), armed = s.ball && s.ball.armed;
     var rr = 14 + rt.t / P.ARM_WINDOW * 34;
     c.save();
     c.beginPath(); c.ellipse(X, Y, rr * 1.4, rr * 0.45, 0, 0, TAU);

@@ -282,15 +282,38 @@
   // that is further away than maxT. Objects are ignored.
   function predictImpact(course, ball, maxT) {
     if (ball.done || ball.mode !== 'air') return null;
-    var g = course.world.gravity, x = ball.x, y = ball.y, vx = ball.vx, vy = ball.vy, h = 1 / 120;
+    var g = course.world.gravity, x = ball.x, y = ball.y, vx = ball.vx, vy = ball.vy, t = 0;
     maxT = finite(maxT, ARM_WINDOW);
-    for (var t = 0; t <= maxT; t += h) {
-      vy -= g * h; x += vx * h; y += vy * h;
-      var floor = heightAt(course, x) + ball.r;
-      if (y <= floor) return { t: t + h, x: x, y: floor - ball.r };
+    // Match step() at the game's 60 Hz cadence, including drag and adaptive
+    // substeps, so the gold cue uses the same contact time as the reward.
+    while (t < maxT + 1e-9) {
+      var dt = 1 / 60, count = Math.max(1, Math.ceil(dt / (1 / 240)), Math.ceil(Math.hypot(vx, vy) * dt / 0.5));
+      var h = dt / count;
+      for (var k = 0; k < count; k++) {
+        if (t + h > maxT + 1e-9) return null;
+        var ox = x, oy = y;
+        vy -= g * h;
+        var drag = Math.exp(-(0.01 + 0.0009 * Math.hypot(vx, vy)) * h);
+        vx *= drag; vy *= drag;
+        x += vx * h; y += vy * h;
+        if (x < 0) { x = 0; vx = Math.abs(vx) * 0.5; }
+        t += h;
+        if (y <= heightAt(course, x) + ball.r) {
+          var lo = 0, hi = 1;
+          for (var it = 0; it < 10; it++) {
+            var mid = (lo + hi) / 2, mx = ox + (x - ox) * mid, my = oy + (y - oy) * mid;
+            if (my >= heightAt(course, mx) + ball.r) lo = mid; else hi = mid;
+          }
+          x = ox + (x - ox) * lo;
+          return { t: t, x: x, y: heightAt(course, x) };
+        }
+      }
     }
     return null;
   }
+
+  // Floating-point accumulation at exactly 200 ms must agree in cue and grade.
+  function perfectTiming(t) { return t <= PERFECT_WINDOW + 1e-9; }
 
   // The player's one button during a flight.
   function press(course, ball, raw) {
@@ -375,7 +398,7 @@
     if (ball.armed && -vn > 4) {
       // Each super bounce in a run is a little weaker, so chains always end.
       var tire = Math.pow(0.92, ball.supers);
-      if (ball.armAge <= PERFECT_WINDOW) { quality = 'perfect'; e = Math.max(e, (0.86 + u.bounce * 0.008) * tire); keep = Math.max(keep, 0.95); }
+      if (perfectTiming(ball.armAge)) { quality = 'perfect'; e = Math.max(e, (0.86 + u.bounce * 0.008) * tire); keep = Math.max(keep, 0.95); }
       else { quality = 'good'; e = Math.max(e, e + 0.1 * tire); keep = Math.max(keep, 0.9); }
       if (type === 'sand') e = Math.min(e, 0.32);
     }
@@ -593,7 +616,7 @@
   var api = { worlds: worlds, skins: skins, upgrades: upgrades, kinds: KINDS, CHUNK: CHUNK, SPACE: SPACE,
     ARM_WINDOW: ARM_WINDOW, PERFECT_WINDOW: PERFECT_WINDOW, bands: { perfect: PERFECT_POWER, great: GREAT_POWER, good: GOOD_POWER },
     createCourse: createCourse, heightAt: heightAt, surfaceType: surfaceType, features: features,
-    levels: levels, grade: grade, launch: launch, press: press, predictImpact: predictImpact, step: step, pace: pace,
+    levels: levels, grade: grade, launch: launch, press: press, predictImpact: predictImpact, perfectTiming: perfectTiming, step: step, pace: pace,
     reward: reward, cost: cost, sanitizeSave: sanitizeSave, magnetOf: magnetOf, rocketsOf: rocketsOf };
   root.GolfPhysics = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
