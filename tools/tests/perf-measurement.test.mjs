@@ -101,8 +101,11 @@ test('delayed initialization/countdown/input remain visible after load; idle gap
       const button = document.querySelector('button');
       window.addEventListener('load', () => {
         window.loadedAt = performance.now();
-        setTimeout(() => { button.disabled = false; window.initAt = performance.now(); }, 250);
       });
+      window.initialize = () => {
+        window.initRequestedAt = performance.now();
+        setTimeout(() => { button.disabled = false; window.initAt = performance.now(); }, 250);
+      };
       button.onclick = () => {
         document.getElementById('scrTitle').hidden = true;
         __game.state = 'play';
@@ -118,10 +121,14 @@ test('delayed initialization/countdown/input remain visible after load; idle gap
   await context.addInitScript(installObservers, { target: 'hoop-heads', active: "window.__game?.state === 'play'", ready: "window.__game?.match?.phase === 'play'" });
   const page = await context.newPage();
   await page.goto(server.origin + '/fixture');
+  await page.waitForFunction(() => window.__perf.firstUsefulMs !== null);
+  assert.equal(await page.evaluate(() => __perf.readyForStartMs), null, 'a visible disabled Start control is not ready');
+  await page.evaluate(() => initialize());
   await page.waitForFunction(() => window.__perf.readyForStartMs !== null);
-  const early = await page.evaluate(() => ({ ...__perf, load: performance.getEntriesByType('navigation')[0].loadEventEnd, initAt }));
+  const early = await page.evaluate(() => ({ ...__perf, load: performance.getEntriesByType('navigation')[0].loadEventEnd, initAt, initRequestedAt }));
   assert.ok(early.firstUsefulMs < early.readyForStartMs, 'Visible screen and ready control must remain separate');
   assert.ok(early.readyForStartMs >= early.initAt && early.readyForStartMs > early.load + 200, 'Deferred initialization cannot disappear after load');
+  assert.ok(early.readyForStartMs - early.initRequestedAt >= 250, 'the actual initialization delay must remain in readiness');
   assert.equal(early.playableMs, null, 'A visible enabled title is not playable');
   await page.evaluate(() => { __perf.startRequestedMs = performance.now(); });
   await page.locator('button').click();
@@ -166,9 +173,12 @@ test('portal useful screen waits for decoded fully opaque artwork, not gradient 
     const img=document.querySelector('img'), decode=img.decode.bind(img);
     img.decode=()=>decode().then(()=>new Promise(resolve=>setTimeout(()=>{ window.decodedAt=performance.now();resolve(); },150)));
     img.addEventListener('transitionend',()=>{window.opaqueAt=performance.now()});
-    addEventListener('load',()=>{window.loadAt=performance.now();setTimeout(()=>{img.style.opacity='1'},100)});
+    addEventListener('load',()=>{window.loadAt=performance.now()});
+    window.startFade=()=>setTimeout(()=>{img.style.opacity='1'},100);
     </script>`);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
   assert.equal(await page.evaluate(() => __perf.firstUsefulMs), null);
+  await page.evaluate(() => startFade());
   await page.waitForFunction(() => __perf.firstUsefulMs !== null);
   const result = await page.evaluate(() => ({ useful: __perf.firstUsefulMs, decodedAt, opaqueAt, loadAt, opacity: getComputedStyle(document.querySelector('img')).opacity }));
   assert.equal(result.opacity, '1');
@@ -206,16 +216,23 @@ test('typing readiness uses populated visible words and enabled language control
 test('board readiness waits for its chooser and proves Start plus a real move', async t => {
   const page = await observeFixture(t, 'connect-four', `<!doctype html>
     <section hidden><canvas></canvas></section><main id="boardApp" style="min-height:100px"></main>
-    <script>addEventListener('load',()=>{
+    <script>window.showChooser=()=>{
       setTimeout(()=>{
         boardApp.innerHTML='<button id="localButton" disabled>Local</button><button id="pcButton">Computer</button><button id="move">Move</button>';
         window.chooserAt=performance.now();
         localButton.onclick=()=>{boardApp.dataset.mode='local'};
         move.onclick=()=>{window.sgInput={seen:true}};
       },150);
-      setTimeout(()=>{localButton.disabled=false;window.enabledAt=performance.now()},300);
-    });</script>`, "document.getElementById('boardApp').dataset.mode === 'local'");
+    };
+    window.enableChooser=()=>setTimeout(()=>{localButton.disabled=false;window.enabledAt=performance.now()},150);
+    </script>`, "document.getElementById('boardApp').dataset.mode === 'local'");
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
   assert.equal(await page.evaluate(() => __perf.firstUsefulMs), null);
+  assert.equal(await page.evaluate(() => __perf.readyForStartMs), null, 'an absent chooser is not ready');
+  await page.evaluate(() => showChooser());
+  await page.waitForFunction(() => __perf.firstUsefulMs !== null);
+  assert.equal(await page.evaluate(() => __perf.readyForStartMs), null, 'a visible disabled chooser is not ready');
+  await page.evaluate(() => enableChooser());
   await page.waitForFunction(() => __perf.readyForStartMs !== null);
   const ready = await page.evaluate(() => ({ ...__perf, chooserAt, enabledAt }));
   assert.ok(ready.firstUsefulMs >= ready.chooserAt && ready.readyForStartMs >= ready.enabledAt);
