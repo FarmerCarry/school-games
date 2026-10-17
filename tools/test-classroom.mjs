@@ -120,13 +120,21 @@ try {
         assert.equal(fs.readFileSync(await workbook.path()).subarray(0, 4).toString('latin1'), 'PK\u0003\u0004', 'the workbook is a ZIP package');
       });
 
-      for (const slug of ['tic-tac-toe', 'connect-four', 'air-hockey', 'merge-2048', 'pizza-clicker', 'dino-3d', 'pool-party']) {
+      for (const slug of ['tic-tac-toe', 'connect-four', 'air-hockey', 'merge-2048', 'pizza-clicker', 'dino-3d']) {
         await check(page, label + '-' + slug, async () => {
           await page.goto(pathToFileURL(path.join(folder, 'games', slug, 'index.html')).href);
           const result = await runScenario(page, slug, { mode: 'performance' });
           assert.ok(result.checks.length, 'the game completes observable gameplay checks');
         });
       }
+      await check(page, label + '-pool-party', async () => {
+        await page.goto(pathToFileURL(path.join(folder, 'games', 'pool-party', 'index.html')).href);
+        await page.locator('#btnTrick').click();
+        assert.equal(await page.locator('#lvgrid .lvl').count(), 12, 'all twelve trick-shot puzzles are available in the downloaded menu');
+        await page.locator('#lvBack').click();
+        const result = await runScenario(page, 'pool-party', { mode: 'performance' });
+        assert.ok(result.checks.length, 'Pool completes observable gameplay checks after leaving the puzzle menu');
+      });
     } finally { await context.close(); }
   }
 } catch (error) {
