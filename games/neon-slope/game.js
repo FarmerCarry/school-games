@@ -23,31 +23,37 @@
 
   /* =============================================================== SAVE */
   function arr(v, d) { return Array.isArray(v) ? v.slice() : d; }
+  var record = store.get('save', null);
+  if (!record || typeof record !== 'object' || Array.isArray(record) || record.v !== 1) record = null;
+  var savedJSON = record ? JSON.stringify(record) : null;
+  function readSave(key, fallback) {
+    return record ? (record[key] === undefined ? fallback : record[key]) : store.get(key, fallback);
+  }
   var save = {
-    best: Math.max(0, +store.get('best', 0) || 0),
-    gems: Math.max(0, +store.get('gems', 0) || 0),
-    owned: arr(store.get('owned', null), ['neon']),
-    ownedTrails: arr(store.get('ownedTrails', null), ['glow']),
-    skin: String(store.get('skin', 'neon')),
-    trail: String(store.get('trail', 'glow')),
-    runs: +store.get('runs', 0) || 0,
-    music: store.get('music', true) !== false,
-    missions: arr(store.get('missions', null), []),
-    mDone: +store.get('mDone', 0) || 0
+    v: 1,
+    best: Math.max(0, +readSave('best', 0) || 0),
+    gems: Math.max(0, +readSave('gems', 0) || 0),
+    owned: arr(readSave('owned', null), ['neon']),
+    ownedTrails: arr(readSave('ownedTrails', null), ['glow']),
+    skin: String(readSave('skin', 'neon')),
+    trail: String(readSave('trail', 'glow')),
+    runs: +readSave('runs', 0) || 0,
+    music: readSave('music', true) !== false,
+    missions: arr(readSave('missions', null), []),
+    mDone: +readSave('mDone', 0) || 0
   };
   if (save.owned.indexOf('neon') < 0) save.owned.push('neon');
   if (save.ownedTrails.indexOf('glow') < 0) save.ownedTrails.push('glow');
   if (save.owned.indexOf(save.skin) < 0) save.skin = 'neon';
   if (save.ownedTrails.indexOf(save.trail) < 0) save.trail = 'glow';
   var saveUi = Kit.saveStatus({ retry: persist });
-  // Writes every key even after one fails; the warning clears only when all of them succeed.
+  // Currency, unlocks and selection commit together. Legacy keys stay untouched
+  // if migration fails; pending progress stays in memory for Retry.
   function persist() {
-    var ok = store.set('best', save.best);
-    ok = store.set('gems', save.gems) && ok;
-    ok = store.set('owned', save.owned) && ok; ok = store.set('ownedTrails', save.ownedTrails) && ok;
-    ok = store.set('skin', save.skin) && ok; ok = store.set('trail', save.trail) && ok;
-    ok = store.set('runs', save.runs) && ok; ok = store.set('music', save.music) && ok;
-    ok = store.set('missions', save.missions) && ok; ok = store.set('mDone', save.mDone) && ok;
+    var json;
+    try { json = JSON.stringify(save); } catch (e) { json = null; }
+    var ok = json !== null && (json === savedJSON || store.set('save', save));
+    savedJSON = ok ? json : null;
     if (ok) saveUi.saved(); else saveUi.failed();
     return ok;
   }
@@ -1915,7 +1921,7 @@
     die: function (why) { if (st.mode === 'paused') resumeGame(); if (st.mode === 'play') die(why || 'bonk'); return st.mode; },
     pause: function () { pauseGame(); return st.mode; },
     addGems: function (n) { save.gems += n; persist(); refreshTitle(); },
-    reset: function () { ['best', 'gems', 'owned', 'ownedTrails', 'skin', 'trail', 'runs', 'music', 'missions', 'mDone'].forEach(function (k) { store.remove(k); }); },
+    reset: function () { ['save', 'best', 'gems', 'owned', 'ownedTrails', 'skin', 'trail', 'runs', 'music', 'missions', 'mDone'].forEach(function (k) { store.remove(k); }); savedJSON = null; },
     _fx: function () {
       popup('قفزة خارقة! ' + ltr('+3'), '#ffe14d', true, ball.x - 3, ball.y + 1.5, ball.d + 6);
       popup(ltr('+5'), '#ff5fe0', true, ball.x + 3, ball.y + 1, ball.d + 8);
