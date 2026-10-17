@@ -86,7 +86,6 @@
     // pickup pads baked into the map geometry
     for (var i = 0; i < m.pickups.length; i++) {
       var pk = m.pickups[i];
-      var py = m.W.ground ? 0 : 0;
       pk.gy = pk.y;
       m.b.ao = false;
       var padCol = pk.type === 'hp' ? 0xff3d6e : pk.type === 'ammo' ? 0x3fb8ff : 0xffc61a;
@@ -541,7 +540,6 @@
     var ul = Math.sqrt(ux * ux + uy * uy + uz * uz) || 1; ux /= ul; uy /= ul; uz /= ul;
     var mult = (e.power > 0 ? 2 : 1) * (e.bot && !e.autopilot ? e.bot.D.dmg : 1);
     var mz = G.muzzle(e, dx, dy, dz);
-    var anyHit = false;
     for (var p = 0; p < W.pellets; p++) {
       var a, rr;
       if (W.pellets > 1) { if (p === 0) { a = 0; rr = 0; } else { a = (p - 1) / (W.pellets - 1) * Math.PI * 2 + Math.random() * 0.5; rr = spread * (0.55 + Math.random() * 0.45); } }
@@ -553,7 +551,6 @@
       var dist = tr.t, fall = dist <= W.fall0 ? 1 : dist >= W.fall1 ? W.fallMin : 1 - (1 - W.fallMin) * (dist - W.fall0) / (W.fall1 - W.fall0);
       var dmg = W.dmg * fall * (tr.head ? W.head : 1) * mult;
       var hx = ex + px * dist, hy = ey + py * dist, hz = ez + pz * dist;
-      if (tr.ent || tr.world || dist < W.range) anyHit = true;
       addShot(e, mz.x, mz.y, mz.z, hx, hy, hz, wi, dmg);
       if (wi === 2 && !G.headless) fx.tracer(mz.x, mz.y, mz.z, hx, hy, hz, G.paint(e));
     }
@@ -844,7 +841,7 @@
     G.headless = !opts.visual; fx.lite = true;
     var P = G.player;
     if (P && opts.autopilot && !P.bot) { P.bot = new SS.Bot(P, opts.autopilotDiff != null ? opts.autopilotDiff : G.diff); P.bot.reset(G); P.autopilot = true; }
-    var cells = {}, upper = {}, total = 0, maxStill = 0, still = {}, t0 = performance.now();
+    var cells = {}, upper = {}, maxStill = 0, still = {}, t0 = performance.now();
     var n = Math.round(sec * 60), steps = 0, inside = 0, below = 0, outside = 0, W = G.W, lim = W.half;
     for (var i = 0; i < n; i++) {
       G.update(1 / 60); steps++;

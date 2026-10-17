@@ -577,7 +577,7 @@
   }
 
   function handleEvents(s) {
-    var look = myLook(), th = G.L.theme;
+    var th = G.L.theme;
     for (var i = 0; i < s.ev.length; i++) {
       var e = s.ev[i], o = e.o;
       switch (e.t) {

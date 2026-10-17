@@ -69,7 +69,7 @@ function jitter(frames, J) {
   var sw = [];
   for (var i = 1; i < frames.length; i++) if (frames[i] !== frames[i - 1]) sw.push(i);
   if (frames[0]) sw.unshift(0);
-  var out = [], state = 0, prev = 0;
+  var out = [], state = 0;
   var shifted = sw.map(function (s, i) {
     var v = s + Math.round((Math.random() * 2 - 1) * J);
     return Math.max(i === 0 ? 0 : 1, v);

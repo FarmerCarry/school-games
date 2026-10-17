@@ -1102,14 +1102,12 @@
       var nx = alignRight ? x + 172 : x - 172;
       txt(name, nx, 36, 26, col, alignRight ? 'right' : 'left', { stroke: 5 });
       // pips
-      var n = st.goalsToWin, pw = Math.min(22, 250 / n), total = pw * (n - 1);
-      var startX = alignRight ? nx - total : nx;
+      var n = st.goalsToWin, pw = Math.min(22, 250 / n);
       for (var i = 0; i < n; i++) {
         var px = alignRight ? nx - i * pw : nx + i * pw;
         ctx.fillStyle = i < score ? col : 'rgba(255,255,255,0.18)';
         ctx.beginPath(); ctx.arc(px + (alignRight ? -6 : 6), 66, i < score ? 7 : 5, 0, Math.PI * 2); ctx.fill();
       }
-      startX = startX;
     }
     plate(360, ca, a.name, st.score[0], false);
     plate(920, cb, b.name, st.score[1], true);

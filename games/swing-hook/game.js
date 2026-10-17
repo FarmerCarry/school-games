@@ -323,7 +323,7 @@
   var mode = 'title';       // title | levels | style | play | pause | result
   var lvl = 0, endless = false, attract = false;
   var L = null, w = null, theme = THEMES[0];
-  var deadT = 0, winT = 0, slow = 1, needFresh = false, readyT = 0, stuckT = 0, runT = 0;
+  var deadT = 0, winT = 0, slow = 1, needFresh = false, readyT = 0, stuckT = 0;
   var resumeWait = false;   // resumed mid-swing: the world waits until the player holds again
   var cam = { x: 0, y: 0, z: 0.9 };
   var shake = Kit.shake();
@@ -431,7 +431,7 @@
   /* ---------------------------------------------------------- level setup */
   function useLevel(Lv) {
     L = Lv; w = Sim.create(L);
-    deadT = 0; winT = 0; slow = 1; readyT = 0; stuckT = 0; runT = 0; ropeT = 1; resumeWait = false;
+    deadT = 0; winT = 0; slow = 1; readyT = 0; stuckT = 0; ropeT = 1; resumeWait = false;
     squash = 0; squashV = 0;
     trailN = 0; trailI = 0;
     clearParts();
@@ -635,7 +635,7 @@
       }
     }
     if (needFresh) { if (!hold) needFresh = false; hold = false; }
-    if (w.st === 'ready') readyT += dt; else runT += dt;
+    if (w.st === 'ready') readyT += dt;
 
     var sdt = dt * slow;
     Sim.step(w, sdt, hold);

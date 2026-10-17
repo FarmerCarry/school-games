@@ -1223,7 +1223,7 @@
   var UPV = new T.Vector3(0, 1, 0);
 
   /* ================================================================ HUD PER FRAME */
-  var boardT = 0, lastHeart = 0;
+  var boardT = 0;
   function hud(dt) {
     var p = G.player; if (!p) return;
     var paused = UI.paused;

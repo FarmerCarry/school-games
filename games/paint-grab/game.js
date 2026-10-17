@@ -292,7 +292,7 @@
   var agentFx = [];           // per id anim state
   var inputMode = 'keys', lastPtr = { x: 0, y: 0, t: 0 }, keysUsed = false;
   var namePool = [], nameIdx = 0;
-  var lb = [], lbT = 0;
+  var lb = [];
   var warnT = 0, threat = null, lastTick = -1;
   var ending = null, endT = 0, result = null;
   var milestones = {}, killStreakT = 0, killStreak = 0;
@@ -432,7 +432,7 @@
     clearTex();
     parts.length = 0; sparts.length = 0; popups.length = 0; banners.length = 0; feed.length = 0;
     namePool = Kit.shuffle(PG.BOT_NAMES.slice()); nameIdx = 0;
-    var nb = 8, defs = [];
+    var nb = 8;
     if (withPlayer) {
       player = world.addAgent({ isPlayer: true, name: 'أنت', turn: PG.PLAYER_TURN });
       skins.push(playerSkin()); agentFx.push(newFx());
@@ -1185,11 +1185,10 @@
   }
 
   /* ============================================================ skins UI */
-  var skTab = 'c', skSel = null;
+  var skTab = 'c';
   function openSkins() {
     state = 'skins';
     showScreen('scr-skins');
-    skSel = null;
     buildSkinGrid();
   }
   function closeSkins() {

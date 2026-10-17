@@ -493,7 +493,7 @@
 
   function drawDoor(g, w, ex, t) {
     var fire = ex.kind === 'fire';
-    var x = ex.x + T / 2, top = ex.y, bot = ex.y + 2 * T;
+    var x = ex.x + T / 2, bot = ex.y + 2 * T;
     var dw = 40, dh = 58;
     var col = fire ? '#ff5a1f' : '#2f9bff', light = fire ? '#ffb347' : '#8fe3ff', dark = fire ? '#8a1c05' : '#0b3f8a';
     // glow when occupied

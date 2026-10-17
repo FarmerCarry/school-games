@@ -221,7 +221,7 @@
     }
 
     function playStep(dt, realDt) {
-      var m = G.maze, i;
+      var i;
       for (i = 0; i < G.tanks.length; i++) {
         var t = G.tanks[i];
         animTank(t, dt);
@@ -532,7 +532,6 @@
         if (p.life <= 0) G.pops.splice(i, 1);
       }
     }
-    G.burst = burst; G.pop = pop;
 
     function addSplat(x, y, s, color, style) {
       var rec = { x: x, y: y, s: s, color: color, style: style, seed: (Math.random() * 1e9) | 0 };

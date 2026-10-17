@@ -121,10 +121,6 @@
   var nbuf = null;
   function actx() { var a = Kit.audio; return (a.ctx && !a.muted) ? a.ctx : null; }
   function quiet() { return !G || G.kind === 'demo'; }
-  function tone(f, to, type, dur, vol, delay) {
-    if (!actx()) return;
-    Kit.audio.tone({ freq: f, to: to, type: type, dur: dur, vol: vol, delay: delay || 0 });
-  }
   function noise(dur, vol, freq, q, ftype, delay, to) {
     var c = actx(); if (!c) return;
     if (!nbuf) {
@@ -462,7 +458,6 @@
   }
 
   function updateGame(dt) {
-    var st = G.st;
     if (G.banner) { G.banner.t += dt; if (G.banner.t > G.banner.dur) G.banner = null; }
     if (G.say) { G.say.t += dt; if (G.say.t > 2.4) G.say = null; }
     // sprite squash decay
@@ -1244,7 +1239,6 @@
 
   function drawVS() {
     var status = '';
-    var pl = G.players[G.turn];
     if (G.phase === 'cpu') status = G.cpu.stage === 'think' ? 'يفكّر' + '...'.substr(0, 1 + ((time * 3) | 0) % 3) : 'يصوّب...';
     else if (G.phase === 'aim') status = G.inHand ? 'الكرة بيدك' : (G.kind === 'cpu' ? 'دورك' : 'اضرب!');
     else if (G.phase === 'rolling' || G.phase === 'strike') status = '';

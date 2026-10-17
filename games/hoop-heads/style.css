@@ -192,7 +192,6 @@ button { font-family: var(--sg-font); }
 }
 .lslot.boss { border-color: #ff4d6d; }
 .lslot .bosst { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); background: #ff4d6d; color: #fff; font-weight: 700; padding: 0 12px; border-radius: 10px; white-space: nowrap; }
-.lad-you { position: absolute; bottom: 110px; left: 0; right: 0; text-align: center; font-size: 22px; }
 
 /* ============ SHOP ============ */
 .shop-coins { position: absolute; top: 20px; left: 40px; font-size: 32px; font-weight: 700; color: #ffd23f; }

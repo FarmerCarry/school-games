@@ -128,7 +128,7 @@
 
   /* --------------------------------------------------------------- decisions */
   B.decide = function (G) {
-    var e = this.e, nav = G.nav, D = this.D;
+    var e = this.e, nav = G.nav;
     var t = this.target;
     // low on paint: grab health if it's close and not in a point-blank fight
     if (e.hp < 45 && (!t || this.dist(t) > 9)) {

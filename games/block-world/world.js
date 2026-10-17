@@ -55,7 +55,7 @@
 
   // ------------------------------------------------------------ generation
   P.generate = function () {
-    var seed = this.seed, rnd = mulberry(seed), t = this.tiles, wl = this.walls, self = this;
+    var seed = this.seed, rnd = mulberry(seed), t = this.tiles, wl = this.walls;
     function set(x, y, id) { if (x >= 0 && x < W && y >= 0 && y < H) t[y * W + x] = id; }
     function get(x, y) { return (x >= 0 && x < W && y >= 0 && y < H) ? t[y * W + x] : B.BEDROCK; }
     // biome segments

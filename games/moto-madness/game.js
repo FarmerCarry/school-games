@@ -79,7 +79,7 @@
   var levelIdx = 0, world = null, level = null, demo = false, demoIdx = 0, demoCrashes = 0;
   var cam = { x: 0, y: 0, zoom: 1 };
   var shake = Kit.shake();
-  var clock = 0, finishT = 0, lean = 0, crouch = 0, bannerT = 0, bonusFlash = 0, prevTime = 0, hurry = 0;
+  var clock = 0, finishT = 0, lean = 0, crouch = 0, bonusFlash = 0, prevTime = 0, hurry = 0;
   var levelsCache = [];
   function getLevel(i) { if (!levelsCache[i]) levelsCache[i] = MM.build(MM.LEVELS[i]); return levelsCache[i]; }
 
@@ -218,7 +218,7 @@
     state = 'play';
     statRound();
     if (!i && !save.stars[0]) Kit.stats.tutorial('start'); // level 1 teaches with its signs
-    bannerT = 0; prevTime = 0; hurry = 0; stuckT = 0;
+    prevTime = 0; hurry = 0; stuckT = 0;
     rec = []; loadGhost(i);
     showOverlay(null);
     Kit.keys.reset();
@@ -229,7 +229,7 @@
     statRound();
     world.restart();
     clearParticles();
-    bannerT = 0; finishT = 0; state = 'play'; stuckT = 0; prevTime = 0; hurry = 0; rec = [];
+    finishT = 0; state = 'play'; stuckT = 0; prevTime = 0; hurry = 0; rec = [];
     if (result) { if (result.ghost) loadGhost(levelIdx); result = null; } // restarted right after finishing: race the new best
     showOverlay(null);
     var b = world.bike; cam.x = b.x + 220; cam.y = b.y - 60;
@@ -635,7 +635,6 @@
         if (!result) commitResult();
         if (finishT > 1.6) showComplete();
       }
-      bannerT += dt;
       // "hurry" beep when a star time runs out
       var cur = world.time - world.bonus;
       if (world.started && !world.finished) {

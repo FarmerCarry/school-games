@@ -814,7 +814,7 @@
   }
 
   /* ================================================================== UI */
-  var state = 'title', prevState = 'title';
+  var state = 'title';
   var SCR = ['title', 'select', 'cup', 'shop', 'ach', 'pause', 'over'];
   function showScr(name) {
     for (var i = 0; i < SCR.length; i++) $('scr-' + SCR[i]).hidden = SCR[i] !== name;

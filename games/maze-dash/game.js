@@ -160,7 +160,7 @@
   };
   var P = {
     x: 0, y: 0, cx: 0, cy: 0, dir: -1, moving: false, sx: 1, sy: 1, lx: 0, ly: 0,
-    invuln: 0, hidden: false, safeX: 0, safeY: 0, buffer: -1, bufferT: 0, trail: [], blinkT: 2, bumpT: 0, scale: 1
+    invuln: 0, hidden: false, safeX: 0, safeY: 0, buffer: -1, bufferT: 0, trail: [], blinkT: 2, scale: 1
   };
 
   /* -------------------------------------------------------- dom refs */
@@ -478,7 +478,7 @@
     P.lx = D.dx; P.ly = D.dy;
     if (solidFor(nx, ny)) {
       if (G.world.tile(nx, ny) === T.SPIKE) { P.sx = D.dx ? 0.75 : 1.2; P.sy = D.dy ? 0.75 : 1.2; hit('spike'); return; }
-      P.bumpT = 0.12; P.sx = D.dx ? 0.85 : 1.1; P.sy = D.dy ? 0.85 : 1.1; sfx.bump();
+      P.sx = D.dx ? 0.85 : 1.1; P.sy = D.dy ? 0.85 : 1.1; sfx.bump();
       return;
     }
     if (!G.firstMoveDone) {
@@ -1645,7 +1645,7 @@
       (function (n) {
         var b = document.createElement('button');
         b.type = 'button';
-        var locked = n > unl, st = starCount(n), info = levelInfo(n);
+        var locked = n > unl, info = levelInfo(n);
         b.className = 'md-lv' + (locked ? ' locked' : '') + (n === unl && !(info && info.done) ? ' next' : '');
         var s = '';
         for (var k = 0; k < 3; k++) s += '<span class="' + (info && (info.s & (1 << k)) ? 'on' : '') + '">★</span>';

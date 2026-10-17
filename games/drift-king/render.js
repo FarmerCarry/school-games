@@ -439,7 +439,7 @@
   }
 
   function drawFlag(ctx, bf, time) {
-    var seg = bf.seg, S = cam.S;
+    var seg = bf.seg;
     var h = seg.w / 2;
     var n = 8;
     for (var k = 0; k < n; k++) {
@@ -540,7 +540,7 @@
     setCam(G.cam, G.shake.x, G.shake.y);
     drawSky(ctx, p, G.time);
     drawBackground(ctx, p, G.time);
-    var car = G.car, model = G.model;
+    var car = G.car;
     var falling = car.state === 'fall';
     var carS = { x: sx(car.x, car.y), y: sy(car.x, car.y, 0), S: cam.S };
     if (falling && car.fall.behind) drawCarFull(ctx, G, carS, false);

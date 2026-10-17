@@ -1846,7 +1846,7 @@
 
   function drawMachine(c, o) {
     var d = o.d, x = d.x, y = d.y, w = 130, dd = 70, H = 76;
-    var x0 = x - w / 2, yt = y - dd / 2, yb = y + dd / 2;
+    var x0 = x - w / 2, yb = y + dd / 2;
     var ps = popScale(o), b = o.bump > 0 ? 1 + Math.sin(o.bump * 40) * o.bump * 0.3 : 1;
     var sh = o.working ? Math.sin(R.t * 45) * 1.2 : 0;
     c.save(); c.translate(x + sh, yb); c.scale(ps * (2 - b), ps * b); c.translate(-x, -yb);
@@ -1934,7 +1934,7 @@
     if (Math.random() < 0.05) part(p.x + rnd(-20, 20), p.y - 10 - rnd(0, 30), { vx: 0, vy: -30, life: 0.5, size: 8, color: '#fff7b0', g: 0, shape: 'star' });
   }
   function drawCoop(c, o) {
-    var x = o.x, y = o.y, w = 180, H = 62, yb = y + 45, yt = y - 45;
+    var x = o.x, y = o.y, H = 62, yb = y + 45, yt = y - 45;
     var ps = popScale(o);
     c.save(); c.translate(x, yb); c.scale(ps, ps); c.translate(-x, -yb);
     A.rr(c, x - 94, yb - 10, 196, 20, 10); c.fillStyle = 'rgba(40,30,20,0.22)'; c.fill();

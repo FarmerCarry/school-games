@@ -452,7 +452,6 @@
       // arrow stripe on kickers
       if (s.type === 'kicker') {
         ctx.fillStyle = T.track2;
-        var mid = pts[Math.floor(pts.length * 0.7)];
         ctx.save(); ctx.translate(s.x2 - 26, s.y - s.h * 0.45);
         ctx.beginPath(); ctx.moveTo(-10, -8); ctx.lineTo(6, 0); ctx.lineTo(-10, 8); ctx.closePath(); ctx.fill();
         ctx.restore();
