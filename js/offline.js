@@ -6,7 +6,7 @@
   if (!status || !retry) return;
   var update = document.getElementById('offlineUpdate'), refresh = document.getElementById('offlineRefresh');
   var pageVersion = window.SG_OFFLINE_VERSION, availableVersion = null, refreshing = false;
-  var registration = null, starting = false, checking = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0, observedWorker = null, shown = '';
+  var registration = null, starting = false, checking = false, checkingRepair = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0, observedWorker = null, shown = '';
   function safeToRefresh() { return typeof window.SGUpdateSafe === 'function' && window.SGUpdateSafe(); }
   function showUpdate() {
     if (!update || !refresh) return;
@@ -64,7 +64,13 @@
     });
   }
   async function inspect(repair) {
-    if (checking) { queued = true; queuedRepair = queuedRepair || !!repair; return; }
+    if (checking) {
+      // Focus and visibility commonly arrive together. The current request
+      // covers both; only an upgrade to repair needs another scan. Worker
+      // replacement is detected again when the current reply arrives below.
+      if (repair && !checkingRepair) queued = queuedRepair = true;
+      return;
+    }
     if (!registration) return start();
     var owner = registration, worker = owner.active;
     if (!worker) {
@@ -74,6 +80,7 @@
       return;
     }
     checking = true;
+    checkingRepair = !!repair;
     paint('checking', repair ? 'جارٍ إصلاح النسخة المحفوظة…' : 'جارٍ التحقق من الألعاب المحفوظة…', false);
     try {
       var result = await ask(worker, repair);
@@ -89,6 +96,7 @@
       else { availableVersion = null; paint('unavailable', 'تعذّر التأكد من النسخة دون إنترنت — أعد المحاولة', true); }
     } finally {
       checking = false;
+      checkingRepair = false;
       retry.disabled = false;
       showUpdate();
       if (queued) { var repairNext = queuedRepair; queued = queuedRepair = false; inspect(repairNext); }

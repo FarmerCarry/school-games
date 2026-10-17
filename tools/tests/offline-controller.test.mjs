@@ -59,10 +59,11 @@ function controller(registrations, options = {}) {
   }
   const window = { ...events(), SG_OFFLINE_BUILD: options.build !== false, SG_OFFLINE_VERSION: 'page-v1', gameOpen: false,
     SGUpdateSafe() { return !this.gameOpen; } };
+  const document = { ...events(), readyState: 'complete', hidden: false,
+    getElementById: id => ({ offlineStatus: status, offlineRetry: retry, offlineUpdate: update, offlineRefresh: refresh })[id] };
   vm.runInNewContext(source, {
     window, location: { protocol: options.protocol || 'https:', reload() { reloads++; } }, navigator: { serviceWorker }, MessageChannel: Channel,
-    document: { ...events(), readyState: 'complete', hidden: false,
-      getElementById: id => ({ offlineStatus: status, offlineRetry: retry, offlineUpdate: update, offlineRefresh: refresh })[id] },
+    document,
     setTimeout(callback, delay) {
       const id = ++nextTimer;
       timers.set(id, { callback, delay }); timerHistory.push({ id, callback, delay });
@@ -70,7 +71,7 @@ function controller(registrations, options = {}) {
     },
     clearTimeout: id => timers.delete(id)
   });
-  return { status, retry, update, refresh, window, serviceWorker, timers, timerHistory,
+  return { status, retry, update, refresh, window, document, serviceWorker, timers, timerHistory,
     get calls() { return calls; }, get reloads() { return reloads; } };
 }
 
@@ -316,4 +317,36 @@ test('source and downloaded-folder pages never register or offer updates', async
     assert.equal(page.reloads, 0);
     if (options.protocol) assert.equal(page.status['data-state'], 'local');
   }
+});
+
+test('focus and visibility share the pending readiness check without queuing another scan', async () => {
+  const active = worker('activated'), page = controller([registration({ active })]);
+  await flush();
+  const before = active.requests.length;
+  active.hold = true;
+  page.window.emit('focus'); page.document.emit('visibilitychange'); page.window.emit('focus');
+  assert.equal(active.requests.length, before + 1);
+  active.pending.shift()(); await flush();
+  assert.equal(active.requests.length, before + 1);
+  assert.equal(page.status['data-state'], 'ready');
+  active.hold = false; active.ready = false;
+  page.window.emit('focus'); await flush();
+  assert.equal(page.status['data-state'], 'unavailable', 'a later visit still checks eviction');
+});
+
+test('Retry upgrades a pending quick check once; focus events do not repeat the repair', async () => {
+  const active = worker('activated'), page = controller([registration({ active })]);
+  await flush();
+  const before = active.requests.length;
+  active.hold = true;
+  page.window.emit('focus');
+  page.retry.emit('click'); page.retry.emit('click'); await flush();
+  assert.equal(active.requests.length, before + 1);
+  active.pending.shift()(); await flush();
+  assert.equal(active.requests.length, before + 2);
+  assert.equal(active.requests.at(-1).repair, true);
+  page.window.emit('focus'); page.document.emit('visibilitychange'); page.retry.emit('click'); await flush();
+  active.pending.shift()(); await flush();
+  assert.equal(active.requests.length, before + 2);
+  assert.equal(page.status['data-state'], 'ready');
 });
