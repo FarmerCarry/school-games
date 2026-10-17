@@ -58,6 +58,21 @@ test('comparison refuses mismatched profiles, missing samples, failed input and 
   assert.throws(() => compareReports(baseline, dpr), /DPR/);
 });
 
+test('comparison requires the same repetition IDs before claiming paired timing evidence', () => {
+  const baseline = report();
+  for (const offset of [1, 5]) {
+    const candidate = report([50, 52, 54, 56, 58]);
+    for (const sample of candidate.samples) sample.repetition += offset;
+    assert.throws(() => compareReports(baseline, candidate), /same repetition IDs/,
+      'partially overlapping or disjoint repetitions cannot establish paired evidence');
+  }
+  const reordered = report([50, 52, 54, 56, 58]);
+  reordered.samples.reverse();
+  const comparison = compareReports(baseline, reordered);
+  assert.ok(comparison.timings.every(metric => metric.pairs === 5));
+  assert.equal(comparison.hasTimingGain, true, 'matching repetitions need not have the same array order');
+});
+
 test('load improvement cannot conceal a playable regression and noisy medians are not claimed', () => {
   const baseline = report(), candidate = report([50, 52, 54, 56, 58]);
   for (const sample of candidate.samples) {
@@ -165,11 +180,22 @@ test('typing readiness uses populated visible words and enabled language control
   const page = await observeFixture(t, 'typing-test', `<!doctype html>
     <section id="resView" hidden><canvas id="chart"></canvas></section>
     <section id="testView"><button data-lang="en" disabled>English</button><div id="wordsBox"><div id="words"></div></div></section>
-    <script>window.__game={};addEventListener('load',()=>{
-      setTimeout(()=>{document.getElementById('words').innerHTML='<span>ready</span>';window.wordsAt=performance.now()},150);
-      setTimeout(()=>{document.querySelector('button').disabled=false;window.enabledAt=performance.now()},300);
-    });</script>`);
+    <script>window.__game={};</script>`);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
   assert.equal(await page.evaluate(() => __perf.firstUsefulMs), null);
+  assert.equal(await page.evaluate(() => __perf.readyForStartMs), null, 'empty words and a disabled control are not ready');
+  await page.evaluate(() => {
+    document.getElementById('words').innerHTML = '<span>ready</span>';
+    window.wordsAt = performance.now();
+  });
+  // Observe each readiness gate separately: slow rAF delivery may skip the
+  // entire gap between two wall-clock timers without any observer regression.
+  await page.waitForFunction(() => __perf.firstUsefulMs !== null);
+  assert.equal(await page.evaluate(() => __perf.readyForStartMs), null, 'visible words alone cannot make the disabled control ready');
+  await page.evaluate(() => {
+    document.querySelector('button').disabled = false;
+    window.enabledAt = performance.now();
+  });
   await page.waitForFunction(() => __perf.readyForStartMs !== null);
   const result = await page.evaluate(() => ({ ...__perf, wordsAt, enabledAt }));
   assert.ok(result.firstUsefulMs >= result.wordsAt);

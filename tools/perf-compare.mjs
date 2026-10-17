@@ -30,6 +30,12 @@ export function compareReports(baseline, candidate, control = null) {
   }
   const baselineProfile = profile(baseline), candidateProfile = profile(candidate);
   if (JSON.stringify(baselineProfile) !== JSON.stringify(candidateProfile)) throw new Error('Measurements have different browser/environment/scenario profiles; rerun under matched conditions');
+  for (const target of baseline.config.targets) {
+    const repetitions = new Set(candidate.samples.filter(sample => sample.target === target).map(sample => sample.repetition));
+    if (baseline.samples.some(sample => sample.target === target && !repetitions.has(sample.repetition))) {
+      throw new Error(target + ': baseline and candidate must use the same repetition IDs for paired timing evidence');
+    }
+  }
   const profileDigest = digest(baselineProfile);
   if (control && (control.format !== 1 || control.profileDigest !== profileDigest || !Array.isArray(control.timings))) throw new Error('Noise control does not match the measurement profile');
   const timings = [];
