@@ -80,7 +80,7 @@
   var mode = 'title';      // title | play | pause
   var modalOpen = null;    // name of the open modal
   var buffs = { frenzy: 0, frenzyMax: 0, click: 0, clickMax: 0 };
-  var combo = 0, lastClickT = -9, clickTimes = [], comboShown = 0;
+  var combo = 0, lastClickT = -9, clickTimes = [];
   var golden = null, goldenTimer = S.golden ? K.rand(40, 70) : K.rand(22, 30);
   var rain = { toSpawn: 0, spawnT: 0, items: [], caughtThis: 0 };
   var now = 0;             // game clock (s)

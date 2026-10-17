@@ -139,7 +139,7 @@
   };
 
   Player.prototype.step = function (h, t) {
-    var P = this.world.P, s = this.s;
+    var P = this.world.P;
     this.cool -= h; this.kickT -= h; this.groundT += h; this.moodT -= h;
     if (this.moodT <= 0) this.mood = 0;
     this.squash *= Math.pow(0.001, h);

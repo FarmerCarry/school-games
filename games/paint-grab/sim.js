@@ -183,7 +183,6 @@
 
   World.prototype.enter = function (a, cx, cy) {
     var N = this.N;
-    var pcx = a.cx, pcy = a.cy;
     a.cx = cx; a.cy = cy;
     var c = cy * N + cx;
     var t = this.trail[c];
@@ -462,7 +461,7 @@
   }
 
   function findTrailTarget(w, a, b, R) {
-    var N = w.N, best = -1, bd = R * R, bid = 0;
+    var best = -1, bd = R * R, bid = 0;
     for (var i = 1; i < w.agents.length; i++) {
       var e = w.agents[i];
       if (e === a || !e.alive || e.trail.length < 2) continue;

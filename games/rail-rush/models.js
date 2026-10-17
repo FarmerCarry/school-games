@@ -906,7 +906,7 @@
     }
     part(SPH, M.acc2, A.crown, 0, 0.02, -0.22, 0.07, 0.07, 0.04);
     A.cape = group(torso, 0, 0.5, 0.17);
-    var capeMesh = part(BOX, M.acc2, A.cape, 0, -0.34, 0.02, 0.5, 0.72, 0.03);
+    part(BOX, M.acc2, A.cape, 0, -0.34, 0.02, 0.5, 0.72, 0.03);
     A.flames = group(torso, 0, 0, 0);
     [[-0.2, 0.52, 0.12], [0.2, 0.52, 0.12], [0, 0.4, 0.2]].forEach(function (f) {
       var fl = part(CONE, M.flame, A.flames, f[0], f[1], f[2], 0.14, 0.34, 0.14);

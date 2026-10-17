@@ -363,7 +363,6 @@
       var b = document.createElement('button'); b.type = 'button';
       b.className = 'cupc nav' + (locked ? ' locked' : '') + (won ? ' won' : '');
       var cv = document.createElement('canvas'); cv.width = 240; cv.height = 240;
-      var boss = HH.charById(cp.boss);
       b.innerHTML = '';
       b.appendChild(cv);
       var h = document.createElement('h4'); h.textContent = cp.name; b.appendChild(h);

@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const MIME = {
+const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
   '.woff2': 'font/woff2', '.woff': 'font/woff', '.ico': 'image/x-icon', '.txt': 'text/plain',
@@ -11,7 +11,7 @@ export const MIME = {
 
 // Games don't declare a favicon, so Chromium asks for /favicon.ico. Serve the
 // actual site icon there instead of hiding favicon failures in the test report.
-export function createStaticServer(root, { base = '/', latency = 0, cacheControl = 'no-store', pages = {}, mounts = {} } = {}) {
+function createStaticServer(root, { base = '/', latency = 0, cacheControl = 'no-store', pages = {}, mounts = {} } = {}) {
   const absoluteRoot = path.resolve(root);
   const directories = Object.entries(mounts).map(([prefix, directory]) => [prefix, path.resolve(directory)]);
   return http.createServer((req, res) => {

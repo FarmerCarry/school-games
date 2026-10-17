@@ -9,7 +9,6 @@
 (function () {
   'use strict';
   var SS = window.SS;
-  var T = window.THREE;
 
   function shade(hex, k) {
     var r = (hex >> 16) & 255, g = (hex >> 8) & 255, b = hex & 255;

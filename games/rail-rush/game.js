@@ -2006,10 +2006,10 @@
     act: function (a) { actions.push(a); },
     // run n seconds of game time synchronously (no rendering) - for automated tests
     sim: function (sec) {
-      var n = Math.round(sec * 60), deaths = 0;
+      var n = Math.round(sec * 60);
       for (var i = 0; i < n; i++) {
         update(1 / 60);
-        if (S.mode === 'over' || S.mode === 'crash') { deaths++; break; }
+        if (S.mode === 'over' || S.mode === 'crash') break;
       }
       return { info: S.crashInfo, stumbles: S.stumbles, mode: S.mode, dist: Math.floor(run.dist || 0), reason: S.reason, speed: +S.speed.toFixed(1), coins: run.coins, jumps: run.jumps, rolls: run.rolls, dodge: run.dodge, roof: Math.floor(run.roof), obstacles: obstacles.length, coinsActive: coins.length, pool: meshPool.length };
     },

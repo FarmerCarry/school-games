@@ -1,8 +1,6 @@
 import fs from 'node:fs';
 import playwright from 'playwright';
 
-export { playwright };
-
 // Software rendering keeps CI reproducible. SG_GRAPHICS=native removes these
 // overrides for measurements on the actual classroom hardware.
 const GRAPHICS_ARGS = [

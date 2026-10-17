@@ -2,7 +2,7 @@
 /* Painted once on the page canvas: a soft glow in the game's colour over a faint dot grid. */
 html { --accent:#4389ff; --glow:#4389ff3a; background:radial-gradient(50% 55% at 60% 100%,var(--glow),transparent),radial-gradient(35% 40% at 100% 0,var(--glow),transparent),radial-gradient(#ffffff0b 1.5px,transparent 2px) 0 0/26px 26px,var(--sg-bg); }
 .tic-tac-toe { --accent:#b688ff; --glow:#b688ff3a; }
-body { --board-blue:#246ee8; --board-edge:#14449b; --amber:#ffca45; --coral:#ff6474; --muted:#b1bad5; --surface:#1a203b; background:none; }
+body { --board-edge:#14449b; --amber:#ffca45; --coral:#ff6474; --muted:#b1bad5; --surface:#1a203b; background:none; }
 [hidden] { display:none !important; }
 button { font-family:var(--sg-font); font-size:18px; cursor:pointer; touch-action:manipulation; }
 button:disabled { cursor:default; }

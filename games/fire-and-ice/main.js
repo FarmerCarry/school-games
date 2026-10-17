@@ -4,7 +4,6 @@
 (function () {
   'use strict';
   var FI = window.FI, R = FI.R, Kit = window.Kit;
-  var T = FI.T;
   var LEVELS = FI.LEVELS;
   var NL = LEVELS.length;
   var store = Kit.store('fire-and-ice');
@@ -965,8 +964,6 @@
       g.stroke();
     }
     g.setLineDash([]);
-    // top goal
-    var goal = NODES[NL - 1];
     // nodes
     for (i = 0; i < NL; i++) {
       var n = NODES[i], unlocked = i < save.unlocked, best = save.best[i];

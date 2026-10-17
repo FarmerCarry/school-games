@@ -37,7 +37,7 @@ function rnd() { seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff; retu
 function ri(a, b) { return a + Math.floor(rnd() * (b - a + 1)); }
 
 function actionPool(L) {
-  var cuts = [], i;
+  var cuts = [];
   (L.ropes || []).forEach(function (_, i) { cuts.push('p' + i); });
   (L.rings || []).forEach(function (_, i) { cuts.push('g' + i); });
   return { cuts: cuts, pops: (L.bubbles || []).length, blowers: (L.blowers || []).length };

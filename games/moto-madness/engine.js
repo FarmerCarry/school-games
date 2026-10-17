@@ -979,13 +979,13 @@
     var target, yRef = b.y - 30;
     if (w.grounded) target = w.slopeAt(x + 25, yRef);
     else {
-      var px = x, py = b.y, t;
+      var py = b.y, t;
       target = 0;
       for (t = 0.04; t < 2.5; t += 0.04) {
         var nx = x + b.vx * t, ny = b.y + b.vy * t + 0.5 * G * t * t;
         var gy = w.groundAt(nx, py - 10);
         if (gy < ny + 50) { target = w.slopeAt(nx, gy - 40); break; }
-        px = nx; py = ny;
+        py = ny;
       }
       if (opts.flips && w.airT > 0.05 && t > 0.75 && !w.crashed) {
         var done = b.a - w.takeoffA;

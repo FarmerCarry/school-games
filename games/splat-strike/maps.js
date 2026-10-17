@@ -7,7 +7,6 @@
 (function () {
   'use strict';
   var SS = window.SS;
-  var T = window.THREE;
 
   function MapKit(half) {
     this.half = half;

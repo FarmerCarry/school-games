@@ -619,7 +619,6 @@
   var stepping = false;
   function update(dt) {
     if (G.debug && G.debug.frozen && !stepping) return;
-    var car = G.car;
     var m = G.mode;
     if (m !== 'paused') G.time += dt;   // clouds and coins resume where they stopped
     if (m === 'play' || m === 'title' || m === 'falling' || m === 'over' || m === 'garage' || m === 'gift') {

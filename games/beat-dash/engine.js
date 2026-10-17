@@ -31,8 +31,6 @@
     TIERS: [0.75, 1, 1.25, 1.5]
   };
 
-  var SOLID = { '#': 1, '=': 1 };
-
   /* ------------------------------------------------------------ compile */
   BD.compile = function (def) {
     var objs = [], grid = [], slabs = [], x = 0, starIdx = 0, pending = [];

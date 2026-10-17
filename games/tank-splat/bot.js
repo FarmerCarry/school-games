@@ -148,7 +148,6 @@
     if (best !== b.targetCell) { b.targetCell = best; b.wp = -1; }
   }
 
-  var PTS = [];
   function findShot(b, t, G) {
     var p = b.p, m = G.maze, i;
     var bounces = p.bounces + (t.laser > 0 ? 1 : 0);
