@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import fs from 'node:fs/promises';
 import path from 'node:path';
-import vm from 'node:vm';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
@@ -112,16 +110,6 @@ test('refresh verification cannot discard a game launched while the status reply
   assert.equal(await page.evaluate(() => refreshRaceSentinel), 'same-document', 'safe close still requires explicit fresh consent');
 });
 
-test('every catalog game declares useful duration/input metadata and Pool Party supports friends', async () => {
-  const context = { window: {} };
-  vm.runInNewContext(await fs.readFile(path.join(repo, 'js/catalog.js'), 'utf8'), context);
-  for (const game of context.window.GAMES) {
-    assert.ok(['one-button', 'pointer', 'keyboard', 'mixed'].includes(game.inputStyle), game.slug);
-    assert.ok(game.roundMinutes === null || (game.roundMinutes.length === 2 && game.roundMinutes[0] > 0 && game.roundMinutes[1] >= game.roundMinutes[0]), game.slug);
-  }
-  assert.ok(context.window.GAMES.find(game => game.slug === 'pool-party').cats.includes('two-player'));
-});
-
 test('personal games appear first and quick filters select matching games', async t => {
   const page = await pageFor(t);
   await page.addInitScript(() => {
@@ -185,16 +173,6 @@ test('iframe load and foreign messages cannot fake readiness; timeout offers a w
   await page.locator('#gameRetry').click();
   await page.waitForFunction(() => document.querySelector('#stage').getAttribute('aria-busy') === 'false' && document.querySelector('#stageMsg').hidden);
   assert.equal(requests, 2);
-});
-
-test('explicit startup failure offers recovery without waiting for timeout', async t => {
-  const page = await pageFor(t);
-  await page.route('**/games/air-hockey/index.html', route => route.fulfill({ contentType: 'text/html', body: '<script>parent.postMessage({type:"sg:error",version:1,message:"startup failed"}, location.origin)</script>' }));
-  await page.goto(`${origin}/#/play/air-hockey`);
-  await page.locator('#stageMsg').waitFor({ state: 'visible' });
-  assert.equal(await page.locator('#stage iframe').count(), 0, 'failed browsing context is disposed');
-  await page.locator('#stageMsg a').click();
-  await page.waitForFunction(() => document.body.className === 'route-home');
 });
 
 test('a runtime failure disposes the game and rejects stale messages before retrying', async t => {

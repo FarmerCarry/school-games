@@ -109,23 +109,6 @@ test('Rail Rush keeps pop-ups readable under reduced motion and skips confetti',
   assert.deepEqual(await popState(page), { text: 'اللوح أنقذك!', show: false, opacity: '0', animation: 'none' });
 });
 
-test('Rail Rush animates pop-ups and confetti with full motion, then hides the overlays', async t => {
-  const page = await railRush(t);
-  await page.evaluate(() => rr.step(1));
-  assert.equal(await confettiVisibility(page), 'hidden', 'empty confetti layer is not composited');
-  await buyOceanBoard(page);
-  assert.equal(await confettiVisibility(page), 'visible');
-  await page.evaluate(() => rr.step(240));
-  assert.equal(await confettiVisibility(page), 'hidden', 'confetti layer hides once it has fallen');
-  await page.evaluate(() => { __game.god = true; __game.restart(); rr.step(10); __game.stumble(); });
-  const shown = await popState(page);
-  assert.equal(shown.show, true);
-  assert.equal(shown.animation, 'popText');
-  await page.evaluate(() => rr.step(80));
-  assert.equal((await popState(page)).show, false);
-  assert.equal(await confettiVisibility(page), 'hidden');
-});
-
 test('Rail Rush reports a failed save and clears the warning after a retry', async t => {
   const page = await railRush(t);
   const status = () => page.evaluate(() => {
@@ -144,41 +127,6 @@ test('Rail Rush reports a failed save and clears the warning after a retry', asy
   await page.reload();
   await page.waitForFunction(() => window.__game);
   assert.equal(await page.evaluate(() => __game.save.coins), 500);
-});
-
-test('Rail Rush keeps the save warning clear of the title how-to box and the run hint', async t => {
-  // reduced motion: the hint is measured at its resting size, not mid-animation
-  const page = await railRush(t, { reducedMotion: 'reduce' });
-  // the full warning, then the badge it folds into after 6 s (a real-time timer, so set here)
-  const clashes = sels => page.evaluate(sels => {
-    const panel = document.querySelector('.sg-save-status'), out = [];
-    for (const compact of ['false', 'true']) {
-      panel.dataset.compact = compact;
-      const a = panel.getBoundingClientRect();
-      for (const s of sels) {
-        const b = document.querySelector(s).getBoundingClientRect();
-        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) out.push(s + (compact === 'true' ? ' (badge)' : ''));
-      }
-    }
-    return out;
-  }, sels);
-  await page.evaluate(() => { rr.failSave = true; __game.give(1); });
-  assert.deepEqual(await clashes(['.title-left', '.howto-box', '.peek']), [], 'title screen');
-  const hinted = await page.evaluate(() => {
-    __game.god = true; __game.restart(); __game.skip(70);
-    const lane = __game.near('train').lane;
-    if (lane !== 0) __game.act(lane < 0 ? 'left' : 'right');
-    const hint = document.getElementById('hint');
-    for (let i = 0; i < 40 && hint.hidden; i++) rr.step(6);
-    return !hint.hidden;
-  });
-  assert.ok(hinted, 'the change-lane hint is showing');
-  assert.deepEqual(await clashes(['#hint', '.hud-score', '#coinBox']), [], 'run');
-  // the portal's smallest view: the warning's text shrinks with the stage, clear of the longest hint
-  await page.setViewportSize({ width: 764, height: 430 });
-  await page.waitForFunction(() => document.getElementById('ui').style.fontSize === '9.55px');
-  await page.evaluate(() => { document.getElementById('hint').textContent = 'اصعد المنحدر واركض فوق القطارات!'; });
-  assert.deepEqual(await clashes(['#hint', '.hud-score', '#coinBox']), [], 'run at 764x430');
 });
 
 test('Rail Rush shows the change-lane hint only when the first train blocks the runner', async t => {

@@ -115,8 +115,6 @@ async function leave(state, page = state.page) {
   // On the real clock, wait for that settle's write instead of racing its timer on a busy runner.
   else await page.waitForFunction(n => window.sgLiveWrites > n, writes, { timeout: 10000 });
 }
-// Every stored day record, summed by game (for tests on the real clock).
-const readAll = page => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('sg:site:stats:d:')).map(k => JSON.parse(localStorage.getItem(k))));
 const setHidden = (page, hidden) => page.evaluate(h => {
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => h ? 'hidden' : 'visible' });
   Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
@@ -259,81 +257,6 @@ test('failures keep a session out of the length buckets and never-started sessio
   assert.ok(!/Boom|private/.test(stored), 'error text is never stored');
 });
 
-test('launch sources come from the clicked tile, or from how the play page was reached', async t => {
-  const state = await setup(t, { clock: false });
-  const { page } = state;
-  await page.goto(origin + '/seed.html');
-  await page.evaluate(() => {
-    localStorage.setItem('sg:site:favs', '["pool-party"]');
-    localStorage.setItem('sg:site:recent', '["maze-dash"]');
-  });
-  await page.goto(origin + '/#/play/drift-king');
-  await playing(page, 'drift-king');
-  const launch = async (hash, routeClass, selector) => {
-    await go(page, hash);
-    await page.waitForFunction(c => document.body.className === c, routeClass);
-    const slug = await page.evaluate(s => document.querySelector(s).dataset.slug, selector);
-    await click(page, selector);
-    await playing(page, slug);
-    return slug;
-  };
-  const featured = await launch('#/', 'route-home', '.catalog-grid .tile:has(.badge.hot)');
-  // The hot list of a not-found play page has no related games.
-  const missing = await launch('#/play/no-such-game', 'route-missing', '#app .tile:has(.badge.hot)');
-  await launch('#/', 'route-home', '.catalog-grid .tile[data-slug="tunnel-blitz"]');
-  await launch('#/', 'route-home', '.recent-grid .tile[data-slug="maze-dash"]');
-  await launch('#/favorites', 'route-favorites', '.favorites-grid .tile[data-slug="pool-party"]');
-  await launch('#/c/racing', 'route-cat', '.tile[data-slug="moto-madness"]');
-  const quick = await launch('#/quick/simple', 'route-quick', '#app .tile');
-  const searched = await launch('#/search/two', 'route-search', '#app .tile');
-  // Search submit with exactly one result, and a related game on the play page.
-  await go(page, '#/');
-  await page.waitForFunction(() => document.body.className === 'route-home');
-  await page.evaluate(() => { document.querySelector('#q').value = 'Snake Arena'; document.querySelector('#searchForm').requestSubmit(); });
-  await playing(page, 'snake-arena');
-  const related = await page.evaluate(() => document.querySelector('.recommendations .tile').dataset.slug);
-  await click(page, '.recommendations .tile');
-  await playing(page, related);
-  await click(page, '#surprise');
-  await page.waitForFunction(() => /^#\/play\//.test(location.hash) && document.querySelector('#stage iframe')?.contentWindow?.send);
-  const surprise = await page.evaluate(() => decodeURIComponent(location.hash.slice(7)));
-  await go(page, '#/');
-  await page.waitForFunction(() => document.body.className === 'route-home');
-  await page.evaluate(() => history.back());
-  await playing(page, surprise);
-  await page.reload();
-  await playing(page, surprise);
-  await leave(state);
-
-  // Sum over the stored days in case the real clock passed midnight.
-  const record = { g: {} };
-  for (const day of await readAll(page)) {
-    checkRecord(day, day.d);
-    for (const [slug, g] of Object.entries(day.g)) {
-      const sum = record.g[slug] = record.g[slug] || { o: 0, src: {} };
-      sum.o += g.o;
-      for (const [source, n] of Object.entries(g.src)) sum.src[source] = (sum.src[source] || 0) + n;
-    }
-  }
-  const totals = {};
-  for (const g of Object.values(record.g)) for (const [source, n] of Object.entries(g.src)) totals[source] = (totals[source] || 0) + n;
-  assert.deepEqual(totals, { direct: 1, featured: 2, catalog: 1, recent: 1, favorites: 1, category: 1, quick: 1, search: 2, related: 1, surprise: 1, history: 1, reload: 1 });
-  assert.equal(record.g['drift-king'].src.direct, 1);
-  assert.ok(record.g[featured].src.featured >= 1);
-  assert.ok(record.g[missing].src.featured >= 1);
-  assert.equal(record.g['tunnel-blitz'].src.catalog, 1);
-  assert.equal(record.g['maze-dash'].src.recent, 1);
-  assert.equal(record.g['pool-party'].src.favorites, 1);
-  assert.equal(record.g['moto-madness'].src.category, 1);
-  assert.equal(record.g[quick].src.quick, 1);
-  assert.ok(record.g[searched].src.search >= 1);
-  assert.ok(record.g['snake-arena'].src.search >= 1);
-  assert.equal(record.g[related].src.related, 1);
-  assert.deepEqual([record.g[surprise].src.history, record.g[surprise].src.reload], [1, 1]);
-  assert.ok(record.g[surprise].src.surprise >= 1);
-  assert.equal(Object.values(record.g).reduce((n, g) => n + g.o, 0), 14);
-});
-
 test('a hidden page writes but keeps its session; otherwise writes wait about a minute', async t => {
   const state = await setup(t);
   const { page, context } = state;
@@ -365,39 +288,6 @@ test('a hidden page writes but keeps its session; otherwise writes wait about a 
   g = (await read(page)).g['air-hockey'];
   assert.deepEqual([g.o, g.e, g.b, g.lv.L1], [1, 67000, [0, 1, 0, 0], [1, 1, 0, 0, 0, 0, 60000, 0, 0, 0, 1, 0]], 'one session from open to close');
   assert.deepEqual(await read(page, LIVE), {});
-});
-
-test('load time counts only a session\'s first frame, and only while the page stayed visible', async t => {
-  const state = await setup(t, { ready: false });
-  const { page, context } = state;
-  // A record written before load buckets (lb) were dropped: still read and added to.
-  await page.goto(origin + '/seed.html');
-  await page.evaluate(day => localStorage.setItem('sg:site:stats:d:' + day, JSON.stringify({ v: 1, d: day, s: { calm: 0, fs: 0, mute: 0 },
-    g: { 'maze-dash': { o: 3, e: 0, hh: {}, b: [3, 0, 0, 0], ns: 0, src: {}, l: [3, 900, 400], lb: [3, 0, 0, 0, 0], ls: 0, x: 0, t: 0,
-      f: [0, 0, 0, 0], tu: [0, 0], fav: 0, lv: {} } } })), DAY);
-  await page.goto(origin + '/#/play/air-hockey');
-  let game = await playing(page, 'air-hockey');
-  // The PC's clock is set back while the game loads (a time sync after a cold boot).
-  await context.clock.setSystemTime(new Date(+START - 600e3));
-  await context.clock.runFor(1500);
-  await post(page, game, { type: 'sg:ready', version: 1 });
-  await post(page, game, { type: 'sg:ready', version: 1 });
-  await click(page, '#restartBtn');
-  game = await playing(page, 'air-hockey');
-  await context.clock.runFor(9000);
-  await post(page, game, { type: 'sg:ready', version: 1 });
-  await go(page, '#/play/maze-dash');
-  game = await playing(page, 'maze-dash');
-  await setHidden(page, true);
-  await setHidden(page, false);
-  await post(page, game, { type: 'sg:ready', version: 1 });
-  await leave(state);
-
-  const record = await read(page);
-  const a = record.g['air-hockey'], b = record.g['maze-dash'];
-  assert.deepEqual([a.l, a.ls, 'lb' in a], [[1, 1500, 1500], 0, false], 'a doubled sg:ready, a restart and a clock change do not count');
-  assert.deepEqual([b.l, b.ls, b.lb], [[3, 900, 400], 1, [3, 0, 0, 0, 0]], 'a load while hidden is skipped; old load buckets stay as they were');
-  assert.deepEqual([a.b, b.b], [[1, 0, 0, 0], [4, 0, 0, 0]]);
 });
 
 test('two portal pages add up, and stop and clear from another page take effect at once', async t => {

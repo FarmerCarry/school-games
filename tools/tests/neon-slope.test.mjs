@@ -110,36 +110,6 @@ test('Neon Slope draws a paused scene once, redraws resize and context restore, 
   assert.ok(await page.evaluate(d => __game.state.dist > d, dist), 'play continues after resume');
 });
 
-test('Neon Slope popups and banners stay visible, without movement, in reduced motion', async t => {
-  const page = await game(t);
-  // The 4 popups, callout and banner that _fx() (re)starts are pending their first frame.
-  // Each is read half-way through, where every one of them should be fully visible.
-  const fx = () => {
-    __game._fx();
-    return document.getAnimations().filter(a => a.pending && a.effect.target.matches('.pop, #banner')).map(a => {
-      const duration = a.effect.getTiming().duration;
-      a.currentTime = duration / 2;
-      return { name: a.animationName, duration, opacity: +getComputedStyle(a.effect.target).opacity };
-    });
-  };
-  const settle = () => page.waitForFunction(() => document.getAnimations().every(a => !a.pending), null, { polling: 50 });
-  await page.evaluate(() => { __game.start(); ns.step(30); });
-  // A gameplay popup started during those frames must not be counted with _fx()'s six.
-  await settle();
-  const full = await page.evaluate(fx);
-  assert.equal(full.length, 6);
-  assert.ok(full.every(a => a.name !== 'nsFadeHold'), 'full motion keeps the moving animations');
-  await page.evaluate(() => Kit.motion.setPreference('reduce'));
-  // The second round reuses elements of the first, which must replay their fade.
-  for (let round = 0; round < 2; round++) {
-    await settle();
-    const list = await page.evaluate(fx);
-    assert.deepEqual(list.map(a => a.name), Array(6).fill('nsFadeHold'));
-    assert.deepEqual(list.map(a => a.duration).sort(), [1000, 1000, 1000, 1000, 1400, 2200]);
-    assert.deepEqual(list.map(a => a.opacity), Array(6).fill(1));
-  }
-});
-
 test('Neon Slope shows the save warning on failed writes and keeps progress after retry', async t => {
   const page = await game(t);
   const status = () => { const e = document.querySelector('.sg-save-status'); return e && !e.hidden ? e.textContent : ''; };

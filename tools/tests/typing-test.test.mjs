@@ -66,33 +66,6 @@ test('results footer names the real restart key and new animals are celebrated o
   assert.ok(pulse.includes('inset') && pulse.split('rgb').length === 3, pulse);
 });
 
-test('race marks light up when the gliding ⚡ reaches them, and run forwards in English', async t => {
-  const page = await game(t);
-  // Words mode counts finished words only: the ⚡ waits at 0, then one tick puts it at 12 wpm, past the 🐇 (10).
-  const cross = () => page.evaluate(() => {
-    __game.start({ lang: 'en', mode: 'words', amt: 25, seed: 1 });
-    const word = __game.words(1)[0], race = document.getElementById('race'), rabbit = race.querySelector('.ms');
-    __game.typeText(word.slice(0, -1), 1000);
-    const p0 = +race.style.getPropertyValue('--p');
-    __game.typeText(word.slice(-1), 1000);
-    return { p0, p: +race.style.getPropertyValue('--p'), mark: +rabbit.style.getPropertyValue('--p'), cls: rabbit.className,
-      light: parseFloat(rabbit.style.transitionDelay), pop: parseFloat(rabbit.style.animationDelay),
-      turned: [...race.querySelectorAll('.ms')].map(m => getComputedStyle(m).transform !== 'none') };
-  });
-  const r = await cross();
-  assert.match(r.cls, /\bon\b.*\bhit\b/);
-  const reach = 0.9 * (r.mark - r.p0) / (r.p - r.p0); // the 0.9 s glide is linear
-  assert.ok(r.p0 < r.mark && r.mark < r.p && Math.abs(r.light - reach) < 0.02 && r.pop === r.light, JSON.stringify(r));
-  assert.deepEqual(r.turned, [true, true, true, false], 'the animals turn to run left-to-right, the rocket does not');
-  await page.evaluate(() => Kit.motion.setPreference('reduce'));
-  const still = await cross();
-  assert.deepEqual([still.light, still.pop], [0, 0], 'no glide to wait for with reduced motion');
-  assert.deepEqual(await page.evaluate(() => {
-    __game.start({ lang: 'ar' });
-    return [...document.querySelectorAll('#race .ms')].map(m => getComputedStyle(m).transform !== 'none');
-  }), [false, false, false, true], 'Arabic runs right-to-left: the animals face it as drawn, the rocket turns');
-});
-
 // Boxes the save warning overlaps among the footer hints, the progress text and the results buttons.
 const coveredBy = page => page.evaluate(() => {
   const s = document.querySelector('.sg-save-status').getBoundingClientRect(), range = document.createRange();

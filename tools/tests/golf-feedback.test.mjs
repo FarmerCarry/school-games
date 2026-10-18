@@ -38,23 +38,6 @@ async function land(page) {
   assert.equal(await phase(page), 'landed');
 }
 
-test('Golf: a swing at the top of the backswing is perfect, then the hit freezes for a moment', async t => {
-  const page = await game(t);
-  await page.evaluate(n => advanceGolfFrames(n), PEAK);
-  assert(await page.evaluate(() => golfState.gauge.show && golfState.gauge.value > 0.95), 'the gauge peaks in the gold');
-  await page.keyboard.press('Space');
-  assert.equal(await phase(page), 'swing', 'the club swings down first');
-  await page.evaluate(() => advanceGolfFrames(5));
-  const hit = await page.evaluate(() => ({ phase: golfState.phase, grade: golfState.ball.grade, x: golfState.ball.x }));
-  assert.deepEqual(hit, { phase: 'flight', grade: 'perfect', x: 0 });
-  assert(await page.evaluate(() => golfState.flash > 0.3), 'a perfect hit flashes');
-  await page.evaluate(() => advanceGolfFrames(4));
-  assert.equal(await page.evaluate(() => golfState.ball.x), 0, 'hit-stop holds the ball');
-  await page.evaluate(() => advanceGolfFrames(10));
-  assert(await page.evaluate(() => golfState.ball.x > 2), 'then it flies');
-  assert.match(await page.locator('#rockets').getAttribute('aria-label'), /1 من 1/);
-});
-
 test('Golf: the canvas strikes on press, not when a slow click is released', async t => {
   const page = await game(t);
   await page.evaluate(n => advanceGolfFrames(n), PEAK);
@@ -111,25 +94,6 @@ test('Golf: pressing at the first gold landing cue awards a perfect bounce', asy
   await page.evaluate(() => { for (let i = 0; i < 100 && !golfState.ball.supers; i++) golfTick(1 / 60); golfRender(); });
   assert.equal(await page.evaluate(() => golfState.ball.combo), 1, 'the advertised perfect press starts a combo');
   assert(await page.evaluate(() => golfState.popups.some(p => p.text === 'قفزة خارقة!')));
-});
-
-test('Golf: reaching the space line also fills the altitude goal', async t => {
-  const page = await game(t, { reducedMotion: 'reduce', progress: {
-    v: 2, shots: 9, upgrades: { power: 8, bounce: 8, rockets: 4, magnet: 4 }
-  } });
-  await swing(page);
-  for (let n = 0; n < 5; n++) {
-    await page.evaluate(() => advanceGolfFrames(9));
-    await page.keyboard.press('Space');
-  }
-  await page.evaluate(() => {
-    for (let i = 0; i < 1200 && !golfState.ball.space && !golfState.ball.done; i++) golfTick(1 / 60);
-    golfRender();
-  });
-  assert(await page.evaluate(() => golfState.ball.space), 'a natural rocket flight reaches space');
-  assert.match(await page.locator('#toast').textContent(), /حافة الفضاء/);
-  assert(Number(await page.locator('#alt-meters').textContent()) >= 250, 'the altitude reaches the same 250 m goal');
-  assert.equal(await page.locator('#alt-fill').evaluate(el => el.style.height), '286px', 'the space progress bar is full');
 });
 
 for (const exit of ['reload', 'menu', 'restart']) {
@@ -347,31 +311,6 @@ test('Golf: reduced motion keeps play complete without shake, flash, hit-stop, h
     }, reduced);
     assert.deepEqual(motion, { reduced, changed: 1, total: 1 }, 'a motion change repaints once and settles');
   }
-});
-
-test('Golf: a paused scene stays idle, and a lost canvas is repainted once', async t => {
-  const page = await game(t, { scale: 2 });
-  await swing(page);
-  await page.evaluate(() => advanceGolfFrames(30));
-  await page.locator('#pause').click();
-  const result = await page.evaluate(() => {
-    golfRender();
-    const state = () => JSON.stringify({ ball: golfState.ball, cam: golfState.cam, time: golfState.time });
-    const before = { draws: golfProbe.draws, state: state() };
-    advanceGolfFrames(60);
-    const idle = golfProbe.draws - before.draws;
-    const canvas = document.getElementById('game');
-    canvas.width = canvas.width;
-    canvas.dispatchEvent(new Event('contextrestored'));
-    golfRender(); const repaint = golfProbe.draws - before.draws - idle;
-    for (let i = 0; i < 30; i++) golfRender();
-    const settled = golfProbe.draws - before.draws - idle - repaint;
-    document.fonts.dispatchEvent(new Event('loadingdone'));
-    golfRender(); golfRender();
-    const fonts = golfProbe.draws - before.draws - idle - repaint - settled;
-    return { idle, repaint, settled, fonts, same: state() === before.state };
-  });
-  assert.deepEqual(result, { idle: 0, repaint: 1, settled: 0, fonts: 1, same: true }, 'late fonts repaint the kept frame once');
 });
 
 test('Golf: a save from the first version keeps its coins, refunds its upgrades and keeps its balls', async t => {

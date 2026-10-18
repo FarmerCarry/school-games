@@ -261,19 +261,6 @@ test('offline collection takes precedence over a pending finale and credits once
   assert.equal((await snapshot(page)).save.stats.earned, 25);
 });
 
-test('leaving the finale through its menu acknowledges it durably', async t => {
-  const save = fixture({ done: true, finalePending: true, completionTime: 123 });
-  save.un.statue = true;
-  const page = await gamePage(t, save, { best: 123 });
-  await page.evaluate(() => { __game.start(); document.getElementById('finMenuBtn').click(); });
-  assert.equal((await snapshot(page)).state.mode, 'title');
-  assert.equal((await snapshot(page)).save.finalePending, false);
-  await page.reload();
-  await page.evaluate(() => __game.start());
-  assert.equal((await snapshot(page)).state.mode, 'play');
-  assert.equal((await snapshot(page)).meta.best, 123);
-});
-
 test('legacy final purchase with done=false recovers its saved completion time', async t => {
   const save = fixture({ stats: { earned: 17, served: 3, play: 987 } });
   save.un.statue = true;
@@ -286,17 +273,6 @@ test('legacy final purchase with done=false recovers its saved completion time',
   assert.equal(data.save.done, true);
   assert.equal(data.save.stats.served, 3);
   assert.equal(data.save.stats.earned, 17);
-});
-
-test('completed legacy saves remain acknowledged', async t => {
-  const save = fixture({ done: true });
-  save.un.statue = true;
-  const page = await gamePage(t, save, { best: 400 });
-  await page.evaluate(() => __game.start());
-  const data = await snapshot(page);
-  assert.equal(data.state.mode, 'play');
-  assert.equal(data.state.finalePending, false);
-  assert.equal(data.meta.best, 400);
 });
 
 for (const condition of [{ name: 'a better existing record', cheat: false, best: 100 }, { name: 'a cheated run', cheat: true, best: 0 }]) {

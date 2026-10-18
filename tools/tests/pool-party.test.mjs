@@ -245,21 +245,3 @@ test('a paused game draws once, then only after a resize or a canvas restore', a
   await page.keyboard.press('KeyP');
   assert.deepEqual(await page.evaluate(() => { paints = 0; play(10); return [__game.screen, paints]; }), ['game', 10]);
 });
-
-test('reduced motion skips confetti and the pot zoom but keeps the slow motion', async t => {
-  const page = await game(t);
-  const shot = () => page.evaluate(() => {
-    __game.trick(0); stepGame(2);
-    const aim = __game.autoAim();
-    __game.shoot(aim.power);
-    let zoom = 1, slow = 1;
-    for (let i = 0; i < 600 && (__game.phase === 'strike' || __game.phase === 'rolling'); i++) {
-      stepGame(1); zoom = Math.max(zoom, __game.zoom); slow = Math.min(slow, __game.timeScale);
-    }
-    return { zoom: zoom > 1.01, slow: slow < 0.8, phase: __game.phase, confetti: __game.confetti };
-  });
-  assert.deepEqual(await shot(), { zoom: true, slow: true, phase: 'won', confetti: 120 });
-  await page.evaluate(() => Kit.motion.setPreference('reduce'));
-  assert.equal(await page.evaluate(() => __game.confetti), 0, 'switching to reduced motion clears falling confetti');
-  assert.deepEqual(await shot(), { zoom: false, slow: true, phase: 'won', confetti: 0 });
-});

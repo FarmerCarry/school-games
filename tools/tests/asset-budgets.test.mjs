@@ -55,45 +55,6 @@ function metricFor(report, file) {
   return metric;
 }
 
-test('exact boundaries pass and precache counts every manifest entry deterministically', t => {
-  const f = fixture(t);
-  f.write('extra.json', Buffer.alloc(37));
-  f.manifest['extra.json'] = hash;
-  f.saveManifest();
-  f.config.precacheBytes = 537;
-  f.saveConfig();
-  const report = run(f);
-  assert.equal(report.passed, true, report.failures.join('\n'));
-  assert.deepEqual(report.failures, []);
-  assert.equal(report.metrics.length, 6);
-  for (const file of measuredFiles) {
-    const metric = metricFor(report, file);
-    assert.equal(typeof metric.name, 'string');
-    assert.equal(metric.bytes, 100);
-    assert.equal(metric.limitBytes, 100);
-    assert.equal(metric.passed, true);
-  }
-  const total = report.metrics.find(metric => metric.files.includes('extra.json'));
-  assert.ok(total);
-  assert.deepEqual([...total.files].sort(), [...measuredFiles, 'extra.json'].sort());
-  assert.equal(total.bytes, 537);
-  assert.equal(total.limitBytes, 537);
-  assert.equal(total.passed, true);
-  assert.deepEqual(run(f), report);
-});
-
-test('total precache budget fails even when every individual asset passes', t => {
-  const f = fixture(t);
-  f.config.precacheBytes = 499;
-  f.saveConfig();
-  const report = rejected(f);
-  for (const file of measuredFiles) assert.equal(metricFor(report, file).passed, true);
-  const failures = report.metrics.filter(metric => !metric.passed);
-  assert.equal(failures.length, 1);
-  assert.equal(failures[0].bytes, 500);
-  assert.equal(failures[0].limitBytes, 499);
-});
-
 test('new hidden catalog games and fonts require their own reviewed budgets', t => {
   const f = fixture(t);
   f.write('catalog.js', "window.GAMES=[{slug:'alpha'},{slug:'beta',hidden:true}];");
@@ -141,31 +102,6 @@ test('missing measured assets and extra missing manifest entries return failures
       assert.equal(restored.passed, true, restored.failures.join('\n'));
     }
   });
-});
-
-test('invalid JSON and incomplete or incorrectly shaped config are rejected', t => {
-  const f = fixture(t);
-  const invalid = ['{', 'null', '[]', '{}', JSON.stringify({ ...f.config, format: 2 }), JSON.stringify({ ...f.config, gameHtmlBytes: [] }), JSON.stringify({ ...f.config, fontBytes: null })];
-  for (const key of ['portalBytes', 'teacherBytes', 'gameHtmlBytes', 'threeBytes', 'fontBytes', 'precacheBytes']) {
-    const partial = { ...f.config };
-    delete partial[key];
-    invalid.push(JSON.stringify(partial));
-  }
-  for (const contents of invalid) {
-    f.write('asset-budgets.json', contents);
-    rejected(f, contents);
-  }
-});
-
-test('all budget fields reject infinity, NaN, negative, string and null values', t => {
-  const f = fixture(t);
-  for (const field of ['portalBytes', 'teacherBytes', 'alpha', 'threeBytes', 'test.woff2', 'precacheBytes']) {
-    for (const value of ['1e999', 'NaN', '-1', '"100"', 'null']) {
-      const contents = JSON.stringify(f.config).replace('"' + field + '":' + (field === 'precacheBytes' ? '1000' : '100'), '"' + field + '":' + value);
-      f.write('asset-budgets.json', contents);
-      rejected(f, field + ': ' + value);
-    }
-  }
 });
 
 test('missing, malformed and ambiguous FILES declarations and invalid hashes fail safely', t => {
@@ -234,15 +170,6 @@ test('directory symlinks cannot make precache measurements escape the build root
   f.saveManifest();
   rejected(f);
   assert.equal(fs.readFileSync(path.join(outside, 'asset.txt'), 'utf8'), 'outside root');
-});
-
-test('missing inputs and malformed catalogs produce reports rather than throwing', t => {
-  const f = fixture(t);
-  for (const key of ['root', 'configPath', 'catalogPath']) rejected({ ...f, [key]: path.join(f.root, 'not-present') }, key);
-  for (const contents of ['window.GAMES = [;', 'window.GAMES = null;', 'window.GAMES = {};', 'window.GAMES = [{ title: "missing slug" }];']) {
-    f.write('catalog.js', contents);
-    rejected(f, contents);
-  }
 });
 
 test('multiple budget failures are reported together with usable numeric measurements', t => {

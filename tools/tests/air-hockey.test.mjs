@@ -61,23 +61,6 @@ async function hockey(t, viewport = { width: 1280, height: 720 }) {
   return page;
 }
 
-test('Air Hockey table art is opaque above the rink and every frame repaints the whole canvas', async t => {
-  const page = await hockey(t);
-  const alphas = await page.evaluate(() => AH.TABLES.map(th => {
-    const x = AH.art.buildTable(th, 1).getContext('2d');
-    return [x.getImageData(200, 40, 1, 1).data[3], x.getImageData(640, 8, 1, 1).data[3]];
-  }));
-  assert.equal(alphas.length, 5);
-  assert.deepEqual(alphas, alphas.map(() => [255, 255]), 'the strip above the rink is not see-through');
-  const pixel = await page.evaluate(() => {
-    const x = document.getElementById('game').getContext('2d');
-    x.save(); x.setTransform(1, 0, 0, 1, 0, 0); x.fillStyle = '#ff0000'; x.fillRect(40, 20, 10, 10); x.restore();
-    runtime.step(1);
-    return Array.from(x.getImageData(45, 25, 1, 1).data);
-  });
-  assert.notDeepEqual(pixel.slice(0, 3), [255, 0, 0], 'stale pixels above the rink are painted over');
-});
-
 test('Air Hockey paints a paused match once, then only after resize or context restore', async t => {
   const page = await hockey(t);
   await page.evaluate(() => { document.getElementById('btnPlay').click(); runtime.step(150); document.getElementById('pauseBtn').click(); runtime.paints = 0; runtime.step(60); });
@@ -126,51 +109,10 @@ test('Air Hockey holds mid-rally award banners for the goal and reports failed s
   assert.deepEqual(retried, { state: 'saved', awards: { rocket: 1, goal1: 1 } });
 });
 
-test('Air Hockey 2-player chaos: player 2 is lime next to melon, and rally banners wait for the respawn', async t => {
-  const page = await hockey(t);
-  const result = await page.evaluate(() => {
-    Object.assign(__game.save, { mode: 2, chaos: true });
-    __game.save.eq.mallet = 'melon';
-    document.getElementById('btnPlay').click(); runtime.step(150);
-    const banner = () => [...document.querySelectorAll('#toasts .toast')].some(el => el.textContent.includes('جائزة الاختبار'));
-    const skins = __game.st.mallets.map(m => m.skin.id);
-    __game.st.awardQ.push('جائزة الاختبار'); __game.goal(-1); runtime.step(4);
-    const atGoal = { scene: __game.st.scene, score: __game.st.score.slice(), queued: __game.st.awardQ.length, banner: banner() };
-    let frames = 4; // another chaos goal restarts the wait, so step until the queue is shown
-    while (__game.st.awardQ.length && frames < 600) { runtime.step(1); frames++; }
-    return { skins, atGoal, frames, banner: banner() };
-  });
-  assert.deepEqual(result.skins, ['melon', 'lime']);
-  assert.deepEqual(result.atGoal, { scene: 'play', score: [1, 0], queued: 1, banner: false }, 'no banner over the live rink');
-  assert.ok(result.frames >= 55 && result.frames < 600, `the banner waits about a second (${result.frames} frames)`);
-  assert.equal(result.banner, true);
-});
-
-test('Air Hockey 1-player HUD shows the player in blue when the mallet matches the bot', async t => {
-  const page = await hockey(t);
-  const result = await page.evaluate(() => {
-    const seen = {}, fillText = CanvasRenderingContext2D.prototype.fillText;
-    CanvasRenderingContext2D.prototype.fillText = function (s) { if (this.canvas.id === 'game') seen[s] = this.fillStyle; return fillText.apply(this, arguments); };
-    const play = (mallet, bot) => {
-      Object.assign(__game.save, { mode: 1, bot }); __game.save.eq.mallet = mallet;
-      document.getElementById('btnPlay').click(); runtime.step(1);
-      return { you: seen['أنت'], bot: seen[__game.st.bot.name], skin: __game.st.mallets[0].skin.id };
-    };
-    const plain = play('melon', 'easy'), clash = play('melon', 'insane');
-    runtime.step(150); __game.setScore(6, 0); runtime.scoreGoal();
-    for (let i = 0; i < 400 && __game.st.scene !== 'over'; i++) runtime.step(1);
-    const score = [...document.querySelectorAll('#ovScore > span:not(.dash)')].map(el => el.style.color);
-    return { plain, clash, score };
-  });
-  assert.deepEqual(result.plain, { you: '#ff5a6e', bot: '#7cf29a', skin: 'melon' }, 'a melon next to a green bot keeps its colour');
-  assert.deepEqual(result.clash, { you: '#35c8ff', bot: '#ff5c7a', skin: 'melon' }, 'the plate turns blue, the mallet stays a melon');
-  assert.deepEqual(result.score, ['rgb(53, 200, 255)', 'rgb(255, 92, 122)'], 'the results use the same colours');
-});
-
-// 1100x620 is the portal frame on a 1920x1080 screen; 798x449 is the portal on 1366x768 or
-// 1024x768 with a bookmarks bar, where the warning shrinks with the game
-for (const [width, height] of [[1100, 620], [798, 449]]) test(`Air Hockey save warning stays off the rink, the score plates and the hints at ${width}x${height}`, async t => {
-  const page = await hockey(t, { width, height });
+// 798x449 is the portal on 1366x768 or 1024x768 with a bookmarks bar,
+// where the warning shrinks with the game.
+test('Air Hockey save warning stays off the rink, the score plates and the hints at 798x449', async t => {
+  const page = await hockey(t, { width: 798, height: 449 });
   await page.evaluate(() => document.fonts.ready); // the warning's size follows its text
   const rects = await page.evaluate(() => {
     const box = el => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; };

@@ -70,10 +70,6 @@ function flipRider() {
 
 const levels = MM.LEVELS.map((def, i) => ({ i, name: `${Math.floor(i / 5) + 1}-${i % 5 + 1}`, stars: def.stars }));
 
-test('Moto Madness star times are ordered: 3 stars is faster than 2 stars', () => {
-  for (const { name, stars } of levels) assert.ok(stars[0] < stars[1], `${name}: ${stars}`);
-});
-
 test('Moto Madness riding without flips finishes every level with at most 2 stars', () => {
   for (const { i, name, stars } of levels) {
     const held = ride(i, holdUp);

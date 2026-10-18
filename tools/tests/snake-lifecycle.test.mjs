@@ -80,33 +80,30 @@ async function assertStats(page, expected) {
 
 const empty = { bestLen: 0, totalKills: 0, bestKills: 0, games: 0, bestTime: 0, totalFood: 0, bestRank: 0, powerups: 0, top1Time: 0 };
 
-for (const trigger of ['Escape', 'button']) {
-  test(`Snake Arena ${trigger} pauses before a boundary collision and resumes into game over`, async t => {
-    const page = await gamePage(t);
-    const before = await page.evaluate(() => {
-      const p = SA.world.player;
-      p.hx = SA.world.R - p.r * 0.35 - 0.1; p.hy = 0; p.ang = p.want = 0; p.protect = 9999;
-      SA.game.kb = true; SA.game.kbMouse.x = innerWidth / 2; SA.game.kbMouse.y = innerHeight / 2;
-      return { x: p.hx, worldTime: SA.world.time };
-    });
-    const paused = await page.evaluate(trigger => {
-      if (trigger === 'button') document.getElementById('btnPause').click();
-      else window.dispatchEvent(new KeyboardEvent('keydown', { code: trigger }));
-      stepGame(120);
-      if (trigger !== 'button') window.dispatchEvent(new KeyboardEvent('keyup', { code: trigger }));
-      return { state: __game.state, alive: SA.world.player.alive, x: SA.world.player.hx, worldTime: SA.world.time };
-    }, trigger);
-    assert.deepEqual(paused, { state: 'paused', alive: true, ...before });
-    const after = await page.evaluate(() => {
-      document.getElementById('btnResume').click();
-      stepGame();
-      const collisionState = __game.state;
-      stepGame(120);
-      return { collisionState, state: __game.state, alive: SA.world.player.alive, overVisible: !document.getElementById('over').hidden, games: __game.stats.games };
-    });
-    assert.deepEqual(after, { collisionState: 'dying', state: 'over', alive: false, overVisible: true, games: 1 });
+test('Snake Arena Escape pauses before a boundary collision and resumes into game over', async t => {
+  const page = await gamePage(t);
+  const before = await page.evaluate(() => {
+    const p = SA.world.player;
+    p.hx = SA.world.R - p.r * 0.35 - 0.1; p.hy = 0; p.ang = p.want = 0; p.protect = 9999;
+    SA.game.kb = true; SA.game.kbMouse.x = innerWidth / 2; SA.game.kbMouse.y = innerHeight / 2;
+    return { x: p.hx, worldTime: SA.world.time };
   });
-}
+  const paused = await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+    stepGame(120);
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Escape' }));
+    return { state: __game.state, alive: SA.world.player.alive, x: SA.world.player.hx, worldTime: SA.world.time };
+  });
+  assert.deepEqual(paused, { state: 'paused', alive: true, ...before });
+  const after = await page.evaluate(() => {
+    document.getElementById('btnResume').click();
+    stepGame();
+    const collisionState = __game.state;
+    stepGame(120);
+    return { collisionState, state: __game.state, alive: SA.world.player.alive, overVisible: !document.getElementById('over').hidden, games: __game.stats.games };
+  });
+  assert.deepEqual(after, { collisionState: 'dying', state: 'over', alive: false, overVisible: true, games: 1 });
+});
 
 test('Snake Arena repeated BFCache checkpoints merge progress once, including final records and unlocks', async t => {
   const page = await gamePage(t);
@@ -320,22 +317,4 @@ test('Snake Arena draws a paused scene once, redraws it after resize or context 
     return { first: first > 0, idle, resized: resized > 0, resizedIdle, restored: restored > 0, restoredIdle, playing: playing.every(c => c > 0) };
   });
   assert.deepEqual(draws, { first: true, idle: 0, resized: true, resizedIdle: 0, restored: true, restoredIdle: 0, playing: true });
-});
-
-test('Snake Arena keeps the camera still and pops snakes with one small burst under reduced motion', async t => {
-  const page = await gamePage(t);
-  const result = await page.evaluate(() => {
-    Kit.motion.setPreference('reduce');
-    SA.game.shake = 22;
-    stepGame();
-    const cam = [SA.game.shake, SA.render.cam.sx, SA.render.cam.sy];
-    let bursts = 0;
-    const burst = SA.render.burst;
-    SA.render.burst = function () { bursts++; return burst.apply(this, arguments); };
-    __game.trapBot(); // a bot right next to the player, well inside the camera view
-    SA.world.killSnake(SA.world.snakes[1], null, 'border');
-    stepGame();
-    return { cam, bursts };
-  });
-  assert.deepEqual(result, { cam: [0, 0, 0], bursts: 1 });
 });

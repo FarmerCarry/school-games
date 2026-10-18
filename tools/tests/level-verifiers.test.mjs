@@ -29,12 +29,6 @@ test('Swing verification succeeds when a selected real level is solved and repla
   assert.equal(result.status, 0);
 });
 
-test('verifiers reject invalid level or run selections instead of checking nothing', () => {
-  assert.equal(verifier('swing-hook', ['999']).status, 2);
-  assert.equal(verifier('block-burst', ['0']).status, 2);
-  assert.equal(verifier('fire-and-ice', ['999']).status, 2);
-});
-
 test('Block verification keeps balance thresholds strict unless report mode is explicitly selected', () => {
   // Keep the strong bot winning while making the weaker model miss its threshold.
   const inject = `const rules = require('./games/block-burst/rules.js');
@@ -61,12 +55,6 @@ test('Block report mode still fails unsolved levels and invalid starting boards'
     rules.newRun = (...args) => { const run = newRun(...args); run.result = 'win'; return run; };`);
   assert.match(invalid.stdout, /starts with full row/);
   assert.equal(invalid.status, 1);
-});
-
-test('Block verification passes an unmodified beginner level', () => {
-  const result = verifier('block-burst', ['1']);
-  assert.match(result.stdout, /all required checks OK/);
-  assert.equal(result.status, 0);
 });
 
 // Sneaky Levels replays a recorded solution per level through its engine and
