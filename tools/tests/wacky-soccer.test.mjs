@@ -299,3 +299,67 @@ test('the balance simulator runs the real engine with the game\'s CPU kick power
   // the same match index replays the same match
   assert.deepEqual(sim.cell(env, 'mash', 0.2, { n: 1, goals: 1, seed: 1 }), first);
 });
+
+// Records Kit.stats.end in window.ends; key(code) taps a key and until(phase) steps the match there.
+function matchTools(page) {
+  return page.evaluate(() => {
+    window.ends = [];
+    const end = Kit.stats.end;
+    Kit.stats.end = function (...args) { ends.push(args); return end.apply(this, args); };
+    window.key = code => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+      window.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
+    };
+    // hit-stop on big celebration kicks pauses match time, so step until the phase gets there
+    window.until = phase => { for (let i = 0; i < 900 && __game.match.phase !== phase; i++) __game.step(1 / 60); };
+  });
+}
+
+test('a match decided before a pause keeps its result when Menu or R leaves the celebration', async t => {
+  const page = await game(t);
+  const saved = () => page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('sg:wacky-soccer:save'));
+    return [s.stats.matches, s.stats.wins, s.coins];
+  });
+  await matchTools(page);
+  await clickControl(page, '#b1p');
+  await clickControl(page, '#bGo');
+  // the deciding goal, then a pause during the "match over" celebration and Menu
+  await page.evaluate(() => { until('play'); __game.winNow(); until('end'); __game.step(0.5); key('KeyP'); });
+  assert.equal(await page.evaluate(() => __game.state), 'pause');
+  await clickControl(page, '#bMenu');
+  assert.equal(await page.evaluate(() => __game.state), 'title');
+  // 5-0 on Easy: 2 for the goal, 10 for the win and 10 for the clean sheet, plus the badges
+  // for the first goal (10), the long shot (25), the clean sheet (40) and the first win (20)
+  assert.deepEqual(await saved(), [1, 1, 117]);
+  assert.equal(await page.locator('#tWins').textContent(), '1');
+  assert.deepEqual(await page.evaluate(() => ends), [['win', 5]]);
+  // a lost match and R in the pause during its last goal: a new match starts and the loss counts
+  await page.evaluate(() => { key('Enter'); until('play'); __game.loseNow(); __game.step(0.5); key('KeyP'); key('KeyR'); });
+  assert.deepEqual(await page.evaluate(() => [__game.state, __game.match.phase, __game.match.score]), ['play', 'count', [0, 0]]);
+  assert.deepEqual(await saved(), [2, 1, 120]);
+  // resumed instead, the result screen shows the saved result and nothing is counted twice
+  await page.evaluate(() => {
+    until('play'); __game.winNow(); until('end'); key('KeyP'); key('KeyP');
+    for (let i = 0; i < 300 && __game.state !== 'over'; i++) __game.step(1 / 60);
+  });
+  assert.equal(await page.evaluate(() => __game.state), 'over');
+  await page.waitForFunction(() => document.getElementById('oCoinN').textContent === '+22');
+  assert.deepEqual(await saved(), [3, 2, 142]);
+  assert.deepEqual(await page.evaluate(() => ends), [['win', 5], ['lose', 0], ['win', 5]]);
+});
+
+test('a cup round won before a pause goes on to the next round instead of being played again', async t => {
+  const page = await game(t);
+  await matchTools(page);
+  await clickControl(page, '#bCup');
+  await clickControl(page, '#bGo');
+  await clickControl(page, '#bCupPlay');
+  await page.evaluate(() => { until('play'); __game.winNow(); __game.step(1); key('KeyP'); });
+  await clickControl(page, '#bRestart');
+  assert.equal(await page.evaluate(() => __game.state), 'cup');
+  assert.deepEqual(await page.locator('#bracket .node').evaluateAll(nodes => nodes.map(n => n.className)), ['node won', 'node cur', 'node next', 'node next']);
+  assert.deepEqual(await page.evaluate(() => [ends, __game.save.stats.wins]), [[['win', 3]], 1]);
+  await clickControl(page, '#bCupPlay');
+  assert.deepEqual(await page.evaluate(() => [__game.state, __game.match.cupRound]), ['play', 1]);
+});
