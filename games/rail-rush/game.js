@@ -1743,7 +1743,10 @@
   var shopTab = 'outfits', preview = null, portraits = null;
   function makePortraits() {
     if (portraits) return;
-    portraits = { outfits: {}, boards: {} };
+    var dpr = renderer.getPixelRatio(), W = renderer.domElement.width, H = renderer.domElement.height;
+    // a frame with no room (a very short window) has an empty canvas that cannot be read back: try again later
+    if (W < 1 || H < 1) return;
+    var made = { outfits: {}, boards: {} };
     var pScene = new T.Scene();
     // fog too far away to see: the portraits then reuse the main scene's shaders instead of linking new ones
     pScene.fog = new T.Fog(0xffffff, 1e5, 2e5);
@@ -1752,7 +1755,6 @@
     var pr = RR.createRunner();
     pScene.add(pr.root);
     var pCam = new T.PerspectiveCamera(30, 1, 0.1, 20);
-    var dpr = renderer.getPixelRatio(), W = renderer.domElement.width, H = renderer.domElement.height;
     // every portrait goes into one tile of an atlas so we only read the GPU back once
     var jobs = [];
     RR.OUTFITS.forEach(function (o) { jobs.push({ b: 'outfits', o: o }); });
@@ -1761,41 +1763,46 @@
     var SZ = Math.max(48, Math.min(160, Math.floor(W / cols), Math.floor(H / rows)));
     var oldClear = new T.Color(); renderer.getClearColor(oldClear);
     var oldAlpha = renderer.getClearAlpha();
-    renderer.setClearColor(0x000000, 0);
-    renderer.setScissorTest(true);
-    jobs.forEach(function (j, i) {
-      var tx = (i % cols) * SZ, ty = Math.floor(i / cols) * SZ;
-      renderer.setViewport(tx / dpr, ty / dpr, SZ / dpr, SZ / dpr);
-      renderer.setScissor(tx / dpr, ty / dpr, SZ / dpr, SZ / dpr);
-      renderer.clear();
-      pr.root.children.forEach(function (c) { c.visible = j.b === 'boards' ? c === pr.board : c !== pr.board; });
-      if (j.b === 'outfits') {
-        pr.setOutfit(j.o);
-        pr.root.rotation.set(0, Math.PI + 0.35, 0);
-        pr.animate({ mode: 'idle', phase: 0, dt: 1, vy: 0, time: 0.4, snap: true });
-        pCam.position.set(0, 1.25, 4.6); pCam.lookAt(0, 0.95, 0);
-      } else {
-        pr.setBoard(j.o);
-        pr.root.rotation.set(0.5, 0.7, 0.25);
-        pCam.position.set(0, 1.7, 3.5); pCam.lookAt(0, 0.1, 0);
-      }
-      renderer.render(pScene, pCam);
-    });
-    // one readback of the whole atlas area, then cut it into tiles
-    var atlas = document.createElement('canvas');
-    atlas.width = cols * SZ; atlas.height = rows * SZ;
-    atlas.getContext('2d').drawImage(renderer.domElement, 0, H - rows * SZ, cols * SZ, rows * SZ, 0, 0, cols * SZ, rows * SZ);
-    jobs.forEach(function (j, i) {
-      var tx = (i % cols) * SZ, row = Math.floor(i / cols);
-      var out = document.createElement('canvas'); out.width = out.height = SZ;
-      // WebGL rows start at the bottom of the canvas
-      out.getContext('2d').drawImage(atlas, tx, (rows - 1 - row) * SZ, SZ, SZ, 0, 0, SZ, SZ);
-      portraits[j.b][j.o.id] = out;
-    });
-    renderer.setScissorTest(false);
-    renderer.setClearColor(oldClear, oldAlpha);
-    renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
-    renderer.render(scene, camera);
+    // a failure part way must not leave the main view clipped to one tile
+    try {
+      renderer.setClearColor(0x000000, 0);
+      renderer.setScissorTest(true);
+      jobs.forEach(function (j, i) {
+        var tx = (i % cols) * SZ, ty = Math.floor(i / cols) * SZ;
+        renderer.setViewport(tx / dpr, ty / dpr, SZ / dpr, SZ / dpr);
+        renderer.setScissor(tx / dpr, ty / dpr, SZ / dpr, SZ / dpr);
+        renderer.clear();
+        pr.root.children.forEach(function (c) { c.visible = j.b === 'boards' ? c === pr.board : c !== pr.board; });
+        if (j.b === 'outfits') {
+          pr.setOutfit(j.o);
+          pr.root.rotation.set(0, Math.PI + 0.35, 0);
+          pr.animate({ mode: 'idle', phase: 0, dt: 1, vy: 0, time: 0.4, snap: true });
+          pCam.position.set(0, 1.25, 4.6); pCam.lookAt(0, 0.95, 0);
+        } else {
+          pr.setBoard(j.o);
+          pr.root.rotation.set(0.5, 0.7, 0.25);
+          pCam.position.set(0, 1.7, 3.5); pCam.lookAt(0, 0.1, 0);
+        }
+        renderer.render(pScene, pCam);
+      });
+      // one readback of the whole atlas area, then cut it into tiles
+      var atlas = document.createElement('canvas');
+      atlas.width = cols * SZ; atlas.height = rows * SZ;
+      atlas.getContext('2d').drawImage(renderer.domElement, 0, H - rows * SZ, cols * SZ, rows * SZ, 0, 0, cols * SZ, rows * SZ);
+      jobs.forEach(function (j, i) {
+        var tx = (i % cols) * SZ, row = Math.floor(i / cols);
+        var out = document.createElement('canvas'); out.width = out.height = SZ;
+        // WebGL rows start at the bottom of the canvas
+        out.getContext('2d').drawImage(atlas, tx, (rows - 1 - row) * SZ, SZ, SZ, 0, 0, SZ, SZ);
+        made[j.b][j.o.id] = out;
+      });
+      portraits = made;
+    } finally {
+      renderer.setScissorTest(false);
+      renderer.setClearColor(oldClear, oldAlpha);
+      renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+      renderer.render(scene, camera);
+    }
   }
   var UP_INFO = {
     magnet: { name: 'مغناطيس العملات', desc: 'يجذب كل العملات القريبة' },

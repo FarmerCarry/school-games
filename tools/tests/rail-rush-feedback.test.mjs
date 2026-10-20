@@ -222,3 +222,43 @@ test('Rail Rush shows the change-lane hint only when the first train blocks the 
   await page.keyboard.press('Escape');
   assert.deepEqual(await looping(), ['hintBob running', 'pulse running']);
 });
+
+test('Rail Rush survives a 0-px-tall frame and makes the shop portraits once it has room', async t => {
+  const context = await browser.newContext({ viewport: { width: 960, height: 540 } });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
+  await page.addInitScript(() => {
+    // the boot timer that makes the portraits
+    const timeout = window.setTimeout;
+    window.setTimeout = function (fn, ms, ...args) {
+      if (ms !== 1200) return timeout(fn, ms, ...args);
+      return timeout(() => { try { fn(); } finally { window.portraitTimerRan = true; } }, ms);
+    };
+  });
+  // In a browser window under ~170 px tall the portal has no height left for the game frame.
+  await page.route(`${server.origin}/host.html`, route => route.fulfill({ contentType: 'text/html',
+    body: '<!doctype html><body style="margin:0"><iframe src="/games/rail-rush/" style="border:0;width:960px;height:0"></iframe>' }));
+  await page.goto(`${server.origin}/host.html`);
+  const game = page.frames().find(f => f.url().includes('/games/rail-rush/'));
+  await game.waitForFunction(() => window.__game);
+  const gl = () => game.evaluate(() => {
+    const c = document.getElementById('gl'), g = c.getContext('webgl2');
+    return { height: c.height, scissor: g.isEnabled(g.SCISSOR_TEST) };
+  });
+  const portraits = () => game.evaluate(() => [...document.querySelectorAll('canvas[data-portrait]')].map(c => {
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i]) return true;
+    return false;
+  }));
+  await game.waitForFunction(() => window.portraitTimerRan);
+  await game.evaluate(() => document.getElementById('shopBtn').click());
+  assert.deepEqual(await gl(), { height: 0, scissor: false }, 'a failed portrait pass leaves the main view unclipped');
+  await game.evaluate(() => document.getElementById('sBack').click());
+  await page.locator('iframe').evaluate(f => { f.style.height = '540px'; });
+  await game.waitForFunction(() => document.getElementById('gl').height > 0);
+  await game.evaluate(() => document.getElementById('shopBtn').click());
+  const drawn = await portraits();
+  assert.ok(drawn.length > 0 && drawn.every(Boolean), `every shop portrait is drawn once the frame has room: ${drawn}`);
+  assert.equal((await gl()).scissor, false);
+});
