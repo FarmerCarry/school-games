@@ -25,7 +25,7 @@ after(async () => {
 });
 
 // Steps the game by hand: each step renders once and advances one 1/60 s update.
-async function game(t) {
+async function game(t, init) {
   const context = await browser.newContext(), page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
@@ -40,6 +40,7 @@ async function game(t) {
       return n;
     };
   });
+  if (init) await page.addInitScript(init);
   await page.goto(`${origin}/games/candy-rope/`);
   await page.evaluate(() => __game.resetSave());
   return page;
@@ -294,4 +295,18 @@ test('in play the unfolded save warning sits above the level tip and lets cuts a
   assert.equal(r.through, 'cv', 'the panel passes clicks to the canvas');
   assert.equal(r.retry, 'BUTTON');
   assert.equal(r.menuGap, 12, 'menus keep the shared spot');
+});
+
+test('a negative saved candy or hat falls back to the first one, and level 1 still plays and saves', async t => {
+  const page = await game(t, () => localStorage.setItem('sg:candy-rope:prog', JSON.stringify({ stars: [], candy: -1, hat: -2 })));
+  assert.equal(await page.evaluate(() => __game.info().state), 'title');
+  await page.evaluate(() => {
+    __game.start(0); step(40);
+    const r = __game.world().ropes[0], p = r.pts[Math.floor(r.pts.length / 2)];
+    __game.swipe(p.x - 60, p.y, p.x + 60, p.y);
+    step(300, () => __game.info().state === 'won');
+  });
+  assert.equal(await page.evaluate(() => __game.info().state), 'won');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:candy-rope:prog')));
+  assert.deepEqual([saved.candy, saved.hat, saved.stars[0]], [0, 0, 3]);
 });

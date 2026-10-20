@@ -301,3 +301,14 @@ test('leaving an open backpack pauses world time and resumes the backpack explic
   assert.equal(await page.evaluate(() => __game.G.mode), 'inv');
   assert.equal(await page.locator('#inv').isVisible(), true);
 });
+
+test('world metadata saved as a number, or with slots that are not a list, loads empty and a new world saves', async t => {
+  for (const raw of ['5', '{"slots":"abc","totalStars":2}']) {
+    const page = await game(t, `localStorage.setItem('sg:block-world:meta', '${raw}')`);
+    assert.deepEqual(await page.evaluate(() => __game.meta.slots), [null, null, null], raw);
+    await create(page);
+    const meta = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:block-world:meta')));
+    assert.equal(meta.slots[0].gm, 'survival', raw);
+    assert.deepEqual(meta.slots.slice(1), [null, null], raw);
+  }
+});

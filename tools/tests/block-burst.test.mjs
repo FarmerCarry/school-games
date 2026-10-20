@@ -21,7 +21,7 @@ after(async () => {
 });
 
 // The game only advances through stepGame()/drawGame(), and every canvas readback is counted.
-async function game(t, { reducedMotion = 'no-preference', clock = false } = {}) {
+async function game(t, { reducedMotion = 'no-preference', clock = false, init } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -42,6 +42,7 @@ async function game(t, { reducedMotion = 'no-preference', clock = false } = {}) 
       };
     } });
   });
+  if (init) await page.addInitScript(init);
   if (clock) await page.clock.install();
   await page.goto(`${origin}/games/block-burst/`);
   await page.waitForFunction(() => window.__game && window.stepGame);
@@ -248,4 +249,23 @@ test('the first-move hint drags a tray piece to where it fits; its text covers n
   });
   assert.deepEqual(drawn.ys, [34 + 62 * (drawn.row + 0.5)]);
   assert.deepEqual(drawn.order, ['text', 'hand']);
+});
+
+test('stats saved as null or a number restart from zero, so Classic starts and an Adventure line clear counts', async t => {
+  for (const raw of ['null', '7']) {
+    const page = await game(t, { init: `localStorage.setItem('sg:block-burst:stats', '${raw}')` });
+    await clickControl(page, '#btnClassic');
+    assert.equal(await page.evaluate(() => __game.state), 'play', raw);
+    const lines = await page.evaluate(() => {
+      __game.startLevel(0);
+      const run = __game.run;
+      for (let i = 0; i < 8; i++) run.cells[i] = i < 7 ? 3 : 0; // the top row lacks only its last cell
+      run.tray[0] = { shape: BBCore.BY_ID.dot0, color: 2, gemCell: -1, gemKind: 0 };
+      return __game.place(0, 0, 7).lines;
+    });
+    assert.equal(lines, 1, raw);
+    const stats = { games: 1, lines: 1, perfects: 0, bestCombo: 1 };
+    assert.deepEqual(await page.evaluate(() => __game.save.stats), stats, raw);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:block-burst:stats'))), stats, raw);
+  }
 });

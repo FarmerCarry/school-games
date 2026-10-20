@@ -163,8 +163,9 @@
   }
 
   // ------------------------------------------------------------ game state
-  var meta = store.get('meta', null) || {};
-  if (!meta.slots || meta.slots.length !== 3) meta.slots = [null, null, null];
+  var meta = store.get('meta', null);
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) meta = {};
+  if (!Array.isArray(meta.slots) || meta.slots.length !== 3) meta.slots = [null, null, null];
   meta.totalStars = meta.totalStars || 0; meta.skin = meta.skin || 0; meta.lastSlot = meta.lastSlot || 1;
   function saveMeta() { return store.set('meta', meta); }
 

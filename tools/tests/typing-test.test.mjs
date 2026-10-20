@@ -144,3 +144,18 @@ test('denied saves keep the result in this session and recover on retry', async 
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:typing-test:hist')).length), 2);
   assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:typing-test:pbs'))['en|words|10|l']));
 });
+
+test('saved history and records that hold non-results load without them and still record new results', async t => {
+  const page = await game(t, () => {
+    const old = { t: 1, lang: 'en', mode: 'words', amt: 25, len: 1, wpm: 20, raw: 20, acc: 90, cons: 80 };
+    localStorage.setItem('sg:typing-test:hist', JSON.stringify([null, 7, 'x', old]));
+    localStorage.setItem('sg:typing-test:pbs', JSON.stringify({ 'en|words|10|l': null, 'en|words|25|l': { wpm: 20, acc: 90, raw: 20, cons: 80, t: 1 } }));
+  });
+  assert.match(await page.locator('#progTxt').textContent(), /آخر نتيجة 20/);
+  const result = await typeTest(page, 300);
+  assert.equal(result.isPb, true, 'the null record does not count as a previous best');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:typing-test:hist')).map(e => e.amt)), [25, 10]);
+  assert.deepEqual(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('sg:typing-test:pbs'))).sort()), ['en|words|10|l', 'en|words|25|l']);
+  await page.locator('#bProg').click();
+  assert.deepEqual([await page.locator('#histList .row').count(), await page.locator('#pbList .row').count()], [2, 2]);
+});

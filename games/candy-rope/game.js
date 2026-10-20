@@ -65,8 +65,8 @@
     if (!boxUnlocked(b)) return false;
     return i === BOXES[b].from || prog.stars[i - 1] >= 0;
   }
-  if (prog.candy >= Art.CANDIES.length || Art.CANDIES[prog.candy].need > totalStars()) prog.candy = 0;
-  if (prog.hat >= Art.HATS.length || Art.HATS[prog.hat].need > totalStars()) prog.hat = 0;
+  if (!(prog.candy >= 0 && prog.candy < Art.CANDIES.length) || Art.CANDIES[prog.candy].need > totalStars()) prog.candy = 0;
+  if (!(prog.hat >= 0 && prog.hat < Art.HATS.length) || Art.HATS[prog.hat].need > totalStars()) prog.hat = 0;
 
   /* ------------------------------------------------------------ sound */
   // Softer synth on top of Kit.audio (same options as Kit.audio.tone / .noise):
