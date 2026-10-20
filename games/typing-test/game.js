@@ -1199,15 +1199,19 @@
     r.classList.remove('armed');
     r.textContent = '🗑️ امسح نتائجي';
   }
-  var resetTimer = 0;
+  var resetTimer = 0, armedAt = 0;
   $('pReset').addEventListener('click', function () {
     var r = $('pReset');
     if (!r.classList.contains('armed')) {
       r.classList.add('armed'); r.textContent = 'متأكد؟ اضغط مرة أخرى للمسح';
+      armedAt = performance.now();
       clearTimeout(resetTimer);
       resetTimer = setTimeout(function () { r.classList.remove('armed'); r.textContent = '🗑️ امسح نتائجي'; }, 3000);
       return;
     }
+    // The confirming click must come after the question could be read: the second click
+    // of a double-click (or a held Enter's repeat) would otherwise erase everything at once.
+    if (performance.now() - armedAt < 600) return;
     ['pbs', 'hist', 'tier'].forEach(function (k) { delete pending[k]; store.remove(k); });
     flushSaves(); renderProgress(); updateFoot(); buildRace();
   });
