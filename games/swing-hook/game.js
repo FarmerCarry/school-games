@@ -561,8 +561,10 @@
           }
           shake.add(12);
           if (loud && !L.endless && e.x > L.finish - 450) popup('اقتربت جدًّا!', e.x, e.y - 130, '#ffe14d', 36);
+          if (endless && !attract) commitEndless();
           break;
         case 'win':
+          if (!attract && !endless) commitWin();
           if (loud) sfx.win();
           confetti(e.x, e.y, 70);
           shake.add(8);
@@ -1653,7 +1655,11 @@
   /* ----------------------------------------------------------------- result */
   var resultReady = 0;
   var STAR_SVG = '<svg viewBox="-50 -50 100 100"><path d="M0,-46 L13,-16 L45,-14 L20,7 L28,40 L0,22 L-28,40 L-20,7 L-45,-14 L-13,-16 Z" fill="FILL" stroke="#2a1747" stroke-width="7" stroke-linejoin="round"/><path d="M-6,-30 L-12,-16 L-28,-14" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="5" stroke-linecap="round"/></svg>';
-  function showResult() {
+  // A result is saved the moment it happens: R, or a pause and then Restart, Levels or
+  // Menu, can leave during the finish celebration or the splash. showResult and
+  // endlessOver only display it.
+  var result = null;
+  function commitWin() {
     var def = LEVELS[lvl], t = w.timer, f = w.flips;
     var got = 1 | (t <= def.par ? 2 : 0) | (f >= def.flips ? 4 : 0);
     var before = totalStars(), prev = starBits(lvl);
@@ -1665,14 +1671,25 @@
       if (f > best.f) best.f = f;
     }
     if (lvl + 2 > save.unlocked) save.unlocked = Math.min(LEVELS.length, lvl + 2);
-    var after = totalStars();
     persist();
+    Kit.stats.end('win', popcount(got)); // once per finish (never the attract run, which has no finish)
+    result = { got: got, before: before, after: totalStars(), newBest: newBest };
+  }
+  function commitEndless() {
+    var d = dist(), prev = save.endless;
+    Kit.stats.end('end', d); // a real run only: the attract run restarts itself instead
+    if (d > prev) save.endless = d;
+    persist();
+    result = { d: d, prev: prev };
+  }
+  function showResult() {
+    var def = LEVELS[lvl], t = w.timer, f = w.flips;
+    var got = result.got, before = result.before, after = result.after;
     setMode('result');
     resultReady = 0.5;
-    $('rsBest').hidden = !newBest;
+    $('rsBest').hidden = !result.newBest;
     $('rsBest').textContent = 'رقم قياسي جديد!';
     var n = popcount(got);
-    Kit.stats.end('win', n); // once: mode is now 'result' (never the attract run, which has no finish)
     $('rsTitle').textContent = lvl === LEVELS.length - 1 ? 'بطل الخطّاف!' : lvl % 6 === 5 ? 'أنهيت العالم!' : n === 3 ? 'مثالي!' : n === 2 ? 'أرجحة رائعة!' : 'اجتزت المرحلة!';
     var labels = ['الوصول', 'خلال ' + def.par + ' ث', flipCount(def.flips)];
     var html = '';
@@ -1729,10 +1746,7 @@
     setTimeout(function () { if (mode === 'result') sfx.unlock(); }, 950);
   }
   function endlessOver() {
-    var d = dist(), prev = save.endless, nb = d > prev;
-    Kit.stats.end('end', d); // a real run only: the attract run restarts itself instead
-    if (nb) save.endless = d;
-    persist();
+    var d = result.d, prev = result.prev, nb = d > prev;
     setMode('result');
     resultReady = 0.6;
     $('rsBest').hidden = !nb || prev === 0;
