@@ -212,3 +212,18 @@ test('the baked level canvas is rebaked when its context comes back', async t =>
   });
   assert.deepEqual(alpha, [0, 255], 'the level background is painted again');
 });
+
+test('after a mouse click on a pause-panel button, P still resumes and Enter does not click it again', async t => {
+  const page = await game(t);
+  await clickControl(page, '#btn-play');
+  await clickControl(page, '#btn-pause');
+  assert.equal(await page.evaluate(() => __game.mode), 'pause');
+  await page.evaluate(() => stepGame(10)); // past the short guard after pausing
+  await page.locator('#btn-music').click();
+  const label = await page.locator('#btn-music').textContent();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#btn-music').textContent(), label, 'Enter leaves the music setting alone');
+  await page.keyboard.press('p');
+  await page.evaluate(() => stepGame(1));
+  assert.equal(await page.evaluate(() => __game.mode), 'play');
+});

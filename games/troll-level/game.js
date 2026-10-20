@@ -544,7 +544,9 @@
 
   /* ----------------------------------------------------- buttons */
   function on(id, fn) {
-    $(id).addEventListener('click', function (e) { e.stopPropagation(); K.audio.unlock(); fn(); });
+    // A focused button keeps the keyboard (P would not resume, Enter would click again),
+    // so a mouse click gives focus back; keyboard activation keeps it for keyboard users.
+    $(id).addEventListener('click', function (e) { e.stopPropagation(); if (e.detail > 0) e.currentTarget.blur(); K.audio.unlock(); fn(); });
   }
   on('btn-play', function () { S.click(); startLevel(playTarget()); });
   on('btn-levels', function () { S.click(); goSelect(); });
