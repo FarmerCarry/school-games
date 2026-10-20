@@ -298,6 +298,7 @@
   var forcedArena = null;
   var T = 0;
   var overData = null;
+  var result = null;            // the decided match, saved once by commitMatch()
   var roundLog = [];
   var firstMatch = !save.matches;
 
@@ -338,7 +339,7 @@
     // is open counts it as a quit. The first match on this PC shows the keycap bubbles.
     if (firstMatch) Kit.stats.tutorial('start');
     Kit.stats.round(mode === 1 ? 'cpu-' + diff : 'pvp');
-    score = [0, 0]; roundNo = 1; bag = [];
+    score = [0, 0]; roundNo = 1; bag = []; result = null;
     stats = { bonks: [0, 0], perfect: [0, 0], draws: 0 };
     P[0].sumo = save.picks.s0; P[0].hat = hatUnlocked(save.picks.h0) ? save.picks.h0 : 0;
     P[0].cpu = false; P[0].label = mode === 1 ? 'أنت' : 'لاعب 1';
@@ -945,7 +946,8 @@
     roundLog.push({ arena: arena.type, t: +roundT.toFixed(2), winner: roundWinner, hits: [P[0].hits, P[1].hits] }); if (roundLog.length > 300) roundLog.shift();
     var name = mode === 1 ? (roundWinner === 0 ? 'نقطة لك!' : 'نقطة للكمبيوتر!') : 'نقطة للاعب ' + (roundWinner + 1) + '!';
     var sub = w.out ? (mode === 1 && roundWinner === 1 ? 'سقطت أولاً!' : 'الخصم سقط أولاً!') : clean ? 'جولة مثالية!' : (score[roundWinner] === WIN_SCORE - 1 ? 'نقطة الفوز!' : '');
-    if (score[roundWinner] >= WIN_SCORE) { name = 'الضربة القاضية!'; sub = ''; }
+    // the winning point decides the match, so it is saved now; the celebration and podium only show it
+    if (score[roundWinner] >= WIN_SCORE) { name = 'الضربة القاضية!'; sub = ''; matchWinner = roundWinner; commitMatch(); }
     showBanner(name, sub, SUMOS[w.sumo].body, 1.6, 84);
     SFX.point();
     hudPop[roundWinner] = 1;
@@ -954,15 +956,17 @@
 
   function afterRound() {
     if (demo) { roundNo++; beginRound(); return; }
-    if (score[0] >= WIN_SCORE || score[1] >= WIN_SCORE) { matchWinner = score[0] >= WIN_SCORE ? 0 : 1; toOver(); return; }
+    if (score[0] >= WIN_SCORE || score[1] >= WIN_SCORE) { toOver(); return; }
     roundNo++;
     beginRound();
   }
 
   /* ================================================================ over */
-  function toOver() {
-    scr = 'over';
-    var humanWon = mode === 2 || matchWinner === 0;
+  // A result is saved the moment the winning point lands: R, or a pause and then Restart or
+  // Menu (or the portal's Back), can leave during the celebration before the podium.
+  // commitMatch awards it once per match; toOver only displays it.
+  function commitMatch() {
+    if (result) return;
     var before = save.stars;
     var earned = 0, mult = { easy: 1, medium: 2, hard: 3 }[diff], bonus = { easy: 3, medium: 6, hard: 10 }[diff];
     var newSpecial = [], newMedal = null;
@@ -1001,7 +1005,13 @@
       if (diff === 'medium' && save.wins.medium === 1) unlockedDiff = DIFF_AR.hard;
     }
     persist();
-    overData = { newMedal: newMedal, humanWon: humanWon, earned: earned, newHats: newHats, newStreak: newStreak, unlockedDiff: unlockedDiff, t: 0, shown: 0, spaceT: 0 };
+    result = { newMedal: newMedal, earned: earned, newHats: newHats, newStreak: newStreak, unlockedDiff: unlockedDiff };
+  }
+
+  function toOver() {
+    scr = 'over';
+    var humanWon = mode === 2 || matchWinner === 0, r = result;
+    overData = { newMedal: r.newMedal, humanWon: humanWon, earned: r.earned, newHats: r.newHats, newStreak: r.newStreak, unlockedDiff: r.unlockedDiff, t: 0, shown: 0, spaceT: 0 };
     // set up the victory scene
     var w = P[matchWinner], l = P[1 - matchWinner];
     resetPlayer(w, 330, 350, 1); resetPlayer(l, 560, 460, -1);
