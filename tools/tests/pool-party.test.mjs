@@ -263,3 +263,30 @@ test('reduced motion skips confetti and the pot zoom but keeps the slow motion',
   assert.equal(await page.evaluate(() => __game.confetti), 0, 'switching to reduced motion clears falling confetti');
   assert.deepEqual(await shot(), { zoom: false, slow: true, phase: 'won', confetti: 0 });
 });
+
+test('an 8 potted on the break is respotted clear of a cue ball resting on the foot spot', async t => {
+  const page = await game(t);
+  await startCpuMatch(page);
+  const gap = await page.evaluate(() => {
+    const P = PoolPhysics, shoot = P.shoot;
+    let st = null;
+    // the break pots the 8 and leaves the cue ball on the foot spot, the rest along the bottom cushion
+    P.shoot = function (state) {
+      shoot.apply(this, arguments);
+      P.shoot = shoot; st = state;
+      state.balls.forEach((b, i) => {
+        b.vx = b.vy = b.wx = b.wy = 0;
+        if (b.n === 0) { b.x = P.FOOT_X; b.y = P.CY; } else if (b.n === 8) b.on = false;
+        else { b.x = P.TX0 + 80 + i * 30; b.y = P.TY1 - 40; }
+      });
+      state.shot.first = 1;
+      state.shot.pots.push({ n: 8, pocket: 0, cush: 0 });
+    };
+    __game.shoot(0.5);
+    for (let i = 0; i < 30 && (!st || __game.phase === 'strike' || __game.phase === 'rolling'); i++) stepGame(1);
+    const cue = P.ball(st, 0), eight = P.ball(st, 8);
+    return { phase: __game.phase, on: eight.on, cueOnSpot: cue.x === P.FOOT_X && cue.y === P.CY, gap: Math.hypot(eight.x - cue.x, eight.y - cue.y) };
+  });
+  assert.deepEqual([gap.phase, gap.on, gap.cueOnSpot], ['cpu', true, true], 'the shot ended and the 8 is back on the table');
+  assert.ok(gap.gap >= 2 * 12, `the 8 must not overlap the cue ball: ${gap.gap.toFixed(1)} px apart`);
+});
