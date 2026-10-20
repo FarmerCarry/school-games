@@ -89,6 +89,31 @@ test('Fire & Ice warns when saving fails and clears the warning after Retry', as
   assert.equal(await page.evaluate(() => localStorage.getItem('sg:fire-and-ice:unlocked')), '2');
 });
 
+test('Fire & Ice saves a won level at the win, before the result panel opens', async t => {
+  const page = await gamePage(t);
+  // one evaluate, so the real loop cannot reach the panel 0.7 s later in between
+  const atWin = await page.evaluate(() => {
+    __game.load(1); __game.bench(5); __game.win(); __game.bench(1);
+    return { panel: !document.getElementById('winScreen').hidden, unlocked: localStorage.getItem('sg:fire-and-ice:unlocked'),
+      best: (JSON.parse(localStorage.getItem('sg:fire-and-ice:best')) || {})[0] };
+  });
+  assert.equal(atWin.panel, false, 'the result panel has not opened yet');
+  assert.equal(atWin.unlocked, '2', 'the next level is unlocked at the win');
+  assert.ok(atWin.best?.stars >= 1, 'the stars are stored at the win');
+  // the panel shows the result saved at the win, not a second, already-improved one
+  const shown = await page.evaluate(() => {
+    __game.bench(60);
+    return { panel: !document.getElementById('winScreen').hidden, stars: document.querySelectorAll('#winStars .crit.got').length,
+      newBest: !document.getElementById('winNew').hidden, best: JSON.parse(localStorage.getItem('sg:fire-and-ice:best'))[0] };
+  });
+  assert.deepEqual(shown, { panel: true, stars: atWin.best.stars, newBest: false, best: atWin.best });
+  // leaving during the 0.7 s before the panel keeps the level
+  await page.evaluate(() => { __game.load(2); __game.bench(5); __game.win(); __game.bench(1); });
+  await page.reload();
+  await page.waitForFunction(() => window.__game);
+  assert.equal(await page.evaluate(() => __game.save.unlocked), 3);
+});
+
 test('Fire & Ice reduced motion removes ambient embers and confetti', async t => {
   const page = await gamePage(t);
   const counts = await page.evaluate(() => {
