@@ -396,7 +396,7 @@
     }
     // The run's one end (play stops here); a level reports win/lose, classic its points.
     if (ev.win || ev.over) Kit.stats.end(ev.win ? 'win' : run.level ? 'lose' : 'end', run.score);
-    if (ev.win) { state = 'ending'; endKind = 'win'; endTimer = 1.1; cancelDrag(); return; }
+    if (ev.win) { commitWin(); state = 'ending'; endKind = 'win'; endTimer = 1.1; cancelDrag(); return; }
     if (ev.over) {
       state = 'ending'; endKind = run.level ? 'fail' : 'over'; cancelDrag();
       endTimer = ev.fail === 'moves' ? 1.0 : 99;
@@ -706,12 +706,19 @@
     }
     step();
   }
-  function showWin() {
-    state = 'win';
+  // The stars are saved the moment the level is won, so leaving during the ending
+  // animation keeps them; showWin only displays the stored result.
+  var winResult = null;
+  function commitWin() {
     var lv = LV.LEVELS[runLevel], st = Rules.stars(lv, run.moves);
     var before = unlockSnapshot();
     var prev = save.adv[runLevel] | 0;
     if (st > prev) { save.adv[runLevel] = st; put('adv', save.adv); }
+    winResult = { st: st, before: before, prev: prev };
+  }
+  function showWin() {
+    state = 'win';
+    var lv = LV.LEVELS[runLevel], st = winResult.st, before = winResult.before, prev = winResult.prev;
     $('winHead').textContent = st === 3 ? 'مثالي!' : st === 2 ? 'أحسنت!' : 'نجحت!';
     $('winSub').textContent = 'المرحلة ' + (runLevel + 1) + ' مكتملة';
     $('winScore').textContent = Kit.fmt(run.score);
@@ -1490,7 +1497,7 @@
       refreshFits();
     },
     endNow: function () { if (state === 'play') { state = 'ending'; endKind = run.level ? 'fail' : 'over'; startGreying(); } },
-    win: function () { if (state === 'play' && run.level) { run.result = 'win'; state = 'ending'; endKind = 'win'; endTimer = 0.1; } },
+    win: function () { if (state === 'play' && run.level) { run.result = 'win'; commitWin(); state = 'ending'; endKind = 'win'; endTimer = 0.1; } },
     stars: function (arr) { save.adv = arr; put('adv', arr); },
     map: openMap, title: openTitle
   };
