@@ -54,7 +54,7 @@ async function mockCompletedUpdate(page) {
     };
     const owner = Object.assign(new EventTarget(), { active, installing: null, waiting: null, update: async () => {} });
     Object.defineProperty(navigator, 'serviceWorker', { configurable: true,
-      value: Object.assign(new EventTarget(), { register: async () => owner }) });
+      value: Object.assign(new EventTarget(), { controller: active, register: async () => owner }) });
   });
 }
 

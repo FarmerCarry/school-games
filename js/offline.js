@@ -15,7 +15,10 @@
   }
   function complete(result) { return result.ready && result.count === result.total && result.total > 0; }
   function remember(result) {
-    availableVersion = complete(result) && typeof pageVersion === 'string' && typeof result.version === 'string' &&
+    // An uncontrolled page (first visit, or Ctrl+F5 bypassing the worker) came from
+    // the network, so a different cached version is older, never an update.
+    var controlled = !!navigator.serviceWorker.controller;
+    availableVersion = controlled && complete(result) && typeof pageVersion === 'string' && typeof result.version === 'string' &&
       result.version && result.version !== pageVersion ? result.version : null;
   }
   function paint(state, text, canRetry) {
