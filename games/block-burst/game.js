@@ -21,9 +21,11 @@
     adv: store.get('adv', []),
     skin: store.get('skin', 0) | 0,
     music: store.get('music', true) !== false,
-    stats: store.get('stats', { games: 0, lines: 0, perfects: 0, bestCombo: 0 }),
+    stats: store.get('stats', null),
     seen: store.get('seenSkins', [0])
   };
+  if (!save.stats || typeof save.stats !== 'object' || Array.isArray(save.stats)) save.stats = {};
+  ['games', 'lines', 'perfects', 'bestCombo'].forEach(function (k) { save.stats[k] = Math.max(0, save.stats[k] | 0); });
   if (!Array.isArray(save.adv)) save.adv = [];
   for (var li = 0; li < LV.LEVELS.length; li++) save.adv[li] = Math.max(0, Math.min(3, save.adv[li] | 0));
   if (!Array.isArray(save.seen)) save.seen = [0];

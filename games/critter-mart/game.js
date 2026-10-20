@@ -34,7 +34,7 @@
     if (typeof s.pendingOffline !== 'number' || !isFinite(s.pendingOffline) || s.pendingOffline < 0) s.pendingOffline = 0;
     var helpers = Object.create(null);
     if (s.helperCarry && typeof s.helperCarry === 'object') Object.keys(s.helperCarry).forEach(function (id) { helpers[id] = validCarry(s.helperCarry[id]); });
-    s.helperCarry = helpers; s.recoveryCarry = validCarry(s.recoveryCarry);
+    s.helperCarry = helpers; s.recoveryCarry = validCarry(s.recoveryCarry); s.carry = validCarry(s.carry);
     if (typeof s.completionTime !== 'number' || !isFinite(s.completionTime) || s.completionTime < 0) s.completionTime = null;
     s.finalePending = !!s.finalePending; s.finaleWasBest = !!s.finaleWasBest;
     // Older saves could retain the final purchase but lose its runtime-only delay.
@@ -44,7 +44,8 @@
     }
     return s;
   }
-  var META = store.get('meta', null) || {};
+  var META = store.get('meta', null);
+  if (!META || typeof META !== 'object' || Array.isArray(META)) META = {};
   if (!META.hat) META.hat = 'none';
   if (!META.maxLvl) META.maxLvl = 1;
   if (META.music === undefined) META.music = true;
