@@ -200,3 +200,25 @@ test('Paint Grab keeps bots off a rainbow player\'s pink and coral and spreads l
   // the title's 9 bots use all 12 colours (7 groups), so again only 2 near pairs
   assert.deepEqual({ ...title, pinkOrCoral: undefined }, { bots: 9, distinct: 9, pinkOrCoral: undefined, nearPairs: 2 });
 });
+
+test('Paint Grab saves a star the moment it is announced, and the result still shows it as new', async t => {
+  const page = await paintGrab(t);
+  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('sg:paint-grab:save') || 'null'));
+  await page.evaluate(() => { document.getElementById('bPlay').click(); runtime.step(2); __game.grab(30); runtime.step(2); });
+  assert.equal(await page.evaluate(() => __game.state), 'play');
+  assert.equal((await stored()).stars[0][0], 1, 'the first star goal is saved during the round');
+  await page.keyboard.press('KeyP');
+  await page.evaluate(() => { runtime.step(1); document.getElementById('bRestart').click(); runtime.step(2); });
+  assert.equal(await page.evaluate(() => __game.state), 'play');
+  assert.equal((await stored()).stars[0][0], 1, 'a restart keeps it');
+
+  const ended = await paintGrab(t);
+  const shown = await ended.evaluate(() => {
+    document.getElementById('bPlay').click(); runtime.step(2);
+    __game.grab(30); runtime.step(2); __game.die();
+    for (let i = 0; i < 400 && __game.state !== 'over'; i++) runtime.step(1);
+    const first = document.querySelector('#scr-over .ostar svg');
+    return { state: __game.state, delay: first && first.style.animationDelay };
+  });
+  assert.deepEqual(shown, { state: 'over', delay: '0.5s' }, 'the result pops the star won mid-round as new');
+});
