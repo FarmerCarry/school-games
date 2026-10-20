@@ -201,3 +201,16 @@ test('character pictures are drawn in idle time, reused by the characters screen
   });
   assert.deepEqual(reopened, { state: 'chars', pictures: 17, lost: 2 });
 });
+
+test('a run left through the pause menu keeps its best score', async t => {
+  const page = await game(t, { idle: false });
+  const score = await page.evaluate(() => {
+    document.getElementById('btnPlay').click(); rh.frames(20);
+    for (let i = 0; i < 2; i++) { __game.hop(0, 1); rh.frames(14); }
+    return __game.score;
+  });
+  assert.ok(score > 0, `the run scored (${score})`);
+  await page.evaluate(() => { document.getElementById('btnPause').click(); rh.frames(1); document.getElementById('btnRestart').click(); rh.frames(1); });
+  assert.equal(await page.evaluate(() => __game.best), score);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:road-hopper:best'))), score);
+});

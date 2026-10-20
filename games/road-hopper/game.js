@@ -1158,8 +1158,16 @@
   }
   function pauseGame() { if (state !== 'play') return; state = 'paused'; redraw = true; setWarn(false); $('pScore').textContent = score; showScreen('pause'); S.click(); }
   function resumeGame() { if (state !== 'paused') return; state = 'play'; showScreen(null); S.click(); K.reset(); }
-  function restart() { resetWorld(0); state = 'title'; startGame(); }
-  function toMenu() { resetWorld(0); state = 'title'; $('hud').hidden = true; showScreen('title'); refreshTitle(); }
+  // Leaving a run from the pause menu still keeps its best score and the unlock it
+  // earned (coins are saved as they are picked up).
+  function bankRun() {
+    if (state !== 'paused') return;
+    if (score > save.best) save.best = score;
+    if (score >= 100 && !has('gold')) save.owned.push('gold');
+    persist();
+  }
+  function restart() { bankRun(); resetWorld(0); state = 'title'; startGame(); }
+  function toMenu() { bankRun(); resetWorld(0); state = 'title'; $('hud').hidden = true; showScreen('title'); refreshTitle(); }
 
   var overCount = 0;
   function gameOver() {
