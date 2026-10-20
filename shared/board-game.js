@@ -337,6 +337,11 @@
   document.addEventListener('focusin', function (event) {
     if (event.target !== document.body && moveButtons.indexOf(event.target) === -1) pendingBoardFocus = null;
   });
+  // A focused button clicks on every auto-repeated Enter, and focus then moves to the
+  // next free cell or Play again, so one held key would play whole rounds by itself.
+  app.addEventListener('keydown', function (event) {
+    if (event.repeat && (event.key === 'Enter' || event.key === ' ')) event.preventDefault();
+  }, true);
   window.addEventListener('keydown', function (event) {
     var target = event.target;
     if ((target && (target.isContentEditable || (typeof target.matches === 'function' && target.matches('input,textarea,select')))) ||

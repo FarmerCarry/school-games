@@ -197,6 +197,13 @@ async function keyboardAndLifecycle(game) {
   await page.keyboard.press(game === 'tic-tac-toe' ? 'ArrowDown' : 'ArrowLeft');
   assert.equal(await page.evaluate(() => document.activeElement.matches('#gameBoard [data-move]:enabled')), true, 'keyboard remains playable after the second turn');
   assert.notEqual(await page.evaluate(() => document.activeElement.dataset.move), beforeArrow, 'board arrow navigation moves focus');
+  // Holding Enter auto-repeats keydown; only the first press may play.
+  await page.keyboard.down('Enter');
+  for (let i = 0; i < 12; i++) await page.keyboard.down('Enter');
+  await page.keyboard.up('Enter');
+  await moves(page, 3);
+  await page.waitForTimeout(400);
+  assert.equal(await board(page).getAttribute('data-moves'), '3', 'a held Enter plays one move, not one per key repeat');
   await page.keyboard.press('Escape');
   await page.locator('#resumeButton').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#gameBoard [data-move]:enabled').count(), 0, 'local pause locks board');
