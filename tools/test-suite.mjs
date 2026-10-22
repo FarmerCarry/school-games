@@ -13,7 +13,7 @@ const shared = new Set([
   'balance-replay.test.mjs', 'classroom-files.test.mjs', 'offline-controller.test.mjs',
   'offline-readiness.test.mjs', 'shared-kit.test.mjs', 'level-verifiers.test.mjs',
   'engine-regressions.test.mjs', 'moto-balance.test.mjs', 'play-stats-rules.test.mjs',
-  'offline-download.test.mjs', 'dino-3d-engine.test.mjs', 'cake-guards-engine.test.mjs'
+  'offline-download.test.mjs', 'dino-3d-engine.test.mjs', 'cake-guards-engine.test.mjs', 'pool-position-rules.test.mjs'
 ]);
 const files = fs.readdirSync(path.join(repo, 'tools/tests')).filter(file => file.endsWith('.test.mjs')).sort();
 for (const file of shared) {

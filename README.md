@@ -81,6 +81,11 @@ Choose **العب مرة أخرى** after a round; the starting player alternate
 The fast build bundles each game into one HTML file, with the existing shared fonts,
 and the offline cache updates the games on the next site visit.
 
+**حفلة البلياردو (Pool Party)** includes 12 trick-shot puzzles alongside local two-player and
+computer matches. The final two puzzles ask you to pot a ball and leave the cue-ball centre
+inside a marked circle: practise backspin to draw it back, or topspin to follow through.
+Existing puzzle stars and unlocks carry over, and the galaxy table still unlocks at 30 stars.
+
 **ضربة إلى الفضاء (Skybound Golf)** is a one-button golf launcher. Press Space or click when the
 backswing reaches the gold zone, then use the same button in flight: in the air it fires a rocket,
 just before landing it makes a super bounce (also across water). Collect coins, pop balloons, fly
