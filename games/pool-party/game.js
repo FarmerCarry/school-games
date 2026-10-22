@@ -742,7 +742,7 @@
     G.stats.pots[shooter] += own;
     if (G.kind === 'cpu' && human && own) { G.coinsEarned += own * 5; save.totalPots += own; }
     if (res.respot8) {
-      var e8 = P.ball(G.st, 8), sp8 = P.findPlace(G.st, P.FOOT_X, P.CY, false);
+      var e8 = P.ball(G.st, 8), sp8 = P.findPlace(G.st, P.FOOT_X, P.CY, false, 8);
       e8.on = true; e8.x = sp8.x; e8.y = sp8.y; e8.vx = e8.vy = e8.wx = e8.wy = 0;
       G.tray = G.tray.filter(function (t) { return t.n !== 8; });
       G.tray.forEach(function (t, i) { t.tx = 450 + i * 25.6; t.x = Math.min(t.x, t.tx + 1); });

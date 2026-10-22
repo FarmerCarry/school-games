@@ -410,7 +410,9 @@
   };
 
   /* ------------------------------------------------------------ placement */
-  P.canPlace = function (st, x, y, kitchen) {
+  // `ignore` is the ball being placed (default the cue ball), which never blocks itself.
+  P.canPlace = function (st, x, y, kitchen, ignore) {
+    if (ignore == null) ignore = 0;
     if (x < TX0 + R || x > TX1 - R || y < TY0 + R || y > TY1 - R) return false;
     if (kitchen && x > P.HEAD_X) return false;
     for (var k = 0; k < pockets.length; k++) {
@@ -419,7 +421,7 @@
     }
     for (var i = 0; i < st.balls.length; i++) {
       var b = st.balls[i];
-      if (!b.on || b.n === 0) continue;
+      if (!b.on || b.n === ignore) continue;
       var ex = x - b.x, ey = y - b.y;
       if (ex * ex + ey * ey < (2 * R + 0.5) * (2 * R + 0.5)) return false;
     }
@@ -427,15 +429,15 @@
   };
 
   // Nearest free legal spot to (x, y)
-  P.findPlace = function (st, x, y, kitchen) {
+  P.findPlace = function (st, x, y, kitchen, ignore) {
     x = Math.max(TX0 + R, Math.min(kitchen ? P.HEAD_X : TX1 - R, x));
     y = Math.max(TY0 + R, Math.min(TY1 - R, y));
-    if (P.canPlace(st, x, y, kitchen)) return { x: x, y: y };
+    if (P.canPlace(st, x, y, kitchen, ignore)) return { x: x, y: y };
     for (var r = 3; r < 400; r += 3) {
       for (var a = 0; a < 24; a++) {
         var ang = a / 24 * Math.PI * 2;
         var px = x + Math.cos(ang) * r, py = y + Math.sin(ang) * r;
-        if (P.canPlace(st, px, py, kitchen)) return { x: px, y: py };
+        if (P.canPlace(st, px, py, kitchen, ignore)) return { x: px, y: py };
       }
     }
     return { x: P.HEAD_X - 40, y: CY };
