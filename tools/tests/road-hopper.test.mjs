@@ -277,5 +277,5 @@ test('a run left through the pause menu keeps its best score', async t => {
   assert.ok(score > 0, `the run scored (${score})`);
   await page.evaluate(() => { document.getElementById('btnPause').click(); rh.frames(1); document.getElementById('btnRestart').click(); rh.frames(1); });
   assert.equal(await page.evaluate(() => __game.best), score);
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:road-hopper:best'))), score);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:road-hopper:save')).best), score);
 });
