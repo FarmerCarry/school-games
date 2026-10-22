@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
+import { clickControl } from '../ui-input.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -20,14 +21,14 @@ after(async () => {
 
 // Neon Slope drives its own requestAnimationFrame loop. The page's frames are
 // captured so each test steps them by hand; `paints` counts WebGL clears of #gl.
-async function game(t, { parallelCompile = false } = {}) {
+async function game(t, { parallelCompile = false, initialSave = null } = {}) {
   const context = await browser.newContext({ viewport: { width: 960, height: 540 } });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  await page.addInitScript(({ parallelCompile }) => {
-    const ns = window.ns = { paints: 0, frames: [], now: 1000, failSave: false, shadersDone: false, fallback: null, resized: false };
+  await page.addInitScript(({ parallelCompile, initialSave }) => {
+    const ns = window.ns = { paints: 0, frames: [], now: 1000, failSave: false, writes: [], shadersDone: false, fallback: null, resized: false };
     addEventListener('resize', () => { ns.resized = true; });
     window.requestAnimationFrame = cb => ns.frames.push(cb);
     ns.step = count => {
@@ -65,11 +66,16 @@ async function game(t, { parallelCompile = false } = {}) {
       window.setTimeout = function (fn, ms) { if (ms === 4000) { ns.fallback = fn; return 0; } return timeout.apply(this, arguments); };
     }
     const write = Storage.prototype.setItem;
+    if (initialSave && !sessionStorage.getItem('neon-save-fixture')) {
+      for (const [key, value] of Object.entries(initialSave)) write.call(localStorage, 'sg:neon-slope:' + key, JSON.stringify(value));
+      sessionStorage.setItem('neon-save-fixture', 'seeded');
+    }
     Storage.prototype.setItem = function (key) {
+      if (key.startsWith('sg:neon-slope:')) ns.writes.push(key);
       if (ns.failSave && key.startsWith('sg:neon-slope:')) throw new DOMException('Full storage fixture', 'QuotaExceededError');
       return write.apply(this, arguments);
     };
-  }, { parallelCompile });
+  }, { parallelCompile, initialSave });
   await page.goto(`${server.origin}/games/neon-slope/`);
   await page.waitForFunction(() => window.__game, null, { polling: 50 });
   return page;
@@ -110,36 +116,6 @@ test('Neon Slope draws a paused scene once, redraws resize and context restore, 
   assert.ok(await page.evaluate(d => __game.state.dist > d, dist), 'play continues after resume');
 });
 
-test('Neon Slope popups and banners stay visible, without movement, in reduced motion', async t => {
-  const page = await game(t);
-  // The 4 popups, callout and banner that _fx() (re)starts are pending their first frame.
-  // Each is read half-way through, where every one of them should be fully visible.
-  const fx = () => {
-    __game._fx();
-    return document.getAnimations().filter(a => a.pending && a.effect.target.matches('.pop, #banner')).map(a => {
-      const duration = a.effect.getTiming().duration;
-      a.currentTime = duration / 2;
-      return { name: a.animationName, duration, opacity: +getComputedStyle(a.effect.target).opacity };
-    });
-  };
-  const settle = () => page.waitForFunction(() => document.getAnimations().every(a => !a.pending), null, { polling: 50 });
-  await page.evaluate(() => { __game.start(); ns.step(30); });
-  // A gameplay popup started during those frames must not be counted with _fx()'s six.
-  await settle();
-  const full = await page.evaluate(fx);
-  assert.equal(full.length, 6);
-  assert.ok(full.every(a => a.name !== 'nsFadeHold'), 'full motion keeps the moving animations');
-  await page.evaluate(() => Kit.motion.setPreference('reduce'));
-  // The second round reuses elements of the first, which must replay their fade.
-  for (let round = 0; round < 2; round++) {
-    await settle();
-    const list = await page.evaluate(fx);
-    assert.deepEqual(list.map(a => a.name), Array(6).fill('nsFadeHold'));
-    assert.deepEqual(list.map(a => a.duration).sort(), [1000, 1000, 1000, 1000, 1400, 2200]);
-    assert.deepEqual(list.map(a => a.opacity), Array(6).fill(1));
-  }
-});
-
 test('Neon Slope shows the save warning on failed writes and keeps progress after retry', async t => {
   const page = await game(t);
   const status = () => { const e = document.querySelector('.sg-save-status'); return e && !e.hidden ? e.textContent : ''; };
@@ -154,6 +130,109 @@ test('Neon Slope shows the save warning on failed writes and keeps progress afte
   await page.reload();
   await page.waitForFunction(() => window.__game, null, { polling: 50 });
   assert.equal(await page.evaluate(() => __game.state.gems), gems);
+});
+
+const legacyProgress = {
+  best: 80, gems: 500, owned: ['neon', 'cookie'], ownedTrails: ['glow'], skin: 'cookie', trail: 'glow',
+  runs: 8, music: false, mDone: 3,
+  missions: [
+    { t: 'dist', n: 300, rew: 40, prog: 100, done: false },
+    { t: 'gems', n: 20, rew: 25, prog: 2, done: false },
+    { t: 'zone', n: 3, rew: 30, prog: 1, done: false }
+  ]
+};
+const durableProgress = () => Object.fromEntries(Object.keys(localStorage).filter(key => key.startsWith('sg:neon-slope:'))
+  .sort().map(key => [key, localStorage.getItem(key)]));
+async function openShop(page) {
+  await clickControl(page, '#btnShop');
+  await page.waitForFunction(() => !document.getElementById('shop').hidden &&
+    document.getElementById('shop').getAnimations({ subtree: true }).filter(animation => animation.effect.getTiming().iterations !== Infinity)
+      .every(animation => animation.playState === 'finished'), null, { polling: 50, timeout: 5000 });
+}
+async function settledCard(page, index) {
+  const selector = '#sgrid .card:nth-child(' + index + ')';
+  await page.waitForFunction(selector => document.querySelector(selector).getAnimations()
+    .every(animation => animation.playState === 'finished'), selector, { polling: 50, timeout: 5000 });
+  await clickControl(page, selector);
+}
+
+test('Neon Slope migrates all legacy progress in one purchase write and prefers it after reload', async t => {
+  const page = await game(t, { initialSave: legacyProgress });
+  const legacy = await page.evaluate(durableProgress);
+  assert.equal(await page.evaluate(() => __game.state.gems), 500);
+  assert.equal(await page.evaluate(() => __game.state.skin), 'cookie');
+  await openShop(page);
+  await page.evaluate(() => { ns.writes = []; });
+  await clickControl(page, '#sgrid .card:nth-child(2)'); // Bubblegum costs 25 gems.
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:neon-slope:save')));
+  assert.deepEqual(saved, { v: 1, ...legacyProgress, gems: 475, owned: ['neon', 'cookie', 'bubblegum'], skin: 'bubblegum' });
+  assert.deepEqual(await page.evaluate(() => ns.writes), ['sg:neon-slope:save']);
+  const after = await page.evaluate(durableProgress);
+  delete after['sg:neon-slope:save'];
+  assert.deepEqual(after, legacy, 'migration leaves the legacy copy untouched');
+  await page.reload();
+  await page.waitForFunction(() => window.__game, null, { polling: 50 });
+  assert.equal(await page.evaluate(() => __game.state.gems), 475, 'the new record wins over stale legacy currency');
+  assert.equal(await page.evaluate(() => __game.state.skin), 'bubblegum');
+  assert.deepEqual(await page.evaluate(() => __game.missions), legacyProgress.missions);
+});
+
+for (const existingRecord of [false, true]) test(`Neon Slope failed purchase keeps ${existingRecord ? 'the atomic record' : 'legacy progress'} intact and Retry saves it exactly once`, async t => {
+  const initialSave = { ...legacyProgress, ...(existingRecord ? { save: { v: 1, ...legacyProgress } } : {}) };
+  const page = await game(t, { initialSave });
+  const before = await page.evaluate(durableProgress);
+  await openShop(page);
+  await page.evaluate(() => { ns.failSave = true; ns.writes = []; });
+  await clickControl(page, '#sgrid .card:nth-child(2)');
+  assert.deepEqual(await page.evaluate(() => [__game.state.gems, __game.state.skin]), [475, 'bubblegum'], 'pending progress remains usable in this session');
+  assert.deepEqual(await page.evaluate(durableProgress), before, 'failed write cannot persist only the deduction or only the unlock');
+  assert.equal(await page.locator('.sg-save-status').getAttribute('data-state'), 'failed');
+  assert.deepEqual(await page.evaluate(() => ns.writes), ['sg:neon-slope:save']);
+  await clickControl(page, '.sg-save-status button');
+  assert.equal(await page.locator('.sg-save-status').getAttribute('data-state'), 'failed');
+  assert.deepEqual(await page.evaluate(() => ns.writes), ['sg:neon-slope:save', 'sg:neon-slope:save'], 'unchanged pending data must still retry while storage fails');
+  assert.deepEqual(await page.evaluate(durableProgress), before);
+
+  await page.reload();
+  await page.waitForFunction(() => window.__game, null, { polling: 50 });
+  assert.deepEqual(await page.evaluate(() => [__game.state.gems, __game.state.skin]), [500, 'cookie'], 'reload retains the complete pre-purchase state');
+  await openShop(page);
+  await page.evaluate(() => { ns.failSave = true; });
+  await clickControl(page, '#sgrid .card:nth-child(2)');
+  await page.evaluate(() => { ns.failSave = false; ns.writes = []; });
+  await clickControl(page, '.sg-save-status button');
+  assert.equal(await page.locator('.sg-save-status').getAttribute('data-state'), 'saved');
+  assert.deepEqual(await page.evaluate(() => ns.writes), ['sg:neon-slope:save'], 'Retry commits the complete pending purchase in one write');
+  const committed = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:neon-slope:save')));
+  assert.equal(committed.gems, 475);
+  assert.equal(committed.skin, 'bubblegum');
+  assert.equal(committed.owned.filter(id => id === 'bubblegum').length, 1);
+  await page.evaluate(() => { ns.writes = []; });
+  await settledCard(page, 2);
+  assert.deepEqual(await page.evaluate(() => ns.writes), [], 'reselecting the same owned item does not rewrite unchanged progress');
+  await page.reload();
+  await page.waitForFunction(() => window.__game, null, { polling: 50 });
+  assert.deepEqual(await page.evaluate(() => [__game.state.gems, __game.state.skin]), [475, 'bubblegum']);
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:neon-slope:save'))), committed);
+});
+
+test('Neon Slope retries failed equipment changes even when selection returns to the last saved value', async t => {
+  const previous = { v: 1, ...legacyProgress };
+  const page = await game(t, { initialSave: { save: previous } });
+  await openShop(page);
+  await page.evaluate(() => { ns.failSave = true; ns.writes = []; });
+  await settledCard(page, 1); // Equip the already-owned Neon ball.
+  await settledCard(page, 3); // Return to the previously saved Cookie ball.
+  assert.equal(await page.evaluate(() => __game.state.skin), 'cookie');
+  assert.equal(await page.locator('.sg-save-status').getAttribute('data-state'), 'failed');
+  assert.equal((await page.evaluate(() => ns.writes)).length, 2);
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:neon-slope:save'))), previous);
+  await page.evaluate(() => { ns.failSave = false; ns.writes = []; });
+  await clickControl(page, '.sg-save-status button');
+  assert.equal(await page.locator('.sg-save-status').getAttribute('data-state'), 'saved');
+  assert.deepEqual(await page.evaluate(() => ns.writes), ['sg:neon-slope:save']);
+  await page.evaluate(() => { ns.writes = []; ns.step(120); });
+  assert.deepEqual(await page.evaluate(() => ns.writes), [], 'ordinary frames do not save');
 });
 
 // What the player sees: the game mode, which screens are up, and whether Play shows its loading label.

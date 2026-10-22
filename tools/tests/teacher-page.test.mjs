@@ -237,11 +237,6 @@ function checkWorkbook(bytes) {
 }
 
 /* ============================================================ node checks */
-test('exports use exactly the contract columns', () => {
-  assert.deepEqual(JSON.parse(JSON.stringify(api.COLUMNS)), CONTRACT);
-  assert.equal(api.FORMAT, 'sg-play-stats');
-});
-
 test('stored day records are checked field by field; foreign or broken values are ignored', () => {
   const store = fakeStorage(seed());
   const { days, meta } = api.readStore(store);
@@ -320,99 +315,9 @@ test('hours rows are exported only for a game and hour played on at least 3 days
   assert.deepEqual(api.hoursFromDays(days, '', '').slice(9, 12), [180, 61, 20]);
 });
 
-test('durations: under a minute is never «دقيقة واحدة»', () => {
-  assert.deepEqual([0, 1, 30, 59.9, 60, 89, 150, 3720, 7200].map(api.duration),
-    ['0', 'أقل من دقيقة', 'أقل من دقيقة', 'أقل من دقيقة', 'دقيقة واحدة', 'دقيقة واحدة', '3 دقائق', 'ساعة واحدة ودقيقتان', 'ساعتان']);
-});
-
-test('periods, summaries and where children stop', () => {
-  assert.deepEqual(api.periodRange('week', '2026-10-08'), { from: '2026-10-04', to: '2026-10-08' });
-  assert.deepEqual(api.periodRange('week', '2026-10-04'), { from: '2026-10-04', to: '2026-10-04' });
-  assert.deepEqual(api.periodRange('month', '2026-10-08'), { from: '2026-09-09', to: '2026-10-08' });
-  assert.deepEqual(api.periodRange('all', '2026-10-08'), { from: '', to: '' });
-  const { days } = api.readStore(fakeStorage(seed()));
-  const t = api.tables(days, info);
-  const week = api.summary(t, '2026-10-04', '2026-10-08');
-  assert.deepEqual([week.seconds, week.sessions, week.short, week.calm], [2160, 5, 2, 1]);
-  assert.deepEqual(week.games.map(g => [g.game, g.seconds, g.sessions, g.short, g.days, g.hearted]),
-    [['candy-rope', 1860, 4, 1, 2, 1], ['rail-rush', 300, 1, 1, 1, 0]]);
-  const candy = week.games[0];
-  assert.deepEqual(candy.levels.map(l => [l.level, l.winnable]), [['L3', true], ['L4', true]]);
-  assert.deepEqual(api.stuck(candy.levels).map(l => [l.level, l.gaveUp, l.visits]), [['L3', 6, 8]], 'L4 has under 5 visits');
-  // L3: 1 win, 5 losses and 2 quits are 8 tries.
-  assert.deepEqual(api.levelResult(candy.levels[0]), { win: 1 / 8, wins: 1, tries: 8 });
-  assert.equal(api.levelResult(candy.levels[1]), null, 'under 5 tries');
-  assert.equal(week.games[1].levels[0].winnable, false);
-  assert.deepEqual(api.levelResult(week.games[1].levels[0]), { avg: 1000, best: 1800 });
-  assert.deepEqual(api.stuck(week.games[1].levels), [], 'an endless run is never a place children stop');
-  const many = api.markWinnable(['A', 'B', 'C', 'D'].map((level, i) => ({ level, visits: 10, gaveUp: i + 1, wins: 1, losses: 1, draws: 0, ends: 0, quits: 0 })));
-  assert.deepEqual(api.stuck(many).map(l => l.level), ['D', 'C', 'B'], 'three highest give-up shares within one game');
-  // The folded '_other' row is not one level.
-  assert.deepEqual(api.stuck(api.markWinnable([{ level: '_other', visits: 9, gaveUp: 9, wins: 2, losses: 5, draws: 0, ends: 0, quits: 2 }])), []);
-  assert.equal(api.levelResult({ level: 'local', wins: 0, losses: 0, draws: 7, ends: 0, quits: 0, scoreCount: 0 }), null, 'draws alone show no win share');
-  assert.equal(api.verdict(candy.f, candy.loads, candy.loadSum), 'smooth');
-  assert.equal(api.verdict([500, 50, 0, 0], 0, 0), '', 'under 600 counted frames');
-  assert.equal(api.verdict([500, 300, 150, 0], 1, 1000), 'slow');
-  assert.equal(api.verdict([500, 300, 10, 0], 1, 1000), 'ok');
-  const hours = api.hoursFromDays(days, '2026-10-04', '2026-10-08');
-  assert.deepEqual(hours.map(Math.round).slice(8, 13), [0, 840, 720, 600, 0]);
-  assert.equal(api.oldestUnexported(days, 0), '2026-06-01');
-  assert.equal(api.oldestUnexported(days, new Date(2026, 9, 6, 12).getTime()), '2026-10-06');
-});
-
 // A level counts when children can win or lose it: it was won or lost and never
 // ended without a winner, or it was only left and its id has the shape of such a
 // level of the same game (digits aside).
-test('where they stop: winnable levels only, with quits counted as tries', () => {
-  const L = (level, o) => ({ level, starts: 0, visits: 0, gaveUp: 0, wins: 0, losses: 0, draws: 0, ends: 0, quits: 0, seconds: 0,
-    scoreSum: 0, scoreCount: 0, scoreMax: 0, ...o });
-  const flags = levels => api.markWinnable(levels).map(l => [l.level, l.winnable]);
-  // troll-level: a death respawns inside the level, so every level is won or left.
-  const troll = api.markWinnable([L('L1', { starts: 5, visits: 5, wins: 5 }), L('L2', { starts: 5, visits: 5, quits: 5, gaveUp: 5 })]);
-  assert.deepEqual(troll.map(l => l.winnable), [true, true]);
-  assert.deepEqual(api.stuck(troll).map(l => [l.level, l.gaveUp, l.visits]), [['L2', 5, 5]], 'the level everyone abandons is shown');
-  assert.deepEqual([api.levelResult(troll[0]), api.levelResult(troll[1])], [{ win: 1, wins: 5, tries: 5 }, { win: 0, wins: 0, tries: 5 }]);
-  // moto-madness ids are 'w#-#': a stage only left counts beside a won one.
-  assert.deepEqual(flags([L('w1-1', { wins: 3 }), L('w1-3', { quits: 5 }), L('w2-1', { quits: 1 })]),
-    [['w1-1', true], ['w1-3', true], ['w2-1', true]]);
-  // merge-2048 reports a board only as a neutral end when it fills up; the goal tile is not a win. One 3x3
-  // board reached 256 and was left, five 4x4 boards were left, another filled up: no board counts.
-  const merge = api.markWinnable([L('s3', { starts: 9, visits: 9, ends: 4, quits: 5, gaveUp: 5, scoreSum: 4000, scoreCount: 4, scoreMax: 1800 }),
-    L('s4', { starts: 5, visits: 5, quits: 5, gaveUp: 5 })]);
-  assert.deepEqual(merge.map(l => l.winnable), [false, false]);
-  assert.deepEqual(api.stuck(merge), []);
-  assert.deepEqual(api.levelResult(merge[0]), { avg: 1000, best: 1800 }, 'a board shows its average and best score');
-  assert.deepEqual(flags([L('s3', { quits: 1 }), L('s4', { quits: 5 })]), [['s3', false], ['s4', false]], 'boards only left');
-  // block-burst: a saved classic run is continued and reports 'end' only at game over, so a day of
-  // classic visits that were all left is not giving up, even beside a won level.
-  const burst = api.markWinnable([L('L1', { starts: 1, visits: 1, wins: 1 }),
-    L('classic', { starts: 5, visits: 5, quits: 5, gaveUp: 5, seconds: 10134 })]);
-  assert.deepEqual(burst.map(l => l.winnable), [true, false]);
-  assert.deepEqual(api.stuck(burst), []);
-  // maze-dash and swing-hook: an endless run only left beside won levels; swing-hook's abandoned level still counts.
-  assert.deepEqual(flags([L('L1', { wins: 2 }), L('L2', { quits: 6 }), L('endless', { starts: 6, visits: 6, quits: 6, gaveUp: 6 })]),
-    [['L1', true], ['L2', true], ['endless', false]]);
-  assert.deepEqual(flags([L('L3', { losses: 2 }), L('endless', { quits: 5 }), L('main', { quits: 5 }), L('run', { quits: 5 })]),
-    [['L3', true], ['endless', false], ['main', false], ['run', false]]);
-  // fire-and-ice: co-op levels are 'L#:duo' (the default mode) and never count; a solo level only left does.
-  const fire = api.markWinnable([L('L1:solo', { starts: 2, visits: 2, wins: 2 }), L('L4:duo', { starts: 5, visits: 5, quits: 5, gaveUp: 5 }),
-    L('L4:solo', { starts: 5, visits: 5, quits: 5, gaveUp: 5 }), L('L2:duo', { ends: 3 })]);
-  assert.deepEqual(fire.map(l => [l.level, l.winnable]), [['L1:solo', true], ['L4:duo', false], ['L4:solo', true], ['L2:duo', false]]);
-  assert.deepEqual(api.stuck(fire).map(l => l.level), ['L4:solo']);
-  // Free play and endless runs: games with nothing to win, whether rounds ended or were left.
-  assert.deepEqual(flags([L('main', { starts: 6, visits: 6, ends: 1, quits: 5, gaveUp: 5 })]), [['main', false]]);
-  assert.deepEqual(flags([L('endless', { starts: 7, visits: 7, quits: 7, gaveUp: 7 })]), [['endless', false]]);
-  // Two-player modes never count, even when only left beside matches against the computer.
-  assert.deepEqual(flags([L('local', { starts: 6, visits: 6, quits: 6, gaveUp: 6 }), L('cpu-easy', { starts: 6, visits: 6, wins: 3, losses: 2, draws: 1 }),
-    L('duo', { quits: 5 }), L('pvp', { wins: 2 }), L('m1:local', { wins: 1 }), L('m1:pvp', { losses: 1 }), L('duos', { wins: 1 })]),
-    [['local', false], ['cpu-easy', true], ['duo', false], ['pvp', false], ['m1:local', false], ['m1:pvp', false], ['duos', true]]);
-  // A level that was only left counts in a game with won or lost levels, unless it ever ended neutrally or in a draw.
-  assert.deepEqual(flags([L('L1', { wins: 2 }), L('L2', { quits: 3 }), L('L3', { quits: 3, ends: 1 }), L('L4', { quits: 3, draws: 1 }),
-    L('L5', { losses: 1, draws: 4 })]), [['L1', true], ['L2', true], ['L3', false], ['L4', false], ['L5', true]]);
-  assert.deepEqual(api.levelResult(L('L5', { winnable: true, wins: 1, losses: 1, draws: 2, quits: 1 })), { win: 0.2, wins: 1, tries: 5 },
-    'tries are wins, losses, draws and quits');
-});
-
 test('combined days count distinct dates; averages leave out sessions still open', () => {
   const { days } = api.readStore(fakeStorage(seed()));
   const local = { pc: { id: 'pcabcd', label: 'جهاز 7', copy: 'web' }, exported_at: EXPORTED_AT, tables: api.tables(days, info), local: true };

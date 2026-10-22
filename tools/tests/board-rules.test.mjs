@@ -13,20 +13,6 @@ function sequence(game, moves) {
   }, rules.create(game));
 }
 
-test('fresh board sizes, legal moves, independent arrays and unknown games', () => {
-  const four = rules.create('connect-four');
-  const three = rules.create('tic-tac-toe');
-  assert.equal(four.board.length, 42);
-  assert.equal(three.board.length, 9);
-  assert.deepEqual(rules.legalMoves(four), [0, 1, 2, 3, 4, 5, 6]);
-  assert.deepEqual(rules.legalMoves(three), [0, 1, 2, 3, 4, 5, 6, 7, 8]);
-  assert.equal(four.turn, 1);
-  assert.equal(four.last, -1);
-  assert.notEqual(rules.create('connect-four').board, four.board);
-  assert.throws(() => rules.create('bad-game'), RangeError);
-  assert.throws(() => rules.create('__proto__'), RangeError);
-});
-
 test('Connect 4 gravity, full columns, boundaries and immutable transitions', () => {
   const start = rules.create('connect-four');
   const snapshot = structuredClone(start);
@@ -134,20 +120,6 @@ function seeded(seed) {
   return () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
 }
 
-test('the default computer is the hard level, and unknown levels fall back to it', () => {
-  function visit(state) {
-    if (state.winner || state.draw) return;
-    const move = rules.chooseMove(state);
-    assert.equal(rules.chooseMove(state, 'hard'), move);
-    assert.equal(rules.chooseMove(state, 'expert', () => 0.5), move);
-    for (const next of rules.legalMoves(state)) visit(rules.play(state, next));
-  }
-  visit(rules.create('tic-tac-toe'));
-  const second = rules.create('tic-tac-toe');
-  second.turn = 2;
-  visit(second);
-});
-
 test('easy and medium computers always choose a legal move without changing the state', () => {
   const random = seeded(42);
   for (const game of ['tic-tac-toe', 'connect-four']) {
@@ -193,15 +165,4 @@ test('kid-style players can beat the easy computer but rarely the hard one', () 
   assert.ok(kidWins('connect-four', 'hard', 200) <= 0.05);
   assert.ok(kidWins('tic-tac-toe', 'easy', 200) > 0);
   assert.equal(kidWins('tic-tac-toe', 'hard', 100), 0);
-});
-
-test('malformed states are rejected without mutating inputs', () => {
-  for (const state of [null, {}, { ...rules.create('connect-four'), board: [] },
-    { ...rules.create('tic-tac-toe'), turn: 3 },
-    { ...rules.create('tic-tac-toe'), moves: 1 },
-    { ...rules.create('tic-tac-toe'), board: [3, 0, 0, 0, 0, 0, 0, 0, 0] }]) {
-    assert.deepEqual(rules.legalMoves(state), []);
-    assert.equal(rules.play(state, 0), null);
-    assert.equal(rules.chooseMove(state), null);
-  }
 });

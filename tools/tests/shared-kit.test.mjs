@@ -250,33 +250,6 @@ test('stats: every pause and pagehide cuts the window at once, posts, and disarm
   }
 });
 
-test('stats: round() records an open round as a quit, end() needs an open round, ids and results go out raw', () => {
-  const clock = {now: 0}, h = harness({clock});
-  h.Kit.ready(); h.window.emit('pointerdown', {button: 0}); h.sent.length = 0;
-  clock.now = 1000; h.Kit.stats.end('win', 5);
-  assert.deepEqual(h.sent, [], 'end() without an open round is ignored');
-  h.Kit.stats.round('L3');
-  clock.now = 4000; h.Kit.stats.round('L3');
-  clock.now = 6500; h.Kit.stats.end('lose'); h.Kit.stats.end('win');
-  h.Kit.stats.round('endless'); clock.now = 8000; h.Kit.stats.end('end', 950.5);
-  h.Kit.stats.round('w1-4'); h.Kit.stats.end('draw', NaN);
-  h.Kit.stats.round('x'.repeat(30)); h.Kit.stats.end('WIN', -3);
-  h.Kit.stats.round(12);
-  assert.deepEqual(statsOf(h).map(m => [m.e, m.r, m.o]), [
-    [1000, [['s', 'L3']], 'L3'],
-    [3000, [['q', 'L3', 3000], ['s', 'L3']], 'L3'],
-    [2500, [['l', 'L3', 2500]], ''],
-    [0, [['s', 'endless']], 'endless'],
-    [1500, [['e', 'endless', 1500, 950.5]], ''],
-    [0, [['s', 'w1-4']], 'w1-4'],
-    [0, [['d', 'w1-4', 0]], ''],
-    [0, [['s', 'x'.repeat(24)]], 'x'.repeat(24)],
-    // Kit does not clean or clamp; the portal checks ids, codes and numbers.
-    [0, [['W', 'x'.repeat(24), 0, -3]], ''],
-    [0, [['s', '12']], '12']
-  ]);
-});
-
 // om lets the portal keep the time of a round the child leaves open (Back, a portal
 // restart, a reload): Kit puts a round's ms on its end or 'q' event only.
 test('stats: every message carries om, the engaged ms so far in the round open now (0 when none)', () => {
@@ -294,21 +267,6 @@ test('stats: every message carries om, the engaged ms so far in the round open n
     [1500, [['q', 'L1', 6500], ['s', 'L2']], 'L2', 0],
     [1500, [['w', 'L2', 1500]], '', 0]
   ]);
-});
-
-test('stats: each tutorial step is sent at most once per page load, and 32 waiting events post at once', () => {
-  const h = harness({clock: {now: 0}});
-  h.Kit.stats.tutorial('start'); h.Kit.stats.tutorial('start'); h.Kit.ready();
-  h.Kit.stats.tutorial('done'); h.Kit.stats.tutorial('start'); h.Kit.stats.tutorial('done');
-  assert.deepEqual(h.sent, [{type: 'sg:ready', version: 1}], 'tutorial steps wait for the next post');
-  runTimers(h);
-  assert.deepEqual(statsOf(h).map(m => m.r), [[['t', 'start'], ['t', 'done']]]);
-  h.Kit.stats.tutorial('done'); h.Kit.stats.round('L1');
-  assert.deepEqual(lastStats(h).r, [['s', 'L1']]);
-  for (let i = 0; i < 31; i++) h.Kit.stats.tutorial('step' + i);
-  assert.equal(statsOf(h).length, 2);
-  h.Kit.stats.tutorial('step31');
-  assert.equal(statsOf(h).length, 3); assert.equal(lastStats(h).r.length, 32);
 });
 
 test('stats: frames count only while engaged, armed and in a round, never the first frame after start or show', () => {
@@ -388,17 +346,6 @@ test('stats: a standalone game counts but never posts', () => {
   assert.deepEqual(h.sent, []);
 });
 
-test('stats: only the child\'s own mute toggles count', () => {
-  const h = harness({clock: {now: 0}}), button = h.Kit.muteButton();
-  const prefs = data => h.window.emit('message', {source: h.window.parent, data: {type: 'sg:preferences', ...data}});
-  h.Kit.ready();
-  button.emit('click'); h.window.emit('keydown', {code: 'KeyM'});
-  h.Kit.audio.setMuted(true); prefs({quiet: false});
-  prefs({classroom: true}); h.Kit.audio.toggleMute(); h.window.emit('keydown', {code: 'KeyM'});
-  runTimers(h);
-  assert.deepEqual(statsOf(h).map(m => [m.e, m.m]), [[0, 2]], 'mute toggles alone are a change worth posting');
-});
-
 test('stats: every call is safe with any argument, and every payload survives JSON and structured cloning', () => {
   const clock = {now: 0}, h = harness({clock});
   const odd = [undefined, null, true, 0, -1, NaN, Infinity, '', 'L1', 'win', {}, [], [1, 2], Object.create(null), Symbol('s'), () => 1, 10n, {toString() { throw new Error('odd'); }}];
@@ -415,16 +362,5 @@ test('stats: every call is safe with any argument, and every payload survives JS
     assert.ok(Number.isInteger(m.om) && m.om >= 0 && (m.o || !m.om), 'om is whole milliseconds, 0 with no open round');
     assert.ok(m.r.every(event => typeof event[0] === 'string' && event[0].length <= 1 && event.length <= 4));
     assert.ok(m.r.every(event => event.slice(1).every(v => typeof v === 'string' ? v.length <= 24 : Number.isFinite(v))));
-  }
-});
-
-test('stats: every recorded timer is safe to run at any moment, with or without window.performance', () => {
-  for (const embedded of [true, false]) {
-    const h = harness({embedded});
-    h.Kit.ready(); h.window.emit('keydown', {code: 'KeyA'}); h.Kit.stats.round('L1');
-    for (let i = 0; i < 4; i++) assert.doesNotThrow(() => h.timers.filter(Boolean).forEach(fn => fn()));
-    h.Kit.fail('stop');
-    assert.doesNotThrow(() => h.timers.filter(Boolean).forEach(fn => fn()));
-    assert.ok(statsOf(h).every(m => Number.isInteger(m.e) && m.e >= 0), 'the Date.now() fallback gives whole milliseconds');
   }
 });

@@ -6,6 +6,8 @@
  *   pockets : if set, targets only count in these pockets
  *   shots   : how many shots you get
  *   eightLast: the 8 is a target but must be the last ball down
+ *   cueZone : optional { x, y, r }; after the final target, the stopped cue ball's
+ *             center must be inside this circle (including its boundary)
  */
 (function (root) {
   'use strict';
@@ -29,7 +31,15 @@
     { name: 'نظّف الطاولة', hint: 'أدخل الكرات الأربع في 5 ضربات. فكّر أين ستقف البيضاء!',
       cue: [400, 396], balls: [[12, 300, 250], [13, 980, 250], [14, 640, 520], [3, 900, 520]], targets: [12, 13, 14, 3], shots: 5 },
     { name: 'الختام الكبير', hint: 'أدخل 1 و2 و3، ثم اختم بالكرة 8. لديك 6 ضربات!',
-      cue: [360, 396], balls: [[1, 560, 300], [2, 760, 470], [3, 980, 300], [8, 880, 396]], targets: [1, 2, 3, 8], eightLast: true, shots: 6 }
+      cue: [360, 396], balls: [[1, 560, 300], [2, 760, 470], [3, 980, 300], [8, 880, 396]], targets: [1, 2, 3, 8], eightLast: true, shots: 6 },
+    { name: 'ارجع للدائرة', hint: 'أدخل الكرة 1، ثم أوقف البيضاء ومركزها داخل الدائرة.',
+      tip: 'للسحب للخلف: انقر أسفل كرة الدوران، ثم جرّب قوة متوسطة.',
+      cue: [807, 364], balls: [[1, 900, 450]], targets: [1], pockets: [3], shots: 1,
+      cueZone: { x: 810, y: 370, r: 60 } },
+    { name: 'تقدّم للدائرة', hint: 'أدخل الكرة 2، ثم أوقف البيضاء ومركزها داخل الدائرة.',
+      tip: 'للتقدّم: انقر أعلى كرة الدوران، ثم جرّب قوة متوسطة.',
+      cue: [473, 364], balls: [[2, 380, 450]], targets: [2], pockets: [2], shots: 1,
+      cueZone: { x: 290, y: 535, r: 55 } }
   ];
   // Judge one finished shot of a trick level. prog = { shotsUsed } (already counts this shot).
   // Returns { status: 'win' | 'fail' | 'go', reason }
@@ -60,7 +70,16 @@
         }
       }
     }
-    if (remaining === 0) return { status: 'win' };
+    if (remaining === 0) {
+      if (lv.cueZone) {
+        var cue = null, z = lv.cueZone;
+        for (i = 0; i < st.balls.length; i++) if (st.balls[i].n === 0) cue = st.balls[i];
+        if (!cue || !cue.on) return { status: 'fail', reason: 'أوبس! سقطت الكرة البيضاء.' };
+        var dx = cue.x - z.x, dy = cue.y - z.y;
+        if (dx * dx + dy * dy > z.r * z.r) return { status: 'fail', reason: 'دخلت الكرة! لكن مركز البيضاء خارج الدائرة.' };
+      }
+      return { status: 'win' };
+    }
     if (prog.shotsUsed >= lv.shots) return { status: 'fail', reason: lv.shots === 1 ? 'حاول مرة أخرى، أنت تستطيع!' : 'انتهت الضربات! حاول مجددًا.' };
     return { status: 'go' };
   };

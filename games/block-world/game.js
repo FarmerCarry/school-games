@@ -716,7 +716,9 @@
     G.done[q.id] = true;
     var before = meta.totalStars;
     meta.totalStars++;
-    saveMeta();
+    // The world (which records the quest as done) is written first and the star only after it,
+    // so a lost world save cannot leave a star for a quest that is then earned again.
+    saveGame();
     G.toasts.push({ title: 'أنجزت المهمة!', text: q.text, icon: q.icon, t: 0, dur: 3.4 });
     SND.quest(); confettiBurst();
     BW.SKINS.forEach(function (sk, i) {

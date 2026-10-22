@@ -5,6 +5,7 @@
   var store = Kit.store('dino-3d'), best = store.get('best', 0);
   if (!Number.isSafeInteger(best) || best < 0) best = 0;
   var quality = store.get('quality', 'high') === 'low' ? 'low' : 'high';
+  var courseCode = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
   var bestPending = false, qualityPending = false, inputJumps = 0, milestoneUntil = 0;
   var pointerJump = false, pointerDuck = false, jumpQueued = false, controlDuck = false;
   var activePointer = null, loop, lastScore = -1, lastBest = -1;
@@ -49,6 +50,7 @@
     el('over-screen').hidden = mode !== 'over';
     el('hud').hidden = mode === 'ready';
     el('pause-button').hidden = mode !== 'playing';
+    el('course-tag').hidden = mode === 'ready';
     dirty = true;
   }
   function refreshHUD() {
@@ -64,10 +66,34 @@
   }
   function start() {
     if (!renderer || contextLost) return;
-    resetInput(); engine.reset((Math.random() * 4294967296) >>> 0);
+    resetInput(); engine.reset(Number(courseCode) + 1);
     inputJumps = 0; milestoneUntil = 0; lastScore = -1;
     Kit.audio.unlock(); Kit.stats.round('endless');
     changeMode('playing'); refreshHUD(); focusGame();
+  }
+  function showCourse() {
+    el('course-code').value = courseCode;
+    el('active-course').textContent = courseCode;
+    el('course-error').hidden = true;
+    el('course-code').removeAttribute('aria-invalid');
+  }
+  function startSelected() {
+    var code = el('course-code').value.trim();
+    if (!/^[0-9]{4}$/.test(code)) {
+      el('course-error').hidden = false;
+      el('course-code').setAttribute('aria-invalid', 'true');
+      el('course-code').focus(); return;
+    }
+    if (!renderer || contextLost) return;
+    courseCode = code; showCourse(); start();
+  }
+  function newCourse() {
+    if (!renderer || contextLost) return;
+    // Choose a different code; drawing and sound never use the engine's RNG.
+    courseCode = String((Number(courseCode) + 1 + Math.floor(Math.random() * 9999)) % 10000).padStart(4, '0');
+    showCourse();
+    if (mode !== 'ready') start();
+    else { engine.reset(Number(courseCode) + 1); dirty = true; }
   }
   function pause() {
     if (mode !== 'playing') return;
@@ -78,7 +104,7 @@
     resetInput(); changeMode('playing'); focusGame();
   }
   function menu() {
-    resetInput(); engine.reset(12345); milestoneUntil = 0;
+    resetInput(); engine.reset(Number(courseCode) + 1); milestoneUntil = 0; showCourse();
     changeMode('ready'); refreshHUD(); focusGame();
   }
   function finish() {
@@ -119,7 +145,12 @@
     el('quality').textContent = quality === 'low' ? 'الرسوم: خفيفة' : 'الرسوم: كاملة';
     el('quality').setAttribute('aria-pressed', String(quality === 'low'));
   }
-  el('play').addEventListener('click', start);
+  el('course-form').addEventListener('submit', function (e) { e.preventDefault(); startSelected(); });
+  el('course-code').addEventListener('input', function () {
+    this.value = this.value.replace(/[٠-٩۰-۹]/g, function (digit) { return String(digit.charCodeAt(0) - (digit <= '٩' ? 1632 : 1776)); });
+    el('course-error').hidden = true; this.removeAttribute('aria-invalid');
+  });
+  ['new-course', 'new-course-paused', 'new-course-over'].forEach(function (id) { el(id).addEventListener('click', newCourse); });
   el('retry').addEventListener('click', start);
   el('restart').addEventListener('click', start);
   el('resume').addEventListener('click', resume);
@@ -136,8 +167,16 @@
       if (mode === 'playing') controlDuck = true;
       return;
     }
-    if (!Kit.isGameKeyEvent(e) || e.repeat) return;
-    if ((mode === 'ready' || mode === 'over') && (e.code === 'Space' || e.code === 'Enter' || (mode === 'over' && e.code === 'KeyR'))) { e.preventDefault(); if (e.code !== 'Space' || overSettled()) start(); }
+    // Keep retry available after tabbing through a result or pause button.
+    var retryKey = e.code === 'KeyR' && (mode === 'paused' || mode === 'over') &&
+      !e.isComposing && !e.ctrlKey && !e.altKey && !e.metaKey && !e.defaultPrevented &&
+      !e.target.isContentEditable && e.target.closest && e.target.closest('button');
+    if ((!Kit.isGameKeyEvent(e) && !retryKey) || e.repeat) return;
+    if ((mode === 'ready' || mode === 'over') && (e.code === 'Space' || e.code === 'Enter' || (mode === 'over' && e.code === 'KeyR'))) {
+      e.preventDefault();
+      if (mode === 'ready') startSelected();
+      else if (e.code !== 'Space' || overSettled()) start();
+    }
     else if (e.code === 'KeyP' || e.code === 'Escape') { e.preventDefault(); if (mode === 'playing') pause(); else if (mode === 'paused') resume(); }
     else if (mode === 'paused' && e.code === 'KeyR') { e.preventDefault(); start(); }
   });
@@ -145,7 +184,11 @@
   canvas.addEventListener('pointerdown', function (e) {
     if (e.button !== 0 || activePointer !== null) return;
     focusGame();
-    if (mode === 'ready' || mode === 'over') { if (overSettled()) start(); return; }
+    if (mode === 'ready' || mode === 'over') {
+      if (mode === 'ready') startSelected();
+      else if (overSettled()) start();
+      return;
+    }
     if (mode !== 'playing') return;
     e.preventDefault(); activePointer = e.pointerId;
     canvas.setPointerCapture(e.pointerId);
@@ -169,11 +212,11 @@
   });
   Kit.lifecycle({pause:pause, reset:resetInput});
   Kit.motion.onChange(function () { dirty = true; });
-  Kit.muteButton(); paintQuality();
+  Kit.muteButton(); paintQuality(); showCourse();
   window.addEventListener('resize', resize);
   window.addEventListener('pageshow', function () { dirty = true; });
   try {
-    engine = Dino3D.createEngine(12345);
+    engine = Dino3D.createEngine(Number(courseCode) + 1);
     renderer = Dino3D.createRenderer(canvas);
     resize(); refreshHUD(); draw();
     window.Dino3DGame = {

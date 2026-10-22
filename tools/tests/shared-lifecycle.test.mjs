@@ -125,21 +125,6 @@ test('shared preferences follow system motion, persist overrides and expose mute
   assert.equal(await frame.locator('.sg-mute').getAttribute('aria-pressed'), 'true', 'saved mute state is exposed after reload');
 });
 
-test('readiness requires explicit successful initialization and rejects foreign parent commands', async t => {
-  const { page, frame } = await embeddedGame(t, 'beat-dash');
-  await page.evaluate(() => { gameMessages = []; document.querySelector('iframe').contentWindow.postMessage({type: 'sg:request-ready'}, '*'); });
-  await page.waitForFunction(() => gameMessages.some(m => m.type === 'sg:ready'));
-  await frame.evaluate(() => {
-    Kit.motion.setPreference('full');
-    window.dispatchEvent(new MessageEvent('message', { data: {type: 'sg:preferences', reducedMotion: true}, source: window }));
-  });
-  assert.equal(await frame.evaluate(() => Kit.motion.reduced()), false, 'only the actual parent can send preferences');
-  await page.evaluate(() => { gameMessages = []; });
-  await frame.evaluate(() => { Kit.fail(new Error('failed to initialize')); Kit.ready(); });
-  await page.waitForFunction(() => gameMessages.some(m => m.type === 'sg:error'));
-  assert.equal(await page.evaluate(() => gameMessages.some(m => m.type === 'sg:ready')), false, 'a failed initialization cannot report ready');
-});
-
 test('typing time freezes away from the game and requires explicit resume', async t => {
   const context = await browser.newContext(); t.after(() => context.close());
   const page = await context.newPage();

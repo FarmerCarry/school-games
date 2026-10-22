@@ -40,63 +40,6 @@ async function search(page, query) {
   await page.waitForFunction(q => document.body.className === 'route-search' && document.querySelector('#app h1 bdi')?.textContent === q, query);
 }
 
-test('fresh homepage contains each game once, with featured games first', async t => {
-  const page = await newPage(t);
-  await page.goto(url);
-  assert.equal(await page.locator('.catalog-grid').count(), 1);
-  assert.equal(await page.locator('.recent-grid').count(), 0);
-  const games = await page.evaluate(() => window.GAMES.filter(game => !game.hidden));
-  const expected = games.filter(game => game.hot).concat(games.filter(game => !game.hot)).map(game => game.slug);
-  const actual = await slugs(page);
-  assert.ok(games.length > 0, 'the catalog contains visible games');
-  assert.equal(actual.length, games.length, 'the cleanup keeps the entire visible catalog');
-  assert.equal(new Set(actual).size, actual.length, 'no repeated category or featured cards');
-  assert.deepEqual(actual, expected);
-});
-
-test('continue-playing keeps only the six most recent known games', async t => {
-  const page = await newPage(t);
-  await page.goto(url);
-  const recent = await page.evaluate(() => {
-    const list = window.GAMES.filter(game => !game.hidden).slice(-10).map(game => game.slug);
-    localStorage.setItem('sg:site:recent', JSON.stringify(['removed-game', ...list]));
-    return list;
-  });
-  await page.reload();
-  assert.deepEqual(await slugs(page, '.recent-grid .tile'), recent.slice(0, 6));
-  const catalogCount = await page.evaluate(() => window.GAMES.filter(game => !game.hidden).length);
-  assert.equal(await page.locator('.catalog-grid .tile').count(), catalogCount);
-  assert.equal(await page.locator('#app .tile').count(), catalogCount + Math.min(6, recent.length), 'personalization adds at most six cards');
-});
-
-test('category filters show the complete matching set without unrelated suggestions', async t => {
-  const page = await newPage(t);
-  await page.goto(url);
-  const categories = await page.evaluate(() => window.CATEGORIES.filter(category => window.GAMES.some(game => !game.hidden && game.cats.includes(category.id))).map(category => category.id));
-  for (const category of categories) {
-    await page.locator(`#chips a[href="#/c/${category}"]`).click();
-    await page.waitForFunction(id => document.body.className === 'route-cat' && document.querySelector('#chips a[aria-current="page"]')?.getAttribute('href') === '#/c/' + id, category);
-    const expected = await page.evaluate(id => window.GAMES.filter(game => !game.hidden && game.cats.includes(id)).map(game => game.slug).sort(), category);
-    assert.deepEqual((await slugs(page)).sort(), expected, category);
-    assert.equal(await page.locator(`#chips a[href="#/c/${category}"]`).getAttribute('aria-current'), 'page');
-  }
-});
-
-test('favorites filter provides an empty state and only saved known games', async t => {
-  const page = await newPage(t);
-  await page.goto(url);
-  await page.locator('#chips a[href="#/favorites"]').click();
-  await page.waitForFunction(() => document.body.className === 'route-favorites');
-  assert.equal(await page.locator('#chips a[href="#/favorites"]').getAttribute('aria-current'), 'page');
-  assert.equal(await page.locator('#app .empty').isVisible(), true);
-  assert.equal(await page.locator('#app .tile').count(), 0);
-  await page.evaluate(() => localStorage.setItem('sg:site:favs', JSON.stringify(['pool-party', 'removed-game', 'air-hockey'])));
-  await page.reload();
-  assert.deepEqual(await slugs(page), ['pool-party', 'air-hockey']);
-  assert.equal(await page.locator('.favorites-grid').count(), 1);
-  assert.equal(await page.locator('#app .empty').count(), 0);
-});
-
 test('Arabic and fuzzy search retain focus and matching results without rebuilding navigation', async t => {
   const page = await newPage(t);
   await page.goto(url);

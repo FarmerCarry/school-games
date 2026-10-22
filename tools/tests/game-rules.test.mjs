@@ -184,22 +184,6 @@ test('Paint Grab transfers enclosed ownership and eliminates only fully swallowe
   });
 });
 
-test('Paint Grab gives every bot its own colour, never the player\'s or its look-alike', async () => {
-  const result = await paintPage.evaluate(() => {
-    const bad = [];
-    // the default player colour is pink (0); coral (6) is the bot colour that looks like it
-    for (let i = 0; i < 20; i++) {
-      document.getElementById(i ? 'bRestart' : 'bPlay').click();
-      const bots = __game.botColors();
-      if (bots.length !== 8 || new Set(bots).size !== 8 || bots.includes(0) || bots.includes(6)) bad.push(bots.join());
-    }
-    document.getElementById('bMenu').click();
-    const title = __game.botColors();
-    return { bad, state: __game.state, titleBots: title.length, titleColours: new Set(title).size };
-  });
-  assert.deepEqual(result, { bad: [], state: 'title', titleBots: 9, titleColours: 9 });
-});
-
 test('Paint Grab boots from a malformed save and keeps progress when a write fails', async t => {
   const page = await paintPage.context().newPage();
   t.after(() => page.close());

@@ -52,9 +52,12 @@ games are in Arabic, laid out right-to-left.
 The original arcade games save best scores and unlocks in the browser, and have a title screen, P/Esc pause and a 🔊 mute button. The two board games use a compact board with local two-player and computer modes.
 
 **الديناصور ثلاثي الأبعاد (Dino 3D)** is a voxel desert endless runner. Jump with Space or Up,
-hold for a higher jump, and crouch or descend quickly with Down or Ctrl. Avoid cacti and birds
-as the pace increases and the desert changes from day to night. P/Esc pauses, R retries after
-a crash, and the best score saves locally. Its original geometry and synthesized sounds use
+hold for a higher jump, and crouch or descend quickly with Down or Ctrl. Jump over low birds
+and crouch under middle-height birds as the pace increases and the desert changes from day
+to night. Enter a four-digit course code to practise the same obstacle layout or share it with
+classmates using the same game version. P/Esc pauses; R retries the same course from pause
+or after a crash, and a separate button chooses a new course. The best score saves locally.
+Its original geometry and synthesized sounds use
 the bundled Three.js library and work offline, including the downloaded Windows folder.
 
 **حرّاس الكعكة (Cake Guards)** is a tower defense game played with the mouse. Jelly blobs march
@@ -77,6 +80,11 @@ The board shows whose turn it is, highlights winning moves, and detects draws.
 Choose **العب مرة أخرى** after a round; the starting player alternates between rounds.
 The fast build bundles each game into one HTML file, with the existing shared fonts,
 and the offline cache updates the games on the next site visit.
+
+**حفلة البلياردو (Pool Party)** includes 12 trick-shot puzzles alongside local two-player and
+computer matches. The final two puzzles ask you to pot a ball and leave the cue-ball centre
+inside a marked circle: practise backspin to draw it back, or topspin to follow through.
+Existing puzzle stars and unlocks carry over, and the galaxy table still unlocks at 30 stars.
 
 **ضربة إلى الفضاء (Skybound Golf)** is a one-button golf launcher. Press Space or click when the
 backswing reaches the gold zone, then use the same button in flight: in the air it fires a rocket,

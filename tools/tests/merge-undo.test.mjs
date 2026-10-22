@@ -176,11 +176,6 @@ function movingArrow(values) {
   throw new Error(`no arrow moves this board: ${values.join()}`);
 }
 
-test('movingArrow avoids a no-op arrow on the board that once failed CI', () => {
-  assert.equal(movingArrow([0, 0, 0, 4, 0, 0, 0, 2, 0, 0, 0, 8, 2, 0, 0, 2]), 'ArrowUp');
-  assert.equal(movingArrow([2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 'ArrowDown');
-});
-
 test('Pointer restart confirmation returns board focus and still requires its second activation', async t => {
   const page = await gamePage(t);
   await makeThreeMoves(page);

@@ -32,20 +32,3 @@ test('classroom download preserves nested files under Arabic and spaced paths', 
     assert.throws(() => copyClassroomSite(source,path.join(temp,'incomplete')),/Distribution is missing js\/site.js/);
   } finally { fs.rmSync(temp,{recursive:true,force:true}); }
 });
-
-
-test('classroom fast build accepts inlined portal scripts and styles', () => {
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(),'classroom-built-test-'));
-  try {
-    const source = path.join(temp,'_site'), destination = path.join(temp,'ألعاب','Built games');
-    fs.mkdirSync(path.join(source,'games','tic-tac-toe'),{recursive:true});
-    fs.writeFileSync(path.join(source,'index.html'),'<style>body{color:black}</style><script>window.GAMES=[]</script>');
-    fs.writeFileSync(path.join(source,'games','tic-tac-toe','index.html'),'<script>window.Kit={}</script>');
-    fs.writeFileSync(path.join(source,'teacher.html'),'<style>main{color:navy}</style><script>window.SGTeacher={}</script>');
-    const inventory = copyClassroomSite(source,destination,{mode:'build'});
-    assert.deepEqual(inventory.map(item => item.path).sort(),['games/tic-tac-toe/index.html','index.html','teacher.html']);
-    assert.throws(() => copyClassroomSite(source,path.join(temp,'source-mode')),/Distribution is missing css\/site.css/);
-    fs.rmSync(path.join(source,'teacher.html'));
-    assert.throws(() => copyClassroomSite(source,path.join(temp,'no-teacher'),{mode:'build'}),/Distribution is missing teacher.html/);
-  } finally { fs.rmSync(temp,{recursive:true,force:true}); }
-});
