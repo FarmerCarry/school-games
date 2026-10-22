@@ -120,7 +120,7 @@ try {
         assert.equal(fs.readFileSync(await workbook.path()).subarray(0, 4).toString('latin1'), 'PK\u0003\u0004', 'the workbook is a ZIP package');
       });
 
-      for (const slug of ['tic-tac-toe', 'connect-four', 'air-hockey', 'merge-2048', 'pizza-clicker', 'dino-3d', 'cake-guards']) {
+      for (const slug of ['tic-tac-toe', 'connect-four', 'air-hockey', 'merge-2048', 'pizza-clicker', 'dino-3d', 'cake-guards', 'neon-slope', 'road-hopper']) {
         await check(page, label + '-' + slug, async () => {
           await page.goto(pathToFileURL(path.join(folder, 'games', slug, 'index.html')).href);
           const result = await runScenario(page, slug, { mode: 'performance' });
