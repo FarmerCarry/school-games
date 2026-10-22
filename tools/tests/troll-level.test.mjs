@@ -86,9 +86,13 @@ test('a save from before the space world continues into it, and its levels play 
   await clickControl(page, '#btn-next');
   assert.equal(await page.evaluate(() => __game.mode), 'end');
   assert.equal(await page.locator('#e-stars').textContent(), '90/90');
-  // Wait for this finite entrance animation before sampling the button's center.
-  await page.waitForFunction(() => document.querySelector('#scr-end .panel').getAnimations()
-    .every(animation => animation.playState === 'finished'), null, { polling: 50, timeout: 5000 });
+  // Finish this finite entrance animation before sampling the button's center. Waiting for it
+  // timed out on a loaded CI runner: it stays pending until the compositor draws a frame.
+  assert.equal(await page.evaluate(() => {
+    const animations = document.querySelector('#scr-end .panel').getAnimations();
+    animations.forEach(animation => animation.finish());
+    return animations.every(animation => animation.effect.getComputedTiming().endTime !== Infinity);
+  }), true, 'the end panel has only finite entrance animations');
   await clickControl(page, '#btn-e-levels');
   assert.equal(await page.locator('#worlds .wrow').count(), 5);
   assert.equal(await page.locator('#worlds .lv:not(.locked)').count(), 30);
