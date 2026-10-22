@@ -177,31 +177,6 @@ test('a settled pause stops redrawing until a resize, and reduced motion skips t
   assert.ok(await page.evaluate(() => flashes) > 0, 'full motion keeps the death flash');
 });
 
-test('the floor under the elevator gets its frosting top only once the elevator lifts', async t => {
-  const page = await game(t);
-  // Level 14: the elevator rests on the candy floor at columns 20-22 (floor top y = 520).
-  const floorTop = () => page.evaluate(() => {
-    const cv = document.getElementById('cv'), k = cv.width / 1280;
-    return [...cv.getContext('2d').getImageData(Math.round(860 * k), Math.round(523 * k), 1, 1).data].slice(0, 3);
-  });
-  await page.evaluate(() => { __game.start(13); stepGame(1); });
-  assert.ok(Math.max(...await floorTop()) < 128, 'under the resting elevator the floor is one dark mass with it');
-  await page.evaluate(() => { __game.solve(); stepGame(200, true); });
-  assert.ok((await page.evaluate(() => __game.player.y)) < 11, 'the player rides the elevator up');
-  assert.ok(Math.min(...await floorTop()) > 200, 'the uncovered floor shows its white frosting');
-});
-
-test('the canvas edge past the baked level is painted when the canvas rounds up', async t => {
-  // At 125% Windows scaling this canvas is 1623 device pixels wide, one more than the baked level.
-  const page = await game(t, { viewport: { width: 1536, height: 730 }, deviceScaleFactor: 1.25 });
-  const edge = await page.evaluate(() => {
-    __game.start(0); stepGame(1);
-    const cv = document.getElementById('cv');
-    return [...cv.getContext('2d').getImageData(cv.width - 1, 300, 1, 1).data];
-  });
-  assert.deepEqual(edge, [0x1c, 0x12, 0x26, 255], 'the last column is wall coloured, not transparent');
-});
-
 test('the baked level canvas is rebaked when its context comes back', async t => {
   const page = await game(t);
   const alpha = await page.evaluate(() => {

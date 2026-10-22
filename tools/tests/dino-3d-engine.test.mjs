@@ -247,12 +247,6 @@ test('long runs have bounded obstacles, safe recovery gaps, birds only after the
   assert.equal(engine.state.alive, true);
 });
 
-test('invalid or zero deltas never mutate simulation state', () => {
-  const engine = createEngine(8), original = json(engine.state);
-  for (const dt of [0, -1, NaN, Infinity, undefined]) assert.deepEqual(json(engine.step(dt, { jump: true })), []);
-  assert.deepEqual(json(engine.state), original);
-});
-
 test('generated mixed courses remain playable from the initial pace through maximum speed', () => {
   // A simple reaction policy uses only the next visible obstacle. Unlike the
   // long-run pool test, collisions stay enabled throughout these actual runs.

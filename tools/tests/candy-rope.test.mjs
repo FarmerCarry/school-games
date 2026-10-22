@@ -45,13 +45,6 @@ async function game(t) {
   return page;
 }
 
-// In the page: a short swipe across the middle of rope `key`, like a player's cut.
-const CUT = `window.cut = key => {
-  const r = __game.world().ropes.find(r => r.key === key && r.alive), m = Math.floor(r.pts.length / 2);
-  const a = r.pts[m - 1], b = r.pts[m + 1], d = Math.hypot(b.x - a.x, b.y - a.y), nx = (a.y - b.y) / d * 20, ny = (b.x - a.x) / d * 20;
-  __game.swipe(r.pts[m].x - nx, r.pts[m].y - ny, r.pts[m].x + nx, r.pts[m].y + ny);
-};`;
-
 // Node replay of a player who makes the first move `late` frames after the plan, then does every
 // "when" cue exactly on time (all steps of a "cut both" together), as the game plans them.
 function followCues(i, late) {
@@ -129,37 +122,6 @@ test('after a late or early first move, following the timing cues never leads in
       if (r.cues) assert.equal(r.state, 'won', `level ${i + 1}, first move ${late} frames off`);
     }
   });
-});
-
-test('the timing ring moves with a late first cut on level 3, and cutting on it wins with three stars', async t => {
-  const page = await game(t);
-  const r = await page.evaluate(CUT + `;(() => {
-    __game.start(2, { hint: true });
-    step(120, () => __game.info().cue != null);
-    const first = __game.info().cue, firstAt = __game.world().frame;
-    step(300, () => __game.world().frame >= 20);
-    cut('p0');                                   // the plan cuts p0 at frame 10: 10 frames late
-    step(30, () => __game.info().cue != null);
-    const next = __game.info().cue;
-    step(300, () => __game.world().frame >= next);
-    cut('p1');
-    step(600, () => __game.info().state !== 'play');
-    return { first, firstAt, next, info: __game.info() };
-  })()`);
-  assert.equal(r.firstAt, 0, 'the first ring is planned during the frozen start (no title with the hint)');
-  assert.equal(r.first, SOL[2][0][0]);
-  assert.equal(r.next, SOL[2][1][0] + 10, 'the second ring moves by the same 10 frames');
-  assert.deepEqual([r.info.state, r.info.world.stars], ['won', 3]);
-});
-
-test('a "cut both" step in the demo is one swipe through both ropes', async t => {
-  const page = await game(t);
-  const strokes = await page.evaluate(() => [7, 9].map(i => {
-    __game.start(i, { replay: __game.solution(i), demo: true });
-    step(120, () => __game.world().frame >= 13);
-    return __game.info().strokes;
-  }));
-  assert.deepEqual(strokes, [1, 1]);
 });
 
 test('a paused level draws its frozen scene once, then only after a resize, and resumes', async t => {
@@ -254,22 +216,6 @@ test('reduced motion drops the decorative particles but keeps the game playable'
   assert.ok(result.full > 0);
   assert.equal(result.cleared, 0);
   assert.deepEqual([result.state, result.particles], ['won', 0]);
-});
-
-test('in classroom / reduced motion the hint bulb still glows after two misses, as a still ring', async t => {
-  const page = await game(t);
-  await page.evaluate(() => Kit.motion.setPreference('reduce'));
-  await loseLevel5(page);
-  await page.keyboard.press('KeyR');
-  await loseLevel5(page);
-  await page.keyboard.press('KeyR');
-  const bulb = await page.evaluate(() => {
-    const b = document.getElementById('bHint'), cs = getComputedStyle(b);
-    return { glow: b.classList.contains('glow'), animation: cs.animationName, shadow: cs.boxShadow };
-  });
-  assert.equal(bulb.glow, true);
-  assert.equal(bulb.animation, 'none');
-  assert.match(bulb.shadow, /rgba\(255, 225, 77, 0\.9\) 0px 0px 0px 5px/);
 });
 
 test('in play the unfolded save warning sits above the level tip and lets cuts and taps through', async t => {

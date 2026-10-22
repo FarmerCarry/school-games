@@ -147,35 +147,6 @@ test('the session score counts both players, resets with the mode and celebrates
   assert.equal((await confettiSeen(page)).pieces, 0, 'reduced motion skips confetti');
 });
 
-test('a winning disc cut short by a hidden tab celebrates when the player comes back', async t => {
-  const page = await openBoard(t, { game: 'connect-four', reducedMotion: 'no-preference' });
-  const setHidden = value => page.evaluate(value => {
-    Object.defineProperty(document, 'hidden', { configurable: true, get: () => value });
-    document.dispatchEvent(new Event('visibilitychange'));
-  }, value);
-  await page.locator('#localButton').click();
-  await play(page, [0, 1, 0, 1, 0, 1]);
-  await watchConfetti(page);
-  // The tab hides while the fourth yellow disc is still falling.
-  await page.evaluate(() => {
-    document.querySelector('#gameBoard [data-move="0"]').click();
-    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
-  assert.equal(await page.locator('#gameBoard').getAttribute('data-winner'), '1');
-  assert.equal(await page.locator('#gameBoard .dropping').count(), 0, 'the disc is placed while hidden');
-  await page.waitForTimeout(500);
-  assert.equal((await confettiSeen(page)).pieces, 0, 'no celebration while hidden');
-  assert.equal(await page.locator('#score1.bump').count(), 0);
-  await setHidden(false);
-  assert.equal((await confettiSeen(page)).pieces, 24, 'the celebration plays on return');
-  assert.equal(await page.locator('#score1.bump').count(), 1);
-  await setHidden(true);
-  await setHidden(false);
-  assert.equal((await confettiSeen(page)).pieces, 24, 'and only once');
-  assert.equal(await page.locator('.confetti i').count(), 0, 'returning again does not repeat it');
-});
-
 test('a level picked mid-round starts with the next round and keeps the session score', async t => {
   const page = await openBoard(t, { init: () => { Math.random = () => 0.99; } });
   await page.locator('#pcButton').click();

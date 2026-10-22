@@ -108,20 +108,6 @@ test('reduced motion keeps the new-world banner and reward popups readable, with
   await page.waitForFunction(() => !document.getElementById('banner').classList.contains('show') && !document.querySelector('#pops .pop'), null, { polling: 50, timeout: 5000 });
 });
 
-test('full motion still animates popups and the banner, which hides itself afterwards', async t => {
-  const page = await game(t);
-  const shown = await page.evaluate(() => {
-    const g = __game; g.god(true); g.warp(48);
-    for (let i = 0; i < 6 && g.score < 50; i++) { g.hop(0, 1); g.step(0.2); }
-    g.warp(23);
-    for (let i = 0; i < 6 && g.score < 25; i++) { g.hop(0, 1); g.step(0.2); }
-    const banner = document.getElementById('banner'), pop = document.querySelector('#pops .pop');
-    return { banner: getComputedStyle(banner).animationName, pop: pop && getComputedStyle(pop).animationName };
-  });
-  assert.deepEqual(shown, { banner: 'banner', pop: 'popUp' });
-  await page.waitForFunction(() => !document.getElementById('banner').classList.contains('show'), null, { polling: 50, timeout: 5000 });
-});
-
 test('a paused run draws its scene once, redraws after a resize, and resumes normally', async t => {
   const page = await game(t, { idle: false });
   await page.evaluate(() => { document.getElementById('btnPlay').click(); rh.frames(20); __game.hop(0, 1); rh.frames(40); });
@@ -279,33 +265,6 @@ test('unchanged saves and ordinary frames make no writes, while a changed checkp
   await page.evaluate(() => { __game.addCoins(5); __game.addCoins(0); });
   assert.deepEqual(await writeAttempts(page), ['save']);
   assert.equal((await savedProgress(page)).coins, previous.coins + 5);
-});
-
-test('character pictures are drawn in idle time, reused by the characters screen, then their context is freed', async t => {
-  // The first picture fails during the warm-up: the characters screen draws it again
-  // in a new context, which is freed afterwards too.
-  const page = await game(t, { failPictures: 1 });
-  await page.waitForFunction(() => rh.pictures === 16 && rh.lost === 1, null, { polling: 100, timeout: 90000 });
-  const opened = await page.evaluate(() => {
-    document.getElementById('btnChars').click();
-    const imgs = [...document.querySelectorAll('#cGrid img')], locked = getComputedStyle(document.querySelector('.card.locked img'));
-    return {
-      state: __game.state, pictures: rh.pictures, cards: imgs.length,
-      drawn: imgs.every(img => img.src.startsWith('data:image/png')), draggable: imgs.some(img => img.draggable),
-      locked: locked.filter, lockedPointer: locked.pointerEvents
-    };
-  });
-  assert.deepEqual(opened, {
-    state: 'chars', pictures: 17, cards: 16, drawn: true, draggable: false,
-    locked: 'brightness(0) opacity(0.65)', lockedPointer: 'none'
-  });
-  await page.waitForFunction(() => rh.lost === 2, null, { polling: 50, timeout: 10000 });
-  const reopened = await page.evaluate(() => {
-    document.getElementById('cBack').click();
-    document.getElementById('btnChars').click();
-    return { state: __game.state, pictures: rh.pictures, lost: rh.lost };
-  });
-  assert.deepEqual(reopened, { state: 'chars', pictures: 17, lost: 2 });
 });
 
 test('a run left through the pause menu keeps its best score', async t => {

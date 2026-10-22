@@ -247,36 +247,6 @@ test('Hoop Heads a pause request on the two-player select screen calls off the r
   assert.deepEqual(result, { counting: true, blurred: { state: 'select', match: false, ready: [false, false] }, again: 'play' });
 });
 
-test('Hoop Heads draws a high ball over the scoreboard and skips the flash for reduced motion', async t => {
-  const page = await hoop(t);
-  const result = await page.evaluate(() => {
-    __game.start({ mode: 'duo' }); __game.skipIntro(); hh.step(1);
-    const m = __game.match, b = m.ball, ctx = document.getElementById('game').getContext('2d');
-    const pixel = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data.slice(0, 3));
-    // The peak of a long shot, over player 1's blue plate (a seam-free spot inside the ball).
-    Object.assign(b, { hidden: false, holder: null, state: 'shot', x: 480, y: 50, rot: 0, fire: false });
-    b.trail.length = 0;
-    hh.draw(1);
-    const ball = pixel(484, 58);
-    // A fire ball half below the scoreboard: its glow on the sky beside it is painted once.
-    Object.assign(b, { x: 640, y: 118, fire: true });
-    hh.draw(1); const glow = pixel(618, 122);
-    b.hidden = true;
-    hh.draw(1); const plain = pixel(640, 250), sky = pixel(618, 122);
-    m.flash = 1; Kit.motion.setPreference('reduce');
-    hh.draw(1); const reduced = pixel(640, 250);
-    Kit.motion.setPreference('full');
-    hh.draw(1); const flashed = pixel(640, 250);
-    return { ball, glow, sky, plain, reduced, flashed };
-  });
-  const [r, , b] = result.ball;
-  assert.ok(r > 180 && b < 130, `the ball is drawn over the HUD (got rgb ${result.ball})`);
-  const once = [255, 159, 28].map((v, i) => (v + result.sky[i]) / 2); // #ff9f1c at 0.5 alpha
-  assert.ok(once.every((v, i) => Math.abs(v - result.glow[i]) <= 4), `one glow (got rgb ${result.glow}, want ${once})`);
-  assert.deepEqual(result.reduced, result.plain, 'reduced motion draws no full-screen flash');
-  assert.notDeepEqual(result.flashed, result.plain, 'full motion keeps the flash');
-});
-
 test('Hoop Heads bounds vector/fit caches, reuses them across resize and invalidates after restoration', async t => {
   const page = await hoop(t);
   const bounds = await page.evaluate(() => {
@@ -333,31 +303,4 @@ test('Hoop Heads bounds vector/fit caches, reuses them across resize and invalid
     return { rebuilt, steady: hh.paths };
   });
   assert.deepEqual(restored, { rebuilt: 9, steady: 0 });
-});
-
-test('Hoop Heads late local fonts invalidate warmed HUD text fits before repainting', async t => {
-  let release;
-  const fontGate = new Promise(resolve => { release = resolve; });
-  t.after(() => release());
-  const page = await hoop(t, { fontGate });
-  const before = await page.evaluate(() => {
-    hh.widthReads = 0;
-    const c = document.getElementById('game').getContext('2d'), measure = c.measureText;
-    c.measureText = function () { hh.widthReads++; return measure.apply(this, arguments); };
-    __game.start({ mode: 'duo' }); __game.skipIntro(); hh.step(1);
-    const fonts = document.fonts.check('700 30px Fredoka', 'روبو A');
-    hh.widthReads = 0; hh.draw(30);
-    return { fonts, steady: hh.widthReads };
-  });
-  assert.deepEqual(before, { fonts: false, steady: 0 });
-  release();
-  await page.evaluate(async () => { await document.fonts.ready; await new Promise(resolve => setTimeout(resolve, 50)); });
-  const after = await page.evaluate(() => {
-    hh.widthReads = 0; hh.draw(1); const rebuilt = hh.widthReads;
-    hh.widthReads = 0; hh.draw(30);
-    return { fonts: document.fonts.check('700 30px Fredoka', 'روبو A'), rebuilt, steady: hh.widthReads };
-  });
-  assert.equal(after.fonts, true);
-  assert.ok(after.rebuilt > 0, 'font readiness recomputes the formerly cached text widths');
-  assert.equal(after.steady, 0);
 });

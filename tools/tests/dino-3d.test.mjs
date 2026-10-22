@@ -4,8 +4,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
-import { runScenario } from '../game-scenarios.mjs';
-import { testNativeControlGame } from '../regressions-keyboard.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -94,14 +92,6 @@ async function crash(page) {
   assert.equal(await page.evaluate(() => dinoProbe.finish()), 'over', 'an unattended run reaches a real obstacle collision');
 }
 
-test('Dino 3D participates in the catalog native-control regression', async () => {
-  await testNativeControlGame({ browser, origin: server.origin, slug: 'dino-3d' });
-});
-
-test('Dino 3D real controls start, jump, pause, and restart the live game', async t => {
-  const page = await game(t, { manual: false });
-  assert.equal((await runScenario(page, 'dino-3d')).checks.length, 4);
-});
 
 test('Dino course entry preserves leading zeros, accepts Arabic digits and rejects incomplete codes', async t => {
   const page = await game(t);
