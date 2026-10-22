@@ -23,7 +23,10 @@ jobs:
     # Pinned: ubuntu-latest becomes Ubuntu 26 from 19 October 2026. Move on deliberately,
     # once Playwright's --with-deps install supports the new image.
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # The checks take about 48 minutes. On 22 October 2026 the --with-deps install alone took
+    # 11 minutes instead of 18 seconds on two runs in a row, and both hit a 60-minute limit
+    # in the last test step. 90 leaves room for slow package mirrors.
+    timeout-minutes: 90
     permissions:
       contents: read
       pages: read
