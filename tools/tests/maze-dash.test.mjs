@@ -157,3 +157,20 @@ test('a paused game keeps its last frame, repaints it after a GPU reset or resiz
   assert.equal(await page.evaluate(() => { paints = 0; stepGame(10, true); return paints; }), 10, 'play renders every frame again');
   assert.equal(await page.evaluate(() => __game.state.screen), 'play');
 });
+
+test('R during the exit or death animation keeps the result that was reached', async t => {
+  const page = await gamePage(t);
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('sg:maze-dash:save')));
+  await page.evaluate(() => { __game.skip(1); stepGame(2); __game.win(); stepGame(10); });
+  assert.equal(await page.evaluate(() => __game.state.phase), 'exiting');
+  await page.keyboard.press('r');
+  await page.evaluate(() => stepGame(2));
+  assert.deepEqual(await page.evaluate(() => [__game.state.screen, __game.state.phase]), ['play', 'play'], 'R restarts the level');
+  assert.equal((await saved()).lv['1'].done, 1, 'the level reached before R stays won');
+  await page.evaluate(() => { __game.endless(); stepGame(5); __game.die(); stepGame(10); });
+  assert.equal(await page.evaluate(() => __game.state.phase), 'dying');
+  await page.keyboard.press('r');
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await page.evaluate(() => __game.state.phase), 'play', 'R starts a new run');
+  assert.equal((await saved()).runs, 1, 'the run that ended before R is counted');
+});

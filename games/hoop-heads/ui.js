@@ -486,6 +486,7 @@
     cfg = c;
     Kit.stats.round(c.mode === 'duo' ? 'duo' : c.mode === 'tour' ? 'tour-' + tour.cup.id + '-' + (c.stage + 1) : 'cpu-' + c.lv);
     coach();
+    result = null;
     match = HH.newMatch({ mode: c.mode, p1: c.p1, p2: c.p2, lv: c.lv, len: c.len, target: c.target });
     state = 'play'; show(null);
     youT = 3.5; scorePop = [0, 0];
@@ -525,6 +526,9 @@
   function resume() { state = 'play'; show(null); S.click(); }
   function restart() {
     S.click();
+    // Paused in a tour win's celebration: the win already moved the cup on (commitResult),
+    // so go on as its result screen would instead of replaying a beaten opponent.
+    if (cfg.mode === 'tour' && result && result.win) { if (result.cup) finishTour(); else openLadder(); return; }
     if (cfg.mode === 'tour') startTourMatch(); else startMatch(cfg);
   }
   function toMenu() { match = null; tour = null; showTitle(); }
@@ -559,10 +563,14 @@
   }
 
   /* ---------------------------------------------------------------- results */
-  function onMatchEnd() {
+  // A match is saved the moment the engine decides it (m.ended), not at its 'end' event
+  // 2-3 s later: a pause and then Restart or Menu, R, or leaving the page can come during
+  // the celebration. onMatchEnd and finishTour only display the stored result.
+  var result = null;
+  function commitResult() {
     var m = match, c = cfg, a = m.players[0], b = m.players[1];
     var win = m.winner === 0;
-    // the engine's single 'end' event (m.done): two players report no winner
+    // once per match (startMatch clears result): two players report no winner
     if (c.mode === 'duo') Kit.stats.end('end'); else Kit.stats.end(win ? 'win' : 'lose', a.score);
     coach();
     var before = CH.filter(HH.isUnlocked).map(function (x) { return x.id; });
@@ -585,7 +593,24 @@
     save.coins += coins;
     var after = CH.filter(HH.isUnlocked).map(function (x) { return x.id; });
     var fresh = after.filter(function (id) { return before.indexOf(id) < 0; });
+    result = { win: win, coins: coins, newRec: newRec, streak: save.streak, fresh: fresh, cup: null };
+    if (c.mode === 'tour' && win) { tour.stage++; if (tour.stage >= 5) result.cup = winCup(); }
     persist();
+  }
+  // The cup's reward and secret character come with its last win; finishTour shows them.
+  function winCup() {
+    var cp = tour.cup;
+    var firstTime = !save.cups[cp.id];
+    var before = CH.filter(HH.isUnlocked).map(function (x) { return x.id; });
+    save.cups[cp.id] = true;
+    var reward = firstTime ? cp.reward : Math.round(cp.reward / 3);
+    save.coins += reward;
+    var fresh = CH.filter(HH.isUnlocked).filter(function (x) { return before.indexOf(x.id) < 0; });
+    return { reward: reward, fresh: fresh };
+  }
+  function onMatchEnd() {
+    var m = match, c = cfg, a = m.players[0], b = m.players[1];
+    var r = result, win = r.win, coins = r.coins, fresh = r.fresh;
 
     // fill the screen
     var banner = $('resBanner');
@@ -606,7 +631,7 @@
     }
     $('resStats').innerHTML = chips.join('');
     var coinHtml = '<span class="coin"></span>+<span id="coinCount">0</span>';
-    if (c.mode === 'cpu' && win && save.streak >= 2) coinHtml += '<span class="newrec">' + (newRec ? 'رقم قياسي جديد! ' : '') + streakText(save.streak) + ' 🔥</span>';
+    if (c.mode === 'cpu' && win && r.streak >= 2) coinHtml += '<span class="newrec">' + (r.newRec ? 'رقم قياسي جديد! ' : '') + streakText(r.streak) + ' 🔥</span>';
     $('resCoins').innerHTML = coinHtml;
     countUp($('coinCount'), coins);
     var un = $('resUnlock');
@@ -624,8 +649,7 @@
     again.classList.add('nav', 'def'); menu.classList.add('nav');
     if (c.mode === 'tour') {
       if (win) {
-        tour.stage++;
-        if (tour.stage >= 5) { finishTour(coins); return; }
+        if (r.cup) { finishTour(); return; }
         again.innerHTML = 'المباراة التالية <small dir="ltr">Enter</small>';
         resultPrimary = function () { S.click(); openLadder(); };
         menu.innerHTML = 'انسحاب <small dir="ltr">Esc</small>';
@@ -662,17 +686,10 @@
   $('rAgain').addEventListener('click', function () { if (resultPrimary) resultPrimary(); });
   $('rMenu').addEventListener('click', function () { S.click(); if (cfg && cfg.mode === 'tour') { tour = null; match = null; openCups(); } else toMenu(); });
 
-  function finishTour(matchCoins) {
-    var cp = tour.cup;
-    var firstTime = !save.cups[cp.id];
-    var before = CH.filter(HH.isUnlocked).map(function (x) { return x.id; });
-    save.cups[cp.id] = true;
-    var reward = firstTime ? cp.reward : Math.round(cp.reward / 3);
-    save.coins += reward;
-    persist();
-    var fresh = CH.filter(HH.isUnlocked).filter(function (x) { return before.indexOf(x.id) < 0; });
+  function finishTour() {
+    var cp = tour.cup, fresh = result.cup.fresh;
     state = 'trophy'; show('scrTrophy'); resultLock = RESULT_LOCK;
-    $('trText').innerHTML = 'فزت بـ' + cp.name + '!<br><span class="coin"></span><b class="hot">+' + (reward + matchCoins) + '</b>';
+    $('trText').innerHTML = 'فزت بـ' + cp.name + '!<br><span class="coin"></span><b class="hot">+' + (result.cup.reward + result.coins) + '</b>';
     var un = $('trUnlock'); un.innerHTML = '';
     if (fresh.length) {
       var cv = document.createElement('canvas'); cv.width = 90; cv.height = 90; headCanvas(cv, fresh[0], { mood: 'happy' });
@@ -705,6 +722,7 @@
       case 'play':
         if (K.anyPressed(['KeyP', 'Escape'])) { pauseGame(); break; }
         HH.stepMatch(match, dt);
+        if (match.ended && !result) commitResult();
         processEvents(match);
         youT = Math.max(0, youT - dt);
         scorePop[0] = Math.max(0, scorePop[0] - dt * 3); scorePop[1] = Math.max(0, scorePop[1] - dt * 3);
@@ -796,7 +814,12 @@
     fire: function (idx) { if (match) { var p = match.players[idx || 0]; p.fire = true; p.streak = 2; } },
     skipIntro: function () { if (match && match.phase === 'intro') match.phaseT = 0.01; }
   };
-  Kit.lifecycle({ pause: pauseGame });
+  // A pause request on the select screen (blur, the portal) calls off the two-player
+  // "both ready" countdown, which would otherwise start a match with nobody watching.
+  Kit.lifecycle({ pause: function () {
+    if (state === 'select' && sel.ready[0] && sel.ready[1]) { sel.ready = [false, false]; sel.startT = -1; refreshCards(); }
+    pauseGame();
+  } });
   Kit.ready();
 })();
 

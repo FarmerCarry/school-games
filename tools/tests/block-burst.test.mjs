@@ -249,3 +249,17 @@ test('the first-move hint drags a tray piece to where it fits; its text covers n
   assert.deepEqual(drawn.ys, [34 + 62 * (drawn.row + 0.5)]);
   assert.deepEqual(drawn.order, ['text', 'hand']);
 });
+
+test('a won level is saved at once, before its ending animation and result panel', async t => {
+  const page = await game(t);
+  const ended = await page.evaluate(() => {
+    __game.startLevel(0); stepGame(2);
+    for (let i = 0; i < 80 && __game.state === 'play'; i++) __game.auto(1);
+    return { state: __game.state, result: __game.run.result };
+  });
+  assert.equal(ended.state, 'ending', `level 1 is won by greedy play (${JSON.stringify(ended)})`);
+  const adv = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:block-burst:adv')));
+  assert.ok(adv && adv[0] >= 1, 'the stars are already in storage if the page is left now');
+  await page.evaluate(() => { for (let i = 0; i < 600 && __game.state === 'ending'; i++) stepGame(1); });
+  assert.equal(await page.evaluate(() => __game.state), 'win', 'the result panel still follows');
+});

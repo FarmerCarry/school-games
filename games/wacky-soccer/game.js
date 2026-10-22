@@ -56,6 +56,8 @@
     { id: 'silver', ic: '🥈', name: 'بطل الفضة', desc: 'اربح الكأس الفضية', rw: 0 },
     { id: 'gold', ic: '🥇', name: 'البطل الذهبي', desc: 'اربح الكأس الذهبية', rw: 0 }
   ];
+  // While commitResult saves a match, its badges wait here and show with the result screen.
+  var heldBadges = null;
   function unlock(id) {
     if (save.ach[id]) return;
     var a = null;
@@ -64,6 +66,9 @@
     save.ach[id] = 1;
     if (a.rw) save.coins += a.rw;
     persist();
+    if (heldBadges) heldBadges.push(a); else badgeToast(a);
+  }
+  function badgeToast(a) {
     toast(a.ic + ' وسام جديد: ' + a.name, a.rw ? (plus(a.rw) + ' عملة') : a.desc);
     S.tada();
   }
@@ -506,6 +511,7 @@
       persist();
     }
     if (how === 'own' && m.mode !== '2p' && side === 0) unlock('owngoal');
+    if (m.score[side] >= m.target) commitResult();
   }
 
   /* ------------------------------------------------------------- roulette */
@@ -1232,36 +1238,46 @@
     Kit.keys.endFrame(); pointer.endFrame();
     if (match) match.skipReq = false;
   }
+  // A match paused after its deciding goal is already saved, so Restart does what the result
+  // screen would: a won cup round goes on to the bracket instead of being won a second time.
+  function restartMatch() {
+    if (match && match.result) match.result.next();
+    else if (lastCfg) beginMatch(lastCfg);
+  }
   btn('bResume', resumeGame);
-  btn('bRestart', function () { if (lastCfg) beginMatch(lastCfg); });
+  btn('bRestart', restartMatch);
   btn('bMenu', function () { goTitle(); });
   btn('bPause', function () { if (state === 'play') pauseGame(); else resumeGame(); });
 
   /* ------------------------------------------------------------- result */
+  // The deciding goal saves the result at once (onGoal): a pause and then Restart or Menu, R in
+  // the pause, or leaving the page can all come during the celebration. showResult only shows it.
   var resultAct = null;
-  function showResult() {
+  function commitResult() {
     var m = match;
-    state = 'over';
+    if (m.result) return;   // once per match
+    m.winner = m.score[0] > m.score[1] ? 0 : 1;
     var win = m.winner === 0;
-    var lines = [];
+    var r = m.result = { win: win, lines: [], champ: null, badges: [] };
+    var lines = r.lines;
     var coins = 0;
+    heldBadges = r.badges;
     save.stats.matches++;
-    // showResult runs once per match (state 'play' -> 'over'); two players report no winner
+    // two players report no winner
     if (m.mode === '2p') Kit.stats.end('end'); else Kit.stats.end(win ? 'win' : 'lose', m.score[0]);
     if (save.stats.matches === 3) Kit.stats.tutorial('done');
-    var oHead = $('oHead');
     if (m.mode === '2p') {
       coins = 10;
-      oHead.textContent = m.winner === 0 ? 'فاز اللاعب 1!' : 'فاز اللاعب 2!';
-      oHead.style.color = m.teams[m.winner].shirt;
+      r.head = m.winner === 0 ? 'فاز اللاعب 1!' : 'فاز اللاعب 2!';
+      r.color = m.teams[m.winner].shirt;
       lines.push('مباراة رائعة! ' + plus(10) + ' عملة لكما');
       unlock('duo');
     } else {
       coins = m.goalsBy[0] * 2;
       if (win) {
         save.stats.wins++;
-        oHead.textContent = pick(['فوز رائع!', 'أنت بطل!', 'انتصار مجنون!']);
-        oHead.style.color = '#ffd23f';
+        r.head = pick(['فوز رائع!', 'أنت بطل!', 'انتصار مجنون!']);
+        r.color = '#ffd23f';
         if (m.mode === 'cpu') {
           var d = WS.DIFFS[m.diff || 0];
           coins += d.reward;
@@ -1273,15 +1289,15 @@
         unlock('win1');
       } else {
         var close = m.score[0] >= m.target - 1;
-        oHead.textContent = close ? 'كدت تفوز!' : pick(['خسارة... هذه المرة!', 'حاول مجددًا!', 'الجولة القادمة لك!']);
-        oHead.style.color = '#ff8fb1';
+        r.head = close ? 'كدت تفوز!' : pick(['خسارة... هذه المرة!', 'حاول مجددًا!', 'الجولة القادمة لك!']);
+        r.color = '#ff8fb1';
         coins += 3;
         lines.push(m.score[0] >= m.target - 1 ? 'كنت قريبًا جدًا! هدف واحد فقط!' : 'لا بأس! كل مباراة تجعلك أقوى');
       }
       if (m.goalsBy[0]) lines.push('أهدافك (' + m.goalsBy[0] + '): ' + plus(m.goalsBy[0] * 2));
     }
     // cup progression
-    var again = 'العب مجددًا', againFn = function () { beginMatch(lastCfg); };
+    r.again = 'العب مجددًا'; r.next = function () { beginMatch(lastCfg); };
     if (m.mode === 'cup' && cupRun) {
       var cup = WS.CUPS[cupRun.id];
       if (win) {
@@ -1290,25 +1306,35 @@
           coins += cup.reward;
           var firstTime = !save.cups[cup.id];
           save.cups[cup.id] = true;
-          oHead.textContent = 'بطل ' + cup.name + '!';
+          r.head = 'بطل ' + cup.name + '!';
+          r.champ = cup;
           lines.unshift('🏆 جائزة الكأس: ' + plus(cup.reward));
           unlock(cup.id);
           if (cupRun.id === 2 && !owns('teams', 'golden')) { save.teams.push('golden'); lines.push('<span class="new">جديد</span> فريق النجوم الذهبية السرّي!'); }
           else if (firstTime && cupRun.id < 2) lines.push('<span class="new">جديد</span> فُتحت ' + WS.CUPS[cupRun.id + 1].name + '!');
-          S.trophy();
-          again = 'رائع!'; againFn = function () { cupRun = null; goSelect('cup'); };
+          r.again = 'رائع!'; r.next = function () { cupRun = null; goSelect('cup'); };
         } else {
           lines.unshift('تأهلت إلى ' + WS.CUP_ROUNDS[cupRun.round] + '!');
-          again = 'التالي: ' + WS.CUP_ROUNDS[cupRun.round]; againFn = function () { goBracket(); };
+          r.again = 'التالي: ' + WS.CUP_ROUNDS[cupRun.round]; r.next = function () { goBracket(); };
         }
       } else {
-        again = 'أعد المباراة'; againFn = function () { startMatch('cup'); };
+        r.again = 'أعد المباراة'; r.next = function () { startMatch('cup'); };
       }
     }
     save.coins += coins;
+    r.coins = coins;
     persist();
     checkStatAch();
-    if (!(m.mode === 'cup' && cupRun && cupRun.round >= 4)) { if (win || m.mode === '2p') S.win(); else S.lose(); }
+    heldBadges = null;
+  }
+  function showResult() {
+    var m = match, r = m.result;
+    state = 'over';
+    for (var i = 0; i < r.badges.length; i++) badgeToast(r.badges[i]);
+    if (r.champ) S.trophy(); else if (r.win || m.mode === '2p') S.win(); else S.lose();
+    var oHead = $('oHead');
+    oHead.textContent = r.head;
+    oHead.style.color = r.color;
     // score row
     var sc = $('oScore');
     sc.innerHTML = '';
@@ -1317,19 +1343,18 @@
     var n1 = document.createElement('div'); n1.className = 'tn'; n1.textContent = m.teams[1].name;
     var s = document.createElement('div'); s.className = 'sc'; s.textContent = m.score[0] + ' - ' + m.score[1];
     sc.appendChild(mk(m.teams[0])); sc.appendChild(n0); sc.appendChild(s); sc.appendChild(n1); sc.appendChild(mk(m.teams[1]));
-    $('oLines').innerHTML = lines.map(function (l, i) { return '<div class="line" style="animation-delay:' + (0.3 + i * 0.25) + 's">' + l + '</div>'; }).join('');
-    countCoins(coins);
-    var champ = m.mode === 'cup' && cupRun && cupRun.round >= 4;
+    $('oLines').innerHTML = r.lines.map(function (l, i) { return '<div class="line" style="animation-delay:' + (0.3 + i * 0.25) + 's">' + l + '</div>'; }).join('');
+    countCoins(r.coins);
     var tc = $('oTrophy');
-    tc.hidden = !champ;
-    if (champ) {
-      var cc = tc.getContext('2d'), cupD = WS.CUPS[cupRun.id];
+    tc.hidden = !r.champ;
+    if (r.champ) {
+      var cc = tc.getContext('2d');
       cc.clearRect(0, 0, tc.width, tc.height);
-      ART.trophy(cc, 80, 86, 130, cupD.color, cupD.dark, false);
+      ART.trophy(cc, 80, 86, 130, r.champ.color, r.champ.dark, false);
     }
     oHead.style.fontSize = oHead.textContent.length > 13 ? '58px' : '';
-    $('bAgain').innerHTML = again + ' <small dir="ltr">Enter</small>';
-    resultAct = againFn;
+    $('bAgain').innerHTML = r.again + ' <small dir="ltr">Enter</small>';
+    resultAct = r.next;
     showScr('over');
     $('bPause').hidden = true;
   }
@@ -1389,7 +1414,7 @@
         break;
       case 'pause':
         if (c === 'KeyP' || c === 'Escape' || go) resumeGame();
-        else if (c === 'KeyR' && lastCfg) beginMatch(lastCfg);
+        else if (c === 'KeyR') restartMatch();
         break;
       case 'over':
         if (enterT < 1.1) break;

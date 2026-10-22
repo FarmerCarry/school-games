@@ -244,3 +244,23 @@ test('a failed save shows the retry warning and keeps progress after a successfu
   assert.equal(stored.unlocked, 2);
   assert.equal(stored.stars[0] & 1, 1);
 });
+
+test('R during the finish celebration or the endless splash keeps the result that was reached', async t => {
+  const page = await gamePage(t);
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('sg:swing-hook:save')));
+  await page.evaluate(input => { __game.start(0); __game.script(input); }, levelOneInput());
+  await page.evaluate(() => { for (let i = 0; i < 1200 && __game.state().st !== 'won'; i++) stepGame(1); stepGame(20); });
+  assert.deepEqual([(await state(page)).st, await page.evaluate(() => __game.mode)], ['won', 'play']);
+  await page.keyboard.press('r');
+  await page.evaluate(() => stepGame(2));
+  assert.equal((await state(page)).st, 'ready', 'R replays the level');
+  assert.equal((await saved()).unlocked, 2, 'the finish reached before R still unlocks level 2');
+  await page.evaluate(() => { __game.endless(); __game.script('1'.repeat(6)); for (let i = 0; i < 1200 && __game.state().st !== 'dead'; i++) stepGame(1); stepGame(10); });
+  assert.equal((await state(page)).st, 'dead');
+  const reached = await page.evaluate(() => __game.save.endless);
+  assert.ok(reached > 0, `the run covered some distance (${reached} m)`);
+  await page.keyboard.press('r');
+  await page.evaluate(() => stepGame(2));
+  assert.equal((await state(page)).st, 'ready', 'R starts a new run');
+  assert.equal((await saved()).endless, reached, 'the run that ended before R keeps its distance');
+});

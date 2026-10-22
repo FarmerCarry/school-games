@@ -137,3 +137,26 @@ test('Skybound Golf verification passes its physics, progression and save checks
   assert.equal(JSON.parse(result.stdout).status, 'PASS');
   assert.equal(result.status, 0);
 });
+
+// Cake Guards: each level's pads sit beside its roads, doing nothing loses, and one
+// of the builder bots' simple plans wins. Endless must outlast ten waves.
+test('Cake Guards verification fails when the bots cannot build any tower', () => {
+  const result = verifier('cake-guards', ['1'], `
+    const vm = require('vm'), run = vm.runInContext;
+    vm.runInContext = (code, ctx, options) => {
+      const value = run(code, ctx, options);
+      if (options.filename === 'engine.js') ctx.CG.build = () => false;
+      return value;
+    };`, 'verify.js');
+  assert.match(result.stdout, /FAIL level {2}1: no builder bot wins/);
+  assert.match(result.stdout, /NOT ALL LEVELS WINNABLE/);
+  assert.equal(result.status, 1);
+});
+
+test('Cake Guards verification wins every level and checks endless', () => {
+  const result = verifier('cake-guards', [], '', 'verify.js');
+  assert.doesNotMatch(result.stdout, /FAIL/);
+  assert.match(result.stdout, /ALL LEVELS WINNABLE/);
+  assert.equal(result.status, 0);
+  assert.equal(verifier('cake-guards', ['13'], '', 'verify.js').status, 2);
+});

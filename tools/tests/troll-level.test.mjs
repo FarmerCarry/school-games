@@ -86,9 +86,13 @@ test('a save from before the space world continues into it, and its levels play 
   await clickControl(page, '#btn-next');
   assert.equal(await page.evaluate(() => __game.mode), 'end');
   assert.equal(await page.locator('#e-stars').textContent(), '90/90');
-  // Wait for this finite entrance animation before sampling the button's center.
-  await page.waitForFunction(() => document.querySelector('#scr-end .panel').getAnimations()
-    .every(animation => animation.playState === 'finished'), null, { polling: 50, timeout: 5000 });
+  // Finish this finite entrance animation before sampling the button's center. Waiting for it
+  // timed out on a loaded CI runner: it stays pending until the compositor draws a frame.
+  assert.equal(await page.evaluate(() => {
+    const animations = document.querySelector('#scr-end .panel').getAnimations();
+    animations.forEach(animation => animation.finish());
+    return animations.every(animation => animation.effect.getComputedTiming().endTime !== Infinity);
+  }), true, 'the end panel has only finite entrance animations');
   await clickControl(page, '#btn-e-levels');
   assert.equal(await page.locator('#worlds .wrow').count(), 5);
   assert.equal(await page.locator('#worlds .lv:not(.locked)').count(), 30);
@@ -211,4 +215,19 @@ test('the baked level canvas is rebaked when its context comes back', async t =>
     return [lost, centre()];
   });
   assert.deepEqual(alpha, [0, 255], 'the level background is painted again');
+});
+
+test('after a mouse click on a pause-panel button, P still resumes and Enter does not click it again', async t => {
+  const page = await game(t);
+  await clickControl(page, '#btn-play');
+  await clickControl(page, '#btn-pause');
+  assert.equal(await page.evaluate(() => __game.mode), 'pause');
+  await page.evaluate(() => stepGame(10)); // past the short guard after pausing
+  await page.locator('#btn-music').click();
+  const label = await page.locator('#btn-music').textContent();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#btn-music').textContent(), label, 'Enter leaves the music setting alone');
+  await page.keyboard.press('p');
+  await page.evaluate(() => stepGame(1));
+  assert.equal(await page.evaluate(() => __game.mode), 'play');
 });

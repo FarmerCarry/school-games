@@ -798,7 +798,7 @@
   }
   function tickSession() {
     if (!sessionDeadline) return;
-    var left = Math.max(0, Math.ceil((sessionDeadline - Date.now()) / 1000));
+    var left = Math.max(0, Math.ceil((sessionDeadline - performance.now()) / 1000));
     $('#sessionClock').textContent = Math.floor(left / 60) + ':' + ('0' + left % 60).slice(-2);
     if (!left) {
       sessionDeadline = 0;
@@ -826,7 +826,8 @@
     $('#sessionStart').addEventListener('click', function () {
       clearSession();
       var minutes = Number($('#sessionMinutes').value) || 10;
-      sessionDeadline = Date.now() + minutes * 60000;
+      // performance.now() keeps counting evenly if Windows corrects the PC's clock mid-lesson.
+      sessionDeadline = performance.now() + minutes * 60000;
       $('#sessionStop').hidden = false;
       $('#sessionStart').textContent = T.resetTimer;
       $('#sessionStatus').textContent = T.sessionStarted(minutes);

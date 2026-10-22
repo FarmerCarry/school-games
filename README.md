@@ -11,7 +11,7 @@ games are in Arabic, laid out right-to-left.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores, progress and the anonymous play statistics are saved in each browser (localStorage) only.
 
-## The games (32)
+## The games (33)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -38,6 +38,7 @@ games are in Arabic, laid out right-to-left.
 | سوق الحيوانات | Critter Mart | 1 | بناء وإدارة |
 | إمبراطورية البيتزا | Pizza Empire | 1 | بناء وإدارة |
 | عالم المكعبات | Block World | 1 | بناء وإدارة، أركيد |
+| حرّاس الكعكة | Cake Guards (tower defense) | 1 | استراتيجية |
 | انفجار المكعبات | Block Burst | 1 | ألغاز |
 | دمج 2048 | 2048 | 1 | ألغاز |
 | حبل الحلوى | Munch Rope | 1 | ألغاز |
@@ -55,6 +56,15 @@ hold for a higher jump, and crouch or descend quickly with Down or Ctrl. Avoid c
 as the pace increases and the desert changes from day to night. P/Esc pauses, R retries after
 a crash, and the best score saves locally. Its original geometry and synthesized sounds use
 the bundled Three.js library and work offline, including the downloaded Windows folder.
+
+**حرّاس الكعكة (Cake Guards)** is a tower defense game played with the mouse. Jelly blobs march
+along candy roads towards a birthday cake; click a round pad beside the road to build a popcorn
+popper, bubble blower, cupcake cannon or candy-cane zapper, and click a tower to upgrade or sell
+it. Twelve levels in three worlds add new towers and blobs (fast, big, splitting, armoured and a
+jelly king), and each level gives up to three stars for the cake that is left. Finishing four
+levels opens an endless mode, and stars unlock new cakes. Keys: 1–4 choose a tower, Space starts
+the next wave, F plays faster, U/X upgrade or sell, P/Esc pauses. `node games/cake-guards/verify.js`
+checks that every level can be won and is lost when nothing is built.
 
 ### Connect 4 and tic-tac-toe
 
@@ -396,14 +406,15 @@ cp .work/kill-switch/sw.js sw.js
 
 Level-specific verifiers live beside their games. Swing Hook exits nonzero for unsolved
 levels or failed solution replays. Block Burst's default check also fails its statistical
-balance thresholds. On every change CI runs the Sneaky Levels, Maze Dash, Fire & Ice and
-Skybound Golf verifiers, and Swing Hook and Block Burst on one level
+balance thresholds. On every change CI runs the Sneaky Levels, Maze Dash, Fire & Ice,
+Skybound Golf and Cake Guards verifiers, and Swing Hook and Block Burst on one level
 (`tools/tests/level-verifiers.test.mjs`). Block Burst's full balance check (about 4
 minutes) runs whenever `games/block-burst/` or the workflow changes:
 
 ```
 node games/swing-hook/verify-levels.js
 node games/block-burst/verify-levels.js
+node games/cake-guards/verify.js
 node games/block-burst/verify-levels.js --report-balance
 ```
 

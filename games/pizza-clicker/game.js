@@ -557,7 +557,8 @@
           b.type = 'button'; b.className = 'up'; b.setAttribute('data-id', u.id);
           var im = document.createElement('img'); im.src = upIconURL(u); im.alt = '';
           b.appendChild(im);
-          b.addEventListener('click', function () { buyUpgrade(u, b); });
+          // A purchase re-sorts the list, so a double-click's second click lands on a different upgrade.
+          b.addEventListener('click', function (e) { if (e.detail > 1) return; buyUpgrade(u, b); });
           b.addEventListener('mouseenter', function () { showUpgradeTip(u, b); });
           b.addEventListener('mouseleave', hideTip);
           upsEl.appendChild(b);

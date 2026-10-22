@@ -716,7 +716,8 @@
     // Rebuild that result from the restored board, preserving acknowledgement.
     if (!G.keep) G.won = G.maxT >= WIN[G.N];
     G.winPending = G.won && !G.keep;
-    if (G.screen === 'over') setScreen('play');
+    // The full board ended its round; playing on after Undo is a new one.
+    if (G.screen === 'over') { Kit.stats.round('s' + G.N); setScreen('play'); }
     sfx.undo();
     for (var i = 0; i < 18; i++) {
       var a = i / 18 * 6.28;

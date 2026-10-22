@@ -178,3 +178,20 @@ test('Block World redraws a kept pause frame when reduced motion clears its conf
   assert.ok(paints.live > 0, 'confetti should still be falling when reduced motion is switched on');
   assert.deepEqual({ settled: paints.settled, reduced: paints.reduced, left: paints.left }, { settled: 0, reduced: 1, left: 0 });
 });
+
+test('Block World keeps the recipe list still while the backpack is open, so a double-click crafts one recipe', async t => {
+  const page = await adventure(t);
+  await page.evaluate(() => {
+    ['logs', 'planks', 'table', 'tableplace', 'pickwood'].forEach(id => { __game.G.done[id] = true; });
+    __game.G.inv = __game.G.inv.map(() => null);
+    __game.give(BW.B.LOG, 1);
+  });
+  await page.keyboard.press('KeyE');
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await page.evaluate(() => __game.G.mode), 'inv');
+  const first = page.locator('#craftList .crow').first();
+  const box = await first.boundingBox();
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  const inv = await page.evaluate(() => __game.G.inv.filter(Boolean).map(s => [s.id === BW.B.PLANKS ? 'planks' : s.id, s.n]));
+  assert.deepEqual(inv, [['planks', 4]], 'one log made 4 planks and nothing else');
+});

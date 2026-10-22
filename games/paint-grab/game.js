@@ -296,6 +296,9 @@
   var warnT = 0, threat = null, lastTick = -1;
   var ending = null, endT = 0, result = null;
   var milestones = {}, killStreakT = 0, killStreak = 0;
+  // Stars announced mid-round are saved at once (a restart or leaving keeps them); the result
+  // screen still shows them as new, against the unlocks there were when the round began.
+  var roundStars = [], roundBefore = null;
   var attract = { t: 0, follow: 0 };
   var overLock = 0;
   var PLAYER_START_R = 4.8;   // a roomier start base than the bots (kids need a safe spot to learn)
@@ -490,6 +493,7 @@
     state = 'play';
     timeLeft = PG.MATCH_TIME; matchT = 0; lastTick = -1;
     milestones = {}; killStreak = 0; killStreakT = 0;
+    roundStars = []; roundBefore = { keys: unlockedKeys(), arenaNext: arenaIdx + 1 < PG.ARENAS.length && arenaUnlocked(arenaIdx + 1) };
     homeDir = null; homeT = 0; capCount = 0;
     ending = null; result = null; threat = null;
     cam.x = player.x * CS; cam.y = player.y * CS; cam.z = 1.25;
@@ -566,6 +570,7 @@
     arena.goals.forEach(function (gl, i) {
       if (player.maxCells * 100 / NN >= gl && !milestones['g' + i]) {
         milestones['g' + i] = 1;
+        if (state === 'play' && !save.stars[arenaIdx][i]) { save.stars[arenaIdx][i] = 1; roundStars.push(i); persist(); }
         S.star(i);
         starHit = true;
         banner('نجمة!', '#ffcf33', 70, 1.4, 'وصلت إلى ' + iso(gl + '%'));
@@ -637,10 +642,11 @@
 
   function finishRound() {
     var en = ending, peak = Math.min(100, en.peak);
-    var beforeKeys = unlockedKeys(), beforeArenaNext = arenaIdx + 1 < PG.ARENAS.length && arenaUnlocked(arenaIdx + 1);
+    var beforeKeys = roundBefore.keys, beforeArenaNext = roundBefore.arenaNext;
     var st = save.stars[arenaIdx], got = [peak >= arena.goals[0], peak >= arena.goals[1], en.reason !== 'death' && en.rank === 1];
-    var newStars = [];
+    var newStars = roundStars.slice();
     got.forEach(function (g, i) { if (g && !st[i]) { st[i] = 1; newStars.push(i); } });
+    newStars.sort();
     var prevBest = save.best;
     var newBest = peak > save.best + 0.001 && peak >= 0.5;
     if (peak > save.best) save.best = Math.round(peak * 10) / 10;

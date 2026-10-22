@@ -275,3 +275,23 @@ test('a paused match keeps its last frame until something changes', async t => {
   await page.locator('#scr-pause [data-act="resume"]').click();
   assert.equal(await draws(2), 6, 'every frame again after resuming');
 });
+
+test('a match won and then left from a pause during the celebration keeps its coins and stars', async t => {
+  const page = await game(t);
+  await startQuietStage(page, 0);
+  for (let round = 0; round < 3; round++) {
+    await page.evaluate(last => {
+      const g = __game.app.game;
+      __game.winRound();
+      for (let i = 0; i < 600 && g.state === 'play'; i++) runtime.step(1 / 60);
+      for (let i = 0; i < 600 && !last && g.state !== 'play'; i++) runtime.step(1 / 60);
+    }, round === 2);
+  }
+  assert.deepEqual(await page.evaluate(() => [__game.app.game.state, __game.app.game.over]), ['roundEnd', true]);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => __game.app.screen), 'pause');
+  await page.locator('#scr-pause [data-act="menu"]').click();
+  assert.equal(await page.evaluate(() => __game.app.screen), 'title');
+  assert.ok(await stored(page, 'coins') > 0, 'the match coins are saved');
+  assert.ok((await stored(page, 'stars'))[0] > 0, 'stage 1 is won');
+});
