@@ -31,7 +31,7 @@ async function game(t, { manual = true, saved, deniedStorage = false, touch = fa
       sessionStorage.setItem('dino-fixture-seeded', '1');
     }
     let kit, update, render;
-    const probe = window.dinoProbe = { rounds: [], ends: [], failSave: false, ready: 0, paints: 0 };
+    const probe = window.dinoProbe = { rounds: [], ends: [], writes: [], failSave: false, ready: 0, paints: 0 };
     probe.step = count => {
       for (let i = 0; i < count; i++) update(1 / 60);
       if (render) render(0);
@@ -67,6 +67,7 @@ async function game(t, { manual = true, saved, deniedStorage = false, touch = fa
     } });
     const write = Storage.prototype.setItem, read = Storage.prototype.getItem;
     Storage.prototype.setItem = function (key) {
+      if (key.startsWith('sg:dino-3d:')) probe.writes.push(key);
       if (deniedStorage || (probe.failSave && key.startsWith('sg:dino-3d:'))) throw new DOMException('Storage fixture', 'QuotaExceededError');
       return write.apply(this, arguments);
     };
@@ -100,6 +101,112 @@ test('Dino 3D participates in the catalog native-control regression', async () =
 test('Dino 3D real controls start, jump, pause, and restart the live game', async t => {
   const page = await game(t, { manual: false });
   assert.equal((await runScenario(page, 'dino-3d')).checks.length, 4);
+});
+
+test('Dino course entry preserves leading zeros, accepts Arabic digits and rejects incomplete codes', async t => {
+  const page = await game(t);
+  const input = page.locator('#course-code');
+  for (const invalid of ['12', 'ab42']) {
+    await input.fill(invalid);
+    await page.keyboard.press('Enter');
+    assert.equal((await state(page)).mode, 'ready');
+    assert.equal(await page.locator('#course-error').isVisible(), true);
+    assert.equal(await input.getAttribute('aria-invalid'), 'true');
+  }
+  assert.equal(await page.evaluate(() => dinoProbe.rounds.length), 0, 'invalid entry never creates a round');
+  const muted = await page.evaluate(() => Kit.audio.muted);
+  await input.fill('');
+  await page.keyboard.type('mp');
+  assert.equal(await input.inputValue(), 'mp');
+  assert.equal(await page.evaluate(() => Kit.audio.muted), muted, 'typing into the code cannot mute');
+  assert.equal((await state(page)).mode, 'ready', 'typing P cannot pause or start');
+  await input.fill('٠٠٤٢');
+  assert.equal(await input.inputValue(), '0042');
+  await page.keyboard.press('Enter');
+  assert.equal((await state(page)).mode, 'playing');
+  assert.equal(await page.evaluate(() => Dino3DGame.state.seed), 43);
+  assert.equal(await page.locator('#active-course').textContent(), '0042');
+  assert.equal(await page.evaluate(() => Dino3DGame.inputJumps), 0, 'form Enter starts without an extra jump');
+});
+
+test('Dino retry and R repeat the selected course while new-course controls choose a different one', async t => {
+  const page = await game(t);
+  await page.locator('#course-code').fill('0000');
+  await page.locator('#play').click();
+  const initial = await page.evaluate(() => JSON.stringify(Dino3DGame.state));
+  assert.equal(await page.evaluate(() => Dino3DGame.state.seed), 1);
+  await crash(page);
+  const crashed = await page.evaluate(() => JSON.stringify(Dino3DGame.state));
+  await page.locator('#retry').click();
+  assert.equal(await page.evaluate(() => JSON.stringify(Dino3DGame.state)), initial);
+  await crash(page);
+  assert.equal(await page.evaluate(() => JSON.stringify(Dino3DGame.state)), crashed, 'the same untouched attempt reaches the same collision');
+  await page.locator('#new-course-over').focus();
+  await page.keyboard.press('KeyR');
+  assert.equal(await page.evaluate(() => JSON.stringify(Dino3DGame.state)), initial, 'R retries even after tabbing to a result button');
+  await step(page, 30);
+  await page.locator('#pause-button').click();
+  await page.locator('#new-course-paused').focus();
+  await page.keyboard.press('KeyR');
+  assert.equal(await page.evaluate(() => JSON.stringify(Dino3DGame.state)), initial, 'paused R retries the same course');
+  await page.locator('#pause-button').click();
+  await page.locator('#restart').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => JSON.stringify(Dino3DGame.state)), initial);
+  await page.locator('#pause-button').click();
+  await page.locator('#new-course-paused').click();
+  const next = await page.locator('#active-course').textContent();
+  assert.notEqual(next, '0000');
+  assert.equal(await page.evaluate(() => Dino3DGame.state.seed), Number(next) + 1);
+  await crash(page);
+  await page.locator('#new-course-over').click();
+  assert.notEqual(await page.locator('#active-course').textContent(), next);
+  await page.locator('#pause-button').click();
+  await page.locator('#pause-menu').click();
+  const readyCode = await page.locator('#course-code').inputValue();
+  await page.locator('#new-course').click();
+  assert.equal((await state(page)).mode, 'ready', 'choosing on the ready screen does not start play');
+  assert.notEqual(await page.locator('#course-code').inputValue(), readyCode);
+});
+
+test('Dino shared codes replay independently of graphics quality and decorative random calls', async t => {
+  const traces = [];
+  for (const low of [false, true]) {
+    const page = await game(t);
+    if (low) await page.locator('#quality').click();
+    await page.evaluate(() => { for (let i = 0; i < 500; i++) Math.random(); });
+    await page.locator('#course-code').fill('2026');
+    await page.locator('#play').click();
+    await step(page, 150);
+    const before = await page.evaluate(() => JSON.stringify(Dino3DGame.state));
+    await crash(page);
+    traces.push([before, await page.evaluate(() => JSON.stringify(Dino3DGame.state))]);
+  }
+  assert.deepEqual(traces[0], traces[1], 'same course and controls produce the same approach and collision in both render modes');
+});
+
+test('Dino course selection and retries preserve best/quality without per-frame storage writes', async t => {
+  const page = await game(t, { saved: '500' });
+  await page.locator('#quality').click();
+  await page.locator('#course-code').fill('9999');
+  await page.locator('#play').click();
+  await page.evaluate(() => { dinoProbe.writes.length = 0; });
+  await step(page, 100);
+  await page.locator('#pause-button').click();
+  await step(page, 120);
+  await page.locator('#resume').click();
+  await step(page, 20);
+  await crash(page);
+  await page.locator('#retry').click();
+  await crash(page);
+  await page.locator('#new-course-over').click();
+  assert.deepEqual(await page.evaluate(() => dinoProbe.writes), [], 'playing, selecting, pausing and replaying do not write course state');
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:dino-3d:best')), '500');
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:dino-3d:quality')), '"low"');
+  await page.reload();
+  await page.waitForFunction(() => window.Dino3DGame && dinoProbe.ready === 1, null, { polling: 40 });
+  assert.equal(await page.locator('#menu-best').textContent(), '500');
+  assert.equal(await page.locator('#quality').getAttribute('aria-pressed'), 'true');
 });
 
 test('Dino 3D jumping, crouching and repeated pause freeze the whole simulation', async t => {
@@ -330,13 +437,33 @@ test('Dino 3D still plays when classroom storage is disabled', async t => {
 
 test('Dino 3D keeps its controls within the frame at classroom and narrow sizes', async t => {
   const page = await game(t);
-  for (const viewport of [{ width: 1100, height: 620 }, { width: 1920, height: 1080 }, { width: 390, height: 700 }]) {
+  for (const viewport of [{ width: 1100, height: 620 }, { width: 1920, height: 1080 }, { width: 800, height: 450 }, { width: 390, height: 700 }]) {
     await page.setViewportSize(viewport);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
     await step(page);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.documentElement.scrollHeight <= innerHeight), true, 'no page scrollbars');
-    const box = await page.locator('#play').boundingBox();
-    assert.ok(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height, 'Play stays reachable');
+    const withinFrame = async ids => {
+      for (const id of ids) {
+        const box = await page.locator('#' + id).boundingBox();
+        assert.ok(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height, `${id} stays reachable at ${viewport.width}×${viewport.height}`);
+      }
+    };
+    await withinFrame(['play', 'course-code', 'new-course', 'menu-best']);
+    await page.locator('#course-code').fill('12');
+    await page.keyboard.press('Enter');
+    await withinFrame(['play', 'course-code', 'new-course', 'course-error', 'menu-best']);
+    await page.locator('#course-code').fill('0042');
+    await page.locator('#play').click();
+    await page.locator('#pause-button').click();
+    await withinFrame(['resume', 'restart', 'new-course-paused', 'pause-menu']);
+    assert.equal(await page.locator('#course-tag').evaluate(tag => {
+      const r = tag.getBoundingClientRect();
+      return tag.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+    }), true, 'course code stays above the pause veil');
+    await page.locator('#resume').click();
+    await crash(page);
+    await withinFrame(['retry', 'new-course-over', 'menu', 'course-tag']);
+    await page.locator('#menu').click();
   }
 });
 
