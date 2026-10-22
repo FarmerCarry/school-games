@@ -365,3 +365,15 @@ test('Dino 3D does not report ready when WebGL is unavailable', async t => {
   assert.equal(await page.locator('#ready-screen').isVisible(), false);
   assert.deepEqual(errors, [], 'the startup failure is handled');
 });
+
+test('Dino 3D keeps the result on screen when a jump is pressed just after the crash', async t => {
+  const page = await game(t);
+  await page.locator('#play').click();
+  await crash(page);
+  await key(page, 'Space');
+  await page.mouse.click(300, 300);
+  assert.equal((await state(page)).mode, 'over', 'a jump pressed at the crash does not restart at once');
+  await page.waitForTimeout(650);
+  await key(page, 'Space');
+  assert.equal((await state(page)).mode, 'playing', 'Space restarts once the result has been seen');
+});

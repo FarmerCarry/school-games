@@ -1700,6 +1700,7 @@
   function openInv() {
     if (G.mode !== 'play') return;
     G.mode = 'inv';
+    craftOrder = null;
     if (G.gm === 'creative') fillPalette();
     nearStations();
     invEl.classList.toggle('creative', G.gm === 'creative');
@@ -1791,13 +1792,20 @@
     row.setAttribute('data-r', idx);
     return row;
   }
+  // The recipe order is sorted when the backpack opens and then kept: re-sorting after each
+  // craft slid another recipe under the cursor, and a quick second click crafted that one.
+  var craftOrder = null;
   function renderCraft() {
     var st = craftEl.scrollTop;
     craftEl.innerHTML = '';
     var rows = BW.RECIPES.map(function (r, i) { return { r: r, i: i, can: stationOK(r) && hasIngredients(r), has: hasIngredients(r) }; });
     var wool = rows.filter(function (o) { return o.r.cat === 'wool'; }), rest = rows.filter(function (o) { return o.r.cat !== 'wool'; });
     var qr = questRecipe();
-    rest.sort(function (a, b) { return ((b.r === qr) - (a.r === qr)) || (b.can - a.can) || (b.has - a.has) || (a.i - b.i); });
+    if (craftOrder) rest.sort(function (a, b) { return craftOrder.indexOf(a.i) - craftOrder.indexOf(b.i); });
+    else {
+      rest.sort(function (a, b) { return ((b.r === qr) - (a.r === qr)) || (b.can - a.can) || (b.has - a.has) || (a.i - b.i); });
+      craftOrder = rest.map(function (o) { return o.i; });
+    }
     rest.forEach(function (o) { craftEl.appendChild(recipeRow(o.r, o.i)); });
     // wool painter row
     var wr = document.createElement('div');

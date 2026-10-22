@@ -79,7 +79,9 @@
   var ZT = [null];
   (function () {
     var s = 0;
-    for (var k = 1; k <= 60; k++) {
+    // Zones last 16 s each and the generator reads the next one, so build more than
+    // any run can reach (1000 zones is over 4 hours; 60 ran out after 16 minutes).
+    for (var k = 1; k <= 1000; k++) {
       var z = TB.ZDEF[(k - 1) % 8];
       var vn = k <= 8 ? 15 + 3 * (k - 1) : Math.min(46, 36 + 2 * (k - 8));
       var v = vn * WS;
@@ -1095,6 +1097,8 @@
   function resetWorld(speed) {
     obs.length = 0; pick.length = 0; path.length = 0;
     G.D = 0; G.rot = 0; G.rotVel = 0; G.v = speed; G.zone = 1; zCache = 1;
+    // Streaks left far down the previous run's tunnel would never come back into view.
+    for (var i = 0; i < STREAKS.length; i++) STREAKS[i].d = rnd(NEAR + 1, FAR);
     genReset(13, PI / 2);
   }
 
@@ -1103,7 +1107,7 @@
     Kit.keys.reset();
     resetWorld(ZT[1].v);
     G.state = 'play'; G.runActive = true; G.committed = false;
-    G.runT = 0; G.score = 0; G.bonus = 0; G.orbsRun = 0; G.closeRun = 0; G.streak = 0; G.bestStreak = 0; G.lastCloseT = -9;
+    G.runT = 0; G.lastWhoosh = 0; G.score = 0; G.bonus = 0; G.orbsRun = 0; G.closeRun = 0; G.streak = 0; G.bestStreak = 0; G.lastCloseT = -9;
     G.lastCloseRow = -1; G.shieldsRun = 0; G.shield = false; G.invuln = 0; G.passedBest = false; G.runMissions = [];
     G.orbStreak = 0; G.zoneOrbs = 0; G.flash = 0.6; G.flashCol = ZT[1].col; G.fovKick = 1; G.dispScore = 0; G.missionTimer = 0;
     G.ringD = bestRingD();

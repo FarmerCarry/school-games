@@ -199,3 +199,17 @@ for (const [width, height] of [[1100, 620], [798, 449]]) test(`Air Hockey save w
     assert.ok(r.l >= 0 && r.t >= 0 && r.r <= rects.corner.r && r.b <= rects.corner.b, `match warning ${JSON.stringify(r)} fits the corner ${JSON.stringify(rects.corner)}`);
   }
 });
+
+test('Air Hockey keeps a won match when Menu is chosen from a pause during the slow-motion ending', async t => {
+  const page = await hockey(t);
+  const ending = await page.evaluate(() => {
+    document.getElementById('btnPlay').click(); runtime.step(150);
+    __game.setScore(__game.st.goalsToWin - 1, 0); runtime.scoreGoal(); runtime.step(4);
+    return { scene: __game.st.scene, bot: __game.st.bot.id };
+  });
+  assert.equal(ending.scene, 'ending');
+  await page.evaluate(() => { document.getElementById('pauseBtn').click(); runtime.step(1); document.getElementById('btnMenu1').click(); runtime.step(1); });
+  assert.deepEqual(await page.evaluate(() => [!document.getElementById('scr-title').hidden, __game.st.demo]), [true, true], 'Menu opens the title');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:air-hockey:save')));
+  assert.deepEqual([saved.matches, saved.wins[ending.bot], saved.beaten[ending.bot]], [1, 1, true], 'the win counts and unlocks the next bot');
+});

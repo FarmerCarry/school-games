@@ -201,3 +201,14 @@ test('a paused kitchen is drawn once and redrawn only after a resize, restore or
   assert.ok(away.hud.includes(away.pizzas), `the HUD shows the new count (${away.hud})`);
   assert.ok(away.stats.includes(away.total), 'the pause card shows the new total');
 });
+
+test('a double-click on an upgrade buys that one upgrade, not the next one sliding into its place', async t => {
+  const page = await game(t);
+  await page.evaluate(() => { __game.click(20); __game.add(600); __game.buy(0, 1); __game.add(5000); stepGame(5); });
+  const first = await page.locator('#ups .up').first().getAttribute('data-id');
+  assert.ok(await page.locator('#ups .up').count() > 1, 'several upgrades are on offer');
+  const box = await page.locator('#ups .up').first().boundingBox();
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  await page.evaluate(() => stepGame(2));
+  assert.deepEqual(await page.evaluate(() => Object.keys(__game.S.ups)), [first]);
+});

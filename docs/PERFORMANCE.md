@@ -528,3 +528,24 @@ should compare the same routes, cold/warm cache state, viewport, hardware, and
 build across runs. Headless Chromium often uses software rendering; its frame
 rate is **not school-PC FPS**. Confirm rendering improvements on representative
 school hardware, and keep the existing gameplay, browser, and offline checks.
+
+## Cake Guards, 20 October 2026
+
+حرّاس الكعكة (tower defense) is the 33rd game. It draws on one 2D canvas, keeps each
+level's ground, decorations and roads in one cached map bitmap (redrawn only for a new
+level, a new pixel scale or a restored canvas) and the bitten cake in one small cached
+bitmap, so a frame draws only what moves. Towers find their targets in one pass over
+the blobs, and blobs remember which road segment they are on.
+
+| Measurement | Bytes | Limit |
+| --- | ---: | ---: |
+| Cake Guards | 81,029 | 84,000 |
+| Teacher page (one more catalog entry) | 88,038 | 89,000 (was 88,000) |
+| Portal (thumbnail and catalog entry) | 345,149 | 360,000 |
+| Offline precache, 45 files | 5,015,674 | 5,100,000 (was 5,000,000) |
+
+The game is below the middle of the other games (about 50 to 230 KB), but the offline
+cache had only 73,229 bytes left, so its limit was raised knowingly by 100,000 bytes
+(2%). That keeps about the same headroom as before (84,326 bytes, 1.7%) for the next
+change; another game will again need room made or a decision like this one.
+

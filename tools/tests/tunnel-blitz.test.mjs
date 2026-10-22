@@ -177,3 +177,16 @@ test('the gold ring reaches the ship in the frame the record is broken', async t
     assert.ok(crossing.at <= 0.5 && crossing.at > -1.5, `${how}: ring is at the ship when the record breaks (${crossing.at} m)`);
   }
 });
+
+test('a run keeps going past zone 60 (the tunnel used to end there and freeze the game)', async t => {
+  const page = await game(t);
+  await play(page);
+  const zones = await page.evaluate(() => {
+    __game.invincible(true); __game.autopilot(true);
+    const seen = [];
+    for (let i = 0; i < 64 && __game.info().state === 'play'; i++) { __game.skipZone(); seen.push(__game.sim(2).zone); }
+    return seen;
+  });
+  assert.equal(zones.length, 64);
+  assert.ok(zones.at(-1) > 62, `the run reached zone ${zones.at(-1)}`);
+});

@@ -223,6 +223,16 @@ test('Rail Rush shows the change-lane hint only when the first train blocks the 
   assert.deepEqual(await looping(), ['hintBob running', 'pulse running']);
 });
 
+test('Rail Rush keeps the coins and best score of a run left through the pause menu', async t => {
+  const page = await railRush(t);
+  const run = await page.evaluate(() => { __game.restart(); __game.god = true; __game.sim(25); return { coins: __game.state.coins, score: __game.state.score }; });
+  assert.ok(run.coins > 0 && run.score > 0, `the run earned something (${JSON.stringify(run)})`);
+  await page.evaluate(() => { document.getElementById('pauseBtn').click(); rr.step(1); document.getElementById('restartBtn').click(); rr.step(1); });
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:rail-rush:save')));
+  assert.equal(saved.coins, run.coins, 'the coins of the abandoned run are banked');
+  assert.ok(saved.best >= run.score, 'its score counts towards the best');
+});
+
 test('Rail Rush survives a 0-px-tall frame and makes the shop portraits once it has room', async t => {
   const context = await browser.newContext({ viewport: { width: 960, height: 540 } });
   const page = await context.newPage(), errors = [];

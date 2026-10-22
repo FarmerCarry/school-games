@@ -19,6 +19,7 @@ window.CATEGORIES = [
   { id: 'two-player', label: 'لاعبان', icon: '👥' },
   { id: 'sports', label: 'رياضة', icon: '🏀' },
   { id: 'puzzle', label: 'ألغاز', icon: '🧩' },
+  { id: 'strategy', label: 'استراتيجية', icon: '🏰', tags: 'دفاع الأبراج tower defense' },
   { id: 'arcade', label: 'أركيد', icon: '👾' },
   { id: 'idle', label: 'بناء وإدارة', icon: '🏗️' },
   { id: 'battle', label: 'تحدي الروبوتات', icon: '🤖' }
@@ -106,6 +107,10 @@ window.GAMES = [
   { slug: 'block-world', roundMinutes: null, inputStyle: 'mixed', title: 'عالم المكعبات', en: 'Block World', tags: 'ماين كرافت ماينكرافت minecraft', cats: ['idle', 'arcade'], players: '1', color: '#5fbf3f', hot: true,
     blurb: 'احفر بحثًا عن الألماس، اصنع معاول أقوى وابنِ عالم أحلامك!',
     controls: [{ keys: ['A', 'D'], action: 'مشي (أو ← →)' }, { keys: ['W', 'مسافة'], action: 'قفز / تسلق السلالم / سباحة' }, { keys: ['S'], action: 'نزول السلم / الطيران للأسفل' }, { keys: ['انقر'], action: 'اضغط مطوّلًا لتحفر، وانقر الحيوانات لتداعبها أو تجزّ صوف الخراف' }, { keys: ['نقرة يمين'], action: 'ضع مكعبًا / افتح طاولة الصنع' }] },
+  { slug: 'cake-guards', roundMinutes: [3, 8], inputStyle: 'pointer', title: 'حرّاس الكعكة', en: 'Cake Guards tower defense', tags: 'دفاع الأبراج أبراج هلام كعكة', cats: ['strategy'], players: '1', color: '#ff7eb6', hot: true,
+    blurb: 'ابنِ أبراج الحلوى وأوقف الهلام المشاغب قبل أن يأكل كعكة عيد الميلاد!',
+    tip: 'ضع الأبراج عند المنعطفات، وانقر على البرج لتطويره.',
+    controls: [{ keys: ['انقر'], action: 'انقر على دائرة بجانب الطريق لتبني برجًا' }, { keys: ['1', '2', '3', '4'], action: 'اختر برجًا ثم انقر مكانه' }, { keys: ['U', 'X'], action: 'طوّر البرج المختار أو بِعه' }, { keys: ['مسافة'], action: 'ابدأ الموجة التالية' }, { keys: ['F'], action: 'أسرع' }] },
   { slug: 'block-burst', roundMinutes: [3, 8], inputStyle: 'pointer', title: 'انفجار المكعبات', en: 'Block Burst', cats: ['puzzle'], players: '1', color: '#4f7cff',
     blurb: 'ضع المكعبات، فجّر الصفوف، واصنع كومبو خياليًا!',
     controls: [{ keys: ['اسحب'], action: 'اسحب القطعة وضعها على اللوحة' }, { keys: ['انقر'], action: 'انقر القطعة ثم انقر مكانها على اللوحة' }, { keys: ['نقرة يمين'], action: 'أرجع القطعة إلى مكانها' }] },

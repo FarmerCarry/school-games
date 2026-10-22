@@ -1587,7 +1587,20 @@
     $('tMissions').textContent = left ? 'باقي ' + left : 'تمّت!';
     $('tMissionPeek').innerHTML = save.missions.map(function (m) { return missionRow(m, true); }).join('');
   }
+  // Leaving a run from the pause menu (Restart, R or Menu) still keeps what was earned.
+  function bankRun() {
+    if (S.mode !== 'paused') return;
+    var earned = run.coins + run.bonus;
+    save.coins += earned;
+    save.totals.coins += earned;
+    save.totals.boards += run.boards;
+    if (run.score > save.best) save.best = run.score;
+    save.bestDist = Math.max(save.bestDist || 0, Math.floor(run.dist));
+    persist();
+  }
   function goTitle() {
+    bankRun();
+    overAnim.on = false; // the last game over's count-up and fanfare must not play later
     S.mode = 'title'; S.menu = 'title';
     resetPlayer(); resetRun();
     runner.board.visible = false;
@@ -1604,6 +1617,8 @@
     // open counts that run as a quit. The first runs of a fresh save play the scripted intro.
     if (!save.runs) Kit.stats.tutorial('start');
     Kit.stats.round('run');
+    bankRun();
+    overAnim.on = false;
     resetPlayer(); resetRun();
     runner.board.visible = false;
     runner.setOutfit(outfitById(save.outfit));

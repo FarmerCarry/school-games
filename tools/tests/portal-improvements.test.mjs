@@ -364,3 +364,18 @@ test('portal metadata preserves board controls at classroom laptop height and nu
   });
   assert.ok(range.first < range.last, `duration range is visually reversed: ${JSON.stringify(range)}`);
 });
+
+test('the classroom timer ignores a change of the PC clock during the lesson', async t => {
+  const page = await pageFor(t);
+  await page.clock.install();
+  await openGame(page); // the handoff covers a running game
+  await page.locator('#classroom summary').click();
+  await page.locator('#sessionMinutes').selectOption('5');
+  await page.locator('#sessionStart').click();
+  // Windows corrects the clock by 20 minutes: the handoff must not appear early.
+  await page.clock.setSystemTime(await page.evaluate(() => Date.now() + 20 * 60000));
+  await page.clock.fastForward(2000);
+  assert.equal(await page.locator('#sessionHandoff').isHidden(), true, 'a clock jump does not end the session');
+  await page.clock.fastForward(300000);
+  await page.locator('#sessionHandoff').waitFor({ state: 'visible' });
+});

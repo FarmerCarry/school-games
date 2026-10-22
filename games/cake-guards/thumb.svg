@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd6ea"/>
+      <stop offset="1" stop-color="#ffeec2"/>
+    </linearGradient>
+    <radialGradient id="jelly" cx="35%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#b8f5a8"/>
+      <stop offset="1" stop-color="#3fae4c"/>
+    </radialGradient>
+    <radialGradient id="jelly2" cx="35%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#e2d0ff"/>
+      <stop offset="1" stop-color="#7b4fe0"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <ellipse cx="200" cy="330" rx="300" ry="150" fill="#8fd46a"/>
+  <ellipse cx="80" cy="300" rx="70" ry="22" fill="#7cc45a"/>
+  <ellipse cx="330" cy="370" rx="80" ry="24" fill="#7cc45a"/>
+  <!-- the candy road -->
+  <path d="M-20 300 C 70 290, 90 220, 170 230 S 250 300, 300 262" fill="none" stroke="#d6a463" stroke-width="56" stroke-linecap="round"/>
+  <path d="M-20 300 C 70 290, 90 220, 170 230 S 250 300, 300 262" fill="none" stroke="#f6d8a0" stroke-width="44" stroke-linecap="round"/>
+  <path d="M-20 300 C 70 290, 90 220, 170 230 S 250 300, 300 262" fill="none" stroke="#fff" stroke-width="6" stroke-dasharray="2 18" stroke-linecap="round" opacity="0.7"/>
+  <!-- lollipops and flowers -->
+  <g>
+    <rect x="356" y="170" width="5" height="40" fill="#fff"/><circle cx="358" cy="166" r="16" fill="#ff7eb6"/>
+    <path d="M358 166 m-9 0 a9 9 0 1 1 9 9" fill="none" stroke="#fff" stroke-width="3"/>
+    <g fill="#ffd23f"><circle cx="40" cy="352" r="7"/><circle cx="52" cy="346" r="7"/><circle cx="50" cy="360" r="7"/></g>
+    <circle cx="47" cy="353" r="5" fill="#ff7eb6"/>
+  </g>
+  <!-- the cake -->
+  <g transform="translate(316 240)">
+    <ellipse cx="0" cy="62" rx="72" ry="18" fill="#000" opacity="0.15"/>
+    <ellipse cx="0" cy="56" rx="66" ry="16" fill="#fff"/>
+    <rect x="-56" y="2" width="112" height="50" rx="10" fill="#fff1d6"/>
+    <rect x="-59" y="-4" width="118" height="16" rx="8" fill="#ff9ec8"/>
+    <g fill="#ff9ec8"><circle cx="-48" cy="14" r="6"/><circle cx="-24" cy="16" r="6"/><circle cx="0" cy="14" r="6"/><circle cx="24" cy="16" r="6"/><circle cx="48" cy="14" r="6"/></g>
+    <rect x="-38" y="-40" width="76" height="40" rx="9" fill="#fff1d6"/>
+    <rect x="-41" y="-46" width="82" height="14" rx="7" fill="#ff9ec8"/>
+    <circle cx="0" cy="-52" r="8" fill="#ff5a8a"/>
+    <rect x="-24" y="-74" width="7" height="22" fill="#6fd3ff"/><rect x="-3" y="-80" width="7" height="22" fill="#ffd23f"/><rect x="18" y="-74" width="7" height="22" fill="#62d26f"/>
+    <g fill="#ff9f43"><ellipse cx="-20" cy="-82" rx="5" ry="9"/><ellipse cx="0" cy="-88" rx="5" ry="9"/><ellipse cx="22" cy="-82" rx="5" ry="9"/></g>
+    <g fill="#fff3b0"><ellipse cx="-20" cy="-80" rx="2" ry="4"/><ellipse cx="0" cy="-86" rx="2" ry="4"/><ellipse cx="22" cy="-80" rx="2" ry="4"/></g>
+  </g>
+  <!-- jelly blobs on the road -->
+  <g transform="translate(150 230)">
+    <ellipse cx="0" cy="26" rx="30" ry="9" fill="#000" opacity="0.15"/>
+    <ellipse cx="0" cy="0" rx="34" ry="30" fill="url(#jelly2)"/>
+    <ellipse cx="-12" cy="-14" rx="10" ry="6" fill="#fff" opacity="0.5"/>
+    <circle cx="-10" cy="-4" r="9" fill="#fff"/><circle cx="12" cy="-4" r="9" fill="#fff"/>
+    <circle cx="-7" cy="-3" r="5" fill="#2b1d3a"/><circle cx="15" cy="-3" r="5" fill="#2b1d3a"/>
+    <path d="M-6 10 q8 8 16 0" fill="none" stroke="#2b1d3a" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-18 -26 l6 -18 l8 10 l6 -14 l6 14 l8 -10 l6 18 z" fill="#ffcc00" stroke="#a06a00" stroke-width="2"/>
+  </g>
+  <g transform="translate(62 284)">
+    <ellipse cx="0" cy="18" rx="20" ry="6" fill="#000" opacity="0.15"/>
+    <ellipse cx="0" cy="0" rx="23" ry="20" fill="url(#jelly)"/>
+    <ellipse cx="-8" cy="-9" rx="7" ry="4" fill="#fff" opacity="0.5"/>
+    <circle cx="-6" cy="-3" r="6" fill="#fff"/><circle cx="9" cy="-3" r="6" fill="#fff"/>
+    <circle cx="-4" cy="-2" r="3.5" fill="#2b1d3a"/><circle cx="11" cy="-2" r="3.5" fill="#2b1d3a"/>
+    <path d="M-3 7 q5 5 10 0" fill="none" stroke="#2b1d3a" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <!-- popcorn tower and candy cane -->
+  <g transform="translate(110 168)">
+    <ellipse cx="0" cy="26" rx="34" ry="12" fill="#000" opacity="0.18"/>
+    <circle cx="0" cy="12" r="30" fill="#ffcf33"/>
+    <rect x="4" y="-4" width="40" height="16" rx="6" fill="#d33d4f" transform="rotate(30 4 4)"/>
+    <rect x="-18" y="-12" width="36" height="30" rx="5" fill="#fff"/>
+    <g fill="#e8354b"><rect x="-15" y="-12" width="6" height="30"/><rect x="-3" y="-12" width="6" height="30"/><rect x="9" y="-12" width="6" height="30"/></g>
+    <g fill="#fffbe8"><circle cx="-10" cy="-16" r="9"/><circle cx="2" cy="-22" r="10"/><circle cx="12" cy="-15" r="8"/></g>
+    <circle cx="4" cy="-20" r="3.5" fill="#ffd23f"/>
+  </g>
+  <circle cx="148" cy="214" r="7" fill="#fffbe8"/><circle cx="150" cy="212" r="3" fill="#ffd23f"/>
+  <g transform="translate(232 312)">
+    <ellipse cx="0" cy="20" rx="30" ry="10" fill="#000" opacity="0.18"/>
+    <path d="M-18 14 l18 -10 l18 10 l-18 10 z" fill="#a77bff"/>
+    <path d="M0 10 V-30 a10 10 0 0 0 -20 0" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
+    <path d="M0 10 V-30 a10 10 0 0 0 -20 0" fill="none" stroke="#e8354b" stroke-width="10" stroke-dasharray="6 7" stroke-linecap="round"/>
+  </g>
+  <!-- logo -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="900" text-anchor="middle">
+    <text x="200" y="84" font-size="64" fill="#4a1d55" stroke="#4a1d55" stroke-width="14" stroke-linejoin="round">حرّاس الكعكة</text>
+    <text x="200" y="80" font-size="64" fill="#fff" stroke="#ff5a8a" stroke-width="3" paint-order="stroke" stroke-linejoin="round">حرّاس الكعكة</text>
+  </g>
+</svg>

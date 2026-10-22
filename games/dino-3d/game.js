@@ -8,6 +8,10 @@
   var bestPending = false, qualityPending = false, inputJumps = 0, milestoneUntil = 0;
   var pointerJump = false, pointerDuck = false, jumpQueued = false, controlDuck = false;
   var activePointer = null, loop, lastScore = -1, lastBest = -1;
+  // A jump pressed just after a crash must not skip the result: Space and taps on the
+  // scene restart only after this long (Enter, R and the Retry button work at once).
+  var OVER_GUARD_MS = 600, overAt = 0;
+  function overSettled() { return mode !== 'over' || performance.now() - overAt >= OVER_GUARD_MS; }
   function el(id) { return document.getElementById(id); }
   var saveStatus = Kit.saveStatus({ retry: save });
   // Original 5x7 bitmap numerals; the matching DOM text remains accessible.
@@ -83,6 +87,7 @@
     if (record) { best = score; bestPending = true; save(); Dino3D.sound('record'); }
     Kit.stats.end('end', score);
     el('final-score').textContent = String(score); el('record').hidden = !record;
+    overAt = performance.now();
     resetInput(); changeMode('over'); refreshHUD(); focusGame();
   }
   function update(dt) {
@@ -132,7 +137,7 @@
       return;
     }
     if (!Kit.isGameKeyEvent(e) || e.repeat) return;
-    if ((mode === 'ready' || mode === 'over') && (e.code === 'Space' || e.code === 'Enter' || (mode === 'over' && e.code === 'KeyR'))) { e.preventDefault(); start(); }
+    if ((mode === 'ready' || mode === 'over') && (e.code === 'Space' || e.code === 'Enter' || (mode === 'over' && e.code === 'KeyR'))) { e.preventDefault(); if (e.code !== 'Space' || overSettled()) start(); }
     else if (e.code === 'KeyP' || e.code === 'Escape') { e.preventDefault(); if (mode === 'playing') pause(); else if (mode === 'paused') resume(); }
     else if (mode === 'paused' && e.code === 'KeyR') { e.preventDefault(); start(); }
   });
@@ -140,7 +145,7 @@
   canvas.addEventListener('pointerdown', function (e) {
     if (e.button !== 0 || activePointer !== null) return;
     focusGame();
-    if (mode === 'ready' || mode === 'over') { start(); return; }
+    if (mode === 'ready' || mode === 'over') { if (overSettled()) start(); return; }
     if (mode !== 'playing') return;
     e.preventDefault(); activePointer = e.pointerId;
     canvas.setPointerCapture(e.pointerId);

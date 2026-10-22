@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
+import { clickControl } from '../ui-input.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -143,4 +144,20 @@ test('denied saves keep the result in this session and recover on retry', async 
   assert.equal(await page.locator('.sg-save-status[data-state="failed"]').count(), 0);
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:typing-test:hist')).length), 2);
   assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:typing-test:pbs'))['en|words|10|l']));
+});
+
+test('a double-click on "erase my results" only asks; erasing needs a second, separate click', async t => {
+  const page = await game(t);
+  await page.evaluate(() => { for (let i = 0; i < 3; i++) { __game.start({ lang: 'en', mode: 'words', amt: 10, seed: 10 + i }); __game.typeText(__game.words(10).join(' '), 180); } __game.start({ lang: 'en', mode: 'words', amt: 10 }); });
+  assert.equal(await page.evaluate(() => __game.store.hist().length), 3);
+  await clickControl(page, '#progMini');
+  await page.waitForTimeout(400);
+  const box = await page.locator('#pReset').boundingBox();
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => __game.store.hist().length), 3, 'the results survive a double-click');
+  assert.equal(await page.locator('#pReset.armed').count(), 1, 'the button asks for confirmation');
+  await page.waitForTimeout(400);
+  await page.locator('#pReset').click();
+  assert.equal(await page.evaluate(() => __game.store.hist().length), 0, 'a deliberate second click still erases');
 });

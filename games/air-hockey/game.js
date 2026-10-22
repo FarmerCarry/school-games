@@ -770,8 +770,8 @@
     var won = st.score[si] >= st.goalsToWin;
     if (won) {
       st.winner = scorer;
-      // Play statistics: counted here, not in endMatch(), so Restart or Menu during the slow-motion
-      // ending keeps the result (the title demo returned above). Two players report no winner.
+      // Play statistics and rewards: counted here, not in endMatch(), so Restart or Menu during the
+      // slow-motion ending keeps the result (the title demo returned above). Two players report no winner.
       if (!simulated) {
         if (st.mode > 1) Kit.stats.end('end');
         else Kit.stats.end(scorer < 0 ? 'win' : 'lose', st.score[0]); // score: the player's goals
@@ -779,6 +779,7 @@
       bigText(word, col, 1.8, 130, who);
       st.timeScale = 0.3; st.slowT = 1.3;
       setScene('ending');
+      commitMatch();
       return;
     }
     bigText(word, col, 1.4, 130, who);
@@ -1172,7 +1173,7 @@
     st.newAwards.push(a.name);
     S.award();
     // at the end of a match the results panel lists new awards as badges, so no toast there
-    if (st.scene === 'over') return;
+    if (st.scene === 'ending' || st.scene === 'over') return;
     if (midRally) { st.awardQ.push(a.name); popup('جائزة جديدة!', G.CX, 175, '#fff06a', 26); }
     else toast('جائزة جديدة: ' + a.name, AH.AWARD_COINS);
   }
@@ -1180,13 +1181,11 @@
     while (st.awardQ.length) toast('جائزة جديدة: ' + st.awardQ.shift(), AH.AWARD_COINS);
   }
 
-  function endMatch() {
-    setScene('over');
+  // The rewards are saved when the winning goal goes in (goal()); endMatch() only shows them.
+  var badges = [];
+  function commitMatch() {
     st.awardQ.length = 0; // the results panel lists every new award
-    st.timeScale = 1; st.slowT = 0;
-    var humanWon = st.mode === 2 || st.winner < 0;
-    var wIdx = sideIdx(st.winner);
-    var badges = [];
+    badges = [];
     save.matches++;
     if (st.mode === 1) {
       var b = st.bot;
@@ -1216,7 +1215,12 @@
       if (st.chaos) award('chaos');
     }
     persist();
-    // UI
+  }
+  function endMatch() {
+    setScene('over');
+    st.timeScale = 1; st.slowT = 0;
+    var humanWon = st.mode === 2 || st.winner < 0;
+    var wIdx = sideIdx(st.winner);
     var title = $('ovTitle'), sub = $('ovSub');
     if (st.mode === 1) {
       title.textContent = st.winner < 0 ? 'فزت!' : 'خسرت!';
