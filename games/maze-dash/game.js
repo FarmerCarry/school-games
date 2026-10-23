@@ -449,7 +449,12 @@
     try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
 
-  function restart() { if (G.mode === 'endless') startEndless(); else startLevel(G.levelN); }
+  function restart() { leaveRun(); if (G.mode === 'endless') startEndless(); else startLevel(G.levelN); }
+  // A Rising Goo run left alive (R, or Restart or Menu from pause) still banks what it
+  // earned; statistics count it as a quit, so it reports no end.
+  function leaveRun() {
+    if (G.mode === 'endless' && G.phase === 'play' && (G.screen === 'play' || G.screen === 'pause') && (scoreNow() || G.coinsGot)) commitOver(true);
+  }
 
   /* --------------------------------------------------------- the grid */
   function blockAt(x, y) {
@@ -1582,9 +1587,9 @@
     showScreen('fail');
     G.resultLock = 0.5;
   }
-  function commitOver() {
+  function commitOver(left) {
     var score = scoreNow();
-    Kit.stats.end('end', score);
+    if (!left) Kit.stats.end('end', score);
     var isBest = score > save.bestScore;
     var hBefore = save.bestH;
     save.runs++;
@@ -1619,6 +1624,7 @@
   }
 
   function toTitle() {
+    leaveRun();
     refreshTitle();
     showScreen('title');
   }
