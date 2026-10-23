@@ -78,7 +78,13 @@
     var owner = registration, worker = owner.active;
     if (!worker) {
       availableVersion = null;
-      if (repair && !hasWorker(owner)) return start();
+      if (!hasWorker(owner)) {
+        // Nothing is installing after a failed first install, so keep its failure
+        // and Retry up; Retry and reconnecting register again.
+        if (repair) return start();
+        if (shown !== 'unavailable') paint('unavailable', 'تعذّر تجهيز الألعاب دون إنترنت — أعد المحاولة', true);
+        return;
+      }
       paint('preparing', 'جارٍ تجهيز الألعاب للعمل دون إنترنت…', true);
       return;
     }

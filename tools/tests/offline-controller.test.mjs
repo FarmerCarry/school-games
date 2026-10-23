@@ -174,6 +174,23 @@ test('coming online also retries an empty registration left by a failed first in
   assert.equal(page.status['data-state'], 'ready');
 });
 
+test('focus after a failed first install keeps the failure instead of claiming preparation', async () => {
+  const failed = worker(), stale = registration({ installing: failed });
+  const page = controller([stale, registration({ active: worker('activated') })]);
+  await flush();
+  stale.installing = null; failed.state = 'redundant'; failed.emit('statechange');
+  const text = page.status.textContent;
+  page.window.emit('focus'); page.document.emit('visibilitychange');
+  await flush();
+  assert.equal(page.status['data-state'], 'unavailable', 'nothing is installing');
+  assert.equal(page.status.textContent, text);
+  assert.equal(page.retry.hidden, false);
+  page.retry.emit('click');
+  await flush();
+  assert.equal(page.calls, 2);
+  assert.equal(page.status['data-state'], 'ready');
+});
+
 test('first install and unchanged worker never offer an update or reload', async () => {
   const installing = worker(), owner = registration({ installing });
   const page = controller([owner]);
