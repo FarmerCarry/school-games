@@ -1053,6 +1053,11 @@
     if (G.screen === 'play') doMove(dir);
   });
   window.addEventListener('pointerup', function () { drag = null; });
+  // A focused button clicks on every auto-repeated Enter, so one held key would
+  // confirm New game by itself or spend every Undo.
+  ui.addEventListener('keydown', function (e) {
+    if (e.repeat && (e.key === 'Enter' || e.key === ' ')) e.preventDefault();
+  }, true);
   document.addEventListener('click', function (e) {
     var b = e.target && e.target.closest && e.target.closest('button');
     if (b && e.detail > 0) b.blur();
@@ -1061,7 +1066,7 @@
   function play(fresh) { sfx.click(); startGame(save.size, fresh); }
   function on(id, fn) {
     $(id).addEventListener('click', function (e) {
-      e.stopPropagation(); fn();
+      e.stopPropagation(); fn(e);
       // Pointer HUD actions return to the board; keyboard activation keeps
       // the control focused so Tab and a second confirmation still work.
       if (e.detail > 0 && G.screen === 'play' && $('hud').contains(e.currentTarget)) {
@@ -1074,8 +1079,10 @@
   on('btnUndo', undo);
   on('btnTheme', cycleTheme);
   on('btnPause', pause);
-  on('btnRestart', function () {
+  on('btnRestart', function (e) {
     if (G.moves >= 3 && !restartArmed && !G.dead) { sfx.click(); armRestart(true); return; }
+    // The confirming click must be a new one, not the 2nd click of the double-click that asked.
+    if (e.detail > 1) return;
     restart();
   });
   on('btnResume', resume);
