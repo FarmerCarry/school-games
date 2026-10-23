@@ -314,8 +314,13 @@
   levelButtons.forEach(function (button) {
     button.addEventListener('click', function () { setLevel(button.dataset.level); });
   });
-  el('leaveMatch').addEventListener('click', leaveMatch);
-  el('pauseButton').addEventListener('click', function () { pause(true, true); });
+  // The match buttons re-centre as they show and hide, so the 2nd click of a double-click on
+  // Pause or Play again lands on the button that slid under it; keyboard activation has detail 0.
+  // Its mousedown is ignored too, which keeps focus where the 1st click put it (Resume or the
+  // board), so the Enter that follows still resumes or plays.
+  el('leaveMatch').addEventListener('click', function (event) { if (event.detail > 1) return; leaveMatch(); });
+  el('pauseButton').addEventListener('click', function (event) { if (event.detail > 1) return; pause(true, true); });
+  app.querySelector('.match-actions').addEventListener('mousedown', function (event) { if (event.detail > 1) event.preventDefault(); });
   el('resumeButton').addEventListener('click', function () { pause(false, true); });
   el('rematchButton').addEventListener('click', function () {
     if (mode === 'menu' || !finished() || fallingCell) return;
