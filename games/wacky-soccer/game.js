@@ -48,7 +48,8 @@
     { id: 'clean', ic: '🧤', name: 'شباك نظيفة', desc: 'اربح دون أن يدخل مرماك أي هدف', rw: 40 },
     { id: 'comeback', ic: '🔥', name: 'عودة الأبطال', desc: 'اربح بعد أن كنت متأخرًا بهدفين', rw: 50 },
     { id: 'hard', ic: '🤖', name: 'قاهر الكمبيوتر', desc: 'اهزم الكمبيوتر الصعب', rw: 60 },
-    { id: 'mods', ic: '🎲', name: 'عالم الجنون', desc: 'العب مع 8 مفاجآت مختلفة', rw: 40, goal: 8, stat: function () { return Object.keys(save.mods).length; } },
+    // save.mods also records the normal ball, which is no surprise (saves already hold it)
+    { id: 'mods', ic: '🎲', name: 'عالم الجنون', desc: 'العب مع 8 مفاجآت مختلفة', rw: 40, goal: 8, stat: function () { return Object.keys(save.mods).filter(function (k) { return k !== 'normal'; }).length; } },
     { id: 'goals50', ic: '🥅', name: 'هدّاف كبير', desc: 'سجّل 50 هدفًا', rw: 60, goal: 50, stat: function () { return save.stats.goals; } },
     { id: 'shop', ic: '🛒', name: 'متسوّق صغير', desc: 'اشترِ أول شيء من المتجر', rw: 10 },
     { id: 'teams6', ic: '👕', name: 'جامع الفرق', desc: 'امتلك 6 فرق', rw: 50, goal: 6, stat: function () { return save.teams.length; } },

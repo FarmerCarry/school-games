@@ -305,6 +305,23 @@ test('a cup round won before a pause goes on to the next round instead of being 
   assert.deepEqual(await page.evaluate(() => [__game.state, __game.match.cupRound]), ['play', 1]);
 });
 
+test('the 8-surprises badge counts surprises only, not the normal ball every match starts with', async t => {
+  const page = await game(t);
+  await page.keyboard.press('Enter');
+  const seen = await page.evaluate(() => {
+    for (const id of ['giant', 'tiny', 'beach', 'moon', 'ice', 'wind', 'bouncy']) __game.setMod(id);
+    return [Object.keys(__game.save.mods).length, !!__game.save.ach.mods];
+  });
+  assert.deepEqual(seen, [8, false], 'the normal ball and 7 surprises are not enough');
+  await page.keyboard.press('Escape');
+  await clickControl(page, '#bMenu');
+  await clickControl(page, '#bAchv');
+  assert.match(await page.locator('#achList .ach', { hasText: 'عالم الجنون' }).textContent(), /\(7\/8\)/);
+  await clickControl(page, '#bAchBack');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => { __game.setMod('two'); return !!__game.save.ach.mods; }), true, 'the 8th surprise earns it');
+});
+
 // Both clicks of a double-click at the center of a control, as a child does it.
 async function doubleClick(page, selector) {
   const box = await page.locator(selector).boundingBox();
