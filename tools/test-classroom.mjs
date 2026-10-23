@@ -37,8 +37,10 @@ async function check(page, label, action) {
 }
 
 try {
-  browser = await launchChromium();
   for (const deniedStorage of [false, true]) {
+    // Storage policies are independent runs. Keep browser/GPU-process state from
+    // the full normal pass out of the blocked-storage pass.
+    browser = await launchChromium();
     const label = deniedStorage ? 'storage-blocked' : 'normal';
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block', reducedMotion: 'reduce', offline: true });
     try {
@@ -136,6 +138,8 @@ try {
         assert.ok(result.checks.length, 'Pool completes observable gameplay checks after leaving the puzzle menu');
       });
     } finally { await context.close(); }
+    await browser.close();
+    browser = null;
   }
 } catch (error) {
   errors.push(error.stack || String(error));
