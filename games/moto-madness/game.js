@@ -226,6 +226,7 @@
     canvas.focus();
   }
   function restartLevel() {
+    if (world.finished && !result) commitResult();
     statRound();
     world.restart();
     clearParticles();
@@ -370,11 +371,13 @@
   var result = null;
   // judged on the time as shown (tenths), so a run that reads 0:19.8 meets "under 0:19.8"
   function starsFor(i, t) { var s = MM.LEVELS[i].stars; t = Math.round(t * 10) / 10; return t <= s[0] ? 3 : t <= s[1] ? 2 : 1; }
-  // Saved the moment you cross the line, so R / Esc before the results panel can't lose the run.
+  // Saved once the bike is down past the line (a flip landed there still comes off the time),
+  // or straight away on R / pause, so leaving before the results panel can't lose the run.
   function commitResult() {
+    world.settled = true; // a flip still in the air now no longer counts
     var t = world.finalTime, i = levelIdx;
     var r = result = { t: t, st: starsFor(i, t), before: totalStars(), prevBest: save.best[i], ghost: false };
-    // only called from update() while state === 'play', once per finish (never by the demo)
+    // only called while state === 'play', once per finish (never by the demo)
     Kit.stats.end('win', r.st);
     if (!i && !save.stars[0]) Kit.stats.tutorial('done');
     r.newBest = r.prevBest == null || t < r.prevBest - 0.0001;
@@ -443,6 +446,7 @@
   /* ------------------------------------------------------------ pause */
   function pause() {
     if (state !== 'play') return;
+    if (world.finished && !result) commitResult();
     state = 'paused';
     frameDirty = true; // draw the paused scene once (without the in-game hints), then keep it
     showOverlay('pause');
@@ -632,7 +636,7 @@
       emitTrail(inp);
       if (world.finished) {
         finishT += dt;
-        if (!result) commitResult();
+        if (!result && (world.settled || finishT > 1)) commitResult();
         if (finishT > 1.6) showComplete();
       }
       // "hurry" beep when a star time runs out
