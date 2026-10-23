@@ -214,9 +214,18 @@ test('the first level teaches by doing, and the keyboard covers waves, speed and
   await page.evaluate(() => cg.step(1));
   assert.equal((await state(page)).screen, 'play');
   assert.match(await page.locator('#hint').textContent(), /الدائرة المتوهجة/);
+  // A pause (also the automatic one when the window loses focus) hides the hint; resuming shows the same step again.
+  const hintAfterPause = async () => {
+    await page.keyboard.press('KeyP');
+    await page.evaluate(() => cg.step(1));
+    await page.locator('#btnResume').click();
+    return page.locator('#hint').evaluate(e => e.hidden ? '' : e.textContent);
+  };
+  assert.match(await hintAfterPause(), /الدائرة المتوهجة/);
   await clickPad(page, 0);
   await page.locator('#panel .cg-card[data-type="pop"]').click();
   assert.match(await page.locator('#hint').textContent(), /ابدأ الموجة/);
+  assert.match(await hintAfterPause(), /ابدأ الموجة/);
   await page.keyboard.press('KeyF');
   await page.evaluate(() => cg.step(1));
   assert.equal((await state(page)).speed, 2);

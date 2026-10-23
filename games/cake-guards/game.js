@@ -152,7 +152,8 @@
     setScreen('pause');
     S.click();
   }
-  function resume() { if (screen !== 'pause') return; setScreen('play'); Kit.keys.reset(); focusGame(); }
+  // The pause screen hid the tutorial hint; the step the child is on comes back with play.
+  function resume() { if (screen !== 'pause') return; setScreen('play'); Kit.keys.reset(); focusGame(); showTutorial(); }
 
   /* -------------------------------------------------------------- results */
   // A result is saved the moment the engine decides it, not when its screen opens:
