@@ -85,6 +85,25 @@ test('verified update waits through real game menus, play, pause and classroom h
   assert.equal(await page.locator('#offlineRefresh').innerText(), 'حدّث الصفحة الآن');
 });
 
+test('verified update waits while the classroom timer runs or has expired between games', async t => {
+  const page = await pageFor(t);
+  await mockCompletedUpdate(page);
+  await page.clock.install();
+  await page.goto(origin);
+  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+  await page.locator('#classroom summary').click();
+  await page.locator('#sessionMinutes').selectOption('5');
+  await page.locator('#sessionStart').click();
+  assert.equal(await page.locator('#offlineUpdate').isHidden(), true, 'a reload would drop the running timer');
+  assert.equal(await page.evaluate(() => SGUpdateSafe()), false);
+  await page.clock.fastForward(300001);
+  await page.waitForFunction(() => document.querySelector('#sessionClock').textContent === '0:00');
+  assert.equal(await page.locator('#offlineUpdate').isHidden(), true, 'the next game still owes the handoff');
+  assert.equal(await page.evaluate(() => SGUpdateSafe()), false);
+  await page.locator('#sessionStop').click();
+  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+});
+
 test('refresh verification cannot discard a game launched while the status reply is pending', async t => {
   const page = await pageFor(t);
   await mockCompletedUpdate(page);

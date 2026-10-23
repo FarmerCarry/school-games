@@ -613,8 +613,9 @@
   function frameEl() { return $('#stage iframe'); }
   // A paused game, its title/menu and the classroom handoff still own a session.
   // Include the pending route so a launch cannot race an offline refresh check.
+  // The classroom timer lives only in this page, so a reload would silently drop it.
   window.SGUpdateSafe = function () {
-    return renderedHash !== null && !current && !frameEl() && parseRoute().name !== 'play';
+    return renderedHash !== null && !current && !frameEl() && parseRoute().name !== 'play' && !sessionDeadline && !sessionExpired;
   };
   // Local play statistics (js/stats.js, docs/PLAY_STATS.md). Never let them break play.
   function stat(name, a, b) {
@@ -795,6 +796,7 @@
     if (overlay) overlay.hidden = true;
     var f = frameEl();
     if (f && frameReady) f.removeAttribute('inert');
+    window.dispatchEvent(new Event('sg:sessionchange'));
   }
   function tickSession() {
     if (!sessionDeadline) return;
@@ -831,6 +833,7 @@
       $('#sessionStop').hidden = false;
       $('#sessionStart').textContent = T.resetTimer;
       $('#sessionStatus').textContent = T.sessionStarted(minutes);
+      window.dispatchEvent(new Event('sg:sessionchange'));
       tickSession();
     });
     $('#sessionStop').addEventListener('click', function () {
