@@ -64,9 +64,14 @@
     }
     document.querySelector('.current-score').classList.toggle('milestone', mode === 'playing' && engine.state.elapsed < milestoneUntil);
   }
+  // A run left from pause (Restart, R, New course or Menu) still keeps its best score;
+  // finish() has already banked a run that crashed.
+  function bankRun() {
+    if (mode === 'paused' && engine.state.score > best) { best = engine.state.score; bestPending = true; save(); }
+  }
   function start() {
     if (!renderer || contextLost) return;
-    resetInput(); engine.reset(Number(courseCode) + 1);
+    bankRun(); resetInput(); engine.reset(Number(courseCode) + 1);
     inputJumps = 0; milestoneUntil = 0; lastScore = -1;
     Kit.audio.unlock(); Kit.stats.round('endless');
     changeMode('playing'); refreshHUD(); focusGame();
@@ -104,7 +109,7 @@
     resetInput(); changeMode('playing'); focusGame();
   }
   function menu() {
-    resetInput(); engine.reset(Number(courseCode) + 1); milestoneUntil = 0; showCourse();
+    bankRun(); resetInput(); engine.reset(Number(courseCode) + 1); milestoneUntil = 0; showCourse();
     changeMode('ready'); refreshHUD(); focusGame();
   }
   function finish() {
