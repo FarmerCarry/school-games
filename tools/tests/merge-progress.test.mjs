@@ -81,6 +81,33 @@ test('A failed write shows the save warning until Retry stores the board', async
   assert.equal(restored.best[4], saved.best[4]);
 });
 
+for (const storage of ['failing', 'denied']) {
+  test(`While storage is ${storage}, Continue from the menu keeps the board that is in memory`, async t => {
+    const page = await gamePage(t, storage === 'denied' ? () => {
+      Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('denied', 'SecurityError'); } });
+    } : () => {});
+    await page.keyboard.press('Enter');
+    await page.evaluate(() => {
+      window.__game.set([2, 2, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      Storage.prototype.realSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = () => { throw new Error('quota'); };
+      window.__game.move(3);
+    });
+    const played = await state(page);
+    await page.evaluate(() => window.__game.menu());
+    assert.equal(await page.locator('#playLbl').textContent(), '▶ تابع');
+    await page.keyboard.press('Enter');
+    const resumed = await state(page);
+    assert.deepEqual([resumed.values, resumed.score], [played.values, played.score]);
+    if (storage === 'denied') return;
+    await page.evaluate(() => { Storage.prototype.setItem = Storage.prototype.realSetItem; });
+    await page.locator('.sg-save-status button').click();
+    await page.reload();
+    await page.keyboard.press('Enter');
+    assert.deepEqual((await state(page)).values, played.values, 'Retry stored the board that was played');
+  });
+}
+
 test('The HUD shows the next theme and switches after its unlock is announced', async t => {
   const page = await gamePage(t);
   await page.keyboard.press('Enter');

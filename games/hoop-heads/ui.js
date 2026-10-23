@@ -160,7 +160,9 @@
   }
   Array.prototype.forEach.call(document.querySelectorAll('#mainMenu .mbtn'), function (b) {
     b.classList.add('nav');
-    b.addEventListener('click', function () {
+    b.addEventListener('click', function (e) {
+      // A double-click on the result screen's 'القائمة' must not also open the menu entry under it.
+      if (e.detail > 1) return;
       S.click();
       var act = b.getAttribute('data-act');
       if (act === 'cpu' || act === 'duo') openSelect(act);
@@ -174,15 +176,19 @@
   }
 
   /* ================================================================= SELECT */
-  var sel = { mode: 'cpu', idx: [0, 1], ready: [false, false], startT: -1 };
+  var sel = { mode: 'cpu', idx: [0, 1], ready: [false, false], startT: -1, clicked: -1 };
   var grid = $('charGrid'), cards = [];
   CH.forEach(function (ch, i) {
     var b = document.createElement('button'); b.type = 'button'; b.className = 'cc';
     var cv = document.createElement('canvas'); cv.width = 132; cv.height = 132;
     var nm = document.createElement('div'); nm.className = 'nm';
     b.appendChild(cv); b.appendChild(nm);
-    b.addEventListener('click', function () { cardClick(i); });
-    b.addEventListener('dblclick', function () { if (sel.mode !== 'duo') selGo(); });
+    // A double-click on a card starts with it (its second click lands on the picked card), but a
+    // second click that only follows the menu button which opened this screen picks nothing.
+    b.addEventListener('click', function (e) {
+      if (e.detail > 1 && sel.clicked !== i) return;
+      sel.clicked = i; cardClick(i);
+    });
     grid.appendChild(b);
     cards.push({ el: b, cv: cv, nm: nm, ch: ch });
   });
@@ -260,7 +266,7 @@
     });
   }
   function openSelect(mode) {
-    sel.mode = mode; sel.ready = [false, false]; sel.startT = -1;
+    sel.mode = mode; sel.ready = [false, false]; sel.startT = -1; sel.clicked = -1;
     state = 'select'; show('scrSelect');
     $('selTitle').textContent = mode === 'duo' ? 'اختارا لاعبيكما!' : mode === 'tour' ? 'اختر بطلك للبطولة!' : 'اختر لاعبك!';
     var i0 = CH.indexOf(HH.charById(save.p1)); if (!HH.isUnlocked(CH[i0])) i0 = 0;
@@ -336,6 +342,7 @@
   }
   function selBack() { S.click(); if (sel.mode === 'tour') openCups(); else showTitle(); }
   function selGo() {
+    if (state !== 'select') return;   // one match per choice, however many presses ask for it
     var c0 = CH[sel.idx[0]];
     if (!HH.isUnlocked(c0)) { lockedToast(c0); return; }
     if (sel.mode === 'duo') {
@@ -427,7 +434,9 @@
     // the HUD reads cfg.stage: a win moves tour.stage on while the result and ladder still show this match
     startMatch({ mode: 'tour', stage: tour.stage, p1: tour.char, p2: tour.opps[tour.stage], lv: cp.lv[tour.stage], len: 60, target: 11 });
   }
-  $('ladGo').addEventListener('click', ladGo);
+  // The ladder opens with 'العب!' where the tournament's 'ابدأ!' was: a double-click there must
+  // not also skip the ladder into the first match.
+  $('ladGo').addEventListener('click', function (e) { if (e.detail > 1) return; ladGo(); });
   $('ladBack').addEventListener('click', function () {
     S.click();
     askConfirm('الانسحاب من البطولة؟', function () { tour = null; match = null; openCups(); });

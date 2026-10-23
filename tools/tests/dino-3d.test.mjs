@@ -494,3 +494,28 @@ test('Dino 3D keeps the result on screen when a jump is pressed just after the c
   await key(page, 'Space');
   assert.equal((await state(page)).mode, 'playing', 'Space restarts once the result has been seen');
 });
+
+test('Dino 3D keeps the best score of a run left from pause and saves a crashed run once', async t => {
+  const page = await game(t, { saved: '0' });
+  const best = () => page.evaluate(() => ({ best: Dino3DGame.best, saved: JSON.parse(localStorage.getItem('sg:dino-3d:best')) }));
+  await page.locator('#play').click();
+  // Each run is longer than the last but ends before the first obstacle (189 frames).
+  for (const [exit, frames] of [['#pause-menu', 40], ['#restart', 100], ['#new-course-paused', 160]]) {
+    await step(page, frames);
+    const score = (await state(page)).score;
+    assert.ok(score > (await best()).best, `the run beats the best before ${exit} (${score})`);
+    if (exit === '#pause-menu') await page.evaluate(() => dispatchEvent(new Event('blur')));
+    else await page.locator('#pause-button').click();
+    assert.equal((await state(page)).mode, 'paused');
+    await page.locator(exit).click();
+    assert.deepEqual(await best(), { best: score, saved: score }, `${exit} keeps the paused run's score`);
+    if (exit === '#pause-menu') {
+      assert.equal(await page.locator('#menu-best').textContent(), String(score));
+      await page.locator('#play').click();
+    }
+  }
+  await crash(page);
+  const writes = await page.evaluate(() => dinoProbe.writes.length);
+  await page.locator('#menu').click();
+  assert.equal(await page.evaluate(() => dinoProbe.writes.length), writes, 'leaving a crashed run does not save it again');
+});

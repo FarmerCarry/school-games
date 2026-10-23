@@ -1467,7 +1467,9 @@
   function toggleAim() { save.aim = save.aim === 'big' ? 'pro' : 'big'; persistKey('aim'); aimLabels(); frameDirty = true; }
 
   function startCpu() { newMatch('cpu', save.opp); show('game'); }
-  on('btnPlay', startCpu);
+  // The title opens with this button where 'القائمة' was (match over, pause): a double-click
+  // there must not also start a new match.
+  on('btnPlay', function (e) { if (e.detail > 1) return; startCpu(); });
   on('btn2p', function () { newMatch('pvp'); show('game'); });
   on('btnTrick', function () { show('levels'); });
   on('btnShop', function () { show('shop'); });

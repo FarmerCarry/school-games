@@ -304,3 +304,47 @@ test('a cup round won before a pause goes on to the next round instead of being 
   await clickControl(page, '#bCupPlay');
   assert.deepEqual(await page.evaluate(() => [__game.state, __game.match.cupRound]), ['play', 1]);
 });
+
+test('the 8-surprises badge counts surprises only, not the normal ball every match starts with', async t => {
+  const page = await game(t);
+  await page.keyboard.press('Enter');
+  const seen = await page.evaluate(() => {
+    for (const id of ['giant', 'tiny', 'beach', 'moon', 'ice', 'wind', 'bouncy']) __game.setMod(id);
+    return [Object.keys(__game.save.mods).length, !!__game.save.ach.mods];
+  });
+  assert.deepEqual(seen, [8, false], 'the normal ball and 7 surprises are not enough');
+  await page.keyboard.press('Escape');
+  await clickControl(page, '#bMenu');
+  await clickControl(page, '#bAchv');
+  assert.match(await page.locator('#achList .ach', { hasText: 'عالم الجنون' }).textContent(), /\(7\/8\)/);
+  await clickControl(page, '#bAchBack');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => { __game.setMod('two'); return !!__game.save.ach.mods; }), true, 'the 8th surprise earns it');
+});
+
+// Both clicks of a double-click at the center of a control, as a child does it.
+async function doubleClick(page, selector) {
+  const box = await page.locator(selector).boundingBox();
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+test('a double-click never buys in the shop, or plays or quits the cup round, that its first click opened', async t => {
+  const page = await game(t);
+  await matchTools(page);
+  await page.evaluate(() => __game.addCoins(300));
+  await doubleClick(page, '#bShop');
+  assert.deepEqual(await page.evaluate(() => [__game.state, __game.save.coins, __game.save.balls, __game.save.ball]), ['shop', 300, ['classic'], 'classic']);
+  await page.locator('#shopGrid .item').nth(1).click();
+  assert.deepEqual(await page.evaluate(() => [__game.save.ball, __game.save.coins]), ['stripes', 270], 'a single click still buys');
+  await clickControl(page, '#bShopBack');
+  await clickControl(page, '#bCup');
+  await doubleClick(page, '#bGo');
+  assert.equal(await page.evaluate(() => __game.state), 'cup', 'the bracket stays up');
+  await clickControl(page, '#bCupPlay');
+  await page.evaluate(() => { until('play'); __game.winNow(); for (let i = 0; i < 600 && __game.state !== 'over'; i++) __game.step(1 / 60); });
+  await doubleClick(page, '#bAgain');
+  assert.equal(await page.evaluate(() => __game.state), 'cup', 'the cup is not withdrawn from');
+  assert.deepEqual(await page.locator('#bracket .node').evaluateAll(nodes => nodes.map(n => n.className)), ['node won', 'node cur', 'node next', 'node next']);
+  await page.keyboard.press('Enter');
+  assert.deepEqual(await page.evaluate(() => [__game.state, __game.match.cupRound]), ['play', 1], 'Enter still plays');
+});

@@ -181,6 +181,28 @@ test('Rail Rush keeps the coins and best score of a run left through the pause m
   assert.ok(saved.best >= run.score, 'its score counts towards the best');
 });
 
+test('Rail Rush buys one power-up level for a double-click on its upgrade button', async t => {
+  const page = await railRush(t);
+  await page.evaluate(() => {
+    __game.give(1000);
+    document.getElementById('shopBtn').click();
+    document.querySelector('.tab[data-tab="ups"]').click();
+    rr.step(1);
+  });
+  const level = () => page.evaluate(() => ({ coins: __game.save.coins, magnet: __game.save.up.magnet,
+    saved: JSON.parse(localStorage.getItem('sg:rail-rush:save')).up.magnet }));
+  const before = await level();
+  const press = async (double) => {
+    const box = await page.locator('#shopBody [data-act="up"][data-id="magnet"]').boundingBox();
+    await page.mouse[double ? 'dblclick' : 'click'](box.x + box.width / 2, box.y + box.height / 2);
+    await page.evaluate(() => rr.step(1));
+  };
+  await press(true);
+  assert.deepEqual(await level(), { coins: before.coins - 200, magnet: before.magnet + 1, saved: before.magnet + 1 }, 'the double-click buys one level');
+  await press(false);
+  assert.equal((await level()).magnet, before.magnet + 2, 'a separate click still buys the next level');
+});
+
 test('Rail Rush survives a 0-px-tall frame and makes the shop portraits once it has room', async t => {
   const context = await browser.newContext({ viewport: { width: 960, height: 540 } });
   const page = await context.newPage(), errors = [];

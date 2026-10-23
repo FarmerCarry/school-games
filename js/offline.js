@@ -15,7 +15,10 @@
   }
   function complete(result) { return result.ready && result.count === result.total && result.total > 0; }
   function remember(result) {
-    availableVersion = complete(result) && typeof pageVersion === 'string' && typeof result.version === 'string' &&
+    // An uncontrolled page (first visit, or Ctrl+F5 bypassing the worker) came from
+    // the network, so a different cached version is older, never an update.
+    var controlled = !!navigator.serviceWorker.controller;
+    availableVersion = controlled && complete(result) && typeof pageVersion === 'string' && typeof result.version === 'string' &&
       result.version && result.version !== pageVersion ? result.version : null;
   }
   function paint(state, text, canRetry) {
@@ -75,7 +78,13 @@
     var owner = registration, worker = owner.active;
     if (!worker) {
       availableVersion = null;
-      if (repair && !hasWorker(owner)) return start();
+      if (!hasWorker(owner)) {
+        // Nothing is installing after a failed first install, so keep its failure
+        // and Retry up; Retry and reconnecting register again.
+        if (repair) return start();
+        if (shown !== 'unavailable') paint('unavailable', 'تعذّر تجهيز الألعاب دون إنترنت — أعد المحاولة', true);
+        return;
+      }
       paint('preparing', 'جارٍ تجهيز الألعاب للعمل دون إنترنت…', true);
       return;
     }

@@ -165,7 +165,13 @@ The recorder is about 6 KB minified; the portal's current size and limit are in 
 * **Unclosed sessions.** The open session is mirrored in `sg:site:stats:live`, with its
   open round and that round's `om`. If the portal finds one on load (the PC was switched
   off, the tab was killed), it closes it from the stored values first; the open round
-  becomes a quit with that time.
+  becomes a quit with that time. The quit and the gave up are filed at the time the
+  entry was last written, so a session closed the next morning stays on the day it was
+  played; one written before a teacher's clear adds nothing. A portal page still
+  playing answers the loading page within 1.5 seconds and keeps its session. One that
+  cannot answer (in the back-forward cache, or frozen) is closed the same way; when it
+  comes back it files no length and no gave up for that session, and no end for the
+  round that was filed as a quit (its next rounds count as usual).
 
 ### Other measures
 
@@ -187,7 +193,8 @@ The recorder is about 6 KB minified; the portal's current size and limit are in 
 ### Writing
 
 The portal keeps **deltas** in memory, each filed under the local date and hour when it
-was recorded (a session's length bucket goes to the day it opened). A write is
+was recorded (a session's length bucket goes to the day it opened, and an unclosed
+session's quit and gave up to the time it was last written). A write is
 `getItem` → parse and check → add the deltas → `setItem` → forget the deltas, so two
 portal tabs add up instead of overwriting each other. Writes happen when a session
 closes, on `pagehide`, about 1 second after a message arrives while the page is hidden,

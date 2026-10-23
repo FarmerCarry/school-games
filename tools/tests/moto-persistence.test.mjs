@@ -75,6 +75,53 @@ test('Moto Madness saves a finished run at the line, even when R restarts before
   assert.equal(await page.locator('#complete').isVisible(), true);
 });
 
+// Throws the bike over the line in the air, one back flip already turned, so it lands past the line.
+async function flipOverLine(page, level) {
+  await page.evaluate(i => {
+    __game.start(i);
+    const w = __game.world, x = w.level.finishX - 60;
+    w.placeBike(x, w.groundAt(x, -1e9, true) - 240, 0);
+    w.bike.vx = 300; w.started = true; w.time = 20;
+    for (let f = 0; f < 10 && w.grounded; f++) __game.step(1, { gas: true });
+    w.takeoffA = w.bike.a + 2 * Math.PI;
+    for (let f = 0; f < 120 && !w.finished; f++) __game.step(1, { gas: true });
+  }, level);
+  assert.deepEqual(await page.evaluate(() => [__game.world.finished, __game.world.grounded]), [true, false], 'crossed the line in the air');
+}
+
+test('Moto Madness takes a flip landed past the line off the saved time and the results', async t => {
+  const page = await game(t);
+  await flipOverLine(page, 0);
+  const atLine = await page.evaluate(() => __game.world.finalTime);
+  await page.evaluate(() => __game.step(120));
+  const run = await page.evaluate(() => ({
+    state: __game.state, flips: __game.world.flips, time: __game.world.finalTime, best: __game.save.best[0], saved: __game.save.flips
+  }));
+  assert.equal(run.state, 'complete');
+  assert.equal(run.flips, 1, 'the flip counts');
+  assert.ok(Math.abs(run.time - (atLine - 1)) < 1e-9, `it saved a second (${atLine} -> ${run.time})`);
+  assert.equal(run.best, Math.round(run.time * 100) / 100, 'the best time is the time with the flip off');
+  assert.equal(run.saved, 1);
+  assert.equal(await page.locator('#cTime').textContent(), '0:' + (Math.round(run.time * 10) / 10).toFixed(1));
+  assert.match(await page.locator('#cInfo').textContent(), /الشقلبات: 1 \(وفّرت 1 ث\)/);
+
+  // R while the bike is still in the air past the line keeps the run as it stands
+  await flipOverLine(page, 1);
+  await page.keyboard.press('KeyR');
+  const kept = await page.evaluate(() => ({ started: __game.world.started, stars: __game.save.stars[1], best: __game.save.best[1] }));
+  assert.equal(kept.started, false, 'R starts a fresh run');
+  assert.ok(kept.stars > 0 && kept.best > 0, `stars and best time are kept (${JSON.stringify(kept)})`);
+
+  // so does the automatic pause (window blur) there, then the pause menu's level list
+  await flipOverLine(page, 2);
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  assert.equal(await page.evaluate(() => __game.state), 'paused');
+  await page.click('#btnPauseLevels');
+  const left = await page.evaluate(() => ({ state: __game.state, stars: __game.save.stars[2], best: __game.save.best[2] }));
+  assert.equal(left.state, 'levels');
+  assert.ok(left.stars > 0 && left.best > 0, `a pause before the results keeps the run (${JSON.stringify(left)})`);
+});
+
 test('Moto Madness shows a retry warning when progress cannot be saved, and keeps the stars', async t => {
   const page = await game(t);
   await page.evaluate(key => {

@@ -213,3 +213,26 @@ test('R during the finish celebration or the endless splash keeps the result tha
   assert.equal((await state(page)).st, 'ready', 'R starts a new run');
   assert.equal((await saved()).endless, reached, 'the run that ended before R keeps its distance');
 });
+
+test('an endless run left alive with R or through the pause menu keeps its distance', async t => {
+  const page = await gamePage(t);
+  const saved = () => page.evaluate(() => (JSON.parse(localStorage.getItem('sg:swing-hook:save')) || {}).endless);
+  // The opening launch flies about 11 m before its splash: leave the run mid-air.
+  const fly = frames => page.evaluate(n => {
+    if (!window.ends) { window.ends = []; const end = Kit.stats.end; Kit.stats.end = function () { ends.push([...arguments]); return end.apply(this, arguments); }; }
+    __game.endless(); const x0 = __game.state().x; __game.script('1'.repeat(6)); stepGame(n);
+    const s = __game.state(); return { st: s.st, m: Math.floor((s.x - x0) / 50) };
+  }, frames);
+  let run = await fly(25);
+  assert.ok(run.st === 'play' && run.m > 0, `the run is still flying (${JSON.stringify(run)})`);
+  await page.keyboard.press('r');
+  await page.evaluate(() => stepGame(1));
+  assert.equal(await saved(), run.m, 'R mid-run keeps the distance');
+  run = await fly(45);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => stepGame(1));
+  assert.equal(await page.evaluate(() => __game.mode), 'pause');
+  await page.locator('#psMenu').click();
+  assert.equal(await saved(), run.m, 'Menu from pause keeps the longer distance');
+  assert.deepEqual(await page.evaluate(() => ends), [], 'statistics still count a run left alive as a quit');
+});

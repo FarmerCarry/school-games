@@ -326,7 +326,7 @@
   var W = World.prototype;
 
   W.restart = function () {
-    this.time = 0; this.bonus = 0; this.started = false; this.finished = false; this.finalTime = 0;
+    this.time = 0; this.bonus = 0; this.started = false; this.finished = false; this.settled = false; this.finalTime = 0;
     this.cp = -1; this.crashes = 0; this.flips = 0; this.smashed = 0; this.simT = 0; this.frame = 0;
     this.bestAir = 0;
     var L = this.level;
@@ -506,6 +506,7 @@
   var SV = [0, 0];
 
   W.crash = function (why) {
+    if (this.finished) this.pendingFlip = null; // no falls past the line, but a flip landed on the head still doesn't count
     if (this.crashed || this.finished) return;
     var b = this.bike, ca = Math.cos(b.a), sa = Math.sin(b.a);
     this.crashed = true; this.crashT = 0; this.crashes++;
@@ -885,7 +886,7 @@
       var imp = Math.max(rear.impact, front.impact);
       if (this.airT > 0.3 && !this.crashed) {
         var rot = b.a - this.takeoffA, n = Math.floor((Math.abs(rot) + 1.1) / (2 * Math.PI));
-        if (n > 0) this.pendingFlip = { n: n, dir: rot < 0 ? 'back' : 'front', t: 0.18 };
+        if (n > 0 && !this.settled) this.pendingFlip = { n: n, dir: rot < 0 ? 'back' : 'front', t: 0.18 };
         var both = rear.air < 0.05 && front.air < 0.05;
         this.events.push({ type: 'land', v: imp, air: this.airT, x: b.x, y: b.y, perfect: both && imp < 900 && this.airT > 0.7 });
         if (this.airT > this.bestAir) this.bestAir = this.airT;
@@ -896,8 +897,9 @@
       this.pendingFlip.t -= DT;
       if (this.pendingFlip.t <= 0) {
         var pf = this.pendingFlip; this.pendingFlip = null;
-        if (!this.crashed) {
+        if (!this.crashed && !this.settled) {
           this.flips += pf.n; this.bonus += pf.n;
+          if (this.finished) this.finalTime = Math.max(0, this.time - this.bonus); // landed past the line: still counts
           this.events.push({ type: 'flip', n: pf.n, dir: pf.dir, x: b.x, y: b.y });
         }
       }
@@ -931,6 +933,8 @@
         this.events.push({ type: 'finish', x: b.x, y: b.y });
       }
     }
+    // the result is final once the bike is down past the line with no flip left to count
+    if (this.finished && this.grounded && !this.pendingFlip) this.settled = true;
     // boulder triggers
     for (i = 0; i < L.triggerDefs.length; i++) {
       var tg = L.triggerDefs[i];
