@@ -841,7 +841,9 @@
   }
   function btn(id, fn) {
     var el = $(id);
-    el.addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); S.click(); fn(e); });
+    // A mouse click leaves no focus behind, so Enter keeps its on-screen meaning even after a
+    // double-click's second press lands on a button that ignores it.
+    el.addEventListener('click', function (e) { e.stopPropagation(); if (e.detail > 0) el.blur(); Kit.audio.unlock(); S.click(); fn(e); });
     el.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
     el.addEventListener('mouseenter', function () { S.hover(); });
   }
@@ -1110,8 +1112,10 @@
     $('cupInfo').textContent = 'أول من يسجّل ' + WS.CUP_GOALS + ' أهداف يفوز • الجائزة: ' + cup.reward + ' عملة';
     newMatch({ mode: 'show', teams: [WS.teamById(cupRun.team), WS.teamById(cupRun.opps[cupRun.round])], hats: [save.hat, 'none'] });
   }
-  btn('bCupPlay', function () { startMatch('cup'); });
-  btn('bCupQuit', function () { cupRun = null; goTitle(); });
+  // The bracket opens with these buttons where 'إلى الكأس!' and 'التالي' were, so a double-click's
+  // second click must not also play the round or withdraw from the cup; keys (detail 0) still work.
+  btn('bCupPlay', function (e) { if (e.detail > 1) return; startMatch('cup'); });
+  btn('bCupQuit', function (e) { if (e.detail > 1) return; cupRun = null; goTitle(); });
 
   /* -------------------------------------------------------------- shop */
   var shopTab = 'balls';
@@ -1152,7 +1156,8 @@
       else if (secret) pr.textContent = '🔒 سرّي';
       else { pr.innerHTML = '<span class="coin sm"></span><span dir="ltr">' + price + '</span>'; }
       d.appendChild(pr);
-      d.addEventListener('click', function (e) { e.stopPropagation(); shopClick(kind, it, d); });
+      // The shop opens with an item under the title's Shop button: a double-click must not buy it.
+      d.addEventListener('click', function (e) { e.stopPropagation(); if (e.detail > 1) return; shopClick(kind, it, d); });
       d.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
       grid.appendChild(d);
     });
