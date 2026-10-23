@@ -247,6 +247,30 @@ test('Hoop Heads a pause request on the two-player select screen calls off the r
   assert.deepEqual(result, { counting: true, blurred: { state: 'select', match: false, ready: [false, false] }, again: 'play' });
 });
 
+// Both clicks of a double-click at the center of a control, as a child does it.
+async function doubleClick(page, locator) {
+  const box = await locator.boundingBox();
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+test('Hoop Heads a double-click acts once, and never on what its first click opened', async t => {
+  const page = await hoop(t);
+  const now = () => page.evaluate(() => ({ state: __game.state, picked: HH.CHARS[__game.sel.idx[0]].id, p1: __game.save.p1, stats: hh.stats.length }));
+  await doubleClick(page, page.locator('#mainMenu [data-act="cpu"]'));
+  assert.deepEqual(await now(), { state: 'select', picked: 'robo', p1: 'robo', stats: 0 }, 'the select screen stays, with the saved player');
+  // a double-click on another card still starts with it, once
+  const other = await page.evaluate(() => HH.CHARS.findIndex((c, i) => HH.isUnlocked(c) && i !== __game.sel.idx[0]));
+  await doubleClick(page, page.locator('#charGrid .cc').nth(other));
+  assert.deepEqual(await page.evaluate(() => [__game.state, __game.match.players[0].ch.id, hh.stats]),
+    ['play', await page.evaluate(i => HH.CHARS[i].id, other), [['round', 'cpu-0']]]);
+  await page.evaluate(() => { __game.skipIntro(); __game.endNow(0); hh.untilResult(); });
+  await doubleClick(page, page.locator('#rMenu'));
+  assert.equal(await page.evaluate(() => __game.state), 'title', 'not the tournament under القائمة');
+  await page.evaluate(() => { document.querySelector('#mainMenu [data-act="tour"]').click(); document.querySelector('#cupRow .cupc').click(); });
+  await doubleClick(page, page.locator('#selGo'));
+  assert.equal(await page.evaluate(() => __game.state), 'ladder', 'the ladder shows before the first cup match');
+});
+
 test('Hoop Heads bounds vector/fit caches, reuses them across resize and invalidates after restoration', async t => {
   const page = await hoop(t);
   const bounds = await page.evaluate(() => {
