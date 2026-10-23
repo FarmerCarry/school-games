@@ -10,9 +10,11 @@
   var store = Kit.store(SLUG);
   function $(id) { return document.getElementById(id); }
   // The latest value of every write that failed; each later save retries them,
-  // and the warning stays up until all of them are on disk.
+  // and the warning stays up until all of them are on disk. Reads see them first,
+  // so Continue after a visit to the menu keeps the board that is still in memory.
   var dirty = {}, saveUI = Kit.saveStatus({ retry: saveGame });
   function put(k, v) { if (store.set(k, v)) delete dirty[k]; else dirty[k] = v; }
+  function readSaved(k, d) { return k in dirty ? dirty[k] : store.get(k, d); }
   function flushSaves() {
     Object.keys(dirty).forEach(function (k) { put(k, dirty[k]); });
     if (Object.keys(dirty).length) saveUI.failed(); else saveUI.saved();
@@ -74,7 +76,7 @@
     return true;
   }
   function loadSaved(N) {
-    var d = store.get('g' + N, null);
+    var d = readSaved('g' + N, null);
     if (!d || !validVals(d.v, N)) return null;
     var hist = [];
     if (Array.isArray(d.h)) d.h.forEach(function (h) { if (h && validVals(h.v, N)) hist.push({ v: h.v, s: num(h.s, 0) }); });
