@@ -473,7 +473,7 @@
     useLevel(Lv);
   }
   function restart() {
-    if (endless) { startEndless(); return; }
+    if (endless) { bankEndless(); startEndless(); return; }
     useLevel(Sim.build(LEVELS[lvl]));
     tries++;
     needFresh = holdInput();
@@ -1489,7 +1489,7 @@
     resumeWait = !!(w && w.st === 'play' && w.hook && !auto);
     needFresh = !resumeWait && holdInput();
   }
-  function toTitle() { attract = false; w = null; setMode('title'); }
+  function toTitle() { bankEndless(); attract = false; w = null; setMode('title'); }
 
   function refreshTitle() {
     var ts = totalStars(), done = 0;
@@ -1681,6 +1681,11 @@
     if (d > prev) save.endless = d;
     persist();
     result = { d: d, prev: prev };
+  }
+  // An endless run left alive (R, or Restart, Menu or Levels from pause) still keeps its
+  // distance; statistics count it as a quit, so it reports no end.
+  function bankEndless() {
+    if (endless && !attract && w && w.st === 'play' && dist() > save.endless) { save.endless = dist(); persist(); }
   }
   function showResult() {
     var def = LEVELS[lvl], t = w.timer, f = w.flips;
