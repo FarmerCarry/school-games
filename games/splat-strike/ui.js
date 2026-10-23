@@ -450,6 +450,8 @@
   }
   $('lTabs').addEventListener('click', function (e) { var b = e.target.closest('.tab'); if (!b) return; sfx.click(); lTab = b.getAttribute('data-t'); if (lPreview) { lPreview = ''; refreshDoll(); } renderLocker(); });
   $('lGrid').addEventListener('click', function (e) {
+    // a double-click's second click must not buy what its first click only tried on
+    if (e.detail > 1) return;
     var c = e.target.closest('.card'); if (!c) return;
     var id = c.getAttribute('data-id');
     if (lTab === 'wpn') { save.wpn = +id; sfx.swap(); persist(); refreshDoll(); renderLocker(); return; }

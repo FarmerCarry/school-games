@@ -118,3 +118,20 @@ test('Splat Strike shows the save warning when a write is refused and its retry 
   assert.equal((await status()).state, 'saved');
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:splat-strike:data')).coins), coins, 'the retry writes the coins kept in memory');
 });
+
+test('Splat Strike locker: a double-click only tries a locked item on and a later click buys it', async t => {
+  const page = await game(t);
+  const coins = await page.evaluate(() => __game.give(500));
+  await page.locator('#lockerBtn').click();
+  const id = await page.locator('#lGrid .card.locked').first().getAttribute('data-id');
+  const card = page.locator(`#lGrid .card[data-id="${id}"]`);
+  const saved = () => page.evaluate(() => { const d = JSON.parse(localStorage.getItem('sg:splat-strike:data')); return { coins: d.coins, owned: d.ownC, color: d.color }; });
+  await card.dblclick();
+  const tried = await saved();
+  assert.equal(tried.coins, coins, 'the double-click spends nothing');
+  assert.ok(!tried.owned.includes(id) && tried.color !== id, `${id} is not bought`);
+  assert.match(await card.getAttribute('class'), /\bsel\b/, 'the item is being tried on');
+  await card.click();
+  const bought = await saved();
+  assert.ok(bought.coins < coins && bought.owned.includes(id) && bought.color === id, `a separate click buys and wears ${id}`);
+});
