@@ -151,3 +151,20 @@ test('Paint Grab saves a star the moment it is announced, and the result still s
   });
   assert.deepEqual(shown, { state: 'over', delay: '0.5s' }, 'the result pops the star won mid-round as new');
 });
+
+test('Paint Grab keeps the best area and kills of a round left from the pause screen', async t => {
+  for (const exit of ['bMenu', 'bRestart', 'KeyR']) {
+    const page = await paintGrab(t);
+    await page.evaluate(() => {
+      document.getElementById('bPlay').click(); runtime.step(2);
+      __game.grab(22); __game.player.kills = 2; runtime.step(2);
+      window.dispatchEvent(new Event('blur')); runtime.step(1); // the automatic pause when the window loses focus
+    });
+    assert.equal(await page.evaluate(() => __game.state), 'pause');
+    if (exit === 'KeyR') await page.keyboard.press('KeyR');
+    else await page.evaluate(id => document.getElementById(id).click(), exit);
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:paint-grab:save')));
+    assert.deepEqual({ best: saved.best, arena: saved.bestA[0], kills: saved.kills, rounds: saved.rounds },
+      { best: 9, arena: 9, kills: 2, rounds: 0 }, `${exit} keeps the 9% and 2 kills (rounds count only when a round ends)`);
+  }
+});
