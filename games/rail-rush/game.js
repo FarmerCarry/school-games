@@ -1867,6 +1867,8 @@
     paintIcons($('shopBody'));
   }
   function shopClick(e) {
+    // A purchase rebuilds the shop, so a double-click's second click would buy the next upgrade level.
+    if (e.detail > 1) return;
     var b = e.target.closest('[data-act]');
     var card = e.target.closest('.card');
     if (b) {
