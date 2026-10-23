@@ -2441,6 +2441,8 @@
     // Keep the current store intact if the replacement cannot be persisted.
     if (!store.set('save', next)) { saveStatus.failed(); return; }
     S = next; R.welcome = 0; R.firstCust = false; R.rush = 0; R.rushT = 150; R.spawnT = 2; R.finaleT = -1;
+    // The old store's last sales must not become the new store's away-earnings rate.
+    R.income = 0; R.incomeT = 0;
     buildWorld();
     saveGame();
     R.disp = 0;
