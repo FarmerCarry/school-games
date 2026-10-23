@@ -1210,10 +1210,15 @@
       return;
     }
     // The confirming click must come after the question could be read: the second click
-    // of a double-click (or a held Enter's repeat) would otherwise erase everything at once.
+    // of a double-click would otherwise erase everything at once.
     if (performance.now() - armedAt < 600) return;
     ['pbs', 'hist', 'tier'].forEach(function (k) { delete pending[k]; store.remove(k); });
     flushSaves(); renderProgress(); updateFoot(); buildRace();
+  });
+  // A focused button clicks on every auto-repeated Enter, and a key held past 600 ms
+  // would still confirm; only a new key press may.
+  $('pReset').addEventListener('keydown', function (e) {
+    if (e.repeat && (e.key === 'Enter' || e.key === ' ')) e.preventDefault();
   });
 
   /* -------------------------------------------------------------- sounds */
