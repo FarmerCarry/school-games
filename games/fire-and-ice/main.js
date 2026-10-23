@@ -312,7 +312,8 @@
 
   /* ------------------------------------------------------ win / dead */
   function fmtTime(t) {
-    var m = Math.floor(t / 60), s = t - m * 60;
+    // in tenths first, so 9.96 s reads 0:10.0 and 59.96 s carries to 1:00.0
+    var d = Math.round(t * 10), m = Math.floor(d / 600), s = (d - m * 600) / 10;
     return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1);
   }
   function fmtPar(t) { var m = Math.floor(t / 60), s = Math.round(t - m * 60); return m + ':' + (s < 10 ? '0' : '') + s; }

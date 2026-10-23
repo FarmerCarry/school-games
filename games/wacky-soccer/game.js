@@ -48,7 +48,8 @@
     { id: 'clean', ic: '🧤', name: 'شباك نظيفة', desc: 'اربح دون أن يدخل مرماك أي هدف', rw: 40 },
     { id: 'comeback', ic: '🔥', name: 'عودة الأبطال', desc: 'اربح بعد أن كنت متأخرًا بهدفين', rw: 50 },
     { id: 'hard', ic: '🤖', name: 'قاهر الكمبيوتر', desc: 'اهزم الكمبيوتر الصعب', rw: 60 },
-    { id: 'mods', ic: '🎲', name: 'عالم الجنون', desc: 'العب مع 8 مفاجآت مختلفة', rw: 40, goal: 8, stat: function () { return Object.keys(save.mods).length; } },
+    // save.mods also records the normal ball, which is no surprise (saves already hold it)
+    { id: 'mods', ic: '🎲', name: 'عالم الجنون', desc: 'العب مع 8 مفاجآت مختلفة', rw: 40, goal: 8, stat: function () { return Object.keys(save.mods).filter(function (k) { return k !== 'normal'; }).length; } },
     { id: 'goals50', ic: '🥅', name: 'هدّاف كبير', desc: 'سجّل 50 هدفًا', rw: 60, goal: 50, stat: function () { return save.stats.goals; } },
     { id: 'shop', ic: '🛒', name: 'متسوّق صغير', desc: 'اشترِ أول شيء من المتجر', rw: 10 },
     { id: 'teams6', ic: '👕', name: 'جامع الفرق', desc: 'امتلك 6 فرق', rw: 50, goal: 6, stat: function () { return save.teams.length; } },
@@ -841,7 +842,9 @@
   }
   function btn(id, fn) {
     var el = $(id);
-    el.addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); S.click(); fn(e); });
+    // A mouse click leaves no focus behind, so Enter keeps its on-screen meaning even after a
+    // double-click's second press lands on a button that ignores it.
+    el.addEventListener('click', function (e) { e.stopPropagation(); if (e.detail > 0) el.blur(); Kit.audio.unlock(); S.click(); fn(e); });
     el.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
     el.addEventListener('mouseenter', function () { S.hover(); });
   }
@@ -1110,8 +1113,10 @@
     $('cupInfo').textContent = 'أول من يسجّل ' + WS.CUP_GOALS + ' أهداف يفوز • الجائزة: ' + cup.reward + ' عملة';
     newMatch({ mode: 'show', teams: [WS.teamById(cupRun.team), WS.teamById(cupRun.opps[cupRun.round])], hats: [save.hat, 'none'] });
   }
-  btn('bCupPlay', function () { startMatch('cup'); });
-  btn('bCupQuit', function () { cupRun = null; goTitle(); });
+  // The bracket opens with these buttons where 'إلى الكأس!' and 'التالي' were, so a double-click's
+  // second click must not also play the round or withdraw from the cup; keys (detail 0) still work.
+  btn('bCupPlay', function (e) { if (e.detail > 1) return; startMatch('cup'); });
+  btn('bCupQuit', function (e) { if (e.detail > 1) return; cupRun = null; goTitle(); });
 
   /* -------------------------------------------------------------- shop */
   var shopTab = 'balls';
@@ -1152,7 +1157,8 @@
       else if (secret) pr.textContent = '🔒 سرّي';
       else { pr.innerHTML = '<span class="coin sm"></span><span dir="ltr">' + price + '</span>'; }
       d.appendChild(pr);
-      d.addEventListener('click', function (e) { e.stopPropagation(); shopClick(kind, it, d); });
+      // The shop opens with an item under the title's Shop button: a double-click must not buy it.
+      d.addEventListener('click', function (e) { e.stopPropagation(); if (e.detail > 1) return; shopClick(kind, it, d); });
       d.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
       grid.appendChild(d);
     });

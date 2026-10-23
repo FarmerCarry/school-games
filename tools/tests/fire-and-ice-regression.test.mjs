@@ -106,6 +106,17 @@ test('Fire & Ice draws a paused level once and redraws it only after a resize', 
   assert.equal(await page.evaluate(() => __game.mode), 'play');
 });
 
+test('Fire & Ice times that round up to a whole ten seconds or minute read normally', async t => {
+  const page = await gamePage(t);
+  const text = await page.evaluate(() => {
+    __game.load(1); __game.bench(5);
+    __game.save.best[0] = { stars: 1, time: 9.96 };
+    __game.world.t = 59.96; __game.win(); __game.bench(60);
+    return document.getElementById('winTime').textContent;
+  });
+  assert.equal(text, 'الوقت 1:00.0   ·   الأفضل 0:10.0');
+});
+
 test('Fire & Ice glow sprites stop allocating canvases past the colour cap', async t => {
   const page = await gamePage(t);
   const made = await page.evaluate(() => {

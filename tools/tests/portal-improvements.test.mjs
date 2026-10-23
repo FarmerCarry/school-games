@@ -52,7 +52,7 @@ async function mockCompletedUpdate(page) {
     };
     const owner = Object.assign(new EventTarget(), { active, installing: null, waiting: null, update: async () => {} });
     Object.defineProperty(navigator, 'serviceWorker', { configurable: true,
-      value: Object.assign(new EventTarget(), { register: async () => owner }) });
+      value: Object.assign(new EventTarget(), { controller: active, register: async () => owner }) });
   });
 }
 
@@ -83,6 +83,25 @@ test('verified update waits through real game menus, play, pause and classroom h
   assert.equal(await page.evaluate(() => SGUpdateSafe()), true);
   assert.equal(await page.locator('#stage iframe').count(), 0);
   assert.equal(await page.locator('#offlineRefresh').innerText(), 'حدّث الصفحة الآن');
+});
+
+test('verified update waits while the classroom timer runs or has expired between games', async t => {
+  const page = await pageFor(t);
+  await mockCompletedUpdate(page);
+  await page.clock.install();
+  await page.goto(origin);
+  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+  await page.locator('#classroom summary').click();
+  await page.locator('#sessionMinutes').selectOption('5');
+  await page.locator('#sessionStart').click();
+  assert.equal(await page.locator('#offlineUpdate').isHidden(), true, 'a reload would drop the running timer');
+  assert.equal(await page.evaluate(() => SGUpdateSafe()), false);
+  await page.clock.fastForward(300001);
+  await page.waitForFunction(() => document.querySelector('#sessionClock').textContent === '0:00');
+  assert.equal(await page.locator('#offlineUpdate').isHidden(), true, 'the next game still owes the handoff');
+  assert.equal(await page.evaluate(() => SGUpdateSafe()), false);
+  await page.locator('#sessionStop').click();
+  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
 });
 
 test('refresh verification cannot discard a game launched while the status reply is pending', async t => {
@@ -136,21 +155,31 @@ test('personal games appear first and quick filters select matching games', asyn
 });
 
 test('return to games restores the clicked section, keyboard focus, and scroll', async t => {
-  const page = await pageFor(t);
-  await page.goto(origin);
-  const tile = page.locator('#app > section').last().locator('.tile[data-slug="air-hockey"]');
-  await tile.scrollIntoViewIfNeeded();
-  await tile.focus();
-  const before = await tile.evaluate(el => ({ scroll: scrollY, heading: el.closest('section').querySelector('h2').textContent }));
-  await tile.press('Enter');
-  await page.locator('#backGames').waitFor();
-  await page.locator('#backGames').click();
-  await page.waitForFunction(() => document.body.className === 'route-home');
-  const after = await page.evaluate(() => ({ scroll: scrollY, slug: document.activeElement.dataset.slug, heading: document.activeElement.closest('section')?.querySelector('h2')?.textContent }));
-  assert.equal(after.slug, 'air-hockey');
-  assert.equal(after.heading, before.heading);
-  assert.ok(Math.abs(after.scroll - before.scroll) <= 2, `scroll ${before.scroll} -> ${after.scroll}`);
-  assert.equal(await page.evaluate(() => document.activeElement.getAttribute('tabindex')), null, 'restored tile remains in the natural tab order');
+  // A fresh profile gains the «تابع اللعب» row above the list on return, which
+  // moves every tile down; a known player's list keeps its layout and exact scroll.
+  for (const recent of [null, '["air-hockey"]']) {
+    const page = await pageFor(t);
+    if (recent) await page.addInitScript(value => localStorage.setItem('sg:site:recent', value), recent);
+    await page.goto(origin);
+    const tile = page.locator('#app > section').last().locator('.tile[data-slug="air-hockey"]');
+    await tile.scrollIntoViewIfNeeded();
+    await tile.focus();
+    const before = await tile.evaluate(el => ({ scroll: scrollY, heading: el.closest('section').querySelector('h2').textContent }));
+    await tile.press('Enter');
+    await page.locator('#backGames').waitFor();
+    await page.locator('#backGames').click();
+    await page.waitForFunction(() => document.body.className === 'route-home');
+    const after = await page.evaluate(() => {
+      const el = document.activeElement, box = el.getBoundingClientRect();
+      return { scroll: scrollY, slug: el.dataset.slug, heading: el.closest('section')?.querySelector('h2')?.textContent,
+        top: box.top, bottom: box.bottom, header: document.querySelector('.topbar').getBoundingClientRect().bottom };
+    });
+    assert.equal(after.slug, 'air-hockey');
+    assert.equal(after.heading, before.heading);
+    assert.ok(after.top >= after.header && after.bottom <= 900, `focused tile on screen (recent ${recent}): ${after.top}-${after.bottom}`);
+    if (recent) assert.ok(Math.abs(after.scroll - before.scroll) <= 2, `scroll ${before.scroll} -> ${after.scroll}`);
+    assert.equal(await page.evaluate(() => document.activeElement.getAttribute('tabindex')), null, 'restored tile remains in the natural tab order');
+  }
 });
 
 test('iframe load and foreign messages cannot fake readiness; timeout offers a working retry', async t => {
@@ -341,6 +370,21 @@ test('portal metadata preserves board controls at classroom laptop height and nu
     return { first: first.getBoundingClientRect().x, last: last.getBoundingClientRect().x };
   });
   assert.ok(range.first < range.last, `duration range is visually reversed: ${JSON.stringify(range)}`);
+});
+
+test('minute counts agree with their number in round estimates and the session status', async t => {
+  const page = await pageFor(t);
+  await page.goto(origin);
+  const tip = slug => page.locator(`#app .tile[data-slug="${slug}"]`).first().getAttribute('title');
+  // 3-10 take دقائق, 11 and above دقيقة; a range agrees with its last number.
+  assert.match(await tip('pool-party'), /⁦5–10⁩ دقائق للجولة/);
+  assert.match(await tip('merge-2048'), /⁦5–15⁩ دقيقة للجولة/);
+  await page.locator('#classroom summary').click();
+  for (const [minutes, word] of [['10', 'دقائق'], ['15', 'دقيقة'], ['20', 'دقيقة']]) {
+    await page.locator('#sessionMinutes').selectOption(minutes);
+    await page.locator('#sessionStart').click();
+    assert.equal(await page.locator('#sessionStatus').textContent(), `بدأت جلسة ${minutes} ${word}. يتوقف اللعب عند انتهاء الوقت.`);
+  }
 });
 
 test('the classroom timer ignores a change of the PC clock during the lesson', async t => {

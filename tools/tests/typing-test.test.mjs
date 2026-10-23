@@ -134,3 +134,19 @@ test('a double-click on "erase my results" only asks; erasing needs a second, se
   await page.locator('#pReset').click();
   assert.equal(await page.evaluate(() => __game.store.hist().length), 0, 'a deliberate second click still erases');
 });
+
+test('a held Enter on "erase my results" only asks, however long it is held', async t => {
+  const page = await game(t);
+  await page.evaluate(() => { for (let i = 0; i < 3; i++) { __game.start({ lang: 'en', mode: 'words', amt: 10, seed: 10 + i }); __game.typeText(__game.words(10).join(' '), 180); } __game.start({ lang: 'en', mode: 'words', amt: 10 }); });
+  await clickControl(page, '#progMini');
+  await page.locator('#pReset').focus();
+  // A held key repeats its keydown; the repeats after 600 ms used to confirm.
+  await page.keyboard.down('Enter');
+  await page.waitForTimeout(700);
+  for (let i = 0; i < 3; i++) await page.keyboard.down('Enter');
+  await page.keyboard.up('Enter');
+  assert.equal(await page.evaluate(() => __game.store.hist().length), 3, 'the results survive a held Enter');
+  assert.equal(await page.locator('#pReset.armed').count(), 1, 'the button asks for confirmation');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => __game.store.hist().length), 0, 'a separate press still erases');
+});

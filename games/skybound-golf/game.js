@@ -233,6 +233,7 @@
     else canvas.focus({ preventScroll: true });
   }
   function menu() {
+    if (s.phase === 'flight') commit();
     closeModal(); s.phase = 'title'; resetScene(); stats(); controls();
     $('play').focus({ preventScroll: true });
   }
@@ -336,6 +337,7 @@
     hud.meters = hud.coins = hud.alt = -1; hud.rockets = '';
   }
   function start() {
+    if (s.phase === 'flight') commit();
     closeModal(); resetScene(); stats();
     s.phase = 'ready';
     if (!save.shots) Kit.stats.tutorial('start');
@@ -465,7 +467,9 @@
     return f ? f.x : x;
   }
 
-  // Saves the finished shot once, before any animation can be interrupted.
+  // Saves the finished shot once, before any animation can be interrupted. A shot left in
+  // flight from the pause menu (start, menu) is saved with what it has earned so far,
+  // including the world its toast already announced.
   function commit() {
     if (result) return result;
     var b = s.ball, distance = Math.floor(b.maxX), reward = P.reward(b), id = worldId();

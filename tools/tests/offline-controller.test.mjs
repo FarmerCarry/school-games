@@ -41,7 +41,7 @@ function controller(registrations, options = {}) {
   const retry = events(), update = { hidden: true }, refresh = events(), timers = new Map(), timerHistory = [];
   let calls = 0, nextTimer = 0, reloads = 0;
   const serviceWorker = {
-    ...events(),
+    ...events(), controller: options.controlled === false ? null : {},
     async register() {
       const result = registrations[calls++];
       if (!result) throw new Error('unexpected registration');
@@ -174,6 +174,23 @@ test('coming online also retries an empty registration left by a failed first in
   assert.equal(page.status['data-state'], 'ready');
 });
 
+test('focus after a failed first install keeps the failure instead of claiming preparation', async () => {
+  const failed = worker(), stale = registration({ installing: failed });
+  const page = controller([stale, registration({ active: worker('activated') })]);
+  await flush();
+  stale.installing = null; failed.state = 'redundant'; failed.emit('statechange');
+  const text = page.status.textContent;
+  page.window.emit('focus'); page.document.emit('visibilitychange');
+  await flush();
+  assert.equal(page.status['data-state'], 'unavailable', 'nothing is installing');
+  assert.equal(page.status.textContent, text);
+  assert.equal(page.retry.hidden, false);
+  page.retry.emit('click');
+  await flush();
+  assert.equal(page.calls, 2);
+  assert.equal(page.status['data-state'], 'ready');
+});
+
 test('first install and unchanged worker never offer an update or reload', async () => {
   const installing = worker(), owner = registration({ installing });
   const page = controller([owner]);
@@ -225,6 +242,31 @@ test('incomplete upgrades and failed installs retain the old working version wit
   next.ready = true; page.window.emit('focus');
   await flush();
   assert.equal(page.update.hidden, false);
+  assert.equal(page.reloads, 0);
+});
+
+test('a hard-reloaded uncontrolled page never offers the older cached version as an update', async () => {
+  // Ctrl+F5 bypasses the worker: the page is the newest build from the network
+  // while the previous complete version stays active and the new one installs.
+  const old = worker('activated'), next = worker(); old.version = 'page-v0';
+  const owner = registration({ active: old, installing: next });
+  const page = controller([owner], { controlled: false });
+  await flush();
+  assert.equal(page.status['data-state'], 'ready');
+  assert.equal(page.update.hidden, true);
+  page.refresh.emit('click');
+  await flush();
+  assert.equal(page.reloads, 0);
+  owner.installing = null; next.state = 'redundant'; next.emit('statechange');
+  page.window.emit('focus');
+  await flush();
+  assert.equal(page.status['data-state'], 'ready');
+  assert.equal(page.update.hidden, true, 'a failed install still leaves only the older cached version');
+  const newer = worker('activated'); newer.version = 'page-v2';
+  owner.active = newer; page.serviceWorker.controller = newer;
+  page.serviceWorker.emit('controllerchange');
+  await flush();
+  assert.equal(page.update.hidden, false, 'a later complete version that claims the page is a real update');
   assert.equal(page.reloads, 0);
 });
 

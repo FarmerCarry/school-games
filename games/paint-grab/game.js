@@ -469,7 +469,19 @@
     $('bPause').hidden = !(state === 'play');
   }
 
+  // A round left from the pause screen (Restart, R or Menu) keeps its best area and kills, and the
+  // skins they unlock, as it keeps its stars; rounds and wins count only when a round ends.
+  function bankRound() {
+    if (state === 'pause') { bank(Math.min(100, player.maxCells * 100 / NN), player.kills); persist(); }
+  }
+  function bank(peak, kills) {
+    if (peak > save.best) save.best = Math.round(peak * 10) / 10;
+    if (peak > save.bestA[arenaIdx]) save.bestA[arenaIdx] = Math.round(peak * 10) / 10;
+    save.kills += kills;
+  }
+
   function toTitle() {
+    bankRound();
     state = 'title';
     // an arena unlocked by the last round (finishRound stores it in save.arena) is preselected
     if (save.arena !== arenaIdx && arenaUnlocked(save.arena)) arenaIdx = save.arena;
@@ -484,6 +496,7 @@
 
   function startMatch() {
     if (!arenaUnlocked(arenaIdx)) return;
+    bankRound();
     // play stats: every start (play, again, restart, next arena) opens a round; the coach line shows in the first 3 rounds
     Kit.stats.round('arena' + (arenaIdx + 1));
     if (save.rounds < 3) Kit.stats.tutorial('start');
@@ -649,9 +662,7 @@
     newStars.sort();
     var prevBest = save.best;
     var newBest = peak > save.best + 0.001 && peak >= 0.5;
-    if (peak > save.best) save.best = Math.round(peak * 10) / 10;
-    if (peak > save.bestA[arenaIdx]) save.bestA[arenaIdx] = Math.round(peak * 10) / 10;
-    save.kills += en.kills; save.rounds++;
+    bank(peak, en.kills); save.rounds++;
     if (got[2]) save.wins++;
     // play stats: the coach line stops after 3 rounds (sent with the result); first place when time is up
     // (or full domination) wins, anything else loses; score = peak territory %

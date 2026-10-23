@@ -194,6 +194,35 @@ test('Pointer restart confirmation returns board focus and still requires its se
   assert.equal(await page.evaluate(() => document.activeElement.id), 'game');
 });
 
+test('A double-click or a held Enter on New game only asks, and a held Enter on Undo spends one undo', async t => {
+  const page = await gamePage(t);
+  await makeThreeMoves(page);
+  const previous = await state(page);
+  const box = await page.locator('#btnRestart').boundingBox();
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  assert.deepEqual((await state(page)).values, previous.values, 'the board survives a double-click');
+  assert.equal(await page.locator('#btnRestart.warn').count(), 1, 'the button asks for confirmation');
+  // Pausing and resuming withdraws the question.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#btnRestart.warn').count(), 0);
+  // A held Enter keydown repeats; each repeat would click the focused button again.
+  const hold = async id => {
+    await page.locator('#' + id).focus();
+    for (let i = 0; i < 5; i++) await page.keyboard.down('Enter');
+    await page.keyboard.up('Enter');
+  };
+  await hold('btnUndo');
+  const undone = await state(page);
+  assert.deepEqual([undone.undos, undone.hist], [2, 2], 'a held Enter spends one undo');
+  await hold('btnRestart');
+  assert.deepEqual((await state(page)).values, undone.values, 'the board survives a held Enter');
+  assert.equal(await page.locator('#btnRestart.warn').count(), 1);
+  await page.keyboard.press('Enter');
+  const restarted = await state(page);
+  assert.deepEqual([restarted.score, restarted.hist, restarted.undos], [0, 0, 3], 'a separate press still confirms');
+});
+
 for (const key of ['Space']) {
   test(`Keyboard ${key} on live HUD controls preserves Tab navigation and restart confirmation`, async t => {
     const page = await gamePage(t);

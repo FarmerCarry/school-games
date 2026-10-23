@@ -18,13 +18,15 @@ after(async () => {
   await server?.close();
 });
 
-// Drives Blob Battle's own update/render callbacks so frame and save counts are exact.
-async function blob(t, viewport = { width: 960, height: 540 }) {
+// Drives Blob Battle's own update/render callbacks so frame and save counts are exact
+// (and, given a seed, a repeatable Math.random).
+async function blob(t, viewport = { width: 960, height: 540 }, seed = 0) {
   const context = await browser.newContext({ viewport });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  await page.addInitScript(() => {
+  await page.addInitScript(seed => {
+    if (seed) Math.random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
     let kit, update, render;
     const runtime = window.runtime = { paints: 0, failSave: false, canvases: [] };
     runtime.step = count => { for (let i = 0; i < count; i++) { update(1 / 60); render(0); } };
@@ -50,7 +52,7 @@ async function blob(t, viewport = { width: 960, height: 540 }) {
       if (runtime.failSave && key.startsWith('sg:blob-battle:')) throw new DOMException('Full storage fixture', 'QuotaExceededError');
       return write.apply(this, arguments);
     };
-  });
+  }, seed);
   await page.goto(`${server.origin}/games/blob-battle/`);
   await page.waitForFunction(() => window.__game);
   await page.evaluate(async () => { await document.fonts.ready; await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -58,6 +60,25 @@ async function blob(t, viewport = { width: 960, height: 540 }) {
 }
 
 const paintsOver = (page, frames) => page.evaluate(n => { runtime.paints = 0; runtime.step(n); return runtime.paints; }, frames);
+
+test('Blob Battle draws its "+6" eat popups the right way round', async t => {
+  const page = await blob(t, undefined, 20261023);
+  const drawn = await page.evaluate(() => {
+    document.getElementById('btnPlay').click(); runtime.step(2);
+    const seen = [], fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (s) {
+      if (this.canvas.id === 'c') seen.push([String(s), this.direction]);
+      return fill.apply(this, arguments);
+    };
+    __game.setMass(20000); runtime.step(2); // a sudden giant swallows the gold pellets around it
+    CanvasRenderingContext2D.prototype.fillText = fill;
+    return seen;
+  });
+  const plus = drawn.filter(([s]) => /^\+\d+$/.test(s));
+  assert.ok(plus.length > 0, 'an eat popup is drawn');
+  assert.deepEqual([...new Set(plus.map(([, dir]) => dir))], ['ltr'], 'in an RTL run "+6" would read "6+"');
+  assert.ok(drawn.some(([s, dir]) => /[\u0600-\u06FF]/.test(s) && dir === 'rtl'), 'Arabic text still runs right to left');
+});
 
 test('Blob Battle draws a paused scene once, redraws it after resize and context restore, then resumes', async t => {
   const page = await blob(t);

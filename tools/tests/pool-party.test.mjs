@@ -189,6 +189,26 @@ test('a save that fails at the coins keeps the first-win bonus for a later win',
   assert.deepEqual(await stored(page, 'wins'), { easy: 1, medium: 0, hard: 0 });
 });
 
+test('a double-click on Menu shows the title instead of starting the match under it', async t => {
+  const page = await game(t);
+  const doubleClick = async selector => {
+    const box = await page.locator(selector).boundingBox();
+    await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  };
+  await startCpuMatch(page);
+  await page.evaluate(() => { __game.win(0); stepGame(90); });
+  assert.equal(await page.evaluate(() => __game.screen), 'over');
+  await doubleClick('#oMenu');
+  assert.deepEqual(await page.evaluate(() => [__game.screen, __game.kind]), ['title', 'demo'], 'from the match-over screen');
+  await startCpuMatch(page);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => stepGame(1));
+  await doubleClick('#pMenu');
+  assert.deepEqual(await page.evaluate(() => [__game.screen, __game.kind]), ['title', 'demo'], 'from the pause menu');
+  await clickControl(page, '#btnPlay');
+  assert.deepEqual(await page.evaluate(() => [__game.screen, __game.kind]), ['game', 'cpu'], 'a single click still plays');
+});
+
 test('picking an opponent writes only that setting until a save has failed', async t => {
   const page = await game(t);
   await page.evaluate(() => {

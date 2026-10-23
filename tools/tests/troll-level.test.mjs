@@ -136,6 +136,30 @@ test('denied saves warn, keep progress in memory and clear only after a full ret
   assert.deepEqual(await page.evaluate(() => [__game.save.unl, __game.save.stars[0]]), [1, 3]);
 });
 
+test('a level is saved when the door is reached, before the win panel opens, and the title demo saves nothing', async t => {
+  const page = await game(t);
+  const saved = () => page.evaluate(() => ['best', 'stars', 'unl'].map(k => JSON.parse(localStorage.getItem('sg:troll-level:' + k))));
+  await page.evaluate(() => {
+    window.ends = [];
+    const end = Kit.stats.end;
+    Kit.stats.end = function () { ends.push([...arguments]); return end.apply(this, arguments); };
+    // The attract demo on the title reaches its own door after about 9 s.
+    for (let f = 0; f < 900; f++) stepGame(1, true);
+  });
+  assert.deepEqual(await page.evaluate(() => [Object.keys(localStorage).filter(k => k.startsWith('sg:troll-level:')), ends]), [[], []]);
+  await page.evaluate(() => { __game.start(0); stepGame(150); __game.win(); });
+  await page.evaluate(() => { for (let f = 0; f < 120 && __game.player.state !== 'win'; f++) stepGame(1); });
+  assert.equal(await page.evaluate(() => __game.mode), 'play', 'the win panel waits 0.9 s');
+  const atDoor = await saved();
+  assert.deepEqual([atDoor[0][0], atDoor[1][0], atDoor[2]], [0, 3, 1], 'the stars and the next level are stored at the door');
+  assert.deepEqual(await page.evaluate(() => ends), [['win', 3]]);
+  await page.evaluate(() => stepGame(60));
+  assert.equal(await page.evaluate(() => __game.mode), 'win');
+  assert.deepEqual([await page.locator('#w-best').textContent(), await page.locator('#w-newbest').isHidden()], ['0', true]);
+  assert.deepEqual(await saved(), atDoor, 'the panel only shows the stored result');
+  assert.equal(await page.evaluate(() => ends.length), 1, 'the win is reported once');
+});
+
 test('a settled pause stops redrawing until a resize, and reduced motion skips the flash', async t => {
   const page = await game(t);
   await page.evaluate(() => {

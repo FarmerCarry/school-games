@@ -117,6 +117,26 @@ for (const exit of ['reload', 'menu', 'restart']) {
   });
 }
 
+for (const exit of ['menu', 'restart']) {
+  test(`Golf: a shot left in flight from the pause menu (${exit}) keeps its coins and the world it announced`, async t => {
+    const page = await game(t, { progress: { v: 2, best: 200, bests: { meadow: 200 }, upgrades: { power: 12, bounce: 10 }, shots: 10, tips: 2 } });
+    await swing(page);
+    const flown = await page.evaluate(() => {
+      for (let i = 0; i < 6000 && golfState.phase === 'flight' && golfState.ball.maxX < GolfPhysics.worlds[1].unlock + 10; i++) golfTick(1 / 60);
+      return { phase: golfState.phase, maxX: Math.floor(golfState.ball.maxX), toast: document.getElementById('toast').textContent };
+    });
+    assert.deepEqual([flown.phase, flown.toast], ['flight', 'فتحت وادي الرمال!']);
+    const saves = await page.evaluate(() => { window.dispatchEvent(new Event('blur')); advanceGolfFrames(2); return golfProbe.saves; });
+    await page.locator('#' + exit).click();
+    const kept = await saved(page);
+    assert.deepEqual([kept.best, kept.bests.meadow, kept.shots], [flown.maxX, flown.maxX, 11]);
+    assert(kept.coins > 0, 'the distance so far pays');
+    assert.equal(await page.evaluate(() => golfProbe.saves), saves + 1, 'saved once');
+    await page.reload();
+    assert.deepEqual(await saved(page), kept);
+  });
+}
+
 test('Golf: the result card opens by itself shortly after the landing', async t => {
   const page = await game(t);
   await swing(page);

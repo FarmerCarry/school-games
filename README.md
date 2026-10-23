@@ -417,7 +417,8 @@ levels or failed solution replays. Block Burst's default check also fails its st
 balance thresholds. On every change CI runs the Sneaky Levels, Maze Dash, Fire & Ice,
 Skybound Golf and Cake Guards verifiers, and Swing Hook and Block Burst on one level
 (`tools/tests/level-verifiers.test.mjs`). Block Burst's full balance check (about 4
-minutes) runs whenever `games/block-burst/` or the workflow changes:
+minutes) runs on every push to `main`, and on pull requests that change `games/block-burst/`
+or the workflow:
 
 ```
 node games/swing-hook/verify-levels.js

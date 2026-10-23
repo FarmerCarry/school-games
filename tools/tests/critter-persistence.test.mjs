@@ -261,6 +261,17 @@ test('offline collection takes precedence over a pending finale and credits once
   assert.equal((await snapshot(page)).save.stats.earned, 25);
 });
 
+test('a new store does not inherit the old store\'s income rate for away earnings', async t => {
+  const page = await gamePage(t, fixture());
+  await page.evaluate(() => { __game.start(); for (let i = 0; i < 60 * 120 && !__game.S().stats.served; i++) stepGame(); __game.pause(); });
+  assert.ok(await page.evaluate(() => __game.S().stats.served), 'the old store has just made a sale');
+  await page.locator('#restartBtn').click();
+  await page.locator('#yesBtn').click();
+  // Past the next 10 s income window: a store that has sold nothing earns nothing while away.
+  await page.evaluate(() => { __game.start(); stepGame(60 * 12); });
+  assert.deepEqual(await page.evaluate(() => [__game.S().stats.served, __game.S().rate]), [0, 0]);
+});
+
 test('legacy final purchase with done=false recovers its saved completion time', async t => {
   const save = fixture({ stats: { earned: 17, served: 3, play: 987 } });
   save.un.statue = true;

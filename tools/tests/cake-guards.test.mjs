@@ -56,6 +56,16 @@ async function clickPad(page, i) {
   const p = await page.evaluate(i => __game.padPoint(i), i);
   await page.mouse.click(p.x, p.y);
 }
+// Starts endless with four towers and holds n waves; the board waits in the break after the last.
+async function holdEndless(page, n) {
+  await page.evaluate(() => { __game.endless(); __game.give(5000); });
+  for (const [i, type] of [[0, 'cane'], [1, 'cake'], [2, 'pop'], [3, 'cane']]) {
+    await clickPad(page, i);
+    await page.locator(`#panel .cg-card[data-type="${type}"]`).click();
+  }
+  await page.evaluate(n => { for (let w = 0; w < n; w++) { document.getElementById('btnWave').click(); for (let i = 0; i < 4000 && __game.state.phase === 'wave'; i++) cg.run(1); } }, n);
+  return (await state(page)).wave;
+}
 
 test('a won level is saved the moment it is won; Restart from a pause in the celebration keeps it', async t => {
   const page = await game(t);
@@ -91,21 +101,26 @@ test('a lost level reports the waves it held; an endless run saves its best at t
   assert.equal(await page.locator('#scr-lose').isVisible(), true);
   assert.match(await page.locator('#loseSub').textContent(), /صمدت 0 من 7 موجات/);
   assert.equal(await page.locator('#btnEndless').isDisabled(), false, 'four finished levels open endless');
-  await page.evaluate(() => { __game.endless(); __game.give(5000); });
-  for (const [i, type] of [[0, 'cane'], [1, 'cake'], [2, 'pop'], [3, 'cane']]) {
-    await clickPad(page, i);
-    await page.locator(`#panel .cg-card[data-type="${type}"]`).click();
-  }
-  await page.evaluate(() => { for (let w = 0; w < 3; w++) { document.getElementById('btnWave').click(); for (let i = 0; i < 4000 && __game.state.phase === 'wave'; i++) cg.run(1); } });
-  const reached = (await state(page)).wave;
-  assert.ok(reached >= 3, `three waves held (${reached})`);
-  await page.evaluate(() => { __game.lose(); cg.step(1); });
-  assert.equal((await stored(page)).endless, reached - 1, 'the best is saved before the result screen');
+  assert.equal(await holdEndless(page, 3), 3, 'three waves held');
+  // The fourth wave eats the cake.
+  await page.evaluate(() => { document.getElementById('btnWave').click(); __game.lose(); cg.step(1); });
+  assert.equal((await stored(page)).endless, 3, 'the best is saved before the result screen');
   const ends = await page.evaluate(() => cg.stats.filter(s => s[0] === 'end'));
-  assert.deepEqual(ends, [['end', 'lose', 0], ['end', 'end', reached - 1]]);
+  assert.deepEqual(ends, [['end', 'lose', 0], ['end', 'end', 3]]);
   await page.evaluate(() => cg.step(120));
   assert.equal(await page.locator('#scr-over').isVisible(), true);
-  assert.equal(await page.locator('#overWaves').textContent(), String(reached - 1));
+  assert.equal(await page.locator('#overWaves').textContent(), '3');
+  assert.equal(await page.locator('#overNew').isVisible(), true, 'the waves saved during the run still count as a new record');
+});
+
+test('an endless run left from the pause menu keeps the waves it held', async t => {
+  const page = await game(t, { saved: JSON.stringify({ stars: [3, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0] }) });
+  assert.equal(await holdEndless(page, 2), 2, 'two waves held');
+  assert.equal((await stored(page)).endless, 2, 'each held wave is saved at once');
+  await page.keyboard.press('KeyP');
+  await page.evaluate(() => cg.step(1));
+  await page.locator('#btnMenu').click();
+  assert.equal(await page.locator('#endlessSub').textContent(), 'أفضل: 2 موجة');
 });
 
 test('pads build through their menu or the tower bar; upgrades and sales move coins; menus close', async t => {
@@ -199,9 +214,18 @@ test('the first level teaches by doing, and the keyboard covers waves, speed and
   await page.evaluate(() => cg.step(1));
   assert.equal((await state(page)).screen, 'play');
   assert.match(await page.locator('#hint').textContent(), /الدائرة المتوهجة/);
+  // A pause (also the automatic one when the window loses focus) hides the hint; resuming shows the same step again.
+  const hintAfterPause = async () => {
+    await page.keyboard.press('KeyP');
+    await page.evaluate(() => cg.step(1));
+    await page.locator('#btnResume').click();
+    return page.locator('#hint').evaluate(e => e.hidden ? '' : e.textContent);
+  };
+  assert.match(await hintAfterPause(), /الدائرة المتوهجة/);
   await clickPad(page, 0);
   await page.locator('#panel .cg-card[data-type="pop"]').click();
   assert.match(await page.locator('#hint').textContent(), /ابدأ الموجة/);
+  assert.match(await hintAfterPause(), /ابدأ الموجة/);
   await page.keyboard.press('KeyF');
   await page.evaluate(() => cg.step(1));
   assert.equal((await state(page)).speed, 2);
