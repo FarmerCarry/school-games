@@ -251,3 +251,20 @@ test('A paused board is drawn once, settled, redrawn after resize, context resto
   assert.deepEqual(result, { first: true, settled: true, idle: 0, parts: 0, resized: true, resizedIdle: 0, restored: true, restoredIdle: 0,
     themed: true, themedIdle: 0, theme: 'candy', playing: true, burst: true });
 });
+
+test('Best scores saved as a number or a string load as empty records and the game still starts', async t => {
+  const page = await gamePage(t, () => {
+    localStorage.setItem('sg:merge-2048:best', '5');
+    localStorage.setItem('sg:merge-2048:bt', '"x"');
+  });
+  await awaitScreen(page, 'title');
+  assert.deepEqual((await state(page)).best, { 3: 0, 4: 0, 5: 0, 6: 0 });
+  await page.keyboard.press('Enter');
+  await awaitScreen(page, 'play');
+  await page.evaluate(() => {
+    window.__game.set([2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    window.__game.move(3);
+  });
+  assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('sg:merge-2048:best')))[4], 4, 'the first score is a record');
+  assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('sg:merge-2048:bt')))[4], 4);
+});

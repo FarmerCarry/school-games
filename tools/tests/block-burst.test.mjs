@@ -21,7 +21,7 @@ after(async () => {
 });
 
 // The game only advances through stepGame()/drawGame().
-async function game(t) {
+async function game(t, { init } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'no-preference' });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -37,6 +37,7 @@ async function game(t) {
       };
     } });
   });
+  if (init) await page.addInitScript(init);
   await page.goto(`${origin}/games/block-burst/`);
   await page.waitForFunction(() => window.__game && window.stepGame);
   return page;
@@ -165,4 +166,23 @@ test('a won level is saved at once, before its ending animation and result panel
   assert.ok(adv && adv[0] >= 1, 'the stars are already in storage if the page is left now');
   await page.evaluate(() => { for (let i = 0; i < 600 && __game.state === 'ending'; i++) stepGame(1); });
   assert.equal(await page.evaluate(() => __game.state), 'win', 'the result panel still follows');
+});
+
+test('stats saved as null or a number restart from zero, so Classic starts and an Adventure line clear counts', async t => {
+  for (const raw of ['null', '7']) {
+    const page = await game(t, { init: `localStorage.setItem('sg:block-burst:stats', '${raw}')` });
+    await clickControl(page, '#btnClassic');
+    assert.equal(await page.evaluate(() => __game.state), 'play', raw);
+    const lines = await page.evaluate(() => {
+      __game.startLevel(0);
+      const run = __game.run;
+      for (let i = 0; i < 8; i++) run.cells[i] = i < 7 ? 3 : 0; // the top row lacks only its last cell
+      run.tray[0] = { shape: BBCore.BY_ID.dot0, color: 2, gemCell: -1, gemKind: 0 };
+      return __game.place(0, 0, 7).lines;
+    });
+    assert.equal(lines, 1, raw);
+    const stats = { games: 1, lines: 1, perfects: 0, bestCombo: 1 };
+    assert.deepEqual(await page.evaluate(() => __game.save.stats), stats, raw);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:block-burst:stats'))), stats, raw);
+  }
 });

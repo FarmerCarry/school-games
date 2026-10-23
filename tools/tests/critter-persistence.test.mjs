@@ -345,3 +345,15 @@ test('a first shelf trip with one banana still brings and serves the first custo
   assert.equal(state.served, 1, 'the first customer only asks for the banana on the shelf');
   assert.ok(state.tut >= 3);
 });
+
+test('a carried stack saved as a string and metadata saved as a number load empty and the shop still opens', async t => {
+  const page = await gamePage(t, { v: 1, carry: 'banana', tut: 5 }, 5);
+  await page.evaluate(() => { __game.start(); stepGame(30); });
+  const { state } = await snapshot(page);
+  assert.deepEqual([state.mode, state.stack], ['play', []]);
+  await page.evaluate(() => { __game.pause(); document.getElementById('menuBtn').click(); document.getElementById('musicBtn').click(); });
+  const { save, meta } = await snapshot(page);
+  assert.equal(await page.evaluate(() => __game.mode), 'title');
+  assert.deepEqual(save.carry, [], 'Save & Quit stores an empty stack');
+  assert.deepEqual(meta, { hat: 'none', maxLvl: 1, music: false, best: 0 }, 'the music switch stores fresh metadata');
+});

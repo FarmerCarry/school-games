@@ -47,12 +47,13 @@
 
   /* ================================================================ save */
   function num(v, d) { v = Number(v); return isFinite(v) && v >= 0 ? v : d; }
+  function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
   var save = {
     size: num(store.get('size', 4), 4),
     theme: store.get('theme', 'classic'),
     bestTile: num(store.get('bestTile', 0), 0),
-    best: store.get('best', {}) || {},
-    bt: store.get('bt', {}) || {},
+    best: obj(store.get('best', {})),
+    bt: obj(store.get('bt', {})),
     seen: store.get('seen', ['classic']) || ['classic'],
     games: num(store.get('games', 0), 0)
   };

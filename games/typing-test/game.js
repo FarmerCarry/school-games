@@ -496,8 +496,15 @@
     showResults(R);
   }
   function pbKey(o) { return o.lang + '|' + o.mode + '|' + o.amt + '|' + (o.lenient ? 'l' : 's'); }
-  function getPbs() { var p = saved('pbs', {}); return p && typeof p === 'object' ? p : {}; }
-  function getHist() { var h = saved('hist', []); return Array.isArray(h) ? h : []; }
+  // Only object entries are results: anything else in the saved maps or list is dropped.
+  function isObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+  function getPbs() {
+    var p = saved('pbs', {});
+    if (!isObj(p)) return {};
+    Object.keys(p).forEach(function (k) { if (!isObj(p[k])) delete p[k]; });
+    return p;
+  }
+  function getHist() { var h = saved('hist', []); return Array.isArray(h) ? h.filter(isObj) : []; }
   // Every finished test goes into the history (so beginners see their progress too); only results
   // with at least 75% accuracy can be personal bests. Low-accuracy entries are flagged v:0.
   // 'tier' = the best animal badge ever reached (index in E.BADGES), so moving up can be celebrated.
