@@ -170,7 +170,8 @@
           cells[row * 7 + i] = cell; button.appendChild(cell);
         }
       } else { button.setAttribute('aria-label', 'المربع ' + (i + 1)); cells[i] = button; }
-      button.addEventListener('click', function (event) { play(Number(event.currentTarget.dataset.move)); });
+      // With reduced motion a disc lands at once, so the 2nd click of a double-click would play the other seat's turn.
+      button.addEventListener('click', function (event) { if (event.detail > 1) return; play(Number(event.currentTarget.dataset.move)); });
       button.addEventListener('keydown', boardKeys);
       moveButtons.push(button); board.appendChild(button);
     }

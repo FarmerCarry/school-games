@@ -173,6 +173,20 @@ test('a double-click on Play again or Pause does not also press the button that 
   }
 });
 
+test('a double-click on a Connect 4 column with reduced motion drops one disc, not the other player\'s too', async t => {
+  const page = await openBoard(t, { game: 'connect-four' });
+  await page.locator('#localButton').click();
+  const column = async move => {
+    const box = await page.locator(`#gameBoard [data-move="${move}"]`).boundingBox();
+    return [box.x + box.width / 2, box.y + box.height * 0.8];
+  };
+  await page.mouse.dblclick(...await column(3));
+  assert.deepEqual(await page.evaluate(() => [gameBoard.dataset.moves, gameBoard.dataset.turn]), ['1', '2']);
+  // The other player's own click right after still plays.
+  await page.mouse.click(...await column(4));
+  assert.deepEqual(await page.evaluate(() => [gameBoard.dataset.moves, gameBoard.dataset.turn]), ['2', '1']);
+});
+
 test('a level picked mid-round starts with the next round and keeps the session score', async t => {
   const page = await openBoard(t, { init: () => { Math.random = () => 0.99; } });
   await page.locator('#pcButton').click();
