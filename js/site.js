@@ -1016,6 +1016,8 @@
         if (!heading.matches('a[href], button')) heading.setAttribute('tabindex', '-1');
         try { heading.focus({ preventScroll: true }); } catch (e) { heading.focus(); }
       }
+      // A new «تابع اللعب» row above the list can push the tile off screen.
+      if (returningTiles[0]) returningTiles[0].scrollIntoView({ block: 'nearest' });
     }
     renderedHash = routeHash();
     typing = false;

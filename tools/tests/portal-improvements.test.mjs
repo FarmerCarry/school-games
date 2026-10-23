@@ -155,21 +155,31 @@ test('personal games appear first and quick filters select matching games', asyn
 });
 
 test('return to games restores the clicked section, keyboard focus, and scroll', async t => {
-  const page = await pageFor(t);
-  await page.goto(origin);
-  const tile = page.locator('#app > section').last().locator('.tile[data-slug="air-hockey"]');
-  await tile.scrollIntoViewIfNeeded();
-  await tile.focus();
-  const before = await tile.evaluate(el => ({ scroll: scrollY, heading: el.closest('section').querySelector('h2').textContent }));
-  await tile.press('Enter');
-  await page.locator('#backGames').waitFor();
-  await page.locator('#backGames').click();
-  await page.waitForFunction(() => document.body.className === 'route-home');
-  const after = await page.evaluate(() => ({ scroll: scrollY, slug: document.activeElement.dataset.slug, heading: document.activeElement.closest('section')?.querySelector('h2')?.textContent }));
-  assert.equal(after.slug, 'air-hockey');
-  assert.equal(after.heading, before.heading);
-  assert.ok(Math.abs(after.scroll - before.scroll) <= 2, `scroll ${before.scroll} -> ${after.scroll}`);
-  assert.equal(await page.evaluate(() => document.activeElement.getAttribute('tabindex')), null, 'restored tile remains in the natural tab order');
+  // A fresh profile gains the «تابع اللعب» row above the list on return, which
+  // moves every tile down; a known player's list keeps its layout and exact scroll.
+  for (const recent of [null, '["air-hockey"]']) {
+    const page = await pageFor(t);
+    if (recent) await page.addInitScript(value => localStorage.setItem('sg:site:recent', value), recent);
+    await page.goto(origin);
+    const tile = page.locator('#app > section').last().locator('.tile[data-slug="air-hockey"]');
+    await tile.scrollIntoViewIfNeeded();
+    await tile.focus();
+    const before = await tile.evaluate(el => ({ scroll: scrollY, heading: el.closest('section').querySelector('h2').textContent }));
+    await tile.press('Enter');
+    await page.locator('#backGames').waitFor();
+    await page.locator('#backGames').click();
+    await page.waitForFunction(() => document.body.className === 'route-home');
+    const after = await page.evaluate(() => {
+      const el = document.activeElement, box = el.getBoundingClientRect();
+      return { scroll: scrollY, slug: el.dataset.slug, heading: el.closest('section')?.querySelector('h2')?.textContent,
+        top: box.top, bottom: box.bottom, header: document.querySelector('.topbar').getBoundingClientRect().bottom };
+    });
+    assert.equal(after.slug, 'air-hockey');
+    assert.equal(after.heading, before.heading);
+    assert.ok(after.top >= after.header && after.bottom <= 900, `focused tile on screen (recent ${recent}): ${after.top}-${after.bottom}`);
+    if (recent) assert.ok(Math.abs(after.scroll - before.scroll) <= 2, `scroll ${before.scroll} -> ${after.scroll}`);
+    assert.equal(await page.evaluate(() => document.activeElement.getAttribute('tabindex')), null, 'restored tile remains in the natural tab order');
+  }
 });
 
 test('iframe load and foreign messages cannot fake readiness; timeout offers a working retry', async t => {
