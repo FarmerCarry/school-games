@@ -372,6 +372,21 @@ test('portal metadata preserves board controls at classroom laptop height and nu
   assert.ok(range.first < range.last, `duration range is visually reversed: ${JSON.stringify(range)}`);
 });
 
+test('minute counts agree with their number in round estimates and the session status', async t => {
+  const page = await pageFor(t);
+  await page.goto(origin);
+  const tip = slug => page.locator(`#app .tile[data-slug="${slug}"]`).first().getAttribute('title');
+  // 3-10 take دقائق, 11 and above دقيقة; a range agrees with its last number.
+  assert.match(await tip('pool-party'), /⁦5–10⁩ دقائق للجولة/);
+  assert.match(await tip('merge-2048'), /⁦5–15⁩ دقيقة للجولة/);
+  await page.locator('#classroom summary').click();
+  for (const [minutes, word] of [['10', 'دقائق'], ['15', 'دقيقة'], ['20', 'دقيقة']]) {
+    await page.locator('#sessionMinutes').selectOption(minutes);
+    await page.locator('#sessionStart').click();
+    assert.equal(await page.locator('#sessionStatus').textContent(), `بدأت جلسة ${minutes} ${word}. يتوقف اللعب عند انتهاء الوقت.`);
+  }
+});
+
 test('the classroom timer ignores a change of the PC clock during the lesson', async t => {
   const page = await pageFor(t);
   await page.clock.install();

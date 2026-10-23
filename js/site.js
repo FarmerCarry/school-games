@@ -72,7 +72,7 @@
     openEnded: 'لعب مفتوح',
     // Isolate the numeric range so RTL prose keeps its low-to-high order in
     // both the visible label and the plain-text tile tooltip.
-    duration: function (min, max) { return 'حوالي \u2066' + min + '–' + max + '\u2069 دقائق للجولة'; },
+    duration: function (min, max) { return 'حوالي \u2066' + min + '–' + max + '\u2069 ' + minutesWord(max) + ' للجولة'; },
     pointer: 'الفأرة',
     keyboard: 'لوحة المفاتيح',
     mixedInput: 'الفأرة ولوحة المفاتيح',
@@ -86,7 +86,7 @@
     startSession: 'ابدأ جلسة جديدة',
     resetTimer: 'أعد ضبط المؤقّت',
     sessionChoice: 'انتهى وقت الجلسة. اختر تسليم الجهاز أو متابعة الجولة.',
-    sessionStarted: function (minutes) { return 'بدأت جلسة ' + minutes + ' دقائق. يتوقف اللعب عند انتهاء الوقت.'; },
+    sessionStarted: function (minutes) { return 'بدأت جلسة ' + minutes + ' ' + minutesWord(minutes) + '. يتوقف اللعب عند انتهاء الوقت.'; },
     timerCancelled: 'أُلغي المؤقّت. إذا كانت اللعبة متوقفة، استأنفها من داخل اللعبة.',
     nextPlayer: 'انتهت الجلسة. الجهاز جاهز للاعب التالي.',
     finishHint: 'استأنف من داخل اللعبة، ثم اضغط «العودة إلى الألعاب» لتسليم الجهاز بعد الجولة.',
@@ -101,6 +101,8 @@
     if (n >= 3 && n <= 10) return n + ' ألعاب';
     return n + ' لعبة';
   }
+  // After a written number: 3-10 دقائق, otherwise دقيقة. A range follows its last number.
+  function minutesWord(n) { return n >= 3 && n <= 10 ? 'دقائق' : 'دقيقة'; }
   function playersLabel(p) {
     p = String(p || '1').trim();
     var m = p.match(/^(\d+)\s*-\s*(\d+)$/);
