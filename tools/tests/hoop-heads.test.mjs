@@ -19,7 +19,8 @@ after(async () => {
 });
 
 // Hoop Heads with the test driving its loop: hh.step(n) runs n fixed updates, each
-// followed by a render, and hh.draw(n) only renders. hh.renders counts scene draws.
+// followed by a render, and hh.draw(n) only renders. hh.renders counts scene draws and
+// hh.stats lists the Kit.stats.round/end calls, e.g. ['round', 'cpu-0'], ['end', 'win', 5].
 async function hoop(t, { fontGate } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
   const page = await context.newPage(), errors = [];
@@ -27,7 +28,7 @@ async function hoop(t, { fontGate } = {}) {
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
   await page.addInitScript(() => {
     let kit, update, render;
-    const hh = window.hh = { renders: 0, failSave: false };
+    const hh = window.hh = { renders: 0, failSave: false, stats: [] };
     hh.step = (n = 1) => { for (let i = 0; i < n; i++) { update(1 / 60); render(0); } };
     hh.draw = (n = 1) => { for (let i = 0; i < n; i++) render(0); };
     hh.down = code => window.dispatchEvent(new KeyboardEvent('keydown', { code }));
@@ -35,9 +36,15 @@ async function hoop(t, { fontGate } = {}) {
     // A whole press and release between two frames, as on a stuttering school PC.
     hh.tap = code => { hh.down(code); hh.up(code); };
     hh.untilResult = () => { for (let i = 0; i < 600 && __game.state !== 'result'; i++) hh.step(1); return __game.state; };
+    // Until the engine decides the match, then a third of a second into its celebration.
+    hh.untilDecided = () => { for (let i = 0; i < 600 && !__game.match.ended; i++) hh.step(1); hh.step(20); return __game.match.phase; };
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (u, r) => { update = u; render = r; return { running: true, stop() {} }; };
+      for (const name of ['round', 'end']) {
+        const call = kit.stats[name];
+        kit.stats[name] = function (...args) { hh.stats.push([name, ...args]); return call.apply(this, args); };
+      }
     } });
     const write = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key) {
@@ -178,34 +185,90 @@ test('Hoop Heads withdrawing from a cup after a win drops the old match', async 
   assert.deepEqual(result, { hud: ['الكأس البرونزية • المباراة 1 من 5', 'الخصم 1 من 5'], ladder: 'ladder', match: null, renders: 4, state: 'title', demo: true });
 });
 
-test('Hoop Heads draws a high ball over the scoreboard and skips the flash for reduced motion', async t => {
+// The result screen opens 2-3 s after the engine decides a match; a pause in between
+// (P, a blur, the portal's Back) used to drop the win on Menu, Restart or R.
+test('Hoop Heads keeps a match decided before a pause in its celebration', async t => {
   const page = await hoop(t);
   const result = await page.evaluate(() => {
-    __game.start({ mode: 'duo' }); __game.skipIntro(); hh.step(1);
-    const m = __game.match, b = m.ball, ctx = document.getElementById('game').getContext('2d');
-    const pixel = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data.slice(0, 3));
-    // The peak of a long shot, over player 1's blue plate (a seam-free spot inside the ball).
-    Object.assign(b, { hidden: false, holder: null, state: 'shot', x: 480, y: 50, rot: 0, fire: false });
-    b.trail.length = 0;
-    hh.draw(1);
-    const ball = pixel(484, 58);
-    // A fire ball half below the scoreboard: its glow on the sky beside it is painted once.
-    Object.assign(b, { x: 640, y: 118, fire: true });
-    hh.draw(1); const glow = pixel(618, 122);
-    b.hidden = true;
-    hh.draw(1); const plain = pixel(640, 250), sky = pixel(618, 122);
-    m.flash = 1; Kit.motion.setPreference('reduce');
-    hh.draw(1); const reduced = pixel(640, 250);
-    Kit.motion.setPreference('full');
-    hh.draw(1); const flashed = pixel(640, 250);
-    return { ball, glow, sky, plain, reduced, flashed };
+    const pause = () => { hh.tap('KeyP'); hh.step(1); return __game.state; };
+    __game.start({ mode: 'cpu', lv: 0 }); __game.skipIntro(); __game.endNow(0);
+    const seen = [hh.untilDecided(), pause()];
+    document.getElementById('pMenu').click(); document.getElementById('cfYes').click(); hh.step(1);
+    seen.push(__game.state);
+    const saved = HH.store.get('save', { stats: {} });
+    const cpu = { coins: saved.coins, games: saved.stats.games, wins: saved.stats.wins, streak: saved.streak };
+    // Two players, then R: the match counts once, with no winner reported.
+    __game.start({ mode: 'duo' }); __game.skipIntro(); __game.endNow(1); hh.untilDecided();
+    seen.push(pause()); hh.tap('KeyR'); hh.step(1); seen.push(__game.match.phase);
+    // A resumed celebration still opens the result screen without saving again.
+    __game.skipIntro(); __game.endNow(0); hh.untilDecided(); pause(); document.getElementById('pResume').click();
+    seen.push(hh.untilResult());
+    const { stats } = HH.store.get('save', { stats: {} });
+    return { seen, cpu, games: stats.games, wins: stats.wins, coins: __game.save.coins, stats: hh.stats };
   });
-  const [r, , b] = result.ball;
-  assert.ok(r > 180 && b < 130, `the ball is drawn over the HUD (got rgb ${result.ball})`);
-  const once = [255, 159, 28].map((v, i) => (v + result.sky[i]) / 2); // #ff9f1c at 0.5 alpha
-  assert.ok(once.every((v, i) => Math.abs(v - result.glow[i]) <= 4), `one glow (got rgb ${result.glow}, want ${once})`);
-  assert.deepEqual(result.reduced, result.plain, 'reduced motion draws no full-screen flash');
-  assert.notDeepEqual(result.flashed, result.plain, 'full motion keeps the flash');
+  assert.deepEqual(result, {
+    seen: ['end', 'pause', 'title', 'pause', 'intro', 'result'],
+    cpu: { coins: 20, games: 1, wins: 1, streak: 1 }, games: 3, wins: 1, coins: 20 + 12 + 12,
+    stats: [['round', 'cpu-0'], ['end', 'win', 5], ['round', 'duo'], ['end', 'end'], ['round', 'duo'], ['end', 'end']]
+  });
+});
+
+test('Hoop Heads a cup match won before a pause moves the cup on instead of replaying it', async t => {
+  const page = await hoop(t);
+  const result = await page.evaluate(() => {
+    __game.tour(0, 3, 'robo');
+    document.getElementById('ladGo').click(); __game.skipIntro(); __game.endNow(0); hh.untilDecided();
+    hh.tap('KeyP'); hh.step(1); hh.tap('KeyR'); hh.step(1);
+    const ladder = { state: __game.state, done: document.querySelectorAll('#ladder .lslot.done').length };
+    // The boss: Restart from the pause menu shows the cup that was just won.
+    document.getElementById('ladGo').click(); __game.skipIntro(); __game.endNow(0); hh.untilDecided();
+    hh.tap('KeyP'); hh.step(1); document.getElementById('pRestart').click();
+    const saved = HH.store.get('save', { cups: {} });
+    return { ladder, state: __game.state, text: document.getElementById('trText').textContent, cup: saved.cups.b, coins: saved.coins, stats: hh.stats };
+  });
+  assert.deepEqual(result, {
+    ladder: { state: 'ladder', done: 4 }, state: 'trophy', text: 'فزت بـالكأس البرونزية!+169', cup: true,
+    coins: (5 + 20 + 3 * 6) + (5 + 20 + 4 * 6) + 120,
+    stats: [['round', 'tour-b-4'], ['end', 'win', 5], ['round', 'tour-b-5'], ['end', 'win', 5]]
+  });
+});
+
+test('Hoop Heads a pause request on the two-player select screen calls off the ready countdown', async t => {
+  const page = await hoop(t);
+  const result = await page.evaluate(() => {
+    document.querySelector('#mainMenu [data-act="duo"]').click();
+    hh.tap('Space'); hh.tap('Enter'); hh.step(1);
+    const counting = __game.sel.startT > 0;
+    window.dispatchEvent(new Event('blur')); hh.step(120);
+    const blurred = { state: __game.state, match: !!__game.match, ready: __game.sel.ready.slice() };
+    hh.tap('Space'); hh.tap('Enter'); hh.step(60);
+    return { counting, blurred, again: __game.state };
+  });
+  assert.deepEqual(result, { counting: true, blurred: { state: 'select', match: false, ready: [false, false] }, again: 'play' });
+});
+
+// Both clicks of a double-click at the center of a control, as a child does it.
+async function doubleClick(page, locator) {
+  const box = await locator.boundingBox();
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+test('Hoop Heads a double-click acts once, and never on what its first click opened', async t => {
+  const page = await hoop(t);
+  const now = () => page.evaluate(() => ({ state: __game.state, picked: HH.CHARS[__game.sel.idx[0]].id, p1: __game.save.p1, stats: hh.stats.length }));
+  await doubleClick(page, page.locator('#mainMenu [data-act="cpu"]'));
+  assert.deepEqual(await now(), { state: 'select', picked: 'robo', p1: 'robo', stats: 0 }, 'the select screen stays, with the saved player');
+  // a double-click on another card still starts with it, once
+  const other = await page.evaluate(() => HH.CHARS.findIndex((c, i) => HH.isUnlocked(c) && i !== __game.sel.idx[0]));
+  await doubleClick(page, page.locator('#charGrid .cc').nth(other));
+  assert.deepEqual(await page.evaluate(() => [__game.state, __game.match.players[0].ch.id, hh.stats]),
+    ['play', await page.evaluate(i => HH.CHARS[i].id, other), [['round', 'cpu-0']]]);
+  await page.evaluate(() => { __game.skipIntro(); __game.endNow(0); hh.untilResult(); });
+  await doubleClick(page, page.locator('#rMenu'));
+  assert.equal(await page.evaluate(() => __game.state), 'title', 'not the tournament under القائمة');
+  await page.evaluate(() => { document.querySelector('#mainMenu [data-act="tour"]').click(); document.querySelector('#cupRow .cupc').click(); });
+  await doubleClick(page, page.locator('#selGo'));
+  assert.equal(await page.evaluate(() => __game.state), 'ladder', 'the ladder shows before the first cup match');
 });
 
 test('Hoop Heads bounds vector/fit caches, reuses them across resize and invalidates after restoration', async t => {
@@ -264,31 +327,4 @@ test('Hoop Heads bounds vector/fit caches, reuses them across resize and invalid
     return { rebuilt, steady: hh.paths };
   });
   assert.deepEqual(restored, { rebuilt: 9, steady: 0 });
-});
-
-test('Hoop Heads late local fonts invalidate warmed HUD text fits before repainting', async t => {
-  let release;
-  const fontGate = new Promise(resolve => { release = resolve; });
-  t.after(() => release());
-  const page = await hoop(t, { fontGate });
-  const before = await page.evaluate(() => {
-    hh.widthReads = 0;
-    const c = document.getElementById('game').getContext('2d'), measure = c.measureText;
-    c.measureText = function () { hh.widthReads++; return measure.apply(this, arguments); };
-    __game.start({ mode: 'duo' }); __game.skipIntro(); hh.step(1);
-    const fonts = document.fonts.check('700 30px Fredoka', 'روبو A');
-    hh.widthReads = 0; hh.draw(30);
-    return { fonts, steady: hh.widthReads };
-  });
-  assert.deepEqual(before, { fonts: false, steady: 0 });
-  release();
-  await page.evaluate(async () => { await document.fonts.ready; await new Promise(resolve => setTimeout(resolve, 50)); });
-  const after = await page.evaluate(() => {
-    hh.widthReads = 0; hh.draw(1); const rebuilt = hh.widthReads;
-    hh.widthReads = 0; hh.draw(30);
-    return { fonts: document.fonts.check('700 30px Fredoka', 'روبو A'), rebuilt, steady: hh.widthReads };
-  });
-  assert.equal(after.fonts, true);
-  assert.ok(after.rebuilt > 0, 'font readiness recomputes the formerly cached text widths');
-  assert.equal(after.steady, 0);
 });

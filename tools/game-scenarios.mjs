@@ -71,6 +71,12 @@ export const scenarios = {
   'critter-mart': defaults(['#playBtn'], `${g}.mode === 'play'`, select(`${g}.state()`, ['player','coins','play','served']), hold('ArrowRight'), '#pauseBtn', `${g}.mode === 'pause'`, '#resumeBtn', `${g}.mode === 'play'`, { persistent: true }),
   'pizza-clicker': defaults(['#bPlay'], `${g}.mode === 'play'`, `[${g}.S.pizzas,${g}.S.clicks]`, async page => { await page.mouse.click(840, 405); }, '#bPause', `${g}.mode === 'pause'`, '#bResume', `${g}.mode === 'play'`, { persistent: true }),
   'block-world': defaults(['#playBtn','#modeCrea'], `${g}.G.mode === 'play'`, `[${g}.player.x,${g}.player.y,${g}.G.tod]`, hold('ArrowRight'), '#pausebtn', `${g}.G.mode === 'pause'`, '#resumeBtn', `${g}.G.mode === 'play'`, { persistent: true, startIf: ['true', `${g}.G.mode === 'newworld'`] }),
+  // Cake Guards: click a pad beside the road like a player, then pick popcorn from its menu.
+  'cake-guards': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.coins,${g}.state.towers,${g}.state.time,${g}.state.wave]`, async page => {
+    const pad = await page.evaluate(() => window.__game.padPoint(0));
+    await page.mouse.click(pad.x, pad.y);
+    await clickControl(page, '#panel .cg-card[data-type="pop"]');
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.towers === 0 && ${g}.state.wave === 0`),
   'block-burst': defaults(['#btnClassic'], `${g}.state === 'play'`, `[${g}.run.cells,${g}.run.score]`, async page => {
     // A dealt piece can be grabbed only once it has slid into the tray. After Start or a new
     // deal that takes several frames, and a software-rendered frame can take hundreds of ms.
@@ -113,7 +119,18 @@ export const scenarios = {
   'maze-dash': defaults(['#btn-play'], `${g}.state.screen === 'play'`, select(`${g}.state`, ['px','py','dots','time','hearts']), hold('ArrowRight'), null, `${g}.state.screen === 'pause'`, '#btn-restart', `${g}.state.dots === 0`),
   'road-hopper': defaults(['#btnPlay'], `${g}.state === 'play'`, `${g}.player()`, hold('ArrowUp'), '#btnPause', `${g}.state === 'paused'`, '#btnRestart', `${g}.score === 0`),
   'troll-level': defaults(['#btn-play'], `${g}.mode === 'play'`, `${g}.player`, hold('ArrowRight'), '#btn-pause', `${g}.mode === 'pause'`, '#btn-restart', `${g}.mode === 'play'`),
-  'blob-battle': defaults(['#btnPlay'], `${g}.info().state === 'play'`, select(`${g}.info()`, ['T','mass','playerCells','alive','player']), move, '#pauseBtn', `${g}.info().state === 'pause'`, '#btnRestart', `${g}.info().alive && ${g}.info().playerCells === 1 && ${g}.info().mass < 30`),
+  'blob-battle': defaults(['#btnPlay'], `${g}.info().state === 'play'`, select(`${g}.info()`, ['T','mass','playerCells','alive','player']), move, '#pauseBtn', `${g}.info().state === 'pause'`, async page => {
+    // Observe after the real button handler, in the same event dispatch. A fresh
+    // blob can eat nearby golden pellets before a slow runner's next async poll.
+    await page.evaluate(() => {
+      window.sgBlobRestart = null;
+      document.getElementById('btnRestart').addEventListener('click', () => {
+        const s = window.__game.info();
+        window.sgBlobRestart = { state: s.state, alive: s.alive, playerCells: s.playerCells, mass: s.mass };
+      }, { once: true });
+    });
+    await click('#btnRestart')(page);
+  }, `window.sgBlobRestart?.state === 'play' && window.sgBlobRestart.alive && window.sgBlobRestart.playerCells === 1 && window.sgBlobRestart.mass === 20`),
   'paint-grab': defaults(['#bPlay'], `${g}.state === 'play'`, `[${g}.player.x,${g}.player.y,${g}.time()]`, hold('ArrowRight'), '#bPause', `${g}.state === 'pause'`, '#bRestart', `${g}.time() > PG.MATCH_TIME - 1`),
   'snake-arena': defaults(['#btnPlay'], `${g}.state === 'play'`, select(`${g}.player`, ['x','y','len','alive']), move, '#btnPause', `${g}.state === 'paused'`, '#btnRestart', `${g}.player.alive`),
   'splat-strike': defaults(['#playBtn'], `${g}.state.ui === 'play' && !${g}.state.paused`, `[${g}.state.player,${g}.state.matchT]`, hold('KeyW'), '#pauseBtn', `${g}.state.paused`, '#restartBtn', `${g}.state.player.kills === 0 && ${g}.state.player.deaths === 0`, { ready: `${g}.state.countdown === 0`, init: () => { HTMLCanvasElement.prototype.requestPointerLock = undefined; } }),
@@ -143,7 +160,7 @@ const inputSnapshots = {
   'sumo-bonk': `${g}.state.players[0].action`,
   'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`,
   'wacky-soccer': `${g}.world.players.filter(p => p.side === 0).map(p => p.kickT)`,
-  'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`,
+  'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.

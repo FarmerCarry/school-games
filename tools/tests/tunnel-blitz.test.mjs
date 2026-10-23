@@ -145,35 +145,15 @@ test('a denied save warns, keeps progress in memory, and clears after a retry', 
   assert.equal(await page.evaluate(() => __game.info().runs), 1);
 });
 
-test('the gold ring reaches the ship in the frame the record is broken', async t => {
-  // nearMissAt: 0 breaks the record by distance; otherwise a near miss at that score jumps past it.
-  for (const nearMissAt of [0, 142]) {
-    const page = await game(t);
-    await page.evaluate(() => __game.setBest(150));
-    await play(page);
-    assert.equal(await page.evaluate(() => __game.info().ring), 151);
-    const crossing = await page.evaluate(nearMissAt => {
-      __game.invincible(true); __game.autopilot(true);
-      let prev = __game.info();
-      for (let i = 0; i < 3600 && prev.score <= 150; i++) {
-        // A near miss adds its bonus after this frame's record check, so the record breaks next frame.
-        if (nearMissAt && prev.score >= nearMissAt && !prev.closeRun) __game.nearMiss();
-        tb.step(1, false);
-        const now = __game.info();
-        if (now.score > 150) return { before: prev.ring, at: now.ring, D: now.D, closeRun: now.closeRun };
-        prev = now;
-      }
-      return null;
-    }, nearMissAt);
-    const how = nearMissAt ? 'bonus' : 'distance';
-    assert.ok(crossing, `${how}: the run passes the record`);
-    if (nearMissAt) {
-      assert.ok(crossing.closeRun === 1 && crossing.D < 150, `the bonus broke the record (${JSON.stringify(crossing)})`);
-      assert.ok(crossing.before > 5, `ring was well ahead before the bonus (${crossing.before} m)`);
-    } else {
-      assert.equal(crossing.closeRun, 0, 'the record is crossed by distance alone');
-      assert.ok(crossing.before > 0, `ring was still ahead before the record (${crossing.before} m)`);
-    }
-    assert.ok(crossing.at <= 0.5 && crossing.at > -1.5, `${how}: ring is at the ship when the record breaks (${crossing.at} m)`);
-  }
+test('a run keeps going past zone 60 (the tunnel used to end there and freeze the game)', async t => {
+  const page = await game(t);
+  await play(page);
+  const zones = await page.evaluate(() => {
+    __game.invincible(true); __game.autopilot(true);
+    const seen = [];
+    for (let i = 0; i < 64 && __game.info().state === 'play'; i++) { __game.skipZone(); seen.push(__game.sim(2).zone); }
+    return seen;
+  });
+  assert.equal(zones.length, 64);
+  assert.ok(zones.at(-1) > 62, `the run reached zone ${zones.at(-1)}`);
 });

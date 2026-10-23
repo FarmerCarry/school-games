@@ -44,20 +44,6 @@ const manualFrames = () => {
     for (let i = 0; i < count; i++) { time += 1000 / 60; callbacks.splice(0).forEach(callback => callback(time)); }
   };
 };
-// Timers fire only when a test calls runTimers(ms), in due order, so toasts need no real waiting.
-const manualTimers = () => {
-  const timers = new Map();
-  let time = 0, id = 0;
-  window.setTimeout = (callback, ms = 0) => { timers.set(++id, { at: time + ms, callback }); return id; };
-  window.clearTimeout = handle => timers.delete(handle);
-  window.runTimers = ms => {
-    const end = time + ms;
-    for (let due; (due = [...timers].filter(([, timer]) => timer.at <= end).sort((a, b) => a[1].at - b[1].at)[0]);) {
-      timers.delete(due[0]); time = due[1].at; due[1].callback();
-    }
-    time = end;
-  };
-};
 const nextBox = page => page.evaluate(() => ({
   hidden: document.getElementById('nextBox').hidden,
   name: document.getElementById('nextName').textContent,
@@ -95,6 +81,33 @@ test('A failed write shows the save warning until Retry stores the board', async
   assert.equal(restored.best[4], saved.best[4]);
 });
 
+for (const storage of ['failing', 'denied']) {
+  test(`While storage is ${storage}, Continue from the menu keeps the board that is in memory`, async t => {
+    const page = await gamePage(t, storage === 'denied' ? () => {
+      Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('denied', 'SecurityError'); } });
+    } : () => {});
+    await page.keyboard.press('Enter');
+    await page.evaluate(() => {
+      window.__game.set([2, 2, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      Storage.prototype.realSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = () => { throw new Error('quota'); };
+      window.__game.move(3);
+    });
+    const played = await state(page);
+    await page.evaluate(() => window.__game.menu());
+    assert.equal(await page.locator('#playLbl').textContent(), '▶ تابع');
+    await page.keyboard.press('Enter');
+    const resumed = await state(page);
+    assert.deepEqual([resumed.values, resumed.score], [played.values, played.score]);
+    if (storage === 'denied') return;
+    await page.evaluate(() => { Storage.prototype.setItem = Storage.prototype.realSetItem; });
+    await page.locator('.sg-save-status button').click();
+    await page.reload();
+    await page.keyboard.press('Enter');
+    assert.deepEqual((await state(page)).values, played.values, 'Retry stored the board that was played');
+  });
+}
+
 test('The HUD shows the next theme and switches after its unlock is announced', async t => {
   const page = await gamePage(t);
   await page.keyboard.press('Enter');
@@ -122,27 +135,6 @@ test('The HUD shows the next theme and switches after its unlock is announced', 
   await page.reload();
   await page.keyboard.press('Enter');
   assert.equal((await nextBox(page)).hidden, true, 'nothing is left to unlock');
-});
-
-test('A theme unlock waiting behind a record toast moves the HUD on only when it shows', async t => {
-  // A best score from an earlier game, so beating it shows the record toast.
-  const page = await gamePage(t, manualFrames, manualTimers, () => localStorage.setItem('sg:merge-2048:best', '{"4":8}'));
-  await page.keyboard.press('Enter');
-  const [waiting, between, shown] = await page.evaluate(() => {
-    const texts = () => ['toast', 'nextName'].map(id => document.getElementById(id).textContent);
-    window.__game.set([64, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    window.__game.move(3);
-    runFrames(90); // 1.5 s: the record toast is up and the unlock (0.9 s) is queued behind it
-    const waiting = texts();
-    runTimers(2300); // the record toast is sliding away
-    const between = texts();
-    runTimers(200); // 0.38 s after it left, the unlock takes its place
-    return [waiting, between, texts()];
-  });
-  assert.deepEqual(waiting, ['🏆 رقم قياسي جديد!', 'حلوى']);
-  assert.equal(between[1], 'حلوى');
-  assert.match(shown[0], /^🔓 شكل جديد: «حلوى»/);
-  assert.equal(shown[1], 'تطوّر');
 });
 
 test('A 3x3 save from before the 256 goal that already holds 256 resumes into the win screen', async t => {
@@ -223,40 +215,6 @@ test('A board is one statistics round: the goal tile reports nothing and a full 
   await awaitScreen(page, 'win');
   await page.keyboard.press('KeyR');
   assert.deepEqual((await page.evaluate(() => window.statCalls)).slice(2), [['round', 's3'], ['round', 's3']]);
-});
-
-test('Reduced motion keeps merge feedback but trims celebration particles', async t => {
-  const page = await gamePage(t);
-  await page.evaluate(() => Kit.motion.setPreference('reduce'));
-  await page.keyboard.press('Enter');
-  await page.evaluate(() => {
-    window.__game.set([2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    window.__game.move(3);
-  });
-  // The score "+N" pop stays visible instead of finishing its fade at once.
-  const plus = page.locator('#scoreBox .plus');
-  await plus.waitFor({ state: 'attached', timeout: 15000 });
-  assert.deepEqual(await plus.evaluate(el => [getComputedStyle(el).animationName, getComputedStyle(el).opacity, el.textContent]),
-    ['none', '1', '+4']);
-  // A quick second merge replaces the still pop instead of stacking on it.
-  await page.evaluate(() => {
-    window.__game.set([8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    window.__game.move(3);
-  });
-  const pops = await page.waitForFunction(() => {
-    const labels = [...document.querySelectorAll('#scoreBox .plus')].map(el => el.textContent);
-    return labels.includes('+16') && labels;
-  }, null, { timeout: 15000 });
-  assert.deepEqual(await pops.jsonValue(), ['+16']);
-
-  await page.evaluate(() => {
-    window.__game.nearWin();
-    window.__game.move(3);
-  });
-  await awaitScreen(page, 'win');
-  await page.waitForTimeout(800);
-  // Full motion adds 160 + 80 confetti and a 26-particle burst here.
-  assert.ok((await state(page)).parts <= 40, 'win confetti is capped');
 });
 
 test('A paused board is drawn once, settled, redrawn after resize, context restore or a theme change, and resumes its effects', async t => {

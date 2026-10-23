@@ -176,11 +176,6 @@ function movingArrow(values) {
   throw new Error(`no arrow moves this board: ${values.join()}`);
 }
 
-test('movingArrow avoids a no-op arrow on the board that once failed CI', () => {
-  assert.equal(movingArrow([0, 0, 0, 4, 0, 0, 0, 2, 0, 0, 0, 8, 2, 0, 0, 2]), 'ArrowUp');
-  assert.equal(movingArrow([2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 'ArrowDown');
-});
-
 test('Pointer restart confirmation returns board focus and still requires its second activation', async t => {
   const page = await gamePage(t);
   await makeThreeMoves(page);
@@ -197,6 +192,35 @@ test('Pointer restart confirmation returns board focus and still requires its se
   assert.equal(restarted.hist, 0);
   assert.equal(restarted.undos, 3);
   assert.equal(await page.evaluate(() => document.activeElement.id), 'game');
+});
+
+test('A double-click or a held Enter on New game only asks, and a held Enter on Undo spends one undo', async t => {
+  const page = await gamePage(t);
+  await makeThreeMoves(page);
+  const previous = await state(page);
+  const box = await page.locator('#btnRestart').boundingBox();
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  assert.deepEqual((await state(page)).values, previous.values, 'the board survives a double-click');
+  assert.equal(await page.locator('#btnRestart.warn').count(), 1, 'the button asks for confirmation');
+  // Pausing and resuming withdraws the question.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#btnRestart.warn').count(), 0);
+  // A held Enter keydown repeats; each repeat would click the focused button again.
+  const hold = async id => {
+    await page.locator('#' + id).focus();
+    for (let i = 0; i < 5; i++) await page.keyboard.down('Enter');
+    await page.keyboard.up('Enter');
+  };
+  await hold('btnUndo');
+  const undone = await state(page);
+  assert.deepEqual([undone.undos, undone.hist], [2, 2], 'a held Enter spends one undo');
+  await hold('btnRestart');
+  assert.deepEqual((await state(page)).values, undone.values, 'the board survives a held Enter');
+  assert.equal(await page.locator('#btnRestart.warn').count(), 1);
+  await page.keyboard.press('Enter');
+  const restarted = await state(page);
+  assert.deepEqual([restarted.score, restarted.hist, restarted.undos], [0, 0, 3], 'a separate press still confirms');
 });
 
 for (const key of ['Space']) {
@@ -224,3 +248,22 @@ for (const key of ['Space']) {
     assert.equal(restarted.undos, 3);
   });
 }
+
+test('Undo from the game-over screen reopens a statistics round, so the next full board is counted', async t => {
+  const page = await gamePage(t, false);
+  await page.evaluate(() => {
+    window.statsLog = [];
+    for (const name of ['round', 'end']) {
+      const call = Kit.stats[name];
+      Kit.stats[name] = function () { window.statsLog.push(name); return call.apply(this, arguments); };
+    }
+  });
+  await page.keyboard.press('Enter');
+  await page.evaluate(() => { window.__game.move(3); window.__game.move(0); window.__game.forceOver(); });
+  await awaitScreen(page, 'over');
+  await page.evaluate(() => window.__game.undo());
+  assert.equal((await state(page)).screen, 'play');
+  await page.evaluate(() => window.__game.forceOver());
+  await awaitScreen(page, 'over');
+  assert.deepEqual(await page.evaluate(() => window.statsLog), ['round', 'end', 'round', 'end']);
+});

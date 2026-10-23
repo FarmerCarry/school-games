@@ -148,10 +148,15 @@
   }
 
   /* ------------------------------------------------------------ results */
-  function onMatchEnd(G, winner) {
+  // A match is saved as soon as its last round is won (G.over), not when the result card
+  // opens 2.6 s later: a pause and then Restart or Menu, or leaving the page, can come in
+  // between. onMatchEnd only shows the stored result.
+  function commitMatch(G) {
+    if (G.result) return G.result;
     var mt = app.match;
     var human = G.tanks[0];
     var solo = G.humans === 1;
+    var winner = null; G.tanks.forEach(function (t) { if (t.score >= G.target) winner = t; });
     G.coins += 5; // a little something just for playing
     save.coins += G.coins;
     save.stats.matches++;
@@ -174,7 +179,12 @@
     // Solo matches win or lose; two or three children on one PC only end. Skips __game.autoplay matches.
     if (!human.bot) Kit.stats.end(solo ? won ? 'win' : 'lose' : 'end');
     persist();
-
+    G.result = { won: won, starsNow: starsNow, note: note };
+    return G.result;
+  }
+  function onMatchEnd(G, winner) {
+    var mt = app.match, solo = G.humans === 1, r = commitMatch(G);
+    var won = r.won, starsNow = r.starsNow, note = r.note;
     // fill result card
     var title, sub;
     if (solo) title = won ? 'أنت البطل!' : 'حظًّا أوفر!';
@@ -436,7 +446,7 @@
   /* ------------------------------------------------------------ loop */
   function update(dt) {
     var sc = app.screen;
-    if (sc === 'game' || sc === 'result') { if (app.game) app.game.update(dt); }
+    if (sc === 'game' || sc === 'result') { if (app.game) { app.game.update(dt); if (app.game.over) commitMatch(app.game); } }
     else if (sc !== 'pause') app.demo.update(dt);
     if (sc === 'result') {
       app.resT += dt;

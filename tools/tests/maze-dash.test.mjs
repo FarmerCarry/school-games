@@ -157,3 +157,49 @@ test('a paused game keeps its last frame, repaints it after a GPU reset or resiz
   assert.equal(await page.evaluate(() => { paints = 0; stepGame(10, true); return paints; }), 10, 'play renders every frame again');
   assert.equal(await page.evaluate(() => __game.state.screen), 'play');
 });
+
+test('R during the exit or death animation keeps the result that was reached', async t => {
+  const page = await gamePage(t);
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('sg:maze-dash:save')));
+  await page.evaluate(() => { __game.skip(1); stepGame(2); __game.win(); stepGame(10); });
+  assert.equal(await page.evaluate(() => __game.state.phase), 'exiting');
+  await page.keyboard.press('r');
+  await page.evaluate(() => stepGame(2));
+  assert.deepEqual(await page.evaluate(() => [__game.state.screen, __game.state.phase]), ['play', 'play'], 'R restarts the level');
+  assert.equal((await saved()).lv['1'].done, 1, 'the level reached before R stays won');
+  await page.evaluate(() => { __game.endless(); stepGame(5); __game.die(); stepGame(10); });
+  assert.equal(await page.evaluate(() => __game.state.phase), 'dying');
+  await page.keyboard.press('r');
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await page.evaluate(() => __game.state.phase), 'play', 'R starts a new run');
+  assert.equal((await saved()).runs, 1, 'the run that ended before R is counted');
+});
+
+test('a Rising Goo run left alive through the pause menu or R keeps its coins and best height', async t => {
+  const page = await gamePage(t);
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('sg:maze-dash:save')) || {});
+  const climb = () => page.evaluate(() => {
+    if (!window.ends) { window.ends = []; const end = Kit.stats.end; Kit.stats.end = function () { ends.push([...arguments]); return end.apply(this, arguments); }; }
+    __game.endless(); __game.god = true; __game.autoplay = true;
+    for (let i = 0; i < 400 && !(__game.state.height >= 10 && __game.state.coins > 0); i++) stepGame(30);
+    __game.god = false; __game.autoplay = false;
+  });
+  await climb();
+  await page.keyboard.press('Escape');
+  const run = await page.evaluate(() => { stepGame(1); return __game.state; });
+  assert.ok(run.screen === 'pause' && run.height >= 10 && run.coins > 0, `the run climbed and picked up coins (${JSON.stringify(run)})`);
+  await page.locator('#btn-pause-menu').click();
+  const banked = { coins: run.coins + Math.floor(run.height / 5), bestH: run.height, runs: 1 };
+  const kept = s => ({ coins: s.coins, bestH: s.bestH, runs: s.runs });
+  assert.deepEqual(kept(await saved()), banked, 'Menu from pause banks the run');
+  assert.ok((await saved()).bestScore >= run.height * 10);
+  await page.locator('#btn-shop').click();
+  await page.locator('#btn-shop-back').click();
+  assert.deepEqual(kept(await saved()), banked, 'going back to the title later banks nothing again');
+  await climb();
+  const run2 = await page.evaluate(() => __game.state);
+  await page.keyboard.press('r');
+  await page.evaluate(() => stepGame(1));
+  assert.deepEqual(kept(await saved()), { coins: banked.coins + run2.coins + Math.floor(run2.height / 5), bestH: Math.max(run.height, run2.height), runs: 2 }, 'R in play banks the run');
+  assert.deepEqual(await page.evaluate(() => ends), [], 'statistics still count a run left alive as a quit');
+});

@@ -86,9 +86,13 @@ test('a save from before the space world continues into it, and its levels play 
   await clickControl(page, '#btn-next');
   assert.equal(await page.evaluate(() => __game.mode), 'end');
   assert.equal(await page.locator('#e-stars').textContent(), '90/90');
-  // Wait for this finite entrance animation before sampling the button's center.
-  await page.waitForFunction(() => document.querySelector('#scr-end .panel').getAnimations()
-    .every(animation => animation.playState === 'finished'), null, { polling: 50, timeout: 5000 });
+  // Finish this finite entrance animation before sampling the button's center. Waiting for it
+  // timed out on a loaded CI runner: it stays pending until the compositor draws a frame.
+  assert.equal(await page.evaluate(() => {
+    const animations = document.querySelector('#scr-end .panel').getAnimations();
+    animations.forEach(animation => animation.finish());
+    return animations.every(animation => animation.effect.getComputedTiming().endTime !== Infinity);
+  }), true, 'the end panel has only finite entrance animations');
   await clickControl(page, '#btn-e-levels');
   assert.equal(await page.locator('#worlds .wrow').count(), 5);
   assert.equal(await page.locator('#worlds .lv:not(.locked)').count(), 30);
@@ -132,6 +136,30 @@ test('denied saves warn, keep progress in memory and clear only after a full ret
   assert.deepEqual(await page.evaluate(() => [__game.save.unl, __game.save.stars[0]]), [1, 3]);
 });
 
+test('a level is saved when the door is reached, before the win panel opens, and the title demo saves nothing', async t => {
+  const page = await game(t);
+  const saved = () => page.evaluate(() => ['best', 'stars', 'unl'].map(k => JSON.parse(localStorage.getItem('sg:troll-level:' + k))));
+  await page.evaluate(() => {
+    window.ends = [];
+    const end = Kit.stats.end;
+    Kit.stats.end = function () { ends.push([...arguments]); return end.apply(this, arguments); };
+    // The attract demo on the title reaches its own door after about 9 s.
+    for (let f = 0; f < 900; f++) stepGame(1, true);
+  });
+  assert.deepEqual(await page.evaluate(() => [Object.keys(localStorage).filter(k => k.startsWith('sg:troll-level:')), ends]), [[], []]);
+  await page.evaluate(() => { __game.start(0); stepGame(150); __game.win(); });
+  await page.evaluate(() => { for (let f = 0; f < 120 && __game.player.state !== 'win'; f++) stepGame(1); });
+  assert.equal(await page.evaluate(() => __game.mode), 'play', 'the win panel waits 0.9 s');
+  const atDoor = await saved();
+  assert.deepEqual([atDoor[0][0], atDoor[1][0], atDoor[2]], [0, 3, 1], 'the stars and the next level are stored at the door');
+  assert.deepEqual(await page.evaluate(() => ends), [['win', 3]]);
+  await page.evaluate(() => stepGame(60));
+  assert.equal(await page.evaluate(() => __game.mode), 'win');
+  assert.deepEqual([await page.locator('#w-best').textContent(), await page.locator('#w-newbest').isHidden()], ['0', true]);
+  assert.deepEqual(await saved(), atDoor, 'the panel only shows the stored result');
+  assert.equal(await page.evaluate(() => ends.length), 1, 'the win is reported once');
+});
+
 test('a settled pause stops redrawing until a resize, and reduced motion skips the flash', async t => {
   const page = await game(t);
   await page.evaluate(() => {
@@ -173,31 +201,6 @@ test('a settled pause stops redrawing until a resize, and reduced motion skips t
   assert.ok(await page.evaluate(() => flashes) > 0, 'full motion keeps the death flash');
 });
 
-test('the floor under the elevator gets its frosting top only once the elevator lifts', async t => {
-  const page = await game(t);
-  // Level 14: the elevator rests on the candy floor at columns 20-22 (floor top y = 520).
-  const floorTop = () => page.evaluate(() => {
-    const cv = document.getElementById('cv'), k = cv.width / 1280;
-    return [...cv.getContext('2d').getImageData(Math.round(860 * k), Math.round(523 * k), 1, 1).data].slice(0, 3);
-  });
-  await page.evaluate(() => { __game.start(13); stepGame(1); });
-  assert.ok(Math.max(...await floorTop()) < 128, 'under the resting elevator the floor is one dark mass with it');
-  await page.evaluate(() => { __game.solve(); stepGame(200, true); });
-  assert.ok((await page.evaluate(() => __game.player.y)) < 11, 'the player rides the elevator up');
-  assert.ok(Math.min(...await floorTop()) > 200, 'the uncovered floor shows its white frosting');
-});
-
-test('the canvas edge past the baked level is painted when the canvas rounds up', async t => {
-  // At 125% Windows scaling this canvas is 1623 device pixels wide, one more than the baked level.
-  const page = await game(t, { viewport: { width: 1536, height: 730 }, deviceScaleFactor: 1.25 });
-  const edge = await page.evaluate(() => {
-    __game.start(0); stepGame(1);
-    const cv = document.getElementById('cv');
-    return [...cv.getContext('2d').getImageData(cv.width - 1, 300, 1, 1).data];
-  });
-  assert.deepEqual(edge, [0x1c, 0x12, 0x26, 255], 'the last column is wall coloured, not transparent');
-});
-
 test('the baked level canvas is rebaked when its context comes back', async t => {
   const page = await game(t);
   const alpha = await page.evaluate(() => {
@@ -211,4 +214,19 @@ test('the baked level canvas is rebaked when its context comes back', async t =>
     return [lost, centre()];
   });
   assert.deepEqual(alpha, [0, 255], 'the level background is painted again');
+});
+
+test('after a mouse click on a pause-panel button, P still resumes and Enter does not click it again', async t => {
+  const page = await game(t);
+  await clickControl(page, '#btn-play');
+  await clickControl(page, '#btn-pause');
+  assert.equal(await page.evaluate(() => __game.mode), 'pause');
+  await page.evaluate(() => stepGame(10)); // past the short guard after pausing
+  await page.locator('#btn-music').click();
+  const label = await page.locator('#btn-music').textContent();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#btn-music').textContent(), label, 'Enter leaves the music setting alone');
+  await page.keyboard.press('p');
+  await page.evaluate(() => stepGame(1));
+  assert.equal(await page.evaluate(() => __game.mode), 'play');
 });

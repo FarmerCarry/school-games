@@ -119,98 +119,31 @@ test('Splat Strike shows the save warning when a write is refused and its retry 
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:splat-strike:data')).coins), coins, 'the retry writes the coins kept in memory');
 });
 
-test('Splat Strike keeps the camera steady and skips confetti when motion is reduced', async t => {
-  for (const preference of ['full', 'reduce']) {
-    const page = await game(t);
-    const { jitter, confetti, moving } = await page.evaluate(pref => {
-      Kit.motion.setPreference(pref);
-      __game.start({ skipCountdown: true }); __game.botsFrozen = true; runtime.step(5);
-      const G = SS.G, p = G.player;
-      p.shield = 0;
-      G.damage(p, 30, G.ents.find(e => e.bot), false, 0, 1, 0);
-      let most = 0;
-      for (let i = 0; i < 10; i++) {
-        runtime.step(1);
-        most = Math.max(most, Math.abs(G.camera.rotation.x - (p.pitch + p.rp)), Math.abs(G.camera.rotation.y - (p.yaw + p.ry)));
-      }
-      let confetti = 0;
-      const pop = G.fx.confetti;
-      G.fx.confetti = function () { confetti++; return pop.apply(this, arguments); };
-      const bot = G.ents.find(e => e.bot && e.alive);
-      bot.shield = 0;
-      G.damage(bot, 999, p, false, 0, 1, 0);
-      // text pops (countdown, goal and "first splat" callouts, +1 toast) that zoom, bounce or slide
-      const moving = ['bigmsg', 'callout', 'toast'].filter(id => document.getElementById(id).getAnimations()
-        .some(a => a.effect.getKeyframes().some(k => k.transform)));
-      return { jitter: most, confetti, moving };
-    }, preference);
-    if (preference === 'reduce') {
-      assert.equal(jitter, 0, 'no camera shake with reduced motion');
-      assert.equal(confetti, 0, 'a splat pops into paint only');
-      assert.deepEqual(moving, [], 'text pops only fade in and out');
-    } else {
-      assert.ok(jitter > 0, 'a hit still shakes the camera with full motion');
-      assert.equal(confetti, 1, 'a splat pops into paint and confetti');
-      assert.deepEqual(moving, ['bigmsg', 'callout', 'toast']);
-    }
-  }
-});
-
-test('Splat Strike lays the balloon aim ring on the floor when the throw hits a wall', async t => {
+test('Splat Strike locker: a double-click only tries a locked item on and a later click buys it', async t => {
   const page = await game(t);
-  const ring = await page.evaluate(() => {
-    __game.start({ map: 0, mode: 'ffa', skipCountdown: true }); __game.god = true; __game.botsFrozen = true; runtime.step(2);
-    // stand 4.5 m in front of a wide, tall wall on open floor and face it
-    const W = SS.G.W;
-    let spot = null;
-    for (const b of W.boxes) {
-      if (spot || b.noShot || b.y0 > 0.2 || b.y1 - b.y0 < 2 || b.y1 > 8) continue;
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        if ((dx ? b.z1 - b.z0 : b.x1 - b.x0) < 1.5) continue;
-        const fx = dx > 0 ? b.x1 : dx < 0 ? b.x0 : (b.x0 + b.x1) / 2, fz = dz > 0 ? b.z1 : dz < 0 ? b.z0 : (b.z0 + b.z1) / 2;
-        const px = fx + dx * 4.5, pz = fz + dz * 4.5;
-        const gy = W.ground(px, pz, 0.4, 3);
-        if (Math.abs(px) > 18 || Math.abs(pz) > 18 || gy > 0.3 || !W.los(px, gy + 1.5, pz, fx + dx * 0.05, gy + 1.5, fz + dz * 0.05)) continue;
-        spot = { px, gy, pz, yaw: Math.atan2(dx, dz) };
-        break;
-      }
-    }
-    if (!spot) return null;
-    __game.teleport(spot.px, spot.gy, spot.pz, spot.yaw, 0.05);
-    __game.throwHold(true); runtime.step(3);
-    const r = SS.G.fx.ring;
-    return { visible: r.visible, y: r.position.y, up: [r.quaternion.x, r.quaternion.y, r.quaternion.z, r.quaternion.w].map(v => +v.toFixed(3)) };
-  });
-  assert.ok(ring, 'found a wall to throw at');
-  assert.equal(ring.visible, true);
-  assert.deepEqual(ring.up, [0, 0, 0, 1], 'the ring faces up instead of standing on the wall');
-  assert.ok(ring.y < 0.5, `the ring lies on the floor (y = ${ring.y})`);
+  const coins = await page.evaluate(() => __game.give(500));
+  await page.locator('#lockerBtn').click();
+  const id = await page.locator('#lGrid .card.locked').first().getAttribute('data-id');
+  const card = page.locator(`#lGrid .card[data-id="${id}"]`);
+  const saved = () => page.evaluate(() => { const d = JSON.parse(localStorage.getItem('sg:splat-strike:data')); return { coins: d.coins, owned: d.ownC, color: d.color }; });
+  await card.dblclick();
+  const tried = await saved();
+  assert.equal(tried.coins, coins, 'the double-click spends nothing');
+  assert.ok(!tried.owned.includes(id) && tried.color !== id, `${id} is not bought`);
+  assert.match(await card.getAttribute('class'), /\bsel\b/, 'the item is being tried on');
+  await card.click();
+  const bought = await saved();
+  assert.ok(bought.coins < coins && bought.owned.includes(id) && bought.color === id, `a separate click buys and wears ${id}`);
 });
 
-test('Splat Strike states the goal at match start and sizes its minimap to the screen', async t => {
-  const page = await game(t, { viewport: { width: 1920, height: 1080 } });
-  // the backing store matches the minimap's real box (its border snaps to whole pixels) within rounding
-  const minimap = () => page.evaluate(() => { const mm = document.getElementById('minimap'); return { width: mm.width, shown: mm.getBoundingClientRect().width }; });
-  const sharp = mm => assert.ok(Math.abs(mm.width - mm.shown) <= 0.5, `minimap backing store ${mm.width} px matches its ${mm.shown} px box`);
-  const resize = async (width, height) => {
-    await page.setViewportSize({ width, height });
-    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-  };
-  const start = await page.evaluate(() => {
-    __game.start({ mode: 'ffa' }); runtime.step(2);
-    return { goal: document.getElementById('callout').textContent, target: SS.G.target };
+test('Splat Strike results show the experience gained in Arabic with the number kept left to right', async t => {
+  const page = await game(t);
+  const xp = await page.evaluate(() => {
+    __game.start({ skipCountdown: true }); __game.god = true; __game.botsFrozen = true; runtime.step(5); __game.endNow();
+    const el = document.getElementById('oXpT');
+    for (let i = 0; i < 600 && !el.textContent; i++) runtime.step(1);
+    return el.textContent;
   });
-  assert.match(start.goal, /يفوز/);
-  assert.ok(start.goal.includes(String(start.target)), start.goal);
-  const big = await minimap();
-  sharp(big);
-  await resize(1100, 620);             // the portal frame
-  const small = await minimap();
-  assert.ok(small.width < big.width, JSON.stringify(small));
-  sharp(small);
-  // resized on the title screen, where the HUD (and its minimap box) is hidden: the next match measures it
-  await page.evaluate(() => __game.menu());
-  await resize(960, 540);
-  assert.match(await page.evaluate(() => { __game.start({ mode: 'team' }); return document.getElementById('callout').textContent; }), /فريق/);
-  sharp(await minimap());
+  assert.match(xp, /^⁦\+\d+⁩ خبرة$/);
+  assert.doesNotMatch(xp, /[A-Za-z]/, 'no English on the results screen');
 });

@@ -301,3 +301,27 @@ test('leaving an open backpack pauses world time and resumes the backpack explic
   assert.equal(await page.evaluate(() => __game.G.mode), 'inv');
   assert.equal(await page.locator('#inv').isVisible(), true);
 });
+
+test('a quest whose world save is lost is redone after a reload without a second star', async t => {
+  const page = await game(t);
+  await create(page);
+  const quest = () => page.evaluate(() => {
+    __game.G.stats.got[BW.B.LOG] = 4;
+    stepGame(90); // quests are checked a second after play starts
+    return { done: !!__game.G.done.logs, stars: __game.meta.totalStars, error: __game.G.saveError };
+  });
+  // The world record cannot be written (a full quota), and the page is closed before a retry.
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'sg:block-world:slot1') throw new DOMException('fixture', 'QuotaExceededError');
+      return original.call(this, key, value);
+    };
+  });
+  assert.deepEqual(await quest(), { done: true, stars: 1, error: 'world' }, 'the failed save is reported');
+  await restore(page);
+  assert.equal(await page.evaluate(() => !!__game.G.done.logs), false, 'the stored world does not have the quest');
+  assert.deepEqual(await quest(), { done: true, stars: 1, error: null }, 'redoing the quest earns its star once');
+  await restore(page);
+  assert.deepEqual(await page.evaluate(() => ({ done: !!__game.G.done.logs, stars: __game.meta.totalStars })), { done: true, stars: 1 });
+});

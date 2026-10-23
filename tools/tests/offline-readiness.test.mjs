@@ -16,8 +16,20 @@ function worker() {
   const name = 'sg-v2-' + encodeURIComponent(scope) + '|test';
   const entries = new Map(), handlers = {}, requests = [];
   let exists = false, opened = 0, denied = false, updates = 0, activations = 0, fetchOverride;
+  let matches = 0, reads = 0, activeMatches = 0, peakMatches = 0, matchHook;
   const cache = {
-    async match(url) { return entries.get(String(url))?.clone(); },
+    async match(url) {
+      matches++; activeMatches++; peakMatches = Math.max(peakMatches, activeMatches);
+      try {
+        await matchHook?.(String(url));
+        const hit = entries.get(String(url))?.clone();
+        if (hit) {
+          const read = hit.arrayBuffer.bind(hit);
+          hit.arrayBuffer = () => { reads++; return read(); };
+        }
+        return hit;
+      } finally { activeMatches--; }
+    },
     async put(url, response) { entries.set(String(url), response.clone()); }
   };
   const context = vm.createContext({
@@ -44,9 +56,9 @@ function worker() {
     exists = true;
     entries.set(scope + p, new Response(body, { headers: { 'x-sg-hash': files[p] } }));
   }
-  async function status(repair = false, from = scope, quick = false) {
+  async function status(repair = false, from = scope, quick = false, id = 9) {
     let result, task;
-    handlers.message({ data: { type: 'sg:offline-status', id: 9, repair, quick }, source: { url: from },
+    handlers.message({ data: { type: 'sg:offline-status', id, repair, quick }, source: { url: from },
       ports: [{ postMessage(value) { result = JSON.parse(JSON.stringify(value)); } }], waitUntil(value) { task = value; } });
     await task;
     return result;
@@ -66,6 +78,9 @@ function worker() {
   }
   return { status, install, seed, request, requests, bodies, entries, scope,
     setDenied(v) { denied = v; }, setFetch(fn) { fetchOverride = fn; },
+    setMatch(fn) { matchHook = fn; },
+    get matches() { return matches; }, get reads() { return reads; },
+    get peakMatches() { return peakMatches; },
     get exists() { return exists; }, get activations() { return activations; },
     get opened() { return opened; }, get updates() { return updates; } };
 }
@@ -172,4 +187,67 @@ test('only a portal client in this exact deployment can request offline status',
   assert.equal(await w.status(true, 'https://games.test/another/index.html'), undefined);
   assert.equal(await w.status(true, w.scope + 'games/demo/index.html'), undefined);
   assert.equal(w.requests.length, 0);
+});
+
+test('simultaneous tab readiness requests share cache reads and keep separate reply IDs', async () => {
+  const w = worker();
+  Object.keys(w.bodies).forEach(p => w.seed(p));
+  const results = await Promise.all([11, 12, 13].map(id => w.status(false, w.scope, true, id)));
+  assert.ok(results.every(result => result.ready && result.count === 3));
+  assert.deepEqual(results.map(result => result.id), [11, 12, 13]);
+  assert.equal(w.opened, 1);
+  assert.equal(w.matches, 3, 'each file is read once for the whole burst');
+  assert.equal(w.reads, 0, 'routine checks do not re-read file bodies');
+  assert.equal(w.requests.length, 0);
+  w.entries.delete(w.scope + 'shared/font.woff2');
+  assert.equal((await w.status(false, w.scope, true)).ready, false, 'later checks still detect new eviction');
+  assert.equal(w.matches, 6, 'results are shared only while a scan is active');
+});
+
+test('a full verification satisfies simultaneous full and quick requests', async () => {
+  const w = worker();
+  Object.keys(w.bodies).forEach(p => w.seed(p));
+  w.seed('games/demo/index.html', 'damaged game');
+  const results = await Promise.all([w.status(), w.status(), w.status(false, w.scope, true)]);
+  assert.ok(results.every(result => !result.ready && result.count === 2));
+  assert.equal(w.matches, 3);
+  assert.equal(w.reads, 3);
+});
+
+test('queued repairs upgrade a quick check once and preserve full integrity verification', async () => {
+  const w = worker();
+  Object.keys(w.bodies).forEach(p => w.seed(p));
+  w.seed('games/demo/index.html', 'damaged game');
+  const results = await Promise.all([
+    w.status(false, w.scope, true), w.status(true), w.status(true), w.status(true)
+  ]);
+  assert.ok(results.every(result => result.ready));
+  assert.equal(w.opened, 2, 'one quick scan followed by one shared repair');
+  assert.equal(w.matches, 6);
+  assert.equal(w.reads, 3);
+  assert.equal(w.requests.length, 1, 'the damaged body is downloaded once');
+  assert.ok(w.peakMatches <= 4, 'disk-read concurrency stays bounded');
+  assert.equal(await w.entries.get(w.scope + 'games/demo/index.html').clone().text(), 'game');
+});
+
+test('a failing scan settles outstanding reads before a queued repair recovers', async () => {
+  const w = worker();
+  Object.keys(w.bodies).forEach(p => w.seed(p));
+  let release, fail = true, finished = false;
+  const held = new Promise(resolve => { release = resolve; });
+  w.setMatch(async url => {
+    if (url.endsWith('index.html') && fail) { fail = false; throw new Error('disk read failed'); }
+    await held;
+  });
+  const first = w.status(false, w.scope, true).then(result => { finished = true; return result; });
+  const repair = w.status(true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(finished, false, 'the failed request waits for sibling disk reads');
+  assert.equal(w.opened, 1, 'repair has not overlapped the unfinished scan');
+  release();
+  assert.equal((await first).ready, false);
+  assert.equal((await repair).ready, true);
+  assert.equal(w.opened, 2);
+  assert.ok(w.peakMatches <= 4);
+  assert.equal((await w.status(false, w.scope, true)).ready, true, 'the lock is released after recovery');
 });

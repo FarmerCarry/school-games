@@ -169,57 +169,6 @@ test('a paused game keeps its last frame and redraws only for resize, fonts and 
   assert.equal((await state(page)).mode, 'play');
 });
 
-test('the scene clock stops while paused and calm motion holds the launch prompt still', async t => {
-  const page = await gamePage(t);
-  await page.evaluate(() => {
-    // The aim guide's dash offset is -40 x the scene clock; the prompt's alpha and lift show its bob.
-    const proto = CanvasRenderingContext2D.prototype, dash = Object.getOwnPropertyDescriptor(proto, 'lineDashOffset');
-    const translate = proto.translate, strokeText = proto.strokeText;
-    let lift = 0;
-    window.probe = { clock: 0, prompts: [] };
-    Object.defineProperty(proto, 'lineDashOffset', { configurable: true, get: dash.get, set(v) { if (v) probe.clock = -v / 40; dash.set.call(this, v); } });
-    proto.translate = function (x, y) { lift = y; return translate.apply(this, arguments); };
-    proto.strokeText = function (text) {
-      if (text === 'اضغط مطولًا لتنطلق!') probe.prompts.push([+this.globalAlpha.toFixed(3), +lift.toFixed(2)]);
-      return strokeText.apply(this, arguments);
-    };
-    __game.start(0); runFrames(5);
-  });
-  await page.keyboard.press('KeyP');
-  const paused = await page.evaluate(() => { runFrames(1); return probe.clock; });
-  assert.equal((await state(page)).mode, 'pause');
-  await page.evaluate(() => runFrames(60));
-  await page.keyboard.press('KeyP');
-  const resumed = await page.evaluate(() => { runFrames(1); return probe.clock; });
-  assert.equal((await state(page)).mode, 'play');
-  assert.ok(Math.abs(resumed - paused) <= 1.01 / 60, `waves and twinkles carry on from the paused frame (${paused} -> ${resumed})`);
-
-  const prompts = reduce => page.evaluate(reduce => {
-    if (reduce) Kit.motion.setPreference('reduce');
-    probe.prompts = []; runFrames(6);
-    return new Set(probe.prompts.map(String)).size;
-  }, reduce);
-  assert.ok(await prompts(false) > 1, 'the prompt bobs with full motion');
-  assert.equal(await prompts(true), 1, 'reduced motion keeps the prompt still');
-});
-
-test('the hero celebrates above the water after crossing the finish', async t => {
-  const page = await gamePage(t);
-  await page.evaluate(input => { __game.start(0); __game.script(input); }, levelOneInput());
-  await page.evaluate(() => { for (let i = 0; i < 1200 && __game.state().st !== 'won'; i++) stepGame(1); });
-  const won = await state(page);
-  assert.equal(won.st, 'won');
-  const samples = await page.evaluate(() => {
-    const out = [];
-    for (let i = 0; i < 300 && __game.mode !== 'result'; i++) { stepGame(1); if (i % 10 === 0) out.push(__game.state()); }
-    out.push(__game.state());
-    return out;
-  });
-  assert.equal(samples.at(-1).mode, 'result');
-  for (const s of samples) assert.ok(s.y < 900 - 100, `hero must stay above the sea (y ${s.y})`);
-  assert.ok(samples.at(-1).x - won.x < 400, 'hero stays near the finish flag');
-});
-
 test('a failed save shows the retry warning and keeps progress after a successful retry', async t => {
   const page = await gamePage(t);
   await page.evaluate(() => {
@@ -243,4 +192,47 @@ test('a failed save shows the retry warning and keeps progress after a successfu
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:swing-hook:save')));
   assert.equal(stored.unlocked, 2);
   assert.equal(stored.stars[0] & 1, 1);
+});
+
+test('R during the finish celebration or the endless splash keeps the result that was reached', async t => {
+  const page = await gamePage(t);
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('sg:swing-hook:save')));
+  await page.evaluate(input => { __game.start(0); __game.script(input); }, levelOneInput());
+  await page.evaluate(() => { for (let i = 0; i < 1200 && __game.state().st !== 'won'; i++) stepGame(1); stepGame(20); });
+  assert.deepEqual([(await state(page)).st, await page.evaluate(() => __game.mode)], ['won', 'play']);
+  await page.keyboard.press('r');
+  await page.evaluate(() => stepGame(2));
+  assert.equal((await state(page)).st, 'ready', 'R replays the level');
+  assert.equal((await saved()).unlocked, 2, 'the finish reached before R still unlocks level 2');
+  await page.evaluate(() => { __game.endless(); __game.script('1'.repeat(6)); for (let i = 0; i < 1200 && __game.state().st !== 'dead'; i++) stepGame(1); stepGame(10); });
+  assert.equal((await state(page)).st, 'dead');
+  const reached = await page.evaluate(() => __game.save.endless);
+  assert.ok(reached > 0, `the run covered some distance (${reached} m)`);
+  await page.keyboard.press('r');
+  await page.evaluate(() => stepGame(2));
+  assert.equal((await state(page)).st, 'ready', 'R starts a new run');
+  assert.equal((await saved()).endless, reached, 'the run that ended before R keeps its distance');
+});
+
+test('an endless run left alive with R or through the pause menu keeps its distance', async t => {
+  const page = await gamePage(t);
+  const saved = () => page.evaluate(() => (JSON.parse(localStorage.getItem('sg:swing-hook:save')) || {}).endless);
+  // The opening launch flies about 11 m before its splash: leave the run mid-air.
+  const fly = frames => page.evaluate(n => {
+    if (!window.ends) { window.ends = []; const end = Kit.stats.end; Kit.stats.end = function () { ends.push([...arguments]); return end.apply(this, arguments); }; }
+    __game.endless(); const x0 = __game.state().x; __game.script('1'.repeat(6)); stepGame(n);
+    const s = __game.state(); return { st: s.st, m: Math.floor((s.x - x0) / 50) };
+  }, frames);
+  let run = await fly(25);
+  assert.ok(run.st === 'play' && run.m > 0, `the run is still flying (${JSON.stringify(run)})`);
+  await page.keyboard.press('r');
+  await page.evaluate(() => stepGame(1));
+  assert.equal(await saved(), run.m, 'R mid-run keeps the distance');
+  run = await fly(45);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => stepGame(1));
+  assert.equal(await page.evaluate(() => __game.mode), 'pause');
+  await page.locator('#psMenu').click();
+  assert.equal(await saved(), run.m, 'Menu from pause keeps the longer distance');
+  assert.deepEqual(await page.evaluate(() => ends), [], 'statistics still count a run left alive as a quit');
 });

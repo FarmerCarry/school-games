@@ -1452,9 +1452,10 @@
     g.closePath();
   }
 
+  var AR_RE = /[\u0600-\u06FF]/; // only Arabic runs right to left: in an RTL run "+6" reads "6+"
   function text(g, s, x, y, size, col, align, stroke) {
     g.font = '700 ' + Math.round(size) + 'px ' + FONT;
-    g.direction = 'rtl'; g.textAlign = align; g.textBaseline = 'middle';
+    g.direction = AR_RE.test(s) ? 'rtl' : 'ltr'; g.textAlign = align; g.textBaseline = 'middle';
     if (stroke) { g.lineJoin = 'round'; g.lineWidth = stroke; g.strokeStyle = 'rgba(25,28,55,0.9)'; g.strokeText(s, x, y); }
     g.fillStyle = col; g.fillText(s, x, y);
   }

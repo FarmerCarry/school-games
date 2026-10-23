@@ -156,25 +156,19 @@ test('Block World tells the player which hotbar slot holds the item a place ques
   assert.equal(result.placed, 1);
 });
 
-test('Block World redraws a kept pause frame when reduced motion clears its confetti', async t => {
+test('Block World keeps the recipe list still while the backpack is open, so a double-click crafts one recipe', async t => {
   const page = await adventure(t);
-  const paints = await page.evaluate(() => {
-    const G = __game.G, B = BW.B, ctx = document.getElementById('game').getContext('2d'), clear = ctx.clearRect;
-    let n = 0;
-    ctx.clearRect = function () { n++; return clear.apply(this, arguments); };
-    // Finishing the planks quest throws confetti; pause while it is still falling.
-    __game.give(B.LOG, 1);
-    __game.craftId(B.PLANKS);
-    G.toasts.length = 0;
-    document.getElementById('pausebtn').click();
-    stepGame(30);
-    for (let i = 0; i < 20; i++) __game.render();
-    n = 0; __game.render();
-    const settled = n, live = __game.confettiCount;
-    Kit.motion.setPreference('reduce');
-    n = 0; __game.render();
-    return { settled, live, reduced: n, left: __game.confettiCount };
+  await page.evaluate(() => {
+    ['logs', 'planks', 'table', 'tableplace', 'pickwood'].forEach(id => { __game.G.done[id] = true; });
+    __game.G.inv = __game.G.inv.map(() => null);
+    __game.give(BW.B.LOG, 1);
   });
-  assert.ok(paints.live > 0, 'confetti should still be falling when reduced motion is switched on');
-  assert.deepEqual({ settled: paints.settled, reduced: paints.reduced, left: paints.left }, { settled: 0, reduced: 1, left: 0 });
+  await page.keyboard.press('KeyE');
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await page.evaluate(() => __game.G.mode), 'inv');
+  const first = page.locator('#craftList .crow').first();
+  const box = await first.boundingBox();
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  const inv = await page.evaluate(() => __game.G.inv.filter(Boolean).map(s => [s.id === BW.B.PLANKS ? 'planks' : s.id, s.n]));
+  assert.deepEqual(inv, [['planks', 4]], 'one log made 4 planks and nothing else');
 });

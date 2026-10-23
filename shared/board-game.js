@@ -170,7 +170,8 @@
           cells[row * 7 + i] = cell; button.appendChild(cell);
         }
       } else { button.setAttribute('aria-label', 'المربع ' + (i + 1)); cells[i] = button; }
-      button.addEventListener('click', function (event) { play(Number(event.currentTarget.dataset.move)); });
+      // With reduced motion a disc lands at once, so the 2nd click of a double-click would play the other seat's turn.
+      button.addEventListener('click', function (event) { if (event.detail > 1) return; play(Number(event.currentTarget.dataset.move)); });
       button.addEventListener('keydown', boardKeys);
       moveButtons.push(button); board.appendChild(button);
     }
@@ -314,8 +315,13 @@
   levelButtons.forEach(function (button) {
     button.addEventListener('click', function () { setLevel(button.dataset.level); });
   });
-  el('leaveMatch').addEventListener('click', leaveMatch);
-  el('pauseButton').addEventListener('click', function () { pause(true, true); });
+  // The match buttons re-centre as they show and hide, so the 2nd click of a double-click on
+  // Pause or Play again lands on the button that slid under it; keyboard activation has detail 0.
+  // Its mousedown is ignored too, which keeps focus where the 1st click put it (Resume or the
+  // board), so the Enter that follows still resumes or plays.
+  el('leaveMatch').addEventListener('click', function (event) { if (event.detail > 1) return; leaveMatch(); });
+  el('pauseButton').addEventListener('click', function (event) { if (event.detail > 1) return; pause(true, true); });
+  app.querySelector('.match-actions').addEventListener('mousedown', function (event) { if (event.detail > 1) event.preventDefault(); });
   el('resumeButton').addEventListener('click', function () { pause(false, true); });
   el('rematchButton').addEventListener('click', function () {
     if (mode === 'menu' || !finished() || fallingCell) return;
@@ -337,6 +343,11 @@
   document.addEventListener('focusin', function (event) {
     if (event.target !== document.body && moveButtons.indexOf(event.target) === -1) pendingBoardFocus = null;
   });
+  // A focused button clicks on every auto-repeated Enter, and focus then moves to the
+  // next free cell or Play again, so one held key would play whole rounds by itself.
+  app.addEventListener('keydown', function (event) {
+    if (event.repeat && (event.key === 'Enter' || event.key === ' ')) event.preventDefault();
+  }, true);
   window.addEventListener('keydown', function (event) {
     var target = event.target;
     if ((target && (target.isContentEditable || (typeof target.matches === 'function' && target.matches('input,textarea,select')))) ||

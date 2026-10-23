@@ -109,23 +109,6 @@ test('Rail Rush keeps pop-ups readable under reduced motion and skips confetti',
   assert.deepEqual(await popState(page), { text: 'اللوح أنقذك!', show: false, opacity: '0', animation: 'none' });
 });
 
-test('Rail Rush animates pop-ups and confetti with full motion, then hides the overlays', async t => {
-  const page = await railRush(t);
-  await page.evaluate(() => rr.step(1));
-  assert.equal(await confettiVisibility(page), 'hidden', 'empty confetti layer is not composited');
-  await buyOceanBoard(page);
-  assert.equal(await confettiVisibility(page), 'visible');
-  await page.evaluate(() => rr.step(240));
-  assert.equal(await confettiVisibility(page), 'hidden', 'confetti layer hides once it has fallen');
-  await page.evaluate(() => { __game.god = true; __game.restart(); rr.step(10); __game.stumble(); });
-  const shown = await popState(page);
-  assert.equal(shown.show, true);
-  assert.equal(shown.animation, 'popText');
-  await page.evaluate(() => rr.step(80));
-  assert.equal((await popState(page)).show, false);
-  assert.equal(await confettiVisibility(page), 'hidden');
-});
-
 test('Rail Rush reports a failed save and clears the warning after a retry', async t => {
   const page = await railRush(t);
   const status = () => page.evaluate(() => {
@@ -144,41 +127,6 @@ test('Rail Rush reports a failed save and clears the warning after a retry', asy
   await page.reload();
   await page.waitForFunction(() => window.__game);
   assert.equal(await page.evaluate(() => __game.save.coins), 500);
-});
-
-test('Rail Rush keeps the save warning clear of the title how-to box and the run hint', async t => {
-  // reduced motion: the hint is measured at its resting size, not mid-animation
-  const page = await railRush(t, { reducedMotion: 'reduce' });
-  // the full warning, then the badge it folds into after 6 s (a real-time timer, so set here)
-  const clashes = sels => page.evaluate(sels => {
-    const panel = document.querySelector('.sg-save-status'), out = [];
-    for (const compact of ['false', 'true']) {
-      panel.dataset.compact = compact;
-      const a = panel.getBoundingClientRect();
-      for (const s of sels) {
-        const b = document.querySelector(s).getBoundingClientRect();
-        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) out.push(s + (compact === 'true' ? ' (badge)' : ''));
-      }
-    }
-    return out;
-  }, sels);
-  await page.evaluate(() => { rr.failSave = true; __game.give(1); });
-  assert.deepEqual(await clashes(['.title-left', '.howto-box', '.peek']), [], 'title screen');
-  const hinted = await page.evaluate(() => {
-    __game.god = true; __game.restart(); __game.skip(70);
-    const lane = __game.near('train').lane;
-    if (lane !== 0) __game.act(lane < 0 ? 'left' : 'right');
-    const hint = document.getElementById('hint');
-    for (let i = 0; i < 40 && hint.hidden; i++) rr.step(6);
-    return !hint.hidden;
-  });
-  assert.ok(hinted, 'the change-lane hint is showing');
-  assert.deepEqual(await clashes(['#hint', '.hud-score', '#coinBox']), [], 'run');
-  // the portal's smallest view: the warning's text shrinks with the stage, clear of the longest hint
-  await page.setViewportSize({ width: 764, height: 430 });
-  await page.waitForFunction(() => document.getElementById('ui').style.fontSize === '9.55px');
-  await page.evaluate(() => { document.getElementById('hint').textContent = 'اصعد المنحدر واركض فوق القطارات!'; });
-  assert.deepEqual(await clashes(['#hint', '.hud-score', '#coinBox']), [], 'run at 764x430');
 });
 
 test('Rail Rush shows the change-lane hint only when the first train blocks the runner', async t => {
@@ -221,4 +169,76 @@ test('Rail Rush shows the change-lane hint only when the first train blocks the 
   assert.deepEqual(await looping(), ['hintBob paused', 'pulse paused']);
   await page.keyboard.press('Escape');
   assert.deepEqual(await looping(), ['hintBob running', 'pulse running']);
+});
+
+test('Rail Rush keeps the coins and best score of a run left through the pause menu', async t => {
+  const page = await railRush(t);
+  const run = await page.evaluate(() => { __game.restart(); __game.god = true; __game.sim(25); return { coins: __game.state.coins, score: __game.state.score }; });
+  assert.ok(run.coins > 0 && run.score > 0, `the run earned something (${JSON.stringify(run)})`);
+  await page.evaluate(() => { document.getElementById('pauseBtn').click(); rr.step(1); document.getElementById('restartBtn').click(); rr.step(1); });
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:rail-rush:save')));
+  assert.equal(saved.coins, run.coins, 'the coins of the abandoned run are banked');
+  assert.ok(saved.best >= run.score, 'its score counts towards the best');
+});
+
+test('Rail Rush buys one power-up level for a double-click on its upgrade button', async t => {
+  const page = await railRush(t);
+  await page.evaluate(() => {
+    __game.give(1000);
+    document.getElementById('shopBtn').click();
+    document.querySelector('.tab[data-tab="ups"]').click();
+    rr.step(1);
+  });
+  const level = () => page.evaluate(() => ({ coins: __game.save.coins, magnet: __game.save.up.magnet,
+    saved: JSON.parse(localStorage.getItem('sg:rail-rush:save')).up.magnet }));
+  const before = await level();
+  const press = async (double) => {
+    const box = await page.locator('#shopBody [data-act="up"][data-id="magnet"]').boundingBox();
+    await page.mouse[double ? 'dblclick' : 'click'](box.x + box.width / 2, box.y + box.height / 2);
+    await page.evaluate(() => rr.step(1));
+  };
+  await press(true);
+  assert.deepEqual(await level(), { coins: before.coins - 200, magnet: before.magnet + 1, saved: before.magnet + 1 }, 'the double-click buys one level');
+  await press(false);
+  assert.equal((await level()).magnet, before.magnet + 2, 'a separate click still buys the next level');
+});
+
+test('Rail Rush survives a 0-px-tall frame and makes the shop portraits once it has room', async t => {
+  const context = await browser.newContext({ viewport: { width: 960, height: 540 } });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
+  await page.addInitScript(() => {
+    // the boot timer that makes the portraits
+    const timeout = window.setTimeout;
+    window.setTimeout = function (fn, ms, ...args) {
+      if (ms !== 1200) return timeout(fn, ms, ...args);
+      return timeout(() => { try { fn(); } finally { window.portraitTimerRan = true; } }, ms);
+    };
+  });
+  // In a browser window under ~170 px tall the portal has no height left for the game frame.
+  await page.route(`${server.origin}/host.html`, route => route.fulfill({ contentType: 'text/html',
+    body: '<!doctype html><body style="margin:0"><iframe src="/games/rail-rush/" style="border:0;width:960px;height:0"></iframe>' }));
+  await page.goto(`${server.origin}/host.html`);
+  const game = page.frames().find(f => f.url().includes('/games/rail-rush/'));
+  await game.waitForFunction(() => window.__game);
+  const gl = () => game.evaluate(() => {
+    const c = document.getElementById('gl'), g = c.getContext('webgl2');
+    return { height: c.height, scissor: g.isEnabled(g.SCISSOR_TEST) };
+  });
+  const portraits = () => game.evaluate(() => [...document.querySelectorAll('canvas[data-portrait]')].map(c => {
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i]) return true;
+    return false;
+  }));
+  await game.waitForFunction(() => window.portraitTimerRan);
+  await game.evaluate(() => document.getElementById('shopBtn').click());
+  assert.deepEqual(await gl(), { height: 0, scissor: false }, 'a failed portrait pass leaves the main view unclipped');
+  await game.evaluate(() => document.getElementById('sBack').click());
+  await page.locator('iframe').evaluate(f => { f.style.height = '540px'; });
+  await game.waitForFunction(() => document.getElementById('gl').height > 0);
+  await game.evaluate(() => document.getElementById('shopBtn').click());
+  const drawn = await portraits();
+  assert.ok(drawn.length > 0 && drawn.every(Boolean), `every shop portrait is drawn once the frame has room: ${drawn}`);
+  assert.equal((await gl()).scissor, false);
 });

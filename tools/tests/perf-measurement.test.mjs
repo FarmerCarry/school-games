@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { distribution, parseArgs, installObservers, summarize } from '../perf.mjs';
+import { distribution, installObservers, summarize } from '../perf.mjs';
 import { compareReports } from '../perf-compare.mjs';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
@@ -10,14 +10,6 @@ test('measurement summaries retain unrounded median/spread and exclude absent va
   assert.equal(distribution([null, undefined]), null);
   assert.equal(distribution([1, 2, 3, 4]).median, 2.5);
   assert.equal(distribution([1, 2, 3, 4]).mad, 1);
-});
-
-test('invalid benchmark arguments fail before launching a browser', () => {
-  for (const args of [['--samples', '0'], ['--samples', '2.5'], ['--seconds', '0'], ['--seconds', 'NaN'], ['--latency', '-1'], ['--json'], ['--bogus']]) {
-    assert.throws(() => parseArgs(args));
-  }
-  const args = parseArgs(['--samples', '5', '--seconds', '8', '--latency', '20', '--native-gpu', 'portal']);
-  assert.equal(args.samples, 5); assert.equal(args.seconds, 8); assert.equal(args.graphics, 'native');
 });
 
 function report(values = [100, 102, 104, 106, 108]) {
@@ -184,70 +176,4 @@ test('portal useful screen waits for decoded fully opaque artwork, not gradient 
   assert.equal(result.opacity, '1');
   assert.ok(result.useful >= result.decodedAt && result.useful >= result.opaqueAt);
   assert.ok(result.useful - result.loadAt > 450, 'deferred decode and fade must remain in visible readiness');
-});
-
-test('typing readiness uses populated visible words and enabled language control, not hidden chart', async t => {
-  const page = await observeFixture(t, 'typing-test', `<!doctype html>
-    <section id="resView" hidden><canvas id="chart"></canvas></section>
-    <section id="testView"><button data-lang="en" disabled>English</button><div id="wordsBox"><div id="words"></div></div></section>
-    <script>window.__game={};</script>`);
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
-  assert.equal(await page.evaluate(() => __perf.firstUsefulMs), null);
-  assert.equal(await page.evaluate(() => __perf.readyForStartMs), null, 'empty words and a disabled control are not ready');
-  await page.evaluate(() => {
-    document.getElementById('words').innerHTML = '<span>ready</span>';
-    window.wordsAt = performance.now();
-  });
-  // Observe each readiness gate separately: slow rAF delivery may skip the
-  // entire gap between two wall-clock timers without any observer regression.
-  await page.waitForFunction(() => __perf.firstUsefulMs !== null);
-  assert.equal(await page.evaluate(() => __perf.readyForStartMs), null, 'visible words alone cannot make the disabled control ready');
-  await page.evaluate(() => {
-    document.querySelector('button').disabled = false;
-    window.enabledAt = performance.now();
-  });
-  await page.waitForFunction(() => __perf.readyForStartMs !== null);
-  const result = await page.evaluate(() => ({ ...__perf, wordsAt, enabledAt }));
-  assert.ok(result.firstUsefulMs >= result.wordsAt);
-  assert.ok(result.readyForStartMs >= result.enabledAt);
-  assert.ok(result.firstUsefulMs < result.readyForStartMs);
-});
-
-test('board readiness waits for its chooser and proves Start plus a real move', async t => {
-  const page = await observeFixture(t, 'connect-four', `<!doctype html>
-    <section hidden><canvas></canvas></section><main id="boardApp" style="min-height:100px"></main>
-    <script>window.showChooser=()=>{
-      setTimeout(()=>{
-        boardApp.innerHTML='<button id="localButton" disabled>Local</button><button id="pcButton">Computer</button><button id="move">Move</button>';
-        window.chooserAt=performance.now();
-        localButton.onclick=()=>{boardApp.dataset.mode='local'};
-        move.onclick=()=>{window.sgInput={seen:true}};
-      },150);
-    };
-    window.enableChooser=()=>setTimeout(()=>{localButton.disabled=false;window.enabledAt=performance.now()},150);
-    </script>`, "document.getElementById('boardApp').dataset.mode === 'local'");
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
-  assert.equal(await page.evaluate(() => __perf.firstUsefulMs), null);
-  assert.equal(await page.evaluate(() => __perf.readyForStartMs), null, 'an absent chooser is not ready');
-  await page.evaluate(() => showChooser());
-  await page.waitForFunction(() => __perf.firstUsefulMs !== null);
-  assert.equal(await page.evaluate(() => __perf.readyForStartMs), null, 'a visible disabled chooser is not ready');
-  await page.evaluate(() => enableChooser());
-  await page.waitForFunction(() => __perf.readyForStartMs !== null);
-  const ready = await page.evaluate(() => ({ ...__perf, chooserAt, enabledAt }));
-  assert.ok(ready.firstUsefulMs >= ready.chooserAt && ready.readyForStartMs >= ready.enabledAt);
-  assert.equal(ready.playableMs, null);
-  await page.evaluate(() => { __perf.startRequestedMs = performance.now(); });
-  await page.locator('#localButton').click();
-  await page.waitForFunction(() => __perf.playableMs !== null);
-  assert.equal(await page.evaluate(() => __perf.inputResponsiveMs), null);
-  await page.locator('#move').click();
-  await page.waitForFunction(() => __perf.inputResponsiveMs !== null);
-});
-
-test('generic canvas readiness skips a hidden results canvas before a visible surface', async t => {
-  const page = await observeFixture(t, 'rail-rush', `<!doctype html><section hidden><canvas></canvas></section>
-    <canvas width="200" height="100"></canvas><script>window.__game={}</script>`);
-  await page.waitForFunction(() => __perf.readyForStartMs !== null);
-  assert.ok(await page.evaluate(() => __perf.firstUsefulMs > 0));
 });

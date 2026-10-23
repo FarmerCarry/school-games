@@ -312,16 +312,18 @@
 
   /* ------------------------------------------------------ win / dead */
   function fmtTime(t) {
-    var m = Math.floor(t / 60), s = t - m * 60;
+    // in tenths first, so 9.96 s reads 0:10.0 and 59.96 s carries to 1:00.0
+    var d = Math.round(t * 10), m = Math.floor(d / 600), s = (d - m * 600) / 10;
     return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1);
   }
   function fmtPar(t) { var m = Math.floor(t / 60), s = Math.round(t - m * 60); return m + ':' + (s < 10 ? '0' : '') + s; }
 
   var winTimers = [];
   function clearWinTimers() { winTimers.forEach(clearTimeout); winTimers = []; }
-  function showWin() {
-    winShown = true;
-    setPlaying(false);
+  // A level is saved the moment it is won: the page can be left in the 0.7 s before
+  // the panel opens. showWin only displays the stored result.
+  var winResult = null;
+  function commitWin() {
     var def = LEVELS[levelIdx], w = world;
     var gemsAll = w.gemsGot.fire === w.gemsTotal.fire && w.gemsGot.ice === w.gemsTotal.ice;
     var fast = w.t <= def.par;
@@ -340,7 +342,13 @@
     persist();
     // Two children on one PC report a neutral end, never a win; the stars are the score.
     if (stat) Kit.stats.end(stat == 'solo' ? 'win' : 'end', stars);
-
+    winResult = { gemsAll: gemsAll, fast: fast, stars: stars, prev: prev, rec: rec, newBest: newBest, firstClear: firstClear, newHats: newHats };
+  }
+  function showWin() {
+    winShown = true;
+    setPlaying(false);
+    var def = LEVELS[levelIdx], w = world, r = winResult;
+    var gemsAll = r.gemsAll, fast = r.fast, stars = r.stars, prev = r.prev, rec = r.rec, newBest = r.newBest, firstClear = r.firstClear, newHats = r.newHats;
     var medal = ['bronze', 'silver', 'gold'][stars - 1];
     $('winMedal').className = 'medal ' + medal;
     $('winMedalText').textContent = { gold: 'ذهبية', silver: 'فضية', bronze: 'برونزية' }[medal];
@@ -492,7 +500,7 @@
           break;
         }
         case 'win': {
-          if (!quiet) SFX.win();
+          if (!quiet) { SFX.win(); commitWin(); }
           ['fire', 'ice'].forEach(function (k) {
             var ex2 = w.exits[k];
             for (var c = 0; c < 30; c++) confetti(ex2.x + 16, ex2.y + 10, false);

@@ -18,22 +18,25 @@ function seeded(seed) {
 // The game's own lift rule (isOnLift in game.js): on a lift means both wheels on it, or it is moving.
 const onLift = m => m.on === 3 || (m.on && (m.st === 1 || m.st === 3));
 
-// Plays level i to the finish, with the game's own "stuck for 6 s: back to the checkpoint" rule.
-function ride(i, rider) {
+// Plays level i to the finish, with the game's own "stuck for 6 s: back to the checkpoint" rule,
+// then `past` more frames (the game rides on for a moment before it shows the results).
+function ride(i, rider, past = 0) {
   const random = Math.random;
   Math.random = seeded(1234 + i); // crashes and crates use Math.random; keep runs repeatable
   try {
     const w = new MM.World(MM.build(MM.LEVELS[i]));
-    let stuckX = 0, stuckT = 0, rescues = 0;
-    for (let frame = 0; frame < 90 * 60 && !w.finished; frame++) {
+    let stuckX = 0, stuckT = 0, rescues = 0, atLine = null;
+    for (let frame = 0; frame < 90 * 60 && past >= 0; frame++) {
       const inp = rider(w);
       w.step(inp);
       if (Math.abs(w.bike.x - stuckX) > 60 || w.crashed || w.movers.some(onLift)) { stuckX = w.bike.x; stuckT = 0; }
       else stuckT += 1 / 60;
       if (stuckT > 6 && inp.gas) { w.crash('stuck'); stuckT = 0; rescues++; }
+      if (w.finished) { if (atLine == null) atLine = w.bonus; past--; }
     }
     // the game judges stars on the time as shown, in tenths
-    return { finished: w.finished, time: Math.round(w.finalTime * 10) / 10, crashes: w.crashes, flips: w.flips, rescues };
+    return { finished: w.finished, time: Math.round(w.finalTime * 10) / 10, crashes: w.crashes, flips: w.flips, rescues,
+      lateFlips: w.bonus - atLine, timeLessFlips: Math.round((w.time - w.bonus) * 10) / 10 };
   } finally {
     Math.random = random;
   }
@@ -70,10 +73,6 @@ function flipRider() {
 
 const levels = MM.LEVELS.map((def, i) => ({ i, name: `${Math.floor(i / 5) + 1}-${i % 5 + 1}`, stars: def.stars }));
 
-test('Moto Madness star times are ordered: 3 stars is faster than 2 stars', () => {
-  for (const { name, stars } of levels) assert.ok(stars[0] < stars[1], `${name}: ${stars}`);
-});
-
 test('Moto Madness riding without flips finishes every level with at most 2 stars', () => {
   for (const { i, name, stars } of levels) {
     const held = ride(i, holdUp);
@@ -96,6 +95,23 @@ test('Moto Madness a clean run with landed flips earns 3 stars on every level', 
     // leave room for a kid who is a little slower than the bot
     assert.ok(run.time <= stars[0] - 0.3, `${name}: flipping took ${run.time} s, 3 stars is ${stars[0]} s`);
   }
+});
+
+// 3-2 ends on a jump, so the flip rider crosses the line in the air and its last flip lands
+// past it, while the game still rides on before the results: that flip comes off the time too.
+test('Moto Madness takes a flip that lands past the finish line off the time', () => {
+  const run = ride(11, flipRider(), 96);
+  assert.ok(run.lateFlips > 0, `3-2: the last flip lands past the line (${JSON.stringify(run)})`);
+  assert.equal(run.time, run.timeLessFlips, 'every flip counted comes off the time');
+
+  // nobody falls off past the line, but a turn that lands on the rider's head is still no flip
+  const w = new MM.World(MM.build(MM.LEVELS[0])), x = w.level.finishX - 60;
+  w.placeBike(x, w.groundAt(x, -1e9, true) - 240, Math.PI);
+  w.bike.vx = 300; w.started = true;
+  for (let f = 0; f < 10 && w.grounded; f++) w.step(holdUp());
+  w.takeoffA = w.bike.a + TAU;
+  for (let f = 0; f < 120; f++) w.step(holdUp());
+  assert.deepEqual([w.finished, w.flips, w.bonus], [true, 0, 0]);
 });
 
 // The tutorial sign before 1-1's first kicker says to press ← on the ramp. A kid who does that

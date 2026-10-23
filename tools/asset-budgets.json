@@ -1,13 +1,14 @@
 {
   "format": 1,
   "portalBytes": 360000,
-  "teacherBytes": 88000,
+  "teacherBytes": 89000,
   "gameHtmlBytes": {
     "air-hockey": 116000,
     "beat-dash": 125000,
     "blob-battle": 106000,
     "block-burst": 117000,
     "block-world": 164000,
+    "cake-guards": 84000,
     "candy-rope": 110000,
     "connect-four": 53000,
     "critter-mart": 172000,
@@ -43,5 +44,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5000000
+  "precacheBytes": 5100000
 }

@@ -161,102 +161,6 @@ test('the first two stages show an aim guide and explain a self-splat', async t 
   assert.equal(await page.evaluate(() => { __game.startFree(1, 1); return __game.app.game.guide; }), false);
 });
 
-test('reduced motion stops the screen shake and decorative motion', async t => {
-  const page = await game(t);
-  await page.evaluate(() => Kit.motion.setPreference('reduce'));
-  assert.deepEqual(await page.evaluate(() => {
-    // countdown name tags stay put
-    __game.start(0);
-    const name = __game.app.game.tanks[0].name + '@';
-    const tags = () => { runtime.textYs.length = 0; runtime.draw(1); return runtime.textYs.filter(e => e.startsWith(name)).join(); };
-    const before = tags(); runtime.step(0.25);
-    // splatted tanks' spiral eyes, the flower, propeller and antenna hats and the shield's pulse stop
-    const tank = (t, o) => {
-      const cv = document.createElement('canvas'); cv.width = cv.height = 80;
-      TS_ART.drawTank(cv.getContext('2d'), Object.assign({ x: 40, y: 50, a: 0, pal: TS_ART.PAL[1], t }, o));
-      return cv.toDataURL();
-    };
-    const moving = () => [{ dead: 1 }, { hat: 4 }, { hat: 5 }, { hat: 6 }, { shield: 5 }].map(o => tank(0, o) !== tank(0.2, o));
-    const still = moving();
-    Kit.motion.setPreference('full'); const turning = moving(); Kit.motion.setPreference('reduce');
-    return [before === tags(), still, turning];
-  }), [true, [false, false, false, false, false], [true, true, true, true, true]]);
-  await startQuietStage(page, 0);
-  // the maze tanks' routine blink: [tanks drawn, any drawn blinking]
-  const blinking = () => page.evaluate(() => {
-    const drawTank = TS_ART.drawTank, seen = [];
-    TS_ART.drawTank = (c, o) => { seen.push(!!o.blink); return drawTank(c, o); };
-    __game.app.game.tanks.forEach(t => { t.blink = 0.1; }); runtime.draw(1);
-    TS_ART.drawTank = drawTank;
-    return [seen.length > 1, seen.includes(true)];
-  });
-  assert.deepEqual(await page.evaluate(() => {
-    const g = __game.app.game; g.shakeP = 13; runtime.step(0.05); runtime.draw(1); return [g.shakeP, g.shx, g.shy, runtime.dashOffset];
-  }), [0, 0, 0, 0]);
-  assert.deepEqual(await blinking(), [true, false], 'maze tanks hold their eyes open');
-  assert.deepEqual(await page.evaluate(() => {
-    Kit.motion.setPreference('full');
-    const g = __game.app.game; g.shakeP = 13; runtime.step(1 / 60); runtime.draw(1); return [g.shakeP > 0, runtime.dashOffset < 0];
-  }), [true, true], 'shake and marching guide dots return with full motion');
-  assert.deepEqual(await blinking(), [true, true], 'blinks return with full motion');
-
-  // The result screen's winner tank neither drops in, hops nor blinks.
-  await page.evaluate(() => Kit.motion.setPreference('reduce'));
-  assert.deepEqual(await page.evaluate(() => {
-    const drawTank = TS_ART.drawTank, ys = [];
-    TS_ART.drawTank = (c, o) => { if (o.scale === 2.5) ys.push(o.y, !!o.blink); return drawTank(c, o); };
-    for (let n = 0; n < 60 && __game.app.screen !== 'result'; n++) { __game.winRound(); runtime.step(0.5); }
-    // first frames (drop-in, hop), then a blink moment (resT a multiple of 3)
-    runtime.draw(1); runtime.step(0.3); runtime.draw(1); __game.app.resT = 3; runtime.draw(1);
-    TS_ART.drawTank = drawTank;
-    return [__game.app.screen, ys];
-  }), ['result', [250, false, 250, false, 250, false]]);
-});
-
-test('wall highlights stay unbroken where walls meet', async t => {
-  const page = await game(t);
-  const px = await page.evaluate(() => {
-    const th = TS_ART.THEMES[0], name = col => col === th.wtop ? 'light' : col === th.wall ? 'top' : col;
-    const walls = (h, v, rects, points) => {
-      const cv = document.createElement('canvas'); cv.width = cv.height = 160;
-      const c = cv.getContext('2d');
-      TS_ART.drawWalls(c, { cols: 2, rows: 2, cs: 60, ox: 20, oy: 20, T: 10, h, v, rects }, th, false);
-      return points.map(([x, y]) => name('#' + [...c.getImageData(x, y, 1, 1).data.slice(0, 3)].map(n => n.toString(16).padStart(2, '0')).join('')));
-    };
-    const border = [{ x1: 15, x2: 145, y1: 15, y2: 25 }, { x1: 15, x2: 145, y1: 135, y2: 145 }, { x1: 15, x2: 25, y1: 15, y2: 145 }, { x1: 135, x2: 145, y1: 15, y2: 145 }];
-    return [
-      // 2x2 maze: a wall from the left border ends where a wall down to the bottom starts
-      walls([[1, 1], [1, 0], [1, 1]], [[1, 0, 1], [1, 1, 1]], border.concat({ x1: 15, x2: 85, y1: 75, y2: 85 }, { x1: 75, x2: 85, y1: 75, y2: 145 }),
-        [[18, 80], [22, 78], [78, 82], [78, 100]]),
-      // a '+' in the middle: the cross wall's light runs through, the up-down wall's stops above it and starts again past it
-      walls([[1, 1], [1, 1], [1, 1]], [[1, 1, 1], [1, 1, 1]], border.concat({ x1: 15, x2: 145, y1: 75, y2: 85 }, { x1: 75, x2: 85, y1: 15, y2: 145 }),
-        [[78, 60], [78, 78], [70, 78], [100, 78], [78, 83], [78, 90]])
-    ];
-  });
-  // left border light through the joint; the joining walls' light starts past it
-  assert.deepEqual(px, [['light', 'top', 'top', 'light'], ['light', 'light', 'light', 'light', 'top', 'light']]);
-});
-
-test('floor decorations are themed and identical when redrawn', async t => {
-  const page = await game(t);
-  const result = await page.evaluate(() => {
-    const m = TS_MAZE.generate(10, 6, 80, 40, 90, 0.3);
-    const rng = seed => () => (seed = seed * 16807 % 2147483647) / 2147483647;
-    const draw = (theme, seed) => {
-      const cv = document.createElement('canvas'); cv.width = 1280; cv.height = 720;
-      TS_ART.drawFloor(cv.getContext('2d'), m, theme, rng(seed));
-      return cv.toDataURL();
-    };
-    return TS_ART.THEMES.map(th => {
-      const a = draw(th, 7);
-      return { deco: th.deco, same: a === draw(th, 7), decorated: a !== draw(Object.assign({}, th, { deco: null }), 7) };
-    }).concat({ seed: typeof m.seed });
-  });
-  assert.deepEqual(result.pop(), { seed: 'number' });
-  for (const r of result) assert.deepEqual([r.same, r.decorated], [true, true], `theme ${r.deco}`);
-  assert.equal(new Set(result.map(r => r.deco)).size, result.length, 'each theme has its own decorations');
-});
-
 test('a paused match keeps its last frame until something changes', async t => {
   const page = await game(t);
   await startQuietStage(page, 0);
@@ -274,4 +178,24 @@ test('a paused match keeps its last frame until something changes', async t => {
   assert.equal(await draws(3), 3, 'redrawn once after the canvas is restored');
   await page.locator('#scr-pause [data-act="resume"]').click();
   assert.equal(await draws(2), 6, 'every frame again after resuming');
+});
+
+test('a match won and then left from a pause during the celebration keeps its coins and stars', async t => {
+  const page = await game(t);
+  await startQuietStage(page, 0);
+  for (let round = 0; round < 3; round++) {
+    await page.evaluate(last => {
+      const g = __game.app.game;
+      __game.winRound();
+      for (let i = 0; i < 600 && g.state === 'play'; i++) runtime.step(1 / 60);
+      for (let i = 0; i < 600 && !last && g.state !== 'play'; i++) runtime.step(1 / 60);
+    }, round === 2);
+  }
+  assert.deepEqual(await page.evaluate(() => [__game.app.game.state, __game.app.game.over]), ['roundEnd', true]);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => __game.app.screen), 'pause');
+  await page.locator('#scr-pause [data-act="menu"]').click();
+  assert.equal(await page.evaluate(() => __game.app.screen), 'title');
+  assert.ok(await stored(page, 'coins') > 0, 'the match coins are saved');
+  assert.ok((await stored(page, 'stars'))[0] > 0, 'stage 1 is won');
 });

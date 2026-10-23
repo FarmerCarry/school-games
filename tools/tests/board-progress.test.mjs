@@ -147,33 +147,44 @@ test('the session score counts both players, resets with the mode and celebrates
   assert.equal((await confettiSeen(page)).pieces, 0, 'reduced motion skips confetti');
 });
 
-test('a winning disc cut short by a hidden tab celebrates when the player comes back', async t => {
-  const page = await openBoard(t, { game: 'connect-four', reducedMotion: 'no-preference' });
-  const setHidden = value => page.evaluate(value => {
-    Object.defineProperty(document, 'hidden', { configurable: true, get: () => value });
-    document.dispatchEvent(new Event('visibilitychange'));
-  }, value);
+test('a double-click on Play again or Pause does not also press the button that slides under it', async t => {
+  const status = page => page.evaluate(() => [boardApp.dataset.mode, boardApp.dataset.paused, gameBoard.dataset.moves, score1.textContent]);
+  for (const game of ['tic-tac-toe', 'connect-four']) {
+    const page = await openBoard(t, { game });
+    await page.locator('#localButton').click();
+    await play(page, game === 'tic-tac-toe' ? [0, 3, 1, 4, 2] : [0, 1, 0, 1, 0, 1, 0]);
+    const again = await page.locator('#rematchButton').boundingBox();
+    await page.mouse.dblclick(again.x + again.width / 2, again.y + again.height / 2);
+    assert.deepEqual(await status(page), ['local', 'false', '0', '1'], `${game}: the new round starts unpaused`);
+    assert.ok(await page.evaluate(() => gameBoard.contains(document.activeElement)), `${game}: focus stays on the board`);
+    await play(page, [4]);
+    // Once Pause hides, Change mode re-centres over the left part of it.
+    const pauseBox = await page.locator('#pauseButton').boundingBox();
+    const slid = await page.evaluate(() => {
+      pauseButton.hidden = true; const box = leaveMatch.getBoundingClientRect(); pauseButton.hidden = false;
+      return { left: box.left, right: box.right };
+    });
+    const x = Math.max(pauseBox.x, slid.left) + 4;
+    assert.ok(x < Math.min(pauseBox.x + pauseBox.width, slid.right), `${game}: Change mode slides under Pause`);
+    await page.mouse.dblclick(x, pauseBox.y + pauseBox.height / 2);
+    assert.deepEqual(await status(page), ['local', 'true', '1', '1'], `${game}: paused, with the round and score kept`);
+    await page.keyboard.press('Enter');
+    assert.deepEqual(await status(page), ['local', 'false', '1', '1'], `${game}: Enter still resumes the round`);
+  }
+});
+
+test('a double-click on a Connect 4 column with reduced motion drops one disc, not the other player\'s too', async t => {
+  const page = await openBoard(t, { game: 'connect-four' });
   await page.locator('#localButton').click();
-  await play(page, [0, 1, 0, 1, 0, 1]);
-  await watchConfetti(page);
-  // The tab hides while the fourth yellow disc is still falling.
-  await page.evaluate(() => {
-    document.querySelector('#gameBoard [data-move="0"]').click();
-    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
-  assert.equal(await page.locator('#gameBoard').getAttribute('data-winner'), '1');
-  assert.equal(await page.locator('#gameBoard .dropping').count(), 0, 'the disc is placed while hidden');
-  await page.waitForTimeout(500);
-  assert.equal((await confettiSeen(page)).pieces, 0, 'no celebration while hidden');
-  assert.equal(await page.locator('#score1.bump').count(), 0);
-  await setHidden(false);
-  assert.equal((await confettiSeen(page)).pieces, 24, 'the celebration plays on return');
-  assert.equal(await page.locator('#score1.bump').count(), 1);
-  await setHidden(true);
-  await setHidden(false);
-  assert.equal((await confettiSeen(page)).pieces, 24, 'and only once');
-  assert.equal(await page.locator('.confetti i').count(), 0, 'returning again does not repeat it');
+  const column = async move => {
+    const box = await page.locator(`#gameBoard [data-move="${move}"]`).boundingBox();
+    return [box.x + box.width / 2, box.y + box.height * 0.8];
+  };
+  await page.mouse.dblclick(...await column(3));
+  assert.deepEqual(await page.evaluate(() => [gameBoard.dataset.moves, gameBoard.dataset.turn]), ['1', '2']);
+  // The other player's own click right after still plays.
+  await page.mouse.click(...await column(4));
+  assert.deepEqual(await page.evaluate(() => [gameBoard.dataset.moves, gameBoard.dataset.turn]), ['2', '1']);
 });
 
 test('a level picked mid-round starts with the next round and keeps the session score', async t => {

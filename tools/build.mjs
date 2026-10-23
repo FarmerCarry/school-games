@@ -392,7 +392,17 @@ async function fetchVerified(p) {
 // body that a disk error has made unreadable.
 var checkingStatus = null;
 async function offlineStatus(repair, quick) {
-  if (checkingStatus) await checkingStatus;
+  // Tabs can ask together. Share a scan that already provides at least the
+  // requested verification; a repair must still follow a weaker quick check.
+  var strength = repair ? 2 : quick ? 0 : 1;
+  if (checkingStatus) {
+    var active = checkingStatus;
+    if (active.strength >= strength) return active.task;
+    try { await active.task; } catch (e) { /* A stronger check can recover. */ }
+    return offlineStatus(repair, quick);
+  }
+  var check = { strength: strength, task: null };
+  checkingStatus = check;
   var task = (async function () {
     var paths = Object.keys(FILES), count = 0, trustLabel = quick && !repair;
     if (!(await caches.has(CACHE)) && !repair) return { ready: false, count: 0, total: paths.length, version: VERSION };
@@ -411,21 +421,24 @@ async function offlineStatus(repair, quick) {
         if (valid) count++;
       }
     }
-    await Promise.all([inspect(), inspect(), inspect(), inspect()]);
+    // A failing read must settle its sibling reads before another scan starts.
+    var inspected = await Promise.allSettled([inspect(), inspect(), inspect(), inspect()]);
+    var failed = inspected.find(function (result) { return result.status === 'rejected'; });
+    if (failed) throw failed.reason;
     if (repair && count !== paths.length) self.registration.update().catch(function () {});
     // A handle can survive deletion from CacheStorage while hashing its bodies.
     var present = await caches.has(CACHE);
     return { ready: present && count === paths.length, count: present ? count : 0, total: paths.length, version: VERSION };
   })();
-  checkingStatus = task.catch(function () {});
-  try { return await task; } finally { checkingStatus = null; }
+  check.task = task;
+  try { return await task; } finally { if (checkingStatus === check) checkingStatus = null; }
 }
 self.addEventListener('message', function (event) {
   var data = event.data, port = event.ports && event.ports[0];
   if (!data || data.type !== 'sg:offline-status' || !port) return;
   if (!event.source || toRel(event.source.url) !== 'index.html') return;
   event.waitUntil(offlineStatus(data.repair === true, data.quick === true).then(function (result) {
-    result.type = 'sg:offline-status'; result.id = data.id; port.postMessage(result);
+    port.postMessage(Object.assign({}, result, { type: 'sg:offline-status', id: data.id }));
   }).catch(function () {
     port.postMessage({ type: 'sg:offline-status', id: data.id, ready: false, count: 0, total: Object.keys(FILES).length, version: VERSION });
   }));

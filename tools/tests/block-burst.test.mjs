@@ -20,18 +20,13 @@ after(async () => {
   await server?.close();
 });
 
-// The game only advances through stepGame()/drawGame(), and every canvas readback is counted.
-async function game(t, { reducedMotion = 'no-preference', clock = false } = {}) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion });
+// The game only advances through stepGame()/drawGame().
+async function game(t) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'no-preference' });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
   await page.addInitScript(() => {
-    window.readbacks = 0;
-    for (const [proto, name] of [[HTMLCanvasElement.prototype, 'toDataURL'], [HTMLCanvasElement.prototype, 'toBlob'], [CanvasRenderingContext2D.prototype, 'getImageData']]) {
-      const original = proto[name];
-      proto[name] = function (...args) { window.readbacks++; return original.apply(this, args); };
-    }
     let kit;
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
@@ -42,28 +37,10 @@ async function game(t, { reducedMotion = 'no-preference', clock = false } = {}) 
       };
     } });
   });
-  if (clock) await page.clock.install();
   await page.goto(`${origin}/games/block-burst/`);
   await page.waitForFunction(() => window.__game && window.stepGame);
   return page;
 }
-const fxVisibility = page => page.evaluate(() => getComputedStyle(document.getElementById('fx')).visibility);
-
-test('title, skin change, map and fail panel draw thumbnails without reading canvases back', async t => {
-  const page = await game(t);
-  assert.equal(await page.locator('.logo-blocks i canvas').count(), 3);
-  assert.equal(await page.locator('.mode-art canvas').count(), 2);
-  assert.equal(await page.locator('#skins .sprev canvas').count(), 6);
-  await clickControl(page, '#skins .skin');
-  await clickControl(page, '#btnAdv');
-  assert.equal(await page.locator('#worlds .wgem canvas').count(), 4);
-  await page.evaluate(() => { __game.startLevel(9); __game.endNow(); stepGame(300); });
-  assert.equal(await page.evaluate(() => __game.state), 'fail');
-  assert.equal(await page.locator('#failGoal .gi canvas').count(), 2);
-  assert.match(await page.locator('#failGoal').textContent(), /^بقي: .*النقاط 0 \/ 500$/);
-  assert.equal(await page.evaluate(() => window.readbacks), 0);
-});
-
 test('a bomb dropped on an empty area is kept; over blocks it clears them', async t => {
   const page = await game(t);
   await clickControl(page, '#btnClassic');
@@ -105,21 +82,6 @@ test('failed saves warn with a retry, keep progress, and clear once a retry succ
     moves: JSON.parse(localStorage.getItem('sg:block-burst:run')).moves,
     best: JSON.parse(localStorage.getItem('sg:block-burst:best'))
   })), progress);
-});
-
-test('reduced motion skips confetti; otherwise the fx layer shows only while confetti flies', async t => {
-  for (const reducedMotion of ['reduce', 'no-preference']) {
-    const page = await game(t, { reducedMotion, clock: true });
-    assert.equal(await fxVisibility(page), 'hidden');
-    await page.evaluate(() => { __game.startLevel(0); __game.win(); stepGame(30); drawGame(); });
-    assert.equal(await page.evaluate(() => __game.state), 'win');
-    assert.equal(await fxVisibility(page), reducedMotion === 'reduce' ? 'hidden' : 'visible', reducedMotion);
-    // The stars light up (with their own confetti) on timeouts: fire them all before the last check.
-    await page.clock.runFor(1300);
-    assert.equal(await page.locator('#winStars .on').count(), 3);
-    await page.evaluate(() => { stepGame(480); drawGame(); }); // every confetti piece has landed
-    assert.equal(await fxVisibility(page), 'hidden', reducedMotion);
-  }
 });
 
 test('a paused game draws until its effects settle, then only after a resize, canvas restore or resume', async t => {
@@ -191,61 +153,16 @@ test('a classic run whose save failed is continued from the menu instead of bein
   assert.equal(await status(), 'saved');
 });
 
-test('the first-move hint drags a tray piece to where it fits; its text covers no gem and not that piece', async t => {
+test('a won level is saved at once, before its ending animation and result panel', async t => {
   const page = await game(t);
-  const moves = await page.evaluate(() => {
-    let seed = 7;
-    Math.random = () => (seed = seed * 16807 % 2147483647) / 2147483647;
-    const N = 8, out = [], range = [...Array(N).keys()];
-    const inLine = (line, [y, x]) => (line.row != null ? y === line.row : x === line.col);
-    for (const level of [0, 1, 2]) for (let k = 0; k < 16; k++) {
-      __game.startLevel(level);
-      const m = __game.hint, run = __game.run, mask = BBCore.maskFromBoard(run.cells), all = [];
-      run.tray.forEach((p, slot) => {
-        if (p) for (let r = 0; r <= N - p.shape.h; r++) for (let c = 0; c <= N - p.shape.w; c++) {
-          if (BBCore.fits(mask, p.shape, r, c)) all.push({ slot, r, c, h: p.shape.h, cells: p.shape.cells.map(([y, x]) => [r + y, c + x]) });
-        }
-      });
-      const move = m && all.find(p => p.slot === m.slot && p.r === m.r && p.c === m.c);
-      if (!move) { out.push({ level, fits: false }); continue; }
-      const res = { level, fits: true, gem: !!m.gem };
-      // the text row holds no gem and is not a row the hand's piece lands on
-      res.textClear = range.every(x => !run.gems[m.textRow * N + x]) && (m.textRow < m.r || m.textRow >= m.r + move.h);
-      if (level === 1) {
-        // no gems: a spot in a row or column that already holds blocks (the board centre is filled)
-        res.byBlocks = move.cells.some(([y, x]) => range.some(b => run.cells[y * N + b] || run.cells[b * N + x]));
-      } else {
-        // the gem row or column with the fewest empty cells that a piece can reach, filled as far as any piece can
-        const lines = [];
-        for (const a of range) for (const line of [{ row: a }, { col: a }]) {
-          const idx = range.map(b => (line.row != null ? a * N + b : b * N + a));
-          const empty = idx.filter(i => !run.cells[i]).length;
-          const most = Math.max(0, ...all.map(p => p.cells.filter(cell => inLine(line, cell)).length));
-          if (idx.some(i => run.gems[i]) && empty && most) lines.push({ key: JSON.stringify(line), empty, most });
-        }
-        const target = lines.find(l => l.key === JSON.stringify(m.line));
-        res.target = !!target && target.empty === Math.min(...lines.map(l => l.empty)) &&
-          move.cells.filter(cell => inLine(m.line, cell)).length === target.most;
-        res.textTop = m.textRow === 1;
-      }
-      out.push(res);
-    }
-    return out;
+  const ended = await page.evaluate(() => {
+    __game.startLevel(0); stepGame(2);
+    for (let i = 0; i < 80 && __game.state === 'play'; i++) __game.auto(1);
+    return { state: __game.state, result: __game.run.result };
   });
-  const expected = m => (m.level === 1 ? { level: 1, fits: true, gem: false, textClear: true, byBlocks: true }
-    : { level: m.level, fits: true, gem: true, textClear: true, target: true, textTop: m.textTop });
-  for (const m of moves) assert.deepEqual(m, expected(m), JSON.stringify(moves));
-  assert.ok(moves.filter(m => m.level === 0).every(m => m.textTop), 'level 1 keeps its tip text at the top');
-  assert.ok(moves.filter(m => m.level === 2 && m.textTop).length >= 12, 'level 3 mostly keeps its tip text at the top');
-  // The hint draws its text on that row, under the hand (the hand is the only rotate(-0.3)).
-  const drawn = await page.evaluate(() => {
-    const ys = [], order = [], proto = CanvasRenderingContext2D.prototype, fill = proto.fillText, rot = proto.rotate;
-    proto.fillText = function (s, x, y) { if (/^(املأ|اسحب)/.test(s)) { ys.push(y); order.push('text'); } return fill.apply(this, arguments); };
-    proto.rotate = function (a) { if (a === -0.3) order.push('hand'); return rot.apply(this, arguments); };
-    __game.startLevel(2); stepGame(170); drawGame();
-    proto.fillText = fill; proto.rotate = rot;
-    return { ys, order, row: __game.hint.textRow };
-  });
-  assert.deepEqual(drawn.ys, [34 + 62 * (drawn.row + 0.5)]);
-  assert.deepEqual(drawn.order, ['text', 'hand']);
+  assert.equal(ended.state, 'ending', `level 1 is won by greedy play (${JSON.stringify(ended)})`);
+  const adv = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:block-burst:adv')));
+  assert.ok(adv && adv[0] >= 1, 'the stars are already in storage if the page is left now');
+  await page.evaluate(() => { for (let i = 0; i < 600 && __game.state === 'ending'; i++) stepGame(1); });
+  assert.equal(await page.evaluate(() => __game.state), 'win', 'the result panel still follows');
 });

@@ -1,6 +1,6 @@
 /*
  * Pool Party — main game (original code).
- * Modes: vs CPU (3 opponents), 2 players hot-seat, Trick Shots (10 puzzles).
+ * Modes: vs CPU (3 opponents), 2 players hot-seat, Trick Shot puzzles.
  */
 (function () {
   'use strict';
@@ -45,6 +45,8 @@
     unsaved = true; saveStatus.failed(); return false;
   }
   function starTotal() { var t = 0; for (var i = 0; i < LV.length; i++) t += save.stars[i] || 0; return t; }
+  // Keep the original reward requirement when new optional puzzles are added.
+  var GALAXY_STARS = 30;
 
   var OPPS = [
     { id: 'easy', name: 'الجرو ريكس', short: 'ريكس', avatar: 'rex', label: 'سهل', color: '#5ff0a0', reward: 40 },
@@ -740,7 +742,7 @@
     G.stats.pots[shooter] += own;
     if (G.kind === 'cpu' && human && own) { G.coinsEarned += own * 5; save.totalPots += own; }
     if (res.respot8) {
-      var e8 = P.ball(G.st, 8), sp8 = P.findPlace(G.st, P.FOOT_X, P.CY, false);
+      var e8 = P.ball(G.st, 8), sp8 = P.findPlace(G.st, P.FOOT_X, P.CY, false, 8);
       e8.on = true; e8.x = sp8.x; e8.y = sp8.y; e8.vx = e8.vy = e8.wx = e8.wy = 0;
       G.tray = G.tray.filter(function (t) { return t.n !== 8; });
       G.tray.forEach(function (t, i) { t.tx = 450 + i * 25.6; t.x = Math.min(t.x, t.tx + 1); });
@@ -837,14 +839,15 @@
     if (r.status === 'win') {
       G.phase = 'won'; G.overT = 0;
       var stars = G.attempts === 1 ? 3 : G.attempts <= 3 ? 2 : 1;
-      var prev = save.stars[G.level] || 0;
+      var prev = save.stars[G.level] || 0, totalBefore = starTotal();
       G.newStars = stars; G.prevStars = prev;
       Kit.stats.end('win', stars);
       G.coinsEarned = Math.max(0, stars - prev) * 15;
       if (stars > prev) save.stars[G.level] = stars;
       save.coins += G.coinsEarned;
       G.badges = [];
-      if (starTotal() === LV.length * 3 && prev < 3) G.badges.push('كل النجوم الـ30! فتحت طاولة المجرّة!');
+      if (G.lv.cueZone) G.badges.push('أدخلت الكرة وأوقفت البيضاء داخل الدائرة!');
+      if (totalBefore < GALAXY_STARS && starTotal() >= GALAXY_STARS) G.badges.push('جمعت 30 نجمة! فتحت طاولة المجرّة!');
       persist();
       SFX.cheer(); confettiBurst(120); shake.add(5);
       banner('مذهل!', 'أنجزت: ' + G.lv.name, '#ffe45c', 1.4);
@@ -882,6 +885,7 @@
     ctx.drawImage(tableLayer, 0, 0, W, H);
     if (G) {
       drawKitchen();
+      drawCueZone();
       drawBalls();
       if (G.phase === 'aim' || (G.phase === 'cpu' && G.cpu.stage !== 'think' && G.cpu.stage !== 'place') || G.phase === 'strike') drawGuide();
       drawCueStick();
@@ -900,6 +904,22 @@
     if (!(G.inHand && G.kitchen && (G.phase === 'aim' || G.phase === 'cpu'))) return;
     ctx.fillStyle = 'rgba(255,255,255,' + (0.05 + 0.03 * Math.sin(time * 4)) + ')';
     ctx.fillRect(P.TX0, P.TY0, P.HEAD_X - P.TX0, P.TH);
+  }
+
+  function drawCueZone() {
+    if (G.kind !== 'trick' || !G.lv.cueZone) return;
+    var z = G.lv.cueZone;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fill();
+    ctx.strokeStyle = '#17112f'; ctx.lineWidth = 7; ctx.stroke();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.setLineDash([8, 5]); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = '700 18px ' + Art.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4; ctx.strokeStyle = '#17112f';
+    ctx.strokeText('البيضاء هنا', z.x, z.y - z.r - 17);
+    ctx.fillStyle = '#fff'; ctx.fillText('البيضاء هنا', z.x, z.y - z.r - 17);
+    ctx.restore();
   }
 
   function drawBalls() {
@@ -1368,7 +1388,8 @@
   function drawTips() {
     if (G.phase !== 'aim' || G.players[G.turn].cpu) return;
     var tip = '';
-    if (G.isBreak && save.shots < 3 && !G.drag) tip = 'صوّب نحو الكرات، ثم انقر واسحب للخلف واترك!';
+    if (G.kind === 'trick' && G.lv.tip && !G.drag) tip = G.lv.tip;
+    else if (G.isBreak && save.shots < 3 && !G.drag) tip = 'صوّب نحو الكرات، ثم انقر واسحب للخلف واترك!';
     else if (G.inHand && !G.drag) tip = G.kitchen ? 'يمكنك سحب الكرة البيضاء (يسار الخط)' : 'الكرة بيدك! اسحب البيضاء إلى أي مكان';
     else if (save.shots < 4 && !G.drag) tip = 'انقر واسحب للخلف، ثم اترك لتضرب!';
     else if (G.drag && G.drag.type === 'shot' && save.shots < 6) tip = 'اترك لتضرب (النقرة اليمنى تلغي)';
@@ -1446,7 +1467,9 @@
   function toggleAim() { save.aim = save.aim === 'big' ? 'pro' : 'big'; persistKey('aim'); aimLabels(); frameDirty = true; }
 
   function startCpu() { newMatch('cpu', save.opp); show('game'); }
-  on('btnPlay', startCpu);
+  // The title opens with this button where 'القائمة' was (match over, pause): a double-click
+  // there must not also start a new match.
+  on('btnPlay', function (e) { if (e.detail > 1) return; startCpu(); });
   on('btn2p', function () { newMatch('pvp'); show('game'); });
   on('btnTrick', function () { show('levels'); });
   on('btnShop', function () { show('shop'); });
@@ -1481,7 +1504,7 @@
   // ---- shop
   function trophyOk(item) {
     if (item.trophy === 'hard') return (save.wins.hard || 0) > 0;
-    if (item.trophy === 'stars') return starTotal() >= LV.length * 3;
+    if (item.trophy === 'stars') return starTotal() >= GALAXY_STARS;
     return false;
   }
   function refreshShop() {

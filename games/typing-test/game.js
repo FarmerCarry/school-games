@@ -1199,17 +1199,26 @@
     r.classList.remove('armed');
     r.textContent = '🗑️ امسح نتائجي';
   }
-  var resetTimer = 0;
+  var resetTimer = 0, armedAt = 0;
   $('pReset').addEventListener('click', function () {
     var r = $('pReset');
     if (!r.classList.contains('armed')) {
       r.classList.add('armed'); r.textContent = 'متأكد؟ اضغط مرة أخرى للمسح';
+      armedAt = performance.now();
       clearTimeout(resetTimer);
       resetTimer = setTimeout(function () { r.classList.remove('armed'); r.textContent = '🗑️ امسح نتائجي'; }, 3000);
       return;
     }
+    // The confirming click must come after the question could be read: the second click
+    // of a double-click would otherwise erase everything at once.
+    if (performance.now() - armedAt < 600) return;
     ['pbs', 'hist', 'tier'].forEach(function (k) { delete pending[k]; store.remove(k); });
     flushSaves(); renderProgress(); updateFoot(); buildRace();
+  });
+  // A focused button clicks on every auto-repeated Enter, and a key held past 600 ms
+  // would still confirm; only a new key press may.
+  $('pReset').addEventListener('keydown', function (e) {
+    if (e.repeat && (e.key === 'Enter' || e.key === ' ')) e.preventDefault();
   });
 
   /* -------------------------------------------------------------- sounds */

@@ -443,6 +443,7 @@
         break;
       case 'win':
         game.winT = 0;
+        if (!demo) commitWin();
         var dx = d.d.x + (d.d.g ? d.d.g.ox : 0) + 20, dy = d.d.y + (d.d.g ? d.d.g.oy : 0) + 30;
         fx.burst(dx, dy, { count: 40, colors: CONFETTI, speed: 520, life: 1.1, size: 9, gravity: 700 });
         shake.add(4);
@@ -464,7 +465,9 @@
   }
 
   /* ============================================================== win flow */
-  function levelWon() {
+  // A level is saved the moment the door is reached: the page can be left in the
+  // 0.9 s before the panel opens. levelWon only shows the stored result.
+  function commitWin() {
     var i = game.li, d = game.deaths;
     var stars = d === 0 ? 3 : d <= 3 ? 2 : 1;
     var starsBefore = starCount();
@@ -478,6 +481,11 @@
     var unlockedNext = false;
     if (i + 1 < N && save.unl < i + 1) { save.unl = i + 1; unlockedNext = true; }
     persist();
+    game.res = { stars: stars, before: starsBefore, newBest: newBest, next: unlockedNext };
+  }
+  function levelWon() {
+    var i = game.li, d = game.deaths, r = game.res;
+    var stars = r.stars, starsBefore = r.before, newBest = r.newBest, unlockedNext = r.next;
     var starsAfter = starCount();
 
     mode = 'win'; show('scr-win');
@@ -544,7 +552,9 @@
 
   /* ----------------------------------------------------- buttons */
   function on(id, fn) {
-    $(id).addEventListener('click', function (e) { e.stopPropagation(); K.audio.unlock(); fn(); });
+    // A focused button keeps the keyboard (P would not resume, Enter would click again),
+    // so a mouse click gives focus back; keyboard activation keeps it for keyboard users.
+    $(id).addEventListener('click', function (e) { e.stopPropagation(); if (e.detail > 0) e.currentTarget.blur(); K.audio.unlock(); fn(); });
   }
   on('btn-play', function () { S.click(); startLevel(playTarget()); });
   on('btn-levels', function () { S.click(); goSelect(); });

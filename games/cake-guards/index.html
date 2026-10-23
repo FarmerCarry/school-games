@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>حرّاس الكعكة</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" tabindex="0" aria-label="حرّاس الكعكة"></canvas>
+
+<!-- HUD and tower bar: a 1280x720 layer laid exactly over the canvas -->
+<div id="ui">
+  <div id="hud" hidden>
+    <div class="cg-stats">
+      <div class="cg-stat" title="قطع الكعكة"><span class="cg-ico">🍰</span><b id="hearts">20</b></div>
+      <div class="cg-stat" title="العملات"><span class="cg-coin"></span><b id="coins">0</b></div>
+      <div class="cg-stat">الموجة <b id="wave" dir="ltr">0/0</b></div>
+    </div>
+    <div class="cg-hudbtns">
+      <button class="cg-btn cg-round" id="btnPause" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)">⏸</button>
+      <button class="cg-btn cg-round" id="btnSpeed" type="button" dir="ltr" aria-label="السرعة" title="السرعة (F)">×1</button>
+      <button class="cg-btn cg-go" id="btnWave" type="button"><span id="waveLabel">ابدأ الموجة</span> <span id="waveBonus" dir="ltr"></span> <span class="sg-key">مسافة</span></button>
+    </div>
+  </div>
+  <div id="bar" hidden></div>
+  <div id="panel" hidden></div>
+  <div id="banner" hidden></div>
+  <div id="hint" hidden></div>
+</div>
+
+<!-- Title -->
+<div class="sg-overlay cg-overlay" id="scr-title">
+  <div class="cg-title-wrap">
+    <h1 class="cg-logo"><span class="cg-logo-a">حرّاس</span><span class="cg-logo-b">الكعكة</span></h1>
+    <p class="cg-tag">الهلام المشاغب يريد كعكة عيد الميلاد! ابنِ الأبراج وأوقفه.</p>
+    <button class="sg-btn cg-play" id="btnPlay" type="button"><span class="cg-btn-main">▶ العب</span><span class="cg-btn-sub" id="playSub">المرحلة 1</span></button>
+    <div class="cg-menu">
+      <button class="sg-btn secondary cg-big" id="btnLevels" type="button"><span class="cg-btn-main">المراحل</span><span class="cg-btn-sub" id="levelsSub">★ 0 / 36</span></button>
+      <button class="sg-btn secondary cg-big" id="btnEndless" type="button"><span class="cg-btn-main">بلا نهاية</span><span class="cg-btn-sub" id="endlessSub"></span></button>
+      <button class="sg-btn secondary cg-big" id="btnCakes" type="button"><span class="cg-btn-main">الكعكات</span><span class="cg-btn-sub" id="cakesSub"></span></button>
+    </div>
+    <div class="cg-howto">
+      <div>انقر على <b>دائرة</b> بجانب الطريق لتبني برجًا، أو اختر برجًا بالأرقام <span dir="ltr"><span class="sg-key">1</span><span class="sg-key">2</span><span class="sg-key">3</span><span class="sg-key">4</span></span></div>
+      <div>انقر على البرج لتطويره <span class="sg-key">U</span> أو بيعه <span class="sg-key">X</span></div>
+      <div><span class="sg-key">مسافة</span> ابدأ الموجة · <span class="sg-key">F</span> أسرع · <span class="sg-key">P</span> إيقاف</div>
+    </div>
+  </div>
+</div>
+
+<!-- Level select -->
+<div class="sg-overlay cg-overlay" id="scr-levels" hidden>
+  <div class="sg-panel cg-panel cg-wide">
+    <h2 class="cg-h2">اختر المرحلة</h2>
+    <div id="worlds"></div>
+    <div class="cg-row"><span class="cg-total" id="starsTotal"></span><button class="sg-btn secondary" id="btnLevelsBack" type="button">رجوع</button></div>
+  </div>
+</div>
+
+<!-- Cake choice -->
+<div class="sg-overlay cg-overlay" id="scr-cakes" hidden>
+  <div class="sg-panel cg-panel cg-wide">
+    <h2 class="cg-h2">اختر كعكتك</h2>
+    <p class="sg-sub">اجمع النجوم في المراحل لتفتح كعكات جديدة.</p>
+    <div class="cg-cakes" id="cakeGrid"></div>
+    <div class="cg-row"><button class="sg-btn secondary" id="btnCakesBack" type="button">رجوع</button></div>
+  </div>
+</div>
+
+<!-- Pause -->
+<div class="sg-overlay cg-overlay" id="scr-pause" hidden>
+  <div class="sg-panel cg-panel">
+    <h2 class="cg-h2">استراحة</h2>
+    <p class="sg-sub" id="pauseSub"></p>
+    <div class="cg-col">
+      <button class="sg-btn good" id="btnResume" type="button">استمرار</button>
+      <button class="sg-btn" id="btnRestart" type="button">ابدأ المرحلة من جديد</button>
+      <button class="sg-btn secondary" id="btnMenu" type="button">القائمة</button>
+    </div>
+  </div>
+</div>
+
+<!-- Level won -->
+<div class="sg-overlay cg-overlay" id="scr-win" hidden>
+  <div class="sg-panel cg-panel cg-result">
+    <div class="cg-kicker" id="winKicker"></div>
+    <h2 class="cg-h2 cg-win">الكعكة بأمان!</h2>
+    <div class="cg-stars" id="winStars"><span>★</span><span>★</span><span>★</span></div>
+    <p class="sg-sub" id="winSub"></p>
+    <div class="cg-new" id="winNew" hidden></div>
+    <div class="cg-col">
+      <button class="sg-btn good" id="btnNext" type="button">المرحلة التالية ◀</button>
+      <div><button class="sg-btn" id="btnReplay" type="button">أعد المرحلة</button><button class="sg-btn secondary" id="btnWinLevels" type="button">المراحل</button></div>
+    </div>
+    <div class="cg-hint"><span class="sg-key">Enter</span> التالي · <span class="sg-key">R</span> إعادة · <span class="sg-key">Esc</span> المراحل</div>
+  </div>
+</div>
+
+<!-- Level lost -->
+<div class="sg-overlay cg-overlay" id="scr-lose" hidden>
+  <div class="sg-panel cg-panel cg-result">
+    <div class="cg-kicker" id="loseKicker"></div>
+    <h2 class="cg-h2 cg-lose">أكل الهلام الكعكة!</h2>
+    <p class="sg-sub" id="loseSub"></p>
+    <div class="cg-col">
+      <button class="sg-btn good" id="btnRetry" type="button">حاول مرة أخرى</button>
+      <button class="sg-btn secondary" id="btnLoseLevels" type="button">المراحل</button>
+    </div>
+    <div class="cg-hint"><span class="sg-key">Enter</span> أو <span class="sg-key">R</span> للإعادة</div>
+  </div>
+</div>
+
+<!-- Endless over -->
+<div class="sg-overlay cg-overlay" id="scr-over" hidden>
+  <div class="sg-panel cg-panel cg-result">
+    <div class="cg-kicker">بلا نهاية</div>
+    <h2 class="cg-h2 cg-lose">انتهى التحدي!</h2>
+    <div class="cg-bignum" id="overWaves">0</div>
+    <p class="sg-sub" id="overSub"></p>
+    <div class="cg-new" id="overNew" hidden>رقم قياسي جديد!</div>
+    <div class="cg-col">
+      <button class="sg-btn good" id="btnAgain" type="button">مرة أخرى</button>
+      <button class="sg-btn secondary" id="btnOverMenu" type="button">القائمة</button>
+    </div>
+    <div class="cg-hint"><span class="sg-key">Enter</span> مرة أخرى · <span class="sg-key">Esc</span> القائمة</div>
+  </div>
+</div>
+
+<script src="../../shared/kit.js"></script>
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script src="art.js"></script>
+<script src="audio.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

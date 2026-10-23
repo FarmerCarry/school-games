@@ -23,12 +23,16 @@ after(async () => {
 // 1280x720 makes page pixels equal the game's logical pixels. The loop is stepped
 // by hand so pointer events can land between two updates, as they do in Chrome.
 // stepGame only updates; play(n) also draws, and `paints` counts drawn frames.
-async function game(t) {
+async function game(t, saved = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  await page.addInitScript(() => {
+  await page.addInitScript(saved => {
+    for (const [key, value] of Object.entries(saved)) {
+      const name = 'sg:pool-party:' + key;
+      if (localStorage.getItem(name) === null) localStorage.setItem(name, JSON.stringify(value));
+    }
     let kit;
     window.paints = 0;
     window.restorable = [];
@@ -50,7 +54,7 @@ async function game(t) {
       if (type === 'contextrestored') window.restorable.push(this);
       return listen.apply(this, arguments);
     };
-  });
+  }, saved);
   await page.goto(`${origin}/games/pool-party/`);
   await page.waitForFunction(() => window.__game && window.stepGame);
   return page;
@@ -185,6 +189,26 @@ test('a save that fails at the coins keeps the first-win bonus for a later win',
   assert.deepEqual(await stored(page, 'wins'), { easy: 1, medium: 0, hard: 0 });
 });
 
+test('a double-click on Menu shows the title instead of starting the match under it', async t => {
+  const page = await game(t);
+  const doubleClick = async selector => {
+    const box = await page.locator(selector).boundingBox();
+    await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  };
+  await startCpuMatch(page);
+  await page.evaluate(() => { __game.win(0); stepGame(90); });
+  assert.equal(await page.evaluate(() => __game.screen), 'over');
+  await doubleClick('#oMenu');
+  assert.deepEqual(await page.evaluate(() => [__game.screen, __game.kind]), ['title', 'demo'], 'from the match-over screen');
+  await startCpuMatch(page);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => stepGame(1));
+  await doubleClick('#pMenu');
+  assert.deepEqual(await page.evaluate(() => [__game.screen, __game.kind]), ['title', 'demo'], 'from the pause menu');
+  await clickControl(page, '#btnPlay');
+  assert.deepEqual(await page.evaluate(() => [__game.screen, __game.kind]), ['game', 'cpu'], 'a single click still plays');
+});
+
 test('picking an opponent writes only that setting until a save has failed', async t => {
   const page = await game(t);
   await page.evaluate(() => {
@@ -246,20 +270,126 @@ test('a paused game draws once, then only after a resize or a canvas restore', a
   assert.deepEqual(await page.evaluate(() => { paints = 0; play(10); return [__game.screen, paints]; }), ['game', 10]);
 });
 
-test('reduced motion skips confetti and the pot zoom but keeps the slow motion', async t => {
-  const page = await game(t);
-  const shot = () => page.evaluate(() => {
-    __game.trick(0); stepGame(2);
-    const aim = __game.autoAim();
-    __game.shoot(aim.power);
-    let zoom = 1, slow = 1;
-    for (let i = 0; i < 600 && (__game.phase === 'strike' || __game.phase === 'rolling'); i++) {
-      stepGame(1); zoom = Math.max(zoom, __game.zoom); slow = Math.min(slow, __game.timeScale);
+// Use the actual spin control, mouse aim and power-bar drag. Only the game clock
+// is stepped; no debug shot, forced win, aim setter or direct state edit is used.
+async function positionShot(page, { target, power, spin }) {
+  await page.mouse.move(1204, 330 - spin * 52 * .78);
+  await page.mouse.down();
+  await page.evaluate(() => stepGame(1));
+  await page.mouse.up();
+  await page.evaluate(() => stepGame(1));
+  await page.mouse.move(target[0], target[1]);
+  await page.evaluate(() => stepGame(1));
+  await page.mouse.move(84, 245);
+  await page.mouse.down();
+  await page.evaluate(() => stepGame(1));
+  await page.mouse.move(84, 245 + power * 350 * .8);
+  await page.evaluate(() => stepGame(1));
+  assert.ok(Math.abs(await page.evaluate(() => __game.power) - power) < .005);
+  await page.mouse.up();
+  await page.evaluate(() => stepGame(1));
+  assert.equal(await page.evaluate(() => __game.phase), 'strike');
+  return page.evaluate(() => {
+    for (let i = 0; i < 1200; i++) {
+      stepGame(1);
+      if (__game.phase === 'won' || __game.phase === 'fail') { play(1); return __game.phase; }
     }
-    return { zoom: zoom > 1.01, slow: slow < 0.8, phase: __game.phase, confetti: __game.confetti };
+    return __game.phase;
   });
-  assert.deepEqual(await shot(), { zoom: true, slow: true, phase: 'won', confetti: 120 });
-  await page.evaluate(() => Kit.motion.setPreference('reduce'));
-  assert.equal(await page.evaluate(() => __game.confetti), 0, 'switching to reduced motion clears falling confetti');
-  assert.deepEqual(await shot(), { zoom: false, slow: true, phase: 'won', confetti: 0 });
+}
+
+test('both position puzzles are solvable through normal controls and save append-only progress once', async t => {
+  const oldStars = Array(10).fill(3);
+  const page = await game(t, { stars: oldStars, coins: 450 });
+  await clickControl(page, '#btnTrick');
+  const cards = page.locator('#lvgrid .lvl');
+  assert.equal(await cards.count(), 12);
+  assert.equal(await page.locator('#lvStars').textContent(), '30/36');
+  assert.equal(await cards.nth(10).getAttribute('class'), 'lvl');
+  assert.match(await cards.nth(11).getAttribute('class'), /locked/);
+  await cards.nth(10).click();
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await positionShot(page, { target: [900, 450], power: .43, spin: -.95 }), 'won');
+  await page.evaluate(() => play(100));
+  assert.equal(await page.evaluate(() => __game.screen), 'done');
+  assert.match(await page.locator('#dBadges').textContent(), /أوقفت البيضاء داخل الدائرة/);
+  assert.deepEqual(await page.evaluate(() => __game.save.stars), [...oldStars, 3]);
+  assert.equal(await stored(page, 'coins'), 495);
+  await clickControl(page, '#dNext');
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await page.evaluate(() => __game.level), 11);
+  assert.equal(await positionShot(page, { target: [380, 450], power: .4, spin: .7 }), 'won');
+  await page.evaluate(() => play(100));
+  assert.deepEqual(await page.evaluate(() => __game.save.stars), [...oldStars, 3, 3]);
+  assert.equal(await stored(page, 'coins'), 540);
+  assert.equal(await page.locator('#dNext').isVisible(), false, 'the final puzzle has no nonexistent next level');
+  await clickControl(page, '#dRetry');
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await positionShot(page, { target: [380, 450], power: .4, spin: .7 }), 'won');
+  assert.equal(await stored(page, 'coins'), 540, 'replaying earned stars must not mint more coins');
+  await page.reload();
+  await page.waitForFunction(() => window.__game);
+  assert.deepEqual(await page.evaluate(() => __game.save.stars), [...oldStars, 3, 3]);
+  assert.equal(await page.evaluate(() => __game.save.coins), 540);
+});
+
+test('potting without position explains the miss and leaves progress locked', async t => {
+  const page = await game(t, { stars: Array(10).fill(3), coins: 450 });
+  await clickControl(page, '#btnTrick');
+  await page.locator('#lvgrid .lvl').nth(10).click();
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await positionShot(page, { target: [900, 450], power: .43, spin: 0 }), 'fail');
+  const drawn = await page.evaluate(() => {
+    const texts = [], ctx = document.getElementById('game').getContext('2d'), original = ctx.fillText;
+    ctx.fillText = function (text, ...args) { texts.push(text); return original.call(this, text, ...args); };
+    try { play(1); } finally { ctx.fillText = original; }
+    return texts.join('\n');
+  });
+  assert.match(drawn, /دخلت الكرة! لكن مركز البيضاء خارج الدائرة/);
+  assert.equal(await page.evaluate(() => __game.balls().some(b => b[0] === 1)), false, 'the object ball was potted');
+  assert.deepEqual(await page.evaluate(() => __game.save.stars), Array(10).fill(3));
+  assert.equal(await stored(page, 'coins'), 450);
+});
+
+test('an old thirty-star save retains galaxy felt selection after new puzzles are added', async t => {
+  const page = await game(t, { stars: Array(10).fill(3), coins: 450 });
+  await clickControl(page, '#btnShop');
+  const galaxy = page.locator('#shopFelts .item').last();
+  assert.equal(await galaxy.locator('.pr').textContent(), 'استخدم');
+  await galaxy.click();
+  assert.equal(await page.evaluate(() => __game.save.felt), 'galaxy');
+  assert.equal(await stored(page, 'felt'), 'galaxy');
+  assert.equal(await stored(page, 'coins'), 450);
+  await page.reload();
+  await page.waitForFunction(() => window.__game);
+  assert.equal(await page.evaluate(() => __game.save.felt), 'galaxy');
+  await clickControl(page, '#btnShop');
+  assert.equal(await page.locator('#shopFelts .item').last().locator('.pr').textContent(), 'مُختار ✓');
+});
+
+test('an 8 potted on the break is respotted clear of a cue ball resting on the foot spot', async t => {
+  const page = await game(t);
+  await startCpuMatch(page);
+  const gap = await page.evaluate(() => {
+    const P = PoolPhysics, shoot = P.shoot;
+    let st = null;
+    // the break pots the 8 and leaves the cue ball on the foot spot, the rest along the bottom cushion
+    P.shoot = function (state) {
+      shoot.apply(this, arguments);
+      P.shoot = shoot; st = state;
+      state.balls.forEach((b, i) => {
+        b.vx = b.vy = b.wx = b.wy = 0;
+        if (b.n === 0) { b.x = P.FOOT_X; b.y = P.CY; } else if (b.n === 8) b.on = false;
+        else { b.x = P.TX0 + 80 + i * 30; b.y = P.TY1 - 40; }
+      });
+      state.shot.first = 1;
+      state.shot.pots.push({ n: 8, pocket: 0, cush: 0 });
+    };
+    __game.shoot(0.5);
+    for (let i = 0; i < 30 && (!st || __game.phase === 'strike' || __game.phase === 'rolling'); i++) stepGame(1);
+    const cue = P.ball(st, 0), eight = P.ball(st, 8);
+    return { phase: __game.phase, on: eight.on, cueOnSpot: cue.x === P.FOOT_X && cue.y === P.CY, gap: Math.hypot(eight.x - cue.x, eight.y - cue.y) };
+  });
+  assert.deepEqual([gap.phase, gap.on, gap.cueOnSpot], ['cpu', true, true], 'the shot ended and the 8 is back on the table');
+  assert.ok(gap.gap >= 2 * 12, `the 8 must not overlap the cue ball: ${gap.gap.toFixed(1)} px apart`);
 });

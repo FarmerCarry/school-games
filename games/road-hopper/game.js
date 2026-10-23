@@ -12,27 +12,18 @@
   var $ = function (id) { return document.getElementById(id); };
 
   /* ================================================================ save */
-  // Every write goes through put(), which skips a key whose JSON is unchanged since
-  // this page last read or wrote it (fewer disk writes; same keys and format).
-  // A failed write is not remembered, so the next save writes that key again, and the
-  // shared warning (with a retry button) stays up until every failed key is written.
-  var saved = {}, unsaved = {}, MISSING = {};
-  var saveUI = Kit.saveStatus({ retry: function () { persist(); put('tipRuns', tipRuns); } });
+  // Currency, prizes and progress replace one record together. Keep legacy keys
+  // untouched until (and after) migration succeeds; only the new record is then read.
+  // Failed writes retain this session's complete state for the visible Retry button.
+  var record = store.get('save', null);
+  if (!record || typeof record !== 'object' || Array.isArray(record) || record.v !== 1) record = null;
+  var savedJSON = record ? JSON.stringify(record) : null;
+  var saveUI = Kit.saveStatus({ retry: persist });
   function rd(key, fallback) {
-    var v = store.get(key, MISSING);
-    if (v === MISSING) return fallback;
-    try { saved[key] = JSON.stringify(v); } catch (e) { /* ignore */ }
-    return v;
-  }
-  function put(key, value) {
-    var s;
-    try { s = JSON.stringify(value); } catch (e) { s = null; }
-    if (s != null && saved[key] === s) return;
-    if (store.set(key, value)) { saved[key] = s; delete unsaved[key]; }
-    else { delete saved[key]; unsaved[key] = 1; }
-    if (Object.keys(unsaved).length) saveUI.failed(); else saveUI.saved();
+    return record ? (record[key] === undefined ? fallback : record[key]) : store.get(key, fallback);
   }
   var save = {
+    v: 1,
     best: +rd('best', 0) || 0,
     coins: +rd('coins', 0) || 0,
     owned: rd('owned', null),
@@ -41,7 +32,8 @@
     missions: rd('missions', null),
     tiers: rd('tiers', null),
     giftAt: +rd('giftAt', 0) || 0,
-    seen: rd('seen', null)
+    seen: rd('seen', null),
+    tipRuns: +rd('tipRuns', 0) || 0
   };
   if (!Array.isArray(save.owned)) save.owned = ['chick'];
   save.owned = save.owned.filter(function (id) { return !!CHAR_BY[id]; });
@@ -52,9 +44,13 @@
   if (!save.tiers || typeof save.tiers !== 'object') save.tiers = {};
   if (!save.seen || typeof save.seen !== 'object') save.seen = { chick: 1 };
   function persist() {
-    put('best', save.best); put('coins', save.coins); put('owned', save.owned); put('sel', save.sel);
-    put('stats', save.stats); put('missions', save.missions); put('tiers', save.tiers);
-    put('giftAt', save.giftAt); put('seen', save.seen);
+    var json;
+    try { json = JSON.stringify(save); } catch (e) { json = null; }
+    if (json !== null && json === savedJSON) return true;
+    if (json === null || !store.set('save', save)) {
+      savedJSON = null; saveUI.failed(); return false;
+    }
+    savedJSON = json; saveUI.saved(); return true;
   }
   function has(id) { return save.owned.indexOf(id) >= 0; }
 
@@ -548,11 +544,11 @@
   var bestAtStart = 0, bestAnnounced = false, milestoneNext = 25, lastTheme = 0, deathT = 0, overT = 0, warnT = 0, nearRec = null;
   var godMode = false, shakeP = 0, newBestRun = false;
   var TIPS = { road: 'انتظر حتى تمرّ السيارات، ثم اقفز!', river: 'قف على الجذوع… الماء خطر!', rail: 'الضوء الأحمر يعني أن القطار قادم!' };
-  var tipsSeen = {}, tipT = 0, tipRuns = +rd('tipRuns', 0) || 0;
+  var tipsSeen = {}, tipT = 0;
   function showTip(kind) {
-    if (tipRuns >= 3 || tipsSeen[kind]) return;
+    if (save.tipRuns >= 3 || tipsSeen[kind]) return;
     tipsSeen[kind] = 1;
-    if (!tipRuns) Kit.stats.tutorial('start');
+    if (!save.tipRuns) Kit.stats.tutorial('start');
     var h = $('hint');
     h.textContent = TIPS[kind]; h.hidden = false; tipT = 3;
   }
@@ -771,7 +767,7 @@
     var c = L.coin, val = c.big ? 5 : 1;
     give(c.m); c.m = null;
     runCoins += val; save.coins += val; save.stats.coinsAll += val;
-    put('coins', save.coins);
+    persist();
     S.coin(c.big);
     burst(c.c, 0.5, -L.row, 10, c.big ? [0x7ff0ff, 0xffffff, 0x3fb8e0] : [0xffd23f, 0xfff3a0, 0xff9f1a], { speed: 2.6, up: 4, size: 0.1, life: 0.5 });
     popup('+' + val, c.c, 1.0, -L.row, 'gold');
@@ -1158,16 +1154,23 @@
   }
   function pauseGame() { if (state !== 'play') return; state = 'paused'; redraw = true; setWarn(false); $('pScore').textContent = score; showScreen('pause'); S.click(); }
   function resumeGame() { if (state !== 'paused') return; state = 'play'; showScreen(null); S.click(); K.reset(); }
-  function restart() { resetWorld(0); state = 'title'; startGame(); }
-  function toMenu() { resetWorld(0); state = 'title'; $('hud').hidden = true; showScreen('title'); refreshTitle(); }
+  // Leaving a run from the pause menu still keeps its best score and the unlock it
+  // earned (coins are saved as they are picked up).
+  function bankRun() {
+    if (state !== 'paused') return;
+    if (score > save.best) save.best = score;
+    if (score >= 100 && !has('gold')) save.owned.push('gold');
+    persist();
+  }
+  function restart() { bankRun(); resetWorld(0); state = 'title'; startGame(); }
+  function toMenu() { bankRun(); resetWorld(0); state = 'title'; $('hud').hidden = true; showScreen('title'); refreshTitle(); }
 
   var overCount = 0;
   function gameOver() {
     if (state !== 'dying') return;
     state = 'over'; overT = 0;
     save.stats.games++;
-    if (++tipRuns === 3) Kit.stats.tutorial('done');
-    put('tipRuns', tipRuns);
+    if (++save.tipRuns === 3) Kit.stats.tutorial('done');
     Kit.stats.end('end', score);
     missionEvent('games', 1);
     missionEvent('score', score, true);
@@ -1226,7 +1229,7 @@
     if (!Array.isArray(save.missions)) save.missions = [];
     save.missions = save.missions.filter(function (m) { return m && MT[m.t] && !m.done && m.n > 0; });
     while (save.missions.length < 3) save.missions.push(newMission());
-    put('missions', save.missions);
+    persist();
   }
   function missionEvent(type, amount, isMax) {
     var ms = save.missions;
@@ -1296,7 +1299,7 @@
   }
   function selectChar(id) {
     if (!has(id)) return;
-    save.sel = id; put('sel', id);
+    save.sel = id; persist();
     if (!P.dead) {
       setCharModel(id);
       P.jump = 1; P.idle = 2.5;
@@ -1422,7 +1425,7 @@
   }
   function closeChars() {
     save.owned.forEach(function (id) { save.seen[id] = 1; });
-    put('seen', save.seen);
+    persist();
     state = prevScreen === 'over' ? 'over' : 'title';
     showScreen(state);
     if (state === 'title') refreshTitle();
@@ -1483,7 +1486,7 @@
     S.click();
   }
   function playPrize() {
-    if (lastPrize && has(lastPrize)) { save.sel = lastPrize; put('sel', lastPrize); save.seen[lastPrize] = 1; }
+    if (lastPrize && has(lastPrize)) { save.sel = lastPrize; save.seen[lastPrize] = 1; persist(); }
     $('mReveal').hidden = true;
     restart();
   }

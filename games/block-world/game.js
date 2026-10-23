@@ -716,7 +716,9 @@
     G.done[q.id] = true;
     var before = meta.totalStars;
     meta.totalStars++;
-    saveMeta();
+    // The world (which records the quest as done) is written first and the star only after it,
+    // so a lost world save cannot leave a star for a quest that is then earned again.
+    saveGame();
     G.toasts.push({ title: 'أنجزت المهمة!', text: q.text, icon: q.icon, t: 0, dur: 3.4 });
     SND.quest(); confettiBurst();
     BW.SKINS.forEach(function (sk, i) {
@@ -1698,6 +1700,7 @@
   function openInv() {
     if (G.mode !== 'play') return;
     G.mode = 'inv';
+    craftOrder = null;
     if (G.gm === 'creative') fillPalette();
     nearStations();
     invEl.classList.toggle('creative', G.gm === 'creative');
@@ -1789,13 +1792,20 @@
     row.setAttribute('data-r', idx);
     return row;
   }
+  // The recipe order is sorted when the backpack opens and then kept: re-sorting after each
+  // craft slid another recipe under the cursor, and a quick second click crafted that one.
+  var craftOrder = null;
   function renderCraft() {
     var st = craftEl.scrollTop;
     craftEl.innerHTML = '';
     var rows = BW.RECIPES.map(function (r, i) { return { r: r, i: i, can: stationOK(r) && hasIngredients(r), has: hasIngredients(r) }; });
     var wool = rows.filter(function (o) { return o.r.cat === 'wool'; }), rest = rows.filter(function (o) { return o.r.cat !== 'wool'; });
     var qr = questRecipe();
-    rest.sort(function (a, b) { return ((b.r === qr) - (a.r === qr)) || (b.can - a.can) || (b.has - a.has) || (a.i - b.i); });
+    if (craftOrder) rest.sort(function (a, b) { return craftOrder.indexOf(a.i) - craftOrder.indexOf(b.i); });
+    else {
+      rest.sort(function (a, b) { return ((b.r === qr) - (a.r === qr)) || (b.can - a.can) || (b.has - a.has) || (a.i - b.i); });
+      craftOrder = rest.map(function (o) { return o.i; });
+    }
     rest.forEach(function (o) { craftEl.appendChild(recipeRow(o.r, o.i)); });
     // wool painter row
     var wr = document.createElement('div');

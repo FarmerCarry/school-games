@@ -72,7 +72,7 @@
     openEnded: 'لعب مفتوح',
     // Isolate the numeric range so RTL prose keeps its low-to-high order in
     // both the visible label and the plain-text tile tooltip.
-    duration: function (min, max) { return 'حوالي \u2066' + min + '–' + max + '\u2069 دقائق للجولة'; },
+    duration: function (min, max) { return 'حوالي \u2066' + min + '–' + max + '\u2069 ' + minutesWord(max) + ' للجولة'; },
     pointer: 'الفأرة',
     keyboard: 'لوحة المفاتيح',
     mixedInput: 'الفأرة ولوحة المفاتيح',
@@ -86,7 +86,7 @@
     startSession: 'ابدأ جلسة جديدة',
     resetTimer: 'أعد ضبط المؤقّت',
     sessionChoice: 'انتهى وقت الجلسة. اختر تسليم الجهاز أو متابعة الجولة.',
-    sessionStarted: function (minutes) { return 'بدأت جلسة ' + minutes + ' دقائق. يتوقف اللعب عند انتهاء الوقت.'; },
+    sessionStarted: function (minutes) { return 'بدأت جلسة ' + minutes + ' ' + minutesWord(minutes) + '. يتوقف اللعب عند انتهاء الوقت.'; },
     timerCancelled: 'أُلغي المؤقّت. إذا كانت اللعبة متوقفة، استأنفها من داخل اللعبة.',
     nextPlayer: 'انتهت الجلسة. الجهاز جاهز للاعب التالي.',
     finishHint: 'استأنف من داخل اللعبة، ثم اضغط «العودة إلى الألعاب» لتسليم الجهاز بعد الجولة.',
@@ -101,6 +101,8 @@
     if (n >= 3 && n <= 10) return n + ' ألعاب';
     return n + ' لعبة';
   }
+  // After a written number: 3-10 دقائق, otherwise دقيقة. A range follows its last number.
+  function minutesWord(n) { return n >= 3 && n <= 10 ? 'دقائق' : 'دقيقة'; }
   function playersLabel(p) {
     p = String(p || '1').trim();
     var m = p.match(/^(\d+)\s*-\s*(\d+)$/);
@@ -613,8 +615,9 @@
   function frameEl() { return $('#stage iframe'); }
   // A paused game, its title/menu and the classroom handoff still own a session.
   // Include the pending route so a launch cannot race an offline refresh check.
+  // The classroom timer lives only in this page, so a reload would silently drop it.
   window.SGUpdateSafe = function () {
-    return renderedHash !== null && !current && !frameEl() && parseRoute().name !== 'play';
+    return renderedHash !== null && !current && !frameEl() && parseRoute().name !== 'play' && !sessionDeadline && !sessionExpired;
   };
   // Local play statistics (js/stats.js, docs/PLAY_STATS.md). Never let them break play.
   function stat(name, a, b) {
@@ -795,10 +798,11 @@
     if (overlay) overlay.hidden = true;
     var f = frameEl();
     if (f && frameReady) f.removeAttribute('inert');
+    window.dispatchEvent(new Event('sg:sessionchange'));
   }
   function tickSession() {
     if (!sessionDeadline) return;
-    var left = Math.max(0, Math.ceil((sessionDeadline - Date.now()) / 1000));
+    var left = Math.max(0, Math.ceil((sessionDeadline - performance.now()) / 1000));
     $('#sessionClock').textContent = Math.floor(left / 60) + ':' + ('0' + left % 60).slice(-2);
     if (!left) {
       sessionDeadline = 0;
@@ -826,10 +830,12 @@
     $('#sessionStart').addEventListener('click', function () {
       clearSession();
       var minutes = Number($('#sessionMinutes').value) || 10;
-      sessionDeadline = Date.now() + minutes * 60000;
+      // performance.now() keeps counting evenly if Windows corrects the PC's clock mid-lesson.
+      sessionDeadline = performance.now() + minutes * 60000;
       $('#sessionStop').hidden = false;
       $('#sessionStart').textContent = T.resetTimer;
       $('#sessionStatus').textContent = T.sessionStarted(minutes);
+      window.dispatchEvent(new Event('sg:sessionchange'));
       tickSession();
     });
     $('#sessionStop').addEventListener('click', function () {
@@ -1012,6 +1018,8 @@
         if (!heading.matches('a[href], button')) heading.setAttribute('tabindex', '-1');
         try { heading.focus({ preventScroll: true }); } catch (e) { heading.focus(); }
       }
+      // A new «تابع اللعب» row above the list can push the tile off screen.
+      if (returningTiles[0]) returningTiles[0].scrollIntoView({ block: 'nearest' });
     }
     renderedHash = routeHash();
     typing = false;

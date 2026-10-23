@@ -449,7 +449,12 @@
     try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
 
-  function restart() { if (G.mode === 'endless') startEndless(); else startLevel(G.levelN); }
+  function restart() { leaveRun(); if (G.mode === 'endless') startEndless(); else startLevel(G.levelN); }
+  // A Rising Goo run left alive (R, or Restart or Menu from pause) still banks what it
+  // earned; statistics count it as a quit, so it reports no end.
+  function leaveRun() {
+    if (G.mode === 'endless' && G.phase === 'play' && (G.screen === 'play' || G.screen === 'pause') && (scoreNow() || G.coinsGot)) commitOver(true);
+  }
 
   /* --------------------------------------------------------- the grid */
   function blockAt(x, y) {
@@ -621,6 +626,8 @@
     if (G.mode === 'level') G.hearts--;
     else G.hearts = 0;
     G.deathKind = kind;
+    if (G.mode === 'endless') commitOver();
+    else if (G.hearts <= 0) Kit.stats.end('lose');
   }
 
   function checkHazards() {
@@ -678,6 +685,7 @@
 
   function reachExit() {
     G.phase = 'exiting'; G.phaseT = 0.8; P.moving = false;
+    commitWin();
     sfx.exit();
     var px = G.mx + (P.x + 0.5) * G.tile, py = (P.y + 0.5) * G.tile;
     fx.burst(px, py, { count: 40, colors: ['#ffe600', '#ff3fa4', '#34f5ff', '#b6ff3a', '#fff'], speed: 360, life: 0.9, size: 7, gravity: 150 });
@@ -1514,7 +1522,9 @@
   }
   function resume() { hideAll(); K.reset(); try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
 
-  function showWin() {
+  // A result is saved the moment it happens: R, or a pause and then Menu or Restart,
+  // can leave during the exit or death animation. showWin and showOver only display it.
+  function commitWin() {
     var n = G.levelN, prev = save.lv[n] || { done: 0, s: 0, t: 0 };
     var got = [G.dotsGot >= G.dotsTotal, G.hits === 0, G.time <= G.def.par];
     var bits = (got[0] ? 1 : 0) | (got[1] ? 2 : 0) | (got[2] ? 4 : 0);
@@ -1527,9 +1537,13 @@
     persist();
     checkMaskUnlocks(starsBefore, totalStars(), -1);
     if (!prev.done && n % 10 === 0 && n < LEVELS.length) toast('فتحت عالمًا جديدًا: ' + WORLDS[n / 10].name + '!');
+    Kit.stats.end('win', got.filter(Boolean).length);
+    G.result = { got: got, starBonus: starBonus, newBestTime: !!prev.done && newBestTime };
+  }
+  function showWin() {
+    var n = G.levelN, got = G.result.got, starBonus = G.result.starBonus;
     $('win-kicker').textContent = 'المرحلة ' + n + ' · ' + G.def.name;
     var nStars = got.filter(Boolean).length;
-    Kit.stats.end('win', nStars);
     $('win-title').textContent = nStars === 3 ? 'مثالي!' : nStars === 2 ? 'رائع جدًا!' : nStars === 1 ? 'أحسنت!' : 'نجحت!';
     $('win-par-lbl').textContent = 'أسرع من ' + fmtTime(G.def.par);
     var starEls = document.querySelectorAll('#win-stars .md-star');
@@ -1537,7 +1551,7 @@
     $('win-stats').innerHTML = 'النقاط: <b>' + G.dotsGot + '/' + G.dotsTotal + '</b> · الوقت: <b dir="ltr">' + fmtTime(G.time) + '</b> · العملات: <b>' + G.coinsGot + '</b>' +
       (starBonus ? '<br>مكافأة النجوم الجديدة: <b dir="ltr">+' + starBonus + '</b> <span class="md-coin-ico"></span>' : '');
     var nb = $('win-new');
-    if (prev.done && newBestTime) { nb.hidden = false; nb.textContent = 'أفضل وقت جديد!'; }
+    if (G.result.newBestTime) { nb.hidden = false; nb.textContent = 'أفضل وقت جديد!'; }
     else nb.hidden = true;
     $('btn-next').hidden = n >= LEVELS.length;
     showScreen('win');
@@ -1570,13 +1584,12 @@
     var pct = G.dotsTotal ? Math.round(G.dotsGot / G.dotsTotal * 100) : 0;
     $('fail-sub').textContent = pct >= 60 ? 'كدت تنجح! جمعت ' + pct + '% من النقاط.' : 'لا بأس! كل بطل يتعثر أحيانًا.';
     sfx.lose();
-    Kit.stats.end('lose');
     showScreen('fail');
     G.resultLock = 0.5;
   }
-  function showOver() {
+  function commitOver(left) {
     var score = scoreNow();
-    Kit.stats.end('end', score);
+    if (!left) Kit.stats.end('end', score);
     var isBest = score > save.bestScore;
     var hBefore = save.bestH;
     save.runs++;
@@ -1586,6 +1599,10 @@
     save.coins += G.coinsGot + hBonus;
     persist();
     checkMaskUnlocks(-1, -1, hBefore);
+    G.result = { score: score, isBest: isBest, hBonus: hBonus };
+  }
+  function showOver() {
+    var score = G.result.score, isBest = G.result.isBest, hBonus = G.result.hBonus;
     $('over-title').textContent = G.deathKind === 'goo' ? 'ابتلعك الهلام!' : 'أوه! أصابك خطر!';
     $('over-score').textContent = Kit.fmt(score);
     $('over-new').hidden = !isBest || score <= 0;
@@ -1607,6 +1624,7 @@
   }
 
   function toTitle() {
+    leaveRun();
     refreshTitle();
     showScreen('title');
   }
@@ -1815,6 +1833,7 @@
     skip: function (n) { startLevel(n); },
     endless: function () { startEndless(); },
     win: function () { if (G.screen === 'play' && G.mode === 'level') reachExit(); },
+    die: function () { if (G.screen === 'play') hit('spike'); },
     dash: function (d) { tryDash(d); },
     set god(v) { G.god = !!v; }, get god() { return G.god; },
     set autoplay(v) { G.autoplay = !!v; G.ai = null; }, get autoplay() { return G.autoplay; },
