@@ -49,8 +49,8 @@ async function newPage(state) {
   return page;
 }
 
-async function setup(t, { ready = true, storage = true, time = START, clock = true } = {}) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', timezoneId: 'Asia/Riyadh' });
+async function setup(t, { ready = true, storage = true, time = START, clock = true, using = browser } = {}) {
+  const context = await using.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', timezoneId: 'Asia/Riyadh' });
   t.after(() => context.close());
   const state = { context, ready, clock, errors: [], requests: [], clears: 0 };
   await context.route('**/games/*/index.html', route => route.fulfill({ contentType: 'text/html', body: standIn(state.ready) }));
@@ -627,6 +627,67 @@ test('a portal page that loads closes only leftover sessions, never one still pl
   checkRecord(record, DAY);
   const g = record.g['air-hockey'];
   assert.deepEqual([g.o, g.e, g.b, g.lv.L1], [1, 105000, [0, 1, 0, 0], [1, 1, 0, 0, 0, 0, 50000, 0, 0, 0, 1, 0]], 'one session, no false short session or gave up');
+  assert.deepEqual(await read(page, LIVE), {});
+});
+
+test('a page back from the back-forward cache never counts again the round another page closed', async t => {
+  // Playwright turns the cache off; GitHub Pages lets the portal page be kept in it.
+  const cached = await launchChromium({ ignoreDefaultArgs: ['--disable-back-forward-cache'] });
+  const state = await setup(t, { using: cached });
+  t.after(() => cached.close());
+  const { page, context } = state;
+  await context.route(url => url.pathname === '/', async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, headers: { ...response.headers(), 'cache-control': 'max-age=600' } });
+  });
+  await context.addInitScript(() => addEventListener('pageshow', e => { if (e.persisted) window.restored = (window.restored || 0) + 1; }));
+  // The child goes to another address in this tab with a round open, and a portal
+  // page opened meanwhile closes the session: a cached page cannot answer its ping.
+  const away = async () => {
+    const restored = await page.evaluate(() => window.restored || 0);
+    await page.goto(origin + '/seed.html');
+    await context.clock.runFor(1000);
+    const other = await newPage(state);
+    await other.goto(origin + '/#/');
+    await context.clock.runFor(1500);
+    const record = await read(other);
+    await other.close();
+    await page.goBack({ waitUntil: 'commit' });
+    await page.waitForFunction(n => window.restored === n + 1, restored);
+    return record;
+  };
+
+  await page.goto(origin + '/#/play/air-hockey');
+  await post(page, await playing(page, 'air-hockey'), stats(70000, [['s', 'L3']], 'L3', { om: 40000 }));
+  const L3 = [1, 0, 0, 0, 0, 1, 40000, 0, 0, 0, 1, 1];
+  let g = (await away()).g['air-hockey'];
+  assert.deepEqual([g.o, g.e, g.b, g.lv], [1, 70000, [0, 1, 0, 0], { L3 }], 'closed as a leftover');
+  // Back in the game, the child leaves it with that round still open.
+  await leave(state);
+  g = (await read(page)).g['air-hockey'];
+  assert.deepEqual([g.o, g.e, g.b, g.lv], [1, 70000, [0, 1, 0, 0], { L3 }]);
+
+  await go(page, '#/play/maze-dash');
+  await post(page, await playing(page, 'maze-dash'), stats(70000, [['s', 'L1']], 'L1', { om: 40000 }));
+  await away();
+  // Or plays on: the next round's start ends the open one as a quit, and that next
+  // round still counts, here as a quit when the child leaves. Playwright has no
+  // frame for a restored page's game, so its window posts through the portal's.
+  const n = ++pings;
+  await page.evaluate(([d, n]) => {
+    const game = document.querySelector('#stage iframe').contentWindow;
+    game.send(d);
+    game.send({ type: 'test:ping', n });
+  }, [stats(20000, [['q', 'L1', 55000], ['s', 'L2']], 'L2', { om: 5000 }), n]);
+  await page.waitForFunction(n => window.lastPing === n, n);
+  await leave(state);
+  const record = await read(page);
+  checkRecord(record, DAY);
+  g = record.g['maze-dash'];
+  assert.deepEqual([g.o, g.e, g.b, g.lv], [1, 90000, [0, 1, 0, 0], {
+    L1: [1, 0, 0, 0, 0, 1, 40000, 0, 0, 0, 1, 1],
+    L2: [1, 0, 0, 0, 0, 1, 5000, 0, 0, 0, 1, 0]
+  }]);
   assert.deepEqual(await read(page, LIVE), {});
 });
 

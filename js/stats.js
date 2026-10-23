@@ -15,6 +15,8 @@
  *   n when the entry was written (Date.now()),
  *   w the entry was written once, x it files no length and no gave up (another
  *   page closed it, or collection was stopped during it), c closed, d finished;
+ *   k the round open when another page closed this session (that page filed it as
+ *   a quit, or a clear removed it): its end is not filed, until a round starts;
  *   o only on a session left over from a crash: its open round, now a quit.
  * A frame: w its window (let go of 2 s after removal), s its session,
  *   t mounted (performance.now()), l its load is timed (a session's first frame),
@@ -80,6 +82,9 @@
     if (off) return s.i = s.q = 0;
     if (c == 't') { i = { start: 0, done: 1 }[id]; if (i >= 0) g.tu[i]++; return; }
     if (!(i >= 0) || !ok(id)) return;
+    // The page that closed the session filed this round as a quit (or a clear
+    // removed it): its end, or its quit as the frame goes, is not counted again.
+    if (i && id == s.k) return s.k = 0;
     a = level(g, id);
     a[i]++;
     if (i) {
@@ -93,6 +98,7 @@
       // A visit is a start whose previous round in the session had another id.
       if (id != s.i) { a[10]++; gaveUp(s, t); s.i = id; }
       s.q = '';
+      s.k = 0;
     }
   }
   // The last known open round of a replaced or departed frame becomes a quit,
@@ -197,10 +203,11 @@
     return s;
   }
   // Mirror the open session so the next portal load can close it after a crash or
-  // a power cut. A page whose written entry is gone was closed by another page.
+  // a power cut. A page whose written entry is gone was closed by another page:
+  // a portal page that filed the open round it last wrote (p) as a quit, or a clear.
   function mirror() {
     var live = getObj(LIVE);
-    if (sess && sess.w && !live[tab]) sess.x = 1;
+    if (sess && sess.w && !live[tab] && !sess.x) { sess.x = 1; sess.k = sess.p; }
     if (sess && !sess.x) { sess.p = cur && cur.o; sess.u = cur && cur.u; sess.n = now(); live[tab] = sess; } else delete live[tab];
     putLive(live);
     if (sess) sess.w = 1;
@@ -347,6 +354,8 @@
   // Close sessions left open by a crash, a killed tab or a power cut: the entries
   // that did not answer the ping within 1.5 s. Pages that are frozen or in the
   // back-forward cache cannot answer either; their next write finds the entry gone.
+  // A page back from the cache answers the queued ping at once, before the child
+  // can leave the game.
   function sweep(t) {
     var live = getObj(LIVE), old = [], k, x;
     // A newer ping belongs to a page that loaded later.

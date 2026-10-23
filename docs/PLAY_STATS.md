@@ -167,7 +167,11 @@ The recorder is about 6 KB minified; the portal's current size and limit are in 
   off, the tab was killed), it closes it from the stored values first; the open round
   becomes a quit with that time. The quit and the gave up are filed at the time the
   entry was last written, so a session closed the next morning stays on the day it was
-  played; one written before a teacher's clear adds nothing.
+  played; one written before a teacher's clear adds nothing. A portal page still
+  playing answers the loading page within 1.5 seconds and keeps its session. One that
+  cannot answer (in the back-forward cache, or frozen) is closed the same way; when it
+  comes back it files no length and no gave up for that session, and no end for the
+  round that was filed as a quit (its next rounds count as usual).
 
 ### Other measures
 
