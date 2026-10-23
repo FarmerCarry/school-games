@@ -38,7 +38,7 @@
   }
 
   /* --------------------------------------------------------------- state */
-  let screen = 'title', world = null, levelIdx = 0, endless = false, speed = 1;
+  let screen = 'title', world = null, levelIdx = 0, endless = false, endlessBest = 0, speed = 1;
   let placing = null, selected = -1, menuPad = -1, hoverPad = -1, mouse = { x: -100, y: -100 };
   let time = 0, ending = null, result = null, resultLock = 0, busyT = 0;
   let floats = [], zaps = [], rings = [], tutorial = 0, hud = {};
@@ -82,7 +82,7 @@
     showTutorial();
   }
   function startEndless() {
-    endless = true; tutorial = 0;
+    endless = true; tutorial = 0; endlessBest = save.endless;
     Kit.stats.round('endless');
     begin(CG.ENDLESS);
     banner('بلا نهاية', 'كم موجة تستطيع أن تصمد؟', '', 2500);
@@ -169,8 +169,9 @@
   function commitLose() {
     const cleared = Math.max(0, world.wave - 1);
     if (endless) {
-      const best = cleared > save.endless;
-      if (best) { save.endless = cleared; persist(); }
+      // Held waves are saved as they clear, so the record to beat is the one the run started with.
+      const best = cleared > endlessBest;
+      if (cleared > save.endless) { save.endless = cleared; persist(); }
       Kit.stats.end('end', cleared);
       result = { cleared: cleared, best: best };
     } else {
@@ -554,7 +555,11 @@
           break;
         case 'boss': S.boss(); if (!tipShowing()) banner(CG.ENEMIES[e.type].name + ' قادم!', '', '', 2200); break;
         case 'wave': S.wave(); if (world.wave > 1 || endless) banner('الموجة ' + world.wave, '', '', 1300); break;
-        case 'clear': S.clear(); float(world.cake.x, world.cake.y - 90, '+' + e.bonus, '#ffcc00', 30); bump('coins'); break;
+        case 'clear':
+          S.clear(); float(world.cake.x, world.cake.y - 90, '+' + e.bonus, '#ffcc00', 30); bump('coins');
+          // Saved at once: an endless run left by Menu, Restart or closing the tab keeps its best.
+          if (endless && e.n > save.endless) { save.endless = e.n; persist(); }
+          break;
         case 'early': float(world.cake.x, world.cake.y - 120, '+' + e.bonus, '#3ddc84', 30); break;
         case 'win':
           commitWin(e.stars);
