@@ -103,12 +103,14 @@
   function quitGone(s, t) { gone.forEach(function (f) { if (f.s == s) quitOpen(f, t); }); }
 
   /* ---------------------------------------------------------- sessions */
-  function finish(s) {
-    var t = now(), g;
+  // `at`: when a session left over from a crash was last written (default: now).
+  function finish(s, at) {
+    var t = at || now(), g;
     if (s.d) return;
     s.d = 1;
     quitGone(s, t);
-    if (s.o) round(s, ['q', s.o, s.u], t);   // a session left over from a crash
+    // A leftover's open round, unless a teacher cleared the numbers since it was written.
+    if (s.o && t >= cleared) round(s, ['q', s.o, s.u], t);
     // Closed by another tab, stopped meanwhile, or begun before a teacher cleared the numbers: no length.
     if (!s.x && s.t >= cleared) {
       gaveUp(s, t);
@@ -356,7 +358,9 @@
         x.e = num(x.e, 9e15);
         x.o = ok(x.p) && x.p;
         x.q = ok(x.i) && x.q;
-        finish(x);
+        // Its quit and gave up go to the day it was played, not the morning it is closed:
+        // the time it was last written (not after now), or when it opened if that is later.
+        finish(x, max(x.t, num(x.n, now())));
       }
     }));
   }

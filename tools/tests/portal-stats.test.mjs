@@ -448,6 +448,34 @@ test('a session left open by a crash or power cut is closed on the next load', a
   assert.deepEqual(await read(second.page, LIVE), {});
 });
 
+test('a session left open overnight is filed on the day it was played, not the morning it is closed', async t => {
+  const first = await setup(t);
+  await first.page.goto(origin + '/#/play/air-hockey');
+  await post(first.page, await playing(first.page, 'air-hockey'), stats(90000, [['s', 'L3']], 'L3', { om: 90000 }));
+  await first.context.clock.runFor(60000);
+  const saved = await first.page.evaluate(() => Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)])));
+
+  // The PC lost power with the game open and the first portal load is the next
+  // morning. An entry written before a teacher's clear (one that survived it)
+  // brings no cleared day back.
+  const live = JSON.parse(saved[LIVE]), old = +START - 3 * 864e5;
+  live.old = { g: 'maze-dash', t: old, n: old + 60000, e: 30000, r: 1, i: 'L1', q: '', p: 'L1', u: 20000 };
+  saved[LIVE] = JSON.stringify(live);
+  saved[META] = JSON.stringify({ ...JSON.parse(saved[META]), clearedAt: +START - 3600e3 });
+  const second = await setup(t, { time: new Date('2026-10-09T08:00:00+03:00') });
+  await second.page.goto(origin + '/seed.html');
+  await second.page.evaluate(s => { for (const k in s) localStorage.setItem(k, s[k]); }, saved);
+  await second.page.goto(origin + '/#/');
+  await second.context.clock.runFor(1500);
+  const record = await read(second.page);
+  checkRecord(record, DAY);
+  const g = record.g['air-hockey'];
+  assert.deepEqual([g.o, g.e, g.b, g.lv], [1, 90000, [0, 1, 0, 0], { L3: [1, 0, 0, 0, 0, 1, 90000, 0, 0, 0, 1, 1] }]);
+  assert.equal(await read(second.page, 'sg:site:stats:d:2026-10-09'), null, 'nothing is filed on the morning it was closed');
+  assert.equal(await read(second.page, 'sg:site:stats:d:2026-10-05'), null, 'nothing from before the clear comes back');
+  assert.deepEqual(await read(second.page, LIVE), {});
+});
+
 test('storage stays bounded: 120 newest days, 300 KB in all, 16 KB a day, one retry when full', async t => {
   const state = await setup(t);
   const { page } = state;
