@@ -934,7 +934,7 @@
     persist();
     $('oBest').hidden = !best;
     $('oLevel').textContent = save.level;
-    $('oXpT').textContent = ltr('+' + xp + ' XP');
+    $('oXpT').textContent = ltr('+' + xp) + ' خبرة';
     $('oXp').style.width = '0%';
     setTimeout(function () { $('oXp').style.width = Math.round(save.xp / needXp(save.level) * 100) + '%'; }, 60);
     $('oLevelUp').hidden = !ups;

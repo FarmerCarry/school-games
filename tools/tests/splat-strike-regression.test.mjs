@@ -135,3 +135,15 @@ test('Splat Strike locker: a double-click only tries a locked item on and a late
   const bought = await saved();
   assert.ok(bought.coins < coins && bought.owned.includes(id) && bought.color === id, `a separate click buys and wears ${id}`);
 });
+
+test('Splat Strike results show the experience gained in Arabic with the number kept left to right', async t => {
+  const page = await game(t);
+  const xp = await page.evaluate(() => {
+    __game.start({ skipCountdown: true }); __game.god = true; __game.botsFrozen = true; runtime.step(5); __game.endNow();
+    const el = document.getElementById('oXpT');
+    for (let i = 0; i < 600 && !el.textContent; i++) runtime.step(1);
+    return el.textContent;
+  });
+  assert.match(xp, /^⁦\+\d+⁩ خبرة$/);
+  assert.doesNotMatch(xp, /[A-Za-z]/, 'no English on the results screen');
+});
