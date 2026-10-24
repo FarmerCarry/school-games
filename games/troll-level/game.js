@@ -6,7 +6,13 @@
 (function () {
   'use strict';
   var K = window.Kit, E = window.TrollEngine, LV = window.TrollLevels, Art = window.TrollArt;
-  var LEVELS = LV.LEVELS, WORLDS = LV.WORLDS, PER = LV.PER_WORLD, N = LEVELS.length, MAXSTARS = N * 3;
+  var LEVELS = LV.LEVELS, WORLDS = LV.WORLDS, N = LEVELS.length, MAXSTARS = N * 3;
+  // Worlds differ in size: FIRST[w] is world w's first level index (FIRST[WORLDS.length] = N),
+  // WOF[i] the world of level i.
+  var FIRST = [], WOF = [];
+  WORLDS.forEach(function (wd, w) { FIRST.push(WOF.length); for (var k = 0; k < wd.n; k++) WOF.push(w); });
+  FIRST.push(WOF.length);
+  function solution(i) { return LEVELS[i].sol || (window.TrollSolutions || [])[i]; }
   var T = E.T, PH = E.PH, FONT = Art.FONT;
   var $ = function (id) { return document.getElementById(id); };
 
@@ -196,6 +202,7 @@
     mode = 'select'; show('scr-select');
     selIdx = Math.min(save.last, save.unl);
     buildSelect();
+    scrollSel();
     if (!game.demo) startDemo();
   }
   function buildSelect() {
@@ -206,12 +213,12 @@
       var row = document.createElement('div'); row.className = 'wrow';
       var lab = document.createElement('div'); lab.className = 'wlabel';
       lab.style.background = pal.bg; lab.style.color = pal.ink; lab.style.borderColor = pal.ink;
-      var ws = 0; for (var q = w * PER; q < (w + 1) * PER; q++) ws += save.stars[q] || 0;
+      var ws = 0; for (var q = FIRST[w]; q < FIRST[w + 1]; q++) ws += save.stars[q] || 0;
       lab.innerHTML = '<span></span><small></small>';
       lab.firstChild.textContent = pal.name;
-      lab.lastChild.textContent = '★ ' + ws + '/' + (PER * 3);
+      lab.lastChild.textContent = '★ ' + ws + '/' + (pal.n * 3);
       row.appendChild(lab);
-      for (var k = 0; k < PER; k++) row.appendChild(levelTile(w * PER + k, pal));
+      for (var k = FIRST[w]; k < FIRST[w + 1]; k++) row.appendChild(levelTile(k, pal));
       box.appendChild(row);
     }
     markSel();
@@ -242,13 +249,21 @@
     var list = document.querySelectorAll('#worlds .lv');
     for (var i = 0; i < list.length; i++) list[i].classList.toggle('focus', +list[i].dataset.i === selIdx);
   }
+  // Keep the chosen level's world row in view (the list scrolls).
+  function scrollSel() {
+    var box = $('worlds'), el = box.querySelector('.lv.focus');
+    if (!el) return;
+    var row = el.parentNode, top = row.offsetTop - 14, bot = row.offsetTop + row.offsetHeight + 12;
+    if (top < box.scrollTop) box.scrollTop = top;
+    else if (bot > box.scrollTop + box.clientHeight) box.scrollTop = bot - box.clientHeight;
+  }
 
   /* ----------------------------------------------------- skins */
   function goSkins() {
     mode = 'skins'; show('scr-skins');
     $('k-stars').textContent = starCount();
     var box = $('skins'); box.innerHTML = '';
-    Art.SKINS.forEach(function (sk) {
+    Art.SKINS.slice().sort(function (a, b) { return a.stars - b.stars; }).forEach(function (sk) {
       var d = document.createElement('div'); d.className = 'skin';
       var un = skinUnlocked(sk);
       if (!un) d.classList.add('locked');
@@ -283,7 +298,7 @@
 
   /* ============================================================== game state */
   var game = {
-    world: null, demo: false, li: 0, pal: WORLDS[0], deaths: 0, t: 0, winT: -1, deadT: 0,
+    world: null, demo: false, li: 0, pal: WORLDS[0], deaths: 0, tries: 0, visitT: 0, t: 0, winT: -1, deadT: 0,
     vis: { sx: 1, sy: 1, sc: 1, blink: 0 }, msg: null, msgT: 0, introT: 0, flash: 0, flashC: '#fff',
     marks: [], staticC: null, staticFor: null, staticRes: 1, auto: null, autoF: 0, prevJ: false,
     botInputs: null, botF: 0, demoWait: 0, revLabelT: 0, endT: 3
@@ -302,9 +317,10 @@
     if (!i && save.best[0] == null) Kit.stats.tutorial('start');
     Kit.stats.round('L' + (i + 1));
     game.li = i; game.demo = false;
-    game.pal = WORLDS[Math.floor(i / PER)];
-    game.deaths = 0; game.marks.length = 0; game.winT = -1; game.auto = null;
-    game.msg = null; game.msgT = 0; game.introT = 2.2; game.flash = 0;
+    // A level may borrow another world's look (pal: a world index) or skip its title card.
+    game.pal = WORLDS[LEVELS[i].pal != null ? LEVELS[i].pal : WOF[i]];
+    game.deaths = 0; game.tries = 0; game.visitT = 0; game.marks.length = 0; game.winT = -1; game.auto = null;
+    game.msg = null; game.msgT = 0; game.introT = LEVELS[i].noIntro ? 0 : 2.2; game.flash = 0;
     fx.clear();
     game.world = makeWorld(LEVELS[i], false);
     game.staticFor = null;
@@ -350,13 +366,14 @@
         break;
       case 'die':
         if (!demo) {
-          game.deaths++; save.total++;   // only this changed: one small write per death
+          game.deaths++; game.tries++; save.total++;   // only this changed: one small write per death
           if (store.set('total', save.total) === false) saveUi.failed();
-          var pool = Math.random() < 0.55 && CAUSE[d.cause] ? CAUSE[d.cause] : TAUNT;
+          var causes = CAUSE[d.cause] || Art.CAUSE[d.cause];
+          var pool = Math.random() < 0.55 && causes ? causes : TAUNT;
           var m = K.pick(pool);
           if (game.deaths === 5) m = '5 سقطات! المرحلة تضحك عليك!';
           else if (game.deaths === 10) m = '10 سقطات! لا تستسلم يا بطل!';
-          else if (game.deaths === HINT_AFTER) m = 'خذ تلميحًا... انظر للأسفل!';
+          else if (game.tries === HINT_AFTER) m = 'خذ تلميحًا... انظر للأسفل!';
           say(m, 1.7);
           if (game.marks.length > 40) game.marks.shift();
           game.marks.push({ x: d.x, y: d.y });
@@ -423,6 +440,7 @@
       case 'sfx':
         var sf = d.name === 'slam' ? S.thud : S[d.name];
         if (loud && sf) sf();
+        else if (loud && Art.SFX[d.name]) Art.SFX[d.name](A);
         break;
       case 'bonk':
         fx.burst(d.x, d.y, { count: 5, color: '#ffe14d', speed: 140, life: 0.35, size: 5, gravity: 200 });
@@ -449,6 +467,8 @@
         shake.add(4);
         if (loud) S.win();
         break;
+      default: // a world plug-in's own event
+        if (Art.EV[type]) Art.EV[type](d, { fx: fx, shake: shake, say: say, sfx: function (n) { if (loud) (S[n] || (Art.SFX[n] && function () { Art.SFX[n](A); }) || function () {})(); }, pal: pal, loud: loud, demo: demo });
     }
   }
   function dustUnder(g) {
@@ -489,7 +509,7 @@
     var starsAfter = starCount();
 
     mode = 'win'; show('scr-win');
-    $('w-lvl').textContent = WORLDS[Math.floor(i / PER)].name + ' · المرحلة ' + (i + 1);
+    $('w-lvl').textContent = WORLDS[WOF[i]].name + ' · المرحلة ' + (i + 1);
     $('w-title').textContent = K.pick(WIN_TITLES);
     $('w-sub').textContent = LEVELS[i].winMsg || (d === 0 ? 'بلا أي سقطة! مذهل!' : K.pick(WIN_SUBS));
     $('w-deaths').textContent = d;
@@ -497,7 +517,7 @@
     $('w-newbest').hidden = !newBest;
     var un = [];
     Art.SKINS.forEach(function (sk) { if (sk.stars > starsBefore && sk.stars <= starsAfter) un.push('شخصية جديدة: ' + sk.name + '!'); });
-    if (unlockedNext && (i + 1) % PER === 0) un.unshift('فتحت ' + WORLDS[(i + 1) / PER].name + '!');
+    if (unlockedNext && WOF[i + 1] !== WOF[i]) un.unshift('فتحت ' + WORLDS[WOF[i + 1]].name + '!');
     $('w-unlock').hidden = !un.length;
     $('w-unlock').textContent = un.join(' · ');
     var last = i === N - 1;
@@ -535,13 +555,15 @@
     if (mode !== 'play' || game.winT >= 0) return;
     mode = 'pause'; show('scr-pause');
     $('p-info').textContent = 'المرحلة ' + (game.li + 1) + ': ' + LEVELS[game.li].name + ' · السقطات: ' + game.deaths;
-    $('btn-skip').hidden = !(game.deaths >= SKIP_AFTER && game.li < N - 1);
+    $('btn-skip').hidden = !(game.tries >= SKIP_AFTER && game.li < N - 1);
     S.click();
     guardT = 0.08; // a quick second P/Esc should resume right away
   }
   function resume() { if (mode !== 'pause') return; mode = 'play'; show(null); K.keys.reset(); S.click(); }
   function restart() {
     if (!game.world || game.demo) return;
+    // A restart counts as a try (some levels block you without killing), not as a death.
+    if (game.winT < 0) game.tries++;
     game.world.reset(); game.vis.sc = 0.3; game.winT = -1;
     mode = 'play'; show(null); S.respawn(); K.keys.reset();
   }
@@ -587,14 +609,14 @@
       if (kk.anyPressed(KOK)) { S.click(); startLevel(playTarget()); }
       else if (kk.pressed('KeyL')) { S.click(); goSelect(); }
     } else if (mode === 'select') {
-      var w = Math.floor(selIdx / PER), c = selIdx % PER, moved = false;
-      if (kk.anyPressed(['ArrowLeft', 'KeyA'])) { c = Math.min(PER - 1, c + 1); moved = true; }   // RTL: left = next
+      var w = WOF[selIdx], c = selIdx - FIRST[w], moved = false;
+      if (kk.anyPressed(['ArrowLeft', 'KeyA'])) { c++; moved = true; }   // RTL: left = next
       if (kk.anyPressed(['ArrowRight', 'KeyD'])) { c = Math.max(0, c - 1); moved = true; }
       if (kk.anyPressed(['ArrowUp', 'KeyW'])) { w = Math.max(0, w - 1); moved = true; }
       if (kk.anyPressed(['ArrowDown', 'KeyS'])) { w = Math.min(WORLDS.length - 1, w + 1); moved = true; }
       if (moved) {
-        var ni = w * PER + c;
-        if (ni <= save.unl) { selIdx = ni; markSel(); S.click(); } else S.nope();
+        var ni = FIRST[w] + Math.min(c, WORLDS[w].n - 1);
+        if (ni <= save.unl) { selIdx = ni; markSel(); scrollSel(); S.click(); } else S.nope();
       }
       if (kk.anyPressed(KOK)) { S.click(); startLevel(selIdx); }
       if (kk.pressed('Escape')) { S.click(); goTitle(); }
@@ -635,6 +657,7 @@
         inp = { l: kk.anyDown(KL), r: kk.anyDown(KR), jh: kk.anyDown(KJ), jp: kk.anyPressed(KJ) };
       }
       w.step(inp);
+      if (game.winT < 0) game.visitT += dt;
       if (game.winT >= 0) {
         game.winT += dt;
         if (game.winT > 0.9 && mode === 'play') levelWon();
@@ -720,6 +743,7 @@
     if (!game.demo && game.li === 0) drawTutorial();
     Art.drawGZones(ctx, w, pal, t);
     Art.drawGroups(ctx, w, pal, t, view.scale * view.dpr);
+    for (var m = 0; m < Art.MODS.length; m++) if (Art.MODS[m].draw) Art.MODS[m].draw(ctx, w, pal, t, view.scale * view.dpr);
     Art.drawSpikes(ctx, w, pal);
     Art.drawSprings(ctx, w, pal);
     for (var k = 0; k < w.doors.length; k++) {
@@ -735,6 +759,7 @@
     }
     for (k = 0; k < w.saws.length; k++) Art.drawSaw(ctx, w.saws[k], pal);
     drawPlayer();
+    for (m = 0; m < Art.MODS.length; m++) if (Art.MODS[m].front) Art.MODS[m].front(ctx, w, pal, t);
     fx.draw(ctx);
   }
 
@@ -789,6 +814,8 @@
     ctx.restore();
   }
 
+  var HUDUI = { txt: txt, bubble: bubble, rr: Art.rr, game: game };
+
   // A hint list picks the entry for where the player last died (see levels.js).
   function hintText(hint) {
     if (typeof hint === 'string') return hint;
@@ -798,23 +825,25 @@
   }
 
   function drawHUD() {
-    var w = game.world, pal = game.pal;
-    // death counter (left, next to the pause button)
-    var dtext = 'السقطات: ' + game.deaths;
-    var dw = tw(dtext, 26) + 64;
-    Art.rr(ctx, 64, 12, dw, 44, 22); ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fill();
-    // little splat icon
-    ctx.fillStyle = '#ff4d6d';
-    ctx.beginPath(); ctx.arc(90, 34, 11, 0, Math.PI * 2); ctx.fill();
-    for (var i = 0; i < 6; i++) { var an = i / 6 * Math.PI * 2 + 0.3; ctx.beginPath(); ctx.arc(90 + Math.cos(an) * 13, 34 + Math.sin(an) * 13, 4, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(84, 29, 3, 3); ctx.fillRect(93, 29, 3, 3);
-    txt(dtext, 110, 35, 26, '#ffffff', 'left');
-    // level name (center)
-    var name = 'المرحلة ' + (game.li + 1) + ': ' + LEVELS[game.li].name;
+    var w = game.world, pal = game.pal, lv = LEVELS[game.li];
+    // death counter (left, next to the pause button); a level may take it over (noPill)
+    if (!lv.noPill) {
+      var dtext = 'السقطات: ' + game.deaths;
+      var dw = tw(dtext, 26) + 64;
+      Art.rr(ctx, 64, 12, dw, 44, 22); ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fill();
+      // little splat icon
+      ctx.fillStyle = '#ff4d6d';
+      ctx.beginPath(); ctx.arc(90, 34, 11, 0, Math.PI * 2); ctx.fill();
+      for (var i = 0; i < 6; i++) { var an = i / 6 * Math.PI * 2 + 0.3; ctx.beginPath(); ctx.arc(90 + Math.cos(an) * 13, 34 + Math.sin(an) * 13, 4, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(84, 29, 3, 3); ctx.fillRect(93, 29, 3, 3);
+      txt(dtext, 110, 35, 26, '#ffffff', 'left');
+    }
+    // level name (center); hudName lets a level pretend to be another
+    var name = lv.hudName || 'المرحلة ' + (game.li + 1) + ': ' + lv.name;
     txt(name, 640, 36, 30, '#ffffff', 'center', { stroke: pal.ink, lw: 6 });
     // world chip + best (right, left of the mute button)
     var best = save.best[game.li];
-    var rtext = best == null ? WORLDS[Math.floor(game.li / PER)].name : 'أقل سقطات: ' + best;
+    var rtext = best == null ? WORLDS[WOF[game.li]].name : 'أقل سقطات: ' + best;
     txt(rtext, 1200, 35, 22, 'rgba(255,255,255,0.85)', 'right', { w: 500 });
     // reversed controls
     if (w.revT > 0) {
@@ -834,9 +863,11 @@
       var a = Math.min(1, game.msgT * 4), pop = 1 + Math.max(0, game.msgT - 1.5) * 0.4;
       bubble(game.msg, 640, 170, 28, a, pop);
     }
-    // hint after a few deaths
-    if (game.deaths >= HINT_AFTER && LEVELS[game.li].hint) {
-      var h = 'تلميح: ' + hintText(LEVELS[game.li].hint);
+    for (var m = 0; m < Art.MODS.length; m++) if (Art.MODS[m].hud) Art.MODS[m].hud(ctx, w, pal, game.t, HUDUI);
+    // hint after a few tries (deaths or restarts) or 40 s in the level; a fakeHint shows until then
+    var hint = game.tries >= HINT_AFTER || game.visitT > 40 ? lv.hint : lv.fakeHint;
+    if (hint) {
+      var h = 'تلميح: ' + hintText(hint);
       var size = 22, hw = tw(h, size) + 40;
       while (hw > 1220 && size > 14) { size--; hw = tw(h, size) + 40; }
       Art.rr(ctx, 640 - hw / 2, 672, hw, 38, 19);
@@ -845,15 +876,16 @@
       txt(h, 640, 692, size, pal.ink, 'center');
     }
     // skip offer
-    if (game.deaths >= SKIP_AFTER && game.li < N - 1) {
+    if (game.tries >= SKIP_AFTER && game.li < N - 1) {
       txt('عالق؟ اضغط P لتتخطى المرحلة', 640, 648, 18, 'rgba(255,255,255,0.9)', 'center', { stroke: pal.ink, lw: 4, w: 500 });
     }
     // level intro card
     if (game.introT > 0) {
       var ia = Math.min(1, game.introT * 2.5), s = 1 + Math.max(0, game.introT - 1.9) * 1.2;
       ctx.save(); ctx.globalAlpha = ia; ctx.translate(640, 330); ctx.scale(s, s);
-      txt('المرحلة ' + (game.li + 1), 0, -34, 40, '#ffffff', 'center', { stroke: pal.ink, lw: 10 });
-      txt(LEVELS[game.li].name, 0, 22, 64, '#ffe14d', 'center', { stroke: pal.ink, lw: 12 });
+      // card: [small line, big line] lets a level fake its title card
+      txt(lv.card ? lv.card[0] : 'المرحلة ' + (game.li + 1), 0, -34, 40, '#ffffff', 'center', { stroke: pal.ink, lw: 10 });
+      txt(lv.card ? lv.card[1] : lv.name, 0, 22, 64, '#ffe14d', 'center', { stroke: pal.ink, lw: 12 });
       ctx.restore();
     }
   }
@@ -901,9 +933,9 @@
     start: function (i) { startLevel(i); return mode; },
     // Replay the recorded solution for the current level in real time (see solutions.js).
     solve: function () {
-      if (mode !== 'play' || !window.TrollSolutions) return false;
+      if (mode !== 'play' || !solution(game.li)) return false;
       game.world.attempt = 0; game.world.reset();
-      game.auto = E.parseInputs(window.TrollSolutions[game.li]); game.autoF = 0; game.prevJ = false;
+      game.auto = E.parseInputs(solution(game.li)); game.autoF = 0; game.prevJ = false;
       return true;
     },
     // Instantly win the current level (skips the trap).
@@ -912,11 +944,10 @@
       var d = w.door; w.p.x = d.x + (d.g ? d.g.ox : 0) + 7; w.p.y = d.y + (d.g ? d.g.oy : 0) + 20; w.p.vx = 0; w.p.vy = 0;
       return true;
     },
-    setDeaths: function (n) { game.deaths = n; return n; },
+    setDeaths: function (n) { game.deaths = n; game.tries = Math.max(game.tries, n); return n; },
     // Replays every recorded solution through the engine (headless, instant).
     verifyAll: function () {
-      if (!window.TrollSolutions) return 'no solutions';
-      return LEVELS.map(function (lv, i) { return E.simulate(lv, window.TrollSolutions[i]).result; }).join(',');
+      return LEVELS.map(function (lv, i) { return solution(i) ? E.simulate(lv, solution(i)).result : 'none'; }).join(',');
     },
     unlockAll: function () { save.unl = N - 1; persist(); if (mode === 'select') buildSelect(); return true; },
     resetSave: function () { ['best', 'stars', 'total', 'unl', 'skin', 'last', 'ended'].forEach(function (k) { store.remove(k); }); location.reload(); }
