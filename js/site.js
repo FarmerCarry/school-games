@@ -92,7 +92,10 @@
     finishHint: 'استأنف من داخل اللعبة، ثم اضغط «العودة إلى الألعاب» لتسليم الجهاز بعد الجولة.',
     titleNotFound: 'لم نجد اللعبة',
     titleSearch: 'بحث: ',
-    gameFallback: 'لعبة'
+    gameFallback: 'لعبة',
+    starterTitle: 'ابدأ من هنا',
+    starterGo: 'هيا',
+    starterBadge: 'نقطة البداية'
   };
   // Arabic counting: 1 لعبة واحدة, 2 لعبتان, 3-10 ألعاب, 11+ لعبة.
   function nGames(n) {
@@ -300,6 +303,7 @@
     // Icon-only badges keep the names drawn in the thumbnail art readable.
     var badges = '', tip = g.title + ' · ' + durationLabel(g) + ' · ' + (INPUT_LABELS[g.inputStyle] || '');
     if (g.hot) { badges += '<b class="badge hot" aria-hidden="true">🔥</b>'; tip += ' · ' + T.hotBadge; }
+    if (g.starter) { badges += '<b class="badge start" aria-hidden="true">🖱️</b>'; tip += ' · ' + T.starterBadge; }
     if (isMulti(g)) { badges += '<b class="badge p2" aria-hidden="true">👥</b>'; tip += ' · ' + T.p2Badge; }
     return '<a class="tile" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '" title="' + esc(tip) + '"' +
       ' style="--c:' + g.color + ';--c2:' + deepen(g.color, 0.45) + ';--fbs:' + fbSize(g.title) + 'cqw" aria-label="' + esc(g.title) + '">' +
@@ -342,6 +346,7 @@
   }
   var MULTI_WORDS = ' لاعبان لاعبين اثنان اثنين صديق صديقك صديقي اصدقاء ضد جماعي 2 two player players friend friends multiplayer versus 2p';
   var HOT_WORDS = ' رائج رائجه مشهور مشهوره حماس hot popular';
+  var STARTER_WORDS = ' ابدأ هنا نقطة البداية مبتدئ beginner start here tutorial academy mouse keyboard';
   var INDEX = Object.create(null);
   function idx(g) {
     if (INDEX[g.slug]) return INDEX[g.slug];
@@ -350,7 +355,7 @@
       t: norm(g.title),
       en: norm((g.en || '') + ' ' + g.slug.replace(/-/g, ' ')),
       h: norm(g.title + ' ' + (g.en || '') + ' ' + g.slug.replace(/-/g, ' ') + ' ' + (g.blurb || '') + ' ' + (g.tags || '') + ' ' + cats +
-        (isMulti(g) ? MULTI_WORDS : '') + (g.hot ? HOT_WORDS : ''))
+        (isMulti(g) ? MULTI_WORDS : '') + (g.hot ? HOT_WORDS : '') + (g.starter ? STARTER_WORDS : ''))
     };
     ix.words = (ix.t + ' ' + ix.en).split(' ').filter(Boolean);
     INDEX[g.slug] = ix;
@@ -482,8 +487,18 @@
   }
 
   // Stable featured-first order, shared by home and category views.
+  // The beginner lesson leads, then hot games, then the rest.
   function featuredFirst(list) {
-    return list.filter(function (g) { return g.hot; }).concat(list.filter(function (g) { return !g.hot; }));
+    return list.filter(function (g) { return g.starter; })
+      .concat(list.filter(function (g) { return g.hot && !g.starter; }))
+      .concat(list.filter(function (g) { return !g.hot && !g.starter; }));
+  }
+  function starterCard(g) {
+    if (!g) return '';
+    return '<a class="starter" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '">' +
+      '<span class="starter-ico" aria-hidden="true">🖱️</span>' +
+      '<span class="starter-copy"><b>' + T.starterTitle + '</b><span>' + esc(g.title) + '</span><small>' + esc(g.blurb || '') + '</small></span>' +
+      '<span class="starter-go">' + T.starterGo + '</span></a>';
   }
 
   function renderHome() {
@@ -491,7 +506,10 @@
       return '<div class="empty"><div class="empty-emoji">🛠️</div><h2>' + T.soon + '</h2><p>' + T.soonSub + '</p></div>';
     }
     var recent = getRecent().slice(0, 6).map(function (s) { return BY_SLUG[s]; });
-    return (recent.length ? sectionHTML('🕹️', T.recent, gridHTML(recent, 'recent-grid')) : '') +
+    var start = null;
+    for (var i = 0; i < GAMES.length; i++) if (GAMES[i].starter) { start = GAMES[i]; break; }
+    return starterCard(start) +
+      (recent.length ? sectionHTML('🕹️', T.recent, gridHTML(recent, 'recent-grid')) : '') +
       sectionHTML('🎮', T.all, gridHTML(featuredFirst(GAMES), 'catalog-grid'), '<span class="count">' + nGames(GAMES.length) + '</span>');
   }
 
@@ -1019,7 +1037,18 @@
         try { heading.focus({ preventScroll: true }); } catch (e) { heading.focus(); }
       }
       // A new «تابع اللعب» row above the list can push the tile off screen.
-      if (returningTiles[0]) returningTiles[0].scrollIntoView({ block: 'nearest' });
+      // scrollIntoView can still leave a fraction of a pixel past the edge.
+      if (returningTiles[0]) {
+        var backTile = returningTiles[0];
+        backTile.scrollIntoView({ block: 'nearest' });
+        var backBox = backTile.getBoundingClientRect();
+        var backBar = $('.topbar');
+        var backTop = backBar ? backBar.getBoundingClientRect().bottom : 0;
+        var pastBottom = backBox.bottom - window.innerHeight;
+        var pastTop = backTop - backBox.top;
+        if (pastBottom > 0) window.scrollBy(0, Math.ceil(pastBottom));
+        else if (pastTop > 0) window.scrollBy(0, -Math.ceil(pastTop));
+      }
     }
     renderedHash = routeHash();
     typing = false;

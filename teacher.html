@@ -84,6 +84,27 @@
     <div id="tutorials"></div>
   </details>
 
+  <section class="panel" id="academySection" aria-labelledby="academyTitle">
+    <h2 id="academyTitle">أكاديمية الفأرة واللوحة</h2>
+    <p class="hint">افتح محطة للصف، أو ابدأ من جديد على هذا الجهاز. القفز إلى محطة يفتحها دون منح ملصق المحطات التي تُركت.</p>
+    <div class="row">
+      <button type="button" class="btn" data-station-link="games/mouse-keyboard-academy/index.html?station=move">حرّك الفأرة</button>
+      <button type="button" class="btn" data-station-link="games/mouse-keyboard-academy/index.html?station=click">نقرة واحدة</button>
+      <button type="button" class="btn" data-station-link="games/mouse-keyboard-academy/index.html?station=double">نقرتان</button>
+      <button type="button" class="btn" data-station-link="games/mouse-keyboard-academy/index.html?station=drag">اسحب</button>
+      <button type="button" class="btn" data-station-link="games/mouse-keyboard-academy/index.html?station=scroll">مرّر</button>
+      <button type="button" class="btn" data-station-link="games/mouse-keyboard-academy/index.html?station=arrows">الأسهم</button>
+      <button type="button" class="btn" data-station-link="games/mouse-keyboard-academy/index.html?station=jump">مسافة ثم Enter</button>
+      <button type="button" class="btn" data-station-link="games/mouse-keyboard-academy/index.html?station=letters">الحروف</button>
+    </div>
+    <div class="row"><button type="button" class="btn danger" id="academyReset">طالب جديد</button></div>
+    <form class="confirm" id="academyAsk" hidden>
+      <p>سيُمسح تقدّم الأكاديمية على هذا الجهاز فقط. الإحصاءات تبقى.</p>
+      <div class="row"><button type="submit" class="btn danger">نعم، ابدأ من جديد</button><button type="button" class="btn" data-cancel>إلغاء</button></div>
+    </form>
+    <p class="status" id="academyStatus" role="status"></p>
+  </section>
+
   <section class="panel tools" aria-labelledby="toolsTitle">
     <h2 id="toolsTitle">الأدوات</h2>
     <div class="tool">

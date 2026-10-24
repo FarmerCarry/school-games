@@ -1,7 +1,7 @@
 {
   "format": 1,
   "portalBytes": 360000,
-  "teacherBytes": 89000,
+  "teacherBytes": 96000,
   "gameHtmlBytes": {
     "air-hockey": 116000,
     "beat-dash": 125000,
@@ -19,6 +19,7 @@
     "maze-dash": 115000,
     "merge-2048": 79000,
     "moto-madness": 140000,
+    "mouse-keyboard-academy": 56000,
     "neon-slope": 130000,
     "paint-grab": 108000,
     "pizza-clicker": 128000,
