@@ -61,7 +61,7 @@
   // CSS, typing-test redraws on key presses) count no frames, since only Kit.loop and
   // Kit.stats.frame count them: the device status says so instead of «—».
   // tools/tests/play-stats-rules.test.mjs keeps this list equal to those games.
-  var NO_FRAMES = ['connect-four', 'tic-tac-toe', 'typing-test'];
+  var NO_FRAMES = ['connect-four', 'tic-tac-toe', 'typing-test', 'mouse-keyboard-academy'];
   var MINUTES = ['دقيقة واحدة', 'دقيقتان', 'دقائق', 'دقيقة'];
   var HOURS = ['ساعة واحدة', 'ساعتان', 'ساعات', 'ساعة'];
   var TIMES = ['مرة واحدة', 'مرتان', 'مرات', 'مرة'];
@@ -1112,7 +1112,9 @@
 
     function renderActions() {
       var ok = state.ok;
-      ['pcLabel', 'saveLabel', 'exportXlsx', 'exportJson', 'stopBtn', 'resumeBtn', 'clearBtn'].forEach(function (id) { $(id).disabled = !ok; });
+      ['pcLabel', 'saveLabel', 'exportXlsx', 'exportJson', 'stopBtn', 'resumeBtn', 'clearBtn', 'academyReset'].forEach(function (id) {
+        if ($(id)) $(id).disabled = !ok;
+      });
       if (document.activeElement !== $('pcLabel')) $('pcLabel').value = state.meta.label;
       $('stopBtn').hidden = state.meta.off;
       $('resumeBtn').hidden = !state.meta.off;
@@ -1289,6 +1291,21 @@
     $('resumeBtn').addEventListener('click', function () {
       write('stopStatus', function (raw) { raw.off = false; delete raw.offSince; }, 'عاد جمع الإحصاءات على هذا الجهاز.');
     });
+    if ($('academyReset') && $('academyAsk')) {
+      $('academyReset').addEventListener('click', function () { say('academyStatus', ''); $('academyAsk').hidden = false; });
+      $('academyAsk').addEventListener('submit', function (e) {
+        e.preventDefault();
+        $('academyAsk').hidden = true;
+        try {
+          window.localStorage.removeItem('sg:mouse-keyboard-academy:save');
+          say('academyStatus', 'بدأ طالب جديد في الأكاديمية على هذا الجهاز.');
+        } catch (err) { say('academyStatus', 'تعذّر الحفظ في هذا المتصفح.', true); }
+      });
+      $('academyAsk').querySelector('[data-cancel]').addEventListener('click', function () {
+        $('academyAsk').hidden = true;
+        say('academyStatus', '');
+      });
+    }
     $('clearBtn').addEventListener('click', function () { say('clearStatus', ''); ask($('clearConfirm')); });
     confirmWith($('clearConfirm'), 'امسح', 'clearStatus', function () {
       // Save the moment first: the portal drops anything it recorded before it,
@@ -1302,6 +1319,8 @@
       render();
     });
     document.addEventListener('click', function (e) {
+      var stationLink = e.target.closest ? e.target.closest('[data-station-link]') : null;
+      if (stationLink) { location.href = stationLink.getAttribute('data-station-link'); return; }
       var link = e.target.closest ? e.target.closest('[data-open]') : null;
       if (link && $(link.getAttribute('data-open'))) $(link.getAttribute('data-open')).open = true;
       if (e.target.id === 'backLocal') { state.files = []; state.ignored = []; render(); }

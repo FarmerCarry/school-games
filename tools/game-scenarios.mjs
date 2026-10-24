@@ -96,6 +96,10 @@ export const scenarios = {
     await page.waitForTimeout(180); await page.mouse.up();
   }, '#btnPause', `${g}.state === 'pause'`, '#btnRestart', `${g}.run.score === 0`),
   'merge-2048': defaults(['#btnPlay'], `${g}.state().screen === 'play'`, select(`${g}.state()`, ['values','score','hist']), sequence(hold('ArrowLeft',80),hold('ArrowDown',80),hold('ArrowRight',80)), '#btnPause', `${g}.state().screen === 'pause'`, '#btnPauseRestart', `${g}.state().score === 0 && ${g}.state().hist === 0`),
+  'mouse-keyboard-academy': defaults(['#btnStart'], `${g}.screen === 'play' && ${g}.station === 'move'`, `${g}.progress`, async page => {
+    const point = await page.evaluate(() => window.__game.starPoint());
+    await page.mouse.move(point.x, point.y, { steps: 15 });
+  }, '#btnPause', `${g}.screen === 'pause'`, '#btnRestart', `${g}.screen === 'play' && ${g}.progress === 0`),
   'candy-rope': defaults(['#tPlay'], `${g}.info().state === 'play'`, `${g}.info().world`, async page => {
     const point = await page.evaluate(() => {
       const r = __game.world().ropes.find(r => r.alive);

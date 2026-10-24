@@ -373,6 +373,52 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 }
 .badge.hot { background: linear-gradient(180deg, #ff6a3d, #ff2d55); }
 .badge.p2 { background: linear-gradient(180deg, #8f6bff, #5b3df5); }
+.badge.start { background: linear-gradient(180deg, #3ec6e0, #0e8fb8); }
+
+/* Beginner starting point. Same banner shape as the other portal cards. */
+.starter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  margin: 14px 0 8px;
+  padding: 14px 16px;
+  max-width: 100%;
+  border-radius: 24px;
+  color: #1c2250;
+  text-decoration: none;
+  background:
+    radial-gradient(circle at 90% 20%, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0) 42%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0 16px, rgba(255, 255, 255, 0) 16px 32px),
+    #fff4cc;
+  box-shadow: 0 5px 0 #e0b000;
+}
+.starter-ico {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+  background: #fff;
+  font-size: 40px;
+  box-shadow: 0 4px 0 rgba(28, 34, 80, 0.12);
+  animation: bob 2.4s ease-in-out infinite;
+}
+.starter-copy { display: flex; flex-direction: column; min-width: 0; flex: 1 1 180px; }
+.starter-copy b { font-size: 28px; line-height: 1.2; }
+.starter-copy span { font-size: 20px; font-weight: 700; }
+.starter-copy small { font-size: 16px; color: #3a4578; }
+.starter-go {
+  flex: 0 0 auto;
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: #1c2250;
+  font-weight: 700;
+  font-size: 20px;
+  box-shadow: 0 4px 0 #d69a00;
+}
 
 .label {
   position: absolute;
