@@ -32,7 +32,7 @@
     "swing-hook": 112000,
     "tank-splat": 111000,
     "tic-tac-toe": 53000,
-    "troll-level": 111000,
+    "troll-level": 254000,
     "tunnel-blitz": 102000,
     "typing-test": 104000,
     "wacky-soccer": 160000
@@ -44,5 +44,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5100000
+  "precacheBytes": 5250000
 }

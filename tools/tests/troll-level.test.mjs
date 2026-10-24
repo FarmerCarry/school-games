@@ -61,31 +61,48 @@ test('Continue moves on past a skipped level instead of sending the player back'
   assert.equal(await where(page), 'play:1', 'the skipped level stays in the level select');
 });
 
-test('a save from before the space world continues into it, and its levels play through to the end', async t => {
+test('saves from before the new worlds continue into them, and the new levels play through to the end', async t => {
   const page = await game(t);
-  await page.evaluate(() => {
-    // All 24 old levels won; back then level 24 was the last one to unlock.
+  // A save from each earlier size of the game: back then the last level was the last to unlock.
+  const oldSave = n => page.evaluate(n => {
     const set = (key, value) => localStorage.setItem('sg:troll-level:' + key, JSON.stringify(value));
-    set('best', Array(24).fill(0)); set('stars', Array(24).fill(3)); set('unl', 23); set('last', 23); set('ended', true);
+    set('best', Array(n).fill(0)); set('stars', Array(n).fill(3)); set('unl', n - 1); set('last', n - 1); set('ended', true);
+  }, n);
+  // A player part-way through the old 30 levels keeps those stars and is not pushed into the new worlds.
+  await page.evaluate(() => {
+    const set = (key, value) => localStorage.setItem('sg:troll-level:' + key, JSON.stringify(value));
+    const best = Array(30).fill(null), stars = Array(30).fill(null);
+    for (let i = 0; i < 8; i++) { best[i] = i; stars[i] = i % 3 + 1; }
+    set('best', best); set('stars', stars); set('unl', 9); set('last', 7); set('total', 42); set('skin', 'blob');
   });
   await page.reload();
   await page.waitForFunction(() => window.__game && window.stepGame);
-  assert.equal(await page.evaluate(() => __game.save.unl), 24, 'beating level 24 unlocks level 25');
-  assert.equal(await page.locator('#t-levels').textContent(), '24/30');
-  assert.equal(await page.locator('#t-stars-max').textContent(), '/90');
-  assert.equal(await page.locator('#btn-play').textContent(), 'تابع!');
-  await clickControl(page, '#btn-play');
-  assert.equal(await where(page), 'play:24', 'Continue opens the first space level');
-  // Each new level is won through the real game loop (sounds, HUD and traps included).
-  for (let i = 24; i < 30; i++) {
+  assert.deepEqual(await page.evaluate(() => [__game.save.unl, __game.save.last, __game.save.total, __game.save.best.slice(0, 10), __game.save.stars.slice(0, 10)]),
+    [9, 7, 42, [0, 1, 2, 3, 4, 5, 6, 7, null, null], [1, 2, 3, 1, 2, 3, 1, 2, null, null]],
+    'a half-finished 30-level save keeps its progress');
+  assert.equal(await page.locator('#t-levels').textContent(), '8/100');
+  assert.equal(await page.locator('#t-stars').textContent(), '15');
+  for (const n of [24, 30]) {
+    await oldSave(n);
+    await page.reload();
+    await page.waitForFunction(() => window.__game && window.stepGame);
+    assert.equal(await page.evaluate(() => __game.save.unl), n, `beating level ${n} unlocks level ${n + 1}`);
+    assert.equal(await page.locator('#t-levels').textContent(), `${n}/100`);
+    assert.equal(await page.locator('#t-stars-max').textContent(), '/300');
+    assert.equal(await page.locator('#btn-play').textContent(), 'تابع!');
+    await clickControl(page, '#btn-play');
+    assert.equal(await where(page), `play:${n}`, `Continue opens level ${n + 1}`);
+  }
+  // Each level from the space world onward is won through the real game loop (sounds, HUD and traps included).
+  for (let i = 24; i < 100; i++) {
     await page.evaluate(i => { __game.start(i); __game.solve(); }, i);
-    await page.evaluate(() => { for (let f = 0; f < 120 && __game.mode === 'play'; f++) stepGame(10, true); });
+    await page.evaluate(() => { for (let f = 0; f < 40 && __game.mode === 'play'; f++) stepGame(50, true); });
     assert.equal(await where(page), `win:${i}`, `level ${i + 1} is won by its recorded solution`);
   }
-  assert.equal(await page.locator('#w-lvl').textContent(), 'عالم الفضاء · المرحلة 30');
+  assert.equal(await page.locator('#w-lvl').textContent(), 'عالم الملك الماكر · المرحلة 100');
   await clickControl(page, '#btn-next');
   assert.equal(await page.evaluate(() => __game.mode), 'end');
-  assert.equal(await page.locator('#e-stars').textContent(), '90/90');
+  assert.equal(await page.locator('#e-stars').textContent(), '300/300');
   // Finish this finite entrance animation before sampling the button's center. Waiting for it
   // timed out on a loaded CI runner: it stays pending until the compositor draws a frame.
   assert.equal(await page.evaluate(() => {
@@ -94,8 +111,8 @@ test('a save from before the space world continues into it, and its levels play 
     return animations.every(animation => animation.effect.getComputedTiming().endTime !== Infinity);
   }), true, 'the end panel has only finite entrance animations');
   await clickControl(page, '#btn-e-levels');
-  assert.equal(await page.locator('#worlds .wrow').count(), 5);
-  assert.equal(await page.locator('#worlds .lv:not(.locked)').count(), 30);
+  assert.equal(await page.locator('#worlds .wrow').count(), 12);
+  assert.equal(await page.locator('#worlds .lv:not(.locked)').count(), 100);
 });
 
 test('denied saves warn, keep progress in memory and clear only after a full retry', async t => {

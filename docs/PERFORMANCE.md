@@ -549,3 +549,28 @@ cache had only 73,229 bytes left, so its limit was raised knowingly by 100,000 b
 (2%). That keeps about the same headroom as before (84,326 bytes, 1.7%) for the next
 change; another game will again need room made or a decision like this one.
 
+## Sneaky Levels worlds 6–12, 24 October 2026
+
+المراحل الماكرة gains worlds 6–12 (levels 31–100): ice, keys, boxes, portals, music,
+ghosts, and the Sneaky King. Each world is its own script, inlined into the one
+game file like the rest of the game. Nothing new is fetched at runtime, and a
+frame still draws the baked backdrop plus the traps that move. Measured with the
+Linux minified build, against current main (110,163 bytes, gzip 37,283):
+
+| File | Before bytes | After bytes | Before gzip | After gzip | New limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Sneaky Levels | 110,163 | 252,786 | 37,283 | 84,824 | 254,000 (was 111,000) |
+| Offline precache, 45 files | 5,023,893 | 5,166,516 |  |  | 5,250,000 (was 5,100,000) |
+
+The game file grew by 142,623 bytes. 139,699 of that is the seven minified world
+scripts (levels, Arabic hints, recorded solutions, and each world's mechanic).
+The rest is the shared plug-in hooks and the scrolling 100-level select. The
+game limit is the next 1,000 bytes plus another 1,000, as before (1,214 bytes
+left, 0.5%). A small text edit can exceed it.
+
+The same 142,623 bytes are the whole precache growth. Main had 76,107 bytes
+left of 5,100,000, so the new worlds pass that limit by 66,516. The new limit
+is 5,250,000: 83,484 bytes left (1.6%), about the headroom Cake Guards left.
+5,200,000 would have left only 33,484 bytes, less than main has today, so the
+next small game would fail the check again. No other budget changed.
+
