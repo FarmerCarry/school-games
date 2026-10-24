@@ -26,6 +26,9 @@ jobs:
     # The checks take about 48 minutes. On 22 October 2026 the --with-deps install alone took
     # 11 minutes instead of 18 seconds on two runs in a row, and both hit a 60-minute limit
     # in the last test step. 90 leaves room for slow package mirrors.
+    # Each step has its own limit as well. On 23 October 2026 the shared-rules step (normally
+    # ~41s) was still running after 30 minutes and would only have failed at this job limit,
+    # which also blocks the Pages deploy.
     timeout-minutes: 90
     permissions:
       contents: read
@@ -54,16 +57,26 @@ jobs:
           node-version: 22
           cache: npm
       - name: Install development tools
+        timeout-minutes: 10
         run: npm ci
       - name: Install Chromium and its system dependencies
+        # 11 minutes has happened when the package mirror stalled. 25 fails a hung install
+        # and still covers that day.
+        timeout-minutes: 25
         run: npx playwright install --with-deps --no-shell chromium
       - name: Smoke-test all source games
+        timeout-minutes: 15
         run: npm run check
         env:
           SG_ARTIFACT_DIR: .work/smoke-source
       - name: Test shared rules, build safety and harnesses once
+        # Normally ~41s (54s on the slower green run). The harness names a stuck test after
+        # 10 minutes; 20 lets that failure print, and kills a wedged process before the job limit.
+        timeout-minutes: 20
         run: node tools/ci-run.mjs npm run test:shared
       - name: Verify Block Burst balance when its levels or rules change
+        # Seeded play is about 4 minutes. 20 covers a slow run.
+        timeout-minutes: 20
         env:
           EVENT: ${{ github.event_name }}
         run: |
@@ -84,14 +97,19 @@ jobs:
             node tools/ci-run.mjs node games/block-burst/verify-levels.js
           fi
       - name: Test source gameplay and portal regressions
+        # About 14 to 17 minutes on green runs.
+        timeout-minutes: 45
         run: node tools/ci-run.mjs npm run test:browser
       - name: Test local board games and computer opponents
+        timeout-minutes: 10
         run: npm run test:board-games
         env:
           SG_BOARD_SCREENSHOTS: .work/boards-source
       - name: Build the fast site
+        timeout-minutes: 10
         run: npm run build
       - name: Check built asset performance budgets
+        timeout-minutes: 5
         run: npm run perf:assets -- --report artifacts/asset-budgets.json
       - name: Upload asset performance report
         if: always() && hashFiles('artifacts/asset-budgets.json') != ''
@@ -115,20 +133,25 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Test board games in the single-file fast build
+        timeout-minutes: 10
         run: npm run test:board-games
         env:
           SG_ROOT: _site
           SG_BOARD_SCREENSHOTS: .work/boards-built
       - name: Smoke-test all built games
+        timeout-minutes: 15
         run: npm run check
         env:
           SG_ROOT: _site
           SG_ARTIFACT_DIR: .work/smoke-built
       - name: Test optimized gameplay and portal regressions
+        # About 12 to 15 minutes on green runs.
+        timeout-minutes: 45
         run: node tools/ci-run.mjs npm run test:browser
         env:
           SG_ROOT: _site
       - name: Test offline installation, updates and the kill switch
+        timeout-minutes: 10
         run: npm run test:offline
       - name: Upload smoke-test screenshots and reports
         if: always()
