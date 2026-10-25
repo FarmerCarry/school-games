@@ -33,7 +33,7 @@ function main() {
     'balance-replay.test.mjs', 'classroom-files.test.mjs', 'offline-controller.test.mjs',
     'offline-readiness.test.mjs', 'shared-kit.test.mjs', 'level-verifiers.test.mjs',
     'engine-regressions.test.mjs', 'moto-balance.test.mjs', 'play-stats-rules.test.mjs',
-    'offline-download.test.mjs', 'dino-3d-engine.test.mjs', 'cake-guards-engine.test.mjs', 'pool-position-rules.test.mjs',
+    'offline-download.test.mjs', 'dino-3d-engine.test.mjs', 'cake-guards-engine.test.mjs', 'egg-rush-engine.test.mjs', 'pool-position-rules.test.mjs',
     'mouse-keyboard-academy.test.mjs'
   ]);
   const files = fs.readdirSync(path.join(repo, 'tools/tests')).filter(file => file.endsWith('.test.mjs')).sort();

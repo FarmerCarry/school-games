@@ -11,7 +11,7 @@ games are in Arabic, laid out right-to-left.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores, progress and the anonymous play statistics are saved in each browser (localStorage) only.
 
-## The games (34)
+## The games (35)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -38,6 +38,7 @@ games are in Arabic, laid out right-to-left.
 | ضربة إلى الفضاء | Skybound Golf | 1 | رياضة، أركيد |
 | سوق الحيوانات | Critter Mart | 1 | بناء وإدارة |
 | إمبراطورية البيتزا | Pizza Empire | 1 | بناء وإدارة |
+| سباق البيض | Egg Rush | 1-2 | بناء وإدارة، لاعبان |
 | عالم المكعبات | Block World | 1 | بناء وإدارة، أركيد |
 | حرّاس الكعكة | Cake Guards (tower defense) | 1 | استراتيجية |
 | انفجار المكعبات | Block Burst | 1 | ألغاز |
