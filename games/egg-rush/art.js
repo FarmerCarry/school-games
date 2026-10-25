@@ -16,7 +16,10 @@
   A.titleDemo = false;
   A.grabPop = 0;
   A.party = null;
+  A.homeGlow = 0;
+  A.hopPad = -1;
   A.look = { shirt: '#3d7dff', hat: 0 };
+  let hop = null;
   let sceneTime = 0;
   let wink = 1;
 
@@ -175,8 +178,13 @@
     }
   };
   let reveal = null;
-  A.revealPet = function (b, s, v, x, y, name) {
-    reveal = { b: b, s: s, v: v, x: x, y: y, name: name || '', life: 2.3, max: 2.3 };
+  A.revealPet = function (b, s, v, x, y, name, life) {
+    const L = life > 0 ? life : 2.3;
+    reveal = { b: b, s: s, v: v, x: x, y: y, name: name || '', life: L, max: L };
+  };
+  A.hopToPen = function (job) {
+    hop = { b: job.b, s: job.s, v: job.v, pad: job.pad, x0: job.x, y0: job.y, x1: job.tx, y1: job.ty, life: 1.05, max: 1.05 };
+    A.hopPad = job.pad;
   };
   A.crack = function (x, y, species) {
     if (A.reduced) return;
@@ -194,6 +202,11 @@
   A.tick = function (w, dt) {
     if (reveal) { reveal.life -= dt; if (reveal.life <= 0) reveal = null; }
     if (A.grabPop > 0) A.grabPop = Math.max(0, A.grabPop - dt);
+    if (A.homeGlow > 0) A.homeGlow = Math.max(0, A.homeGlow - dt);
+    if (hop) {
+      hop.life -= dt;
+      if (hop.life <= 0) { A.sparkle(hop.x1, hop.y1 - 0.3, 6); hop = null; A.hopPad = -1; }
+    }
     if (A.party) { A.party.life -= dt; if (A.party.life <= 0) A.party = null; }
     if (!A.reduced && w && w.mode === '1p') {
       const p = w.players[0];
@@ -215,7 +228,7 @@
     }
     for (let i = floaters.length - 1; i >= 0; i--) { floaters[i].life -= dt; floaters[i].y -= dt * 0.8; if (floaters[i].life <= 0) floaters.splice(i, 1); }
   };
-  A.clearFx = function () { parts.length = 0; floaters = []; reveal = null; A.grabPop = 0; A.party = null; };
+  A.clearFx = function () { parts.length = 0; floaters = []; reveal = null; hop = null; A.hopPad = -1; A.grabPop = 0; A.homeGlow = 0; A.party = null; };
 
   function label(ctx, text, x, y, size, color, rtl) {
     ctx.save();
@@ -463,6 +476,20 @@
     ctx.beginPath(); ctx.moveTo(hx - 34 * z, hy - 6 * z); ctx.lineTo(hx, hy - 32 * z); ctx.lineTo(hx + 34 * z, hy - 6 * z); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#8a5a32'; ctx.fillRect(hx - 8 * z, hy + 4 * z, 16 * z, 24 * z);
     ctx.fillStyle = '#9ad7ff'; ctx.fillRect(hx + 12 * z, hy, 12 * z, 12 * z); ctx.strokeRect(hx + 12 * z, hy, 12 * z, 12 * z);
+    if (A.homeGlow > 0) {
+      const g = Math.min(1, A.homeGlow);
+      ctx.save();
+      ctx.globalAlpha = 0.45 + 0.55 * g;
+      ctx.fillStyle = '#ffe14a';
+      ctx.fillRect(hx + 13 * z, hy + z, 10 * z, 10 * z);
+      const glow = ctx.createRadialGradient(hx, hy - 10 * z, 8 * z, hx, hy, 120 * z);
+      glow.addColorStop(0, 'rgba(255, 214, 110, ' + (0.7 * g).toFixed(2) + ')');
+      glow.addColorStop(1, 'rgba(255, 214, 110, 0)');
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(hx, hy - 8 * z, 120 * z, 0, 7); ctx.fill();
+      ctx.restore();
+    }
     const homeSignY = hy - 46 * z;
     ctx.fillStyle = '#c9854a';
     ctx.fillRect(hx - 4 * z, homeSignY + 8 * z, 8 * z, 22 * z);
@@ -533,7 +560,7 @@
       ctx.beginPath(); ctx.ellipse(x, y + 6 * z, 20 * z, 11 * z, 0, 0, 7); ctx.fill();
       ctx.strokeStyle = '#e6b14e'; ctx.lineWidth = 4; ctx.stroke();
       ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
-      const pet = w.pets.find(p => p.pad === i);
+      const pet = A.hopPad === i ? null : w.pets.find(p => p.pad === i);
       if (pet) {
         const phase = A.reduced ? 0 : Math.sin(time * 3.15 + i * 1.7);
         const hop = Math.abs(phase) * 13 * z;
@@ -817,12 +844,12 @@
     y = Math.max(190, Math.min(520, y));
     if (x < 460 || x > 820) x = x * 0.34 + 640 * 0.66;
     if (y < 240 || y > 480) y = y * 0.5 + 360 * 0.5;
+    const fade = reveal.life < 0.28 ? reveal.life / 0.28 : 1;
     ctx.save();
     ctx.translate(x, y);
-    ctx.globalAlpha = 0.94;
+    ctx.globalAlpha = fade;
     ctx.fillStyle = '#fff8e8';
     ctx.beginPath(); ctx.arc(0, 8, 92 * Math.max(0.2, pop), 0, 7); ctx.fill();
-    ctx.globalAlpha = 1;
     ctx.strokeStyle = INK; ctx.lineWidth = 6;
     ctx.stroke();
     if (!A.reduced && u > 0.12 && u < 0.85) {
@@ -1194,6 +1221,17 @@
       }
       if (w.mode === '2p') label(ctx, i === 0 ? '1' : '2', x, y - 58 * z, 16 * z, '#fff', false);
     });
+    if (hop) {
+      const u = 1 - hop.life / hop.max;
+      const hx = hop.x0 + (hop.x1 - hop.x0) * u;
+      const hy = hop.y0 + (hop.y1 - hop.y0) * u - Math.sin(Math.PI * u) * 1.55;
+      const sc = z * ((hop.v === 1 || hop.v === 3) ? 1.5 : 1.32);
+      ctx.save();
+      ctx.translate(X(cam, hx), Y(cam, hy));
+      ctx.scale(sc, sc * (1 + Math.sin(Math.PI * u) * 0.12));
+      animal(ctx, (hop.b * 6 + hop.s) % 42, hop.v === 2 || hop.v === 3);
+      ctx.restore();
+    }
     drawParts(ctx, cam);
     for (const f of floaters) {
       ctx.globalAlpha = Math.max(0, f.life);

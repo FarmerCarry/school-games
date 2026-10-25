@@ -728,6 +728,7 @@
       }
       p.x = clamp(p.x, 0.4, w.w - 0.4);
       gateBlock(w, p, prev);
+      if (w.mode === '1p' && p.egg && prev >= w.safeL && p.x < w.safeL) ev(w, { t: 'safe', x: p.x, y: p.y });
     }
     p.step += dt * Math.hypot(p.vx, p.vy) * 3.2;
     if (input.dash && w.mode === '2p' && p.dashCd <= 0 && p.dashT <= 0) {
