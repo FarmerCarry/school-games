@@ -183,7 +183,7 @@
       rod: 0, rods: [1, 0, 0, 0, 0, 0], bait: [0, 0, 0, 0, 0], baitOn: -1,
       boat: 0, spots: [1, 0, 0, 0, 0, 0, 0], spot: 0,
       book: zeros(60), aqua: [], decor: [0, 0, 0, 0],
-      quests: [], qseed: 1, easy: 0, derby: 180, pending: null
+      quests: [], qseed: 1, easy: 0, derby: 180, hat: 0, pending: null
     };
   }
   function zeros(n) { var a = []; for (var i = 0; i < n; i++) a.push(0); return a; }
@@ -262,6 +262,7 @@
     s.rod = Math.floor(num(raw.rod, 0, 5));
     s.boat = raw.boat ? 1 : 0;
     s.easy = raw.easy ? 1 : 0;
+    s.hat = raw.hat ? 1 : 0;
     s.derby = raw.derby === 120 || raw.derby === 300 ? raw.derby : 180;
     s.spot = Math.floor(num(raw.spot, 0, 6));
     s.qseed = Math.floor(num(raw.qseed, 1, 4294967295)) || 1;

@@ -292,6 +292,8 @@ test('a damaged save becomes a playable blank lake and keeps the fields that are
   assert.equal(s.quests.length, 3);
   assert.equal(s.quests[0].k, 'catch');
   assert.equal(s.pending.id, 2);
+  assert.equal(s.hat, 0);
+  assert.equal(LL.normalize({ hat: 1, coins: 3 }).hat, 1);
   assert.equal(LL.normalize(s).coins, s.coins);
   assert.equal(LL.normalize('nope').coins, 0);
   const g = make({ save: s, seed: 1 });

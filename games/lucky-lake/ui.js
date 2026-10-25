@@ -42,6 +42,8 @@
   var parts = [];
   var pops = [];
   var rings = [];
+  var fliers = [];
+  var perfectStreak = 0;
   var shake = Kit.shake();
   var hudCache = '';
   var cardKey = '';
@@ -85,7 +87,9 @@
     $('questLine').hidden = !play;
     $('eventBanner').hidden = modal;
     var ready = game && game.state.anglers[0].phase === 'ready';
-    $('hint').hidden = !(mode === 'play' && !panel && !revealing() && !taught && ready && !game.state.derby);
+    $('hint').hidden = true;
+    $('coach').hidden = !(mode === 'play' && !panel && !revealing() && !taught && ready && !game.state.derby);
+    if (mode !== 'result') clearParty();
     if (mode !== 'play' || panel) { mouseDown = false; edge = false; }
     dirty = true;
     refreshHud(true);
@@ -121,9 +125,10 @@
     $('bookNum').textContent = book;
     $('spotPill').textContent = name;
     $('timerPill').hidden = !(game && game.state.derby);
+    $('timerDot').hidden = $('timerPill').hidden;
     $('timerPill').textContent = clock;
     var q = s.quests && s.quests[0];
-    $('questLine').textContent = q ? (q.text + '  ' + q.have + '/' + q.n) : '';
+    $('questLine').textContent = q ? ('الهدف: ' + q.text + '  ' + q.have + '/' + q.n) : '';
     if (game) {
       var ev = game.state.event;
       var info = LL.EVENTS[ev.id] || LL.EVENTS.calm;
@@ -154,6 +159,42 @@
 
   function pop(text, x, y, color) {
     pops.push({ text: text, x: x, y: y, life: 0.95, color: color || '#ffe14a' });
+  }
+
+  function pingCoins() {
+    var pill = $('coinNum').parentNode;
+    pill.classList.remove('ll-ping');
+    void pill.offsetWidth;
+    pill.classList.add('ll-ping');
+  }
+
+  function flyCoins(x, y) {
+    if (Kit.motion.reduced()) { pingCoins(); return; }
+    for (var i = 0; i < 6 && fliers.length < 24; i++) {
+      fliers.push({ x: x + (i - 2.5) * 18, y: y, t: -i * 0.05, dur: 0.62 });
+    }
+  }
+
+  function clearParty() {
+    $('scr-result').classList.remove('ll-party');
+    $('confetti').textContent = '';
+    $('resultHat').hidden = true;
+  }
+
+  function spawnConfetti() {
+    var box = $('confetti');
+    box.textContent = '';
+    if (Kit.motion.reduced()) return;
+    var colors = ['#ff5d7a', '#ffcc00', '#7dffb2', '#7ec8ff', '#fff'];
+    for (var i = 0; i < 48; i++) {
+      var bit = document.createElement('i');
+      bit.className = 'll-bit';
+      bit.style.left = ((i * 17) % 100) + '%';
+      bit.style.background = colors[i % colors.length];
+      bit.style.animationDelay = ((i % 12) * 0.16) + 's';
+      bit.style.animationDuration = (1.7 + (i % 5) * 0.28) + 's';
+      box.appendChild(bit);
+    }
   }
 
   function shout(text, bang) {
@@ -399,7 +440,10 @@
       shoutT = 2.4;
     } else if (res.choice === 'sell') {
       Sfx.catch(0);
-      if (res.price) pop('+' + res.price, 1040, 80, '#ffe14a');
+      if (res.price) {
+        pop('+' + res.price, 640, 420, '#e09a00');
+        flyCoins(640, 390);
+      }
     } else if (res.choice === 'release') {
       shout('مع السلامة!');
       burst(640, 360, 16, ['#b8ffcf', '#fff']);
@@ -459,6 +503,8 @@
     parts.length = 0;
     pops.length = 0;
     rings.length = 0;
+    fliers.length = 0;
+    perfectStreak = 0;
     gull = null;
     bye = null;
     taught = game.state.save.caught > 0;
@@ -553,6 +599,15 @@
       pod.appendChild(box);
     }
     $('resultSub').textContent = 'يفوز مجموع الأوزان. التاج لأكبر سمكة في المسابقة.';
+    var freshHat = !st.save.hat;
+    if (freshHat) {
+      st.save.hat = 1;
+      persist();
+    }
+    $('resultHat').hidden = !freshHat;
+    $('scr-result').classList.add('ll-party');
+    spawnConfetti();
+    Kit.sfx.win();
     paintChrome();
   }
 
@@ -586,8 +641,15 @@
       var e = ev[i];
       if (e.t === 'cast') {
         taught = true;
+        $('coach').hidden = true;
         Sfx.cast();
-        if (e.perfect) { Sfx.perfect(); shout('رمية ممتازة!'); burst(640, 280, 18, ['#ffe14a', '#fff']); shake.add(5); }
+        if (e.perfect) {
+          perfectStreak++;
+          Sfx.perfect();
+          shout(perfectStreak >= 2 ? 'ممتاز!' : 'رائع!');
+          burst(640, 280, 18, ['#ffe14a', '#fff']);
+          shake.add(5);
+        } else perfectStreak = 0;
       } else if (e.t === 'nibble') {
         Sfx.plip();
         var dip = bobberOf(game.state.anglers[e.i]);
@@ -665,6 +727,15 @@
     if (bye) { bye.t += dt; if (bye.t > 0.9) bye = null; }
     if (shoutT > 0) { shoutT -= dt; if (shoutT <= 0) $('shout').hidden = true; }
     if (goldT > 0) goldT = Math.max(0, goldT - dt);
+    var arrived = false;
+    for (var f = fliers.length - 1; f >= 0; f--) {
+      var fl = fliers[f];
+      fl.t += dt;
+      if (fl.t < fl.dur) continue;
+      fliers.splice(f, 1);
+      arrived = true;
+    }
+    if (arrived) { pingCoins(); Kit.sfx.coin(); }
   }
 
   function update(dt) {
@@ -696,6 +767,10 @@
       time += dt;
       padT += dt;
       if (padT > 2.4) { padT = 0; Sfx.pad(); }
+    } else if (mode === 'result') {
+      time += dt;
+      shake.update(dt);
+      stepJuice(dt);
     }
     if (keys) { /* UI keys already applied */ }
     edge = false;
@@ -765,7 +840,7 @@
   function drawWorld(spot, night, t) {
     var pal = Art.backdrop(ctx, spot, t, night);
     Art.props(ctx, spot, pal, t, 300);
-    Art.water(ctx, pal, 300, t, spot === 2 ? 760 : 980);
+    Art.water(ctx, pal, 300, t);
     Art.life(ctx, spot, pal, t, 300);
     return pal;
   }
@@ -811,9 +886,10 @@
     for (var i = 0; i < st.anglers.length; i++) {
       var a = st.anglers[i];
       var face = faceOf(i);
-      var lean = a.phase === 'charge' ? a.power : (a.phase === 'reel' ? (a.inside ? 0.5 : 0.9) : 0);
+      var pose = a.phase === 'charge' ? 'cast' : (a.phase === 'reel' ? 'reel' : 'idle');
+      var power = a.phase === 'charge' ? a.power : (a.phase === 'reel' ? (a.inside ? 0.35 : 0.85) : 0);
       var shirt = i === 0 ? '#3ec6ff' : '#ff8a3d';
-      var tip = Art.angler(ctx, anglerX(i), STAND, face, shirt, time, lean);
+      var tip = Art.angler(ctx, anglerX(i), STAND, face, shirt, time, pose, power, !!st.save.hat);
       if (a.phase === 'charge') Art.meter(ctx, anglerX(i) + face * 48 - 13, 150, a.power);
       if (a.phase !== 'ready' && a.phase !== 'reveal' && a.phase !== 'scared') {
         var b = bobberOf(a);
@@ -908,6 +984,20 @@
       ctx.globalAlpha = 1;
     }
     for (var k = 0; k < pops.length; k++) Art.label(ctx, pops[k].text, pops[k].x, pops[k].y, 32, pops[k].color);
+    for (var f = 0; f < fliers.length; f++) {
+      var fl = fliers[f];
+      if (fl.t <= 0) continue;
+      var u = Math.min(1, fl.t / fl.dur);
+      var e = u * u * (3 - 2 * u);
+      var x = fl.x + (1120 - fl.x) * e;
+      var y = fl.y + (36 - fl.y) * e - Math.sin(e * Math.PI) * 90;
+      ctx.fillStyle = '#b67d00';
+      ctx.beginPath(); ctx.arc(x + 2, y + 2, 11, 0, 6.3); ctx.fill();
+      ctx.fillStyle = '#ffcc00';
+      ctx.beginPath(); ctx.arc(x, y, 9, 0, 6.3); ctx.fill();
+      ctx.fillStyle = '#fff6c2';
+      ctx.beginPath(); ctx.arc(x - 3, y - 3, 3, 0, 6.3); ctx.fill();
+    }
   }
 
   function drawWeather(ev) {
@@ -946,7 +1036,7 @@
   }
 
   function render() {
-    var draw = dirty || mode === 'title' || (mode === 'play' && (!panel || panel === 'aqua'));
+    var draw = dirty || mode === 'title' || mode === 'result' || (mode === 'play' && (!panel || panel === 'aqua'));
     if (!draw) return;
     dirty = false;
     paints++;
@@ -971,7 +1061,7 @@
       var home = save.spot || 0;
       if (home === 1 || home === 2) Art.dock(ctx, pal, 300);
       else if (home !== 3) Art.shore(ctx, pal, 210, 1, 300, home);
-      var tip = Art.angler(ctx, 210, STAND, 1, '#3ec6ff', time, 0.2);
+      var tip = Art.angler(ctx, 210, STAND, 1, '#3ec6ff', time, 'idle', 0.15, !!save.hat);
       Art.line(ctx, tip.x, tip.y, 620, 360, Math.sin(time * 2) * 4);
       Art.bobber(ctx, 620, 360 + Math.sin(time * 2) * 3, time, 0.12);
       drawWeather({ id: 'calm' });

@@ -12,11 +12,15 @@
 <canvas id="game" tabindex="0" aria-label="بحيرة الحظ"></canvas>
 <div id="ui">
   <div id="hud" hidden>
-    <div class="ll-pills">
-      <div class="ll-pill"><span class="ll-coin"></span><b id="coinNum">0</b></div>
-      <div class="ll-pill">الكتاب <b id="bookNum">0/60</b></div>
-      <div class="ll-pill" id="spotPill">بركة القرية</div>
-      <div class="ll-pill" id="timerPill" hidden dir="ltr">3:00</div>
+    <div class="ll-primary">
+      <div class="ll-pill ll-coins"><span class="ll-coin"></span><b id="coinNum">0</b></div>
+      <div class="ll-meta">
+        <span id="spotPill">بركة القرية</span>
+        <span>·</span>
+        <span>الكتاب <b id="bookNum">0/60</b></span>
+        <span id="timerDot" hidden>·</span>
+        <b id="timerPill" hidden dir="ltr">3:00</b>
+      </div>
     </div>
     <div class="ll-actions">
       <button type="button" id="btnShop">المتجر <span class="sg-key">1</span></button>
@@ -29,6 +33,12 @@
   <div id="questLine" hidden></div>
   <div id="eventBanner" hidden></div>
   <div id="hint" hidden>اضغط مطوّلًا ثم اترك</div>
+  <div id="coach" hidden>
+    <div class="ll-hand"></div>
+    <div class="ll-mini"><i></i></div>
+    <div class="ll-bob"></div>
+    <div class="ll-mark">!</div>
+  </div>
   <div id="shout" hidden></div>
 </div>
 
@@ -69,12 +79,14 @@
 </div>
 
 <div class="sg-overlay ll-overlay" id="scr-result" hidden>
+  <div id="confetti" class="ll-confetti"></div>
   <div class="sg-panel ll-panel">
     <h2 id="resultTitle">انتهت المسابقة</h2>
     <div class="ll-podium" id="podium"></div>
+    <p id="resultHat" hidden>قبعة جديدة!</p>
     <p id="resultSub"></p>
     <div class="ll-row">
-      <button class="sg-btn" id="btnAgain" type="button">مرة أخرى</button>
+      <button class="sg-btn" id="btnAgain" type="button">العب مرة أخرى</button>
       <button class="sg-btn secondary" id="btnResultMenu" type="button">القائمة</button>
     </div>
   </div>
