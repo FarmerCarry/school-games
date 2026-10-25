@@ -531,8 +531,8 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20%;
-  height: 26%;
+  width: 14%;
+  height: 16%;
   margin: 0;
   padding: 0;
   border: 0;
@@ -540,15 +540,14 @@ button:focus-visible {
   color: #1c2250;
   font: inherit;
   font-weight: 700;
-  font-size: 33cqh;
+  font-size: 17cqh;
   line-height: 1;
   cursor: pointer;
   transform: translate(-50%, -50%);
 }
-/* The right hand lands on the left key. ب sits in that key's open white,
-   beside the finger and below the bump. ت mirrors it on the right key. */
-.glyph.f { left: 38.6%; top: 54%; }
-.glyph.j { left: 62.8%; top: 54%; }
+/* ب and ت sit in the lower white of each key, below the bump and clear of the finger. */
+.glyph.f { left: 42.8%; top: 53%; }
+.glyph.j { left: 58.4%; top: 55.6%; }
 .poses .straight { position: absolute; inset: 0; opacity: 0; }
 .pose { transition: opacity 0.45s ease; }
 .child.sat .slouch { opacity: 0; }

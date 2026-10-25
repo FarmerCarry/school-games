@@ -555,9 +555,9 @@ The grip lesson is five picture screens for children who are not reading yet. Th
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Mouse & Keyboard Academy | 74,999 | 82,000 (was 77,000; before that 84,000, 81,000, and originally 56,000) |
-| Offline precache, 51 files | 5,203,538 | 5,210,000 (was 5,135,000; before that 5,130,000 and 5,100,000) |
+| Mouse & Keyboard Academy | 75,001 | 82,000 (was 77,000; before that 84,000, 81,000, and originally 56,000) |
+| Offline precache, 51 files | 5,203,540 | 5,210,000 (was 5,135,000; before that 5,130,000 and 5,100,000) |
 | Five grip illustrations | 95,930 | — |
 
-The pictures add 95,930 bytes. The minified page is 74,999 bytes, down from 79,930 when the pictures were still drawn in SVG, so it still fits the 82,000 page limit with 7,001 bytes left. The precache grew from 5,112,539 to 5,203,538, which is why its limit moved up by 75,000 bytes. 6,462 bytes remain under the precache limit. The build copies each game's WebP and AVIF files into the offline cache.
+The pictures add 95,930 bytes. The minified page is 75,001 bytes, down from 79,930 when the pictures were still drawn in SVG, so it still fits the 82,000 page limit with 6,999 bytes left. The precache grew from 5,112,539 to 5,203,540, which is why its limit moved up by 75,000 bytes. 6,460 bytes remain under the precache limit. The build copies each game's WebP and AVIF files into the offline cache.
 
