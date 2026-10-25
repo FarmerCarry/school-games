@@ -184,6 +184,7 @@
     $('btnMap').hidden = screen === 'map';
     $('btnPause').hidden = screen !== 'play';
     app.classList.toggle('playing', screen === 'play');
+    app.classList.toggle('gripping', screen === 'grip');
     paintStickers();
     setPrompt();
   }
@@ -486,28 +487,29 @@
   function mouseFace(side) {
     return '<i class="ear"></i><i class="ear r"></i><i class="eye"></i><i class="eye r"></i><i class="smile"></i><i class="bulb ' + side + ' lit"></i>';
   }
-  function mitt(side) {
-    return '<div class="mitt ' + side + '"><i></i><i></i><b></b></div>';
+  function hand(side) {
+    return '<div class="hand ' + side + '"><b></b><u></u><i></i><i></i><i></i><i></i></div>';
   }
   function gripScene() {
     if (gripCard === 0 || gripCard === 1) {
       var side = gripCard === 1 ? 'right' : 'left';
-      return '<div class="pair">' + mitt(side) +
+      return '<div class="pair"><i class="wrist"></i>' + hand(side) +
         '<button type="button" class="mousey target" data-grip="' + side + '">' + mouseFace(side) + '</button></div>';
     }
     if (gripCard === 2) {
-      return '<div class="pair slide"><i class="wrist"></i><div class="glide">' + mitt('left') +
+      return '<div class="pair slide"><i class="wrist"></i><div class="glide">' + hand('left') +
         '<div class="mousey">' + mouseFace('left') + '</div></div></div>' +
         '<button type="button" class="catch target" data-grip="star" aria-label="نجمة">⭐</button>';
     }
     if (gripCard === 3) {
-      return '<div class="lands"><i></i><i></i></div>' +
-        '<button type="button" class="bump target" data-code="KeyF">' + MKA.AR.KeyF + '<i class="nub"></i></button>' +
-        '<button type="button" class="bump target" data-code="KeyJ">' + MKA.AR.KeyJ + '<i class="nub"></i></button>';
+      return '<div class="keys"><div class="keywrap"><i class="digit"></i>' +
+        '<button type="button" class="bump target" data-code="KeyF">' + MKA.AR.KeyF + '<i class="nub"></i></button></div>' +
+        '<div class="keywrap"><i class="digit"></i>' +
+        '<button type="button" class="bump target" data-code="KeyJ">' + MKA.AR.KeyJ + '<i class="nub"></i></button></div></div>';
     }
-    return '<div class="sit"><i class="chair" aria-hidden="true"></i>' +
-      '<button type="button" class="child" data-sit="kid"><i class="hair"></i><i class="head">' +
-      '<i class="eye"></i><i class="eye r"></i><i class="smile"></i></i><i class="body"></i><i class="leg"></i><i class="leg r"></i></button></div>';
+    return '<div class="sit"><i class="chair"></i><i class="shin"></i><i class="thigh"></i>' +
+      '<button type="button" class="child" data-sit="kid"><i class="torso"><i class="arm"></i><i class="head">' +
+      '<i class="hair"></i><i class="eye"></i><i class="smile"></i></i></i></button></div>';
   }
   function renderGrip() {
     gripReady = gripCard === 4;
@@ -552,13 +554,6 @@
     say('أحسنت');
     speak('أحسنت');
     cheer();
-    var stage = document.querySelector('.grip-stage');
-    if (stage && !stage.querySelector('.yay')) {
-      var yay = document.createElement('div');
-      yay.className = 'yay';
-      yay.textContent = '⭐';
-      stage.appendChild(yay);
-    }
     var btn = $('btnGripNext');
     if (btn) { btn.hidden = false; btn.classList.add('target'); btn.focus(); }
     paintPips();

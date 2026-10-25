@@ -256,7 +256,19 @@ test('grip cards fit the classroom sizes without overlapping', async t => {
     const left = await inside(page, '[data-grip="left"]', width, height);
     assert.equal(intersects(replay, left), false, `${width}x${height} replay covers the mouse`);
     assert.equal(await page.locator('.grip-note').count(), 0);
+    assert.equal(await page.locator('.hand i').count(), 4);
+    assert.equal(await page.locator('.hand u').count(), 1);
     await page.locator('[data-grip="left"]').click();
+    const praise = await page.evaluate(() => {
+      const toast = document.getElementById('toast').getBoundingClientRect();
+      const stage = document.querySelector('.grip-stage').getBoundingClientRect();
+      return {
+        hidden: document.getElementById('toast').hidden,
+        onArt: toast.top < stage.bottom - 4 && toast.bottom > stage.top && toast.left < stage.right && toast.right > stage.left
+      };
+    });
+    assert.equal(praise.hidden, false, `${width}x${height} praise is missing`);
+    assert.equal(praise.onArt, false, `${width}x${height} praise covers the picture`);
     const next = await inside(page, '#btnGripNext', width, height);
     assert.equal(intersects(next, left), false, `${width}x${height} next covers the mouse`);
     await pageFits(page);
@@ -278,6 +290,16 @@ test('grip cards fit the classroom sizes without overlapping', async t => {
     await page.locator('#btnGripNext').click();
     await pageFits(page);
     await words(page);
+    const landed = await page.evaluate(() => {
+      const digits = [...document.querySelectorAll('.digit')];
+      const nubs = [...document.querySelectorAll('.nub')];
+      return digits.length === 2 && digits.every((digit, i) => {
+        const tip = digit.getBoundingClientRect();
+        const nub = nubs[i].getBoundingClientRect();
+        return tip.bottom >= nub.top - 6 && tip.bottom <= nub.bottom + 10;
+      });
+    });
+    assert.equal(landed, true, `${width}x${height} fingers rest on the bumps`);
     for (const key of ['KeyF', 'KeyJ']) {
       const button = await inside(page, `.bump[data-code="${key}"]`, width, height);
       assert.equal(intersects(replay, button), false, `${width}x${height} replay covers ${key}`);
@@ -289,11 +311,11 @@ test('grip cards fit the classroom sizes without overlapping', async t => {
     await inside(page, '[data-sit="kid"]', width, height);
     await inside(page, '#btnGripNext', width, height);
     const poses = await page.evaluate(() => {
-      const kid = document.querySelector('.child');
-      const slouch = getComputedStyle(kid).transform;
-      kid.classList.add('sat');
-      const tall = getComputedStyle(kid).transform;
-      kid.classList.remove('sat');
+      const torso = document.querySelector('.torso');
+      const slouch = getComputedStyle(torso).transform;
+      document.querySelector('.child').classList.add('sat');
+      const tall = getComputedStyle(torso).transform;
+      document.querySelector('.child').classList.remove('sat');
       return slouch !== 'none' && slouch !== tall;
     });
     assert.equal(poses, true, `${width}x${height} sitting up changes the pose`);
