@@ -357,3 +357,111 @@ test('the intro card keeps one countdown clear of the stair, and a survival thro
   assert.equal(flown.streak, 'رائع!');
   assert.ok(Number(flown.shown) < flown.bank, 'the counter waits for the coins to land ' + flown.shown + '/' + flown.bank);
 });
+
+const VIEWPORTS = [[1024, 576], [1280, 720], [1366, 768], [1920, 1080], [1280, 600]];
+
+async function sweep(page, selectors, label) {
+  const failures = [];
+  for (const [width, height] of VIEWPORTS) {
+    await page.setViewportSize({ width, height });
+    const report = await page.evaluate(({ selectors, width, height }) => {
+      window.dispatchEvent(new Event('resize'));
+      const box = el => {
+        const b = el.getBoundingClientRect();
+        return { top: b.top, left: b.left, right: b.right, bottom: b.bottom, width: b.width, height: b.height };
+      };
+      const inside = (b, w, h) => b.top >= -0.5 && b.left >= -0.5 && b.bottom <= h + 0.5 && b.right <= w + 0.5 && b.width > 8 && b.height > 8;
+      const contained = (inner, outer) => inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5 && inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5;
+      const exposed = el => {
+        if (getComputedStyle(el).pointerEvents === 'none') return true;
+        const b = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+        return !!hit && (hit === el || el.contains(hit));
+      };
+      return selectors.map(sel => {
+        const el = document.querySelector(sel);
+        if (!el || el.hidden) return { sel, missing: true };
+        const b = box(el);
+        const panel = el.closest('.panel');
+        const pb = panel ? box(panel) : null;
+        return {
+          sel,
+          b,
+          inside: inside(b, width, height),
+          inPanel: pb ? contained(b, pb) : true,
+          exposed: exposed(el),
+          scroll: panel ? panel.scrollHeight - panel.clientHeight : 0
+        };
+      });
+    }, { selectors, width, height });
+    const tag = label + ' ' + width + 'x' + height;
+    for (const row of report) {
+      if (row.missing) failures.push(tag + ' missing ' + row.sel);
+      else if (!row.inside) failures.push(tag + ' clips ' + row.sel + ' ' + JSON.stringify(row.b));
+      else if (!row.inPanel) failures.push(tag + ' outside card ' + row.sel);
+      else if (!row.exposed) failures.push(tag + ' covered ' + row.sel);
+      else if (row.scroll > 1 && label === 'podium') failures.push(tag + ' card scrolls by ' + row.scroll);
+    }
+  }
+  assert.deepEqual(failures, []);
+}
+
+test('the end card and the other overlays stay fully on screen', async t => {
+  const page = await game(t);
+  await clickControl(page, '#btnShop');
+  await sweep(page, ['#scr-shop .panel', '#btnShopBack'], 'shop');
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await clickControl(page, '#btnShopBack');
+  assert.equal(await page.evaluate(() => __game.mode), 'title');
+
+  await clickControl(page, '#btnPlay');
+  await page.evaluate(() => {
+    while (__game.world.phase === 'inter' && Math.ceil(__game.world.frames / 60) > 4) simGame(1);
+    stepGame(1);
+  });
+  await sweep(page, ['#siren'], 'intro');
+
+  await page.evaluate(() => {
+    while (!document.getElementById('siren').hidden && __game.mode === 'play') simGame(1);
+  });
+  await clickControl(page, '#btnPause');
+  await sweep(page, ['#scr-pause .panel', '#btnResume', '#btnRestart', '#btnMenu'], 'pause');
+  await clickControl(page, '#btnResume');
+
+  await page.evaluate(() => {
+    while (__game.mode === 'play') { park(__game.player); simGame(1); }
+  });
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const podium = await page.evaluate(() => {
+    window.dispatchEvent(new Event('resize'));
+    const again = getComputedStyle(document.getElementById('btnAgain'));
+    const title = getComputedStyle(document.getElementById('r-title'));
+    const menu = getComputedStyle(document.getElementById('btnResultMenu'));
+    const first = document.querySelector('#podium .pod.p1 canvas');
+    const third = document.querySelector('#podium .pod.p3 canvas');
+    const score = document.querySelector('#podium .pod.p3 b').getBoundingClientRect();
+    const line = document.getElementById('r-titles').getBoundingClientRect();
+    return {
+      banner: !document.getElementById('banner').hidden,
+      again: parseFloat(again.fontSize),
+      title: parseFloat(title.fontSize),
+      menu: parseFloat(menu.fontSize),
+      againH: document.getElementById('btnAgain').getBoundingClientRect().height,
+      titleH: document.getElementById('r-title').getBoundingClientRect().height,
+      hop: first ? getComputedStyle(first).animationName : '',
+      plant: third ? getComputedStyle(third).animationName : '',
+      motion: document.documentElement.getAttribute('data-sg-motion'),
+      gap: line.top - score.bottom
+    };
+  });
+  assert.equal(podium.banner, true, 'a first survival shows the record line');
+  assert.ok(podium.again > podium.title, 'play again ' + podium.again + ' title ' + podium.title);
+  assert.ok(podium.again > podium.menu, 'play again is bigger than the menu button');
+  assert.ok(podium.againH > podium.titleH, 'the play-again button is taller than the title');
+  assert.ok(podium.gap >= 8, 'the stats line clears 3rd place by ' + podium.gap);
+  if (podium.motion !== 'reduce') {
+    assert.equal(podium.hop, 'winhop');
+    assert.equal(podium.plant, 'plant');
+  }
+  await sweep(page, ['#scr-result .panel', '#btnAgain', '#btnResultMenu', '#r-titles', '#scr-result .lead'], 'podium');
+});

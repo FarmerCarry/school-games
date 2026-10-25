@@ -140,6 +140,9 @@
       [523, 659, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.1, vol: 0.14, delay: i * 0.05 }); });
     },
     streak: function () { A.tone({ freq: 784, to: 1175, type: 'square', dur: 0.12, vol: 0.08 }); },
+    fanfare: function () {
+      [523, 659, 784].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.16, vol: 0.16, delay: i * 0.12 }); });
+    },
     nope: function () { A.tone({ freq: 220, to: 140, type: 'square', dur: 0.12, vol: 0.12 }); },
     drop: function () { K.sfx.whoosh(); }
   };
@@ -419,7 +422,7 @@
     persist();
     paintResult(record);
     setMode('result');
-    if (rounds > 0) S.win(); else S.lose();
+    if (rounds > 0) S.fanfare(); else S.lose();
     burst(W / 2, 160, { count: 48, colors: ['#ffe14a', '#ff5d8f', '#7cf29a', '#4cc9f0', '#fff'], speed: 360, life: 1.1, size: 7, gravity: 380 });
     shower();
   }
