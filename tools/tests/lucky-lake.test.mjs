@@ -152,3 +152,27 @@ test('one finger and two fingers both cast, and a paused derby holds its clock',
   const derbyEnd = await page.evaluate(() => ll.stats.filter(s => s[0] === 'end' && s[1] === 'draw'));
   assert.equal(derbyEnd.length, 1);
 });
+
+test('a nibble ripple draws without a page error', async t => {
+  const page = await game(t);
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.locator('#btnPlay').click();
+  await page.evaluate(() => ll.step(2));
+  await page.keyboard.down('Space');
+  await page.evaluate(() => {
+    for (let i = 0; i < 90 && (__game.phase === 'ready' || __game.phase === 'charge'); i++) ll.step(1);
+  });
+  await page.keyboard.up('Space');
+  const dipped = await page.evaluate(() => {
+    for (let i = 0; i < 500; i++) {
+      ll.step(1);
+      const a = __game.world.anglers[0];
+      if (a.dip > 0) return true;
+    }
+    return false;
+  });
+  assert.equal(dipped, true);
+  await page.evaluate(() => ll.step(20));
+  assert.deepEqual(errors, []);
+});

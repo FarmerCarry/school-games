@@ -1053,6 +1053,7 @@
     }
     for (var ring = 0; ring < rings.length; ring++) {
       var wave = rings[ring];
+      if (wave.t < 0) continue;
       ctx.globalAlpha = Math.max(0, 1 - wave.t / 0.6);
       ctx.strokeStyle = '#e7f8ff';
       ctx.lineWidth = 3;
