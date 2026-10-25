@@ -120,6 +120,45 @@ test('damaged saves load as a playable academy', () => {
   assert.equal(MKA.loadSave({ unlocked: 99, done: {} }).unlocked, 9);
 });
 
+test('home row is Arabic 101 and the grip lesson is not a ninth station', () => {
+  assert.equal(MKA.STATIONS.length, 8);
+  assert.deepEqual(Array.from(MKA.HOME_LEFT, code => MKA.AR[code]), ['ش', 'س', 'ي', 'ب']);
+  assert.deepEqual(Array.from(MKA.HOME_LEFT, code => MKA.EN[code]), ['A', 'S', 'D', 'F']);
+  assert.deepEqual(Array.from(MKA.HOME_RIGHT, code => MKA.AR[code]), ['ت', 'ن', 'م', 'ك']);
+  assert.deepEqual(Array.from(MKA.HOME_RIGHT, code => MKA.EN[code]), ['J', 'K', 'L', ';']);
+  assert.deepEqual(Array.from(MKA.KEY_ROWS[1]).slice(0, 4), Array.from(MKA.HOME_LEFT));
+  assert.deepEqual(Array.from(MKA.KEY_ROWS[1]).slice(6, 10), Array.from(MKA.HOME_RIGHT));
+  assert.equal(MKA.FINGER_OF.KeyF, 'index');
+  assert.equal(MKA.FINGER_OF.KeyJ, 'index');
+  const fresh = MKA.freshSave();
+  assert.equal(fresh.grip, false);
+  assert.equal(MKA.gripNeeded(fresh), true);
+  assert.equal(MKA.gripNeeded(null), false);
+  const learned = MKA.markGrip(fresh);
+  assert.equal(learned.grip, true);
+  assert.equal(MKA.gripNeeded(learned), false);
+  const kept = MKA.markDone(learned, 'move');
+  assert.equal(kept.grip, true);
+  assert.equal(kept.done.move, true);
+  assert.equal(MKA.gripNeeded(MKA.loadSave({ unlocked: 2 })), false);
+  assert.equal(MKA.gripNeeded(MKA.loadSave({ done: { move: true } })), false);
+  assert.equal(MKA.loadSave({ grip: 'yes' }).grip, false);
+  assert.equal(MKA.loadSave({ grip: true }).grip, true);
+  assert.equal(MKA.bumpPress(0, 'KeyA').hit, false);
+  assert.equal(MKA.bumpPress(0, 'KeyA').done, false);
+  const left = MKA.bumpPress(0, 'KeyF');
+  assert.equal(left.bits, 1);
+  assert.equal(left.done, false);
+  assert.equal(left.hit, true);
+  const again = MKA.bumpPress(left.bits, 'KeyF');
+  assert.equal(again.bits, 1);
+  assert.equal(again.done, false);
+  const both = MKA.bumpPress(left.bits, 'KeyJ');
+  assert.equal(both.bits, 3);
+  assert.equal(both.done, true);
+  assert.equal(both.hit, true);
+});
+
 test('names keep one character and drop control characters', () => {
   const named = value => { const result = MKA.acceptName(value); return { ok: result.ok, name: result.name }; };
   assert.deepEqual(named('   '), { ok: false, name: '' });
@@ -157,6 +196,17 @@ test('letter keys follow event.code and hint when the layout is English', () => 
   assert.equal(MKA.languageHint('KeyH', 'Unidentified'), '');
   assert.equal(MKA.languageHint('KeyH', ''), '');
   assert.equal(MKA.languageHint('Nope', 'h'), '');
+});
+
+test('the first try is the largest and the most patient', () => {
+  assert.equal(MKA.starRadius(-1), MKA.starRadius(0));
+  assert.ok(MKA.starRadius(0) > MKA.starRadius(1));
+  assert.ok(MKA.starRadius(1) > MKA.starRadius(3));
+  assert.equal(MKA.starRadius(20), 80);
+  assert.ok(MKA.doubleWindow(0) > MKA.doubleWindow(1));
+  assert.equal(MKA.doubleWindow(1) > MKA.DOUBLE_MS, true);
+  assert.equal(MKA.doubleWindow(2), MKA.DOUBLE_MS);
+  assert.equal(MKA.doubleWindow(8), MKA.DOUBLE_MS);
 });
 
 test('drops, scrolling, and balloons stay forgiving', () => {

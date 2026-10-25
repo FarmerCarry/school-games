@@ -549,3 +549,14 @@ cache had only 73,229 bytes left, so its limit was raised knowingly by 100,000 b
 (2%). That keeps about the same headroom as before (84,326 bytes, 1.7%) for the next
 change; another game will again need room made or a decision like this one.
 
+## Mouse & Keyboard Academy, 25 October 2026
+
+The academy page is still one inlined HTML file (no new images, fonts, or precache entries). The child coach and the three grip cards are drawn with markup, so the minified page grew past its old limit.
+
+| Measurement | Bytes | Limit |
+| --- | ---: | ---: |
+| Mouse & Keyboard Academy | 80,055 | 81,000 (was 56,000) |
+| Offline precache, 46 files | 5,112,664 | 5,130,000 (was 5,100,000) |
+
+The page limit is the next thousand above the measured file. The precache was 12,664 bytes over only because that same file is cached; nothing else was added. The new precache limit leaves 17,336 bytes (0.3%). Another game will need room made or a decision like the Cake Guards one.
+

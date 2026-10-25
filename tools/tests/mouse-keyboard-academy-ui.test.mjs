@@ -27,11 +27,19 @@ async function openGame(t, { init, query = '', reduced = false, viewport } = {})
   return page;
 }
 
-test('a damaged save opens a playable map and a real save is kept', async t => {
+function learnedGrip() {
+  localStorage.setItem('sg:mouse-keyboard-academy:save', JSON.stringify({ v: 1, done: {}, unlocked: 1, name: '', grip: true }));
+}
+
+test('a damaged save opens the grip lesson, and the map can start after it', async t => {
   const damaged = await openGame(t, { init: () => localStorage.setItem('sg:mouse-keyboard-academy:save', '{not json') });
-  assert.equal(await damaged.evaluate(() => __game.screen), 'map');
+  assert.equal(await damaged.evaluate(() => __game.screen), 'grip');
   assert.equal(await damaged.evaluate(() => __game.save.unlocked), 1);
+  assert.match(await damaged.locator('#prompt').innerText(), /أمسك/);
+  await damaged.locator('#btnMap').click();
+  assert.equal(await damaged.evaluate(() => __game.screen), 'map');
   assert.equal(await damaged.locator('#btnStart').textContent(), 'ابدأ');
+  assert.match(await damaged.locator('#btnGrip').textContent(), /كيف أمسك/);
 
   const kept = await openGame(t, { init: () => localStorage.setItem('sg:mouse-keyboard-academy:save', JSON.stringify({
     v: 1, done: { move: true, nope: true }, unlocked: 2, name: 'ل'
@@ -113,8 +121,99 @@ test('drag, scroll, and a short window do not scroll the page', async t => {
   await scroll.waitForFunction(() => __game.progress === 3 || __game.screen === 'celebrate');
 });
 
+test('a miss wiggles the star and التالي opens the next lesson', async t => {
+  const page = await openGame(t, { init: learnedGrip });
+  await page.locator('#btnStart').click();
+  await page.waitForFunction(() => __game.screen === 'play' && __game.station === 'move' && !document.getElementById('ghost').hidden);
+  const box = await page.locator('#field').boundingBox();
+  await page.mouse.click(box.x + 24, box.y + 28);
+  await page.waitForFunction(() => document.querySelector('#field .star.nudge'));
+  for (let i = 0; i < 4; i++) {
+    await page.waitForFunction(() => __game.screen === 'celebrate' || document.querySelector('#field .star'));
+    if (await page.evaluate(() => __game.screen === 'celebrate')) break;
+    const point = await page.evaluate(() => __game.starPoint());
+    await page.mouse.move(point.x, point.y, { steps: 8 });
+    await page.waitForTimeout(40);
+  }
+  await page.waitForFunction(() => __game.screen === 'celebrate');
+  assert.match(await page.locator('#btnNext').innerText(), /التالي/);
+  await page.locator('#btnNext').click();
+  await page.waitForFunction(() => __game.screen === 'play' && __game.station === 'click' && __game.progress === 0);
+});
+
+test('how to hold the mouse and keyboard comes before the lessons', async t => {
+  const page = await openGame(t, { viewport: { width: 1100, height: 620 } });
+  async function fits(selector) {
+    const box = await page.locator(selector).boundingBox();
+    assert.ok(box, selector);
+    assert.ok(box.y >= -1 && box.y + box.height <= 621, `${selector} y ${box.y} h ${box.height}`);
+    assert.ok(box.x >= -1 && box.x + box.width <= 1101, `${selector} x ${box.x} w ${box.width}`);
+  }
+  async function pageFits() {
+    const scroll = await page.evaluate(() => ({
+      sh: document.documentElement.scrollHeight,
+      ch: document.documentElement.clientHeight,
+      sw: document.documentElement.scrollWidth,
+      cw: document.documentElement.clientWidth
+    }));
+    assert.ok(scroll.sh <= scroll.ch + 1, `page height ${scroll.sh} > ${scroll.ch}`);
+    assert.ok(scroll.sw <= scroll.cw + 1, `page width ${scroll.sw} > ${scroll.cw}`);
+  }
+  assert.equal(await page.evaluate(() => __game.screen), 'grip');
+  assert.match(await page.locator('#prompt').innerText(), /أمسك/);
+  assert.match(await page.locator('[data-grip="left"]').textContent(), /الأيسر/);
+  assert.match(await page.locator('[data-grip="right"]').textContent(), /الأيمن/);
+  await pageFits();
+  await fits('#prompt');
+  await fits('[data-grip="left"]');
+  await page.locator('[data-grip="right"]').click();
+  assert.equal(await page.locator('#btnGripNext').isHidden(), true);
+  await page.locator('[data-grip="left"]').click();
+  await page.locator('[data-grip="right"]').click();
+  await page.waitForFunction(() => !document.getElementById('btnGripNext').hidden);
+  assert.match(await page.locator('#btnGripNext').innerText(), /التالي/);
+  assert.match(await page.locator('#toast').innerText(), /أحسنت/);
+  await fits('#btnGripNext');
+  await page.locator('#btnGripNext').click();
+
+  assert.match(await page.locator('#prompt').innerText(), /سبابت/);
+  const letters = await page.evaluate(() => document.querySelector('.grip-art').textContent);
+  for (const ch of ['ش', 'س', 'ي', 'ب', 'ت', 'ن', 'م', 'ك']) assert.ok(letters.includes(ch), ch);
+  assert.match(letters, /A/);
+  assert.match(letters, /F/);
+  assert.match(letters, /J/);
+  await page.keyboard.press('q');
+  await page.locator('.big-key[data-code="KeyF"]').click();
+  await page.keyboard.press('j');
+  await page.waitForFunction(() => !document.getElementById('btnGripNext').hidden);
+  await pageFits();
+  await fits('.big-key[data-code="KeyJ"]');
+  await page.locator('#btnGripNext').click();
+
+  assert.match(await page.locator('#prompt').innerText(), /اجلس/);
+  await page.locator('[data-sit="eyes"]').click();
+  await page.locator('[data-sit="feet"]').click();
+  await page.locator('[data-sit="back"]').click();
+  await page.waitForFunction(() => !document.getElementById('btnGripNext').hidden);
+  await pageFits();
+  await fits('[data-sit="back"]');
+  await page.locator('#btnGripNext').click();
+  await page.waitForFunction(() => __game.screen === 'play' && __game.station === 'move');
+  assert.equal(await page.evaluate(() => __game.save.grip), true);
+  assert.equal(await page.evaluate(() => __game.save.done.move), undefined);
+
+  await page.locator('#btnMap').click();
+  assert.equal(await page.locator('#btnStart').textContent(), 'ابدأ');
+  await page.locator('#btnGrip').click();
+  assert.equal(await page.evaluate(() => __game.screen), 'grip');
+  assert.match(await page.locator('#prompt').innerText(), /أمسك/);
+  await page.locator('#btnMap').click();
+  assert.equal(await page.evaluate(() => __game.save.grip), true);
+  assert.equal(await page.evaluate(() => __game.screen), 'map');
+});
+
 test('reduced motion still shows the station prompt', async t => {
-  const page = await openGame(t, { reduced: true });
+  const page = await openGame(t, { reduced: true, init: learnedGrip });
   await page.locator('#btnStart').click();
   await page.waitForFunction(() => __game.screen === 'play');
   assert.match(await page.locator('#prompt').innerText(), /حرّك الفأرة/);

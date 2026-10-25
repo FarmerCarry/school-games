@@ -41,6 +41,14 @@
   ];
   // ا ب ت then م — familiar letters, each on its real Arabic-101 key.
   var LETTERS = ['KeyH', 'KeyF', 'KeyJ', 'KeyL'];
+  // Home row under A S D F and J K L ; . On Arabic 101 those keys are ش س ي ب and ت ن م ك.
+  // F and J (ب and ت) are the bump keys an index finger can feel.
+  var HOME_LEFT = ['KeyA', 'KeyS', 'KeyD', 'KeyF'];
+  var HOME_RIGHT = ['KeyJ', 'KeyK', 'KeyL', 'Semicolon'];
+  var FINGER_OF = {
+    KeyA: 'pinky', KeyS: 'ring', KeyD: 'middle', KeyF: 'index',
+    KeyJ: 'index', KeyK: 'middle', KeyL: 'ring', Semicolon: 'pinky'
+  };
 
   var MAZE_ROWS = [
     '##########',
@@ -66,7 +74,7 @@
     return i < 0 ? null : STATIONS[i];
   }
   function freshSave() {
-    return { v: 1, done: {}, unlocked: 1, name: '' };
+    return { v: 1, done: {}, unlocked: 1, name: '', grip: false };
   }
   function cleanName(value) {
     var text = String(value == null ? '' : value).replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim();
@@ -93,7 +101,26 @@
     }
     if (save.unlocked > STATIONS.length + 1) save.unlocked = STATIONS.length + 1;
     save.name = cleanName(raw.name);
+    save.grip = raw.grip === true;
     return save;
+  }
+  function markGrip(save) {
+    var next = loadSave(save);
+    next.grip = true;
+    return next;
+  }
+  // A brand-new student sees how to hold the mouse and keyboard before the stations.
+  // Anyone who already earned a sticker, or who was moved ahead, is not sent back.
+  function gripNeeded(save) {
+    return !!(save && save.grip !== true && stickerCount(save) === 0 && (save.unlocked | 0) <= 1);
+  }
+  // Bit 1 is the F bump (ب), bit 2 is the J bump (ت). Any other key is not a hit.
+  function bumpPress(bits, code) {
+    var next = bits | 0;
+    if (code === 'KeyF') next |= 1;
+    else if (code === 'KeyJ') next |= 2;
+    else return { bits: next, done: next === 3, hit: false };
+    return { bits: next, done: next === 3, hit: true };
   }
   function markDone(save, id) {
     var next = loadSave(save);
@@ -171,6 +198,19 @@
     if (n < 0) n = 0;
     var scale = 1 - n * 0.14;
     return scale < 0.48 ? 0.48 : scale;
+  }
+  // The first try is the biggest and the most patient. Later tries shrink a little.
+  function starRadius(index) {
+    var n = index | 0;
+    if (n < 0) n = 0;
+    var radius = 112 - n * 10;
+    return radius < 80 ? 80 : radius;
+  }
+  function doubleWindow(index) {
+    var n = index | 0;
+    if (n <= 0) return 1400;
+    if (n === 1) return 1100;
+    return 800;
   }
   function acceptName(value) {
     var name = cleanName(value);
@@ -307,6 +347,9 @@
     DROP_SLOP: 64,
     STAR_R: 84,
     LETTERS: LETTERS,
+    HOME_LEFT: HOME_LEFT,
+    HOME_RIGHT: HOME_RIGHT,
+    FINGER_OF: FINGER_OF,
     KEY_ROWS: KEY_ROWS,
     AR: AR,
     EN: EN,
@@ -329,8 +372,13 @@
     dropHits: dropHits,
     friendReached: friendReached,
     balloonScale: balloonScale,
+    starRadius: starRadius,
+    doubleWindow: doubleWindow,
     cleanName: cleanName,
     acceptName: acceptName,
+    markGrip: markGrip,
+    gripNeeded: gripNeeded,
+    bumpPress: bumpPress,
     mazeStart: mazeStart,
     mazeStep: mazeStep,
     mazeHint: mazeHint,
