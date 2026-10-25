@@ -46,6 +46,11 @@ h1, h2, p { margin: 0; }
 .back { margin-top: 12px; text-align: center; }
 
 #btnPause { position: absolute; top: 14px; left: 14px; width: 64px; height: 52px; border-radius: 16px; border: 4px solid #2b2148; background: #fff; font-weight: 700; font-size: 22px; cursor: pointer; box-shadow: 0 4px 0 #2b2148; pointer-events: auto; }
+#hud-coins { position: absolute; top: 16px; left: 120px; z-index: 6; display: flex; align-items: center; gap: 8px; padding: 2px 14px 4px; border: 4px solid #2b2148; border-radius: 16px; background: rgba(43,33,72,.88); color: #fff; font-size: 26px; font-weight: 700; line-height: 1.2; white-space: nowrap; pointer-events: none; }
+#hud-coins[hidden] { display: none !important; }
+#hud-coins i { width: 16px; height: 16px; border-radius: 50%; background: #ffe14a; box-shadow: inset 0 -3px 0 #f0b429; }
+#hud-coins b { color: #ffe14a; }
+#hud-coins.hard::after { content: '· صعب'; color: #ffe14a; margin-inline-start: 6px; }
 #btnPause[hidden] { display: none; }
 .podium { display: flex; gap: 12px; justify-content: center; align-items: flex-end; margin: 12px 0; }
 .pod { width: 180px; border: 4px solid #2b2148; border-radius: 16px; text-align: center; padding: 8px; background: #fff; }

@@ -193,6 +193,47 @@ test('two players keep separate keys, a popped kid becomes a cloud, and results 
   assert.equal(await page.evaluate(() => ends.some(e => e[0] === 'win' || e[0] === 'lose')), false);
 });
 
+test('the coin count keeps its number and stays clear of mute and pause', async t => {
+  const page = await game(t);
+  await clickControl(page, '#btnPlay');
+  await page.evaluate(() => { __game.save.coins = 128; stepGame(1); });
+  const sizes = [[1024, 576], [1100, 620], [1920, 1080]];
+  for (const [width, height] of sizes) {
+    await page.setViewportSize({ width, height });
+    const box = await page.evaluate(() => {
+      window.dispatchEvent(new Event('resize'));
+      stepGame(1);
+      const r = el => {
+        const b = el.getBoundingClientRect();
+        return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height };
+      };
+      return {
+        coins: r(document.getElementById('hud-coins')),
+        num: r(document.getElementById('hud-coin-n')),
+        mute: r(document.querySelector('.sg-mute')),
+        pause: r(document.getElementById('btnPause')),
+        text: document.getElementById('hud-coin-n').textContent,
+        hard: document.getElementById('hud-coins').classList.contains('hard'),
+        vw: innerWidth
+      };
+    });
+    const label = width + 'x' + height;
+    const clearOf = (a, b) => {
+      const vert = a.top < b.bottom && a.bottom > b.top;
+      const horiz = a.left < b.right && a.right > b.left;
+      if (vert && horiz) return 0;
+      if (!vert) return 99;
+      return a.left >= b.right ? a.left - b.right : b.left - a.right;
+    };
+    assert.equal(box.text, '128', label + ' shows the coin number');
+    assert.ok(box.num.width > 10 && box.num.height > 10, label + ' number is on screen');
+    assert.ok(box.num.left >= -1 && box.num.right <= box.vw + 1, label + ' number stays inside the window');
+    assert.ok(clearOf(box.coins, box.mute) >= 8, label + ' coins meet the mute button ' + JSON.stringify(box));
+    assert.ok(clearOf(box.num, box.mute) >= 8, label + ' number meets the mute button');
+    assert.ok(clearOf(box.coins, box.pause) >= 8, label + ' coins meet pause ' + JSON.stringify(box));
+  }
+});
+
 test('one player can win, restart counts a new round, and leaving early ends the match', async t => {
   const page = await game(t);
   await clickControl(page, '#btnPlay');

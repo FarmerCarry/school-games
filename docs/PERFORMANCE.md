@@ -560,15 +560,15 @@ Measured with the Linux minified build, after adding this game only:
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Chaos Island | 80,945 | 115,000 |
+| Chaos Island | 84,913 | 115,000 |
 | Teacher page (one more catalog entry) | 93,237 | 96,000 (unchanged) |
 | Portal (thumbnail and catalog entry) | 353,360 | 360,000 (unchanged) |
-| Offline precache, 47 files | 5,167,035 | 5,215,000 (was 5,100,000) |
+| Offline precache, 47 files | 5,171,003 | 5,215,000 (was 5,100,000) |
 
-`gameHtmlBytes['chaos-island']` is the planned 115,000. The built page is 80,945
+`gameHtmlBytes['chaos-island']` is the planned 115,000. The built page is 84,913
 bytes, under that cap. The offline cache was 5,082,082 of 5,100,000 before this
 game, so `precacheBytes` is raised by 115,000, the amount in the per-game plan
 (the new game budget, already rounded to 10 KB). The thumbnail and catalog text
 fit in the existing portal and teacher headroom, so those limits stay put. The
-new precache headroom is 47,965 bytes.
+new precache headroom is 43,997 bytes.
 
