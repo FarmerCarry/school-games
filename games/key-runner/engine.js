@@ -208,7 +208,7 @@
       pl.hop = true;
       pl.boost = false;
       pl.ground = 0;
-      pl.stretch = 1.28;
+      pl.stretch = 1.42;
       events.push({ e: 'jump', p: pl.i });
     }
     function onLand(pl, p, events) {
@@ -223,7 +223,7 @@
       pl.usedDouble = false;
       pl.ice = p.t === 'ice';
       if (!fromAir) return;
-      pl.squash = 0.72;
+      pl.squash = 0.58;
       if (p.t === 'tramp') {
         pl.vy = C.TRAMP;
         pl.onGround = false;
@@ -530,7 +530,7 @@
       if (pl.falling > 0) {
         pl.falling -= dt;
         pl.stageTime += dt;
-        pl.squash += (0.55 - pl.squash) * Math.min(1, dt * 8);
+        pl.squash += (0.55 - pl.squash) * Math.min(1, dt * 5);
         if (pl.falling <= 0) respawn(pl, events);
         return;
       }
@@ -623,8 +623,8 @@
       if (state.flood && pl.z >= state.flood.z0 && pl.z <= state.flood.z1 && pl.y < state.floodY) startFall(pl, events, 'flood');
       if (pl.y > pl.maxY) pl.maxY = pl.y;
       pl.stageTime += dt;
-      pl.squash += (1 - pl.squash) * Math.min(1, dt * 8);
-      pl.stretch += (1 - pl.stretch) * Math.min(1, dt * 8);
+      pl.squash += (1 - pl.squash) * Math.min(1, dt * 4);
+      pl.stretch += (1 - pl.stretch) * Math.min(1, dt * 4);
       if (state.mode === 'tower' && state.time >= 360 && !pl.finished) {
         pl.finished = true;
         state.over = { type: 'end', height: pl.maxY };

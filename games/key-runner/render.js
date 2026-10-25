@@ -59,9 +59,27 @@
     }
     var seaMat = lambert(0xff7eb8);
     var sea = new T.Mesh(bodyGeo, seaMat);
-    sea.scale.set(80, 1.2, 80);
-    sea.position.set(0, -2.4, 20);
+    sea.scale.set(180, 0.5, 240);
+    sea.position.set(0, -2.28, 30);
     scene.add(sea);
+    var choco = new T.Mesh(bodyGeo, lambert(0x6a3418));
+    choco.scale.set(180, 2.4, 240);
+    choco.position.set(0, -3.7, 30);
+    scene.add(choco);
+    var sheen = new T.Mesh(bodyGeo, lambert(0xffe7c8, { transparent: true, opacity: 0.42, depthWrite: false }));
+    sheen.scale.set(180, 0.08, 240);
+    sheen.position.set(0, -2.02, 30);
+    scene.add(sheen);
+    var skyCanvas = document.createElement('canvas');
+    skyCanvas.width = 8;
+    skyCanvas.height = 256;
+    var skyCtx = skyCanvas.getContext('2d');
+    var skyTex = new T.CanvasTexture(skyCanvas);
+    skyTex.colorSpace = T.SRGBColorSpace;
+    var sky = new T.Mesh(new T.SphereGeometry(140, 14, 10), new T.MeshBasicMaterial({ map: skyTex, side: T.BackSide, fog: false, depthWrite: false }));
+    scene.add(sky);
+    var clouds = instanced(sphereGeo, lambert(0xffffff));
+    var sprinkles = instanced(bodyGeo, lambert(0xffffff));
     var floodMat = new T.MeshLambertMaterial({ color: 0x6a3018, transparent: true, opacity: 0.78, depthWrite: false });
     var flood = new T.Mesh(bodyGeo, floodMat);
     flood.visible = false;
@@ -91,27 +109,42 @@
     function buddy(color) {
       var group = new T.Group();
       var mat = lambert(color);
-      var body = new T.Mesh(new T.CapsuleGeometry(0.32, 0.46, 2, 8), mat);
-      body.position.y = 0.62;
+      var skin = lambert(0xfff3df);
+      var body = new T.Mesh(new T.CapsuleGeometry(0.34, 0.42, 3, 8), mat);
+      body.position.y = 0.58;
       var faceCanvas = document.createElement('canvas');
-      faceCanvas.width = faceCanvas.height = 64;
+      faceCanvas.width = faceCanvas.height = 128;
       var fctx = faceCanvas.getContext('2d');
-      fctx.fillStyle = '#fff7ea';
-      fctx.beginPath(); fctx.arc(32, 32, 30, 0, Math.PI * 2); fctx.fill();
+      fctx.fillStyle = '#fff6ea';
+      fctx.beginPath(); fctx.arc(64, 64, 60, 0, Math.PI * 2); fctx.fill();
+      fctx.fillStyle = '#ffb0c8';
+      fctx.beginPath(); fctx.arc(28, 78, 12, 0, Math.PI * 2); fctx.arc(100, 78, 12, 0, Math.PI * 2); fctx.fill();
+      fctx.fillStyle = '#fff';
+      fctx.beginPath(); fctx.ellipse(42, 54, 16, 20, 0, 0, Math.PI * 2); fctx.ellipse(86, 54, 16, 20, 0, 0, Math.PI * 2); fctx.fill();
       fctx.fillStyle = '#2a2030';
-      fctx.beginPath(); fctx.arc(22, 28, 4, 0, Math.PI * 2); fctx.arc(42, 28, 4, 0, Math.PI * 2); fctx.fill();
-      fctx.strokeStyle = '#2a2030'; fctx.lineWidth = 3; fctx.lineCap = 'round';
-      fctx.beginPath(); fctx.arc(32, 36, 10, 0.2, Math.PI - 0.2); fctx.stroke();
-      var face = new T.Mesh(planeGeo, new T.MeshBasicMaterial({ map: new T.CanvasTexture(faceCanvas), transparent: true }));
-      face.position.set(0, 0.78, 0.3);
-      face.scale.set(0.46, 0.46, 1);
-      var footL = new T.Mesh(bodyGeo, mat);
-      var footR = new T.Mesh(bodyGeo, mat);
-      footL.scale.set(0.22, 0.14, 0.34);
-      footR.scale.set(0.22, 0.14, 0.34);
+      fctx.beginPath(); fctx.arc(46, 56, 8, 0, Math.PI * 2); fctx.arc(90, 56, 8, 0, Math.PI * 2); fctx.fill();
+      fctx.fillStyle = '#fff';
+      fctx.beginPath(); fctx.arc(49, 52, 3, 0, Math.PI * 2); fctx.arc(93, 52, 3, 0, Math.PI * 2); fctx.fill();
+      fctx.strokeStyle = '#2a2030'; fctx.lineWidth = 5; fctx.lineCap = 'round';
+      fctx.beginPath(); fctx.arc(64, 70, 22, 0.25, Math.PI - 0.25); fctx.stroke();
+      var faceMap = new T.CanvasTexture(faceCanvas);
+      faceMap.colorSpace = T.SRGBColorSpace;
+      var face = new T.Mesh(planeGeo, new T.MeshBasicMaterial({ map: faceMap, transparent: true, depthWrite: false, side: T.DoubleSide }));
+      face.position.set(0, 0.86, 0.02);
+      face.scale.set(0.62, 0.62, 1);
+      var handL = new T.Mesh(sphereGeo, skin);
+      var handR = new T.Mesh(sphereGeo, skin);
+      handL.scale.set(0.13, 0.13, 0.13);
+      handR.scale.set(0.13, 0.13, 0.13);
+      handL.position.set(-0.42, 0.52, 0.06);
+      handR.position.set(0.42, 0.52, 0.06);
+      var footL = new T.Mesh(sphereGeo, mat);
+      var footR = new T.Mesh(sphereGeo, mat);
+      footL.scale.set(0.16, 0.1, 0.22);
+      footR.scale.set(0.16, 0.1, 0.22);
       var hat = new T.Group();
-      group.add(body, face, footL, footR, hat);
-      group.userData = { mat: mat, footL: footL, footR: footR, hat: hat, hatId: -1 };
+      group.add(body, face, handL, handR, footL, footR, hat);
+      group.userData = { mat: mat, face: face, handL: handL, handR: handR, footL: footL, footR: footR, hat: hat, hatId: -1 };
       scene.add(group);
       var shadow = new T.Mesh(shadowGeo, new T.MeshBasicMaterial({ color: 0x2a1428, transparent: true, opacity: 0.28, depthWrite: false }));
       shadow.rotation.x = -Math.PI / 2;
@@ -220,27 +253,65 @@
       });
     }
 
-    function put(mesh, index, x, y, z, sx, sy, sz, color) {
+    function put(mesh, index, x, y, z, sx, sy, sz, color, ry) {
       dummy.position.set(x, y, z);
-      dummy.scale.set(sx, sy, sz);
-      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(Math.max(0.02, sx), Math.max(0.02, sy), Math.max(0.02, sz));
+      dummy.rotation.set(0, ry || 0, 0);
       dummy.updateMatrix();
       mesh.setMatrixAt(index, dummy.matrix);
       if (color != null) { tint.setHex(hex(color)); mesh.setColorAt(index, tint); }
     }
+    function mix(a, b, t) {
+      var ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+      var br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+      return ((ar + (br - ar) * t) | 0) << 16 | ((ag + (bg - ag) * t) | 0) << 8 | ((ab + (bb - ab) * t) | 0);
+    }
+    function css(n) { return '#' + ('000000' + (n >>> 0).toString(16)).slice(-6); }
+    function shade(n, f) {
+      var r = Math.max(0, Math.min(255, ((n >> 16) & 255) * f));
+      var g = Math.max(0, Math.min(255, ((n >> 8) & 255) * f));
+      var b = Math.max(0, Math.min(255, (n & 255) * f));
+      return (r | 0) << 16 | (g | 0) << 8 | (b | 0);
+    }
+    var CANDY = [0xff4eb6, 0xffd24a, 0x7dffb0, 0x8fd0ff, 0xff8ad8, 0xfff1a8, 0xff9a62];
+    var ALPHA = 'ضصثقفغعهخحجدشسيبلاتنمكطئءؤرلاىةوزظ';
 
     function applyTheme(state) {
       var idx = state.mode === 'world' || state.mode === 'race' ? state.world | 0 : state.mode === 'tower' ? 6 : 0;
       if (idx === themeIndex) return;
       themeIndex = idx;
       var th = KR.themes[idx] || KR.themes[0];
-      scene.background = new T.Color(th.sky);
+      var top = mix(th.sky, 0x9fd8ff, 0.62);
+      var mid = mix(th.sky, 0xffffff, 0.28);
+      var grd = skyCtx.createLinearGradient(0, 0, 0, 256);
+      grd.addColorStop(0, css(top));
+      grd.addColorStop(0.55, css(mid));
+      grd.addColorStop(1, css(th.fog));
+      skyCtx.fillStyle = grd;
+      skyCtx.fillRect(0, 0, 8, 256);
+      skyTex.needsUpdate = true;
+      scene.background = new T.Color(th.fog);
       scene.fog.color.setHex(th.fog);
       seaMat.color.setHex(th.sea);
       colors.body.setHex(th.key);
       colors.top.setHex(th.top);
       colors.accent.setHex(th.accent);
       colors.ink.setHex(th.dark);
+    }
+    function keyColor(p) {
+      if (p.hw > 5) return 0xffd0b0;
+      if (p.t === 'tramp') return 0x3ddc6a;
+      if (p.t === 'launch') return 0xffc400;
+      if (p.t === 'ice') return 0x9ee7ff;
+      if (p.t === 'jelly') return 0xff4fa3;
+      if (p.t === 'sink') return 0xc46a3a;
+      if (p.t === 'caps') return 0xff7a3c;
+      if (p.t === 'portal') return 0x9b6bff;
+      if (p.t === 'shop') return 0xffd24a;
+      if (p.t === 'tower') return 0x7ec8ff;
+      if (p.t === 'convey') return 0x4aa3ff;
+      if (p.flag) return 0xffe56a;
+      return CANDY[(p.id * 3 + (themeIndex < 0 ? 0 : themeIndex)) % CANDY.length];
     }
 
     function render(state, opts) {
@@ -250,21 +321,36 @@
       var low = opts.quality === 'low';
       var reduced = !!opts.reduced;
       var two = state.players.length > 1;
-      scene.fog.near = low ? 14 : two ? 18 : 26;
-      scene.fog.far = low ? 46 : two ? 58 : 96;
+      scene.fog.near = low ? 12 : two ? 16 : 22;
+      scene.fog.far = low ? 42 : two ? 52 : 78;
       var pieces = state.pieces;
       var nb = 0, nt = 0, nr = 0, ns = 0, ng = 0, nf = 0, nflag = 0, nstick = 0, nlet = 0, ngate = 0;
       var speedOk = state.players[0] ? state.players[0].speed : 0;
-      for (var i = 0; i < pieces.length && nb < MAX; i++) {
+      var focus = state.players[0] || { x: 0, z: 0 };
+      var letterPick = [];
+      function pressed(id) {
+        for (var s = 0; s < state.players.length; s++) {
+          var pl = state.players[s];
+          if (pl && pl.onGround && pl.ground === id) return 0.075;
+        }
+        return 0;
+      }
+      for (var i = 0; i < pieces.length && nb < MAX - 2; i++) {
         var p = pieces[i];
         if (p.t === 'chev') {
-          put(flags, nflag++, p.x, p.y, p.z + 0.15, 0.5, 0.08, 0.28, 0xfff1a8);
+          put(flags, nflag++, p.x, p.y + 0.2, p.z + 0.2, 0.55, 0.1, 0.36, 0xffe56a);
           continue;
         }
-        if (p.t === 'rail') { put(rails, nr++, p.x, p.y, p.z, p.hw * 2, p.hh * 2, p.hd * 2, 0xfff1a8); continue; }
+        if (p.t === 'rail') {
+          var candy = (p.id % 2) ? 0xff4eb6 : 0xffd24a;
+          put(sticks, nstick++, p.x, p.y, p.z - p.hd * 0.55, 0.2, Math.max(0.45, p.hh * 2.6), 0.2, candy);
+          put(sticks, nstick++, p.x, p.y, p.z + p.hd * 0.55, 0.2, Math.max(0.45, p.hh * 2.6), 0.2, candy);
+          put(rails, nr++, p.x, p.y + p.hh * 0.85, p.z, 0.14, 0.1, p.hd * 2, 0xfff6ea);
+          continue;
+        }
         if (p.t === 'gum' || p.t === 'sweep' || p.t === 'pop') {
           put(balls, ns++, p.x, p.y + (p.r || p.hh), p.z, p.r || p.hh, p.r || p.hh, p.r || p.hh, p.t === 'gum' ? 0xff4d8d : 0xffd24a);
-          if (p.t === 'pop') put(sticks, nstick++, p.baseX || p.x, (p.pivot || 2) * 0.5, p.baseZ || p.z, 0.06, p.pivot || 2, 0.06, 0xfff1c9);
+          if (p.t === 'pop') put(sticks, nstick++, p.baseX || p.x, (p.pivot || 2) * 0.5, p.baseZ || p.z, 0.08, p.pivot || 2, 0.08, 0xfff1c9);
           continue;
         }
         if (p.t === 'fan') { put(fans, nf++, p.x, p.y, p.z, p.hw * 2, p.hh * 2, p.hd * 2, 0x9ad7ff); continue; }
@@ -281,19 +367,29 @@
           continue;
         }
         if (p.t === 'caps' && p.gone) continue;
-        var col = p.t === 'tramp' ? 0x7dffa0 : p.t === 'launch' ? 0xffe56a : p.t === 'ice' ? 0xd7f4ff : p.t === 'jelly' ? 0xff8ad0 : p.t === 'portal' ? 0xb388ff : p.t === 'shop' ? 0xffd24a : p.t === 'tower' ? 0x8fd0ff : colors.body.getHex();
-        var sy = p.hh * 2;
-        put(bodies, nb++, p.x, p.y, p.z, p.hw * 2, sy, p.hd * 2, col);
-        if (p.ch && nlet < LETTERS) {
-          var letter = letterMesh[nlet++];
-          letter.visible = true;
-          letter.material = paintChar(p.ch);
-          letter.position.set(p.x, p.y + p.hh + 0.03, p.z);
-          letter.scale.set(Math.min(1.3, p.hw * 1.7), Math.min(1.3, p.hd * 1.7), 1);
-        } else if (!p.ch) {
-          put(tops, nt++, p.x, p.y + p.hh * 0.55, p.z, p.hw * 1.7, 0.06, p.hd * 1.7, p.flag ? 0xffe56a : colors.top.getHex());
+        var col = keyColor(p);
+        var dip = pressed(p.id);
+        var topY = p.y + p.hh - dip;
+        var wide = p.hw > 5;
+        var skirt = wide ? 0.22 : Math.max(0.16, p.hh * 1.45);
+        put(bodies, nb++, p.x, topY - skirt * 0.62, p.z, (wide ? p.hw * 2 : p.hw * 2.04), skirt, (wide ? p.hd * 2 : p.hd * 2.04), shade(col, wide ? 0.9 : 0.68));
+        put(tops, nt++, p.x, topY - 0.05, p.z, p.hw * (wide ? 1.96 : 1.7), wide ? 0.08 : 0.16, p.hd * (wide ? 1.96 : 1.7), shade(col, 1.18));
+        if (!wide && (p.ch || p.t === 'key' || p.t === 'sink' || p.t === 'ice' || p.t === 'jelly' || p.t === 'caps' || p.t === 'portal')) {
+          var dx = p.x - focus.x, dz = p.z - focus.z;
+          letterPick.push({ p: p, y: topY, d: dx * dx + dz * dz, ch: p.ch || '' });
         }
-        if (p.flag) put(flags, nflag++, p.x + p.hw * 0.7, p.y + p.hh + 0.55, p.z, 0.08, 0.7, 0.08, 0xffe56a);
+        if (p.flag) put(flags, nflag++, p.x + p.hw * 0.55, topY + 0.55, p.z, 0.08, 0.85, 0.08, 0xffe56a);
+      }
+      letterPick.sort(function (a, b) { return (a.ch ? -1000 : 0) + a.d - ((b.ch ? -1000 : 0) + b.d); });
+      var letterCap = low ? 12 : 22;
+      for (var li0 = 0; li0 < letterPick.length && nlet < letterCap; li0++) {
+        var item = letterPick[li0];
+        if (!item.ch && item.d > 260) continue;
+        var letter = letterMesh[nlet++];
+        letter.visible = true;
+        letter.material = paintChar(item.ch || ALPHA.charAt(item.p.id % ALPHA.length));
+        letter.position.set(item.p.x, item.y + 0.04, item.p.z);
+        letter.scale.set(Math.min(1.25, item.p.hw * 1.55), Math.min(1.25, item.p.hd * 1.55), 1);
       }
       bodies.count = nb; tops.count = nt; rails.count = nr; balls.count = ns; sticks.count = nstick;
       gates.count = ng; fans.count = nf; flags.count = nflag;
@@ -307,6 +403,36 @@
       if (balls.instanceColor) balls.instanceColor.needsUpdate = true;
       if (gates.instanceColor) gates.instanceColor.needsUpdate = true;
       if (flags.instanceColor) flags.instanceColor.needsUpdate = true;
+      var anchorX = focus.x, anchorZ = focus.z;
+      sky.position.set(anchorX, 2, anchorZ + 6);
+      choco.position.z = sea.position.z = sheen.position.z = anchorZ + 18;
+      choco.position.x = sea.position.x = sheen.position.x = anchorX;
+      var cloudN = low ? 3 : 6;
+      for (var ci = 0; ci < cloudN; ci++) {
+        var ang = ci * 1.15 + 0.4;
+        put(clouds, ci, anchorX + Math.sin(ang) * (16 + ci * 3), 9 + (ci % 3) * 2.2, anchorZ + 18 + ci * 7, 4.2, 1.15, 2.4, 0xffffff);
+      }
+      clouds.count = cloudN;
+      clouds.instanceMatrix.needsUpdate = true;
+      if (clouds.instanceColor) clouds.instanceColor.needsUpdate = true;
+      var spr = 0;
+      var candyN = low ? 6 : 14;
+      for (var si = 0; si < candyN && nstick < MAX - 4 && ns < MAX - 4; si++) {
+        var side = si % 2 ? 1 : -1;
+        var sz = anchorZ + 8 + (si % 5) * 5.2;
+        var sx = anchorX + side * (8.2 + (si % 3));
+        if (si % 4 === 0) {
+          put(sticks, nstick++, sx, 1.15, sz, 0.1, 2.2, 0.1, 0xfff1c9);
+          put(balls, ns++, sx, 2.35, sz, 0.46, 0.46, 0.46, CANDY[si % CANDY.length]);
+        } else put(sprinkles, spr++, sx, 0.45 + (si % 3) * 0.7, sz, 0.16, 0.06, 0.4, CANDY[si % CANDY.length], si * 0.7);
+      }
+      sprinkles.count = spr;
+      balls.count = ns;
+      sticks.count = nstick;
+      sprinkles.instanceMatrix.needsUpdate = balls.instanceMatrix.needsUpdate = sticks.instanceMatrix.needsUpdate = true;
+      if (sprinkles.instanceColor) sprinkles.instanceColor.needsUpdate = true;
+      if (balls.instanceColor) balls.instanceColor.needsUpdate = true;
+      if (sticks.instanceColor) sticks.instanceColor.needsUpdate = true;
       for (var li = nlet; li < LETTERS; li++) letterMesh[li].visible = false;
       for (var gi = ngate; gi < gateMesh.length; gi++) gateMesh[gi].visible = false;
 
@@ -347,24 +473,38 @@
           buddyMesh.group.userData.hatId = hatId;
         }
         var stretch = reduced ? 1 : (pl.onGround ? pl.squash : pl.stretch);
-        var bob = pl.onGround && Math.hypot(pl.vx, pl.vz) > 1 ? Math.sin(state.time * 14 + pi) * 0.05 : Math.sin(state.time * 2 + pi) * 0.02;
+        var moving = Math.hypot(pl.vx, pl.vz) > 0.8;
+        var bob = moving ? Math.abs(Math.sin(state.time * 14 + pi)) * 0.1 : Math.sin(state.time * 2 + pi) * 0.03;
         buddyMesh.group.position.set(pl.x, pl.y + bob, pl.z);
         buddyMesh.group.scale.set(1 / stretch, stretch, 1 / stretch);
         buddyMesh.group.rotation.y = pl.face;
-        var moving = Math.hypot(pl.vx, pl.vz) > 0.8;
-        var step = moving ? Math.sin(state.time * 14) : 0;
-        buddyMesh.group.userData.footL.position.set(-0.16, 0.08, step * 0.18);
-        buddyMesh.group.userData.footR.position.set(0.16, 0.08, -step * 0.18);
+        var step = moving ? Math.sin(state.time * 14 + pi) : 0;
+        var ud = buddyMesh.group.userData;
+        ud.footL.position.set(-0.18, 0.05, step * 0.28);
+        ud.footR.position.set(0.18, 0.05, -step * 0.28);
+        ud.handL.position.set(-0.42, 0.5 + Math.abs(step) * 0.06, -step * 0.2);
+        ud.handR.position.set(0.42, 0.5 + Math.abs(step) * 0.06, step * 0.2);
         var sh = opts.engine.shadowPoint(pi);
         buddyMesh.shadow.visible = true;
         buddyMesh.shadow.position.set(sh.x, sh.y + 0.04, sh.z);
         var spread = pl.onGround ? 0.55 : 0.38;
         buddyMesh.shadow.scale.set(spread, spread, 1);
-        if (!low && !reduced && !ghost && moving) {
+        if (!low && !reduced && !ghost && moving && pl.speed > 1 && parts.length < SPARKS - 4) {
           var trail = opts.trail || 0;
-          if (trail && Math.floor(state.time * 20) % 2 === 0) {
-            var tc = trail === 2 ? 0xffe56a : trail === 3 ? 0xfff6ea : TRAIL[Math.floor(state.time * 6 + pi) % 4];
-            spark(pl.x, pl.y + 0.25, pl.z, tc, 0.32);
+          var bits = Math.min(7, 1 + Math.floor(pl.speed / 6));
+          if ((Math.floor(state.time * 24) + pi) % 2 === 0) {
+            for (var k = 0; k < bits && parts.length < SPARKS; k++) {
+              var back = 0.35 + k * 0.22;
+              parts.push({
+                x: pl.x - Math.sin(pl.face) * back,
+                y: pl.y + 0.28 + (k % 2) * 0.08,
+                z: pl.z - Math.cos(pl.face) * back,
+                vx: -pl.vx * 0.12, vy: 0.35, vz: -pl.vz * 0.12,
+                life: 0.22 + Math.min(0.25, pl.speed * 0.01),
+                size: 0.07 + Math.min(0.18, pl.speed * 0.008),
+                color: trail === 2 ? 0xffe56a : trail === 3 ? 0xfff6ea : TRAIL[(k + (pl.speed | 0)) % TRAIL.length]
+              });
+            }
           }
           var aura = opts.aura || 0;
           if (aura && Math.floor(state.time * 12) % 2 === 0) {
@@ -402,7 +542,8 @@
         } else {
           renderer.setViewport(0, 0, buf.x, buf.y);
         }
-        var fast = !reduced && !low && plEye && KR.topSpeed(plEye.speed) > 12;
+        var fast = !reduced && !low && plEye && KR.topSpeed(plEye.speed) > 10;
+        var kick = (!reduced && !low && opts.fovKick) ? opts.fovKick : 0;
         for (var li = 0; li < speedLines.length; li++) {
           speedLines[li].visible = !!fast;
           if (!fast || !plEye) continue;
@@ -416,8 +557,7 @@
           speedLines[li].scale.set(0.035, 0.035, 0.55);
           speedLines[li].rotation.y = plEye.face;
         }
-        camera.fov = 60;
-        if (fast) camera.fov = 66;
+        camera.fov = 60 + (fast ? Math.min(8, (KR.topSpeed(plEye.speed) - 10) * 0.85) : 0) + kick;
         camera.updateProjectionMatrix();
         camera.position.set(pose.x, pose.y, pose.z);
         if (!reduced && opts.shake > 0) {
@@ -428,6 +568,13 @@
           camera.position.x += Math.sin(state.time * 18) * 0.08;
         }
         camera.lookAt(pose.lx, pose.ly, pose.lz);
+        for (var faceI = 0; faceI < buddies.length; faceI++) {
+          var bill = buddies[faceI].group.userData.face;
+          if (bill && buddies[faceI].group.visible) {
+            buddies[faceI].group.updateMatrixWorld();
+            bill.lookAt(camera.position);
+          }
+        }
         renderer.render(scene, camera);
       }
       renderer.setScissorTest(false);

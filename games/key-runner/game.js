@@ -17,7 +17,9 @@
   var bannerUntil = 0;
   var prevKey = {};
   var shake = 0;
+  var fovKick = 0;
   var shownSpeed = -1;
+  var floatTimer = 0;
   var rank = { '': 0, bronze: 1, silver: 2, gold: 3 };
   var activity = 'plaza';
 
@@ -51,8 +53,11 @@
     var node = el('floater');
     node.hidden = false;
     node.textContent = text;
-    node.style.opacity = '1';
-    setTimeout(function () { node.hidden = true; }, 700);
+    node.classList.remove('up');
+    void node.offsetWidth;
+    node.classList.add('up');
+    clearTimeout(floatTimer);
+    floatTimer = setTimeout(function () { node.hidden = true; }, 650);
   }
   function screens() {
     el('title-screen').hidden = mode !== 'title';
@@ -241,16 +246,28 @@
       var ev = events[i];
       if (ev.e === 'jump') { KR.sound('jump'); shake = Math.max(shake, 0.04); }
       else if (ev.e === 'double') KR.sound('double');
-      else if (ev.e === 'land') { KR.sound('land', ev.row); shake = Math.max(shake, 0.08); }
+      else if (ev.e === 'land') {
+        KR.sound('land', ev.row);
+        shake = Math.max(shake, 0.08);
+        var landed = eng.state.players[ev.p];
+        if (landed) view.burst(landed.x, landed.y + 0.15, landed.z, 0xfff3ea, 8);
+      }
       else if (ev.e === 'bounce') KR.sound('bounce');
       else if (ev.e === 'launch') { KR.sound('launch'); shake = Math.max(shake, 0.1); }
-    else if (ev.e === 'step') {
-      KR.sound('step', ev.p);
-      syncSpeed(false);
-    }
+      else if (ev.e === 'step') {
+        KR.sound('step', ev.p);
+        if (!duo || ev.p === 0) floater('+' + ev.n);
+        if (eng.state.players[ev.p] && eng.state.players[ev.p].speed > 6) fovKick = Math.min(8, fovKick + 2.4);
+        syncSpeed(false);
+      }
       else if (ev.e === 'gate') { KR.sound('gate'); toast('تحتاج سرعة ' + ev.n); }
       else if (ev.e === 'fall') { KR.sound('fall'); shake = Math.max(shake, 0.12); }
-      else if (ev.e === 'checkpoint') { banner('نقطة حفظ!'); persist(); }
+      else if (ev.e === 'checkpoint') {
+        banner('نقطة حفظ!');
+        persist();
+        var flag = eng.state.players[ev.p];
+        if (flag) view.burst(flag.x, flag.y + 1.2, flag.z, 0xffe56a, 20);
+      }
       else if (ev.e === 'stage') {
         if (duo) banner('مرحلة!');
         else { KR.sound('stage'); noteStage(ev); view.burst(eng.state.players[ev.p].x, 1.4, eng.state.players[ev.p].z, 0xfff1a8, 16); }
@@ -350,10 +367,11 @@
     if (contextLost) return;
     dirty = false;
     shake *= 0.86;
-    if (Kit.motion.reduced()) shake = 0;
+    fovKick *= 0.82;
+    if (Kit.motion.reduced()) { shake = 0; fovKick = 0; }
     view.render(eng.state, {
       engine: eng, quality: save.quality, reduced: Kit.motion.reduced(),
-      shake: shake, hat: duo ? 0 : save.hat, trail: duo ? 0 : save.trail, aura: duo ? 0 : save.aura
+      shake: shake, fovKick: fovKick, hat: duo ? 0 : save.hat, trail: duo ? 0 : save.trail, aura: duo ? 0 : save.aura
     });
   }
   function openShop() {

@@ -560,16 +560,17 @@ runner is a decal. Particles stay at or below 200. Paused frames are not redrawn
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Key Runner | 83,445 | 100,000 |
+| Key Runner | 89,070 | 100,000 |
 | Teacher page (catalog row only, same limit) | 92,810 | 96,000 |
 | Portal (thumbnail and catalog entry) | 352,845 | 365,000 (was 360,000) |
-| Offline precache | 5,168,593 | 5,200,000 (was 5,100,000) |
+| Offline precache | 5,174,218 | 5,200,000 (was 5,100,000) |
 
 The built game is under its 100,000 byte cap. The offline cache on this branch was
 5,082,082 / 5,100,000 before the game, with about 17.9 KB free, so `precacheBytes`
 is raised by this game's planned 100,000 bytes to 5,200,000. Measured precache
-growth is about 86.5 KB (the built page plus its catalog and thumbnail share).
-Headroom after the raise is 31,407 bytes.
+growth is about 92.1 KB (the built page plus its catalog and thumbnail share).
+Headroom after the raise is 25,782 bytes. The candy scenery, keycap faces and
+runner trail fit in the existing cap, so the 100,000 game limit was not raised.
 
 The portal grew by about 2.2 KB (the inlined thumbnail and one catalog row) and
 still fits in 360,000. `portalBytes` is still raised by 5,000 to 365,000: that is
