@@ -90,6 +90,7 @@
   let cam = { x: 0, y: 0, z: 1 };
   let cardDelay = 0;
   let pendingCard = null;
+  let streak = 0;
 
   function ymd() {
     const d = new Date();
@@ -164,7 +165,7 @@
     screen = 'play';
     ER.art.clearFx();
     showCoins = world.mode === '1p' ? world.coins : 0;
-    slow = 0; zoom = 1; flash = 0; lastStep = 0; cardDelay = 0; pendingCard = null;
+    slow = 0; zoom = 1; flash = 0; lastStep = 0; cardDelay = 0; pendingCard = null; streak = 0;
     if (mode === '1p') {
       Kit.stats.round('main');
       if (world.tut !== 'done') Kit.stats.tutorial('start');
@@ -283,7 +284,15 @@
 
   function onEvent(e) {
     const A = ER.art, S = ER.sfx, calm = Kit.motion.reduced();
+    function cheer() {
+      const word = streak >= 10 ? 'خارق!' : streak >= 6 ? 'ممتاز!' : streak >= 3 ? 'رائع!' : '';
+      if (!word || (streak !== 3 && streak !== 6 && streak !== 10)) return;
+      const p = world.players[0];
+      if (p) A.float(p.x, p.y - 1.7, word, '#ffd23f', 40);
+      S.cheer();
+    }
     if (e.t === 'grab') {
+      streak += 1; cheer();
       S.grab();
       const px = e.x != null ? e.x : (world.players[e.p] || world.players[0]).x;
       const py = e.y != null ? e.y : (world.players[e.p] || world.players[0]).y;
@@ -292,12 +301,14 @@
       if (!calm) shake.add(3);
     }
     else if (e.t === 'boop') {
+      streak = 0;
       S.boop(); A.burst(e.x, e.y, 16, ['#fff', '#ffd23f', '#ff8a3d'], 3); A.float(e.x, e.y - 0.6, 'بوينغ!', '#fff');
       if (!calm) shake.add(7);
     } else if (e.t === 'spot') {
       S.alert();
       if (!calm) { slow = 0.2; zoom = 1.06; shake.add(3); }
     } else if (e.t === 'collect') {
+      streak += 1; cheer();
       S.coin();
       A.flyCoins(e.x, e.y, calm ? 4 : 8);
       A.coins(e.x, e.y, 4);
@@ -307,12 +318,12 @@
       if (e.s >= 4) { S.legend(); flash = calm ? 0 : 0.45; } else S.hatch();
       const hx = e.x != null ? e.x : 2.2, hy = e.y != null ? e.y : 8.6;
       A.crack(hx, hy, e.s);
-      A.sparkle(hx, hy - 0.4, calm ? 0 : 12);
-      A.revealPet(e.b, e.s, e.v, hx, hy - 0.45);
+      const who = world.players[0];
+      A.revealPet(e.b, e.s, e.v, who ? who.x : hx, who ? who.y - 0.9 : hy);
       if (e.pad >= 0 && world.pads[e.pad]) A.flyCoins(world.pads[e.pad].x, world.pads[e.pad].y, calm ? 4 : 8);
-      if (!calm) shake.add(e.s >= 4 ? 9 : 6);
+      if (!calm) { slow = 0.55; shake.add(e.s >= 4 ? 6 : 4); }
       if (e.pad < 0) openCard(e);
-      else { pendingCard = e; cardDelay = calm ? 0.15 : 1.05; }
+      else { pendingCard = e; cardDelay = calm ? 0.2 : 1.25; }
       persist(true);
     } else if (e.t === 'buy') { S.buy(); persist(true); if (!$('ovShop').hidden) paintShop(); }
     else if (e.t === 'gate') { S.gate(); A.float(e.x, e.y - 0.8, 'تحتاج سرعة ' + e.need, '#fff'); if (!calm) shake.add(2); }
@@ -339,6 +350,10 @@
     $('resultTitle').textContent = draw ? 'تعادل!' : (e.winner === 0 ? 'اللاعب الأول فاز!' : 'اللاعب الثاني فاز!');
     $('resultSub').textContent = 'الأول ' + ER.fmt(e.a) + ' · الثاني ' + ER.fmt(e.b);
     const hi = Math.max(e.a, e.b);
+    const best = Number(store.get('duelBest', 0)) || 0;
+    const record = !draw && hi > best;
+    if (record) store.set('duelBest', hi);
+    $('resultNew').hidden = !record;
     const stars = draw ? 2 : hi >= 30 ? 3 : hi >= 12 ? 2 : 1;
     const starBox = $('resultStars');
     starBox.replaceChildren();
@@ -613,6 +628,7 @@
     if (screen === 'pause' && !frameDirty) return;
     frameDirty = false;
     aimCoins();
+    ER.art.titleDemo = screen === 'title';
     ER.art.reduced = Kit.motion.reduced();
     const ctx = view.ctx;
     if (screen === 'title') {

@@ -833,16 +833,16 @@ plan. The teacher page is unchanged; its headroom covers one more catalog name.
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Egg Rush HTML | 110,910 | 125,000 |
+| Egg Rush HTML | 114,503 | 125,000 |
 | Portal (thumbnail and catalog entry) | 361,093 | 366,000 (was 360,000) |
-| Offline precache, 47 files | 5,204,260 | 5,230,000 (was 5,100,000) |
+| Offline precache, 47 files | 5,207,853 | 5,230,000 (was 5,100,000) |
 | Teacher page | 92,764 | 96,000 (unchanged) |
 
-The built game is 110,910 bytes, inside the 125,000 allowance from the four-game plan.
+The built game is 114,503 bytes, inside the 125,000 allowance from the four-game plan.
 A later art pass (closer camera, biome props, hatch particles, yard signs) grew the file from
-82,972 bytes. A juice pass (hatch burst, coins that fly to the counter, the result
-screen, and a larger portal tile) added about 5 KB and stayed inside that allowance.
-The precache is 5,204,260 bytes against a 130 KB raise (the 125 KB allowance rounded
+82,972 bytes. Juice passes (hatch burst, flying coins, a centered pet reveal, a thinner yard,
+and the result screen) added the rest and stayed inside that allowance.
+The precache is 5,207,853 bytes against a 130 KB raise (the 125 KB allowance rounded
 up to 10 KB, plus about 6 KB for the thumbnail). The portal, including a small subset
 of the arcade Arabic font inside the Egg Rush tile, is 361,093 bytes against its
 366,000 limit. Headroom stays for the other new games.

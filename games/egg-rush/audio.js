@@ -27,6 +27,7 @@
     },
     legend: () => Kit.sfx.win(),
     fanfare: () => { [523, 659, 784, 1046].forEach((f, i) => T({ freq: f, type: 'triangle', dur: 0.16, vol: 0.18, delay: i * 0.09 })); },
+    cheer: () => { T({ freq: 784, type: 'triangle', dur: 0.08, vol: 0.14 }); T({ freq: 1046, type: 'triangle', dur: 0.12, vol: 0.14, delay: 0.07 }); },
     buy: () => T({ freq: 440, to: 660, type: 'triangle', dur: 0.12, vol: 0.16 }),
     deny: () => T({ freq: 180, to: 120, type: 'square', dur: 0.1, vol: 0.08 }),
     slip: () => T({ freq: 300, to: 140, type: 'sawtooth', dur: 0.2, vol: 0.08 }),
