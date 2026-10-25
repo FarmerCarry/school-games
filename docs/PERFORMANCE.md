@@ -562,20 +562,20 @@ runner is a decal. Particles stay at or below 200. Paused frames are not redrawn
 | --- | ---: | ---: |
 | Key Runner | 91,693 | 100,000 |
 | Teacher page (catalog row only, same limit) | 92,810 | 96,000 |
-| Portal (thumbnail and catalog entry) | 352,845 | 365,000 (was 360,000) |
-| Offline precache | 5,176,841 | 5,200,000 (was 5,100,000) |
+| Portal (thumbnail and catalog entry) | 357,369 | 365,000 (was 360,000) |
+| Offline precache | 5,181,365 | 5,200,000 (was 5,100,000) |
 
 The built game is under its 100,000 byte cap. The offline cache on this branch was
 5,082,082 / 5,100,000 before the game, with about 17.9 KB free, so `precacheBytes`
 is raised by this game's planned 100,000 bytes to 5,200,000. Measured precache
-growth is about 94.8 KB (the built page plus its catalog and thumbnail share).
-Headroom after the raise is 23,159 bytes. The candy scenery, soft cloud cards,
-keycap faces and runner trail fit in the existing cap, so the 100,000 game limit
-was not raised.
+growth is about 99.3 KB (the built page plus its catalog and thumbnail share).
+Headroom after the raise is 18,635 bytes. The candy scenery, soft cloud cards,
+keycap faces, runner trail and portal tile fit in the existing caps, so the
+100,000 game limit was not raised.
 
-The portal grew by about 2.2 KB (the inlined thumbnail and one catalog row) and
-still fits in 360,000. `portalBytes` is still raised by 5,000 to 365,000: that is
-this game's share of the planned +20 KB for the recess games landing together.
+The portal grew by about 6.7 KB once the catalog row and the drawn tile were
+inlined, past the old 360,000 cap. `portalBytes` stays at 365,000, this game's
+share of the planned +20 KB, with 7,631 bytes left.
 The teacher page grew by about 0.9 KB and stays inside 96,000, so `teacherBytes`
 is unchanged.
 

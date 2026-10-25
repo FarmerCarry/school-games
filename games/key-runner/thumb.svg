@@ -1,20 +1,93 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
-<rect width="400" height="400" fill="#ffd4ee"/>
-<rect x="28" y="250" width="78" height="70" rx="10" fill="#ff4eb6"/>
-<rect x="40" y="258" width="54" height="36" rx="6" fill="#ffe0f6"/>
-<rect x="118" y="228" width="78" height="70" rx="10" fill="#ff7eb8"/>
-<rect x="130" y="236" width="54" height="36" rx="6" fill="#fff6ea"/>
-<rect x="208" y="250" width="78" height="70" rx="10" fill="#ff4eb6"/>
-<rect x="220" y="258" width="54" height="36" rx="6" fill="#ffe0f6"/>
-<rect x="298" y="206" width="78" height="70" rx="10" fill="#ffd24a"/>
-<rect x="310" y="214" width="54" height="36" rx="6" fill="#fff6ea"/>
-<ellipse cx="168" cy="286" rx="22" ry="8" fill="#3a2144"/>
-<circle cx="168" cy="168" r="46" fill="#3d8bff"/>
-<circle cx="168" cy="118" r="28" fill="#7eb6ff"/>
-<rect x="148" y="200" width="16" height="28" rx="6" fill="#3d8bff"/>
-<rect x="172" y="200" width="16" height="28" rx="6" fill="#3d8bff"/>
-<circle cx="158" cy="114" r="4" fill="#2a2030"/>
-<circle cx="178" cy="114" r="4" fill="#2a2030"/>
-<circle cx="250" cy="292" r="36" fill="#fff1a8"/>
-<circle cx="250" cy="292" r="22" fill="#ffd4ee"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="32%" r="78%">
+      <stop offset="0" stop-color="#fff7fb"/>
+      <stop offset="0.42" stop-color="#ff8ec8"/>
+      <stop offset="1" stop-color="#ff3d86"/>
+    </radialGradient>
+    <radialGradient id="body" cx="35%" cy="28%" r="75%">
+      <stop offset="0" stop-color="#b9dcff"/>
+      <stop offset="1" stop-color="#2f6fe0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff4a8"/>
+      <stop offset="1" stop-color="#ffb703"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <g fill="#fff" opacity="0.16">
+    <path d="M200 210 L150 -20 L190 -20 Z"/>
+    <path d="M200 210 L250 -20 L300 -20 Z"/>
+    <path d="M200 210 L420 20 L420 80 Z"/>
+    <path d="M200 210 L-20 20 L-20 80 Z"/>
+    <path d="M200 210 L420 180 L400 250 Z"/>
+    <path d="M200 210 L-20 180 L0 250 Z"/>
+  </g>
+  <g fill="#fff">
+    <ellipse cx="78" cy="118" rx="36" ry="16"/>
+    <ellipse cx="108" cy="112" rx="28" ry="14"/>
+    <ellipse cx="300" cy="132" rx="40" ry="16"/>
+    <ellipse cx="336" cy="126" rx="26" ry="13"/>
+  </g>
+  <ellipse cx="200" cy="372" rx="190" ry="28" fill="#6a3418"/>
+  <ellipse cx="200" cy="360" rx="170" ry="16" fill="#8a4b28"/>
+  <g>
+    <rect x="18" y="286" width="78" height="22" rx="8" fill="#c2186a"/>
+    <rect x="18" y="262" width="78" height="46" rx="12" fill="#ff4eb6" stroke="#7a1248" stroke-width="4"/>
+    <rect x="28" y="270" width="58" height="26" rx="7" fill="#fff6ea"/>
+    <text x="57" y="290" text-anchor="middle" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="20" font-weight="700" fill="#3a2140">ق</text>
+  </g>
+  <g>
+    <rect x="108" y="252" width="78" height="22" rx="8" fill="#c98412"/>
+    <rect x="108" y="228" width="78" height="46" rx="12" fill="#ffd24a" stroke="#8a5a08" stroke-width="4"/>
+    <rect x="118" y="236" width="58" height="26" rx="7" fill="#fff6ea"/>
+    <text x="147" y="256" text-anchor="middle" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="20" font-weight="700" fill="#3a2140">ط</text>
+  </g>
+  <g>
+    <rect x="214" y="268" width="86" height="22" rx="8" fill="#1f8a42"/>
+    <rect x="214" y="240" width="86" height="50" rx="12" fill="#3ddc6a" stroke="#146b32" stroke-width="4"/>
+    <rect x="224" y="250" width="66" height="26" rx="7" fill="#f3fff4"/>
+    <text x="257" y="270" text-anchor="middle" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="16" font-weight="700" fill="#146b32">مسافة</text>
+  </g>
+  <g>
+    <rect x="312" y="214" width="74" height="20" rx="8" fill="#1d6fd0"/>
+    <rect x="312" y="190" width="74" height="44" rx="12" fill="#7eb6ff" stroke="#1a4e96" stroke-width="4"/>
+    <rect x="322" y="198" width="54" height="24" rx="7" fill="#fff6ea"/>
+    <text x="349" y="216" text-anchor="middle" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="20" font-weight="700" fill="#3a2140">ة</text>
+  </g>
+  <g fill="#fff6ea">
+    <path d="M330 168 l4 9 9 3 -9 4 -4 9 -4 -9 -9 -4 9 -4 z"/>
+    <path d="M64 168 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 z"/>
+    <path d="M292 96 l3 6 6 2 -6 3 -3 6 -3 -6 -6 -3 6 -3 z"/>
+  </g>
+  <g transform="translate(156 118)">
+    <ellipse cx="36" cy="168" rx="34" ry="8" fill="#3a1240" opacity="0.22"/>
+    <ellipse cx="16" cy="150" rx="13" ry="8" fill="#2458c4" stroke="#1a2a55" stroke-width="3"/>
+    <ellipse cx="52" cy="142" rx="13" ry="8" fill="#2458c4" stroke="#1a2a55" stroke-width="3"/>
+    <path d="M18 96 Q-6 78 2 58" fill="none" stroke="#1a2a55" stroke-width="11" stroke-linecap="round"/>
+    <path d="M18 96 Q-6 78 2 58" fill="none" stroke="#8ec4ff" stroke-width="6" stroke-linecap="round"/>
+    <path d="M52 92 Q78 70 70 48" fill="none" stroke="#1a2a55" stroke-width="11" stroke-linecap="round"/>
+    <path d="M52 92 Q78 70 70 48" fill="none" stroke="#8ec4ff" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="2" cy="56" r="7" fill="#fff3df" stroke="#1a2a55" stroke-width="3"/>
+    <circle cx="70" cy="46" r="7" fill="#fff3df" stroke="#1a2a55" stroke-width="3"/>
+    <rect x="14" y="78" width="44" height="62" rx="22" fill="url(#body)" stroke="#1a2a55" stroke-width="5"/>
+    <circle cx="36" cy="58" r="30" fill="#fff6ea" stroke="#1a2a55" stroke-width="5"/>
+    <ellipse cx="24" cy="66" rx="7" ry="4" fill="#ffb0c8"/>
+    <ellipse cx="48" cy="66" rx="7" ry="4" fill="#ffb0c8"/>
+    <ellipse cx="26" cy="52" rx="8" ry="10" fill="#fff"/>
+    <ellipse cx="46" cy="52" rx="8" ry="10" fill="#fff"/>
+    <circle cx="26" cy="54" r="4" fill="#2a2030"/>
+    <circle cx="46" cy="54" r="4" fill="#2a2030"/>
+    <circle cx="27.5" cy="52.5" r="1.6" fill="#fff"/>
+    <circle cx="47.5" cy="52.5" r="1.6" fill="#fff"/>
+    <path d="M26 68 Q36 78 46 68" fill="none" stroke="#2a2030" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(248 126) rotate(8)">
+    <rect x="0" y="0" width="58" height="32" rx="12" fill="#fff" stroke="#7a1248" stroke-width="4"/>
+    <text x="29" y="23" text-anchor="middle" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="20" font-weight="700" fill="#e42386">+1</text>
+  </g>
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="700" text-anchor="middle" direction="rtl" transform="rotate(-3 200 64)">
+    <text x="200" y="72" font-size="40" fill="#3a1248" stroke="#3a1248" stroke-width="12" stroke-linejoin="round">عدّاء المفاتيح</text>
+    <text x="200" y="72" font-size="40" fill="url(#gold)">عدّاء المفاتيح</text>
+  </g>
 </svg>
