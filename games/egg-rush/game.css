@@ -18,9 +18,15 @@ button { font-family: var(--sg-font); cursor: pointer; }
 .gad:disabled { opacity: 0.45; }
 .timer { min-width: 110px; text-align: center; }
 .timer.frenzy { background: #ff5a6a; color: #fff; }
-#hint { position: absolute; top: auto; bottom: 86px; left: 50%; transform: translateX(-50%); background: #2a2348; color: #fff; border-radius: 18px; padding: 8px 14px; font-size: 26px; font-weight: 700; display: flex; gap: 10px; align-items: center; white-space: nowrap; z-index: 5; }
+#dock { position: absolute; left: 0; right: 0; bottom: 0; height: 78px; z-index: 6; display: flex; align-items: center; justify-content: center; pointer-events: none; background: linear-gradient(#e7c49a, #e7c49a) top / 100% 10px no-repeat, linear-gradient(#7dce6a, #5eae4c); box-shadow: inset 0 4px 0 #2a2348; }
+#dock[hidden] { display: none; }
+#hint { position: relative; background: #2a2348; color: #fff; border-radius: 18px; padding: 8px 14px; font-size: 26px; font-weight: 700; display: flex; gap: 10px; align-items: center; white-space: nowrap; pointer-events: auto; max-width: 1180px; }
 #hint[hidden] { display: none; }
 #hint button { background: #ffd23f; color: #2a2348; border: 0; border-radius: 12px; font-weight: 700; font-size: 18px; padding: 6px 10px; }
+.looklab { margin: 4px 0; font-size: 20px; font-weight: 700; }
+.swatch { min-width: 52px; height: 52px; border-radius: 16px; border: 4px solid #2a2348; font-size: 14px; font-weight: 700; color: #2a2348; padding: 0 8px; }
+.swatch.on { outline: 4px solid #ffd23f; outline-offset: 2px; }
+.swatch:disabled { opacity: 0.55; cursor: default; }
 #banner { position: absolute; top: 150px; left: 50%; transform: translateX(-50%); background: #ffd23f; color: #2a2348; border: 4px solid #2a2348; border-radius: 20px; padding: 12px 18px; font-size: 28px; font-weight: 700; box-shadow: 0 6px 0 #2a2348; }
 #banner[hidden] { display: none; }
 .ov { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(42, 35, 72, 0.28); }

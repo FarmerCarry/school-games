@@ -12,7 +12,7 @@
   }
   ER.sfx = {
     click: () => T({ freq: 680, type: 'triangle', dur: 0.05, vol: 0.12 }),
-    grab: () => T({ freq: 520, to: 880, type: 'sine', dur: 0.12, vol: 0.18 }),
+    grab: () => { T({ freq: 520, to: 880, type: 'sine', dur: 0.12, vol: 0.18 }); T({ freq: 990, type: 'triangle', dur: 0.08, vol: 0.1, delay: 0.04 }); },
     alert: () => {
       T({ freq: 660, type: 'sine', dur: 0.08, vol: 0.12 });
       T({ freq: 880, type: 'sine', dur: 0.09, vol: 0.12, delay: 0.09 });
@@ -33,6 +33,7 @@
     slip: () => T({ freq: 300, to: 140, type: 'sawtooth', dur: 0.2, vol: 0.08 }),
     fox: () => T({ freq: 392, to: 260, type: 'triangle', dur: 0.2, vol: 0.14 }),
     bump: () => N({ dur: 0.1, vol: 0.16, filter: 1400, to: 300 }),
-    gate: () => T({ freq: 200, type: 'square', dur: 0.08, vol: 0.08 })
+    gate: () => T({ freq: 200, type: 'square', dur: 0.08, vol: 0.08 }),
+    open: () => { [523, 659, 784, 1046].forEach((f, i) => T({ freq: f, type: 'triangle', dur: 0.12, vol: 0.16, delay: i * 0.07 })); }
   };
 })(globalThis.EggRush = globalThis.EggRush || {});

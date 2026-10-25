@@ -58,6 +58,18 @@
     again: 'بيضة أخرى... راقب الحارس',
     shop: 'اشترِ الحذاء'
   };
+  const CALL = [
+    'فرخ أصفر', 'بطة بيضاء', 'أرنب وردي', 'حمل أبيض', 'ضفدع أخضر', 'قنفذ بني',
+    'سلحفاة خضراء', 'نجم ذهبي', 'دلفين أزرق', 'ببغاء أحمر', 'أخطبوط بنفسجي', 'سمكة زرقاء',
+    'بطريق', 'فقمة', 'دب بني', 'ثعلب برتقالي', 'بومة', 'رنة',
+    'جمل صغير', 'أفعى', 'عقرب', 'فنك', 'سحلية خضراء', 'صقر',
+    'دونات', 'مارشميلو', 'كب كيك', 'مصاصة', 'غزل بنات', 'جيلي',
+    'عصفور', 'فراشة', 'نحلة صفراء', 'هرة', 'تنين أخضر', 'قوس',
+    'روبوت', 'صاروخ', 'نيزك', 'فضائي', 'كوكب', 'رائد'
+  ];
+  const SHIRT = ['#3d7dff', '#ff5a8a', '#3cbf6e', '#ffd23f', '#9b6bff', '#ff8a3d', '#3ec6ff'];
+  const SHIRT_NAME = ['أزرق', 'وردي', 'أخضر', 'ذهبي', 'بنفسجي', 'برتقالي', 'سماوي'];
+  const HAT_NAME = ['بدون', 'قبعة', 'شمس', 'صوف', 'زهرة', 'فيونكة', 'نجمة'];
   const GAD = { banana: 'موز', decoy: 'دمية', bubble: 'فقاعة' };
   const SHOP = [
     ['shoes', 'حذاء السرعة', 'خبرة سرعة، وتفتح البوابة التالية'],
@@ -91,6 +103,7 @@
   let cardDelay = 0;
   let pendingCard = null;
   let streak = 0;
+  let hatchHint = 0;
 
   function ymd() {
     const d = new Date();
@@ -128,9 +141,7 @@
     $('ovPause').hidden = screen !== 'pause';
     $('ovResult').hidden = screen !== 'result';
     $('hud').hidden = screen === 'title';
-    const showHint = screen === 'play' && world && world.mode === '1p' && world.tut !== 'done' && TUT[world.tut];
-    $('hint').hidden = !showHint;
-    if (showHint) $('hintText').textContent = TUT[world.tut];
+    applyHint();
     $('btnShop').hidden = $('btnBook').hidden = $('btnGear').hidden = !world || world.mode !== '1p';
     frameDirty = true;
   }
@@ -165,7 +176,7 @@
     screen = 'play';
     ER.art.clearFx();
     showCoins = world.mode === '1p' ? world.coins : 0;
-    slow = 0; zoom = 1; flash = 0; lastStep = 0; cardDelay = 0; pendingCard = null; streak = 0;
+    slow = 0; zoom = 1; flash = 0; lastStep = 0; cardDelay = 0; pendingCard = null; streak = 0; hatchHint = 0;
     if (mode === '1p') {
       Kit.stats.round('main');
       if (world.tut !== 'done') Kit.stats.tutorial('start');
@@ -238,6 +249,7 @@
     let x = focus - viewW * (w.mode === '2p' ? 0.5 : 0.36);
     x = Math.max(0, Math.min(Math.max(0, w.w - viewW), x));
     let y = fy - viewH * 0.48;
+    if (w.mode !== '2p') y += 1.35;
     y = Math.max(0, Math.min(Math.max(0, 15 - viewH), y));
     return { x: x, y: y, z: z };
   }
@@ -296,8 +308,11 @@
       S.grab();
       const px = e.x != null ? e.x : (world.players[e.p] || world.players[0]).x;
       const py = e.y != null ? e.y : (world.players[e.p] || world.players[0]).y;
-      A.confetti(px, py - 0.4, 16);
-      A.burst(px, py - 0.6, 10, ['#fff', '#ffd23f', '#ff8ad8'], 2.4);
+      if (!calm) A.grabPop = 0.42;
+      A.confetti(px, py - 0.4, 12);
+      A.sparkle(px, py - 0.5, 6);
+      A.burst(px, py - 0.6, 8, ['#fff', '#ffd23f', '#ff8ad8'], 2.4);
+      if (streak !== 3 && streak !== 6 && streak !== 10) A.float(px, py - 1.6, 'خذتها!', '#fff', 34);
       if (!calm) shake.add(3);
     }
     else if (e.t === 'boop') {
@@ -319,14 +334,23 @@
       const hx = e.x != null ? e.x : 2.2, hy = e.y != null ? e.y : 8.6;
       A.crack(hx, hy, e.s);
       const who = world.players[0];
-      A.revealPet(e.b, e.s, e.v, who ? who.x : hx, who ? who.y - 0.9 : hy);
+      A.revealPet(e.b, e.s, e.v, who ? who.x : hx, who ? who.y - 0.9 : hy, petCall(e));
+      hatchHint = calm ? 1.1 : 2.8;
       if (e.pad >= 0 && world.pads[e.pad]) A.flyCoins(world.pads[e.pad].x, world.pads[e.pad].y, calm ? 4 : 8);
       if (!calm) { slow = 0.55; shake.add(e.s >= 4 ? 6 : 4); }
       if (e.pad < 0) openCard(e);
-      else { pendingCard = e; cardDelay = calm ? 0.2 : 1.25; }
+      else { pendingCard = e; cardDelay = calm ? 0.2 : 2.05; }
       persist(true);
     } else if (e.t === 'buy') { S.buy(); persist(true); if (!$('ovShop').hidden) paintShop(); }
     else if (e.t === 'gate') { S.gate(); A.float(e.x, e.y - 0.8, 'تحتاج سرعة ' + e.need, '#fff'); if (!calm) shake.add(2); }
+    else if (e.t === 'open') {
+      S.open();
+      banner('انفتحت بوابة ' + e.name + '! ملابس جديدة');
+      A.float(e.x, e.y - 1.4, e.name + '!', '#9dff8a', 40);
+      A.confetti(e.x, e.y, 14);
+      A.sparkle(e.x, e.y - 0.4, 8);
+      if (!calm) { A.party = { biome: e.biome, life: 4 }; shake.add(3); }
+    }
     else if (e.t === 'xp') { S.xp(); A.float(e.x, e.y, '+' + e.n, '#7ec8ff'); }
     else if (e.t === 'fox') { S.fox(); A.float(e.x, e.y, '+' + e.n, '#ffd23f'); banner('أفزعت الثعلب!'); persist(true); }
     else if (e.t === 'stolen') { S.fox(); banner('الثعلب استعارت ' + e.name + '. الحق بها في الوكر!'); persist(true); }
@@ -552,9 +576,83 @@
     on($('togGrab'), world.settings.autoGrab);
     on($('togMove'), world.settings.clickMove);
     on($('togFox'), world.settings.fox !== false);
+    paintLooks();
+  }
+  function petCall(e) {
+    const id = ((e.b | 0) * 6 + (e.s | 0)) % 42;
+    let s = CALL[id] || e.name || 'حيوان';
+    if (e.v === 3) s += ' عملاق ذهبي';
+    else if (e.v === 2) s += ' ذهبي';
+    else if (e.v === 1) s += ' عملاق';
+    return s + '!';
+  }
+  function hintLine() {
+    if (!world || world.mode !== '1p' || world.tut === 'done') return '';
+    if (hatchHint > 0) return 'فقست! الحيوان الجديد معك';
+    const p = world.players[0];
+    if (p && p.egg) return 'ارجع إلى البيت';
+    if (world.incs.some(Boolean)) return 'انتظر الفقس';
+    return TUT[world.tut] || '';
+  }
+  function applyHint() {
+    const showDock = screen === 'play' && !!world && world.mode === '1p';
+    $('dock').hidden = !showDock;
+    const line = showDock ? hintLine() : '';
+    $('hint').hidden = !line;
+    if (line) $('hintText').textContent = line;
+  }
+  function readLook() {
+    const v = store.get('look', null);
+    let shirt = v && Number.isFinite(v.shirt) ? v.shirt | 0 : 0;
+    let hat = v && Number.isFinite(v.hat) ? v.hat | 0 : 0;
+    if (shirt < 0 || shirt > 6) shirt = 0;
+    if (hat < 0 || hat > 6) hat = 0;
+    return { shirt: shirt, hat: hat };
+  }
+  function applyLook() {
+    const saved = readLook();
+    const open = world && world.mode === '1p' ? ER.maxOpen(world.speedXP) : 0;
+    const shirt = saved.shirt <= open ? saved.shirt : 0;
+    const hat = saved.hat <= open ? saved.hat : 0;
+    ER.art.look = { shirt: SHIRT[shirt], hat: hat };
+  }
+  function paintLooks() {
+    if (!world) return;
+    const open = ER.maxOpen(world.speedXP);
+    const saved = readLook();
+    function row(box, kind) {
+      box.textContent = '';
+      const names = kind === 'hat' ? HAT_NAME : SHIRT_NAME;
+      for (let i = 0; i < 7; i++) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'swatch' + ((saved[kind] | 0) === i ? ' on' : '');
+        b.style.background = kind === 'shirt' ? SHIRT[i] : '#fff8e8';
+        b.disabled = i > open;
+        b.textContent = i > open ? 'مقفل' : (kind === 'hat' ? names[i] : '');
+        const biome = ER.BIOMES[i] ? ER.BIOMES[i].name : '';
+        b.setAttribute('aria-label', i > open ? 'تفتح مع ' + biome : names[i]);
+        b.addEventListener('click', function () {
+          const cur = readLook();
+          cur[kind] = i;
+          store.set('look', cur);
+          applyLook();
+          paintLooks();
+          ER.sfx.click();
+        });
+        box.appendChild(b);
+      }
+    }
+    row($('shirtRow'), 'shirt');
+    row($('hatRow'), 'hat');
   }
   function tutPoint() {
     const p = world.players[0];
+    if (hatchHint > 0) {
+      const pet = world.pets[world.pets.length - 1];
+      if (pet && pet.pad >= 0 && world.pads[pet.pad]) return { x: world.pads[pet.pad].x, y: world.pads[pet.pad].y };
+      return { x: p.x, y: p.y };
+    }
     if (world.tut === 'home') return { x: 5.2, y: 8 };
     if (world.tut === 'hatch') return { x: 2.2, y: 8.6 };
     if (world.tut === 'pad') return { x: world.pads[0].x, y: world.pads[0].y };
@@ -616,6 +714,7 @@
         if (flash > 0) flash = Math.max(0, flash - dt);
       }
     }
+    if (screen === 'play' && hatchHint > 0) hatchHint -= dt;
     if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $('banner').hidden = true; }
     shake.update(dt);
     if (world && screen === 'play') ER.art.tick(world, dt);
@@ -628,6 +727,7 @@
     if (screen === 'pause' && !frameDirty) return;
     frameDirty = false;
     aimCoins();
+    applyLook();
     ER.art.titleDemo = screen === 'title';
     ER.art.reduced = Kit.motion.reduced();
     const ctx = view.ctx;
@@ -644,7 +744,7 @@
     cam = c;
     const sx = shake.x / (48 * c.z), sy = shake.y / (48 * c.z);
     ER.art.draw(ctx, world, { x: c.x - sx, y: c.y - sy, z: c.z }, time, zoom);
-    if (screen === 'play' && world.mode === '1p' && world.tut !== 'done' && TUT[world.tut]) {
+    if (screen === 'play' && world.mode === '1p' && hintLine()) {
       const t = tutPoint();
       const s = toScreen(c, t.x, t.y - 1.3);
       if (s.x > 20 && s.x < 1260 && s.y > 20 && s.y < 700) drawArrow(ctx, s.x, s.y);
@@ -661,10 +761,7 @@
     }
     if (flash > 0) { ctx.save(); ctx.globalAlpha = Math.min(0.85, flash * 2); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 1280, 720); ctx.restore(); }
     paintHud();
-    if (screen === 'play' && world.mode === '1p' && world.tut !== 'done') {
-      $('hint').hidden = !TUT[world.tut];
-      if (TUT[world.tut]) $('hintText').textContent = TUT[world.tut];
-    }
+    applyHint();
   }
 
   function on(id, fn) { $(id).addEventListener('click', function () { ER.sfx.click(); fn(); }); }

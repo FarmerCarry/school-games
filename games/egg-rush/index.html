@@ -23,7 +23,9 @@
     <button class="iconbtn" id="btnGear" type="button" aria-label="إعدادات">⚙</button>
     <button class="iconbtn" id="btnPause" type="button" aria-label="إيقاف مؤقت">⏸</button>
   </div>
-  <div id="hint" hidden><span id="hintText"></span><button id="btnSkip" type="button">تخطَّ</button></div>
+  <div id="dock" hidden>
+    <div id="hint" hidden><span id="hintText"></span><button id="btnSkip" type="button">تخطَّ</button></div>
+  </div>
   <div id="banner" hidden></div>
 
   <div class="ov" id="ovTitle">
@@ -88,6 +90,10 @@
   <div class="ov" id="ovSet" hidden>
     <div class="card panel">
       <h2>إعدادات</h2>
+      <p class="looklab">القميص</p>
+      <div class="row" id="shirtRow"></div>
+      <p class="looklab">القبعة</p>
+      <div class="row" id="hatRow"></div>
       <div class="toggle"><span>خطف تلقائي للبيضة</span><button class="sg-btn" id="togGrab" type="button">لا</button></div>
       <div class="toggle"><span>المشي بالنقر</span><button class="sg-btn" id="togMove" type="button">لا</button></div>
       <div class="toggle"><span>الثعلب الليلي</span><button class="sg-btn" id="togFox" type="button">نعم</button></div>
