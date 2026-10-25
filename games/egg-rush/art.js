@@ -183,6 +183,32 @@
     ctx.strokeText(text, x, y); ctx.fillText(text, x, y);
     ctx.restore();
   }
+  function sign(ctx, text, x, y, size) {
+    ctx.save();
+    ctx.direction = 'rtl';
+    ctx.font = '700 ' + size + 'px Fredoka';
+    const tw = ctx.measureText(text).width;
+    const h = size * 1.42;
+    const w = tw + size * 1.15;
+    const left = x - w / 2, top = y - h / 2, r = h / 2;
+    ctx.beginPath();
+    ctx.moveTo(left + r, top);
+    ctx.lineTo(left + w - r, top);
+    ctx.arc(left + w - r, top + r, r, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(left + r, top + h);
+    ctx.arc(left + r, top + r, r, Math.PI / 2, Math.PI * 1.5);
+    ctx.closePath();
+    ctx.fillStyle = '#fff8e8';
+    ctx.fill();
+    ctx.lineWidth = Math.max(3, size * 0.14);
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+    ctx.fillStyle = INK;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y + size * 0.06);
+    ctx.restore();
+  }
   function badge(ctx, x, y, text, fill, size) {
     ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.arc(x, y, size * 0.62, 0, 7); ctx.fill();
@@ -344,7 +370,15 @@
     ctx.moveTo(X(cam, penX0), Y(cam, penY0)); ctx.lineTo(X(cam, penX0), Y(cam, penY1));
     ctx.moveTo(X(cam, penX1), Y(cam, penY0)); ctx.lineTo(X(cam, penX1), Y(cam, penY1));
     ctx.stroke();
-    label(ctx, 'الحظيرة', X(cam, (penX0 + penX1) / 2), Y(cam, penY0) - 8, 16 * z, '#fff', true);
+    const penSignX = penX1 + 1.35;
+    if (penSignX < 10.3) {
+      const sx = X(cam, penSignX), sy = Y(cam, (penY0 + penY1) / 2);
+      ctx.fillStyle = '#c9854a';
+      ctx.fillRect(sx - 4 * z, sy + 10 * z, 8 * z, 28 * z);
+      ctx.strokeStyle = INK; ctx.lineWidth = 2;
+      ctx.strokeRect(sx - 4 * z, sy + 10 * z, 8 * z, 28 * z);
+      sign(ctx, 'الحظيرة', sx, sy, 16 * z);
+    } else sign(ctx, 'الحظيرة', X(cam, (penX0 + penX1) / 2), Y(cam, penY1 + 0.85), 16 * z);
     fence(ctx, cam, 0.4, 11.3, 0.55, null, null);
     fence(ctx, cam, 0.4, 11.3, 14.35, null, null);
     ctx.strokeStyle = '#c9854a'; ctx.lineWidth = 5 * z; ctx.lineCap = 'round';
@@ -360,7 +394,7 @@
     ctx.strokeStyle = INK; ctx.lineWidth = 2;
     ctx.strokeRect(X(cam, 11.05) - 5 * z, Y(cam, 6.9) - 8 * z, 10 * z, 18 * z);
     ctx.strokeRect(X(cam, 11.05) - 5 * z, Y(cam, 9.5) - 8 * z, 10 * z, 18 * z);
-    label(ctx, 'البيت', X(cam, 11.15), Y(cam, 5.7), 18 * z, '#fff8e8', true);
+    sign(ctx, 'البيت', X(cam, 8.7), Y(cam, 5.15), 17 * z);
 
     const hx = X(cam, 8.6), hy = Y(cam, 11.15);
     ctx.fillStyle = 'rgba(40,30,60,0.15)';
@@ -379,7 +413,7 @@
       for (let i = 0; i < 5; i++) { ctx.fillStyle = i % 2 ? accent : '#fff'; ctx.fillRect(x - 32 * z + i * 13 * z, y - 36 * z, 13 * z, 16 * z); }
       ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.strokeRect(x - 32 * z, y - 36 * z, 65 * z, 16 * z);
       ctx.fillStyle = '#c9854a'; ctx.fillRect(x - 28 * z, y - 18 * z, 56 * z, 28 * z); ctx.strokeRect(x - 28 * z, y - 18 * z, 56 * z, 28 * z);
-      label(ctx, 'المتجر', x, y - 4 * z, 16 * z, '#fff', true);
+      sign(ctx, 'المتجر', x, y - 58 * z, 15 * z);
     }
     for (let i = 0; i < w.mills.length; i++) {
       const m = w.mills[i], on = (m.mult === 1) || (m.mult === 2 && w.millLv >= 2) || (m.mult === 5 && w.millLv >= 3);
@@ -423,10 +457,16 @@
       ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
       const pet = w.pets.find(p => p.pad === i);
       if (pet) {
-        const spr = A.sprite(pet.b, pet.s, pet.v);
-        const bob = Math.sin(time * 4 + i) * 4 * z;
-        const dw = spr.width * z * 0.72, dh = spr.height * z * 0.72;
-        ctx.drawImage(spr, x - dw / 2, y - dh * 0.78 + bob, dw, dh);
+        const phase = A.reduced ? 0 : Math.sin(time * 3.15 + i * 1.7);
+        const hop = Math.abs(phase) * 13 * z;
+        const stretch = 1 + (A.reduced ? 0 : (Math.abs(phase) - 0.35) * 0.2);
+        const giant = pet.v === 1 || pet.v === 3;
+        const sc = z * (giant ? 1.55 : 1.34);
+        ctx.save();
+        ctx.translate(x, y - 8 * z - hop);
+        ctx.scale(sc / stretch, sc * stretch);
+        animal(ctx, (pet.b * 6 + pet.s) % 42, pet.v === 2 || pet.v === 3);
+        ctx.restore();
       } else {
         ctx.fillStyle = '#ffd23f';
         ctx.beginPath(); ctx.arc(x, y - 2 * z, 7 * z, 0, 7); ctx.fill();

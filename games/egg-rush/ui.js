@@ -16,7 +16,7 @@
     mute.style.right = Math.round(window.innerWidth - rect.right + 10) + 'px';
     mute.style.left = 'auto';
     const hud = $('hud');
-    if (hud) hud.style.paddingInlineStart = Math.ceil(86 / v.scale) + 'px';
+    if (hud) hud.style.paddingInlineStart = Math.ceil(130 / v.scale - 16) + 'px';
     frameDirty = true;
   }
   const view = Kit.fit(canvas, 1280, 720, { maxDpr: 1.5, onResize: placeChrome });
