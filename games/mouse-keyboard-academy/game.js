@@ -528,7 +528,8 @@
   }
   function renderGrip() {
     gripReady = gripCard === 4;
-    view.innerHTML = '<div class="grip"><div class="grip-stage go">' + gripScene() + '</div>' +
+    var sky = ['sky-mouse', 'sky-right', 'sky-mouse', 'sky-keys', 'sky-sit'][gripCard];
+    view.innerHTML = '<div class="grip"><div class="grip-stage go ' + sky + '">' + gripScene() + '</div>' +
       '<div class="grip-bar"><button type="button" class="replay" data-act="grip-replay" aria-label="أعد">🔊</button>' +
       '<b class="yay" hidden>أحسنت!</b>' +
       '<button type="button" class="next' + (gripReady ? ' target' : '') + '" id="btnGripNext" data-act="grip-next"' + (gripReady ? '' : ' hidden') +

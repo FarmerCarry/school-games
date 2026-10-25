@@ -551,13 +551,13 @@ change; another game will again need room made or a decision like this one.
 
 ## Mouse & Keyboard Academy, 25 October 2026
 
-The grip lesson is five picture screens for children who are not reading yet. The drawn glove was replaced with illustrations for the non-reader grip lesson: five WebP pictures at 720×540 (a left-button mouse, a right-button mouse, the two bump keys, a slouch, and sitting up straight). The slide screen reuses the left-button picture. The page itself got smaller because the hand-drawn SVG markup came out.
+The grip lesson is five picture screens for children who are not reading yet. The drawn glove was replaced with illustrations for the non-reader grip lesson: five WebP pictures at 720×540 (a left-button mouse, a right-button mouse, the two bump keys, a slouch, and sitting up straight). The three hand pictures have no faces. The slide screen reuses the left-button picture. Each grip screen uses that picture's own sky color, and the picture edges fade about 6% so the rectangle blends into the stage. The page itself got smaller because the hand-drawn SVG markup came out.
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Mouse & Keyboard Academy | 74,295 | 82,000 (was 77,000; before that 84,000, 81,000, and originally 56,000) |
-| Offline precache, 51 files | 5,202,606 | 5,210,000 (was 5,135,000; before that 5,130,000 and 5,100,000) |
-| Five grip illustrations | 95,702 | — |
+| Mouse & Keyboard Academy | 74,999 | 82,000 (was 77,000; before that 84,000, 81,000, and originally 56,000) |
+| Offline precache, 51 files | 5,203,538 | 5,210,000 (was 5,135,000; before that 5,130,000 and 5,100,000) |
+| Five grip illustrations | 95,930 | — |
 
-The pictures add 95,702 bytes. The minified page shrank by 5,635 bytes, from 79,930 to 74,295, so it still fits the 82,000 page limit with 7,705 bytes left. The precache grew by 90,067 bytes, from 5,112,539 to 5,202,606, which is why its limit moved up by 75,000 bytes. 7,394 bytes remain under the precache limit. The build copies each game's WebP and AVIF files into the offline cache.
+The pictures add 95,930 bytes. The minified page is 74,999 bytes, down from 79,930 when the pictures were still drawn in SVG, so it still fits the 82,000 page limit with 7,001 bytes left. The precache grew from 5,112,539 to 5,203,538, which is why its limit moved up by 75,000 bytes. 6,462 bytes remain under the precache limit. The build copies each game's WebP and AVIF files into the offline cache.
 
