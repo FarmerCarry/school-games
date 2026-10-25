@@ -84,7 +84,8 @@
     <div class="panel">
       <h2 id="r-title">انتهت الجولة</h2>
       <div class="banner" id="banner" hidden>رقم قياسي جديد!</div>
-      <div class="podium" id="podium"></div>
+      <div class="nudge" id="r-nudge" hidden>قبعة جديدة!</div>
+      <div class="podium" id="podium" dir="ltr"></div>
       <div class="titles" id="r-titles"></div>
       <div class="back">
         <button class="mid" id="btnAgain" type="button">العب مرة أخرى</button>
@@ -95,8 +96,17 @@
     <div id="confetti" hidden></div>
   </section>
 
-  <div id="siren" hidden><b id="siren-name"></b><i id="siren-joke"></i><span id="siren-tip"></span><em id="siren-count"></em></div>
+  <div id="siren" hidden>
+    <div class="siren-copy">
+      <b id="siren-name"></b>
+      <i id="siren-joke"></i>
+      <span id="siren-tip"></span>
+    </div>
+    <em id="siren-count"></em>
+  </div>
   <div id="cheer" hidden>نجوت!</div>
+  <div id="streak" hidden></div>
+  <div id="flies"></div>
   <div id="hud-coins" dir="ltr" hidden><i></i><b id="hud-coin-n">0</b> عملة</div>
 </div>
 <script src="../../shared/kit.js"></script>

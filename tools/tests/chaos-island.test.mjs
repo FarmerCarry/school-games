@@ -245,6 +245,29 @@ test('one player can win, restart counts a new round, and leaving early ends the
   });
   assert.equal(await page.evaluate(() => ends.at(-1)[0]), 'win');
   assert.ok(await page.evaluate(() => __game.save.coins) >= 20, 'a full survival pays for a hat');
+  const podium = await page.evaluate(() => {
+    const pods = [...document.querySelectorAll('#podium .pod')];
+    const height = el => el ? el.getBoundingClientRect().height : 0;
+    return {
+      line: __game.hudLine(),
+      title: document.getElementById('r-title').textContent,
+      nudge: document.getElementById('r-nudge').textContent,
+      nudgeOn: !document.getElementById('r-nudge').hidden,
+      classes: pods.map(el => el.className),
+      steps: pods.map(el => height(el.querySelector('.step'))),
+      canvases: pods.map(el => !!el.querySelector('canvas')),
+      scores: pods.map(el => el.querySelector('b').textContent)
+    };
+  });
+  assert.equal(podium.line.includes('6/5'), false, podium.line);
+  assert.equal(podium.line.includes('انتهت الجولات'), true, podium.line);
+  assert.equal(podium.title.includes('6/5'), false);
+  assert.equal(podium.nudgeOn, true);
+  assert.equal(podium.nudge, 'قبعة جديدة!');
+  assert.deepEqual(podium.classes, ['pod p2', 'pod p1', 'pod p3']);
+  assert.ok(podium.steps[1] > podium.steps[0] && podium.steps[0] > podium.steps[2], 'first place is the tall middle step');
+  assert.deepEqual(podium.canvases, [true, true, true]);
+  assert.ok(podium.scores.every(s => /^\d\/5$/.test(s)), podium.scores.join(','));
   await clickControl(page, '#btnAgain');
   assert.equal(await page.evaluate(() => __game.matches), 2);
   assert.equal(await page.evaluate(() => rounds.length), 2);
@@ -252,4 +275,65 @@ test('one player can win, restart counts a new round, and leaving early ends the
   await clickControl(page, '#btnMenu');
   assert.equal(await page.evaluate(() => ends.at(-1)[0]), 'end');
   assert.equal(await page.evaluate(() => __game.mode), 'title');
+});
+
+test('the intro card keeps one countdown clear of the stair, and a survival throws coins', async t => {
+  const page = await game(t);
+  await clickControl(page, '#btnPlay');
+  const intro = await page.evaluate(() => {
+    while (__game.world.phase === 'inter' && Math.ceil(__game.world.frames / 60) > 4) simGame(1);
+    stepGame(1);
+    const card = document.getElementById('siren');
+    const count = document.getElementById('siren-count');
+    const fours = [...document.querySelectorAll('#ui *')].filter(el => el.children.length === 0 && el.textContent.trim() === '4').map(el => el.id);
+    const canvas = document.getElementById('cv').getBoundingClientRect();
+    const box = card.getBoundingClientRect();
+    const scale = canvas.width / 1280;
+    const heads = canvas.top + (288 - 72) * scale;
+    const bg = getComputedStyle(card).backgroundColor;
+    return {
+      hidden: card.hidden,
+      joke: document.getElementById('siren-joke').textContent,
+      tip: document.getElementById('siren-tip').textContent,
+      count: count.textContent,
+      fours,
+      bg,
+      clear: box.bottom < heads - 2,
+      bottom: box.bottom,
+      heads
+    };
+  });
+  assert.equal(intro.hidden, false);
+  assert.ok(intro.joke.length > 4);
+  assert.ok(intro.tip.length > 4);
+  assert.equal(intro.count, '4');
+  assert.deepEqual(intro.fours, ['siren-count']);
+  assert.equal(intro.bg === 'rgba(0, 0, 0, 0)', false, intro.bg);
+  assert.equal(intro.clear, true, 'card bottom ' + intro.bottom + ' heads ' + intro.heads);
+
+  const flown = await page.evaluate(() => {
+    let stamps = 0;
+    let seen = false;
+    while (__game.mode === 'play' && stamps < 2) {
+      const phase = __game.world.phase;
+      if (phase === 'stamp') {
+        if (!seen) { stamps++; seen = true; }
+      } else seen = false;
+      if (stamps >= 2) break;
+      park(__game.player);
+      simGame(1);
+    }
+    const streak = document.getElementById('streak');
+    return {
+      flies: document.getElementById('flies').childElementCount,
+      streak: streak.hidden ? '' : streak.textContent,
+      shown: document.getElementById('hud-coin-n').textContent,
+      bank: __game.save.coins,
+      phase: __game.world.phase
+    };
+  });
+  assert.equal(flown.phase, 'stamp');
+  assert.ok(flown.flies >= 3, 'coins leave the survivor ' + flown.flies);
+  assert.equal(flown.streak, 'رائع!');
+  assert.ok(Number(flown.shown) < flown.bank, 'the counter waits for the coins to land ' + flown.shown + '/' + flown.bank);
 });

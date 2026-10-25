@@ -139,6 +139,7 @@
     cheer: function () {
       [523, 659, 784, 1047].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.1, vol: 0.14, delay: i * 0.05 }); });
     },
+    streak: function () { A.tone({ freq: 784, to: 1175, type: 'square', dur: 0.12, vol: 0.08 }); },
     nope: function () { A.tone({ freq: 220, to: 140, type: 'square', dur: 0.12, vol: 0.12 }); },
     drop: function () { K.sfx.whoosh(); }
   };
@@ -185,6 +186,28 @@
     void el.offsetWidth;
     el.classList.add('pop');
   }
+  function streakWord(n) {
+    if (n >= 4) return 'خارق!';
+    if (n === 3) return 'ممتاز!';
+    if (n === 2) return 'رائع!';
+    return '';
+  }
+  function showStreak(word) {
+    var el = $('streak');
+    el.textContent = word;
+    el.hidden = false;
+    el.classList.remove('pop');
+    void el.offsetWidth;
+    el.classList.add('pop');
+  }
+  function motionFull() {
+    return document.documentElement.getAttribute('data-sg-motion') !== 'reduce';
+  }
+  function hudRound(w) {
+    if (!w) return '';
+    if (w.phase === 'podium' || w.round >= 5) return w.island.name + ' · انتهت الجولات';
+    return w.island.name + ' · الجولة ' + (Math.min(w.round, 4) + 1) + '/5';
+  }
   function paintCount(w) {
     var el = $('siren-count');
     var show = w && !w.attract && mode === 'play' && w.phase === 'inter';
@@ -227,6 +250,7 @@
   makeAttract();
 
   function beginMatch(opts) {
+    clearFlies();
     opts = opts || {};
     var players = opts.players || 1;
     var daily = !!opts.daily;
@@ -260,16 +284,61 @@
     focusGame();
   }
 
-  var coinShown = '', coinHard = false;
+  var coinShown = '', coinHard = false, coinLag = 0, flyGen = 0;
   function paintCoins() {
     var el = $('hud-coins');
     var on = mode === 'play' || mode === 'pause';
     if (el.hidden === on) el.hidden = !on;
     if (!on) return;
-    var n = String(save.coins);
-    if (n !== coinShown) { $('hud-coin-n').textContent = n; coinShown = n; }
+    var n = String(Math.max(0, save.coins - coinLag));
+    if (n !== coinShown) {
+      $('hud-coin-n').textContent = n;
+      if (coinShown !== '') { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+      coinShown = n;
+    }
     var hard = !!(world && world.hard);
     if (hard !== coinHard) { el.classList.toggle('hard', hard); coinHard = hard; }
+  }
+  function clearFlies() {
+    flyGen++;
+    coinLag = 0;
+    var box = $('flies');
+    if (box) box.textContent = '';
+  }
+  function flyCoins(x, y, n) {
+    if (!motionFull() || n <= 0) return;
+    var gen = flyGen;
+    coinLag += n;
+    var box = $('flies');
+    var bits = Math.min(6, Math.max(3, Math.round(n / 8)));
+    if (box.childElementCount > 18) bits = 0;
+    var tx = 148, ty = 34;
+    for (var i = 0; i < bits; i++) {
+      var node = document.createElement('i');
+      var sx = x + (i - (bits - 1) / 2) * 12;
+      var sy = y - 10;
+      node.style.left = sx + 'px';
+      node.style.top = sy + 'px';
+      box.appendChild(node);
+      (function (el, delay, fromX, fromY) {
+        var dx = tx - fromX, dy = ty - fromY;
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            el.style.transition = 'transform .62s cubic-bezier(.18,.8,.22,1) ' + delay + 'ms, opacity .16s linear ' + (460 + delay) + 'ms';
+            el.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(.5)';
+            el.style.opacity = '0';
+          });
+        });
+        setTimeout(function () {
+          try { if (el.parentNode) el.parentNode.removeChild(el); } catch (e) {}
+        }, 820 + delay);
+      })(node, i * 50, sx, sy);
+    }
+    setTimeout(function () {
+      if (gen !== flyGen) return;
+      coinLag = Math.max(0, coinLag - n);
+      try { S.coin(); paintCoins(); } catch (e) {}
+    }, 640);
   }
   function setMode(next) {
     mode = next;
@@ -277,7 +346,8 @@
     Object.keys(map).forEach(function (k) { $(map[k]).hidden = k !== next; });
     $('btnPause').hidden = next !== 'play';
     if (next !== 'play' && next !== 'pause') $('siren').hidden = true;
-    if (next !== 'play') $('cheer').hidden = true;
+    if (next !== 'play') { $('cheer').hidden = true; $('streak').hidden = true; }
+    if (next !== 'play' && next !== 'pause') clearFlies();
     $('confetti').hidden = next !== 'result';
     paintCoins();
     sceneDirty = true;
@@ -294,7 +364,7 @@
   function pause() {
     if (mode !== 'play') return;
     var you = human(0);
-    $('p-info').textContent = world.island.name + ' · الجولة ' + (world.round + 1) + '/5 · ' + (you ? you.rounds : 0) + ' نجاة';
+    $('p-info').textContent = hudRound(world) + ' · ' + (you ? you.rounds : 0) + ' نجاة';
     setMode('pause');
     S.click();
   }
@@ -366,7 +436,8 @@
         save.coins += e.n;
         if (!e.lived) save.streak = 0;
         popText(e.x, e.y - 30, '+' + e.n, '#ffe14a');
-        S.coin();
+        flyCoins(e.x, e.y, e.n);
+        if (!motionFull()) S.coin();
         dirty = true;
       } else if (e.t === 'ok' && mine) {
         save.survivals++;
@@ -379,6 +450,8 @@
         shake.add(4);
         cheer();
         S.cheer();
+        var word = streakWord(actor.streak);
+        if (word) { showStreak(word); S.streak(); }
         dirty = true;
       } else if (e.t === 'siren') {
         var name = e.name + (e.name2 ? ' + ' + e.name2 : '');
@@ -713,39 +786,90 @@
     ctx.lineTo(a.x + a.w / 2 + 8, y - 14);
     ctx.fill();
   }
-  function drawArrow(w) {
-    if (w.round !== 0 || w.phase !== 'inter') return;
-    var stair = null;
+  function chevron(x, y, s) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - s);
+    ctx.lineTo(x + s * 0.75, y);
+    ctx.lineTo(x, y - s * 0.32);
+    ctx.lineTo(x - s * 0.75, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  function upArrow(s) {
+    ctx.beginPath();
+    ctx.moveTo(0, -22 * s);
+    ctx.lineTo(16 * s, -2 * s);
+    ctx.lineTo(7 * s, -2 * s);
+    ctx.lineTo(7 * s, 16 * s);
+    ctx.lineTo(-7 * s, 16 * s);
+    ctx.lineTo(-7 * s, -2 * s);
+    ctx.lineTo(-16 * s, -2 * s);
+    ctx.closePath();
+  }
+  function drawHint(w) {
+    if (w.attract || w.round !== 0 || w.phase !== 'inter') return;
+    var steps = [];
     for (var i = 0; i < w.plats.length; i++) {
       var p = w.plats[i];
-      if (p.spine && p.one && (!stair || p.y > stair.y)) stair = p;
+      if (p.spine && !p.solid && !p.gone) steps.push(p);
     }
-    if (!stair) return;
-    var y = stair.y - 28 + Math.sin(w.time * 6) * 6;
-    ctx.fillStyle = '#ffe14a';
-    ctx.beginPath();
-    ctx.moveTo(stair.x + 40, y);
-    ctx.lineTo(stair.x + 64, y + 16);
-    ctx.lineTo(stair.x + 40, y + 16);
+    steps.sort(function (a, b) { return b.y - a.y; });
+    if (steps.length < 2) return;
+    var lane = steps[steps.length - 1].x + 72;
+    function laneX(p) { return Math.max(p.x + 36, Math.min(p.x + p.w - 36, lane)); }
+    var elapsed = (8 * 60 - w.frames) / 60;
+    if (elapsed < 0.35) return;
+    var u = Math.min(1, (elapsed - 0.35) / 5.4);
+    var fade = elapsed > 6.3 ? Math.max(0, 1 - (elapsed - 6.3) / 1.1) : 1;
+    if (fade <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = fade;
+    for (var s = 0; s < steps.length; s++) {
+      var step = steps[s];
+      var lit = u * (steps.length - 1) + 0.2 >= s;
+      ctx.fillStyle = lit ? '#ffe14a' : 'rgba(255,255,255,.7)';
+      chevron(laneX(step), step.y - 18, lit ? 14 : 10);
+    }
+    var seg = u * (steps.length - 1);
+    var i0 = Math.min(steps.length - 2, Math.floor(seg));
+    var f = seg - i0;
+    var e = f * f * (3 - 2 * f);
+    var ax = laneX(steps[i0]);
+    var ay = steps[i0].y - 52;
+    var bx = laneX(steps[i0 + 1]);
+    var by = steps[i0 + 1].y - 52;
+    ctx.translate(ax + (bx - ax) * e, ay + (by - ay) * e + Math.sin(w.time * 10) * 3);
+    ctx.fillStyle = '#2b2148';
+    upArrow(1.18);
     ctx.fill();
+    ctx.fillStyle = '#ffe14a';
+    upArrow(1);
+    ctx.fill();
+    ctx.restore();
   }
   function drawHud(w) {
     ctx.direction = 'rtl';
     ctx.textBaseline = 'top';
     var sec = Math.max(0, Math.ceil(w.frames / 60));
-    var hot = w.phase === 'danger' && sec <= 10;
+    var showClock = w.phase === 'danger' || w.phase === 'stamp';
     ctx.textAlign = 'center';
-    ctx.font = '700 ' + (hot ? 54 : 40) + 'px Fredoka';
-    ctx.fillStyle = hot ? (Math.sin(w.time * 10) > 0 ? '#e23b2f' : '#fff') : '#fff';
     ctx.strokeStyle = '#2b2148';
-    ctx.lineWidth = 6;
-    var label = w.phase === 'stamp' ? 'نجا!' : String(sec);
-    ctx.strokeText(label, W / 2, 12);
-    ctx.fillText(label, W / 2, 12);
+    if (showClock) {
+      var hot = w.phase === 'danger' && sec <= 10;
+      ctx.font = '700 ' + (hot ? 54 : 40) + 'px Fredoka';
+      ctx.fillStyle = hot ? (Math.sin(w.time * 10) > 0 ? '#e23b2f' : '#fff') : '#fff';
+      ctx.lineWidth = 6;
+      var label = w.phase === 'stamp' ? 'نجا!' : String(sec);
+      ctx.strokeText(label, W / 2, 12);
+      ctx.fillText(label, W / 2, 12);
+    }
     ctx.font = '700 22px Fredoka';
     ctx.fillStyle = '#fff';
-    ctx.strokeText(w.island.name + ' · الجولة ' + (w.round + 1) + '/5', W / 2, 62);
-    ctx.fillText(w.island.name + ' · الجولة ' + (w.round + 1) + '/5', W / 2, 62);
+    ctx.lineWidth = 6;
+    var line = hudRound(w);
+    var lineY = showClock ? 62 : 16;
+    ctx.strokeText(line, W / 2, lineY);
+    ctx.fillText(line, W / 2, lineY);
     var list = w.actors, n = list.length, gap = 54;
     var x0 = (W - n * gap) / 2;
     for (var i = 0; i < n; i++) {
@@ -762,15 +886,6 @@
         ctx.fillStyle = a.mode === 'run' ? '#146b32' : '#e23b2f';
         ctx.fillText(a.mode === 'run' ? '✓' : '×', x, 678);
       }
-    }
-    if (w.phase === 'inter' && w.frames <= 180) {
-      ctx.textAlign = 'center';
-      ctx.font = '700 72px Fredoka';
-      ctx.strokeStyle = '#2b2148';
-      ctx.lineWidth = 8;
-      ctx.strokeText(String(sec), W / 2, 250);
-      ctx.fillStyle = '#ffe14a';
-      ctx.fillText(String(sec), W / 2, 250);
     }
   }
   var WASH = {
@@ -884,8 +999,8 @@
     drawWaves(w);
     CI.drawDisasters(ctx, w);
     drawItems(w);
-    drawArrow(w);
     for (var i = 0; i < w.actors.length; i++) drawActor(w.actors[i], w);
+    drawHint(w);
     for (var m = 0; m < w.actors.length; m++) drawMarker(w.actors[m], w);
     fx.draw(ctx);
     ctx.restore();
@@ -910,6 +1025,7 @@
     var w = (mode === 'play' || mode === 'pause' || mode === 'result') ? world : attract;
     ctx.direction = 'rtl';
     drawWorld(w);
+    if (mode === 'result') paintPortraits();
   }
 
   function landJuice(w) {
@@ -956,6 +1072,7 @@
     }
     fx.update(dt);
     shake.update(dt);
+    if (mode === 'result') podiumT += dt;
     paintCount(mode === 'play' ? world : null);
     if (mode === 'play') paintCoins();
     K.keys.endFrame();
@@ -1131,26 +1248,86 @@
     }
     box.hidden = false;
   }
+  var portraits = [];
+  var podiumT = 0;
+  function affordNudge() {
+    var hat = CI.HATS.some(function (id) { return save.hats.indexOf(id) < 0; });
+    if (hat && save.coins >= 20) return 'قبعة جديدة!';
+    var color = CI.COLORS.some(function (c) { return save.colors.indexOf(c) < 0; });
+    if (color && save.coins >= 25) return 'لون جديد!';
+    return '';
+  }
+  function paintPortraits() {
+    for (var i = 0; i < portraits.length; i++) {
+      var slot = portraits[i];
+      var g = slot.g;
+      var a = slot.actor;
+      g.clearRect(0, 0, 130, 168);
+      g.save();
+      g.translate(65, 154);
+      g.scale(1.45, 1.45);
+      var prev = ctx;
+      ctx = g;
+      drawActor({
+        x: -16, y: -48, w: 32, h: 48, face: 1, id: a.id,
+        color: a.color, hat: a.hat, outfit: a.outfit,
+        mode: 'run', ground: true, vx: 0, vy: 0, sq: 1,
+        emote: '', emoteT: 0
+      }, { time: podiumT + a.id });
+      g.strokeStyle = '#2b2148';
+      g.lineWidth = 4;
+      g.lineCap = 'round';
+      var lift = Math.sin(podiumT * 8 + slot.place) * 3;
+      g.beginPath();
+      g.moveTo(-12, -40);
+      g.lineTo(-26, -62 - lift);
+      g.moveTo(12, -40);
+      g.lineTo(28, -64 + lift);
+      g.stroke();
+      ctx = prev;
+      g.restore();
+    }
+  }
   function paintResult(record) {
     $('banner').hidden = !record;
     var hs = humansOf(world);
     var you = hs[0];
     $('r-title').textContent = you && you.rounds >= 3 ? 'نجوت!' : 'انتهت الجولات';
+    var nudge = affordNudge();
+    $('r-nudge').hidden = !nudge;
+    if (nudge) $('r-nudge').textContent = nudge;
     var rank = world.actors.slice().sort(function (a, b) { return (b.rounds - a.rounds) || (b.coins - a.coins); });
+    var slots = [];
+    if (rank[1]) slots.push({ a: rank[1], place: 2, cls: 'p2' });
+    if (rank[0]) slots.push({ a: rank[0], place: 1, cls: 'p1' });
+    if (rank[2]) slots.push({ a: rank[2], place: 3, cls: 'p3' });
     var pod = $('podium');
     pod.innerHTML = '';
-    for (var i = 0; i < Math.min(3, rank.length); i++) {
-      var a = rank[i];
+    portraits = [];
+    podiumT = 0;
+    for (var i = 0; i < slots.length; i++) {
+      var slot = slots[i];
+      var a = slot.a;
       var d = document.createElement('div');
-      d.className = 'pod p' + i;
-      var swatch = document.createElement('i');
-      swatch.style.background = a.color;
-      d.appendChild(swatch);
-      d.appendChild(document.createTextNode((i + 1) + ' ' + a.name));
+      d.className = 'pod ' + slot.cls;
+      var canvas = document.createElement('canvas');
+      canvas.width = 130;
+      canvas.height = 168;
+      d.appendChild(canvas);
+      var step = document.createElement('div');
+      step.className = 'step';
+      var place = document.createElement('strong');
+      place.textContent = String(slot.place);
+      var name = document.createElement('span');
+      name.textContent = a.name;
       var score = document.createElement('b');
       score.textContent = a.rounds + '/5';
-      d.appendChild(score);
+      step.appendChild(place);
+      step.appendChild(name);
+      step.appendChild(score);
+      d.appendChild(step);
       pod.appendChild(d);
+      portraits.push({ g: canvas.getContext('2d'), actor: a, place: slot.place });
     }
     var bits = [];
     if (world.titles) world.titles.forEach(function (t) {
@@ -1222,6 +1399,7 @@
       for (var i = 0; i < (n || 1); i++) update(1 / 60);
       if (draw !== false) render();
     },
+    hudLine: function () { return world ? hudRound(world) : ''; },
     persist: persist
   };
   K.loop(update, render);
