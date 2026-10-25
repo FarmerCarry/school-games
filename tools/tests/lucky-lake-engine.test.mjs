@@ -340,6 +340,45 @@ test('ice keeps more reel speed than the pond, and the derby is two reels on one
   assert.equal(win.state.winner, 0);
 });
 
+test('a banked derby fish is the biggest catch, and the crown follows that fish', () => {
+  const g = make({ save: LL.blankSave(), players: 2, seconds: 90, seed: 2, forceSpot: 1, spot: 1 });
+  assert.equal(g.hookTest(0, 0), 1);
+  const first = until(g, a => a.weight > 0, 20, 0);
+  assert.ok(first.some(e => e.t === 'banked' && e.i === 0));
+  const light = g.state.anglers[0];
+  assert.ok(light.best > 0 && light.best < 4);
+  assert.equal(light.best, light.weight);
+
+  assert.equal(g.hookTest(1, 6), 1);
+  const second = until(g, a => a.weight > 0, 25, 1);
+  assert.ok(second.some(e => e.t === 'banked' && e.i === 1));
+  const heavy = g.state.anglers[1];
+  assert.ok(heavy.best >= 8);
+  assert.ok(heavy.best > light.best);
+  light.weight = Math.round((heavy.weight + 5) * 10) / 10;
+  g.state.left = 0.02;
+  const end = [];
+  for (let i = 0; i < 5; i++) end.push(...g.step(1 / 60, {}));
+  assert.equal(end.some(e => e.t === 'derby'), true);
+  assert.equal(g.state.winner, 0);
+  assert.equal(g.state.crown, 1);
+  assert.equal(g.state.anglers[1].best, heavy.best);
+
+  const late = make({ save: LL.blankSave(), players: 2, seconds: 90, seed: 4, forceSpot: 1, spot: 1 });
+  assert.equal(late.hookTest(1, 6), 1);
+  until(late, a => a.phase === 'show', 20, 1);
+  assert.equal(late.state.anglers[1].phase, 'show');
+  assert.equal(late.state.anglers[1].best, 0);
+  const held = late.state.anglers[1].fish.w;
+  late.state.left = 0.01;
+  late.step(1 / 60, {});
+  assert.equal(late.state.over, 1);
+  assert.equal(late.state.anglers[1].best, held);
+  assert.equal(late.state.anglers[1].weight, held);
+  assert.equal(late.state.crown, 1);
+  assert.equal(late.state.winner, 1);
+});
+
 test('visible odds add up, and a moon night favors the sky legendary', () => {
   const odds = LL.odds({ luck: 0.2, spot: 6, day: 5, event: 'rainbow' });
   const sum = odds.rare.reduce((total, row) => total + row.pct, 0);

@@ -838,6 +838,10 @@
   }
 
   function finishDerby(st, ev) {
+    for (var i = 0; i < st.anglers.length; i++) {
+      var holding = st.anglers[i];
+      if (holding.phase === 'show' && holding.fish) bankDerby(st, holding, ev);
+    }
     st.left = 0;
     st.over = 1;
     var w0 = st.anglers[0].weight, w1 = st.anglers[1] ? st.anglers[1].weight : 0;

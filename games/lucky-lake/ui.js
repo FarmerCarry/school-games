@@ -44,6 +44,8 @@
   var rings = [];
   var fliers = [];
   var perfectStreak = 0;
+  var goalFx = null;
+  var WX = { rain: 'السمك جائع!', rainbow: 'سمك ملون!', night: 'سمك يضيء!', frenzy: 'السمك مجنون!' };
   var shake = Kit.shake();
   var hudCache = '';
   var cardKey = '';
@@ -81,11 +83,10 @@
     show('scr-result', mode === 'result');
     show('scr-card', mode === 'play' && revealing());
     show('scr-panel', mode === 'play' && !!panel && !revealing());
-    $('hud').hidden = mode === 'title';
+    $('hud').hidden = mode === 'title' || mode === 'result';
     var play = mode === 'play' || mode === 'pause';
-    var modal = mode !== 'play' || !!panel || revealing();
     $('questLine').hidden = !play;
-    $('eventBanner').hidden = modal;
+    if (mode !== 'play') hush();
     var ready = game && game.state.anglers[0].phase === 'ready';
     $('hint').hidden = true;
     $('coach').hidden = !(mode === 'play' && !panel && !revealing() && !taught && ready && !game.state.derby);
@@ -127,20 +128,61 @@
     $('timerPill').hidden = !(game && game.state.derby);
     $('timerDot').hidden = $('timerPill').hidden;
     $('timerPill').textContent = clock;
-    var q = s.quests && s.quests[0];
-    $('questLine').textContent = q ? ('الهدف: ' + q.text + '  ' + q.have + '/' + q.n) : '';
-    if (game) {
-      var ev = game.state.event;
-      var info = LL.EVENTS[ev.id] || LL.EVENTS.calm;
-      var sec = Math.max(0, Math.ceil(ev.left));
-      $('eventBanner').textContent = '';
-      var strong = document.createElement('b');
-      strong.textContent = info.name + ' · ' + sec;
-      var small = document.createElement('small');
-      small.textContent = info.odds;
-      $('eventBanner').appendChild(strong);
-      $('eventBanner').appendChild(small);
+    if (!goalFx) {
+      var q = s.quests && s.quests[0];
+      $('questText').textContent = q ? ('الهدف: ' + q.text + '  ' + q.have + '/' + q.n) : '';
     }
+    var phrase = game ? (WX[game.state.event.id] || '') : '';
+    $('eventText').textContent = phrase;
+    $('eventBanner').className = phrase ? game.state.event.id : '';
+    $('eventBanner').hidden = !(mode === 'play' && !panel && !revealing() && phrase);
+  }
+
+  function questNow() {
+    return liveSave().quests.map(function (q) {
+      return { k: q.k, have: q.have, n: q.n, reward: q.reward, text: q.text };
+    });
+  }
+
+  function startGoalStamp(reward, next) {
+    var line = 'الهدف: ' + next.text + '  ' + next.have + '/' + next.n;
+    if (Kit.motion.reduced()) {
+      goalFx = null;
+      $('questStamp').hidden = true;
+      $('questLine').classList.remove('ll-stamp');
+      $('questLine').classList.remove('ll-slide');
+      $('questText').textContent = line;
+      return;
+    }
+    goalFx = { t: 0, shown: 0, next: line };
+    $('questStamp').hidden = false;
+    $('questStamp').textContent = 'تم! +' + reward;
+    $('questLine').classList.add('ll-stamp');
+    $('questLine').classList.remove('ll-slide');
+  }
+
+  function watchQuest(before) {
+    if (!before) return;
+    var after = questNow();
+    for (var i = 0; i < before.length; i++) {
+      var prev = before[i];
+      var next = after[i];
+      if (!prev || !next || prev.have >= prev.n) continue;
+      if (next.k !== prev.k || next.have < prev.have) {
+        startGoalStamp(prev.reward, next);
+        if (mode === 'play') shout('مهمة تمت!');
+        return;
+      }
+    }
+  }
+
+  function hush() {
+    shoutT = 0;
+    var el = $('shout');
+    el.hidden = true;
+    el.textContent = '';
+    pops.length = 0;
+    bye = null;
   }
 
   function burst(x, y, n, colors) {
@@ -425,6 +467,7 @@
 
   function choose(choice) {
     if (!revealing()) return;
+    var beforeQ = questNow();
     var res = game.resolve(0, choice);
     if (!res.ok) {
       if (res.full) $('cardHint').textContent = 'الحوض ممتلئ (24). بِع سمكة أو أطلقها.';
@@ -450,6 +493,7 @@
     } else {
       shout('إلى الحوض!');
     }
+    watchQuest(beforeQ);
     persist();
     refreshHud(true);
     paintChrome();
@@ -576,22 +620,48 @@
     focusGame();
   }
 
+  function portrait(i, win) {
+    var canvas = document.createElement('canvas');
+    canvas.className = 'll-pod-face';
+    canvas.width = win ? 200 : 150;
+    canvas.height = win ? 148 : 108;
+    var c = canvas.getContext('2d');
+    var sc = win ? 0.68 : 0.46;
+    c.save();
+    c.translate(canvas.width / 2, canvas.height - 4);
+    c.scale(sc, sc);
+    Art.angler(c, 0, 0, 1, i === 0 ? '#3ec6ff' : '#ff8a3d', 0.4, 'idle', 0, !!(game && game.state.save.hat));
+    c.restore();
+    return canvas;
+  }
+
   function showResult() {
     var st = game.state;
     mode = 'result';
     panel = '';
+    hush();
     $('resultTitle').textContent = st.draw ? 'تعادل!' : ('فاز اللاعب ' + (st.winner + 1));
     var pod = $('podium');
     pod.textContent = '';
     for (var i = 0; i < st.anglers.length; i++) {
+      var win = st.winner === i;
       var box = document.createElement('div');
-      box.className = 'll-pod' + (st.winner === i ? ' win' : '');
+      box.className = 'll-pod' + (win ? ' win' : '');
+      box.appendChild(portrait(i, win));
+      if (st.crown === i) {
+        var crown = document.createElement('div');
+        crown.className = 'll-crown';
+        crown.textContent = 'التاج';
+        box.appendChild(crown);
+      }
       var h = document.createElement('h3');
-      h.textContent = 'لاعب ' + (i + 1) + (st.crown === i ? ' 👑' : '');
+      h.textContent = 'لاعب ' + (i + 1);
       var p = document.createElement('p');
+      p.className = 'll-kg';
       p.dir = 'ltr';
       p.textContent = st.anglers[i].weight.toFixed(1) + ' كغ';
-      var small = document.createElement('small');
+      var small = document.createElement('div');
+      small.className = 'll-best';
       small.textContent = 'أكبر سمكة ' + st.anglers[i].best.toFixed(1);
       box.appendChild(h);
       box.appendChild(p);
@@ -630,10 +700,6 @@
       p2left: !block && Kit.keys.down('ArrowLeft'),
       p2right: !block && Kit.keys.down('ArrowRight')
     };
-  }
-
-  function questSnap() {
-    return liveSave().quests.map(function (q) { return q.k + ':' + q.have + ':' + q.n; }).join('|');
   }
 
   function handleEvents(ev, before) {
@@ -698,11 +764,7 @@
         showResult();
       }
     }
-    if (before && questSnap() !== before) {
-      shout('مهمة تمت!');
-      pop('+', 1040, 120, '#b8ffcf');
-      refreshHud(true);
-    }
+    watchQuest(before);
   }
 
   function stepJuice(dt) {
@@ -736,6 +798,20 @@
       arrived = true;
     }
     if (arrived) { pingCoins(); Kit.sfx.coin(); }
+    if (goalFx) {
+      goalFx.t += dt;
+      if (goalFx.t >= 0.7 && !goalFx.shown) {
+        goalFx.shown = 1;
+        $('questStamp').hidden = true;
+        $('questText').textContent = goalFx.next;
+        $('questLine').classList.remove('ll-stamp');
+        $('questLine').classList.add('ll-slide');
+      }
+      if (goalFx.t >= 1.25) {
+        $('questLine').classList.remove('ll-slide');
+        goalFx = null;
+      }
+    }
   }
 
   function update(dt) {
@@ -743,7 +819,7 @@
     if (simOn()) {
       var scale = slow > 0 && !Kit.motion.reduced() ? 0.35 : 1;
       if (slow > 0) slow = Math.max(0, slow - dt);
-      var before = questSnap();
+      var before = questNow();
       var ev = game.step(dt * scale, readInput());
       handleEvents(ev, before);
       var a0 = game.state.anglers[0];
@@ -865,9 +941,11 @@
       if (a.phase !== 'wait' && a.phase !== 'bite') continue;
       var u = a.phase === 'bite' ? 1 : Math.min(1, a.waitT / Math.max(0.2, a.waitNeed));
       var b = bobberOf(a);
-      var x = b.x - 180 * (1 - u) * faceOf(n);
-      var y = 460 - u * 90 + Math.sin(time * 2.4 + n) * 10;
-      Art.fishShadow(ctx, x, y, 26 + u * 20, faceOf(n), 0.28 + u * 0.35);
+      var face = faceOf(n);
+      var x = b.x - face * 300 * (1 - u);
+      var y = 580 - u * 220 + Math.sin(time * 3 + n) * 6;
+      var grow = u > 0.8 ? 1 + Math.sin(time * 9) * 0.07 : 1;
+      Art.fishShadow(ctx, x, y, (20 + u * 52) * grow, face, 0.18 + u * 0.7);
     }
   }
 
@@ -886,7 +964,7 @@
     for (var i = 0; i < st.anglers.length; i++) {
       var a = st.anglers[i];
       var face = faceOf(i);
-      var pose = a.phase === 'charge' ? 'cast' : (a.phase === 'reel' ? 'reel' : 'idle');
+      var pose = a.phase === 'charge' ? 'cast' : (a.phase === 'reel' ? 'reel' : ((a.phase === 'wait' || a.phase === 'bite') ? 'wait' : 'idle'));
       var power = a.phase === 'charge' ? a.power : (a.phase === 'reel' ? (a.inside ? 0.35 : 0.85) : 0);
       var shirt = i === 0 ? '#3ec6ff' : '#ff8a3d';
       var tip = Art.angler(ctx, anglerX(i), STAND, face, shirt, time, pose, power, !!st.save.hat);
@@ -1146,7 +1224,7 @@
       refreshHud(true);
       refreshTitle();
     },
-    hook: function (id) { if (game) game.hookTest(0, id); },
+    hook: function (id, i) { if (game) game.hookTest(i || 0, id); },
     saveNow: persist
   };
 

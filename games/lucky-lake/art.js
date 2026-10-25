@@ -404,7 +404,14 @@
     pose = pose || 'idle';
     power = power || 0;
     t = t || 0;
-    var sway = pose === 'idle' ? Math.sin(t * 2.4) * 3 : (pose === 'reel' ? Math.sin(t * 12) * 1.6 : 0);
+    var lively = pose === 'idle' || pose === 'wait';
+    var calm = typeof Kit !== 'undefined' && Kit.motion && Kit.motion.reduced();
+    var sway = lively ? Math.sin(t * (pose === 'wait' ? 3.4 : 2.4)) * (pose === 'wait' ? 2.4 : 3) : (pose === 'reel' ? Math.sin(t * 12) * 1.6 : 0);
+    var tap = 0;
+    if (lively && !calm) {
+      var cycle = (t * (pose === 'wait' ? 2.4 : 1.5)) % 1;
+      if (cycle < 0.18) tap = Math.sin(cycle / 0.18 * Math.PI) * (pose === 'wait' ? 7 : 4);
+    }
     var back = pose === 'cast' ? power : 0;
     var fight = pose === 'reel' ? 0.35 + power * 0.45 : 0;
     ctx.save();
@@ -415,10 +422,14 @@
     var ink = '#16324a';
     ctx.fillStyle = ink;
     roundRect(ctx, -24, 8, 20, 14, 6); ctx.fill();
+    ctx.save();
+    ctx.translate(0, -tap);
     roundRect(ctx, 4, 8, 20, 14, 6); ctx.fill();
     ctx.fillStyle = '#2a3a52';
-    roundRect(ctx, -21, 10, 14, 9, 4); ctx.fill();
     roundRect(ctx, 7, 10, 14, 9, 4); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = '#2a3a52';
+    roundRect(ctx, -21, 10, 14, 9, 4); ctx.fill();
     ctx.strokeStyle = ink; ctx.lineWidth = 14;
     ctx.beginPath();
     ctx.moveTo(-10, -4); ctx.lineTo(-12, 14);
@@ -436,10 +447,19 @@
     ctx.beginPath(); ctx.arc(0, -76, 24, 0, 6.3); ctx.fill();
     ctx.fillStyle = '#ffd2b8';
     ctx.beginPath(); ctx.arc(0, -76, 20, 0, 6.3); ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(-8, -78, 7, 0, 6.3); ctx.arc(8, -78, 7, 0, 6.3); ctx.fill();
-    ctx.fillStyle = ink;
-    ctx.beginPath(); ctx.arc(-6, -78, 3.4, 0, 6.3); ctx.arc(10, -78, 3.4, 0, 6.3); ctx.fill();
+    var blink = lively && !calm && ((t * 0.31) % 1) > 0.93;
+    if (blink) {
+      ctx.strokeStyle = ink; ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-14, -78); ctx.lineTo(-2, -78);
+      ctx.moveTo(4, -78); ctx.lineTo(16, -78);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(-8, -78, 7, 0, 6.3); ctx.arc(8, -78, 7, 0, 6.3); ctx.fill();
+      ctx.fillStyle = ink;
+      ctx.beginPath(); ctx.arc(-6, -78, 3.4, 0, 6.3); ctx.arc(10, -78, 3.4, 0, 6.3); ctx.fill();
+    }
     ctx.strokeStyle = '#e07a62'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(1, -70, 8, 0.15, 1.15); ctx.stroke();
     ctx.fillStyle = ink;
