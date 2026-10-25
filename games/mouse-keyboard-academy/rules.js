@@ -14,7 +14,7 @@
     { id: 'drag', goal: 4, icon: '🍎', title: 'اسحب', hint: 'إلى الحيوان', prompt: 'اسحب الفاكهة' },
     { id: 'scroll', goal: 3, icon: '🐭', title: 'مرّر', hint: 'إلى الأسفل', prompt: 'حرّك العجلة' },
     { id: 'arrows', goal: 1, icon: '⬆️', title: 'الأسهم', hint: 'اتبع السهم', prompt: 'اضغط الأسهم' },
-    { id: 'jump', goal: 1, icon: '🚪', title: 'مسافة ثم Enter', hint: 'مسافة', prompt: 'مسافة للقفز' },
+    { id: 'jump', goal: 1, icon: '🚪', title: 'اقفز', hint: 'مسافة', prompt: 'اقفز' },
     { id: 'letters', goal: 4, icon: '⌨️', title: 'الحروف', hint: 'هذا المفتاح', prompt: 'اضغط المفتاح' }
   ];
 
@@ -181,7 +181,7 @@
   function languageHint(code, eventKey) {
     if (!AR[code]) return '';
     if (scriptOf(eventKey) !== 'en') return '';
-    return 'لوحة المفاتيح بالإنجليزية. انظر الحرف الصغير.';
+    return 'الإنجليزية';
   }
   function dropHits(x, y, rect, slop) {
     if (!rect || !isFinite(x) || !isFinite(y)) return false;

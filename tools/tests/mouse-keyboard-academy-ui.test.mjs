@@ -161,42 +161,48 @@ test('how to hold the mouse and keyboard comes before the lessons', async t => {
   }
   assert.equal(await page.evaluate(() => __game.screen), 'grip');
   assert.match(await page.locator('#prompt').innerText(), /أمسك/);
-  assert.match(await page.locator('[data-grip="left"]').textContent(), /الأيسر/);
-  assert.match(await page.locator('[data-grip="right"]').textContent(), /الأيمن/);
+  assert.ok((await page.locator('.prompt-text').innerText()).trim().split(/\s+/).length <= 2);
+  assert.equal(await page.locator('.grip-note').count(), 0);
   await pageFits();
   await fits('#prompt');
   await fits('[data-grip="left"]');
-  await page.locator('[data-grip="right"]').click();
+  await fits('.replay');
   assert.equal(await page.locator('#btnGripNext').isHidden(), true);
   await page.locator('[data-grip="left"]').click();
-  await page.locator('[data-grip="right"]').click();
   await page.waitForFunction(() => !document.getElementById('btnGripNext').hidden);
   assert.match(await page.locator('#btnGripNext').innerText(), /التالي/);
   assert.match(await page.locator('#toast').innerText(), /أحسنت/);
   await fits('#btnGripNext');
   await page.locator('#btnGripNext').click();
 
-  assert.match(await page.locator('#prompt').innerText(), /سبابت/);
-  const letters = await page.evaluate(() => document.querySelector('.grip-art').textContent);
-  for (const ch of ['ش', 'س', 'ي', 'ب', 'ت', 'ن', 'م', 'ك']) assert.ok(letters.includes(ch), ch);
-  assert.match(letters, /A/);
-  assert.match(letters, /F/);
-  assert.match(letters, /J/);
+  assert.match(await page.locator('#prompt').innerText(), /انقر/);
+  await page.locator('[data-grip="right"]').click();
+  await page.waitForFunction(() => !document.getElementById('btnGripNext').hidden);
+  await page.locator('#btnGripNext').click();
+
+  assert.match(await page.locator('#prompt').innerText(), /حرّك/);
+  const star = await page.locator('[data-grip="star"]').boundingBox();
+  await page.mouse.move(star.x + star.width / 2, star.y + star.height / 2);
+  await page.waitForFunction(() => !document.getElementById('btnGripNext').hidden);
+  await page.locator('#btnGripNext').click();
+
+  assert.match(await page.locator('#prompt').innerText(), /اضغط/);
+  const keys = await page.evaluate(() => document.querySelector('.grip-stage').textContent);
+  assert.ok(keys.includes('ب') && keys.includes('ت'));
+  assert.equal(keys.includes('ش'), false);
   await page.keyboard.press('q');
-  await page.locator('.big-key[data-code="KeyF"]').click();
-  await page.keyboard.press('j');
+  assert.equal(await page.locator('#btnGripNext').isHidden(), true);
+  await page.locator('.bump[data-code="KeyJ"]').click();
   await page.waitForFunction(() => !document.getElementById('btnGripNext').hidden);
   await pageFits();
-  await fits('.big-key[data-code="KeyJ"]');
   await page.locator('#btnGripNext').click();
 
   assert.match(await page.locator('#prompt').innerText(), /اجلس/);
-  await page.locator('[data-sit="eyes"]').click();
-  await page.locator('[data-sit="feet"]').click();
-  await page.locator('[data-sit="back"]').click();
-  await page.waitForFunction(() => !document.getElementById('btnGripNext').hidden);
+  assert.equal(await page.locator('#btnGripNext').isHidden(), false);
+  await page.locator('[data-sit="kid"]').click();
+  assert.equal(await page.evaluate(() => document.querySelector('.child').classList.contains('sat')), true);
   await pageFits();
-  await fits('[data-sit="back"]');
+  await fits('[data-sit="kid"]');
   await page.locator('#btnGripNext').click();
   await page.waitForFunction(() => __game.screen === 'play' && __game.station === 'move');
   assert.equal(await page.evaluate(() => __game.save.grip), true);
@@ -210,6 +216,90 @@ test('how to hold the mouse and keyboard comes before the lessons', async t => {
   await page.locator('#btnMap').click();
   assert.equal(await page.evaluate(() => __game.save.grip), true);
   assert.equal(await page.evaluate(() => __game.screen), 'map');
+});
+
+test('grip cards fit the classroom sizes without overlapping', async t => {
+  const sizes = [[1024, 576], [1280, 800], [1366, 768]];
+  function intersects(a, b) {
+    return a.x < b.x + b.width - 1 && a.x + a.width > b.x + 1 && a.y < b.y + b.height - 1 && a.y + a.height > b.y + 1;
+  }
+  async function inside(page, selector, width, height) {
+    const box = await page.locator(selector).first().boundingBox();
+    assert.ok(box, selector);
+    assert.ok(box.y >= -1 && box.x >= -1 && box.y + box.height <= height + 1 && box.x + box.width <= width + 1,
+      `${width}x${height} ${selector} at ${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)}`);
+    return box;
+  }
+  async function pageFits(page) {
+    const scroll = await page.evaluate(() => ({
+      sh: document.documentElement.scrollHeight,
+      ch: document.documentElement.clientHeight,
+      sw: document.documentElement.scrollWidth,
+      cw: document.documentElement.clientWidth
+    }));
+    assert.ok(scroll.sh <= scroll.ch + 1, `page height ${scroll.sh} > ${scroll.ch}`);
+    assert.ok(scroll.sw <= scroll.cw + 1, `page width ${scroll.sw} > ${scroll.cw}`);
+  }
+  async function words(page) {
+    const text = (await page.locator('.prompt-text').innerText()).trim();
+    assert.ok(text.split(/\s+/).length <= 2, text);
+    const picture = ((await page.locator('.grip-stage').innerText()) || '').replace(/\s/g, '');
+    assert.ok(picture.length <= 3, picture);
+  }
+  for (const [width, height] of sizes) {
+    const page = await openGame(t, { viewport: { width, height }, reduced: true });
+    await pageFits(page);
+    await words(page);
+    await inside(page, '#prompt', width, height);
+    await inside(page, '.grip-stage', width, height);
+    const replay = await inside(page, '.replay', width, height);
+    const left = await inside(page, '[data-grip="left"]', width, height);
+    assert.equal(intersects(replay, left), false, `${width}x${height} replay covers the mouse`);
+    assert.equal(await page.locator('.grip-note').count(), 0);
+    await page.locator('[data-grip="left"]').click();
+    const next = await inside(page, '#btnGripNext', width, height);
+    assert.equal(intersects(next, left), false, `${width}x${height} next covers the mouse`);
+    await pageFits(page);
+    await page.locator('#btnGripNext').click();
+    await inside(page, '[data-grip="right"]', width, height);
+    await page.locator('[data-grip="right"]').click();
+    await page.locator('#btnGripNext').click();
+    await pageFits(page);
+    const star = await inside(page, '[data-grip="star"]', width, height);
+    const wrist = await page.evaluate(() => {
+      const glide = document.querySelector('.glide');
+      const rest = document.querySelector('.wrist');
+      return !!glide && !!rest && !glide.contains(rest);
+    });
+    assert.equal(wrist, true, `${width}x${height} wrist stays put while the mouse glides`);
+    await page.locator('[data-grip="star"]').click();
+    await inside(page, '#btnGripNext', width, height);
+    assert.equal(intersects(star, replay), false);
+    await page.locator('#btnGripNext').click();
+    await pageFits(page);
+    await words(page);
+    for (const key of ['KeyF', 'KeyJ']) {
+      const button = await inside(page, `.bump[data-code="${key}"]`, width, height);
+      assert.equal(intersects(replay, button), false, `${width}x${height} replay covers ${key}`);
+    }
+    await page.locator('.bump[data-code="KeyF"]').click();
+    await inside(page, '#btnGripNext', width, height);
+    await page.locator('#btnGripNext').click();
+    await pageFits(page);
+    await inside(page, '[data-sit="kid"]', width, height);
+    await inside(page, '#btnGripNext', width, height);
+    const poses = await page.evaluate(() => {
+      const kid = document.querySelector('.child');
+      const slouch = getComputedStyle(kid).transform;
+      kid.classList.add('sat');
+      const tall = getComputedStyle(kid).transform;
+      kid.classList.remove('sat');
+      return slouch !== 'none' && slouch !== tall;
+    });
+    assert.equal(poses, true, `${width}x${height} sitting up changes the pose`);
+    await words(page);
+    assert.equal(await page.locator('#btnTeacher').click().then(() => page.locator('.panel').innerText()).then(text => /لليد اليسرى/.test(text)), true);
+  }
 });
 
 test('reduced motion still shows the station prompt', async t => {

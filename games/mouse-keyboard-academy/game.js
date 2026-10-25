@@ -53,20 +53,11 @@
   var FRUITS = ['🍎', '🍊', '🍌', '🍇'];
   var ARROW_GLYPH = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' };
   var gripCard = 0;
-  var gripBits = 0;
   var gripReady = false;
   var gripBack = 'lesson';
-  var FINGER_COLOR = { thumb: '#e85d4c', index: '#1c8ed8', middle: '#3aaa3a', ring: '#e0a106', pinky: '#9b59d0' };
-  var KEY_FINGER = {
-    KeyQ: 'pinky', KeyA: 'pinky', KeyZ: 'pinky',
-    KeyW: 'ring', KeyS: 'ring', KeyX: 'ring',
-    KeyE: 'middle', KeyD: 'middle', KeyC: 'middle',
-    KeyR: 'index', KeyT: 'index', KeyF: 'index', KeyG: 'index', KeyV: 'index', KeyB: 'index',
-    KeyY: 'index', KeyU: 'index', KeyH: 'index', KeyJ: 'index', KeyN: 'index', KeyM: 'index',
-    KeyI: 'middle', KeyK: 'middle', Comma: 'middle',
-    KeyO: 'ring', KeyL: 'ring', Period: 'ring',
-    KeyP: 'pinky', Semicolon: 'pinky', Quote: 'pinky', Slash: 'pinky'
-  };
+  var GRIP_WORD = ['أمسك الفأرة', 'انقر هنا', 'حرّكها', 'اضغط', 'اجلس'];
+  var GRIP_SAY = ['أمسك الفأرة', 'انقر الزر الآخر', 'حرّك الفأرة', 'اضغط المفتاح', 'اجلس'];
+  var GRIP_ICON = ['🖱️', '👆', '⭐', '⌨️', '🧒'];
 
   function $(id) { return document.getElementById(id); }
   function field() { return $('field'); }
@@ -100,7 +91,7 @@
     $('stickers').innerHTML = html;
   }
   function promptPhrase() {
-    if (screen === 'grip') return ['أمسك بلطف', 'ضع السبابتين', 'اجلس مستقيمًا'][gripCard] || 'أمسك بلطف';
+    if (screen === 'grip') return GRIP_WORD[gripCard] || GRIP_WORD[0];
     if (naming()) return 'اسمك';
     var station = MKA.stationById(stationId);
     if (station && screen !== 'map' && screen !== 'cert') return station.prompt;
@@ -109,7 +100,7 @@
     return 'ابدأ';
   }
   function promptIcon() {
-    if (screen === 'grip') return ['🖱️', '⌨️', '🧒'][gripCard] || '🖱️';
+    if (screen === 'grip') return GRIP_ICON[gripCard] || GRIP_ICON[0];
     if (naming()) return '✏️';
     var station = MKA.stationById(stationId);
     if (station && screen !== 'map' && screen !== 'cert') return station.icon;
@@ -133,9 +124,8 @@
     var host = $('pips');
     if (!host) return;
     if (screen === 'grip') {
-      var icons = ['🖱️', '⌨️', '🧒'];
       var marks = '';
-      for (var g = 0; g < 3; g++) marks += '<span class="' + (g < gripCard ? 'on' : (g === gripCard ? 'now' : '')) + '">' + icons[g] + '</span>';
+      for (var g = 0; g < GRIP_ICON.length; g++) marks += '<span class="' + (g < gripCard ? 'on' : (g === gripCard ? 'now' : '')) + '">' + GRIP_ICON[g] + '</span>';
       host.innerHTML = marks;
       return;
     }
@@ -211,9 +201,14 @@
     var list = [];
     try { list = speechSynthesis.getVoices() || []; } catch (err) { voice = null; return; }
     voice = null;
+    var fallback = null;
     for (var i = 0; i < list.length; i++) {
-      if (/^ar([-_]|$)/i.test(list[i].lang || '')) { voice = list[i]; break; }
+      var lang = list[i].lang || '';
+      if (!/^ar([-_]|$)/i.test(lang)) continue;
+      if (/^ar[-_]SA$/i.test(lang)) { voice = list[i]; return; }
+      if (!fallback) fallback = list[i];
     }
+    voice = fallback;
   }
   function hush() {
     if (!window.speechSynthesis) return;
@@ -488,157 +483,43 @@
     overlay.hidden = false;
   }
 
-  function mouseArt() {
-    return [
-      '<svg class="grip-art" viewBox="0 0 760 380" role="img" aria-label="كيف تمسك الفأرة">',
-      '<rect width="760" height="380" fill="#f3d7b0"/>',
-      '<rect y="308" width="760" height="72" fill="#e2c08a"/>',
-      '<g class="wrist"><ellipse cx="380" cy="322" rx="74" ry="30" fill="#f6c7a4" stroke="#1c2250" stroke-width="3"/>',
-      '<text x="380" y="328" text-anchor="middle" font-size="16">المعصم</text></g>',
-      '<g class="slide-mouse">',
-      '<ellipse cx="380" cy="258" rx="110" ry="44" fill="#f6c7a4" stroke="#1c2250" stroke-width="3"/>',
-      '<text x="380" y="264" text-anchor="middle" font-size="18">الكف بلطف</text>',
-      '<rect x="268" y="108" width="224" height="132" rx="44" fill="#e4e7f2" stroke="#1c2250" stroke-width="4"/>',
-      '<g class="mbtn target" data-grip="left" tabindex="0" role="button">',
-      '<rect x="278" y="116" width="98" height="70" rx="16" fill="#d6ecfa" stroke="#1c2250" stroke-width="3"/>',
-      '<text x="327" y="146" text-anchor="middle" font-size="16">الزر</text>',
-      '<text x="327" y="168" text-anchor="middle" font-size="16">الأيسر</text></g>',
-      '<g class="mbtn" data-grip="right" tabindex="0" role="button">',
-      '<rect x="384" y="116" width="98" height="70" rx="16" fill="#d9f5d6" stroke="#1c2250" stroke-width="3"/>',
-      '<text x="433" y="146" text-anchor="middle" font-size="16">الزر</text>',
-      '<text x="433" y="168" text-anchor="middle" font-size="16">الأيمن</text></g>',
-      '<g class="finger index"><rect x="300" y="28" width="40" height="96" rx="18" fill="#1c8ed8" stroke="#1c2250" stroke-width="3"/>',
-      '<text x="248" y="78" text-anchor="middle" font-size="16">سبابة</text></g>',
-      '<g class="finger middle"><rect x="414" y="28" width="40" height="96" rx="18" fill="#3aaa3a" stroke="#1c2250" stroke-width="3"/>',
-      '<text x="500" y="48" text-anchor="middle" font-size="16">وسطى</text></g>',
-      '<g class="finger ring"><rect x="508" y="102" width="32" height="74" rx="15" fill="#e0a106" stroke="#1c2250" stroke-width="3"/>',
-      '<text x="600" y="140" text-anchor="middle" font-size="16">بنصر</text></g>',
-      '<g class="finger pinky"><rect x="548" y="136" width="28" height="58" rx="13" fill="#9b59d0" stroke="#1c2250" stroke-width="3"/>',
-      '<text x="640" y="172" text-anchor="middle" font-size="16">خنصر</text></g>',
-      '<g class="finger thumb"><ellipse cx="228" cy="196" rx="28" ry="42" fill="#e85d4c" stroke="#1c2250" stroke-width="3"/>',
-      '<text x="150" y="202" text-anchor="middle" font-size="16">إبهام</text></g>',
-      '<text x="640" y="230" text-anchor="middle" font-size="16">← حرّكها →</text>',
-      '</g></svg>'
-    ].join('');
+  function mouseFace(side) {
+    return '<i class="ear"></i><i class="ear r"></i><i class="eye"></i><i class="eye r"></i><i class="smile"></i><i class="bulb ' + side + ' lit"></i>';
   }
-  function keyboardArt() {
-    var keyW = 62;
-    var keyH = 48;
-    var gap = 4;
-    var rows = MKA.KEY_ROWS;
-    var y0 = [8, 62, 116];
-    var home = {};
-    var r;
-    var c;
-    for (r = 0; r < MKA.HOME_LEFT.length; r++) home[MKA.HOME_LEFT[r]] = 1;
-    for (r = 0; r < MKA.HOME_RIGHT.length; r++) home[MKA.HOME_RIGHT[r]] = 1;
-    var parts = ['<svg class="grip-art" viewBox="0 0 900 340" role="img" aria-label="صف الارتكاز">',
-      '<rect width="900" height="340" fill="#fff6ea"/>'];
-    for (r = 0; r < rows.length; r++) {
-      var rowW = rows[r].length * keyW + (rows[r].length - 1) * gap;
-      var x0 = (900 - rowW) / 2;
-      for (c = 0; c < rows[r].length; c++) {
-        var code = rows[r][c];
-        var x = Math.round(x0 + c * (keyW + gap));
-        var y = y0[r];
-        var finger = KEY_FINGER[code] || 'index';
-        var bump = code === 'KeyF' || code === 'KeyJ';
-        parts.push('<g class="keyhit' + (bump ? ' target' : '') + '" data-code="' + code + '" tabindex="0" role="button">');
-        parts.push('<rect x="' + x + '" y="' + y + '" width="' + keyW + '" height="' + keyH + '" rx="8" fill="' + FINGER_COLOR[finger] + '" fill-opacity="' + (home[code] ? '1' : '0.38') + '" stroke="#1c2250" stroke-width="' + (home[code] ? '4' : '2') + '"/>');
-        parts.push('<text x="' + (x + keyW / 2) + '" y="' + (y + 24) + '" text-anchor="middle" font-size="18">' + MKA.AR[code] + '</text>');
-        parts.push('<text x="' + (x + keyW / 2) + '" y="' + (y + 40) + '" text-anchor="middle" font-size="11">' + MKA.EN[code] + '</text>');
-        if (bump) parts.push('<circle cx="' + (x + keyW / 2) + '" cy="' + (y + 8) + '" r="4" fill="#ffcc00" stroke="#1c2250"/>');
-        parts.push('</g>');
-      }
-    }
-    parts.push('<rect x="250" y="174" width="400" height="42" rx="12" fill="#f7c1b8" stroke="#1c2250" stroke-width="3"/>');
-    parts.push('<ellipse cx="400" cy="195" rx="22" ry="14" fill="#e85d4c" stroke="#1c2250" stroke-width="2"/>');
-    parts.push('<ellipse cx="500" cy="195" rx="22" ry="14" fill="#e85d4c" stroke="#1c2250" stroke-width="2"/>');
-    parts.push('<text x="450" y="236" text-anchor="middle" font-size="16">الإبهامان على المسافة</text>');
-    var hands = [
-      [190, 'pinky'], [216, 'ring'], [242, 'middle'], [268, 'index'],
-      [632, 'index'], [658, 'middle'], [684, 'ring'], [710, 'pinky']
-    ];
-    for (c = 0; c < hands.length; c++) {
-      parts.push('<ellipse cx="' + hands[c][0] + '" cy="268" rx="14" ry="16" fill="' + FINGER_COLOR[hands[c][1]] + '" stroke="#1c2250" stroke-width="2"/>');
-    }
-    parts.push('<ellipse cx="229" cy="308" rx="96" ry="26" fill="#f6c7a4" stroke="#1c2250" stroke-width="3"/>');
-    parts.push('<ellipse cx="671" cy="308" rx="96" ry="26" fill="#f6c7a4" stroke="#1c2250" stroke-width="3"/>');
-    parts.push('<text x="229" y="314" text-anchor="middle" font-size="16">اليسرى</text>');
-    parts.push('<text x="671" y="314" text-anchor="middle" font-size="16">اليمنى</text>');
-    parts.push('</svg>');
-    return parts.join('');
+  function mitt(side) {
+    return '<div class="mitt ' + side + '"><i></i><i></i><b></b></div>';
   }
-  function postureArt() {
-    return [
-      '<svg class="grip-art" viewBox="0 0 760 400" role="img" aria-label="الجلسة">',
-      '<rect width="760" height="400" fill="#fff6ea"/>',
-      '<circle cx="68" cy="52" r="22" fill="#ffcc00" stroke="#1c2250" stroke-width="3"/>',
-      '<rect y="332" width="760" height="68" fill="#e2c08a"/>',
-      '<rect x="150" y="96" width="16" height="130" rx="6" fill="#7d93c7" stroke="#1c2250"/>',
-      '<rect x="150" y="214" width="130" height="14" rx="4" fill="#7d93c7" stroke="#1c2250"/>',
-      '<rect x="168" y="228" width="12" height="90" fill="#5c709e"/>',
-      '<rect x="250" y="228" width="12" height="90" fill="#5c709e"/>',
-      '<rect x="188" y="214" width="22" height="110" rx="10" fill="#3d4d86"/>',
-      '<rect x="236" y="214" width="22" height="110" rx="10" fill="#3d4d86"/>',
-      '<rect x="430" y="188" width="250" height="16" rx="4" fill="#c9843d" stroke="#1c2250"/>',
-      '<rect x="460" y="204" width="12" height="128" fill="#a56a32"/>',
-      '<rect x="640" y="204" width="12" height="128" fill="#a56a32"/>',
-      '<rect x="470" y="64" width="180" height="116" rx="12" fill="#1c2250"/>',
-      '<rect x="484" y="78" width="152" height="86" rx="6" fill="#d7f4ff"/>',
-      '<text x="560" y="54" text-anchor="middle" font-size="16">أعلى الشاشة</text>',
-      '<g class="sit target" data-sit="feet" tabindex="0" role="button">',
-      '<rect class="sit-ring" x="160" y="300" width="130" height="58" rx="16" fill="transparent" stroke="#ffcc00" stroke-width="4"/>',
-      '<ellipse cx="198" cy="328" rx="26" ry="12" fill="#1c2250"/>',
-      '<ellipse cx="250" cy="328" rx="26" ry="12" fill="#1c2250"/>',
-      '<text x="224" y="348" text-anchor="middle" font-size="16">قدمان</text></g>',
-      '<g class="sit target" data-sit="back" tabindex="0" role="button">',
-      '<rect class="sit-ring" x="164" y="112" width="100" height="108" rx="18" fill="rgba(255,204,0,0.12)" stroke="#ffcc00" stroke-width="4"/>',
-      '<rect x="184" y="128" width="64" height="88" rx="18" fill="#ffcc00" stroke="#1c2250" stroke-width="3"/>',
-      '<text x="216" y="168" text-anchor="middle" font-size="15">ظهر</text>',
-      '<text x="216" y="188" text-anchor="middle" font-size="15">مستقيم</text></g>',
-      '<circle cx="214" cy="86" r="36" fill="#f6c7a4" stroke="#1c2250" stroke-width="3"/>',
-      '<circle cx="202" cy="82" r="4" fill="#1c2250"/>',
-      '<circle cx="228" cy="82" r="4" fill="#1c2250"/>',
-      '<path d="M200 98 Q214 112 228 98" fill="none" stroke="#1c2250" stroke-width="3" stroke-linecap="round"/>',
-      '<rect x="236" y="150" width="150" height="16" rx="8" fill="#f6c7a4" stroke="#1c2250" stroke-width="3"/>',
-      '<text x="70" y="168" text-anchor="middle" font-size="15">كتفان</text>',
-      '<text x="70" y="188" text-anchor="middle" font-size="15">مرتاحان</text>',
-      '<g class="sit target" data-sit="eyes" tabindex="0" role="button">',
-      '<rect class="sit-ring" x="246" y="48" width="220" height="44" rx="12" fill="transparent" stroke="#ffcc00" stroke-width="4"/>',
-      '<line x1="250" y1="78" x2="470" y2="64" stroke="#1c8ed8" stroke-width="4" stroke-dasharray="8 6"/>',
-      '<text x="360" y="70" text-anchor="middle" font-size="16">العينان</text></g>',
-      '</svg>'
-    ].join('');
-  }
-  function legendHTML() {
-    var names = [['thumb', 'إبهام'], ['index', 'سبابة'], ['middle', 'وسطى'], ['ring', 'بنصر'], ['pinky', 'خنصر']];
-    var html = '<p class="legend">';
-    for (var i = 0; i < names.length; i++) {
-      html += '<span><i style="background:' + FINGER_COLOR[names[i][0]] + '"></i>' + names[i][1] + '</span>';
+  function gripScene() {
+    if (gripCard === 0 || gripCard === 1) {
+      var side = gripCard === 1 ? 'right' : 'left';
+      return '<div class="pair">' + mitt(side) +
+        '<button type="button" class="mousey target" data-grip="' + side + '">' + mouseFace(side) + '</button></div>';
     }
-    return html + '</p>';
+    if (gripCard === 2) {
+      return '<div class="pair slide"><i class="wrist"></i><div class="glide">' + mitt('left') +
+        '<div class="mousey">' + mouseFace('left') + '</div></div></div>' +
+        '<button type="button" class="catch target" data-grip="star" aria-label="نجمة">⭐</button>';
+    }
+    if (gripCard === 3) {
+      return '<div class="lands"><i></i><i></i></div>' +
+        '<button type="button" class="bump target" data-code="KeyF">' + MKA.AR.KeyF + '<i class="nub"></i></button>' +
+        '<button type="button" class="bump target" data-code="KeyJ">' + MKA.AR.KeyJ + '<i class="nub"></i></button>';
+    }
+    return '<div class="sit"><i class="chair" aria-hidden="true"></i>' +
+      '<button type="button" class="child" data-sit="kid"><i class="hair"></i><i class="head">' +
+      '<i class="eye"></i><i class="eye r"></i><i class="smile"></i></i><i class="body"></i><i class="leg"></i><i class="leg r"></i></button></div>';
   }
   function renderGrip() {
-    gripReady = false;
-    var art = gripCard === 0 ? mouseArt() : gripCard === 1 ? keyboardArt() : postureArt();
-    var cap = gripCard === 0 ? 'الكف بلطف على الفأرة. لا تعصرها.'
-      : gripCard === 1 ? 'حرّك السبابتين حتى تحسّ النتوء، ثم اضغط ب و ت.'
-      : 'المس الظهر والقدمين والعينين.';
-    var extra = '';
-    if (gripCard === 0) {
-      extra = '<p class="grip-note">المعصم على الطاولة. حرّكها ولا ترفعها.</p>' +
-        '<p class="grip-note">للمعلم: بدّل الزرين لليد اليسرى من إعدادات الجهاز.</p>';
-    } else if (gripCard === 1) {
-      extra = legendHTML() + '<div class="check-row"><button type="button" class="big-key target" data-code="KeyF">' + MKA.AR.KeyF +
-        '</button><button type="button" class="big-key target" data-code="KeyJ">' + MKA.AR.KeyJ + '</button></div>';
-    }
-    view.innerHTML = '<div class="grip"><div class="grip-stage">' + art + '</div><p class="grip-cap">' + cap + '</p>' + extra +
-      '<div class="grip-next-row"><button type="button" class="next" id="btnGripNext" data-act="grip-next" hidden><span>التالي</span><span class="next-arrow" aria-hidden="true">←</span></button></div></div>';
+    gripReady = gripCard === 4;
+    view.innerHTML = '<div class="grip"><div class="grip-stage go">' + gripScene() + '</div>' +
+      '<div class="grip-bar"><button type="button" class="replay" data-act="grip-replay" aria-label="أعد">🔊</button>' +
+      '<button type="button" class="next' + (gripReady ? ' target' : '') + '" id="btnGripNext" data-act="grip-next"' + (gripReady ? '' : ' hidden') +
+      '><span>التالي</span><span class="next-arrow" aria-hidden="true">←</span></button></div></div>';
     hideOverlay();
     langHintEl.hidden = true;
     updateChrome();
-    say(promptPhrase());
+    say(GRIP_WORD[gripCard]);
+    speak(GRIP_SAY[gripCard]);
   }
   function showGrip(back) {
     quitRound();
@@ -649,11 +530,20 @@
     progress = 0;
     screen = 'grip';
     gripCard = 0;
-    gripBits = 0;
     gripReady = false;
     gripBack = back === 'map' ? 'map' : 'lesson';
     renderGrip();
-    speakOnce(promptPhrase());
+  }
+  function replayGrip() {
+    if (screen !== 'grip') return;
+    var stage = document.querySelector('.grip-stage');
+    if (!stage) return;
+    var kid = stage.querySelector('.child');
+    if (kid) kid.classList.remove('sat');
+    stage.classList.remove('go');
+    void stage.offsetWidth;
+    stage.classList.add('go');
+    speak(GRIP_SAY[gripCard]);
   }
   function gripCardReady() {
     if (gripReady) return;
@@ -661,17 +551,23 @@
     praise();
     say('أحسنت');
     speak('أحسنت');
+    cheer();
+    var stage = document.querySelector('.grip-stage');
+    if (stage && !stage.querySelector('.yay')) {
+      var yay = document.createElement('div');
+      yay.className = 'yay';
+      yay.textContent = '⭐';
+      stage.appendChild(yay);
+    }
     var btn = $('btnGripNext');
-    if (btn) { btn.hidden = false; btn.focus(); }
+    if (btn) { btn.hidden = false; btn.classList.add('target'); btn.focus(); }
     paintPips();
   }
   function gripAdvance() {
     if (screen !== 'grip' || !gripReady) return;
-    if (gripCard < 2) {
+    if (gripCard < 4) {
       gripCard += 1;
-      gripBits = 0;
       renderGrip();
-      speakOnce(promptPhrase());
       return;
     }
     save = MKA.markGrip(save);
@@ -680,56 +576,27 @@
     else openStation('move', true);
   }
   function gripMouse(which) {
-    if (screen !== 'grip' || gripCard !== 0) return;
-    var left = document.querySelector('[data-grip="left"]');
-    var right = document.querySelector('[data-grip="right"]');
-    if (which === 'left') {
-      if (gripBits & 1) return;
-      gripBits |= 1;
-      if (left) { left.classList.add('done'); left.classList.remove('target'); }
-      if (right) right.classList.add('target');
-      sparkle(left);
-      cheer();
-      return;
-    }
-    if (which !== 'right') return;
-    if (!(gripBits & 1)) { oops(document.querySelector('.grip-stage')); return; }
-    if (gripBits & 2) return;
-    gripBits |= 2;
-    if (right) { right.classList.add('done'); right.classList.remove('target'); }
-    sparkle(right);
-    cheer();
-    gripCardReady();
+    if (screen !== 'grip' || gripReady) return;
+    if (gripCard === 0 && which === 'left') { gripCardReady(); return; }
+    if (gripCard === 1 && which === 'right') { gripCardReady(); return; }
+    if (gripCard === 2 && which === 'star') { gripCardReady(); return; }
+    oops(document.querySelector('.grip-stage .target'));
   }
   function gripBump(code) {
-    if (screen !== 'grip' || gripCard !== 1) return;
-    var result = MKA.bumpPress(gripBits, code);
-    if (!result.hit) {
-      oops(document.querySelector('.big-key.target') || document.querySelector('.grip-stage'));
-      return;
-    }
-    gripBits = result.bits;
-    var nodes = document.querySelectorAll('[data-code="' + code + '"]');
-    for (var i = 0; i < nodes.length; i++) {
-      nodes[i].classList.add('done');
-      nodes[i].classList.remove('target');
-    }
-    sparkle(document.querySelector('.big-key[data-code="' + code + '"]'));
-    cheer();
-    if (result.done) gripCardReady();
+    if (screen !== 'grip' || gripCard !== 3 || gripReady) return;
+    if (code === 'KeyF' || code === 'KeyJ') { gripCardReady(); return; }
   }
-  function gripSit(part) {
-    if (screen !== 'grip' || gripCard !== 2) return;
-    var bit = part === 'back' ? 1 : part === 'feet' ? 2 : part === 'eyes' ? 4 : 0;
-    if (!bit || (gripBits & bit)) return;
-    gripBits |= bit;
-    var el = document.querySelector('[data-sit="' + part + '"]');
-    if (el) { el.classList.add('done'); el.classList.remove('target'); sparkle(el); }
+  function gripSit() {
+    if (screen !== 'grip' || gripCard !== 4) return;
+    var kid = document.querySelector('[data-sit="kid"]');
+    if (!kid || kid.classList.contains('sat')) return;
+    kid.classList.add('sat');
     cheer();
-    if (gripBits === 7) gripCardReady();
+    praise();
+    sparkle(kid);
   }
   function renderMap() {
-    var html = '<button type="button" class="grip-link" id="btnGrip">كيف أمسك الفأرة واللوحة؟</button><div class="map">';
+    var html = '<button type="button" class="grip-link" id="btnGrip">🖱️ كيف أمسك؟</button><div class="map">';
     var nextId = '';
     for (var n = 0; n < MKA.STATIONS.length; n++) {
       if (MKA.isOpen(save, MKA.STATIONS[n].id) && !(save.done && save.done[MKA.STATIONS[n].id])) { nextId = MKA.STATIONS[n].id; break; }
@@ -769,7 +636,7 @@
     screen = 'cert';
     stationId = '';
     view.innerHTML = '<div class="cert"><h2>شهادة</h2><p class="cert-name" id="certName" dir="auto"></p>' +
-      '<p>أكملت المحطات الثمانية</p><div class="stars" aria-hidden="true">⭐⭐⭐⭐⭐⭐⭐⭐</div><div id="certForm"></div>' +
+      '<div class="stars" aria-hidden="true">⭐⭐⭐⭐⭐⭐⭐⭐</div><div id="certForm"></div>' +
       '<button type="button" data-act="map">الخريطة</button></div>';
     $('certName').textContent = save.name || '';
     if (!save.name) $('certForm').innerHTML = nameFormHTML();
@@ -798,7 +665,8 @@
     if (next) next.focus();
   }
   function showTeacher() {
-    var html = '<div class="panel"><h2>للمعلم</h2><p>القفز يفتح المحطة دون منح ملصق.</p><div class="jumps">';
+    var html = '<div class="panel"><h2>للمعلم</h2><p>القفز يفتح المحطة دون منح ملصق.</p>' +
+      '<p>لليد اليسرى: بدّل زرّي الفأرة من إعدادات الجهاز.</p><div class="jumps">';
     for (var i = 0; i < MKA.STATIONS.length; i++) {
       var station = MKA.STATIONS[i];
       html += '<button type="button" data-act="jump" data-station="' + station.id + '">' + station.title + '</button>';
@@ -1226,9 +1094,9 @@
     jumpWorld = MKA.jumpStart();
     field().innerHTML = '<div class="track" dir="ltr"><div class="ground"></div><div class="kid" id="kid">🧒</div>' +
       '<div class="bush" style="left:26%">🌿</div><div class="bush" style="left:52%">🌿</div><div class="bush" style="left:78%">🌿</div>' +
-      '<div class="door" id="door">🚪</div></div><p class="jump-note" id="jumpNote" hidden>🚪 لاحقًا</p>' +
-      '<div class="jump-keys" dir="ltr"><button type="button" class="key space" id="keySpace" data-code="Space">مسافة</button>' +
-      '<button type="button" class="key" id="keyEnter" data-code="Enter">Enter</button></div>';
+      '<div class="door" id="door">🚪</div></div><p class="jump-note" id="jumpNote" hidden>🚪</p>' +
+      '<div class="jump-keys" dir="ltr"><button type="button" class="key space" id="keySpace" data-code="Space" aria-label="مسافة"></button>' +
+      '<button type="button" class="key" id="keyEnter" data-code="Enter" aria-label="Enter">↵</button></div>';
     paintJump();
     armJumpIntro();
   }
@@ -1347,6 +1215,8 @@
     var hint = MKA.languageHint(code, eventKey);
     langHintEl.hidden = !hint;
     langHintEl.textContent = hint;
+    var letterBox = field();
+    if (letterBox) letterBox.classList.toggle('show-latin', !!hint);
     if (!MKA.acceptKey(MKA.LETTERS[progress], code)) {
       oops(document.querySelector('#field .kbd .key[data-code="' + code + '"]') || $('bigLetter'));
       return;
@@ -1356,6 +1226,13 @@
 
   function onPointerMove(e) {
     if (!overlay.hidden) return;
+    if (screen === 'grip' && gripCard === 2 && !gripReady) {
+      var star = document.querySelector('[data-grip="star"]');
+      if (star) {
+        var box = star.getBoundingClientRect();
+        if (e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom) gripMouse('star');
+      }
+    }
     if (stationId === 'move' && screen === 'play') {
       var ghost = $('ghost');
       if (ghost && !ghost.hidden) stopDemo();
@@ -1387,6 +1264,7 @@
     if (act.id === 'btnStart') { startLesson(); return; }
     if (act.id === 'btnGrip') { showGrip('map'); return; }
     if (act.getAttribute('data-act') === 'grip-next') { gripAdvance(); return; }
+    if (act.getAttribute('data-act') === 'grip-replay') { replayGrip(); return; }
     if (screen === 'grip') {
       var which = act.getAttribute('data-grip');
       if (which) { gripMouse(which); return; }
@@ -1433,7 +1311,7 @@
     }
     if (screen === 'grip') {
       if (e.repeat || e.code === 'Space' || e.code === 'Enter') return;
-      if (gripCard === 1) gripBump(e.code);
+      if (gripCard === 3) gripBump(e.code);
       return;
     }
     if (screen !== 'play') return;

@@ -122,6 +122,7 @@ test('damaged saves load as a playable academy', () => {
 
 test('home row is Arabic 101 and the grip lesson is not a ninth station', () => {
   assert.equal(MKA.STATIONS.length, 8);
+  for (const station of MKA.STATIONS) assert.ok(station.prompt.trim().split(/\s+/).length <= 2, station.prompt);
   assert.deepEqual(Array.from(MKA.HOME_LEFT, code => MKA.AR[code]), ['ش', 'س', 'ي', 'ب']);
   assert.deepEqual(Array.from(MKA.HOME_LEFT, code => MKA.EN[code]), ['A', 'S', 'D', 'F']);
   assert.deepEqual(Array.from(MKA.HOME_RIGHT, code => MKA.AR[code]), ['ت', 'ن', 'م', 'ك']);

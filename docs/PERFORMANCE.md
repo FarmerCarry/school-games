@@ -551,12 +551,12 @@ change; another game will again need room made or a decision like this one.
 
 ## Mouse & Keyboard Academy, 25 October 2026
 
-The academy page is still one inlined HTML file (no new images, fonts, or precache entries). The child coach and the three grip cards are drawn with markup, so the minified page grew past its old limit.
+The academy page is still one inlined HTML file (no new images, fonts, or precache entries). The grip lesson is five short picture screens drawn with shared markup, so the minified page is smaller than the first grip version.
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Mouse & Keyboard Academy | 80,055 | 81,000 (was 56,000) |
-| Offline precache, 46 files | 5,112,664 | 5,130,000 (was 5,100,000) |
+| Mouse & Keyboard Academy | 76,911 | 77,000 (was 84,000; before that 81,000; originally 56,000) |
+| Offline precache, 46 files | 5,109,520 | 5,130,000 (was 5,100,000) |
 
-The page limit is the next thousand above the measured file. The precache was 12,664 bytes over only because that same file is cached; nothing else was added. The new precache limit leaves 17,336 bytes (0.3%). Another game will need room made or a decision like the Cake Guards one.
+The page limit is the next thousand above the measured file. Replacing the connected-hand diagrams with one smiling mouse, a simple mitt, two bump keys, and a sitting child removed 6,957 bytes from the 83,868-byte page. 89 bytes remain under the page limit, and 20,480 bytes remain under the precache limit. No new files were added.
 
