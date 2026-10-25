@@ -78,7 +78,34 @@
     skyTex.colorSpace = T.SRGBColorSpace;
     var sky = new T.Mesh(new T.SphereGeometry(140, 14, 10), new T.MeshBasicMaterial({ map: skyTex, side: T.BackSide, fog: false, depthWrite: false }));
     scene.add(sky);
-    var clouds = instanced(sphereGeo, lambert(0xffffff));
+    var cloudCanvas = document.createElement('canvas');
+    cloudCanvas.width = 256;
+    cloudCanvas.height = 160;
+    var cloudCtx = cloudCanvas.getContext('2d');
+    function cloudPuff(x, y, r, inner, edge) {
+      var g = cloudCtx.createRadialGradient(x, y - r * 0.18, r * 0.08, x, y, r);
+      g.addColorStop(0, inner);
+      g.addColorStop(0.55, edge);
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      cloudCtx.fillStyle = g;
+      cloudCtx.beginPath();
+      cloudCtx.ellipse(x, y, r * 1.15, r * 0.82, 0, 0, Math.PI * 2);
+      cloudCtx.fill();
+    }
+    cloudPuff(78, 88, 52, 'rgba(255,255,255,0.98)', 'rgba(255,246,252,0.55)');
+    cloudPuff(148, 80, 64, 'rgba(255,255,255,0.96)', 'rgba(238,247,255,0.5)');
+    cloudPuff(198, 96, 46, 'rgba(255,252,255,0.94)', 'rgba(255,236,246,0.45)');
+    cloudPuff(112, 70, 36, 'rgba(255,255,255,1)', 'rgba(255,255,255,0.35)');
+    var cloudShade = cloudCtx.createLinearGradient(0, 70, 0, 150);
+    cloudShade.addColorStop(0, 'rgba(255,255,255,0)');
+    cloudShade.addColorStop(1, 'rgba(186,214,255,0.28)');
+    cloudCtx.fillStyle = cloudShade;
+    cloudCtx.fillRect(0, 0, 256, 160);
+    var cloudTex = new T.CanvasTexture(cloudCanvas);
+    cloudTex.colorSpace = T.SRGBColorSpace;
+    var clouds = instanced(planeGeo, new T.MeshBasicMaterial({
+      map: cloudTex, transparent: true, depthWrite: false, side: T.DoubleSide, fog: false
+    }));
     var sprinkles = instanced(bodyGeo, lambert(0xffffff));
     var floodMat = new T.MeshLambertMaterial({ color: 0x6a3018, transparent: true, opacity: 0.78, depthWrite: false });
     var flood = new T.Mesh(bodyGeo, floodMat);
@@ -108,8 +135,8 @@
 
     function buddy(color) {
       var group = new T.Group();
-      var mat = lambert(color);
-      var skin = lambert(0xfff3df);
+      var mat = lambert(color, { transparent: true });
+      var skin = lambert(0xfff3df, { transparent: true });
       var body = new T.Mesh(new T.CapsuleGeometry(0.34, 0.42, 3, 8), mat);
       body.position.y = 0.58;
       var faceCanvas = document.createElement('canvas');
@@ -144,7 +171,7 @@
       footR.scale.set(0.16, 0.1, 0.22);
       var hat = new T.Group();
       group.add(body, face, handL, handR, footL, footR, hat);
-      group.userData = { mat: mat, face: face, handL: handL, handR: handR, footL: footL, footR: footR, hat: hat, hatId: -1 };
+      group.userData = { mat: mat, skin: skin, face: face, handL: handL, handR: handR, footL: footL, footR: footR, hat: hat, hatId: -1 };
       scene.add(group);
       var shadow = new T.Mesh(shadowGeo, new T.MeshBasicMaterial({ color: 0x2a1428, transparent: true, opacity: 0.28, depthWrite: false }));
       shadow.rotation.x = -Math.PI / 2;
@@ -159,7 +186,7 @@
     function hatMesh(id, parent) {
       while (parent.children.length) parent.remove(parent.children[0]);
       if (!id) return;
-      var mat = lambert(id === 2 ? 0xbfe9ff : id === 3 ? 0xffe56a : id === 4 ? 0xff8ad0 : 0xffe56a);
+      var mat = lambert(id === 2 ? 0xbfe9ff : id === 3 ? 0xffe56a : id === 4 ? 0xff8ad0 : 0xffe56a, { transparent: true });
       if (id === 1) {
         var crown = new T.Mesh(new T.ConeGeometry(0.22, 0.28, 5), mat);
         crown.position.y = 1.12;
@@ -407,12 +434,21 @@
       sky.position.set(anchorX, 2, anchorZ + 6);
       choco.position.z = sea.position.z = sheen.position.z = anchorZ + 18;
       choco.position.x = sea.position.x = sheen.position.x = anchorX;
-      var cloudN = low ? 3 : 6;
+      var cloudN = low ? 4 : 7;
+      var puff = 0;
+      var cloudTint = [0xffffff, 0xfff7fc, 0xf3f8ff, 0xfffaf2];
       for (var ci = 0; ci < cloudN; ci++) {
-        var ang = ci * 1.15 + 0.4;
-        put(clouds, ci, anchorX + Math.sin(ang) * (16 + ci * 3), 9 + (ci % 3) * 2.2, anchorZ + 18 + ci * 7, 4.2, 1.15, 2.4, 0xffffff);
+        var ang = ci * 0.95 + 0.35;
+        var cx = anchorX + Math.sin(ang) * (14 + (ci % 3) * 4);
+        var cy = 8.4 + (ci % 4) * 1.35;
+        var cz = anchorZ + 8 + ci * 6.5;
+        var faceYaw = Math.atan2(anchorX - cx, (anchorZ + 2) - cz);
+        var tintC = cloudTint[ci % cloudTint.length];
+        put(clouds, puff++, cx, cy, cz, 8.2, 4.6, 1, tintC, faceYaw);
+        put(clouds, puff++, cx + 2.1, cy + 0.55, cz + 0.2, 5.2, 3.1, 1, 0xffffff, faceYaw);
+        if (!low) put(clouds, puff++, cx - 2.4, cy - 0.2, cz, 4.2, 2.5, 1, 0xfff4fa, faceYaw);
       }
-      clouds.count = cloudN;
+      clouds.count = puff;
       clouds.instanceMatrix.needsUpdate = true;
       if (clouds.instanceColor) clouds.instanceColor.needsUpdate = true;
       var spr = 0;
@@ -464,11 +500,7 @@
         var pl = state.players[pi];
         if (!pl) { buddyMesh.group.visible = buddyMesh.shadow.visible = buddyMesh.ring.visible = false; continue; }
         buddyMesh.group.visible = true;
-        var ghost = two && opts.eye !== pi;
-        buddyMesh.group.userData.mat.opacity = ghost ? 0.38 : 1;
-        buddyMesh.group.userData.mat.transparent = ghost;
-        buddyMesh.group.userData.mat.depthWrite = !ghost;
-        if (buddyMesh.group.userData.hatId !== hatId && !ghost) {
+        if (buddyMesh.group.userData.hatId !== hatId && !(two && pi > 0)) {
           hatMesh(hatId, buddyMesh.group.userData.hat);
           buddyMesh.group.userData.hatId = hatId;
         }
@@ -489,9 +521,9 @@
         buddyMesh.shadow.position.set(sh.x, sh.y + 0.04, sh.z);
         var spread = pl.onGround ? 0.55 : 0.38;
         buddyMesh.shadow.scale.set(spread, spread, 1);
-        if (!low && !reduced && !ghost && moving && pl.speed > 1 && parts.length < SPARKS - 4) {
+        if (!low && !reduced && moving && pl.speed > 1 && parts.length < SPARKS - 4) {
           var trail = opts.trail || 0;
-          var bits = Math.min(7, 1 + Math.floor(pl.speed / 6));
+          var bits = two ? 2 : Math.min(7, 1 + Math.floor(pl.speed / 6));
           if ((Math.floor(state.time * 24) + pi) % 2 === 0) {
             for (var k = 0; k < bits && parts.length < SPARKS; k++) {
               var back = 0.35 + k * 0.22;
@@ -523,19 +555,37 @@
       }
 
       var eyes = two ? [0, 1] : [0];
+      var ringWas = [buddies[0].ring.visible, buddies[1].ring.visible];
       var buf = renderer.getDrawingBufferSize(new T.Vector2());
       renderer.setScissorTest(two);
+      function nearFade(dist) {
+        if (dist >= 11.5) return 1;
+        if (dist <= 9.2) return 0.12;
+        return 0.12 + 0.88 * ((dist - 9.2) / (11.5 - 9.2));
+      }
+      function applyFade(buddyMesh, opacity) {
+        var ud = buddyMesh.group.userData;
+        var soft = opacity < 0.98;
+        ud.mat.opacity = opacity;
+        ud.mat.depthWrite = !soft;
+        ud.skin.opacity = opacity;
+        ud.skin.depthWrite = !soft;
+        ud.face.material.opacity = opacity < 0.75 ? 0 : 1;
+        ud.face.visible = opacity >= 0.75;
+        var kids = ud.hat.children;
+        for (var h = 0; h < kids.length; h++) {
+          var hm = kids[h].material;
+          if (!hm) continue;
+          hm.opacity = opacity;
+          hm.depthWrite = !soft;
+        }
+        buddyMesh.shadow.material.opacity = soft ? 0.04 : 0.28;
+      }
       for (var e = 0; e < eyes.length; e++) {
         var eye = eyes[e];
         var plEye = state.players[eye];
         var pose = opts.engine.cameraPose(eye);
         if (two) {
-          for (var b = 0; b < state.players.length; b++) {
-            var ghostOn = b !== eye;
-            buddies[b].group.userData.mat.opacity = ghostOn ? 0.38 : 1;
-            buddies[b].group.userData.mat.transparent = ghostOn;
-            buddies[b].group.userData.mat.depthWrite = !ghostOn;
-          }
           var half = buf.x / 2;
           renderer.setViewport(eye ? half : 0, 0, half, buf.y);
           renderer.setScissor(eye ? half : 0, 0, half, buf.y);
@@ -557,6 +607,7 @@
           speedLines[li].scale.set(0.035, 0.035, 0.55);
           speedLines[li].rotation.y = plEye.face;
         }
+        camera.aspect = two ? (buf.x * 0.5) / buf.y : buf.x / buf.y;
         camera.fov = 60 + (fast ? Math.min(8, (KR.topSpeed(plEye.speed) - 10) * 0.85) : 0) + kick;
         camera.updateProjectionMatrix();
         camera.position.set(pose.x, pose.y, pose.z);
@@ -567,14 +618,32 @@
         if (!reduced && state.flood && plEye && plEye.z > state.flood.z0 && state.floodY > plEye.y - 1) {
           camera.position.x += Math.sin(state.time * 18) * 0.08;
         }
-        camera.lookAt(pose.lx, pose.ly, pose.lz);
-        for (var faceI = 0; faceI < buddies.length; faceI++) {
-          var bill = buddies[faceI].group.userData.face;
-          if (bill && buddies[faceI].group.visible) {
-            buddies[faceI].group.updateMatrixWorld();
-            bill.lookAt(camera.position);
-          }
+        if (two && plEye) {
+          var yaw = plEye.face + (plEye.cam || 0);
+          var shift = eye === 0 ? -1.15 : 1.15;
+          camera.position.x += Math.cos(yaw) * shift;
+          camera.position.z -= Math.sin(yaw) * shift;
         }
+        for (var b = 0; b < buddies.length; b++) {
+          var mate = state.players[b];
+          buddies[b].ring.visible = ringWas[b];
+          var fade = 1;
+          if (two && b !== eye && mate && buddies[b].group.visible) {
+            var dx = mate.x - camera.position.x;
+            var dy = (mate.y + 0.7) - camera.position.y;
+            var dz = mate.z - camera.position.z;
+            fade = nearFade(Math.hypot(dx, dy, dz));
+          }
+          applyFade(buddies[b], fade);
+          if (fade < 0.45) buddies[b].ring.visible = false;
+          var bill = buddies[b].group.userData.face;
+          if (!bill || !buddies[b].group.visible) continue;
+          if (b === eye && fade >= 0.75) {
+            buddies[b].group.updateMatrixWorld();
+            bill.lookAt(camera.position);
+          } else bill.rotation.set(0, 0, 0);
+        }
+        camera.lookAt(pose.lx, pose.ly, pose.lz);
         renderer.render(scene, camera);
       }
       renderer.setScissorTest(false);

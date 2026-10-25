@@ -141,7 +141,17 @@
   };
 
   function demo(b, mech) {
-    if (mech === 'sink') { b.floor(2.4, 0.55); b.run(2, 'sink'); return; }
+    if (mech === 'sink') {
+      var sinkAt = b.z;
+      var sinkX = b.x;
+      b.run(2, 'sink');
+      var span = b.z - sinkAt;
+      b.piece('floor', {
+        x: sinkX, z: sinkAt + span / 2, hw: 2.4, hd: Math.max(0.4, span / 2 - 0.08), hh: 0.2,
+        surf: b.surf - 0.55, stand: true
+      });
+      return;
+    }
     if (mech === 'move') { b.floor(3.2, 0.02); b.pad('move', { amp: 0.85, hw: 1.25 }); b.pad('move', { amp: 0.85, hw: 1.25 }); return; }
     if (mech === 'gum') {
       b.pad('key', { hw: 2.3 });
@@ -235,24 +245,77 @@
     return { z0: z0, z1: b.z + 0.6, rate: 0.58, from: -0.85 };
   }
 
+  function candyStage(b, stage) {
+    if (stage === 0) {
+      var zRun = b.z;
+      b.run(3, 'key', { rails: true, hw: 1.25 });
+      for (var c = 0; c < 3; c++) {
+        b.piece('chev', { x: 0, z: zRun + 1.3 + c * 1.7, hw: 0.26, hd: 0.16, hh: 0.045, surf: 0.52, stand: false });
+      }
+      b.x = 1.55;
+      b.pad('key', { hw: 1.9 });
+      b.x = 2.35;
+      b.pad('tramp', { hw: 2.15, hd: 1.2 });
+      b.hole(1.35);
+      b.x = 1.15;
+      b.pad('key', { hw: 1.7, hd: 1.05 });
+      b.x = -0.2;
+      b.run(3, 'key', { hw: 1.35 });
+      b.x = -1.7;
+      b.run(2, 'key', { hw: 2.05 });
+      b.x = -0.4;
+      b.run(3, 'key', { hw: 1.35 });
+      b.x = 1.2;
+      b.run(3, 'key', { hw: 1.6 });
+      b.x = 0;
+      demo(b, 'sink');
+      for (var k = 0; k < 36; k++) {
+        b.x = Math.sin(k * 0.55) * 0.65;
+        b.pad('key', { hw: 1.35 });
+      }
+      b.x = 0;
+      return;
+    }
+    if (stage === 1) {
+      b.run(2, 'key', { hw: 1.2 });
+      b.x = -1.25;
+      demo(b, 'sink');
+      b.x = -0.2;
+      b.pad('key', { hw: 1.25 });
+      b.x = 1.2;
+      b.pad('tramp', { hw: 1.4, hd: 1.1 });
+      b.x = 0.35;
+      b.run(2, 'key', { hw: 1.2 });
+      b.x = 0;
+      return;
+    }
+    b.run(2, 'key', { hw: 1.15 });
+    b.x = 1.15;
+    b.pad('move', { amp: 0.45, hw: 1.45, freq: 0.65 });
+    b.x = 0;
+    b.hole(1.55);
+    b.pad('key', { hw: 1.5, hd: 1.1 });
+    b.x = -1.05;
+    b.pad('tramp', { hw: 1.35, hd: 1.05 });
+    b.x = 0;
+    b.run(2, 'key', { hw: 1.15 });
+  }
+
   function buildStage(world, stage, z0) {
     var b = new Builder(z0, stage);
     var mech = MECH[world];
-    var rails = world === 0 && stage === 0;
+    var rails = false;
     var padKind = world === 3 ? 'ice' : 'key';
     var opt = { rails: rails, hw: world === 3 ? 1.2 : 0.9 };
-    b.run(stage === 0 ? 8 : 5, padKind, opt);
-    if (rails) {
-      for (var c = 0; c < 4; c++) {
-        b.piece('chev', { x: 0, z: z0 + 2.4 + c * 3.1, hw: 0.26, hd: 0.16, hh: 0.045, surf: 0.52, stand: false });
+    if (world === 0 && stage < 3) candyStage(b, stage);
+    else {
+      b.run(stage === 0 ? 8 : 5, padKind, opt);
+      if (world === 0 || stage === 0) {
+        b.pad('tramp', { hw: 1.35, hd: 1.1 });
+        b.run(8, 'key', { hw: 1.15 });
       }
+      if (stage === 0 || stage === 1) demo(b, mech);
     }
-    if (world === 0 || stage === 0) {
-      b.pad('tramp', { hw: 1.35, hd: 1.1 });
-      b.run(8, 'key', { hw: 1.15, rails: rails });
-    }
-    if (stage === 0) demo(b, mech);
-    else if (stage === 1) demo(b, mech);
     var gateAt = world === 0 ? -1 : (world < 4 ? 3 : 1);
     var gateN = [0, 300, 700, 1100, 400, 500, 600, 700][world];
     var cycles = 3 + Math.floor(stage / 2);
