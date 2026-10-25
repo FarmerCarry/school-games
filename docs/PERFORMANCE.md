@@ -551,12 +551,13 @@ change; another game will again need room made or a decision like this one.
 
 ## Mouse & Keyboard Academy, 25 October 2026
 
-The academy page is still one inlined HTML file (no new images, fonts, or precache entries). The grip lesson is five picture screens. The page limit was raised because 14 bytes of headroom was not enough to replace the jagged hand with a smooth cartoon glove, draw a whole sitting child, and show a real star burst.
+The grip lesson is five picture screens for children who are not reading yet. The drawn glove was replaced with illustrations for the non-reader grip lesson: five WebP pictures at 720×540 (a left-button mouse, a right-button mouse, the two bump keys, a slouch, and sitting up straight). The slide screen reuses the left-button picture. The page itself got smaller because the hand-drawn SVG markup came out.
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Mouse & Keyboard Academy | 79,930 | 82,000 (was 77,000; before that 84,000, 81,000, and originally 56,000) |
-| Offline precache, 46 files | 5,112,539 | 5,135,000 (was 5,130,000; before that 5,100,000) |
+| Mouse & Keyboard Academy | 74,295 | 82,000 (was 77,000; before that 84,000, 81,000, and originally 56,000) |
+| Offline precache, 51 files | 5,202,606 | 5,210,000 (was 5,135,000; before that 5,130,000 and 5,100,000) |
+| Five grip illustrations | 95,702 | — |
 
-The extra room is 5,000 bytes on the page and the same 5,000 bytes on the precache, and it was spent on those drawings. The measured page grew by 2,944 bytes, from 76,986 to 79,930. 2,070 bytes remain under the page limit, and 22,461 bytes remain under the precache limit. No new files were added.
+The pictures add 95,702 bytes. The minified page shrank by 5,635 bytes, from 79,930 to 74,295, so it still fits the 82,000 page limit with 7,705 bytes left. The precache grew by 90,067 bytes, from 5,112,539 to 5,202,606, which is why its limit moved up by 75,000 bytes. 7,394 bytes remain under the precache limit. The build copies each game's WebP and AVIF files into the offline cache.
 

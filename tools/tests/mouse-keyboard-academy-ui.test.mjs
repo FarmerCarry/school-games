@@ -192,7 +192,7 @@ test('how to hold the mouse and keyboard comes before the lessons', async t => {
   assert.equal(keys.includes('ش'), false);
   await page.keyboard.press('q');
   assert.equal(await page.locator('#btnGripNext').isHidden(), true);
-  await page.locator('.bump[data-code="KeyJ"]').click();
+  await page.locator('.glyph[data-code="KeyJ"]').click();
   await page.waitForFunction(() => !document.getElementById('btnGripNext').hidden);
   await pageFits();
   await page.locator('#btnGripNext').click();
@@ -256,7 +256,7 @@ test('grip cards fit the classroom sizes without overlapping', async t => {
     const left = await inside(page, '[data-grip="left"]', width, height);
     assert.equal(intersects(replay, left), false, `${width}x${height} replay covers the mouse`);
     assert.equal(await page.locator('.grip-note').count(), 0);
-    assert.equal(await page.locator('.hand path').count(), 1);
+    assert.match(await page.locator('.grip-stage img').first().getAttribute('src'), /grip-mouse-left\.webp$/);
     await page.locator('[data-grip="left"]').click();
     const praise = await page.evaluate(() => {
       const yay = document.querySelector('.grip-bar .yay').getBoundingClientRect();
@@ -283,45 +283,51 @@ test('grip cards fit the classroom sizes without overlapping', async t => {
     await page.locator('#btnGripNext').click();
     await pageFits(page);
     const star = await inside(page, '[data-grip="star"]', width, height);
-    const wrist = await page.evaluate(() => {
+    const sliding = await page.evaluate(() => {
       const glide = document.querySelector('.glide');
-      const rest = document.querySelector('.wrist');
-      return !!glide && !!rest && !glide.contains(rest);
+      const star = document.querySelector('[data-grip="star"]');
+      const img = glide && glide.querySelector('img');
+      return !!glide && !!star && !!img && !glide.contains(star) && /grip-mouse-left\.webp$/.test(img.getAttribute('src'));
     });
-    assert.equal(wrist, true, `${width}x${height} wrist stays put while the mouse glides`);
+    assert.equal(sliding, true, `${width}x${height} the picture slides and the star stays`);
     await page.locator('[data-grip="star"]').click();
     await inside(page, '#btnGripNext', width, height);
     assert.equal(intersects(star, replay), false);
     await page.locator('#btnGripNext').click();
     await pageFits(page);
     await words(page);
-    const landed = await page.evaluate(() => {
-      const paws = [...document.querySelectorAll('.paw')];
-      const nubs = [...document.querySelectorAll('.nub')];
-      return paws.length === 2 && paws.every((paw, i) => {
-        const tip = paw.getBoundingClientRect();
-        const nub = nubs[i].getBoundingClientRect();
-        return tip.bottom >= nub.top - 8 && tip.bottom <= nub.bottom + 16;
-      });
+    const letters = await page.evaluate(() => {
+      const beh = document.querySelector('[data-code="KeyF"]').getBoundingClientRect();
+      const teh = document.querySelector('[data-code="KeyJ"]').getBoundingClientRect();
+      const picture = document.querySelector('.grip-stage img').getBoundingClientRect();
+      return {
+        behUnderRightHand: beh.left < teh.left,
+        beh: document.querySelector('[data-code="KeyF"]').textContent.trim(),
+        teh: document.querySelector('[data-code="KeyJ"]').textContent.trim(),
+        inside: beh.left >= picture.left && beh.right <= picture.right && teh.left >= picture.left && teh.right <= picture.right
+      };
     });
-    assert.equal(landed, true, `${width}x${height} fingers rest on the bumps`);
+    assert.equal(letters.beh, 'ب', `${width}x${height} ب is on the F key`);
+    assert.equal(letters.teh, 'ت', `${width}x${height} ت is on the J key`);
+    assert.equal(letters.behUnderRightHand, true, `${width}x${height} ب stays under the right hand`);
+    assert.equal(letters.inside, true, `${width}x${height} letters sit on the keys`);
     for (const key of ['KeyF', 'KeyJ']) {
-      const button = await inside(page, `.bump[data-code="${key}"]`, width, height);
+      const button = await inside(page, `.glyph[data-code="${key}"]`, width, height);
       assert.equal(intersects(replay, button), false, `${width}x${height} replay covers ${key}`);
     }
-    await page.locator('.bump[data-code="KeyF"]').click();
+    await page.locator('.glyph[data-code="KeyF"]').click();
     await inside(page, '#btnGripNext', width, height);
     await page.locator('#btnGripNext').click();
     await pageFits(page);
     await inside(page, '[data-sit="kid"]', width, height);
     await inside(page, '#btnGripNext', width, height);
     const poses = await page.evaluate(() => {
-      const torso = document.querySelector('.torso');
-      const slouch = getComputedStyle(torso).transform;
+      const straight = document.querySelector('.straight');
+      const before = getComputedStyle(straight).opacity;
       document.querySelector('.child').classList.add('sat');
-      const tall = getComputedStyle(torso).transform;
+      const after = getComputedStyle(straight).opacity;
       document.querySelector('.child').classList.remove('sat');
-      return slouch !== 'none' && slouch !== tall;
+      return before === '0' && after === '1';
     });
     assert.equal(poses, true, `${width}x${height} sitting up changes the pose`);
     await words(page);

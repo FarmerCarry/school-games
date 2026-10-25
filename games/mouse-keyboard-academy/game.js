@@ -56,6 +56,7 @@
   var gripReady = false;
   var gripBack = 'lesson';
   var GRIP_WORD = ['أمسك الفأرة', 'انقر هنا', 'حرّكها', 'اضغط', 'اجلس'];
+  var GRIP_NEXT = ['grip-mouse-right.webp', 'grip-mouse-left.webp', 'grip-keys.webp', 'grip-sit-slouch.webp', 'grip-sit-straight.webp'];
   var GRIP_SAY = ['أمسك الفأرة', 'انقر الزر الآخر', 'حرّك الفأرة', 'اضغط المفتاح', 'اجلس'];
   var GRIP_ICON = ['🖱️', '👆', '⭐', '⌨️', '🧒'];
 
@@ -502,35 +503,28 @@
     overlay.hidden = false;
   }
 
-  function mouseFace(side) {
-    var on = side === 'right' ? 'right' : 'left';
-    return '<i class="bulb left' + (on === 'left' ? ' lit' : '') + '"></i><i class="bulb right' + (on === 'right' ? ' lit' : '') + '"></i><i class="split"></i><i class="eye"></i><i class="eye r"></i><i class="smile"></i>';
+  function warm(src) {
+    var img = new Image();
+    img.decoding = 'async';
+    img.src = src;
   }
-  function handSvg(cls) {
-    return '<svg class="' + cls + '" viewBox="26 26 216 186"><path d="M110 200C105 200 98 205 92 204C86 203 80 200 76 196C72 192 70 185 68 180C66 175 66 169 64 164C62 159 57 156 54 152C51 148 47 144 44 140C41 136 39 131 38 126C37 121 38 116 40 112C42 108 46 103 50 100C54 97 60 96 64 96C68 96 73 103 74 102C75 101 73 93 72 88C71 83 69 77 70 72C71 67 73 62 76 58C79 54 84 50 88 48C92 46 96 45 100 46C104 47 108 50 110 54C112 58 114 63 114 68C114 73 113 78 112 82C111 86 108 90 108 94C108 98 112 103 114 104C116 105 120 103 122 100C124 97 125 90 126 84C127 78 128 72 130 66C132 60 135 54 138 50C141 46 146 42 150 40C154 38 160 37 164 38C168 39 173 44 176 48C179 52 180 59 180 64C180 69 178 75 176 80C174 85 170 88 168 92C166 96 165 103 166 104C167 105 171 103 174 100C177 97 179 92 182 88C185 84 189 80 192 78C195 76 199 75 202 76C205 77 209 82 210 86C211 90 210 94 210 98C210 102 207 108 208 110C209 112 213 110 216 108C219 106 221 101 224 100C227 99 230 100 232 102C234 104 235 110 234 114C233 118 231 122 228 124C225 126 219 125 216 128C213 131 212 136 210 140C208 144 205 149 202 154C199 159 195 164 190 168C185 172 180 176 174 180C168 184 162 187 156 190C150 193 142 196 136 198C130 200 124 202 120 202C116 202 115 200 110 200Z"/></svg>';
+  function shot(src, extra, cls) {
+    return '<span class="shot' + (cls ? ' ' + cls : '') + '"><img alt="" width="720" height="540" src="' + src + '">' + (extra || '') + '</span>';
   }
   function gripScene() {
-    if (gripCard === 0 || gripCard === 1) {
-      var side = gripCard === 1 ? 'right' : 'left';
-      return '<div class="pair ' + side + '"><i class="wrist"></i>' + handSvg('hand ' + side) +
-        '<button type="button" class="mousey target" data-grip="' + side + '">' + mouseFace(side) + '</button></div>';
-    }
+    if (gripCard === 0) return '<button type="button" class="pic target" data-grip="left">' + shot('grip-mouse-left.webp', '<i class="halo left"></i>') + '</button>';
+    if (gripCard === 1) return '<button type="button" class="pic target" data-grip="right">' + shot('grip-mouse-right.webp', '<i class="halo right"></i>') + '</button>';
     if (gripCard === 2) {
-      return '<div class="pair slide"><i class="wrist"></i><div class="glide">' + handSvg('hand left') +
-        '<div class="mousey">' + mouseFace('left') + '</div></div></div>' +
-        '<button type="button" class="catch target" data-grip="star" aria-label="نجمة">⭐</button>';
+      return '<div class="move"><div class="glide">' + shot('grip-mouse-left.webp') + '</div>' +
+        '<button type="button" class="catch target" data-grip="star" aria-label="نجمة">⭐</button></div>';
     }
     if (gripCard === 3) {
-      return '<div class="keys"><div class="keywrap">' + handSvg('paw') +
-        '<button type="button" class="bump target" data-code="KeyF">' + MKA.AR.KeyF + '<i class="nub"></i></button></div>' +
-        '<div class="keywrap">' + handSvg('paw') +
-        '<button type="button" class="bump target" data-code="KeyJ">' + MKA.AR.KeyJ + '<i class="nub"></i></button></div></div>';
+      return shot('grip-keys.webp', '<button type="button" class="glyph j" data-code="KeyJ">ت</button>' +
+        '<button type="button" class="glyph f" data-code="KeyF">ب</button>', 'target');
     }
-    return '<div class="sit"><i class="chair"></i><i class="desk"></i><i class="mon"></i><i class="kb"></i>' +
-      '<button type="button" class="child" data-sit="kid"><i class="thigh far"></i><i class="shin far"></i><i class="foot far"></i>' +
-      '<i class="thigh"></i><i class="shin"></i><i class="foot"></i>' +
-      '<i class="torso"><i class="head"><i class="hair"></i><i class="eye"></i><i class="smile"></i></i></i>' +
-      '<i class="uarm"></i><i class="farm"></i><i class="mitt"></i></button></div>';
+    return '<button type="button" class="pic child" data-sit="kid"><span class="shot poses">' +
+      '<img class="pose slouch" alt="" width="720" height="540" src="grip-sit-slouch.webp">' +
+      '<img class="pose straight" alt="" width="720" height="540" src="grip-sit-straight.webp"></span></button>';
   }
   function renderGrip() {
     gripReady = gripCard === 4;
@@ -543,6 +537,8 @@
     hideToast();
     langHintEl.hidden = true;
     updateChrome();
+    warm(GRIP_NEXT[gripCard]);
+    if (gripCard === 3) warm('grip-sit-straight.webp');
     say(GRIP_WORD[gripCard]);
     speak(GRIP_SAY[gripCard]);
   }
