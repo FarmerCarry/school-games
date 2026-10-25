@@ -560,21 +560,25 @@ runner is a decal. Particles stay at or below 200. Paused frames are not redrawn
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Key Runner | 102,150 | 104,000 (was 100,000) |
+| Key Runner | 109,519 | 112,000 (was 104,000) |
 | Teacher page (catalog row only, same limit) | 92,810 | 96,000 |
 | Portal (thumbnail and catalog entry) | 357,445 | 365,000 (was 360,000) |
-| Offline precache | 5,191,898 | 5,200,000 (was 5,100,000) |
+| Offline precache | 5,199,267 | 5,215,000 (was 5,200,000) |
 
 The offline cache on this branch was 5,082,082 / 5,100,000 before the game, with
-about 17.9 KB free, so `precacheBytes` is raised by this game's planned 100,000
-bytes to 5,200,000. The third juice pass (a readable runner, a candy-tile plaza,
-a small castle, the on-screen keyboard hint, the record shout and end-screen
-confetti) measured 102,150 bytes, 2,150 past the old 100,000 game cap.
-`gameHtmlBytes` for Key Runner is now 104,000. Measured precache is 5,191,898
-bytes, still inside 5,200,000, with 8,102 bytes left, so the precache cap was
-not raised again. Particles stay capped at 200, and a press, landing or
-celebration spawns fewer of them on the low-quality setting. The castle is one
-small group of cones and cylinders, hidden on the low-quality setting.
+about 17.9 KB free, so `precacheBytes` was first raised by this game's planned
+100,000 bytes to 5,200,000. The third juice pass measured 102,150 bytes, and
+`gameHtmlBytes` for Key Runner became 104,000. Precache then was 5,191,898,
+inside 5,200,000. The fourth juice pass (candies between keys, a rotating
+moment every 6 to 10 keys, a letter that floats off each landing, a plaza
+ghost, and the victory wave) measured 109,519 bytes, 5,519 past 104,000.
+`gameHtmlBytes` for Key Runner is now 112,000, with 2,481 bytes left. The same
+7,369 bytes landed in the precache, which measured 5,199,267 and left only 733
+bytes under 5,200,000. `precacheBytes` is now 5,215,000, with 15,733 bytes left.
+Particles stay capped at 200. Candies, arches, and the gummy bear reuse the
+existing sphere, stick, and donut instances (two bears, two arches, one
+translucent ghost). The castle stays one small group, hidden on the low-quality
+setting except during the victory wave.
 
 The portal grew by about 6.8 KB once the catalog row and the drawn tile were
 inlined, past the old 360,000 cap. `portalBytes` stays at 365,000, this game's

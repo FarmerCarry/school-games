@@ -189,6 +189,31 @@ test('holding forward crosses the plaza into world 1 and walks the sinking keys'
   assert.equal(pl.falling, 0);
 });
 
+test('candies sit between keys and moments rotate', () => {
+  const stage = KR.worlds()[0].stages[0];
+  const candies = stage.pieces.filter((p) => p.t === 'candy');
+  assert.ok(candies.length > 10 && candies.length <= 40);
+  assert.ok(candies.every((c) => c.sensor && !c.stand && c.y > 0.5));
+  const moments = stage.path.filter((p) => p.moment).map((p) => p.moment);
+  assert.ok(moments.length >= 4);
+  for (let i = 1; i < moments.length; i++) assert.notEqual(moments[i], moments[i - 1]);
+  const kinds = new Set(moments);
+  assert.ok(kinds.has('gold') && kinds.has('boost') && kinds.has('bear') && kinds.has('arch'));
+  const eng = KR.createEngine({ mode: 'world', world: 0, speed: 0 });
+  const memory = {};
+  let got = 0;
+  const seen = new Set();
+  for (let i = 0; i < 120 * 8; i++) {
+    for (const ev of eng.step(1 / 120, KR.suggest(eng.state, 0, memory))) {
+      if (ev.e === 'candy') got++;
+      if (ev.e === 'press' && ev.moment) seen.add(ev.moment);
+    }
+  }
+  assert.ok(got > 5, 'a run picks up candies, got ' + got);
+  assert.ok(seen.has('bear') || seen.has('arch'));
+  assert.equal(eng.state.players[0].falls, 0);
+});
+
 test('corrupt saves fall back and a real save keeps the career', () => {
   assert.equal(KR.normalizeSave(null).speed, 0);
   assert.equal(KR.normalizeSave({ v: 2, speed: 99 }).wins, 0);

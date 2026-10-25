@@ -13,7 +13,7 @@
     "connect-four": 53000,
     "critter-mart": 172000,
     "dino-3d": 55000,
-    "key-runner": 104000,
+    "key-runner": 112000,
     "drift-king": 113000,
     "fire-and-ice": 126000,
     "hoop-heads": 155000,
@@ -46,5 +46,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5200000
+  "precacheBytes": 5215000
 }

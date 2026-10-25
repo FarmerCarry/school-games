@@ -22,6 +22,11 @@
       [659, 880, 1175].forEach(function (f, i) { tone({ freq: f, type: 'triangle', dur: 0.12, vol: 0.1, delay: i * 0.08 }); });
     }
     else if (name === 'world') Kit.sfx.win();
+    else if (name === 'candy') {
+      var step = Math.min(8, extra || 1);
+      tone({ freq: 520 + step * 62, to: 740 + step * 78, type: 'square', dur: 0.07, vol: 0.06 });
+    }
+    else if (name === 'moment') tone({ freq: extra === 2 ? 320 : 520, to: extra === 2 ? 880 : 1040, type: 'triangle', dur: 0.12, vol: 0.07 });
     else if (name === 'record') {
       [523, 659, 784, 1047].forEach(function (f, i) { tone({ freq: f, type: 'triangle', dur: 0.11, vol: 0.1, delay: i * 0.07 }); });
     }

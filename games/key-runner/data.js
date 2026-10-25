@@ -301,6 +301,46 @@
     b.run(2, 'key', { hw: 1.15 });
   }
 
+  function dress(b) {
+    var path = b.path;
+    var kinds = ['gold', 'boost', 'bear', 'arch'];
+    var gaps = [7, 9, 6, 8, 10];
+    var at = 6 + (b.stage % 3);
+    var ki = b.stage % 4;
+    var gi = b.stage % 5;
+    var last = '';
+    while (at < path.length - 1) {
+      var pad = path[at];
+      var skip = !pad || pad.flag || pad.hw > 4 || pad.t === 'tramp' || pad.t === 'launch' || pad.t === 'caps';
+      if (skip) { at++; continue; }
+      var kind = kinds[ki % 4];
+      if (kind === last) kind = kinds[(ki + 1) % 4];
+      pad.moment = kind;
+      last = pad.moment;
+      ki++;
+      at += gaps[gi % 5];
+      gi++;
+    }
+    var n = 0;
+    for (var i = 0; i < path.length - 1 && n < 40; i++) {
+      var a = path[i], c = path[i + 1];
+      if (!a || !c || a.hw > 4 || c.hw > 4) continue;
+      var gap = (c.z - c.hd) - (a.z + a.hd);
+      if (gap > 2.6) continue;
+      var surf = Math.max(a.y + a.hh, c.y + c.hh);
+      b.pieces.push({
+        id: 80000 + b.stage * 100 + n,
+        t: 'candy', sensor: 1, stand: false, stage: b.stage,
+        x: (a.x + c.x) * 0.5 + (i % 2 ? 0.28 : -0.28),
+        z: (a.z + c.z) * 0.5,
+        y: surf + 0.82 + Math.max(0, gap) * 0.38,
+        hw: 0.24, hh: 0.24, hd: 0.24,
+        star: n % 4 === 3 ? 1 : 0
+      });
+      n++;
+    }
+  }
+
   function buildStage(world, stage, z0) {
     var b = new Builder(z0, stage);
     var mech = MECH[world];
@@ -359,6 +399,7 @@
     }
     var flag = b.pad('key', { hw: 1.35, hd: 1.15 });
     flag.flag = 1;
+    dress(b);
     var length = b.z - z0;
     var gold = Math.max(16, Math.min(30, length / 6.2));
     return {

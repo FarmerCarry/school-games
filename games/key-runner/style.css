@@ -1,5 +1,5 @@
 :root { --ink:#3a2144; --candy:#ff4eb6; --paper:#fff6ea; --sky:#ffd4ee; }
-html, body { margin:0; height:100%; overflow:hidden; background:var(--sky); color:var(--ink); }
+html, body { margin:0; height:100%; overflow:hidden; overflow:clip; background:var(--sky); color:var(--ink); }
 [hidden] { display:none !important; }
 #scene { position:fixed; top:0; bottom:0; left:0; right:auto; width:100%; height:100%; touch-action:none; z-index:0; }
 button, input { font-family:var(--sg-font); }
@@ -31,10 +31,12 @@ h1 span { display:block; font-size:0.42em; letter-spacing:0.04em; }
 .chip.speed span { font-size:15px; }
 .chip.speed b { font-size:clamp(44px, 5.4vw, 68px); line-height:0.92; color:#ff2f9a; }
 .chip b.pop { animation:pop 0.22s ease-out; }
+#candy-chip { min-width:58px; background:#ffe0f2e6; }
+#candy-chip b { color:#e21878; }
 @keyframes pop { 40% { transform:scale(1.28); } }
 #place, #word { font-weight:700; max-width:240px; }
 #word b { color:var(--candy); }
-#banner { position:absolute; top:22%; left:0; right:0; z-index:3; text-align:center; font-size:clamp(40px, 8vw, 84px); font-weight:700; color:#ffe14d; pointer-events:none; margin:0; -webkit-text-stroke:10px #3a1248; paint-order:stroke fill; text-shadow:0 6px 0 #3a1248; }
+#banner { position:fixed; top:22%; left:0; right:0; z-index:3; text-align:center; font-size:clamp(40px, 8vw, 84px); font-weight:700; color:#ffe14d; pointer-events:none; margin:0; -webkit-text-stroke:10px #3a1248; paint-order:stroke fill; text-shadow:0 6px 0 #3a1248; }
 #banner.pop { animation:bannerpop 0.42s ease-out; }
 @keyframes bannerpop { 0% { transform:scale(0.35) rotate(-8deg); } 60% { transform:scale(1.12) rotate(2deg); } 100% { transform:scale(1) rotate(0); } }
 #hint { position:fixed; left:16px; bottom:16px; z-index:6; pointer-events:none; }

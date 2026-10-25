@@ -225,7 +225,7 @@
       pl.usedDouble = false;
       pl.ice = p.t === 'ice';
       if (!fromAir) return;
-      pl.squash = 0.46;
+      pl.squash = 0.3;
       if (p.t === 'tramp') {
         pl.vy = C.TRAMP;
         pl.onGround = false;
@@ -291,7 +291,7 @@
       if (p.id !== pl.lastPad && pl.pressCd <= 0) {
         pl.lastPad = p.id;
         pl.pressCd = 0.03;
-        events.push({ e: 'press', p: pl.i, id: p.id, x: pl.x, y: pl.y, z: pl.z });
+        events.push({ e: 'press', p: pl.i, id: p.id, x: pl.x, y: pl.y, z: pl.z, moment: p.moment || '' });
       }
       if (p.ch && pl.wordId !== p.id && (state.mode === 'world' || state.mode === 'race')) {
         pl.wordId = p.id;
@@ -522,6 +522,20 @@
       }
     }
 
+    function grabCandy(pl, events) {
+      if (pl.finished) return;
+      var py = pl.y + 0.5;
+      for (var i = 0; i < state.pieces.length; i++) {
+        var c = state.pieces[i];
+        if (c.t !== 'candy' || c.got) continue;
+        var dx = pl.x - c.x, dy = py - c.y, dz = pl.z - c.z;
+        if (dx * dx + dy * dy + dz * dz < 1.45) {
+          c.got = 1;
+          events.push({ e: 'candy', p: pl.i, x: c.x, y: c.y, z: c.z, star: c.star ? 1 : 0 });
+        }
+      }
+    }
+
     function sensors(pl, events) {
       if (pl.touchCd > 0 || state.mode !== 'plaza') return;
       for (var i = 0; i < state.pieces.length; i++) {
@@ -629,6 +643,7 @@
         events.push({ e: 'step', p: pl.i, n: gain, speed: pl.speed });
       }
       sensors(pl, events);
+      grabCandy(pl, events);
       feet(pl, events);
       if (pl.y < C.FALL_Y) startFall(pl, events, 'void');
       if (state.flood && pl.z >= state.flood.z0 && pl.z <= state.flood.z1 && pl.y < state.floodY) startFall(pl, events, 'flood');

@@ -26,6 +26,24 @@
   var hintTimer = 0;
   var hintShown = false;
   var recordRound = false;
+  var candyN = [0, 0];
+  var chain = [0, 0];
+  var chainAt = [0, 0];
+  var boostUntil = 0;
+  var victoryUntil = 0;
+  var holdResult = null;
+  var ghostDone = false;
+
+  function clearJuice() {
+    candyN = [0, 0];
+    chain = [0, 0];
+    chainAt = [0, 0];
+    boostUntil = 0;
+    victoryUntil = 0;
+    holdResult = null;
+    var node = el('candy');
+    if (node) node.textContent = '0';
+  }
 
   function persist() {
     save.best = Math.max(save.best || 0, save.speed || 0);
@@ -115,6 +133,7 @@
   function go(nextMode, opts, round) {
     duo = nextMode === 'race';
     activity = nextMode;
+    clearJuice();
     eng.reset(runOpts(Object.assign({ mode: nextMode === 'race' ? 'race' : nextMode }, opts || {})));
     mode = 'play';
     dirty = true;
@@ -126,6 +145,10 @@
     streakAt = startSp >= 40 ? 40 : startSp >= 24 ? 24 : startSp >= 12 ? 12 : 0;
     recordRound = false;
     showHint();
+    if (!duo && !ghostDone && nextMode === 'plaza') {
+      ghostDone = true;
+      view.playGhost(eng.state);
+    }
   }
   function buildConfetti() {
     var root = el('confetti');
@@ -215,6 +238,7 @@
     if (activity === 'tower') opts.seed = eng.state.seed;
     if (activity === 'race') { opts.players = 2; opts.speed = 0; opts.shoe = 1; opts.rebirths = 0; opts.charm = false; }
     mode = 'play';
+    clearJuice();
     eng.reset(runOpts(opts));
     dirty = true;
     screens();
@@ -222,6 +246,7 @@
   }
   function menu() {
     endRound('end', Math.round(duo ? 0 : save.speed));
+    clearJuice();
     duo = false;
     activity = 'plaza';
     mode = 'title';
@@ -256,16 +281,28 @@
     if (save.unlocked < next) { save.unlocked = next; bonus = 4; save.wins += bonus; }
     persist();
     endRound('win', Math.round(save.wins));
+    holdResult = { world: world, bonus: bonus };
+    victoryUntil = performance.now() + 1900;
+    dirty = true;
+    el('banner').hidden = true;
+    bannerUntil = 0;
+    view.cheer(0);
+    KR.sound('world');
+  }
+  function revealResult() {
+    var held = holdResult;
+    holdResult = null;
+    victoryUntil = 0;
+    if (!held) return;
+    var sweets = candyN[0] || 0;
     mode = 'result';
     dirty = true;
     el('result-title').textContent = 'أنهيت العالم!';
-    el('result-line').textContent = KR.NAMES[world] + (bonus ? ' · +4 أوسمة' : '');
+    el('result-line').textContent = KR.NAMES[held.world] + (held.bonus ? ' · +4 أوسمة' : '') + (sweets ? ' · حلوى ' + sweets : '');
     hideHint();
     buildConfetti();
     showRecord(recordRound);
     screens();
-    view.burst(eng.state.players[0].x, eng.state.players[0].y + 1, eng.state.players[0].z, 0xffe56a, 24);
-    KR.sound('world');
   }
   function finishTower(height) {
     var seed = String(eng.state.seed || KR.dailySeed());
@@ -328,6 +365,36 @@
         KR.sound('press', ev.id);
         view.pressKey(ev.id);
         view.burst(ev.x, ev.y + 0.28, ev.z, POP[(ev.id || 0) % POP.length], sparkCount(6));
+        if (ev.moment === 'gold') {
+          view.burst(ev.x, ev.y + 0.7, ev.z, 0xffe14d, sparkCount(12));
+          view.burst(ev.x, ev.y + 1.05, ev.z, 0xff4eb6, sparkCount(8));
+          KR.sound('moment', 1);
+        } else if (ev.moment === 'boost') {
+          boostUntil = performance.now() + 850;
+          fovKick = 9;
+          KR.sound('moment', 2);
+        } else if (ev.moment === 'bear' || ev.moment === 'arch') {
+          KR.sound('moment', 0);
+          if (ev.moment === 'bear') view.burst(ev.x + 2.1, ev.y + 1.1, ev.z, 0xff4d8d, sparkCount(6));
+        }
+      }
+      else if (ev.e === 'candy') {
+        var who = ev.p || 0;
+        var nowC = performance.now();
+        chain[who] = nowC - (chainAt[who] || 0) < 1100 ? (chain[who] || 0) + 1 : 1;
+        chainAt[who] = nowC;
+        candyN[who] = (candyN[who] || 0) + 1;
+        KR.sound('candy', chain[who]);
+        view.burst(ev.x, ev.y, ev.z, ev.star ? 0xffe56a : 0xff4eb6, sparkCount(5));
+        if (who === 0) {
+          var sweet = el('candy');
+          if (sweet) {
+            sweet.textContent = String(candyN[0]);
+            sweet.classList.remove('pop');
+            void sweet.offsetWidth;
+            sweet.classList.add('pop');
+          }
+        }
       }
       else if (ev.e === 'bounce') {
         KR.sound('bounce');
@@ -442,6 +509,11 @@
   var floodCue = 0;
   function update(dt) {
     if (mode === 'paused' || mode === 'shop' || mode === 'result' || mode === 'duo' || contextLost) return;
+    if (victoryUntil && mode === 'play') {
+      if (performance.now() >= victoryUntil) revealResult();
+      else dirty = true;
+      return;
+    }
     var input = mode === 'title' ? {} : readInput();
     onEvents(eng.step(dt, input));
     if (mode === 'play') hud();
@@ -460,10 +532,12 @@
     dirty = false;
     shake *= 0.86;
     fovKick *= 0.82;
-    if (Kit.motion.reduced()) { shake = 0; fovKick = 0; }
+    if (Kit.motion.reduced() || victoryUntil) shake = 0;
+    if (Kit.motion.reduced() || victoryUntil) fovKick = 0;
     view.render(eng.state, {
       engine: eng, quality: save.quality, reduced: Kit.motion.reduced(),
-      shake: shake, fovKick: fovKick, hat: duo ? 0 : save.hat, trail: duo ? 0 : save.trail, aura: duo ? 0 : save.aura
+      shake: shake, fovKick: fovKick, hat: duo ? 0 : save.hat, trail: duo ? 0 : save.trail, aura: duo ? 0 : save.aura,
+      victory: victoryUntil > now, boost: now < boostUntil
     });
   }
   function openShop() {

@@ -123,7 +123,7 @@
     }));
     var sprinkles = instanced(bodyGeo, lambert(0xffffff));
     var torusGeo = new T.TorusGeometry(1, 0.38, 5, 10);
-    var donuts = instanced(torusGeo, lambert(0xffffff), 12);
+    var donuts = instanced(torusGeo, lambert(0xffffff), 16);
     var coneGeo = new T.ConeGeometry(1, 1, 6);
     var castle = new T.Group();
     function prop(geo, x, y, z, sx, sy, sz, color) {
@@ -190,6 +190,17 @@
       m.frustumCulled = false;
       scene.add(m);
       letterMesh.push(m);
+    }
+    var pops = [];
+    var popped = Object.create(null);
+    for (var popI = 0; popI < 6; popI++) {
+      var pop = new T.Mesh(planeGeo, new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false }));
+      pop.rotation.x = -Math.PI / 2;
+      pop.visible = false;
+      pop.frustumCulled = false;
+      pop.userData = { life: 0, y0: 0, born: 0 };
+      scene.add(pop);
+      pops.push(pop);
     }
     var gateLabel = {};
     var gateMesh = [];
@@ -304,6 +315,42 @@
       return { group: group, shadow: shadow, ring: ring };
     }
     var buddies = [buddy(0x1c9bff, 0xff2f86), buddy(0xff4eb6, 0x3d7dff)];
+
+    function makeBear() {
+      var g = new T.Group();
+      function blob(x, y, z, sx, sy, sz, color) {
+        var mesh = new T.Mesh(sphereGeo, lambert(color));
+        mesh.position.set(x, y, z);
+        mesh.scale.set(sx, sy, sz);
+        g.add(mesh);
+      }
+      blob(0, 0.55, 0, 0.42, 0.5, 0.36, 0xff4d8d);
+      blob(0, 0.48, 0.2, 0.22, 0.3, 0.14, 0xffd6e6);
+      blob(0, 1.08, 0.06, 0.28, 0.26, 0.24, 0xff6aa3);
+      blob(-0.16, 1.34, 0.02, 0.1, 0.12, 0.08, 0xff4d8d);
+      blob(0.16, 1.34, 0.02, 0.1, 0.12, 0.08, 0xff4d8d);
+      blob(-0.08, 1.12, 0.24, 0.045, 0.05, 0.03, 0x3a2144);
+      blob(0.08, 1.12, 0.24, 0.045, 0.05, 0.03, 0x3a2144);
+      g.visible = false;
+      scene.add(g);
+      return g;
+    }
+    var bears = [makeBear(), makeBear()];
+    var ghostMat = lambert(0xd7f6ff, { transparent: true, opacity: 0.42, depthWrite: false, emissive: 0xb7e8ff, emissiveIntensity: 0.45 });
+    var ghostEarMat = lambert(0xffe14d, { transparent: true, opacity: 0.7, depthWrite: false });
+    var ghost = new T.Group();
+    var ghostBody = new T.Mesh(new T.CapsuleGeometry(0.26, 0.36, 2, 6), ghostMat);
+    ghostBody.position.y = 0.52;
+    var ghostEarL = new T.Mesh(sphereGeo, ghostEarMat);
+    ghostEarL.scale.set(0.12, 0.28, 0.08);
+    ghostEarL.position.set(-0.16, 1.08, 0);
+    var ghostEarR = new T.Mesh(sphereGeo, ghostEarMat);
+    ghostEarR.scale.set(0.12, 0.28, 0.08);
+    ghostEarR.position.set(0.16, 1.08, 0);
+    ghost.add(ghostBody, ghostEarL, ghostEarR);
+    ghost.visible = false;
+    scene.add(ghost);
+    var ghostRun = null;
 
     function hatMesh(id, parent) {
       while (parent.children.length) parent.remove(parent.children[0]);
@@ -462,6 +509,8 @@
     }
     function keyColor(p) {
       if (p.hw > 5) return 0xffb3d6;
+      if (p.moment === 'gold') return 0xffe14d;
+      if (p.moment === 'boost') return 0x5debff;
       if (p.t === 'tramp') return 0x3ddc6a;
       if (p.t === 'launch') return 0xffc400;
       if (p.t === 'ice') return 0x9ee7ff;
@@ -500,6 +549,20 @@
       }
       for (var i = 0; i < pieces.length && nb < MAX - 2; i++) {
         var p = pieces[i];
+        if (p.t === 'candy') {
+          if (!p.got && ns < MAX - 8) {
+            var bob = reduced ? 0 : Math.sin(state.time * 3.2 + p.id) * 0.09;
+            var cy = p.y + bob;
+            if (p.star) {
+              put(balls, ns++, p.x, cy, p.z, 0.16, 0.16, 0.16, 0xffe56a);
+              if (ns < MAX - 8) put(balls, ns++, p.x, cy, p.z, 0.07, 0.07, 0.07, 0xffffff);
+            } else {
+              put(balls, ns++, p.x, cy, p.z, 0.26, 0.2, 0.26, CANDY[p.id % CANDY.length]);
+              if (ns < MAX - 8) put(balls, ns++, p.x, cy + 0.12, p.z, 0.1, 0.08, 0.1, 0xfff6ea);
+            }
+          }
+          continue;
+        }
         if (p.t === 'chev') {
           put(flags, nflag++, p.x, p.y + 0.2, p.z + 0.2, 0.55, 0.1, 0.36, 0xffe56a);
           continue;
@@ -542,6 +605,12 @@
         var lit = dip || glow > 0.02;
         var bodyCol = lit ? mix(shade(col, 0.68), 0xffffff, dip ? 0.42 : glow * 0.55) : shade(col, wide ? 0.9 : 0.68);
         var topCol = lit ? mix(shade(col, 1.18), 0xffffff, dip ? 0.62 : glow * 0.8) : shade(col, 1.18);
+        var ahead = !wide && !reduced && !dip && p.hw < 3 && p.z > focus.z + 0.35 && p.z < focus.z + 16;
+        if (ahead) {
+          topY += Math.sin(state.time * 2.8 + p.z * 0.9) * 0.045;
+          var pulse = 0.5 + 0.5 * Math.sin(state.time * 5.2 - p.z * 1.2);
+          if (pulse > 0.78) topCol = mix(topCol, 0xffffff, Math.min(0.55, (pulse - 0.78) * 2.4));
+        }
         put(bodies, nb++, p.x, topY - skirt * 0.62, p.z, (wide ? p.hw * 2 : p.hw * 2.04 * bulge), skirt, (wide ? p.hd * 2 : p.hd * 2.04 * bulge), bodyCol);
         put(tops, nt++, p.x, topY - 0.05, p.z, p.hw * (wide ? 1.96 : 1.7 * bulge), wide ? 0.08 : (dip ? 0.07 : 0.16), p.hd * (wide ? 1.96 : 1.7 * bulge), topCol);
         if (!wide && (p.ch || p.t === 'key' || p.t === 'sink' || p.t === 'ice' || p.t === 'jelly' || p.t === 'caps' || p.t === 'portal')) {
@@ -566,9 +635,39 @@
         var letter = letterMesh[nlet++];
         letter.visible = true;
         letter.material = paintChar(item.ch || ALPHA.charAt(item.p.id % ALPHA.length));
-        letter.position.set(item.p.x, item.y + 0.07, item.p.z);
+        var g = glowOf(item.p.id);
+        if (!reduced && g > 0.82 && !popped[item.p.id]) {
+          popped[item.p.id] = 1;
+          var slot = pops[0];
+          for (var ps = 0; ps < pops.length; ps++) if (pops[ps].userData.life <= 0) { slot = pops[ps]; break; }
+          slot.userData.life = 0.52;
+          slot.userData.y0 = item.y + 0.2;
+          slot.userData.born = performance.now();
+          slot.material.map = letter.material.map;
+          slot.material.needsUpdate = true;
+          slot.material.opacity = 1;
+          slot.position.set(item.p.x, slot.userData.y0, item.p.z);
+          slot.rotation.z = ((item.p.id % 5) - 2) * 0.12;
+          slot.visible = true;
+        }
+        var bump = reduced ? 1 : (1 + g * 0.55);
+        var lift = reduced ? 0 : g * 0.22;
+        letter.position.set(item.p.x, item.y + 0.07 + lift, item.p.z);
         var letterSize = Math.min(1.85, Math.max(item.p.hw, item.p.hd) * 1.85);
-        letter.scale.set(letterSize, letterSize * 0.92, 1);
+        letter.scale.set(letterSize * bump, letterSize * 0.92 * bump, 1);
+      }
+      for (var pk in popped) if (glowOf(pk) <= 0) delete popped[pk];
+      for (var pf = 0; pf < pops.length; pf++) {
+        var flo = pops[pf];
+        if (flo.userData.life <= 0) { flo.visible = false; continue; }
+        var age = (performance.now() - flo.userData.born) / 520;
+        if (age >= 1) { flo.userData.life = 0; flo.visible = false; continue; }
+        flo.position.y = flo.userData.y0 + age * 0.85;
+        flo.material.opacity = 1 - age;
+        flo.rotation.z += reduced ? 0 : 0.012;
+        var pscl = 0.72 + age * 0.4;
+        flo.scale.set(pscl, pscl, 1);
+        flo.visible = true;
       }
       bodies.count = nb; tops.count = nt; rails.count = nr; balls.count = ns; sticks.count = nstick;
       gates.count = ng; fans.count = nf; flags.count = nflag;
@@ -621,11 +720,46 @@
         } else if (nd < 12) put(donuts, nd++, sx, 1.15 + sway, sz, 0.62, 0.62, 0.62, CANDY[(si + 2) % CANDY.length], si * 0.4);
         else put(sprinkles, spr++, sx, 0.7, sz, 0.16, 0.06, 0.4, CANDY[si % CANDY.length], si);
       }
-      castle.visible = !low;
-      if (!low) {
-        castle.position.set(anchorX + 8, 0, anchorZ + 13);
-        castle.scale.setScalar(1.55);
-        flagCloth.rotation.y = Math.PI + Math.sin(state.time * 1.7) * 0.4;
+      var bearCap = low ? 1 : 2;
+      var bearList = [];
+      var archList = [];
+      for (var mi = 0; mi < pieces.length && (bearList.length < 6 || archList.length < 4); mi++) {
+        var mp = pieces[mi];
+        if (!mp || !mp.moment) continue;
+        var mdz = mp.z - focus.z;
+        if (mdz < -4 || mdz > 22) continue;
+        if (mp.moment === 'bear' && bearList.length < 6) bearList.push(mp);
+        else if (mp.moment === 'arch' && archList.length < 4) archList.push(mp);
+      }
+      bearList.sort(function (a, b) { return Math.abs(a.z - focus.z) - Math.abs(b.z - focus.z); });
+      archList.sort(function (a, b) { return Math.abs(a.z - focus.z) - Math.abs(b.z - focus.z); });
+      for (var bi = 0; bi < bears.length; bi++) {
+        var padB = bi < bearCap ? bearList[bi] : null;
+        if (!padB) { bears[bi].visible = false; continue; }
+        var side = padB.x >= focus.x ? 1 : -1;
+        var near = Math.abs(padB.z - focus.z) < 2.2;
+        var hop = reduced ? 0 : (near ? Math.abs(Math.sin(state.time * 12)) * 0.38 : Math.sin(state.time * 2 + bi) * 0.05);
+        bears[bi].visible = true;
+        bears[bi].position.set(padB.x + side * 2.15, padB.y + padB.hh + hop, padB.z);
+        bears[bi].rotation.y = Math.atan2(focus.x - bears[bi].position.x, focus.z - bears[bi].position.z);
+      }
+      for (var ai = 0; ai < archList.length && ai < (low ? 1 : 2) && nd < 16 && nstick < MAX - 4; ai++) {
+        var padA = archList[ai];
+        var ay = padA.y + padA.hh + 2.05;
+        put(donuts, nd++, padA.x, ay, padA.z, 1.55, 1.2, 1.55, 0xff4eb6);
+        put(sticks, nstick++, padA.x - 1.45, padA.y + padA.hh + 0.85, padA.z, 0.16, 1.7, 0.16, 0xffe56a);
+        put(sticks, nstick++, padA.x + 1.45, padA.y + padA.hh + 0.85, padA.z, 0.16, 1.7, 0.16, 0xffd24a);
+      }
+      castle.visible = !low || !!opts.victory;
+      if (castle.visible) {
+        if (opts.victory) {
+          castle.position.set(anchorX + 0.6, 0, anchorZ + 9.5);
+          castle.scale.setScalar(1.85);
+        } else {
+          castle.position.set(anchorX + 8, 0, anchorZ + 13);
+          castle.scale.setScalar(1.55);
+        }
+        flagCloth.rotation.y = Math.PI + Math.sin(performance.now() / 1000 * 1.7) * 0.4;
       }
       donuts.count = nd;
       donuts.instanceMatrix.needsUpdate = true;
@@ -714,7 +848,7 @@
         if (waving) {
           ud.armL.rotation.x = 0.4;
           ud.armR.rotation.x = -2.15;
-          ud.armR.rotation.z = reduced ? 0.15 : Math.sin(state.time * 14) * 0.4;
+          ud.armR.rotation.z = reduced ? 0.15 : Math.sin(performance.now() / 1000 * 14) * 0.4;
         } else {
           ud.armL.rotation.x = step * 0.95;
           ud.armR.rotation.x = -step * 0.95;
@@ -814,7 +948,8 @@
         } else {
           renderer.setViewport(0, 0, buf.x, buf.y);
         }
-        var fast = !reduced && !low && plEye && KR.topSpeed(plEye.speed) > 10;
+        var boosting = !!opts.boost && !reduced && !low;
+        var fast = boosting || (!reduced && !low && plEye && KR.topSpeed(plEye.speed) > 10);
         var kick = (!reduced && !low && opts.fovKick) ? opts.fovKick : 0;
         for (var li = 0; li < speedLines.length; li++) {
           speedLines[li].visible = !!fast;
@@ -830,10 +965,19 @@
           speedLines[li].rotation.y = plEye.face;
         }
         camera.aspect = two ? (buf.x * 0.5) / buf.y : buf.x / buf.y;
-        camera.fov = 60 + (fast ? Math.min(8, (KR.topSpeed(plEye.speed) - 10) * 0.85) : 0) + kick;
+        var speedFov = (fast && plEye) ? Math.min(8, Math.max(0, (KR.topSpeed(plEye.speed) - 10) * 0.85)) : 0;
+        if (boosting && speedFov < 6) speedFov = 6;
+        camera.fov = Math.min(76, 60 + speedFov + (boosting ? 8 : 0) + kick);
         camera.updateProjectionMatrix();
         camera.position.set(pose.x, pose.y, pose.z);
-        if (!reduced && opts.shake > 0) {
+        if (opts.victory && !two && plEye) {
+          camera.position.set(
+            plEye.x - Math.sin(plEye.face) * 6.4,
+            plEye.y + 2.15,
+            plEye.z - Math.cos(plEye.face) * 6.4
+          );
+        }
+        if (!reduced && opts.shake > 0 && !opts.victory) {
           camera.position.x += Math.sin(state.time * 40) * opts.shake;
           camera.position.y += Math.cos(state.time * 33) * opts.shake * 0.6;
         }
@@ -901,13 +1045,68 @@
       }
     }
 
-    function cheer(index) { waveUntil[index] = performance.now() + 1700; }
+    function cheer(index) { waveUntil[index] = performance.now() + 2000; }
+    function playGhost(state) {
+      var rows = {};
+      var list = (state && state.pieces) || [];
+      for (var i = 0; i < list.length; i++) {
+        var p = list[i];
+        if (!p || !p.stand || p.hw > 2.4 || p.t === 'tramp' || p.t === 'launch' || p.flag) continue;
+        var key = Math.round(p.z * 2);
+        var prev = rows[key];
+        if (!prev || Math.abs(p.x) < Math.abs(prev.x)) rows[key] = p;
+      }
+      var pads = [];
+      for (var k in rows) pads.push(rows[k]);
+      pads.sort(function (a, b) { return a.z - b.z; });
+      if (pads.length < 3) { ghost.visible = false; ghostRun = null; return; }
+      ghostRun = { pads: pads.slice(0, 3), t0: performance.now() };
+      ghost.visible = true;
+    }
+    function tickGhost(reduced, hide) {
+      if (hide || !ghostRun) { ghost.visible = false; return; }
+      var pads = ghostRun.pads;
+      var hop = 0.85;
+      var elapsed = (performance.now() - ghostRun.t0) / 1000;
+      var total = hop * pads.length;
+      if (elapsed > total + 0.45) { ghost.visible = false; ghostRun = null; return; }
+      var idx = Math.min(pads.length - 1, Math.floor(Math.max(0, elapsed) / hop));
+      var u = elapsed / hop - idx;
+      if (u < 0) u = 0;
+      if (u > 1) u = 1;
+      var to = pads[idx];
+      var from = idx === 0
+        ? { x: pads[0].x, y: pads[0].y, z: pads[0].z - 1.55, hh: pads[0].hh }
+        : pads[idx - 1];
+      var arc = Math.sin(u * Math.PI) * 1.15;
+      var gx = from.x + (to.x - from.x) * u + 0.42;
+      var gz = from.z + (to.z - from.z) * u;
+      var gy = from.y + from.hh + (to.y + to.hh - from.y - from.hh) * u + arc;
+      if (elapsed > total) gy = to.y + to.hh;
+      var fade = elapsed > total ? Math.max(0, 1 - (elapsed - total) / 0.45) : 1;
+      ghost.position.set(gx, gy, gz);
+      ghost.visible = fade > 0.02;
+      ghostMat.opacity = 0.42 * fade;
+      ghostEarMat.opacity = 0.72 * fade;
+      if (reduced) ghost.scale.set(1, 1, 1);
+      else {
+        var stretch = 1 + Math.sin(u * Math.PI) * 0.16;
+        ghost.scale.set(1 / stretch, stretch, 1 / stretch);
+      }
+    }
+    var renderInner = render;
+    render = function (state, opts) {
+      opts = opts || {};
+      tickGhost(!!opts.reduced, !!opts.victory);
+      renderInner(state, opts);
+    };
     return {
       render: render,
       burst: burst,
       dust: dust,
       pressKey: pressKey,
       cheer: cheer,
+      playGhost: playGhost,
       rebuildText: function () { letterMat = {}; gateLabel = {}; },
       setPixelRatio: function (dpr) { renderer.setPixelRatio(dpr); renderer.setSize(1280, 720, false); },
       dispose: function () {
