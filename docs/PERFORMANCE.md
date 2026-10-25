@@ -551,12 +551,12 @@ change; another game will again need room made or a decision like this one.
 
 ## Mouse & Keyboard Academy, 25 October 2026
 
-The academy page is still one inlined HTML file (no new images, fonts, or precache entries). The grip lesson is five short picture screens drawn with shared markup, so the minified page is smaller than the first grip version.
+The academy page is still one inlined HTML file (no new images, fonts, or precache entries). The grip lesson is five picture screens. The page limit was raised because 14 bytes of headroom was not enough to replace the jagged hand with a smooth cartoon glove, draw a whole sitting child, and show a real star burst.
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Mouse & Keyboard Academy | 76,986 | 77,000 (was 84,000; before that 81,000; originally 56,000) |
-| Offline precache, 46 files | 5,109,595 | 5,130,000 (was 5,100,000) |
+| Mouse & Keyboard Academy | 79,930 | 82,000 (was 77,000; before that 84,000, 81,000, and originally 56,000) |
+| Offline precache, 46 files | 5,112,539 | 5,135,000 (was 5,130,000; before that 5,100,000) |
 
-The page limit is the next thousand above the measured file. The five picture screens, with one hand silhouette, two bump keys, and a child at a desk, are 6,882 bytes smaller than the 83,868-byte diagram page. 14 bytes remain under the page limit, and 20,405 bytes remain under the precache limit. No new files were added.
+The extra room is 5,000 bytes on the page and the same 5,000 bytes on the precache, and it was spent on those drawings. The measured page grew by 2,944 bytes, from 76,986 to 79,930. 2,070 bytes remain under the page limit, and 22,461 bytes remain under the precache limit. No new files were added.
 
