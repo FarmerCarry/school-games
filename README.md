@@ -11,10 +11,11 @@ games are in Arabic, laid out right-to-left.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores, progress and the anonymous play statistics are saved in each browser (localStorage) only.
 
-## The games (33)
+## The games (34)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
+| أكاديمية الفأرة واللوحة | Mouse & Keyboard Academy | 1 | نقطة البداية، تحديات |
 | أربعة على التوالي | Connect 4 | 1-2 | ألغاز، لاعبان على نفس الجهاز |
 | إكس أو | Tic-tac-toe | 1-2 | ألغاز، لاعبان على نفس الجهاز |
 | أصابع البرق | Lightning Fingers (typing test, English + Arabic) | 1 | تحديات |
@@ -50,6 +51,8 @@ games are in Arabic, laid out right-to-left.
 | ساحة الثعابين | Snake Arena | 1 | تحدي الروبوتات، أركيد |
 
 The original arcade games save best scores and unlocks in the browser, and have a title screen, P/Esc pause and a 🔊 mute button. The two board games use a compact board with local two-player and computer modes.
+
+**أكاديمية الفأرة واللوحة (Mouse & Keyboard Academy)** is the starting lesson for a child who is new to the mouse and keyboard. A teacher opens it from the «ابدأ من هنا» card on the home page, and the child follows eight stations — move, click, double-click, drag, scroll, arrows, Space then Enter, and letters — with no timers, lives, or sound. Progress stays in this browser. P or Esc pauses. A teacher can jump to a station from inside the lesson or from the teacher page; skipping ahead does not award those stickers. The certificate needs all eight.
 
 **الديناصور ثلاثي الأبعاد (Dino 3D)** is a voxel desert endless runner. Jump with Space or Up,
 hold for a higher jump, and crouch or descend quickly with Down or Ctrl. Jump over low birds

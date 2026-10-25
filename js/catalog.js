@@ -4,6 +4,7 @@
  *
  * To hide a game: set `hidden: true` on its entry.
  * To feature a game first in the catalog: set `hot: true`.
+ * To mark the one beginner starting point: set `starter: true`.
  * Plain script (not JSON) so the site also works when opened from a folder.
  */
 window.SITE = {
@@ -34,6 +35,10 @@ window.CATEGORIES = [
 // Key labels: arrows and letters as printed on the keyboard; 'مسافة' = Space,
 // 'انقر' = click, 'الفأرة' = mouse, 'اسحب' = drag.
 window.GAMES = [
+  { slug: 'mouse-keyboard-academy', roundMinutes: [8, 15], inputStyle: 'mixed', title: 'أكاديمية الفأرة واللوحة', en: 'Mouse and Keyboard Academy beginner tutorial', tags: 'مبتدئ ابدأ هنا فأرة ماوس لوحة مفاتيح كيبورد تعليم', cats: ['challenge'], players: '1', color: '#0e8fb8', starter: true,
+    blurb: 'تعلّم الفأرة ولوحة المفاتيح خطوة بخطوة.',
+    tip: 'اضغط <b>P</b> أو <b>Esc</b> للاستراحة. هذه الأكاديمية بلا صوت وبلا خسارة.',
+    controls: [{ keys: ['الفأرة'], action: 'حرّك المؤشر' }, { keys: ['انقر'], action: 'نقرة واحدة أو نقرتان' }, { keys: ['اسحب'], action: 'اسحب وأفلت' }, { keys: ['العجلة'], action: 'مرّر' }, { keys: ['←', '↑', '→', '↓'], action: 'تحرّك' }, { keys: ['مسافة'], action: 'اقفز' }, { keys: ['Enter'], action: 'افتح الباب' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
   { slug: 'connect-four', roundMinutes: [2, 5], inputStyle: 'pointer', title: 'أربعة على التوالي', en: 'Connect 4 Connect Four local two players same computer', cats: ['two-player', 'puzzle'], players: '1-2', color: '#4389ff',
     blurb: 'اجمع 4 قطع متتالية! تحدَّ زميلك على نفس الجهاز أو العب ضد الكمبيوتر.',
     tip: 'تبادلوا الأدوار على نفس الجهاز: اللاعب الأول بالأصفر والثاني بالأحمر. يعمل الوضعان دون إنترنت.',
