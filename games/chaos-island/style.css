@@ -53,19 +53,39 @@ h1, h2, p { margin: 0; }
 #hud-coins.hard::after { content: '· صعب'; color: #ffe14a; margin-inline-start: 6px; }
 #btnPause[hidden] { display: none; }
 .podium { display: flex; gap: 12px; justify-content: center; align-items: flex-end; margin: 12px 0; }
-.pod { width: 180px; border: 4px solid #2b2148; border-radius: 16px; text-align: center; padding: 8px; background: #fff; }
-.pod.p0 { height: 168px; background: #ffe14a; }
-.pod.p1 { height: 140px; }
-.pod.p2 { height: 120px; }
+.pod { width: 180px; border: 4px solid #2b2148; border-radius: 16px; text-align: center; padding: 8px; background: #fff; animation: popin .45s ease both; }
+.pod i { display: block; width: 28px; height: 28px; margin: 4px auto 6px; border-radius: 50%; border: 3px solid #2b2148; }
+.pod b { display: block; font-size: 22px; }
+.pod.p0 { height: 188px; background: #ffe14a; }
+.pod.p1 { height: 156px; animation-delay: .08s; }
+.pod.p2 { height: 136px; animation-delay: .16s; }
+@keyframes popin { from { transform: translateY(28px) scale(.82); } }
+#btnAgain { font-size: 28px; background: #ffe14a; }
 .banner { text-align: center; font-size: 28px; font-weight: 700; color: #e23b2f; margin: 6px 0; }
 .banner[hidden] { display: none; }
 #siren { position: absolute; top: 86px; left: 0; right: 0; text-align: center; pointer-events: none; z-index: 6; }
 #siren[hidden] { display: none !important; }
-#siren b { display: inline-block; font-size: 42px; line-height: 1.15; color: #fff; background: #ff5d8f; border: 5px solid #2b2148; border-radius: 18px; padding: 6px 18px; box-shadow: 0 6px 0 #2b2148; }
-#siren span { display: block; margin-top: 8px; font-size: 22px; font-weight: 700; color: #fff; -webkit-text-stroke: 4px #2b2148; paint-order: stroke fill; }
-#siren.hot b { background: #ffe14a; color: #2b2148; animation: bob .35s ease-in-out infinite; }
+#siren b { display: inline-block; font-size: 42px; line-height: 1.15; color: #fff; background: #ff5d8f; border: 5px solid #2b2148; border-radius: 18px; padding: 6px 18px; box-shadow: 0 6px 0 #2b2148; transform-origin: center; animation: wobble .5s ease-in-out infinite; }
+#siren i { display: block; margin-top: 6px; font-style: normal; font-size: 26px; font-weight: 700; color: #ffe14a; -webkit-text-stroke: 4px #2b2148; paint-order: stroke fill; }
+#siren span { display: block; margin-top: 6px; font-size: 20px; font-weight: 700; color: #fff; -webkit-text-stroke: 4px #2b2148; paint-order: stroke fill; }
+#siren em { display: block; margin-top: 2px; font-style: normal; font-size: 68px; line-height: 1; font-weight: 700; color: #fff; -webkit-text-stroke: 6px #2b2148; paint-order: stroke fill; }
+#siren em:empty { display: none; }
+#siren.hot b { background: #ffe14a; color: #2b2148; animation-duration: .28s; }
+#cheer { position: absolute; left: 0; right: 0; top: 220px; z-index: 7; text-align: center; pointer-events: none; font-size: 84px; font-weight: 700; color: #7cf29a; -webkit-text-stroke: 10px #2b2148; paint-order: stroke fill; }
+#cheer[hidden] { display: none !important; }
+#cheer.pop { animation: cheer .95s ease forwards; }
+@keyframes wobble { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg) scale(1.06); } }
+@keyframes cheer { 0% { transform: scale(.4) rotate(-8deg); opacity: 0; } 28% { transform: scale(1.16) rotate(4deg); opacity: 1; } 100% { transform: scale(1) rotate(0); opacity: 0; } }
+#confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 3; }
+#confetti[hidden] { display: none !important; }
+#confetti i { position: absolute; top: -24px; width: 12px; height: 18px; border-radius: 3px; animation: fall linear infinite; }
+@keyframes fall { to { transform: translateY(780px) rotate(220deg); } }
 .titles { text-align: center; font-size: 18px; font-weight: 700; margin: 4px 0 8px; }
 #cv:focus { outline: none; }
-html[data-sg-motion="reduce"] #btnPlay { animation: none; }
+html[data-sg-motion="reduce"] #btnPlay,
+html[data-sg-motion="reduce"] #siren b,
+html[data-sg-motion="reduce"] #cheer,
+html[data-sg-motion="reduce"] #confetti i,
+html[data-sg-motion="reduce"] .pod { animation: none; }
 #btnPlay { animation: bob 1.1s ease-in-out infinite; }
 @keyframes bob { 50% { transform: translateY(-6px); } }

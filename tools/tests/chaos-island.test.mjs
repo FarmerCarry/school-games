@@ -128,6 +128,9 @@ test('pause freezes the round and draws again only after a resize', async t => {
     };
   });
   await clickControl(page, '#btnPlay');
+  const intro = await page.evaluate(() => { stepGame(20); return { joke: document.getElementById('siren-joke').textContent, hidden: document.getElementById('siren').hidden }; });
+  assert.equal(intro.hidden, false, 'the disaster intro is on screen');
+  assert.ok(intro.joke && intro.joke.length > 4, 'the intro has a funny line');
   assert.equal(await page.evaluate(() => __game.world.players), 1);
   assert.equal(await page.evaluate(() => __game.world.actors.filter(a => a.bot).length), 7);
   await page.evaluate(() => stepGame(20));
