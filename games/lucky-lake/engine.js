@@ -444,7 +444,7 @@
   function makeShadows() {
     var list = [];
     for (var i = 0; i < 7; i++) {
-      list.push({ x: (i * 0.15) % 1, y: 0.22 + (i % 3) * 0.24, s: 0.35 + (i % 5) * 0.13, v: 0.035 + (i % 4) * 0.012, dir: i % 2 ? 1 : -1 });
+      list.push({ x: (i * 0.15) % 1, y: 0.22 + (i % 3) * 0.24, s: 0.35 + (i % 5) * 0.13, v: 0.035 + (i % 4) * 0.012, dir: i % 2 ? 1 : -1, ph: i * 1.7 });
     }
     return list;
   }
@@ -851,8 +851,12 @@
     for (var i = 0; i < list.length; i++) {
       var s = list[i];
       s.x += s.dir * s.v * dt;
+      s.ph += dt * (0.7 + (i % 3) * 0.25);
+      s.y += Math.sin(s.ph) * 0.15 * dt;
       if (s.x < -0.08) { s.x = -0.08; s.dir = 1; }
       if (s.x > 1.08) { s.x = 1.08; s.dir = -1; }
+      if (s.y < 0.1) s.y = 0.1;
+      if (s.y > 0.9) s.y = 0.9;
     }
   }
 

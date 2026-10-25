@@ -563,14 +563,14 @@ still fits, so its limit stays.
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Lucky Lake built page | 85,493 | 115,000 |
+| Lucky Lake built page | 90,589 | 115,000 |
 | Teacher page | 93,008 | 96,000 (unchanged) |
 | Portal, thumbnail inlined | 353,880 | 365,000 (was 360,000) |
-| Offline precache, 47 files | 5,171,874 | 5,220,000 (was 5,100,000) |
+| Offline precache, 47 files | 5,176,970 | 5,220,000 (was 5,100,000) |
 
 The built page is under the budget, so nothing was cut to fit. The home page
 still fits the old 360,000 ceiling (353,880). Its limit moves up by the reserved
 5,000 anyway, which leaves 11,120 bytes. The precache no longer fit in
-5,100,000 (it measured 5,171,874), so that limit moves up by the planned
-120,000 and leaves 48,126 bytes (0.9%).
+5,100,000 (it measured 5,176,970), so that limit moves up by the planned
+120,000 and leaves 43,030 bytes (0.8%).
 

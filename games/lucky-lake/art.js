@@ -200,21 +200,7 @@
   }
 
   function props(ctx, spot, pal, t, y) {
-    if (spot === 0) {
-      ctx.fillStyle = '#2f8a48';
-      for (var i = 0; i < 5; i++) {
-        ctx.beginPath(); ctx.ellipse(430 + i * 70, y + 8, 16, 8, 0, 0, 6.3); ctx.fill();
-      }
-    } else if (spot === 1 || spot === 2) {
-      ctx.fillStyle = pal.wood;
-      for (var p = 0; p < 6; p++) ctx.fillRect(360 + p * 140, y - 8, 16, 70);
-      ctx.fillRect(300, y - 18, 900, 16);
-    } else if (spot === 3) {
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillRect(300, y - 8, 980, 28);
-      ctx.fillStyle = pal.deep;
-      ctx.beginPath(); ctx.ellipse(760, y + 36, 120, 28, 0, 0, 6.3); ctx.fill();
-    } else if (spot === 4) {
+    if (spot === 4) {
       ctx.fillStyle = '#14241e';
       for (var m = 0; m < 4; m++) {
         ctx.beginPath(); ctx.moveTo(980 + m * 40, y); ctx.lineTo(1000 + m * 40, y - 90); ctx.lineTo(1020 + m * 40, y); ctx.fill();
@@ -231,6 +217,140 @@
       for (var c = 0; c < 4; c++) {
         var cx = 420 + c * 180 + Math.sin(t + c) * 8;
         ctx.beginPath(); ctx.ellipse(cx, y - 30, 50, 18, 0, 0, 6.3); ctx.fill();
+      }
+    }
+  }
+
+  function fishShadow(ctx, x, y, len, face, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha == null ? 0.35 : alpha;
+    ctx.translate(x, y);
+    ctx.scale(face < 0 ? -1 : 1, 0.78);
+    ctx.beginPath();
+    ctx.ellipse(len * 0.16, 0, len * 0.46, len * 0.22, 0, 0, 6.3);
+    ctx.moveTo(-len * 0.18, 0);
+    ctx.lineTo(-len * 0.78, -len * 0.32);
+    ctx.lineTo(-len * 0.48, 0);
+    ctx.lineTo(-len * 0.78, len * 0.32);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function dock(ctx, pal, y) {
+    ctx.fillStyle = pal.wood;
+    for (var i = 0; i < 8; i++) ctx.fillRect(100 + i * 145, y + 10, 14, 44);
+    ctx.fillStyle = '#6b3e22';
+    ctx.fillRect(40, y - 2, 1200, 18);
+    ctx.fillStyle = '#c48a4a';
+    ctx.fillRect(40, y - 2, 1200, 6);
+  }
+
+  function shore(ctx, pal, x, face, y, spot) {
+    var right = face < 0;
+    ctx.fillStyle = spot === 3 ? '#f7fbff' : pal.grass;
+    ctx.beginPath();
+    if (right) {
+      ctx.moveTo(1280, y + 78); ctx.lineTo(1280, y - 8);
+      ctx.quadraticCurveTo(x + 30, y - 34, x - 20, y + 4);
+      ctx.lineTo(x - 36, y + 78);
+    } else {
+      ctx.moveTo(0, y + 78); ctx.lineTo(0, y - 8);
+      ctx.quadraticCurveTo(x - 30, y - 34, x + 20, y + 4);
+      ctx.lineTo(x + 36, y + 78);
+    }
+    ctx.closePath();
+    ctx.fill();
+    if (spot === 3) {
+      ctx.fillStyle = '#d7ecf8';
+      ctx.beginPath(); ctx.ellipse(x, y + 10, 78, 18, 0, 0, 6.3); ctx.fill();
+      return;
+    }
+    if (spot === 4 || spot === 5 || spot === 6) {
+      ctx.fillStyle = spot === 6 ? '#f4f0ff' : '#8a6244';
+      ctx.beginPath(); ctx.ellipse(x, y + 14, 64, 20, 0, 0, 6.3); ctx.fill();
+      ctx.fillStyle = spot === 6 ? '#ffffff' : '#6d4a30';
+      ctx.beginPath(); ctx.ellipse(x - 8, y + 10, 36, 12, 0, 0, 6.3); ctx.fill();
+      return;
+    }
+    var x0 = right ? x - 78 : x - 24;
+    ctx.fillStyle = pal.wood;
+    ctx.fillRect(x0 + 16, y + 12, 10, 32);
+    ctx.fillRect(x0 + 62, y + 14, 10, 34);
+    ctx.fillStyle = '#6b3e22';
+    ctx.fillRect(x0, y, 96, 16);
+    ctx.fillStyle = '#c48a4a';
+    ctx.fillRect(x0, y, 96, 5);
+    if (spot === 0) {
+      ctx.strokeStyle = '#1c6b30';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      var tuft = right ? [1156, 1196, 1236] : [24, 58, 96];
+      for (var i = 0; i < tuft.length; i++) {
+        ctx.beginPath();
+        ctx.moveTo(tuft[i], y + 6);
+        ctx.quadraticCurveTo(tuft[i] + 10, y - 28, tuft[i] - 4, y - 58);
+        ctx.stroke();
+      }
+    }
+  }
+
+  function life(ctx, spot, pal, t, y) {
+    if (spot === 0) {
+      ctx.fillStyle = '#3eaf5a';
+      for (var pad = 0; pad < 4; pad++) {
+        var px = 560 + pad * 150;
+        var py = y + 36 + (pad % 2) * 48 + Math.sin(t * 0.7 + pad) * 3;
+        ctx.beginPath();
+        ctx.ellipse(px, py, 26, 11, 0, 0.5, 5.8);
+        ctx.fill();
+        ctx.fillStyle = '#7dff9a';
+        ctx.beginPath(); ctx.ellipse(px - 3, py - 1, 12, 5, 0, 0, 6.3); ctx.fill();
+        ctx.fillStyle = '#3eaf5a';
+      }
+      ctx.strokeStyle = '#1c6b30';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      for (var reed = 0; reed < 3; reed++) {
+        var rx = 470 + reed * 14;
+        ctx.beginPath();
+        ctx.moveTo(rx, y + 20);
+        ctx.quadraticCurveTo(rx + 8, y - 8, rx - 2, y - 36);
+        ctx.stroke();
+      }
+      var hop = t % 4.8;
+      if (hop < 0.55) {
+        var u = hop / 0.55;
+        ctx.save();
+        ctx.translate(760, y + 8 - Math.sin(u * 3.1416) * 58);
+        ctx.rotate(-0.8 + u * 1.6);
+        ctx.fillStyle = '#f0a030';
+        ctx.beginPath();
+        ctx.ellipse(6, 0, 14, 6, 0, 0, 6.3);
+        ctx.moveTo(-6, 0); ctx.lineTo(-16, -6); ctx.lineTo(-16, 6); ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    if (spot === 3) {
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.fillRect(0, y - 6, 1280, 22);
+      ctx.fillStyle = pal.deep;
+      ctx.beginPath(); ctx.ellipse(760, y + 28, 130, 26, 0, 0, 6.3); ctx.fill();
+    }
+    if (spot === 0 || spot === 1) {
+      ctx.strokeStyle = '#243044';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      for (var b = 0; b < 2; b++) {
+        var bx = ((t * 36 + b * 420) % 1500) - 80;
+        var by = 54 + b * 28 + Math.sin(t * 1.6 + b) * 8;
+        var flap = Math.sin(t * 7 + b * 2) * 6;
+        ctx.beginPath();
+        ctx.moveTo(bx - 12, by + flap);
+        ctx.quadraticCurveTo(bx - 5, by - 6, bx, by);
+        ctx.quadraticCurveTo(bx + 5, by - 6, bx + 12, by + flap);
+        ctx.stroke();
       }
     }
   }
@@ -359,7 +479,8 @@
   }
 
   window.LLArt = {
-    palette: palette, backdrop: backdrop, water: water, props: props, angler: angler,
+    palette: palette, backdrop: backdrop, water: water, props: props, life: life,
+    shore: shore, dock: dock, fishShadow: fishShadow, angler: angler,
     bobber: bobber, line: line, meter: meter, reel: reel, blit: blit, gull: gull,
     label: label, sprite: sprite, silhouette: silhouette, paintFish: paintFish
   };

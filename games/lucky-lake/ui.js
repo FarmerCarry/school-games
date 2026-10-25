@@ -31,6 +31,8 @@
   var slow = 0;
   var taught = save.caught > 0;
   var shoutT = 0;
+  var cardAt = 0;
+  var STAND = 292;
   var padT = 0;
   var reelSnd = 0;
   var statsOpen = '';
@@ -78,8 +80,9 @@
     show('scr-panel', mode === 'play' && !!panel && !revealing());
     $('hud').hidden = mode === 'title';
     var play = mode === 'play' || mode === 'pause';
+    var modal = mode !== 'play' || !!panel || revealing();
     $('questLine').hidden = !play;
-    $('eventBanner').hidden = !play;
+    $('eventBanner').hidden = modal;
     var ready = game && game.state.anglers[0].phase === 'ready';
     $('hint').hidden = !(mode === 'play' && !panel && !revealing() && !taught && ready && !game.state.derby);
     if (mode !== 'play' || panel) { mouseDown = false; edge = false; }
@@ -262,17 +265,74 @@
     return c;
   }
 
+  function star(g, x, y, r) {
+    g.beginPath();
+    g.moveTo(x, y - r);
+    g.lineTo(x + r * 0.32, y - r * 0.32);
+    g.lineTo(x + r, y);
+    g.lineTo(x + r * 0.32, y + r * 0.32);
+    g.lineTo(x, y + r);
+    g.lineTo(x - r * 0.32, y + r * 0.32);
+    g.lineTo(x - r, y);
+    g.lineTo(x - r * 0.32, y - r * 0.32);
+    g.closePath();
+    g.fill();
+  }
+
+  function catchGlow(fish) {
+    if (fish.boss) return '#ffd76a';
+    if (fish.junk) return '#d7c4a4';
+    return ['#ffb24a', '#7ec8ff', '#d9a6ff', '#ff8ad4', '#ffe14a'][Math.min(fish.rare | 0, 4)];
+  }
+
+  function paintCatchFish() {
+    var fish = game && game.state.anglers[0].fish;
+    var view = $('fishView');
+    if (!fish || !view) return;
+    var g = view.getContext('2d');
+    var w = view.width, h = view.height;
+    var glow = catchGlow(fish);
+    var cy = h * 0.52;
+    g.clearRect(0, 0, w, h);
+    g.save();
+    g.translate(w / 2, cy);
+    g.fillStyle = glow;
+    g.globalAlpha = 0.55;
+    g.beginPath(); g.ellipse(0, 8, 200, 96, 0, 0, 6.3); g.fill();
+    g.globalAlpha = 1;
+    g.beginPath(); g.ellipse(0, 6, 118, 58, 0, 0, 6.3); g.fill();
+    g.restore();
+    Art.blit(g, fish, w / 2, cy, 2.05, time);
+    var age = Math.max(0, time - cardAt);
+    var burst = Kit.motion.reduced() ? 0.75 : Math.min(1, age / 0.55);
+    var n = Kit.motion.reduced() ? 8 : 16;
+    for (var i = 0; i < n; i++) {
+      var ang = i * 0.39 + 0.2;
+      var rad = 36 + burst * (78 + (i % 5) * 14);
+      var tw = Kit.motion.reduced() ? 1 : (age < 0.7 ? 1 : 0.72 + Math.sin(time * 6 + i) * 0.28);
+      g.globalAlpha = Math.max(0.55, tw);
+      g.fillStyle = i % 2 ? '#fffef6' : '#ffe14a';
+      star(g, w / 2 + Math.cos(ang) * rad, cy + Math.sin(ang) * rad * 0.55, 8 + (i % 3) * 4);
+    }
+    g.globalAlpha = 1;
+  }
+
+  function bounce(el) {
+    el.classList.remove('ll-bounce');
+    void el.offsetWidth;
+    el.classList.add('ll-bounce');
+  }
+
   function fillCard() {
     var fish = game.state.anglers[0].fish;
     if (!fish) return;
     var key = fish.id + ':' + fish.w + ':' + fish.rb + ':' + fish.glow + ':' + fish.day;
     if (key === cardKey) return;
     cardKey = key;
+    cardAt = time;
     var s = liveSave();
-    var viewFish = $('fishView');
-    var g = viewFish.getContext('2d');
-    g.clearRect(0, 0, viewFish.width, viewFish.height);
-    Art.blit(g, fish, 110, 62, 1.15, time);
+    $('scr-card').querySelector('.ll-cardbox').style.borderColor = catchGlow(fish);
+    paintCatchFish();
     $('cardNew').hidden = !(!(s.book[fish.id] > 0));
     $('cardName').textContent = fish.name;
     $('cardWeight').textContent = fish.w.toFixed(1) + ' كغ';
@@ -287,6 +347,8 @@
     $('cardPrice').textContent = LL.priceOf(fish) + ' عملة' + (tags.length ? ' · ' + tags.join(' · ') : '');
     $('cardHint').textContent = '';
     $('btnKeep').disabled = !!fish.junk;
+    bounce($('cardWeight'));
+    bounce($('cardNew'));
   }
 
   function choose(choice) {
@@ -523,7 +585,13 @@
         bye = { id: e.id, i: e.i, t: 0 };
       } else if (e.t === 'miss') { Sfx.miss(); shout('هرب!'); }
       else if (e.t === 'scare') { Sfx.miss(); shout('فزع!'); }
-      else if (e.t === 'reveal') { persist(); cardKey = ''; paintChrome(); }
+      else if (e.t === 'reveal') {
+        $('shout').hidden = true;
+        shoutT = 0;
+        persist();
+        cardKey = '';
+        paintChrome();
+      }
       else if (e.t === 'banked') {
         var w = game.state.anglers[e.i].weight;
         pop(w.toFixed(1), e.i ? 180 : 1100, 80, '#ffe14a');
@@ -656,19 +724,23 @@
     var pal = Art.backdrop(ctx, spot, t, night);
     Art.props(ctx, spot, pal, t, 300);
     Art.water(ctx, pal, 300, t, spot === 2 ? 760 : 980);
+    Art.life(ctx, spot, pal, t, 300);
     return pal;
+  }
+
+  function drawGround(pal, spot, anglers) {
+    if (spot === 1 || spot === 2) { Art.dock(ctx, pal, 300); return; }
+    if (spot === 3) return;
+    for (var i = 0; i < anglers.length; i++) Art.shore(ctx, pal, anglers[i].x, anglers[i].face, 300, spot);
   }
 
   function drawShadows() {
     var list = game.state.shadows;
-    ctx.save();
     ctx.fillStyle = '#042033';
     for (var i = 0; i < list.length; i++) {
       var s = list[i];
-      ctx.globalAlpha = 0.28;
-      ctx.beginPath();
-      ctx.ellipse(180 + s.x * 920, 390 + s.y * 250, 36 * s.s, 12 * s.s, 0, 0, 6.2832);
-      ctx.fill();
+      var drift = Math.sin(time * 0.8 + s.ph) * 10;
+      Art.fishShadow(ctx, 180 + s.x * 920, 410 + s.y * 220 + drift, 64 * s.s, s.dir, 0.5);
     }
     var anglers = game.state.anglers;
     for (var n = 0; n < anglers.length; n++) {
@@ -676,15 +748,10 @@
       if (a.phase !== 'wait' && a.phase !== 'bite') continue;
       var u = a.phase === 'bite' ? 1 : Math.min(1, a.waitT / Math.max(0.2, a.waitNeed));
       var b = bobberOf(a);
-      var x = b.x - 220 * (1 - u) * faceOf(n);
-      var y = 470 - u * 110 + Math.sin(time * 3 + n) * 8;
-      var wide = 22 + u * 18;
-      ctx.globalAlpha = 0.35 + u * 0.25;
-      ctx.beginPath();
-      ctx.ellipse(x, y, wide, 9 + u * 4, 0, 0, 6.2832);
-      ctx.fill();
+      var x = b.x - 180 * (1 - u) * faceOf(n);
+      var y = 460 - u * 90 + Math.sin(time * 2.4 + n) * 10;
+      Art.fishShadow(ctx, x, y, 26 + u * 20, faceOf(n), 0.28 + u * 0.35);
     }
-    ctx.restore();
   }
 
   function drawDecor(s) {
@@ -704,7 +771,7 @@
       var face = faceOf(i);
       var lean = a.phase === 'charge' ? a.power : (a.phase === 'reel' ? 0.35 : 0);
       var shirt = i === 0 ? '#3ec6ff' : '#ff8a3d';
-      var tip = Art.angler(ctx, anglerX(i), 332, face, shirt, time, lean);
+      var tip = Art.angler(ctx, anglerX(i), STAND, face, shirt, time, lean);
       if (a.phase === 'charge') Art.meter(ctx, anglerX(i) + face * 48 - 13, 150, a.power);
       if (a.phase !== 'ready' && a.phase !== 'reveal' && a.phase !== 'scared') {
         var b = bobberOf(a);
@@ -841,21 +908,28 @@
     var night = game && game.state.event.id === 'night' ? 1 : 0;
     ctx.save();
     ctx.translate(shake.x, shake.y);
-    drawWorld(spot, night, time);
+    var pal = drawWorld(spot, night, time);
     if (game && (mode === 'play' || mode === 'pause' || mode === 'result')) {
       drawDecor(game.state.save);
       drawShadows();
+      var feet = [];
+      for (var gi = 0; gi < game.state.anglers.length; gi++) feet.push({ x: anglerX(gi), face: faceOf(gi) });
+      drawGround(pal, game.state.spot, feet);
       drawAnglers();
       drawWeather(game.state.event);
     } else {
       drawDecor(save);
-      var tip = Art.angler(ctx, 210, 332, 1, '#3ec6ff', time, 0.2);
+      var home = save.spot || 0;
+      if (home === 1 || home === 2) Art.dock(ctx, pal, 300);
+      else if (home !== 3) Art.shore(ctx, pal, 210, 1, 300, home);
+      var tip = Art.angler(ctx, 210, STAND, 1, '#3ec6ff', time, 0.2);
       Art.line(ctx, tip.x, tip.y, 620, 360, Math.sin(time * 2) * 4);
       Art.bobber(ctx, 620, 360 + Math.sin(time * 2) * 3);
       drawWeather({ id: 'calm' });
     }
     drawFx();
     ctx.restore();
+    if (mode === 'play' && revealing()) paintCatchFish();
   }
 
   function on(el, fn) {
