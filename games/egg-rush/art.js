@@ -230,6 +230,21 @@
   };
   A.clearFx = function () { parts.length = 0; floaters = []; reveal = null; hop = null; A.hopPad = -1; A.grabPop = 0; A.homeGlow = 0; A.party = null; };
 
+  function drawFloats(ctx, cam) {
+    const z = cam.z;
+    for (const f of floaters) {
+      const size = f.size || 22 * z;
+      ctx.font = '700 ' + size + 'px Fredoka';
+      const half = ctx.measureText(f.text).width / 2 + 8;
+      const pad = size * 0.62;
+      let x = X(cam, f.x), y = Y(cam, f.y);
+      x = Math.max(half, Math.min(1280 - half, x));
+      y = Math.max(90 + pad, Math.min(632 - pad, y));
+      ctx.globalAlpha = Math.max(0, f.life);
+      label(ctx, f.text, x, y, size, f.color, /[ء-ي]/.test(f.text));
+    }
+    ctx.globalAlpha = 1;
+  }
   function label(ctx, text, x, y, size, color, rtl) {
     ctx.save();
     ctx.direction = rtl ? 'rtl' : 'ltr';
@@ -1233,10 +1248,6 @@
       ctx.restore();
     }
     drawParts(ctx, cam);
-    for (const f of floaters) {
-      ctx.globalAlpha = Math.max(0, f.life);
-      label(ctx, f.text, X(cam, f.x), Y(cam, f.y), f.size || 22 * z, f.color, /[ء-ي]/.test(f.text));
-    }
     ctx.globalAlpha = 1;
     const near = w.players[0];
     if (near) {
@@ -1248,6 +1259,7 @@
       if (best) label(ctx, 'عملاق 1/8 · ذهبي 1/30', X(cam, best.x), Y(cam, best.y) + 40 * z, 14 * z, '#fff', true);
     }
     ctx.restore();
+    drawFloats(ctx, cam);
     drawFly(ctx, cam);
     drawReveal(ctx, cam);
     drawTitleDemo(ctx);
