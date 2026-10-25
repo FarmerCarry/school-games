@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>جزيرة الفوضى</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="cv" tabindex="0"></canvas>
+<button id="btnPause" type="button" aria-label="إيقاف مؤقت" hidden>❚❚</button>
+<div id="ui">
+  <section id="scr-title" class="scr">
+    <div class="logo"><b>جزيرة <i>الفوضى</i></b></div>
+    <div class="tag">اصمد، اجمع العملات، وضحّك صاحبك!</div>
+    <div class="card side" id="howto">
+      <h2>طريقة اللعب</h2>
+      <div class="krow"><span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span> أو <span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> حركة</div>
+      <div class="krow"><span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">W</span></span> أو <span class="sg-key">مسافة</span> قفز</div>
+      <div class="krow"><span dir="ltr"><span class="sg-key">↓</span><span class="sg-key">S</span></span> نزول · <span dir="ltr"><span class="sg-key">F</span></span> إمساك</div>
+      <div class="krow">بعد الفرقعة: <span dir="ltr"><span class="sg-key">E</span></span> أسقط قشرة أو وسادة</div>
+    </div>
+    <div class="card side" id="prog">
+      <h2>تقدّمك</h2>
+      <div class="big" id="t-coins">0</div>
+      <div class="sub">عملة</div>
+      <div class="sub" id="t-streak">سلسلة: 0</div>
+      <div class="sub" id="t-surv">نجاة: 0/20</div>
+    </div>
+    <div class="playwrap">
+      <button id="btnPlay" type="button">العب!</button>
+      <div class="row">
+        <button id="btnTwo" type="button">لاعبان</button>
+        <button id="btnShop" type="button">المتجر</button>
+        <button id="btnBook" type="button">كتاب الكوارث</button>
+      </div>
+      <div class="hint">أو اضغط <span class="sg-key">Enter</span> · انظر الظل واهرب منه</div>
+    </div>
+  </section>
+
+  <section id="scr-setup" class="scr" hidden>
+    <div class="panel">
+      <h2>لاعبان</h2>
+      <p class="lead">نفس الجهاز: اللاعب الأول <span dir="ltr">WASD</span> والثاني الأسهم.</p>
+      <div id="setupOpts"></div>
+      <div class="back"><button class="mid" id="btnStart" type="button">ابدأ!</button> <button class="mid" id="btnSetupBack" type="button">رجوع</button></div>
+    </div>
+  </section>
+
+  <section id="scr-shop" class="scr" hidden>
+    <div class="panel">
+      <h2>المتجر</h2>
+      <p class="lead" id="shop-coins">عملاتك: 0</p>
+      <div class="grid" id="shopGrid"></div>
+      <div class="back"><button class="mid" id="btnShopBack" type="button">رجوع</button></div>
+    </div>
+  </section>
+
+  <section id="scr-book" class="scr" hidden>
+    <div class="panel">
+      <h2>كتاب الكوارث</h2>
+      <p class="lead">انجح مرة لتفتح البطاقة، وعلى الصعب تصبح ذهبية.</p>
+      <div class="grid" id="bookGrid"></div>
+      <div class="back"><button class="mid" id="btnBookBack" type="button">رجوع</button></div>
+    </div>
+  </section>
+
+  <section id="scr-pause" class="scr" hidden>
+    <div class="panel">
+      <h2>استراحة</h2>
+      <p class="lead" id="p-info"></p>
+      <div class="back">
+        <button class="mid" id="btnResume" type="button">تابع</button>
+        <button class="mid" id="btnRestart" type="button">أعد</button>
+        <button class="mid" id="btnMenu" type="button">القائمة</button>
+      </div>
+      <p class="lead"><span class="sg-key">P</span> تابع · <span class="sg-key">R</span> إعادة</p>
+    </div>
+  </section>
+
+  <section id="scr-result" class="scr" hidden>
+    <div class="panel">
+      <h2 id="r-title">انتهت الجولة</h2>
+      <div class="banner" id="banner" hidden>رقم قياسي جديد!</div>
+      <div class="podium" id="podium"></div>
+      <div class="titles" id="r-titles"></div>
+      <div class="back">
+        <button class="mid" id="btnAgain" type="button">العب مجددًا</button>
+        <button class="mid" id="btnResultMenu" type="button">القائمة</button>
+      </div>
+      <p class="lead"><span class="sg-key">Enter</span> مجددًا · <span class="sg-key">R</span> إعادة</p>
+    </div>
+  </section>
+
+  <div id="siren" hidden><b id="siren-name"></b><span id="siren-tip"></span></div>
+</div>
+<script src="../../shared/kit.js"></script>
+<script src="engine.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

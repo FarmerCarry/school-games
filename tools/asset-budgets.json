@@ -10,6 +10,7 @@
     "block-world": 164000,
     "cake-guards": 84000,
     "candy-rope": 110000,
+    "chaos-island": 115000,
     "connect-four": 53000,
     "critter-mart": 172000,
     "dino-3d": 55000,
@@ -45,5 +46,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5100000
+  "precacheBytes": 5215000
 }
