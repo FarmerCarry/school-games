@@ -25,6 +25,7 @@
   var streakAt = 0;
   var hintTimer = 0;
   var hintShown = false;
+  var recordRound = false;
 
   function persist() {
     save.best = Math.max(save.best || 0, save.speed || 0);
@@ -123,7 +124,26 @@
     focusGame();
     var startSp = save.speed || 0;
     streakAt = startSp >= 40 ? 40 : startSp >= 24 ? 24 : startSp >= 12 ? 12 : 0;
+    recordRound = false;
     showHint();
+  }
+  function buildConfetti() {
+    var root = el('confetti');
+    if (root.childNodes.length) return;
+    var colors = ['#ff4eb6', '#ffd24a', '#7dffb0', '#8fd0ff', '#fff6ea', '#ff7a3c'];
+    for (var i = 0; i < 16; i++) {
+      var bit = document.createElement('i');
+      bit.style.cssText = 'left:' + ((i * 6.2) % 94) + '%;background:' + colors[i % colors.length] + ';animation-delay:' + ((i % 8) * 0.2) + 's;animation-duration:' + (1.7 + (i % 5) * 0.22) + 's';
+      root.appendChild(bit);
+    }
+  }
+  function showRecord(on) {
+    var node = el('result-record');
+    node.hidden = !on;
+    node.classList.remove('pop');
+    if (!on) return;
+    void node.offsetWidth;
+    node.classList.add('pop');
   }
   function showHint() {
     if (hintShown || duo) return;
@@ -240,7 +260,9 @@
     dirty = true;
     el('result-title').textContent = 'أنهيت العالم!';
     el('result-line').textContent = KR.NAMES[world] + (bonus ? ' · +4 أوسمة' : '');
-    el('result-record').hidden = save.speed < save.best;
+    hideHint();
+    buildConfetti();
+    showRecord(recordRound);
     screens();
     view.burst(eng.state.players[0].x, eng.state.players[0].y + 1, eng.state.players[0].z, 0xffe56a, 24);
     KR.sound('world');
@@ -254,8 +276,10 @@
     endRound('end', Math.round(height));
     mode = 'result';
     dirty = true;
-    el('result-title').textContent = height > best ? 'رقم قياسي جديد!' : 'انتهى البرج';
-    el('result-record').hidden = height <= best;
+    el('result-title').textContent = height > best ? 'رقم جديد!' : 'انتهى البرج';
+    hideHint();
+    buildConfetti();
+    showRecord(height > best || recordRound);
     el('result-line').textContent = 'الارتفاع ' + Math.round(height);
     screens();
   }
@@ -264,7 +288,9 @@
     endRound(over.type === 'draw' ? 'draw' : 'end', 0);
     mode = 'result';
     dirty = true;
-    el('result-record').hidden = true;
+    hideHint();
+    buildConfetti();
+    showRecord(false);
     el('result-title').textContent = over.type === 'draw' ? 'تعادل!' : 'انتهى السباق';
     el('result-line').textContent = over.winner === 1 ? 'الوردي وصل أولًا' : over.winner === 0 ? 'الأزرق وصل أولًا' : 'تعادل!';
     screens();
@@ -275,6 +301,13 @@
     if (sp > save.speed) save.speed = sp;
     if (save.speed > save.best) save.best = save.speed;
     var bucket = Math.floor(save.speed / 25);
+    if (!force && bucket > milestone && bucket > 0) {
+      recordRound = true;
+      banner('رقم جديد!');
+      KR.sound('record');
+      var hero = eng.state.players[0];
+      if (hero) celebrate(hero.x, hero.y + 1.3, hero.z);
+    }
     if (force || bucket > milestone) {
       milestone = Math.max(milestone, bucket);
       persist();

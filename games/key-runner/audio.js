@@ -22,6 +22,9 @@
       [659, 880, 1175].forEach(function (f, i) { tone({ freq: f, type: 'triangle', dur: 0.12, vol: 0.1, delay: i * 0.08 }); });
     }
     else if (name === 'world') Kit.sfx.win();
+    else if (name === 'record') {
+      [523, 659, 784, 1047].forEach(function (f, i) { tone({ freq: f, type: 'triangle', dur: 0.11, vol: 0.1, delay: i * 0.07 }); });
+    }
     else if (name === 'word') Kit.sfx.power();
     else if (name === 'buy') Kit.sfx.coin();
     else if (name === 'rebirth') Kit.sfx.power();

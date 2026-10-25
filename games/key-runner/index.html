@@ -19,7 +19,13 @@
   <div class="chip" id="word" hidden></div>
 </div>
 <p id="banner" hidden>مرحلة!</p>
-<div id="hint" hidden><b class="hint-w" dir="ltr">W</b><i class="hint-arrow"></i><b class="hint-space">مسافة</b></div>
+<div id="hint" hidden aria-hidden="true">
+  <div class="kb">
+    <div class="kb-row"><b class="key key-w" dir="ltr">W</b></div>
+    <div class="kb-row"><b class="key" dir="ltr">A</b><b class="key" dir="ltr">S</b><b class="key" dir="ltr">D</b></div>
+    <b class="key key-space" dir="ltr"></b>
+  </div>
+</div>
 <p id="floater" hidden dir="ltr">+1</p>
 <p id="toast" role="status" hidden></p>
 <button id="pause-button" class="utility" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3v14H7zm7 0h3v14h-3z"/></svg></button>
@@ -70,9 +76,10 @@
   </div>
 </section>
 <section id="result-screen" class="screen veil" hidden>
+  <div id="confetti" aria-hidden="true"></div>
   <div class="panel">
     <h2 id="result-title">أحسنت!</h2>
-    <p id="result-record" hidden>رقم قياسي جديد!</p>
+    <p id="result-record" hidden>رقم جديد!</p>
     <p id="result-line" class="lead"></p>
     <button id="again" class="play" type="button">العب مرة أخرى</button>
     <button id="result-menu" class="ghost" type="button">القائمة</button>
