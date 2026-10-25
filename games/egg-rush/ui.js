@@ -6,20 +6,24 @@
   const canvas = $('game');
   const ui = $('ui');
   let frameDirty = true;
-  const view = Kit.fit(canvas, 1280, 720, {
-    maxDpr: 1.5,
-    onResize: function (v) {
-      ui.style.left = canvas.style.left;
-      ui.style.top = canvas.style.top;
-      ui.style.transform = 'scale(' + v.scale + ')';
-      frameDirty = true;
-    }
-  });
+  const mute = Kit.muteButton();
+  function placeChrome(v) {
+    ui.style.left = canvas.style.left;
+    ui.style.top = canvas.style.top;
+    ui.style.transform = 'scale(' + v.scale + ')';
+    const rect = canvas.getBoundingClientRect();
+    mute.style.top = Math.round(rect.top + 10) + 'px';
+    mute.style.right = Math.round(window.innerWidth - rect.right + 10) + 'px';
+    mute.style.left = 'auto';
+    const hud = $('hud');
+    if (hud) hud.style.paddingInlineStart = Math.ceil(86 / v.scale) + 'px';
+    frameDirty = true;
+  }
+  const view = Kit.fit(canvas, 1280, 720, { maxDpr: 1.5, onResize: placeChrome });
   const pointer = Kit.pointer(view);
   const shake = Kit.shake();
   const store = Kit.store('egg-rush');
   const saveStatus = Kit.saveStatus({ retry: function () { persist(true); } });
-  Kit.muteButton();
 
   const TUT = {
     egg: 'امشِ إلى البيضة',
@@ -59,6 +63,8 @@
   let lastStep = 0;
   let time = 0;
   let cam = { x: 0, y: 0, z: 1 };
+  let cardDelay = 0;
+  let pendingCard = null;
 
   function ymd() {
     const d = new Date();
@@ -133,7 +139,7 @@
     screen = 'play';
     ER.art.clearFx();
     showCoins = world.mode === '1p' ? world.coins : 0;
-    slow = 0; zoom = 1; flash = 0; lastStep = 0;
+    slow = 0; zoom = 1; flash = 0; lastStep = 0; cardDelay = 0; pendingCard = null;
     if (mode === '1p') {
       Kit.stats.round('main');
       if (world.tut !== 'done') Kit.stats.tutorial('start');
@@ -165,6 +171,7 @@
       Kit.stats.end('end');
     }
     world = null;
+    pendingCard = null; cardDelay = 0;
     screen = 'title';
     closeModals();
     paintChrome();
@@ -192,16 +199,21 @@
   }
   function cameraOf(w) {
     const a = w.players[0], b = w.players[1];
-    let z = 1, focus = a.x + a.facing * 3;
+    let z = w.mode === '2p' ? 1 : 1.62;
+    let focus = a.x + a.facing * 2.4;
+    let fy = a.y;
     if (w.mode === '2p' && b) {
-      const span = Math.abs(a.x - b.x) + 10;
-      z = Math.max(0.62, Math.min(1, 1280 / (span * 48)));
+      const span = Math.abs(a.x - b.x) + 12;
+      z = Math.max(0.74, Math.min(1.15, 1280 / (span * 48)));
       focus = (a.x + b.x) / 2;
+      fy = (a.y + b.y) / 2;
     }
     const viewW = 1280 / (48 * z), viewH = 720 / (48 * z);
-    let x = focus - viewW * (w.mode === '2p' ? 0.5 : 0.42);
+    let x = focus - viewW * (w.mode === '2p' ? 0.5 : 0.36);
     x = Math.max(0, Math.min(Math.max(0, w.w - viewW), x));
-    return { x: x, y: (15 - viewH) / 2, z: z };
+    let y = fy - viewH * 0.48;
+    y = Math.max(0, Math.min(Math.max(0, 15 - viewH), y));
+    return { x: x, y: y, z: z };
   }
   function inputOf(K) {
     if (modalOpen()) return {};
@@ -246,7 +258,14 @@
 
   function onEvent(e) {
     const A = ER.art, S = ER.sfx, calm = Kit.motion.reduced();
-    if (e.t === 'grab') S.grab();
+    if (e.t === 'grab') {
+      S.grab();
+      const px = e.x != null ? e.x : (world.players[e.p] || world.players[0]).x;
+      const py = e.y != null ? e.y : (world.players[e.p] || world.players[0]).y;
+      A.confetti(px, py - 0.4, 16);
+      A.burst(px, py - 0.6, 10, ['#fff', '#ffd23f', '#ff8ad8'], 2.4);
+      if (!calm) shake.add(3);
+    }
     else if (e.t === 'boop') {
       S.boop(); A.burst(e.x, e.y, 16, ['#fff', '#ffd23f', '#ff8a3d'], 3); A.float(e.x, e.y - 0.6, 'بوينغ!', '#fff');
       if (!calm) shake.add(7);
@@ -254,12 +273,17 @@
       S.alert();
       if (!calm) { slow = 0.2; zoom = 1.06; shake.add(3); }
     } else if (e.t === 'collect') {
-      S.coin(); A.burst(e.x, e.y, 12, ['#ffd23f', '#fff6c2'], 2.4); A.float(e.x, e.y - 0.4, '+' + ER.fmt(e.n), '#ffd23f');
+      S.coin(); A.coins(e.x, e.y, 14); A.confetti(e.x, e.y, 8); A.float(e.x, e.y - 0.4, '+' + ER.fmt(e.n), '#ffd23f');
       persist(false);
     } else if (e.t === 'hatch') {
       if (e.s >= 4) { S.legend(); flash = calm ? 0 : 0.45; } else S.hatch();
-      A.burst(6, 8, e.s >= 4 ? 28 : 14, ['#fff', '#ffd23f', '#ff8ad8', '#7ec8ff'], 3);
-      openCard(e);
+      const hx = e.x != null ? e.x : 2.2, hy = e.y != null ? e.y : 8.6;
+      A.crack(hx, hy, e.s);
+      A.confetti(hx, hy, 18);
+      if (e.pad >= 0 && world.pads[e.pad]) { A.coins(world.pads[e.pad].x, world.pads[e.pad].y, 8); A.confetti(world.pads[e.pad].x, world.pads[e.pad].y, 10); }
+      if (!calm) shake.add(e.s >= 4 ? 8 : 5);
+      if (e.pad < 0) openCard(e);
+      else { pendingCard = e; cardDelay = 0.72; }
       persist(true);
     } else if (e.t === 'buy') { S.buy(); persist(true); if (!$('ovShop').hidden) paintShop(); }
     else if (e.t === 'gate') { S.gate(); A.float(e.x, e.y - 0.8, 'تحتاج سرعة ' + e.need, '#fff'); if (!calm) shake.add(2); }
@@ -272,8 +296,8 @@
     else if (e.t === 'bump') { S.bump(); if (!calm) shake.add(5); A.float(e.x, e.y, '!', '#fff'); }
     else if (e.t === 'slip') S.slip();
     else if (e.t === 'popshield') { S.boop(); A.float(e.x, e.y, 'فقاعة!', '#8fd8ff'); }
-    else if (e.t === 'bank' && world.mode === '2p') { S.coin(); A.float(e.x, e.y, '+' + e.n, '#ffd23f'); }
-    else if (e.t === 'bank') persist(true);
+    else if (e.t === 'bank' && world.mode === '2p') { S.coin(); A.coins(e.x, e.y, 10); A.float(e.x, e.y, '+' + e.n, '#ffd23f'); }
+    else if (e.t === 'bank') { A.burst(2.2 + (e.slot || 0) * 2.3, 8.2, 10, ['#fff', '#ffd23f'], 2); persist(true); }
     else if (e.t === 'release' || e.t === 'place') persist(true);
     else if (e.t === 'rebirth') { S.legend(); banner('مهرجان الفقس! التاج رقم ' + e.n); persist(true); }
     else if (e.t === 'tut' && e.phase === 'done') { markTut(); persist(true); }
@@ -514,6 +538,7 @@
         const ev = world.ev.splice(0, world.ev.length);
         for (let i = 0; i < ev.length; i++) onEvent(ev[i]);
         if (cardT > 0) { cardT -= dt; if (cardT <= 0 && !world.pending) $('ovCard').hidden = true; }
+        if (cardDelay > 0) { cardDelay -= dt; if (cardDelay <= 0 && pendingCard) { openCard(pendingCard); pendingCard = null; } }
         if (dirty && clock - savedAt >= 1500) persist(true);
         zoom += (1 - zoom) * Math.min(1, dt * 6);
         if (flash > 0) flash = Math.max(0, flash - dt);

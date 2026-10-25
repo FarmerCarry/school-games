@@ -445,7 +445,7 @@
       p.egg = { nest: loose.nest, biome: loose.biome, species: loose.species, rarity: loose.species, daily: !!loose.daily };
       w.flights.splice(w.flights.indexOf(loose), 1);
       alertGrab(w, p);
-      ev(w, { t: 'grab', p: p.id, biome: p.egg.biome, species: p.egg.species });
+      ev(w, { t: 'grab', p: p.id, biome: p.egg.biome, species: p.egg.species, x: p.x, y: p.y });
       return true;
     }
     bd = 0.95;
@@ -518,7 +518,7 @@
     if (force === 'giant') return gold ? 3 : 1;
     return (giant ? 1 : 0) + (gold ? 2 : 0);
   }
-  function hatchSlot(w, inc) {
+  function hatchSlot(w, inc, slot) {
     const v = rollVariant(w.rng, inc.force);
     const id = inc.b * 6 + inc.s;
     const neu = !w.seen[id];
@@ -529,7 +529,7 @@
     const pad = freePad(w);
     if (pad >= 0) { pet.pad = pad; w.pets.push(pet); }
     else w.pending = pet;
-    ev(w, { t: 'hatch', b: pet.b, s: pet.s, v: pet.v, neu: neu, pad: pet.pad, rate: pet.rate, name: PETS[id] });
+    ev(w, { t: 'hatch', b: pet.b, s: pet.s, v: pet.v, neu: neu, pad: pet.pad, rate: pet.rate, name: PETS[id], x: 2.2 + slot * 2.3, y: 8.6 });
     refreshDaily(w);
     syncTut(w);
   }
@@ -908,7 +908,7 @@
     if (w.mode === '1p') {
       for (let i = 0; i < w.incs.length; i++) {
         const inc = w.incs[i];
-        if (inc && w.now >= inc.end) { w.incs[i] = null; hatchSlot(w, inc); }
+        if (inc && w.now >= inc.end) { w.incs[i] = null; hatchSlot(w, inc, i); }
       }
       const mult = coinMult(w.rebirths, w.seen);
       for (const pet of w.pets) if (pet.pad >= 0 && pet.pad < w.pens) w.pads[pet.pad].pile += pet.rate * mult * dt;

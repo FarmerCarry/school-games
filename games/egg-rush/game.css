@@ -5,7 +5,8 @@
 @keyframes er-bob { 50% { transform: translateY(-4px); } }
 html[data-sg-motion="reduce"] .card h1 { animation: none; }
 button { font-family: var(--sg-font); cursor: pointer; }
-.hud { position: absolute; top: 12px; left: 16px; right: 16px; display: flex; gap: 10px; align-items: flex-start; }
+.hud { position: absolute; top: 12px; left: 16px; right: 16px; display: flex; gap: 10px; align-items: flex-start; padding-inline-start: 86px; }
+.sg-mute { z-index: 30; width: 46px; height: 46px; }
 .pill { background: #fff8e8; color: #2a2348; border: 4px solid #2a2348; border-radius: 18px; padding: 6px 12px; font-weight: 700; font-size: 22px; box-shadow: 0 4px 0 #2a2348; }
 .pill b { font-weight: 700; }
 .pill .sub { display: block; font-size: 15px; color: #6a5a38; }
