@@ -35,6 +35,7 @@
   var STAND = 292;
   var padT = 0;
   var reelSnd = 0;
+  var goldT = 0;
   var statsOpen = '';
   var gull = null;
   var bye = null;
@@ -302,17 +303,36 @@
     g.globalAlpha = 1;
     g.beginPath(); g.ellipse(0, 6, 118, 58, 0, 0, 6.3); g.fill();
     g.restore();
-    Art.blit(g, fish, w / 2, cy, 2.05, time);
+    var golden = fish.rare >= 3 || fish.boss;
+    if (golden) {
+      g.save();
+      g.translate(w / 2, cy);
+      g.globalAlpha = Kit.motion.reduced() ? 0.28 : 0.42;
+      g.fillStyle = '#ffe14a';
+      var rays = Kit.motion.reduced() ? 8 : 12;
+      for (var ray = 0; ray < rays; ray++) {
+        g.save();
+        g.rotate((Kit.motion.reduced() ? 0 : time * 0.35) + ray * (6.2832 / rays));
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.lineTo(16, -230);
+        g.lineTo(-16, -230);
+        g.fill();
+        g.restore();
+      }
+      g.restore();
+    }
+    Art.blit(g, fish, w / 2, cy, golden ? 2.25 : 2.05, time);
     var age = Math.max(0, time - cardAt);
-    var burst = Kit.motion.reduced() ? 0.75 : Math.min(1, age / 0.55);
-    var n = Kit.motion.reduced() ? 8 : 16;
+    var burstN = Kit.motion.reduced() ? 0.75 : Math.min(1, age / 0.55);
+    var n = Kit.motion.reduced() ? 8 : (golden ? 24 : 16);
     for (var i = 0; i < n; i++) {
       var ang = i * 0.39 + 0.2;
-      var rad = 36 + burst * (78 + (i % 5) * 14);
+      var rad = 36 + burstN * (golden ? 110 : 78) + (i % 5) * (golden ? 10 : 14);
       var tw = Kit.motion.reduced() ? 1 : (age < 0.7 ? 1 : 0.72 + Math.sin(time * 6 + i) * 0.28);
       g.globalAlpha = Math.max(0.55, tw);
       g.fillStyle = i % 2 ? '#fffef6' : '#ffe14a';
-      star(g, w / 2 + Math.cos(ang) * rad, cy + Math.sin(ang) * rad * 0.55, 8 + (i % 3) * 4);
+      star(g, w / 2 + Math.cos(ang) * rad, cy + Math.sin(ang) * rad * 0.55, (golden ? 12 : 8) + (i % 3) * 4);
     }
     g.globalAlpha = 1;
   }
@@ -331,9 +351,21 @@
     cardKey = key;
     cardAt = time;
     var s = liveSave();
-    $('scr-card').querySelector('.ll-cardbox').style.borderColor = catchGlow(fish);
+    var box = $('scr-card').querySelector('.ll-cardbox');
+    var golden = fish.rare >= 3 || fish.boss;
+    box.classList.toggle('ll-gold', golden);
+    box.style.borderColor = golden ? '#ffcc00' : catchGlow(fish);
     paintCatchFish();
     $('cardNew').hidden = !(!(s.book[fish.id] > 0));
+    var record = !!(s.book[fish.id] > 0 && fish.w > s.book[fish.id]);
+    $('cardBest').hidden = !record;
+    if (record) {
+      bounce($('cardBest'));
+      Sfx.best();
+      shake.add(12);
+      goldT = Math.max(goldT, 0.5);
+      burst(640, 240, 22, ['#ffe14a', '#fff8d0', '#ff9a1a']);
+    }
     $('cardName').textContent = fish.name;
     $('cardWeight').textContent = fish.w.toFixed(1) + ' كغ';
     var rare = $('cardRare');
@@ -343,7 +375,6 @@
     if (fish.rb) tags.push('قوس ×5');
     if (fish.day) tags.push('سمكة اليوم ×3');
     if (fish.glow) tags.push('مضيئة ×1.5');
-    if (s.book[fish.id] > 0 && fish.w > s.book[fish.id]) tags.push('رقم قياسي!');
     $('cardPrice').textContent = LL.priceOf(fish) + ' عملة' + (tags.length ? ' · ' + tags.join(' · ') : '');
     $('cardHint').textContent = '';
     $('btnKeep').disabled = !!fish.junk;
@@ -561,6 +592,8 @@
         Sfx.plip();
         var dip = bobberOf(game.state.anglers[e.i]);
         rings.push({ x: dip.x, y: dip.y, t: 0 });
+        rings.push({ x: dip.x, y: dip.y, t: -0.16 });
+        burst(dip.x, dip.y - 8, 10, ['#fff', '#d7f4ff', '#7ee0ff']);
       } else if (e.t === 'bite') {
         Sfx.bite();
         shout('!', true);
@@ -574,9 +607,10 @@
         var fish = game.state.anglers[e.i].fish;
         Sfx.catch(fish ? fish.rare : 0);
         Sfx.splash(!!(fish && (fish.rare >= 3 || fish.boss)));
+        if (fish && (fish.rare >= 3 || fish.boss)) { Sfx.rare(); goldT = 0.7; }
         shout(fish && (fish.rare >= 3 || fish.boss) ? fish.name : 'أمسكتها!');
-        shake.add(fish && (fish.rare >= 4 || fish.boss) ? 12 : 6);
-        burst(640, 300, fish && fish.rare >= 3 ? 28 : 14, ['#ffe14a', '#7ee0ff', '#fff', '#ff8ad4']);
+        shake.add(fish && (fish.rare >= 3 || fish.boss) ? (fish.rare >= 4 || fish.boss ? 16 : 12) : 6);
+        burst(640, 300, fish && fish.rare >= 3 ? 36 : 14, ['#ffe14a', '#fff6c2', '#fff', '#ffb000']);
         if (fish && (fish.rare >= 4 || fish.boss) && !Kit.motion.reduced()) slow = 0.4;
         pop((fish ? fish.w.toFixed(1) : '') + ' كغ', 640, 240, '#fff');
       }       else if (e.t === 'escape') {
@@ -630,6 +664,7 @@
     if (gull) { gull.t += dt; gull.x += dt * 520; if (gull.x > 1360) gull = null; }
     if (bye) { bye.t += dt; if (bye.t > 0.9) bye = null; }
     if (shoutT > 0) { shoutT -= dt; if (shoutT <= 0) $('shout').hidden = true; }
+    if (goldT > 0) goldT = Math.max(0, goldT - dt);
   }
 
   function update(dt) {
@@ -641,9 +676,11 @@
       var ev = game.step(dt * scale, readInput());
       handleEvents(ev, before);
       var a0 = game.state.anglers[0];
-      if (a0.phase === 'reel' && (Kit.keys.down('Space') || mouseDown)) {
+      if (a0.phase === 'reel') {
+        if (!a0.inside) shake.add(3.2);
         reelSnd += dt;
-        if (reelSnd > 0.16) { reelSnd = 0; Sfx.reel(); }
+        var gap = a0.inside ? 0.2 : 0.08;
+        if (reelSnd > gap) { reelSnd = 0; Sfx.reel(a0.inside ? 0 : 1); }
       }
       time += dt;
       shake.update(dt);
@@ -709,15 +746,20 @@
     var dist = a.phase === 'ready' || a.phase === 'charge' ? 0.15 : (a.dist || 0.4);
     var x = anglerX(a.i) + face * (150 + dist * 460 + a.aim * 80);
     x = Math.max(70, Math.min(1210, x));
-    var dip = a.dip > 0 ? 18 * Math.min(1, a.dip / 0.26) : 0;
-    var y = 338 + dip + Math.sin(time * 2.2 + a.i) * 2;
+    var splash = 0;
+    if (a.dip > 0) splash = Math.sin(Math.min(1, a.dip / 0.26) * Math.PI);
+    else if (a.phase === 'bite') splash = 0.9;
+    else if (a.phase === 'reel') splash = a.inside ? 0.2 : 0.65;
+    var plunge = splash * 36;
+    if (a.phase === 'reel' && a.fish) plunge += (0.55 - a.fish.y) * 42;
+    var y = 338 + plunge + Math.sin(time * 2.2 + a.i) * 3;
     if (a.phase === 'flight') {
       var u = Math.min(1, a.flightT / 0.42);
       var tip = anglerX(a.i) + face * 46;
       x = tip + (x - tip) * u;
       y = 250 + (y - 250) * u - Math.sin(u * 3.1416) * 70;
     }
-    return { x: x, y: y };
+    return { x: x, y: y, splash: splash };
   }
 
   function drawWorld(spot, night, t) {
@@ -769,15 +811,22 @@
     for (var i = 0; i < st.anglers.length; i++) {
       var a = st.anglers[i];
       var face = faceOf(i);
-      var lean = a.phase === 'charge' ? a.power : (a.phase === 'reel' ? 0.35 : 0);
+      var lean = a.phase === 'charge' ? a.power : (a.phase === 'reel' ? (a.inside ? 0.5 : 0.9) : 0);
       var shirt = i === 0 ? '#3ec6ff' : '#ff8a3d';
       var tip = Art.angler(ctx, anglerX(i), STAND, face, shirt, time, lean);
       if (a.phase === 'charge') Art.meter(ctx, anglerX(i) + face * 48 - 13, 150, a.power);
       if (a.phase !== 'ready' && a.phase !== 'reveal' && a.phase !== 'scared') {
         var b = bobberOf(a);
-        var wob = a.phase === 'wait' ? Math.sin(time * 8) * 6 : 0;
+        var wob = a.phase === 'wait' ? Math.sin(time * 8) * 6 : (a.phase === 'reel' ? Math.sin(time * (a.inside ? 10 : 22)) * (a.inside ? 8 : 18) : 0);
         Art.line(ctx, tip.x, tip.y, b.x, b.y, wob);
-        Art.bobber(ctx, b.x, b.y);
+        if (a.phase === 'reel' && a.fish) {
+          ctx.save();
+          ctx.translate(b.x, b.y + 26);
+          ctx.rotate(Math.sin(time * (a.inside ? 7 : 16)) * (a.inside ? 0.2 : 0.55));
+          Art.blit(ctx, a.fish, 0, 0, a.inside ? 0.62 : 0.78, time);
+          ctx.restore();
+        }
+        Art.bobber(ctx, b.x, b.y, time, b.splash);
         if (a.phase === 'bite') {
           ctx.font = '700 72px Fredoka';
           ctx.textAlign = 'center';
@@ -788,7 +837,7 @@
       }
       if (a.phase === 'reel') {
         var rx = st.anglers.length === 1 ? 1088 : (i === 0 ? 24 : 1170);
-        Art.reel(ctx, rx, 168, 300, a);
+        Art.reel(ctx, rx, 168, 300, a, time);
       }
       if (a.phase === 'show' && a.fish) {
         var u = Math.min(1, a.showT / 0.85);
@@ -798,7 +847,7 @@
         var sc = (1.1 + u * 0.8) * (1 + Math.sin(u * 9) * 0.08);
         Art.blit(ctx, a.fish, x, y, sc, time);
       }
-      if ((a.phase === 'show' || a.phase === 'reveal') && a.fish && (a.fish.rare >= 4 || a.fish.boss)) {
+      if ((a.phase === 'show' || a.phase === 'reveal') && a.fish && (a.fish.rare >= 3 || a.fish.boss)) {
         ctx.strokeStyle = '#ffd76a';
         ctx.lineWidth = 12;
         ctx.strokeRect(8, 8, 1264, 704);
@@ -854,7 +903,7 @@
       ctx.strokeStyle = '#e7f8ff';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(wave.x, wave.y, 8 + wave.t * 70, 0, 6.2832);
+      ctx.ellipse(wave.x, wave.y, 12 + wave.t * 96, 5 + wave.t * 28, 0, 0, 6.2832);
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
@@ -924,10 +973,16 @@
       else if (home !== 3) Art.shore(ctx, pal, 210, 1, 300, home);
       var tip = Art.angler(ctx, 210, STAND, 1, '#3ec6ff', time, 0.2);
       Art.line(ctx, tip.x, tip.y, 620, 360, Math.sin(time * 2) * 4);
-      Art.bobber(ctx, 620, 360 + Math.sin(time * 2) * 3);
+      Art.bobber(ctx, 620, 360 + Math.sin(time * 2) * 3, time, 0.12);
       drawWeather({ id: 'calm' });
     }
     drawFx();
+    if (goldT > 0) {
+      ctx.globalAlpha = Math.min(0.45, goldT);
+      ctx.fillStyle = '#ffe14a';
+      ctx.fillRect(-20, -20, 1320, 760);
+      ctx.globalAlpha = 1;
+    }
     ctx.restore();
     if (mode === 'play' && revealing()) paintCatchFish();
   }
