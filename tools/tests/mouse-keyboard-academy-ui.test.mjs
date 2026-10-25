@@ -256,19 +256,24 @@ test('grip cards fit the classroom sizes without overlapping', async t => {
     const left = await inside(page, '[data-grip="left"]', width, height);
     assert.equal(intersects(replay, left), false, `${width}x${height} replay covers the mouse`);
     assert.equal(await page.locator('.grip-note').count(), 0);
-    assert.equal(await page.locator('.hand i').count(), 4);
-    assert.equal(await page.locator('.hand u').count(), 1);
+    assert.equal(await page.locator('.hand path').count(), 1);
     await page.locator('[data-grip="left"]').click();
     const praise = await page.evaluate(() => {
-      const toast = document.getElementById('toast').getBoundingClientRect();
+      const yay = document.querySelector('.grip-bar .yay').getBoundingClientRect();
       const stage = document.querySelector('.grip-stage').getBoundingClientRect();
+      const next = document.getElementById('btnGripNext').getBoundingClientRect();
+      const font = parseFloat(getComputedStyle(document.querySelector('.grip-bar .yay')).fontSize);
       return {
-        hidden: document.getElementById('toast').hidden,
-        onArt: toast.top < stage.bottom - 4 && toast.bottom > stage.top && toast.left < stage.right && toast.right > stage.left
+        hidden: document.querySelector('.grip-bar .yay').hidden,
+        font,
+        onArt: yay.top < stage.bottom - 4 && yay.bottom > stage.top && yay.left < stage.right && yay.right > stage.left,
+        beside: Math.abs((yay.top + yay.bottom) / 2 - (next.top + next.bottom) / 2) < 24
       };
     });
     assert.equal(praise.hidden, false, `${width}x${height} praise is missing`);
     assert.equal(praise.onArt, false, `${width}x${height} praise covers the picture`);
+    assert.ok(praise.font >= 26, `${width}x${height} praise is tiny`);
+    assert.equal(praise.beside, true, `${width}x${height} praise is not beside التالي`);
     const next = await inside(page, '#btnGripNext', width, height);
     assert.equal(intersects(next, left), false, `${width}x${height} next covers the mouse`);
     await pageFits(page);
@@ -291,12 +296,12 @@ test('grip cards fit the classroom sizes without overlapping', async t => {
     await pageFits(page);
     await words(page);
     const landed = await page.evaluate(() => {
-      const digits = [...document.querySelectorAll('.digit')];
+      const paws = [...document.querySelectorAll('.paw')];
       const nubs = [...document.querySelectorAll('.nub')];
-      return digits.length === 2 && digits.every((digit, i) => {
-        const tip = digit.getBoundingClientRect();
+      return paws.length === 2 && paws.every((paw, i) => {
+        const tip = paw.getBoundingClientRect();
         const nub = nubs[i].getBoundingClientRect();
-        return tip.bottom >= nub.top - 6 && tip.bottom <= nub.bottom + 10;
+        return tip.bottom >= nub.top - 8 && tip.bottom <= nub.bottom + 16;
       });
     });
     assert.equal(landed, true, `${width}x${height} fingers rest on the bumps`);

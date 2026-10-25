@@ -555,8 +555,8 @@ The academy page is still one inlined HTML file (no new images, fonts, or precac
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Mouse & Keyboard Academy | 76,987 | 77,000 (was 84,000; before that 81,000; originally 56,000) |
-| Offline precache, 46 files | 5,109,596 | 5,130,000 (was 5,100,000) |
+| Mouse & Keyboard Academy | 76,986 | 77,000 (was 84,000; before that 81,000; originally 56,000) |
+| Offline precache, 46 files | 5,109,595 | 5,130,000 (was 5,100,000) |
 
-The page limit is the next thousand above the measured file. The five picture screens, with a cartoon hand, two bump keys, and a side-view child, are 6,881 bytes smaller than the 83,868-byte diagram page. 13 bytes remain under the page limit, and 20,404 bytes remain under the precache limit. No new files were added.
+The page limit is the next thousand above the measured file. The five picture screens, with one hand silhouette, two bump keys, and a child at a desk, are 6,882 bytes smaller than the 83,868-byte diagram page. 14 bytes remain under the page limit, and 20,405 bytes remain under the precache limit. No new files were added.
 

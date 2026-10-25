@@ -487,37 +487,39 @@
   function mouseFace(side) {
     return '<i class="ear"></i><i class="ear r"></i><i class="eye"></i><i class="eye r"></i><i class="smile"></i><i class="bulb ' + side + ' lit"></i>';
   }
-  function hand(side) {
-    return '<div class="hand ' + side + '"><b></b><u></u><i></i><i></i><i></i><i></i></div>';
+  function handSvg(cls) {
+    return '<svg class="' + cls + '" viewBox="0 0 100 74"><path d="M34 70L26 52L8 48L2 34L14 28L20 38L20 16L26 6L32 14L34 26L38 14L44 6L50 14L52 24L54 16L60 10L66 18L68 26L74 18L80 28L74 44L64 56L50 70Z"/></svg>';
   }
   function gripScene() {
     if (gripCard === 0 || gripCard === 1) {
       var side = gripCard === 1 ? 'right' : 'left';
-      return '<div class="pair"><i class="wrist"></i>' + hand(side) +
+      return '<div class="pair"><i class="wrist"></i>' + handSvg('hand ' + side) +
         '<button type="button" class="mousey target" data-grip="' + side + '">' + mouseFace(side) + '</button></div>';
     }
     if (gripCard === 2) {
-      return '<div class="pair slide"><i class="wrist"></i><div class="glide">' + hand('left') +
+      return '<div class="pair slide"><i class="wrist"></i><div class="glide">' + handSvg('hand left') +
         '<div class="mousey">' + mouseFace('left') + '</div></div></div>' +
         '<button type="button" class="catch target" data-grip="star" aria-label="نجمة">⭐</button>';
     }
     if (gripCard === 3) {
-      return '<div class="keys"><div class="keywrap"><i class="digit"></i>' +
+      return '<div class="keys"><div class="keywrap">' + handSvg('paw') +
         '<button type="button" class="bump target" data-code="KeyF">' + MKA.AR.KeyF + '<i class="nub"></i></button></div>' +
-        '<div class="keywrap"><i class="digit"></i>' +
+        '<div class="keywrap">' + handSvg('paw') +
         '<button type="button" class="bump target" data-code="KeyJ">' + MKA.AR.KeyJ + '<i class="nub"></i></button></div></div>';
     }
     return '<div class="sit"><i class="chair"></i><i class="shin"></i><i class="thigh"></i>' +
-      '<button type="button" class="child" data-sit="kid"><i class="torso"><i class="arm"></i><i class="head">' +
+      '<button type="button" class="child" data-sit="kid"><i class="arm"></i><i class="arm b"></i><i class="torso"><i class="head">' +
       '<i class="hair"></i><i class="eye"></i><i class="smile"></i></i></i></button></div>';
   }
   function renderGrip() {
     gripReady = gripCard === 4;
     view.innerHTML = '<div class="grip"><div class="grip-stage go">' + gripScene() + '</div>' +
       '<div class="grip-bar"><button type="button" class="replay" data-act="grip-replay" aria-label="أعد">🔊</button>' +
+      '<b class="yay" hidden>أحسنت!</b>' +
       '<button type="button" class="next' + (gripReady ? ' target' : '') + '" id="btnGripNext" data-act="grip-next"' + (gripReady ? '' : ' hidden') +
       '><span>التالي</span><span class="next-arrow" aria-hidden="true">←</span></button></div></div>';
     hideOverlay();
+    hideToast();
     langHintEl.hidden = true;
     updateChrome();
     say(GRIP_WORD[gripCard]);
@@ -550,10 +552,9 @@
   function gripCardReady() {
     if (gripReady) return;
     gripReady = true;
-    praise();
     say('أحسنت');
     speak('أحسنت');
-    cheer();
+    celebrate(document.querySelector('.grip-stage .target'));
     var btn = $('btnGripNext');
     if (btn) { btn.hidden = false; btn.classList.add('target'); btn.focus(); }
     paintPips();
@@ -581,14 +582,18 @@
     if (screen !== 'grip' || gripCard !== 3 || gripReady) return;
     if (code === 'KeyF' || code === 'KeyJ') { gripCardReady(); return; }
   }
+  function celebrate(el) {
+    var yay = document.querySelector('.yay');
+    if (yay) yay.hidden = false;
+    if (el) { el.classList.add('boing'); sparkle(el); }
+    cheer();
+  }
   function gripSit() {
     if (screen !== 'grip' || gripCard !== 4) return;
     var kid = document.querySelector('[data-sit="kid"]');
     if (!kid || kid.classList.contains('sat')) return;
     kid.classList.add('sat');
-    cheer();
-    praise();
-    sparkle(kid);
+    celebrate(kid);
   }
   function renderMap() {
     var html = '<button type="button" class="grip-link" id="btnGrip">🖱️ كيف أمسك؟</button><div class="map">';
