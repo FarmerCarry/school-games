@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+<rect width="400" height="400" fill="#8fd46a"/>
+<rect y="280" width="400" height="120" fill="#6fbf4a"/>
+<ellipse cx="70" cy="250" rx="46" ry="16" fill="#e7c98a"/>
+<ellipse cx="330" cy="230" rx="40" ry="14" fill="#e7c98a"/>
+<path d="M48 236c18-28 40-28 54 0" fill="none" stroke="#c9843a" stroke-width="8"/>
+<path d="M312 216c16-24 36-24 48 0" fill="none" stroke="#c9843a" stroke-width="8"/>
+<ellipse cx="200" cy="168" rx="54" ry="68" fill="#fff8e8" stroke="#2a2348" stroke-width="8"/>
+<ellipse cx="176" cy="150" rx="12" ry="18" fill="#fff"/>
+<circle cx="206" cy="176" r="10" fill="#ffd23f" stroke="#2a2348" stroke-width="4"/>
+<ellipse cx="118" cy="300" rx="36" ry="22" fill="#fff" stroke="#2a2348" stroke-width="6"/>
+<path d="M108 286l8-22 8 22" fill="#ff5a3c" stroke="#2a2348" stroke-width="4"/>
+<circle cx="108" cy="292" r="4" fill="#2a2348"/>
+<circle cx="128" cy="292" r="4" fill="#2a2348"/>
+<path d="M140 304h16l6 4h-22z" fill="#ffb703" stroke="#2a2348" stroke-width="3"/>
+<text x="200" y="64" text-anchor="middle" font-family="Fredoka,sans-serif" font-size="42" font-weight="700" fill="#2a2348">3('B 'D(J6</text>
+</svg>

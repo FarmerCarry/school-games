@@ -818,3 +818,28 @@ portal and the teacher page) and gains one file, so `precacheBytes` moves from
 5,450,000 to 5,578,000: 749 bytes (0.013%) above this measurement and 646 bytes
 (0.012%) above the Actions precache (5,577,354). No other game, font or library limit
 changes.
+
+## Egg Rush, 25 October 2026
+
+سباق البيض (Egg Rush) is a 2D egg-and-pet run. It draws on one canvas, paints each
+pet once into a small sprite, and fills only the visible strip of the world, so a
+frame stays a handful of shapes. Particles are capped at 150. Pixel ratio is capped
+at 1.5, and a paused game keeps the last frame.
+
+The precache limit rises by 130,000 bytes: the game's 125,000 byte allowance rounded
+up to 10 KB, plus about 6 KB for the thumbnail's share of the cached portal. The
+portal limit rises by 6,000 bytes for this game's share of the four-game thumbnail
+plan. The teacher page is unchanged; its headroom covers one more catalog name.
+
+| Measurement | Bytes | Limit |
+| --- | ---: | ---: |
+| Egg Rush HTML | 82,972 | 125,000 |
+| Portal (thumbnail and catalog entry) | 352,841 | 366,000 (was 360,000) |
+| Offline precache, 47 files | 5,168,070 | 5,230,000 (was 5,100,000) |
+| Teacher page | 92,764 | 96,000 (unchanged) |
+
+The built game is 82,972 bytes, inside the 125,000 allowance from the four-game plan.
+The precache grew by about 86 KB against a 130 KB raise (the 125 KB allowance rounded
+up to 10 KB, plus about 6 KB for the thumbnail). The portal grew by about 2 KB against
+its 6 KB raise. Headroom stays for the other new games.
+
