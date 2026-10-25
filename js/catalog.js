@@ -142,6 +142,18 @@ window.GAMES = [
     controls: [{ keys: ['←', '↑', '→', '↓'], action: 'توجيه' }, { keys: ['W', 'A', 'S', 'D'], action: 'توجيه' }, { keys: ['الفأرة'], action: 'اتبع المؤشر' }] },
   { slug: 'snake-arena', roundMinutes: [3, 8], inputStyle: 'mixed', title: 'ساحة الثعابين', en: 'Snake Arena', tags: 'دودة slither', cats: ['battle', 'arcade'], players: '1', color: '#8e44ff',
     blurb: 'كُل النقاط المضيئة، اكبر، وحاصر 15 ثعبانًا لتصبح ملك الساحة!',
-    controls: [{ keys: ['الفأرة'], action: 'وجّه الثعبان' }, { keys: ['انقر'], action: 'تسريع (اضغط مطولًا)' }, { keys: ['مسافة'], action: 'تسريع' }, { keys: ['←', '→'], action: 'لفّ يسارًا ويمينًا' }, { keys: ['A', 'D'], action: 'لفّ يسارًا ويمينًا' }] }
+    controls: [{ keys: ['الفأرة'], action: 'وجّه الثعبان' }, { keys: ['انقر'], action: 'تسريع (اضغط مطولًا)' }, { keys: ['مسافة'], action: 'تسريع' }, { keys: ['←', '→'], action: 'لفّ يسارًا ويمينًا' }, { keys: ['A', 'D'], action: 'لفّ يسارًا ويمينًا' }] },
+  { slug: 'lucky-lake', roundMinutes: [3, 15], inputStyle: 'mixed', title: 'بحيرة الحظ', en: 'Lucky Lake fishing game fish collection', tags: 'صيد سمك سنارة بحر', cats: ['two-player', 'idle'], players: '1-2', color: '#2ec4ff',
+    blurb: 'ارمِ السنارة، انتظر العلامة !، واسحب السمكة! اجمع 60 سمكة واصطد السمكة الأسطورية!',
+    tip: 'لا تضغط عند النقرة الأولى، انتظر علامة ! ثم اضغط بسرعة',
+    controls: [
+      { keys: ['مسافة', 'الفأرة'], action: 'اضغط مطوّلًا للرمي، وانتظر ! ثم اضغط' },
+      { keys: ['مسافة', 'الفأرة'], action: 'في السحب: اضغط ليصعد الشريط واتركه لينزل' },
+      { keys: ['A', 'D'], action: 'تصويب اللاعب 1 (والأسهم في لعب فردي)' },
+      { keys: ['Enter'], action: 'اللاعب 2: رمي وعضّ وسحب' },
+      { keys: ['←', '→'], action: 'تصويب اللاعب 2' },
+      { keys: ['1', '2', '3', '4'], action: 'المتجر، الكتاب، الحوض، الخريطة' },
+      { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }
+    ] }
 ];
 

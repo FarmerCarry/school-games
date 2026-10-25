@@ -94,9 +94,12 @@ test('drag, scroll, and a short window do not scroll the page', async t => {
   assert.equal(await drag.evaluate(() => __game.progress), 1);
 
   const scroll = await openGame(t, { query: '?station=scroll', viewport: { width: 1100, height: 620 } });
+  // The scroller box is tall before its spacers are laid out. Scrolling then
+  // lands on the short page, and the later layout does not scroll again.
   await scroll.waitForFunction(() => {
     const scroller = document.getElementById('scroller');
-    return scroller && scroller.clientHeight > 80 && __game.progress === 0;
+    const spacer = scroller && scroller.querySelector('.spacer');
+    return scroller && spacer && spacer.clientHeight > 80 && __game.progress === 0;
   });
   const pageScroll = await scroll.evaluate(() => ({
     sh: document.documentElement.scrollHeight,

@@ -549,3 +549,28 @@ cache had only 73,229 bytes left, so its limit was raised knowingly by 100,000 b
 (2%). That keeps about the same headroom as before (84,326 bytes, 1.7%) for the next
 change; another game will again need room made or a decision like this one.
 
+## Lucky Lake, 25 October 2026
+
+بحيرة الحظ is a one-button fishing game. It draws the lake, the anglers and the reel
+on one 2D canvas. Fish sprites are painted once into small canvases and reused.
+Particles stay in a pool of 200. A paused round keeps the last frame and redraws
+once after a resize.
+
+The limits below are the previous ceilings plus only this game's share of the
+four-game plan: precache +120,000 (the 115,000 game budget rounded up to 10 KB)
+and the home page +5,000 (a quarter of the planned +20 KB). The teacher page
+still fits, so its limit stays.
+
+| Measurement | Bytes | Limit |
+| --- | ---: | ---: |
+| Lucky Lake built page | 85,493 | 115,000 |
+| Teacher page | 93,008 | 96,000 (unchanged) |
+| Portal, thumbnail inlined | 353,880 | 365,000 (was 360,000) |
+| Offline precache, 47 files | 5,171,874 | 5,220,000 (was 5,100,000) |
+
+The built page is under the budget, so nothing was cut to fit. The home page
+still fits the old 360,000 ceiling (353,880). Its limit moves up by the reserved
+5,000 anyway, which leaves 11,120 bytes. The precache no longer fit in
+5,100,000 (it measured 5,171,874), so that limit moves up by the planned
+120,000 and leaves 48,126 bytes (0.9%).
+

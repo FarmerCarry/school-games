@@ -1,0 +1,60 @@
+body { background: #08345a; }
+#ui { position: fixed; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; pointer-events: none; z-index: 5; }
+#ui button, #hud button { pointer-events: auto; }
+#hud { position: absolute; top: 10px; right: 86px; left: 14px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+#hud[hidden] { display: none; }
+.ll-pills { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start; }
+.ll-pill { display: flex; align-items: center; gap: 6px; height: 42px; padding: 0 14px; border-radius: 999px; background: rgba(8, 32, 58, 0.82); font-size: 20px; font-weight: 700; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.25); }
+.ll-pill b { min-width: 1ch; }
+.ll-coin { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff6c2, #ffcc00 55%, #e09a00); box-shadow: inset 0 0 0 2px #b67d00; }
+.ll-actions { display: flex; gap: 6px; }
+.ll-actions button, #btnPause { font: inherit; font-weight: 700; border: none; cursor: pointer; border-radius: 999px; height: 42px; padding: 0 12px; background: rgba(8, 32, 58, 0.85); color: #fff; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28); }
+.ll-actions button .sg-key, #hint .sg-key { font-size: 13px; }
+#btnPause { width: 46px; padding: 0; font-size: 20px; }
+#questLine { position: absolute; top: 60px; right: 86px; max-width: 520px; padding: 6px 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.92); color: #16324a; font-size: 18px; font-weight: 700; }
+#questLine[hidden] { display: none; }
+#eventBanner { position: absolute; top: 102px; left: 50%; transform: translateX(-50%); min-width: 280px; max-width: 760px; padding: 8px 18px; border-radius: 16px; background: rgba(8, 32, 58, 0.9); border: 3px solid #ffcc00; text-align: center; font-size: 22px; font-weight: 700; }
+#eventBanner[hidden] { display: none; }
+#eventBanner small { display: block; font-size: 15px; font-weight: 500; opacity: 0.92; }
+#hint { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); padding: 10px 18px; border-radius: 16px; background: #fff; color: #16324a; font-size: 26px; font-weight: 700; box-shadow: 0 8px 0 rgba(0, 0, 0, 0.18); }
+#hint[hidden] { display: none; }
+#shout { position: absolute; top: 150px; left: 50%; transform: translateX(-50%); font-size: 54px; font-weight: 700; color: #fff; text-shadow: 0 4px 0 #0b3a5c; pointer-events: none; }
+#shout.bang { top: 180px; font-size: 128px; color: #ffe14a; }
+#shout[hidden] { display: none; }
+.ll-overlay { background: rgba(6, 24, 48, 0.5); }
+.ll-title { text-align: center; max-width: 920px; }
+.ll-logo { margin: 0; line-height: 0.9; font-weight: 700; font-size: clamp(64px, 10vw, 112px); color: #fff; text-shadow: 0 6px 0 #0a6ea8, 0 0 24px rgba(80, 210, 255, 0.7); }
+.ll-logo span { color: #ffe14a; }
+.ll-tag { margin: 8px 0 14px; font-size: 22px; }
+.ll-play { min-width: 240px; font-size: 32px; padding: 12px 36px; }
+.ll-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+.ll-howto { margin-top: 14px; font-size: 18px; line-height: 1.7; }
+.ll-progress { margin-top: 8px; font-size: 18px; color: #d7f4ff; }
+.ll-check { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 8px; font-size: 18px; }
+.ll-len button[aria-pressed="true"] { background: #ffcc00; color: #3a2a00; }
+.ll-panel { width: min(920px, 94vw); max-height: min(640px, 90vh); overflow: auto; text-align: start; }
+.ll-panel h2 { margin: 0 0 8px; text-align: center; }
+.ll-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 8px; }
+.ll-card, .ll-spot, .ll-fish { font: inherit; text-align: start; border-radius: 16px; border: 3px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.08); color: #fff; padding: 8px; cursor: pointer; }
+.ll-card b, .ll-spot b, .ll-fish b { display: block; font-size: 18px; }
+.ll-card small, .ll-spot small, .ll-fish small { display: block; opacity: 0.85; font-size: 14px; }
+.ll-card.on, .ll-spot.on { border-color: #ffcc00; background: rgba(255, 204, 0, 0.16); }
+.ll-card:disabled, .ll-spot:disabled { opacity: 0.55; cursor: default; }
+.ll-book { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.ll-fish { min-height: 78px; position: relative; }
+.ll-fish canvas { width: 72px; height: 40px; display: block; }
+.ll-fish.new { box-shadow: 0 0 0 3px #3ddc84; }
+.ll-odds { font-size: 16px; margin: 0 0 8px; line-height: 1.5; }
+#scr-card .ll-cardbox { width: min(560px, 92vw); text-align: center; }
+.ll-ribbon { display: inline-block; padding: 2px 12px; border-radius: 999px; background: #ffcc00; color: #3a2a00; font-weight: 700; }
+.ll-ribbon.r2 { background: #7ec8ff; }
+.ll-ribbon.r3 { background: #d9a6ff; }
+.ll-ribbon.r4 { background: #ffd76a; color: #5a3a00; }
+#fishView { width: 220px; height: 120px; margin: 6px auto; display: block; }
+.ll-price { font-size: 28px; margin: 6px 0; }
+#scr-result .ll-podium { display: flex; gap: 16px; justify-content: center; align-items: flex-end; margin: 12px 0; }
+.ll-pod { width: 180px; border-radius: 16px 16px 8px 8px; padding: 10px; background: rgba(255, 255, 255, 0.1); }
+.ll-pod.win { background: rgba(255, 204, 0, 0.25); min-height: 160px; }
+.ll-pod h3 { margin: 0; }
+html[data-sg-motion="reduce"] #hint { box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18); }
+button:focus-visible, .ll-card:focus-visible { outline: 3px solid #ffcc00; outline-offset: 2px; }

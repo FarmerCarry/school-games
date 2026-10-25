@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>بحيرة الحظ</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" tabindex="0" aria-label="بحيرة الحظ"></canvas>
+<div id="ui">
+  <div id="hud" hidden>
+    <div class="ll-pills">
+      <div class="ll-pill"><span class="ll-coin"></span><b id="coinNum">0</b></div>
+      <div class="ll-pill">الكتاب <b id="bookNum">0/60</b></div>
+      <div class="ll-pill" id="spotPill">بركة القرية</div>
+      <div class="ll-pill" id="timerPill" hidden dir="ltr">3:00</div>
+    </div>
+    <div class="ll-actions">
+      <button type="button" id="btnShop">المتجر <span class="sg-key">1</span></button>
+      <button type="button" id="btnBook">الكتاب <span class="sg-key">2</span></button>
+      <button type="button" id="btnAqua">الحوض <span class="sg-key">3</span></button>
+      <button type="button" id="btnMap">الخريطة <span class="sg-key">4</span></button>
+      <button type="button" id="btnPause" aria-label="إيقاف مؤقت">⏸</button>
+    </div>
+  </div>
+  <div id="questLine" hidden></div>
+  <div id="eventBanner" hidden></div>
+  <div id="hint" hidden>اضغط مطوّلًا ثم اترك</div>
+  <div id="shout" hidden></div>
+</div>
+
+<div class="sg-overlay ll-overlay" id="scr-title">
+  <div class="ll-title">
+    <h1 class="ll-logo">بحيرة <span>الحظ</span></h1>
+    <p class="ll-tag">ارمِ السنارة، انتظر علامة !، ثم اسحب السمكة.</p>
+    <button class="sg-btn ll-play" id="btnPlay" type="button">العب</button>
+    <div class="ll-row">
+      <button class="sg-btn secondary" id="btnDerby" type="button">لاعبان</button>
+      <span class="ll-len" dir="ltr">
+        <button class="sg-btn secondary" type="button" data-sec="120">2 د</button>
+        <button class="sg-btn secondary" type="button" data-sec="180" aria-pressed="true">3 د</button>
+        <button class="sg-btn secondary" type="button" data-sec="300">5 د</button>
+      </span>
+    </div>
+    <label class="ll-check"><input type="checkbox" id="easyToggle"> سحب أسهل (منطقة أكبر)</label>
+    <div class="ll-howto">
+      <div><span class="sg-key">مسافة</span> أو الفأرة: اضغط مطوّلًا للرمي، وانتظر <b>!</b> ثم اضغط</div>
+      <div>في السحب: اضغط مطوّلًا ليصعد الشريط، واتركه لينزل</div>
+      <div>لاعب 2: <span class="sg-key">Enter</span> · التصويب <span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> و <span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span></div>
+    </div>
+    <p class="ll-progress" id="titleProgress"></p>
+  </div>
+</div>
+
+<div class="sg-overlay ll-overlay" id="scr-pause" hidden>
+  <div class="sg-panel">
+    <h2>استراحة</h2>
+    <p class="sg-sub">البحيرة تنتظرك.</p>
+    <div class="ll-row">
+      <button class="sg-btn good" id="btnResume" type="button">استمرار</button>
+      <button class="sg-btn" id="btnRestart" type="button">رمية جديدة</button>
+      <button class="sg-btn secondary" id="btnMenu" type="button">القائمة</button>
+    </div>
+    <label class="ll-check"><input type="checkbox" id="easyPause"> سحب أسهل</label>
+  </div>
+</div>
+
+<div class="sg-overlay ll-overlay" id="scr-result" hidden>
+  <div class="sg-panel ll-panel">
+    <h2 id="resultTitle">انتهت المسابقة</h2>
+    <div class="ll-podium" id="podium"></div>
+    <p id="resultSub"></p>
+    <div class="ll-row">
+      <button class="sg-btn" id="btnAgain" type="button">مرة أخرى</button>
+      <button class="sg-btn secondary" id="btnResultMenu" type="button">القائمة</button>
+    </div>
+  </div>
+</div>
+
+<div class="sg-overlay ll-overlay" id="scr-card" hidden>
+  <div class="sg-panel ll-cardbox">
+    <canvas id="fishView" width="220" height="120"></canvas>
+    <div id="cardNew" hidden>جديد!</div>
+    <h2 id="cardName"></h2>
+    <div id="cardWeight" dir="ltr"></div>
+    <div class="ll-ribbon" id="cardRare"></div>
+    <p class="ll-price" id="cardPrice"></p>
+    <p id="cardHint"></p>
+    <div class="ll-row">
+      <button class="sg-btn" id="btnSell" type="button">بيع <span class="sg-key">1</span></button>
+      <button class="sg-btn good" id="btnKeep" type="button">حوض <span class="sg-key">2</span></button>
+      <button class="sg-btn secondary" id="btnFree" type="button">أطلق <span class="sg-key">3</span></button>
+    </div>
+  </div>
+</div>
+
+<div class="sg-overlay ll-overlay" id="scr-panel" hidden>
+  <div class="sg-panel ll-panel">
+    <h2 id="panelTitle"></h2>
+    <div id="panelBody"></div>
+    <div class="ll-row"><button class="sg-btn secondary" id="btnPanelClose" type="button">إغلاق</button></div>
+  </div>
+</div>
+
+<script src="../../shared/kit.js"></script>
+<script src="engine.js"></script>
+<script src="art.js"></script>
+<script src="audio.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>

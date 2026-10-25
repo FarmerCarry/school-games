@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7ad4ff"/>
+      <stop offset="1" stop-color="#fff3c4"/>
+    </linearGradient>
+    <linearGradient id="lake" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3ec4ff"/>
+      <stop offset="1" stop-color="#0b5f9c"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <circle cx="78" cy="64" r="26" fill="#ffe56a"/>
+  <path d="M0 196 C70 170 120 210 190 188 C270 164 320 206 400 176 L400 250 L0 250 Z" fill="#3e9a46"/>
+  <path d="M0 214 C90 196 150 236 230 214 C310 192 350 228 400 208 L400 250 L0 250 Z" fill="#2f8a48"/>
+  <rect y="236" width="400" height="164" fill="url(#lake)"/>
+  <path d="M20 268 C90 258 140 278 210 266 C280 254 330 276 390 264" fill="none" stroke="#e7f8ff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M10 304 C100 292 160 318 240 304 C320 290 350 314 400 300" fill="none" stroke="#e7f8ff" stroke-width="3" stroke-linecap="round"/>
+  <path d="M250 250 L268 168" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="268" cy="162" r="10" fill="#ff4d4d"/>
+  <path d="M258 162 A10 10 0 0 0 278 162 Z" fill="#fff"/>
+  <rect x="266" y="146" width="4" height="12" rx="2" fill="#243044"/>
+  <text x="292" y="148" text-anchor="middle" font-family="Fredoka, Tahoma, sans-serif" font-size="64" font-weight="700" fill="#ffe14a">!</text>
+  <g transform="translate(168 300)">
+    <path d="M0 0 L34 -22 L22 0 L34 22 Z" fill="#ff8a3d"/>
+    <ellipse cx="48" cy="0" rx="36" ry="20" fill="#ff8a3d"/>
+    <ellipse cx="52" cy="6" rx="20" ry="10" fill="#ffe0b0"/>
+    <circle cx="70" cy="-2" r="5" fill="#fff"/>
+    <circle cx="72" cy="-2" r="2" fill="#243044"/>
+  </g>
+  <text x="200" y="78" text-anchor="middle" direction="rtl" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="48" font-weight="700" fill="#16324a">بحيرة الحظ</text>
+</svg>
