@@ -268,7 +268,17 @@ test('one player can win, restart counts a new round, and leaving early ends the
   assert.ok(podium.steps[1] > podium.steps[0] && podium.steps[0] > podium.steps[2], 'first place is the tall middle step');
   assert.deepEqual(podium.canvases, [true, true, true]);
   assert.ok(podium.scores.every(s => /^\d\/5$/.test(s)), podium.scores.join(','));
-  await clickControl(page, '#btnAgain');
+  const gap = await page.evaluate(() => {
+    const score = document.querySelector('#podium .pod.p3 b').getBoundingClientRect();
+    const line = document.getElementById('r-titles').getBoundingClientRect();
+    return line.top - score.bottom;
+  });
+  assert.ok(gap >= 8, 'the stats line clears 3rd place by ' + gap);
+  await page.evaluate(() => document.getElementById('r-nudge').click());
+  assert.equal(await page.evaluate(() => __game.mode), 'shop');
+  await page.evaluate(() => document.getElementById('btnShopBack').click());
+  assert.equal(await page.evaluate(() => __game.mode), 'title');
+  await clickControl(page, '#btnPlay');
   assert.equal(await page.evaluate(() => __game.matches), 2);
   assert.equal(await page.evaluate(() => rounds.length), 2);
   await clickControl(page, '#btnPause');
@@ -296,6 +306,9 @@ test('the intro card keeps one countdown clear of the stair, and a survival thro
       joke: document.getElementById('siren-joke').textContent,
       tip: document.getElementById('siren-tip').textContent,
       count: count.textContent,
+      jokePx: parseFloat(getComputedStyle(document.getElementById('siren-joke')).fontSize),
+      tipPx: parseFloat(getComputedStyle(document.getElementById('siren-tip')).fontSize),
+      countPx: parseFloat(getComputedStyle(count).fontSize),
       fours,
       bg,
       clear: box.bottom < heads - 2,
@@ -307,6 +320,9 @@ test('the intro card keeps one countdown clear of the stair, and a survival thro
   assert.ok(intro.joke.length > 4);
   assert.ok(intro.tip.length > 4);
   assert.equal(intro.count, '4');
+  assert.ok(intro.jokePx >= 27, 'joke is ' + intro.jokePx);
+  assert.ok(intro.tipPx >= 21, 'tip is ' + intro.tipPx);
+  assert.ok(intro.countPx >= 72, 'countdown is ' + intro.countPx);
   assert.deepEqual(intro.fours, ['siren-count']);
   assert.equal(intro.bg === 'rgba(0, 0, 0, 0)', false, intro.bg);
   assert.equal(intro.clear, true, 'card bottom ' + intro.bottom + ' heads ' + intro.heads);
@@ -323,16 +339,20 @@ test('the intro card keeps one countdown clear of the stair, and a survival thro
       park(__game.player);
       simGame(1);
     }
+    const held = __game.world.frames;
+    simGame(5);
     const streak = document.getElementById('streak');
     return {
       flies: document.getElementById('flies').childElementCount,
       streak: streak.hidden ? '' : streak.textContent,
       shown: document.getElementById('hud-coin-n').textContent,
       bank: __game.save.coins,
-      phase: __game.world.phase
+      phase: __game.world.phase,
+      held: held === __game.world.frames
     };
   });
   assert.equal(flown.phase, 'stamp');
+  assert.equal(flown.held, true, 'a survival holds the round for a beat');
   assert.ok(flown.flies >= 3, 'coins leave the survivor ' + flown.flies);
   assert.equal(flown.streak, 'رائع!');
   assert.ok(Number(flown.shown) < flown.bank, 'the counter waits for the coins to land ' + flown.shown + '/' + flown.bank);

@@ -169,11 +169,26 @@
     spark: 'اللمعان يغمز ثم يضرب!',
     stomp: 'الروبوت يمشي على أطراف أصابعه!'
   };
+  var SHORT = {
+    jelly: 'اصعد فوق البيوت',
+    meteor: 'اهرب من الظل',
+    tornado: 'امسك عكس الريح',
+    sauce: 'ابقَ في الأعلى',
+    bowl: 'اصعد عن الممر',
+    quake: 'اقفز إذا اهتز',
+    gum: 'امسك عكس الخطوط',
+    snow: 'ابتعد عن الحافة',
+    beach: 'ابتعد عن الظل',
+    ice: 'امشِ بهدوء',
+    spark: 'اخرج من الدائرة',
+    stomp: 'ابتعد عن الظل'
+  };
   var countSec = 0;
+  var hitT = 0;
   function showCard(name, tip, hot, id) {
     $('siren-name').textContent = name;
     $('siren-joke').textContent = JOKES[id] || 'استعد للقفز!';
-    $('siren-tip').textContent = tip || '';
+    $('siren-tip').textContent = SHORT[id] || tip || '';
     $('siren').hidden = false;
     $('siren').classList.toggle('hot', !!hot);
     cardT = hot ? 3.4 : 8;
@@ -445,9 +460,9 @@
         if (actor.streak > save.bestStreak) save.bestStreak = actor.streak;
         if (w.dis[0]) noteBook(w.dis[0].id, w.hard);
         if (w.dis[1]) noteBook(w.dis[1].id, w.hard);
-        popText(actor.x, actor.y - 48, 'نجوت!', '#7cf29a');
-        burst(actor.x + actor.w / 2, actor.y, { count: 26, colors: ['#7cf29a', '#ffe14a', '#fff', '#ff5d8f'], speed: 340, life: 0.8, size: 6, gravity: 320 });
+        burst(actor.x + actor.w / 2, actor.y + actor.h, { count: 18, colors: ['#7cf29a', '#ffe14a', '#fff', '#ff5d8f'], speed: 220, life: 0.55, size: 5, gravity: 280 });
         shake.add(4);
+        hitT = 0.14;
         cheer();
         S.cheer();
         var word = streakWord(actor.streak);
@@ -635,9 +650,22 @@
       ctx.moveTo(-12, -58); ctx.lineTo(-12, -74); ctx.lineTo(-4, -64); ctx.lineTo(0, -78); ctx.lineTo(4, -64); ctx.lineTo(12, -74); ctx.lineTo(12, -58); ctx.fill();
     }
   }
+  function ovalLimb(x, y, ang, len, thick, color) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#2b2148';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.ellipse(0, len * 0.5, thick, len * 0.5, 0, 0, 7);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
   function drawActor(a, w) {
-    var idle = a.ground && a.mode === 'run' && Math.abs(a.vx) < 22;
-    var bob = a.ground && Math.abs(a.vx) > 30 ? Math.sin(w.time * 14 + a.id) * 3 : (idle ? Math.sin(w.time * 2.1 + a.id) * 2.5 : 0);
+    var idle = !a.plant && a.ground && a.mode === 'run' && Math.abs(a.vx) < 22;
+    var bob = a.plant ? 0 : (a.ground && Math.abs(a.vx) > 30 ? Math.sin(w.time * 14 + a.id) * 3 : (idle ? Math.sin(w.time * 2.1 + a.id) * 2.5 : 0));
     ctx.save();
     ctx.translate(a.x + a.w / 2, a.y + a.h);
     if (a.face < 0) ctx.scale(-1, 1);
@@ -668,7 +696,7 @@
       return;
     }
     var sq = a.sq || 1;
-    var sx = 0.9, sy = 1.1;
+    var sx = a.plant ? 1 : 0.9, sy = a.plant ? 1 : 1.1;
     if (sq > 1.02) { sx = sq; sy = 1 / sq; }
     else if (!a.ground && a.vy < -40) { sx = 0.76; sy = 1.34; }
     else if (!a.ground && a.vy > 220) { sx = 1.14; sy = 0.84; }
@@ -689,7 +717,13 @@
       ctx.beginPath(); ctx.arc(-6, -36, 3, 0, 7); ctx.arc(7, -28, 3, 0, 7); ctx.fill();
     }
     face(0, -56, idle && Math.sin(w.time * 1.7 + a.id * 2) > 0.93);
-    if (a.ground && (Math.abs(a.vx) > 20 || idle)) {
+    if (a.plant) {
+      var wave = Math.sin(w.time * 7 + a.id) * 0.35;
+      ovalLimb(-9, -16, 0.08, 18, 8, a.color);
+      ovalLimb(9, -16, -0.08, 18, 8, a.color);
+      ovalLimb(-15, -46, Math.PI + 0.5 + wave, 20, 7.2, a.color);
+      ovalLimb(15, -46, Math.PI - 0.5 - wave, 20, 7.2, a.color);
+    } else if (a.ground && (Math.abs(a.vx) > 20 || idle)) {
       ctx.fillStyle = '#2b2148';
       var swing = Math.sin(w.time * (idle ? 3 : 16) + a.id) * (idle ? 2 : 4);
       ctx.fillRect(-10, -8, 6, 8 + swing);
@@ -806,46 +840,86 @@
     ctx.lineTo(-16 * s, -2 * s);
     ctx.closePath();
   }
-  function drawHint(w) {
-    if (w.attract || w.round !== 0 || w.phase !== 'inter') return;
+  function spineSteps(w) {
     var steps = [];
     for (var i = 0; i < w.plats.length; i++) {
       var p = w.plats[i];
       if (p.spine && !p.solid && !p.gone) steps.push(p);
     }
     steps.sort(function (a, b) { return b.y - a.y; });
-    if (steps.length < 2) return;
+    return steps.length > 1 ? steps : null;
+  }
+  function laneX(steps, p) {
     var lane = steps[steps.length - 1].x + 72;
-    function laneX(p) { return Math.max(p.x + 36, Math.min(p.x + p.w - 36, lane)); }
-    var elapsed = (8 * 60 - w.frames) / 60;
-    if (elapsed < 0.35) return;
-    var u = Math.min(1, (elapsed - 0.35) / 5.4);
-    var fade = elapsed > 6.3 ? Math.max(0, 1 - (elapsed - 6.3) / 1.1) : 1;
-    if (fade <= 0) return;
-    ctx.save();
-    ctx.globalAlpha = fade;
-    for (var s = 0; s < steps.length; s++) {
-      var step = steps[s];
-      var lit = u * (steps.length - 1) + 0.2 >= s;
-      ctx.fillStyle = lit ? '#ffe14a' : 'rgba(255,255,255,.7)';
-      chevron(laneX(step), step.y - 18, lit ? 14 : 10);
-    }
-    var seg = u * (steps.length - 1);
-    var i0 = Math.min(steps.length - 2, Math.floor(seg));
+    return Math.max(p.x + 36, Math.min(p.x + p.w - 36, lane));
+  }
+  function climbAt(steps, u) {
+    var seg = Math.max(0, Math.min(steps.length - 1.001, u * (steps.length - 1)));
+    var i0 = Math.floor(seg);
     var f = seg - i0;
     var e = f * f * (3 - 2 * f);
-    var ax = laneX(steps[i0]);
-    var ay = steps[i0].y - 52;
-    var bx = laneX(steps[i0 + 1]);
-    var by = steps[i0 + 1].y - 52;
-    ctx.translate(ax + (bx - ax) * e, ay + (by - ay) * e + Math.sin(w.time * 10) * 3);
-    ctx.fillStyle = '#2b2148';
-    upArrow(1.18);
-    ctx.fill();
-    ctx.fillStyle = '#ffe14a';
-    upArrow(1);
-    ctx.fill();
+    var a = steps[i0], b = steps[i0 + 1];
+    return {
+      x: laneX(steps, a) + (laneX(steps, b) - laneX(steps, a)) * e,
+      y: a.y + (b.y - a.y) * e,
+      hop: Math.sin(f * Math.PI) * 36
+    };
+  }
+  function drawHint(w) {
+    if (w.attract || w.round !== 0 || w.phase !== 'inter') return;
+    var steps = spineSteps(w);
+    if (!steps) return;
+    var elapsed = (8 * 60 - w.frames) / 60;
+    var ghostU = elapsed < 0.4 ? -1 : Math.min(1, (elapsed - 0.4) / 2.15);
+    var arrowU = elapsed < 2.55 ? -1 : Math.min(1, (elapsed - 2.55) / 3.4);
+    var arrowFade = elapsed > 6.2 ? Math.max(0, 1 - (elapsed - 6.2) / 1) : (arrowU < 0 ? 0 : 1);
+    if (ghostU < 0 && arrowFade <= 0) return;
+    ctx.save();
+    for (var s = 0; s < steps.length; s++) {
+      var along = Math.max(ghostU, arrowU);
+      var lit = along * (steps.length - 1) + 0.15 >= s;
+      ctx.globalAlpha = lit ? 1 : 0.8;
+      ctx.fillStyle = lit ? '#ffe14a' : 'rgba(255,255,255,.7)';
+      chevron(laneX(steps, steps[s]), steps[s].y - 18, lit ? 14 : 10);
+    }
+    if (ghostU >= 0 && ghostU < 1.02 && elapsed < 2.85) {
+      var gpos = climbAt(steps, Math.min(1, ghostU));
+      var gfade = elapsed > 2.45 ? Math.max(0, 1 - (elapsed - 2.45) / 0.4) : 1;
+      ctx.save();
+      ctx.globalAlpha = 0.62 * gfade;
+      ctx.fillStyle = 'rgba(255,255,255,.55)';
+      ctx.beginPath();
+      ctx.ellipse(gpos.x, gpos.y - 30 - gpos.hop, 20, 28, 0, 0, 7);
+      ctx.fill();
+      drawActor({
+        x: gpos.x - 16, y: gpos.y - 48 - gpos.hop, w: 32, h: 48, face: 1, id: 2,
+        color: save.color, hat: save.hat, outfit: save.outfit,
+        mode: 'run', ground: true, vx: 80, vy: 0, sq: 1, emote: '', emoteT: 0, bot: true
+      }, w);
+      ctx.restore();
+    }
+    if (arrowFade > 0) {
+      var apos = climbAt(steps, Math.max(0, arrowU));
+      ctx.globalAlpha = arrowFade;
+      ctx.translate(apos.x, apos.y - 50 + Math.sin(w.time * 10) * 3);
+      ctx.fillStyle = '#2b2148';
+      upArrow(1.18);
+      ctx.fill();
+      ctx.fillStyle = '#ffe14a';
+      upArrow(1);
+      ctx.fill();
+    }
     ctx.restore();
+  }
+  function drawTitleKid(w) {
+    if (mode !== 'title') return;
+    var kid = {
+      x: 148, y: 592, w: 32, h: 48, face: 1, id: 1, slot: 0, bot: false,
+      color: save.color, hat: save.hat, outfit: save.outfit,
+      mode: 'run', ground: true, vx: 0, vy: 0, sq: 1, emote: '', emoteT: 0
+    };
+    drawActor(kid, w);
+    drawMarker(kid, w);
   }
   function drawHud(w) {
     ctx.direction = 'rtl';
@@ -1000,6 +1074,7 @@
     CI.drawDisasters(ctx, w);
     drawItems(w);
     for (var i = 0; i < w.actors.length; i++) drawActor(w.actors[i], w);
+    drawTitleKid(w);
     drawHint(w);
     for (var m = 0; m < w.actors.length; m++) drawMarker(w.actors[m], w);
     fx.draw(ctx);
@@ -1050,6 +1125,13 @@
     }
     var playing = mode === 'play' || mode === 'result';
     var w = playing ? world : attract;
+    if (hitT > 0 && mode === 'play') {
+      hitT -= dt;
+      fx.update(dt);
+      shake.update(dt);
+      K.keys.endFrame();
+      return;
+    }
     if (playing && world && mode === 'play') {
       var players = world.players;
       var ins = [readSlot(0, players), readSlot(1, players)];
@@ -1264,26 +1346,16 @@
       var a = slot.actor;
       g.clearRect(0, 0, 130, 168);
       g.save();
-      g.translate(65, 154);
-      g.scale(1.45, 1.45);
+      g.translate(65, 162);
+      g.scale(1.32, 1.32);
       var prev = ctx;
       ctx = g;
       drawActor({
         x: -16, y: -48, w: 32, h: 48, face: 1, id: a.id,
         color: a.color, hat: a.hat, outfit: a.outfit,
-        mode: 'run', ground: true, vx: 0, vy: 0, sq: 1,
+        mode: 'run', ground: true, vx: 0, vy: 0, sq: 1, plant: true,
         emote: '', emoteT: 0
       }, { time: podiumT + a.id });
-      g.strokeStyle = '#2b2148';
-      g.lineWidth = 4;
-      g.lineCap = 'round';
-      var lift = Math.sin(podiumT * 8 + slot.place) * 3;
-      g.beginPath();
-      g.moveTo(-12, -40);
-      g.lineTo(-26, -62 - lift);
-      g.moveTo(12, -40);
-      g.lineTo(28, -64 + lift);
-      g.stroke();
       ctx = prev;
       g.restore();
     }
@@ -1351,6 +1423,7 @@
   $('btnAgain').addEventListener('click', restart);
   $('btnMenu').addEventListener('click', toMenu);
   $('btnResultMenu').addEventListener('click', toMenu);
+  $('r-nudge').addEventListener('click', function () { S.click(); setMode('shop'); });
 
   window.addEventListener('keydown', function (e) {
     if (!K.isGameKeyEvent(e) || e.repeat) return;
