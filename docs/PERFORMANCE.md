@@ -549,3 +549,31 @@ cache had only 73,229 bytes left, so its limit was raised knowingly by 100,000 b
 (2%). That keeps about the same headroom as before (84,326 bytes, 1.7%) for the next
 change; another game will again need room made or a decision like this one.
 
+## Key Runner, 25 October 2026
+
+عدّاء المفاتيح (Key Runner +1) is a 3D parkour game. It reuses the three.js build
+already in the precache (667,796 bytes, limit 750,000), so the library adds no new
+offline bytes. The page is one built HTML file: stage data, the kinematic engine,
+a Three.js view of instanced keycaps, and the Arabic UI. Pixel ratio is capped at
+1.5 (1 on the low-quality setting). There are no shadow maps; the blob under the
+runner is a decal. Particles stay at or below 200. Paused frames are not redrawn.
+
+| Measurement | Bytes | Limit |
+| --- | ---: | ---: |
+| Key Runner | 83,445 | 100,000 |
+| Teacher page (catalog row only, same limit) | 92,810 | 96,000 |
+| Portal (thumbnail and catalog entry) | 352,845 | 365,000 (was 360,000) |
+| Offline precache | 5,168,593 | 5,200,000 (was 5,100,000) |
+
+The built game is under its 100,000 byte cap. The offline cache on this branch was
+5,082,082 / 5,100,000 before the game, with about 17.9 KB free, so `precacheBytes`
+is raised by this game's planned 100,000 bytes to 5,200,000. Measured precache
+growth is about 86.5 KB (the built page plus its catalog and thumbnail share).
+Headroom after the raise is 31,407 bytes.
+
+The portal grew by about 2.2 KB (the inlined thumbnail and one catalog row) and
+still fits in 360,000. `portalBytes` is still raised by 5,000 to 365,000: that is
+this game's share of the planned +20 KB for the recess games landing together.
+The teacher page grew by about 0.9 KB and stays inside 96,000, so `teacherBytes`
+is unchanged.
+

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>عدّاء المفاتيح</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-mode="title">
+<canvas id="scene" tabindex="0" aria-label="ساحة المفاتيح. تحرك واقفز فوق المفاتيح العملاقة."></canvas>
+<div id="split" aria-hidden="true"></div>
+<div id="hud" hidden>
+  <div class="chip"><span>السرعة</span><b id="speed" dir="ltr">0</b></div>
+  <div class="chip" id="speed2" hidden><span>الوردي</span><b id="speed-b" dir="ltr">0</b></div>
+  <div class="chip"><span>الأوسمة</span><b id="wins" dir="ltr">0</b></div>
+  <div class="chip" id="place">الساحة</div>
+  <div class="chip" id="word" hidden></div>
+</div>
+<p id="banner" hidden>مرحلة!</p>
+<p id="floater" hidden dir="ltr">+1</p>
+<p id="toast" role="status" hidden></p>
+<button id="pause-button" class="utility" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3v14H7zm7 0h3v14h-3z"/></svg></button>
+<main id="title-screen" class="screen ready">
+  <div class="card">
+    <h1>عدّاء المفاتيح<span>كل خطوة +1</span></h1>
+    <p class="lead">اقفز فوق المفاتيح العملاقة. الدائرة على الأرض هي مكان هبوطك.</p>
+    <button id="play" class="play" type="button">العب</button>
+    <button id="duo" class="ghost" type="button">لاعبان</button>
+    <div class="howto">
+      <p><span dir="ltr"><kbd class="sg-key">W</kbd> <kbd class="sg-key">A</kbd> <kbd class="sg-key">S</kbd> <kbd class="sg-key">D</kbd></span> حركة</p>
+      <p><span dir="ltr"><kbd class="sg-key">مسافة</kbd></span> قفز</p>
+      <p><span dir="ltr"><kbd class="sg-key">Q</kbd> <kbd class="sg-key">E</kbd></span> الكاميرا</p>
+    </div>
+    <p class="meta">السرعة <b id="menu-speed" dir="ltr">0</b> · الأوسمة <b id="menu-wins" dir="ltr">0</b></p>
+    <p class="meta" id="menu-progress">عالم واحد مفتوح</p>
+  </div>
+</main>
+<section id="duo-screen" class="screen veil" hidden>
+  <div class="panel">
+    <h2>سباق لاعبين</h2>
+    <p>الأزرق يسار الشاشة، والوردي يمينها. أول من ينهي المراحل الست يفوز.</p>
+    <div id="race-list" class="row"></div>
+    <button id="duo-back" class="ghost" type="button">رجوع</button>
+  </div>
+</section>
+<section id="shop-screen" class="screen veil" hidden>
+  <div class="panel">
+    <h2>متجر الساحة</h2>
+    <p>أوسمتك: <b id="shop-wins" dir="ltr">0</b></p>
+    <div id="shop-list"></div>
+    <button id="rebirth" class="choice" type="button">إعادة الانطلاق</button>
+    <div id="rebirth-ask" hidden>
+      <p>تبدأ السرعة من صفر، وتضرب كل خطوة في 1.5 إلى الأبد.</p>
+      <button id="rebirth-yes" class="choice" type="button">نعم، أعد الانطلاق</button>
+      <button id="rebirth-no" class="ghost" type="button">ليس الآن</button>
+    </div>
+    <button id="shop-close" class="ghost" type="button">رجوع للساحة</button>
+  </div>
+</section>
+<section id="pause-screen" class="screen veil" hidden>
+  <div class="panel">
+    <h2>استراحة</h2>
+    <button id="resume" class="play" type="button">تابع</button>
+    <button id="restart" class="ghost" type="button">من البداية</button>
+    <button id="pause-menu" class="ghost" type="button">القائمة</button>
+    <p class="meta"><kbd class="sg-key">P</kbd> متابعة · <kbd class="sg-key">R</kbd> من البداية</p>
+  </div>
+</section>
+<section id="result-screen" class="screen veil" hidden>
+  <div class="panel">
+    <h2 id="result-title">أحسنت!</h2>
+    <p id="result-record" hidden>رقم قياسي جديد!</p>
+    <p id="result-line" class="lead"></p>
+    <button id="again" class="play" type="button">العب مرة أخرى</button>
+    <button id="result-menu" class="ghost" type="button">القائمة</button>
+  </div>
+</section>
+<button id="quality" class="quality-button" type="button" aria-pressed="false">الرسوم: كاملة</button>
+<div id="context-notice" role="status" hidden>توقفت الرسوم مؤقتًا. انتظر لحظة لاستعادتها.</div>
+<section id="error-screen" class="screen error" hidden>
+  <div class="panel"><h2>تعذّر تشغيل اللعبة</h2><p>الرسوم ثلاثية الأبعاد غير متاحة الآن.<br>أعد فتح اللعبة أو اختر لعبة أخرى.</p></div>
+</section>
+<script src="../../shared/kit.js"></script>
+<script src="../../lib/three/three.min.js"></script>
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script src="render.js"></script>
+<script src="audio.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
