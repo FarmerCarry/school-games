@@ -62,11 +62,26 @@
     sea.scale.set(180, 0.5, 240);
     sea.position.set(0, -2.28, 30);
     scene.add(sea);
+    var groundCanvas = document.createElement('canvas');
+    groundCanvas.width = groundCanvas.height = 64;
+    var groundCtx = groundCanvas.getContext('2d');
+    groundCtx.fillStyle = '#ff9ec8';
+    groundCtx.fillRect(0, 0, 64, 64);
+    groundCtx.fillStyle = '#ffd4ea';
+    for (var gi = 0; gi < 64; gi += 8) groundCtx.fillRect(0, gi, 64, 3);
+    groundCtx.fillStyle = '#fff6ea';
+    for (var gd = 6; gd < 64; gd += 16) { groundCtx.beginPath(); groundCtx.arc(gd, (gd * 3) % 64, 2.4, 0, 6.3); groundCtx.fill(); }
+    var groundTex = new T.CanvasTexture(groundCanvas);
+    groundTex.colorSpace = T.SRGBColorSpace;
+    groundTex.wrapS = groundTex.wrapT = T.RepeatWrapping;
+    groundTex.repeat.set(22, 30);
+    seaMat.map = groundTex;
+    seaMat.color.setHex(0xffffff);
     var choco = new T.Mesh(bodyGeo, lambert(0x6a3418));
     choco.scale.set(180, 2.4, 240);
     choco.position.set(0, -3.7, 30);
     scene.add(choco);
-    var sheen = new T.Mesh(bodyGeo, lambert(0xffe7c8, { transparent: true, opacity: 0.42, depthWrite: false }));
+    var sheen = new T.Mesh(bodyGeo, lambert(0xffe7c8, { transparent: true, opacity: 0.16, depthWrite: false }));
     sheen.scale.set(180, 0.08, 240);
     sheen.position.set(0, -2.02, 30);
     scene.add(sheen);
@@ -107,6 +122,9 @@
       map: cloudTex, transparent: true, depthWrite: false, side: T.DoubleSide, fog: false
     }));
     var sprinkles = instanced(bodyGeo, lambert(0xffffff));
+    var torusGeo = new T.TorusGeometry(1, 0.38, 5, 10);
+    var donuts = instanced(torusGeo, lambert(0xffffff), 12);
+    var props = instanced(bodyGeo, lambert(0xffffff), 24);
     var floodMat = new T.MeshLambertMaterial({ color: 0x6a3018, transparent: true, opacity: 0.78, depthWrite: false });
     var flood = new T.Mesh(bodyGeo, floodMat);
     flood.visible = false;
@@ -137,8 +155,36 @@
       var group = new T.Group();
       var mat = lambert(color, { transparent: true });
       var skin = lambert(0xfff3df, { transparent: true });
-      var body = new T.Mesh(new T.CapsuleGeometry(0.34, 0.42, 3, 8), mat);
+      var body = new T.Mesh(new T.CapsuleGeometry(0.32, 0.46, 3, 8), mat);
       body.position.y = 0.58;
+      function arm(x) {
+        var pivot = new T.Group();
+        pivot.position.set(x, 0.78, 0);
+        var limb = new T.Mesh(new T.CapsuleGeometry(0.07, 0.28, 2, 5), skin);
+        limb.position.y = -0.2;
+        var hand = new T.Mesh(sphereGeo, skin);
+        hand.scale.set(0.13, 0.13, 0.13);
+        hand.position.y = -0.4;
+        pivot.add(limb, hand);
+        group.add(pivot);
+        return pivot;
+      }
+      var armL = arm(-0.4);
+      var armR = arm(0.4);
+      var earMat = skin;
+      var earL = new T.Mesh(sphereGeo, earMat);
+      var earR = new T.Mesh(sphereGeo, earMat);
+      earL.scale.set(0.13, 0.18, 0.09);
+      earR.scale.set(0.13, 0.18, 0.09);
+      earL.position.set(-0.2, 1.16, -0.02);
+      earR.position.set(0.2, 1.16, -0.02);
+      var pack = new T.Mesh(bodyGeo, lambert(0xff4eb6, { transparent: true }));
+      pack.position.set(0, 0.58, -0.3);
+      pack.scale.set(0.3, 0.34, 0.16);
+      var scarf = new T.Mesh(bodyGeo, lambert(0xffe56a, { transparent: true }));
+      scarf.position.set(0.18, 0.86, -0.2);
+      scarf.scale.set(0.08, 0.26, 0.06);
+      group.add(earL, earR, pack, scarf);
       var faceCanvas = document.createElement('canvas');
       faceCanvas.width = faceCanvas.height = 128;
       var fctx = faceCanvas.getContext('2d');
@@ -157,21 +203,15 @@
       var faceMap = new T.CanvasTexture(faceCanvas);
       faceMap.colorSpace = T.SRGBColorSpace;
       var face = new T.Mesh(planeGeo, new T.MeshBasicMaterial({ map: faceMap, transparent: true, depthWrite: false, side: T.DoubleSide }));
-      face.position.set(0, 0.86, 0.02);
-      face.scale.set(0.62, 0.62, 1);
-      var handL = new T.Mesh(sphereGeo, skin);
-      var handR = new T.Mesh(sphereGeo, skin);
-      handL.scale.set(0.13, 0.13, 0.13);
-      handR.scale.set(0.13, 0.13, 0.13);
-      handL.position.set(-0.42, 0.52, 0.06);
-      handR.position.set(0.42, 0.52, 0.06);
+      face.position.set(0, 0.98, 0.3);
+      face.scale.set(0.74, 0.74, 1);
       var footL = new T.Mesh(sphereGeo, mat);
       var footR = new T.Mesh(sphereGeo, mat);
       footL.scale.set(0.16, 0.1, 0.22);
       footR.scale.set(0.16, 0.1, 0.22);
       var hat = new T.Group();
-      group.add(body, face, handL, handR, footL, footR, hat);
-      group.userData = { mat: mat, skin: skin, face: face, handL: handL, handR: handR, footL: footL, footR: footR, hat: hat, hatId: -1 };
+      group.add(body, face, footL, footR, hat);
+      group.userData = { mat: mat, skin: skin, face: face, armL: armL, armR: armR, pack: pack, scarf: scarf, footL: footL, footR: footR, hat: hat, hatId: -1 };
       scene.add(group);
       var shadow = new T.Mesh(shadowGeo, new T.MeshBasicMaterial({ color: 0x2a1428, transparent: true, opacity: 0.28, depthWrite: false }));
       shadow.rotation.x = -Math.PI / 2;
@@ -181,11 +221,17 @@
       scene.add(ring);
       return { group: group, shadow: shadow, ring: ring };
     }
-    var buddies = [buddy(0x3d8bff), buddy(0xff6ad5)];
+    var buddies = [buddy(0x8fd8ff), buddy(0xff8ad8)];
 
     function hatMesh(id, parent) {
       while (parent.children.length) parent.remove(parent.children[0]);
-      if (!id) return;
+      if (!id) {
+        var bow = new T.Mesh(sphereGeo, lambert(0xff4eb6, { transparent: true }));
+        bow.scale.set(0.18, 0.12, 0.1);
+        bow.position.y = 1.18;
+        parent.add(bow);
+        return;
+      }
       var mat = lambert(id === 2 ? 0xbfe9ff : id === 3 ? 0xffe56a : id === 4 ? 0xff8ad0 : 0xffe56a, { transparent: true });
       if (id === 1) {
         var crown = new T.Mesh(new T.ConeGeometry(0.22, 0.28, 5), mat);
@@ -210,6 +256,7 @@
 
     var parts = [];
     var glowUntil = Object.create(null);
+    var waveUntil = [0, 0];
     var shake = 0;
     var themeIndex = -1;
     var disposed = false;
@@ -217,24 +264,18 @@
     function paintChar(ch) {
       if (letterMat[ch]) return letterMat[ch];
       var c = document.createElement('canvas');
-      c.width = c.height = 64;
+      c.width = c.height = 128;
       var ctx = c.getContext('2d');
       ctx.fillStyle = '#fff6ea';
-      ctx.fillRect(0, 0, 64, 64);
+      ctx.fillRect(0, 0, 128, 128);
       ctx.fillStyle = '#3a2140';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.direction = 'rtl';
       var latin = LATIN[ch];
-      if (latin) {
-        ctx.font = '700 30px Fredoka';
-        ctx.fillText(ch, 32, 24);
-        ctx.font = '700 16px Fredoka';
-        ctx.fillText(latin, 32, 48);
-      } else {
-        ctx.font = '700 40px Fredoka';
-        ctx.fillText(ch, 32, 34);
-      }
+      ctx.font = '700 96px Fredoka';
+      ctx.fillText(ch || '؟', 64, latin ? 56 : 66);
+      if (latin) { ctx.font = '700 28px Fredoka'; ctx.fillText(latin, 64, 108); }
       var tex = new T.CanvasTexture(c);
       tex.colorSpace = T.SRGBColorSpace;
       letterMat[ch] = new T.MeshBasicMaterial({ map: tex, transparent: true, polygonOffset: true, polygonOffsetFactor: -2 });
@@ -441,8 +482,9 @@
         var letter = letterMesh[nlet++];
         letter.visible = true;
         letter.material = paintChar(item.ch || ALPHA.charAt(item.p.id % ALPHA.length));
-        letter.position.set(item.p.x, item.y + 0.04, item.p.z);
-        letter.scale.set(Math.min(1.25, item.p.hw * 1.55), Math.min(1.25, item.p.hd * 1.55), 1);
+        letter.position.set(item.p.x, item.y + 0.07, item.p.z);
+        var letterSize = Math.min(1.85, Math.max(item.p.hw, item.p.hd) * 1.85);
+        letter.scale.set(letterSize, letterSize * 0.92, 1);
       }
       bodies.count = nb; tops.count = nt; rails.count = nr; balls.count = ns; sticks.count = nstick;
       gates.count = ng; fans.count = nf; flags.count = nflag;
@@ -478,16 +520,38 @@
       clouds.instanceMatrix.needsUpdate = true;
       if (clouds.instanceColor) clouds.instanceColor.needsUpdate = true;
       var spr = 0;
-      var candyN = low ? 6 : 14;
+      var nd = 0;
+      var np = 0;
+      var candyN = low ? 5 : 9;
       for (var si = 0; si < candyN && nstick < MAX - 4 && ns < MAX - 4; si++) {
         var side = si % 2 ? 1 : -1;
-        var sz = anchorZ + 8 + (si % 5) * 5.2;
-        var sx = anchorX + side * (8.2 + (si % 3));
-        if (si % 4 === 0) {
+        var sway = Math.sin(state.time * 1.4 + si) * 0.18;
+        var sz = anchorZ + 4 + (si % 5) * 6.4;
+        var sx = anchorX + side * (7.4 + (si % 3) * 1.6);
+        var kind = si % 3;
+        if (kind === 0) {
           put(sticks, nstick++, sx, 1.15, sz, 0.1, 2.2, 0.1, 0xfff1c9);
-          put(balls, ns++, sx, 2.35, sz, 0.46, 0.46, 0.46, CANDY[si % CANDY.length]);
-        } else put(sprinkles, spr++, sx, 0.45 + (si % 3) * 0.7, sz, 0.16, 0.06, 0.4, CANDY[si % CANDY.length], si * 0.7);
+          put(balls, ns++, sx + sway, 2.45, sz, 0.5, 0.5, 0.5, CANDY[si % CANDY.length]);
+        } else if (kind === 1) {
+          put(balls, ns++, sx, 0.55 + sway * 0.3, sz, 0.42, 0.32, 0.42, CANDY[si % CANDY.length]);
+          put(balls, ns++, sx, 1.05 + sway * 0.3, sz, 0.3, 0.24, 0.3, 0xfff6ea);
+        } else if (nd < 12) put(donuts, nd++, sx, 1.15 + sway, sz, 0.62, 0.62, 0.62, CANDY[(si + 2) % CANDY.length], si * 0.4);
+        else put(sprinkles, spr++, sx, 0.7, sz, 0.16, 0.06, 0.4, CANDY[si % CANDY.length], si);
       }
+      if (!low) {
+        var castleX = anchorX + 16;
+        var castleZ = anchorZ + 26;
+        put(props, np++, castleX, 1.7, castleZ, 3.4, 3.2, 1.3, 0xff8ec8);
+        put(props, np++, castleX - 1.6, 3.6, castleZ, 0.75, 2.2, 0.75, 0xffd24a);
+        put(props, np++, castleX + 1.6, 3.9, castleZ, 0.75, 2.6, 0.75, 0x8fd0ff);
+        put(props, np++, castleX, 3.7, castleZ, 1.5, 1.3, 0.9, 0xff4eb6);
+        put(props, np++, castleX, 4.7, castleZ, 0.55, 0.8, 0.55, 0xffe56a);
+      }
+      donuts.count = nd;
+      props.count = np;
+      donuts.instanceMatrix.needsUpdate = props.instanceMatrix.needsUpdate = true;
+      if (donuts.instanceColor) donuts.instanceColor.needsUpdate = true;
+      if (props.instanceColor) props.instanceColor.needsUpdate = true;
       sprinkles.count = spr;
       balls.count = ns;
       sticks.count = nstick;
@@ -526,22 +590,40 @@
         var pl = state.players[pi];
         if (!pl) { buddyMesh.group.visible = buddyMesh.shadow.visible = buddyMesh.ring.visible = false; continue; }
         buddyMesh.group.visible = true;
-        if (buddyMesh.group.userData.hatId !== hatId && !(two && pi > 0)) {
-          hatMesh(hatId, buddyMesh.group.userData.hat);
-          buddyMesh.group.userData.hatId = hatId;
+        var wantHat = two && pi > 0 ? 0 : hatId;
+        if (buddyMesh.group.userData.hatId !== wantHat) {
+          hatMesh(wantHat, buddyMesh.group.userData.hat);
+          buddyMesh.group.userData.hatId = wantHat;
         }
         var stretch = reduced ? 1 : (pl.onGround ? pl.squash : pl.stretch);
         var moving = Math.hypot(pl.vx, pl.vz) > 0.8;
-        var bob = moving ? Math.abs(Math.sin(state.time * 14 + pi)) * 0.1 : Math.sin(state.time * 2 + pi) * 0.03;
-        buddyMesh.group.position.set(pl.x, pl.y + bob, pl.z);
+        var bob = moving ? Math.abs(Math.sin(state.time * 14 + pi)) * 0.1 : Math.sin(state.time * 2 + pi) * 0.04;
+        var idleHop = 0;
+        if (!moving && pl.onGround && !reduced) {
+          var cyc = (state.time + pi * 0.4) % 2.6;
+          if (cyc > 2.2) idleHop = Math.sin((cyc - 2.2) / 0.4 * Math.PI) * 0.16;
+        }
+        buddyMesh.group.position.set(pl.x, pl.y + bob + idleHop, pl.z);
         buddyMesh.group.scale.set(1 / stretch, stretch, 1 / stretch);
-        buddyMesh.group.rotation.y = pl.face;
-        var step = moving ? Math.sin(state.time * 14 + pi) : 0;
+        var waving = performance.now() < (waveUntil[pi] || 0);
+        buddyMesh.group.rotation.y = pl.face + (waving ? Math.PI : 0);
+        var step = moving ? Math.sin(state.time * 14 + pi) : Math.sin(state.time * 2 + pi) * 0.35;
         var ud = buddyMesh.group.userData;
-        ud.footL.position.set(-0.18, 0.05, step * 0.28);
-        ud.footR.position.set(0.18, 0.05, -step * 0.28);
-        ud.handL.position.set(-0.42, 0.5 + Math.abs(step) * 0.06, -step * 0.2);
-        ud.handR.position.set(0.42, 0.5 + Math.abs(step) * 0.06, step * 0.2);
+        ud.footL.position.set(-0.18, 0.05, step * 0.22);
+        ud.footR.position.set(0.18, 0.05, -step * 0.22);
+        ud.armL.rotation.z = 0;
+        ud.armR.rotation.z = 0;
+        if (waving) {
+          ud.armL.rotation.x = 0.4;
+          ud.armR.rotation.x = -2.15;
+          ud.armR.rotation.z = reduced ? 0.15 : Math.sin(state.time * 14) * 0.4;
+        } else {
+          ud.armL.rotation.x = step * 0.95;
+          ud.armR.rotation.x = -step * 0.95;
+        }
+        ud.pack.position.y = 0.58 + Math.abs(step) * 0.05;
+        ud.scarf.rotation.z = Math.sin(state.time * (moving ? 14 : 3) + pi) * (reduced ? 0.08 : moving ? 0.5 : 0.22);
+        ud.scarf.position.y = 0.84 + Math.abs(step) * 0.06;
         var sh = opts.engine.shadowPoint(pi);
         buddyMesh.shadow.visible = true;
         buddyMesh.shadow.position.set(sh.x, sh.y + 0.04, sh.z);
@@ -598,6 +680,10 @@
         ud.skin.depthWrite = !soft;
         ud.face.material.opacity = opacity < 0.75 ? 0 : 1;
         ud.face.visible = opacity >= 0.75;
+        ud.pack.material.opacity = opacity;
+        ud.pack.material.depthWrite = !soft;
+        ud.scarf.material.opacity = opacity;
+        ud.scarf.material.depthWrite = !soft;
         var kids = ud.hat.children;
         for (var h = 0; h < kids.length; h++) {
           var hm = kids[h].material;
@@ -705,11 +791,13 @@
       }
     }
 
+    function cheer(index) { waveUntil[index] = performance.now() + 1700; }
     return {
       render: render,
       burst: burst,
       dust: dust,
       pressKey: pressKey,
+      cheer: cheer,
       rebuildText: function () { letterMat = {}; gateLabel = {}; },
       setPixelRatio: function (dpr) { renderer.setPixelRatio(dpr); renderer.setSize(1280, 720, false); },
       dispose: function () {

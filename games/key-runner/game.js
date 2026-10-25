@@ -22,6 +22,9 @@
   var floatTimer = 0;
   var rank = { '': 0, bronze: 1, silver: 2, gold: 3 };
   var activity = 'plaza';
+  var streakAt = 0;
+  var hintTimer = 0;
+  var hintShown = false;
 
   function persist() {
     save.best = Math.max(save.best || 0, save.speed || 0);
@@ -118,6 +121,26 @@
     screens();
     paintMenus();
     focusGame();
+    var startSp = save.speed || 0;
+    streakAt = startSp >= 40 ? 40 : startSp >= 24 ? 24 : startSp >= 12 ? 12 : 0;
+    showHint();
+  }
+  function showHint() {
+    if (hintShown || duo) return;
+    hintShown = true;
+    el('hint').hidden = false;
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(function () { el('hint').hidden = true; }, 5000);
+  }
+  function hideHint() {
+    el('hint').hidden = true;
+    clearTimeout(hintTimer);
+  }
+  function markStreak(sp) {
+    var mark = sp >= 40 ? 40 : sp >= 24 ? 24 : sp >= 12 ? 12 : 0;
+    if (mark <= streakAt) return;
+    streakAt = mark;
+    banner(mark >= 40 ? 'أسطوري!' : mark >= 24 ? 'خارق!' : 'ممتاز!');
   }
   function startPlaza() {
     go('plaza', { mode: 'plaza', speed: save.speed }, 'plaza');
@@ -260,7 +283,7 @@
   function onEvents(events) {
     for (var i = 0; i < events.length; i++) {
       var ev = events[i];
-      if (ev.e === 'jump') { KR.sound('jump'); shake = Math.max(shake, 0.04); }
+      if (ev.e === 'jump') { KR.sound('jump'); shake = Math.max(shake, 0.04); hideHint(); }
       else if (ev.e === 'double') KR.sound('double');
       else if (ev.e === 'land') {
         KR.sound('land', ev.row);
@@ -284,6 +307,7 @@
         KR.sound('step', ev.p);
         if (!duo || ev.p === 0) floater('+' + ev.n);
         if (eng.state.players[ev.p] && eng.state.players[ev.p].speed > 6) fovKick = Math.min(8, fovKick + 2.4);
+        if (!duo && ev.p === 0) markStreak(eng.state.players[ev.p].speed);
         syncSpeed(false);
       }
       else if (ev.e === 'gate') { KR.sound('gate'); toast('تحتاج سرعة ' + ev.n); }
@@ -291,12 +315,14 @@
       else if (ev.e === 'checkpoint') {
         KR.sound('checkpoint');
         banner('رائع!');
+        view.cheer(ev.p);
         persist();
         var saved = eng.state.players[ev.p];
         if (saved) celebrate(saved.x, saved.y + 1.15, saved.z);
       }
       else if (ev.e === 'stage') {
         var fin = eng.state.players[ev.p];
+        view.cheer(ev.p);
         if (duo) banner('مرحلة!');
         else { KR.sound('stage'); noteStage(ev); }
         if (fin) celebrate(fin.x, fin.y + 1.45, fin.z);
@@ -584,6 +610,7 @@
       webgl: true,
       maxDpr: 1.5,
       onResize: function () {
+        canvas.style.right = 'auto';
         var dpr = save.quality === 'low' ? 1 : Math.min(1.5, window.devicePixelRatio || 1);
         view.setPixelRatio(dpr);
         dirty = true;
