@@ -44,3 +44,16 @@ button { font-family: var(--sg-font); cursor: pointer; }
 #cardNew { color: #ff5a8a; font-size: 28px; }
 .toggle { display: flex; justify-content: space-between; align-items: center; font-size: 22px; margin: 10px 0; }
 html[data-sg-motion="reduce"] .big { transition: none; }
+.pill.pop { animation: er-pop 0.18s ease-out; }
+@keyframes er-pop { 40% { transform: scale(1.14); } }
+.stars { display: flex; justify-content: center; gap: 12px; height: 76px; font-size: 64px; line-height: 1; }
+.stars i { font-style: normal; display: inline-block; }
+.stars .on { color: #ffd23f; text-shadow: 0 4px 0 #c48a12; animation: er-star 0.45s ease-out both; }
+.stars .off { color: #e4d8c4; }
+@keyframes er-star { 0% { transform: scale(0.2) rotate(-18deg); } 60% { transform: scale(1.28) rotate(8deg); } }
+.burst { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.burst b { position: absolute; top: -24px; width: 14px; height: 22px; border-radius: 3px; animation: er-fall linear forwards; }
+@keyframes er-fall { to { transform: translateY(780px) rotate(220deg); opacity: 0.15; } }
+html[data-sg-motion="reduce"] .pill.pop,
+html[data-sg-motion="reduce"] .stars .on,
+html[data-sg-motion="reduce"] .burst b { animation: none; }

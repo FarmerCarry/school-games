@@ -11,6 +11,8 @@
   const cache = new Map();
   const parts = [];
   let floaters = [];
+  A.hudCoin = { x: 1100, y: 40 };
+  A.hudCoin2 = { x: 920, y: 40 };
 
   function rng(n) { n = (n * 1103515245 + 12345) >>> 0; return (n % 1000) / 1000; }
   function X(c, x) { return (x - c.x) * TILE * c.z; }
@@ -146,16 +148,38 @@
     if (A.reduced) return;
     for (let i = 0; i < n; i++) pushPart({ kind: 'coin', x: x + (Math.random() - 0.5) * 0.3, y: y, vx: (Math.random() - 0.5) * 2.4, vy: -3.2 - Math.random() * 1.8, g: 9, life: 0.95, max: 0.95, size: 0.16, color: '#ffd23f' });
   };
+  A.flyCoins = function (x, y, n, who) {
+    if (A.reduced) {
+      for (let i = 0; i < Math.min(4, n); i++) pushPart({ kind: 'coin', x: x + (i - 1) * 0.18, y: y, vx: (i - 1.5) * 0.7, vy: -1.4, g: 7, life: 0.4, max: 0.4, size: 0.16, color: '#ffd23f' });
+      return;
+    }
+    for (let i = 0; i < n; i++) {
+      const life = 0.62 + i * 0.045;
+      pushPart({ kind: 'fly', x: x + (Math.random() - 0.5) * 0.25, y: y, life: life, max: life, to: who || 0 });
+    }
+  };
+  A.sparkle = function (x, y, n) {
+    if (A.reduced) return;
+    const cols = ['#fff', '#ffd23f', '#fff6c2', '#ff8ad8', '#7ec8ff'];
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 6.28, sp = 0.5 + Math.random() * 1.8;
+      pushPart({ kind: 'star', x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.6, g: 1.4, life: 0.75, max: 0.75, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 8, size: 0.14, color: cols[i % cols.length] });
+    }
+  };
+  let reveal = null;
+  A.revealPet = function (b, s, v, x, y) { reveal = { b: b, s: s, v: v, x: x, y: y, life: 1.15, max: 1.15 }; };
   A.crack = function (x, y, species) {
     if (A.reduced) return;
     const col = RCOL[species] || '#fff6d8';
-    for (const side of [-1, 1]) pushPart({ kind: 'half', x: x, y: y, vx: side * 1.5, vy: -2.4, g: 8, life: 0.8, max: 0.8, rot: 0, vr: side * 4, side: side, color: col });
-    A.confetti(x, y, 20);
-    A.coins(x, y - 0.2, 10);
-    pushPart({ kind: 'ring', x: x, y: y, life: 0.4, max: 0.4, size: 0.15, grow: 3.2, color: '#fff' });
+    for (const side of [-1, 1]) pushPart({ kind: 'half', x: x, y: y, vx: side * 2.1, vy: -2.8, g: 8, life: 0.85, max: 0.85, rot: 0, vr: side * 6, side: side, color: col });
+    A.confetti(x, y, 16);
+    A.sparkle(x, y - 0.3, 10);
+    pushPart({ kind: 'ring', x: x, y: y, life: 0.45, max: 0.45, size: 0.12, grow: 4.2, color: '#fff' });
+    pushPart({ kind: 'ring', x: x, y: y, life: 0.55, max: 0.55, size: 0.2, grow: 2.4, color: '#ffd23f' });
   };
   A.float = function (x, y, text, color) { floaters.push({ x: x, y: y, text: text, color: color || '#fff', life: 0.8 }); if (floaters.length > 24) floaters.shift(); };
   A.tick = function (w, dt) {
+    if (reveal) { reveal.life -= dt; if (reveal.life <= 0) reveal = null; }
     if (!A.reduced && w && w.mode === '1p') {
       const p = w.players[0];
       if (p && p.egg && Math.random() < 0.55 && parts.length < 140) {
@@ -165,14 +189,18 @@
     for (let i = parts.length - 1; i >= 0; i--) {
       const p = parts[i];
       p.life -= dt;
-      if (p.life <= 0) { parts.splice(i, 1); continue; }
+      if (p.life <= 0) {
+        if (p.kind === 'fly' && A.onArrive) A.onArrive(p.to || 0);
+        parts.splice(i, 1); continue;
+      }
+      if (p.kind === 'fly') continue;
       p.vy += (p.g || 0) * dt; p.x += p.vx * dt; p.y += p.vy * dt;
       if (p.rot != null) p.rot += (p.vr || 0) * dt;
       if (p.grow) p.size += p.grow * dt;
     }
     for (let i = floaters.length - 1; i >= 0; i--) { floaters[i].life -= dt; floaters[i].y -= dt * 0.8; if (floaters[i].life <= 0) floaters.splice(i, 1); }
   };
-  A.clearFx = function () { parts.length = 0; floaters = []; };
+  A.clearFx = function () { parts.length = 0; floaters = []; reveal = null; };
 
   function label(ctx, text, x, y, size, color, rtl) {
     ctx.save();
@@ -438,8 +466,11 @@
         const u = 1 - Math.min(1, left / Math.max(0.2, total));
         ctx.save();
         ctx.translate(x, y - 4 * z);
-        ctx.rotate(Math.sin(time * (3 + u * 14)) * u * 0.28);
-        drawEgg(ctx, 0, 0, inc.s, 0, (0.95 + u * 0.28) * z);
+        const wob = A.reduced ? u * 0.04 : Math.sin(time * (4 + u * 20)) * u * (0.16 + u * 0.55);
+        const squash = 1 + (A.reduced ? 0 : Math.sin(time * (8 + u * 14)) * u * 0.14);
+        ctx.rotate(wob);
+        ctx.scale(squash, 1 / squash);
+        drawEgg(ctx, 0, 0, inc.s, 0, (0.95 + u * 0.4) * z);
         if (u > 0.3) {
           ink(ctx, 2);
           ctx.beginPath(); ctx.moveTo(0, -12 * z); ctx.lineTo(-5 * z, -2 * z); ctx.lineTo(4 * z, 8 * z); ctx.stroke();
@@ -608,8 +639,14 @@
     ctx.translate(0, g.air ? -16 : 0);
     ctx.scale(1.22, 1.22);
     if (sleep) ctx.translate(0, 7);
-    if (chase) ctx.translate(0, -Math.abs(Math.sin(t * 14)) * 3);
-    if (stir) ctx.translate(0, Math.sin(t * 18) * 1.5);
+    if (chase) ctx.translate(0, -Math.abs(Math.sin(t * 14)) * 4);
+    if (stir) {
+      const hop = Math.abs(Math.sin(t * 14)) * 6;
+      const sq = 1 + Math.sin(t * 14) * 0.1;
+      ctx.translate(0, -hop);
+      ctx.scale((1 / sq) * 1.12, sq * 1.12);
+    }
+    const wide = 0.9 + Math.sin(t * 16) * 0.1;
     ink(ctx, 4);
     const k = g.kind;
     if (k === 'hen') {
@@ -631,7 +668,7 @@
     } else if (k === 'owl') {
       ctx.save(); ctx.rotate(g.spin && g.state === 'watch' ? (g.ang + Math.PI) * 0.15 : 0);
       blob(ctx, 0, 2, 16, 16, '#d7c4a8'); blob(ctx, -6, 0, 6, 6, '#fff'); blob(ctx, 6, 0, 6, 6, '#fff');
-      const o = sleep ? 0 : stir ? 0.5 : 1;
+      const o = sleep ? 0 : stir ? wide : 1;
       eye(ctx, -6, 0, o, 0); eye(ctx, 6, 0, o, 0);
       poly(ctx, [-2, 6, 0, 10, 2, 6], '#ffb703');
       ctx.restore();
@@ -642,9 +679,13 @@
       ctx.fillStyle = sleep ? '#9aa' : '#7ec8ff'; ctx.fillRect(-8, -2, 16, 6); ctx.strokeRect(-8, -2, 16, 6);
     }
     if (k !== 'owl') {
-      const o = sleep ? 0 : stir ? 0.45 : 1;
+      const o = sleep ? 0 : stir ? wide : 1;
       eye(ctx, -6, -2, o, chase ? g.facing * 2 : 1);
       eye(ctx, 6, -2, o, chase ? g.facing * 2 : 1);
+      if (stir) {
+        ctx.fillStyle = 'rgba(255,120,140,0.6)';
+        ctx.beginPath(); ctx.arc(-11, 4, 3.4, 0, 7); ctx.arc(11, 4, 3.4, 0, 7); ctx.fill();
+      }
       if (chase) {
         ink(ctx, 3); ctx.beginPath(); ctx.moveTo(-12, -10); ctx.lineTo(-3, -6); ctx.moveTo(12, -10); ctx.lineTo(3, -6); ctx.stroke();
       }
@@ -655,6 +696,7 @@
   function drawParts(ctx, cam) {
     const z = cam.z;
     for (const p of parts) {
+      if (p.kind === 'fly') continue;
       const a = Math.max(0, p.life / (p.max || 0.7));
       ctx.globalAlpha = a;
       const px = X(cam, p.x), py = Y(cam, p.y);
@@ -672,9 +714,69 @@
         ctx.restore();
       } else if (p.kind === 'ring') {
         ctx.strokeStyle = p.color; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(px, py, Math.max(4, p.size * TILE * z), 0, 7); ctx.stroke();
+      } else if (p.kind === 'star') {
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(p.rot || 0);
+        ctx.fillStyle = p.color;
+        const r = Math.max(5, (p.size || 0.14) * TILE * z);
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+          const a = i / 8 * Math.PI * 2 - Math.PI / 2;
+          const rr = i % 2 ? r * 0.38 : r;
+          if (i) ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+          else ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
       } else {
         ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(px, py, Math.max(2, p.size * TILE * z), 0, 7); ctx.fill();
       }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawReveal(ctx, cam) {
+    if (!reveal) return;
+    const u = 1 - reveal.life / reveal.max;
+    const pop = u < 0.16 ? u / 0.16 : 1;
+    const over = u < 0.32 ? 1 + Math.sin(u / 0.32 * Math.PI) * 0.22 : 1;
+    const z = cam.z;
+    const x = X(cam, reveal.x), y = Y(cam, reveal.y) - (1 - Math.min(1, u * 4)) * 22 * z;
+    ctx.save();
+    ctx.translate(x, y);
+    if (u < 0.4) {
+      ctx.globalAlpha = 1 - u / 0.4;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(0, 0, (18 + u * 70) * z, 0, 7);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.scale(1.7 * pop * over * z, 1.7 * pop * over * z);
+    animal(ctx, (reveal.b * 6 + reveal.s) % 42, reveal.v === 2 || reveal.v === 3);
+    ctx.restore();
+  }
+
+  function drawFly(ctx, cam) {
+    for (const p of parts) {
+      if (p.kind !== 'fly') continue;
+      const dest = p.to ? (A.hudCoin2 || A.hudCoin) : A.hudCoin;
+      if (!dest) continue;
+      const u = 1 - p.life / (p.max || 0.7);
+      const e = u * u * (3 - 2 * u);
+      const sx = X(cam, p.x), sy = Y(cam, p.y);
+      const x = sx + (dest.x - sx) * e;
+      const y = sy + (dest.y - sy) * e - Math.sin(Math.PI * u) * 64;
+      const r = 10 * (1 - e * 0.28);
+      ctx.globalAlpha = u > 0.9 ? (1 - u) / 0.1 : 1;
+      ctx.fillStyle = '#ffd23f';
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#2a2348'; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.fillStyle = '#fff6c2';
+      ctx.fillRect(x - 1.4, y - r * 0.48, 2.8, r * 0.96);
     }
     ctx.globalAlpha = 1;
   }
@@ -804,8 +906,12 @@
         ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
         label(ctx, 'Z', gx + 2 * z, gy - 28 * z + bob, 14 * z, '#9ecbff', false);
         label(ctx, 'z', gx + 16 * z, gy - 46 * z + bob, 20 * z, '#d7e8ff', false);
-      } else if (g.state === 'stir') badge(ctx, gx, gy - 42 * z, '!', '#ffcf33', 28 * z);
-      else if (g.state === 'chase') badge(ctx, gx, gy - 48 * z, '!', '#ff2d4a', 32 * z);
+      } else if (g.state === 'stir' || g.state === 'chase') {
+        const alert = g.state === 'stir';
+        const bounce = Math.abs(Math.sin(time * (alert ? 8 : 11))) * (alert ? 10 : 6) * z;
+        const size = (alert ? 30 : 32) * z * (1 + Math.sin(time * (alert ? 12 : 14)) * 0.12);
+        badge(ctx, gx, gy - (alert ? 50 : 52) * z - bounce, '!', alert ? '#ffcf33' : '#ff2d4a', size);
+      }
     }
     if (w.fox) {
       const x = X(cam, w.fox.x), y = Y(cam, w.fox.y);
@@ -851,6 +957,7 @@
       }
       if (w.mode === '2p') label(ctx, i === 0 ? '1' : '2', x, y - 58 * z, 16 * z, '#fff', false);
     });
+    drawReveal(ctx, cam);
     drawParts(ctx, cam);
     for (const f of floaters) {
       ctx.globalAlpha = Math.max(0, f.life);
@@ -867,5 +974,6 @@
       if (best) label(ctx, 'عملاق 1/8 · ذهبي 1/30', X(cam, best.x), Y(cam, best.y) + 40 * z, 14 * z, '#fff', true);
     }
     ctx.restore();
+    drawFly(ctx, cam);
   };
 })(globalThis.EggRush = globalThis.EggRush || {});
