@@ -20,6 +20,31 @@
     frameDirty = true;
   }
   const view = Kit.fit(canvas, 1280, 720, { maxDpr: 1.5, onResize: placeChrome });
+  const lastPop = [0, 0];
+  ER.art.onArrive = function (who) {
+    const i = who ? 1 : 0;
+    const now = performance.now();
+    if (now - lastPop[i] < 80) return;
+    lastPop[i] = now;
+    const pill = $(i ? 'p2coins' : 'coinPill');
+    if (!pill) return;
+    pill.classList.remove('pop');
+    void pill.offsetWidth;
+    pill.classList.add('pop');
+  };
+  function aimCoins() {
+    const uiRect = ui.getBoundingClientRect();
+    const s = view.scale || 1;
+    function at(el, xf, yf) {
+      if (!el || el.hidden) return null;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2) return null;
+      return { x: (r.left + r.width * xf - uiRect.left) / s, y: (r.top + r.height * yf - uiRect.top) / s };
+    }
+    const coin = at($('coinPill'), 0.8, 0.34);
+    if (coin) ER.art.hudCoin = coin;
+    ER.art.hudCoin2 = at($('p2coins'), 0.5, 0.5) || ER.art.hudCoin;
+  }
   const pointer = Kit.pointer(view);
   const shake = Kit.shake();
   const store = Kit.store('egg-rush');
@@ -273,17 +298,21 @@
       S.alert();
       if (!calm) { slow = 0.2; zoom = 1.06; shake.add(3); }
     } else if (e.t === 'collect') {
-      S.coin(); A.coins(e.x, e.y, 14); A.confetti(e.x, e.y, 8); A.float(e.x, e.y - 0.4, '+' + ER.fmt(e.n), '#ffd23f');
+      S.coin();
+      A.flyCoins(e.x, e.y, calm ? 4 : 8);
+      A.coins(e.x, e.y, 4);
+      A.float(e.x, e.y - 0.4, '+' + ER.fmt(e.n), '#ffd23f');
       persist(false);
     } else if (e.t === 'hatch') {
       if (e.s >= 4) { S.legend(); flash = calm ? 0 : 0.45; } else S.hatch();
       const hx = e.x != null ? e.x : 2.2, hy = e.y != null ? e.y : 8.6;
       A.crack(hx, hy, e.s);
-      A.confetti(hx, hy, 18);
-      if (e.pad >= 0 && world.pads[e.pad]) { A.coins(world.pads[e.pad].x, world.pads[e.pad].y, 8); A.confetti(world.pads[e.pad].x, world.pads[e.pad].y, 10); }
-      if (!calm) shake.add(e.s >= 4 ? 8 : 5);
+      A.sparkle(hx, hy - 0.4, calm ? 0 : 12);
+      A.revealPet(e.b, e.s, e.v, hx, hy - 0.45);
+      if (e.pad >= 0 && world.pads[e.pad]) A.flyCoins(world.pads[e.pad].x, world.pads[e.pad].y, calm ? 4 : 8);
+      if (!calm) shake.add(e.s >= 4 ? 9 : 6);
       if (e.pad < 0) openCard(e);
-      else { pendingCard = e; cardDelay = 0.72; }
+      else { pendingCard = e; cardDelay = calm ? 0.15 : 1.05; }
       persist(true);
     } else if (e.t === 'buy') { S.buy(); persist(true); if (!$('ovShop').hidden) paintShop(); }
     else if (e.t === 'gate') { S.gate(); A.float(e.x, e.y - 0.8, 'تحتاج سرعة ' + e.need, '#fff'); if (!calm) shake.add(2); }
@@ -296,7 +325,7 @@
     else if (e.t === 'bump') { S.bump(); if (!calm) shake.add(5); A.float(e.x, e.y, '!', '#fff'); }
     else if (e.t === 'slip') S.slip();
     else if (e.t === 'popshield') { S.boop(); A.float(e.x, e.y, 'فقاعة!', '#8fd8ff'); }
-    else if (e.t === 'bank' && world.mode === '2p') { S.coin(); A.coins(e.x, e.y, 10); A.float(e.x, e.y, '+' + e.n, '#ffd23f'); }
+    else if (e.t === 'bank' && world.mode === '2p') { S.coin(); A.flyCoins(e.x, e.y, 6, e.p === 1 ? 1 : 0); A.float(e.x, e.y, '+' + e.n, '#ffd23f'); }
     else if (e.t === 'bank') { A.burst(2.2 + (e.slot || 0) * 2.3, 8.2, 10, ['#fff', '#ffd23f'], 2); persist(true); }
     else if (e.t === 'release' || e.t === 'place') persist(true);
     else if (e.t === 'rebirth') { S.legend(); banner('مهرجان الفقس! التاج رقم ' + e.n); persist(true); }
@@ -309,7 +338,35 @@
     const draw = e.winner < 0;
     $('resultTitle').textContent = draw ? 'تعادل!' : (e.winner === 0 ? 'اللاعب الأول فاز!' : 'اللاعب الثاني فاز!');
     $('resultSub').textContent = 'الأول ' + ER.fmt(e.a) + ' · الثاني ' + ER.fmt(e.b);
-    Kit.stats.end(draw ? 'draw' : 'end', Math.max(e.a, e.b));
+    const hi = Math.max(e.a, e.b);
+    const stars = draw ? 2 : hi >= 30 ? 3 : hi >= 12 ? 2 : 1;
+    const starBox = $('resultStars');
+    starBox.replaceChildren();
+    for (let i = 0; i < 3; i++) {
+      const star = document.createElement('i');
+      star.textContent = '★';
+      star.className = i < stars ? 'on' : 'off';
+      star.style.animationDelay = (i * 0.12) + 's';
+      starBox.appendChild(star);
+    }
+    const burst = $('resultBurst');
+    burst.replaceChildren();
+    if (!Kit.motion.reduced()) {
+      const colors = ['#ff5a8a', '#ffd23f', '#7ec8ff', '#fff', '#9dff8a', '#ff8a3d', '#c9a0ff'];
+      for (let i = 0; i < 28; i++) {
+        const bit = document.createElement('b');
+        bit.style.left = (3 + Math.random() * 94) + '%';
+        bit.style.background = colors[i % colors.length];
+        bit.style.animationDelay = (Math.random() * 0.45) + 's';
+        bit.style.animationDuration = (1.5 + Math.random() * 1.3) + 's';
+        bit.style.width = (10 + (i % 4) * 3) + 'px';
+        burst.appendChild(bit);
+      }
+      const p = world.players[e.winner < 0 ? 0 : e.winner] || world.players[0];
+      if (p) ER.art.confetti(p.x, p.y - 1, 20);
+    }
+    ER.sfx.fanfare();
+    Kit.stats.end(draw ? 'draw' : 'end', hi);
     paintChrome();
   }
 
@@ -555,6 +612,7 @@
   function render() {
     if (screen === 'pause' && !frameDirty) return;
     frameDirty = false;
+    aimCoins();
     ER.art.reduced = Kit.motion.reduced();
     const ctx = view.ctx;
     if (screen === 'title') {
