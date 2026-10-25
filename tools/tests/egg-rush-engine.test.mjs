@@ -230,6 +230,22 @@ test('two players move, a dash drops an egg, and the match ends in a draw or a w
   assert.ok(kinds(win).includes('match'));
 });
 
+test('opening a speed gate celebrates that biome once', () => {
+  const w = ER.create({ tutorial: false, seed: 1, now: 0 });
+  w.coins = 200;
+  w.ev.length = 0;
+  assert.equal(ER.buy(w, 'shoes'), true);
+  const opens = w.ev.filter(e => e.t === 'open');
+  assert.equal(opens.length, 1);
+  assert.equal(opens[0].biome, 1);
+  assert.equal(opens[0].name, 'الشاطئ');
+  w.ev.length = 0;
+  assert.equal(ER.buy(w, 'shoes'), true);
+  assert.equal(w.ev.filter(e => e.t === 'open').length, 0);
+  const again = ER.create({ save: ER.exportSave(w), now: 1, tutorial: false });
+  assert.equal(again.ev.filter(e => e.t === 'open').length, 0);
+});
+
 test('the night fox borrows a pet and the den gives it back', () => {
   const w = ER.create({ tutorial: false, seed: 1, now: 0 });
   w.pets.push({ b: 0, s: 0, v: 0, pad: 0, rate: 4 });

@@ -324,6 +324,7 @@
     w.notice = notice;
     w.away = away;
     syncTut(w);
+    noteOpen(w, w.players[0].x, w.players[0].y);
     return w;
   }
 
@@ -347,7 +348,7 @@
     const gad = id === 'banana' || id === 'decoy' || id === 'bubble';
     if (gad && w.gadgets.length >= 3) return false;
     w.coins -= c;
-    if (id === 'shoes') { w.shoes++; w.speedXP += 40; }
+    if (id === 'shoes') { w.shoes++; w.speedXP += 40; noteOpen(w, w.players[0].x, w.players[0].y); }
     else if (id === 'mill') w.millLv++;
     else if (id === 'pen') w.pens++;
     else if (id === 'inc') { w.incN++; w.incs.push(null); }
@@ -651,6 +652,14 @@
     if (x < BASE) return -1;
     return clamp(Math.floor((x - BASE) / BW), 0, 6);
   }
+  function noteOpen(w, x, y) {
+    if (!w || w.mode !== '1p') return;
+    const now = maxOpen(w.speedXP);
+    if (w.openMark == null) { w.openMark = now; return; }
+    const from = w.openMark < now ? w.openMark : now;
+    for (let i = from + 1; i <= now; i++) ev(w, { t: 'open', biome: i, name: BIOMES[i].name, x: x, y: y });
+    w.openMark = now;
+  }
   function gateBlock(w, p, prev) {
     if (w.mode !== '1p') return;
     const sp = speedOf(w.speedXP);
@@ -680,7 +689,8 @@
       if (dir && dir !== p.millArm) {
         if (p.millArm) {
           const add = w.mills[onMill].mult;
-          if (w.mode === '1p') w.speedXP += add; else p.speedXP = (p.speedXP || 0) + add;
+          if (w.mode === '1p') { w.speedXP += add; noteOpen(w, p.x, p.y); }
+          else p.speedXP = (p.speedXP || 0) + add;
           ev(w, { t: 'xp', n: add, x: p.x, y: p.y - 0.8, p: p.id });
         }
         p.millArm = dir;
