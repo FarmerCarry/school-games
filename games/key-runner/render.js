@@ -209,6 +209,7 @@
     }
 
     var parts = [];
+    var glowUntil = Object.create(null);
     var shake = 0;
     var themeIndex = -1;
     var disposed = false;
@@ -267,6 +268,17 @@
     };
     var TRAIL = [0xff5ad0, 0xffe56a, 0x7dffa0, 0x8fd0ff];
 
+    function glowOf(id) {
+      var until = glowUntil[id];
+      if (!until) return 0;
+      var left = (until - performance.now()) / 200;
+      if (left <= 0) { delete glowUntil[id]; return 0; }
+      return left > 1 ? 1 : left;
+    }
+    function pressKey(id) {
+      if (id == null) return;
+      glowUntil[id] = performance.now() + 200;
+    }
     function spark(x, y, z, color, life) {
       if (parts.length >= SPARKS) return;
       parts.push({
@@ -396,16 +408,30 @@
         if (p.t === 'caps' && p.gone) continue;
         var col = keyColor(p);
         var dip = pressed(p.id);
-        var topY = p.y + p.hh - dip;
+        if (dip) glowUntil[p.id] = performance.now() + 200;
+        var glow = glowOf(p.id);
+        var topY = p.y + p.hh - (dip ? 0.14 : glow * 0.06);
         var wide = p.hw > 5;
-        var skirt = wide ? 0.22 : Math.max(0.16, p.hh * 1.45);
-        put(bodies, nb++, p.x, topY - skirt * 0.62, p.z, (wide ? p.hw * 2 : p.hw * 2.04), skirt, (wide ? p.hd * 2 : p.hd * 2.04), shade(col, wide ? 0.9 : 0.68));
-        put(tops, nt++, p.x, topY - 0.05, p.z, p.hw * (wide ? 1.96 : 1.7), wide ? 0.08 : 0.16, p.hd * (wide ? 1.96 : 1.7), shade(col, 1.18));
+        var skirt = wide ? 0.22 : Math.max(0.1, p.hh * (dip ? 0.72 : 1.45));
+        var bulge = wide ? 1 : (dip ? 1.22 : 1 + glow * 0.1);
+        var lit = dip || glow > 0.02;
+        var bodyCol = lit ? mix(shade(col, 0.68), 0xffffff, dip ? 0.42 : glow * 0.55) : shade(col, wide ? 0.9 : 0.68);
+        var topCol = lit ? mix(shade(col, 1.18), 0xffffff, dip ? 0.62 : glow * 0.8) : shade(col, 1.18);
+        put(bodies, nb++, p.x, topY - skirt * 0.62, p.z, (wide ? p.hw * 2 : p.hw * 2.04 * bulge), skirt, (wide ? p.hd * 2 : p.hd * 2.04 * bulge), bodyCol);
+        put(tops, nt++, p.x, topY - 0.05, p.z, p.hw * (wide ? 1.96 : 1.7 * bulge), wide ? 0.08 : (dip ? 0.07 : 0.16), p.hd * (wide ? 1.96 : 1.7 * bulge), topCol);
         if (!wide && (p.ch || p.t === 'key' || p.t === 'sink' || p.t === 'ice' || p.t === 'jelly' || p.t === 'caps' || p.t === 'portal')) {
           var dx = p.x - focus.x, dz = p.z - focus.z;
           letterPick.push({ p: p, y: topY, d: dx * dx + dz * dz, ch: p.ch || '' });
         }
-        if (p.flag) put(flags, nflag++, p.x + p.hw * 0.55, topY + 0.55, p.z, 0.08, 0.85, 0.08, 0xffe56a);
+        if (p.flag && nflag < MAX - 8) {
+          put(flags, nflag++, p.x - p.hw * 0.72, topY + 0.85, p.z, 0.1, 1.55, 0.1, 0xffe56a);
+          put(flags, nflag++, p.x + p.hw * 0.72, topY + 0.85, p.z, 0.1, 1.55, 0.1, 0xffe56a);
+          put(flags, nflag++, p.x, topY + 1.55, p.z, Math.min(2.4, p.hw * 1.45), 0.22, 0.1, 0xff4eb6);
+          var tw = state.time * 3;
+          put(flags, nflag++, p.x, topY + 2.05, p.z, 0.34, 0.34, 0.08, 0xfff6a8, tw);
+          put(flags, nflag++, p.x - 0.62, topY + 1.82, p.z, 0.16, 0.16, 0.06, 0xff4eb6, tw * 1.3);
+          put(flags, nflag++, p.x + 0.58, topY + 1.72, p.z, 0.14, 0.14, 0.06, 0xffffff, -tw);
+        }
       }
       letterPick.sort(function (a, b) { return (a.ch ? -1000 : 0) + a.d - ((b.ch ? -1000 : 0) + b.d); });
       var letterCap = low ? 12 : 22;
@@ -650,16 +676,31 @@
     }
 
     function burst(x, y, z, color, count) {
-      count = Math.min(count || 10, 24);
+      count = Math.min(count || 10, 18);
       for (var i = 0; i < count && parts.length < SPARKS; i++) {
         parts.push({
           x: x, y: y, z: z,
           vx: (Math.random() - 0.5) * 6,
           vy: 2 + Math.random() * 5,
           vz: (Math.random() - 0.5) * 6,
-          life: 0.4 + Math.random() * 0.4,
+          life: 0.35 + Math.random() * 0.35,
           size: 0.08 + Math.random() * 0.08,
           color: color || 0xfff1a8
+        });
+      }
+    }
+    function dust(x, y, z, count) {
+      count = Math.min(count || 8, 14);
+      for (var i = 0; i < count && parts.length < SPARKS; i++) {
+        var ang = (i / count) * Math.PI * 2;
+        parts.push({
+          x: x, y: y, z: z,
+          vx: Math.cos(ang) * (1.4 + Math.random() * 1.2),
+          vy: 0.35 + Math.random() * 0.9,
+          vz: Math.sin(ang) * (1.4 + Math.random() * 1.2),
+          life: 0.22 + Math.random() * 0.16,
+          size: 0.1 + Math.random() * 0.1,
+          color: i % 3 === 0 ? 0xffb6d9 : 0xfff6ea
         });
       }
     }
@@ -667,6 +708,8 @@
     return {
       render: render,
       burst: burst,
+      dust: dust,
+      pressKey: pressKey,
       rebuildText: function () { letterMat = {}; gateLabel = {}; },
       setPixelRatio: function (dpr) { renderer.setPixelRatio(dpr); renderer.setSize(1280, 720, false); },
       dispose: function () {

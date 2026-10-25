@@ -57,7 +57,7 @@
       ground: 0, ice: false, usedDouble: false,
       falling: 0, falls: 0, stageFalls: 0, stage: 0, stageTime: 0,
       wordAt: 0, maxY: o.y || 0, cd: 0, gateCd: 0, touchCd: 0,
-      squash: 1, stretch: 1, alive: true, finished: false,
+      squash: 1, stretch: 1, alive: true, finished: false, lastPad: -1, pressCd: 0,
       shoe: o.shoe || 1, rebirths: o.rebirths || 0, charm: !!o.charm
     };
     p.cp = { x: p.x, y: p.y, z: p.z, stage: 0 };
@@ -208,7 +208,9 @@
       pl.hop = true;
       pl.boost = false;
       pl.ground = 0;
-      pl.stretch = 1.42;
+      pl.lastPad = -1;
+      pl.stretch = 1.65;
+      pl.squash = 1;
       events.push({ e: 'jump', p: pl.i });
     }
     function onLand(pl, p, events) {
@@ -223,13 +225,15 @@
       pl.usedDouble = false;
       pl.ice = p.t === 'ice';
       if (!fromAir) return;
-      pl.squash = 0.58;
+      pl.squash = 0.46;
       if (p.t === 'tramp') {
         pl.vy = C.TRAMP;
         pl.onGround = false;
         pl.hop = true;
         pl.boost = true;
         pl.ground = 0;
+        pl.stretch = 1.85;
+        pl.squash = 0.7;
         events.push({ e: 'bounce', p: pl.i });
       } else if (p.t === 'launch') {
         pl.vy = C.LAUNCH_V;
@@ -265,6 +269,7 @@
         pl.hop = true;
         pl.boost = true;
         pl.ground = 0;
+        pl.stretch = 1.85;
         events.push({ e: 'bounce', p: pl.i });
         return;
       }
@@ -283,6 +288,11 @@
         return;
       }
       pl.ride = p.id;
+      if (p.id !== pl.lastPad && pl.pressCd <= 0) {
+        pl.lastPad = p.id;
+        pl.pressCd = 0.03;
+        events.push({ e: 'press', p: pl.i, id: p.id, x: pl.x, y: pl.y, z: pl.z });
+      }
       if (p.ch && pl.wordId !== p.id && (state.mode === 'world' || state.mode === 'race')) {
         pl.wordId = p.id;
         var word = worlds[state.world].word;
@@ -334,6 +344,7 @@
       pl.usedDouble = false;
       pl.squash = 0.6;
       pl.stretch = 1.2;
+      pl.lastPad = -1;
       if (state.mode === 'world' || state.mode === 'race') pl.stage = pl.cp.stage;
       if (state.flood && pl.z < state.flood.z0 - 0.4) state.floodY = state.flood.from;
       events.push({ e: 'respawn', p: pl.i });
@@ -623,7 +634,8 @@
       if (state.flood && pl.z >= state.flood.z0 && pl.z <= state.flood.z1 && pl.y < state.floodY) startFall(pl, events, 'flood');
       if (pl.y > pl.maxY) pl.maxY = pl.y;
       pl.stageTime += dt;
-      pl.squash += (1 - pl.squash) * Math.min(1, dt * 4);
+      if (pl.pressCd > 0) pl.pressCd -= dt;
+      pl.squash += (1 - pl.squash) * Math.min(1, dt * 6);
       pl.stretch += (1 - pl.stretch) * Math.min(1, dt * 4);
       if (state.mode === 'tower' && state.time >= 360 && !pl.finished) {
         pl.finished = true;

@@ -45,9 +45,25 @@
     toastUntil = performance.now() + 2200;
   }
   function banner(text) {
-    el('banner').hidden = false;
-    el('banner').textContent = text;
+    var node = el('banner');
+    node.hidden = false;
+    node.textContent = text;
+    node.classList.remove('pop');
+    void node.offsetWidth;
+    node.classList.add('pop');
     bannerUntil = performance.now() + 1600;
+  }
+  var POP = [0xff4eb6, 0xffd24a, 0x7eb6ff, 0x3ddc6a, 0xff7a3c];
+  function sparkCount(n) {
+    if (Kit.motion.reduced()) return Math.min(3, n);
+    if (save.quality === 'low') return Math.max(2, (n * 0.45) | 0);
+    return n;
+  }
+  function celebrate(x, y, z) {
+    view.burst(x, y, z, 0xffe56a, sparkCount(14));
+    view.burst(x, y + 0.4, z, 0xff4eb6, sparkCount(10));
+    view.burst(x, y + 0.15, z, 0xffffff, sparkCount(8));
+    if (save.quality !== 'low' && !Kit.motion.reduced()) view.burst(x, y + 0.7, z, 0x7dffa8, 6);
   }
   function floater(text) {
     var node = el('floater');
@@ -250,9 +266,19 @@
         KR.sound('land', ev.row);
         shake = Math.max(shake, 0.08);
         var landed = eng.state.players[ev.p];
-        if (landed) view.burst(landed.x, landed.y + 0.15, landed.z, 0xfff3ea, 8);
+        if (landed) view.dust(landed.x, landed.y + 0.08, landed.z, sparkCount(12));
       }
-      else if (ev.e === 'bounce') KR.sound('bounce');
+      else if (ev.e === 'press') {
+        KR.sound('press', ev.id);
+        view.pressKey(ev.id);
+        view.burst(ev.x, ev.y + 0.28, ev.z, POP[(ev.id || 0) % POP.length], sparkCount(6));
+      }
+      else if (ev.e === 'bounce') {
+        KR.sound('bounce');
+        shake = Math.max(shake, 0.15);
+        var bounced = eng.state.players[ev.p];
+        if (bounced) view.burst(bounced.x, bounced.y + 0.2, bounced.z, 0x7dffa8, sparkCount(8));
+      }
       else if (ev.e === 'launch') { KR.sound('launch'); shake = Math.max(shake, 0.1); }
       else if (ev.e === 'step') {
         KR.sound('step', ev.p);
@@ -263,16 +289,23 @@
       else if (ev.e === 'gate') { KR.sound('gate'); toast('تحتاج سرعة ' + ev.n); }
       else if (ev.e === 'fall') { KR.sound('fall'); shake = Math.max(shake, 0.12); }
       else if (ev.e === 'checkpoint') {
-        banner('نقطة حفظ!');
+        KR.sound('checkpoint');
+        banner('رائع!');
         persist();
-        var flag = eng.state.players[ev.p];
-        if (flag) view.burst(flag.x, flag.y + 1.2, flag.z, 0xffe56a, 20);
+        var saved = eng.state.players[ev.p];
+        if (saved) celebrate(saved.x, saved.y + 1.15, saved.z);
       }
       else if (ev.e === 'stage') {
+        var fin = eng.state.players[ev.p];
         if (duo) banner('مرحلة!');
-        else { KR.sound('stage'); noteStage(ev); view.burst(eng.state.players[ev.p].x, 1.4, eng.state.players[ev.p].z, 0xfff1a8, 16); }
+        else { KR.sound('stage'); noteStage(ev); }
+        if (fin) celebrate(fin.x, fin.y + 1.45, fin.z);
       }
-      else if (ev.e === 'world' && !duo) finishWorld(ev.world);
+      else if (ev.e === 'world' && !duo) {
+        var winner = eng.state.players[ev.p];
+        if (winner) celebrate(winner.x, winner.y + 1.6, winner.z);
+        finishWorld(ev.world);
+      }
       else if (ev.e === 'word') KR.sound('word');
       else if (ev.e === 'portal' && ev.p === 0) enterWorld(ev.world);
       else if (ev.e === 'shop' && ev.p === 0 && !duo) openShop();
