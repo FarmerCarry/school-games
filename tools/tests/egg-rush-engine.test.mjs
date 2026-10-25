@@ -262,3 +262,18 @@ test('the night fox borrows a pet and the den gives it back', () => {
   assert.equal(w.stolen, null);
   assert.equal(w.pets.length, 1);
 });
+
+test('carrying an egg into the yard is marked once', () => {
+  const w = ER.create({ tutorial: false, seed: 1, now: 0 });
+  const p = w.players[0];
+  p.x = 12.4; p.y = 8; p.vx = 0;
+  p.egg = { nest: -1, biome: 0, species: 0, rarity: 0, daily: false };
+  w.ev.length = 0;
+  step(w, { x: -1, y: 0 }, 50);
+  assert.ok(p.x < w.safeL, 'x ' + p.x);
+  assert.equal(kinds(w).filter(t => t === 'safe').length, 1);
+  assert.equal(p.egg, null);
+  const n = w.ev.length;
+  step(w, { x: -1, y: 0 }, 30);
+  assert.equal(w.ev.length, n);
+});

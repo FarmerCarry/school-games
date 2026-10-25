@@ -104,6 +104,9 @@
   let pendingCard = null;
   let streak = 0;
   let hatchHint = 0;
+  let penCam = null;
+  let hopWait = 0;
+  let hopJob = null;
 
   function ymd() {
     const d = new Date();
@@ -177,6 +180,7 @@
     ER.art.clearFx();
     showCoins = world.mode === '1p' ? world.coins : 0;
     slow = 0; zoom = 1; flash = 0; lastStep = 0; cardDelay = 0; pendingCard = null; streak = 0; hatchHint = 0;
+    penCam = null; hopWait = 0; hopJob = null;
     if (mode === '1p') {
       Kit.stats.round('main');
       if (world.tut !== 'done') Kit.stats.tutorial('start');
@@ -208,7 +212,7 @@
       Kit.stats.end('end');
     }
     world = null;
-    pendingCard = null; cardDelay = 0;
+    pendingCard = null; cardDelay = 0; penCam = null; hopWait = 0; hopJob = null;
     screen = 'title';
     closeModals();
     paintChrome();
@@ -244,6 +248,10 @@
       z = Math.max(0.74, Math.min(1.15, 1280 / (span * 48)));
       focus = (a.x + b.x) / 2;
       fy = (a.y + b.y) / 2;
+    } else if (penCam && penCam.life > 0) {
+      const k = Math.min(1, (penCam.max - penCam.life) / 0.5);
+      focus += (penCam.x - focus) * k;
+      fy += (penCam.y - fy) * k;
     }
     const viewW = 1280 / (48 * z), viewH = 720 / (48 * z);
     let x = focus - viewW * (w.mode === '2p' ? 0.5 : 0.36);
@@ -334,22 +342,45 @@
       const hx = e.x != null ? e.x : 2.2, hy = e.y != null ? e.y : 8.6;
       A.crack(hx, hy, e.s);
       const who = world.players[0];
-      A.revealPet(e.b, e.s, e.v, who ? who.x : hx, who ? who.y - 0.9 : hy, petCall(e));
+      const pad = e.pad >= 0 ? world.pads[e.pad] : null;
+      A.revealPet(e.b, e.s, e.v, who ? who.x : hx, who ? who.y - 0.9 : hy, petCall(e), pad ? (calm ? 0.7 : 1.35) : 2.3);
       hatchHint = calm ? 1.1 : 2.8;
-      if (e.pad >= 0 && world.pads[e.pad]) A.flyCoins(world.pads[e.pad].x, world.pads[e.pad].y, calm ? 4 : 8);
+      if (pad) A.flyCoins(pad.x, pad.y, calm ? 4 : 8);
       if (!calm) { slow = 0.55; shake.add(e.s >= 4 ? 6 : 4); }
-      if (e.pad < 0) openCard(e);
-      else { pendingCard = e; cardDelay = calm ? 0.2 : 2.05; }
+      if (!pad) openCard(e);
+      else {
+        pendingCard = e;
+        cardDelay = calm ? 1.15 : 2.6;
+        hopJob = {
+          b: e.b, s: e.s, v: e.v, pad: e.pad,
+          x: Math.max(0.7, Math.min(14.2, who ? who.x : hx)),
+          y: Math.max(3.1, Math.min(7.5, (who ? who.y : hy) - 0.45)),
+          tx: pad.x, ty: pad.y
+        };
+        hopWait = calm ? 0.45 : 1.15;
+        if (!calm) A.hopPad = e.pad;
+        penCam = { x: pad.x, y: pad.y, life: calm ? 1.35 : 2.85, max: calm ? 1.35 : 2.85 };
+      }
       persist(true);
     } else if (e.t === 'buy') { S.buy(); persist(true); if (!$('ovShop').hidden) paintShop(); }
     else if (e.t === 'gate') { S.gate(); A.float(e.x, e.y - 0.8, 'تحتاج سرعة ' + e.need, '#fff'); if (!calm) shake.add(2); }
     else if (e.t === 'open') {
       S.open();
+      wearNew(e.biome);
       banner('انفتحت بوابة ' + e.name + '! ملابس جديدة');
-      A.float(e.x, e.y - 1.4, e.name + '!', '#9dff8a', 40);
+      const kid = world.players[0];
+      A.float(kid ? kid.x : e.x, kid ? kid.y - 1.9 : e.y - 1.4, 'ملابس جديدة!', '#ffd23f', 36);
       A.confetti(e.x, e.y, 14);
-      A.sparkle(e.x, e.y - 0.4, 8);
+      A.sparkle(kid ? kid.x : e.x, (kid ? kid.y : e.y) - 1.1, 10);
       if (!calm) { A.party = { biome: e.biome, life: 4 }; shake.add(3); }
+    }
+    else if (e.t === 'safe') {
+      A.homeGlow = calm ? 1.1 : 1.9;
+      S.cheer();
+      A.float(8.6, 9.55, 'وصلت!', '#fff6c2', 40);
+      A.sparkle(8.6, 10.7, 8);
+      A.burst(8.6, 10.9, 8, ['#ffe14a', '#fff', '#ffd23f'], 2);
+      if (!calm) shake.add(2);
     }
     else if (e.t === 'xp') { S.xp(); A.float(e.x, e.y, '+' + e.n, '#7ec8ff'); }
     else if (e.t === 'fox') { S.fox(); A.float(e.x, e.y, '+' + e.n, '#ffd23f'); banner('أفزعت الثعلب!'); persist(true); }
@@ -601,6 +632,16 @@
     $('hint').hidden = !line;
     if (line) $('hintText').textContent = line;
   }
+  function wearNew(biome) {
+    const i = biome | 0;
+    if (i < 1 || i > 6) return;
+    const cur = readLook();
+    cur.shirt = i;
+    cur.hat = i;
+    store.set('look', cur);
+    applyLook();
+    if (!$('ovSet').hidden) paintLooks();
+  }
   function readLook() {
     const v = store.get('look', null);
     let shirt = v && Number.isFinite(v.shirt) ? v.shirt | 0 : 0;
@@ -709,6 +750,14 @@
         for (let i = 0; i < ev.length; i++) onEvent(ev[i]);
         if (cardT > 0) { cardT -= dt; if (cardT <= 0 && !world.pending) $('ovCard').hidden = true; }
         if (cardDelay > 0) { cardDelay -= dt; if (cardDelay <= 0 && pendingCard) { openCard(pendingCard); pendingCard = null; } }
+        if (penCam) { penCam.life -= dt; if (penCam.life <= 0) penCam = null; }
+        if (hopWait > 0) {
+          hopWait -= dt;
+          if (hopWait <= 0 && hopJob) {
+            if (!Kit.motion.reduced()) ER.art.hopToPen(hopJob);
+            hopJob = null;
+          }
+        }
         if (dirty && clock - savedAt >= 1500) persist(true);
         zoom += (1 - zoom) * Math.min(1, dt * 6);
         if (flash > 0) flash = Math.max(0, flash - dt);
@@ -747,7 +796,7 @@
     if (screen === 'play' && world.mode === '1p' && hintLine()) {
       const t = tutPoint();
       const s = toScreen(c, t.x, t.y - 1.3);
-      if (s.x > 20 && s.x < 1260 && s.y > 20 && s.y < 700) drawArrow(ctx, s.x, s.y);
+      if (s.x > 40 && s.x < 1240 && s.y > 96 && s.y < 620) drawArrow(ctx, s.x, s.y);
     }
     if (world.mode === '2p') {
       world.players.forEach(function (p, i) {
