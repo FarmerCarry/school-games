@@ -58,11 +58,13 @@
   var motionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   var motionListeners = [];
   function validMotion(value) { return value === 'reduce' || value === 'full' ? value : 'system'; }
+  // Adds fn to a listener list and returns its unsubscribe function.
+  function subscribe(list, fn) { list.push(fn); return function () { var i = list.indexOf(fn); if (i !== -1) list.splice(i, 1); }; }
   Kit.motion = {
     preference: validMotion(siteStore.get('motion', 'system')),
     reduced: function () { return classroomMode || this.preference === 'reduce' || (this.preference === 'system' && !!(motionQuery && motionQuery.matches)); },
     setPreference: function (value) { this.preference = validMotion(value); siteStore.set('motion', this.preference); paintMotion(); },
-    onChange: function (fn) { motionListeners.push(fn); return function () { var i = motionListeners.indexOf(fn); if (i !== -1) motionListeners.splice(i, 1); }; }
+    onChange: function (fn) { return subscribe(motionListeners, fn); }
   };
   function paintMotion() {
     var reduced = Kit.motion.reduced();
@@ -75,6 +77,13 @@
   }
   paintMotion();
 
+  // The portal's current player (docs/ARCHITECTURE.md "Kit v2"): age band '6-7',
+  // '8-9', '10-11' or '' (unknown) and a local profile slot ('' for a guest).
+  // Set only by sg:preferences, never stored. onChange(fn) -> unsubscribe.
+  // SEEDS: the bands, with the level Kit.dda starts a new player at.
+  var profileListeners = [], SEEDS = { '6-7': 0.12, '8-9': 0.38, '10-11': 0.6 };
+  var profile = Kit.profile = { band: '', player: '', onChange: function (fn) { return subscribe(profileListeners, fn); } };
+
   /* ----------------------------------------------------------- lifecycle */
   var lifecycleHandlers = [], pointerResets = [], ready = false, failed = false;
   function tellPortal(message) {
@@ -84,6 +93,7 @@
   function listen(type, fn) { window.addEventListener(type, fn, true); }
   function suspend(reason) {
     sendStats(true);
+    cueAt = -1;
     if (Kit.keys) Kit.keys.reset();
     pointerResets.forEach(function (reset) { reset(); });
     lifecycleHandlers.slice().forEach(function (hooks) {
@@ -137,6 +147,12 @@
       if (typeof message.quiet === 'boolean') audio.setMuted(message.quiet);
       if (typeof message.motionPreference === 'string') Kit.motion.setPreference(message.motionPreference);
       else if (typeof message.reducedMotion === 'boolean') Kit.motion.setPreference(message.reducedMotion ? 'reduce' : 'full');
+      // Invalid profile fields are ignored; switching telemetry off drops what waits.
+      var was = profile.band + ' ' + profile.player;
+      if (typeof message.band === 'string' && (message.band === '' || SEEDS[message.band] > 0)) profile.band = message.band;
+      if (typeof message.player === 'string' && /^(p[0-9a-z]{1,8})?$/.test(message.player)) profile.player = message.player;
+      if (typeof message.telemetry === 'boolean' && !(telemetry = message.telemetry)) { il.fill(0); tev = []; cueAt = -1; }
+      if (was !== profile.band + ' ' + profile.player) profileListeners.slice().forEach(function (fn) { fn({ band: profile.band, player: profile.player }); });
     }
   });
 
@@ -171,10 +187,16 @@
   function sendStats(cut) {
     tally();
     if (cut) until = 0;
-    if (ready && (engaged || mutes || events.length || frames.some(Number))) { // something changed
+    var e = engaged, f = frames; // both 0 whenever a ready game has nothing for v1
+    if (ready && (e || mutes || events.length || f.some(Number))) { // something changed
       // om: the engaged ms so far in the round open now, for the portal to keep if it is left open.
-      tellPortal({ type: 'sg:stats', version: 1, e: engaged, f: frames, m: mutes, r: events, o: roundId, om: roundId ? roundMs : 0 });
-      engaged = mutes = 0; frames.fill(0); events = [];
+      tellPortal({ type: 'sg:stats', version: 1, e: e, f: f, m: mutes, r: events, o: roundId, om: roundId ? roundMs : 0 });
+      engaged = mutes = 0; frames = [0, 0, 0, 0]; events = [];
+    }
+    // Telemetry v2 follows with the same e and f, at most 64 events per message.
+    while (on() && (e || f.some(Number) || il.some(Number) || tev.length)) {
+      tellPortal({ type: 'sg:telemetry', version: 2, e: e, f: f, il: il, ev: tev.splice(0, 64) });
+      e = 0; f = frames; il.fill(0);
     }
   }
   function statsTimer() { setTimeout(function () { if (!failed) { sendStats(); statsTimer(); } }, 10000); }
@@ -187,15 +209,18 @@
       id = text(id, 24);
       tally();
       // A new round while one is open records the open one as a quit.
-      if (roundId) events.push(['q', roundId, roundMs]);
+      if (roundId) { events.push(['q', roundId, roundMs]); mark('q'); }
       events.push(['s', roundId = id]);
+      mark();
       roundMs = 0;
       sendStats();
     },
     end: function (result, score) {
       if (!roundId) return;
       tally();
-      events.push([text(result, 1), roundId, roundMs].concat(Number.isFinite(score) ? score : []));
+      var code = text(result, 1);
+      events.push([code, roundId, roundMs].concat(Number.isFinite(score) ? score : []));
+      mark(code, score);
       roundId = '';
       sendStats();
     },
@@ -205,6 +230,95 @@
     },
     busy: function () { engage(1); },
     frame: countFrame
+  };
+
+  /* ------------------------------------------------------ telemetry v2 */
+  // Extras for the portal's anonymous telemetry (docs/ARCHITECTURE.md "Kit v2"),
+  // counted only while embedded, ready and the portal says telemetry is on, and
+  // posted as sg:telemetry right after sg:stats. Like v1, round events also wait
+  // for Kit.ready(). Histograms: upper bounds in ms, the last bucket open.
+  // rt and hits/misses belong to the open round.
+  var telemetry = false, tier = 0, hits = 0, misses = 0, cueAt = -1, tev = [];
+  var rt = [0, 0, 0, 0, 0, 0], il = [0, 0, 0, 0, 0, 0], RT = [300, 500, 800, 1200, 2000], IL = [8, 16, 33, 50, 100];
+  function on() { return telemetry && ready && !failed; }
+  function fin(v) { return typeof v === 'number' && v >= 0 && v < 1 / 0; }
+  function put(list, ms, bounds) { for (var i = 0; i < 5 && ms >= bounds[i]; i++); list[i]++; }
+  // A round start (no code) or the end of the open round, beside the v1 event.
+  function mark(code, score) {
+    if (telemetry && !failed) tev.push(code == null ? ['rs', roundId, tier] : ['re', code, roundId, roundMs, fin(score) ? score : -1, tier, hits, misses, rt]);
+    hits = misses = 0; rt = [0, 0, 0, 0, 0, 0]; cueAt = -1;
+  }
+  // Every key press and click: engaged time, then (key repeats aside) how long the
+  // event waited for the page and the reaction time to a pending cue. Only a click or
+  // a key a game accepts (Kit.keys.acceptsEvent) answers the cue.
+  function input(e, key) {
+    engage();
+    if (on() && !e.repeat) {
+      var t = e.timeStamp;
+      if (perf && typeof t === 'number' && t > 0 && (t = perf.now() - t) >= 0 && t <= 1000) put(il, t, IL);
+      if (cueAt >= 0 && (!key || acceptsKeyEvent(e))) { put(rt, clock() - cueAt, RT); cueAt = -1; }
+    }
+  }
+  Kit.track = {
+    hit: function () { if (on()) hits++; },
+    miss: function () { if (on()) misses++; },
+    cue: function () { if (on()) cueAt = clock(); },
+    react: function (ms) { if (on() && fin(ms)) put(rt, ms, RT); },
+    // The current difficulty tier 0..9 (0 = no DDA) is state, so it is kept at any time.
+    tier: function (n) { if (fin(n) && n < 10) tier = n | 0; }
+  };
+
+  /* ------------------------------------------------------------- DDA */
+  // var dda = Kit.dda('my-game', { id: 'main', target: 0.72, tiers: 5, start });
+  // At round start read dda.level (0..1), dda.tier (1..tiers), dda.value(easy, hard)
+  // or dda.pick([...one per tier]); report each try with dda.result(true/false or 0..1).
+  // Saved per player in Kit.store(slug) 'dda': { <player or '_'>: { <id>: [level, n] } }.
+  function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
+  function unit(v, fallback) { return fin(v) && v <= 1 ? v : fallback; }
+  Kit.dda = function (slug, opts) {
+    opts = opts || {};
+    var store = Kit.store(slug), id = opts.id || 'main', level = 0, n = 0, low = 0, high = 0, who, t;
+    var target = unit(opts.target, 0.72), tiers = Kit.clamp(opts.tiers | 0, 0, 9) || 5;
+    // A player with no saved results starts from the seed of the current band.
+    function now() {
+      if (who !== profile.player) {
+        var mine = obj(obj(store.get('dda'))[profile.player || '_'])[id];
+        who = profile.player; low = high = n = 0;
+        if (mine && mine[1] >= 1 && unit(mine[0], -1) >= 0) { level = mine[0]; n = mine[1] >>> 0; }
+      }
+      return n ? level : unit(opts.start, SEEDS[profile.band] || 0.35);
+    }
+    // Every read (level, tier, value, pick) reports the tier for the round events.
+    function read() { var l = now(); Kit.track.tier(t = 1 + Math.floor(l * tiers * 0.9999)); return l; }
+    // The player just written moves last, so the 16 most recent players are kept.
+    function save() {
+      var all = obj(store.get('dda')), key = profile.player || '_', mine = obj(all[key]);
+      delete all[key];
+      if (n) mine[id] = [level, n]; else delete mine[id];
+      all[key] = mine;
+      for (var keys = Object.keys(all); keys.length > 16;) delete all[keys.shift()];
+      store.set('dda', all);
+    }
+    var dda = {
+      get level() { return read(); },
+      get tier() { read(); return t; },
+      value: function (easy, hard) { return Kit.lerp(easy, hard, read()); },
+      pick: function (list) { return list[Math.min(dda.tier, list.length) - 1]; },
+      result: function (outcome) {
+        var x = outcome === true ? 1 : outcome === false ? 0 : outcome, l = now();
+        if (!Number.isFinite(x)) return;
+        x = Kit.clamp(x, 0, 1);
+        var step = Kit.clamp(0.18 / Math.sqrt(1 + n / 2), 0.03, 0.18);
+        low = x < 0.3 ? low + 1 : 0; high = x >= 0.9 ? high + 1 : 0;
+        // Mercy: two poor tries in a row drop an extra step; three great ones add half a step.
+        l += step * (x - target) - (low > 1 ? step : 0) + (high > 2 ? step / 2 : 0);
+        level = Math.round(Kit.clamp(l, 0, 1) * 1000) / 1000;
+        n++;
+        save();
+      },
+      reset: function () { now(); n = low = high = 0; save(); }
+    };
+    return dda;
   };
 
   /* --------------------------------------------------------------- audio */
@@ -363,7 +477,7 @@
     reset: function () { held = {}; hit = {}; }
   };
   listen('keydown', function (e) {
-    engage();
+    input(e, 1);
     // Shift+Tab from the game surface returns to the portal. Native controls keep
     // their ordinary Tab order; standalone game pages keep browser navigation.
     if (e.code === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && !e.defaultPrevented && !nativeKeyTarget(e.target) && window.parent !== window) {
@@ -387,7 +501,7 @@
 
   // Any click/tap arms engaged time, unlocks audio and makes sure the game frame
   // has keyboard focus.
-  listen('pointerdown', function () { engage(); audio.unlock(); try { window.focus(); } catch (e) { /* ignore */ } });
+  listen('pointerdown', function (e) { input(e); audio.unlock(); try { window.focus(); } catch (err) { /* ignore */ } });
   window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
   /* ------------------------------------------------------ canvas scaling */
