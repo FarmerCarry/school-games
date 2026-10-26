@@ -19,7 +19,7 @@
     "maze-dash": 115000,
     "merge-2048": 79000,
     "moto-madness": 140000,
-    "mouse-keyboard-academy": 56000,
+    "mouse-keyboard-academy": 82000,
     "neon-slope": 130000,
     "paint-grab": 108000,
     "pizza-clicker": 128000,
@@ -45,5 +45,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5100000
+  "precacheBytes": 5210000
 }

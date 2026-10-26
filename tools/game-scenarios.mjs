@@ -99,7 +99,9 @@ export const scenarios = {
   'mouse-keyboard-academy': defaults(['#btnStart'], `${g}.screen === 'play' && ${g}.station === 'move'`, `${g}.progress`, async page => {
     const point = await page.evaluate(() => window.__game.starPoint());
     await page.mouse.move(point.x, point.y, { steps: 15 });
-  }, '#btnPause', `${g}.screen === 'pause'`, '#btnRestart', `${g}.screen === 'play' && ${g}.progress === 0`),
+  }, '#btnPause', `${g}.screen === 'pause'`, '#btnRestart', `${g}.screen === 'play' && ${g}.progress === 0`, {
+    init: () => localStorage.setItem('sg:mouse-keyboard-academy:save', JSON.stringify({ v: 1, done: {}, unlocked: 1, name: '', grip: true }))
+  }),
   'candy-rope': defaults(['#tPlay'], `${g}.info().state === 'play'`, `${g}.info().world`, async page => {
     const point = await page.evaluate(() => {
       const r = __game.world().ropes.find(r => r.alive);
