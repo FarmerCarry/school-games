@@ -340,6 +340,21 @@ test('the idle hand shows the move after a few seconds and repeats while the chi
   assert.equal(s.screen, 'play'); assert.equal(s.escapes, 0);
 });
 
+test('the hand that shows a key along the bottom edge is wholly on screen, on that key', async t => {
+  for (const [w, key] of [[2, 'space'], [3, null]]) {
+    const page = await game(t, { save: SAVE(w), dda: { _: { ['w' + (w + 1)]: [0.05, 4] } } });
+    await openLevel(page, w, 0);
+    assert.ok(await until(page, 's.ghost', 60 * 4), `world ${w + 1}: the hand shows the key`);
+    await step(page, 12);
+    const box = await page.evaluate(() => { const r = document.getElementById('ghost').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; });
+    assert.ok(box.top >= 0 && box.bottom <= 720 && box.left >= 0 && box.right <= 1280, `world ${w + 1}: the whole hand is visible ${JSON.stringify(box)}`);
+    // Its fingertip (the lowest point of the turned hand) is on the key it presses.
+    const keys = await page.evaluate(() => ({ space: BB.KEYS.space, left: BB.KEYS.left, right: BB.KEYS.right }));
+    const on = k => box.bottom >= k.y - k.h / 2 && box.bottom <= k.y + k.h / 2 && box.left < k.x + k.w / 2 && box.right > k.x - k.w / 2;
+    assert.ok(key ? on(keys[key]) : on(keys.left) || on(keys.right), `world ${w + 1}: the fingertip is on the key`);
+  }
+});
+
 // Embedded like in the portal: rounds, ends and telemetry reach the parent.
 async function embedded(t, prefs, options) {
   const ctx = await context(t, options);

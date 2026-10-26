@@ -446,14 +446,16 @@
 
   /* ----------------------------------------------------- the ghost hand */
   // A wordless coach: a hand that glides to the next target and presses, on the game
-  // clock (it freezes with a pause). Steps: { at }, { to, s }, { press, track, onPress },
+  // clock (it freezes with a pause). Steps: { at, down }, { to, s }, { press, track, onPress },
   // { hold, onHold }, { wait }. Targets may be functions, so the hand follows moving ones.
-  const ghost = { on: false, steps: null, i: 0, t: 0, x: 0, y: 0, press: 0, alpha: 0 };
+  // down: the hand reaches down from above, for the keys along the bottom edge.
+  const ghost = { on: false, steps: null, i: 0, t: 0, x: 0, y: 0, press: 0, alpha: 0, down: false };
   const pt = p => typeof p === 'function' ? p() : p;
   function demo(steps) {
     const p0 = steps && steps[0] && pt(steps[0].at);
     if (!p0) return false;
     ghost.steps = steps; ghost.i = 0; ghost.t = 0; ghost.on = true; ghost.alpha = 0; ghost.x = p0.x; ghost.y = p0.y; ghost.press = 0;
+    ghost.down = !!steps[0].down;
     ghostEl.hidden = false;
     placeGhost();
     return true;
@@ -487,8 +489,11 @@
     if (done) { ghost.i++; ghost.t = 0; }
     placeGhost();
   }
+  // The fingertip sits at (33, 5) of the 84x105 hand, or at (51, 100) when it is turned over.
   function placeGhost() {
-    ghostEl.style.transform = 'translate(' + (ghost.x - 33).toFixed(1) + 'px,' + (ghost.y - 5 + ghost.press * 16).toFixed(1) + 'px)';
+    const y = ghost.y + ghost.press * 16;
+    ghostEl.style.transform = ghost.down ? 'translate(' + (ghost.x - 51).toFixed(1) + 'px,' + (y - 100).toFixed(1) + 'px) rotate(180deg)'
+      : 'translate(' + (ghost.x - 33).toFixed(1) + 'px,' + (y - 5).toFixed(1) + 'px)';
     ghostEl.style.opacity = (0.92 * ghost.alpha).toFixed(2);
   }
   function centerOf(el) {
@@ -505,10 +510,11 @@
       const t = focusTarget();
       return t && [{ at: { x: world.bop.x, y: world.bop.y } }, { to: targetPos(t.id), s: 0.9 }, { press: 2, track: targetPos(t.id), onPress: () => { flash.click = 1; } }, { wait: 0.3 }];
     },
-    jump: () => [{ at: { x: KEYS.space.x + 40, y: KEYS.space.y - 18 } }, { press: 3, onPress: () => { flash.space = 1; flash.spaceGlow = 1; } }, { wait: 0.3 }],
+    // On the right half of the bar, clear of the frog.
+    jump: () => [{ at: { x: KEYS.space.x + 150, y: KEYS.space.y - 8 }, down: true }, { press: 3, onPress: () => { flash.space = 1; flash.spaceGlow = 1; } }, { wait: 0.3 }],
     catch: () => {
       const f = focusTarget(), side = f && f.x < world.basket.x ? 'left' : 'right', k = KEYS[side];
-      return [{ at: { x: k.x, y: k.y - 14 } }, { hold: 1.1, onHold: () => { flash[side] = 1; flash.keyGlow = 1; } }, { wait: 0.2 }];
+      return [{ at: { x: k.x, y: k.y - 10 }, down: true }, { hold: 1.1, onHold: () => { flash[side] = 1; flash.keyGlow = 1; } }, { wait: 0.2 }];
     }
   };
   function playDemo() {
