@@ -52,7 +52,7 @@ const OUTPUT_PRODUCER = 'school-games/tools/build.mjs';
 // The README links to this file on the published site; keep the names stable.
 const OFFLINE_ZIP = 'school-games-offline.zip';
 const OFFLINE_FOLDER = 'school-games';
-const SOURCE_DIRS = new Set(['.git', '.github', '.agents', '.aws', '.codex', 'games', 'js', 'css', 'shared', 'lib', 'icons', 'tools', 'docs', 'node_modules', 'multiplayer-server']);
+const SOURCE_DIRS = new Set(['.git', '.github', '.agents', '.aws', '.codex', 'games', 'js', 'css', 'shared', 'lib', 'icons', 'tools', 'docs', 'node_modules', 'multiplayer-server', 'server']);
 const filesystemName = name => process.platform === 'win32' ? name.toLowerCase() : name;
 
 function parseArgs(args) {
