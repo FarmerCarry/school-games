@@ -309,7 +309,7 @@
     setTheme(th);
     if (selBeat.lvl !== sel) { selBeat.lvl = sel; selBeat.t0 = menuT; }
   }
-  // The level select pulses at the chosen level's tempo, from its drop (see render).
+  // The level select pulses at the chosen level's tempo, from the first bar after its intro (see render).
   var selBeat = { lvl: -1, t0: 0 };
   function selMove(d) {
     var n = Math.max(0, Math.min(LEVELS.length - 1, sel + d));
