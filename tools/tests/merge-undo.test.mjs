@@ -259,7 +259,21 @@ test('Undo from the game-over screen reopens a statistics round, so the next ful
     }
   });
   await page.keyboard.press('Enter');
-  await page.evaluate(() => { window.__game.move(3); window.__game.move(0); window.__game.forceOver(); });
+  await awaitScreen(page, 'play');
+  await page.evaluate(() => {
+    const n = window.__game.state().N;
+    const values = Array(n * n).fill(0);
+    // The opening tiles are random. Left then up can both be blocked, and
+    // forceOver replaces the board without recording a move, so Undo finds
+    // an empty history and stays on the game-over screen. Two separated
+    // tiles make the left move slide, whichever way the round spawned.
+    values[1] = 2;
+    values[n + 2] = 4;
+    if (!window.__game.set(values)) throw new Error('could not place the undo board');
+    window.__game.move(3);
+    if (window.__game.state().hist < 1) throw new Error('left move recorded no undo');
+    window.__game.forceOver();
+  });
   await awaitScreen(page, 'over');
   await page.evaluate(() => window.__game.undo());
   assert.equal((await state(page)).screen, 'play');

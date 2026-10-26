@@ -323,9 +323,23 @@ test('Dino 3D touch cancellation releases ducking and permits the next jump', as
   const page = await game(t, { touch: true });
   const input = await page.context().newCDPSession(page);
   await page.locator('#play').click();
-  const touch = async (type, y) => input.send('Input.dispatchTouchEvent', {
-    type, touchPoints: y === undefined ? [] : [{ x: 550, y, id: 1 }]
-  });
+  // Input.dispatchTouchEvent resolves in the browser process before the renderer
+  // delivers pointerdown/pointercancel. Stepping inside one evaluate can therefore
+  // run while the previous gesture is still held. A held jump that lasts the 8
+  // setup frames plus these 70 frames lands and takes off again, at y just above
+  // 2.8 with a second jump. Wait until the page has handled the event first.
+  const touch = async (type, y) => {
+    const applied = type === 'touchCancel' ? 'pointercancel' : 'pointerdown';
+    await page.evaluate(applied => {
+      dinoProbe.touchApplied = new Promise(resolve => {
+        document.getElementById('scene').addEventListener(applied, () => resolve(), { once: true });
+      });
+    }, applied);
+    await input.send('Input.dispatchTouchEvent', {
+      type, touchPoints: y === undefined ? [] : [{ x: 550, y, id: 1 }]
+    });
+    await page.evaluate(() => dinoProbe.touchApplied);
+  };
   await touch('touchStart', 440);
   await step(page);
   assert.equal((await state(page)).player.duck, true, 'lower screen touch crouches');

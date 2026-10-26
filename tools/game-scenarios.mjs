@@ -218,8 +218,8 @@ const heldKeys = {
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 
 async function evaluate(page, expr) { return page.evaluate(expr); }
-async function requireState(page, expr, label) {
-  try { await page.waitForFunction(expr, null, { timeout: 7000, polling: 40 }); }
+async function requireState(page, expr, label, timeout = 7000) {
+  try { await page.waitForFunction(expr, null, { timeout, polling: 40 }); }
   catch (error) { throw new Error(`${label}: ${expr}`, { cause: error }); }
 }
 async function focusSurface(page) { await page.evaluate(() => { document.activeElement?.blur(); window.Kit?.keys.reset(); }); }
@@ -248,7 +248,11 @@ export async function prepareScenario(page, slug) {
   if (s.init) await page.addInitScript(s.init);
 }
 async function start(page, slug, s) {
-  await requireState(page, '!!window.Kit && (!!window.__game || !!document.getElementById("boardApp") || !!window.GolfArt || !!window.Dino3DGame)', `${slug}: initialized`);
+  // The hook is assigned before the first paint, but that paint is one task.
+  // On software WebGL it can block the main thread for longer than a gameplay
+  // check, so the poll below cannot observe the assignment until the frame
+  // yields. Same condition as every other gate; only this wait covers that frame.
+  await requireState(page, '!!window.Kit && (!!window.__game || !!document.getElementById("boardApp") || !!window.GolfArt || !!window.Dino3DGame)', `${slug}: initialized`, 20000);
   for (let i=0;i<s.start.length;i++) if (!s.startIf || await evaluate(page,s.startIf[i])) await s.start[i](page);
   await focusSurface(page);
   await requireState(page,s.active,`${slug}: Start must reach gameplay`);
