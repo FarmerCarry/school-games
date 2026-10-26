@@ -646,7 +646,8 @@
       // still going nowhere after 6 s of trying: tumble off and go back to the last checkpoint
       if (stuckT > 6 && inp.gas) { world.crash('stuck'); stuckT = 0; }
       var b = world.bike;
-      MMA.engine(!world.crashed || world.crashT > 1.2, b.wheels[0].s, inp.gas && !world.crashed && world.started, !world.grounded, dt);
+      // showComplete() above may have just silenced the engine: keep it off under the results
+      if (state === 'play') MMA.engine(!world.crashed || world.crashT > 1.2, b.wheels[0].s, inp.gas && !world.crashed && world.started, !world.grounded, dt);
     } else if (state === 'title' || state === 'levels' || state === 'garage') {
       var di = MM.autopilot(world, { flips: true });
       lastInp = di;
