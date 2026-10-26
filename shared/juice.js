@@ -11,11 +11,12 @@
  *   J.pop(size)  J.whoosh(speed)  J.jump(h)  J.land(power)   (0..1)
  *   J.star(i)        1..3: ascending star award
  *   J.levelUp()  J.fail()  J.countdown(i)   (3, 2, 1 beep; 0 is "go")
- *   J.setQuiet(on)   the portal's classroom preset: no sound at all while on
+ *   J.setQuiet(on)   an extra quiet switch: no sound at all while on
  *
  * Games play through the Kit audio graph: Kit creates Kit.audio.ctx on the first key
  * press or click and mute turns Kit.audio.master down. The portal creates its own
- * AudioContext on the first key press or click and follows sg:site:muted.
+ * AudioContext on the first key press or click and follows sg:site:muted and the stored
+ * classroom preset (sg:site:classroom), read again at every sound.
  * Nothing plays before a user gesture or while muted (no audio nodes are created then).
  *
  * Every sound is one short one-shot synthesised on the spot: no files, no loops, no
@@ -28,14 +29,15 @@
   'use strict';
   var W = window, Kit = W.Kit, kit = Kit && Kit.audio;
   if (Kit ? Kit.juice : W.Juice) return;
-  var own = null, master = null, quiet = false, bus = null, buf = null, last = {}, ends = [];
+  var own = null, master = null, up = false, quiet = false, bus = null, buf = null, last = {}, ends = [];
   var C, T, P, L; // context, start time, pitch factor and length of the voice being built
   var WAVES = ['sine', 'triangle'], FILTERS = ['lowpass', 'highpass', 'bandpass'];
   var J = {};
 
   function num(x, lo, hi, fallback) { return typeof x === 'number' && x === x ? x < lo ? lo : x > hi ? hi : x : fallback; }
-  function siteMuted() { try { return !!JSON.parse(W.localStorage.getItem('sg:site:muted')); } catch (e) { return false; } }
-  function muted() { return quiet || (kit ? kit.muted : siteMuted()); }
+  // The portal's own stored switches: sg:site:muted and the classroom preset.
+  function site(key) { try { return !!JSON.parse(W.localStorage.getItem('sg:site:' + key)); } catch (e) { return false; } }
+  function muted() { return quiet || (kit ? kit.muted : site('muted') || site('classroom')); }
 
   // Portal only: an own context on the first gesture, resumed by later ones.
   function unlock() {
@@ -43,18 +45,20 @@
     try {
       if (!own && AC) {
         own = new AC(); master = own.createGain();
-        master.gain.value = muted() ? 0 : 0.5;
+        master.gain.value = (up = !muted()) ? 0.5 : 0;
         master.connect(own.destination);
       }
       if (own && own.state === 'suspended') { var p = own.resume(); if (p && p.catch) p.catch(function () { /* a later gesture retries */ }); }
     } catch (e) { own = master = null; }
   }
-  // Cut what is still sounding when the portal mutes (another tab, or setQuiet).
-  function paint() { if (master) try { master.gain.setTargetAtTime(muted() ? 0 : 0.5, own.currentTime, 0.015); } catch (e) { /* ignore */ } }
+  // Cut what is still sounding when the portal mutes (another tab, or setQuiet), and
+  // turn the master up again at the next sound after the portal's own unmute (which
+  // fires no storage event in this page).
+  function paint() { if (master) try { master.gain.setTargetAtTime((up = !muted()) ? 0.5 : 0, own.currentTime, 0.015); } catch (e) { /* ignore */ } }
   if (!kit && W.addEventListener) {
     W.addEventListener('pointerdown', unlock, true);
     W.addEventListener('keydown', unlock, true);
-    W.addEventListener('storage', function (e) { if (e.key === 'sg:site:muted' || e.key === null) paint(); });
+    W.addEventListener('storage', function (e) { if (!e.key || /^sg:site:(muted|classroom)$/.test(e.key)) paint(); });
   }
 
   // The context to play in, or null before the first gesture or while muted.
@@ -62,6 +66,7 @@
   function live() {
     var c = kit ? kit.ctx : own;
     if (!c || muted()) return null;
+    if (!up) paint();
     if (!bus || bus.context !== c) {
       var limit = c.createDynamicsCompressor(), n = c.sampleRate, data;
       // Ratio 12, attack 3 ms. A new compressor starts fully turned down and recovers

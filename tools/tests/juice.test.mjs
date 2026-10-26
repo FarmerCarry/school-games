@@ -194,6 +194,39 @@ test('juice: the portal makes no AudioContext before a gesture and follows sg:si
   assert.doesNotThrow(() => { none.emit('pointerdown'); playAll(none.J, { currentTime: 0 }); });
 });
 
+test('juice: the portal master comes back up after its own unmute and follows the stored classroom preset', () => {
+  // The portal's own mute toggle writes sg:site:muted in this page, which fires no storage event.
+  const level = h => { const master = h.contexts[0].nodes[0], last = master.gain.events.at(-1); return last ? last[1] : master.gain.value; };
+  const unmuteFirst = portal({ stored: { 'sg:site:muted': 'true' } });
+  unmuteFirst.emit('pointerdown');                                  // the click on the unmute button
+  unmuteFirst.values.set('sg:site:muted', 'false');
+  unmuteFirst.contexts[0].currentTime = 1; unmuteFirst.J.tap();
+  assert.equal(level(unmuteFirst), 0.5, 'the master starts silent, then sounds again');
+  const h = portal();
+  h.emit('pointerdown');
+  const ctx = h.contexts[0];
+  h.values.set('sg:site:muted', 'true'); h.emit('storage', { key: 'sg:site:muted' });
+  assert.equal(level(h), 0);
+  h.values.set('sg:site:muted', 'false');
+  ctx.currentTime = 1; h.J.tap();
+  assert.equal(level(h), 0.5, 'a mute from another tab, then this page unmutes');
+  const events = ctx.nodes[0].gain.events.length;
+  ctx.currentTime = 2; h.J.pop();
+  assert.equal(ctx.nodes[0].gain.events.length, events, 'no master automation while it is already up');
+  // The classroom preset the portal stores (sg:site:classroom) silences Juice by itself.
+  h.values.set('sg:site:classroom', 'true'); h.emit('storage', { key: 'sg:site:classroom' });
+  assert.equal(level(h), 0, 'what still sounds is cut');
+  const nodes = ctx.nodes.length;
+  playAll(h.J, ctx);
+  assert.equal(ctx.nodes.length, nodes, 'classroom: no audio nodes');
+  h.values.set('sg:site:classroom', 'false');
+  ctx.currentTime += 1; h.J.tap();
+  assert.ok(ctx.nodes.length > nodes && level(h) === 0.5, 'sound again once the preset is off');
+  const classroom = portal({ stored: { 'sg:site:classroom': 'true' } });
+  classroom.emit('pointerdown'); classroom.J.tap();
+  assert.deepEqual([classroom.contexts[0].nodes.length, level(classroom)], [1, 0], 'a classroom PC starts silent');
+});
+
 test('juice: a suspended portal context is resumed by each gesture and its rejection is caught', () => {
   const h = portal();
   h.emit('pointerdown');
