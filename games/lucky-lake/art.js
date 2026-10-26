@@ -53,45 +53,86 @@
 
   function ink(ctx, s) {
     ctx.strokeStyle = '#16324a';
-    ctx.lineWidth = Math.max(2, s * 0.05);
+    ctx.lineWidth = Math.max(2, s * 0.045);
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     ctx.stroke();
   }
 
-  // One closed teardrop. Nose is +x. Extents about x -1.15..1.05, y -0.78..0.56.
-  function bodyPath(ctx, s) {
+  function tone(hex, k) {
+    var n = parseInt(hex.slice(1), 16);
+    var r = Math.round(((n >> 16) & 255) * k);
+    var g = Math.round(((n >> 8) & 255) * k);
+    var b = Math.round((n & 255) * k);
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+  }
+
+  // Pond teardrop, ice puffer, pier/volcano pike, reef/sky angel, swamp catfish.
+  function shapeOf(fish) {
+    var g = fish.spot;
+    if (g == null || g < 0) g = (fish.id || 0) % 7;
+    return [0, 2, 3, 1, 4, 2, 3][g] || 0;
+  }
+
+  function bodyOf(ctx, k, s) {
     ctx.beginPath();
-    ctx.moveTo(s * 1.05, 0);
-    ctx.bezierCurveTo(s * 0.78, -s * 0.5, s * 0.05, -s * 0.62, -s * 0.55, -s * 0.28);
-    ctx.bezierCurveTo(-s * 0.9, -s * 0.1, -s * 0.9, s * 0.1, -s * 0.55, s * 0.3);
-    ctx.bezierCurveTo(s * 0.05, s * 0.56, s * 0.78, s * 0.46, s * 1.05, 0);
+    if (k === 1) ctx.ellipse(0, s * 0.02, s * 0.62, s * 0.56, 0, 0, 6.3);
+    else if (k === 2) {
+      ctx.moveTo(s * 1.02, s * 0.02);
+      ctx.bezierCurveTo(s * 0.72, -s * 0.34, s * 0.05, -s * 0.42, -s * 0.58, -s * 0.28);
+      ctx.bezierCurveTo(-s * 1.0, -s * 0.16, -s * 1.12, -s * 0.02, -s * 1.08, s * 0.04);
+      ctx.bezierCurveTo(-s * 0.92, s * 0.22, -s * 0.4, s * 0.36, s * 0.08, s * 0.4);
+      ctx.bezierCurveTo(s * 0.68, s * 0.34, s * 0.92, s * 0.16, s * 1.02, s * 0.02);
+    }     else if (k === 3) ctx.ellipse(s * 0.04, 0, s * 0.5, s * 0.44, 0, 0, 6.3);
+    else if (k === 4) {
+      ctx.moveTo(s * 0.92, s * 0.08);
+      ctx.bezierCurveTo(s * 1.12, -s * 0.55, s * 0.12, -s * 0.6, -s * 0.42, -s * 0.12);
+      ctx.bezierCurveTo(-s * 0.82, -s * 0.04, -s * 1.12, s * 0.02, -s * 1.05, s * 0.05);
+      ctx.bezierCurveTo(-s * 0.78, s * 0.1, -s * 0.12, s * 0.14, s * 0.22, s * 0.5);
+      ctx.bezierCurveTo(s * 0.7, s * 0.68, s * 1.16, s * 0.28, s * 0.92, s * 0.08);
+    } else {
+      ctx.moveTo(s * 1.05, 0);
+      ctx.bezierCurveTo(s * 0.78, -s * 0.5, s * 0.05, -s * 0.62, -s * 0.55, -s * 0.28);
+      ctx.bezierCurveTo(-s * 0.9, -s * 0.1, -s * 0.9, s * 0.1, -s * 0.55, s * 0.3);
+      ctx.bezierCurveTo(s * 0.05, s * 0.56, s * 0.78, s * 0.46, s * 1.05, 0);
+    }
     ctx.closePath();
   }
 
-  function tailPath(ctx, s) {
+  function tailOf(ctx, k, s, ext) {
+    var base = [0.55, 0.5, 0.92, 0.38, 0.9][k];
+    var reach = [1.12, 0.98, 1.08, 0.92, 1.22][k] * ext;
+    var lift = [0.42, 0.34, 0.36, 0.36, 0.22][k];
     ctx.beginPath();
-    ctx.moveTo(-s * 0.58, -s * 0.12);
-    ctx.lineTo(-s * 1.15, -s * 0.46);
-    ctx.quadraticCurveTo(-s * 0.88, 0, -s * 1.15, s * 0.46);
-    ctx.lineTo(-s * 0.58, s * 0.12);
+    ctx.moveTo(-s * (base - 0.08), -s * 0.1);
+    ctx.lineTo(-s * reach, -s * lift);
+    ctx.quadraticCurveTo(-s * reach * 0.72, 0, -s * reach, s * lift);
+    ctx.lineTo(-s * (base - 0.08), s * 0.1);
     ctx.closePath();
   }
 
-  function dorsalPath(ctx, s) {
+  function finLeaf(ctx, s, x0, y0, x1, y1, x2, y2) {
     ctx.beginPath();
-    ctx.moveTo(-s * 0.12, -s * 0.4);
-    ctx.quadraticCurveTo(s * 0.18, -s * 0.78, s * 0.46, -s * 0.34);
-    ctx.quadraticCurveTo(s * 0.16, -s * 0.5, -s * 0.12, -s * 0.4);
+    ctx.moveTo(s * x0, s * y0);
+    ctx.quadraticCurveTo(s * x1, s * y1, s * x2, s * y2);
+    ctx.quadraticCurveTo(s * ((x0 + x2) * 0.5), s * ((y0 + y2) * 0.5 + (y1 < 0 ? 0.12 : -0.12)), s * x0, s * y0);
     ctx.closePath();
   }
 
-  function pecPath(ctx, s) {
+  function tallFin(ctx, s, x0, y0, tx, ty, x2, y2) {
     ctx.beginPath();
-    ctx.moveTo(s * 0.28, s * 0.04);
-    ctx.quadraticCurveTo(s * 0.02, s * 0.24, -s * 0.12, s * 0.3);
-    ctx.quadraticCurveTo(s * 0.06, s * 0.12, s * 0.28, s * 0.04);
+    ctx.moveTo(s * x0, s * y0);
+    ctx.lineTo(s * tx, s * ty);
+    ctx.lineTo(s * x2, s * y2);
     ctx.closePath();
+  }
+
+  function dorsalOf(ctx, k, s) {
+    if (k === 1) finLeaf(ctx, s, -0.04, -0.5, 0.12, -0.78, 0.28, -0.46);
+    else if (k === 2) finLeaf(ctx, s, -0.12, -0.3, 0.14, -0.62, 0.42, -0.24);
+    else if (k === 3) tallFin(ctx, s, -0.18, -0.38, -0.04, -1.02, 0.2, -0.4);
+    else if (k === 4) finLeaf(ctx, s, 0.15, -0.42, 0.38, -0.78, 0.62, -0.28);
+    else finLeaf(ctx, s, -0.12, -0.4, 0.18, -0.78, 0.46, -0.34);
   }
 
   function drawFish(ctx, fish, x, y, w, h, sil) {
@@ -109,72 +150,159 @@
       ctx.restore();
       return;
     }
+    var k = shapeOf(fish);
+    var rare = fish.boss ? 4 : (fish.rare | 0);
+    var ext = rare >= 4 ? 1.22 : 1;
     var vivid = VIVID[(fish.boss ? 5 : (fish.id || 0)) % 10];
     var body = sil ? '#08345c' : vivid[0];
     var belly = sil ? '#08345c' : vivid[1];
     var mark = sil ? '#08345c' : vivid[2];
-    var s = Math.min((w * 0.9) / 2.2, (h * 0.86) / 1.36);
+    var fin = sil ? body : tone(body, 0.72);
+    var finEdge = sil ? body : tone(body, 0.5);
+    var fit = [[2.35, 1.5], [2.05, 1.62], [2.5, 1.22], [1.75, 2.55], [2.85, 1.72]][k];
+    var s = Math.min((w * 0.86) / fit[0], (h * 0.84) / (fit[1] * (rare >= 2 ? 1.06 : 1)));
+    var eye = [[0.66, -0.06], [0.26, -0.04], [0.58, -0.06], [0.22, -0.02], [0.48, -0.1]][k];
     ctx.save();
-    ctx.translate(x + w * 0.5 + s * 0.05, y + h * 0.5 + s * 0.1);
-    tailPath(ctx, s);
+    ctx.translate(x + w * 0.5, y + h * 0.52);
+    tailOf(ctx, k, s, ext);
     ctx.fillStyle = body;
     ctx.fill();
     if (!sil) ink(ctx, s);
-    bodyPath(ctx, s);
+    bodyOf(ctx, k, s);
     ctx.fillStyle = body;
     ctx.fill();
     if (!sil) {
       ctx.save();
       ctx.clip();
       ctx.fillStyle = belly;
+      var bellyAt = [[0.08, 0.16, 0.38, 0.16], [0.06, 0.14, 0.26, 0.18], [0.08, 0.12, 0.42, 0.12], [0.04, 0.14, 0.2, 0.2], [0.32, 0.16, 0.26, 0.16]][k];
       ctx.beginPath();
-      ctx.ellipse(s * 0.08, s * 0.16, s * 0.48, s * 0.2, 0, 0, 6.3);
+      ctx.ellipse(s * bellyAt[0], s * bellyAt[1], s * bellyAt[2], s * bellyAt[3], 0, 0, 6.3);
       ctx.fill();
       ctx.fillStyle = mark;
       var pat = fish.pat | 0;
       var i;
       if (pat === 1) {
-        var spots = [[-0.22, -0.06], [0.12, -0.1], [0.32, 0.02], [-0.02, 0.06]];
-        for (i = 0; i < spots.length; i++) {
+        var dots = [[-0.16, -0.04], [0.12, -0.08], [0.22, 0.06], [-0.02, 0.08]];
+        for (i = 0; i < dots.length; i++) {
           ctx.beginPath();
-          ctx.arc(s * spots[i][0], s * spots[i][1], s * 0.07, 0, 6.3);
+          ctx.arc(s * dots[i][0], s * dots[i][1], s * 0.06, 0, 6.3);
           ctx.fill();
         }
       } else if (pat === 2) {
         for (i = 0; i < 3; i++) {
           ctx.beginPath();
-          ctx.arc(-s * 0.28 + i * s * 0.24, s * 0.02, s * 0.1, Math.PI * 1.05, Math.PI * 1.95);
+          ctx.arc(-s * 0.2 + i * s * 0.18, s * 0.02, s * 0.08, Math.PI * 1.05, Math.PI * 1.95);
           ctx.fill();
         }
       } else {
-        for (i = 0; i < 3; i++) ctx.fillRect(-s * 0.32 + i * s * 0.22, -s * 0.7, s * 0.07, s * 1.4);
+        for (i = 0; i < 3; i++) ctx.fillRect(-s * 0.24 + i * s * 0.16, -s * 0.7, s * 0.055, s * 1.4);
       }
       ctx.restore();
     }
-    dorsalPath(ctx, s);
+    if (k === 1) {
+      for (var sp = 0; sp < 4; sp++) {
+        var ang = -2.4 + sp * 0.55;
+        ctx.beginPath();
+        ctx.arc(Math.cos(ang) * s * 0.58, Math.sin(ang) * s * 0.52 + s * 0.02, s * 0.07, ang - 1.2, ang + 1.2);
+        ctx.closePath();
+        ctx.fillStyle = body;
+        ctx.fill();
+        if (!sil) ink(ctx, s * 0.55);
+      }
+    }
+    if (k === 3) {
+      tallFin(ctx, s, -0.16, 0.36, -0.02, 0.96, 0.2, 0.38);
+      ctx.fillStyle = body;
+      ctx.fill();
+      if (!sil) ink(ctx, s * 0.75);
+    }
+    dorsalOf(ctx, k, s);
     ctx.fillStyle = body;
     ctx.fill();
+    if (!sil) ink(ctx, s * 0.75);
+    if (!sil && rare >= 4) {
+      ctx.save();
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#ffe56a';
+      bodyOf(ctx, k, s);
+      ctx.globalAlpha = 0.4;
+      ctx.lineWidth = Math.max(4, s * 0.065);
+      ctx.stroke();
+      ctx.globalAlpha = 0.85;
+      ctx.lineWidth = Math.max(1.8, s * 0.032);
+      ctx.stroke();
+      ctx.restore();
+    }
+    bodyOf(ctx, k, s);
     if (!sil) ink(ctx, s);
-    pecPath(ctx, s);
-    ctx.fillStyle = sil ? body : belly;
+    var px = [0.16, 0.18, 0.18, 0.08, 0.28][k];
+    var py = [0.2, 0.24, 0.18, 0.26, 0.24][k];
+    ctx.beginPath();
+    ctx.ellipse(s * px, s * py, Math.max(3.5, s * 0.1), Math.max(2.2, s * 0.062), -0.25, 0, 6.3);
+    ctx.fillStyle = fin;
     ctx.fill();
-    if (!sil) ink(ctx, s);
-    bodyPath(ctx, s);
-    if (!sil) ink(ctx, s);
+    ctx.strokeStyle = finEdge;
+    ctx.lineWidth = Math.max(1.1, s * 0.016);
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    if (!sil && rare >= 3) {
+      var glow = [[-0.08, -0.16], [0.18, -0.06], [-0.22, 0.02]];
+      for (var gi = 0; gi < glow.length; gi++) {
+        ctx.beginPath();
+        ctx.arc(s * glow[gi][0], s * glow[gi][1], s * 0.05, 0, 6.3);
+        ctx.fillStyle = '#fff8c4';
+        ctx.fill();
+        ctx.lineWidth = Math.max(1.1, s * 0.014);
+        ctx.strokeStyle = tone(body, 0.55);
+        ctx.stroke();
+      }
+    }
+    if (k === 4) {
+      ctx.strokeStyle = finEdge;
+      ctx.lineWidth = Math.max(1.6, s * 0.028);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(s * 0.9, s * 0.1);
+      ctx.quadraticCurveTo(s * 1.28, s * 0.18, s * 1.18, s * 0.42);
+      ctx.moveTo(s * 0.82, s * 0.18);
+      ctx.quadraticCurveTo(s * 1.22, s * 0.4, s * 1.02, s * 0.6);
+      ctx.moveTo(s * 0.7, s * 0.24);
+      ctx.quadraticCurveTo(s * 1.05, s * 0.5, s * 0.78, s * 0.68);
+      ctx.stroke();
+    }
     if (!sil) {
-      var ex = s * 0.66, ey = -s * 0.06, er = Math.max(3.5, s * 0.13);
+      var er = Math.max(3.2, s * (k === 4 ? 0.13 : 0.11));
+      var ex = s * eye[0], ey = s * eye[1];
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc(ex, ey, er, 0, 6.3); ctx.fill();
-      ink(ctx, s * 0.65);
+      ink(ctx, s * 0.55);
       ctx.fillStyle = '#16324a';
-      ctx.beginPath(); ctx.arc(ex + er * 0.12, ey, er * 0.5, 0, 6.3); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex + er * 0.16, ey, er * 0.46, 0, 6.3); ctx.fill();
       ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(ex - er * 0.12, ey - er * 0.28, er * 0.24, 0, 6.3); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex - er * 0.16, ey - er * 0.28, er * 0.22, 0, 6.3); ctx.fill();
       ctx.strokeStyle = '#16324a';
-      ctx.lineWidth = Math.max(1.6, s * 0.04);
+      ctx.lineWidth = Math.max(1.4, s * 0.03);
       ctx.beginPath();
-      ctx.arc(s * 0.58, s * 0.2, s * 0.08, 0.4, Math.PI - 0.4);
+      ctx.arc(ex - er * 0.1, ey + er * 1.15, er * 0.7, 0.35, Math.PI - 0.35);
       ctx.stroke();
+      if (rare >= 2) {
+        var cx0 = k === 3 ? -s * 0.02 : ex;
+        var cy0 = k === 3 ? -s * 1.12 : ey - er - s * 0.03;
+        ctx.fillStyle = '#ffcc00';
+        ctx.beginPath();
+        ctx.moveTo(cx0 - s * 0.11, cy0);
+        ctx.lineTo(cx0 - s * 0.06, cy0 - s * 0.16);
+        ctx.lineTo(cx0, cy0 - s * 0.04);
+        ctx.lineTo(cx0 + s * 0.07, cy0 - s * 0.18);
+        ctx.lineTo(cx0 + s * 0.12, cy0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.lineWidth = Math.max(1.15, s * 0.016);
+        ctx.strokeStyle = '#16324a';
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }
