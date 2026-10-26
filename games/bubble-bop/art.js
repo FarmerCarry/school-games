@@ -417,7 +417,7 @@
   // A row of pips for the targets of this level part: filled ones are done.
   A.pips = function (ctx, kind, goal, done, time, still, bump) {
     var gap = goal > 20 ? 30 : goal > 14 ? 36 : 44, r = goal > 20 ? 11 : goal > 14 ? 13 : 16, x0 = W / 2 - (goal - 1) * gap / 2, y = 44;
-    rr(ctx, x0 - gap / 2 - 10, y - r - 12, (goal - 1) * gap + gap + 20, r * 2 + 24, r + 12); ctx.fillStyle = 'rgba(28,34,80,0.45)'; ctx.fill();
+    rr(ctx, x0 - gap / 2 - 10, y - r - 12, (goal - 1) * gap + gap + 20, r * 2 + 24, r + 12); ctx.fillStyle = 'rgba(28,34,80,0.6)'; ctx.fill();
     // Right to left, like the child reads.
     for (var i = 0; i < goal; i++) {
       var x = x0 + (goal - 1 - i) * gap;
@@ -568,7 +568,13 @@
       for (var x = -20; x <= W + 40; x += 90) g.quadraticCurveTo(x + 45, 150 + (x / 90 % 2) * 24, x + 90, 100);
       g.lineTo(W + 20, -20); g.closePath(); fill(g, '#3fb950'); ink(g, 6);
       var r = seeded(9);
-      for (var i = 0; i < 26; i++) { var ax = 30 + r() * 1220, ay = 18 + r() * 80; circle(g, ax, ay, 9); fill(g, i % 4 ? '#ff4d4d' : '#ffb703'); ink(g, 3); }
+      // Apples in the leaves, but none behind the pause button, the pips or the mute
+      // button: a red dot there reads like a fruit already caught.
+      for (var i = 0, n = 0; i < 90 && n < 14; i++) {
+        var ax = 30 + r() * 1220, ay = 18 + r() * 80;
+        if (ax < 116 || (ax > 300 && ax < 980) || ax > 1196) continue;
+        circle(g, ax, ay, 9); fill(g, n++ % 4 ? '#ff4d4d' : '#ffb703'); ink(g, 3);
+      }
       g.beginPath(); g.moveTo(0, 662); g.lineTo(W, 662); g.lineTo(W, H); g.lineTo(0, H); g.closePath(); fill(g, '#6ed14f'); ink(g, 5);
       for (i = 0; i < 9; i++) { var fx = 150 + i * 122; rr(g, fx, 618, 16, 50, 6); fill(g, '#f7e3c4'); ink(g, 3.5); }
       g.beginPath(); g.moveTo(140, 634); g.lineTo(1140, 634); g.moveTo(140, 652); g.lineTo(1140, 652); g.lineWidth = 8; g.strokeStyle = INK; g.stroke(); g.lineWidth = 4; g.strokeStyle = '#f7e3c4'; g.stroke();

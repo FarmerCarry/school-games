@@ -355,6 +355,22 @@ test('the hand that shows a key along the bottom edge is wholly on screen, on th
   }
 });
 
+test('the orchard leaves keep their apples out from behind the pips and the buttons', async t => {
+  const page = await game(t);
+  // Red or orange apple paint in the top band where the pause button, the pips and mute sit.
+  const reds = await page.evaluate(() => {
+    const c = BB.art.bg('orchard', 1), d = c.getContext('2d').getImageData(0, 0, 1280, 104).data;
+    let n = 0;
+    for (let y = 0; y < 104; y++) for (let x = 0; x < 1280; x++) {
+      if (!(x < 108 || (x > 308 && x < 972) || x > 1204)) continue;
+      const i = (y * 1280 + x) * 4, r = d[i], g = d[i + 1], b = d[i + 2];
+      if (r > 220 && g < 200 && b < 100) n++;
+    }
+    return n;
+  });
+  assert.equal(reds, 0, 'no apple under the HUD');
+});
+
 test('spoken hints use only an Arabic voice installed on the PC, never an online one', async t => {
   for (const [voices, expected] of [
     [[{ name: 'online', lang: 'ar-SA', localService: false }, { name: 'local', lang: 'ar-EG', localService: true }], 'local'],
