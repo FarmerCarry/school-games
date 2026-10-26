@@ -438,6 +438,7 @@
       waitT: 0, waitNeed: 1, nibbleAt: [0, 0], nibbles: 0, dip: 0, biteT: 0, bang: 0,
       fish: null, zoneY: 0.5, zoneV: 0, zoneH: 0.2, prog: 0, fill: 0.17, drain: 0.1,
       slip: 0, inside: 0, tension: 0, breather: 0, showT: 0, missT: 0, flightT: 0,
+      clean: 1, reelT: 0, guide: 0,
       banner: '', bannerT: 0, reelSpin: 0, weight: 0, best: 0, catches: [], rod: LL.RODS[0]
     };
   }
@@ -445,7 +446,7 @@
   function makeShadows() {
     var list = [];
     for (var i = 0; i < 7; i++) {
-      list.push({ x: (i * 0.15) % 1, y: 0.22 + (i % 3) * 0.24, s: 0.35 + (i % 5) * 0.13, v: 0.035 + (i % 4) * 0.012, dir: i % 2 ? 1 : -1, ph: i * 1.7 });
+      list.push({ x: (i * 0.15) % 1, y: 0.22 + (i % 3) * 0.24, s: 0.35 + (i % 5) * 0.13, v: 0.035 + (i % 4) * 0.012, dir: i % 2 ? 1 : -1, ph: i * 1.7, fam: i % 10 });
     }
     return list;
   }
@@ -563,6 +564,9 @@
     if (fish.junk) { a.zoneH = Math.min(0.42, a.zoneH * 1.35); a.fill *= 1.7; a.drain *= 0.6; }
     a.phase = 'reel';
     a.bang = 0;
+    a.clean = 1;
+    a.reelT = 0;
+    a.guide = !st.derby && st.save.caught === 0 ? 1 : 0;
     ev.push({ t: 'hook', i: a.i });
   }
 
@@ -679,7 +683,10 @@
     if (a.zoneY < h) { a.zoneY = h; if (a.zoneV < 0) a.zoneV = 0; }
     if (a.zoneY > 1 - h) { a.zoneY = 1 - h; if (a.zoneV > 0) a.zoneV = 0; }
     if (hold) a.reelSpin += dt * 7;
-    stepFish(st, a, dt);
+    a.reelT += dt;
+    var fishDt = dt;
+    if (a.guide && a.reelT < 2) fishDt *= 0.45;
+    stepFish(st, a, fishDt);
     a.tension = clamp(Math.abs(a.fish.y - a.zoneY) / 0.5, 0, 1);
     if (a.breather > 0) { a.breather -= dt; a.inside = 0; return; }
     var inside = Math.abs(a.fish.y - a.zoneY) <= h + 0.02;
@@ -689,8 +696,12 @@
     else if (a.fish.boss && a.fish.yPhase === 1) drain *= 1.35;
     if (inside) a.prog += a.fill * dt;
     else a.prog -= drain * dt;
-    if (a.prog >= 1) { a.prog = 1; onCatch(st, a, ev); }
-    else if (a.prog <= 0) { a.prog = 0; onEscape(st, a, ev); }
+    if (!inside) a.clean = 0;
+    if (a.prog >= 1) {
+      a.prog = 1;
+      if (a.clean && a.fish && !a.fish.junk) a.fish.perfectReel = 1;
+      onCatch(st, a, ev);
+    } else if (a.prog <= 0) { a.prog = 0; onEscape(st, a, ev); }
   }
 
   function stepAngler(st, a, dt, inp, ev) {
@@ -818,8 +829,9 @@
     if (isNew) save.caught++;
     if (fish.boss && isNew) save.bosses++;
     refreshUnlocks(save);
+    var price = LL.priceOf(fish);
+    if (choice === 'sell' && fish.perfectReel && !fish.junk && !fish.stolen) price = Math.round(price * 1.5);
     if (choice === 'sell') {
-      var price = LL.priceOf(fish);
       save.coins += price;
       bumpQuest(st, 'earn', price);
     }
@@ -834,7 +846,7 @@
     if (fish.junk) bumpQuest(st, 'junk', 1);
     if (fish.boss) bumpQuest(st, 'boss', 1);
     if (!fish.junk) bumpQuest(st, 'spot', 1, st.spot);
-    return { isNew: isNew ? 1 : 0, price: choice === 'sell' ? LL.priceOf(fish) : 0, best: fish.w > prev && prev > 0 ? 1 : 0 };
+    return { isNew: isNew ? 1 : 0, price: choice === 'sell' ? price : 0, best: fish.w > prev && prev > 0 ? 1 : 0 };
   }
 
   function finishDerby(st, ev) {

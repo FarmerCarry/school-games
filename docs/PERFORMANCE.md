@@ -574,3 +574,12 @@ still fits the old 360,000 ceiling (353,880). Its limit moves up by the reserved
 5,100,000 (it measured 5,176,970), so that limit moves up by the planned
 120,000 and leaves 43,030 bytes (0.8%).
 
+## Lucky Lake art, 26 October 2026
+
+The catch card, the reel, and the fisher were redrawn after a playtest. The
+built page limit moves from 115,000 to 135,000 (+20,000) for the fish shapes,
+the wide reel bar, and the music loop. The page measured 113,639, so 21,361
+bytes of that new ceiling are still free. Portal, teacher, and precache limits
+stay put. The page grew by 7,535 bytes and the precache absorbed that inside
+the headroom it already had (5,200,560 of 5,220,000).
+

@@ -1,8 +1,10 @@
-/* Short cues on Kit.audio. Mute sets the master gain to zero, so every cue stops. */
+/* Short cues plus a light loop. Mute zeros the master gain, so every cue stops. */
 (function () {
   'use strict';
   function tone(o) { if (window.Kit && Kit.audio) Kit.audio.tone(o); }
   function noise(o) { if (window.Kit && Kit.audio) Kit.audio.noise(o); }
+  var MELODY = [523, 587, 659, 784, 659, 587, 698, 659, 523, 440, 523, 659];
+  var BASS = [196, 220, 247, 196];
   window.LLAudio = {
     cast: function () {
       tone({ freq: 520, to: 220, type: 'triangle', dur: 0.12, vol: 0.1 });
@@ -11,19 +13,37 @@
     perfect: function () {
       tone({ freq: 740, type: 'triangle', dur: 0.08, vol: 0.11 });
       tone({ freq: 988, type: 'triangle', dur: 0.14, vol: 0.11, delay: 0.07 });
+      tone({ freq: 1319, type: 'sine', dur: 0.22, vol: 0.08, delay: 0.16 });
     },
     plip: function () {
       tone({ freq: 980, to: 420, type: 'sine', dur: 0.07, vol: 0.1 });
       noise({ dur: 0.08, vol: 0.07, filter: 2200, to: 300 });
     },
-    bite: function () { tone({ freq: 660, to: 1180, type: 'square', dur: 0.1, vol: 0.09 }); },
-    splash: function (big) { noise({ dur: big ? 0.32 : 0.16, vol: big ? 0.14 : 0.09, filter: 1600, to: 160 }); },
+    bite: function (rare) {
+      var f = 380 + (rare || 0) * 70;
+      tone({ freq: f, to: f * 0.62, type: 'sine', dur: 0.11, vol: 0.12 });
+      tone({ freq: f * 1.2, to: f * 0.7, type: 'sine', dur: 0.13, vol: 0.1, delay: 0.09 });
+    },
+    splash: function (big) {
+      noise({ dur: big ? 0.34 : 0.18, vol: big ? 0.16 : 0.1, filter: 1800, to: 180 });
+      tone({ freq: big ? 180 : 240, to: 90, type: 'sine', dur: 0.16, vol: 0.06 });
+    },
     reel: function (tense) {
-      tone({ freq: tense ? 320 : 180, to: tense ? 480 : 250, type: 'triangle', dur: tense ? 0.05 : 0.04, vol: tense ? 0.07 : 0.045 });
+      tone({ freq: tense ? 280 : 160, to: tense ? 420 : 220, type: 'square', dur: 0.035, vol: tense ? 0.045 : 0.03 });
+    },
+    creak: function () {
+      noise({ dur: 0.09, vol: 0.05, filter: 700, to: 180 });
+      tone({ freq: 140, to: 90, type: 'sawtooth', dur: 0.08, vol: 0.03 });
     },
     catch: function (rare) {
       if (window.Kit) Kit.sfx.coin();
-      if (rare >= 3) tone({ freq: 880, type: 'triangle', dur: 0.16, vol: 0.1, delay: 0.12 });
+      this.fanfare(rare || 0);
+    },
+    fanfare: function (rare) {
+      var base = [392, 523, 659, 784, 1047][Math.max(0, Math.min(4, rare | 0))];
+      tone({ freq: base, type: 'triangle', dur: 0.12, vol: 0.1 });
+      tone({ freq: base * 1.25, type: 'triangle', dur: 0.14, vol: 0.1, delay: 0.08 });
+      tone({ freq: base * 1.5, type: 'sine', dur: 0.22, vol: 0.09, delay: 0.16 });
     },
     rare: function () {
       [523, 659, 784, 1047].forEach(function (f, i) {
@@ -41,9 +61,15 @@
       tone({ freq: 760, to: 980, type: 'square', dur: 0.09, vol: 0.05 });
       tone({ freq: 640, to: 420, type: 'square', dur: 0.12, vol: 0.05, delay: 0.1 });
     },
-    pad: function () {
-      tone({ freq: 196, type: 'sine', dur: 1.5, vol: 0.02 });
-      tone({ freq: 247, type: 'sine', dur: 1.7, vol: 0.015, delay: 0.08 });
+    pad: function () { this.water(); },
+    water: function () {
+      noise({ dur: 0.7, vol: 0.035, filter: 900, to: 280 });
+    },
+    music: function (step) {
+      var n = MELODY[step % MELODY.length];
+      tone({ freq: n, type: 'triangle', dur: 0.32, vol: 0.035, attack: 0.02 });
+      if (step % 2 === 0) tone({ freq: n * 1.5, type: 'sine', dur: 0.28, vol: 0.018, delay: 0.02 });
+      if (step % 4 === 0) tone({ freq: BASS[(step / 4) % 4], type: 'sine', dur: 0.42, vol: 0.03 });
     }
   };
 })();

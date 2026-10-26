@@ -45,6 +45,12 @@
   var fliers = [];
   var perfectStreak = 0;
   var goalFx = null;
+  var hit = 0;
+  var musicT = 0;
+  var musicStep = 0;
+  var waterT = 0;
+  var creakT = 0;
+  var bookPage = 0;
   var WX = { rain: 'السمك جائع!', rainbow: 'سمك ملون!', night: 'سمك يضيء!', frenzy: 'السمك مجنون!' };
   var shake = Kit.shake();
   var hudCache = '';
@@ -101,7 +107,10 @@
   function refreshTitle() {
     var s = liveSave();
     var spot = LL.SPOTS[s.spot] || LL.SPOTS[0];
-    $('titleProgress').textContent = 'الكتاب ' + LL.bookCount(s.book) + '/60 · ' + s.coins + ' عملة · ' + spot.name;
+    var known = LL.bookCount(s.book);
+    $('titleProgress').textContent = 'الكتاب ' + known + '/60 · ' + s.coins + ' عملة · ' + spot.name;
+    var ring = $('titleRing');
+    if (ring) ring.style.background = 'conic-gradient(#ffcc00 ' + (known / 60 * 360) + 'deg, rgba(255,255,255,0.22) 0deg)';
     $('easyToggle').checked = !!s.easy;
     $('easyPause').checked = !!s.easy;
     var buttons = document.querySelectorAll('[data-sec]');
@@ -303,7 +312,8 @@
       body.appendChild(line);
       var book = document.createElement('div');
       book.className = 'll-book';
-      for (var i = 0; i < 60; i++) {
+      var start = bookPage * 24;
+      for (var i = start; i < start + 24 && i < 60; i++) {
         var fish = LL.FISH[i];
         var caught = s.book[i] > 0;
         var cell = document.createElement('div');
@@ -318,6 +328,12 @@
         book.appendChild(cell);
       }
       body.appendChild(book);
+      var nav = document.createElement('div');
+      nav.className = 'll-row';
+      nav.appendChild(btn('◀', 'book', bookPage - 1, false, bookPage <= 0));
+      nav.appendChild(btn((bookPage + 1) + ' / 3', 'book', bookPage, true, true));
+      nav.appendChild(btn('▶', 'book', bookPage + 1, false, bookPage >= 2));
+      body.appendChild(nav);
       return;
     }
     if (panel === 'map') {
@@ -376,48 +392,75 @@
     var g = view.getContext('2d');
     var w = view.width, h = view.height;
     var glow = catchGlow(fish);
-    var cy = h * 0.52;
+    var box = { x: 24, y: 6, w: w - 48, h: h - 58 };
     g.clearRect(0, 0, w, h);
     g.save();
-    g.translate(w / 2, cy);
+    g.translate(w / 2, box.y + box.h * 0.5);
+    g.globalAlpha = 0.9;
     g.fillStyle = glow;
-    g.globalAlpha = 0.55;
-    g.beginPath(); g.ellipse(0, 8, 200, 96, 0, 0, 6.3); g.fill();
-    g.globalAlpha = 1;
-    g.beginPath(); g.ellipse(0, 6, 118, 58, 0, 0, 6.3); g.fill();
-    g.restore();
-    var golden = fish.rare >= 3 || fish.boss;
-    if (golden) {
+    var rays = 10;
+    for (var ray = 0; ray < rays; ray++) {
       g.save();
-      g.translate(w / 2, cy);
-      g.globalAlpha = Kit.motion.reduced() ? 0.28 : 0.42;
-      g.fillStyle = '#ffe14a';
-      var rays = Kit.motion.reduced() ? 8 : 12;
-      for (var ray = 0; ray < rays; ray++) {
-        g.save();
-        g.rotate((Kit.motion.reduced() ? 0 : time * 0.35) + ray * (6.2832 / rays));
-        g.beginPath();
-        g.moveTo(0, 0);
-        g.lineTo(16, -230);
-        g.lineTo(-16, -230);
-        g.fill();
-        g.restore();
-      }
+      g.rotate((Kit.motion.reduced() ? 0.2 : time * 0.25) + ray * (6.2832 / rays));
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.lineTo(18, -210);
+      g.lineTo(-18, -210);
+      g.fill();
       g.restore();
     }
-    Art.blit(g, fish, w / 2, cy, golden ? 2.25 : 2.05, time);
-    var age = Math.max(0, time - cardAt);
-    var burstN = Kit.motion.reduced() ? 0.75 : Math.min(1, age / 0.55);
-    var n = Kit.motion.reduced() ? 8 : (golden ? 24 : 16);
-    for (var i = 0; i < n; i++) {
-      var ang = i * 0.39 + 0.2;
-      var rad = 36 + burstN * (golden ? 110 : 78) + (i % 5) * (golden ? 10 : 14);
-      var tw = Kit.motion.reduced() ? 1 : (age < 0.7 ? 1 : 0.72 + Math.sin(time * 6 + i) * 0.28);
-      g.globalAlpha = Math.max(0.55, tw);
-      g.fillStyle = i % 2 ? '#fffef6' : '#ffe14a';
-      star(g, w / 2 + Math.cos(ang) * rad, cy + Math.sin(ang) * rad * 0.55, (golden ? 12 : 8) + (i % 3) * 4);
+    g.restore();
+    var marks = [[14, 36], [14, 110], [14, 180], [14, 250], [w - 14, 36], [w - 14, 110], [w - 14, 180], [w - 14, 250]];
+    for (var i = 0; i < 8; i++) {
+      var sx = marks[i][0], sy = marks[i][1];
+      if (sx > box.x && sx < box.x + box.w && sy > box.y && sy < box.y + box.h) continue;
+      g.globalAlpha = 0.9;
+      g.fillStyle = i % 2 ? '#fff' : glow;
+      star(g, sx, sy, 10 + (i % 3) * 3);
     }
     g.globalAlpha = 1;
+    var img = Art.sprite(fish, true);
+    g.drawImage(img, box.x, box.y, box.w, box.h);
+    if ((fish.rare >= 3 || fish.boss) && !Kit.motion.reduced()) {
+      var sweep = ((time * 0.35) % 1);
+      g.save();
+      g.beginPath();
+      g.rect(box.x, box.y, box.w, box.h);
+      g.clip();
+      g.globalAlpha = 0.35;
+      g.fillStyle = '#fff';
+      g.fillRect(box.x + sweep * box.w - 18, box.y, 16, box.h);
+      g.restore();
+      g.globalAlpha = 1;
+    }
+    for (var d = 0; d < 6; d++) {
+      var side = d < 3 ? -1 : 1;
+      var dx = box.x + (side < 0 ? -18 : box.w + 18);
+      var dy = box.y + 30 + (d % 3) * 48 + Math.sin(time * 4 + d) * 6;
+      g.fillStyle = '#e7f8ff';
+      g.beginPath();
+      g.ellipse(dx, dy, 5, 8, side * 0.4, 0, 6.3);
+      g.fill();
+    }
+    var cm = Math.max(8, Math.round((fish.w || 0.4) * 22));
+    var hand = 48;
+    var bar = Math.max(36, Math.min(220, cm * 1.4));
+    var ry = h - 36;
+    g.fillStyle = '#ffd2b8';
+    g.strokeStyle = '#16324a';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.roundRect(w / 2 - 150, ry - 8, 28, 22, 6);
+    g.fill();
+    g.stroke();
+    g.fillStyle = bar > hand ? '#ffcc00' : '#7ee0ff';
+    g.fillRect(w / 2 - 110, ry - 4, bar, 14);
+    g.strokeRect(w / 2 - 110, ry - 4, bar, 14);
+    g.fillStyle = '#fff';
+    g.font = '700 22px Fredoka';
+    g.textAlign = 'left';
+    g.direction = 'ltr';
+    g.fillText(cm + ' cm', w / 2 - 100 + bar + 10, ry + 10);
   }
 
   function bounce(el) {
@@ -452,13 +495,22 @@
     $('cardName').textContent = fish.name;
     $('cardWeight').textContent = fish.w.toFixed(1) + ' كغ';
     var rare = $('cardRare');
-    rare.className = 'll-ribbon' + (fish.rare >= 2 ? ' r' + Math.min(fish.rare, 4) : '');
+    var tier = fish.boss ? 4 : Math.min(fish.rare | 0, 4);
+    rare.className = 'll-ribbon r' + tier;
     rare.textContent = fish.junk ? 'غريب' : (fish.boss ? 'زعيم' : LL.RARE_NAME[fish.rare]);
+    var stars = $('cardStars');
+    if (stars) stars.textContent = fish.junk ? '●' : '★★★★★'.slice(0, tier + 1);
+    var banner = $('cardBanner');
+    if (banner) banner.style.background = catchGlow(fish);
+    var perfect = $('cardPerfect');
+    if (perfect) perfect.hidden = !fish.perfectReel;
     var tags = [];
     if (fish.rb) tags.push('قوس ×5');
     if (fish.day) tags.push('سمكة اليوم ×3');
     if (fish.glow) tags.push('مضيئة ×1.5');
-    $('cardPrice').textContent = LL.priceOf(fish) + ' عملة' + (tags.length ? ' · ' + tags.join(' · ') : '');
+    var price = LL.priceOf(fish);
+    if (fish.perfectReel && !fish.junk) price = Math.round(price * 1.5);
+    $('cardPrice').textContent = price + ' عملة' + (tags.length ? ' · ' + tags.join(' · ') : '');
     $('cardHint').textContent = '';
     $('btnKeep').disabled = !!fish.junk;
     bounce($('cardWeight'));
@@ -504,7 +556,9 @@
     if (!b || !game) return;
     var act = b.getAttribute('data-act');
     var idx = Number(b.getAttribute('data-i'));
-    if (act === 'travel') {
+    if (act === 'book') {
+      if (idx >= 0 && idx <= 2 && idx !== bookPage) { bookPage = idx; fillPanel(); }
+    } else if (act === 'travel') {
       if (game.travel(idx)) { Sfx.cast(); persist(); closePanel(); }
     } else if (game.buy(act, idx)) {
       Sfx.buy();
@@ -630,7 +684,7 @@
     c.save();
     c.translate(canvas.width / 2, canvas.height - 4);
     c.scale(sc, sc);
-    Art.angler(c, 0, 0, 1, i === 0 ? '#3ec6ff' : '#ff8a3d', 0.4, 'idle', 0, !!(game && game.state.save.hat));
+    Art.angler(c, 0, 0, 1, i === 0 ? '#3ec6ff' : '#ff8a3d', 0.4, 'idle', 0, !!(game && game.state.save.hat), 1);
     c.restore();
     return canvas;
   }
@@ -641,6 +695,24 @@
     panel = '';
     hush();
     $('resultTitle').textContent = st.draw ? 'تعادل!' : ('فاز اللاعب ' + (st.winner + 1));
+    var hero = $('resultHero');
+    var bestFish = null;
+    var caughtN = 0;
+    for (var hi = 0; hi < st.anglers.length; hi++) {
+      var bag = st.anglers[hi].catches || [];
+      caughtN += bag.length;
+      for (var hk = 0; hk < bag.length; hk++) {
+        if (!bestFish || bag[hk].w > bestFish.w) bestFish = bag[hk];
+      }
+    }
+    if (hero) {
+      hero.hidden = !bestFish;
+      if (bestFish && LL.FISH[bestFish.id]) {
+        var hg = hero.getContext('2d');
+        hg.clearRect(0, 0, hero.width, hero.height);
+        Art.drawFish(hg, LL.FISH[bestFish.id], 16, 8, 288, 154, false);
+      }
+    }
     var pod = $('podium');
     pod.textContent = '';
     for (var i = 0; i < st.anglers.length; i++) {
@@ -668,7 +740,7 @@
       box.appendChild(small);
       pod.appendChild(box);
     }
-    $('resultSub').textContent = 'يفوز مجموع الأوزان. التاج لأكبر سمكة في المسابقة.';
+    $('resultSub').textContent = caughtN ? ('صيد ' + caughtN) : '';
     var freshHat = !st.save.hat;
     if (freshHat) {
       st.save.hat = 1;
@@ -722,21 +794,32 @@
         rings.push({ x: dip.x, y: dip.y, t: 0 });
         rings.push({ x: dip.x, y: dip.y, t: -0.16 });
         burst(dip.x, dip.y - 8, 10, ['#fff', '#d7f4ff', '#7ee0ff']);
-      } else if (e.t === 'bite') {
-        Sfx.bite();
+      }       else if (e.t === 'bite') {
+        var bitten = game.state.anglers[e.i].fish;
+        Sfx.bite(bitten ? bitten.rare : 0);
         shout('!', true);
         shake.add(7);
         var biteAt = bobberOf(game.state.anglers[e.i]);
         rings.push({ x: biteAt.x, y: biteAt.y, t: 0 });
         burst(biteAt.x, biteAt.y, 12, ['#e7f8ff', '#fff', '#7ee0ff']);
+      } else if (e.t === 'hook') {
+        hit = 0.08;
+        Sfx.splash(0);
+        shake.add(9);
+        var hookedAt = bobberOf(game.state.anglers[e.i]);
+        rings.push({ x: hookedAt.x, y: hookedAt.y, t: 0 });
+        burst(hookedAt.x, hookedAt.y, 16, ['#fff', '#7ee0ff', '#e7f8ff']);
       }
       else if (e.t === 'splash') burst(bobberOf(game.state.anglers[e.i]).x, 330, e.kind === 'cast' ? 10 : 6, ['#e7f8ff', '#7ee0ff']);
       else if (e.t === 'catch') {
+        hit = 0.08;
         var fish = game.state.anglers[e.i].fish;
         Sfx.catch(fish ? fish.rare : 0);
-        Sfx.splash(!!(fish && (fish.rare >= 3 || fish.boss)));
-        if (fish && (fish.rare >= 3 || fish.boss)) { Sfx.rare(); goldT = 0.7; }
-        shout(fish && (fish.rare >= 3 || fish.boss) ? fish.name : 'أمسكتها!');
+        Sfx.splash(1);
+        if (fish && fish.perfectReel) { Sfx.perfect(); shout('ممتاز!'); }
+        else if (fish && (fish.rare >= 3 || fish.boss)) { Sfx.rare(); goldT = 0.7; shout(fish.name); }
+        else shout('أمسكتها!');
+        if (fish && (fish.rare >= 3 || fish.boss)) goldT = 0.7;
         shake.add(fish && (fish.rare >= 3 || fish.boss) ? (fish.rare >= 4 || fish.boss ? 16 : 12) : 6);
         burst(640, 300, fish && fish.rare >= 3 ? 36 : 14, ['#ffe14a', '#fff6c2', '#fff', '#ffb000']);
         if (fish && (fish.rare >= 4 || fish.boss) && !Kit.motion.reduced()) slow = 0.4;
@@ -817,23 +900,30 @@
   function update(dt) {
     var keys = keysUI();
     if (simOn()) {
-      var scale = slow > 0 && !Kit.motion.reduced() ? 0.35 : 1;
-      if (slow > 0) slow = Math.max(0, slow - dt);
-      var before = questNow();
-      var ev = game.step(dt * scale, readInput());
-      handleEvents(ev, before);
+      if (hit > 0) {
+        hit = Math.max(0, hit - dt);
+      } else {
+        var scale = slow > 0 && !Kit.motion.reduced() ? 0.35 : 1;
+        if (slow > 0) slow = Math.max(0, slow - dt);
+        var before = questNow();
+        var ev = game.step(dt * scale, readInput());
+        handleEvents(ev, before);
+      }
       var a0 = game.state.anglers[0];
-      if (a0.phase === 'reel') {
+      if (hit <= 0 && a0.phase === 'reel') {
         if (!a0.inside) shake.add(3.2);
         reelSnd += dt;
-        var gap = a0.inside ? 0.2 : 0.08;
+        var gap = Math.max(0.045, 0.16 - Math.min(0.11, Math.abs(a0.zoneV) * 0.09));
+        if (!a0.inside) gap *= 0.7;
         if (reelSnd > gap) { reelSnd = 0; Sfx.reel(a0.inside ? 0 : 1); }
+        if (!a0.inside && a0.tension > 0.62) {
+          creakT += dt;
+          if (creakT > 0.28) { creakT = 0; Sfx.creak(); }
+        }
       }
-      time += dt;
+      time += hit > 0 ? dt * 0.05 : dt;
       shake.update(dt);
-      stepJuice(dt);
-      padT += dt;
-      if (padT > 1.6) { padT = 0; Sfx.pad(); }
+      stepJuice(hit > 0 ? dt * 0.2 : dt);
       refreshHud(false);
       if (a0.phase === 'reveal') fillCard();
     } else if (mode === 'play' && panel === 'aqua') {
@@ -841,12 +931,16 @@
       time += dt;
     } else if (mode === 'title') {
       time += dt;
-      padT += dt;
-      if (padT > 2.4) { padT = 0; Sfx.pad(); }
     } else if (mode === 'result') {
       time += dt;
       shake.update(dt);
       stepJuice(dt);
+    }
+    if (mode === 'play' || mode === 'title') {
+      musicT += dt;
+      waterT += dt;
+      if (musicT > 0.46) { musicT = 0; Sfx.music(musicStep++); }
+      if (waterT > 0.9 && mode === 'play') { waterT = 0; Sfx.water(); }
     }
     if (keys) { /* UI keys already applied */ }
     edge = false;
@@ -916,7 +1010,7 @@
   function drawWorld(spot, night, t) {
     var pal = Art.backdrop(ctx, spot, t, night);
     Art.props(ctx, spot, pal, t, 300);
-    Art.water(ctx, pal, 300, t);
+    Art.water(ctx, pal, 300, t, spot);
     Art.life(ctx, spot, pal, t, 300);
     return pal;
   }
@@ -933,7 +1027,7 @@
     for (var i = 0; i < list.length; i++) {
       var s = list[i];
       var drift = Math.sin(time * 0.8 + s.ph) * 10;
-      Art.fishShadow(ctx, 180 + s.x * 920, 410 + s.y * 220 + drift, 64 * s.s, s.dir, 0.5);
+      Art.fishShadow(ctx, 180 + s.x * 920, 410 + s.y * 220 + drift, 64 * s.s, s.dir, 0.5, s.fam);
     }
     var anglers = game.state.anglers;
     for (var n = 0; n < anglers.length; n++) {
@@ -945,7 +1039,7 @@
       var x = b.x - face * 300 * (1 - u);
       var y = 580 - u * 220 + Math.sin(time * 3 + n) * 6;
       var grow = u > 0.8 ? 1 + Math.sin(time * 9) * 0.07 : 1;
-      Art.fishShadow(ctx, x, y, (20 + u * 52) * grow, face, 0.18 + u * 0.7);
+      Art.fishShadow(ctx, x, y, (28 + u * 70) * grow, face, 0.22 + u * 0.65, u > 0.66 ? 2 : 6);
     }
   }
 
@@ -964,15 +1058,23 @@
     for (var i = 0; i < st.anglers.length; i++) {
       var a = st.anglers[i];
       var face = faceOf(i);
-      var pose = a.phase === 'charge' ? 'cast' : (a.phase === 'reel' ? 'reel' : ((a.phase === 'wait' || a.phase === 'bite') ? 'wait' : 'idle'));
-      var power = a.phase === 'charge' ? a.power : (a.phase === 'reel' ? (a.inside ? 0.35 : 0.85) : 0);
+      var pose = a.phase === 'show' ? 'cheer' : (a.phase === 'charge' || a.phase === 'flight' ? 'cast' : (a.phase === 'reel' ? 'reel' : ((a.phase === 'wait' || a.phase === 'bite') ? 'wait' : 'idle')));
+      var power = a.phase === 'charge' ? a.power : (a.phase === 'reel' ? (a.inside ? 0.35 : 0.9) : (a.phase === 'flight' ? 1 : 0));
       var shirt = i === 0 ? '#3ec6ff' : '#ff8a3d';
-      var tip = Art.angler(ctx, anglerX(i), STAND, face, shirt, time, pose, power, !!st.save.hat);
-      if (a.phase === 'charge') Art.meter(ctx, anglerX(i) + face * 48 - 13, 150, a.power);
-      if (a.phase !== 'ready' && a.phase !== 'reveal' && a.phase !== 'scared') {
+      var tip = Art.angler(ctx, anglerX(i), STAND, face, shirt, time + a.reelSpin, pose, power, !!st.save.hat);
+      if (a.phase === 'charge') {
+        var mx = anglerX(i) + face * 92;
+        Art.arcMeter(ctx, mx, STAND - 70, a.power);
+        if (!taught && !st.derby) Art.hand(ctx, mx + Math.cos(Math.PI + a.power * Math.PI) * 62, STAND - 70 - 20 + Math.sin(time * 6) * 4, a.power > 0.15);
+      } else if (a.phase === 'ready' && !taught && !st.derby && i === 0) {
+        Art.arcMeter(ctx, anglerX(i) + face * 92, STAND - 70, (time * 0.35) % 1);
+        Art.hand(ctx, anglerX(i) + face * 92, STAND - 120, Math.sin(time * 3) > 0.2);
+      }
+      if (a.phase !== 'ready' && a.phase !== 'reveal' && a.phase !== 'scared' && a.phase !== 'show') {
         var b = bobberOf(a);
-        var wob = a.phase === 'wait' ? Math.sin(time * 8) * 6 : (a.phase === 'reel' ? Math.sin(time * (a.inside ? 10 : 22)) * (a.inside ? 8 : 18) : 0);
-        Art.line(ctx, tip.x, tip.y, b.x, b.y, wob);
+        var hot = a.phase === 'reel' && (!a.inside || a.tension > 0.62);
+        var wob = a.phase === 'wait' ? Math.sin(time * 8) * 6 : (a.phase === 'reel' ? Math.sin(time * (a.inside ? 10 : 22)) * (hot ? 16 : 8) : 0);
+        Art.line(ctx, tip.x, tip.y, b.x, b.y, wob, hot);
         if (a.phase === 'reel' && a.fish) {
           ctx.save();
           ctx.translate(b.x, b.y + 26);
@@ -990,15 +1092,15 @@
         }
       }
       if (a.phase === 'reel') {
-        var rx = st.anglers.length === 1 ? 1088 : (i === 0 ? 24 : 1170);
-        Art.reel(ctx, rx, 168, 300, a, time);
+        var rw = st.anglers.length === 1 ? 560 : 520;
+        Art.reel(ctx, (1280 - rw) / 2, st.anglers.length === 1 ? 14 : (i === 0 ? 8 : 96), rw, a, time);
       }
       if (a.phase === 'show' && a.fish) {
         var u = Math.min(1, a.showT / 0.85);
         var from = bobberOf(a);
-        var x = from.x + (anglerX(i) - from.x) * u;
-        var y = from.y + (180 - from.y) * u - Math.sin(u * 3.1416) * 120;
-        var sc = (1.1 + u * 0.8) * (1 + Math.sin(u * 9) * 0.08);
+        var x = from.x + (anglerX(i) + face * 36 - from.x) * u;
+        var y = from.y + (STAND - 250 - from.y) * u - Math.sin(u * 3.1416) * 90;
+        var sc = 1.5 + u * 0.8;
         Art.blit(ctx, a.fish, x, y, sc, time);
       }
       if ((a.phase === 'show' || a.phase === 'reveal') && a.fish && (a.fish.rare >= 3 || a.fish.boss)) {
@@ -1126,6 +1228,17 @@
     var night = game && game.state.event.id === 'night' ? 1 : 0;
     ctx.save();
     ctx.translate(shake.x, shake.y);
+    if (mode === 'play' && game) {
+      var look = null;
+      for (var zi = 0; zi < game.state.anglers.length; zi++) {
+        if (game.state.anglers[zi].phase === 'reel') look = bobberOf(game.state.anglers[zi]);
+      }
+      if (look) {
+        ctx.translate(look.x, look.y);
+        ctx.scale(1.15, 1.15);
+        ctx.translate(-look.x, -look.y);
+      }
+    }
     var pal = drawWorld(spot, night, time);
     if (game && (mode === 'play' || mode === 'pause' || mode === 'result')) {
       drawDecor(game.state.save);

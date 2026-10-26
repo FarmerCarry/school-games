@@ -46,6 +46,7 @@
   <div class="ll-title">
     <h1 class="ll-logo">بحيرة <span>الحظ</span></h1>
     <p class="ll-tag">ارمِ السنارة، انتظر علامة !، ثم اسحب السمكة.</p>
+    <div id="titleRing" aria-hidden="true"></div>
     <button class="sg-btn ll-play" id="btnPlay" type="button">العب</button>
     <div class="ll-row">
       <button class="sg-btn secondary" id="btnDerby" type="button">لاعبان</button>
@@ -82,6 +83,7 @@
   <div id="confetti" class="ll-confetti"></div>
   <div class="sg-panel ll-panel">
     <h2 id="resultTitle">انتهت المسابقة</h2>
+    <canvas id="resultHero" width="320" height="170" hidden></canvas>
     <div class="ll-podium" id="podium"></div>
     <p id="resultHat" hidden>قبعة جديدة!</p>
     <p id="resultSub"></p>
@@ -92,14 +94,15 @@
   </div>
 </div>
 
-<div class="sg-overlay ll-overlay" id="scr-card" hidden>
+  <div class="sg-overlay ll-overlay" id="scr-card" hidden>
   <div class="sg-panel ll-cardbox">
-    <canvas id="fishView" width="440" height="240"></canvas>
+    <div id="cardBanner"><b id="cardStars">★</b><span class="ll-ribbon" id="cardRare"></span></div>
+    <canvas id="fishView" width="640" height="340"></canvas>
     <div id="cardNew" hidden>جديد!</div>
     <div id="cardBest" hidden>رقم قياسي!</div>
+    <div id="cardPerfect" hidden>ممتاز!</div>
     <h2 id="cardName"></h2>
     <div id="cardWeight" dir="ltr"></div>
-    <div class="ll-ribbon" id="cardRare"></div>
     <p class="ll-price" id="cardPrice"></p>
     <p id="cardHint"></p>
     <div class="ll-row">
