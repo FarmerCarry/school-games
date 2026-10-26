@@ -121,18 +121,18 @@ h1, h2, p { margin: 0; }
 #siren em { flex: 0 0 auto; min-width: 78px; font-style: normal; font-size: 76px; line-height: 1; font-weight: 700; color: #e23b2f; transform-origin: center; }
 #siren em:empty { display: none; }
 #siren.hot { border-color: #e23b4a; }
-#cheer { position: absolute; left: 16px; right: auto; top: 72px; z-index: 7; text-align: start; pointer-events: none; font-size: 32px; font-weight: 700; color: #7cf29a; -webkit-text-stroke: 6px #2b2148; paint-order: stroke fill; }
-#streak { position: absolute; top: 72px; left: auto; right: 20px; z-index: 7; pointer-events: none; font-size: 28px; font-weight: 700; color: #ffe14a; -webkit-text-stroke: 5px #2b2148; paint-order: stroke fill; }
+#cheer { position: absolute; left: 0; right: 0; top: 78px; z-index: 7; text-align: center; pointer-events: none; font-size: 76px; line-height: 1; font-weight: 700; color: #7cf29a; -webkit-text-stroke: 10px #2b2148; paint-order: stroke fill; text-shadow: 0 6px 0 #1d6b3a; }
+#streak { position: absolute; top: 168px; left: auto; right: 28px; z-index: 7; pointer-events: none; font-size: 28px; font-weight: 700; color: #ffe14a; -webkit-text-stroke: 5px #2b2148; paint-order: stroke fill; }
 #streak[hidden] { display: none !important; }
 #streak.pop { animation: cheer .95s ease forwards; }
 #flies { position: absolute; inset: 0; pointer-events: none; z-index: 8; }
 #flies i { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: #ffe14a; border: 3px solid #2b2148; box-shadow: inset 0 -3px 0 #f0b429; }
 #cheer[hidden] { display: none !important; }
-#cheer.pop { animation: slideoff 1.15s ease forwards; }
+#cheer.pop { animation: saved .7s cubic-bezier(.2, 1.4, .4, 1) forwards; }
 @keyframes wobble { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg) scale(1.06); } }
 @keyframes pulse { 50% { transform: scale(1.16); } }
 @keyframes cheer { 0% { transform: scale(.4) rotate(-8deg); opacity: 0; } 28% { transform: scale(1.16) rotate(4deg); opacity: 1; } 100% { transform: scale(1) rotate(0); opacity: 0; } }
-@keyframes slideoff { 0% { transform: translateX(-80px) scale(.6); opacity: 0; } 18% { transform: translateX(0) scale(1.08); opacity: 1; } 62% { transform: translateX(0) scale(1); opacity: 1; } 100% { transform: translateX(150px) scale(.92); opacity: 0; } }
+@keyframes saved { 0% { transform: scale(.45) rotate(-8deg); opacity: 0; } 60% { transform: scale(1.12) rotate(3deg); opacity: 1; } 100% { transform: scale(1) rotate(0); opacity: 1; } }
 #confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 3; }
 #confetti[hidden] { display: none !important; }
 #confetti i { position: absolute; top: -24px; width: 12px; height: 18px; border-radius: 3px; animation: fall linear infinite; }

@@ -116,7 +116,12 @@
   var cardT = 0, boomT = 0, fontReady = false;
 
   if (document.fonts && document.fonts.load) {
-    document.fonts.load('700 40px Fredoka', 'ب').then(function () { fontReady = true; sceneDirty = true; }).catch(function () {});
+    document.fonts.load('700 40px Fredoka', 'ب').then(function () {
+      fontReady = true;
+      glyphs = {};
+      glyphsReady = false;
+      sceneDirty = true;
+    }).catch(function () {});
   }
 
   function burst(x, y, o) {
@@ -1082,26 +1087,21 @@
     spr = document.createElement('canvas');
     var g = spr.getContext('2d');
     g.font = font;
-    var tw = Math.ceil(g.measureText(text).width + 16);
-    var th = Math.ceil(parseInt(font, 10) * 1.5 + 12);
+    var px = /([\d.]+)px/.exec(font);
+    var size = px ? parseFloat(px[1]) : 22;
+    var tw = Math.ceil(g.measureText(text).width + 12);
+    var th = Math.ceil(size + 16);
     spr.width = Math.max(8, tw);
     spr.height = Math.max(8, th);
     g.font = font;
     g.direction = 'rtl';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.lineWidth = 6;
     g.lineJoin = 'round';
-    g.strokeStyle = '#2b2148';
-    g.strokeText(text, spr.width / 2, spr.height / 2 + 1);
     g.fillStyle = fill;
-    g.fillText(text, spr.width / 2, spr.height / 2 + 1);
+    g.fillText(text, spr.width / 2, spr.height / 2);
     glyphs[key] = spr;
     return spr;
-  }
-  function blitText(text, font, fill, x, y) {
-    var spr = glyph(text, font, fill);
-    ctx.drawImage(spr, x - spr.width / 2, y);
   }
   var glyphsReady = false;
   function warmGlyphs() {
@@ -1109,12 +1109,10 @@
     glyphsReady = true;
     var n;
     for (n = 0; n <= 60; n++) {
-      glyph(String(n), '700 40px Fredoka', '#fff');
-      glyph(String(n), '700 54px Fredoka', '#fff');
-      glyph(String(n), '700 54px Fredoka', '#e23b2f');
+      glyph(String(n), '700 22px Fredoka', '#fff');
+      glyph(String(n), '700 22px Fredoka', '#ffe14a');
     }
-    glyph('نجا!', '700 40px Fredoka', '#fff');
-    glyph('أنت', '700 22px Fredoka', '#fff');
+    glyph('نجا', '700 22px Fredoka', '#fff');
   }
   function drawHud(w) {
     warmGlyphs();
@@ -1122,29 +1120,56 @@
     var showClock = w.phase === 'danger' || w.phase === 'stamp';
     var clock = showClock ? (w.phase === 'stamp' ? 'نجا' : String(sec)) : '';
     var name = (w.dis && w.dis[0] && (w.phase === 'danger' || w.warn)) ? w.dis[0].name : '';
+    var round = glyph(hudRound(w), '700 20px Fredoka', '#fff');
+    var nameSpr = name ? glyph(name, '700 20px Fredoka', '#ffe14a') : null;
+    var clockSpr = clock ? glyph(clock, '700 22px Fredoka', sec <= 10 && w.phase === 'danger' ? '#ffe14a' : '#fff') : null;
+    var parts = [round];
+    if (nameSpr) parts.push(nameSpr);
+    if (clockSpr) parts.push(clockSpr);
+    var list = w.actors, n = list.length, gap = 12, dotGap = 22;
+    var textW = 0;
+    for (var p = 0; p < parts.length; p++) textW += parts[p].width;
+    if (parts.length > 1) textW += gap * (parts.length - 1);
+    var dotsW = n ? 16 + (n - 1) * dotGap : 0;
+    var mid = n ? 16 : 0;
+    var pad = 16;
+    var cw = pad + textW + mid + dotsW + pad;
+    var ch = 44;
+    var cx = Math.round((W - cw) / 2);
+    if (cx < 300) cx = 300;
+    if (cx + cw > 1200) cx = Math.max(300, 1200 - cw);
+    var cy = 10;
     ctx.save();
     ctx.fillStyle = '#2b2148';
-    roundRect(ctx, 300, 8, 680, 40, 14);
+    roundRect(ctx, cx, cy, cw, ch, 16);
     ctx.fill();
-    blitText(hudRound(w), '700 18px Fredoka', '#fff', name ? 470 : 560, 16);
-    if (clock) blitText(clock, '700 22px Fredoka', sec <= 10 && w.phase === 'danger' ? '#ffe14a' : '#fff', 640, 14);
-    if (name) blitText(name, '700 18px Fredoka', '#ffe14a', 860, 16);
-    var list = w.actors, n = list.length, gap = 22;
-    var x0 = 640 - (n * gap) / 2;
-    for (var i = 0; i < n; i++) {
-      var a = list[i];
-      var x = x0 + i * gap + 8;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#ffe14a';
+    roundRect(ctx, cx, cy, cw, ch, 16);
+    ctx.stroke();
+    var x = cx + cw - pad;
+    for (var i = 0; i < parts.length; i++) {
+      var spr = parts[i];
+      x -= spr.width;
+      ctx.drawImage(spr, Math.round(x), Math.round(cy + (ch - spr.height) / 2));
+      x -= gap;
+    }
+    var dotY = cy + ch / 2;
+    var x0 = cx + pad + 8;
+    for (var d = 0; d < n; d++) {
+      var a = list[d];
+      var dx = x0 + d * dotGap;
       ctx.fillStyle = a.color;
-      ctx.beginPath(); ctx.arc(x, 58, 7, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(dx, dotY, 7, 0, 7); ctx.fill();
       ctx.lineWidth = 2;
-      ctx.strokeStyle = a.bot ? '#2b2148' : '#ffe14a';
+      ctx.strokeStyle = a.bot ? 'rgba(255,255,255,.55)' : '#ffe14a';
       ctx.stroke();
       if (w.phase === 'stamp') {
         ctx.font = '700 12px Fredoka';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#fff';
-        ctx.fillText(a.mode === 'run' ? '✓' : '×', x, 58);
+        ctx.fillText(a.mode === 'run' ? '✓' : '×', dx, dotY);
       }
     }
     ctx.restore();

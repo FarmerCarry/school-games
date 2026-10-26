@@ -559,21 +559,22 @@ poses cached at final size, hazards and loose planks are drawn live, and a frame
 keeps at most 36 particles. `tools/perf.mjs --samples 1 --seconds 8 chaos-island`
 reports an active p95 of 33.4 ms on this harness. Disasters stay in a DOM-free
 engine. Music and cues are oscillators in `audio.js`, with no audio files.
+The round chip is a small text blit, and the meteor warning is a few circles.
 
 Measured with the Linux minified build, after adding this game only:
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Chaos Island | 114,190 | 150,000 (was 115,000) |
+| Chaos Island | 114,739 | 150,000 (was 115,000) |
 | Teacher page (one more catalog entry) | 93,237 | 96,000 (unchanged) |
 | Portal (thumbnail and catalog entry) | 359,061 | 360,000 (unchanged) |
-| Offline precache, 47 files | 5,205,981 | 5,215,000 (was 5,100,000) |
+| Offline precache, 47 files | 5,206,530 | 5,215,000 (was 5,100,000) |
 
 `gameHtmlBytes['chaos-island']` is now 150,000, a raise of 35,000 for the
 redraw (bigger characters, layered island, disaster art, and `audio.js`). The
-built page is 114,190 bytes. The offline cache was 5,082,082 of 5,100,000 before
+built page is 114,739 bytes. The offline cache was 5,082,082 of 5,100,000 before
 this game, so `precacheBytes` stays at the earlier raise of 115,000. The redraw
 fits that cap, so the precache limit was not raised again. The thumbnail and
 catalog text fit the existing portal and teacher headroom, so those limits stay
-put. The precache headroom is 9,019 bytes, and the portal headroom is 939 bytes.
+put. The precache headroom is 8,470 bytes, and the portal headroom is 939 bytes.
 
