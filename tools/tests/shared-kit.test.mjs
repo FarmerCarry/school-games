@@ -390,6 +390,12 @@ test('v2: sg:preferences sets the band, player and telemetry only from valid val
   assert.equal(h.Kit.profile.band, '', 'listeners get a copy');
   off(); preferences(h, {band: '8-9'});
   assert.equal(seen.length, 5, 'unsubscribed');
+  // A listener that unsubscribes itself does not make the next one miss the change.
+  const order = [], once = h.Kit.profile.onChange(() => { order.push('once'); once(); });
+  const stay = h.Kit.profile.onChange(change => order.push(change.player));
+  preferences(h, {player: 'p7'}); preferences(h, {player: 'p8'}); stay();
+  assert.deepEqual(order, ['once', 'p7', 'p8']);
+  preferences(h, {player: ''});
   preferences(h, {band: '6-7', player: 'p9', telemetry: true}, {});
   assert.deepEqual([h.Kit.profile.band, h.Kit.profile.player], ['8-9', ''], 'a foreign window cannot set the profile');
   assert.equal(JSON.stringify([...h.values]), stored, 'profile and telemetry preferences are never stored');

@@ -152,7 +152,7 @@
       if (typeof message.band === 'string' && (message.band === '' || SEEDS[message.band] > 0)) profile.band = message.band;
       if (typeof message.player === 'string' && /^(p[0-9a-z]{1,8})?$/.test(message.player)) profile.player = message.player;
       if (typeof message.telemetry === 'boolean' && !(telemetry = message.telemetry)) { il.fill(0); tev = []; cueAt = -1; }
-      if (was !== profile.band + ' ' + profile.player) profileListeners.forEach(function (fn) { fn({ band: profile.band, player: profile.player }); });
+      if (was !== profile.band + ' ' + profile.player) profileListeners.slice().forEach(function (fn) { fn({ band: profile.band, player: profile.player }); });
     }
   });
 
