@@ -552,9 +552,9 @@ change; another game will again need room made or a decision like this one.
 ## Egg Rush, 26 October 2026
 
 سباق البيض (Egg Rush) is a 2D egg-and-pet run. It draws on one canvas, paints each
-pet once into a small sprite, and keeps the static meadow, beach and snow in one
-offscreen sheet that a frame only blits. Particles are capped at 150. Pixel ratio
-is capped at 1.5, and a paused game keeps the last frame.
+pet and each egg once into an offscreen sprite, and keeps the static meadow,
+beach and snow in one offscreen sheet that a frame only blits. Particles are
+capped at 64. Pixel ratio is capped at 1.5, and a paused game keeps the last frame.
 
 The game allowance rises from 125,000 to 150,000 bytes (+25,000). That pays for the
 full-screen hatch (a wobbling egg, cracks, a flash, rays and a rarity reveal), a
@@ -564,17 +564,18 @@ precache limit stays 5,230,000.
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Egg Rush HTML | 130,600 | 150,000 (was 125,000) |
+| Egg Rush HTML | 131,598 | 150,000 (was 125,000) |
 | Portal (thumbnail and catalog entry) | 361,093 | 366,000 (unchanged) |
-| Offline precache, 47 files | 5,223,950 | 5,230,000 (unchanged) |
+| Offline precache, 47 files | 5,224,948 | 5,230,000 (unchanged) |
 | Teacher page | 92,764 | 96,000 (unchanged) |
 
-The built game is 130,600 bytes. The ceremony pass reached 135,084. The following
-art pass replaces the teardrop egg and the per-pet drawings with one rounded egg
-and one pastel face, so the file shrinks by 4,484 bytes and the precache has
-6,050 bytes left. Eggs are ovals with a rarity pattern, the ceremony splits the
-shell on a zigzag, pets and the runner use dot eyes, and the shop is a grid of
-picture cards. On the software-GL harness the active p95 frame time is 66.7 ms
-(50.1 ms on the ceremony pass, 117 ms in the audit before the terrain sheet). The portal, including the
-arcade Arabic subset in the Egg Rush tile, is unchanged at 361,093 bytes.
+The built game is 131,598 bytes. The ceremony pass reached 135,084, and the picture
+pass 130,600. This pass bakes each pet and egg into a small play sprite (a sharper
+copy is used only for the hatch) and caps particles at 64, which adds 998 bytes.
+The precache has 5,052 bytes left. Eggs stay ovals, the crack is the zigzag plus a
+few shell bits and a soft glow, and the starburst waits for the reveal. Pet fills
+are the pastel coat, with navy kept to a thin outline and the eyes. On the
+software-GL harness the active p95 frame time is 50.1 ms again (66.7 ms on the
+picture pass, 117 ms in the audit before the terrain sheet). The portal, including
+the arcade Arabic subset in the Egg Rush tile, is unchanged at 361,093 bytes.
 
