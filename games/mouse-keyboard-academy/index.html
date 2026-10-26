@@ -7,6 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <link rel="stylesheet" href="../../shared/game.css">
 <link rel="stylesheet" href="style.css">
+<link rel="preload" as="image" href="grip-mouse-left.webp">
 </head>
 <body>
 <div id="app">
@@ -16,13 +17,17 @@
     <div class="tools">
       <button type="button" id="btnMap" hidden>الخريطة</button>
       <button type="button" id="btnPause" hidden>استراحة</button>
-      <button type="button" id="btnTeacher">للمعلم</button>
-      <button type="button" id="btnNew">طالب جديد</button>
+      <div class="teacher-dock">
+        <button type="button" id="btnTeacher">للمعلم</button>
+        <button type="button" id="btnNew">طالب جديد</button>
+      </div>
     </div>
   </header>
   <p id="prompt" role="status"></p>
+  <div id="pips" aria-hidden="true"></div>
   <p id="langHint" hidden></p>
   <div id="view"></div>
+  <div id="fx" aria-hidden="true"><div id="ghost" hidden>👆</div></div>
   <div id="overlay" hidden></div>
   <div id="toast" hidden>أحسنت!</div>
   <div id="live" class="sr" aria-live="polite"></div>

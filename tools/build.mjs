@@ -261,6 +261,9 @@ try {
     const html = inlinePage(path.join(ROOT, 'games', slug, 'index.html'));
     write(`games/${slug}/index.html`, html);
     report.push([`games/${slug}/index.html`, Buffer.byteLength(html)]);
+    for (const name of fs.readdirSync(path.join(ROOT, 'games', slug))) {
+      if (/\.(?:webp|avif)$/i.test(name)) copy(`games/${slug}/${name}`);
+    }
   }
   const missing = catalogSlugs.filter(s => !gameDirs.includes(s));
   if (missing.length) console.warn('warning: catalog games without a folder:', missing.join(', '));
