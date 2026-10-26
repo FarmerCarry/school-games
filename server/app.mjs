@@ -134,7 +134,10 @@ export function createApp(options = {}) {
   async function handle(req, res) {
     const headers = { Vary: 'Origin', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
     const origin = req.headers.origin;
-    if (typeof origin === 'string' && origins.has(origin)) headers['Access-Control-Allow-Origin'] = origin;
+    if (typeof origin === 'string' && origins.has(origin)) {
+      // Retry-After is not a CORS-safelisted response header, so the page could not read it otherwise.
+      Object.assign(headers, { 'Access-Control-Allow-Origin': origin, 'Access-Control-Expose-Headers': 'Retry-After' });
+    }
     const send = (status, body, extra = {}) => {
       if (body === undefined) { res.writeHead(status, { ...headers, ...extra }); res.end(); return; }
       const text = JSON.stringify(body);
@@ -170,6 +173,9 @@ export function createApp(options = {}) {
       if (res.headersSent) { res.destroy(); return; }
       if (error instanceof HttpError) {
         send(error.status, { error: error.message }, error.headers);
+      } else if (error && error.code === 'ECONNRESET') {
+        // The client went away or was too slow (Node has answered 408): nothing failed here.
+        res.destroy();
       } else {
         log('telemetry: request failed: ' + (error && error.message));
         send(500, { error: 'server' });

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import net from 'node:net';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -154,6 +155,24 @@ test('bodies over 64 KB are 413, declared or streamed; exactly 64 KB is accepted
   assert.equal(s.count('batches'), 1);
 });
 
+test('a client that disconnects mid-body is not logged as a server error', async t => {
+  const logs = [];
+  const s = await start(t, { log: message => logs.push(message) });
+  await new Promise((resolve, reject) => {
+    const socket = net.connect(Number(new URL(s.base).port), '127.0.0.1', () => {
+      socket.write('POST /v1/batch HTTP/1.1\r\nHost: x\r\nContent-Type: text/plain\r\nContent-Length: 1000\r\n\r\n{"v":2,');
+      setTimeout(() => socket.destroy(), 50);
+    });
+    socket.on('close', resolve);
+    socket.on('error', reject);
+  });
+  const open = () => new Promise(resolve => s.app.server.getConnections((_, n) => resolve(n)));
+  while (await open()) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal((await s.send('GET', '/v1/health')).status, 200);
+  assert.deepEqual(logs, []);
+  assert.equal(s.count('batches'), 0);
+});
+
 test('unknown and malformed events are dropped while valid ones are kept; measures are clamped', async t => {
   const s = await start(t);
   const z6 = [0, 0, 0, 0, 0, 0];
@@ -250,6 +269,7 @@ test('CORS echoes only listed origins, never with credentials, and null only whe
     const denied = await s.post({ ...fixture, b: batchId() }, { origin });
     assert.equal(denied.status, 403, origin);
     assert.equal(denied.headers['access-control-allow-origin'], undefined);
+    assert.equal(denied.headers['access-control-expose-headers'], undefined);
   }
   assert.equal(s.count('batches'), 1);
   // Tools without a browser send no Origin.
@@ -291,6 +311,7 @@ test('the per-client token bucket answers 429 with Retry-After and refills', asy
   assert.equal(limited.status, 429);
   assert.equal(limited.headers['retry-after'], '30');
   assert.equal(limited.headers['access-control-allow-origin'], ORIGIN, 'the page can read the status');
+  assert.equal(limited.headers['access-control-expose-headers'], 'Retry-After', 'and the wait');
   assert.equal(s.count('batches'), 1);
   s.clock.now += 30000;
   assert.equal((await s.send('GET', '/v1/health')).status, 200);

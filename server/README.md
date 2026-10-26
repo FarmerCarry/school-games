@@ -52,9 +52,11 @@ Privacy is built into what can be stored, not only into what the portal chooses 
   stored on the PC; the batch id is random per batch and kept only 30 days for
   de-duplication. Neither can link sessions of the same child.
 * **No IP addresses and no headers are stored or logged.** The client address is only a
-  key of the in-memory rate limiter and is forgotten within about a minute. Requests
+  key of the in-memory rate limiter and is forgotten once its bucket has refilled, at the
+  next sweep (at most once a minute, when a request arrives). Requests
   are not logged; request bodies are never logged. The only log lines are start-up,
-  purge counts and internal error messages.
+  purge counts and internal error messages (a client that disconnects or times out
+  mid-request is not an error and is not logged).
 * **No wall-clock times from the client.** Events carry seconds since the session
   started; the server stamps only the UTC **day** and **hour** of receipt. The "live"
   view keeps the last receipt time per session **in memory only**, for 5 minutes.
@@ -205,8 +207,9 @@ uses it. It must start with `https://`. Use the batch endpoint, for example
 ## API
 
 Every response has `Vary: Origin`, `Cache-Control: no-store` and, for an origin in
-`ALLOWED_ORIGINS`, `Access-Control-Allow-Origin: <that origin>`. Credentials are never
-allowed. Error bodies are `{"error": "<short reason>"}` and never echo the request.
+`ALLOWED_ORIGINS`, `Access-Control-Allow-Origin: <that origin>` and
+`Access-Control-Expose-Headers: Retry-After`. Credentials are never allowed. Error
+bodies are `{"error": "<short reason>"}` and never echo the request.
 Every request (including `OPTIONS` and health checks) takes a token from the client's
 rate-limit bucket; an empty bucket answers `429` with `Retry-After` in seconds.
 
