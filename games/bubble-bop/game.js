@@ -29,7 +29,7 @@
 
   /* --------------------------------------------------------------- state */
   let screen = 'title', world = null, cur = { w: 0, l: 0 }, time = 0, ending = null, result = null, resultT = 0, resultLock = 0;
-  let closetFrom = 'title', gripCard = 0, gripThen = '', menuIdle = 0, menuNext = 4, busyT = 0, lastMissT = -9, unlockFx = null;
+  let closetFrom = 'title', gripCard = 0, gripThen = '', gripAt = 0, menuIdle = 0, menuNext = 4, busyT = 0, lastMissT = -9, unlockFx = null;
   const ptr = { x: W / 2, y: H / 2, known: false, travel: 0, movedAt: -9 };
   const menuBop = { x: 640, y: 364, vx: 0, vy: 0 };
   let clicks = [], jumpPress = false, holdDir = 0, keyDir = 0, anyKey = '';
@@ -93,6 +93,7 @@
     const dots = document.querySelectorAll('.grip-dots i');
     dots.forEach((d, i) => d.classList.toggle('on', i === gripCard));
     menuIdle = 0; menuNext = 3; stopDemo();
+    gripAt = time;
   }
   function gripNext() {
     if (screen !== 'grip') return;
@@ -353,7 +354,9 @@
   on($('btnHow'), () => { J.select(); showGrip('title'); });
   on($('gripNext'), gripNext);
   on($('gripSkip'), () => { J.back(); gripDone(); });
-  $('gripCard').addEventListener('click', e => { e.stopPropagation(); gripNext(); });
+  // A click anywhere on the cards' screen turns the card, but not in the first moment
+  // after it appears: the second click of a double click on Play must not skip it.
+  $('scrGrip').addEventListener('click', e => { e.stopPropagation(); if (time - gripAt >= 0.4) gripNext(); });
   on($('mapHome'), () => { J.back(); toTitle(); });
   on($('mapCloset'), () => openCloset('map'));
   on($('btnPause'), () => pause(true));

@@ -9,7 +9,7 @@ html, body {
   background: #0d63b4;
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M6 4L6 40L15.5 31.5L22 45L29 42L22.5 28.5L35 28.5Z' fill='%23fff' stroke='%231c2250' stroke-width='3.5' stroke-linejoin='round'/%3E%3C/svg%3E") 6 4, auto;
 }
-button, .grip-card {
+button, #scrGrip {
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='52' viewBox='0 0 44 52'%3E%3Cpath d='M14 4a4.5 4.5 0 0 1 9 0v18h1a4 4 0 0 1 8 0v2a4 4 0 0 1 8 0v12c0 8-6 14-14 14h-2c-6 0-10-3-13-8l-7-11a4 4 0 0 1 6-5l4 4z' fill='%23fff' stroke='%231c2250' stroke-width='3.5' stroke-linejoin='round'/%3E%3C/svg%3E") 18 1, pointer;
 }
 .defs { position: absolute; width: 0; height: 0; overflow: hidden; }

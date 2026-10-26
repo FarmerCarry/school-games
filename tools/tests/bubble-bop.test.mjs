@@ -127,6 +127,25 @@ test('Enter or a click starts; a first visit shows the two picture cards, then t
   assert.equal((await state(back)).screen, 'map', 'a child with stars picks a level on the map');
 });
 
+test('a click anywhere on the picture cards turns them, but a double click on Play skips none', async t => {
+  const page = await game(t);
+  const play = await page.locator('#btnPlay').boundingBox();
+  await page.mouse.dblclick(play.x + play.width / 2, play.y + play.height / 2);
+  await step(page);
+  let s = await state(page);
+  assert.equal(s.screen, 'grip'); assert.equal(s.grip, 0, 'the second click of the double click does not turn the first card');
+  await step(page, 30);
+  await page.mouse.click(100, 650); // the dimmed sea below the card, nowhere near a button
+  await step(page);
+  assert.equal((await state(page)).grip, 1, 'a click beside the card turns it');
+  await step(page, 30);
+  await page.mouse.click(1180, 300);
+  await step(page);
+  s = await state(page);
+  assert.equal(s.screen, 'play', 'and the next one starts the first bubbles');
+  assert.deepEqual((await page.evaluate(() => bb.stats)).filter(c => c[0] === 'tutorial').map(c => c[1]), ['start', 'done']);
+});
+
 test('world 1 pops by hovering only, and a near miss within the margin still pops', async t => {
   const page = await game(t, { save: SAVE(0) });
   await page.keyboard.press('Enter');
