@@ -52,9 +52,15 @@ button { font-family: var(--sg-font); cursor: pointer; }
 .grid.mini .cell { height: 68px; }
 .grid.mini .sil { margin: 10px auto; }
 .big { font-size: 32px; padding: 12px 28px; }
-.shop { width: 980px; max-height: 640px; overflow: auto; text-align: right; }
+.shop { width: 1080px; max-height: 660px; overflow: auto; text-align: center; }
+#shopList { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 10px 0 14px; }
+.deal { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 196px; background: #fff; border: 4px solid #2a2348; border-radius: 24px; box-shadow: 0 5px 0 #2a2348; color: #2a2348; padding: 12px 8px 14px; }
+.deal i { font-style: normal; font-size: 72px; line-height: 1; }
+.deal b { font-size: 28px; line-height: 1.1; }
+.deal em { display: flex; align-items: center; justify-content: center; gap: 6px; font-style: normal; font-weight: 700; font-size: 28px; background: #ffd23f; border: 3px solid #2a2348; border-radius: 16px; padding: 4px 12px; min-width: 96px; }
+.deal .coin { width: 22px; height: 22px; }
+.deal:disabled { filter: grayscale(1); opacity: 0.45; box-shadow: none; }
 .item { display: flex; gap: 12px; align-items: center; background: #fff; border: 4px solid #2a2348; border-radius: 16px; padding: 8px 12px; margin: 8px 0; }
-.shopico { width: 42px; height: 42px; flex: none; display: grid; place-items: center; font-style: normal; font-size: 26px; background: #fff4c2; border: 3px solid #2a2348; border-radius: 12px; }
 .item b { font-size: 22px; }
 .item span { flex: 1; color: #6a5a38; font-size: 16px; }
 .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }

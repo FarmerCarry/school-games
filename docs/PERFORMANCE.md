@@ -560,21 +560,21 @@ The game allowance rises from 125,000 to 150,000 bytes (+25,000). That pays for 
 full-screen hatch (a wobbling egg, cracks, a flash, rays and a rarity reveal), a
 small marimba loop with a sneaky variant, and the terrain sheet. Cutting four biomes
 paid for part of it. The portal and teacher limits stay where they were. The
-precache limit stays 5,230,000: the built game grew by 11,174 bytes and the cache
-still fits, with 1,566 bytes left.
+precache limit stays 5,230,000.
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Egg Rush HTML | 135,084 | 150,000 (was 125,000) |
+| Egg Rush HTML | 130,600 | 150,000 (was 125,000) |
 | Portal (thumbnail and catalog entry) | 361,093 | 366,000 (unchanged) |
-| Offline precache, 47 files | 5,228,434 | 5,230,000 (unchanged) |
+| Offline precache, 47 files | 5,223,950 | 5,230,000 (unchanged) |
 | Teacher page | 92,764 | 96,000 (unchanged) |
 
-The built game is 135,084 bytes. Earlier passes (yard, hatch juice, the hopping pet,
-and the pop-text clamp) had reached 123,910 inside the old 125,000 cap. This pass
-replaces the small hatch disc with the ceremony, adds the music and the picture
-title, and ships three biomes instead of seven. On the software-GL harness the
-active p95 frame time is 50.1 ms (the audit measured 117 ms before the terrain
-sheet). The portal, including the arcade Arabic subset in the Egg Rush tile, is
-unchanged at 361,093 bytes.
+The built game is 130,600 bytes. The ceremony pass reached 135,084. The following
+art pass replaces the teardrop egg and the per-pet drawings with one rounded egg
+and one pastel face, so the file shrinks by 4,484 bytes and the precache has
+6,050 bytes left. Eggs are ovals with a rarity pattern, the ceremony splits the
+shell on a zigzag, pets and the runner use dot eyes, and the shop is a grid of
+picture cards. On the software-GL harness the active p95 frame time is 66.7 ms
+(50.1 ms on the ceremony pass, 117 ms in the audit before the terrain sheet). The portal, including the
+arcade Arabic subset in the Egg Rush tile, is unchanged at 361,093 bytes.
 
