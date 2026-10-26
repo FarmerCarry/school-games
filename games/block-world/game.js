@@ -150,18 +150,6 @@
     grow: function () { [523, 784, 1047].forEach(function (f, i) { tn({ f: f, dur: 0.14, vol: 0.13, delay: i * 0.06, exact: true }); }); },
     timber: function () { hit({ f: 700, q: 0.8, to: 120, dur: 0.5, vol: 0.8, attack: 0.01 }); tn({ f: 200, to: 60, type: 'triangle', dur: 0.4, vol: 0.25 }); SND.mat('wood', 1.3); }
   };
-  // Gentle ambient music: sparse pentatonic notes.
-  var music = { t: 3 };
-  function updateMusic(dt) {
-    music.t -= dt;
-    if (music.t > 0 || !A.ctx || A.muted) return;
-    music.t = 2.6 + Math.random() * 3.5;
-    var night = BW.envAt(G.tod).night > 0.5, deep = G.mode === 'play' && P.y > 90;
-    var scale = night || deep ? [220, 261.6, 293.7, 329.6, 392, 440] : [261.6, 293.7, 329.6, 392, 440, 523.3];
-    var n = 1 + Math.floor(Math.random() * 3), base = Math.floor(Math.random() * 4);
-    for (var i = 0; i < n; i++) A.tone({ freq: scale[(base + i * 2) % scale.length] * (Math.random() < 0.3 ? 2 : 1), type: 'sine', dur: 1.6, vol: 0.045, attack: 0.04, delay: i * 0.35 });
-  }
-
   // ------------------------------------------------------------ game state
   var meta = store.get('meta', null);
   if (!meta || typeof meta !== 'object' || Array.isArray(meta)) meta = {};
@@ -916,7 +904,6 @@
   var budget = { n: 3 };
   function update(dt) {
     G.time += dt;
-    updateMusic(dt);
     if (G.mode === 'title') {
       G.titleT += dt;
       G.tod = (0.3 + G.titleT / 70) % 1;
