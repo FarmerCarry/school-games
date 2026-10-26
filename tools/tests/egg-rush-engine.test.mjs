@@ -263,6 +263,45 @@ test('the night fox borrows a pet and the den gives it back', () => {
   assert.equal(w.pets.length, 1);
 });
 
+test('the first bank is a rare pet', () => {
+  const w = ER.create({ tutorial: false, seed: 1, now: 1000 });
+  const p = w.players[0];
+  p.x = 5; p.y = 8;
+  p.egg = { nest: -1, biome: 0, species: 0, rarity: 0, daily: false };
+  step(w, {});
+  assert.equal(w.banks, 1);
+  assert.ok(w.incs[0] && w.incs[0].s >= 2, 'species ' + (w.incs[0] && w.incs[0].s));
+});
+
+test('a naive runner banks at least 3 eggs in 90 seconds', () => {
+  const w = ER.create({ tutorial: false, seed: 4, now: 0 });
+  const p = w.players[0];
+  for (let i = 0; i < 90 * 60; i++) {
+    let red = false;
+    for (const g of w.guards) if (g.state === 'chase' && ER.inCone(g, p.x, p.y)) red = true;
+    if (red) { step(w, {}); continue; }
+    if (p.egg) {
+      const dx = 5.5 - p.x, dy = 8 - p.y, d = Math.hypot(dx, dy) || 1;
+      step(w, { x: dx / d, y: dy / d });
+      continue;
+    }
+    let tx = null, ty = null, bd = 1e9;
+    for (const n of w.nests) if (n.egg) {
+      const d = Math.hypot(n.x - p.x, n.y - p.y);
+      if (d < bd) { bd = d; tx = n.x; ty = n.y; }
+    }
+    for (const f of w.flights) if (f.kind === 'loose') {
+      const d = Math.hypot(f.x - p.x, f.y - p.y);
+      if (d < bd) { bd = d; tx = f.x; ty = f.y; }
+    }
+    if (tx == null) { step(w, { x: 1 }); continue; }
+    const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy) || 1;
+    const near = d < 0.9;
+    step(w, { x: near ? 0 : dx / d, y: near ? 0 : dy / d, grab: near });
+  }
+  assert.ok(w.banks >= 3, 'banks ' + w.banks);
+});
+
 test('carrying an egg into the yard is marked once', () => {
   const w = ER.create({ tutorial: false, seed: 1, now: 0 });
   const p = w.players[0];

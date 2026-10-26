@@ -106,7 +106,7 @@
   }
 
   function build1p(w) {
-    w.w = BASE + 7 * BW;
+    w.w = BASE + 3 * BW;
     w.safeL = SAFE; w.safeR = 999;
     w.players = [makePlayer(0, 6.2, 8, 1)];
     addNest(w, 0, 17.6, 8, 0);
@@ -114,14 +114,13 @@
     addNest(w, 0, 30.6, 11.1, 2);
     addNest(w, 0, 33.4, 6.4, 3);
     addGuard(w, 0, 28.4, 8.1, Math.PI);
-    for (let i = 1; i < 7; i++) {
+    for (let i = 1; i < 3; i++) {
       const x0 = BASE + i * BW;
       const specs = [i % 3, (i + 1) % 4, Math.min(5, 2 + (i % 3)), Math.min(5, 3 + (i % 2))];
       addNest(w, i, x0 + 4.6, 5.4, specs[0]);
       addNest(w, i, x0 + 8.8, 10.6, specs[1]);
       addNest(w, i, x0 + 14.2, 6.2, specs[2]);
       addNest(w, i, x0 + 18.6, 11.2, specs[3]);
-      if (i >= 3) addNest(w, i, x0 + 19.4, 4.4, 5);
       const g1 = addGuard(w, i, x0 + 7.2, 8.2, Math.PI);
       const g2 = addGuard(w, i, x0 + 15.5, 7.2, Math.PI);
       if (BIOMES[i].patrol) { g1.pmin = x0 + 4; g1.pmax = x0 + 12; g2.pmin = x0 + 12; g2.pmax = x0 + 20; }
@@ -320,6 +319,11 @@
       }
     }
     if (opts.tutorial === false) { w.tut = 'done'; w.taught = true; }
+    else if (w.mode === '1p' && !opts.save) {
+      addNest(w, 0, 13.35, 8, 2);
+      const hen = w.guards[0];
+      if (hen && !w.taught) { hen.state = 'sleep'; hen.timer = 30; }
+    }
     refreshDaily(w);
     w.notice = notice;
     w.away = away;
@@ -495,6 +499,7 @@
     const slot = w.incs.findIndex(s => !s);
     if (slot < 0) { if (!p.fullNote) { p.fullNote = 1; ev(w, { t: 'full' }); } return false; }
     p.fullNote = 0;
+    if (w.banks === 0 && e.species < 2) e.species = 2;
     const id = e.biome * 6 + e.species;
     let force = 0;
     if (e.daily && w.seen[id]) {
@@ -509,7 +514,7 @@
       nest.respawn = w.t + 6.5;
       if (nest.daily) { nest.daily = false; w.daily.claimed = true; }
     }
-    ev(w, { t: 'bank', p: p.id, slot: slot });
+    ev(w, { t: 'bank', p: p.id, slot: slot, n: eggLump(w, e), x: p.x, y: p.y });
     syncTut(w);
     return true;
   }
@@ -637,12 +642,10 @@
       return;
     }
     const e = p.egg;
-    const nest = e.nest >= 0 ? w.nests[e.nest] : null;
-    const tx = nest ? nest.x : g.hx, ty = nest ? nest.y : g.hy;
-    w.flights.push({ kind: 'return', nest: e.nest, biome: e.biome, species: e.species, daily: e.daily, x: p.x, y: p.y, sx: p.x, sy: p.y, tx: tx, ty: ty, t: 0, T: 0.62 });
-    p.egg = null;
     const dx = p.x - g.x, dy = p.y - g.y, d = Math.hypot(dx, dy) || 1;
-    p.vx = dx / d * 7; p.vy = dy / d * 7; p.knock = 0.22;
+    w.flights.push({ kind: 'loose', nest: e.nest, biome: e.biome, species: e.species, daily: e.daily, x: p.x, y: p.y, vx: dx / d * 0.6, vy: -0.35, t: 0 });
+    p.egg = null;
+    p.vx = dx / d * 3.4; p.vy = dy / d * 3.4; p.knock = 0.16;
     g.state = 'return'; g.boost = 0; g.script = false;
     if (w.mode === '1p') w.taught = true;
     ev(w, { t: 'boop', x: p.x, y: p.y, p: p.id });
@@ -654,7 +657,7 @@
   }
   function noteOpen(w, x, y) {
     if (!w || w.mode !== '1p') return;
-    const now = maxOpen(w.speedXP);
+    const now = Math.min(2, maxOpen(w.speedXP));
     if (w.openMark == null) { w.openMark = now; return; }
     const from = w.openMark < now ? w.openMark : now;
     for (let i = from + 1; i <= now; i++) ev(w, { t: 'open', biome: i, name: BIOMES[i].name, x: x, y: y });
@@ -663,7 +666,7 @@
   function gateBlock(w, p, prev) {
     if (w.mode !== '1p') return;
     const sp = speedOf(w.speedXP);
-    for (let i = 1; i < 7; i++) {
+    for (let i = 1; i < 3; i++) {
       const gx = BASE + i * BW;
       if (sp + 1e-6 < GATES[i] && prev <= gx - 0.2 && p.x > gx - 0.2) {
         p.x = gx - 0.2; p.vx = Math.min(0, p.vx);

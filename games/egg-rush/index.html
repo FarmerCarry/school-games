@@ -23,6 +23,7 @@
     <button class="iconbtn" id="btnGear" type="button" aria-label="إعدادات">⚙</button>
     <button class="iconbtn" id="btnPause" type="button" aria-label="إيقاف مؤقت">⏸</button>
   </div>
+  <div id="petbar" hidden><b id="petCount">+1</b><div id="petSlots"></div></div>
   <div id="dock" hidden>
     <div id="hint" hidden><span id="hintText"></span><button id="btnSkip" type="button">تخطَّ</button></div>
   </div>
@@ -31,15 +32,33 @@
   <div class="ov" id="ovTitle">
     <div class="card">
       <h1>سباق البيض</h1>
-      <p id="titleSub">تسلّل إلى العش، اخطف البيضة، واهرب قبل أن يستيقظ الحارس!</p>
-      <div class="row">
-        <button class="sg-btn big" id="btnPlay" type="button">العب</button>
-        <button class="sg-btn secondary big" id="btn2p" type="button">تحدي العشّين</button>
+      <p id="titleSub"></p>
+      <div class="strip" aria-hidden="true">
+        <svg viewBox="0 0 200 140">
+          <rect width="200" height="140" rx="16" fill="#b6e7a0"/>
+          <ellipse cx="118" cy="78" rx="28" ry="36" fill="#fff6d8" stroke="#2a2348" stroke-width="4"/>
+          <path d="M46 96c18-8 28-28 30-46 8 6 20 8 28 4-6 22-8 40-2 58-16 6-36 4-56-16z" fill="#ffd7b5" stroke="#2a2348" stroke-width="4"/>
+          <circle cx="108" cy="84" r="6" fill="#7ec8ff"/>
+        </svg>
+        <svg viewBox="0 0 200 140">
+          <rect width="200" height="140" rx="16" fill="#d7f3c8"/>
+          <ellipse cx="96" cy="88" rx="40" ry="28" fill="#fff" stroke="#2a2348" stroke-width="4"/>
+          <path d="M78 70l6-22 10 16z" fill="#ff5a3c" stroke="#2a2348" stroke-width="3"/>
+          <path d="M70 84h16M108 84h16" stroke="#2a2348" stroke-width="4" stroke-linecap="round"/>
+          <text x="148" y="48" font-size="28" font-family="Fredoka, sans-serif" fill="#7eb6ff">Zzz</text>
+        </svg>
+        <svg viewBox="0 0 200 140">
+          <rect width="200" height="140" rx="16" fill="#ffe7a8"/>
+          <path d="M70 96c0-28 18-48 30-48s30 20 30 48z" fill="#fff6d8" stroke="#2a2348" stroke-width="4"/>
+          <path d="M86 70l10 16 8-18 8 18 12-14" fill="none" stroke="#2a2348" stroke-width="3"/>
+          <ellipse cx="118" cy="58" rx="16" ry="14" fill="#ffe14a" stroke="#2a2348" stroke-width="4"/>
+          <circle cx="112" cy="56" r="2" fill="#2a2348"/><circle cx="124" cy="56" r="2" fill="#2a2348"/>
+          <path d="M114 64c4 4 10 4 14 0" fill="none" stroke="#2a2348" stroke-width="2"/>
+        </svg>
       </div>
-      <div class="howto">
-        <div><span class="sg-key">WASD</span> أو الأسهم للحركة · <span class="sg-key">مسافة</span> خطف البيضة</div>
-        <div>الحارس يفتح عينه قبل أن يطاردك. ارجع إلى البيت لتفقس البيضة.</div>
-        <div>لاعبان: الأول <span dir="ltr"><span class="sg-key">WASD</span> <span class="sg-key">E</span> <span class="sg-key">F</span></span> · الثاني <span dir="ltr"><span class="sg-key">↑↓←→</span> <span class="sg-key">/</span> <span class="sg-key">Enter</span></span></div>
+      <div class="row">
+        <button class="sg-btn big" id="btnPlay" type="button">▶</button>
+        <button class="sg-btn secondary" id="btn2p" type="button">تحدي العشّين</button>
       </div>
     </div>
   </div>
@@ -62,6 +81,7 @@
       <h2 id="resultTitle">انتهى التحدي</h2>
       <p id="resultNew" hidden>رقم جديد!</p>
       <p id="resultSub"></p>
+      <div class="grid mini" id="resultBook" hidden></div>
       <div class="row">
         <button class="sg-btn big" id="btnReplay" type="button">العب مرة أخرى</button>
         <button class="sg-btn secondary" id="btnResultMenu" type="button">القائمة</button>
