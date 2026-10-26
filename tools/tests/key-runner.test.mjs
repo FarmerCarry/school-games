@@ -62,7 +62,7 @@ test('Key Runner stays on the title until Play and then jumps', async t => {
   await page.locator('#play').click();
   await focusSurface(page);
   assert.equal((await page.evaluate(() => KeyRunnerGame.mode)), 'play');
-  assert.deepEqual(await page.evaluate(() => krProbe.rounds.map(r => r[0])), ['plaza']);
+  assert.deepEqual(await page.evaluate(() => krProbe.rounds.map(r => r[0])), ['tower']);
   const before = await page.evaluate(() => KeyRunnerGame.state.y);
   await page.keyboard.down('Space');
   await step(page, 6);

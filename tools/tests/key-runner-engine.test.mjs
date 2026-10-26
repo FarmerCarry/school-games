@@ -84,24 +84,45 @@ test('jump buffer at 100ms before landing still jumps', () => {
   assert.equal(lateJump, false);
 });
 
-test('authored courses are clearable and world 1 stage 1 is short', () => {
+test('a guided climb clears the first stage in a recess and hold-forward falls on the next', () => {
   assert.equal(KR.audit().length, 0);
-  const engine = KR.createEngine({ mode: 'world', world: 0, speed: 0 });
+  assert.equal(KR.worlds()[0].stages.length, 8);
+  for (const stage of KR.worlds()[0].stages) {
+    const kinds = new Set(stage.pieces.map((p) => p.t));
+    assert.ok(kinds.size >= 2, 'stage ' + stage.index + ' needs two piece types');
+  }
+  const bot = KR.createEngine({ mode: 'world', world: 0, speed: 0 });
   const memory = {};
   let stageOne = 0;
-  for (let i = 0; i < 120 * 70 && !engine.state.players[0].finished; i++) {
-    engine.step(1 / 120, KR.suggest(engine.state, 0, memory));
-    if (!stageOne && engine.state.players[0].stage >= 1) stageOne = engine.state.time;
+  for (let i = 0; i < 120 * 40 && bot.state.players[0].stage < 1; i++) {
+    bot.step(1 / 120, KR.suggest(bot.state, 0, memory));
+    if (!stageOne && bot.state.players[0].stage >= 1) stageOne = bot.state.time;
   }
-  assert.ok(stageOne > 0 && stageOne < 60, `stage 1 took ${stageOne}`);
-  assert.equal(engine.state.players[0].finished, true);
+  assert.ok(stageOne >= 20 && stageOne <= 30, `stage 1 took ${stageOne}`);
+  assert.equal(bot.state.players[0].falls, 0);
+  const hold = KR.createEngine({ mode: 'world', world: 0, speed: 0 });
+  let fell = null;
+  for (let i = 0; i < 120 * 40 && !fell; i++) {
+    const ev = hold.step(1 / 120, { z: 1 });
+    const hit = ev.find((e) => e.e === 'fall');
+    if (hit) fell = { t: hold.state.time, stage: hold.state.players[0].stage };
+  }
+  assert.ok(fell && fell.stage >= 1 && fell.stage <= 2, 'hold-forward should fall on stage 2 or 3');
+  const side = KR.createEngine({ mode: 'world', world: 0, speed: 0 });
+  let sideT = 0;
+  for (let i = 0; i < 120 * 10 && !sideT; i++) {
+    if (side.step(1 / 120, { x: 1, z: 0.15 }).some((e) => e.e === 'fall')) sideT = side.state.time;
+  }
+  assert.ok(sideT > 0 && sideT < 10, 'a sidestep can fall within 10s, took ' + sideT);
 });
 
-test('sinking keys dip, gates block, and a lip of 0.2 can be stepped onto', () => {
+test('sinking keys warn then drop, gates block, and a lip of 0.2 can be stepped onto', () => {
   const sink = course([pad(1, 0, { t: 'sink', hw: 2, hd: 2 })], { z: 0 });
   const base = sink.state.players[0].y;
-  run(sink, 0.35, {});
-  assert.ok(base - sink.state.players[0].y > 0.12 && base - sink.state.players[0].y < 0.24);
+  run(sink, 0.3, {});
+  assert.ok(Math.abs(base - sink.state.players[0].y) < 0.12, 'the first half-second only wobbles');
+  run(sink, 0.5, {});
+  assert.ok(base - sink.state.players[0].y > 0.35, 'standing on a sink drops the runner');
   const gate = course([
     pad(1, 0, { hw: 2, hd: 2 }),
     { id: 2, t: 'gate', stage: 0, x: 0, z: 1.2, y: 0.4, hw: 2, hh: 1.2, hd: 0.2, stand: false, n: 10 }
@@ -129,23 +150,18 @@ test('a fall keeps speed and the current stage', () => {
   pl.speed = 40;
   pl.stage = 2;
   pl.cp.stage = 2;
-  pl.y = -3;
-  run(engine, 0.7, {});
+  pl.y = -7;
+  run(engine, 0.95, {});
   assert.equal(pl.speed, 40);
   assert.equal(pl.stage, 2);
   assert.ok(pl.y > -0.2);
 });
 
-test('shoes and rebirths stack, tower seeds are stable, and the landing ring exists in the air', () => {
+test('shoes and rebirths stack, the daily seed is stable, and the landing ring exists in the air', () => {
   assert.equal(KR.stepGain(1, 0), 1);
   assert.equal(KR.stepGain(2, 0), 2);
   assert.ok(Math.abs(KR.stepGain(2, 2) - 2 * 1.5 * 1.5) < 1e-9);
-  const seed = KR.dailySeed(new Date(2026, 9, 25));
-  const a = KR.tower(seed);
-  const b = KR.tower(seed);
-  assert.equal(a.pieces.length, b.pieces.length);
-  assert.equal(a.pieces[10].z, b.pieces[10].z);
-  assert.notEqual(KR.tower(seed + 1).pieces[10].z, a.pieces[10].z);
+  assert.equal(KR.dailySeed(new Date(2026, 9, 25)), 20261025);
   const engine = course([pad(1, 0, { hw: 2, hd: 2 })]);
   engine.step(1 / 120, { jump: true });
   run(engine, 0.05, { jump: true });
@@ -160,58 +176,16 @@ test('shoes and rebirths stack, tower seeds are stable, and the landing ring exi
   assert.equal(cam.inside, false);
 });
 
-test('holding forward crosses the plaza into world 1 and walks the sinking keys', () => {
-  const plaza = KR.createEngine({ mode: 'plaza' });
-  plaza.reset({ mode: 'plaza' });
-  let entered = -1;
-  let fell = false;
-  for (let i = 0; i < 60 * 4; i++) {
-    const pl = plaza.state.players[0];
-    const yaw = pl.face;
-    const ev = plaza.step(1 / 60, { x: Math.sin(yaw), z: Math.cos(yaw) });
-    if (ev.some((e) => e.e === 'fall')) fell = true;
-    const hit = ev.find((e) => e.e === 'portal');
-    if (hit) { entered = hit.world; break; }
-  }
-  assert.equal(fell, false);
-  assert.equal(entered, 0);
-  const world = KR.createEngine({ mode: 'world', world: 0, speed: 0 });
-  world.reset({ mode: 'world', world: 0, speed: 0 });
+test('walking the first stage does not farm a speed stat', () => {
+  const world = KR.createEngine({ mode: 'world', world: 0, speed: 40 });
+  world.reset({ mode: 'world', world: 0, speed: 40 });
   const z0 = world.state.players[0].z;
-  for (let i = 0; i < 60 * 12; i++) {
-    const pl = world.state.players[0];
-    const yaw = pl.face;
-    world.step(1 / 60, { x: Math.sin(yaw), z: Math.cos(yaw) });
-  }
+  for (let i = 0; i < 60 * 8; i++) world.step(1 / 60, { z: 1 });
   const pl = world.state.players[0];
-  assert.ok(pl.z > z0 + 25, 'runway should keep moving, z=' + pl.z);
-  assert.ok(pl.speed < 40, 'a wall grind must not farm speed, speed=' + pl.speed);
+  assert.ok(pl.z > z0 + 25, 'the opening runway keeps moving, z=' + pl.z);
+  assert.equal(pl.speed, 40);
   assert.equal(pl.falling, 0);
-});
-
-test('candies sit between keys and moments rotate', () => {
-  const stage = KR.worlds()[0].stages[0];
-  const candies = stage.pieces.filter((p) => p.t === 'candy');
-  assert.ok(candies.length > 10 && candies.length <= 40);
-  assert.ok(candies.every((c) => c.sensor && !c.stand && c.y > 0.5));
-  const moments = stage.path.filter((p) => p.moment).map((p) => p.moment);
-  assert.ok(moments.length >= 4);
-  for (let i = 1; i < moments.length; i++) assert.notEqual(moments[i], moments[i - 1]);
-  const kinds = new Set(moments);
-  assert.ok(kinds.has('gold') && kinds.has('boost') && kinds.has('bear') && kinds.has('arch'));
-  const eng = KR.createEngine({ mode: 'world', world: 0, speed: 0 });
-  const memory = {};
-  let got = 0;
-  const seen = new Set();
-  for (let i = 0; i < 120 * 8; i++) {
-    for (const ev of eng.step(1 / 120, KR.suggest(eng.state, 0, memory))) {
-      if (ev.e === 'candy') got++;
-      if (ev.e === 'press' && ev.moment) seen.add(ev.moment);
-    }
-  }
-  assert.ok(got > 5, 'a run picks up candies, got ' + got);
-  assert.ok(seen.has('bear') || seen.has('arch'));
-  assert.equal(eng.state.players[0].falls, 0);
+  assert.ok(world.state.players[0].z < 1.2 || z0 < 1.2);
 });
 
 test('corrupt saves fall back and a real save keeps the career', () => {

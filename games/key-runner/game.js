@@ -1,4 +1,4 @@
-/* Arabic HUD, saves and rounds. The engine never calls Kit.stats. */
+/* Picture-first tower climb. The engine never calls Kit.stats. */
 (function () {
   'use strict';
   var KR = window.KeyRunner;
@@ -12,103 +12,49 @@
   var dirty = true;
   var contextLost = false;
   var eng, view, loop, fit;
-  var milestone = Math.floor(save.speed / 25);
-  var toastUntil = 0;
-  var bannerUntil = 0;
   var prevKey = {};
   var shake = 0;
   var fovKick = 0;
-  var shownSpeed = -1;
-  var floatTimer = 0;
-  var rank = { '': 0, bronze: 1, silver: 2, gold: 3 };
-  var activity = 'plaza';
-  var streakAt = 0;
-  var hintTimer = 0;
-  var hintShown = false;
-  var recordRound = false;
-  var candyN = [0, 0];
-  var chain = [0, 0];
-  var chainAt = [0, 0];
-  var boostUntil = 0;
-  var victoryUntil = 0;
-  var holdResult = null;
-  var ghostDone = false;
-
-  function clearJuice() {
-    candyN = [0, 0];
-    chain = [0, 0];
-    chainAt = [0, 0];
-    boostUntil = 0;
-    victoryUntil = 0;
-    holdResult = null;
-    var node = el('candy');
-    if (node) node.textContent = '0';
-  }
+  var activity = 'tower';
+  var hitUntil = 0;
+  var combo = 0;
+  var comboAt = 0;
+  var resultAt = 0;
+  var heldWin = null;
+  var scripted = false;
 
   function persist() {
     save.best = Math.max(save.best || 0, save.speed || 0);
     if (store.set('save', save)) saveStatus.saved();
     else saveStatus.failed();
   }
+  function clock(t) {
+    t = Math.max(0, t || 0);
+    var m = Math.floor(t / 60);
+    var s = Math.floor(t % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
   function paintMenus() {
-    el('menu-speed').textContent = String(Math.round(save.speed));
-    el('menu-wins').textContent = String(Math.round(save.wins));
-    el('menu-progress').textContent = save.unlocked > 1
-      ? ('عوالم مفتوحة: ' + save.unlocked + (save.rebirths ? ' · إعادات ' + save.rebirths : ''))
-      : 'عالم واحد مفتوح';
-    el('quality').textContent = save.quality === 'low' ? 'الرسوم: خفيفة' : 'الرسوم: كاملة';
-    el('quality').setAttribute('aria-pressed', String(save.quality === 'low'));
-    el('wins').textContent = String(Math.round(save.wins));
-    if (el('shop-wins')) el('shop-wins').textContent = String(Math.round(save.wins));
-  }
-  function toast(text) {
-    el('toast').hidden = false;
-    el('toast').textContent = text;
-    toastUntil = performance.now() + 2200;
-  }
-  function banner(text) {
-    var node = el('banner');
-    node.hidden = false;
-    node.textContent = text;
-    node.classList.remove('pop');
-    void node.offsetWidth;
-    node.classList.add('pop');
-    bannerUntil = performance.now() + 1600;
-  }
-  var POP = [0xff4eb6, 0xffd24a, 0x7eb6ff, 0x3ddc6a, 0xff7a3c];
-  function sparkCount(n) {
-    if (Kit.motion.reduced()) return Math.min(3, n);
-    if (save.quality === 'low') return Math.max(2, (n * 0.45) | 0);
-    return n;
-  }
-  function celebrate(x, y, z) {
-    view.burst(x, y, z, 0xffe56a, sparkCount(14));
-    view.burst(x, y + 0.4, z, 0xff4eb6, sparkCount(10));
-    view.burst(x, y + 0.15, z, 0xffffff, sparkCount(8));
-    if (save.quality !== 'low' && !Kit.motion.reduced()) view.burst(x, y + 0.7, z, 0x7dffa8, 6);
-  }
-  function floater(text) {
-    var node = el('floater');
-    node.hidden = false;
-    node.textContent = text;
-    node.classList.remove('up');
-    void node.offsetWidth;
-    node.classList.add('up');
-    clearTimeout(floatTimer);
-    floatTimer = setTimeout(function () { node.hidden = true; }, 650);
+    var q = el('quality');
+    var low = save.quality === 'low';
+    q.setAttribute('aria-pressed', low ? 'true' : 'false');
+    q.textContent = low ? 'الرسوم: خفيفة' : 'الرسوم: كاملة';
+    var best = el('menu-best');
+    if (best) best.textContent = save.bestTime ? clock(save.bestTime) : '—';
+    var flags = el('menu-flags');
+    if (flags) flags.textContent = String(save.flags || 0);
   }
   function screens() {
     el('title-screen').hidden = mode !== 'title';
     el('duo-screen').hidden = mode !== 'duo';
-    el('shop-screen').hidden = mode !== 'shop';
     el('pause-screen').hidden = mode !== 'paused';
     el('result-screen').hidden = mode !== 'result';
-    el('hud').hidden = mode === 'title' || mode === 'duo';
+    el('hud').hidden = mode === 'title' || mode === 'duo' || mode === 'result';
     el('pause-button').hidden = mode !== 'play';
     el('quality').hidden = mode === 'play';
+    el('hint').hidden = mode !== 'play';
     document.body.dataset.mode = mode;
     document.body.dataset.duo = duo && mode === 'play' ? '1' : '0';
-    el('speed2').hidden = !(duo && mode === 'play');
   }
   function endRound(result, score) {
     if (!roundId) return;
@@ -116,7 +62,7 @@
     roundId = '';
   }
   function beginRound(id) {
-    if (roundId) endRound('end', Math.round(duo ? 0 : save.speed));
+    if (roundId) endRound('end', 0);
     roundId = id;
     Kit.stats.round(id);
   }
@@ -133,89 +79,63 @@
   function go(nextMode, opts, round) {
     duo = nextMode === 'race';
     activity = nextMode;
-    clearJuice();
-    eng.reset(runOpts(Object.assign({ mode: nextMode === 'race' ? 'race' : nextMode }, opts || {})));
+    combo = 0;
+    resultAt = 0;
+    heldWin = null;
+    eng.reset(runOpts(Object.assign({ mode: nextMode === 'race' ? 'race' : 'world', world: 0 }, opts || {})));
+    eng.state.armed = true;
     mode = 'play';
     dirty = true;
     if (round) beginRound(round);
     screens();
     paintMenus();
     focusGame();
-    var startSp = save.speed || 0;
-    streakAt = startSp >= 40 ? 40 : startSp >= 24 ? 24 : startSp >= 12 ? 12 : 0;
-    recordRound = false;
-    showHint();
-    if (!duo && !ghostDone && nextMode === 'plaza') {
-      ghostDone = true;
-      view.playGhost(eng.state);
+    paintPips(0);
+    KR.music(true, 0);
+    if (!duo) view.playGhost(eng.state);
+  }
+  function paintPips(n) {
+    var dots = el('pips').querySelectorAll('i');
+    for (var i = 0; i < dots.length; i++) dots[i].classList.toggle('on', i < n);
+  }
+  function starsFor(time) {
+    var stages = KR.worlds()[0].stages;
+    var gold = 0, silver = 0, bronze = 0;
+    for (var i = 0; i < stages.length; i++) {
+      gold += stages[i].gold;
+      silver += stages[i].silver;
+      bronze += stages[i].bronze;
     }
+    if (time <= gold) return 3;
+    if (time <= silver) return 2;
+    if (time <= bronze) return 1;
+    return 1;
   }
-  function buildConfetti() {
-    var root = el('confetti');
-    if (root.childNodes.length) return;
-    var colors = ['#ff4eb6', '#ffd24a', '#7dffb0', '#8fd0ff', '#fff6ea', '#ff7a3c'];
-    for (var i = 0; i < 16; i++) {
-      var bit = document.createElement('i');
-      bit.style.cssText = 'left:' + ((i * 6.2) % 94) + '%;background:' + colors[i % colors.length] + ';animation-delay:' + ((i % 8) * 0.2) + 's;animation-duration:' + (1.7 + (i % 5) * 0.22) + 's';
-      root.appendChild(bit);
-    }
+  function unlockTrail(flags) {
+    var trail = flags >= 8 ? 3 : flags >= 6 ? 2 : flags >= 3 ? 1 : 0;
+    if (trail && save.owned.trails.indexOf(trail) < 0) save.owned.trails.push(trail);
+    if (trail > save.trail) save.trail = trail;
   }
-  function showRecord(on) {
-    var node = el('result-record');
-    node.hidden = !on;
-    node.classList.remove('pop');
-    if (!on) return;
-    void node.offsetWidth;
-    node.classList.add('pop');
+  function showResult(time, flags, fresh) {
+    mode = 'result';
+    dirty = true;
+    var stars = starsFor(time);
+    el('result-title').textContent = 'قمة البرج!';
+    el('result-line').textContent = flags + '/8   ' + clock(time);
+    el('result-record').hidden = !fresh;
+    el('stars').setAttribute('data-stars', String(stars));
+    el('tower-mark').style.bottom = Math.min(92, 8 + flags * 10) + '%';
+    screens();
+    KR.music(false, 0);
   }
-  function showHint() {
-    if (hintShown || duo) return;
-    hintShown = true;
-    el('hint').hidden = false;
-    clearTimeout(hintTimer);
-    hintTimer = setTimeout(function () { el('hint').hidden = true; }, 5000);
-  }
-  function hideHint() {
-    el('hint').hidden = true;
-    clearTimeout(hintTimer);
-  }
-  function markStreak(sp) {
-    var mark = sp >= 40 ? 40 : sp >= 24 ? 24 : sp >= 12 ? 12 : 0;
-    if (mark <= streakAt) return;
-    streakAt = mark;
-    banner(mark >= 40 ? 'أسطوري!' : mark >= 24 ? 'خارق!' : 'ممتاز!');
-  }
-  function startPlaza() {
-    go('plaza', { mode: 'plaza', speed: save.speed }, 'plaza');
+  function startClimb() {
+    Kit.audio.unlock();
+    go('world', { speed: save.speed }, 'tower');
     persist();
   }
-  function canEnter(world) {
-    var gate = KR.worlds()[world];
-    if (world >= save.unlocked) return 'هذا العالم يفتح بعد الذي قبله';
-    if (save.rebirths < gate.rebirth) return 'تحتاج ' + gate.rebirth + ' إعادة انطلاق';
-    if (gate.charm && !save.owned.charm) return 'اشترِ حذاء القفز من المتجر أولًا';
-    return '';
-  }
-  function enterWorld(world) {
-    var why = canEnter(world);
-    if (why) {
-      toast(why);
-      var pl = eng.state.players[0];
-      pl.vy = 8;
-      pl.onGround = false;
-      pl.hop = true;
-      return;
-    }
-    if (KR.worlds()[world].charm) save.charm = 1;
-    go('world', { world: world, speed: save.speed, charm: !!save.charm }, 'w' + (world + 1));
-  }
-  function startTower() {
-    if (save.unlocked < 4) { toast('برج المفاتيح يفتح بعد العالم الثالث'); return; }
-    var seed = KR.dailySeed();
-    go('tower', { seed: seed, speed: save.speed }, 'tower');
-  }
-  function startRace(world) {
-    go('race', { world: world, players: 2, speed: 0, shoe: 1, rebirths: 0, charm: false }, 'duo');
+  function startRace() {
+    Kit.audio.unlock();
+    go('race', { players: 2, speed: 0, shoe: 1, rebirths: 0, charm: false }, 'duo');
   }
   function pause() {
     if (mode !== 'play') return;
@@ -233,212 +153,106 @@
     focusGame();
   }
   function restart() {
-    var opts = { mode: activity === 'race' ? 'race' : activity };
-    if (activity === 'world' || activity === 'race') opts.world = eng.state.world;
-    if (activity === 'tower') opts.seed = eng.state.seed;
-    if (activity === 'race') { opts.players = 2; opts.speed = 0; opts.shoe = 1; opts.rebirths = 0; opts.charm = false; }
+    var race = activity === 'race';
     mode = 'play';
-    clearJuice();
-    eng.reset(runOpts(opts));
+    combo = 0;
+    resultAt = 0;
+    eng.reset(runOpts(race ? { mode: 'race', world: 0, players: 2, speed: 0, shoe: 1, rebirths: 0, charm: false } : { mode: 'world', world: 0 }));
+    eng.state.armed = true;
     dirty = true;
     screens();
     focusGame();
+    paintPips(0);
   }
   function menu() {
-    endRound('end', Math.round(duo ? 0 : save.speed));
-    clearJuice();
+    endRound('end', 0);
     duo = false;
-    activity = 'plaza';
+    activity = 'tower';
     mode = 'title';
-    eng.reset(runOpts({ mode: 'plaza' }));
+    resultAt = 0;
+    heldWin = null;
+    eng.reset(runOpts({ mode: 'world', world: 0 }));
     dirty = true;
     screens();
     paintMenus();
-  }
-  function noteStage(ev) {
-    var key = ev.world + '-' + ev.stage;
-    var prev = save.medals[key];
-    var add = 0;
-    if (!prev) add += 2;
-    if (ev.word && !(prev && prev.word)) add += 3;
-    if (ev.noFall && !(prev && prev.noFall)) add += 2;
-    if ((rank[ev.medal] || 0) > (prev ? rank[prev.medal] || 0 : 0)) add += 1;
-    if (!duo) save.wins += add;
-    var medal = prev && (rank[prev.medal] || 0) > (rank[ev.medal] || 0) ? prev.medal : ev.medal;
-    var time = prev && prev.time && prev.time < ev.time ? prev.time : ev.time;
-    save.medals[key] = {
-      time: time, medal: medal,
-      noFall: (prev && prev.noFall) || ev.noFall ? 1 : 0,
-      word: (prev && prev.word) || ev.word ? 1 : 0
-    };
-    if (add && !duo) floater('+' + add);
-    banner(ev.medal === 'gold' ? 'ذهبي!' : 'مرحلة!');
-    persist();
-  }
-  function finishWorld(world) {
-    var next = Math.min(8, world + 2);
-    var bonus = 0;
-    if (save.unlocked < next) { save.unlocked = next; bonus = 4; save.wins += bonus; }
-    persist();
-    endRound('win', Math.round(save.wins));
-    holdResult = { world: world, bonus: bonus };
-    victoryUntil = performance.now() + 1900;
-    dirty = true;
-    el('banner').hidden = true;
-    bannerUntil = 0;
-    view.cheer(0);
-    KR.sound('world');
-  }
-  function revealResult() {
-    var held = holdResult;
-    holdResult = null;
-    victoryUntil = 0;
-    if (!held) return;
-    var sweets = candyN[0] || 0;
-    mode = 'result';
-    dirty = true;
-    el('result-title').textContent = 'أنهيت العالم!';
-    el('result-line').textContent = KR.NAMES[held.world] + (held.bonus ? ' · +4 أوسمة' : '') + (sweets ? ' · حلوى ' + sweets : '');
-    hideHint();
-    buildConfetti();
-    showRecord(recordRound);
-    screens();
-  }
-  function finishTower(height) {
-    var seed = String(eng.state.seed || KR.dailySeed());
-    var best = save.tower[seed] || 0;
-    if (height > best) save.tower[seed] = height;
-    syncSpeed(true);
-    persist();
-    endRound('end', Math.round(height));
-    mode = 'result';
-    dirty = true;
-    el('result-title').textContent = height > best ? 'رقم جديد!' : 'انتهى البرج';
-    hideHint();
-    buildConfetti();
-    showRecord(height > best || recordRound);
-    el('result-line').textContent = 'الارتفاع ' + Math.round(height);
-    screens();
-  }
-  function finishRace() {
-    var over = eng.state.over || { type: 'end', winner: 0 };
-    endRound(over.type === 'draw' ? 'draw' : 'end', 0);
-    mode = 'result';
-    dirty = true;
-    hideHint();
-    buildConfetti();
-    showRecord(false);
-    el('result-title').textContent = over.type === 'draw' ? 'تعادل!' : 'انتهى السباق';
-    el('result-line').textContent = over.winner === 1 ? 'الوردي وصل أولًا' : over.winner === 0 ? 'الأزرق وصل أولًا' : 'تعادل!';
-    screens();
-  }
-  function syncSpeed(force) {
-    if (duo) return;
-    var sp = eng.state.players[0].speed;
-    if (sp > save.speed) save.speed = sp;
-    if (save.speed > save.best) save.best = save.speed;
-    var bucket = Math.floor(save.speed / 25);
-    if (!force && bucket > milestone && bucket > 0) {
-      recordRound = true;
-      banner('رقم جديد!');
-      KR.sound('record');
-      var hero = eng.state.players[0];
-      if (hero) celebrate(hero.x, hero.y + 1.3, hero.z);
-    }
-    if (force || bucket > milestone) {
-      milestone = Math.max(milestone, bucket);
-      persist();
-    }
+    KR.music(false, 0);
   }
   function onEvents(events) {
     for (var i = 0; i < events.length; i++) {
       var ev = events[i];
-      if (ev.e === 'jump') { KR.sound('jump'); shake = Math.max(shake, 0.04); hideHint(); }
-      else if (ev.e === 'double') KR.sound('double');
+      if (ev.e === 'jump') { KR.sound('jump'); shake = Math.max(shake, 0.04); }
       else if (ev.e === 'land') {
         KR.sound('land', ev.row);
-        shake = Math.max(shake, 0.08);
         var landed = eng.state.players[ev.p];
-        if (landed) view.dust(landed.x, landed.y + 0.08, landed.z, sparkCount(12));
+        if (landed) view.dust(landed.x, landed.y + 0.05, landed.z, 10);
       }
       else if (ev.e === 'press') {
-        KR.sound('press', ev.id);
+        var now = performance.now();
+        combo = now - comboAt < 900 ? combo + 1 : 1;
+        comboAt = now;
+        KR.sound('press', combo);
         view.pressKey(ev.id);
-        view.burst(ev.x, ev.y + 0.28, ev.z, POP[(ev.id || 0) % POP.length], sparkCount(6));
-        if (ev.moment === 'gold') {
-          view.burst(ev.x, ev.y + 0.7, ev.z, 0xffe14d, sparkCount(12));
-          view.burst(ev.x, ev.y + 1.05, ev.z, 0xff4eb6, sparkCount(8));
-          KR.sound('moment', 1);
-        } else if (ev.moment === 'boost') {
-          boostUntil = performance.now() + 850;
-          fovKick = 9;
-          KR.sound('moment', 2);
-        } else if (ev.moment === 'bear' || ev.moment === 'arch') {
-          KR.sound('moment', 0);
-          if (ev.moment === 'bear') view.burst(ev.x + 2.1, ev.y + 1.1, ev.z, 0xff4d8d, sparkCount(6));
-        }
-      }
-      else if (ev.e === 'candy') {
-        var who = ev.p || 0;
-        var nowC = performance.now();
-        chain[who] = nowC - (chainAt[who] || 0) < 1100 ? (chain[who] || 0) + 1 : 1;
-        chainAt[who] = nowC;
-        candyN[who] = (candyN[who] || 0) + 1;
-        KR.sound('candy', chain[who]);
-        view.burst(ev.x, ev.y, ev.z, ev.star ? 0xffe56a : 0xff4eb6, sparkCount(5));
-        if (who === 0) {
-          var sweet = el('candy');
-          if (sweet) {
-            sweet.textContent = String(candyN[0]);
-            sweet.classList.remove('pop');
-            void sweet.offsetWidth;
-            sweet.classList.add('pop');
-          }
-        }
+        view.burst(ev.x, ev.y + 0.35, ev.z, 0xffe14a, 6);
       }
       else if (ev.e === 'bounce') {
         KR.sound('bounce');
-        shake = Math.max(shake, 0.15);
+        shake = 0.12;
         var bounced = eng.state.players[ev.p];
-        if (bounced) view.burst(bounced.x, bounced.y + 0.2, bounced.z, 0x7dffa8, sparkCount(8));
+        if (bounced) view.burst(bounced.x, bounced.y + 0.3, bounced.z, 0x7dffa0, 8);
       }
-      else if (ev.e === 'launch') { KR.sound('launch'); shake = Math.max(shake, 0.1); }
-      else if (ev.e === 'step') {
-        KR.sound('step', ev.p);
-        if (!duo || ev.p === 0) floater('+' + ev.n);
-        if (eng.state.players[ev.p] && eng.state.players[ev.p].speed > 6) fovKick = Math.min(8, fovKick + 2.4);
-        if (!duo && ev.p === 0) markStreak(eng.state.players[ev.p].speed);
-        syncSpeed(false);
+      else if (ev.e === 'haste') {
+        KR.sound('haste');
+        fovKick = 8;
       }
-      else if (ev.e === 'gate') { KR.sound('gate'); toast('تحتاج سرعة ' + ev.n); }
-      else if (ev.e === 'fall') { KR.sound('fall'); shake = Math.max(shake, 0.12); }
-      else if (ev.e === 'checkpoint') {
-        KR.sound('checkpoint');
-        banner('رائع!');
-        view.cheer(ev.p);
-        persist();
-        var saved = eng.state.players[ev.p];
-        if (saved) celebrate(saved.x, saved.y + 1.15, saved.z);
+      else if (ev.e === 'checkpoint' || ev.e === 'stage') {
+        if (ev.e === 'checkpoint') {
+          KR.sound('checkpoint');
+          hitUntil = performance.now() + 100;
+          var saved = eng.state.players[ev.p];
+          if (saved) view.burst(saved.x, saved.y + 1.2, saved.z, 0xff4eb6, 16);
+        }
+        if (ev.e === 'stage' && !duo) {
+          var flags = ev.stage + 1;
+          if (flags > (save.flags || 0)) save.flags = flags;
+          unlockTrail(save.flags);
+          paintPips(flags);
+          persist();
+        } else if (ev.e === 'stage') paintPips(ev.stage + 1);
       }
-      else if (ev.e === 'stage') {
-        var fin = eng.state.players[ev.p];
-        view.cheer(ev.p);
-        if (duo) banner('مرحلة!');
-        else { KR.sound('stage'); noteStage(ev); }
-        if (fin) celebrate(fin.x, fin.y + 1.45, fin.z);
+      else if (ev.e === 'fall') {
+        KR.sound(ev.why === 'flood' ? 'splash' : 'fall');
+        shake = 0.1;
       }
+      else if (ev.e === 'glug') KR.sound('glug');
       else if (ev.e === 'world' && !duo) {
+        var time = eng.state.time;
+        var fresh = !save.bestTime || time < save.bestTime;
+        if (fresh) {
+          save.bestTime = time;
+          KR.sound('record');
+        }
+        save.flags = 8;
+        unlockTrail(8);
+        persist();
+        endRound('win', Math.round(time));
+        heldWin = { time: time, fresh: fresh };
+        resultAt = performance.now() + 700;
         var winner = eng.state.players[ev.p];
-        if (winner) celebrate(winner.x, winner.y + 1.6, winner.z);
-        finishWorld(ev.world);
+        if (winner) view.burst(winner.x, winner.y + 1.6, winner.z, 0xffe14a, 18);
+        KR.sound('world');
       }
-      else if (ev.e === 'word') KR.sound('word');
-      else if (ev.e === 'portal' && ev.p === 0) enterWorld(ev.world);
-      else if (ev.e === 'shop' && ev.p === 0 && !duo) openShop();
-      else if (ev.e === 'towerDoor' && ev.p === 0 && !duo) startTower();
-      else if (ev.e === 'towerEnd') finishTower(ev.height);
     }
-    if (eng.state.over && duo && mode === 'play') finishRace();
+    if (eng.state.over && duo && mode === 'play') {
+      endRound(eng.state.over.type === 'draw' ? 'draw' : 'end', 0);
+      mode = 'result';
+      dirty = true;
+      el('result-title').textContent = eng.state.over.type === 'draw' ? 'تعادل!' : 'انتهى السباق';
+      el('result-line').textContent = eng.state.over.winner === 1 ? 'الوردي' : 'الأزرق';
+      el('result-record').hidden = true;
+      el('stars').setAttribute('data-stars', '1');
+      screens();
+      KR.music(false, 0);
+    }
   }
   function edge(code) {
     var now = Kit.keys.down(code);
@@ -458,6 +272,7 @@
     return { x: w.x, z: w.z, jump: jump, respawn: respawn, cam: cam };
   }
   function readInput() {
+    if (scripted && mode === 'play') return KR.suggest(eng.state, 0);
     var players = eng.state.players;
     var cam = (edge('KeyQ') ? -1 : 0) + (edge('KeyE') ? 1 : 0);
     if (!duo) {
@@ -465,208 +280,77 @@
       var iz = (Kit.keys.down('KeyW') || Kit.keys.down('ArrowUp') ? 1 : 0) - (Kit.keys.down('KeyS') || Kit.keys.down('ArrowDown') ? 1 : 0);
       return padInput(players[0], ix, iz, Kit.keys.down('Space'), edge('KeyR'), cam);
     }
-    var p1 = padInput(players[0],
-      (Kit.keys.down('KeyD') ? 1 : 0) - (Kit.keys.down('KeyA') ? 1 : 0),
-      (Kit.keys.down('KeyW') ? 1 : 0) - (Kit.keys.down('KeyS') ? 1 : 0),
-      Kit.keys.down('Space'), edge('KeyG'), cam);
-    var p2 = padInput(players[1],
-      (Kit.keys.down('ArrowRight') ? 1 : 0) - (Kit.keys.down('ArrowLeft') ? 1 : 0),
-      (Kit.keys.down('ArrowUp') ? 1 : 0) - (Kit.keys.down('ArrowDown') ? 1 : 0),
-      Kit.keys.down('Enter') || Kit.keys.down('NumpadEnter') || Kit.keys.down('Slash'),
-      edge('Period'), cam);
-    return [p1, p2];
+    return [
+      padInput(players[0],
+        (Kit.keys.down('KeyD') ? 1 : 0) - (Kit.keys.down('KeyA') ? 1 : 0),
+        (Kit.keys.down('KeyW') ? 1 : 0) - (Kit.keys.down('KeyS') ? 1 : 0),
+        Kit.keys.down('Space'), edge('KeyG'), cam),
+      padInput(players[1],
+        (Kit.keys.down('ArrowRight') ? 1 : 0) - (Kit.keys.down('ArrowLeft') ? 1 : 0),
+        (Kit.keys.down('ArrowUp') ? 1 : 0) - (Kit.keys.down('ArrowDown') ? 1 : 0),
+        Kit.keys.down('Enter') || Kit.keys.down('NumpadEnter'),
+        edge('Period'), 0)
+    ];
   }
   function hud() {
     var pl = eng.state.players[0];
-    var speed = Math.round(pl.speed);
-    var node = el('speed');
-    if (speed !== shownSpeed) {
-      node.textContent = String(speed);
-      node.classList.remove('pop');
-      void node.offsetWidth;
-      node.classList.add('pop');
-      shownSpeed = speed;
-    }
-    if (duo) el('speed-b').textContent = String(Math.round(eng.state.players[1].speed));
-    el('wins').textContent = String(Math.round(save.wins));
-    var place = 'الساحة';
-    if (activity === 'world' || activity === 'race') place = KR.NAMES[eng.state.world] + ' · ' + (pl.stage + 1);
-    else if (activity === 'tower') place = 'البرج · ' + Math.round(pl.maxY);
-    el('place').textContent = place;
-    var wordBox = el('word');
-    if ((activity === 'world' || activity === 'race') && pl.stage === 5) {
-      var word = KR.WORDS[eng.state.world];
-      wordBox.hidden = false;
-      wordBox.innerHTML = '';
-      for (var i = 0; i < word.length; i++) {
-        var bit = document.createElement('b');
-        bit.textContent = word.charAt(i);
-        if (i === pl.wordAt) bit.style.color = '#ff4eb6';
-        wordBox.appendChild(bit);
-      }
-    } else wordBox.hidden = true;
+    var gap = pl.y - (eng.state.floodY || -2.2);
+    var danger = Math.max(0, Math.min(1, 1 - gap / 7));
+    el('choco-fill').style.height = (16 + danger * 84) + '%';
+    el('choco').classList.toggle('hot', danger > 0.72);
   }
-  var floodCue = 0;
   function update(dt) {
-    if (mode === 'paused' || mode === 'shop' || mode === 'result' || mode === 'duo' || contextLost) return;
-    if (victoryUntil && mode === 'play') {
-      if (performance.now() >= victoryUntil) revealResult();
-      else dirty = true;
+    if (mode === 'paused' || mode === 'result' || mode === 'duo' || contextLost) return;
+    if (resultAt && mode === 'play') {
+      dirty = true;
+      if (performance.now() >= resultAt && heldWin) {
+        showResult(heldWin.time, 8, heldWin.fresh);
+        heldWin = null;
+      }
       return;
     }
+    if (performance.now() < hitUntil) { dirty = true; return; }
     var input = mode === 'title' ? {} : readInput();
     onEvents(eng.step(dt, input));
-    if (mode === 'play') hud();
-    var pl = eng.state.players[0];
-    if (eng.state.flood && pl && pl.z >= eng.state.flood.z0 && eng.state.floodY > pl.y - 0.4 && eng.state.time - floodCue > 0.5) {
-      floodCue = eng.state.time;
-      KR.sound('flood', 1);
+    if (mode === 'play') {
+      hud();
+      KR.music(true, eng.state.players[0].y);
+      KR.musicTick();
     }
   }
   function draw() {
-    var now = performance.now();
-    if (toastUntil && now > toastUntil) { el('toast').hidden = true; toastUntil = 0; }
-    if (bannerUntil && now > bannerUntil) { el('banner').hidden = true; bannerUntil = 0; }
-    if ((mode === 'paused' || mode === 'shop' || mode === 'result') && !dirty) return;
+    if ((mode === 'paused' || mode === 'result') && !dirty) return;
     if (contextLost) return;
     dirty = false;
     shake *= 0.86;
-    fovKick *= 0.82;
-    if (Kit.motion.reduced() || victoryUntil) shake = 0;
-    if (Kit.motion.reduced() || victoryUntil) fovKick = 0;
+    fovKick *= 0.86;
+    if (Kit.motion.reduced()) { shake = 0; fovKick = 0; }
     view.render(eng.state, {
       engine: eng, quality: save.quality, reduced: Kit.motion.reduced(),
-      shake: shake, fovKick: fovKick, hat: duo ? 0 : save.hat, trail: duo ? 0 : save.trail, aura: duo ? 0 : save.aura,
-      victory: victoryUntil > now, boost: now < boostUntil
+      shake: shake, fovKick: fovKick
     });
-  }
-  function openShop() {
-    if (mode !== 'play' || duo) return;
-    mode = 'shop';
-    dirty = true;
-    buildShop();
-    el('rebirth-ask').hidden = true;
-    screens();
-  }
-  function closeShop() {
-    if (mode !== 'shop') return;
-    mode = 'play';
-    dirty = true;
-    eng.state.players[0].touchCd = 0.6;
-    screens();
-    focusGame();
-  }
-  function owned(kind, id) {
-    if (kind === 'charm') return !!save.owned.charm;
-    var list = save.owned[kind];
-    return list && list.indexOf(id) >= 0;
-  }
-  function equip(kind, id) {
-    if (kind === 'shoes') save.shoe = id;
-    else if (kind === 'trails') save.trail = id;
-    else if (kind === 'auras') save.aura = id;
-    else if (kind === 'hats') save.hat = id;
-    else if (kind === 'charm') save.charm = 1;
-    eng.state.players[0].shoe = save.shoe;
-    eng.state.players[0].rebirths = save.rebirths;
-    eng.state.players[0].charm = !!save.charm;
-  }
-  function buy(kind, id, cost, need) {
-    if (need && save.unlocked < need) { toast('يفتح بعد عالم سابق'); return; }
-    if (owned(kind, id)) { equip(kind, id); persist(); buildShop(); return; }
-    if (save.wins < cost) { toast('تحتاج ' + cost + ' أوسمة'); return; }
-    save.wins -= cost;
-    if (kind === 'charm') save.owned.charm = 1;
-    else save.owned[kind].push(id);
-    equip(kind, id);
-    KR.sound('buy');
-    floater('-' + cost);
-    persist();
-    buildShop();
-  }
-  function choice(label, on, disabled, click) {
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'choice' + (on ? ' on' : '');
-    button.textContent = label;
-    button.disabled = !!disabled;
-    button.addEventListener('click', click);
-    return button;
-  }
-  function buildShop() {
-    var root = el('shop-list');
-    root.innerHTML = '';
-    el('shop-wins').textContent = String(Math.round(save.wins));
-    function group(title, kind, items) {
-      var head = document.createElement('p');
-      head.className = 'meta';
-      head.textContent = title;
-      var row = document.createElement('div');
-      row.className = 'row';
-      items.forEach(function (item) {
-        var have = owned(kind, item.id);
-        var label = item.name + (have ? ' · معك' : ' · ' + item.cost);
-        row.appendChild(choice(label, (kind === 'shoes' ? save.shoe : save[kind.slice(0, -1)] || save[kind]) === item.id, false, function () {
-          buy(kind, item.id, item.cost, item.need);
-        }));
-      });
-      root.appendChild(head);
-      root.appendChild(row);
-    }
-    group('أحذية الخطوات', 'shoes', KR.SHOP.shoes);
-    group('آثار', 'trails', KR.SHOP.trails);
-    group('هالات', 'auras', KR.SHOP.auras);
-    group('قبعات', 'hats', KR.SHOP.hats);
-    var charm = KR.SHOP.charm;
-    var row = document.createElement('div');
-    row.className = 'row';
-    row.appendChild(choice(charm.name + (save.owned.charm ? ' · معك' : ' · ' + charm.cost), !!save.charm, false, function () {
-      buy('charm', 1, charm.cost, charm.need);
-    }));
-    root.appendChild(row);
   }
   function buildRaces() {
     var root = el('race-list');
     root.innerHTML = '';
-    for (var i = 0; i < save.unlocked && i < 8; i++) {
-      (function (world) {
-        var button = choice(KR.NAMES[world], false, false, function () { startRace(world); });
-        button.id = 'race-' + world;
-        root.appendChild(button);
-      })(i);
-    }
-  }
-  function rebirth() {
-    if (save.speed < 200) { toast('تحتاج سرعة 200'); return; }
-    el('rebirth-ask').hidden = false;
-  }
-  function confirmRebirth() {
-    save.rebirths += 1;
-    save.speed = 0;
-    milestone = 0;
-    eng.state.players[0].speed = 0;
-    eng.state.players[0].rebirths = save.rebirths;
-    el('rebirth-ask').hidden = true;
-    KR.sound('rebirth');
-    banner('إعادة الانطلاق!');
-    persist();
-    buildShop();
-    paintMenus();
+    var button = document.createElement('button');
+    button.id = 'race-0';
+    button.type = 'button';
+    button.className = 'choice';
+    button.textContent = 'برج الحلوى';
+    button.addEventListener('click', startRace);
+    root.appendChild(button);
   }
 
-  el('play').addEventListener('click', startPlaza);
+  el('play').addEventListener('click', startClimb);
   el('duo').addEventListener('click', function () { mode = 'duo'; buildRaces(); screens(); });
   el('duo-back').addEventListener('click', function () { mode = 'title'; screens(); });
   el('resume').addEventListener('click', resume);
   el('restart').addEventListener('click', restart);
   el('pause-menu').addEventListener('click', menu);
-  el('pause-button').addEventListener('click', function () { pause(); });
-  el('again').addEventListener('click', startPlaza);
+  el('pause-button').addEventListener('click', pause);
+  el('again').addEventListener('click', startClimb);
   el('result-menu').addEventListener('click', menu);
-  el('shop-close').addEventListener('click', closeShop);
-  el('rebirth').addEventListener('click', rebirth);
-  el('rebirth-yes').addEventListener('click', confirmRebirth);
-  el('rebirth-no').addEventListener('click', function () { el('rebirth-ask').hidden = true; });
   el('quality').addEventListener('click', function () {
     save.quality = save.quality === 'low' ? 'high' : 'low';
     paintMenus();
@@ -676,12 +360,9 @@
   });
   window.addEventListener('keydown', function (e) {
     if (!Kit.isGameKeyEvent(e) || e.repeat) return;
-    if ((mode === 'title' || mode === 'result') && (e.code === 'Space' || e.code === 'Enter' || (mode === 'result' && e.code === 'KeyR'))) {
+    if ((mode === 'title' || mode === 'result') && (e.code === 'Space' || e.code === 'Enter')) {
       e.preventDefault();
-      startPlaza();
-    } else if (mode === 'shop' && (e.code === 'Escape' || e.code === 'KeyP')) {
-      e.preventDefault();
-      closeShop();
+      startClimb();
     } else if (e.code === 'KeyP' || e.code === 'Escape') {
       e.preventDefault();
       if (mode === 'play') pause();
@@ -711,9 +392,9 @@
   Kit.muteButton();
   paintMenus();
   try {
-    eng = KR.createEngine(runOpts({ mode: 'plaza' }));
+    eng = KR.createEngine(runOpts({ mode: 'world', world: 0 }));
     view = KR.createView(canvas);
-    fit = Kit.fit(canvas, 1280, 720, {
+    fit = Kit.fit(canvas, 1280, 800, {
       webgl: true,
       maxDpr: 1.5,
       onResize: function () {
@@ -736,7 +417,20 @@
         };
       },
       get save() { return save; },
-      start: startPlaza, pause: pause, resume: resume, restart: restart, menu: menu
+      start: startClimb, pause: pause, resume: resume, restart: restart, menu: menu,
+      set auto(on) { scripted = !!on; },
+      draws: function () { return view.drawCalls(); },
+      get engine() { return eng; },
+      reveal: function () {
+        var time = eng.state.time;
+        var fresh = !save.bestTime || time < save.bestTime;
+        if (fresh) save.bestTime = time;
+        save.flags = 8;
+        unlockTrail(8);
+        showResult(time, 8, fresh);
+        dirty = true;
+        draw();
+      }
     };
     loop = Kit.loop(update, draw, { hz: 60 });
     Kit.ready();

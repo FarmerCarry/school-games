@@ -9,17 +9,14 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body data-mode="title">
-<canvas id="scene" tabindex="0" aria-label="ساحة المفاتيح. تحرك واقفز فوق المفاتيح العملاقة."></canvas>
+<canvas id="scene" tabindex="0" aria-label="برج الحلوى. اصعد المفاتيح قبل الشوكولاتة."></canvas>
 <div id="split" aria-hidden="true"></div>
 <div id="hud" hidden>
-  <div class="chip speed"><span>السرعة</span><b id="speed" dir="ltr">0</b></div>
-  <div class="chip" id="speed2" hidden><span>الوردي</span><b id="speed-b" dir="ltr">0</b></div>
-  <div class="chip"><span>الأوسمة</span><b id="wins" dir="ltr">0</b></div>
-  <div class="chip" id="candy-chip"><span>حلوى</span><b id="candy" dir="ltr">0</b></div>
-  <div class="chip" id="place">الساحة</div>
-  <div class="chip" id="word" hidden></div>
+  <div id="pips" aria-label="الأعلام">
+    <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+  </div>
+  <div id="choco" aria-hidden="true"><b id="choco-fill"></b></div>
 </div>
-<p id="banner" hidden>مرحلة!</p>
 <div id="hint" hidden aria-hidden="true">
   <div class="kb">
     <div class="kb-row"><b class="key key-w" dir="ltr">W</b></div>
@@ -27,44 +24,21 @@
     <b class="key key-space" dir="ltr"></b>
   </div>
 </div>
-<p id="floater" hidden dir="ltr">+1</p>
-<p id="toast" role="status" hidden></p>
 <button id="pause-button" class="utility" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3v14H7zm7 0h3v14h-3z"/></svg></button>
 <main id="title-screen" class="screen ready">
   <div class="card">
-    <h1>عدّاء المفاتيح<span>كل خطوة +1</span></h1>
-    <p class="lead">اقفز فوق المفاتيح العملاقة. الدائرة على الأرض هي مكان هبوطك.</p>
+    <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
+    <h1>عدّاء المفاتيح</h1>
     <button id="play" class="play" type="button">العب</button>
     <button id="duo" class="ghost" type="button">لاعبان</button>
-    <div class="howto">
-      <p><span dir="ltr"><kbd class="sg-key">W</kbd> <kbd class="sg-key">A</kbd> <kbd class="sg-key">S</kbd> <kbd class="sg-key">D</kbd></span> حركة</p>
-      <p><span dir="ltr"><kbd class="sg-key">مسافة</kbd></span> قفز</p>
-      <p><span dir="ltr"><kbd class="sg-key">Q</kbd> <kbd class="sg-key">E</kbd></span> الكاميرا</p>
-    </div>
-    <p class="meta">السرعة <b id="menu-speed" dir="ltr">0</b> · الأوسمة <b id="menu-wins" dir="ltr">0</b></p>
-    <p class="meta" id="menu-progress">عالم واحد مفتوح</p>
+    <p class="meta">الأعلام <b id="menu-flags" dir="ltr">0</b> · الوقت <b id="menu-best" dir="ltr">—</b></p>
   </div>
 </main>
 <section id="duo-screen" class="screen veil" hidden>
   <div class="panel">
     <h2>سباق لاعبين</h2>
-    <p>الأزرق يسار الشاشة، والوردي يمينها. أول من ينهي المراحل الست يفوز.</p>
     <div id="race-list" class="row"></div>
     <button id="duo-back" class="ghost" type="button">رجوع</button>
-  </div>
-</section>
-<section id="shop-screen" class="screen veil" hidden>
-  <div class="panel">
-    <h2>متجر الساحة</h2>
-    <p>أوسمتك: <b id="shop-wins" dir="ltr">0</b></p>
-    <div id="shop-list"></div>
-    <button id="rebirth" class="choice" type="button">إعادة الانطلاق</button>
-    <div id="rebirth-ask" hidden>
-      <p>تبدأ السرعة من صفر، وتضرب كل خطوة في 1.5 إلى الأبد.</p>
-      <button id="rebirth-yes" class="choice" type="button">نعم، أعد الانطلاق</button>
-      <button id="rebirth-no" class="ghost" type="button">ليس الآن</button>
-    </div>
-    <button id="shop-close" class="ghost" type="button">رجوع للساحة</button>
   </div>
 </section>
 <section id="pause-screen" class="screen veil" hidden>
@@ -73,15 +47,16 @@
     <button id="resume" class="play" type="button">تابع</button>
     <button id="restart" class="ghost" type="button">من البداية</button>
     <button id="pause-menu" class="ghost" type="button">القائمة</button>
-    <p class="meta"><kbd class="sg-key">P</kbd> متابعة · <kbd class="sg-key">R</kbd> من البداية</p>
   </div>
 </section>
 <section id="result-screen" class="screen veil" hidden>
   <div id="confetti" aria-hidden="true"></div>
   <div class="panel">
-    <h2 id="result-title">أحسنت!</h2>
+    <div class="tower" aria-hidden="true"><i id="tower-mark"></i></div>
+    <p id="stars" data-stars="0" aria-label="النجوم"><b></b><b></b><b></b></p>
+    <h2 id="result-title">قمة البرج!</h2>
     <p id="result-record" hidden>رقم جديد!</p>
-    <p id="result-line" class="lead"></p>
+    <p id="result-line" class="lead" dir="ltr"></p>
     <button id="again" class="play" type="button">العب مرة أخرى</button>
     <button id="result-menu" class="ghost" type="button">القائمة</button>
   </div>

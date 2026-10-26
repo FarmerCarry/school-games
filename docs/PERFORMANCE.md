@@ -549,40 +549,31 @@ cache had only 73,229 bytes left, so its limit was raised knowingly by 100,000 b
 (2%). That keeps about the same headroom as before (84,326 bytes, 1.7%) for the next
 change; another game will again need room made or a decision like this one.
 
-## Key Runner, 25 October 2026
+## Key Runner, 26 October 2026
 
-عدّاء المفاتيح (Key Runner +1) is a 3D parkour game. It reuses the three.js build
-already in the precache (667,796 bytes, limit 750,000), so the library adds no new
-offline bytes. The page is one built HTML file: stage data, the kinematic engine,
-a Three.js view of instanced keycaps, and the Arabic UI. Pixel ratio is capped at
-1.5 (1 on the low-quality setting). There are no shadow maps; the blob under the
-runner is a decal. Particles stay at or below 200. Paused frames are not redrawn.
+عدّاء المفاتيح is now a candy-tower climb: eight hand-built stages, a rising
+chocolate flood, and instanced beveled keycaps. It still reuses the three.js
+build already in the precache (667,796 bytes, limit 750,000). The page is one
+built HTML file. Pixel ratio is capped at 1.5 (1 on the low-quality setting).
+There are no shadow maps. Particles stay at or below 160. A chase camera render
+measured 60 draw calls. Paused frames are not redrawn.
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Key Runner | 109,519 | 112,000 (was 104,000) |
-| Teacher page (catalog row only, same limit) | 92,810 | 96,000 |
-| Portal (thumbnail and catalog entry) | 357,445 | 365,000 (was 360,000) |
-| Offline precache | 5,199,267 | 5,215,000 (was 5,200,000) |
+| Key Runner | 77,801 | 112,000 (unchanged; was 109,519 before this rework) |
+| Teacher page (catalog row only, same limit) | 92,854 | 96,000 |
+| Portal (thumbnail and catalog entry) | 357,489 | 365,000 |
+| Offline precache | 5,167,637 | 5,215,000 |
 
-The offline cache on this branch was 5,082,082 / 5,100,000 before the game, with
-about 17.9 KB free, so `precacheBytes` was first raised by this game's planned
-100,000 bytes to 5,200,000. The third juice pass measured 102,150 bytes, and
-`gameHtmlBytes` for Key Runner became 104,000. Precache then was 5,191,898,
-inside 5,200,000. The fourth juice pass (candies between keys, a rotating
-moment every 6 to 10 keys, a letter that floats off each landing, a plaza
-ghost, and the victory wave) measured 109,519 bytes, 5,519 past 104,000.
-`gameHtmlBytes` for Key Runner is now 112,000, with 2,481 bytes left. The same
-7,369 bytes landed in the precache, which measured 5,199,267 and left only 733
-bytes under 5,200,000. `precacheBytes` is now 5,215,000, with 15,733 bytes left.
-Particles stay capped at 200. Candies, arches, and the gummy bear reuse the
-existing sphere, stick, and donut instances (two bears, two arches, one
-translucent ghost). The castle stays one small group, hidden on the low-quality
-setting except during the victory wave.
+The teacher audit allowed this rework to grow by up to 38 KB, to a 150,000 game
+cap. The built page came out smaller than the previous juice pass, so
+`gameHtmlBytes` stays 112,000, with 34,199 bytes left. The precache fell with
+the page, from 5,199,267 to 5,167,637, and `precacheBytes` stays 5,215,000,
+with 47,363 bytes left. The catalog blurb no longer describes a +1 speed grind.
+Portal and teacher stay inside their existing caps.
 
-The portal grew by about 6.8 KB once the catalog row and the drawn tile were
-inlined, past the old 360,000 cap. `portalBytes` stays at 365,000, this game's
-share of the planned +20 KB, with 7,555 bytes left.
-The teacher page grew by about 0.9 KB and stays inside 96,000, so `teacherBytes`
-is unchanged.
+The old +1 speed counter, the eight-world plaza, rebirth, and the speed gates
+are gone. Movement is a fixed run speed plus a short haste pickup. Chocolate
+rises for the whole climb and speeds up if the runner stands still for 4 seconds.
+A clean guided climb of all eight flags measured about 1 minute 50 seconds.
 

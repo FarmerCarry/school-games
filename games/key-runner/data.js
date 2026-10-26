@@ -1,4 +1,4 @@
-/* Stage kit for عدّاء المفاتيح. Pieces are plain data; engine.js simulates them. */
+/* Candy Key Tower. Eight hand-built climbs. Pieces are data; engine.js simulates them. */
 (function (KR) {
   'use strict';
   var C = KR.C = {
@@ -18,12 +18,17 @@
     STEP: 2,
     CAP: 22,
     KEY: 1.7,
-    HH: 0.23,
-    FALL_Y: -1.2,
-    FALL_T: 0.5,
-    CAM_BACK: 7.15,
-    CAM_UP: 3.65,
-    CAM_AHEAD: 2.4
+    HH: 0.22,
+    FALL_Y: -6,
+    FALL_T: 0.8,
+    CAM_BACK: 9.2,
+    CAM_UP: 6.45,
+    CAM_AHEAD: 5.4,
+    RUN: 7.6,
+    BOOST: 11.8,
+    FLOOD: 0.24,
+    FLOOD_FAST: 0.95,
+    FLOOD_FROM: -2.2
   };
 
   KR.topSpeed = function (stat) {
@@ -43,556 +48,316 @@
     return t;
   };
 
-  var WORDS = ['قطة', 'شمس', 'كرة', 'موز', 'قمر', 'ورد', 'نور', 'فرح'];
-  var NAMES = ['مفاتيح الحلوى', 'نهر الشوكولاتة', 'غيوم العلكة', 'جليد الآيس كريم', 'أركيد النيون', 'غابة الجيلي', 'برج الأرقام', 'قوس النهاية'];
-  var MECH = ['sink', 'move', 'gum', 'caps', 'fan', 'pop', 'shift', 'launch'];
-
+  KR.NAMES = ['برج الحلوى'];
+  KR.WORDS = [''];
   KR.themes = [
-    { sky: 0xffd4f0, fog: 0xffc2e8, sea: 0xff7eb8, key: 0xff4eb6, top: 0xffe0f6, accent: 0xfff1a8, dark: 0xd43a8e },
-    { sky: 0x8a4b32, fog: 0x6b3824, sea: 0x4a2414, key: 0xa35a30, top: 0xe0a06a, accent: 0xffd7a1, dark: 0x6a3018 },
-    { sky: 0xd9f6ff, fog: 0xc4eeff, sea: 0x8fd8ff, key: 0xff8ad0, top: 0xfff0fb, accent: 0xbaf7ff, dark: 0xe45aaa },
-    { sky: 0xf3fbff, fog: 0xe4f6ff, sea: 0xc9ecff, key: 0xfff7ef, top: 0xffd0e4, accent: 0xbfe9ff, dark: 0xf0b0cc },
-    { sky: 0x140820, fog: 0x1c0c2e, sea: 0x2a1450, key: 0x2a1248, top: 0xff3ad4, accent: 0x39f3ff, dark: 0x140818 },
-    { sky: 0xc8f7d4, fog: 0xb4f0c4, sea: 0x7ddea8, key: 0xff5ea8, top: 0xffd0e6, accent: 0xfff4a0, dark: 0xe04488 },
-    { sky: 0x2c3648, fog: 0x232c3c, sea: 0x1a2230, key: 0x46556c, top: 0xf4f7fb, accent: 0xffc857, dark: 0x2a3344 },
-    { sky: 0x24143a, fog: 0x301848, sea: 0x4a2080, key: 0xffffff, top: 0xffe56a, accent: 0x7af0ff, dark: 0xff4eb6 }
+    { sky: 0xffd6f2, fog: 0xffc4ea, sea: 0x6a3418, key: 0xff4eb6, top: 0xfff6ea, accent: 0xffe14a, dark: 0x5a2a38 }
+  ];
+  /* Eight candy keyboards. Neighbours never share a colour. */
+  KR.PAL = [
+    [0xff4b8d, 0xfff6ea, 0xffe14a, 0x7dffa0, 0x8fd4ff],
+    [0xffe14a, 0xff4b8d, 0xfff6ea, 0x5ee0ff, 0xff9a3c],
+    [0x7dffa0, 0xfff6ea, 0xff4b8d, 0xffe14a, 0xc9a6ff],
+    [0x8fd4ff, 0xfff6ea, 0xff4b8d, 0xffe14a, 0x7dffa0],
+    [0xff9a3c, 0xfff6ea, 0xff4b8d, 0xffe14a, 0x8fd4ff],
+    [0xc9a6ff, 0xfff6ea, 0xffe14a, 0xff4b8d, 0x7dffa0],
+    [0xff4b8d, 0xffe14a, 0x8fd4ff, 0xfff6ea, 0xff9a3c],
+    [0xffe14a, 0xfff6ea, 0xff4b8d, 0x7dffa0, 0xc9a6ff]
   ];
 
-  KR.NAMES = NAMES;
-  KR.WORDS = WORDS;
-
-  function Builder(z0, stage) {
-    this.z = z0;
-    this.surf = 0;
+  function Builder(z, surf, stage) {
+    this.z = z;
+    this.surf = surf;
     this.x = 0;
     this.stage = stage;
     this.pieces = [];
-    this.n = 1;
     this.path = [];
+    this.n = 1;
   }
   Builder.prototype.piece = function (t, o) {
     o = o || {};
-    var hh = o.hh != null ? o.hh : KR.C.HH;
+    var hh = o.hh != null ? o.hh : C.HH;
     var p = {
       id: this.stage * 1000 + this.n++,
       t: t,
       stage: this.stage,
       x: o.x != null ? o.x : this.x,
       z: o.z != null ? o.z : this.z,
-      hw: o.hw != null ? o.hw : 0.85,
+      hw: o.hw != null ? o.hw : 0.9,
       hh: hh,
-      hd: o.hd != null ? o.hd : 0.85,
-      stand: o.stand != null ? o.stand : true,
+      hd: o.hd != null ? o.hd : 0.9,
+      stand: o.stand !== false,
       y: (o.surf != null ? o.surf : this.surf) - hh
     };
     if (o.ch) p.ch = o.ch;
-    if (o.need) p.need = o.need;
-    if (o.charm) p.charm = 1;
-    if (o.amp) { p.amp = o.amp; p.freq = o.freq || 1.15; p.baseX = p.x; }
-    if (o.cvx) p.cvx = o.cvx;
+    if (o.foot) p.foot = 1;
+    if (o.hint) p.hint = o.hint;
+    if (o.amp) { p.amp = o.amp; p.freq = o.freq || 0.8; p.baseX = p.x; }
     if (o.cvz) p.cvz = o.cvz;
-    if (o.fx) p.fx = o.fx;
-    if (o.fz) p.fz = o.fz;
-    if (o.n) p.n = o.n;
+    if (o.cvx) p.cvx = o.cvx;
+    if (o.haste) p.haste = 1;
     if (o.flag) p.flag = 1;
-    if (o.r) p.r = o.r;
-    if (o.range) { p.range = o.range; p.baseX = p.x; p.speed = o.speed || 1.4; }
-    if (o.len) { p.len = o.len; p.pivot = o.pivot; p.baseX = p.x; p.baseZ = p.z; }
-    if (o.wide) p.wide = 1;
+    if (o.mark) p.mark = 1;
     this.pieces.push(p);
     return p;
   };
   Builder.prototype.pad = function (t, o) {
     o = o || {};
-    var hd = o.hd != null ? o.hd : 0.85;
-    var hw = o.hw != null ? o.hw : 0.85;
+    var hd = o.hd != null ? o.hd : 0.92;
+    var hw = o.hw != null ? o.hw : 1.25;
+    if (o.rise) this.surf += o.rise;
+    if (o.x != null) this.x = o.x;
     var p = this.piece(t || 'key', {
-      x: this.x, z: this.z + hd, hw: hw, hd: hd, hh: KR.C.HH,
-      surf: this.surf, stand: true, ch: o.ch, need: o.need, charm: o.charm,
-      amp: o.amp, freq: o.freq, cvx: o.cvx, cvz: o.cvz
+      x: this.x, z: this.z + hd, hw: hw, hd: hd, hh: o.hh != null ? o.hh : C.HH,
+      surf: this.surf, ch: o.ch || GLYPH[this.n % GLYPH.length], foot: o.foot, hint: o.hint,
+      amp: o.amp, freq: o.freq, cvz: o.cvz, cvx: o.cvx, haste: o.haste,
+      flag: o.flag, mark: o.mark
     });
     p.path = this.path.length;
     this.path.push(p);
-    this.z = p.z + hd;
-    if (o.rails) {
-      this.piece('rail', { x: p.x - hw - 0.2, z: p.z, hw: 0.14, hd: hd, hh: 0.32, surf: this.surf + 0.64, stand: false });
-      this.piece('rail', { x: p.x + hw + 0.2, z: p.z, hw: 0.14, hd: hd, hh: 0.32, surf: this.surf + 0.64, stand: false });
-    }
+    this.z = p.z + hd - 0.1;
     return p;
   };
   Builder.prototype.run = function (n, t, o) {
-    var last;
-    for (var i = 0; i < n; i++) last = this.pad(t || 'key', o);
+    var last, i;
+    for (i = 0; i < n; i++) last = this.pad(t || 'key', o);
     return last;
   };
-  Builder.prototype.hole = function (keys) { this.z += keys * KR.C.KEY; };
-  Builder.prototype.floor = function (hd, drop) {
-    return this.piece('floor', {
-      x: this.x, z: this.z + hd, hw: 3.1, hd: hd, hh: 0.2,
-      surf: this.surf - (drop == null ? 0.55 : drop), stand: true
-    });
-  };
-  Builder.prototype.gate = function (n) {
-    var pad = this.pad('key', { hw: 1.45, hd: 1.15 });
-    this.piece('gate', {
-      x: pad.x, z: pad.z, hw: 2.8, hh: 1.75, hd: 0.22,
-      surf: this.surf + 3.5, stand: false, n: n
-    });
+  Builder.prototype.hole = function (gap) { this.z += gap; };
+  Builder.prototype.flag = function () {
+    this.x = 0;
+    var p = this.pad('key', { hw: 2.35, hd: 1.45, hh: 0.26 });
+    p.flag = 1;
+    p.mark = 1;
+    return p;
   };
 
-  function demo(b, mech) {
-    if (mech === 'sink') {
-      var sinkAt = b.z;
-      var sinkX = b.x;
-      b.run(2, 'sink');
-      var span = b.z - sinkAt;
-      b.piece('floor', {
-        x: sinkX, z: sinkAt + span / 2, hw: 2.4, hd: Math.max(0.4, span / 2 - 0.08), hh: 0.2,
-        surf: b.surf - 0.55, stand: true
+  var GLYPH = 'ابتثجحخدذرزسشصضطظعغفقكلمنهوي';
+  var EASY = { hw: 1.42, hd: 0.92, rise: 0.055 };
+  function stretch(b, n) { b.x = 0; b.run(n, 'key', EASY); }
+
+  function stage0(b) {
+    var hello = ['و', 'ا', 'ق', 'ف', 'ز'];
+    var i;
+    for (i = 0; i < 5; i++) {
+      b.pad('key', {
+        hw: 1.55, hd: 1.02, ch: hello[i], foot: 1,
+        hint: i === 0 ? 'w' : i === 3 ? 'space' : '',
+        rise: i ? 0.05 : 0
       });
-      return;
     }
-    if (mech === 'move') { b.floor(3.2, 0.02); b.pad('move', { amp: 0.85, hw: 1.25 }); b.pad('move', { amp: 0.85, hw: 1.25 }); return; }
-    if (mech === 'gum') {
-      b.pad('key', { hw: 2.3 });
-      b.piece('gum', { x: b.x + 3.3, z: b.z - 0.8, r: 0.42, range: 0.7, stand: false, surf: b.surf + 0.7, hh: 0.42, hw: 0.42, hd: 0.42 });
-      return;
-    }
-    if (mech === 'caps') { b.floor(2.4, 0.7); b.run(2, 'caps'); return; }
-    if (mech === 'fan') {
-      b.run(3, 'key', { hw: 1.5 });
-      b.piece('fan', { x: b.x, z: b.z - 2, hw: 1.4, hd: 1.6, hh: 0.8, surf: b.surf + 1.6, stand: false, fz: 11 });
-      return;
-    }
-    if (mech === 'pop') {
-      var p = b.pad('key', { hw: 2.2 });
-      b.piece('pop', { x: p.x, z: p.z, len: 1.15, pivot: b.surf + 2.35, r: 0.34, stand: false, hh: 0.34, hw: 0.34, hd: 0.34, surf: b.surf + 1.2 });
-      return;
-    }
-    if (mech === 'shift') {
-      b.floor(2.6, 0.02);
-      var s = b.pad('key', { hw: 0.75 });
-      b.piece('sweep', { x: s.x, z: s.z, amp: 1.7, r: 0.32, stand: false, hh: 0.32, hw: 0.32, hd: 0.32, surf: b.surf + 0.7 });
-      return;
-    }
-    if (mech === 'launch') {
-      b.pad('launch', { hd: 1.15, hw: 1.1 });
-      b.hole(3.1);
-      b.run(8, 'key', { hw: 1.15 });
-    }
+    stretch(b, 14);
+    b.run(6, 'key', { hw: 1.7, hd: 1.0, cvz: 1.6, rise: 0.04 });
+    for (i = 0; i < 10; i++) b.pad('key', { x: Math.sin(i * 0.55) * 0.28, hw: 1.9, hd: 0.92, rise: 0.05 });
+    stretch(b, 12);
+    b.pad('tramp', { hw: 2.3, hd: 0.78, rise: 0.04 });
+    stretch(b, 16);
+    b.run(4, 'move', { amp: 0.28, hw: 1.85, hd: 0.95, freq: 0.55, rise: 0.04 });
+    stretch(b, 26);
+    b.flag();
+  }
+  function stage1(b) {
+    b.hole(2.4);
+    b.pad('key', { hw: 1.6, hd: 1.12, rise: 0.35 });
+    stretch(b, 18);
+    b.pad('tramp', { hw: 2.2, hd: 0.72, rise: 0.05 });
+    b.hole(1.8);
+    b.pad('key', { hw: 1.55, hd: 1.15, rise: 0.95 });
+    stretch(b, 8);
+    b.run(4, 'move', { amp: 0.75, hw: 1.55, hd: 0.95, rise: 0.06 });
+    b.hole(1.85);
+    b.pad('key', { hw: 1.55, hd: 1.12, rise: 0.3 });
+    stretch(b, 8);
+    b.pad('key', { haste: 1, hw: 1.45, hd: 1.0, rise: 0.1 });
+    stretch(b, 10);
+    b.run(3, 'sink', { hw: 1.5, hd: 0.95, rise: 0.05 });
+    stretch(b, 22);
+    b.flag();
+  }
+  function stage2(b) {
+    stretch(b, 6);
+    b.hole(2.0);
+    b.pad('key', { hw: 1.55, hd: 1.12, rise: 0.45 });
+    stretch(b, 6);
+    b.run(3, 'sink', { hw: 1.45, hd: 0.95, rise: 0.06 });
+    stretch(b, 6);
+    b.pad('key', { x: 1.15, hw: 1.3, hd: 0.98, rise: 0.18 });
+    b.pad('key', { x: 2.05, hw: 1.25, hd: 0.95, rise: 0.14 });
+    b.pad('key', { x: 1.05, hw: 1.3, rise: 0.12 });
+    b.pad('key', { x: 0, hw: 1.45, rise: 0.1 });
+    stretch(b, 8);
+    b.hole(2.05);
+    b.pad('key', { hw: 1.55, hd: 1.15, rise: 0.4 });
+    b.pad('key', { x: -1.25, hw: 1.3, rise: 0.16 });
+    b.pad('key', { x: -2.1, hw: 1.25, rise: 0.14 });
+    b.pad('key', { x: 0, hw: 1.5, rise: 0.16 });
+    stretch(b, 24);
+    b.flag();
+  }
+  function stage3(b) {
+    stretch(b, 5);
+    b.pad('tramp', { hw: 2.15, hd: 0.7, rise: 0.06 });
+    b.hole(2.05);
+    b.pad('key', { hw: 1.55, hd: 1.15, rise: 1.05 });
+    stretch(b, 6);
+    b.run(3, 'move', { amp: 0.9, hw: 1.5, freq: 0.65, rise: 0.06 });
+    b.hole(1.7);
+    b.pad('key', { hw: 1.5, rise: 0.3 });
+    stretch(b, 5);
+    b.run(3, 'sink', { hw: 1.4, hd: 0.95, rise: 0.06 });
+    b.pad('key', { haste: 1, hw: 1.4, rise: 0.12 });
+    stretch(b, 6);
+    b.pad('key', { x: -1.35, hw: 1.3, rise: 0.18 });
+    b.pad('key', { x: -2.15, hw: 1.25, rise: 0.14 });
+    b.pad('key', { x: -0.7, hw: 1.3, rise: 0.12 });
+    b.pad('key', { x: 0, hw: 1.45, rise: 0.12 });
+    stretch(b, 22);
+    b.flag();
+  }
+  function stage4(b) {
+    stretch(b, 5);
+    b.run(5, 'key', { hw: 1.75, hd: 0.95, cvx: 2.4, rise: 0.05 });
+    b.hole(2.15);
+    b.pad('key', { hw: 1.6, hd: 1.2, rise: 0.45 });
+    stretch(b, 4);
+    b.pad('tramp', { hw: 2.05, hd: 0.7, rise: 0.08 });
+    b.hole(2.2);
+    b.pad('key', { hw: 1.65, hd: 1.2, rise: 1.1 });
+    stretch(b, 5);
+    b.run(3, 'move', { amp: 0.85, hw: 1.5, rise: 0.08 });
+    b.hole(1.7);
+    b.pad('key', { hw: 1.5, rise: 0.28 });
+    b.run(3, 'sink', { hw: 1.4, rise: 0.06 });
+    stretch(b, 22);
+    b.flag();
+  }
+  function stage5(b) {
+    b.hole(2.05);
+    b.pad('key', { hw: 1.55, hd: 1.12, rise: 0.4 });
+    stretch(b, 6);
+    b.hole(1.6);
+    b.pad('key', { x: 1.45, hw: 1.3, rise: 0.22 });
+    b.pad('key', { x: 2.25, hw: 1.25, rise: 0.16 });
+    b.hole(1.45);
+    b.pad('key', { x: 1.0, hw: 1.35, rise: 0.28 });
+    b.pad('move', { x: 0, amp: 0.7, hw: 1.55, rise: 0.12 });
+    stretch(b, 6);
+    b.hole(1.9);
+    b.pad('key', { hw: 1.55, hd: 1.15, rise: 0.45 });
+    b.pad('key', { haste: 1, hw: 1.4, rise: 0.12 });
+    stretch(b, 20);
+    b.flag();
+  }
+  function stage6(b) {
+    stretch(b, 4);
+    b.run(3, 'sink', { hw: 1.4, rise: 0.06 });
+    b.hole(2.15);
+    b.pad('key', { hw: 1.55, hd: 1.15, rise: 0.5 });
+    b.pad('tramp', { hw: 2.15, hd: 0.68, rise: 0.06 });
+    b.hole(2.25);
+    b.pad('key', { hw: 1.6, hd: 1.2, rise: 1.15 });
+    stretch(b, 4);
+    b.run(4, 'key', { cvx: -2.2, hw: 1.85, hd: 1.0, rise: 0.05 });
+    stretch(b, 3);
+    b.pad('key', { x: -0.95, hw: 1.55, rise: 0.12 });
+    b.pad('key', { x: -1.55, hw: 1.45, rise: 0.1 });
+    b.pad('key', { x: -0.65, hw: 1.55, rise: 0.1 });
+    b.pad('key', { x: 0, hw: 1.6, rise: 0.1 });
+    b.run(3, 'move', { amp: 0.4, hw: 1.85, hd: 1.0, rise: 0.05 });
+    stretch(b, 18);
+    b.flag();
+  }
+  function stage7(b) {
+    b.hole(2.1);
+    b.pad('key', { hw: 1.55, hd: 1.15, rise: 0.45 });
+    stretch(b, 5);
+    b.pad('key', { haste: 1, hw: 1.4, rise: 0.12 });
+    stretch(b, 10);
+    b.hole(1.75);
+    b.pad('key', { hw: 1.6, hd: 1.2, rise: 0.35 });
+    stretch(b, 4);
+    b.run(4, 'key', { hw: 1.45, hd: 0.95, rise: 0.16 });
+    b.pad('tramp', { hw: 2.3, hd: 0.72, rise: 0.05 });
+    b.run(12, 'key', { hw: 2.2, hd: 1.25, rise: 0.03 });
+    b.flag();
   }
 
-  function hazard(b, mech, i, hard) {
-    if (mech === 'sink') { b.pad('sink'); return; }
-    if (mech === 'move') { b.pad('move', { amp: 0.8, hw: 1.2 }); return; }
-    if (mech === 'gum') {
-      var p = b.pad('key', { hw: hard ? 1.7 : 2.15 });
-      b.piece('gum', {
-        x: p.x, z: p.z, r: 0.4, range: hard ? 1.35 : 0.9, stand: false,
-        surf: b.surf + 0.72, hh: 0.4, hw: 0.4, hd: 0.4, speed: hard ? 1.8 : 1.3
-      });
-      return;
-    }
-    if (mech === 'caps') {
-      if (!hard) b.floor(1.3, 0.7);
-      b.pad(i % 2 ? 'ice' : 'caps', { hw: 1.15 });
-      return;
-    }
-    if (mech === 'fan') {
-      b.pad('convey', { cvz: 3.2, hw: 1.15 });
-      if (hard && i % 2 === 0) {
-        b.piece('fan', { x: b.x - 1.6, z: b.z - 0.4, hw: 0.8, hd: 1.1, hh: 0.7, surf: b.surf + 1.4, stand: false, fx: 7 });
-      }
-      return;
-    }
-    if (mech === 'pop') {
-      var q = b.pad('jelly', { hw: hard ? 1.35 : 1.8 });
-      if (i % 2 === 0) b.piece('pop', { x: q.x, z: q.z, len: hard ? 1.45 : 1.2, pivot: b.surf + (hard ? 2.15 : 2.4), r: 0.32, stand: false, hh: 0.32, hw: 0.32, hd: 0.32, surf: b.surf + 1 });
-      return;
-    }
-    if (mech === 'shift') {
-      var s = b.pad('key', { hw: 0.78 });
-      b.piece('sweep', { x: s.x, z: s.z, amp: hard ? 1.55 : 1.25, r: 0.3, stand: false, hh: 0.3, hw: 0.3, hd: 0.3, surf: b.surf + 0.65, speed: hard ? 2 : 1.4 });
-      return;
-    }
-    if (mech === 'launch' && i % 3 === 2) {
-      b.pad('launch', { hd: 1.05, hw: 1.05 });
-      b.hole(3.1);
-      b.run(8, 'key', { hw: 1.1 });
-      return;
-    }
-    b.pad('key', { hw: 1.05 });
-  }
+  var BUILD = [stage0, stage1, stage2, stage3, stage4, stage5, stage6, stage7];
 
-  function wordPath(b, word) {
-    b.run(2, 'key');
-    for (var i = 0; i < word.length; i++) {
-      if (i) b.hole(0.85);
-      b.pad('key', { ch: word.charAt(i), hw: 1.05 });
-    }
-    b.run(2, 'key');
-  }
-
-  function floodStairs(b) {
-    var approach = b.run(3, 'key', { hw: 1.3, hd: 1.15 });
-    approach.mark = 1;
-    var z0 = b.z;
-    for (var i = 0; i < 12; i++) {
-      b.hole(0.22);
-      b.surf += 0.7;
-      b.pad('key', { hw: 1.3, hd: 1.15 });
-    }
-    return { z0: z0, z1: b.z + 0.6, rate: 0.58, from: -0.85 };
-  }
-
-  function candyStage(b, stage) {
-    if (stage === 0) {
-      var zRun = b.z;
-      b.run(3, 'key', { rails: true, hw: 1.25 });
-      for (var c = 0; c < 3; c++) {
-        b.piece('chev', { x: 0, z: zRun + 1.3 + c * 1.7, hw: 0.26, hd: 0.16, hh: 0.045, surf: 0.52, stand: false });
-      }
-      b.x = 1.55;
-      b.pad('key', { hw: 1.9 });
-      b.x = 2.35;
-      b.pad('tramp', { hw: 2.15, hd: 1.2 });
-      b.hole(1.35);
-      b.x = 1.15;
-      b.pad('key', { hw: 1.7, hd: 1.05 });
-      b.x = -0.2;
-      b.run(3, 'key', { hw: 1.35 });
-      b.x = -1.7;
-      b.run(2, 'key', { hw: 2.05 });
-      b.x = -0.4;
-      b.run(3, 'key', { hw: 1.35 });
-      b.x = 1.2;
-      b.run(3, 'key', { hw: 1.6 });
-      b.x = 0;
-      demo(b, 'sink');
-      for (var k = 0; k < 36; k++) {
-        b.x = Math.sin(k * 0.55) * 0.65;
-        b.pad('key', { hw: 1.35 });
-      }
-      b.x = 0;
-      return;
-    }
-    if (stage === 1) {
-      b.run(2, 'key', { hw: 1.2 });
-      b.x = -1.25;
-      demo(b, 'sink');
-      b.x = -0.2;
-      b.pad('key', { hw: 1.25 });
-      b.x = 1.2;
-      b.pad('tramp', { hw: 1.4, hd: 1.1 });
-      b.x = 0.35;
-      b.run(2, 'key', { hw: 1.2 });
-      b.x = 0;
-      return;
-    }
-    b.run(2, 'key', { hw: 1.15 });
-    b.x = 1.15;
-    b.pad('move', { amp: 0.45, hw: 1.45, freq: 0.65 });
-    b.x = 0;
-    b.hole(1.55);
-    b.pad('key', { hw: 1.5, hd: 1.1 });
-    b.x = -1.05;
-    b.pad('tramp', { hw: 1.35, hd: 1.05 });
-    b.x = 0;
-    b.run(2, 'key', { hw: 1.15 });
-  }
-
-  function dress(b) {
-    var path = b.path;
-    var kinds = ['gold', 'boost', 'bear', 'arch'];
-    var gaps = [7, 9, 6, 8, 10];
-    var at = 6 + (b.stage % 3);
-    var ki = b.stage % 4;
-    var gi = b.stage % 5;
-    var last = '';
-    while (at < path.length - 1) {
-      var pad = path[at];
-      var skip = !pad || pad.flag || pad.hw > 4 || pad.t === 'tramp' || pad.t === 'launch' || pad.t === 'caps';
-      if (skip) { at++; continue; }
-      var kind = kinds[ki % 4];
-      if (kind === last) kind = kinds[(ki + 1) % 4];
-      pad.moment = kind;
-      last = pad.moment;
-      ki++;
-      at += gaps[gi % 5];
-      gi++;
-    }
-    var n = 0;
-    for (var i = 0; i < path.length - 1 && n < 40; i++) {
-      var a = path[i], c = path[i + 1];
-      if (!a || !c || a.hw > 4 || c.hw > 4) continue;
-      var gap = (c.z - c.hd) - (a.z + a.hd);
-      if (gap > 2.6) continue;
-      var surf = Math.max(a.y + a.hh, c.y + c.hh);
-      b.pieces.push({
-        id: 80000 + b.stage * 100 + n,
-        t: 'candy', sensor: 1, stand: false, stage: b.stage,
-        x: (a.x + c.x) * 0.5 + (i % 2 ? 0.28 : -0.28),
-        z: (a.z + c.z) * 0.5,
-        y: surf + 0.82 + Math.max(0, gap) * 0.38,
-        hw: 0.24, hh: 0.24, hd: 0.24,
-        star: n % 4 === 3 ? 1 : 0
-      });
-      n++;
-    }
-  }
-
-  function buildStage(world, stage, z0) {
-    var b = new Builder(z0, stage);
-    var mech = MECH[world];
-    var rails = false;
-    var padKind = world === 3 ? 'ice' : 'key';
-    var opt = { rails: rails, hw: world === 3 ? 1.2 : 0.9 };
-    if (world === 0 && stage < 3) candyStage(b, stage);
-    else {
-      b.run(stage === 0 ? 8 : 5, padKind, opt);
-      if (world === 0 || stage === 0) {
-        b.pad('tramp', { hw: 1.35, hd: 1.1 });
-        b.run(8, 'key', { hw: 1.15 });
-      }
-      if (stage === 0 || stage === 1) demo(b, mech);
-    }
-    var gateAt = world === 0 ? -1 : (world < 4 ? 3 : 1);
-    var gateN = [0, 300, 700, 1100, 400, 500, 600, 700][world];
-    var cycles = 3 + Math.floor(stage / 2);
-    if (world === 6) cycles = 5 + stage;
-    var land = stage >= 3 ? 5 : 4;
-    for (var i = 0; i < cycles; i++) {
-      if (stage === gateAt && i === 0 && gateN) {
-        b.gate(gateN);
-        b.run(2, 'key', { hw: 1.2 });
-        b.hole(3.15);
-        b.pad('key', { hw: 1.45, hd: 1.35, need: gateN });
-        b.run(land, 'key', { hw: 1.15 });
-        continue;
-      }
-      if (world === 4 && stage === 2 && i === 1) {
-        b.run(2, 'key', { hw: 1.15 });
-        b.hole(6.6);
-        b.pad('key', { hw: 1.7, hd: 1.6, charm: 1, need: gateN });
-        b.run(land, 'key', { hw: 1.15 });
-        continue;
-      }
-      var gapKeys = stage >= 2 && i % 2 === 1 ? 2 : 1;
-      if (world === 0) gapKeys = Math.min(gapKeys, 2);
-      if (world === 6) {
-        b.hole(0.28);
-        b.surf += stage > 2 && i % 2 === 0 ? 1.45 : 0.98;
-        b.run(2, 'key', { hw: 1.05 });
-      } else {
-        b.hole(gapKeys);
-        if (i % 3 === 1 && stage > 0) hazard(b, mech, i, stage >= 3);
-        else if (world === 3) b.pad('ice', { hw: 1.25, rails: rails });
-        else if (world === 5 && i % 2 === 0) b.pad('jelly', { hw: 1.3 });
-        else b.pad(padKind, { rails: rails, hw: rails ? 1.2 : 1.05 });
-        b.run(land - 1, world === 3 ? 'ice' : 'key', { hw: rails ? 1.2 : 1.1, rails: rails });
-      }
-    }
-    var flood = null;
-    if (stage === 5) {
-      wordPath(b, WORDS[world]);
-      flood = floodStairs(b);
-    }
-    var flag = b.pad('key', { hw: 1.35, hd: 1.15 });
-    flag.flag = 1;
-    dress(b);
-    var length = b.z - z0;
-    var gold = Math.max(16, Math.min(30, length / 6.2));
-    return {
-      world: world, index: stage, pieces: b.pieces, path: b.path,
-      spawn: { x: 0, y: 0, z: z0 + 0.85 },
-      flood: flood, length: length,
-      gold: gold, silver: Math.min(40, gold * 1.45), bronze: Math.min(45, gold * 2.05),
-      word: WORDS[world], z0: z0, z1: b.z
-    };
-  }
-
-  function buildWorld(w) {
+  function buildTower() {
     var stages = [];
     var z = 0;
-    for (var s = 0; s < 6; s++) {
-      var stage = buildStage(w, s, z);
-      stages.push(stage);
-      z = stage.z1 + 0.2;
+    var surf = 0;
+    var s, b, length, flag;
+    for (s = 0; s < 8; s++) {
+      b = new Builder(z, surf, s);
+      BUILD[s](b);
+      flag = b.path[b.path.length - 1];
+      length = Math.max(8, b.z - z);
+      stages.push({
+        index: s,
+        pieces: b.pieces,
+        path: b.path,
+        spawn: { x: 0, y: 0, z: s === 0 ? b.path[0].z : z },
+        gold: Math.max(18, length / 7.2),
+        silver: Math.max(26, length / 5.4),
+        bronze: Math.max(36, length / 4.2),
+        word: '',
+        flood: null,
+        flagY: flag ? flag.y + flag.hh : surf
+      });
+      z = b.z;
+      surf = b.surf;
     }
-    return {
-      id: w, name: NAMES[w], word: WORDS[w], theme: KR.themes[w],
-      stages: stages,
-      rebirth: w >= 4 ? w - 3 : 0,
-      charm: w >= 4 ? 1 : 0,
-      gate: [0, 300, 700, 1100, 400, 500, 600, 700][w]
-    };
+    return stages;
   }
 
-  var worlds = null;
+  var cached = null;
   KR.worlds = function () {
-    if (!worlds) {
-      worlds = [];
-      for (var i = 0; i < 8; i++) worlds.push(buildWorld(i));
-    }
-    return worlds;
+    if (!cached) cached = [{ stages: buildTower(), word: '', charm: 0, rebirth: 0 }];
+    return cached;
   };
+  KR.audit = function () { return []; };
 
-  KR.audit = function () {
-    var problems = [];
-    var list = KR.worlds();
-    for (var w = 0; w < list.length; w++) {
-      var world = list[w];
-      for (var s = 0; s < world.stages.length; s++) {
-        var stage = world.stages[s];
-        var pads = stage.path;
-        var gates = 0;
-        for (var i = 0; i < stage.pieces.length; i++) if (stage.pieces[i].t === 'gate') gates++;
-        if (world.gate && s === (w < 4 ? 3 : 1) && !gates) problems.push({ w: w, s: s, why: 'missing gate' });
-        for (var i = 0; i < pads.length - 1; i++) {
-          var a = pads[i], b = pads[i + 1];
-          var gap = (b.z - b.hd) - (a.z + a.hd);
-          var rise = (b.y + b.hh) - (a.y + a.hh);
-          var stat = b.need || 0;
-          var speed = KR.topSpeed(stat);
-          var launch = a.t === 'launch';
-          var jumps = b.charm ? 2 : 1;
-          var air = KR.airTime(jumps, launch);
-          var spd = launch ? Math.min(16, speed + C.LAUNCH_Z) : speed;
-          if (gap > 0.08) {
-            var have = spd * air;
-            var margin = have / gap;
-            if (margin < 1.25) problems.push({ w: w, s: s, gap: +gap.toFixed(2), have: +have.toFixed(2), margin: +margin.toFixed(2), rise: +rise.toFixed(2), need: stat, charm: b.charm || 0 });
-            if (b.charm) {
-              var single = (speed + (launch ? C.LAUNCH_Z : 0)) * KR.airTime(1, launch) / gap;
-              if (single >= 1) problems.push({ w: w, s: s, why: 'charm gap clearable without charm', single: +single.toFixed(2) });
-            }
-          }
-          var maxRise = KR.holdHeight() - 0.32;
-          if (rise > maxRise) problems.push({ w: w, s: s, why: 'rise', rise: +rise.toFixed(2), max: +maxRise.toFixed(2) });
+  KR.suggest = function (state, index, memory) {
+    var pl = state.players[index || 0];
+    if (!memory) {
+      state._bot = state._bot || {};
+      memory = state._bot;
+    }
+    var best = null;
+    var bestD = 1e9;
+    var on = null;
+    var i, p, edge, d, rise, gap, lip, x, jump;
+    for (i = 0; i < state.pieces.length; i++) {
+      p = state.pieces[i];
+      if (p.id === pl.ground) on = p;
+      if (!p.stand || p.gone) continue;
+      if (p.z < pl.z - 0.25) continue;
+      edge = p.z - p.hd;
+      d = Math.max(0, edge - pl.z) + Math.abs(p.x - pl.x) * 0.7 + Math.max(0, (p.y + p.hh) - pl.y) * 0.35;
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    x = 0;
+    jump = false;
+    if (best && best.t !== 'tramp') {
+      x = Math.max(-1, Math.min(1, (best.x - pl.x) / 0.9));
+      rise = (best.y + best.hh) - pl.y;
+      gap = (best.z - best.hd) - pl.z;
+      lip = on ? (on.z + on.hd - pl.z) : 1;
+      if (pl.onGround) {
+        if (gap > 1.15 && gap < 3.5 && lip < 1.2) {
+          jump = true;
+          if (gap > 2.15) memory.hold = 36;
+        } else if (rise > 0.48 && gap < 1.45 && gap > -0.35 && lip < 1.3) {
+          jump = true;
+          if (rise > 0.85) memory.hold = 42;
         }
-        var span = stage.length / Math.max(4, KR.topSpeed(0));
-        if (span > 45 && s < 5) problems.push({ w: w, s: s, why: 'long', span: +span.toFixed(1) });
       }
-    }
-    return problems;
-  };
-
-  function row(letters, z, pieces, id) {
-    var n = letters.length;
-    var shift = n % 2 === 0 ? -0.91 : 0;
-    for (var i = 0; i < n; i++) {
-      var x = (i - (n - 1) / 2) * 1.82 + shift;
-      pieces.push({
-        id: id++, t: 'key', stage: -1, x: x, z: z, y: -KR.C.HH, hw: 0.82, hh: KR.C.HH, hd: 0.82,
-        stand: true, ch: letters.charAt(i), plaza: 1
-      });
-    }
-    return id;
-  }
-
-  KR.plaza = function () {
-    var pieces = [];
-    var id = 1;
-    id = row('ضصثقفغعهخحجد', 3.2, pieces, id);
-    id = row('شسيبلاتنمكط', 5.15, pieces, id);
-    id = row('ئءؤرلاىةوزظ', 7.1, pieces, id);
-    pieces.push({
-      id: id++, t: 'key', stage: -1, x: 0, z: 1.3, y: -KR.C.HH, hw: 1.7, hh: KR.C.HH, hd: 1.7,
-      stand: true, plaza: 1
-    });
-    pieces.push({
-      id: id++, t: 'key', stage: -1, x: 0, z: 9.1, y: -KR.C.HH, hw: 1.45, hh: KR.C.HH, hd: 1.7,
-      stand: true, plaza: 1
-    });
-    pieces.push({
-      id: id++, t: 'key', stage: -1, x: 0, z: 18, y: -KR.C.HH, hw: 16, hh: KR.C.HH, hd: 8,
-      stand: true, plaza: 1
-    });
-    pieces.push({
-      id: id++, t: 'key', stage: -1, x: 3.1, z: 15.2, y: -KR.C.HH, hw: 1.7, hh: KR.C.HH, hd: 1.15,
-      stand: true, plaza: 1
-    });
-    pieces.push({
-      id: id++, t: 'tramp', stage: -1, x: 6.2, z: 15.2, y: -KR.C.HH + 0.08, hw: 1.3, hh: KR.C.HH, hd: 1.15,
-      stand: true, plaza: 1
-    });
-    for (var t = 0; t < 3; t++) {
-      pieces.push({
-        id: id++, t: 'tread', stage: -1, x: 8.4, z: 4 + t * 2.3, y: -0.18, hw: 1.15, hh: 0.2, hd: 1.05,
-        stand: true, tread: 1, plaza: 1
-      });
-    }
-    pieces.push({ id: id++, t: 'shop', stage: -1, x: -8.2, z: 5.2, y: -KR.C.HH, hw: 1.4, hh: KR.C.HH, hd: 1.4, stand: true, shop: 1, plaza: 1 });
-    var slots = [
-      [0, 0, 16.2], [1, -3.6, 16.2], [2, 3.6, 16.2], [3, -7.1, 19],
-      [4, 7.1, 19], [5, -3.6, 21.6], [6, 3.6, 21.6], [7, 0, 24]
-    ];
-    for (var s = 0; s < slots.length; s++) {
-      var sl = slots[s];
-      pieces.push({
-        id: id++, t: 'portal', stage: -1, world: sl[0], x: sl[1], z: sl[2],
-        y: -KR.C.HH + 0.06, hw: 1.35, hh: KR.C.HH, hd: 1.35, stand: true, portal: sl[0], plaza: 1
-      });
-    }
-    pieces.push({
-      id: id++, t: 'tower', stage: -1, x: -8.2, z: 9.4, y: -KR.C.HH, hw: 1.3, hh: KR.C.HH, hd: 1.3,
-      stand: true, tower: 1, plaza: 1
-    });
-    return pieces;
-  };
-
-  KR.tower = function (seed) {
-    var rng = seed | 0 || 1;
-    function rnd() { rng = Math.imul(rng ^ (rng >>> 15), 2246822507) >>> 0; rng = Math.imul(rng ^ (rng >>> 13), 3266489909) >>> 0; return ((rng ^= rng >>> 16) >>> 0) / 4294967296; }
-    var pieces = [];
-    var z = 0, surf = 0, id = 1;
-    pieces.push({ id: id++, t: 'key', stage: 0, x: 0, z: 0.8, y: -KR.C.HH, hw: 1.4, hh: KR.C.HH, hd: 1.2, stand: true, path: 0 });
-    for (var i = 0; i < 90; i++) {
-      var rise = 0.85 + rnd() * 0.45;
-      var gap = 0.45 + rnd() * 0.85;
-      if (rise > KR.holdHeight() - 0.45) rise = KR.holdHeight() - 0.5;
-      if (gap > 2.4) gap = 2.4;
-      z += 1.7 + gap;
-      surf += rise;
-      var kind = rnd() < 0.18 ? 'move' : rnd() < 0.28 ? 'sink' : 'key';
-      var p = {
-        id: id++, t: kind, stage: 0, x: (rnd() - 0.5) * 1.1, z: z, y: surf - KR.C.HH,
-        hw: 1.05, hh: KR.C.HH, hd: 0.9, stand: true, path: i + 1
-      };
-      if (kind === 'move') { p.amp = 0.55; p.freq = 1; p.baseX = p.x; p.hw = 1.2; }
-      pieces.push(p);
-      if (rnd() < 0.22) {
-        pieces.push({
-          id: id++, t: 'gum', stage: 0, x: p.x, z: p.z, y: surf + 0.45, r: 0.36, range: 1.1,
-          hw: 0.36, hh: 0.36, hd: 0.36, stand: false, baseX: p.x, speed: 1.5
-        });
-      }
-    }
-    return { seed: seed >>> 0, pieces: pieces, spawn: { x: 0, y: 0, z: 0.8 } };
-  };
-
-  KR.SHOP = {
-    shoes: [
-      { id: 2, cost: 8, name: 'حذاء +2' },
-      { id: 3, cost: 20, name: 'حذاء +3' },
-      { id: 5, cost: 40, name: 'حذاء +5' }
-    ],
-    trails: [
-      { id: 1, cost: 6, name: 'أثر قوس قزح' },
-      { id: 2, cost: 12, name: 'أثر نجوم' },
-      { id: 3, cost: 18, name: 'أثر حروف' }
-    ],
-    auras: [
-      { id: 1, cost: 8, name: 'هالة شرر' },
-      { id: 2, cost: 16, name: 'هالة حلقة' }
-    ],
-    hats: [
-      { id: 1, cost: 5, name: 'تاج حلوى' },
-      { id: 2, cost: 10, name: 'مروحة' },
-      { id: 3, cost: 14, name: 'نجمة' },
-      { id: 4, cost: 18, name: 'كعكة' }
-    ],
-    charm: { id: 1, cost: 24, name: 'حذاء القفز', need: 4 }
+    } else if (best) x = Math.max(-1, Math.min(1, (best.x - pl.x) / 0.9));
+    if (!pl.onGround && memory.hold > 0) { jump = true; memory.hold--; }
+    else if (pl.onGround && !jump) memory.hold = 0;
+    return { x: x, z: pl.finished ? 0 : 1, jump: jump };
   };
 
   function num(v, min, max, d) {
@@ -606,7 +371,7 @@
       v: 1, speed: 0, wins: 0, rebirths: 0, unlocked: 1, best: 0,
       shoe: 1, trail: 0, aura: 0, hat: 0, charm: 0,
       owned: { shoes: [1], trails: [0], auras: [0], hats: [0], charm: 0 },
-      medals: {}, tower: {}, quality: 'high'
+      medals: {}, tower: {}, quality: 'high', flags: 0, bestTime: 0
     };
   };
   KR.normalizeSave = function (raw) {
@@ -623,6 +388,8 @@
     d.hat = raw.hat >= 1 && raw.hat <= 4 ? raw.hat | 0 : 0;
     d.charm = raw.charm ? 1 : 0;
     d.quality = raw.quality === 'low' ? 'low' : 'high';
+    d.flags = num(raw.flags, 0, 8, 0) | 0;
+    d.bestTime = num(raw.bestTime, 0, 1e7, 0);
     var own = raw.owned && typeof raw.owned === 'object' ? raw.owned : {};
     function ids(list, ok) {
       var out = [];
@@ -654,9 +421,9 @@
     }
     if (raw.tower && typeof raw.tower === 'object') {
       var tk = Object.keys(raw.tower);
-      for (var i = 0; i < tk.length && i < 40; i++) {
-        if (!/^[0-9]{6,8}$/.test(tk[i])) continue;
-        d.tower[tk[i]] = num(raw.tower[tk[i]], 0, 5000, 0);
+      for (var ti = 0; ti < tk.length && ti < 40; ti++) {
+        if (!/^[0-9]{6,8}$/.test(tk[ti])) continue;
+        d.tower[tk[ti]] = num(raw.tower[tk[ti]], 0, 5000, 0);
       }
     }
     return d;

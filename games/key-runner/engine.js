@@ -12,12 +12,11 @@
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function topOf(p) { return p.y + p.hh; }
   function standable(p) {
-    if (!p || !p.stand) return false;
-    if (p.t === 'caps' && p.gone) return false;
+    if (!p || !p.stand || p.gone) return false;
     return true;
   }
   function solid(p, speed) {
-    if (!p || p.sensor) return false;
+    if (!p || p.sensor || p.gone) return false;
     if (p.t === 'gum' || p.t === 'pop' || p.t === 'fan' || p.t === 'sweep' || p.t === 'flag' || p.t === 'chev') return false;
     if (p.t === 'caps' && p.gone) return false;
     if (p.t === 'gate' && speed >= p.n) return false;
@@ -58,7 +57,8 @@
       falling: 0, falls: 0, stageFalls: 0, stage: 0, stageTime: 0,
       wordAt: 0, maxY: o.y || 0, cd: 0, gateCd: 0, touchCd: 0,
       squash: 1, stretch: 1, alive: true, finished: false, lastPad: -1, pressCd: 0,
-      shoe: o.shoe || 1, rebirths: o.rebirths || 0, charm: !!o.charm
+      shoe: o.shoe || 1, rebirths: o.rebirths || 0, charm: !!o.charm,
+      hasteTime: 0, idle: 0, glug: 0
     };
     p.cp = { x: p.x, y: p.y, z: p.z, stage: 0 };
     return p;
@@ -75,6 +75,7 @@
       players: [],
       flood: null,
       floodY: -8,
+      armed: false,
       over: null,
       seed: opt.seed || 1,
       built: {}
@@ -89,8 +90,8 @@
     }
 
     function templates(stage) {
-      if (state.mode === 'plaza') return stage === -1 ? KR.plaza() : [];
-      if (state.mode === 'tower') return stage === 0 ? state.tower.pieces : [];
+      if (state.mode === 'plaza') return stage === -1 && KR.plaza ? KR.plaza() : [];
+      if (state.mode === 'tower') return stage === 0 && state.tower ? state.tower.pieces : [];
       var w = worlds[state.world];
       if (!w || !w.stages[stage]) return [];
       return w.stages[stage].pieces;
@@ -114,17 +115,11 @@
         for (var i = 0; i < state.players.length; i++) {
           var s = state.players[i].stage;
           need[s] = 1;
-          if (s + 1 < 6) need[s + 1] = 1;
+          if (s + 1 < 8) need[s + 1] = 1;
         }
       }
       Object.keys(state.built).forEach(function (k) { if (!need[k]) drop(+k); });
       Object.keys(need).forEach(function (k) { ensure(+k); });
-      if (state.mode === 'world' || state.mode === 'race') {
-        var st = worlds[state.world].stages[state.players[0].stage];
-        var nextFlood = st && st.flood ? st.flood : null;
-        if (nextFlood !== state.flood) state.floodY = nextFlood ? nextFlood.from : -8;
-        state.flood = nextFlood;
-      } else state.flood = null;
     }
     function reset(next) {
       if (next) opt = Object.assign({}, opt, next);
@@ -136,8 +131,9 @@
       state.built = {};
       state.flood = null;
       state.floodY = -8;
+      state.armed = false;
       state.seed = opt.seed || state.seed;
-      if (state.mode === 'tower') state.tower = KR.tower(opt.seed || 1);
+      if (state.mode === 'tower' && KR.tower) state.tower = KR.tower(opt.seed || 1);
       var spawn = { x: 0, y: 0, z: 1.1 };
       if (state.mode === 'world' || state.mode === 'race') spawn = { x: worlds[state.world].stages[0].spawn.x, y: 0, z: worlds[state.world].stages[0].spawn.z };
       if (state.mode === 'tower') spawn = { x: 0, y: 0, z: 0.8 };
@@ -158,7 +154,10 @@
         state.players.push(pl);
       }
       if (state.mode !== 'custom') sync();
-      if ((state.mode === 'world' || state.mode === 'race') && state.flood) state.floodY = state.flood.from;
+      if (state.mode === 'world' || state.mode === 'race') {
+        state.flood = { rate: C.FLOOD, fast: C.FLOOD_FAST, from: C.FLOOD_FROM, z0: -1e5, z1: 1e5 };
+        state.floodY = C.FLOOD_FROM;
+      }
       return state;
     }
 
@@ -292,6 +291,10 @@
         pl.lastPad = p.id;
         pl.pressCd = 0.03;
         events.push({ e: 'press', p: pl.i, id: p.id, x: pl.x, y: pl.y, z: pl.z, moment: p.moment || '' });
+        if (p.haste) {
+          pl.hasteTime = state.time + 2.8;
+          events.push({ e: 'haste', p: pl.i });
+        }
       }
       if (p.ch && pl.wordId !== p.id && (state.mode === 'world' || state.mode === 'race')) {
         pl.wordId = p.id;
@@ -324,7 +327,7 @@
       pl.stageFalls = 0;
       pl.wordAt = 0;
       pl.cp = { x: pl.x, y: pl.y, z: pl.z, stage: pl.stage };
-      if (pl.stage >= 6) {
+      if (pl.stage >= 8) {
         pl.finished = true;
         events.push({ e: 'world', p: pl.i, world: state.world });
         if (state.mode === 'race') {
@@ -345,8 +348,11 @@
       pl.squash = 0.6;
       pl.stretch = 1.2;
       pl.lastPad = -1;
+      pl.idle = 0;
+      pl.glug = 0;
+      pl.hasteTime = 0;
       if (state.mode === 'world' || state.mode === 'race') pl.stage = pl.cp.stage;
-      if (state.flood && pl.z < state.flood.z0 - 0.4) state.floodY = state.flood.from;
+      if (state.flood && state.floodY > pl.y - 1.2) state.floodY = pl.y - 1.6;
       events.push({ e: 'respawn', p: pl.i });
     }
     function startFall(pl, events, why) {
@@ -375,11 +381,16 @@
         p.px = p.x; p.py = p.y; p.pz = p.z;
         if (p.cd > 0) p.cd -= dt;
         if (p.t === 'sink') {
-          var target = grounded[p.id] ? 0.2 : 0;
-          var step = 1.7 * dt;
-          if (p.sink < target) p.sink = Math.min(target, p.sink + step);
-          else p.sink = Math.max(target, p.sink - step);
-          p.y = p.baseY - p.sink;
+          if (grounded[p.id] && !p.gone) p.warm += dt;
+          else if (!p.gone) p.warm = Math.max(0, p.warm - dt * 2);
+          if (!p.gone && p.warm > 0 && p.warm < 0.5) p.y = p.baseY + Math.sin(p.warm * 46) * 0.05;
+          else if (!p.gone && p.warm >= 0.5) { p.gone = 1; p.cool = 1.35; p.stand = false; }
+          else if (!p.gone) p.y = p.baseY;
+          if (p.gone) {
+            p.y -= 3.4 * dt;
+            p.cool -= dt;
+            if (p.cool <= 0) { p.gone = 0; p.warm = 0; p.stand = true; p.y = p.baseY; }
+          }
         } else if (p.t === 'move') {
           p.phase += dt * (p.freq || 1.15);
           p.x = p.baseX + Math.sin(p.phase) * (p.amp || 0.8);
@@ -417,7 +428,7 @@
     }
 
     function control(pl, input, dt) {
-      var top = KR.topSpeed(pl.speed);
+      var top = pl.hasteTime > state.time ? C.BOOST : C.RUN;
       var ix = input.x || 0, iz = input.z || 0;
       var mag = Math.hypot(ix, iz);
       if (mag > 1) { ix /= mag; iz /= mag; mag = 1; }
@@ -562,7 +573,6 @@
       if (pl.cd > 0) pl.cd -= dt;
       if (pl.gateCd > 0) pl.gateCd -= dt;
       if (pl.touchCd > 0) pl.touchCd -= dt;
-      var px = pl.x, pz = pl.z;
       carry(pl);
       control(pl, input, dt);
       var ground = pl.ground ? pieceById(pl.ground) : null;
@@ -628,25 +638,16 @@
       var hsp = Math.hypot(pl.vx, pl.vz);
       if (hsp > 30) { pl.vx *= 30 / hsp; pl.vz *= 30 / hsp; }
 
-      var tread = pl.onGround && ground && ground.tread && (input.z || 0) > 0.2;
-      if (tread) {
-        pl.stepAcc += KR.topSpeed(pl.speed) * dt;
-        pl.z = ground.z;
-        pl.vz = 0;
-      } else if (pl.onGround) {
-        pl.stepAcc += Math.hypot(pl.x - px, pl.z - pz);
-      }
-      var gain = KR.stepGain(pl.shoe, pl.rebirths);
-      while (pl.stepAcc >= C.STEP) {
-        pl.stepAcc -= C.STEP;
-        pl.speed += gain;
-        events.push({ e: 'step', p: pl.i, n: gain, speed: pl.speed });
-      }
+      if (pl.onGround && Math.hypot(pl.vx, pl.vz) < 0.45) pl.idle += dt;
+      else pl.idle = 0;
+      if (pl.idle > 4) {
+        if (!pl.glug) { pl.glug = 1; events.push({ e: 'glug', p: pl.i }); }
+      } else pl.glug = 0;
       sensors(pl, events);
       grabCandy(pl, events);
       feet(pl, events);
       if (pl.y < C.FALL_Y) startFall(pl, events, 'void');
-      if (state.flood && pl.z >= state.flood.z0 && pl.z <= state.flood.z1 && pl.y < state.floodY) startFall(pl, events, 'flood');
+      if (state.armed && state.flood && pl.y < state.floodY) startFall(pl, events, 'flood');
       if (pl.y > pl.maxY) pl.maxY = pl.y;
       pl.stageTime += dt;
       if (pl.pressCd > 0) pl.pressCd -= dt;
@@ -662,16 +663,13 @@
     function tick(dt, inputs, events) {
       if (state.over && state.mode !== 'world') return;
       updatePieces(dt);
-      if (state.flood) {
-        var chase = false;
+      if (state.flood && state.armed) {
+        var fast = false;
         for (var fi = 0; fi < state.players.length; fi++) {
-          var fq = state.players[fi];
-          if (fq.falling <= 0 && fq.z >= state.flood.z0 - 4 && fq.z <= state.flood.z1 + 1) chase = true;
+          if (state.players[fi].idle > 4 && state.players[fi].falling <= 0) fast = true;
         }
-        if (chase) {
-          state.floodY += state.flood.rate * dt;
-          if (state.floodY > 80) state.floodY = 80;
-        }
+        state.floodY += (fast ? state.flood.fast : state.flood.rate) * dt;
+        if (state.floodY > 80) state.floodY = 80;
       }
       for (var i = 0; i < state.players.length; i++) tickPlayer(state.players[i], inputs[i] || inputs[0] || {}, dt, events);
       state.time += dt;
@@ -696,6 +694,7 @@
       var best = null;
       for (var i = 0; i < state.pieces.length; i++) {
         var p = state.pieces[i];
+        if (p.stand) continue;
         if (solidsOnly && !solid(p, 1e9) && p.t !== 'gate') continue;
         if (!solidsOnly && (p.t === 'fan' || p.t === 'gum' || p.t === 'pop')) continue;
         var minx = p.x - p.hw, maxx = p.x + p.hw;
@@ -720,6 +719,7 @@
     function inside(pt) {
       for (var i = 0; i < state.pieces.length; i++) {
         var p = state.pieces[i];
+        if (p.stand) continue;
         if (!solid(p, 1e9) && p.t !== 'gate') continue;
         if (Math.abs(pt.x - p.x) < p.hw - 0.05 && Math.abs(pt.y - p.y) < p.hh - 0.05 && Math.abs(pt.z - p.z) < p.hd - 0.05) return true;
       }
@@ -815,74 +815,5 @@
       state: state, step: step, reset: reset, sync: sync,
       cameraPose: cameraPose, predictLanding: predictLanding, shadowPoint: shadowPoint
     };
-  };
-
-  function nearestPad(state, pl) {
-    var best = null, bestD = 1e9;
-    for (var i = 0; i < state.pieces.length; i++) {
-      var p = state.pieces[i];
-      if (!standable(p)) continue;
-      var edge = p.z - p.hd;
-      if (edge < pl.z - 0.15) continue;
-      var d = edge - pl.z + Math.abs(p.x - pl.x) * 0.8 + Math.max(0, (p.y + p.hh) - pl.y) * 0.5;
-      if (d < bestD) { bestD = d; best = p; }
-    }
-    return best;
-  }
-  function groundedAhead(state, pl, dist) {
-    var z = pl.z + dist;
-    for (var i = 0; i < state.pieces.length; i++) {
-      var p = state.pieces[i];
-      if (!standable(p)) continue;
-      var top = topOf(p);
-      if (top < pl.y - 0.35 || top > pl.y + 0.45) continue;
-      if (Math.abs(pl.x - p.x) > p.hw + 0.15) continue;
-      if (z >= p.z - p.hd - 0.05 && z <= p.z + p.hd + 0.2) return true;
-    }
-    return false;
-  }
-  function lipLeft(state, pl) {
-    var best = 0;
-    for (var i = 0; i < state.pieces.length; i++) {
-      var p = state.pieces[i];
-      if (!standable(p)) continue;
-      var top = topOf(p);
-      if (top < pl.y - 0.25 || top > pl.y + 0.2) continue;
-      if (Math.abs(pl.x - p.x) > p.hw + 0.05) continue;
-      if (pl.z < p.z - p.hd - 0.15) continue;
-      var end = p.z + p.hd - pl.z;
-      if (end > best) best = end;
-    }
-    return best;
-  }
-  KR.suggest = function (state, index, memory) {
-    var pl = state.players[index || 0];
-    memory = memory || {};
-    var next = nearestPad(state, pl);
-    var x = 0, jump = false;
-    if (next) {
-      x = clamp((next.x - pl.x) / 1.1, -1, 1);
-      var rise = topOf(next) - pl.y;
-      var dist = (next.z - next.hd) - pl.z;
-      var hole = !groundedAhead(state, pl, 0.48);
-      var lip = lipLeft(state, pl);
-      var big = dist > 3.6 || next.need || next.charm || rise > 1.15;
-      if (pl.onGround && hole && !next.charm && dist < (big ? 6.4 : 4.8) && dist > 0.05) jump = true;
-      if (pl.onGround && rise > 0.35 && dist < 1.05 && dist > -0.02) jump = true;
-      if (pl.onGround && rise > 1.05 && lip < 1.1 && lip > 0) memory.hold = 36;
-      if (pl.onGround && big && !next.charm && hole && lip < 1.3 && lip > 0) memory.hold = 58;
-      if (pl.onGround && next.charm && lip < 0.9 && lip > 0.02) memory.hold = 96;
-      if (!pl.onGround && pl.charm && pl.vy < 0 && next.charm && dist > 1.6) jump = true;
-    } else x = clamp(-pl.x / 2, -1, 1);
-    memory.t = (memory.t || 0) + 1;
-    if (memory.t % 30 === 0) {
-      if (memory.mark != null && pl.z < memory.mark + 0.35 && pl.y < (memory.markY || 0) + 0.4) memory.stuck = (memory.stuck || 0) + 1;
-      else memory.stuck = 0;
-      memory.mark = pl.z;
-      memory.markY = pl.y;
-    }
-    if ((memory.stuck || 0) >= 4 && pl.onGround) jump = true;
-    if ((memory.hold || 0) > 0) { jump = true; memory.hold--; }
-    return { x: x, z: pl.finished ? 0 : 1, jump: jump, respawn: false, cam: 0 };
   };
 })(globalThis.KeyRunner = globalThis.KeyRunner || {});

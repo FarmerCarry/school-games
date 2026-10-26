@@ -61,9 +61,9 @@ window.GAMES = [
     blurb: 'شارك رمز المسار مع أصدقائك، وتدرّب على القفز والانحناء لتتجاوز رقمك!',
     tip: 'اقفز فوق الصبّار والطيور المنخفضة، وانحنِ تحت الطيور المتوسطة. اضغط مطولًا لقفزة أعلى.',
     controls: [{ keys: ['مسافة', '↑'], action: 'اقفز (اضغط مطولًا لقفزة أعلى)' }, { keys: ['↓', 'Ctrl'], action: 'انحنِ أو انزل بسرعة' }, { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }, { keys: ['R'], action: 'أعد المسار نفسه بعد النتيجة أو أثناء التوقف' }] },
-  { slug: 'key-runner', roundMinutes: [5, 15], inputStyle: 'keyboard', title: 'عدّاء المفاتيح', en: 'Key Runner +1 speed obby 3D parkour keyboard escape', tags: 'أوبي باركور سرعة مفاتيح ثلاثية الأبعاد', cats: ['two-player', 'challenge'], players: '1-2', color: '#ff6ad5',
-    blurb: 'كل خطوة تزيد سرعتك +1! اقفز فوق مفاتيح الحلوى العملاقة واهرب من فيضان الشوكولاتة!',
-    tip: 'راقب الدائرة على الأرض: هناك ستهبط!',
+  { slug: 'key-runner', roundMinutes: [5, 10], inputStyle: 'keyboard', title: 'عدّاء المفاتيح', en: 'Key Runner candy tower obby 3D parkour chocolate climb', tags: 'أوبي باركور مفاتيح برج حلوى ثلاثية الأبعاد', cats: ['two-player', 'challenge'], players: '1-2', color: '#ff6ad5',
+    blurb: 'اصعد برج مفاتيح الحلوى قبل أن ترتفع الشوكولاتة. ثمانية أعلام، وقت قصير.',
+    tip: 'المفتاح الذهبي يسرّعك لحظة. لا تقف، فالشوكولاتة تسرع إن توقفت.',
     controls: [
       { keys: ['W', 'A', 'S', 'D'], action: 'تحرّك' },
       { keys: ['الأسهم'], action: 'تحرّك (أو اللاعب الثاني)' },
