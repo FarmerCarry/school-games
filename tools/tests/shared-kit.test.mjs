@@ -636,14 +636,20 @@ test('v2: Kit.dda keeps one state per player, at most 16 players, reloads on pla
   assert.equal(dda.level, 0.38, 'reset returns to the seed');
   assert.equal(JSON.parse(h.values.get('sg:g:dda')).p5.main, undefined);
   // Damaged or foreign saved data never breaks the controller.
-  for (const raw of ['not json', '"text"', '[1,2]', '{"p5":{"main":[2,5]}}', '{"p5":{"main":[0.5,0]}}', '{"p5":{"main":"x"}}', '{"p5":7}', 'null']) {
+  for (const raw of ['not json', '"text"', '[1,2]', '{"p5":{"main":[2,5]}}', '{"p5":{"main":[0.5,0]}}', '{"p5":{"main":"x"}}', '{"p5":7}', '{"p5":[0.5,3]}', 'null']) {
     const fresh = harness({stored: {'sg:g:dda': raw}});
     preferences(fresh, {player: 'p5'});
     const d = fresh.Kit.dda('g');
     assert.equal(d.level, 0.35, raw);
     assert.doesNotThrow(() => d.result(true), raw);
     assert.equal(d.level, 0.4, raw);
+    // An array where an object belongs would drop every later save in JSON.
+    assert.deepEqual(JSON.parse(fresh.values.get('sg:g:dda')).p5, {main: [0.4, 1]}, 'the result is saved: ' + raw);
   }
+  // A huge saved count (beyond int32) keeps the smallest step instead of a NaN level.
+  const huge = harness({stored: {'sg:g:dda': JSON.stringify({_: {main: [0.5, 3e9]}})}}), big = huge.Kit.dda('g');
+  big.result(true);
+  assert.deepEqual([big.level, big.tier, big.pick(['a', 'b', 'c', 'd', 'e'])], [0.508, 3, 'c']);
   const blocked = harness();
   blocked.window.localStorage.setItem = () => { throw new Error('blocked'); };
   const b = blocked.Kit.dda('g');
@@ -661,4 +667,31 @@ test('v2: every read of dda.tier reports it to Kit.track.tier for the round even
   dda.pick([1, 2, 3, 4, 5]);
   h.Kit.stats.end('win');
   assert.deepEqual(telemetryOf(h).flatMap(m => m.ev).map(event => event[0] === 'rs' ? event[2] : event[5]), [3, 4]);
+  // A game that reads only level or value() still reports its tier (0 means "no DDA").
+  for (const read of [d => d.level, d => d.value(1, 2)]) {
+    const g = harness();
+    g.Kit.ready(); preferences(g, {telemetry: true, band: '10-11'});
+    read(g.Kit.dda('g'));
+    g.Kit.stats.round('L1'); g.Kit.stats.end('win');
+    assert.deepEqual(telemetryOf(g).flatMap(m => m.ev).map(event => event[0] === 'rs' ? event[2] : event[5]), [3, 3], String(read));
+  }
+});
+
+test('v2: a cue is answered only by a click or a key the game accepts, and switching telemetry off drops it', () => {
+  const clock = {now: 0}, h = harness({clock});
+  h.Kit.ready(); preferences(h, {telemetry: true});
+  h.Kit.stats.round('L1'); h.Kit.track.cue();
+  const button = {closest: selector => selector.includes('button') ? button : null};
+  const rejected = [{code: 'ControlLeft', ctrlKey: true}, {code: 'AltLeft', altKey: true}, {code: 'MetaLeft', metaKey: true},
+    {code: 'KeyA', isComposing: true}, {code: 'Tab'}, {code: 'Enter', target: button}];
+  for (const [i, key] of rejected.entries()) { clock.now = 100 + i; h.window.emit('keydown', {timeStamp: clock.now - 1, ...key}); }
+  clock.now = 900; h.window.emit('keydown', {code: 'Space', timeStamp: 899});        // 900 ms
+  h.Kit.track.cue(); clock.now = 1000; h.window.emit('pointerdown', {button: 0, timeStamp: 999}); // 100 ms
+  runTimers(h);
+  h.Kit.track.cue(); preferences(h, {telemetry: false});
+  clock.now = 9000; preferences(h, {telemetry: true}); h.window.emit('pointerdown', {button: 0, timeStamp: 8999});
+  h.Kit.stats.end('win');
+  const [re] = telemetryOf(h).flatMap(m => m.ev).filter(event => event[0] === 're');
+  assert.deepEqual(re[8], [1, 0, 0, 1, 0, 0], 'rejected keys and a cue from before telemetry went off are not timed');
+  assert.deepEqual(telemetryOf(h).reduce((sum, m) => sum.map((n, i) => n + m.il[i]), zeros), [9, 0, 0, 0, 0, 0], 'every press still counts for input latency');
 });

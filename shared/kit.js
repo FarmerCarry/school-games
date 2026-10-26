@@ -151,7 +151,7 @@
       var was = profile.band + ' ' + profile.player;
       if (typeof message.band === 'string' && (message.band === '' || SEEDS[message.band] > 0)) profile.band = message.band;
       if (typeof message.player === 'string' && /^(p[0-9a-z]{1,8})?$/.test(message.player)) profile.player = message.player;
-      if (typeof message.telemetry === 'boolean' && !(telemetry = message.telemetry)) { il.fill(0); tev = []; }
+      if (typeof message.telemetry === 'boolean' && !(telemetry = message.telemetry)) { il.fill(0); tev = []; cueAt = -1; }
       if (was !== profile.band + ' ' + profile.player) profileListeners.forEach(function (fn) { fn({ band: profile.band, player: profile.player }); });
     }
   });
@@ -249,13 +249,14 @@
     hits = misses = 0; rt = [0, 0, 0, 0, 0, 0]; cueAt = -1;
   }
   // Every key press and click: engaged time, then (key repeats aside) how long the
-  // event waited for the page and the reaction time to a pending cue.
-  function input(e) {
+  // event waited for the page and the reaction time to a pending cue. Only a click or
+  // a key a game accepts (Kit.keys.acceptsEvent) answers the cue.
+  function input(e, key) {
     engage();
     if (on() && !e.repeat) {
       var t = e.timeStamp;
       if (perf && typeof t === 'number' && t > 0 && (t = perf.now() - t) >= 0 && t <= 1000) put(il, t, IL);
-      if (cueAt >= 0) { put(rt, clock() - cueAt, RT); cueAt = -1; }
+      if (cueAt >= 0 && (!key || acceptsKeyEvent(e))) { put(rt, clock() - cueAt, RT); cueAt = -1; }
     }
   }
   Kit.track = {
@@ -272,21 +273,23 @@
   // At round start read dda.level (0..1), dda.tier (1..tiers), dda.value(easy, hard)
   // or dda.pick([...one per tier]); report each try with dda.result(true/false or 0..1).
   // Saved per player in Kit.store(slug) 'dda': { <player or '_'>: { <id>: [level, n] } }.
-  function obj(v) { return v && typeof v === 'object' ? v : {}; }
+  function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
   function unit(v, fallback) { return fin(v) && v <= 1 ? v : fallback; }
   Kit.dda = function (slug, opts) {
     opts = opts || {};
-    var store = Kit.store(slug), id = opts.id || 'main', level = 0, n = 0, low = 0, high = 0, who;
+    var store = Kit.store(slug), id = opts.id || 'main', level = 0, n = 0, low = 0, high = 0, who, t;
     var target = unit(opts.target, 0.72), tiers = Kit.clamp(opts.tiers | 0, 0, 9) || 5;
     // A player with no saved results starts from the seed of the current band.
     function now() {
       if (who !== profile.player) {
         var mine = obj(obj(store.get('dda'))[profile.player || '_'])[id];
         who = profile.player; low = high = n = 0;
-        if (mine && mine[1] >= 1 && unit(mine[0], -1) >= 0) { level = mine[0]; n = mine[1] | 0; }
+        if (mine && mine[1] >= 1 && unit(mine[0], -1) >= 0) { level = mine[0]; n = mine[1] >>> 0; }
       }
       return n ? level : unit(opts.start, SEEDS[profile.band] || 0.35);
     }
+    // Every read (level, tier, value, pick) reports the tier for the round events.
+    function read() { var l = now(); Kit.track.tier(t = 1 + Math.floor(l * tiers * 0.9999)); return l; }
     // The player just written moves last, so the 16 most recent players are kept.
     function save() {
       var all = obj(store.get('dda')), key = profile.player || '_', mine = obj(all[key]);
@@ -297,9 +300,9 @@
       store.set('dda', all);
     }
     var dda = {
-      get level() { return now(); },
-      get tier() { var t = 1 + Math.floor(now() * tiers * 0.9999); Kit.track.tier(t); return t; },
-      value: function (easy, hard) { return Kit.lerp(easy, hard, now()); },
+      get level() { return read(); },
+      get tier() { read(); return t; },
+      value: function (easy, hard) { return Kit.lerp(easy, hard, read()); },
       pick: function (list) { return list[Math.min(dda.tier, list.length) - 1]; },
       result: function (outcome) {
         var x = outcome === true ? 1 : outcome === false ? 0 : outcome, l = now();
@@ -474,7 +477,7 @@
     reset: function () { held = {}; hit = {}; }
   };
   listen('keydown', function (e) {
-    input(e);
+    input(e, 1);
     // Shift+Tab from the game surface returns to the portal. Native controls keep
     // their ordinary Tab order; standalone game pages keep browser navigation.
     if (e.code === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && !e.defaultPrevented && !nativeKeyTarget(e.target) && window.parent !== window) {
