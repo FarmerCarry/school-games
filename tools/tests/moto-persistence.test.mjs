@@ -183,6 +183,7 @@ test('Moto Madness keeps its paused frame and repaints it only when needed', asy
   assert.equal(await page.evaluate(() => frames(3)), 3, 'a running game paints every frame');
   await page.keyboard.press('KeyP');
   assert.equal(await page.evaluate(() => __game.state), 'paused');
+  assert.doesNotMatch(await page.locator('#pause').textContent(), /الموسيقى/, 'the pause panel has no music switch');
   assert.equal(await page.evaluate(() => frames(20)), 1, 'pausing paints the scene once, then keeps it');
   await page.setViewportSize({ width: 1000, height: 600 });
   await page.evaluate(() => new Promise(requestAnimationFrame));

@@ -471,10 +471,6 @@
   btn('btnGarageBack', function () { if (garageFrom === 'levels') goLevels(); else goTitle(); });
   btn('btnResume', resume);
   btn('btnRestart', restartLevel);
-  btn('btnMusic', function () { MMA.setMusic(!MMA.musicOn()); store.set('music', MMA.musicOn()); paintMusicBtn(); });
-  function paintMusicBtn() { $('btnMusic').textContent = '🎵 الموسيقى: ' + (MMA.musicOn() ? 'تعمل' : 'متوقفة'); }
-  MMA.setMusic(store.get('music', true) !== false);
-  paintMusicBtn();
   btn('btnPauseLevels', function () { sel = levelIdx; demo = false; startDemo(); goLevels(); });
   btn('btnNext', nextLevel);
   btn('btnRetry', function () { startLevel(levelIdx); });
@@ -626,7 +622,6 @@
   var lastInp = { gas: false, brake: false, lean: 0 };
   function update(dt) {
     if (state !== 'paused') clock += dt; // clouds, snow and flags stand still while paused
-    MMA.music(state === 'complete' ? 0.35 : state === 'paused' ? 0.55 : 1);
     if (state === 'play') {
       var inp = readInput();
       lastInp = inp;
