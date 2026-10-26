@@ -247,7 +247,7 @@
     }
   };
 
-  // Seconds since the level started for a given state (for music sync).
+  // Seconds since the level started for a given state (the clock of the visual beat).
   BD.time = function (s) { return s.tick / P.HZ; };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = BD;

@@ -20,7 +20,6 @@
   canvas.addEventListener('contextrestored', function () { frameDirty = true; });
   var ptr = Kit.pointer(view);
   var store = Kit.store('beat-dash');
-  var music = new BD.Music();
   var shake = Kit.shake();
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
@@ -41,7 +40,7 @@
     return L;
   });
   var MENU_BPM = 128;
-  var menuSong = BD.makeSong({ root: 60, scale: 'major', prog: [0, 5, 3, 4], seed: 7, style: 'walk', chill: true, intro: 2, lead: 'pulse25' }, MENU_BPM);
+  var menuSong = BD.makeSong({ root: 60, scale: 'major', prog: [0, 5, 3, 4], chill: true, intro: 2 }, MENU_BPM);
   var demoL = (function () {
     var pat = ['....|....|..^.|....|....|....|..^.|..^.|....|....|..##|##..|....|....|..^^|....|....|..Y.|....|....|....|....|..^.|....'];
     var chunks = [];
@@ -129,12 +128,20 @@
 
   /* ------------------------------------------------------------- sound */
   var A = Kit.audio;
-  // Soft, rounded effects (triangle/sine) so they sit on top of the music instead of buzzing over it.
+  // There is no music: the player plays the notes. A jump, landing, pad or orb sounds a note of
+  // the level's chord at that moment (key and chords from levels.js, read from the same game clock
+  // as the visual beat). deg 0, 2, 4 = the chord's root, third and fifth; with arp, the beat
+  // nearest to now adds root, third, fifth or octave, so jumping in time plays an arpeggio.
+  function noteHz(deg, oct, arp) {
+    var song = G.L ? G.L.song : menuSong, b = Math.round((G.s ? G.s.tick / 60 : 0) * song.bpm / 60);
+    return BD.mtof(BD.chordNote(song, Math.floor(b / 4), deg + (arp ? [0, 2, 4, 7][b % 4] : 0), oct));
+  }
+  // Soft, rounded effects (triangle/sine), so quick repeats never buzz.
   var sfx = {
-    jump: function () { A.tone({ freq: 420, to: 640, type: 'triangle', dur: 0.06, vol: 0.07 }); },
-    land: function (p) { if (p > 0.15) A.tone({ freq: 150, to: 70, type: 'sine', dur: 0.07, vol: 0.06 + 0.12 * p }); },
-    pad: function () { A.tone({ freq: 300, to: 1100, type: 'triangle', dur: 0.18, vol: 0.16 }); A.tone({ freq: 600, to: 1600, type: 'sine', dur: 0.2, vol: 0.1 }); },
-    orb: function () { A.tone({ freq: 880, type: 'sine', dur: 0.18, vol: 0.18 }); A.tone({ freq: 1320, type: 'sine', dur: 0.22, vol: 0.12, delay: 0.04 }); },
+    jump: function () { var f = noteHz(0, 1, true); A.tone({ freq: f * 0.75, to: f, type: 'triangle', dur: 0.06, vol: 0.07 }); A.tone({ freq: f, type: 'sine', dur: 0.14, vol: 0.05, delay: 0.03 }); },
+    land: function (p) { if (p > 0.15) { var f = noteHz(0, -1); A.tone({ freq: f, to: f / 2, type: 'sine', dur: 0.07, vol: 0.06 + 0.12 * p }); } },
+    pad: function () { var f = noteHz(0, 0), g = noteHz(4, 1); A.tone({ freq: f, to: f * 4, type: 'triangle', dur: 0.18, vol: 0.16 }); A.tone({ freq: g, to: g * 2, type: 'sine', dur: 0.2, vol: 0.1 }); },
+    orb: function () { A.tone({ freq: noteHz(0, 1, true), type: 'sine', dur: 0.18, vol: 0.18 }); A.tone({ freq: noteHz(4, 1, true), type: 'sine', dur: 0.22, vol: 0.12, delay: 0.04 }); },
     portal: function () { A.noise({ dur: 0.3, vol: 0.12, filter: 2600, to: 300 }); A.tone({ freq: 200, to: 800, type: 'sine', dur: 0.3, vol: 0.14 }); },
     star: function () { [1047, 1319, 1568, 2093].forEach(function (f, i) { A.tone({ freq: f, type: 'triangle', dur: 0.14, vol: 0.14, delay: i * 0.05 }); }); },
     die: function () { A.noise({ dur: 0.4, vol: 0.32, filter: 1800, to: 90 }); A.tone({ freq: 260, to: 45, type: 'triangle', dur: 0.32, vol: 0.26 }); },
@@ -247,7 +254,6 @@
     var st = totalStars();
     $('title-summary').innerHTML = BD.starSVG(true).replace('<svg', '<svg style="width:24px;height:24px;vertical-align:-4px"') + ' النجوم: ' + st + ' من ' + maxStars() + ' &nbsp;·&nbsp; المراحل المكتملة: ' + beatenCount() + ' من ' + LEVELS.length;
     setTheme(LEVELS[0].theme);
-    ensureMenuMusic(true);
   }
   onClick('b-play', function () { sfx.click(); goSelect(); });
   onClick('b-garage', function () { sfx.click(); goGarage(); });
@@ -260,6 +266,7 @@
       sel = Math.min(save.last || 0, LEVELS.length - 1);
       if (!levelUnlocked(sel)) sel = 0;
     }
+    selBeat.lvl = -1;
     var dots = $('dots'); dots.innerHTML = '';
     LEVELS.forEach(function (L, i) {
       var d = document.createElement('i');
@@ -267,7 +274,6 @@
       dots.appendChild(d);
     });
     refreshSelect(false);
-    ensureMenuMusic(true);
   }
   function refreshSelect(anim) {
     var L = LEVELS[sel], def = L.def, th = L.theme, unlocked = levelUnlocked(sel);
@@ -301,16 +307,10 @@
     }
     $('sel-stars').innerHTML = BD.starSVG(true).replace('<svg', '<svg style="width:26px;height:26px;vertical-align:-4px"') + ' ' + totalStars() + ' من ' + maxStars();
     setTheme(th);
-    if (scene === 'select') previewSong();
+    if (selBeat.lvl !== sel) { selBeat.lvl = sel; selBeat.t0 = menuT; }
   }
-  var previewing = -1;
-  function previewSong() {
-    if (!A.ctx || A.ctx.state !== 'running') return;
-    if (previewing === sel && music.playing) return;
-    previewing = sel;
-    var L = LEVELS[sel];
-    music.play(L.song, (L.song.intro) * 16 * L.song.stepDur, 0.4);
-  }
+  // The level select pulses at the chosen level's tempo, from its drop (see render).
+  var selBeat = { lvl: -1, t0: 0 };
   function selMove(d) {
     var n = Math.max(0, Math.min(LEVELS.length - 1, sel + d));
     if (n !== sel) { sel = n; sfx.click(); refreshSelect(true); }
@@ -331,7 +331,6 @@
   function goGarage() {
     scene = 'garage'; show('garage');
     buildGrid();
-    ensureMenuMusic(true);
   }
   onClick('b-gar-back', function () { sfx.click(); markGarageSeen(); goTitle(); });
   Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
@@ -380,7 +379,7 @@
   /* ---------------------------------------------------------- pause */
   function pauseGame() {
     if (scene !== 'play' || G.paused || G.won) return;
-    G.paused = true; music.stop(0.08);
+    G.paused = true;
     // the still paused frame is drawn without a half-faded flash or a shake offset
     G.flash = 0; shake.power = shake.x = shake.y = 0; frameDirty = true;
     show('pause');
@@ -396,12 +395,11 @@
     if (!G.paused) return;
     G.paused = false; show(null);
     Kit.keys.reset();
-    if (!G.dead && !G.won) music.play(G.L.song, G.s.tick / 60);
   }
   onClick('b-resume', function () { sfx.click(); resumeGame(); });
   onClick('b-restart', function () { sfx.click(); G.paused = false; show(null); G.cps = G.practice ? G.cps : []; restartFromStart(); });
   onClick('b-toggle-practice', function () { sfx.click(); G.paused = false; startLevel(G.li, !G.practice); });
-  onClick('b-menu', function () { sfx.click(); G.paused = false; music.stop(0.1); goSelect(G.li); });
+  onClick('b-menu', function () { sfx.click(); G.paused = false; goSelect(G.li); });
 
   /* ---------------------------------------------------------- win */
   function showWin() {
@@ -453,7 +451,7 @@
   }
   onClick('b-win-next', winNext);
   onClick('b-win-again', function () { sfx.click(); startLevel(G.li, G.practice); });
-  function winMenu() { sfx.click(); music.stop(0.2); var n = Math.min(G.li + (G.practice ? 0 : 1), LEVELS.length - 1); goSelect(levelUnlocked(n) ? n : G.li); }
+  function winMenu() { sfx.click(); var n = Math.min(G.li + (G.practice ? 0 : 1), LEVELS.length - 1); goSelect(levelUnlocked(n) ? n : G.li); }
   onClick('b-win-menu', winMenu);
 
   /* ---------------------------------------------------------- toast */
@@ -511,7 +509,6 @@
     // play stats: each attempt (first try, restart, auto-respawn) is a round; a new one marks an open
     // try as quit. Level 1's signs are the tutorial until its first win. Autoplay replays never report.
     if (!G.auto) { if (!G.li && !save.done[L.id]) Kit.stats.tutorial('start'); Kit.stats.round(L.id + (G.practice ? ':practice' : '')); }
-    music.play(L.song, s.tick / 60);
     checkUnlocks().forEach(function (u) { toast(itemName(u)); });
   }
 
@@ -544,7 +541,6 @@
     shake.add(14);
     if (!calm()) { G.flash = 0.45; G.flashCol = '#ffffff'; }
     sfx.die();
-    music.stop(0.12);
     save.total.jumps += s.jumps - G.jumpsAtStart; G.jumpsAtStart = s.jumps; persist('total');
     var p = pct(s);
     if (!G.auto) Kit.stats.end('lose', p); // score: % of the level reached
@@ -656,7 +652,8 @@
     var cols = [['#ffe14d', '#fff6b0'], ['#ff5ad1', '#ffb3e6'], ['#3df2ff', '#b8fbff'], ['#7dff5a', '#d6ffc4'], [th.line, '#ffffff']][Math.floor(Math.random() * 5)];
     burst(x, y, big ? 46 : 34, { speed: 380, life: 1.2, size: 7, colors: cols, g: 260, screen: true, shape: 1, drag: 1.4 });
     ring(x, y, cols[0], 10, 150, 0.5, true);
-    sfx.firework();
+    // only the fireworks of the ~2 s win fanfare crackle; the later ones behind the result panel are silent
+    if (G.wonT < 2) sfx.firework();
   }
 
   function practiceSafe(s) {
@@ -703,7 +700,6 @@
         else if (Kit.keys.pressed('KeyR')) { sfx.click(); startLevel(G.li, G.practice); }
         else if (Kit.keys.pressed('Escape')) winMenu();
       }
-      if (G.wonT > 4 && music.playing) music.stop(1.5);
       return;
     }
     if (Kit.keys.pressed('KeyR') && !G.dead) { restartFromStart(); return; }
@@ -768,14 +764,6 @@
     if (s.onGround && s.tick % 3 === 0) spawn({ x: s.x + 0.1, y: s.y + 0.05, vx: -2 - Math.random() * 2, vy: Math.random() * 2, life: 0.35, max: 0.35, size: 0.1, color: themeNow.line, g: 0, rot: 0, vr: 0, shape: 0 });
   }
 
-  function ensureMenuMusic(force) {
-    if (!A.ctx || A.ctx.state !== 'running') return;
-    if (scene === 'select') { previewing = -1; previewSong(); return; }
-    if (scene !== 'title' && scene !== 'garage') return;
-    if (music.playing && music.song === menuSong) return;
-    if (force || !music.playing) music.play(menuSong, 0, 0.5);
-  }
-
   /* ============================================================ UPDATE */
   function update(dt) {
     // Paused: only the pause keys and the toast run. Particles, pop-ups, flashes and the
@@ -791,7 +779,6 @@
     if (scene === 'play') updatePlay(dt);
     else {
       updateDemo(dt);
-      if (!music.playing && A.ctx && A.ctx.state === 'running' && !document.hidden) ensureMenuMusic(false);
       var k = Kit.keys;
       if (scene === 'title') {
         if (k.anyPressed(['Enter', 'Space'])) { sfx.click(); goSelect(); }
@@ -824,10 +811,6 @@
     Kit.keys.endFrame(); ptr.endFrame();
   }
 
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden && scene !== 'play') music.stop(0.05);
-  });
-
   /* ============================================================ RENDER */
   var gradCache = {};
   function mixHex(a, b, t) {
@@ -847,10 +830,12 @@
     var frac = b - Math.floor(b);
     var bar = Math.floor(b / 4);
     var sec = BD.songSection(song, bar);
-    var amp = sec === 0 ? 0.55 : sec === 2 ? 1 : 0.8;
-    // calm: everything that pulses or hops on the beat (and the title logo) holds still
-    if (calm()) return { pulse: 0, beat: 0, sec: sec, frac: frac };
-    return { pulse: Math.exp(-frac * 5) * amp, beat: Math.floor(b), sec: sec, frac: frac };
+    var amp = sec === 0 ? 0.55 : sec === 2 ? 1 : 0.8, glow = Math.exp(-frac * 5) * amp;
+    // pulse moves and grows things on the beat; tint only brightens glows and outlines.
+    // calm: everything that pulses or hops on the beat (and the title logo) holds still,
+    // and the beat still shows as colour alone
+    if (calm()) return { pulse: 0, tint: glow, beat: 0, sec: sec, frac: frac };
+    return { pulse: glow, tint: glow, beat: Math.floor(b), sec: sec, frac: frac };
   }
 
   function drawBackground(th, t, bi, camX, camY) {
@@ -867,7 +852,7 @@
       var bx = ((i * 190 - camX * U * 0.08) % span + span) % span - 200;
       var by = 90 + (i * 137 % 5) * 72 + camY * U * 0.05;
       var sz = (70 + (i * 53 % 4) * 34) * (1 + pulse * 0.08);
-      ctx.globalAlpha = 0.16 + 0.1 * pulse;
+      ctx.globalAlpha = 0.16 + 0.1 * bi.tint;
       ctx.save(); ctx.translate(bx, by); ctx.rotate(spin * (i % 2 ? 1 : -1) + i);
       if (i % 3 === 0) { ctx.beginPath(); ctx.arc(0, 0, sz / 2, 0, TAU); ctx.stroke(); }
       else ctx.strokeRect(-sz / 2, -sz / 2, sz, sz);
@@ -884,7 +869,7 @@
       var base = 40 + hash(k) * 150;
       var hop = hash(k * 31 + bi.beat * 7) * 90;
       var hh = (base + hop * (bi.sec === 0 ? 0.3 : 1)) * (0.6 + 0.4 * pulse);
-      ctx.globalAlpha = 0.18 + 0.08 * pulse;
+      ctx.globalAlpha = 0.18 + 0.08 * bi.tint;
       ctx.fillRect(x, gy - hh, bw, hh);
       ctx.globalAlpha = 0.35;
       ctx.fillRect(x, gy - hh - 10, bw, 5);
@@ -908,7 +893,7 @@
     ctx.stroke();
     // bright line
     ctx.strokeStyle = th.line;
-    ctx.globalAlpha = 0.25 + 0.35 * bi.pulse; ctx.lineWidth = 12;
+    ctx.globalAlpha = 0.25 + 0.35 * bi.tint; ctx.lineWidth = 12;
     ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
     ctx.globalAlpha = 1; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
@@ -933,7 +918,7 @@
     }
     ctx.fill();
     // inner squares
-    ctx.strokeStyle = hexA(th.blockLine, 0.16 + 0.12 * bi.pulse); ctx.lineWidth = 2;
+    ctx.strokeStyle = hexA(th.blockLine, 0.16 + 0.12 * bi.tint); ctx.lineWidth = 2;
     ctx.beginPath();
     for (c = c0; c <= c1; c++) {
       list = L.cols[c];
@@ -956,7 +941,7 @@
       }
     }
     ctx.lineCap = 'round';
-    ctx.strokeStyle = th.blockLine; ctx.globalAlpha = 0.28 + 0.2 * bi.pulse; ctx.lineWidth = 10; ctx.stroke();
+    ctx.strokeStyle = th.blockLine; ctx.globalAlpha = 0.28 + 0.2 * bi.tint; ctx.lineWidth = 10; ctx.stroke();
     ctx.globalAlpha = 1; ctx.lineWidth = 3.5; ctx.stroke();
     // --- spikes
     ctx.beginPath();
@@ -972,7 +957,7 @@
     }
     ctx.lineJoin = 'round';
     ctx.fillStyle = th.block; ctx.fill();
-    ctx.strokeStyle = th.spike; ctx.globalAlpha = 0.3 + 0.2 * bi.pulse; ctx.lineWidth = 9; ctx.stroke();
+    ctx.strokeStyle = th.spike; ctx.globalAlpha = 0.3 + 0.2 * bi.tint; ctx.lineWidth = 9; ctx.stroke();
     ctx.globalAlpha = 1; ctx.lineWidth = 3; ctx.stroke();
     // --- pads, orbs, portals, stars
     for (c = c0; c <= c1; c++) {
@@ -1032,7 +1017,7 @@
     ctx.save(); ctx.translate(x, y);
     ctx.globalAlpha = used ? 0.35 : 1;
     ctx.strokeStyle = col; ctx.lineWidth = 4;
-    ctx.globalAlpha *= 0.55 + 0.3 * bi.pulse;
+    ctx.globalAlpha *= 0.55 + 0.3 * bi.tint;
     ctx.beginPath(); ctx.arc(0, 0, U * 0.5 * (1 + 0.14 * bi.pulse), 0, TAU); ctx.stroke();
     ctx.globalAlpha = used ? 0.35 : 1;
     ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, r * (1 + fl * 0.5), 0, TAU); ctx.fill();
@@ -1060,7 +1045,7 @@
       ctx.restore(); return;
     }
     var rw = U * 0.55, rh = U * 1.5 * (1 + 0.05 * bi.pulse + fl * 0.2);
-    ctx.fillStyle = hexA(col, 0.18 + 0.1 * bi.pulse);
+    ctx.fillStyle = hexA(col, 0.18 + 0.1 * bi.tint);
     ctx.beginPath(); ctx.ellipse(0, 0, rw, rh, 0, 0, TAU); ctx.fill();
     ctx.lineWidth = 14; ctx.strokeStyle = '#1b1033'; ctx.stroke();
     ctx.lineWidth = 9; ctx.strokeStyle = col; ctx.stroke();
@@ -1091,7 +1076,7 @@
   function drawStar(x, y, t, ghost, bi) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(t * 2) * 0.25);
     var r = U * 0.42 * (1 + 0.08 * bi.pulse);
-    ctx.globalAlpha = 0.35 + 0.2 * bi.pulse;
+    ctx.globalAlpha = 0.35 + 0.2 * bi.tint;
     ctx.fillStyle = ghost ? '#9fd8ff' : '#ffe14d';
     ctx.beginPath(); ctx.arc(0, 0, r * 1.25, 0, TAU); ctx.fill();
     ctx.globalAlpha = ghost ? 0.6 : 1;
@@ -1246,9 +1231,9 @@
     var look = myLook();
     if (scene === 'play' && G.s) {
       var s = G.s, L = G.L;
+      // the beat follows the game clock (the level's tempo also sets its speed)
       var songTime = (G.dead || G.paused) ? s.tick / 60 : (s.tick + (G.won ? 0 : alpha)) / 60;
-      if (!G.dead && !G.paused && (!G.won || G.wonT < 4)) music.sync(G.won ? null : songTime);
-      var bi = beatInfo(L.song, G.won ? songTime + G.wonT : songTime);
+      var bi = lastBeat = beatInfo(L.song, G.won ? songTime + G.wonT : songTime);
       var x = G.won ? G.winX : lerp(s.px, s.x, G.dead ? 1 : alpha);
       var y = G.dead ? s.y : lerp(s.py, s.y, alpha);
       var camX = Math.min(x, G.won ? G.winX : 1e9) - PLAYER_SX;
@@ -1280,8 +1265,8 @@
     } else {
       // menu backdrop: attract mode
       var ds = demo.s || BD.newState(demoL);
-      var mt = music.playing ? music.time() : menuT;
-      var bi2 = beatInfo(music.playing && music.song ? music.song : menuSong, mt);
+      var bsong = scene === 'select' ? LEVELS[sel].song : menuSong;
+      var bi2 = lastBeat = beatInfo(bsong, scene === 'select' ? menuT - selBeat.t0 + bsong.intro * 4 * 60 / bsong.bpm : menuT);
       var dx = lerp(ds.px, ds.x, alpha), dy = lerp(ds.py, ds.y, alpha);
       var camX2 = dx - (scene === 'title' ? 3.5 : 3.5);
       drawBackground(th, t, bi2, camX2, 0);
@@ -1309,6 +1294,7 @@
   }
 
   var logoEl = document.querySelector('.logo'), playEl = $('b-play'), titlePulse = '';
+  var lastBeat = null; // the beat of the last drawn frame (test hook)
   var pvc = $('preview'), pctx = pvc.getContext('2d');
   function drawPreview(look, t, bi) {
     pctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1332,6 +1318,7 @@
   // Debug / test hook
   window.__game = {
     get scene() { return scene; },
+    get beat() { return lastBeat; },
     get level() { return G.L ? G.L.id : null; },
     get state() { var s = G.s; return s ? { x: +s.x.toFixed(2), y: +s.y.toFixed(2), pct: G.L ? pct(s) : 0, dead: G.dead, won: G.won, mode: s.mode, grav: s.grav, stars: s.stars, attempt: G.sessionAtt, practice: G.practice, paused: G.paused, cps: G.cps.length } : null; },
     save: save,
@@ -1343,8 +1330,7 @@
     // jump forward to a percentage (debug only; uses a clean state at that x)
     skipTo: function (p) { if (!G.s) return; var s = G.s; s.x = G.L.finishX * p / 100; s.px = s.x; s.y = 0; s.py = 0; s.vy = 0; s.onGround = true; },
     // run n game ticks right now (debug / automated tests)
-    ff: function (n) { for (var i = 0; i < n; i++) update(1 / 60); return this.state; },
-    music: music
+    ff: function (n) { for (var i = 0; i < n; i++) update(1 / 60); return this.state; }
   };
   Kit.lifecycle({ pause: pauseGame });
   Kit.ready();
