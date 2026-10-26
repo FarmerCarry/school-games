@@ -1,7 +1,8 @@
 /*
  * Splat Strike — audio.js
- * Toy-blaster sound effects and a bouncy marimba music loop, all synthesised with WebAudio.
- * Chain: voices -> (panner) -> sfx / music gain -> compressor -> Kit.audio.master (so the shared
+ * Toy-blaster sound effects, all synthesised with WebAudio. No background music: every sound
+ * is a one-shot caused by the player or a game event.
+ * Chain: voices -> (panner) -> sfx gain -> compressor -> Kit.audio.master (so the shared
  * mute button works). No noise beds: noise is only used in short, filtered bursts.
  */
 (function () {
@@ -28,8 +29,7 @@
       comp.threshold.value = -16; comp.knee.value = 10; comp.ratio.value = 5; comp.attack.value = 0.003; comp.release.value = 0.18;
       comp.connect(A.master);
       var sfx = c.createGain(); sfx.gain.value = 1.7; sfx.connect(comp);
-      var mus = c.createGain(); mus.gain.value = 0.0001; mus.connect(comp);
-      bus = { c: c, comp: comp, sfx: sfx, mus: mus };
+      bus = { c: c, comp: comp, sfx: sfx };
     }
     return bus;
   }
@@ -255,82 +255,4 @@
     zoom: function (inn) { var c = ctx(); if (!c) return; osc(c, out(c).sfx, c.currentTime, { f: inn ? 500 : 700, to: inn ? 800 : 450, dur: 0.07, vol: 0.05, type: 'triangle' }); }
   };
   SS.sfx = S;
-
-  /* ------------------------------------------------------------------ music */
-  // 116 BPM toy-pop loop in F major, 8 bars x 2 sections. Menu: full band. Match: calmer groove.
-  var BPM = 116, STEP = 60 / BPM / 4;
-  var CH = [[53, 57, 60], [50, 53, 57], [46, 50, 53], [48, 52, 55]];   // F  Dm  Bb  C
-  var ROOT = [41, 38, 34, 36];
-  var MEL = [
-    [77, null, 76, null, 77, null, 81, null, 79, null, 77, null, 76, null, 72, null],
-    [74, null, null, 77, 76, null, 74, null, 72, null, 69, null, 72, null, null, null],
-    [74, null, 72, null, 74, null, 77, null, 81, null, 79, null, 77, null, 74, null],
-    [76, null, 77, null, 79, null, null, 76, 72, null, null, null, 79, null, 76, null]
-  ];
-  var music = { on: false, held: false, mode: 'menu', step: 0, next: 0, timer: 0, g: null, want: false };
-  function level() { return music.mode === 'menu' ? 0.42 : 0.24; }
-  function marimba(c, g, t, f, vol) {
-    osc(c, g, t, { f: f, dur: 0.28, vol: vol, att: 0.003 });
-    osc(c, g, t, { f: f * 4, dur: 0.05, vol: vol * 0.18, att: 0.002 });
-  }
-  function kick(c, g, t, v) {
-    var o = c.createOscillator(), a = c.createGain();
-    o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.1);
-    a.gain.value = 0; a.gain.setValueAtTime(0.0001, t); a.gain.exponentialRampToValueAtTime(v, t + 0.003); a.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
-    o.connect(a); a.connect(g); o.start(t); o.stop(t + 0.22);
-    osc(c, g, t, { f: 700, to: 200, dur: 0.02, vol: v * 0.12, type: 'triangle' });
-  }
-  function sched(c, g, s, t) {
-    var bar = Math.floor(s / 16) % 8, st = s % 16, ch = bar % 4, sec = bar >> 2;
-    var menu = music.mode === 'menu';
-    if (st % 4 === 0) kick(c, g, t, menu ? 0.5 : 0.42);
-    if (st === 4 || st === 12) { nz(c, g, t, { bp: 1600, q: 0.9, dur: 0.09, vol: menu ? 0.12 : 0.08 }); osc(c, g, t, { f: 210, to: 150, dur: 0.06, vol: 0.08, type: 'triangle' }); }
-    if (st % 4 === 2) osc(c, g, t, { f: 3100, dur: 0.012, vol: 0.012 });
-    var bp = [0, null, null, 12, null, null, 7, null, 0, null, 12, null, 7, null, 5, null][st];
-    if (bp != null) osc(c, g, t, { f: mtof(ROOT[ch] + bp), dur: STEP * 1.8, vol: 0.16, type: 'triangle', lp: 700 });
-    var chord = CH[ch];
-    if (st % 2 === 0) marimba(c, g, t, mtof(chord[[0, 1, 2, 1, 0, 2, 1, 2][(st / 2) | 0]] + 12), menu ? 0.07 : 0.06);
-    if (st === 0) chord.forEach(function (n) { osc(c, g, t, { f: mtof(n + 12), dur: STEP * 14, vol: 0.018, type: 'triangle', att: 0.25 }); });
-    if (menu || sec === 1) {
-      var m = MEL[ch][st];
-      if (m != null) { marimba(c, g, t, mtof(m), menu ? 0.11 : 0.06); if (sec === 1 && menu) bell(c, g, t, mtof(m + 12), 0.2, 0.025); }
-    }
-  }
-  function tick() {
-    var c = A.ctx;
-    if (!music.on || music.held || !c || A.muted || c.state !== 'running' || document.hidden) return;
-    var g = out(c).mus;
-    if (!music.faded) { music.faded = true; fade(level(), 0.3); }
-    if (music.next < c.currentTime) {
-      // we fell behind (busy main thread): skip the missed steps but stay on the beat grid
-      var miss = Math.ceil((c.currentTime + 0.03 - music.next) / STEP);
-      if (music.next === 0 || miss > 64) { music.next = c.currentTime + 0.05; } else { music.step += miss; music.next += miss * STEP; }
-    }
-    while (music.next < c.currentTime + 0.32) { sched(c, g, music.step, music.next); music.step++; music.next += STEP; }
-  }
-  function fade(v, tc) { var c = A.ctx; if (!c || !bus) return; bus.mus.gain.cancelScheduledValues(c.currentTime); bus.mus.gain.setTargetAtTime(v, c.currentTime, tc); }
-  SS.music = {
-    enabled: true,
-    play: function (mode) {
-      if (!this.enabled) { this.stop(); music.mode = mode || music.mode; return; }
-      var changed = music.mode !== mode;
-      music.mode = mode || 'menu'; music.held = false;
-      if (!music.on || changed) { music.step = 0; music.next = 0; }
-      music.on = true;
-      if (!music.timer) music.timer = setInterval(tick, 40);
-      if (A.ctx) { out(A.ctx); fade(level(), 0.3); music.faded = true; }
-    },
-    stop: function () {
-      music.on = false; music.faded = false;
-      if (music.timer) { clearInterval(music.timer); music.timer = 0; }
-      fade(0.0001, 0.08);
-    },
-    pump: tick,
-    duck: function (on) { if (music.on) fade(on ? level() * 0.35 : level(), 0.15); },
-    // pause: silence the bus and stop scheduling notes; the loop picks up on the beat grid afterwards
-    hold: function (on) { music.held = !!on; if (music.on) fade(on ? 0.0001 : level(), on ? 0.05 : 0.25); },
-    get playing() { return music.on; },
-    get debug() { return { gain: bus ? +bus.mus.gain.value.toFixed(4) : -1, step: music.step, next: music.next, t: A.ctx ? A.ctx.currentTime : 0, timer: !!music.timer, faded: !!music.faded, held: music.held }; },
-    get mode() { return music.mode; }
-  };
 })();
