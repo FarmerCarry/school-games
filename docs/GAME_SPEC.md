@@ -265,7 +265,7 @@ action, never per frame:
 * `Kit.track.hit()` / `Kit.track.miss()` for each successful / failed action in the open
   round (a bubble popped, a fly missed), for accuracy.
 * `Kit.track.cue()` when a target appears that the child should react to; Kit times the next
-  click or game key press (not a Ctrl/Alt shortcut, Tab or a key on a focused button).
+  click or game key press (not a Ctrl/Alt shortcut, Tab, or a key on a focused button or field).
   `Kit.track.react(ms)` reports a reaction time the game timed itself.
 * Reading the controller (`dda.level`, `dda.tier`, `value()` or `pick()`) reports the tier
   (`Kit.track.tier(n)` is only for games with their own tiers). Kit measures input latency
