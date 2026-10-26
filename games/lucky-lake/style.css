@@ -11,17 +11,26 @@ body { background: #08345a; }
 .ll-meta { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 999px; background: rgba(8, 32, 58, 0.62); color: #fff; font-size: 16px; font-weight: 700; }
 .ll-meta [hidden] { display: none; }
 .ll-coin { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff6c2, #ffcc00 55%, #e09a00); box-shadow: inset 0 0 0 2px #b67d00; }
-.ll-actions { display: flex; gap: 4px; align-items: center; }
-.ll-actions button, #btnPause { font: inherit; font-weight: 700; border: none; cursor: pointer; border-radius: 999px; height: 32px; padding: 0 9px; background: rgba(8, 32, 58, 0.55); color: #fff; font-size: 15px; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.22); }
-.ll-actions button .sg-key, #hint .sg-key { font-size: 12px; padding: 0 4px; }
-#btnPause { width: 34px; padding: 0; font-size: 16px; }
-#questLine { position: absolute; top: 112px; right: 86px; max-width: 560px; padding: 8px 16px; border-radius: 16px; background: #fff; color: #16324a; font-size: 24px; font-weight: 700; box-shadow: 0 4px 0 rgba(8, 32, 58, 0.18); }
+.ll-actions { display: flex; gap: 6px; align-items: center; }
+.ll-actions button, #btnPause { font: inherit; font-weight: 700; border: none; cursor: pointer; border-radius: 999px; width: 40px; height: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: rgba(8, 32, 58, 0.72); color: #fff; font-size: 16px; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.22); }
+.ll-ico { display: block; width: 18px; height: 18px; margin: 0 auto; }
+.ll-ico.shop { border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff6c2, #ffcc00 55%, #e09a00); box-shadow: inset 0 0 0 2px #b67d00; }
+.ll-ico.book { width: 16px; height: 18px; background: #7ec8ff; border-radius: 2px 5px 5px 2px; box-shadow: inset 4px 0 #fff, inset 5px 0 #16324a; }
+.ll-ico.drop { width: 14px; height: 18px; background: #3ec6ff; border-radius: 0 12px 12px 12px; transform: rotate(45deg); }
+.ll-ico.pin { width: 14px; height: 14px; margin-top: 4px; background: #ff5d7a; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
+#hint .sg-key { font-size: 12px; padding: 0 4px; }
+#btnPause { font-size: 16px; }
+#questLine { position: absolute; top: 76px; right: 86px; display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 999px; background: #fff; color: #16324a; font-size: 22px; font-weight: 700; box-shadow: 0 4px 0 rgba(8, 32, 58, 0.18); }
+.ll-qfish { width: 26px; height: 14px; border-radius: 12px 3px 3px 12px; background: #ff6a00; box-shadow: inset 0 -4px 0 #fff6e8, 0 0 0 2px #16324a; position: relative; }
+.ll-qfish:before { content: ''; position: absolute; right: -7px; top: 1px; border: 6px solid transparent; border-left: 8px solid #ff6a00; }
+.ll-qfish:after { content: ''; position: absolute; left: 4px; top: 3px; width: 5px; height: 5px; border-radius: 50%; background: #16324a; box-shadow: 1px -1px 0 1px #fff; }
 #questLine[hidden] { display: none; }
 #questStamp { position: absolute; top: -22px; left: 8px; padding: 4px 12px; border-radius: 12px; background: #ffcc00; color: #3a2a00; font-size: 26px; box-shadow: 0 4px 0 #c47e00; }
 #questStamp[hidden] { display: none; }
 #questLine.ll-stamp { animation: ll-stamp 0.4s ease-out; }
 #questLine.ll-slide { animation: ll-slide 0.35s ease-out; }
-#eventBanner { position: absolute; top: 54px; left: 14px; right: auto; transform: none; display: flex; align-items: center; gap: 8px; min-width: 0; max-width: none; padding: 6px 14px 6px 8px; border-radius: 999px; background: #14385c; border: 3px solid #fff; text-align: start; font-size: 20px; font-weight: 700; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25); }
+#eventBanner { position: absolute; top: 54px; left: 14px; right: auto; transform: none; display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; padding: 0; border-radius: 999px; background: #14385c; border: 3px solid #fff; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25); }
+#eventText { display: none; }
 #eventBanner[hidden] { display: none; }
 #eventIcon { position: relative; width: 36px; height: 28px; display: block; flex: none; }
 #eventBanner.rain #eventIcon:before { content: ''; position: absolute; left: 6px; top: 4px; width: 24px; height: 12px; background: #fff; border-radius: 10px; box-shadow: -8px -3px 0 -3px #fff, 9px -4px 0 -4px #fff; }

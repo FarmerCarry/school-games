@@ -583,3 +583,7 @@ bytes of that new ceiling are still free. Portal, teacher, and precache limits
 stay put. The page grew by 7,535 bytes and the precache absorbed that inside
 the headroom it already had (5,200,560 of 5,220,000).
 
+A later sticker pass (saturated fish, a rarity glow, living water, and the
+reel bar drawn in screen space) measured the page at 116,569 and the precache
+at 5,203,490. Both stay inside the same limits.
+

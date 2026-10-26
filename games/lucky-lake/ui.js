@@ -139,7 +139,7 @@
     $('timerPill').textContent = clock;
     if (!goalFx) {
       var q = s.quests && s.quests[0];
-      $('questText').textContent = q ? ('الهدف: ' + q.text + '  ' + q.have + '/' + q.n) : '';
+      $('questText').textContent = q ? (q.have + '/' + q.n) : '';
     }
     var phrase = game ? (WX[game.state.event.id] || '') : '';
     $('eventText').textContent = phrase;
@@ -154,7 +154,7 @@
   }
 
   function startGoalStamp(reward, next) {
-    var line = 'الهدف: ' + next.text + '  ' + next.have + '/' + next.n;
+    var line = next.have + '/' + next.n;
     if (Kit.motion.reduced()) {
       goalFx = null;
       $('questStamp').hidden = true;
@@ -380,9 +380,14 @@
   }
 
   function catchGlow(fish) {
-    if (fish.boss) return '#ffd76a';
-    if (fish.junk) return '#d7c4a4';
-    return ['#ffb24a', '#7ec8ff', '#d9a6ff', '#ff8ad4', '#ffe14a'][Math.min(fish.rare | 0, 4)];
+    if (fish.boss) return '#ffc400';
+    if (fish.junk) return '#c48a4a';
+    return ['#ff6a00', '#1288ff', '#7a3dff', '#ff4b8d', '#ff9a00'][Math.min(fish.rare | 0, 4)];
+  }
+
+  function glowFade(hex, a) {
+    var n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + (a || 0) + ')';
   }
 
   function paintCatchFish() {
@@ -394,22 +399,16 @@
     var glow = catchGlow(fish);
     var box = { x: 24, y: 6, w: w - 48, h: h - 58 };
     g.clearRect(0, 0, w, h);
-    g.save();
-    g.translate(w / 2, box.y + box.h * 0.5);
-    g.globalAlpha = 0.9;
-    g.fillStyle = glow;
-    var rays = 10;
-    for (var ray = 0; ray < rays; ray++) {
-      g.save();
-      g.rotate((Kit.motion.reduced() ? 0.2 : time * 0.25) + ray * (6.2832 / rays));
-      g.beginPath();
-      g.moveTo(0, 0);
-      g.lineTo(18, -210);
-      g.lineTo(-18, -210);
-      g.fill();
-      g.restore();
-    }
-    g.restore();
+    var gx = w / 2, gy = box.y + box.h * 0.48;
+    var rad = g.createRadialGradient(gx, gy, 24, gx, gy, 250);
+    rad.addColorStop(0, glowFade(glow, 0.72));
+    rad.addColorStop(0.55, glowFade(glow, 0.28));
+    rad.addColorStop(1, glowFade(glow, 0));
+    g.fillStyle = rad;
+    g.beginPath();
+    g.arc(gx, gy, 250, 0, 6.3);
+    g.fill();
+    g.globalAlpha = 1;
     var marks = [[14, 36], [14, 110], [14, 180], [14, 250], [w - 14, 36], [w - 14, 110], [w - 14, 180], [w - 14, 250]];
     for (var i = 0; i < 8; i++) {
       var sx = marks[i][0], sy = marks[i][1];
@@ -1027,7 +1026,7 @@
     for (var i = 0; i < list.length; i++) {
       var s = list[i];
       var drift = Math.sin(time * 0.8 + s.ph) * 10;
-      Art.fishShadow(ctx, 180 + s.x * 920, 410 + s.y * 220 + drift, 64 * s.s, s.dir, 0.5, s.fam);
+      Art.fishShadow(ctx, 180 + s.x * 920, 410 + s.y * 220 + drift, 150 * s.s, s.dir, 0.95, s.fam);
     }
     var anglers = game.state.anglers;
     for (var n = 0; n < anglers.length; n++) {
@@ -1090,10 +1089,6 @@
           ctx.fillStyle = '#ffe14a';
           ctx.fillText('!', b.x, b.y - 28);
         }
-      }
-      if (a.phase === 'reel') {
-        var rw = st.anglers.length === 1 ? 560 : 520;
-        Art.reel(ctx, (1280 - rw) / 2, st.anglers.length === 1 ? 14 : (i === 0 ? 8 : 96), rw, a, time);
       }
       if (a.phase === 'show' && a.fish) {
         var u = Math.min(1, a.showT / 0.85);
@@ -1266,6 +1261,15 @@
       ctx.globalAlpha = 1;
     }
     ctx.restore();
+    if (mode === 'play' && game && !revealing()) {
+      var bars = game.state.anglers;
+      for (var ri = 0; ri < bars.length; ri++) {
+        if (bars[ri].phase !== 'reel') continue;
+        var rw = bars.length === 1 ? 560 : 520;
+        var ry = bars.length === 1 ? 118 : (ri === 0 ? 96 : 204);
+        Art.reel(ctx, (1280 - rw) / 2, ry, rw, bars[ri], time);
+      }
+    }
     if (mode === 'play' && revealing()) paintCatchFish();
   }
 
