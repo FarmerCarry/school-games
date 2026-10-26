@@ -14,10 +14,12 @@ function fail(message) {
   process.exit(1);
 }
 
-function whole(name, fallback, min) {
+function whole(name, fallback, min, max = Infinity) {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
-  if (!/^\d+$/.test(raw) || Number(raw) < min) fail(`${name} must be a whole number of at least ${min}`);
+  if (!/^\d+$/.test(raw) || Number(raw) < min || Number(raw) > max) {
+    fail(`${name} must be a whole number ${max < Infinity ? `from ${min} to ${max}` : `of at least ${min}`}`);
+  }
   return Number(raw);
 }
 
@@ -33,14 +35,16 @@ function origins(raw = '') {
 
 const env = process.env;
 const adminToken = env.ADMIN_TOKEN || '';
-if (adminToken && (adminToken.length < 16 || /\s/.test(adminToken))) fail('ADMIN_TOKEN must be at least 16 characters without spaces');
+// Printable ASCII only: Node reads header bytes as latin1, so any other character could never match.
+if (adminToken && !/^[\x21-\x7e]{16,}$/.test(adminToken)) fail('ADMIN_TOKEN must be at least 16 printable ASCII characters without spaces');
 const config = {
-  port: whole('PORT', 8787, 0),
+  port: whole('PORT', 8787, 0, 65535),
   host: env.HOST || undefined,
   dbPath: env.DB_PATH || path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'telemetry.db'),
   allowedOrigins: origins(env.ALLOWED_ORIGINS),
   adminToken,
-  retentionDays: whole('RETENTION_DAYS', 180, 1),
+  // Far larger values are past the dates JavaScript can hold, and every purge would fail.
+  retentionDays: whole('RETENTION_DAYS', 180, 1, 36500),
   ratePerMin: whole('RATE_PER_MIN', 1200, 0),
   trustProxy: whole('TRUST_PROXY', 0, 0),
   log: message => console.log(message)

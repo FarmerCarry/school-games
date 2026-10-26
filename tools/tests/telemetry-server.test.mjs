@@ -576,7 +576,10 @@ test('main.mjs starts from the environment without the SQLite warning and refuse
   assert.doesNotMatch(stderr, /ExperimentalWarning|SQLite/);
   assert.ok(fs.existsSync(env.DB_PATH));
   for (const [name, value, message] of [['ALLOWED_ORIGINS', ORIGIN + '/', /not an origin/], ['ALLOWED_ORIGINS', 'school.example', /not an origin/],
-    ['ADMIN_TOKEN', 'short', /at least 16/], ['RETENTION_DAYS', '0', /RETENTION_DAYS/], ['RATE_PER_MIN', 'many', /RATE_PER_MIN/]]) {
+    ['ADMIN_TOKEN', 'short', /at least 16/], ['ADMIN_TOKEN', 'ü'.repeat(20), /printable ASCII/],
+    ['RETENTION_DAYS', '0', /RETENTION_DAYS/], ['RETENTION_DAYS', '1000000000', /RETENTION_DAYS must be a whole number from 1 to 36500/],
+    ['PORT', '70000', /PORT must be a whole number from 0 to 65535/],
+    ['RATE_PER_MIN', 'many', /RATE_PER_MIN/]]) {
     const run = spawnSync(process.execPath, [path.join(repo, 'server/main.mjs')], { env: { ...env, [name]: value }, encoding: 'utf8', timeout: 10000 });
     assert.equal(run.status, 1, name + '=' + value);
     assert.match(run.stderr, message);

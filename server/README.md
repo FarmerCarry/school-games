@@ -96,8 +96,8 @@ All settings are environment variables.
 | `HOST` | all interfaces | Bind address. Use `127.0.0.1` behind a reverse proxy on the same machine. |
 | `DB_PATH` | `server/data/telemetry.db` | SQLite file (created with its folder). Also writes `-wal` and `-shm` files next to it. |
 | `ALLOWED_ORIGINS` | none | Comma-separated origins of the portal, e.g. `https://name.github.io` (an origin has no path and no trailing slash, even when the site lives at `/school-games/`). Browser requests from any other origin get no CORS header and `POST /v1/batch` answers `403`. The literal `null` (pages from `file:` or sandboxed frames) is accepted only if listed; the portal never sends from `file:`. |
-| `ADMIN_TOKEN` | none | Bearer token for `/v1/admin/*`, at least 16 characters (use `openssl rand -hex 24`). Unset: the admin endpoints answer `404`. |
-| `RETENTION_DAYS` | `180` | Days of data to keep (at least 1). |
+| `ADMIN_TOKEN` | none | Bearer token for `/v1/admin/*`, at least 16 printable ASCII characters without spaces (use `openssl rand -hex 24`). Unset: the admin endpoints answer `404`. |
+| `RETENTION_DAYS` | `180` | Days of data to keep (1 to 36,500). |
 | `RATE_PER_MIN` | `1200` | Requests per minute per client address (token bucket, bursts up to the same number). Generous because a whole school lab shares one NAT address. `0` turns the limit off. |
 | `TRUST_PROXY` | `0` | Number of reverse proxies in front of the server. With `1`, the client address for the rate limit is the last `X-Forwarded-For` entry (the one your proxy wrote); with `0` it is the socket address, so all traffic through a proxy shares one bucket. |
 
@@ -137,8 +137,9 @@ After=network-online.target
 ExecStart=/usr/bin/node /opt/sg-telemetry/main.mjs
 Environment=HOST=127.0.0.1 PORT=8787 TRUST_PROXY=1 DB_PATH=/var/lib/sg-telemetry/telemetry.db
 Environment=ALLOWED_ORIGINS=https://name.github.io
-# ADMIN_TOKEN=... (chmod 600)
-EnvironmentFile=/etc/sg-telemetry.env
+# The admin token, as the line ADMIN_TOKEN=... in a file only root can read (chmod 600).
+# The leading "-" lets the service start without the file (admin endpoints off).
+EnvironmentFile=-/etc/sg-telemetry.env
 DynamicUser=yes
 StateDirectory=sg-telemetry
 ProtectSystem=strict
