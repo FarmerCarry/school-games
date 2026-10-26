@@ -585,5 +585,7 @@ the headroom it already had (5,200,560 of 5,220,000).
 
 A later sticker pass (saturated fish, a rarity glow, living water, and the
 reel bar drawn in screen space) measured the page at 116,569 and the precache
-at 5,203,490. Both stay inside the same limits.
+at 5,203,490. Both stay inside the same limits. The follow-up that quiets the
+lake, rebuilds the fish as one closed shape, and paints a blue-and-green reel
+measures 115,855 and 5,202,776.
 

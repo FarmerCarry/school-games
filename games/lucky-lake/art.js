@@ -45,12 +45,6 @@
     ['#ff7a12', '#5a28e0', '#ffe14a'],
     ['#3a6dff', '#7dff9a', '#ffffff']
   ];
-  // length, height, tail (0 fork, 1 round, 2 fan). All stay plump.
-  var SHAPE = [
-    [1.05, 1, 0], [1.16, 0.96, 0], [0.92, 1.16, 2], [1.2, 0.92, 1], [1.14, 0.9, 2],
-    [0.96, 1.18, 2], [1.08, 1.04, 0], [1.18, 0.94, 1], [1.1, 1, 1], [1, 1.1, 2]
-  ];
-
   function famOf(fish) {
     if (!fish || fish.junk) return 0;
     if (fish.boss) return 8;
@@ -59,41 +53,50 @@
 
   function ink(ctx, s) {
     ctx.strokeStyle = '#16324a';
-    ctx.lineWidth = Math.max(3, s * 0.12);
+    ctx.lineWidth = Math.max(2, s * 0.05);
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     ctx.stroke();
   }
 
-  function bodyPath(ctx, s, L, T) {
-    ctx.moveTo(s * 1.12 * L, 0);
-    ctx.bezierCurveTo(s * 0.55 * L, -s * 0.78 * T, -s * 0.15 * L, -s * 0.72 * T, -s * 0.72 * L, -s * 0.22 * T);
-    ctx.bezierCurveTo(-s * 0.98 * L, 0, -s * 0.98 * L, s * 0.08 * T, -s * 0.68 * L, s * 0.28 * T);
-    ctx.bezierCurveTo(-s * 0.1 * L, s * 0.7 * T, s * 0.55 * L, s * 0.62 * T, s * 1.12 * L, 0);
+  // One closed teardrop. Nose is +x. Extents about x -1.15..1.05, y -0.78..0.56.
+  function bodyPath(ctx, s) {
+    ctx.beginPath();
+    ctx.moveTo(s * 1.05, 0);
+    ctx.bezierCurveTo(s * 0.78, -s * 0.5, s * 0.05, -s * 0.62, -s * 0.55, -s * 0.28);
+    ctx.bezierCurveTo(-s * 0.9, -s * 0.1, -s * 0.9, s * 0.1, -s * 0.55, s * 0.3);
+    ctx.bezierCurveTo(s * 0.05, s * 0.56, s * 0.78, s * 0.46, s * 1.05, 0);
+    ctx.closePath();
   }
 
-  function tailPath(ctx, kind, s, L, T) {
-    var x = -s * 0.62 * L;
+  function tailPath(ctx, s) {
     ctx.beginPath();
-    if (kind === 1) ctx.ellipse(x - s * 0.28, 0, s * 0.32, s * 0.42 * T, 0, 0, 6.3);
-    else if (kind === 2) {
-      ctx.moveTo(x, 0);
-      ctx.quadraticCurveTo(x - s * 0.55, -s * 0.15 * T, x - s * 0.7, -s * 0.62 * T);
-      ctx.quadraticCurveTo(x - s * 0.28, -s * 0.05 * T, x, 0);
-      ctx.quadraticCurveTo(x - s * 0.28, s * 0.05 * T, x - s * 0.7, s * 0.62 * T);
-      ctx.quadraticCurveTo(x - s * 0.55, s * 0.15 * T, x, 0);
-    } else {
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x - s * 0.72, -s * 0.55 * T);
-      ctx.lineTo(x - s * 0.34, 0);
-      ctx.lineTo(x - s * 0.72, s * 0.55 * T);
-      ctx.closePath();
-    }
+    ctx.moveTo(-s * 0.58, -s * 0.12);
+    ctx.lineTo(-s * 1.15, -s * 0.46);
+    ctx.quadraticCurveTo(-s * 0.88, 0, -s * 1.15, s * 0.46);
+    ctx.lineTo(-s * 0.58, s * 0.12);
+    ctx.closePath();
+  }
+
+  function dorsalPath(ctx, s) {
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.12, -s * 0.4);
+    ctx.quadraticCurveTo(s * 0.18, -s * 0.78, s * 0.46, -s * 0.34);
+    ctx.quadraticCurveTo(s * 0.16, -s * 0.5, -s * 0.12, -s * 0.4);
+    ctx.closePath();
+  }
+
+  function pecPath(ctx, s) {
+    ctx.beginPath();
+    ctx.moveTo(s * 0.28, s * 0.04);
+    ctx.quadraticCurveTo(s * 0.02, s * 0.24, -s * 0.12, s * 0.3);
+    ctx.quadraticCurveTo(s * 0.06, s * 0.12, s * 0.28, s * 0.04);
+    ctx.closePath();
   }
 
   function drawFish(ctx, fish, x, y, w, h, sil) {
     if (!fish) return;
-    if (fish.junk || fish.id >= 49) {
+    if (fish.junk || (fish.id >= 49 && fish.id <= 52)) {
       ctx.save();
       ctx.translate(x, y);
       ctx.beginPath();
@@ -106,21 +109,18 @@
       ctx.restore();
       return;
     }
-    var shape = SHAPE[famOf(fish)];
-    var L = shape[0], T = shape[1], kind = shape[2];
     var vivid = VIVID[(fish.boss ? 5 : (fish.id || 0)) % 10];
-    var body = sil ? '#16324a' : vivid[0];
-    var belly = sil ? '#16324a' : vivid[1];
-    var mark = sil ? '#16324a' : vivid[2];
-    var s = Math.min((w * 0.98) / (2.85 * L), (h * 0.96) / (1.85 * T));
+    var body = sil ? '#08345c' : vivid[0];
+    var belly = sil ? '#08345c' : vivid[1];
+    var mark = sil ? '#08345c' : vivid[2];
+    var s = Math.min((w * 0.9) / 2.2, (h * 0.86) / 1.36);
     ctx.save();
-    ctx.translate(x + w * 0.56, y + h * 0.54);
-    tailPath(ctx, kind, s, L, T);
+    ctx.translate(x + w * 0.5 + s * 0.05, y + h * 0.5 + s * 0.1);
+    tailPath(ctx, s);
     ctx.fillStyle = body;
     ctx.fill();
     if (!sil) ink(ctx, s);
-    ctx.beginPath();
-    bodyPath(ctx, s, L, T);
+    bodyPath(ctx, s);
     ctx.fillStyle = body;
     ctx.fill();
     if (!sil) {
@@ -128,54 +128,52 @@
       ctx.clip();
       ctx.fillStyle = belly;
       ctx.beginPath();
-      ctx.ellipse(s * 0.05 * L, s * 0.22 * T, s * 0.55 * L, s * 0.28 * T, 0, 0, 6.3);
+      ctx.ellipse(s * 0.08, s * 0.16, s * 0.48, s * 0.2, 0, 0, 6.3);
       ctx.fill();
       ctx.fillStyle = mark;
       var pat = fish.pat | 0;
+      var i;
       if (pat === 1) {
-        for (var i = 0; i < 5; i++) {
+        var spots = [[-0.22, -0.06], [0.12, -0.1], [0.32, 0.02], [-0.02, 0.06]];
+        for (i = 0; i < spots.length; i++) {
           ctx.beginPath();
-          ctx.arc(-s * 0.35 * L + (i % 3) * s * 0.32 * L, (i < 3 ? -0.08 : 0.16) * s * T, s * 0.1, 0, 6.3);
+          ctx.arc(s * spots[i][0], s * spots[i][1], s * 0.07, 0, 6.3);
           ctx.fill();
         }
       } else if (pat === 2) {
-        for (var q = 0; q < 4; q++) {
+        for (i = 0; i < 3; i++) {
           ctx.beginPath();
-          ctx.arc(-s * 0.4 * L + q * s * 0.26 * L, s * 0.02 * T, s * 0.14, Math.PI, 0);
+          ctx.arc(-s * 0.28 + i * s * 0.24, s * 0.02, s * 0.1, Math.PI * 1.05, Math.PI * 1.95);
           ctx.fill();
         }
       } else {
-        for (var k = 0; k < 3; k++) ctx.fillRect(-s * 0.42 * L + k * s * 0.28 * L, -s * 0.7 * T, s * 0.1 * L, s * 1.4 * T);
+        for (i = 0; i < 3; i++) ctx.fillRect(-s * 0.32 + i * s * 0.22, -s * 0.7, s * 0.07, s * 1.4);
       }
       ctx.restore();
-      ctx.beginPath();
-      ctx.moveTo(-s * 0.05 * L, -s * 0.55 * T);
-      ctx.quadraticCurveTo(s * 0.2 * L, -s * 1.05 * T, s * 0.48 * L, -s * 0.42 * T);
-      ctx.closePath();
-      ctx.fillStyle = body;
-      ctx.fill();
-      ink(ctx, s);
-      ctx.beginPath();
-      ctx.ellipse(s * 0.12 * L, s * 0.08 * T, s * 0.22 * L, s * 0.12 * T, 0.7, 0, 6.3);
-      ctx.fillStyle = belly;
-      ctx.fill();
-      ink(ctx, s);
-      ctx.beginPath();
-      bodyPath(ctx, s, L, T);
-      ink(ctx, s);
-      var ex = s * 0.62 * L;
-      var er = Math.max(4, s * 0.28);
+    }
+    dorsalPath(ctx, s);
+    ctx.fillStyle = body;
+    ctx.fill();
+    if (!sil) ink(ctx, s);
+    pecPath(ctx, s);
+    ctx.fillStyle = sil ? body : belly;
+    ctx.fill();
+    if (!sil) ink(ctx, s);
+    bodyPath(ctx, s);
+    if (!sil) ink(ctx, s);
+    if (!sil) {
+      var ex = s * 0.66, ey = -s * 0.06, er = Math.max(3.5, s * 0.13);
       ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(ex, -s * 0.08 * T, er, 0, 6.3); ctx.fill();
-      ink(ctx, s * 0.7);
+      ctx.beginPath(); ctx.arc(ex, ey, er, 0, 6.3); ctx.fill();
+      ink(ctx, s * 0.65);
       ctx.fillStyle = '#16324a';
-      ctx.beginPath(); ctx.arc(ex + er * 0.18, -s * 0.06 * T, er * 0.48, 0, 6.3); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex + er * 0.12, ey, er * 0.5, 0, 6.3); ctx.fill();
       ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(ex + er * 0.02, -s * 0.16 * T, er * 0.22, 0, 6.3); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex - er * 0.12, ey - er * 0.28, er * 0.24, 0, 6.3); ctx.fill();
       ctx.strokeStyle = '#16324a';
-      ctx.lineWidth = Math.max(2.5, s * 0.07);
+      ctx.lineWidth = Math.max(1.6, s * 0.04);
       ctx.beginPath();
-      ctx.arc(ex - s * 0.34 * L, s * 0.16 * T, s * 0.16, 0.2, 1.15);
+      ctx.arc(s * 0.58, s * 0.2, s * 0.08, 0.4, Math.PI - 0.4);
       ctx.stroke();
     }
     ctx.restore();
@@ -370,26 +368,6 @@
       if (fx === 0) ctx.moveTo(fx, fy); else ctx.lineTo(fx, fy);
     }
     ctx.stroke();
-    school(ctx, y, t);
-  }
-
-  function school(ctx, y, t) {
-    var row = [[0, 1, 120, 2.35, 1], [5, 0, 420, 2.05, -1], [2, 2, 680, 1.7, 1], [3, 1, 960, 2.2, -1], [4, 1, 240, 1.8, 1], [6, 0, 1120, 1.55, -1]];
-    for (var i = 0; i < row.length; i++) {
-      var r = row[i];
-      var fish = { id: r[0], junk: 0, boss: 0, pat: r[1] };
-      var speed = 34 + (i % 3) * 10;
-      var travel = t * speed * r[4];
-      var px = ((r[2] + travel) % 1680 + 1680) % 1680 - 160;
-      var py = y + 86 + (i % 3) * 112 + Math.sin(t * 1.2 + i * 1.7) * 10;
-      var img = sprite(fish, true);
-      var dw = 156 * r[3];
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.scale(r[4], 1);
-      ctx.drawImage(img, -dw / 2, -dw * 0.28, dw, dw * 0.56);
-      ctx.restore();
-    }
   }
 
   function props(ctx, spot, pal, t, y) {
@@ -416,13 +394,16 @@
 
   function fishShadow(ctx, x, y, len, face, alpha, fam) {
     var id = (fam == null ? 0 : fam) % 10;
-    var w = Math.max(48, len * 2.2);
-    var img = sprite({ id: id, junk: 0, boss: 0, pat: id % 3 }, w > 120);
+    var w = Math.max(40, Math.min(90, len || 60));
+    var h = w * 0.58;
+    var a = alpha == null ? 0.32 : alpha;
+    if (a < 0.25) a = 0.25;
+    if (a > 0.4) a = 0.4;
     ctx.save();
-    ctx.globalAlpha = alpha == null ? 0.9 : alpha;
+    ctx.globalAlpha = a;
     ctx.translate(x, y);
     ctx.scale(face < 0 ? -1 : 1, 1);
-    ctx.drawImage(img, -w * 0.5, -w * 0.28, w, w * 0.56);
+    drawFish(ctx, { id: id, junk: 0, boss: 0, pat: 0 }, -w / 2, -h / 2, w, h, true);
     ctx.restore();
   }
 
@@ -807,7 +788,7 @@
     ctx.strokeStyle = hot ? '#ff5d6a' : '#7dffb2';
     roundRect(ctx, x, y, w, h, 22); ctx.stroke();
     var trackX = x + 22, trackW = w - 44, trackY = y + 16, trackH = 58;
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillStyle = '#1a8fd4';
     roundRect(ctx, trackX, trackY, trackW, trackH, 14); ctx.fill();
     var zh = Math.max(0.08, a.zoneH || 0.2);
     var zc = a.zoneY || 0.5;
@@ -815,24 +796,32 @@
     var zw = Math.max(16, zh * 2 * trackW);
     if (zx < trackX) { zw -= trackX - zx; zx = trackX; }
     if (zx + zw > trackX + trackW) zw = trackX + trackW - zx;
-    ctx.fillStyle = '#fff';
-    roundRect(ctx, zx, trackY + 4, Math.max(8, zw), trackH - 8, 10); ctx.fill();
+    ctx.fillStyle = '#3ddc6a';
+    roundRect(ctx, zx, trackY + 8, Math.max(8, zw), trackH - 16, 10); ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = hot ? '#ff5d6a' : '#128a3c';
+    roundRect(ctx, zx, trackY + 8, Math.max(8, zw), trackH - 16, 10); ctx.stroke();
     var rare = a.fish ? a.fish.rare || 0 : 0;
     var fy = a.fish ? a.fish.y : 0.5;
     var dart = Math.sin(t * (5 + rare * 3.2)) * (3 + rare * 4);
     var fx = trackX + fy * trackW + dart;
-    fx = Math.max(trackX + 46, Math.min(trackX + trackW - 46, fx));
+    fx = Math.max(trackX + 70, Math.min(trackX + trackW - 70, fx));
     var cy = trackY + trackH / 2;
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-    ctx.lineWidth = 7;
-    ctx.beginPath(); ctx.arc(fx, cy, 30, 0, 6.2832); ctx.stroke();
-    ctx.strokeStyle = a.inside ? '#3ddc84' : '#ff5d6a';
-    ctx.lineWidth = 8;
+    var wob = Math.sin(t * 8) * 0.2;
+    ctx.strokeStyle = 'rgba(8, 40, 70, 0.35)';
+    ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(fx, cy, 28, 0, 6.2832); ctx.stroke();
+    ctx.strokeStyle = a.inside ? '#ffe14a' : '#ff5d6a';
+    ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.arc(fx, cy, 30, -Math.PI / 2, -Math.PI / 2 + Math.max(0, a.prog || 0) * 6.2832);
+    ctx.arc(fx, cy, 28, -Math.PI / 2, -Math.PI / 2 + Math.max(0.04, a.prog || 0) * 6.2832);
     ctx.stroke();
     if (a.fish) {
-      ctx.drawImage(sprite(a.fish, true), fx - 40, cy - 24, 80, 46);
+      ctx.save();
+      ctx.translate(fx, cy);
+      ctx.rotate(wob);
+      ctx.drawImage(sprite(a.fish, true), -30, -17, 60, 34);
+      ctx.restore();
       if (a.fish.tell) {
         ctx.fillStyle = '#ffcc00';
         ctx.font = '700 28px Fredoka';
@@ -841,10 +830,8 @@
         ctx.fillText('!', fx, cy - 30);
       }
     }
-    if (a.guide && (a.reelT || 0) < 2) {
-      var pulse = (t * 0.8) % 1;
-      hand(ctx, trackX + 40 + pulse * (trackW - 80), y + h - 6, pulse > 0.45 && pulse < 0.8);
-    }
+    var side = fx > trackX + trackW * 0.72 ? -1 : 1;
+    hand(ctx, fx + side * 54, cy + 6, Math.sin(t * 4) > 0.15);
   }
 
   function blit(ctx, fish, x, y, sc, t) {

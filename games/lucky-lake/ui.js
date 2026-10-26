@@ -397,7 +397,7 @@
     var g = view.getContext('2d');
     var w = view.width, h = view.height;
     var glow = catchGlow(fish);
-    var box = { x: 24, y: 6, w: w - 48, h: h - 58 };
+    var box = { x: 80, y: 40, w: w - 160, h: h - 128 };
     g.clearRect(0, 0, w, h);
     var gx = w / 2, gy = box.y + box.h * 0.48;
     var rad = g.createRadialGradient(gx, gy, 24, gx, gy, 250);
@@ -1021,24 +1021,17 @@
   }
 
   function drawShadows() {
-    var list = game.state.shadows;
-    ctx.fillStyle = '#042033';
-    for (var i = 0; i < list.length; i++) {
-      var s = list[i];
-      var drift = Math.sin(time * 0.8 + s.ph) * 10;
-      Art.fishShadow(ctx, 180 + s.x * 920, 410 + s.y * 220 + drift, 150 * s.s, s.dir, 0.95, s.fam);
-    }
-    var anglers = game.state.anglers;
-    for (var n = 0; n < anglers.length; n++) {
-      var a = anglers[n];
-      if (a.phase !== 'wait' && a.phase !== 'bite') continue;
-      var u = a.phase === 'bite' ? 1 : Math.min(1, a.waitT / Math.max(0.2, a.waitNeed));
-      var b = bobberOf(a);
-      var face = faceOf(n);
-      var x = b.x - face * 300 * (1 - u);
-      var y = 580 - u * 220 + Math.sin(time * 3 + n) * 6;
-      var grow = u > 0.8 ? 1 + Math.sin(time * 9) * 0.07 : 1;
-      Art.fishShadow(ctx, x, y, (28 + u * 70) * grow, face, 0.22 + u * 0.65, u > 0.66 ? 2 : 6);
+    var lanes = [
+      { x: 150, y: 545, w: 72, dir: 1, id: 0, sway: 55 },
+      { x: 230, y: 655, w: 48, dir: -1, id: 2, sway: 40 },
+      { x: 1020, y: 530, w: 84, dir: -1, id: 3, sway: 50 },
+      { x: 1120, y: 650, w: 58, dir: 1, id: 5, sway: 42 }
+    ];
+    for (var i = 0; i < lanes.length; i++) {
+      var L = lanes[i];
+      var px = L.x + Math.sin(time * 0.28 + i * 1.4) * L.sway;
+      var py = L.y + Math.sin(time * 0.7 + i) * 5;
+      Art.fishShadow(ctx, px, py, L.w, L.dir, 0.32, L.id);
     }
   }
 
