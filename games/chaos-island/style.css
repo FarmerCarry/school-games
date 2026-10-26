@@ -121,8 +121,8 @@ h1, h2, p { margin: 0; }
 #siren em { flex: 0 0 auto; min-width: 78px; font-style: normal; font-size: 76px; line-height: 1; font-weight: 700; color: #e23b2f; transform-origin: center; }
 #siren em:empty { display: none; }
 #siren.hot { border-color: #e23b4a; }
-#cheer { position: absolute; left: 28px; right: auto; top: 448px; z-index: 7; text-align: start; pointer-events: none; font-size: 72px; font-weight: 700; color: #7cf29a; -webkit-text-stroke: 10px #2b2148; paint-order: stroke fill; }
-#streak { position: absolute; top: 68px; left: 120px; z-index: 7; pointer-events: none; font-size: 36px; font-weight: 700; color: #ffe14a; -webkit-text-stroke: 6px #2b2148; paint-order: stroke fill; }
+#cheer { position: absolute; left: 16px; right: auto; top: 72px; z-index: 7; text-align: start; pointer-events: none; font-size: 32px; font-weight: 700; color: #7cf29a; -webkit-text-stroke: 6px #2b2148; paint-order: stroke fill; }
+#streak { position: absolute; top: 72px; left: auto; right: 20px; z-index: 7; pointer-events: none; font-size: 28px; font-weight: 700; color: #ffe14a; -webkit-text-stroke: 5px #2b2148; paint-order: stroke fill; }
 #streak[hidden] { display: none !important; }
 #streak.pop { animation: cheer .95s ease forwards; }
 #flies { position: absolute; inset: 0; pointer-events: none; z-index: 8; }

@@ -230,36 +230,24 @@
       },
       draw: function (ctx, w) {
         var y = w.phase === 'danger' ? w.waterY : (w.warn ? Math.min(760, w.waterTarget + 80) : 860);
-        if (y >= 800) return;
+        if (y >= 790) return;
         ctx.save();
-        var stripes = ['#e01555', '#ff2d78', '#ff6b3d', '#ff4fa3', '#c9184a', '#ff8c42'];
-        var depth = Math.max(0, H - y);
-        for (var col = 0; col < 16; col++) {
-          ctx.fillStyle = stripes[col % stripes.length];
-          ctx.fillRect(col * 80, y + 18, 80, depth);
-        }
-        ctx.fillStyle = '#ffe0f2';
-        ctx.beginPath();
-        ctx.moveTo(0, y + 22);
-        for (var x = 0; x <= W; x += 40) {
-          var wob = Math.sin(w.time * 3 + x * 0.02) * 10;
-          if (x) ctx.lineTo(x, y + wob); else ctx.lineTo(0, y + wob);
-        }
-        ctx.lineTo(W, y + 22);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,.9)';
-        for (var f = 0; f < 10; f++) {
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = 'rgba(255,255,255,.8)';
+        for (var b = 0; b < 6; b++) {
+          var bx = (b * 210 + w.time * 28) % W;
+          var by = y + 30 + (b % 3) * 18 + Math.sin(w.time * 3 + b) * 4;
           ctx.beginPath();
-          ctx.ellipse(40 + f * 128, y + Math.sin(w.time * 3 + f) * 6, 18, 6, 0, 0, 7);
+          ctx.arc(bx, by, 5 + (b % 3), 0, 7);
           ctx.fill();
         }
-        var fruits = ['#ffe14a', '#7cf29a', '#fff', '#4cc9f0'];
-        for (var i = 0; i < 8; i++) {
-          var fx = (i * 160 + 50 + Math.sin(w.time + i) * 12) % W;
-          var fy = y + 36 + (i % 4) * 28;
-          ctx.fillStyle = fruits[i % 4];
+        var beans = ['#ffe14a', '#7cf29a', '#fff', '#4cc9f0'];
+        for (var i = 0; i < 5; i++) {
+          var fx = (i * 250 + 80 + Math.sin(w.time * 1.4 + i) * 14) % W;
+          var fy = y + Math.sin(fx * 0.02) * 8 - 6;
+          ctx.fillStyle = beans[i % 4];
           ctx.beginPath();
-          ctx.ellipse(fx, fy, 16, 11, i, 0, 7);
+          ctx.ellipse(fx, fy, 11, 7, 0.4, 0, 7);
           ctx.fill();
         }
         ctx.restore();
@@ -536,16 +524,16 @@
       ctx.globalAlpha = 1;
       ctx.fillStyle = '#fff6fb';
       ctx.beginPath();
-      ctx.arc(h.x, my, 22 + grow * 6, 0, 7);
+      ctx.arc(h.x, my, 36 + grow * 10, 0, 7);
       ctx.fill();
       ctx.fillStyle = '#ff8ec8';
       ctx.beginPath();
-      ctx.arc(h.x - 6, my - 6, 8, 0, 7);
+      ctx.arc(h.x - 10, my - 10, 12, 0, 7);
       ctx.fill();
       ctx.strokeStyle = '#2b2148';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.arc(h.x, my, 22 + grow * 6, 0, 7);
+      ctx.arc(h.x, my, 36 + grow * 10, 0, 7);
       ctx.stroke();
       if (h.hit) {
         ctx.fillStyle = '#fff';
@@ -833,10 +821,61 @@
     return inp;
   }
 
+  /* Bots claim spaced spots so their sprites never pile onto one stair. */
+  function slotFor(a, w) {
+    if (!a.bot || a.mode !== 'run') return null;
+    var rising = (w.phase === 'danger' || w.warn) && w.has('jelly');
+    var burn = (w.phase === 'danger' || w.warn) && (w.has('sauce') || w.has('quake'));
+    var list = [];
+    function consider(p) {
+      if (!p || p.gone || p.solid || (!p.one && !p.ground)) return;
+      if (list.indexOf(p) >= 0) return;
+      if (rising && p.y >= w.waterTarget - 2) return;
+      if (burn && p.ground) return;
+      list.push(p);
+    }
+    consider(pickGoal(w));
+    var rest = w.plats.slice().sort(function (p, q) { return p.y - q.y; });
+    for (var r = 0; r < rest.length; r++) consider(rest[r]);
+    var slots = [];
+    for (var s = 0; s < list.length; s++) {
+      var p = list[s];
+      var n = Math.max(1, Math.floor((p.w - 8) / 100));
+      for (var k = 0; k < n; k++) slots.push({ plat: p, x: p.x + p.w * (k + 1) / (n + 1) });
+    }
+    if (!slots.length) return null;
+    return slots[(a.botIndex || 0) % slots.length];
+  }
+  function steerTo(a, w, home) {
+    var inp = { x: 0, y: 0, jump: false, down: false, drop: false, brace: false, emote: false };
+    var cx = a.x + a.w * 0.5;
+    var goal = home.plat;
+    if (a.ground && a.ground.one && a.ground.y + 8 < goal.y) { inp.down = true; return inp; }
+    var here = a.ground === goal;
+    if (!here) {
+      var next = nextPlat(a, w, goal);
+      if (next) {
+        var mid = next.x + next.w * 0.5;
+        var overlap = cx > next.x + 6 && cx < next.x + next.w - 6;
+        var dx = mid - cx;
+        if (!overlap) inp.x = Math.sign(dx);
+        else if (a.ground) { inp.jump = true; inp.x = Math.abs(dx) > 22 ? Math.sign(dx) : 0; }
+        else inp.x = Math.abs(dx) > 16 ? Math.sign(dx) : 0;
+      } else inp.x = Math.sign((goal.x + goal.w * 0.5) - cx) || 0;
+      return inp;
+    }
+    var dx2 = home.x - cx;
+    inp.x = Math.abs(dx2) > 18 ? Math.sign(dx2) : paceDir(a, w);
+    return inp;
+  }
+
   function botInput(a, w) {
     a.lag -= 1 / 60;
     if (a.lag <= 0 || !a.hold) {
-      var thought = oracleInput(a, w);
+      var dodge = a.mode === 'run' ? dodgeX(a, w) : null;
+      var home = !dodge ? slotFor(a, w) : null;
+      var thought = home ? steerTo(a, w, home) : oracleInput(a, w);
+      if (dodge) thought.x = Math.sign(dodge - (a.x + a.w * 0.5)) || thought.x;
       var mistake = w.rnd() < (1 - a.skill) * 0.5;
       if (mistake) {
         if (thought.jump && w.rnd() < 0.75) thought.jump = false;
@@ -1359,6 +1398,27 @@
     return w.in[a.slot] || w.in[0];
   }
 
+  function separateActors(w, dt) {
+    var list = w.actors;
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      if (!a.bot || a.mode !== 'run' || !a.ground) continue;
+      for (var j = 0; j < i; j++) {
+        var b = list[j];
+        if (b.mode !== 'run') continue;
+        if (Math.abs(a.y - b.y) > 28) continue;
+        var dx = (a.x + a.w * 0.5) - (b.x + b.w * 0.5);
+        if (Math.abs(dx) >= 100) continue;
+        var dir = dx === 0 ? (a.id % 2 ? 1 : -1) : (dx > 0 ? 1 : -1);
+        var push = dir * Math.min(220 * dt, (100 - Math.abs(dx)) * 0.55);
+        var lo = a.ground.x + 4;
+        var hi = a.ground.x + a.ground.w - a.w - 4;
+        if (hi <= lo) continue;
+        a.x = clamp(a.x + push, lo, hi);
+      }
+    }
+  }
+
   CI.step = function (w, dt) {
     if (w.phase === 'podium') return;
     dt = dt || 1 / 60;
@@ -1380,6 +1440,7 @@
         if (inp && inp.emote && w.phase === 'inter') { a.emote = a.emote === 'dance' ? 'wave' : 'dance'; a.emoteT = 1.2; }
         body(w, a, inp || { x: 0, y: 0, jump: false, down: false, drop: false, brace: false }, dt);
       }
+      separateActors(w, dt);
       stepItems(w, dt);
       if (w.phase === 'danger') takeStars(w);
     } else if (w.phase === 'stamp') {

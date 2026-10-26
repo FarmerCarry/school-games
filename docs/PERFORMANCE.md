@@ -552,25 +552,28 @@ change; another game will again need room made or a decision like this one.
 ## Chaos Island, 25 October 2026
 
 جزيرة الفوضى (Chaos Island) is a fixed 1280×720 canvas party platformer. The island
-backdrop is baked once per island (sky, shore, and the ground spine). Characters are
-vector poses cached to small canvases, hazards and loose planks are drawn live, and
-a frame keeps at most 200 particles. Disasters stay in a DOM-free engine. Music and
-cues are oscillators in `audio.js`, with no audio files.
+backdrop is baked once per island (sky, shore, and the ground spine) and composited
+with the static platforms into one plate. The jelly body is painted into that plate
+when the waterline moves; bubbles and beans stay live. Characters are pet-style
+poses cached at final size, hazards and loose planks are drawn live, and a frame
+keeps at most 36 particles. `tools/perf.mjs --samples 1 --seconds 8 chaos-island`
+reports an active p95 of 33.4 ms on this harness. Disasters stay in a DOM-free
+engine. Music and cues are oscillators in `audio.js`, with no audio files.
 
 Measured with the Linux minified build, after adding this game only:
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Chaos Island | 114,176 | 150,000 (was 115,000) |
+| Chaos Island | 114,190 | 150,000 (was 115,000) |
 | Teacher page (one more catalog entry) | 93,237 | 96,000 (unchanged) |
 | Portal (thumbnail and catalog entry) | 359,061 | 360,000 (unchanged) |
-| Offline precache, 47 files | 5,205,967 | 5,215,000 (was 5,100,000) |
+| Offline precache, 47 files | 5,205,981 | 5,215,000 (was 5,100,000) |
 
 `gameHtmlBytes['chaos-island']` is now 150,000, a raise of 35,000 for the
 redraw (bigger characters, layered island, disaster art, and `audio.js`). The
-built page is 114,176 bytes. The offline cache was 5,082,082 of 5,100,000 before
+built page is 114,190 bytes. The offline cache was 5,082,082 of 5,100,000 before
 this game, so `precacheBytes` stays at the earlier raise of 115,000. The redraw
 fits that cap, so the precache limit was not raised again. The thumbnail and
 catalog text fit the existing portal and teacher headroom, so those limits stay
-put. The precache headroom is 9,033 bytes, and the portal headroom is 939 bytes.
+put. The precache headroom is 9,019 bytes, and the portal headroom is 939 bytes.
 
