@@ -18,8 +18,10 @@
   // skilled 10–11 year olds; their colliders stay as fair as tier 3.
   // speedEvery: score points per +1 speed. recovery + random * spread: seconds between
   // obstacles at the speed they are met. birds / cacti: the variants that can appear.
-  // grace: how much smaller than the art the colliders are. par: a run this long
-  // (score) counts as a full success for Kit.dda.
+  // grace: how much smaller than the art the colliders are; a slower world keeps a cactus
+  // under the dinosaur for longer, so this is what widens the jump timing window (the
+  // camera behind the dinosaur hides the overlap). par: a run this long (score) counts
+  // as a full success for Kit.dda.
   var C = D.config, COLUMNS = {
     startSpeed: [11, 13, C.startSpeed, 16, 17], maxSpeed: [24, 29, C.maxSpeed, 38, 41],
     speedEvery: [160, 125, 100, 85, 75],
@@ -27,7 +29,7 @@
     birdScore: [1500, 800, C.birdScore, 300, 200], birdChance: [0.15, 0.22, 0.29, 0.33, 0.37],
     birds: [[0], [0, 1], [0, 1, 2], [0, 1, 2], [0, 1, 2]],
     cacti: [[0, 1], [0, 1, 3], [0, 1, 2, 3], [0, 1, 2, 3], [0, 1, 2, 3]],
-    grace: [0.16, 0.08, 0, 0, 0],
+    grace: [0.3, 0.15, 0, 0, 0],
     par: [250, 400, 600, 850, 1100]
   };
   // +1: a larger value is harder; -1: easier; 'set': later tiers add variants.

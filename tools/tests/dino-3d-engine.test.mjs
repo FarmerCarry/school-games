@@ -411,9 +411,34 @@ test('every tier stays playable from its first pace through its top speed', () =
   }
 });
 
+// How long (ms) a child may be early or late with a jump and still clear the smallest
+// cactus at a tier's starting speed: the range of press times, before the cactus art
+// reaches the dinosaur, that survive a tap (0.1 s) or one full held jump (0.6 s).
+function pressWindow(tier, hold) {
+  const T = tierOf(tier), reach = 0.72 / 2 + C.playerHalfDepth;
+  let clear = 0;
+  for (let lead = 0; lead <= 0.8; lead += 0.004) {
+    const engine = createEngine(3, tier), s = engine.state;
+    s.obstacles = [obstacle({ z: -reach - lead * T.startSpeed })];
+    const o = s.obstacles[0];
+    for (let f = 0; f < 90 && s.alive && o.z <= reach; f++) engine.step(1 / 60, { jump: f / 60 < hold });
+    if (s.alive) clear++;
+  }
+  return clear * 4;
+}
+
+test('tiers 1 and 2 give a wider timing window for each jump than tier 3, not only slower obstacles', () => {
+  // A slower world keeps the cactus under the dinosaur for longer, which narrows the
+  // window; the kinder colliders must more than make up for it.
+  const [tap1, tap2, tap3] = [1, 2, 3].map(tier => pressWindow(tier, 0.1));
+  const [held1, held2, held3] = [1, 2, 3].map(tier => pressWindow(tier, 0.6));
+  assert.ok(tap1 >= tap3 * 1.15 && tap2 >= tap3 * 1.05, `taps: ${tap1} / ${tap2} / ${tap3} ms`);
+  assert.ok(held1 > held2 && held2 > held3, `held jumps: ${held1} / ${held2} / ${held3} ms`);
+});
+
 test('tiers 1 and 2 have kinder colliders: a jump that clips a cactus at tier 3 clears it', () => {
   // The dinosaur's feet are at y = 1, still rising, over the smallest cactus (top at 1.3:
-  // the feet must pass 1.06 at tier 3, 0.98 at tier 2 and 0.9 at tier 1).
+  // the feet must pass 1.06 at tier 3, 0.91 at tier 2 and 0.76 at tier 1).
   for (const [tier, alive] of [[1, true], [2, true], [3, false], [5, false]]) {
     const engine = createEngine(3, tier);
     engine.state.obstacles = [obstacle({ z: 0 })];
