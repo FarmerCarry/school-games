@@ -676,3 +676,34 @@ test('Dino surprise-course results move the tier, and obstacles cleared, crashes
     assert.ok(sum(e[8]) >= 8, `jumps after an obstacle came close are reaction times (${e[8]})`);
   }
 });
+
+test('Dino: a cleared course code gives a new surprise, whose retry promises no same course, and high birds are no cue', async t => {
+  const frame = await game(t, { embed: { band: '10-11', telemetry: true } }), page = frame.page();
+  const retry = () => frame.locator('#retry').textContent();
+  await frame.locator('#course-code').fill('0042');
+  await frame.locator('#play').click();
+  await crash(frame);
+  assert.equal(await retry(), 'أعد المسار نفسه', 'a shared code replays exactly');
+  await frame.locator('#menu').click();
+  assert.equal(await frame.locator('#course-code').inputValue(), '0042');
+  // Clearing the code is asking for a surprise: not course 0042 again at this tier.
+  await frame.locator('#course-code').fill('');
+  await frame.locator('#play').click();
+  const surprise = await course(frame);
+  assert.deepEqual(surprise.slice(0, 3), ['playing', 3, false]);
+  assert.notEqual(surprise[3], 43, 'a new course');
+  // A high bird the dinosaur runs under asks for no reaction: a press then times nothing.
+  await frame.evaluate(() => {
+    const s = Dino3DGame.state;
+    s.obstacles = [{ id: 500, type: 'bird', variant: 2, width: 1.65, depth: 1.35, height: 0.62, bottom: 3.4, z: -8 }];
+    for (let i = 0; i < 6; i++) dinoProbe.tick();
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowDown' }));
+    dinoProbe.tick();
+    dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowDown' }));
+  });
+  await crash(frame);
+  assert.equal(await retry(), 'العب مرة أخرى', 'the next try may be at another tier');
+  await page.waitForFunction(() => got.filter(m => m && m.type === 'sg:telemetry').flatMap(m => m.ev).filter(e => e[0] === 're').length >= 2, null, { polling: 50 });
+  const end = (await telemetry(page)).filter(e => e[0] === 're')[1];
+  assert.deepEqual([end[5], sum(end[8])], [3, 0], `no reaction time for the high bird (${end[8]})`);
+});

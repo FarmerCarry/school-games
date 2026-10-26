@@ -57,6 +57,9 @@
     el('hud').hidden = mode === 'ready';
     el('pause-button').hidden = mode !== 'playing';
     el('course-tag').hidden = mode === 'ready' || !shared;
+    // After a result a surprise course may come back at another tier, so its retry does
+    // not promise the same course.
+    el('retry').lastChild.textContent = shared ? 'أعد المسار نفسه' : 'العب مرة أخرى';
     dirty = true;
   }
   function refreshHUD() {
@@ -102,8 +105,9 @@
       el('course-code').focus(); return;
     }
     if (!renderer || contextLost) return;
+    // A code cleared from the field gives a new surprise, not the shared course again.
+    if (code) courseCode = code; else if (shared) courseCode = otherCode();
     shared = !!code;
-    if (shared) courseCode = code;
     showCourse(); start();
   }
   // A different code; drawing and sound never use the engine's RNG.
@@ -162,14 +166,15 @@
     Kit.keys.endFrame();
   }
   // Kit.track: the next obstacle coming within CUE_S seconds is a cue (the next jump or
-  // duck press gives a reaction time); each obstacle that passes the dinosaur is a hit.
+  // duck press gives a reaction time), unless it is a high bird the dinosaur simply runs
+  // under; each obstacle that passes the dinosaur is a hit.
   var CUE_S = 1, cued = 0, cleared = 0;
   function trackObstacles() {
-    var s = engine.state, list = s.obstacles;
+    var s = engine.state, list = s.obstacles, C = Dino3D.config;
     for (var i = 0; i < list.length; i++) {
-      var o = list[i], reach = o.depth / 2 + Dino3D.config.playerHalfDepth;
+      var o = list[i], reach = o.depth / 2 + C.playerHalfDepth;
       if (o.z > reach) { if (o.id > cleared) { cleared = o.id; Kit.track.hit(); } continue; }
-      if (o.id > cued && -reach - o.z < s.speed * CUE_S) { cued = o.id; Kit.track.cue(); }
+      if (o.id > cued && o.bottom < C.playerTop && -reach - o.z < s.speed * CUE_S) { cued = o.id; Kit.track.cue(); }
       return;
     }
   }
