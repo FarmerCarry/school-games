@@ -72,14 +72,14 @@
   const HAT_NAME = ['بدون', 'قبعة', 'شمس', 'صوف', 'زهرة', 'فيونكة', 'نجمة'];
   const GAD = { banana: 'موز', decoy: 'دمية', bubble: 'فقاعة' };
   const SHOP = [
-    ['shoes', 'حذاء السرعة', 'خبرة سرعة، وتفتح البوابة التالية'],
-    ['mill', 'جهاز المشي', 'بدّل يمينًا ويسارًا: ×2 ثم ×5'],
-    ['pen', 'حظيرة', 'مكان لحيوان جديد'],
-    ['inc', 'حاضنة', 'افقس أكثر من بيضة معًا'],
-    ['hatch', 'فقس أسرع', 'البيضة تفقس في وقت أقل'],
-    ['banana', 'قشر موز', 'يُزلِق الحارس المطارد'],
-    ['decoy', 'دمية', 'يلتفت الحارس إليها'],
-    ['bubble', 'فقاعة', 'تصدّ ضربة واحدة']
+    ['shoes', '👟', 'حذاء السرعة', 'خبرة سرعة، وتفتح البوابة التالية'],
+    ['mill', '🏃', 'جهاز المشي', 'بدّل يمينًا ويسارًا: ×2 ثم ×5'],
+    ['pen', '🏡', 'حظيرة', 'مكان لحيوان جديد'],
+    ['inc', '🥚', 'حاضنة', 'افقس أكثر من بيضة معًا'],
+    ['hatch', '✨', 'فقس أسرع', 'البيضة تفقس في وقت أقل'],
+    ['banana', '🍌', 'قشر موز', 'يُزلِق الحارس المطارد'],
+    ['decoy', '🧸', 'دمية', 'يلتفت الحارس إليها'],
+    ['bubble', '🫧', 'فقاعة', 'تصدّ ضربة واحدة']
   ];
 
   let screen = 'title';
@@ -107,6 +107,16 @@
   let penCam = null;
   let hopWait = 0;
   let hopJob = null;
+  let roundLeft = 180;
+  let roundPets = [];
+  let paradeT = 0;
+  let replayMode = '1p';
+  let hitStop = 0;
+  let hitArmed = false;
+  let ended = false;
+  let chaseOn = false;
+  let chaseX = 0;
+  let chaseY = 0;
 
   function ymd() {
     const d = new Date();
@@ -143,7 +153,7 @@
     $('ovTitle').hidden = screen !== 'title';
     $('ovPause').hidden = screen !== 'pause';
     $('ovResult').hidden = screen !== 'result';
-    $('hud').hidden = screen === 'title';
+    $('hud').hidden = screen === 'title' || screen === 'parade';
     applyHint();
     $('btnShop').hidden = $('btnBook').hidden = $('btnGear').hidden = !world || world.mode !== '1p';
     frameDirty = true;
@@ -181,6 +191,10 @@
     showCoins = world.mode === '1p' ? world.coins : 0;
     slow = 0; zoom = 1; flash = 0; lastStep = 0; cardDelay = 0; pendingCard = null; streak = 0; hatchHint = 0;
     penCam = null; hopWait = 0; hopJob = null;
+    roundLeft = 180; roundPets = []; paradeT = 0; replayMode = mode === '2p' ? '2p' : '1p';
+    hitStop = 0; hitArmed = false; ended = false; chaseOn = false;
+    ER.art.onCeremonyEnd = null;
+    try { ER.sfx.music(true); } catch (e) { /* mute-safe */ }
     if (mode === '1p') {
       Kit.stats.round('main');
       if (world.tut !== 'done') Kit.stats.tutorial('start');
@@ -213,6 +227,7 @@
     }
     world = null;
     pendingCard = null; cardDelay = 0; penCam = null; hopWait = 0; hopJob = null;
+    try { ER.sfx.music(false); } catch (e) { /* mute-safe */ }
     screen = 'title';
     closeModals();
     paintChrome();
@@ -220,8 +235,8 @@
     $('titleSub').textContent = loaded.corrupt
       ? 'تعذّر قراءة الحفظ، بدأنا من جديد.'
       : loaded.raw
-        ? 'رصيدك ' + ER.fmt(loaded.raw.coins) + ' قطعة. البيض ينتظر!'
-        : 'تسلّل إلى العش، اخطف البيضة، واهرب قبل أن يستيقظ الحارس!';
+        ? 'رصيدك ' + ER.fmt(loaded.raw.coins) + ' قطعة'
+        : '';
   }
 
   function axis(K, neg, pos) {
@@ -241,23 +256,32 @@
   function cameraOf(w) {
     const a = w.players[0], b = w.players[1];
     let z = w.mode === '2p' ? 1 : 1.62;
-    let focus = a.x + a.facing * 2.4;
-    let fy = a.y;
     if (w.mode === '2p' && b) {
       const span = Math.abs(a.x - b.x) + 12;
       z = Math.max(0.74, Math.min(1.15, 1280 / (span * 48)));
-      focus = (a.x + b.x) / 2;
-      fy = (a.y + b.y) / 2;
-    } else if (penCam && penCam.life > 0) {
+      const viewW = 1280 / (48 * z), viewH = 720 / (48 * z);
+      let x = (a.x + b.x) / 2 - viewW * 0.5;
+      x = Math.max(0, Math.min(Math.max(0, w.w - viewW), x));
+      let y = (a.y + b.y) / 2 - viewH * 0.48;
+      y = Math.max(0, Math.min(Math.max(0, 15 - viewH), y));
+      return { x: x, y: y, z: z };
+    }
+    const viewW = 1280 / (48 * z), viewH = 720 / (48 * z);
+    let focus = a.x, fy = a.y;
+    if (a.egg) focus = a.x + (8.6 < a.x ? -1 : 1) * viewW * 0.2;
+    else focus = a.x + (a.facing || 1) * viewW * 0.04;
+    if (penCam && penCam.life > 0) {
       const k = Math.min(1, (penCam.max - penCam.life) / 0.5);
       focus += (penCam.x - focus) * k;
       fy += (penCam.y - fy) * k;
     }
-    const viewW = 1280 / (48 * z), viewH = 720 / (48 * z);
-    let x = focus - viewW * (w.mode === '2p' ? 0.5 : 0.36);
+    if (!chaseOn) { chaseX = focus; chaseY = fy; chaseOn = true; }
+    const dead = viewW * 0.15;
+    if (a.egg || Math.abs(focus - chaseX) > dead * 0.5) chaseX += (focus - chaseX) * 0.18;
+    if (Math.abs(fy - chaseY) > viewH * 0.12) chaseY += (fy - chaseY) * 0.18;
+    let x = chaseX - viewW * 0.5;
     x = Math.max(0, Math.min(Math.max(0, w.w - viewW), x));
-    let y = fy - viewH * 0.48;
-    if (w.mode !== '2p') y += 1.35;
+    let y = chaseY - viewH * 0.48 + 1.35;
     y = Math.max(0, Math.min(Math.max(0, 15 - viewH), y));
     return { x: x, y: y, z: z };
   }
@@ -326,7 +350,7 @@
     else if (e.t === 'boop') {
       streak = 0;
       S.boop(); A.burst(e.x, e.y, 16, ['#fff', '#ffd23f', '#ff8a3d'], 3); A.float(e.x, e.y - 0.6, 'بوينغ!', '#fff');
-      if (!calm) shake.add(7);
+      if (!calm) { shake.add(5); hitStop = Math.max(hitStop, 0.05); A.grabPop = 0.28; }
     } else if (e.t === 'spot') {
       S.alert();
       if (!calm) { slow = 0.2; zoom = 1.06; shake.add(3); }
@@ -338,28 +362,29 @@
       A.float(e.x, e.y - 0.4, '+' + ER.fmt(e.n), '#ffd23f');
       persist(false);
     } else if (e.t === 'hatch') {
-      if (e.s >= 4) { S.legend(); flash = calm ? 0 : 0.45; } else S.hatch();
-      const hx = e.x != null ? e.x : 2.2, hy = e.y != null ? e.y : 8.6;
-      A.crack(hx, hy, e.s);
+      const rare = e.s >= 2;
+      const wobble = calm ? 0.65 : (rare ? 1.5 : 1.1);
+      const dur = calm ? 1.45 : (rare ? 2.3 : 2.15);
+      if (e.s >= 4) S.legend(); else S.hatch();
+      S.riser(wobble, rare);
+      A.startCeremony({ b: e.b, s: e.s, v: e.v, neu: e.neu, name: petCall(e), calm: calm, wobble: wobble, dur: dur });
+      hitArmed = !calm;
+      roundPets.push({ b: e.b, s: e.s, v: e.v, neu: !!e.neu });
+      paintPetBar(true);
+      const born = { b: e.b, s: e.s, v: e.v };
+      A.onCeremonyEnd = function () { A.follow = { b: born.b, s: born.s, v: born.v, life: 6 }; paintPetBar(true); };
+      hatchHint = dur + 0.5;
       const who = world.players[0];
       const pad = e.pad >= 0 ? world.pads[e.pad] : null;
-      A.revealPet(e.b, e.s, e.v, who ? who.x : hx, who ? who.y - 0.9 : hy, petCall(e), pad ? (calm ? 0.7 : 1.35) : 2.3);
-      hatchHint = calm ? 1.1 : 2.8;
-      if (pad) A.flyCoins(pad.x, pad.y, calm ? 4 : 8);
-      if (!calm) { slow = 0.55; shake.add(e.s >= 4 ? 6 : 4); }
-      if (!pad) openCard(e);
-      else {
-        pendingCard = e;
-        cardDelay = calm ? 1.15 : 2.6;
+      if (!pad) { pendingCard = e; cardDelay = dur + 0.15; }
+      else if (!calm) {
         hopJob = {
           b: e.b, s: e.s, v: e.v, pad: e.pad,
-          x: Math.max(0.7, Math.min(14.2, who ? who.x : hx)),
-          y: Math.max(3.1, Math.min(7.5, (who ? who.y : hy) - 0.45)),
+          x: who ? who.x : 4, y: who ? who.y - 0.4 : 8,
           tx: pad.x, ty: pad.y
         };
-        hopWait = calm ? 0.45 : 1.15;
-        if (!calm) A.hopPad = e.pad;
-        penCam = { x: pad.x, y: pad.y, life: calm ? 1.35 : 2.85, max: calm ? 1.35 : 2.85 };
+        hopWait = dur + 0.05;
+        A.hopPad = e.pad;
       }
       persist(true);
     } else if (e.t === 'buy') { S.buy(); persist(true); if (!$('ovShop').hidden) paintShop(); }
@@ -392,7 +417,14 @@
     else if (e.t === 'slip') S.slip();
     else if (e.t === 'popshield') { S.boop(); A.float(e.x, e.y, 'فقاعة!', '#8fd8ff'); }
     else if (e.t === 'bank' && world.mode === '2p') { S.coin(); A.flyCoins(e.x, e.y, 6, e.p === 1 ? 1 : 0); A.float(e.x, e.y, '+' + e.n, '#ffd23f'); }
-    else if (e.t === 'bank') { A.burst(2.2 + (e.slot || 0) * 2.3, 8.2, 10, ['#fff', '#ffd23f'], 2); persist(true); }
+    else if (e.t === 'bank') {
+      S.cascade();
+      A.flyCoins(e.x != null ? e.x : 6, e.y != null ? e.y : 8, calm ? 8 : 16);
+      A.float(e.x != null ? e.x : 6, (e.y != null ? e.y : 8) - 0.7, '+' + ER.fmt(e.n || 0), '#ffd23f', 42);
+      A.burst(2.2 + (e.slot || 0) * 2.3, 8.2, 10, ['#fff', '#ffd23f'], 2);
+      if (!calm) shake.add(2);
+      persist(true);
+    }
     else if (e.t === 'release' || e.t === 'place') persist(true);
     else if (e.t === 'rebirth') { S.legend(); banner('مهرجان الفقس! التاج رقم ' + e.n); persist(true); }
     else if (e.t === 'tut' && e.phase === 'done') { markTut(); persist(true); }
@@ -409,6 +441,8 @@
     const record = !draw && hi > best;
     if (record) store.set('duelBest', hi);
     $('resultNew').hidden = !record;
+    $('resultBook').hidden = true;
+    replayMode = '2p';
     const stars = draw ? 2 : hi >= 30 ? 3 : hi >= 12 ? 2 : 1;
     const starBox = $('resultStars');
     starBox.replaceChildren();
@@ -450,12 +484,15 @@
       $('coins').textContent = ER.fmt(showCoins);
       const sp = ER.speedOf(world.speedXP);
       let next = '';
-      for (let i = 1; i < 7; i++) if (sp + 1e-6 < ER.GATES[i]) { next = String(ER.GATES[i]); break; }
+      for (let i = 1; i <= 2; i++) if (sp + 1e-6 < ER.GATES[i]) { next = String(ER.GATES[i]); break; }
       $('speedLine').textContent = 'السرعة ' + sp.toFixed(1);
-      $('gateLine').textContent = next || 'القمر';
+      $('gateLine').textContent = next || 'تم';
       $('gatePill').hidden = false;
-      $('timer').hidden = true;
+      $('timer').hidden = false;
+      $('timer').textContent = fmtTime(roundLeft);
+      $('timer').classList.toggle('frenzy', roundLeft <= 30);
       $('p2coins').hidden = true;
+      paintPetBar(false);
     } else {
       $('coins').textContent = ER.fmt(p.coins);
       $('speedLine').textContent = 'الأول';
@@ -501,10 +538,13 @@
       const id = row[0], cost = ER.price(world, id);
       const item = document.createElement('div');
       item.className = 'item';
+      const icon = document.createElement('i');
+      icon.className = 'shopico';
+      icon.textContent = row[1];
       const name = document.createElement('b');
-      name.textContent = row[1];
+      name.textContent = row[2];
       const desc = document.createElement('span');
-      desc.textContent = row[2];
+      desc.textContent = row[3];
       const btn = document.createElement('button');
       btn.type = 'button'; btn.className = 'sg-btn';
       const full = id !== 'banana' && id !== 'decoy' && id !== 'bubble' && !cost;
@@ -514,12 +554,15 @@
       btn.addEventListener('click', function () {
         if (!ER.buy(world, id)) ER.sfx.deny();
       });
-      item.appendChild(name); item.appendChild(desc); item.appendChild(btn);
+      item.appendChild(icon); item.appendChild(name); item.appendChild(desc); item.appendChild(btn);
       list.appendChild(item);
     });
     if (ER.price(world, 'rebirth')) {
       const item = document.createElement('div');
       item.className = 'item';
+      const icon = document.createElement('i');
+      icon.className = 'shopico';
+      icon.textContent = '👑';
       const name = document.createElement('b');
       name.textContent = 'مهرجان الفقس';
       const desc = document.createElement('span');
@@ -527,7 +570,7 @@
       const btn = document.createElement('button');
       btn.type = 'button'; btn.className = 'sg-btn'; btn.textContent = 'ابدأ';
       btn.addEventListener('click', function () { ER.buy(world, 'rebirth'); closeModals(); });
-      item.appendChild(name); item.appendChild(desc); item.appendChild(btn);
+      item.appendChild(icon); item.appendChild(name); item.appendChild(desc); item.appendChild(btn);
       list.appendChild(item);
     }
   }
@@ -536,11 +579,12 @@
     const grid = $('bookGrid');
     grid.textContent = '';
     let owned = 0;
-    for (let id = 0; id < 42; id++) {
+    for (let id = 0; id < 18; id++) {
       const cell = document.createElement('div');
       cell.className = 'cell';
       if (world.seen[id]) {
         owned++;
+        if (roundPets.some(function (p) { return p.neu && p.b * 6 + p.s === id; })) cell.className = 'cell fresh';
         const cv = ER.art.sprite((id / 6) | 0, id % 6, world.gold[id] && world.giant[id] ? 3 : world.gold[id] ? 2 : world.giant[id] ? 1 : 0);
         cv.style.width = '72px'; cv.style.height = '72px';
         cell.appendChild(cv);
@@ -557,7 +601,7 @@
       }
       grid.appendChild(cell);
     }
-    $('bookSub').textContent = owned + ' / 42 · كل منطقة مكتملة +10%';
+    $('bookSub').textContent = owned + ' / 18 · كل منطقة مكتملة +10%';
     const pens = $('penList');
     pens.textContent = '';
     world.pets.forEach(function (pet) {
@@ -652,14 +696,14 @@
   }
   function applyLook() {
     const saved = readLook();
-    const open = world && world.mode === '1p' ? ER.maxOpen(world.speedXP) : 0;
+    const open = world && world.mode === '1p' ? Math.min(2, ER.maxOpen(world.speedXP)) : 0;
     const shirt = saved.shirt <= open ? saved.shirt : 0;
     const hat = saved.hat <= open ? saved.hat : 0;
     ER.art.look = { shirt: SHIRT[shirt], hat: hat };
   }
   function paintLooks() {
     if (!world) return;
-    const open = ER.maxOpen(world.speedXP);
+    const open = Math.min(2, ER.maxOpen(world.speedXP));
     const saved = readLook();
     function row(box, kind) {
       box.textContent = '';
@@ -716,6 +760,76 @@
   }
   function toScreen(c, x, y) { return { x: (x - c.x) * 48 * c.z, y: (y - c.y) * 48 * c.z }; }
 
+  function paintPetBar(force) {
+    const bar = $('petbar');
+    if (!bar) return;
+    const show = screen === 'play' && !!world && world.mode === '1p' && roundPets.length > 0;
+    bar.hidden = !show;
+    if (!show) return;
+    const key = roundPets.map(function (p) { return p.b + ':' + p.s + ':' + p.v; }).join(',');
+    if (!force && bar.dataset.k === key) return;
+    bar.dataset.k = key;
+    $('petCount').textContent = '+' + roundPets.length;
+    const slots = $('petSlots');
+    slots.textContent = '';
+    const from = Math.max(0, roundPets.length - 6);
+    for (let i = from; i < roundPets.length; i++) {
+      const pet = roundPets[i];
+      const cv = ER.art.sprite(pet.b, pet.s, pet.v);
+      cv.className = 'pslot';
+      slots.appendChild(cv);
+    }
+  }
+  function fillStars(n) {
+    const starBox = $('resultStars');
+    starBox.replaceChildren();
+    for (let i = 0; i < 3; i++) {
+      const star = document.createElement('i');
+      star.textContent = '★';
+      star.className = i < n ? 'on' : 'off';
+      star.style.animationDelay = (i * 0.12) + 's';
+      starBox.appendChild(star);
+    }
+  }
+  function beginParade() {
+    if (screen !== 'play' || !world || world.mode !== '1p') return;
+    closeModals();
+    screen = 'parade';
+    paradeT = 0;
+    persist(true);
+    paintChrome();
+  }
+  function finishParade() {
+    if (screen !== 'parade') return;
+    screen = 'result';
+    replayMode = '1p';
+    $('resultTitle').textContent = 'انتهت الجولة';
+    $('resultSub').textContent = roundPets.length ? ('فقست ' + roundPets.length + ' بيضة') : 'البيضة القادمة أقرب';
+    $('resultNew').hidden = true;
+    $('resultBook').hidden = false;
+    fillStars(roundPets.length >= 4 ? 3 : roundPets.length >= 2 ? 2 : roundPets.length ? 1 : 0);
+    const grid = $('resultBook');
+    grid.textContent = '';
+    for (let id = 0; id < 18; id++) {
+      const cell = document.createElement('div');
+      const fresh = roundPets.some(function (p) { return p.b * 6 + p.s === id; });
+      cell.className = 'cell' + (fresh ? ' fresh' : '');
+      if (world && world.seen[id]) {
+        const cv = ER.art.sprite((id / 6) | 0, id % 6, world.gold[id] ? 2 : 0);
+        cv.style.width = '64px';
+        cv.style.height = '64px';
+        cell.appendChild(cv);
+      } else {
+        const sil = document.createElement('div');
+        sil.className = 'sil';
+        cell.appendChild(sil);
+      }
+      grid.appendChild(cell);
+    }
+    if (!ended) { ended = true; Kit.stats.end('end', roundPets.length); }
+    ER.sfx.fanfare();
+    paintChrome();
+  }
   function update(dt) {
     const K = Kit.keys;
     time += dt;
@@ -729,21 +843,52 @@
       if (K.anyPressed(['Enter', 'NumpadEnter', 'Space'])) start('1p');
     } else if (screen === 'pause') {
       if (K.anyPressed(['KeyP', 'Escape', 'Enter', 'NumpadEnter', 'Space'])) resume();
+    } else if (screen === 'parade') {
+      paradeT += dt;
+      if (paradeT > 4.2) finishParade();
     } else if (screen === 'result') {
-      if (K.anyPressed(['Enter', 'NumpadEnter', 'KeyR', 'Space'])) start('2p');
+      if (K.anyPressed(['Enter', 'NumpadEnter', 'KeyR', 'Space'])) start(replayMode);
       else if (K.pressed('Escape')) toTitle();
     } else if (screen === 'play' && world) {
       if ((modalOpen() || !$('ovCard').hidden) && K.pressed('Escape')) closeModals();
       else if (K.anyPressed(['KeyP', 'Escape'])) pause();
       else {
         let sim = dt;
-        if (slow > 0) { sim = dt * 0.35; slow -= dt; }
+        const cny = ER.art.ceremony;
+        if (cny && hitArmed && cny.t >= cny.wobble) {
+          hitStop = 0.09;
+          hitArmed = false;
+          ER.sfx.popHatch();
+          if (!Kit.motion.reduced()) shake.add(4);
+        }
+        if (hitStop > 0) { hitStop -= dt; sim = 0; ER.art.hold = true; }
+        else if (cny) { sim = 0; ER.art.hold = false; }
+        else {
+          ER.art.hold = false;
+          if (slow > 0) { sim = dt * 0.35; slow -= dt; }
+        }
         clock += sim * 1000;
         cam = cameraOf(world);
         const before = world.players[0].step;
         ER.step(world, sim, inputOf(K), clock);
         if (Math.hypot(world.players[0].vx, world.players[0].vy) > 1.2 && (before | 0) !== (world.players[0].step | 0)) {
-          ER.art.burst(world.players[0].x, world.players[0].y + 0.3, 2, ['#fff6d0', '#e6d2a4'], 1);
+          ER.art.burst(world.players[0].x, world.players[0].y + 0.35, 4, ['#fff6d0', '#c8b48a'], 1.3);
+        }
+        if (world.mode === '1p') {
+          const kid = world.players[0];
+          let red = false, near = false;
+          for (const g of world.guards) {
+            if (!ER.inCone(g, kid.x, kid.y)) continue;
+            if (g.state === 'chase') red = true;
+            else if (g.state === 'watch' || g.state === 'stir') near = true;
+          }
+          ER.sfx.carry = !!kid.egg;
+          if ((red || near) && !cny) ER.sfx.heart(red);
+          if (kid.egg) ER.art.homeGlow = Math.max(ER.art.homeGlow, 0.9);
+          if (!ER.art.ceremony && hitStop <= 0) {
+            roundLeft = Math.max(0, roundLeft - sim);
+            if (roundLeft <= 0) beginParade();
+          }
         }
         lastStep = world.players[0].step;
         const ev = world.ev.splice(0, world.ev.length);
@@ -773,6 +918,26 @@
     pointerUI = false;
   }
   function render() {
+    if (screen === 'parade') {
+      const ctx = view.ctx;
+      ctx.fillStyle = '#1d2440';
+      ctx.fillRect(0, 0, 1280, 720);
+      ctx.fillStyle = '#5cbf4a';
+      ctx.fillRect(0, 500, 1280, 220);
+      ctx.fillStyle = '#e7c49a';
+      ctx.fillRect(0, 548, 1280, 26);
+      ctx.fillStyle = '#fff8e8';
+      ctx.font = '700 56px Fredoka';
+      ctx.textAlign = 'center';
+      ctx.fillText('عرض الحيوانات', 640, 130);
+      roundPets.forEach(function (pet, i) {
+        const spr = ER.art.sprite(pet.b, pet.s, pet.v);
+        const x = ((paradeT * 240 + i * 180) % 1760) - 180;
+        const y = 340 + Math.sin(paradeT * 7 + i) * 14;
+        ctx.drawImage(spr, x, y, 160, 160);
+      });
+      return;
+    }
     if (screen === 'pause' && !frameDirty) return;
     frameDirty = false;
     aimCoins();
@@ -820,7 +985,7 @@
   on('btnResume', resume);
   on('btnMenu', toTitle);
   on('btnResultMenu', toTitle);
-  on('btnReplay', function () { start('2p'); });
+  on('btnReplay', function () { start(replayMode); });
   on('btnShop', openShop);
   on('btnShopClose', closeModals);
   on('btnBook', openBook);
@@ -857,7 +1022,7 @@
   }
   paintChrome();
   const loaded = readRaw();
-  if (loaded.raw) $('titleSub').textContent = 'رصيدك ' + ER.fmt(loaded.raw.coins) + ' قطعة. البيض ينتظر!';
+  if (loaded.raw) $('titleSub').textContent = 'رصيدك ' + ER.fmt(loaded.raw.coins) + ' قطعة';
 
   window.__game = {
     get screen() { return screen; },
@@ -877,6 +1042,10 @@
     pets: function () { return world ? world.pets.length : 0; },
     notice: function () { return $('banner').hidden ? '' : $('banner').textContent; },
     tune: function (fn) { if (world) fn(world); },
+    ceremony: function () {
+      const c = ER.art.ceremony;
+      return c ? { t: c.t, dur: c.dur, wobble: c.wobble, s: c.s } : null;
+    },
     p2x: function () { return world && world.players[1] ? world.players[1].x : 0; }
   };
 

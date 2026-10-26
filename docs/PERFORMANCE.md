@@ -819,35 +819,32 @@ portal and the teacher page) and gains one file, so `precacheBytes` moves from
 (0.012%) above the Actions precache (5,577,354). No other game, font or library limit
 changes.
 
-## Egg Rush, 25 October 2026
+## Egg Rush, 26 October 2026
 
 سباق البيض (Egg Rush) is a 2D egg-and-pet run. It draws on one canvas, paints each
-pet once into a small sprite, and fills only the visible strip of the world, so a
-frame stays a handful of shapes. Particles are capped at 150. Pixel ratio is capped
-at 1.5, and a paused game keeps the last frame.
+pet once into a small sprite, and keeps the static meadow, beach and snow in one
+offscreen sheet that a frame only blits. Particles are capped at 150. Pixel ratio
+is capped at 1.5, and a paused game keeps the last frame.
 
-The precache limit rises by 130,000 bytes: the game's 125,000 byte allowance rounded
-up to 10 KB, plus about 6 KB for the thumbnail's share of the cached portal. The
-portal limit rises by 6,000 bytes for this game's share of the four-game thumbnail
-plan. The teacher page is unchanged; its headroom covers one more catalog name.
+The game allowance rises from 125,000 to 150,000 bytes (+25,000). That pays for the
+full-screen hatch (a wobbling egg, cracks, a flash, rays and a rarity reveal), a
+small marimba loop with a sneaky variant, and the terrain sheet. Cutting four biomes
+paid for part of it. The portal and teacher limits stay where they were. The
+precache limit stays 5,230,000: the built game grew by 11,174 bytes and the cache
+still fits, with 1,566 bytes left.
 
 | Measurement | Bytes | Limit |
 | --- | ---: | ---: |
-| Egg Rush HTML | 123,910 | 125,000 |
-| Portal (thumbnail and catalog entry) | 361,093 | 366,000 (was 360,000) |
-| Offline precache, 47 files | 5,217,260 | 5,230,000 (was 5,100,000) |
+| Egg Rush HTML | 135,084 | 150,000 (was 125,000) |
+| Portal (thumbnail and catalog entry) | 361,093 | 366,000 (unchanged) |
+| Offline precache, 47 files | 5,228,434 | 5,230,000 (unchanged) |
 | Teacher page | 92,764 | 96,000 (unchanged) |
 
-The built game is 123,910 bytes, inside the 125,000 allowance from the four-game plan.
-A later art pass (closer camera, biome props, hatch particles, yard signs) grew the file from
-82,972 bytes. Juice passes (hatch burst, flying coins, a centered pet reveal, a thinner yard,
-a hint bar, a named hopping pet, and the result screen) added the rest. The last pass dresses
-the kid when a gate opens, lights the cottage when an egg reaches the yard, and hops the new
-pet into an on-screen pen. Clamping the floating words so they stay under the top
-buttons added a little more. The file is still inside the allowance, so the
-125,000 limit was not raised.
-The precache is 5,217,260 bytes against a 130 KB raise (the 125 KB allowance rounded
-up to 10 KB, plus about 6 KB for the thumbnail). The portal, including a small subset
-of the arcade Arabic font inside the Egg Rush tile, is 361,093 bytes against its
-366,000 limit. Headroom stays for the other new games.
+The built game is 135,084 bytes. Earlier passes (yard, hatch juice, the hopping pet,
+and the pop-text clamp) had reached 123,910 inside the old 125,000 cap. This pass
+replaces the small hatch disc with the ceremony, adds the music and the picture
+title, and ships three biomes instead of seven. On the software-GL harness the
+active p95 frame time is 50.1 ms (the audit measured 117 ms before the terrain
+sheet). The portal, including the arcade Arabic subset in the Egg Rush tile, is
+unchanged at 361,093 bytes.
 
