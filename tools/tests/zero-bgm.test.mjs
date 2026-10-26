@@ -8,6 +8,9 @@
 // time; one-shot SFX from the gesture or the Pause click are over before the window opens;
 // a continuous sound tied to the player's input (an engine, a rolling ball, wind while
 // steering) is started once and only changes its level, so it never counts.
+// Everything sent to the speakers is also measured: a drone or a looped music buffer that
+// was started before the window opened starts nothing in it, but it is heard, and an
+// input-tied sound must be turned down to silence on these screens.
 //
 // Audio is unlocked the way a child does it: a key press no game uses (F2; Kit unlocks on
 // every keydown) and a primary click in the top-left corner, away from every control (some
@@ -50,6 +53,9 @@ const TAIL_MS = 2000;
 // Several pages share the CPU with software WebGL, so a countdown or a first frame can
 // take far longer than on a school PC; waits are generous, only the idle windows count.
 const SLOW_MS = 60000;
+// Output peaks above this (-60 dBFS) are heard; a sound faded out with setTargetAtTime is
+// far below it after TAIL_MS.
+const SILENT = 0.001;
 const CLICK_PLAYS = new Set(['dino-3d', 'skybound-golf']);
 // Pages run side by side in one browser: each game spends most of its time waiting.
 const PAGES = Math.max(2, Math.min(4, os.availableParallelism()));
@@ -67,10 +73,21 @@ addEventListener('keydown', () => {
   }, 250);
 });
 </script></body></html>`;
+// One oscillator started once on the first key press and never stopped: a drone with
+// ?gain=0.05, or a continuous sound turned all the way down (an engine at rest) with ?gain=0.
+const DRONE = '/zero-bgm-drone';
+const dronePage = `<!doctype html><html><body><script>
+addEventListener('keydown', () => {
+  if (window.ac) return;
+  const ac = window.ac = new AudioContext(), o = ac.createOscillator(), g = ac.createGain();
+  g.gain.value = +new URLSearchParams(location.search).get('gain');
+  o.connect(g); g.connect(ac.destination); o.start();
+});
+</script></body></html>`;
 
 let browser, server;
 before(async () => {
-  server = await startTestServer(root, { pages: { [FIXTURE]: fixturePage } });
+  server = await startTestServer(root, { pages: { [FIXTURE]: fixturePage, [DRONE]: dronePage } });
   browser = await launchChromium();
 });
 after(async () => { await browser?.close(); await server?.close(); });
@@ -89,6 +106,18 @@ function instrument() {
   count(window.AudioScheduledSourceNode?.prototype, 'start');
   count(window.AudioBufferSourceNode?.prototype, 'start');
   count(window.HTMLMediaElement?.prototype, 'play');
+  // Whatever is connected to the speakers also feeds one analyser per context (an offline
+  // context renders a buffer, not the speakers).
+  const taps = window.sgTaps = new Map(), connect = window.AudioNode?.prototype.connect;
+  if (connect) window.AudioNode.prototype.connect = function (target, output, ...rest) {
+    const result = connect.call(this, target, output, ...rest);
+    if (target instanceof AudioDestinationNode && !(this.context instanceof OfflineAudioContext)) {
+      let tap = taps.get(this.context);
+      if (!tap) { tap = this.context.createAnalyser(); tap.fftSize = 2048; taps.set(this.context, tap); }
+      connect.call(this, tap, output || 0);
+    }
+    return result;
+  };
   for (const name of ['AudioContext', 'webkitAudioContext']) {
     const AC = window[name];
     if (AC) window[name] = new Proxy(AC, { construct(target, args, newTarget) {
@@ -101,13 +130,22 @@ async function requireState(page, expr, label, timeout = SLOW_MS) {
   try { await page.waitForFunction(expr, null, { timeout, polling: 50 }); }
   catch (error) { throw new Error(`${label}: ${expr}`, { cause: error }); }
 }
-// Starts in the next IDLE_MS, as "+ms Kind" (ms after the window opened). A loaded runner
-// draws few frames, and a game loop advances at most about 133 ms of game time per frame
-// (Kit.loop runs 8 steps), so the window also lasts until the frames add up to IDLE_MS of
-// game time (at most twice as long): a game-clock timer gets its full chance to fire.
-async function idleStarts(page) {
+// A scenario's Start and Pause clicks wait 5 s for their button, which a page sharing the
+// CPU with three others can miss; a timed-out wait clicked nothing, so it is tried again.
+async function patient(step) {
+  for (const end = Date.now() + SLOW_MS; ;) {
+    try { return await step(); }
+    catch (error) { if (error.name !== 'TimeoutError' || Date.now() > end) throw error; }
+  }
+}
+// The next IDLE_MS: its starts, as "+ms Kind" (ms after the window opened), and the peak
+// output level. A loaded runner draws few frames, and a game loop advances at most about
+// 133 ms of game time per frame (Kit.loop runs 8 steps), so the window also lasts until
+// the frames add up to IDLE_MS of game time (at most twice as long): a game-clock timer
+// gets its full chance to fire.
+async function idleWindow(page) {
   const t0 = await page.evaluate(() => {
-    const w = window.sgIdle = { t0: performance.now(), game: 0, last: 0 };
+    const w = window.sgIdle = { t0: performance.now(), game: 0, last: 0, peak: 0 };
     const frame = now => {
       if (window.sgIdle !== w) return;
       if (w.last) w.game += Math.min(now - w.last, 8000 / 60);
@@ -115,20 +153,37 @@ async function idleStarts(page) {
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
+    // An analyser holds the last 2048 samples (about 45 ms), so this hears every sound
+    // that lasts longer than a timer delay.
+    const buf = new Float32Array(2048);
+    const listen = () => {
+      if (window.sgIdle !== w) return;
+      for (const tap of window.sgTaps.values()) {
+        tap.getFloatTimeDomainData(buf);
+        for (const v of buf) if (Math.abs(v) > w.peak) w.peak = Math.abs(v);
+      }
+      setTimeout(listen, 40);
+    };
+    listen();
     return w.t0;
   });
   await page.waitForTimeout(IDLE_MS);
   await page.waitForFunction(ms => window.sgIdle.game >= ms, IDLE_MS, { timeout: IDLE_MS, polling: 100 }).catch(() => {});
-  const t1 = await page.evaluate(() => performance.now());
-  return page.evaluate(([t0, t1]) => window.sgStarts.filter(s => s[0] >= t0 && s[0] <= t1)
-    .map(s => `+${Math.round(s[0] - t0)}ms ${s[1]}`), [t0, t1]);
+  return page.evaluate(t0 => {
+    const t1 = performance.now(), peak = window.sgIdle.peak;
+    window.sgIdle = null;
+    return { peak, starts: window.sgStarts.filter(s => s[0] >= t0 && s[0] <= t1).map(s => `+${Math.round(s[0] - t0)}ms ${s[1]}`) };
+  }, t0);
 }
 async function unlockAudio(page, click) {
   await page.keyboard.press('F2');
   if (click) await page.mouse.click(3, 3);
   await requireState(page, `window.sgContexts.some(ac => ac.state === 'running')`, 'the gesture must unlock a running AudioContext', 5000);
 }
-const summary = list => list.length ? `${list.length} starts (${list.slice(0, 6).join(', ')}${list.length > 6 ? ', …' : ''})` : 'none';
+const summary = ({ starts, peak }) => [
+  starts.length ? `${starts.length} starts (${starts.slice(0, 6).join(', ')}${starts.length > 6 ? ', …' : ''})` : '',
+  peak > SILENT ? `output peaks at ${peak.toFixed(4)}` : ''
+].filter(Boolean).join(', ') || 'none';
 
 test('the start counter hears a page that plays a loop', async t => {
   const context = await browser.newContext({ serviceWorkers: 'block' });
@@ -137,9 +192,24 @@ test('the start counter hears a page that plays a loop', async t => {
   await page.addInitScript(instrument);
   await page.goto(server.origin + FIXTURE);
   await unlockAudio(page, false);
-  const heard = await idleStarts(page);
-  assert.ok(heard.some(s => s.endsWith('OscillatorNode')), 'oscillator starts are counted: ' + summary(heard));
-  assert.ok(heard.some(s => s.endsWith('AudioBufferSourceNode')), 'buffer source starts are counted: ' + summary(heard));
+  const heard = await idleWindow(page);
+  assert.ok(heard.starts.some(s => s.endsWith('OscillatorNode')), 'oscillator starts are counted: ' + summary(heard));
+  assert.ok(heard.starts.some(s => s.endsWith('AudioBufferSourceNode')), 'buffer source starts are counted: ' + summary(heard));
+});
+
+test('the level check hears a drone started before the window, and not one turned down', async t => {
+  for (const [gain, audible] of [[0.05, true], [0, false]]) {
+    const context = await browser.newContext({ serviceWorkers: 'block' });
+    t.after(() => context.close());
+    const page = await context.newPage();
+    await page.addInitScript(instrument);
+    await page.goto(`${server.origin}${DRONE}?gain=${gain}`);
+    await unlockAudio(page, false);
+    await page.waitForTimeout(500);
+    const heard = await idleWindow(page);
+    assert.deepEqual(heard.starts, [], `gain ${gain}: the drone starts before the window`);
+    assert.equal(heard.peak > SILENT, audible, `gain ${gain}: ${summary(heard)}`);
+  }
 });
 
 describe('no catalog game plays background music on its title or pause screen', { concurrency: PAGES }, () => {
@@ -162,23 +232,23 @@ describe('no catalog game plays background music on its title or pause screen', 
     assert.equal(await page.evaluate(s.active), wasActive, `${slug}: the unlock gesture must not start or leave play`);
     assert.equal(await page.evaluate(() => window.Kit.audio.muted), false, `${slug}: a muted game would schedule nothing`);
     await page.waitForTimeout(TAIL_MS);
-    const title = await idleStarts(page);
+    const title = await idleWindow(page);
 
-    let paused = [];
-    for (let i = 0; i < s.start.length; i++) if (!s.startIf || await page.evaluate(s.startIf[i])) await s.start[i](page);
+    let paused = { starts: [], peak: 0 };
+    for (let i = 0; i < s.start.length; i++) if (!s.startIf || await page.evaluate(s.startIf[i])) await patient(() => s.start[i](page));
     await page.evaluate(() => { document.activeElement?.blur(); window.Kit?.keys.reset(); });
     await requireState(page, s.active, `${slug}: Start must reach gameplay`);
     if (s.ready) await requireState(page, s.ready, `${slug}: countdown must reach active play`);
     if (!s.noPause) {
       if (s.beforePause) await s.beforePause(page);
       if (typeof s.pause === 'function') await s.pause(page);
-      else if (s.pause) await clickControl(page, s.pause); else await page.keyboard.press('Escape');
+      else if (s.pause) await patient(() => clickControl(page, s.pause)); else await page.keyboard.press('Escape');
       await requireState(page, s.paused, `${slug}: Pause must open`);
       await page.waitForTimeout(TAIL_MS);
-      paused = await idleStarts(page);
+      paused = await idleWindow(page);
     } else t.diagnostic(`${slug} has no pause screen (${s.noPause}); only its title is checked`);
 
     assert.deepEqual({ title: summary(title), pause: summary(paused), errors },
-      { title: 'none', pause: 'none', errors: [] }, `${slug}: sound sources started while idle`);
+      { title: 'none', pause: 'none', errors: [] }, `${slug}: sound while idle`);
   });
 });
