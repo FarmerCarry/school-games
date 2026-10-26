@@ -390,6 +390,24 @@
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + (a || 0) + ')';
   }
 
+  function fishBounds(img) {
+    if (img._b) return img._b;
+    var iw = img.width, ih = img.height;
+    var data = img.getContext('2d').getImageData(0, 0, iw, ih).data;
+    var minx = iw, miny = ih, maxx = 0, maxy = 0;
+    for (var y = 0; y < ih; y++) {
+      for (var x = 0; x < iw; x++) {
+        if (data[(y * iw + x) * 4 + 3] < 16) continue;
+        if (x < minx) minx = x;
+        if (x > maxx) maxx = x;
+        if (y < miny) miny = y;
+        if (y > maxy) maxy = y;
+      }
+    }
+    img._b = maxx < minx ? { x: 0, y: 0, w: iw, h: ih } : { x: minx, y: miny, w: maxx - minx + 1, h: maxy - miny + 1 };
+    return img._b;
+  }
+
   function paintCatchFish() {
     var fish = game && game.state.anglers[0].fish;
     var view = $('fishView');
@@ -419,23 +437,16 @@
     }
     g.globalAlpha = 1;
     var img = Art.sprite(fish, true);
-    g.drawImage(img, box.x, box.y, box.w, box.h);
-    if ((fish.rare >= 3 || fish.boss) && !Kit.motion.reduced()) {
-      var sweep = ((time * 0.35) % 1);
-      g.save();
-      g.beginPath();
-      g.rect(box.x, box.y, box.w, box.h);
-      g.clip();
-      g.globalAlpha = 0.35;
-      g.fillStyle = '#fff';
-      g.fillRect(box.x + sweep * box.w - 18, box.y, 16, box.h);
-      g.restore();
-      g.globalAlpha = 1;
-    }
+    var ob = fishBounds(img);
+    var fitW = 260, fitH = 160;
+    var sc = Math.min(fitW / ob.w, fitH / ob.h);
+    var dw = ob.w * sc, dh = ob.h * sc;
+    var fx = (w - dw) / 2, fy = 28 + (fitH - dh) / 2;
+    g.drawImage(img, ob.x, ob.y, ob.w, ob.h, fx, fy, dw, dh);
     for (var d = 0; d < 6; d++) {
       var side = d < 3 ? -1 : 1;
-      var dx = box.x + (side < 0 ? -18 : box.w + 18);
-      var dy = box.y + 30 + (d % 3) * 48 + Math.sin(time * 4 + d) * 6;
+      var dx = (side < 0 ? fx : fx + dw) + side * 18;
+      var dy = fy + 16 + (d % 3) * Math.max(28, dh * 0.28) + Math.sin(time * 4 + d) * 6;
       g.fillStyle = '#e7f8ff';
       g.beginPath();
       g.ellipse(dx, dy, 5, 8, side * 0.4, 0, 6.3);

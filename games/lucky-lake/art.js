@@ -283,9 +283,11 @@
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc(ex - er * 0.16, ey - er * 0.28, er * 0.22, 0, 6.3); ctx.fill();
       ctx.strokeStyle = '#16324a';
-      ctx.lineWidth = Math.max(1.4, s * 0.03);
+      ctx.lineWidth = Math.max(1.5, s * 0.028);
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.arc(ex - er * 0.1, ey + er * 1.15, er * 0.7, 0.35, Math.PI - 0.35);
+      ctx.moveTo(ex - er * 0.46, ey + er * 0.82);
+      ctx.quadraticCurveTo(ex, ey + er * 1.12, ex + er * 0.46, ey + er * 0.82);
       ctx.stroke();
       if (rare >= 2) {
         var cx0 = k === 3 ? -s * 0.02 : ex;

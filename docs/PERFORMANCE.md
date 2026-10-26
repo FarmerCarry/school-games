@@ -589,5 +589,6 @@ at 5,203,490. Both stay inside the same limits. The follow-up that quiets the
 lake, rebuilds the fish as one closed shape, and paints a blue-and-green reel
 measures 115,855 and 5,202,776. Five body shapes (teardrop, puffer, pike,
 angelfish, and whiskered catfish), plus a crown, glow spots, a longer tail,
-and a gold rim on legendaries, measure 118,864 and 5,205,785.
+and a gold rim on legendaries, then a same-size catch-card fit, measure
+119,112 and 5,206,033.
 
