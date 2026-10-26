@@ -72,14 +72,14 @@
   const HAT_NAME = ['بدون', 'قبعة', 'شمس', 'صوف', 'زهرة', 'فيونكة', 'نجمة'];
   const GAD = { banana: 'موز', decoy: 'دمية', bubble: 'فقاعة' };
   const SHOP = [
-    ['shoes', '👟', 'حذاء السرعة', 'خبرة سرعة، وتفتح البوابة التالية'],
-    ['mill', '🏃', 'جهاز المشي', 'بدّل يمينًا ويسارًا: ×2 ثم ×5'],
-    ['pen', '🏡', 'حظيرة', 'مكان لحيوان جديد'],
-    ['inc', '🥚', 'حاضنة', 'افقس أكثر من بيضة معًا'],
-    ['hatch', '✨', 'فقس أسرع', 'البيضة تفقس في وقت أقل'],
-    ['banana', '🍌', 'قشر موز', 'يُزلِق الحارس المطارد'],
-    ['decoy', '🧸', 'دمية', 'يلتفت الحارس إليها'],
-    ['bubble', '🫧', 'فقاعة', 'تصدّ ضربة واحدة']
+    ['shoes', '👟', 'حذاء'],
+    ['mill', '🏃', 'مشي'],
+    ['pen', '🏡', 'حظيرة'],
+    ['inc', '🥚', 'حاضنة'],
+    ['hatch', '✨', 'أسرع'],
+    ['banana', '🍌', 'موز'],
+    ['decoy', '🧸', 'دمية'],
+    ['bubble', '🫧', 'فقاعة']
   ];
 
   let screen = 'title';
@@ -534,44 +534,36 @@
   function paintShop() {
     const list = $('shopList');
     list.textContent = '';
+    function deal(icon, label, priceText, coin, disabled, onClick) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'deal';
+      btn.disabled = !!disabled;
+      const pic = document.createElement('i');
+      pic.textContent = icon;
+      const name = document.createElement('b');
+      name.textContent = label;
+      const price = document.createElement('em');
+      if (coin) {
+        const mark = document.createElement('s');
+        mark.className = 'coin';
+        price.appendChild(mark);
+      }
+      price.appendChild(document.createTextNode(priceText));
+      btn.appendChild(pic); btn.appendChild(name); btn.appendChild(price);
+      btn.addEventListener('click', onClick);
+      list.appendChild(btn);
+    }
     SHOP.forEach(function (row) {
       const id = row[0], cost = ER.price(world, id);
-      const item = document.createElement('div');
-      item.className = 'item';
-      const icon = document.createElement('i');
-      icon.className = 'shopico';
-      icon.textContent = row[1];
-      const name = document.createElement('b');
-      name.textContent = row[2];
-      const desc = document.createElement('span');
-      desc.textContent = row[3];
-      const btn = document.createElement('button');
-      btn.type = 'button'; btn.className = 'sg-btn';
       const full = id !== 'banana' && id !== 'decoy' && id !== 'bubble' && !cost;
       const bag = (id === 'banana' || id === 'decoy' || id === 'bubble') && world.gadgets.length >= 3;
-      btn.disabled = full || bag || world.coins < cost;
-      btn.textContent = full ? 'اكتمل' : bag ? 'ممتلئ' : ER.fmt(cost);
-      btn.addEventListener('click', function () {
+      deal(row[1], row[2], full ? 'تم' : bag ? 'ممتلئ' : ER.fmt(cost), !full && !bag, full || bag || world.coins < cost, function () {
         if (!ER.buy(world, id)) ER.sfx.deny();
       });
-      item.appendChild(icon); item.appendChild(name); item.appendChild(desc); item.appendChild(btn);
-      list.appendChild(item);
     });
     if (ER.price(world, 'rebirth')) {
-      const item = document.createElement('div');
-      item.className = 'item';
-      const icon = document.createElement('i');
-      icon.className = 'shopico';
-      icon.textContent = '👑';
-      const name = document.createElement('b');
-      name.textContent = 'مهرجان الفقس';
-      const desc = document.createElement('span');
-      desc.textContent = 'ابدأ من جديد مع تاج و×1.5 عملات. المجموعة تبقى.';
-      const btn = document.createElement('button');
-      btn.type = 'button'; btn.className = 'sg-btn'; btn.textContent = 'ابدأ';
-      btn.addEventListener('click', function () { ER.buy(world, 'rebirth'); closeModals(); });
-      item.appendChild(icon); item.appendChild(name); item.appendChild(desc); item.appendChild(btn);
-      list.appendChild(item);
+      deal('👑', 'تاج', 'ابدأ', false, false, function () { ER.buy(world, 'rebirth'); closeModals(); });
     }
   }
   function openBook() {
