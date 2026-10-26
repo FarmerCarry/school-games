@@ -417,7 +417,7 @@ test('the workbook is a stored ZIP of well-formed parts: RTL sheets, an Arabic r
   for (const table of Object.keys(CONTRACT)) assert.deepEqual(empty[table], [], 'an empty ' + table + ' table keeps a valid range');
   const readme = unescapeXml(unzip(api.xlsx(t, info)).get('xl/worksheets/sheet1.xml'));
   for (const text of ['عندما تمتلئ مساحة الإحصاءات أو بعد 120 يومًا، أيهما أسبق', 'شهرين أو ثلاثة', 'في 3 أيام أو أكثر',
-    'احذف الصفوف التي يكون فيها pc فارغًا', 'لا ترسم حركة مستمرة: connect-four، tic-tac-toe، typing-test، mouse-keyboard-academy.',
+    'احذف الصفوف التي يكون فيها pc فارغًا', 'لا ترسم حركة مستمرة: connect-four، tic-tac-toe، typing-test.',
     'تبدأ من الصفر في متصفح آخر', 'في جدول hours استخدم أحدث ملف لكل جهاز']) {
     assert.ok(readme.includes(text), 'the read-me says: ' + text);
   }
@@ -816,7 +816,7 @@ test('a game still open and days removed for space are explained, not hidden', a
 test('blocked storage is explained; other PCs\' files still open', async t => {
   const page = await teacherPage(t, { blocked: true });
   assert.equal(await page.locator('#storageMsg').isVisible(), true);
-  for (const id of ['exportXlsx', 'exportJson', 'saveLabel', 'stopBtn', 'clearBtn', 'academyReset']) assert.equal(await page.locator('#' + id).isDisabled(), true, id);
+  for (const id of ['exportXlsx', 'exportJson', 'saveLabel', 'stopBtn', 'clearBtn']) assert.equal(await page.locator('#' + id).isDisabled(), true, id);
   assert.match(await page.locator('#gameTable').textContent(), /لا يوجد لعب/);
   await page.locator('#files').setInputFiles([{ name: 'other.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(newerFile)) }]);
   await page.locator('#combined tr[data-pc="pcwxyz"]').waitFor();

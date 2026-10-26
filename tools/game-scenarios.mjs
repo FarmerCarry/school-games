@@ -96,11 +96,17 @@ export const scenarios = {
     await page.waitForTimeout(180); await page.mouse.up();
   }, '#btnPause', `${g}.state === 'pause'`, '#btnRestart', `${g}.run.score === 0`),
   'merge-2048': defaults(['#btnPlay'], `${g}.state().screen === 'play'`, select(`${g}.state()`, ['values','score','hist']), sequence(hold('ArrowLeft',80),hold('ArrowDown',80),hold('ArrowRight',80)), '#btnPause', `${g}.state().screen === 'pause'`, '#btnPauseRestart', `${g}.state().score === 0 && ${g}.state().hist === 0`),
-  'mouse-keyboard-academy': defaults(['#btnStart'], `${g}.screen === 'play' && ${g}.station === 'move'`, `${g}.progress`, async page => {
-    const point = await page.evaluate(() => window.__game.starPoint());
-    await page.mouse.move(point.x, point.y, { steps: 15 });
-  }, '#btnPause', `${g}.screen === 'pause'`, '#btnRestart', `${g}.screen === 'play' && ${g}.progress === 0`, {
-    init: () => localStorage.setItem('sg:mouse-keyboard-academy:save', JSON.stringify({ v: 1, done: {}, unlocked: 1, name: '', grip: true }))
+  // World 1 needs no click: moving the real mouse onto the ringed bubble pops it.
+  'bubble-bop': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.mode === 'touch'`, `[${g}.state.time,${g}.state.hits,${g}.state.targets.map(t => [t.x, t.y])]`, async page => {
+    const hits = await page.evaluate(() => window.__game.state.hits);
+    await page.waitForFunction(() => window.__game.state.targets.length > 0, null, { timeout: 7000, polling: 40 });
+    for (let i = 0; i < 40 && await page.evaluate(hits => window.__game.state.hits <= hits, hits); i++) {
+      const point = await page.evaluate(() => window.__game.targetPoint(0));
+      if (point) await page.mouse.move(point.x, point.y, { steps: 6 });
+      await page.waitForTimeout(80);
+    }
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.hits === 0`, {
+    init: () => localStorage.setItem('sg:bubble-bop:save', JSON.stringify({ v: 1, stars: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]], best: [0, 0, 0, 0, 0], grip: true, color: 0, hat: 0, seenStars: 0 }))
   }),
   'candy-rope': defaults(['#tPlay'], `${g}.info().state === 'play'`, `${g}.info().world`, async page => {
     const point = await page.evaluate(() => {
@@ -167,6 +173,7 @@ const inputSnapshots = {
   'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`,
   'wacky-soccer': `${g}.world.players.filter(p => p.side === 0).map(p => p.kickT)`,
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
+  'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
@@ -199,7 +206,9 @@ const inputSeen = {
   'wacky-soccer': `${g}.match.phase === 'play' && ${g}.match.cpu[1].since < 1 && ${g}.world.players.filter(p => p.side === 0).every(p => p.kickT > 0)`,
   // The blob follows the pointer, which rests on the centred Play button below it:
   // without input it drifts straight down. The input points up and left of it.
-  'blob-battle': `${g}.info().player.x < sgInput.before.x - 20 && ${g}.info().player.y < sgInput.before.y - 20`
+  'blob-battle': `${g}.info().player.x < sgInput.before.x - 20 && ${g}.info().player.y < sgInput.before.y - 20`,
+  // A bubble that rises into a resting Bop pops too; only real pointer travel onto one counts.
+  'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
