@@ -85,6 +85,20 @@ try {
       // The teacher statistics page from the same folder: it reads this folder's
       // storage, exports files, and explains itself when storage is blocked.
       await check(page, label + '-teacher', async () => {
+        // One day record in the storage format the portal writes (docs/PLAY_STATS.md).
+        // It has to be in place before teacher.js reads storage. A write in the
+        // previous document, then a reload, can miss the built page: Edge showed
+        // All selected while this row was still today's short visit (no counted
+        // session). The week view can already list that visit, so wait until All
+        // shows a session of a minute or more.
+        if (!deniedStorage) {
+          const teacherDay = JSON.stringify({ v: 1, d: '2025-09-01', s: { calm: 1 },
+            g: { 'tic-tac-toe': { o: 2, e: 95000, hh: { 10: 95000 }, b: [1, 1, 0, 0], lv: { duo: [2, 0, 0, 1, 1, 0, 90000, 0, 0, 0, 1, 0] } } } });
+          await page.addInitScript(teacherDay => {
+            if (!/\/teacher\.html$/i.test(location.pathname)) return;
+            localStorage.setItem('sg:site:stats:d:2025-09-01', teacherDay);
+          }, teacherDay);
+        }
         await page.goto(pathToFileURL(path.join(folder, 'teacher.html')).href);
         await page.waitForFunction(() => document.getElementById('source')?.dataset.copy === 'folder');
         if (deniedStorage) {
@@ -92,20 +106,17 @@ try {
           assert.ok(await page.locator('#exportXlsx').isDisabled(), 'exports need readable storage');
           return;
         }
-        // One day record in the storage format the portal writes (docs/PLAY_STATS.md).
-        await page.evaluate(() => {
-          localStorage.setItem('sg:site:stats:d:2025-09-01', JSON.stringify({ v: 1, d: '2025-09-01', s: { calm: 1 },
-            g: { 'tic-tac-toe': { o: 2, e: 95000, hh: { 10: 95000 }, b: [1, 1, 0, 0], lv: { duo: [2, 0, 0, 1, 1, 0, 90000, 0, 0, 0, 1, 0] } } } }));
-        });
-        await page.reload();
         // A file:// page is a secure context, so Edge offers its save dialog, which a
         // headless browser closes at once. Check the download path instead (the dialog
         // is covered by tools/tests/teacher-page.test.mjs).
         await page.evaluate(() => { delete window.showSaveFilePicker; });
         await page.locator('input[name="period"][value="all"]').check();
-        // The portal's own recorder may add today's tic-tac-toe session to the same row.
         const row = page.locator('#gameTable tr[data-game="tic-tac-toe"]');
-        await row.waitFor();
+        await page.waitForFunction(() => {
+          const selected = document.querySelector('input[name="period"]:checked');
+          const line = document.querySelector('#gameTable tr[data-game="tic-tac-toe"]');
+          return !!selected && selected.value === 'all' && !!line && Number(line.getAttribute('data-sessions')) >= 1;
+        });
         assert.ok(Number(await row.getAttribute('data-sessions')) >= 1, 'the seeded session of a minute or more is shown');
         const [json] = await Promise.all([page.waitForEvent('download'), page.locator('#exportJson').click()]);
         assert.match(json.suggestedFilename(), /^play-stats_pc[a-z]{4}_\d{4}-\d{2}-\d{2}\.json$/);
