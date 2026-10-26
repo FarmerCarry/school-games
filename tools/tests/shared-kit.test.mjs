@@ -615,6 +615,19 @@ test('v2: Kit.dda follows the update rule with mercy and hot streaks, clamps, an
   assert.deepEqual([picker.pick(['a', 'b', 'c', 'd', 'e']), picker.pick(['a', 'b']), picker.value(10, 20)], ['c', 'b', 15]);
 });
 
+test('v2: Kit.dda keeps guests of different bands apart', () => {
+  const h = harness(), dda = h.Kit.dda('g');
+  preferences(h, {band: '6-7'});
+  dda.result(true); dda.result(true);
+  const young = dda.level;
+  preferences(h, {band: '10-11'});
+  assert.equal(dda.level, 0.6, 'a guest of another band starts from that band\'s seed');
+  dda.result(false);
+  preferences(h, {band: '6-7'});
+  assert.equal(dda.level, young, 'the first band keeps its own level');
+  assert.deepEqual(Object.keys(JSON.parse(h.values.get('sg:g:dda'))), ['_6-7', '_10-11']);
+});
+
 test('v2: Kit.dda keeps one state per player, at most 16 players, reloads on player change and resets', () => {
   const h = harness(), dda = h.Kit.dda('g'), other = h.Kit.dda('g', {id: 'boss'});
   preferences(h, {band: '8-9', player: 'p1'});

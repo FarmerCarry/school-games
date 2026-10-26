@@ -121,31 +121,39 @@ dda.reset()
 * **Seed** (no saved state for this player): band `6-7` → 0.12, `8-9` → 0.38,
   `10-11` → 0.60, unknown → 0.35; `opts.start` overrides.
 * **Update:** `n` = results so far; `step = clamp(0.18 / sqrt(1 + n / 2), 0.03, 0.18)`;
-  `level += step * (outcome - target)`. **Mercy rule:** two outcomes in a row below
-  0.3 drop an extra `step`. **Hot streak:** three in a row at or above 0.9 add an
-  extra `step / 2`. Clamp to 0..1. `tier = 1 + floor(level * tiers * 0.9999)`.
+  `level += step * (outcome - target)`. **Mercy rule:** from the second outcome in a row
+  below 0.3, each one drops an extra `step`. **Hot streak:** from the third outcome in a
+  row at or above 0.9, each one adds an extra `step / 2`. Clamp to 0..1.
+  `tier = 1 + floor(level * tiers * 0.9999)`.
 * **Storage:** `Kit.store(slug)` key `dda` →
-  `{ <player or '_'>: { <id>: [level rounded to 3 decimals, n] } }`; at most 16 players
-  kept (oldest dropped). A change of `Kit.profile.player` reloads the state.
-* Every read of `tier` reports it to `Kit.track.tier()`.
+  `{ <player, or '_' + band for a guest>: { <id>: [level rounded to 3 decimals, n] } }`;
+  at most 16 players kept (the least recently saved is dropped). A change of player
+  (or, for a guest, of band) reloads the state. A player with no results yet follows
+  the current band's seed.
+* Every read of the controller (`level`, `tier`, `value`, `pick`) reports the tier to
+  `Kit.track.tier()`.
 * DDA lives in the UI layer (`game.js`): engines and level files stay pure and take
   difficulty as parameters (their Node verifiers load a stub Kit).
 
 ### `Kit.track` — telemetry v2 extras
 
-No-ops unless embedded, ready and `telemetry` is `true`.
+`hit`, `miss`, `cue` and `react` are no-ops unless embedded, ready and `telemetry` is
+`true`. `tier` is state and is kept at any time (a game reads its tier before the
+round starts, possibly before the preferences arrive).
 
 ```js
 Kit.track.hit()      // a successful action in the open round (accuracy numerator)
 Kit.track.miss()     // a failed/missed action
-Kit.track.cue()      // a stimulus just appeared: the next accepted keydown/pointerdown
-                     // records a reaction time
+Kit.track.cue()      // a stimulus just appeared: the next pointerdown, or keydown that
+                     // Kit.keys accepts (not Ctrl/Alt/Meta, IME, Tab, keys on focused
+                     // controls), records a reaction time
 Kit.track.react(ms)  // an explicit reaction time
 Kit.track.tier(n)    // current difficulty tier 0..9 (0 = no DDA); Kit.dda calls this
 ```
 
 Automatic: **input latency** — in Kit's existing keydown/pointerdown capture listeners,
-`performance.now() - event.timeStamp` goes into a histogram.
+`performance.now() - event.timeStamp` (0–1000 ms, key repeats skipped) goes into a
+histogram.
 
 Buckets (fixed, upper bounds in ms, last bucket open):
 * reaction time `rt[6]`: `<300, <500, <800, <1200, <2000, ≥2000`
@@ -178,11 +186,12 @@ a row, never typed text). A `round()` while a round is open ends it with code `q
 
 `Kit.juice` when Kit is present (games), `window.Juice` otherwise (portal). Built on
 the Kit audio graph when present (`Kit.audio.unlock/ctx/master/muted`); in the portal
-it creates its own lazily-unlocked `AudioContext` and respects `sg:site:muted` and the
-classroom preset. Never plays before a user gesture. Respects mute in every call.
+it creates its own lazily-unlocked `AudioContext` and reads `sg:site:muted` and the
+stored classroom preset `sg:site:classroom` at every sound (plus `Juice.setQuiet(bool)`). Never plays before a user gesture. Respects mute in every call.
 
 Engine: a juice bus → `DynamicsCompressor` (limiter) → master; cached noise buffers;
-a cap of 14 simultaneous voices (new low-priority sounds are skipped when full);
+a cap of 14 simultaneous sounds (one sound may use several oscillators; new
+low-priority sounds are skipped when full, UI and reward cues always play);
 the same sound within 25 ms is dropped (no flams when a child mashes); ±2 % random
 pitch variation so repeats never sound machine-gunned.
 

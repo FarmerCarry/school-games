@@ -272,18 +272,20 @@
   // var dda = Kit.dda('my-game', { id: 'main', target: 0.72, tiers: 5, start });
   // At round start read dda.level (0..1), dda.tier (1..tiers), dda.value(easy, hard)
   // or dda.pick([...one per tier]); report each try with dda.result(true/false or 0..1).
-  // Saved per player in Kit.store(slug) 'dda': { <player or '_'>: { <id>: [level, n] } }.
+  // Saved per player in Kit.store(slug) 'dda': { <player, or '_' + band for a guest>: { <id>: [level, n] } }.
+  // Guests of different bands on one PC never inherit each other's level.
   function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
   function unit(v, fallback) { return fin(v) && v <= 1 ? v : fallback; }
   Kit.dda = function (slug, opts) {
     opts = opts || {};
     var store = Kit.store(slug), id = opts.id || 'main', level = 0, n = 0, low = 0, high = 0, who, t;
     var target = unit(opts.target, 0.72), tiers = Kit.clamp(opts.tiers | 0, 0, 9) || 5;
+    function key() { return profile.player || '_' + profile.band; }
     // A player with no saved results starts from the seed of the current band.
     function now() {
-      if (who !== profile.player) {
-        var mine = obj(obj(store.get('dda'))[profile.player || '_'])[id];
-        who = profile.player; low = high = n = 0;
+      if (who !== key()) {
+        var mine = obj(obj(store.get('dda'))[key()])[id];
+        who = key(); low = high = n = 0;
         if (mine && mine[1] >= 1 && unit(mine[0], -1) >= 0) { level = mine[0]; n = mine[1] >>> 0; }
       }
       return n ? level : unit(opts.start, SEEDS[profile.band] || 0.35);
@@ -292,10 +294,10 @@
     function read() { var l = now(); Kit.track.tier(t = 1 + Math.floor(l * tiers * 0.9999)); return l; }
     // The player just written moves last, so the 16 most recent players are kept.
     function save() {
-      var all = obj(store.get('dda')), key = profile.player || '_', mine = obj(all[key]);
-      delete all[key];
+      var all = obj(store.get('dda')), k = key(), mine = obj(all[k]);
+      delete all[k];
       if (n) mine[id] = [level, n]; else delete mine[id];
-      all[key] = mine;
+      all[k] = mine;
       for (var keys = Object.keys(all); keys.length > 16;) delete all[keys.shift()];
       store.set('dda', all);
     }
@@ -339,7 +341,8 @@
         audio.master.connect(audio.ctx.destination);
       } catch (e) { audio.ctx = null; return null; }
     }
-    if (audio.ctx.state === 'suspended') { try { audio.ctx.resume(); } catch (e) { /* ignore */ } }
+    // A refused resume() must not reach the unhandledrejection listener and fail the game.
+    if (audio.ctx.state === 'suspended') { try { var p = audio.ctx.resume(); if (p && p.catch) p.catch(function () {}); } catch (e) { /* ignore */ } }
     return audio.ctx;
   };
 
