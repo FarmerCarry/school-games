@@ -412,10 +412,16 @@
   };
   MODE.catch = {
     spawn: function (w) {
-      var tier = w.tier, x = pickX(w, w.basket.x, knob(w, 'spread'), w.party ? 0 : tier <= 2 ? 130 : 60, 150);
+      var tier = w.tier, later = !w.party && w.plan.l >= 1;
+      var sway = knob(w, 'sway') * (later ? 1.5 : 1) + (later ? 6 : 0);
+      // In a level a fruit never falls into a basket that stays put: beyond the catch
+      // reach (half-width + 17) plus its full side-to-side wobble (2 * sway), so the
+      // child has to steer.
+      var away = w.party ? 0 : Math.max(tier <= 2 ? 130 : 60, w.basket.hw + 17 + 2 * sway + 20);
+      var x = pickX(w, w.basket.x, knob(w, 'spread'), away, 150);
       var f = make(w, 'fruit', x, 60, 34);
       f.type = Math.floor(w.rand() * 5); f.fallK = 0.9 + 0.2 * w.rand();
-      f.sway = knob(w, 'sway') * (!w.party && w.plan.l >= 1 ? 1.5 : 1) + (!w.party && w.plan.l >= 1 ? 6 : 0);
+      f.sway = sway; f.steered = false;
     },
     update: function (w, dt, input) {
       var bk = w.basket, B = BB.BASKET, top = knob(w, 'basket'), fall = knob(w, 'fall'), magnet = knob(w, 'magnet'), reach = knob(w, 'reach');
@@ -430,7 +436,10 @@
         f.age += dt;
         f.y += fall * f.fallK * dt;
         f.x = clamp(f.x + Math.cos(f.age * 1.7 + f.phase) * f.sway * 1.7 * dt, 60, W - 60);
-        if (f.y > 330 && f.y < B.y) BB.magnet(f, bk.x, f.y, magnet, reach + bk.hw, dt, 0);
+        // The magnet helps only a fruit the child has steered for (an arrow press while
+        // it falls): like the pointer magnet, nothing is caught by itself.
+        if (input.dir) f.steered = true;
+        if (f.steered && f.y > 330 && f.y < B.y) BB.magnet(f, bk.x, f.y, magnet, reach + bk.hw, dt, 0);
         if (f.y >= B.y - 8 && f.y <= B.y + 30 && Math.abs(f.x - bk.x) <= bk.hw + f.r * 0.5) { bk.squash = 1; pop(w, f, 'catch'); }
         else if (f.y > B.ground) escape(w, f);
       }

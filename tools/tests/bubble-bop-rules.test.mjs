@@ -173,11 +173,57 @@ test('pressing Space at random moments finishes every tier-1 jump level', () => 
   }
 });
 
-test('nothing pops by itself: a Bop that never moves and a frog that never jumps score nothing', () => {
-  for (const [w, mode] of [[0, 'touch'], [1, 'tap'], [2, 'jump']]) {
+test('nothing pops by itself: a Bop that never moves, a frog that never jumps and a basket that never moves score nothing', () => {
+  for (const [w, mode] of [[0, 'touch'], [1, 'tap'], [2, 'jump'], [3, 'catch']]) {
     const world = BB.create(BB.plan(w, 0, 1), 9);
     for (let i = 0; i < 60 * 30; i++) { BB.step(world, DT, { px: null, py: null, clicks: [], jump: false, dir: 0 }); world.ev.length = 0; }
     assert.equal(world.hits, 0, mode);
+  }
+  // No fruit falls into a resting basket in any level, at any tier: world 4 teaches the arrows.
+  for (const w of [3, 4]) for (const l of [0, 1, 2]) for (let tier = 1; tier <= BB.TIERS; tier++) for (const seed of [1, 2, 3]) {
+    const world = BB.create(BB.plan(w, l, tier), seed);
+    for (let i = 0; i < 60 * 40; i++) {
+      // world 5 starts with touch, tap and jump parts: play those, then leave the basket alone
+      const input = { px: null, py: null, clicks: [], jump: false, dir: 0 };
+      const t = world.targets.find(o => !o.dead);
+      if (world.mode !== 'catch' && t) {
+        input.px = t.x + (i % 2); input.py = t.y;
+        if (world.mode === 'tap') input.clicks.push({ x: t.x, y: t.y });
+        if (world.mode === 'jump') input.jump = Math.abs(t.x - world.frog.x) < 40 && i % 20 === 0;
+      }
+      BB.step(world, DT, input);
+      assert.ok(!world.ev.some(e => e.t === 'pop' && e.kind === 'fruit'), `world ${w + 1} level ${l + 1} tier ${tier} seed ${seed}: a fruit fell into the resting basket`);
+      world.ev.length = 0;
+    }
+  }
+});
+
+// A first-timer at the arrow keys: notices a fruit late, then holds the arrow towards it
+// in hesitant presses (letting go now and then), and stops once the basket is under it.
+function firstCatcher(l, seed) {
+  const world = BB.create(BB.plan(3, l, 1), seed), rand = BB.rng(seed * 17 + 3);
+  let rest = 0;
+  while (!world.over && world.t < 90) {
+    const input = { px: null, py: null, clicks: [], jump: false, dir: 0 };
+    let f = null;
+    for (const t of world.targets) if (!t.dead && t.y > 220 && (!f || t.y > f.y)) f = t;
+    if (rest > 0) rest -= DT;
+    else if (f) {
+      const dx = f.x - world.basket.x;
+      if (Math.abs(dx) > 40) input.dir = Math.sign(dx);
+      if (rand() < DT * 1.5) rest = 0.2 + rand() * 0.4;
+    }
+    BB.step(world, DT, input);
+    world.ev.length = 0;
+  }
+  return world;
+}
+
+test('a hesitant first-timer steering late finishes every tier-1 catch level within 90 s', () => {
+  for (const l of [0, 1, 2]) for (const seed of [1, 2, 3, 4, 5]) {
+    const world = firstCatcher(l, seed);
+    assert.ok(world.over, `level ${l + 1} seed ${seed}: ${world.hits}/${world.goal} after ${world.t.toFixed(1)} s`);
+    assert.ok(world.escapes <= 1, `level ${l + 1} seed ${seed}: ${world.escapes} fruit got away`);
   }
 });
 
