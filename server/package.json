@@ -1,0 +1,10 @@
+{
+  "name": "school-games-telemetry",
+  "private": true,
+  "description": "Anonymous telemetry ingest server for the school games portal (no dependencies).",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node main.mjs",
+    "simulate": "node simulate.mjs"
+  }
+}
