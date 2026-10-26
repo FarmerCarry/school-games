@@ -161,6 +161,24 @@
     return any;
   }
 
+  function needsHeight(w) {
+    return w.has('jelly') || w.has('sauce') || w.has('bowl');
+  }
+
+  /* Standing in a house's awning, not up on the roof. Meteors miss this spot. */
+  function underRoof(w, a) {
+    var cx = a.x + a.w / 2;
+    var feet = a.y + a.h;
+    for (var i = 0; i < w.plats.length; i++) {
+      var h = w.plats[i];
+      if (!h.solid || h.gone || h.h < 40) continue;
+      if (feet < h.y + 8) continue;
+      if (cx >= h.x - 52 && cx <= h.x + 14) return true;
+      if (cx >= h.x + h.w - 14 && cx <= h.x + h.w + 52) return true;
+    }
+    return false;
+  }
+
   function spawn(w, h) {
     if (h.tell == null) h.tell = 0;
     if ((h.k === 'meteor' || h.k === 'zap' || h.k === 'foot') && h.tell < TELL) h.tell = TELL;
@@ -202,32 +220,51 @@
   var DIS = CI.DISASTERS = [
     { id: 'jelly', name: 'فيضان الجيلي', easy: 1, tip: 'اصعد فوق البيوت قبل أن يرتفع الجيلي',
       open: function (w) {
-        w.waterTarget = 560 - (w.power - 1) * 60;
+        w.waterTarget = 450 - (w.power - 1) * 32;
         w.waterY = 860;
       },
       update: function (w, dt) {
         if (w.phase !== 'danger') return;
-        var speed = (860 - w.waterTarget) / (w.power >= 4 ? 14 : 26);
+        var speed = (860 - w.waterTarget) / (w.power >= 4 ? 12 : 20);
         w.waterY = Math.max(w.waterTarget, w.waterY - speed * dt);
       },
       draw: function (ctx, w) {
-        var y = w.phase === 'danger' ? w.waterY : (w.warn ? w.waterTarget : 860);
+        var y = w.phase === 'danger' ? w.waterY : (w.warn ? Math.min(760, w.waterTarget + 80) : 860);
         if (y >= 800) return;
         ctx.save();
-        ctx.globalAlpha = w.phase === 'danger' ? 0.9 : 0.35;
-        ctx.fillStyle = '#ff4fa3';
+        var stripes = ['#e01555', '#ff2d78', '#ff6b3d', '#ff4fa3', '#c9184a', '#ff8c42'];
+        var depth = Math.max(0, H - y);
+        for (var col = 0; col < 16; col++) {
+          ctx.fillStyle = stripes[col % stripes.length];
+          ctx.fillRect(col * 80, y + 18, 80, depth);
+        }
+        ctx.fillStyle = '#ffe0f2';
         ctx.beginPath();
-        ctx.moveTo(0, H);
-        ctx.lineTo(0, y);
-        for (var x = 0; x <= W; x += 40) ctx.lineTo(x, y + Math.sin(w.time * 5 + x * 0.05) * 6);
-        ctx.lineTo(W, H);
+        ctx.moveTo(0, y + 22);
+        for (var x = 0; x <= W; x += 40) {
+          var wob = Math.sin(w.time * 3 + x * 0.02) * 10;
+          if (x) ctx.lineTo(x, y + wob); else ctx.lineTo(0, y + wob);
+        }
+        ctx.lineTo(W, y + 22);
         ctx.fill();
-        ctx.globalAlpha = 0.45;
-        ctx.fillStyle = '#ffd0ea';
-        ctx.fillRect(0, y, W, 8);
+        ctx.fillStyle = 'rgba(255,255,255,.9)';
+        for (var f = 0; f < 10; f++) {
+          ctx.beginPath();
+          ctx.ellipse(40 + f * 128, y + Math.sin(w.time * 3 + f) * 6, 18, 6, 0, 0, 7);
+          ctx.fill();
+        }
+        var fruits = ['#ffe14a', '#7cf29a', '#fff', '#4cc9f0'];
+        for (var i = 0; i < 8; i++) {
+          var fx = (i * 160 + 50 + Math.sin(w.time + i) * 12) % W;
+          var fy = y + 36 + (i % 4) * 28;
+          ctx.fillStyle = fruits[i % 4];
+          ctx.beginPath();
+          ctx.ellipse(fx, fy, 16, 11, i, 0, 7);
+          ctx.fill();
+        }
         ctx.restore();
       } },
-    { id: 'meteor', name: 'نيازك المارشملو', easy: 1, tip: 'انظر إلى الظلال على الأرض: هناك سيسقط النيزك',
+    { id: 'meteor', name: 'نيازك المارشملو', easy: 1, tip: 'قف تحت سقف البيت: الظل على الأرض هو مكان السقوط',
       open: function (w) { w.timers.meteor = 0.45; },
       update: function (w, dt) {
         if (w.phase !== 'danger') return;
@@ -237,7 +274,17 @@
         if (w.timers.meteor <= 0 && n < (w.power >= 4 ? 2 : 2)) {
           w.timers.meteor = every(w.power, 1.45, 0.85);
           var r = 42;
-          var x = columnX(w, r);
+          var x = null;
+          if (!w.meteorHome) {
+            w.meteorHome = 1;
+            var roof = topSpine(w);
+            if (roof) {
+              var mid = roof.x + roof.w * 0.5;
+              var edge = roof.x + 40;
+              if (Math.abs(edge - mid) > r + 24 && pointClear(w, edge)) x = mid;
+            }
+          }
+          if (x == null) x = columnX(w, r);
           if (x != null) spawn(w, { k: 'meteor', x: x, y: 640, r: r, tell: Math.max(0.85, 1.25 - (w.power - 1) * 0.1) });
         }
       },
@@ -293,7 +340,7 @@
         ctx.restore();
         drawKind(ctx, w, 'bowl');
       } },
-    { id: 'quake', name: 'بلاط الزلزال', tip: 'إذا اهتز البلاط، اقفز قبل أن يسقط',
+    { id: 'quake', name: 'بلاط الزلزال', tip: 'السطح سيسقط: انزل إلى الأرض المفتوحة بعيدًا عن البيوت',
       open: function (w) { w.timers.quake = 0.7; },
       update: function (w, dt) {
         if (w.phase !== 'danger') return;
@@ -305,10 +352,14 @@
             var p = w.plats[i];
             if (!p.spine && !p.gone && !p.shake) cands.push(p);
           }
-          if (cands.length) {
-            var p = pick(w.rnd, cands);
-            p.shake = Math.max(TELL, 0.95 - (w.power - 1) * 0.08);
-            w.minTell = Math.min(w.minTell, p.shake);
+          var picked = cands.length ? pick(w.rnd, cands) : null;
+          if (!needsHeight(w) && !w.topShook) {
+            var roof = topSpine(w);
+            if (roof && !roof.ground && !roof.gone && !roof.shake) { picked = roof; w.topShook = 1; }
+          }
+          if (picked) {
+            picked.shake = Math.max(TELL, 0.95 - (w.power - 1) * 0.08);
+            w.minTell = Math.min(w.minTell, picked.shake);
           }
         }
         for (var j = 0; j < w.plats.length; j++) {
@@ -316,7 +367,15 @@
           if (q.shake > 0) {
             q.shake -= dt;
             q.ox = Math.sin(w.time * 46) * 3;
-            if (q.shake <= 0) { q.gone = true; q.shake = 0; }
+            if (q.shake <= 0) {
+              q.gone = true; q.shake = 0;
+              if (q.spine) {
+                for (var ri = 0; ri < w.actors.length; ri++) {
+                  var rider = w.actors[ri];
+                  if (rider.mode === 'run' && rider.ground === q) pop(w, rider, 'quake');
+                }
+              }
+            }
           }
         }
       },
@@ -456,27 +515,43 @@
   function drawHaz(ctx, w, h) {
     ctx.save();
     if (h.k === 'meteor') {
-      var grow = h.tell > 0 ? 1 - h.tell / 1.2 : 1;
-      ctx.globalAlpha = 0.35 + grow * 0.4;
-      ctx.fillStyle = '#6b4a3a';
+      var grow = h.tell > 0 ? 1 - h.tell / 1.25 : 1;
+      ctx.globalAlpha = 0.28 + grow * 0.45;
+      ctx.fillStyle = '#5c3d32';
       ctx.beginPath();
-      ctx.ellipse(h.x, 636, h.r * (0.35 + grow * 0.7), 12, 0, 0, 7);
+      ctx.ellipse(h.x, 640, h.r * (0.3 + grow), 16, 0, 0, 7);
       ctx.fill();
-      if (h.tell > 0) {
-        ctx.globalAlpha = 1;
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = '#ff4fa3';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.ellipse(h.x, 640, h.r * (0.25 + grow * 0.9), 10, 0, 0, 7);
+      ctx.stroke();
+      var my = h.tell > 0 ? 70 + h.tell * 280 : 250;
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = '#ffd0ea';
+      ctx.beginPath();
+      ctx.ellipse(h.x, my + 28, 10, 26, 0, 0, 7);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#fff6fb';
+      ctx.beginPath();
+      ctx.arc(h.x, my, 22 + grow * 6, 0, 7);
+      ctx.fill();
+      ctx.fillStyle = '#ff8ec8';
+      ctx.beginPath();
+      ctx.arc(h.x - 6, my - 6, 8, 0, 7);
+      ctx.fill();
+      ctx.strokeStyle = '#2b2148';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(h.x, my, 22 + grow * 6, 0, 7);
+      ctx.stroke();
+      if (h.hit) {
         ctx.fillStyle = '#fff';
+        ctx.globalAlpha = 0.85;
         ctx.beginPath();
-        ctx.arc(h.x, 80 + h.tell * 220, 18 + (1 - grow) * 6, 0, 7);
-        ctx.fill();
-        ctx.fillStyle = '#ffd0ea';
-        ctx.beginPath();
-        ctx.arc(h.x - 6, 76 + h.tell * 220, 6, 0, 7);
-        ctx.fill();
-      } else {
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = '#fff6fb';
-        ctx.beginPath();
-        ctx.arc(h.x, 620, h.r, 0, 7);
+        ctx.arc(h.x, 620, h.r * 0.7, 0, 7);
         ctx.fill();
       }
     } else if (h.k === 'funnel') {
@@ -589,9 +664,43 @@
 
   function pickGoal(w) {
     if (w.has('ice') && !w.has('jelly') && !w.has('sauce') && !w.has('tornado')) return spineGround(w);
-    if (w.has('jelly') || w.has('sauce') || w.has('bowl') || w.has('gum') || w.has('tornado') || w.has('snow')) return topSpine(w);
-    if (w.has('quake') && !w.has('meteor') && !w.has('spark') && !w.has('stomp') && !w.has('beach')) return spineGround(w);
+    if (needsHeight(w) || w.has('gum') || w.has('tornado') || w.has('snow')) return topSpine(w);
+    if (w.has('quake')) return spineGround(w);
     return topSpine(w);
+  }
+
+  function roofSpot(w) {
+    var best = null, bestD = 1e9;
+    for (var i = 0; i < w.plats.length; i++) {
+      var h = w.plats[i];
+      if (!h.solid || h.gone || h.h < 40) continue;
+      var spots = [h.x - 28, h.x + h.w + 28];
+      for (var s = 0; s < spots.length; s++) {
+        var x = spots[s];
+        if (x < 24 || x > W - 24) continue;
+        var g = null;
+        for (var p = 0; p < w.plats.length; p++) {
+          var pl = w.plats[p];
+          if (pl.gone || pl.solid || (!pl.ground && !pl.one)) continue;
+          if (x < pl.x + 18 || x > pl.x + pl.w - 18) continue;
+          if (pl.y < h.y + 8) continue;
+          if (!g || pl.y > g.y) g = pl;
+        }
+        if (!g) continue;
+        var d = (g.spine ? 0 : 800) + Math.abs(x - W * 0.5);
+        if (d < bestD) { bestD = d; best = { x: x, plat: g }; }
+      }
+    }
+    return best;
+  }
+
+  function sameFloor(a, spot) {
+    var g = a.ground;
+    if (!g || !spot) return false;
+    if (g === spot.plat) return true;
+    if (Math.abs(g.y - spot.plat.y) > 6) return false;
+    var gap = Math.max(g.x, spot.plat.x) - Math.min(g.x + g.w, spot.plat.x + spot.plat.w);
+    return gap < 28;
   }
 
   function nextPlat(a, w, goal) {
@@ -683,7 +792,21 @@
     var feet = a.y + a.h;
     var windy = w.has('tornado') || w.has('gum');
     var goal = pickGoal(w);
-    if (w.has('quake') && a.ground && a.ground.shake > 0) goal = topSpine(w) || spineGround(w);
+    if (w.has('quake') && !needsHeight(w) && a.ground && a.ground.one && !a.ground.ground) {
+      inp.down = true;
+      return inp;
+    }
+    if (a.ground && a.ground.shake > 0 && a.ground.one && !a.ground.ground) {
+      inp.down = true;
+      return inp;
+    }
+    if (w.has('meteor') && !needsHeight(w) && !w.has('quake') && !w.has('spark') && !w.has('stomp')) {
+      var spot = roofSpot(w);
+      if (spot && sameFloor(a, spot)) {
+        inp.x = Math.abs(spot.x - cx) > 10 ? Math.sign(spot.x - cx) : 0;
+        return inp;
+      }
+    }
     var onGoal = goal && feet <= goal.y + 14 && a.ground === goal;
     if (windy && onGoal) inp.brace = true;
     if (goal && !onGoal) {
@@ -725,7 +848,7 @@
       a.lag = (1 - a.skill) * 0.5 + 0.06;
     }
     var src = a.hold;
-    var out = { x: src.x, y: src.y, jump: src.jump, down: false, drop: src.drop, brace: src.brace, emote: false };
+    var out = { x: src.x, y: src.y, jump: src.jump, down: !!src.down, drop: src.drop, brace: src.brace, emote: false };
     if (a.mode === 'cloud') {
       out.x = Math.sin(w.time * 1.5 + a.id);
       out.y = Math.cos(w.time * 1.05 + a.id) * 0.6;
@@ -863,7 +986,7 @@
     var cx = a.x + a.w / 2, cy = a.y + a.h / 2, feet = a.y + a.h;
     for (var i = 0; i < w.haz.length; i++) {
       var h = w.haz[i];
-      if (h.k === 'meteor' && h.hit && h.live > 0 && Math.abs(cx - h.x) < h.r - 4) return pop(w, a, 'meteor');
+      if (h.k === 'meteor' && h.hit && h.live > 0 && Math.abs(cx - h.x) < h.r - 4 && !underRoof(w, a)) return pop(w, a, 'meteor');
       if ((h.k === 'zap' || h.k === 'foot') && h.hit && h.live > 0 && Math.abs(cx - h.x) < h.r - 6) return pop(w, a, 'sky');
       if (h.tell > 0 && h.k !== 'meteor' && h.k !== 'zap' && h.k !== 'foot') continue;
       if (h.k === 'bowl' && feet > 560 && Math.hypot(cx - h.x, feet - h.y) < h.r + 6) return pop(w, a, 'bowl');
@@ -1020,14 +1143,24 @@
     var easy = rnd() < 0.5 ? EASY[0] : EASY[1];
     var pool = shuffle(rnd, ALL.filter(function (id) { return id !== easy; }));
     var rounds = [];
-    for (var r = 0; r < 5; r++) {
+    var used = [easy];
+    for (var r = 0; r < 4; r++) {
       var id = r === 0 ? easy : pool[r - 1];
-      var power = hard ? 1 + r : [1, 2, 2, 3, 4][r];
+      if (used.indexOf(id) < 0) used.push(id);
+      var power = hard ? 1 + r : [1, 2, 2, 3][r];
       var combo = hard ? r >= 1 : r >= 3;
       var id2 = null;
       if (combo) {
-        id2 = pool[(r + 4) % pool.length];
-        if (id2 === id) id2 = pool[(r + 5) % pool.length];
+        for (var k = 0; k < pool.length; k++) {
+          var cand = pool[(r + 3 + k) % pool.length];
+          if (cand !== id && used.indexOf(cand) < 0) { id2 = cand; used.push(cand); break; }
+        }
+        if (!id2) {
+          for (var k2 = 0; k2 < pool.length; k2++) {
+            var alt = pool[(r + 5 + k2) % pool.length];
+            if (alt !== id) { id2 = alt; break; }
+          }
+        }
       }
       rounds.push({ id: id, id2: id2, power: power });
     }
@@ -1085,6 +1218,7 @@
     w.items = [];
     w.hot = false; w.ice = false; w.wind = 0; w.windMag = 0; w.windMode = null;
     w.waterY = 900; w.waterTarget = 900; w.gust = 0;
+    w.topShook = 0; w.meteorHome = 0;
     w.timers = {};
     w.power = spec.power;
     w.roundPops = 0;
@@ -1100,7 +1234,39 @@
     w.warn = false;
     w.siren = false;
     place(w);
+    layStars(w);
     w.ev.push({ t: 'round', n: w.round, name: w.dis[0].name, name2: w.dis[1] ? w.dis[1].name : '', id: w.dis[0].id });
+  }
+  function layStars(w) {
+    w.stars = [];
+    var lows = [];
+    for (var i = 0; i < w.plats.length; i++) {
+      var p = w.plats[i];
+      if (!p.solid && !p.gone && p.y >= 500) lows.push(p);
+    }
+    for (var s = 0; s < 3; s++) {
+      var p = lows.length ? lows[s % lows.length] : null;
+      if (!p) break;
+      w.stars.push({ x: p.x + 40 + (s % 3) * Math.max(26, (p.w - 90) / 3), y: p.y - 24, n: 8 });
+    }
+  }
+  function takeStars(w) {
+    if (!w.stars) return;
+    for (var i = w.stars.length - 1; i >= 0; i--) {
+      var s = w.stars[i];
+      if (w.waterY < s.y - 8) { w.stars.splice(i, 1); continue; }
+      for (var a = 0; a < w.actors.length; a++) {
+        var p = w.actors[a];
+        if (p.mode !== 'run') continue;
+        if (Math.abs(p.x + p.w / 2 - s.x) < 24 && Math.abs(p.y + p.h * 0.4 - s.y) < 40) {
+          p.coins += s.n;
+          w.ev.push({ t: 'coin', id: p.id, n: s.n, x: s.x, y: s.y, lived: true });
+          if (w.ev.length > 40) w.ev.shift();
+          w.stars.splice(i, 1);
+          break;
+        }
+      }
+    }
   }
 
   function award(w) {
@@ -1155,7 +1321,7 @@
       actors: [], haz: [], items: [], ev: [], plats: [],
       phase: 'inter', round: 0, frames: INTER, time: 0,
       power: 1, coins: 0, roundPops: 0, maxStill: 0, minTell: 99,
-      waterY: 900, waterTarget: 900, hot: false, ice: false, wind: 0, windMag: 0,
+      waterY: 900, waterTarget: 900, hot: false, ice: false, wind: 0, windMag: 0, stars: [],
       dis: [], timers: {}, titles: [], pops: [],
       in: [{ x: 0, y: 0, jump: false, down: false, drop: false, brace: false, emote: false },
         { x: 0, y: 0, jump: false, down: false, drop: false, brace: false, emote: false }]
@@ -1215,6 +1381,7 @@
         body(w, a, inp || { x: 0, y: 0, jump: false, down: false, drop: false, brace: false }, dt);
       }
       stepItems(w, dt);
+      if (w.phase === 'danger') takeStars(w);
     } else if (w.phase === 'stamp') {
       for (var s = 0; s < w.actors.length; s++) {
         var p = w.actors[s];
@@ -1230,7 +1397,7 @@
         award(w);
       } else if (w.phase === 'stamp') {
         w.round++;
-        if (w.round >= 5) { w.phase = 'podium'; w.frames = 0; titles(w); }
+        if (w.round >= 4) { w.phase = 'podium'; w.frames = 0; titles(w); }
         else beginRound(w);
       }
     }

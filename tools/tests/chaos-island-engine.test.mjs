@@ -28,7 +28,7 @@ test('round 1 is an easy disaster and nothing repeats back to back', () => {
   for (let seed = 1; seed <= 20; seed++) {
     for (const hard of [false, true]) {
       const plan = CI.plan(seed, hard);
-      assert.equal(plan.length, 5);
+      assert.equal(plan.length, 4);
       assert.ok(plan[0].id === 'jelly' || plan[0].id === 'meteor');
       assert.equal(plan[0].power, 1);
       assert.equal(plan[0].id2, null);
@@ -110,15 +110,15 @@ test('a pop becomes a cloud within a second, sooner with the quick perk', () => 
   assert.ok(frames <= 12, 'quick bubble is faster (' + frames + ')');
 });
 
-test('a 1P match of 5 rounds lasts between 5 and 7 minutes', () => {
+test('a 1P match of 4 rounds lasts about 4 minutes', () => {
   const world = CI.create({ seed: 7, players: 1, bots: 7, oracle: true });
   let steps = 0;
   while (world.phase !== 'podium' && steps < 60 * 500) { CI.step(world, 1 / 60); steps++; }
   const seconds = steps / 60;
   assert.equal(world.phase, 'podium');
-  assert.ok(seconds >= 300 && seconds <= 420, 'match seconds ' + seconds);
-  assert.equal(world.round, 5);
-  assert.equal(world.pops.length, 5);
+  assert.ok(seconds >= 230 && seconds <= 260, 'match seconds ' + seconds);
+  assert.equal(world.round, 4);
+  assert.equal(world.pops.length, 4);
 });
 
 test('bots keep moving during danger and about 3 to 5 are popped each round', () => {
@@ -169,6 +169,54 @@ test('two players keep separate inputs and coop pays both when one survives', ()
   runUntil(pay, 'stamp', 60 * 50);
   CI.step(pay, 1 / 60);
   assert.ok(p0.coins > 0 && p1.coins > 0, 'coop coins ' + p0.coins + '/' + p1.coins);
+});
+
+function climbWait(a, w) {
+  const inp = { x: 0, y: 0, jump: false, down: false, drop: false, brace: false, emote: false };
+  if (a.mode !== 'run') return inp;
+  let goal = null;
+  for (const p of w.plats) {
+    if (!p.spine || p.gone || p.solid) continue;
+    if (!goal || p.y < goal.y) goal = p;
+  }
+  if (!goal) return inp;
+  const cx = a.x + a.w / 2;
+  const on = a.ground === goal && a.y + a.h <= goal.y + 14;
+  if (on) {
+    const mid = goal.x + goal.w / 2;
+    if (Math.abs(cx - mid) > 6) inp.x = Math.sign(mid - cx);
+    return inp;
+  }
+  let next = null;
+  for (const p of w.plats) {
+    if (!p.spine || p.gone || p.solid || p.y > a.y + a.h - 10 || p.y < goal.y - 2) continue;
+    if (cx > p.x - 18 && cx < p.x + p.w + 18 && (!next || p.y > next.y)) next = p;
+  }
+  if (!next) { inp.x = Math.sign(goal.x + goal.w / 2 - cx) || 1; return inp; }
+  const mid = next.x + next.w / 2;
+  const overlap = cx > next.x + 6 && cx < next.x + next.w - 6;
+  if (!overlap) inp.x = Math.sign(mid - cx);
+  else if (a.ground) { inp.jump = true; inp.x = Math.abs(mid - cx) > 22 ? Math.sign(mid - cx) : 0; }
+  else inp.x = Math.abs(mid - cx) > 16 ? Math.sign(mid - cx) : 0;
+  return inp;
+}
+
+test('climbing to the roof and waiting fails meteor and quake', () => {
+  const died = [];
+  for (const id of ['jelly', 'meteor', 'quake', 'tornado']) {
+    const world = CI.create({ island: 'beach', seed: 7, players: 1, bots: 0, script: [{ id, power: 3 }] });
+    const hero = world.actors[0];
+    let n = 0;
+    while (world.phase !== 'stamp' && n < 60 * 70) {
+      CI.setInput(world, 0, climbWait(hero, world));
+      CI.step(world, 1 / 60);
+      n++;
+    }
+    if (hero.mode !== 'run') died.push(id);
+  }
+  assert.ok(died.length >= 2, 'climb-only died on ' + died.join(','));
+  assert.equal(died.includes('jelly'), false);
+  assert.ok(died.includes('meteor') && died.includes('quake'));
 });
 
 test('daily mix is a stable date seed', () => {

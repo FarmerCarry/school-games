@@ -267,7 +267,7 @@ test('one player can win, restart counts a new round, and leaving early ends the
   assert.deepEqual(podium.classes, ['pod p2', 'pod p1', 'pod p3']);
   assert.ok(podium.steps[1] > podium.steps[0] && podium.steps[0] > podium.steps[2], 'first place is the tall middle step');
   assert.deepEqual(podium.canvases, [true, true, true]);
-  assert.ok(podium.scores.every(s => /^\d\/5$/.test(s)), podium.scores.join(','));
+  assert.ok(podium.scores.every(s => /^\d\/4$/.test(s)), podium.scores.join(','));
   const gap = await page.evaluate(() => {
     const score = document.querySelector('#podium .pod.p3 b').getBoundingClientRect();
     const line = document.getElementById('r-titles').getBoundingClientRect();

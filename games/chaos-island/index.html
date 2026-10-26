@@ -15,12 +15,18 @@
   <section id="scr-title" class="scr">
     <div class="logo"><b>جزيرة <i>الفوضى</i></b></div>
     <div class="tag">اصمد، اجمع العملات، وضحّك صاحبك!</div>
+    <div class="story" aria-hidden="true">
+      <div class="beat"><i class="kid"></i><b>→</b></div>
+      <div class="beat"><i class="kid hop"></i><b>↑</b></div>
+      <div class="beat"><i class="roof"></i><b>★</b></div>
+    </div>
     <div class="card side" id="howto">
       <h2>طريقة اللعب</h2>
-      <div class="krow"><span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span> أو <span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> حركة</div>
-      <div class="krow"><span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">W</span></span> أو <span class="sg-key">مسافة</span> قفز</div>
-      <div class="krow"><span dir="ltr"><span class="sg-key">↓</span><span class="sg-key">S</span></span> نزول · <span dir="ltr"><span class="sg-key">F</span></span> إمساك</div>
-      <div class="krow">بعد الفرقعة: <span dir="ltr"><span class="sg-key">E</span></span> أسقط قشرة أو وسادة</div>
+      <div class="pics">
+        <div class="pic"><i class="kid"></i><span dir="ltr" class="sg-key">←</span><span dir="ltr" class="sg-key">→</span></div>
+        <div class="pic"><i class="kid hop"></i><span class="sg-key">مسافة</span></div>
+        <div class="pic"><i class="roof"></i><b>★</b></div>
+      </div>
     </div>
     <div class="card side" id="prog">
       <h2>تقدّمك</h2>
@@ -28,6 +34,7 @@
       <div class="sub">عملة</div>
       <div class="sub" id="t-streak">سلسلة: 0</div>
       <div class="sub" id="t-surv">نجاة: 0/20</div>
+      <div class="stickers" id="stickers"></div>
     </div>
     <div class="playwrap">
       <button id="btnPlay" type="button">العب!</button>
@@ -97,6 +104,7 @@
   </section>
 
   <div id="siren" hidden>
+    <i id="siren-pic" hidden></i>
     <div class="siren-copy">
       <b id="siren-name"></b>
       <i id="siren-joke"></i>
@@ -111,6 +119,7 @@
 </div>
 <script src="../../shared/kit.js"></script>
 <script src="engine.js"></script>
+<script src="audio.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
