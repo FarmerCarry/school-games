@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
@@ -267,5 +268,157 @@ test('generated mixed courses remain playable from the initial pace through maxi
     assert.equal(engine.state.alive, true, `reaction policy should clear seed ${seed} (score ${engine.state.score})`);
     assert.equal(engine.state.speed, C.maxSpeed);
     assert.ok(engine.state.score >= 6900);
+  }
+});
+
+/* ---------------------------------------------------------- difficulty tiers */
+// Kit.dda picks a tier (1..5) for a surprise course; a course code always plays tier 3.
+const { tiers: TIERS, tier: tierOf, knobs: KNOBS } = context.Dino3D;
+const sha = value => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16);
+// The reaction policy of the playability test above, as a function of the state.
+function react(s) {
+  const p = s.player, next = s.obstacles.find(o => o.z < o.depth / 2 + C.playerHalfDepth);
+  const until = next ? -next.z / s.speed : 9, airborne = p.y > 0;
+  let jump = airborne && !(p.vy < 0 && p.y < 0.8), duck = false;
+  if (!airborne && next && until < 0.38) {
+    if (next.type === 'cactus' || next.bottom < C.duckTop) jump = true;
+    else if (next.bottom < C.playerTop) duck = true;
+  }
+  return { jump, duck };
+}
+
+test('tier 3 is the original balance and the default for anything else', () => {
+  assert.deepEqual(json(tierOf(3)), { tier: 3, startSpeed: 15, maxSpeed: 35, speedEvery: 100, recovery: 1.08, spread: 0.43,
+    birdScore: 400, birdChance: 0.29, birds: [0, 1, 2], cacti: [0, 1, 2, 3], grace: 0, par: 600 });
+  assert.deepEqual([C.startSpeed, C.maxSpeed, C.birdScore, C.recoveryTime], [15, 35, 400, 1.08], 'the original constants stay');
+  for (const odd of [undefined, null, 0, 6, -1, NaN, '3', 'x', {}]) assert.equal(tierOf(odd), TIERS[2], String(odd));
+  assert.deepEqual([1, 2, 3, 4, 5].map(n => tierOf(n).tier), [1, 2, 3, 4, 5]);
+  assert.ok(Object.isFrozen(TIERS) && TIERS.every(t => Object.isFrozen(t) && Object.isFrozen(t.birds) && Object.isFrozen(t.cacti)));
+  const plain = createEngine(2026), third = createEngine(2026, 3);
+  assert.equal(plain.state.tier, 3);
+  for (let i = 0; i < 60 * 40; i++) { plain.step(1 / 60, react(plain.state)); third.step(1 / 60, react(third.state)); }
+  assert.deepEqual(json(third.state), json(plain.state));
+});
+
+test('tier 3 replays the courses and a reaction-policy run exactly as the game did before tiers', () => {
+  // Hashes recorded from the engine at da6fa54, before the tiers existed: obstacles as
+  // first seen and the course clocks over 180 s with harmless colliders, and a
+  // collision-enabled reaction-policy run of up to 200 s.
+  const before = { 1: ['e6519cda92d83364', 'cf210905dc217e3b'], 43: ['c4f6e9155149b26b', 'ebca6451e6d3f9b1'],
+    2027: ['4c178f4691ccf733', '4a67d880bebc6dd7'], 10000: ['bc9f9d18f24cc749', 'd5540c4bdcc3b957'] };
+  function course(engine) {
+    const seen = new Map(), samples = [];
+    for (let frame = 0; frame < 60 * 180; frame++) {
+      for (const o of engine.state.obstacles) {
+        if (!seen.has(o.id)) seen.set(o.id, [o.id, o.type, o.variant, o.width, o.depth, o.height, o.bottom, engine.state.distance - o.z]);
+        o.bottom = 1000;
+      }
+      engine.step(1 / 60, {});
+      if ((frame + 1) % 600 === 0) { const s = engine.state; samples.push([s.elapsed, s.distance, s.score, s.speed, s.points, s.night]); }
+    }
+    return [...seen.values(), samples];
+  }
+  function play(engine) {
+    for (let frame = 0; frame < 60 * 200 && engine.state.alive; frame++) engine.step(1 / 60, react(engine.state));
+    const s = engine.state;
+    return [s.alive, s.elapsed, s.distance, s.score, s.speed, s.player, s.obstacles.map(o => [o.id, o.z])];
+  }
+  for (const [seed, hashes] of Object.entries(before)) {
+    for (const tier of [undefined, 3]) {
+      assert.deepEqual([sha(course(createEngine(+seed, tier))), sha(play(createEngine(+seed, tier)))], hashes, `seed ${seed}, tier ${tier}`);
+    }
+  }
+});
+
+test('every tier knob moves one way from tier 1 to 5, and tiers 1-2 and 4-5 really differ from 3', () => {
+  assert.deepEqual(Object.keys(KNOBS).sort(), Object.keys(TIERS[0]).filter(k => k !== 'tier').sort());
+  for (const [knob, way] of Object.entries(KNOBS)) {
+    for (let i = 1; i < 5; i++) {
+      const a = TIERS[i - 1][knob], b = TIERS[i][knob];
+      if (way === 'set') assert.ok(a.every(v => b.includes(v)) && a.length <= b.length, `${knob}: tier ${i + 1} keeps tier ${i}'s kinds`);
+      else assert.ok(way > 0 ? b >= a : b <= a, `${knob} ${way > 0 ? 'rises' : 'falls'} from tier ${i} to ${i + 1} (${a} -> ${b})`);
+    }
+  }
+  const [t1, t2, t3, t4, t5] = TIERS;
+  // Slower, longer gaps, fewer kinds, later birds and kinder colliders for 6-9 year olds.
+  for (const easy of [t1, t2]) {
+    assert.ok(easy.startSpeed < t3.startSpeed && easy.maxSpeed < t3.maxSpeed && easy.speedEvery > t3.speedEvery);
+    assert.ok(easy.recovery > t3.recovery && easy.birdScore > t3.birdScore && easy.birdChance < t3.birdChance);
+    assert.ok(easy.birds.length < t3.birds.length && easy.cacti.length < t3.cacti.length && easy.grace > 0);
+  }
+  assert.deepEqual(json([t1.birds, t1.cacti]), [[0], [0, 1]], 'tier 1: low birds to jump and the two smallest cacti');
+  // Faster, denser and earlier birds for skilled 10-11 year olds, with tier 3's fair colliders.
+  for (const hard of [t4, t5]) {
+    assert.ok(hard.startSpeed > t3.startSpeed && hard.maxSpeed > t3.maxSpeed && hard.speedEvery < t3.speedEvery);
+    assert.ok(hard.recovery < t3.recovery && hard.birdScore < t3.birdScore && hard.birdChance > t3.birdChance && hard.grace === 0);
+  }
+  // A full held flight lasts under 0.82 s: even tier 5 leaves time to land before the next jump.
+  assert.ok(t5.recovery > 0.9);
+});
+
+test('every tier keeps its own pace, gaps and obstacle kinds, and reset keeps the tier unless given one', () => {
+  for (const T of TIERS) {
+    const engine = createEngine(79, T.tier), seen = new Set();
+    assert.deepEqual([engine.state.tier, engine.state.speed], [T.tier, T.startSpeed]);
+    let birds = 0, cacti = 0;
+    for (let i = 0; i < 60 * 400; i++) {
+      const { obstacles, speed, score } = engine.state;
+      assert.equal(speed, Math.min(T.maxSpeed, T.startSpeed + Math.floor(score / T.speedEvery)));
+      for (let j = 0; j < obstacles.length; j++) {
+        const o = obstacles[j];
+        if (!seen.has(o.id)) {
+          seen.add(o.id);
+          if (o.type === 'bird') { birds++; assert.ok(score >= T.birdScore && T.birds.includes(o.variant), `tier ${T.tier} bird ${o.variant} at ${score}`); }
+          else if (o.id > 1) { cacti++; assert.ok(T.cacti.includes(o.variant), `tier ${T.tier} cactus ${o.variant}`); }
+        }
+        if (j) {
+          const previous = obstacles[j - 1];
+          const free = previous.z - o.z - (previous.depth + o.depth) / 2 - C.playerHalfDepth * 2;
+          assert.ok(free / speed >= T.recovery - 0.04, `tier ${T.tier}: recovery gap ${free / speed}`);
+        }
+        o.bottom = 1000;
+      }
+      engine.step(1 / 60, {});
+    }
+    assert.equal(engine.state.speed, T.maxSpeed);
+    assert.ok(birds > 10 && cacti > 100, `tier ${T.tier}: ${birds} birds, ${cacti} cacti`);
+  }
+  const engine = createEngine(5, 1);
+  engine.reset();
+  assert.deepEqual([engine.state.tier, engine.state.seed], [1, 5]);
+  engine.reset(9);
+  assert.deepEqual([engine.state.tier, engine.state.seed, engine.state.speed], [1, 9, TIERS[0].startSpeed]);
+  engine.reset(9, 4);
+  assert.deepEqual([engine.state.tier, engine.state.speed], [4, TIERS[3].startSpeed]);
+});
+
+test('every tier stays playable from its first pace through its top speed', () => {
+  for (const T of TIERS) for (const seed of [11, 53, 2026]) {
+    const engine = createEngine(seed, T.tier);
+    for (let frame = 0; frame < 60 * 300 && engine.state.alive; frame++) engine.step(1 / 60, react(engine.state));
+    assert.equal(engine.state.alive, true, `tier ${T.tier}, seed ${seed} (score ${engine.state.score})`);
+    assert.equal(engine.state.speed, T.maxSpeed);
+  }
+  // A timed held jump clears every cactus the tier uses at every speed it reaches.
+  for (const T of TIERS) for (const variant of T.cacti) for (const speed of [T.startSpeed, T.maxSpeed]) {
+    const engine = createEngine(3, T.tier), s = engine.state;
+    s.score = s.points = (speed - T.startSpeed) * T.speedEvery;
+    s.speed = speed;
+    s.obstacles = [obstacle({ variant, width: [0.8, 1.25, 1.5, 1.05][variant], depth: [0.72, 0.9, 1.7, 0.85][variant],
+      height: [1.3, 1.65, 1.45, 2][variant], z: -speed * 0.38 })];
+    advance(engine, 0.8, { jump: true });
+    assert.equal(s.alive, true, `tier ${T.tier}, cactus ${variant}, speed ${speed}`);
+  }
+});
+
+test('tiers 1 and 2 have kinder colliders: a jump that clips a cactus at tier 3 clears it', () => {
+  // The dinosaur's feet are at y = 1, still rising, over the smallest cactus (top at 1.3:
+  // the feet must pass 1.06 at tier 3, 0.98 at tier 2 and 0.9 at tier 1).
+  for (const [tier, alive] of [[1, true], [2, true], [3, false], [5, false]]) {
+    const engine = createEngine(3, tier);
+    engine.state.obstacles = [obstacle({ z: 0 })];
+    Object.assign(engine.state.player, { y: 1, vy: 3, jumpAge: 0 });
+    engine.step(0.05, { jump: true });
+    assert.equal(engine.state.alive, alive, `tier ${tier}`);
   }
 });

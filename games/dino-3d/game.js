@@ -6,6 +6,12 @@
   if (!Number.isSafeInteger(best) || best < 0) best = 0;
   var quality = store.get('quality', 'high') === 'low' ? 'low' : 'high';
   var courseCode = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+  // A course code (typed in, or picked with «مسار جديد» on the start screen) is the same
+  // course for every child, so classmates can share it: it always plays tier 3, the
+  // original balance, and its runs never change the difficulty. An empty code field and
+  // «العب مسارًا جديدًا» give a surprise course whose tier Kit.dda fits to the child;
+  // its code is never shown, because sharing it would not give the same course.
+  var dda = Kit.dda('dino-3d'), shared = false;
   var bestPending = false, qualityPending = false, inputJumps = 0, milestoneUntil = 0;
   var pointerJump = false, pointerDuck = false, jumpQueued = false, controlDuck = false;
   var activePointer = null, loop, lastScore = -1, lastBest = -1;
@@ -50,7 +56,7 @@
     el('over-screen').hidden = mode !== 'over';
     el('hud').hidden = mode === 'ready';
     el('pause-button').hidden = mode !== 'playing';
-    el('course-tag').hidden = mode === 'ready';
+    el('course-tag').hidden = mode === 'ready' || !shared;
     dirty = true;
   }
   function refreshHUD() {
@@ -69,36 +75,47 @@
   function bankRun() {
     if (mode === 'paused' && engine.state.score > best) { best = engine.state.score; bestPending = true; save(); }
   }
+  // Retry (R, Enter, the Retry and Restart buttons) replays the same course; a surprise
+  // course reads its tier again, so a child who keeps retrying still gets help.
   function start() {
     if (!renderer || contextLost) return;
-    bankRun(); resetInput(); engine.reset(Number(courseCode) + 1);
-    inputJumps = 0; milestoneUntil = 0; lastScore = -1;
+    bankRun(); resetInput();
+    // The tier is read before the round starts (Kit.dda reports it; a code reports 3).
+    var tier = shared ? 3 : dda.tier;
+    if (shared) Kit.track.tier(3);
+    engine.reset(Number(courseCode) + 1, tier);
+    inputJumps = 0; milestoneUntil = 0; lastScore = -1; cued = cleared = 0;
     Kit.audio.unlock(); Kit.stats.round('endless');
     changeMode('playing'); refreshHUD(); focusGame();
   }
   function showCourse() {
-    el('course-code').value = courseCode;
+    el('course-code').value = shared ? courseCode : '';
     el('active-course').textContent = courseCode;
     el('course-error').hidden = true;
     el('course-code').removeAttribute('aria-invalid');
   }
   function startSelected() {
     var code = el('course-code').value.trim();
-    if (!/^[0-9]{4}$/.test(code)) {
+    if (code && !/^[0-9]{4}$/.test(code)) {
       el('course-error').hidden = false;
       el('course-code').setAttribute('aria-invalid', 'true');
       el('course-code').focus(); return;
     }
     if (!renderer || contextLost) return;
-    courseCode = code; showCourse(); start();
+    shared = !!code;
+    if (shared) courseCode = code;
+    showCourse(); start();
   }
+  // A different code; drawing and sound never use the engine's RNG.
+  function otherCode() { return String((Number(courseCode) + 1 + Math.floor(Math.random() * 9999)) % 10000).padStart(4, '0'); }
+  // On the start screen the new code is shown, to play or share; from a pause or a
+  // result a new surprise course starts at once.
   function newCourse() {
     if (!renderer || contextLost) return;
-    // Choose a different code; drawing and sound never use the engine's RNG.
-    courseCode = String((Number(courseCode) + 1 + Math.floor(Math.random() * 9999)) % 10000).padStart(4, '0');
+    courseCode = otherCode(); shared = mode === 'ready';
     showCourse();
     if (mode !== 'ready') start();
-    else { engine.reset(Number(courseCode) + 1); dirty = true; }
+    else { engine.reset(Number(courseCode) + 1, 3); dirty = true; }
   }
   function pause() {
     if (mode !== 'playing') return;
@@ -109,13 +126,18 @@
     resetInput(); changeMode('playing'); focusGame();
   }
   function menu() {
-    bankRun(); resetInput(); engine.reset(Number(courseCode) + 1); milestoneUntil = 0; showCourse();
+    bankRun(); resetInput();
+    if (!shared) courseCode = otherCode(); // the next surprise course is a new one
+    engine.reset(Number(courseCode) + 1); milestoneUntil = 0; showCourse();
     changeMode('ready'); refreshHUD(); focusGame();
   }
   function finish() {
     if (mode !== 'playing') return;
     var score = engine.state.score, record = score > best;
     if (record) { best = score; bestPending = true; save(); Dino3D.sound('record'); }
+    // Difficulty: the share of this tier's par score reached, from surprise courses only.
+    // Early crashes ease the next course off; runs that reach the par make it harder.
+    if (!shared) dda.result(Math.min(1, score / Dino3D.tier(engine.state.tier).par));
     Kit.stats.end('end', score);
     el('final-score').textContent = String(score); el('record').hidden = !record;
     overAt = performance.now();
@@ -130,12 +152,26 @@
       events.forEach(function (event) {
         if (event === 'jump') inputJumps++;
         if (event === 'milestone') milestoneUntil = engine.state.elapsed + 0.65;
+        if (event === 'crash') Kit.track.miss();
         Dino3D.sound(event);
       });
+      trackObstacles();
       if (!engine.state.alive) finish();
       refreshHUD(); dirty = true;
     }
     Kit.keys.endFrame();
+  }
+  // Kit.track: the next obstacle coming within CUE_S seconds is a cue (the next jump or
+  // duck press gives a reaction time); each obstacle that passes the dinosaur is a hit.
+  var CUE_S = 1, cued = 0, cleared = 0;
+  function trackObstacles() {
+    var s = engine.state, list = s.obstacles;
+    for (var i = 0; i < list.length; i++) {
+      var o = list[i], reach = o.depth / 2 + Dino3D.config.playerHalfDepth;
+      if (o.z > reach) { if (o.id > cleared) { cleared = o.id; Kit.track.hit(); } continue; }
+      if (o.id > cued && -reach - o.z < s.speed * CUE_S) { cued = o.id; Kit.track.cue(); }
+      return;
+    }
   }
   function draw() {
     if (!dirty || contextLost || !renderer || document.hidden) return;
@@ -228,6 +264,7 @@
       get mode() { return mode; }, get state() { return engine.state; },
       get engine() { return engine; }, get renderer() { return renderer; },
       get best() { return best; }, get inputJumps() { return inputJumps; },
+      get tier() { return engine.state.tier; }, get shared() { return shared; },
       start:start, pause:pause, resume:resume, restart:start, menu:menu
     };
     loop = Kit.loop(update, draw, {hz:60});

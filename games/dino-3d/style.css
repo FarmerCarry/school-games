@@ -17,6 +17,8 @@ h1 span { font-size:.67em; }
 .course-controls label { font-size:17px; font-weight:700; pointer-events:auto; }
 #course-code { width:86px; border:2px solid #53634c; border-radius:4px; padding:5px; color:var(--ink); background:#fff3d4; font:700 22px monospace; text-align:center; letter-spacing:2px; }
 #course-code:focus-visible { outline:3px solid #254b55; outline-offset:3px; }
+/* Empty: a surprise course. Arabic needs the shared font, not the monospace digits. */
+#course-code::placeholder { color:#6f7a5f; font:700 17px var(--sg-font); letter-spacing:0; opacity:1; }
 #course-code[aria-invalid] { border-color:#8f251f; }
 .course-controls .text-button { margin:0; font-size:16px; }
 .course-help { font-size:14px; line-height:1.4; margin:9px 0 13px; }
