@@ -547,8 +547,9 @@
   }
 
   /* -------------------------------------------------------------- speech */
-  // Optional Arabic speech for the first hint of a level: only an Arabic voice, never
-  // while muted, never needed to play.
+  // Optional Arabic speech for the first hint of a level: only an Arabic voice installed
+  // on the PC (an online voice, such as a browser's cloud voices, would send the words to
+  // a server: games never use the network), never while muted, never needed to play.
   let voice;
   function findVoice() {
     voice = null;
@@ -556,7 +557,7 @@
     let list = [];
     try { list = speechSynthesis.getVoices() || []; } catch (e) { return; }
     for (const v of list) {
-      if (!/^ar([-_]|$)/i.test(v.lang || '')) continue;
+      if (!v || v.localService === false || !/^ar([-_]|$)/i.test(v.lang || '')) continue;
       if (/^ar[-_]SA$/i.test(v.lang)) { voice = v; return; }
       if (!voice) voice = v;
     }

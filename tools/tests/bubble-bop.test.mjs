@@ -355,6 +355,36 @@ test('the hand that shows a key along the bottom edge is wholly on screen, on th
   }
 });
 
+test('spoken hints use only an Arabic voice installed on the PC, never an online one', async t => {
+  for (const [voices, expected] of [
+    [[{ name: 'online', lang: 'ar-SA', localService: false }, { name: 'local', lang: 'ar-EG', localService: true }], 'local'],
+    [[{ name: 'online', lang: 'ar-SA', localService: false }, { name: 'english', lang: 'en-US', localService: true }], null]
+  ]) {
+    const ctx = await context(t, { save: SAVE(0) });
+    await ctx.addInitScript(list => {
+      window.spoken = [];
+      window.SpeechSynthesisUtterance = function (text) { this.text = text; };
+      Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
+        getVoices: () => list, speak: u => window.spoken.push(u.voice && u.voice.name), cancel() {}, addEventListener() {}
+      } });
+    }, voices);
+    await ctx.addInitScript(() => {
+      let kit;
+      Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
+        kit = value;
+        kit.loop = update => { window.bb = { run: n => { for (let i = 0; i < n; i++) update(1 / 60); } }; return { stop() {} }; };
+      } });
+    });
+    const page = await ctx.newPage();
+    await page.goto(`${server.origin}/games/bubble-bop/`);
+    await page.waitForFunction(() => window.__game && window.bb);
+    await page.keyboard.press('Enter');
+    await page.evaluate(() => { for (let i = 0; i < 400 && !__game.state.ghost; i++) bb.run(1); });
+    assert.equal((await page.evaluate(() => __game.state)).ghost, true, 'the first hint shows');
+    assert.deepEqual(await page.evaluate(() => window.spoken), expected ? [expected] : [], `voices ${voices.map(v => v.name)}`);
+  }
+});
+
 // Embedded like in the portal: rounds, ends and telemetry reach the parent.
 async function embedded(t, prefs, options) {
   const ctx = await context(t, options);
