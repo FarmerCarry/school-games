@@ -66,6 +66,23 @@ function useClock(t) {
   return clock;
 }
 
+test('the Node driver binds values the way D1 does, so the tests see what D1 would do', async () => {
+  const db = openDatabase(':memory:');
+  // D1 binds every number, and a boolean, as REAL (wrangler dev: typeof(?1) is 'real').
+  assert.deepEqual((await db.prepare('SELECT ?1 / 2 AS x, typeof(?1) AS a, typeof(?2) AS b').bind(7, true).all()).results,
+    [{ x: 3.5, a: 'real', b: 'real' }]);
+  // A STRICT INTEGER column still stores a whole number as an integer, and refuses 1.5.
+  await db.prepare('CREATE TABLE t (v INTEGER NOT NULL) STRICT').run();
+  await db.prepare('INSERT INTO t (v) VALUES (?1)').bind(5).run();
+  assert.deepEqual((await db.prepare('SELECT v, typeof(v) AS t FROM t').all()).results, [{ v: 5, t: 'integer' }]);
+  await assert.rejects(db.prepare('INSERT INTO t (v) VALUES (?1)').bind(1.5).run(), /^Error: D1_ERROR: cannot store REAL value/);
+  for (const value of [undefined, 5n, {}]) assert.throws(() => db.prepare('SELECT ?1').bind(value), /^TypeError: D1_TYPE_ERROR/);
+  // D1 runs every statement of one prepare and answers with the last; node:sqlite would run
+  // only the first, so the driver refuses more than one.
+  await assert.rejects(db.prepare('SELECT 1 AS a; SELECT 2 AS b').all(), /^Error: D1_ERROR: one statement per query/);
+  assert.deepEqual((await db.prepare('SELECT 1 AS a; -- a comment\n').all()).results, [{ a: 1 }]);
+});
+
 test('wrangler.json binds what the Worker reads and keeps request logs off', () => {
   assert.equal(wrangler.main, 'worker.mjs');
   assert.deepEqual(wrangler.d1_databases, [{ binding: 'DB', database_name: 'school-games-telemetry' }], 'no database_id: Wrangler provisions it');

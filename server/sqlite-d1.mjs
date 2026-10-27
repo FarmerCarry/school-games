@@ -1,8 +1,11 @@
 // A Cloudflare D1-style database over node:sqlite, for the Node host and the tests:
 // db.prepare(sql).bind(...values).all() / .first(column) / .run() / .raw(), db.batch([...])
 // (one transaction: all or nothing) and db.exec(sql), with D1's results
-// ({ success, meta, results }) and D1's value rules (integers bind as INTEGER, booleans
-// as 1/0, undefined is refused). Statements are compiled when they first run and cached.
+// ({ success, meta, results }) and D1's value rules: every number, and a boolean (1/0),
+// binds as REAL, as on D1 (a STRICT INTEGER column still stores a whole number as an
+// integer); undefined, BigInt and objects are refused. A query is one statement (D1 would
+// run them all and answer with the last; node:sqlite would run only the first). Statements
+// are compiled when they first run and cached.
 // meta.rows_written is the rows changed (all tables here are WITHOUT ROWID and have no
 // other index, so this is what D1 bills); meta.rows_read is only the rows returned,
 // since node:sqlite cannot count the rows SQLite scanned.
@@ -21,11 +24,11 @@ function d1Error(error) {
     : new Error('D1_ERROR: ' + (error && error.message), { cause: error });
 }
 
+// node:sqlite binds a JS number as REAL, like D1.
 function bindable(value, index) {
   if (value === null) return null;
-  if (typeof value === 'boolean') return value ? 1n : 0n;
-  if (typeof value === 'number') return Number.isSafeInteger(value) ? BigInt(value) : value;
-  if (typeof value === 'string') return value;
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  if (typeof value === 'number' || typeof value === 'string') return value;
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
   if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
   throw new TypeError(`D1_TYPE_ERROR: Type '${typeof value}' not supported for value '${String(value)}' at position ${index + 1}`);
@@ -72,6 +75,10 @@ class Database {
     let entry = this.compiled.get(sql);
     if (!entry) {
       const statement = this.sqlite.prepare(sql);
+      // What follows the first statement, without comments, must be empty.
+      if (/\S/.test(sql.slice(statement.sourceSQL.length).replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, ''))) {
+        throw new Error('D1_ERROR: one statement per query (use batch() for several)');
+      }
       entry = { statement, rows: statement.columns().length > 0 };
       if (this.compiled.size >= CACHE) this.compiled.delete(this.compiled.keys().next().value);
       this.compiled.set(sql, entry);
