@@ -70,7 +70,7 @@ function catalogSlugs() {
   try {
     const window = {};
     vm.runInNewContext(fs.readFileSync(path.join(HERE, '../js/catalog.js'), 'utf8'), { window });
-    const slugs = window.GAMES.filter(g => !g.hidden && g.slug !== 'mouse-keyboard-academy').map(g => g.slug);
+    const slugs = window.GAMES.filter(g => !g.hidden).map(g => g.slug);
     return slugs.includes('bubble-bop') ? slugs : ['bubble-bop', ...slugs];
   } catch {
     return FALLBACK_GAMES;

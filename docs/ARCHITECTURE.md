@@ -262,8 +262,8 @@ nothing, and the portal sends `telemetry: false`):
 **Privacy rules (enforced in the sink and again on the server):** no names, no typed
 text, no error text, no PC label, no profile key or avatar, no wall-clock timestamps
 (times are seconds since the session started; the server stamps the receipt day and
-hour), no persistent identifiers (the session id is random per portal session and is
-never stored), no user-agent or GPU strings (coarse device buckets only), no IP
+hour), no persistent identifiers (the session id is random per portal session, is
+never reused, and is kept on the PC only inside batches still waiting to be sent), no user-agent or GPU strings (coarse device buckets only), no IP
 storage on the server.
 
 **Envelope** (POST body, `Content-Type: text/plain`, JSON):
