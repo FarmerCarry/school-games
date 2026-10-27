@@ -47,6 +47,9 @@
 
   // ---- game names from the site's catalog ---------------------------------------
   // The first render waits for it a few seconds; a catalog that arrives later redraws the names.
+  // The published fast build inlines the catalog into its pages (no js/catalog.js), so the
+  // names bundled in names.js (make-names.mjs) stand in for any game the live catalog lacks.
+  var BUNDLED = window.SG_GAME_NAMES || {};
   var catalogWaited = false;
   var catalogReady = new Promise(function (resolve) {
     var done = function () { catalogWaited = true; resolve(); };
@@ -66,7 +69,8 @@
     document.head.appendChild(script);
   });
   function gameName(slug) {
-    return I.catalogName(state.games && state.games.get(slug), state.lang) || slug;
+    var own = Object.prototype.hasOwnProperty.call(BUNDLED, slug) ? BUNDLED[slug] : null;
+    return I.catalogName(state.games && state.games.get(slug), state.lang) || (own && own[state.lang === 'ar' ? 0 : 1]) || slug;
   }
 
   // ---- formatting ---------------------------------------------------------------

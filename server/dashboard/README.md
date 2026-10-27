@@ -12,8 +12,10 @@ page runs under `default-src 'self'; script-src 'self' https://farmercarry.githu
 | `charts.js` | Inline-SVG line charts, bar lists and stacked bars, tooltip, table twin. |
 | `i18n.js` | Every word of the page in Arabic and English. |
 | `style.css` | Light and dark colour roles (validated dataviz palette), layout down to 360 px. |
+| `names.js` | Every game's Arabic and English name from `js/catalog.js`, for a site that does not publish the catalog. |
 | `demo.json` | `/?demo`: the real Node server's answers on simulated sessions, for every filter. |
 | `make-demo.mjs` | Rebuilds `demo.json`: `node server/dashboard/make-demo.mjs`. Not deployed (`.assetsignore`). |
+| `make-names.mjs` | Rebuilds `names.js` after a game is added or renamed: `node server/dashboard/make-names.mjs`. Not deployed. |
 
 * **Password:** the `ADMIN_TOKEN` of the server, kept in that browser's `localStorage`
   (`sg:dash:token`) until "Sign out". 401 says the password is wrong, 404 explains how to
@@ -22,7 +24,10 @@ page runs under `default-src 'self'; script-src 'self' https://farmercarry.githu
   30 seconds, both paused while the tab is hidden. An unchanged answer keeps the page.
 * **Days** are the server's UTC receipt days; "today" is the UTC date.
 * **Game names** come from `SITE_URL` + `js/catalog.js` (one constant in `app.js`; the
-  CSP's `script-src` must allow that origin). The slug is shown when it cannot load.
+  CSP's `script-src` must allow that origin) when the site publishes it. The fast build
+  that GitHub Pages publishes inlines the catalog into its pages and has no such file, so
+  `names.js` (bundled, same origin) gives the names of every game in the repository's
+  catalog; only a game added after the server was last deployed shows its slug.
 * **Privacy:** a group the server hides (`suppressed`, fewer than 3 sessions) is shown
   only as "fewer than 3 children — hidden for privacy", never ranked or described; a
   1–2 session group without the flag is treated the same way.

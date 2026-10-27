@@ -78,8 +78,9 @@ after(async () => {
 });
 
 // A browser context whose every request is accounted for. mode.api: 'server' (default),
-// 'unset' (no ADMIN_TOKEN: 404), 'down' (network error).
-async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-GB', colorScheme = 'light', token, lang } = {}) {
+// 'unset' (no ADMIN_TOKEN: 404), 'down' (network error). catalog: false answers the
+// site's catalog with 404, as the published fast build does (it inlines the catalog).
+async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-GB', colorScheme = 'light', token, lang, catalog = true } = {}) {
   const context = await browser.newContext({ viewport, locale, colorScheme, serviceWorkers: 'block' });
   t.after(() => context.close());
   const s = { context, mode: { api: 'server' }, api: [], outside: [], errors: [], allowed: [] };
@@ -89,7 +90,10 @@ async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-G
   });
   await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url());
-    if (url.href === CATALOG_URL) return route.fulfill({ status: 200, contentType: 'text/javascript', body: catalogSource });
+    if (url.href === CATALOG_URL) {
+      return catalog ? route.fulfill({ status: 200, contentType: 'text/javascript', body: catalogSource })
+        : route.fulfill({ status: 404, contentType: 'text/html', body: 'Not found' });
+    }
     if (url.origin !== site.origin) return route.abort();
     if (url.pathname.startsWith('/v1/')) {
       if (s.mode.api === 'down') return route.abort('connectionrefused');
@@ -454,4 +458,21 @@ test('a phone and a 360 px screen: no sideways scrolling, every section there', 
       await s.check();
     }
   }
+});
+
+test('game names come with the dashboard when the site does not publish its catalog', async t => {
+  // The published fast build (tools/build.mjs) inlines js/catalog.js into its pages, so the
+  // live site answers 404 for it: the names must not depend on that script.
+  const s = await open(t, { token: TOKEN, catalog: false });
+  const { page } = s;
+  s.allowed.push(/status of 404/);
+  await page.goto(site.origin + '/');
+  await waitForKpis(s, 1);
+  const shown = I.favourites(s.lastKpis().json).rows;
+  const names = () => page.locator('#fav-card .table-host tbody tr th').allTextContents();
+  await page.click('#fav-card .table-toggle');
+  assert.deepEqual((await names()).slice(0, shown.length), shown.map(g => nameOf('en')(g.slug)));
+  await page.click('#langBtn');
+  assert.deepEqual((await names()).slice(0, shown.length), shown.map(g => nameOf('ar')(g.slug)));
+  await s.check();
 });

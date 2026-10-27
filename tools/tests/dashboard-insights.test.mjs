@@ -193,6 +193,16 @@ test('a suppressed group is never described, ranked or counted', () => {
   }
 });
 
+test('names.js carries every catalog game\'s names (rebuild: node server/dashboard/make-names.mjs)', async () => {
+  const { namesSource } = await import('../../server/dashboard/make-names.mjs');
+  assert.equal(fs.readFileSync(path.join(dashboard, 'names.js'), 'utf8'), namesSource(), 'names.js is out of date: run node server/dashboard/make-names.mjs');
+  const names = loadScripts('names.js').SG_GAME_NAMES;
+  const site = {};
+  vm.runInNewContext(fs.readFileSync(path.join(repo, 'js/catalog.js'), 'utf8'), { window: site });
+  assert.deepEqual(Object.keys(names).sort(), [...site.GAMES].map(g => g.slug).sort());
+  for (const g of site.GAMES) assert.deepEqual(names[g.slug], [I.catalogName(g, 'ar'), I.catalogName(g, 'en')], g.slug);
+});
+
 test('the sentences: at most five, one kind at a time, in the documented order', () => {
   const en = I.insights(sample(), opts('en'));
   assert.deepEqual(en.map(s => s.kind), ['stuck', 'hard', 'favourite', 'health', 'returning']);

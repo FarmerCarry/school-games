@@ -446,7 +446,10 @@ axis per chart, table view, hover tooltips). Arabic and English with a toggle
   Fire & Ice level 3 unfinished in 64% of tries.» Only groups of 3 or more sessions
   are ever described; hidden groups say "fewer than 3 children: hidden for privacy".
 * **Game names** come from the live portal's `js/catalog.js` (loaded as a script from
-  the site address); the slug is shown if it cannot load.
+  the site address) when the site publishes it. The fast build inlines the catalog and
+  publishes no such file, so the dashboard also bundles every game's names
+  (`server/dashboard/names.js`, written from `js/catalog.js` by `make-names.mjs`; a test
+  fails while it is out of date); the slug is shown only for a game neither knows.
 * **Demo mode** (`/?demo`) shows bundled sample data, so the dashboard can be seen
   before any child plays.
 
