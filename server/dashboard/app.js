@@ -292,17 +292,29 @@
   });
   if (media && media.addEventListener) media.addEventListener('change', applyTheme);
 
+  // A redrawn control keeps the keyboard focus: the new button with the same data-focus
+  // key takes it back, so a keyboard user is not sent to the top of the page.
+  function keepFocus(draw) {
+    var active = document.activeElement, key = active && active.getAttribute && active.getAttribute('data-focus');
+    draw();
+    if (!key || document.activeElement === active) return;
+    var next = document.querySelector('[data-focus="' + key + '"]');
+    if (next) next.focus({ preventScroll: true });
+  }
+
   // ---- filters ---------------------------------------------------------------------
   function segmented(host, label, items, current, onPick) {
     host.textContent = '';
     h('span', { class: 'filter-label', id: host.id + 'Label' }, host, label);
     var group = h('div', { class: 'seg', role: 'group', 'aria-labelledby': host.id + 'Label' }, host);
     items.forEach(function (item) {
-      var b = h('button', { type: 'button', 'aria-pressed': String(item.value === current), 'data-value': String(item.value) }, group, item.text);
+      var b = h('button', { type: 'button', 'aria-pressed': String(item.value === current), 'data-value': String(item.value),
+        'data-focus': host.id + ':' + item.value }, group, item.text);
       b.addEventListener('click', function () { if (item.value !== current) onPick(item.value); });
     });
   }
-  function renderFilters() {
+  function renderFilters() { keepFocus(drawFilters); }
+  function drawFilters() {
     var T = t();
     segmented($('periodFilter'), T.period, PERIODS.map(function (p) { return { value: p, text: p === 1 ? T.today : T.days(p) }; }), state.period,
       function (p) { state.period = p; renderFilters(); refreshKpis(); });
@@ -310,12 +322,13 @@
       function (b) { state.band = b; renderFilters(); refreshKpis(); });
     renderStatus();
   }
-  function renderStatus() {
+  function renderStatus() { keepFocus(drawStatus); }
+  function drawStatus() {
     var T = t(), box = $('status');
     box.textContent = '';
     if (state.demo) h('span', { class: 'pill' }, box, T.demoTitle);
     if (state.kpisAt) h('span', { class: 'updated' }, box, T.updated(timeText(state.kpisAt)));
-    var b = h('button', { type: 'button', class: 'btn-quiet', id: 'refreshBtn' }, box, T.refresh);
+    var b = h('button', { type: 'button', class: 'btn-quiet', id: 'refreshBtn', 'data-focus': 'refresh' }, box, T.refresh);
     b.addEventListener('click', function () { refreshKpis(); refreshLive(); });
   }
   function renderNotice() {
@@ -343,7 +356,8 @@
     var api = { root: root, chart: chart, table: tableHost, foot: foot, body: body, head: head };
     if (withTable) {
       var on = !!state.tables[id];
-      var b = h('button', { type: 'button', class: 'btn-quiet table-toggle', 'aria-pressed': String(on), 'aria-controls': id + '-body' }, head, on ? T.showChart : T.showTable);
+      var b = h('button', { type: 'button', class: 'btn-quiet table-toggle', 'aria-pressed': String(on), 'aria-controls': id + '-body',
+        'data-focus': 'table:' + id }, head, on ? T.showChart : T.showTable);
       body.id = id + '-body';
       chart.hidden = on; tableHost.hidden = !on;
       b.addEventListener('click', function () {
@@ -363,7 +377,7 @@
   function moreButton(parent, id, total) {
     if (total <= TOP) return;
     var T = t(), open = !!state.expanded[id];
-    var b = h('button', { type: 'button', class: 'btn-quiet more', 'aria-expanded': String(open) }, parent, open ? T.showFewer : T.showAll(total));
+    var b = h('button', { type: 'button', class: 'btn-quiet more', 'aria-expanded': String(open), 'data-focus': 'more:' + id }, parent, open ? T.showFewer : T.showAll(total));
     b.addEventListener('click', function () { state.expanded[id] = !open; renderData(); });
   }
   var top = function (id, rows) { return state.expanded[id] ? rows : rows.slice(0, TOP); };
@@ -381,7 +395,8 @@
   }
 
   // ---- render --------------------------------------------------------------------------
-  function renderData() {
+  function renderData() { keepFocus(drawData); }
+  function drawData() {
     var T = t(), k = state.kpis, scrollY = window.scrollY;
     clearData();
     renderNotice();

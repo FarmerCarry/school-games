@@ -505,6 +505,36 @@ test('chart labels stay inside their cards, left to right and right to left', as
   }
 });
 
+test('the keyboard focus stays on a control that is redrawn', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  await page.goto(site.origin + '/');
+  await waitForKpis(s, 1);
+  const focused = () => page.evaluate(() => {
+    const el = document.activeElement;
+    return el === document.body ? 'body' : (el.closest('[id]') || el).id + ': ' + el.textContent.trim();
+  });
+  let n = s.kpis().length;
+  await page.focus('#periodFilter button[data-value="7"]');
+  await page.keyboard.press('Enter');
+  await waitForKpis(s, n + 1);
+  assert.equal(await focused(), 'periodFilter: 7 days');
+  n = s.kpis().length;
+  await page.focus('#bandFilter button[data-value="8-9"]');
+  await page.keyboard.press('Space');
+  await waitForKpis(s, n + 1);
+  assert.equal(await focused(), 'bandFilter: 8–9');
+  await page.focus('#fav-card .more');
+  await page.keyboard.press('Enter');
+  assert.equal(await focused(), 'fav-card: Show fewer');
+  n = s.kpis().length;
+  await page.focus('#refreshBtn');
+  await page.keyboard.press('Enter');
+  await waitForKpis(s, n + 1);
+  assert.equal(await focused(), 'refreshBtn: Refresh');
+  await s.check();
+});
+
 // WCAG 2 contrast of every visible text run against the nearest opaque background behind it.
 function lowContrast() {
   const parse = c => {
