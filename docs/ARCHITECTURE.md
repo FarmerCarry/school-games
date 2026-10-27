@@ -370,12 +370,92 @@ in the first worlds. Bop is a round, glowing friend that floats with the mouse p
 * Optional first-time picture cards for holding the mouse and finding the keys reuse
   the academy's approved grip pictures.
 
+## Milestone 2: the Cloudflare host and the insights dashboard
+
+Decisions (with the product owner): the data is collected on a **free Cloudflare
+account** the owner creates with one "Deploy to Cloudflare" button; the school has
+approved collection, so the fast build is pointed at it as soon as it exists; the
+next feature is the **insights dashboard**. The owner is not technical: everything
+they do is a click or a copy-paste, described step by step in plain words.
+
+### One server core, two hosts
+
+The same code runs on Cloudflare Workers (the default) and on Node (self-hosting):
+
+```
+server/schema.mjs        envelope and event validation (unchanged)
+server/store.mjs         daily aggregates over a D1-style async SQL driver; KPIs; live; purge
+server/handler.mjs       HTTP rules as a Fetch-API handler: routes, CORS, auth, limits, statuses
+server/worker.mjs        Cloudflare entry: export default { fetch, scheduled } on env.DB (D1)
+server/sqlite-d1.mjs     a D1-style driver over node:sqlite for Node and the tests
+server/app.mjs, main.mjs Node entry (node:http -> handler), unchanged options and behaviour
+server/dashboard/        the dashboard: static files served at / by both hosts
+server/wrangler.json     Worker config; server/package.json pins wrangler; .dev.vars.example
+```
+
+* **Daily aggregates, not raw events.** Cloudflare's free D1 allows about 100,000 rows
+  written and 5,000,000 rows read per day, and a Worker gets 10 ms of CPU per request.
+  So an accepted batch adds to running daily totals (per UTC day and age band: per game,
+  per level, per launch source, per device bucket, replay buckets, player buckets,
+  daily totals) with a few `INSERT ... ON CONFLICT DO UPDATE` statements in one batch,
+  and the KPIs are `SUM ... GROUP BY` over those small tables. The work per request
+  stays O(groups), never O(events). A batch touches about 15 rows.
+* **Small groups stay hidden.** Each aggregate row carries `sessions`: the number of
+  distinct sessions that day, counted through a small `seen(day, group, s)` table
+  (`INSERT OR IGNORE ... RETURNING`) that keeps only the last 2 days. A range's
+  sessions are the sum of its days' counts (a session crossing midnight counts twice;
+  it is rare). Groups below 3 sessions are suppressed exactly as before.
+* **Live.** A `live(s, slug, seen_minute)` row per session (one write per batch),
+  deleted after 10 minutes. It is the only fine-grained time kept, and only briefly.
+* **Schema in code.** The store creates and upgrades its tables itself on first use
+  (`CREATE TABLE IF NOT EXISTS`, a `meta` schema version), so a deploy has no separate
+  migration step that could fail.
+* **The KPI and live JSON keep their documented shapes** (server/README.md). Additions
+  only: `bands[].games[]` gains `winRate`, `dropOffRate` and `engagedMinutes`.
+* **Cloudflare specifics:** D1 binding `DB` with no `database_id` (Wrangler provisions it
+  on the first deploy); `ADMIN_TOKEN` is a secret the Deploy button asks for (from
+  `.dev.vars.example`, with a plain description in `package.json` `cloudflare.bindings`);
+  `ALLOWED_ORIGINS` (default `https://farmercarry.github.io`) and `RETENTION_DAYS` are
+  plain vars; a daily cron purges old rows; Workers observability stays **off** (its
+  request logs would hold IP addresses); the client key for the soft rate limit is
+  `CF-Connecting-IP`, in memory only. Wrangler is pinned (4.149.0) in
+  `server/package.json`; the deploy command is `wrangler deploy`.
+* `SG_TELEMETRY_URL` becomes the Worker's `https://…workers.dev/v1/batch`, committed in
+  `.github/workflows/build.yml` once the owner reports the address.
+
+### The insights dashboard (server/dashboard/)
+
+Served at `/` of the server, so it lives next to the data, outside the children's site
+(no bytes added to any child's page). Plain HTML/CSS/JS, no external libraries; charts
+are inline SVG following the dataviz method (validated palette, light and dark, one
+axis per chart, table view, hover tooltips). Arabic and English with a toggle
+(Arabic right to left; the browser language picks the default).
+
+* **Sign in** with the dashboard password (`ADMIN_TOKEN`), kept in that browser until
+  "sign out". A wrong password says so plainly.
+* **Filters** in one row: period (today, 7, 30, 90 days) and age band (all, 6–7, 8–9,
+  10–11). The KPIs reload on a change and every 5 minutes; "playing now" every 30 s.
+* **Sections, in plain words:** headline numbers (play sessions, total play time,
+  minutes per session, games opened, playing now); daily activity; favourite games;
+  favourites by age; where children get stuck (levels most often left unfinished);
+  difficulty check per game and age (too hard / about right / too easy, from win and
+  quit rates, with icon and label); coming back (games children return to); PC health
+  (smoothness, loading time, input delay, errors, by game and by PC type).
+* **Insights first:** up to five short sentences at the top, generated by
+  `server/dashboard/insights.js` (pure, unit-tested), e.g. «Children aged 6–7 leave
+  Fire & Ice level 3 unfinished in 64% of tries.» Only groups of 3 or more sessions
+  are ever described; hidden groups say "fewer than 3 children: hidden for privacy".
+* **Game names** come from the live portal's `js/catalog.js` (loaded as a script from
+  the site address); the slug is shown if it cannot load.
+* **Demo mode** (`/?demo`) shows bundled sample data, so the dashboard can be seen
+  before any child plays.
+
 ## Milestones
 
 | Milestone | Scope |
 |---|---|
-| **M1** (this) | Kit v2 (profile, track, dda, sg:telemetry), `shared/juice.js`, portal profiles/age bands/XP, telemetry sink, ingest server with KPI queries, zero-BGM sweep + guard, `bubble-bop` replaces the academy, DDA reference integrations. |
-| M2 | Insights dashboard (admin, live KPIs) on the server queries; portal shell visual refresh; Lightning Fingers → arcade letter-blaster; teacher-page sharing switch. |
-| M3 | DDA and tiered complexity across the whole catalog; juice retrofits; per-game mastery, daily quests and collections. |
+| **M1** | Kit v2 (profile, track, dda, sg:telemetry), `shared/juice.js`, portal profiles/age bands/XP, telemetry sink, ingest server with KPI queries, zero-BGM sweep + guard, `bubble-bop` replaces the academy, DDA reference integrations. |
+| **M2** | Cloudflare host (one-click deploy, daily aggregates on free D1), the insights dashboard, telemetry switched on. |
+| M3 | DDA and tiered complexity across the whole catalog; juice retrofits; per-game mastery, daily quests and collections; portal shell visual refresh; Lightning Fingers → arcade letter-blaster. |
 | M4 | New high-replayability titles on the runtime; rendering upgrades for the 3D titles. |
 | M5 | Server-side insight jobs (drop-off alerts, difficulty tuning reports) and A/B tuning of DDA targets. |
