@@ -1,9 +1,10 @@
 # Play statistics server and insights dashboard
 
-This folder is a small service that receives **anonymous** play statistics from the
+This folder is a small service that receives play statistics **without names** from the
 games portal (the portal's telemetry sink, `js/telemetry.js`; see
-[`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md), "Telemetry sink" and "Milestone 2"),
-keeps them as daily totals, and shows them on the insights dashboard at its own address.
+[`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md), "Telemetry sink", "Milestone 2" and
+"Milestone 2.5"), keeps them row by row under random codes (one per child's profile,
+one per PC), and shows them on the insights dashboard at its own address.
 
 It runs in one of two places, with the same code:
 
@@ -48,7 +49,7 @@ a web browser. Everything below is free.
 8. **Copy the address** it shows. It looks like
    `https://school-games-telemetry.<your-name>.workers.dev`. Send that address to the
    developer (an email or a chat message is fine). The developer then switches the games
-   site on, and children's PCs start sending anonymous statistics.
+   site on, and children's PCs start sending statistics (without names).
 9. **Open that address** in your browser to see the dashboard, and sign in with the
    password from step 5. Until children play, there is nothing to show; add `/?demo` to
    the address to see the dashboard with made-up sample data.
@@ -57,11 +58,9 @@ a web browser. Everything below is free.
 server per day (a PC sends one about every game played; 120 play sessions send about
 300; the server's own clean-up every 5 minutes adds about 300), and its free D1 database
 allows 500 MB per database, 5 million rows read and 100,000 rows written per day. A
-school day with 120 play sessions writes about 3,000 rows (a few percent of the
-allowance) and keeps about 1 MB of totals per month. The first time each day the
-dashboard shows a month it reads about 25,000 rows, and about 1,400 each time it
-refreshes after that (a busy school with 500 play sessions a day: about 130,000 rows the
-first time it shows 90 days).
+busy school (500 play sessions a day) writes about a third of the daily allowance and
+keeps about 220 MB after a year. The server counts its own use, and when a day's writes
+run high it asks the PCs to send less often (the `X-Batch-Every` answer header).
 If a limit were ever reached, the server stops answering until midnight UTC: nothing is
 charged (the free plan has no bill), and the PCs keep their statistics for up to 7 days
 and send them later.
@@ -75,17 +74,14 @@ collected), and you set a longer one here.
 
 ## Before you turn it on
 
-The players are **children aged 6 to 11**. Even anonymous usage statistics about
-children need the school's or district's **privacy review** and a **notice to
-parents** before collection starts, under the rules that apply to you: for example
-**COPPA** and **FERPA** in the United States, the **GDPR** with its rules for children's
-data (often called GDPR-K) in the European Union, and the **UK GDPR with the Age
-Appropriate Design Code** (Children's Code) in the United Kingdom. Give the reviewers
-the "Privacy design" section below and the event list in `docs/ARCHITECTURE.md`, and
-record who operates the server, where it runs and how long data is kept.
-
-Even with the server on, a PC sends nothing while a teacher has stopped statistics on
-it (the teacher page), and browsers that send Global Privacy Control never send anything.
+The players are **children aged 6 to 11**. No names are collected, but each child's play
+is kept under a random code, so these records are **pseudonymous personal data** under
+GDPR-style rules (the GDPR, the UK GDPR and its Children's Code; COPPA and FERPA notions
+in the United States): tell parents before collection starts, give your privacy
+reviewers the section "What is collected and kept" below, and check whether publishing
+research from it needs consent or an ethics review. A PC sends nothing while a teacher
+has stopped statistics on it (the teacher page), and browsers that send Global Privacy
+Control never send anything.
 
 ## Files
 
@@ -96,40 +92,43 @@ it (the teacher page), and browsers that send Global Privacy Control never send 
 | `package.json`, `package-lock.json` | Wrangler 4.149.0 for deploying (a development tool only), the plain-English descriptions the Deploy button shows, `npm start` for Node. |
 | `.dev.vars.example` | Tells the Deploy button to ask for the `ADMIN_TOKEN` secret (empty on purpose). |
 | `handler.mjs` | The HTTP rules as a Fetch-API handler, shared by both hosts: routes, CORS, the soft rate limit, body limits, admin password, status codes. |
-| `store.mjs` | Daily aggregates over a D1-style SQL driver; creates and upgrades its tables itself; KPIs, live sessions, retention. |
-| `schema.mjs` | Strict validation of the envelope and every event kind; cleans and clamps. |
+| `store.mjs` | The facts (sessions, game visits, rounds, marks, students, PCs) over a D1-style SQL driver; creates and upgrades its tables itself, one version step at a time; KPIs, live sessions, retention, the usage meter. |
+| `schema.mjs` | Validation of the envelope (wire versions 2 and 3) and every event kind; cleans and clamps. |
+| `clock.mjs` | The school's clock: UTC offsets, local days and the exact bounds of a local day in an IANA zone, from `Intl` alone. |
 | `sqlite-d1.mjs` | A D1-style driver over Node's built-in `node:sqlite`, for the Node host and the tests. |
 | `app.mjs`, `main.mjs` | The Node host: `node:http` in front of the handler, settings from the environment, a purge every 24 hours. |
 | `static.mjs` | The Node host's static file server for `dashboard/`, with the headers of `dashboard/_headers`. |
 | `dashboard/` | The insights dashboard (static files), served at `/` by both hosts. `_headers` gives every page a strict Content-Security-Policy. |
 | `warnings.mjs` | Hides Node 22's one `node:sqlite` ExperimentalWarning (and nothing else). |
 | `simulate.mjs` | Deterministic synthetic sessions for dashboard development and tests. |
-| `fixtures/sample-batch.json` | A valid envelope with every event kind (shared with the portal's tests). |
+| `fixtures/sample-batch.json`, `fixtures/sample-batch-v3.json` | A valid v2 and a valid v3 envelope, each with every event kind of its version (shared with the portal's tests). |
 | `Dockerfile` | A minimal `node:22-alpine` image of the Node host. |
 
 The folder is self-contained (it imports nothing from outside it), because the Deploy
 button copies only this folder into a new repository.
 
-## Privacy design
+## What is collected and kept
 
-Privacy is built into what can be stored, not only into what the portal chooses to send.
+What can be stored is decided here, not only by what the portal chooses to send.
 
-* **No personal data.** The contract has no field for a name, typed text, error text,
-  a PC label, a profile key, an avatar, a user-agent or a GPU string. The server
-  validates every field against closed lists and patterns (`schema.mjs`) and drops
-  anything else: unknown envelope fields are ignored, an event with an extra or a
-  malformed field is dropped whole, and round ids that could be typed text (three
-  digits in a row, spaces, more than 24 characters) are refused.
-* **Totals, not events.** Events are never stored. A batch only adds to whole-number
-  totals per UTC receipt day and age band (per game, level, launch source and device
-  bucket). What a single child did cannot be read back.
-* **Session ids for two days, batch ids for 30.** The session id is random per portal
-  session and never reused. The server keeps it only in the `seen` table (to count
-  distinct sessions per day) for today and yesterday, and in the `live` table while it
-  is in the 5-minute live window (a sweep every 5 minutes deletes it within 10 minutes,
-  also when no request comes). The batch id is random per batch and kept 30 days for
-  de-duplication. Neither can link sessions of the same child. On the PC, unsent batches
-  wait in localStorage (keys starting with `sg:site:tm:q`, at most 7 days and 128 KB).
+* **No names, nothing a child types.** The contract has no field for a name, typed
+  text, error text, a PC label, a profile key, an avatar or colour, a user-agent or a
+  GPU string. The server validates every field against closed lists and patterns
+  (`schema.mjs`) and drops anything else: unknown envelope fields are ignored, an event
+  with an extra or a malformed field is dropped whole, and round ids that could be typed
+  text (three digits in a row, spaces, more than 24 characters) are refused.
+* **Random codes, so pseudonymous.** A batch of wire version 3 carries a random code for
+  the child's profile (`u`: 12 lowercase hex, or a player card's `c` and 4 hex) and one
+  for the PC (`p`: 12 hex), made on the PC and never derived from anything about the
+  child, and the PC's zone name (such as `Asia/Riyadh`). A value of any other form is
+  stored as unknown (`''`), never as sent. Guests send no code. Because the codes keep
+  one child's play together over time, these records are pseudonymous personal data.
+* **Play is kept row by row.** Each play session, game visit, round and mark (a level-up,
+  a heart, a tutorial step, the classroom timer, a removed profile, an older code of the
+  same child) is a row of the facts, with the session's code and PC code. A student row
+  holds the code, a label (its first 4 to 12 characters, as the dashboard shows it), the
+  age band, the first and last play and the profile's age in days. Older v2 batches are
+  stored the same way, with no codes.
 * **No IP addresses and no headers are stored or logged.** The client address
   (`CF-Connecting-IP` on Cloudflare, the socket address or a trusted `X-Forwarded-For`
   hop on Node) is only a key of the in-memory rate limiter and is forgotten once its
@@ -138,23 +137,21 @@ Privacy is built into what can be stored, not only into what the portal chooses 
   **off** in `wrangler.json`; keep it off. The only log lines are start-up and purge
   counts (Node) and internal error messages.
 * **No wall-clock times from the client.** Events carry seconds since the session
-  started and the server stores only the UTC **day** of receipt. The live view keeps
-  the **minute** of each session's last batch, for at most 10 minutes.
+  started, and a v3 batch the seconds from the session's start to its sending (`w`).
+  The server dates the session by its own clock at receipt minus `w` (for v2: minus the
+  batch's last event time and 10 seconds), so a PC whose clock is wrong still dates its
+  play correctly; days and hours follow the school's zone.
 * **Coarse buckets.** Devices are reported as cores (1, 2, 4, 8, 16), memory in GB
   (0, 1, 2, 4, 8) and screen width (1366, 1600, 1920, 2560); age as a band (6-7, 8-9,
-  10-11 or unknown); profile age, days since last play and plays before as buckets;
-  reaction times, input latency and frame times as fixed histograms.
-* **Small-group suppression.** Every KPI group (a game, a level, an age band, a device
-  bucket, a day, a launch source, live counts) with fewer than **3 distinct sessions**
-  is returned as `{ ..., "suppressed": true }` with no numbers. Lists are sorted by
-  their key, never by a hidden number. Suppression does not stop an administrator from
-  subtracting narrower queries from wider ones; the dashboard password is for the
-  people who operate the service, not for publishing raw results.
-* **Retention.** Daily totals older than `RETENTION_DAYS` (default 180) are deleted by
-  the daily purge (Cloudflare: a cron at 03:23 UTC; Node: at start and every 24 hours);
-  live rows by a sweep every 5 minutes (Node: every minute).
-  On Node, SQLite's `secure_delete` overwrites deleted rows and the write-ahead log is
-  truncated after each purge.
+  10-11 or unknown); reaction times, input latency and frame times as fixed histograms.
+* **Small groups in the KPI answers.** `/v1/admin/kpis` and `/v1/admin/live` still report
+  a group with fewer than **3 distinct sessions** as `{ ..., "suppressed": true }`.
+* **Retention.** The daily purge (Cloudflare: a cron at 03:23 UTC; Node: at start and
+  every 24 hours) deletes the frozen daily totals of milestone 2 older than
+  `RETENTION_DAYS` (default 180), batch ids after 30 days and the server's usage counts
+  after 60 days; live rows go by a sweep every 5 minutes (Node: every minute). The facts
+  are not purged by this version yet. On Node, SQLite's `secure_delete` overwrites
+  deleted rows and the write-ahead log is truncated after each purge.
 
 ## Self-hosting on Node
 
@@ -165,7 +162,7 @@ runtime dependencies.
 export ADMIN_TOKEN=$(openssl rand -hex 24)
 node server/main.mjs &
 # telemetry: listening on port 8787; 0 allowed origin(s), admin on, ...
-curl -s localhost:8787/v1/health                    # {"ok":true}
+curl -s localhost:8787/v1/health                    # {"ok":true,"accepts":[2,3],"schema":4}
 node server/simulate.mjs --sessions 200             # synthetic sessions (today)
 curl -s -H "Authorization: Bearer $ADMIN_TOKEN" localhost:8787/v1/admin/kpis
 # the dashboard: http://localhost:8787/
@@ -307,7 +304,7 @@ address plus `/v1/batch`, for example
 Every API response (paths under `/v1/`) has `Vary: Origin`, `Cache-Control: no-store`,
 `X-Content-Type-Options: nosniff` and, for an origin in `ALLOWED_ORIGINS`,
 `Access-Control-Allow-Origin: <that origin>` and `Access-Control-Expose-Headers:
-Retry-After`. Credentials are never allowed. Error bodies are `{"error": "<short
+Retry-After, X-Batch-Every`. Credentials are never allowed. Error bodies are `{"error": "<short
 reason>"}` and never echo the request. Every request that reaches the server (including
 `OPTIONS`, health checks and, on Node, dashboard files) takes a token from the client's
 rate-limit bucket; an empty bucket answers `429` with `Retry-After` in seconds.
@@ -325,31 +322,51 @@ nosniff`, `Referrer-Policy: no-referrer`, and `Cache-Control: no-store` for the 
 ### `POST /v1/batch`
 
 The body is the telemetry envelope as JSON, sent as `text/plain` (a CORS "simple
-request" without a preflight) or `application/json`. See `fixtures/sample-batch.json`
-and `docs/ARCHITECTURE.md`.
+request" without a preflight) or `application/json`. Wire version 2 (`"v": 2`, the
+portal until milestone 2.5) and version 3 (`"v": 3`) are both accepted, version 2
+indefinitely (queues of up to 7 days, cached portals). See
+`fixtures/sample-batch.json`, `fixtures/sample-batch-v3.json`, `docs/ARCHITECTURE.md`
+and `docs/RESEARCH_TELEMETRY_SPEC.md` ("Wire format v3").
 
 | Status | When |
 |---|---|
-| `204` | Stored, or a batch id already received (repeats are answered the same, so the client drops them). Unknown event kinds and malformed events are dropped silently; the rest of the batch is kept. |
-| `400` | Not JSON, or an invalid envelope: `v` is not `2`; `b` is not 16 lowercase hex; `s` is not 12 lowercase hex; `k` is not `src` or exactly 16 lowercase hex; `m` is not `web`/`app`; `a` is not `6-7`/`8-9`/`10-11`/`''`; `d` is not `[cores, memoryGB, screenWidth]` from the bucket lists; `ev` is not an array of at most 200 entries. |
+| `204` | Stored, or already stored: a repeated v2 batch id is answered the same, and a v3 batch delivered again changes nothing, so the client drops it. Unknown event kinds and malformed events are dropped silently; the rest of the batch is kept. The header `X-Batch-Every` gives the seconds the PC should wait between batches: `60` while the day's rows written are at most 60,000, `180` up to 80,000, `300` above. |
+| `400` | Not JSON, or an invalid envelope: `v` is not `2` or `3`; `b` is not 16 lowercase hex; `s` is not 12 lowercase hex; `k` is not `src` or exactly 16 lowercase hex; `m` is not `web`/`app`; `a` is not `6-7`/`8-9`/`10-11`/`''`; `d` is not `[cores, memoryGB, screenWidth]` from the bucket lists; `ev` is not an array of at most 200 entries. |
 | `403` | The request has an `Origin` header that is not in `ALLOWED_ORIGINS`. Requests without `Origin` (tools, `simulate.mjs`) are accepted. |
 | `413` | The body is over 64 KB (65,536 bytes), declared or streamed. |
 | `415` | Another content type. |
 | `429` | Rate limited. |
+| `503` | `{"error": "updating"}` with `Retry-After: 2`: this request created or upgraded the database (one version step) and did nothing else. The portal sends the batch again. Only on Cloudflare: the Node host upgrades at start. |
+
+The fields version 3 adds to the envelope are lenient, because the portal drops a batch
+for good on any `4xx`: a malformed value is stored as unknown and the batch is kept.
+
+| Field | Accepted | Otherwise |
+|---|---|---|
+| `u` | a student code: 12 lowercase hex, or `c` and 4 lowercase hex (a player card); `''` for a guest | `''` |
+| `p` | a PC code: 12 lowercase hex, or `''` | `''` |
+| `z` | an IANA zone this server knows (or `UTC`), at most 40 characters | `''` |
+| `w` | a whole number of seconds from 0 to 691,200 (8 days): the session's age when the batch was sent | `null` (the session is dated from the receipt time) |
 
 Event validation (exact length; every field must pass):
 
-| Event | Fields after the kind |
-|---|---|
-| `ss` | `t`, isNew `0`/`1`, profile age `0`–`3`, days since last `0`–`4`, level ≥ 0 |
-| `go` | `t`, slug, source (`featured catalog recent favorites category quick search related surprise reload history direct starter`), plays before `0`–`4` |
-| `ld` | `t`, slug, load ms |
-| `er` | `t`, slug, kind `t`/`x`/`l` |
-| `rs` | `t`, slug, round id, tier `0`–`9`, replay index |
-| `re` | `t`, slug, code `w`/`l`/`d`/`e`/`q`, round id, ms, score (`-1` or ≥ 0), tier `0`–`9`, hits, misses, `rt[6]` |
-| `gx` | `t`, slug, engaged ms, `il[6]`, `f[4]` |
-| `lv` | `t`, level ≥ 1 |
-| `se` | `t`, engaged ms |
+| Event | v2 fields after the kind | v3 fields after the kind |
+|---|---|---|
+| `ss` | `t`, isNew `0`/`1`, profile age `0`–`3`, days since last `0`–`4`, level ≥ 0 | `t`, isNew, profile age in days and days since the last play (`-1`–`36500`), level, profiles on the PC (≤ 99), classroom mode `0`/`1` |
+| `go` | `t`, slug, source (`featured catalog recent favorites category quick search related surprise reload history direct starter`), plays before `0`–`4` | `t`, visit `n` (`1`–`9999`), slug, source, plays before (≤ 10⁶), favourite `0`/`1` |
+| `ld` | `t`, slug, load ms | `t`, `n`, slug, load ms |
+| `er` | `t`, slug, kind `t`/`x`/`l` | `t`, `n`, slug, kind |
+| `rs` | `t`, slug, round id, tier `0`–`9`, replay index | `t`, `n`, round `k` (`1`–`99999`), slug, round id, tier, replay index |
+| `re` | `t`, slug, code `w`/`l`/`d`/`e`/`q`, round id, ms, score (`-1` or ≥ 0), tier `0`–`9`, hits, misses, `rt[6]` | `t`, `n`, `k`, slug, then as v2, then `x`: `null` or `[wallMs, inputs, idleLapses, pauses, rtSumMs, rtN, ddaPermille]` (lenient: anything else is `null` and the round is kept) |
+| `gp` | | `t`, `n`, slug, engaged ms so far |
+| `gx` | `t`, slug, engaged ms, `il[6]`, `f[4]` | `t`, `n`, slug, engaged ms, `il[6]`, `f[4]` |
+| `tu` | | `t`, `n`, slug, tutorial step `s`/`d` |
+| `fv` | | `t`, `n`, slug, heart on `1` or off `0` |
+| `ct` | | `t`, classroom timer `s`/`c`/`e`, minutes (≤ 120) |
+| `lv` | `t`, level ≥ 1 | the same |
+| `pr` | | `t`, the code of a profile removed on this PC |
+| `cd` | | `t`, an older code of this student (linked to `u`) |
+| `se` | `t`, engaged ms | `t`, engaged ms, why the session ended `u`/`p`/`h`/`i` |
 
 Slugs match `^[a-z0-9]+(?:-[a-z0-9]+)*$` (at most 40 characters); round ids match
 `^[A-Za-z][A-Za-z0-9_:.-]{0,23}$` without three digits in a row. Neither may be a
@@ -367,7 +384,9 @@ OPTIONS`, `Access-Control-Allow-Headers: Content-Type, Authorization` and
 
 ### `GET /v1/health`
 
-`200 {"ok": true}`.
+`200 {"ok": true, "accepts": [2, 3], "schema": 4}`: the wire versions this server takes
+and its database schema. It never touches the database, so it is the check to make
+before a portal that sends version 3 is published.
 
 ### Admin endpoints
 
@@ -375,13 +394,15 @@ OPTIONS`, `Access-Control-Allow-Headers: Content-Type, Authorization` and
 (compared in constant time). Without a valid token: `401` with
 `WWW-Authenticate: Bearer`. With no valid `ADMIN_TOKEN` set: `404
 {"error": "admin password not set"}` (the dashboard shows this as "the password was
-not set").
+not set"). The request that upgrades the database answers `503` as for batches.
 
 #### `GET /v1/admin/kpis?from=YYYY-MM-DD&to=YYYY-MM-DD&band=6-7`
 
-Receipt days `from`..`to` (UTC, inclusive, at most 366 days; default: the 30 days
-ending today). `band` is `all` (default), `6-7`, `8-9`, `10-11` or `unknown`.
-Invalid parameters: `400`.
+Days `from`..`to` (inclusive, at most 366 days; default: the 30 days ending today on the
+school's clock). Days up to the update to schema 4 (`legacy_until`) are the frozen UTC
+receipt days of milestone 2; days from `facts_since` on are the school's local days. On
+the one day both cover, both add up. `band` is `all` (default), `6-7`, `8-9`, `10-11`
+or `unknown`. Invalid parameters: `400`.
 
 Conventions:
 
@@ -389,14 +410,14 @@ Conventions:
   sessions in it (for games this is the brief's "unique sessions"). A group with 1 or
   2 sessions is only `{ <key fields>, "suppressed": true }`; a group with 0 sessions
   and nothing stored keeps its zeros. Check `suppressed` before reading numbers.
-* **Sessions are counted per day:** a range's sessions are the sum of its days' distinct
-  sessions, so a session that crosses midnight UTC (rare) counts on both days.
+* **A session counts once, on the day it started** (on the school's clock), with
+  everything it did; a range's sessions are the sum of its days' sessions.
 * Rates and shares are 0..1 with 4 decimals and `null` when the denominator is 0.
   Minutes have 1 decimal (`avgEngagedMinutesPerSession` 2), seconds 1, tiers 2,
   milliseconds are whole.
-* Days are receipt days: a batch kept offline and delivered later counts on the day it
-  arrived. Engaged time comes from game-close (`gx`) events; a visit that never closed
-  adds rounds but no engaged time.
+* A batch kept offline and delivered later counts on the day it was played. Engaged
+  time is each game visit's: from its close (`gx`) and, for v3, also from the running
+  time (`gp`) of a visit that never closed.
 * Histograms: `rt` reaction time `<300, <500, <800, <1200, <2000, ≥2000` ms; `il` input
   latency `<8, <16, <33, <50, <100, ≥100` ms; frames `smooth ≤20, ok ≤34, choppy ≤250,
   stall >250` ms; `replayIndex` `0, 1, 2, 3–4, 5–9, 10+` prior starts of the same round
@@ -405,7 +426,7 @@ Conventions:
 * Round codes: `w` win, `l` loss, `d` draw, `e` neutral end (endless runs, two-player
   modes), `q` quit. Endless games end with `e`, so their completion rate is 0 and
   their win rate `null`: read `rounds.codes` and `dropOffRate` for them.
-* A device bucket counts a session under the buckets of its first batch of the day.
+* A device bucket and an age band count a session under its first batch's.
 
 ```jsonc
 {
@@ -506,65 +527,66 @@ life when it arrives; a repeated batch does not.
   Keep backups no longer than `RETENTION_DAYS` (they are copies of the same data) and
   encrypt them at rest. To restore, stop the server and replace the file (delete stale
   `-wal`/`-shm` files).
-* **Retention.** Daily totals are deleted by receipt day by the daily purge; batch ids
-  after 30 days, `seen` session ids after yesterday, the kept KPI rows (`kpi_cache`) at
-  every daily purge, and live rows once they leave the 5-minute window (by the next batch
-  or live query, and by a sweep every 5 minutes on Cloudflare and every minute on Node,
-  so within 10 minutes even with no traffic). Lowering `RETENTION_DAYS` takes effect at
-  the next purge (Node: the next start). To erase everything on Node, stop the server and
+* **Retention.** The frozen daily totals of milestone 2 are deleted by receipt day by
+  the daily purge; batch ids after 30 days, the usage counts after 60 days, the kept KPI
+  rows (`kpi_cache`) at every daily purge, and live rows once they leave the 5-minute
+  window (by the next batch or live query, and by a sweep every 5 minutes on Cloudflare
+  and every minute on Node, so within 10 minutes even with no traffic). The facts are
+  not purged by this version yet. Lowering `RETENTION_DAYS` takes effect at the next
+  purge (Node: the next start). To erase everything on Node, stop the server and
   delete the database files; on Cloudflare, delete the Worker and its D1 database
   `school-games-telemetry` in the Cloudflare dashboard.
 * **Monitoring.** `GET /v1/health`. The Node process exits when it cannot start (port in
   use, unreadable database), so the supervisor (Docker, systemd) reports or restarts it.
   On Cloudflare, the Worker's *Metrics* tab shows requests and errors without logs.
-* **Upgrades.** The store creates and upgrades its tables itself on first use (`CREATE
-  TABLE IF NOT EXISTS`, the schema version in the `meta` table), so a deploy has no
-  migration step. A database of the first server (one table per event kind) is folded
-  into the daily totals on first use, its event tables are dropped, and its
-  `user_version` is raised so the first server refuses it. A server refuses a database
-  newer than itself.
-* **Size and cost.** Measured with `simulate.mjs` (120 sessions per weekday, a sixth
-  at weekends, 30 days, 9,105 batches): a batch is one transaction that writes 10.5 rows
-  on average (median 11, 95th percentile 19) and reads about 16, so a month writes about
-  96,000 rows and keeps about 1 MB of totals; a batch of 200 events over one game writes
-  about 30 rows. A KPI query reads the aggregate rows of its days (about 500 per school
-  day, 12,800 for the month; D1 counts 25,000 rows read for a 30-day query, twice the
-  rows because of the grouping). Days before yesterday never change, so their KPI rows
-  are read once per period and day: they are kept in `kpi_cache` (for every instance,
-  until the next daily purge) and in each instance's memory for an hour, and any later
-  query reads only the last two days (about 1,400 rows). A busy school (500 sessions per
-  weekday, 90 days) writes about 17,000 rows per weekday, and a first 90-day query reads
-  about 130,000 rows. JavaScript time per request in Node: 0.06 ms per batch and about
-  1.3 ms per 30- or 90-day KPI query (about 3 ms for the busy school; 3 ms for a
-  200-event batch over 100 games), plus SQLite's own work (0.2 ms per batch, 4 to 20 ms
-  per KPI query), which on Cloudflare D1 does outside the Worker.
+* **Upgrades.** The store creates and upgrades its tables itself (`CREATE TABLE IF NOT
+  EXISTS`, the schema version in the `meta` table), so a deploy has no migration step.
+  It goes one version step per request: on Cloudflare the first request after a deploy
+  that needs a step does only that step and is answered `503` with `Retry-After: 2` (a
+  daily or 5-minute cron that meets it does nothing else either); the Node host takes
+  every step at start. Schema 3 (milestone 2) becomes schema 4 in one step: the facts,
+  settings and rollup tables are added, `seen` is dropped, `live` is made again with the
+  codes, and the daily totals stay, read only, for the days up to the update. A database
+  of the first server (one table per event kind) is folded into the daily totals first
+  (schema 3, with its `user_version` raised so the first server refuses it) and becomes
+  schema 4 on the next request. A server refuses a database newer than itself; a server
+  older than schema 4 refuses a database it has upgraded, so going back means D1 *Time
+  Travel* (7 days) to just before the deploy, then deploying the older server.
+* **Size and cost.** Measured on the Node driver, which bills a written row once for its
+  table and once for each secondary index, as D1 does: the first v3 batch of a session
+  writes 12 rows (its session row is 4: the row, `UNIQUE (s)` and two indexes), a later
+  batch 5, a batch of 200 events one row per visit and round plus 2; a v2 batch about
+  13. A batch takes at most 20 statements, and the request that upgrades the database
+  at most 45 (D1 allows 50 per request). For a busy school (500 play sessions a day,
+  9.2 batches each at the 60 s interval) see `docs/RESEARCH_TELEMETRY_SPEC.md`, "Budget
+  math": about 33,000 rows written a day in the first year and about 220 MB after it.
 
 ### Storage
 
-`batches (b, day)` for de-duplication; `seen (day, kind, key, s)`, which sessions were
-already counted today in a group (`d` the day, `g` a game, `l` a level, `s` a launch
-source); `live (s, slug, seen_minute)`; `meta (key, value)` with the schema version;
-`kpi_cache (key, made, rows)`, the KPI rows (sums per group as JSON, no session id) of
-the closed days of a requested period, emptied by every daily purge; and five daily
-aggregate tables, each keyed by `day` and band `a`:
+Schema 4 (`docs/RESEARCH_TELEMETRY_SPEC.md`, "Storage on D1", has the exact columns):
 
-| Table | Key after (day, a) | Sums |
-|---|---|---|
-| `agg_days` | | sessions (and per mode `web`, `app`), engaged ms, opens, round starts and ends, level-ups, errors, session starts, new profiles, guests, profile-age and days-since-last buckets |
-| `agg_games` | `slug` | sessions, opens, closes, engaged ms, round starts and ends, codes `w l d e q`, tier sum and count, hits, misses, `rt0..5`, `il0..5`, `f0..3`, loads and load ms, errors per kind, opens per launch source, replay and plays-before buckets |
-| `agg_levels` | `slug`, `id` | sessions, starts, ends, codes, round ms, tier sum and count |
-| `agg_sources` | `src` | sessions, opens |
-| `agg_devices` | `cores`, `mem`, `screen` | sessions, `f0..3`, `il0..5`, loads and load ms |
+| Tables | What they hold |
+|---|---|
+| `st_sessions` | One row per play session: its codes (`u`, `p`, `''` when unknown), wire version, band, build, mode, device buckets, start (`start_s`, with `clock` `w` from the PC's elapsed seconds or `r` estimated from the receipt time), the PC's zone, the session start's fields (exact profile age, days since last play, level, profiles on the PC, classroom mode, and the v2 buckets), how it ended, and the server's numbering state for v2. Indexed by start and by student. |
+| `st_visits`, `st_rounds`, `st_marks` | Game visits `(session, n)`, rounds `(session, n, k)` with their outcome, tier, score, hits, misses, reaction times and extras, the two-player flag and the student's attempt number, and marks (level-ups, hearts, tutorial steps, classroom timer, removed profiles, older codes). |
+| `st_students`, `st_pcs`, `st_student_pcs`, `st_student_games`, `aliases`, `cards` | Per student code: label, first and last play, bands, profile age; per PC code: first and last play, zone, buckets, build; who played on which PC; rounds ended per student and game (for attempt numbers); links from older codes to a student's code, one hop deep; player cards. |
+| `settings`, `usage`, `roll_days` | The school's zone and where it came from, the week start, `facts_since`, `legacy_until`, `v3_since` and the rollup version; D1 rows read and written per UTC day (each instance adds its counts once a minute); which local days are rolled up. |
+| `r_day`, `r_game_day`, `r_level_day`, `r_source_day`, `r_device_day`, `r_student_day`, `r_student_game`, `r_pc_day`, `r_stat` | Per-day rollups of the facts by the school's local day. |
+| `live`, `batches`, `kpi_cache`, `meta` | Sessions in the 5-minute live window (with codes and wire version); v2 batch ids for de-duplication; kept KPI rows of the frozen days; the schema version. |
+| `agg_days`, `agg_games`, `agg_levels`, `agg_sources`, `agg_devices` | Only on a database milestone 2 used: its daily totals per UTC receipt day, frozen. |
 
-All tables are `STRICT, WITHOUT ROWID` with no other index, so a write is one row. There
-are no other columns.
+Every table but `st_sessions` is `STRICT, WITHOUT ROWID`. The only indexes beyond the
+primary keys are `st_sessions_time`, `st_sessions_student`, `r_student_day_u`,
+`r_student_game_u` and `r_stat_metric`. There are no other columns.
 
 ## Development
 
 * Tests: `node --test --test-reporter=spec tools/tests/telemetry-server.test.mjs
-  tools/tests/telemetry-worker.test.mjs` (the Node host on port 0 with a temporary
-  database; the Worker entry with real `Request`s on the Node driver; and a comparison
-  with the first server's store from Git, skipped when that commit is not checked out).
+  tools/tests/telemetry-worker.test.mjs tools/tests/telemetry-facts.test.mjs
+  tools/tests/telemetry-clock.test.mjs` (the Node host on port 0 with a temporary
+  database; the Worker entry with real `Request`s on the Node driver; the facts on the
+  store; the school's clock; and comparisons with milestone 2's store and the first
+  server's store from Git, skipped when those commits are not checked out).
 * The Workers runtime on your machine (no Cloudflare account needed): `npm install` in
   `server/`, put `ADMIN_TOKEN=...` in `server/.dev.vars` (ignored by Git), then
   `npx wrangler dev` (local D1 in `.wrangler/`). Add `--test-scheduled` and open

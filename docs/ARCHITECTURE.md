@@ -319,13 +319,12 @@ GitHub Pages (any small VM or container; see `server/README.md`).
 
 * `POST /v1/batch` → `204`. Validates the envelope and every event against the rules
   above (unknown event kinds and malformed events are dropped; an invalid envelope is
-  `400`; a body over 64 KB is `413`). De-duplicates on `b`. Stamps `day` (UTC date)
-  and `hour` (UTC hour) at receipt. Stores no IP and no headers. A per-IP token
-  bucket in memory only (generous: school NAT puts a whole lab behind one IP) answers
-  `429`.
+  `400`; a body over 64 KB is `413`). Wire versions 2 and 3 are accepted (milestone 2.5
+  below). Stores no IP and no headers. A per-IP token bucket in memory only (generous:
+  school NAT puts a whole lab behind one IP) answers `429`.
 * CORS: `Access-Control-Allow-Origin` echoes an origin from `ALLOWED_ORIGINS`
   (comma-separated); no credentials; `OPTIONS` handled.
-* `GET /v1/health` → `{ ok: true }`.
+* `GET /v1/health` → `{ ok: true, accepts: [2, 3], schema: 4 }`, without the database.
 * `GET /v1/admin/kpis?from=YYYY-MM-DD&to=YYYY-MM-DD[&band=6-7]` and
   `GET /v1/admin/live` with `Authorization: Bearer $ADMIN_TOKEN`: engagement KPIs
   (sessions, engaged minutes, per-game opens, completion/drop-off/win rates, per-level
@@ -467,12 +466,60 @@ axis per chart, table view, hover tooltips). Arabic and English with a toggle
 * **Demo mode** (`/?demo`) shows bundled sample data, so the dashboard can be seen
   before any child plays.
 
+## Milestone 2.5: research telemetry
+
+The binding spec is `docs/RESEARCH_TELEMETRY_SPEC.md`. Decisions (with the product owner):
+
+1. No names, nothing a child types, no avatar or colour, no PC label, no user agent, no
+   IP. Random codes per profile and per PC are allowed, so the data is pseudonymous.
+2. No suppression: every number is shown, even for one child; small samples carry a
+   truthful chip instead of being hidden.
+3. Days, hours and weekdays follow the school's own clock, found from the PCs' zones; the
+   owner can change it with one click.
+4. Count per student (a profile's code), not per PC. Guests count in totals, never as
+   students.
+5. Row-level facts are the source of truth; small per-day rollups are built from them for
+   the dashboard. Milestone 2's daily totals are frozen, not dropped.
+6. Wire format v3 is additive: Kit stays on `sg:telemetry` version 2 (it adds the kind
+   `rx`), `sg:stats` v1 is unchanged, and the server accepts v2 indefinitely.
+7. No wall-clock time is sent: `w` is the seconds from the session's start to the send.
+8. Facts are kept 400 days by default, rollups 800.
+9. The server ships first; the portal sends v3 only once `/v1/health` on the deployed
+   server answers `"accepts": [2, 3]`.
+
+The server so far:
+
+* **Schema 4** (`server/store.mjs`): the facts `st_sessions`, `st_visits`, `st_rounds`,
+  `st_marks`, the student and PC tables, `aliases`, `cards`, `settings`, `usage`,
+  `roll_days` and the rollup tables `r_*`; a new database gets them directly, and a
+  milestone-2 database gains them next to its frozen `agg_*` totals. The upgrade goes
+  one version step per invocation; on Cloudflare that request is answered `503` with
+  `Retry-After: 2` and does nothing else (at most 45 statements).
+* **Ingest** writes each batch's facts with one upsert per table (rows as JSON), at most
+  20 statements per request. A v3 batch is idempotent (first known values, running
+  maxima, natural keys), so it needs no batch id; v2 batches keep their de-duplication
+  and are numbered into visits and rounds by the server. Rounds a student ends are
+  numbered as attempts per game. A session is dated by the server's receipt time minus
+  the PC's elapsed seconds and counts on the school's local day it started
+  (`server/clock.mjs` turns zones into offsets and day bounds for SQL).
+* **The school's zone** starts unknown (UTC) and is set by the first v3 batch with a
+  valid zone, unless the owner or the PCs' vote has set it; a change marks rolled days
+  for a rebuild.
+* **The usage meter** adds up D1's rows read and written per instance and writes them
+  once a minute; from today's writes the server answers `X-Batch-Every` (60, 180 or 300
+  seconds) so the PCs send less often near the free limit.
+* Until the rollups land, the KPI and live answers keep milestone 2's shapes: frozen
+  days from `agg_*`, newer days computed from the facts with each milestone-2 column
+  defined over them (a test locks them equal to milestone 2's store on the same
+  batches).
+
 ## Milestones
 
 | Milestone | Scope |
 |---|---|
 | **M1** | Kit v2 (profile, track, dda, sg:telemetry), `shared/juice.js`, portal profiles/age bands/XP, telemetry sink, ingest server with KPI queries, zero-BGM sweep + guard, `bubble-bop` replaces the academy, DDA reference integrations. |
 | **M2** | Cloudflare host (one-click deploy, daily aggregates on free D1), the insights dashboard, telemetry switched on. |
+| M2.5 | Research telemetry: wire v3 with pseudonymous student and PC codes, row-level facts and rollups on schema 4, the school's clock, no suppression, per-student and learning views, research export. |
 | M3 | DDA and tiered complexity across the whole catalog; juice retrofits; per-game mastery, daily quests and collections; portal shell visual refresh; Lightning Fingers → arcade letter-blaster. |
 | M4 | New high-replayability titles on the runtime; rendering upgrades for the 3D titles. |
 | M5 | Server-side insight jobs (drop-off alerts, difficulty tuning reports) and A/B tuning of DDA targets. |
