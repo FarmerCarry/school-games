@@ -135,11 +135,12 @@ dda.reset()
   `tier = 1 + floor(level * tiers * 0.9999)`.
 * **Storage:** `Kit.store(slug)` key `dda` →
   `{ <player, or '_' + band for a guest>: { <id>: [level rounded to 3 decimals, n] } }`;
-  at most 16 players kept (the least recently saved is dropped). A change of player
+  at most 24 players kept, a full PC (the least recently saved is dropped; game pages
+  built before milestone 2.5 still keep 16). A change of player
   (or, for a guest, of band) reloads the state. A player with no results yet follows
   the current band's seed.
 * Every read of the controller (`level`, `tier`, `value`, `pick`) reports the tier to
-  `Kit.track.tier()`.
+  `Kit.track.tier()`, and the level (in thousandths) for the next `rx`.
 * DDA lives in the UI layer (`game.js`): engines and level files stay pure and take
   difficulty as parameters (their Node verifiers load a stub Kit).
 
@@ -191,6 +192,32 @@ Round ids follow the v1 rules (`^[A-Za-z][A-Za-z0-9_:.-]{0,23}$`, no three digit
 a row, never typed text). A `round()` while a round is open ends it with code `q`, and so
 does a round still open when the game page is unloaded (not kept in the back-forward
 cache); `sg:stats` v1 is unchanged and the portal records its own quit from `o`/`om`.
+
+**Round counters `rx` (milestone 2.5).** Immediately before every `re`, in the same `ev`
+list, Kit pushes one more kind. `sg:telemetry` stays **version 2**: a portal from before
+2.5 accepts only `rs` of length 3 and `re` of length 9, so it ignores `rx`, and a new
+portal with an old game page gets no `rx` and stores `x: null`. Because of the 64-event
+split, `rx` and its `re` may arrive in two messages.
+
+```js
+['rx', wallMs, inputs, idleLapses, pauses, rtSumMs, rtN, ddaPermille]
+// e.g. ['rx', 99000, 6, 2, 3, 650, 2, 600], then ['re', 'w', 'L3', …]
+```
+
+| Counter | Counted | Rule |
+|---|---|---|
+| `wallMs` | the round's start to its end | elapsed milliseconds (`performance.now()`), engaged or not; never a time of day |
+| `inputs` | every key press and click Kit sees in the round | key repeats excluded |
+| `idleLapses` | a key press or click in the round after its 20 s engaged window lapsed | mouse moves, the wheel and `busy()` never count; after a pause the window is cut, so the press that resumes play is not a lapse |
+| `pauses` | every Kit pause in the round (blur, hidden page, fullscreen exit, `sg:pause`, Shift+Tab) | one blur can arrive with a hidden page, which counts twice |
+| `rtSumMs`, `rtN` | the same reaction times as the `re` histogram | for the exact mean |
+| `ddaPermille` | `round(level × 1000)` of the last `Kit.dda` read of any controller in the page | −1 before the first read; sticky across rounds |
+
+Everything except `ddaPermille` restarts at each round start. The first four are plain
+counts kept at any time and posted only while `telemetry` is `true`; reaction times are
+counted only while it is `true`, as for the histogram. Kit adds no timer and posts nothing
+new: `rx` rides on the existing messages. The counters cost 195 minified bytes per game
+page (about 6.6 KB of offline cache over the 34 game pages).
 
 ## Juice (shared/juice.js)
 
