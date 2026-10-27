@@ -128,8 +128,8 @@ const FACTS = [
   // x: lv level | fv '1'/'0' | tu 's'/'d' | ct what || ':' || minutes | pr code | cd old code
   'CREATE TABLE IF NOT EXISTS st_marks (sid INTEGER NOT NULL, kind TEXT NOT NULL, t INTEGER NOT NULL, n INTEGER NOT NULL, ' +
     'x TEXT NOT NULL, PRIMARY KEY (sid, kind, t, n, x)) STRICT, WITHOUT ROWID',
-  'CREATE TABLE IF NOT EXISTS aliases (u_old TEXT PRIMARY KEY, u_new TEXT NOT NULL, s INTEGER NOT NULL, how TEXT NOT NULL) STRICT, WITHOUT ROWID',
-  'CREATE TABLE IF NOT EXISTS cards (code TEXT PRIMARY KEY, set_no INTEGER NOT NULL, a TEXT NOT NULL, made_day TEXT NOT NULL) STRICT, WITHOUT ROWID'
+  // how: 'pc' (a cd mark) or 'owner' (the dashboard's link)
+  'CREATE TABLE IF NOT EXISTS aliases (u_old TEXT PRIMARY KEY, u_new TEXT NOT NULL, s INTEGER NOT NULL, how TEXT NOT NULL) STRICT, WITHOUT ROWID'
 ];
 const LIVE_4 = 'CREATE TABLE IF NOT EXISTS live (s TEXT PRIMARY KEY, slug TEXT NOT NULL, seen_minute INTEGER NOT NULL, ' +
   "u TEXT NOT NULL DEFAULT '', p TEXT NOT NULL DEFAULT '', wire INTEGER NOT NULL DEFAULT 2) STRICT, WITHOUT ROWID";
@@ -273,8 +273,7 @@ const PC_SET = [['first_s', 'MIN(first_s, excluded.first_s)'], ['last_s', 'MAX(l
 const PC = `INSERT INTO st_pcs (p, first_s, last_s, z, cores, mem, screen, k) SELECT ?2, start_s, start_s, ?3, ?4, ?5, ?6, ?7 ` +
   `FROM st_sessions WHERE s = ?1 ON CONFLICT (p) DO UPDATE SET ${assign(PC_SET)} WHERE ${unchanged(PC_SET)}`;
 // W3: the student. The label is the code's first 4 characters in capitals, unless a stored
-// code already starts with them (then 6, 8 or all 12); a card code is always all 5. It is
-// never changed. band_first and age_days_first come from the earliest session, band_last
+// code already starts with them (then 6, 8 or all 12). It is never changed. band_first and age_days_first come from the earliest session, band_last
 // from the latest.
 const prefix = n => `WHEN NOT EXISTS (SELECT 1 FROM st_students WHERE u >= substr(?2, 1, ${n}) AND u < substr(?2, 1, ${n}) || 'g') ` +
   `THEN upper(substr(?2, 1, ${n}))`;
@@ -282,7 +281,7 @@ const earlier = c => [c, `CASE WHEN excluded.first_s < first_s THEN excluded.${c
 const STUDENT_SET = [...['band_first', 'age_days_first'].map(earlier), ['band_last', 'CASE WHEN excluded.last_s >= last_s THEN excluded.band_last ELSE band_last END'],
   ['first_s', 'MIN(first_s, excluded.first_s)'], ['last_s', 'MAX(last_s, excluded.last_s)']];
 const STUDENT = `INSERT INTO st_students (u, label, first_s, last_s, band_first, band_last, age_days_first) ` +
-  `SELECT ?2, CASE WHEN length(?2) = 5 THEN upper(?2) ${[4, 6, 8].map(prefix).join(' ')} ELSE upper(?2) END, ` +
+  `SELECT ?2, CASE ${[4, 6, 8].map(prefix).join(' ')} ELSE upper(?2) END, ` +
   `start_s, start_s, ?3, ?3, ?4 FROM st_sessions WHERE s = ?1 ` +
   `ON CONFLICT (u) DO UPDATE SET ${assign(STUDENT_SET)} WHERE ${unchanged(STUDENT_SET)}`;
 // W4: the PCs a student played on.

@@ -336,10 +336,9 @@ from a copy of `server/`), or Node ≥ 22 with no dependencies (`node:http`,
   guests and PCs in the last 5 minutes, and the school's clock and retention. Every
   group is shown, however small.
 * The research reads, with the same token (milestone 2.5 below): `students`, `student?u`,
-  `game?slug`, `stats?metrics`, `cohorts`, `pcs` and `cards` (phase 2), and
-  `export?file` (one page of a research CSV file, its next page's cursor in `X-Next`);
-  and the owner's actions, `POST forget {u}`, `POST link {u, to}`, `DELETE link?u` and
-  `POST rebuild {}`. Each route takes only its methods (`405` with `Allow` otherwise);
+  `game?slug`, `stats?metrics`, `cohorts` and `pcs`, and `export?file` (one page of a
+  research CSV file, its next page's cursor in `X-Next`); and the owner's actions,
+  `POST forget {u}`, `POST link {u, to}`, `DELETE link?u` and `POST rebuild {}`. Each route takes only its methods (`405` with `Allow` otherwise);
   bodies are JSON of at most 4 KB. Admin reads but live and settings answer `429` once
   the day's D1 reads near the free limit (export pages earlier), and the actions once
   the day's writes do.
@@ -499,11 +498,15 @@ The binding spec is `docs/RESEARCH_TELEMETRY_SPEC.md`. Decisions (with the produ
 8. Facts are kept 400 days by default, rollups 800.
 9. The server ships first; the portal sends v3 only once `/v1/health` on the deployed
    server answers `"accepts": [2, 3]`.
+10. The owner's answers to the spec's open questions: the 20-minute idle hand-over ships
+    on, a PC keeps up to 24 profiles, and there are no player cards (a student code is
+    always a profile's 12 hex digits; a child on two PCs is joined by the teacher page's
+    code transfer or by the owner's link on the dashboard).
 
 The server:
 
 * **Schema 4** (`server/store.mjs`): the facts `st_sessions`, `st_visits`, `st_rounds`,
-  `st_marks`, the student and PC tables, `aliases`, `cards`, `settings`, `usage`,
+  `st_marks`, the student and PC tables, `aliases`, `settings`, `usage`,
   `roll_days` and the rollup tables `r_*`; a new database gets them directly, and a
   milestone-2 database gains them next to its frozen `agg_*` totals. The upgrade goes
   one version step per invocation; on Cloudflare that request is answered `503` with

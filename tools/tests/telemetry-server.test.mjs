@@ -408,7 +408,7 @@ test('v3: a malformed optional field is stored as unknown and the batch is kept 
   const cases = [
     [{}, [U, P, 'Asia/Riyadh', 'w']],
     [{ u: 'p1' }, ['', P, 'Asia/Riyadh', 'w']], [{ u: 'Sara' }, ['', P, 'Asia/Riyadh', 'w']], [{ u: U.toUpperCase() }, ['', P, 'Asia/Riyadh', 'w']],
-    [{ u: 7 }, ['', P, 'Asia/Riyadh', 'w']], [{ u: 'c7f3a' }, ['c7f3a', P, 'Asia/Riyadh', 'w']], [{ u: '' }, ['', P, 'Asia/Riyadh', 'w']],
+    [{ u: 7 }, ['', P, 'Asia/Riyadh', 'w']], [{ u: 'c7f3a' }, ['', P, 'Asia/Riyadh', 'w']], [{ u: '' }, ['', P, 'Asia/Riyadh', 'w']],
     [{ p: 'PC-LAB-1' }, [U, '', 'Asia/Riyadh', 'w']], [{ p: P.slice(1) }, [U, '', 'Asia/Riyadh', 'w']], [{ p: 'c7f3a' }, [U, '', 'Asia/Riyadh', 'w']],
     [{ z: 'Mars/Base' }, [U, P, '', 'w']], [{ z: 'constructor' }, [U, P, '', 'w']], [{ z: 42 }, [U, P, '', 'w']], [{ z: 'utc' }, [U, P, '', 'w']],
     [{ w: -1 }, [U, P, 'Asia/Riyadh', 'r']], [{ w: 691201 }, [U, P, 'Asia/Riyadh', 'r']], [{ w: '35' }, [U, P, 'Asia/Riyadh', 'r']],
@@ -432,6 +432,7 @@ test('v3: a malformed optional field is stored as unknown and the batch is kept 
   const malformed = [['go', 1, 0, 'road-hopper', 'catalog', 0, 0], ['go', 1, 1, 'road-hopper', 'catalog', 0, 2], ['go', 1, 'road-hopper', 'catalog', 0],
     ['rs', 1, 1, 100000, 'road-hopper', 'L1', 1, 0], ['re', 40, 1, 1, 'road-hopper', 'w', 'L1', 30000, 5, 1, 2, 1, z6], ['gp', 1, 1, 'road-hopper', -5],
     ['tu', 1, 1, 'road-hopper', 'x'], ['fv', 1, 1, 'road-hopper', 2], ['ct', 1, 's', -1], ['ct', 1, 'started', 20], ['pr', 1, 'p1'], ['cd', 1, 'C7F3A'],
+    ['pr', 1, 'c7f3a'], ['cd', 1, 'c7f3a'],
     ['se', 1, 100, 'x'], ['se', 1, 100], ['ss', 0, 0, 1, 1, 3], ['ss', 0, 0, 36501, 1, 3, 4, 0], ['lv', 1, 0], ['xx', 1]];
   const cleaned = validateBatch(envelope3('f00000000099', [...malformed, ['lv', 2, 3]]));
   assert.deepEqual([cleaned.dropped, cleaned.events], [malformed.length, [['lv', 2, 3]]]);
@@ -555,7 +556,7 @@ const COLUMNS = {
   st_visits: ['sid', 'n', 'slug', 't_open', 't_close', 'src', 'plays', 'plays_b', 'fav', 'load_ms', 'err', 'engaged_ms', 'closed', ...list('il', 6), ...list('f', 4)],
   st_rounds: ['sid', 'n', 'k', 'slug', 'id', 't0', 'tier0', 'replay', 't', 'code', 'ms', 'score', 'tier', 'hits', 'misses', ...list('rt', 6), 'wall_ms',
     'inputs', 'idle', 'pauses', 'rt_sum', 'rt_n', 'dda', 'duo', 'attempt'],
-  st_marks: ['sid', 'kind', 't', 'n', 'x'], aliases: ['u_old', 'u_new', 's', 'how'], cards: ['code', 'set_no', 'a', 'made_day'],
+  st_marks: ['sid', 'kind', 't', 'n', 'x'], aliases: ['u_old', 'u_new', 's', 'how'],
   r_day: ['day', 'a', ...AGG_DAYS, 'students', 'new_students', 'guest_sessions', 'v2_sessions', 'linked_ms', 'clock_r', 'unclosed', 'unended', 'duo',
     'hearts_on', 'hearts_off', 'timer_sessions', 'why_u', 'why_p', 'why_h', 'why_i'],
   r_game_day: ['day', 'a', 'slug', ...AGG_GAMES, 'students', 'wall_s', 'inputs', 'idle', 'pauses', 'rt_sum', 'rt_n', 'dda_sum', 'dda_n', 'score_sum',
@@ -853,10 +854,11 @@ test('settings: the school\'s clock, retention, storage and usage; the dashboard
 });
 
 test('keeping two school years is refused when the database would outgrow the storage guard', async () => {
-  const db = openDatabase(':memory:'), store = openStore(db, { guards: { bytes: 300000 } });
-  await store.ingest(validateBatch(fixture3), START);
-  const size = (await store.settings(START)).storage.bytes;
-  assert.ok(size * 760 / 400 > 300000 && size < 300000, 'the test database is ' + size + ' bytes');
+  const db = openDatabase(':memory:'), first = openStore(db);
+  await first.ingest(validateBatch(fixture3), START);
+  // A guard above the database's size now, and below it kept 760 days instead of 400.
+  const size = (await first.settings(START)).storage.bytes, store = openStore(db, { guards: { bytes: Math.round(size * 1.5) } });
+  assert.equal((await store.settings(START)).storage.bytes, size, 'the test database is ' + size + ' bytes');
   assert.deepEqual(await store.updateSettings({ keepDays: 760 }, START), { error: 'storage' });
   assert.equal((await store.settings(START)).keep.days, 400);
   assert.deepEqual((await store.updateSettings({ keepDays: 400 }, START)).keep, { days: 400, source: 'owner', rollupDays: 800 });
@@ -1132,10 +1134,10 @@ function call(s, method, pathname, body, headers = {}) {
 }
 // Every admin route and the methods it takes (HEAD goes with GET).
 const ROUTES = { kpis: ['GET'], live: ['GET'], settings: ['GET', 'POST'], students: ['GET'], student: ['GET'], game: ['GET'], stats: ['GET'],
-  cohorts: ['GET'], pcs: ['GET'], cards: ['GET'], export: ['GET'], forget: ['POST'], link: ['POST', 'DELETE'], rebuild: ['POST'] };
+  cohorts: ['GET'], pcs: ['GET'], export: ['GET'], forget: ['POST'], link: ['POST', 'DELETE'], rebuild: ['POST'] };
 // A request each route answers 2xx (or, for a code nobody played with, 404) on an empty server.
 const VALID = { kpis: ['GET', ''], live: ['GET', ''], settings: ['GET', ''], students: ['GET', ''], student: ['GET', '?u=' + U, 404],
-  game: ['GET', '?slug=road-hopper'], stats: ['GET', '?metrics=hour'], cohorts: ['GET', ''], pcs: ['GET', ''], cards: ['GET', ''],
+  game: ['GET', '?slug=road-hopper'], stats: ['GET', '?metrics=hour'], cohorts: ['GET', ''], pcs: ['GET', ''],
   export: ['GET', '?file=sessions'], forget: ['POST', '', 200, { u: U }], link: ['POST', '', 404, { u: U, to: '1b2c3d4e5f60' }], rebuild: ['POST', '', 200, {}] };
 
 test('the admin router: each route takes its own methods only (405 with Allow), and every one needs the dashboard password', async t => {
@@ -1399,7 +1401,7 @@ test('the guards: above 90,000 writes today the owner\'s actions answer 429; abo
   await usage('reads', 4200001);
   s.clock.now += 5 * 60000;
   for (const pathname of ['/v1/admin/kpis', '/v1/admin/students', `/v1/admin/student?u=${U}`, '/v1/admin/game?slug=road-hopper', '/v1/admin/stats?metrics=hour',
-    '/v1/admin/cohorts', '/v1/admin/pcs', '/v1/admin/cards', '/v1/admin/export?file=pcs']) {
+    '/v1/admin/cohorts', '/v1/admin/pcs', '/v1/admin/export?file=pcs']) {
     const res = await s.admin(pathname);
     assert.deepEqual([res.status, res.json()], [429, { error: 'reads', ...until }], pathname);
   }
@@ -1407,18 +1409,24 @@ test('the guards: above 90,000 writes today the owner\'s actions answer 429; abo
   assert.equal((await call(s, 'POST', '/v1/admin/forget', { u: U })).status, 200, 'actions are guarded by writes');
 });
 
-test('cards: the phase-2 stub lists the printed player cards; making cards answers 405 until phase 2', async t => {
+test('there are no player cards: /v1/admin/cards is an unknown route, and a code of c and 4 hex is no student code', async t => {
   const s = await start(t);
-  assert.deepEqual((await s.admin('/v1/admin/cards')).json(), { v: 1, cards: [], clock: UTC });
-  await s.app.store.db.prepare("INSERT INTO cards (code, set_no, a, made_day) VALUES ('c7f3a', 1, '6-7', '2026-10-19'), ('c0b12', 1, '', '2026-10-19')").run();
+  for (const [method, body] of [['GET'], ['POST', { count: 8, band: '6-7' }]]) {
+    const res = await call(s, method, '/v1/admin/cards', body);
+    assert.deepEqual([res.status, res.json()], [404, { error: 'not found' }], method);
+    assert.equal((await s.send(method, '/v1/admin/cards')).status, 404, method + ' without the password');
+  }
+  // Such a code plays as a guest, and is neither an older code of a student nor a removed profile.
   assert.equal((await s.post(envelope3('cc0000000001', [ss3(1, 0, 1)], { u: 'c7f3a', z: '' }))).status, 204);
-  assert.deepEqual((await s.admin('/v1/admin/cards')).json().cards, [{ code: 'c0b12', set: 1, band: 'unknown', madeDay: '2026-10-19', used: false },
-    { code: 'c7f3a', set: 1, band: '6-7', madeDay: '2026-10-19', used: true }]);
-  const made = await call(s, 'POST', '/v1/admin/cards', { count: 8, band: '6-7' });
-  assert.deepEqual([made.status, made.headers.allow], [405, 'GET, HEAD, OPTIONS']);
-  // A card student keeps all five characters as its label.
-  const card = (await s.admin('/v1/admin/students?from=2026-10-20&to=2026-10-20')).json().students[0];
-  assert.deepEqual(pick(card, ['u', 'label', 'kind']), { u: 'c7f3a', label: 'C7F3A', kind: 'card' });
+  const linked = envelope3('cc0000000002', [ss3(1, 0, 1), ['cd', 1, 'c7f3a'], ['pr', 2, 'c7f3a'], ['lv', 3, 2]], { z: '' });
+  assert.equal(validateBatch(linked).dropped, 2);
+  assert.equal((await s.post(linked)).status, 204);
+  assert.deepEqual((await s.rows('st_sessions', 'id')).map(r => r.u), ['', U]);
+  assert.deepEqual((await s.rows('st_students')).map(r => [r.u, r.label]), [[U, U.slice(0, 4).toUpperCase()]]);
+  assert.deepEqual((await s.rows('st_marks')).map(r => r.kind), ['lv']);
+  assert.deepEqual(await s.rows('aliases'), []);
+  const students = (await s.admin('/v1/admin/students?from=2026-10-20&to=2026-10-20')).json().students;
+  assert.deepEqual(students.map(x => pick(x, ['u', 'kind'])), [{ u: U, kind: 'profile' }]);
 });
 
 // A simulated school (simulate.mjs) stored through `store`, with the cron's rolls after each day.
@@ -1712,7 +1720,7 @@ test('the store creates schema 4, upgrades schema 2 and 3 one step at a time kee
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const names = async db => (await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all()).results.map(r => r.name);
   const settings = async db => Object.fromEntries((await db.prepare('SELECT key, value FROM settings').all()).results.map(r => [r.key, r.value]));
-  const v4 = ['aliases', 'batches', 'cards', 'kpi_cache', 'live', 'meta', 'r_day', 'r_device_day', 'r_game_day', 'r_level_day', 'r_pc_day', 'r_source_day',
+  const v4 = ['aliases', 'batches', 'kpi_cache', 'live', 'meta', 'r_day', 'r_device_day', 'r_game_day', 'r_level_day', 'r_pc_day', 'r_source_day',
     'r_stat', 'r_student_day', 'r_student_game', 'roll_days', 'settings', 'st_marks', 'st_pcs', 'st_rounds', 'st_sessions', 'st_student_games',
     'st_student_pcs', 'st_students', 'st_visits', 'usage'];
   // A new database: schema 4 at once, without the aggregates.

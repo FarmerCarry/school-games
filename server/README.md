@@ -95,7 +95,7 @@ Control never send anything.
 | `.dev.vars.example` | Tells the Deploy button to ask for the `ADMIN_TOKEN` secret (empty on purpose). |
 | `handler.mjs` | The HTTP rules as a Fetch-API handler, shared by both hosts: routes, CORS, the soft rate limit, body limits, admin password, the admin router (methods, parameters, guards), status codes. |
 | `store.mjs` | The facts (sessions, game visits, rounds, marks, students, PCs) over a D1-style SQL driver; creates and upgrades its tables itself, one version step at a time; the 5-minute rollups, KPIs, live sessions, settings, retention, the usage meter and its guards, and the kept parts of answers. |
-| `admin.mjs` | The research reads (the students, one student, one game, the `r_stat` metrics, retention cohorts, the PCs, player cards) and the owner's actions (forget a student, link and unlink codes, recount), in SQL over the rollups and the facts not rolled yet. |
+| `admin.mjs` | The research reads (the students, one student, one game, the `r_stat` metrics, retention cohorts, the PCs) and the owner's actions (forget a student, link and unlink codes, recount), in SQL over the rollups and the facts not rolled yet. |
 | `export.mjs` | The research export: each file's pinned columns (`COLUMNS`) and its pages of CSV lines, built in SQL. |
 | `rollups.mjs` | The daily rollups of the facts by the school's local day, and milestone 2's frozen daily totals: their tables, and for each rollup the one SQL `SELECT` that defines it. |
 | `schema.mjs` | Validation of the envelope (wire versions 2 and 3) and every event kind; cleans and clamps. |
@@ -123,11 +123,11 @@ What can be stored is decided here, not only by what the portal chooses to send.
   with an extra or a malformed field is dropped whole, and round ids that could be typed
   text (three digits in a row, spaces, more than 24 characters) are refused.
 * **Random codes, so pseudonymous.** A batch of wire version 3 carries a random code for
-  the child's profile (`u`: 12 lowercase hex, or a player card's `c` and 4 hex) and one
-  for the PC (`p`: 12 hex), made on the PC and never derived from anything about the
-  child, and the PC's zone name (such as `Asia/Riyadh`). A value of any other form is
-  stored as unknown (`''`), never as sent. Guests send no code. Because the codes keep
-  one child's play together over time, these records are pseudonymous personal data.
+  the child's profile (`u`: 12 lowercase hex) and one for the PC (`p`: 12 hex), made on
+  the PC and never derived from anything about the child, and the PC's zone name (such
+  as `Asia/Riyadh`). A value of any other form is stored as unknown (`''`), never as
+  sent. Guests send no code. Because the codes keep one child's play together over time,
+  these records are pseudonymous personal data.
 * **Play is kept row by row.** Each play session, game visit, round and mark (a level-up,
   a heart, a tutorial step, the classroom timer, a removed profile, an older code of the
   same child) is a row of the facts, with the session's code and PC code. A student row
@@ -432,7 +432,7 @@ for good on any `4xx`: a malformed value is stored as unknown and the batch is k
 
 | Field | Accepted | Otherwise |
 |---|---|---|
-| `u` | a student code: 12 lowercase hex, or `c` and 4 lowercase hex (a player card); `''` for a guest | `''` |
+| `u` | a student code: 12 lowercase hex; `''` for a guest | `''` |
 | `p` | a PC code: 12 lowercase hex, or `''` | `''` |
 | `z` | an IANA zone this server knows (or `UTC`), at most 40 characters | `''` |
 | `w` | a whole number of seconds from 0 to 691,200 (8 days): the session's age when the batch was sent | `null` (the session is dated from the receipt time) |
@@ -481,12 +481,17 @@ before a portal that sends version 3 is published.
 
 | Route under `/v1/admin/` | Methods | Guard |
 |---|---|---|
-| `kpis`, `students`, `student`, `game`, `stats`, `cohorts`, `pcs`, `cards` | `GET` | reads |
+| `kpis`, `students`, `student`, `game`, `stats`, `cohorts`, `pcs` | `GET` | reads |
 | `export` | `GET` | export reads |
 | `live` | `GET` | none |
 | `settings` | `GET`, `POST` | none |
 | `forget`, `rebuild` | `POST` | writes |
 | `link` | `POST`, `DELETE` | writes |
+
+Player cards (the spec's phase 2: printed cards with a short code) are not built, so a
+student code is always a profile's 12 hex digits and there is no `cards` route
+(`/v1/admin/cards` answers `404` like any unknown path). A child who plays on two PCs is
+joined by the teacher page's code transfer (the `cd` mark) or by the owner's link.
 
 `HEAD` goes with every `GET`. Every admin route needs `Authorization: Bearer
 <ADMIN_TOKEN>` (compared in constant time). Without a valid token: `401` with
@@ -500,8 +505,8 @@ batches. Every JSON answer has `"v": 1` and the school's clock, `"clock": {"tz",
 **Parameters.** `from`, `to` and `band` as for the KPIs below: days `from`..`to` of the
 school's clock (inclusive, at most 366; default the 30 days ending today) and `band`
 `all` (default), `6-7`, `8-9`, `10-11` or `unknown`. A student code `u` is 12 lowercase
-hex, or `c` and 4 lowercase hex (a player card); a game `slug` is as in batches. A
-malformed parameter, or a missing one that has no default: `400 {"error": "<its name>"}`.
+hex; a game `slug` is as in batches. A malformed parameter, or a missing one that has no
+default: `400 {"error": "<its name>"}`.
 
 **Bodies.** `POST` takes a JSON body (`Content-Type: application/json`, at most 4 KB);
 `DELETE /v1/admin/link` may take one. Over 4 KB: `413`; another media type: `415`; not
@@ -745,7 +750,7 @@ not rolled yet come from the facts.
 { "v": 1, "range": { "from": "2026-10-09", "to": "2026-10-29", "days": 21, "band": "all" },
   "students": [
     { "u": "06680e4e7bb2", "label": "0668",    // label: the start of the code, as the dashboard shows it
-      "kind": "profile",                       // profile | card (a player card, phase 2)
+      "kind": "profile",                       // always profile: every code is a profile's
       "linked": ["29d9f70dff0c"],              // older codes that count as this student
       "band": "6-7", "bandFirst": "6-7",       // the band of the latest and of the first session; unknown when not set
       "firstDay": "2026-10-11", "lastDay": "2026-10-27",   // the first and last play the server keeps
@@ -914,15 +919,15 @@ Columns, in their pinned order:
 | `daily_games` | day, clock, band, game, sessions, students, opens, minutes, starts, ends, wins, losses, draws, ends_neutral, quits, hearts_on, hearts_off, avg_tier, accuracy |
 | `pcs` | pc, pc_label, first_day, last_day, days, time_zone, build, cores, memory_gb, screen, sessions, students, guest_share, minutes, smooth_share, stall_share, avg_load_ms, slow_input_share, failures, profiles_max, new_profiles |
 
-Words: `kind` (students) `profile`, `card`; `kind` (sessions) `student`, `guest`,
-`unknown` (wire version 2); `clock_source` `w` (from the PC's elapsed seconds), `r`
-(from the receipt time); `end_reason` `unload`, `switch` (another player), `handover`,
-`idle`; `error` `timeout`, `script`, `load`; `outcome` and `previous_outcome` `win`,
-`loss`, `draw`, `end`, `quit`, empty for a round not ended; `tutorial` `none`, `start`,
-`done`; `kind` (events) `level_up`, `heart_on`, `heart_off`, `tutorial_start`,
-`tutorial_done`, `timer_start`, `timer_cancel`, `timer_end`, `profile_removed`, `linked`,
-with `value` the new level, the timer's minutes, or the removed or linked code. Flags
-are `0` or `1`.
+Words: `kind` (students) `profile` (every code is a profile's); `kind` (sessions)
+`student`, `guest`, `unknown` (wire version 2); `clock_source` `w` (from the PC's
+elapsed seconds), `r` (from the receipt time); `end_reason` `unload`, `switch` (another
+player), `handover`, `idle`; `error` `timeout`, `script`, `load`; `outcome` and
+`previous_outcome` `win`, `loss`, `draw`, `end`, `quit`, empty for a round not ended;
+`tutorial` `none`, `start`, `done`; `kind` (events) `level_up`, `heart_on`,
+`heart_off`, `tutorial_start`, `tutorial_done`, `timer_start`, `timer_cancel`,
+`timer_end`, `profile_removed`, `linked`, with `value` the new level, the timer's
+minutes, or the removed or linked code. Flags are `0` or `1`.
 
 #### `POST /v1/admin/forget`
 
@@ -953,12 +958,6 @@ Body `{}`: every rolled day since `factsSince` (and not trimmed by the storage g
 waits to be rolled again in full; the 5-minute cron rebuilds one day at a time, newest
 first, within the day's rebuild allowance. Answers `{"pending": <days waiting>}`. Use it
 after a forget, so that the school-wide counts lose that student too.
-
-#### `GET /v1/admin/cards`
-
-Phase 2 (player cards; not built yet): `{"cards": [{"code", "set", "band", "madeDay",
-"used"}]}`, empty until cards are printed. `POST` (making a set of cards) is not offered
-yet and answers `405`.
 
 ## Operations
 
@@ -1034,7 +1033,7 @@ Schema 4 (`docs/RESEARCH_TELEMETRY_SPEC.md`, "Storage on D1", has the exact colu
 |---|---|
 | `st_sessions` | One row per play session: its codes (`u`, `p`, `''` when unknown), wire version, band, build, mode, device buckets, start (`start_s`, with `clock` `w` from the PC's elapsed seconds or `r` estimated from the receipt time), the PC's zone, the session start's fields (exact profile age, days since last play, level, profiles on the PC, classroom mode, and the v2 buckets), how it ended, and the server's numbering state for v2. Indexed by start and by student. |
 | `st_visits`, `st_rounds`, `st_marks` | Game visits `(session, n)`, rounds `(session, n, k)` with their outcome, tier, score, hits, misses, reaction times and extras, the two-player flag and the student's attempt number, and marks (level-ups, hearts, tutorial steps, classroom timer, removed profiles, older codes). |
-| `st_students`, `st_pcs`, `st_student_pcs`, `st_student_games`, `aliases`, `cards` | Per student code: label, first and last play, bands, profile age; per PC code: first and last play, zone, buckets, build; who played on which PC; rounds ended per student and game (for attempt numbers); links from older codes to a student's code, one hop deep; player cards. |
+| `st_students`, `st_pcs`, `st_student_pcs`, `st_student_games`, `aliases` | Per student code: label, first and last play, bands, profile age; per PC code: first and last play, zone, buckets, build; who played on which PC; rounds ended per student and game (for attempt numbers); links from older codes to a student's code, one hop deep (`how`: `pc` from a PC's `cd` mark, `owner` from the dashboard). |
 | `settings`, `usage`, `roll_days` | The school's zone and where it came from (and `tz_epoch`, raised with each change), the week start, the retention the owner chose, `facts_since`, `legacy_until`, `v3_since`, the rollup version `rv`, `rolled_through`, `trimmed_before`, and the cron's bookkeeping (`rebuild`: days may wait for a full rebuild; `trimmed_size`); D1 rows read, written and read by rebuilds per UTC day, and the database size (each instance adds its counts once a minute); which local days are rolled up, whether late data or a new zone made one dirty, and when it was rolled. |
 | `r_day`, `r_game_day`, `r_level_day`, `r_source_day`, `r_device_day`, `r_student_day`, `r_student_game`, `r_pc_day`, `r_stat` | Per-day rollups of the facts by the school's local day: milestone 2's daily totals with students, guests, two-player rounds, hearts, tutorials and session endings; per student code and per student and game; per PC; and `r_stat`, the research metrics (hour of play, session length, minutes per student-day, games per session, visit length, game-to-game flows, attempts, weeks of practice, what follows a round, tiredness, losses before quitting, tier, tutorials) per day, band and game. |
 | `live`, `batches`, `kpi_cache`, `meta` | Sessions in the 5-minute live window (with codes and wire version); v2 batch ids for de-duplication; kept parts of admin answers, with the rollup version they were made with; the schema version. |
@@ -1103,7 +1102,7 @@ time in `db.batch`, the median of cold runs) over 30 days of the simulated schoo
 | `stats` (every metric of every game) | 5 | 3–3.8 ms |
 | `cohorts` | 5 | 0.4 ms |
 | `pcs` | 9 | 0.5 ms |
-| `cards`, `live`, `settings`, `POST settings` | 3, 5, 2, at most 7 | under 0.1 ms |
+| `live`, `settings`, `POST settings` | 5, 2, at most 7 | under 0.1 ms |
 | an `export` page (`rounds`, `visits` or `events`: 5,000 lines) | 3 | 0.7–1 ms |
 | another `export` page | 3 | under 0.5 ms |
 | `forget`, `link`, `DELETE link`, `rebuild` | 17, 7, 5, 5 | under 0.2 ms |

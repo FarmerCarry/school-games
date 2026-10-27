@@ -33,7 +33,7 @@ export class HttpError extends Error {
 const ADMIN = {
   kpis: { GET: 'read' }, live: { GET: null }, settings: { GET: null, POST: null },
   students: { GET: 'read' }, student: { GET: 'read' }, game: { GET: 'read' }, stats: { GET: 'read' }, cohorts: { GET: 'read' },
-  pcs: { GET: 'read' }, cards: { GET: 'read' }, export: { GET: 'export' },
+  pcs: { GET: 'read' }, export: { GET: 'export' },
   forget: { POST: 'write' }, link: { POST: 'write', DELETE: 'write' }, rebuild: { POST: 'write' }
 };
 const SETTINGS_FIELDS = new Set(['tz', 'source', 'weekStart', 'keepDays']);
@@ -246,7 +246,6 @@ export function createHandler(options) {
       case 'stats GET': { const metrics = metricsParam(query), slug = slugParam(query, 'slug', true); return store.stats({ ...period(), metrics, slug }, t); }
       case 'cohorts GET': return store.cohorts(period(), t);
       case 'pcs GET': { const { from, to } = period(); return store.pcs({ from, to }, t); }
-      case 'cards GET': return store.cards(t);
       case 'export GET': {
         const file = query.get('file');
         if (!FILES.includes(file)) throw new HttpError(400, 'file');

@@ -41,7 +41,7 @@ const timer = like => `EXISTS (SELECT 1 FROM st_marks m WHERE m.sid = s.id AND m
 const FIELDS = {
   students: L => [
     ['student', 'x.u'], ['student_label', 'COALESCE(t.label, upper(substr(x.u, 1, 4)))'], ['student_linked', 'COALESCE(al.u_new, x.u)'],
-    ['kind', "CASE WHEN length(x.u) = 5 THEN 'card' ELSE 'profile' END"], ['band_first', 't.band_first'], ['band_last', 't.band_last'],
+    ['kind', "'profile'"], ['band_first', 't.band_first'], ['band_last', 't.band_last'],
     ['profile_made_day', `date(${L('t.first_s')}, 'unixepoch', '-' || IFNULL(t.age_days_first, 0) || ' days')`],
     ['first_day', dayOf(L, 't.first_s')], ['last_day', dayOf(L, 't.last_s')], ['days_active', 'x.days'], ['sessions', 'x.sessions'],
     ['minutes', 'round(x.ms / 60000.0, 1)'], ['rounds', 'x.rounds'], ['wins', 'x.w'], ['losses', 'x.l'], ['quits', 'x.q'],

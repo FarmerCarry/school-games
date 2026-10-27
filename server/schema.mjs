@@ -21,8 +21,8 @@ export const MEMORY = [0, 1, 2, 4, 8];
 export const SCREENS = [1366, 1600, 1920, 2560];
 export const MAX_EVENTS = 200;
 export const WIRES = [2, 3];
-// A student code: 12 lowercase hex for a profile, or a player card's c plus 4 hex.
-export const U_RE = /^(?:[0-9a-f]{12}|c[0-9a-f]{4})$/;
+// A student code: 12 lowercase hex, made at random for a profile on its PC.
+export const U_RE = /^[0-9a-f]{12}$/;
 // The longest a session can have been open when a batch is sent (8 days, in seconds).
 export const MAX_W = 691200;
 

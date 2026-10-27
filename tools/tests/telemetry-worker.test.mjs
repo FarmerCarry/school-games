@@ -400,7 +400,7 @@ test('every invocation stays inside D1\'s free limits: the upgrade alone (503), 
   const research = [['students', '/v1/admin/students?' + period], ['student', `/v1/admin/student?u=${U}&` + period], ['game', '/v1/admin/game?slug=game-0&' + period],
     ['stats', '/v1/admin/stats?metrics=hour,rhour,sesslen,daymin,games,visitlen,flow,attempt,tenure,persist,fatigue,qrun,tier,tutorial&' + period],
     ['stats of a game', '/v1/admin/stats?metrics=attempt,tenure&slug=game-0&' + period], ['cohorts', '/v1/admin/cohorts?' + period],
-    ['pcs', '/v1/admin/pcs?' + period], ['cards', '/v1/admin/cards'],
+    ['pcs', '/v1/admin/pcs?' + period],
     ...['students', 'sessions', 'visits', 'rounds', 'events', 'student_days', 'daily_games', 'pcs'].map(file => ['export ' + file, `/v1/admin/export?file=${file}&` + period])];
   let instance = 0;
   const fresh = () => { const env = { ...next, RATE_PER_MIN: String(700 + ++instance) }; return [env, counted(env)]; };
@@ -754,8 +754,8 @@ test('a database of the first server is upgraded over two requests, to schema 3 
   for (let i = 0; i < 3; i++) answers.push((await admin(env, '/v1/admin/kpis?from=2026-10-18&to=2026-10-23')).status);
   assert.deepEqual(answers, [503, 503, 200], 'one version step per request');
   const tables = (await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'r\\_%' ESCAPE '\\' ORDER BY name").all()).results.map(r => r.name);
-  assert.deepEqual(tables, ['agg_days', 'agg_devices', 'agg_games', 'agg_levels', 'agg_sources', 'aliases', 'batches', 'cards', 'kpi_cache', 'live',
-    'meta', 'roll_days', 'settings', 'st_marks', 'st_pcs', 'st_rounds', 'st_sessions', 'st_student_games', 'st_student_pcs', 'st_students', 'st_visits', 'usage']);
+  assert.deepEqual(tables, ['agg_days', 'agg_devices', 'agg_games', 'agg_levels', 'agg_sources', 'aliases', 'batches', 'kpi_cache', 'live', 'meta',
+    'roll_days', 'settings', 'st_marks', 'st_pcs', 'st_rounds', 'st_sessions', 'st_student_games', 'st_student_pcs', 'st_students', 'st_visits', 'usage']);
   assert.ok(env.DB.sqlite.prepare('PRAGMA user_version').get().user_version > 1, 'the first server now refuses this file');
   const store = openStore(env.DB);
   for (const [i, query] of QUERIES.entries()) assert.deepEqual(withoutAdditions(await store.kpis(query, clock.now)), expected[i], JSON.stringify(query));

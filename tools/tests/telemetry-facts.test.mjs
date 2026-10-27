@@ -263,15 +263,15 @@ test('the school\'s zone: unknown until a PC reports one; the dashboard\'s guess
   }
 });
 
-test('a student\'s label is the shortest prefix no stored code shares, never changed; a card code keeps all five characters', async () => {
+test('a student\'s label is the shortest prefix no stored code shares, never changed', async () => {
   const s = open();
-  const codes = ['abcd11112222', 'abcd22223333', 'abcd22553333', 'abcd22556666', 'c7f3a', 'c7f3a1234567', 'c7f30000aaaa', 'abcd11110000'];
+  const codes = ['abcd11112222', 'abcd22223333', 'abcd22553333', 'abcd22556666', 'c7f3a1234567', 'c7f30000aaaa', 'c7f3a1000000', 'abcd11110000'];
   for (const [i, u] of codes.entries()) await s.ingest(v3('aa000000000' + i, [ss3()], { u }), T0 + i * MIN);
   // A second session of the first code changes nothing.
   await s.ingest(v3('aa0000000009', [ss3()], { u: codes[0] }), T0 + 9 * MIN);
   assert.deepEqual(Object.fromEntries((await s.rows('st_students')).map(r => [r.u, r.label])), {
     abcd11110000: 'ABCD11110000', abcd11112222: 'ABCD', abcd22223333: 'ABCD22', abcd22553333: 'ABCD2255', abcd22556666: 'ABCD22556666',
-    c7f30000aaaa: 'C7F300', c7f3a: 'C7F3A', c7f3a1234567: 'C7F3A1'
+    c7f3a1234567: 'C7F3', c7f30000aaaa: 'C7F300', c7f3a1000000: 'C7F3A100'
   });
   // Every label is a prefix of its code, in capitals, and no two are the same.
   const labels = (await s.rows('st_students')).map(r => { assert.ok(r.u.toUpperCase().startsWith(r.label)); return r.label; });
@@ -293,7 +293,7 @@ test('a student\'s first and last play, bands, age and PCs come from the session
   assert.deepEqual((await s.rows('st_pcs', 'p')).map(pc => [pc.p, pc.first_s, pc.last_s]), [[P2, last, last], [P1, first, first]]);
   // A profile removed on a PC: its student is marked once, at the time of the first removal.
   await s.ingest(v3('ab0000000003', [ss3(), ['pr', 30, U1]], { u: U2, w: 40 }), T0 + 2000);
-  await s.ingest(v3('ab0000000004', [ss3(), ['pr', 50, U1], ['pr', 51, 'c0ffe']], { u: U2, w: 60 }), T0 + 3000);
+  await s.ingest(v3('ab0000000004', [ss3(), ['pr', 50, U1], ['pr', 51, 'c0ffee000000']], { u: U2, w: 60 }), T0 + 3000);
   assert.equal((await s.rows('st_students')).find(r => r.u === U1).removed_s, R0 + 2 - 40 + 30);
   assert.equal((await s.rows('st_students')).find(r => r.u === U2).removed_s, null);
   assert.equal((await s.rows('st_students')).length, 2, 'an unknown removed code adds no student');
@@ -395,7 +395,7 @@ test('the usage meter adds up every result\'s rows and writes them at most once 
   assert.equal(fresh.store.batchEvery(now + DAY_MS), 60, 'a new UTC day starts again');
 });
 
-// The small tables a statement may scan: settings, aliases, roll_days, usage and cards always (live holds a few
+// The small tables a statement may scan: settings, aliases, roll_days and usage always (live holds a few
 // minutes of sessions); the PCs for the zone vote and the settings' zone list; the students and PCs for the
 // daily purge (it finds those last seen before the cutoff, and the v2 batch ids older than 30 days, as
 // milestone 2 did: an index on their day would cost every v2 batch a row written); kpi_cache when a roll
@@ -442,7 +442,6 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
   for (const slug of [null, 'road-hopper']) await store.stats({ ...q, metrics: ['attempt', 'flow'], slug }, at);
   await store.cohorts(q, at);
   await store.pcs(q, at);
-  await store.cards(at);
   const cursors = { sessions: `${R0}.1`, visits: `${R0}.1.1`, rounds: `${R0}.1.1.1`, events: `${R0}.1.lv.81.0.8`, students: U1,
     student_days: '2026-10-19.' + U1, daily_games: '2026-10-19.school.8-9.road-hopper', pcs: P1 };
   for (const [file, after] of Object.entries(cursors)) for (const cursor of [null, after]) await store.exportPage({ file, ...q, after: cursor }, at);
@@ -470,13 +469,12 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
     'INSERT INTO aliases', 'UPDATE roll_days SET', 'UPDATE settings SET', 'INSERT INTO live', 'DELETE FROM live', 'INSERT INTO batches', 'INSERT INTO usage',
     'SELECT s.id, s.start_s,', 'SELECT slug, rounds FROM st_student_games', 'INSERT INTO r_stat', 'DELETE FROM r_day', 'INSERT INTO roll_days',
     'SELECT json_group_array(json_array(u, bands', 'WITH sd AS MATERIALIZED', 'SELECT key, rows FROM kpi_cache', 'DELETE FROM st_rounds', 'DELETE FROM aliases',
-    // The research reads: students, a student (rollups and facts), a game, r_stat, cohorts, PCs and cards.
+    // The research reads: students, a student (rollups and facts), a game, r_stat, cohorts and PCs.
     'SELECT json_group_array(json_array(c, days,', 'SELECT json_group_array(json_array(c, json(list)))', 'WITH p AS (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT d.day AS day',
     'SELECT g.slug AS slug', 'SELECT date(g.day', "SELECT CAST(strftime('%H'", "SELECT date(((s.start_s + COALESCE(r.t0", 'SELECT date(((s.start_s) +',
     'SELECT CASE WHEN nx.k', 'SELECT x.day AS day, x.a AS a', 'SELECT x.day AS day, COUNT(DISTINCT', 'SELECT x.a AS a', 'SELECT COALESCE(al.u_new, x.u) AS c, x.a',
     'SELECT json_group_array(json_array(a, metric, k1', 'SELECT json_group_array(json_array(a, metric, slug', 'WITH RECURSIVE f', 'WITH codes AS',
     'WITH d AS MATERIALIZED (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT x.p AS p', 'SELECT s.p AS p', 'SELECT p, z, k', 'SELECT k FROM st_pcs',
-    'SELECT code, set_no',
     // Export pages of every file.
     "SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u", "SELECT IFNULL(s.s, '') || ',' || IFNULL(v.n", "SELECT IFNULL(s.s, '') || ',' || IFNULL(r.n",
     "SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u, '') || ',' || IFNULL(CASE", 'WITH d AS (SELECT u, day', "SELECT IFNULL(x.u", "SELECT IFNULL(x.day",

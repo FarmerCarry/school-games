@@ -1,7 +1,7 @@
 // The admin API's research reads and the owner's actions (docs/RESEARCH_TELEMETRY_SPEC.md,
 // §F.4): the students, one student's page, one game's page, the r_stat metrics, retention
-// cohorts, the PCs and the player cards; and forgetting a student, linking and unlinking
-// codes, and recounting every day. Each read takes the rolled days from the rollups and the
+// cohorts and the PCs; and forgetting a student, linking and unlinking codes, and
+// recounting every day. Each read takes the rolled days from the rollups and the
 // days not rolled yet from the facts, through the rollups' own SELECT, as the KPIs do; the
 // part of the rolled days is kept per rollup version (rv), the open part per 10-minute slot
 // on Workers (store.mjs keeps them). Lists that only the facts hold (a student's recent
@@ -17,8 +17,6 @@ import { CODES } from './schema.mjs';
 const DAY_MS = 86400000;
 const ALL_BANDS = ['6-7', '8-9', '10-11', ''];
 const bandName = a => a === '' ? 'unknown' : a;
-// A player card's code (phase 2): c and 4 hex.
-const CARD = /^c[0-9a-f]{4}$/;
 // A student page lists at most this many recent rounds and sessions.
 const RECENT_ROUNDS = 600, RECENT_SESSIONS = 100;
 // A PC is choppy under 80% smooth frames (as the dashboard's insights say).
@@ -77,7 +75,8 @@ const STUDENT_GAMES = src => 'SELECT json_group_array(json_array(c, json(list)))
 // The students answer itself, as one JSON text (so JavaScript neither parses nor builds it),
 // from the closed and the open part (?1, ?2: {"weeks": ..., "games": ...}, as made above):
 // both added up per student, with their games and top 3 by minutes (ties: the first slug),
-// their links, and who they are from their codes' rows (as GROUPS_INFO, below).
+// their links, and who they are from their codes' rows (as GROUPS_INFO, below). kind is
+// always 'profile': every student code is made for a profile on a PC.
 const WEEK_COLUMNS = ['days', ...STUDENT_COUNTS, ...Array.from({ length: 13 }, (_, i) => 'w' + i)];
 const STUDENTS_ANSWER = L => {
   const weeks = n => `SELECT value ->> 0 AS c, ${WEEK_COLUMNS.map((col, i) => `value ->> ${i + 1} AS ${col}`).join(', ')} FROM json_each(?${n}, '$.weeks')`;
@@ -99,7 +98,7 @@ const STUDENTS_ANSWER = L => {
     `MIN(CASE WHEN t.removed_s IS NOT NULL THEN date(${L('t.removed_s')}, 'unixepoch') END) AS removed_day ` +
     'FROM codes JOIN st_students t ON t.u = codes.u GROUP BY 1) ' +
     "SELECT json_group_array(json(o)) AS students FROM (SELECT json_object('u', s.c, 'label', COALESCE(w.label, upper(substr(s.c, 1, 4))), " +
-    "'kind', CASE WHEN length(s.c) = 5 THEN 'card' ELSE 'profile' END, 'linked', json(IFNULL(k.list, '[]')), " +
+    "'kind', 'profile', 'linked', json(IFNULL(k.list, '[]')), " +
     `'band', ${band('w.band')}, 'bandFirst', ${band('w.band_first')}, 'firstDay', w.first_day, 'lastDay', w.last_day, ` +
     `${['days', 'sessions'].map(col => `'${col}', CAST(s.${col} AS INTEGER)`).join(', ')}, 'minutes', round(s.engaged_ms / 60000.0, 1), ` +
     `${['rounds', 'w', 'l', 'q'].map(col => `'${col}', CAST(s.${col} AS INTEGER)`).join(', ')}, 'games', IFNULL(g.n, 0), ` +
@@ -236,8 +235,6 @@ const PC_INFO = L => `SELECT p, z, k, cores, mem, screen, date(${L('first_s')}, 
   `date(${L('last_s')}, 'unixepoch') AS last_day FROM st_pcs WHERE p IN ${IN_JSON(1)}`;
 const PC_BUILD = 'SELECT k FROM st_pcs WHERE last_s >= ?1 ORDER BY last_s DESC, k LIMIT 1';
 
-const CARDS = 'SELECT code, set_no, a, made_day, EXISTS (SELECT 1 FROM st_students t WHERE t.u = c.code) AS used FROM cards c ORDER BY set_no, code';
-
 // The owner's actions. A student's group: the canonical code of ?1 and every code linked to it.
 const CANONICAL = 'COALESCE((SELECT u_new FROM aliases WHERE u_old = ?1), ?1)';
 const GROUP = `(SELECT ${CANONICAL} AS u UNION SELECT u_old FROM aliases WHERE u_new = ${CANONICAL})`;
@@ -311,7 +308,7 @@ export function adminViews(ctx) {
   function described(c, info) {
     const [label = c.slice(0, 4).toUpperCase(), band = null, bandFirst = null, firstDay = null, lastDay = null, made = null, removed = null, pcs = 0,
       pcLabels = []] = info[c] || [];
-    return { label, kind: CARD.test(c) ? 'card' : 'profile', band: band === null ? null : bandName(band), bandFirst: bandFirst === null ? null : bandName(bandFirst),
+    return { label, kind: 'profile', band: band === null ? null : bandName(band), bandFirst: bandFirst === null ? null : bandName(bandFirst),
       firstDay, lastDay, profileMadeDay: made, knownBefore: !!(made && firstDay && made < firstDay), removed, pcs, pcLabels: pcLabels.sort(natural) };
   }
 
@@ -597,14 +594,6 @@ export function adminViews(ctx) {
     });
   }
 
-  // GET /v1/admin/cards (phase 2): the player cards printed so far (none until then).
-  async function cards(now = Date.now()) {
-    await ensure(now);
-    let list = [];
-    await perform([[sql(CARDS), r => { list = r.results.map(row => ({ code: row.code, set: row.set_no, band: bandName(row.a), madeDay: row.made_day, used: !!row.used })); }]], now);
-    return answer(now, { cards: list });
-  }
-
   // POST /v1/admin/forget { u }: every fact and per-student row of the student's group of
   // codes. The school-wide rollups keep the play already counted (a recount drops it).
   async function forget({ u }, now = Date.now()) {
@@ -645,5 +634,5 @@ export function adminViews(ctx) {
     return answer(now, { pending: results[2].results[0].n });
   }
 
-  return { students, student, game, stats, cohorts, pcs, cards, forget, link, unlink, rebuild };
+  return { students, student, game, stats, cohorts, pcs, forget, link, unlink, rebuild };
 }
