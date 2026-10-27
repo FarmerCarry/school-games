@@ -1,8 +1,8 @@
 // The site's network rule (docs/ARCHITECTURE.md "Telemetry sink"): nothing uses the
 // network except the portal's anonymous telemetry sink, js/telemetry.js, which may call
-// fetch() and navigator.sendBeacon and nothing else. tools/check-all.mjs and
-// tools/tests/play-stats-rules.test.mjs both use these, so the carve-out is the same
-// exact path everywhere.
+// fetch() and nothing else (not sendBeacon, which always sends the ingest host's
+// cookies). tools/check-all.mjs and tools/tests/play-stats-rules.test.mjs both use
+// these, so the carve-out is the same exact path everywhere.
 export const SENDER = 'js/telemetry.js';
 export const NETWORK = [
   [/\bfetch\s*\(/, 'fetch()'],
@@ -15,10 +15,10 @@ export const NETWORK = [
   [/\.src\s*=\s*['"`]https?:/, 'an external image or script address (a beacon)'],
   [/\b(?:src|href|action)\s*=\s*["']https?:\/\//, 'an external address']
 ];
-const SENDER_MAY = new Set(['fetch()', 'navigator.sendBeacon']);
+const SENDER_MAY = new Set(['fetch()']);
 
 // The names of the network APIs `text` uses. `file` is its path in the site ('/'
-// separators); only exactly js/telemetry.js may use fetch() and sendBeacon.
+// separators); only exactly js/telemetry.js may use fetch().
 export function networkUse(file, text) {
   return NETWORK.filter(([pattern, name]) => pattern.test(text) && !(file === SENDER && SENDER_MAY.has(name))).map(([, name]) => name);
 }

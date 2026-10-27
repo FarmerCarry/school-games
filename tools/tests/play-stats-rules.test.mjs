@@ -39,14 +39,12 @@ test('no network APIs in the shared scripts, the portal, the teacher page or any
   const found = [];
   for (const file of [...pages, ...gameFiles]) found.push(...networkUse(rel(file), read(file)).map(name => `${rel(file)}: ${name}`));
   assert.deepEqual(found, []);
-  // The sender really is the one file that sends, with both of its calls.
-  const sender = read(path.join(repo, SENDER));
-  assert.match(sender, /\bfetch\s*\(/);
-  assert.match(sender, /\bsendBeacon\b/);
+  // The sender really is the one file that sends.
+  assert.match(read(path.join(repo, SENDER)), /\bfetch\s*\(/);
 });
 
-test('the telemetry carve-out is exactly js/telemetry.js, and only for fetch() and sendBeacon', () => {
-  const calls = 'fetch(url, { method: "POST" }); navigator.sendBeacon(url, body);';
+test('the telemetry carve-out is exactly js/telemetry.js, and only for fetch()', () => {
+  const calls = 'fetch(url, { method: "POST", credentials: "omit", keepalive: true });';
   assert.deepEqual(networkUse(SENDER, calls), []);
   // The same calls anywhere else still fail: other portal scripts, Kit, games, other
   // files named telemetry.js, and paths that only look like the sender.
@@ -54,10 +52,12 @@ test('the telemetry carve-out is exactly js/telemetry.js, and only for fetch() a
     'teacher.html', 'shared/kit.js', 'shared/juice.js', 'shared/telemetry.js', 'games/tic-tac-toe/index.html',
     'games/road-hopper/game.js', 'games/road-hopper/js/telemetry.js', 'js/sub/telemetry.js', 'js/telemetry.js.bak',
     'js/telemetry.jsx', 'JS/telemetry.js', './js/telemetry.js', '/js/telemetry.js', 'js\\telemetry.js', 'js/telemetry']) {
-    assert.deepEqual(networkUse(file, calls), ['fetch()', 'navigator.sendBeacon'], file);
+    assert.deepEqual(networkUse(file, calls), ['fetch()'], file);
   }
-  // Every other network API stays banned in the sender too.
+  // Every other network API stays banned in the sender too, sendBeacon included: it
+  // always sends the ingest host's cookies.
   for (const [code, names] of [
+    ['navigator.sendBeacon(url, body)', ['navigator.sendBeacon']],
     ['new XMLHttpRequest()', ['XMLHttpRequest']], ['new WebSocket(url)', ['WebSocket']], ['new EventSource(url)', ['EventSource']],
     ['new RTCPeerConnection()', ['RTCPeerConnection']], ['importScripts(url)', ['importScripts()']],
     ["new Image().src = 'https://ingest.test/pixel.gif'", ['an external image or script address (a beacon)', 'an external address']],
@@ -67,7 +67,7 @@ test('the telemetry carve-out is exactly js/telemetry.js, and only for fetch() a
 
   // In the fast build the portal inlines the sender: only one exact copy is split off and
   // checked as the sender; the rest of the page is checked like any other file.
-  const copy = '(function(){fetch(u,{});navigator.sendBeacon(u,b)})();';
+  const copy = '(function(){fetch(u,{});fetch(u,b)})();';
   const page = body => '<script>window.SG_TELEMETRY={url:"https://ingest.test/v1"};\n' + body + '</script><script>site()</script>';
   let split = splitSender(page(copy), [copy]);
   assert.equal(split.sender, copy);

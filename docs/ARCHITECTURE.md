@@ -246,7 +246,7 @@ Every sound is a one-shot under 1.5 s. Juice never loops and has no music API.
 
 ### Telemetry sink (js/telemetry.js → `window.SGTelemetry`)
 
-The **only** file in the repository allowed to use `fetch`/`sendBeacon`. The static
+The **only** file in the repository allowed to use `fetch` (never `sendBeacon`). The static
 network bans (`tools/check-all.mjs`, `tools/tests/play-stats-rules.test.mjs`) carve
 out exactly this path.
 
@@ -297,12 +297,16 @@ A new session (new `s`) starts at page load and whenever the player changes.
 | round end | `['re', t, slug, code, id, ms, score, tier, hits, misses, rt[6]]` |
 | game close | `['gx', t, slug, engagedMs, il[6], f[4]]` |
 | level up | `['lv', t, level]` |
-| session end | `['se', t, engagedMs]` (best effort, via `sendBeacon`) |
+| session end | `['se', t, engagedMs]` (best effort, via a keepalive `fetch`) |
 
 **Delivery:** events batch in memory; a batch is sent when a game closes, after 20 s
-with pending events, and with `sendBeacon` when the page is hidden. Unsent batches
-are kept in `localStorage` `sg:site:tm:q` (at most 128 KB, at most 7 days old, oldest
-dropped first). Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the batch;
+with pending events, and when the page is hidden, always by `fetch` without credentials
+(`credentials: 'omit'`: no cookie ever goes, so never by `sendBeacon`), with `keepalive`
+while the keepalive bodies in flight fit in 60 KB (the rest wait in the queue). Unsent
+batches are kept in `localStorage` `sg:site:tm:q:<hash of the ingest URL>`, so another
+copy of the site on the same origin with another URL never sends them (at most 128 KB,
+at most 7 days old, oldest dropped first); stopping statistics or turning sharing off
+drops every `sg:site:tm:q` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the batch;
 a 4xx other than 429 drops it as malformed; 429, 5xx and network errors retry.
 Teacher "clear" removes `sg:site:tm:*` too. All storage calls are wrapped; no
 `console`; never `clear()`.

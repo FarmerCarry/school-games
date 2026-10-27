@@ -22,18 +22,20 @@
  * one removed under 2 s ago, as in js/stats.js), checked field by field.
  *
  * Delivery: events wait in memory; batches of at most 200 events and 32 KB go when
- * a game closes, 20 s after the first waiting event, and by sendBeacon when the page
- * is hidden. Unsent batches wait in localStorage sg:site:tm:q (oldest first, at most
- * 128 KB and 7 days). A 2xx or a 4xx other than 429 is final; 429, 5xx and network
- * errors back off 20, 40, 80, 160, 300 s; a request with no answer after a minute is
- * sent again. sg:site:tm:on (the server's host) tells the teacher page that this PC
- * shares. Every storage call is guarded, nothing is logged, every promise is caught
- * and no call into this file throws.
+ * a game closes, 20 s after the first waiting event, and when the page is hidden, each
+ * by fetch without cookies, with keepalive while the bodies in flight fit in 60 KB.
+ * Unsent batches wait in localStorage sg:site:tm:q:<hash of the address>, so another
+ * copy of the site on this origin that sends elsewhere never sends them (oldest first,
+ * at most 128 KB and 7 days). A 2xx or a 4xx other than 429 is final; 429, 5xx and
+ * network errors back off 20, 40, 80, 160, 300 s; a request with no answer after a
+ * minute is sent again. sg:site:tm:on (the server's host) tells the teacher page that
+ * this PC shares. Every storage call is guarded, nothing is logged, every promise is
+ * caught and no call into this file throws.
  */
 (function () {
   'use strict';
 
-  var Q = 'sg:site:tm:q', ON = 'sg:site:tm:on', META = 'sg:site:statsmeta';
+  var TM = 'sg:site:tm:', Q = TM + 'q', ON = TM + 'on', META = 'sg:site:statsmeta';
   var cfg = window.SG_TELEMETRY, url = cfg && cfg.url, doc = document, nav = navigator, perf = performance;
   var isArr = Array.isArray, min = Math.min, floor = Math.floor, str = JSON.stringify;
   var ID = /^(?!.*\d{3})[A-Za-z][\w:.-]{0,23}$/, SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/, BACK = [20, 40, 80, 160, 300];
@@ -42,11 +44,17 @@
     ready = typeof url == 'string' && url.length <= 200 && /^https:\/\/[\w\-.~:/?#[\]@!$&()*+,;=%]+$/.test(url) &&
       location.protocol != 'file:' && nav.globalPrivacyControl !== true &&
       (cfg.allowLocal === true || !/^(?:(?:.+\.)?localhost|127(?:\.\d+){3}|\[::1\])$/i.test(location.hostname));
-    if (ready) flagged = str(new URL(url).host);
+    if (ready) {
+      flagged = str(new URL(url).host);
+      // The queue belongs to this address: a copy of the site elsewhere on this origin,
+      // built with another address, never sends (or drops) these batches.
+      for (var h = 0, i = 0; i < url.length; i++) h = h * 31 + url.charCodeAt(i) | 0;
+      Q += ':' + (h >>> 0).toString(36);
+    }
   } catch (e) { ready = false; }
 
   var on, cleared = 0, sess, game = 0, cur = 0, gone = [], closing = [], pend = [], known = [];
-  var tag = 0, timer = 0, timerAt = 0, busy = 0, busyAt = 0, fails = 0, retryAt = 0, mq = [], temp = false;
+  var tag = 0, timer = 0, timerAt = 0, busy = 0, busyAt = 0, fly = 0, fails = 0, retryAt = 0, mq = [], temp = false;
 
   function now() { return Date.now(); }
   function safe(fn) {
@@ -177,7 +185,10 @@
         gone = [];
         closing = [];
         save([]);
-        try { localStorage.removeItem(ON); } catch (e) { /* nothing to say */ }
+        // The note and every queue on this origin go, also those of another copy of the site.
+        try {
+          Object.keys(localStorage).forEach(function (k) { if (k.indexOf(TM) === 0) localStorage.removeItem(k); });
+        } catch (e) { /* nothing to drop */ }
         clearTimeout(timer);
         timer = 0;
       }
@@ -250,22 +261,31 @@
     timerAt = at;
     timer = setTimeout(safe(send), ms);
   }
+  // One POST, never with cookies. keepalive lets it outlive the page, but the browser
+  // refuses keepalive bodies beyond 64 KB in flight together: ours stay within 60 KB.
+  function room(json) { return fly + json.length <= 6e4; }
+  function post(json) {
+    var n = room(json) ? json.length : 0, p = fetch(url, { method: 'POST', body: json, headers: { 'Content-Type': 'text/plain' },
+      credentials: 'omit', mode: 'cors', keepalive: n > 0 });
+    fly += n;
+    p.then(free, free);
+    function free() { fly -= n; }
+    return p;
+  }
   // Sends the oldest batch; the next one follows its answer.
   function send() {
     clearTimeout(timer);
     timer = 0;
     if (!live()) return;
     seal();
-    var x = load()[0], b, json;
+    var x = load()[0], b;
     if (!x) return;
     // A request with no answer after a minute no longer holds the queue back: its batch
     // goes again (the server keeps it once), with no new event needed to wake the sink.
     if (busy && now() - busyAt < 6e4) return arm(busyAt + 6e4 - now());
     if (retryAt > now()) return arm(retryAt - now());
     b = x.e.b;
-    json = str(x.e);
-    fetch(url, { method: 'POST', body: json, headers: { 'Content-Type': 'text/plain' }, credentials: 'omit', mode: 'cors', keepalive: json.length < 6e4 })
-      .then(safe(function (r) { done(b, r.status); }), safe(function () { done(b, 0); }));
+    post(str(x.e)).then(safe(function (r) { done(b, r.status); }), safe(function () { done(b, 0); }));
     busy = b;
     busyAt = now();
     arm(6e4);
@@ -285,15 +305,21 @@
       arm(retryAt - now());
     }
   }
-  // The page is hidden or going away: what waits goes by sendBeacon, unless the server
-  // has been failing or the PC is offline (the queue keeps it for later).
+  // The page is hidden or going away: what waits goes at once with keepalive, unless the
+  // server has been failing or the PC is offline (the queue keeps it for later). Oldest
+  // first while the bodies fit in 60 KB; the batch already on its way stays where it is,
+  // and the queue keeps every batch not handed to fetch.
   function beacon() {
     if (!live()) return;
     seal();
     if (fails || nav.onLine === false) return;
     var sent = {};
     load().every(function (x) {
-      return x.e.b === busy || (sent[x.e.b] = nav.sendBeacon(url, new Blob([str(x.e)], { type: 'text/plain' })));
+      var json = str(x.e);
+      if (x.e.b === busy) return true;
+      if (!room(json)) return false;
+      post(json);
+      return sent[x.e.b] = true;
     });
     save(load().filter(function (x) { return !sent[x.e.b]; }));
     if (!mq.length) { clearTimeout(timer); timer = 0; }
