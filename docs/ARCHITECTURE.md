@@ -434,8 +434,9 @@ server/wrangler.json     Worker config; server/package.json pins wrangler; .dev.
   Workers observability stays **off** (its request logs would hold IP addresses); the
   client key for the soft rate limit is `CF-Connecting-IP`, in memory only. Wrangler is pinned (4.149.0) in
   `server/package.json`; the deploy command is `wrangler deploy`.
-* `SG_TELEMETRY_URL` becomes the Worker's `https://…workers.dev/v1/batch`, committed in
-  `.github/workflows/build.yml` once the owner reports the address.
+* `SG_TELEMETRY_URL` is the Worker's `https://school-games-telemetry.services-agreement137.workers.dev/v1/batch`,
+  committed in `.github/workflows/build.yml` (a `SG_TELEMETRY_URL` repository variable
+  overrides it).
 
 ### The insights dashboard (server/dashboard/)
 

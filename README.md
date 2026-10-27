@@ -327,9 +327,9 @@ Everything the home page shows comes from **`js/catalog.js`**:
 A school can collect anonymous play events from every PC on one server of its own (a free
 Cloudflare account, set up with one button; see below),
 to see which games children choose, where they stop, how difficulty settles per age band,
-and whether the PCs keep up. It is **off** unless the fast build is made with the
-`SG_TELEMETRY_URL` repository variable pointing at that server; the source tree, the
-downloaded folder and local previews never send anything. Before turning it on, the
+and whether the PCs keep up. This project's published site sends to the school's
+server, named in `.github/workflows/build.yml`; a build without `SG_TELEMETRY_URL`, the
+source tree, the downloaded folder and local previews never send anything. Before turning it on, the
 school or district must complete its privacy review and tell parents (children's data:
 COPPA in the US, GDPR and the UK Age Appropriate Design Code in Europe and the UK).
 

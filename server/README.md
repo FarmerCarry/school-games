@@ -291,8 +291,10 @@ uses it. It must start with `https://` and name the batch endpoint: the Worker's
 address plus `/v1/batch`, for example
 `https://school-games-telemetry.name.workers.dev/v1/batch`.
 
-* **This project:** once the owner reports the Worker's address, the developer commits
-  it as `SG_TELEMETRY_URL` in `.github/workflows/build.yml`.
+* **This project:** `.github/workflows/build.yml` names the school's Worker,
+  `https://school-games-telemetry.services-agreement137.workers.dev/v1/batch`; a `SG_TELEMETRY_URL`
+  repository variable overrides it, and removing the address from the workflow switches
+  the portal off.
 * **GitHub Pages in general:** in the repository, *Settings → Secrets and variables →
   Actions → Variables → New repository variable*, name `SG_TELEMETRY_URL`; delete it and
   rebuild to switch telemetry off.

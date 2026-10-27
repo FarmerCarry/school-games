@@ -109,8 +109,9 @@ jobs:
         timeout-minutes: 10
         run: npm run build
         env:
-          # The anonymous telemetry ingest address (docs/TELEMETRY.md). Unset: the site never sends.
-          SG_TELEMETRY_URL: ${{ vars.SG_TELEMETRY_URL }}
+          # The anonymous telemetry ingest address (docs/TELEMETRY.md): the school's Cloudflare
+          # Worker, unless the SG_TELEMETRY_URL repository variable names another server.
+          SG_TELEMETRY_URL: ${{ vars.SG_TELEMETRY_URL || 'https://school-games-telemetry.services-agreement137.workers.dev/v1/batch' }}
       - name: Check built asset performance budgets
         timeout-minutes: 5
         run: npm run perf:assets -- --report artifacts/asset-budgets.json
@@ -197,7 +198,7 @@ jobs:
       - name: Build the fast site
         run: npm run build
         env:
-          SG_TELEMETRY_URL: ${{ vars.SG_TELEMETRY_URL }}
+          SG_TELEMETRY_URL: ${{ vars.SG_TELEMETRY_URL || 'https://school-games-telemetry.services-agreement137.workers.dev/v1/batch' }}
       # Test the teachers' offline download (README) as they get it: unzipped on Windows.
       # tools/tests/offline-download.test.mjs proves it holds the built files byte for byte.
       - name: Unzip the offline download
