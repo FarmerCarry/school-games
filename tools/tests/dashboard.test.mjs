@@ -535,6 +535,77 @@ test('the keyboard focus stays on a control that is redrawn', async t => {
   await s.check();
 });
 
+test('the difficulty check shows the win rate each verdict is based on', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  await page.goto(site.origin + '/');
+  await waitForKpis(s, 1);
+  const k = s.lastKpis().json, grid = I.difficultyGrid(k);
+  await page.click('#diff-card .table-toggle');
+  const head = await page.locator('#diff-card .table-host thead th').allTextContents();
+  const col = head.indexOf('Won (of finished)');
+  assert.ok(col > 0, head.join(' | '));
+  const rows = page.locator('#diff-card .table-host tbody tr');
+  assert.equal(await rows.count(), grid.rows.length);
+  for (let i = 0; i < grid.rows.length; i++) {
+    const g = k.games.find(x => x.slug === grid.rows[i].slug);
+    assert.equal(await rows.nth(i).locator('th, td').nth(col).textContent(), I.pct(g.winRate), g.slug);
+  }
+  await page.click('#diff-card .table-toggle');
+  const judged = grid.rows.find(r => r.verdict.basis === 'win');
+  await page.locator(`#difficulty .diff-row[data-slug="${judged.slug}"]`).focus();
+  const g = k.games.find(x => x.slug === judged.slug);
+  assert.ok((await page.locator('.tip').textContent()).includes(I.pct(g.winRate) + 'Won (of finished)'), 'the tooltip says it too');
+  await s.check();
+});
+
+test('the difficulty rule explains the age-group rules only when this server\'s answer needs them', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  await page.goto(site.origin + '/');
+  await waitForKpis(s, 1);
+  const rule = () => page.locator('#diff-card details.rule').textContent();
+  // This server reports neither tries nor win rates per age group.
+  assert.match(await rule(), /at least 5 play sessions/);
+  assert.match(await rule(), /reports only the share of rounds won/);
+  s.mode.edit = k => {
+    for (const b of k.bands) for (const g of b.games || []) {
+      if (g.suppressed) continue;
+      const all = k.games.find(x => x.slug === g.slug);
+      Object.assign(g, { starts: 40, winRate: all.winRate, dropOffRate: all.dropOffRate });
+    }
+    return k;
+  };
+  const n = s.kpis().length;
+  await page.click('#periodFilter button[data-value="7"]');
+  await waitForKpis(s, n + 1);
+  assert.doesNotMatch(await rule(), /play sessions|reports only/);
+  await s.check();
+});
+
+test('a day of one or two children is hidden even without the server\'s flag; an all-hidden week keeps whole numbers', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  s.mode.edit = k => {
+    const i = k.daily.length - 2;
+    k.daily[i] = { day: k.daily[i].day, sessions: 2, engagedMinutes: 4.5, opens: 3 };
+    return k;
+  };
+  await page.goto(site.origin + '/');
+  await waitForKpis(s, 1);
+  await page.click('#daily-sessions .table-toggle');
+  assert.match(await page.locator('#daily-sessions .table-host tbody tr').nth(1).textContent(), /fewer than 3 children — hidden for privacy/);
+  await page.click('#daily-sessions .table-toggle');
+  // A very small pilot: every day hidden. No line, and the axis still counts whole play sessions.
+  s.mode.edit = k => { k.daily = k.daily.map(d => ({ day: d.day, suppressed: true })); return k; };
+  const n = s.kpis().length;
+  await page.click('#periodFilter button[data-value="7"]');
+  await waitForKpis(s, n + 1);
+  const ticks = await page.locator('#daily-sessions svg.chart .grid .tick').allTextContents();
+  assert.ok(ticks.length >= 2 && ticks.every(v => /^\d+$/.test(v)), ticks.join(' '));
+  await s.check();
+});
+
 // WCAG 2 contrast of every visible text run against the nearest opaque background behind it.
 function lowContrast() {
   const parse = c => {

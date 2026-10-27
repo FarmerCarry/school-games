@@ -184,13 +184,27 @@ test('a suppressed group is never described, ranked or counted', () => {
   days.daily[16] = { day: days.daily[16].day, suppressed: true };
   assert.ok(!I.insights(days, opts('en')).some(s => s.kind === 'trend'));
   assert.ok(I.insights(sample(), { ...opts('en') }).length <= 5);
-  // Totals hidden: one sentence, about privacy only.
+  // Totals hidden: one sentence, about privacy only (also for 1–2 sessions without the flag).
   for (const lang of ['en', 'ar']) {
-    const hidden = I.insights(sample({ totals: { suppressed: true } }), opts(lang));
-    assert.equal(hidden.length, 1);
-    assert.equal(hidden[0].kind, 'hidden');
-    assert.match(hidden[0].text, lang === 'ar' ? /أقل من 3 أطفال/ : /Fewer than 3 children/);
+    for (const totals of [{ suppressed: true }, { ...sample().totals, sessions: 2 }]) {
+      const hidden = I.insights(sample({ totals }), opts(lang));
+      assert.equal(hidden.length, 1);
+      assert.equal(hidden[0].kind, 'hidden');
+      assert.match(hidden[0].text, lang === 'ar' ? /أقل من 3 أطفال/ : /Fewer than 3 children/);
+    }
   }
+});
+
+test('a game is called the slowest to open only when no shown game is slower', () => {
+  // Only the favourite and the loading-time sentences: one game every child opens for the first time.
+  const quiet = extra => sample({ levels: [], bands: [], devices: { cores: [], memory: [], screen: [] },
+    games: [game('delta', { opens: 60, sessions: 45, loadMs: 4200, playsBefore: [60, 0, 0, 0, 0] }), ...extra] });
+  const load = k => I.insights(k, opts('en')).find(s => s.key.startsWith('load ')).text;
+  assert.equal(load(quiet([])), 'Delta Drive takes 4.2 seconds to open on average, the slowest of all games.');
+  // A game opened only 5 times is not judged, but it is slower: no "slowest" for Delta Drive.
+  const slower = quiet([game('echo', { opens: 5, sessions: 4, loadMs: 6000, playsBefore: [5, 0, 0, 0, 0] })]);
+  assert.equal(load(slower), 'Delta Drive takes 4.2 seconds to open on average.');
+  assert.ok(!I.insights(slower, opts('ar')).find(s => s.key.startsWith('load ')).text.includes('الأبطأ'));
 });
 
 test('names.js carries every catalog game\'s names (rebuild: node server/dashboard/make-names.mjs)', async () => {
@@ -255,7 +269,7 @@ test('both languages: Arabic sentences are Arabic with Western digits, English o
   assert.deepEqual(I.duration(270, 'ar'), { value: '4.5', unit: 'ساعة', text: '4.5 ساعة' });
   assert.deepEqual(I.duration(5, 'ar').unit, 'دقائق');
   assert.deepEqual(I.duration(8.16, 'en'), { value: '8.2', unit: 'minutes', text: '8.2 minutes' });
-  assert.deepEqual([0, 0.004, 0.5, 0.996, 1, null].map(I.pct), ['0%', '<1%', '50%', '>99%', '100%', '–']);
+  assert.deepEqual([0, 0.004, 0.5, 0.996, 1, null].map(I.pct), ['0%', '<1%', '50%', '>99%', '100%', '—'], 'no rate: the dash the tiles show');
   assert.equal(I.int(1234567), '1,234,567');
   // Game names from the site's catalog.
   const window = {};

@@ -35,7 +35,7 @@
     errNotSetTitle: 'The dashboard password was not set when the server was deployed.',
     errNotSetSteps: [
       'Open dash.cloudflare.com and sign in.',
-      'Click Workers & Pages, then click the school games server.',
+      'Click Workers & Pages, then click school-games-telemetry (or the name you gave the server when you deployed it).',
       'Click Settings, then Variables and Secrets, then Add.',
       'Choose Secret. Type ADMIN_TOKEN as the name, and a new password as the value: at least 16 letters and numbers, no spaces.',
       'Click Deploy. Wait a minute, then sign in here with that password.'
@@ -55,7 +55,7 @@
     loading: 'Loading…',
     rangeOne: function (a) { return a; },
     range: function (a, b) { return a + ' – ' + b; },
-    utcNote: 'Days follow UTC time.',
+    utcNote: 'Days follow world time (UTC), which can be a few hours from your own clock.',
 
     insightsTitle: 'What stands out',
     numbersTitle: 'Headline numbers',
@@ -115,6 +115,7 @@
     diffSub: 'From how often children win and how often they leave a round unfinished. A verdict needs at least 20 tries.',
     diffRule: 'Too hard: children win fewer than 40% of the rounds they finish, or leave 30% or more unfinished. Too easy: they win 90% or more and leave fewer than 10% unfinished. Games without a winner (endless runs, two players on one PC) are not rated.',
     diffRuleCompletion: 'For an age group the server reports only the share of rounds won: under 30% is too hard, 85% or more too easy.',
+    diffRuleSessions: 'The server does not say how many tries each age group made, so a verdict for one age group needs at least 5 play sessions instead of 20 tries.',
     howRoundsEnd: 'How rounds end',
     verdict: { hard: 'Too hard', right: 'About right', easy: 'Too easy', few: 'Not enough tries', none: 'No winner', hidden: 'Hidden', missing: 'Not played' },
     verdictLong: {
@@ -195,7 +196,7 @@
     errNotSetTitle: 'لم تُضبط كلمة مرور اللوحة عند نشر الخادم.',
     errNotSetSteps: [
       'افتح dash.cloudflare.com وسجّل الدخول.',
-      'اضغط Workers & Pages، ثم اضغط على خادم ألعاب المدرسة.',
+      'اضغط Workers & Pages، ثم اضغط school-games-telemetry (أو الاسم الذي أعطيته للخادم عند نشره).',
       'اضغط Settings، ثم Variables and Secrets، ثم Add.',
       'اختر Secret. اكتب ADMIN_TOKEN في خانة الاسم، وكلمة مرور جديدة في خانة القيمة: 16 حرفًا ورقمًا على الأقل، دون مسافات.',
       'اضغط Deploy. انتظر دقيقة، ثم سجّل الدخول هنا بكلمة المرور تلك.'
@@ -275,6 +276,7 @@
     diffSub: 'بحسب عدد مرات فوز الأطفال وعدد الجولات التي يتركونها دون إكمال. يحتاج كل حكم إلى 20 محاولة على الأقل.',
     diffRule: 'صعبة جدًا: يفوز الأطفال في أقل من 40% من الجولات التي يُنهونها، أو يتركون 30% أو أكثر من جولاتهم دون إكمال. سهلة جدًا: يفوزون في 90% أو أكثر ويتركون أقل من 10% دون إكمال. الألعاب التي ليس فيها فائز (الجري المتواصل، ولاعبان على جهاز واحد) لا تُقيَّم.',
     diffRuleCompletion: 'عندما لا يذكر الخادم لفئة عمرية إلا نسبة الجولات المنتهية بالفوز: أقل من 30% صعبة جدًا، و85% أو أكثر سهلة جدًا.',
+    diffRuleSessions: 'لا يذكر الخادم عدد محاولات كل فئة عمرية، لذلك يحتاج الحكم لفئة عمرية واحدة إلى 5 جلسات لعب على الأقل بدلًا من 20 محاولة.',
     howRoundsEnd: 'كيف تنتهي الجولات',
     verdict: { hard: 'صعبة جدًا', right: 'مناسبة', easy: 'سهلة جدًا', few: 'محاولات قليلة', none: 'بلا فائز', hidden: 'مخفية', missing: 'لم تُلعب' },
     verdictLong: {

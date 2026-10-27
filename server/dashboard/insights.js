@@ -103,10 +103,10 @@
     const v = num(n) || 0;
     return Math.abs(v) >= 10 ? int(v) : v.toLocaleString('en-US', { maximumFractionDigits: 1 });
   }
-  // 0..1 -> "64%"; a non-zero share that rounds to 0 or 100 says so.
+  // 0..1 -> "64%"; a non-zero share that rounds to 0 or 100 says so. No rate: the dash the tiles show.
   function pct(rate) {
     const r = num(rate);
-    if (r === null) return '–';
+    if (r === null) return '—';
     const p = Math.round(r * 100);
     if (p === 0 && r > 0) return '<1%';
     if (p === 100 && r < 1) return '>99%';
@@ -306,8 +306,8 @@
       const ended = w + l + q + d + e;
       const tries = num(g.rounds && g.rounds.starts) || 0;
       const winnable = w + l > 0;
-      const main = verdict({ tries, sessions: g.sessions, winRate: g.winRate === undefined ? (winnable ? w / (w + l) : null) : g.winRate,
-        dropOffRate: g.dropOffRate, completionRate: g.completionRate, winnable });
+      const winRate = g.winRate === undefined ? (winnable ? w / (w + l) : null) : num(g.winRate);
+      const main = verdict({ tries, sessions: g.sessions, winRate, dropOffRate: g.dropOffRate, completionRate: g.completionRate, winnable });
       const cells = {};
       if (perBand) {
         for (const b of BANDS) {
@@ -326,11 +326,17 @@
       return {
         slug: g.slug, tries, verdict: main, cells, worst,
         outcomes: { won: w, lost: l, unfinished: q, other: d + e, ended },
-        winRate: main.win ?? null
+        winRate   // wins / (wins + losses), the number the verdict compares (null: no winner)
       };
     }).sort((a, b) => a.worst - b.worst || VERDICT_RANK[a.verdict.code] - VERDICT_RANK[b.verdict.code] ||
       (a.verdict.win ?? 2) - (b.verdict.win ?? 2) || b.tries - a.tries || cmp(a.slug, b.slug));
-    return { rows, perBand, band: perBand ? 'all' : band, hidden: list(kpis && kpis.games).filter(g => g && g.suppressed === true).length };
+    // Which of the fallback rules an age group's cell needed, so the page explains only those.
+    const cellsOf = rows.flatMap(r => Object.values(r.cells));
+    return {
+      rows, perBand, band: perBand ? 'all' : band, hidden: list(kpis && kpis.games).filter(g => g && g.suppressed === true).length,
+      bySessions: cellsOf.some(c => c.tries === null && ['hard', 'easy', 'right', 'few'].includes(c.code)),
+      byCompletion: cellsOf.some(c => c.basis === 'completion')
+    };
   }
 
   // Coming back: the share of a game's opens by children who had opened it before.
@@ -495,9 +501,11 @@
     }
     const slow = health.rows.filter(r => r.flags.includes('slowLoad')).sort((a, b) => b.loadMs - a.loadMs || cmp(a.slug, b.slug))[0];
     if (slow) {
+      // "The slowest" only when no shown game is slower, even one opened too few times to flag.
+      const slowest = health.rows.every(r => r.loadMs === null || !r.loads || r.loadMs <= slow.loadMs);
       add('health', 'load ' + slow.slug, ar
-        ? 'تحتاج ' + game(slow.slug) + ' إلى ' + seconds(slow.loadMs) + ' ثانية في المتوسط حتى تفتح، وهي الأبطأ بين الألعاب.'
-        : nameOf(slow.slug) + ' takes ' + seconds(slow.loadMs) + ' seconds to open on average, the slowest of all games.');
+        ? 'تحتاج ' + game(slow.slug) + ' إلى ' + seconds(slow.loadMs) + ' ثانية في المتوسط حتى تفتح' + (slowest ? '، وهي الأبطأ بين الألعاب.' : '.')
+        : nameOf(slow.slug) + ' takes ' + seconds(slow.loadMs) + ' seconds to open on average' + (slowest ? ', the slowest of all games.' : '.'));
     }
 
     // Trend: the last full week against the one before (today is still filling up).
@@ -558,7 +566,7 @@
   function insights(kpis, options) {
     const lang = options && options.lang === 'ar' ? 'ar' : 'en', ar = lang === 'ar';
     if (!kpis || typeof kpis !== 'object' || !kpis.totals) return [];
-    if (kpis.totals.suppressed === true) {
+    if (!shown(kpis.totals)) {
       return [{ kind: 'hidden', key: 'totals', text: ar ? 'لعب أقل من 3 أطفال في هذه الفترة، لذلك أُخفيت الأرقام حفاظًا على الخصوصية.'
         : 'Fewer than 3 children played in this period, so the numbers are hidden for privacy.' }];
     }

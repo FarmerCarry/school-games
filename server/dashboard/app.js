@@ -82,7 +82,7 @@
     return new Intl.DateTimeFormat(locale(), { hour: '2-digit', minute: '2-digit' }).format(date);
   }
   function minutesText(m) { var d = I.duration(m, state.lang); return d.value + ' ' + d.unit; }
-  function secondsText(ms) { return ms == null ? '–' : t().secondsValue(I.seconds(ms)); }
+  function secondsText(ms) { return ms == null ? '—' : t().secondsValue(I.seconds(ms)); }
   var utcToday = function () { return new Date().toISOString().slice(0, 10); };
   var shiftDay = function (day, by) { return new Date(Date.parse(day + 'T00:00:00Z') + by * 86400000).toISOString().slice(0, 10); };
 
@@ -409,7 +409,7 @@
     renderInsights(k);
     renderTiles(k);
     var sections = $('sections');
-    var totalsHidden = !k.totals || k.totals.suppressed === true;
+    var totalsHidden = !I.shown(k.totals);
     if (totalsHidden || !k.totals.sessions) {
       note(sections, totalsHidden ? T.hiddenHint : T.emptyHint, 'empty');
       return;
@@ -465,7 +465,7 @@
   }
   function renderTiles(k) {
     var T = t(), box = $('tiles'), tot = k.totals;
-    var hidden = !tot || tot.suppressed === true;
+    var hidden = !I.shown(tot);
     var dash = '—';
     tile(box, 'sessions', T.tileSessions, hidden ? dash : I.int(tot.sessions), '', hidden ? T.hiddenTile : T.tileSessionsHint, hidden ? null : tot.sessions);
     var d = hidden ? null : I.duration(tot.engagedMinutes, state.lang);
@@ -482,7 +482,7 @@
     if (!el) return;
     var T = t(), live = state.live, total = live && live.total;
     var number = el.querySelector('.tile-number'), hint = el.querySelector('.tile-hint');
-    el.classList.toggle('is-live', !!(total && !total.suppressed && total.sessions > 0));
+    el.classList.toggle('is-live', !!(I.shown(total) && total.sessions > 0));
     if (!total) { number.textContent = '—'; el.setAttribute('data-value', ''); return; }
     if (!I.shown(total)) {
       number.textContent = '—'; el.setAttribute('data-value', '');
@@ -502,7 +502,7 @@
     var T = t(), sec = section(parent, 'daily', T.dailyTitle);
     var grid = h('div', { class: 'grid-2' }, sec);
     var days = (k.daily || []).filter(Boolean);
-    var hiddenDays = days.filter(function (d) { return d.suppressed; }).length;
+    var hiddenDays = days.filter(function (d) { return !I.shown(d); }).length;
     var tick = function (day) { return days.length <= 7 ? dayText(day, { weekday: 'short', day: 'numeric' }) : dayText(day, { day: 'numeric', month: 'short' }); };
     var title = function (day) { return dayText(day, { weekday: 'long', day: 'numeric', month: 'long' }); };
     [['sessions', T.dailySessions, function (v) { return I.int(v); }, T.sessions],
@@ -510,7 +510,7 @@
       var c = card(grid, i ? 'daily-minutes' : 'daily-sessions', spec[1], null, true);
       if (days.length < 7) { note(c.chart, T.dailyNeedsDays); }
       else {
-        var points = days.map(function (d) { return { title: title(d.day), tick: tick(d.day), value: d.suppressed ? null : d[spec[0]] || 0 }; });
+        var points = days.map(function (d) { return { title: title(d.day), tick: tick(d.day), value: I.shown(d) ? d[spec[0]] || 0 : null }; });
         draw(function () {
           if (c.chart.hidden) return;
           C.lineChart(c.chart, { points: points, color: 'var(--s1)', rtl: rtl(), name: spec[1], format: spec[2], unit: '',
@@ -519,7 +519,7 @@
       }
       if (hiddenDays) note(c.foot, T.hiddenDays(hiddenDays), 'privacy');
       C.table(c.table, spec[1], [{ label: T.day }, { label: spec[3], num: true }], days.slice().reverse().map(function (d) {
-        return [title(d.day), d.suppressed ? { text: T.hiddenPrivacy } : spec[2](d[spec[0]] || 0)];
+        return [title(d.day), I.shown(d) ? spec[2](d[spec[0]] || 0) : { text: T.hiddenPrivacy }];
       }));
     });
   }
@@ -589,7 +589,7 @@
       if (g.hidden) { rows.push([I.bandLabel(g.band, state.lang), { text: T.hiddenPrivacy, colspan: minutes ? 4 : 3 }]); return; }
       g.rows.forEach(function (r) {
         rows.push([I.bandLabel(g.band, state.lang), gameName(r.slug), I.pct(r.share), I.int(r.opens)]
-          .concat(minutes ? [r.engagedMinutes == null ? '–' : minutesText(r.engagedMinutes)] : []));
+          .concat(minutes ? [r.engagedMinutes == null ? '—' : minutesText(r.engagedMinutes)] : []));
       });
     });
     C.table(c.table, T.byAgeTitle, [{ label: T.ageGroup }, { label: T.game }, { label: T.share, num: true }, { label: T.opens, num: true }]
@@ -655,8 +655,10 @@
       var barHost = h('span', { class: 'stack-host' }, barCell);
       draw(function () { if (!c.chart.hidden) C.stackedBar(barHost, parts, { rtl: rtl(), height: 10 }); });
       var tipRows = OUTCOMES.map(function (x) {
-        return { value: total ? I.pct(o[x[0]] / total) : '–', label: T.outcome[x[0]] + ' (' + I.int(o[x[0]]) + ')', color: x[1], swatch: 'bar' };
+        return { value: total ? I.pct(o[x[0]] / total) : '—', label: T.outcome[x[0]] + ' (' + I.int(o[x[0]]) + ')', color: x[1], swatch: 'bar' };
       });
+      // The bar's "won" is a share of every ending; the verdict compares wins with wins and losses.
+      if (r.winRate != null) tipRows.push({ value: I.pct(r.winRate), label: T.winRate });
       var verdicts = [];
       cols.forEach(function (b) {
         var v = b === 'all' || b === grid.band ? r.verdict : r.cells[b] || { code: 'missing' };
@@ -673,13 +675,15 @@
     var details = h('details', { class: 'rule' }, c.foot);
     h('summary', null, details, state.lang === 'ar' ? 'كيف يُحسب الحكم؟' : 'How is this decided?');
     h('p', null, details, T.diffRule);
-    h('p', null, details, T.diffRuleCompletion);
-    // Table twin with every number.
-    var columns = [{ label: T.game }, { label: T.tries, num: true }].concat(OUTCOMES.map(function (x) { return { label: T.outcome[x[0]], num: true }; }))
+    if (grid.byCompletion) h('p', null, details, T.diffRuleCompletion);
+    if (grid.bySessions) h('p', null, details, T.diffRuleSessions);
+    // Table twin with every number, the win rate the verdicts compare included.
+    var columns = [{ label: T.game }, { label: T.tries, num: true }, { label: T.winRate, num: true }]
+      .concat(OUTCOMES.map(function (x) { return { label: T.outcome[x[0]], num: true }; }))
       .concat(cols.map(function (b) { return { label: b === 'all' ? T.allAgesShort : I.bandLabel(b, state.lang) }; }));
     C.table(c.table, T.diffTitle, columns, grid.rows.map(function (r) {
       var o = r.outcomes;
-      return [gameName(r.slug), I.int(r.tries)].concat(OUTCOMES.map(function (x) { return o.ended ? I.pct(o[x[0]] / o.ended) : '–'; }))
+      return [gameName(r.slug), I.int(r.tries), I.pct(r.winRate)].concat(OUTCOMES.map(function (x) { return o.ended ? I.pct(o[x[0]] / o.ended) : '—'; }))
         .concat(cols.map(function (b) {
           var v = b === 'all' || b === grid.band ? r.verdict : r.cells[b] || { code: 'missing' };
           return v.code === 'hidden' ? { text: T.hiddenPrivacy } : T.verdict[v.code];

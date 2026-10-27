@@ -93,9 +93,10 @@
     var raw = max / count, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
     return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * mag;
   }
+  // The charts count play sessions and whole minutes: a step is never below 1.
   function ticks(max, count) {
     if (!(max > 0)) return [0, 1];
-    var step = niceStep(max, count || 4), out = [];
+    var step = Math.max(1, niceStep(max, count || 4)), out = [];
     for (var v = 0; v <= max + step * 0.999; v += step) out.push(Math.round(v * 1000) / 1000);
     if (out[out.length - 1] < max) out.push(out[out.length - 1] + step);
     return out;
