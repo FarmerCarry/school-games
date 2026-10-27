@@ -484,6 +484,8 @@ async function embedded(t, prefs, options) {
   await frame.waitForFunction(() => window.__game && window.Kit);
   await page.waitForFunction(() => window.msgs.some(m => m && m.type === 'sg:ready'));
   await page.evaluate(p => prefs(p), prefs);
+  // A click can overtake the message on a busy PC: play only once the game has the band.
+  await frame.waitForFunction(band => Kit.profile.band === band, prefs.band);
   return { page, frame };
 }
 const fstate = frame => frame.evaluate(() => __game.state);
