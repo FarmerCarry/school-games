@@ -1181,11 +1181,12 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     // Students by canonical code (an older code counts as the code it is linked to): new
     // (the profile was made in the range), known before (first seen in the range, made
     // before it) or returning (seen before the range).
-    const canonical = new Map(aliases.map(([u, to]) => [u, to])), students = new Map();
+    const canonical = new Map(aliases.map(([u, to]) => [u, to])), students = new Map(), playedBy = new Map();
     for (const [u, bands, games, first, made] of all('students')) {
-      const c = canonical.get(u) || u, s = students.get(c) || students.set(c, { bands: new Set(), games: new Set(), first, made }).get(c);
+      const c = canonical.get(u) || u, s = students.get(c) || students.set(c, { bands: new Set(), first, made }).get(c);
       for (const a of csv(bands)) s.bands.add(a.slice(1));
-      for (const slug of csv(games)) s.games.add(slug);
+      // Each game's students, as a set of canonical codes.
+      for (const slug of csv(games)) (playedBy.get(slug) || playedBy.set(slug, new Set()).get(slug)).add(c);
       s.first = Math.min(s.first, first);
       s.made = Math.min(s.made, made);
     }
@@ -1193,14 +1194,13 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       const s = students.get(to);
       if (s) for (const [first, made] of [known.slice(0, 2), known.slice(2)]) if (first !== null) { s.first = Math.min(s.first, first); s.made = Math.min(s.made, made); }
     }
-    const lo = dayBounds(conf.tz, from).lo, bandStudents = new Map(), gameStudents = new Map();
+    const lo = dayBounds(conf.tz, from).lo, bandStudents = new Map(), gameStudents = new Map([...playedBy].map(([slug, set]) => [slug, set.size]));
     let fresh = 0, returning = 0, knownBefore = 0;
     for (const s of students.values()) {
       if (s.first < lo) returning++;
       else if (s.made >= lo) fresh++;
       else knownBefore++;
       for (const a of s.bands) bandStudents.set(a, (bandStudents.get(a) || 0) + 1);
-      for (const slug of s.games) gameStudents.set(slug, (gameStudents.get(slug) || 0) + 1);
     }
     // Students per day, minutes per student-day, minutes by kind of session, and PCs.
     const perDay = new Map(), guestPerDay = new Map(), tenths = new Map(), kinds = { s: 0, g: 0, u: 0 }, pcs = new Map();
