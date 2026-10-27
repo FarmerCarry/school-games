@@ -553,6 +553,30 @@ test('with storage blocked the portal plays as a guest, and a player lives in me
   assert.ok(await page.evaluate(() => window.sounds) > sounds, 'sounds again without it');
 });
 
+test('with storage blocked a game opened later still follows the topbar mute', async t => {
+  const { page } = await setup(t, { storage: false });
+  await page.goto(origin + '/');
+  let frame = await play(page, 'air-hockey');
+  await page.locator('#muteBtn').click();
+  await frame.waitForFunction(() => Kit.audio.muted);
+  await home(page);
+  assert.equal(await page.locator('#muteBtn').getAttribute('aria-pressed'), 'true');
+  // The new game cannot read the mute from storage: the portal says it (on load and on ready).
+  frame = await play(page, 'maze-dash');
+  await frame.waitForFunction(() => (window.prefs || []).length >= 2);
+  assert.equal(await frame.evaluate(() => Kit.audio.muted), true, 'the new game is muted, as the topbar shows');
+  assert.deepEqual(await frame.evaluate(() => window.prefs.at(-1)),
+    { type: 'sg:preferences', classroom: false, band: '', player: '', telemetry: false, quiet: true });
+  // Unmuted again, the next game plays its sounds, and no correction is needed.
+  await page.locator('#muteBtn').click();
+  await frame.waitForFunction(() => !Kit.audio.muted);
+  await home(page);
+  frame = await play(page, 'air-hockey');
+  await frame.waitForFunction(() => (window.prefs || []).length >= 2);
+  assert.equal(await frame.evaluate(() => Kit.audio.muted), false);
+  assert.deepEqual(await frame.evaluate(() => window.prefs.at(-1)), { type: 'sg:preferences', classroom: false, band: '', player: '', telemetry: false });
+});
+
 test('damaged stored profiles, class band and loss tallies are repaired silently', async t => {
   const state = await setup(t);
   const { page } = state;

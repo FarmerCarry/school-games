@@ -995,7 +995,8 @@
   function telemetryOn() {
     try { return !!(window.SGTelemetry && window.SGTelemetry.active && window.SGTelemetry.active()); } catch (e) { return false; }
   }
-  // quiet: the child's own mute, sent only when the topbar button changes it.
+  // quiet: the child's own mute, sent when the topbar button changes it, and whenever
+  // storage could not keep it (a newly opened game reads the stored value instead).
   function sendPreferences(quiet) {
     // A temporary preset must not overwrite each game's personal settings.
     // Always clear it too: file:// may give every game its own storage area.
@@ -1003,6 +1004,7 @@
     sentTelemetry = telemetryOn();
     var message = { type: 'sg:preferences', classroom: classroomOn, band: String(prof('band') || ''),
       player: String(prof('player') || ''), telemetry: sentTelemetry };
+    if (typeof quiet !== 'boolean' && personalMuted !== !!storedPreference('muted', false)) quiet = personalMuted;
     if (typeof quiet === 'boolean') message.quiet = quiet;
     postGame(message);
   }
