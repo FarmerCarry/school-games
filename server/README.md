@@ -1,27 +1,69 @@
-# Telemetry ingest server
+# Play statistics server and insights dashboard
 
-A small HTTPS service that receives **anonymous** play telemetry from the portal's
-telemetry sink (`js/telemetry.js`, see [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md),
-"Telemetry sink" and "Ingest server"), stores it in one SQLite file and answers
-engagement KPIs for the insights dashboard (milestone 2).
+This folder is a small service that receives **anonymous** play statistics from the
+games portal (the portal's telemetry sink, `js/telemetry.js`; see
+[`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md), "Telemetry sink" and "Milestone 2"),
+keeps them as daily totals, and shows them on the insights dashboard at its own address.
 
-* Node 22.13 or newer (where `node:sqlite` needs no flag), **no dependencies**
-  (`node:http`, `node:sqlite`, `node:crypto`), no `npm install`.
-* Deployed separately from GitHub Pages: a container, a small VM, or any Node host.
-* The portal sends nothing unless the fast build is given an ingest URL, so the site
-  works exactly as before without this server.
+It runs in one of two places, with the same code:
 
-| File | What it does |
-|---|---|
-| `main.mjs` | Reads the environment, opens the database, starts listening, purges daily. |
-| `app.mjs` | HTTP routing, CORS, per-client rate limit, body limits, admin authentication. |
-| `schema.mjs` | Strict validation of the envelope and every event kind; cleans and clamps. |
-| `store.mjs` | SQLite tables, one transaction per batch, de-duplication, retention, KPI and live queries. |
-| `warnings.mjs` | Hides Node 22's one `node:sqlite` ExperimentalWarning (and nothing else). |
-| `simulate.mjs` | Deterministic synthetic sessions for dashboard development. |
-| `fixtures/sample-batch.json` | A valid envelope with every event kind (shared with the portal's tests). |
-| `Dockerfile` | A minimal `node:22-alpine` image. |
-| `package.json` | Only the Node version and `npm start`, for hosts that look for one. No dependencies. |
+* **Cloudflare (recommended):** a free Cloudflare Worker with a free D1 database. One
+  button sets it up; nothing to install, nothing to keep running.
+* **Your own computer or server (Node):** `node main.mjs` with one SQLite file. See
+  [Self-hosting on Node](#self-hosting-on-node).
+
+The portal sends nothing until its fast build is given this server's address, so the
+site works exactly as before without it.
+
+## Turn on data collection (about 5 minutes, no code)
+
+You need: an email address, your GitHub account (the one that holds the games site), and
+a web browser. Everything below is free.
+
+1. **Click this button:**
+
+   [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/FarmerCarry/school-games/tree/claude/charming-bell-5izwb5/server)
+
+2. **Sign up or sign in to Cloudflare.** If you have no Cloudflare account, choose
+   *Sign up*, type your email address and a password of your choice, and open the
+   confirmation email Cloudflare sends you. The free plan is all you need: if Cloudflare
+   offers a paid plan, skip it.
+3. **Connect GitHub when Cloudflare asks.** Click *Connect GitHub* (or *GitHub*), sign in
+   to GitHub if asked, and allow Cloudflare. The button makes a **copy of this server in
+   your own GitHub account** (a new repository, usually named `school-games-telemetry`),
+   and Cloudflare runs that copy. This is normal and expected.
+4. **Keep the suggested names.** Leave the project name `school-games-telemetry` and the
+   database name `school-games-telemetry` as they are.
+5. **Type a dashboard password** in the box named **`ADMIN_TOKEN`**. Make one up: **at
+   least 16 English letters or digits, with no spaces** (for example
+   `GreenTiger42Window7Lamp`, but make up your own). **Write it down on paper now.**
+   You type it to open the dashboard, and Cloudflare keeps it secret: it cannot show it
+   to you again later (you can only replace it, see below).
+6. **Press *Create and deploy*** (it may just say *Deploy*).
+7. **Wait** one to three minutes, until Cloudflare says the deployment succeeded.
+8. **Copy the address** it shows. It looks like
+   `https://school-games-telemetry.<your-name>.workers.dev`. Send that address to the
+   developer (an email or a chat message is fine). The developer then switches the games
+   site on, and children's PCs start sending anonymous statistics.
+9. **Open that address** in your browser to see the dashboard, and sign in with the
+   password from step 5. Until children play, there is nothing to show; add `/?demo` to
+   the address to see the dashboard with made-up sample data.
+
+**It is free for a school.** Cloudflare's free plan allows 100,000 requests to the
+server per day (a PC sends one about every game played; 120 play sessions send about
+300), and its free D1 database allows 5 GB of storage, 5 million rows read and 100,000
+rows written per day. A school day with 120 play sessions writes about 3,000 rows (a few
+percent of the allowance) and keeps about 1 MB of totals per month; the dashboard reads
+about 25,000 rows when it first shows a month, and about 2,000 each time it refreshes.
+If a limit were ever reached, the server stops answering until midnight UTC: nothing is
+charged (the free plan has no bill), and the PCs keep their statistics for up to 7 days
+and send them later.
+
+**Changing or setting the password later:** on [dash.cloudflare.com](https://dash.cloudflare.com),
+open *Workers & Pages*, then `school-games-telemetry`, then *Settings*, then *Variables and
+Secrets*. Edit `ADMIN_TOKEN` (or add it, type *Secret*), type the new password and press
+*Deploy*. Without a valid password the dashboard says that the password was not set,
+while the statistics are still collected.
 
 ## Before you turn it on
 
@@ -31,12 +73,34 @@ parents** before collection starts, under the rules that apply to you: for examp
 **COPPA** and **FERPA** in the United States, the **GDPR** with its rules for children's
 data (often called GDPR-K) in the European Union, and the **UK GDPR with the Age
 Appropriate Design Code** (Children's Code) in the United Kingdom. Give the reviewers
-the "Privacy design" section below and the event list in `docs/ARCHITECTURE.md`. Keep
-the server switched off (build without `SG_TELEMETRY_URL`) until the review is done,
-and record who operates the server, where it runs and how long data is kept.
+the "Privacy design" section below and the event list in `docs/ARCHITECTURE.md`, and
+record who operates the server, where it runs and how long data is kept.
 
 Even with the server on, a PC sends nothing while a teacher has stopped statistics on
 it (the teacher page), and browsers that send Global Privacy Control never send anything.
+
+## Files
+
+| File | What it does |
+|---|---|
+| `worker.mjs` | Cloudflare entry: `fetch` (the handler on the D1 database `env.DB`, the dashboard from `env.ASSETS`) and `scheduled` (the daily purge). |
+| `wrangler.json` | The Worker's settings: D1 binding `DB`, static assets `./dashboard`, the daily cron, `ALLOWED_ORIGINS` and `RETENTION_DAYS`, request logs (observability) off. |
+| `package.json`, `package-lock.json` | Wrangler 4.149.0 for deploying (a development tool only), the plain-English descriptions the Deploy button shows, `npm start` for Node. |
+| `.dev.vars.example` | Tells the Deploy button to ask for the `ADMIN_TOKEN` secret (empty on purpose). |
+| `handler.mjs` | The HTTP rules as a Fetch-API handler, shared by both hosts: routes, CORS, the soft rate limit, body limits, admin password, status codes. |
+| `store.mjs` | Daily aggregates over a D1-style SQL driver; creates and upgrades its tables itself; KPIs, live sessions, retention. |
+| `schema.mjs` | Strict validation of the envelope and every event kind; cleans and clamps. |
+| `sqlite-d1.mjs` | A D1-style driver over Node's built-in `node:sqlite`, for the Node host and the tests. |
+| `app.mjs`, `main.mjs` | The Node host: `node:http` in front of the handler, settings from the environment, a purge every 24 hours. |
+| `static.mjs` | The Node host's static file server for `dashboard/`, with the headers of `dashboard/_headers`. |
+| `dashboard/` | The insights dashboard (static files), served at `/` by both hosts. `_headers` gives every page a strict Content-Security-Policy. |
+| `warnings.mjs` | Hides Node 22's one `node:sqlite` ExperimentalWarning (and nothing else). |
+| `simulate.mjs` | Deterministic synthetic sessions for dashboard development and tests. |
+| `fixtures/sample-batch.json` | A valid envelope with every event kind (shared with the portal's tests). |
+| `Dockerfile` | A minimal `node:22-alpine` image of the Node host. |
+
+The folder is self-contained (it imports nothing from outside it), because the Deploy
+button copies only this folder into a new repository.
 
 ## Privacy design
 
@@ -48,21 +112,25 @@ Privacy is built into what can be stored, not only into what the portal chooses 
   anything else: unknown envelope fields are ignored, an event with an extra or a
   malformed field is dropped whole, and round ids that could be typed text (three
   digits in a row, spaces, more than 24 characters) are refused.
-* **No persistent identifiers.** The session id is random per portal session and never
-  reused. On the PC it is kept only inside batches still waiting to be sent (localStorage
-  keys starting with `sg:site:tm:q`, at most 7 days and 128 KB, each batch with the local
-  time its first event was recorded); delivery, the teacher's clear, or stopping
-  statistics or sharing removes them. The batch id is random per batch and kept only
-  30 days for de-duplication. Neither can link sessions of the same child.
-* **No IP addresses and no headers are stored or logged.** The client address is only a
-  key of the in-memory rate limiter and is forgotten once its bucket has refilled, at the
-  next sweep (at most once a minute, when a request arrives). Requests
-  are not logged; request bodies are never logged. The only log lines are start-up,
-  purge counts and internal error messages (a client that disconnects or times out
-  mid-request is not an error and is not logged).
+* **Totals, not events.** Events are never stored. A batch only adds to whole-number
+  totals per UTC receipt day and age band (per game, level, launch source and device
+  bucket). What a single child did cannot be read back.
+* **Session ids for two days, batch ids for 30.** The session id is random per portal
+  session and never reused. The server keeps it only in the `seen` table (to count
+  distinct sessions per day) for today and yesterday, and in the `live` table for at
+  most 10 minutes. The batch id is random per batch and kept 30 days for
+  de-duplication. Neither can link sessions of the same child. On the PC, unsent batches
+  wait in localStorage (keys starting with `sg:site:tm:q`, at most 7 days and 128 KB).
+* **No IP addresses and no headers are stored or logged.** The client address
+  (`CF-Connecting-IP` on Cloudflare, the socket address or a trusted `X-Forwarded-For`
+  hop on Node) is only a key of the in-memory rate limiter and is forgotten once its
+  bucket has refilled. Requests and request bodies are never logged. On Cloudflare,
+  Workers observability (stored request logs, which would hold IP addresses) is
+  **off** in `wrangler.json`; keep it off. The only log lines are start-up and purge
+  counts (Node) and internal error messages.
 * **No wall-clock times from the client.** Events carry seconds since the session
-  started; the server stamps only the UTC **day** and **hour** of receipt. The "live"
-  view keeps the last receipt time per session **in memory only**, for 5 minutes.
+  started and the server stores only the UTC **day** of receipt. The live view keeps
+  the **minute** of each session's last batch, for 10 minutes.
 * **Coarse buckets.** Devices are reported as cores (1, 2, 4, 8, 16), memory in GB
   (0, 1, 2, 4, 8) and screen width (1366, 1600, 1920, 2560); age as a band (6-7, 8-9,
   10-11 or unknown); profile age, days since last play and plays before as buckets;
@@ -71,13 +139,17 @@ Privacy is built into what can be stored, not only into what the portal chooses 
   bucket, a day, a launch source, live counts) with fewer than **3 distinct sessions**
   is returned as `{ ..., "suppressed": true }` with no numbers. Lists are sorted by
   their key, never by a hidden number. Suppression does not stop an administrator from
-  subtracting narrower queries from wider ones; the admin token is for the people who
-  operate the service, not for publishing raw results.
-* **Retention.** Rows older than `RETENTION_DAYS` (default 180) are deleted when the
-  server starts and every 24 hours. SQLite's `secure_delete` overwrites deleted rows,
-  and the write-ahead log is truncated after each purge.
+  subtracting narrower queries from wider ones; the dashboard password is for the
+  people who operate the service, not for publishing raw results.
+* **Retention.** Daily totals older than `RETENTION_DAYS` (default 180) are deleted by
+  the daily purge (Cloudflare: a cron at 03:23 UTC; Node: at start and every 24 hours).
+  On Node, SQLite's `secure_delete` overwrites deleted rows and the write-ahead log is
+  truncated after each purge.
 
-## Quick start
+## Self-hosting on Node
+
+Node 22.13 or newer (where `node:sqlite` needs no flag); no `npm install` and no
+runtime dependencies.
 
 ```sh
 export ADMIN_TOKEN=$(openssl rand -hex 24)
@@ -86,11 +158,12 @@ node server/main.mjs &
 curl -s localhost:8787/v1/health                    # {"ok":true}
 node server/simulate.mjs --sessions 200             # synthetic sessions (today)
 curl -s -H "Authorization: Bearer $ADMIN_TOKEN" localhost:8787/v1/admin/kpis
+# the dashboard: http://localhost:8787/
 ```
 
 The default database is `server/data/telemetry.db` (ignored by Git).
 
-## Configuration
+### Configuration
 
 All settings are environment variables.
 
@@ -100,20 +173,27 @@ All settings are environment variables.
 | `HOST` | all interfaces | Bind address. Use `127.0.0.1` behind a reverse proxy on the same machine. |
 | `DB_PATH` | `server/data/telemetry.db` | SQLite file (created with its folder). Also writes `-wal` and `-shm` files next to it. |
 | `ALLOWED_ORIGINS` | none | Comma-separated origins of the portal, e.g. `https://name.github.io` (an origin has no path and no trailing slash, even when the site lives at `/school-games/`). Browser requests from any other origin get no CORS header and `POST /v1/batch` answers `403`. The literal `null` (pages from `file:` or sandboxed frames) is accepted only if listed; the portal never sends from `file:`. |
-| `ADMIN_TOKEN` | none | Bearer token for `/v1/admin/*`, at least 16 printable ASCII characters without spaces (use `openssl rand -hex 24`). Unset: the admin endpoints answer `404`. |
+| `ADMIN_TOKEN` | none | The dashboard password: the bearer token for `/v1/admin/*`, at least 16 printable ASCII characters without spaces (use `openssl rand -hex 24`). Unset: the admin endpoints answer `404`. |
 | `RETENTION_DAYS` | `180` | Days of data to keep (1 to 36,500). |
 | `RATE_PER_MIN` | `1200` | Requests per minute per client address (token bucket, bursts up to the same number). Generous because a whole school lab shares one NAT address. `0` turns the limit off. |
 | `TRUST_PROXY` | `0` | Number of reverse proxies in front of the server. With `1`, the client address for the rate limit is the last `X-Forwarded-For` entry (the one your proxy wrote); with `0` it is the socket address, so all traffic through a proxy shares one bucket. |
 
-The server refuses to start on a malformed origin, a short admin token or a bad number.
+The server refuses to start on a malformed origin, a short admin token, a bad number,
+or a database written by a newer version of the server.
 
-## Deploying
+On Cloudflare the same settings are `ALLOWED_ORIGINS` and `RETENTION_DAYS` (plain
+variables in `wrangler.json`, default `https://farmercarry.github.io` and `180`),
+`ADMIN_TOKEN` (a secret; an invalid one turns the admin endpoints off rather than
+stopping the Worker) and the optional `RATE_PER_MIN` (the limit is per Worker
+instance, so it is soft).
 
-The server speaks plain HTTP. **Always run it behind a TLS reverse proxy**: the portal
-only sends to `https://` URLs, and GitHub Pages is served over HTTPS. Configure the proxy
-**not to log client IP addresses**, and keep request bodies out of its logs.
+### Deploying
 
-### Docker
+The Node host speaks plain HTTP. **Always run it behind a TLS reverse proxy**: the
+portal only sends to `https://` URLs, and GitHub Pages is served over HTTPS. Configure
+the proxy **not to log client IP addresses**, and keep request bodies out of its logs.
+
+**Docker:**
 
 ```sh
 docker build -t school-games-telemetry server/
@@ -125,12 +205,11 @@ docker run -d --name sg-telemetry --restart unless-stopped \
 ```
 
 The image runs as the unprivileged `node` user, stores the database in the `/data`
-volume and has a health check on `/v1/health`.
+volume, serves the dashboard and has a health check on `/v1/health`.
 
-### A small VM with systemd
-
-Copy the `server/` folder to `/opt/sg-telemetry` and install Node 22.13 or newer (for
-example from nodejs.org or NodeSource). Then `/etc/systemd/system/sg-telemetry.service`:
+**A small VM with systemd:** copy the `server/` folder to `/opt/sg-telemetry` and
+install Node 22.13 or newer (for example from nodejs.org or NodeSource). Then
+`/etc/systemd/system/sg-telemetry.service`:
 
 ```ini
 [Unit]
@@ -188,48 +267,61 @@ server {
 }
 ```
 
-### Any other Node host
-
-Any platform that runs `node main.mjs` (or `npm start` in `server/`, whose
-`package.json` declares the Node version) with Node 22.13+, gives it a persistent disk
-for `DB_PATH` and terminates TLS works (one instance: SQLite is a single file). Check
-that the platform's request logs can be configured without client IPs, or turned off.
+**Any other Node host** that runs `node main.mjs` (or `npm start` in `server/`) with Node
+22.13+, gives it a persistent disk for `DB_PATH` and terminates TLS works (one instance:
+SQLite is a single file). Check that the platform's request logs can be configured
+without client IPs, or turned off.
 
 ## Pointing the portal at the server
 
 The source tree never contains a URL. The fast build (`tools/build.mjs`) reads the
 **`SG_TELEMETRY_URL`** environment variable and injects it into the portal as
 `window.SG_TELEMETRY.url`; the portal's sink (`js/telemetry.js`) is the only code that
-uses it. It must start with `https://`. Use the batch endpoint, for example
-`https://telemetry.example.org/v1/batch`.
+uses it. It must start with `https://` and name the batch endpoint: the Worker's
+address plus `/v1/batch`, for example
+`https://school-games-telemetry.name.workers.dev/v1/batch`.
 
-* **GitHub Pages:** in the repository, *Settings → Secrets and variables → Actions →
-  Variables → New repository variable*, name `SG_TELEMETRY_URL`. The Pages workflow
-  passes it to the build; delete the variable and rebuild to switch telemetry off.
+* **This project:** once the owner reports the Worker's address, the developer commits
+  it as `SG_TELEMETRY_URL` in `.github/workflows/build.yml`.
+* **GitHub Pages in general:** in the repository, *Settings → Secrets and variables →
+  Actions → Variables → New repository variable*, name `SG_TELEMETRY_URL`; delete it and
+  rebuild to switch telemetry off.
 * **A local build:** `SG_TELEMETRY_URL=https://telemetry.example.org/v1/batch node tools/build.mjs`.
-* Add the site's origin (e.g. `https://name.github.io`) to `ALLOWED_ORIGINS`.
+* `ALLOWED_ORIGINS` must list the site's origin (on Cloudflare it already lists
+  `https://farmercarry.github.io`).
 
 ## API
 
-Every response has `Vary: Origin`, `Cache-Control: no-store` and, for an origin in
-`ALLOWED_ORIGINS`, `Access-Control-Allow-Origin: <that origin>` and
-`Access-Control-Expose-Headers: Retry-After`. Credentials are never allowed. Error
-bodies are `{"error": "<short reason>"}` and never echo the request.
-Every request (including `OPTIONS` and health checks) takes a token from the client's
+Every API response (paths under `/v1/`) has `Vary: Origin`, `Cache-Control: no-store`,
+`X-Content-Type-Options: nosniff` and, for an origin in `ALLOWED_ORIGINS`,
+`Access-Control-Allow-Origin: <that origin>` and `Access-Control-Expose-Headers:
+Retry-After`. Credentials are never allowed. Error bodies are `{"error": "<short
+reason>"}` and never echo the request. Every request that reaches the server (including
+`OPTIONS`, health checks and, on Node, dashboard files) takes a token from the client's
 rate-limit bucket; an empty bucket answers `429` with `Retry-After` in seconds.
+
+### `GET /` and other paths outside `/v1/`
+
+The dashboard's static files from `dashboard/` (`GET` and `HEAD` only; anything else,
+and missing files, are `404`). On Cloudflare, Workers static assets serve them; on Node,
+`static.mjs` serves only regular files inside the folder (no dot files, no `_headers`,
+no path outside it). Both send the headers in `dashboard/_headers`: a
+Content-Security-Policy (`default-src 'self'`; scripts also from
+`https://farmercarry.github.io` for the live game names), `X-Content-Type-Options:
+nosniff`, `Referrer-Policy: no-referrer`, and `Cache-Control: no-store` for the page.
 
 ### `POST /v1/batch`
 
 The body is the telemetry envelope as JSON, sent as `text/plain` (a CORS "simple
-request" without a preflight, also what `navigator.sendBeacon` sends) or
-`application/json`. See `fixtures/sample-batch.json` and `docs/ARCHITECTURE.md`.
+request" without a preflight) or `application/json`. See `fixtures/sample-batch.json`
+and `docs/ARCHITECTURE.md`.
 
 | Status | When |
 |---|---|
 | `204` | Stored, or a batch id already received (repeats are answered the same, so the client drops them). Unknown event kinds and malformed events are dropped silently; the rest of the batch is kept. |
 | `400` | Not JSON, or an invalid envelope: `v` is not `2`; `b` is not 16 lowercase hex; `s` is not 12 lowercase hex; `k` is not `src` or exactly 16 lowercase hex; `m` is not `web`/`app`; `a` is not `6-7`/`8-9`/`10-11`/`''`; `d` is not `[cores, memoryGB, screenWidth]` from the bucket lists; `ev` is not an array of at most 200 entries. |
 | `403` | The request has an `Origin` header that is not in `ALLOWED_ORIGINS`. Requests without `Origin` (tools, `simulate.mjs`) are accepted. |
-| `413` | The body is over 64 KB (65,536 bytes). |
+| `413` | The body is over 64 KB (65,536 bytes), declared or streamed. |
 | `415` | Another content type. |
 | `429` | Rate limited. |
 
@@ -259,7 +351,7 @@ hits/misses/`rt`/`il` entries 100,000, each frame bucket 10⁷, game visit 6 h, 
 
 `204`. For an allowed origin also `Access-Control-Allow-Methods: GET, HEAD, POST,
 OPTIONS`, `Access-Control-Allow-Headers: Content-Type, Authorization` and
-`Access-Control-Max-Age: 86400` (the dashboard's admin calls need the preflight).
+`Access-Control-Max-Age: 86400`.
 
 ### `GET /v1/health`
 
@@ -267,9 +359,11 @@ OPTIONS`, `Access-Control-Allow-Headers: Content-Type, Authorization` and
 
 ### Admin endpoints
 
-`GET /v1/admin/kpis` and `GET /v1/admin/live` need `Authorization: Bearer $ADMIN_TOKEN`
+`GET /v1/admin/kpis` and `GET /v1/admin/live` need `Authorization: Bearer <ADMIN_TOKEN>`
 (compared in constant time). Without a valid token: `401` with
-`WWW-Authenticate: Bearer`. With `ADMIN_TOKEN` unset: `404`.
+`WWW-Authenticate: Bearer`. With no valid `ADMIN_TOKEN` set: `404
+{"error": "admin password not set"}` (the dashboard shows this as "the password was
+not set").
 
 #### `GET /v1/admin/kpis?from=YYYY-MM-DD&to=YYYY-MM-DD&band=6-7`
 
@@ -282,7 +376,9 @@ Conventions:
 * A **group** is an object with its key fields and `sessions`, the number of distinct
   sessions in it (for games this is the brief's "unique sessions"). A group with 1 or
   2 sessions is only `{ <key fields>, "suppressed": true }`; a group with 0 sessions
-  keeps its zeros. Check `suppressed` before reading numbers.
+  and nothing stored keeps its zeros. Check `suppressed` before reading numbers.
+* **Sessions are counted per day:** a range's sessions are the sum of its days' distinct
+  sessions, so a session that crosses midnight UTC (rare) counts on both days.
 * Rates and shares are 0..1 with 4 decimals and `null` when the denominator is 0.
   Minutes have 1 decimal (`avgEngagedMinutesPerSession` 2), seconds 1, tiers 2,
   milliseconds are whole.
@@ -297,6 +393,7 @@ Conventions:
 * Round codes: `w` win, `l` loss, `d` draw, `e` neutral end (endless runs, two-player
   modes), `q` quit. Endless games end with `e`, so their completion rate is 0 and
   their win rate `null`: read `rounds.codes` and `dropOffRate` for them.
+* A device bucket counts a session under the buckets of its first batch of the day.
 
 ```jsonc
 {
@@ -304,7 +401,7 @@ Conventions:
   "range": { "from": "2026-10-01", "to": "2026-10-26", "days": 26, "band": "all" },  // band: all | 6-7 | 8-9 | 10-11 | unknown
   "minSessions": 3,
   "totals": {                                  // or { "suppressed": true }
-    "sessions": 2560,                          // distinct sessions with a stored event
+    "sessions": 2560,                          // distinct sessions with a stored event, per day
     "engagedMinutes": 22692.6,                 // sum of gx engaged ms
     "avgEngagedMinutesPerSession": 8.86,
     "gameOpens": 6419, "roundsStarted": 27938, "roundsEnded": 27938, "levelUps": 2580, "errors": 147,
@@ -350,7 +447,8 @@ Conventions:
       "games": [                               // age-band preferences, sorted by slug
         { "slug": "bubble-bop", "sessions": 136, "opens": 143,
           "share": 0.0784,                     // this game's share of the band's opens
-          "avgTier": 1.48, "completionRate": 0.6432 },
+          "avgTier": 1.48, "completionRate": 0.6432,
+          "winRate": 0.8411, "dropOffRate": 0.1203, "engagedMinutes": 210.4 },  // added in milestone 2
         { "slug": "dino-3d", "suppressed": true }
       ] },
     { "band": "unknown", "suppressed": true }
@@ -372,10 +470,11 @@ Conventions:
 
 #### `GET /v1/admin/live`
 
-Sessions whose last batch arrived in the last 5 minutes, and the game each one has open
-(opened with `go` and not yet closed with `gx`; `se` closes everything). Kept in memory:
-it starts empty after a restart, and a batch delivered late from a PC's offline queue
-counts as a sign of life when it arrives.
+Sessions whose last batch arrived in the current minute or the four before it (300 s
+at minute resolution), and the game each one has open (opened with `go` and not yet
+closed with `gx`; `se` closes everything; a session forgotten after 5 quiet minutes has
+nothing open). A batch delivered late from a PC's offline queue counts as a sign of
+life when it arrives; a repeated batch does not.
 
 ```json
 { "v": 1, "windowSec": 300, "minSessions": 3,
@@ -385,40 +484,71 @@ counts as a sign of life when it arrives.
 
 ## Operations
 
-* **Backup.** The database is one file plus its write-ahead log. Take a consistent copy
-  while the server runs with SQLite's `VACUUM INTO`, for example nightly from cron:
+* **Backup.** Cloudflare: D1 can restore the database to any minute of the last 7 days
+  on the free plan (*Time Travel*). Node: the
+  database is one file plus its write-ahead log; take a consistent copy while the server
+  runs with SQLite's `VACUUM INTO`, for example nightly from cron:
   `sqlite3 /var/lib/sg-telemetry/telemetry.db "VACUUM INTO '/backups/telemetry-$(date +%F).db'"`,
   or without the `sqlite3` tool:
   `node --no-warnings -e "new (require('node:sqlite').DatabaseSync)(process.argv[1]).exec(\"VACUUM INTO '\" + process.argv[2] + \"'\")" telemetry.db backup.db`.
   Keep backups no longer than `RETENTION_DAYS` (they are copies of the same data) and
   encrypt them at rest. To restore, stop the server and replace the file (delete stale
   `-wal`/`-shm` files).
-* **Retention.** Rows are deleted by receipt day when the server starts and every
-  24 hours; batch ids after 30 days. Lowering `RETENTION_DAYS` takes effect at the next
-  start. To erase everything, stop the server and delete the database files.
-* **Monitoring.** `GET /v1/health`. The process exits when it cannot start (port in
+* **Retention.** Daily totals are deleted by receipt day by the daily purge; batch ids
+  after 30 days, `seen` session ids after yesterday, live rows after 10 minutes (also by
+  the next batch or live query). Lowering `RETENTION_DAYS` takes effect at the next
+  purge (Node: the next start). To erase everything on Node, stop the server and delete
+  the database files; on Cloudflare, delete the Worker and its D1 database
+  `school-games-telemetry` in the Cloudflare dashboard.
+* **Monitoring.** `GET /v1/health`. The Node process exits when it cannot start (port in
   use, unreadable database), so the supervisor (Docker, systemd) reports or restarts it.
-* **Upgrades.** The schema version is stored in SQLite's `user_version`; a server
-  refuses a database newer than itself.
-* **Size.** About 3.5 KB per session (about 40 rows with indexes), so 1,000 sessions a
-  day kept for 180 days is about 0.6 GB. A KPI query over 28 days with 2,500 sessions
-  (110,000 rows) takes 0.3–0.5 s on a busy 4-CPU machine; the time grows with the rows
-  in the range, so a dashboard should cache results rather than poll the KPIs.
+  On Cloudflare, the Worker's *Metrics* tab shows requests and errors without logs.
+* **Upgrades.** The store creates and upgrades its tables itself on first use (`CREATE
+  TABLE IF NOT EXISTS`, the schema version in the `meta` table), so a deploy has no
+  migration step. A database of the first server (one table per event kind) is folded
+  into the daily totals on first use, its event tables are dropped, and its
+  `user_version` is raised so the first server refuses it. A server refuses a database
+  newer than itself.
+* **Size and cost.** Measured with `simulate.mjs` (120 sessions per weekday, a sixth
+  at weekends, 30 days, 9,105 batches): a batch writes 10.5 rows on average (median 11,
+  95th percentile 19) and reads about 20, so a month writes about 96,000 rows and keeps
+  about 1 MB of totals. A KPI query reads the aggregate rows of its days (about 500
+  per school day, 12,800 for the month; D1 counts 25,500 rows read for a first 30-day
+  query and 2,000 for a repeat, because days before yesterday never change and each
+  instance keeps their totals for an hour). JavaScript time per request in Node: 0.06 ms
+  per batch and about 1.3 ms per 30- or 90-day KPI query, plus SQLite's own work (0.2 ms
+  per batch, 4 to 20 ms per KPI query), which on Cloudflare D1 does outside the Worker.
 
 ### Storage
 
-`batches (b, day)` for de-duplication; `session_days (s, day, hour, a, m, k, cores, mem,
-screen)` with the envelope's buckets for each session and receipt day; `session_games
-(day, slug, s, a)` and `session_levels (day, slug, id, s, a)`, derived at insert so the
-small-group gates count distinct sessions cheaply; and one table per event kind, `ev_ss`, `ev_go`, `ev_ld`, `ev_er`, `ev_rs`, `ev_re`, `ev_gx`, `ev_lv`,
-`ev_se`, each with `s, day, hour, a, t` and the event's fields (histograms as numbered
-columns, e.g. `rt0`..`rt5`). There are no other columns.
+`batches (b, day)` for de-duplication; `seen (day, kind, key, s)`, which sessions were
+already counted today in a group (`d` the day, `g` a game, `l` a level, `s` a launch
+source); `live (s, slug, seen_minute)`; `meta (key, value)` with the schema version;
+and five daily aggregate tables, each keyed by `day` and band `a`:
+
+| Table | Key after (day, a) | Sums |
+|---|---|---|
+| `agg_days` | | sessions (and per mode `web`, `app`), engaged ms, opens, round starts and ends, level-ups, errors, session starts, new profiles, guests, profile-age and days-since-last buckets |
+| `agg_games` | `slug` | sessions, opens, closes, engaged ms, round starts and ends, codes `w l d e q`, tier sum and count, hits, misses, `rt0..5`, `il0..5`, `f0..3`, loads and load ms, errors per kind, opens per launch source, replay and plays-before buckets |
+| `agg_levels` | `slug`, `id` | sessions, starts, ends, codes, round ms, tier sum and count |
+| `agg_sources` | `src` | sessions, opens |
+| `agg_devices` | `cores`, `mem`, `screen` | sessions, `f0..3`, `il0..5`, loads and load ms |
+
+All tables are `STRICT, WITHOUT ROWID` with no other index, so a write is one row. There
+are no other columns.
 
 ## Development
 
-* Tests: `node --test --test-reporter=spec tools/tests/telemetry-server.test.mjs`
-  (in-process server on port 0, temporary database, injected clock; about 2 s).
+* Tests: `node --test --test-reporter=spec tools/tests/telemetry-server.test.mjs
+  tools/tests/telemetry-worker.test.mjs` (the Node host on port 0 with a temporary
+  database; the Worker entry with real `Request`s on the Node driver; and a comparison
+  with the first server's store from Git, skipped when that commit is not checked out).
+* The Workers runtime on your machine (no Cloudflare account needed): `npm install` in
+  `server/`, put `ADMIN_TOKEN=...` in `server/.dev.vars` (ignored by Git), then
+  `npx wrangler dev` (local D1 in `.wrangler/`). Add `--test-scheduled` and open
+  `/__scheduled` to run the purge. `npx wrangler deploy --dry-run --outdir /tmp/out`
+  bundles without deploying.
 * Synthetic data for the dashboard: `node server/simulate.mjs --url http://127.0.0.1:8787`
   posts deterministic sessions (same `--seed`, same batch ids, so a repeat adds nothing);
   `node server/simulate.mjs --db server/data/dev.db --days 28` writes four weeks of
-  history straight into a file. Every generated batch passes `schema.mjs`.
+  history straight into a Node database file. Every generated batch passes `schema.mjs`.

@@ -10,7 +10,8 @@ adapt to each child), and none of them plays background music.
   Children pick an animal picture and their age band to play as themselves; nothing is typed.
 - Play statistics are counted on each PC (see [Play statistics](#play-statistics-local-only)).
   A school can also run its **own** anonymous telemetry server (see
-  [Anonymous telemetry](#anonymous-telemetry-optional-school-run-server)); without it the site
+  [Anonymous telemetry](#anonymous-telemetry-optional-school-run-server) and
+  [Turning on data collection](#turning-on-data-collection)); without it the site
   makes no network request.
 - Every game, sound, font and picture lives in this repo. All games run locally in the browser.
 - **Made for Windows PCs with a mouse and keyboard.**
@@ -339,6 +340,17 @@ statistics and the sharing. The server stores no IP addresses, keeps rows for 18
 hides any group smaller than three sessions. See [`docs/TELEMETRY.md`](docs/TELEMETRY.md)
 for the portal side and [`server/README.md`](server/README.md) for running the server
 (`node server/main.mjs`, Node 22.13 or newer, no dependencies).
+
+### Turning on data collection
+
+The statistics server and its insights dashboard run on a **free Cloudflare account**,
+set up with one "Deploy to Cloudflare" button and no code: follow
+[Turn on data collection](server/README.md#turn-on-data-collection-about-5-minutes-no-code)
+in `server/README.md` (about 5 minutes), then send the address it shows
+(`https://school-games-telemetry.<name>.workers.dev`) to the developer, who points the
+site's fast build at it. The dashboard opens at that same address, with the password
+chosen during the setup. To run it on your own server instead, see
+[Self-hosting on Node](server/README.md#self-hosting-on-node).
 
 ## For developers
 

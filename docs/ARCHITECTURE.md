@@ -389,6 +389,7 @@ server/handler.mjs       HTTP rules as a Fetch-API handler: routes, CORS, auth, 
 server/worker.mjs        Cloudflare entry: export default { fetch, scheduled } on env.DB (D1)
 server/sqlite-d1.mjs     a D1-style driver over node:sqlite for Node and the tests
 server/app.mjs, main.mjs Node entry (node:http -> handler), unchanged options and behaviour
+server/static.mjs        the Node host's static files for dashboard/, with dashboard/_headers
 server/dashboard/        the dashboard: static files served at / by both hosts
 server/wrangler.json     Worker config; server/package.json pins wrangler; .dev.vars.example
 ```
@@ -397,24 +398,31 @@ server/wrangler.json     Worker config; server/package.json pins wrangler; .dev.
   written and 5,000,000 rows read per day, and a Worker gets 10 ms of CPU per request.
   So an accepted batch adds to running daily totals (per UTC day and age band: per game,
   per level, per launch source, per device bucket, replay buckets, player buckets,
-  daily totals) with a few `INSERT ... ON CONFLICT DO UPDATE` statements in one batch,
-  and the KPIs are `SUM ... GROUP BY` over those small tables. The work per request
-  stays O(groups), never O(events). A batch touches about 15 rows.
+  daily totals) with one `INSERT ... ON CONFLICT DO UPDATE` per table (its rows as one
+  JSON parameter) in one batch, and the KPIs are `SUM ... GROUP BY` over those small
+  tables. The work per request stays O(groups), never O(events). A batch writes about
+  11 rows on average (95% of batches 19 or fewer) and reads about 20.
 * **Small groups stay hidden.** Each aggregate row carries `sessions`: the number of
-  distinct sessions that day, counted through a small `seen(day, group, s)` table
-  (`INSERT OR IGNORE ... RETURNING`) that keeps only the last 2 days. A range's
-  sessions are the sum of its days' counts (a session crossing midnight counts twice;
-  it is rare). Groups below 3 sessions are suppressed exactly as before.
+  distinct sessions that day, counted through a small `seen(day, kind, key, s)` table
+  (`INSERT OR IGNORE ... RETURNING`, in a first batch before the additions) that keeps
+  only the last 2 days. A range's sessions are the sum of its days' counts (a session
+  crossing midnight counts twice; it is rare). Groups below 3 sessions are suppressed
+  exactly as before.
 * **Live.** A `live(s, slug, seen_minute)` row per session (one write per batch),
-  deleted after 10 minutes. It is the only fine-grained time kept, and only briefly.
+  deleted after 10 minutes. It is the only fine-grained time kept, and only briefly; the
+  live window is the current minute and the four before.
+* **Closed days are kept.** Only today's rows change, so each instance keeps the KPI
+  rows of days before yesterday for an hour: a dashboard refresh reads two days of rows.
 * **Schema in code.** The store creates and upgrades its tables itself on first use
   (`CREATE TABLE IF NOT EXISTS`, a `meta` schema version), so a deploy has no separate
-  migration step that could fail.
+  migration step that could fail. A milestone-1 Node database is folded into the
+  aggregates on first use and its event tables are dropped.
 * **The KPI and live JSON keep their documented shapes** (server/README.md). Additions
   only: `bands[].games[]` gains `winRate`, `dropOffRate` and `engagedMinutes`.
 * **Cloudflare specifics:** D1 binding `DB` with no `database_id` (Wrangler provisions it
   on the first deploy); `ADMIN_TOKEN` is a secret the Deploy button asks for (from
-  `.dev.vars.example`, with a plain description in `package.json` `cloudflare.bindings`);
+  `.dev.vars.example`, with a plain description in `package.json` `cloudflare.bindings`;
+  without a valid one the admin endpoints answer `404 {"error":"admin password not set"}`);
   `ALLOWED_ORIGINS` (default `https://farmercarry.github.io`) and `RETENTION_DAYS` are
   plain vars; a daily cron purges old rows; Workers observability stays **off** (its
   request logs would hold IP addresses); the client key for the soft rate limit is
