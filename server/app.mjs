@@ -129,11 +129,13 @@ export function createApp(options = {}) {
 
   return {
     server, store, purge,
-    // Creates or upgrades the tables (a newer or unreadable database stops here), purges
-    // once, then every 24 hours, sweeps the live rows every minute and starts listening.
-    // Resolves to the address.
+    // Creates or upgrades the tables, every version step (a newer or unreadable database
+    // stops here, so no request ever waits for an upgrade), purges once, then every 24
+    // hours, sweeps the live rows every minute and starts listening. Resolves to the address.
     async listen(port = 0, host) {
-      await store.setup?.();
+      for (let step = 0; await store.setup?.(now()) === 'migrated'; step++) {
+        if (step > 3) throw new Error('the database did not reach the current schema');
+      }
       await purge();
       clearInterval(timer);
       clearInterval(sweeper);

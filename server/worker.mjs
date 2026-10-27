@@ -48,10 +48,12 @@ export default {
   },
   // The crons of wrangler.json. Every 5 minutes: the live rows that have left the window
   // are deleted, so none outlives 10 minutes while no request comes. Any other (the daily
-  // one): aggregate days past RETENTION_DAYS, batch ids past 30 days, seen rows past
-  // yesterday, those live rows and the kept KPI rows are deleted.
+  // one): frozen aggregate days past RETENTION_DAYS, batch ids past 30 days, usage rows
+  // past 60 days, those live rows and the kept KPI rows are deleted. A run that upgrades
+  // the database does only that.
   async scheduled(controller, env) {
-    const { store } = instance(env);
-    await (controller.cron === SWEEP_CRON ? store.sweep(Date.now()) : store.purge(Date.now()));
+    const { store } = instance(env), now = Date.now();
+    if (await store.setup(now) === 'migrated') return;
+    await (controller.cron === SWEEP_CRON ? store.sweep(now) : store.purge(now));
   }
 };

@@ -3,9 +3,10 @@
 // per-client token bucket, body limits, admin authentication and status codes. Paths
 // outside /v1/ go to the host's static files (the dashboard). No IP, header or request
 // body is ever stored or logged; the client key (an address) is only a key of the
-// in-memory token bucket.
-import { validateBatch } from './schema.mjs';
-import { utcDay } from './store.mjs';
+// in-memory token bucket. The request that upgrades the database does only that and is
+// answered 503 with Retry-After (the portal sends the batch again).
+import { WIRES, validateBatch } from './schema.mjs';
+import { SCHEMA_VERSION, utcDay } from './store.mjs';
 
 export const MAX_BODY = 64 * 1024;
 export const MAX_RANGE_DAYS = 366;
@@ -95,9 +96,9 @@ async function readBody(request, limit) {
 const validDay = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) &&
   Number.isFinite(Date.parse(v + 'T00:00:00Z')) && utcDay(Date.parse(v + 'T00:00:00Z')) === v;
 
-// from/to default to the 30 days ending today (UTC).
-function kpiParams(query, now) {
-  const to = query.get('to') ?? utcDay(now);
+// from/to default to the 30 days ending today (the school's day when the store knows it).
+function kpiParams(query, today) {
+  const to = query.get('to') ?? today;
   if (!validDay(to)) throw new HttpError(400, 'to');
   const from = query.get('from') ?? utcDay(Date.parse(to + 'T00:00:00Z') - 29 * DAY_MS);
   if (!validDay(from) || from > to) throw new HttpError(400, 'from');
@@ -121,6 +122,12 @@ export function createHandler(options) {
     return !!match && sameDigest(await sha256(match[1]), await token);
   }
 
+  // The database is created or upgraded by the first request that needs it, one version
+  // step at a time; that request is answered 503 and does nothing else.
+  async function ready(t) {
+    if (await store.setup?.(t) === 'migrated') throw new HttpError(503, 'updating', { 'Retry-After': '2' });
+  }
+
   async function batch(request) {
     const origin = request.headers.get('origin');
     // Browsers always send Origin; a page from another site must not add rows.
@@ -133,8 +140,12 @@ export function createHandler(options) {
     try { body = JSON.parse(new TextDecoder('utf-8', { ignoreBOM: true }).decode(raw)); } catch { throw new HttpError(400, 'json'); }
     const valid = validateBatch(body);
     if (!valid) throw new HttpError(400, 'envelope');
-    // A repeated batch id is answered like a new one, so the client drops it.
-    await store.ingest(valid.envelope, valid.events, now());
+    const t = now();
+    await ready(t);
+    // A repeated batch is answered like a new one, so the client drops it.
+    await store.ingest(valid, t);
+    // How long the PCs should wait between batches, by today's writes (the free plan's limit).
+    return store.batchEvery?.(t);
   }
 
   async function admin(request, kind, query) {
@@ -142,15 +153,16 @@ export function createHandler(options) {
     if (request.method !== 'GET' && request.method !== 'HEAD') throw new HttpError(405, 'method', { Allow: 'GET, HEAD, OPTIONS' });
     if (!(await authorized(request))) throw new HttpError(401, 'unauthorized', { 'WWW-Authenticate': 'Bearer realm="telemetry"' });
     const t = now();
-    return kind === 'kpis' ? store.kpis(kpiParams(query, t), t) : store.live(t);
+    await ready(t);
+    return kind === 'kpis' ? store.kpis(kpiParams(query, store.today?.(t) ?? utcDay(t)), t) : store.live(t);
   }
 
   return async function handle(request, clientKey = '') {
     const headers = { Vary: 'Origin', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
     const origin = request.headers.get('origin');
     if (origin !== null && origins.has(origin)) {
-      // Retry-After is not a CORS-safelisted response header, so the page could not read it otherwise.
-      Object.assign(headers, { 'Access-Control-Allow-Origin': origin, 'Access-Control-Expose-Headers': 'Retry-After' });
+      // Retry-After and X-Batch-Every are not CORS-safelisted response headers, so the page could not read them otherwise.
+      Object.assign(headers, { 'Access-Control-Allow-Origin': origin, 'Access-Control-Expose-Headers': 'Retry-After, X-Batch-Every' });
     }
     const send = (status, body, extra = {}) => body === undefined
       ? new Response(null, { status, headers: { ...headers, ...extra } })
@@ -168,12 +180,13 @@ export function createHandler(options) {
       }
       if (pathname === '/v1/batch') {
         if (method !== 'POST') throw new HttpError(405, 'method', { Allow: 'POST, OPTIONS' });
-        await batch(request);
-        return send(204);
+        const every = await batch(request);
+        return send(204, undefined, every ? { 'X-Batch-Every': String(every) } : {});
       }
       if (pathname === '/v1/health') {
         if (method !== 'GET' && method !== 'HEAD') throw new HttpError(405, 'method', { Allow: 'GET, HEAD, OPTIONS' });
-        return send(200, { ok: true });
+        // Answered without the database: which wire versions this server accepts.
+        return send(200, { ok: true, accepts: WIRES, schema: SCHEMA_VERSION });
       }
       if (pathname === '/v1/admin/kpis' || pathname === '/v1/admin/live') return send(200, await admin(request, pathname.slice(10), url.searchParams));
       // Everything outside /v1/ is the dashboard's static files.

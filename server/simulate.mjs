@@ -207,9 +207,8 @@ async function main() {
     const store = openStore(openDatabase(options.db));
     let stored = 0, batches = 0;
     for (const { batch, now } of history(options)) {
-      const { envelope, events } = validateBatch(batch);
       batches++;
-      if (await store.ingest(envelope, events, now)) stored++;
+      if (await store.ingest(validateBatch(batch), now)) stored++;
     }
     store.close();
     console.log(`simulate: ${stored} of ${batches} batches stored in ${options.db} (${options.days} days, seed ${options.seed})`);

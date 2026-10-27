@@ -12,23 +12,35 @@ import { fileURLToPath } from 'node:url';
 const { hideSqliteWarning } = await import('../../server/warnings.mjs');
 hideSqliteWarning();
 const { createApp, MAX_BODY } = await import('../../server/app.mjs');
-const { EVENTS, validateBatch } = await import('../../server/schema.mjs');
+const { EVENTS, EVENTS_V3, validateBatch } = await import('../../server/schema.mjs');
 const { TABLES, SCHEMA_VERSION, openStore } = await import('../../server/store.mjs');
 const { openDatabase } = await import('../../server/sqlite-d1.mjs');
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const fixture = JSON.parse(fs.readFileSync(path.join(repo, 'server/fixtures/sample-batch.json'), 'utf8'));
+const fixture3 = JSON.parse(fs.readFileSync(path.join(repo, 'server/fixtures/sample-batch-v3.json'), 'utf8'));
 const ORIGIN = 'https://school.example';
 const TOKEN = 'test-admin-token-0123456789';
 const DAY_MS = 86400000;
-const START = Date.parse('2026-10-20T09:15:00Z');
-const AGGREGATES = Object.keys(TABLES);
-// A whole aggregate row: its key fields, the given sums and zeros for the rest.
-const aggregate = (table, key, sums = {}) => ({ ...key, ...Object.fromEntries(TABLES[table].sums.map(c => [c, sums[c] || 0])) });
+const START = Date.parse('2026-10-20T09:15:00Z'), R0 = START / 1000;
+// The tables that hold what a batch says (schema 4).
+const FACTS = ['st_sessions', 'st_visits', 'st_rounds', 'st_marks', 'st_students', 'st_pcs', 'st_student_pcs', 'st_student_games', 'aliases'];
+const U = '3f9a0c51e2b7', P = '8c21d0e94a6f';
+const z6 = [0, 0, 0, 0, 0, 0], z4 = [0, 0, 0, 0];
 
 let batchSeq = 0;
 const batchId = () => (++batchSeq).toString(16).padStart(16, '0');
 const envelope = (s, ev, extra = {}) => ({ v: 2, b: batchId(), s, k: 'src', m: 'web', a: '6-7', d: [4, 4, 1920], ev, ...extra });
+const envelope3 = (s, ev, extra = {}) => ({ v: 3, b: batchId(), s, k: 'src', m: 'web', a: '8-9', d: [4, 4, 1920], u: U, p: P,
+  z: 'Asia/Riyadh', ev, w: Math.max(0, ...ev.map(e => Array.isArray(e) && Number.isFinite(e[1]) ? e[1] : 0)) + 5, ...extra });
+const pick = (object, keys) => Object.fromEntries(keys.map(key => [key, object[key]]));
+const series = (prefix, values) => Object.fromEntries(values.map((v, i) => [prefix + i, v]));
+// Whole fact rows: the given fields, and every other column empty.
+const visitRow = (n, slug, fields = {}) => ({ sid: 1, n, slug, t_open: null, t_close: null, src: null, plays: null, plays_b: null, fav: null,
+  load_ms: null, err: null, engaged_ms: 0, closed: 0, ...series('il', Array(6).fill(null)), ...series('f', Array(4).fill(null)), ...fields });
+const roundRow = (n, k, slug, id, fields = {}) => ({ sid: 1, n, k, slug, id, t0: null, tier0: null, replay: null, t: null, code: null, ms: null,
+  score: null, tier: null, hits: null, misses: null, ...series('rt', Array(6).fill(null)), wall_ms: null, inputs: null, idle: null, pauses: null,
+  rt_sum: null, rt_n: null, dda: null, duo: 0, attempt: null, ...fields });
 
 function request(base, method, pathname, { headers = {}, body, chunks } = {}) {
   return new Promise((resolve, reject) => {
@@ -82,16 +94,45 @@ async function start(t, options = {}) {
   return { app, clock, dir, dbPath: dbPath, dbDir: path.dirname(dbPath), base, send, post, admin, rows, count };
 }
 
-// Every aggregate row, so that a check can see that nothing was added.
-const storedAggregates = async s => Object.fromEntries(await Promise.all(AGGREGATES.map(async table => [table, await s.rows(table)])));
+// Every fact row, so that a check can see that nothing was added.
+const storedFacts = async s => Object.fromEntries(await Promise.all(FACTS.map(async table => [table, await s.rows(table)])));
 
-test('health answers ok; unknown routes are 404 and wrong methods 405', async t => {
+// A database as milestone 2 left it (schema 3: the daily aggregates, seen and the old
+// live table, created as its store created them), with the given aggregate rows.
+async function milestone2(file, rows = []) {
+  const db = openDatabase(file);
+  const keyList = key => ['day', 'a', ...key].join(', ');
+  await db.batch([
+    'CREATE TABLE meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL) STRICT, WITHOUT ROWID',
+    'CREATE TABLE batches (b TEXT PRIMARY KEY, day TEXT NOT NULL) STRICT, WITHOUT ROWID',
+    'CREATE TABLE seen (day TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL, s TEXT NOT NULL, PRIMARY KEY (day, kind, key, s)) STRICT, WITHOUT ROWID',
+    'CREATE TABLE live (s TEXT PRIMARY KEY, slug TEXT NOT NULL, seen_minute INTEGER NOT NULL) STRICT, WITHOUT ROWID',
+    'CREATE TABLE kpi_cache (key TEXT PRIMARY KEY, made TEXT NOT NULL, rows TEXT NOT NULL) STRICT, WITHOUT ROWID',
+    ...Object.entries(TABLES).map(([table, { key, sums }]) => `CREATE TABLE ${table} (day TEXT NOT NULL, a TEXT NOT NULL, ` +
+      key.map(c => `${c} ${['slug', 'id', 'src'].includes(c) ? 'TEXT' : 'INTEGER'} NOT NULL, `).join('') +
+      sums.map(c => `${c} INTEGER NOT NULL DEFAULT 0, `).join('') + `PRIMARY KEY (${keyList(key)})) STRICT, WITHOUT ROWID`),
+    "INSERT INTO meta (key, value) VALUES ('schema', 3)",
+    "INSERT INTO seen (day, kind, key, s) VALUES ('2026-10-19', 'd', '', 'a00000000009')",
+    "INSERT INTO live (s, slug, seen_minute) VALUES ('a00000000009', 'road-hopper', 1)"
+  ].map(text => db.prepare(text)));
+  for (const [table, row] of rows) {
+    await db.prepare(`INSERT INTO ${table} (${Object.keys(row).join(', ')}) VALUES (${Object.keys(row).map((_, i) => '?' + (i + 1)).join(', ')})`)
+      .bind(...Object.values(row)).run();
+  }
+  db.close();
+}
+
+test('health answers which wire versions and schema this server takes, without the database; unknown routes are 404 and wrong methods 405', async t => {
   const s = await start(t);
+  const db = s.app.store.db, batch = db.batch.bind(db);
+  let used = 0;
+  db.batch = statements => { used++; return batch(statements); };
   const health = await s.send('GET', '/v1/health');
   assert.equal(health.status, 200);
-  assert.deepEqual(health.json(), { ok: true });
+  assert.deepEqual(health.json(), { ok: true, accepts: [2, 3], schema: 4 });
   assert.match(health.headers['content-type'], /^application\/json/);
   assert.equal((await s.send('HEAD', '/v1/health')).status, 200);
+  assert.equal(used, 0, 'no query');
   assert.equal((await s.send('GET', '/v1/nothing')).status, 404);
   assert.equal((await s.send('GET', '/v1')).status, 404);
   assert.equal((await s.send('GET', '/nothing.html')).status, 404);
@@ -141,85 +182,149 @@ test('the Node host serves the dashboard folder with the headers of its _headers
   assert.equal((await limited.send('GET', '/')).status, 429);
 });
 
-test('the shared fixture is a valid envelope with every event kind, added to the day\'s aggregates', async t => {
+test('the v2 fixture has every v2 kind and is stored as facts, its visits and rounds numbered by the server', async t => {
   assert.deepEqual([...new Set(fixture.ev.map(e => e[0]))].sort(), Object.keys(EVENTS).sort(), 'the fixture exercises every kind');
   const s = await start(t);
   const res = await s.post(fixture);
   assert.equal(res.status, 204);
   assert.equal(res.text, '');
-  const key = { day: '2026-10-20', a: '6-7' };
   assert.deepEqual(await s.rows('batches'), [{ b: fixture.b, day: '2026-10-20' }]);
-  assert.deepEqual(await s.rows('agg_days'), [aggregate('agg_days', key, {
-    sessions: 1, web: 1, engaged_ms: 112000, opens: 2, starts: 3, ends: 3, level_ups: 1, errors: 1,
-    session_starts: 1, profile_age1: 1, since_last1: 1
-  })]);
-  assert.deepEqual(await s.rows('agg_games', 'slug'), [
-    aggregate('agg_games', { ...key, slug: 'bubble-bop' }, {
-      sessions: 1, opens: 1, closes: 1, engaged_ms: 112000, starts: 3, ends: 3, w: 1, l: 1, q: 1, tier_sum: 5, tier_n: 3,
-      hits: 24, misses: 10, rt0: 11, rt1: 11, rt2: 6, rt3: 3, rt4: 2, rt5: 1, il0: 180, il1: 44, il2: 6, il3: 1,
-      f0: 5830, f1: 412, f2: 37, f3: 1, loads: 1, load_ms: 840, src_starter: 1, replay0: 2, replay1: 1, plays2: 1
-    }),
-    aggregate('agg_games', { ...key, slug: 'road-hopper' }, { sessions: 1, opens: 1, closes: 1, error_t: 1, src_featured: 1, plays0: 1 })
+  // No w: the session started 10 s before its first batch's last event, by the server's clock.
+  assert.deepEqual(await s.rows('st_sessions'), [{
+    id: 1, s: fixture.s, u: '', p: '', wire: 2, a: '6-7', k: fixture.k, m: 'web', cores: 4, mem: 4, screen: 1920, start_s: R0 - 160 - 10,
+    clock: 'r', z: '', is_new: 0, age_days: null, since_days: null, age_b: 1, since_b: 1, level0: 3, np: null, cls: null,
+    se_t: 160, se_ms: 112000, why: null, vn: 2, open_n: null, open_slug: null, open_k: null, last_k: 0
+  }]);
+  assert.deepEqual(await s.rows('st_visits', 'n'), [
+    visitRow(1, 'bubble-bop', { t_open: 2, t_close: 123, src: 'starter', plays_b: 2, load_ms: 840, engaged_ms: 112000, closed: 1,
+      ...series('il', [180, 44, 6, 1, 0, 0]), ...series('f', [5830, 412, 37, 1]) }),
+    visitRow(2, 'road-hopper', { t_open: 130, t_close: 152, src: 'featured', plays_b: 0, err: 't', closed: 1, ...series('il', z6), ...series('f', z4) })
   ]);
-  assert.deepEqual(await s.rows('agg_levels', 'id'), [
-    aggregate('agg_levels', { ...key, slug: 'bubble-bop', id: 'w1-1' }, { sessions: 1, starts: 1, ends: 1, w: 1, ms: 36500, tier_sum: 1, tier_n: 1 }),
-    aggregate('agg_levels', { ...key, slug: 'bubble-bop', id: 'w1-2' }, { sessions: 1, starts: 2, ends: 2, l: 1, q: 1, ms: 68250, tier_sum: 4, tier_n: 2 })
+  assert.deepEqual(await s.rows('st_rounds', 'n, k'), [
+    roundRow(1, 1, 'bubble-bop', 'w1-1', { t0: 4, tier0: 1, replay: 0, t: 41, code: 'w', ms: 36500, score: 12, tier: 2, hits: 12, misses: 1,
+      ...series('rt', [6, 4, 2, 1, 0, 0]) }),
+    roundRow(1, 2, 'bubble-bop', 'w1-2', { t0: 42, tier0: 2, replay: 0, t: 80, code: 'q', ms: 30250, tier: 2, hits: 5, misses: 3,
+      ...series('rt', [2, 3, 1, 0, 1, 1]) }),
+    roundRow(1, 3, 'bubble-bop', 'w1-2', { t0: 81, tier0: 2, replay: 1, t: 120, code: 'l', ms: 38000, score: 4, tier: 1, hits: 7, misses: 6,
+      ...series('rt', [3, 4, 3, 2, 1, 0]) })
   ]);
-  assert.deepEqual(await s.rows('agg_sources', 'src'), [
-    aggregate('agg_sources', { ...key, src: 'featured' }, { sessions: 1, opens: 1 }),
-    aggregate('agg_sources', { ...key, src: 'starter' }, { sessions: 1, opens: 1 })
-  ]);
-  assert.deepEqual(await s.rows('agg_devices'), [aggregate('agg_devices', { ...key, cores: 4, mem: 4, screen: 1920 }, {
-    sessions: 1, f0: 5830, f1: 412, f2: 37, f3: 1, il0: 180, il1: 44, il2: 6, il3: 1, loads: 1, load_ms: 840
-  })]);
+  assert.deepEqual(await s.rows('st_marks'), [{ sid: 1, kind: 'lv', t: 121, n: 0, x: '4' }]);
+  for (const table of ['st_students', 'st_pcs', 'st_student_pcs', 'st_student_games', 'aliases']) assert.deepEqual(await s.rows(table), [], table);
   // The session closed everything with se: it is live with no game open.
-  assert.deepEqual(await s.rows('live'), [{ s: fixture.s, slug: '', seen_minute: Math.floor(START / 60000) }]);
-  assert.deepEqual((await s.rows('seen', 'kind, key')).map(r => [r.day, r.kind, r.key, r.s]), [
-    ['2026-10-20', 'd', '', fixture.s], ['2026-10-20', 'g', 'bubble-bop', fixture.s], ['2026-10-20', 'g', 'road-hopper', fixture.s],
-    ['2026-10-20', 'l', 'bubble-bop w1-1', fixture.s], ['2026-10-20', 'l', 'bubble-bop w1-2', fixture.s],
-    ['2026-10-20', 's', 'featured', fixture.s], ['2026-10-20', 's', 'starter', fixture.s]
-  ]);
+  assert.deepEqual(await s.rows('live'), [{ s: fixture.s, slug: '', seen_minute: Math.floor(START / 60000), u: '', p: '', wire: 2 }]);
 });
 
-test('a typical batch writes at most 20 rows, and a later batch of the same session fewer', async t => {
+test('the v3 fixture has every v3 kind and is stored as exact facts, with its student, PC, attempts, link and the school\'s zone', async t => {
+  assert.deepEqual([...new Set(fixture3.ev.map(e => e[0]))].sort(), Object.keys(EVENTS_V3).sort(), 'the fixture exercises every kind');
+  assert.ok(fixture3.ev.some(e => e[0] === 're' && e[13] === null) && fixture3.ev.some(e => e[0] === 're' && Array.isArray(e[13])), 're.x both ways');
+  assert.equal(validateBatch(fixture3).dropped, 0);
   const s = await start(t);
-  const written = [];
+  const res = await s.post(fixture3);
+  assert.equal(res.status, 204);
+  assert.deepEqual(await s.rows('batches'), [], 'v3 needs no batch ids: every write is idempotent');
+  const at = R0 - fixture3.w;
+  assert.deepEqual(await s.rows('st_sessions'), [{
+    id: 1, s: fixture3.s, u: U, p: P, wire: 3, a: '8-9', k: fixture3.k, m: 'web', cores: 4, mem: 4, screen: 1920, start_s: at, clock: 'w',
+    z: 'Asia/Riyadh', is_new: 0, age_days: 41, since_days: 2, age_b: 3, since_b: 2, level0: 7, np: 19, cls: 0, se_t: 160, se_ms: 103000,
+    why: 'h', vn: 0, open_n: null, open_slug: null, open_k: null, last_k: 0
+  }]);
+  assert.deepEqual(await s.rows('st_visits', 'n'), [
+    visitRow(1, 'road-hopper', { t_open: 3, t_close: 84, src: 'catalog', plays: 12, plays_b: 4, fav: 1, load_ms: 910, engaged_ms: 71000, closed: 1,
+      ...series('il', [190, 40, 8, 2, 0, 0]), ...series('f', [4100, 230, 18, 1]) }),
+    visitRow(2, 'maze-dash', { t_open: 90, t_close: 106, src: 'featured', plays: 0, plays_b: 0, fav: 0, err: 't', closed: 1,
+      ...series('il', z6), ...series('f', z4) }),
+    visitRow(3, 'tic-tac-toe', { t_open: 110, t_close: 155, src: 'favorites', plays: 3, plays_b: 2, fav: 1, load_ms: 420, engaged_ms: 32000, closed: 1,
+      ...series('il', [9, 0, 0, 0, 0, 0]), ...series('f', z4) })
+  ]);
+  assert.deepEqual(await s.rows('st_rounds', 'n, k'), [
+    roundRow(1, 1, 'road-hopper', 'L1', { t0: 6, tier0: 2, replay: 0, t: 40, code: 'w', ms: 33500, score: 120, tier: 2, hits: 14, misses: 3,
+      ...series('rt', [6, 5, 3, 2, 1, 0]), wall_ms: 34100, inputs: 41, idle: 1, pauses: 0, rt_sum: 9150, rt_n: 17, dda: 640, attempt: 1 }),
+    roundRow(1, 2, 'road-hopper', 'L2', { t0: 43, tier0: 3, replay: 0, t: 80, code: 'l', ms: 36000, score: 60, tier: 3, hits: 9, misses: 7,
+      ...series('rt', [2, 4, 4, 3, 2, 1]), attempt: 2 }),
+    // A local two-player round, with no score (-1) and no DDA level (-1 is kept: the game reported it).
+    roundRow(3, 1, 'tic-tac-toe', 'local', { t0: 112, tier0: 0, replay: 0, t: 150, code: 'd', ms: 37000, tier: 0, hits: 0, misses: 0,
+      ...series('rt', z6), wall_ms: 37800, inputs: 9, idle: 0, pauses: 1, rt_sum: 0, rt_n: 0, dda: -1, duo: 1, attempt: 1 })
+  ]);
+  assert.deepEqual((await s.rows('st_marks')).map(m => [m.kind, m.t, m.n, m.x]), [['cd', 0, 0, '1b2c3d4e5f60'], ['ct', 1, 0, 's:20'],
+    ['ct', 153, 0, 'e:0'], ['fv', 42, 1, '1'], ['lv', 81, 0, '8'], ['pr', 0, 0, '5e6f7a8b9c0d'], ['tu', 5, 1, 's'], ['tu', 41, 1, 'd']]);
+  assert.deepEqual(await s.rows('st_students'), [{ u: U, label: '3F9A', first_s: at, last_s: at, band_first: '8-9', band_last: '8-9',
+    age_days_first: 41, removed_s: null }]);
+  assert.deepEqual(await s.rows('st_pcs'), [{ p: P, first_s: at, last_s: at, z: 'Asia/Riyadh', cores: 4, mem: 4, screen: 1920, k: fixture3.k }]);
+  assert.deepEqual(await s.rows('st_student_pcs'), [{ u: U, p: P, first_s: at }]);
+  assert.deepEqual(await s.rows('st_student_games', 'slug'), [{ u: U, slug: 'road-hopper', rounds: 2, first_s: at + 40 },
+    { u: U, slug: 'tic-tac-toe', rounds: 1, first_s: at + 150 }]);
+  assert.deepEqual(await s.rows('aliases'), [{ u_old: '1b2c3d4e5f60', u_new: U, s: at, how: 'pc' }]);
+  const settings = Object.fromEntries((await s.rows('settings')).map(r => [r.key, r.value]));
+  assert.deepEqual([settings.tz, settings.tz_source, settings.tz_epoch, settings.rv, settings.v3_since], ['Asia/Riyadh', 'pc', '1', '2', '2026-10-20']);
+  assert.deepEqual(await s.rows('live'), [{ s: fixture3.s, slug: '', seen_minute: Math.floor(START / 60000), u: U, p: P, wire: 3 }]);
+});
+
+test('a batch writes few rows: the first v3 batch of a session at most 14, a later one at most 8, a long one one row per fact', async t => {
+  const s = await start(t);
   const db = s.app.store.db, batch = db.batch.bind(db);
+  let written = 0;
   db.batch = async statements => {
     const results = await batch(statements);
-    written.push(results.reduce((n, r) => n + r.meta.rows_written, 0));
+    written += results.reduce((n, r) => n + r.meta.rows_written, 0);
     return results;
   };
-  assert.equal((await s.post(fixture)).status, 204);
-  assert.equal((await s.post({ ...fixture, b: batchId(), ev: fixture.ev.filter(e => e[0] !== 'ss' && e[0] !== 'se') })).status, 204);
-  const [first, second] = written;
-  assert.ok(first <= 20, `the first batch wrote ${first} rows`);
-  assert.ok(second < first, `the second batch wrote ${second} rows`);
-  assert.equal(written.length, 2, 'one transaction per batch');
+  // The rows written by every query of one request, which D1 bills (a session row is 4: the table, UNIQUE (s) and two indexes).
+  const cost = async (body, ahead = 0) => {
+    s.clock.now += ahead;
+    const before = written;
+    assert.equal((await s.post(body)).status, 204);
+    return written - before;
+  };
+  const S = 'a00000000001', x = [30000, 40, 1, 0, 9000, 16, 600];
+  // The school's zone and the first v3 day are written once, by the first v3 batch ever.
+  await s.post(envelope3('a00000000000', [['lv', 1, 2]]));
+  const first = await cost(envelope3(S, [['ss', 0, 0, 12, 1, 4, 6, 0], ['go', 2, 1, 'road-hopper', 'catalog', 3, 0], ['ld', 3, 1, 'road-hopper', 800],
+    ['rs', 4, 1, 1, 'road-hopper', 'L1', 1, 0], ['re', 35, 1, 1, 'road-hopper', 'w', 'L1', 30000, 50, 1, 9, 2, [3, 3, 2, 1, 0, 0], x],
+    ['gp', 40, 1, 'road-hopper', 31000]]), 60000);
+  const later = await cost(envelope3(S, [['rs', 41, 1, 2, 'road-hopper', 'L2', 1, 0], ['re', 70, 1, 2, 'road-hopper', 'l', 'L2', 28000, 20, 1, 6, 4, z6, x],
+    ['gx', 75, 1, 'road-hopper', 58000, [20, 4, 1, 0, 0, 0], [3000, 40, 2, 0]], ['go', 80, 2, 'maze-dash', 'recent', 1, 0], ['ld', 81, 2, 'maze-dash', 600]]), 20000);
+  assert.ok(first <= 14, `the first batch of a session wrote ${first} rows`);
+  assert.ok(later <= 8, `a later batch wrote ${later} rows`);
+  // A batch of 200 events (99 rounds of one visit) writes a row per visit, round and counter, and the same few rows as any batch.
+  const rounds = Array.from({ length: 99 }, (_, i) => [['rs', 100 + 2 * i, 3, i + 1, 'pizza-clicker', 'L1', 0, i],
+    ['re', 101 + 2 * i, 3, i + 1, 'pizza-clicker', 'w', 'L1', 900, -1, 0, 1, 0, z6, null]]).flat();
+  const long = envelope3(S, [['go', 99, 3, 'pizza-clicker', 'catalog', 0, 0], ...rounds, ['gx', 300, 3, 'pizza-clicker', 90000, z6, z4]]);
+  assert.equal(long.ev.length, 200);
+  const many = await cost(long, 20000);
+  assert.ok(many <= 1 + 99 + 1 + 8, `a 200-event batch wrote ${many} rows`);
+  // v2 batches, numbered by the server, cost about the same.
+  const v2first = await cost(fixture, 60000);
+  const v2later = await cost({ ...fixture, b: batchId(), ev: fixture.ev.filter(e => e[0] !== 'ss' && e[0] !== 'se') }, 20000);
+  assert.ok(v2first <= 16, `the first v2 batch wrote ${v2first} rows`);
+  assert.ok(v2later < v2first, `a later v2 batch wrote ${v2later} rows`);
 });
 
-test('a repeated batch id is answered 204 and stored once', async t => {
+test('a repeated v2 batch id is answered 204 and stored once', async t => {
   const s = await start(t);
   assert.equal((await s.post(fixture)).status, 204);
-  const before = await storedAggregates(s);
+  const before = await storedFacts(s);
   s.clock.now += 3600000;
   assert.equal((await s.post(fixture)).status, 204);
   assert.equal((await s.post({ ...fixture, ev: [['lv', 1, 9]] })).status, 204, 'the id alone decides');
-  assert.deepEqual(await storedAggregates(s), before);
+  assert.deepEqual(await storedFacts(s), before);
   assert.equal(await s.count('batches'), 1);
-  assert.equal(await s.count('agg_days'), 1);
   assert.deepEqual((await s.rows('live'))[0].seen_minute, Math.floor(START / 60000), 'a repeat is not a sign of life');
 });
 
-test('the same batch arriving twice at once is added once', async t => {
+test('the same batch arriving twice at once is stored once', async t => {
   const s = await start(t);
   const body = { ...fixture, b: batchId() };
   const answers = await Promise.all([s.post(body), s.post(body), s.post(body)]);
   assert.deepEqual(answers.map(res => res.status), [204, 204, 204]);
-  const [day] = await s.rows('agg_days');
-  assert.equal(day.opens, 2);
-  assert.equal(day.sessions, 1);
+  assert.equal(await s.count('st_sessions'), 1);
+  assert.equal(await s.count('st_visits'), 2);
+  assert.equal(await s.count('st_rounds'), 3);
   assert.equal(await s.count('batches'), 1);
+  const three = await Promise.all([1, 2, 3].map(() => s.post(fixture3)));
+  assert.deepEqual(three.map(res => res.status), [204, 204, 204]);
+  assert.equal(await s.count('st_sessions'), 2);
+  assert.equal(await s.count('st_rounds'), 6);
+  assert.deepEqual((await s.rows('st_student_games', 'slug')).map(r => r.rounds), [2, 1]);
 });
 
 // The store on the Node driver, with a hook in front of every db.batch call.
@@ -228,41 +333,37 @@ function hookedStore(hook) {
   db.batch = async statements => { await hook(statements); return batch(statements); };
   return { db, store: openStore(db) };
 }
-const adds = statements => statements.some(st => /^INSERT INTO agg_/.test(st.sql));
-const sessionsOf = async db => Object.fromEntries(await Promise.all(AGGREGATES.map(async table =>
-  [table, (await db.prepare(`SELECT sessions FROM ${table}`).all()).results.map(r => r.sessions)])));
+const writes = statements => statements.some(st => /^INSERT INTO st_sessions/.test(st.sql));
+const factCounts = async db => Object.fromEntries(await Promise.all(['st_sessions', 'st_visits', 'st_rounds', 'st_marks', 'batches'].map(async table =>
+  [table, (await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()).n])));
 
-test('a batch whose additions fail is kept whole for the retry, distinct sessions included', async () => {
+test('a batch whose writes fail is kept whole for the retry', async () => {
   let fail = true;
   const { db, store } = hookedStore(statements => {
-    if (fail && adds(statements)) { fail = false; throw new Error('D1_ERROR: Network connection lost.'); }
+    if (fail && writes(statements)) { fail = false; throw new Error('D1_ERROR: Network connection lost.'); }
   });
-  const { envelope: env, events } = validateBatch(fixture);
-  await assert.rejects(store.ingest(env, events, START), /Network connection lost/);
-  // The PC got a 500 and sends the same batch again: it counts, with its session.
-  assert.equal(await store.ingest(env, events, START + 20000), true);
-  assert.deepEqual(await sessionsOf(db), {
-    agg_days: [1], agg_games: [1, 1], agg_levels: [1, 1], agg_sources: [1, 1], agg_devices: [1]
-  });
+  const valid = validateBatch(fixture);
+  await assert.rejects(store.ingest(valid, START), /Network connection lost/);
+  assert.deepEqual(await factCounts(db), { st_sessions: 0, st_visits: 0, st_rounds: 0, st_marks: 0, batches: 0 });
+  // The PC got a 500 and sends the same batch again: it counts in full.
+  assert.equal(await store.ingest(valid, START + 20000), true);
+  assert.deepEqual(await factCounts(db), { st_sessions: 1, st_visits: 2, st_rounds: 3, st_marks: 1, batches: 1 });
 });
 
-test('the same batch arriving twice at once counts its session once, whichever finishes first', async () => {
-  // The first copy is held back just before its additions, so the second copy (the
-  // portal sends a batch again after a minute without an answer) is stored first.
+test('the same v2 batch arriving twice at once is stored once, whichever finishes first', async () => {
+  // The first copy is held back just before its writes, so the second copy (the portal
+  // sends a batch again after a minute without an answer) is stored first.
   let held = null, release;
   const { db, store } = hookedStore(async statements => {
-    if (!held && adds(statements)) { held = new Promise(resolve => { release = resolve; }); await held; }
+    if (!held && writes(statements)) { held = new Promise(resolve => { release = resolve; }); await held; }
   });
-  const { envelope: env, events } = validateBatch({ ...fixture, b: batchId() });
-  const first = store.ingest(env, events, START);
+  const valid = validateBatch({ ...fixture, b: batchId() });
+  const first = store.ingest(valid, START);
   while (!held) await new Promise(resolve => setImmediate(resolve));
-  assert.equal(await store.ingest(env, events, START + 60000), true);
+  assert.equal(await store.ingest(valid, START + 60000), true);
   release();
   assert.equal(await first, false, 'the held copy is the repeat');
-  assert.deepEqual(await sessionsOf(db), {
-    agg_days: [1], agg_games: [1, 1], agg_levels: [1, 1], agg_sources: [1, 1], agg_devices: [1]
-  });
-  assert.equal((await db.prepare('SELECT opens FROM agg_days').first()).opens, 2);
+  assert.deepEqual(await factCounts(db), { st_sessions: 1, st_visits: 2, st_rounds: 3, st_marks: 1, batches: 1 });
 });
 
 test('invalid envelopes are 400 and other media types 415, storing nothing', async t => {
@@ -270,14 +371,17 @@ test('invalid envelopes are 400 and other media types 415, storing nothing', asy
   const { b: _b, ...noBatch } = fixture;
   const bad = [
     'not json', '', '[]', 'null', '2', JSON.stringify([fixture]),
-    { ...fixture, v: 1 }, { ...fixture, v: '2' }, noBatch,
+    { ...fixture, v: 1 }, { ...fixture, v: '2' }, { ...fixture, v: 4 }, { ...fixture3, v: '3' }, { ...fixture3, v: 3.5 }, noBatch,
     { ...fixture, b: 'ABCDEF0123456789' }, { ...fixture, b: '9f3c0a17b2e44d1' }, { ...fixture, b: [fixture.b] },
     { ...fixture, s: '5d02be9a41c7aa' }, { ...fixture, s: 'p1' }, { ...fixture, s: undefined },
     { ...fixture, k: 'v1.2 build' }, { ...fixture, k: 7 }, { ...fixture, k: 'abcdef' }, { ...fixture, k: '5c18c6d2d1c052ad00' },
     { ...fixture, m: 'desktop' },
     { ...fixture, a: '6' }, { ...fixture, a: null }, { ...fixture, d: [4, 4] }, { ...fixture, d: [3, 4, 1920] },
     { ...fixture, d: [4, 4, '1920'] }, { ...fixture, d: [4, 3, 1920] }, { ...fixture, d: [4, 4, 1024] },
-    { ...fixture, ev: {} }, { ...fixture, ev: undefined }, { ...fixture, ev: new Array(201).fill(['lv', 1, 2]) }
+    { ...fixture, ev: {} }, { ...fixture, ev: undefined }, { ...fixture, ev: new Array(201).fill(['lv', 1, 2]) },
+    // v3 keeps the core of v2 strict.
+    { ...fixture3, b: 'XYZ' }, { ...fixture3, s: 'not-a-session' }, { ...fixture3, k: 'build-7' }, { ...fixture3, m: 'pwa' }, { ...fixture3, a: '12-13' },
+    { ...fixture3, d: [4, 4, 1280] }, { ...fixture3, ev: 'none' }, { ...fixture3, ev: new Array(201).fill(['lv', 1, 2]) }
   ];
   for (const body of bad) {
     const res = await s.post(body);
@@ -287,9 +391,47 @@ test('invalid envelopes are 400 and other media types 415, storing nothing', asy
   for (const type of ['application/x-www-form-urlencoded', 'multipart/form-data; boundary=x', '']) {
     assert.equal((await s.post(fixture, { type })).status, 415, type);
   }
+  assert.deepEqual(await storedFacts(s), Object.fromEntries(FACTS.map(table => [table, []])));
   assert.equal((await s.post(fixture, { type: 'application/json' })).status, 204);
   assert.equal((await s.post({ ...fixture, b: batchId(), ev: new Array(200).fill(['lv', 1, 2]) })).status, 204, '200 events are fine');
+  assert.equal((await s.post({ ...fixture3, ev: new Array(200).fill(['lv', 1, 2]) })).status, 204);
   assert.equal(await s.count('batches'), 2);
+  assert.equal(await s.count('st_sessions'), 2);
+});
+
+test('v3: a malformed optional field is stored as unknown and the batch is kept (the portal drops any batch a 4xx answers)', async t => {
+  const s = await start(t);
+  const base = envelope3('e00000000000', [['ss', 0, 0, 5, 1, 2, 3, 1], ['lv', 30, 3]]);
+  const cases = [
+    [{}, [U, P, 'Asia/Riyadh', 'w']],
+    [{ u: 'p1' }, ['', P, 'Asia/Riyadh', 'w']], [{ u: 'Sara' }, ['', P, 'Asia/Riyadh', 'w']], [{ u: U.toUpperCase() }, ['', P, 'Asia/Riyadh', 'w']],
+    [{ u: 7 }, ['', P, 'Asia/Riyadh', 'w']], [{ u: 'c7f3a' }, ['c7f3a', P, 'Asia/Riyadh', 'w']], [{ u: '' }, ['', P, 'Asia/Riyadh', 'w']],
+    [{ p: 'PC-LAB-1' }, [U, '', 'Asia/Riyadh', 'w']], [{ p: P.slice(1) }, [U, '', 'Asia/Riyadh', 'w']], [{ p: 'c7f3a' }, [U, '', 'Asia/Riyadh', 'w']],
+    [{ z: 'Mars/Base' }, [U, P, '', 'w']], [{ z: 'constructor' }, [U, P, '', 'w']], [{ z: 42 }, [U, P, '', 'w']], [{ z: 'utc' }, [U, P, '', 'w']],
+    [{ w: -1 }, [U, P, 'Asia/Riyadh', 'r']], [{ w: 691201 }, [U, P, 'Asia/Riyadh', 'r']], [{ w: '35' }, [U, P, 'Asia/Riyadh', 'r']],
+    [{ w: 1.5 }, [U, P, 'Asia/Riyadh', 'r']], [{ w: null }, [U, P, 'Asia/Riyadh', 'r']],
+    [{ u: undefined, p: undefined, z: undefined, w: undefined }, ['', '', '', 'r']]
+  ];
+  for (const [i, [extra]] of cases.entries()) {
+    const res = await s.post({ ...base, b: batchId(), s: 'e0000000' + String(i).padStart(4, '0'), ...extra });
+    assert.equal(res.status, 204, JSON.stringify(extra));
+  }
+  assert.deepEqual((await s.rows('st_sessions', 'id')).map(r => [r.u, r.p, r.z, r.clock]), cases.map(([, stored]) => stored));
+  // A round's extras are lenient too: anything but 7 valid numbers is null, and the round is kept.
+  const re = x => ['re', 40, 1, 1, 'road-hopper', 'w', 'L1', 30000, 5, 1, 2, 1, z6, x];
+  const extras = [[1, 2, 3], [1, 2, 3, 4, 5, 6, 'x'], [1, 2, 3, 4, 5, 6, 1001], [1, 2, 3, 4, 5, 6, -2], { wall: 1 }, 'none', 0, [1, 2, 3, 4, 5, 6, 7]];
+  for (const [i, x] of extras.entries()) {
+    assert.equal((await s.post(envelope3('f0000000' + String(i).padStart(4, '0'), [['go', 1, 1, 'road-hopper', 'catalog', 0, 0], re(x)]))).status, 204);
+  }
+  assert.deepEqual((await s.app.store.db.prepare("SELECT r.wall_ms, r.dda, r.code FROM st_rounds r JOIN st_sessions s ON s.id = r.sid WHERE s.s LIKE 'f%' ORDER BY s.id").all())
+    .results.map(r => [r.wall_ms, r.dda, r.code]), [...extras.slice(0, -1).map(() => [null, null, 'w']), [1, 7, 'w']]);
+  // Malformed v3 events are dropped whole, as in v2; a v2-shaped event is malformed in v3.
+  const malformed = [['go', 1, 0, 'road-hopper', 'catalog', 0, 0], ['go', 1, 1, 'road-hopper', 'catalog', 0, 2], ['go', 1, 'road-hopper', 'catalog', 0],
+    ['rs', 1, 1, 100000, 'road-hopper', 'L1', 1, 0], ['re', 40, 1, 1, 'road-hopper', 'w', 'L1', 30000, 5, 1, 2, 1, z6], ['gp', 1, 1, 'road-hopper', -5],
+    ['tu', 1, 1, 'road-hopper', 'x'], ['fv', 1, 1, 'road-hopper', 2], ['ct', 1, 's', -1], ['ct', 1, 'started', 20], ['pr', 1, 'p1'], ['cd', 1, 'C7F3A'],
+    ['se', 1, 100, 'x'], ['se', 1, 100], ['ss', 0, 0, 1, 1, 3], ['ss', 0, 0, 36501, 1, 3, 4, 0], ['lv', 1, 0], ['xx', 1]];
+  const cleaned = validateBatch(envelope3('f00000000099', [...malformed, ['lv', 2, 3]]));
+  assert.deepEqual([cleaned.dropped, cleaned.events], [malformed.length, [['lv', 2, 3]]]);
 });
 
 test('bodies over 64 KB are 413, declared or streamed; exactly 64 KB is accepted', async t => {
@@ -331,7 +473,6 @@ test('a client that disconnects mid-body is not logged as a server error', async
 
 test('unknown and malformed events are dropped while valid ones are kept; measures are clamped', async t => {
   const s = await start(t);
-  const z6 = [0, 0, 0, 0, 0, 0];
   const malformed = [
     ['zz', 1], 'go', null, 42, {}, [], ['go'], [7, 1], ['toString', 1],
     ['go', -1, 'road-hopper', 'search', 1], ['go', 1, 'Road-Hopper', 'search', 1], ['go', 1, 'road--hopper', 'search', 1],
@@ -364,36 +505,81 @@ test('unknown and malformed events are dropped while valid ones are kept; measur
     ['re', 9, 'road-hopper', 'e', 'endless', 10800000, 1e9, 3, 7, 2, [1, 2, 3, 4, 5, 6]],
     ['lv', 10, 999], ['er', 11, 'road-hopper', 'l'], ['ss', 604800, 1, 3, 4, 0], ['se', 12, 801]
   ]);
-  // ...and the store adds exactly those.
-  const key = { day: '2026-10-20', a: '6-7' };
-  assert.deepEqual(await s.rows('agg_days'), [aggregate('agg_days', key, {
-    sessions: 1, web: 1, opens: 1, starts: 1, ends: 1, level_ups: 1, errors: 1,
-    session_starts: 1, new_profiles: 1, guests: 1, profile_age3: 1, since_last4: 1
-  })]);
-  assert.deepEqual(await s.rows('agg_games'), [aggregate('agg_games', { ...key, slug: 'road-hopper' }, {
-    sessions: 1, opens: 1, src_search: 1, plays1: 1, loads: 1, load_ms: 120000, starts: 1, tier_sum: 9, tier_n: 1, replay5: 1,
-    ends: 1, e: 1, hits: 7, misses: 2, rt0: 1, rt1: 2, rt2: 3, rt3: 4, rt4: 5, rt5: 6, error_l: 1
-  })]);
-  assert.deepEqual(await s.rows('agg_levels', 'id'), [
-    aggregate('agg_levels', { ...key, slug: 'road-hopper', id: 'endless' }, { sessions: 1, ends: 1, e: 1, ms: 10800000 }),
-    aggregate('agg_levels', { ...key, slug: 'road-hopper', id: 'w1-2' }, { sessions: 1, starts: 1, tier_sum: 9, tier_n: 1 })
+  // ...and the store keeps exactly those: a re of another level than the open round is a round of its own.
+  const [session] = await s.rows('st_sessions');
+  assert.deepEqual([session.start_s, session.is_new, session.age_b, session.since_b, session.level0, session.se_t, session.se_ms],
+    [R0 - 604800 - 10, 1, 3, 4, 0, 12, 801]);
+  assert.deepEqual(await s.rows('st_visits'), [visitRow(1, 'road-hopper', { t_open: 3, src: 'search', plays_b: 1, load_ms: 120000, err: 'l' })]);
+  assert.deepEqual(await s.rows('st_rounds', 'k'), [
+    roundRow(1, 1, 'road-hopper', 'w1-2', { t0: 6, tier0: 9, replay: 9999 }),
+    roundRow(1, 2, 'road-hopper', 'endless', { t: 9, code: 'e', ms: 10800000, score: 1e9, tier: 3, hits: 7, misses: 2, ...series('rt', [1, 2, 3, 4, 5, 6]) })
   ]);
-  const before = await storedAggregates(s);
+  assert.deepEqual(await s.rows('st_marks'), [{ sid: 1, kind: 'lv', t: 10, n: 0, x: '999' }]);
+  const before = await storedFacts(s);
   // A batch whose events were all dropped is still a valid, de-duplicated batch.
   assert.equal((await s.post(envelope('b00000000002', malformed))).status, 204);
   assert.equal(await s.count('batches'), 2);
-  assert.deepEqual(await storedAggregates(s), before, 'no session row without a stored event');
+  assert.deepEqual(await storedFacts(s), before, 'no session row without a stored event');
   assert.equal(await s.count('live'), 1, 'nor a sign of life');
+  // An empty v3 batch stores nothing at all.
+  assert.equal((await s.post(envelope3('b00000000003', malformed))).status, 204);
+  assert.deepEqual(await storedFacts(s), before);
+  assert.equal(await s.count('batches'), 2);
 });
 
-test('names, user agents, PC labels, error text, profile keys and addresses are never stored', async t => {
+// Every column schema 4 has (docs/RESEARCH_TELEMETRY_SPEC.md §D.2), written out here so that
+// a column added anywhere fails this test until it is reviewed. Codes (u, p), the zone
+// name (z) and times counted from a session's start are the only identifiers.
+const list = (prefix, n) => Array.from({ length: n }, (_, i) => prefix + i);
+const CODES5 = ['w', 'l', 'd', 'e', 'q'];
+const AGG_DAYS = ['sessions', 'web', 'app', 'engaged_ms', 'opens', 'starts', 'ends', 'level_ups', 'errors', 'session_starts', 'new_profiles', 'guests',
+  ...list('profile_age', 4), ...list('since_last', 5)];
+const AGG_GAMES = ['sessions', 'opens', 'closes', 'engaged_ms', 'starts', 'ends', ...CODES5, 'tier_sum', 'tier_n', 'hits', 'misses', ...list('rt', 6),
+  ...list('il', 6), ...list('f', 4), 'loads', 'load_ms', 'error_t', 'error_x', 'error_l', 'src_featured', 'src_catalog', 'src_recent', 'src_favorites',
+  'src_category', 'src_quick', 'src_search', 'src_related', 'src_surprise', 'src_reload', 'src_history', 'src_direct', 'src_starter',
+  ...list('replay', 6), ...list('plays', 5)];
+const AGG_LEVELS = ['sessions', 'starts', 'ends', ...CODES5, 'ms', 'tier_sum', 'tier_n'];
+const AGG_DEVICES = ['sessions', ...list('f', 4), ...list('il', 6), 'loads', 'load_ms'];
+const COLUMNS = {
+  meta: ['key', 'value'], batches: ['b', 'day'], kpi_cache: ['key', 'made', 'rows'], settings: ['key', 'value'],
+  usage: ['day', 'reads', 'writes', 'rebuild_reads', 'export_reads', 'size'], roll_days: ['day', 'dirty', 'rolled_s'],
+  live: ['s', 'slug', 'seen_minute', 'u', 'p', 'wire'],
+  st_pcs: ['p', 'first_s', 'last_s', 'z', 'cores', 'mem', 'screen', 'k'],
+  st_students: ['u', 'label', 'first_s', 'last_s', 'band_first', 'band_last', 'age_days_first', 'removed_s'],
+  st_student_pcs: ['u', 'p', 'first_s'], st_student_games: ['u', 'slug', 'rounds', 'first_s'],
+  st_sessions: ['id', 's', 'u', 'p', 'wire', 'a', 'k', 'm', 'cores', 'mem', 'screen', 'start_s', 'clock', 'z', 'is_new', 'age_days', 'since_days',
+    'age_b', 'since_b', 'level0', 'np', 'cls', 'se_t', 'se_ms', 'why', 'vn', 'open_n', 'open_slug', 'open_k', 'last_k'],
+  st_visits: ['sid', 'n', 'slug', 't_open', 't_close', 'src', 'plays', 'plays_b', 'fav', 'load_ms', 'err', 'engaged_ms', 'closed', ...list('il', 6), ...list('f', 4)],
+  st_rounds: ['sid', 'n', 'k', 'slug', 'id', 't0', 'tier0', 'replay', 't', 'code', 'ms', 'score', 'tier', 'hits', 'misses', ...list('rt', 6), 'wall_ms',
+    'inputs', 'idle', 'pauses', 'rt_sum', 'rt_n', 'dda', 'duo', 'attempt'],
+  st_marks: ['sid', 'kind', 't', 'n', 'x'], aliases: ['u_old', 'u_new', 's', 'how'], cards: ['code', 'set_no', 'a', 'made_day'],
+  r_day: ['day', 'a', ...AGG_DAYS, 'students', 'new_students', 'guest_sessions', 'v2_sessions', 'linked_ms', 'clock_r', 'unclosed', 'unended', 'duo',
+    'hearts_on', 'hearts_off', 'timer_sessions', 'why_u', 'why_p', 'why_h', 'why_i'],
+  r_game_day: ['day', 'a', 'slug', ...AGG_GAMES, 'students', 'wall_s', 'inputs', 'idle', 'pauses', 'rt_sum', 'rt_n', 'dda_sum', 'dda_n', 'score_sum',
+    'score_n', 'score_max', 'unended', 'duo', 'hearts_on', 'hearts_off', 'tu_start', 'tu_done', 'fav_opens'],
+  r_level_day: ['day', 'a', 'slug', 'id', ...AGG_LEVELS, 'students', 'unended', 'hits', 'misses', 'score_sum', 'score_n', 'score_max', 'wall_ms', 'dda_sum', 'dda_n'],
+  r_source_day: ['day', 'a', 'src', 'sessions', 'opens'],
+  r_device_day: ['day', 'a', 'cores', 'mem', 'screen', ...AGG_DEVICES],
+  r_student_day: ['day', 'u', 'a', 'sessions', 'engaged_ms', 'opens', 'games', 'rounds', ...CODES5, 'hits', 'misses', 'rt_sum', 'rt_n', 'level_ups',
+    'first_s', 'last_s', 'pcs'],
+  r_student_game: ['day', 'slug', 'u', 'a', 'opens', 'engaged_ms', 'rounds', ...CODES5, 'hits', 'misses', 'rt_sum', 'rt_n', 'score_sum', 'score_n', 'score_max',
+    'dda_sum', 'dda_n', 'tier_sum', 'tier_n', 'hearts', 'first_attempt', 'last_attempt'],
+  r_pc_day: ['day', 'p', 'k', 'sessions', 'students', 'guests', 'engaged_ms', 'opens', 'loads', 'load_ms', 'load_max', 'errors', 'quits', ...list('f', 4),
+    ...list('il', 6), 'np_max', 'new_profiles', 'busy_s', 'first_s', 'last_s', 'wire'],
+  r_stat: ['day', 'a', 'metric', 'slug', 'k1', 'k2', 'n', 'students', ...CODES5, 'ms', 'wall_ms', 'win_ms', 'hits', 'misses', 'rt_sum', 'rt_n', 'score_sum',
+    'score_n', 'tier_sum', 'tier_n', 'dda_sum', 'dda_n', 'inputs', 'gap_sum', 'gap_n']
+};
+
+test('names, user agents, PC labels, typed text, profile keys, avatars, colours and addresses are never stored', async t => {
   const s = await start(t);
-  const secrets = ['SENTINEL-NAME', 'SENTINEL-UA', 'SENTINEL-PC-LAB', 'SENTINEL-LABEL', 'SENTINEL-ERROR', 'p9z8y7',
-    'SENTINEL-AVATAR', '198.51.100.23', '127.0.0.1', 'SENTINEL-COOKIE', 'SENTINEL-REFERER', 'SENTINEL-UA-HEADER', 'sara'];
-  const body = {
-    ...fixture, b: batchId(), name: 'sara SENTINEL-NAME', ua: 'Mozilla/5.0 SENTINEL-UA', pc: 'SENTINEL-PC-LAB',
-    label: 'SENTINEL-LABEL', err: 'TypeError SENTINEL-ERROR', p: 'p9z8y7', player: 'p9z8y7', avatar: 'SENTINEL-AVATAR',
-    ip: '198.51.100.23', time: Date.now(),
+  const secrets = ['SENTINEL-NAME', 'SENTINEL-UA', 'SENTINEL-PC-LAB', 'SENTINEL-LABEL', 'SENTINEL-ERROR', 'p9z8y7', 'مختبر سارة', 'زرافة سرية',
+    'SENTINEL-AVATAR', '🦊', '#e85d75', 'SENTINEL-COLOUR', '198.51.100.23', '127.0.0.1', 'SENTINEL-COOKIE', 'SENTINEL-REFERER', 'SENTINEL-UA-HEADER', 'sara'];
+  const extra = { name: 'sara SENTINEL-NAME', ua: 'Mozilla/5.0 SENTINEL-UA', pc: 'SENTINEL-PC-LAB', label: 'مختبر سارة SENTINEL-LABEL',
+    err: 'TypeError SENTINEL-ERROR', player: 'p9z8y7', avatar: 'SENTINEL-AVATAR 🦊', colour: '#e85d75', color: 'SENTINEL-COLOUR', ip: '198.51.100.23', time: Date.now() };
+  const headers = { 'user-agent': 'SENTINEL-UA-HEADER', 'x-forwarded-for': '198.51.100.23', cookie: 'sid=SENTINEL-COOKIE',
+    referer: 'https://school.example/SENTINEL-REFERER' };
+  const v2body = {
+    ...fixture, b: batchId(), ...extra, p: 'p9z8y7',
     ev: [
       ...fixture.ev,
       ['er', 200, 'road-hopper', 'x', 'TypeError SENTINEL-ERROR'], ['ss', 0, 0, 0, 4, 0, 'p9z8y7'],
@@ -401,26 +587,37 @@ test('names, user agents, PC labels, error text, profile keys and addresses are 
       { t: 'go', name: 'SENTINEL-NAME' }
     ]
   };
-  const res = await s.post(body, { headers: { 'user-agent': 'SENTINEL-UA-HEADER', 'x-forwarded-for': '198.51.100.23',
-    cookie: 'sid=SENTINEL-COOKIE', referer: 'https://school.example/SENTINEL-REFERER' } });
-  assert.equal(res.status, 204);
-  assert.equal((await s.rows('agg_days'))[0].opens, 2, 'the valid events are kept');
-  // Only the aggregates' keys and sums, the batch ids, the seen and live session ids and
-  // the schema version exist: no column for a header, a time of day or an event.
-  const columns = {
-    batches: ['b', 'day'], seen: ['day', 'kind', 'key', 's'], live: ['s', 'slug', 'seen_minute'], meta: ['key', 'value'],
-    kpi_cache: ['key', 'made', 'rows'],
-    ...Object.fromEntries(Object.entries(TABLES).map(([table, { key, sums }]) => [table, ['day', 'a', ...key, ...sums]]))
+  assert.equal((await s.post(v2body, { headers })).status, 204);
+  // v3: the codes and the zone must have their exact forms, or they are stored as unknown.
+  const v3body = {
+    ...fixture3, ...extra, u: 'p9z8y7', p: 'SENTINEL-PC-LAB', z: 'مختبر سارة', w: 'SENTINEL-NAME',
+    ev: [
+      ...fixture3.ev,
+      ['go', 200, 4, 'road-hopper', 'search', 0, 0, 'sara SENTINEL-NAME'], ['pr', 201, 'p9z8y7'], ['cd', 202, 'SENTINEL-NAME'], ['cd', 202, 'p1'],
+      ['ct', 203, 'SENTINEL-LABEL', 20], ['tu', 204, 1, 'road-hopper', 'زرافة سرية'], ['fv', 205, 1, 'road-hopper', '🦊'],
+      ['re', 206, 1, 9, 'road-hopper', 'w', 'Sara Ahmed', 1, 1, 1, 1, 1, z6, null], ['er', 207, 1, 'road-hopper', 'x', 'TypeError SENTINEL-ERROR']
+    ]
   };
-  const tables = (await s.app.store.db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all()).results.map(r => r.name);
-  assert.deepEqual(tables.sort(), Object.keys(columns).sort());
-  assert.deepEqual((await s.app.store.db.prepare("SELECT name FROM sqlite_schema WHERE type = 'index'").all()).results, [], 'no index but the keys');
+  assert.equal((await s.post(v3body, { headers })).status, 204);
+  const [, session3] = await s.rows('st_sessions', 'id');
+  assert.deepEqual([session3.u, session3.p, session3.z, session3.clock], ['', '', '', 'r'], 'unknown, not the text sent');
+  // A child's real code is kept, and its label is the code's first characters.
+  assert.equal((await s.post({ ...fixture3, b: batchId(), s: 'f1f1f1f1f1f1' }, { headers })).status, 204);
+  assert.deepEqual((await s.rows('st_students')).map(r => [r.u, r.label]), [[U, '3F9A']]);
+  const db = s.app.store.db;
+  const tables = (await db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all()).results.map(r => r.name);
+  assert.deepEqual(tables.sort(), Object.keys(COLUMNS).sort());
+  // The five named indexes of the spec, and the one UNIQUE (s) of st_sessions; no other.
+  const indexes = (await db.prepare("SELECT name, tbl_name, sql FROM sqlite_schema WHERE type = 'index' ORDER BY name").all()).results;
+  assert.deepEqual(indexes.filter(i => i.sql).map(i => i.name), ['r_stat_metric', 'r_student_day_u', 'r_student_game_u', 'st_sessions_student', 'st_sessions_time']);
+  assert.deepEqual(indexes.filter(i => !i.sql).map(i => i.tbl_name), ['st_sessions']);
   for (const table of tables) {
-    const info = (await s.app.store.db.prepare(`PRAGMA table_info(${table})`).all()).results;
-    assert.deepEqual(info.map(c => c.name), columns[table], table);
+    const info = (await db.prepare(`PRAGMA table_info(${table})`).all()).results;
+    assert.deepEqual(info.map(c => c.name), COLUMNS[table], table);
     for (const row of await s.rows(table)) {
       for (const [column, value] of Object.entries(row)) {
         for (const secret of secrets) assert.ok(!String(value).includes(secret), `${table}.${column} holds ${secret}`);
+        assert.notEqual(value, 'p1', `${table}.${column} holds a profile key`);
       }
     }
   }
@@ -428,7 +625,7 @@ test('names, user agents, PC labels, error text, profile keys and addresses are 
   // Nor anywhere in the database files, including the write-ahead log.
   for (const file of fs.readdirSync(s.dbDir)) {
     const bytes = fs.readFileSync(path.join(s.dbDir, file));
-    for (const secret of secrets.filter(x => x.length > 5)) assert.equal(bytes.indexOf(secret), -1, `${file} holds ${secret}`);
+    for (const secret of secrets.filter(x => Buffer.byteLength(x) > 5)) assert.equal(bytes.indexOf(secret), -1, `${file} holds ${secret}`);
   }
 });
 
@@ -437,6 +634,9 @@ test('CORS echoes only listed origins, never with credentials, and null only whe
   const allowed = await s.post(fixture);
   assert.equal(allowed.status, 204);
   assert.equal(allowed.headers['access-control-allow-origin'], ORIGIN);
+  // How long the portal waits before its next batch, readable by the page.
+  assert.equal(allowed.headers['x-batch-every'], '60');
+  assert.equal(allowed.headers['access-control-expose-headers'], 'Retry-After, X-Batch-Every');
   assert.match(allowed.headers.vary, /\bOrigin\b/);
   assert.equal(allowed.headers['access-control-allow-credentials'], undefined);
   for (const origin of ['https://evil.example', 'http://school.example', 'https://school.example.evil', 'null']) {
@@ -489,7 +689,7 @@ test('the per-client token bucket answers 429 with Retry-After and refills', asy
   assert.equal(limited.status, 429);
   assert.equal(limited.headers['retry-after'], '30');
   assert.equal(limited.headers['access-control-allow-origin'], ORIGIN, 'the page can read the status');
-  assert.equal(limited.headers['access-control-expose-headers'], 'Retry-After', 'and the wait');
+  assert.equal(limited.headers['access-control-expose-headers'], 'Retry-After, X-Batch-Every', 'and the wait');
   assert.equal(await s.count('batches'), 1);
   s.clock.now += 30000;
   assert.equal((await s.send('GET', '/v1/health')).status, 200);
@@ -535,7 +735,6 @@ test('admin endpoints are 404 without ADMIN_TOKEN and 401 without the right bear
 });
 
 // Four sessions on two days. S1 to S3 are 6-7 year olds on day one, S4 is 10-11 on day two.
-const z6 = [0, 0, 0, 0, 0, 0];
 const S1 = 'a00000000001', S2 = 'a00000000002', S3 = 'a00000000003', S4 = 'a00000000004';
 const DAY_ONE = [
   envelope(S1, [
@@ -715,63 +914,102 @@ test('the Node host sweeps live rows every minute, so none outlives 10 minutes w
   assert.equal(await s.count('live'), 0);
 });
 
-test('retention purges old rows on start and daily; batch ids are kept for 30 days', async t => {
+test('retention purges on start and daily: batch ids after 30 days, usage after 60, the frozen daily totals by RETENTION_DAYS', async t => {
   const s = await start(t);
   const day0 = Date.parse('2026-01-01T12:00:00Z');
   s.clock.now = day0;
   await s.post(envelope('d00000000001', [['lv', 1, 2]]));
   s.clock.now = day0 + DAY_MS;
   await s.post(envelope('d00000000002', [['lv', 1, 3]]));
-  // Session ids in seen are kept for today and yesterday only.
-  assert.deepEqual((await s.rows('seen', 'day')).map(r => r.day), ['2026-01-01', '2026-01-02']);
-  s.clock.now = day0 + 2 * DAY_MS;
-  await s.app.purge();
-  assert.deepEqual((await s.rows('seen')).map(r => r.day), ['2026-01-02']);
   s.clock.now = day0 + 30 * DAY_MS;
   assert.deepEqual(await s.app.purge(), { cutoff: '2025-08-04', rows: 0, batches: 0 });
-  assert.deepEqual(await s.rows('seen'), []);
   s.clock.now = day0 + 31 * DAY_MS;
   assert.deepEqual(await s.app.purge(), { cutoff: '2025-08-05', rows: 0, batches: 1 }, 'the first batch id is forgotten');
-  s.clock.now = day0 + 180 * DAY_MS;
-  assert.deepEqual(await s.app.purge(), { cutoff: '2026-01-01', rows: 0, batches: 1 }, 'exactly 180 days old is kept');
-  s.clock.now = day0 + 181 * DAY_MS;
-  assert.deepEqual(await s.app.purge(), { cutoff: '2026-01-02', rows: 2, batches: 0 }, 'one daily-totals row and one device row');
-  assert.deepEqual((await s.rows('agg_days')).map(r => [r.day, r.level_ups]), [['2026-01-02', 1]]);
-  assert.deepEqual((await s.rows('agg_devices')).map(r => r.day), ['2026-01-02']);
+  assert.deepEqual((await s.rows('usage', 'day')).map(r => r.day).slice(0, 2), ['2026-01-01', '2026-01-02']);
+  s.clock.now = day0 + 62 * DAY_MS;
+  await s.app.purge();
+  assert.ok((await s.rows('usage')).every(r => r.day >= '2026-01-03'), 'usage rows are kept 60 days');
   assert.equal(await s.count('batches'), 0);
 
-  // A restart purges at once.
-  await s.app.close();
-  const later = createApp({ dbPath: s.dbPath, now: () => day0 + 182 * DAY_MS });
-  t.after(() => later.close());
-  await later.listen(0, '127.0.0.1');
-  for (const table of AGGREGATES) assert.equal((await later.store.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()).n, 0, table);
-  const custom = createApp({ retentionDays: 7, now: () => day0 + 8 * DAY_MS });
-  t.after(() => custom.close());
-  assert.equal(await custom.store.ingest(envelope('d00000000003', []), [['lv', 1, 2]], day0), true);
-  assert.equal((await custom.purge()).rows, 2);
-});
-
-test('the store creates its tables on first use and refuses a database newer than itself', async t => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-telemetry-schema-'));
+  // A database the milestone-2 server filled: its daily totals stay, read only, until retention.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-telemetry-m2-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 't.db');
-  const first = createApp({ dbPath: file });
+  await milestone2(file, [['agg_days', { day: '2026-01-01', a: '6-7', sessions: 4, level_ups: 2 }], ['agg_days', { day: '2026-01-02', a: '6-7', sessions: 3 }],
+    ['agg_devices', { day: '2026-01-01', a: '6-7', cores: 4, mem: 4, screen: 1920, sessions: 4 }]]);
+  const clock = { now: day0 + 180 * DAY_MS };
+  const old = createApp({ dbPath: file, now: () => clock.now });
+  t.after(() => old.close());
+  await old.listen(0, '127.0.0.1');
+  assert.deepEqual((await old.store.db.prepare('SELECT day FROM agg_days ORDER BY day').all()).results.map(r => r.day), ['2026-01-01', '2026-01-02'],
+    'exactly 180 days old is kept');
+  clock.now = day0 + 181 * DAY_MS;
+  assert.deepEqual(await old.purge(), { cutoff: '2026-01-02', rows: 2, batches: 0 }, 'one daily-totals row and one device row');
+  assert.deepEqual((await old.store.db.prepare('SELECT day, sessions FROM agg_days').all()).results, [{ day: '2026-01-02', sessions: 3 }]);
+  await old.close();
+  // A restart purges at once.
+  const later = createApp({ dbPath: file, now: () => day0 + 182 * DAY_MS });
+  t.after(() => later.close());
+  await later.listen(0, '127.0.0.1');
+  for (const table of Object.keys(TABLES)) assert.equal((await later.store.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()).n, 0, table);
+});
+
+test('the store creates schema 4, upgrades schema 2 and 3 one step at a time keeping the frozen totals, and refuses a newer one', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-telemetry-schema-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const names = async db => (await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all()).results.map(r => r.name);
+  const settings = async db => Object.fromEntries((await db.prepare('SELECT key, value FROM settings').all()).results.map(r => [r.key, r.value]));
+  const v4 = ['aliases', 'batches', 'cards', 'kpi_cache', 'live', 'meta', 'r_day', 'r_device_day', 'r_game_day', 'r_level_day', 'r_pc_day', 'r_source_day',
+    'r_stat', 'r_student_day', 'r_student_game', 'roll_days', 'settings', 'st_marks', 'st_pcs', 'st_rounds', 'st_sessions', 'st_student_games',
+    'st_student_pcs', 'st_students', 'st_visits', 'usage'];
+  // A new database: schema 4 at once, without the aggregates.
+  const fresh = path.join(dir, 'fresh.db');
+  const first = createApp({ dbPath: fresh, now: () => START });
   await first.listen(0, '127.0.0.1');
+  assert.deepEqual(await names(first.store.db), v4);
+  assert.deepEqual((await first.store.db.prepare('SELECT * FROM meta').all()).results, [{ key: 'schema', value: 4 }]);
+  assert.deepEqual(await settings(first.store.db), { tz: 'UTC', tz_source: 'none', tz_epoch: '0', week_start: 'mon', week_source: 'auto', keep_days: '',
+    facts_since: '2026-10-20', legacy_until: '', v3_since: '', rv: '1', rolled_through: '', trimmed_before: '' });
   await first.close();
-  // A database of schema 2 (before kpi_cache) gains the table on first use.
-  let db = openDatabase(file);
+
+  // Milestone 2's schema 3 with a day of totals: one step to 4; the totals stay and are read for their days.
+  const m2 = path.join(dir, 'm2.db');
+  await milestone2(m2, [['agg_days', { day: '2026-10-20', a: '6-7', sessions: 3, web: 3, opens: 5, engaged_ms: 120000 }],
+    ['agg_games', { day: '2026-10-20', a: '6-7', slug: 'road-hopper', sessions: 3, opens: 5 }]]);
+  const upgraded = createApp({ dbPath: m2, now: () => START, adminToken: TOKEN, allowedOrigins: [ORIGIN] });
+  t.after(() => upgraded.close());
+  const { port } = await upgraded.listen(0, '127.0.0.1');
+  assert.deepEqual(await names(upgraded.store.db), [...v4, ...Object.keys(TABLES)].sort());
+  assert.deepEqual(pick(await settings(upgraded.store.db), ['facts_since', 'legacy_until', 'tz']), { facts_since: '2026-10-20', legacy_until: '2026-10-20', tz: 'UTC' });
+  assert.deepEqual((await upgraded.store.db.prepare('PRAGMA table_info(live)').all()).results.map(c => c.name), ['s', 'slug', 'seen_minute', 'u', 'p', 'wire']);
+  assert.deepEqual(await upgraded.store.db.prepare('SELECT * FROM live').all().then(r => r.results), [], 'live starts again');
+  // The overlap day adds up: the frozen totals and the facts of the same day.
+  const base = `http://127.0.0.1:${port}`;
+  for (const s of ['a00000000001', 'a00000000002', 'a00000000003']) {
+    const res = await request(base, 'POST', '/v1/batch', { headers: { 'content-type': 'text/plain', origin: ORIGIN },
+      body: JSON.stringify(envelope(s, [['go', 1, 'road-hopper', 'featured', 0], ['gx', 20, 'road-hopper', 15000, z6, z4]])) });
+    assert.equal(res.status, 204);
+  }
+  const kpis = (await request(base, 'GET', '/v1/admin/kpis?from=2026-10-20&to=2026-10-20', { headers: { authorization: 'Bearer ' + TOKEN } })).json();
+  assert.deepEqual([kpis.totals.sessions, kpis.totals.gameOpens, kpis.totals.engagedMinutes, kpis.games[0].sessions, kpis.games[0].opens], [6, 8, 2.8, 6, 8]);
+  await upgraded.close();
+
+  // Schema 2 (milestone 2 before kpi_cache): to 3, then to 4, at start.
+  const older = path.join(dir, 'older.db');
+  await milestone2(older);
+  let db = openDatabase(older);
   await db.batch([db.prepare('DROP TABLE kpi_cache'), db.prepare("UPDATE meta SET value = 2 WHERE key = 'schema'")]);
   db.close();
-  const older = createApp({ dbPath: file });
-  await older.listen(0, '127.0.0.1');
-  assert.deepEqual(await older.store.db.prepare('SELECT * FROM kpi_cache').all().then(r => r.results), []);
-  assert.deepEqual((await older.store.db.prepare('SELECT * FROM meta').all()).results, [{ key: 'schema', value: SCHEMA_VERSION }]);
-  await older.close();
-  db = openDatabase(file);
+  const two = openStore(openDatabase(older));
+  assert.deepEqual([await two.setup(START), await two.setup(START), await two.setup(START)], ['migrated', 'migrated', 'ready']);
+  assert.deepEqual(await names(two.db), [...v4, ...Object.keys(TABLES)].sort());
+  two.close();
+
+  // A database of a newer server is refused, and left as it is.
+  db = openDatabase(fresh);
   await db.prepare("UPDATE meta SET value = ?1 WHERE key = 'schema'").bind(SCHEMA_VERSION + 1).run();
   db.close();
-  const newer = createApp({ dbPath: file });
+  const newer = createApp({ dbPath: fresh });
   t.after(() => newer.close());
   await assert.rejects(newer.listen(0, '127.0.0.1'), new RegExp(`database schema ${SCHEMA_VERSION + 1} is newer than this server \\(${SCHEMA_VERSION}\\)`));
 });
