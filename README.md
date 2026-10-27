@@ -10,7 +10,7 @@ adapt to each child), and none of them plays background music.
   Children pick an animal picture and their age band to play as themselves; nothing is typed.
 - Play statistics are counted on each PC (see [Play statistics](#play-statistics-local-only)).
   A school can also run its **own** anonymous telemetry server (see
-  [Anonymous telemetry](#anonymous-telemetry-optional-school-run-server) and
+  [Anonymous telemetry](#anonymous-telemetry-optional) and
   [Turning on data collection](#turning-on-data-collection)); without it the site
   makes no network request.
 - Every game, sound, font and picture lives in this repo. All games run locally in the browser.
@@ -322,9 +322,10 @@ Everything the home page shows comes from **`js/catalog.js`**:
 - **Feature a game** first in the catalog: set `hot: true`.
 - **Rename the site:** change `name` in `window.SITE` (currently "ألعاب الفسحة").
 
-### Anonymous telemetry (optional, school-run server)
+### Anonymous telemetry (optional)
 
-A school can collect anonymous play events from every PC on one server it runs itself,
+A school can collect anonymous play events from every PC on one server of its own (a free
+Cloudflare account, set up with one button; see below),
 to see which games children choose, where they stop, how difficulty settles per age band,
 and whether the PCs keep up. It is **off** unless the fast build is made with the
 `SG_TELEMETRY_URL` repository variable pointing at that server; the source tree, the
@@ -338,8 +339,8 @@ identifier that lasts beyond a portal session, and no browser or graphics string
 teacher page shows whether this PC shares, and «stop collecting» stops both the local
 statistics and the sharing. The server stores no IP addresses, keeps rows for 180 days and
 hides any group smaller than three sessions. See [`docs/TELEMETRY.md`](docs/TELEMETRY.md)
-for the portal side and [`server/README.md`](server/README.md) for running the server
-(`node server/main.mjs`, Node 22.13 or newer, no dependencies).
+for the portal side and [`server/README.md`](server/README.md) for the server and its
+insights dashboard.
 
 ### Turning on data collection
 
@@ -366,7 +367,8 @@ games/<slug>/             one folder per game (index.html + thumb.svg + its own 
 shared/kit.js             tiny helper library all games use (sound, saving, input, scaling, play statistics,
                           age band, difficulty control Kit.dda, telemetry extras Kit.track)
 shared/juice.js           procedural sound effects (Kit.juice in games, Juice in the portal)
-server/                   the anonymous telemetry ingest server (Node, no dependencies; not published)
+server/                   the anonymous telemetry server and its insights dashboard (a Cloudflare
+                          Worker, or Node with no dependencies; deployed on its own, not part of the site)
 shared/game.css           shared game page styles + the Fredoka font
 lib/three/                three.js r159 (MIT) for the 3D games
 docs/ARCHITECTURE.md      the platform contract: runtime, profiles, telemetry, server, milestones

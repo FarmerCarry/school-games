@@ -136,8 +136,9 @@ own code never logs.
 
 ## Turning it on
 
-1. Deploy the ingest server behind HTTPS (`server/README.md`), with `ALLOWED_ORIGINS` set to
-   the portal's origin (for example `https://name.github.io`).
+1. Deploy the server (`server/README.md`: the one-click free Cloudflare setup, or Node behind
+   HTTPS), with `ALLOWED_ORIGINS` set to the portal's origin (for example
+   `https://name.github.io`; the Cloudflare setup already has `https://farmercarry.github.io`).
 2. In the GitHub repository: **Settings → Secrets and variables → Actions → Variables →
    New repository variable**, name **`SG_TELEMETRY_URL`**, value the full ingest address,
    for example `https://telemetry.example.org/v1/batch`. It is a variable, not a secret:
