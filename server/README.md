@@ -22,7 +22,7 @@ a web browser. Everything below is free.
 
 1. **Click this button:**
 
-   [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/FarmerCarry/school-games/tree/claude/charming-bell-5izwb5/server)
+   [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/FarmerCarry/school-games/tree/main/server)
 
 2. **Sign up or sign in to Cloudflare.** If you have no Cloudflare account, choose
    *Sign up*, type your email address and a password of your choice, and open the
