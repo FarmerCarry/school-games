@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// Starts the ingest server from environment variables (see server/README.md):
+// Starts the ingest server on Node from environment variables (see server/README.md):
 //   PORT=8787 DB_PATH=/data/telemetry.db ALLOWED_ORIGINS=https://name.github.io \
 //   ADMIN_TOKEN=... node server/main.mjs
+// The dashboard is served at / from server/dashboard/.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hideSqliteWarning } from './warnings.mjs';
+import { isAdminToken, parseOrigins } from './handler.mjs';
 
 // Before node:sqlite loads: the server modules are imported dynamically below.
 hideSqliteWarning();
@@ -24,19 +26,14 @@ function whole(name, fallback, min, max = Infinity) {
 }
 
 function origins(raw = '') {
-  const list = raw.split(',').map(s => s.trim()).filter(Boolean);
-  for (const origin of list) {
-    let valid = origin === 'null';
-    try { valid ||= new URL(origin).origin === origin; } catch { /* not a URL */ }
-    if (!valid) fail(`ALLOWED_ORIGINS entry "${origin}" is not an origin such as https://name.github.io (no path, no trailing slash)`);
-  }
+  const { origins: list, invalid } = parseOrigins(raw);
+  if (invalid.length) fail(`ALLOWED_ORIGINS entry "${invalid[0]}" is not an origin such as https://name.github.io (no path, no trailing slash)`);
   return list;
 }
 
 const env = process.env;
 const adminToken = env.ADMIN_TOKEN || '';
-// Printable ASCII only: Node reads header bytes as latin1, so any other character could never match.
-if (adminToken && !/^[\x21-\x7e]{16,}$/.test(adminToken)) fail('ADMIN_TOKEN must be at least 16 printable ASCII characters without spaces');
+if (adminToken && !isAdminToken(adminToken)) fail('ADMIN_TOKEN must be at least 16 printable ASCII characters without spaces');
 const config = {
   port: whole('PORT', 8787, 0, 65535),
   host: env.HOST || undefined,
@@ -57,8 +54,13 @@ try {
   if (error.code === 'ERR_UNKNOWN_BUILTIN_MODULE') fail(`node:sqlite is missing: use Node 22.13 or newer (this is ${process.version})`);
   throw error;
 }
-const app = createApp(config);
-const address = await app.listen(config.port, config.host);
+let app, address;
+try {
+  app = createApp(config);
+  address = await app.listen(config.port, config.host);
+} catch (error) {
+  fail('cannot start: ' + error.message);
+}
 console.log(`telemetry: listening on port ${address.port}; ` +
   `${config.allowedOrigins.length} allowed origin(s), admin ${adminToken ? 'on' : 'off'}, ` +
   `retention ${config.retentionDays} days, ${config.ratePerMin || 'unlimited'} requests per minute per client`);

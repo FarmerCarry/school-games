@@ -12,14 +12,14 @@
  * the catalog is not next to this folder), devices, launch sources, difficulty tiers,
  * wins, losses and quits. The same seed always gives the same sessions and batch ids,
  * so a repeated run is de-duplicated and adds nothing: use another --seed for more.
- * Every batch is checked with server/schema.mjs before it is sent.
+ * Every batch is checked with server/schema.mjs before it is sent. Tests import
+ * history() for the same --db batches without running the command.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { validateBatch } from './schema.mjs';
-import { hideSqliteWarning } from './warnings.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DAY_MS = 86400000;
@@ -179,33 +179,43 @@ async function post(url, batch) {
   }
 }
 
+// The --db history: { batch, now } for --sessions per weekday (a sixth at the weekend)
+// over the `days` UTC days that end with the day of `today` (ms). Each session starts
+// between 07:00 and 14:59 UTC and its batches arrive 20 to 240 s apart, so no session
+// crosses midnight. The same options always give the same batches and receipt times.
+export function* history({ days = 28, sessions = 120, seed = 1, today = Date.now(), games = catalogSlugs() } = {}) {
+  const traits = games.map(gameTraits), first = Math.floor(today / DAY_MS) * DAY_MS;
+  for (let day = days - 1; day >= 0; day--) {
+    const r = random(seed * 100003 + day);
+    // Fewer children at the weekend, more mid-week.
+    const weekday = new Date(first - day * DAY_MS).getUTCDay(), count = weekday % 6 ? sessions : Math.round(sessions / 6);
+    for (let i = 0; i < count; i++) {
+      let now = first - day * DAY_MS + r.int(7, 14) * 3600000 + r.int(0, 3599) * 1000;
+      for (const batch of session(r, traits)) {
+        yield { batch, now };
+        now += r.int(20, 240) * 1000;
+      }
+    }
+  }
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const games = catalogSlugs().map(gameTraits);
   if (options.db) {
-    hideSqliteWarning();
+    const { openDatabase } = await import('./sqlite-d1.mjs');
     const { openStore } = await import('./store.mjs');
-    const store = openStore(options.db);
-    const today = Math.floor(Date.now() / DAY_MS) * DAY_MS;
+    const store = openStore(openDatabase(options.db));
     let stored = 0, batches = 0;
-    for (let day = options.days - 1; day >= 0; day--) {
-      const r = random(options.seed * 100003 + day);
-      // Fewer children at the weekend, more mid-week.
-      const weekday = new Date(today - day * DAY_MS).getUTCDay(), count = weekday % 6 ? options.sessions : Math.round(options.sessions / 6);
-      for (let i = 0; i < count; i++) {
-        let now = today - day * DAY_MS + r.int(7, 14) * 3600000 + r.int(0, 3599) * 1000;
-        for (const batch of session(r, games)) {
-          batches++;
-          if (store.insertBatch(validateBatch(batch), now)) stored++;
-          now += r.int(20, 240) * 1000;
-        }
-      }
+    for (const { batch, now } of history(options)) {
+      const { envelope, events } = validateBatch(batch);
+      batches++;
+      if (await store.ingest(envelope, events, now)) stored++;
     }
     store.close();
     console.log(`simulate: ${stored} of ${batches} batches stored in ${options.db} (${options.days} days, seed ${options.seed})`);
     return;
   }
-  const r = random(options.seed);
+  const r = random(options.seed), games = catalogSlugs().map(gameTraits);
   const url = options.url.replace(/\/+$/, '') + '/v1/batch';
   const sessions = Array.from({ length: options.sessions }, () => session(r, games));
   const statuses = {};
@@ -224,4 +234,5 @@ async function main() {
   if (Object.keys(statuses).some(status => status !== '204')) process.exitCode = 1;
 }
 
-main().catch(error => { console.error('simulate: ' + error.message); process.exit(1); });
+const entry = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (entry === fileURLToPath(import.meta.url)) main().catch(error => { console.error('simulate: ' + error.message); process.exit(1); });
