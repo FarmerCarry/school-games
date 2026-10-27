@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import vm from 'node:vm';
 import { svgDataUri } from '../lib/svg-data-uri.mjs';
 import { launchChromium } from '../browser.mjs';
+import { withPageDeadline } from '../page-wait.mjs';
 import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -19,11 +20,13 @@ test('SVG URI insertion cannot escape an img attribute or inline JSON script', a
   const page = await browser.newPage();
   const table = JSON.stringify({ sample: uri }).replace(/<\//g, '<\\/');
   await page.setContent('<!doctype html><meta charset="utf-8"><script>window.thumbs=' + table + ';window.prefixReached=true;</script><script>window.afterReached=true;</script><div id="images"></div>');
-  const result = await page.evaluate(async uri => {
+  // decode() is allowed to stay pending. The element is in the document, but a
+  // deferred decode still never rejects, and page.evaluate will not time it out.
+  const result = await withPageDeadline(page, async uri => {
     const box = document.getElementById('images'); box.innerHTML = '<img src="' + thumbs.sample + '">';
     await box.firstElementChild.decode();
     return { prefixReached, afterReached, same: thumbs.sample === uri, count: box.childElementCount, tag: box.firstElementChild.tagName, loaded: box.firstElementChild.naturalWidth };
-  }, uri);
+  }, 8000, 'svg attribute image.decode()', uri);
   assert.deepEqual(result, { prefixReached: true, afterReached: true, same: true, count: 1, tag: 'IMG', loaded: 40 });
 });
 

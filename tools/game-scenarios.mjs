@@ -1,6 +1,7 @@
 /* Real UI smoke scenarios. Debug hooks are read-only here: starting, moving,
  * pausing and restarting all go through the same controls as a player. */
 import assert from 'node:assert/strict';
+import { animationFrames, waitForFrameTime, waitForGameClock } from './page-wait.mjs';
 import { clickControl } from './ui-input.mjs';
 
 const g = 'window.__game';
@@ -50,12 +51,13 @@ export const scenarios = {
       // one, cannot miss the new run when a slow frame carries the car past 1.
       await page.evaluate(() => { window.sgRetryCar = window.__game.car; });
       const fresh = `${g}.mode === 'play' && ${g}.car !== window.sgRetryCar`;
-      // The results screen ignores R for its first 0.45 s of game time. A frame
-      // advances the game at most 8 steps (0.13 s), so on a slow runner that is
-      // longer than any fixed real-time wait: press R until the fresh run starts.
+      // The results screen ignores R for its first 0.45s of game time. One
+      // slow frame moves that clock by at most 0.13s, so a wall-clock gap can
+      // be spent before the game has caught up. Press R until the fresh run
+      // starts, giving the clock 0.2s between presses.
       for (let i = 0; i < 12 && !(await evaluate(page, fresh)); i++) {
         await page.keyboard.press('KeyR');
-        await page.waitForTimeout(500);
+        await waitForGameClock(page, 0.2, 'drift-king: time between retry presses');
       }
       await requireState(page, fresh, 'drift-king: retry must start a fresh run before pause');
     }
@@ -118,7 +120,9 @@ export const scenarios = {
     await page.mouse.move(point.x-60,point.y); await page.mouse.down();
     await page.mouse.move(point.x+60,point.y,{steps:15}); await page.mouse.up();
   }, '#bPause', `${g}.info().state === 'pause'`, '#pRestart', `${g}.info().world.stars === 0`, {
-    settle: 650,
+    // The sim does not step during the 0.55s intro, so world.frame stays 0.
+    // The first step is the intro ending. A 650ms sleep can arrive before that.
+    settle: `${g}.info().world.frame >= 1`,
     beforePause: async page => {
       // The first level is solved by the one cut already asserted above.
       // Retry via the player's R shortcut before checking pause so success
@@ -266,7 +270,7 @@ async function start(page, slug, s) {
   await focusSurface(page);
   await requireState(page,s.active,`${slug}: Start must reach gameplay`);
   if (s.ready) await requireState(page,s.ready,`${slug}: countdown must reach active play`);
-  if (s.settle) await page.waitForTimeout(s.settle);
+  if (s.settle) await requireState(page, s.settle, `${slug}: the round must be ready for input`, 8000);
 }
 export async function performInput(page, slug, {repeat = false} = {}) {
   const s = scenarios[slug];
@@ -286,7 +290,9 @@ export async function performInput(page, slug, {repeat = false} = {}) {
   } else if (watch && s.heldKey) await holdUntil(s.heldKey, 'window.sgInput.seen',
     `${s.heldKey}: held input must change gameplay (${watch.before}): ${watch.seen}`)(page);
   else await s.input(page);
-  await page.waitForTimeout(120);
+  // Give the handler a frame before the input assertion reads state. A fixed
+  // 120ms can fall between two slow frames and observe the previous one.
+  await animationFrames(page, 1, `${slug}: input frame`);
   return watch;
 }
 export async function ensureActive(page, slug) {
@@ -315,10 +321,12 @@ export async function runScenario(page, slug, { mode = 'smoke' } = {}) {
     if (typeof s.pause === 'function') await s.pause(page);
     else if (s.pause) await click(s.pause)(page); else await page.keyboard.press('Escape');
     await requireState(page,s.paused,`${slug}: Pause must open`);
-    // Let pending events settle before comparing meaningful simulation state.
-    await page.waitForTimeout(80);
+    // Let the pause handler's frame land before the snapshot, then keep
+    // watching for as long as the old wall-clock window, measured in frames
+    // that actually ran.
+    await waitForFrameTime(page, 80, `${slug}: pause settled`);
     const paused = await evaluate(page,`JSON.stringify(${s.snapshot})`);
-    await page.waitForTimeout(350);
+    await waitForFrameTime(page, 350, `${slug}: paused observation`);
     assert.equal(await evaluate(page,`JSON.stringify(${s.snapshot})`),paused,`${slug}: gameplay must freeze while paused`);
     checks.push('Pause freezes gameplay');
   } else checks.push(s.noPause);
