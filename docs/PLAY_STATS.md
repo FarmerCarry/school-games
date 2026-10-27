@@ -463,8 +463,8 @@ Step 1's files are the input; they do not need to change.
 * `tools/tests/merge-progress.test.mjs`: a merge-2048 board is one round; the goal tile
   reports nothing and a full board reports `'end'` with the score.
 * `tools/tests/play-stats-rules.test.mjs` (node only): no network APIs in Kit and the other
-  shared scripts, the portal, the teacher page or games, except `fetch()` and `sendBeacon`
-  in exactly `js/telemetry.js` (the same rule as `tools/check-all.mjs`, from
+  shared scripts, the portal, the teacher page or games, except `fetch()` in exactly
+  `js/telemetry.js` (`sendBeacon` is banned there too; the same rule as `tools/check-all.mjs`, from
   `tools/lib/network-rules.mjs`); no `Kit.stats` in engine or simulation files; every game calls
   `Kit.stats.round` and `Kit.stats.end` (the games come from `js/catalog.js` and the
   `games/` folders, so a new game is checked without editing the test; a game allowed

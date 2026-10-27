@@ -124,8 +124,9 @@ strings, wall-clock dates or times, IP-derived data, and the local day records.
   page can say «المشاركة المجهولة مفعّلة على هذا الجهاز … إلى <host>».
 * Stopping statistics or turning sharing off drops every queue on this origin (another
   copy's too), the note and every waiting event. The teacher page's **clear** removes every
-  `sg:site:tm:` key, and a portal page that is still open drops whatever it recorded
-  before the clear (`statsmeta.clearedAt`).
+  `sg:site:tm:` key except the note `sg:site:tm:on` (this PC still shares), and a portal
+  page that is still open drops whatever it recorded before the clear
+  (`statsmeta.clearedAt`).
 * Every storage call is guarded (with blocked storage the queue lives in memory for that
   page), nothing is logged, every promise is caught, and no call into the sink throws.
 
@@ -193,4 +194,4 @@ stopping statistics on the teacher page.
   in the fast build, only in the portal's exact inlined copy of it); every other network
   API, `sendBeacon` included, stays banned there, and the same calls anywhere else fail.
 * `tools/tests/teacher-page.test.mjs`: the note, the sharing line, and clear removing
-  `sg:site:tm:` keys.
+  the `sg:site:tm:` queue while the note and the sharing line stay.

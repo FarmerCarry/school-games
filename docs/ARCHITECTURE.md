@@ -308,7 +308,8 @@ copy of the site on the same origin with another URL never sends them (at most 1
 at most 7 days old, oldest dropped first); stopping statistics or turning sharing off
 drops every `sg:site:tm:q` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the batch;
 a 4xx other than 429 drops it as malformed; 429, 5xx and network errors retry.
-Teacher "clear" removes `sg:site:tm:*` too. All storage calls are wrapped; no
+Teacher "clear" removes the `sg:site:tm:` queues too (not the sharing note
+`sg:site:tm:on`). All storage calls are wrapped; no
 `console`; never `clear()`.
 
 ## Ingest server (server/)
