@@ -104,7 +104,7 @@ after(async () => {
 // (method, body, search) => [status, json] } answers that path instead of the server.
 async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-GB', colorScheme = 'light', token, lang, timezoneId = 'UTC' } = {}) {
   const context = await browser.newContext({ viewport, locale, colorScheme, serviceWorkers: 'block', timezoneId, acceptDownloads: true });
-  t.after(() => context.close());
+  t.after(() => { s.closed = true; return context.close(); });
   // missing: the URLs the server answered 404 "not found" (an endpoint this server does not
   // have yet); the browser logs those, and the page carries on without them.
   const s = { context, mode: { api: 'server' }, api: [], outside: [], errors: [], allowed: [], missing: new Set(), files: [] };
@@ -112,7 +112,10 @@ async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-G
     const url = request.url();
     if (!url.startsWith(site.origin + '/')) s.outside.push(request.method() + ' ' + url);
   });
-  await context.route('**/*', async route => {
+  // A request still on its way when the test closes the context is dropped quietly; any
+  // other failure of the routing is reported by s.check().
+  await context.route('**/*', route => answer(route).catch(error => { if (!s.closed) s.errors.push('routing: ' + error.message); }));
+  async function answer(route) {
     const request = route.request(), url = new URL(request.url());
     if (url.origin !== site.origin) return route.abort();
     if (url.pathname.startsWith('/v1/')) {
@@ -154,7 +157,7 @@ async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-G
     const headers = { ...res.headers() };
     if ((headers['content-type'] || '').startsWith('text/html')) headers['content-security-policy'] = CSP;
     return route.fulfill({ response: res, headers });
-  });
+  }
   await context.addInitScript(({ token, lang }) => {
     window.__csp = [];
     document.addEventListener('securitypolicyviolation', e => window.__csp.push(e.violatedDirective + ' ' + e.blockedURI));
@@ -177,6 +180,11 @@ async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-G
     assert.deepEqual(await page.evaluate(() => window.__csp), [], 'no Content Security Policy violation');
     assert.deepEqual(s.errors, [], 'no page or console errors');
     assert.deepEqual(s.outside, [], 'no request outside the dashboard');
+  };
+  // The school's day, as the newest answer of the server says (UTC for a server without the clock).
+  s.today = () => {
+    const hit = s.api.filter(e => !e.fixture && e.json && e.json.clock && /^\d{4}-\d\d-\d\d$/.test(e.json.clock.today)).at(-1);
+    return hit ? hit.json.clock.today : today();
   };
   s.kpis = () => s.api.filter(e => e.path === '/v1/admin/kpis');
   s.lastKpis = () => s.kpis().at(-1);
@@ -229,8 +237,8 @@ test('sign in: a wrong password says so, the right one shows the server\'s numbe
   await waitForKpis(s, 1);
   const call = s.lastKpis();
   assert.equal(call.auth, 'Bearer ' + TOKEN);
-  assert.equal(call.search.get('to'), today());
-  assert.equal(call.search.get('from'), dayBefore(today(), 29), 'the default period is 30 days');
+  assert.equal(call.search.get('to'), s.today());
+  assert.equal(call.search.get('from'), dayBefore(s.today(), 29), 'the default period is 30 days');
   assert.equal(call.search.get('band'), null);
   const k = call.json, live = s.lastLive().json;
   // The headline tiles are the KPI JSON; a server without students per period shows a dash.
@@ -246,7 +254,7 @@ test('sign in: a wrong password says so, the right one shows the server\'s numbe
   assert.ok(live.total.sessions >= 8);
   assert.equal(Number(await tileValue(page, 'now')), live.total.sessions);
   // The insights are insights.js on that JSON, with the catalog's names.
-  const expected = I.insights(k, { lang: 'en', name: nameOf('en'), today: today() }).map(x => x.text);
+  const expected = I.insights(k, { lang: 'en', name: nameOf('en'), today: s.today() }).map(x => x.text);
   assert.ok(expected.length >= 1 && expected.length <= 5);
   assert.deepEqual(await insightTexts(page), expected);
   for (const id of OVERVIEW_SECTIONS) assert.equal(await page.locator('#' + id).count(), 1, id);
@@ -281,8 +289,8 @@ test('filters change the request and every section; the period and age band', as
     return s.lastKpis();
   };
   let call = await pick('periodFilter', 7);
-  assert.equal(call.search.get('from'), dayBefore(today(), 6));
-  assert.equal(call.search.get('to'), today());
+  assert.equal(call.search.get('from'), dayBefore(s.today(), 6));
+  assert.equal(call.search.get('to'), s.today());
   assert.equal(await tileValue(page, 'sessions'), String(call.json.totals.sessions));
   await page.click('#daily-count .table-toggle');
   assert.equal(await page.locator('#daily-count .table-host tbody tr').count(), 7, 'one row per day');
@@ -297,22 +305,22 @@ test('filters change the request and every section; the period and age band', as
   assert.match(await page.locator('#rangeText').textContent(), /8–9$/);
   assert.match(await page.locator('#by-age').textContent(), /Only children aged 8–9 are shown/, 'no second copy of the favourites');
   assert.deepEqual([...new Set(await page.locator('#difficulty .diff-cell[data-band]').evaluateAll(cells => cells.map(c => c.dataset.band)))], ['8-9']);
-  assert.deepEqual(await insightTexts(page), I.insights(call.json, { lang: 'en', name: nameOf('en'), today: today() }).map(x => x.text));
+  assert.deepEqual(await insightTexts(page), I.insights(call.json, { lang: 'en', name: nameOf('en'), today: s.today() }).map(x => x.text));
 
   call = await pick('periodFilter', 1);
-  assert.equal(call.search.get('from'), today());
+  assert.equal(call.search.get('from'), s.today());
   assert.match(await page.locator('#daily').textContent(), /Choose 7, 30 or 90 days/);
   call = await pick('bandFilter', 'all');
   assert.equal(call.search.get('band'), null);
   call = await pick('periodFilter', 90);
-  assert.equal(call.search.get('from'), dayBefore(today(), 89));
+  assert.equal(call.search.get('from'), dayBefore(s.today(), 89));
   assert.equal(await page.locator('#by-age .panel').count(), call.json.bands.length);
   // Refresh with an unchanged answer: the page (its focus and scroll) stays as it is.
   const tile = await page.locator('.tile[data-key="sessions"]').elementHandle();
   const n = s.kpis().length;
   await page.click('#refreshBtn');
   await waitForKpis(s, n + 1);
-  assert.equal(s.lastKpis().search.get('from'), dayBefore(today(), 89), 'the refresh asks for the same period');
+  assert.equal(s.lastKpis().search.get('from'), dayBefore(s.today(), 89), 'the refresh asks for the same period');
   assert.equal(await tile.evaluate(node => node.isConnected), true, 'no rebuild for the same numbers');
   await s.check();
 });
@@ -413,7 +421,7 @@ test('Arabic: right to left, Arabic game names, Western digits, remembered', asy
   const top = I.favourites(k).rows[0];
   await page.click('#fav-card .table-toggle');
   assert.equal(await page.locator('#fav-card .table-host tbody tr th').first().textContent(), catalog.get(top.slug).title);
-  assert.deepEqual(await insightTexts(page), I.insights(k, { lang: 'ar', name: nameOf('ar'), today: today() }).map(x => x.text));
+  assert.deepEqual(await insightTexts(page), I.insights(k, { lang: 'ar', name: nameOf('ar'), today: s.today() }).map(x => x.text));
   const text = await page.locator('body').textContent();
   assert.ok(!/[\u0660-\u0669\u06f0-\u06f9]/.test(text), 'Western digits only');
   // Every number range ("6–7", "2–3 أنوية", ...) is drawn low to high inside the Arabic text.
@@ -982,7 +990,7 @@ test('a student\'s page: linking and forgetting ask twice before anything is sen
   await waitForView(page, 'student');
   const own = s.api.find(e => e.path === '/v1/admin/student');
   assert.equal(own.search.get('u'), me);
-  assert.equal(own.search.get('to'), today());
+  assert.equal(own.search.get('to'), s.today());
   // Link: find the other code, pick it, confirm, confirm again.
   await page.click('#linkBtn');
   await page.locator('#linkSearch').pressSequentially(other.label);
@@ -1023,23 +1031,23 @@ test('the period: a custom range of at most 366 days, this school year, and chil
   let n = s.kpis().length;
   await page.click('#periodFilter button[data-value="year"]');
   await waitForKpis(s, n + 1);
-  const y = Number(today().slice(0, 4)), aug = today() >= y + '-08-01' ? y + '-08-01' : (y - 1) + '-08-01';
+  const y = Number(s.today().slice(0, 4)), aug = s.today() >= y + '-08-01' ? y + '-08-01' : (y - 1) + '-08-01';
   assert.equal(s.lastKpis().search.get('from'), aug, 'the school year starts on 1 August');
-  assert.equal(s.lastKpis().search.get('to'), today());
+  assert.equal(s.lastKpis().search.get('to'), s.today());
   await page.click('#periodFilter button[data-value="custom"]');
   assert.equal(await page.evaluate(() => document.activeElement.id), 'customFrom');
-  await page.fill('#customFrom', dayBefore(today(), 400));
-  await page.fill('#customTo', today());
+  await page.fill('#customFrom', dayBefore(s.today(), 400));
+  await page.fill('#customTo', s.today());
   await page.click('#customRange button[type="submit"]');
   assert.match(await page.locator('#customRange .field-error').textContent(), /at most 366 days/);
   assert.equal(s.kpis().length, n + 1, 'nothing asked for a range the server refuses');
-  await page.fill('#customFrom', dayBefore(today(), 9));
-  await page.fill('#customTo', dayBefore(today(), 2));
+  await page.fill('#customFrom', dayBefore(s.today(), 9));
+  await page.fill('#customTo', dayBefore(s.today(), 2));
   n = s.kpis().length;
   await page.click('#customRange button[type="submit"]');
   await waitForKpis(s, n + 1);
-  assert.equal(s.lastKpis().search.get('from'), dayBefore(today(), 9));
-  assert.equal(s.lastKpis().search.get('to'), dayBefore(today(), 2));
+  assert.equal(s.lastKpis().search.get('from'), dayBefore(s.today(), 9));
+  assert.equal(s.lastKpis().search.get('to'), dayBefore(s.today(), 2));
   assert.equal(await page.locator('#customRange').isHidden(), true);
   n = s.kpis().length;
   await page.click('#bandFilter button[data-value="unknown"]');
@@ -1047,7 +1055,7 @@ test('the period: a custom range of at most 366 days, this school year, and chil
   assert.equal(s.lastKpis().search.get('band'), 'unknown');
   await page.reload();
   await waitForKpis(s, n + 2);
-  assert.equal(s.lastKpis().search.get('from'), dayBefore(today(), 9), 'the custom range is remembered');
+  assert.equal(s.lastKpis().search.get('from'), dayBefore(s.today(), 9), 'the custom range is remembered');
   await s.check();
 });
 
