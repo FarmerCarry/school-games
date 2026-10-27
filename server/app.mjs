@@ -1,6 +1,7 @@
 // Node host of the ingest server: node:http in front of the Fetch-API handler
 // (handler.mjs), the store (store.mjs) over one SQLite file (sqlite-d1.mjs), the
-// dashboard's static files (static.mjs) and a purge at start and every 24 hours.
+// dashboard's static files (static.mjs), a purge at start and every 24 hours, and a sweep
+// of the live rows every minute.
 // No IP, header or request body is ever stored or logged; the IP is only a key of the
 // handler's in-memory token bucket.
 import http from 'node:http';
@@ -13,6 +14,7 @@ import { staticFiles } from './static.mjs';
 
 export { MAX_BODY, MAX_RANGE_DAYS };
 const PURGE_EVERY_MS = 24 * 3600000;
+const SWEEP_EVERY_MS = 60000;
 const DRAIN_LIMIT = 1024 * 1024;
 const DASHBOARD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'dashboard');
 
@@ -71,7 +73,7 @@ export function createApp(options = {}) {
     store, allowedOrigins: config.allowedOrigins, adminToken: config.adminToken, ratePerMin: config.ratePerMin, now, log,
     assets: config.dashboardDir ? staticFiles(config.dashboardDir) : null
   });
-  let timer = null, closing = null;
+  let timer = null, sweeper = null, closing = null;
 
   async function respond(req, res) {
     const body = req.method === 'GET' || req.method === 'HEAD' ? null : requestBody(req);
@@ -120,17 +122,25 @@ export function createApp(options = {}) {
       return null;
     }
   }
+  // The live rows that have left the window go even when no request comes.
+  async function sweep() {
+    try { await store.sweep?.(now()); } catch (error) { log('telemetry: sweep failed: ' + error.message); }
+  }
 
   return {
     server, store, purge,
     // Creates or upgrades the tables (a newer or unreadable database stops here), purges
-    // once, then every 24 hours, and starts listening. Resolves to the address.
+    // once, then every 24 hours, sweeps the live rows every minute and starts listening.
+    // Resolves to the address.
     async listen(port = 0, host) {
       await store.setup?.();
       await purge();
       clearInterval(timer);
+      clearInterval(sweeper);
       timer = setInterval(purge, PURGE_EVERY_MS);
       timer.unref();
+      sweeper = setInterval(sweep, SWEEP_EVERY_MS);
+      sweeper.unref();
       return new Promise((resolve, reject) => {
         server.once('error', reject);
         server.listen(port, host, () => { server.off('error', reject); resolve(server.address()); });
@@ -139,6 +149,7 @@ export function createApp(options = {}) {
     // Stops listening and closes the database (unless it was passed in). Safe to repeat.
     close() {
       clearInterval(timer);
+      clearInterval(sweeper);
       closing ||= new Promise(resolve => {
         server.close(() => { if (!options.store) store.close(); resolve(); });
         server.closeAllConnections();

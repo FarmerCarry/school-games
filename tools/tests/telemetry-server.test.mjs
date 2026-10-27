@@ -697,12 +697,22 @@ test('live counts sessions seen in the last five minutes and the games they have
   s.clock.now += 5 * 60000;
   await s.post(repeat);
   assert.deepEqual((await live()).total, { sessions: 0 });
-  // The database keeps a session's last minute for ten minutes at most.
-  const minute = Math.floor(s.clock.now / 60000);
-  assert.deepEqual((await s.rows('live')).map(r => [r.s, minute - r.seen_minute]), [['c00000000007', 5]]);
-  s.clock.now += 5 * 60000;
-  await live();
+  // The database keeps a session's last minute only while it is in the window.
   assert.deepEqual(await s.rows('live'), []);
+});
+
+test('the Node host sweeps live rows every minute, so none outlives 10 minutes without requests', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const s = await start(t);
+  assert.equal((await s.post(fixture)).status, 204);
+  s.clock.now += 4 * 60000;
+  t.mock.timers.tick(60000);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(await s.count('live'), 1, 'still in the window');
+  s.clock.now += 60000;
+  t.mock.timers.tick(60000);
+  for (let i = 0; i < 100 && await s.count('live'); i++) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(await s.count('live'), 0);
 });
 
 test('retention purges old rows on start and daily; batch ids are kept for 30 days', async t => {

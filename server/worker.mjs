@@ -1,6 +1,6 @@
 // Cloudflare Workers entry of the ingest server: the shared handler (handler.mjs) and
 // store (store.mjs) on the D1 database bound as env.DB, the dashboard from the static
-// assets bound as env.ASSETS, and the daily purge from the cron trigger (wrangler.json).
+// assets bound as env.ASSETS, and the purges from the cron triggers (wrangler.json).
 // Settings come from env: ALLOWED_ORIGINS and RETENTION_DAYS (plain variables),
 // ADMIN_TOKEN (a secret: the dashboard password) and the optional RATE_PER_MIN.
 // Nothing about a request is logged; the client address (CF-Connecting-IP) only keys the
@@ -8,6 +8,7 @@
 import { createHandler, isAdminToken, parseOrigins } from './handler.mjs';
 import { openStore } from './store.mjs';
 
+const SWEEP_CRON = '*/5 * * * *';
 const whole = (raw, fallback, min, max) =>
   /^\d+$/.test(String(raw ?? '')) && Number(raw) >= min && Number(raw) <= max ? Number(raw) : fallback;
 
@@ -45,9 +46,12 @@ export default {
   async fetch(request, env) {
     return instance(env).handle(request, request.headers.get('CF-Connecting-IP') || '');
   },
-  // The daily cron: aggregate days past RETENTION_DAYS, batch ids past 30 days, seen
-  // rows past yesterday and live rows past 10 minutes are deleted.
+  // The crons of wrangler.json. Every 5 minutes: the live rows that have left the window
+  // are deleted, so none outlives 10 minutes while no request comes. Any other (the daily
+  // one): aggregate days past RETENTION_DAYS, batch ids past 30 days, seen rows past
+  // yesterday, those live rows and the kept KPI rows are deleted.
   async scheduled(controller, env) {
-    await instance(env).store.purge(Date.now());
+    const { store } = instance(env);
+    await (controller.cron === SWEEP_CRON ? store.sweep(Date.now()) : store.purge(Date.now()));
   }
 };

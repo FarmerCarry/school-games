@@ -184,6 +184,28 @@ test('KPIs and live through the Worker; the daily cron purges old days', async t
   assert.deepEqual(await rows(env, 'seen'), []);
 });
 
+test('with no request at all, a live row is gone within 10 minutes: a cron sweeps every 5 minutes', async t => {
+  const clock = useClock(t);
+  const env = makeEnv(), every5 = '*/5 * * * *';
+  assert.ok(wrangler.triggers.crons.includes(every5), 'wrangler.json: ' + wrangler.triggers.crons);
+  assert.equal((await post(env, fixture)).status, 204);
+  const sweep = async () => {
+    let statements = 0;
+    const prepare = env.DB.prepare;
+    env.DB.prepare = sql => { statements++; return prepare.call(env.DB, sql); };
+    try { await worker.scheduled({ scheduledTime: Date.now(), cron: every5 }, env, ctx); } finally { env.DB.prepare = prepare; }
+    return statements;
+  };
+  // The cron fires at minutes 0, 5, 10...: a batch at 09:15 is swept at 09:20 at the latest.
+  clock.now = Date.parse('2026-10-20T09:19:00Z');
+  await sweep();
+  assert.equal((await rows(env, 'live')).length, 1, 'still in the window');
+  clock.now = Date.parse('2026-10-20T09:20:00Z');
+  assert.equal(await sweep(), 1, 'only the live sweep: the daily purge waits for its own cron');
+  assert.deepEqual(await rows(env, 'live'), []);
+  assert.equal((await rows(env, 'seen')).length, 7);
+});
+
 test('the soft rate limit is keyed by CF-Connecting-IP, in memory only', async () => {
   const env = makeEnv({ RATE_PER_MIN: '2' });
   assert.equal((await call(env, 'GET', '/v1/health', { ip: '198.51.100.1' })).status, 200);

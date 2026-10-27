@@ -5,13 +5,13 @@
 // UPDATE per table, all in one transaction, so a request costs O(groups), never
 // O(events). Distinct sessions per group and day are counted through the small `seen`
 // table, which keeps only the last two days; `live` keeps the last receipt minute and
-// open game per session for ten minutes. Rows hold only validated contract values,
-// counts and sums: no column for an IP, a header, a timestamp or an event.
+// open game per session while it is in the five-minute window (at most ten minutes). Rows
+// hold only validated contract values, counts and sums: no column for an IP, a header, a
+// timestamp or an event.
 import { CODES, ERRORS, SOURCES } from './schema.mjs';
 
 export const MIN_SESSIONS = 3;
 export const LIVE_WINDOW_MIN = 5;
-export const LIVE_KEEP_MIN = 10;
 export const DEDUP_DAYS = 30;
 export const SEEN_DAYS = 2;
 export const SCHEMA_VERSION = 3;
@@ -90,6 +90,8 @@ const ADD_EMPTY_BATCH = 'INSERT OR IGNORE INTO batches (b, day) VALUES (?1, ?2) 
 const LIVE = 'INSERT INTO live (s, slug, seen_minute) VALUES (?1, ?2, ?3) ON CONFLICT (s) DO UPDATE SET ' +
   'seen_minute = excluded.seen_minute, slug = CASE WHEN ?4 THEN excluded.slug WHEN seen_minute <= ?6 THEN \'\' ' +
   "WHEN instr(?5, ' ' || slug || ' ') THEN '' ELSE slug END";
+// Rows that have left the window (?1 is the current minute - LIVE_WINDOW_MIN) are dead:
+// LIVE forgets them anyway. Every sweep deletes them.
 const LIVE_SWEEP = 'DELETE FROM live WHERE seen_minute <= ?1';
 const LIVE_COUNT = 'SELECT slug, COUNT(*) AS n FROM live WHERE seen_minute > ?1 GROUP BY slug';
 const KEPT_GET = 'SELECT rows FROM kpi_cache WHERE key = ?1';
@@ -343,7 +345,7 @@ export function openStore(db, { retentionDays = 180 } = {}) {
     statements.push(sql(SEEN).bind(day, s, JSON.stringify(delta.seen)));
     const open = openGame(events), sweep = minute !== sweptMinute;
     statements.push(sql(LIVE).bind(s, open.known ? open.slug : '', minute, open.known ? 1 : 0, open.closed, minute - LIVE_WINDOW_MIN));
-    if (sweep) statements.push(sql(LIVE_SWEEP).bind(minute - LIVE_KEEP_MIN));
+    if (sweep) statements.push(sql(LIVE_SWEEP).bind(minute - LIVE_WINDOW_MIN));
     try {
       await db.batch(statements);
     } catch (error) {
@@ -355,8 +357,8 @@ export function openStore(db, { retentionDays = 180 } = {}) {
   }
 
   // Deletes aggregate days older than the retention period, batch ids older than 30
-  // days, seen rows older than yesterday, live rows older than 10 minutes and the kept
-  // KPI rows of closed days.
+  // days, seen rows older than yesterday, live rows out of the window and the kept KPI
+  // rows of closed days.
   async function purge(now) {
     await setup();
     const cutoff = utcDay(now - retentionDays * DAY_MS);
@@ -364,7 +366,7 @@ export function openStore(db, { retentionDays = 180 } = {}) {
       ...AGGREGATES.map(table => sql(`DELETE FROM ${table} WHERE day < ?1`).bind(cutoff)),
       sql('DELETE FROM batches WHERE day < ?1').bind(utcDay(now - DEDUP_DAYS * DAY_MS)),
       sql('DELETE FROM seen WHERE day < ?1').bind(utcDay(now - (SEEN_DAYS - 1) * DAY_MS)),
-      sql(LIVE_SWEEP).bind(Math.floor(now / MINUTE_MS) - LIVE_KEEP_MIN),
+      sql(LIVE_SWEEP).bind(Math.floor(now / MINUTE_MS) - LIVE_WINDOW_MIN),
       sql('DELETE FROM kpi_cache')
     ]);
     closedDays.clear();
@@ -509,11 +511,20 @@ export function openStore(db, { retentionDays = 180 } = {}) {
     };
   }
 
+  // Deletes the live rows that have left the window. Batches and live queries do it as they
+  // come; the hosts also call this every few minutes (the Worker's 5-minute cron, a timer
+  // on Node), so a live row is gone within 10 minutes when no request comes at all.
+  async function sweep(now) {
+    await setup();
+    const [result] = await db.batch([sql(LIVE_SWEEP).bind(Math.floor(now / MINUTE_MS) - LIVE_WINDOW_MIN)]);
+    return result.meta.changes;
+  }
+
   // Sessions whose last batch arrived in this minute or the four before, and their open games.
   async function live(now) {
     await setup();
     const minute = Math.floor(now / MINUTE_MS), statements = [sql(LIVE_COUNT).bind(minute - LIVE_WINDOW_MIN)];
-    if (minute !== sweptMinute) { sweptMinute = minute; statements.push(sql(LIVE_SWEEP).bind(minute - LIVE_KEEP_MIN)); }
+    if (minute !== sweptMinute) { sweptMinute = minute; statements.push(sql(LIVE_SWEEP).bind(minute - LIVE_WINDOW_MIN)); }
     const [{ results }] = await db.batch(statements);
     const open = results.filter(row => row.slug).sort((x, y) => natural(x.slug, y.slug));
     return {
@@ -523,5 +534,5 @@ export function openStore(db, { retentionDays = 180 } = {}) {
     };
   }
 
-  return { db, setup, ingest, purge, kpis, live, close: () => db.close?.() };
+  return { db, setup, ingest, purge, sweep, kpis, live, close: () => db.close?.() };
 }

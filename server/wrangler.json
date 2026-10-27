@@ -7,7 +7,7 @@
     { "binding": "DB", "database_name": "school-games-telemetry" }
   ],
   "assets": { "directory": "./dashboard", "binding": "ASSETS" },
-  "triggers": { "crons": ["23 3 * * *"] },
+  "triggers": { "crons": ["23 3 * * *", "*/5 * * * *"] },
   "vars": {
     "ALLOWED_ORIGINS": "https://farmercarry.github.io",
     "RETENTION_DAYS": "180"
