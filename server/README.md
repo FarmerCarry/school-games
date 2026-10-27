@@ -55,13 +55,14 @@ a web browser. Everything below is free.
    the address to see the dashboard with made-up sample data.
 
 **It is free for a school.** Cloudflare's free plan allows 100,000 requests to the
-server per day (a PC sends one about every minute of play; 500 play sessions send about
-4,600; the server's own work every 5 minutes adds about 300), and its free D1 database
-allows 500 MB per database, 5 million rows read and 100,000 rows written per day. A
-busy school (500 play sessions a day) writes about a third of the daily allowance and
-keeps about 220 MB after a year. The server counts its own use, and when a day's writes
-run high it asks the PCs to send less often (the `X-Batch-Every` answer header), and
-when a day's reads run high the dashboard waits until the next day.
+server per day (a PC sends one about every minute of play and one when a game closes;
+500 play sessions send about 4,600 to 5,800; the server's own work every 5 minutes adds
+about 300), and its free D1 database allows 500 MB per database, 5 million rows read and
+100,000 rows written per day. A busy school (500 play sessions a day) writes a little
+under half of the daily allowance in the first year and keeps about 350 MB after it
+(see [Free-plan arithmetic](#free-plan-arithmetic)). The server counts its own use, and
+when a day's writes run high it asks the PCs to send less often (the `X-Batch-Every`
+answer header), and when a day's reads run high the dashboard waits until the next day.
 If a limit were ever reached, the server stops answering until midnight UTC: nothing is
 charged (the free plan has no bill), and the PCs keep their statistics for up to 7 days
 and send them later.
@@ -92,8 +93,10 @@ Control never send anything.
 | `wrangler.json` | The Worker's settings: D1 binding `DB`, static assets `./dashboard`, two crons (the daily purge, and every 5 minutes the rollups and the sweep of the live rows), `ALLOWED_ORIGINS` and `RETENTION_DAYS`, request logs (observability) off. |
 | `package.json`, `package-lock.json` | Wrangler 4.149.0 for deploying (a development tool only), the plain-English descriptions the Deploy button shows, `npm start` for Node. |
 | `.dev.vars.example` | Tells the Deploy button to ask for the `ADMIN_TOKEN` secret (empty on purpose). |
-| `handler.mjs` | The HTTP rules as a Fetch-API handler, shared by both hosts: routes, CORS, the soft rate limit, body limits, admin password, status codes. |
-| `store.mjs` | The facts (sessions, game visits, rounds, marks, students, PCs) over a D1-style SQL driver; creates and upgrades its tables itself, one version step at a time; the 5-minute rollups, KPIs, live sessions, settings, retention, the usage meter and its guards. |
+| `handler.mjs` | The HTTP rules as a Fetch-API handler, shared by both hosts: routes, CORS, the soft rate limit, body limits, admin password, the admin router (methods, parameters, guards), status codes. |
+| `store.mjs` | The facts (sessions, game visits, rounds, marks, students, PCs) over a D1-style SQL driver; creates and upgrades its tables itself, one version step at a time; the 5-minute rollups, KPIs, live sessions, settings, retention, the usage meter and its guards, and the kept parts of answers. |
+| `admin.mjs` | The research reads (the students, one student, one game, the `r_stat` metrics, retention cohorts, the PCs, player cards) and the owner's actions (forget a student, link and unlink codes, recount), in SQL over the rollups and the facts not rolled yet. |
+| `export.mjs` | The research export: each file's pinned columns (`COLUMNS`) and its pages of CSV lines, built in SQL. |
 | `rollups.mjs` | The daily rollups of the facts by the school's local day, and milestone 2's frozen daily totals: their tables, and for each rollup the one SQL `SELECT` that defines it. |
 | `schema.mjs` | Validation of the envelope (wire versions 2 and 3) and every event kind; cleans and clamps. |
 | `clock.mjs` | The school's clock: UTC offsets, local days and the exact bounds of a local day in an IANA zone, from `Intl` alone. |
@@ -102,7 +105,7 @@ Control never send anything.
 | `static.mjs` | The Node host's static file server for `dashboard/`, with the headers of `dashboard/_headers`. |
 | `dashboard/` | The insights dashboard (static files), served at `/` by both hosts. `_headers` gives every page a strict Content-Security-Policy. |
 | `warnings.mjs` | Hides Node 22's one `node:sqlite` ExperimentalWarning (and nothing else). |
-| `simulate.mjs` | Deterministic synthetic sessions for dashboard development and tests. |
+| `simulate.mjs` | A deterministic simulated school (600 children in 24 classes on 30 PCs, mostly wire version 3, at the portal sink's real batch cadence) for dashboard development, tests and measurements; `--db` writes weeks of history and rolls each day up as the cron would. |
 | `fixtures/sample-batch.json`, `fixtures/sample-batch-v3.json` | A valid v2 and a valid v3 envelope, each with every event kind of its version (shared with the portal's tests). |
 | `Dockerfile` | A minimal `node:22-alpine` image of the Node host. |
 
@@ -149,6 +152,17 @@ What can be stored is decided here, not only by what the portal chooses to send.
 * **Every number is shown.** The dashboard's answers show every group with its numbers,
   even one child's (nothing is hidden for small groups any more); only the dashboard
   password opens them.
+* **Forgetting a student.** The owner can delete one student on the dashboard (`POST
+  /v1/admin/forget`): every session, game visit, round and mark of the student's codes
+  (a code and every code linked to it), their student and PC lists, their per-student
+  rollups, live rows and links, and the marks in other sessions that recorded the
+  removal of their profile. The school-wide daily counts, in which no child can be
+  found, keep the play already counted until a recount (`POST /v1/admin/rebuild`) makes
+  them again from the facts left. D1 *Time Travel* can still restore the database to
+  any minute of the last 7 days.
+* **Downloads.** The research export (`GET /v1/admin/export`) gives the rows themselves,
+  under the same codes. Once downloaded they are outside the server's retention: keep
+  them like other school records.
 * **Retention.** The daily purge (Cloudflare: a cron at 03:23 UTC; Node: at start and
   every 24 hours) deletes the facts of play sessions that started more than
   `RETENTION_DAYS` days ago (default 400: a school year and the summer; the owner can
@@ -307,13 +321,80 @@ address plus `/v1/batch`, for example
 * `ALLOWED_ORIGINS` must list the site's origin (on Cloudflare it already lists
   `https://farmercarry.github.io`).
 
+## Updating the server
+
+**On Cloudflare** the Worker runs the copy of this folder in the owner's GitHub
+repository (`FarmerCarry/school-games-telemetry`), and Cloudflare deploys every push to
+it. To update it:
+
+1. Before the first update to milestone 2.5, measure the batch rate (below) while the
+   old server still runs.
+2. Copy this `server/` folder **byte for byte** to the root of that repository: every
+   file except that repository's own `wrangler.json`, which names its D1 database. In
+   that `wrangler.json` change only `RETENTION_DAYS`, to `"400"` for milestone 2.5.
+   Commit and push; Cloudflare deploys within a few minutes.
+3. **Check:**
+   * `https://<your worker>/v1/health` answers `{"ok": true, "accepts": [2, 3], "schema": 4}`;
+   * a real batch from a PC on wire version 2 is answered `204` (the first request after
+     the deploy may be answered `503` once, while the database is upgraded; the PC sends
+     it again);
+   * `/?demo` shows the dashboard with sample data;
+   * after signing in, the days before the update and the new "student unknown"
+     sessions show every number;
+   * the next 5-minute cron runs without errors (*Workers & Pages* →
+     `school-games-telemetry` → *Metrics*), and the meters on the Settings page move;
+   * watch one school day.
+4. Only then is the portal's wire version 3 published: a server older than milestone 2.5
+   answers `400` to a version 3 batch, and the portal drops such a batch for good.
+
+**Rolling back.** A server older than schema 4 refuses a database this one has
+upgraded, so going back is one of:
+
+* deploying this server again with a fix (the database stays as it is); or
+* restoring the database with D1 *Time Travel* (free; any minute of the last 7 days) to
+  just before the deploy, then deploying milestone 2's server. The restore is in the
+  Cloudflare dashboard (*Storage & databases* → *D1* → `school-games-telemetry` → *Time
+  Travel*) or `npx wrangler d1 time-travel restore school-games-telemetry
+  --timestamp=<the time, RFC 3339>`. Schema 4 keeps milestone 2's daily totals frozen
+  as they were, so a restore to just before the deploy is a clean milestone 2 database;
+  what arrived after that point is lost.
+
+Meanwhile the PCs keep what they could not send for up to 7 days, and send it later.
+
+**On Node,** stop the server, back up the database (see [Operations](#operations)),
+replace the folder and start it again: the Node host upgrades the database at start.
+Going back means that backup.
+
+### Measuring the batch rate first (Step 0)
+
+Before the first update to milestone 2.5, with milestone 2's server still running, open
+the D1 console (Cloudflare → *Storage & databases* → *D1* → `school-games-telemetry` →
+*Console*) and run, one at a time:
+
+```sql
+SELECT day, COUNT(*) FROM batches GROUP BY day ORDER BY day DESC LIMIT 14;
+SELECT day, SUM(sessions) FROM agg_days GROUP BY day ORDER BY day DESC LIMIT 14;
+```
+
+Divide each school day's batches by its sessions and record the ratio below. If it is
+above 16, the portal's default batch timer for wire version 3 goes from 60 to 90 seconds
+(`docs/RESEARCH_TELEMETRY_SPEC.md`, §B.6), before that version is published.
+
+| Measured on | School days | Batches per session (portal on wire version 2, 20 s timer) |
+|---|---|---|
+| not measured yet (needs the Cloudflare account) | | |
+
+For comparison, the simulated school (`simulate.mjs`) sends 16.1 batches per version 2
+session (20 s timer) and 11.5 per version 3 session (60 s timer, and one when a game
+closes).
+
 ## API
 
 Every API response (paths under `/v1/`) has `Vary: Origin`, `Cache-Control: no-store`,
 `X-Content-Type-Options: nosniff` and, for an origin in `ALLOWED_ORIGINS`,
 `Access-Control-Allow-Origin: <that origin>` and `Access-Control-Expose-Headers:
 Retry-After, X-Batch-Every`. Credentials are never allowed. Error bodies are `{"error": "<short
-reason>"}` (a `429` from the read guard adds `until`) and never echo the request. Every request that reaches the server (including
+reason>"}` (a `429` from a guard adds `until`) and never echo the request. Every request that reaches the server (including
 `OPTIONS`, health checks and, on Node, dashboard files) takes a token from the client's
 rate-limit bucket; an empty bucket answers `429` with `Retry-After` in seconds.
 
@@ -387,7 +468,7 @@ hits/misses/`rt`/`il` entries 100,000, each frame bucket 10⁷, game visit 6 h, 
 ### `OPTIONS *`
 
 `204`. For an allowed origin also `Access-Control-Allow-Methods: GET, HEAD, POST,
-OPTIONS`, `Access-Control-Allow-Headers: Content-Type, Authorization` and
+DELETE, OPTIONS`, `Access-Control-Allow-Headers: Content-Type, Authorization` and
 `Access-Control-Max-Age: 86400`.
 
 ### `GET /v1/health`
@@ -398,24 +479,59 @@ before a portal that sends version 3 is published.
 
 ### Admin endpoints
 
-`GET /v1/admin/kpis`, `GET /v1/admin/live` and `GET` and `POST /v1/admin/settings` need
-`Authorization: Bearer <ADMIN_TOKEN>` (compared in constant time). Without a valid token:
-`401` with `WWW-Authenticate: Bearer`. With no valid `ADMIN_TOKEN` set: `404
-{"error": "admin password not set"}` (the dashboard shows this as "the password was
-not set"). A method a route does not take: `405` with `Allow`. The request that upgrades
-the database answers `503` as for batches. Every answer has `"v": 1` and the school's
-clock, `"clock": {"tz", "source", "offsetMin", "today"}` (`today` is the school's local
-day).
+| Route under `/v1/admin/` | Methods | Guard |
+|---|---|---|
+| `kpis`, `students`, `student`, `game`, `stats`, `cohorts`, `pcs`, `cards` | `GET` | reads |
+| `export` | `GET` | export reads |
+| `live` | `GET` | none |
+| `settings` | `GET`, `POST` | none |
+| `forget`, `rebuild` | `POST` | writes |
+| `link` | `POST`, `DELETE` | writes |
+
+`HEAD` goes with every `GET`. Every admin route needs `Authorization: Bearer
+<ADMIN_TOKEN>` (compared in constant time). Without a valid token: `401` with
+`WWW-Authenticate: Bearer`. With no valid `ADMIN_TOKEN` set: `404 {"error": "admin
+password not set"}` (the dashboard shows this as "the password was not set"). A method a
+route does not take: `405` with `Allow`, the route's methods (with `HEAD` for a `GET`
+route) and `OPTIONS`. The request that upgrades the database answers `503` as for
+batches. Every JSON answer has `"v": 1` and the school's clock, `"clock": {"tz",
+"source", "offsetMin", "today"}` (`today` is the school's local day).
+
+**Parameters.** `from`, `to` and `band` as for the KPIs below: days `from`..`to` of the
+school's clock (inclusive, at most 366; default the 30 days ending today) and `band`
+`all` (default), `6-7`, `8-9`, `10-11` or `unknown`. A student code `u` is 12 lowercase
+hex, or `c` and 4 lowercase hex (a player card); a game `slug` is as in batches. A
+malformed parameter, or a missing one that has no default: `400 {"error": "<its name>"}`.
+
+**Bodies.** `POST` takes a JSON body (`Content-Type: application/json`, at most 4 KB);
+`DELETE /v1/admin/link` may take one. Over 4 KB: `413`; another media type: `415`; not
+JSON: `400 {"error": "json"}`; not an object: `400 {"error": "body"}`; a field the route
+does not take: `400 {"error": "field"}`. There is no cookie, so another site cannot make
+a browser send these requests.
 
 **Nothing is hidden:** every group is shown with its numbers, even a single session or
 a single child (`minSessions` is `0`, and no group is ever `suppressed`). A dashboard
 should mark small numbers as early signs instead.
 
-**The free reading allowance.** D1's free plan stops every query for the rest of the UTC
-day once 5 million rows have been read. Once the day's reads pass 4.2 million (as far as
-the server's own meter knows), `GET /v1/admin/kpis` answers `429 {"error": "reads",
-"until": "03:00"}`, `until` being the next 00:00 UTC on the school's clock; `live` and
-`settings` still answer, and batches are never refused.
+**The free allowances.** D1's free plan stops every query for the rest of the UTC day
+once 5 million rows have been read, and every write once 100,000 rows have been
+written. As far as the server's own meter knows: once the day's reads pass 4.2 million,
+the admin reads answer `429 {"error": "reads", "until": "03:00"}`, `until` being the next
+00:00 UTC on the school's clock; export pages answer so from 3.5 million, so that an
+export stops well before the dashboard does; once the day's writes pass 90,000, `forget`,
+`link` and `rebuild` answer `429 {"error": "writes", "until": ...}`. `live` and
+`settings` always answer, and batches are never refused.
+
+**Kept parts.** Each read takes the days already rolled up from the rollups and the
+days after them (today, and yesterday until the night's roll) from the facts, through
+the rollups' own SQL, so both count alike (`stats`, `cohorts` and a game's `stats` and
+flows take the rolled days only). The part of the rolled days is kept in
+`kpi_cache` under the route, its parameters and the rollup version `rv`, and in the
+instance's memory for an hour; on Cloudflare the part of the other days is kept 10
+minutes (on Node it is made on every request). A part over 1 MB is not kept. Each roll
+(a recount's too), forget, link and unlink raises `rv`, so later answers are made again
+(a Worker instance that kept a part in memory sees the new `rv` within 5 minutes).
+Every answer takes at most 20 statements.
 
 #### `GET /v1/admin/kpis?from=YYYY-MM-DD&to=YYYY-MM-DD&band=6-7`
 
@@ -618,6 +734,232 @@ Anything else is `400 {"error": "<field>"}`; another media type `415`.
   (two). Keeping more is refused with `400 {"error": "storage"}` when the database,
   growing in proportion, would pass the storage guard.
 
+#### `GET /v1/admin/students?from&to&band`
+
+Every student who played in the period, by code. A student is a canonical code: an
+older code linked to a newer one counts as the newer one, with its history. `band`
+keeps the student-days whose first session was in that band. Today and the other days
+not rolled yet come from the facts.
+
+```jsonc
+{ "v": 1, "range": { "from": "2026-10-09", "to": "2026-10-29", "days": 21, "band": "all" },
+  "students": [
+    { "u": "06680e4e7bb2", "label": "0668",    // label: the start of the code, as the dashboard shows it
+      "kind": "profile",                       // profile | card (a player card, phase 2)
+      "linked": ["29d9f70dff0c"],              // older codes that count as this student
+      "band": "6-7", "bandFirst": "6-7",       // the band of the latest and of the first session; unknown when not set
+      "firstDay": "2026-10-11", "lastDay": "2026-10-27",   // the first and last play the server keeps
+      "days": 3, "sessions": 3, "minutes": 20.3, "rounds": 33, "w": 13, "l": 10, "q": 2,   // in the period; rounds: ended
+      "games": 10, "top": ["rail-rush", "block-burst", "tunnel-blitz"],   // games tried; the top 3 by minutes
+      "pcs": 1,                                // PCs it ever played on
+      "knownBefore": true,                     // the profile was made before its first play here
+      "removed": null,                         // the first day a PC removed the profile
+      "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9.4, 9.3, 12.2] }   // minutes in each of the 13 school weeks ending with to's week
+  ],
+  "clock": { "tz": "Asia/Riyadh", "source": "pcs", "offsetMin": 180, "today": "2026-10-29" } }
+```
+
+#### `GET /v1/admin/student?u&from&to`
+
+One student's page; `u` is any of their codes. A code the server does not know: `404
+{"error": "student"}`. `days`, `games` and `weekly` come from the rollups (and the facts
+of the days not rolled yet); `hours`, `rounds`, `sessions` and `persist` from the facts.
+
+```jsonc
+{ "v": 1, "range": { "from": "2026-10-09", "to": "2026-10-29", "days": 21, "band": "all" },
+  "student": { "u": "06680e4e7bb2", "label": "0668", "kind": "profile", "band": "6-7", "bandFirst": "6-7",
+    "firstDay": "2026-10-11", "lastDay": "2026-10-27",
+    "profileMadeDay": "2026-04-07",            // the earliest profile's start: its first session's day less the profile's age then
+    "knownBefore": true, "removed": null,
+    "pcs": ["C7A6", "CE60"],                   // the PCs' labels
+    "linked": ["29d9f70dff0c"] },
+  "days": [ { "day": "2026-10-11", "sessions": 1, "minutes": 10.3, "opens": 3, "rounds": 8, "w": 4, "l": 1, "q": 1 } ],
+  "hours": [0, 0, 0, 0, 0, 0, 0, 0, 0, 37.8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],   // minutes by the hour a game was opened
+  "games": [                                   // by minutes
+    { "slug": "candy-rope", "minutes": 12.3, "rounds": 15, "w": 12, "l": 2, "d": 0, "e": 0, "q": 1, "hits": 0, "misses": 0,
+      "rtMean": null, "bestScore": 600, "avgScore": 327.1, "ddaMean": null,   // null where the game reports none
+      "hearts": 0 }                            // heart presses on less off
+  ],
+  "weekly": [                                  // per school week and game, with rounds: sums for growth charts
+    { "week": "2026-10-11", "slug": "dino-3d", "rounds": 5, "w": 5, "l": 0, "hits": 254, "misses": 86, "rtSum": 264910, "rtN": 254,
+      "scoreSum": 1900, "scoreN": 5, "ddaSum": 1877, "ddaN": 5 }
+  ],
+  "rounds": [                                  // the 600 latest, newest first
+    { "day": "2026-10-27", "time": "09:41", "slug": "troll-level", "id": "endless", "code": "e", "ms": 68041, "score": 50,
+      "tier": 0, "dda": null, "hits": 0, "misses": 0, "rtMean": null,
+      "attempt": 2,                            // the student's attempt at the game (its rounds ended so far)
+      "minIntoSession": 10 }
+  ],
+  "sessions": [                                // the 100 latest, newest first
+    { "day": "2026-10-27", "time": "09:31", "pc": "CE60", "minutes": 9.5, "games": ["candy-rope", "tunnel-blitz"],
+      "rounds": 11, "wins": 3, "why": "h" }    // why: u unload, p player change, h hand-over, i idle hand-over
+  ],
+  "persist": { "same": 5, "level": 0, "game": 2, "stop": 1 },   // after a loss (solo): the same round, another level, another game, nothing
+  "clock": { ... } }
+```
+
+#### `GET /v1/admin/game?slug&from&to&band`
+
+One game's page. `stats`, `flowsIn` and `flowsOut` cover the rolled days only (up to
+last night); the rest also today.
+
+```jsonc
+{ "v": 1, "slug": "bubble-bop", "range": { ... },
+  "bands": [ { "band": "8-9", "students": 50,
+    "twoDays": 13,                             // students who played it on 2 days or more
+    "minutes": 149, "opens": 98 } ],
+  "daily": [ { "day": "2026-10-09", "students": 0, "minutes": 0, "opens": 0 } ],   // every day of the period
+  "stats": { "columns": ["a", "metric", "k1", "k2", "n", "students", "w", "l", ...], "rows": [["", "attempt", "1", "", 5, 5, 5, 0, ...]] },
+  "firstWin": [                                // per round id: solo rounds ended up to and including the first win
+    { "id": "w1-1", "students": 114, "median": 1, "p75": 1,   // of the students who won it
+      "never": 11 } ],                         // students who have not won it yet
+  "paired": { "columns": ["u", "a", "part", "rounds", "w", "l", "hits", "misses", "rtSum", "rtN", "scoreSum", "scoreN", "ddaSum", "ddaN"],
+    "rows": [["5e3dbbb11634", "10-11", 0, 1, 0, 1, 14, 4, 6570, 14, 370, 1, 194, 1]] },   // part 0: the first third of the period, 1: the last; students with rounds in both
+  "flowsIn": [ { "from": "", "n": 46 }, { "from": "rail-rush", "n": 10 } ],   // the game before it ('': it came first)
+  "flowsOut": [ { "to": "", "n": 29 }, { "to": "tic-tac-toe", "n": 9 } ],     // the game after it ('': the session ended)
+  "clock": { ... } }
+```
+
+#### `GET /v1/admin/stats?from&to&metrics=a,b,...&band[&slug]`
+
+The research metrics of `r_stat`, summed over the rolled days of the period (up to
+`range.rolledThrough`), for every game or the game `slug`. `metrics` is a comma-separated
+subset of `hour, rhour, sesslen, daymin, games, visitlen, flow, attempt, tenure, persist,
+fatigue, qrun, tier, tutorial` (`docs/RESEARCH_TELEMETRY_SPEC.md`, §D.2, gives each
+one's keys `k1` and `k2`); the answer lists them in that order. Rows are sorted by their
+keys.
+
+```jsonc
+{ "v": 1, "range": { ..., "rolledThrough": "2026-10-28" }, "metrics": ["hour", "flow"], "slug": null,
+  "columns": ["a", "metric", "slug", "k1", "k2", "n", "students", "w", "l", "d", "e", "q", "ms", "wall_ms", "win_ms", "hits",
+    "misses", "rt_sum", "rt_n", "score_sum", "score_n", "tier_sum", "tier_n", "dda_sum", "dda_n", "inputs", "gap_sum", "gap_n"],
+  "rows": [ ["", "flow", "", "air-hockey", "", 1, 0, 0, ...] ],
+  "clock": { ... } }
+```
+
+#### `GET /v1/admin/cohorts?from&to&band`
+
+Retention by the week a student's profile started (the earliest of their codes), for
+the school weeks of the period from `v3Since` on (`[]` before any version 3 batch):
+`size` students, and how many of them played in that week and each of the 12 after it,
+over the rolled days (`null` for a week not reached yet; weeks after `to` count while
+they are reached).
+
+```jsonc
+{ "v": 1, "range": { ... }, "weekStart": "sun",
+  "cohorts": [ { "week": "2026-10-18", "size": 45, "active": [45, 18, null, null, null, null, null, null, null, null, null, null, null] } ],
+  "clock": { ... } }
+```
+
+#### `GET /v1/admin/pcs?from&to`
+
+Every PC with a code that played in the period, by code.
+
+```jsonc
+{ "v": 1, "range": { ... },
+  "pcs": [ { "p": "01e890fc1672", "label": "01E8", "firstDay": "2026-10-28", "lastDay": "2026-10-28",
+    "days": 1, "sessions": 4,
+    "students": 4,                             // distinct, from the facts
+    "guests": 0, "minutes": 19.6,
+    "smoothShare": 0.9278, "stallShare": 0.0008,   // frames up to 20 ms; over 250 ms
+    "avgLoadMs": 926, "slowInputShare": 0.0198,    // input latency of 50 ms or more
+    "errors": 0, "npMax": 4, "newProfiles": 4, "z": "Asia/Riyadh", "build": "5c18c6d2d1c052ad",
+    "flags": ["forgets"] } ],                  // full, forgets, choppy, old (below)
+  "clock": { ... } }
+```
+
+Flags: `full`, it reached 24 profiles; `forgets`, on some day it made 3 or more new
+profiles, in half or more of its sessions; `choppy`, under 80% of its frames were
+smooth; `old`, its build is not that of the PC seen last.
+
+#### `GET /v1/admin/export?file&from&to[&after]`
+
+One page of a research file: `200`, `Content-Type: text/csv; charset=utf-8`, at most
+5,000 lines **without a header** (each ending in a line feed), `X-Rows: <lines>` and,
+unless it is the last page, `X-Next: <cursor>`; the next page is the same request with
+`&after=<cursor>`. A cursor that is not this file's: `400 {"error": "after"}`. The
+dashboard writes the header (its data dictionary lists the same columns as
+`export.mjs` `COLUMNS`), the BOM and the zip.
+
+* No value is quoted, because none can hold a comma, a quote or a line break: each is a
+  number, an ISO date, a time `HH:MM:SS` or a token the server validated (codes, slugs,
+  round ids, bands, builds, zone names, the words below). Empty means unknown or not
+  applicable; `-1` never appears; `.` is the decimal mark.
+* Days, weekdays (1 = Sunday … 7 = Saturday) and times are the school's clock, each at
+  the row's own moment (a round's start, a mark's time).
+* `student_linked` is the student's canonical code (an older code linked to a newer one
+  gives the newer one); empty for guests.
+* Pages follow a key, never an offset, so each row is read once. A daily file's page
+  covers a few weeks; one can be empty and still have `X-Next`.
+
+| `file` | One line per | A page |
+|---|---|---|
+| `students` | student code with play in the period | 5,000 codes, by code |
+| `sessions` | session started in the period | 400 sessions, by start |
+| `visits`, `rounds`, `events` | game visit, round, mark (of those sessions) | 5,000 lines, in the sessions' order |
+| `student_days` | student code and school day | 5,000 lines, at most 14 days |
+| `daily_games` | day, clock, band and game: milestone 2's frozen UTC days (`clock` `utc`, without students or hearts), then the school's days | 5,000 lines, at most 30 days |
+| `pcs` | PC code with play in the period | 5,000 codes, by code |
+
+Columns, in their pinned order:
+
+| `file` | Columns |
+|---|---|
+| `students` | student, student_label, student_linked, kind, band_first, band_last, profile_made_day, first_day, last_day, days_active, sessions, minutes, rounds, wins, losses, quits, games_tried, favourite_game, pcs, known_before, removed_day |
+| `sessions` | session, student, student_linked, pc, kind, wire_version, band, day, weekday, start_time, minute_of_day, start_utc, clock_source, mode, build, cores, memory_gb, screen, classroom_mode, profiles_on_pc, new_profile, profile_age_days, days_since_last, profile_age_bucket, days_since_last_bucket, level_start, level_ups, games_opened, rounds, engaged_s, end_t_s, end_reason, timer_minutes, timer_ended |
+| `visits` | session, visit, student, student_linked, band, day, open_time, open_s, close_s, open_seconds, engaged_s, game, source, plays_before, plays_before_bucket, favourite_at_open, load_ms, error, rounds_started, rounds_ended, tutorial, hearts_on, hearts_off, il_lt8, il_lt16, il_lt33, il_lt50, il_lt100, il_ge100, frames_smooth, frames_ok, frames_choppy, frames_stall, closed, previous_game, next_game |
+| `rounds` | session, visit, round, student, student_linked, pc, band, day, weekday, time, start_s, minutes_into_session, game, level, outcome, previous_outcome, two_player, attempt, replay_in_session, engaged_ms, wall_ms, score, tier_start, tier_end, dda_level, hits, misses, accuracy, rt_lt300, rt_lt500, rt_lt800, rt_lt1200, rt_lt2000, rt_ge2000, rt_mean_ms, rt_n, inputs, inputs_per_min, idle_lapses, pauses |
+| `events` | session, student, student_linked, day, time, t_s, kind, game, value |
+| `student_days` | student, student_linked, day, weekday, band, sessions, minutes, opens, games, rounds, wins, losses, draws, ends, quits, hits, misses, rt_mean_ms, level_ups, first_time, last_time, pcs |
+| `daily_games` | day, clock, band, game, sessions, students, opens, minutes, starts, ends, wins, losses, draws, ends_neutral, quits, hearts_on, hearts_off, avg_tier, accuracy |
+| `pcs` | pc, pc_label, first_day, last_day, days, time_zone, build, cores, memory_gb, screen, sessions, students, guest_share, minutes, smooth_share, stall_share, avg_load_ms, slow_input_share, failures, profiles_max, new_profiles |
+
+Words: `kind` (students) `profile`, `card`; `kind` (sessions) `student`, `guest`,
+`unknown` (wire version 2); `clock_source` `w` (from the PC's elapsed seconds), `r`
+(from the receipt time); `end_reason` `unload`, `switch` (another player), `handover`,
+`idle`; `error` `timeout`, `script`, `load`; `outcome` and `previous_outcome` `win`,
+`loss`, `draw`, `end`, `quit`, empty for a round not ended; `tutorial` `none`, `start`,
+`done`; `kind` (events) `level_up`, `heart_on`, `heart_off`, `tutorial_start`,
+`tutorial_done`, `timer_start`, `timer_cancel`, `timer_end`, `profile_removed`, `linked`,
+with `value` the new level, the timer's minutes, or the removed or linked code. Flags
+are `0` or `1`.
+
+#### `POST /v1/admin/forget`
+
+Body `{"u": "<code>"}`: forgets the student of that code, with every code linked to it
+(see "What is collected and kept"). Answers how much went:
+
+```json
+{ "v": 1, "removed": { "codes": 2, "sessions": 14, "visits": 41, "rounds": 160, "marks": 30 }, "clock": { ... } }
+```
+
+A code the server does not hold answers zeros.
+
+#### `POST /v1/admin/link` and `DELETE /v1/admin/link?u=`
+
+`POST` body `{"u": "<code>", "to": "<code>"}`: `u`, and every code linked to it, count
+as `to`'s student from now on, their history included (one hop deep: links to `u` move
+to `to`'s canonical code). Answers `{"ok": true, "u", "to": "<to's canonical code>"}`. A
+code the server does not know: `404 {"error": "student"}`; `to` is `u` or already counts
+as `u`: `400 {"error": "cycle"}`. A PC links codes the same way when a profile carries
+an older code of the same child (the `cd` mark).
+
+`DELETE` with `?u=` (or a JSON body `{"u"}`): `u` counts as itself again. Answers
+`{"ok": true}`, or `{"ok": false}` when `u` had no link.
+
+#### `POST /v1/admin/rebuild`
+
+Body `{}`: every rolled day since `factsSince` (and not trimmed by the storage guard)
+waits to be rolled again in full; the 5-minute cron rebuilds one day at a time, newest
+first, within the day's rebuild allowance. Answers `{"pending": <days waiting>}`. Use it
+after a forget, so that the school-wide counts lose that student too.
+
+#### `GET /v1/admin/cards`
+
+Phase 2 (player cards; not built yet): `{"cards": [{"code", "set", "band", "madeDay",
+"used"}]}`, empty until cards are printed. `POST` (making a set of cards) is not offered
+yet and answers `405`.
+
 ## Operations
 
 * **Backup.** Cloudflare: D1 can restore the database to any minute of the last 7 days
@@ -680,12 +1022,9 @@ Anything else is `400 {"error": "<field>"}`; another media type `415`.
   writes 12 rows (its session row is 4: the row, `UNIQUE (s)` and two indexes), a later
   batch 5, a batch of 200 events one row per visit and round plus 2; a v2 batch about
   13. A batch takes at most 20 statements, and the request that upgrades the database
-  at most 45 (D1 allows 50 per request). Measured worst cases otherwise: a KPI answer
-  over frozen, rolled and open days 18 statements (limit 20), the 5-minute cron's full
-  rebuild of a day 24 (35), its first roll with the zone vote 17, the daily purge with
-  frozen days and the storage guard 24 (25). For a busy school (500 play sessions a day,
-  9.2 batches each at the 60 s interval) see `docs/RESEARCH_TELEMETRY_SPEC.md`, "Budget
-  math": about 33,000 rows written a day in the first year and about 220 MB after it.
+  at most 45 (D1 allows 50 per request). The other invocations' worst cases are in
+  [Free-plan arithmetic](#free-plan-arithmetic), with the rows and bytes of a busy
+  school.
 
 ### Storage
 
@@ -698,12 +1037,85 @@ Schema 4 (`docs/RESEARCH_TELEMETRY_SPEC.md`, "Storage on D1", has the exact colu
 | `st_students`, `st_pcs`, `st_student_pcs`, `st_student_games`, `aliases`, `cards` | Per student code: label, first and last play, bands, profile age; per PC code: first and last play, zone, buckets, build; who played on which PC; rounds ended per student and game (for attempt numbers); links from older codes to a student's code, one hop deep; player cards. |
 | `settings`, `usage`, `roll_days` | The school's zone and where it came from (and `tz_epoch`, raised with each change), the week start, the retention the owner chose, `facts_since`, `legacy_until`, `v3_since`, the rollup version `rv`, `rolled_through`, `trimmed_before`, and the cron's bookkeeping (`rebuild`: days may wait for a full rebuild; `trimmed_size`); D1 rows read, written and read by rebuilds per UTC day, and the database size (each instance adds its counts once a minute); which local days are rolled up, whether late data or a new zone made one dirty, and when it was rolled. |
 | `r_day`, `r_game_day`, `r_level_day`, `r_source_day`, `r_device_day`, `r_student_day`, `r_student_game`, `r_pc_day`, `r_stat` | Per-day rollups of the facts by the school's local day: milestone 2's daily totals with students, guests, two-player rounds, hearts, tutorials and session endings; per student code and per student and game; per PC; and `r_stat`, the research metrics (hour of play, session length, minutes per student-day, games per session, visit length, game-to-game flows, attempts, weeks of practice, what follows a round, tiredness, losses before quitting, tier, tutorials) per day, band and game. |
-| `live`, `batches`, `kpi_cache`, `meta` | Sessions in the 5-minute live window (with codes and wire version); v2 batch ids for de-duplication; kept parts of KPI answers, with the rollup version they were made with; the schema version. |
+| `live`, `batches`, `kpi_cache`, `meta` | Sessions in the 5-minute live window (with codes and wire version); v2 batch ids for de-duplication; kept parts of admin answers, with the rollup version they were made with; the schema version. |
 | `agg_days`, `agg_games`, `agg_levels`, `agg_sources`, `agg_devices` | Only on a database milestone 2 used: its daily totals per UTC receipt day, frozen. |
 
 Every table but `st_sessions` is `STRICT, WITHOUT ROWID`. The only indexes beyond the
 primary keys are `st_sessions_time`, `st_sessions_student`, `r_student_day_u`,
 `r_student_game_u` and `r_stat_metric`. There are no other columns.
+
+### Free-plan arithmetic
+
+Measured on the Node driver, which bills a written row once for its table and once for
+each index as D1 does, with the simulated school of `simulate.mjs`: 600 children in 24
+classes on 30 PCs, about 465 play sessions a school day, 11.5 batches per version 3
+session (60 s timer, and one when a game closes), 3.6 game visits, 11.7 rounds and 9.8
+engaged minutes per session. Scaled to a busy school of 500 sessions a school day:
+
+| Rows written per school day | Simulated school | 500 sessions |
+|---|---|---|
+| Batches: 5.9 rows each (facts, student and PC rows, live rows, usage) | 30,400 | ≈ 32,700 |
+| The night's first roll of the day: ≈ 6,600 rollup rows (4,400 of them `r_stat`), their index entries and the live sweep | 12,300 | ≈ 13,200 |
+| Re-rolls of days that late batches reached | 300–450 each | ≈ 500 |
+| **First year** | | **≈ 46,000 (46%)** |
+| + the facts of a day deleted after 400 days (about 23 rows and index entries a session) | | + ≈ 11,400 |
+| + the rollups of a day deleted after 800 days | | + ≈ 13,200 |
+| **From the third year** | | **≈ 71,000 (71%)** |
+
+From the third year a busy UTC day's writes can pass 60,000, after which the PCs are
+asked to send every 180 s (`X-Batch-Every`) for the rest of that UTC day. In Riyadh that
+happens only at night, when the roll and the deletions run after the school day. The
+daily limit of 100,000 stays out of reach.
+
+| Storage | Measured | 500 sessions a school day |
+|---|---|---|
+| Facts | 1.4 KB a session | ≈ 150 MB for 400 days (about 220 school days) |
+| Rollups | 0.85 MB a school day, two thirds of it `r_stat` and its index | ≈ 190 MB a year of 220 school days |
+| **After the first year** | | **≈ 345 MB (69%)** |
+
+The rollups are kept 800 days, so at this size the database reaches the storage guard
+(425 MB) in its second year. The guard then deletes the round rows of the oldest 30 days
+of facts each time the file has grown again, but the rollups keep growing until their
+first days pass 800 days, near the 500 MB limit. The spec's budget assumed 0.3 MB of
+rollups a school day; a school this busy should watch *Settings* → storage. Read costs
+cannot be measured on Node (`node:sqlite` reports the rows returned, not the rows
+SQLite read): the spec (`docs/RESEARCH_TELEMETRY_SPEC.md`, "Budget math") estimates 0.6
+to 1.2 million rows read on a typical day with the dashboard open, and 2.1 to 2.6
+million more for a school year's export.
+
+**Requests:** about 5,750 batches, 289 crons and about 1,500 dashboard calls a day; a
+school year's export adds about 700 pages (most of them `sessions`, `rounds` and
+`visits`). About 8% of the 100,000.
+
+**Statements and CPU per invocation.** D1 allows 50 statements per invocation; this
+server keeps an admin answer to 20, the 5-minute cron to 35 and the daily purge to 25.
+The Workers free plan allows 10 ms of CPU per invocation (only CPU counts, not the time
+waiting for D1). The CPU column is JavaScript's time outside SQLite (wall time less the
+time in `db.batch`, the median of cold runs) over 30 days of the simulated school with
+120 and with 450 sessions a school day, on a 2.1 GHz server core:
+
+| Invocation | Statements | CPU outside SQLite |
+|---|---|---|
+| `kpis` over frozen, rolled and open days | 18 | 7–10.5 ms |
+| `students` (with 13 weeks of each of about 600 students) | 9 | 1.5–2.2 ms |
+| `student` | 15 | 0.7–1 ms |
+| `game` | 15 | 1.5–2.1 ms |
+| `stats` (every metric of every game) | 5 | 3.3–4.6 ms |
+| `cohorts` | 5 | 0.5 ms |
+| `pcs` | 9 | 0.6 ms |
+| `cards`, `live`, `settings`, `POST settings` | 3, 5, 2, at most 7 | under 0.1 ms |
+| an `export` page (`rounds`, `visits` or `events`: 5,000 lines) | 3 | 0.8–1.3 ms |
+| another `export` page | 3 | under 0.6 ms |
+| `forget`, `link`, `DELETE link`, `rebuild` | 17, 7, 5, 5 | under 0.1 ms |
+| the 5-minute cron's full rebuild of a day | 24 | |
+| its first roll with the zone vote | 17 | |
+| the daily purge with frozen days and the storage guard | 24 | |
+
+The statement counts include the settings re-read (every 5 minutes) and the usage flush
+(once a minute) that an invocation may carry. The tests hold the admin answers to 10 ms
+and an export page to 3 ms on this measure, with 120 sessions a day. `kpis` at a busy
+school is close to the limit when nothing of it is kept yet (the first request for a
+period after a roll), and takes 6.5–7 ms with the rolled days' part kept.
 
 ## Development
 
@@ -720,7 +1132,13 @@ primary keys are `st_sessions_time`, `st_sessions_student`, `r_student_day_u`,
   `/__scheduled` to run the daily purge, or `/__scheduled?cron=*/5+*+*+*+*` for the
   rollups and the sweep of the live rows. `npx wrangler deploy --dry-run --outdir /tmp/out`
   bundles without deploying.
-* Synthetic data for the dashboard: `node server/simulate.mjs --url http://127.0.0.1:8787`
-  posts deterministic sessions (same `--seed`, same batch ids, so a repeat adds nothing);
-  `node server/simulate.mjs --db server/data/dev.db --days 28` writes four weeks of
-  history straight into a Node database file. Every generated batch passes `schema.mjs`.
+* Synthetic data for the dashboard: a simulated school in Asia/Riyadh (600 children in
+  24 classes, a lab of 30 PCs, Sunday to Thursday; guests, three PCs still on wire
+  version 2, one PC that forgets its profiles every night, children on two PCs whose
+  codes a teacher joined), sending at the portal sink's real cadence.
+  `node server/simulate.mjs --url http://127.0.0.1:8787 [--sessions 300]` posts the
+  sessions of the last half hour to a running server (same `--seed`, same batch ids, so
+  a repeat adds nothing); `node server/simulate.mjs --db server/data/dev.db --days 28
+  [--sessions 120]` writes four weeks of history straight into a Node database file (stop
+  the server first, or use another file) and rolls each day up with the store's own
+  rollups, as the cron would. Every generated batch passes `schema.mjs`.

@@ -314,8 +314,10 @@ Teacher "clear" removes the `sg:site:tm:` queues too (not the sharing note
 
 ## Ingest server (server/)
 
-Node ≥ 22, no dependencies (`node:http`, `node:sqlite`). Deployed separately from
-GitHub Pages (any small VM or container; see `server/README.md`).
+One Fetch-API core on two hosts: a Cloudflare Worker with D1 (the school's, deployed
+from a copy of `server/`), or Node ≥ 22 with no dependencies (`node:http`,
+`node:sqlite`) on any small VM or container. Deployed separately from GitHub Pages; see
+`server/README.md`.
 
 * `POST /v1/batch` → `204`. Validates the envelope and every event against the rules
   above (unknown event kinds and malformed events are dropped; an invalid envelope is
@@ -332,8 +334,15 @@ GitHub Pages (any small VM or container; see `server/README.md`).
   reaction-time and input-latency histograms, frame smoothness, load times, age-band
   preferences, replay distributions, level-ups, data quality), live sessions, students,
   guests and PCs in the last 5 minutes, and the school's clock and retention. Every
-  group is shown, however small. Admin reads but live and settings answer `429` once
-  the day's D1 reads near the free limit.
+  group is shown, however small.
+* The research reads, with the same token (milestone 2.5 below): `students`, `student?u`,
+  `game?slug`, `stats?metrics`, `cohorts`, `pcs` and `cards` (phase 2), and
+  `export?file` (one page of a research CSV file, its next page's cursor in `X-Next`);
+  and the owner's actions, `POST forget {u}`, `POST link {u, to}`, `DELETE link?u` and
+  `POST rebuild {}`. Each route takes only its methods (`405` with `Allow` otherwise);
+  bodies are JSON of at most 4 KB. Admin reads but live and settings answer `429` once
+  the day's D1 reads near the free limit (export pages earlier), and the actions once
+  the day's writes do.
 * Retention: play facts older than `RETENTION_DAYS` (default 400) or the owner's choice
   are deleted daily; the daily rollups are kept 800 days.
 * Configuration by environment: `PORT` (0–65535), `HOST`, `DB_PATH`, `ALLOWED_ORIGINS`,
@@ -491,7 +500,7 @@ The binding spec is `docs/RESEARCH_TELEMETRY_SPEC.md`. Decisions (with the produ
 9. The server ships first; the portal sends v3 only once `/v1/health` on the deployed
    server answers `"accepts": [2, 3]`.
 
-The server so far:
+The server:
 
 * **Schema 4** (`server/store.mjs`): the facts `st_sessions`, `st_visits`, `st_rounds`,
   `st_marks`, the student and PC tables, `aliases`, `cards`, `settings`, `usage`,
@@ -528,12 +537,39 @@ The server so far:
   rolled yet, and add them up. They keep milestone 2's shape with nothing suppressed
   (`minSessions` 0) and add student counts by canonical code, data quality and the
   school's clock. The part of an answer from closed days is kept in `kpi_cache` per
-  rollup version (`rv`, raised by every roll and purge) and shared by every instance. A
+  rollup version (`rv`, raised by every roll and purge, and by a forget or a change of
+  links) and shared by every instance. A
   test locks the answers equal to milestone 2's store from Git, with its privacy floor
   set to 0, on the same v2 batches, open, rolled or both.
 * **Retention** (daily purge): facts after 400 days (`RETENTION_DAYS`, or the owner's 760),
   with the students and PCs last seen before then; frozen days on the same rule; above
   425 MB the round rows of the oldest 30 days. `facts_since` moves with the cutoff.
+* **Research reads** (`server/admin.mjs`): the students (each canonical code with its
+  days, minutes, rounds, games, PCs, links and 13 weeks of minutes), one student's page
+  (days, hours, games, weeks per game, the 600 latest rounds and 100 latest sessions,
+  what follows a loss), one game's page (bands, days, `r_stat` rows, tries before the
+  first win, paired first and last thirds, flows in and out), the `r_stat` metrics,
+  retention cohorts by the week a profile started, and the PCs with their flags. Like
+  the KPIs they read the rolled days from the rollups and the open days from the facts
+  through the rollups' own `SELECT`, keep the closed part per `rv`, and stay within 20
+  statements; large answers (the students, the metrics) go from SQL to the reply as
+  JSON text, so that a Worker stays within its 10 ms of CPU.
+* **The research export** (`server/export.mjs`): eight files (students, sessions,
+  visits, rounds, events, student-days, daily games with milestone 2's frozen days, PCs)
+  with pinned columns; every CSV line is built in SQL from validated tokens, so no value
+  needs quoting, and pages follow a key (400 sessions, or 5,000 lines) so each row is
+  read once. The dashboard adds the headers and zips the files.
+* **The owner's actions**: forgetting a student deletes the facts and per-student rows
+  of the student's codes (the school-wide counts keep them until a recount); a link
+  makes an older code count as a newer one, history included, one hop deep; a recount
+  marks every rolled day for a rebuild by the cron.
+* **The simulated school** (`server/simulate.mjs`): 600 children in 24 classes on 30 PCs
+  in Asia/Riyadh, mostly wire v3 with some v2, sending at the sink's real cadence; with
+  `--db` it writes weeks of history and rolls them up with the real `rollupStep`. The
+  tests measure statements, rows written and CPU on it.
+* **Updating** copies `server/` into the owner's Worker repository (all but its
+  `wrangler.json`, where only `RETENTION_DAYS` changes); going back after schema 4 means
+  a fixed redeploy or a D1 Time Travel restore (7 days) and milestone 2's server.
 
 ## Milestones
 
@@ -541,7 +577,7 @@ The server so far:
 |---|---|
 | **M1** | Kit v2 (profile, track, dda, sg:telemetry), `shared/juice.js`, portal profiles/age bands/XP, telemetry sink, ingest server with KPI queries, zero-BGM sweep + guard, `bubble-bop` replaces the academy, DDA reference integrations. |
 | **M2** | Cloudflare host (one-click deploy, daily aggregates on free D1), the insights dashboard, telemetry switched on. |
-| M2.5 | Research telemetry: wire v3 with pseudonymous student and PC codes, row-level facts and rollups on schema 4, the school's clock, no suppression, per-student and learning views, research export. |
+| M2.5 | Research telemetry: wire v3 with pseudonymous student and PC codes, row-level facts and rollups on schema 4, the school's clock, no suppression, per-student and learning views, research export. The server (schema 4, ingest, rollups, the research API and export, the simulated school) ships first; the dashboard and the portal's v3 follow. |
 | M3 | DDA and tiered complexity across the whole catalog; juice retrofits; per-game mastery, daily quests and collections; portal shell visual refresh; Lightning Fingers → arcade letter-blaster. |
 | M4 | New high-replayability titles on the runtime; rendering upgrades for the 3D titles. |
 | M5 | Server-side insight jobs (drop-off alerts, difficulty tuning reports) and A/B tuning of DDA targets. |
