@@ -2,3 +2,6 @@ data
 *.db
 *.db-*
 fixtures
+node_modules
+.wrangler
+.dev.vars*

@@ -12,8 +12,9 @@ import { fileURLToPath } from 'node:url';
 const { hideSqliteWarning } = await import('../../server/warnings.mjs');
 hideSqliteWarning();
 const { createApp, MAX_BODY } = await import('../../server/app.mjs');
-const { EVENTS } = await import('../../server/schema.mjs');
-const { COLUMNS } = await import('../../server/store.mjs');
+const { EVENTS, validateBatch } = await import('../../server/schema.mjs');
+const { TABLES } = await import('../../server/store.mjs');
+const { openDatabase } = await import('../../server/sqlite-d1.mjs');
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const fixture = JSON.parse(fs.readFileSync(path.join(repo, 'server/fixtures/sample-batch.json'), 'utf8'));
@@ -21,6 +22,9 @@ const ORIGIN = 'https://school.example';
 const TOKEN = 'test-admin-token-0123456789';
 const DAY_MS = 86400000;
 const START = Date.parse('2026-10-20T09:15:00Z');
+const AGGREGATES = Object.keys(TABLES);
+// A whole aggregate row: its key fields, the given sums and zeros for the rest.
+const aggregate = (table, key, sums = {}) => ({ ...key, ...Object.fromEntries(TABLES[table].sums.map(c => [c, sums[c] || 0])) });
 
 let batchSeq = 0;
 const batchId = () => (++batchSeq).toString(16).padStart(16, '0');
@@ -44,11 +48,27 @@ function request(base, method, pathname, { headers = {}, body, chunks } = {}) {
   });
 }
 
+// A dashboard folder with the real _headers file, so the static checks do not depend on
+// which dashboard files exist in this checkout.
+function dashboard(dir) {
+  const folder = path.join(dir, 'dashboard');
+  fs.mkdirSync(path.join(folder, 'sub'), { recursive: true });
+  fs.copyFileSync(path.join(repo, 'server/dashboard/_headers'), path.join(folder, '_headers'));
+  fs.writeFileSync(path.join(folder, 'index.html'), '<!doctype html><title>Dashboard</title><script src="app.js"></script>');
+  fs.writeFileSync(path.join(folder, 'app.js'), 'document.title = "ok";');
+  fs.writeFileSync(path.join(folder, 'style.css'), 'body { color: black }');
+  fs.writeFileSync(path.join(folder, 'sub', 'index.html'), '<!doctype html><title>Sub</title>');
+  fs.writeFileSync(path.join(folder, '.secret'), 'SENTINEL-DOTFILE');
+  fs.writeFileSync(path.join(dir, 'outside.txt'), 'SENTINEL-OUTSIDE');
+  fs.symlinkSync(path.join(dir, 'outside.txt'), path.join(folder, 'link.txt'));
+  return folder;
+}
+
 async function start(t, options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-telemetry-'));
   const clock = { now: START };
-  const dbPath = path.join(dir, 'telemetry.db');
-  const app = createApp({ dbPath, allowedOrigins: [ORIGIN], adminToken: TOKEN, now: () => clock.now, ...options });
+  const dbPath = path.join(dir, 'db', 'telemetry.db');
+  const app = createApp({ dbPath, allowedOrigins: [ORIGIN], adminToken: TOKEN, now: () => clock.now, dashboardDir: dashboard(dir), ...options });
   const { port } = await app.listen(0, '127.0.0.1');
   t.after(async () => { await app.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${port}`;
@@ -57,13 +77,13 @@ async function start(t, options = {}) {
     send('POST', '/v1/batch', { headers: { 'content-type': type, ...(origin ? { origin } : {}), ...headers },
       body: typeof body === 'string' ? body : JSON.stringify(body) });
   const admin = (pathname, headers = {}) => send('GET', pathname, { headers: { authorization: 'Bearer ' + TOKEN, ...headers } });
-  const rows = table => app.store.db.prepare(`SELECT * FROM ${table}`).all().map(row => ({ ...row }));
-  const count = table => app.store.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
-  return { app, clock, dir, dbPath, base, send, post, admin, rows, count };
+  const rows = async (table, order = '') => (await app.store.db.prepare(`SELECT * FROM ${table}${order && ' ORDER BY ' + order}`).all()).results;
+  const count = async table => (await app.store.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()).n;
+  return { app, clock, dir, dbPath: dbPath, dbDir: path.dirname(dbPath), base, send, post, admin, rows, count };
 }
 
-const eventTables = () => Object.keys(COLUMNS).map(kind => 'ev_' + kind);
-const storedEvents = s => Object.fromEntries(eventTables().map(table => [table, s.count(table)]));
+// Every aggregate row, so that a check can see that nothing was added.
+const storedAggregates = async s => Object.fromEntries(await Promise.all(AGGREGATES.map(async table => [table, await s.rows(table)])));
 
 test('health answers ok; unknown routes are 404 and wrong methods 405', async t => {
   const s = await start(t);
@@ -73,41 +93,133 @@ test('health answers ok; unknown routes are 404 and wrong methods 405', async t 
   assert.match(health.headers['content-type'], /^application\/json/);
   assert.equal((await s.send('HEAD', '/v1/health')).status, 200);
   assert.equal((await s.send('GET', '/v1/nothing')).status, 404);
-  assert.equal((await s.send('GET', '/')).status, 404);
+  assert.equal((await s.send('GET', '/v1')).status, 404);
+  assert.equal((await s.send('GET', '/nothing.html')).status, 404);
+  assert.equal((await s.send('POST', '/')).status, 404, 'the dashboard only answers GET and HEAD');
   const wrong = await s.send('GET', '/v1/batch');
   assert.equal(wrong.status, 405);
   assert.equal(wrong.headers.allow, 'POST, OPTIONS');
   assert.equal((await s.send('POST', '/v1/health')).status, 405);
 });
 
-test('the shared fixture is a valid envelope with every event kind, stored row for row', async t => {
+test('the Node host serves the dashboard folder with the headers of its _headers file, and nothing else', async t => {
+  const s = await start(t);
+  const csp = "default-src 'self'; script-src 'self' https://farmercarry.github.io; style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+  for (const pathname of ['/', '/index.html']) {
+    const page = await s.send('GET', pathname);
+    assert.equal(page.status, 200, pathname);
+    assert.equal(page.headers['content-type'], 'text/html; charset=utf-8');
+    assert.match(page.text, /<title>Dashboard<\/title>/);
+    assert.equal(page.headers['content-security-policy'], csp);
+    assert.equal(page.headers['x-content-type-options'], 'nosniff');
+    assert.equal(page.headers['referrer-policy'], 'no-referrer');
+    assert.equal(page.headers['cache-control'], 'no-store', pathname);
+    assert.equal(page.headers['access-control-allow-origin'], undefined);
+  }
+  const script = await s.send('GET', '/app.js', { headers: { origin: ORIGIN } });
+  assert.equal(script.status, 200);
+  assert.equal(script.headers['content-type'], 'text/javascript; charset=utf-8');
+  assert.equal(script.headers['content-security-policy'], csp);
+  assert.equal(script.headers['cache-control'], 'no-cache');
+  assert.equal((await s.send('GET', '/style.css')).headers['content-type'], 'text/css; charset=utf-8');
+  assert.equal((await s.send('GET', '/sub/')).status, 200);
+  const head = await s.send('HEAD', '/');
+  assert.equal(head.status, 200);
+  assert.equal(head.text, '');
+  for (const pathname of ['/_headers', '/.secret', '/%2esecret', '/link.txt', '/../outside.txt', '/%2e%2e/outside.txt',
+    '/..%2foutside.txt', '/sub/..%2f..%2foutside.txt', '/%2e%2e%5coutside.txt', '/sub', '//index.html', '/index.html%00',
+    '/%E0%A4%A', '/nothing/', '/v1/index.html']) {
+    const res = await s.send('GET', pathname);
+    assert.equal(res.status, 404, pathname);
+    assert.match(res.headers['content-type'], /^application\/json/, pathname);
+    assert.doesNotMatch(res.text, /SENTINEL/, pathname);
+  }
+  // Static files share the client's rate-limit bucket like every other request.
+  const limited = await start(t, { ratePerMin: 1 });
+  assert.equal((await limited.send('GET', '/')).status, 200);
+  assert.equal((await limited.send('GET', '/')).status, 429);
+});
+
+test('the shared fixture is a valid envelope with every event kind, added to the day\'s aggregates', async t => {
   assert.deepEqual([...new Set(fixture.ev.map(e => e[0]))].sort(), Object.keys(EVENTS).sort(), 'the fixture exercises every kind');
   const s = await start(t);
   const res = await s.post(fixture);
   assert.equal(res.status, 204);
   assert.equal(res.text, '');
-  for (const kind of Object.keys(EVENTS)) {
-    assert.equal(s.count('ev_' + kind), fixture.ev.filter(e => e[0] === kind).length, kind);
-  }
-  assert.deepEqual(s.rows('session_days'), [{ s: fixture.s, day: '2026-10-20', hour: 9, a: '6-7', m: 'web',
-    k: fixture.k, cores: 4, mem: 4, screen: 1920 }]);
-  assert.deepEqual(s.rows('batches'), [{ b: fixture.b, day: '2026-10-20' }]);
-  const re = fixture.ev.filter(e => e[0] === 're').map(e => e.slice(1).flat());
-  const columns = ['t', ...COLUMNS.re];
-  assert.deepEqual(s.rows('ev_re').map(row => columns.map(c => row[c])), re);
-  for (const row of s.rows('ev_gx')) assert.deepEqual([row.s, row.day, row.hour, row.a], [fixture.s, '2026-10-20', 9, '6-7']);
+  const key = { day: '2026-10-20', a: '6-7' };
+  assert.deepEqual(await s.rows('batches'), [{ b: fixture.b, day: '2026-10-20' }]);
+  assert.deepEqual(await s.rows('agg_days'), [aggregate('agg_days', key, {
+    sessions: 1, web: 1, engaged_ms: 112000, opens: 2, starts: 3, ends: 3, level_ups: 1, errors: 1,
+    session_starts: 1, profile_age1: 1, since_last1: 1
+  })]);
+  assert.deepEqual(await s.rows('agg_games', 'slug'), [
+    aggregate('agg_games', { ...key, slug: 'bubble-bop' }, {
+      sessions: 1, opens: 1, closes: 1, engaged_ms: 112000, starts: 3, ends: 3, w: 1, l: 1, q: 1, tier_sum: 5, tier_n: 3,
+      hits: 24, misses: 10, rt0: 11, rt1: 11, rt2: 6, rt3: 3, rt4: 2, rt5: 1, il0: 180, il1: 44, il2: 6, il3: 1,
+      f0: 5830, f1: 412, f2: 37, f3: 1, loads: 1, load_ms: 840, src_starter: 1, replay0: 2, replay1: 1, plays2: 1
+    }),
+    aggregate('agg_games', { ...key, slug: 'road-hopper' }, { sessions: 1, opens: 1, closes: 1, error_t: 1, src_featured: 1, plays0: 1 })
+  ]);
+  assert.deepEqual(await s.rows('agg_levels', 'id'), [
+    aggregate('agg_levels', { ...key, slug: 'bubble-bop', id: 'w1-1' }, { sessions: 1, starts: 1, ends: 1, w: 1, ms: 36500, tier_sum: 1, tier_n: 1 }),
+    aggregate('agg_levels', { ...key, slug: 'bubble-bop', id: 'w1-2' }, { sessions: 1, starts: 2, ends: 2, l: 1, q: 1, ms: 68250, tier_sum: 4, tier_n: 2 })
+  ]);
+  assert.deepEqual(await s.rows('agg_sources', 'src'), [
+    aggregate('agg_sources', { ...key, src: 'featured' }, { sessions: 1, opens: 1 }),
+    aggregate('agg_sources', { ...key, src: 'starter' }, { sessions: 1, opens: 1 })
+  ]);
+  assert.deepEqual(await s.rows('agg_devices'), [aggregate('agg_devices', { ...key, cores: 4, mem: 4, screen: 1920 }, {
+    sessions: 1, f0: 5830, f1: 412, f2: 37, f3: 1, il0: 180, il1: 44, il2: 6, il3: 1, loads: 1, load_ms: 840
+  })]);
+  // The session closed everything with se: it is live with no game open.
+  assert.deepEqual(await s.rows('live'), [{ s: fixture.s, slug: '', seen_minute: Math.floor(START / 60000) }]);
+  assert.deepEqual((await s.rows('seen', 'kind, key')).map(r => [r.day, r.kind, r.key, r.s]), [
+    ['2026-10-20', 'd', '', fixture.s], ['2026-10-20', 'g', 'bubble-bop', fixture.s], ['2026-10-20', 'g', 'road-hopper', fixture.s],
+    ['2026-10-20', 'l', 'bubble-bop w1-1', fixture.s], ['2026-10-20', 'l', 'bubble-bop w1-2', fixture.s],
+    ['2026-10-20', 's', 'featured', fixture.s], ['2026-10-20', 's', 'starter', fixture.s]
+  ]);
+});
+
+test('a typical batch writes at most 20 rows, and a later batch of the same session fewer', async t => {
+  const s = await start(t);
+  const written = [];
+  const db = s.app.store.db, batch = db.batch.bind(db);
+  db.batch = async statements => {
+    const results = await batch(statements);
+    written.push(results.reduce((n, r) => n + r.meta.rows_written, 0));
+    return results;
+  };
+  assert.equal((await s.post(fixture)).status, 204);
+  assert.equal((await s.post({ ...fixture, b: batchId(), ev: fixture.ev.filter(e => e[0] !== 'ss' && e[0] !== 'se') })).status, 204);
+  const [first, second] = [written[0] + written[1], written[2] + written[3]];
+  assert.ok(first <= 20, `the first batch wrote ${first} rows`);
+  assert.ok(second < first, `the second batch wrote ${second} rows`);
+  assert.equal(written.length, 4, 'two transactions per batch');
 });
 
 test('a repeated batch id is answered 204 and stored once', async t => {
   const s = await start(t);
   assert.equal((await s.post(fixture)).status, 204);
-  const before = storedEvents(s);
+  const before = await storedAggregates(s);
   s.clock.now += 3600000;
   assert.equal((await s.post(fixture)).status, 204);
   assert.equal((await s.post({ ...fixture, ev: [['lv', 1, 9]] })).status, 204, 'the id alone decides');
-  assert.deepEqual(storedEvents(s), before);
-  assert.equal(s.count('batches'), 1);
-  assert.equal(s.count('session_days'), 1);
+  assert.deepEqual(await storedAggregates(s), before);
+  assert.equal(await s.count('batches'), 1);
+  assert.equal(await s.count('agg_days'), 1);
+  assert.deepEqual((await s.rows('live'))[0].seen_minute, Math.floor(START / 60000), 'a repeat is not a sign of life');
+});
+
+test('the same batch arriving twice at once is added once', async t => {
+  const s = await start(t);
+  const body = { ...fixture, b: batchId() };
+  const answers = await Promise.all([s.post(body), s.post(body), s.post(body)]);
+  assert.deepEqual(answers.map(res => res.status), [204, 204, 204]);
+  const [day] = await s.rows('agg_days');
+  assert.equal(day.opens, 2);
+  assert.equal(day.sessions, 1);
+  assert.equal(await s.count('batches'), 1);
 });
 
 test('invalid envelopes are 400 and other media types 415, storing nothing', async t => {
@@ -134,7 +246,7 @@ test('invalid envelopes are 400 and other media types 415, storing nothing', asy
   }
   assert.equal((await s.post(fixture, { type: 'application/json' })).status, 204);
   assert.equal((await s.post({ ...fixture, b: batchId(), ev: new Array(200).fill(['lv', 1, 2]) })).status, 204, '200 events are fine');
-  assert.equal(s.count('batches'), 2);
+  assert.equal(await s.count('batches'), 2);
 });
 
 test('bodies over 64 KB are 413, declared or streamed; exactly 64 KB is accepted', async t => {
@@ -151,9 +263,9 @@ test('bodies over 64 KB are 413, declared or streamed; exactly 64 KB is accepted
   // The rest of a large body is drained, so the answer is never lost to a connection reset.
   assert.equal((await s.post('x'.repeat(900 * 1024))).status, 413);
   assert.equal((await s.send('GET', '/v1/health')).status, 200);
-  assert.equal(s.count('batches'), 0);
+  assert.equal(await s.count('batches'), 0);
   assert.equal((await s.post(exact)).status, 204);
-  assert.equal(s.count('batches'), 1);
+  assert.equal(await s.count('batches'), 1);
 });
 
 test('a client that disconnects mid-body is not logged as a server error', async t => {
@@ -171,7 +283,7 @@ test('a client that disconnects mid-body is not logged as a server error', async
   while (await open()) await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal((await s.send('GET', '/v1/health')).status, 200);
   assert.deepEqual(logs, []);
-  assert.equal(s.count('batches'), 0);
+  assert.equal(await s.count('batches'), 0);
 });
 
 test('unknown and malformed events are dropped while valid ones are kept; measures are clamped', async t => {
@@ -201,20 +313,34 @@ test('unknown and malformed events are dropped while valid ones are kept; measur
   // 1e400 parses to Infinity, which is not a measure to clamp.
   const raw = JSON.stringify(envelope('b00000000001', [...malformed, ...valid])).slice(0, -2) + ',["ld",1,"road-hopper",1e400]]}';
   assert.equal((await s.post(raw)).status, 204);
-  assert.deepEqual(storedEvents(s), { ev_ss: 1, ev_go: 1, ev_ld: 1, ev_er: 1, ev_rs: 1, ev_re: 1, ev_gx: 0, ev_lv: 1, ev_se: 1 });
-  const one = table => { const { s: _, day, hour, a, ...rest } = s.rows(table)[0]; return rest; };
-  assert.deepEqual(one('ev_go'), { t: 3, slug: 'road-hopper', src: 'search', plays: 1 });
-  assert.deepEqual(one('ev_ld'), { t: 5, slug: 'road-hopper', ms: 120000 });
-  assert.deepEqual(one('ev_rs'), { t: 6, slug: 'road-hopper', id: 'w1-2', tier: 9, replay: 9999 });
-  assert.deepEqual(one('ev_re'), { t: 9, slug: 'road-hopper', code: 'e', id: 'endless', ms: 10800000, score: 1e9, tier: 3,
-    hits: 7, misses: 2, rt0: 1, rt1: 2, rt2: 3, rt3: 4, rt4: 5, rt5: 6 });
-  assert.deepEqual(one('ev_lv'), { t: 10, level: 999 });
-  assert.deepEqual(one('ev_ss'), { t: 604800, new_profile: 1, profile_age: 3, since_last: 4, level: 0 });
-  assert.deepEqual(one('ev_se'), { t: 12, ms: 801 });
+  // The validator keeps exactly the valid events, rounded and clamped...
+  const cleaned = validateBatch(JSON.parse(raw));
+  assert.equal(cleaned.dropped, malformed.length + 1);
+  assert.deepEqual(cleaned.events, [
+    ['go', 3, 'road-hopper', 'search', 1], ['ld', 5, 'road-hopper', 120000], ['rs', 6, 'road-hopper', 'w1-2', 9, 9999],
+    ['re', 9, 'road-hopper', 'e', 'endless', 10800000, 1e9, 3, 7, 2, [1, 2, 3, 4, 5, 6]],
+    ['lv', 10, 999], ['er', 11, 'road-hopper', 'l'], ['ss', 604800, 1, 3, 4, 0], ['se', 12, 801]
+  ]);
+  // ...and the store adds exactly those.
+  const key = { day: '2026-10-20', a: '6-7' };
+  assert.deepEqual(await s.rows('agg_days'), [aggregate('agg_days', key, {
+    sessions: 1, web: 1, opens: 1, starts: 1, ends: 1, level_ups: 1, errors: 1,
+    session_starts: 1, new_profiles: 1, guests: 1, profile_age3: 1, since_last4: 1
+  })]);
+  assert.deepEqual(await s.rows('agg_games'), [aggregate('agg_games', { ...key, slug: 'road-hopper' }, {
+    sessions: 1, opens: 1, src_search: 1, plays1: 1, loads: 1, load_ms: 120000, starts: 1, tier_sum: 9, tier_n: 1, replay5: 1,
+    ends: 1, e: 1, hits: 7, misses: 2, rt0: 1, rt1: 2, rt2: 3, rt3: 4, rt4: 5, rt5: 6, error_l: 1
+  })]);
+  assert.deepEqual(await s.rows('agg_levels', 'id'), [
+    aggregate('agg_levels', { ...key, slug: 'road-hopper', id: 'endless' }, { sessions: 1, ends: 1, e: 1, ms: 10800000 }),
+    aggregate('agg_levels', { ...key, slug: 'road-hopper', id: 'w1-2' }, { sessions: 1, starts: 1, tier_sum: 9, tier_n: 1 })
+  ]);
+  const before = await storedAggregates(s);
   // A batch whose events were all dropped is still a valid, de-duplicated batch.
   assert.equal((await s.post(envelope('b00000000002', malformed))).status, 204);
-  assert.equal(s.count('batches'), 2);
-  assert.equal(s.count('session_days'), 1, 'no session row without a stored event');
+  assert.equal(await s.count('batches'), 2);
+  assert.deepEqual(await storedAggregates(s), before, 'no session row without a stored event');
+  assert.equal(await s.count('live'), 1, 'nor a sign of life');
 });
 
 test('names, user agents, PC labels, error text, profile keys and addresses are never stored', async t => {
@@ -235,22 +361,29 @@ test('names, user agents, PC labels, error text, profile keys and addresses are 
   const res = await s.post(body, { headers: { 'user-agent': 'SENTINEL-UA-HEADER', 'x-forwarded-for': '198.51.100.23',
     cookie: 'sid=SENTINEL-COOKIE', referer: 'https://school.example/SENTINEL-REFERER' } });
   assert.equal(res.status, 204);
-  assert.equal(s.count('ev_go'), 2, 'the valid events are kept');
-  // Only contract columns exist.
-  const allowed = new Set(['b', 's', 'day', 'hour', 'a', 'm', 'k', 'cores', 'mem', 'screen', 't', ...Object.values(COLUMNS).flat()]);
-  const tables = s.app.store.db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all().map(r => r.name);
-  assert.deepEqual(tables.sort(), ['batches', 'session_days', 'session_games', 'session_levels', ...eventTables()].sort());
+  assert.equal((await s.rows('agg_days'))[0].opens, 2, 'the valid events are kept');
+  // Only the aggregates' keys and sums, the batch ids, the seen and live session ids and
+  // the schema version exist: no column for a header, a time of day or an event.
+  const columns = {
+    batches: ['b', 'day'], seen: ['day', 'kind', 'key', 's'], live: ['s', 'slug', 'seen_minute'], meta: ['key', 'value'],
+    ...Object.fromEntries(Object.entries(TABLES).map(([table, { key, sums }]) => [table, ['day', 'a', ...key, ...sums]]))
+  };
+  const tables = (await s.app.store.db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all()).results.map(r => r.name);
+  assert.deepEqual(tables.sort(), Object.keys(columns).sort());
+  assert.deepEqual((await s.app.store.db.prepare("SELECT name FROM sqlite_schema WHERE type = 'index'").all()).results, [], 'no index but the keys');
   for (const table of tables) {
-    for (const { name } of s.app.store.db.prepare(`PRAGMA table_info(${table})`).all()) assert.ok(allowed.has(name), `${table}.${name}`);
-    for (const row of s.rows(table)) {
+    const info = (await s.app.store.db.prepare(`PRAGMA table_info(${table})`).all()).results;
+    assert.deepEqual(info.map(c => c.name), columns[table], table);
+    for (const row of await s.rows(table)) {
       for (const [column, value] of Object.entries(row)) {
         for (const secret of secrets) assert.ok(!String(value).includes(secret), `${table}.${column} holds ${secret}`);
       }
     }
   }
+  assert.deepEqual((await s.rows('meta')), [{ key: 'schema', value: 2 }]);
   // Nor anywhere in the database files, including the write-ahead log.
-  for (const file of fs.readdirSync(s.dir)) {
-    const bytes = fs.readFileSync(path.join(s.dir, file));
+  for (const file of fs.readdirSync(s.dbDir)) {
+    const bytes = fs.readFileSync(path.join(s.dbDir, file));
     for (const secret of secrets.filter(x => x.length > 5)) assert.equal(bytes.indexOf(secret), -1, `${file} holds ${secret}`);
   }
 });
@@ -272,7 +405,7 @@ test('CORS echoes only listed origins, never with credentials, and null only whe
     assert.equal(denied.headers['access-control-allow-origin'], undefined);
     assert.equal(denied.headers['access-control-expose-headers'], undefined);
   }
-  assert.equal(s.count('batches'), 1);
+  assert.equal(await s.count('batches'), 1);
   // Tools without a browser send no Origin.
   assert.equal((await s.post({ ...fixture, b: batchId() }, { origin: '' })).status, 204);
 
@@ -313,7 +446,7 @@ test('the per-client token bucket answers 429 with Retry-After and refills', asy
   assert.equal(limited.headers['retry-after'], '30');
   assert.equal(limited.headers['access-control-allow-origin'], ORIGIN, 'the page can read the status');
   assert.equal(limited.headers['access-control-expose-headers'], 'Retry-After', 'and the wait');
-  assert.equal(s.count('batches'), 1);
+  assert.equal(await s.count('batches'), 1);
   s.clock.now += 30000;
   assert.equal((await s.send('GET', '/v1/health')).status, 200);
   assert.equal((await s.send('GET', '/v1/health')).status, 429);
@@ -429,7 +562,8 @@ test('KPIs are exact for a hand-built dataset, with groups under three sessions 
     ],
     bands: [
       { band: '6-7', sessions: 3, opens: 4, engagedMinutes: 2.8, games: [
-        { slug: 'road-hopper', sessions: 3, opens: 3, share: 0.75, avgTier: 1.25, completionRate: 0.6 },
+        { slug: 'road-hopper', sessions: 3, opens: 3, share: 0.75, avgTier: 1.25, completionRate: 0.6,
+          winRate: 0.75, dropOffRate: 0.2, engagedMinutes: 2.3 },
         { slug: 'tank-splat', suppressed: true }
       ] },
       { band: '10-11', suppressed: true }
@@ -519,6 +653,12 @@ test('live counts sessions seen in the last five minutes and the games they have
   s.clock.now += 5 * 60000;
   await s.post(repeat);
   assert.deepEqual((await live()).total, { sessions: 0 });
+  // The database keeps a session's last minute for ten minutes at most.
+  const minute = Math.floor(s.clock.now / 60000);
+  assert.deepEqual((await s.rows('live')).map(r => [r.s, minute - r.seen_minute]), [['c00000000007', 5]]);
+  s.clock.now += 5 * 60000;
+  await live();
+  assert.deepEqual(await s.rows('live'), []);
 });
 
 test('retention purges old rows on start and daily; batch ids are kept for 30 days', async t => {
@@ -528,29 +668,49 @@ test('retention purges old rows on start and daily; batch ids are kept for 30 da
   await s.post(envelope('d00000000001', [['lv', 1, 2]]));
   s.clock.now = day0 + DAY_MS;
   await s.post(envelope('d00000000002', [['lv', 1, 3]]));
+  // Session ids in seen are kept for today and yesterday only.
+  assert.deepEqual((await s.rows('seen', 'day')).map(r => r.day), ['2026-01-01', '2026-01-02']);
+  s.clock.now = day0 + 2 * DAY_MS;
+  await s.app.purge();
+  assert.deepEqual((await s.rows('seen')).map(r => r.day), ['2026-01-02']);
   s.clock.now = day0 + 30 * DAY_MS;
-  assert.deepEqual(s.app.purge(), { cutoff: '2025-08-04', rows: 0, batches: 0 });
+  assert.deepEqual(await s.app.purge(), { cutoff: '2025-08-04', rows: 0, batches: 0 });
+  assert.deepEqual(await s.rows('seen'), []);
   s.clock.now = day0 + 31 * DAY_MS;
-  assert.deepEqual(s.app.purge(), { cutoff: '2025-08-05', rows: 0, batches: 1 }, 'the first batch id is forgotten');
+  assert.deepEqual(await s.app.purge(), { cutoff: '2025-08-05', rows: 0, batches: 1 }, 'the first batch id is forgotten');
   s.clock.now = day0 + 180 * DAY_MS;
-  assert.deepEqual(s.app.purge(), { cutoff: '2026-01-01', rows: 0, batches: 1 }, 'exactly 180 days old is kept');
+  assert.deepEqual(await s.app.purge(), { cutoff: '2026-01-01', rows: 0, batches: 1 }, 'exactly 180 days old is kept');
   s.clock.now = day0 + 181 * DAY_MS;
-  assert.deepEqual(s.app.purge(), { cutoff: '2026-01-02', rows: 2, batches: 0 }, 'one event row and one session row');
-  assert.deepEqual(s.rows('ev_lv').map(r => [r.day, r.level]), [['2026-01-02', 3]]);
-  assert.deepEqual(s.rows('session_days').map(r => r.day), ['2026-01-02']);
-  assert.equal(s.count('batches'), 0);
+  assert.deepEqual(await s.app.purge(), { cutoff: '2026-01-02', rows: 2, batches: 0 }, 'one daily-totals row and one device row');
+  assert.deepEqual((await s.rows('agg_days')).map(r => [r.day, r.level_ups]), [['2026-01-02', 1]]);
+  assert.deepEqual((await s.rows('agg_devices')).map(r => r.day), ['2026-01-02']);
+  assert.equal(await s.count('batches'), 0);
 
   // A restart purges at once.
   await s.app.close();
   const later = createApp({ dbPath: s.dbPath, now: () => day0 + 182 * DAY_MS });
   t.after(() => later.close());
   await later.listen(0, '127.0.0.1');
-  assert.equal(later.store.db.prepare('SELECT COUNT(*) AS n FROM ev_lv').get().n, 0);
-  assert.equal(later.store.db.prepare('SELECT COUNT(*) AS n FROM session_days').get().n, 0);
+  for (const table of AGGREGATES) assert.equal((await later.store.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()).n, 0, table);
   const custom = createApp({ retentionDays: 7, now: () => day0 + 8 * DAY_MS });
   t.after(() => custom.close());
-  custom.store.insertBatch({ envelope: envelope('d00000000003', []), events: [['lv', 1, 2]] }, day0);
-  assert.equal(custom.purge().rows, 2);
+  assert.equal(await custom.store.ingest(envelope('d00000000003', []), [['lv', 1, 2]], day0), true);
+  assert.equal((await custom.purge()).rows, 2);
+});
+
+test('the store creates its tables on first use and refuses a database newer than itself', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-telemetry-schema-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 't.db');
+  const first = createApp({ dbPath: file });
+  await first.listen(0, '127.0.0.1');
+  await first.close();
+  const db = openDatabase(file);
+  await db.prepare("UPDATE meta SET value = 3 WHERE key = 'schema'").run();
+  db.close();
+  const newer = createApp({ dbPath: file });
+  t.after(() => newer.close());
+  await assert.rejects(newer.listen(0, '127.0.0.1'), /database schema 3 is newer than this server \(2\)/);
 });
 
 test('main.mjs starts from the environment without the SQLite warning and refuses bad settings', async t => {
