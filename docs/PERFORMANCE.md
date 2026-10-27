@@ -573,22 +573,22 @@ Milestone 1 ([`ARCHITECTURE.md`](ARCHITECTURE.md)) changes the bytes of every pa
   options), which every game page inlines.
 * **Zero background music** deletes the music engines of 14 games. Beat Dash, Moto
   Madness, Neon Slope, Rail Rush, Splat Strike, Swing Hook and Tunnel Blitz are smaller
-  than before even with Kit v2; Critter Mart grew by only 1,117 bytes.
-* **Bubble Bop** replaces Mouse & Keyboard Academy: a 113,577-byte page plus two of the
+  than before even with Kit v2; Critter Mart grew by only 1,169 bytes.
+* **Bubble Bop** replaces Mouse & Keyboard Academy: a 113,629-byte page plus two of the
   academy's WebP pictures (40,920 bytes) instead of a 75,001-byte page and five pictures
   (95,930 bytes).
 * **Road Hopper and Dino 3D** carry the first Kit.dda tier tables (Road Hopper also moves
   its lane generator into `endless.js`).
 * **The portal** gains `shared/juice.js` (4,467 minified bytes), picture profiles with
   age bands and XP (`js/profiles.js` and its styles) and the telemetry sink
-  (`js/telemetry.js`, 7,576 minified bytes, inert unless the build sets
+  (`js/telemetry.js`, 7,956 minified bytes, inert unless the build sets
   `SG_TELEMETRY_URL`).
 
 | Measurement | Before bytes | After bytes | Before limit | New limit |
 | --- | ---: | ---: | ---: | ---: |
-| Portal | 350,663 | 391,407 | 360,000 | 393,000 |
-| Teacher page | 91,926 | 90,409 | 96,000 | 96,000 |
-| Offline precache | 5,203,540 | 5,274,290 | 5,210,000 | 5,290,000 |
+| Portal | 350,663 | 392,040 | 360,000 | 394,000 |
+| Teacher page | 91,926 | 90,422 | 96,000 | 96,000 |
+| Offline precache | 5,203,540 | 5,276,735 | 5,210,000 | 5,290,000 |
 
 Every game page whose limit moves is listed below. Pages that grew past their limit,
 or kept less than 1,000 bytes, get the next 1,000 bytes plus one, as before. The 14
@@ -597,39 +597,40 @@ the music removal saved cannot quietly come back.
 
 | Game | Before bytes | After bytes | Before limit | New limit |
 | --- | ---: | ---: | ---: | ---: |
-| beat-dash | 118,368 | 112,767 | 125,000 | 114,000 |
-| blob-battle | 102,758 | 105,388 | 106,000 | 107,000 |
-| block-burst | 113,519 | 113,967 | 117,000 | 115,000 |
-| block-world | 155,642 | 157,851 | 164,000 | 159,000 |
-| bubble-bop | — | 113,577 | — | 115,000 |
-| cake-guards | 81,184 | 83,814 | 84,000 | 85,000 |
-| candy-rope | 108,648 | 111,278 | 110,000 | 113,000 |
-| connect-four | 51,974 | 54,604 | 53,000 | 56,000 |
-| critter-mart | 160,158 | 161,275 | 172,000 | 163,000 |
-| dino-3d | 53,957 | 58,325 | 55,000 | 60,000 |
-| drift-king | 108,726 | 108,747 | 113,000 | 110,000 |
-| fire-and-ice | 121,154 | 122,628 | 126,000 | 124,000 |
-| maze-dash | 113,005 | 115,635 | 115,000 | 117,000 |
-| merge-2048 | 77,701 | 80,331 | 79,000 | 82,000 |
-| moto-madness | 132,201 | 131,957 | 140,000 | 133,000 |
-| neon-slope | 123,876 | 121,954 | 130,000 | 123,000 |
-| paint-grab | 107,180 | 109,810 | 108,000 | 111,000 |
-| rail-rush | 142,960 | 141,941 | 152,000 | 143,000 |
-| road-hopper | 111,802 | 116,315 | 117,000 | 118,000 |
-| skybound-golf | 111,014 | 113,644 | 112,000 | 115,000 |
-| snake-arena | 95,813 | 98,443 | 98,000 | 100,000 |
-| splat-strike | 231,318 | 230,607 | 251,000 | 232,000 |
-| sumo-bonk | 120,773 | 121,266 | 127,000 | 123,000 |
-| swing-hook | 108,146 | 107,718 | 112,000 | 109,000 |
-| tank-splat | 109,286 | 111,916 | 111,000 | 113,000 |
-| tic-tac-toe | 51,952 | 54,582 | 53,000 | 56,000 |
-| troll-level | 110,163 | 110,806 | 111,000 | 112,000 |
-| tunnel-blitz | 97,382 | 95,268 | 102,000 | 97,000 |
-| typing-test | 102,644 | 105,274 | 104,000 | 107,000 |
+| air-hockey | 112,346 | 115,028 | 116,000 | 117,000 |
+| beat-dash | 118,368 | 112,819 | 125,000 | 114,000 |
+| blob-battle | 102,758 | 105,440 | 106,000 | 107,000 |
+| block-burst | 113,519 | 114,019 | 117,000 | 116,000 |
+| block-world | 155,642 | 157,903 | 164,000 | 159,000 |
+| bubble-bop | — | 113,629 | — | 115,000 |
+| cake-guards | 81,184 | 83,866 | 84,000 | 85,000 |
+| candy-rope | 108,648 | 111,330 | 110,000 | 113,000 |
+| connect-four | 51,974 | 54,656 | 53,000 | 56,000 |
+| critter-mart | 160,158 | 161,327 | 172,000 | 163,000 |
+| dino-3d | 53,957 | 58,377 | 55,000 | 60,000 |
+| drift-king | 108,726 | 108,799 | 113,000 | 110,000 |
+| fire-and-ice | 121,154 | 122,680 | 126,000 | 124,000 |
+| maze-dash | 113,005 | 115,687 | 115,000 | 117,000 |
+| merge-2048 | 77,701 | 80,383 | 79,000 | 82,000 |
+| moto-madness | 132,201 | 132,009 | 140,000 | 134,000 |
+| neon-slope | 123,876 | 122,006 | 130,000 | 124,000 |
+| paint-grab | 107,180 | 109,862 | 108,000 | 111,000 |
+| rail-rush | 142,960 | 141,993 | 152,000 | 143,000 |
+| road-hopper | 111,802 | 116,398 | 117,000 | 118,000 |
+| skybound-golf | 111,014 | 113,696 | 112,000 | 115,000 |
+| snake-arena | 95,813 | 98,495 | 98,000 | 100,000 |
+| splat-strike | 231,318 | 230,659 | 251,000 | 232,000 |
+| sumo-bonk | 120,773 | 121,318 | 127,000 | 123,000 |
+| swing-hook | 108,146 | 107,770 | 112,000 | 109,000 |
+| tank-splat | 109,286 | 111,968 | 111,000 | 113,000 |
+| tic-tac-toe | 51,952 | 54,634 | 53,000 | 56,000 |
+| troll-level | 110,163 | 110,858 | 111,000 | 112,000 |
+| tunnel-blitz | 97,382 | 95,320 | 102,000 | 97,000 |
+| typing-test | 102,644 | 105,326 | 104,000 | 107,000 |
 
-The portal grows by 40,744 bytes (11.6%). Most of it is the profile picker and its
+The portal grows by 41,377 bytes (11.8%). Most of it is the profile picker and its
 styles; the juice engine and the sink are about 12 KB together. It is still one file.
 Thumbnails remain the largest part of the portal (about 256 KB). The offline cache
-grows by 70,750 bytes (1.4%). No request, font, library or third-party code is added
+grows by 73,195 bytes (1.4%). No request, font, library or third-party code is added
 to any child's page, and with `SG_TELEMETRY_URL` unset the built site makes no network
 request at all.
