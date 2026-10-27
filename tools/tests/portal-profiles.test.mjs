@@ -426,6 +426,48 @@ test('hand over the device and the topbar badge return to the strip; the mute to
   assert.deepEqual([await mute.getAttribute('aria-disabled'), await mute.getAttribute('aria-pressed')], ['false', 'false']);
 });
 
+test('a mouse click on the topbar mute gives the keys back to the game; the keyboard keeps them', async t => {
+  const { page } = await setup(t);
+  await page.goto(origin + '/');
+  const frame = await play(page, 'air-hockey');
+  await frame.evaluate(() => { window.spaces = 0; addEventListener('keydown', e => { if (e.code === 'Space') window.spaces++; }, true); });
+  const mute = page.locator('#muteBtn');
+  const sound = () => page.evaluate(() => [document.querySelector('#muteBtn').getAttribute('aria-pressed'), localStorage.getItem('sg:site:muted')]);
+  const focused = () => page.evaluate(() => document.activeElement.tagName === 'IFRAME' ? 'IFRAME' : document.activeElement.id);
+  await mute.click();
+  assert.deepEqual(await sound(), ['true', 'true']);
+  await frame.waitForFunction(() => Kit.audio.muted);
+  assert.equal(await focused(), 'IFRAME', 'the game has the keys again');
+  // The child's next Space goes to the game and does not press the mute button again.
+  await page.keyboard.press('Space');
+  assert.deepEqual(await sound(), ['true', 'true'], 'Space does not toggle the sound back');
+  assert.equal(await frame.evaluate(() => [window.spaces, Kit.audio.muted].join()), '1,true');
+  assert.equal(await focused(), 'IFRAME');
+
+  // From the keyboard the button keeps focus, like the heart: Enter and Space press it again.
+  await mute.focus();
+  await page.keyboard.press('Enter');
+  assert.deepEqual(await sound(), ['false', 'false']);
+  assert.equal(await focused(), 'muteBtn');
+  await page.keyboard.press('Space');
+  assert.deepEqual(await sound(), ['true', 'true']);
+  assert.equal(await focused(), 'muteBtn');
+  assert.equal(await frame.evaluate(() => window.spaces), 1);
+
+  // Locked by the classroom preset, a click explains and still gives the keys back.
+  await page.locator('#classroom summary').click();
+  await page.locator('#classroomMode').check();
+  await mute.click({ force: true });
+  assert.equal(await page.locator('#toast').innerText(), 'وضع الصف يكتم الصوت الآن');
+  assert.equal(await focused(), 'IFRAME');
+  await page.keyboard.press('Space');
+  assert.equal(await frame.evaluate(() => window.spaces), 2);
+  await mute.focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await focused(), 'muteBtn', 'the keyboard stays on the locked button too');
+  assert.deepEqual(await sound(), ['true', 'true']);
+});
+
 test('removing a player asks twice and never happens on one click', async t => {
   const { page } = await setup(t);
   await page.goto(origin + '/');

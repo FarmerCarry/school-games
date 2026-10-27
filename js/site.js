@@ -815,14 +815,18 @@
 
     personalMuted = !!storedPreference('muted', false);
     paintMute();
-    mute.addEventListener('click', function () {
-      if (classroomOn) { toast(T.muteLocked); return; }
-      personalMuted = !personalMuted;
-      writePreference('muted', personalMuted);
-      // The open game follows at once, also from a folder where it has its own storage.
-      sendPreferences(personalMuted);
-      paintMute();
-      if (!personalMuted) juice('toggle', true);
+    mute.addEventListener('click', function (e) {
+      if (classroomOn) toast(T.muteLocked);
+      else {
+        personalMuted = !personalMuted;
+        writePreference('muted', personalMuted);
+        // The open game follows at once, also from a folder where it has its own storage.
+        sendPreferences(personalMuted);
+        paintMute();
+        if (!personalMuted) juice('toggle', true);
+      }
+      // After a mouse click the keys go back to the game (so Space doesn't press this button again).
+      if (e.detail && current) activateGame();
     });
     // The teacher page can stop statistics (and so telemetry) at any time: the open game follows.
     window.addEventListener('storage', function (e) {
