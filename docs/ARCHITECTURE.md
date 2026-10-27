@@ -44,9 +44,15 @@ notes); they never schedule notes on their own.
 No music toggles, no `music` save keys, no "الموسيقى" buttons. Old saves that carry
 a `music` key are simply ignored.
 
+Also allowed: **game-state warning cues during play** (a low-health heartbeat, a gust
+warning) and a vehicle's own motion sound while it moves under the player's control;
+both stop on title, pause and result screens.
+
 Guard: `tools/tests/zero-bgm.test.mjs` (browser suite) counts every
-`AudioScheduledSourceNode.start()` call in every catalog game during idle windows on
-the title screen and the pause screen; any start in those windows fails.
+`AudioScheduledSourceNode.start()`, `AudioBufferSourceNode.start()` and
+`HTMLMediaElement.play()` call and taps the peak level sent to the speakers, for every
+catalog game, during idle windows on the title screen and the pause screen (4 s of game
+time, after a 2 s tail). Any start in a window, or any output above −60 dBFS, fails.
 
 ## Runtime layers
 
@@ -318,8 +324,13 @@ GitHub Pages (any small VM or container; see `server/README.md`).
   smoothness, load times, age-band preferences, replay distributions, level-ups) and
   live sessions in the last 5 minutes. Groups smaller than 3 sessions are suppressed.
 * Retention: rows older than `RETENTION_DAYS` (default 180) are deleted daily.
-* Configuration by environment: `PORT`, `DB_PATH`, `ALLOWED_ORIGINS`, `ADMIN_TOKEN`,
-  `RETENTION_DAYS`, `RATE_PER_MIN`.
+* Configuration by environment: `PORT` (0–65535), `HOST`, `DB_PATH`, `ALLOWED_ORIGINS`,
+  `ADMIN_TOKEN` (at least 16 printable ASCII characters), `RETENTION_DAYS` (1–36500),
+  `RATE_PER_MIN`, `TRUST_PROXY` (which `X-Forwarded-For` hop is the client, for the
+  in-memory rate limit only). Requires Node 22.13 or newer.
+* Other status codes: `403` for an `Origin` not in the allowlist, `415` for a body that
+  is not `text/plain` or `application/json`. Responses to allowed origins expose
+  `Retry-After`. `SG_TELEMETRY_URL` is the full `…/v1/batch` endpoint.
 
 Milestone 2 builds the insights dashboard on these query endpoints.
 
