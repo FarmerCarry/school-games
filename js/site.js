@@ -765,6 +765,7 @@
   }
   function levelled(lv) {
     var el = $('#me');
+    tm('level', lv);
     paintMe();
     toast(T.levelUp(lv), 'gold');
     juice('levelUp');
@@ -824,6 +825,10 @@
       postGame({ type: 'sg:preferences', quiet: personalMuted });
       paintMute();
       if (!personalMuted) juice('toggle', true);
+    });
+    // The teacher page can stop statistics (and so telemetry) at any time: the open game follows.
+    window.addEventListener('storage', function (e) {
+      if ((e.key === 'sg:site:statsmeta' || e.key === null) && telemetryOn() !== sentTelemetry) sendPreferences();
     });
     window.addEventListener('storage', function (e) {
       if (e.key !== 'sg:site:muted' && e.key !== null) return;
@@ -961,6 +966,8 @@
   var sessionDeadline = 0;
   var sessionExpired = false;
   var hadFullscreen = false;
+  var frameAt = 0;        // when the current frame was made (performance.now())
+  var sentTelemetry = false;
   function routeHash() { return location.hash || '#/'; }
   function frameEl() { return $('#stage iframe'); }
   // A paused game, its title/menu and the classroom handoff still own a session.
@@ -972,6 +979,11 @@
   // Local play statistics (js/stats.js, docs/PLAY_STATS.md). Never let them break play.
   function stat(name, a, b) {
     try { window.SGStats[name](a, b); } catch (e) { /* statistics are optional */ }
+  }
+  // The anonymous telemetry sink (js/telemetry.js) follows the same calls; it does
+  // nothing unless the build has an ingest address and the teacher has not stopped it.
+  function tm(name, a, b) {
+    try { var t = window.SGTelemetry; if (t && typeof t[name] === 'function') t[name](a, b); } catch (e) { /* telemetry is optional */ }
   }
   // file:// uses an opaque origin, so target/source Window identity is the
   // authentication boundary. Never accept messages from other windows.
@@ -986,8 +998,9 @@
     // A temporary preset must not overwrite each game's personal settings.
     // Always clear it too: file:// may give every game its own storage area.
     // The player's age band and profile slot are transient too (docs/ARCHITECTURE.md "Kit v2").
+    sentTelemetry = telemetryOn();
     postGame({ type: 'sg:preferences', classroom: classroomOn, band: String(prof('band') || ''),
-      player: String(prof('player') || ''), telemetry: telemetryOn() });
+      player: String(prof('player') || ''), telemetry: sentTelemetry });
   }
   function focusGame() {
     if (portalFocus) return;
@@ -1012,6 +1025,7 @@
     // The recorder and the XP counter also accept sg:stats from a game removed under 2 s ago.
     stat('msg', e.source, e.data);
     prof('msg', e.source, e.data);
+    tm('msg', e.source, e.data);
     if (!f || e.source !== f.contentWindow) return;
     if (e.data === 'sg:focus-portal') {
       portalFocus = true;
@@ -1021,6 +1035,7 @@
     }
     var type = e.data && e.data.type;
     if (type === 'sg:ready') {
+      if (!frameReady) tm('ready', current, performance.now() - frameAt);
       clearTimeout(readyTimer);
       frameReady = true;
       if (!sessionExpired) f.removeAttribute('inert');
@@ -1033,6 +1048,7 @@
   function failFrame(f, kind) {
     if (frameEl() !== f) return;
     stat('fail', kind);
+    tm('fail', kind);
     clearTimeout(readyTimer);
     frameReady = false;
     $('#stage').classList.remove('loading');
@@ -1042,6 +1058,7 @@
     // Merely hiding a game after a runtime error leaves its simulation alive.
     stat('gone');
     prof('gone');
+    tm('gone');
     f.parentNode.removeChild(f);
     portalFocus = true;
     var handoff = $('#sessionHandoff');
@@ -1055,7 +1072,7 @@
     var stage = $('#stage');
     if (!stage) return;
     var old = frameEl();
-    if (old) { stat('gone'); prof('gone'); old.parentNode.removeChild(old); }
+    if (old) { stat('gone'); prof('gone'); tm('gone'); old.parentNode.removeChild(old); }
     var msg = $('#stageMsg');
     if (msg) msg.hidden = true;
     stage.classList.add('loading');
@@ -1075,8 +1092,10 @@
     f.addEventListener('error', function () { failFrame(f); });
     f.src = 'games/' + encodeURIComponent(slug) + '/index.html';
     stage.appendChild(f);
+    frameAt = performance.now();
     stat('mount', f.contentWindow);
     prof('mount', f.contentWindow);
+    tm('mount', f.contentWindow);
     readyTimer = setTimeout(function () { failFrame(f, 't'); }, 20000);
   }
   function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
@@ -1211,6 +1230,8 @@
   }
   function setupPlay(slug) {
     stat('open', slug, !renderedHash);
+    // Before the visit is counted: telemetry reports the plays before this one.
+    tm('open', slug, !renderedHash);
     prof('visit', slug);
     pushRecent(slug);
     mountFrame(slug);
@@ -1354,6 +1375,7 @@
     // the same game only replaces the frame.
     stat(current && current === previousGame ? 'gone' : 'close');
     prof(current && current === previousGame ? 'gone' : 'close');
+    tm(current && current === previousGame ? 'gone' : 'close');
     if (previousGame && !current) juice('back');
     app.innerHTML = html;
     $('#searchStatus').textContent = route.name === 'search' ? ((route.q || '').trim() ? T.found(search(route.q).length) : T.searchPrompt) : '';
@@ -1410,6 +1432,7 @@
     b.classList.remove('roll'); void b.offsetWidth; b.classList.add('roll');
     juice('whoosh', 0.8);
     stat('tag', g.slug, 'surprise');
+    tm('tag', g.slug, 'surprise');
     go('#/play/' + enc(g.slug));
   }
 
@@ -1450,7 +1473,10 @@
     // A game tile or the starter card plays the select sound (never a hover sound).
     document.addEventListener('click', function (e) {
       var t = e.target && e.target.closest ? e.target.closest('.tile[data-slug], .starter') : null;
-      if (t && !e.button && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) juice('select');
+      if (!t || e.button || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      juice('select');
+      // Telemetry tells the starter card apart (js/stats.js counts it as history).
+      if (t.classList.contains('starter')) tm('tag', t.getAttribute('data-slug'), 'starter');
     });
     document.addEventListener('click', function (e) {
       var tile = tileFrom(e);
@@ -1499,7 +1525,7 @@
     $('#searchForm').addEventListener('submit', function (e) {
       e.preventDefault();
       var res = search(q.value);
-      if (res.length === 1) { q.blur(); stat('tag', res[0].slug, 'search'); go('#/play/' + enc(res[0].slug)); return; }
+      if (res.length === 1) { q.blur(); stat('tag', res[0].slug, 'search'); tm('tag', res[0].slug, 'search'); go('#/play/' + enc(res[0].slug)); return; }
       // Several results: hand keyboard focus to the first one.
       var first = $('#app .tile');
       if (res.length && first) first.focus(); else q.blur();
