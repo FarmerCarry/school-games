@@ -634,3 +634,36 @@ Thumbnails remain the largest part of the portal (about 256 KB). The offline cac
 grows by 73,195 bytes (1.4%). No request, font, library or third-party code is added
 to any child's page, and with `SG_TELEMETRY_URL` unset the built site makes no network
 request at all.
+
+## Research telemetry, Kit and profiles (milestone 2.5), 27 October 2026
+
+The first client step of milestone 2.5 (`docs/RESEARCH_TELEMETRY_SPEC.md`, steps C1
+and C2) changes three files. Measured with the Linux minified build:
+
+* **Kit** gains the round counters `rx` (wall time, inputs, idle lapses, pauses, the
+  reaction-time sum and count, and the DDA level) and keeps the DDA level of 24 players
+  instead of 16: +195 minified bytes per game page, under the 350 the spec allows. It adds
+  no timer and no message; per input it adds one comparison and an increment.
+* **The portal** grows by 868 bytes, to 392,908 of 394,000: 24 profiles per PC split over
+  two storage keys so that an old portal tab cannot drop profiles 13 to 24
+  (`js/profiles.js`, +396 minified bytes), and in `js/site.js` the 20-minute idle
+  hand-over and the calls for the new telemetry hooks (+472). The limit is unchanged.
+* The offline cache grows from 5,276,735 to 5,284,233 of 5,290,000 bytes (unchanged).
+
+Seven game pages kept less than 1,000 bytes, so their limits rise to the measured size
+rounded up to the next 1,000 bytes plus 1,000, as before:
+
+| Game | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| beat-dash | 112,819 | 113,014 | 114,000 | 115,000 |
+| block-world | 157,903 | 158,098 | 159,000 | 160,000 |
+| cake-guards | 83,866 | 84,061 | 85,000 | 86,000 |
+| paint-grab | 109,862 | 110,057 | 111,000 | 112,000 |
+| rail-rush | 141,993 | 142,188 | 143,000 | 144,000 |
+| tank-splat | 111,968 | 112,163 | 113,000 | 114,000 |
+| troll-level | 110,858 | 111,053 | 112,000 | 113,000 |
+
+The other 27 games grow by the same 195 bytes inside their unchanged limits (drift-king
+is now closest, with 1,006 bytes left). No request, font, library or precached file is
+added. The rest of the client step (the v3 sink in `js/telemetry.js` and the teacher
+page's codes panel) is measured when it lands.
