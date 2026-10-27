@@ -13,7 +13,7 @@ const { hideSqliteWarning } = await import('../../server/warnings.mjs');
 hideSqliteWarning();
 const { createApp, MAX_BODY } = await import('../../server/app.mjs');
 const { EVENTS, validateBatch } = await import('../../server/schema.mjs');
-const { TABLES } = await import('../../server/store.mjs');
+const { TABLES, openStore } = await import('../../server/store.mjs');
 const { openDatabase } = await import('../../server/sqlite-d1.mjs');
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -192,10 +192,10 @@ test('a typical batch writes at most 20 rows, and a later batch of the same sess
   };
   assert.equal((await s.post(fixture)).status, 204);
   assert.equal((await s.post({ ...fixture, b: batchId(), ev: fixture.ev.filter(e => e[0] !== 'ss' && e[0] !== 'se') })).status, 204);
-  const [first, second] = [written[0] + written[1], written[2] + written[3]];
+  const [first, second] = written;
   assert.ok(first <= 20, `the first batch wrote ${first} rows`);
   assert.ok(second < first, `the second batch wrote ${second} rows`);
-  assert.equal(written.length, 4, 'two transactions per batch');
+  assert.equal(written.length, 2, 'one transaction per batch');
 });
 
 test('a repeated batch id is answered 204 and stored once', async t => {
@@ -220,6 +220,49 @@ test('the same batch arriving twice at once is added once', async t => {
   assert.equal(day.opens, 2);
   assert.equal(day.sessions, 1);
   assert.equal(await s.count('batches'), 1);
+});
+
+// The store on the Node driver, with a hook in front of every db.batch call.
+function hookedStore(hook) {
+  const db = openDatabase(':memory:'), batch = db.batch.bind(db);
+  db.batch = async statements => { await hook(statements); return batch(statements); };
+  return { db, store: openStore(db) };
+}
+const adds = statements => statements.some(st => /^INSERT INTO agg_/.test(st.sql));
+const sessionsOf = async db => Object.fromEntries(await Promise.all(AGGREGATES.map(async table =>
+  [table, (await db.prepare(`SELECT sessions FROM ${table}`).all()).results.map(r => r.sessions)])));
+
+test('a batch whose additions fail is kept whole for the retry, distinct sessions included', async () => {
+  let fail = true;
+  const { db, store } = hookedStore(statements => {
+    if (fail && adds(statements)) { fail = false; throw new Error('D1_ERROR: Network connection lost.'); }
+  });
+  const { envelope: env, events } = validateBatch(fixture);
+  await assert.rejects(store.ingest(env, events, START), /Network connection lost/);
+  // The PC got a 500 and sends the same batch again: it counts, with its session.
+  assert.equal(await store.ingest(env, events, START + 20000), true);
+  assert.deepEqual(await sessionsOf(db), {
+    agg_days: [1], agg_games: [1, 1], agg_levels: [1, 1], agg_sources: [1, 1], agg_devices: [1]
+  });
+});
+
+test('the same batch arriving twice at once counts its session once, whichever finishes first', async () => {
+  // The first copy is held back just before its additions, so the second copy (the
+  // portal sends a batch again after a minute without an answer) is stored first.
+  let held = null, release;
+  const { db, store } = hookedStore(async statements => {
+    if (!held && adds(statements)) { held = new Promise(resolve => { release = resolve; }); await held; }
+  });
+  const { envelope: env, events } = validateBatch({ ...fixture, b: batchId() });
+  const first = store.ingest(env, events, START);
+  while (!held) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(await store.ingest(env, events, START + 60000), true);
+  release();
+  assert.equal(await first, false, 'the held copy is the repeat');
+  assert.deepEqual(await sessionsOf(db), {
+    agg_days: [1], agg_games: [1, 1], agg_levels: [1, 1], agg_sources: [1, 1], agg_devices: [1]
+  });
+  assert.equal((await db.prepare('SELECT opens FROM agg_days').first()).opens, 2);
 });
 
 test('invalid envelopes are 400 and other media types 415, storing nothing', async t => {

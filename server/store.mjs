@@ -59,16 +59,26 @@ const META = 'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value INTEG
 const SET_VERSION = `INSERT INTO meta (key, value) VALUES ('schema', ${SCHEMA_VERSION}) ` +
   'ON CONFLICT (key) DO UPDATE SET value = excluded.value';
 
-// One statement per table adds a JSON array of rows [...key, ...sums] for day ?1 and band ?2.
-// (WHERE true keeps SQLite from reading ON CONFLICT as a join constraint.)
-const UPSERT = Object.fromEntries(Object.entries(TABLES).map(([table, { key, sums }]) => [table,
-  `INSERT INTO ${table} (${keyList([...key, ...sums])}) SELECT ?1, ?2, ` +
-  [...key, ...sums].map((_, i) => `value ->> ${i}`).join(', ') + ' FROM json_each(?3) WHERE true ' +
-  `ON CONFLICT (${keyList(key)}) DO UPDATE SET ` + sums.map(c => `${c} = ${c} + excluded.${c}`).join(', ')]));
-// The groups [kind, key] this session had not been seen in today, unless the batch id is known.
-const SEEN = 'INSERT OR IGNORE INTO seen (day, kind, key, s) SELECT ?1, value ->> 0, value ->> 1, ?2 FROM json_each(?3) ' +
-  'WHERE NOT EXISTS (SELECT 1 FROM batches WHERE b = ?4) RETURNING kind, key';
-const KNOWN_BATCH = 'SELECT 1 AS known FROM batches WHERE b = ?1';
+// The seen group of each table's rows: its kind and its key, from the JSON row.
+const SEEN_GROUP = { agg_days: ['d', "''"], agg_games: ['g', 'value ->> 0'], agg_levels: ['l', "(value ->> 0) || ' ' || (value ->> 1)"],
+  agg_sources: ['s', 'value ->> 0'], agg_devices: ['d', "''"] };
+// The sums a session adds only with its first batch of the day in a group.
+const FIRST = new Set(['sessions', 'web', 'app']);
+// One statement per table adds a JSON array of rows [...key, ...sums, more] for day ?1 and
+// band ?2. A FIRST sum counts only while session ?4 has no seen row for the group, so the
+// statements run before the batch's own seen rows go in, in the same transaction; a row
+// whose other sums are all 0 (more = 0) is written only then. (WHERE keeps SQLite from
+// reading ON CONFLICT as a join constraint.)
+const UPSERT = Object.fromEntries(Object.entries(TABLES).map(([table, { key, sums }]) => {
+  const [kind, group] = SEEN_GROUP[table], columns = [...key, ...sums];
+  const fresh = `NOT EXISTS (SELECT 1 FROM seen WHERE day = ?1 AND kind = '${kind}' AND key = ${group} AND s = ?4)`;
+  const values = columns.map((c, i) => FIRST.has(c) ? `CASE WHEN value ->> ${i} AND ${fresh} THEN value ->> ${i} ELSE 0 END` : `value ->> ${i}`);
+  return [table, `INSERT INTO ${table} (${keyList(columns)}) SELECT ?1, ?2, ${values.join(', ')} FROM json_each(?3) ` +
+    `WHERE value ->> ${columns.length} OR ${fresh} ` +
+    `ON CONFLICT (${keyList(key)}) DO UPDATE SET ` + sums.map(c => `${c} = ${c} + excluded.${c}`).join(', ')];
+}));
+// The groups [kind, key] of session ?2 today, after the additions.
+const SEEN = 'INSERT OR IGNORE INTO seen (day, kind, key, s) SELECT ?1, value ->> 0, value ->> 1, ?2 FROM json_each(?3)';
 const ADD_BATCH = 'INSERT INTO batches (b, day) VALUES (?1, ?2)';
 const ADD_EMPTY_BATCH = 'INSERT OR IGNORE INTO batches (b, day) VALUES (?1, ?2) RETURNING b';
 // ?4 is 1 when the batch decides the open game (?2). Otherwise the game stays open unless
@@ -195,14 +205,17 @@ const frames = (v, at) => {
 const codes = (v, at) => Object.fromEntries(CODES.map(c => [c, v[at[c]]]));
 const replayBucket = n => n < 3 ? n : n < 5 ? 3 : n < 10 ? 4 : 5;
 
-// The deltas of one batch: a row per aggregate table and group, and the seen keys.
+// The deltas of one batch: a row per aggregate table and group, and the seen keys. The
+// FIRST sums hold what the session adds if this is its first batch of the day in the group
+// (the store decides that): one session, and on the day's row its mode.
 function collect(envelope, events) {
-  const day = zeros('agg_days'), device = zeros('agg_devices');
+  const first = table => ({ ...zeros(table), sessions: 1 });
+  const day = { ...first('agg_days'), [envelope.m]: 1 }, device = first('agg_devices');
   const games = new Map(), levels = new Map(), sources = new Map();
-  const game = slug => games.get(slug) || games.set(slug, zeros('agg_games')).get(slug);
+  const game = slug => games.get(slug) || games.set(slug, first('agg_games')).get(slug);
   const level = (slug, id) => {
     const key = slug + ' ' + id;
-    return (levels.get(key) || levels.set(key, { slug, id, row: zeros('agg_levels') }).get(key)).row;
+    return (levels.get(key) || levels.set(key, { slug, id, row: first('agg_levels') }).get(key)).row;
   };
   for (const event of events) {
     switch (event[0]) {
@@ -215,7 +228,7 @@ function collect(envelope, events) {
       case 'go': {
         const [, , slug, src, plays] = event, g = game(slug);
         day.opens++; g.opens++; g['src_' + src]++; g['plays' + plays]++;
-        (sources.get(src) || sources.set(src, zeros('agg_sources')).get(src)).opens++;
+        (sources.get(src) || sources.set(src, first('agg_sources')).get(src)).opens++;
         break;
       }
       case 'ld': {
@@ -273,7 +286,8 @@ function openGame(events) {
   return { known, slug, closed: ' ' + [...closed].join(' ') + ' ' };
 }
 
-const hasSums = (row, table) => TABLES[table].sums.some(c => row[c]);
+// 1 when a row adds more than its FIRST sums.
+const more = (row, table) => TABLES[table].sums.some(c => !FIRST.has(c) && row[c]) ? 1 : 0;
 
 export function openStore(db, { retentionDays = 180 } = {}) {
   let ready = null, sweptMinute = -1;
@@ -302,41 +316,33 @@ export function openStore(db, { retentionDays = 180 } = {}) {
       return added.results.length > 0;
     }
     const delta = collect(envelope, events);
-    // First: is the batch new, and in which groups is this session new today?
-    const [known, fresh] = await db.batch([sql(KNOWN_BATCH).bind(b), sql(SEEN).bind(day, s, JSON.stringify(delta.seen), b)]);
-    if (known.results.length) return false;
-    for (const { kind, key } of fresh.results) {
-      if (kind === 'd') {
-        // The session's first stored batch today also decides its mode and device buckets.
-        delta.day.sessions = 1;
-        delta.day[envelope.m] = 1;
-        delta.device.sessions = 1;
-      } else if (kind === 'g') delta.games.get(key).sessions = 1;
-      else if (kind === 'l') delta.levels.get(key).row.sessions = 1;
-      else if (kind === 's') delta.sources.get(key).sessions = 1;
-    }
-    // Then everything else in one transaction. The batch id goes in first: a batch that
-    // arrived twice at the same time fails here, and none of its additions are kept.
+    // Everything in one transaction, so a failure keeps nothing and the PC's retry counts in
+    // full. The batch id goes in first: a known id (a repeat, even one arriving at the same
+    // time) fails here and none of the additions are kept. The additions read seen before
+    // the batch's own seen rows go in: that is how a session counts once per group and day,
+    // and its first batch of the day also decides its mode and device buckets.
     const statements = [sql(ADD_BATCH).bind(b, day)];
     const add = (table, rows) => {
       const { key, sums } = TABLES[table];
-      const json = rows.filter(row => hasSums(row, table)).map(row => [...pick(row, key), ...pick(row, sums)]);
-      if (json.length) statements.push(sql(UPSERT[table]).bind(day, a, JSON.stringify(json)));
+      const json = rows.map(row => [...pick(row, key), ...pick(row, sums), more(row, table)]);
+      if (json.length) statements.push(sql(UPSERT[table]).bind(day, a, JSON.stringify(json), s));
     };
     add('agg_days', [delta.day]);
     add('agg_games', [...delta.games].map(([slug, row]) => ({ slug, ...row })));
     add('agg_levels', [...delta.levels.values()].map(({ slug, id, row }) => ({ slug, id, ...row })));
     add('agg_sources', [...delta.sources].map(([src, row]) => ({ src, ...row })));
     add('agg_devices', [{ cores: envelope.d[0], mem: envelope.d[1], screen: envelope.d[2], ...delta.device }]);
-    const open = openGame(events);
+    statements.push(sql(SEEN).bind(day, s, JSON.stringify(delta.seen)));
+    const open = openGame(events), sweep = minute !== sweptMinute;
     statements.push(sql(LIVE).bind(s, open.known ? open.slug : '', minute, open.known ? 1 : 0, open.closed, minute - LIVE_WINDOW_MIN));
-    if (minute !== sweptMinute) { sweptMinute = minute; statements.push(sql(LIVE_SWEEP).bind(minute - LIVE_KEEP_MIN)); }
+    if (sweep) statements.push(sql(LIVE_SWEEP).bind(minute - LIVE_KEEP_MIN));
     try {
       await db.batch(statements);
     } catch (error) {
       if (DUPLICATE.test(error && error.message)) return false;
       throw error;
     }
+    if (sweep) sweptMinute = minute;
     return true;
   }
 
