@@ -1,10 +1,11 @@
 // The Cloudflare Worker entry (server/worker.mjs) driven with real Fetch-API Requests,
 // with env.DB a D1-style database over node:sqlite (server/sqlite-d1.mjs) and env.ASSETS a
 // stub: D1's free-plan limits per invocation (the request that upgrades the database does
-// only that and is answered 503), the batch interval and the usage meter; and two checks
-// against earlier servers from Git: the same simulated batches give milestone 2's KPIs
-// (git show 743e5ec), and a database of the first server (git show 6866861) is upgraded
-// with the same KPIs.
+// only that and is answered 503), the batch interval, the usage meter, the 5-minute cron's
+// rollups and the KPI parts kept in D1; and two checks against earlier servers from Git,
+// with their privacy floor at 0: the same simulated batches give milestone 2's KPIs (git
+// show 743e5ec), and a database of the first server (git show 6866861) is upgraded with
+// the same KPIs.
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import fs from 'node:fs';
