@@ -3,6 +3,7 @@ import { after, before, test } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
+import { animationFrames, fontsReady, waitForCondition } from '../page-wait.mjs';
 import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -61,7 +62,7 @@ async function game(t, { reducedMotion = 'no-preference' } = {}) {
   });
   await page.goto(`${server.origin}/games/tunnel-blitz/`);
   await page.waitForFunction(() => window.__game);
-  await page.evaluate(() => document.fonts.ready);
+  await fontsReady(page, 'Tunnel Blitz fonts');
   return page;
 }
 
@@ -76,7 +77,14 @@ test('reduced motion keeps toasts visible and calms the crash shake and flash', 
       document.querySelector('.card[data-id="bubble"]').click();
       document.querySelector('#hangar .back').click();
     });
-    await page.waitForTimeout(400);
+    await waitForCondition(page, mode => {
+      const toast = document.querySelector('.toast');
+      if (!toast) return false;
+      const opacity = getComputedStyle(toast).opacity;
+      const animation = getComputedStyle(toast).animationName;
+      if (mode === 'reduce') return opacity === '1' && animation === 'none';
+      return animation === 'toastIn';
+    }, mode, mode === 'reduce' ? 'reduced-motion purchase toast is shown' : 'purchase toast animation has started');
     const toast = await page.$eval('.toast', e => ({ opacity: getComputedStyle(e).opacity, animation: getComputedStyle(e).animationName }));
     // Reduced motion would otherwise jump the toast to its last, transparent keyframe.
     if (mode === 'reduce') assert.deepEqual(toast, { opacity: '1', animation: 'none' }, 'purchase toast is shown still');
@@ -110,7 +118,7 @@ test('a paused scene is painted once, repainted for resize and context restore, 
   });
   assert.equal(await page.evaluate(() => { tb.paints = 0; tb.step(120); return tb.paints; }), 0, 'settled pause paints nothing');
   await page.setViewportSize({ width: 1000, height: 600 });
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  await animationFrames(page, 1, 'Tunnel Blitz resize frame');
   assert.equal(await page.evaluate(() => { tb.paints = 0; tb.step(30); return tb.paints; }), 1, 'resize repaints once');
   const restored = await page.evaluate(() => {
     const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');

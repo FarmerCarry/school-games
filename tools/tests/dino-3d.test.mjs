@@ -3,6 +3,7 @@ import { after, before, test } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
+import { fontsReady, waitForElapsed } from '../page-wait.mjs';
 import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -76,7 +77,7 @@ async function game(t, { manual = true, saved, deniedStorage = false, touch = fa
   }, { manual, saved, deniedStorage });
   await page.goto(`${server.origin}/games/dino-3d/`);
   await page.waitForFunction(() => !!window.Dino3DGame && window.dinoProbe.ready === 1, null, { polling: 40 });
-  await page.evaluate(() => document.fonts.ready);
+  await fontsReady(page, 'Dino 3D fonts');
   return page;
 }
 
@@ -85,7 +86,32 @@ const state = page => page.evaluate(() => ({ mode: Dino3DGame.mode, score: Dino3
   distance: Dino3DGame.state.distance, player: { ...Dino3DGame.state.player } }));
 const focusSurface = page => page.evaluate(() => { document.activeElement?.blur(); Kit.keys.reset(); });
 async function key(page, code) {
-  await page.keyboard.press(code);
+  // keyboard.press resolves when the browser process accepts the key, which can
+  // be before the renderer runs keydown. The manual loop then steps a frame
+  // with the key still up and the jump is missed. Wait until this page has
+  // handled that keydown (listeners registered at load run first).
+  await page.evaluate(code => {
+    dinoProbe.keyApplied = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        window.removeEventListener('keydown', onKey);
+        reject(new Error('keydown ' + code + ' was not delivered to the page within 8s'));
+      }, 8000);
+      function onKey(event) {
+        if (event.code !== code) return;
+        clearTimeout(timer);
+        window.removeEventListener('keydown', onKey);
+        resolve();
+      }
+      window.addEventListener('keydown', onKey);
+    });
+  }, code);
+  try {
+    await page.keyboard.press(code);
+    await page.evaluate(() => dinoProbe.keyApplied);
+  } catch (error) {
+    await page.evaluate(() => { const pending = dinoProbe.keyApplied; if (pending) pending.catch(() => {}); });
+    throw error;
+  }
   await step(page);
 }
 async function crash(page) {
@@ -504,7 +530,8 @@ test('Dino 3D keeps the result on screen when a jump is pressed just after the c
   await key(page, 'Space');
   await page.mouse.click(300, 300);
   assert.equal((await state(page)).mode, 'over', 'a jump pressed at the crash does not restart at once');
-  await page.waitForTimeout(650);
+  // Space and a scene tap are ignored for 600ms of page time after the crash.
+  await waitForElapsed(page, 600, 'Dino result guard');
   await key(page, 'Space');
   assert.equal((await state(page)).mode, 'playing', 'Space restarts once the result has been seen');
 });
