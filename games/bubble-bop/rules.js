@@ -28,6 +28,8 @@
 
   // The frog's pond and the basket's orchard, in logical pixels.
   BB.FROG = { x: 640, ground: 598, h: 96, v: 1020, g: 2900, tongue: 86 };
+  // A firefly this many catch windows from the frog lights the Space bar: time to jump.
+  BB.NEAR = 1.3;
   BB.BASKET = { y: 604, ground: 676 };
   // On-screen keys that light up with the real ones (art draws them, game clicks them).
   BB.KEYS = {
@@ -400,6 +402,8 @@
         if (f.dead) continue;
         f.age += dt;
         var dx = f.x - frog.x, ad = Math.abs(dx), k = slow + (1 - slow) * clamp((ad - 10) / (win * 1.5), 0, 1);
+        // The moment to press Space, which a reaction time counts from (not the fly's start).
+        if (!f.near && ad < win * BB.NEAR) { f.near = true; w.ev.push({ t: 'near', kind: 'fly', id: f.id, x: f.x, y: f.y }); }
         if (slow === 0 && ad <= 10 && f.waited < f.wait) { f.waited += dt; f.x += (frog.x - f.x) * Math.min(1, dt * 4); }
         else f.x += f.dir * speed * Math.max(k, slow > 0 ? slow : 0.16) * dt;
         f.y = f.baseY + Math.sin(f.age * 3.2 + f.phase) * f.zig;

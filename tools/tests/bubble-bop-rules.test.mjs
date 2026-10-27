@@ -173,6 +173,25 @@ test('pressing Space at random moments finishes every tier-1 jump level', () => 
   }
 });
 
+test('a firefly says when to jump once, as it comes over the frog and the Space bar lights up', () => {
+  for (let tier = 1; tier <= BB.TIERS; tier++) {
+    const world = BB.create(BB.plan(2, 0, tier), 3), near = new Set(), spawned = new Set();
+    for (let i = 0; i < 60 * 30; i++) {
+      BB.step(world, DT, { px: null, py: null, clicks: [], jump: false, dir: 0 });
+      for (const e of world.ev) {
+        if (e.t === 'spawn') spawned.add(e.id);
+        if (e.t !== 'near') continue;
+        assert.ok(spawned.has(e.id) && !near.has(e.id), `tier ${tier}: one cue per firefly`);
+        near.add(e.id);
+        assert.ok(Math.abs(e.x - world.frog.x) < BB.knob(world, 'window') * BB.NEAR, `tier ${tier}: the cue comes over the frog, not where the fly starts`);
+      }
+      world.ev.length = 0;
+    }
+    // A tier-1 firefly waits above the frog; from tier 2 they fly past one after another.
+    assert.ok(near.size >= (tier === 1 ? 1 : 3), `tier ${tier}: ${near.size} cues`);
+  }
+});
+
 test('nothing pops by itself: a Bop that never moves, a frog that never jumps and a basket that never moves score nothing', () => {
   for (const [w, mode] of [[0, 'touch'], [1, 'tap'], [2, 'jump'], [3, 'catch']]) {
     const world = BB.create(BB.plan(w, 0, 1), 9);

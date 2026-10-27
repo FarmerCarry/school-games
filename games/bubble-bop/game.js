@@ -614,7 +614,10 @@
   }
   function handleEvents() {
     for (const e of world.ev) {
-      if (e.t === 'spawn') { if (world.mode !== 'touch') Kit.track.cue(); }
+      // A reaction time counts from the moment there is something to press: a balloon or a
+      // fruit appears, or a firefly comes over the frog. Touching a bubble needs no press.
+      if (e.t === 'spawn') { if (world.mode === 'tap' || world.mode === 'catch') Kit.track.cue(); }
+      else if (e.t === 'near') Kit.track.cue();
       else if (e.t === 'pop') onPop(e);
       else if (e.t === 'escape') {
         Kit.track.miss();
@@ -797,7 +800,7 @@
     drawFxLayer(ctx);
     // The input mirror: the real device the child should use, lighting up with it.
     if (mode === 'jump') {
-      const near = w.targets.some(t => !t.dead && Math.abs(t.x - w.frog.x) < BB.knob(w, 'window') * 1.3);
+      const near = w.targets.some(t => !t.dead && Math.abs(t.x - w.frog.x) < BB.knob(w, 'window') * BB.NEAR);
       A.spaceBar(ctx, { down: Kit.keys.down('Space') || flash.space > 0.55, glow: Math.max(flash.spaceGlow, near ? 0.6 + 0.4 * Math.sin(time * 9) : w.tier === 1 ? 0.3 : 0), wiggle: flash.wiggle, time: time, still: still });
     } else if (mode === 'catch') {
       const dx = focus ? focus.x - w.basket.x : 0, far = Math.abs(dx) > w.basket.hw * 0.5;

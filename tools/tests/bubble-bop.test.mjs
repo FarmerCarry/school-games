@@ -45,7 +45,7 @@ async function game(t, options = {}) {
   const ctx = await context(t, options);
   await ctx.addInitScript(() => {
     let kit;
-    const bb = window.bb = { stats: [] };
+    const bb = window.bb = { stats: [], cues: [] };
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (update, render) => {
@@ -59,6 +59,9 @@ async function game(t, options = {}) {
         const call = kit.stats[name];
         kit.stats[name] = function (...args) { bb.stats.push([name, ...args]); return call.apply(this, args); };
       }
+      // What is on screen at each reaction-time cue.
+      const cue = kit.track.cue;
+      kit.track.cue = function (...args) { const s = window.__game && __game.state; bb.cues.push(s && { mode: s.mode, frog: s.frog && s.frog.x, targets: s.targets }); return cue.apply(this, args); };
     } });
   });
   const page = await ctx.newPage();
@@ -248,6 +251,19 @@ test('world 3: Space jumps and catches; other keys never cost anything; at tier 
   await easy.mouse.click(bar.x, bar.y);
   await step(easy);
   assert.equal((await state(easy)).frog.jumps, 2, 'and so does a click on the on-screen Space bar');
+});
+
+test('a reaction time starts when there is something to press: a firefly over the frog, not far away', async t => {
+  const page = await game(t, { save: SAVE(2), dda: { _: { w3: [0.3, 4] } } });
+  await openLevel(page, 2, 0);
+  const tier = (await state(page)).tier;
+  assert.ok(await until(page, 'bb.cues.length >= 3', 60 * 30), 'the fireflies fly past the frog one after another');
+  const { cues, reach } = await page.evaluate(tier => ({ cues: bb.cues, reach: BB.TUNE.jump.window[tier - 1] * BB.NEAR }), tier);
+  for (const c of cues) {
+    assert.equal(c.mode, 'jump');
+    const gap = Math.min(...c.targets.map(f => Math.abs(f.x - c.frog)));
+    assert.ok(gap < reach, `the cue comes as a firefly is ${Math.round(gap)} px from the frog, when the Space bar lights up (${Math.round(reach)} px)`);
+  }
 });
 
 test('world 4: the arrow keys (and A, D) move the basket under the fruit', async t => {
