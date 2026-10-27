@@ -162,7 +162,10 @@
     return getKpis(state.token).then(function (kpis) {
       if (seq !== state.seq) return;
       if (!kpis || !kpis.totals) throw new Failure('server', 200);
-      state.kpis = kpis; state.kpisAt = new Date(); state.notice = null;
+      // An unchanged answer (the 5-minute refresh, mostly) keeps the page, its focus and scroll.
+      var json = JSON.stringify(kpis), same = !!state.kpis && json === state.kpisJson && !state.notice;
+      state.kpis = kpis; state.kpisJson = json; state.kpisAt = new Date(); state.notice = null;
+      if (same) { renderNotice(); return; }
       return catalogReady.then(function () { if (seq === state.seq) renderData(); });
     }, function (f) {
       if (seq !== state.seq) return;
@@ -229,7 +232,7 @@
     }
   }
   function signOut(reason) {
-    state.token = null; state.kpis = null; state.live = null; state.kpisAt = null; state.seq++;
+    state.token = null; state.kpis = null; state.kpisJson = null; state.live = null; state.kpisAt = null; state.seq++;
     save(KEY.token, null);
     clearData();
     showSignIn(reason ? { kind: reason } : null);
@@ -361,10 +364,11 @@
   }
   var top = function (id, rows) { return state.expanded[id] ? rows : rows.slice(0, TOP); };
 
-  // Charts are drawn to their card's width; a resize redraws them.
+  // Charts are drawn to their card's width once the whole page is laid out (a panel
+  // measured before its neighbours exist would be too wide); a resize redraws them.
   var drawers = [];
   function redrawCharts() { drawers.forEach(function (fn) { fn(); }); }
-  function draw(fn) { drawers.push(fn); fn(); }
+  function draw(fn) { drawers.push(fn); }
 
   function clearData() {
     drawers = [];
@@ -374,7 +378,7 @@
 
   // ---- render --------------------------------------------------------------------------
   function renderData() {
-    var T = t(), k = state.kpis;
+    var T = t(), k = state.kpis, scrollY = window.scrollY;
     clearData();
     renderNotice();
     $('rangeText').textContent = '';
@@ -388,7 +392,7 @@
     var sections = $('sections');
     var totalsHidden = !k.totals || k.totals.suppressed === true;
     if (totalsHidden || !k.totals.sessions) {
-      note(sections, totalsHidden ? T.hiddenTile : T.noData, 'empty');
+      note(sections, totalsHidden ? T.hiddenHint : T.emptyHint, 'empty');
       return;
     }
     renderDaily(sections, k);
@@ -398,6 +402,8 @@
     renderDifficulty(sections, k);
     renderReturning(sections, k);
     renderHealth(sections, k);
+    redrawCharts();
+    if (window.scrollY !== scrollY) window.scrollTo(window.scrollX, scrollY);
   }
 
   function section(parent, id, title) {
@@ -411,7 +417,7 @@
     favourite: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z',
     favouriteBand: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z',
     health: 'M3 5h18v11H3zM8 20h8M12 16v4', returning: 'M4 12a8 8 0 0 1 14-5.3M20 4v4h-4M20 12a8 8 0 0 1-14 5.3M4 20v-4h4',
-    trend: 'M3 17l6-6 4 4 8-8M15 7h6v6', easy: 'M5 12l5 5 9-10', hidden: 'M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Zm9 3a3 3 0 1 0 0-6',
+    trend: 'M3 17l6-6 4 4 8-8M15 7h6v6', easy: 'M5 12l5 5 9-10', hidden: 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z',
     empty: 'M4 12h16', quiet: 'M5 12l5 5 9-10'
   };
   function icon(parent, kind, cls) {
@@ -512,8 +518,8 @@
         return { label: gameName(g.slug), value: g.opens, valueText: T.nOpens(g.opens),
           tip: { title: gameName(g.slug), rows: [
             { value: T.nOpens(g.opens), label: g.share != null ? '(' + I.pct(g.share) + ')' : '', color: 'var(--s1)', swatch: 'bar' },
-            { value: I.int(g.sessions), label: T.playSessions },
-            { value: minutesText(g.engagedMinutes), label: T.playTime }] } };
+            { value: T.nSessions(g.sessions) },
+            { value: minutesText(g.engagedMinutes), label: T.ofPlay }] } };
       }) });
     });
     moreButton(c.foot, 'fav', fav.rows.length);
@@ -527,7 +533,12 @@
   // Favourites by age: one small panel per age group, on the same scale.
   function renderByAge(parent, k) {
     var T = t(), sec = section(parent, 'by-age', T.byAgeTitle);
-    var groups = I.favouritesByBand(k, k.range && k.range.band !== 'all' ? TOP : 5);
+    // One age group chosen: its favourites are the list above.
+    if (k.range && k.range.band && k.range.band !== 'all') {
+      note(h('div', { class: 'card', id: 'age-card' }, sec), T.byAgeOne(I.bandLabel(k.range.band, state.lang)));
+      return;
+    }
+    var groups = I.favouritesByBand(k, 5);
     var c = card(sec, 'age-card', null, T.byAgeSub, true);
     var max = 0;
     groups.forEach(function (g) { g.rows.forEach(function (r) { max = Math.max(max, r.share || 0); }); });
@@ -538,7 +549,7 @@
       var head = h('div', { class: 'panel-head' }, p);
       h('h4', { class: 'panel-title' }, head, I.bandLabel(g.band, state.lang));
       if (g.hidden) { note(p, T.hiddenTile, 'privacy'); return; }
-      h('span', { class: 'panel-sub' }, head, I.int(g.sessions) + ' ' + (state.lang === 'ar' ? I.arWord(g.sessions, ['جلسة', 'جلستان', 'جلسات', 'جلسة']) : g.sessions === 1 ? 'play session' : 'play sessions'));
+      h('span', { class: 'panel-sub' }, head, T.nSessions(g.sessions));
       var host = h('div', { class: 'chart-host' }, p);
       if (!g.rows.length) { note(host, T.noData); return; }
       draw(function () {
@@ -582,7 +593,7 @@
   }
 
   var VERDICT_ICON = { hard: 'M12 4 3 19h18L12 4Z', easy: 'M12 20 3 5h18L12 20Z', right: 'M5 12.5l4.5 4.5L19 7', few: 'M6 12h.01M12 12h.01M18 12h.01',
-    none: 'M6 12h12', hidden: 'M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z', missing: 'M6 12h12' };
+    none: 'M6 12h12', hidden: 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z', missing: 'M6 12h12' };
   function verdictNode(parent, v, compact) {
     var T = t(), code = v.code;
     var el = h('span', { class: 'verdict v-' + code, 'data-verdict': code }, parent);
@@ -710,7 +721,7 @@
               tip: { title: T.dims[dim] + ': ' + I.deviceLabel(dim, d.value, state.lang), rows: [
                 { value: I.pct(d.smooth), label: T.smooth, color: 'var(--s1)', swatch: 'bar' },
                 { value: secondsText(d.loadMs), label: T.loadTime }, { value: I.pct(d.slowInput), label: T.inputDelay },
-                { value: I.int(d.sessions), label: T.playSessions }] } };
+                { value: T.nSessions(d.sessions) }] } };
           }) });
       });
       if (hiddenCount) note(p, T.moreHidden(hiddenCount, T.pcTypes), 'privacy');
@@ -763,7 +774,6 @@
   if (window.ResizeObserver) new ResizeObserver(onResize).observe($('dash'));
   else window.addEventListener('resize', onResize);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') C.hideTip(); });
-  window.addEventListener('scroll', function () { C.hideTip(); }, { passive: true });
 
   applyTheme();
   applyLang();

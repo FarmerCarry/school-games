@@ -7,7 +7,7 @@
 (function () {
   'use strict';
   var I = window.SGInsights;
-  var LRI = '⁦', PDI = '⁩';
+  var LRI = '\u2066', PDI = '\u2069';
   var iso = function (t) { return LRI + t + PDI; };
   var n = function (v) { return I.int(v); };
 
@@ -92,12 +92,15 @@
     game: 'Game',
     playSessions: 'Play sessions',
     playTime: 'Play time',
+    ofPlay: 'played',
+    nSessions: function (v) { return v === 1 ? '1 play session' : n(v) + ' play sessions'; },
     share: 'Share of opens',
 
     byAgeTitle: 'Favourites by age',
     byAgeSub: 'Each age group’s most opened games, as a share of that group’s game opens.',
     ofGroupOpens: 'of this age group’s game opens',
     ageGroup: 'Age group',
+    byAgeOne: function (b) { return 'Only children aged ' + b + ' are shown, so their favourites are the list above. Choose “All ages” to compare the age groups side by side.'; },
 
     stuckTitle: 'Where children get stuck',
     stuckSub: 'Levels most often left unfinished, among levels with at least 20 tries.',
@@ -163,6 +166,8 @@
     levels: { one: 'level', many: 'levels' },
     pcTypes: { one: 'PC type', many: 'PC types' },
     noData: 'No play has been recorded in this period yet.',
+    emptyHint: 'Numbers appear here a few minutes after children play on the games site with statistics switched on.',
+    hiddenHint: 'So few children played in this period that everything is hidden for privacy. Choose a longer period above.',
     footer: 'Groups with fewer than 3 children are always hidden for privacy. The games never collect names or other personal details.'
   };
 
@@ -247,12 +252,15 @@
     game: 'اللعبة',
     playSessions: 'جلسات اللعب',
     playTime: 'وقت اللعب',
+    ofPlay: 'من اللعب',
+    nSessions: function (v) { return v === 1 ? 'جلسة لعب واحدة' : v === 2 ? 'جلستا لعب' : n(v) + ' ' + I.arWord(v, ['جلسة', 'جلستان', 'جلسات', 'جلسة']) + ' لعب'; },
     share: 'النسبة من مرات الفتح',
 
     byAgeTitle: 'المفضلة حسب العمر',
     byAgeSub: 'أكثر الألعاب فتحًا في كل فئة عمرية، كنسبة من مرات فتح الألعاب في الفئة نفسها.',
     ofGroupOpens: 'من مرات فتح الألعاب في هذه الفئة',
     ageGroup: 'الفئة العمرية',
+    byAgeOne: function (b) { return 'تظهر الآن فئة ' + b + ' وحدها، فالمفضلة لديها هي القائمة السابقة. اختر «كل الأعمار» لمقارنة الفئات العمرية جنبًا إلى جنب.'; },
 
     stuckTitle: 'أين يتعثر الأطفال',
     stuckSub: 'المراحل التي تُترك دون إكمال أكثر من غيرها، من بين المراحل التي جُرّبت 20 مرة على الأقل.',
@@ -325,6 +333,8 @@
     levels: { forms: ['مرحلة أخرى', 'مرحلتان أخريان', 'مراحل أخرى', 'مرحلة أخرى'] },
     pcTypes: { masc: true, forms: ['نوع جهاز آخر', 'نوعا جهاز آخران', 'أنواع أجهزة أخرى', 'نوع جهاز آخر'] },
     noData: 'لم يُسجَّل أي لعب في هذه الفترة بعد.',
+    emptyHint: 'تظهر الأرقام هنا بعد دقائق من لعب الأطفال على موقع الألعاب والإحصاءات مفعّلة.',
+    hiddenHint: 'لعب عدد قليل جدًا من الأطفال في هذه الفترة، لذلك أُخفي كل شيء حفاظًا على الخصوصية. اختر فترة أطول في الأعلى.',
     footer: 'تُخفى دائمًا المجموعات التي فيها أقل من 3 أطفال حفاظًا على الخصوصية. لا تجمع الألعاب أي أسماء أو تفاصيل شخصية.'
   };
 

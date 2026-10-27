@@ -28,7 +28,7 @@ const TEXT = loadScripts('insights.js', 'i18n.js').SGDashText;
 const ARABIC = /[؀-ۿ]/;
 const ARABIC_INDIC_DIGITS = /[٠-٩۰-۹]/;
 const LATIN_WORD = /[A-Za-z]{2,}/;
-const strip = text => text.replace(/[⁦-⁩]/g, '');
+const strip = text => text.replace(/[\u2066-\u2069]/g, '');
 
 // ---- a small hand-made KPI answer in the documented shape ------------------------
 const codes = (w, l, q, d = 0, e = 0) => ({ w, l, d, e, q });
@@ -96,8 +96,8 @@ test('the difficulty verdict follows the documented thresholds', () => {
   assert.deepEqual({ ...I.T }, {
     MIN_SESSIONS: 3, MIN_TRIES: 20, MIN_SESSIONS_NO_TRIES: 5, HARD_WIN: 0.4, HARD_QUIT: 0.3, EASY_WIN: 0.9, EASY_QUIT: 0.1,
     HARD_COMPLETION: 0.3, EASY_COMPLETION: 0.85, STUCK_MIN_TRIES: 20, STUCK_RATE: 0.25, RETURN_MIN_OPENS: 20, RETURN_RATE: 0.5,
-    FAIL_MIN_OPENS: 20, FAIL_RATE: 0.03, SLOW_LOAD_MS: 3000, SLOW_LOAD_MIN: 10, CHOPPY_SMOOTH: 0.8, SLOW_INPUT: 0.1,
-    DEVICE_MIN_SESSIONS: 10, DEVICE_GAP: 0.05, TREND_DAYS: 7, TREND_MIN: 20, TREND_CHANGE: 0.1
+    FAIL_MIN_OPENS: 20, FAIL_MIN: 3, FAIL_RATE: 0.03, SLOW_LOAD_MS: 3000, SLOW_LOAD_MIN: 10, CHOPPY_SMOOTH: 0.8, SLOW_INPUT: 0.1,
+    DEVICE_MIN_SESSIONS: 10, DEVICE_SMOOTH: 0.85, DEVICE_GAP: 0.05, TREND_DAYS: 7, TREND_MIN: 20, TREND_CHANGE: 0.1
   });
   const v = cell => I.verdict({ tries: 20, sessions: 10, winnable: true, ...cell }).code;
   assert.equal(v({ tries: 19, winRate: 0.1, dropOffRate: 0.5 }), 'few', 'fewer than 20 tries: no verdict');
@@ -120,6 +120,11 @@ test('the difficulty verdict follows the documented thresholds', () => {
   assert.equal(c({ sessions: 5, completionRate: 0.30 }), 'right');
   assert.equal(c({ sessions: 5, completionRate: 0.85 }), 'easy');
   assert.equal(I.verdict({ tries: null, sessions: 9, winnable: true, completionRate: 0.5 }).basis, 'completion');
+  // Rates are judged as the whole percentages the page shows.
+  assert.equal(v({ winRate: 0.396, dropOffRate: 0 }), 'right', '39.6 % is shown as 40 %');
+  assert.equal(v({ winRate: 0.394, dropOffRate: 0 }), 'hard');
+  const choppy = smooth => I.pcHealth({ games: [game('g', { smooth })] }).rows[0].flags.includes('choppy');
+  assert.deepEqual([0.794, 0.7951, 0.81].map(choppy), [true, false, false]);
 });
 
 test('rankings are deterministic: a number first, then the slug and the id', () => {
@@ -217,14 +222,14 @@ test('both languages: Arabic sentences are Arabic with Western digits, English o
     assert.ok(ARABIC.test(s.text), s.text);
     assert.ok(!LATIN_WORD.test(strip(s.text)), 'no English words: ' + s.text);
     assert.ok(!ARABIC_INDIC_DIGITS.test(s.text), 'Western digits: ' + s.text);
-    assert.match(s.text, /«⁨[^»]+⁩»/, 'a game name in guillemets, isolated');
+    assert.match(s.text, /«\u2068[^»]+\u2069»/, 'a game name in guillemets, isolated');
   }
   assert.equal(strip(ar[0].text), 'يترك الأطفال المرحلة 1 من «قفز برافو» دون إكمال في 40% من المحاولات (20 من أصل 50).');
   assert.equal(strip(ar[1].text), 'تبدو لعبة «جري ألفا» صعبة جدًا على الأطفال بعمر 6–7 سنوات: يفوزون في 12% من الجولات التي يُنهونها، ويتركون 20% من جولاتهم دون إكمال.');
-  assert.ok(ar[1].text.includes('⁦6–7⁩ سنوات'), 'the age range keeps its order inside Arabic text');
+  assert.ok(ar[1].text.includes('\u20666–7\u2069 سنوات'), 'the age range keeps its order inside Arabic text');
   assert.equal(strip(ar[3].text), 'تعذّر تشغيل «قيادة دلتا» 4 مرات (7 من كل 100 مرة فتح).');
   // Labels and Arabic counting.
-  assert.equal(I.bandLabel('10-11', 'ar'), '⁦10–11⁩ سنة');
+  assert.equal(I.bandLabel('10-11', 'ar'), '\u206610–11\u2069 سنة');
   assert.equal(I.bandLabel('8-9', 'en'), '8–9');
   assert.equal(I.levelLabel('w1-2', 'en'), 'world 1, level 2');
   assert.equal(I.levelLabel('L3', 'ar'), 'المرحلة 3');

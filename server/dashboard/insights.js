@@ -22,6 +22,9 @@
  *   When an age group has only the completion rate (wins / rounds started, from
  *   an older server), too hard is under 30 % and too easy 85 % or more.
  *
+ * Every rate is compared as the whole percentage the page shows (79.6 % counts as
+ * 80 %), so a label never contradicts the number next to it.
+ *
  * Insights: at most five sentences. Each kind has its own rule below (STUCK_*,
  * RETURN_*, ...) and a deterministic order (a number, then the slug, then the id).
  * One sentence per kind, in KIND_ORDER; while fewer than five, a second pass adds
@@ -50,13 +53,15 @@
     RETURN_MIN_OPENS: 20,
     RETURN_RATE: 0.5,
     FAIL_MIN_OPENS: 20,
-    FAIL_RATE: 0.03,           // 3 failed starts in every 100 opens
+    FAIL_MIN: 3,               // at least 3 failed starts ...
+    FAIL_RATE: 0.03,           // ... and 3 in every 100 opens
     SLOW_LOAD_MS: 3000,
     SLOW_LOAD_MIN: 10,         // loads measured
     CHOPPY_SMOOTH: 0.80,       // under 80 % smooth picture updates
     SLOW_INPUT: 0.10,          // 10 % of clicks and key presses answered in 50 ms or more
     DEVICE_MIN_SESSIONS: 10,
-    DEVICE_GAP: 0.05,          // the least smooth PC type is 5 points below the best
+    DEVICE_SMOOTH: 0.85,       // a PC type under 85 % smooth motion ...
+    DEVICE_GAP: 0.05,          // ... and 5 points below the best
     TREND_DAYS: 7,
     TREND_MIN: 20,             // play sessions in the earlier week
     TREND_CHANGE: 0.10
@@ -67,7 +72,7 @@
   const VERDICT_RANK = { hard: 0, easy: 1, right: 2, few: 3, none: 4, hidden: 5, missing: 6 };
 
   // Unicode isolates keep numbers and Latin slugs in order inside Arabic text.
-  const LRI = '⁦', FSI = '⁨', PDI = '⁩';
+  const LRI = '\u2066', FSI = '\u2068', PDI = '\u2069';
   const iso = text => LRI + text + PDI;
 
   // Shown: not suppressed, and (defence in depth) not a 1- or 2-session group even if
@@ -76,6 +81,8 @@
     !(typeof g.sessions === 'number' && g.sessions > 0 && g.sessions < T.MIN_SESSIONS);
   const list = v => Array.isArray(v) ? v : [];
   const num = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
+  // A rate as shown: a whole percentage (null stays null).
+  const shownRate = v => { const r = num(v); return r === null ? null : Math.round(r * 100) / 100; };
   const sum = arr => list(arr).reduce((a, b) => a + (num(b) || 0), 0);
   const cmp = (a, b) => a < b ? -1 : a > b ? 1 : 0;
   const byLevel = (a, b) => cmp(a.slug, b.slug) ||
@@ -265,7 +272,7 @@
     const tries = num(cell.tries), sessions = num(cell.sessions) || 0;
     if (cell.winnable === false) return { code: 'none', tries };
     if (tries !== null ? tries < T.MIN_TRIES : sessions < T.MIN_SESSIONS_NO_TRIES) return { code: 'few', tries };
-    const win = num(cell.winRate), quit = num(cell.dropOffRate), done = num(cell.completionRate);
+    const win = shownRate(cell.winRate), quit = shownRate(cell.dropOffRate), done = shownRate(cell.completionRate);
     // undefined: an older server without the win rate for this group; null: no
     // round of this group ended in a win or a loss.
     if (cell.winRate !== undefined) {
@@ -356,10 +363,10 @@
       const fails = sum(Object.values(g.errors || {})), opens = opensOf(g);
       const smooth = num(g.frames && g.frames.smoothShare), slow = slowInput(list(g.il));
       const flags = [];
-      if (smooth !== null && sum(counts) > 0 && smooth < T.CHOPPY_SMOOTH) flags.push('choppy');
-      if (ms !== null && n >= T.SLOW_LOAD_MIN && ms >= T.SLOW_LOAD_MS) flags.push('slowLoad');
-      if (slow !== null && slow >= T.SLOW_INPUT) flags.push('slowInput');
-      if (opens >= T.FAIL_MIN_OPENS && fails / opens >= T.FAIL_RATE) flags.push('fails');
+      if (smooth !== null && sum(counts) > 0 && shownRate(smooth) < T.CHOPPY_SMOOTH) flags.push('choppy');
+      if (ms !== null && n >= T.SLOW_LOAD_MIN && Math.round(ms / 100) * 100 >= T.SLOW_LOAD_MS) flags.push('slowLoad');
+      if (slow !== null && shownRate(slow) >= T.SLOW_INPUT) flags.push('slowInput');
+      if (opens >= T.FAIL_MIN_OPENS && fails >= T.FAIL_MIN && shownRate(fails / opens) >= T.FAIL_RATE) flags.push('fails');
       return { slug: g.slug, smooth, stall: num(g.frames && g.frames.stallShare), loadMs: ms, loads: n, slowInput: slow,
         fails, opens, failRate: opens ? fails / opens : null, flags };
     }).sort((a, b) => b.flags.length - a.flags.length || (a.smooth ?? 2) - (b.smooth ?? 2) || cmp(a.slug, b.slug));
@@ -394,7 +401,7 @@
 
     // Where children get stuck.
     for (const l of stuckLevels(kpis).rows) {
-      if (l.rate < T.STUCK_RATE) break;
+      if (shownRate(l.rate) < T.STUCK_RATE) break;
       add('stuck', l.slug + ' ' + l.id, ar
         ? 'يترك ' + children(band, lang) + ' ' + levelLabel(l.id, lang) + ' من ' + game(l.slug) + ' دون إكمال في ' + pct(l.rate) +
           ' من المحاولات (' + int(l.quits) + ' من أصل ' + int(l.starts) + ').'
@@ -445,7 +452,7 @@
 
     // Coming back.
     for (const r of returning(kpis, T.RETURN_MIN_OPENS).rows) {
-      if (r.share < T.RETURN_RATE) break;
+      if (shownRate(r.share) < T.RETURN_RATE) break;
       add('returning', r.slug, ar
         ? 'يعود ' + children(band, lang) + ' إلى ' + game(r.slug) + ' أكثر من غيرها: ' + pct(r.share) + ' من مرات فتحها كانت لأطفال لعبوها من قبل.'
         : children(band, lang, true) + ' come back to ' + nameOf(r.slug) + ' the most: ' + pct(r.share) +
@@ -466,7 +473,8 @@
       if (rows.length < 2) continue;
       const worst = rows.slice().sort((a, b) => a.smooth - b.smooth || a.value - b.value)[0];
       const best = rows.slice().sort((a, b) => b.smooth - a.smooth || b.value - a.value)[0];
-      if (worst.value !== best.value && worst.smooth < 0.85 && best.smooth - worst.smooth >= T.DEVICE_GAP) gaps.push({ dim, worst, best });
+      const gap = Math.round((shownRate(best.smooth) - shownRate(worst.smooth)) * 100);
+      if (worst.value !== best.value && shownRate(worst.smooth) < T.DEVICE_SMOOTH && gap >= Math.round(T.DEVICE_GAP * 100)) gaps.push({ dim, worst, best });
     }
     gaps.sort((a, b) => (b.best.smooth - b.worst.smooth) - (a.best.smooth - a.worst.smooth) || cmp(a.dim, b.dim));
     for (const g of gaps) {
@@ -498,7 +506,7 @@
       if (recent.every(shown) && before.every(shown)) {
         const a = sum(before.map(d => d.sessions)), b = sum(recent.map(d => d.sessions));
         const change = a ? (b - a) / a : null;
-        if (a >= T.TREND_MIN && change !== null && Math.abs(change) >= T.TREND_CHANGE) {
+        if (a >= T.TREND_MIN && change !== null && shownRate(Math.abs(change)) >= T.TREND_CHANGE) {
           const up = change > 0;
           add('trend', up ? 'up' : 'down', ar
             ? (up ? 'زادت' : 'انخفضت') + ' جلسات اللعب بنسبة ' + pct(Math.abs(change)) + ' في آخر 7 أيام كاملة مقارنة بالأيام السبعة التي قبلها (' +

@@ -233,7 +233,7 @@ test('filters change the request and every section; the period and age band', as
   assert.equal(call.json.range.band, '8-9');
   assert.equal(await tileValue(page, 'sessions'), String(call.json.totals.sessions));
   assert.match(await page.locator('#rangeText').textContent(), /8–9$/);
-  assert.deepEqual(await page.locator('#by-age .panel-title').allTextContents(), ['8–9'], 'only the chosen age group');
+  assert.match(await page.locator('#by-age').textContent(), /Only children aged 8–9 are shown/, 'no second copy of the favourites');
   assert.deepEqual([...new Set(await page.locator('#difficulty .diff-cell[data-band]').evaluateAll(cells => cells.map(c => c.dataset.band)))], ['8-9']);
   const insights = await page.locator('.insight').allTextContents();
   assert.deepEqual(insights, I.insights(call.json, { lang: 'en', name: nameOf('en'), today: today() }).map(x => x.text));
@@ -246,6 +246,13 @@ test('filters change the request and every section; the period and age band', as
   call = await pick('periodFilter', 90);
   assert.equal(call.search.get('from'), dayBefore(today(), 89));
   assert.equal(await page.locator('#by-age .panel').count(), call.json.bands.length);
+  // Refresh with an unchanged answer: the page (its focus and scroll) stays as it is.
+  const tile = await page.locator('.tile[data-key="sessions"]').elementHandle();
+  const n = s.kpis().length;
+  await page.click('#refreshBtn');
+  await waitForKpis(s, n + 1);
+  assert.equal(s.lastKpis().search.get('from'), dayBefore(today(), 89), 'the refresh asks for the same period');
+  assert.equal(await tile.evaluate(node => node.isConnected), true, 'no rebuild for the same numbers');
   await s.check();
 });
 
@@ -308,6 +315,20 @@ test('Arabic: right to left, Arabic game names, Western digits, remembered', asy
   assert.deepEqual(await page.locator('.insight').allTextContents(), I.insights(k, { lang: 'ar', name: nameOf('ar'), today: today() }).map(x => x.text));
   const text = await page.locator('body').textContent();
   assert.ok(!/[\u0660-\u0669\u06f0-\u06f9]/.test(text), 'Western digits only');
+  // Every number range ("6–7", "2–3 أنوية", ...) is drawn low to high inside the Arabic text.
+  const ranges = await page.evaluate(() => {
+    const out = [], walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node; (node = walker.nextNode());) {
+      for (const m of node.textContent.matchAll(/(\d+)–(\d+)/g)) {
+        const box = (i, n) => { const r = document.createRange(); r.setStart(node, i); r.setEnd(node, i + n); return r.getBoundingClientRect(); };
+        const a = box(m.index, m[1].length), b = box(m.index + m[1].length + 1, m[2].length);
+        if (a.width) out.push({ text: m[0], lowFirst: a.left < b.left });
+      }
+    }
+    return out;
+  });
+  assert.ok(ranges.length > 5, 'ranges found: ' + ranges.length);
+  assert.deepEqual(ranges.filter(r => !r.lowFirst), [], 'ranges drawn high to low');
   assert.equal(await tileText(page, 'sessions'), k.totals.sessions.toLocaleString('en-US'));
   // Bars grow from the right.
   const bar = await page.locator('#returning svg .bar').first().boundingBox();
