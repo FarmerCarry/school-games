@@ -316,6 +316,52 @@ test('XP from a real round, the rules per round code, the loss cap, level-ups an
   assert.deepEqual(await page.evaluate(() => window.levels), [2, 3]);
 });
 
+test('in fullscreen the level-up toast and burst are drawn over the game, and the toast comes back', async t => {
+  const { page } = await setup(t);
+  await page.goto(origin + '/');
+  await page.evaluate(() => SGProfiles.create(0, 0, '8-9'));
+  const frame = await play(page, 'air-hockey');
+  await page.locator('#fsBtn').click();
+  await page.waitForFunction(() => document.fullscreenElement === document.querySelector('#stage'));
+  // Only the fullscreen element is drawn. Record where each burst star goes, and its start.
+  await page.evaluate(() => {
+    window.stars = [];
+    new MutationObserver(list => list.forEach(m => m.addedNodes.forEach(n => {
+      if (n.className === 'burst') window.stars.push([n.parentNode === document.fullscreenElement, parseFloat(n.style.left)]);
+    }))).observe(document.documentElement, { childList: true, subtree: true });
+  });
+  await post(page, frame, stats([['s', 'L1'], ['w', 'L1', 1000], ['w', 'L1', 1000], ['w', 'L1', 1000]]));
+  assert.equal(await page.evaluate(() => SGProfiles.current().lv), 2);
+  assert.equal(await page.evaluate(() => document.fullscreenElement.contains(document.querySelector('#toast'))), true, 'the toast is drawn in fullscreen');
+  assert.match(await page.locator('#toast').innerText(), /^مستوى جديد! ⭐ 2$/);
+  assert.equal(await page.locator('#toast').getAttribute('class'), 'toast show gold');
+  const stars = await page.evaluate(() => window.stars), middle = await page.evaluate(() => innerWidth / 2);
+  assert.equal(stars.length, 7, 'the burst');
+  for (const [inside, x] of stars) {
+    assert.equal(inside, true, 'every star is drawn in fullscreen');
+    assert.ok(Math.abs(x - middle) < 2, 'the stars fly from the toast (the badge is not drawn): ' + x);
+  }
+  // Out of fullscreen the toast goes back to the page, where a redrawn view cannot remove it.
+  await page.evaluate(() => document.exitFullscreen());
+  await page.waitForFunction(() => !document.fullscreenElement);
+  await page.waitForFunction(() => document.querySelector('#toast').parentNode === document.body);
+
+  // Leaving the game while still in fullscreen redraws the view at once: the toast survives.
+  await page.locator('#fsBtn').click();
+  await page.waitForFunction(() => document.fullscreenElement === document.querySelector('#stage'));
+  await post(page, frame, stats(Array.from({ length: 5 }, () => ['w', 'L1', 1000])));
+  assert.equal(await page.evaluate(() => document.fullscreenElement.contains(document.querySelector('#toast'))), true);
+  assert.match(await page.locator('#toast').innerText(), /^مستوى جديد! ⭐ 3$/);
+  await page.evaluate(() => { location.hash = '#/'; });
+  await page.waitForFunction(() => document.body.className === 'route-home' && !document.fullscreenElement);
+  assert.equal(await page.evaluate(() => document.querySelector('#toast')?.parentNode === document.body), true, 'the toast is still in the page');
+  await page.locator('#who [data-w="add"]').click();
+  await page.locator('#who [data-w="a:4"]').click();
+  await page.locator('#who [data-w="c:4"]').click();
+  await page.locator('#who [data-w="b:6-7"]').click();
+  assert.equal(await page.locator('#toast').innerText(), 'أهلًا بك! 🎉', 'and still shows the next message');
+});
+
 test('the class band is the guest band; a new tab is a guest; the band reaches Kit.dda', async t => {
   const state = await setup(t);
   const { page } = state;

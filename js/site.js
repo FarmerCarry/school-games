@@ -243,11 +243,23 @@
     return String(s || '').replace(/[←-⯿️‍]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').trim();
   }
 
+  // In fullscreen only the fullscreen element is drawn, so the toast and bursts go
+  // inside it. A game's own fullscreen frame cannot hold them; they stay in the page.
+  function overlayHost() {
+    var fs = document.fullscreenElement || document.webkitFullscreenElement;
+    return fs && fs.tagName !== 'IFRAME' ? fs : document.body;
+  }
+  // Back to the page, where redrawing #app (and the stage in it) cannot remove it.
+  function parkToast() {
+    var t = $('#toast');
+    if (t && t.parentNode !== document.body) document.body.appendChild(t);
+  }
   var toastTimer = 0;
   // cls 'gold' is the bigger level-up toast.
   function toast(msg, cls) {
-    var t = $('#toast');
+    var t = $('#toast'), host = overlayHost();
     if (!t) return;
+    if (t.parentNode !== host) host.appendChild(t);
     t.textContent = msg;
     t.className = 'toast show' + (cls ? ' ' + cls : '');
     clearTimeout(toastTimer);
@@ -271,6 +283,9 @@
   // A little burst of emoji flying out of an element.
   function burst(el, chars) {
     if (calm()) return;
+    var host = overlayHost();
+    // The topbar is not drawn in fullscreen: the stars fly out of the toast instead.
+    if (host !== document.body) el = $('#toast') || el;
     var r = el.getBoundingClientRect();
     for (var i = 0; i < 7; i++) {
       var h = document.createElement('span');
@@ -280,7 +295,7 @@
       h.style.top = (r.top + r.height / 2) + 'px';
       h.style.setProperty('--dx', Math.round(Math.cos(i / 7 * 6.28) * 60) + 'px');
       h.style.setProperty('--dy', Math.round(Math.sin(i / 7 * 6.28) * 40 - 50) + 'px');
-      document.body.appendChild(h);
+      host.appendChild(h);
       setTimeout((function (s) { return function () { if (s.parentNode) s.parentNode.removeChild(s); }; })(h), 900);
     }
   }
@@ -1137,6 +1152,7 @@
     var fullscreen = isFullscreen();
     if (hadFullscreen && !fullscreen) postGame({ type: 'sg:pause', reason: 'fullscreen-exit' });
     hadFullscreen = fullscreen;
+    if (!fullscreen) parkToast();
     var b = $('#fsBtn');
     if (b) {
       var lbl = isFullscreen() ? T.fsExit : T.fs;
@@ -1383,6 +1399,8 @@
     prof(current && current === previousGame ? 'gone' : 'close');
     tm(current && current === previousGame ? 'gone' : 'close');
     if (previousGame && !current) juice('back');
+    // fullscreenchange comes only after the fullscreen stage is replaced here.
+    parkToast();
     app.innerHTML = html;
     $('#searchStatus').textContent = route.name === 'search' ? ((route.q || '').trim() ? T.found(search(route.q).length) : T.searchPrompt) : '';
     document.title = title;
