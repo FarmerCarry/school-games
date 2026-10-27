@@ -2,9 +2,16 @@
 
 Teachers want to know which games children choose, how long they really play, where
 they stop, and whether the school PCs run the games smoothly. This feature counts that
-**on each PC only**. Nothing is sent over the network: there is no server, no upload,
-no cookie and no third-party script. The numbers stay in the browser's `localStorage`
-on that PC until a teacher exports or clears them.
+**on each PC only**. These statistics never go over the network: they have no server,
+no upload, no cookie and no third-party script. The numbers stay in the browser's
+`localStorage` on that PC until a teacher exports or clears them.
+
+The portal also has a separate, optional **anonymous telemetry** sink
+([`TELEMETRY.md`](TELEMETRY.md)). It is off unless the school's administrator builds the
+fast site with an ingest server address, and even then it never sends these day records,
+the PC's id or label, or anything a child types: only coarse, anonymous play events.
+Stopping statistics on the teacher page stops it too, and clearing removes what it has
+not sent yet.
 
 Never recorded: names, anything a child types (typing-test words, search text, class
 codes, Snake Arena's player name), free-text error messages, screenshots, mouse paths
@@ -275,7 +282,13 @@ type a word first. It shows where its numbers come from (the web copy or a downl
 folder: each keeps its own statistics) and the date data starts.
 
 Arabic, right to left, Western digits. Fixed note at the top: **«الأرقام لكل جهاز وليست
-لكل طالب، ولا تُرسل إلى أي مكان.»** Period: اليوم، هذا الأسبوع، آخر 30 يومًا، الكل.
+لكل طالب، وتبقى على هذا الجهاز. لا يُرسل شيء إلا إذا ربط مسؤول المدرسة نسخة الموقع بخادم
+للإحصاءات، وعندها يُرسل الموقع معلومات لعب مجهولة فقط: بلا أسماء ولا اسم للجهاز ولا أي نص
+كتبه الأطفال.»** While the portal on this PC shares anonymous telemetry (it notes the server's
+host in `sg:site:tm:on`), and statistics are not stopped, sharing is not turned off and the
+browser sends no Global Privacy Control, a line under it says so and names the server:
+«المشاركة المجهولة مفعّلة على هذا الجهاز: يُرسل الموقع معلومات اللعب بلا أسماء ولا اسم للجهاز
+إلى <host>.» Period: اليوم، هذا الأسبوع، آخر 30 يومًا، الكل.
 
 1. Four answer cards: **أكثر الألعاب لعبًا** (by sessions of at least a minute, with
    minutes beside it), **كم يلعبون** (actual play time and average session),
@@ -317,9 +330,10 @@ Arabic, right to left, Western digits. Fixed note at the top: **«الأرقام
    this PC").
 5. Actions: name this PC, **تصدير ملف Excel**, **تصدير JSON**, **فتح ملفات من أجهزة أخرى**
    (view several PCs together; nothing is saved), stop or resume collecting (type
-   «أوقف»), clear this PC's statistics (type «امسح»; removes only keys that start with
-   `sg:site:stats:`, never the id, label or stop setting). While collection is stopped,
-   the 🏫 strip shows «الإحصاءات متوقفة».
+   «أوقف»; this also stops the anonymous telemetry), clear this PC's statistics (type
+   «امسح»; removes only keys that start with `sg:site:stats:`, and the telemetry keys
+   `sg:site:tm:` so nothing recorded before the clear is sent later; never the id, label or
+   stop setting). While collection is stopped, the 🏫 strip shows «الإحصاءات متوقفة».
    **An export counts only once its file is saved** (`lastExport`, which the reminder
    uses, is the moment the file was made). Where the browser offers pages a save dialog
    (`showSaveFilePicker`: Edge and Chrome, and only in a secure context, which includes
@@ -430,8 +444,9 @@ Step 1's files are the input; they do not need to change.
   refreshes in one click.
 * **Automatic collection** would need a Power Automate flow with an HTTP trigger (a
   premium licence) or an Azure Function, plus the school web filter allowing it. Any
-  upload would send this same JSON **from teacher.html only**, so games and the portal
-  stay free of network calls.
+  upload of these files would send this same JSON **from teacher.html only**. Games never
+  use the network, and the portal's only sender is the separate anonymous telemetry sink
+  (`js/telemetry.js`, [`TELEMETRY.md`](TELEMETRY.md)), which never sends these records.
 
 ## 6. Tests
 
@@ -449,8 +464,10 @@ Step 1's files are the input; they do not need to change.
   the export reminder, the hours rule and games still open.
 * `tools/tests/merge-progress.test.mjs`: a merge-2048 board is one round; the goal tile
   reports nothing and a full board reports `'end'` with the score.
-* `tools/tests/play-stats-rules.test.mjs` (node only): no network APIs in Kit, portal,
-  teacher page or games; no `Kit.stats` in engine or simulation files; every game calls
+* `tools/tests/play-stats-rules.test.mjs` (node only): no network APIs in Kit and the other
+  shared scripts, the portal, the teacher page or games, except `fetch()` and `sendBeacon`
+  in exactly `js/telemetry.js` (the same rule as `tools/check-all.mjs`, from
+  `tools/lib/network-rules.mjs`); no `Kit.stats` in engine or simulation files; every game calls
   `Kit.stats.round` and `Kit.stats.end` (the games come from `js/catalog.js` and the
   `games/` folders, so a new game is checked without editing the test; a game allowed
   not to report must be listed there with its reason); the teacher page's `NO_FRAMES`
