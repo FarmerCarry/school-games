@@ -6,6 +6,8 @@
  * page itself is opened from this computer (localhost), so a crafted link can
  * never send the password elsewhere. Game names come from names.js, written from
  * the games site's js/catalog.js by make-names.mjs; an unknown slug is shown as is.
+ * Days, hours and "today" follow the school's clock that every answer carries
+ * (clock: { tz, source, offsetMin, today }); a server without it means UTC.
  */
 (function () {
   'use strict';
@@ -37,6 +39,7 @@
     demo: params.has('demo'),
     period: 30, band: 'all',
     kpis: null, live: null, kpisAt: null, liveAt: null,
+    clock: null, settings: null, clockPosted: false, clockOpen: false, clockNotice: null,
     loading: false, seq: 0, notice: null, signinError: null,
     tables: {}, expanded: {},
     demoData: null
@@ -64,6 +67,8 @@
   function minutesText(m) { var d = I.duration(m, state.lang); return d.value + ' ' + d.unit; }
   function secondsText(ms) { return ms == null ? '—' : t().secondsValue(I.seconds(ms)); }
   var utcToday = function () { return new Date().toISOString().slice(0, 10); };
+  // "Today" is the school's day from the server's clock; UTC only for a server without one.
+  var today = function () { return state.clock && /^\d{4}-\d\d-\d\d$/.test(state.clock.today) ? state.clock.today : utcToday(); };
   var shiftDay = function (day, by) { return new Date(Date.parse(day + 'T00:00:00Z') + by * 86400000).toISOString().slice(0, 10); };
 
   // ---- theme and language ----------------------------------------------------------
@@ -95,19 +100,27 @@
 
   // ---- data -------------------------------------------------------------------------
   function range() {
-    var to = utcToday();
+    var to = today();
     return { from: shiftDay(to, -(state.period - 1)), to: to };
   }
-  function Failure(kind, status) { this.kind = kind; this.status = status; }
-  function request(path, token) {
-    return fetch(api + path, { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store', credentials: 'omit' })
+  function Failure(kind, status, body) { this.kind = kind; this.status = status; this.body = body || null; }
+  // method and body for the POST and DELETE actions (a JSON body of at most 4 KB).
+  function request(path, token, method, body) {
+    var init = { method: method || 'GET', headers: { Authorization: 'Bearer ' + token }, cache: 'no-store', credentials: 'omit' };
+    if (body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+    return fetch(api + path, init)
       .catch(function () { throw new Failure('network'); })
       .then(function (res) {
-        if (res.status === 401) throw new Failure('wrong', 401);
-        if (res.status === 404) throw new Failure('notSet', 404);
-        if (res.status === 429) throw new Failure('busy', 429);
-        if (!res.ok) throw new Failure('server', res.status);
-        return res.json().catch(function () { throw new Failure('server', res.status); });
+        return res.json().catch(function () { return null; }).then(function (json) {
+          if (res.status === 401) throw new Failure('wrong', 401);
+          // 404 is "the password was never set", or an older server without this endpoint.
+          if (res.status === 404) throw new Failure(json && json.error === 'admin password not set' ? 'notSet' : 'missing', 404);
+          if (res.status === 429) throw new Failure('busy', 429, json);
+          if (!res.ok || !json) throw new Failure('server', res.status, json);
+          // Every answer of the updated server carries the school's clock.
+          if (json.clock && typeof json.clock === 'object') setClock(json.clock);
+          return json;
+        });
       });
   }
   function kpiPath() {
@@ -132,9 +145,133 @@
   function failureText(f) {
     var T = t();
     if (f && f.kind === 'network') return T.errNetwork;
+    if (f && f.kind === 'missing') return T.oldServer;
     if (f && f.kind === 'busy') return T.errBusy;
     if (f && f.kind === 'wrong') return T.errExpired;
     return T.errServer(f && f.status || '?');
+  }
+
+  // ---- the school's clock ------------------------------------------------------------
+  function setClock(clock) {
+    var old = state.clock && JSON.stringify(state.clock);
+    state.clock = { tz: String(clock.tz || ''), source: String(clock.source || 'none'), offsetMin: Number(clock.offsetMin) || 0,
+      today: String(clock.today || '') };
+    if (old !== JSON.stringify(state.clock)) renderClock();
+  }
+  function browserZone() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; }
+  }
+  // GET /v1/admin/settings; once a page, while nothing knows the school's clock, this
+  // browser's zone is offered as a first guess (the PCs' own zone replaces it later).
+  function loadSettings() {
+    if (state.demo) return Promise.resolve();
+    var token = state.token;
+    return request('/v1/admin/settings', token).then(function (settings) {
+      if (token !== state.token) return;
+      state.settings = settings;
+      if (settings.clock) setClock(settings.clock);
+      var zone = browserZone();
+      if (state.clock && state.clock.source === 'none' && !state.clockPosted && zone) {
+        state.clockPosted = true;
+        return request('/v1/admin/settings', token, 'POST', { tz: zone, source: 'dashboard' }).then(function (next) {
+          if (token !== state.token) return;
+          state.settings = next;
+          if (next.clock) setClock(next.clock);
+        });
+      }
+    }).catch(function (f) {
+      if (f && f.kind === 'wrong') signOut('expired');
+      // An older server has no settings: days stay in UTC.
+    }).then(renderClock);
+  }
+  function offsetText(min) {
+    var m = Math.abs(min), sign = min < 0 ? '-' : '+';
+    return 'UTC' + (m ? sign + Math.floor(m / 60) + (m % 60 ? ':' + String(m % 60).padStart(2, '0') : '') : '');
+  }
+  // The school's time now, for the clock line.
+  function schoolTime(clock) {
+    try {
+      return new Intl.DateTimeFormat('en-GB', { timeZone: clock.tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
+    } catch (e) {
+      return new Date(Date.now() + clock.offsetMin * 60000).toISOString().slice(11, 16);
+    }
+  }
+  function zonePcs(tz) {
+    var list = state.settings && state.settings.clock && state.settings.clock.detected;
+    var hit = Array.isArray(list) ? list.filter(function (d) { return d && d.tz === tz; })[0] : null;
+    return hit ? Number(hit.pcs) || 0 : 0;
+  }
+  function renderClock() { keepFocus(drawClock); }
+  function drawClock() {
+    var box = $('clockLine');
+    if (!box) return;
+    var T = t(), c = state.clock;
+    box.textContent = '';
+    if (!c) { box.hidden = true; return; }
+    box.hidden = false;
+    var line = h('p', { class: 'clock-text' }, box);
+    h('span', { id: 'clockText' }, line, T.clockNote(c.tz, offsetText(c.offsetMin), c.source, c.source === 'none' ? '' : schoolTime(c), zonePcs(c.tz)));
+    if (!state.demo) {
+      var b = h('button', { type: 'button', class: 'btn-link', id: 'clockChange', 'aria-expanded': String(state.clockOpen),
+        'aria-controls': 'clockPanel', 'data-focus': 'clock:change' }, line, T.clockChange);
+      b.addEventListener('click', function () { state.clockOpen = !state.clockOpen; state.clockNotice = null; renderClock(); });
+    }
+    var rebuild = state.settings && state.settings.rebuild;
+    if (rebuild && Number(rebuild.pending) > 0) {
+      h('p', { class: 'clock-note', role: 'status' }, box, T.rebuildProgress(Number(rebuild.done) || 0, (Number(rebuild.done) || 0) + Number(rebuild.pending)));
+    } else if (state.clockNotice) h('p', { class: 'clock-note', role: 'status' }, box, state.clockNotice);
+    if (state.clockOpen && !state.demo) drawClockPanel(box);
+  }
+  function drawClockPanel(box) {
+    var T = t(), current = state.clock && state.clock.tz;
+    var panel = h('div', { class: 'clock-panel', id: 'clockPanel', role: 'group', 'aria-labelledby': 'clockPanelTitle' }, box);
+    h('h2', { class: 'clock-title', id: 'clockPanelTitle' }, panel, T.clockTitle);
+    h('p', { class: 'note' }, panel, T.clockIntro);
+    var detected = (state.settings && state.settings.clock && Array.isArray(state.settings.clock.detected) ? state.settings.clock.detected : [])
+      .filter(function (d) { return d && typeof d.tz === 'string' && d.tz; });
+    var choices = detected.map(function (d) { return { tz: d.tz, label: d.tz, note: T.clockPcs(Number(d.pcs) || 0) }; });
+    var mine = browserZone();
+    if (mine && !choices.some(function (c) { return c.tz === mine; })) choices.push({ tz: mine, label: mine, note: T.clockBrowser });
+    if (choices.length) {
+      h('p', { class: 'clock-sub' }, panel, T.clockReported);
+      var list = h('div', { class: 'clock-choices' }, panel);
+      choices.forEach(function (c) {
+        var b = h('button', { type: 'button', class: 'btn-quiet clock-choice', 'aria-pressed': String(c.tz === current), 'data-tz': c.tz,
+          'data-focus': 'clock:' + c.tz }, list);
+        h('span', { class: 'clock-zone', dir: 'ltr' }, b, c.label);
+        h('span', { class: 'clock-pcs' }, b, c.note);
+        b.addEventListener('click', function () { chooseZone(c.tz); });
+      });
+    }
+    var zones = [];
+    try { zones = Intl.supportedValuesOf('timeZone'); } catch (e) { /* an older browser: the list above only */ }
+    if (zones.length) {
+      var row = h('div', { class: 'clock-all' }, panel);
+      h('label', { for: 'clockSelect' }, row, T.clockAll);
+      var select = h('select', { id: 'clockSelect', dir: 'ltr', 'data-focus': 'clock:select' }, row);
+      (zones.indexOf('UTC') < 0 ? ['UTC'].concat(zones) : zones).forEach(function (z) { h('option', { value: z, selected: z === current }, select, z); });
+      var use = h('button', { type: 'button', class: 'btn-quiet', 'data-focus': 'clock:use' }, row, T.clockUse);
+      use.addEventListener('click', function () { chooseZone(select.value); });
+    }
+    var cancel = h('button', { type: 'button', class: 'btn-link', 'data-focus': 'clock:cancel' }, panel, T.clockCancel);
+    cancel.addEventListener('click', function () { state.clockOpen = false; renderClock(); $('clockChange') && $('clockChange').focus(); });
+  }
+  // One click: the owner's choice (POST settings { tz }), never changed automatically.
+  function chooseZone(tz) {
+    var token = state.token;
+    request('/v1/admin/settings', token, 'POST', { tz: tz }).then(function (settings) {
+      if (token !== state.token) return;
+      state.settings = settings;
+      if (settings.clock) setClock(settings.clock);
+      state.clockOpen = false;
+      state.clockNotice = t().clockSaved;
+      renderClock();
+      refreshKpis();
+    }, function (f) {
+      if (f && f.kind === 'wrong') { signOut('expired'); return; }
+      state.clockNotice = f && f.kind === 'busy' ? t().errBusy : t().clockFailed;
+      renderClock();
+    });
   }
 
   // Loads the KPIs for the current filters; a newer request wins.
@@ -170,6 +307,9 @@
       if (token !== state.token) return;
       state.live = live; state.liveAt = new Date();
       renderLive();
+      renderClock();
+      // While past days move to a new clock, the progress line follows it.
+      if (state.settings && state.settings.rebuild && Number(state.settings.rebuild.pending) > 0) loadSettings();
     }, function (f) {
       if (token === state.token && !state.demo && f && f.kind === 'wrong') signOut('expired');
     });
@@ -217,6 +357,7 @@
   }
   function signOut(reason) {
     state.token = null; state.kpis = null; state.kpisJson = null; state.live = null; state.kpisAt = null; state.seq++;
+    state.clock = null; state.settings = null; state.clockPosted = false; state.clockOpen = false; state.clockNotice = null;
     save(KEY.token, null);
     clearData();
     showSignIn(reason ? { kind: reason } : null);
@@ -227,7 +368,9 @@
     $('signOutBtn').hidden = state.demo;
     $('demoBanner').hidden = !state.demo;
     renderFilters();
-    refreshKpis();
+    renderClock();
+    // The school's day decides the period, so the clock comes first.
+    loadSettings().then(function () { refreshKpis(); });
     if (!haveLive) refreshLive();
     startTimers();
   }
@@ -263,6 +406,7 @@
     applyLang();
     renderSignInError();
     renderFilters();
+    renderClock();
     if (state.kpis || state.notice) renderData();
   });
   $('themeBtn').addEventListener('click', function () {
@@ -353,7 +497,15 @@
     return api;
   }
   function note(parent, text, cls) { return h('p', { class: 'note' + (cls ? ' ' + cls : '') }, parent, text); }
-  function hiddenNote(parent, k, what) { if (k) note(parent, t().moreHidden(k, t()[what]), 'privacy'); }
+  // The small-sample chip: "based on 2 children" (fewer than 5 students, or 20 tries).
+  function chipText(students, tries, long) {
+    var T = t(), few = students != null && students < I.T.SMALL_STUDENTS;
+    return few ? (long ? T.smallSample(students) : T.smallChip(students)) : (long ? T.smallTries(tries) : T.smallChipTries(tries));
+  }
+  function chip(parent, students, tries) {
+    if (!I.small(students, tries)) return null;
+    return h('span', { class: 'chip', 'data-small': 'true' }, parent, chipText(students, tries));
+  }
   function moreButton(parent, id, total) {
     if (total <= TOP) return;
     var T = t(), open = !!state.expanded[id];
@@ -389,9 +541,8 @@
     renderInsights(k);
     renderTiles(k);
     var sections = $('sections');
-    var totalsHidden = !I.shown(k.totals);
-    if (totalsHidden || !k.totals.sessions) {
-      note(sections, totalsHidden ? T.hiddenHint : T.emptyHint, 'empty');
+    if (!I.shown(k.totals) || !k.totals.sessions) {
+      note(sections, I.shown(k.totals) ? T.emptyHint : T.oldServer, 'empty');
       return;
     }
     renderDaily(sections, k);
@@ -416,8 +567,9 @@
     favourite: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z',
     favouriteBand: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z',
     health: 'M3 5h18v11H3zM8 20h8M12 16v4', returning: 'M4 12a8 8 0 0 1 14-5.3M20 4v4h-4M20 12a8 8 0 0 1-14 5.3M4 20v-4h4',
-    trend: 'M3 17l6-6 4 4 8-8M15 7h6v6', easy: 'M5 12l5 5 9-10', hidden: 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z',
-    empty: 'M4 12h16', quiet: 'M5 12l5 5 9-10'
+    trend: 'M3 17l6-6 4 4 8-8M15 7h6v6', easy: 'M5 12l5 5 9-10',
+    hearts: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z',
+    old: 'M12 8v5m0 3v.5M4 12a8 8 0 1 0 16 0a8 8 0 1 0-16 0', empty: 'M4 12h16', quiet: 'M5 12l5 5 9-10'
   };
   function icon(parent, kind, cls) {
     var svg = C.s('svg', { viewBox: '0 0 24 24', class: 'icon ' + (cls || ''), 'aria-hidden': 'true' }, parent);
@@ -425,12 +577,13 @@
     return svg;
   }
   function renderInsights(k) {
-    var box = $('insights'), list = I.insights(k, { lang: state.lang, name: gameName, today: utcToday() });
+    var box = $('insights'), list = I.insights(k, { lang: state.lang, name: gameName, today: today() });
     var ol = h('ol', { class: 'insight-list' }, box);
     list.forEach(function (item) {
       var li = h('li', { class: 'insight', 'data-kind': item.kind }, ol);
       icon(li, item.kind);
-      h('span', null, li, item.text);
+      var text = h('span', { class: 'insight-text' }, li, item.text);
+      if (item.small) { text.appendChild(document.createTextNode(' ')); chip(text, item.students, item.tries); }
     });
   }
 
@@ -444,15 +597,14 @@
     return { el: el, hint: hintNode };
   }
   function renderTiles(k) {
-    var T = t(), box = $('tiles'), tot = k.totals;
-    var hidden = !I.shown(tot);
-    var dash = '—';
-    tile(box, 'sessions', T.tileSessions, hidden ? dash : I.int(tot.sessions), '', hidden ? T.hiddenTile : T.tileSessionsHint, hidden ? null : tot.sessions);
-    var d = hidden ? null : I.duration(tot.engagedMinutes, state.lang);
-    tile(box, 'playTime', T.tilePlayTime, hidden ? dash : d.value, hidden ? '' : d.unit, hidden ? T.hiddenTile : T.tilePlayTimeHint, hidden ? null : tot.engagedMinutes);
-    var per = hidden ? null : tot.avgEngagedMinutesPerSession;
-    tile(box, 'perSession', T.tilePerSession, per == null ? dash : I.short(per), '', hidden ? T.hiddenTile : T.tilePerSessionHint, per);
-    tile(box, 'opens', T.tileOpens, hidden ? dash : I.int(tot.gameOpens), '', hidden ? T.hiddenTile : T.tileOpensHint, hidden ? null : tot.gameOpens);
+    var T = t(), box = $('tiles'), tot = I.shown(k.totals) ? k.totals : {};
+    var dash = '—', has = function (v) { return typeof v === 'number' && isFinite(v); };
+    tile(box, 'sessions', T.tileSessions, has(tot.sessions) ? I.int(tot.sessions) : dash, '', T.tileSessionsHint, has(tot.sessions) ? tot.sessions : null);
+    var d = has(tot.engagedMinutes) ? I.duration(tot.engagedMinutes, state.lang) : null;
+    tile(box, 'playTime', T.tilePlayTime, d ? d.value : dash, d ? d.unit : '', T.tilePlayTimeHint, d ? tot.engagedMinutes : null);
+    var per = has(tot.avgEngagedMinutesPerSession) ? tot.avgEngagedMinutesPerSession : null;
+    tile(box, 'perSession', T.tilePerSession, per == null ? dash : I.short(per), '', T.tilePerSessionHint, per);
+    tile(box, 'opens', T.tileOpens, has(tot.gameOpens) ? I.int(tot.gameOpens) : dash, '', T.tileOpensHint, has(tot.gameOpens) ? tot.gameOpens : null);
     var now = tile(box, 'now', T.tileNow, dash, '', T.tileNowHint, null);
     now.el.id = 'nowTile';
     renderLive();
@@ -463,12 +615,7 @@
     var T = t(), live = state.live, total = live && live.total;
     var number = el.querySelector('.tile-number'), hint = el.querySelector('.tile-hint');
     el.classList.toggle('is-live', !!(I.shown(total) && total.sessions > 0));
-    if (!total) { number.textContent = '—'; el.setAttribute('data-value', ''); return; }
-    if (!I.shown(total)) {
-      number.textContent = '—'; el.setAttribute('data-value', '');
-      hint.textContent = T.hiddenTile;
-      return;
-    }
+    if (!I.shown(total)) { number.textContent = '—'; el.setAttribute('data-value', ''); return; }
     number.textContent = I.int(total.sessions);
     el.setAttribute('data-value', String(total.sessions));
     var games = (live.games || []).filter(function (g) { return I.shown(g) && g.sessions > 0; })
@@ -482,7 +629,6 @@
     var T = t(), sec = section(parent, 'daily', T.dailyTitle);
     var grid = h('div', { class: 'grid-2' }, sec);
     var days = (k.daily || []).filter(Boolean);
-    var hiddenDays = days.filter(function (d) { return !I.shown(d); }).length;
     var tick = function (day) { return days.length <= 7 ? dayText(day, { weekday: 'short', day: 'numeric' }) : dayText(day, { day: 'numeric', month: 'short' }); };
     var title = function (day) { return dayText(day, { weekday: 'long', day: 'numeric', month: 'long' }); };
     [['sessions', T.dailySessions, function (v) { return I.int(v); }, T.sessions],
@@ -494,12 +640,11 @@
         draw(function () {
           if (c.chart.hidden) return;
           C.lineChart(c.chart, { points: points, color: 'var(--s1)', rtl: rtl(), name: spec[1], format: spec[2], unit: '',
-            hiddenText: T.hiddenPrivacy, keysHint: state.lang === 'ar' ? 'استخدم مفاتيح الأسهم لقراءة كل يوم.' : 'Use the arrow keys to read each day.' });
+            emptyText: T.noNumbers, keysHint: T.keysDays });
         });
       }
-      if (hiddenDays) note(c.foot, T.hiddenDays(hiddenDays), 'privacy');
       C.table(c.table, spec[1], [{ label: T.day }, { label: spec[3], num: true }], days.slice().reverse().map(function (d) {
-        return [title(d.day), I.shown(d) ? spec[2](d[spec[0]] || 0) : { text: T.hiddenPrivacy }];
+        return [title(d.day), I.shown(d) ? spec[2](d[spec[0]] || 0) : { text: T.noNumbers }];
       }));
     });
   }
@@ -514,19 +659,17 @@
     else draw(function () {
       if (c.chart.hidden) return;
       C.barList(c.chart, { name: T.favTitle, rtl: rtl(), color: 'var(--s1)', max: max, sub: false, rows: rows.map(function (g) {
-        return { label: gameName(g.slug), value: g.opens, valueText: T.nOpens(g.opens),
-          tip: { title: gameName(g.slug), rows: [
+        return { label: gameName(g.slug), value: g.opens, valueText: T.nOpens(g.opens), chip: g.small ? chipText(g.students, null) : null,
+          tip: { title: gameName(g.slug), note: g.small ? chipText(g.students, null, true) : null, rows: [
             { value: T.nOpens(g.opens), label: g.share != null ? '(' + I.pct(g.share) + ')' : '', color: 'var(--s1)', swatch: 'bar' },
             { value: T.nSessions(g.sessions) },
             { value: minutesText(g.engagedMinutes), label: T.ofPlay }] } };
       }) });
     });
     moreButton(c.foot, 'fav', fav.rows.length);
-    hiddenNote(c.foot, fav.hidden, 'games');
     C.table(c.table, T.favTitle, [{ label: T.game }, { label: T.opens, num: true }, { label: T.share, num: true },
       { label: T.playSessions, num: true }, { label: T.playTime, num: true }],
-    fav.rows.map(function (g) { return [gameName(g.slug), I.int(g.opens), I.pct(g.share), I.int(g.sessions), minutesText(g.engagedMinutes)]; })
-      .concat(fav.hidden ? [[{ text: T.moreHidden(fav.hidden, T.games), colspan: 5 }]] : []));
+    fav.rows.map(function (g) { return [gameName(g.slug), I.int(g.opens), I.pct(g.share), I.int(g.sessions), minutesText(g.engagedMinutes)]; }));
   }
 
   // Favourites by age: one small panel per age group, on the same scale.
@@ -547,8 +690,8 @@
       var p = h('div', { class: 'panel' }, panels);
       var head = h('div', { class: 'panel-head' }, p);
       h('h4', { class: 'panel-title' }, head, I.bandLabel(g.band, state.lang));
-      if (g.hidden) { note(p, T.hiddenTile, 'privacy'); return; }
-      h('span', { class: 'panel-sub' }, head, T.nSessions(g.sessions));
+      var sub = h('span', { class: 'panel-sub' }, head, T.nSessions(g.sessions));
+      if (g.small) { sub.appendChild(document.createTextNode(' ')); chip(sub, g.students, null); }
       var host = h('div', { class: 'chart-host' }, p);
       if (!g.rows.length) { note(host, T.noData); return; }
       draw(function () {
@@ -560,13 +703,11 @@
                 { value: T.nOpens(r.opens) }].concat(r.engagedMinutes == null ? [] : [{ value: minutesText(r.engagedMinutes), label: T.ofPlay }]) } };
           }) });
       });
-      if (g.hiddenGames) note(p, T.moreHidden(g.hiddenGames, T.games), 'privacy');
     });
     // Play time per age group and game, when the server reports it.
     var minutes = groups.some(function (g) { return g.rows.some(function (r) { return r.engagedMinutes != null; }); });
     var rows = [];
     groups.forEach(function (g) {
-      if (g.hidden) { rows.push([I.bandLabel(g.band, state.lang), { text: T.hiddenPrivacy, colspan: minutes ? 4 : 3 }]); return; }
       g.rows.forEach(function (r) {
         rows.push([I.bandLabel(g.band, state.lang), gameName(r.slug), I.pct(r.share), I.int(r.opens)]
           .concat(minutes ? [r.engagedMinutes == null ? '—' : minutesText(r.engagedMinutes)] : []));
@@ -587,24 +728,29 @@
     else draw(function () {
       if (c.chart.hidden) return;
       C.barList(c.chart, { name: T.stuckTitle, rtl: rtl(), color: 'var(--s3)', max: 1, track: true, rows: rows.map(function (l) {
-        return { label: levelName(l), value: l.rate, valueText: I.pct(l.rate), sub: T.xOfY(l.quits, l.starts),
-          tip: { title: levelName(l), rows: [{ value: I.pct(l.rate), label: T.leftUnfinished, color: 'var(--s3)', swatch: 'bar' },
+        return { label: levelName(l), value: l.rate, valueText: I.pct(l.rate), sub: T.xOfY(l.quits, l.starts), chip: l.small ? chipText(l.students, l.starts) : null,
+          tip: { title: levelName(l), note: l.small ? chipText(l.students, l.starts, true) : null, rows: [{ value: I.pct(l.rate), label: T.leftUnfinished, color: 'var(--s3)', swatch: 'bar' },
             { value: T.xOfY(l.quits, l.starts) }] } };
       }) });
     });
-    hiddenNote(c.foot, stuck.hidden, 'levels');
     C.table(c.table, T.stuckTitle, [{ label: T.game }, { label: T.level }, { label: T.leftUnfinished, num: true }, { label: T.tries, num: true }],
       stuck.rows.map(function (l) { return [gameName(l.slug), I.levelLabel(l.id, state.lang), I.pct(l.rate), T.xOfY(l.quits, l.starts)]; }));
   }
 
   var VERDICT_ICON = { hard: 'M12 4 3 19h18L12 4Z', easy: 'M12 20 3 5h18L12 20Z', right: 'M5 12.5l4.5 4.5L19 7', few: 'M6 12h.01M12 12h.01M18 12h.01',
-    none: 'M6 12h12', hidden: 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z', missing: 'M6 12h12' };
+    none: 'M6 12h12', missing: 'M6 12h12' };
+  // A verdict with its icon and label; an early sign (10-19 tries) says so next to it.
+  function verdictText(v, compact) {
+    var T = t(), label = compact ? T.verdict[v.code] : T.verdictLong[v.code];
+    return v.early ? label + ' · ' + (compact ? T.earlyShort : T.earlySign) : label;
+  }
   function verdictNode(parent, v, compact) {
     var T = t(), code = v.code;
-    var el = h('span', { class: 'verdict v-' + code, 'data-verdict': code }, parent);
+    var el = h('span', { class: 'verdict v-' + code + (v.early ? ' is-early' : ''), 'data-verdict': code, 'data-early': v.early ? 'true' : null }, parent);
     var svg = C.s('svg', { viewBox: '0 0 24 24', class: 'verdict-icon', 'aria-hidden': 'true' }, el);
     C.s('path', { d: VERDICT_ICON[code] }, svg);
-    h('span', { class: 'verdict-label' }, el, compact ? T.verdict[code] : T.verdictLong[code]);
+    var label = h('span', { class: 'verdict-label' }, el, compact ? T.verdict[code] : T.verdictLong[code]);
+    if (v.early) h('span', { class: 'verdict-early' }, label, (compact ? T.earlyShort : T.earlySign));
     return el;
   }
   var OUTCOMES = [['won', 'var(--s1)'], ['lost', 'var(--s2)'], ['unfinished', 'var(--s3)'], ['other', 'var(--other)']];
@@ -628,7 +774,8 @@
     cols.forEach(function (b) { h('span', { role: 'columnheader', class: 'diff-cell' }, head, colName(b)); });
     top('diff', grid.rows).forEach(function (r) {
       var row = h('div', { class: 'diff-row mark', role: 'row', 'data-slug': r.slug }, table);
-      h('span', { role: 'rowheader', class: 'diff-game' }, row, gameName(r.slug));
+      var nameCell = h('span', { role: 'rowheader', class: 'diff-game' }, row, gameName(r.slug));
+      if (r.small) { nameCell.appendChild(document.createTextNode(' ')); chip(nameCell, r.students, r.tries); }
       var barCell = h('span', { role: 'cell', class: 'diff-bar' }, row);
       var o = r.outcomes, total = o.ended || 0;
       var parts = OUTCOMES.map(function (x) { return { value: o[x[0]], color: x[1] }; });
@@ -645,13 +792,12 @@
         var cell = h('span', { role: 'cell', class: 'diff-cell', 'data-band': b }, row);
         h('span', { class: 'diff-cell-band', 'aria-hidden': 'true' }, cell, colName(b));
         verdictNode(cell, v, true);
-        verdicts.push(colName(b) + ': ' + T.verdictLong[v.code]);
+        verdicts.push(colName(b) + ': ' + verdictText(v, false));
       });
       // One stop per row for the keyboard: how its rounds end and every verdict.
       C.interactive(row, { title: gameName(r.slug), rows: tipRows, note: T.nTries(r.tries) + ' · ' + verdicts.join(' · ') });
     });
     moreButton(c.foot, 'diff', grid.rows.length);
-    hiddenNote(c.foot, grid.hidden, 'games');
     var details = h('details', { class: 'rule' }, c.foot);
     h('summary', null, details, state.lang === 'ar' ? 'كيف يُحسب الحكم؟' : 'How is this decided?');
     h('p', null, details, T.diffRule);
@@ -666,7 +812,7 @@
       return [gameName(r.slug), I.int(r.tries), I.pct(r.winRate)].concat(OUTCOMES.map(function (x) { return o.ended ? I.pct(o[x[0]] / o.ended) : '—'; }))
         .concat(cols.map(function (b) {
           var v = b === 'all' || b === grid.band ? r.verdict : r.cells[b] || { code: 'missing' };
-          return v.code === 'hidden' ? { text: T.hiddenPrivacy } : T.verdict[v.code];
+          return verdictText(v, true);
         }));
     }));
   }
@@ -692,7 +838,6 @@
       }) });
     });
     moreButton(c.foot, 'back', back.rows.length);
-    hiddenNote(c.foot, back.hidden, 'games');
     C.table(c.table, T.backTitle, [{ label: T.game }, { label: T.playedBefore, num: true }, { label: T.opens, num: true }, { label: T.firstTime, num: true }],
       back.rows.map(function (g) { return [gameName(g.slug), I.pct(g.share), I.int(g.opens), I.int(g.opens - g.back)]; }));
   }
@@ -715,13 +860,11 @@
       h('h4', { class: 'panel-title' }, h('div', { class: 'panel-head' }, p), T.dims[dim]);
       var items = health.devices[dim] || [];
       var host = h('div', { class: 'chart-host' }, p);
-      var shownItems = items.filter(function (d) { return !d.hidden; });
-      var hiddenCount = items.length - shownItems.length;
+      var shownItems = items;
       items.forEach(function (d) {
-        typeRows.push(d.hidden ? [T.dims[dim], I.deviceLabel(dim, d.value, state.lang), { text: T.hiddenPrivacy, colspan: 4 }]
-          : [T.dims[dim], I.deviceLabel(dim, d.value, state.lang), I.int(d.sessions), I.pct(d.smooth), secondsText(d.loadMs), I.pct(d.slowInput)]);
+        typeRows.push([T.dims[dim], I.deviceLabel(dim, d.value, state.lang), I.int(d.sessions), I.pct(d.smooth), secondsText(d.loadMs), I.pct(d.slowInput)]);
       });
-      if (!shownItems.length) { note(host, hiddenCount ? T.hiddenTile : T.noData, hiddenCount ? 'privacy' : null); return; }
+      if (!shownItems.length) { note(host, T.noData); return; }
       draw(function () {
         if (c.chart.hidden) return;
         C.barList(host, { name: T.byType + ': ' + T.dims[dim], rtl: rtl(), color: 'var(--s1)', max: 1, track: true, sub: false,
@@ -733,7 +876,6 @@
                 { value: T.nSessions(d.sessions) }] } };
           }) });
       });
-      if (hiddenCount) note(p, T.moreHidden(hiddenCount, T.pcTypes), 'privacy');
     });
     C.table(c.table, T.byType, [{ label: T.pcType }, { label: '' }, { label: T.playSessions, num: true }, { label: T.smooth, num: true },
       { label: T.loadTime, num: true }, { label: T.inputDelay, num: true }], typeRows);
@@ -761,14 +903,13 @@
       var flags = h('td', { class: 'flags' }, tr);
       if (!r.flags.length) h('span', { class: 'flag-ok' }, flags, T.noProblem);
       r.flags.forEach(function (f) {
-        var chip = h('span', { class: 'flag' }, flags);
-        var svg = C.s('svg', { viewBox: '0 0 24 24', class: 'flag-icon', 'aria-hidden': 'true' }, chip);
+        var flag = h('span', { class: 'flag' }, flags);
+        var svg = C.s('svg', { viewBox: '0 0 24 24', class: 'flag-icon', 'aria-hidden': 'true' }, flag);
         C.s('path', { d: 'M12 4 3 19h18L12 4Z' }, svg);
-        h('span', null, chip, T.flag[f]);
+        h('span', null, flag, T.flag[f]);
       });
     });
     moreButton(g.foot, 'health', health.rows.length);
-    hiddenNote(g.foot, health.hidden, 'games');
   }
 
   // ---- start ----------------------------------------------------------------------------

@@ -77,11 +77,14 @@ after(async () => {
 });
 
 // A browser context whose every request is accounted for. mode.api: 'server' (default),
-// 'unset' (no ADMIN_TOKEN: 404), 'down' (network error).
-async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-GB', colorScheme = 'light', token, lang } = {}) {
-  const context = await browser.newContext({ viewport, locale, colorScheme, serviceWorkers: 'block' });
+// 'unset' (no ADMIN_TOKEN: 404), 'down' (network error). mode.stub: { '/v1/admin/<path>':
+// (method, body, search) => [status, json] } answers that path instead of the server.
+async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-GB', colorScheme = 'light', token, lang, timezoneId } = {}) {
+  const context = await browser.newContext({ viewport, locale, colorScheme, serviceWorkers: 'block', ...(timezoneId ? { timezoneId } : {}) });
   t.after(() => context.close());
-  const s = { context, mode: { api: 'server' }, api: [], outside: [], errors: [], allowed: [] };
+  // missing: the URLs the server answered 404 "not found" (an endpoint this server does not
+  // have yet); the browser logs those, and the page carries on without them.
+  const s = { context, mode: { api: 'server' }, api: [], outside: [], errors: [], allowed: [], missing: new Set() };
   context.on('request', request => {
     const url = request.url();
     if (!url.startsWith(site.origin + '/')) s.outside.push(request.method() + ' ' + url);
@@ -91,12 +94,21 @@ async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-G
     if (url.origin !== site.origin) return route.abort();
     if (url.pathname.startsWith('/v1/')) {
       if (s.mode.api === 'down') return route.abort('connectionrefused');
+      const stub = s.mode.stub && s.mode.stub[url.pathname];
+      if (stub) {
+        const body = request.postData() ? JSON.parse(request.postData()) : undefined;
+        const [status, json] = stub(request.method(), body, url.searchParams);
+        s.api.push({ path: url.pathname, method: request.method(), search: url.searchParams, auth: request.headers().authorization,
+          type: request.headers()['content-type'], body, status, json });
+        return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(json) });
+      }
       const target = (s.mode.api === 'unset' ? unsetUrl : ingest) + url.pathname + url.search;
       const auth = request.headers().authorization;
       const res = await fetch(target, { headers: auth ? { Authorization: auth } : {} });
       let body = Buffer.from(await res.arrayBuffer());
-      const entry = { path: url.pathname, search: url.searchParams, auth, status: res.status };
+      const entry = { path: url.pathname, method: request.method(), search: url.searchParams, auth, status: res.status };
       if (res.status === 200) entry.json = JSON.parse(body.toString('utf8'));
+      if (res.status === 404 && JSON.parse(body.toString('utf8')).error === 'not found') s.missing.add(request.url());
       if (res.status === 200 && s.mode.edit && url.pathname === '/v1/admin/kpis') {
         entry.json = s.mode.edit(entry.json);
         body = Buffer.from(JSON.stringify(entry.json));
@@ -125,6 +137,7 @@ async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-G
   page.on('console', message => {
     if (message.type() !== 'error') return;
     const text = message.text();
+    if (/status of 404/.test(text) && s.missing.has(message.location().url)) return;
     if (!s.allowed.some(re => re.test(text))) s.errors.push(text);
   });
   s.page = page;
@@ -261,36 +274,43 @@ test('filters change the request and every section; the period and age band', as
   await s.check();
 });
 
-test('table views, tooltips and the privacy wording for hidden groups', async t => {
+test('table views, tooltips, and a game one child opened: shown with its numbers and a small-sample chip', async t => {
   const s = await open(t, { token: TOKEN });
   const { page } = s;
+  // Students per game, as the updated server sends them: one game only one child played.
+  s.mode.edit = k => {
+    for (const g of k.games) if (!g.suppressed) g.students = 40;
+    const few = k.games.filter(g => !g.suppressed).sort((a, b) => b.opens - a.opens)[0];
+    few.students = 1;
+    return k;
+  };
   await page.goto(site.origin + '/');
   await waitForKpis(s, 1);
   const k = s.lastKpis().json;
-  const hidden = k.games.filter(g => g.suppressed);
-  assert.ok(hidden.some(g => g.slug === 'zz-private'), 'the game two children opened is hidden by the server');
-  const foot = await page.locator('#fav-card .card-foot').textContent();
-  assert.match(foot, new RegExp((hidden.length === 1 ? '1 more game' : hidden.length + ' more games') + ': fewer than 3 children'));
-  assert.ok(!(await page.locator('body').textContent()).includes('zz-private'), 'a hidden game is never named');
-  // The favourites table: every shown game, then the hidden ones as one line.
+  const shown = k.games.filter(g => !g.suppressed);
+  const top = I.favourites(k).rows[0];
+  assert.equal(top.students, 1);
+  // The chart: the bar keeps its number, a chip says how few children it is based on.
+  assert.match(await page.locator('#fav-card svg .mark').first().textContent(), /based on 1 child/);
+  assert.equal(await page.locator('#fav-card svg .mark').first().locator('.bar-label.is-small').count(), 1);
+  // The favourites table: every game the server sent, no line about hidden ones.
   await page.click('#fav-card .table-toggle');
   const rows = page.locator('#fav-card .table-host tbody tr');
-  assert.equal(await rows.count(), k.games.filter(g => !g.suppressed).length + 1);
-  assert.match(await rows.last().textContent(), /fewer than 3 children — hidden for privacy/);
-  const top = I.favourites(k).rows[0];
+  assert.equal(await rows.count(), shown.length);
   assert.deepEqual(await rows.first().locator('th, td').allTextContents(),
     [nameOf('en')(top.slug), top.opens.toLocaleString('en-US'), I.pct(top.share), top.sessions.toLocaleString('en-US'), I.duration(top.engagedMinutes, 'en').text]);
+  assert.doesNotMatch(await page.locator('body').textContent(), /hidden for privacy|fewer than 3 children/i);
   // Every chart card has its table twin.
   for (const id of ['daily-sessions', 'daily-minutes', 'age-card', 'stuck-card', 'diff-card', 'back-card', 'type-card']) {
     await page.click(`#${id} .table-toggle`);
     assert.ok(await page.locator(`#${id} .table-host table`).isVisible(), id);
     assert.ok(await page.locator(`#${id} .table-host tbody tr`).count() > 0, id);
   }
-  // Tooltips: a bar on hover, the daily chart on keyboard focus.
+  // Tooltips: a bar on hover (with the chip's sentence), the daily chart on keyboard focus.
   await page.click('#fav-card .table-toggle');
   await page.locator('#fav-card svg .mark').first().hover();
   await page.locator('.tip').waitFor();
-  assert.match(await page.locator('.tip').textContent(), new RegExp(nameOf('en')(top.slug)));
+  assert.match(await page.locator('.tip').textContent(), new RegExp(nameOf('en')(top.slug) + '.*Based on 1 child so far'));
   await page.click('#daily-sessions .table-toggle');
   await page.locator('#daily-sessions svg.chart').focus();
   await page.keyboard.press('Home');
@@ -573,26 +593,125 @@ test('the difficulty rule explains the age-group rules only when this server\'s 
   await s.check();
 });
 
-test('a day of one or two children is hidden even without the server\'s flag; an all-hidden week keeps whole numbers', async t => {
+test('a day of one child shows its number; days an older server left out break the line and keep whole numbers', async t => {
   const s = await open(t, { token: TOKEN });
   const { page } = s;
   s.mode.edit = k => {
     const i = k.daily.length - 2;
-    k.daily[i] = { day: k.daily[i].day, sessions: 2, engagedMinutes: 4.5, opens: 3 };
+    k.daily[i] = { day: k.daily[i].day, sessions: 1, engagedMinutes: 4.5, opens: 3 };
     return k;
   };
   await page.goto(site.origin + '/');
   await waitForKpis(s, 1);
   await page.click('#daily-sessions .table-toggle');
-  assert.match(await page.locator('#daily-sessions .table-host tbody tr').nth(1).textContent(), /fewer than 3 children — hidden for privacy/);
+  assert.equal(await page.locator('#daily-sessions .table-host tbody tr').nth(1).locator('td').textContent(), '1');
   await page.click('#daily-sessions .table-toggle');
-  // A very small pilot: every day hidden. No line, and the axis still counts whole play sessions.
+  // An older server's suppressed days: no line, and the axis still counts whole play sessions.
   s.mode.edit = k => { k.daily = k.daily.map(d => ({ day: d.day, suppressed: true })); return k; };
   const n = s.kpis().length;
   await page.click('#periodFilter button[data-value="7"]');
   await waitForKpis(s, n + 1);
   const ticks = await page.locator('#daily-sessions svg.chart .grid .tick').allTextContents();
   assert.ok(ticks.length >= 2 && ticks.every(v => /^\d+$/.test(v)), ticks.join(' '));
+  await s.check();
+});
+
+test('10 to 19 tries give an early sign next to the verdict, fewer than 10 say so', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  let early, few;
+  s.mode.edit = k => {
+    const games = k.games.filter(g => !g.suppressed && g.rounds && g.rounds.starts >= 20 && g.winRate !== null);
+    [early, few] = [games[0].slug, games[1].slug];
+    Object.assign(games[0], { rounds: { ...games[0].rounds, starts: 15 }, winRate: 0.2, dropOffRate: 0.1 });
+    Object.assign(games[1], { rounds: { ...games[1].rounds, starts: 9 } });
+    return k;
+  };
+  await page.goto(site.origin + '/');
+  await waitForKpis(s, 1);
+  await page.click('#difficulty .more');
+  const cell = slug => page.locator(`#difficulty .diff-row[data-slug="${slug}"] .diff-cell[data-band="all"] .verdict`);
+  assert.equal(await cell(early).getAttribute('data-verdict'), 'hard');
+  assert.equal(await cell(early).getAttribute('data-early'), 'true');
+  assert.match(await cell(early).textContent(), /Too hard.*early sign/);
+  assert.equal(await cell(few).getAttribute('data-verdict'), 'few');
+  assert.match(await cell(few).textContent(), /Not enough tries yet/);
+  await page.locator(`#difficulty .diff-row[data-slug="${early}"]`).focus();
+  assert.match(await page.locator('.tip').textContent(), /Too hard · Early sign \(10–19 tries\)/);
+  assert.ok(!(await page.locator('.insight').allTextContents()).some(x => x.includes(nameOf('en')(early) + ' looks too hard')), 'an early sign is no finding');
+  await s.check();
+});
+
+// The settings answer of the updated server (§F.4), for a server that has none yet.
+function settingsStub(state) {
+  const answer = () => ({ v: 1, clock: { ...state.clock, now: '10:42', weekStart: 'sun', weekSource: 'auto', detected: state.detected,
+    factsSince: '2026-10-01', legacyUntil: '2026-09-30', v3Since: '2026-10-02' },
+  keep: { days: 400, source: 'env', rollupDays: 800 }, storage: { bytes: 82e6, limit: 5e8, guardAt: 4.25e8, trimmedBefore: null },
+  usage: { day: state.clock.today, reads: 450000, writes: 34000, readsLimit: 5e6, writesLimit: 1e5, batchEvery: 60 },
+  rebuild: { pending: state.pending || 0, full: 0, done: state.done || 0 }, accepts: [2, 3], pcs: { new: 12, seen14d: 14 } });
+  return {
+    '/v1/admin/settings': (method, body) => {
+      if (method === 'POST') {
+        state.posts.push(body);
+        if (body.source === 'dashboard') { if (['none', 'dashboard'].includes(state.clock.source)) Object.assign(state.clock, { tz: body.tz, source: 'dashboard', offsetMin: 180 }); }
+        else Object.assign(state.clock, { tz: body.tz, source: 'owner', offsetMin: body.tz === 'Europe/London' ? 0 : 180 });
+        if (!body.source) Object.assign(state, { pending: 40, done: 0 });
+      }
+      return [200, answer()];
+    }
+  };
+}
+
+test('the school\'s clock: the browser\'s zone once while none is known, the school\'s day for the period, one click to change it', async t => {
+  const s = await open(t, { token: TOKEN, timezoneId: 'Asia/Riyadh' });
+  const { page } = s;
+  // The school's day is ahead of UTC late in the evening; here it is simply a fixed day.
+  const schoolDay = dayBefore(today(), 3);
+  const clock = { posts: [], detected: [{ tz: 'Asia/Riyadh', pcs: 12 }], clock: { tz: 'UTC', source: 'none', offsetMin: 0, today: schoolDay } };
+  s.mode.stub = settingsStub(clock);
+  await page.goto(site.origin + '/');
+  await waitForKpis(s, 1);
+  assert.deepEqual(clock.posts, [{ tz: 'Asia/Riyadh', source: 'dashboard' }], 'the browser\'s zone, posted once');
+  const post = s.api.find(e => e.method === 'POST');
+  assert.equal(post.type, 'application/json');
+  assert.equal(post.auth, 'Bearer ' + TOKEN);
+  assert.equal(s.lastKpis().search.get('to'), schoolDay, 'the period ends on the school\'s today, not the UTC one');
+  assert.equal(s.lastKpis().search.get('from'), dayBefore(schoolDay, 29));
+  const line = () => page.locator('#clockText').textContent();
+  assert.match(await line(), /school’s clock: \u2066Asia\/Riyadh\u2069 \(\u2066UTC\+3\u2069, now \u2066\d\d:\d\d\u2069\), from this browser/);
+  // Change: the zones the PCs report, this browser's, then every zone; one click posts the owner's choice.
+  await page.click('#clockChange');
+  assert.match(await page.locator('#clockPanel .clock-choice[data-tz="Asia/Riyadh"]').textContent(), /Asia\/Riyadh.*12 PCs/);
+  await page.selectOption('#clockSelect', 'Europe/London');
+  const n = s.kpis().length;
+  await page.click('#clockPanel button:has-text("Use this clock")');
+  await waitForKpis(s, n + 1);
+  assert.deepEqual(clock.posts.at(-1), { tz: 'Europe/London' });
+  assert.match(await line(), /Europe\/London.*UTC\b.*as you chose/);
+  assert.equal(await page.locator('#clockPanel').count(), 0);
+  assert.match(await page.locator('#clockLine').textContent(), /Moving past days to the new clock: 0 of 40 days done/);
+  // A reload: the owner's choice stands, nothing is posted again.
+  await page.reload();
+  await waitForKpis(s, n + 2);
+  assert.equal(clock.posts.length, 2);
+  // Arabic: the same line, right to left.
+  await page.click('#langBtn');
+  assert.match(await line(), /ساعة المدرسة: \u2066Europe\/London\u2069/);
+  await s.check();
+});
+
+test('a server without the clock: no line, UTC days, and a missing endpoint never signs out', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  await page.goto(site.origin + '/');
+  await waitForKpis(s, 1);
+  const settings = s.api.find(e => e.path === '/v1/admin/settings');
+  if (settings && settings.status === 404) {
+    assert.equal(await page.locator('#clockLine').isHidden(), true);
+    assert.equal(s.lastKpis().search.get('to'), today());
+  }
+  assert.equal(await page.locator('#signin').isHidden(), true);
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:dash:token')), TOKEN);
   await s.check();
 });
 

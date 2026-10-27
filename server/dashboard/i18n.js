@@ -28,7 +28,7 @@
     hidePassword: 'Hide',
     signInButton: 'Sign in',
     checking: 'Checking…',
-    remember: 'This browser keeps the password until you sign out. On a shared PC, sign out when you finish.',
+    remember: 'This browser keeps the password until you sign out. This page shows each child’s play under a code. On a shared PC, sign out when you finish.',
     demoLink: 'Or look around with sample data',
     errWrong: 'That password is not right. Check it and try again (capital and small letters are different).',
     errExpired: 'The password has changed. Sign in again with the new password.',
@@ -55,7 +55,35 @@
     loading: 'Loading…',
     rangeOne: function (a) { return a; },
     range: function (a, b) { return a + ' – ' + b; },
-    utcNote: 'Days follow world time (UTC), which can be a few hours from your own clock.',
+    // The school's clock (§C): zone and offset are shown as they are, isolated.
+    clockNote: function (zone, offset, source, now, pcs) {
+      if (source === 'none' || !zone) return 'Waiting for a PC to report the school’s clock; world time (UTC) until then.';
+      var head = 'Days and hours follow the school’s clock: ' + iso(zone) + ' (' + iso(offset) + (now ? ', now ' + iso(now) : '') + ')';
+      if (source === 'owner') return head + ', as you chose.';
+      if (source === 'dashboard') return head + ', from this browser until a school PC reports its clock.';
+      return head + (pcs ? ', from ' + (pcs === 1 ? '1 PC' : n(pcs) + ' PCs') + '.' : ', as your PCs report it.');
+    },
+    clockChange: 'Change',
+    clockTitle: 'The school’s clock',
+    clockIntro: 'Days, hours and weekdays on every page follow this clock. Past days are recounted on the new clock; nothing is lost.',
+    clockReported: 'Reported by the school PCs',
+    clockBrowser: 'This browser',
+    clockAll: 'Every time zone',
+    clockUse: 'Use this clock',
+    clockCancel: 'Cancel',
+    clockPcs: function (k) { return k === 1 ? '1 PC' : n(k) + ' PCs'; },
+    clockSaved: 'Saved. Past days are moving to the new clock.',
+    clockFailed: 'The clock was not changed. Try again in a minute.',
+    rebuildProgress: function (done, all) { return 'Moving past days to the new clock: ' + n(done) + ' of ' + n(all) + ' days done.'; },
+    smallSample: function (k) { return 'Based on ' + (k === 1 ? '1 child' : n(k) + ' children') + ' so far'; },
+    smallTries: function (k) { return 'Based on ' + (k === 1 ? '1 try' : n(k) + ' tries') + ' so far'; },
+    smallChip: function (k) { return 'based on ' + (k === 1 ? '1 child' : n(k) + ' children'); },
+    smallChipTries: function (k) { return 'based on ' + (k === 1 ? '1 try' : n(k) + ' tries'); },
+    noNumbers: 'No numbers from the server for this day',
+    keysDays: 'Use the arrow keys to read each day.',
+    earlySign: 'Early sign (10–19 tries)',
+    earlyShort: 'early sign',
+    oldServer: 'This needs the updated server. Ask the person who set up the server to update it.',
 
     insightsTitle: 'What stands out',
     numbersTitle: 'Headline numbers',
@@ -71,14 +99,11 @@
     tileNowHint: 'Active in the last 5 minutes',
     nowTop: function (g) { return 'Most played now: ' + g; },
     nowChecked: function (t) { return 'Checked ' + t; },
-    hiddenShort: 'Hidden',
-    hiddenTile: 'Fewer than 3 children — hidden for privacy',
 
     dailyTitle: 'Daily activity',
     dailySessions: 'Play sessions per day',
     dailyMinutes: 'Play time per day, in minutes',
     dailyNeedsDays: 'Choose 7, 30 or 90 days above to see the day-by-day charts.',
-    hiddenDays: function (k) { return k === 1 ? '1 day hidden for privacy (fewer than 3 children).' : k + ' days hidden for privacy (fewer than 3 children each).'; },
     day: 'Day',
     sessions: 'Play sessions',
     minutes: 'Play time (minutes)',
@@ -112,15 +137,15 @@
     stuckNone: 'No level with 20 or more tries was left unfinished.',
 
     diffTitle: 'Difficulty check',
-    diffSub: 'From how often children win and how often they leave a round unfinished. A verdict needs at least 20 tries.',
+    diffSub: 'From how often children win and how often they leave a round unfinished. A verdict needs at least 20 tries; 10 to 19 tries give an early sign.',
     diffRule: 'Too hard: children win fewer than 40% of the rounds they finish, or leave 30% or more unfinished while winning fewer than 90% of the rounds they finish. Too easy: they win 90% or more and leave fewer than 10% unfinished. Games without a winner (endless runs, two players on one PC) are not rated.',
     diffRuleCompletion: 'For an age group the server reports only the share of rounds won: under 30% is too hard, 85% or more too easy.',
     diffRuleSessions: 'The server does not say how many tries each age group made, so a verdict for one age group needs at least 5 play sessions instead of 20 tries.',
     howRoundsEnd: 'How rounds end',
-    verdict: { hard: 'Too hard', right: 'About right', easy: 'Too easy', few: 'Not enough tries', none: 'No winner', hidden: 'Hidden', missing: 'Not played' },
+    verdict: { hard: 'Too hard', right: 'About right', easy: 'Too easy', few: 'Not enough tries yet', none: 'No winner', missing: 'Not played' },
     verdictLong: {
-      hard: 'Too hard', right: 'About right', easy: 'Too easy', few: 'Not enough tries yet', none: 'No winner or loser: not rated',
-      hidden: 'Fewer than 3 children — hidden for privacy', missing: 'Not played by this age group'
+      hard: 'Too hard', right: 'About right', easy: 'Too easy', few: 'Not enough tries yet (fewer than 10)', none: 'No winner or loser: not rated',
+      missing: 'Not played by this age group'
     },
     outcome: { won: 'Won', lost: 'Lost', unfinished: 'Left unfinished', other: 'Other ending' },
     winRate: 'Won (of finished)',
@@ -161,15 +186,9 @@
 
     showTable: 'Show table',
     showChart: 'Show chart',
-    hiddenPrivacy: 'fewer than 3 children — hidden for privacy',
-    moreHidden: function (k, what) { return k === 1 ? '1 more ' + what.one + ': fewer than 3 children — hidden for privacy.' : k + ' more ' + what.many + ': fewer than 3 children each — hidden for privacy.'; },
-    games: { one: 'game', many: 'games' },
-    levels: { one: 'level', many: 'levels' },
-    pcTypes: { one: 'PC type', many: 'PC types' },
     noData: 'No play has been recorded in this period yet.',
     emptyHint: 'Numbers appear here a few minutes after children play on the games site with statistics switched on.',
-    hiddenHint: 'So few children played in this period that everything is hidden for privacy. Choose a longer period above.',
-    footer: 'Groups with fewer than 3 children are always hidden for privacy. The games never collect names or other personal details.'
+    footer: 'No names are collected. Each child who picks an animal appears here under a code such as Student 7F3A; guests are counted together. A child who plays on two PCs appears as two students unless a teacher gives both profiles the same code or you link them.'
   };
 
   var ar = {
@@ -189,7 +208,7 @@
     hidePassword: 'إخفاء',
     signInButton: 'دخول',
     checking: 'جارٍ التحقق…',
-    remember: 'يحتفظ هذا المتصفح بكلمة المرور حتى تسجّل الخروج. على جهاز مشترك، سجّل الخروج عند الانتهاء.',
+    remember: 'يحتفظ هذا المتصفح بكلمة المرور حتى تسجّل الخروج. تعرض هذه الصفحة لعب كل طفل تحت رمز. على جهاز مشترك، سجّل الخروج عند الانتهاء.',
     demoLink: 'أو تجوّل في اللوحة ببيانات تجريبية',
     errWrong: 'كلمة المرور غير صحيحة. تحقّق منها وحاول مرة أخرى (الأحرف الكبيرة تختلف عن الصغيرة).',
     errExpired: 'تغيّرت كلمة المرور. سجّل الدخول من جديد بكلمة المرور الجديدة.',
@@ -216,7 +235,34 @@
     loading: 'جارٍ التحميل…',
     rangeOne: function (a) { return a; },
     range: function (a, b) { return a + ' – ' + b; },
-    utcNote: 'الأيام بحسب التوقيت العالمي (UTC).',
+    clockNote: function (zone, offset, source, now, pcs) {
+      if (source === 'none' || !zone) return 'بانتظار أن يذكر أحد أجهزة المدرسة ساعة المدرسة؛ وحتى ذلك الحين تتبع الأيام التوقيت العالمي (UTC).';
+      var head = 'الأيام والساعات بحسب ساعة المدرسة: ' + iso(zone) + ' \u200f(' + iso(offset) + (now ? '، الآن ' + iso(now) : '') + ')';
+      if (source === 'owner') return head + ' كما اخترتها.';
+      if (source === 'dashboard') return head + ' كما يذكرها هذا المتصفح، حتى يذكرها أحد أجهزة المدرسة.';
+      return head + (pcs ? ' كما يذكرها ' + (pcs === 1 ? 'جهاز واحد' : pcs === 2 ? 'جهازان' : n(pcs) + ' ' + I.arWord(pcs, ['جهاز', 'جهازان', 'أجهزة', 'جهازًا'])) + ' في المدرسة.' : ' كما تذكرها أجهزة المدرسة.');
+    },
+    clockChange: 'تغيير',
+    clockTitle: 'ساعة المدرسة',
+    clockIntro: 'تتبع الأيام والساعات وأيام الأسبوع في كل الصفحات هذه الساعة. تُعاد حسبة الأيام السابقة على الساعة الجديدة، ولا يضيع شيء.',
+    clockReported: 'كما تذكرها أجهزة المدرسة',
+    clockBrowser: 'هذا المتصفح',
+    clockAll: 'كل المناطق الزمنية',
+    clockUse: 'استخدم هذه الساعة',
+    clockCancel: 'إلغاء',
+    clockPcs: function (k) { return k === 1 ? 'جهاز واحد' : k === 2 ? 'جهازان' : n(k) + ' ' + I.arWord(k, ['جهاز', 'جهازان', 'أجهزة', 'جهازًا']); },
+    clockSaved: 'حُفظت. تُنقل الأيام السابقة الآن إلى الساعة الجديدة.',
+    clockFailed: 'لم تتغيّر الساعة. حاول مرة أخرى بعد دقيقة.',
+    rebuildProgress: function (done, all) { return 'تُنقل الأيام السابقة إلى الساعة الجديدة: اكتمل ' + n(done) + ' من أصل ' + n(all) + ' ' + I.arWord(all, ['يوم', 'يومين', 'أيام', 'يومًا']) + '.'; },
+    smallSample: function (k) { return 'بناءً على ' + (k === 1 ? 'طفل واحد' : k === 2 ? 'طفلين' : n(k) + ' ' + I.arWord(k, ['طفل', 'طفلين', 'أطفال', 'طفلًا'])) + ' حتى الآن'; },
+    smallTries: function (k) { return 'بناءً على ' + (k === 1 ? 'محاولة واحدة' : k === 2 ? 'محاولتين' : n(k) + ' ' + I.arWord(k, ['محاولة', 'محاولتين', 'محاولات', 'محاولة'])) + ' حتى الآن'; },
+    smallChip: function (k) { return 'بناءً على ' + (k === 1 ? 'طفل واحد' : k === 2 ? 'طفلين' : n(k) + ' ' + I.arWord(k, ['طفل', 'طفلين', 'أطفال', 'طفلًا'])); },
+    smallChipTries: function (k) { return 'بناءً على ' + (k === 1 ? 'محاولة واحدة' : k === 2 ? 'محاولتين' : n(k) + ' ' + I.arWord(k, ['محاولة', 'محاولتين', 'محاولات', 'محاولة'])); },
+    noNumbers: 'لم يرسل الخادم أرقامًا لهذا اليوم',
+    keysDays: 'استخدم مفاتيح الأسهم لقراءة كل يوم.',
+    earlySign: 'علامة مبكرة (' + iso('10–19') + ' محاولة)',
+    earlyShort: 'علامة مبكرة',
+    oldServer: 'يحتاج هذا إلى الإصدار المحدَّث من الخادم. اطلب من الشخص الذي أعدّ الخادم أن يحدّثه.',
 
     insightsTitle: 'أبرز ما لاحظناه',
     numbersTitle: 'الأرقام الرئيسية',
@@ -232,14 +278,11 @@
     tileNowHint: 'نشطون في آخر 5 دقائق',
     nowTop: function (g) { return 'الأكثر لعبًا الآن: ' + g; },
     nowChecked: function (t) { return 'آخر فحص ' + t; },
-    hiddenShort: 'مخفي',
-    hiddenTile: 'أقل من 3 أطفال — مخفي حفاظًا على الخصوصية',
 
     dailyTitle: 'النشاط اليومي',
     dailySessions: 'جلسات اللعب في كل يوم',
     dailyMinutes: 'وقت اللعب في كل يوم، بالدقائق',
     dailyNeedsDays: 'اختر 7 أو 30 أو 90 يومًا في الأعلى لترى الرسوم اليومية.',
-    hiddenDays: function (k) { return k === 1 ? 'يوم واحد مخفي حفاظًا على الخصوصية (أقل من 3 أطفال).' : k === 2 ? 'يومان مخفيان حفاظًا على الخصوصية (أقل من 3 أطفال في كل منهما).' : n(k) + ' ' + I.arWord(k, ['يوم', 'يومان', 'أيام', 'يومًا']) + ' مخفية حفاظًا على الخصوصية (أقل من 3 أطفال في كل منها).'; },
     day: 'اليوم',
     sessions: 'جلسات اللعب',
     minutes: 'وقت اللعب (بالدقائق)',
@@ -273,15 +316,15 @@
     stuckNone: 'لم تُترك أي مرحلة جُرّبت 20 مرة أو أكثر دون إكمال.',
 
     diffTitle: 'فحص الصعوبة',
-    diffSub: 'بحسب عدد مرات فوز الأطفال وعدد الجولات التي يتركونها دون إكمال. يحتاج كل حكم إلى 20 محاولة على الأقل.',
+    diffSub: 'بحسب عدد مرات فوز الأطفال وعدد الجولات التي يتركونها دون إكمال. يحتاج كل حكم إلى 20 محاولة على الأقل، وتعطي 10 إلى 19 محاولة علامة مبكرة.',
     diffRule: 'صعبة جدًا: يفوز الأطفال في أقل من 40% من الجولات التي يُنهونها، أو يتركون 30% أو أكثر من جولاتهم دون إكمال بينما يفوزون في أقل من 90% من الجولات التي يُنهونها. سهلة جدًا: يفوزون في 90% أو أكثر ويتركون أقل من 10% دون إكمال. الألعاب التي ليس فيها فائز (الجري المتواصل، ولاعبان على جهاز واحد) لا تُقيَّم.',
     diffRuleCompletion: 'عندما لا يذكر الخادم لفئة عمرية إلا نسبة الجولات المنتهية بالفوز: أقل من 30% صعبة جدًا، و85% أو أكثر سهلة جدًا.',
     diffRuleSessions: 'لا يذكر الخادم عدد محاولات كل فئة عمرية، لذلك يحتاج الحكم لفئة عمرية واحدة إلى 5 جلسات لعب على الأقل بدلًا من 20 محاولة.',
     howRoundsEnd: 'كيف تنتهي الجولات',
-    verdict: { hard: 'صعبة جدًا', right: 'مناسبة', easy: 'سهلة جدًا', few: 'محاولات قليلة', none: 'بلا فائز', hidden: 'مخفية', missing: 'لم تُلعب' },
+    verdict: { hard: 'صعبة جدًا', right: 'مناسبة', easy: 'سهلة جدًا', few: 'المحاولات قليلة حتى الآن', none: 'بلا فائز', missing: 'لم تُلعب' },
     verdictLong: {
-      hard: 'صعبة جدًا', right: 'مناسبة', easy: 'سهلة جدًا', few: 'المحاولات قليلة حتى الآن', none: 'لا فوز فيها ولا خسارة: لا تُقيَّم',
-      hidden: 'أقل من 3 أطفال — مخفية حفاظًا على الخصوصية', missing: 'لم تلعبها هذه الفئة العمرية'
+      hard: 'صعبة جدًا', right: 'مناسبة', easy: 'سهلة جدًا', few: 'المحاولات قليلة حتى الآن (أقل من 10)', none: 'لا فوز فيها ولا خسارة: لا تُقيَّم',
+      missing: 'لم تلعبها هذه الفئة العمرية'
     },
     outcome: { won: 'فوز', lost: 'خسارة', unfinished: 'تُركت دون إكمال', other: 'نهاية أخرى' },
     winRate: 'الفوز (من المنتهية)',
@@ -322,22 +365,9 @@
 
     showTable: 'اعرض جدولًا',
     showChart: 'اعرض الرسم',
-    hiddenPrivacy: 'أقل من 3 أطفال — مخفي حفاظًا على الخصوصية',
-    // Counted noun, its adjective and the predicate agree: لعبة أخرى … مخفية، نوع آخر … مخفي.
-    moreHidden: function (k, what) {
-      var phrase = k === 1 ? what.forms[0] : k === 2 ? what.forms[1] : n(k) + ' ' + I.arWord(k, what.forms);
-      var each = k === 1 ? 'فيها' : k === 2 ? 'في كل منهما' : 'في كل منها';
-      if (k === 1 && what.masc) each = 'فيه';
-      var hidden = k === 1 ? (what.masc ? 'مخفي' : 'مخفية') : k === 2 ? (what.masc ? 'مخفيان' : 'مخفيتان') : 'مخفية';
-      return phrase + ': أقل من 3 أطفال ' + each + ' — ' + hidden + ' حفاظًا على الخصوصية.';
-    },
-    games: { forms: ['لعبة أخرى', 'لعبتان أخريان', 'ألعاب أخرى', 'لعبة أخرى'] },
-    levels: { forms: ['مرحلة أخرى', 'مرحلتان أخريان', 'مراحل أخرى', 'مرحلة أخرى'] },
-    pcTypes: { masc: true, forms: ['نوع جهاز آخر', 'نوعا جهاز آخران', 'أنواع أجهزة أخرى', 'نوع جهاز آخر'] },
     noData: 'لم يُسجَّل أي لعب في هذه الفترة بعد.',
     emptyHint: 'تظهر الأرقام هنا بعد دقائق من لعب الأطفال على موقع الألعاب والإحصاءات مفعّلة.',
-    hiddenHint: 'لعب عدد قليل جدًا من الأطفال في هذه الفترة، لذلك أُخفي كل شيء حفاظًا على الخصوصية. اختر فترة أطول في الأعلى.',
-    footer: 'تُخفى دائمًا المجموعات التي فيها أقل من 3 أطفال حفاظًا على الخصوصية. لا تجمع الألعاب أي أسماء أو تفاصيل شخصية.'
+    footer: 'لا تُجمع الأسماء. يظهر كل طفل يختار حيوانه برمز مثل «الطالب ' + iso('7F3A') + '»، ويُحسب لعب الضيوف معًا. الطفل الذي يلعب على جهازين يظهر طالبين، إلا إذا أعطى المعلم الملفين الرمز نفسه أو ربطتهما هنا.'
   };
 
   window.SGDashText = { en: en, ar: ar, iso: iso };

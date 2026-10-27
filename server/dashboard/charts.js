@@ -134,8 +134,8 @@
   }
 
   // ---- line chart: one series over days ---------------------------------------
-  // opts: { points: [{ title, tick, value (null = hidden) }], color, rtl, name,
-  //         format(v) -> text, hiddenText, height }
+  // opts: { points: [{ title, tick, value (null = no number for that day) }], color, rtl, name,
+  //         format(v) -> text, emptyText (the tooltip of a day without a number), height }
   function lineChart(host, opts) {
     host.textContent = '';
     var points = opts.points, n = points.length, rtl = !!opts.rtl;
@@ -181,7 +181,7 @@
       s('text', { x: r1(x), y: H - 7, class: 'tick', 'text-anchor': anchor, direction: dir }, svg, points[i].tick);
     }
 
-    // The line breaks at hidden days; an isolated day is a dot.
+    // The line breaks at a day without a number (an older server's); an isolated day is a dot.
     var segs = [], cur = [];
     points.forEach(function (p, i) {
       if (p.value == null) { if (cur.length) segs.push(cur); cur = []; } else cur.push(i);
@@ -199,7 +199,7 @@
       s('path', { d: d, stroke: opts.color, class: 'line' }, marks);
     });
     points.forEach(function (p, i) {
-      if (p.value == null) s('rect', { x: r1(X(i)) - 3, y: r1(Y(0)) - 1, width: 6, height: 3, rx: 1.5, class: 'hidden-day' }, marks);
+      if (p.value == null) s('rect', { x: r1(X(i)) - 3, y: r1(Y(0)) - 1, width: 6, height: 3, rx: 1.5, class: 'no-day' }, marks);
     });
     // The newest shown value gets a dot and its number.
     for (var last = n - 1; last >= 0 && points[last].value == null; last--);
@@ -220,7 +220,7 @@
     function content(i) {
       var p = points[i];
       return p.value == null
-        ? { title: p.title, note: opts.hiddenText }
+        ? { title: p.title, note: opts.emptyText }
         : { title: p.title, rows: [{ value: opts.format(p.value), label: opts.unit || '', color: opts.color, swatch: 'line' }] };
     }
     function move(i, anchor) {
@@ -257,17 +257,25 @@
   // Wide: label | bar | value at the bar's tip (or, over a 0-100 % track, in a
   // column after it). Narrow: the label and value on a line above the bar.
   // Text anchors are logical (start = the reading side) and follow the page direction.
-  // opts: { rows: [{ label, value, valueText, sub, tip, color }], max, color, rtl, name, track }
+  // opts: { rows: [{ label, value, valueText, sub, chip, tip, color }], max, color, rtl, name, track }
+  // chip: the small-sample note ("based on 2 children"), drawn as a pill after the
+  // value (in the narrow layout, after the sub text); that row's label turns secondary.
   function barList(host, opts) {
     host.textContent = '';
-    var rows = opts.rows, rtl = !!opts.rtl, track = !!opts.track;
+    var rows = opts.rows.map(function (r) {
+      return r.chip ? Object.assign({}, r, { sub: r.sub ? r.sub + ' · ' + r.chip : r.chip, pill: r.chip }) : r;
+    }), rtl = !!opts.rtl, track = !!opts.track;
     var W = Math.max(240, Math.floor(host.clientWidth || 400));
     var max = opts.max || Math.max.apply(null, rows.map(function (r) { return r.value || 0; }).concat([1]));
     var X = function (x) { return rtl ? W - x : x; };
     var family = getComputedStyle(host).fontFamily;
     var labelFont = '13px ' + family, valueFont = '600 13px ' + family, subFont = '12px ' + family;
     var valueW = Math.max.apply(null, rows.map(function (r) { return textWidth(r.valueText, valueFont); }).concat([0]));
-    var subW = Math.max.apply(null, rows.map(function (r) { return r.sub ? textWidth(r.sub, subFont) : 0; }).concat([0]));
+    // Wide rows draw the chip as a pill (its text plus 8px padding each side) instead of in the sub text.
+    var subOf = function (r) { return r.pill ? (r.sub === r.pill ? '' : r.sub.slice(0, r.sub.length - r.pill.length - 3)) : r.sub; };
+    var subW = Math.max.apply(null, rows.map(function (r) {
+      return (subOf(r) ? textWidth(subOf(r), subFont) : 0) + (r.pill ? textWidth(r.pill, subFont) + 16 + (subOf(r) ? 8 : 0) : 0);
+    }).concat([0]));
     var labelNeed = Math.max.apply(null, rows.map(function (r) { return textWidth(r.label, labelFont); }).concat([0]));
     var tail = valueW + (subW ? subW + 10 : 0) + 10;
     var inline = W >= 520 && W - Math.min(labelNeed + 16, 260) - tail >= 160;
@@ -286,15 +294,21 @@
       var color = row.color || opts.color;
       if (inline) {
         var mid = y + rowH / 2, by = mid - barH / 2, base = mid + 4.5;
-        s('text', { x: X(0), y: base, class: 'bar-label', 'text-anchor': 'start', direction: dir }, g, fit(row.label, labelW - 12, labelFont));
+        s('text', { x: X(0), y: base, class: 'bar-label' + (row.pill ? ' is-small' : ''), 'text-anchor': 'start', direction: dir }, g, fit(row.label, labelW - 12, labelFont));
         if (track) s('path', { d: barPath(X(labelW), X(barEnd), by, barH, 4), class: 'track' }, g);
         if (w) s('path', { d: barPath(X(labelW), X(labelW + w), by, barH, 4), fill: color, class: 'bar' }, g);
         var vx = track ? barEnd + 10 : labelW + w + 8;
         s('text', { x: X(vx), y: base, class: 'bar-value', 'text-anchor': 'start', direction: dir }, g, row.valueText);
-        if (row.sub) s('text', { x: X(vx + textWidth(row.valueText, valueFont) + 8), y: base, class: 'bar-sub', 'text-anchor': 'start', direction: dir }, g, row.sub);
+        var sx = vx + textWidth(row.valueText, valueFont) + 8, sub = subOf(row);
+        if (sub) { s('text', { x: X(sx), y: base, class: 'bar-sub', 'text-anchor': 'start', direction: dir }, g, sub); sx += textWidth(sub, subFont) + 8; }
+        if (row.pill) {
+          var pw = textWidth(row.pill, subFont) + 16;
+          s('rect', { x: r1(rtl ? W - sx - pw : sx), y: mid - 9, width: r1(pw), height: 18, rx: 9, class: 'chip-pill' }, g);
+          s('text', { x: X(sx + 8), y: base - 0.5, class: 'bar-sub chip-text', 'text-anchor': 'start', direction: dir }, g, row.pill);
+        }
       } else {
         var rowValueW = textWidth(row.valueText, valueFont), rowSubW = row.sub ? textWidth(row.sub, subFont) + 10 : 0;
-        s('text', { x: X(0), y: y + 14, class: 'bar-label', 'text-anchor': 'start', direction: dir }, g, fit(row.label, W - rowValueW - rowSubW - 14, labelFont));
+        s('text', { x: X(0), y: y + 14, class: 'bar-label' + (row.pill ? ' is-small' : ''), 'text-anchor': 'start', direction: dir }, g, fit(row.label, W - rowValueW - rowSubW - 14, labelFont));
         if (row.sub) s('text', { x: X(W - rowValueW - 8), y: y + 14, class: 'bar-sub', 'text-anchor': 'end', direction: dir }, g, row.sub);
         s('text', { x: X(W), y: y + 14, class: 'bar-value', 'text-anchor': 'end', direction: dir }, g, row.valueText);
         var sy = y + 22, sw = row.value > 0 ? Math.max(2, (row.value / max) * W) : 0;
@@ -328,7 +342,8 @@
   }
 
   // ---- table twin -------------------------------------------------------------
-  // columns: [{ label, num }]; rows: arrays of cell text (or { text, hidden }).
+  // columns: [{ label, num }]; rows: arrays of cell text, or { text, colspan } for a muted
+  // cell, or { node } for a cell built by the caller (a sparkline, a link).
   function table(host, caption, columns, rows) {
     host.textContent = '';
     var wrap = h('div', { class: 'table-wrap' }, host);
@@ -340,10 +355,11 @@
     rows.forEach(function (row) {
       var tr = h('tr', null, body);
       row.forEach(function (cell, i) {
-        var hidden = cell && typeof cell === 'object';
-        var td = h(i ? 'td' : 'th', { scope: i ? null : 'row', class: (columns[i].num ? 'num' : '') + (hidden ? ' muted' : '') || null }, tr,
-          hidden ? cell.text : cell);
-        if (hidden && cell.colspan) td.setAttribute('colspan', cell.colspan);
+        var muted = cell && typeof cell === 'object' && !cell.node;
+        var td = h(i ? 'td' : 'th', { scope: i ? null : 'row', class: (columns[i].num ? 'num' : '') + (muted ? ' muted' : '') || null }, tr,
+          muted ? cell.text : cell && cell.node ? null : cell);
+        if (cell && cell.node) td.appendChild(cell.node);
+        if (muted && cell.colspan) td.setAttribute('colspan', cell.colspan);
       });
     });
     return t;

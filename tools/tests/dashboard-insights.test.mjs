@@ -1,6 +1,6 @@
 // The dashboard's insight rules (server/dashboard/insights.js): thresholds, ranking,
-// suppressed groups never described, both languages, empty data; and demo.json keeps
-// the server's KPI and live shapes. Pure Node: insights.js and i18n.js are plain
+// every group described (even one child) with the small-sample flag, both languages,
+// empty data; and demo.json keeps the server's KPI and live shapes. Pure Node: insights.js and i18n.js are plain
 // browser scripts, loaded here in a vm context with a stand-in window.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
@@ -94,13 +94,22 @@ const opts = lang => ({ lang, name: slug => (lang === 'ar' ? AR_NAMES : NAMES)[s
 
 test('the difficulty verdict follows the documented thresholds', () => {
   assert.deepEqual({ ...I.T }, {
-    MIN_SESSIONS: 3, MIN_TRIES: 20, MIN_SESSIONS_NO_TRIES: 5, HARD_WIN: 0.4, HARD_QUIT: 0.3, EASY_WIN: 0.9, EASY_QUIT: 0.1,
+    MIN_TRIES: 20, MIN_EARLY_TRIES: 10, MIN_SESSIONS_NO_TRIES: 5, HARD_WIN: 0.4, HARD_QUIT: 0.3, EASY_WIN: 0.9, EASY_QUIT: 0.1,
     HARD_COMPLETION: 0.3, EASY_COMPLETION: 0.85, STUCK_MIN_TRIES: 20, STUCK_RATE: 0.25, RETURN_MIN_OPENS: 20, RETURN_RATE: 0.5,
     FAIL_MIN_OPENS: 20, FAIL_MIN: 3, FAIL_RATE: 0.03, SLOW_LOAD_MS: 3000, SLOW_LOAD_MIN: 10, CHOPPY_SMOOTH: 0.8, SLOW_INPUT: 0.1,
-    DEVICE_MIN_SESSIONS: 10, DEVICE_SMOOTH: 0.85, DEVICE_GAP: 0.05, TREND_DAYS: 7, TREND_MIN: 20, TREND_CHANGE: 0.1
+    DEVICE_MIN_SESSIONS: 10, DEVICE_SMOOTH: 0.85, DEVICE_GAP: 0.05, TREND_DAYS: 7, TREND_MIN: 20, TREND_CHANGE: 0.1,
+    HEARTS_MIN: 3, SMALL_STUDENTS: 5, SMALL_TRIES: 20
   });
+  assert.equal('MIN_SESSIONS' in I.T, false, 'no privacy floor: every group is described');
   const v = cell => I.verdict({ tries: 20, sessions: 10, winnable: true, ...cell }).code;
-  assert.equal(v({ tries: 19, winRate: 0.1, dropOffRate: 0.5 }), 'few', 'fewer than 20 tries: no verdict');
+  // Fewer than 10 tries: not enough yet; 10-19: the same rules as an early sign; 20 or more: a verdict.
+  assert.deepEqual(I.verdict({ tries: 9, winnable: true, winRate: 0.1, dropOffRate: 0.5 }), { code: 'few', tries: 9 });
+  assert.deepEqual(I.verdict({ tries: 10, winnable: true, winRate: 0.1, dropOffRate: 0.5 }),
+    { code: 'hard', basis: 'win', win: 0.1, quit: 0.5, tries: 10, early: true });
+  assert.equal(I.verdict({ tries: 19, winnable: true, winRate: 0.95, dropOffRate: 0 }).early, true);
+  assert.equal(I.verdict({ tries: 19, winnable: true, winRate: 0.95, dropOffRate: 0 }).code, 'easy');
+  assert.equal(I.verdict({ tries: 20, winnable: true, winRate: 0.95, dropOffRate: 0 }).early, undefined, '20 tries: a verdict');
+  assert.equal(I.verdict({ tries: 12, winnable: false }).early, undefined, 'an unrated game is no early sign');
   assert.equal(v({ winRate: 0.39, dropOffRate: 0 }), 'hard');
   assert.equal(v({ winRate: 0.40, dropOffRate: 0.29 }), 'right');
   assert.equal(v({ winRate: 0.70, dropOffRate: 0.30 }), 'hard', '30 % left unfinished is too hard');
@@ -114,7 +123,7 @@ test('the difficulty verdict follows the documented thresholds', () => {
   assert.equal(I.verdict({ tries: 30, winnable: true, winRate: null, dropOffRate: 0.31 }).basis, 'quit');
   assert.equal(v({ winRate: null, dropOffRate: 0.1 }), 'none');
   assert.equal(v({ winnable: false, winRate: null, dropOffRate: 0.9 }), 'none', 'endless and two-player games are not rated');
-  assert.equal(I.verdict({ suppressed: true }).code, 'hidden');
+  assert.equal(I.verdict({ suppressed: true }).code, 'missing', 'an older server\'s group without numbers is not judged');
   assert.equal(I.verdict(null).code, 'missing');
   // An older server: only the completion rate for an age group, and no tries.
   const c = cell => I.verdict({ tries: null, winnable: true, ...cell }).code;
@@ -134,7 +143,6 @@ test('rankings are deterministic: a number first, then the slug and the id', () 
   const stuck = I.stuckLevels(sample()).rows.map(l => l.slug + ' ' + l.id);
   // 40 % for three levels: more quits first, then by slug and natural level order; delta L3 has 19 tries.
   assert.deepEqual(stuck, ['bravo L1', 'alpha L2', 'alpha L10', 'charlie endless']);
-  assert.equal(I.stuckLevels(sample()).hidden, 1);
   const shuffled = sample({ games: sample().games.slice().reverse(), levels: sample().levels.slice().reverse() });
   assert.deepEqual(I.stuckLevels(shuffled).rows, I.stuckLevels(sample()).rows);
   // charlie and delta both have 60 opens: more play sessions first.
@@ -149,7 +157,7 @@ test('rankings are deterministic: a number first, then the slug and the id', () 
   assert.deepEqual(grid.rows.map(r => [r.slug, r.verdict.code]), [['alpha', 'hard'], ['bravo', 'easy'], ['delta', 'right'], ['charlie', 'none']]);
   assert.deepEqual(grid.rows[0].cells, {
     '6-7': I.verdict({ tries: null, sessions: 30, winRate: 0.12, dropOffRate: 0.2, completionRate: 0.1, winnable: true }),
-    '8-9': { code: 'hidden' }, '10-11': { code: 'missing' }
+    '8-9': { code: 'missing' }, '10-11': { code: 'missing' }
   });
   assert.equal(grid.rows[1].cells['10-11'].code, 'easy');
   // Play time per age group and game: used when the server sends it, null otherwise.
@@ -157,45 +165,65 @@ test('rankings are deterministic: a number first, then the slug and the id', () 
   withMinutes.bands[0].games[0].engagedMinutes = 81.5;
   assert.equal(I.favouritesByBand(withMinutes)[0].rows[0].engagedMinutes, 81.5);
   assert.equal(I.favouritesByBand(sample())[0].rows[0].engagedMinutes, null);
-  assert.equal(grid.rows[2].cells['10-11'].code, 'hidden', 'a 2-session group without "suppressed" is still never judged');
+  assert.deepEqual(grid.rows[2].cells['10-11'], { code: 'few', tries: null }, 'a 2-session group is shown: not enough play yet to judge');
 });
 
-test('a suppressed group is never described, ranked or counted', () => {
-  // Even a malformed answer that carries numbers next to "suppressed" changes nothing.
-  const leaky = sample();
-  leaky.games[4] = { slug: 'secret', suppressed: true, opens: 9999, sessions: 2, rounds: { starts: 999, codes: codes(0, 999, 0) }, winRate: 0, dropOffRate: 0.9 };
-  leaky.levels[5] = { slug: 'secret', id: 'L1', suppressed: true, starts: 999, codes: codes(0, 0, 999), dropOffRate: 1 };
-  leaky.bands[1] = { band: '8-9', suppressed: true, games: [{ slug: 'alpha', sessions: 50, opens: 50, share: 1, winRate: 0, dropOffRate: 1 }] };
-  leaky.devices.cores[0] = { value: 1, suppressed: true, sessions: 2, frames: { smoothShare: 0.1 } };
+test('every group is described, even one child, with the small-sample flag', () => {
+  // One child played Echo once: it is ranked, judged and named like any other game.
+  const one = sample();
+  one.games.push({ ...game('echo', { opens: 1, sessions: 1, starts: 1, c: codes(0, 1, 0), playsBefore: [1, 0, 0, 0, 0] }), students: 1 });
+  one.levels.push({ ...level('echo', 'L1', 1, 1, 1), students: 1 });
+  one.bands[0].students = 2;
+  assert.ok(I.favourites(one).rows.some(g => g.slug === 'echo' && g.opens === 1 && g.small === true));
+  assert.ok(I.difficultyGrid(one).rows.some(r => r.slug === 'echo' && r.verdict.code === 'few' && r.small === true));
+  assert.equal(I.stuckLevels(one, 1).rows.find(l => l.slug === 'echo').small, true);
+  assert.equal(I.favouritesByBand(one)[0].small, true, '2 students in the age group');
+  assert.equal(I.favouritesByBand(one)[1].band, '10-11', 'an older server\'s group without numbers is left out, not described');
+  // The rule: fewer than 5 students or fewer than 20 tries; a count not sent says nothing.
+  assert.deepEqual([[4, 100], [5, 19], [5, 20], [null, null], [null, 5], [1, null]].map(([s, n]) => I.small(s, n)),
+    [true, true, false, false, true, true]);
+  // A sentence based on few children says so (the page shows the chip next to it).
+  const small = sample();
+  small.games[0].students = 3;
+  const fav = I.insights(small, opts('en')).find(s => s.kind === 'favourite');
+  assert.deepEqual([fav.students, fav.small], [3, true]);
+  assert.equal(I.insights(sample(), opts('en')).find(s => s.kind === 'favourite').small, false, 'no student count: no chip');
+  // An early sign is shown in the grid, never stated as "too hard".
+  const early = sample({ games: [game('alpha', { opens: 120, sessions: 80, starts: 15, c: codes(2, 13, 0) })], levels: [], bands: [] });
+  assert.equal(I.difficultyGrid(early).rows[0].verdict.early, true);
+  assert.ok(!I.insights(early, opts('en')).some(s => s.kind === 'hard'));
+  // Totals, days and groups an older server marked "suppressed" have no numbers: left out, never read as zero.
+  const old = sample();
+  old.games[4] = { slug: 'secret', suppressed: true };
+  old.daily[16] = { day: old.daily[16].day, suppressed: true };
+  assert.ok(!I.favourites(old).rows.some(g => g.slug === 'secret'));
+  assert.ok(!I.difficultyGrid(old).rows.some(r => r.slug === 'secret'));
+  assert.ok(!I.insights(old, opts('en')).some(s => s.kind === 'trend'), 'a day without numbers stops the trend sentence');
   for (const lang of ['en', 'ar']) {
-    const all = I.insights(leaky, opts(lang)).map(s => strip(s.text)).join('\n');
-    assert.ok(all.length > 0);
-    for (const word of ['Secret Game', 'لعبة سرية', 'secret', '9999', '999', '8–9', '1 core', 'نواة واحدة']) assert.ok(!all.includes(word), lang + ' mentions ' + word + ':\n' + all);
+    const list = I.insights(sample({ totals: { suppressed: true } }), opts(lang));
+    assert.deepEqual(list.map(s => s.kind), ['old']);
+    assert.match(list[0].text, lang === 'ar' ? /حدِّث الخادم/ : /Update the server/);
+    // A one-session period is described like any other.
+    const tiny = I.insights(sample({ totals: { ...sample().totals, sessions: 1 } }), opts(lang));
+    assert.ok(tiny.length >= 1 && !tiny.some(s => s.kind === 'old' || s.kind === 'empty'));
   }
-  assert.ok(!I.favourites(leaky).rows.some(g => g.slug === 'secret'));
-  assert.equal(I.favourites(leaky).hidden, 1);
-  assert.ok(!I.stuckLevels(leaky).rows.some(l => l.slug === 'secret'));
-  assert.ok(!I.difficultyGrid(leaky).rows.some(r => r.slug === 'secret'));
-  assert.equal(I.difficultyGrid(leaky).rows.find(r => r.slug === 'alpha').cells['8-9'].code, 'hidden');
-  assert.deepEqual(I.favouritesByBand(leaky)[1], { band: '8-9', hidden: true, rows: [], hiddenGames: 0, more: 0 });
-  assert.ok(!I.returning(leaky).rows.some(r => r.slug === 'secret'));
-  assert.equal(I.returning(leaky).opens, 210, 'hidden games add nothing to the overall share');
-  assert.deepEqual(I.pcHealth(leaky).devices.cores[0], { value: 1, hidden: true });
-  assert.ok(!I.pcHealth(leaky).rows.some(r => r.slug === 'secret'));
-  // A hidden day stops the trend sentence rather than being read as zero.
-  const days = sample();
-  days.daily[16] = { day: days.daily[16].day, suppressed: true };
-  assert.ok(!I.insights(days, opts('en')).some(s => s.kind === 'trend'));
-  assert.ok(I.insights(sample(), { ...opts('en') }).length <= 5);
-  // Totals hidden: one sentence, about privacy only (also for 1–2 sessions without the flag).
-  for (const lang of ['en', 'ar']) {
-    for (const totals of [{ suppressed: true }, { ...sample().totals, sessions: 2 }]) {
-      const hidden = I.insights(sample({ totals }), opts(lang));
-      assert.equal(hidden.length, 1);
-      assert.equal(hidden[0].kind, 'hidden');
-      assert.match(hidden[0].text, lang === 'ar' ? /أقل من 3 أطفال/ : /Fewer than 3 children/);
-    }
-  }
+});
+
+test('the most hearted game: hearts pressed minus taken back, in both languages', () => {
+  const k = sample({ levels: [] });
+  k.games[1].hearts = { on: 23, off: 2 };
+  k.games[2].hearts = { on: 4, off: 0 };
+  assert.ok(I.KIND_ORDER.includes('hearts'));
+  assert.deepEqual(I.insights(k, opts('en')).map(s => s.kind), I.insights(k, opts('ar')).map(s => s.kind));
+  assert.ok(I.insights(k, opts('en')).length <= 5);
+  // Hearts come after the other kinds: a quiet answer leaves room for them.
+  const quiet = sample({ levels: [], bands: [], devices: { cores: [], memory: [], screen: [] },
+    games: [{ ...game('bravo', { playsBefore: [40, 0, 0, 0, 0] }), hearts: { on: 23, off: 2 } }, { ...game('charlie', { playsBefore: [40, 0, 0, 0, 0] }), hearts: { on: 2, off: 0 } }] });
+  const q = I.insights(quiet, opts('en')).find(s => s.kind === 'hearts');
+  assert.equal(q.text, 'Bravo Hop got the most hearts in this period: 21 after the ones taken back (its heart was pressed 23 times and taken back twice).');
+  assert.equal(strip(I.insights(quiet, opts('ar')).find(s => s.kind === 'hearts').text),
+    'نالت «قفز برافو» أكثر القلوب في هذه الفترة: 21 قلبًا بعد طرح ما أُلغي، إذ ضُغط قلبها 23 مرة وأُلغي مرتين.');
+  assert.ok(!I.insights(quiet, opts('en')).some(s => s.key === 'charlie' && s.kind === 'hearts'), '2 hearts are not a finding');
 });
 
 test('a game is called the slowest to open only when no shown game is slower', () => {
@@ -294,22 +322,51 @@ test('the dashboard words exist in both languages', () => {
   const keys = obj => Object.keys(obj).sort();
   assert.deepEqual(keys(TEXT.ar), keys(TEXT.en));
   for (const key of keys(TEXT.en)) {
-    if (['games', 'levels', 'pcTypes'].includes(key)) continue; // counted nouns differ by language
     assert.deepEqual(shape(TEXT.ar[key]), shape(TEXT.en[key]), key);
   }
   for (const [key, value] of Object.entries(TEXT.ar)) {
     if (typeof value === 'string' && !['otherLang'].includes(key)) assert.ok(ARABIC.test(value), 'Arabic text for ' + key);
   }
-  for (const lang of ['en', 'ar']) {
-    const text = TEXT[lang];
-    for (const k of [1, 2, 3, 11]) {
-      for (const what of ['games', 'levels', 'pcTypes']) assert.match(text.moreHidden(k, text[what]), lang === 'ar' ? /أقل من 3 أطفال/ : /fewer than 3 children/);
-    }
-    assert.match(text.hiddenPrivacy, lang === 'ar' ? /أقل من 3 أطفال/ : /fewer than 3 children — hidden for privacy/);
-    assert.equal(text.errNotSetSteps.length, 5);
+  for (const lang of ['en', 'ar']) assert.equal(TEXT[lang].errNotSetSteps.length, 5);
+  // The small-sample chip and Arabic number agreement.
+  assert.deepEqual([1, 2, 3, 11].map(k => TEXT.en.smallSample(k)),
+    ['Based on 1 child so far', 'Based on 2 children so far', 'Based on 3 children so far', 'Based on 11 children so far']);
+  assert.deepEqual([1, 2, 3, 11].map(k => TEXT.ar.smallSample(k)),
+    ['بناءً على طفل واحد حتى الآن', 'بناءً على طفلين حتى الآن', 'بناءً على 3 أطفال حتى الآن', 'بناءً على 11 طفلًا حتى الآن']);
+  assert.equal(TEXT.ar.smallChip(2), 'بناءً على طفلين');
+  assert.equal(TEXT.en.verdictLong.few, 'Not enough tries yet (fewer than 10)');
+  assert.equal(TEXT.ar.verdict.few, 'المحاولات قليلة حتى الآن');
+  assert.equal(strip(TEXT.ar.earlySign), 'علامة مبكرة (10–19 محاولة)');
+  // The school's clock line, in each state.
+  assert.equal(TEXT.en.clockNote('UTC', 'UTC', 'none', '', 0), 'Waiting for a PC to report the school’s clock; world time (UTC) until then.');
+  assert.equal(strip(TEXT.en.clockNote('Asia/Riyadh', 'UTC+3', 'pcs', '10:42', 12)),
+    'Days and hours follow the school’s clock: Asia/Riyadh (UTC+3, now 10:42), from 12 PCs.');
+  assert.equal(strip(TEXT.ar.clockNote('Asia/Riyadh', 'UTC+3', 'pc', '10:42', 12)).replace('\u200f', ''),
+    'الأيام والساعات بحسب ساعة المدرسة: Asia/Riyadh (UTC+3، الآن 10:42) كما يذكرها 12 جهازًا في المدرسة.');
+  assert.match(TEXT.en.clockNote('Asia/Riyadh', 'UTC+3', 'dashboard', '10:42', 0), /from this browser/);
+  assert.match(TEXT.en.clockNote('Asia/Riyadh', 'UTC+3', 'owner', '10:42', 0), /as you chose/);
+});
+
+test('no word of the dashboard says a number is hidden for privacy', () => {
+  // Every string and every function's answer, in both languages, and the page's own scripts.
+  const words = [];
+  const walk = v => {
+    if (typeof v === 'string') words.push(v);
+    else if (typeof v === 'function') for (const args of [[1], [2], [3, 'x'], [11, 'x', 'pc', '10:00', 3]]) { try { walk(v(...args)); } catch { /* needs other arguments */ } }
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  walk(TEXT);
+  for (const s of I.insights(sample(), opts('en')).concat(I.insights(sample(), opts('ar')))) words.push(s.text);
+  for (const file of fs.readdirSync(dashboard).filter(f => /\.(js|html)$/.test(f))) words.push(fs.readFileSync(path.join(dashboard, file), 'utf8'));
+  for (const text of words) {
+    assert.ok(!/hidden for privacy/i.test(text), text.slice(0, 120));
+    assert.ok(!text.includes('حفاظًا على الخصوصية'), text.slice(0, 120));
   }
-  assert.equal(TEXT.en.moreHidden(1, TEXT.en.games), '1 more game: fewer than 3 children — hidden for privacy.');
-  assert.equal(TEXT.ar.moreHidden(2, TEXT.ar.pcTypes), 'نوعا جهاز آخران: أقل من 3 أطفال في كل منهما — مخفيان حفاظًا على الخصوصية.');
+  for (const key of ['hiddenShort', 'hiddenTile', 'hiddenDays', 'hiddenPrivacy', 'moreHidden', 'hiddenHint', 'utcNote']) {
+    assert.equal(key in TEXT.en || key in TEXT.ar, false, key);
+  }
+  assert.equal('hidden' in TEXT.en.verdict || 'hidden' in TEXT.en.verdictLong || 'hidden' in TEXT.ar.verdictLong, false);
 });
 
 test('empty and missing data never throw', () => {
@@ -386,7 +443,10 @@ test('on real server answers: at most five sentences, deterministic, only about 
     for (const r of grid.rows) {
       const g = kpis.games.find(x => x.slug === r.slug);
       assert.equal(r.tries, g.rounds.starts);
-      if (r.verdict.code === 'hard' || r.verdict.code === 'easy' || r.verdict.code === 'right') assert.ok(g.rounds.starts >= I.T.MIN_TRIES);
+      if (r.verdict.code === 'hard' || r.verdict.code === 'easy' || r.verdict.code === 'right') {
+        assert.ok(g.rounds.starts >= (r.verdict.early ? I.T.MIN_EARLY_TRIES : I.T.MIN_TRIES), r.slug);
+        assert.equal(!!r.verdict.early, g.rounds.starts < I.T.MIN_TRIES, r.slug);
+      }
     }
     for (const l of I.stuckLevels(kpis).rows) assert.ok(l.starts >= I.T.STUCK_MIN_TRIES);
   }
