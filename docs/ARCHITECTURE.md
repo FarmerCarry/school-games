@@ -252,7 +252,7 @@ Every sound is a one-shot under 1.5 s. Juice never loops and has no music API.
 ### Profiles and age bands (js/profiles.js → `window.SGProfiles`)
 
 * **Anonymous picture profiles:** an animal (12 choices) and a colour (8). **No names,
-  no typed text.** Up to 12 profiles per browser.
+  no typed text.** Up to 24 profiles per browser (about 20 children share a lab PC).
 * **Age band** chosen with three big number cards: `6–7`, `8–9`, `10–11`.
   The classroom panel offers a class default band used for guests.
 * **Never blocking:** home renders as before; a "who's playing?" strip of big round
@@ -260,9 +260,24 @@ Every sound is a one-shot under 1.5 s. Juice never loops and has no music API.
   with level and an XP bar. One click picks a player; a guest plays immediately.
 * The current player lives in `sessionStorage` (`sg:site:player`), so a closed tab or
   the classroom "hand over the device" button returns to guest.
-* Storage `sg:site:profiles`:
+* **Idle hand-over** (`js/site.js`): a tab left open would give the next class the last
+  child's profile. After **20 minutes** with no key press, click or wheel on the portal and
+  no `sg:stats` with engaged time (`e > 0`) from the open game, the player becomes a guest;
+  an open game goes back to home, where the "who's playing?" strip has focus. A classroom
+  timer that is still running is kept; the hand-over overlay of one that ran out is
+  cleared. The check runs on the classroom timer's 1-second tick, also when no timer is set.
+* Storage `sg:site:profiles`, the first 12 profiles:
   `{ v: 1, seq, list: [{ k: 'p1', a: animal, c: colour, b: band, xp, lv, d0: day created,
   dl: last day played, g: { <slug>: visits } }] }` (days are local day numbers).
+  Profiles 13 to 24 are in `sg:site:profiles:more` = `{ v: 1, list: [...same records...] }`,
+  removed while there are 12 or fewer. The split keeps old tabs safe: a portal from before
+  milestone 2.5 keeps the first 12 records of `sg:site:profiles` and saves the result
+  back, so a key holding 24 would lose 13 to 24 to any old tab or offline copy still open
+  on the PC. With at most 12 there it drops nothing, and it can add a profile only while
+  that key has room; the new code refills it to 12 on its next load. `load()` reads both
+  keys (the first key first, a key in both counts once, `seq` the highest key ever seen);
+  `save()` writes the first key, then `:more`, so a profile moving up after a removal is
+  never missing from both keys for a tab that reads in between.
 * **XP** comes from the v1 `sg:stats` round events the portal already receives
   (so it works with telemetry off): win +10, draw +6, loss +4 (at most 40 XP of
   losses per game per tab session), endless end +5 (+1 per 30 s of round time, up to

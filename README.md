@@ -241,9 +241,10 @@ A new player picks an animal, a colour and an age band from three big number car
 sets where difficulty starts, and the game then adapts to how that child plays; the other
 games follow in later milestones. Winning, trying and playing earn XP; the topbar
 shows the player's picture, level and progress, with a short celebration on a new level.
-Up to 12 players fit on one browser. The current player lasts only for that tab: closing
-it, or the classroom «hand over the device» button, returns to the guest. The classroom
-panel can set an age band for guests. The topbar 🔊 button mutes the portal and the games.
+Up to 24 players fit on one browser. The current player lasts only for that tab: closing
+it, the classroom «hand over the device» button, or 20 minutes with nobody playing returns
+to the guest. The classroom panel can set an age band for guests. The topbar 🔊 button
+mutes the portal and the games.
 
 ### Sound
 
