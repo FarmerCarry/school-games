@@ -21,6 +21,8 @@ import { CODES, ERRORS, SOURCES, WIRES } from './schema.mjs';
 import { dayBounds, localDay, localParts, offsetMin, offsetsBetween, weekStartOf } from './clock.mjs';
 import { F, IL, PLAYS, PROFILE_AGE, REPLAY, ROLLUPS, ROLLUP_TABLES, RT, SINCE_LAST, TABLES, rollStatements, rollupSelect, spanScope }
   from './rollups.mjs';
+import { adminViews } from './admin.mjs';
+import { exportPage } from './export.mjs';
 
 export { ROLLUPS, TABLES };
 // Nothing is suppressed: a group of one session is shown with its numbers.
@@ -46,7 +48,7 @@ const MINUTE_MS = 60000;
 // The instance reads the settings again when its copy is older than this.
 const SETTINGS_MS = 5 * MINUTE_MS;
 const CLOSED_KEEP_MS = 3600000;
-const KEPT_CAP = 16;
+const KEPT_CAP = 24;
 // Kept KPI rows stay well under D1's 2 MB limit for a value.
 const KEPT_MAX = 1000000;
 // X-Batch-Every: the seconds a PC waits between batches, by today's rows written.
@@ -502,6 +504,8 @@ const ROLL_DAY = 'INSERT INTO roll_days (day, dirty, rolled_s) VALUES (?1, 0, ?2
 const ROLLED = "UPDATE settings SET value = CASE key WHEN 'rv' THEN CAST(CAST(value AS INTEGER) + 1 AS TEXT) ELSE ?1 END " +
   "WHERE key = 'rv' OR key = 'rolled_through' AND ?1 <> '' AND value < ?1";
 const KEPT_CLEAN = `DELETE FROM kpi_cache WHERE made <> ${SETTING('rv')}`;
+// A change of the links or of the facts behind kept parts (forget, link, unlink): rv goes up.
+const RV_UP = "UPDATE settings SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'rv'";
 // No day waits for a full re-roll any more (checked when written, so a zone change that
 // came in between keeps the flag).
 const REBUILT = "INSERT INTO settings (key, value) SELECT 'rebuild', '' WHERE NOT EXISTS (SELECT 1 FROM roll_days WHERE dirty = 2) " +
@@ -555,6 +559,9 @@ const KPI = {
 const GROUPS = Object.keys(KPI);
 const AT = Object.fromEntries(GROUPS.map(name => [name, Object.fromEntries(KPI[name].sums.map((c, i) => [c, i]))]));
 const D = AT.days, G = AT.games, L = AT.levels, S = AT.sources, V = AT.devices;
+// A statement's rows as one JSON text of arrays, in the order of `columns`: the Worker then
+// parses one string instead of making an object of every row (CPU it is billed for).
+const asRows = (text, columns) => `SELECT json_group_array(json_array(${columns.join(', ')})) AS rows FROM (${text})`;
 // A group over the frozen days ?1..?2 (only on a database milestone 2 used) and the rolled
 // days ?4..?5, band ?3 (null for every band, '' for the unknown band).
 function closedGroup(name, legacy) {
@@ -562,25 +569,27 @@ function closedGroup(name, legacy) {
   const part = (from, days, mark) => `SELECT ${keys.map(c => c === 'part' ? `${mark} AS part` : c).join(', ')}, ` +
     sums.map(c => from === table && !frozen.has(c) ? `0 AS ${c}` : c).join(', ') + ` FROM ${from} WHERE day BETWEEN ${days} AND (?3 IS NULL OR a = ?3)`;
   const parts = [...(legacy ? [part(table, '?1 AND ?2', 0)] : []), part(rollup, '?4 AND ?5', 1)];
-  return `SELECT ${keys.join(', ')}, ${sums.map(c => `TOTAL(${c})`).join(', ')} FROM (${parts.join(' UNION ALL ')}) GROUP BY ${keys.join(', ')}`;
+  return asRows(`SELECT ${keys.join(', ')}, ${sums.map(c => `TOTAL(${c}) AS ${c}`).join(', ')} FROM (${parts.join(' UNION ALL ')}) GROUP BY ${keys.join(', ')}`,
+    [...keys, ...sums]);
 }
 const CLOSED_GROUPS = [false, true].map(legacy => GROUPS.map(name => closedGroup(name, legacy)));
 // The same group over the days not rolled yet, from the facts: the UTC seconds [?1, ?2), band ?3.
-const openGroup = (name, scope) => `SELECT ${KPI[name].keys.map(c => c === 'part' ? '1 AS part' : c).join(', ')}, ` +
-  `${KPI[name].sums.map(c => `TOTAL(${c})`).join(', ')} FROM (${rollupSelect(KPI[name].rollup, scope)}) WHERE ?3 IS NULL OR a = ?3 ` +
-  `GROUP BY ${KPI[name].keys.map((_, i) => i + 1).join(', ')}`;
+const openGroup = (name, scope) => asRows(`SELECT ${KPI[name].keys.map(c => c === 'part' ? '1 AS part' : c).join(', ')}, ` +
+  `${KPI[name].sums.map(c => `TOTAL(${c}) AS ${c}`).join(', ')} FROM (${rollupSelect(KPI[name].rollup, scope)}) WHERE ?3 IS NULL OR a = ?3 ` +
+  `GROUP BY ${KPI[name].keys.map((_, i) => i + 1).join(', ')}`, [...KPI[name].keys, ...KPI[name].sums]);
 // Per raw student code: its bands (each after ':', so that the unknown band '' is one too),
 // games, first play and profile start (UTC seconds: the first session's start less the
 // profile's age then; without a student row, the code's first session in the range). Over
 // the rolled days ?1..?2, or the facts of [?1, ?2); band ?3.
 const firsts = 'COALESCE(t.first_s, x.first) AS first, COALESCE(t.first_s - IFNULL(t.age_days_first, 0) * 86400, x.first) AS made';
-const CLOSED_STUDENTS = `SELECT x.u, x.bands, y.games, ${firsts} FROM (SELECT u, group_concat(DISTINCT ':' || a) AS bands, MIN(first_s) AS first ` +
+const STUDENT_COLUMNS = ['u', 'bands', 'games', 'first', 'made'];
+const CLOSED_STUDENTS = asRows(`SELECT x.u, x.bands, y.games, ${firsts} FROM (SELECT u, group_concat(DISTINCT ':' || a) AS bands, MIN(first_s) AS first ` +
   'FROM r_student_day WHERE day BETWEEN ?1 AND ?2 AND (?3 IS NULL OR a = ?3) GROUP BY u) x LEFT JOIN (SELECT u, group_concat(DISTINCT slug) AS games ' +
-  'FROM r_student_game WHERE day BETWEEN ?1 AND ?2 AND (?3 IS NULL OR a = ?3) GROUP BY u) y ON y.u = x.u LEFT JOIN st_students t ON t.u = x.u';
-const OPEN_STUDENTS = `SELECT x.u, x.bands, x.games, ${firsts} FROM (SELECT s.u, group_concat(DISTINCT ':' || s.a) AS bands, MIN(s.start_s) AS first, ` +
+  'FROM r_student_game WHERE day BETWEEN ?1 AND ?2 AND (?3 IS NULL OR a = ?3) GROUP BY u) y ON y.u = x.u LEFT JOIN st_students t ON t.u = x.u', STUDENT_COLUMNS);
+const OPEN_STUDENTS = asRows(`SELECT x.u, x.bands, x.games, ${firsts} FROM (SELECT s.u, group_concat(DISTINCT ':' || s.a) AS bands, MIN(s.start_s) AS first, ` +
   '(SELECT group_concat(DISTINCT v.slug) FROM st_sessions o JOIN st_visits v ON v.sid = o.id WHERE o.u = s.u AND o.start_s >= ?1 AND o.start_s < ?2 ' +
   "AND (?3 IS NULL OR o.a = ?3)) AS games FROM st_sessions s WHERE s.start_s >= ?1 AND s.start_s < ?2 AND s.u <> '' AND (?3 IS NULL OR s.a = ?3) " +
-  'GROUP BY s.u) x LEFT JOIN st_students t ON t.u = x.u';
+  'GROUP BY s.u) x LEFT JOIN st_students t ON t.u = x.u', STUDENT_COLUMNS);
 // The rest, as JSON: distinct students per day; the minutes of every student-day (by
 // canonical code) as counts per tenth of a minute, with their number and sum; the engaged
 // ms per day by kind of session (s a student, g a guest, u v2); and per PC (any band)
@@ -606,9 +615,9 @@ const openExtras = scope => extras(
   `SELECT p, MAX(full) AS full, MAX(forgets) AS forgets FROM (SELECT s.p AS p, ${scope.day} AS day, MAX(s.np) >= 24 AS full, ` +
   "TOTAL(s.is_new) >= 3 AND TOTAL(s.is_new) * 2 >= COUNT(*) AS forgets FROM st_sessions s WHERE s.start_s >= ?1 AND s.start_s < ?2 AND s.p <> '' " +
   'GROUP BY 1, 2) GROUP BY p');
-// The kept parts of a KPI answer (?1, ?2) and every link between codes, with the first
-// play and profile start of both codes.
-const KEPT_LOOKUP = 'SELECT key, rows FROM kpi_cache WHERE key IN (?1, ?2) UNION ALL ' +
+// The kept parts of an answer (their keys: the JSON array ?1) and every link between codes,
+// with the first play and profile start of both codes.
+const KEPT_LOOKUP = 'SELECT key, rows FROM kpi_cache WHERE key IN (SELECT value FROM json_each(?1)) UNION ALL ' +
   "SELECT '', json_group_array(json_array(a.u_old, a.u_new, o.first_s, o.first_s - IFNULL(o.age_days_first, 0) * 86400, " +
   'n.first_s, n.first_s - IFNULL(n.age_days_first, 0) * 86400)) FROM aliases a LEFT JOIN st_students o ON o.u = a.u_old LEFT JOIN st_students n ON n.u = a.u_new';
 // Keeps parts ([[key, rows], ...] in ?2) made with rv ?1.
@@ -653,8 +662,8 @@ const frames = (v, at) => {
   return { counts, smoothShare: ratio(counts[0], all), stallShare: ratio(counts[3], all) };
 };
 const codes = (v, at) => Object.fromEntries(CODES.map(c => [c, v[at[c]]]));
-// KPI rows as arrays: D1's batch() answers objects, whose values keep the column order.
-const arrays = result => result.results.map(row => Object.values(row));
+// KPI rows as arrays, from a statement's one JSON text (asRows).
+const arrays = result => JSON.parse(result.results[0].rows);
 const csv = text => text ? text.split(',') : [];
 // Quantiles of the minutes per student-day from the counts of each tenth of a minute (so
 // exact to the answer's one decimal): linear between the two nearest ranks, as R and
@@ -677,11 +686,12 @@ const EMPTY_PART = { days: [], games: [], levels: [], sources: [], devices: [], 
   extras: { students: [], minutes: [], dose: [0, 0], kinds: [], pcs: [] } };
 
 // Options: retentionDays (the facts' default retention; the owner's keep_days setting
-// wins), openCacheMs (how long the KPIs of the days not rolled yet are kept and shared
-// between instances, per slot of that length; 0 computes them on every request, as the
-// Node host does) and guards (the thresholds of GUARDS, for tests). The store's work is all
-// in SQL on db; JavaScript folds one batch's events and assembles small answers.
-export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0, guards = {} } = {}) {
+// wins), openCacheMs (how long the answers' parts for the days not rolled yet are kept and
+// shared between instances, per slot of that length; 0 computes them on every request, as
+// the Node host does), guards (the thresholds of GUARDS) and exportLimits (smaller export
+// pages), both for tests. The store's work is all in SQL on db; JavaScript folds one
+// batch's events and assembles small answers.
+export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0, guards = {}, exportLimits = {} } = {}) {
   let ready = null, sweptMinute = -1, conf = null;
   const sql = text => db.prepare(text);
   // A statement with exactly as many values as it has parameters.
@@ -690,10 +700,10 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
 
   /* ---------------------------------------------- usage and settings */
   // D1 usage of this instance, per UTC day, until it is flushed (at most once a minute).
-  // Reads of re-rolls also count as rebuild reads.
+  // Reads of re-rolls also count as rebuild reads, and reads of export pages as export reads.
   const pending = new Map();
   let flushedMinute = -1;
-  function meter(results, now, rebuild = false) {
+  function meter(results, now, rebuild = false, exported = false) {
     const day = utcDay(now);
     let c = pending.get(day);
     if (!c) pending.set(day, c = { reads: 0, writes: 0, rebuild: 0, export: 0, size: 0 });
@@ -701,6 +711,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       c.reads += meta.rows_read || 0;
       c.writes += meta.rows_written || 0;
       if (rebuild) c.rebuild += meta.rows_read || 0;
+      if (exported) c.export += meta.rows_read || 0;
       if (meta.size_after > 0) c.size = meta.size_after;
     }
   }
@@ -718,7 +729,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
   // One db.batch: the settings are read again first when the copy is old (unless the
   // statements read them themselves: fresh), this instance's usage is flushed last when a
   // minute has passed, and every result's meta is metered. Answers the results of `statements`.
-  async function run(statements, now, { rebuild = false, fresh = false } = {}) {
+  async function run(statements, now, { rebuild = false, exported = false, fresh = false } = {}) {
     const refresh = !fresh && (!conf || now - conf.at >= SETTINGS_MS), minute = Math.floor(now / MINUTE_MS);
     const list = refresh ? [sql(PROBE).bind(utcDay(now)), ...statements] : [...statements];
     let flush = null;
@@ -743,7 +754,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       flushedMinute = minute;
       if (conf && conf.usage.day === flush.day) for (const key of ['reads', 'writes', 'rebuild', 'export']) conf.usage[key] += flush.c[key];
     }
-    meter(results, now, rebuild);
+    meter(results, now, rebuild, exported);
     return results.slice(refresh ? 1 : 0, flush ? -1 : undefined);
   }
   function addPending(day, key, n) {
@@ -1032,8 +1043,31 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     return out;
   }
 
-  /* ------------------------------------------------------------ the KPIs */
-  // Parts of KPI answers kept in this instance, besides kpi_cache (which every instance
+  /* ---------------------------------------------- periods and kept parts */
+  // A period's days from..to (YYYY-MM-DD, the school's): the rolled days (read from the
+  // rollups), and the days after them (from the facts), with the UTC seconds [lo, hi) they
+  // span and the SQL scope of their clock.
+  function spans(from, to) {
+    const { tz, factsSince, rolledThrough } = conf;
+    const rolled = rolledThrough && from <= rolledThrough ? [from, rolledThrough < to ? rolledThrough : to] : null;
+    const start = [from, factsSince, rolledThrough ? addDays(rolledThrough, 1) : ''].reduce((x, y) => x > y ? x : y);
+    if (start > to) return { rolled, open: null, bounds: null, scope: null };
+    const bounds = [dayBounds(tz, start).lo, dayBounds(tz, to).hi];
+    return { rolled, open: [start, to], bounds, scope: spanScope(offsetsBetween(tz, ...bounds)) };
+  }
+  // The school's clock over every second the database can hold (the rollups' retention back
+  // and a week ahead), for SQL that dates stored times: read once a week, kept for the day.
+  let wideScope = null;
+  function wide(now) {
+    const key = [conf.tz, keepDays(), utcDay(now)].join(' ');
+    if (wideScope?.key !== key) {
+      const hi = Math.floor(now / 1000) + 8 * DAY_S, lo = hi - (Math.max(ROLLUP_DAYS, keepDays()) + 60) * DAY_S;
+      wideScope = { key, scope: spanScope(offsetsBetween(conf.tz, lo, hi, 7)) };
+    }
+    return wideScope.scope;
+  }
+
+  // Parts of answers kept in this instance, besides kpi_cache (which every instance
   // shares): closed parts for an hour, open parts until their slot ends.
   const kept = new Map();
   const keptPart = (key, now) => { const entry = key && kept.get(key); return entry && entry.until > now ? entry.part : null; };
@@ -1042,64 +1076,82 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     kept.set(key, { part, until });
     while (kept.size > KEPT_CAP) kept.delete(kept.keys().next().value);
   }
+  // The keys of an answer's kept parts (§F.4, "Caching"): the closed part (when there is
+  // one) under [endpoint, params..., rv], the open part under the same and its slot of
+  // openCacheMs (never kept when that is 0). raw: the parts are JSON text, kept as it is.
+  function partKeys(params, closed, open, now, { raw = false } = {}) {
+    const { rv } = conf, slot = openCacheMs > 0 ? Math.floor(now / openCacheMs) : -1;
+    return {
+      closed: closed ? { key: JSON.stringify([...params, rv]), until: now + CLOSED_KEEP_MS, rv, raw } : null,
+      open: open && slot >= 0 ? { key: JSON.stringify([...params, rv, slot]), until: (slot + 1) * openCacheMs, rv, raw } : null
+    };
+  }
+  // The parts kept under those keys (this instance's first, then kpi_cache's) and every link
+  // between codes (as KEPT_LOOKUP gives them), in one statement.
+  async function lookup(keys, now) {
+    const found = new Map(), wanted = new Map();
+    for (const k of keys) {
+      if (!k) continue;
+      const part = keptPart(k.key, now);
+      if (part) found.set(k.key, part); else wanted.set(k.key, k);
+    }
+    const [result] = await run([sql(KEPT_LOOKUP).bind(JSON.stringify([...wanted.keys()]))], now);
+    let aliases = [];
+    for (const { key, rows } of result.results) {
+      if (key === '') { aliases = JSON.parse(rows); continue; }
+      const k = wanted.get(key), part = k.raw ? rows : JSON.parse(rows);
+      keepPart(key, part, k.until, now);
+      found.set(key, part);
+    }
+    return { found, aliases };
+  }
+  // Keeps newly made parts ([key, part] pairs) here and in kpi_cache, as far as they fit (at
+  // most KEPT_MAX bytes per write): a part that cannot be kept only costs a read later.
+  async function keepParts(entries, now) {
+    const rows = [];
+    let size = 0, rv = null;
+    for (const [k, part] of entries) {
+      if (!k) continue;
+      keepPart(k.key, part, k.until, now);
+      const text = k.raw ? part : JSON.stringify(part);
+      rv = k.rv;
+      if ((size += text.length) <= KEPT_MAX) rows.push([k.key, text]);
+    }
+    if (rows.length) await run([sql(KEPT_PUT).bind(rv, JSON.stringify(rows))], now).catch(() => {});
+  }
+
+  /* ------------------------------------------------------------ the KPIs */
   const extrasOf = row => Object.fromEntries(Object.keys(EMPTY_PART.extras).map(key => [key, JSON.parse(row[key])]));
   // The parts of a KPI answer for days from..to and band, with the links between codes:
   // the closed part (the frozen days up to legacy_until and the rolled days up to
   // rolled_through, kept per rollup version rv) and the open part (the days after them,
   // from the facts with the rollups' own SELECT; kept per slot of openCacheMs).
   async function kpiParts(from, to, band, now) {
-    const { tz, rv, legacyUntil, factsSince, rolledThrough } = conf;
+    const { legacyUntil } = conf;
     const legacy = legacyUntil && from <= legacyUntil ? [from, legacyUntil < to ? legacyUntil : to] : null;
-    const rolled = rolledThrough && from <= rolledThrough ? [from, rolledThrough < to ? rolledThrough : to] : null;
-    const start = [from, factsSince, rolledThrough ? addDays(rolledThrough, 1) : ''].reduce((x, y) => x > y ? x : y);
-    const open = start <= to ? [start, to] : null;
-    const closedKey = legacy || rolled ? JSON.stringify(['kpis', from, to, band, rv]) : null;
-    const slot = openCacheMs > 0 ? Math.floor(now / openCacheMs) : -1;
-    const openKey = open && slot >= 0 ? JSON.stringify(['kpis', from, to, band, rv, slot]) : null;
-    let closed = keptPart(closedKey, now), recent = keptPart(openKey, now), aliases = [];
-    const [lookup] = await run([sql(KEPT_LOOKUP).bind(closed ? '' : closedKey || '', recent ? '' : openKey || '')], now);
-    for (const { key, rows } of lookup.results) {
-      if (key === '') aliases = JSON.parse(rows);
-      else if (key === closedKey) keepPart(key, closed = JSON.parse(rows), now + CLOSED_KEEP_MS, now);
-      else if (key === openKey) keepPart(key, recent = JSON.parse(rows), (slot + 1) * openCacheMs, now);
-    }
+    const { rolled, open, bounds, scope } = spans(from, to);
+    const keys = partKeys(['kpis', from, to, band], legacy || rolled, open, now);
+    const { found, aliases } = await lookup([keys.closed, keys.open], now);
+    let closed = keys.closed && found.get(keys.closed.key), recent = keys.open && found.get(keys.open.key);
     // Statements for each part that is not kept; an empty range is '1'..'0'.
-    const none = ['1', '0'], work = [], makeClosed = !!closedKey && !closed, makeOpen = !!open && !recent;
+    const none = ['1', '0'], work = [], makeClosed = !!keys.closed && !closed, makeOpen = !!open && !recent;
     if (makeClosed) {
       const values = [...(legacy || none), band, ...(rolled || none)];
       work.push(...CLOSED_GROUPS[legacyUntil ? 1 : 0].map(text => sql(text).bind(...values)));
       if (rolled) work.push(sql(CLOSED_STUDENTS).bind(...rolled, band), sql(CLOSED_EXTRAS).bind(...rolled, band));
     }
     if (makeOpen) {
-      const bounds = [dayBounds(tz, open[0]).lo, dayBounds(tz, open[1]).hi], scope = spanScope(offsetsBetween(tz, ...bounds));
       work.push(...GROUPS.map(name => sql(openGroup(name, scope)).bind(...bounds, band)), sql(OPEN_STUDENTS).bind(...bounds, band),
         sql(openExtras(scope)).bind(...bounds, band));
     }
     const results = work.length ? await run(work, now) : [];
     const take = (list, students) => ({ ...Object.fromEntries(GROUPS.map((name, i) => [name, arrays(list[i])])),
-      students: students ? list[GROUPS.length].results.map(row => Object.values(row)) : [],
+      students: students ? arrays(list[GROUPS.length]) : [],
       extras: students ? extrasOf(list[GROUPS.length + 1].results[0]) : EMPTY_PART.extras });
     const puts = [];
-    if (makeClosed) {
-      closed = take(results, !!rolled);
-      keepPart(closedKey, closed, now + CLOSED_KEEP_MS, now);
-      puts.push([closedKey, closed]);
-    }
-    if (makeOpen) {
-      recent = take(results.slice(makeClosed ? GROUPS.length + (rolled ? 2 : 0) : 0), true);
-      if (openKey) {
-        keepPart(openKey, recent, (slot + 1) * openCacheMs, now);
-        puts.push([openKey, recent]);
-      }
-    }
-    // Parts that cannot be kept only cost a read later.
-    const rows = [];
-    let size = 0;
-    for (const [key, part] of puts) {
-      const text = JSON.stringify(part);
-      if ((size += text.length) <= KEPT_MAX) rows.push([key, text]);
-    }
-    if (rows.length) await run([sql(KEPT_PUT).bind(rv, JSON.stringify(rows))], now).catch(() => {});
+    if (makeClosed) puts.push([keys.closed, closed = take(results, !!rolled)]);
+    if (makeOpen) puts.push([keys.open, recent = take(results.slice(makeClosed ? GROUPS.length + (rolled ? 2 : 0) : 0), true)]);
+    await keepParts(puts, now);
     return { parts: [closed, recent].filter(Boolean), aliases };
   }
 
@@ -1349,5 +1401,18 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     return settings(now);
   }
 
-  return { db, setup, ingest, batchEvery, today, guard, rollupStep, purge, sweep, kpis, live, settings, updateSettings, close: () => db.close?.() };
+  // What the admin views and the export pages (admin.mjs, export.mjs) use of the store.
+  const ctx = {
+    sql, bound, run, ensure, spans, wide, partKeys, lookup, keepParts, clock,
+    conf: () => conf, bounds: day => dayBounds(conf.tz, day),
+    // Statements that raise rv and forget every kept part, and what follows once they ran.
+    renew: () => [sql(RV_UP), sql(KEPT_CLEAN)],
+    renewed: () => { kept.clear(); conf.at = -Infinity; }
+  };
+  const views = adminViews(ctx);
+  // One page of a research file (export.mjs); exportLimits ({ lines, sessions }) are for tests.
+  const page = (query, now = Date.now()) => exportPage(ctx, query, now, exportLimits);
+
+  return { db, setup, ingest, batchEvery, today, guard, rollupStep, purge, sweep, kpis, live, settings, updateSettings, ...views,
+    exportPage: page, close: () => db.close?.() };
 }

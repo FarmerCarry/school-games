@@ -1122,6 +1122,455 @@ test('live counts sessions seen in the last five minutes, their students, guests
   assert.deepEqual(await s.rows('live'), []);
 });
 
+// ---- the research endpoints and the owner's actions (§F.4) ------------------------------
+// An admin request with the password, and a JSON body when one is given (with its length, as
+// a browser sends it: node:http would send a DELETE's body with neither length nor chunks).
+function call(s, method, pathname, body, headers = {}) {
+  const text = body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body);
+  return s.send(method, pathname, { headers: { authorization: 'Bearer ' + TOKEN,
+    ...(text === undefined ? {} : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text) }), ...headers }, body: text });
+}
+// Every admin route and the methods it takes (HEAD goes with GET).
+const ROUTES = { kpis: ['GET'], live: ['GET'], settings: ['GET', 'POST'], students: ['GET'], student: ['GET'], game: ['GET'], stats: ['GET'],
+  cohorts: ['GET'], pcs: ['GET'], cards: ['GET'], export: ['GET'], forget: ['POST'], link: ['POST', 'DELETE'], rebuild: ['POST'] };
+// A request each route answers 2xx (or, for a code nobody played with, 404) on an empty server.
+const VALID = { kpis: ['GET', ''], live: ['GET', ''], settings: ['GET', ''], students: ['GET', ''], student: ['GET', '?u=' + U, 404],
+  game: ['GET', '?slug=road-hopper'], stats: ['GET', '?metrics=hour'], cohorts: ['GET', ''], pcs: ['GET', ''], cards: ['GET', ''],
+  export: ['GET', '?file=sessions'], forget: ['POST', '', 200, { u: U }], link: ['POST', '', 404, { u: U, to: '1b2c3d4e5f60' }], rebuild: ['POST', '', 200, {}] };
+
+test('the admin router: each route takes its own methods only (405 with Allow), and every one needs the dashboard password', async t => {
+  const closed = await start(t, { adminToken: '' }), s = await start(t);
+  for (const [name, methods] of Object.entries(ROUTES)) {
+    const pathname = '/v1/admin/' + name, allow = [...methods, ...(methods.includes('GET') ? ['HEAD'] : []), 'OPTIONS'].join(', ');
+    for (const method of ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'PATCH']) {
+      const takes = methods.includes(method === 'HEAD' ? 'GET' : method);
+      const res = await call(s, method, pathname);
+      if (!takes) {
+        assert.deepEqual([res.status, res.headers.allow], [405, allow], name + ' ' + method);
+        continue;
+      }
+      assert.equal((await s.send(method, pathname)).status, 401, name + ' ' + method + ' without the password');
+      assert.equal((await s.send(method, pathname, { headers: { authorization: 'Bearer ' + TOKEN + 'x' } })).status, 401);
+      assert.equal((await closed.send(method, pathname, { headers: { authorization: 'Bearer ' + TOKEN } })).status, 404, 'no password set');
+    }
+    const [method, query, status = 200, body] = VALID[name];
+    const res = await call(s, method, pathname + query, body);
+    assert.equal(res.status, status, name + ': ' + res.text);
+    assert.equal(res.headers['cache-control'], 'no-store');
+    if (name === 'export') assert.equal(res.headers['content-type'], 'text/csv; charset=utf-8');
+    else assert.equal(res.json().v ?? status, status === 200 ? 1 : status, name);
+    if (method === 'GET') {
+      const head = await call(s, 'HEAD', pathname + query);
+      assert.deepEqual([head.status, head.text], [status, ''], name + ' HEAD');
+    }
+  }
+  // A preflight from an allowed origin lists DELETE too (the link route takes it).
+  const preflight = await s.send('OPTIONS', '/v1/admin/link', { headers: { origin: ORIGIN } });
+  assert.equal(preflight.headers['access-control-allow-methods'], 'GET, HEAD, POST, DELETE, OPTIONS');
+});
+
+test('admin actions take a JSON body of at most 4 KB with exactly their fields (DELETE may, or name its code in the query); bad parameters are 400', async t => {
+  const s = await start(t);
+  for (const [method, pathname, body, headers, status, error] of [
+    ['POST', '/v1/admin/forget', { u: U, pad: 'x'.repeat(4096) }, {}, 413, 'too large'],
+    ['POST', '/v1/admin/forget', JSON.stringify({ u: U }), { 'content-type': 'text/plain' }, 415, 'content type'],
+    ['POST', '/v1/admin/forget', '{', {}, 400, 'json'], ['POST', '/v1/admin/forget', [], {}, 400, 'body'], ['POST', '/v1/admin/forget', null, {}, 400, 'body'],
+    ['POST', '/v1/admin/forget', { u: U, why: 'x' }, {}, 400, 'field'], ['POST', '/v1/admin/forget', {}, {}, 400, 'u'],
+    ['POST', '/v1/admin/forget', { u: 'p1' }, {}, 400, 'u'], ['POST', '/v1/admin/forget', { u: U.toUpperCase() }, {}, 400, 'u'],
+    ['POST', '/v1/admin/link', { u: U }, {}, 400, 'to'], ['POST', '/v1/admin/link', { u: U, to: 'Student 3F9A' }, {}, 400, 'to'],
+    ['POST', '/v1/admin/link', { u: U, to: U, how: 'pc' }, {}, 400, 'field'], ['POST', '/v1/admin/rebuild', { all: true }, {}, 400, 'field'],
+    ['DELETE', '/v1/admin/link', undefined, {}, 400, 'u'], ['DELETE', '/v1/admin/link', { u: U, to: U }, {}, 400, 'field'],
+    ['DELETE', '/v1/admin/link', { u: 'x' }, {}, 400, 'u'], ['DELETE', '/v1/admin/link', JSON.stringify({ u: U }), { 'content-type': 'text/plain' }, 415, 'content type'],
+    ['DELETE', '/v1/admin/link?u=' + U, { pad: 'x'.repeat(4096) }, {}, 413, 'too large'],
+    ['GET', '/v1/admin/student', undefined, {}, 400, 'u'], ['GET', '/v1/admin/student?u=' + U + '&from=2026-13-01', undefined, {}, 400, 'from'],
+    ['GET', '/v1/admin/game', undefined, {}, 400, 'slug'], ['GET', '/v1/admin/game?slug=Road%20Hopper', undefined, {}, 400, 'slug'],
+    ['GET', '/v1/admin/game?slug=constructor', undefined, {}, 400, 'slug'], ['GET', '/v1/admin/students?band=5-6', undefined, {}, 400, 'band'],
+    ['GET', '/v1/admin/stats', undefined, {}, 400, 'metrics'], ['GET', '/v1/admin/stats?metrics=hour,minutes', undefined, {}, 400, 'metrics'],
+    ['GET', '/v1/admin/stats?metrics=hour&slug=x_y', undefined, {}, 400, 'slug'], ['GET', '/v1/admin/pcs?from=2025-01-01&to=2026-10-20', undefined, {}, 400, 'range'],
+    ['GET', '/v1/admin/export', undefined, {}, 400, 'file'], ['GET', '/v1/admin/export?file=games', undefined, {}, 400, 'file'],
+    ['GET', '/v1/admin/export?file=rounds&after=1.2', undefined, {}, 400, 'after'], ['GET', '/v1/admin/export?file=students&after=' + U.toUpperCase(), undefined, {}, 400, 'after']
+  ]) {
+    const res = await call(s, method, pathname, body, headers);
+    assert.deepEqual([res.status, res.json()], [status, { error }], method + ' ' + pathname + ' ' + JSON.stringify(body)?.slice(0, 40));
+  }
+  // DELETE takes its code from the query, or from a JSON body.
+  assert.deepEqual((await call(s, 'DELETE', '/v1/admin/link', { u: U })).json().ok, false);
+  assert.deepEqual((await call(s, 'DELETE', '/v1/admin/link?u=' + U)).json().ok, false);
+  // The same metrics in any order are one question, answered in the contract's order.
+  const stats = (await call(s, 'GET', '/v1/admin/stats?metrics=tier,hour,tier')).json();
+  assert.deepEqual([stats.metrics, stats.rows], [['hour', 'tier'], []]);
+});
+
+// The hand-built school of STUDENT_DAYS (zone UTC), as the research endpoints see it.
+async function studentDays(t) {
+  const s = await start(t, { at: START - DAY_MS });
+  for (const [at, body] of STUDENT_DAYS) {
+    s.clock.now = at;
+    assert.equal((await s.post({ ...body, z: '' })).status, 204);
+  }
+  s.clock.now = START + 3600000;
+  return s;
+}
+const UTC = UTC_CLOCK('2026-10-20');
+const RANGE = { from: '2026-10-19', to: '2026-10-20', days: 2, band: 'all' };
+const weekly = minutes => [...Array(12).fill(0), minutes];
+const STUDENTS = [
+  { u: U1, label: '1A1A', kind: 'profile', linked: [], band: '8-9', bandFirst: '8-9', firstDay: '2026-10-20', lastDay: '2026-10-20', days: 1, sessions: 1,
+    minutes: 2, rounds: 2, w: 1, l: 1, q: 0, games: 1, top: ['road-hopper'], pcs: 1, knownBefore: false, removed: null, weekly: weekly(2) },
+  // U4 is U2's older code on the same PC: one student, from 19 October, with both codes' play.
+  { u: U2, label: '2B2B', kind: 'profile', linked: [U4], band: '8-9', bandFirst: '8-9', firstDay: '2026-10-19', lastDay: '2026-10-20', days: 2, sessions: 2,
+    minutes: 6, rounds: 0, w: 0, l: 0, q: 0, games: 2, top: ['road-hopper', 'maze-dash'], pcs: 1, knownBefore: true, removed: null, weekly: weekly(6) },
+  { u: U3, label: '3C3C', kind: 'profile', linked: [], band: '6-7', bandFirst: '6-7', firstDay: '2026-10-19', lastDay: '2026-10-20', days: 2, sessions: 2,
+    minutes: 4, rounds: 0, w: 0, l: 0, q: 0, games: 1, top: ['road-hopper'], pcs: 1, knownBefore: true, removed: null, weekly: weekly(4) },
+  { u: U5, label: '5E5E', kind: 'profile', linked: [], band: '10-11', bandFirst: '10-11', firstDay: '2026-10-20', lastDay: '2026-10-20', days: 1, sessions: 1,
+    minutes: 1.5, rounds: 0, w: 0, l: 0, q: 0, games: 1, top: ['tank-splat'], pcs: 1, knownBefore: true, removed: null, weekly: weekly(1.5) }
+];
+const STUDENT_ONE = {
+  v: 1, range: RANGE,
+  student: { u: U1, label: '1A1A', kind: 'profile', band: '8-9', bandFirst: '8-9', firstDay: '2026-10-20', lastDay: '2026-10-20', profileMadeDay: '2026-10-20',
+    knownBefore: false, removed: null, pcs: ['8C21'], linked: [] },
+  days: [{ day: '2026-10-20', sessions: 1, minutes: 2, opens: 1, rounds: 2, w: 1, l: 1, q: 0 }],
+  hours: Array.from({ length: 24 }, (_, h) => h === 9 ? 2 : 0),
+  games: [{ slug: 'road-hopper', minutes: 2, rounds: 2, w: 1, l: 1, d: 0, e: 0, q: 0, hits: 15, misses: 7, rtMean: 600, bestScore: 50, avgScore: 35,
+    ddaMean: 500, hearts: 1 }],
+  weekly: [{ week: '2026-10-19', slug: 'road-hopper', rounds: 2, w: 1, l: 1, hits: 15, misses: 7, rtSum: 6000, rtN: 10, scoreSum: 70, scoreN: 2, ddaSum: 500, ddaN: 1 }],
+  // The session started at 09:13:25 (95 s before its batch arrived); the latest round first.
+  rounds: [
+    { day: '2026-10-20', time: '09:14', slug: 'road-hopper', id: 'L2', code: 'l', ms: 30000, score: 20, tier: 2, dda: null, hits: 5, misses: 5, rtMean: null,
+      attempt: 2, minIntoSession: 0.7 },
+    { day: '2026-10-20', time: '09:13', slug: 'road-hopper', id: 'L1', code: 'w', ms: 30000, score: 50, tier: 2, dda: 500, hits: 10, misses: 2, rtMean: 600,
+      attempt: 1, minIntoSession: 0.1 }],
+  sessions: [{ day: '2026-10-20', time: '09:13', pc: '8C21', minutes: 2, games: ['road-hopper'], rounds: 2, wins: 1, why: null }],
+  // After the loss on L2 the session had nothing more.
+  persist: { same: 0, level: 0, game: 0, stop: 1 }
+};
+const GAME = {
+  v: 1, slug: 'road-hopper', range: RANGE,
+  bands: [{ band: '6-7', students: 1, twoDays: 1, minutes: 4.5, opens: 3 }, { band: '8-9', students: 2, twoDays: 0, minutes: 5.3, opens: 2 }],
+  daily: [{ day: '2026-10-19', students: 1, minutes: 3, opens: 1 }, { day: '2026-10-20', students: 3, minutes: 6.8, opens: 4 }],
+  firstWin: [{ id: 'L1', students: 1, median: 1, p75: 1, never: 0 }, { id: 'L2', students: 1, median: null, p75: null, never: 1 }],
+  paired: { columns: ['u', 'a', 'part', 'rounds', 'w', 'l', 'hits', 'misses', 'rtSum', 'rtN', 'scoreSum', 'scoreN', 'ddaSum', 'ddaN'], rows: [] }
+};
+const STAT_COLUMNS = ['n', 'students', 'w', 'l', 'd', 'e', 'q', 'ms', 'wall_ms', 'win_ms', 'hits', 'misses', 'rt_sum', 'rt_n', 'score_sum', 'score_n',
+  'tier_sum', 'tier_n', 'dda_sum', 'dda_n', 'inputs', 'gap_sum', 'gap_n'];
+const pcRow = (p, fields) => ({ p, label: p.slice(0, 4).toUpperCase(), firstDay: '2026-10-19', lastDay: '2026-10-20', days: 2, smoothShare: 1, stallShare: 0,
+  avgLoadMs: null, slowInputShare: 0, errors: 0, npMax: 4, z: '', build: 'src', flags: [], ...fields });
+const PCS_ANSWER = { v: 1, range: RANGE, pcs: [
+  pcRow(P2, { sessions: 3, students: 2, guests: 0, minutes: 7.5, newProfiles: 0 }),
+  pcRow(P, { sessions: 4, students: 2, guests: 1, minutes: 6.5, newProfiles: 1 })] };
+
+test('students, a student, a game and the PCs are exact for a hand-built school, from the facts and from the rollups alike', async t => {
+  const s = await studentDays(t);
+  const get = async pathname => { const res = await s.admin(pathname); assert.equal(res.status, 200, pathname + ': ' + res.text); return res.json(); };
+  const q = 'from=2026-10-19&to=2026-10-20';
+  const check = async rolled => {
+    const clock = UTC_CLOCK(rolled ? '2026-10-21' : '2026-10-20');
+    assert.deepEqual(await get('/v1/admin/students?' + q), { v: 1, range: RANGE, students: STUDENTS, clock });
+    // One band: the students whose day was in it.
+    assert.deepEqual((await get('/v1/admin/students?' + q + '&band=6-7')).students.map(x => x.u), [U3]);
+    assert.deepEqual(await get(`/v1/admin/student?u=${U1}&` + q), { ...STUDENT_ONE, clock });
+    // Any of a student's codes opens the page of their canonical code.
+    const two = await get(`/v1/admin/student?u=${U4}&` + q);
+    assert.deepEqual(pick(two.student, ['u', 'linked', 'firstDay', 'profileMadeDay', 'knownBefore', 'pcs']),
+      { u: U2, linked: [U4], firstDay: '2026-10-19', profileMadeDay: '2026-09-20', knownBefore: true, pcs: ['0A0B'] });
+    assert.deepEqual(two.days.map(d => [d.day, d.minutes, d.opens]), [['2026-10-19', 1, 1], ['2026-10-20', 5, 2]]);
+    assert.deepEqual(two.sessions.map(x => [x.day, x.time, x.games]), [['2026-10-20', '09:13', ['road-hopper', 'maze-dash']], ['2026-10-19', '09:14', ['maze-dash']]]);
+    assert.equal(two.hours[9], 6);
+    const game = await get('/v1/admin/game?slug=road-hopper&' + q);
+    // Game-to-game flows and r_stat rows are the rolled days' (up to last night).
+    const flows = rolled ? { flowsIn: [{ from: '', n: 5 }], flowsOut: [{ to: '', n: 4 }, { to: 'maze-dash', n: 1 }] } : { flowsIn: [], flowsOut: [] };
+    assert.deepEqual({ ...game, stats: undefined }, { ...GAME, ...flows, stats: undefined, clock });
+    assert.deepEqual(game.stats.columns, ['a', 'metric', 'k1', 'k2', ...STAT_COLUMNS]);
+    const rows = game.stats.rows.map(row => Object.fromEntries(game.stats.columns.map((c, i) => [c, row[i]])));
+    assert.equal(rows.length > 0, rolled);
+    if (rolled) {
+      assert.deepEqual(rows.filter(r => r.metric === 'attempt').map(r => [r.a, r.k1, r.n, r.w, r.l, r.hits, r.dda_n]), [['8-9', '1', 1, 1, 0, 10, 1], ['8-9', '2', 1, 0, 1, 5, 0]]);
+      assert.ok(rows.every(r => !['hour', 'rhour', 'sesslen', 'daymin', 'games'].includes(r.metric)), 'the metrics of all games are not the game\'s');
+    }
+    assert.deepEqual(await get('/v1/admin/game?slug=road-hopper&' + q + '&band=10-11'), { ...GAME, clock, range: { ...RANGE, band: '10-11' }, bands: [],
+      daily: GAME.daily.map(d => ({ ...d, students: 0, minutes: 0, opens: 0 })), firstWin: [], flowsIn: [], flowsOut: [],
+      stats: { columns: game.stats.columns, rows: [] } });
+    assert.deepEqual(await get('/v1/admin/pcs?' + q), { ...PCS_ANSWER, clock });
+    const stats = await get('/v1/admin/stats?' + q + '&metrics=tier,attempt&slug=road-hopper');
+    assert.deepEqual({ ...stats, rows: undefined }, { v: 1, range: { ...RANGE, rolledThrough: rolled ? '2026-10-20' : '' }, metrics: ['attempt', 'tier'],
+      slug: 'road-hopper', columns: ['a', 'metric', 'slug', 'k1', 'k2', ...STAT_COLUMNS], rows: undefined, clock });
+    assert.deepEqual(stats.rows, rolled ? [['8-9', 'attempt', 'road-hopper', '1', '', 1, 1, 1, 0, 0, 0, 0, 30000, 30000, 30000, 10, 2, 6000, 10, 50, 1, 2, 1, 500, 1, 40, 0, 0],
+      ['8-9', 'attempt', 'road-hopper', '2', '', 1, 1, 0, 1, 0, 0, 0, 30000, 0, 0, 5, 5, 0, 0, 20, 1, 2, 1, 0, 0, 0, 0, 0],
+      ['8-9', 'tier', 'road-hopper', '2', '', 2, 1, 1, 1, 0, 0, 0, 60000, 0, 30000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]] : []);
+    // The cohort of the week of 19 October (Monday, the first week with v3 data): U1's profile was made then.
+    assert.deepEqual(await get('/v1/admin/cohorts?' + q), { v: 1, range: RANGE, weekStart: 'mon', clock,
+      cohorts: rolled ? [{ week: '2026-10-19', size: 1, active: [1, ...Array(12).fill(null)] }] : [] });
+  };
+  await check(false);
+  // An unknown code is not a student.
+  const unknown = await s.admin('/v1/admin/student?u=777777777777&' + q);
+  assert.deepEqual([unknown.status, unknown.json()], [404, { error: 'student' }]);
+  // Rolled up (the cron, after 01:00 the next day), the answers are the same.
+  s.clock.now = Date.parse('2026-10-21T02:00:00Z');
+  assert.equal((await s.app.roll()).rolled, '2026-10-19');
+  assert.equal((await s.app.roll()).rolled, '2026-10-20');
+  await check(true);
+});
+
+test('forget removes a student\'s group of codes with their facts and per-student rollups; school totals keep the play until a recount', async t => {
+  const s = await studentDays(t);
+  // Another child's session on U2's PC removed U2's profile there.
+  assert.equal((await s.post(envelope3('b20000000006', [ss3(0, 3, 1), ['pr', 0, U2], ['lv', 1, 4]], { u: U5, p: P2, z: '' }))).status, 204);
+  s.clock.now = Date.parse('2026-10-21T02:00:00Z');
+  await s.app.roll();
+  await s.app.roll();
+  const kpis = async () => (await s.admin('/v1/admin/kpis?from=2026-10-19&to=2026-10-20')).json();
+  const before = await kpis(), rv = async () => (await s.rows('settings')).find(r => r.key === 'rv').value, rv0 = await rv();
+  // Forgetting U4, an older code of U2, forgets both.
+  const res = await call(s, 'POST', '/v1/admin/forget', { u: U4 });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.json(), { v: 1, removed: { codes: 2, sessions: 2, visits: 3, rounds: 0, marks: 2 }, clock: UTC_CLOCK('2026-10-21') });
+  for (const table of ['st_sessions', 'st_students', 'st_student_pcs', 'st_student_games', 'r_student_day', 'r_student_game', 'live']) {
+    assert.deepEqual((await s.rows(table)).filter(r => r.u === U2 || r.u === U4), [], table);
+  }
+  assert.deepEqual(await s.rows('aliases'), []);
+  assert.deepEqual((await s.rows('st_marks')).filter(m => m.x === U2 || m.x === U4), [], 'the removal of U2\'s profile, recorded in U5\'s session, too');
+  assert.equal(await s.count('st_students'), 3);
+  assert.ok(Number(await rv()) > Number(rv0), 'kept answers are made again');
+  const after = await kpis();
+  assert.equal(after.totals.sessions, before.totals.sessions, 'the school\'s totals keep the play already counted');
+  assert.deepEqual([before.totals.students.active, after.totals.students.active], [4, 3]);
+  assert.deepEqual((await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-20')).json().students.map(x => x.u), [U1, U3, U5]);
+  assert.equal((await s.admin(`/v1/admin/student?u=${U2}&from=2026-10-19&to=2026-10-20`)).status, 404);
+  // Again: nothing left to remove.
+  assert.deepEqual((await call(s, 'POST', '/v1/admin/forget', { u: U2 })).json().removed, { codes: 0, sessions: 0, visits: 0, rounds: 0, marks: 0 });
+  // A recount rebuilds the days without the student.
+  assert.deepEqual((await call(s, 'POST', '/v1/admin/rebuild', {})).json(), { v: 1, pending: 2, clock: UTC_CLOCK('2026-10-21') });
+  assert.deepEqual((await s.rows('roll_days', 'day')).map(r => r.dirty), [2, 2]);
+  assert.deepEqual([(await s.app.roll()).kind, (await s.app.roll()).kind, (await s.app.roll()).rolled], ['full', 'full', null]);
+  assert.equal((await kpis()).totals.sessions, before.totals.sessions - 2);
+});
+
+test('link joins a student\'s codes one hop deep (history included), refuses cycles and unknown codes; unlink undoes it', async t => {
+  const s = await studentDays(t);
+  const students = async () => (await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-20')).json().students.map(x => [x.u, x.linked, x.days]);
+  const aliases = async () => (await s.rows('aliases', 'u_old')).map(r => [r.u_old, r.u_new, r.how]);
+  // The owner says U5 is U1.
+  let res = await call(s, 'POST', '/v1/admin/link', { u: U5, to: U1 });
+  assert.deepEqual([res.status, res.json()], [200, { v: 1, ok: true, u: U5, to: U1, clock: UTC }]);
+  assert.deepEqual(await students(), [[U1, [U5], 1], [U2, [U4], 2], [U3, [], 2]]);
+  // U1 turns out to be U3: U5 now counts as U3 too (one hop), and U3 played on both days.
+  res = await call(s, 'POST', '/v1/admin/link', { u: U1, to: U3 });
+  assert.deepEqual(res.json().to, U3);
+  assert.deepEqual(await aliases(), [[U1, U3, 'owner'], [U4, U2, 'pc'], [U5, U3, 'owner']]);
+  assert.deepEqual(await students(), [[U2, [U4], 2], [U3, [U1, U5], 2]]);
+  // Linking to a code linked to it already (a cycle), to itself, or to a code nobody played with, is refused.
+  for (const [body, status, error] of [[{ u: U3, to: U5 }, 400, 'cycle'], [{ u: U3, to: U3 }, 400, 'cycle'], [{ u: U3, to: '777777777777' }, 404, 'student'],
+    [{ u: '777777777777', to: U3 }, 404, 'student']]) {
+    res = await call(s, 'POST', '/v1/admin/link', body);
+    assert.deepEqual([res.status, res.json()], [status, { error }], JSON.stringify(body));
+  }
+  assert.equal((await aliases()).length, 3);
+  // Linking an old code to another student moves it.
+  assert.equal((await call(s, 'POST', '/v1/admin/link', { u: U4, to: U3 })).status, 200);
+  assert.deepEqual(await aliases(), [[U1, U3, 'owner'], [U4, U3, 'owner'], [U5, U3, 'owner']]);
+  // Unlink: U1 is itself again; a second unlink finds nothing.
+  res = await call(s, 'DELETE', '/v1/admin/link?u=' + U1);
+  assert.deepEqual([res.status, res.json()], [200, { v: 1, ok: true, clock: UTC }]);
+  assert.deepEqual((await call(s, 'DELETE', '/v1/admin/link?u=' + U1)).json().ok, false);
+  assert.deepEqual(await students(), [[U1, [], 1], [U2, [], 1], [U3, [U4, U5], 2]]);
+});
+
+test('the guards: above 90,000 writes today the owner\'s actions answer 429; above 4.2 million reads every admin read but live and settings; export pages above 3.5 million', async t => {
+  const s = await start(t);
+  const usage = (field, n) => s.app.store.db.prepare(`INSERT INTO usage (day, ${field}) VALUES ('2026-10-20', ?1) ON CONFLICT (day) DO UPDATE SET ${field} = ?1`).bind(n).run();
+  const until = { until: '00:00' };
+  await usage('writes', 90001);
+  s.clock.now += 5 * 60000;
+  for (const [method, pathname, body] of [['POST', '/v1/admin/forget', { u: U }], ['POST', '/v1/admin/link', { u: U, to: U1 }],
+    ['DELETE', '/v1/admin/link?u=' + U], ['POST', '/v1/admin/rebuild', {}]]) {
+    const res = await call(s, method, pathname, body);
+    assert.deepEqual([res.status, res.json()], [429, { error: 'writes', ...until }], method + ' ' + pathname);
+  }
+  assert.equal((await call(s, 'POST', '/v1/admin/settings', { weekStart: 'sun' })).status, 200, 'settings are not an action that writes much');
+  assert.equal((await s.admin('/v1/admin/students')).status, 200);
+  assert.equal((await s.post(envelope('cb0000000002', [['lv', 1, 2]]))).status, 204, 'batches are never refused');
+  await usage('writes', 0);
+  await usage('reads', 3500001);
+  s.clock.now += 5 * 60000;
+  const page = await s.admin('/v1/admin/export?file=rounds');
+  assert.deepEqual([page.status, page.json()], [429, { error: 'reads', ...until }]);
+  assert.equal((await s.admin('/v1/admin/students')).status, 200, 'other reads go on until 4.2 million');
+  await usage('reads', 4200001);
+  s.clock.now += 5 * 60000;
+  for (const pathname of ['/v1/admin/kpis', '/v1/admin/students', `/v1/admin/student?u=${U}`, '/v1/admin/game?slug=road-hopper', '/v1/admin/stats?metrics=hour',
+    '/v1/admin/cohorts', '/v1/admin/pcs', '/v1/admin/cards', '/v1/admin/export?file=pcs']) {
+    const res = await s.admin(pathname);
+    assert.deepEqual([res.status, res.json()], [429, { error: 'reads', ...until }], pathname);
+  }
+  for (const pathname of ['/v1/admin/live', '/v1/admin/settings']) assert.equal((await s.admin(pathname)).status, 200, pathname);
+  assert.equal((await call(s, 'POST', '/v1/admin/forget', { u: U })).status, 200, 'actions are guarded by writes');
+});
+
+test('cards: the phase-2 stub lists the printed player cards; making cards answers 405 until phase 2', async t => {
+  const s = await start(t);
+  assert.deepEqual((await s.admin('/v1/admin/cards')).json(), { v: 1, cards: [], clock: UTC });
+  await s.app.store.db.prepare("INSERT INTO cards (code, set_no, a, made_day) VALUES ('c7f3a', 1, '6-7', '2026-10-19'), ('c0b12', 1, '', '2026-10-19')").run();
+  assert.equal((await s.post(envelope3('cc0000000001', [ss3(1, 0, 1)], { u: 'c7f3a', z: '' }))).status, 204);
+  assert.deepEqual((await s.admin('/v1/admin/cards')).json().cards, [{ code: 'c0b12', set: 1, band: 'unknown', madeDay: '2026-10-19', used: false },
+    { code: 'c7f3a', set: 1, band: '6-7', madeDay: '2026-10-19', used: true }]);
+  const made = await call(s, 'POST', '/v1/admin/cards', { count: 8, band: '6-7' });
+  assert.deepEqual([made.status, made.headers.allow], [405, 'GET, HEAD, OPTIONS']);
+  // A card student keeps all five characters as its label.
+  const card = (await s.admin('/v1/admin/students?from=2026-10-20&to=2026-10-20')).json().students[0];
+  assert.deepEqual(pick(card, ['u', 'label', 'kind']), { u: 'c7f3a', label: 'C7F3A', kind: 'card' });
+});
+
+// A simulated school (simulate.mjs) stored through `store`, with the cron's rolls after each day.
+async function simulatedSchool(store, options) {
+  const { schoolDays } = await import('../../server/simulate.mjs');
+  for (const day of schoolDays(options)) {
+    for (const { batch, now } of day.batches) await store.ingest(validateBatch(batch), now);
+    const night = Date.parse(day.day + 'T00:00:00Z') - 3 * 3600000 + DAY_MS + 65 * 60000;
+    if (night < options.now) for (let i = 0; i < 40 && (await store.rollupStep(night + i * 300000)).rolled; i++);
+  }
+}
+
+test('export: every file\'s pages hold each row once, with exactly its COLUMNS and no value that needs quoting; X-Rows, X-Next and cursors', async t => {
+  const { COLUMNS, FILES } = await import('../../server/export.mjs');
+  const now = Date.parse('2026-10-22T08:00:00Z'), db = openDatabase(':memory:');
+  // Small pages (13 sessions or 97 lines), so that every file has several.
+  const store = openStore(db, { exportLimits: { lines: 97, sessions: 13 } });
+  await simulatedSchool(store, { days: 9, sessions: 40, seed: 9, now });
+  const clock = { now }, app = createApp({ store, adminToken: TOKEN, now: () => clock.now, dashboardDir: null });
+  const { port } = await app.listen(0, '127.0.0.1');
+  t.after(() => app.close());
+  const get = pathname => request(`http://127.0.0.1:${port}`, 'GET', pathname, { headers: { authorization: 'Bearer ' + TOKEN } });
+  // The same database with pages of the real size: each file is one page here.
+  const whole = openStore(db);
+  const range = { from: '2026-10-13', to: '2026-10-22' };
+  const lo = Date.parse('2026-10-13T00:00:00+03:00') / 1000, hi = Date.parse('2026-10-23T00:00:00+03:00') / 1000;
+  const counted = async from => (await db.prepare(`SELECT COUNT(*) AS n FROM st_sessions s ${from} WHERE s.start_s >= ?1 AND s.start_s < ?2`).bind(lo, hi).first()).n;
+  const expected = { sessions: await counted(''), visits: await counted('JOIN st_visits v ON v.sid = s.id'), rounds: await counted('JOIN st_rounds r ON r.sid = s.id'),
+    events: await counted('JOIN st_marks m ON m.sid = s.id') };
+  assert.ok(expected.rounds > 1000 && expected.events > 100, JSON.stringify(expected));
+  for (const file of FILES) {
+    const lines = [];
+    let after = null, pages = 0;
+    do {
+      const res = await get(`/v1/admin/export?file=${file}&from=${range.from}&to=${range.to}` + (after ? '&after=' + encodeURIComponent(after) : ''));
+      assert.equal(res.status, 200, file + ' ' + after + ': ' + res.text);
+      assert.equal(res.headers['content-type'], 'text/csv; charset=utf-8');
+      const page = res.text ? res.text.replace(/\n$/, '').split('\n') : [];
+      assert.equal(Number(res.headers['x-rows']), page.length);
+      assert.ok(page.length <= (file === 'sessions' ? 13 : 97), file + ' page ' + pages);
+      lines.push(...page);
+      after = res.headers['x-next'] ?? null;
+      pages++;
+    } while (after && pages < 1000);
+    assert.equal(after, null, file + ' ends');
+    for (const line of lines) {
+      assert.doesNotMatch(line, /["\r]/, file);
+      assert.equal(line.split(',').length, COLUMNS[file].length, file + ': ' + line);
+    }
+    const one = await whole.exportPage({ file, ...range }, now);
+    assert.equal(one.next, null, file + ' is one page of 5,000 lines');
+    assert.deepEqual(lines, one.lines, file + ': the pages hold every row once, in order');
+    if (expected[file] !== undefined) assert.equal(lines.length, expected[file], file);
+    assert.ok(lines.length > 0 && (file === 'pcs' || pages > 1), `${file}: ${lines.length} lines in ${pages} pages`);
+  }
+  // A cursor of another file, or a forged one, is refused; a cursor past the end gives an empty last page.
+  assert.equal((await get('/v1/admin/export?file=visits&after=1760000000.1')).status, 400);
+  const end = await get('/v1/admin/export?file=sessions&after=99999999999.999');
+  assert.deepEqual([end.status, end.text, end.headers['x-rows'], end.headers['x-next']], [200, '', '0', undefined]);
+});
+
+test('export lines are exact for a hand-built school: dates and times on the school\'s clock, words for codes, empty for unknown', async t => {
+  const s = await studentDays(t);
+  const lines = async (file, q = 'from=2026-10-19&to=2026-10-20') => {
+    const res = await s.admin(`/v1/admin/export?file=${file}&${q}`);
+    assert.equal(res.status, 200);
+    return res.text.replace(/\n$/, '').split('\n');
+  };
+  // U1's session: it started 95 s before its batch arrived (09:15:00 UTC).
+  const sessions = await lines('sessions');
+  assert.equal(sessions.length, 7);
+  // A Tuesday (weekday 3, Sunday being 1), a new profile: no days since a last play is 1 here (the test's ss), its buckets 0 and 1.
+  assert.equal(sessions.find(line => line.startsWith('b20000000001')), ['b20000000001', U1, U1, P, 'student', 3, '8-9', '2026-10-20', 3, '09:13:25', 553,
+    '2026-10-20T09:13:25Z', 'w', 'web', 'src', 4, 4, 1920, 0, 4, 1, 0, 1, 0, 1, 3, 0, 1, 2, '120.0', '', '', '', ''].join(','));
+  // The guest's session: no student, no profile age; U3's ended by the idle hand-over.
+  assert.equal(sessions.find(line => line.startsWith('b20000000004')), ['b20000000004', '', '', P, 'guest', 3, '6-7', '2026-10-20', 3, '09:14:23', 554,
+    '2026-10-20T09:14:23Z', 'w', 'web', 'src', 4, 4, 1920, 0, 4, 0, '', '', 0, 4, 0, 0, 1, 0, '30.0', '', '', '', ''].join(','));
+  assert.match(sessions.find(line => line.startsWith('b20000000003')), /,50,idle,,$/);
+  const rounds = await lines('rounds');
+  assert.deepEqual(rounds, [
+    ['b20000000001', 1, 1, U1, U1, P, '8-9', '2026-10-20', 3, '09:13:29', 4, 0.1, 'road-hopper', 'L1', 'win', '', 0, 1, 0, 30000, 30000, 50, 2, 2, 500,
+      10, 2, 0.8333, 0, 0, 0, 0, 0, 0, 600, 10, 40, '80.0', 0, 0].join(','),
+    ['b20000000001', 1, 2, U1, U1, P, '8-9', '2026-10-20', 3, '09:14:08', 43, 0.7, 'road-hopper', 'L2', 'loss', 'win', 0, 2, 0, 30000, '', 20, 2, 2, '',
+      5, 5, 0.5, 0, 0, 0, 0, 0, 0, '', '', '', '', '', ''].join(',')]);
+  const events = await lines('events');
+  // A session's marks in key order: kind, then time.
+  assert.deepEqual(events.filter(line => line.startsWith('b20000000001')), [
+    `b20000000001,${U1},${U1},2026-10-20,09:14:07,42,heart_on,road-hopper,`,
+    `b20000000001,${U1},${U1},2026-10-20,09:13:28,3,tutorial_start,road-hopper,`,
+    `b20000000001,${U1},${U1},2026-10-20,09:14:06,41,tutorial_done,road-hopper,`]);
+  assert.deepEqual(events.filter(line => line.startsWith('b20000000002')), [`b20000000002,${U2},${U2},2026-10-20,09:13:45,0,linked,,${U4}`]);
+  const students = await lines('students');
+  assert.deepEqual(students.map(line => line.split(',').slice(0, 3)), [[U1, '1A1A', U1], [U2, '2B2B', U2], [U3, '3C3C', U3], [U4, '4D4D', U2], [U5, '5E5E', U5]]);
+  // Per code: U4's row is its own play, linked to U2; known_before is 1 for a profile made before its first play here.
+  assert.equal(students[0], [U1, '1A1A', U1, 'profile', '8-9', '8-9', '2026-10-20', '2026-10-20', '2026-10-20', 1, 1, '2.0', 2, 1, 1, 0, 1, 'road-hopper', 1, 0, ''].join(','));
+  assert.equal(students[3], [U4, '4D4D', U2, 'profile', '8-9', '8-9', '2026-10-17', '2026-10-19', '2026-10-19', 1, 1, '1.0', 0, 0, 0, 0, 1, 'maze-dash', 1, 1, ''].join(','));
+  const days = await lines('student_days');
+  assert.equal(days.length, 6);
+  assert.equal(days[0], [U3, U3, '2026-10-19', 2, '6-7', 1, '3.0', 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, '', 0, '09:14:23', '09:14:23', 1].join(','));
+  assert.equal(days[2], [U1, U1, '2026-10-20', 3, '8-9', 1, '2.0', 1, 1, 2, 1, 1, 0, 0, 0, 15, 7, 600, 0, '09:13:25', '09:13:25', 1].join(','));
+  const games = await lines('daily_games');
+  assert.deepEqual(games.map(line => line.split(',').slice(0, 7)), [['2026-10-19', 'school', '6-7', 'road-hopper', '1', '1', '1'],
+    ['2026-10-19', 'school', '8-9', 'maze-dash', '1', '1', '1'], ['2026-10-20', 'school', '10-11', 'tank-splat', '1', '1', '1'],
+    ['2026-10-20', 'school', '6-7', 'road-hopper', '2', '1', '2'], ['2026-10-20', 'school', '8-9', 'maze-dash', '1', '1', '1'],
+    ['2026-10-20', 'school', '8-9', 'road-hopper', '2', '2', '2']]);
+  assert.equal(games[5], '2026-10-20,school,8-9,road-hopper,2,2,2,5.3,2,2,1,1,0,0,0,1,0,2.0,0.6818');
+  assert.deepEqual(await lines('pcs'), [`${P2},0A0B,2026-10-19,2026-10-20,2,,src,4,4,1920,3,2,0.0,7.5,1.0,0.0,,0.0,0,4,0`,
+    `${P},8C21,2026-10-19,2026-10-20,2,,src,4,4,1920,4,2,0.25,6.5,1.0,0.0,,0.0,0,4,1`]);
+});
+
+test('daily_games holds milestone 2\'s frozen days too, on UTC receipt days, next to the school\'s days', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-telemetry-export-m2-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 't.db');
+  await milestone2(file, [['agg_games', { day: '2026-10-20', a: '6-7', slug: 'road-hopper', sessions: 3, opens: 5, engaged_ms: 120000, starts: 4, ends: 4,
+    w: 2, l: 2, tier_sum: 6, tier_n: 3, hits: 3, misses: 1 }], ['agg_games', { day: '2026-10-19', a: '', slug: 'maze-dash', sessions: 1, opens: 1 }]]);
+  const clock = { now: START };
+  const app = createApp({ dbPath: file, now: () => clock.now, adminToken: TOKEN, dashboardDir: null });
+  t.after(() => app.close());
+  const { port } = await app.listen(0, '127.0.0.1');
+  const base = `http://127.0.0.1:${port}`;
+  assert.equal((await request(base, 'POST', '/v1/batch', { headers: { 'content-type': 'text/plain' },
+    body: JSON.stringify(envelope('a00000000001', [['go', 1, 'road-hopper', 'featured', 0], ['gx', 20, 'road-hopper', 15000, z6, z4]])) })).status, 204);
+  const res = await request(base, 'GET', '/v1/admin/export?file=daily_games&from=2026-10-19&to=2026-10-20', { headers: { authorization: 'Bearer ' + TOKEN } });
+  // The overlap day has both: the frozen totals (no student or heart counts then) and the school's day from the facts.
+  assert.deepEqual(res.text.trim().split('\n'), ['2026-10-19,utc,,maze-dash,1,,1,0.0,0,0,0,0,0,0,0,,,,',
+    '2026-10-20,school,6-7,road-hopper,1,0,1,0.3,0,0,0,0,0,0,0,0,0,,', '2026-10-20,utc,6-7,road-hopper,3,,5,2.0,4,4,2,2,0,0,0,,,2.0,0.75']);
+});
+
+test('simulate.mjs --db writes a school\'s days of v3 batches and rolls them up with the store\'s own cron', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-telemetry-simulate-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'school.db');
+  const run = spawnSync(process.execPath, [path.join(repo, 'server/simulate.mjs'), '--db', file, '--days', '8', '--sessions', '30', '--seed', '4'],
+    { encoding: 'utf8', timeout: 120000 });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /^simulate: (\d+) of \1 batches stored in .* \(8 days, seed 4, \d+ days rolled up\)/);
+  const db = openDatabase(file);
+  t.after(() => db.close());
+  const one = async text => (await db.prepare(text).first());
+  const settings = Object.fromEntries((await db.prepare('SELECT key, value FROM settings').all()).results.map(r => [r.key, r.value]));
+  assert.deepEqual([settings.tz, settings.tz_source], ['Asia/Riyadh', 'pcs']);
+  // Every past school day is rolled, and its rollups equal the facts' own numbers.
+  const rolled = (await db.prepare('SELECT day FROM roll_days ORDER BY day').all()).results.map(r => r.day);
+  assert.ok(rolled.length >= 4, rolled.join());
+  assert.equal((await one('SELECT COUNT(*) AS n FROM roll_days WHERE dirty > 0')).n, 0);
+  assert.equal((await one('SELECT TOTAL(sessions) AS n FROM r_day')).n, (await one(`SELECT COUNT(*) AS n FROM st_sessions WHERE start_s < ${Date.parse(rolled.at(-1) + 'T21:00:00Z') / 1000}`)).n);
+  assert.ok((await one("SELECT COUNT(*) AS n FROM st_sessions WHERE wire = 2")).n > 0, 'some PCs still run the old portal');
+  assert.ok((await one("SELECT COUNT(*) AS n FROM st_rounds WHERE duo = 1")).n > 0, 'local two-player rounds');
+  assert.ok((await one("SELECT COUNT(*) AS n FROM st_rounds WHERE dda >= 0")).n > 0, 'DDA levels');
+});
+
 test('the Node host sweeps live rows every minute, so none outlives 10 minutes without requests', async t => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   const s = await start(t);

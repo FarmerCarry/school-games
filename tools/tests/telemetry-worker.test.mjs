@@ -2,10 +2,10 @@
 // with env.DB a D1-style database over node:sqlite (server/sqlite-d1.mjs) and env.ASSETS a
 // stub: D1's free-plan limits per invocation (the request that upgrades the database does
 // only that and is answered 503), the batch interval, the usage meter, the 5-minute cron's
-// rollups and the KPI parts kept in D1; and two checks against earlier servers from Git,
-// with their privacy floor at 0: the same simulated batches give milestone 2's KPIs (git
-// show 743e5ec), and a database of the first server (git show 6866861) is upgraded with
-// the same KPIs.
+// rollups, the KPI and research parts kept in D1 and the CPU the admin answers take outside
+// SQLite; and two checks against earlier servers from Git, with their privacy floor at 0:
+// the same simulated batches give milestone 2's KPIs (git show 743e5ec), and a database of
+// the first server (git show 6866861) is upgraded with the same KPIs.
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import fs from 'node:fs';
@@ -19,7 +19,7 @@ const { openDatabase } = await import('../../server/sqlite-d1.mjs');
 const { default: worker } = await import('../../server/worker.mjs');
 const { openStore, TABLES, SCHEMA_VERSION } = await import('../../server/store.mjs');
 const { validateBatch } = await import('../../server/schema.mjs');
-const { history } = await import('../../server/simulate.mjs');
+const { historyV2 } = await import('../../server/simulate.mjs');
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const fixture = JSON.parse(fs.readFileSync(path.join(repo, 'server/fixtures/sample-batch.json'), 'utf8'));
@@ -395,13 +395,29 @@ test('every invocation stays inside D1\'s free limits: the upgrade alone (503), 
   // facts; the 5-minute cron re-rolls a day in full (the zone changed).
   const setZone = () => call(next, 'POST', '/v1/admin/settings', { headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
     body: JSON.stringify({ tz: 'Asia/Riyadh', source: 'dashboard', weekStart: 'sun', keepDays: 400 }) });
+  // The research reads over frozen, rolled and open days (nothing kept yet, on a new instance each), every export file, and the owner's actions.
+  const period = 'from=2026-07-23&to=2026-10-20';
+  const research = [['students', '/v1/admin/students?' + period], ['student', `/v1/admin/student?u=${U}&` + period], ['game', '/v1/admin/game?slug=game-0&' + period],
+    ['stats', '/v1/admin/stats?metrics=hour,rhour,sesslen,daymin,games,visitlen,flow,attempt,tenure,persist,fatigue,qrun,tier,tutorial&' + period],
+    ['stats of a game', '/v1/admin/stats?metrics=attempt,tenure&slug=game-0&' + period], ['cohorts', '/v1/admin/cohorts?' + period],
+    ['pcs', '/v1/admin/pcs?' + period], ['cards', '/v1/admin/cards'],
+    ...['students', 'sessions', 'visits', 'rounds', 'events', 'student_days', 'daily_games', 'pcs'].map(file => ['export ' + file, `/v1/admin/export?file=${file}&` + period])];
+  let instance = 0;
+  const fresh = () => { const env = { ...next, RATE_PER_MIN: String(700 + ++instance) }; return [env, counted(env)]; };
+  const action = (method, pathname, body) => () => call(next, method, pathname, { body: body && JSON.stringify(body),
+    headers: { Authorization: 'Bearer ' + TOKEN, ...(body ? { 'Content-Type': 'application/json' } : {}) } });
   for (const [label, work, limit, sql] of [['kpis', () => admin(next, '/v1/admin/kpis?from=2026-07-23&to=2026-10-20'), 20, /FROM agg_days.*FROM r_day/],
     ['live', () => admin(next, '/v1/admin/live'), 20], ['settings', () => admin(next, '/v1/admin/settings'), 20], ['settings POST', setZone, 20],
+    ...research.map(([name, pathname]) => [name, async () => { const [env, measure] = fresh(); const counts = await measure(() => admin(env, pathname)); return counts; }, 20]),
+    ['link', action('POST', '/v1/admin/link', { u: U, to: '77aa00bb11cc' }), 20], ['unlink', action('DELETE', '/v1/admin/link?u=' + U), 20],
+    ['recount', action('POST', '/v1/admin/rebuild', {}), 20], ['forget', action('POST', '/v1/admin/forget', { u: '77aa00bb11cc' }), 20],
     ['5-minute cron', () => scheduled(next, '*/5 * * * *'), 35, /^DELETE FROM r_stat WHERE day/], ['purge', () => scheduled(next, '23 3 * * *'), 25]]) {
     clock.now += 6 * 60000;
-    const counts = await measureNext(work);
+    let counts = await measureNext(work);
+    // A research read measured itself, on its own new instance.
+    if (counts.result && counts.result.n !== undefined) counts = counts.result;
     assert.ok(counts.n <= limit, `${label} took ${counts.n} statements`);
-    if (counts.result) assert.equal(counts.result.status, 200, label);
+    if (counts.result) assert.equal(counts.result.status, 200, label + ': ' + counts.result.text);
     if (sql) assert.ok(counts.sql.some(text => sql.test(text)), label + ' did its work');
   }
   // The first roll of yesterday with the PCs' vote, after 01:00 in Riyadh.
@@ -561,7 +577,7 @@ after(() => { for (const dir of [m2Dir, firstDir]) if (dir) fs.rmSync(dir, { rec
 
 // Several days of simulated school sessions in every band, none crossing midnight.
 const TODAY = Date.parse('2026-10-23T00:00:00Z');
-const simulated = () => [...history({ days: 6, sessions: 45, seed: 11, today: TODAY })];
+const simulated = () => [...historyV2({ days: 6, sessions: 45, seed: 11, today: TODAY })];
 const QUERIES = [];
 for (const band of [null, '6-7', '8-9', '10-11', '']) {
   for (const [from, to] of [['2026-10-18', '2026-10-23'], ['2026-10-20', '2026-10-20'], ['2026-10-18', '2026-10-19'],
@@ -679,14 +695,14 @@ test('the Worker keeps the open days\' KPIs for 10 minutes, shared through D1, s
   const env = await makeEnv(), measure = counted(env);
   assert.equal((await post(env, fixture)).status, 204);
   const first = await measure(() => admin(env, '/v1/admin/kpis'));
-  assert.ok(first.sql.some(text => /^SELECT day, a, 1 AS part/.test(text)), 'today from the facts');
+  assert.ok(first.sql.some(text => /SELECT day, a, 1 AS part/.test(text)), 'today from the facts');
   // A new batch, then a refresh on another instance in the same 10-minute slot (09:10 to 09:20): the same answer, from the kept part.
   clock.now += 3 * 60000;
   assert.equal((await post(env, envelope('f20000000001', [['go', 1, 'road-hopper', 'featured', 0]]))).status, 204);
   const other = { ...env, RATE_PER_MIN: '600' }, measureOther = counted(other);
   const again = await measureOther(() => admin(other, '/v1/admin/kpis'));
   assert.equal(again.result.json().totals.sessions, first.result.json().totals.sessions);
-  assert.ok(!again.sql.some(text => /^SELECT day, a, 1 AS part/.test(text)));
+  assert.ok(!again.sql.some(text => /SELECT day, a, 1 AS part/.test(text)));
   // In the next slot it is read again.
   clock.now += 3 * 60000;
   const later = await measureOther(() => admin(other, '/v1/admin/kpis'));
@@ -746,4 +762,86 @@ test('a database of the first server is upgraded over two requests, to schema 3 
   // Batch ids carry over: a repeat is still refused.
   const last = batches.at(-1);
   assert.equal(await store.ingest(last, last.now), false);
+});
+
+test('the research reads keep their closed part in D1 for every instance, made again when a roll or a forget changes the rollup version', async t => {
+  const clock = useClock(t);
+  const env = await makeEnv();
+  // Three children on 19 and 20 October; the cron rolls both days the next night.
+  for (const [day, s, u] of [['2026-10-19', 'f50000000001', U], ['2026-10-19', 'f50000000002', '1b2c3d4e5f60'], ['2026-10-20', 'f50000000003', U],
+    ['2026-10-20', 'f50000000004', '2c3d4e5f6071']]) {
+    clock.now = Date.parse(day + 'T09:15:00Z');
+    assert.equal((await post(env, envelope3(s, [['ss', 0, 0, 30, 1, 3, 4, 0], ['go', 1, 1, 'road-hopper', 'catalog', 0, 0],
+      ['rs', 2, 1, 1, 'road-hopper', 'L1', 1, 0], ['re', 30, 1, 1, 'road-hopper', 'w', 'L1', 20000, 10, 1, 3, 1, z6, null],
+      ['gx', 31, 1, 'road-hopper', 20000, z6, z4]], { u }))).status, 204);
+  }
+  clock.now = Date.parse('2026-10-21T01:30:00Z');
+  await scheduled(env, '*/5 * * * *');
+  await scheduled(env, '*/5 * * * *');
+  const closed = /^SELECT json_group_array\(json_array\(c, days,|^SELECT g\.slug AS slug|^SELECT x\.day AS day, x\.a AS a|^SELECT x\.p AS p|^WITH d AS MATERIALIZED \(SELECT COALESCE/;
+  const paths = ['/v1/admin/students?from=2026-10-19&to=2026-10-20', `/v1/admin/student?u=${U}&from=2026-10-19&to=2026-10-20`,
+    '/v1/admin/game?slug=road-hopper&from=2026-10-19&to=2026-10-20', '/v1/admin/pcs?from=2026-10-19&to=2026-10-20', '/v1/admin/cohorts?from=2026-10-19&to=2026-10-20'];
+  const read = async instance => {
+    const other = { ...env, RATE_PER_MIN: String(instance) }, measure = counted(other), out = [];
+    for (const pathname of paths) {
+      const { sql, result } = await measure(() => admin(other, pathname));
+      assert.equal(result.status, 200, pathname);
+      out.push([result.json(), sql.some(text => closed.test(text))]);
+    }
+    return out;
+  };
+  const first = await read(601);
+  assert.deepEqual(first.map(([, made]) => made), [true, true, true, true, true], 'the first instance makes every closed part');
+  clock.now += 60000;
+  const second = await read(602);
+  assert.deepEqual(second.map(([, made]) => made), [false, false, false, false, false], 'another instance finds them in kpi_cache');
+  assert.deepEqual(second.map(([answer]) => ({ ...answer, clock: null })), first.map(([answer]) => ({ ...answer, clock: null })));
+  // A forget raises the rollup version: every kept part is made again, without the student.
+  const gone = await call(env, 'POST', '/v1/admin/forget', { headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ u: '1b2c3d4e5f60' }) });
+  assert.equal(gone.status, 200);
+  const third = await read(603);
+  assert.deepEqual(third.map(([, made]) => made), [true, true, true, true, true]);
+  assert.deepEqual(third[0][0].students.map(s => s.u), [U, '2c3d4e5f6071'].sort());
+});
+
+test('the CPU each admin answer and export page spends in JavaScript (outside SQLite) stays inside the Workers limit on a simulated school', async () => {
+  const { schoolDays } = await import('../../server/simulate.mjs');
+  const { serialize } = await import('../../server/handler.mjs');
+  const now = Date.parse('2026-10-22T09:30:00Z'), db = openDatabase(':memory:'), store = openStore(db);
+  for (const day of schoolDays({ days: 21, sessions: 120, seed: 3, now })) {
+    for (const { batch, now: at } of day.batches) await store.ingest(validateBatch(batch), at);
+    const night = Date.parse(day.day + 'T00:00:00Z') - 3 * 3600000 + DAY_MS + 65 * 60000;
+    if (night < now) for (let i = 0; i < 40 && (await store.rollupStep(night + i * 300000)).rolled; i++);
+  }
+  // The time of a call less the time inside the driver's statements (which D1 spends, not the Worker): node:sqlite
+  // runs on this thread, and the test files run one at a time, so this is the JavaScript's own CPU.
+  let inSql = 0;
+  const batch = db.batch.bind(db);
+  db.batch = async list => { const t0 = performance.now(); try { return await batch(list); } finally { inSql += performance.now() - t0; } };
+  const students = JSON.parse(serialize(await store.students({ from: '2026-09-23', to: '2026-10-22', band: null }, now))).students;
+  assert.ok(students.length > 500, students.length + ' students');
+  const u = students.find(s => s.linked.length)?.u || students[0].u;
+  // Each run asks about another period, so that nothing is kept from the run before (the cold case).
+  const periods = Array.from({ length: 7 }, (_, i) => ({ from: '2026-09-' + String(20 + i).padStart(2, '0'), to: '2026-10-22', band: null }));
+  const work = {
+    kpis: q => store.kpis(q, now), students: q => store.students(q, now), student: q => store.student({ ...q, u }, now),
+    game: q => store.game({ ...q, slug: 'road-hopper' }, now), stats: q => store.stats({ ...q, metrics: ['attempt', 'persist', 'flow'], slug: null }, now),
+    cohorts: q => store.cohorts(q, now), pcs: q => store.pcs(q, now), live: () => store.live(now), settings: () => store.settings(now),
+    'export rounds': q => store.exportPage({ file: 'rounds', ...q }, now), 'export sessions': q => store.exportPage({ file: 'sessions', ...q }, now),
+    'export students': q => store.exportPage({ file: 'students', ...q }, now)
+  };
+  const medians = {};
+  for (const [name, run] of Object.entries(work)) {
+    const spent = [];
+    for (const q of periods) {
+      inSql = 0;
+      const t0 = performance.now(), answer = await run(q);
+      // Writing the answer is part of it: the handler's JSON, or the export page's lines.
+      if (answer.lines) answer.lines.join('\n'); else serialize(answer);
+      spent.push(performance.now() - t0 - inSql);
+    }
+    medians[name] = spent.sort((a, b) => a - b)[3];
+  }
+  for (const [name, ms] of Object.entries(medians)) assert.ok(ms <= (name.startsWith('export') ? 3 : 10), `${name}: ${ms.toFixed(1)} ms of JavaScript (${JSON.stringify(medians)})`);
 });

@@ -1,13 +1,17 @@
 // The ingest server's HTTP rules as a Fetch-API handler (Request -> Response), shared by
 // the Cloudflare Worker (worker.mjs) and the Node host (app.mjs): routing, CORS, the soft
-// per-client token bucket, body limits, admin authentication and status codes. Paths
-// outside /v1/ go to the host's static files (the dashboard). No IP, header or request
-// body is ever stored or logged; the client key (an address) is only a key of the
+// per-client token bucket, body limits, admin authentication, the admin router and status
+// codes. Paths outside /v1/ go to the host's static files (the dashboard). No IP, header or
+// request body is ever stored or logged; the client key (an address) is only a key of the
 // in-memory token bucket. The request that upgrades the database does only that and is
 // answered 503 with Retry-After (the portal sends the batch again). Admin reads answer 429
-// once the day's free reading allowance is nearly used (store.mjs, guard).
+// once the day's free reading allowance is nearly used, and the owner's actions once the
+// day's writes are (store.mjs, guard).
+import { JsonText } from './admin.mjs';
 import { isZone } from './clock.mjs';
-import { WIRES, validateBatch } from './schema.mjs';
+import { FILES } from './export.mjs';
+import { METRICS } from './rollups.mjs';
+import { U_RE, WIRES, isSlug, validateBatch } from './schema.mjs';
 import { SCHEMA_VERSION, utcDay } from './store.mjs';
 
 export const MAX_BODY = 64 * 1024;
@@ -23,9 +27,15 @@ const encoder = new TextEncoder();
 export class HttpError extends Error {
   constructor(status, message, headers = {}, more = {}) { super(message); this.status = status; this.headers = headers; this.more = more; }
 }
-// The admin routes and their methods (HEAD with every GET); the read guard covers every
-// admin read but live and settings.
-const ADMIN = { kpis: { methods: ['GET'], guarded: true }, live: { methods: ['GET'] }, settings: { methods: ['GET', 'POST'] } };
+// The admin routes: each method they take (HEAD goes with GET) and the guard it passes:
+// read (an admin read: 429 once today's reads pass 4.2 million), export (an export page:
+// 3.5 million), write (an action that writes: 90,000 writes) or none (live and settings).
+const ADMIN = {
+  kpis: { GET: 'read' }, live: { GET: null }, settings: { GET: null, POST: null },
+  students: { GET: 'read' }, student: { GET: 'read' }, game: { GET: 'read' }, stats: { GET: 'read' }, cohorts: { GET: 'read' },
+  pcs: { GET: 'read' }, cards: { GET: 'read' }, export: { GET: 'export' },
+  forget: { POST: 'write' }, link: { POST: 'write', DELETE: 'write' }, rebuild: { POST: 'write' }
+};
 const SETTINGS_FIELDS = new Set(['tz', 'source', 'weekStart', 'keepDays']);
 
 // Printable ASCII only: header bytes are read as latin1, so any other character could never match.
@@ -116,6 +126,41 @@ function kpiParams(query, today) {
   return { from, to, band: KPI_BANDS[band] };
 }
 
+// A query parameter that must match: a student code, a game, the r_stat metrics (a
+// comma-separated subset, answered in the contract's order) or an export file.
+function code(query, name) {
+  const value = query.get(name);
+  if (typeof value !== 'string' || !U_RE.test(value)) throw new HttpError(400, name);
+  return value;
+}
+function slugParam(query, name, optional = false) {
+  const value = query.get(name);
+  if (value === null && optional) return null;
+  if (!isSlug(value)) throw new HttpError(400, name);
+  return value;
+}
+function metricsParam(query) {
+  const list = (query.get('metrics') ?? '').split(',');
+  if (!list.every(metric => METRICS.includes(metric))) throw new HttpError(400, 'metrics');
+  return METRICS.filter(metric => list.includes(metric));
+}
+// The JSON body of an action: an object with exactly these fields.
+function fields(body, names) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'body');
+  const field = Object.keys(body).find(key => !names.includes(key));
+  if (field !== undefined) throw new HttpError(400, 'field');
+  return body;
+}
+function bodyCode(body, name) {
+  if (typeof body[name] !== 'string' || !U_RE.test(body[name])) throw new HttpError(400, name);
+  return body[name];
+}
+
+// An export page: CSV lines, with how many and the next page's cursor.
+class CsvPage {
+  constructor(lines, next) { this.lines = lines; this.next = next; }
+}
+
 // POST /v1/admin/settings: { tz?, source?: 'dashboard', weekStart?: 'sun' | 'mon',
 // keepDays?: 400 | 760 }, nothing else.
 function settingsBody(body) {
@@ -128,6 +173,13 @@ function settingsBody(body) {
   if (weekStart !== undefined && weekStart !== 'sun' && weekStart !== 'mon') throw new HttpError(400, 'weekStart');
   if (keepDays !== undefined && keepDays !== 400 && keepDays !== 760) throw new HttpError(400, 'keepDays');
   return { tz, source, weekStart, keepDays };
+}
+
+// An answer as JSON; a field that is JSON text already (admin.mjs JsonText) is written as it is.
+export function serialize(body) {
+  if (!Object.values(body).some(value => value instanceof JsonText)) return JSON.stringify(body);
+  return '{' + Object.entries(body).filter(([, value]) => value !== undefined)
+    .map(([key, value]) => JSON.stringify(key) + ':' + (value instanceof JsonText ? value.text : JSON.stringify(value))).join(',') + '}';
 }
 
 // Options: store (store.mjs), allowedOrigins, adminToken ('' turns the admin endpoints
@@ -170,30 +222,67 @@ export function createHandler(options) {
     return store.batchEvery?.(t);
   }
 
-  // A JSON body of at most MAX_ADMIN_BODY bytes, sent as application/json.
-  async function jsonBody(request) {
+  // A JSON body of at most MAX_ADMIN_BODY bytes, sent as application/json (optional: an
+  // empty body is no body).
+  async function jsonBody(request, optional = false) {
     const type = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-    if (type !== 'application/json') throw new HttpError(415, 'content type');
     const raw = await readBody(request, MAX_ADMIN_BODY);
+    if (optional && !raw.byteLength) return null;
+    if (type !== 'application/json') throw new HttpError(415, 'content type');
     try { return JSON.parse(new TextDecoder('utf-8', { ignoreBOM: true }).decode(raw)); } catch { throw new HttpError(400, 'json'); }
+  }
+
+  // What each admin route and method does, with its parameters validated first.
+  function work(name, method, query, body, t) {
+    const period = () => kpiParams(query, store.today?.(t) ?? utcDay(t));
+    switch (name + ' ' + method) {
+      case 'kpis GET': return store.kpis(period(), t);
+      case 'live GET': return store.live(t);
+      case 'settings GET': return store.settings(t);
+      case 'settings POST': return store.updateSettings(settingsBody(body), t);
+      case 'students GET': return store.students(period(), t);
+      case 'student GET': { const u = code(query, 'u'); return store.student({ ...period(), u }, t); }
+      case 'game GET': { const slug = slugParam(query, 'slug'); return store.game({ ...period(), slug }, t); }
+      case 'stats GET': { const metrics = metricsParam(query), slug = slugParam(query, 'slug', true); return store.stats({ ...period(), metrics, slug }, t); }
+      case 'cohorts GET': return store.cohorts(period(), t);
+      case 'pcs GET': { const { from, to } = period(); return store.pcs({ from, to }, t); }
+      case 'cards GET': return store.cards(t);
+      case 'export GET': {
+        const file = query.get('file');
+        if (!FILES.includes(file)) throw new HttpError(400, 'file');
+        const { from, to } = period();
+        return store.exportPage({ file, from, to, after: query.get('after') }, t).then(page => page.error ? page : new CsvPage(page.lines, page.next));
+      }
+      case 'forget POST': return store.forget({ u: bodyCode(fields(body, ['u']), 'u') }, t);
+      case 'link POST': { const b = fields(body, ['u', 'to']); return store.link({ u: bodyCode(b, 'u'), to: bodyCode(b, 'to') }, t); }
+      case 'link DELETE': {
+        // The code from the query (DELETE /v1/admin/link?u=), or from a JSON body { u }.
+        if (query.has('u') || body === null) return store.unlink({ u: code(query, 'u') }, t);
+        return store.unlink({ u: bodyCode(fields(body, ['u']), 'u') }, t);
+      }
+      case 'rebuild POST': fields(body, []); return store.rebuild(t);
+    }
   }
 
   async function admin(request, name, query) {
     const route = ADMIN[name];
     if (!token) throw new HttpError(404, 'admin password not set');
     const method = request.method === 'HEAD' ? 'GET' : request.method;
-    if (!route.methods.includes(method)) throw new HttpError(405, 'method', { Allow: [...route.methods, 'HEAD', 'OPTIONS'].join(', ') });
+    if (!Object.hasOwn(route, method)) {
+      const allow = [...Object.keys(route), ...(Object.hasOwn(route, 'GET') ? ['HEAD'] : []), 'OPTIONS'];
+      throw new HttpError(405, 'method', { Allow: allow.join(', ') });
+    }
     if (!(await authorized(request))) throw new HttpError(401, 'unauthorized', { 'WWW-Authenticate': 'Bearer realm="telemetry"' });
-    const body = method === 'POST' ? await jsonBody(request) : null;
+    // POST takes a JSON body; DELETE may (its code can also be in the query).
+    let body = null;
+    if (method === 'POST') body = await jsonBody(request);
+    else if (method === 'DELETE' && request.body && request.headers.get('content-length') !== '0') body = await jsonBody(request, true);
     const t = now();
     await ready(t);
-    const stop = route.guarded ? await store.guard?.('read', t) : null;
+    const stop = route[method] ? await store.guard?.(route[method], t) : null;
     if (stop) throw new HttpError(429, stop.error, {}, { until: stop.until });
-    if (name === 'kpis') return store.kpis(kpiParams(query, store.today?.(t) ?? utcDay(t)), t);
-    if (name === 'live') return store.live(t);
-    if (method === 'GET') return store.settings(t);
-    const answer = await store.updateSettings(settingsBody(body), t);
-    if (answer.error) throw new HttpError(400, answer.error);
+    const answer = await work(name, method, query, body, t);
+    if (answer.error) throw new HttpError(answer.status || 400, answer.error);
     return answer;
   }
 
@@ -206,7 +295,7 @@ export function createHandler(options) {
     }
     const send = (status, body, extra = {}) => body === undefined
       ? new Response(null, { status, headers: { ...headers, ...extra } })
-      : new Response(encoder.encode(JSON.stringify(body)), {
+      : new Response(encoder.encode(serialize(body)), {
         status, headers: { ...headers, ...extra, 'Content-Type': 'application/json; charset=utf-8' }
       });
     try {
@@ -214,7 +303,7 @@ export function createHandler(options) {
       if (wait) throw new HttpError(429, 'rate limited', { 'Retry-After': String(wait) });
       const url = new URL(request.url), { pathname } = url, method = request.method;
       if (method === 'OPTIONS') {
-        const preflight = headers['Access-Control-Allow-Origin'] ? { 'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+        const preflight = headers['Access-Control-Allow-Origin'] ? { 'Access-Control-Allow-Methods': 'GET, HEAD, POST, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization', 'Access-Control-Max-Age': '86400' } : {};
         return send(204, undefined, preflight);
       }
@@ -229,7 +318,12 @@ export function createHandler(options) {
         return send(200, { ok: true, accepts: WIRES, schema: SCHEMA_VERSION });
       }
       if (pathname.startsWith('/v1/admin/') && Object.hasOwn(ADMIN, pathname.slice(10))) {
-        return send(200, await admin(request, pathname.slice(10), url.searchParams));
+        const answer = await admin(request, pathname.slice(10), url.searchParams);
+        if (!(answer instanceof CsvPage)) return send(200, answer);
+        // An export page: lines without a header, how many, and the next page's cursor.
+        const text = answer.lines.length ? answer.lines.join('\n') + '\n' : '';
+        return new Response(encoder.encode(text), { status: 200, headers: { ...headers, 'Content-Type': 'text/csv; charset=utf-8',
+          'X-Rows': String(answer.lines.length), ...(answer.next ? { 'X-Next': answer.next } : {}) } });
       }
       // Everything outside /v1/ is the dashboard's static files.
       if (assets && pathname !== '/v1' && !pathname.startsWith('/v1/') && (method === 'GET' || method === 'HEAD')) return await assets(request);

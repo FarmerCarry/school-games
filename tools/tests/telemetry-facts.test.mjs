@@ -1,7 +1,8 @@
 // The store's facts (server/store.mjs, schema 4) on the Node driver: v3 batches written
 // idempotently, v2 batches numbered by the server, attempt numbers, the session's clock,
-// the school's zone, student labels, links between codes, late data, the usage meter and
-// the query plans of every write (docs/RESEARCH_TELEMETRY_SPEC.md, §C and §D).
+// the school's zone, student labels, links between codes, late data, the usage meter, the
+// query plans of every write and admin read, the export's pinned columns and values, and
+// the simulated school (docs/RESEARCH_TELEMETRY_SPEC.md, §C, §D, §F.6 and §F.7).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'node:fs';
@@ -432,6 +433,23 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
   await store.kpis({ from: '2026-10-18', to: '2026-10-21', band: '8-9' }, night + 4 * MIN);
   await store.settings(night + 4 * MIN);
   await store.purge(night + 5 * MIN);
+  // The research reads (rolled and open days), every export file (its first page and a later one) and the owner's actions.
+  const q = { from: '2026-10-18', to: '2026-10-21', band: null }, at = night + 6 * MIN;
+  for (const band of [null, '8-9']) await store.students({ ...q, band }, at);
+  await store.student({ u: U1, ...q }, at);
+  await store.game({ slug: 'road-hopper', ...q }, at);
+  await store.game({ slug: 'road-hopper', from: '2026-10-12', to: '2026-10-21', band: '8-9' }, at);
+  for (const slug of [null, 'road-hopper']) await store.stats({ ...q, metrics: ['attempt', 'flow'], slug }, at);
+  await store.cohorts(q, at);
+  await store.pcs(q, at);
+  await store.cards(at);
+  const cursors = { sessions: `${R0}.1`, visits: `${R0}.1.1`, rounds: `${R0}.1.1.1`, events: `${R0}.1.lv.81.0.8`, students: U1,
+    student_days: '2026-10-19.' + U1, daily_games: '2026-10-19.school.8-9.road-hopper', pcs: P1 };
+  for (const [file, after] of Object.entries(cursors)) for (const cursor of [null, after]) await store.exportPage({ file, ...q, after: cursor }, at);
+  await store.link({ u: U3, to: U1 }, at);
+  await store.unlink({ u: U3 }, at);
+  await store.rebuild(at);
+  await store.forget({ u: U3 }, at);
   for (const [text, params] of seen) {
     if (!/^(?:SELECT|INSERT|UPDATE|DELETE|WITH)/.test(text) || /sqlite_master/.test(text)) continue;
     const plan = db.sqlite.prepare('EXPLAIN QUERY PLAN ' + text).all(...params).map(row => row.detail);
@@ -440,14 +458,146 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
       const scan = /^SCAN (st_\w+|r_\w+|batches|kpi_cache)\b/.exec(step);
       assert.ok(!scan || allowed && new RegExp(`^(?:${allowed})$`).test(scan[1]), text.slice(0, 120) + '\n' + plan.join('\n'));
     }
-    if (/FROM st_sessions s/.test(text) && /start_s >= \?1/.test(text)) assert.ok(plan.some(step => /SEARCH s USING INDEX st_sessions_time/.test(step)), text.slice(0, 120));
+    // Sessions are found by their start, or for one student's codes by code and start.
+    if (/FROM st_sessions s/.test(text) && /start_s >= \?1/.test(text)) {
+      const index = /s\.u IN \(SELECT value FROM json_each/.test(text) ? 'st_sessions_student' : 'st_sessions_time';
+      assert.ok(plan.some(step => new RegExp(`SEARCH s USING (?:COVERING )?INDEX ${index}`).test(step)), text.slice(0, 120) + '\n' + plan.join('\n'));
+    }
   }
   // Every kind of write and pre-read was checked.
   for (const statement of ['INSERT INTO st_sessions', 'INSERT INTO st_visits', 'INSERT INTO st_rounds', 'INSERT INTO st_students', 'INSERT INTO st_pcs',
     'INSERT OR IGNORE INTO st_student_pcs', 'INSERT OR IGNORE INTO st_marks', 'INSERT INTO st_student_games', 'UPDATE st_students SET', 'UPDATE aliases SET',
     'INSERT INTO aliases', 'UPDATE roll_days SET', 'UPDATE settings SET', 'INSERT INTO live', 'DELETE FROM live', 'INSERT INTO batches', 'INSERT INTO usage',
     'SELECT s.id, s.start_s,', 'SELECT slug, rounds FROM st_student_games', 'INSERT INTO r_stat', 'DELETE FROM r_day', 'INSERT INTO roll_days',
-    'SELECT x.u, x.bands', 'WITH sd AS MATERIALIZED', 'SELECT key, rows FROM kpi_cache', 'DELETE FROM st_rounds', 'DELETE FROM aliases']) {
+    'SELECT json_group_array(json_array(u, bands', 'WITH sd AS MATERIALIZED', 'SELECT key, rows FROM kpi_cache', 'DELETE FROM st_rounds', 'DELETE FROM aliases',
+    // The research reads: students, a student (rollups and facts), a game, r_stat, cohorts, PCs and cards.
+    'SELECT json_group_array(json_array(c, days,', 'SELECT json_group_array(json_array(c, json(list)))', 'WITH p AS (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT d.day AS day',
+    'SELECT g.slug AS slug', 'SELECT date(g.day', "SELECT CAST(strftime('%H'", "SELECT date(((s.start_s + COALESCE(r.t0", 'SELECT date(((s.start_s) +',
+    'SELECT CASE WHEN nx.k', 'SELECT x.day AS day, x.a AS a', 'SELECT x.day AS day, COUNT(DISTINCT', 'SELECT x.a AS a', 'SELECT COALESCE(al.u_new, x.u) AS c, x.a',
+    'SELECT json_group_array(json_array(a, metric, k1', 'SELECT json_group_array(json_array(a, metric, slug', 'WITH RECURSIVE f', 'WITH codes AS',
+    'WITH d AS MATERIALIZED (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT x.p AS p', 'SELECT s.p AS p', 'SELECT p, z, k', 'SELECT k FROM st_pcs',
+    'SELECT code, set_no',
+    // Export pages of every file.
+    "SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u", "SELECT IFNULL(s.s, '') || ',' || IFNULL(v.n", "SELECT IFNULL(s.s, '') || ',' || IFNULL(r.n",
+    "SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u, '') || ',' || IFNULL(CASE", 'WITH d AS (SELECT u, day', "SELECT IFNULL(x.u", "SELECT IFNULL(x.day",
+    'WITH d AS (SELECT p, np_max',
+    // The owner's actions: link, unlink, recount and forget.
+    'SELECT COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2), ?2) AS target', 'UPDATE aliases SET u_new = COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2)',
+    'INSERT INTO aliases (u_old, u_new, s, how) SELECT ?1', 'DELETE FROM aliases WHERE u_old = ?1', 'UPDATE roll_days SET dirty = 2 WHERE day >=',
+    'SELECT COUNT(*) AS n FROM (SELECT COALESCE', "DELETE FROM st_marks WHERE kind = 'pr'", 'DELETE FROM r_student_day WHERE u IN', 'DELETE FROM r_student_game WHERE u IN',
+    "UPDATE settings SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'rv'"]) {
     assert.ok([...seen.keys()].some(text => text.startsWith(statement)), 'covered: ' + statement);
   }
+});
+
+// The research files' columns, in the order §F.6 of the spec pins (the dashboard's dictionary.js lists the same).
+const SPEC_COLUMNS = {
+  students: 'student, student_label, student_linked, kind, band_first, band_last, profile_made_day, first_day, last_day, days_active, sessions, minutes, ' +
+    'rounds, wins, losses, quits, games_tried, favourite_game, pcs, known_before, removed_day',
+  sessions: 'session, student, student_linked, pc, kind, wire_version, band, day, weekday, start_time, minute_of_day, start_utc, clock_source, mode, build, ' +
+    'cores, memory_gb, screen, classroom_mode, profiles_on_pc, new_profile, profile_age_days, days_since_last, profile_age_bucket, days_since_last_bucket, ' +
+    'level_start, level_ups, games_opened, rounds, engaged_s, end_t_s, end_reason, timer_minutes, timer_ended',
+  visits: 'session, visit, student, student_linked, band, day, open_time, open_s, close_s, open_seconds, engaged_s, game, source, plays_before, ' +
+    'plays_before_bucket, favourite_at_open, load_ms, error, rounds_started, rounds_ended, tutorial, hearts_on, hearts_off, il_lt8, il_lt16, il_lt33, ' +
+    'il_lt50, il_lt100, il_ge100, frames_smooth, frames_ok, frames_choppy, frames_stall, closed, previous_game, next_game',
+  rounds: 'session, visit, round, student, student_linked, pc, band, day, weekday, time, start_s, minutes_into_session, game, level, outcome, ' +
+    'previous_outcome, two_player, attempt, replay_in_session, engaged_ms, wall_ms, score, tier_start, tier_end, dda_level, hits, misses, accuracy, ' +
+    'rt_lt300, rt_lt500, rt_lt800, rt_lt1200, rt_lt2000, rt_ge2000, rt_mean_ms, rt_n, inputs, inputs_per_min, idle_lapses, pauses',
+  events: 'session, student, student_linked, day, time, t_s, kind, game, value',
+  student_days: 'student, student_linked, day, weekday, band, sessions, minutes, opens, games, rounds, wins, losses, draws, ends, quits, hits, misses, ' +
+    'rt_mean_ms, level_ups, first_time, last_time, pcs',
+  daily_games: 'day, clock, band, game, sessions, students, opens, minutes, starts, ends, wins, losses, draws, ends_neutral, quits, hearts_on, hearts_off, ' +
+    'avg_tier, accuracy',
+  pcs: 'pc, pc_label, first_day, last_day, days, time_zone, build, cores, memory_gb, screen, sessions, students, guest_share, minutes, smooth_share, ' +
+    'stall_share, avg_load_ms, slow_input_share, failures, profiles_max, new_profiles'
+};
+
+test('the research files have exactly the columns the spec pins, in its order', async () => {
+  const { COLUMNS, FILES } = await import('../../server/export.mjs');
+  assert.deepEqual(FILES, Object.keys(SPEC_COLUMNS));
+  for (const file of FILES) assert.deepEqual(COLUMNS[file], SPEC_COLUMNS[file].split(', '), file);
+});
+
+test('no value of a research file can hold a comma, a quote or a line break: every text a line holds is a token the ingest validated', async () => {
+  const { isSlug, isId, isCode, BANDS, SOURCES, CODES, ERRORS } = await import('../../server/schema.mjs');
+  const { isZone } = await import('../../server/clock.mjs');
+  const bad = [',', '"', "'", '\n', '\r', ';', ' '];
+  for (const c of bad) {
+    for (const [name, valid, sample] of [['slug', isSlug, 'road-hopper'], ['round id', isId, 'w1-2'], ['code', isCode, '3f9a0c51e2b7'], ['zone', isZone, 'Asia/Riyadh']]) {
+      assert.ok(valid(sample), name);
+      for (const value of [sample + c, c + sample, sample.slice(0, 2) + c + sample.slice(2)]) assert.ok(!valid(value), `${name} ${JSON.stringify(value)}`);
+    }
+    for (const list of [BANDS, SOURCES, CODES, ERRORS]) assert.ok(list.every(value => !value.includes(c)), JSON.stringify(list));
+    // The build (k) and the session and batch ids are exact; a wrong one refuses the batch.
+    for (const field of ['k', 's', 'b']) assert.equal(validateBatch({ ...fixture, [field]: fixture[field].slice(0, -1) + c }), null, field + JSON.stringify(c));
+  }
+  // The most unusual tokens the ingest takes still give lines of exactly COLUMNS fields.
+  const { COLUMNS, FILES } = await import('../../server/export.mjs');
+  const s = open();
+  await s.ingest(v3('fa0000000001', [ss3(), ['go', 1, 1, 'a-b-c', 'surprise', 0, 0], ['rs', 2, 1, 1, 'a-b-c', 'w1-2:duo.b_x', 0, 0],
+    ['re', 9, 1, 1, 'a-b-c', 'd', 'w1-2:duo.b_x', 7000, -1, 0, 0, 0, z6, [7000, 3, 0, 0, 0, 0, -1]], ['er', 10, 1, 'a-b-c', 'x'], ['ct', 11, 'c', 0],
+    ['pr', 12, U2], ['se', 13, 7000, 'p']], { a: '', z: 'America/Port-au-Prince', m: 'app', k: 'src' }), T0);
+  await s.store.rollupStep(T0 + DAY_MS);
+  for (const file of FILES) {
+    const page = await s.store.exportPage({ file, from: '2026-10-19', to: '2026-10-21' }, T0 + DAY_MS);
+    assert.ok(page.lines.length > 0, file);
+    for (const line of page.lines) {
+      assert.doesNotMatch(line, /["\n\r]/);
+      assert.equal(line.split(',').length, COLUMNS[file].length, file + ': ' + line);
+    }
+  }
+});
+
+test('simulate.mjs: one school in Riyadh at the sink\'s cadence, with guests, old PCs, two-PC children, a forgetful PC, late batches and learning', async () => {
+  const { history } = await import('../../server/simulate.mjs');
+  const now = Date.parse('2026-10-22T12:00:00Z'), options = { days: 21, sessions: 200, seed: 2, now };
+  const list = [...history(options)];
+  assert.equal(JSON.stringify([...history(options)].slice(0, 50)), JSON.stringify(list.slice(0, 50)), 'the same seed, the same batches');
+  const sessions = new Map(), wins = { first: [0, 0], later: [0, 0] }, seenRounds = new Map(), kinds = new Set();
+  let late = 0, last = 0;
+  for (const { batch, now: at } of list) {
+    const valid = validateBatch(batch);
+    assert.equal(valid.dropped, 0);
+    assert.ok(at >= last, 'in the order they arrive');
+    last = at;
+    const s = sessions.get(batch.s) || sessions.set(batch.s, { batches: 0, v: batch.v, u: batch.u, p: batch.p, start: batch.v === 3 ? at - batch.w * 1000 : at }).get(batch.s);
+    s.batches++;
+    if (batch.v === 3) {
+      assert.equal(batch.z, 'Asia/Riyadh');
+      if (at - s.start > 3 * 3600000) late++;
+      // gp rides along with other events, never alone.
+      if (batch.ev.some(e => e[0] === 'gp')) assert.ok(batch.ev.some(e => e[0] !== 'gp'));
+    }
+    for (const e of batch.ev) {
+      kinds.add(e[0] + (e[0] === 're' && e[6] === 'local' ? ':duo' : ''));
+      if (batch.v === 3 && e[0] === 're' && e[6] !== 'local' && batch.u && e[5] !== 'q') {
+        const key = batch.u + e[4], n = (seenRounds.get(key) || 0) + 1;
+        seenRounds.set(key, n);
+        const bucket = n === 1 ? wins.first : n >= 6 ? wins.later : null;
+        if (bucket) { bucket[0] += e[5] === 'w'; bucket[1]++; }
+        // Only the three DDA games report a DDA level.
+        if (e[13]) assert.equal(e[13][6] >= 0, ['bubble-bop', 'dino-3d', 'road-hopper'].includes(e[4]), e[4]);
+      }
+    }
+  }
+  const all = [...sessions.values()], v3 = all.filter(s => s.v === 3);
+  assert.ok(all.length > 2000, all.length + ' sessions');
+  // Sunday to Thursday, 07:30 to 13:30 at the school.
+  for (const s of v3) {
+    const local = new Date(s.start + 3 * 3600000);
+    assert.ok(local.getUTCDay() <= 4, 'a school day');
+    const minute = local.getUTCHours() * 60 + local.getUTCMinutes();
+    assert.ok(minute >= 450 && minute < 810, 'school hours: ' + local.toISOString());
+  }
+  const share = (part, whole) => part.length / whole.length;
+  assert.ok(share(all.filter(s => s.v === 2), all) > 0.05 && share(all.filter(s => s.v === 2), all) < 0.2, 'a v2 minority');
+  assert.ok(share(v3.filter(s => !s.u), v3) > 0.1 && share(v3.filter(s => !s.u), v3) < 0.3, 'about a fifth guests');
+  const perSession = all.reduce((n, s) => n + s.batches, 0) / all.length;
+  assert.ok(perSession > 6 && perSession < 16, perSession + ' batches per session');
+  assert.ok(new Set(v3.map(s => s.u).filter(Boolean)).size <= 600 + 21 * 30, 'children and the forgetful PC\'s new profiles');
+  assert.ok(new Set(v3.map(s => s.p)).size > 30, 'the forgetful PC has a new code each day');
+  assert.ok(late > 0, 'late batches from offline PCs');
+  for (const kind of ['ss', 'go', 'ld', 'er', 'rs', 're', 're:duo', 'gp', 'gx', 'tu', 'fv', 'ct', 'lv', 'pr', 'cd', 'se']) assert.ok(kinds.has(kind), kind);
+  // Children win more often once they have practised a game.
+  assert.ok(wins.later[0] / wins.later[1] > wins.first[0] / wins.first[1] + 0.05, JSON.stringify(wins));
 });

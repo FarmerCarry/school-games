@@ -117,11 +117,13 @@ export function dayBounds(zone, day) {
 // The offsets over the UTC seconds [lo, hi): { o, changes: [[ch, offset from ch on], ...] },
 // o being the offset at lo. For queries over many days: the wall clock is read once a day
 // (a change and its return within one day never happens), then each change to the second.
-export function offsetsBetween(zone, lo, hi) {
+// Over years of days, stepDays 7 reads it once a week: no zone's rules change its offset
+// and back within a week (the shortest such span, Morocco's Ramadan hour, is about a month).
+export function offsetsBetween(zone, lo, hi, stepDays = 1) {
   const o = offsetMin(zone, lo * 1000), changes = [];
   let at = lo, last = o;
   while (at < hi - 1) {
-    const next = Math.min(at + DAY_S, hi - 1), now = exact(zone, next * 1000);
+    const next = Math.min(at + stepDays * DAY_S, hi - 1), now = exact(zone, next * 1000);
     if (now !== last) {
       const ch = change(zone, at, next);
       changes.push([ch, offsetMin(zone, ch * 1000)]);

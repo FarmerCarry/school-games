@@ -122,6 +122,12 @@ test('offsetsBetween finds each change of a range to the second', () => {
   assert.deepEqual(offsetsBetween('Europe/London', sec('2026-10-25T01:00:00Z'), sec('2026-10-26T00:00:00Z')), { o: 0, changes: [] });
   assert.deepEqual(offsetsBetween('Europe/London', sec('2026-10-25T00:59:59Z'), sec('2026-10-25T01:00:01Z')),
     { o: 60, changes: [[sec('2026-10-25T01:00:00Z'), 0]] });
+  // Read once a week over years (the admin reads' clock for every stored second), the same changes, Morocco's Ramadan hour included.
+  for (const zone of ['Europe/London', 'America/New_York', 'Australia/Lord_Howe', 'Africa/Casablanca', 'Asia/Riyadh', 'Pacific/Chatham']) {
+    const from = sec('2024-01-01T00:00:00Z'), to = sec('2027-01-01T00:00:00Z');
+    assert.deepEqual(offsetsBetween(zone, from, to, 7), offsetsBetween(zone, from, to), zone);
+  }
+  assert.ok(offsetsBetween('Africa/Casablanca', sec('2024-01-01T00:00:00Z'), sec('2027-01-01T00:00:00Z'), 7).changes.length >= 6);
 });
 
 test('the week starts on Sunday where schools do, and on Monday elsewhere', () => {
