@@ -126,7 +126,9 @@
     tick: function () { A.tone({ freq: 1200, type: 'sine', dur: 0.03, vol: 0.06 }); }
   };
   // Air rush that rises with speed: deep brown noise through a low-pass (a soft "whoom",
-  // not a hiss), only when you are really flying, and well under the music.
+  // not a hiss), only when you are really flying. It is the only continuous sound (there is
+  // no background music) and it is built the first time it is needed, so menus, the attract
+  // swing and the pause screen never start an audio source.
   var wind = null;
   function ensureWind() {
     var c = A.ctx;
@@ -142,92 +144,15 @@
     } catch (e) { wind = { f: null, g: null, broken: true }; }
   }
   function updateWind(sp, on) {
-    if (!wind) ensureWind();
-    if (!wind || wind.broken || !A.ctx) return;
     var lv = on ? Kit.clamp((sp - 700) / 1500, 0, 1) : 0;
     lv = Math.round(lv * 20) / 20; // only touch the audio graph when it really changes
+    if (!wind) { if (!lv) return; ensureWind(); }
+    if (!wind || wind.broken || !A.ctx) return;
     if (lv === wind.lv) return;
     wind.lv = lv;
     var t = A.ctx.currentTime;
     wind.g.gain.setTargetAtTime(0.12 * lv * lv, t, 0.1);
     wind.f.frequency.setTargetAtTime(220 + 600 * lv, t, 0.12);
-  }
-
-  /* ----------------------------------------------------------------- music */
-  // A small cheerful band (kick, clap, hats, bass, chord stabs, echoing arpeggio),
-  // scheduled ahead with WebAudio time. Different key and chords per world.
-  var MUSIC = [
-    { root: 60, prog: [0, 7, 9, 5], minor: [false, false, true, false], bpm: 124 },   // C G Am F
-    { root: 65, prog: [0, 5, 7, 5], minor: [false, false, false, false], bpm: 132 },  // F Bb C Bb
-    { root: 57, prog: [0, 8, 3, 10], minor: [true, false, false, false], bpm: 120 },  // Am F C G
-    { root: 62, prog: [0, 10, 8, 7], minor: [true, false, false, true], bpm: 112 }    // Dm C Bb Am
-  ];
-  var music = { on: false, next: 0, step: 0, song: 0 };
-  var mbus = null;
-  function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-  function musicBus(c) {
-    if (mbus && mbus.c === c) return mbus;
-    var out = c.createGain(); out.gain.value = 0.9;
-    var hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 40;
-    var comp = c.createDynamicsCompressor();
-    comp.threshold.value = -16; comp.knee.value = 12; comp.ratio.value = 3; comp.attack.value = 0.006; comp.release.value = 0.2;
-    out.connect(hp); hp.connect(comp); comp.connect(A.master);
-    var echo = c.createGain();
-    var dl = c.createDelay(1), dlp = c.createBiquadFilter(), fb = c.createGain(), wet = c.createGain();
-    dlp.type = 'lowpass'; dlp.frequency.value = 2200; fb.gain.value = 0.28; wet.gain.value = 0.25;
-    echo.connect(out); echo.connect(dl); dl.connect(dlp); dlp.connect(fb); fb.connect(dl); dlp.connect(wet); wet.connect(out);
-    var nb = c.createBuffer(1, c.sampleRate / 2, c.sampleRate), nd = nb.getChannelData(0);
-    for (var i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
-    mbus = { c: c, out: out, echo: echo, dl: dl, nb: nb };
-    return mbus;
-  }
-  function mNote(c, t, type, f, dur, vol, lp, dest) {
-    var o = c.createOscillator(), g = c.createGain(), n = o;
-    o.type = type; o.frequency.value = f;
-    if (lp) { var fl = c.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = lp; o.connect(fl); n = fl; }
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
-    g.gain.setValueAtTime(vol, t + dur * 0.5); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    n.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.02);
-  }
-  function mNoise(c, t, dur, vol, type, freq) {
-    var s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
-    s.buffer = mbus.nb; f.type = type; f.frequency.value = freq;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    s.connect(f); f.connect(g); g.connect(mbus.out); s.start(t, Math.random() * 0.3); s.stop(t + dur + 0.02);
-  }
-  function mKick(c, t, v) {
-    var o = c.createOscillator(), g = c.createGain();
-    o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(50, t + 0.09);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
-    o.connect(g); g.connect(mbus.out); o.start(t); o.stop(t + 0.22);
-  }
-  function musicTick() {
-    var c = A.ctx;
-    if (!c || A.muted || !music.on) { if (c) music.next = Math.max(music.next, c.currentTime); return; }
-    var mb = musicBus(c);
-    var sg = MUSIC[music.song], spb = 60 / sg.bpm / 2; // eighth notes
-    if (music.next < c.currentTime) music.next = c.currentTime + 0.05;
-    if (mb.spb !== spb) { mb.spb = spb; mb.dl.delayTime.setTargetAtTime(spb * 1.5, c.currentTime, 0.05); }
-    while (music.next < c.currentTime + 0.2) {
-      var st = music.step, bar = Math.floor(st / 8) % 4, e = st % 8, t = music.next;
-      var r = sg.root + sg.prog[bar], third = sg.minor[bar] ? 3 : 4;
-      var full = Math.floor(st / 32) % 4 !== 0; // every 4th phrase is a lighter breather
-      if (e === 0 || e === 4 || (full && e === 7 && bar === 3)) mKick(c, t, 0.5);
-      if (full && (e === 2 || e === 6)) mNoise(c, t, 0.12, 0.16, 'bandpass', 1900);
-      if (e === 0 || e === 3 || e === 6) mNote(c, t, 'triangle', mtof(r - 24), spb * 1.6, 0.16, 0, mb.out);
-      var arp = [0, third, 7, 12, 7, third, 12, 7 + 12][e];
-      mNote(c, t, 'square', mtof(r + arp), spb * 0.8, 0.045, 2000, mb.echo);
-      if (e === 2 || e === 6) {
-        mNote(c, t, 'triangle', mtof(r + 12 + third), spb * 0.9, 0.05, 0, mb.out);
-        mNote(c, t, 'triangle', mtof(r + 19), spb * 0.9, 0.035, 0, mb.out);
-      }
-      if (e % 2 === 1) mNoise(c, t, 0.035, 0.05, 'highpass', 7500);
-      music.next += spb; music.step++;
-    }
-  }
-  function setMusic(on, song) {
-    if (song != null && song !== music.song) { music.song = song; music.step = 0; }
-    music.on = on;
   }
 
   /* ------------------------------------------------------------- particles */
@@ -587,8 +512,6 @@
   function update(dt) {
     // the scene clock (waves, twinkles, bobbing prompts) stops with the kept pause frame
     if (mode !== 'pause') time += dt;
-    setMusic(mode !== 'pause', Math.max(0, THEMES.indexOf(theme)));
-    musicTick();
     var kp = Kit.keys.pressed;
     if (mode === 'play') {
       if (kp('KeyP') || kp('Escape')) pause();
