@@ -579,7 +579,12 @@
     P.hop = null; P.row = h.row1; P.z = -P.row;
     if (!L) return;
     if (L.type === 'river') {
-      if (!h.target) { P.x = h.x1; die('water'); return; }
+      if (!h.target) {
+        P.x = h.x1;
+        // Test hook: nothing defeats the critter in god mode, not even the water.
+        if (godMode) { P.log = null; P.y = 0; return; }
+        die('water'); return;
+      }
       P.log = h.target; P.rel = h.rel; P.x = P.log.x + P.rel; P.y = h.y1;
       P.log.bob = 1;
       if (P.log.pad) S.pad(); else S.log();

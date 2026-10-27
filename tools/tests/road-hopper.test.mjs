@@ -468,20 +468,21 @@ test('the age band picks the first tier, the title world follows a new player, a
   // A 6-7 guest (their own level) who reaches the par twice is lifted to tier 2.
   await prefs(frame, { band: '6-7', telemetry: true });
   const up = await frame.evaluate(() => {
-    // A fixed world (mulberry32): the autopilot can still fall in a river, so a random
-    // world sometimes ends a run before the par.
-    let seed = 20261027;
-    Math.random = () => {
-      seed = (seed + 0x6D2B79F5) | 0;
-      let r = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-      r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
-      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-    };
     const g = __game, seen = [g.tier], scores = [];
     for (let run = 0; run < 2; run++) {
       if (run) g.press('KeyR'); else g.start();
-      g.god(true); // the autopilot is not killed by cars; it still has to find logs
-      for (let s = 0; s < 120 && g.state === 'play' && g.score < RHEndless.tier(g.tier).par; s += 2) g.bot(2);
+      // Nothing defeats the critter in god mode, so walking on (around trees) reaches the
+      // par; the autopilot can wait for ever at a river it thinks is unsafe.
+      g.god(true);
+      for (let i = 0, side = 1; i < 400 && g.state === 'play' && g.score < RHEndless.tier(g.tier).par; i++) {
+        const row = g.player().row;
+        g.hop(0, 1); g.step(0.25);
+        if (g.player().row === row) {
+          const x = g.player().x;
+          g.hop(side, 0); g.step(0.25);
+          if (g.player().x === x || Math.abs(g.player().x) >= 4) side = -side; // a tree or the edge: turn round
+        }
+      }
       scores.push(g.score);
       g.god(false); g.kill('car'); g.step(2);
     }
