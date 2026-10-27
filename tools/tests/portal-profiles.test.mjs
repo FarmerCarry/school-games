@@ -316,6 +316,52 @@ test('XP from a real round, the rules per round code, the loss cap, level-ups an
   assert.deepEqual(await page.evaluate(() => window.levels), [2, 3]);
 });
 
+test('in fullscreen the level-up toast and burst are drawn over the game, and the toast comes back', async t => {
+  const { page } = await setup(t);
+  await page.goto(origin + '/');
+  await page.evaluate(() => SGProfiles.create(0, 0, '8-9'));
+  const frame = await play(page, 'air-hockey');
+  await page.locator('#fsBtn').click();
+  await page.waitForFunction(() => document.fullscreenElement === document.querySelector('#stage'));
+  // Only the fullscreen element is drawn. Record where each burst star goes, and its start.
+  await page.evaluate(() => {
+    window.stars = [];
+    new MutationObserver(list => list.forEach(m => m.addedNodes.forEach(n => {
+      if (n.className === 'burst') window.stars.push([n.parentNode === document.fullscreenElement, parseFloat(n.style.left)]);
+    }))).observe(document.documentElement, { childList: true, subtree: true });
+  });
+  await post(page, frame, stats([['s', 'L1'], ['w', 'L1', 1000], ['w', 'L1', 1000], ['w', 'L1', 1000]]));
+  assert.equal(await page.evaluate(() => SGProfiles.current().lv), 2);
+  assert.equal(await page.evaluate(() => document.fullscreenElement.contains(document.querySelector('#toast'))), true, 'the toast is drawn in fullscreen');
+  assert.match(await page.locator('#toast').innerText(), /^مستوى جديد! ⭐ 2$/);
+  assert.equal(await page.locator('#toast').getAttribute('class'), 'toast show gold');
+  const stars = await page.evaluate(() => window.stars), middle = await page.evaluate(() => innerWidth / 2);
+  assert.equal(stars.length, 7, 'the burst');
+  for (const [inside, x] of stars) {
+    assert.equal(inside, true, 'every star is drawn in fullscreen');
+    assert.ok(Math.abs(x - middle) < 2, 'the stars fly from the toast (the badge is not drawn): ' + x);
+  }
+  // Out of fullscreen the toast goes back to the page, where a redrawn view cannot remove it.
+  await page.evaluate(() => document.exitFullscreen());
+  await page.waitForFunction(() => !document.fullscreenElement);
+  await page.waitForFunction(() => document.querySelector('#toast').parentNode === document.body);
+
+  // Leaving the game while still in fullscreen redraws the view at once: the toast survives.
+  await page.locator('#fsBtn').click();
+  await page.waitForFunction(() => document.fullscreenElement === document.querySelector('#stage'));
+  await post(page, frame, stats(Array.from({ length: 5 }, () => ['w', 'L1', 1000])));
+  assert.equal(await page.evaluate(() => document.fullscreenElement.contains(document.querySelector('#toast'))), true);
+  assert.match(await page.locator('#toast').innerText(), /^مستوى جديد! ⭐ 3$/);
+  await page.evaluate(() => { location.hash = '#/'; });
+  await page.waitForFunction(() => document.body.className === 'route-home' && !document.fullscreenElement);
+  assert.equal(await page.evaluate(() => document.querySelector('#toast')?.parentNode === document.body), true, 'the toast is still in the page');
+  await page.locator('#who [data-w="add"]').click();
+  await page.locator('#who [data-w="a:4"]').click();
+  await page.locator('#who [data-w="c:4"]').click();
+  await page.locator('#who [data-w="b:6-7"]').click();
+  assert.equal(await page.locator('#toast').innerText(), 'أهلًا بك! 🎉', 'and still shows the next message');
+});
+
 test('the class band is the guest band; a new tab is a guest; the band reaches Kit.dda', async t => {
   const state = await setup(t);
   const { page } = state;
@@ -426,6 +472,48 @@ test('hand over the device and the topbar badge return to the strip; the mute to
   assert.deepEqual([await mute.getAttribute('aria-disabled'), await mute.getAttribute('aria-pressed')], ['false', 'false']);
 });
 
+test('a mouse click on the topbar mute gives the keys back to the game; the keyboard keeps them', async t => {
+  const { page } = await setup(t);
+  await page.goto(origin + '/');
+  const frame = await play(page, 'air-hockey');
+  await frame.evaluate(() => { window.spaces = 0; addEventListener('keydown', e => { if (e.code === 'Space') window.spaces++; }, true); });
+  const mute = page.locator('#muteBtn');
+  const sound = () => page.evaluate(() => [document.querySelector('#muteBtn').getAttribute('aria-pressed'), localStorage.getItem('sg:site:muted')]);
+  const focused = () => page.evaluate(() => document.activeElement.tagName === 'IFRAME' ? 'IFRAME' : document.activeElement.id);
+  await mute.click();
+  assert.deepEqual(await sound(), ['true', 'true']);
+  await frame.waitForFunction(() => Kit.audio.muted);
+  assert.equal(await focused(), 'IFRAME', 'the game has the keys again');
+  // The child's next Space goes to the game and does not press the mute button again.
+  await page.keyboard.press('Space');
+  assert.deepEqual(await sound(), ['true', 'true'], 'Space does not toggle the sound back');
+  assert.equal(await frame.evaluate(() => [window.spaces, Kit.audio.muted].join()), '1,true');
+  assert.equal(await focused(), 'IFRAME');
+
+  // From the keyboard the button keeps focus, like the heart: Enter and Space press it again.
+  await mute.focus();
+  await page.keyboard.press('Enter');
+  assert.deepEqual(await sound(), ['false', 'false']);
+  assert.equal(await focused(), 'muteBtn');
+  await page.keyboard.press('Space');
+  assert.deepEqual(await sound(), ['true', 'true']);
+  assert.equal(await focused(), 'muteBtn');
+  assert.equal(await frame.evaluate(() => window.spaces), 1);
+
+  // Locked by the classroom preset, a click explains and still gives the keys back.
+  await page.locator('#classroom summary').click();
+  await page.locator('#classroomMode').check();
+  await mute.click({ force: true });
+  assert.equal(await page.locator('#toast').innerText(), 'وضع الصف يكتم الصوت الآن');
+  assert.equal(await focused(), 'IFRAME');
+  await page.keyboard.press('Space');
+  assert.equal(await frame.evaluate(() => window.spaces), 2);
+  await mute.focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await focused(), 'muteBtn', 'the keyboard stays on the locked button too');
+  assert.deepEqual(await sound(), ['true', 'true']);
+});
+
 test('removing a player asks twice and never happens on one click', async t => {
   const { page } = await setup(t);
   await page.goto(origin + '/');
@@ -509,6 +597,30 @@ test('with storage blocked the portal plays as a guest, and a player lives in me
   await page.locator('#classroomMode').uncheck();
   await page.locator('#who [data-w="cancel"]').click();
   assert.ok(await page.evaluate(() => window.sounds) > sounds, 'sounds again without it');
+});
+
+test('with storage blocked a game opened later still follows the topbar mute', async t => {
+  const { page } = await setup(t, { storage: false });
+  await page.goto(origin + '/');
+  let frame = await play(page, 'air-hockey');
+  await page.locator('#muteBtn').click();
+  await frame.waitForFunction(() => Kit.audio.muted);
+  await home(page);
+  assert.equal(await page.locator('#muteBtn').getAttribute('aria-pressed'), 'true');
+  // The new game cannot read the mute from storage: the portal says it (on load and on ready).
+  frame = await play(page, 'maze-dash');
+  await frame.waitForFunction(() => (window.prefs || []).length >= 2);
+  assert.equal(await frame.evaluate(() => Kit.audio.muted), true, 'the new game is muted, as the topbar shows');
+  assert.deepEqual(await frame.evaluate(() => window.prefs.at(-1)),
+    { type: 'sg:preferences', classroom: false, band: '', player: '', telemetry: false, quiet: true });
+  // Unmuted again, the next game plays its sounds, and no correction is needed.
+  await page.locator('#muteBtn').click();
+  await frame.waitForFunction(() => !Kit.audio.muted);
+  await home(page);
+  frame = await play(page, 'air-hockey');
+  await frame.waitForFunction(() => (window.prefs || []).length >= 2);
+  assert.equal(await frame.evaluate(() => Kit.audio.muted), false);
+  assert.deepEqual(await frame.evaluate(() => window.prefs.at(-1)), { type: 'sg:preferences', classroom: false, band: '', player: '', telemetry: false });
 });
 
 test('damaged stored profiles, class band and loss tallies are repaired silently', async t => {

@@ -243,11 +243,23 @@
     return String(s || '').replace(/[←-⯿️‍]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').trim();
   }
 
+  // In fullscreen only the fullscreen element is drawn, so the toast and bursts go
+  // inside it. A game's own fullscreen frame cannot hold them; they stay in the page.
+  function overlayHost() {
+    var fs = document.fullscreenElement || document.webkitFullscreenElement;
+    return fs && fs.tagName !== 'IFRAME' ? fs : document.body;
+  }
+  // Back to the page, where redrawing #app (and the stage in it) cannot remove it.
+  function parkToast() {
+    var t = $('#toast');
+    if (t && t.parentNode !== document.body) document.body.appendChild(t);
+  }
   var toastTimer = 0;
   // cls 'gold' is the bigger level-up toast.
   function toast(msg, cls) {
-    var t = $('#toast');
+    var t = $('#toast'), host = overlayHost();
     if (!t) return;
+    if (t.parentNode !== host) host.appendChild(t);
     t.textContent = msg;
     t.className = 'toast show' + (cls ? ' ' + cls : '');
     clearTimeout(toastTimer);
@@ -271,6 +283,9 @@
   // A little burst of emoji flying out of an element.
   function burst(el, chars) {
     if (calm()) return;
+    var host = overlayHost();
+    // The topbar is not drawn in fullscreen: the stars fly out of the toast instead.
+    if (host !== document.body) el = $('#toast') || el;
     var r = el.getBoundingClientRect();
     for (var i = 0; i < 7; i++) {
       var h = document.createElement('span');
@@ -280,7 +295,7 @@
       h.style.top = (r.top + r.height / 2) + 'px';
       h.style.setProperty('--dx', Math.round(Math.cos(i / 7 * 6.28) * 60) + 'px');
       h.style.setProperty('--dy', Math.round(Math.sin(i / 7 * 6.28) * 40 - 50) + 'px');
-      document.body.appendChild(h);
+      host.appendChild(h);
       setTimeout((function (s) { return function () { if (s.parentNode) s.parentNode.removeChild(s); }; })(h), 900);
     }
   }
@@ -815,14 +830,18 @@
 
     personalMuted = !!storedPreference('muted', false);
     paintMute();
-    mute.addEventListener('click', function () {
-      if (classroomOn) { toast(T.muteLocked); return; }
-      personalMuted = !personalMuted;
-      writePreference('muted', personalMuted);
-      // The open game follows at once, also from a folder where it has its own storage.
-      sendPreferences(personalMuted);
-      paintMute();
-      if (!personalMuted) juice('toggle', true);
+    mute.addEventListener('click', function (e) {
+      if (classroomOn) toast(T.muteLocked);
+      else {
+        personalMuted = !personalMuted;
+        writePreference('muted', personalMuted);
+        // The open game follows at once, also from a folder where it has its own storage.
+        sendPreferences(personalMuted);
+        paintMute();
+        if (!personalMuted) juice('toggle', true);
+      }
+      // After a mouse click the keys go back to the game (so Space doesn't press this button again).
+      if (e.detail && current) activateGame();
     });
     // The teacher page can stop statistics (and so telemetry) at any time: the open game follows.
     window.addEventListener('storage', function (e) {
@@ -991,7 +1010,8 @@
   function telemetryOn() {
     try { return !!(window.SGTelemetry && window.SGTelemetry.active && window.SGTelemetry.active()); } catch (e) { return false; }
   }
-  // quiet: the child's own mute, sent only when the topbar button changes it.
+  // quiet: the child's own mute, sent when the topbar button changes it, and whenever
+  // storage could not keep it (a newly opened game reads the stored value instead).
   function sendPreferences(quiet) {
     // A temporary preset must not overwrite each game's personal settings.
     // Always clear it too: file:// may give every game its own storage area.
@@ -999,6 +1019,7 @@
     sentTelemetry = telemetryOn();
     var message = { type: 'sg:preferences', classroom: classroomOn, band: String(prof('band') || ''),
       player: String(prof('player') || ''), telemetry: sentTelemetry };
+    if (typeof quiet !== 'boolean' && personalMuted !== !!storedPreference('muted', false)) quiet = personalMuted;
     if (typeof quiet === 'boolean') message.quiet = quiet;
     postGame(message);
   }
@@ -1131,6 +1152,7 @@
     var fullscreen = isFullscreen();
     if (hadFullscreen && !fullscreen) postGame({ type: 'sg:pause', reason: 'fullscreen-exit' });
     hadFullscreen = fullscreen;
+    if (!fullscreen) parkToast();
     var b = $('#fsBtn');
     if (b) {
       var lbl = isFullscreen() ? T.fsExit : T.fs;
@@ -1377,6 +1399,8 @@
     prof(current && current === previousGame ? 'gone' : 'close');
     tm(current && current === previousGame ? 'gone' : 'close');
     if (previousGame && !current) juice('back');
+    // fullscreenchange comes only after the fullscreen stage is replaced here.
+    parkToast();
     app.innerHTML = html;
     $('#searchStatus').textContent = route.name === 'search' ? ((route.q || '').trim() ? T.found(search(route.q).length) : T.searchPrompt) : '';
     document.title = title;
