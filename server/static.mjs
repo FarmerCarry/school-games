@@ -72,7 +72,8 @@ export function staticFiles(root) {
     const body = await fs.readFile(real);
     const headers = new Headers({ 'Content-Type': TYPES[path.extname(real).toLowerCase()] || 'application/octet-stream',
       'Cache-Control': 'no-cache' });
-    for (const [name, value] of await headersFor(pathname)) headers.set(name, value);
+    // Matched on the decoded path, the one that names the file (/%69ndex.html is /index.html).
+    for (const [name, value] of await headersFor(decoded)) headers.set(name, value);
     return new Response(request.method === 'HEAD' ? null : body, { status: 200, headers });
   };
 }

@@ -106,7 +106,7 @@ test('the Node host serves the dashboard folder with the headers of its _headers
   const s = await start(t);
   const csp = "default-src 'self'; script-src 'self' https://farmercarry.github.io; style-src 'self' 'unsafe-inline'; " +
     "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
-  for (const pathname of ['/', '/index.html']) {
+  for (const pathname of ['/', '/index.html', '/%69ndex.html']) {
     const page = await s.send('GET', pathname);
     assert.equal(page.status, 200, pathname);
     assert.equal(page.headers['content-type'], 'text/html; charset=utf-8');
