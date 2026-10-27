@@ -1,0 +1,586 @@
+// The portal's anonymous picture profiles, age bands and XP (js/profiles.js and the
+// "who's playing?" strip in js/site.js, docs/ARCHITECTURE.md "Profiles and age bands"),
+// driven through the real portal UI and real game pages.
+import assert from 'node:assert/strict';
+import { after, before, test } from 'node:test';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { launchChromium } from '../browser.mjs';
+import { startTestServer } from '../test-server.mjs';
+
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
+// The fast build inlines every portal script, so a script cannot be swapped out there.
+const sourceTree = fs.readFileSync(path.join(root, 'index.html'), 'utf8').includes('src="js/profiles.js"');
+const KEY = 'sg:site:profiles';
+let browser, server, origin, pings = 0;
+
+before(async () => {
+  server = await startTestServer(root, { pages: { '/seed.html': '<!doctype html><title>seed</title>' } });
+  origin = server.origin;
+  browser = await launchChromium();
+});
+after(async () => { await browser?.close(); await server?.close(); });
+
+// Every test: no page or console errors, and nothing over the network (no beacons,
+// uploads, sockets or other origins; the static files of this server only).
+async function setup(t, { storage = true, reducedMotion = 'no-preference', clock = false } = {}) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', reducedMotion });
+  t.after(() => context.close());
+  const state = { context, errors: [], requests: [] };
+  context.on('request', request => {
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || /^(fetch|xhr|websocket|eventsource|ping)$/.test(request.resourceType()) ||
+      (/^https?:$/.test(url.protocol) && url.origin !== origin)) state.requests.push(request.method() + ' ' + request.url());
+  });
+  await context.addInitScript(() => {
+    // A ping posted after a game message is handled after it (same source, same order).
+    addEventListener('message', e => { if (e.data && e.data.type === 'test:ping') window.lastPing = e.data.n; });
+    // Inside game frames: every sg:preferences the portal sends.
+    addEventListener('message', e => { if (e.data && e.data.type === 'sg:preferences') (window.prefs = window.prefs || []).push(e.data); });
+  });
+  if (!storage) {
+    await context.addInitScript(() => {
+      for (const method of ['getItem', 'setItem', 'removeItem', 'key', 'clear']) {
+        Object.defineProperty(Storage.prototype, method, { value() { throw new DOMException('Storage disabled by test', 'SecurityError'); } });
+      }
+    });
+  }
+  if (clock) await context.clock.install();
+  state.page = await newPage(state);
+  t.after(() => {
+    assert.deepEqual(state.errors, [], 'no page or console errors');
+    assert.deepEqual(state.requests, [], 'nothing goes over the network');
+  });
+  return state;
+}
+async function newPage(state) {
+  const page = await state.context.newPage();
+  page.on('pageerror', error => state.errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') state.errors.push(message.text()); });
+  return page;
+}
+
+const stored = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY);
+const xp = page => page.evaluate(() => SGProfiles.current() && SGProfiles.current().xp);
+const active = page => page.evaluate(() => document.activeElement.getAttribute('data-w') || document.activeElement.id);
+const stats = (r, e = 0) => ({ type: 'sg:stats', version: 1, e, f: [0, 0, 0, 0], m: 0, r, o: '' });
+async function home(page) {
+  await page.locator('#logo').click();
+  await page.waitForFunction(() => document.body.className === 'route-home' && document.querySelector('#who'));
+}
+// Opens a game from home through its tile and waits for Kit.ready().
+async function play(page, slug) {
+  await page.locator(`.catalog-grid .tile[data-slug="${slug}"]`).click();
+  await page.waitForFunction(() => document.querySelector('#stage')?.getAttribute('aria-busy') === 'false' && document.querySelector('#stageMsg').hidden);
+  return page.frames().find(frame => frame.url().includes(`/games/${slug}/`));
+}
+// A message from inside the game frame, sent with the game's own window.parent.postMessage,
+// so it passes the portal's source check exactly like Kit's own messages.
+async function post(page, frame, data) {
+  const n = ++pings;
+  await frame.evaluate(([d, n]) => { parent.postMessage(d, location.origin); parent.postMessage({ type: 'test:ping', n }, location.origin); }, [data, n]);
+  await page.waitForFunction(n => window.lastPing === n, n);
+}
+const kitProfile = frame => frame.evaluate(() => ({ band: Kit.profile.band, player: Kit.profile.player }));
+
+test('home renders at once; a new player is made with the mouse and reaches the game', async t => {
+  const { page } = await setup(t);
+  await page.goto(origin + '/');
+  // Never blocking: the strip sits above the starter card, nothing modal, the flow is closed.
+  assert.equal(await page.locator('#app > #who.who + a.starter').count(), 1, 'the strip is directly above the starter card');
+  assert.equal(await page.locator('#app > a.starter').count(), 1);
+  assert.equal(await page.locator('[role="dialog"]:visible, [aria-modal="true"]:visible').count(), 0, 'nothing modal on home');
+  assert.equal(await page.locator('#who [data-w^="a:"]').count(), 0, 'the new-player flow is not shown on first load');
+  assert.equal(await page.locator('#who [data-w="pick:"]').getAttribute('aria-pressed'), 'true', 'a guest plays by default');
+  assert.equal(await page.locator('#me').getAttribute('class'), 'me guest');
+  assert.match(await page.locator('#who .who-hint').innerText(), /اختر حيوانك/);
+  assert.equal(await page.evaluate(() => [SGProfiles.player(), SGProfiles.band(), SGProfiles.current()].join('|')), '||');
+
+  await page.locator('#who [data-w="add"]').click();
+  assert.equal(await page.locator('#who [data-w^="a:"]').count(), 12, 'twelve animals');
+  assert.equal(await active(page), 'a:0', 'focus moves to the first animal');
+  assert.equal(await page.locator('#whoTitle').innerText(), '🐾 اختر حيوانك');
+  await page.locator('#who [data-w="a:3"]').click();
+  assert.equal(await page.locator('#who [data-w^="c:"]').count(), 8, 'eight colours');
+  assert.equal(await page.locator('#who [data-w="c:0"] .who-face').innerText(), '🐸', 'colours show the chosen animal');
+  await page.locator('#who [data-w="c:1"]').click();
+  const ages = page.locator('#who [data-w^="b:"]');
+  assert.deepEqual(await ages.evaluateAll(cards => cards.map(card => card.querySelector('b').textContent)), ['6–7', '8–9', '10–11']);
+  // The numbers read low to high, left to right, inside the right-to-left page.
+  const order = await ages.last().locator('b').evaluate(b => {
+    const node = b.firstChild, first = document.createRange(), last = document.createRange();
+    first.setStart(node, 0); first.setEnd(node, 1);
+    last.setStart(node, node.length - 1); last.setEnd(node, node.length);
+    return [first.getBoundingClientRect().x, last.getBoundingClientRect().x];
+  });
+  assert.ok(order[0] < order[1], 'age range is not reversed: ' + order);
+  assert.equal(await ages.first().getAttribute('aria-label'), 'من 6 إلى 7 سنوات');
+  assert.equal(await ages.last().getAttribute('aria-label'), 'من 10 إلى 11 سنة');
+  await page.locator('#who [data-w="b:8-9"]').click();
+
+  const record = await stored(page);
+  assert.equal(record.v, 1);
+  assert.equal(record.seq, 1);
+  assert.equal(record.list.length, 1);
+  const [p] = record.list;
+  const today = await page.evaluate(() => { const d = new Date(); return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5); });
+  assert.deepEqual(p, { k: 'p1', a: 3, c: 1, b: '8-9', xp: 0, lv: 1, d0: today, dl: today, g: {} });
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:site:player')), 'p1', 'the current player lives in sessionStorage');
+  assert.equal(await active(page), 'pick:p1', 'focus lands on the new avatar');
+  assert.equal(await page.locator('#who [data-w="pick:p1"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#who [data-w="pick:"]').getAttribute('aria-pressed'), 'false');
+  assert.match(await page.locator('#toast').innerText(), /أهلًا بك/);
+  assert.equal(await page.locator('#me').getAttribute('class'), 'me');
+  assert.equal(await page.locator('#me').getAttribute('aria-label'), 'ضفدع بإطار برتقالي، المستوى 1. اختر مَن يلعب');
+  assert.equal(await page.locator('#me .me-face').innerText(), '🐸');
+  // No names, no typed text anywhere in the flow.
+  assert.equal(await page.locator('#who input, #who textarea, #who [contenteditable]').count(), 0);
+
+  const frame = await play(page, 'air-hockey');
+  assert.deepEqual(await kitProfile(frame), { band: '8-9', player: 'p1' }, 'Kit.profile in the real game');
+  const prefs = await frame.evaluate(() => window.prefs.at(-1));
+  assert.deepEqual(prefs, { type: 'sg:preferences', classroom: false, band: '8-9', player: 'p1', telemetry: false });
+  assert.deepEqual((await stored(page)).list[0].g, { 'air-hockey': 1 }, 'the open is counted for the player');
+  // Restart replaces the frame within the same visit; leaving and coming back is a new one.
+  await page.locator('#restartBtn').click();
+  await page.waitForFunction(() => document.querySelector('#stage').getAttribute('aria-busy') === 'false');
+  assert.deepEqual((await stored(page)).list[0].g, { 'air-hockey': 1 });
+  await home(page);
+  await play(page, 'air-hockey');
+  assert.deepEqual((await stored(page)).list[0].g, { 'air-hockey': 2 });
+});
+
+test('the keyboard alone makes a player; Back, Escape and taken colours behave', async t => {
+  const { page } = await setup(t);
+  await page.goto(origin + '/');
+  await page.locator('#who [data-w="add"]').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await active(page), 'a:0');
+  const outline = await page.evaluate(() => { const s = getComputedStyle(document.activeElement); return [s.outlineStyle, parseFloat(s.outlineWidth)]; });
+  assert.ok(outline[0] !== 'none' && outline[1] >= 3, 'keyboard focus is clearly visible: ' + outline);
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  assert.equal(await active(page), 'a:2');
+  await page.keyboard.press('Space');
+  assert.equal(await active(page), 'c:0');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  assert.equal(await active(page), 'b:6-7');
+  // Back returns to the colour that was chosen; Back again to the animal.
+  await page.locator('#who [data-w="back"]').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await active(page), 'c:1');
+  await page.locator('#who [data-w="back"]').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await active(page), 'a:2');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  assert.equal(await active(page), 'b:6-7');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Space');
+  assert.equal(await active(page), 'pick:p1');
+  assert.equal(await page.evaluate(() => SGProfiles.band()), '8-9');
+  assert.deepEqual(await page.evaluate(() => [SGProfiles.current().a, SGProfiles.current().c]), [2, 0]);
+
+  // Escape closes the flow and focus returns to the + button.
+  await page.locator('#who [data-w="add"]').focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#who [data-w^="a:"]').count(), 0);
+  assert.equal(await active(page), 'add');
+  // The same animal in the same colour is taken; another colour is free.
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#who [data-w="c:0"]').isDisabled(), true, 'a taken animal and colour cannot be picked twice');
+  assert.match(await page.locator('#who [data-w="c:0"]').getAttribute('aria-label'), /مأخوذ/);
+  assert.equal(await active(page), 'c:1', 'focus skips the taken colour');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  assert.equal(await active(page), 'pick:p2');
+  assert.equal((await stored(page)).list.length, 2);
+
+  // Picking players with the keyboard; the guest button is a player too.
+  await page.locator('#who [data-w="pick:p1"]').focus();
+  await page.keyboard.press('Space');
+  assert.equal(await page.evaluate(() => SGProfiles.player()), 'p1');
+  assert.equal(await active(page), 'pick:p1', 'focus stays on the picked avatar');
+  await page.locator('#who [data-w="pick:"]').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => SGProfiles.player()), '');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:site:player')), null);
+});
+
+test('XP from a real round, the rules per round code, the loss cap, level-ups and the guest', async t => {
+  const { page } = await setup(t);
+  await page.goto(origin + '/');
+  await page.evaluate(() => {
+    SGProfiles.create(0, 0, '6-7');
+    window.levels = [];
+    SGProfiles.onLevel(level => window.levels.push(level));
+  });
+
+  // A real two-player tic-tac-toe round ends neutrally ('e'): +5.
+  let frame = await play(page, 'tic-tac-toe');
+  const game = page.frameLocator('#stage iframe');
+  await game.locator('#localButton').click();
+  for (const [i, move] of [0, 3, 1, 4, 2].entries()) {
+    await game.locator(`#gameBoard [data-move="${move}"]`).click();
+    await game.locator(`#gameBoard[data-moves="${i + 1}"]`).waitFor();
+  }
+  await page.waitForFunction(() => SGProfiles.current().xp === 5);
+  await home(page);
+
+  // A game without any input sends nothing by itself, so the counts below are exact.
+  frame = await play(page, 'air-hockey');
+  await post(page, frame, stats([['s', 'L1'], ['w', 'L1', 1000]]));
+  assert.equal(await xp(page), 15, 'win +10');
+  await post(page, frame, stats([['s', 'L1'], ['d', 'L1', 1000]]));
+  assert.equal(await xp(page), 21, 'draw +6');
+  await post(page, frame, stats([['s', 'endless'], ['e', 'endless', 95000, 120]]));
+  assert.equal(await xp(page), 29, 'endless end +5, +1 per 30 s');
+  await post(page, frame, stats([['s', 'endless'], ['e', 'endless', 9e6]]));
+  assert.equal(await xp(page), 39, 'at most +5 for round time');
+  await post(page, frame, stats([['s', 'L2'], ['q', 'L2', 5000], ['t', 'done'], ['w', '1-4', 1000], ['w', 'L123', 1], ['x', 'L1'], 'w', ['w']]));
+  assert.equal(await xp(page), 39, 'quits, tutorials, unknown codes and bad ids earn nothing');
+  assert.deepEqual(await page.evaluate(() => window.levels), [2], 'reached level 2 at 30 XP');
+  assert.match(await page.locator('#toast').innerText(), /^مستوى جديد! ⭐ 2$/);
+  assert.equal(await page.locator('#toast').getAttribute('class'), 'toast show gold');
+  assert.equal(await page.locator('#me').evaluate(el => el.classList.contains('lvup')), true, 'the badge bursts');
+  assert.equal(await page.locator('#me .me-lv').innerText(), '⭐2');
+
+  // Losses: at most 40 XP per game per tab session. Classroom mode keeps the toast but
+  // drops the burst.
+  await page.locator('#classroom summary').click();
+  await page.locator('#classroomMode').check();
+  await page.evaluate(() => document.querySelector('#me').classList.remove('lvup'));
+  await page.waitForFunction(() => !document.querySelector('.burst'));
+  await post(page, frame, stats(Array.from({ length: 12 }, () => ['l', 'L1', 1000])));
+  assert.equal(await xp(page), 79, 'twelve losses give 40, not 48');
+  assert.deepEqual(await page.evaluate(() => window.levels), [2, 3]);
+  assert.match(await page.locator('#toast').innerText(), /مستوى جديد! ⭐ 3/);
+  assert.equal(await page.locator('#me').evaluate(el => el.classList.contains('lvup')), false, 'no burst in classroom mode');
+  assert.equal(await page.locator('.burst').count(), 0);
+  await page.locator('#classroomMode').uncheck();
+  await post(page, frame, stats([['l', 'L1', 1000], ['w', 'L1', 1000]]));
+  assert.equal(await xp(page), 89, 'the cap is reached; wins still count');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:site:xploss')), '{"p1 air-hockey":40}');
+  // XP bar: level 3 starts at 75 XP and needs 60 more.
+  assert.equal(await page.locator('#me .me-bar i').evaluate(el => el.style.width), '23%');
+
+  // Engaged time: +1 per full minute in a visit, at most 120 s per message.
+  await post(page, frame, stats([], 150000));
+  assert.equal(await xp(page), 91, '120 s counted: +2');
+  await post(page, frame, stats([], 30000));
+  assert.equal(await xp(page), 91);
+  await post(page, frame, stats([], 30000));
+  assert.equal(await xp(page), 92, 'the minute adds up across messages');
+  await post(page, frame, stats([], 59000));
+  // Other windows never count: the portal itself and a frame that is not the game.
+  await page.evaluate(data => {
+    window.postMessage(data, location.origin);
+    const helper = document.createElement('iframe');
+    helper.srcdoc = '<script>parent.postMessage(' + JSON.stringify(data) + ', "*"); parent.postMessage({ type: "test:ping", n: -1 }, "*")<\/script>';
+    document.body.appendChild(helper);
+  }, stats([['w', 'L1', 1000]], 120000));
+  await page.waitForFunction(() => window.lastPing === -1);
+  assert.equal(await xp(page), 92, 'foreign windows earn nothing');
+
+  // Another game has its own loss cap. Leaving ends the visit (its 59 s are not carried).
+  await page.evaluate(() => { window.oldGame = document.querySelector('#stage iframe').contentWindow; });
+  await home(page);
+  // A removed game's last message within 2 s still counts, for the player who played it.
+  await page.evaluate(d => dispatchEvent(new MessageEvent('message', { source: window.oldGame, origin: location.origin, data: d })), stats([['w', 'L1', 1000]]));
+  assert.equal(await xp(page), 102, 'a late message from the removed game');
+  frame = await play(page, 'maze-dash');
+  await post(page, frame, stats([['l', 'L1', 1000]], 1000));
+  assert.equal(await xp(page), 106, 'maze-dash losses count on their own');
+  await page.waitForTimeout(2100);
+  await page.evaluate(d => dispatchEvent(new MessageEvent('message', { source: window.oldGame, origin: location.origin, data: d })), stats([['w', 'L1', 1000]]));
+  assert.equal(await xp(page), 106, 'nothing from a game removed more than 2 s ago');
+  const p = (await stored(page)).list[0];
+  assert.deepEqual([p.xp, p.lv], [106, 3]);
+  assert.deepEqual(p.g, { 'tic-tac-toe': 1, 'air-hockey': 1, 'maze-dash': 1 });
+
+  // A guest keeps nothing and is invited, once, to pick an animal.
+  await home(page);
+  await page.locator('#who [data-w="pick:"]').click();
+  const before = await page.evaluate(k => localStorage.getItem(k), KEY);
+  frame = await play(page, 'air-hockey');
+  await post(page, frame, stats([['s', 'L1'], ['w', 'L1', 1000]], 120000));
+  assert.equal(await page.evaluate(k => localStorage.getItem(k), KEY), before, 'guests earn nothing');
+  assert.equal(await page.locator('#toast').innerText(), 'اختر حيوانك في الرئيسية لتجمع النجوم ⭐');
+  assert.deepEqual(await page.evaluate(() => window.levels), [2, 3]);
+});
+
+test('the class band is the guest band; a new tab is a guest; the band reaches Kit.dda', async t => {
+  const state = await setup(t);
+  const { page } = state;
+  await page.goto(origin + '/');
+  await page.locator('#classroom summary').click();
+  await page.locator('#classBand').selectOption('6-7');
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:site:classband')), '"6-7"');
+  assert.equal(await page.evaluate(() => SGProfiles.band()), '6-7');
+  await page.locator('#classroom summary').click();
+  let frame = await play(page, 'air-hockey');
+  assert.deepEqual(await kitProfile(frame), { band: '6-7', player: '' });
+  // A guest of a known band starts at that band's difficulty seed.
+  assert.equal(await frame.evaluate(() => Kit.dda('test-band', { id: 'probe' }).level), 0.12);
+  // The band changes while the game is open: the game follows at once.
+  await page.locator('#classroom summary').click();
+  await page.locator('#classBand').selectOption('10-11');
+  await frame.waitForFunction(() => Kit.profile.band === '10-11');
+  await page.locator('#classBand').selectOption('');
+  await frame.waitForFunction(() => Kit.profile.band === '');
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:site:classband')), null);
+  await page.locator('#classBand').selectOption('8-9');
+
+  await home(page);
+  await page.evaluate(() => SGProfiles.create(5, 2, '10-11'));
+  frame = await play(page, 'air-hockey');
+  assert.deepEqual(await kitProfile(frame), { band: '10-11', player: 'p1' }, "the player's own band wins over the class band");
+
+  // sessionStorage scoping: a new tab of the same browser starts as a guest.
+  const second = await newPage(state);
+  await second.goto(origin + '/');
+  assert.equal(await second.evaluate(() => SGProfiles.player()), '');
+  assert.equal(await second.evaluate(() => SGProfiles.band()), '8-9');
+  assert.equal(await second.locator('#me').getAttribute('class'), 'me guest');
+  assert.equal(await second.locator('#who [data-w="pick:p1"]').getAttribute('aria-pressed'), 'false', 'the player exists, but is not picked here');
+  const other = await play(second, 'maze-dash');
+  assert.deepEqual(await kitProfile(other), { band: '8-9', player: '' });
+  assert.equal(await page.evaluate(() => SGProfiles.player()), 'p1', 'the first tab keeps its player');
+  // A profile removed in another tab turns this tab's player into a guest.
+  await second.evaluate(() => SGProfiles.remove('p1'));
+  await page.waitForFunction(() => SGProfiles.player() === '');
+  await frame.waitForFunction(() => Kit.profile.player === '' && Kit.profile.band === '8-9');
+  assert.equal(await page.locator('#me').getAttribute('class'), 'me guest');
+});
+
+test('hand over the device and the topbar badge return to the strip; the mute toggle', async t => {
+  const { page } = await setup(t, { clock: true });
+  await page.goto(origin + '/');
+  await page.evaluate(() => SGProfiles.create(1, 4, '8-9'));
+  let frame = await play(page, 'air-hockey');
+  // The badge goes home to the strip with the current player focused.
+  await page.locator('#me').click();
+  await page.waitForFunction(() => document.body.className === 'route-home');
+  assert.equal(await active(page), 'pick:p1');
+  assert.equal(await page.evaluate(() => scrollY), 0);
+  await page.evaluate(() => scrollTo(0, 800));
+  await page.locator('#me').click();
+  assert.equal(await page.evaluate(() => scrollY), 0, 'on home it scrolls back to the strip');
+  assert.equal(await active(page), 'pick:p1');
+
+  frame = await play(page, 'air-hockey');
+  await page.locator('#classroom summary').click();
+  await page.locator('#sessionMinutes').selectOption('5');
+  await page.locator('#sessionStart').click();
+  await page.clock.fastForward(300001);
+  await page.locator('#sessionHandoff').waitFor({ state: 'visible' });
+  await page.evaluate(() => { window.oldGame = document.querySelector('#stage iframe').contentWindow; });
+  await page.locator('#sessionEnd').click();
+  await page.waitForFunction(() => document.body.className === 'route-home');
+  assert.equal(await page.evaluate(() => SGProfiles.player()), '');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:site:player')), null);
+  assert.equal(await page.locator('#who [data-w="pick:"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await active(page), 'pick:', 'the next child starts on the strip as a guest');
+  assert.equal(await page.locator('#me').getAttribute('class'), 'me guest');
+  // The game's last message after the handover still goes to the child who played.
+  await page.evaluate(d => dispatchEvent(new MessageEvent('message', { source: window.oldGame, origin: location.origin, data: d })), stats([['w', 'L1', 1000]]));
+  assert.equal((await stored(page)).list[0].xp, 10);
+
+  // Mute: the same sg:site:muted key as Kit, so the open game follows.
+  await page.locator('#classroom summary').click();
+  await page.evaluate(() => SGProfiles.select('p1'));
+  frame = await play(page, 'air-hockey');
+  const mute = page.locator('#muteBtn');
+  assert.deepEqual([await mute.getAttribute('aria-pressed'), await mute.innerText()], ['false', '🔊']);
+  await mute.click();
+  assert.deepEqual([await mute.getAttribute('aria-pressed'), await mute.innerText()], ['true', '🔇']);
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:site:muted')), 'true');
+  await frame.waitForFunction(() => Kit.audio.muted);
+  // Like every sg:preferences, the mute carries the player's band, slot and telemetry.
+  assert.deepEqual(await frame.evaluate(() => window.prefs.at(-1)),
+    { type: 'sg:preferences', classroom: false, band: '8-9', player: 'p1', telemetry: false, quiet: true });
+  await mute.click();
+  await frame.waitForFunction(() => !Kit.audio.muted);
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:site:muted')), 'false');
+  // The game's own mute button: the portal toggle follows.
+  await frame.evaluate(() => Kit.audio.toggleMute());
+  await page.waitForFunction(() => document.querySelector('#muteBtn').getAttribute('aria-pressed') === 'true');
+  await frame.evaluate(() => Kit.audio.toggleMute());
+  await page.waitForFunction(() => document.querySelector('#muteBtn').getAttribute('aria-pressed') === 'false');
+  // Classroom mode locks it: shown muted and disabled, a click explains and changes nothing.
+  await page.locator('#classroom summary').click();
+  await page.locator('#classroomMode').check();
+  assert.deepEqual([await mute.getAttribute('aria-disabled'), await mute.getAttribute('aria-pressed'), await mute.getAttribute('title')], ['true', 'true', 'وضع الصف يكتم الصوت الآن']);
+  // aria-disabled keeps it focusable and clickable (Playwright would wait for "enabled").
+  await mute.click({ force: true });
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:site:muted')), 'false');
+  assert.equal(await page.locator('#toast').innerText(), 'وضع الصف يكتم الصوت الآن');
+  await page.locator('#classroomMode').uncheck();
+  assert.deepEqual([await mute.getAttribute('aria-disabled'), await mute.getAttribute('aria-pressed')], ['false', 'false']);
+});
+
+test('removing a player asks twice and never happens on one click', async t => {
+  const { page } = await setup(t);
+  await page.goto(origin + '/');
+  await page.evaluate(() => { SGProfiles.create(7, 3, '6-7'); SGProfiles.create(8, 6, '8-9'); });
+  await page.locator('#logo').click();
+  await page.locator('#who [data-w="edit"]').click();
+  assert.equal(await page.locator('#who').getAttribute('class'), 'who who-remove');
+  assert.equal(await active(page), 'rm:p1');
+  // Cancel goes back to the choice without removing anything.
+  await page.locator('#who [data-w="rm:p2"]').click();
+  assert.equal(await active(page), 'cancel', 'the safe button has focus');
+  await page.locator('#who [data-w="cancel"]').click();
+  assert.equal(await active(page), 'rm:p2');
+  await page.locator('#who [data-w="rm:p2"]').click();
+  await page.locator('#who [data-w="del"]').click();
+  assert.equal((await stored(page)).list.length, 2, 'the first click only asks again');
+  assert.equal(await page.locator('#who [data-w="del"]').innerText(), 'متأكد؟ احذف نهائيًا');
+  await page.locator('#who [data-w="del"]').click();
+  assert.equal((await stored(page)).list.length, 2, 'a double click is not a second answer');
+  await page.waitForTimeout(600);
+  await page.locator('#who [data-w="del"]').click();
+  assert.deepEqual((await stored(page)).list.map(p => p.k), ['p1']);
+  assert.equal(await page.locator('#toast').innerText(), 'حُذف اللاعب.');
+  assert.equal(await page.evaluate(() => SGProfiles.player()), '', 'the removed current player becomes a guest');
+  assert.equal(await page.locator('#who').getAttribute('class'), 'who who-list');
+  // A new player never gets a removed player's key (games keep difficulty per key).
+  await page.evaluate(() => SGProfiles.create(0, 0, '6-7'));
+  assert.deepEqual((await stored(page)).list.map(p => p.k), ['p1', 'p3']);
+  // Done leaves the remove mode.
+  await page.locator('#who [data-w="edit"]').click();
+  await page.locator('#who [data-w="done"]').click();
+  assert.equal(await active(page), 'edit');
+  assert.equal(await page.locator('#who').getAttribute('class'), 'who who-list');
+});
+
+test('with storage blocked the portal plays as a guest, and a player lives in memory', async t => {
+  const state = await setup(t, { storage: false, reducedMotion: 'reduce' }), { page } = state;
+  // Every sound source the portal page starts.
+  await state.context.addInitScript(() => {
+    if (window.top !== window) return;
+    window.sounds = 0;
+    const start = AudioScheduledSourceNode.prototype.start;
+    AudioScheduledSourceNode.prototype.start = function () { window.sounds++; return start.apply(this, arguments); };
+  });
+  await page.goto(origin + '/');
+  assert.equal(await page.locator('#app > #who + a.starter').count(), 1);
+  assert.equal(await page.locator('#me').getAttribute('class'), 'me guest');
+  let frame = await play(page, 'air-hockey');
+  assert.deepEqual(await kitProfile(frame), { band: '', player: '' });
+  await page.locator('#muteBtn').click();
+  assert.equal(await page.locator('#muteBtn').getAttribute('aria-pressed'), 'true');
+  await page.locator('#muteBtn').click();
+  await home(page);
+  await page.locator('#who [data-w="add"]').click();
+  await page.locator('#who [data-w="a:5"]').click();
+  await page.locator('#who [data-w="c:5"]').click();
+  await page.locator('#who [data-w="b:10-11"]').click();
+  assert.equal(await page.locator('#toast').innerText(), 'تعذّر الحفظ؛ هذا اللاعب مؤقت حتى تحديث الصفحة.');
+  assert.deepEqual(await page.evaluate(() => [SGProfiles.player(), SGProfiles.stored()]), ['p1', false]);
+  frame = await play(page, 'air-hockey');
+  assert.deepEqual(await kitProfile(frame), { band: '10-11', player: 'p1' });
+  await post(page, frame, stats([['s', 'L1'], ['w', 'L1', 1000], ['w', 'L1', 1000], ['w', 'L1', 1000]]));
+  assert.equal(await xp(page), 30);
+  assert.match(await page.locator('#toast').innerText(), /مستوى جديد! ⭐ 2/, 'the level-up toast stays readable with reduced motion');
+  assert.equal(await page.locator('#me').evaluate(el => el.classList.contains('lvup')), false, 'no burst with reduced motion');
+  await page.reload();
+  await page.waitForFunction(() => document.body.className === 'route-play');
+  assert.deepEqual(await page.evaluate(() => [SGProfiles.player(), SGProfiles.list().length]), ['', 0], 'nothing survives a reload');
+
+  // Storage cannot keep the classroom preset, and it still silences the portal's sounds.
+  await home(page);
+  await page.locator('#who [data-w="pick:"]').click();
+  assert.ok(await page.evaluate(() => window.sounds) > 0, 'the portal plays its sounds');
+  await page.locator('#classroom summary').click();
+  await page.locator('#classroomMode').check();
+  const sounds = await page.evaluate(() => window.sounds);
+  await page.locator('#who [data-w="add"]').click();
+  await page.locator('#who [data-w="a:1"]').click();
+  await page.locator('#who [data-w="back"]').click();
+  assert.equal(await page.evaluate(() => window.sounds), sounds, 'no sound in classroom mode');
+  await page.locator('#classroomMode').uncheck();
+  await page.locator('#who [data-w="cancel"]').click();
+  assert.ok(await page.evaluate(() => window.sounds) > sounds, 'sounds again without it');
+});
+
+test('damaged stored profiles, class band and loss tallies are repaired silently', async t => {
+  const state = await setup(t);
+  const { page } = state;
+  const today = await page.evaluate(() => { const d = new Date(); return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5); });
+  const seed = async (values, session = {}) => {
+    await page.goto(origin + '/seed.html');
+    await page.evaluate(([values, session]) => {
+      Object.keys(localStorage).forEach(k => localStorage.removeItem(k));
+      for (const [k, v] of Object.entries(values)) localStorage.setItem(k, v);
+      for (const [k, v] of Object.entries(session)) sessionStorage.setItem(k, v);
+    }, [values, session]);
+    await page.goto(origin + '/');
+    await page.waitForFunction(() => document.querySelector('#who'));
+  };
+  for (const raw of ['not json{', '[1,2]', '"text"', 'null', '{"v":1,"seq":-3,"list":"none"}', '{"list":[null,"p1",{"k":"p1"},{"k":5}]}']) {
+    await seed({ [KEY]: raw }, { 'sg:site:player': 'p1' });
+    const fixed = await stored(page);
+    const expected = raw.includes('"k":"p1"')
+      ? { v: 1, seq: 1, list: [{ k: 'p1', a: 0, c: 0, b: '', xp: 0, lv: 1, d0: today, dl: today, g: {} }] }
+      : { v: 1, seq: 0, list: [] };
+    assert.deepEqual(fixed, expected, raw);
+    assert.equal(await page.evaluate(() => SGProfiles.player()), raw.includes('"k":"p1"') ? 'p1' : '', raw);
+  }
+
+  const list = [
+    { k: 'p1', a: 3, c: 2, b: '8-9', xp: 100, lv: 50, d0: 20000, dl: 19000, extra: 'dropped',
+      g: { 'air-hockey': 3, __proto__x: 1, constructor: 2, toString: 4, 'Bad Slug': 1, 'maze-dash': -4, 'pool-party': 'x', 'drift-king': 2.7 } },
+    { k: 'p1', a: 1, c: 1, b: '6-7', xp: 5 },
+    { k: '__proto__', a: 1 }, { k: 'toString' }, { k: 'P2' }, { k: 'p123456789' },
+    { k: 'p2', a: 99, c: -1, b: 'old', xp: -5, lv: 'x', d0: 'yesterday', g: [1, 2] },
+    null, 'p9', [{ k: 'p8' }]
+  ];
+  for (let i = 3; i <= 20; i++) list.push({ k: 'p' + i.toString(36), a: i % 12, c: i % 8, b: '10-11', xp: 1e12, d0: 20500, dl: 20600, g: {} });
+  const text = JSON.stringify({ v: 7, seq: 'x', list, more: true }).replace('"__proto__x"', '"__proto__"');
+  await seed({ [KEY]: text, 'sg:site:classband': '"5-6"' }, { 'sg:site:player': '__proto__', 'sg:site:xploss': '{"p1 air-hockey":999,"__proto__":3,"x":"y"}' });
+  const fixed = await stored(page);
+  assert.deepEqual(Object.keys(fixed), ['v', 'seq', 'list']);
+  assert.equal(fixed.v, 1);
+  assert.equal(fixed.list.length, 12, 'at most 12 profiles');
+  assert.equal(fixed.seq, 20, 'the highest key seen, so no key is ever reused');
+  assert.deepEqual(fixed.list[0], { k: 'p1', a: 3, c: 2, b: '8-9', xp: 100, lv: 3, d0: 20000, dl: 20000, g: { 'air-hockey': 3, 'drift-king': 2 } });
+  assert.deepEqual(fixed.list[1], { k: 'p2', a: 0, c: 0, b: '', xp: 0, lv: 1, d0: today, dl: today, g: {} });
+  assert.deepEqual(fixed.list[2], { k: 'p3', a: 3, c: 3, b: '10-11', xp: 74235, lv: 99, d0: 20500, dl: 20600, g: {} }, 'XP and level are capped at 99');
+  assert.deepEqual(fixed.list.map(p => p.k), ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'pa', 'pb', 'pc']);
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:site:classband')), null, 'a band that does not exist is removed');
+  assert.deepEqual(await page.evaluate(() => [SGProfiles.player(), SGProfiles.band(), SGProfiles.classBand()]), ['', '', '']);
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:site:player')), null);
+  // The repaired data works: XP at level 99 stays full, the bar stays full.
+  await page.locator('#who [data-w="pick:p3"]').click();
+  assert.equal(await page.locator('#me .me-bar i').evaluate(el => el.style.width), '100%');
+  await page.locator('#who [data-w="pick:p1"]').click();
+  const frame = await play(page, 'air-hockey');
+  // The damaged tally of 999 reads as the cap of 40: no more loss XP in this tab.
+  await post(page, frame, stats([['l', 'L1', 1000], ['w', 'L1', 1000]]));
+  assert.equal(await xp(page), 110);
+});
+
+test('the portal still works when js/profiles.js is missing', { skip: !sourceTree && 'the fast build inlines every portal script' }, async t => {
+  const state = await setup(t);
+  const { page } = state;
+  await state.context.route('**/js/profiles.js', route => route.fulfill({ contentType: 'text/javascript', body: '' }));
+  await page.goto(origin + '/');
+  assert.equal(await page.evaluate(() => typeof window.SGProfiles), 'undefined');
+  assert.equal(await page.locator('#who').count(), 0);
+  assert.equal(await page.locator('#app > a.starter').count(), 1);
+  assert.equal(await page.locator('#me').isHidden(), true);
+  assert.equal(await page.locator('#bandPick').isHidden(), true);
+  const frame = await play(page, 'air-hockey');
+  assert.deepEqual(await frame.evaluate(() => window.prefs.at(-1)), { type: 'sg:preferences', classroom: false, band: '', player: '', telemetry: false });
+  await post(page, frame, stats([['w', 'L1', 1000]]));
+  await page.locator('#muteBtn').click();
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:site:muted')), 'true');
+});
