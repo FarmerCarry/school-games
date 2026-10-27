@@ -1,8 +1,10 @@
 // The insights dashboard (server/dashboard) in Chromium, under the Content Security
 // Policy it is served with. The page's /v1/* requests are answered by the real Node
-// server (server/app.mjs) on 127.0.0.1, filled by server/simulate.mjs. Any other
-// request (the page loads no script from the games site), any CSP violation, page error
-// or unexpected console error fails the test.
+// server (server/app.mjs) on 127.0.0.1, filled by server/simulate.mjs; an admin endpoint
+// that server does not have yet (students, student, game, stats, cohorts, pcs) is
+// answered from the sample answers in server/dashboard/demo/ instead, so every tab is
+// exercised against either server. Any other request (the page loads no script from the
+// games site), any CSP violation, page error or unexpected console error fails the test.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import fs from 'node:fs';
@@ -24,10 +26,31 @@ const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inl
 const TOKEN = 'dashboard-test-token-0123456789';
 const DAY_MS = 86400000;
 const catalogSource = fs.readFileSync(path.join(repo, 'js/catalog.js'));
-const demo = JSON.parse(fs.readFileSync(path.join(repo, 'server/dashboard/demo.json'), 'utf8'));
+const DEMO = path.join(repo, 'server/dashboard/demo');
+const demoFile = name => JSON.parse(fs.readFileSync(path.join(DEMO, name), 'utf8'));
+const DEMO_STUDENTS = fs.readdirSync(DEMO).filter(f => f.startsWith('student-')).map(f => f.slice(8, -5));
+// A sample answer for an endpoint this checkout's server does not have yet, filtered as the
+// server would; without its clock, so the page keeps the server's own idea of today.
+function fixture(url) {
+  const q = url.searchParams, band = q.get('band');
+  const file = { '/v1/admin/students': 'students-30.json', '/v1/admin/stats': 'stats-30.json', '/v1/admin/cohorts': 'cohorts-90.json',
+    '/v1/admin/pcs': 'pcs-30.json', '/v1/admin/student': 'student-' + q.get('u') + '.json', '/v1/admin/game': 'game-' + q.get('slug') + '.json' }[url.pathname];
+  if (!file || !/^[a-z0-9-]+\.json$/.test(file) || !fs.existsSync(path.join(DEMO, file))) return null;
+  const json = demoFile(file);
+  delete json.clock;
+  if (url.pathname === '/v1/admin/students' && band) json.students = json.students.filter(x => x.band === band);
+  if (url.pathname === '/v1/admin/stats') {
+    const metrics = (q.get('metrics') || '').split(','), c = name => json.columns.indexOf(name);
+    json.rows = json.rows.filter(r => metrics.includes(r[c('metric')]) && (!band || r[c('a')] === band) &&
+      (!q.get('slug') || r[c('slug')] === q.get('slug') || (r[c('metric')] === 'flow' && r[c('k1')] === q.get('slug'))));
+  }
+  return json;
+}
 const insightsWindow = {};
 vm.runInThisContext('(function (window) {' + fs.readFileSync(path.join(repo, 'server/dashboard/insights.js'), 'utf8') + '\n})')(insightsWindow);
 const I = insightsWindow.SGInsights;
+vm.runInThisContext('(function (window) {' + fs.readFileSync(path.join(repo, 'server/dashboard/research.js'), 'utf8') + '\n})')(insightsWindow);
+const R = insightsWindow.SGResearch;
 const catalogWindow = {};
 vm.runInNewContext(catalogSource.toString('utf8'), { window: catalogWindow });
 const catalog = new Map(catalogWindow.GAMES.map(g => [g.slug, g]));
@@ -79,12 +102,12 @@ after(async () => {
 // A browser context whose every request is accounted for. mode.api: 'server' (default),
 // 'unset' (no ADMIN_TOKEN: 404), 'down' (network error). mode.stub: { '/v1/admin/<path>':
 // (method, body, search) => [status, json] } answers that path instead of the server.
-async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-GB', colorScheme = 'light', token, lang, timezoneId } = {}) {
-  const context = await browser.newContext({ viewport, locale, colorScheme, serviceWorkers: 'block', ...(timezoneId ? { timezoneId } : {}) });
+async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-GB', colorScheme = 'light', token, lang, timezoneId = 'UTC' } = {}) {
+  const context = await browser.newContext({ viewport, locale, colorScheme, serviceWorkers: 'block', timezoneId, acceptDownloads: true });
   t.after(() => context.close());
   // missing: the URLs the server answered 404 "not found" (an endpoint this server does not
   // have yet); the browser logs those, and the page carries on without them.
-  const s = { context, mode: { api: 'server' }, api: [], outside: [], errors: [], allowed: [], missing: new Set() };
+  const s = { context, mode: { api: 'server' }, api: [], outside: [], errors: [], allowed: [], missing: new Set(), files: [] };
   context.on('request', request => {
     const url = request.url();
     if (!url.startsWith(site.origin + '/')) s.outside.push(request.method() + ' ' + url);
@@ -108,7 +131,15 @@ async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-G
       let body = Buffer.from(await res.arrayBuffer());
       const entry = { path: url.pathname, method: request.method(), search: url.searchParams, auth, status: res.status };
       if (res.status === 200) entry.json = JSON.parse(body.toString('utf8'));
-      if (res.status === 404 && JSON.parse(body.toString('utf8')).error === 'not found') s.missing.add(request.url());
+      if (res.status === 404 && JSON.parse(body.toString('utf8')).error === 'not found') {
+        const json = fixture(url);
+        if (json) {
+          Object.assign(entry, { status: 200, json, fixture: true });
+          s.api.push(entry);
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(json) });
+        }
+        s.missing.add(request.url());
+      }
       if (res.status === 200 && s.mode.edit && url.pathname === '/v1/admin/kpis') {
         entry.json = s.mode.edit(entry.json);
         body = Buffer.from(JSON.stringify(entry.json));
@@ -118,6 +149,7 @@ async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-G
       delete headers['content-length'];
       return route.fulfill({ status: res.status, headers, body });
     }
+    if (url.pathname.startsWith('/demo/')) s.files.push(url.pathname.slice(6));
     const res = await route.fetch();
     const headers = { ...res.headers() };
     if ((headers['content-type'] || '').startsWith('text/html')) headers['content-security-policy'] = CSP;
@@ -163,9 +195,19 @@ async function waitForKpis(s, count) {
     if (Date.now() > end) throw new Error('waiting for KPI request ' + count);
     await new Promise(resolve => setTimeout(resolve, 50));
   }
-  await s.page.waitForFunction(() => document.querySelectorAll('#tiles .tile').length === 5 &&
+  await s.page.waitForFunction(() => document.querySelectorAll('#tiles .tile').length === 6 &&
     !document.getElementById('dash').classList.contains('is-loading'));
 }
+// A tab's page once its data is drawn.
+const waitForView = (page, tab) => page.waitForFunction(t => document.querySelector('#view[data-route="' + t + '"] .section') &&
+  !document.getElementById('dash').classList.contains('is-loading'), tab);
+// The insight sentences as insights.js writes them (without the small-sample chip).
+const insightTexts = page => page.locator('.insight-text').evaluateAll(nodes => nodes.map(n => {
+  const copy = n.cloneNode(true);
+  copy.querySelectorAll('.chip').forEach(c => c.remove());
+  return copy.textContent.trim();
+}));
+const OVERVIEW_SECTIONS = ['daily', 'when', 'favourites', 'by-age', 'stuck', 'difficulty', 'returning', 'health'];
 
 test('sign in: a wrong password says so, the right one shows the server\'s numbers, sign out forgets it', async t => {
   const s = await open(t);
@@ -191,23 +233,25 @@ test('sign in: a wrong password says so, the right one shows the server\'s numbe
   assert.equal(call.search.get('from'), dayBefore(today(), 29), 'the default period is 30 days');
   assert.equal(call.search.get('band'), null);
   const k = call.json, live = s.lastLive().json;
-  // The headline tiles are the KPI JSON.
+  // The headline tiles are the KPI JSON; a server without students per period shows a dash.
   assert.equal(Number(await tileValue(page, 'sessions')), k.totals.sessions);
   assert.equal(await tileText(page, 'sessions'), k.totals.sessions.toLocaleString('en-US'));
   assert.equal(Number(await tileValue(page, 'playTime')), k.totals.engagedMinutes);
   assert.equal(await tileText(page, 'playTime'), I.duration(k.totals.engagedMinutes, 'en').value);
-  assert.equal(Number(await tileValue(page, 'perSession')), k.totals.avgEngagedMinutesPerSession);
-  assert.equal(Number(await tileValue(page, 'opens')), k.totals.gameOpens);
-  assert.equal(await tileText(page, 'opens'), k.totals.gameOpens.toLocaleString('en-US'));
+  const st = k.totals.students;
+  assert.equal(await tileValue(page, 'students'), st ? String(st.active) : '');
+  assert.equal(await tileValue(page, 'newStudents'), st ? String(st.new) : '');
+  assert.equal(await tileValue(page, 'perStudentDay'), st ? String(st.minutesPerStudentDay.median) : '');
+  if (!st) assert.equal(await tileText(page, 'students'), '—');
   assert.ok(live.total.sessions >= 8);
   assert.equal(Number(await tileValue(page, 'now')), live.total.sessions);
   // The insights are insights.js on that JSON, with the catalog's names.
   const expected = I.insights(k, { lang: 'en', name: nameOf('en'), today: today() }).map(x => x.text);
   assert.ok(expected.length >= 1 && expected.length <= 5);
-  assert.deepEqual(await page.locator('.insight').allTextContents(), expected);
-  for (const id of ['daily', 'favourites', 'by-age', 'stuck', 'difficulty', 'returning', 'health']) {
-    assert.equal(await page.locator('#' + id).count(), 1, id);
-  }
+  assert.deepEqual(await insightTexts(page), expected);
+  for (const id of OVERVIEW_SECTIONS) assert.equal(await page.locator('#' + id).count(), 1, id);
+  assert.equal(await page.locator('#tabs a[aria-current="page"]').getAttribute('data-tab'), 'overview');
+  assert.equal(new URL(page.url()).hash, '#/overview');
   assert.match(await page.locator('#status .updated').textContent(), /^Updated \d\d:\d\d$/);
 
   // Kept across a reload until signing out.
@@ -240,11 +284,11 @@ test('filters change the request and every section; the period and age band', as
   assert.equal(call.search.get('from'), dayBefore(today(), 6));
   assert.equal(call.search.get('to'), today());
   assert.equal(await tileValue(page, 'sessions'), String(call.json.totals.sessions));
-  await page.click('#daily-sessions .table-toggle');
-  assert.equal(await page.locator('#daily-sessions .table-host tbody tr').count(), 7, 'one row per day');
-  assert.equal(await page.locator('#daily-sessions .chart-host').isHidden(), true);
-  await page.click('#daily-sessions .table-toggle');
-  assert.equal(await page.locator('#daily-sessions svg.chart').count(), 1);
+  await page.click('#daily-count .table-toggle');
+  assert.equal(await page.locator('#daily-count .table-host tbody tr').count(), 7, 'one row per day');
+  assert.equal(await page.locator('#daily-count .chart-host').isHidden(), true);
+  await page.click('#daily-count .table-toggle');
+  assert.equal(await page.locator('#daily-count svg.chart').count(), 1);
 
   call = await pick('bandFilter', '8-9');
   assert.equal(call.search.get('band'), '8-9');
@@ -253,8 +297,7 @@ test('filters change the request and every section; the period and age band', as
   assert.match(await page.locator('#rangeText').textContent(), /8–9$/);
   assert.match(await page.locator('#by-age').textContent(), /Only children aged 8–9 are shown/, 'no second copy of the favourites');
   assert.deepEqual([...new Set(await page.locator('#difficulty .diff-cell[data-band]').evaluateAll(cells => cells.map(c => c.dataset.band)))], ['8-9']);
-  const insights = await page.locator('.insight').allTextContents();
-  assert.deepEqual(insights, I.insights(call.json, { lang: 'en', name: nameOf('en'), today: today() }).map(x => x.text));
+  assert.deepEqual(await insightTexts(page), I.insights(call.json, { lang: 'en', name: nameOf('en'), today: today() }).map(x => x.text));
 
   call = await pick('periodFilter', 1);
   assert.equal(call.search.get('from'), today());
@@ -301,7 +344,7 @@ test('table views, tooltips, and a game one child opened: shown with its numbers
     [nameOf('en')(top.slug), top.opens.toLocaleString('en-US'), I.pct(top.share), top.sessions.toLocaleString('en-US'), I.duration(top.engagedMinutes, 'en').text]);
   assert.doesNotMatch(await page.locator('body').textContent(), /hidden for privacy|fewer than 3 children/i);
   // Every chart card has its table twin.
-  for (const id of ['daily-sessions', 'daily-minutes', 'age-card', 'stuck-card', 'diff-card', 'back-card', 'type-card']) {
+  for (const id of ['daily-count', 'daily-minutes', 'when-card', 'cat-card', 'age-card', 'stuck-card', 'diff-card', 'back-card', 'weeks-card']) {
     await page.click(`#${id} .table-toggle`);
     assert.ok(await page.locator(`#${id} .table-host table`).isVisible(), id);
     assert.ok(await page.locator(`#${id} .table-host tbody tr`).count() > 0, id);
@@ -311,8 +354,8 @@ test('table views, tooltips, and a game one child opened: shown with its numbers
   await page.locator('#fav-card svg .mark').first().hover();
   await page.locator('.tip').waitFor();
   assert.match(await page.locator('.tip').textContent(), new RegExp(nameOf('en')(top.slug) + '.*Based on 1 child so far'));
-  await page.click('#daily-sessions .table-toggle');
-  await page.locator('#daily-sessions svg.chart').focus();
+  await page.click('#daily-count .table-toggle');
+  await page.locator('#daily-count svg.chart').focus();
   await page.keyboard.press('Home');
   const first = new Date(k.daily[0].day + 'T00:00:00Z');
   const tip = await page.locator('.tip').textContent();
@@ -349,6 +392,9 @@ test('the newer server\'s age-group win rates and play time are used when they a
     }
   }
   await page.click('#age-card .table-toggle');
+  assert.deepEqual(await page.locator('#age-card .table-host thead th').allTextContents(), ['Age group', 'Game', 'Share of play time', 'Games opened', 'Play time']);
+  // The switch: by opens, as a share of the group's game opens.
+  await page.click('#age-card button[data-value="opens"]');
   assert.deepEqual(await page.locator('#age-card .table-host thead th').allTextContents(), ['Age group', 'Game', 'Share of opens', 'Games opened', 'Play time']);
   await s.check();
 });
@@ -367,7 +413,7 @@ test('Arabic: right to left, Arabic game names, Western digits, remembered', asy
   const top = I.favourites(k).rows[0];
   await page.click('#fav-card .table-toggle');
   assert.equal(await page.locator('#fav-card .table-host tbody tr th').first().textContent(), catalog.get(top.slug).title);
-  assert.deepEqual(await page.locator('.insight').allTextContents(), I.insights(k, { lang: 'ar', name: nameOf('ar'), today: today() }).map(x => x.text));
+  assert.deepEqual(await insightTexts(page), I.insights(k, { lang: 'ar', name: nameOf('ar'), today: today() }).map(x => x.text));
   const text = await page.locator('body').textContent();
   assert.ok(!/[\u0660-\u0669\u06f0-\u06f9]/.test(text), 'Western digits only');
   // Every number range ("6–7", "2–3 أنوية", ...) is drawn low to high inside the Arabic text.
@@ -423,16 +469,26 @@ test('demo mode: sample data without signing in, and nothing sent to the server'
   await page.goto(site.origin + '/?demo');
   await page.locator('#demoBanner').waitFor();
   assert.match(await page.locator('#demoBanner').textContent(), /Sample data/);
-  await page.waitForFunction(() => document.querySelectorAll('#tiles .tile').length === 5 && document.querySelector('.tile[data-key="now"]').dataset.value);
-  const k = demo.kpis['30|all'];
+  await page.waitForFunction(() => document.querySelectorAll('#tiles .tile').length === 6 && document.querySelector('.tile[data-key="now"]').dataset.value);
+  const k = demoFile('kpis-30-all.json'), live = demoFile('live.json');
   assert.equal(Number(await tileValue(page, 'sessions')), k.totals.sessions);
-  assert.equal(Number(await tileValue(page, 'opens')), k.totals.gameOpens);
-  assert.equal(Number(await tileValue(page, 'now')), demo.live.total.sessions);
+  assert.equal(Number(await tileValue(page, 'students')), k.totals.students.active);
+  assert.equal(Number(await tileValue(page, 'newStudents')), k.totals.students.new);
+  assert.equal(Number(await tileValue(page, 'perStudentDay')), k.totals.students.minutesPerStudentDay.median);
+  assert.equal(Number(await tileValue(page, 'now')), live.total.sessions);
+  assert.match(await page.locator('.tile[data-key="now"] .tile-hint').textContent(), new RegExp(`${live.total.sessions} children: ${live.students} students, ${live.guests} guests`));
+  assert.equal(s.lastKpis(), undefined);
+  // The school's day of the sample, not this computer's.
+  assert.match(await page.locator('#rangeText').textContent(), /27 Oct 2026/);
+  assert.match(await page.locator('#clockText').textContent(), /Asia\/Riyadh/);
+  assert.equal(await page.locator('#clockChange').count(), 0, 'the sample cannot be changed');
   assert.equal(await page.locator('#signOutBtn').isHidden(), true);
   await page.click('#bandFilter button[data-value="6-7"]');
-  await page.waitForFunction(v => document.querySelector('.tile[data-key="sessions"]').dataset.value === v, String(demo.kpis['30|6-7'].totals.sessions));
+  await page.waitForFunction(v => document.querySelector('.tile[data-key="sessions"]').dataset.value === v, String(demoFile('kpis-30-6-7.json').totals.sessions));
   await page.click('#periodFilter button[data-value="90"]');
-  await page.waitForFunction(v => document.querySelector('.tile[data-key="sessions"]').dataset.value === v, String(demo.kpis['90|6-7'].totals.sessions));
+  await page.waitForFunction(v => document.querySelector('.tile[data-key="sessions"]').dataset.value === v, String(demoFile('kpis-90-6-7.json').totals.sessions));
+  // The sample has its own periods only.
+  assert.deepEqual(await page.locator('#periodFilter button').evaluateAll(b => b.map(x => x.dataset.value)), ['1', '7', '30', '90']);
   assert.deepEqual(s.api, [], 'no /v1 request in demo mode');
   await s.check();
 });
@@ -464,9 +520,7 @@ test('a phone and a 360 px screen: no sideways scrolling, every section there', 
       const { page } = s;
       await page.goto(site.origin + '/');
       await waitForKpis(s, 1);
-      for (const id of ['daily', 'favourites', 'by-age', 'stuck', 'difficulty', 'returning', 'health']) {
-        assert.ok(await page.locator('#' + id).isVisible(), id);
-      }
+      for (const id of OVERVIEW_SECTIONS) assert.ok(await page.locator('#' + id).isVisible(), id);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       assert.ok(overflow <= 0, `${width}px ${lang}: ${overflow}px of sideways scroll`);
       await s.check();
@@ -496,7 +550,7 @@ test('chart labels stay inside their cards, left to right and right to left', as
     const s = await open(t, { viewport: { width, height: 800 }, token: TOKEN, lang });
     const { page } = s;
     const shows = period => page.waitForFunction(v => document.querySelector('.tile[data-key="sessions"]')?.dataset.value === v,
-      String(demo.kpis[period + '|all'].totals.sessions));
+      String(demoFile(`kpis-${period}-all.json`).totals.sessions));
     await page.goto(site.origin + (demoMode ? '/?demo' : '/'));
     if (demoMode) await shows(30); else await waitForKpis(s, 1);
     for (const period of [30, 90]) {
@@ -603,15 +657,15 @@ test('a day of one child shows its number; days an older server left out break t
   };
   await page.goto(site.origin + '/');
   await waitForKpis(s, 1);
-  await page.click('#daily-sessions .table-toggle');
-  assert.equal(await page.locator('#daily-sessions .table-host tbody tr').nth(1).locator('td').textContent(), '1');
-  await page.click('#daily-sessions .table-toggle');
+  await page.click('#daily-count .table-toggle');
+  assert.equal(await page.locator('#daily-count .table-host tbody tr').nth(1).locator('td').textContent(), '1');
+  await page.click('#daily-count .table-toggle');
   // An older server's suppressed days: no line, and the axis still counts whole play sessions.
   s.mode.edit = k => { k.daily = k.daily.map(d => ({ day: d.day, suppressed: true })); return k; };
   const n = s.kpis().length;
   await page.click('#periodFilter button[data-value="7"]');
   await waitForKpis(s, n + 1);
-  const ticks = await page.locator('#daily-sessions svg.chart .grid .tick').allTextContents();
+  const ticks = await page.locator('#daily-count svg.chart .grid .tick').allTextContents();
   assert.ok(ticks.length >= 2 && ticks.every(v => /^\d+$/.test(v)), ticks.join(' '));
   await s.check();
 });
@@ -682,7 +736,7 @@ test('the school\'s clock: the browser\'s zone once while none is known, the sch
   // Change: the zones the PCs report, this browser's, then every zone; one click posts the owner's choice.
   await page.click('#clockChange');
   assert.match(await page.locator('#clockPanel .clock-choice[data-tz="Asia/Riyadh"]').textContent(), /Asia\/Riyadh.*12 PCs/);
-  await page.selectOption('#clockSelect', 'Europe/London');
+  await page.selectOption('#clockPanelSelect', 'Europe/London');
   const n = s.kpis().length;
   await page.click('#clockPanel button:has-text("Use this clock")');
   await waitForKpis(s, n + 1);
@@ -745,17 +799,299 @@ function lowContrast() {
   return [...low];
 }
 
-test('text is readable in light and dark: contrast of at least 4.5 to 1 (3 to 1 for large text)', async t => {
+const ROUTES = ['overview', 'students', 'student/' + DEMO_STUDENTS[0], 'games', 'game/bubble-bop', 'habits', 'learning', 'pcs', 'data'];
+
+test('text is readable in light and dark on every tab, the ramps\' cell labels included: 4.5 to 1 (3 to 1 for large text)', async t => {
   for (const colorScheme of ['light', 'dark']) {
     const s = await open(t, { colorScheme });
     const { page } = s;
     await page.goto(site.origin + '/');
     await page.locator('#signin').waitFor();
     const low = await page.evaluate(lowContrast);
-    await page.goto(site.origin + '/?demo');
-    await page.waitForFunction(() => document.querySelectorAll('#tiles .tile').length === 5 && document.querySelector('#health'));
-    low.push(...await page.evaluate(lowContrast));
+    const steps = new Set();
+    for (const route of ROUTES) {
+      await page.goto(site.origin + '/?demo#/' + route);
+      await waitForView(page, route.split('/')[0]);
+      low.push(...(await page.evaluate(lowContrast)).map(x => route + ': ' + x));
+      for (const q of await page.locator('.hm-cell').evaluateAll(cells => cells.map(c => /q\d/.exec(c.className)[0]))) steps.add(q);
+    }
+    assert.deepEqual([...steps].sort(), ['q0', 'q1', 'q2', 'q3', 'q4', 'q5'], 'every step of the ramp was on a page');
     assert.deepEqual(low, [], colorScheme);
     await s.check();
   }
+});
+
+test('every tab and route draws from the sample data, in English and Arabic, on a desktop and at 360 px', async t => {
+  for (const [lang, width] of [['en', 1366], ['ar', 1366], ['en', 360], ['ar', 360]]) {
+    const s = await open(t, { viewport: { width, height: 800 }, lang });
+    const { page } = s;
+    for (const route of ROUTES) {
+      const tab = route.split('/')[0];
+      await page.goto(site.origin + '/?demo#/' + route);
+      await waitForView(page, tab);
+      const where = `${lang} ${width}px #/${route}`;
+      assert.equal(await page.locator('html').getAttribute('dir'), lang === 'ar' ? 'rtl' : 'ltr', where);
+      const parent = { student: 'students', game: 'games' }[tab] || tab;
+      assert.equal(await page.locator('#tabs a[aria-current="page"]').getAttribute('data-tab'), parent, where);
+      assert.equal(await page.locator('#view .note.empty, #view .empty-part').count(), 0, where + ': every part has its data');
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      assert.ok(overflow <= 0, `${where}: ${overflow}px of sideways scroll`);
+      // Every chart has its table twin, with rows.
+      if (width === 1366 && lang === 'en') {
+        const ids = await page.locator('#view .card .table-toggle').evaluateAll(bs => bs.map(b => b.closest('.card').id));
+        assert.ok(ids.length > 0 || ['pcs', 'data', 'games'].includes(tab), where);
+        for (const id of ids) {
+          await page.click(`#${id} .table-toggle`);
+          assert.ok(await page.locator(`#${id} .table-host tbody tr`).count() > 0, where + ' ' + id);
+          await page.click(`#${id} .table-toggle`);
+        }
+      }
+      // Number ranges ("4–5", "6–7") read low to high inside Arabic text.
+      if (lang === 'ar') {
+        const reversed = await page.evaluate(() => {
+          const out = [], walker = document.createTreeWalker(document.getElementById('view'), NodeFilter.SHOW_TEXT);
+          for (let node; (node = walker.nextNode());) {
+            for (const m of node.textContent.matchAll(/(\d+)–(\d+)/g)) {
+              const box = (i, n) => { const r = document.createRange(); r.setStart(node, i); r.setEnd(node, i + n); return r.getBoundingClientRect(); };
+              const a = box(m.index, m[1].length), b = box(m.index + m[1].length + 1, m[2].length);
+              if (a.width && a.left > b.left) out.push(m[0]);
+            }
+          }
+          return out;
+        });
+        assert.deepEqual(reversed, [], where + ': ranges drawn high to low');
+      }
+    }
+    await s.check();
+  }
+});
+
+test('each tab asks for its data only when it is opened; the tab and the period are remembered', async t => {
+  const s = await open(t);
+  const { page } = s;
+  await page.goto(site.origin + '/?demo');
+  await waitForView(page, 'overview');
+  assert.equal(new URL(page.url()).hash, '#/overview', 'the default route');
+  for (const f of ['settings.json', 'live.json', 'kpis-30-all.json', 'stats-30.json', 'students-30.json']) assert.ok(s.files.includes(f), f);
+  for (const f of ['pcs-30.json', 'cohorts-90.json']) assert.ok(!s.files.includes(f), f + ' is not asked for on the Overview');
+  await page.click('#tabs a[data-tab="pcs"]');
+  await waitForView(page, 'pcs');
+  assert.equal(new URL(page.url()).hash, '#/pcs');
+  assert.ok(s.files.includes('pcs-30.json'));
+  assert.equal(await page.locator('#bandFilter').isHidden(), true, 'the PCs have no age');
+  await page.click('#periodFilter button[data-value="7"]');
+  await waitForView(page, 'pcs');
+  // Back and forward follow the routes.
+  await page.goBack();
+  await waitForView(page, 'overview');
+  await page.goForward();
+  await waitForView(page, 'pcs');
+  await page.goto(site.origin + '/?demo');
+  await waitForView(page, 'pcs');
+  assert.equal(new URL(page.url()).hash, '#/pcs', 'the remembered tab');
+  assert.equal(await page.locator('#periodFilter button[data-value="7"]').getAttribute('aria-pressed'), 'true', 'the remembered period');
+  // A route that is not one: the remembered tab instead.
+  await page.goto(site.origin + '/?demo#/student/not-a-code');
+  await waitForView(page, 'pcs');
+  await s.check();
+});
+
+test('the keyboard reads the heatmap cell by cell and a column chart column by column, mirrored in Arabic', async t => {
+  for (const lang of ['en', 'ar']) {
+    const s = await open(t, { lang });
+    const { page } = s;
+    await page.goto(site.origin + '/?demo#/overview');
+    await waitForView(page, 'overview');
+    const start = page.locator('#when-card .hm-cell[tabindex="0"]');
+    assert.equal(await start.count(), 1, 'one tab stop in the grid');
+    await start.focus();
+    const at = () => page.evaluate(() => { const c = document.activeElement; return [Number(c.dataset.row), Number(c.dataset.col)]; });
+    const [r0, c0] = await at();
+    await page.keyboard.press('ArrowRight');
+    assert.deepEqual(await at(), [r0, lang === 'ar' ? Math.max(0, c0 - 1) : c0 + 1], lang + ': the right arrow moves right on the screen');
+    await page.keyboard.press('ArrowDown');
+    assert.equal((await at())[0], r0 + 1);
+    assert.ok(await page.locator('.tip').isVisible());
+    assert.match(await page.locator('.tip').textContent(), lang === 'ar' ? /دقيقة|دقائق|ساعة|ساعات/ : /minute|hour/);
+    await page.keyboard.press('Escape');
+    // The weeks: one column at a time, End for the latest.
+    await page.locator('#weeks-card svg.cols').focus();
+    await page.keyboard.press('End');
+    const weeks = await page.locator('#weeks-card .table-host tbody tr th').allTextContents();
+    assert.ok((await page.locator('.tip').textContent()).includes(weeks[0]), 'the latest week');
+    await page.keyboard.press('Home');
+    assert.ok((await page.locator('.tip').textContent()).includes(weeks.at(-1)), 'the first week');
+    await s.check();
+  }
+});
+
+test('the Students tab: the code search, sorting both ways, pages of 50, and a student\'s page', async t => {
+  const s = await open(t);
+  const { page } = s;
+  await page.goto(site.origin + '/?demo#/students');
+  await waitForView(page, 'students');
+  const all = demoFile('students-30.json').students;
+  const rows = page.locator('#students-card tbody tr');
+  assert.equal(await rows.count(), Math.min(50, all.length));
+  assert.match(await page.locator('.pager-text').textContent(), new RegExp(`1–50 of ${all.length}`));
+  await page.click('#students-card button:has-text("Next")');
+  assert.equal(await rows.count(), Math.min(50, all.length - 50));
+  // Sorting by play time: most first, then least first.
+  await page.click('#students-card th button:has-text("Play time")');
+  assert.equal(await page.locator('#students-card th[aria-sort]').getAttribute('aria-sort'), 'descending');
+  const most = all.slice().sort((a, b) => b.minutes - a.minutes || (a.u < b.u ? -1 : 1))[0];
+  assert.equal(await rows.first().getAttribute('data-u'), most.u, 'a new sort starts on the first page');
+  await page.click('#students-card th button:has-text("Play time")');
+  assert.equal(await page.locator('#students-card th[aria-sort]').getAttribute('aria-sort'), 'ascending');
+  // The search keeps the keyboard in its box while the table follows.
+  const one = all[5];
+  await page.fill('#codeSearch', one.u.slice(0, 2));
+  assert.match(await page.locator('#students-card').textContent(), /4 to 13 letters/);
+  await page.locator('#codeSearch').fill('');
+  await page.locator('#codeSearch').pressSequentially(one.u.slice(0, 6).toUpperCase().replace(/(.{4})/, '$1-'));
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'codeSearch');
+  assert.ok((await rows.evaluateAll(r => r.map(x => x.dataset.u))).includes(one.u));
+  assert.ok(await rows.count() >= 1 && await rows.count() < 5);
+  await page.fill('#codeSearch', 'ffffff99');
+  assert.match(await page.locator('#students-card').textContent(), /No student code starts with/);
+  // A student's page from the table.
+  await page.fill('#codeSearch', DEMO_STUDENTS[0]);
+  await page.click(`#students-card tr[data-u="${DEMO_STUDENTS[0]}"] .student-link`);
+  await waitForView(page, 'student');
+  assert.equal(new URL(page.url()).hash, '#/student/' + DEMO_STUDENTS[0]);
+  const one0 = demoFile('student-' + DEMO_STUDENTS[0] + '.json');
+  assert.equal(await page.locator('#student-h').textContent(), 'Student ⁦' + one0.student.label + '⁩');
+  assert.equal(await page.locator('#student-sessions tbody tr').count(), Math.min(20, one0.sessions.length));
+  // A code that is not in the sample says so.
+  s.allowed.push(/status of 404/);
+  await page.goto(site.origin + '/?demo#/student/0123456789ab');
+  await page.waitForFunction(() => /not in the sample data/.test(document.getElementById('view').textContent));
+  await s.check();
+});
+
+test('a student\'s page: linking and forgetting ask twice before anything is sent; the CSV file', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  const me = DEMO_STUDENTS[0], list = demoFile('students-30.json').students, other = list.find(x => x.u !== me);
+  const posts = [];
+  s.mode.stub = {
+    '/v1/admin/link': (method, body, search) => { posts.push({ method, body, u: search.get('u') }); return [200, method === 'DELETE' ? { ok: true } : { ok: true, ...body }]; },
+    '/v1/admin/forget': (method, body) => { posts.push({ method, body }); return [200, { removed: { codes: 1, sessions: 9, visits: 20, rounds: 80, marks: 3 } }]; }
+  };
+  await page.goto(site.origin + '/#/student/' + me);
+  await waitForView(page, 'student');
+  const own = s.api.find(e => e.path === '/v1/admin/student');
+  assert.equal(own.search.get('u'), me);
+  assert.equal(own.search.get('to'), today());
+  // Link: find the other code, pick it, confirm, confirm again.
+  await page.click('#linkBtn');
+  await page.locator('#linkSearch').pressSequentially(other.label);
+  await page.click(`.link-pick[data-u="${other.u}"]`);
+  assert.match(await page.locator('#actionPanel').textContent(), /will count as one child/);
+  await page.click('#linkYes');
+  assert.deepEqual(posts, [], 'nothing is sent before the second answer');
+  assert.match(await page.locator('#actionPanel').textContent(), /really the same child/);
+  await page.click('#linkSure');
+  await page.waitForFunction(() => /Linked\./.test(document.getElementById('actionPanel').textContent));
+  assert.deepEqual(posts, [{ method: 'POST', body: { u: other.u, to: me }, u: null }], 'the other code joins this student');
+  const post = s.api.find(e => e.path === '/v1/admin/link');
+  assert.equal(post.type, 'application/json');
+  assert.equal(post.auth, 'Bearer ' + TOKEN);
+  // Forget: two answers, then the server's count of what it removed.
+  await page.click('#forgetBtn');
+  assert.match(await page.locator('#actionPanel').textContent(), /School totals keep the play already counted/);
+  await page.click('#forgetYes');
+  assert.equal(posts.length, 1);
+  await page.click('#forgetSure');
+  await page.waitForFunction(() => /Deleted: 9 play sessions and 80 rounds/.test(document.getElementById('actionPanel').textContent));
+  assert.deepEqual(posts[1], { method: 'POST', body: { u: me } });
+  // This student's rounds as CSV: a byte-order mark, then the header.
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#csvBtn')]);
+  assert.match(download.suggestedFilename(), /^student-[0-9a-f]{4}_\d{4}-\d\d-\d\d_\d{4}-\d\d-\d\d\.csv$/);
+  const text = fs.readFileSync(await download.path(), 'utf8');
+  assert.equal(text.charCodeAt(0), 0xfeff);
+  assert.equal(text.slice(1).split('\r\n')[0], 'day,time,game,level,outcome,engaged_ms,score,tier,dda_level,hits,misses,rt_mean_ms,attempt,minutes_into_session');
+  assert.equal(text.trim().split('\r\n').length, 1 + demoFile('student-' + me + '.json').rounds.length);
+  await s.check();
+});
+
+test('the period: a custom range of at most 366 days, this school year, and children whose age is not set', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  await page.goto(site.origin + '/');
+  await waitForKpis(s, 1);
+  let n = s.kpis().length;
+  await page.click('#periodFilter button[data-value="year"]');
+  await waitForKpis(s, n + 1);
+  const y = Number(today().slice(0, 4)), aug = today() >= y + '-08-01' ? y + '-08-01' : (y - 1) + '-08-01';
+  assert.equal(s.lastKpis().search.get('from'), aug, 'the school year starts on 1 August');
+  assert.equal(s.lastKpis().search.get('to'), today());
+  await page.click('#periodFilter button[data-value="custom"]');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'customFrom');
+  await page.fill('#customFrom', dayBefore(today(), 400));
+  await page.fill('#customTo', today());
+  await page.click('#customRange button[type="submit"]');
+  assert.match(await page.locator('#customRange .field-error').textContent(), /at most 366 days/);
+  assert.equal(s.kpis().length, n + 1, 'nothing asked for a range the server refuses');
+  await page.fill('#customFrom', dayBefore(today(), 9));
+  await page.fill('#customTo', dayBefore(today(), 2));
+  n = s.kpis().length;
+  await page.click('#customRange button[type="submit"]');
+  await waitForKpis(s, n + 1);
+  assert.equal(s.lastKpis().search.get('from'), dayBefore(today(), 9));
+  assert.equal(s.lastKpis().search.get('to'), dayBefore(today(), 2));
+  assert.equal(await page.locator('#customRange').isHidden(), true);
+  n = s.kpis().length;
+  await page.click('#bandFilter button[data-value="unknown"]');
+  await waitForKpis(s, n + 1);
+  assert.equal(s.lastKpis().search.get('band'), 'unknown');
+  await page.reload();
+  await waitForKpis(s, n + 2);
+  assert.equal(s.lastKpis().search.get('from'), dayBefore(today(), 9), 'the custom range is remembered');
+  await s.check();
+});
+
+test('the Games tab: a card per game, a game\'s page, and the game picker', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  await page.goto(site.origin + '/#/games');
+  await waitForView(page, 'games');
+  const k = s.lastKpis().json;
+  assert.equal(await page.locator('.game-card').count(), k.games.filter(g => !g.suppressed).length);
+  await page.click('.game-card[data-slug="bubble-bop"] a');
+  await waitForView(page, 'game');
+  assert.equal(new URL(page.url()).hash, '#/game/bubble-bop');
+  const call = s.api.filter(e => e.path === '/v1/admin/game').at(-1);
+  assert.equal(call.search.get('slug'), 'bubble-bop');
+  assert.equal(await page.locator('#game-h').textContent(), nameOf('en')('bubble-bop'));
+  for (const id of ['game-who', 'game-levels', 'game-difficulty', 'game-better', 'game-after', 'game-tired', 'game-flows', 'game-score', 'game-pcs']) {
+    assert.equal(await page.locator('#' + id).count(), 1, id);
+  }
+  assert.match(await page.locator('#game-score').textContent(), /The score here is the stars of a finished level/);
+  // Only the measures this game reports are offered.
+  const NAMES = { accuracy: 'Accuracy', reaction: 'Reaction time', winRate: 'Won (of finished)', score: 'Average score', timeToWin: 'Time to win' };
+  const reported = R.measuresOf(R.pick(R.statRows(call.json.stats), 'attempt')).filter(m => NAMES[m]).map(m => NAMES[m]);
+  assert.ok(reported.length >= 2, reported.join(', '));
+  assert.deepEqual(await page.locator('#game-better .list-tools button').allTextContents(), reported);
+  await page.selectOption('#gamePick', 'road-hopper');
+  await waitForView(page, 'game');
+  assert.equal(new URL(page.url()).hash, '#/game/road-hopper');
+  assert.equal(await page.locator('#game-h').textContent(), nameOf('en')('road-hopper'));
+  await s.check();
+});
+
+test('the Learning tab: one game or every measured game, and the paired same-child comparison', async t => {
+  const s = await open(t);
+  const { page } = s;
+  await page.goto(site.origin + '/?demo#/learning');
+  await waitForView(page, 'learning');
+  assert.match(await page.locator('#learning-intro').textContent(), /measured in 3 games so far/);
+  assert.equal(await page.locator('#learning-growth .card').count(), 3, 'every measured game');
+  assert.ok(await page.locator('#learning-growth .dumbbell .mark').count() >= 3);
+  assert.match(await page.locator('#footNotes').textContent(), /Charts include play up to last night/);
+  await page.selectOption('#gamePick', 'road-hopper');
+  await page.waitForFunction(() => document.querySelectorAll('#learning-growth .card').length === 1 && !document.getElementById('dash').classList.contains('is-loading'));
+  assert.match(await page.locator('#learning-growth').textContent(), /Road Hopper/);
+  assert.equal(await page.locator('#learning-diff .diff-row[data-slug]').count(), 1, 'the difficulty of that game only');
+  await s.check();
 });

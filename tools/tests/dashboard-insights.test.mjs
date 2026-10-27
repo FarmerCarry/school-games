@@ -1,6 +1,6 @@
 // The dashboard's insight rules (server/dashboard/insights.js): thresholds, ranking,
 // every group described (even one child) with the small-sample flag, both languages,
-// empty data; and demo.json keeps the server's KPI and live shapes. Pure Node: insights.js and i18n.js are plain
+// empty data; and demo/ keeps the shapes of the admin API. Pure Node: insights.js and i18n.js are plain
 // browser scripts, loaded here in a vm context with a stand-in window.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
@@ -389,7 +389,7 @@ test('empty and missing data never throw', () => {
 });
 
 // ---- the real server: simulated sessions in a temporary database ----------------------
-let dir, app, base, serverKpis = {}, serverLive;
+let dir, app, base, serverKpis = {};
 const TOKEN = 'insights-test-token-0123456789';
 const PERIODS = [1, 7, 30, 90], BANDS = ['all', '6-7', '8-9', '10-11'];
 before(async () => {
@@ -412,7 +412,6 @@ before(async () => {
     const from = new Date(Date.parse(today) - (period - 1) * 86400000).toISOString().slice(0, 10);
     for (const band of BANDS) serverKpis[period + '|' + band] = await get(`/v1/admin/kpis?from=${from}&to=${today}` + (band === 'all' ? '' : '&band=' + band));
   }
-  serverLive = await get('/v1/admin/live');
 });
 after(async () => {
   await app?.close();
@@ -466,26 +465,146 @@ function paths(value, prefix = '', out = new Set()) {
   return out;
 }
 
-test('demo.json holds the server\'s own KPI and live answers for every filter', () => {
-  const demo = JSON.parse(fs.readFileSync(path.join(dashboard, 'demo.json'), 'utf8'));
-  assert.equal(demo.sample, true);
-  assert.deepEqual(Object.keys(demo.kpis).sort(), Object.keys(serverKpis).sort());
+// The answers of the updated server's admin API (docs/RESEARCH_TELEMETRY_SPEC.md §F.4): the
+// keys each object has. demo/ is built in these shapes until make-demo.mjs writes the real
+// server's own answers into it; this test then checks the server keeps them.
+const CLOCK = ['tz', 'source', 'offsetMin', 'today'];
+const SHAPES = {
+  live: ['v', 'clock', 'windowSec', 'minSessions', 'total', 'students', 'guests', 'unknown', 'pcs', 'games'],
+  settings: ['v', 'clock', 'keep', 'storage', 'usage', 'rebuild', 'accepts', 'pcs'],
+  settingsClock: [...CLOCK, 'now', 'weekStart', 'weekSource', 'detected', 'factsSince', 'legacyUntil', 'v3Since'],
+  students: ['v', 'clock', 'range', 'students'],
+  studentRow: ['u', 'label', 'kind', 'linked', 'band', 'bandFirst', 'firstDay', 'lastDay', 'days', 'sessions', 'minutes', 'rounds', 'w', 'l', 'q',
+    'games', 'top', 'pcs', 'knownBefore', 'removed', 'weekly'],
+  student: ['v', 'clock', 'student', 'days', 'hours', 'games', 'weekly', 'rounds', 'sessions', 'persist'],
+  studentHead: ['u', 'label', 'kind', 'band', 'bandFirst', 'firstDay', 'lastDay', 'profileMadeDay', 'knownBefore', 'pcs', 'linked'],
+  studentDay: ['day', 'sessions', 'minutes', 'opens', 'rounds', 'w', 'l', 'q'],
+  studentGame: ['slug', 'minutes', 'rounds', 'w', 'l', 'd', 'e', 'q', 'hits', 'misses', 'rtMean', 'bestScore', 'avgScore', 'ddaMean', 'hearts'],
+  studentWeek: ['week', 'slug', 'rounds', 'w', 'l', 'hits', 'misses', 'rtSum', 'rtN', 'scoreSum', 'scoreN', 'ddaSum', 'ddaN'],
+  studentRound: ['day', 'time', 'slug', 'id', 'code', 'ms', 'score', 'tier', 'dda', 'hits', 'misses', 'rtMean', 'attempt', 'minIntoSession'],
+  studentSession: ['day', 'time', 'pc', 'minutes', 'games', 'rounds', 'wins', 'why'],
+  game: ['v', 'clock', 'slug', 'range', 'bands', 'daily', 'stats', 'firstWin', 'paired', 'flowsIn', 'flowsOut'],
+  stats: ['v', 'clock', 'range', 'columns', 'rows'],
+  cohorts: ['v', 'clock', 'weekStart', 'cohorts'],
+  pcs: ['v', 'clock', 'pcs'],
+  pcRow: ['p', 'label', 'firstDay', 'lastDay', 'days', 'sessions', 'students', 'guests', 'minutes', 'smoothShare', 'stallShare', 'avgLoadMs',
+    'slowInputShare', 'errors', 'npMax', 'newProfiles', 'z', 'build', 'flags']
+};
+// What the updated server adds to the milestone-2 KPI answer (§F.4).
+const KPI_ADDITIONS = new Set(['clock', ...CLOCK.map(k => 'clock.' + k), 'range.legacyUntil', 'range.factsSince', 'totals.students',
+  ...['active', 'new', 'returning', 'knownBefore', 'guestSessions', 'guestMinutes', 'minutesPerStudentDay', 'minutesPerStudentDay.p25',
+    'minutesPerStudentDay.median', 'minutesPerStudentDay.p75', 'minutesPerStudentDay.mean'].map(k => 'totals.students.' + k),
+  'daily[].students', 'daily[].guestMinutes', 'games[].students', 'games[].hearts', 'games[].hearts.on', 'games[].hearts.off', 'games[].tutorials',
+  'games[].tutorials.start', 'games[].tutorials.done', 'games[].wallMinutes', 'games[].actionsPerMinute', 'games[].avgScore', 'games[].unended',
+  'games[].duoRounds', 'levels[].students', 'levels[].avgScore', 'levels[].unended', 'bands[].students', 'quality',
+  ...['linkedShare', 'v2Share', 'clockEstimatedShare', 'unclosedVisits', 'unknownBandShare', 'idleHandovers', 'pcsNew', 'oldVersionSessionShare',
+    'profilesFullPcs', 'forgetfulPcs'].map(k => 'quality.' + k)]);
+const METRICS = ['hour', 'rhour', 'sesslen', 'daymin', 'games', 'visitlen', 'flow', 'attempt', 'tenure', 'persist', 'fatigue', 'qrun', 'tier', 'tutorial'];
+const keysOf = (value, keys, where) => assert.deepEqual(Object.keys(value).sort(), [...keys].sort(), where);
+
+test('demo/ holds an answer in the shape of the admin API for every filter and page it shows', () => {
+  const dir = path.join(dashboard, 'demo');
+  const files = fs.readdirSync(dir).sort();
+  const expected = [];
+  for (const p of [1, 7, 30, 90]) {
+    for (const b of ['all', '6-7', '8-9', '10-11']) expected.push(`kpis-${p}-${b}.json`);
+    expected.push(`students-${p}.json`, `stats-${p}.json`);
+  }
+  expected.push('live.json', 'settings.json', 'cohorts-90.json', 'pcs-30.json');
+  for (const f of expected) assert.ok(files.includes(f), 'demo/' + f);
+  const students = files.filter(f => /^student-/.test(f)), games = files.filter(f => /^game-/.test(f));
+  assert.equal(students.length, 3);
+  assert.equal(games.length, 6);
+  assert.deepEqual(files.filter(f => !expected.includes(f) && !students.includes(f) && !games.includes(f)), [], 'no other file');
+  assert.equal(fs.existsSync(path.join(dashboard, 'demo.json')), false, 'demo/ replaces demo.json');
+  const size = files.reduce((a, f) => a + fs.statSync(path.join(dir, f)).size, 0);
+  assert.ok(size <= 3e6, 'the sample data stays small: ' + size + ' bytes');
+  const read = f => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+  const catalog = {};
+  vm.runInNewContext(fs.readFileSync(path.join(repo, 'js/catalog.js'), 'utf8'), { window: catalog });
+  const slugs = new Set([...catalog.GAMES].map(g => g.slug));
+  const today = read('settings.json').clock.today;
+  for (const f of files) {
+    const answer = read(f);
+    assert.equal(answer.v, 1, f);
+    keysOf(answer.clock, CLOCK.concat(f === 'settings.json' ? SHAPES.settingsClock.slice(4) : []), f + ' clock');
+    assert.equal(answer.clock.today, today, f + ': one school day for the whole sample');
+    assert.ok(!JSON.stringify(answer).includes('"suppressed"'), f + ': nothing is suppressed');
+  }
+  // The KPIs: every field the server sends (the milestone-2 answer of this checkout's server,
+  // with everything it hid), plus only the documented additions.
   const known = new Set();
   for (const k of Object.values(serverKpis)) paths(k, '', known);
-  for (const [key, kpis] of Object.entries(demo.kpis)) {
-    const [period, band] = key.split('|');
-    assert.equal(kpis.v, 1);
-    assert.equal(kpis.range.days, Number(period), key);
-    assert.equal(kpis.range.band, band, key);
-    assert.deepEqual(Object.keys(kpis).sort(), Object.keys(serverKpis[key]).sort(), key + ': the same top-level fields');
-    // Fields the server may add later are fine; a field the server does not have is not.
-    for (const p of paths(kpis)) if (!p.endsWith('suppressed')) assert.ok(known.has(p), key + ': unknown field ' + p);
-    assert.ok(kpis.totals.sessions > 0, key);
+  for (const f of files.filter(f => f.startsWith('kpis-'))) {
+    const k = read(f), [, period, band] = /^kpis-(\d+)-(.+)\.json$/.exec(f);
+    assert.equal(k.range.days, Number(period), f);
+    assert.equal(k.range.band, band, f);
+    assert.equal(k.range.to, today, f);
+    assert.equal(k.minSessions, 0, f);
+    const own = paths(k);
+    for (const p of own) assert.ok(known.has(p) || KPI_ADDITIONS.has(p), f + ': unknown field ' + p);
+    for (const p of ['v', 'range', 'totals', 'totals.players', 'daily[].day', 'games[].rounds.codes.w', 'levels[].codes.q', 'bands[].games[].share',
+      'devices.cores[].frames.smoothShare', 'modes[].mode']) assert.ok(own.has(p), f + ': ' + p);
+    for (const p of KPI_ADDITIONS) if (!p.startsWith('clock')) assert.ok(own.has(p), f + ': the addition ' + p);
   }
-  // The live view is in memory, so this database-filled server has none: its documented shape instead.
-  assert.deepEqual(Object.keys(demo.live).sort(), Object.keys(serverLive).sort());
-  const live = new Set(['v', 'windowSec', 'minSessions', 'total', 'total.sessions', 'total.suppressed', 'games', 'games[]',
-    'games[].slug', 'games[].sessions', 'games[].suppressed']);
-  for (const p of paths(demo.live)) assert.ok(live.has(p), 'live: ' + p);
-  assert.ok(demo.live.total.sessions > 0);
+  const live = read('live.json');
+  keysOf(live, SHAPES.live, 'live');
+  assert.equal(live.minSessions, 0);
+  assert.equal(live.total.sessions, live.students + live.guests + live.unknown, 'live: every session is a student, a guest or unknown');
+  const settings = read('settings.json');
+  keysOf(settings, SHAPES.settings, 'settings');
+  assert.deepEqual(settings.accepts, [2, 3]);
+  for (const p of [1, 7, 30, 90]) {
+    const s = read(`students-${p}.json`);
+    keysOf(s, SHAPES.students, 'students-' + p);
+    for (const row of s.students) {
+      keysOf(row, SHAPES.studentRow, 'students-' + p + ' ' + row.u);
+      assert.match(row.u, /^(?:[0-9a-f]{12}|c[0-9a-f]{4})$/);
+      assert.ok(row.u.toUpperCase().startsWith(row.label), 'a label is a prefix of its code');
+      assert.equal(row.weekly.length, 13);
+      assert.ok(row.top.length <= 3 && row.top.every(slug => slugs.has(slug)));
+    }
+    const st = read(`stats-${p}.json`);
+    keysOf(st, SHAPES.stats, 'stats-' + p);
+    for (const c of ['a', 'metric', 'slug', 'k1', 'k2', 'n', 'students']) assert.ok(st.columns.includes(c), 'stats column ' + c);
+    const mi = st.columns.indexOf('metric');
+    for (const r of st.rows) { assert.equal(r.length, st.columns.length); assert.ok(METRICS.includes(r[mi]), r[mi]); }
+  }
+  for (const f of students) {
+    const s = read(f);
+    keysOf(s, SHAPES.student, f);
+    keysOf(s.student, SHAPES.studentHead, f + ' student');
+    assert.equal(f, 'student-' + s.student.u + '.json');
+    assert.equal(s.hours.length, 24);
+    s.days.forEach(d => keysOf(d, SHAPES.studentDay, f + ' days'));
+    s.games.forEach(g => keysOf(g, SHAPES.studentGame, f + ' games'));
+    s.weekly.forEach(w => keysOf(w, SHAPES.studentWeek, f + ' weekly'));
+    s.rounds.forEach(r => keysOf(r, SHAPES.studentRound, f + ' rounds'));
+    s.sessions.forEach(x => keysOf(x, SHAPES.studentSession, f + ' sessions'));
+    assert.ok(s.rounds.length <= 600 && s.sessions.length <= 100);
+    keysOf(s.persist, ['same', 'level', 'game', 'stop'], f + ' persist');
+  }
+  for (const f of games) {
+    const g = read(f);
+    keysOf(g, SHAPES.game, f);
+    assert.equal(f, 'game-' + g.slug + '.json');
+    assert.ok(slugs.has(g.slug));
+    g.bands.forEach(b => keysOf(b, ['band', 'students', 'minutes', 'opens'], f + ' bands'));
+    g.daily.forEach(d => keysOf(d, ['day', 'students', 'minutes', 'opens'], f + ' daily'));
+    g.firstWin.forEach(x => keysOf(x, ['id', 'students', 'median', 'p75', 'never'], f + ' firstWin'));
+    assert.deepEqual(g.paired.columns, ['u', 'a', 'part', 'rounds', 'w', 'l', 'hits', 'misses', 'rtSum', 'rtN', 'scoreSum', 'scoreN', 'ddaSum', 'ddaN']);
+    g.flowsIn.forEach(x => keysOf(x, ['from', 'n'], f + ' flowsIn'));
+    g.flowsOut.forEach(x => keysOf(x, ['to', 'n'], f + ' flowsOut'));
+  }
+  const cohorts = read('cohorts-90.json');
+  keysOf(cohorts, SHAPES.cohorts, 'cohorts');
+  for (const c of cohorts.cohorts) { keysOf(c, ['week', 'size', 'active'], 'cohort'); assert.ok(c.active.length <= 13); }
+  const pcs = read('pcs-30.json');
+  keysOf(pcs, SHAPES.pcs, 'pcs');
+  for (const p of pcs.pcs) {
+    keysOf(p, SHAPES.pcRow, 'pc ' + p.p);
+    assert.match(p.p, /^[0-9a-f]{12}$/);
+    assert.equal(p.label, p.p.slice(0, 4).toUpperCase());
+    assert.ok(p.flags.every(x => ['full', 'forgets', 'choppy', 'old'].includes(x)));
+  }
 });
