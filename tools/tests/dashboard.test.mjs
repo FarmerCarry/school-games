@@ -476,3 +476,76 @@ test('game names come with the dashboard when the site does not publish its cata
   assert.deepEqual((await names()).slice(0, shown.length), shown.map(g => nameOf('ar')(g.slug)));
   await s.check();
 });
+
+test('chart labels stay inside their cards, left to right and right to left', async t => {
+  // The sample data too: its longer "x of y" labels showed figures wider than they were measured.
+  for (const [lang, width, demoMode] of [['en', 1366], ['ar', 1366], ['ar', 390], ['en', 1366, true], ['ar', 1366, true]]) {
+    const s = await open(t, { viewport: { width, height: 800 }, token: TOKEN, lang });
+    const { page } = s;
+    const shows = period => page.waitForFunction(v => document.querySelector('.tile[data-key="sessions"]')?.dataset.value === v,
+      String(demo.kpis[period + '|all'].totals.sessions));
+    await page.goto(site.origin + (demoMode ? '/?demo' : '/'));
+    if (demoMode) await shows(30); else await waitForKpis(s, 1);
+    for (const period of [30, 90]) {
+      if (period !== 30) {
+        const n = s.kpis().length;
+        await page.click(`#periodFilter button[data-value="${period}"]`);
+        if (demoMode) await shows(period); else await waitForKpis(s, n + 1);
+      }
+      const outside = await page.evaluate(() => [...document.querySelectorAll('svg.chart text')].flatMap(text => {
+        const card = text.closest('.card'), r = text.getBoundingClientRect();
+        if (!card || !r.width) return [];
+        const c = card.getBoundingClientRect(), cs = getComputedStyle(card);
+        const left = c.left + parseFloat(cs.paddingLeft) - 1, right = c.right - parseFloat(cs.paddingRight) + 1;
+        return r.left < left || r.right > right ? [`${card.id}: "${text.textContent}" ${Math.round(r.left)}..${Math.round(r.right)}`] : [];
+      }));
+      assert.deepEqual(outside, [], `${lang} ${width}px, ${period} days`);
+    }
+    await s.check();
+  }
+});
+
+// WCAG 2 contrast of every visible text run against the nearest opaque background behind it.
+function lowContrast() {
+  const parse = c => {
+    const m = /rgba?\(([^)]+)\)/.exec(c);
+    if (!m) return null;
+    const p = m[1].split(/[ ,/]+/).filter(Boolean).map(Number);
+    return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+  };
+  const lum = ({ r, g, b }) => {
+    const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  const background = el => {
+    for (let n = el; n; n = n.parentElement) { const c = parse(getComputedStyle(n).backgroundColor); if (c && c.a > 0.5) return c; }
+    return { r: 255, g: 255, b: 255 };
+  };
+  const low = new Set();
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node; (node = walker.nextNode());) {
+    const el = node.parentElement;
+    if (!node.textContent.trim() || !el || el.closest('[hidden], .sr-only, noscript, .tip') || !el.getBoundingClientRect().width) continue;
+    const cs = getComputedStyle(el), svg = el instanceof SVGElement;
+    const fg = parse(svg ? cs.fill : cs.color), bg = background(svg ? el.closest('.card') || el : el);
+    const a = lum(fg), b = lum(bg), ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    const size = parseFloat(cs.fontSize), large = size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700);
+    if (ratio < (large ? 3 : 4.5)) low.add(`"${node.textContent.trim().slice(0, 30)}" ${ratio.toFixed(2)}:1`);
+  }
+  return [...low];
+}
+
+test('text is readable in light and dark: contrast of at least 4.5 to 1 (3 to 1 for large text)', async t => {
+  for (const colorScheme of ['light', 'dark']) {
+    const s = await open(t, { colorScheme });
+    const { page } = s;
+    await page.goto(site.origin + '/');
+    await page.locator('#signin').waitFor();
+    const low = await page.evaluate(lowContrast);
+    await page.goto(site.origin + '/?demo');
+    await page.waitForFunction(() => document.querySelectorAll('#tiles .tile').length === 5 && document.querySelector('#health'));
+    low.push(...await page.evaluate(lowContrast));
+    assert.deepEqual(low, [], colorScheme);
+    await s.check();
+  }
+});

@@ -153,10 +153,11 @@
     var svg = s('svg', { width: W, height: H, viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img', tabindex: '0',
       'aria-label': opts.name + '. ' + opts.keysHint }, host);
     var grid = s('g', { class: 'grid' }, svg);
+    // The numbers sit beside the plot, aligned to it: to its left, or mirrored to its right.
     yt.forEach(function (v) {
       var y = r1(Y(v)) + 0.5;
       s('line', { x1: left, x2: right, y1: y, y2: y, class: v === 0 ? 'baseline' : 'gridline' }, grid);
-      s('text', { x: rtl ? W - 2 : axisW - 8, y: y + 4, class: 'tick', 'text-anchor': rtl ? 'start' : 'end', direction: 'ltr' }, grid, compact(v));
+      s('text', { x: rtl ? W - axisW + 8 : axisW - 8, y: y + 4, class: 'tick', 'text-anchor': rtl ? 'start' : 'end', direction: 'ltr' }, grid, compact(v));
     });
     // Day labels, counted back from the newest day so the latest always has one;
     // a label that would touch one already placed is skipped (measured, not guessed).
