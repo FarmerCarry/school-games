@@ -52,8 +52,9 @@ async function setup(t, { telemetry = ON, gpc = false, clock = false, answer = (
     const post = { url: request.url(), method: request.method(), type: request.resourceType(), headers: await request.allHeaders(), body: request.postData() };
     state.posts.push(post);
     const status = state.answer(state.posts.length, post);
-    // 'abort': the network fails (no answer at all).
+    // 'abort': the network fails; 'hang': the request is never answered.
     if (status === 'abort') await route.abort('failed');
+    else if (status === 'hang') return;
     else await route.fulfill({ status, headers: { 'Access-Control-Allow-Origin': origin } });
   });
   await context.addInitScript(([config, gpc]) => {
@@ -406,6 +407,22 @@ test('failures back off 20, 40, 80, 160, 300 s; a 2xx and a 4xx are final; 429, 
   assert.equal(await queue(page), null);
   assert.equal(state.posts[9].body, state.posts[8].body);
   like(state.posts.slice(7).map(p => JSON.parse(p.body).ev), [[['lv', int, 4]], [['lv', int, 5]], [['lv', int, 5]]]);
+  await checkBatches(page, batches(state));
+});
+
+test('a request that is never answered holds the queue back for a minute at most', async t => {
+  const state = await setup(t, { clock: true, answer: n => n === 1 ? 'hang' : 204 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/');
+  const at = async (ms, count, label) => { await page.clock.runFor(ms); await until(() => state.posts.length === count, label, 5000); };
+  await at(20000, 1, 'the first send');
+  // Nothing else happens on the page: the same batch goes again a minute later.
+  await at(59999, 1, 'no second request while the first may still be answered');
+  await at(1, 2, 'the same batch again after a minute');
+  await page.waitForFunction(() => window.fetched === 1);
+  assert.equal(state.posts[1].body, state.posts[0].body, 'the same batch, the same id');
+  assert.equal(await queue(page), null, 'delivered');
+  await at(300000, 2, 'nothing more to send');
   await checkBatches(page, batches(state));
 });
 

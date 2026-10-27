@@ -98,9 +98,10 @@ strings, wall-clock dates or times, IP-derived data, and the local day records.
   keepalive })`, one at a time, oldest first.
 * A **2xx** removes the batch. A **4xx other than 429** removes it as malformed (it would
   never be accepted). **429, 5xx and network errors** keep it and back off **20, 40, 80,
-  160, then 300 s**. While the server is failing, or the PC is offline
-  (`navigator.onLine === false`), a hidden page sends no beacon and the queue keeps
-  everything for later.
+  160, then 300 s**. A request with no answer at all after a minute no longer holds the
+  queue back: its batch goes again (the server keeps it once). While the server is
+  failing, or the PC is offline (`navigator.onLine === false`), a hidden page sends no
+  beacon and the queue keeps everything for later.
 * Unsent batches wait in `localStorage` **`sg:site:tm:q`** (an array of `{ t, e }`: when the
   batch's first event was recorded, and the envelope), oldest first, **at most 128 KB**
   (the oldest go first) and **7 days**. They survive a reload or a restart of the PC and go
@@ -162,7 +163,8 @@ stopping statistics on the teacher page.
   `http://`, a quote, this computer without `allowLocal`, Global Privacy Control,
   statistics stopped, sharing off) sends and stores nothing and games get
   `telemetry: false`; back-off 20, 40, 80, 160, 300 s with a fake clock, for 5xx and for
-  no answer at all; 400 and 429; the queue across a reload, its 128 KB, 7-day and clear rules;
+  no answer at all; 400 and 429; a request that is never answered goes again after a minute;
+  the queue across a reload, its 128 KB, 7-day and clear rules;
   beacons on a hidden page and at unload, and offline; a new session per player with the
   old one ending after its game; field-by-field checks of `sg:telemetry` and late frames;
   load failures; a stop from another tab.

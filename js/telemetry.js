@@ -25,9 +25,10 @@
  * a game closes, 20 s after the first waiting event, and by sendBeacon when the page
  * is hidden. Unsent batches wait in localStorage sg:site:tm:q (oldest first, at most
  * 128 KB and 7 days). A 2xx or a 4xx other than 429 is final; 429, 5xx and network
- * errors back off 20, 40, 80, 160, 300 s. sg:site:tm:on (the server's host) tells the
- * teacher page that this PC shares. Every storage call is guarded, nothing is logged,
- * every promise is caught and no call into this file throws.
+ * errors back off 20, 40, 80, 160, 300 s; a request with no answer after a minute is
+ * sent again. sg:site:tm:on (the server's host) tells the teacher page that this PC
+ * shares. Every storage call is guarded, nothing is logged, every promise is caught
+ * and no call into this file throws.
  */
 (function () {
   'use strict';
@@ -255,7 +256,10 @@
     if (!live()) return;
     seal();
     var x = load()[0], b, json;
-    if (!x || (busy && now() - busyAt < 6e4)) return;
+    if (!x) return;
+    // A request with no answer after a minute no longer holds the queue back: its batch
+    // goes again (the server keeps it once), with no new event needed to wake the sink.
+    if (busy && now() - busyAt < 6e4) return arm(busyAt + 6e4 - now());
     if (retryAt > now()) return arm(retryAt - now());
     b = x.e.b;
     json = str(x.e);
@@ -263,6 +267,7 @@
       .then(safe(function (r) { done(b, r.status); }), safe(function () { done(b, 0); }));
     busy = b;
     busyAt = now();
+    arm(6e4);
   }
   // A 2xx is delivered and a 4xx other than 429 is malformed: both are final.
   // 429, 5xx and network errors keep the batch and back off.
