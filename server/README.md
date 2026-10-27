@@ -38,9 +38,13 @@ a web browser. Everything below is free.
    least 16 English letters or digits, with no spaces** (for example
    `GreenTiger42Window7Lamp`, but make up your own). **Write it down on paper now.**
    You type it to open the dashboard, and Cloudflare keeps it secret: it cannot show it
-   to you again later (you can only replace it, see below).
+   to you again later (you can only replace it, see below). If you see no box with that
+   name, go on without it and add the password afterwards (see *Changing or setting the
+   password later* below).
 6. **Press *Create and deploy*** (it may just say *Deploy*).
-7. **Wait** one to three minutes, until Cloudflare says the deployment succeeded.
+7. **Wait** one to three minutes, until Cloudflare says the deployment succeeded. If
+   Cloudflare first asks you to choose a *workers.dev* name (a subdomain), type a short
+   name in English letters, for example your school's name: it becomes part of the address.
 8. **Copy the address** it shows. It looks like
    `https://school-games-telemetry.<your-name>.workers.dev`. Send that address to the
    developer (an email or a chat message is fine). The developer then switches the games
@@ -51,10 +55,13 @@ a web browser. Everything below is free.
 
 **It is free for a school.** Cloudflare's free plan allows 100,000 requests to the
 server per day (a PC sends one about every game played; 120 play sessions send about
-300), and its free D1 database allows 5 GB of storage, 5 million rows read and 100,000
-rows written per day. A school day with 120 play sessions writes about 3,000 rows (a few
-percent of the allowance) and keeps about 1 MB of totals per month; the dashboard reads
-about 25,000 rows when it first shows a month, and about 2,000 each time it refreshes.
+300; the server's own clean-up every 5 minutes adds about 300), and its free D1 database
+allows 500 MB per database, 5 million rows read and 100,000 rows written per day. A
+school day with 120 play sessions writes about 3,000 rows (a few percent of the
+allowance) and keeps about 1 MB of totals per month. The first time each day the
+dashboard shows a month it reads about 25,000 rows, and about 1,400 each time it
+refreshes after that (a busy school with 500 play sessions a day: about 130,000 rows the
+first time it shows 90 days).
 If a limit were ever reached, the server stops answering until midnight UTC: nothing is
 charged (the free plan has no bill), and the PCs keep their statistics for up to 7 days
 and send them later.
@@ -62,8 +69,9 @@ and send them later.
 **Changing or setting the password later:** on [dash.cloudflare.com](https://dash.cloudflare.com),
 open *Workers & Pages*, then `school-games-telemetry`, then *Settings*, then *Variables and
 Secrets*. Edit `ADMIN_TOKEN` (or add it, type *Secret*), type the new password and press
-*Deploy*. Without a valid password the dashboard says that the password was not set,
-while the statistics are still collected.
+*Deploy*. A password shorter than 16 characters, or one with a space, does not count:
+the dashboard then says that the password was not set (the statistics are still
+collected), and you set a longer one here.
 
 ## Before you turn it on
 
@@ -83,8 +91,8 @@ it (the teacher page), and browsers that send Global Privacy Control never send 
 
 | File | What it does |
 |---|---|
-| `worker.mjs` | Cloudflare entry: `fetch` (the handler on the D1 database `env.DB`, the dashboard from `env.ASSETS`) and `scheduled` (the daily purge). |
-| `wrangler.json` | The Worker's settings: D1 binding `DB`, static assets `./dashboard`, the daily cron, `ALLOWED_ORIGINS` and `RETENTION_DAYS`, request logs (observability) off. |
+| `worker.mjs` | Cloudflare entry: `fetch` (the handler on the D1 database `env.DB`, the dashboard from `env.ASSETS`) and `scheduled` (the daily purge, and the sweep of the live rows every 5 minutes). |
+| `wrangler.json` | The Worker's settings: D1 binding `DB`, static assets `./dashboard`, two crons (the daily purge, and every 5 minutes the sweep of the live rows), `ALLOWED_ORIGINS` and `RETENTION_DAYS`, request logs (observability) off. |
 | `package.json`, `package-lock.json` | Wrangler 4.149.0 for deploying (a development tool only), the plain-English descriptions the Deploy button shows, `npm start` for Node. |
 | `.dev.vars.example` | Tells the Deploy button to ask for the `ADMIN_TOKEN` secret (empty on purpose). |
 | `handler.mjs` | The HTTP rules as a Fetch-API handler, shared by both hosts: routes, CORS, the soft rate limit, body limits, admin password, status codes. |
@@ -117,8 +125,9 @@ Privacy is built into what can be stored, not only into what the portal chooses 
   bucket). What a single child did cannot be read back.
 * **Session ids for two days, batch ids for 30.** The session id is random per portal
   session and never reused. The server keeps it only in the `seen` table (to count
-  distinct sessions per day) for today and yesterday, and in the `live` table for at
-  most 10 minutes. The batch id is random per batch and kept 30 days for
+  distinct sessions per day) for today and yesterday, and in the `live` table while it
+  is in the 5-minute live window (a sweep every 5 minutes deletes it within 10 minutes,
+  also when no request comes). The batch id is random per batch and kept 30 days for
   de-duplication. Neither can link sessions of the same child. On the PC, unsent batches
   wait in localStorage (keys starting with `sg:site:tm:q`, at most 7 days and 128 KB).
 * **No IP addresses and no headers are stored or logged.** The client address
@@ -130,7 +139,7 @@ Privacy is built into what can be stored, not only into what the portal chooses 
   counts (Node) and internal error messages.
 * **No wall-clock times from the client.** Events carry seconds since the session
   started and the server stores only the UTC **day** of receipt. The live view keeps
-  the **minute** of each session's last batch, for 10 minutes.
+  the **minute** of each session's last batch, for at most 10 minutes.
 * **Coarse buckets.** Devices are reported as cores (1, 2, 4, 8, 16), memory in GB
   (0, 1, 2, 4, 8) and screen width (1366, 1600, 1920, 2560); age as a band (6-7, 8-9,
   10-11 or unknown); profile age, days since last play and plays before as buckets;
@@ -142,7 +151,8 @@ Privacy is built into what can be stored, not only into what the portal chooses 
   subtracting narrower queries from wider ones; the dashboard password is for the
   people who operate the service, not for publishing raw results.
 * **Retention.** Daily totals older than `RETENTION_DAYS` (default 180) are deleted by
-  the daily purge (Cloudflare: a cron at 03:23 UTC; Node: at start and every 24 hours).
+  the daily purge (Cloudflare: a cron at 03:23 UTC; Node: at start and every 24 hours);
+  live rows by a sweep every 5 minutes (Node: every minute).
   On Node, SQLite's `secure_delete` overwrites deleted rows and the write-ahead log is
   truncated after each purge.
 
@@ -495,10 +505,12 @@ life when it arrives; a repeated batch does not.
   encrypt them at rest. To restore, stop the server and replace the file (delete stale
   `-wal`/`-shm` files).
 * **Retention.** Daily totals are deleted by receipt day by the daily purge; batch ids
-  after 30 days, `seen` session ids after yesterday, live rows after 10 minutes (also by
-  the next batch or live query). Lowering `RETENTION_DAYS` takes effect at the next
-  purge (Node: the next start). To erase everything on Node, stop the server and delete
-  the database files; on Cloudflare, delete the Worker and its D1 database
+  after 30 days, `seen` session ids after yesterday, the kept KPI rows (`kpi_cache`) at
+  every daily purge, and live rows once they leave the 5-minute window (by the next batch
+  or live query, and by a sweep every 5 minutes on Cloudflare and every minute on Node,
+  so within 10 minutes even with no traffic). Lowering `RETENTION_DAYS` takes effect at
+  the next purge (Node: the next start). To erase everything on Node, stop the server and
+  delete the database files; on Cloudflare, delete the Worker and its D1 database
   `school-games-telemetry` in the Cloudflare dashboard.
 * **Monitoring.** `GET /v1/health`. The Node process exits when it cannot start (port in
   use, unreadable database), so the supervisor (Docker, systemd) reports or restarts it.
@@ -510,21 +522,29 @@ life when it arrives; a repeated batch does not.
   `user_version` is raised so the first server refuses it. A server refuses a database
   newer than itself.
 * **Size and cost.** Measured with `simulate.mjs` (120 sessions per weekday, a sixth
-  at weekends, 30 days, 9,105 batches): a batch writes 10.5 rows on average (median 11,
-  95th percentile 19) and reads about 20, so a month writes about 96,000 rows and keeps
-  about 1 MB of totals. A KPI query reads the aggregate rows of its days (about 500
-  per school day, 12,800 for the month; D1 counts 25,500 rows read for a first 30-day
-  query and 2,000 for a repeat, because days before yesterday never change and each
-  instance keeps their totals for an hour). JavaScript time per request in Node: 0.06 ms
-  per batch and about 1.3 ms per 30- or 90-day KPI query, plus SQLite's own work (0.2 ms
-  per batch, 4 to 20 ms per KPI query), which on Cloudflare D1 does outside the Worker.
+  at weekends, 30 days, 9,105 batches): a batch is one transaction that writes 10.5 rows
+  on average (median 11, 95th percentile 19) and reads about 16, so a month writes about
+  96,000 rows and keeps about 1 MB of totals; a batch of 200 events over one game writes
+  about 30 rows. A KPI query reads the aggregate rows of its days (about 500 per school
+  day, 12,800 for the month; D1 counts 25,000 rows read for a 30-day query, twice the
+  rows because of the grouping). Days before yesterday never change, so their KPI rows
+  are read once per period and day: they are kept in `kpi_cache` (for every instance,
+  until the next daily purge) and in each instance's memory for an hour, and any later
+  query reads only the last two days (about 1,400 rows). A busy school (500 sessions per
+  weekday, 90 days) writes about 17,000 rows per weekday, and a first 90-day query reads
+  about 130,000 rows. JavaScript time per request in Node: 0.06 ms per batch and about
+  1.3 ms per 30- or 90-day KPI query (about 3 ms for the busy school; 3 ms for a
+  200-event batch over 100 games), plus SQLite's own work (0.2 ms per batch, 4 to 20 ms
+  per KPI query), which on Cloudflare D1 does outside the Worker.
 
 ### Storage
 
 `batches (b, day)` for de-duplication; `seen (day, kind, key, s)`, which sessions were
 already counted today in a group (`d` the day, `g` a game, `l` a level, `s` a launch
 source); `live (s, slug, seen_minute)`; `meta (key, value)` with the schema version;
-and five daily aggregate tables, each keyed by `day` and band `a`:
+`kpi_cache (key, made, rows)`, the KPI rows (sums per group as JSON, no session id) of
+the closed days of a requested period, emptied by every daily purge; and five daily
+aggregate tables, each keyed by `day` and band `a`:
 
 | Table | Key after (day, a) | Sums |
 |---|---|---|
@@ -546,7 +566,8 @@ are no other columns.
 * The Workers runtime on your machine (no Cloudflare account needed): `npm install` in
   `server/`, put `ADMIN_TOKEN=...` in `server/.dev.vars` (ignored by Git), then
   `npx wrangler dev` (local D1 in `.wrangler/`). Add `--test-scheduled` and open
-  `/__scheduled` to run the purge. `npx wrangler deploy --dry-run --outdir /tmp/out`
+  `/__scheduled` to run the daily purge, or `/__scheduled?cron=*/5+*+*+*+*` for the
+  sweep of the live rows. `npx wrangler deploy --dry-run --outdir /tmp/out`
   bundles without deploying.
 * Synthetic data for the dashboard: `node server/simulate.mjs --url http://127.0.0.1:8787`
   posts deterministic sessions (same `--seed`, same batch ids, so a repeat adds nothing);

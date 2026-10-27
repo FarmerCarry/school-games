@@ -399,20 +399,26 @@ server/wrangler.json     Worker config; server/package.json pins wrangler; .dev.
   So an accepted batch adds to running daily totals (per UTC day and age band: per game,
   per level, per launch source, per device bucket, replay buckets, player buckets,
   daily totals) with one `INSERT ... ON CONFLICT DO UPDATE` per table (its rows as one
-  JSON parameter) in one batch, and the KPIs are `SUM ... GROUP BY` over those small
+  JSON parameter), all in one D1 batch (one transaction: a failure keeps nothing, so the
+  PC's retry counts in full), and the KPIs are `SUM ... GROUP BY` over those small
   tables. The work per request stays O(groups), never O(events). A batch writes about
-  11 rows on average (95% of batches 19 or fewer) and reads about 20.
+  11 rows on average (95% of batches 19 or fewer) and reads about 16.
 * **Small groups stay hidden.** Each aggregate row carries `sessions`: the number of
   distinct sessions that day, counted through a small `seen(day, kind, key, s)` table
-  (`INSERT OR IGNORE ... RETURNING`, in a first batch before the additions) that keeps
-  only the last 2 days. A range's sessions are the sum of its days' counts (a session
-  crossing midnight counts twice; it is rare). Groups below 3 sessions are suppressed
-  exactly as before.
+  (the additions check it with `NOT EXISTS`, then `INSERT OR IGNORE` adds the batch's
+  groups, in the batch's transaction) that keeps only the last 2 days. A range's
+  sessions are the sum of its days' counts (a session crossing midnight counts twice; it
+  is rare). Groups below 3 sessions are suppressed exactly as before.
 * **Live.** A `live(s, slug, seen_minute)` row per session (one write per batch),
-  deleted after 10 minutes. It is the only fine-grained time kept, and only briefly; the
-  live window is the current minute and the four before.
-* **Closed days are kept.** Only today's rows change, so each instance keeps the KPI
-  rows of days before yesterday for an hour: a dashboard refresh reads two days of rows.
+  deleted once it leaves the live window (the current minute and the four before): by
+  the next batch or live query, and by a 5-minute cron (Node: a timer) when no request
+  comes, so it is gone within 10 minutes. It is the only fine-grained time kept, and
+  only briefly.
+* **Closed days are kept.** Only today's rows change, so the KPI rows of the days
+  before yesterday are read from the aggregates once per period and day and kept in a
+  `kpi_cache` table until the next daily purge (shared by every instance: Cloudflare may
+  answer each refresh from a new one) and in memory for an hour: a dashboard refresh
+  reads two days of rows.
 * **Schema in code.** The store creates and upgrades its tables itself on first use
   (`CREATE TABLE IF NOT EXISTS`, a `meta` schema version), so a deploy has no separate
   migration step that could fail. A milestone-1 Node database is folded into the
@@ -424,9 +430,9 @@ server/wrangler.json     Worker config; server/package.json pins wrangler; .dev.
   `.dev.vars.example`, with a plain description in `package.json` `cloudflare.bindings`;
   without a valid one the admin endpoints answer `404 {"error":"admin password not set"}`);
   `ALLOWED_ORIGINS` (default `https://farmercarry.github.io`) and `RETENTION_DAYS` are
-  plain vars; a daily cron purges old rows; Workers observability stays **off** (its
-  request logs would hold IP addresses); the client key for the soft rate limit is
-  `CF-Connecting-IP`, in memory only. Wrangler is pinned (4.149.0) in
+  plain vars; a daily cron purges old rows and a 5-minute cron deletes stale live rows;
+  Workers observability stays **off** (its request logs would hold IP addresses); the
+  client key for the soft rate limit is `CF-Connecting-IP`, in memory only. Wrangler is pinned (4.149.0) in
   `server/package.json`; the deploy command is `wrangler deploy`.
 * `SG_TELEMETRY_URL` becomes the Worker's `https://…workers.dev/v1/batch`, committed in
   `.github/workflows/build.yml` once the owner reports the address.
