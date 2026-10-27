@@ -395,6 +395,7 @@ test('hand over the device and the topbar badge return to the strip; the mute to
 
   // Mute: the same sg:site:muted key as Kit, so the open game follows.
   await page.locator('#classroom summary').click();
+  await page.evaluate(() => SGProfiles.select('p1'));
   frame = await play(page, 'air-hockey');
   const mute = page.locator('#muteBtn');
   assert.deepEqual([await mute.getAttribute('aria-pressed'), await mute.innerText()], ['false', '🔊']);
@@ -402,6 +403,9 @@ test('hand over the device and the topbar badge return to the strip; the mute to
   assert.deepEqual([await mute.getAttribute('aria-pressed'), await mute.innerText()], ['true', '🔇']);
   assert.equal(await page.evaluate(() => localStorage.getItem('sg:site:muted')), 'true');
   await frame.waitForFunction(() => Kit.audio.muted);
+  // Like every sg:preferences, the mute carries the player's band, slot and telemetry.
+  assert.deepEqual(await frame.evaluate(() => window.prefs.at(-1)),
+    { type: 'sg:preferences', classroom: false, band: '8-9', player: 'p1', telemetry: false, quiet: true });
   await mute.click();
   await frame.waitForFunction(() => !Kit.audio.muted);
   assert.equal(await page.evaluate(() => localStorage.getItem('sg:site:muted')), 'false');
@@ -458,7 +462,14 @@ test('removing a player asks twice and never happens on one click', async t => {
 });
 
 test('with storage blocked the portal plays as a guest, and a player lives in memory', async t => {
-  const { page } = await setup(t, { storage: false, reducedMotion: 'reduce' });
+  const state = await setup(t, { storage: false, reducedMotion: 'reduce' }), { page } = state;
+  // Every sound source the portal page starts.
+  await state.context.addInitScript(() => {
+    if (window.top !== window) return;
+    window.sounds = 0;
+    const start = AudioScheduledSourceNode.prototype.start;
+    AudioScheduledSourceNode.prototype.start = function () { window.sounds++; return start.apply(this, arguments); };
+  });
   await page.goto(origin + '/');
   assert.equal(await page.locator('#app > #who + a.starter').count(), 1);
   assert.equal(await page.locator('#me').getAttribute('class'), 'me guest');
@@ -483,6 +494,21 @@ test('with storage blocked the portal plays as a guest, and a player lives in me
   await page.reload();
   await page.waitForFunction(() => document.body.className === 'route-play');
   assert.deepEqual(await page.evaluate(() => [SGProfiles.player(), SGProfiles.list().length]), ['', 0], 'nothing survives a reload');
+
+  // Storage cannot keep the classroom preset, and it still silences the portal's sounds.
+  await home(page);
+  await page.locator('#who [data-w="pick:"]').click();
+  assert.ok(await page.evaluate(() => window.sounds) > 0, 'the portal plays its sounds');
+  await page.locator('#classroom summary').click();
+  await page.locator('#classroomMode').check();
+  const sounds = await page.evaluate(() => window.sounds);
+  await page.locator('#who [data-w="add"]').click();
+  await page.locator('#who [data-w="a:1"]').click();
+  await page.locator('#who [data-w="back"]').click();
+  assert.equal(await page.evaluate(() => window.sounds), sounds, 'no sound in classroom mode');
+  await page.locator('#classroomMode').uncheck();
+  await page.locator('#who [data-w="cancel"]').click();
+  assert.ok(await page.evaluate(() => window.sounds) > sounds, 'sounds again without it');
 });
 
 test('damaged stored profiles, class band and loss tallies are repaired silently', async t => {

@@ -784,9 +784,10 @@
   // Personal mute, shared with every game through sg:site:muted (Kit uses the same key).
   // The classroom preset silences everything without touching it.
   function paintMute() {
-    var b = $('#muteBtn');
+    var b = $('#muteBtn'), muted = personalMuted || classroomOn;
+    // Juice reads sg:site:muted and sg:site:classroom itself; this also covers blocked storage.
+    juice('setQuiet', muted);
     if (!b) return;
-    var muted = personalMuted || classroomOn;
     b.setAttribute('aria-pressed', String(muted));
     b.setAttribute('aria-disabled', String(classroomOn));
     b.title = classroomOn ? T.muteLocked : T.mute;
@@ -813,16 +814,13 @@
     prof('onLevel', levelled);
 
     personalMuted = !!storedPreference('muted', false);
-    // Juice reads sg:site:muted itself; this also covers blocked storage.
-    juice('setQuiet', personalMuted);
     paintMute();
     mute.addEventListener('click', function () {
       if (classroomOn) { toast(T.muteLocked); return; }
       personalMuted = !personalMuted;
       writePreference('muted', personalMuted);
-      juice('setQuiet', personalMuted);
       // The open game follows at once, also from a folder where it has its own storage.
-      postGame({ type: 'sg:preferences', quiet: personalMuted });
+      sendPreferences(personalMuted);
       paintMute();
       if (!personalMuted) juice('toggle', true);
     });
@@ -833,7 +831,6 @@
     window.addEventListener('storage', function (e) {
       if (e.key !== 'sg:site:muted' && e.key !== null) return;
       personalMuted = !!storedPreference('muted', false);
-      juice('setQuiet', personalMuted);
       paintMute();
     });
   }
@@ -994,13 +991,16 @@
   function telemetryOn() {
     try { return !!(window.SGTelemetry && window.SGTelemetry.active && window.SGTelemetry.active()); } catch (e) { return false; }
   }
-  function sendPreferences() {
+  // quiet: the child's own mute, sent only when the topbar button changes it.
+  function sendPreferences(quiet) {
     // A temporary preset must not overwrite each game's personal settings.
     // Always clear it too: file:// may give every game its own storage area.
     // The player's age band and profile slot are transient too (docs/ARCHITECTURE.md "Kit v2").
     sentTelemetry = telemetryOn();
-    postGame({ type: 'sg:preferences', classroom: classroomOn, band: String(prof('band') || ''),
-      player: String(prof('player') || ''), telemetry: sentTelemetry });
+    var message = { type: 'sg:preferences', classroom: classroomOn, band: String(prof('band') || ''),
+      player: String(prof('player') || ''), telemetry: sentTelemetry };
+    if (typeof quiet === 'boolean') message.quiet = quiet;
+    postGame(message);
   }
   function focusGame() {
     if (portalFocus) return;
