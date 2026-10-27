@@ -13,20 +13,21 @@
  *       rollups (rollupStep) after each day, as the cron would.
  *
  * The school: 600 children in 24 classes (8 per age band, a few without a band) and a lab
- * of 30 PCs, Sunday to Thursday, 07:30 to 13:30, one class per lab slot, with the classroom
- * timer in half the slots. Each child keeps a profile (a random code) on the PC they sit
- * at, with their own skill and taste; 5% also play on a second PC, and half of those had
- * the two codes joined by a teacher (the cd event). About a fifth of the sessions are
- * guests; three PCs still run the old portal (wire version 2); one PC forgets its profiles
- * and its code every night; two PCs fill up to 24 profiles. Games come from js/catalog.js
- * (a built-in list when the catalog is not next to this folder): the 3 DDA games adapt
- * their tier, local two-player games have duo rounds, 25 games show a tutorial, and the
- * games without a score send none. Skill rises with log(attempt), faster for older
- * children; children tire after 20 minutes; how often a child retries after a loss
- * depends on the game. Batches go out as the sink sends them: 60 seconds after the first
- * waiting event (20 for the old portal), at every game close and at the session's end;
- * a few PCs are offline for a while and deliver late. The same seed always gives the same
- * batches, so a repeated run adds nothing. Every batch is checked with server/schema.mjs.
+ * of 30 PCs, Sunday to Thursday, 07:30 to 13:30, one class per lab slot (six a day, or more
+ * on a busy day; each slot's class from the next age band), with the classroom timer in half
+ * the slots. Each child keeps a profile (a random code) on the PC they sit at, with their
+ * own skill and taste; 5% also play on a second PC, and half of those had the two codes
+ * joined by a teacher (the cd event). About a fifth of the sessions are guests; three PCs
+ * still run the old portal (wire version 2); one PC forgets its profiles and its code every
+ * night; two PCs fill up to 24 profiles. Games come from js/catalog.js (a built-in list
+ * when the catalog is not next to this folder): the 3 DDA games adapt their tier, local
+ * two-player games have duo rounds, 25 games show a tutorial, and the games without a
+ * score send none. Skill rises with log(attempt), faster for older children; children
+ * tire after 20 minutes; how often a child retries after a loss depends on the game.
+ * Batches go out as the sink sends them: 60 seconds after the first waiting event (20 for
+ * the old portal), at every game close and at the session's end; a few PCs are offline for
+ * a while and deliver late. The same seed always gives the same batches, so a repeated run
+ * adds nothing. Every batch is checked with server/schema.mjs.
  *
  * Tests import history() (the v3 school's batches) and historyV2() (milestone 2's
  * generator: v2 batches only, one per game close, kept for the comparisons with
@@ -215,12 +216,12 @@ const DDA_GAMES = new Set(['bubble-bop', 'dino-3d', 'road-hopper']);
 const DUO_GAMES = new Set(['air-hockey', 'hoop-heads', 'wacky-soccer', 'sumo-bonk', 'pool-party', 'fire-and-ice', 'connect-four', 'tic-tac-toe']);
 const NO_SCORE = new Set(['block-world', 'connect-four', 'critter-mart', 'pizza-clicker', 'tank-splat', 'tic-tac-toe']);
 const NO_FRAMES = new Set(['connect-four', 'tic-tac-toe', 'typing-test']);
-const CHILDREN = 600, CLASS_SIZE = 25, CLASSES = CHILDREN / CLASS_SIZE, PCS = 30, MAX_PROFILES = 24;
+const CHILDREN = 600, CLASS_SIZE = 25, CLASSES = CHILDREN / CLASS_SIZE, PCS = 30, MAX_PROFILES = 24, PERIODS = 6;
 // PCs 26 to 28 still run the old portal; 29 forgets everything each night; the second PCs
 // of the children who play on two are 5 and 6, which fill up.
 const OLD_PCS = new Set([26, 27, 28]), FORGETFUL_PC = 29, SECOND_PCS = [5, 6];
 // Skill by age band: the chance to win a first try, and how much it rises with log(attempt).
-const LEARNING = { '6-7': [0.3, 0.07], '8-9': [0.38, 0.09], '10-11': [0.45, 0.11], '': [0.38, 0.08] };
+const LEARNING = { '6-7': [0.3, 0.1], '8-9': [0.38, 0.13], '10-11': [0.45, 0.16], '': [0.38, 0.12] };
 const WHY = [['h', 55], ['u', 20], ['p', 15], ['i', 10]];
 const ERRORS = [['t', 3], ['x', 1], ['l', 1]];
 
@@ -486,16 +487,20 @@ const check = batch => {
   if (!valid || valid.dropped) throw new Error('simulator produced an invalid batch: ' + JSON.stringify(batch).slice(0, 200));
 };
 
-// One school day: its lab slots, each with one class at the PCs, `sessions` in all.
+// The lab's timetable: one class per slot, each slot's class from the next age band.
+const TIMETABLE = Array.from({ length: CLASSES }, (_, j) => (j % 3) * (CLASSES / 3) + Math.floor(j / 3));
+
+// One school day: its lab slots (the day's six periods, or more and shorter ones on a busy
+// day), each with one class at the PCs, `sessions` in all, shared out between the slots.
 function schoolDay(school, r, day, dayIndex, sessions) {
-  const slots = Math.max(1, Math.ceil(sessions / CLASS_SIZE)), slotMs = Math.floor(360 / slots) * 60000;
+  const slots = Math.max(PERIODS, Math.ceil(sessions / CLASS_SIZE)), slotMs = Math.floor(360 / slots) * 60000;
   const out = [];
   let left = sessions;
   for (let s = 0; s < slots && left > 0; s++) {
     const start = dayStart(day) + (7 * 60 + 30) * 60000 + s * slotMs, end = start + Math.min(slotMs, 45 * 60000) - 3 * 60000;
     // Half the slots use the classroom timer: each child's turn lasts 10 to 20 minutes.
-    const cls = (dayIndex * slots + s) % CLASSES, timer = r.chance(0.5) ? Math.min(r.int(10, 20), Math.floor((end - start) / 60000)) : 0;
-    const kids = school.children.filter(c => c.cls === cls).filter(() => r.chance(0.92)).slice(0, left);
+    const cls = TIMETABLE[(dayIndex * slots + s) % CLASSES], timer = r.chance(0.5) ? Math.min(r.int(10, 20), Math.floor((end - start) / 60000)) : 0;
+    const kids = school.children.filter(c => c.cls === cls).filter(() => r.chance(0.92)).slice(0, Math.ceil(left / (slots - s)));
     for (const child of kids) {
       // A child with two PCs takes turns: the second one first.
       const pc = school.pcs[child.second !== null && child.sessions++ % 2 === 0 ? child.second : child.home];
@@ -538,7 +543,8 @@ export function* history(options = {}) {
 function playingNow({ sessions, seed, now = Date.now(), games = catalogSlugs() }) {
   const school = makeSchool(seed, games), r = random(seed * 31337), day = localDay(now), out = [];
   for (let i = 0; i < sessions; i++) {
-    const child = school.children[r.int(0, CHILDREN - 1)], pc = school.pcs[child.home];
+    // Children of each age band in turn (a band's classes hold a third of the children).
+    const child = school.children[(i % 3) * (CHILDREN / 3) + r.int(0, CHILDREN / 3 - 1)], pc = school.pcs[child.home];
     const startMs = now - r.int(5, 30) * 60000;
     const played = play(school, r, child, pc, startMs, startMs + 45 * 60000, 0, day);
     const cut = Math.floor((now - startMs) / 1000);

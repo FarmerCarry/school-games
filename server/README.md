@@ -56,7 +56,7 @@ a web browser. Everything below is free.
 
 **It is free for a school.** Cloudflare's free plan allows 100,000 requests to the
 server per day (a PC sends one about every minute of play and one when a game closes;
-500 play sessions send about 4,600 to 5,800; the server's own work every 5 minutes adds
+500 play sessions send about 4,600 to 5,700; the server's own work every 5 minutes adds
 about 300), and its free D1 database allows 500 MB per database, 5 million rows read and
 100,000 rows written per day. A busy school (500 play sessions a day) writes a little
 under half of the daily allowance in the first year and keeps about 350 MB after it
@@ -384,8 +384,8 @@ above 16, the portal's default batch timer for wire version 3 goes from 60 to 90
 |---|---|---|
 | not measured yet (needs the Cloudflare account) | | |
 
-For comparison, the simulated school (`simulate.mjs`) sends 16.1 batches per version 2
-session (20 s timer) and 11.5 per version 3 session (60 s timer, and one when a game
+For comparison, the simulated school (`simulate.mjs`) sends 15.4 batches per version 2
+session (20 s timer) and 11.3 per version 3 session (60 s timer, and one when a game
 closes).
 
 ## API
@@ -1048,18 +1048,18 @@ primary keys are `st_sessions_time`, `st_sessions_student`, `r_student_day_u`,
 
 Measured on the Node driver, which bills a written row once for its table and once for
 each index as D1 does, with the simulated school of `simulate.mjs`: 600 children in 24
-classes on 30 PCs, about 465 play sessions a school day, 11.5 batches per version 3
-session (60 s timer, and one when a game closes), 3.6 game visits, 11.7 rounds and 9.8
+classes on 30 PCs, about 465 play sessions a school day, 11.3 batches per version 3
+session (60 s timer, and one when a game closes), 3.5 game visits, 11.3 rounds and 9.6
 engaged minutes per session. Scaled to a busy school of 500 sessions a school day:
 
 | Rows written per school day | Simulated school | 500 sessions |
 |---|---|---|
-| Batches: 5.9 rows each (facts, student and PC rows, live rows, usage) | 30,400 | ≈ 32,700 |
-| The night's first roll of the day: ≈ 6,600 rollup rows (4,400 of them `r_stat`), their index entries and the live sweep | 12,300 | ≈ 13,200 |
-| Re-rolls of days that late batches reached | 300–450 each | ≈ 500 |
+| Batches: 5.9 rows each (facts, student and PC rows, live rows, usage) | 30,000 | ≈ 32,500 |
+| The night's first roll of the day: ≈ 6,600 rollup rows (4,500 of them `r_stat`), their index entries and the live sweep | 12,400 | ≈ 13,300 |
+| Re-rolls of days that late batches reached | 50–350 each | ≈ 500 |
 | **First year** | | **≈ 46,000 (46%)** |
 | + the facts of a day deleted after 400 days (about 23 rows and index entries a session) | | + ≈ 11,400 |
-| + the rollups of a day deleted after 800 days | | + ≈ 13,200 |
+| + the rollups of a day deleted after 800 days | | + ≈ 13,300 |
 | **From the third year** | | **≈ 71,000 (71%)** |
 
 From the third year a busy UTC day's writes can pass 60,000, after which the PCs are
@@ -1070,7 +1070,7 @@ daily limit of 100,000 stays out of reach.
 | Storage | Measured | 500 sessions a school day |
 |---|---|---|
 | Facts | 1.4 KB a session | ≈ 150 MB for 400 days (about 220 school days) |
-| Rollups | 0.85 MB a school day, two thirds of it `r_stat` and its index | ≈ 190 MB a year of 220 school days |
+| Rollups | 0.86 MB a school day, 70% of it `r_stat` and its index | ≈ 190 MB a year of 220 school days |
 | **After the first year** | | **≈ 345 MB (69%)** |
 
 The rollups are kept 800 days, so at this size the database reaches the storage guard
@@ -1083,7 +1083,7 @@ SQLite read): the spec (`docs/RESEARCH_TELEMETRY_SPEC.md`, "Budget math") estima
 to 1.2 million rows read on a typical day with the dashboard open, and 2.1 to 2.6
 million more for a school year's export.
 
-**Requests:** about 5,750 batches, 289 crons and about 1,500 dashboard calls a day; a
+**Requests:** about 5,650 batches, 289 crons and about 1,500 dashboard calls a day; a
 school year's export adds about 700 pages (most of them `sessions`, `rounds` and
 `visits`). About 8% of the 100,000.
 
@@ -1096,17 +1096,17 @@ time in `db.batch`, the median of cold runs) over 30 days of the simulated schoo
 
 | Invocation | Statements | CPU outside SQLite |
 |---|---|---|
-| `kpis` over frozen, rolled and open days | 18 | 7–10.5 ms |
-| `students` (with 13 weeks of each of about 600 students) | 9 | 1.5–2.2 ms |
-| `student` | 15 | 0.7–1 ms |
-| `game` | 15 | 1.5–2.1 ms |
-| `stats` (every metric of every game) | 5 | 3.3–4.6 ms |
-| `cohorts` | 5 | 0.5 ms |
-| `pcs` | 9 | 0.6 ms |
+| `kpis` over frozen, rolled and open days | 18 | 7.5–10.5 ms |
+| `students` (with 13 weeks of each of about 600 students) | 9 | 1.3–2 ms |
+| `student` | 15 | 0.6–0.9 ms |
+| `game` | 15 | 1.4–2.1 ms |
+| `stats` (every metric of every game) | 5 | 3–3.8 ms |
+| `cohorts` | 5 | 0.4 ms |
+| `pcs` | 9 | 0.5 ms |
 | `cards`, `live`, `settings`, `POST settings` | 3, 5, 2, at most 7 | under 0.1 ms |
-| an `export` page (`rounds`, `visits` or `events`: 5,000 lines) | 3 | 0.8–1.3 ms |
-| another `export` page | 3 | under 0.6 ms |
-| `forget`, `link`, `DELETE link`, `rebuild` | 17, 7, 5, 5 | under 0.1 ms |
+| an `export` page (`rounds`, `visits` or `events`: 5,000 lines) | 3 | 0.7–1 ms |
+| another `export` page | 3 | under 0.5 ms |
+| `forget`, `link`, `DELETE link`, `rebuild` | 17, 7, 5, 5 | under 0.2 ms |
 | the 5-minute cron's full rebuild of a day | 24 | |
 | its first roll with the zone vote | 17 | |
 | the daily purge with frozen days and the storage guard | 24 | |
@@ -1115,7 +1115,7 @@ The statement counts include the settings re-read (every 5 minutes) and the usag
 (once a minute) that an invocation may carry. The tests hold the admin answers to 10 ms
 and an export page to 3 ms on this measure, with 120 sessions a day. `kpis` at a busy
 school is close to the limit when nothing of it is kept yet (the first request for a
-period after a roll), and takes 6.5–7 ms with the rolled days' part kept.
+period after a roll), and takes about 6 ms with the rolled days' part kept.
 
 ## Development
 
