@@ -1348,6 +1348,19 @@ test('forget removes a student\'s group of codes with their facts and per-studen
   assert.equal((await kpis()).totals.sessions, before.totals.sessions - 2);
 });
 
+test('forget leaves no mark that names the code: an older code whose link was undone goes from the other student\'s session too', async t => {
+  const s = await studentDays(t);
+  const marks = async () => (await s.rows('st_marks')).filter(m => m.kind === 'cd').map(m => m.x);
+  assert.deepEqual(await marks(), [U4], 'U2\'s session says U4 was its older code');
+  assert.equal((await call(s, 'DELETE', '/v1/admin/link?u=' + U4)).json().ok, true);
+  const res = await call(s, 'POST', '/v1/admin/forget', { u: U4 });
+  assert.deepEqual(res.json().removed, { codes: 1, sessions: 1, visits: 1, rounds: 0, marks: 1 });
+  assert.deepEqual(await marks(), []);
+  assert.equal((await s.rows('st_sessions')).filter(r => r.u === U4).length, 0);
+  assert.deepEqual((await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-20')).json().students.map(x => [x.u, x.linked, x.sessions]),
+    [[U1, [], 1], [U2, [], 1], [U3, [], 2], [U5, [], 1]], 'U2 keeps its own session');
+});
+
 test('link joins a student\'s codes one hop deep (history included), refuses cycles and unknown codes; unlink undoes it', async t => {
   const s = await studentDays(t);
   const students = async () => (await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-20')).json().students.map(x => [x.u, x.linked, x.days]);

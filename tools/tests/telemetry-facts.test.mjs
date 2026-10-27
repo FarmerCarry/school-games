@@ -482,7 +482,7 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
     // The owner's actions: link, unlink, recount and forget.
     'SELECT COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2), ?2) AS target', 'UPDATE aliases SET u_new = COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2)',
     'INSERT INTO aliases (u_old, u_new, s, how) SELECT ?1', 'DELETE FROM aliases WHERE u_old = ?1', 'UPDATE roll_days SET dirty = 2 WHERE day >=',
-    'SELECT COUNT(*) AS n FROM (SELECT COALESCE', "DELETE FROM st_marks WHERE kind = 'pr'", 'DELETE FROM r_student_day WHERE u IN', 'DELETE FROM r_student_game WHERE u IN',
+    'SELECT COUNT(*) AS n FROM (SELECT COALESCE', "DELETE FROM st_marks WHERE kind IN ('pr', 'cd')", 'DELETE FROM r_student_day WHERE u IN', 'DELETE FROM r_student_game WHERE u IN',
     "UPDATE settings SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'rv'"]) {
     assert.ok([...seen.keys()].some(text => text.startsWith(statement)), 'covered: ' + statement);
   }

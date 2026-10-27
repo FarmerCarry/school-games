@@ -155,11 +155,12 @@ What can be stored is decided here, not only by what the portal chooses to send.
 * **Forgetting a student.** The owner can delete one student on the dashboard (`POST
   /v1/admin/forget`): every session, game visit, round and mark of the student's codes
   (a code and every code linked to it), their student and PC lists, their per-student
-  rollups, live rows and links, and the marks in other sessions that recorded the
-  removal of their profile. The school-wide daily counts, in which no child can be
-  found, keep the play already counted until a recount (`POST /v1/admin/rebuild`) makes
-  them again from the facts left. D1 *Time Travel* can still restore the database to
-  any minute of the last 7 days.
+  rollups, live rows and links, and the marks in other sessions that name one of their
+  codes (the removal of their profile, or an older code whose link was undone). The
+  school-wide daily counts, in which no child can be found, keep the play already
+  counted until a recount (`POST /v1/admin/rebuild`) makes them again from the facts
+  left. D1 *Time Travel* can still restore the database to any minute of the last 7
+  days.
 * **Downloads.** The research export (`GET /v1/admin/export`) gives the rows themselves,
   under the same codes. Once downloaded they are outside the server's retention: keep
   them like other school records.

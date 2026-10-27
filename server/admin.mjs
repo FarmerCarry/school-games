@@ -240,13 +240,14 @@ const CANONICAL = 'COALESCE((SELECT u_new FROM aliases WHERE u_old = ?1), ?1)';
 const GROUP = `(SELECT ${CANONICAL} AS u UNION SELECT u_old FROM aliases WHERE u_new = ${CANONICAL})`;
 const OF_GROUP = `(SELECT id FROM st_sessions WHERE u IN ${GROUP})`;
 // Forget: how many of the group's codes the server holds, then every fact and per-student
-// rollup row of the group (and the removals of their profiles recorded in other sessions:
-// a pr mark comes after the student's first play), the live rows, the student rows and the
-// links last (the group is read from them). School-wide rollups keep their counts.
+// rollup row of the group (and the marks of other sessions that name one of its codes: the
+// removal of a profile, or an older code whose link was undone; both come after the
+// student's first play), the live rows, the student rows and the links last (the group is
+// read from them). School-wide rollups keep their counts.
 const FORGET = [
   `SELECT COUNT(*) AS n FROM ${GROUP} g WHERE EXISTS (SELECT 1 FROM st_students WHERE u = g.u) OR EXISTS (SELECT 1 FROM st_sessions WHERE u = g.u)`,
   `DELETE FROM st_rounds WHERE sid IN ${OF_GROUP}`, `DELETE FROM st_visits WHERE sid IN ${OF_GROUP}`, `DELETE FROM st_marks WHERE sid IN ${OF_GROUP}`,
-  `DELETE FROM st_marks WHERE kind = 'pr' AND x IN ${GROUP} AND sid IN (SELECT id FROM st_sessions WHERE start_s >= ` +
+  `DELETE FROM st_marks WHERE kind IN ('pr', 'cd') AND x IN ${GROUP} AND sid IN (SELECT id FROM st_sessions WHERE start_s >= ` +
     `(SELECT MIN(first_s) FROM st_students WHERE u IN ${GROUP}))`,
   `DELETE FROM st_sessions WHERE u IN ${GROUP}`, `DELETE FROM st_student_pcs WHERE u IN ${GROUP}`, `DELETE FROM st_student_games WHERE u IN ${GROUP}`,
   `DELETE FROM r_student_day WHERE u IN ${GROUP}`, `DELETE FROM r_student_game WHERE u IN ${GROUP}`, `DELETE FROM live WHERE u IN ${GROUP}`,
