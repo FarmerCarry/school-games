@@ -127,10 +127,11 @@ function buildFixture(t) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, content);
   };
-  for (const file of ['tools/build.mjs', 'tools/check-all.mjs', 'tools/lib/svg-data-uri.mjs', 'tools/lib/zip.mjs']) write(file, fs.readFileSync(path.join(repo, file)));
+  for (const file of ['tools/build.mjs', 'tools/check-all.mjs', 'tools/lib/svg-data-uri.mjs', 'tools/lib/zip.mjs', 'tools/lib/network-rules.mjs']) write(file, fs.readFileSync(path.join(repo, file)));
   write('index.html', '<!doctype html><body><script src="js/catalog.js"></script><script src="js/site.js"></script></body>');
   write('js/catalog.js', 'window.GAMES=[{slug:"demo"}];');
   write('js/site.js', 'window.ready=true;');
+  write('js/telemetry.js', 'window.SGTelemetry={};'); // check-all reads the one allowed sender
   write('teacher.html', '<!doctype html><body><main id="teacherApp"></main><script src="js/catalog.js"></script><script src="js/teacher.js"></script></body>');
   write('js/teacher.js', 'window.SGTeacher={};');
   write('games/demo/index.html', '<!doctype html><body>Demo</body>');
@@ -151,6 +152,9 @@ function checkFixture(f) {
 test('release smoke rejects missing, changed and unknown embedded thumbnails', t => {
   const f = buildFixture(t);
   const good = JSON.parse(f.portal.match(/window\.SG_THUMBS=(\{[^\r\n]*\});/)[1]);
+  // The untouched fixture passes, so each failure below is the check's own, not a crash.
+  const control = checkFixture(f);
+  assert.equal(control.status, 0, control.stderr);
   for (const [table, message] of [
     [{}, /missing embedded thumbnail/],
     [{ demo: good.demo.replace('%23ff00ff', '%23000000') }, /does not match its source/],

@@ -101,13 +101,24 @@ test('denied metadata writes keep their warning until metadata and progress both
       return window.restoreStorage.call(this, key, value);
     };
   });
-  await page.evaluate(() => { __game.start(); __game.pause(); document.getElementById('musicBtn').click(); });
+  // Picking a hat on the title screen writes the metadata.
+  await page.evaluate(() => { document.querySelectorAll('#hats .cm-hat')[1].click(); __game.start(); __game.pause(); });
   assert.equal(await page.evaluate(() => __game.save()), false);
   assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
   await page.evaluate(() => { Storage.prototype.setItem = window.restoreStorage; });
   await page.locator('.sg-save-status button').click();
-  assert.equal(await page.evaluate(() => Kit.store('critter-mart').get('meta').music), false);
+  assert.equal(await page.evaluate(() => Kit.store('critter-mart').get('meta').hat), 'cap');
   assert.equal(await page.locator('.sg-save-status[data-state="failed"]').count(), 0);
+});
+
+test('an old music switch in saved metadata is ignored and dropped by the next metadata write', async t => {
+  const page = await gamePage(t, fixture(), { hat: 'cap', maxLvl: 11, music: true, best: 0 });
+  await page.evaluate(() => { __game.start(); stepGame(30); __game.pause(); });
+  assert.equal(await page.evaluate(() => __game.mode), 'pause');
+  assert.equal(await page.locator('#musicBtn').count(), 0, 'the pause panel has no music switch');
+  assert.equal(await page.locator('#pause button', { hasText: 'الموسيقى' }).count(), 0);
+  await page.evaluate(() => { document.getElementById('menuBtn').click(); document.querySelectorAll('#hats .cm-hat')[6].click(); });
+  assert.deepEqual(await page.evaluate(() => Kit.store('critter-mart').get('meta')), { hat: 'crown', maxLvl: 11, best: 0 });
 });
 
 async function snapshot(page) {
@@ -351,9 +362,9 @@ test('a carried stack saved as a string and metadata saved as a number load empt
   await page.evaluate(() => { __game.start(); stepGame(30); });
   const { state } = await snapshot(page);
   assert.deepEqual([state.mode, state.stack], ['play', []]);
-  await page.evaluate(() => { __game.pause(); document.getElementById('menuBtn').click(); document.getElementById('musicBtn').click(); });
+  await page.evaluate(() => { __game.pause(); document.getElementById('menuBtn').click(); document.querySelector('#hats .cm-hat').click(); });
   const { save, meta } = await snapshot(page);
   assert.equal(await page.evaluate(() => __game.mode), 'title');
   assert.deepEqual(save.carry, [], 'Save & Quit stores an empty stack');
-  assert.deepEqual(meta, { hat: 'none', maxLvl: 1, music: false, best: 0 }, 'the music switch stores fresh metadata');
+  assert.deepEqual(meta, { hat: 'none', maxLvl: 1, best: 0 }, 'picking a hat stores fresh metadata');
 });

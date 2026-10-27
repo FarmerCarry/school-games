@@ -49,6 +49,7 @@ test('Fire & Ice warns when saving fails and clears the warning after Retry', as
   await panel.locator('button').click();
   assert.equal(await panel.getAttribute('data-state'), 'saved');
   assert.equal(await page.evaluate(() => localStorage.getItem('sg:fire-and-ice:unlocked')), '2');
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:fire-and-ice:music')), null, 'the game has no music setting to save');
 });
 
 test('Fire & Ice saves a won level at the win, before the result panel opens', async t => {
@@ -86,6 +87,7 @@ test('Fire & Ice draws a paused level once and redraws it only after a resize', 
   await page.evaluate(() => { __game.load(1); __game.bench(10); });
   await page.locator('#pauseBtn').click();
   assert.equal(await page.evaluate(() => __game.mode), 'paused');
+  assert.doesNotMatch(await page.locator('#pauseScreen').textContent(), /الموسيقى/, 'the pause panel has no music switch');
   await page.evaluate(() => {
     const ctx = document.getElementById('game').getContext('2d'), fillRect = ctx.fillRect;
     window.__draws = 0;

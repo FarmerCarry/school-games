@@ -1,12 +1,14 @@
-// Static rules for the local-only play statistics (docs/PLAY_STATS.md). Node only:
-// nothing on the site goes over the network, engine and simulation files never
-// report, and round ids never carry typed text. Runs once in the shared suite.
+// Static rules for the local play statistics (docs/PLAY_STATS.md). Node only:
+// nothing on the site goes over the network except the portal's anonymous telemetry
+// sink, js/telemetry.js (docs/ARCHITECTURE.md "Telemetry sink"), engine and simulation
+// files never report, and round ids never carry typed text. Runs once in the shared suite.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { NETWORK, SENDER, networkUse, splitSender } from '../lib/network-rules.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const rel = file => path.relative(repo, file).split(path.sep).join('/');
@@ -19,34 +21,62 @@ const catalog = { window: {} };
 vm.runInNewContext(read(path.join(repo, 'js/catalog.js')), catalog);
 const slugs = catalog.window.GAMES.map(game => game.slug);
 
-// Kit, the portal and teacher scripts, both root pages and every game file.
-const pages = [path.join(repo, 'shared/kit.js'), path.join(repo, 'index.html'), path.join(repo, 'teacher.html'),
-  ...fs.readdirSync(path.join(repo, 'js')).filter(name => name.endsWith('.js')).map(name => path.join(repo, 'js', name))];
+// Every shared script (Kit, juice, the board games), the portal and teacher scripts,
+// both root pages and every game file.
+const pages = [path.join(repo, 'index.html'), path.join(repo, 'teacher.html'),
+  ...['shared', 'js'].flatMap(dir => fs.readdirSync(path.join(repo, dir)).filter(name => name.endsWith('.js')).map(name => path.join(repo, dir, name)))];
 const gameFiles = walk(path.join(repo, 'games')).filter(file => /\.(?:html|js)$/.test(file));
-const NETWORK = [
-  [/\bfetch\s*\(/, 'fetch()'],
-  [/\bXMLHttpRequest\b/, 'XMLHttpRequest'],
-  [/\bsendBeacon\b/, 'navigator.sendBeacon'],
-  [/\bWebSocket\b/, 'WebSocket'],
-  [/\bEventSource\b/, 'EventSource'],
-  [/\bRTCPeerConnection\b/, 'RTCPeerConnection'],
-  [/\bimportScripts\s*\(/, 'importScripts()'],
-  [/\.src\s*=\s*['"`]https?:/, 'an external image or script address (a beacon)'],
-  [/\b(?:src|href|action)\s*=\s*["']https?:\/\//, 'an external address']
-];
 
 // Files that Node verifiers and regression tests load with a stub Kit (engines,
 // physics, rules, simulations, level data, verifiers and developer tools).
 const ENGINE = /(?:^|\/)(?:engine|physics|sim\w*|balance-sim|rules|core|levels|data|ai|endless|board-rules|verify[\w-]*|solutions)\.js$|^games\/[^/]+\/(?:dev|tools)\/|^games\/snake-arena\/world\.js$/;
 
-test('no network APIs in Kit, the portal, the teacher page or any game', () => {
+test('no network APIs in the shared scripts, the portal, the teacher page or any game, except the telemetry sink', () => {
   assert.ok(fs.existsSync(path.join(repo, 'teacher.html')), 'the teacher page is covered');
-  const found = [];
-  for (const file of [...pages, ...gameFiles]) {
-    const text = read(file);
-    for (const [pattern, name] of NETWORK) if (pattern.test(text)) found.push(`${rel(file)}: ${name}`);
+  for (const file of ['shared/kit.js', 'shared/juice.js', 'shared/board-game.js', 'js/site.js', 'js/stats.js', 'js/profiles.js', SENDER]) {
+    assert.ok(pages.some(page => rel(page) === file), 'the scan covers ' + file);
   }
+  const found = [];
+  for (const file of [...pages, ...gameFiles]) found.push(...networkUse(rel(file), read(file)).map(name => `${rel(file)}: ${name}`));
   assert.deepEqual(found, []);
+  // The sender really is the one file that sends.
+  assert.match(read(path.join(repo, SENDER)), /\bfetch\s*\(/);
+});
+
+test('the telemetry carve-out is exactly js/telemetry.js, and only for fetch()', () => {
+  const calls = 'fetch(url, { method: "POST", credentials: "omit", keepalive: true });';
+  assert.deepEqual(networkUse(SENDER, calls), []);
+  // The same calls anywhere else still fail: other portal scripts, Kit, games, other
+  // files named telemetry.js, and paths that only look like the sender.
+  for (const file of ['js/site.js', 'js/stats.js', 'js/profiles.js', 'js/teacher.js', 'js/offline.js', 'index.html',
+    'teacher.html', 'shared/kit.js', 'shared/juice.js', 'shared/telemetry.js', 'games/tic-tac-toe/index.html',
+    'games/road-hopper/game.js', 'games/road-hopper/js/telemetry.js', 'js/sub/telemetry.js', 'js/telemetry.js.bak',
+    'js/telemetry.jsx', 'JS/telemetry.js', './js/telemetry.js', '/js/telemetry.js', 'js\\telemetry.js', 'js/telemetry']) {
+    assert.deepEqual(networkUse(file, calls), ['fetch()'], file);
+  }
+  // Every other network API stays banned in the sender too, sendBeacon included: it
+  // always sends the ingest host's cookies.
+  for (const [code, names] of [
+    ['navigator.sendBeacon(url, body)', ['navigator.sendBeacon']],
+    ['new XMLHttpRequest()', ['XMLHttpRequest']], ['new WebSocket(url)', ['WebSocket']], ['new EventSource(url)', ['EventSource']],
+    ['new RTCPeerConnection()', ['RTCPeerConnection']], ['importScripts(url)', ['importScripts()']],
+    ["new Image().src = 'https://ingest.test/pixel.gif'", ['an external image or script address (a beacon)', 'an external address']],
+    ['<form action="https://ingest.test/">', ['an external address']]
+  ]) assert.deepEqual(networkUse(SENDER, code), names, code);
+  assert.equal(NETWORK.length, 9, 'every banned API above is tried in the sender');
+
+  // In the fast build the portal inlines the sender: only one exact copy is split off and
+  // checked as the sender; the rest of the page is checked like any other file.
+  const copy = '(function(){fetch(u,{});fetch(u,b)})();';
+  const page = body => '<script>window.SG_TELEMETRY={url:"https://ingest.test/v1"};\n' + body + '</script><script>site()</script>';
+  let split = splitSender(page(copy), [copy]);
+  assert.equal(split.sender, copy);
+  assert.deepEqual([...networkUse('index.html', split.rest), ...networkUse(SENDER, split.sender)], []);
+  for (const tampered of [page(copy.replace('b)', 'b);fetch(x)')), page(copy) + '<script>fetch(x)</script>', page(copy + copy),
+    page(copy.replace('fetch(u,{})', 'new XMLHttpRequest()'))]) {
+    split = splitSender(tampered, [copy]);
+    assert.notDeepEqual([...networkUse('index.html', split.rest), ...networkUse(SENDER, split.sender)], [], tampered);
+  }
 });
 
 test('portal-side scripts never log and never clear all of storage', () => {

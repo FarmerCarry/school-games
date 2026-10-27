@@ -1,22 +1,17 @@
 /*
- * Neon Slope — synthesized music and sound effects (WebAudio only).
- * Everything routes through Kit.audio.master so the shared mute button works.
+ * Neon Slope — synthesized sound effects and the rolling rumble (WebAudio only, no
+ * background music). Everything routes through Kit.audio.master so the shared mute
+ * button works.
  */
 (function () {
   'use strict';
   var A = Kit.audio;
-  var NA = {
-    musicOn: true, level: 0, running: false,
-    musicBus: null, sfxBus: null, noiseBuf: null, roll: null
-  };
+  var NA = { sfxBus: null, noiseBuf: null, roll: null };
 
   function ctx() {
     var c = A.ctx;
     if (!c || !A.master) return null;
     if (!NA.sfxBus) {
-      NA.musicBus = c.createGain();
-      NA.musicBus.gain.value = NA.musicOn ? 0.42 : 0;
-      NA.musicBus.connect(A.master);
       NA.sfxBus = c.createGain();
       NA.sfxBus.gain.value = 0.9;
       NA.sfxBus.connect(A.master);
@@ -25,7 +20,7 @@
       var d = NA.noiseBuf.getChannelData(0);
       for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
       // Continuous rolling rumble: soft, low "brown" noise (not white hiss), made loopable
-      // without a click, and kept well below the music.
+      // without a click. Silent (gain 0) unless the ball rolls on the track (rollSound).
       try {
         var rl = c.sampleRate * 3, rb = c.createBuffer(1, rl, c.sampleRate), rd = rb.getChannelData(0), last = 0, j;
         for (j = 0; j < rl; j++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; rd[j] = last * 3.5; }
@@ -73,132 +68,6 @@
     s.start(t0, Math.random() * 0.5); s.stop(t0 + dur + 0.03);
   }
 
-  /* ------------------------------------------------------------ music */
-  var BPM = 122, STEP = 60 / BPM / 4;
-  var CHORDS = [
-    { root: 55.0, notes: [440, 523.25, 659.25] },      // Am
-    { root: 43.65, notes: [349.23, 440, 523.25] },     // F
-    { root: 65.41, notes: [392, 523.25, 659.25] },     // C
-    { root: 49.0, notes: [392, 493.88, 587.33] }       // G
-  ];
-  var nextT = 0, step = 0, timer = 0;
-
-  function kick(t) {
-    var c = A.ctx, o = c.createOscillator(), g = c.createGain();
-    o.type = 'sine'; o.frequency.setValueAtTime(170, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.12);
-    g.gain.value = 0; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.85, t + 0.003); g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
-    o.connect(g); g.connect(NA.musicBus); o.start(t); o.stop(t + 0.3);
-  }
-  function mnoise(t, dur, vol, type, freq, q) {
-    var c = A.ctx, s = c.createBufferSource(); s.buffer = NA.noiseBuf;
-    var f = c.createBiquadFilter(); f.type = type; f.frequency.value = freq; if (q) f.Q.value = q;
-    var g = c.createGain(); g.gain.value = 0; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    s.connect(f); f.connect(g); g.connect(NA.musicBus); s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.02);
-  }
-  function bass(t, freq, dur) {
-    var c = A.ctx, o = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain();
-    o.type = 'sawtooth'; o.frequency.value = freq;
-    f.type = 'lowpass'; f.Q.value = 5; f.frequency.setValueAtTime(260, t); f.frequency.exponentialRampToValueAtTime(1000, t + 0.03); f.frequency.exponentialRampToValueAtTime(260, t + dur);
-    g.gain.value = 0; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.26, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(f); f.connect(g); g.connect(NA.musicBus); o.start(t); o.stop(t + dur + 0.02);
-  }
-  function lead(t, freq, dur, vol) {
-    var c = A.ctx, o = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain();
-    o.type = 'square'; o.frequency.value = freq;
-    f.type = 'lowpass'; f.frequency.value = 2600;
-    g.gain.value = 0; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(f); f.connect(g); g.connect(NA.musicBus); o.start(t); o.stop(t + dur + 0.02);
-  }
-  function pad(t, notes, dur) {
-    var c = A.ctx, f = c.createBiquadFilter(), g = c.createGain();
-    f.type = 'lowpass'; f.frequency.value = 900;
-    g.gain.value = 0; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 0.4); g.gain.setValueAtTime(0.05, t + dur - 0.4); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    f.connect(g); g.connect(NA.musicBus);
-    for (var i = 0; i < notes.length; i++) {
-      for (var k = -1; k <= 1; k += 2) {
-        var o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = notes[i] / 2; o.detune.value = k * 9;
-        o.connect(f); o.start(t); o.stop(t + dur + 0.02);
-      }
-    }
-  }
-
-  // 16-bar song (about 31 s) instead of one 4-bar loop: bars 0-7 arpeggio groove,
-  // bars 8-15 a synth melody on top (so a long run doesn't hammer the same 8 seconds).
-  function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-  var MEL = [
-    [69, 0, 72, 0, 76, 0, 74, 72, 0, 71, 0, 72, 0, 0, 0, 0],
-    [69, 0, 72, 0, 77, 0, 76, 74, 0, 72, 0, 74, 0, 0, 0, 0],
-    [72, 0, 76, 0, 79, 0, 77, 76, 0, 74, 0, 76, 0, 0, 0, 0],
-    [74, 0, 71, 0, 67, 0, 71, 74, 0, 76, 0, 74, 0, 71, 0, 0]
-  ];
-  function schedule(s, t) {
-    var bar = Math.floor(s / 16) % 16, i = s % 16, ch = CHORDS[bar % 4], lvl = NA.level, second = bar >= 8;
-    if (i === 0) pad(t, ch.notes, STEP * 16);
-    if (lvl >= 2) {
-      if (i % 4 === 0) kick(t);
-      if (i === 4 || i === 12) mnoise(t, 0.16, 0.3, 'bandpass', 1600, 0.9);
-      if (i % 4 === 2) mnoise(t, 0.05, 0.1, 'highpass', 7000);
-      else if (i % 2 === 1) mnoise(t, 0.03, 0.05, 'highpass', 8000);
-      if (bar % 8 === 7 && i >= 12) mnoise(t, 0.08, 0.12, 'bandpass', 1800 + (i - 12) * 400, 1);
-      bass(t, (i % 4 === 2) ? ch.root * 2 : ch.root, STEP * 1.6);
-      var n = ch.notes[[0, 1, 2, 1][i % 4]] * (i >= 8 ? 2 : 1);
-      if (second) {
-        var m = MEL[bar % 4][i];
-        if (m) { lead(t, mtof(m), STEP * 2.2, 0.065); lead(t, mtof(m + 12), STEP * 1.2, 0.012); }
-        if (lvl >= 3 && i % 4 === 2) lead(t, n, STEP * 0.8, 0.02);
-      } else if (lvl >= 3) lead(t, n, STEP * 0.9, 0.035);
-    } else if (lvl === 1) {
-      if (i % 8 === 0) bass(t, ch.root, STEP * 4);
-      if (i % 4 === 2) mnoise(t, 0.05, 0.05, 'highpass', 8000);
-      if (i % 2 === 0) lead(t, ch.notes[(i / 2) % 3] * 2, STEP * 1.4, 0.018);
-    }
-  }
-  function tick() {
-    var c = A.ctx;
-    if (!c || !NA.running || document.hidden) return;   // no stuttering music in a background tab
-    if (!ctx()) return;
-    if (nextT < c.currentTime) nextT = c.currentTime + 0.05;
-    while (nextT < c.currentTime + 0.15) {
-      if (!A.muted && NA.musicOn) schedule(step, nextT);
-      nextT += STEP; step++;
-    }
-  }
-  function busLevel() { return NA.musicOn && NA.running ? 0.42 : 0; }
-  function fadeBus(tc) {
-    var c = A.ctx;
-    if (!c || !NA.musicBus) return;
-    NA.musicBus.gain.cancelScheduledValues(c.currentTime);
-    NA.musicBus.gain.setTargetAtTime(busLevel(), c.currentTime, tc);
-  }
-
-  // level 0 = silent, 1 = menu, 2 = run, 3 = run with more layers.
-  // keep=true resumes where the song was (after a pause) instead of starting over.
-  NA.setMusic = function (level, keep) {
-    NA.level = level;
-    if (level > 0 && !NA.running) {
-      NA.running = true; nextT = 0;
-      if (!keep) step = 0; else step = Math.max(0, step - (step % 4) - 4);
-      if (!timer) timer = setInterval(tick, 30);
-      fadeBus(0.03);
-    } else if (level === 0) {
-      NA.running = false;
-      // fade out quickly so long pad notes that were already scheduled don't ring on
-      fadeBus(0.05);
-    }
-  };
-  // test hook: schedule one 16th step into another context/bus (offline analysis)
-  NA._step = STEP;
-  NA._level = function () { return 0.42; };
-  NA._sched = function (c, g, s, t, lvl) {
-    var mb = NA.musicBus, lv = NA.level;
-    if (!NA.noiseBuf) ctx();
-    NA.musicBus = g; NA.level = lvl === 'menu' ? 1 : lvl === 'game' ? 3 : +lvl;
-    try { schedule(s, t); } finally { NA.musicBus = mb; NA.level = lv; }
-  };
-  NA.setMusicOn = function (on) {
-    NA.musicOn = !!on;
-    fadeBus(0.05);
-  };
   var rollLast = { a: -1, f: -1, t: 0 };
   NA.rollSound = function (amount, speed) {
     var c = ctx();
