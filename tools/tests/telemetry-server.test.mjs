@@ -13,7 +13,7 @@ const { hideSqliteWarning } = await import('../../server/warnings.mjs');
 hideSqliteWarning();
 const { createApp, MAX_BODY } = await import('../../server/app.mjs');
 const { EVENTS, validateBatch } = await import('../../server/schema.mjs');
-const { TABLES, openStore } = await import('../../server/store.mjs');
+const { TABLES, SCHEMA_VERSION, openStore } = await import('../../server/store.mjs');
 const { openDatabase } = await import('../../server/sqlite-d1.mjs');
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -409,6 +409,7 @@ test('names, user agents, PC labels, error text, profile keys and addresses are 
   // the schema version exist: no column for a header, a time of day or an event.
   const columns = {
     batches: ['b', 'day'], seen: ['day', 'kind', 'key', 's'], live: ['s', 'slug', 'seen_minute'], meta: ['key', 'value'],
+    kpi_cache: ['key', 'made', 'rows'],
     ...Object.fromEntries(Object.entries(TABLES).map(([table, { key, sums }]) => [table, ['day', 'a', ...key, ...sums]]))
   };
   const tables = (await s.app.store.db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all()).results.map(r => r.name);
@@ -423,7 +424,7 @@ test('names, user agents, PC labels, error text, profile keys and addresses are 
       }
     }
   }
-  assert.deepEqual((await s.rows('meta')), [{ key: 'schema', value: 2 }]);
+  assert.deepEqual((await s.rows('meta')), [{ key: 'schema', value: SCHEMA_VERSION }]);
   // Nor anywhere in the database files, including the write-ahead log.
   for (const file of fs.readdirSync(s.dbDir)) {
     const bytes = fs.readFileSync(path.join(s.dbDir, file));
@@ -748,12 +749,21 @@ test('the store creates its tables on first use and refuses a database newer tha
   const first = createApp({ dbPath: file });
   await first.listen(0, '127.0.0.1');
   await first.close();
-  const db = openDatabase(file);
-  await db.prepare("UPDATE meta SET value = 3 WHERE key = 'schema'").run();
+  // A database of schema 2 (before kpi_cache) gains the table on first use.
+  let db = openDatabase(file);
+  await db.batch([db.prepare('DROP TABLE kpi_cache'), db.prepare("UPDATE meta SET value = 2 WHERE key = 'schema'")]);
+  db.close();
+  const older = createApp({ dbPath: file });
+  await older.listen(0, '127.0.0.1');
+  assert.deepEqual(await older.store.db.prepare('SELECT * FROM kpi_cache').all().then(r => r.results), []);
+  assert.deepEqual((await older.store.db.prepare('SELECT * FROM meta').all()).results, [{ key: 'schema', value: SCHEMA_VERSION }]);
+  await older.close();
+  db = openDatabase(file);
+  await db.prepare("UPDATE meta SET value = ?1 WHERE key = 'schema'").bind(SCHEMA_VERSION + 1).run();
   db.close();
   const newer = createApp({ dbPath: file });
   t.after(() => newer.close());
-  await assert.rejects(newer.listen(0, '127.0.0.1'), /database schema 3 is newer than this server \(2\)/);
+  await assert.rejects(newer.listen(0, '127.0.0.1'), new RegExp(`database schema ${SCHEMA_VERSION + 1} is newer than this server \\(${SCHEMA_VERSION}\\)`));
 });
 
 test('main.mjs starts from the environment without the SQLite warning and refuses bad settings', async t => {

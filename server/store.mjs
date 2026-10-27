@@ -14,11 +14,13 @@ export const LIVE_WINDOW_MIN = 5;
 export const LIVE_KEEP_MIN = 10;
 export const DEDUP_DAYS = 30;
 export const SEEN_DAYS = 2;
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 const DAY_MS = 86400000;
 const MINUTE_MS = 60000;
 const CLOSED_KEEP_MS = 3600000;
 const CLOSED_CAP = 16;
+// Kept KPI rows stay well under D1's 2 MB limit for a value.
+const KEPT_MAX = 1000000;
 const BANDS = [['6-7', '6-7'], ['8-9', '8-9'], ['10-11', '10-11'], ['', 'unknown']];
 const DEVICES = [['cores', 'cores'], ['mem', 'memory'], ['screen', 'screen']];
 
@@ -51,6 +53,8 @@ const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS seen (day TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL, s TEXT NOT NULL, ' +
     'PRIMARY KEY (day, kind, key, s)) STRICT, WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS live (s TEXT PRIMARY KEY, slug TEXT NOT NULL, seen_minute INTEGER NOT NULL) STRICT, WITHOUT ROWID',
+  // The KPI rows of closed days (JSON) per [from, end, band], and the last closed day when made.
+  'CREATE TABLE IF NOT EXISTS kpi_cache (key TEXT PRIMARY KEY, made TEXT NOT NULL, rows TEXT NOT NULL) STRICT, WITHOUT ROWID',
   ...Object.entries(TABLES).map(([table, { key, sums }]) => `CREATE TABLE IF NOT EXISTS ${table} (day TEXT NOT NULL, a TEXT NOT NULL, ` +
     key.map(c => `${c} ${TEXT_KEYS.has(c) ? 'TEXT' : 'INTEGER'} NOT NULL, `).join('') +
     sums.map(c => `${c} INTEGER NOT NULL DEFAULT 0, `).join('') + `PRIMARY KEY (${keyList(key)})) STRICT, WITHOUT ROWID`)
@@ -88,6 +92,10 @@ const LIVE = 'INSERT INTO live (s, slug, seen_minute) VALUES (?1, ?2, ?3) ON CON
   "WHEN instr(?5, ' ' || slug || ' ') THEN '' ELSE slug END";
 const LIVE_SWEEP = 'DELETE FROM live WHERE seen_minute <= ?1';
 const LIVE_COUNT = 'SELECT slug, COUNT(*) AS n FROM live WHERE seen_minute > ?1 GROUP BY slug';
+const KEPT_GET = 'SELECT rows FROM kpi_cache WHERE key = ?1';
+const KEPT_PRUNE = 'DELETE FROM kpi_cache WHERE made < ?1';
+const KEPT_PUT = 'INSERT INTO kpi_cache (key, made, rows) VALUES (?1, ?2, ?3) ' +
+  'ON CONFLICT (key) DO UPDATE SET made = excluded.made, rows = excluded.rows';
 const DUPLICATE = /UNIQUE constraint failed: batches\.b\b/;
 
 // The KPI queries, one per aggregate table: the group's key fields, then its sums over
@@ -347,7 +355,8 @@ export function openStore(db, { retentionDays = 180 } = {}) {
   }
 
   // Deletes aggregate days older than the retention period, batch ids older than 30
-  // days, seen rows older than yesterday and live rows older than 10 minutes.
+  // days, seen rows older than yesterday, live rows older than 10 minutes and the kept
+  // KPI rows of closed days.
   async function purge(now) {
     await setup();
     const cutoff = utcDay(now - retentionDays * DAY_MS);
@@ -355,7 +364,8 @@ export function openStore(db, { retentionDays = 180 } = {}) {
       ...AGGREGATES.map(table => sql(`DELETE FROM ${table} WHERE day < ?1`).bind(cutoff)),
       sql('DELETE FROM batches WHERE day < ?1').bind(utcDay(now - DEDUP_DAYS * DAY_MS)),
       sql('DELETE FROM seen WHERE day < ?1').bind(utcDay(now - (SEEN_DAYS - 1) * DAY_MS)),
-      sql(LIVE_SWEEP).bind(Math.floor(now / MINUTE_MS) - LIVE_KEEP_MIN)
+      sql(LIVE_SWEEP).bind(Math.floor(now / MINUTE_MS) - LIVE_KEEP_MIN),
+      sql('DELETE FROM kpi_cache')
     ]);
     closedDays.clear();
     const changes = results.map(result => result.meta.changes);
@@ -364,24 +374,35 @@ export function openStore(db, { retentionDays = 180 } = {}) {
 
 
   // The KPI rows (arrays, see KPI) for days from..to. Only today's rows change (a batch
-  // counts on its receipt day), so the rows of the days before yesterday are kept for an
-  // hour: a dashboard that reloads every few minutes reads only the last two days again.
+  // counts on its receipt day), so the rows of the days before yesterday are read from the
+  // aggregates once: they are kept in the kpi_cache table until the next purge, so every
+  // instance shares them (Cloudflare may answer each dashboard refresh from a new one),
+  // and in this instance's memory for an hour. A refresh reads only the last two days again.
   const closedDays = new Map();
   const scan = (from, to, band) => Promise.all(KPI.map(text => sql(text).bind(from, to, band).raw()));
+  async function closedRows(from, end, band, lastClosed, now) {
+    const key = JSON.stringify([from, end, band]);
+    let entry = closedDays.get(key);
+    if (entry && entry.until > now) return entry.rows;
+    const kept = await sql(KEPT_GET).bind(key).first('rows');
+    entry = { rows: kept === null ? await scan(from, end, band) : JSON.parse(kept), until: now + CLOSED_KEEP_MS };
+    if (kept === null) {
+      // Copies made on earlier days go. A copy that cannot be kept only costs a scan later.
+      const text = JSON.stringify(entry.rows);
+      if (text.length <= KEPT_MAX) await db.batch([sql(KEPT_PRUNE).bind(lastClosed), sql(KEPT_PUT).bind(key, lastClosed, text)]).catch(() => {});
+    }
+    for (const [old, other] of closedDays) if (old === key || other.until <= now) closedDays.delete(old);
+    closedDays.set(key, entry);
+    while (closedDays.size > CLOSED_CAP) closedDays.delete(closedDays.keys().next().value);
+    return entry.rows;
+  }
   async function kpiRows(from, to, band, now) {
     const lastClosed = utcDay(now - 2 * DAY_MS);
     if (from > lastClosed) return scan(from, to, band);
-    const end = to < lastClosed ? to : lastClosed, key = JSON.stringify([from, end, band]);
-    let entry = closedDays.get(key);
-    if (!entry || entry.until <= now) {
-      entry = { rows: await scan(from, end, band), until: now + CLOSED_KEEP_MS };
-      for (const [old, kept] of closedDays) if (old === key || kept.until <= now) closedDays.delete(old);
-      closedDays.set(key, entry);
-      while (closedDays.size > CLOSED_CAP) closedDays.delete(closedDays.keys().next().value);
-    }
-    if (end === to) return entry.rows;
+    const end = to < lastClosed ? to : lastClosed, rows = await closedRows(from, end, band, lastClosed, now);
+    if (end === to) return rows;
     const recent = await scan(utcDay(Date.parse(end + 'T00:00:00Z') + DAY_MS), to, band);
-    return entry.rows.map((rows, i) => rows.concat(recent[i]));
+    return rows.map((part, i) => part.concat(recent[i]));
   }
 
   // Engagement KPIs for receipt days from..to (YYYY-MM-DD, inclusive). band: null for

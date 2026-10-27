@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // sqlite-d1.mjs hides node:sqlite's ExperimentalWarning before it loads node:sqlite.
 const { openDatabase } = await import('../../server/sqlite-d1.mjs');
 const { default: worker } = await import('../../server/worker.mjs');
-const { openStore, TABLES } = await import('../../server/store.mjs');
+const { openStore, TABLES, SCHEMA_VERSION } = await import('../../server/store.mjs');
 const { validateBatch } = await import('../../server/schema.mjs');
 const { history } = await import('../../server/simulate.mjs');
 
@@ -249,6 +249,30 @@ test('a request stays within D1\'s free per-request limits, even the first one o
   assert.equal((await rows(env, 'agg_games')).length, 102);
 });
 
+test('closed days are read from the aggregates once a day, whichever instance asks', async () => {
+  // Cloudflare may answer each dashboard refresh from a new instance, with nothing in memory.
+  const db = openDatabase(':memory:'), first = openStore(db);
+  for (const { envelope: env, events, now } of simulated()) await first.ingest(env, events, now);
+  const scans = [], execute = db.execute.bind(db);
+  db.execute = (statement, ...rest) => {
+    if (/GROUP BY/.test(statement.sql) && /FROM agg_/.test(statement.sql)) scans.push(statement.params.slice(0, 2).join('..'));
+    return execute(statement, ...rest);
+  };
+  const query = { from: '2026-09-24', to: '2026-10-23', band: null }, now = TODAY + 13 * 3600000;
+  const expected = await first.kpis(query, now);
+  assert.deepEqual([...new Set(scans)], ['2026-09-24..2026-10-21', '2026-10-22..2026-10-23']);
+  scans.length = 0;
+  for (const [i, other] of [openStore(db), openStore(db)].entries()) {
+    assert.deepEqual(await other.kpis(query, now + (i + 1) * 300000), expected);
+  }
+  assert.deepEqual([...new Set(scans)], ['2026-10-22..2026-10-23'], 'new instances read only the last two days');
+  // The next day's purge lets the next query read them again.
+  await first.purge(now + DAY_MS);
+  scans.length = 0;
+  await openStore(db).kpis(query, now + 60000);
+  assert.deepEqual([...new Set(scans)], ['2026-09-24..2026-10-21', '2026-10-22..2026-10-23']);
+});
+
 // The first server's store, from Git (CI checkouts without history skip the comparison).
 const FIRST = '6866861';
 function firstStore() {
@@ -347,8 +371,8 @@ test('a database of the first store is upgraded in place on first use, with the 
   t.after(() => store.close());
   for (const [i, query] of QUERIES.entries()) assert.deepEqual(withoutAdditions(await store.kpis(query, TODAY + 13 * 3600000)), expected[i], JSON.stringify(query));
   const tables = (await db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'index') ORDER BY name").all()).results.map(r => r.name);
-  assert.deepEqual(tables, ['agg_days', 'agg_devices', 'agg_games', 'agg_levels', 'agg_sources', 'batches', 'live', 'meta', 'seen']);
-  assert.equal(db.sqlite.prepare('PRAGMA user_version').get().user_version, 2, 'the first server now refuses this file');
+  assert.deepEqual(tables, ['agg_days', 'agg_devices', 'agg_games', 'agg_levels', 'agg_sources', 'batches', 'kpi_cache', 'live', 'meta', 'seen']);
+  assert.equal(db.sqlite.prepare('PRAGMA user_version').get().user_version, SCHEMA_VERSION, 'the first server now refuses this file');
   assert.deepEqual((await db.prepare('SELECT DISTINCT day FROM seen ORDER BY day').all()).results.map(r => r.day), ['2026-10-22', '2026-10-23']);
   // Batch ids carry over (a repeat is still refused), and later batches add to the same days.
   const last = batches.at(-1);
