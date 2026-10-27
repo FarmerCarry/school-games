@@ -1,0 +1,5 @@
+# Local databases: the default DB_PATH is server/data/telemetry.db.
+data/
+*.db
+*.db-wal
+*.db-shm
