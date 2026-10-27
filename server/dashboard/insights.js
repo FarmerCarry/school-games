@@ -626,8 +626,92 @@
     return picked;
   }
 
+  // ---- research sentences (the Habits and Learning tabs) ----------------------------
+  // At most five sentences from facts the page derives with research.js:
+  //   growth    [{ slug, measure, band, students, before, after, change, better }]: the
+  //             same children in the first and the last third of the period
+  //   persist   [{ slug, share, n }]: after a loss or a quit, the share that tried the
+  //             same level again (n rounds)
+  //   tired     { early: { value, n }, late: { value, n } }: the win rate in the first
+  //             10 minutes of a session and after 20
+  //   session   { median, open, n }: the median length of the students' sessions (minutes)
+  //   peak      { weekday, hour, share }: the busiest weekday and hour, and its share of play
+  // options: { lang, name: slug -> name, weekday: (0-6) -> name }
+  // Every comparison is an association: children choose what they play.
+  const RESEARCH_ORDER = ['growth', 'persist', 'tired', 'session', 'peak'];
+  const GROWTH_MIN = { accuracy: 0.03, winRate: 0.05, reaction: 30, score: 0 };   // the smallest change worth a sentence
+  function researchInsights(facts, options) {
+    const o = options || {}, ar = o.lang === 'ar', lang = ar ? 'ar' : 'en';
+    const nameOf = typeof o.name === 'function' ? o.name : slug => slug;
+    const game = slug => ar ? '«' + FSI + nameOf(slug) + PDI + '»' : nameOf(slug);
+    const dayName = typeof o.weekday === 'function' ? o.weekday : d => String(d);
+    const f = facts || {};
+    const out = [];
+    const add = (kind, key, text, sample) => out.push({ kind, key, text, students: num(sample && sample.students), tries: num(sample && sample.tries),
+      small: !!sample && small(sample.students, sample.tries) });
+    // Growth: the largest improvement of one age group's same children.
+    const better = list(f.growth).filter(g => g && GROWTH_MIN[g.measure] !== undefined && num(g.before) !== null && num(g.after) !== null && g.students > 0)
+      .map(g => ({ ...g, gain: g.measure === 'reaction' ? g.before - g.after : g.after - g.before }))
+      .filter(g => g.gain > GROWTH_MIN[g.measure] && (g.measure !== 'score' || g.after > g.before))
+      .sort((a, b) => b.students - a.students || b.gain - a.gain || cmp(a.slug, b.slug) || cmp(a.band, b.band));
+    if (better.length) {
+      const g = better[0], who = children(g.band, lang);
+      const v = x => g.measure === 'reaction' ? seconds(x) + (ar ? ' ثانية' : ' s') : g.measure === 'score' ? short(x) : pct(x);
+      const what = ar
+        ? { accuracy: 'أصابوا ' + v(g.after) + ' من أهدافهم', winRate: 'فازوا في ' + v(g.after) + ' من جولاتهم المنتهية',
+            reaction: 'صارت استجابتهم ' + v(g.after), score: 'صار متوسط نتيجتهم ' + v(g.after) }[g.measure]
+        : { accuracy: 'hit ' + v(g.after) + ' of their targets', winRate: 'won ' + v(g.after) + ' of their finished rounds',
+            reaction: 'reacted in ' + v(g.after) + ' on average', score: 'scored ' + v(g.after) + ' on average' }[g.measure];
+      add('growth', g.slug + ' ' + g.band + ' ' + g.measure, ar
+        ? who + ' الذين لعبوا ' + game(g.slug) + ' في بداية الفترة ونهايتها ' + what + ' في آخرها، مقابل ' + v(g.before) + ' في أولها (' +
+          int(g.students) + ' ' + arWord(g.students, ['طفل', 'طفلان', 'أطفال', 'طفلًا']) + ').'
+        : children(g.band, lang, true) + ' who played ' + nameOf(g.slug) + ' at the start and the end of this period ' + what + ' lately, from ' + v(g.before) +
+          ' at first (' + int(g.students) + (g.students === 1 ? ' child' : ' children') + ').', { students: g.students });
+    }
+    // Persistence: the game children most often try again after a loss.
+    const tries = list(f.persist).filter(p => p && num(p.share) !== null && p.n >= T.SMALL_TRIES).sort((a, b) => b.share - a.share || b.n - a.n || cmp(a.slug, b.slug));
+    if (tries.length >= 2) {
+      const p = tries[0];
+      add('persist', p.slug, ar
+        ? 'بعد خسارة جولة أو تركها في ' + game(p.slug) + ' يعيد الأطفال المرحلة نفسها في ' + pct(p.share) + ' من المرات، أكثر من أي لعبة أخرى.'
+        : 'After losing or leaving a round of ' + nameOf(p.slug) + ', children try the same level again ' + pct(p.share) + ' of the time, more than in any other game.',
+      { tries: p.n });
+    }
+    // Tiredness: the win rate later in a session against its first minutes.
+    const t = f.tired;
+    if (t && t.early && t.late && num(t.early.value) !== null && num(t.late.value) !== null && t.early.n >= T.SMALL_TRIES && t.late.n >= T.SMALL_TRIES) {
+      const drop = Math.round(t.early.value * 100) - Math.round(t.late.value * 100);
+      if (Math.abs(drop) >= 5) {
+        add('tired', drop > 0 ? 'down' : 'up', ar
+          ? 'يفوز الأطفال في ' + pct(t.late.value) + ' من جولاتهم بعد 20 دقيقة من اللعب، مقابل ' + pct(t.early.value) + ' في أول 10 دقائق من الجلسة.'
+          : 'Children win ' + pct(t.late.value) + ' of their rounds after 20 minutes of play, against ' + pct(t.early.value) + ' in the first 10 minutes of a session.',
+        { tries: Math.min(t.early.n, t.late.n) });
+      }
+    }
+    // Session length: the median of the students' sessions.
+    const ss = f.session;
+    if (ss && num(ss.median) !== null && ss.n > 0) {
+      const m = Math.max(1, Math.round(ss.median));
+      add('session', 'median', ar
+        ? (ss.open ? 'تمتد نصف جلسات لعب الطلاب ' + int(m) + ' دقيقة أو أكثر.' : 'تنتهي نصف جلسات لعب الطلاب خلال ' + int(m) + ' ' + arWord(m, ['دقيقة', 'دقيقتين', 'دقائق', 'دقيقة']) + ' أو أقل.')
+        : (ss.open ? 'Half of the students\' play sessions last ' + int(m) + ' minutes or more.' : 'Half of the students\' play sessions last ' + int(m) + (m === 1 ? ' minute' : ' minutes') + ' or less.'),
+      { tries: ss.n >= T.SMALL_TRIES ? null : ss.n });
+    }
+    // The busiest weekday and hour.
+    const pk = f.peak;
+    if (pk && num(pk.share) !== null && pk.share > 0) {
+      const at = String(pk.hour).padStart(2, '0') + ':00';
+      add('peak', pk.weekday + ' ' + pk.hour, ar
+        ? 'أكثر أوقات اللعب ازدحامًا يوم ' + dayName(pk.weekday) + ' عند الساعة ' + iso(at) + '، وفيه ' + pct(pk.share) + ' من وقت اللعب.'
+        : 'The busiest time is ' + dayName(pk.weekday) + ' at ' + at + ', with ' + pct(pk.share) + ' of the play time.');
+    }
+    out.sort((a, b) => RESEARCH_ORDER.indexOf(a.kind) - RESEARCH_ORDER.indexOf(b.kind));
+    if (!out.length) return [{ kind: 'quiet', key: 'none', text: ar ? 'لا يوجد ما يلفت الانتباه في هذه الفترة بعد.' : 'Nothing stands out in this period yet.' }];
+    return out.slice(0, MAX_INSIGHTS);
+  }
+
   return Object.freeze({
-    T, KIND_ORDER, BANDS, shown, small,
+    T, KIND_ORDER, BANDS, shown, small, researchInsights,
     int, decimal, short, pct, duration, seconds, arWord, arTimes, enTimes,
     catalogName, bandLabel, children, levelLabel, deviceLabel,
     favourites, favouritesByBand, stuckLevels, verdict, difficultyGrid, returning, pcHealth, insights

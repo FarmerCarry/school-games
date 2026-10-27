@@ -34,7 +34,8 @@ function main() {
     'offline-readiness.test.mjs', 'shared-kit.test.mjs', 'level-verifiers.test.mjs',
     'engine-regressions.test.mjs', 'moto-balance.test.mjs', 'play-stats-rules.test.mjs',
     'offline-download.test.mjs', 'dino-3d-engine.test.mjs', 'cake-guards-engine.test.mjs', 'pool-position-rules.test.mjs',
-    'bubble-bop-rules.test.mjs', 'juice.test.mjs', 'telemetry-server.test.mjs', 'telemetry-worker.test.mjs', 'dashboard-insights.test.mjs'
+    'bubble-bop-rules.test.mjs', 'juice.test.mjs', 'telemetry-server.test.mjs', 'telemetry-worker.test.mjs', 'dashboard-insights.test.mjs',
+    'dashboard-research.test.mjs'
   ]);
   const files = fs.readdirSync(path.join(repo, 'tools/tests')).filter(file => file.endsWith('.test.mjs')).sort();
   for (const file of shared) {

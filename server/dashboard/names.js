@@ -36,3 +36,54 @@ window.SG_GAME_NAMES = {
   "typing-test": ["أصابع البرق","Lightning Fingers"],
   "wacky-soccer": ["كرة القدم المجنونة","Wacky Soccer"]
 };
+// Each game's categories, the most players at once and its input style (js/catalog.js).
+window.SG_GAME_INFO = {
+  "air-hockey": {"cats":["two-player","sports"],"players":2,"input":"mixed"},
+  "beat-dash": {"cats":["running","arcade"],"players":1,"input":"one-button"},
+  "blob-battle": {"cats":["battle"],"players":1,"input":"mixed"},
+  "block-burst": {"cats":["puzzle"],"players":1,"input":"pointer"},
+  "block-world": {"cats":["idle","arcade"],"players":1,"input":"mixed"},
+  "bubble-bop": {"cats":["arcade"],"players":1,"input":"mixed"},
+  "cake-guards": {"cats":["strategy"],"players":1,"input":"pointer"},
+  "candy-rope": {"cats":["puzzle"],"players":1,"input":"pointer"},
+  "connect-four": {"cats":["two-player","puzzle"],"players":2,"input":"pointer"},
+  "critter-mart": {"cats":["idle"],"players":1,"input":"mixed"},
+  "dino-3d": {"cats":["running","arcade"],"players":1,"input":"keyboard"},
+  "drift-king": {"cats":["racing"],"players":1,"input":"one-button"},
+  "fire-and-ice": {"cats":["two-player","puzzle"],"players":2,"input":"keyboard"},
+  "hoop-heads": {"cats":["sports","two-player"],"players":2,"input":"keyboard"},
+  "maze-dash": {"cats":["arcade"],"players":1,"input":"keyboard"},
+  "merge-2048": {"cats":["puzzle"],"players":1,"input":"keyboard"},
+  "moto-madness": {"cats":["racing"],"players":1,"input":"keyboard"},
+  "neon-slope": {"cats":["running","arcade"],"players":1,"input":"keyboard"},
+  "paint-grab": {"cats":["battle"],"players":1,"input":"mixed"},
+  "pizza-clicker": {"cats":["idle"],"players":1,"input":"one-button"},
+  "pool-party": {"cats":["sports","two-player"],"players":2,"input":"pointer"},
+  "rail-rush": {"cats":["running"],"players":1,"input":"keyboard"},
+  "road-hopper": {"cats":["arcade"],"players":1,"input":"keyboard"},
+  "skybound-golf": {"cats":["sports","arcade"],"players":1,"input":"one-button"},
+  "snake-arena": {"cats":["battle","arcade"],"players":1,"input":"mixed"},
+  "splat-strike": {"cats":["shooter","battle"],"players":1,"input":"mixed"},
+  "sumo-bonk": {"cats":["two-player","sports"],"players":2,"input":"keyboard"},
+  "swing-hook": {"cats":["arcade"],"players":1,"input":"one-button"},
+  "tank-splat": {"cats":["two-player","battle"],"players":3,"input":"keyboard"},
+  "tic-tac-toe": {"cats":["two-player","puzzle"],"players":2,"input":"pointer"},
+  "troll-level": {"cats":["arcade"],"players":1,"input":"keyboard"},
+  "tunnel-blitz": {"cats":["running","arcade"],"players":1,"input":"keyboard"},
+  "typing-test": {"cats":["challenge"],"players":1,"input":"keyboard"},
+  "wacky-soccer": {"cats":["sports","two-player"],"players":2,"input":"one-button"}
+};
+// Category names: [Arabic, English].
+window.SG_CATEGORIES = {
+  "challenge": ["تحديات","Challenges"],
+  "shooter": ["تصويب","Shooting"],
+  "running": ["جري","Running"],
+  "racing": ["سباقات","Racing"],
+  "two-player": ["لاعبان","Two players"],
+  "sports": ["رياضة","Sports"],
+  "puzzle": ["ألغاز","Puzzles"],
+  "strategy": ["استراتيجية","Strategy"],
+  "arcade": ["أركيد","Arcade"],
+  "idle": ["بناء وإدارة","Build and manage"],
+  "battle": ["تحدي الروبوتات","Battle the bots"]
+};
