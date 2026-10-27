@@ -4,7 +4,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
-import { waitForCondition } from '../page-wait.mjs';
 import { clickControl } from '../ui-input.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -184,21 +183,17 @@ test('a settled pause stops redrawing until a resize, and reduced motion skips t
     const a = draws; stepGame(10); return draws - a;
   });
   assert.equal(redrawn, 1, 'a resize repaints the paused scene once');
-  // The pause panel scales in over 300ms. A click during that pop can miss
-  // the button even though it is already in the DOM.
-  await waitForCondition(page, () => {
-    const panel = document.querySelector('#scr-pause .panel');
-    const button = document.getElementById('btn-resume');
-    if (!panel || !button) return false;
-    const settling = panel.getAnimations().some(animation => {
-      const timing = animation.effect && animation.effect.getComputedTiming();
-      return timing && timing.iterations !== Infinity && animation.playState === 'running';
-    });
-    if (settling) return false;
-    const box = button.getBoundingClientRect();
-    const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-    return box.width > 0 && (hit === button || button.contains(hit));
-  }, null, 'pause panel finished popping in', 5000);
+  // The pause panel scales in over 300ms, and a click during that pop can miss the
+  // button. Finish the pop here: with nothing else drawing (stepGame replaces the game's
+  // own loop), headless Chromium can hold the animation unstarted for seconds.
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll('#scr-pause, #scr-pause *')) {
+      for (const animation of el.getAnimations()) {
+        const timing = animation.effect && animation.effect.getComputedTiming();
+        if (timing && timing.iterations !== Infinity) animation.finish();
+      }
+    }
+  });
   await clickControl(page, '#btn-resume');
   assert.equal(await page.evaluate(() => { const a = draws; stepGame(3); return draws - a; }), 3);
 
