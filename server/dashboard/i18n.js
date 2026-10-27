@@ -58,7 +58,7 @@
     loading: 'Loading…',
     rangeOne: function (a) { return a; },
     range: function (a, b) { return a + ' – ' + b; },
-    // The school's clock (§C): zone and offset are shown as they are, isolated.
+    // The school's clock: zone and offset are shown as they are, isolated.
     clockNote: function (zone, offset, source, now, pcs) {
       if (source === 'none' || !zone) return 'Waiting for a PC to report the school’s clock; world time (UTC) until then.';
       var head = 'Days and hours follow the school’s clock: ' + iso(zone) + ' (' + iso(offset) + (now ? ', now ' + iso(now) : '') + ')';

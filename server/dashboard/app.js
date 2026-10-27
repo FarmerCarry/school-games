@@ -630,7 +630,8 @@
 
   // ---- filters ---------------------------------------------------------------------
   function bandApplies() { return ['pcs', 'data', 'student'].indexOf(state.route.tab) < 0; }
-  function periodApplies() { return state.route.tab !== 'data'; }
+  // Every tab follows the period (the Data tab's quality panel too).
+  function periodApplies() { return true; }
   function segmented(host, label, items, current, onPick) {
     host.textContent = '';
     h('span', { class: 'filter-label', id: host.id + 'Label' }, host, label);
