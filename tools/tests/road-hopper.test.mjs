@@ -468,6 +468,15 @@ test('the age band picks the first tier, the title world follows a new player, a
   // A 6-7 guest (their own level) who reaches the par twice is lifted to tier 2.
   await prefs(frame, { band: '6-7', telemetry: true });
   const up = await frame.evaluate(() => {
+    // A fixed world (mulberry32): the autopilot can still fall in a river, so a random
+    // world sometimes ends a run before the par.
+    let seed = 20261027;
+    Math.random = () => {
+      seed = (seed + 0x6D2B79F5) | 0;
+      let r = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
     const g = __game, seen = [g.tier], scores = [];
     for (let run = 0; run < 2; run++) {
       if (run) g.press('KeyR'); else g.start();
