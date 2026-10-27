@@ -149,6 +149,20 @@ test('a click anywhere on the picture cards turns them, but a double click on Pl
   assert.deepEqual((await page.evaluate(() => bb.stats)).filter(c => c[0] === 'tutorial').map(c => c[1]), ['start', 'done']);
 });
 
+test('the picture cards can be skipped with the X or Esc, and a skip is not reported as finished', async t => {
+  for (const skip of ['x', 'Escape']) {
+    const page = await game(t);
+    await page.keyboard.press('Enter');
+    await step(page);
+    assert.equal((await state(page)).screen, 'grip');
+    if (skip === 'x') await page.locator('#gripSkip').click(); else await page.keyboard.press('Escape');
+    await step(page);
+    assert.equal((await state(page)).screen, 'play', skip + ': straight into the first bubbles');
+    assert.equal((await page.evaluate(() => __game.save)).grip, true, skip + ': the cards are not shown again');
+    assert.deepEqual((await page.evaluate(() => bb.stats)).filter(c => c[0] === 'tutorial').map(c => c[1]), ['start'], skip);
+  }
+});
+
 test('a double click on a button acts once: its second click never lands on the next screen', async t => {
   // Worlds 1-3 open: the map's world-3 island and pebbles lie under Play and under the pause card's Map button.
   const page = await game(t, { save: SAVE(3) });

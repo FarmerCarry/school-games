@@ -98,11 +98,12 @@
   function gripNext() {
     if (screen !== 'grip') return;
     if (gripCard === 0) { J.tap(); gripCard = 1; paintGrip(); }
-    else { J.select(); gripDone(); }
+    else { J.select(); gripDone(false); }
   }
-  function gripDone() {
+  // Skipping the cards (the X or Esc) is not finishing them: only the last card reports done.
+  function gripDone(skipped) {
     if (screen !== 'grip') return;
-    Kit.stats.tutorial('done');
+    if (!skipped) Kit.stats.tutorial('done');
     if (!save.grip) { save.grip = true; persist(); }
     const then = gripThen; gripThen = '';
     if (then === 'play') afterGrip(); else toTitle();
@@ -355,7 +356,7 @@
   on($('btnCloset'), () => openCloset('title'));
   on($('btnHow'), () => { J.select(); showGrip('title'); });
   on($('gripNext'), gripNext);
-  on($('gripSkip'), () => { J.back(); gripDone(); });
+  on($('gripSkip'), () => { J.back(); gripDone(true); });
   // A click anywhere on the cards' screen turns the card, but not in the first moment
   // after it appears: the second click of a double click on Play must not skip it.
   $('scrGrip').addEventListener('click', e => { e.stopPropagation(); if (e.detail < 2 && time - gripAt >= 0.4) gripNext(); });
@@ -417,7 +418,7 @@
   function handleKeys() {
     const K = Kit.keys, go = K.anyPressed(['Enter', 'NumpadEnter', 'Space']);
     if (screen === 'title') { if (go) play(); }
-    else if (screen === 'grip') { if (K.pressed('Escape')) { J.back(); gripDone(); } else if (anyKey) gripNext(); }
+    else if (screen === 'grip') { if (K.pressed('Escape')) { J.back(); gripDone(true); } else if (anyKey) gripNext(); }
     else if (screen === 'map') { if (go) startNext(); else if (K.pressed('Escape')) { J.back(); toTitle(); } }
     else if (screen === 'closet') { if (go || K.pressed('Escape')) closeCloset(); }
     else if (screen === 'play') { if (K.anyPressed(['KeyP', 'Escape'])) pause(true); else if (!ending) playKeys(K); }
