@@ -346,8 +346,10 @@
 
   /* --------------------------------------------------------------- input */
   // A mouse click hands the keyboard back to the game; keyboard activation keeps focus.
+  // Young children double-click everything: the second click of a double click (detail 2)
+  // is dropped, since the first one already acted and it would land on the next screen.
   function on(el, fn) {
-    el.addEventListener('click', e => { e.stopPropagation(); Kit.audio.unlock(); if (e.detail > 0) { el.blur(); focusGame(); } fn(e); });
+    el.addEventListener('click', e => { e.stopPropagation(); if (e.detail > 1) return; Kit.audio.unlock(); if (e.detail > 0) { el.blur(); focusGame(); } fn(e); });
   }
   on($('btnPlay'), play);
   on($('btnCloset'), () => openCloset('title'));
@@ -356,7 +358,7 @@
   on($('gripSkip'), () => { J.back(); gripDone(); });
   // A click anywhere on the cards' screen turns the card, but not in the first moment
   // after it appears: the second click of a double click on Play must not skip it.
-  $('scrGrip').addEventListener('click', e => { e.stopPropagation(); if (time - gripAt >= 0.4) gripNext(); });
+  $('scrGrip').addEventListener('click', e => { e.stopPropagation(); if (e.detail < 2 && time - gripAt >= 0.4) gripNext(); });
   on($('mapHome'), () => { J.back(); toTitle(); });
   on($('mapCloset'), () => openCloset('map'));
   on($('btnPause'), () => pause(true));

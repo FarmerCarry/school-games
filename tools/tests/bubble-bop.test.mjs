@@ -146,6 +146,24 @@ test('a click anywhere on the picture cards turns them, but a double click on Pl
   assert.deepEqual((await page.evaluate(() => bb.stats)).filter(c => c[0] === 'tutorial').map(c => c[1]), ['start', 'done']);
 });
 
+test('a double click on a button acts once: its second click never lands on the next screen', async t => {
+  // Worlds 1-3 open: the map's world-3 island and pebbles lie under Play and under the pause card's Map button.
+  const page = await game(t, { save: SAVE(3) });
+  const play = await page.locator('#btnPlay').boundingBox();
+  await page.mouse.dblclick(play.x + play.width / 2, play.y + 20);
+  await step(page, 2);
+  assert.equal((await state(page)).screen, 'map', 'a double click on Play opens the map, not a world-3 level');
+  await page.locator('.pebble[data-w="0"][data-l="0"]').click();
+  await step(page, 30);
+  await page.keyboard.press('KeyP');
+  await step(page);
+  const map = await page.locator('#btnMap').boundingBox();
+  await page.mouse.dblclick(map.x + map.width / 2, map.y + map.height / 2);
+  await step(page, 2);
+  assert.equal((await state(page)).screen, 'map', 'a double click on the pause Map button stays on the map');
+  assert.deepEqual((await page.evaluate(() => bb.stats)).filter(c => c[0] === 'round').map(c => c[1]), ['w1L1'], 'no other level started');
+});
+
 test('world 1 pops by hovering only, and a near miss within the margin still pops', async t => {
   const page = await game(t, { save: SAVE(0) });
   await page.keyboard.press('Enter');
