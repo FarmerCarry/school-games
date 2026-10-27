@@ -20,7 +20,6 @@
     best: store.get('best', 0) | 0,
     adv: store.get('adv', []),
     skin: store.get('skin', 0) | 0,
-    music: store.get('music', true) !== false,
     stats: store.get('stats', null),
     seen: store.get('seenSkins', [0])
   };
@@ -76,21 +75,9 @@
   function artK() { return Math.min(2.5, Math.round(view.scale * view.dpr * 100) / 100); }
 
   var SCR = ['scrTitle', 'scrMap', 'hud', 'scrPause', 'scrOver', 'scrWin', 'scrFail'];
-  function show(ids) { SCR.forEach(function (s) { $(s).hidden = ids.indexOf(s) < 0; }); Snd.music.duck(ids.indexOf('scrPause') >= 0); }
+  function show(ids) { SCR.forEach(function (s) { $(s).hidden = ids.indexOf(s) < 0; }); }
 
   Kit.muteButton();
-  var musicBtn = $('btnMusicTop');
-  musicBtn.textContent = '🎵';
-  function paintMusic() {
-    musicBtn.classList.toggle('off', !save.music);
-    $('musicState').textContent = save.music ? 'تعمل' : 'متوقفة';
-    Snd.music.setOn(save.music);
-  }
-  function toggleMusic() { save.music = !save.music; put('music', save.music); paintMusic(); Snd.button(); }
-  musicBtn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-  musicBtn.addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); toggleMusic(); startMusic(); if (e.detail > 0) musicBtn.blur(); });
-  paintMusic();
-  function startMusic() { if (Kit.audio.ctx) Snd.music.start(); }
 
   var toastTimer = 0;
   function toast(msg, dur) {
@@ -291,7 +278,7 @@
     state = 'play'; show(['hud']);
     Kit.stats.round('classic'); // new, restarted or continued classic run
     banner = run.moves ? { t: 0, title: 'تابع اللعب!', sub: 'النقاط: ' + run.score } : { t: 0, title: 'كلاسيكي', sub: 'املأ الصفوف والأعمدة لتفجيرها!' };
-    Snd.button(); startMusic();
+    Snd.button();
     checkStuck();
   }
   function levelGoalText(lv) {
@@ -312,7 +299,7 @@
     state = 'play'; show(['hud']);
     Kit.stats.round('L' + (idx + 1));
     banner = { t: 0, title: 'المرحلة ' + (idx + 1), sub: levelGoalText(LV.LEVELS[idx]), world: LV.WORLDS[LV.LEVELS[idx].world] };
-    Snd.button(); startMusic();
+    Snd.button();
   }
   function restart() { if (runLevel >= 0) startLevel(runLevel); else { dropRun(); startClassic(true); } }
 
@@ -468,7 +455,7 @@
   var lastPtr = { x: 640, y: 360 };
 
   canvas.addEventListener('pointerdown', function (e) {
-    Kit.audio.unlock(); startMusic();
+    Kit.audio.unlock();
     try { canvas.focus({ preventScroll: true }); } catch (err) { /* ignore */ }
     if (state !== 'play') return;
     var p = logical(e); lastPtr = p;
@@ -605,7 +592,7 @@
     var k = e.code;
     if (k === 'Enter' || k === 'Space' || k === 'NumpadEnter') e.preventDefault();
     if (e.repeat) return;
-    Kit.audio.unlock(); startMusic();
+    Kit.audio.unlock();
     var go = k === 'Enter' || k === 'Space' || k === 'NumpadEnter';
     switch (state) {
       case 'title':
@@ -881,7 +868,6 @@
   onClick('btnPause', function () { if (state === 'play') pause(); });
   onClick('btnResume', resume);
   onClick('btnRestart', restart);
-  onClick('btnMusic', toggleMusic);
   onClick('btnPauseMenu', function () { Snd.back(); if (runLevel >= 0) openMap(); else openTitle(); });
   onClick('btnAgain', restart);
   onClick('btnOverMenu', function () { Snd.back(); openTitle(); });

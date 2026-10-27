@@ -186,3 +186,16 @@ test('stats saved as null or a number restart from zero, so Classic starts and a
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:block-burst:stats'))), stats, raw);
   }
 });
+
+test('the pause panel has no music switch, and an old music save is ignored and left alone', async t => {
+  const page = await game(t, { init: () => localStorage.setItem('sg:block-burst:music', 'false') });
+  await clickControl(page, '#btnClassic');
+  await clickControl(page, '#btnPause');
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#scrPause button')].map(b => b.id)),
+    ['btnResume', 'btnRestart', 'btnPauseMenu']);
+  assert.equal(await page.locator('.sg-mute').count(), 1, 'only the shared mute button');
+  assert.equal(await page.evaluate(() => 'music' in __game.save), false);
+  await clickControl(page, '#btnResume');
+  await page.evaluate(() => { __game.auto(2); stepGame(60); });
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:block-burst:music')), 'false', 'nothing rewrites the old key');
+});
