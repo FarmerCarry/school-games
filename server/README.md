@@ -55,12 +55,13 @@ a web browser. Everything below is free.
    the address to see the dashboard with made-up sample data.
 
 **It is free for a school.** Cloudflare's free plan allows 100,000 requests to the
-server per day (a PC sends one about every game played; 120 play sessions send about
-300; the server's own clean-up every 5 minutes adds about 300), and its free D1 database
+server per day (a PC sends one about every minute of play; 500 play sessions send about
+4,600; the server's own work every 5 minutes adds about 300), and its free D1 database
 allows 500 MB per database, 5 million rows read and 100,000 rows written per day. A
 busy school (500 play sessions a day) writes about a third of the daily allowance and
 keeps about 220 MB after a year. The server counts its own use, and when a day's writes
-run high it asks the PCs to send less often (the `X-Batch-Every` answer header).
+run high it asks the PCs to send less often (the `X-Batch-Every` answer header), and
+when a day's reads run high the dashboard waits until the next day.
 If a limit were ever reached, the server stops answering until midnight UTC: nothing is
 charged (the free plan has no bill), and the PCs keep their statistics for up to 7 days
 and send them later.
@@ -87,16 +88,17 @@ Control never send anything.
 
 | File | What it does |
 |---|---|
-| `worker.mjs` | Cloudflare entry: `fetch` (the handler on the D1 database `env.DB`, the dashboard from `env.ASSETS`) and `scheduled` (the daily purge, and the sweep of the live rows every 5 minutes). |
-| `wrangler.json` | The Worker's settings: D1 binding `DB`, static assets `./dashboard`, two crons (the daily purge, and every 5 minutes the sweep of the live rows), `ALLOWED_ORIGINS` and `RETENTION_DAYS`, request logs (observability) off. |
+| `worker.mjs` | Cloudflare entry: `fetch` (the handler on the D1 database `env.DB`, the dashboard from `env.ASSETS`) and `scheduled` (the daily purge, and every 5 minutes the rollups and the sweep of the live rows). |
+| `wrangler.json` | The Worker's settings: D1 binding `DB`, static assets `./dashboard`, two crons (the daily purge, and every 5 minutes the rollups and the sweep of the live rows), `ALLOWED_ORIGINS` and `RETENTION_DAYS`, request logs (observability) off. |
 | `package.json`, `package-lock.json` | Wrangler 4.149.0 for deploying (a development tool only), the plain-English descriptions the Deploy button shows, `npm start` for Node. |
 | `.dev.vars.example` | Tells the Deploy button to ask for the `ADMIN_TOKEN` secret (empty on purpose). |
 | `handler.mjs` | The HTTP rules as a Fetch-API handler, shared by both hosts: routes, CORS, the soft rate limit, body limits, admin password, status codes. |
-| `store.mjs` | The facts (sessions, game visits, rounds, marks, students, PCs) over a D1-style SQL driver; creates and upgrades its tables itself, one version step at a time; KPIs, live sessions, retention, the usage meter. |
+| `store.mjs` | The facts (sessions, game visits, rounds, marks, students, PCs) over a D1-style SQL driver; creates and upgrades its tables itself, one version step at a time; the 5-minute rollups, KPIs, live sessions, settings, retention, the usage meter and its guards. |
+| `rollups.mjs` | The daily rollups of the facts by the school's local day, and milestone 2's frozen daily totals: their tables, and for each rollup the one SQL `SELECT` that defines it. |
 | `schema.mjs` | Validation of the envelope (wire versions 2 and 3) and every event kind; cleans and clamps. |
 | `clock.mjs` | The school's clock: UTC offsets, local days and the exact bounds of a local day in an IANA zone, from `Intl` alone. |
 | `sqlite-d1.mjs` | A D1-style driver over Node's built-in `node:sqlite`, for the Node host and the tests. |
-| `app.mjs`, `main.mjs` | The Node host: `node:http` in front of the handler, settings from the environment, a purge every 24 hours. |
+| `app.mjs`, `main.mjs` | The Node host: `node:http` in front of the handler, settings from the environment, a purge every 24 hours, the rollups every 5 minutes. |
 | `static.mjs` | The Node host's static file server for `dashboard/`, with the headers of `dashboard/_headers`. |
 | `dashboard/` | The insights dashboard (static files), served at `/` by both hosts. `_headers` gives every page a strict Content-Security-Policy. |
 | `warnings.mjs` | Hides Node 22's one `node:sqlite` ExperimentalWarning (and nothing else). |
@@ -144,14 +146,20 @@ What can be stored is decided here, not only by what the portal chooses to send.
 * **Coarse buckets.** Devices are reported as cores (1, 2, 4, 8, 16), memory in GB
   (0, 1, 2, 4, 8) and screen width (1366, 1600, 1920, 2560); age as a band (6-7, 8-9,
   10-11 or unknown); reaction times, input latency and frame times as fixed histograms.
-* **Small groups in the KPI answers.** `/v1/admin/kpis` and `/v1/admin/live` still report
-  a group with fewer than **3 distinct sessions** as `{ ..., "suppressed": true }`.
+* **Every number is shown.** The dashboard's answers show every group with its numbers,
+  even one child's (nothing is hidden for small groups any more); only the dashboard
+  password opens them.
 * **Retention.** The daily purge (Cloudflare: a cron at 03:23 UTC; Node: at start and
-  every 24 hours) deletes the frozen daily totals of milestone 2 older than
-  `RETENTION_DAYS` (default 180), batch ids after 30 days and the server's usage counts
-  after 60 days; live rows go by a sweep every 5 minutes (Node: every minute). The facts
-  are not purged by this version yet. On Node, SQLite's `secure_delete` overwrites
-  deleted rows and the write-ahead log is truncated after each purge.
+  every 24 hours) deletes the facts of play sessions that started more than
+  `RETENTION_DAYS` days ago (default 400: a school year and the summer; the owner can
+  choose 760 on the dashboard), the student and PC rows (with their links) last seen
+  before then, the frozen daily totals of milestone 2 older than that, batch ids after
+  30 days and the server's usage counts after 60 days. The daily rollups (counts per day,
+  per game, per student code) are kept 800 days, or longer if the facts are. Live rows
+  go by a sweep every 5 minutes (Node: every minute). If the database nears the free
+  plan's 500 MB, the purge removes the round-by-round rows of the oldest 30 days of
+  facts (the rollups stay). On Node, SQLite's `secure_delete` overwrites deleted rows
+  and the write-ahead log is truncated after each purge.
 
 ## Self-hosting on Node
 
@@ -181,7 +189,7 @@ All settings are environment variables.
 | `DB_PATH` | `server/data/telemetry.db` | SQLite file (created with its folder). Also writes `-wal` and `-shm` files next to it. |
 | `ALLOWED_ORIGINS` | none | Comma-separated origins of the portal, e.g. `https://name.github.io` (an origin has no path and no trailing slash, even when the site lives at `/school-games/`). Browser requests from any other origin get no CORS header and `POST /v1/batch` answers `403`. The literal `null` (pages from `file:` or sandboxed frames) is accepted only if listed; the portal never sends from `file:`. |
 | `ADMIN_TOKEN` | none | The dashboard password: the bearer token for `/v1/admin/*`, at least 16 printable ASCII characters without spaces (use `openssl rand -hex 24`). Unset: the admin endpoints answer `404`. |
-| `RETENTION_DAYS` | `180` | Days of data to keep (1 to 36,500). |
+| `RETENTION_DAYS` | `400` | Days of play facts to keep (1 to 36,500); the daily rollups are kept at least 800 days. The owner's choice on the dashboard (`keepDays`) wins. |
 | `RATE_PER_MIN` | `1200` | Requests per minute per client address (token bucket, bursts up to the same number). Generous because a whole school lab shares one NAT address. `0` turns the limit off. |
 | `TRUST_PROXY` | `0` | Number of reverse proxies in front of the server. With `1`, the client address for the rate limit is the last `X-Forwarded-For` entry (the one your proxy wrote); with `0` it is the socket address, so all traffic through a proxy shares one bucket. |
 
@@ -189,7 +197,7 @@ The server refuses to start on a malformed origin, a short admin token, a bad nu
 or a database written by a newer version of the server.
 
 On Cloudflare the same settings are `ALLOWED_ORIGINS` and `RETENTION_DAYS` (plain
-variables in `wrangler.json`, default `https://farmercarry.github.io` and `180`),
+variables in `wrangler.json`, default `https://farmercarry.github.io` and `400`),
 `ADMIN_TOKEN` (a secret; an invalid one turns the admin endpoints off rather than
 stopping the Worker) and the optional `RATE_PER_MIN` (the limit is per Worker
 instance, so it is soft).
@@ -305,7 +313,7 @@ Every API response (paths under `/v1/`) has `Vary: Origin`, `Cache-Control: no-s
 `X-Content-Type-Options: nosniff` and, for an origin in `ALLOWED_ORIGINS`,
 `Access-Control-Allow-Origin: <that origin>` and `Access-Control-Expose-Headers:
 Retry-After, X-Batch-Every`. Credentials are never allowed. Error bodies are `{"error": "<short
-reason>"}` and never echo the request. Every request that reaches the server (including
+reason>"}` (a `429` from the read guard adds `until`) and never echo the request. Every request that reaches the server (including
 `OPTIONS`, health checks and, on Node, dashboard files) takes a token from the client's
 rate-limit bucket; an empty bucket answers `429` with `Retry-After` in seconds.
 
@@ -390,31 +398,51 @@ before a portal that sends version 3 is published.
 
 ### Admin endpoints
 
-`GET /v1/admin/kpis` and `GET /v1/admin/live` need `Authorization: Bearer <ADMIN_TOKEN>`
-(compared in constant time). Without a valid token: `401` with
-`WWW-Authenticate: Bearer`. With no valid `ADMIN_TOKEN` set: `404
+`GET /v1/admin/kpis`, `GET /v1/admin/live` and `GET` and `POST /v1/admin/settings` need
+`Authorization: Bearer <ADMIN_TOKEN>` (compared in constant time). Without a valid token:
+`401` with `WWW-Authenticate: Bearer`. With no valid `ADMIN_TOKEN` set: `404
 {"error": "admin password not set"}` (the dashboard shows this as "the password was
-not set"). The request that upgrades the database answers `503` as for batches.
+not set"). A method a route does not take: `405` with `Allow`. The request that upgrades
+the database answers `503` as for batches. Every answer has `"v": 1` and the school's
+clock, `"clock": {"tz", "source", "offsetMin", "today"}` (`today` is the school's local
+day).
+
+**Nothing is hidden:** every group is shown with its numbers, even a single session or
+a single child (`minSessions` is `0`, and no group is ever `suppressed`). A dashboard
+should mark small numbers as early signs instead.
+
+**The free reading allowance.** D1's free plan stops every query for the rest of the UTC
+day once 5 million rows have been read. Once the day's reads pass 4.2 million (as far as
+the server's own meter knows), `GET /v1/admin/kpis` answers `429 {"error": "reads",
+"until": "03:00"}`, `until` being the next 00:00 UTC on the school's clock; `live` and
+`settings` still answer, and batches are never refused.
 
 #### `GET /v1/admin/kpis?from=YYYY-MM-DD&to=YYYY-MM-DD&band=6-7`
 
 Days `from`..`to` (inclusive, at most 366 days; default: the 30 days ending today on the
-school's clock). Days up to the update to schema 4 (`legacy_until`) are the frozen UTC
-receipt days of milestone 2; days from `facts_since` on are the school's local days. On
-the one day both cover, both add up. `band` is `all` (default), `6-7`, `8-9`, `10-11`
-or `unknown`. Invalid parameters: `400`.
+school's clock). Days up to the update to schema 4 (`range.legacyUntil`) are the frozen
+UTC receipt days of milestone 2, which did not tell students apart; days from
+`range.factsSince` on are the school's local days. On the one day both cover, both add
+up. `band` is `all` (default), `6-7`, `8-9`, `10-11` or `unknown`. Invalid parameters:
+`400`.
 
 Conventions:
 
 * A **group** is an object with its key fields and `sessions`, the number of distinct
-  sessions in it (for games this is the brief's "unique sessions"). A group with 1 or
-  2 sessions is only `{ <key fields>, "suppressed": true }`; a group with 0 sessions
-  and nothing stored keeps its zeros. Check `suppressed` before reading numbers.
+  sessions in it (for games this is the brief's "unique sessions"). A group that has no
+  play keeps its zeros.
 * **A session counts once, on the day it started** (on the school's clock), with
   everything it did; a range's sessions are the sum of its days' sessions.
+* **Students** are counted by their code, an older code linked to a newer one counting
+  as the newer one (`totals.students.active`, `games[].students`, `bands[].students`:
+  distinct over the range; `daily[].students`: distinct per day). Guests and v2
+  sessions are never students. `levels[].students` is each day's distinct students
+  added up over the range (a child who plays a level on three days counts three times).
+  Student counts cover the days from `factsSince`; a frozen day has `students` and
+  `guestMinutes` `null`.
 * Rates and shares are 0..1 with 4 decimals and `null` when the denominator is 0.
   Minutes have 1 decimal (`avgEngagedMinutesPerSession` 2), seconds 1, tiers 2,
-  milliseconds are whole.
+  scores 1, milliseconds are whole.
 * A batch kept offline and delivered later counts on the day it was played. Engaged
   time is each game visit's: from its close (`gx`) and, for v3, also from the running
   time (`gp`) of a visit that never closed.
@@ -427,26 +455,40 @@ Conventions:
   modes), `q` quit. Endless games end with `e`, so their completion rate is 0 and
   their win rate `null`: read `rounds.codes` and `dropOffRate` for them.
 * A device bucket and an age band count a session under its first batch's.
+* Days already rolled up come from the rollups; today (and yesterday until 01:00 at
+  the school, or any day the cron has not reached) from the facts, with the same
+  definitions. A day rolled again after late data shows the late play within about an
+  hour. On Cloudflare the answer for the days not rolled yet is kept 10 minutes.
 
 ```jsonc
 {
   "v": 1,
-  "range": { "from": "2026-10-01", "to": "2026-10-26", "days": 26, "band": "all" },  // band: all | 6-7 | 8-9 | 10-11 | unknown
-  "minSessions": 3,
-  "totals": {                                  // or { "suppressed": true }
-    "sessions": 2560,                          // distinct sessions with a stored event, per day
-    "engagedMinutes": 22692.6,                 // sum of gx engaged ms
+  "range": { "from": "2026-11-01", "to": "2026-11-26", "days": 26, "band": "all",   // band: all | 6-7 | 8-9 | 10-11 | unknown
+    "legacyUntil": "2026-10-28", "factsSince": "2026-10-28" },   // '' when this database never held milestone 2's totals
+  "minSessions": 0,
+  "clock": { "tz": "Asia/Riyadh", "source": "pcs", "offsetMin": 180, "today": "2026-11-26" },
+  "totals": {
+    "sessions": 2560,                          // distinct sessions, per day
+    "engagedMinutes": 22692.6,                 // sum of the visits' engaged ms
     "avgEngagedMinutesPerSession": 8.86,
     "gameOpens": 6419, "roundsStarted": 27938, "roundsEnded": 27938, "levelUps": 2580, "errors": 147,
     "players": {                               // from session-start events
       "sessionStarts": 2560, "newProfiles": 283, "guests": 531,   // guests: level 0
       "profileAge": [814, 554, 577, 615],
       "daysSinceLast": [432, 439, 462, 413, 814]
+    },
+    "students": {
+      "active": 412,                           // distinct students who played in the range
+      "new": 61,                               // their profile was made in the range
+      "returning": 290,                        // seen before the range
+      "knownBefore": 61,                       // first seen in the range, with a profile made before it
+      "guestSessions": 431, "guestMinutes": 1904.2,   // v3 sessions without a student code
+      "minutesPerStudentDay": { "p25": 4.2, "median": 9.5, "p75": 17.1, "mean": 12.3 }   // quartiles between ranks (as R and NumPy)
     }
   },
   "daily": [                                   // every day of the range, oldest first
-    { "day": "2026-10-23", "sessions": 120, "engagedMinutes": 1117.5, "opens": 320 },
-    { "day": "2026-10-24", "suppressed": true }
+    { "day": "2026-11-23", "sessions": 120, "engagedMinutes": 1117.5, "opens": 320, "students": 96, "guestMinutes": 85.3 },
+    { "day": "2026-11-24", "sessions": 1, "engagedMinutes": 3.2, "opens": 1, "students": 1, "guestMinutes": 0 }
   ],
   "games": [                                   // sorted by slug
     {
@@ -465,39 +507,53 @@ Conventions:
       "loads": 481, "avgLoadMs": 940,
       "errors": { "t": 5, "x": 4, "l": 3 },    // timeout, script error, load error
       "sources": { "featured": 40, "catalog": 73, "starter": 283 },  // opens per launch source (non-zero only)
-      "replay": { "replayIndex": [1632, 327, 76, 35, 3, 0], "playsBefore": [379, 26, 27, 32, 29] }
-    },
-    { "slug": "tank-splat", "suppressed": true }
+      "replay": { "replayIndex": [1632, 327, 76, 35, 3, 0], "playsBefore": [379, 26, 27, 32, 29] },
+      "students": 133,                         // distinct students who opened it
+      "hearts": { "on": 12, "off": 2 },        // the heart button pressed in a visit
+      "tutorials": { "start": 88, "done": 71 },
+      "wallMinutes": 1022.4,                   // rounds' wall-clock time (newer Kit only)
+      "actionsPerMinute": 41.3,                // key presses and clicks per minute of that time
+      "avgScore": 212.4,                       // mean score of rounds that report one
+      "unended": 14,                           // rounds started and never ended
+      "duoRounds": 0                           // local two-player rounds
+    }
   ],
   "levels": [                                  // per (slug, round id), sorted by slug then id (L2 before L10)
     { "slug": "air-hockey", "id": "L1", "sessions": 126, "starts": 248, "ends": 248,
       "codes": { "w": 111, "l": 107, "d": 0, "e": 0, "q": 30 },
-      "completionRate": 0.4476, "winRate": 0.5092, "dropOffRate": 0.121, "avgMs": 78585, "avgTier": null },
-    { "slug": "air-hockey", "id": "L9", "suppressed": true }
+      "completionRate": 0.4476, "winRate": 0.5092, "dropOffRate": 0.121, "avgMs": 78585, "avgTier": null,
+      "students": 140, "avgScore": null, "unended": 3 }   // students: per-day counts added up
   ],
   "bands": [                                   // 6-7, 8-9, 10-11, unknown (those with sessions)
-    { "band": "6-7", "sessions": 739, "opens": 1825, "engagedMinutes": 5120.4,
+    { "band": "6-7", "sessions": 739, "opens": 1825, "engagedMinutes": 5120.4, "students": 118,
       "games": [                               // age-band preferences, sorted by slug
         { "slug": "bubble-bop", "sessions": 136, "opens": 143,
           "share": 0.0784,                     // this game's share of the band's opens
           "avgTier": 1.48, "completionRate": 0.6432,
-          "winRate": 0.8411, "dropOffRate": 0.1203, "engagedMinutes": 210.4, "starts": 812 },  // added in milestone 2
-        { "slug": "dino-3d", "suppressed": true }
-      ] },
-    { "band": "unknown", "suppressed": true }
+          "winRate": 0.8411, "dropOffRate": 0.1203, "engagedMinutes": 210.4, "starts": 812 }   // the last four added in milestone 2
+      ] }
   ],
   "sources": [                                 // launch sources over all games, in the contract's order
-    { "src": "featured", "sessions": 1013, "opens": 1242 },
-    { "src": "history", "suppressed": true }
+    { "src": "featured", "sessions": 1013, "opens": 1242 }
   ],
   "devices": {                                 // each dimension separately, sorted by value
     "cores":  [ { "value": 2, "sessions": 617,
                   "frames": { "counts": [15436271, 2715746, 676173, 35793], "smoothShare": 0.8183, "stallShare": 0.0019 },
                   "il": [75877, 88713, 50563, 20262, 12608, 5099], "avgLoadMs": 1757 } ],
-    "memory": [ { "value": 0, "suppressed": true } ],
+    "memory": [ ... ],
     "screen": [ ... ]
   },
-  "modes": [ { "mode": "web", "sessions": 2180 }, { "mode": "app", "sessions": 380 } ]  // app = installed PWA
+  "modes": [ { "mode": "web", "sessions": 2180 }, { "mode": "app", "sessions": 380 } ],  // app = installed PWA
+  "quality": {                                 // how far the numbers can be trusted (the days from factsSince)
+    "linkedShare": 0.82,                       // engaged time of sessions with a student code / all
+    "v2Share": 0.18,                           // engaged time of sessions from PCs still on wire version 2
+    "clockEstimatedShare": 0.2,                // sessions dated from the receipt time, not the PC's elapsed seconds
+    "unclosedVisits": 310, "unknownBandShare": 0.04, "idleHandovers": 23,
+    "pcsNew": 12,                              // PC codes seen (only PCs on the new version send one)
+    "oldVersionSessionShare": 0.18,            // sessions from PCs on wire version 2
+    "profilesFullPcs": 1,                      // PCs that reached 24 profiles
+    "forgetfulPcs": 0                          // PCs that on some day made 3 or more new profiles, in half or more of their sessions
+  }
 }
 ```
 
@@ -507,13 +563,60 @@ Sessions whose last batch arrived in the current minute or the four before it (3
 at minute resolution), and the game each one has open (opened with `go` and not yet
 closed with `gx`; `se` closes everything; a session forgotten after 5 quiet minutes has
 nothing open). A batch delivered late from a PC's offline queue counts as a sign of
-life when it arrives; a repeated batch does not.
+life when it arrives; a repeated batch does not. `students` are distinct student codes
+(linked codes as one), `guests` v3 sessions without a code, `unknown` sessions from PCs
+still on wire version 2, `pcs` distinct PC codes.
 
 ```json
-{ "v": 1, "windowSec": 300, "minSessions": 3,
-  "total": { "sessions": 80 },
-  "games": [ { "slug": "dino-3d", "sessions": 3 }, { "slug": "block-burst", "suppressed": true } ] }
+{ "v": 1, "windowSec": 300, "minSessions": 0,
+  "total": { "sessions": 14 }, "students": 11, "guests": 2, "unknown": 1, "pcs": 12,
+  "games": [ { "slug": "dino-3d", "sessions": 3 }, { "slug": "block-burst", "sessions": 1 } ],
+  "clock": { "tz": "Asia/Riyadh", "source": "pcs", "offsetMin": 180, "today": "2026-11-26" } }
 ```
+
+#### `GET /v1/admin/settings` and `POST /v1/admin/settings`
+
+The school's clock, retention, storage and today's usage:
+
+```jsonc
+{
+  "v": 1,
+  "clock": { "tz": "Asia/Riyadh", "source": "pcs", "offsetMin": 180, "today": "2026-11-26", "now": "10:42",
+    "weekStart": "sun", "weekSource": "auto",             // auto: from the zone; owner: chosen
+    "detected": [ { "tz": "Asia/Riyadh", "pcs": 12 } ],   // zones of the PCs seen in the last 14 days
+    "factsSince": "2026-10-28", "legacyUntil": "2026-10-28", "v3Since": "2026-11-02" },
+  "keep": { "days": 400, "source": "env", "rollupDays": 800 },   // source: env (RETENTION_DAYS) or owner
+  "storage": { "bytes": 82000000, "limit": 500000000, "guardAt": 425000000, "trimmedBefore": "" },
+  "usage": { "day": "2026-11-26", "reads": 450000, "writes": 34000, "readsLimit": 5000000, "writesLimit": 100000, "batchEvery": 60 },
+  "rebuild": { "pending": 0, "full": 0, "done": 200 },  // rolled days since factsSince: waiting to be rolled again, in full, and done
+  "accepts": [2, 3],
+  "pcs": { "new": 14, "seen14d": 12 }                   // PC codes known, and seen in the last 14 days
+}
+```
+
+`usage` is UTC (D1's day), as far as the server's own meter knows ("about": an instance
+that stops loses its last minute of counts).
+
+`POST` takes a JSON body (`Content-Type: application/json`, at most 4 KB) with any of
+`tz` (an IANA zone this runtime knows), `source: "dashboard"` (only with `tz`),
+`weekStart` (`"sun"` or `"mon"`) and `keepDays` (`400` or `760`), and answers like `GET`.
+Anything else is `400 {"error": "<field>"}`; another media type `415`.
+
+* **Where the school's zone comes from** (`clock.source`): `none` (nothing known yet:
+  UTC); `dashboard` (`{tz, source: "dashboard"}`, the signed-in browser's zone, taken only
+  while the source is `none` or `dashboard`); `pc` (the first v3 batch with a zone, while
+  the source is `none` or `dashboard`, then the nightly vote); `pcs` (locked: the nightly
+  vote found 3 PCs seen in the last 14 days reporting the top zone); `owner` (`{tz}`
+  without `source`). Nothing changes `pcs` or `owner` automatically, and only the owner
+  changes `pcs`.
+* A new zone moves every rolled day (since `factsSince`, and not trimmed by the storage
+  guard) to the new clock: the 5-minute cron rebuilds them one at a time, newest first,
+  and `rebuild` shows how far it is. The facts never change.
+* The week start follows the zone while `weekSource` is `auto` (Sunday in Riyadh, Cairo
+  and the other zones `clock.mjs` lists, Monday elsewhere); `weekStart` sets it for good.
+* `keepDays` overrides `RETENTION_DAYS`: 400 days (a school year and the summer) or 760
+  (two). Keeping more is refused with `400 {"error": "storage"}` when the database,
+  growing in proportion, would pass the storage guard.
 
 ## Operations
 
@@ -527,15 +630,35 @@ life when it arrives; a repeated batch does not.
   Keep backups no longer than `RETENTION_DAYS` (they are copies of the same data) and
   encrypt them at rest. To restore, stop the server and replace the file (delete stale
   `-wal`/`-shm` files).
-* **Retention.** The frozen daily totals of milestone 2 are deleted by receipt day by
-  the daily purge; batch ids after 30 days, the usage counts after 60 days, the kept KPI
-  rows (`kpi_cache`) at every daily purge, and live rows once they leave the 5-minute
-  window (by the next batch or live query, and by a sweep every 5 minutes on Cloudflare
-  and every minute on Node, so within 10 minutes even with no traffic). The facts are
-  not purged by this version yet. Lowering `RETENTION_DAYS` takes effect at the next
-  purge (Node: the next start). To erase everything on Node, stop the server and
-  delete the database files; on Cloudflare, delete the Worker and its D1 database
-  `school-games-telemetry` in the Cloudflare dashboard.
+* **Retention.** The daily purge deletes, by the school's local day, the facts of the
+  sessions that started more than `keep` days ago (`keep_days` chosen on the dashboard,
+  else `RETENTION_DAYS`), the students and PCs last seen before then with their PC
+  lists, attempt counters and links, and moves `facts_since` to that day; the frozen
+  daily totals of milestone 2 by UTC receipt day after `keep` days (`legacy_until` is
+  cleared once the last one goes); batch ids after 30 days, the usage counts after 60
+  days, kept KPI parts of an older rollup version, and live rows once they leave the
+  5-minute window (by the next batch or live query, and by a sweep every 5 minutes on
+  Cloudflare and every minute on Node, so within 10 minutes even with no traffic). The
+  rollups and their `roll_days` rows go after the larger of 800 days and `keep`, deleted
+  by the 5-minute cron when it has no day to roll (so the daily purge stays within D1's
+  statement limit). Lowering the retention takes effect at the next purge (Node: the
+  next start). To erase everything on Node, stop the server and delete the database
+  files; on Cloudflare, delete the Worker and its D1 database `school-games-telemetry`
+  in the Cloudflare dashboard.
+* **Storage guard.** When the database passes 425 MB at the daily purge, the round rows
+  of the oldest 30 days of facts are deleted (sessions, visits and every rollup stay, so
+  charts keep working) and `trimmed_before` is set; the next trim waits until the file
+  has grown again (SQLite reuses the freed space first). Days before `trimmed_before`
+  are never rebuilt for a new zone. Download the research files each term.
+* **Rollups.** Every 5 minutes (Node: at start and every 5 minutes) the cron rolls at most
+  one of the school's local days into the `r_*` tables: first the oldest day not rolled
+  yet (yesterday from 01:00 at the school; only one instance can make that roll), then a
+  day waiting for a full rebuild after a change of zone (newest first), then a day that
+  late batches reached (at most once an hour per day). After yesterday's roll, the PCs
+  seen in the last 14 days vote for the school's zone. Rebuilds wait for the next UTC
+  day while the day's reads pass 3 million (2 million by rebuilds) or its writes pass
+  80,000. Each roll raises the rollup version, so the dashboard's kept answers are made
+  again.
 * **Monitoring.** `GET /v1/health`. The Node process exits when it cannot start (port in
   use, unreadable database), so the supervisor (Docker, systemd) reports or restarts it.
   On Cloudflare, the Worker's *Metrics* tab shows requests and errors without logs.
@@ -557,7 +680,10 @@ life when it arrives; a repeated batch does not.
   writes 12 rows (its session row is 4: the row, `UNIQUE (s)` and two indexes), a later
   batch 5, a batch of 200 events one row per visit and round plus 2; a v2 batch about
   13. A batch takes at most 20 statements, and the request that upgrades the database
-  at most 45 (D1 allows 50 per request). For a busy school (500 play sessions a day,
+  at most 45 (D1 allows 50 per request). Measured worst cases otherwise: a KPI answer
+  over frozen, rolled and open days 18 statements (limit 20), the 5-minute cron's full
+  rebuild of a day 24 (35), its first roll with the zone vote 17, the daily purge with
+  frozen days and the storage guard 24 (25). For a busy school (500 play sessions a day,
   9.2 batches each at the 60 s interval) see `docs/RESEARCH_TELEMETRY_SPEC.md`, "Budget
   math": about 33,000 rows written a day in the first year and about 220 MB after it.
 
@@ -570,9 +696,9 @@ Schema 4 (`docs/RESEARCH_TELEMETRY_SPEC.md`, "Storage on D1", has the exact colu
 | `st_sessions` | One row per play session: its codes (`u`, `p`, `''` when unknown), wire version, band, build, mode, device buckets, start (`start_s`, with `clock` `w` from the PC's elapsed seconds or `r` estimated from the receipt time), the PC's zone, the session start's fields (exact profile age, days since last play, level, profiles on the PC, classroom mode, and the v2 buckets), how it ended, and the server's numbering state for v2. Indexed by start and by student. |
 | `st_visits`, `st_rounds`, `st_marks` | Game visits `(session, n)`, rounds `(session, n, k)` with their outcome, tier, score, hits, misses, reaction times and extras, the two-player flag and the student's attempt number, and marks (level-ups, hearts, tutorial steps, classroom timer, removed profiles, older codes). |
 | `st_students`, `st_pcs`, `st_student_pcs`, `st_student_games`, `aliases`, `cards` | Per student code: label, first and last play, bands, profile age; per PC code: first and last play, zone, buckets, build; who played on which PC; rounds ended per student and game (for attempt numbers); links from older codes to a student's code, one hop deep; player cards. |
-| `settings`, `usage`, `roll_days` | The school's zone and where it came from, the week start, `facts_since`, `legacy_until`, `v3_since` and the rollup version; D1 rows read and written per UTC day (each instance adds its counts once a minute); which local days are rolled up. |
-| `r_day`, `r_game_day`, `r_level_day`, `r_source_day`, `r_device_day`, `r_student_day`, `r_student_game`, `r_pc_day`, `r_stat` | Per-day rollups of the facts by the school's local day. |
-| `live`, `batches`, `kpi_cache`, `meta` | Sessions in the 5-minute live window (with codes and wire version); v2 batch ids for de-duplication; kept KPI rows of the frozen days; the schema version. |
+| `settings`, `usage`, `roll_days` | The school's zone and where it came from (and `tz_epoch`, raised with each change), the week start, the retention the owner chose, `facts_since`, `legacy_until`, `v3_since`, the rollup version `rv`, `rolled_through`, `trimmed_before`, and the cron's bookkeeping (`rebuild`: days may wait for a full rebuild; `trimmed_size`); D1 rows read, written and read by rebuilds per UTC day, and the database size (each instance adds its counts once a minute); which local days are rolled up, whether late data or a new zone made one dirty, and when it was rolled. |
+| `r_day`, `r_game_day`, `r_level_day`, `r_source_day`, `r_device_day`, `r_student_day`, `r_student_game`, `r_pc_day`, `r_stat` | Per-day rollups of the facts by the school's local day: milestone 2's daily totals with students, guests, two-player rounds, hearts, tutorials and session endings; per student code and per student and game; per PC; and `r_stat`, the research metrics (hour of play, session length, minutes per student-day, games per session, visit length, game-to-game flows, attempts, weeks of practice, what follows a round, tiredness, losses before quitting, tier, tutorials) per day, band and game. |
+| `live`, `batches`, `kpi_cache`, `meta` | Sessions in the 5-minute live window (with codes and wire version); v2 batch ids for de-duplication; kept parts of KPI answers, with the rollup version they were made with; the schema version. |
 | `agg_days`, `agg_games`, `agg_levels`, `agg_sources`, `agg_devices` | Only on a database milestone 2 used: its daily totals per UTC receipt day, frozen. |
 
 Every table but `st_sessions` is `STRICT, WITHOUT ROWID`. The only indexes beyond the
@@ -583,15 +709,16 @@ primary keys are `st_sessions_time`, `st_sessions_student`, `r_student_day_u`,
 
 * Tests: `node --test --test-reporter=spec tools/tests/telemetry-server.test.mjs
   tools/tests/telemetry-worker.test.mjs tools/tests/telemetry-facts.test.mjs
-  tools/tests/telemetry-clock.test.mjs` (the Node host on port 0 with a temporary
-  database; the Worker entry with real `Request`s on the Node driver; the facts on the
-  store; the school's clock; and comparisons with milestone 2's store and the first
-  server's store from Git, skipped when those commits are not checked out).
+  tools/tests/telemetry-rollups.test.mjs tools/tests/telemetry-clock.test.mjs` (the
+  Node host on port 0 with a temporary database; the Worker entry with real `Request`s
+  on the Node driver; the facts on the store; every rollup against a JavaScript oracle
+  over the same facts; the school's clock; and comparisons with milestone 2's store and
+  the first server's store from Git, skipped when those commits are not checked out).
 * The Workers runtime on your machine (no Cloudflare account needed): `npm install` in
   `server/`, put `ADMIN_TOKEN=...` in `server/.dev.vars` (ignored by Git), then
   `npx wrangler dev` (local D1 in `.wrangler/`). Add `--test-scheduled` and open
   `/__scheduled` to run the daily purge, or `/__scheduled?cron=*/5+*+*+*+*` for the
-  sweep of the live rows. `npx wrangler deploy --dry-run --outdir /tmp/out`
+  rollups and the sweep of the live rows. `npx wrangler deploy --dry-run --outdir /tmp/out`
   bundles without deploying.
 * Synthetic data for the dashboard: `node server/simulate.mjs --url http://127.0.0.1:8787`
   posts deterministic sessions (same `--seed`, same batch ids, so a repeat adds nothing);

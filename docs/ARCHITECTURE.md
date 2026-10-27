@@ -325,13 +325,17 @@ GitHub Pages (any small VM or container; see `server/README.md`).
 * CORS: `Access-Control-Allow-Origin` echoes an origin from `ALLOWED_ORIGINS`
   (comma-separated); no credentials; `OPTIONS` handled.
 * `GET /v1/health` → `{ ok: true, accepts: [2, 3], schema: 4 }`, without the database.
-* `GET /v1/admin/kpis?from=YYYY-MM-DD&to=YYYY-MM-DD[&band=6-7]` and
-  `GET /v1/admin/live` with `Authorization: Bearer $ADMIN_TOKEN`: engagement KPIs
-  (sessions, engaged minutes, per-game opens, completion/drop-off/win rates, per-level
-  funnels, tier and accuracy, reaction-time and input-latency histograms, frame
-  smoothness, load times, age-band preferences, replay distributions, level-ups) and
-  live sessions in the last 5 minutes. Groups smaller than 3 sessions are suppressed.
-* Retention: rows older than `RETENTION_DAYS` (default 180) are deleted daily.
+* `GET /v1/admin/kpis?from=YYYY-MM-DD&to=YYYY-MM-DD[&band=6-7]`, `GET /v1/admin/live`
+  and `GET`/`POST /v1/admin/settings` with `Authorization: Bearer $ADMIN_TOKEN`:
+  engagement KPIs (sessions, students, engaged minutes, minutes per student-day,
+  per-game opens, completion/drop-off/win rates, per-level funnels, tier and accuracy,
+  reaction-time and input-latency histograms, frame smoothness, load times, age-band
+  preferences, replay distributions, level-ups, data quality), live sessions, students,
+  guests and PCs in the last 5 minutes, and the school's clock and retention. Every
+  group is shown, however small. Admin reads but live and settings answer `429` once
+  the day's D1 reads near the free limit.
+* Retention: play facts older than `RETENTION_DAYS` (default 400) or the owner's choice
+  are deleted daily; the daily rollups are kept 800 days.
 * Configuration by environment: `PORT` (0–65535), `HOST`, `DB_PATH`, `ALLOWED_ORIGINS`,
   `ADMIN_TOKEN` (at least 16 printable ASCII characters), `RETENTION_DAYS` (1–36500),
   `RATE_PER_MIN`, `TRUST_PROXY` (which `X-Forwarded-For` hop is the client, for the
@@ -502,16 +506,34 @@ The server so far:
   numbered as attempts per game. A session is dated by the server's receipt time minus
   the PC's elapsed seconds and counts on the school's local day it started
   (`server/clock.mjs` turns zones into offsets and day bounds for SQL).
-* **The school's zone** starts unknown (UTC) and is set by the first v3 batch with a
-  valid zone, unless the owner or the PCs' vote has set it; a change marks rolled days
-  for a rebuild.
+* **The school's zone** starts unknown (UTC), may take the signed-in dashboard's zone, is
+  set by the first v3 batch with a valid zone, then by the PCs' nightly vote (locked at
+  three PCs), unless the owner chose it; a change marks rolled days for a rebuild.
 * **The usage meter** adds up D1's rows read and written per instance and writes them
   once a minute; from today's writes the server answers `X-Batch-Every` (60, 180 or 300
-  seconds) so the PCs send less often near the free limit.
-* Until the rollups land, the KPI and live answers keep milestone 2's shapes: frozen
-  days from `agg_*`, newer days computed from the facts with each milestone-2 column
-  defined over them (a test locks them equal to milestone 2's store on the same
-  batches).
+  seconds) so the PCs send less often near the free limit. The same counts pause
+  rebuilds of rolled days and, above 4.2 million reads, make admin reads answer `429`
+  until the next UTC day.
+* **Rollups** (`server/rollups.mjs`): nine `r_*` tables (days, games, levels, sources,
+  devices, students, students per game, PCs, and `r_stat`'s fourteen research metrics),
+  each defined by one SQL `SELECT` over the sessions of a span of local days. The same
+  text rolls a day (INSERT), rebuilds it (DELETE then INSERT), rolls it again after late
+  data (an upsert that writes only changed rows) and answers for the days not rolled
+  yet. `store.rollupStep`, on the 5-minute cron (a timer on Node), does at most one day
+  per run: yesterday's first roll from 01:00 at the school, then rebuilds after a zone
+  change, then re-rolls after late data (at most hourly). After yesterday's roll the PCs
+  vote for the zone; three PCs on the top zone lock it. A test checks every table and
+  metric against a JavaScript oracle over the same facts.
+* **KPIs** read the frozen `agg_*` days, the rolled days and the facts of the days not
+  rolled yet, and add them up. They keep milestone 2's shape with nothing suppressed
+  (`minSessions` 0) and add student counts by canonical code, data quality and the
+  school's clock. The part of an answer from closed days is kept in `kpi_cache` per
+  rollup version (`rv`, raised by every roll and purge) and shared by every instance. A
+  test locks the answers equal to milestone 2's store from Git, with its privacy floor
+  set to 0, on the same v2 batches, open, rolled or both.
+* **Retention** (daily purge): facts after 400 days (`RETENTION_DAYS`, or the owner's 760),
+  with the students and PCs last seen before then; frozen days on the same rule; above
+  425 MB the round rows of the oldest 30 days. `facts_since` moves with the cutoff.
 
 ## Milestones
 
