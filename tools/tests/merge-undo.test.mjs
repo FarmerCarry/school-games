@@ -3,6 +3,7 @@ import { after, before, test } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
+import { waitForGameClock } from '../page-wait.mjs';
 import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -40,6 +41,12 @@ async function awaitScreen(page, screen) {
   await page.waitForFunction(value => window.__game.state().screen === value, screen, { timeout: 15000 });
 }
 
+// A win is shown 0.45s of game time later, and a slow frame advances that clock
+// by at most eight steps (about 0.13s). 900ms of wall time can expire first.
+async function afterScheduledResult(page, label) {
+  await waitForGameClock(page, 0.55, label);
+}
+
 
 test('Repeated Undo clears the newly scheduled result when the winning move is undone too', async t => {
   const page = await gamePage(t);
@@ -50,7 +57,7 @@ test('Repeated Undo clears the newly scheduled result when the winning move is u
     window.__game.undo();
     window.__game.undo();
   });
-  await page.waitForTimeout(900);
+  await afterScheduledResult(page, 'undo clears the scheduled win');
   const restored = await state(page);
   assert.equal(restored.screen, 'play');
   assert.equal(restored.max, 1024);
@@ -83,7 +90,7 @@ for (const exit of ['menu', 'reload']) {
     if (exit === 'menu') await page.evaluate(() => window.__game.menu());
     else await page.reload();
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(900);
+    await afterScheduledResult(page, 'acknowledged win stays dismissed after ' + exit);
     const acknowledged = await state(page);
     assert.equal(acknowledged.screen, 'play');
     assert.equal(acknowledged.won, true);
@@ -101,7 +108,7 @@ test('Undo after acknowledgement never presents the same victory again', async t
   await awaitScreen(page, 'win');
   await page.locator('#btnKeep').click();
   await page.evaluate(() => window.__game.undo());
-  await page.waitForTimeout(900);
+  await afterScheduledResult(page, 'undo after acknowledgement does not schedule another win');
   assert.equal((await state(page)).screen, 'play');
   assert.equal((await state(page)).max, 2048);
   await page.evaluate(() => {
@@ -110,7 +117,7 @@ test('Undo after acknowledgement never presents the same victory again', async t
   });
   await page.reload();
   await page.keyboard.press('Enter');
-  await page.waitForTimeout(900);
+  await afterScheduledResult(page, 'reloaded acknowledged win stays dismissed');
   const acknowledged = await state(page);
   assert.equal(acknowledged.screen, 'play');
   assert.equal(acknowledged.max, 2048);
