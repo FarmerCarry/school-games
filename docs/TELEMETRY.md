@@ -75,7 +75,7 @@ the player changes (a new profile, another avatar, a guest after «سلّم ال
 | round end | `['re', t, slug, code, id, ms, score, tier, hits, misses, rt[6]]` | `code` w l d e q; `score` −1 for none; reaction-time histogram (< 300, < 500, < 800, < 1200, < 2000, ≥ 2000 ms). |
 | game close | `['gx', t, slug, engagedMs, il[6], f[4]]` | Engaged time, input-latency histogram (< 8, < 16, < 33, < 50, < 100, ≥ 100 ms) and frame buckets of the whole visit. Waits for the removed frame's own last message (1 s at most, and never past the next game's `go`). |
 | level up | `['lv', t, level]` | `SGProfiles.onLevel`, the current player only. |
-| session end | `['se', t, engagedMs]` | After the session's games have closed, so it is always its session's last event. Best effort when the page unloads (by `sendBeacon`). |
+| session end | `['se', t, engagedMs]` | After the session's games have closed, so it is always its session's last event. Best effort when the page unloads (by a keepalive `fetch`). |
 
 Round events come only from `sg:telemetry` version 2 of the **current game frame**, or
 of a frame removed less than 2 seconds ago (its last message), as for `sg:stats` v1.
@@ -92,16 +92,25 @@ strings, wall-clock dates or times, IP-derived data, and the local day records.
 ## Delivery
 
 * Events wait in memory. A batch goes **when a game closes**, **20 seconds after the first
-  waiting event** (one timer, only while something waits), and by
-  `navigator.sendBeacon(url, Blob(text/plain))` **when the page is hidden or unloads**.
-  Normal sends use `fetch(url, { method: 'POST', credentials: 'omit', mode: 'cors',
-  keepalive })`, one at a time, oldest first.
+  waiting event** (one timer, only while something waits), and **when the page is hidden
+  or unloads**. Every send is `fetch(url, { method: 'POST', credentials: 'omit', mode:
+  'cors', keepalive })`, **never with cookies**: a cookie the browser keeps for the ingest
+  host (a district sign-in on the same site, a load balancer's stickiness cookie that
+  would link the session ids) never goes with a batch. That is why the sink does not use
+  `navigator.sendBeacon`, which always sends them. Normal sends go one at a time, oldest
+  first.
+* `keepalive` lets a request outlive its page, but the browser refuses keepalive bodies
+  beyond 64 KB in flight together, so the sink keeps its own within **60 KB** (a normal
+  send that does not fit goes without `keepalive`). A hidden or unloading page hands
+  `fetch` what waits at once, oldest first, while it fits: the first batch that does not
+  fit and every later one stay in the queue, and so does the batch of a normal send still
+  on its way. A batch handed over this way is not kept.
 * A **2xx** removes the batch. A **4xx other than 429** removes it as malformed (it would
   never be accepted). **429, 5xx and network errors** keep it and back off **20, 40, 80,
   160, then 300 s**. A request with no answer at all after a minute no longer holds the
   queue back: its batch goes again (the server keeps it once). While the server is
-  failing, or the PC is offline (`navigator.onLine === false`), a hidden page sends no
-  beacon and the queue keeps everything for later.
+  failing, or the PC is offline (`navigator.onLine === false`), a hidden page sends
+  nothing and the queue keeps everything for later.
 * Unsent batches wait in `localStorage` **`sg:site:tm:q`** (an array of `{ t, e }`: when the
   batch's first event was recorded, and the envelope), oldest first, **at most 128 KB**
   (the oldest go first) and **7 days**. They survive a reload or a restart of the PC and go
@@ -146,8 +155,8 @@ stopping statistics on the teacher page.
 
 * The built `_site/index.html` contains `window.SG_TELEMETRY={url:` exactly once.
 * On the published site, in the browser's developer tools: `SGTelemetry.active()` is
-  `true`; the Network tab shows a `POST` to the address (type `fetch`, or `ping` for a
-  beacon) about 20 seconds after load or when a game closes, answered with `204`;
+  `true`; the Network tab shows a `POST` to the address (type `fetch`, without a `Cookie`
+  header) about 20 seconds after load or when a game closes, answered with `204`;
   `localStorage['sg:site:tm:q']` is empty once batches are delivered.
 * The teacher page (🏫 → 📊) shows the line that sharing is on, with the server's host.
 * On the server: `GET /v1/health`, then `GET /v1/admin/live` with the admin token.
@@ -164,16 +173,18 @@ stopping statistics on the teacher page.
   statistics stopped, sharing off) sends and stores nothing and games get
   `telemetry: false`; back-off 20, 40, 80, 160, 300 s with a fake clock, for 5xx and for
   no answer at all; 400 and 429; a request that is never answered goes again after a minute;
-  the queue across a reload, its 128 KB, 7-day and clear rules;
-  beacons on a hidden page and at unload, and offline; a new session per player with the
-  old one ending after its game; a returning player's buckets, and a profile that has never
-  played as a first time; field-by-field checks of `sg:telemetry` and late frames;
-  load failures; a stop from another tab.
+  the queue across a reload, its 128 KB, 7-day and clear rules; keepalive sends on a
+  hidden page and at unload, with no cookie of the ingest host on either path (the
+  unloading page's request is seen by an interception for the whole browser), the 60 KB
+  keepalive budget beside a send still on its way, and offline; a new session per player
+  with the old one ending after its game; a returning player's buckets, and a profile that
+  has never played as a first time; field-by-field checks of `sg:telemetry` and late
+  frames; load failures; a stop from another tab.
 * `tools/tests/build-safety.test.mjs`: the address reaches the portal only, bad addresses
   are refused before any output changes, and an unset or empty variable changes nothing.
 * `tools/tests/play-stats-rules.test.mjs` and `tools/check-all.mjs` share
-  `tools/lib/network-rules.mjs`: `fetch()` and `sendBeacon` are allowed in exactly
-  `js/telemetry.js` (and, in the fast build, only in the portal's exact inlined copy of it);
-  every other network API stays banned there, and the same calls anywhere else fail.
+  `tools/lib/network-rules.mjs`: `fetch()` is allowed in exactly `js/telemetry.js` (and,
+  in the fast build, only in the portal's exact inlined copy of it); every other network
+  API, `sendBeacon` included, stays banned there, and the same calls anywhere else fail.
 * `tools/tests/teacher-page.test.mjs`: the note, the sharing line, and clear removing
   `sg:site:tm:` keys.

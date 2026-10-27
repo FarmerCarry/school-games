@@ -18,6 +18,7 @@ const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : rep
 const sourceTree = fs.readFileSync(path.join(root, 'index.html'), 'utf8').includes('src="js/telemetry.js"');
 const INGEST = 'https://ingest.test/v1/batch';
 const ON = { url: INGEST, allowLocal: true };
+const COOKIE = { name: 'trackme', value: 'cookie-value', domain: 'ingest.test', path: '/', secure: true, sameSite: 'None' };
 const SOURCES = ['featured', 'catalog', 'recent', 'favorites', 'category', 'quick', 'search', 'related', 'surprise',
   'reload', 'history', 'direct', 'starter'];
 const ARITY = { ss: 6, go: 5, ld: 4, er: 4, rs: 6, re: 11, gx: 6, lv: 3, se: 3 };
@@ -47,16 +48,29 @@ async function setup(t, { telemetry = ON, gpc = false, clock = false, answer = (
     if (request.method() !== 'GET' || /^(fetch|xhr|websocket|eventsource|ping)$/.test(request.resourceType()) ||
       (/^https?:$/.test(url.protocol) && url.origin !== origin)) state.requests.push(request.method() + ' ' + request.url());
   });
+  // 'abort': the network fails; 'hang': the request is never answered.
+  const answered = post => { state.posts.push(post); return state.answer(state.posts.length, post); };
   await context.route('https://ingest.test/**', async route => {
     const request = route.request();
-    const post = { url: request.url(), method: request.method(), type: request.resourceType(), headers: await request.allHeaders(), body: request.postData() };
-    state.posts.push(post);
-    const status = state.answer(state.posts.length, post);
-    // 'abort': the network fails; 'hang': the request is never answered.
+    const status = answered({ url: request.url(), method: request.method(), type: request.resourceType(), headers: await request.allHeaders(), body: request.postData() });
     if (status === 'abort') await route.abort('failed');
     else if (status === 'hang') return;
     else await route.fulfill({ status, headers: { 'Access-Control-Allow-Origin': origin } });
   });
+  // What a page sends while it unloads leaves after the page is gone, where the routes
+  // above no longer see it; an interception for the whole browser does, with its headers.
+  const cdp = await browser.newBrowserCDPSession();
+  t.after(() => cdp.detach().catch(() => {}));
+  cdp.on('Fetch.requestPaused', ({ requestId, request, resourceType }) => {
+    const headers = Object.fromEntries(Object.entries(request.headers).map(([name, value]) => [name.toLowerCase(), value]));
+    const status = answered({ url: request.url, method: request.method, type: resourceType.toLowerCase(), headers, body: request.postData });
+    // The page is gone: nothing waits for the answer.
+    if (status === 'abort') cdp.send('Fetch.failRequest', { requestId, errorReason: 'Failed' }).catch(() => {});
+    else if (status !== 'hang') {
+      cdp.send('Fetch.fulfillRequest', { requestId, responseCode: status, responseHeaders: [{ name: 'Access-Control-Allow-Origin', value: origin }] }).catch(() => {});
+    }
+  });
+  await cdp.send('Fetch.enable', { patterns: [{ urlPattern: 'https://ingest.test/*' }] });
   await context.addInitScript(([config, gpc]) => {
     // The test's setting wins over a build's own (CI may build with SG_TELEMETRY_URL).
     Object.defineProperty(window, 'SG_TELEMETRY', { value: config || undefined, writable: false });
@@ -70,21 +84,11 @@ async function setup(t, { telemetry = ON, gpc = false, clock = false, answer = (
     });
     if (window.top !== window) return;
     // Settled fetches, so a fake clock moves on only after the page has seen each answer.
-    const realFetch = window.fetch, texts = new WeakMap(), RealBlob = window.Blob, realBeacon = Navigator.prototype.sendBeacon;
+    const realFetch = window.fetch;
     window.fetch = function () {
       const p = realFetch.apply(this, arguments), settled = () => { window.fetched = (window.fetched || 0) + 1; };
       p.then(settled, settled);
       return p;
-    };
-    // Beacons are also written down here: Playwright cannot see one sent while the page unloads.
-    window.Blob = function (parts, options) { const blob = new RealBlob(parts, options); texts.set(blob, parts.join('')); return blob; };
-    window.Blob.prototype = RealBlob.prototype;
-    Navigator.prototype.sendBeacon = function (url, data) {
-      const ok = realBeacon.call(this, url, data);
-      const list = JSON.parse(localStorage.getItem('test:beacons') || '[]');
-      list.push({ url: String(url), ok, type: data && data.type, body: texts.get(data) });
-      localStorage.setItem('test:beacons', JSON.stringify(list));
-      return ok;
     };
   }, [telemetry, gpc]);
   if (clock) await context.clock.install();
@@ -229,7 +233,7 @@ test('real rounds reach the ingest server as the contract says, with nothing tha
   await page.goto(origin + '/seed.html');
   await page.evaluate(() => localStorage.setItem('sg:site:statsmeta', JSON.stringify({ pc: { id: 'pcwxyz', label: 'مختبر سارة' }, since: '2026-10-01' })));
   // credentials: 'omit': a cookie of the ingest server never goes with a fetch.
-  await state.context.addCookies([{ name: 'trackme', value: 'cookie-value', domain: 'ingest.test', path: '/', secure: true, sameSite: 'None' }]);
+  await state.context.addCookies([COOKIE]);
   await page.goto(origin + '/');
   assert.equal(await page.evaluate(() => SGTelemetry.active()), true);
   assert.deepEqual(await tmKeys(page), ['sg:site:tm:on'], 'the teacher page is told this PC shares');
@@ -342,12 +346,12 @@ test('off unless every gate holds: games are told telemetry: false and nothing i
     await t.test(name, async t => {
       const state = await setup(t, { ...options, clock: true }), { page } = state;
       await page.goto(origin + '/seed.html');
-      // A note from an earlier build that shared.
-      await page.evaluate(([m, q]) => {
+      // A queue and a note from an earlier build that shared.
+      await page.evaluate(([m, key, q]) => {
         if (m) localStorage.setItem('sg:site:statsmeta', m);
-        localStorage.setItem('sg:site:tm:q', q);
+        localStorage.setItem(key, q);
         localStorage.setItem('sg:site:tm:on', '"ingest.test"');
-      }, [statsmeta, seeded]);
+      }, [statsmeta, 'sg:site:tm:q', seeded]);
       await page.goto(origin + '/');
       assert.equal(await page.evaluate(() => SGTelemetry.active()), false);
       const frame = await play(page, 'tic-tac-toe');
@@ -358,8 +362,8 @@ test('off unless every gate holds: games are told telemetry: false and nothing i
       await home(page);
       await setHidden(page, true);
       await page.clock.runFor(120000);
-      assert.deepEqual(state.posts, [], 'nothing is sent');
-      assert.equal(await page.evaluate(() => localStorage.getItem('test:beacons')), null, 'no beacon');
+      await page.goto(origin + '/seed.html');
+      assert.deepEqual(state.posts, [], 'nothing is sent, neither while the page lives nor as it unloads');
       // Stopped statistics and sharing turned off drop what waited; otherwise the sink only
       // removes the old note, so the teacher page does not say that this PC shares.
       assert.deepEqual(await tmKeys(page), statsmeta ? [] : ['sg:site:tm:q']);
@@ -464,10 +468,10 @@ test('the queue survives a reload, sends oldest first, and keeps at most 128 KB,
     { t: 'yesterday', e: envelope('d'.repeat(16), []) }, null, 'text', { t: now, e: { v: 1, b: 'e'.repeat(16), ev: [] } },
     ...[1, 2, 3, 4, 5].map(big)
   ];
-  await page.evaluate(([q, cleared]) => {
-    localStorage.setItem('sg:site:tm:q', JSON.stringify(q));
+  await page.evaluate(([key, q, cleared]) => {
+    localStorage.setItem(key, JSON.stringify(q));
     localStorage.setItem('sg:site:statsmeta', JSON.stringify({ pc: { id: 'pcwxyz' }, clearedAt: cleared }));
-  }, [seeded, now - 5400000]);
+  }, ['sg:site:tm:q', seeded, now - 5400000]);
   await page.goto(origin + '/');
   await page.clock.runFor(20000);
   await until(() => state.posts.length === 1, 'the first send');
@@ -481,9 +485,9 @@ test('the queue survives a reload, sends oldest first, and keeps at most 128 KB,
   assert.equal(JSON.parse(state.posts[0].body).b, kept[0], 'the oldest batch goes first');
 
   // A reload while the server is failing: the session's end joins the queue, and the
-  // unloading page sends no beacon to a failing server.
+  // unloading page sends nothing to a failing server.
   await page.reload();
-  assert.equal(await page.evaluate(() => localStorage.getItem('test:beacons')), null);
+  assert.equal(state.posts.length, 1);
   stored = await queue(page);
   assert.deepEqual(stored.map(x => x.e.b).slice(0, -1), kept);
   like(stored.at(-1).e.ev, [['se', int, 0]]);
@@ -500,37 +504,79 @@ test('the queue survives a reload, sends oldest first, and keeps at most 128 KB,
   serverKeeps(batches(state));
 });
 
-test('a hidden page sends what waits by sendBeacon, unloading ends the session, and offline keeps the queue', async t => {
+test('a hidden page sends what waits by fetch with keepalive, unloading ends the session, offline keeps the queue, and no cookie goes', async t => {
   const state = await setup(t), { page } = state;
+  // A cookie of the ingest server (a district sign-in, a load balancer's) goes on
+  // neither path; sendBeacon would always send it.
+  await state.context.addCookies([COOKIE]);
   await page.goto(origin + '/');
   await setHidden(page, true);
-  await until(() => state.posts.length === 1, 'the beacon');
-  assert.deepEqual([state.posts[0].type, state.posts[0].method, state.posts[0].url], ['ping', 'POST', INGEST]);
+  await until(() => state.posts.length === 1, 'the hidden page\'s send');
+  assert.deepEqual([state.posts[0].type, state.posts[0].method, state.posts[0].url], ['fetch', 'POST', INGEST]);
   assert.match(state.posts[0].headers['content-type'], /^text\/plain/);
   const first = JSON.parse(state.posts[0].body);
   like(first.ev, [['ss', 0, 0, 0, 4, 0]]);
-  assert.equal(await queue(page), null, 'a beacon the browser took is not kept');
+  assert.equal(await queue(page), null, 'a batch handed to fetch is not kept');
   await setHidden(page, false);
 
   // A game, then the page unloads: the open game closes and the session ends at once.
   await play(page, 'air-hockey');
+  const before = state.posts.length;
   await page.goto(origin + '/seed.html');
-  const beacons = JSON.parse(await page.evaluate(() => localStorage.getItem('test:beacons')));
-  assert.ok(beacons.every(b => b.url === INGEST && b.ok === true && b.type === 'text/plain'));
-  const last = JSON.parse(beacons.at(-1).body);
+  await until(() => state.posts.slice(before).some(p => JSON.parse(p.body).ev.some(ev => ev[0] === 'se')), 'the unloading page\'s send');
+  const unload = state.posts.slice(before);
+  // A beacon would be a 'ping' (Chromium reports a keepalive fetch that outlives its page as 'xhr').
+  assert.ok(unload.every(p => p.type !== 'ping' && p.method === 'POST' && p.url === INGEST && /^text\/plain/.test(p.headers['content-type'])),
+    JSON.stringify(unload.map(p => [p.type, p.method, p.url, p.headers['content-type']])));
+  const last = unload.map(p => JSON.parse(p.body)).find(b => b.ev.some(ev => ev[0] === 'se'));
   assert.equal(last.s, first.s, 'the same session');
   like(last.ev.slice(-2), [['gx', int, 'air-hockey', 0, zeros(6), zeros(4)], ['se', int, 0]]);
-  assert.ok(beacons.flatMap(b => JSON.parse(b.body).ev).some(ev => ev[0] === 'go' && ev[2] === 'air-hockey'));
+  assert.ok(allEvents(state).some(ev => ev[0] === 'go' && ev[2] === 'air-hockey'));
   assert.equal(await queue(page), null);
 
-  // Offline: nothing goes by beacon and the batch waits in the queue.
-  await page.evaluate(() => localStorage.removeItem('test:beacons'));
+  // Offline: nothing goes and the batch waits in the queue.
+  const sent = state.posts.length;
   await page.goto(origin + '/');
   await page.evaluate(() => Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false }));
   await setHidden(page, true);
-  assert.equal(await page.evaluate(() => localStorage.getItem('test:beacons')), null);
   like((await queue(page)).map(x => x.e.ev), [[['ss', 0, 0, 0, 4, 0]]]);
-  await checkBatches(page, beacons.map(b => JSON.parse(b.body)));
+  assert.equal(state.posts.length, sent, 'nothing goes while offline');
+  for (const p of state.posts) assert.equal(p.headers.cookie, undefined, 'no cookie, neither while the page lives nor as it unloads');
+  await checkBatches(page, batches(state));
+});
+
+test('a hidden page hands fetch only what fits in 60 KB of keepalive bodies in flight, oldest first, and keeps the rest', async t => {
+  const state = await setup(t, { clock: true, answer: n => n === 1 ? 'hang' : 204 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/seed.html');
+  const now = await page.evaluate(() => Date.now());
+  // Four batches of about 26 KB (200 of the largest events the server takes), oldest first.
+  const most = ['re', 1, 'air-hockey', 'w', 'Level_abcdefghijklmnopq', 108e5, 1e9, 9, 1e5, 1e5, [1e5, 1e5, 1e5, 1e5, 1e5, 1e5]];
+  const ids = [1, 2, 3, 4].map(i => i.toString(16).padStart(16, 'a'));
+  const seeded = ids.map((b, i) => ({ t: now - 3600000 + i,
+    e: { v: 2, b, s: '0123456789ab', k: 'src', m: 'web', a: '', d: [4, 4, 1920], ev: Array.from({ length: 200 }, () => most) } }));
+  assert.ok(seeded.every(x => JSON.stringify(x.e).length > 20000 && JSON.stringify(x.e).length < 30000));
+  await page.evaluate(q => localStorage.setItem('sg:site:tm:q', JSON.stringify(q)), seeded);
+  await page.goto(origin + '/');
+  // The oldest goes by the 20 s send and is never answered: its body stays in flight.
+  await page.clock.runFor(20000);
+  await until(() => state.posts.length === 1, 'the first send');
+  await setHidden(page, true);
+  await until(() => state.posts.length === 2, 'the hidden page\'s send');
+  await page.waitForFunction(() => window.fetched === 1);
+  assert.deepEqual(state.posts.map(p => JSON.parse(p.body).b), ids.slice(0, 2), 'only one more fits beside the one in flight');
+  assert.ok(state.posts.every(p => p.type === 'fetch'));
+  let stored = await queue(page);
+  assert.deepEqual(stored.map(x => x.e.b).slice(0, -1), [ids[0], ids[2], ids[3]], 'the batch in flight and every batch not handed to fetch stay');
+  like(stored.at(-1).e.ev, [['ss', 0, 0, 0, 4, 0]]);
+  // That send was answered, so its bytes are free again: the page hidden once more sends the next.
+  await setHidden(page, false);
+  await setHidden(page, true);
+  await until(() => state.posts.length === 3, 'the next hidden page\'s send');
+  assert.equal(JSON.parse(state.posts[2].body).b, ids[2]);
+  stored = await queue(page);
+  assert.deepEqual(stored.map(x => x.e.b).slice(0, -1), [ids[0], ids[3]]);
+  serverKeeps(batches(state));
 });
 
 test('each player gets a new session: the old one ends after its game, and a band change marks later batches', async t => {
