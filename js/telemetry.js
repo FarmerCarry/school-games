@@ -92,14 +92,15 @@
   }
   // A session starts at page load and whenever the player changes. isNew: the player
   // was just made on this page. Profile age 0 new, 1 1-6 days, 2 7-29, 3 30+; days
-  // since the last play 0 same day, 1 one, 2 2-6, 3 7+, 4 first time; level 0 a guest.
+  // since the last play 0 same day, 1 one, 2 2-6, 3 7+, 4 first time (no game played
+  // yet, whenever the profile was made); level 0 a guest.
   function begin(isNew) {
     var p = prof('current'), d = today(), a = p ? d - p.d0 : 0, l = p ? d - p.dl : 0;
     sess = { s: hex(12), t0: perf.now(), a: band(), k: p ? p.k : '', e: 0, o: 0, x: 0, n: {}, ev: [], at: 0 };
     known = keys();
     flag();
     rec(sess, ['ss', isNew ? 1 : 0, a < 1 ? 0 : a < 7 ? 1 : a < 30 ? 2 : 3,
-      !p || isNew ? 4 : l < 1 ? 0 : l < 2 ? 1 : l < 7 ? 2 : 3, p ? min(p.lv, 999) : 0]);
+      !p || isNew || !p.played ? 4 : l < 1 ? 0 : l < 2 ? 1 : l < 7 ? 2 : 3, p ? min(p.lv, 999) : 0]);
   }
   // A session ends once its games have closed: 'se' is always its last event.
   function end(s) { s.x = 1; if (!s.o) finish(s); }

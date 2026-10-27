@@ -67,7 +67,7 @@ the player changes (a new profile, another avatar, a guest after «سلّم ال
 
 | Event | Shape | Notes |
 |---|---|---|
-| session start | `['ss', t, isNew, profileAge, sinceLast, level]` | `isNew` 1 when the player was just made on this page. Profile age `0` new, `1` 1–6 days, `2` 7–29, `3` 30+. Days since the last play `0` same day, `1` one, `2` 2–6, `3` 7+, `4` first time. A guest is `['ss', 0, 0, 0, 4, 0]`. |
+| session start | `['ss', t, isNew, profileAge, sinceLast, level]` | `isNew` 1 when the player was just made on this page. Profile age `0` new, `1` 1–6 days, `2` 7–29, `3` 30+. Days since the last play `0` same day, `1` one, `2` 2–6, `3` 7+, `4` first time (no game played yet, even if the profile was made on an earlier day). A guest is `['ss', 0, 0, 0, 4, 0]`. |
 | game open | `['go', t, slug, src, playsBefore]` | `src`: the v1 launch sources of `PLAY_STATS.md` (featured, catalog, recent, favorites, category, quick, search, related, surprise, reload, history, direct) plus `starter` for the «ابدأ من هنا» card. Plays of this game before, for this player: `0`, `1`, `2` (2–4), `3` (5–9), `4` (10+); always `0` for a guest. |
 | game ready | `['ld', t, slug, loadMs]` | Frame created to its first `sg:ready`; only a visit's first frame, and only if the page stayed visible (as in v1). |
 | game failed | `['er', t, slug, kind]` | `x` script error, `t` 20-second load timeout, `l` the page failed to load. Never the error text. |
@@ -166,7 +166,8 @@ stopping statistics on the teacher page.
   no answer at all; 400 and 429; a request that is never answered goes again after a minute;
   the queue across a reload, its 128 KB, 7-day and clear rules;
   beacons on a hidden page and at unload, and offline; a new session per player with the
-  old one ending after its game; field-by-field checks of `sg:telemetry` and late frames;
+  old one ending after its game; a returning player's buckets, and a profile that has never
+  played as a first time; field-by-field checks of `sg:telemetry` and late frames;
   load failures; a stop from another tab.
 * `tools/tests/build-safety.test.mjs`: the address reaches the portal only, bad addresses
   are refused before any output changes, and an unset or empty variable changes nothing.

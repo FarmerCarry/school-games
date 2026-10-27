@@ -179,6 +179,8 @@
     var g = p.g;
     return { k: p.k, a: p.a, c: p.c, b: p.b, xp: p.xp, lv: p.lv, d0: p.d0, dl: p.dl,
       animal: ANIMALS[p.a], color: COLORS[p.c], have: p.xp - start(p.lv), need: need(p.lv),
+      // played: a game was opened for this player (dl is the day made until then).
+      played: Object.keys(g).length > 0,
       visits: function (slug) { return typeof slug == 'string' && Object.prototype.hasOwnProperty.call(g, slug) ? g[slug] : 0; } };
   }
   var api = {

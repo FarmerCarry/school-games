@@ -426,6 +426,27 @@ test('a request that is never answered holds the queue back for a minute at most
   await checkBatches(page, batches(state));
 });
 
+test('a profile made on an earlier day that has never played is a first time', async t => {
+  const state = await setup(t, { clock: true }), { page } = state;
+  await page.goto(origin + '/seed.html');
+  // Both made 3 days ago; p2 played air-hockey that day.
+  await page.evaluate(() => {
+    const d = new Date(), today = Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5);
+    localStorage.setItem('sg:site:profiles', JSON.stringify({ v: 1, seq: 2, list: [
+      { k: 'p1', a: 1, c: 1, b: '6-7', xp: 0, lv: 1, d0: today - 3, dl: today - 3, g: {} },
+      { k: 'p2', a: 2, c: 2, b: '8-9', xp: 40, lv: 2, d0: today - 3, dl: today - 3, g: { 'air-hockey': 1 } }] }));
+    sessionStorage.setItem('sg:site:player', 'p1');
+  });
+  await page.goto(origin + '/');
+  await page.evaluate(() => SGProfiles.select('p2'));
+  await page.clock.fastForward(20000);
+  await until(() => bySession(batches(state)).size === 2, 'both sessions');
+  const [[, never], [, played]] = [...bySession(batches(state))];
+  like(never, [['ss', 0, 0, 1, 4, 1], ['se', int, 0]], 'never played');
+  like(played, [['ss', 0, 0, 1, 2, 2]], 'played 3 days ago');
+  await checkBatches(page, batches(state));
+});
+
 test('the queue survives a reload, sends oldest first, and keeps at most 128 KB, 7 days and nothing from before a clear', async t => {
   let down = true;
   const state = await setup(t, { clock: true, answer: () => down ? 503 : 204 }), { page } = state;
