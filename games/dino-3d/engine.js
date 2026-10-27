@@ -34,8 +34,10 @@
     return null;
   }
 
-  D.createEngine = function (seed) {
-    let s, randomState, originalSeed = seedNumber(seed), nextId, pending, gap;
+  // seed: the course (a course code + 1). tier: 1..5 from Dino3D.tiers (default 3,
+  // the original balance); reset() keeps both unless it is given new ones.
+  D.createEngine = function (seed, tier) {
+    let s, randomState, originalSeed = seedNumber(seed), T = D.tier(tier), nextId, pending, gap;
     const engine = { state: null, step, reset };
     function random() {
       randomState ^= randomState << 13;
@@ -44,22 +46,23 @@
       return (randomState >>> 0) / 4294967296;
     }
     function shape() {
-      if (s.score >= C.birdScore && random() < 0.29) {
-        const variant = Math.floor(random() * 3);
+      if (s.score >= T.birdScore && random() < T.birdChance) {
+        const variant = T.birds[Math.floor(random() * T.birds.length)];
         return { type: 'bird', width: 1.65, depth: 1.35, height: 0.62,
           bottom: [0.65, 1.55, 3.4][variant], variant };
       }
-      const variant = Math.floor(random() * 4);
+      const variant = T.cacti[Math.floor(random() * T.cacti.length)];
       return { type: 'cactus', width: [0.8, 1.25, 1.5, 1.05][variant],
         depth: [0.72, 0.9, 1.7, 0.85][variant], height: [1.3, 1.65, 1.45, 2][variant], bottom: 0, variant };
     }
+    function speedAt(score) { return Math.min(T.maxSpeed, T.startSpeed + Math.floor(score / T.speedEvery)); }
     function queue(last) {
       pending = shape();
       // Use the fastest possible encounter speed, including score acceleration
       // while this gap approaches. Edge-to-edge spacing includes both colliders.
       const encounterScore = s.score + 40 * C.spawnDistance / s.speed;
-      const encounterSpeed = Math.min(C.maxSpeed, C.startSpeed + Math.floor(encounterScore / 100));
-      gap = encounterSpeed * (C.recoveryTime + random() * 0.43) +
+      const encounterSpeed = speedAt(encounterScore);
+      gap = encounterSpeed * (T.recovery + random() * T.spread) +
         (last.depth + pending.depth) / 2 + C.playerHalfDepth * 2;
     }
     function spawn() {
@@ -73,11 +76,12 @@
         s.obstacles.push(last); queue(last);
       }
     }
-    function reset(newSeed) {
+    function reset(newSeed, newTier) {
       if (newSeed !== undefined) originalSeed = seedNumber(newSeed);
+      if (newTier !== undefined) T = D.tier(newTier);
       randomState = originalSeed; nextId = 1;
-      s = { alive: true, elapsed: 0, distance: 0, speed: C.startSpeed,
-        score: 0, points: 0, night: 0, seed: originalSeed,
+      s = { alive: true, elapsed: 0, distance: 0, speed: T.startSpeed,
+        score: 0, points: 0, night: 0, seed: originalSeed, tier: T.tier,
         player: { y: 0, vy: 0, duck: false, jumpAge: 0 }, obstacles: [] };
       engine.state = s;
       // A small first cactus and a clear approach teach the initial jump.
@@ -99,12 +103,13 @@
       const top = p.duck ? C.duckTop : C.playerTop;
       let duration = dt, crashed = false;
       for (const o of s.obstacles) {
-        const reach = o.depth / 2 + C.playerHalfDepth;
+        // Colliders are T.grace smaller than the art on every side (0 from tier 3 up).
+        const reach = o.depth / 2 + C.playerHalfDepth - T.grace;
         const enter = Math.max(0, (-reach - o.z) / s.speed);
         const leave = Math.min(duration, (reach - o.z) / s.speed);
         if (leave < enter || leave < 0 || enter > duration) continue;
         const hit = heightContact(p.y, p.vy, gravity,
-          o.bottom - top, o.bottom + o.height - C.playerBottom, enter, leave);
+          o.bottom - top + T.grace, o.bottom + o.height - C.playerBottom - T.grace, enter, leave);
         if (hit !== null && hit <= duration) { duration = hit; crashed = true; }
       }
       const nextY = p.y + p.vy * duration + gravity * duration * duration / 2;
@@ -120,7 +125,7 @@
       const previousMilestone = Math.floor(s.score / 100);
       s.points += (s.score >= 3000 ? 40 : s.score >= 1000 ? 20 : C.scoreRate) * duration;
       s.score = Math.floor(s.points + EPS);
-      s.speed = Math.min(C.maxSpeed, C.startSpeed + Math.floor(s.score / 100));
+      s.speed = speedAt(s.score);
       if (Math.floor(s.score / 100) > previousMilestone) events.push('milestone');
       const phase = s.elapsed % (C.dayDuration + C.nightDuration);
       s.night = phase < C.dayDuration
