@@ -299,8 +299,10 @@ A new session (new `s`) starts at page load and whenever the player changes.
 with pending events, and when the page is hidden, always by `fetch` without credentials
 (`credentials: 'omit'`: no cookie ever goes, so never by `sendBeacon`), with `keepalive`
 while the keepalive bodies in flight fit in 60 KB (the rest wait in the queue). Unsent
-batches are kept in `localStorage` `sg:site:tm:q` (at most 128 KB, at most 7 days old,
-oldest dropped first). Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the batch;
+batches are kept in `localStorage` `sg:site:tm:q:<hash of the ingest URL>`, so another
+copy of the site on the same origin with another URL never sends them (at most 128 KB,
+at most 7 days old, oldest dropped first); stopping statistics or turning sharing off
+drops every `sg:site:tm:q` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the batch;
 a 4xx other than 429 drops it as malformed; 429, 5xx and network errors retry.
 Teacher "clear" removes `sg:site:tm:*` too. All storage calls are wrapped; no
 `console`; never `clear()`.

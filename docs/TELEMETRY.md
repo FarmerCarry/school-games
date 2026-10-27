@@ -111,16 +111,21 @@ strings, wall-clock dates or times, IP-derived data, and the local day records.
   queue back: its batch goes again (the server keeps it once). While the server is
   failing, or the PC is offline (`navigator.onLine === false`), a hidden page sends
   nothing and the queue keeps everything for later.
-* Unsent batches wait in `localStorage` **`sg:site:tm:q`** (an array of `{ t, e }`: when the
-  batch's first event was recorded, and the envelope), oldest first, **at most 128 KB**
-  (the oldest go first) and **7 days**. They survive a reload or a restart of the PC and go
-  out from the next portal page. Two portal tabs may send the same queued batch; the
-  server keeps it once (`b`).
+* Unsent batches wait in `localStorage` **`sg:site:tm:q:<hash>`** (an array of `{ t, e }`:
+  when the batch's first event was recorded, and the envelope), oldest first, **at most
+  128 KB** (the oldest go first) and **7 days**. They survive a reload or a restart of the
+  PC and go out from the next portal page. Two portal tabs may send the same queued batch;
+  the server keeps it once (`b`).
+* `<hash>` is a short hash of the full ingest address (a 32-bit string hash, in base 36),
+  so each address has its own queue: another copy of the site on the same origin (for
+  example `name.github.io/school-games` and `name.github.io/school-games-test`) built with
+  another `SG_TELEMETRY_URL` never sends, or drops, this one's batches.
 * While the sink shares, it notes the server's host in **`sg:site:tm:on`**, so the teacher
   page can say «المشاركة المجهولة مفعّلة على هذا الجهاز … إلى <host>».
-* Stopping statistics or turning sharing off drops the queue, the note and every waiting
-  event. The teacher page's **clear** removes every `sg:site:tm:` key, and a portal page
-  that is still open drops whatever it recorded before the clear (`statsmeta.clearedAt`).
+* Stopping statistics or turning sharing off drops every queue on this origin (another
+  copy's too), the note and every waiting event. The teacher page's **clear** removes every
+  `sg:site:tm:` key, and a portal page that is still open drops whatever it recorded
+  before the clear (`statsmeta.clearedAt`).
 * Every storage call is guarded (with blocked storage the queue lives in memory for that
   page), nothing is logged, every promise is caught, and no call into the sink throws.
 
@@ -156,8 +161,8 @@ stopping statistics on the teacher page.
 * The built `_site/index.html` contains `window.SG_TELEMETRY={url:` exactly once.
 * On the published site, in the browser's developer tools: `SGTelemetry.active()` is
   `true`; the Network tab shows a `POST` to the address (type `fetch`, without a `Cookie`
-  header) about 20 seconds after load or when a game closes, answered with `204`;
-  `localStorage['sg:site:tm:q']` is empty once batches are delivered.
+  header) about 20 seconds after load or when a game closes, answered with `204`; no
+  `sg:site:tm:q:` key is left in `localStorage` once batches are delivered.
 * The teacher page (🏫 → 📊) shows the line that sharing is on, with the server's host.
 * On the server: `GET /v1/health`, then `GET /v1/admin/live` with the admin token.
 
@@ -176,10 +181,11 @@ stopping statistics on the teacher page.
   the queue across a reload, its 128 KB, 7-day and clear rules; keepalive sends on a
   hidden page and at unload, with no cookie of the ingest host on either path (the
   unloading page's request is seen by an interception for the whole browser), the 60 KB
-  keepalive budget beside a send still on its way, and offline; a new session per player
-  with the old one ending after its game; a returning player's buckets, and a profile that
-  has never played as a first time; field-by-field checks of `sg:telemetry` and late
-  frames; load failures; a stop from another tab.
+  keepalive budget beside a send still on its way, and offline; two copies of the site on
+  one origin with two addresses, each sending only its own queue, and a stop dropping
+  both; a new session per player with the old one ending after its game; a returning
+  player's buckets, and a profile that has never played as a first time; field-by-field
+  checks of `sg:telemetry` and late frames; load failures; a stop from another tab.
 * `tools/tests/build-safety.test.mjs`: the address reaches the portal only, bad addresses
   are refused before any output changes, and an unset or empty variable changes nothing.
 * `tools/tests/play-stats-rules.test.mjs` and `tools/check-all.mjs` share

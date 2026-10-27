@@ -24,17 +24,18 @@
  * Delivery: events wait in memory; batches of at most 200 events and 32 KB go when
  * a game closes, 20 s after the first waiting event, and when the page is hidden, each
  * by fetch without cookies, with keepalive while the bodies in flight fit in 60 KB.
- * Unsent batches wait in localStorage sg:site:tm:q (oldest first, at most 128 KB and
- * 7 days). A 2xx or a 4xx other than 429 is final; 429, 5xx and network errors back
- * off 20, 40, 80, 160, 300 s; a request with no answer after a minute is sent again.
- * sg:site:tm:on (the server's host) tells the teacher page that this PC shares. Every
- * storage call is guarded, nothing is logged, every promise is caught and no call into
- * this file throws.
+ * Unsent batches wait in localStorage sg:site:tm:q:<hash of the address>, so another
+ * copy of the site on this origin that sends elsewhere never sends them (oldest first,
+ * at most 128 KB and 7 days). A 2xx or a 4xx other than 429 is final; 429, 5xx and
+ * network errors back off 20, 40, 80, 160, 300 s; a request with no answer after a
+ * minute is sent again. sg:site:tm:on (the server's host) tells the teacher page that
+ * this PC shares. Every storage call is guarded, nothing is logged, every promise is
+ * caught and no call into this file throws.
  */
 (function () {
   'use strict';
 
-  var Q = 'sg:site:tm:q', ON = 'sg:site:tm:on', META = 'sg:site:statsmeta';
+  var TM = 'sg:site:tm:', Q = TM + 'q', ON = TM + 'on', META = 'sg:site:statsmeta';
   var cfg = window.SG_TELEMETRY, url = cfg && cfg.url, doc = document, nav = navigator, perf = performance;
   var isArr = Array.isArray, min = Math.min, floor = Math.floor, str = JSON.stringify;
   var ID = /^(?!.*\d{3})[A-Za-z][\w:.-]{0,23}$/, SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/, BACK = [20, 40, 80, 160, 300];
@@ -43,7 +44,13 @@
     ready = typeof url == 'string' && url.length <= 200 && /^https:\/\/[\w\-.~:/?#[\]@!$&()*+,;=%]+$/.test(url) &&
       location.protocol != 'file:' && nav.globalPrivacyControl !== true &&
       (cfg.allowLocal === true || !/^(?:(?:.+\.)?localhost|127(?:\.\d+){3}|\[::1\])$/i.test(location.hostname));
-    if (ready) flagged = str(new URL(url).host);
+    if (ready) {
+      flagged = str(new URL(url).host);
+      // The queue belongs to this address: a copy of the site elsewhere on this origin,
+      // built with another address, never sends (or drops) these batches.
+      for (var h = 0, i = 0; i < url.length; i++) h = h * 31 + url.charCodeAt(i) | 0;
+      Q += ':' + (h >>> 0).toString(36);
+    }
   } catch (e) { ready = false; }
 
   var on, cleared = 0, sess, game = 0, cur = 0, gone = [], closing = [], pend = [], known = [];
@@ -178,7 +185,10 @@
         gone = [];
         closing = [];
         save([]);
-        try { localStorage.removeItem(ON); } catch (e) { /* nothing to say */ }
+        // The note and every queue on this origin go, also those of another copy of the site.
+        try {
+          Object.keys(localStorage).forEach(function (k) { if (k.indexOf(TM) === 0) localStorage.removeItem(k); });
+        } catch (e) { /* nothing to drop */ }
         clearTimeout(timer);
         timer = 0;
       }
