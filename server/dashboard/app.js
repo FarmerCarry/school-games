@@ -558,17 +558,23 @@
           rows: g.rows.map(function (r) {
             return { label: gameName(r.slug), value: r.share || 0, valueText: I.pct(r.share),
               tip: { title: gameName(r.slug), rows: [{ value: I.pct(r.share), label: T.ofGroupOpens, color: 'var(--s1)', swatch: 'bar' },
-                { value: T.nOpens(r.opens) }] } };
+                { value: T.nOpens(r.opens) }].concat(r.engagedMinutes == null ? [] : [{ value: minutesText(r.engagedMinutes), label: T.ofPlay }]) } };
           }) });
       });
       if (g.hiddenGames) note(p, T.moreHidden(g.hiddenGames, T.games), 'privacy');
     });
+    // Play time per age group and game, when the server reports it.
+    var minutes = groups.some(function (g) { return g.rows.some(function (r) { return r.engagedMinutes != null; }); });
     var rows = [];
     groups.forEach(function (g) {
-      if (g.hidden) { rows.push([I.bandLabel(g.band, state.lang), { text: T.hiddenPrivacy, colspan: 3 }]); return; }
-      g.rows.forEach(function (r) { rows.push([I.bandLabel(g.band, state.lang), gameName(r.slug), I.pct(r.share), I.int(r.opens)]); });
+      if (g.hidden) { rows.push([I.bandLabel(g.band, state.lang), { text: T.hiddenPrivacy, colspan: minutes ? 4 : 3 }]); return; }
+      g.rows.forEach(function (r) {
+        rows.push([I.bandLabel(g.band, state.lang), gameName(r.slug), I.pct(r.share), I.int(r.opens)]
+          .concat(minutes ? [r.engagedMinutes == null ? '–' : minutesText(r.engagedMinutes)] : []));
+      });
     });
-    C.table(c.table, T.byAgeTitle, [{ label: T.ageGroup }, { label: T.game }, { label: T.share, num: true }, { label: T.opens, num: true }], rows);
+    C.table(c.table, T.byAgeTitle, [{ label: T.ageGroup }, { label: T.game }, { label: T.share, num: true }, { label: T.opens, num: true }]
+      .concat(minutes ? [{ label: T.playTime, num: true }] : []), rows);
   }
 
   function levelName(l) { return gameName(l.slug) + ' · ' + I.levelLabel(l.id, state.lang); }

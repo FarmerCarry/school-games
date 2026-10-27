@@ -33,6 +33,7 @@ const catalogWindow = {};
 vm.runInNewContext(catalogSource.toString('utf8'), { window: catalogWindow });
 const catalog = new Map(catalogWindow.GAMES.map(g => [g.slug, g]));
 const nameOf = lang => slug => I.catalogName(catalog.get(slug), lang) || slug;
+const BANDS_ORDER = ['6-7', '8-9', '10-11', 'unknown'];
 
 let browser, site, dir, app, ingest, unset, unsetUrl;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -95,11 +96,17 @@ async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-G
       const target = (s.mode.api === 'unset' ? unsetUrl : ingest) + url.pathname + url.search;
       const auth = request.headers().authorization;
       const res = await fetch(target, { headers: auth ? { Authorization: auth } : {} });
-      const body = Buffer.from(await res.arrayBuffer());
+      let body = Buffer.from(await res.arrayBuffer());
       const entry = { path: url.pathname, search: url.searchParams, auth, status: res.status };
       if (res.status === 200) entry.json = JSON.parse(body.toString('utf8'));
+      if (res.status === 200 && s.mode.edit && url.pathname === '/v1/admin/kpis') {
+        entry.json = s.mode.edit(entry.json);
+        body = Buffer.from(JSON.stringify(entry.json));
+      }
       s.api.push(entry);
-      return route.fulfill({ status: res.status, headers: Object.fromEntries(res.headers), body });
+      const headers = Object.fromEntries(res.headers);
+      delete headers['content-length'];
+      return route.fulfill({ status: res.status, headers, body });
     }
     const res = await route.fetch();
     const headers = { ...res.headers() };
@@ -295,6 +302,36 @@ test('table views, tooltips and the privacy wording for hidden groups', async t 
     'the oldest day: ' + tip);
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('.tip').isHidden(), true);
+  await s.check();
+});
+
+test('the newer server\'s age-group win rates and play time are used when they are there', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  // What server/handler.mjs adds to bands[].games[] (docs/ARCHITECTURE.md, milestone 2).
+  s.mode.edit = k => {
+    for (const b of k.bands) for (const g of b.games || []) {
+      if (g.suppressed) continue;
+      const all = k.games.find(x => x.slug === g.slug);
+      Object.assign(g, { winRate: all.winRate === null ? null : Math.max(0, Math.round((all.winRate - 0.25 + 0.2 * BANDS_ORDER.indexOf(b.band)) * 1e4) / 1e4),
+        dropOffRate: all.dropOffRate, engagedMinutes: Math.round(g.opens * 3.3 * 10) / 10 });
+    }
+    return k;
+  };
+  await page.goto(site.origin + '/');
+  await waitForKpis(s, 1);
+  const k = s.lastKpis().json;
+  const grid = I.difficultyGrid(k);
+  assert.ok(grid.rows.some(r => Object.values(r.cells).some(c => c.basis === 'win')), 'the win rates are judged');
+  await page.click('#difficulty .more');
+  for (const r of grid.rows) {
+    for (const band of I.BANDS) {
+      assert.equal(await page.locator(`#difficulty .diff-row[data-slug="${r.slug}"] .diff-cell[data-band="${band}"] .verdict`).getAttribute('data-verdict'),
+        r.cells[band].code, r.slug + ' ' + band);
+    }
+  }
+  await page.click('#age-card .table-toggle');
+  assert.deepEqual(await page.locator('#age-card .table-host thead th').allTextContents(), ['Age group', 'Game', 'Share of opens', 'Games opened', 'Play time']);
   await s.check();
 });
 

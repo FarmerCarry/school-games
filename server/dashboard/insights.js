@@ -242,7 +242,8 @@
       if (!shown(b)) return { band: b && b.band, hidden: true, rows: [], hiddenGames: 0, more: 0 };
       const games = list(b.games);
       const rows = games.filter(shown).map(g => ({
-        slug: g.slug, opens: opensOf(g), sessions: num(g.sessions) || 0, share: num(g.share)
+        slug: g.slug, opens: opensOf(g), sessions: num(g.sessions) || 0, share: num(g.share),
+        engagedMinutes: num(g.engagedMinutes)   // null from a server without it
       })).sort((x, y) => (y.share || 0) - (x.share || 0) || y.opens - x.opens || cmp(x.slug, y.slug));
       return {
         band: b.band, hidden: false, sessions: num(b.sessions) || 0, opens: num(b.opens) || 0,

@@ -149,6 +149,11 @@ test('rankings are deterministic: a number first, then the slug and the id', () 
     '8-9': { code: 'hidden' }, '10-11': { code: 'missing' }
   });
   assert.equal(grid.rows[1].cells['10-11'].code, 'easy');
+  // Play time per age group and game: used when the server sends it, null otherwise.
+  const withMinutes = sample();
+  withMinutes.bands[0].games[0].engagedMinutes = 81.5;
+  assert.equal(I.favouritesByBand(withMinutes)[0].rows[0].engagedMinutes, 81.5);
+  assert.equal(I.favouritesByBand(sample())[0].rows[0].engagedMinutes, null);
   assert.equal(grid.rows[2].cells['10-11'].code, 'hidden', 'a 2-session group without "suppressed" is still never judged');
 });
 
