@@ -346,7 +346,7 @@
   }
   var MULTI_WORDS = ' لاعبان لاعبين اثنان اثنين صديق صديقك صديقي اصدقاء ضد جماعي 2 two player players friend friends multiplayer versus 2p';
   var HOT_WORDS = ' رائج رائجه مشهور مشهوره حماس hot popular';
-  var STARTER_WORDS = ' ابدأ هنا نقطة البداية مبتدئ beginner start here tutorial academy mouse keyboard';
+  var STARTER_WORDS = ' ابدأ هنا نقطة البداية مبتدئ beginner start here tutorial first mouse keyboard';
   var INDEX = Object.create(null);
   function idx(g) {
     if (INDEX[g.slug]) return INDEX[g.slug];
