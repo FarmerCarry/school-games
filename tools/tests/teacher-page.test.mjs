@@ -418,7 +418,9 @@ test('the workbook is a stored ZIP of well-formed parts: RTL sheets, an Arabic r
   const readme = unescapeXml(unzip(api.xlsx(t, info)).get('xl/worksheets/sheet1.xml'));
   for (const text of ['عندما تمتلئ مساحة الإحصاءات أو بعد 120 يومًا، أيهما أسبق', 'شهرين أو ثلاثة', 'في 3 أيام أو أكثر',
     'احذف الصفوف التي يكون فيها pc فارغًا', 'لا ترسم حركة مستمرة: connect-four، tic-tac-toe، typing-test، mouse-keyboard-academy.',
-    'تبدأ من الصفر في متصفح آخر', 'في جدول hours استخدم أحدث ملف لكل جهاز']) {
+    'تبدأ من الصفر في متصفح آخر', 'في جدول hours استخدم أحدث ملف لكل جهاز',
+    'الأرقام لكل جهاز وليست لكل طالب. لا يُرسل الموقع هذا الملف إلى أي مكان. وإذا ربط مسؤول المدرسة نسخة الموقع ' +
+    'بخادم للإحصاءات فلا تصله إلا معلومات لعب مجهولة: بلا أسماء ولا اسم للجهاز ولا أي نص كتبه الأطفال.']) {
     assert.ok(readme.includes(text), 'the read-me says: ' + text);
   }
   // Text that looks like XML or a formula stays plain text.
@@ -522,7 +524,11 @@ const rowNumbers = (page, slug) => gameRow(page, slug).evaluate(row => ['seconds
 test('seeded records show the right numbers, and the period choice changes them', async t => {
   const page = await teacherPage(t);
   assert.equal(await page.locator('html').getAttribute('dir'), 'rtl');
-  assert.equal(await page.locator('.note').textContent(), 'الأرقام لكل جهاز وليست لكل طالب، ولا تُرسل إلى أي مكان.');
+  assert.equal(await page.locator('.note').textContent(), 'الأرقام لكل جهاز وليست لكل طالب، وتبقى على هذا الجهاز. ' +
+    'لا يُرسل شيء إلا إذا ربط مسؤول المدرسة نسخة الموقع بخادم للإحصاءات، وعندها يُرسل الموقع معلومات لعب مجهولة فقط: ' +
+    'بلا أسماء ولا اسم للجهاز ولا أي نص كتبه الأطفال.');
+  // Nothing on this PC says it shares (js/telemetry.js writes sg:site:tm:on while it does).
+  assert.equal(await page.locator('#shareMsg').isHidden(), true);
   assert.equal(await page.locator('input[name="period"]:checked').getAttribute('value'), 'week');
   assert.deepEqual(await page.locator('#gameTable tbody tr').evaluateAll(rows => rows.map(r => r.dataset.game)), ['candy-rope', 'rail-rush']);
   assert.deepEqual(await rowNumbers(page, 'candy-rope'), [1860, 4, 1, 2]);
@@ -705,8 +711,13 @@ test('files from other PCs are viewed together: the newest export per PC and day
   assert.deepEqual(await rowNumbers(page, 'candy-rope'), [1860, 4, 1, 2]);
 });
 
-test('clearing needs the typed word and removes only sg:site:stats: keys; stop and resume set the settings', async t => {
-  const page = await teacherPage(t, { entries: { ...seed(), 'sg:site:statsmeta': JSON.stringify({ ...META, pruned: '2026-05-30' }) } });
+test('clearing needs the typed word and removes only sg:site:stats: and sg:site:tm: keys; stop and resume set the settings', async t => {
+  // The portal's telemetry sink is sharing: its queue and its note are there.
+  const page = await teacherPage(t, { entries: { ...seed(), 'sg:site:statsmeta': JSON.stringify({ ...META, pruned: '2026-05-30' }),
+    'sg:site:tm:q': JSON.stringify([{ t: NOW.getTime(), e: { v: 2, b: '0123456789abcdef', ev: [] } }]), 'sg:site:tm:on': '"ingest.example.org"' } });
+  assert.equal(await page.locator('#shareMsg').textContent(),
+    'المشاركة المجهولة مفعّلة على هذا الجهاز: يُرسل الموقع معلومات اللعب بلا أسماء ولا اسم للجهاز إلى ingest.example.org.');
+  assert.equal(await page.locator('#shareMsg bdi[dir="ltr"]').textContent(), 'ingest.example.org');
   // Name this PC: the label rules apply.
   await page.locator('#pcLabel').fill('=+مختبر الحاسوب الكبير رقم 12');
   const label = api.cleanLabel(await page.locator('#pcLabel').inputValue());
@@ -725,10 +736,29 @@ test('clearing needs the typed word and removes only sg:site:stats: keys; stop a
   let meta = JSON.parse((await storage(page))['sg:site:statsmeta']);
   assert.deepEqual([meta.off, meta.offSince], [true, NOW.getTime()]);
   assert.equal(await page.locator('#stoppedMsg').isVisible(), true);
+  assert.equal(await page.locator('#shareMsg').isHidden(), true, 'stopped statistics stop sharing too');
   await page.locator('#resumeBtn').click();
   meta = JSON.parse((await storage(page))['sg:site:statsmeta']);
   assert.deepEqual([meta.off, Object.hasOwn(meta, 'offSince')], [false, false]);
   assert.equal(await page.locator('#stoppedMsg').isHidden(), true);
+  assert.equal(await page.locator('#shareMsg').isVisible(), true);
+  // Sharing turned off in the settings (statsmeta.tm === false), or a damaged note: not said.
+  await page.evaluate(() => {
+    localStorage.setItem('sg:site:statsmeta', JSON.stringify({ ...JSON.parse(localStorage.getItem('sg:site:statsmeta')), tm: false }));
+  });
+  await page.reload();
+  assert.equal(await page.locator('#shareMsg').isHidden(), true, 'sharing turned off');
+  await page.evaluate(() => {
+    const meta = JSON.parse(localStorage.getItem('sg:site:statsmeta'));
+    delete meta.tm;
+    localStorage.setItem('sg:site:statsmeta', JSON.stringify(meta));
+    localStorage.setItem('sg:site:tm:on', '"<b>x</b>"');
+  });
+  await page.reload();
+  assert.equal(await page.locator('#shareMsg').isHidden(), true, 'a damaged note');
+  await page.evaluate(() => localStorage.setItem('sg:site:tm:on', '"ingest.example.org"'));
+  await page.reload();
+  assert.equal(await page.locator('#shareMsg').isVisible(), true);
   // Stop again, then clear: the stop setting, id and label survive the clear.
   await page.locator('#stopBtn').click();
   await page.locator('#stopWord').fill('أوقف');

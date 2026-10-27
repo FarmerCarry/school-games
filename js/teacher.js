@@ -21,6 +21,7 @@
   /* ------------------------------------------------------------- format */
   var FORMAT = 'sg-play-stats';
   var PREFIX = 'sg:site:stats:';            // every key "clear" may remove
+  var TM = 'sg:site:tm:';                   // the telemetry queue and note (js/telemetry.js): cleared too
   var META_KEY = 'sg:site:statsmeta';       // id, label and stop setting: never cleared
   var DAY_KEY = /^sg:site:stats:d:(\d{4}-\d{2}-\d{2})$/;
   var SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -290,15 +291,22 @@
       var day = parseDay(DAY_KEY.exec(key)[1], ls.getItem(key));
       if (day) days.push(day);
     });
-    return { days: days, meta: parseMeta(ls.getItem(META_KEY)), bytes: bytes };
+    return { days: days, meta: parseMeta(ls.getItem(META_KEY)), bytes: bytes, share: shareHost(ls.getItem(TM + 'on')) };
+  }
+  // The ingest server's host, which the portal's telemetry sink notes while it shares.
+  function shareHost(text) {
+    var host = '';
+    try { host = JSON.parse(text); } catch (e) { /* not sharing */ }
+    return typeof host === 'string' && /^[a-z0-9.-]{1,100}(?::\d{1,5})?$/i.test(host) ? host : '';
   }
 
-  // Removes only keys that start with sg:site:stats: (never sg:site:statsmeta).
+  // Removes only keys that start with sg:site:stats: (never sg:site:statsmeta) and the
+  // telemetry keys sg:site:tm:, so nothing recorded before the clear is sent later.
   function clearStats(ls) {
     var keys = [];
     for (var i = 0; i < ls.length; i++) {
       var key = ls.key(i);
-      if (typeof key === 'string' && key.indexOf(PREFIX) === 0) keys.push(key);
+      if (typeof key === 'string' && (key.indexOf(PREFIX) === 0 || key.indexOf(TM) === 0)) keys.push(key);
     }
     keys.forEach(function (key) { ls.removeItem(key); });
     return keys.length;
@@ -675,7 +683,8 @@
       ['إحصاءات اللعب في ألعاب الفسحة', null],
       ['الجهاز', info.pc + (info.label ? ' (' + info.label + ')' : '')],
       ['وقت التصدير', info.exportedAt],
-      ['ملاحظة', 'الأرقام لكل جهاز وليست لكل طالب، ولم تُرسل إلى أي مكان.'],
+      ['ملاحظة', 'الأرقام لكل جهاز وليست لكل طالب. لا يُرسل الموقع هذا الملف إلى أي مكان. وإذا ربط مسؤول المدرسة نسخة الموقع ' +
+        'بخادم للإحصاءات فلا تصله إلا معلومات لعب مجهولة: بلا أسماء ولا اسم للجهاز ولا أي نص كتبه الأطفال.'],
       ['ما في الملف', 'كل الأيام المحفوظة على هذا الجهاز وقت التصدير، لا الفترة المعروضة في الصفحة فقط.'],
       ['مدة الحفظ', KEEP + ' لذلك صدّر الملف كل أسبوع.'],
       ['مكان الحفظ', 'تُحفظ الأرقام في ملف تعريف واحد للمتصفح على هذا الجهاز. وتبدأ من الصفر في متصفح آخر، أو مع ملف تعريف مدرسي ' +
@@ -821,16 +830,16 @@
     var NAMES = names(window.GAMES);
     var COPY = location.protocol === 'file:' ? 'folder' : 'web';
     var XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    var state = { ok: false, days: [], meta: parseMeta(null), bytes: 0, files: [], ignored: [] };
+    var state = { ok: false, days: [], meta: parseMeta(null), bytes: 0, share: '', files: [], ignored: [] };
     var store = null, refresh = 0, pending = null, saving = false, again = '';
 
     function load() {
       try {
         store = window.localStorage;
         var r = readStore(store);
-        state.ok = true; state.days = r.days; state.meta = r.meta; state.bytes = r.bytes;
+        state.ok = true; state.days = r.days; state.meta = r.meta; state.bytes = r.bytes; state.share = r.share;
       } catch (e) {
-        state.ok = false; state.days = []; state.meta = parseMeta(null); state.bytes = 0;
+        state.ok = false; state.days = []; state.meta = parseMeta(null); state.bytes = 0; state.share = '';
       }
     }
     function newId() {
@@ -895,6 +904,11 @@
     function renderNotices(today, combined) {
       $('storageMsg').hidden = state.ok;
       $('stoppedMsg').hidden = !(state.ok && state.meta.off);
+      // Said only while the portal on this PC shares and nothing here stops it.
+      var share = state.ok && state.share && !state.meta.off && state.meta.raw.tm !== false && navigator.globalPrivacyControl !== true;
+      $('shareMsg').hidden = !share;
+      $('shareMsg').innerHTML = share ? 'المشاركة المجهولة مفعّلة على هذا الجهاز: يُرسل الموقع معلومات اللعب بلا أسماء ولا اسم للجهاز إلى ' +
+        bdi(state.share, true) + '.' : '';
       var r = state.ok ? reminder(state.days, state.meta, state.bytes, today) : null, why = [];
       $('reminder').hidden = !r;
       if (r) {
@@ -1333,7 +1347,7 @@
     });
     // The portal writes while children play in another tab: follow it.
     window.addEventListener('storage', function (e) {
-      if (e.key !== null && e.key.indexOf('sg:site:stats') !== 0) return;
+      if (e.key !== null && e.key.indexOf('sg:site:stats') !== 0 && e.key.indexOf(TM) !== 0) return;
       clearTimeout(refresh);
       refresh = setTimeout(function () { load(); render(); }, 500);
     });
