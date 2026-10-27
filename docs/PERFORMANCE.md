@@ -569,10 +569,11 @@ The academy was retired in milestone 1 (see below); two of its pictures moved to
 Milestone 1 ([`ARCHITECTURE.md`](ARCHITECTURE.md)) changes the bytes of every page:
 
 * **Kit v2** (`Kit.profile`, `Kit.track`, `Kit.dda`, the `sg:telemetry` message) adds
-  2,526 minified bytes to `shared/kit.js` (14,605 → 17,131), which every game page inlines.
-* **Zero background music** deletes the music engines of 14 games. Beat Dash, Critter
-  Mart, Moto Madness, Neon Slope, Rail Rush, Splat Strike, Swing Hook and Tunnel Blitz
-  are smaller than before even with Kit v2.
+  2,682 minified bytes to `shared/kit.js` (14,501 → 17,183 with the build's esbuild
+  options), which every game page inlines.
+* **Zero background music** deletes the music engines of 14 games. Beat Dash, Moto
+  Madness, Neon Slope, Rail Rush, Splat Strike, Swing Hook and Tunnel Blitz are smaller
+  than before even with Kit v2; Critter Mart grew by only 1,117 bytes.
 * **Bubble Bop** replaces Mouse & Keyboard Academy: a 113,577-byte page plus two of the
   academy's WebP pictures (40,920 bytes) instead of a 75,001-byte page and five pictures
   (95,930 bytes).

@@ -774,13 +774,17 @@ test('clearing needs the typed word and removes only sg:site:stats: and sg:site:
   await page.locator('#clearWord').fill(' «امسح» ');
   await page.locator('#clearConfirm button[type="submit"]').click();
   const after = await storage(page);
-  assert.deepEqual(Object.keys(after), ['other-site-key', 'sg:candy-rope:save', 'sg:site:favs', 'sg:site:statsmeta']);
+  assert.deepEqual(Object.keys(after), ['other-site-key', 'sg:candy-rope:save', 'sg:site:favs', 'sg:site:statsmeta', 'sg:site:tm:on'],
+    'the telemetry queue goes; the note that this PC shares stays');
   for (const key of ['other-site-key', 'sg:candy-rope:save', 'sg:site:favs']) assert.equal(after[key], before[key]);
   meta = JSON.parse(after['sg:site:statsmeta']);
   assert.deepEqual(meta, { pc: { id: 'pcabcd', label }, off: true, custom: 'kept', offSince: NOW.getTime(), clearedAt: NOW.getTime() });
   assert.match(await page.locator('#clearStatus').textContent(), /مُسحت/);
   assert.equal(await page.locator('#gameTable tbody tr').count(), 0);
   assert.match(await page.locator('#source').textContent(), /لا توجد بيانات بعد/);
+  // The PC still shares after a clear, and the page still says so once statistics resume.
+  await page.locator('#resumeBtn').click();
+  assert.equal(await page.locator('#shareMsg').isVisible(), true, 'the sharing line comes back after a clear');
 });
 
 test('a game still open and days removed for space are explained, not hidden', async t => {

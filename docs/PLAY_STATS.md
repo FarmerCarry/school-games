@@ -329,9 +329,9 @@ browser sends no Global Privacy Control, a line under it says so and names the s
 5. Actions: name this PC, **تصدير ملف Excel**, **تصدير JSON**, **فتح ملفات من أجهزة أخرى**
    (view several PCs together; nothing is saved), stop or resume collecting (type
    «أوقف»; this also stops the anonymous telemetry), clear this PC's statistics (type
-   «امسح»; removes only keys that start with `sg:site:stats:`, and the telemetry keys
-   `sg:site:tm:` so nothing recorded before the clear is sent later; never the id, label or
-   stop setting). While collection is stopped, the 🏫 strip shows «الإحصاءات متوقفة».
+   «امسح»; removes only keys that start with `sg:site:stats:`, and the telemetry queue
+   under `sg:site:tm:` so nothing recorded before the clear is sent later; never the id,
+   label or stop setting, nor the note `sg:site:tm:on` that says this PC shares). While collection is stopped, the 🏫 strip shows «الإحصاءات متوقفة».
    **An export counts only once its file is saved** (`lastExport`, which the reminder
    uses, is the moment the file was made). Where the browser offers pages a save dialog
    (`showSaveFilePicker`: Edge and Chrome, and only in a secure context, which includes

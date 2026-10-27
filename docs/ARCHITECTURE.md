@@ -78,7 +78,9 @@ Kit is inlined into every game page, so every minified byte in `shared/kit.js` c
 ~34 bytes of offline cache.
 
 * `shared/kit.js` v2 additions (profile + track + dda + sg:telemetry) together:
-  **≤ 2,600 minified bytes** (measured with the build's esbuild options).
+  **about 2,600 minified bytes** (measured with the build's esbuild options; 2,682 with the
+  reviewed fixes). Further growth needs a budget decision: every byte costs ~34 bytes of
+  offline cache.
 * `shared/juice.js`: **≤ 4,500 minified bytes**, loaded only by pages that use it
   (`<script src="../../shared/juice.js">` after `kit.js`; the portal loads
   `shared/juice.js` before `js/site.js`).
@@ -186,7 +188,9 @@ per message.
 ```
 
 Round ids follow the v1 rules (`^[A-Za-z][A-Za-z0-9_:.-]{0,23}$`, no three digits in
-a row, never typed text). A `round()` while a round is open ends it with code `q`.
+a row, never typed text). A `round()` while a round is open ends it with code `q`, and so
+does a round still open when the game page is unloaded (not kept in the back-forward
+cache); `sg:stats` v1 is unchanged and the portal records its own quit from `o`/`om`.
 
 ## Juice (shared/juice.js)
 

@@ -21,7 +21,7 @@
   /* ------------------------------------------------------------- format */
   var FORMAT = 'sg-play-stats';
   var PREFIX = 'sg:site:stats:';            // every key "clear" may remove
-  var TM = 'sg:site:tm:';                   // the telemetry queue and note (js/telemetry.js): cleared too
+  var TM = 'sg:site:tm:';                   // the telemetry queue (js/telemetry.js): cleared too, not its sharing note
   var META_KEY = 'sg:site:statsmeta';       // id, label and stop setting: never cleared
   var DAY_KEY = /^sg:site:stats:d:(\d{4}-\d{2}-\d{2})$/;
   var SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -301,12 +301,13 @@
   }
 
   // Removes only keys that start with sg:site:stats: (never sg:site:statsmeta) and the
-  // telemetry keys sg:site:tm:, so nothing recorded before the clear is sent later.
+  // telemetry keys sg:site:tm:, so nothing recorded before the clear is sent later. The
+  // note sg:site:tm:on holds only the server's name and stays: this PC still shares.
   function clearStats(ls) {
     var keys = [];
     for (var i = 0; i < ls.length; i++) {
       var key = ls.key(i);
-      if (typeof key === 'string' && (key.indexOf(PREFIX) === 0 || key.indexOf(TM) === 0)) keys.push(key);
+      if (typeof key === 'string' && (key.indexOf(PREFIX) === 0 || (key.indexOf(TM) === 0 && key !== TM + 'on'))) keys.push(key);
     }
     keys.forEach(function (key) { ls.removeItem(key); });
     return keys.length;

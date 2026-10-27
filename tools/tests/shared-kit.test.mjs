@@ -504,6 +504,26 @@ test('v2: sg:telemetry follows sg:stats with the same e and f, round starts and 
   assert.deepEqual(h.delays, [10000, 10000, 10000]);
 });
 
+test('v2: a round still open when the page goes away ends as a quit, unless the page is kept in the back-forward cache', () => {
+  const clock = {now: 0}, h = harness({clock});
+  h.Kit.ready(); preferences(h, {telemetry: true});
+  h.Kit.track.tier(2);
+  clock.now = 1000; h.Kit.stats.round('L1');
+  h.Kit.track.hit();
+  clock.now = 4000; h.window.emit('pagehide', {persisted: true});                  // kept: no quit yet
+  clock.now = 5000; h.window.emit('keydown', {code: 'KeyA'});
+  h.Kit.track.miss();
+  clock.now = 9000; h.window.emit('pagehide', {persisted: false});                 // gone: a quit for v2
+  const v2 = h.sent.filter(m => m.type === 'sg:telemetry').flatMap(m => m.ev);
+  assert.deepEqual(v2, [['rs', 'L1', 2], ['re', 'q', 'L1', 4000, -1, 2, 1, 1, zeros]]);
+  const v1 = h.sent.filter(m => m.type === 'sg:stats');
+  assert.deepEqual(v1.at(-1).o, 'L1', 'sg:stats still names the open round, so the portal records its own quit');
+  assert.ok(v1.every(m => m.r.every(e => e[0] !== 'q')), 'v1 gets no quit event from Kit');
+  const off = harness({clock});
+  off.Kit.ready(); off.Kit.stats.round('L1'); off.window.emit('pagehide', {persisted: false});
+  assert.ok(off.sent.every(m => m.type !== 'sg:telemetry'), 'nothing for telemetry while it is off');
+});
+
 test('v2: input latency is performance.now() minus the event time, only for a valid time within 0..1000 ms', () => {
   const clock = {now: 5000}, h = harness({clock});
   h.Kit.ready(); preferences(h, {telemetry: true});

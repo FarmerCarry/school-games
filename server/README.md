@@ -49,8 +49,11 @@ Privacy is built into what can be stored, not only into what the portal chooses 
   malformed field is dropped whole, and round ids that could be typed text (three
   digits in a row, spaces, more than 24 characters) are refused.
 * **No persistent identifiers.** The session id is random per portal session and never
-  stored on the PC; the batch id is random per batch and kept only 30 days for
-  de-duplication. Neither can link sessions of the same child.
+  reused. On the PC it is kept only inside batches still waiting to be sent (localStorage
+  keys starting with `sg:site:tm:q`, at most 7 days and 128 KB, each batch with the local
+  time its first event was recorded); delivery, the teacher's clear, or stopping
+  statistics or sharing removes them. The batch id is random per batch and kept only
+  30 days for de-duplication. Neither can link sessions of the same child.
 * **No IP addresses and no headers are stored or logged.** The client address is only a
   key of the in-memory rate limiter and is forgotten once its bucket has refilled, at the
   next sweep (at most once a minute, when a request arrives). Requests
@@ -77,7 +80,8 @@ Privacy is built into what can be stored, not only into what the portal chooses 
 ## Quick start
 
 ```sh
-ADMIN_TOKEN=$(openssl rand -hex 24) node server/main.mjs
+export ADMIN_TOKEN=$(openssl rand -hex 24)
+node server/main.mjs &
 # telemetry: listening on port 8787; 0 allowed origin(s), admin on, ...
 curl -s localhost:8787/v1/health                    # {"ok":true}
 node server/simulate.mjs --sessions 200             # synthetic sessions (today)

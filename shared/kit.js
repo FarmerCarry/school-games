@@ -201,7 +201,13 @@
   }
   function statsTimer() { setTimeout(function () { if (!failed) { sendStats(); statsTimer(); } }, 10000); }
   // As the argument, the event object means "cut" for pagehide and "extend only" for moves.
-  listen('pagehide', sendStats);
+  listen('pagehide', function (e) {
+    // A round still open when the page goes away is a quit for telemetry v2 too. v1
+    // leaves that to the portal (from o/om), so roundId stays and sg:stats is unchanged.
+    // A page kept in the back-forward cache may still end the round itself later.
+    if (!(e && e.persisted) && roundId) { tally(); mark('q'); }
+    sendStats(e);
+  });
   listen('pointermove', engage);
   listen('wheel', engage);
   Kit.stats = {

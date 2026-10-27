@@ -2,8 +2,9 @@
 
 A light, ad-free games website **in Arabic** for children aged 6–11: a small Poki-style portal
 with original browser games, all written from scratch for this site. The site and all of its
-games are in Arabic, laid out right-to-left. Every game scales from a 6-year-old who has never
-held a mouse to an 11-year-old expert, and none of them plays background music.
+games are in Arabic, laid out right-to-left. The games are being made to scale from a 6-year-old
+who has never held a mouse to an 11-year-old expert (Bubble Bop, Road Hopper and Dino 3D already
+adapt to each child), and none of them plays background music.
 
 - **No ads, no email/password accounts, no names, no chat, no third-party analytics, no links to other sites.**
   Children pick an animal picture and their age band to play as themselves; nothing is typed.
@@ -235,8 +236,9 @@ the player acknowledges it.
 The top of the home page asks «مَن يلعب؟» with big round animal pictures. A child picks
 their animal (or plays as a guest) with one click; nothing is typed and no name is stored.
 A new player picks an animal, a colour and an age band from three big number cards
-(6–7, 8–9, 10–11). The age band sets where every game's difficulty starts, and each game
-then adapts to how that child plays. Winning, trying and playing earn XP; the topbar
+(6–7, 8–9, 10–11). In Bubble Bop, Road Hopper and Dino 3D's surprise courses the age band
+sets where difficulty starts, and the game then adapts to how that child plays; the other
+games follow in later milestones. Winning, trying and playing earn XP; the topbar
 shows the player's picture, level and progress, with a short celebration on a new level.
 Up to 12 players fit on one browser. The current player lasts only for that tab: closing
 it, or the classroom «hand over the device» button, returns to the guest. The classroom
