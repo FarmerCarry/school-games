@@ -76,9 +76,10 @@ function dashboard(dir) {
   return folder;
 }
 
-async function start(t, options = {}) {
+// A Node host on a new database, created (so its facts start) at `at`.
+async function start(t, { at = START, ...options } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-telemetry-'));
-  const clock = { now: START };
+  const clock = { now: at };
   const dbPath = path.join(dir, 'db', 'telemetry.db');
   const app = createApp({ dbPath, allowedOrigins: [ORIGIN], adminToken: TOKEN, now: () => clock.now, dashboardDir: dashboard(dir), ...options });
   const { port } = await app.listen(0, '127.0.0.1');
@@ -255,7 +256,9 @@ test('the v3 fixture has every v3 kind and is stored as exact facts, with its st
     { u: U, slug: 'tic-tac-toe', rounds: 1, first_s: at + 150 }]);
   assert.deepEqual(await s.rows('aliases'), [{ u_old: '1b2c3d4e5f60', u_new: U, s: at, how: 'pc' }]);
   const settings = Object.fromEntries((await s.rows('settings')).map(r => [r.key, r.value]));
-  assert.deepEqual([settings.tz, settings.tz_source, settings.tz_epoch, settings.rv, settings.v3_since], ['Asia/Riyadh', 'pc', '1', '2', '2026-10-20']);
+  // rv: 1, up once by the purge at start and once by the change of zone.
+  assert.deepEqual([settings.tz, settings.tz_source, settings.tz_epoch, settings.rv, settings.v3_since, settings.week_start, settings.rebuild],
+    ['Asia/Riyadh', 'pc', '1', '3', '2026-10-20', 'sun', '1']);
   assert.deepEqual(await s.rows('live'), [{ s: fixture3.s, slug: '', seen_minute: Math.floor(START / 60000), u: U, p: P, wire: 3 }]);
 });
 
@@ -713,12 +716,12 @@ test('the per-client token bucket answers 429 with Retry-After and refills', asy
 
 test('admin endpoints are 404 without ADMIN_TOKEN and 401 without the right bearer token', async t => {
   const closed = await start(t, { adminToken: '' });
-  for (const pathname of ['/v1/admin/kpis', '/v1/admin/live']) {
+  for (const pathname of ['/v1/admin/kpis', '/v1/admin/live', '/v1/admin/settings']) {
     assert.equal((await closed.send('GET', pathname)).status, 404);
     assert.equal((await closed.admin(pathname)).status, 404);
   }
   const s = await start(t);
-  for (const pathname of ['/v1/admin/kpis', '/v1/admin/live']) {
+  for (const pathname of ['/v1/admin/kpis', '/v1/admin/live', '/v1/admin/settings']) {
     const none = await s.send('GET', pathname);
     assert.equal(none.status, 401);
     assert.match(none.headers['www-authenticate'], /^Bearer/);
@@ -730,7 +733,8 @@ test('admin endpoints are 404 without ADMIN_TOKEN and 401 without the right bear
     assert.equal(ok.status, 200);
     assert.equal(ok.headers['cache-control'], 'no-store');
     assert.equal((await s.send('GET', pathname, { headers: { authorization: 'bearer ' + TOKEN } })).status, 200);
-    assert.equal((await s.send('POST', pathname, { headers: { authorization: 'Bearer ' + TOKEN } })).status, 405);
+    // Settings take a JSON body; the other reads take no POST.
+    assert.equal((await s.send('POST', pathname, { headers: { authorization: 'Bearer ' + TOKEN } })).status, pathname.endsWith('settings') ? 415 : 405);
   }
 });
 
@@ -774,18 +778,130 @@ async function dataset(t) {
   return s;
 }
 
-test('KPIs are exact for a hand-built dataset, with groups under three sessions suppressed', async t => {
+test('settings: the school\'s clock, retention, storage and usage; the dashboard\'s zone yields to the PCs\', the owner\'s to nothing', async t => {
+  const s = await start(t);
+  const post = (body, headers = {}) => s.send('POST', '/v1/admin/settings', { headers: { authorization: 'Bearer ' + TOKEN,
+    'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+  const get = async () => (await s.admin('/v1/admin/settings')).json();
+  const first = await get();
+  assert.deepEqual(first, {
+    v: 1,
+    clock: { tz: 'UTC', source: 'none', offsetMin: 0, today: '2026-10-20', now: '09:15', weekStart: 'mon', weekSource: 'auto', detected: [],
+      factsSince: '2026-10-20', legacyUntil: '', v3Since: '' },
+    keep: { days: 400, source: 'env', rollupDays: 800 },
+    storage: { bytes: first.storage.bytes, limit: 500000000, guardAt: 425000000, trimmedBefore: '' },
+    usage: { day: '2026-10-20', reads: first.usage.reads, writes: first.usage.writes, readsLimit: 5000000, writesLimit: 100000, batchEvery: 60 },
+    rebuild: { pending: 0, full: 0, done: 0 }, accepts: [2, 3], pcs: { new: 0, seen14d: 0 }
+  });
+  assert.ok(first.storage.bytes > 0 && first.usage.writes > 0, 'the meters move');
+  await s.app.store.db.batch([s.app.store.db.prepare("INSERT INTO roll_days (day, dirty, rolled_s) VALUES ('2026-10-19', 0, 1), ('2026-10-20', 0, 1)")]);
+  const days = async () => (await s.rows('roll_days', 'day')).map(r => r.dirty);
+  const clean = () => s.app.store.db.prepare('UPDATE roll_days SET dirty = 0').run();
+
+  // Signed in, the dashboard sends its browser's zone while nothing better is known.
+  let answer = (await post({ tz: 'Asia/Riyadh', source: 'dashboard' })).json();
+  assert.deepEqual(pick(answer.clock, ['tz', 'source', 'offsetMin', 'now', 'weekStart', 'weekSource']),
+    { tz: 'Asia/Riyadh', source: 'dashboard', offsetMin: 180, now: '12:15', weekStart: 'sun', weekSource: 'auto' });
+  assert.deepEqual(await days(), [0, 2], 'the days since facts_since move to the new clock');
+  assert.deepEqual(answer.rebuild, { pending: 1, full: 1, done: 0 });
+  await clean();
+  // A PC's zone wins over the dashboard's; then the dashboard's guess is ignored.
+  assert.equal((await s.post(envelope3('ca0000000001', [['lv', 1, 2]], { z: 'Europe/London' }))).status, 204);
+  s.clock.now += 6 * 60000;
+  answer = await get();
+  assert.deepEqual([answer.clock.tz, answer.clock.source, answer.clock.weekStart, answer.clock.detected], ['Europe/London', 'pc', 'mon', []]);
+  assert.deepEqual(await days(), [0, 2]);
+  await clean();
+  assert.equal((await s.post(envelope3('ca0000000002', [['ss', 0, 0, 3, 1, 2, 4, 0]], { z: 'Europe/London' }))).status, 204);
+  answer = (await post({ tz: 'Asia/Riyadh', source: 'dashboard' })).json();
+  assert.deepEqual([answer.clock.tz, answer.clock.source, answer.clock.detected, answer.pcs], ['Europe/London', 'pc', [{ tz: 'Europe/London', pcs: 1 }],
+    { new: 1, seen14d: 1 }]);
+  assert.deepEqual(await days(), [0, 0]);
+  // The owner's click wins, and no PC moves it.
+  answer = (await post({ tz: 'Asia/Riyadh' })).json();
+  assert.deepEqual([answer.clock.tz, answer.clock.source, answer.clock.weekStart], ['Asia/Riyadh', 'owner', 'sun']);
+  assert.deepEqual(await days(), [0, 2]);
+  assert.equal((await s.post(envelope3('ca0000000003', [['lv', 1, 2]], { z: 'Europe/Paris', p: '0a0b0c0d0e0f' }))).status, 204);
+  s.clock.now += 6 * 60000;
+  assert.deepEqual(pick((await get()).clock, ['tz', 'source']), { tz: 'Asia/Riyadh', source: 'owner' });
+  // The same zone from the owner again changes nothing.
+  await clean();
+  await post({ tz: 'Asia/Riyadh' });
+  assert.deepEqual(await days(), [0, 0]);
+  // Week start and retention.
+  answer = (await post({ weekStart: 'mon', keepDays: 760 })).json();
+  assert.deepEqual([answer.clock.weekStart, answer.clock.weekSource, answer.keep], ['mon', 'owner', { days: 760, source: 'owner', rollupDays: 800 }]);
+  answer = (await post({ tz: 'Europe/London' })).json();
+  assert.deepEqual([answer.clock.tz, answer.clock.weekStart], ['Europe/London', 'mon'], 'the owner\'s week start stays');
+  const nothing = (await post({})).json(), now = await get();
+  assert.deepEqual({ ...nothing, usage: null }, { ...now, usage: null }, 'an empty body changes nothing');
+
+  // Bad requests change nothing.
+  const before = await s.rows('settings', 'key');
+  for (const [body, status, error] of [[{ tz: 'Mars/Olympus' }, 400, 'tz'], [{ tz: 'constructor' }, 400, 'tz'], [{ tz: 3 }, 400, 'tz'],
+    [{ source: 'dashboard' }, 400, 'source'], [{ tz: 'UTC', source: 'pc' }, 400, 'source'], [{ weekStart: 'tue' }, 400, 'weekStart'],
+    [{ keepDays: 500 }, 400, 'keepDays'], [{ keepDays: '400' }, 400, 'keepDays'], [{ tz: 'UTC', name: 'x' }, 400, 'field'], [[], 400, 'body'],
+    [null, 400, 'body'], ['{', 400, 'json'], [{ tz: 'UTC'.padEnd(5000, ' ') }, 413, 'too large']]) {
+    const res = await post(body);
+    assert.deepEqual([res.status, res.json()], [status, { error }], JSON.stringify(body).slice(0, 40));
+  }
+  assert.equal((await post({ tz: 'UTC' }, { 'content-type': 'text/plain' })).status, 415);
+  assert.equal((await s.send('POST', '/v1/admin/settings', { headers: { 'content-type': 'application/json' }, body: '{"tz":"UTC"}' })).status, 401);
+  const wrong = await s.send('DELETE', '/v1/admin/settings', { headers: { authorization: 'Bearer ' + TOKEN } });
+  assert.deepEqual([wrong.status, wrong.headers.allow], [405, 'GET, POST, HEAD, OPTIONS']);
+  assert.deepEqual(await s.rows('settings', 'key'), before);
+});
+
+test('keeping two school years is refused when the database would outgrow the storage guard', async () => {
+  const db = openDatabase(':memory:'), store = openStore(db, { guards: { bytes: 300000 } });
+  await store.ingest(validateBatch(fixture3), START);
+  const size = (await store.settings(START)).storage.bytes;
+  assert.ok(size * 760 / 400 > 300000 && size < 300000, 'the test database is ' + size + ' bytes');
+  assert.deepEqual(await store.updateSettings({ keepDays: 760 }, START), { error: 'storage' });
+  assert.equal((await store.settings(START)).keep.days, 400);
+  assert.deepEqual((await store.updateSettings({ keepDays: 400 }, START)).keep, { days: 400, source: 'owner', rollupDays: 800 });
+});
+
+test('the read guard: once today\'s reads pass 4.2 million, admin reads but live and settings answer 429 until 00:00 UTC on the school\'s clock', async t => {
+  const s = await start(t);
+  await s.send('POST', '/v1/admin/settings', { headers: { authorization: 'Bearer ' + TOKEN, 'content-type': 'application/json' },
+    body: JSON.stringify({ tz: 'Asia/Riyadh' }) });
+  assert.equal((await s.admin('/v1/admin/kpis')).status, 200);
+  await s.app.store.db.prepare('UPDATE usage SET reads = 4200001').run();
+  // Each instance reads the day's usage again within 5 minutes.
+  s.clock.now += 5 * 60000;
+  const stopped = await s.admin('/v1/admin/kpis');
+  assert.deepEqual([stopped.status, stopped.json()], [429, { error: 'reads', until: '03:00' }]);
+  assert.equal((await s.admin('/v1/admin/live')).status, 200);
+  assert.equal((await s.admin('/v1/admin/settings')).status, 200);
+  assert.equal((await s.post(envelope('cb0000000001', [['lv', 1, 2]]))).status, 204, 'batches are never refused');
+  // A new UTC day starts again.
+  s.clock.now = Date.parse('2026-10-21T00:00:00Z');
+  assert.equal((await s.admin('/v1/admin/kpis')).status, 200);
+});
+
+// What the KPIs say about students when every session is v2: there are none to tell apart.
+const NO_STUDENTS = { active: 0, new: 0, returning: 0, knownBefore: 0, guestSessions: 0, guestMinutes: 0,
+  minutesPerStudentDay: { p25: null, median: null, p75: null, mean: null } };
+const NO_EXTRAS = { students: 0, hearts: { on: 0, off: 0 }, tutorials: { start: 0, done: 0 }, wallMinutes: 0, actionsPerMinute: null, unended: 0, duoRounds: 0 };
+const UTC_CLOCK = today => ({ tz: 'UTC', source: 'none', offsetMin: 0, today });
+
+test('KPIs are exact for a hand-built dataset, and every group is shown with its numbers, even one session', async t => {
   const s = await dataset(t);
   const res = await s.admin('/v1/admin/kpis?from=2026-10-20&to=2026-10-21');
   assert.equal(res.status, 200);
+  const z6 = [0, 0, 0, 0, 0, 0], empty = { counts: [0, 0, 0, 0], smoothShare: null, stallShare: null };
   assert.deepEqual(res.json(), {
-    v: 1, range: { from: '2026-10-20', to: '2026-10-21', days: 2, band: 'all' }, minSessions: 3,
+    v: 1, range: { from: '2026-10-20', to: '2026-10-21', days: 2, band: 'all', legacyUntil: '', factsSince: '2026-10-20' }, minSessions: 0,
+    clock: UTC_CLOCK('2026-10-21'),
     totals: {
       sessions: 4, engagedMinutes: 2.8, avgEngagedMinutesPerSession: 0.71, gameOpens: 5, roundsStarted: 5, roundsEnded: 5,
       levelUps: 1, errors: 1,
-      players: { sessionStarts: 3, newProfiles: 1, guests: 0, profileAge: [1, 1, 0, 1], daysSinceLast: [1, 1, 0, 0, 1] }
+      players: { sessionStarts: 3, newProfiles: 1, guests: 0, profileAge: [1, 1, 0, 1], daysSinceLast: [1, 1, 0, 0, 1] },
+      students: NO_STUDENTS
     },
-    daily: [{ day: '2026-10-20', sessions: 3, engagedMinutes: 2.8, opens: 4 }, { day: '2026-10-21', suppressed: true }],
+    daily: [{ day: '2026-10-20', sessions: 3, engagedMinutes: 2.8, opens: 4, students: 0, guestMinutes: 0 },
+      { day: '2026-10-21', sessions: 1, engagedMinutes: 0, opens: 1, students: 0, guestMinutes: 0 }],
     games: [
       {
         slug: 'road-hopper', sessions: 3, opens: 3, closes: 3, engagedMinutes: 2.3, avgEngagedSecPerOpen: 46.7,
@@ -794,46 +910,72 @@ test('KPIs are exact for a hand-built dataset, with groups under three sessions 
         rt: [10, 11, 9, 5, 2, 1], il: [70, 20, 7, 5, 0, 0],
         frames: { counts: [1400, 280, 105, 15], smoothShare: 0.7778, stallShare: 0.0083 },
         loads: 3, avgLoadMs: 1000, errors: { t: 0, x: 0, l: 0 }, sources: { featured: 2, recent: 1 },
-        replay: { replayIndex: [4, 1, 0, 0, 0, 0], playsBefore: [1, 1, 1, 0, 0] }
+        replay: { replayIndex: [4, 1, 0, 0, 0, 0], playsBefore: [1, 1, 1, 0, 0] },
+        ...NO_EXTRAS, avgScore: 112.5
       },
-      { slug: 'tank-splat', suppressed: true }
+      // Two sessions on two days, one of them 10-11 years old: shown in full.
+      {
+        slug: 'tank-splat', sessions: 2, opens: 2, closes: 2, engagedMinutes: 0.5, avgEngagedSecPerOpen: 15,
+        rounds: { starts: 0, ends: 0, codes: { w: 0, l: 0, d: 0, e: 0, q: 0 } },
+        completionRate: null, winRate: null, dropOffRate: null, avgTier: null, hits: 0, misses: 0, accuracy: null,
+        rt: z6, il: [10, 0, 0, 0, 0, 0], frames: { counts: [500, 0, 0, 0], smoothShare: 1, stallShare: 0 },
+        loads: 0, avgLoadMs: null, errors: { t: 1, x: 0, l: 0 }, sources: { featured: 1, catalog: 1 },
+        replay: { replayIndex: z6, playsBefore: [1, 0, 0, 0, 1] }, ...NO_EXTRAS, avgScore: null
+      }
     ],
     levels: [
       { slug: 'road-hopper', id: 'L1', sessions: 3, starts: 4, ends: 4, codes: { w: 3, l: 0, d: 0, e: 0, q: 1 },
-        completionRate: 0.75, winRate: 1, dropOffRate: 0.25, avgMs: 27250, avgTier: 1 },
-      { slug: 'road-hopper', id: 'L2', suppressed: true }
+        completionRate: 0.75, winRate: 1, dropOffRate: 0.25, avgMs: 27250, avgTier: 1, students: 0, avgScore: 123.3, unended: 0 },
+      { slug: 'road-hopper', id: 'L2', sessions: 1, starts: 1, ends: 1, codes: { w: 0, l: 1, d: 0, e: 0, q: 0 },
+        completionRate: 0, winRate: 0, dropOffRate: 0, avgMs: 29000, avgTier: 2, students: 0, avgScore: 80, unended: 0 }
     ],
     bands: [
-      { band: '6-7', sessions: 3, opens: 4, engagedMinutes: 2.8, games: [
+      { band: '6-7', sessions: 3, opens: 4, engagedMinutes: 2.8, students: 0, games: [
         { slug: 'road-hopper', sessions: 3, opens: 3, share: 0.75, avgTier: 1.25, completionRate: 0.6,
           winRate: 0.75, dropOffRate: 0.2, engagedMinutes: 2.3, starts: 5 },
-        { slug: 'tank-splat', suppressed: true }
+        { slug: 'tank-splat', sessions: 1, opens: 1, share: 0.25, avgTier: null, completionRate: null,
+          winRate: null, dropOffRate: null, engagedMinutes: 0.5, starts: 0 }
       ] },
-      { band: '10-11', suppressed: true }
+      { band: '10-11', sessions: 1, opens: 1, engagedMinutes: 0, students: 0, games: [
+        { slug: 'tank-splat', sessions: 1, opens: 1, share: 1, avgTier: null, completionRate: null, winRate: null, dropOffRate: null,
+          engagedMinutes: 0, starts: 0 }
+      ] }
     ],
-    sources: [{ src: 'featured', sessions: 3, opens: 3 }, { src: 'catalog', suppressed: true }, { src: 'recent', suppressed: true }],
+    sources: [{ src: 'featured', sessions: 3, opens: 3 }, { src: 'catalog', sessions: 1, opens: 1 }, { src: 'recent', sessions: 1, opens: 1 }],
     devices: {
       cores: [
         { value: 4, sessions: 3, frames: { counts: [1900, 280, 105, 15], smoothShare: 0.8261, stallShare: 0.0065 },
           il: [80, 20, 7, 5, 0, 0], avgLoadMs: 1000 },
-        { value: 8, suppressed: true }
+        { value: 8, sessions: 1, frames: empty, il: z6, avgLoadMs: null }
       ],
-      memory: [{ value: 2, suppressed: true }, { value: 4, suppressed: true }, { value: 8, suppressed: true }],
-      screen: [{ value: 1366, suppressed: true }, { value: 1920, suppressed: true }, { value: 2560, suppressed: true }]
+      memory: [
+        { value: 2, sessions: 1, frames: { counts: [400, 200, 90, 10], smoothShare: 0.5714, stallShare: 0.0143 }, il: [20, 10, 5, 5, 0, 0], avgLoadMs: 1200 },
+        { value: 4, sessions: 2, frames: { counts: [1500, 80, 15, 5], smoothShare: 0.9375, stallShare: 0.0031 }, il: [60, 10, 2, 0, 0, 0], avgLoadMs: 900 },
+        { value: 8, sessions: 1, frames: empty, il: z6, avgLoadMs: null }
+      ],
+      screen: [
+        { value: 1366, sessions: 1, frames: { counts: [400, 200, 90, 10], smoothShare: 0.5714, stallShare: 0.0143 }, il: [20, 10, 5, 5, 0, 0], avgLoadMs: 1200 },
+        { value: 1920, sessions: 2, frames: { counts: [1500, 80, 15, 5], smoothShare: 0.9375, stallShare: 0.0031 }, il: [60, 10, 2, 0, 0, 0], avgLoadMs: 900 },
+        { value: 2560, sessions: 1, frames: empty, il: z6, avgLoadMs: null }
+      ]
     },
-    modes: [{ mode: 'web', sessions: 3 }, { mode: 'app', suppressed: true }]
+    modes: [{ mode: 'web', sessions: 3 }, { mode: 'app', sessions: 1 }],
+    quality: { linkedShare: 0, v2Share: 1, clockEstimatedShare: 1, unclosedVisits: 0, unknownBandShare: 0, idleHandovers: 0, pcsNew: 0,
+      oldVersionSessionShare: 1, profilesFullPcs: 0, forgetfulPcs: 0 }
   });
+  assert.doesNotMatch(res.text, /suppressed/);
 
   // One band.
   const young = (await s.admin('/v1/admin/kpis?from=2026-10-20&to=2026-10-21&band=6-7')).json();
-  assert.deepEqual(young.range, { from: '2026-10-20', to: '2026-10-21', days: 2, band: '6-7' });
+  assert.deepEqual(young.range, { from: '2026-10-20', to: '2026-10-21', days: 2, band: '6-7', legacyUntil: '', factsSince: '2026-10-20' });
   assert.deepEqual(young.totals, {
     sessions: 3, engagedMinutes: 2.8, avgEngagedMinutesPerSession: 0.94, gameOpens: 4, roundsStarted: 5, roundsEnded: 5,
     levelUps: 1, errors: 0,
-    players: { sessionStarts: 2, newProfiles: 1, guests: 0, profileAge: [1, 1, 0, 0], daysSinceLast: [0, 1, 0, 0, 1] }
+    players: { sessionStarts: 2, newProfiles: 1, guests: 0, profileAge: [1, 1, 0, 0], daysSinceLast: [0, 1, 0, 0, 1] },
+    students: NO_STUDENTS
   });
-  assert.deepEqual(young.daily[1], { day: '2026-10-21', sessions: 0, engagedMinutes: 0, opens: 0 });
-  assert.deepEqual(young.games.map(g => [g.slug, g.suppressed || false]), [['road-hopper', false], ['tank-splat', true]]);
+  assert.deepEqual(young.daily[1], { day: '2026-10-21', sessions: 0, engagedMinutes: 0, opens: 0, students: 0, guestMinutes: 0 });
+  assert.deepEqual(young.games.map(g => [g.slug, g.sessions]), [['road-hopper', 3], ['tank-splat', 1]]);
   assert.deepEqual(young.bands.map(b => b.band), ['6-7']);
   // Nobody of unknown age: empty groups keep their zeros.
   const unknown = (await s.admin('/v1/admin/kpis?from=2026-10-20&to=2026-10-21&band=unknown')).json();
@@ -841,15 +983,85 @@ test('KPIs are exact for a hand-built dataset, with groups under three sessions 
   assert.equal(unknown.totals.sessions, 0);
   assert.equal(unknown.totals.avgEngagedMinutesPerSession, null);
   assert.deepEqual([unknown.games, unknown.levels, unknown.bands, unknown.sources], [[], [], [], []]);
-  // A single session's day: everything is suppressed, nothing is a number.
+  // A single session's day: its numbers, like any other.
   const lonely = (await s.admin('/v1/admin/kpis?from=2026-10-21&to=2026-10-21')).json();
-  assert.deepEqual(lonely.totals, { suppressed: true });
-  assert.deepEqual(lonely.games, [{ slug: 'tank-splat', suppressed: true }]);
-  assert.deepEqual(lonely.daily, [{ day: '2026-10-21', suppressed: true }]);
-  assert.ok(!/"sessions":[12]\b/.test(JSON.stringify(lonely)), 'no group reports one or two sessions');
+  assert.equal(lonely.totals.sessions, 1);
+  assert.deepEqual(lonely.totals.players, { sessionStarts: 1, newProfiles: 0, guests: 0, profileAge: [0, 0, 0, 1], daysSinceLast: [1, 0, 0, 0, 0] });
+  assert.deepEqual(lonely.games.map(g => [g.slug, g.sessions, g.opens, g.errors.t]), [['tank-splat', 1, 1, 1]]);
+  assert.deepEqual(lonely.daily, [{ day: '2026-10-21', sessions: 1, engagedMinutes: 0, opens: 1, students: 0, guestMinutes: 0 }]);
+  assert.deepEqual(lonely.bands.map(b => [b.band, b.sessions]), [['10-11', 1]]);
+
+  // Once both days are rolled up (the cron, after 01:00 the next day), the answer is the same, from the rollups.
+  const before = (await s.admin('/v1/admin/kpis?from=2026-10-20&to=2026-10-21')).json();
+  s.clock.now = Date.parse('2026-10-22T01:30:00Z');
+  assert.deepEqual(await s.app.roll(), { rolled: '2026-10-20', kind: 'first', voted: null, purged: null });
+  assert.deepEqual((await s.app.roll()).rolled, '2026-10-21');
+  assert.deepEqual((await s.rows('r_day', 'day, a')).map(r => [r.day, r.a, r.sessions]), [['2026-10-20', '6-7', 3], ['2026-10-21', '10-11', 1]]);
+  const after = (await s.admin('/v1/admin/kpis?from=2026-10-20&to=2026-10-21')).json();
+  assert.deepEqual({ ...after, clock: null }, { ...before, clock: null });
 });
 
-test('KPI query parameters are validated and default to the last 30 days', async t => {
+// Students on two days, zone UTC. 19 Oct: U3 (6-7, a profile 5 days old) and U4 (8-9). 20 Oct: U1 (8-9, a
+// profile made today), U2 (8-9, 30 days old, who links U4, its old code on another PC), U3 again, a guest
+// and U5 (10-11, 30 days old, first seen today).
+const U1 = '1a1a1a1a1a1a', U2 = '2b2b2b2b2b2b', U3 = '3c3c3c3c3c3c', U4 = '4d4d4d4d4d4d', U5 = '5e5e5e5e5e5e';
+const P2 = '0a0b0c0d0e0f';
+const ss3 = (isNew, age, band) => ['ss', 0, isNew, age, age < 0 ? -1 : 1, band ? 3 : 0, 4, 0];
+const visit = (n, slug, t, ms) => [['go', t, n, slug, 'catalog', 1, 0], ['gx', t + 30, n, slug, ms, [9, 0, 0, 0, 0, 0], [100, 0, 0, 0]]];
+const STUDENT_DAYS = [
+  [START - DAY_MS, envelope3('b10000000001', [ss3(0, 5, 1), ...visit(1, 'road-hopper', 2, 180000)], { u: U3, a: '6-7' })],
+  [START - DAY_MS, envelope3('b10000000002', [ss3(0, 2, 1), ...visit(1, 'maze-dash', 2, 60000)], { u: U4, p: P2 })],
+  [START, envelope3('b20000000001', [ss3(1, 0, 1), ['go', 2, 1, 'road-hopper', 'starter', 0, 0], ['tu', 3, 1, 'road-hopper', 's'],
+    ['rs', 4, 1, 1, 'road-hopper', 'L1', 2, 0], ['re', 40, 1, 1, 'road-hopper', 'w', 'L1', 30000, 50, 2, 10, 2, z6, [30000, 40, 0, 0, 6000, 10, 500]],
+    ['tu', 41, 1, 'road-hopper', 'd'], ['fv', 42, 1, 'road-hopper', 1], ['rs', 43, 1, 2, 'road-hopper', 'L2', 2, 0],
+    ['re', 80, 1, 2, 'road-hopper', 'l', 'L2', 30000, 20, 2, 5, 5, z6, null], ['gx', 90, 1, 'road-hopper', 120000, z6, z4]], { u: U1 })],
+  [START, envelope3('b20000000002', [ss3(0, 30, 1), ['cd', 0, U4], ...visit(1, 'road-hopper', 2, 200000), ...visit(2, 'maze-dash', 40, 100000)],
+    { u: U2, p: P2 })],
+  [START, envelope3('b20000000003', [ss3(0, 6, 1), ...visit(1, 'road-hopper', 2, 60000), ['se', 50, 60000, 'i']], { u: U3, a: '6-7' })],
+  [START, envelope3('b20000000004', [ss3(0, -1, 0), ...visit(1, 'road-hopper', 2, 30000)], { u: '', a: '6-7' })],
+  [START, envelope3('b20000000005', [ss3(0, 30, 1), ...visit(1, 'tank-splat', 2, 90000)], { u: U5, p: P2, a: '10-11' })]
+];
+
+test('KPIs count students by canonical code: new, returning, known before, minutes per student-day, per game and band, and the data quality', async t => {
+  const s = await start(t, { at: START - DAY_MS });
+  for (const [at, body] of STUDENT_DAYS) {
+    s.clock.now = at;
+    assert.equal((await s.post({ ...body, z: '' })).status, 204);
+  }
+  const check = async () => {
+    const today = (await s.admin('/v1/admin/kpis?from=2026-10-20&to=2026-10-20')).json();
+    assert.deepEqual(today.totals.students, { active: 4, new: 1, returning: 2, knownBefore: 1, guestSessions: 1, guestMinutes: 0.5,
+      // 1, 1.5, 2 and 5 minutes: quartiles between ranks, as R and NumPy compute them.
+      minutesPerStudentDay: { p25: 1.4, median: 1.8, p75: 2.8, mean: 2.4 } });
+    assert.deepEqual(today.daily, [{ day: '2026-10-20', sessions: 5, engagedMinutes: 10, opens: 6, students: 4, guestMinutes: 0.5 }]);
+    const game = slug => today.games.find(g => g.slug === slug);
+    assert.deepEqual(pick(game('road-hopper'), ['students', 'hearts', 'tutorials', 'wallMinutes', 'actionsPerMinute', 'avgScore', 'unended', 'duoRounds']),
+      { students: 3, hearts: { on: 1, off: 0 }, tutorials: { start: 1, done: 1 }, wallMinutes: 0.5, actionsPerMinute: 80, avgScore: 35, unended: 0, duoRounds: 0 });
+    assert.deepEqual(today.games.map(g => [g.slug, g.students]), [['maze-dash', 1], ['road-hopper', 3], ['tank-splat', 1]]);
+    assert.deepEqual(today.levels.map(l => [l.id, l.students, l.avgScore]), [['L1', 1, 50], ['L2', 1, 20]]);
+    assert.deepEqual(today.bands.map(b => [b.band, b.sessions, b.students]), [['6-7', 2, 1], ['8-9', 2, 2], ['10-11', 1, 1]]);
+    assert.deepEqual(today.quality, { linkedShare: 0.95, v2Share: 0, clockEstimatedShare: 0, unclosedVisits: 0, unknownBandShare: 0,
+      idleHandovers: 1, pcsNew: 2, oldVersionSessionShare: 0, profilesFullPcs: 0, forgetfulPcs: 0 });
+    // Over both days U4 is U2's older code: one student, first seen on the 19th like U3.
+    const both = (await s.admin('/v1/admin/kpis?from=2026-10-19&to=2026-10-20')).json();
+    assert.deepEqual(pick(both.totals.students, ['active', 'new', 'returning', 'knownBefore']), { active: 4, new: 1, returning: 0, knownBefore: 3 });
+    assert.deepEqual(both.daily.map(d => [d.day, d.students]), [['2026-10-19', 2], ['2026-10-20', 4]]);
+    assert.deepEqual(both.totals.students.minutesPerStudentDay, { p25: 1.1, median: 1.8, p75: 2.8, mean: 2.3 });
+    // One band: the students of that band only.
+    const older = (await s.admin('/v1/admin/kpis?from=2026-10-19&to=2026-10-20&band=8-9')).json();
+    assert.deepEqual(pick(older.totals.students, ['active', 'new', 'returning', 'knownBefore']), { active: 2, new: 1, returning: 0, knownBefore: 1 });
+    return [today, both, older];
+  };
+  s.clock.now = START + 3600000;
+  const open = await check();
+  // Rolled up, the answers are the same.
+  s.clock.now = Date.parse('2026-10-21T02:00:00Z');
+  assert.equal((await s.app.roll()).rolled, '2026-10-19');
+  assert.equal((await s.app.roll()).rolled, '2026-10-20');
+  assert.deepEqual((await check()).map(k => ({ ...k, clock: null })), open.map(k => ({ ...k, clock: null })));
+});
+
+test('KPI query parameters are validated and default to the 30 days ending today on the school\'s clock', async t => {
   const s = await dataset(t);
   for (const query of ['from=2026-02-30&to=2026-03-01', 'from=2026-10-22&to=2026-10-21', 'from=2025-01-01&to=2026-10-21',
     'from=20261020&to=2026-10-21', 'to=yesterday', 'band=5-6', 'band=', 'from=2026-10-20&to=2026-10-21&band=All']) {
@@ -858,37 +1070,47 @@ test('KPI query parameters are validated and default to the last 30 days', async
   }
   assert.equal((await s.admin('/v1/admin/kpis?from=2025-10-21&to=2026-10-21')).status, 200, '366 days are allowed');
   const defaults = (await s.admin('/v1/admin/kpis')).json();
-  assert.deepEqual(defaults.range, { from: '2026-09-22', to: '2026-10-21', days: 30, band: 'all' });
+  assert.deepEqual(defaults.range, { from: '2026-09-22', to: '2026-10-21', days: 30, band: 'all', legacyUntil: '', factsSince: '2026-10-20' });
   assert.equal(defaults.daily.length, 30);
   assert.equal(defaults.totals.sessions, 4);
 });
 
-test('live counts sessions seen in the last five minutes and the games they have open', async t => {
+test('live counts sessions seen in the last five minutes, their students, guests, v2 sessions and PCs, and the games they have open', async t => {
   const s = await start(t);
   const live = async () => (await s.admin('/v1/admin/live')).json();
-  assert.deepEqual(await live(), { v: 1, windowSec: 300, minSessions: 3, total: { sessions: 0 }, games: [] });
+  const nobody = { total: { sessions: 0 }, students: 0, guests: 0, unknown: 0, pcs: 0, games: [] };
+  const answer = fields => ({ v: 1, windowSec: 300, minSessions: 0, ...fields, clock: { tz: 'UTC', source: 'none', offsetMin: 0, today: '2026-10-20' } });
+  assert.deepEqual(await live(), answer(nobody));
   const ids = ['c00000000001', 'c00000000002', 'c00000000003', 'c00000000004', 'c00000000005', 'c00000000006'];
   for (const id of ids.slice(0, 3)) await s.post(envelope(id, [['go', 1, 'road-hopper', 'featured', 0]]));
   await s.post(envelope(ids[3], [['go', 1, 'road-hopper', 'featured', 0], ['gx', 9, 'road-hopper', 8000, z6, [1, 0, 0, 0]]]));
   for (const id of ids.slice(4)) await s.post(envelope(id, [['go', 1, 'tank-splat', 'catalog', 0]]));
-  assert.deepEqual(await live(), { v: 1, windowSec: 300, minSessions: 3, total: { sessions: 6 },
-    games: [{ slug: 'road-hopper', sessions: 3 }, { slug: 'tank-splat', suppressed: true }] });
+  assert.deepEqual(await live(), answer({ total: { sessions: 6 }, students: 0, guests: 0, unknown: 6, pcs: 0,
+    games: [{ slug: 'road-hopper', sessions: 3 }, { slug: 'tank-splat', sessions: 2 }] }));
+  // v3: one student on two PCs (one code, linked from an older one) counts once; a guest is no student.
+  const go3 = [['go', 1, 1, 'maze-dash', 'catalog', 0, 0]];
+  await s.post(envelope3('c10000000001', go3, { z: '' }));
+  await s.post(envelope3('c10000000002', [['cd', 0, '1b2c3d4e5f60'], ...go3], { z: '', p: '0a0b0c0d0e0f' }));
+  await s.post(envelope3('c10000000003', go3, { z: '', u: '1b2c3d4e5f60', p: '0a0b0c0d0e0f' }));
+  await s.post(envelope3('c10000000004', go3, { z: '', u: '' }));
+  assert.deepEqual(await live(), answer({ total: { sessions: 10 }, students: 1, guests: 1, unknown: 6, pcs: 2,
+    games: [{ slug: 'maze-dash', sessions: 4 }, { slug: 'road-hopper', sessions: 3 }, { slug: 'tank-splat', sessions: 2 }] }));
   // A close, a session end and a switch to another game.
   s.clock.now += 4 * 60000;
   await s.post(envelope(ids[0], [['gx', 60, 'road-hopper', 50000, z6, [1, 0, 0, 0]]]));
   await s.post(envelope(ids[4], [['gx', 60, 'tank-splat', 50000, z6, [1, 0, 0, 0]], ['go', 61, 'road-hopper', 'related', 0]]));
   await s.post(envelope(ids[5], [['se', 70, 60000]]));
-  assert.deepEqual((await live()).games, [{ slug: 'road-hopper', sessions: 3 }]);
+  assert.deepEqual((await live()).games, [{ slug: 'maze-dash', sessions: 4 }, { slug: 'road-hopper', sessions: 3 }]);
   // Five minutes after their last batch, sessions leave the window.
   s.clock.now += 60000;
-  assert.deepEqual(await live(), { v: 1, windowSec: 300, minSessions: 3, total: { sessions: 3 },
-    games: [{ slug: 'road-hopper', suppressed: true }] });
+  assert.deepEqual(await live(), answer({ total: { sessions: 3 }, students: 0, guests: 0, unknown: 3, pcs: 0,
+    games: [{ slug: 'road-hopper', sessions: 1 }] }));
   s.clock.now += 4 * 60000 - 1;
   assert.deepEqual((await live()).total, { sessions: 3 });
   s.clock.now += 1;
   assert.deepEqual((await live()).total, { sessions: 0 });
   await s.post(envelope(ids[1], [['lv', 90, 3]]));
-  assert.deepEqual(await live(), { v: 1, windowSec: 300, minSessions: 3, total: { suppressed: true }, games: [] });
+  assert.deepEqual(await live(), answer({ ...nobody, total: { sessions: 1 }, unknown: 1 }));
   s.clock.now += 5 * 60000;
   // A repeated batch is not a sign of life.
   const repeat = envelope('c00000000007', [['go', 1, 'road-hopper', 'featured', 0]]);
@@ -914,44 +1136,126 @@ test('the Node host sweeps live rows every minute, so none outlives 10 minutes w
   assert.equal(await s.count('live'), 0);
 });
 
-test('retention purges on start and daily: batch ids after 30 days, usage after 60, the frozen daily totals by RETENTION_DAYS', async t => {
-  const s = await start(t);
-  const day0 = Date.parse('2026-01-01T12:00:00Z');
-  s.clock.now = day0;
-  await s.post(envelope('d00000000001', [['lv', 1, 2]]));
+test('retention: facts after 400 days (or the owner\'s choice), rollups after 800, batch ids after 30, usage after 60, the frozen daily totals by RETENTION_DAYS', async t => {
+  const day0 = Date.parse('2026-01-01T09:00:00Z');
+  const s = await start(t, { at: day0 });
+  const counts = async () => Object.fromEntries(await Promise.all(['st_sessions', 'st_visits', 'st_rounds', 'st_marks', 'st_students', 'st_pcs',
+    'st_student_pcs', 'st_student_games', 'aliases', 'batches', 'r_day', 'r_stat', 'roll_days'].map(async table => [table, await s.count(table)])));
+  // A student's session (with an older code linked), then a v2 session the next day.
+  assert.equal((await s.post(envelope3('d10000000001', [['ss', 0, 0, 3, 1, 2, 4, 0], ['cd', 0, '1b2c3d4e5f60'], ['go', 1, 1, 'road-hopper', 'catalog', 0, 0],
+    ['rs', 2, 1, 1, 'road-hopper', 'L1', 1, 0], ['re', 30, 1, 1, 'road-hopper', 'w', 'L1', 20000, 10, 1, 3, 1, z6, null], ['lv', 31, 3]], { z: '' }))).status, 204);
   s.clock.now = day0 + DAY_MS;
-  await s.post(envelope('d00000000002', [['lv', 1, 3]]));
-  s.clock.now = day0 + 30 * DAY_MS;
-  assert.deepEqual(await s.app.purge(), { cutoff: '2025-08-04', rows: 0, batches: 0 });
+  assert.equal((await s.post(envelope('d00000000002', [['go', 1, 'road-hopper', 'featured', 0], ['lv', 2, 3]]))).status, 204);
+  // The cron rolls both days.
+  s.clock.now = day0 + 2 * DAY_MS;
+  assert.deepEqual([(await s.app.roll()).rolled, (await s.app.roll()).rolled], ['2026-01-01', '2026-01-02']);
+  const all = await counts();
+  assert.deepEqual(all, { st_sessions: 2, st_visits: 2, st_rounds: 1, st_marks: 3, st_students: 1, st_pcs: 1, st_student_pcs: 1, st_student_games: 1,
+    aliases: 1, batches: 1, r_day: 2, r_stat: all.r_stat, roll_days: 2 });
+  assert.ok(all.r_stat > 10);
+
   s.clock.now = day0 + 31 * DAY_MS;
-  assert.deepEqual(await s.app.purge(), { cutoff: '2025-08-05', rows: 0, batches: 1 }, 'the first batch id is forgotten');
+  let result = await s.app.purge();
+  assert.deepEqual(pick(result, ['cutoff', 'sessions', 'batches']), { cutoff: '2024-12-28', sessions: 0, batches: 0 });
+  s.clock.now = day0 + 32 * DAY_MS;
+  assert.equal((await s.app.purge()).batches, 1, 'the batch id is forgotten after 30 days');
   assert.deepEqual((await s.rows('usage', 'day')).map(r => r.day).slice(0, 2), ['2026-01-01', '2026-01-02']);
   s.clock.now = day0 + 62 * DAY_MS;
   await s.app.purge();
   assert.ok((await s.rows('usage')).every(r => r.day >= '2026-01-03'), 'usage rows are kept 60 days');
-  assert.equal(await s.count('batches'), 0);
 
-  // A database the milestone-2 server filled: its daily totals stay, read only, until retention.
+  // Exactly 400 days old is kept; a day later the session goes with its student, PC, visits, rounds, marks and links.
+  s.clock.now = day0 + 400 * DAY_MS;
+  assert.deepEqual(pick(await s.app.purge(), ['cutoff', 'sessions']), { cutoff: '2026-01-01', sessions: 0 });
+  s.clock.now = day0 + 401 * DAY_MS;
+  result = await s.app.purge();
+  assert.deepEqual(pick(result, ['cutoff', 'sessions', 'rounds', 'students', 'pcs']), { cutoff: '2026-01-02', sessions: 1, rounds: 1, students: 1, pcs: 1 });
+  assert.deepEqual(await counts(), { ...all, st_sessions: 1, st_visits: 1, st_rounds: 0, st_marks: 1, st_students: 0, st_pcs: 0, st_student_pcs: 0,
+    st_student_games: 0, aliases: 0, batches: 0 }, 'the rollups stay');
+  const settings = async () => Object.fromEntries((await s.rows('settings')).map(r => [r.key, r.value]));
+  assert.equal((await settings()).facts_since, '2026-01-02', 'the facts start at the cutoff');
+  // The rollups go after 800 days, when the 5-minute cron has nothing to roll.
+  // The cron's runs until one has no day to roll: what that one did.
+  const idle = async () => {
+    for (let i = 0; i < 1000; i++) { const done = await s.app.roll(); if (!done.rolled) return done; }
+    throw new Error('the cron never ran out of days');
+  };
+  s.clock.now = day0 + 800 * DAY_MS + 3600000;
+  await s.app.purge();
+  assert.equal((await idle()).purged, null, 'exactly 800 days old is kept');
+  assert.equal((await s.rows('r_day')).length, 2);
+  s.clock.now += DAY_MS;
+  assert.equal((await idle()).purged, '2026-01-02');
+  assert.deepEqual((await s.rows('r_day')).map(r => r.day), ['2026-01-02']);
+  assert.equal((await s.rows('roll_days', 'day'))[0].day, '2026-01-02');
+
+  // The owner keeps two school years: facts stay 760 days, rollups still 800.
+  const owner = await start(t, { at: day0 });
+  await owner.post(envelope3('d20000000001', [['ss', 0, 0, 3, 1, 2, 4, 0], ['lv', 1, 3]], { z: '' }));
+  const set = await owner.send('POST', '/v1/admin/settings', { headers: { authorization: 'Bearer ' + TOKEN, 'content-type': 'application/json' },
+    body: JSON.stringify({ keepDays: 760 }) });
+  assert.equal(set.status, 200);
+  assert.deepEqual(set.json().keep, { days: 760, source: 'owner', rollupDays: 800 });
+  owner.clock.now = day0 + 760 * DAY_MS;
+  assert.equal((await owner.app.purge()).sessions, 0);
+  owner.clock.now += DAY_MS;
+  assert.deepEqual(pick(await owner.app.purge(), ['cutoff', 'sessions']), { cutoff: '2026-01-02', sessions: 1 });
+
+  // A database the milestone-2 server filled: its daily totals stay, read only, until RETENTION_DAYS.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-telemetry-m2-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 't.db');
   await milestone2(file, [['agg_days', { day: '2026-01-01', a: '6-7', sessions: 4, level_ups: 2 }], ['agg_days', { day: '2026-01-02', a: '6-7', sessions: 3 }],
     ['agg_devices', { day: '2026-01-01', a: '6-7', cores: 4, mem: 4, screen: 1920, sessions: 4 }]]);
   const clock = { now: day0 + 180 * DAY_MS };
-  const old = createApp({ dbPath: file, now: () => clock.now });
+  const old = createApp({ dbPath: file, now: () => clock.now, retentionDays: 180 });
   t.after(() => old.close());
   await old.listen(0, '127.0.0.1');
   assert.deepEqual((await old.store.db.prepare('SELECT day FROM agg_days ORDER BY day').all()).results.map(r => r.day), ['2026-01-01', '2026-01-02'],
     'exactly 180 days old is kept');
   clock.now = day0 + 181 * DAY_MS;
-  assert.deepEqual(await old.purge(), { cutoff: '2026-01-02', rows: 2, batches: 0 }, 'one daily-totals row and one device row');
+  assert.deepEqual(pick(await old.purge(), ['legacyCutoff', 'rows', 'batches']), { legacyCutoff: '2026-01-02', rows: 2, batches: 0 },
+    'one daily-totals row and one device row');
   assert.deepEqual((await old.store.db.prepare('SELECT day, sessions FROM agg_days').all()).results, [{ day: '2026-01-02', sessions: 3 }]);
   await old.close();
-  // A restart purges at once.
-  const later = createApp({ dbPath: file, now: () => day0 + 182 * DAY_MS });
+  // A restart purges at once. legacy_until (the day of the update) goes once it is past retention too.
+  const later = createApp({ dbPath: file, now: () => clock.now, retentionDays: 180 });
   t.after(() => later.close());
+  clock.now = day0 + 182 * DAY_MS;
   await later.listen(0, '127.0.0.1');
   for (const table of Object.keys(TABLES)) assert.equal((await later.store.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()).n, 0, table);
+  const legacyUntil = async () => (await later.store.db.prepare("SELECT value FROM settings WHERE key = 'legacy_until'").first()).value;
+  assert.equal(await legacyUntil(), '2026-06-30');
+  clock.now = Date.parse('2026-06-30T12:00:00Z') + 181 * DAY_MS;
+  await later.purge();
+  assert.equal(await legacyUntil(), '');
+});
+
+test('the storage guard removes the round details of the oldest 30 days of facts, and again only once the database grows', async () => {
+  const db = openDatabase(':memory:'), day0 = Date.parse('2026-01-05T09:00:00Z');
+  const store = openStore(db, { guards: { bytes: 1 } });
+  const round = (s, at) => store.ingest(validateBatch(envelope3(s, [['ss', 0, 0, 3, 1, 2, 4, 0], ['go', 1, 1, 'road-hopper', 'catalog', 0, 0],
+    ['rs', 2, 1, 1, 'road-hopper', 'L1', 1, 0], ['re', 30, 1, 1, 'road-hopper', 'w', 'L1', 20000, 10, 1, 3, 1, z6, null]], { z: '' })), at);
+  // A session every 10 days for 100 days.
+  for (let i = 0; i < 10; i++) await round('e0000000000' + i, day0 + i * 10 * DAY_MS);
+  const settings = async () => Object.fromEntries((await db.prepare('SELECT key, value FROM settings').all()).results.map(r => [r.key, r.value]));
+  const left = async () => (await db.prepare('SELECT s.s FROM st_rounds r JOIN st_sessions s ON s.id = r.sid ORDER BY s.start_s').all()).results.map(r => r.s);
+  let result = await store.purge(day0 + 100 * DAY_MS);
+  assert.deepEqual(result.trimmed, { before: '2026-02-04', rounds: 3 });
+  assert.deepEqual(await left(), ['e00000000003', 'e00000000004', 'e00000000005', 'e00000000006', 'e00000000007', 'e00000000008', 'e00000000009']);
+  assert.equal((await settings()).trimmed_before, '2026-02-04');
+  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM st_sessions').first()).n, 10, 'sessions and visits stay');
+  // SQLite reuses the freed pages: the next purge waits until the file has grown.
+  result = await store.purge(day0 + 101 * DAY_MS);
+  assert.equal(result.trimmed, null);
+  for (let i = 0; i < 300; i++) await round('e1' + String(i).padStart(10, '0'), day0 + 100 * DAY_MS + i * 1000);
+  result = await store.purge(day0 + 102 * DAY_MS);
+  assert.deepEqual(result.trimmed, { before: '2026-03-06', rounds: 3 });
+  // A change of zone does not re-roll the days without round details.
+  await db.batch([db.prepare("INSERT INTO roll_days (day, dirty, rolled_s) VALUES ('2026-01-15', 0, 1), ('2026-03-06', 0, 1), ('2026-03-07', 0, 1)")]);
+  await store.updateSettings({ tz: 'Asia/Riyadh' }, day0 + 102 * DAY_MS);
+  assert.deepEqual((await db.prepare('SELECT day, dirty FROM roll_days ORDER BY day').all()).results.map(r => [r.day, r.dirty]),
+    [['2026-01-15', 0], ['2026-03-06', 2], ['2026-03-07', 2]]);
 });
 
 test('the store creates schema 4, upgrades schema 2 and 3 one step at a time keeping the frozen totals, and refuses a newer one', async t => {
@@ -965,11 +1269,13 @@ test('the store creates schema 4, upgrades schema 2 and 3 one step at a time kee
   // A new database: schema 4 at once, without the aggregates.
   const fresh = path.join(dir, 'fresh.db');
   const first = createApp({ dbPath: fresh, now: () => START });
+  t.after(() => first.close());
   await first.listen(0, '127.0.0.1');
   assert.deepEqual(await names(first.store.db), v4);
   assert.deepEqual((await first.store.db.prepare('SELECT * FROM meta').all()).results, [{ key: 'schema', value: 4 }]);
   assert.deepEqual(await settings(first.store.db), { tz: 'UTC', tz_source: 'none', tz_epoch: '0', week_start: 'mon', week_source: 'auto', keep_days: '',
-    facts_since: '2026-10-20', legacy_until: '', v3_since: '', rv: '1', rolled_through: '', trimmed_before: '' });
+    facts_since: '2026-10-20', legacy_until: '', v3_since: '', rv: '2', rolled_through: '', trimmed_before: '', rebuild: '', trimmed_size: '' },
+  'rv went up with the purge at start');
   await first.close();
 
   // Milestone 2's schema 3 with a day of totals: one step to 4; the totals stay and are read for their days.

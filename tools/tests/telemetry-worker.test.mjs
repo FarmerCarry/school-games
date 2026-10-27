@@ -147,7 +147,8 @@ test('wrangler.json binds what the Worker reads and keeps request logs off', () 
   assert.equal(wrangler.main, 'worker.mjs');
   assert.deepEqual(wrangler.d1_databases, [{ binding: 'DB', database_name: 'school-games-telemetry' }], 'no database_id: Wrangler provisions it');
   assert.deepEqual(wrangler.assets, { directory: './dashboard', binding: 'ASSETS' });
-  assert.deepEqual(wrangler.vars, { ALLOWED_ORIGINS: ORIGIN, RETENTION_DAYS: '180' });
+  assert.deepEqual(wrangler.vars, { ALLOWED_ORIGINS: ORIGIN, RETENTION_DAYS: '400' });
+  assert.deepEqual(wrangler.triggers, { crons: ['23 3 * * *', '*/5 * * * *'] }, 'the daily purge and the 5-minute rollups');
   assert.deepEqual(wrangler.observability, { enabled: false });
   assert.ok(Date.parse(wrangler.compatibility_date) <= Date.now() - 14 * DAY_MS, 'a compatibility date at least two weeks old');
   const pkg = JSON.parse(fs.readFileSync(path.join(repo, 'server/package.json'), 'utf8'));
@@ -244,16 +245,19 @@ test('KPIs and live through the Worker; the daily cron forgets old batch ids and
     ]))).status, 204);
   }
   const live = (await admin(env, '/v1/admin/live')).json();
-  assert.deepEqual(live, { v: 1, windowSec: 300, minSessions: 3, total: { sessions: 3 }, games: [{ slug: 'road-hopper', sessions: 3 }] });
+  assert.deepEqual(live, { v: 1, windowSec: 300, minSessions: 0, total: { sessions: 3 }, students: 0, guests: 0, unknown: 3, pcs: 0,
+    games: [{ slug: 'road-hopper', sessions: 3 }], clock: { tz: 'UTC', source: 'none', offsetMin: 0, today: '2026-10-20' } });
   const kpis = (await admin(env, '/v1/admin/kpis?from=2026-10-20&to=2026-10-20')).json();
   assert.deepEqual(kpis.totals, {
     sessions: 3, engagedMinutes: 0, avgEngagedMinutesPerSession: 0, gameOpens: 3, roundsStarted: 3, roundsEnded: 3, levelUps: 0, errors: 0,
-    players: { sessionStarts: 3, newProfiles: 0, guests: 0, profileAge: [0, 3, 0, 0], daysSinceLast: [0, 3, 0, 0, 0] }
+    players: { sessionStarts: 3, newProfiles: 0, guests: 0, profileAge: [0, 3, 0, 0], daysSinceLast: [0, 3, 0, 0, 0] },
+    students: { active: 0, new: 0, returning: 0, knownBefore: 0, guestSessions: 0, guestMinutes: 0,
+      minutesPerStudentDay: { p25: null, median: null, p75: null, mean: null } }
   });
   const game = kpis.games[0];
   assert.deepEqual([game.slug, game.sessions, game.opens, game.rounds.codes, game.completionRate, game.dropOffRate, game.avgLoadMs, game.avgTier],
     ['road-hopper', 3, 3, { w: 2, l: 0, d: 0, e: 0, q: 1 }, 0.6667, 0.3333, 1000, 2]);
-  assert.deepEqual(kpis.bands, [{ band: '6-7', sessions: 3, opens: 3, engagedMinutes: 0, games: [
+  assert.deepEqual(kpis.bands, [{ band: '6-7', sessions: 3, opens: 3, engagedMinutes: 0, students: 0, games: [
     { slug: 'road-hopper', sessions: 3, opens: 3, share: 1, avgTier: 2, completionRate: 0.6667, winRate: 1, dropOffRate: 0.3333, engagedMinutes: 0, starts: 3 }
   ] }]);
   assert.equal((await admin(env, '/v1/admin/kpis?from=2026-10-21&to=2026-10-20')).status, 400);
@@ -386,14 +390,110 @@ test('every invocation stays inside D1\'s free limits: the upgrade alone (503), 
   ({ n, result: res } = await measureNext(() => post(next, v2wide)));
   assert.equal(res.status, 204);
   assert.ok(n <= 20, `a wide v2 batch took ${n} statements`);
-  // Admin requests and the crons.
-  for (const [label, work, limit] of [['kpis', () => admin(next, '/v1/admin/kpis?from=2026-07-23&to=2026-10-20'), 20],
-    ['live', () => admin(next, '/v1/admin/live'), 20], ['sweep', () => scheduled(next, '*/5 * * * *'), 35], ['purge', () => scheduled(next, '23 3 * * *'), 25]]) {
+  // Admin requests and the crons. The KPIs read the frozen days, the rolled ones and today's
+  // facts; the 5-minute cron re-rolls a day in full (the zone changed).
+  const setZone = () => call(next, 'POST', '/v1/admin/settings', { headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tz: 'Asia/Riyadh', source: 'dashboard', weekStart: 'sun', keepDays: 400 }) });
+  for (const [label, work, limit, sql] of [['kpis', () => admin(next, '/v1/admin/kpis?from=2026-07-23&to=2026-10-20'), 20, /FROM agg_days.*FROM r_day/],
+    ['live', () => admin(next, '/v1/admin/live'), 20], ['settings', () => admin(next, '/v1/admin/settings'), 20], ['settings POST', setZone, 20],
+    ['5-minute cron', () => scheduled(next, '*/5 * * * *'), 35, /^DELETE FROM r_stat WHERE day/], ['purge', () => scheduled(next, '23 3 * * *'), 25]]) {
     clock.now += 6 * 60000;
     const counts = await measureNext(work);
     assert.ok(counts.n <= limit, `${label} took ${counts.n} statements`);
     if (counts.result) assert.equal(counts.result.status, 200, label);
+    if (sql) assert.ok(counts.sql.some(text => sql.test(text)), label + ' did its work');
   }
+  // The first roll of yesterday with the PCs' vote, after 01:00 in Riyadh.
+  clock.now = Date.parse('2026-10-20T22:30:00Z');
+  const vote = await measureNext(() => scheduled(next, '*/5 * * * *'));
+  assert.ok(vote.n <= 35, `the first roll with the vote took ${vote.n} statements`);
+  assert.ok(vote.sql.some(text => /^INSERT INTO r_stat /.test(text)) && vote.sql.some(text => /^UPDATE settings SET value = CASE key WHEN 'tz'/.test(text)));
+  // The purge at its worst: frozen days to delete and the storage guard trimming.
+  const guarded = openStore(next.DB, { guards: { bytes: 1 } }), counter = counted(next);
+  clock.now += DAY_MS;
+  const purge = await counter(() => guarded.purge(Date.now()));
+  assert.ok(purge.result.trimmed && purge.n <= 25, `the purge with the storage guard took ${purge.n} statements`);
+  assert.ok(purge.sql.some(text => /^DELETE FROM agg_days/.test(text)));
+});
+
+test('the 5-minute cron rolls yesterday once, after 01:00 at the school, whichever instance runs it; then the PCs vote for the zone', async t => {
+  const clock = useClock(t);
+  const env = await makeEnv(), other = { ...env, RATE_PER_MIN: '600' }, measure = counted(env), measureOther = counted(other);
+  const cron = async (e = env, m = measure) => {
+    const { n } = await m(() => scheduled(e, '*/5 * * * *'));
+    assert.ok(n <= 35, `the cron took ${n} statements`);
+  };
+  const settings = async () => Object.fromEntries((await rows(env, 'settings')).map(r => [r.key, r.value]));
+  const sessionsOn = async day => (await rows(env, 'r_day')).filter(r => r.day === day).reduce((n, r) => n + r.sessions, 0);
+  const days = async () => (await rows(env, 'roll_days')).map(r => [r.day, r.dirty]);
+  const late = (s, at) => envelope3(s, [['ss', 0, 0, 30, 1, 3, 4, 0], ['go', 1, 1, 'maze-dash', 'catalog', 0, 0]],
+    { z: 'Asia/Riyadh', w: Math.round((clock.now - Date.parse(at)) / 1000) });
+  // Three PCs in Riyadh, a session each on 20 October.
+  for (const [i, p] of ['8c21d0e94a6f', '0a0b0c0d0e0f', '1a2b3c4d5e6f'].entries()) {
+    assert.equal((await post(env, envelope3('f3000000000' + i, [['ss', 0, 0, 30, 1, 3, 4, 0], ['go', 1, 1, 'road-hopper', 'catalog', 0, 0]],
+      { p, z: 'Asia/Riyadh' }))).status, 204);
+  }
+  let now = await settings();
+  assert.deepEqual([now.tz, now.tz_source, now.rolled_through], ['Asia/Riyadh', 'pc', '']);
+  // 00:30 in Riyadh: yesterday is not rolled yet.
+  clock.now = Date.parse('2026-10-20T21:30:00Z');
+  await cron();
+  assert.deepEqual(await days(), []);
+  // 01:05: two instances at once, and one roll.
+  clock.now = Date.parse('2026-10-20T22:05:00Z');
+  await Promise.all([cron(), cron(other, measureOther)]);
+  assert.deepEqual(await days(), [['2026-10-20', 0]]);
+  assert.equal(await sessionsOn('2026-10-20'), 3);
+  // Three PCs seen in the last 14 days report Riyadh: the zone is locked, and no PC moves it.
+  now = await settings();
+  assert.deepEqual([now.tz, now.tz_source, now.rolled_through, now.tz_epoch], ['Asia/Riyadh', 'pcs', '2026-10-20', '1']);
+  assert.equal((await post(env, envelope3('f30000000009', [['lv', 1, 2]], { p: '9a8b7c6d5e4f', z: 'Europe/London' }))).status, 204);
+  assert.equal((await settings()).tz, 'Asia/Riyadh');
+
+  // A batch of 20 October arrives late: its day is rolled again, at most once an hour.
+  clock.now = Date.parse('2026-10-20T22:10:00Z');
+  assert.equal((await post(env, late('f3000000000a', '2026-10-20T10:00:00Z'))).status, 204);
+  assert.deepEqual(await days(), [['2026-10-20', 1]]);
+  clock.now = Date.parse('2026-10-20T22:15:00Z');
+  await cron();
+  assert.equal(await sessionsOn('2026-10-20'), 3, 'not within the hour');
+  clock.now = Date.parse('2026-10-20T23:06:00Z');
+  await cron();
+  assert.deepEqual([await sessionsOn('2026-10-20'), await days()], [4, [['2026-10-20', 0]]]);
+
+  // The owner moves the school to London: the day is rolled again in full, before any other re-roll.
+  const set = await call(env, 'POST', '/v1/admin/settings', { headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tz: 'Europe/London' }) });
+  assert.equal(set.status, 200);
+  assert.deepEqual(set.json().rebuild, { pending: 1, full: 1, done: 0 });
+  clock.now = Date.parse('2026-10-20T23:11:00Z');
+  const { sql } = await measure(() => scheduled(env, '*/5 * * * *'));
+  assert.ok(sql.includes('DELETE FROM r_day WHERE day = ?1'), 'a full re-roll');
+  assert.deepEqual(await days(), [['2026-10-20', 0]]);
+  // 20 October in London also holds the session that started at 22:05 UTC (01:05 on the 21st in Riyadh).
+  assert.equal(await sessionsOn('2026-10-20'), 5);
+  assert.equal((await settings()).rebuild, '1');
+  await cron();
+  assert.equal((await settings()).rebuild, '', 'no day waits for a full re-roll');
+
+  // While today's reads are high, re-rolls wait for the next UTC day; first rolls do not.
+  clock.now = Date.parse('2026-10-20T23:20:00Z');
+  assert.equal((await post(env, { ...late('f3000000000b', '2026-10-20T11:00:00Z'), z: '' })).status, 204);
+  await env.DB.prepare("UPDATE usage SET reads = 3000001 WHERE day = '2026-10-20'").run();
+  clock.now = Date.parse('2026-10-20T23:55:00Z');
+  await cron();
+  assert.deepEqual([await sessionsOn('2026-10-20'), await days()], [5, [['2026-10-20', 1]]]);
+  clock.now = Date.parse('2026-10-21T00:25:00Z');
+  await cron();
+  assert.deepEqual([await sessionsOn('2026-10-20'), await days()], [6, [['2026-10-20', 0]]]);
+  // So do writes above 80,000.
+  assert.equal((await post(env, { ...late('f3000000000c', '2026-10-20T12:00:00Z'), z: '' })).status, 204);
+  clock.now = Date.parse('2026-10-22T00:30:00Z');
+  await env.DB.prepare("INSERT INTO usage (day, writes) VALUES ('2026-10-22', 80001)").run();
+  await cron();
+  assert.deepEqual(await days(), [['2026-10-20', 1], ['2026-10-21', 0]], 'the first roll of 21 October ran');
+  await cron();
+  assert.deepEqual(await days(), [['2026-10-20', 1], ['2026-10-21', 0]]);
 });
 
 test('X-Batch-Every tells the PCs to wait longer as the day\'s writes near the free limit, and the page can read it', async t => {
@@ -411,11 +511,12 @@ test('X-Batch-Every tells the PCs to wait longer as the day\'s writes near the f
 test('the usage meter adds up the rows of every result and writes them once a minute, so the guards see every instance', async t => {
   const clock = useClock(t);
   const env = await makeEnv(), batch = env.DB.batch.bind(env.DB), sums = [];
-  let flushes = 0;
+  let flushes = 0, flushed = 0;
   env.DB.batch = async statements => {
     const results = await batch(statements);
+    // A flush writes the counts of the batches before it (its own are metered after it ran).
+    if (statements.some(st => st.sql.startsWith('INSERT INTO usage'))) { flushes++; flushed = sums.length; }
     sums.push([results.reduce((n, r) => n + r.meta.rows_written, 0), results.reduce((n, r) => n + r.meta.rows_read, 0)]);
-    if (statements.some(st => st.sql.startsWith('INSERT INTO usage'))) flushes++;
     return results;
   };
   for (let i = 0; i < 6; i++) {
@@ -426,20 +527,28 @@ test('the usage meter adds up the rows of every result and writes them once a mi
   clock.now = START + 5 * 60000;
   await scheduled(env, '*/5 * * * *');
   assert.equal(flushes, 2);
-  // Everything but the last call's own counts (they wait for the next flush) is in the table.
+  // Every batch before the last flush is in the table; the later ones wait for the next.
   const [usage] = await rows(env, 'usage');
-  const total = i => sums.slice(0, -1).reduce((n, s) => n + s[i], 0);
+  const total = i => sums.slice(0, flushed).reduce((n, s) => n + s[i], 0);
   assert.deepEqual([usage.day, usage.writes, usage.reads], ['2026-10-20', total(0), total(1)]);
   assert.ok(usage.size > 0);
 });
 
-// The earlier stores, from Git (CI checkouts without history skip these comparisons).
+// The earlier stores, from Git (CI checkouts without history skip these comparisons), with
+// their privacy floor at 0: they then show every group they used to hide, with its numbers,
+// which is what this server answers.
 function fromGit(commit) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sg-store-' + commit + '-'));
   for (const file of ['store.mjs', 'schema.mjs']) {
     const shown = spawnSync('git', ['show', `${commit}:server/${file}`], { cwd: repo, encoding: 'utf8' });
     if (shown.status !== 0) { fs.rmSync(dir, { recursive: true, force: true }); return null; }
-    fs.writeFileSync(path.join(dir, file), shown.stdout);
+    let text = shown.stdout;
+    if (file === 'store.mjs') {
+      assert.equal(text.split('export const MIN_SESSIONS = 3;').length, 2, commit + ' has its privacy floor');
+      fs.writeFileSync(path.join(dir, 'suppressing.mjs'), text);
+      text = text.replace('export const MIN_SESSIONS = 3;', 'export const MIN_SESSIONS = 0;');
+    }
+    fs.writeFileSync(path.join(dir, file), text);
   }
   return dir;
 }
@@ -458,8 +567,30 @@ for (const band of [null, '6-7', '8-9', '10-11', '']) {
     ['2026-10-19', '2026-10-21'], ['2026-09-24', '2026-10-23'], ['2026-10-24', '2026-10-30']]) QUERIES.push({ from, to, band });
 }
 
-test('the same v2 batches give milestone 2\'s KPIs, every group of them, from the facts with the school\'s zone UTC', { skip: skipM2 }, async () => {
+// What this server adds to an answer of milestone 2 (docs/RESEARCH_TELEMETRY_SPEC.md, §F.4);
+// without it, an answer has milestone 2's shape.
+function milestone2Shape(kpis) {
+  const copy = JSON.parse(JSON.stringify(kpis));
+  for (const key of ['clock', 'quality']) delete copy[key];
+  delete copy.range.legacyUntil;
+  delete copy.range.factsSince;
+  delete copy.totals.students;
+  for (const day of copy.daily) { delete day.students; delete day.guestMinutes; }
+  for (const game of copy.games) for (const key of ['students', 'hearts', 'tutorials', 'wallMinutes', 'actionsPerMinute', 'avgScore', 'unended', 'duoRounds']) delete game[key];
+  for (const level of copy.levels) for (const key of ['students', 'avgScore', 'unended']) delete level[key];
+  for (const band of copy.bands) delete band.students;
+  return copy;
+}
+// Runs the 5-minute cron's work until it has no day left to roll.
+async function rollAll(store, now) {
+  const days = [];
+  for (let done; (done = await store.rollupStep(now)).rolled;) days.push(done.rolled);
+  return days;
+}
+
+test('the KPI lock: the same v2 batches give milestone 2\'s KPIs without its privacy floor, every group, from the facts, the rollups or both', { skip: skipM2 }, async () => {
   const { openStore: openM2 } = await import(pathToFileURL(path.join(m2Dir, 'store.mjs')).href);
+  const { openStore: openHiding } = await import(pathToFileURL(path.join(m2Dir, 'suppressing.mjs')).href);
   const { validateBatch: validateM2 } = await import(pathToFileURL(path.join(m2Dir, 'schema.mjs')).href);
   const batches = simulated();
   const days = new Map();
@@ -467,52 +598,98 @@ test('the same v2 batches give milestone 2\'s KPIs, every group of them, from th
   assert.ok([...days.values()].every(set => set.size === 1), 'no session crosses midnight');
   assert.deepEqual(new Set(batches.map(b => b.batch.a)), new Set(['6-7', '8-9', '10-11', '']), 'every band');
   assert.ok(batches.length > 500, batches.length + ' batches');
-  const m2 = openM2(openDatabase(':memory:')), store = openStore(openDatabase(':memory:'));
+  // Milestone 2 without and with its privacy floor; this server open, fully rolled up, and rolled up to 20 October.
+  const m2 = openM2(openDatabase(':memory:')), hiding = openHiding(openDatabase(':memory:'));
+  const stores = [openStore(openDatabase(':memory:')), openStore(openDatabase(':memory:')), openStore(openDatabase(':memory:'))];
   for (const { batch, now } of batches) {
-    const old = validateM2(batch);
-    assert.equal(await store.ingest(validateBatch(batch), now), await m2.ingest(old.envelope, old.events, now));
+    const old = validateM2(batch), stored = await m2.ingest(old.envelope, old.events, now);
+    assert.equal(await hiding.ingest(old.envelope, old.events, now), stored);
+    for (const store of stores) assert.equal(await store.ingest(validateBatch(batch), now), stored);
   }
   // Repeats are refused by both.
   for (const { batch, now } of batches.slice(0, 20)) {
     const old = validateM2(batch);
-    assert.equal(await store.ingest(validateBatch(batch), now + 3600000), false);
+    assert.equal(await stores[0].ingest(validateBatch(batch), now + 3600000), false);
     assert.equal(await m2.ingest(old.envelope, old.events, now + 3600000), false);
   }
-  let shown = 0, suppressed = 0;
+  const now = TODAY + DAY_MS + 2 * 3600000;
+  assert.deepEqual(await rollAll(stores[1], now), ['2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23']);
+  assert.deepEqual(await rollAll(stores[2], Date.parse('2026-10-21T02:00:00Z')), ['2026-10-18', '2026-10-19', '2026-10-20']);
+  let shown = 0, hidden = 0;
   for (const query of QUERIES) {
-    const expected = JSON.parse(JSON.stringify(await m2.kpis(query, TODAY + 13 * 3600000)));
-    assert.deepEqual(await store.kpis(query, TODAY + 13 * 3600000), expected, JSON.stringify(query));
-    const text = JSON.stringify(expected);
-    shown += (text.match(/"sessions":/g) || []).length;
-    suppressed += (text.match(/"suppressed":true/g) || []).length;
+    const expected = JSON.parse(JSON.stringify(await m2.kpis(query, now)));
+    for (const [i, store] of stores.entries()) {
+      const answer = await store.kpis(query, now);
+      assert.doesNotMatch(JSON.stringify(answer), /suppressed/);
+      assert.deepEqual(milestone2Shape(answer), expected, ['open', 'rolled', 'partly rolled'][i] + ' ' + JSON.stringify(query));
+    }
+    shown += (JSON.stringify(expected).match(/"sessions":/g) || []).length;
+    hidden += (JSON.stringify(await hiding.kpis(query, now)).match(/"suppressed":true/g) || []).length;
   }
-  assert.ok(shown > 1000 && suppressed > 100, `the comparison covers shown (${shown}) and hidden (${suppressed}) groups`);
+  assert.ok(shown > 1000 && hidden > 100, `the comparison covers ${shown} groups, ${hidden} of which milestone 2 hid`);
 });
 
-test('the frozen days before the update are read from the aggregates once, whichever instance asks, until the daily purge', { skip: skipM2 }, async () => {
+test('the closed days\' KPIs are kept in D1 and shared by every instance, until a roll or the purge changes the rollup version', { skip: skipM2 }, async () => {
   // Milestone 2 filled the database; Cloudflare may answer each dashboard refresh from a new instance, with nothing in memory.
   const { openStore: openM2 } = await import(pathToFileURL(path.join(m2Dir, 'store.mjs')).href);
   const { validateBatch: validateM2 } = await import(pathToFileURL(path.join(m2Dir, 'schema.mjs')).href);
-  const db = openDatabase(':memory:'), m2 = openM2(db);
-  for (const { batch, now } of simulated()) { const old = validateM2(batch); await m2.ingest(old.envelope, old.events, now); }
-  const query = { from: '2026-09-24', to: '2026-10-23', band: null }, now = TODAY + 13 * 3600000;
+  const db = openDatabase(':memory:'), m2 = openM2(db), batches = simulated();
+  for (const { batch, now } of batches.slice(0, 400)) { const old = validateM2(batch); await m2.ingest(old.envelope, old.events, now); }
+  const query = { from: '2026-09-24', to: '2026-10-23', band: null };
+  let now = Date.parse('2026-10-21T13:00:00Z');
   const expected = JSON.parse(JSON.stringify(await m2.kpis(query, now)));
   await upgrade(db, now);
-  const scans = [], execute = db.execute.bind(db);
+  for (const { batch, now: at } of batches.slice(400)) await openStore(db).ingest(validateBatch(batch), at);
+  // The frozen days and the facts since the update: milestone 2 answers for the frozen part.
+  const reads = [], execute = db.execute.bind(db);
   db.execute = (statement, ...rest) => {
-    if (/GROUP BY/.test(statement.sql) && /FROM agg_/.test(statement.sql)) scans.push(statement.params.slice(0, 2).join('..'));
+    if (/GROUP BY/.test(statement.sql)) reads.push(/FROM agg_days/.test(statement.sql) ? 'closed' : /FROM \(SELECT day, a, /.test(statement.sql) ? 'open' : 'other');
     return execute(statement, ...rest);
   };
   const first = openStore(db);
-  assert.deepEqual(await first.kpis(query, now), expected);
-  assert.deepEqual([...new Set(scans)], ['2026-09-24..2026-10-23']);
-  scans.length = 0;
-  for (const [i, other] of [openStore(db), openStore(db)].entries()) assert.deepEqual(await other.kpis(query, now + (i + 1) * 300000), expected);
-  assert.deepEqual(scans, [], 'new instances read the kept rows');
-  // The next day's purge lets the next query read them again.
-  await first.purge(now + DAY_MS);
+  const answer = await first.kpis(query, now);
+  assert.equal(answer.range.legacyUntil, '2026-10-21');
+  assert.ok(reads.includes('closed') && reads.includes('open'));
+  // Another instance, five minutes later: the closed part comes from kpi_cache; the open part is read again (Node keeps no open part).
+  reads.length = 0;
+  now += 300000;
+  assert.deepEqual(await openStore(db).kpis(query, now), { ...answer, clock: { ...answer.clock } });
+  assert.ok(!reads.includes('closed') && reads.includes('open'), reads.join());
+  // The cron rolls the update's day: the rollup version goes up and the closed part is read again.
+  now = Date.parse('2026-10-22T02:00:00Z');
+  assert.equal((await openStore(db).rollupStep(now)).rolled, '2026-10-21');
+  reads.length = 0;
+  const rolled = await openStore(db).kpis(query, now);
+  assert.ok(reads.includes('closed'), reads.join());
+  assert.deepEqual({ ...rolled, clock: null }, { ...answer, clock: null }, 'the same numbers, now from the rollups');
+  reads.length = 0;
   await openStore(db).kpis(query, now + 60000);
-  assert.deepEqual([...new Set(scans)], ['2026-09-24..2026-10-23']);
+  assert.ok(!reads.includes('closed'));
+  // So does the daily purge.
+  await openStore(db).purge(now + 3600000);
+  reads.length = 0;
+  await openStore(db).kpis(query, now + 2 * 3600000);
+  assert.ok(reads.includes('closed'));
+  assert.ok(milestone2Shape(answer).totals.sessions > expected.totals.sessions, 'the facts since the update add up with the frozen days');
+});
+
+test('the Worker keeps the open days\' KPIs for 10 minutes, shared through D1, so a dashboard left open reads today\'s facts at most every 10 minutes', async t => {
+  const clock = useClock(t);
+  const env = await makeEnv(), measure = counted(env);
+  assert.equal((await post(env, fixture)).status, 204);
+  const first = await measure(() => admin(env, '/v1/admin/kpis'));
+  assert.ok(first.sql.some(text => /^SELECT day, a, 1 AS part/.test(text)), 'today from the facts');
+  // A new batch, then a refresh on another instance in the same 10-minute slot (09:10 to 09:20): the same answer, from the kept part.
+  clock.now += 3 * 60000;
+  assert.equal((await post(env, envelope('f20000000001', [['go', 1, 'road-hopper', 'featured', 0]]))).status, 204);
+  const other = { ...env, RATE_PER_MIN: '600' }, measureOther = counted(other);
+  const again = await measureOther(() => admin(other, '/v1/admin/kpis'));
+  assert.equal(again.result.json().totals.sessions, first.result.json().totals.sessions);
+  assert.ok(!again.sql.some(text => /^SELECT day, a, 1 AS part/.test(text)));
+  // In the next slot it is read again.
+  clock.now += 3 * 60000;
+  const later = await measureOther(() => admin(other, '/v1/admin/kpis'));
+  assert.equal(later.result.json().totals.sessions, first.result.json().totals.sessions + 1);
 });
 
 test('a session that crosses midnight counts once, on the school\'s day it started', async () => {
@@ -534,9 +711,9 @@ test('a session that crosses midnight counts once, on the school\'s day it start
   assert.deepEqual(there.daily.map(d => [d.day, d.sessions]), [['2026-10-20', 0], ['2026-10-21', 3]]);
 });
 
-// The documented additions of milestone 2 are the only fields the first store did not have.
+// The documented additions of milestone 2 are the only fields of its shape the first store did not have.
 function withoutAdditions(kpis) {
-  const copy = JSON.parse(JSON.stringify(kpis));
+  const copy = milestone2Shape(kpis);
   for (const band of copy.bands) for (const game of band.games || []) { delete game.winRate; delete game.dropOffRate; delete game.engagedMinutes; delete game.starts; }
   return copy;
 }

@@ -57,8 +57,8 @@ async function snapshot(db, { live = true } = {}) {
   return out;
 }
 const pick = (object, keys) => Object.fromEntries(keys.map(key => [key, object[key]]));
-// A day of the KPIs with play on it (a group of one or two sessions is still suppressed in this version).
-const hasPlay = day => day.suppressed === true || day.sessions > 0;
+// A day of the KPIs with play on it.
+const hasPlay = day => day.sessions > 0;
 
 test('a v3 batch delivered again, later or as a retry with a newer w, leaves every table as one delivery left it', async () => {
   const s = open();
@@ -341,6 +341,14 @@ test('late data marks the rolled day of its session for a re-roll, once', async 
   await db.batch([db.prepare("UPDATE roll_days SET dirty = 0 WHERE day = '2026-10-19'")]);
   await s.ingest(v3('ad0000000001', [['lv', 20, 5]], { w: DAY_MS / 1000 + 60 }), T0 + 2 * MIN);
   assert.deepEqual((await s.rows('roll_days', 'day')).map(r => [r.day, r.dirty]), [['2026-10-18', 0], ['2026-10-19', 1]]);
+  // A session of 20 October; this instance reads the settings at 01:08, another one rolls the 20th at 01:10, and a
+  // late batch of that session at 01:11 is still marked, though this instance's copy says only the 19th is rolled.
+  const evening = Date.parse('2026-10-20T23:00:00Z'), night = Date.parse('2026-10-21T01:10:00Z');
+  await s.ingest(v3('ad0000000003', [ss3(), ['lv', 10, 4]]), evening);
+  await s.ingest(v3('ad0000000004', [ss3(), ['lv', 10, 4]]), night - 2 * MIN);
+  assert.equal((await open(db).store.rollupStep(night)).rolled, '2026-10-20');
+  await s.ingest(v3('ad0000000003', [['lv', 30, 6]], { w: (night + MIN - evening) / 1000 + 15 }), night + MIN);
+  assert.deepEqual((await s.rows('roll_days', 'day')).map(r => [r.day, r.dirty]), [['2026-10-18', 0], ['2026-10-19', 1], ['2026-10-20', 1]]);
 });
 
 test('the usage meter adds up every result\'s rows and writes them at most once a minute; it sets the batch interval', async () => {
@@ -386,7 +394,16 @@ test('the usage meter adds up every result\'s rows and writes them at most once 
   assert.equal(fresh.store.batchEvery(now + DAY_MS), 60, 'a new UTC day starts again');
 });
 
-test('every write and pre-read finds its rows by key: no statement of a batch scans a fact table', async () => {
+// The small tables a statement may scan: settings, aliases, roll_days, usage and cards always (live holds a few
+// minutes of sessions); the PCs for the zone vote and the settings' zone list; the students and PCs for the
+// daily purge (it finds those last seen before the cutoff, and the v2 batch ids older than 30 days, as
+// milestone 2 did: an index on their day would cost every v2 batch a row written); kpi_cache when a roll
+// forgets its old parts.
+const SCANS = [[/FROM st_pcs WHERE last_s >= /, 'st_pcs'], [/^DELETE FROM \w+ WHERE u(?:_old)? IN \(SELECT u FROM st_students WHERE last_s /, 'st_students'],
+  [/^DELETE FROM st_(?:students|pcs) WHERE last_s /, 'st_students|st_pcs'], [/^DELETE FROM batches WHERE day < /, 'batches'],
+  [/^DELETE FROM kpi_cache WHERE made /, 'kpi_cache']];
+
+test('every write, pre-read, roll, admin read and purge finds its rows by key: none scans a fact or rollup table', async () => {
   const db = openDatabase(':memory:'), seen = new Map();
   const batch = db.batch.bind(db);
   db.batch = async statements => {
@@ -405,18 +422,32 @@ test('every write and pre-read finds its rows by key: no statement of a batch sc
   await stores[1].ingest(v2('ba0000000002', [['re', 9, 'road-hopper', 'w', 'L1', 6000, 1, 1, 1, 1, z6], ['gx', 10, 'road-hopper', 6000, z6, z4]]), T0 + 4 * MIN);
   await stores[1].store.kpis({ from: '2026-10-19', to: '2026-10-20', band: null }, T0 + 5 * MIN);
   await stores[1].store.live(T0 + 5 * MIN);
+  // The cron's rolls (a first roll with the vote, a diff, a full one), the closed and open KPIs, settings and the purge.
+  const store = stores[1].store, night = Date.parse('2026-10-20T22:30:00Z');
+  assert.equal((await store.rollupStep(night)).kind, 'first');
+  await db.batch([db.prepare('UPDATE roll_days SET dirty = 1, rolled_s = 0')]);
+  assert.equal((await store.rollupStep(night + MIN)).kind, 'diff');
+  await store.updateSettings({ tz: 'Europe/London', weekStart: 'sun', keepDays: 400 }, night + 2 * MIN);
+  assert.equal((await store.rollupStep(night + 3 * MIN)).kind, 'full');
+  await store.kpis({ from: '2026-10-18', to: '2026-10-21', band: '8-9' }, night + 4 * MIN);
+  await store.settings(night + 4 * MIN);
+  await store.purge(night + 5 * MIN);
   for (const [text, params] of seen) {
-    if (!/^(?:SELECT|INSERT|UPDATE|DELETE)/.test(text) || /sqlite_master/.test(text)) continue;
+    if (!/^(?:SELECT|INSERT|UPDATE|DELETE|WITH)/.test(text) || /sqlite_master/.test(text)) continue;
     const plan = db.sqlite.prepare('EXPLAIN QUERY PLAN ' + text).all(...params).map(row => row.detail);
-    // Only the small tables may be scanned (settings, aliases, roll_days, usage, cards; live is a few minutes of sessions).
-    for (const step of plan) assert.doesNotMatch(step, /^SCAN (?:st_|r_|batches|kpi_cache)/, text.slice(0, 120) + '\n' + plan.join('\n'));
+    const allowed = SCANS.filter(([pattern]) => pattern.test(text)).map(([, tables]) => tables).join('|');
+    for (const step of plan) {
+      const scan = /^SCAN (st_\w+|r_\w+|batches|kpi_cache)\b/.exec(step);
+      assert.ok(!scan || allowed && new RegExp(`^(?:${allowed})$`).test(scan[1]), text.slice(0, 120) + '\n' + plan.join('\n'));
+    }
     if (/FROM st_sessions s/.test(text) && /start_s >= \?1/.test(text)) assert.ok(plan.some(step => /SEARCH s USING INDEX st_sessions_time/.test(step)), text.slice(0, 120));
   }
   // Every kind of write and pre-read was checked.
   for (const statement of ['INSERT INTO st_sessions', 'INSERT INTO st_visits', 'INSERT INTO st_rounds', 'INSERT INTO st_students', 'INSERT INTO st_pcs',
     'INSERT OR IGNORE INTO st_student_pcs', 'INSERT OR IGNORE INTO st_marks', 'INSERT INTO st_student_games', 'UPDATE st_students SET', 'UPDATE aliases SET',
     'INSERT INTO aliases', 'UPDATE roll_days SET', 'UPDATE settings SET', 'INSERT INTO live', 'DELETE FROM live', 'INSERT INTO batches', 'INSERT INTO usage',
-    'SELECT s.id, s.start_s,', 'SELECT slug, rounds FROM st_student_games']) {
+    'SELECT s.id, s.start_s,', 'SELECT slug, rounds FROM st_student_games', 'INSERT INTO r_stat', 'DELETE FROM r_day', 'INSERT INTO roll_days',
+    'SELECT x.u, x.bands', 'WITH sd AS MATERIALIZED', 'SELECT key, rows FROM kpi_cache', 'DELETE FROM st_rounds', 'DELETE FROM aliases']) {
     assert.ok([...seen.keys()].some(text => text.startsWith(statement)), 'covered: ' + statement);
   }
 });

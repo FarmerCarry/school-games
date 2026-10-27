@@ -4,11 +4,14 @@
 // outside /v1/ go to the host's static files (the dashboard). No IP, header or request
 // body is ever stored or logged; the client key (an address) is only a key of the
 // in-memory token bucket. The request that upgrades the database does only that and is
-// answered 503 with Retry-After (the portal sends the batch again).
+// answered 503 with Retry-After (the portal sends the batch again). Admin reads answer 429
+// once the day's free reading allowance is nearly used (store.mjs, guard).
+import { isZone } from './clock.mjs';
 import { WIRES, validateBatch } from './schema.mjs';
 import { SCHEMA_VERSION, utcDay } from './store.mjs';
 
 export const MAX_BODY = 64 * 1024;
+export const MAX_ADMIN_BODY = 4 * 1024;
 export const MAX_RANGE_DAYS = 366;
 const DAY_MS = 86400000;
 const BUCKET_CAP = 100000;
@@ -16,9 +19,14 @@ const BUCKET_CAP = 100000;
 const KPI_BANDS = { all: null, '6-7': '6-7', '8-9': '8-9', '10-11': '10-11', unknown: '' };
 const encoder = new TextEncoder();
 
+// An answer other than 2xx: { error: message, ...more }.
 export class HttpError extends Error {
-  constructor(status, message, headers = {}) { super(message); this.status = status; this.headers = headers; }
+  constructor(status, message, headers = {}, more = {}) { super(message); this.status = status; this.headers = headers; this.more = more; }
 }
+// The admin routes and their methods (HEAD with every GET); the read guard covers every
+// admin read but live and settings.
+const ADMIN = { kpis: { methods: ['GET'], guarded: true }, live: { methods: ['GET'] }, settings: { methods: ['GET', 'POST'] } };
+const SETTINGS_FIELDS = new Set(['tz', 'source', 'weekStart', 'keepDays']);
 
 // Printable ASCII only: header bytes are read as latin1, so any other character could never match.
 export const isAdminToken = token => typeof token === 'string' && /^[\x21-\x7e]{16,}$/.test(token);
@@ -108,6 +116,20 @@ function kpiParams(query, today) {
   return { from, to, band: KPI_BANDS[band] };
 }
 
+// POST /v1/admin/settings: { tz?, source?: 'dashboard', weekStart?: 'sun' | 'mon',
+// keepDays?: 400 | 760 }, nothing else.
+function settingsBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'body');
+  const field = Object.keys(body).find(key => !SETTINGS_FIELDS.has(key));
+  if (field !== undefined) throw new HttpError(400, 'field');
+  const { tz, source, weekStart, keepDays } = body;
+  if (tz !== undefined && !isZone(tz)) throw new HttpError(400, 'tz');
+  if (source !== undefined && (source !== 'dashboard' || tz === undefined)) throw new HttpError(400, 'source');
+  if (weekStart !== undefined && weekStart !== 'sun' && weekStart !== 'mon') throw new HttpError(400, 'weekStart');
+  if (keepDays !== undefined && keepDays !== 400 && keepDays !== 760) throw new HttpError(400, 'keepDays');
+  return { tz, source, weekStart, keepDays };
+}
+
 // Options: store (store.mjs), allowedOrigins, adminToken ('' turns the admin endpoints
 // off), ratePerMin, now, log (internal errors only), assets (request => Response for
 // paths outside /v1/, or null). Returns handle(request, clientKey) => Promise<Response>.
@@ -148,13 +170,31 @@ export function createHandler(options) {
     return store.batchEvery?.(t);
   }
 
-  async function admin(request, kind, query) {
+  // A JSON body of at most MAX_ADMIN_BODY bytes, sent as application/json.
+  async function jsonBody(request) {
+    const type = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (type !== 'application/json') throw new HttpError(415, 'content type');
+    const raw = await readBody(request, MAX_ADMIN_BODY);
+    try { return JSON.parse(new TextDecoder('utf-8', { ignoreBOM: true }).decode(raw)); } catch { throw new HttpError(400, 'json'); }
+  }
+
+  async function admin(request, name, query) {
+    const route = ADMIN[name];
     if (!token) throw new HttpError(404, 'admin password not set');
-    if (request.method !== 'GET' && request.method !== 'HEAD') throw new HttpError(405, 'method', { Allow: 'GET, HEAD, OPTIONS' });
+    const method = request.method === 'HEAD' ? 'GET' : request.method;
+    if (!route.methods.includes(method)) throw new HttpError(405, 'method', { Allow: [...route.methods, 'HEAD', 'OPTIONS'].join(', ') });
     if (!(await authorized(request))) throw new HttpError(401, 'unauthorized', { 'WWW-Authenticate': 'Bearer realm="telemetry"' });
+    const body = method === 'POST' ? await jsonBody(request) : null;
     const t = now();
     await ready(t);
-    return kind === 'kpis' ? store.kpis(kpiParams(query, store.today?.(t) ?? utcDay(t)), t) : store.live(t);
+    const stop = route.guarded ? await store.guard?.('read', t) : null;
+    if (stop) throw new HttpError(429, stop.error, {}, { until: stop.until });
+    if (name === 'kpis') return store.kpis(kpiParams(query, store.today?.(t) ?? utcDay(t)), t);
+    if (name === 'live') return store.live(t);
+    if (method === 'GET') return store.settings(t);
+    const answer = await store.updateSettings(settingsBody(body), t);
+    if (answer.error) throw new HttpError(400, answer.error);
+    return answer;
   }
 
   return async function handle(request, clientKey = '') {
@@ -188,12 +228,14 @@ export function createHandler(options) {
         // Answered without the database: which wire versions this server accepts.
         return send(200, { ok: true, accepts: WIRES, schema: SCHEMA_VERSION });
       }
-      if (pathname === '/v1/admin/kpis' || pathname === '/v1/admin/live') return send(200, await admin(request, pathname.slice(10), url.searchParams));
+      if (pathname.startsWith('/v1/admin/') && Object.hasOwn(ADMIN, pathname.slice(10))) {
+        return send(200, await admin(request, pathname.slice(10), url.searchParams));
+      }
       // Everything outside /v1/ is the dashboard's static files.
       if (assets && pathname !== '/v1' && !pathname.startsWith('/v1/') && (method === 'GET' || method === 'HEAD')) return await assets(request);
       throw new HttpError(404, 'not found');
     } catch (error) {
-      if (error instanceof HttpError) return send(error.status, { error: error.message }, error.headers);
+      if (error instanceof HttpError) return send(error.status, { error: error.message, ...error.more }, error.headers);
       log('telemetry: request failed: ' + (error && error.message));
       return send(500, { error: 'server' });
     }
