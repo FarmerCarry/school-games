@@ -118,7 +118,8 @@ test('invalid envelopes are 400 and other media types 415, storing nothing', asy
     { ...fixture, v: 1 }, { ...fixture, v: '2' }, noBatch,
     { ...fixture, b: 'ABCDEF0123456789' }, { ...fixture, b: '9f3c0a17b2e44d1' }, { ...fixture, b: [fixture.b] },
     { ...fixture, s: '5d02be9a41c7aa' }, { ...fixture, s: 'p1' }, { ...fixture, s: undefined },
-    { ...fixture, k: 'v1.2 build' }, { ...fixture, k: 7 }, { ...fixture, m: 'desktop' },
+    { ...fixture, k: 'v1.2 build' }, { ...fixture, k: 7 }, { ...fixture, k: 'abcdef' }, { ...fixture, k: '5c18c6d2d1c052ad00' },
+    { ...fixture, m: 'desktop' },
     { ...fixture, a: '6' }, { ...fixture, a: null }, { ...fixture, d: [4, 4] }, { ...fixture, d: [3, 4, 1920] },
     { ...fixture, d: [4, 4, '1920'] }, { ...fixture, d: [4, 3, 1920] }, { ...fixture, d: [4, 4, 1024] },
     { ...fixture, ev: {} }, { ...fixture, ev: undefined }, { ...fixture, ev: new Array(201).fill(['lv', 1, 2]) }

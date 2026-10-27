@@ -33,7 +33,8 @@ export const LIMITS = {
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const ID = /^[A-Za-z][A-Za-z0-9_:.-]{0,23}$/;
-const VERSION = /^(?:src|[0-9a-f]{6,40})$/;
+// The fast build's version: the first 16 hex digits of a SHA-256 (tools/build.mjs).
+const VERSION = /^(?:src|[0-9a-f]{16})$/;
 // A name such as 'constructor' matches the patterns but is a plain-object key
 // (the v1 portal rejects those too).
 const reserved = v => v in Object.prototype;

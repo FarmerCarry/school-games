@@ -223,7 +223,7 @@ request" without a preflight, also what `navigator.sendBeacon` sends) or
 | Status | When |
 |---|---|
 | `204` | Stored, or a batch id already received (repeats are answered the same, so the client drops them). Unknown event kinds and malformed events are dropped silently; the rest of the batch is kept. |
-| `400` | Not JSON, or an invalid envelope: `v` is not `2`; `b` is not 16 lowercase hex; `s` is not 12 lowercase hex; `k` is not `src` or 6–40 lowercase hex; `m` is not `web`/`app`; `a` is not `6-7`/`8-9`/`10-11`/`''`; `d` is not `[cores, memoryGB, screenWidth]` from the bucket lists; `ev` is not an array of at most 200 entries. |
+| `400` | Not JSON, or an invalid envelope: `v` is not `2`; `b` is not 16 lowercase hex; `s` is not 12 lowercase hex; `k` is not `src` or exactly 16 lowercase hex; `m` is not `web`/`app`; `a` is not `6-7`/`8-9`/`10-11`/`''`; `d` is not `[cores, memoryGB, screenWidth]` from the bucket lists; `ev` is not an array of at most 200 entries. |
 | `403` | The request has an `Origin` header that is not in `ALLOWED_ORIGINS`. Requests without `Origin` (tools, `simulate.mjs`) are accepted. |
 | `413` | The body is over 64 KB (65,536 bytes). |
 | `415` | Another content type. |
