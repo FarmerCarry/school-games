@@ -23,11 +23,10 @@ page runs under `default-src 'self'; script-src 'self' https://farmercarry.githu
 * **Refresh:** the KPIs on every filter change and every 5 minutes, "playing now" every
   30 seconds, both paused while the tab is hidden. An unchanged answer keeps the page.
 * **Days** are the server's UTC receipt days; "today" is the UTC date.
-* **Game names** come from `SITE_URL` + `js/catalog.js` (one constant in `app.js`; the
-  CSP's `script-src` must allow that origin) when the site publishes it. The fast build
-  that GitHub Pages publishes inlines the catalog into its pages and has no such file, so
-  `names.js` (bundled, same origin) gives the names of every game in the repository's
-  catalog; only a game added after the server was last deployed shows its slug.
+* **Game names** come from `names.js` (bundled, same origin), written from the games
+  site's `js/catalog.js` by `make-names.mjs`; only a game added after the server was last
+  deployed shows its slug. No script from another site runs on the page (the CSP's
+  `script-src` is `'self'`): it could read the stored password.
 * **Privacy:** a group the server hides (`suppressed`, fewer than 3 sessions) is shown
   only as "fewer than 3 children — hidden for privacy", never ranked or described; a
   1–2 session group without the flag is treated the same way.

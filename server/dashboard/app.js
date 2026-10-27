@@ -4,13 +4,12 @@
  * Bearer token (server/README.md). ?demo uses the bundled demo.json instead and
  * sends nothing. ?api=<origin> points the page at another server, only while the
  * page itself is opened from this computer (localhost), so a crafted link can
- * never send the password elsewhere. Game names come from the live site's
- * catalog (SITE_URL); the slug is shown when it cannot load.
+ * never send the password elsewhere. Game names come from names.js, written from
+ * the games site's js/catalog.js by make-names.mjs; an unknown slug is shown as is.
  */
 (function () {
   'use strict';
-  var SITE_URL = 'https://farmercarry.github.io/school-games/';
-  var KPI_EVERY_MS = 5 * 60000, LIVE_EVERY_MS = 30000, CATALOG_WAIT_MS = 4000;
+  var KPI_EVERY_MS = 5 * 60000, LIVE_EVERY_MS = 30000;
   var PERIODS = [1, 7, 30, 90], BANDS = ['all', '6-7', '8-9', '10-11'];
   var KEY = { lang: 'sg:dash:lang', theme: 'sg:dash:theme', token: 'sg:dash:token' };
   var TOP = 10;
@@ -40,37 +39,18 @@
     kpis: null, live: null, kpisAt: null, liveAt: null,
     loading: false, seq: 0, notice: null, signinError: null,
     tables: {}, expanded: {},
-    demoData: null, games: null
+    demoData: null
   };
   var t = function () { return TEXT[state.lang]; };
   var rtl = function () { return state.lang === 'ar'; };
 
-  // ---- game names from the site's catalog ---------------------------------------
-  // The first render waits for it a few seconds; a catalog that arrives later redraws the names.
-  // The published fast build inlines the catalog into its pages (no js/catalog.js), so the
-  // names bundled in names.js (make-names.mjs) stand in for any game the live catalog lacks.
+  // ---- game names ---------------------------------------------------------------
+  // Bundled in names.js (make-names.mjs). No script from another site ever runs here:
+  // it could read the stored password.
   var BUNDLED = window.SG_GAME_NAMES || {};
-  var catalogWaited = false;
-  var catalogReady = new Promise(function (resolve) {
-    var done = function () { catalogWaited = true; resolve(); };
-    var script = document.createElement('script');
-    script.src = SITE_URL + 'js/catalog.js';
-    script.async = true;
-    script.onload = function () {
-      if (Array.isArray(window.GAMES)) {
-        state.games = new Map();
-        window.GAMES.forEach(function (g) { if (g && typeof g.slug === 'string') state.games.set(g.slug, g); });
-        if (catalogWaited && state.kpis && !$('dash').hidden) renderData();
-      }
-      done();
-    };
-    script.onerror = done;
-    setTimeout(done, CATALOG_WAIT_MS);
-    document.head.appendChild(script);
-  });
   function gameName(slug) {
     var own = Object.prototype.hasOwnProperty.call(BUNDLED, slug) ? BUNDLED[slug] : null;
-    return I.catalogName(state.games && state.games.get(slug), state.lang) || (own && own[state.lang === 'ar' ? 0 : 1]) || slug;
+    return (own && own[state.lang === 'ar' ? 0 : 1]) || slug;
   }
 
   // ---- formatting ---------------------------------------------------------------
@@ -170,7 +150,7 @@
       var json = JSON.stringify(kpis), same = !!state.kpis && json === state.kpisJson && !state.notice;
       state.kpis = kpis; state.kpisJson = json; state.kpisAt = new Date(); state.notice = null;
       if (same) { renderNotice(); return; }
-      return catalogReady.then(function () { if (seq === state.seq) renderData(); });
+      renderData();
     }, function (f) {
       if (seq !== state.seq) return;
       if (f && (f.kind === 'wrong' || f.kind === 'notSet')) { signOut(f.kind === 'wrong' ? 'expired' : 'notSet'); return; }
@@ -189,7 +169,7 @@
     return getLive(token).then(function (live) {
       if (token !== state.token) return;
       state.live = live; state.liveAt = new Date();
-      return catalogReady.then(renderLive);
+      renderLive();
     }, function (f) {
       if (token === state.token && !state.demo && f && f.kind === 'wrong') signOut('expired');
     });

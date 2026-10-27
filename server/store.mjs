@@ -480,7 +480,8 @@ export function openStore(db, { retentionDays = 180 } = {}) {
         games: (perBand.get(a) || []).sort((x, y) => natural(x.slug, y.slug)).map(({ slug, v }) => group({ slug }, v[G.sessions], true, () => ({
           opens: v[G.opens], share: ratio(v[G.opens], opens), avgTier: mean(v[G.tier_sum], v[G.tier_n], 2),
           completionRate: ratio(v[G.w], v[G.starts]),
-          winRate: ratio(v[G.w], v[G.w] + v[G.l]), dropOffRate: ratio(v[G.q], v[G.starts]), engagedMinutes: minutes(v[G.engaged_ms])
+          winRate: ratio(v[G.w], v[G.w] + v[G.l]), dropOffRate: ratio(v[G.q], v[G.starts]), engagedMinutes: minutes(v[G.engaged_ms]),
+          starts: v[G.starts]
         })))
       }));
     });

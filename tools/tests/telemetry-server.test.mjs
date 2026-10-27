@@ -104,7 +104,7 @@ test('health answers ok; unknown routes are 404 and wrong methods 405', async t 
 
 test('the Node host serves the dashboard folder with the headers of its _headers file, and nothing else', async t => {
   const s = await start(t);
-  const csp = "default-src 'self'; script-src 'self' https://farmercarry.github.io; style-src 'self' 'unsafe-inline'; " +
+  const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
     "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
   for (const pathname of ['/', '/index.html', '/%69ndex.html']) {
     const page = await s.send('GET', pathname);
@@ -607,7 +607,7 @@ test('KPIs are exact for a hand-built dataset, with groups under three sessions 
     bands: [
       { band: '6-7', sessions: 3, opens: 4, engagedMinutes: 2.8, games: [
         { slug: 'road-hopper', sessions: 3, opens: 3, share: 0.75, avgTier: 1.25, completionRate: 0.6,
-          winRate: 0.75, dropOffRate: 0.2, engagedMinutes: 2.3 },
+          winRate: 0.75, dropOffRate: 0.2, engagedMinutes: 2.3, starts: 5 },
         { slug: 'tank-splat', suppressed: true }
       ] },
       { band: '10-11', suppressed: true }

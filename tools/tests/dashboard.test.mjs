@@ -1,8 +1,8 @@
 // The insights dashboard (server/dashboard) in Chromium, under the Content Security
 // Policy it is served with. The page's /v1/* requests are answered by the real Node
-// server (server/app.mjs) on 127.0.0.1, filled by server/simulate.mjs; the catalog
-// script of the live site is answered with this repository's js/catalog.js. Any other
-// request, any CSP violation, page error or unexpected console error fails the test.
+// server (server/app.mjs) on 127.0.0.1, filled by server/simulate.mjs. Any other
+// request (the page loads no script from the games site), any CSP violation, page error
+// or unexpected console error fails the test.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import fs from 'node:fs';
@@ -19,9 +19,8 @@ hideSqliteWarning();
 const { createApp } = await import('../../server/app.mjs');
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const CSP = "default-src 'self'; script-src 'self' https://farmercarry.github.io; style-src 'self' 'unsafe-inline'; " +
+const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'";
-const CATALOG_URL = 'https://farmercarry.github.io/school-games/js/catalog.js';
 const TOKEN = 'dashboard-test-token-0123456789';
 const DAY_MS = 86400000;
 const catalogSource = fs.readFileSync(path.join(repo, 'js/catalog.js'));
@@ -78,22 +77,17 @@ after(async () => {
 });
 
 // A browser context whose every request is accounted for. mode.api: 'server' (default),
-// 'unset' (no ADMIN_TOKEN: 404), 'down' (network error). catalog: false answers the
-// site's catalog with 404, as the published fast build does (it inlines the catalog).
-async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-GB', colorScheme = 'light', token, lang, catalog = true } = {}) {
+// 'unset' (no ADMIN_TOKEN: 404), 'down' (network error).
+async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-GB', colorScheme = 'light', token, lang } = {}) {
   const context = await browser.newContext({ viewport, locale, colorScheme, serviceWorkers: 'block' });
   t.after(() => context.close());
   const s = { context, mode: { api: 'server' }, api: [], outside: [], errors: [], allowed: [] };
   context.on('request', request => {
     const url = request.url();
-    if (!url.startsWith(site.origin + '/') && url !== CATALOG_URL) s.outside.push(request.method() + ' ' + url);
+    if (!url.startsWith(site.origin + '/')) s.outside.push(request.method() + ' ' + url);
   });
   await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url());
-    if (url.href === CATALOG_URL) {
-      return catalog ? route.fulfill({ status: 200, contentType: 'text/javascript', body: catalogSource })
-        : route.fulfill({ status: 404, contentType: 'text/html', body: 'Not found' });
-    }
     if (url.origin !== site.origin) return route.abort();
     if (url.pathname.startsWith('/v1/')) {
       if (s.mode.api === 'down') return route.abort('connectionrefused');
@@ -137,7 +131,7 @@ async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-G
   s.check = async () => {
     assert.deepEqual(await page.evaluate(() => window.__csp), [], 'no Content Security Policy violation');
     assert.deepEqual(s.errors, [], 'no page or console errors');
-    assert.deepEqual(s.outside, [], 'no request outside the dashboard and the catalog');
+    assert.deepEqual(s.outside, [], 'no request outside the dashboard');
   };
   s.kpis = () => s.api.filter(e => e.path === '/v1/admin/kpis');
   s.lastKpis = () => s.kpis().at(-1);
@@ -460,12 +454,11 @@ test('a phone and a 360 px screen: no sideways scrolling, every section there', 
   }
 });
 
-test('game names come with the dashboard when the site does not publish its catalog', async t => {
-  // The published fast build (tools/build.mjs) inlines js/catalog.js into its pages, so the
-  // live site answers 404 for it: the names must not depend on that script.
-  const s = await open(t, { token: TOKEN, catalog: false });
+test('game names come with the dashboard, and no script from the games site runs', async t => {
+  // A script from another site could read the stored password, and the published fast
+  // build (tools/build.mjs) has no js/catalog.js anyway: the names are in names.js.
+  const s = await open(t, { token: TOKEN });
   const { page } = s;
-  s.allowed.push(/status of 404/);
   await page.goto(site.origin + '/');
   await waitForKpis(s, 1);
   const shown = I.favourites(s.lastKpis().json).rows;
@@ -565,21 +558,18 @@ test('the difficulty rule explains the age-group rules only when this server\'s 
   await page.goto(site.origin + '/');
   await waitForKpis(s, 1);
   const rule = () => page.locator('#diff-card details.rule').textContent();
-  // This server reports neither tries nor win rates per age group.
-  assert.match(await rule(), /at least 5 play sessions/);
-  assert.match(await rule(), /reports only the share of rounds won/);
+  // This server reports tries and win rates per age group: no fallback rule to explain.
+  assert.doesNotMatch(await rule(), /play sessions|reports only/);
+  // An older server reported neither.
   s.mode.edit = k => {
-    for (const b of k.bands) for (const g of b.games || []) {
-      if (g.suppressed) continue;
-      const all = k.games.find(x => x.slug === g.slug);
-      Object.assign(g, { starts: 40, winRate: all.winRate, dropOffRate: all.dropOffRate });
-    }
+    for (const b of k.bands) for (const g of b.games || []) { delete g.starts; delete g.winRate; delete g.dropOffRate; }
     return k;
   };
   const n = s.kpis().length;
   await page.click('#periodFilter button[data-value="7"]');
   await waitForKpis(s, n + 1);
-  assert.doesNotMatch(await rule(), /play sessions|reports only/);
+  assert.match(await rule(), /at least 5 play sessions/);
+  assert.match(await rule(), /reports only the share of rounds won/);
   await s.check();
 });
 

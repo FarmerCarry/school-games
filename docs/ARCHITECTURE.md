@@ -424,7 +424,7 @@ server/wrangler.json     Worker config; server/package.json pins wrangler; .dev.
   migration step that could fail. A milestone-1 Node database is folded into the
   aggregates on first use and its event tables are dropped.
 * **The KPI and live JSON keep their documented shapes** (server/README.md). Additions
-  only: `bands[].games[]` gains `winRate`, `dropOffRate` and `engagedMinutes`.
+  only: `bands[].games[]` gains `winRate`, `dropOffRate`, `engagedMinutes` and `starts`.
 * **Cloudflare specifics:** D1 binding `DB` with no `database_id` (Wrangler provisions it
   on the first deploy); `ADMIN_TOKEN` is a secret the Deploy button asks for (from
   `.dev.vars.example`, with a plain description in `package.json` `cloudflare.bindings`;
@@ -459,11 +459,10 @@ axis per chart, table view, hover tooltips). Arabic and English with a toggle
   `server/dashboard/insights.js` (pure, unit-tested), e.g. «Children aged 6–7 leave
   Fire & Ice level 3 unfinished in 64% of tries.» Only groups of 3 or more sessions
   are ever described; hidden groups say "fewer than 3 children: hidden for privacy".
-* **Game names** come from the live portal's `js/catalog.js` (loaded as a script from
-  the site address) when the site publishes it. The fast build inlines the catalog and
-  publishes no such file, so the dashboard also bundles every game's names
-  (`server/dashboard/names.js`, written from `js/catalog.js` by `make-names.mjs`; a test
-  fails while it is out of date); the slug is shown only for a game neither knows.
+* **Game names** are bundled with the dashboard (`server/dashboard/names.js`, written
+  from `js/catalog.js` by `make-names.mjs`; a test fails while it is out of date); the
+  slug is shown only for a game it does not know. No script from another site runs on
+  the dashboard (`script-src 'self'`): it could read the stored password.
 * **Demo mode** (`/?demo`) shows bundled sample data, so the dashboard can be seen
   before any child plays.
 

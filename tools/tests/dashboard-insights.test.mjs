@@ -104,6 +104,9 @@ test('the difficulty verdict follows the documented thresholds', () => {
   assert.equal(v({ winRate: 0.39, dropOffRate: 0 }), 'hard');
   assert.equal(v({ winRate: 0.40, dropOffRate: 0.29 }), 'right');
   assert.equal(v({ winRate: 0.70, dropOffRate: 0.30 }), 'hard', '30 % left unfinished is too hard');
+  assert.equal(v({ winRate: 0.89, dropOffRate: 0.32 }), 'hard');
+  assert.equal(v({ winRate: 1, dropOffRate: 0.32 }), 'right', 'a game children always win but often leave (it cannot be lost) is not too hard');
+  assert.equal(v({ winRate: 0.90, dropOffRate: 0.5 }), 'right');
   assert.equal(v({ winRate: 0.90, dropOffRate: 0.09 }), 'easy');
   assert.equal(v({ winRate: 0.90, dropOffRate: 0.10 }), 'right');
   assert.equal(v({ winRate: 0.89, dropOffRate: 0 }), 'right');

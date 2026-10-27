@@ -14,7 +14,10 @@
  *                MIN_SESSIONS_NO_TRIES play sessions instead.
  *   win rate     wins / (wins + losses) — rounds that ended with a winner.
  *   quit rate    rounds left unfinished / rounds started (dropOffRate).
- *   too hard     win rate under 40 %, or 30 % or more of the rounds left unfinished.
+ *   too hard     win rate under 40 %, or 30 % or more of the rounds left unfinished
+ *                while they win under 90 % of the rounds they finish (a game they
+ *                nearly always win but often leave, such as one that cannot be lost,
+ *                is not too hard: "where children stop" shows it).
  *   too easy     win rate 90 % or more and fewer than 10 % left unfinished.
  *   about right  everything in between.
  *   no winner    games whose rounds never end in a win or a loss (endless runs,
@@ -279,7 +282,7 @@
     if (cell.winRate !== undefined) {
       const q = quit === null ? 0 : quit;
       if (win === null) return q >= T.HARD_QUIT ? { code: 'hard', basis: 'quit', win, quit: q, tries } : { code: 'none', tries };
-      if (win < T.HARD_WIN || q >= T.HARD_QUIT) return { code: 'hard', basis: 'win', win, quit: q, tries };
+      if (win < T.HARD_WIN || (q >= T.HARD_QUIT && win < T.EASY_WIN)) return { code: 'hard', basis: 'win', win, quit: q, tries };
       if (win >= T.EASY_WIN && q < T.EASY_QUIT) return { code: 'easy', basis: 'win', win, quit: q, tries };
       return { code: 'right', basis: 'win', win, quit: q, tries };
     }

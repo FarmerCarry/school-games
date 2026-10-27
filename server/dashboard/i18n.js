@@ -113,7 +113,7 @@
 
     diffTitle: 'Difficulty check',
     diffSub: 'From how often children win and how often they leave a round unfinished. A verdict needs at least 20 tries.',
-    diffRule: 'Too hard: children win fewer than 40% of the rounds they finish, or leave 30% or more unfinished. Too easy: they win 90% or more and leave fewer than 10% unfinished. Games without a winner (endless runs, two players on one PC) are not rated.',
+    diffRule: 'Too hard: children win fewer than 40% of the rounds they finish, or leave 30% or more unfinished while winning fewer than 90% of the rounds they finish. Too easy: they win 90% or more and leave fewer than 10% unfinished. Games without a winner (endless runs, two players on one PC) are not rated.',
     diffRuleCompletion: 'For an age group the server reports only the share of rounds won: under 30% is too hard, 85% or more too easy.',
     diffRuleSessions: 'The server does not say how many tries each age group made, so a verdict for one age group needs at least 5 play sessions instead of 20 tries.',
     howRoundsEnd: 'How rounds end',
@@ -274,7 +274,7 @@
 
     diffTitle: 'فحص الصعوبة',
     diffSub: 'بحسب عدد مرات فوز الأطفال وعدد الجولات التي يتركونها دون إكمال. يحتاج كل حكم إلى 20 محاولة على الأقل.',
-    diffRule: 'صعبة جدًا: يفوز الأطفال في أقل من 40% من الجولات التي يُنهونها، أو يتركون 30% أو أكثر من جولاتهم دون إكمال. سهلة جدًا: يفوزون في 90% أو أكثر ويتركون أقل من 10% دون إكمال. الألعاب التي ليس فيها فائز (الجري المتواصل، ولاعبان على جهاز واحد) لا تُقيَّم.',
+    diffRule: 'صعبة جدًا: يفوز الأطفال في أقل من 40% من الجولات التي يُنهونها، أو يتركون 30% أو أكثر من جولاتهم دون إكمال بينما يفوزون في أقل من 90% من الجولات التي يُنهونها. سهلة جدًا: يفوزون في 90% أو أكثر ويتركون أقل من 10% دون إكمال. الألعاب التي ليس فيها فائز (الجري المتواصل، ولاعبان على جهاز واحد) لا تُقيَّم.',
     diffRuleCompletion: 'عندما لا يذكر الخادم لفئة عمرية إلا نسبة الجولات المنتهية بالفوز: أقل من 30% صعبة جدًا، و85% أو أكثر سهلة جدًا.',
     diffRuleSessions: 'لا يذكر الخادم عدد محاولات كل فئة عمرية، لذلك يحتاج الحكم لفئة عمرية واحدة إلى 5 جلسات لعب على الأقل بدلًا من 20 محاولة.',
     howRoundsEnd: 'كيف تنتهي الجولات',

@@ -458,7 +458,7 @@ Conventions:
         { "slug": "bubble-bop", "sessions": 136, "opens": 143,
           "share": 0.0784,                     // this game's share of the band's opens
           "avgTier": 1.48, "completionRate": 0.6432,
-          "winRate": 0.8411, "dropOffRate": 0.1203, "engagedMinutes": 210.4 },  // added in milestone 2
+          "winRate": 0.8411, "dropOffRate": 0.1203, "engagedMinutes": 210.4, "starts": 812 },  // added in milestone 2
         { "slug": "dino-3d", "suppressed": true }
       ] },
     { "band": "unknown", "suppressed": true }

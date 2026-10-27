@@ -185,7 +185,7 @@ test('KPIs and live through the Worker; the daily cron purges old days', async t
   assert.deepEqual([game.slug, game.sessions, game.opens, game.rounds.codes, game.completionRate, game.dropOffRate, game.avgLoadMs, game.avgTier],
     ['road-hopper', 3, 3, { w: 2, l: 0, d: 0, e: 0, q: 1 }, 0.6667, 0.3333, 1000, 2]);
   assert.deepEqual(kpis.bands, [{ band: '6-7', sessions: 3, opens: 3, engagedMinutes: 0, games: [
-    { slug: 'road-hopper', sessions: 3, opens: 3, share: 1, avgTier: 2, completionRate: 0.6667, winRate: 1, dropOffRate: 0.3333, engagedMinutes: 0 }
+    { slug: 'road-hopper', sessions: 3, opens: 3, share: 1, avgTier: 2, completionRate: 0.6667, winRate: 1, dropOffRate: 0.3333, engagedMinutes: 0, starts: 3 }
   ] }]);
   assert.equal((await admin(env, '/v1/admin/kpis?from=2026-10-21&to=2026-10-20')).status, 400);
 
@@ -329,7 +329,7 @@ const skipFirst = !firstDir && `commit ${FIRST} is not in this checkout (git sho
 // The documented additions are the only fields the first store did not have.
 function withoutAdditions(kpis) {
   const copy = JSON.parse(JSON.stringify(kpis));
-  for (const band of copy.bands) for (const game of band.games || []) { delete game.winRate; delete game.dropOffRate; delete game.engagedMinutes; }
+  for (const band of copy.bands) for (const game of band.games || []) { delete game.winRate; delete game.dropOffRate; delete game.engagedMinutes; delete game.starts; }
   return copy;
 }
 // Several days of simulated school sessions in every band, none crossing midnight.
@@ -376,7 +376,7 @@ test('the daily aggregates give the same KPIs as the first store for the same ba
   const band = young.bands[0];
   for (const game of band.games.filter(g => !g.suppressed)) {
     const same = young.games.find(g => g.slug === game.slug);
-    assert.deepEqual([game.winRate, game.dropOffRate, game.engagedMinutes], [same.winRate, same.dropOffRate, same.engagedMinutes], game.slug);
+    assert.deepEqual([game.winRate, game.dropOffRate, game.engagedMinutes, game.starts], [same.winRate, same.dropOffRate, same.engagedMinutes, same.rounds.starts], game.slug);
   }
 });
 
