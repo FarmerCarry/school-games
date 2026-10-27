@@ -308,6 +308,32 @@ test('P and Esc pause and resume; a paused level stays frozen; leaving the windo
   assert.equal((await state(page)).screen, 'play');
 });
 
+test('every row reads right to left: the picture cards\' dots, the party\'s waves, Map then Again', async t => {
+  const page = await game(t);
+  await page.keyboard.press('Enter');
+  await step(page);
+  const dots = await page.locator('.grip-dots i').evaluateAll(list => list.map(i => i.getBoundingClientRect().x));
+  assert.ok(dots[0] > dots[1], 'the first card\'s dot is on the right');
+  // The first of the party's four waves lights the rightmost dot.
+  const lit = await page.evaluate(() => {
+    const c = document.createElement('canvas'), g = c.getContext('2d');
+    c.width = 1280; c.height = 120;
+    BB.art.partyHud(g, { score: 0, mult: 1, left: 60, total: 60, best: 0, wave: 1, still: true });
+    return [666, 644, 622, 600].map(x => { const d = g.getImageData(x, 100, 1, 1).data; return d[0] > 200 && d[1] > 180 && d[2] < 120; });
+  });
+  assert.deepEqual(lit, [true, false, false, false]);
+  // The pause card keeps the Map and Again buttons where the result card has them.
+  const box = id => page.locator('#' + id).boundingBox();
+  await page.keyboard.press('Escape');
+  await step(page, 2);
+  await page.keyboard.press('KeyP');
+  await step(page);
+  assert.equal((await state(page)).screen, 'pause');
+  assert.ok((await box('btnMap')).x > (await box('btnRestart')).x, 'pause: the Map is on the right');
+  await page.evaluate(() => { document.getElementById('scrPause').hidden = true; document.getElementById('scrResult').hidden = false; });
+  assert.ok((await box('resMap')).x > (await box('resAgain')).x, 'results: the Map is on the right');
+});
+
 test('stars and unlocks are saved at once and survive a reload', async t => {
   const page = await game(t, { save: SAVE(0), dda: { _: { w1: [0.05, 4] } } });
   await page.keyboard.press('Enter');

@@ -458,8 +458,8 @@
       outlined(ctx, '×' + o.mult, 0, 3, 28, '#ffffff');
       ctx.restore();
     }
-    // four waves: filled dots for the ones reached
-    for (var i = 0; i < 4; i++) { circle(ctx, x - 40 + i * 22, y + 50, 7); fill(ctx, i < (o.wave || 1) ? '#ffd23f' : 'rgba(255,255,255,0.35)'); ink(ctx, 3); }
+    // four waves: filled dots for the ones reached, right to left like the pips
+    for (var i = 0; i < 4; i++) { circle(ctx, x + 26 - i * 22, y + 50, 7); fill(ctx, i < (o.wave || 1) ? '#ffd23f' : 'rgba(255,255,255,0.35)'); ink(ctx, 3); }
     if (o.best > 0) {
       var cx2 = x - 196;
       ctx.beginPath(); ctx.moveTo(cx2 - 40, y - 8); ctx.lineTo(cx2 - 33, y + 12); ctx.lineTo(cx2 - 15, y + 12); ctx.lineTo(cx2 - 8, y - 8); ctx.lineTo(cx2 - 18, y); ctx.lineTo(cx2 - 24, y - 14); ctx.lineTo(cx2 - 30, y); ctx.closePath();
