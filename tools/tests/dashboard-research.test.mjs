@@ -639,4 +639,9 @@ test('export.js: every page once, a header from the dictionary, rounds by month,
   assert.equal(est.share, est.rows / 5000000);
   assert.equal(est.stops, true, 'today’s reads so far plus these pass the export guard');
   assert.equal(E.estimate({ totals: { sessions: 100 } }, { reads: 0 }, 1).stops, false);
+  // Each page of 2,500 students reads the student-days and student-games again, and each page
+  // of 2,500 PCs the sessions (a lab that forgets its profiles nightly has thousands of codes).
+  const many = { totals: { sessions: 7000, gameOpens: 9000, students: { active: 6000, guestSessions: 0 } }, quality: { pcsNew: 2600 } };
+  const more = E.estimate(many, { reads: 0 }, 30), fewer = E.estimate({ ...many, totals: { ...many.totals, students: { active: 2500, guestSessions: 0 } }, quality: { pcsNew: 2500 } }, { reads: 0 }, 30);
+  assert.equal(more.rows - fewer.rows, 3500 * 3 + 2 * (7000 + 9000) + 100 * 2 + 7000);
 });

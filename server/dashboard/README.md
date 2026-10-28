@@ -43,7 +43,7 @@ page runs under `default-src 'self'; script-src 'self'; …`.
   last night.
 * **Research files** (Data & settings): the period's rows as `school-games-data_<from>_<to>.zip`:
   `students.csv`, `sessions.csv`, `visits.csv`, `rounds.csv`, `events.csv`, `student_days.csv`,
-  `daily_games.csv` and `pcs.csv` from `GET /v1/admin/export` (pages of at most 5,000 lines; the
+  `daily_games.csv` and `pcs.csv` from `GET /v1/admin/export` (pages of at most 2,500 lines; the
   page adds the header from `dictionary.js` and a byte-order mark), plus `games.csv`,
   `dictionary.csv`, `README.txt` (English and Arabic), `labels.sps` (SPSS) and `load.R` (R). The
   tab first says what it costs ("About 2.4 million rows: about 48% of today's free reading
