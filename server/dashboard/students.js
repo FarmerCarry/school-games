@@ -524,7 +524,8 @@
       rounds.map(function (x) { return [ctx.gameName(x.slug), I.int(x.attempt), ctx.shortDay(x.day), I.short(x.dda / 10)]; }));
   }
 
-  // After a loss: this student's same / level / game / stop next to the school's.
+  // After a loss: this student's same / level / game / stop next to the school's. The
+  // student's counts follow lost rounds only, so the school's do too (not quits as well).
   function afterLoss(ctx, parent, a, school) {
     var T = ctx.t(), C = ctx.C, I = ctx.I, R = ctx.R;
     var sec = ctx.section(parent, 'student-after', T.afterLossTitle, T.afterLossIntro);
@@ -532,7 +533,7 @@
     var mine = R.persistShares(a.persist || {});
     var rows = [{ label: R.studentLabel(a.student, ctx.lang()), p: mine.shares, n: mine.n }];
     if (!ctx.failed(school)) {
-      var all = R.persist(R.statRows(school));
+      var all = R.persist(R.statRows(school), { codes: ['l'] });
       rows.push({ label: T.wholeSchool, p: all.shares, n: all.n });
     }
     var names = R.PERSIST.map(function (k) { return T.persist[k]; });

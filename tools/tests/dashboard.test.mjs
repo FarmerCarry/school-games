@@ -1000,6 +1000,16 @@ test('a student\'s page: linking and forgetting ask twice before anything is sen
   const own = s.api.find(e => e.path === '/v1/admin/student');
   assert.equal(own.search.get('u'), me);
   assert.equal(own.search.get('to'), s.today());
+  // After a loss: this child's losses next to the school's losses (not its losses and quits).
+  const school = s.api.find(e => e.path === '/v1/admin/stats' && e.search.get('metrics') === 'persist').json;
+  const lost = R.persist(R.statRows(school), { codes: ['l'] });
+  assert.ok(lost.n > 0 && lost.n < R.persist(R.statRows(school)).n, 'the school has losses and quits');
+  await page.click('#after-card .table-toggle');
+  const after = await page.locator('#after-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
+  assert.deepEqual(after.map(r => r.at(-1)), [own.json.persist.same + own.json.persist.level + own.json.persist.game + own.json.persist.stop, lost.n]
+    .map(n => n.toLocaleString('en-US')));
+  assert.deepEqual(after[1].slice(1, 5), R.PERSIST.map(k => I.pct(lost.shares[k])));
+  assert.doesNotMatch(await page.locator('#student-after .section-intro').textContent(), /left/);
   // Link: find the other code, pick it, confirm, confirm again.
   await page.click('#linkBtn');
   await page.locator('#linkSearch').pressSequentially(other.label);
