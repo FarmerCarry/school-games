@@ -1,14 +1,14 @@
 // The dashboard's insight rules (server/dashboard/insights.js): thresholds, ranking,
 // every group described (even one child) with the small-sample flag, both languages,
-// empty data; and demo/ keeps the shapes of the admin API. Pure Node: insights.js and i18n.js are plain
-// browser scripts, loaded here in a vm context with a stand-in window.
+// empty data; and demo/: the real server's own answers (make-demo.mjs, run again here), in
+// the shapes the tabs read, with research files that follow the data dictionary. Pure
+// Node: insights.js and i18n.js are plain browser scripts, loaded here in a vm context
+// with a stand-in window.
 import assert from 'node:assert/strict';
-import { after, before, test } from 'node:test';
+import { before, test } from 'node:test';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -388,60 +388,40 @@ test('empty and missing data never throw', () => {
   assert.deepEqual(I.pcHealth(null).overall, { smooth: null, loadMs: null, slowInput: null, fails: null, failRate: null });
 });
 
-// ---- the real server: simulated sessions in a temporary database ----------------------
-let dir, app, base, serverKpis = {};
-const TOKEN = 'insights-test-token-0123456789';
+// ---- the real server: the sample data, made again ------------------------------------------
+// make-demo.mjs runs the real store and Node server over simulate.mjs's school at a pinned
+// clock, so it writes the same answers every time; they are both the real answers these
+// tests read and what demo/ must hold.
+let made = {};
 const PERIODS = [1, 7, 30, 90], BANDS = ['all', '6-7', '8-9', '10-11'];
+const serverKpis = {};
 before(async () => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sg-dashboard-insights-'));
-  const db = path.join(dir, 'kpi.db');
-  const sim = spawnSync(process.execPath, [path.join(repo, 'server/simulate.mjs'), '--db', db, '--days', '21', '--sessions', '40', '--seed', '11'], { encoding: 'utf8' });
-  assert.equal(sim.status, 0, sim.stderr);
-  const { hideSqliteWarning } = await import('../../server/warnings.mjs');
-  hideSqliteWarning();
-  const { createApp } = await import('../../server/app.mjs');
-  app = createApp({ dbPath: db, adminToken: TOKEN });
-  base = 'http://127.0.0.1:' + (await app.listen(0, '127.0.0.1')).port;
-  const get = async route => {
-    const res = await fetch(base + route, { headers: { Authorization: 'Bearer ' + TOKEN } });
-    assert.equal(res.status, 200, route);
-    return res.json();
-  };
-  const today = new Date().toISOString().slice(0, 10);
-  for (const period of PERIODS) {
-    const from = new Date(Date.parse(today) - (period - 1) * 86400000).toISOString().slice(0, 10);
-    for (const band of BANDS) serverKpis[period + '|' + band] = await get(`/v1/admin/kpis?from=${from}&to=${today}` + (band === 'all' ? '' : '&band=' + band));
-  }
-});
-after(async () => {
-  await app?.close();
-  if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  const { makeDemo } = await import('../../server/dashboard/make-demo.mjs');
+  made = await makeDemo();
+  for (const period of PERIODS) for (const band of BANDS) serverKpis[period + '|' + band] = JSON.parse(made[`kpis-${period}-${band}.json`]);
 });
 
-test('on real server answers: at most five sentences, deterministic, only about groups that are shown', () => {
+test('on real server answers: at most five sentences, deterministic, every game described', () => {
   const window = {};
   vm.runInNewContext(fs.readFileSync(path.join(repo, 'js/catalog.js'), 'utf8'), { window });
   const catalog = new Map(window.GAMES.map(g => [g.slug, g]));
   for (const [key, kpis] of Object.entries(serverKpis)) {
-    const hidden = (kpis.games || []).filter(g => g.suppressed).map(g => g.slug);
+    assert.equal(kpis.minSessions, 0, key);
+    assert.ok(!JSON.stringify(kpis).includes('"suppressed"'), key + ': nothing is suppressed');
     for (const lang of ['en', 'ar']) {
       const name = slug => I.catalogName(catalog.get(slug), lang) || slug;
-      const list = I.insights(kpis, { lang, name, today: kpis.range.to });
+      const list = I.insights(kpis, { lang, name, today: kpis.clock.today });
       assert.ok(list.length >= 1 && list.length <= 5, key + ' ' + lang + ': ' + list.length);
-      assert.deepEqual(I.insights(kpis, { lang, name, today: kpis.range.to }), list);
-      const text = list.map(s => s.text).join('\n');
-      for (const slug of hidden) {
-        // A hidden game is named in no sentence (its name might be part of another's, so check the whole name in guillemets/at start).
-        const shownNames = (kpis.games || []).filter(g => !g.suppressed).map(g => name(g.slug));
-        if (!shownNames.some(n => n.includes(name(slug)))) assert.ok(!text.includes(name(slug)), key + ' names hidden ' + slug);
-      }
-      if (lang === 'ar') assert.ok(!ARABIC_INDIC_DIGITS.test(text));
+      assert.deepEqual(I.insights(kpis, { lang, name, today: kpis.clock.today }), list);
+      if (lang === 'ar') assert.ok(!ARABIC_INDIC_DIGITS.test(list.map(x => x.text).join('\n')));
     }
+    // Every game the server sends has a row in the difficulty check, however few played it.
     const grid = I.difficultyGrid(kpis);
-    assert.deepEqual(grid.rows.map(r => r.slug).sort(), kpis.games.filter(g => !g.suppressed).map(g => g.slug).sort());
+    assert.deepEqual(grid.rows.map(r => r.slug).sort(), kpis.games.map(g => g.slug).sort());
     for (const r of grid.rows) {
       const g = kpis.games.find(x => x.slug === r.slug);
       assert.equal(r.tries, g.rounds.starts);
+      assert.equal(!!r.small, I.small(g.students, g.rounds.starts), r.slug + ': the small-sample flag');
       if (r.verdict.code === 'hard' || r.verdict.code === 'easy' || r.verdict.code === 'right') {
         assert.ok(g.rounds.starts >= (r.verdict.early ? I.T.MIN_EARLY_TRIES : I.T.MIN_TRIES), r.slug);
         assert.equal(!!r.verdict.early, g.rounds.starts < I.T.MIN_TRIES, r.slug);
@@ -451,24 +431,11 @@ test('on real server answers: at most five sentences, deterministic, only about 
   }
 });
 
-// Every key path of a value, arrays collapsed to [] ("games[].rounds.codes.w").
-function paths(value, prefix = '', out = new Set()) {
-  if (Array.isArray(value)) { out.add(prefix + '[]'); for (const v of value) paths(v, prefix + '[]', out); }
-  else if (value && typeof value === 'object') {
-    for (const [k, v] of Object.entries(value)) {
-      // Launch sources are only the non-zero ones, so their names are not part of the shape.
-      const p = prefix ? prefix + '.' + (prefix.endsWith('sources') ? '*' : k) : k;
-      out.add(p);
-      paths(v, p, out);
-    }
-  }
-  return out;
-}
-
-// The answers of the updated server's admin API (docs/RESEARCH_TELEMETRY_SPEC.md §F.4): the
-// keys each object has. demo/ is built in these shapes until make-demo.mjs writes the real
-// server's own answers into it; this test then checks the server keeps them.
+// The answers of the updated server's admin API (docs/RESEARCH_TELEMETRY_SPEC.md §F.4) as
+// the dashboard reads them: the keys each object has. demo/ is the server's own answers, so
+// this also says when the server's shapes move away from what the tabs expect.
 const CLOCK = ['tz', 'source', 'offsetMin', 'today'];
+const RANGE = ['from', 'to', 'days', 'band'];
 const SHAPES = {
   live: ['v', 'clock', 'windowSec', 'minSessions', 'total', 'students', 'guests', 'unknown', 'pcs', 'games'],
   settings: ['v', 'clock', 'keep', 'storage', 'usage', 'rebuild', 'accepts', 'pcs'],
@@ -476,106 +443,138 @@ const SHAPES = {
   students: ['v', 'clock', 'range', 'students'],
   studentRow: ['u', 'label', 'kind', 'linked', 'band', 'bandFirst', 'firstDay', 'lastDay', 'days', 'sessions', 'minutes', 'rounds', 'w', 'l', 'q',
     'games', 'top', 'pcs', 'knownBefore', 'removed', 'weekly'],
-  student: ['v', 'clock', 'student', 'days', 'hours', 'games', 'weekly', 'rounds', 'sessions', 'persist'],
-  studentHead: ['u', 'label', 'kind', 'band', 'bandFirst', 'firstDay', 'lastDay', 'profileMadeDay', 'knownBefore', 'pcs', 'linked'],
+  student: ['v', 'clock', 'range', 'student', 'days', 'hours', 'games', 'weekly', 'rounds', 'sessions', 'persist'],
+  studentHead: ['u', 'label', 'kind', 'band', 'bandFirst', 'firstDay', 'lastDay', 'profileMadeDay', 'knownBefore', 'removed', 'pcs', 'linked'],
   studentDay: ['day', 'sessions', 'minutes', 'opens', 'rounds', 'w', 'l', 'q'],
   studentGame: ['slug', 'minutes', 'rounds', 'w', 'l', 'd', 'e', 'q', 'hits', 'misses', 'rtMean', 'bestScore', 'avgScore', 'ddaMean', 'hearts'],
   studentWeek: ['week', 'slug', 'rounds', 'w', 'l', 'hits', 'misses', 'rtSum', 'rtN', 'scoreSum', 'scoreN', 'ddaSum', 'ddaN'],
   studentRound: ['day', 'time', 'slug', 'id', 'code', 'ms', 'score', 'tier', 'dda', 'hits', 'misses', 'rtMean', 'attempt', 'minIntoSession'],
   studentSession: ['day', 'time', 'pc', 'minutes', 'games', 'rounds', 'wins', 'why'],
   game: ['v', 'clock', 'slug', 'range', 'bands', 'daily', 'stats', 'firstWin', 'paired', 'flowsIn', 'flowsOut'],
-  stats: ['v', 'clock', 'range', 'columns', 'rows'],
-  cohorts: ['v', 'clock', 'weekStart', 'cohorts'],
-  pcs: ['v', 'clock', 'pcs'],
+  stats: ['v', 'clock', 'range', 'metrics', 'slug', 'columns', 'rows'],
+  cohorts: ['v', 'clock', 'range', 'weekStart', 'cohorts'],
+  pcs: ['v', 'clock', 'range', 'pcs'],
   pcRow: ['p', 'label', 'firstDay', 'lastDay', 'days', 'sessions', 'students', 'guests', 'minutes', 'smoothShare', 'stallShare', 'avgLoadMs',
     'slowInputShare', 'errors', 'npMax', 'newProfiles', 'z', 'build', 'flags']
 };
-// What the updated server adds to the milestone-2 KPI answer (§F.4).
-const KPI_ADDITIONS = new Set(['clock', ...CLOCK.map(k => 'clock.' + k), 'range.legacyUntil', 'range.factsSince', 'totals.students',
+// What the updated server adds to the milestone-2 KPI answer (§F.4), all of which the tabs read.
+const KPI_ADDITIONS = ['range.legacyUntil', 'range.factsSince', 'totals.students',
   ...['active', 'new', 'returning', 'knownBefore', 'guestSessions', 'guestMinutes', 'minutesPerStudentDay', 'minutesPerStudentDay.p25',
     'minutesPerStudentDay.median', 'minutesPerStudentDay.p75', 'minutesPerStudentDay.mean'].map(k => 'totals.students.' + k),
-  'daily[].students', 'daily[].guestMinutes', 'games[].students', 'games[].hearts', 'games[].hearts.on', 'games[].hearts.off', 'games[].tutorials',
+  'daily[].students', 'daily[].guestMinutes', 'games[].students', 'games[].hearts.on', 'games[].hearts.off',
   'games[].tutorials.start', 'games[].tutorials.done', 'games[].wallMinutes', 'games[].actionsPerMinute', 'games[].avgScore', 'games[].unended',
-  'games[].duoRounds', 'levels[].students', 'levels[].avgScore', 'levels[].unended', 'bands[].students', 'quality',
+  'games[].duoRounds', 'levels[].students', 'levels[].avgScore', 'levels[].unended', 'bands[].students',
   ...['linkedShare', 'v2Share', 'clockEstimatedShare', 'unclosedVisits', 'unknownBandShare', 'idleHandovers', 'pcsNew', 'oldVersionSessionShare',
-    'profilesFullPcs', 'forgetfulPcs'].map(k => 'quality.' + k)]);
+    'profilesFullPcs', 'forgetfulPcs'].map(k => 'quality.' + k)];
 const METRICS = ['hour', 'rhour', 'sesslen', 'daymin', 'games', 'visitlen', 'flow', 'attempt', 'tenure', 'persist', 'fatigue', 'qrun', 'tier', 'tutorial'];
 const keysOf = (value, keys, where) => assert.deepEqual(Object.keys(value).sort(), [...keys].sort(), where);
-
-test('demo/ holds an answer in the shape of the admin API for every filter and page it shows', () => {
-  const dir = path.join(dashboard, 'demo');
-  const files = fs.readdirSync(dir).sort();
-  const expected = [];
-  for (const p of [1, 7, 30, 90]) {
-    for (const b of ['all', '6-7', '8-9', '10-11']) expected.push(`kpis-${p}-${b}.json`);
-    expected.push(`students-${p}.json`, `stats-${p}.json`);
+// Every key path of a value, arrays collapsed to [] ("games[].rounds.codes.w").
+function paths(value, prefix = '', out = new Set()) {
+  if (Array.isArray(value)) { out.add(prefix + '[]'); for (const v of value) paths(v, prefix + '[]', out); }
+  else if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      const p = prefix ? prefix + '.' + k : k;
+      out.add(p);
+      paths(v, p, out);
+    }
   }
-  expected.push('live.json', 'settings.json', 'cohorts-90.json', 'pcs-30.json');
-  for (const f of expected) assert.ok(files.includes(f), 'demo/' + f);
-  const students = files.filter(f => /^student-/.test(f)), games = files.filter(f => /^game-/.test(f));
-  assert.equal(students.length, 3);
-  assert.equal(games.length, 6);
-  assert.deepEqual(files.filter(f => !expected.includes(f) && !students.includes(f) && !games.includes(f)), [], 'no other file');
+  return out;
+}
+const dir = path.join(dashboard, 'demo');
+// The meters of the run that made the sample (rows SQLite read and wrote, the file's size)
+// depend on the SQLite build; everything else is compared byte for byte.
+const settled = text => {
+  const x = JSON.parse(text);
+  for (const k of ['reads', 'writes']) x.usage[k] = typeof x.usage[k];
+  x.storage.bytes = typeof x.storage.bytes;
+  return x;
+};
+
+test('demo/ is the server\'s own answers (rebuild: node server/dashboard/make-demo.mjs)', () => {
+  const files = fs.readdirSync(dir).sort();
+  assert.deepEqual(files, Object.keys(made).sort(), 'the files make-demo.mjs writes, and no other');
   assert.equal(fs.existsSync(path.join(dashboard, 'demo.json')), false, 'demo/ replaces demo.json');
+  for (const f of files) {
+    const text = fs.readFileSync(path.join(dir, f), 'utf8');
+    if (f === 'settings.json') assert.deepEqual(settled(text), settled(made[f]), f);
+    else assert.ok(text === made[f], 'demo/' + f + ' is not what the server answers now: run node server/dashboard/make-demo.mjs');
+  }
   const size = files.reduce((a, f) => a + fs.statSync(path.join(dir, f)).size, 0);
   assert.ok(size <= 3e6, 'the sample data stays small: ' + size + ' bytes');
-  const read = f => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+});
+
+test('demo/ has an answer for every filter and page the sample shows, in the shapes the tabs read', () => {
+  const files = Object.keys(made).sort();
+  const expected = ['live.json', 'settings.json', 'cohorts-90.json', 'pcs-30.json'];
+  for (const p of PERIODS) {
+    for (const b of BANDS) expected.push(`kpis-${p}-${b}.json`);
+    expected.push(`students-${p}.json`, `stats-${p}.json`);
+  }
+  for (const f of expected) assert.ok(files.includes(f), 'demo/' + f);
+  const students = files.filter(f => /^student-/.test(f)), games = files.filter(f => /^game-/.test(f)), exports = files.filter(f => /^export-/.test(f));
+  assert.equal(students.length, 3);
+  assert.equal(games.length, 6);
+  const D = loadScripts('dictionary.js').SGDictionary;
+  assert.deepEqual(exports, D.SERVER_FILES.map(f => `export-${f}.csv`).sort());
+  const read = f => JSON.parse(made[f]);
   const catalog = {};
   vm.runInNewContext(fs.readFileSync(path.join(repo, 'js/catalog.js'), 'utf8'), { window: catalog });
   const slugs = new Set([...catalog.GAMES].map(g => g.slug));
   const today = read('settings.json').clock.today;
-  for (const f of files) {
+  for (const f of files.filter(f => f.endsWith('.json'))) {
     const answer = read(f);
     assert.equal(answer.v, 1, f);
     keysOf(answer.clock, CLOCK.concat(f === 'settings.json' ? SHAPES.settingsClock.slice(4) : []), f + ' clock');
     assert.equal(answer.clock.today, today, f + ': one school day for the whole sample');
-    assert.ok(!JSON.stringify(answer).includes('"suppressed"'), f + ': nothing is suppressed');
+    assert.equal(answer.clock.tz, 'Asia/Riyadh', f);
+    if (answer.range) assert.ok(RANGE.every(k => k in answer.range), f + ' range');
   }
-  // The KPIs: every field the server sends (the milestone-2 answer of this checkout's server,
-  // with everything it hid), plus only the documented additions.
-  const known = new Set();
-  for (const k of Object.values(serverKpis)) paths(k, '', known);
   for (const f of files.filter(f => f.startsWith('kpis-'))) {
-    const k = read(f), [, period, band] = /^kpis-(\d+)-(.+)\.json$/.exec(f);
+    const k = read(f), [, period, band] = /^kpis-(\d+)-(.+)\.json$/.exec(f), own = paths(k);
     assert.equal(k.range.days, Number(period), f);
     assert.equal(k.range.band, band, f);
     assert.equal(k.range.to, today, f);
-    assert.equal(k.minSessions, 0, f);
-    const own = paths(k);
-    for (const p of own) assert.ok(known.has(p) || KPI_ADDITIONS.has(p), f + ': unknown field ' + p);
     for (const p of ['v', 'range', 'totals', 'totals.players', 'daily[].day', 'games[].rounds.codes.w', 'levels[].codes.q', 'bands[].games[].share',
-      'devices.cores[].frames.smoothShare', 'modes[].mode']) assert.ok(own.has(p), f + ': ' + p);
-    for (const p of KPI_ADDITIONS) if (!p.startsWith('clock')) assert.ok(own.has(p), f + ': the addition ' + p);
+      'devices.cores[].frames.smoothShare', 'modes[].mode', ...KPI_ADDITIONS]) assert.ok(own.has(p), f + ': ' + p);
   }
   const live = read('live.json');
   keysOf(live, SHAPES.live, 'live');
   assert.equal(live.minSessions, 0);
+  assert.ok(live.total.sessions > 0, 'children are playing at the sample\'s "now"');
   assert.equal(live.total.sessions, live.students + live.guests + live.unknown, 'live: every session is a student, a guest or unknown');
   const settings = read('settings.json');
   keysOf(settings, SHAPES.settings, 'settings');
   assert.deepEqual(settings.accepts, [2, 3]);
-  for (const p of [1, 7, 30, 90]) {
+  for (const p of PERIODS) {
     const s = read(`students-${p}.json`);
     keysOf(s, SHAPES.students, 'students-' + p);
     for (const row of s.students) {
       keysOf(row, SHAPES.studentRow, 'students-' + p + ' ' + row.u);
-      assert.match(row.u, /^(?:[0-9a-f]{12}|c[0-9a-f]{4})$/);
+      assert.match(row.u, /^[0-9a-f]{12}$/, 'a student code is 12 hex digits');
+      assert.equal(row.kind, 'profile');
       assert.ok(row.u.toUpperCase().startsWith(row.label), 'a label is a prefix of its code');
       assert.equal(row.weekly.length, 13);
       assert.ok(row.top.length <= 3 && row.top.every(slug => slugs.has(slug)));
+      assert.ok(['6-7', '8-9', '10-11', 'unknown'].includes(row.band), row.band);
     }
     const st = read(`stats-${p}.json`);
     keysOf(st, SHAPES.stats, 'stats-' + p);
     for (const c of ['a', 'metric', 'slug', 'k1', 'k2', 'n', 'students']) assert.ok(st.columns.includes(c), 'stats column ' + c);
-    const mi = st.columns.indexOf('metric');
-    for (const r of st.rows) { assert.equal(r.length, st.columns.length); assert.ok(METRICS.includes(r[mi]), r[mi]); }
+    const mi = st.columns.indexOf('metric'), ai = st.columns.indexOf('a');
+    for (const r of st.rows) {
+      assert.equal(r.length, st.columns.length);
+      assert.ok(METRICS.includes(r[mi]), r[mi]);
+      assert.ok(['6-7', '8-9', '10-11', ''].includes(r[ai]), 'the stats rows name an age group never set ' + JSON.stringify(r[ai]));
+    }
   }
+  assert.ok(read('students-30.json').students.some(s => s.linked.length), 'the sample has a child whose two codes are linked');
   for (const f of students) {
     const s = read(f);
     keysOf(s, SHAPES.student, f);
     keysOf(s.student, SHAPES.studentHead, f + ' student');
     assert.equal(f, 'student-' + s.student.u + '.json');
     assert.equal(s.hours.length, 24);
+    assert.ok(Array.isArray(s.student.pcs) && s.student.pcs.every(l => /^[0-9A-F]{4}$/.test(l)), 'the student page lists its PCs\' labels');
     s.days.forEach(d => keysOf(d, SHAPES.studentDay, f + ' days'));
     s.games.forEach(g => keysOf(g, SHAPES.studentGame, f + ' games'));
     s.weekly.forEach(w => keysOf(w, SHAPES.studentWeek, f + ' weekly'));
@@ -589,13 +588,15 @@ test('demo/ holds an answer in the shape of the admin API for every filter and p
     keysOf(g, SHAPES.game, f);
     assert.equal(f, 'game-' + g.slug + '.json');
     assert.ok(slugs.has(g.slug));
-    g.bands.forEach(b => keysOf(b, ['band', 'students', 'minutes', 'opens'], f + ' bands'));
+    g.bands.forEach(b => keysOf(b, ['band', 'students', 'twoDays', 'minutes', 'opens'], f + ' bands'));
     g.daily.forEach(d => keysOf(d, ['day', 'students', 'minutes', 'opens'], f + ' daily'));
     g.firstWin.forEach(x => keysOf(x, ['id', 'students', 'median', 'p75', 'never'], f + ' firstWin'));
+    assert.deepEqual(g.stats.columns.slice(0, 4), ['a', 'metric', 'k1', 'k2'], 'a game\'s own stats rows have no slug column');
     assert.deepEqual(g.paired.columns, ['u', 'a', 'part', 'rounds', 'w', 'l', 'hits', 'misses', 'rtSum', 'rtN', 'scoreSum', 'scoreN', 'ddaSum', 'ddaN']);
     g.flowsIn.forEach(x => keysOf(x, ['from', 'n'], f + ' flowsIn'));
     g.flowsOut.forEach(x => keysOf(x, ['to', 'n'], f + ' flowsOut'));
   }
+  for (const slug of ['bubble-bop', 'dino-3d', 'road-hopper']) assert.ok(games.includes('game-' + slug + '.json'), 'the adaptive games have a page: ' + slug);
   const cohorts = read('cohorts-90.json');
   keysOf(cohorts, SHAPES.cohorts, 'cohorts');
   for (const c of cohorts.cohorts) { keysOf(c, ['week', 'size', 'active'], 'cohort'); assert.ok(c.active.length <= 13); }
@@ -606,5 +607,28 @@ test('demo/ holds an answer in the shape of the admin API for every filter and p
     assert.match(p.p, /^[0-9a-f]{12}$/);
     assert.equal(p.label, p.p.slice(0, 4).toUpperCase());
     assert.ok(p.flags.every(x => ['full', 'forgets', 'choppy', 'old'].includes(x)));
+  }
+});
+
+test('the sample research files: every line has the dictionary\'s columns, each value of its type', () => {
+  const D = loadScripts('dictionary.js').SGDictionary;
+  const TYPE = {
+    code: /^[0-9a-f]{12}$/, text: /^[^,"\n]*$/, category: /^[a-z0-9_-]*$/, integer: /^-?\d+$/, decimal: /^-?\d+(?:\.\d+)?$/, flag: /^[01]$/,
+    date: /^\d{4}-\d\d-\d\d$/, time: /^\d\d:\d\d:\d\d$/, datetime: /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/
+  };
+  for (const file of D.SERVER_FILES) {
+    const text = made[`export-${file}.csv`], columns = D.file(file).columns;
+    assert.ok(text.length > 0 && text.endsWith('\n'), file + ': this morning\'s play');
+    for (const line of text.slice(0, -1).split('\n')) {
+      const cells = line.split(',');
+      assert.equal(cells.length, columns.length, file + ': ' + line);
+      cells.forEach((v, i) => {
+        if (v === '') return;
+        const [name, type, , values] = columns[i];
+        assert.match(v, TYPE[type], file + '.' + name + ' = ' + v);
+        if (type === 'category') assert.ok(values.split(';')[0].split(/,\s*/).includes(v), file + '.' + name + ': ' + v + ' is one of ' + values);
+        if (/^band/.test(name)) assert.ok(['6-7', '8-9', '10-11'].includes(v), file + '.' + name);
+      });
+    }
   }
 });

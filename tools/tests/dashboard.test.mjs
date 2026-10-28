@@ -1,16 +1,16 @@
 // The insights dashboard (server/dashboard) in Chromium, under the Content Security
 // Policy it is served with. The page's /v1/* requests are answered by the real Node
-// server (server/app.mjs) on 127.0.0.1, filled by server/simulate.mjs; an admin endpoint
-// that server does not have yet (students, student, game, stats, cohorts, pcs) is
-// answered from the sample answers in server/dashboard/demo/ instead, so every tab is
-// exercised against either server. Any other request (the page loads no script from the
-// games site), any CSP violation, page error or unexpected console error fails the test.
+// server (server/app.mjs) on 127.0.0.1, filled by server/simulate.mjs, or by a test's own
+// stub of one endpoint; ?demo reads the sample answers in server/dashboard/demo/. Any
+// other request (the page loads no script from the games site), any CSP violation, page
+// error or unexpected console error fails the test.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
+import zlib from 'node:zlib';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
@@ -29,28 +29,13 @@ const catalogSource = fs.readFileSync(path.join(repo, 'js/catalog.js'));
 const DEMO = path.join(repo, 'server/dashboard/demo');
 const demoFile = name => JSON.parse(fs.readFileSync(path.join(DEMO, name), 'utf8'));
 const DEMO_STUDENTS = fs.readdirSync(DEMO).filter(f => f.startsWith('student-')).map(f => f.slice(8, -5));
-// A sample answer for an endpoint this checkout's server does not have yet, filtered as the
-// server would; without its clock, so the page keeps the server's own idea of today.
-function fixture(url) {
-  const q = url.searchParams, band = q.get('band');
-  const file = { '/v1/admin/students': 'students-30.json', '/v1/admin/stats': 'stats-30.json', '/v1/admin/cohorts': 'cohorts-90.json',
-    '/v1/admin/pcs': 'pcs-30.json', '/v1/admin/student': 'student-' + q.get('u') + '.json', '/v1/admin/game': 'game-' + q.get('slug') + '.json' }[url.pathname];
-  if (!file || !/^[a-z0-9-]+\.json$/.test(file) || !fs.existsSync(path.join(DEMO, file))) return null;
-  const json = demoFile(file);
-  delete json.clock;
-  if (url.pathname === '/v1/admin/students' && band) json.students = json.students.filter(x => x.band === band);
-  if (url.pathname === '/v1/admin/stats') {
-    const metrics = (q.get('metrics') || '').split(','), c = name => json.columns.indexOf(name);
-    json.rows = json.rows.filter(r => metrics.includes(r[c('metric')]) && (!band || r[c('a')] === band) &&
-      (!q.get('slug') || r[c('slug')] === q.get('slug') || (r[c('metric')] === 'flow' && r[c('k1')] === q.get('slug'))));
-  }
-  return json;
-}
 const insightsWindow = {};
 vm.runInThisContext('(function (window) {' + fs.readFileSync(path.join(repo, 'server/dashboard/insights.js'), 'utf8') + '\n})')(insightsWindow);
 const I = insightsWindow.SGInsights;
 vm.runInThisContext('(function (window) {' + fs.readFileSync(path.join(repo, 'server/dashboard/research.js'), 'utf8') + '\n})')(insightsWindow);
 const R = insightsWindow.SGResearch;
+vm.runInThisContext('(function (window) {' + fs.readFileSync(path.join(repo, 'server/dashboard/dictionary.js'), 'utf8') + '\n})')(insightsWindow);
+const D = insightsWindow.SGDictionary;
 const catalogWindow = {};
 vm.runInNewContext(catalogSource.toString('utf8'), { window: catalogWindow });
 const catalog = new Map(catalogWindow.GAMES.map(g => [g.slug, g]));
@@ -102,11 +87,13 @@ after(async () => {
 // A browser context whose every request is accounted for. mode.api: 'server' (default),
 // 'unset' (no ADMIN_TOKEN: 404), 'down' (network error). mode.stub: { '/v1/admin/<path>':
 // (method, body, search) => [status, json] } answers that path instead of the server.
+// mode.edit(kpis) changes the server's KPI answers; mode.clock() gives every server answer
+// that clock instead of its own.
 async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-GB', colorScheme = 'light', token, lang, timezoneId = 'UTC' } = {}) {
   const context = await browser.newContext({ viewport, locale, colorScheme, serviceWorkers: 'block', timezoneId, acceptDownloads: true });
   t.after(() => { s.closed = true; return context.close(); });
-  // missing: the URLs the server answered 404 "not found" (an endpoint this server does not
-  // have yet); the browser logs those, and the page carries on without them.
+  // missing: the URLs the server answered 404 (a stub of an older server); the browser logs
+  // those, and the page carries on without them.
   const s = { context, mode: { api: 'server' }, api: [], outside: [], errors: [], allowed: [], missing: new Set(), files: [] };
   context.on('request', request => {
     const url = request.url();
@@ -122,31 +109,26 @@ async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-G
       if (s.mode.api === 'down') return route.abort('connectionrefused');
       const stub = s.mode.stub && s.mode.stub[url.pathname];
       if (stub) {
+        // [status, json], or { status, contentType, headers, body } for another kind of answer.
         const body = request.postData() ? JSON.parse(request.postData()) : undefined;
-        const [status, json] = stub(request.method(), body, url.searchParams);
+        const out = await stub(request.method(), body, url.searchParams);
+        const [status, json] = Array.isArray(out) ? out : [out.status, null];
         s.api.push({ path: url.pathname, method: request.method(), search: url.searchParams, auth: request.headers().authorization,
           type: request.headers()['content-type'], body, status, json });
-        return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(json) });
+        return route.fulfill(Array.isArray(out) ? { status, contentType: 'application/json', body: JSON.stringify(json) } : out);
       }
       const target = (s.mode.api === 'unset' ? unsetUrl : ingest) + url.pathname + url.search;
-      const auth = request.headers().authorization;
-      const res = await fetch(target, { headers: auth ? { Authorization: auth } : {} });
+      const auth = request.headers().authorization, type = request.headers()['content-type'];
+      const res = await fetch(target, { method: request.method(), headers: { ...(auth ? { Authorization: auth } : {}), ...(type ? { 'Content-Type': type } : {}) },
+        body: ['GET', 'HEAD'].includes(request.method()) ? undefined : request.postData() || undefined });
       let body = Buffer.from(await res.arrayBuffer());
       const entry = { path: url.pathname, method: request.method(), search: url.searchParams, auth, status: res.status };
-      if (res.status === 200) entry.json = JSON.parse(body.toString('utf8'));
-      if (res.status === 404 && JSON.parse(body.toString('utf8')).error === 'not found') {
-        const json = fixture(url);
-        if (json) {
-          Object.assign(entry, { status: 200, json, fixture: true });
-          s.api.push(entry);
-          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(json) });
-        }
-        s.missing.add(request.url());
-      }
-      if (res.status === 200 && s.mode.edit && url.pathname === '/v1/admin/kpis') {
-        entry.json = s.mode.edit(entry.json);
-        body = Buffer.from(JSON.stringify(entry.json));
-      }
+      const json = res.status === 200 && /json/.test(res.headers.get('content-type') || '');
+      if (json) entry.json = JSON.parse(body.toString('utf8'));
+      if (res.status === 404) s.missing.add(request.url());
+      if (json && s.mode.edit && url.pathname === '/v1/admin/kpis') entry.json = s.mode.edit(entry.json);
+      if (json && s.mode.clock && entry.json.clock) entry.json.clock = { ...entry.json.clock, ...s.mode.clock() };
+      if (json && (s.mode.edit || s.mode.clock)) body = Buffer.from(JSON.stringify(entry.json));
       s.api.push(entry);
       const headers = Object.fromEntries(res.headers);
       delete headers['content-length'];
@@ -183,7 +165,7 @@ async function open(t, { viewport = { width: 1366, height: 768 }, locale = 'en-G
   };
   // The school's day, as the newest answer of the server says (UTC for a server without the clock).
   s.today = () => {
-    const hit = s.api.filter(e => !e.fixture && e.json && e.json.clock && /^\d{4}-\d\d-\d\d$/.test(e.json.clock.today)).at(-1);
+    const hit = s.api.filter(e => e.json && e.json.clock && /^\d{4}-\d\d-\d\d$/.test(e.json.clock.today)).at(-1);
     return hit ? hit.json.clock.today : today();
   };
   s.kpis = () => s.api.filter(e => e.path === '/v1/admin/kpis');
@@ -660,7 +642,7 @@ test('a day of one child shows its number; days an older server left out break t
   const { page } = s;
   s.mode.edit = k => {
     const i = k.daily.length - 2;
-    k.daily[i] = { day: k.daily[i].day, sessions: 1, engagedMinutes: 4.5, opens: 3 };
+    k.daily[i] = { day: k.daily[i].day, sessions: 1, engagedMinutes: 4.5, opens: 3, students: 1, guestMinutes: 0 };
     return k;
   };
   await page.goto(site.origin + '/');
@@ -731,6 +713,8 @@ test('the school\'s clock: the browser\'s zone once while none is known, the sch
   const schoolDay = dayBefore(today(), 3);
   const clock = { posts: [], detected: [{ tz: 'Asia/Riyadh', pcs: 12 }], clock: { tz: 'UTC', source: 'none', offsetMin: 0, today: schoolDay } };
   s.mode.stub = settingsStub(clock);
+  // The other answers carry the same clock, as one server's would.
+  s.mode.clock = () => ({ ...clock.clock });
   await page.goto(site.origin + '/');
   await waitForKpis(s, 1);
   assert.deepEqual(clock.posts, [{ tz: 'Asia/Riyadh', source: 'dashboard' }], 'the browser\'s zone, posted once');
@@ -980,7 +964,10 @@ test('the Students tab: the code search, sorting both ways, pages of 50, and a s
 test('a student\'s page: linking and forgetting ask twice before anything is sent; the CSV file', async t => {
   const s = await open(t, { token: TOKEN });
   const { page } = s;
-  const me = DEMO_STUDENTS[0], list = demoFile('students-30.json').students, other = list.find(x => x.u !== me);
+  // Two students of the test server: the one with the most rounds, and another one.
+  const list = (await (await fetch(ingest + '/v1/admin/students', { headers: { Authorization: 'Bearer ' + TOKEN } })).json()).students
+    .sort((a, b) => b.rounds - a.rounds || (a.u < b.u ? -1 : 1));
+  const me = list[0].u, other = list.find(x => x.u !== me && !x.linked.length);
   const posts = [];
   s.mode.stub = {
     '/v1/admin/link': (method, body, search) => { posts.push({ method, body, u: search.get('u') }); return [200, method === 'DELETE' ? { ok: true } : { ok: true, ...body }]; },
@@ -1019,7 +1006,8 @@ test('a student\'s page: linking and forgetting ask twice before anything is sen
   const text = fs.readFileSync(await download.path(), 'utf8');
   assert.equal(text.charCodeAt(0), 0xfeff);
   assert.equal(text.slice(1).split('\r\n')[0], 'day,time,game,level,outcome,engaged_ms,score,tier,dda_level,hits,misses,rt_mean_ms,attempt,minutes_into_session');
-  assert.equal(text.trim().split('\r\n').length, 1 + demoFile('student-' + me + '.json').rounds.length);
+  assert.equal(text.trim().split('\r\n').length, 1 + own.json.rounds.length);
+  assert.ok(own.json.rounds.length > 0);
   await s.check();
 });
 
@@ -1101,5 +1089,181 @@ test('the Learning tab: one game or every measured game, and the paired same-chi
   await page.waitForFunction(() => document.querySelectorAll('#learning-growth .card').length === 1 && !document.getElementById('dash').classList.contains('is-loading'));
   assert.match(await page.locator('#learning-growth').textContent(), /Road Hopper/);
   assert.equal(await page.locator('#learning-diff .diff-row[data-slug]').count(), 1, 'the difficulty of that game only');
+  await s.check();
+});
+
+// ---- the Data & settings tab ------------------------------------------------------------------
+// The entries of a ZIP file as text: { name: text }, each checked against its CRC and size.
+function unzip(buffer) {
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  let end = buffer.length - 22;
+  while (view.getUint32(end, true) !== 0x06054b50) end--;
+  const out = {};
+  for (let i = 0, p = view.getUint32(end + 16, true); i < view.getUint16(end + 10, true); i++) {
+    const method = view.getUint16(p + 10, true), crc = view.getUint32(p + 16, true), packed = view.getUint32(p + 20, true), size = view.getUint32(p + 24, true);
+    const nameLength = view.getUint16(p + 28, true), at = view.getUint32(p + 42, true), name = buffer.subarray(p + 46, p + 46 + nameLength).toString('utf8');
+    const start = at + 30 + view.getUint16(at + 26, true) + view.getUint16(at + 28, true), raw = buffer.subarray(start, start + packed);
+    const data = method === 8 ? zlib.inflateRawSync(raw) : Buffer.from(raw);
+    assert.equal(data.length, size, name);
+    assert.equal(zlib.crc32(data), crc, name);
+    out[name] = data.toString('utf8');
+    p += 46 + nameLength;
+  }
+  return out;
+}
+const download = async (page, click) => {
+  const [file] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.click(click)]);
+  return { name: file.suggestedFilename(), files: unzip(fs.readFileSync(await file.path())) };
+};
+const BOM = '﻿';
+const lines = text => text.split('\n').filter(Boolean).length;
+// Every page of a research file, as the test server answers it: its lines.
+async function serverLines(file, from, to) {
+  let text = '', after = null;
+  do {
+    const res = await fetch(ingest + `/v1/admin/export?file=${file}&from=${from}&to=${to}` + (after ? '&after=' + encodeURIComponent(after) : ''),
+      { headers: { Authorization: 'Bearer ' + TOKEN } });
+    assert.equal(res.status, 200);
+    text += await res.text();
+    after = res.headers.get('x-next');
+  } while (after);
+  return text;
+}
+
+test('the Data tab in the sample: the research files with the dictionary\'s headers, a byte-order mark and Arabic names', async t => {
+  const s = await open(t);
+  const { page } = s;
+  await page.goto(site.origin + '/?demo#/data');
+  await waitForView(page, 'data');
+  for (const id of ['research-files', 'dictionary', 'settings', 'meters', 'data-quality']) assert.equal(await page.locator('#' + id).count(), 1, id);
+  assert.match(await page.locator('#exportCost').textContent(), /^About [\d,]+ rows: (about \d+%|less than 1%) of today’s free reading allowance\.$/);
+  assert.match(await page.locator('#export-card').textContent(), /this morning’s play only/);
+  // The dictionary: a file's columns, in the files' order.
+  assert.deepEqual(await page.locator('#dictionary-card tbody th').allTextContents(), D.columns('students'));
+  await page.focus('#dictFile');
+  await page.selectOption('#dictFile', 'rounds');
+  await page.waitForFunction(n => document.querySelectorAll('#dictionary-card tbody tr').length === n, D.columns('rounds').length);
+  assert.equal(await page.locator('#dictFile').evaluate(el => el === document.activeElement), true, 'the picker keeps the keyboard');
+  const today = demoFile('settings.json').clock.today;
+  const { name, files } = await download(page, '#exportBtn');
+  assert.equal(name, `school-games-data_${today}_${today}.zip`);
+  assert.deepEqual(Object.keys(files), [...D.SERVER_FILES.map(f => f + '.csv'), 'games.csv', 'dictionary.csv', 'README.txt', 'labels.sps', 'load.R']);
+  for (const f of D.SERVER_FILES) {
+    const sample = fs.readFileSync(path.join(DEMO, `export-${f}.csv`), 'utf8');
+    assert.equal(files[f + '.csv'], BOM + D.header(f) + '\n' + sample, f + ': the sample\'s lines under the dictionary\'s header');
+  }
+  for (const f of ['games.csv', 'dictionary.csv', 'README.txt', 'labels.sps']) assert.ok(files[f].startsWith(BOM), f);
+  assert.ok(files['games.csv'].includes('road-hopper,عبور الطريق,Road Hopper,'), 'Arabic names in games.csv');
+  assert.equal(lines(files['games.csv']), 1 + catalog.size);
+  assert.match(files['README.txt'], /SAMPLE DATA/);
+  assert.ok(files['README.txt'].includes('rounds.csv: ' + lines(fs.readFileSync(path.join(DEMO, 'export-rounds.csv'), 'utf8')) + ' rows'));
+  assert.match(await page.locator('#exportResult').textContent(), /^Ready: .*school-games-data_.*\.zip.*\(\d+ KB\)/);
+  assert.match(await page.locator('#exportSave').getAttribute('href'), /^blob:/);
+  assert.deepEqual(s.files.filter(f => f.startsWith('export-')).sort(), D.SERVER_FILES.map(f => `export-${f}.csv`).sort());
+  assert.deepEqual(s.api, [], 'the sample sends nothing');
+  await s.check();
+});
+
+test('the Data tab: the cost first; the reading allowance stops part 1, and part 2 goes on from there', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  s.allowed.push(/status of 429/);
+  let stops = 1;
+  s.mode.stub = {
+    '/v1/admin/export': async (method, body, search) => {
+      if (search.get('file') === 'events' && !search.get('after') && stops-- > 0) return [429, { error: 'reads', until: '03:00' }];
+      const res = await fetch(ingest + '/v1/admin/export?' + search, { headers: { Authorization: 'Bearer ' + TOKEN } });
+      return { status: res.status, contentType: 'text/csv; charset=utf-8', headers: res.headers.get('x-next') ? { 'X-Next': res.headers.get('x-next') } : {}, body: await res.text() };
+    }
+  };
+  await page.goto(site.origin + '/#/data');
+  await waitForView(page, 'data');
+  const k = s.lastKpis().json;
+  const from = k.range.from, to = k.range.to;
+  assert.match(await page.locator('#exportCost').textContent(), /^About [\d,]+ rows/);
+  const one = await download(page, '#exportBtn');
+  assert.equal(one.name, `school-games-data_${from}_${to}.zip`);
+  assert.match(await page.locator('#exportResult').textContent(), /reading allowance is nearly used.*Part 1 is ready.*03:00.*part 2/);
+  for (const f of ['students', 'sessions', 'visits', 'rounds']) {
+    assert.equal(one.files[f + '.csv'], BOM + D.header(f) + '\n' + await serverLines(f, from, to), f + ': every row, once');
+  }
+  assert.equal(one.files['events.csv'], BOM + D.header('events') + '\n', 'events stopped before its first page');
+  assert.equal(one.files['pcs.csv'], undefined, 'the files after the stop wait for part 2');
+  assert.match(one.files['README.txt'], /stopped early, in events\.csv/);
+  const saved = JSON.parse(await page.evaluate(() => localStorage.getItem('sg:dash:export')));
+  assert.deepEqual([saved.part, saved.file, saved.after, saved.from, saved.to], [2, 'events', null, from, to]);
+  // Tomorrow (here: a reload), part 2 starts where part 1 stopped.
+  await page.reload();
+  await waitForView(page, 'data');
+  assert.match(await page.locator('#exportResume').textContent(), /stopped in .*events\.csv.*Part 2 goes on from there/);
+  const two = await download(page, '#exportContinue');
+  assert.equal(two.name, `school-games-data_${from}_${to}_part2.zip`);
+  assert.deepEqual(Object.keys(two.files).filter(f => f.endsWith('.csv')), ['events.csv', 'student_days.csv', 'daily_games.csv', 'pcs.csv', 'games.csv', 'dictionary.csv']);
+  for (const f of ['events', 'student_days', 'daily_games', 'pcs']) {
+    assert.equal(two.files[f + '.csv'], BOM + D.header(f) + '\n' + await serverLines(f, from, to), f);
+  }
+  assert.match(two.files['README.txt'], /This is part 2 of the download/);
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:dash:export')), null, 'done: nothing left to continue');
+  assert.equal(await page.locator('#exportResume').count(), 0);
+  await s.check();
+});
+
+test('the Data tab: one child found by the teacher page\'s code and forgotten after two answers; the settings say how they went', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  s.allowed.push(/status of 400/);
+  const list = (await (await fetch(ingest + '/v1/admin/students', { headers: { Authorization: 'Bearer ' + TOKEN } })).json()).students;
+  const child = list.find(x => !x.linked.length), posts = [];
+  const settings = async () => (await fetch(ingest + '/v1/admin/settings', { headers: { Authorization: 'Bearer ' + TOKEN } })).json();
+  s.mode.stub = {
+    '/v1/admin/forget': (method, body) => { posts.push({ path: 'forget', body }); return [200, { removed: { codes: 1, sessions: 4, visits: 9, rounds: 30, marks: 2 } }]; },
+    '/v1/admin/rebuild': (method, body) => { posts.push({ path: 'rebuild', body }); return [200, { pending: 21 }]; },
+    '/v1/admin/settings': async (method, body) => {
+      if (method !== 'POST') return [200, await settings()];
+      posts.push({ path: 'settings', body });
+      if (body.keepDays === 760) return [400, { error: 'storage' }];
+      const next = await settings();
+      next.clock.weekStart = body.weekStart || next.clock.weekStart;
+      next.clock.weekSource = 'owner';
+      return [200, next];
+    }
+  };
+  await page.goto(site.origin + '/#/data');
+  await waitForView(page, 'data');
+  // The code as the teacher page shows it, with one character wrong, then right.
+  const shown = code => code.toUpperCase().match(/.{4}/g).join('-') + '-' + R.checkChar(code).toUpperCase();
+  const wrong = shown(child.u).slice(0, -1) + (R.checkChar(child.u) === '0' ? '1' : '0');
+  await page.fill('#childCode', wrong);
+  await page.click('#setting-child button[type="submit"]');
+  assert.match(await page.locator('#childResult').textContent(), /One character is wrong; check the code\./);
+  await page.fill('#childCode', shown(child.u));
+  await page.click('#setting-child button[type="submit"]');
+  await page.locator('#childResult .student-link').waitFor();
+  assert.equal(await page.locator('#childResult .student-link').getAttribute('href'), '#/student/' + child.u);
+  assert.equal(s.api.filter(e => e.path === '/v1/admin/student').at(-1).search.get('u'), child.u);
+  await page.click('#childForget');
+  assert.match(await page.locator('#setting-child #actionPanel').textContent(), /School totals keep the play already counted/);
+  await page.click('#forgetYes');
+  assert.deepEqual(posts, [], 'nothing is sent before the second answer');
+  await page.click('#forgetSure');
+  await page.waitForFunction(() => /Deleted: 4 play sessions and 30 rounds/.test(document.getElementById('actionPanel').textContent));
+  assert.deepEqual(posts, [{ path: 'forget', body: { u: child.u } }]);
+  // A code the server does not hold, and the start of a code.
+  await page.fill('#childCode', 'ffffffffffff');
+  await page.click('#setting-child button[type="submit"]');
+  await page.waitForFunction(() => /The server holds nothing under this code/.test(document.getElementById('childResult').textContent));
+  await page.fill('#childCode', child.label);
+  await page.click('#setting-child button[type="submit"]');
+  await page.locator(`#childResult .student-link[href="#/student/${child.u}"], #childResult .link-pick[data-u="${child.u}"]`).first().waitFor();
+  // The settings: two school years do not fit, Monday is saved, a recount asks twice.
+  await page.click('#setting-keep button[data-value="760"]');
+  await page.waitForFunction(() => /would not fit in the free 500 MB/.test(document.getElementById('note-keepDays').textContent));
+  await page.click('#setting-week button[data-value="mon"]');
+  await page.waitForFunction(() => document.getElementById('note-weekStart') && /Saved\./.test(document.getElementById('note-weekStart').textContent));
+  assert.deepEqual(posts.filter(p => p.path === 'settings').map(p => p.body), [{ keepDays: 760 }, { weekStart: 'mon' }]);
+  await page.click('#rebuildBtn');
+  await page.click('#rebuildYes');
+  await page.waitForFunction(() => /Started: 21 days to recount/.test(document.getElementById('setting-rebuild').textContent));
+  assert.deepEqual(posts.at(-1), { path: 'rebuild', body: {} });
   await s.check();
 });

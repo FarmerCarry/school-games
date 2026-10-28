@@ -1,15 +1,20 @@
 // The dashboard's research maths (server/dashboard/research.js): weeks, quantiles from
 // histograms, category sums, cohorts, paired same-student growth, persistence shares, the
-// small-sample rule, labels and code search; the research sentences of insights.js in both
-// languages; the game facts the tabs need (names.js: categories, players and input of
-// every catalog game; scores.js: what the score means in each of the 28 score games).
-// Pure Node: the dashboard files are plain browser scripts, loaded in a vm context.
+// small-sample rule, labels, the code search and the teacher page's check character; the
+// research sentences of insights.js in both languages; the game facts the tabs need
+// (names.js: categories, players, input and what each game's code reports for every
+// catalog game; scores.js: what the score means in each of the 28 score games); and the
+// research download: dictionary.js (its columns equal server/export.mjs COLUMNS, and
+// docs/RESEARCH_DATA.md is its own output), zip.js and export.js. Pure Node: the
+// dashboard files are plain browser scripts, loaded in a vm context.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { COLUMNS } from '../../server/export.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dashboard = path.join(repo, 'server/dashboard');
@@ -66,7 +71,7 @@ test('the small-sample rule is the one insights.js uses: fewer than 5 students o
 test('student labels and the code search', () => {
   assert.equal(R.studentLabel({ u: '3f9a0c51e2b7', label: '3F9A' }, 'en'), 'Student ⁦3F9A⁩');
   assert.equal(R.studentLabel({ u: '3f9a0c51e2b7', label: '3F9A' }, 'ar'), 'الطالب ⁦3F9A⁩');
-  assert.equal(R.studentLabel({ u: 'c7f3a', label: 'C7F3A', kind: 'card' }, 'en'), '🎴 Student ⁦C7F3A⁩', 'a player card shows its picture');
+  assert.equal(R.studentLabel({ u: '3f9a0c51e2b7', label: '3F9A', kind: 'card' }, 'en'), 'Student ⁦3F9A⁩', 'there are no player cards: kind changes nothing');
   assert.equal(R.studentLabel({ u: 'ab12cd34ef56' }, 'en'), 'Student ⁦AB12⁩', 'no label: the first 4 characters');
   // As the teacher page shows a code: 12 hex in groups of 4 and a check character.
   assert.equal(R.codeQuery('3F9A-0C51-E2B7-C'), '3f9a0c51e2b7');
@@ -74,12 +79,28 @@ test('student labels and the code search', () => {
   assert.equal(R.codeQuery('3F9'), null, 'at least 4 characters');
   assert.equal(R.codeQuery('3F9A0C51E2B7CC'), null, 'at most 13');
   assert.equal(R.codeQuery('3F9A;'), null);
-  const list = [{ u: '3f9a0c51e2b7', label: '3F9A', linked: ['77aa00000000'] }, { u: '3f9b11112222', label: '3F9B', linked: [] }, { u: 'c7f3a', label: 'C7F3A' }];
+  const list = [{ u: '3f9a0c51e2b7', label: '3F9A', linked: ['77aa00000000'] }, { u: '3f9b11112222', label: '3F9B', linked: [] }, { u: 'c7f3a0000001', label: 'C7F3' }];
   assert.deepEqual(R.findStudents(list, '3F9A').map(s => s.u), ['3f9a0c51e2b7']);
   assert.deepEqual(R.findStudents(list, '3f9a-0c51-e2b7-x').map(s => s.u), ['3f9a0c51e2b7'], 'the check character is not part of the code');
   assert.deepEqual(R.findStudents(list, '77aa').map(s => s.u), ['3f9a0c51e2b7'], 'a linked code finds its student');
-  assert.deepEqual(R.findStudents(list, 'c7f3').map(s => s.u), ['c7f3a']);
+  assert.deepEqual(R.findStudents(list, 'c7f3').map(s => s.u), ['c7f3a0000001']);
   assert.deepEqual(R.findStudents(list, 'ab'), []);
+  // The check character (Luhn mod 16, docs/RESEARCH_TELEMETRY_SPEC.md §A.8), worked by hand
+  // for 3f9a0c51e2b7: the addends from the right are 14 11 4 14 2 5 9 0 5 9 15 3 = 91, and
+  // (16 − 91 % 16) % 16 = 5.
+  assert.equal(R.checkChar('3f9a0c51e2b7'), '5');
+  assert.equal(R.checkChar('000000000000'), '0');
+  assert.equal(R.checkChar('3F9A'), null);
+  assert.deepEqual(R.fullCode('3F9A-0C51-E2B7-5'), { code: '3f9a0c51e2b7' });
+  assert.deepEqual(R.fullCode(' 3f9a 0c51 e2b7 '), { code: '3f9a0c51e2b7' }, 'without the check character');
+  assert.deepEqual(R.fullCode('3F9A-0C51-E2B7-C'), { wrong: true });
+  assert.equal(R.fullCode('3F9A-0C51'), null, 'not a whole code');
+  assert.equal(R.fullCode('3F9A-0C51-E2B7-55'), null);
+  // Any one wrong digit changes the check character.
+  const code = '3f9a0c51e2b7', check = R.checkChar(code);
+  for (let i = 0; i < 12; i++) {
+    for (const d of '0123456789abcdef') if (d !== code[i]) assert.notEqual(R.checkChar(code.slice(0, i) + d + code.slice(i + 1)), check, i + ' ' + d);
+  }
 });
 
 test('r_stat rows: sums per band and game, and measures that are null without their denominator', () => {
@@ -113,6 +134,10 @@ test('r_stat rows: sums per band and game, and measures that are null without th
   // Missing numeric columns read as 0; text columns as ''.
   const short = R.statRows({ columns: ['metric', 'k1', 'n'], rows: [['games', '1', 3], 'not a row'] });
   assert.deepEqual([short.length, short[0].w, short[0].slug], [1, 0, '']);
+  // The server stores an age group never set as '': here it is 'unknown', as in its other answers.
+  const unset = R.statRows(stats([row('', 'attempt', 'road-hopper', '1', '', { n: 2, w: 1, l: 1 })]));
+  assert.equal(unset[0].a, 'unknown');
+  assert.deepEqual(Object.keys(R.curvesByBand(unset, 'attempt', 'winRate')), ['unknown']);
   assert.deepEqual(R.statRows(null), []);
 });
 
@@ -222,6 +247,11 @@ test('paired growth: the same children in the first and the last third, each chi
   const rt = R.paired(answer, 'reaction');
   assert.deepEqual([rt.all.students, rt.all.before, rt.all.after, rt.all.better], [1, 800, 500, 1], 'a faster reaction is better');
   assert.deepEqual(R.paired({ rows: [] }, 'winRate'), {});
+  // The server pairs a child's thirds within one age group: a child whose group changed
+  // counts in each group, and an age group never set is 'unknown'.
+  const moved = R.paired({ columns: answer.columns, rows: [['e', '6-7', 0, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0], ['e', '6-7', 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ['e', '', 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0], ['e', '', 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]] }, 'winRate');
+  assert.deepEqual([moved['6-7'].after, moved.unknown.before, moved.unknown.after, moved.all.students], [1, 0, 0.5, 2]);
   // Without columns the rows follow the documented order.
   assert.equal(R.paired({ rows: answer.rows }, 'accuracy').all.after, 0.9);
 });
@@ -288,7 +318,14 @@ test('names.js carries every catalog game\'s categories, players and input, and 
     assert.equal(info.players, Math.max(...g.players.split('-').map(Number)), g.slug);
     assert.equal(info.input, g.inputStyle, g.slug);
     for (const c of info.cats) assert.ok(Object.hasOwn(w.SG_CATEGORIES, c), g.slug + ': ' + c);
+    for (const flag of ['dda', 'track', 'tutorial']) assert.ok(info[flag] === 0 || info[flag] === 1, g.slug + ' ' + flag);
   }
+  // What the games' own code reports (docs/RESEARCH_TELEMETRY_SPEC.md §B.5): 3 games adapt
+  // their difficulty and count hits and reaction times, 25 show a tutorial.
+  const flagged = flag => Object.keys(w.SG_GAME_INFO).filter(slug => w.SG_GAME_INFO[slug][flag]).sort();
+  assert.deepEqual(flagged('dda'), ['bubble-bop', 'dino-3d', 'road-hopper']);
+  assert.deepEqual(flagged('track'), ['bubble-bop', 'dino-3d', 'road-hopper']);
+  assert.equal(flagged('tutorial').length, 25);
   assert.deepEqual(Object.keys(w.SG_CATEGORIES), site.CATEGORIES.map(c => c.id));
   for (const c of site.CATEGORIES) {
     const [ar, en] = w.SG_CATEGORIES[c.id];
@@ -325,4 +362,201 @@ test('scores.js says what the score means in exactly the 28 games that pass one'
     assert.ok(ARABIC.test(ar) && !LATIN_WORD.test(ar), slug + ': ' + ar);
     assert.ok(en && !ARABIC.test(en) && /^[a-z]/.test(en), slug + ': ' + en);
   }
+});
+
+// ---- the research download ----------------------------------------------------------------------
+const W = loadScripts('dictionary.js', 'zip.js', 'export.js', 'names.js', 'scores.js');
+const D = W.SGDictionary, Z = W.SGZip, E = W.SGExport;
+// The entries of a ZIP: { name: { data (Buffer), method } }, each checked against its CRC and size.
+function unzip(buffer) {
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  let end = buffer.length - 22;
+  while (view.getUint32(end, true) !== 0x06054b50) end--;
+  const out = {};
+  for (let i = 0, p = view.getUint32(end + 16, true); i < view.getUint16(end + 10, true); i++) {
+    const method = view.getUint16(p + 10, true), crc = view.getUint32(p + 16, true), packed = view.getUint32(p + 20, true), size = view.getUint32(p + 24, true);
+    const nameLength = view.getUint16(p + 28, true), at = view.getUint32(p + 42, true), name = buffer.subarray(p + 46, p + 46 + nameLength).toString('utf8');
+    assert.equal(view.getUint32(at, true), 0x04034b50, name + ': local header');
+    const start = at + 30 + view.getUint16(at + 26, true) + view.getUint16(at + 28, true), raw = buffer.subarray(start, start + packed);
+    const data = method === 8 ? zlib.inflateRawSync(raw) : Buffer.from(raw);
+    assert.equal(data.length, size, name + ': size');
+    assert.equal(zlib.crc32(data), crc, name + ': CRC');
+    out[name] = { data, method };
+    p += 46 + nameLength;
+  }
+  return out;
+}
+
+test('dictionary.js lists exactly the columns of server/export.mjs, each with both meanings', () => {
+  assert.deepEqual(D.SERVER_FILES, Object.keys(COLUMNS), 'the server\'s files, in the order of the download');
+  for (const [file, columns] of Object.entries(COLUMNS)) {
+    assert.deepEqual(D.columns(file), columns, file);
+    assert.equal(D.header(file), columns.join(','), file);
+  }
+  const TYPES = ['code', 'text', 'category', 'integer', 'decimal', 'flag', 'date', 'time', 'datetime'];
+  for (const f of D.FILES) {
+    assert.equal(new Set(D.columns(f.file)).size, f.columns.length, f.file + ': no column twice');
+    assert.ok(f.one[0] && ARABIC.test(f.one[1]), f.file);
+    for (const col of f.columns) {
+      const [name, type, unit, values, en, ar, source, available] = col;
+      assert.equal(col.length, 8, f.file + '.' + name);
+      assert.match(name, /^[a-z][a-z0-9_]*$/, f.file);
+      assert.ok(TYPES.includes(type), f.file + '.' + name + ': ' + type);
+      assert.equal(typeof unit, 'string');
+      assert.equal(typeof values, 'string');
+      assert.ok(en && !ARABIC.test(en), f.file + '.' + name + ': ' + en);
+      assert.ok(ARABIC.test(ar) && !ARABIC_INDIC_DIGITS.test(ar), f.file + '.' + name + ': ' + ar);
+      assert.ok(source, f.file + '.' + name);
+      assert.ok(D.AVAILABLE.includes(available), f.file + '.' + name + ': ' + available);
+      if (type === 'flag') assert.equal(values, '0, 1', f.file + '.' + name);
+    }
+  }
+  assert.deepEqual(D.columns('games'), ['game', 'name_ar', 'name_en', 'categories', 'players', 'input_style', 'has_levels', 'dda', 'reports_hits',
+    'reports_reaction', 'reports_score', 'score_meaning_en', 'score_meaning_ar', 'tutorial']);
+  assert.deepEqual(D.columns('dictionary'), ['file', 'column', 'type', 'unit', 'values', 'meaning_en', 'meaning_ar', 'source', 'available_for']);
+  assert.equal(D.NOTES.length, 13);
+  for (const [en, ar] of D.NOTES) assert.ok(en && !ARABIC.test(en) && ARABIC.test(ar));
+});
+
+test('docs/RESEARCH_DATA.md is the dictionary\'s own output (rebuild: node server/dashboard/dictionary.js --md > docs/RESEARCH_DATA.md)', () => {
+  assert.equal(fs.readFileSync(path.join(repo, 'docs/RESEARCH_DATA.md'), 'utf8'), D.markdown());
+  for (const f of D.FILES) assert.ok(D.markdown().includes('### `' + f.file + '.csv`'), f.file);
+});
+
+test('the browser\'s files: games.csv, dictionary.csv, README.txt in both languages, labels.sps and load.R', () => {
+  const parse = text => text.trim().split('\n').map(line => {
+    const cells = [];
+    for (let i = 0, cur = '', quoted = false; i <= line.length; i++) {
+      const ch = line[i];
+      if (quoted) { if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') quoted = false; else cur += ch; }
+      else if (ch === '"') quoted = true;
+      else if (ch === ',' || ch === undefined) { cells.push(cur); cur = ''; } else cur += ch;
+    }
+    return cells;
+  });
+  const games = parse(D.gamesCsv({ games: W.SG_GAME_NAMES, about: W.SG_GAME_INFO, scores: W.SG_SCORES, levels: { 'road-hopper': 4, 'dino-3d': 1 } }));
+  assert.deepEqual(games[0], D.columns('games'));
+  assert.equal(games.length, 1 + site.GAMES.length);
+  const of = slug => Object.fromEntries(D.columns('games').map((c, i) => [c, games.find(r => r[0] === slug)[i]]));
+  const hopper = of('road-hopper');
+  assert.equal(hopper.name_en, 'Road Hopper');
+  assert.ok(ARABIC.test(hopper.name_ar));
+  assert.deepEqual([hopper.has_levels, hopper.dda, hopper.reports_hits, hopper.reports_reaction, hopper.reports_score, hopper.tutorial], ['1', '1', '1', '1', '1', '1']);
+  assert.equal(of('dino-3d').has_levels, '0');
+  assert.equal(of('tic-tac-toe').has_levels, '', 'not played in the period');
+  assert.deepEqual([of('tic-tac-toe').reports_score, of('tic-tac-toe').score_meaning_en], ['0', '']);
+  assert.equal(of('beat-dash').score_meaning_en, W.SG_SCORES['beat-dash'][1], 'a meaning with a comma, quoted');
+  const dictionary = parse(D.dictionaryCsv());
+  assert.deepEqual(dictionary[0], D.columns('dictionary'));
+  assert.equal(dictionary.length - 1, D.FILES.reduce((n, f) => n + f.columns.length, 0));
+  assert.ok(dictionary.every(r => r.length === 9));
+
+  const files = [{ name: 'students.csv', rows: 3 }, { name: 'rounds-2026-09.csv', rows: 1 }, { name: 'rounds-2026-10.csv', rows: 12 }];
+  const readme = D.readme({ from: '2026-09-01', to: '2026-10-27', tz: 'Asia/Riyadh', exported: '2026-10-27 10:40', files, factsSince: '2026-09-02',
+    legacyUntil: '2026-09-02', v3Since: '2026-09-10', part: 2, stopped: { file: 'events' } });
+  for (const text of ['2026-09-01', 'Asia/Riyadh', 'students.csv: 3 rows, one per student code', 'rounds-2026-09.csv: 1 row, one per round', 'part 2',
+    'stopped early, in events.csv', 'Up to 2026-09-02', 'From 2026-09-10', 'GET DATA /TYPE=TXT /ENCODING=\'UTF8\'', 'fileEncoding = "UTF-8-BOM"',
+    'lme4::glmer(win ~ log(attempt) * band + (1 + log(attempt) | student_linked) + (1 | pc) + (1 | game)', 'MIXED',
+    'pseudonymous records of individual children', 'students.csv: 3 صفوف', 'rounds-2026-09.csv: صف واحد', 'rounds-2026-10.csv: 12 صفًّا']) {
+    assert.ok(readme.includes(text), text);
+  }
+  for (const [en, ar] of D.NOTES) assert.ok(readme.includes(en) && readme.includes(ar));
+  assert.doesNotMatch(readme, /card/i, 'there are no player cards');
+  const names = files.map(f => f.name).concat(['games.csv', 'dictionary.csv']);
+  const sps = D.spss(names);
+  for (const name of names) {
+    const block = sps.slice(sps.indexOf("/FILE='" + name + "'"));
+    const variables = /\/VARIABLES=([^\n]*)\./.exec(block)[1].split(' ');
+    assert.equal(variables.length / 2, D.columns(name.replace(/\.csv$/, '').replace(/-\d{4}-\d\d$/, '')).length, name);
+  }
+  assert.match(sps, /VALUE LABELS [^.]*outcome 'win' 'win' 'loss' 'loss'/);
+  const r = D.rLoader(names);
+  assert.match(r, /rounds <- read_sg\(c\("rounds-2026-09\.csv", "rounds-2026-10\.csv"\)/, 'the months of rounds as one table');
+  assert.match(r, /students\$band_first <- factor\(students\$band_first, levels = c\("6-7", "8-9", "10-11"\)\)/);
+  assert.doesNotMatch(r, /sessions <-/, 'only the files of the download');
+});
+
+test('zip.js: deflated and stored entries any unzip tool reads, with streaming CRCs', async () => {
+  assert.equal(Z.crc32(Buffer.from('hello world')), zlib.crc32('hello world'));
+  assert.equal(Z.crc32(Buffer.from(' world'), Z.crc32(Buffer.from('hello'))), zlib.crc32('hello world'), 'the CRC goes on from the bytes before');
+  const big = new Blob(['﻿a,b\n', ...Array.from({ length: 4000 }, (_, i) => i + ',' + 'x'.repeat(i % 40) + '\n')]);
+  const blob = await Z.zip([{ name: 'rounds.csv', blob: big }, { name: 'اقرأني.txt', blob: 'نص قصير' }, { name: 'empty.csv', blob: '' }], { when: new Date(2026, 9, 27, 10, 40) });
+  assert.equal(blob.type, 'application/zip');
+  const files = unzip(Buffer.from(await blob.arrayBuffer()));
+  assert.deepEqual(Object.keys(files), ['rounds.csv', 'اقرأني.txt', 'empty.csv']);
+  assert.equal(files['rounds.csv'].method, 8, 'deflated');
+  // (Blob.text() would drop the byte-order mark: compare the bytes.)
+  assert.equal(files['rounds.csv'].data.toString('utf8'), Buffer.from(await big.arrayBuffer()).toString('utf8'));
+  assert.equal(files['اقرأني.txt'].data.toString('utf8'), 'نص قصير');
+  assert.equal(files['اقرأني.txt'].method, 0, 'a short file that deflating does not shrink is stored');
+  const stored = unzip(Buffer.from(await (await Z.zip([{ name: 'a.csv', blob: big }], { store: true })).arrayBuffer()));
+  assert.equal(stored['a.csv'].method, 0);
+  assert.equal(stored['a.csv'].data.length, big.size);
+});
+
+test('export.js: every page once, a header from the dictionary, rounds by month, and part 2 after the reading guard', async () => {
+  // A server of three pages of rounds over two months and one page of everything else; the
+  // reading guard answers the second page of events.
+  const line = (file, i, day = '2026-10-0' + (1 + (i % 5))) => D.columns(file).map(c => c === 'day' ? day : c === 'session' ? 's' + i : '').join(',');
+  const pages = {
+    rounds: [[0, 1, 2].map(i => line('rounds', i, '2026-09-30')).join('\n') + '\n', [3, 4].map(i => line('rounds', i)).join('\n') + '\n', line('rounds', 5) + '\n'],
+    events: [line('events', 0) + '\n', line('events', 1) + '\n']
+  };
+  const asked = [];
+  const page = guard => (file, after) => {
+    asked.push(file + ':' + after);
+    const list = pages[file] || [line(file, 0) + '\n'], k = after ? Number(after) : 0;
+    if (guard && file === 'events' && k === 1) return Promise.reject({ kind: 'busy', status: 429, body: { error: 'reads', until: '03:00' } });
+    return Promise.resolve({ text: list[k], next: k + 1 < list.length ? String(k + 1) : null });
+  };
+  const progress = [];
+  const job = E.job({ from: '2026-09-01', to: '2026-10-27', page: page(true), split: 4, onProgress: p => progress.push(p) });
+  assert.equal(await job.run(), 'stopped');
+  assert.deepEqual(job.stopped, { file: 'events', after: '1', until: '03:00' });
+  assert.deepEqual(asked, ['students:null', 'sessions:null', 'visits:null', 'rounds:null', 'rounds:1', 'rounds:2', 'events:null', 'events:1']);
+  assert.equal(progress.at(-1).lines, 1 + 1 + 1 + 6 + 1);
+  const one = await job.zip({ games: { games: W.SG_GAME_NAMES, about: W.SG_GAME_INFO, scores: W.SG_SCORES }, readme: { from: '2026-09-01', to: '2026-10-27' } }, new Date(2026, 9, 27));
+  assert.equal(one.name, 'school-games-data_2026-09-01_2026-10-27.zip');
+  const files = unzip(Buffer.from(await one.blob.arrayBuffer()));
+  // 6 rounds pass the split of 4 in this test: one file per month.
+  assert.deepEqual(Object.keys(files), ['students.csv', 'sessions.csv', 'visits.csv', 'rounds-2026-09.csv', 'rounds-2026-10.csv', 'events.csv', 'games.csv',
+    'dictionary.csv', 'README.txt', 'labels.sps', 'load.R']);
+  const text = name => files[name].data.toString('utf8');
+  for (const name of ['students.csv', 'rounds-2026-09.csv', 'events.csv', 'games.csv', 'dictionary.csv', 'README.txt']) assert.ok(text(name).startsWith('﻿'), name + ': BOM');
+  assert.equal(text('rounds-2026-09.csv'), '﻿' + D.header('rounds') + '\n' + pages.rounds[0]);
+  assert.equal(text('rounds-2026-10.csv').split('\n').length - 2, 3);
+  assert.equal(text('events.csv'), '﻿' + D.header('events') + '\n' + pages.events[0], 'the rows before the guard');
+  assert.match(text('README.txt'), /stopped early, in events\.csv/);
+  assert.match(text('README.txt'), /rounds-2026-10\.csv: 3 rows/);
+  // Part 2 goes on from the cursor and holds only what part 1 did not.
+  asked.length = 0;
+  const two = E.job({ from: '2026-09-01', to: '2026-10-27', page: page(false), part: 2, file: job.stopped.file, after: job.stopped.after });
+  assert.equal(await two.run(), 'done');
+  assert.deepEqual(asked, ['events:1', 'student_days:null', 'daily_games:null', 'pcs:null']);
+  const second = await two.zip({}, new Date(2026, 9, 28));
+  assert.equal(second.name, 'school-games-data_2026-09-01_2026-10-27_part2.zip');
+  const rest = unzip(Buffer.from(await second.blob.arrayBuffer()));
+  assert.deepEqual(Object.keys(rest).filter(n => n.endsWith('.csv')), ['events.csv', 'student_days.csv', 'daily_games.csv', 'pcs.csv', 'games.csv', 'dictionary.csv']);
+  assert.equal(rest['events.csv'].data.toString('utf8'), '﻿' + D.header('events') + '\n' + pages.events[1]);
+  assert.match(rest['README.txt'].data.toString('utf8'), /This is part 2 of the download/);
+  // Without the split, one rounds.csv in the server's order.
+  const whole = E.job({ from: '2026-09-01', to: '2026-10-27', page: page(false) });
+  assert.equal(await whole.run(), 'done');
+  const all = (await whole.entries({})).find(e => e.name === 'rounds.csv');
+  assert.equal(Buffer.from(await all.blob.arrayBuffer()).toString('utf8'), '﻿' + D.header('rounds') + '\n' + pages.rounds.join(''));
+  assert.equal(all.rows, 6);
+  // A network failure keeps the rows: run() again asks for the same page.
+  let fail = true;
+  const flaky = E.job({ from: '2026-09-01', to: '2026-10-27', page: (file, after) => file === 'visits' && fail ? (fail = false, Promise.reject({ kind: 'network' })) : page(false)(file, after) });
+  await assert.rejects(flaky.run(), f => f.kind === 'network');
+  assert.equal(await flaky.run(), 'done');
+  assert.equal((await flaky.entries({})).find(e => e.name === 'students.csv').rows, 1, 'nothing fetched twice');
+  // The cost before starting, from the period's KPIs.
+  const est = E.estimate({ totals: { sessions: 100, gameOpens: 250, roundsStarted: 1100, roundsEnded: 1000, levelUps: 40, students: { active: 30, guestSessions: 20 } },
+    games: [{ slug: 'a', hearts: { on: 5, off: 1 }, tutorials: { start: 10, done: 4 } }], quality: { pcsNew: 12 } }, { reads: 3499000, readsLimit: 5000000 }, 30);
+  assert.equal(est.lines, 30 + 100 + 250 + 1100 + 60 + 80 + 30 + 12);
+  assert.equal(est.rows, Math.round(est.lines * 1.25));
+  assert.equal(est.share, est.rows / 5000000);
+  assert.equal(est.stops, true, 'today’s reads so far plus these pass the export guard');
+  assert.equal(E.estimate({ totals: { sessions: 100 } }, { reads: 0 }, 1).stops, false);
 });
