@@ -256,7 +256,7 @@ test('the v3 fixture has every v3 kind and is stored as exact facts, with its st
     { u: U, slug: 'tic-tac-toe', rounds: 1, first_s: at + 150 }]);
   assert.deepEqual(await s.rows('aliases'), [{ u_old: '1b2c3d4e5f60', u_new: U, s: at, how: 'pc' }]);
   const settings = Object.fromEntries((await s.rows('settings')).map(r => [r.key, r.value]));
-  // rv: 1, up once by the purge at start and once by the change of zone.
+  // rv: 1, up once by the purge at start, and once by the change of zone and the new link.
   assert.deepEqual([settings.tz, settings.tz_source, settings.tz_epoch, settings.rv, settings.v3_since, settings.week_start, settings.rebuild],
     ['Asia/Riyadh', 'pc', '1', '3', '2026-10-20', 'sun', '1']);
   assert.deepEqual(await s.rows('live'), [{ s: fixture3.s, slug: '', seen_minute: Math.floor(START / 60000), u: U, p: P, wire: 3 }]);

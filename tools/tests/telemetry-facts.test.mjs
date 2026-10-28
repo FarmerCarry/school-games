@@ -601,3 +601,24 @@ test('simulate.mjs: one school in Riyadh at the sink\'s cadence, with guests, ol
   // Children win more often once they have practised a game.
   assert.ok(wins.later[0] / wins.later[1] > wins.first[0] / wins.first[1] + 0.05, JSON.stringify(wins));
 });
+
+test('a PC linking a code (cd) raises the rollup version, so kept KPIs count both codes as one student at once', async () => {
+  const s = open();
+  await ready(s.store, T0);
+  // Two codes of one child play on 20 October; the cron rolls the day.
+  for (const [sid, u] of [['fb0000000001', U1], ['fb0000000002', U3]]) {
+    await s.ingest(v3(sid, [ss3(), ['go', 1, 1, 'road-hopper', 'catalog', 0, 0], rs3(2, 1, 1, 'road-hopper', 'L1'), re3(30, 1, 1, 'road-hopper', 'L1', 'w')], { u }), T0);
+  }
+  const night = Date.parse('2026-10-21T02:00:00Z');
+  assert.equal((await s.store.rollupStep(night)).rolled, '2026-10-20');
+  const q = { from: '2026-10-20', to: '2026-10-20', band: null }, active = async at => (await s.store.kpis(q, at)).totals.students.active;
+  assert.equal(await active(night + MIN), 2);
+  const rv = Number((await s.settings()).rv);
+  // The next morning the teacher's transfer reaches U1's PC: U3 is U1's older code.
+  await s.ingest(v3('fb0000000003', [ss3(), ['cd', 0, U3]], { u: U1 }), night + 6 * 3600000);
+  assert.equal(Number((await s.settings()).rv), rv + 1);
+  assert.equal(await active(night + 6 * 3600000 + MIN), 1);
+  // The same link again changes nothing.
+  await s.ingest(v3('fb0000000004', [ss3(), ['cd', 0, U3]], { u: U1 }), night + 7 * 3600000);
+  assert.equal(Number((await s.settings()).rv), rv + 1);
+});

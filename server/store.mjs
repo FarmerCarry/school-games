@@ -310,6 +310,11 @@ const CANONICAL = 'COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2), ?2)';
 const ALIAS_HOP = `UPDATE aliases SET u_new = ${CANONICAL} WHERE u_new IN (SELECT value FROM json_each(?3) WHERE value <> ${CANONICAL})`;
 const ALIAS = `INSERT INTO aliases (u_old, u_new, s, how) SELECT value, ${CANONICAL}, (${START}), 'pc' FROM json_each(?3) ` +
   `WHERE value <> ?2 AND value <> ${CANONICAL} ON CONFLICT (u_old) DO NOTHING`;
+// Before them (in ZONE, below): rv goes up when they will change a link (an old code of ?6
+// not linked yet, or one that codes are linked to; the student ?7), so that kept answers
+// count the linked codes as one student.
+const RELINKS = "EXISTS (SELECT 1 FROM json_each(?6) j WHERE j.value <> ?7 AND j.value <> COALESCE((SELECT u_new FROM aliases WHERE u_old = ?7), ?7) " +
+  'AND (NOT EXISTS (SELECT 1 FROM aliases WHERE u_old = j.value) OR EXISTS (SELECT 1 FROM aliases WHERE u_new = j.value)))';
 // W11: a rolled day that late data reaches is rolled again.
 const LATE = 'UPDATE roll_days SET dirty = 1 WHERE day IN (SELECT value FROM json_each(?1)) AND dirty = 0';
 // W12 and every other change of the school's zone: the zone ?1 from source ?2 (week start
@@ -317,8 +322,9 @@ const LATE = 'UPDATE roll_days SET dirty = 1 WHERE day IN (SELECT value FROM jso
 // ?4 (such as ',none,dashboard,'). A new zone marks every rolled day since facts_since
 // (and not trimmed) for a full rebuild, and bumps tz_epoch and rv; the same zone from
 // another source only changes the source. ?5, when not '', is v3_since (the first v3
-// batch). SQLite reads each scalar subquery once, at its first use: the WHERE clause of the
-// first row it changes, so before any row changes.
+// batch); ?6 and ?7 are the older codes a batch links to its student, and that student (see
+// RELINKS; '[]' and '' otherwise). SQLite reads each scalar subquery once, at its first use:
+// the WHERE clause of the first row it changes, so before any row changes.
 const SETTING = key => `(SELECT value FROM settings WHERE key = '${key}')`;
 const ALLOWED = `?1 <> '' AND instr(?4, ',' || ${SETTING('tz_source')} || ',') > 0`;
 const MOVED = `${ALLOWED} AND ${SETTING('tz')} <> ?1`;
@@ -327,7 +333,7 @@ const ZONE_DIRTY = "UPDATE roll_days SET dirty = 2 WHERE day >= (SELECT MAX(valu
 const ZONE = "UPDATE settings SET value = CASE key WHEN 'tz' THEN ?1 WHEN 'tz_source' THEN ?2 WHEN 'week_start' THEN ?3 WHEN 'v3_since' THEN ?5 " +
   "WHEN 'rebuild' THEN '1' ELSE CAST(CAST(value AS INTEGER) + 1 AS TEXT) END WHERE CASE key " +
   `WHEN 'tz_source' THEN ${ALLOWED} AND value <> ?2 WHEN 'week_start' THEN ${MOVED} AND ${SETTING('week_source')} = 'auto' AND value <> ?3 ` +
-  `WHEN 'v3_since' THEN value = '' AND ?5 <> '' WHEN 'tz' THEN ${MOVED} WHEN 'tz_epoch' THEN ${MOVED} WHEN 'rv' THEN ${MOVED} ` +
+  `WHEN 'v3_since' THEN value = '' AND ?5 <> '' WHEN 'tz' THEN ${MOVED} WHEN 'tz_epoch' THEN ${MOVED} WHEN 'rv' THEN (${MOVED}) OR ${RELINKS} ` +
   `WHEN 'rebuild' THEN ${MOVED} ELSE 0 END`;
 // Who may set the zone: a PC (W12) or the dashboard's guess while nothing better is known;
 // the nightly vote also while it is the PCs' provisional choice; the owner always.
@@ -1007,10 +1013,13 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     if (totals.size) statements.push(sql(STUDENT_GAMES).bind(s, u, JSON.stringify([...totals].map(([slug, [total, t]]) => [slug, total, t]))));
     if (f.marks.length) statements.push(sql(MARKS).bind(s, JSON.stringify(f.marks)));
     if (f.removed.length) statements.push(sql(REMOVED).bind(s, JSON.stringify(f.removed)));
-    if (f.linked.length) {
-      const olds = JSON.stringify([...new Set(f.linked)]);
-      statements.push(sql(ALIAS_HOP).bind(s, u, olds), sql(ALIAS).bind(s, u, olds));
-    }
+    // The settings first (a link raises rv when it changes the links), then the links.
+    const v3Since = wire === 3 && !conf.v3Since ? utcDay(now) : '', olds = JSON.stringify([...new Set(f.linked)]);
+    const zone = wire === 3 && z && (conf.tzSource === 'none' || conf.tzSource === 'dashboard') ? z : '';
+    const zoneChange = [zone, 'pc', zone ? weekStartOf(zone) : 'mon', BY_PC, v3Since, olds, u];
+    if (zone && zone !== conf.tz) statements.push(bound(ZONE_DIRTY, zoneChange));
+    if (zone || v3Since || f.linked.length) statements.push(bound(ZONE, zoneChange));
+    if (f.linked.length) statements.push(sql(ALIAS_HOP).bind(s, u, olds), sql(ALIAS).bind(s, u, olds));
     // Late data for a day that may be rolled already: any day before today, whatever this
     // instance last read of rolled_through (another one may have rolled it since); the
     // statement only changes a rolled day. A v3 start estimate can be a second off, so both
@@ -1018,11 +1027,6 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     const local = localDay(conf.tz, now);
     const days = [...new Set([start - 5, start + 5].map(x => localDay(conf.tz, x * 1000)))].filter(day => day < local);
     if (days.length) statements.push(sql(LATE).bind(JSON.stringify(days)));
-    const v3Since = wire === 3 && !conf.v3Since ? utcDay(now) : '';
-    const zone = wire === 3 && z && (conf.tzSource === 'none' || conf.tzSource === 'dashboard') ? z : '';
-    const zoneChange = [zone, 'pc', zone ? weekStartOf(zone) : 'mon', BY_PC, v3Since];
-    if (zone && zone !== conf.tz) statements.push(bound(ZONE_DIRTY, zoneChange));
-    if (zone || v3Since) statements.push(bound(ZONE, zoneChange));
     const open = openGame(events, wire), sweep = minute !== sweptMinute;
     statements.push(sql(LIVE).bind(s, open.known ? open.slug : '', minute, open.known ? 1 : 0, open.closed, minute - LIVE_WINDOW_MIN, u, p, wire));
     if (sweep) statements.push(sql(LIVE_SWEEP).bind(minute - LIVE_WINDOW_MIN));
@@ -1033,8 +1037,8 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       throw error;
     }
     if (sweep) sweptMinute = minute;
-    // Another instance or the owner may have set the zone first: the next request reads the settings again.
-    if (zone || v3Since) conf.at = -Infinity;
+    // Another instance or the owner may have set the zone first, or a link raised rv: the next request reads the settings again.
+    if (zone || v3Since || f.linked.length) conf.at = -Infinity;
     return true;
   }
 
@@ -1118,7 +1122,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       // The vote, once a day: the zone most PCs report, locked once LOCK_PCS of them report it.
       const vote = row.vote ? JSON.parse(row.vote) : null;
       if (done.kind === 'first' && done.rolled === yesterday && vote && BY_VOTE.includes(',' + conf.tzSource + ',')) {
-        const change = [vote[0], vote[1] >= LOCK_PCS ? 'pcs' : 'pc', weekStartOf(vote[0]), BY_VOTE, ''];
+        const change = [vote[0], vote[1] >= LOCK_PCS ? 'pcs' : 'pc', weekStartOf(vote[0]), BY_VOTE, '', '[]', ''];
         statements.push(bound(ZONE_DIRTY, change), bound(ZONE, change));
         done.voted = { tz: vote[0], pcs: vote[1] };
       }
@@ -1546,7 +1550,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
   async function updateSettings({ tz, source, weekStart, keepDays: days }, now = Date.now()) {
     const current = await settings(now), statements = [];
     if (tz !== undefined) {
-      const change = source === 'dashboard' ? [tz, 'dashboard', weekStartOf(tz), BY_PC, ''] : [tz, 'owner', weekStartOf(tz), BY_OWNER, ''];
+      const change = source === 'dashboard' ? [tz, 'dashboard', weekStartOf(tz), BY_PC, '', '[]', ''] : [tz, 'owner', weekStartOf(tz), BY_OWNER, '', '[]', ''];
       statements.push(bound(ZONE_DIRTY, change), bound(ZONE, change));
     }
     if (weekStart !== undefined) statements.push(sql(WEEK_START).bind(weekStart));

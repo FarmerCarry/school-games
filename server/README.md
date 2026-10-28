@@ -540,7 +540,7 @@ flows take the rolled days only). The part of the rolled days is kept in
 `kpi_cache` under the route, its parameters and the rollup version `rv`, and in the
 instance's memory for an hour; on Cloudflare the part of the other days is kept 10
 minutes (on Node it is made on every request). A part over 1 MB is not kept. Each roll
-(a recount's too), forget, link and unlink raises `rv`, so later answers are made again
+(a recount's too), forget, link and unlink, and a PC's new link (a `cd` mark), raises `rv`, so later answers are made again
 (a Worker instance that kept a part in memory sees the new `rv` within 5 minutes).
 Every answer takes at most 20 statements.
 
