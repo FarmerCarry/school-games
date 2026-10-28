@@ -92,7 +92,9 @@
   // Window capture listeners run before any game listener can stop the event.
   function listen(type, fn) { window.addEventListener(type, fn, true); }
   function suspend(reason) {
-    if (roundId) rp++;
+    // One pause per stop of play: a blur and the hidden page that follows it, or Kit's own
+    // fullscreen exit and the portal's, find play already cut (until 0) and count once.
+    if (roundId && until !== 0) rp++;
     sendStats(true);
     cueAt = -1;
     if (Kit.keys) Kit.keys.reset();

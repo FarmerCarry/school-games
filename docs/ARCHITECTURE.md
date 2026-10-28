@@ -209,7 +209,7 @@ split, `rx` and its `re` may arrive in two messages.
 | `wallMs` | the round's start to its end | elapsed milliseconds (`performance.now()`), engaged or not; never a time of day |
 | `inputs` | every key press and click Kit sees in the round | key repeats excluded |
 | `idleLapses` | a key press or click in the round after its 20 s engaged window lapsed | mouse moves, the wheel and `busy()` never count; after a pause the window is cut, so the press that resumes play is not a lapse |
-| `pauses` | every Kit pause in the round (blur, hidden page, fullscreen exit, `sg:pause`, Shift+Tab) | one blur can arrive with a hidden page, which counts twice |
+| `pauses` | every Kit pause in the round (blur, hidden page, fullscreen exit, `sg:pause`, Shift+Tab) | once per stop of play: a pause while play is already cut (no key press or click since the last pause, such as the hidden page after a blur, or the portal's `sg:pause` after Kit's own fullscreen exit) does not count again |
 | `rtSumMs`, `rtN` | the same reaction times as the `re` histogram | for the exact mean |
 | `ddaPermille` | `round(level × 1000)` of the last `Kit.dda` read of any controller in the page | −1 before the first read; sticky across rounds |
 
