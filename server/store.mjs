@@ -273,8 +273,8 @@ const PC_SET = [['first_s', 'MIN(first_s, excluded.first_s)'], ['last_s', 'MAX(l
 const PC = `INSERT INTO st_pcs (p, first_s, last_s, z, cores, mem, screen, k) SELECT ?2, start_s, start_s, ?3, ?4, ?5, ?6, ?7 ` +
   `FROM st_sessions WHERE s = ?1 ON CONFLICT (p) DO UPDATE SET ${assign(PC_SET)} WHERE ${unchanged(PC_SET)}`;
 // W3: the student. The label is the code's first 4 characters in capitals, unless a stored
-// code already starts with them (then 6, 8 or all 12). It is never changed. band_first and age_days_first come from the earliest session, band_last
-// from the latest.
+// code already starts with them (then 6, 8 or all 12). It is never changed. band_first and
+// age_days_first come from the earliest session, band_last from the latest.
 const prefix = n => `WHEN NOT EXISTS (SELECT 1 FROM st_students WHERE u >= substr(?2, 1, ${n}) AND u < substr(?2, 1, ${n}) || 'g') ` +
   `THEN upper(substr(?2, 1, ${n}))`;
 const earlier = c => [c, `CASE WHEN excluded.first_s < first_s THEN excluded.${c} ELSE ${c} END`];
