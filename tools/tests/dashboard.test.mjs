@@ -383,9 +383,11 @@ test('the newer server\'s age-group win rates and play time are used when they a
   }
   await page.click('#age-card .table-toggle');
   assert.deepEqual(await page.locator('#age-card .table-host thead th').allTextContents(), ['Age group', 'Game', 'Share of play time', 'Games opened', 'Play time']);
+  assert.match(await page.locator('#age-card .card-sub').textContent(), /share of that group’s play time/, 'the subtitle names the measure shown');
   // The switch: by opens, as a share of the group's game opens.
   await page.click('#age-card button[data-value="opens"]');
   assert.deepEqual(await page.locator('#age-card .table-host thead th').allTextContents(), ['Age group', 'Game', 'Share of opens', 'Games opened', 'Play time']);
+  assert.match(await page.locator('#age-card .card-sub').textContent(), /share of that group’s game opens/);
   await s.check();
 });
 

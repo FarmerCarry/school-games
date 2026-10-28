@@ -1141,6 +1141,7 @@
     var minutes = groups.some(function (g) { return g.rows.some(function (r) { return r.engagedMinutes != null; }); });
     var c = card(sec, 'age-card', null, T.byAgeSub, true);
     var by = minutes ? choice(c.tools, 'byAge', [{ value: 'minutes', text: T.byMinutes }, { value: 'opens', text: T.byOpens }], 'minutes', T.showBy) : 'opens';
+    c.head.querySelector('.card-sub').textContent = by === 'minutes' ? T.byAgeSubMinutes : T.byAgeSub;
     var val = function (g, r) { return by === 'minutes' ? (g.engagedMinutes ? (r.engagedMinutes || 0) / g.engagedMinutes : 0) : r.share || 0; };
     groups.forEach(function (g) { g.top = g.rows.slice().sort(function (a, b) { return val(g, b) - val(g, a) || b.opens - a.opens; }).slice(0, 5); });
     var max = 0;

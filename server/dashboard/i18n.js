@@ -129,6 +129,7 @@
 
     byAgeTitle: 'Favourites by age',
     byAgeSub: 'Each age group’s most opened games, as a share of that group’s game opens.',
+    byAgeSubMinutes: 'Each age group’s most played games, as a share of that group’s play time.',
     ofGroupOpens: 'of this age group’s game opens',
     ageGroup: 'Age group',
     byAgeOne: function (b) { return 'Only children aged ' + b + ' are shown, so their favourites are the list above. Choose “All ages” to compare the age groups side by side.'; },
@@ -786,6 +787,7 @@
 
     byAgeTitle: 'المفضلة حسب العمر',
     byAgeSub: 'أكثر الألعاب فتحًا في كل فئة عمرية، كنسبة من مرات فتح الألعاب في الفئة نفسها.',
+    byAgeSubMinutes: 'أطول الألعاب لعبًا في كل فئة عمرية، كنسبة من وقت اللعب في الفئة نفسها.',
     ofGroupOpens: 'من مرات فتح الألعاب في هذه الفئة',
     ageGroup: 'الفئة العمرية',
     byAgeOne: function (b) { return 'تظهر الآن فئة ' + b + ' وحدها، فالمفضلة لديها هي القائمة السابقة. اختر «كل الأعمار» لمقارنة الفئات العمرية جنبًا إلى جنب.'; },
