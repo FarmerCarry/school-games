@@ -43,7 +43,7 @@
       histogram(ctx, grid, 'week-minutes', T.weekMinutesTitle, T.weekMinutesSub, weeks, function (b, i) {
         return i + 1 < WEEK_BUCKETS.length ? T.rangeMinutes(b.k, WEEK_BUCKETS[i + 1] - 1) : T.minutesOrMore(b.k);
       }, T.nStudentWeeks, function (b, i) { return i + 1 < WEEK_BUCKETS.length ? String(b.k) : b.k + '+'; });
-      var days = R.bucketize(R.daysPerWeek(students), [1, 2, 3, 4, 5, 6, 7]);
+      var days = R.bucketize(R.daysPerWeek(students, { from: r.from, to: r.to, weekStart: ctx.weekStart() }), [1, 2, 3, 4, 5, 6, 7]);
       histogram(ctx, grid, 'week-days', T.weekDaysTitle, T.weekDaysSub, days, function (b) { return T.daysAWeek(b.k); }, T.nStudents,
         function (b) { return String(b.k); });
 

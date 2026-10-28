@@ -353,12 +353,14 @@
     }
     return out.filter(w => shift(w.week, 6) >= o.from && w.week <= o.to);
   }
+  // Which of the 13 weekly slots (the weeks ending with the week of `to`) overlap [from, to].
+  function weeksKept(o) {
+    return weeksEnding(o.to, 13, o.weekStart).map(w => shift(w, 6) >= o.from && w <= o.to);
+  }
   // Each student-week with play, from the weekly minutes (the histogram of minutes per
   // student per week), limited to the weeks that overlap [from, to].
   function studentWeeks(students, opts) {
-    const o = opts || {};
-    const weeks = weeksEnding(o.to, 13, o.weekStart);
-    const keep = weeks.map(w => shift(w, 6) >= o.from && w <= o.to);
+    const keep = weeksKept(opts || {});
     const out = [];
     for (const s of list(students)) list(s.weekly).slice(-13).forEach((m, i) => { if (keep[i] && num(m) > 0) out.push(m); });
     return out;
@@ -374,10 +376,13 @@
     }
     return out;
   }
-  // Days played per week, on average over the weeks a student played: [1..7].
-  function daysPerWeek(students) {
+  // Days played per week, on average over the weeks a student played: [1..7]. days counts
+  // the days of [from, to], so only the weeks that overlap it count (opts: { from, to,
+  // weekStart }; without them every one of the 13 weeks).
+  function daysPerWeek(students, opts) {
+    const o = opts || {}, keep = isDay(o.from) && isDay(o.to) ? weeksKept(o) : null;
     return list(students).map(s => {
-      const weeks = list(s.weekly).filter(m => num(m) > 0).length;
+      const weeks = list(s.weekly).slice(-13).filter((m, i) => num(m) > 0 && (!keep || keep[i])).length;
       return weeks ? Math.min(7, num(s.days) / weeks) : null;
     }).filter(v => v !== null && v > 0);
   }

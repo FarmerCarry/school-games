@@ -218,6 +218,13 @@ test('students: new and returning per week, minutes per student-week, days per w
   ], 'the weeks that overlap the period');
   assert.deepEqual(R.studentWeeks(students, { from: '2026-10-12', to: '2026-10-27', weekStart: 'sun' }).sort((x, y) => x - y), [5, 7, 10, 20, 30]);
   assert.deepEqual(R.daysPerWeek(students), [2, 1.5, 1]);
+  // The days are those of the period, so only the weeks that overlap it count: 9 days over the
+  // 5 Sunday weeks that 30 days touch, not over 13 weeks of play.
+  const steady = [{ u: 'd', days: 9, weekly: Array(13).fill(20) }];
+  assert.deepEqual(R.daysPerWeek(steady, { from: '2026-09-28', to: '2026-10-27', weekStart: 'sun' }), [9 / 5]);
+  assert.deepEqual(R.daysPerWeek(students, { from: '2026-10-12', to: '2026-10-27', weekStart: 'sun' }), [2, 1.5, 1]);
+  assert.deepEqual(R.daysPerWeek([{ u: 'e', days: 2, weekly: weekly(9, 0, 0) }], { from: '2026-10-19', to: '2026-10-27', weekStart: 'sun' }), [],
+    'play only in a week before the period');
   assert.deepEqual(R.weeklyMinutes([{ day: '2026-10-13', minutes: 5 }, { day: '2026-10-15', minutes: 7 }, { day: '2026-10-27', minutes: 1 }],
     { from: '2026-10-11', to: '2026-10-27', weekStart: 'sun' }), [{ week: '2026-10-11', minutes: 12 }, { week: '2026-10-18', minutes: 0 }, { week: '2026-10-25', minutes: 1 }]);
   assert.equal(R.winShare({ w: 3, l: 1 }), 0.75);
