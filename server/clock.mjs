@@ -45,6 +45,9 @@ function format(zone) {
   }
   return f;
 }
+// The first DateTimeFormat loads the runtime's time zone data (about 15 ms): done when the
+// module loads, which a Worker does at startup, not within a request's CPU time.
+format('UTC').format(0);
 
 // The offset at the whole second of ms, from the zone's wall clock ("10/25/2026, 01:59:59"
 // in en-US with a 24-hour clock; read as six numbers, which is three times faster than

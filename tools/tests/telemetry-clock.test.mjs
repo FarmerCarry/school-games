@@ -155,3 +155,13 @@ test('every name of UTC a browser may report is UTC; other zones keep their name
   for (const z of ['Asia/Riyadh', 'Europe/London', 'America/Port-au-Prince']) assert.equal(zoneName(z), z);
   for (const bad of ['Mars/Olympus_Mons', 'utc', 'Etc/UTC ', 'constructor', '', null, 42]) assert.equal(zoneName(bad), null, String(bad));
 });
+
+test('the zone data loads with the module, so no request pays for the first DateTimeFormat', async () => {
+  const { spawnSync } = await import('node:child_process');
+  // A new process: the first local day after the import, in a zone the module has not used.
+  const script = "const c = await import(process.argv[1]); const t = performance.now(); c.localDay('Asia/Riyadh', Date.now()); " +
+    'console.log(performance.now() - t);';
+  const times = Array.from({ length: 3 }, () => Number(spawnSync(process.execPath, ['--input-type=module', '-e', script,
+    new URL('../../server/clock.mjs', import.meta.url).href], { encoding: 'utf8' }).stdout));
+  assert.ok(Math.min(...times) < 5, times.map(t => t.toFixed(1)).join(', ') + ' ms');
+});
