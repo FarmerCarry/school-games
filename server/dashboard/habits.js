@@ -78,8 +78,8 @@
       if (c.chart.hidden) return;
       C.columns(c.chart, { name: title, rtl: ctx.rtl(), color: 'var(--s1)', keysHint: T.keysColumns, format: function (v) { return I.int(v); }, bars: bucketBars(ctx, hist, metric, countText) });
     });
-    var q = R.quantile(hist, 0.5);
-    if (q) ctx.note(c.foot, T.medianIs(T.bucketValue[metric](I.short(q.value)), q.open));
+    var q = R.quantile(hist, 0.5, metric);
+    if (q) ctx.note(c.foot, T.medianIs(T.bucketValue[metric](q.label && !q.open ? q.label : I.short(q.value)), q.open));
     C.table(c.table, title, [{ label: T.bucketCol[metric] }, { label: T.count, num: true }, { label: T.shareCol, num: true }],
       hist.map(function (b) { return [R.bucketLabel(metric, b.k), I.int(b.n), total ? I.pct(b.n / total) : '—']; }));
     return c;

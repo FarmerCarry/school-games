@@ -158,6 +158,13 @@ test('bucket labels and quantiles from a histogram', () => {
   // The last bucket has no end: a quantile there is "60 or more".
   assert.deepEqual(R.quantile([{ k: 30, n: 1 }, { k: 60, n: 3 }], 0.5), { value: 60, open: true });
   assert.equal(R.quantile([{ k: 0, n: 0 }], 0.5), null);
+  // A count (games per session, attempts, losses in a row, tier) is never 3.7: the bucket that holds the quantile.
+  const games = R.histogram(R.statRows(stats([1, 2, 3, 4].map((k, i) => row('8-9', 'games', '', String(k), '', { n: [115, 384, 503, 350][i] })))), 'games');
+  close(R.quantile(games, 0.5).value, 3.352, 0.001);
+  assert.deepEqual(R.quantile(games, 0.5, 'games'), { value: 3, open: false, label: '3' });
+  assert.deepEqual(R.quantile([{ k: 1, n: 1 }, { k: 6, n: 3 }, { k: 8, n: 0 }], 0.5, 'games'), { value: 6, open: false, label: '6–7' });
+  assert.deepEqual(R.quantile([{ k: 6, n: 1 }, { k: 8, n: 3 }], 0.5, 'games'), { value: 8, open: true, label: '8+' });
+  assert.deepEqual(R.quantile(hist, 0.5, 'sesslen'), { value: 10, open: false }, 'minutes stay linear');
   assert.deepEqual(R.bucketize([0, 9.9, 10, 45, 500, null], [0, 10, 20, 45]).map(b => b.n), [2, 1, 0, 2]);
 });
 

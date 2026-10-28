@@ -248,8 +248,10 @@
   }
   // Quantile q (0..1) of a bucketed distribution, linear inside the bucket. The last
   // bucket has no upper bound: a quantile that falls in it is its lower bound, and
-  // `open` says so ("45 minutes or more").
-  function quantile(hist, q) {
+  // `open` says so ("45 minutes or more"). With a metric that counts (games per session,
+  // attempts, losses in a row, tiers: not minutes or seconds), the bucket that holds the
+  // quantile instead, with its label ("3", "6–7"): a session never opens 3.7 games.
+  function quantile(hist, q, metric) {
     const counts = list(hist).map(h => num(h.n) || 0), totalN = counts.reduce((a, b) => a + b, 0);
     if (!totalN) return null;
     const target = q * totalN;
@@ -258,6 +260,7 @@
       if (!counts[i]) continue;
       if (seen + counts[i] >= target || i === counts.length - 1) {
         const lo = hist[i].k, hi = i + 1 < hist.length ? hist[i + 1].k : null;
+        if (metric && BUCKETS[metric] && !CONTINUOUS.has(metric)) return { value: lo, open: hi === null, label: bucketLabel(metric, lo) };
         if (hi === null) return { value: lo, open: true };
         return { value: lo + (hi - lo) * Math.max(0, Math.min(1, (target - seen) / counts[i])), open: false };
       }
