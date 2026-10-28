@@ -1329,6 +1329,36 @@ test('students, a student, a game and the PCs are exact for a hand-built school,
   await check(true);
 });
 
+test('a new week start makes the kept weekly answers again: cohorts and students\' weeks follow it at once', async t => {
+  const s = await studentDays(t);
+  // A child whose profile was made on Sunday 18 October: in the cohort of that week only when weeks start on Sunday.
+  s.clock.now = Date.parse('2026-10-19T09:30:00Z');
+  assert.equal((await s.post({ ...envelope3('b60000000001', [ss3(0, 1, 1), ...visit(1, 'road-hopper', 2, 60000)], { u: '6f6f6f6f6f6f', a: '8-9' }), z: '' })).status, 204);
+  s.clock.now = Date.parse('2026-10-21T02:00:00Z');
+  await s.app.roll();
+  await s.app.roll();
+  const q = 'from=2026-10-19&to=2026-10-20', get = async pathname => (await s.admin(pathname)).json();
+  const monday = await get('/v1/admin/cohorts?' + q);
+  assert.deepEqual([monday.weekStart, monday.cohorts.map(c => c.week)], ['mon', ['2026-10-19']]);
+  await get('/v1/admin/students?' + q);
+  const set = await s.send('POST', '/v1/admin/settings', { headers: { authorization: 'Bearer ' + TOKEN, 'content-type': 'application/json' },
+    body: JSON.stringify({ weekStart: 'sun' }) });
+  assert.equal(set.status, 200);
+  // What a database with nothing kept answers, now.
+  const fresh = async pathname => {
+    const other = openStore(s.app.store.db);
+    await s.app.store.db.prepare('DELETE FROM kpi_cache').run();
+    const { serialize } = await import('../../server/handler.mjs');
+    const [route, query] = pathname.split('?'), p = Object.fromEntries(new URLSearchParams(query));
+    return JSON.parse(serialize(await other[route.split('/').at(-1)]({ ...p, band: null }, s.clock.now)));
+  };
+  const sunday = await get('/v1/admin/cohorts?' + q), students = await get('/v1/admin/students?' + q);
+  assert.equal(sunday.weekStart, 'sun');
+  assert.deepEqual(sunday.cohorts, (await fresh('/v1/admin/cohorts?' + q)).cohorts);
+  assert.deepEqual(students.students, (await fresh('/v1/admin/students?' + q)).students);
+  assert.deepEqual(sunday.cohorts.map(c => [c.week, c.size]), [['2026-10-18', monday.cohorts[0].size + 1]]);
+});
+
 test('the students come in pages of at most a set size of JSON (D1 refuses a value over 2 MB), each naming the code to go on from', async t => {
   const s = await studentDays(t);
   const { serialize } = await import('../../server/handler.mjs');

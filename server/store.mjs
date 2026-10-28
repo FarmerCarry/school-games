@@ -1553,7 +1553,9 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       const change = source === 'dashboard' ? [tz, 'dashboard', weekStartOf(tz), BY_PC, '', '[]', ''] : [tz, 'owner', weekStartOf(tz), BY_OWNER, '', '[]', ''];
       statements.push(bound(ZONE_DIRTY, change), bound(ZONE, change));
     }
-    if (weekStart !== undefined) statements.push(sql(WEEK_START).bind(weekStart));
+    // A new week start changes the weeks of every kept answer (cohorts, students' weeks): rv goes up.
+    if (weekStart !== undefined && weekStart !== current.clock.weekStart) statements.push(sql(WEEK_START).bind(weekStart), sql(RV_UP), sql(KEPT_CLEAN));
+    else if (weekStart !== undefined) statements.push(sql(WEEK_START).bind(weekStart));
     if (days !== undefined) {
       // The facts grow about in proportion to the days kept.
       if (days > current.keep.days && current.storage.bytes * days / current.keep.days > limits.bytes) return { error: 'storage' };
@@ -1561,6 +1563,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     }
     if (!statements.length) return current;
     await run(statements, now);
+    kept.clear();
     return settings(now);
   }
 
