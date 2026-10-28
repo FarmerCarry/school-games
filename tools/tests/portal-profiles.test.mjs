@@ -3,6 +3,7 @@
 // driven through the real portal UI and real game pages.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +14,7 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
 // The fast build inlines every portal script, so a script cannot be swapped out there.
 const sourceTree = fs.readFileSync(path.join(root, 'index.html'), 'utf8').includes('src="js/profiles.js"');
-const KEY = 'sg:site:profiles';
+const KEY = 'sg:site:profiles', MORE = 'sg:site:profiles:more';
 let browser, server, origin, pings = 0;
 
 before(async () => {
@@ -646,6 +647,22 @@ test('damaged stored profiles, class band and loss tallies are repaired silently
     assert.deepEqual(fixed, expected, raw);
     assert.equal(await page.evaluate(() => SGProfiles.player()), raw.includes('"k":"p1"') ? 'p1' : '', raw);
   }
+  // The second key is repaired the same way. It is read after the first, whose seq is the
+  // one kept; a key in both counts once; it is removed while 12 or fewer profiles are left.
+  const rec = (k, a = 0) => ({ k, a, c: 0, b: '8-9', xp: 0, lv: 1, d0: 20000, dl: 20000, g: {} });
+  const twelve = Array.from({ length: 12 }, (_, i) => rec('p' + (i + 1).toString(36), i));
+  for (const [main, more, keys, seq, rest] of [
+    [{ v: 1, seq: 2, list: twelve.slice(0, 2) }, 'not json{', ['p1', 'p2'], 2, null],
+    [{ v: 1, seq: 2, list: twelve.slice(0, 2) }, JSON.stringify({ v: 1, list: [rec('p1', 5), rec('p9')] }), ['p1', 'p2', 'p9'], 9, null],
+    [{ v: 1, seq: 12, list: twelve }, JSON.stringify({ seq: 99, list: [rec('pc', 3), null, rec('pz', 4)] }), [...twelve.map(p => p.k), 'pz'], 35, ['pz']],
+    [null, JSON.stringify({ v: 1, list: [rec('p5'), rec('p7')] }), ['p5', 'p7'], 7, null]
+  ]) {
+    await seed(main ? { [KEY]: JSON.stringify(main), [MORE]: more } : { [MORE]: more });
+    const [first, second] = await page.evaluate(k => k.map(key => JSON.parse(localStorage.getItem(key))), [KEY, MORE]);
+    assert.deepEqual(await page.evaluate(() => SGProfiles.list().map(p => p.k)), keys, more);
+    assert.deepEqual([first.seq, first.list.length, second && second.list.map(p => p.k)], [seq, Math.min(keys.length, 12), rest], more);
+    assert.equal(first.list[0].a, 0, 'the first key wins: ' + more);
+  }
 
   const list = [
     { k: 'p1', a: 3, c: 2, b: '8-9', xp: 100, lv: 50, d0: 20000, dl: 19000, extra: 'dropped',
@@ -655,14 +672,16 @@ test('damaged stored profiles, class band and loss tallies are repaired silently
     { k: 'p2', a: 99, c: -1, b: 'old', xp: -5, lv: 'x', d0: 'yesterday', g: [1, 2] },
     null, 'p9', [{ k: 'p8' }]
   ];
-  for (let i = 3; i <= 20; i++) list.push({ k: 'p' + i.toString(36), a: i % 12, c: i % 8, b: '10-11', xp: 1e12, d0: 20500, dl: 20600, g: {} });
+  for (let i = 3; i <= 30; i++) list.push({ k: 'p' + i.toString(36), a: i % 12, c: i % 8, b: '10-11', xp: 1e12, d0: 20500, dl: 20600, g: {} });
   const text = JSON.stringify({ v: 7, seq: 'x', list, more: true }).replace('"__proto__x"', '"__proto__"');
   await seed({ [KEY]: text, 'sg:site:classband': '"5-6"' }, { 'sg:site:player': '__proto__', 'sg:site:xploss': '{"p1 air-hockey":999,"__proto__":3,"x":"y"}' });
-  const fixed = await stored(page);
+  const fixed = await stored(page), more = await page.evaluate(k => JSON.parse(localStorage.getItem(k)), MORE);
   assert.deepEqual(Object.keys(fixed), ['v', 'seq', 'list']);
   assert.equal(fixed.v, 1);
-  assert.equal(fixed.list.length, 12, 'at most 12 profiles');
-  assert.equal(fixed.seq, 20, 'the highest key seen, so no key is ever reused');
+  assert.equal(fixed.list.length, 12, 'the first key keeps 12 profiles');
+  assert.deepEqual(Object.keys(more), ['v', 'list']);
+  assert.deepEqual(more.list.map(p => p.k), ['pd', 'pe', 'pf', 'pg', 'ph', 'pi', 'pj', 'pk', 'pl', 'pm', 'pn', 'po'], 'at most 24 profiles in all');
+  assert.equal(fixed.seq, 30, 'the highest key seen, so no key is ever reused');
   assert.deepEqual(fixed.list[0], { k: 'p1', a: 3, c: 2, b: '8-9', xp: 100, lv: 3, d0: 20000, dl: 20000, g: { 'air-hockey': 3, 'drift-king': 2 } });
   assert.deepEqual(fixed.list[1], { k: 'p2', a: 0, c: 0, b: '', xp: 0, lv: 1, d0: today, dl: today, g: {} });
   assert.deepEqual(fixed.list[2], { k: 'p3', a: 3, c: 3, b: '10-11', xp: 74235, lv: 99, d0: 20500, dl: 20600, g: {} }, 'XP and level are capped at 99');
@@ -678,6 +697,184 @@ test('damaged stored profiles, class band and loss tallies are repaired silently
   // The damaged tally of 999 reads as the cap of 40: no more loss XP in this tab.
   await post(page, frame, stats([['l', 'L1', 1000], ['w', 'L1', 1000]]));
   assert.equal(await xp(page), 110);
+});
+
+const listKeys = page => page.evaluate(() => SGProfiles.list().map(p => p.k));
+const storedKeys = page => page.evaluate(k => k.map(key => { const d = JSON.parse(localStorage.getItem(key)); return d && d.list.map(p => p.k); }), [KEY, MORE]);
+const keysFrom = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => 'p' + (a + i).toString(36));
+const allStored = page => page.evaluate(k => k.flatMap(key => (JSON.parse(localStorage.getItem(key)) || { list: [] }).list), [KEY, MORE]);
+// The next n profiles through the API, each with its own animal and colour.
+const makeProfiles = (page, n, from = 0) => page.evaluate(([n, from]) => {
+  for (let i = from; i < from + n; i++) SGProfiles.create(i % 12, Math.floor(i / 12), '8-9');
+}, [n, from]);
+
+test('24 players fit: the 13th to 24th live in sg:site:profiles:more and the strip wraps at 360 px', async t => {
+  const { page } = await setup(t);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto(origin + '/');
+  assert.equal(await page.evaluate(() => SGProfiles.MAX), 24);
+  await makeProfiles(page, 12);
+  assert.deepEqual(await storedKeys(page), [keysFrom(1, 12), null], 'the second key is only made for the 13th profile');
+  await makeProfiles(page, 11, 12);
+  await home(page);
+  // The 24th through the strip, like a child.
+  await page.locator('#who [data-w="add"]').click();
+  await page.locator('#who [data-w="a:11"]').click();
+  await page.locator('#who [data-w="c:2"]').click();
+  await page.locator('#who [data-w="b:6-7"]').click();
+  assert.equal(await active(page), 'pick:po', 'the 24th player is picked');
+  assert.deepEqual(await storedKeys(page), [keysFrom(1, 12), keysFrom(13, 24)]);
+  const main = await stored(page);
+  assert.deepEqual([Object.keys(main), main.seq], [['v', 'seq', 'list'], 24], 'the first key keeps the format of portals made before 24');
+  assert.equal(await page.locator('#who [data-w="add"]').count(), 0, 'no + button when the PC is full');
+  assert.equal(await page.evaluate(() => SGProfiles.create(0, 7, '8-9')), null);
+  // Every player and the guest on the strip, in rows, inside a 360 px screen.
+  for (const mode of ['list', 'remove']) {
+    if (mode === 'remove') await page.locator('#who [data-w="edit"]').click();
+    const boxes = await page.locator('#who .who-row > button').evaluateAll(list => list.map(b => b.getBoundingClientRect().toJSON()));
+    assert.equal(await page.locator('#who .who-row > .who-av').count(), mode === 'list' ? 25 : 24, mode + ': every player (and the guest)');
+    assert.ok(boxes.every(b => b.left >= 0 && b.right <= 360), mode + ': every avatar fits the width');
+    assert.ok(new Set(boxes.map(b => Math.round(b.top))).size >= 6, mode + ': the strip wraps into rows');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, mode + ': no horizontal scroll');
+  }
+  // A reload reads both keys back.
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector('#who'));
+  assert.deepEqual(await listKeys(page), keysFrom(1, 24));
+  assert.equal(await page.locator('#who [data-w^="pick:p"]').count(), 24);
+});
+
+// js/profiles.js as it was before 24 profiles (CI checkouts without history skip this).
+const OLD_PROFILES = '252283d';
+const oldProfiles = (() => {
+  const shown = spawnSync('git', ['show', `${OLD_PROFILES}:js/profiles.js`], { cwd: repo, encoding: 'utf8' });
+  return shown.status === 0 && shown.stdout.includes('MAX = 12') ? shown.stdout : null;
+})();
+
+test('a portal tab from before 24 profiles, still open on the PC, never drops a profile',
+  { skip: !oldProfiles && `commit ${OLD_PROFILES} is not in this checkout (git show failed)` }, async t => {
+  const state = await setup(t), { page } = state;
+  await page.goto(origin + '/');
+  await makeProfiles(page, 24);
+  await page.evaluate(() => { SGProfiles.select('pk'); SGProfiles.visit('air-hockey'); });
+  const texts = p => p.evaluate(k => k.map(key => localStorage.getItem(key)), [KEY, MORE]);
+  const before = await texts(page);
+  // The old tab: the same origin and storage, running the old js/profiles.js.
+  const old = await newPage(state);
+  await old.goto(origin + '/seed.html');
+  await old.addScriptTag({ content: oldProfiles });
+  assert.deepEqual(await texts(old), before, 'loading the old code writes nothing');
+  assert.deepEqual(await listKeys(old), keysFrom(1, 12));
+  assert.equal(await old.evaluate(() => SGProfiles.create(5, 5, '6-7')), null, 'the old tab sees a full list and makes nothing');
+  // The old tab plays and removes; the new tab follows and keeps the first key full.
+  await old.evaluate(() => { SGProfiles.select('p3'); SGProfiles.visit('maze-dash'); });
+  await page.waitForFunction(() => SGProfiles.list().find(p => p.k === 'p3').visits('maze-dash') === 1);
+  assert.deepEqual(await listKeys(page), keysFrom(1, 24));
+  assert.deepEqual((await allStored(page)).find(p => p.k === 'pk').g, { 'air-hockey': 1 }, 'the visit counted in the new tab stays');
+  await old.evaluate(() => SGProfiles.remove('p2'));
+  await page.waitForFunction(k => JSON.parse(localStorage.getItem(k)).list.length === 12 && SGProfiles.list().length === 23, KEY);
+  assert.deepEqual(await storedKeys(page), [['p1', ...keysFrom(3, 13)], keysFrom(14, 24)], 'profile 13 moves up into the first key');
+  await old.waitForFunction(() => SGProfiles.list().length === 12);
+  assert.equal(await old.evaluate(() => SGProfiles.create(5, 5, '6-7')), null, 'so the old tab still cannot make one');
+  // With no new tab open, the old tab removes one and makes one in the room it sees.
+  await page.close();
+  await old.evaluate(() => { SGProfiles.remove('p4'); return SGProfiles.create(5, 5, '6-7'); });
+  assert.deepEqual(await old.evaluate(() => SGProfiles.player()), 'pp', 'the new key follows the highest key ever used');
+  const next = await newPage(state);
+  await next.goto(origin + '/');
+  await next.waitForFunction(() => document.querySelector('#who'));
+  assert.deepEqual(await listKeys(next), ['p1', 'p3', ...keysFrom(5, 13), 'pp', ...keysFrom(14, 24)]);
+  assert.deepEqual([(await stored(next)).seq, (await storedKeys(next))[1].length], [25, 11]);
+  assert.equal(await next.locator('#who [data-w^="pick:p"]').count(), 23, 'every profile is on the strip');
+  await old.close();
+});
+
+test('after 20 minutes with nobody playing, the player becomes a guest; why the session ended goes to telemetry', async t => {
+  const { page } = await setup(t, { clock: true });
+  await page.goto(origin + '/');
+  // A recorder in front of the telemetry hooks (the current sink may not have them yet).
+  await page.evaluate(() => {
+    window.calls = [];
+    for (const name of ['why', 'fav', 'timer']) {
+      const real = SGTelemetry[name];
+      SGTelemetry[name] = (a, b) => { window.calls.push(b === undefined ? [name, a] : [name, a, b]); if (typeof real === 'function') real(a, b); };
+    }
+    SGProfiles.create(1, 4, '8-9');
+  });
+  const calls = () => page.evaluate(() => window.calls.splice(0));
+  const player = () => page.evaluate(() => SGProfiles.player());
+  let frame = await play(page, 'air-hockey');
+  await page.clock.fastForward(19 * 60000);
+  assert.equal(await player(), 'p1', 'nothing happens before 20 minutes');
+  // A game that reports engaged play keeps the player; a message with none does not.
+  await post(page, frame, { ...stats([], 5000), om: 0 });
+  await page.clock.fastForward(19 * 60000);
+  await post(page, frame, { ...stats([], 0), om: 0 });
+  assert.equal(await player(), 'p1');
+  await page.clock.fastForward(60001);
+  await page.waitForFunction(() => document.body.className === 'route-home');
+  assert.equal(await player(), '', 'the next child starts as a guest');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:site:player')), null);
+  assert.equal(await active(page), 'pick:', 'on the strip');
+  assert.deepEqual(await calls(), [['why', 'i']]);
+  // A guest has nothing to hand over.
+  await page.clock.fastForward(21 * 60000);
+  assert.deepEqual(await calls(), []);
+
+  // Portal input keeps the player: a click, a key press, then a wheel turn.
+  await page.locator('#who [data-w="pick:p1"]').click();
+  await page.clock.fastForward(19 * 60000);
+  await page.keyboard.press('Shift');
+  await page.clock.fastForward(19 * 60000);
+  // A wheel event reaches the page after mouse.wheel() returns: wait for it.
+  await page.evaluate(() => addEventListener('wheel', () => { window.wheeled = true; }, { passive: true }));
+  await page.mouse.wheel(0, 10);
+  await page.waitForFunction(() => window.wheeled);
+  await page.clock.fastForward(19 * 60000);
+  assert.equal(await player(), 'p1');
+
+  // The classroom timer: start (5 min), its end with the hand-over overlay, then idle.
+  frame = await play(page, 'air-hockey');
+  await page.locator('#favBtn').click();
+  await page.locator('#favBtn').click();
+  await page.locator('#classroom summary').click();
+  await page.locator('#sessionMinutes').selectOption('5');
+  await page.locator('#sessionStart').click();
+  await page.locator('#sessionStop').click();
+  await page.locator('#sessionStart').click();
+  await page.clock.fastForward(300001);
+  await page.locator('#sessionHandoff').waitFor({ state: 'visible' });
+  assert.deepEqual(await calls(), [['fav', 'air-hockey', true], ['fav', 'air-hockey', false], ['timer', 's', 5], ['timer', 'c', 0], ['timer', 's', 5], ['timer', 'e', 0]]);
+  await page.clock.fastForward(15 * 60000);
+  await page.waitForFunction(() => document.body.className === 'route-home');
+  assert.equal(await player(), '');
+  assert.deepEqual(await calls(), [['why', 'i']]);
+  assert.equal(await page.locator('#sessionStatus').innerText(), 'انتهت الجلسة. الجهاز جاهز للاعب التالي.');
+  assert.equal(await page.evaluate(() => SGUpdateSafe()), true, 'the overlay of the ended timer went too');
+
+  // A timer still running is left alone (started here without a click, so the idle time runs on).
+  await page.locator('#who [data-w="pick:p1"]').click();
+  await page.clock.fastForward(10 * 60000);
+  await page.evaluate(() => { document.querySelector('#sessionMinutes').value = '20'; document.querySelector('#sessionStart').click(); });
+  await page.clock.fastForward(10 * 60000 + 1);
+  assert.equal(await player(), '');
+  assert.match(await page.locator('#sessionClock').innerText(), /^(9|10):\d\d$/, 'the timer keeps running');
+  assert.equal(await page.locator('#sessionStop').isVisible(), true);
+  assert.deepEqual(await calls(), [['timer', 's', 20], ['why', 'i']]);
+  await page.locator('#sessionStop').click();
+
+  // The hand-over button: 'h' for a player, nothing for a guest.
+  await page.locator('#sessionMinutes').selectOption('5');
+  for (const who of ['p1', '']) {
+    await page.locator(`#who [data-w="pick:${who}"]`).click();
+    await play(page, 'air-hockey');
+    await page.locator('#sessionStart').click();
+    await page.clock.fastForward(300001);
+    await page.locator('#sessionHandoff').waitFor({ state: 'visible' });
+    await page.locator('#sessionEnd').click();
+    await page.waitForFunction(() => document.body.className === 'route-home');
+    assert.deepEqual((await calls()).filter(c => c[0] === 'why'), who ? [['why', 'h']] : [], who || 'guest');
+  }
 });
 
 test('the portal still works when js/profiles.js is missing', { skip: !sourceTree && 'the fast build inlines every portal script' }, async t => {

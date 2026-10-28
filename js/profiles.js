@@ -3,10 +3,15 @@
  * age bands"). Plain script, loaded after shared/juice.js and before js/site.js,
  * which draws everything; this file only keeps the numbers.
  *
- * A profile is an animal (12) and a ring colour (8): no names, no typed text.
- *   localStorage 'sg:site:profiles':
+ * A profile is an animal (12) and a ring colour (8): no names, no typed text. A PC
+ * keeps up to 24 profiles (about 20 children share a lab PC).
+ *   localStorage 'sg:site:profiles': the first 12 profiles,
  *     { v: 1, seq, list: [{ k: 'p1', a: animal 0..11, c: colour 0..7, b: band,
  *       xp: total XP, lv: level, d0: day created, dl: last day played, g: { <slug>: visits } }] }
+ *   localStorage 'sg:site:profiles:more': profiles 13 to 24, { v: 1, list: [...] } (missing
+ *     while there are 12 or fewer). The first key keeps exactly the format of portals made
+ *     before 24, which keep 12 records and save them back: an old tab still open on the
+ *     PC then drops nothing, and can only add a profile while the first key has room.
  *   Days are local calendar day numbers (days since 1970-01-01 on this PC's calendar).
  *   sessionStorage 'sg:site:player': the current player's key (missing: a guest), so a
  *   closed tab or the classroom "hand over the device" returns to guest.
@@ -27,12 +32,12 @@
 (function () {
   'use strict';
 
-  var KEY = 'sg:site:profiles', PLAYER = 'sg:site:player', LOSS = 'sg:site:xploss', CLASS = 'sg:site:classband';
+  var KEY = 'sg:site:profiles', MORE = KEY + ':more', PLAYER = 'sg:site:player', LOSS = 'sg:site:xploss', CLASS = 'sg:site:classband';
   // Emoji drawn by Windows 10's Segoe UI Emoji; ring colours stay apart for every eye.
   var ANIMALS = ['🦊', '🐼', '🐯', '🐸', '🐵', '🐧', '🦁', '🐰', '🐨', '🐙', '🦄', '🐢'];
   var COLORS = ['#e53935', '#f57c00', '#fdd835', '#43a047', '#00acc1', '#1e5bd6', '#8e24aa', '#ec407a'];
   var BANDS = ['6-7', '8-9', '10-11'];
-  var MAX = 12, TOP = 99, SEQ = 2821109907455; // 36^8 - 1: the longest key is p + 8 characters
+  var MAX = 24, MAIN = 12, TOP = 99, SEQ = 2821109907455; // 36^8 - 1: the longest key is p + 8 characters
   var KEY_RE = /^p[0-9a-z]{1,8}$/, SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
   var isArr = Array.isArray, min = Math.min, floor = Math.floor;
 
@@ -80,18 +85,35 @@
     out.seq = Math.max(int(d.seq, 0, SEQ), top);
     return out;
   }
-  function save(d) {
-    mem = d;
-    try { localStorage.setItem(KEY, JSON.stringify(d)); temp = false; return true; } catch (e) { temp = true; return false; }
+  // The two stored texts: the first 12 profiles with seq, and the rest (null: none).
+  function split(d) {
+    return [JSON.stringify({ v: 1, seq: d.seq, list: d.list.slice(0, MAIN) }),
+      d.list.length > MAIN ? JSON.stringify({ v: 1, list: d.list.slice(MAIN) }) : null];
   }
+  // The first key goes first: a profile that moves up to it after a removal is then never
+  // missing from both keys, even for a tab that reads between the two writes.
+  function save(d) {
+    var s = split(d);
+    mem = d;
+    try {
+      localStorage.setItem(KEY, s[0]);
+      if (s[1]) localStorage.setItem(MORE, s[1]); else localStorage.removeItem(MORE);
+      temp = false; return true;
+    } catch (e) { temp = true; return false; }
+  }
+  function parse(raw) { try { raw = JSON.parse(raw); } catch (e) { raw = 0; } return isObj(raw) ? raw : {}; }
+  function records(d) { return isArr(d.list) ? d.list : []; }
   // The stored profiles (repaired in place when damaged), or memory when storage fails.
+  // The first key comes first and its seq is the one kept; a key in both counts once.
   function load() {
-    var raw, d;
+    var raw, more, d, s;
     if (temp) return mem;
-    try { raw = localStorage.getItem(KEY); } catch (e) { return mem; }
-    if (raw === null) return mem = fresh();
-    try { d = clean(JSON.parse(raw)); } catch (e) { d = fresh(); }
-    if (JSON.stringify(d) !== raw) save(d); else mem = d;
+    try { raw = localStorage.getItem(KEY); more = localStorage.getItem(MORE); } catch (e) { return mem; }
+    if (raw === null && more === null) return mem = fresh();
+    d = parse(raw);
+    d = clean({ seq: d.seq, list: records(d).concat(records(parse(more))) });
+    s = split(d);
+    if (s[0] !== raw || s[1] !== more) save(d); else mem = d;
     return mem;
   }
   // Read, change, write: two portal tabs add up instead of overwriting each other.
@@ -301,7 +323,7 @@
   } catch (e) { /* a guest with no profiles */ }
   // Another tab created, removed or played a profile, or changed the class band.
   addEventListener('storage', function (e) {
-    if (e.key !== null && e.key !== KEY && e.key !== CLASS) return;
+    if (e.key !== null && e.key !== KEY && e.key !== MORE && e.key !== CLASS) return;
     try {
       var p = find(mem, who), xp = p && p.xp;
       sync(function () { load(); classBand = readClass(); });

@@ -135,11 +135,12 @@ dda.reset()
   `tier = 1 + floor(level * tiers * 0.9999)`.
 * **Storage:** `Kit.store(slug)` key `dda` →
   `{ <player, or '_' + band for a guest>: { <id>: [level rounded to 3 decimals, n] } }`;
-  at most 16 players kept (the least recently saved is dropped). A change of player
+  at most 24 players kept, a full PC (the least recently saved is dropped; game pages
+  built before milestone 2.5 still keep 16). A change of player
   (or, for a guest, of band) reloads the state. A player with no results yet follows
   the current band's seed.
 * Every read of the controller (`level`, `tier`, `value`, `pick`) reports the tier to
-  `Kit.track.tier()`.
+  `Kit.track.tier()`, and the level (in thousandths) for the next `rx`.
 * DDA lives in the UI layer (`game.js`): engines and level files stay pure and take
   difficulty as parameters (their Node verifiers load a stub Kit).
 
@@ -192,6 +193,32 @@ a row, never typed text). A `round()` while a round is open ends it with code `q
 does a round still open when the game page is unloaded (not kept in the back-forward
 cache); `sg:stats` v1 is unchanged and the portal records its own quit from `o`/`om`.
 
+**Round counters `rx` (milestone 2.5).** Immediately before every `re`, in the same `ev`
+list, Kit pushes one more kind. `sg:telemetry` stays **version 2**: a portal from before
+2.5 accepts only `rs` of length 3 and `re` of length 9, so it ignores `rx`, and a new
+portal with an old game page gets no `rx` and stores `x: null`. Because of the 64-event
+split, `rx` and its `re` may arrive in two messages.
+
+```js
+['rx', wallMs, inputs, idleLapses, pauses, rtSumMs, rtN, ddaPermille]
+// e.g. ['rx', 99000, 6, 2, 3, 650, 2, 600], then ['re', 'w', 'L3', …]
+```
+
+| Counter | Counted | Rule |
+|---|---|---|
+| `wallMs` | the round's start to its end | elapsed milliseconds (`performance.now()`), engaged or not; never a time of day |
+| `inputs` | every key press and click Kit sees in the round | key repeats excluded |
+| `idleLapses` | a key press or click in the round after its 20 s engaged window lapsed | mouse moves, the wheel and `busy()` never count; after a pause the window is cut, so the press that resumes play is not a lapse |
+| `pauses` | every Kit pause in the round (blur, hidden page, fullscreen exit, `sg:pause`, Shift+Tab) | one blur can arrive with a hidden page, which counts twice |
+| `rtSumMs`, `rtN` | the same reaction times as the `re` histogram | for the exact mean |
+| `ddaPermille` | `round(level × 1000)` of the last `Kit.dda` read of any controller in the page | −1 before the first read; sticky across rounds |
+
+Everything except `ddaPermille` restarts at each round start. The first four are plain
+counts kept at any time and posted only while `telemetry` is `true`; reaction times are
+counted only while it is `true`, as for the histogram. Kit adds no timer and posts nothing
+new: `rx` rides on the existing messages. The counters cost 195 minified bytes per game
+page (about 6.6 KB of offline cache over the 34 game pages).
+
 ## Juice (shared/juice.js)
 
 `Kit.juice` when Kit is present (games), `window.Juice` otherwise (portal). Built on
@@ -224,8 +251,10 @@ Every sound is a one-shot under 1.5 s. Juice never loops and has no music API.
 
 ### Profiles and age bands (js/profiles.js → `window.SGProfiles`)
 
-* **Anonymous picture profiles:** an animal (12 choices) and a colour (8). **No names,
-  no typed text.** Up to 12 profiles per browser.
+* **Picture profiles without names:** an animal (12 choices) and a colour (8). **No names,
+  no typed text.** Up to 24 profiles per browser (about 20 children share a lab PC).
+  A profile's random code for the school's dashboard is kept by the telemetry sink in
+  `sg:site:rid` ("Telemetry sink"), never on the profile record.
 * **Age band** chosen with three big number cards: `6–7`, `8–9`, `10–11`.
   The classroom panel offers a class default band used for guests.
 * **Never blocking:** home renders as before; a "who's playing?" strip of big round
@@ -233,9 +262,24 @@ Every sound is a one-shot under 1.5 s. Juice never loops and has no music API.
   with level and an XP bar. One click picks a player; a guest plays immediately.
 * The current player lives in `sessionStorage` (`sg:site:player`), so a closed tab or
   the classroom "hand over the device" button returns to guest.
-* Storage `sg:site:profiles`:
+* **Idle hand-over** (`js/site.js`): a tab left open would give the next class the last
+  child's profile. After **20 minutes** with no key press, click or wheel on the portal and
+  no `sg:stats` with engaged time (`e > 0`) from the open game, the player becomes a guest;
+  an open game goes back to home, where the "who's playing?" strip has focus. A classroom
+  timer that is still running is kept; the hand-over overlay of one that ran out is
+  cleared. The check runs on the classroom timer's 1-second tick, also when no timer is set.
+* Storage `sg:site:profiles`, the first 12 profiles:
   `{ v: 1, seq, list: [{ k: 'p1', a: animal, c: colour, b: band, xp, lv, d0: day created,
   dl: last day played, g: { <slug>: visits } }] }` (days are local day numbers).
+  Profiles 13 to 24 are in `sg:site:profiles:more` = `{ v: 1, list: [...same records...] }`,
+  removed while there are 12 or fewer. The split keeps old tabs safe: a portal from before
+  milestone 2.5 keeps the first 12 records of `sg:site:profiles` and saves the result
+  back, so a key holding 24 would lose 13 to 24 to any old tab or offline copy still open
+  on the PC. With at most 12 there it drops nothing, and it can add a profile only while
+  that key has room; the new code refills it to 12 on its next load. `load()` reads both
+  keys (the first key first, a key in both counts once, `seq` the highest key ever seen);
+  `save()` writes the first key, then `:more`, so a profile moving up after a removal is
+  never missing from both keys for a tab that reads in between.
 * **XP** comes from the v1 `sg:stats` round events the portal already receives
   (so it works with telemetry off): win +10, draw +6, loss +4 (at most 40 XP of
   losses per game per tab session), endless end +5 (+1 per 30 s of round time, up to
@@ -248,10 +292,11 @@ Every sound is a one-shot under 1.5 s. Juice never loops and has no music API.
 
 The **only** file in the repository allowed to use `fetch` (never `sendBeacon`). The static
 network bans (`tools/check-all.mjs`, `tools/tests/play-stats-rules.test.mjs`) carve
-out exactly this path.
+out exactly this path. It sends **wire version 3** (milestone 2.5,
+`docs/RESEARCH_TELEMETRY_SPEC.md` §B); the client details are in `docs/TELEMETRY.md`.
 
 **Active only when all of these hold**, otherwise it is inert (sends nothing, queues
-nothing, and the portal sends `telemetry: false`):
+nothing, makes no code, and the portal sends `telemetry: false`):
 * `window.SG_TELEMETRY.url` is set (the fast build injects it from the
   `SG_TELEMETRY_URL` environment variable; the source tree never contains a URL) and
   starts with `https://`;
@@ -263,54 +308,86 @@ nothing, and the portal sends `telemetry: false`):
 * the teacher has not stopped statistics (`sg:site:statsmeta.off`), nor turned off
   sharing (`sg:site:statsmeta.tm === false`).
 
-**Privacy rules (enforced in the sink and again on the server):** no names, no typed
-text, no error text, no PC label, no profile key or avatar, no wall-clock timestamps
-(times are seconds since the session started; the server stamps the receipt day and
-hour), no persistent identifiers (the session id is random per portal session, is
-never reused, and is kept on the PC only inside batches still waiting to be sent), no user-agent or GPU strings (coarse device buckets only), no IP
-storage on the server.
+**Privacy rules (enforced in the sink and again on the server):** the data is **without
+names (pseudonymous)**. No names, no typed text, no error text, no PC label or teacher-page
+PC id, no profile key, avatar or colour, no user-agent or GPU strings (coarse device
+buckets only), no IP storage on the server, and **no wall-clock time**: times are seconds
+since the session started, and the envelope's `w` (seconds from the session's start to the
+send) lets the server date the session by its own clock. What is sent: a random session id
+per portal session; a **random code per profile and one per PC** (12 hex each, in
+`localStorage` `sg:site:rid`, made and written only while the sink is active, never derived
+from anything, kept by the teacher's clear and stop), so the school's server can follow one
+child's play over time without knowing who the child is; and the PC's **time zone name**,
+from which the server picks the school's clock. Under GDPR-style rules the codes make this
+pseudonymous personal data: parents should be told, and research publication may need
+consent or an ethics review.
 
 **Envelope** (POST body, `Content-Type: text/plain`, JSON):
 
 ```js
-{ v: 2,
-  b: '9f3c0a17b2e44d10',   // batch id, 16 hex (server de-duplicates)
+{ v: 3,
+  b: '9f3c0a17b2e44d10',   // batch id, 16 hex
   s: '5d02be9a41c7',       // session id, 12 hex, random per portal session
   k: '5c18c6d2d1c052ad',   // build version ('src' outside the fast build)
   m: 'web',                // 'web' | 'app' (installed PWA)
   a: '6-7',                // age band of the session's player, '' if unknown
   d: [4, 4, 1920],         // device buckets: cores (1,2,4,8,16), memory GB (0,1,2,4,8), screen width (1366,1600,1920,2560)
-  ev: [ ... ] }            // at most 200 events, at most 32 KB per batch
+  u: '3f9a0c51e2b7',       // the player's code, '' for a guest or when storage refused it
+  p: '8c21d0e94a6f',       // this PC's code, '' when storage refused it
+  z: 'Asia/Riyadh',        // the PC's IANA zone, '' if unknown
+  ev: [ ... ],             // at most 200 events, at most 32 KB per batch as sealed
+  w: 64 }                  // whole seconds from the session's start to this send (0..691200), written last
 ```
 
-A new session (new `s`) starts at page load and whenever the player changes.
+The server validates `u`, `p`, `z` and `w` leniently (a malformed one becomes `''` or
+`null` and the batch is kept), because the sink drops a batch for good on any 4xx. `w`
+comes from `performance.now()` for a session begun on this page, else from the queue
+entry's `w0` (`Date.now()` at the session's start, never sent), and is at least the batch's
+last `t`. A new session (new `s`) starts at page load and whenever the player changes.
 
-**Events** (`t` = whole seconds since the session started):
+**Events** (`t` = whole seconds since the session started; `n` the visit in its session,
+`k` the round in its visit, both from 1):
 
 | Event | Shape |
 |---|---|
-| session start | `['ss', t, isNewProfile 0/1, profileAgeBucket, daysSinceLastBucket, level]` — profile age `0` new, `1` 1–6 days, `2` 7–29, `3` 30+; days since last play `0` same day, `1` 1, `2` 2–6, `3` 7+, `4` first time; level 0 for a guest |
-| game open | `['go', t, slug, src, playsBeforeBucket]` — `src` from the v1 launch sources plus `starter`; plays before `0`, `1`, `2` (2–4), `3` (5–9), `4` (10+) for this player |
-| game ready | `['ld', t, slug, loadMs]` |
-| game failed | `['er', t, slug, kind]` — `t` timeout, `x` script error, `l` load error |
-| round start | `['rs', t, slug, id, tier, replayIndex]` — prior starts of this slug+id in this session |
-| round end | `['re', t, slug, code, id, ms, score, tier, hits, misses, rt[6]]` |
-| game close | `['gx', t, slug, engagedMs, il[6], f[4]]` |
+| session start | `['ss', t, isNew 0/1, ageDays, sinceDays, level, np, cls]` — whole days, −1 for a guest (days since also −1 for a new profile or one that never played); `np` profiles on this PC; `cls` classroom mode |
+| older code | `['cd', t, olderCode]` — once, right after `ss`, when a teacher gave this profile another PC's code (the server links the older code to `u`) |
+| profile removed | `['pr', t, code]` — once per profile gone from this PC (censoring, not drop-out) |
+| game open | `['go', t, n, slug, src, playsBefore, fav]` — `src` from the v1 launch sources plus `starter`; the player's exact visits before; `fav` the game is hearted |
+| game ready | `['ld', t, n, slug, loadMs]` |
+| game failed | `['er', t, n, slug, kind]` — `t` timeout, `x` script error, `l` load error |
+| round start | `['rs', t, n, k, slug, id, tier, replayIndex]` — prior starts of this slug+id in this session |
+| round end | `['re', t, n, k, slug, code, id, ms, score, tier, hits, misses, rt[6], x]` — `x` Kit's `rx` counters (`[wallMs, inputs, idleLapses, pauses, rtSumMs, rtN, ddaPermille]`) or `null` |
+| engaged so far | `['gp', t, n, slug, engagedMs]` — an open visit's engaged time, added when a batch is sealed beside other events, never alone |
+| game close | `['gx', t, n, slug, engagedMs, il[6], f[4]]` |
+| tutorial | `['tu', t, n, slug, 's' \| 'd']` — from the game's `sg:stats` v1 `['t', 'start' \| 'done']`, once per visit and step |
+| heart | `['fv', t, n, slug, on]` |
+| classroom timer | `['ct', t, 's' \| 'c' \| 'e', minutes]` — started (minutes), cancelled, ran out |
 | level up | `['lv', t, level]` |
-| session end | `['se', t, engagedMs]` (best effort, via a keepalive `fetch`) |
+| session end | `['se', t, engagedMs, why]` — `h` hand-over button, `i` idle hand-over, `p` other player change, `u` unload (best effort, via a keepalive `fetch`) |
 
-**Delivery:** events batch in memory; a batch is sent when a game closes, after 20 s
-with pending events, and when the page is hidden, always by `fetch` without credentials
+`site.js` calls the hooks `why(code)` (`h` and `i` only, just before it changes the
+player), `fav(slug, on)` and `timer(what, minutes)` next to its own handlers; like every
+hook they do nothing while the sink is inert. A teacher's "same child as on another PC"
+on the teacher page (`js/teacher.js`, `docs/PLAY_STATS.md` section 3) writes `k[key]` and
+the older code in `l[key]`; the sink sends that `cd` at the profile's next session start
+and deletes `l[key]`. The check character the teacher page shows (Luhn mod 16) is never
+sent.
+
+**Delivery:** events batch in memory; a batch is sent when a game closes, 60 s after the
+first waiting event (or as often as the server's last `X-Batch-Every` asked, 20 to 600 s),
+and when the page is hidden, always by `fetch` without credentials
 (`credentials: 'omit'`: no cookie ever goes, so never by `sendBeacon`), with `keepalive`
 while the keepalive bodies in flight fit in 60 KB (the rest wait in the queue). Unsent
-batches are kept in `localStorage` `sg:site:tm:q:<hash of the ingest URL>`, so another
-copy of the site on the same origin with another URL never sends them (at most 128 KB,
-at most 7 days old, oldest dropped first); stopping statistics or turning sharing off
-drops every `sg:site:tm:q` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the batch;
-a 4xx other than 429 drops it as malformed; 429, 5xx and network errors retry.
+batches are kept as `{ t, w0, e }` in `localStorage` `sg:site:tm:q:<hash of the ingest
+URL>`, so another copy of the site on the same origin with another URL never sends them (at
+most 128 KB, at most 7 days old, oldest dropped first); entries of wire version 2 queued by
+an older build are still sent, unchanged. Stopping statistics or turning sharing off drops
+every `sg:site:tm:q` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the
+batch; a 4xx other than 429 drops it as malformed; 429, 5xx and network errors retry.
 Teacher "clear" removes the `sg:site:tm:` queues too (not the sharing note
-`sg:site:tm:on`). All storage calls are wrapped; no
-`console`; never `clear()`.
+`sg:site:tm:on`, and not `sg:site:rid`). All storage calls are wrapped; no `console`; never
+`clear()`.
 
 ## Ingest server (server/)
 

@@ -634,3 +634,72 @@ Thumbnails remain the largest part of the portal (about 256 KB). The offline cac
 grows by 73,195 bytes (1.4%). No request, font, library or third-party code is added
 to any child's page, and with `SG_TELEMETRY_URL` unset the built site makes no network
 request at all.
+
+## Research telemetry, Kit and profiles (milestone 2.5), 27 October 2026
+
+The first client step of milestone 2.5 (`docs/RESEARCH_TELEMETRY_SPEC.md`, steps C1
+and C2) changes three files. Measured with the Linux minified build:
+
+* **Kit** gains the round counters `rx` (wall time, inputs, idle lapses, pauses, the
+  reaction-time sum and count, and the DDA level) and keeps the DDA level of 24 players
+  instead of 16: +195 minified bytes per game page, under the 350 the spec allows. It adds
+  no timer and no message; per input it adds one comparison and an increment.
+* **The portal** grows by 868 bytes, to 392,908 of 394,000: 24 profiles per PC split over
+  two storage keys so that an old portal tab cannot drop profiles 13 to 24
+  (`js/profiles.js`, +396 minified bytes), and in `js/site.js` the 20-minute idle
+  hand-over and the calls for the new telemetry hooks (+472). The limit is unchanged.
+* The offline cache grows from 5,276,735 to 5,284,233 of 5,290,000 bytes (unchanged).
+
+Seven game pages kept less than 1,000 bytes, so their limits rise to the measured size
+rounded up to the next 1,000 bytes plus 1,000, as before:
+
+| Game | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| beat-dash | 112,819 | 113,014 | 114,000 | 115,000 |
+| block-world | 157,903 | 158,098 | 159,000 | 160,000 |
+| cake-guards | 83,866 | 84,061 | 85,000 | 86,000 |
+| paint-grab | 109,862 | 110,057 | 111,000 | 112,000 |
+| rail-rush | 141,993 | 142,188 | 143,000 | 144,000 |
+| tank-splat | 111,968 | 112,163 | 113,000 | 114,000 |
+| troll-level | 110,858 | 111,053 | 112,000 | 113,000 |
+
+The other 27 games grow by the same 195 bytes inside their unchanged limits (drift-king
+is now closest, with 1,006 bytes left). No request, font, library or precached file is
+added. The rest of the client step (the v3 sink in `js/telemetry.js` and the teacher
+page's codes panel) is measured below.
+
+## Research telemetry, the v3 sink and the teacher page's codes (milestone 2.5), 28 October 2026
+
+The second client step of milestone 2.5 (steps C3 and C4) changes no game page and no
+shared script; Kit is as above. Measured with the Linux minified build:
+
+* **The portal** grows by 2,626 bytes, from 392,908 to 395,534: `js/telemetry.js` sends
+  wire version 3 (+2,623 minified bytes): the random codes in `sg:site:rid`, the pending
+  links, `w` at each send, the visit and round numbers, Kit's round counters, tutorials,
+  `gp`, hearts, the classroom timer, the session-end reason and `X-Batch-Every`. The spec
+  expected about +2.0 KB for the sink. Its new storage reads are small and rare: a session
+  start reads `sg:site:classroom` and reads (and, when a code is made or changes, writes)
+  `sg:site:rid`; a game open reads `sg:site:favs`; and each `sg:stats` message of the open
+  game now reads the teacher's settings, as each `sg:telemetry` message already did.
+* **The teacher page** grows by 6,215 bytes, from 90,422 to 96,637: the dashboard codes
+  panel with its Luhn mod 16 check character, its own copies of the portal's 12 animals
+  and 8 ring colours, the parsing of `sg:site:rid` and both profile keys, "the same child
+  as on another PC" with its five refusals, and the new copy (about +5.0 KB of minified
+  script, most of it Arabic text at two bytes a character, and about +1.2 KB of markup and
+  styles). The spec estimated at most 1.8 KB; the copy was shortened once, and going
+  further would drop the explanations a teacher needs to type a code from another PC.
+* The offline cache grows by 8,841 bytes, from 5,284,233 to 5,293,074 (the portal and
+  the teacher page, each cached once, and the worker's list).
+
+All three limits follow the rule above: the measured size rounded up to the next 1,000
+bytes plus 1,000.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 392,908 | 395,534 | 394,000 | 397,000 |
+| Teacher page | 90,422 | 96,637 | 96,000 | 98,000 |
+| Offline precache | 5,284,233 | 5,293,074 | 5,290,000 | 5,295,000 |
+
+No game limit changes (drift-king keeps 1,006 bytes and swing-hook 1,035). No request,
+font, library or third-party code is added to any child's page; with `SG_TELEMETRY_URL`
+unset the built site still makes no network request at all.

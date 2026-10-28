@@ -23,8 +23,8 @@
  *     The sw.js committed at the repo root is this same off switch, so switching GitHub Pages
  *     back to the plain source site also cleans the offline cache off every PC.
  *     (Regenerate it with: node tools/build.mjs --kill-sw --out .work/kill-switch && cp .work/kill-switch/sw.js sw.js)
- *   - SG_TELEMETRY_URL (environment, optional): the https:// address of the anonymous telemetry
- *     ingest server (docs/TELEMETRY.md). Only the portal gets it, as window.SG_TELEMETRY, and
+ *   - SG_TELEMETRY_URL (environment, optional): the https:// address of the school's telemetry
+ *     ingest server (docs/TELEMETRY.md; play events without names). Only the portal gets it, as window.SG_TELEMETRY, and
  *     only in a normal build; unset or empty, nothing is added and the portal never sends.
  */
 import fs from 'node:fs';
@@ -370,7 +370,7 @@ try {
   console.log(`offline download: ${OFFLINE_ZIP}, ${zipped.length} files in ${OFFLINE_FOLDER}/, ${(download.length / 1048576).toFixed(2)} MB`);
   for (const [f, b] of report.slice(0, 1)) console.log(`  ${f}: ${(b / 1024).toFixed(0)} KB`);
   console.log(`  teacher.html: ${(Buffer.byteLength(teacher) / 1024).toFixed(0)} KB`);
-  if (telemetry) console.log(`  telemetry: the portal sends anonymous events to ${new URL(TELEMETRY_URL).host}`);
+  if (telemetry) console.log(`  telemetry: the portal sends play events without names to ${new URL(TELEMETRY_URL).host}`);
   const gb = report.slice(1).map(r => r[1]);
   console.log(`  games: ${(Math.min(...gb) / 1024).toFixed(0)}–${(Math.max(...gb) / 1024).toFixed(0)} KB each (one file per game)`);
 } finally {

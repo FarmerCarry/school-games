@@ -2,7 +2,8 @@
 // Node checks run the page's pure functions without a browser (in the built page,
 // the inlined scripts), including unpacking the .xlsx byte by byte. Browser checks
 // use seeded day records and a fixed clock: numbers, periods, exports, combining
-// other PCs' files, clear, stop, blocked storage, requests and console errors.
+// other PCs' files, clear, stop, blocked storage, the dashboard codes and "the same
+// child as on another PC", requests and console errors.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import fs from 'node:fs';
@@ -59,6 +60,19 @@ const { api, names } = loadPage();
 /* ------------------------------------------------------------ seeded data */
 const day = (d, g, s = {}) => JSON.stringify({ v: 1, d, s, g });
 const META = { pc: { id: 'pcabcd', label: 'جهاز 7' }, off: false, since: '2026-06-01', custom: 'kept' };
+// Dashboard codes (js/telemetry.js): this PC's, and those of two of the portal's players.
+const PC_CODE = '8c21d0e94a6f', P1 = '3f9a0c51e2b7', P13 = 'a1b2c3d4e5f6';
+const RID_TEXT = JSON.stringify({ v: 1, pc: PC_CODE, k: { p1: P1, p13: P13 }, l: {} });
+// The check character as the spec defines it (Luhn mod 16), written out here on purpose:
+// from the rightmost hex digit the factors are 2, 1, 2, …; each product adds floor(p / 16)
+// and p % 16; the check is (16 - sum % 16) % 16.
+function luhn16(hex) {
+  let sum = 0;
+  [...hex].reverse().forEach((c, i) => { const p = (i % 2 ? 1 : 2) * parseInt(c, 16); sum += Math.floor(p / 16) + p % 16; });
+  return ((16 - sum % 16) % 16).toString(16);
+}
+// A code as another PC's teacher page shows it: 3F9A-0C51-E2B7-5.
+const shown = hex => (hex + luhn16(hex)).toUpperCase().match(/.{1,4}/g).join('-');
 function seed() {
   return {
     'sg:site:stats:d:2026-10-08': day('2026-10-08', {
@@ -237,6 +251,55 @@ function checkWorkbook(bytes) {
 }
 
 /* ============================================================ node checks */
+test('dashboard codes: the Luhn mod 16 check character, how codes are shown and typed, and the transfer', () => {
+  for (let i = 0; i < 500; i++) {
+    const hex = [...Array(12)].map(() => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
+    assert.equal(api.checkChar(hex), luhn16(hex), hex);
+  }
+  // Any one wrong character is caught.
+  const full = P1 + luhn16(P1);
+  for (let i = 0; i < 13; i++) {
+    for (const d of '0123456789abcdef') if (d !== full[i]) assert.deepEqual(api.readCode(full.slice(0, i) + d + full.slice(i + 1)), { error: 'check' });
+  }
+  assert.equal(api.showCode(P1, true), shown(P1));
+  assert.equal(shown(P1), '3F9A-0C51-E2B7-5');
+  assert.equal(api.showCode(PC_CODE), '8C21-D0E9-4A6F');
+  // Case, dashes and spaces do not matter; Arabic digits count as digits.
+  for (const typed of [full, shown(P1), ' 3f9a 0c51-e2b7 5 ', '٣F9A-٠C51-E2B7-٥']) assert.deepEqual(api.readCode(typed), { code: P1 }, typed);
+  for (const bad of ['', P1, full + '0', full.replace('3', 'g'), shown(P1) + 'A', 'ABCD-EFGH-IJKL-M']) {
+    assert.deepEqual(api.readCode(bad), { error: 'length' }, bad);
+  }
+
+  // The player takes the other PC's code; its own waits in l for the portal to link once.
+  const P2 = '0a0b0c0d0e0f', OTHER = 'b0b1b2b3b4b5', THIRD = 'c0ffee000000';
+  const rid = { v: 1, pc: PC_CODE, k: { p1: P1, p2: P2 }, l: {} }, copy = structuredClone(rid);
+  const first = api.transfer(rid, 'p1', shown(OTHER));
+  assert.deepEqual(first, { rid: { v: 1, pc: PC_CODE, k: { p1: OTHER, p2: P2 }, l: { p1: P1 } }, joined: true });
+  assert.deepEqual(rid, copy, 'the record read is not changed in place');
+  // A second transfer before the portal linked: the oldest code still waits.
+  assert.deepEqual(api.transfer(first.rid, 'p1', shown(THIRD)).rid, { v: 1, pc: PC_CODE, k: { p1: THIRD, p2: P2 }, l: { p1: P1 } });
+  // A player with no code yet: nothing waits.
+  assert.deepEqual(api.transfer(rid, 'p3', shown(OTHER)), { rid: { v: 1, pc: PC_CODE, k: { p1: P1, p2: P2, p3: OTHER }, l: {} }, joined: false });
+  // Refused: the player's own code, another player's code on this PC, and malformed codes.
+  assert.deepEqual(api.transfer(rid, 'p1', shown(P1)), { error: 'own' });
+  assert.deepEqual(api.transfer(rid, 'p1', shown(P2)), { error: 'other' });
+  assert.deepEqual(api.transfer(rid, 'p1', OTHER), { error: 'length' });
+  assert.deepEqual(api.transfer(rid, 'p1', shown(OTHER).replace(/.$/, c => c === '0' ? '1' : '0')), { error: 'check' });
+
+  // sg:site:rid and the portal's players are read as the portal keeps them; the rest is left out.
+  const none = { v: 1, pc: '', k: {}, l: {} };
+  for (const text of [null, '{', '[]', '{"v":2,"pc":"8c21d0e94a6f"}']) assert.deepEqual(api.parseRid(text), none, String(text));
+  assert.deepEqual(api.parseRid(JSON.stringify({ v: 1, pc: 'PC', k: { p1: P1, p2: 'short', x1: P1, p3: 7, pqrstuvwxyz: P1 }, l: { p1: [P1], p4: P13 }, more: 1 })),
+    { v: 1, pc: '', k: { p1: P1 }, l: { p4: P13 } });
+  const record = (k, a, c) => ({ k, a, c, b: '8-9', xp: 0, lv: 1, d0: 20000, dl: 20000, g: {} });
+  const main = { v: 1, seq: 30, list: [record('p1', 3, 1), record('p2', 99, -1), { k: 'Bad' }, record('p1', 5, 5)] };
+  const more = { v: 1, list: [...Array(30)].map((_, i) => record('p' + (i + 3), i % 12, i % 8)) };
+  const players = api.parsePlayers(JSON.stringify(main), JSON.stringify(more));
+  assert.equal(players.length, 24, 'at most 24 players');
+  assert.deepEqual(players.slice(0, 3), [{ k: 'p1', a: 3, c: 1 }, { k: 'p2', a: 0, c: 0 }, { k: 'p3', a: 0, c: 0 }]);
+  assert.deepEqual(api.parsePlayers('{', null), []);
+});
+
 test('stored day records are checked field by field; foreign or broken values are ignored', () => {
   const store = fakeStorage(seed());
   const { days, meta } = api.readStore(store);
@@ -420,7 +483,7 @@ test('the workbook is a stored ZIP of well-formed parts: RTL sheets, an Arabic r
     'احذف الصفوف التي يكون فيها pc فارغًا', 'لا ترسم حركة مستمرة: connect-four، tic-tac-toe، typing-test.',
     'تبدأ من الصفر في متصفح آخر', 'في جدول hours استخدم أحدث ملف لكل جهاز',
     'الأرقام لكل جهاز وليست لكل طالب. لا يُرسل الموقع هذا الملف إلى أي مكان. وإذا ربط مسؤول المدرسة نسخة الموقع ' +
-    'بخادم للإحصاءات فلا تصله إلا معلومات لعب مجهولة: بلا أسماء ولا اسم للجهاز ولا أي نص كتبه الأطفال.']) {
+    'بخادم للإحصاءات فلا تصله إلا معلومات اللعب بلا أسماء ولا اسم للجهاز ولا أي نص كتبه الأطفال، ويظهر فيها كل طفل برمز عشوائي.']) {
     assert.ok(readme.includes(text), 'the read-me says: ' + text);
   }
   // Text that looks like XML or a formula stays plain text.
@@ -524,11 +587,15 @@ const rowNumbers = (page, slug) => gameRow(page, slug).evaluate(row => ['seconds
 test('seeded records show the right numbers, and the period choice changes them', async t => {
   const page = await teacherPage(t);
   assert.equal(await page.locator('html').getAttribute('dir'), 'rtl');
+  // Milestone 2.5: the codes make the data pseudonymous, so the note no longer says «مجهولة».
   assert.equal(await page.locator('.note').textContent(), 'الأرقام لكل جهاز وليست لكل طالب، وتبقى على هذا الجهاز. ' +
-    'لا يُرسل شيء إلا إذا ربط مسؤول المدرسة نسخة الموقع بخادم للإحصاءات، وعندها يُرسل الموقع معلومات لعب مجهولة فقط: ' +
-    'بلا أسماء ولا اسم للجهاز ولا أي نص كتبه الأطفال.');
-  // Nothing on this PC says it shares (js/telemetry.js writes sg:site:tm:on while it does).
+    'لا يُرسل شيء إلا إذا ربط مسؤول المدرسة نسخة الموقع بخادم للإحصاءات، وعندها يُرسل الموقع معلومات اللعب ' +
+    'بلا أسماء ولا اسم للجهاز ولا أي نص كتبه الأطفال، ويظهر فيها كل طفل برمز عشوائي.');
+  // Nothing on this PC says it shares (js/telemetry.js writes sg:site:tm:on while it does),
+  // and it never did (no codes): no codes panel, no note about the server beside clear.
   assert.equal(await page.locator('#shareMsg').isHidden(), true);
+  assert.equal(await page.locator('#codesPanel').isHidden(), true);
+  assert.equal(await page.locator('#clearServer').isHidden(), true);
   assert.equal(await page.locator('input[name="period"]:checked').getAttribute('value'), 'week');
   assert.deepEqual(await page.locator('#gameTable tbody tr').evaluateAll(rows => rows.map(r => r.dataset.game)), ['candy-rope', 'rail-rush']);
   assert.deepEqual(await rowNumbers(page, 'candy-rope'), [1860, 4, 1, 2]);
@@ -712,11 +779,12 @@ test('files from other PCs are viewed together: the newest export per PC and day
 });
 
 test('clearing needs the typed word and removes only sg:site:stats: and sg:site:tm: keys; stop and resume set the settings', async t => {
-  // The portal's telemetry sink is sharing: its queue and its note are there.
+  // The portal's telemetry sink is sharing: its queue, its note and the dashboard codes are there.
   const page = await teacherPage(t, { entries: { ...seed(), 'sg:site:statsmeta': JSON.stringify({ ...META, pruned: '2026-05-30' }),
-    'sg:site:tm:q': JSON.stringify([{ t: NOW.getTime(), e: { v: 2, b: '0123456789abcdef', ev: [] } }]), 'sg:site:tm:on': '"ingest.example.org"' } });
+    'sg:site:tm:q': JSON.stringify([{ t: NOW.getTime(), e: { v: 3, b: '0123456789abcdef', ev: [] } }]), 'sg:site:tm:on': '"ingest.example.org"',
+    'sg:site:rid': RID_TEXT } });
   assert.equal(await page.locator('#shareMsg').textContent(),
-    'المشاركة المجهولة مفعّلة على هذا الجهاز: يُرسل الموقع معلومات اللعب بلا أسماء ولا اسم للجهاز إلى ingest.example.org.');
+    'مشاركة إحصاءات اللعب مفعّلة على هذا الجهاز: تُرسل بلا أسماء، ويظهر كل طفل برمز عشوائي، إلى ingest.example.org.');
   assert.equal(await page.locator('#shareMsg bdi[dir="ltr"]').textContent(), 'ingest.example.org');
   // Name this PC: the label rules apply.
   await page.locator('#pcLabel').fill('=+مختبر الحاسوب الكبير رقم 12');
@@ -766,17 +834,20 @@ test('clearing needs the typed word and removes only sg:site:stats: and sg:site:
   await page.waitForFunction(() => !document.getElementById('stoppedMsg').hidden);
 
   const before = await storage(page);
+  // Beside clear: what was sent stays on the server, and the codes stay here.
+  assert.equal(await page.locator('#clearServer').textContent(), 'ما أُرسل إلى خادم المدرسة يبقى هناك؛ لحذف بيانات طفل استخدم رمزه في لوحة المؤشرات.');
+  assert.equal(await page.locator('#clearServer').isVisible(), true);
   await page.locator('#clearBtn').click();
-  assert.match(await page.locator('#clearText').textContent(), /5 أيام/);
+  assert.match(await page.locator('#clearText').textContent(), /5 أيام.*يبقى اسم الجهاز ومعرّفه وإعداد الإيقاف ورموز لوحة المؤشرات\./);
   await page.locator('#clearWord').fill('امسخ');
   await page.locator('#clearConfirm button[type="submit"]').click();
   assert.deepEqual(await storage(page), before, 'a wrong word changes nothing');
   await page.locator('#clearWord').fill(' «امسح» ');
   await page.locator('#clearConfirm button[type="submit"]').click();
   const after = await storage(page);
-  assert.deepEqual(Object.keys(after), ['other-site-key', 'sg:candy-rope:save', 'sg:site:favs', 'sg:site:statsmeta', 'sg:site:tm:on'],
-    'the telemetry queue goes; the note that this PC shares stays');
-  for (const key of ['other-site-key', 'sg:candy-rope:save', 'sg:site:favs']) assert.equal(after[key], before[key]);
+  assert.deepEqual(Object.keys(after), ['other-site-key', 'sg:candy-rope:save', 'sg:site:favs', 'sg:site:rid', 'sg:site:statsmeta', 'sg:site:tm:on'],
+    'the telemetry queue goes; the note that this PC shares and the dashboard codes stay');
+  for (const key of ['other-site-key', 'sg:candy-rope:save', 'sg:site:favs', 'sg:site:rid']) assert.equal(after[key], before[key]);
   meta = JSON.parse(after['sg:site:statsmeta']);
   assert.deepEqual(meta, { pc: { id: 'pcabcd', label }, off: true, custom: 'kept', offSince: NOW.getTime(), clearedAt: NOW.getTime() });
   assert.match(await page.locator('#clearStatus').textContent(), /مُسحت/);
@@ -845,6 +916,100 @@ test('a game still open and days removed for space are explained, not hidden', a
   assert.ok(used > 0.75 && used < 0.85, String(used));
   assert.match(await page.locator('#reminder').textContent(),
     new RegExp('^تذكير: مساحة الإحصاءات على هذا الجهاز ممتلئة بنسبة ' + Math.round(used * 100) + '%\\. صدّر ملف Excel الآن\\. '));
+});
+
+test('the codes panel: this PC\'s code, each player\'s code with its check character, and "the same child as on another PC"', async t => {
+  const record = (k, a, c) => ({ k, a, c, b: '8-9', xp: 0, lv: 1, d0: 20000, dl: 20000, g: {} });
+  const main = { v: 1, seq: 13, list: [record('p1', 3, 1), record('p2', 9, 6), ...[...Array(10)].map((_, i) => record('p' + (i + 3), i, i % 8))] };
+  const more = { v: 1, list: [record('p13', 10, 7)] };
+  const sharing = { 'sg:site:tm:on': '"ingest.example.org"', 'sg:site:profiles': JSON.stringify(main), 'sg:site:profiles:more': JSON.stringify(more) };
+  const page = await teacherPage(t, { entries: { ...seed(), ...sharing, 'sg:site:rid': RID_TEXT } });
+  const rid = async () => JSON.parse((await storage(page))['sg:site:rid']);
+  const row = key => page.locator(`#codes li[data-key="${key}"]`);
+  assert.equal(await page.locator('#codesPanel').isVisible(), true);
+  await page.locator('#codesPanel summary').click();
+  assert.equal(await page.locator('#codes p').first().textContent(), 'رمز هذا الجهاز: 8C21-D0E9-4A6F');
+  assert.deepEqual(await page.locator('#codes li').evaluateAll(items => items.map(li => li.dataset.key)),
+    [...Array(13)].map((_, i) => 'p' + (i + 1)), 'every player, the 13th from sg:site:profiles:more too');
+  // The player's animal in its colour ring, its code with the check character, and its dashboard label.
+  assert.deepEqual([await row('p1').locator('.ring').textContent(), await row('p1').locator('.ring').getAttribute('style')], ['🐸', 'border-color:#f57c00']);
+  assert.equal(await row('p1').locator('.code').textContent(), '3F9A-0C51-E2B7-5');
+  assert.equal(await row('p1').locator('.hint').textContent(), 'في لوحة المؤشرات: الطالب 3F9A…');
+  assert.equal(await row('p13').locator('.code').textContent(), shown(P13));
+  assert.equal(await row('p2').locator('.code').count(), 0);
+  assert.equal(await row('p2').locator('.hint').textContent(), 'يُصنع في المرة القادمة التي يلعب فيها هذا الطفل.');
+
+  // The same child as on another PC: the code that PC's teacher page shows for the child.
+  const OTHER = 'b0b1b2b3b4b5', THIRD = 'c0ffee000000';
+  const before = await storage(page);
+  await row('p1').locator('[data-link]').click();
+  assert.equal(await page.locator('#linkForm').isVisible(), true);
+  assert.equal(await page.locator('#linkText').textContent(), '🐸 رمز هذا الطفل كما يظهر على الجهاز الآخر (13 خانة، بالحروف الإنجليزية):');
+  for (const [typed, message] of [
+    ['3F9A-0C51', 'الرمز 13 خانة؛ تحقّق منه.'],
+    [shown(OTHER).replace(/^B/, 'C'), 'إحدى خانات الرمز خاطئة؛ تحقّق منه.'],
+    [shown(P1), 'هذا رمزه على هذا الجهاز؛ اكتب رمزه على الجهاز الآخر.'],
+    [shown(P13), 'هذا رمز لاعب آخر على هذا الجهاز.']
+  ]) {
+    await page.locator('#linkCode').fill(typed);
+    await page.locator('#linkForm button[type="submit"]').click();
+    assert.equal(await page.locator('#linkStatus').textContent(), message, typed);
+    assert.equal(await page.locator('#linkStatus').getAttribute('class'), 'status bad');
+  }
+  assert.deepEqual(await storage(page), before, 'a refused code changes nothing');
+  await page.locator('#linkCode').fill(' ' + shown(OTHER).toLowerCase().replace(/-/g, ' ') + ' ');
+  await page.locator('#linkCode').press('Enter');
+  assert.equal(await page.locator('#linkStatus').textContent(),
+    'من اللعبة القادمة يُحسب لعب هذا الطفل مع رمزه على الجهاز الآخر، ويُضم إليه ما لعبه هنا من قبل.');
+  assert.equal(await page.locator('#linkForm').isHidden(), true);
+  assert.deepEqual(await rid(), { v: 1, pc: PC_CODE, k: { p1: OTHER, p13: P13 }, l: { p1: P1 } });
+  assert.equal(await row('p1').locator('.code').textContent(), shown(OTHER));
+  // A player with no code yet takes the other code; nothing of its own waits to be joined.
+  await row('p2').locator('[data-link]').click();
+  await page.locator('#linkCode').fill(shown(THIRD));
+  await page.locator('#linkForm button[type="submit"]').click();
+  assert.equal(await page.locator('#linkStatus').textContent(), 'من اللعبة القادمة يُحسب لعب هذا الطفل مع رمزه على الجهاز الآخر.');
+  assert.deepEqual(await rid(), { v: 1, pc: PC_CODE, k: { p1: OTHER, p2: THIRD, p13: P13 }, l: { p1: P1 } });
+  // Cancel closes the form and writes nothing.
+  await row('p3').locator('[data-link]').click();
+  await page.locator('#linkCode').fill(shown(P1));
+  await page.locator('#linkForm [data-cancel]').click();
+  assert.equal(await page.locator('#linkForm').isHidden(), true);
+  assert.deepEqual(Object.keys((await rid()).k), ['p1', 'p13', 'p2']);
+
+  // Sharing off on this PC: the codes stay visible, nothing can be linked, nothing new is made.
+  await page.evaluate(() => localStorage.setItem('sg:site:statsmeta', JSON.stringify({ ...JSON.parse(localStorage.getItem('sg:site:statsmeta')), tm: false })));
+  await page.reload();
+  await page.locator('#codesPanel summary').click();
+  assert.equal(await row('p1').locator('.code').textContent(), shown(OTHER));
+  assert.equal(await page.locator('#codes .notice').textContent(),
+    'المشاركة غير مفعّلة على هذا الجهاز، فلا تُصنع رموز جديدة ولا يُربط طفل بجهاز آخر.');
+  assert.deepEqual(await page.locator('#codes [data-link]').evaluateAll(buttons => buttons.map(b => b.disabled)), Array(13).fill(true));
+  assert.equal(await row('p4').locator('.hint').textContent(), 'لا رمز بعد.');
+  // Sharing on, no code made yet for this PC.
+  await page.evaluate(() => {
+    const meta = JSON.parse(localStorage.getItem('sg:site:statsmeta'));
+    delete meta.tm;
+    localStorage.setItem('sg:site:statsmeta', JSON.stringify(meta));
+    localStorage.removeItem('sg:site:rid');
+  });
+  await page.reload();
+  await page.locator('#codesPanel summary').click();
+  assert.equal(await page.locator('#codes p').first().textContent(), 'رمز هذا الجهاز: يُصنع في المرة القادمة التي يلعب فيها طفل هنا.');
+  assert.equal(await page.locator('#codes .notice').count(), 0);
+  assert.equal(await page.locator('#clearServer').isVisible(), true, 'this PC shares: the clear note says what stays on the server');
+});
+
+test('the teacher page\'s copies of the animals and ring colours are the portal\'s own', async t => {
+  if (!browser) browser = await launchChromium();
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  t.after(() => context.close());
+  const page = await context.newPage();
+  await page.goto(origin + '/');
+  const portal = await page.evaluate(() => [SGProfiles.ANIMALS, SGProfiles.COLORS]);
+  assert.deepEqual([api.ANIMALS, api.COLORS], portal);
+  await page.goto(origin + '/teacher.html');
+  assert.deepEqual(await page.evaluate(() => [SGTeacher.ANIMALS, SGTeacher.COLORS]), portal);
 });
 
 test('blocked storage is explained; other PCs\' files still open', async t => {
