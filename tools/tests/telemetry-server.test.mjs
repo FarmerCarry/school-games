@@ -438,6 +438,19 @@ test('v3: a malformed optional field is stored as unknown and the batch is kept 
   assert.deepEqual([cleaned.dropped, cleaned.events], [malformed.length, [['lv', 2, 3]]]);
 });
 
+test('a PC or owner that names UTC another way (Etc/UTC, GMT) sets the school\'s zone to UTC', async t => {
+  const s = await start(t);
+  assert.equal((await s.post(envelope3('c90000000001', [['ss', 0, 0, 3, 1, 2, 4, 0]], { z: 'Etc/UTC' }))).status, 204);
+  assert.deepEqual((await s.rows('st_sessions')).map(r => r.z), ['UTC']);
+  assert.deepEqual((await s.rows('st_pcs')).map(r => r.z), ['UTC']);
+  const settings = Object.fromEntries((await s.rows('settings')).map(r => [r.key, r.value]));
+  assert.deepEqual([settings.tz, settings.tz_source], ['UTC', 'pc']);
+  const set = await s.send('POST', '/v1/admin/settings', { headers: { authorization: 'Bearer ' + TOKEN, 'content-type': 'application/json' },
+    body: JSON.stringify({ tz: 'Etc/GMT' }) });
+  assert.equal(set.status, 200);
+  assert.deepEqual([set.json().clock.tz, set.json().clock.source], ['UTC', 'owner']);
+});
+
 test('bodies over 64 KB are 413, declared or streamed; exactly 64 KB is accepted', async t => {
   const s = await start(t);
   const json = JSON.stringify(fixture);

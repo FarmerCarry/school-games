@@ -8,7 +8,7 @@
 // once the day's free reading allowance is nearly used, and the owner's actions once the
 // day's writes are (store.mjs, guard).
 import { JsonText, SENT } from './admin.mjs';
-import { isZone } from './clock.mjs';
+import { zoneName } from './clock.mjs';
 import { FILES } from './export.mjs';
 import { METRICS } from './rollups.mjs';
 import { U_RE, WIRES, isSlug, validateBatch } from './schema.mjs';
@@ -169,11 +169,11 @@ function settingsBody(body) {
   const field = Object.keys(body).find(key => !SETTINGS_FIELDS.has(key));
   if (field !== undefined) throw new HttpError(400, 'field');
   const { tz, source, weekStart, keepDays } = body;
-  if (tz !== undefined && !isZone(tz)) throw new HttpError(400, 'tz');
+  if (tz !== undefined && !zoneName(tz)) throw new HttpError(400, 'tz');
   if (source !== undefined && (source !== 'dashboard' || tz === undefined)) throw new HttpError(400, 'source');
   if (weekStart !== undefined && weekStart !== 'sun' && weekStart !== 'mon') throw new HttpError(400, 'weekStart');
   if (keepDays !== undefined && keepDays !== 400 && keepDays !== 760) throw new HttpError(400, 'keepDays');
-  return { tz, source, weekStart, keepDays };
+  return { tz: tz === undefined ? tz : zoneName(tz), source, weekStart, keepDays };
 }
 
 // An answer as JSON; one that is JSON text already (admin.mjs JsonText, or SENT), or a field

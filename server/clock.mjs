@@ -25,6 +25,16 @@ export function isZone(z) {
   known ||= new Set([...Intl.supportedValuesOf('timeZone'), 'UTC']);
   return known.has(z);
 }
+// The names of UTC that a browser may report (Chromium on some Linux builds reports
+// Etc/UTC), none of them canonical.
+const UTC_NAMES = new Set(['UTC', 'Etc/UTC', 'Etc/GMT', 'GMT', 'Etc/UCT', 'UCT', 'Etc/Universal', 'Universal', 'Etc/Zulu', 'Zulu',
+  'Etc/Greenwich', 'Greenwich', 'GMT0', 'Etc/GMT0', 'GMT+0', 'GMT-0', 'Etc/GMT+0', 'Etc/GMT-0']);
+// A zone as the school's clock keeps it: any name of UTC is 'UTC', a zone isZone knows is
+// itself, anything else null.
+export function zoneName(z) {
+  if (typeof z === 'string' && UTC_NAMES.has(z)) return 'UTC';
+  return isZone(z) ? z : null;
+}
 
 function format(zone) {
   let f = formats.get(zone);

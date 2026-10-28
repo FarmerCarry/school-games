@@ -7,7 +7,7 @@
 // to the envelope (u p z w) and a round's extras (re.x) are lenient: a malformed value
 // becomes '' or null and the rest is kept, because the portal drops a batch for good on
 // any 4xx answer.
-import { isZone } from './clock.mjs';
+import { zoneName } from './clock.mjs';
 
 export const BANDS = ['6-7', '8-9', '10-11', ''];
 export const MODES = ['web', 'app'];
@@ -149,7 +149,7 @@ export function validateBatch(body) {
   if (v === 3) {
     if (isCode(body.u)) envelope.u = body.u;
     if (isHex(body.p, 12)) envelope.p = body.p;
-    if (isZone(body.z)) envelope.z = body.z;
+    if (zoneName(body.z)) envelope.z = zoneName(body.z);
     if (Number.isInteger(body.w) && body.w >= 0 && body.w <= MAX_W) envelope.w = body.w;
   }
   return { wire: v, envelope, events, dropped: ev.length - events.length };

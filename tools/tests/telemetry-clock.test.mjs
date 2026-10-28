@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { isZone, offsetMin, localDay, localParts, dayBounds, offsetsBetween, weekStartOf } = await import('../../server/clock.mjs');
+const { isZone, zoneName, offsetMin, localDay, localParts, dayBounds, offsetsBetween, weekStartOf } = await import('../../server/clock.mjs');
 
 const at = iso => Date.parse(iso);
 const sec = iso => Date.parse(iso) / 1000;
@@ -148,4 +148,10 @@ test('isZone accepts the zones this runtime knows, and nothing else', () => {
     '__proto__', 'Europe/../etc', 'Europe//London', 'A/B/C/D/E/F/G', 'x'.repeat(41), 'Asia/Riyadh;DROP', 42, null, undefined, {}, ['UTC']]) {
     assert.equal(isZone(bad), false, String(bad));
   }
+});
+
+test('every name of UTC a browser may report is UTC; other zones keep their name, and unknown ones are none', () => {
+  for (const z of ['UTC', 'Etc/UTC', 'Etc/GMT', 'GMT', 'Etc/UCT', 'Etc/Universal', 'Etc/Zulu', 'GMT0', 'Etc/GMT+0', 'Etc/GMT-0']) assert.equal(zoneName(z), 'UTC', z);
+  for (const z of ['Asia/Riyadh', 'Europe/London', 'America/Port-au-Prince']) assert.equal(zoneName(z), z);
+  for (const bad of ['Mars/Olympus_Mons', 'utc', 'Etc/UTC ', 'constructor', '', null, 42]) assert.equal(zoneName(bad), null, String(bad));
 });
