@@ -363,7 +363,7 @@ chosen during the setup. To run it on your own server instead, see
 index.html, css/, js/     the portal (plain HTML/CSS/JS, no build step)
 js/catalog.js             list of games, categories and site name
 js/stats.js               the portal's local play-statistics recorder
-js/profiles.js            anonymous picture profiles, age bands and XP
+js/profiles.js            picture profiles without names, age bands and XP
 js/telemetry.js           the only network sender: play events without names to a school-run server (off by default)
 teacher.html              teacher page: this PC's play statistics, Excel/JSON exports and dashboard codes
 css/teacher.css, js/teacher.js   its styles and script (pure parts in window.SGTeacher)

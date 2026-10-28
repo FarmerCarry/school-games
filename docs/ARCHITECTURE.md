@@ -10,7 +10,7 @@ updated to match.
 | Question | Decision |
 |---|---|
 | Existing 34 games | **Kept.** They move onto the new shared runtime in waves; nothing that works is thrown away. |
-| Telemetry destination | **A central, anonymous HTTPS ingest server** (`server/`), fed by the portal. Off unless a build is configured with an ingest URL. |
+| Telemetry destination | **A central HTTPS ingest server, without names (pseudonymous)** (`server/`), fed by the portal. Off unless a build is configured with an ingest URL. |
 | Edutainment titles | Mouse & Keyboard Academy is **replaced** by a new HID-onboarding game for 6-year-olds. Lightning Fingers becomes an arcade game (milestone 2). |
 | Milestone 1 | Shared runtime (juice SFX, DDA, profiles/XP, telemetry v2) + ingest server + zero background music + age bands + the onboarding game. |
 
@@ -61,7 +61,7 @@ games/<slug>/            game code (UI layer calls Kit.stats / Kit.track / Kit.d
 shared/juice.js          Kit.juice  — procedural SFX engine (opt-in; portal + games)
 shared/kit.js            Kit        — lifecycle, input, audio graph, stats v1, and v2:
                                       Kit.profile, Kit.track, Kit.dda, sg:telemetry
-js/profiles.js           SGProfiles — anonymous picture profiles, age band, XP/levels
+js/profiles.js           SGProfiles — picture profiles without names, age band, XP/levels
 js/telemetry.js          SGTelemetry — the ONLY network sender: batches to the ingest URL
 js/stats.js              SGStats    — local play statistics v1 (unchanged format)
 js/site.js               portal shell, iframe host, routes, classroom tools
