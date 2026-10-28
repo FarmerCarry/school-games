@@ -184,13 +184,18 @@ local day records. The server stores no IP address.
   back: its batch goes again (the server keeps it once). While the server is failing, or
   the PC is offline (`navigator.onLine === false`), a hidden page sends nothing and the
   queue keeps everything for later.
-* Unsent batches wait in `localStorage` **`sg:site:tm:q:<hash>`** (an array of
+* Unsent batches wait in `localStorage` **`sg:site:tm:q3:<hash>`** (an array of
   `{ t, w0, e }`: when the batch's first event was recorded, its session's start, and the
   envelope), oldest first, **at most 128 KB** (the oldest go first) and **7 days**. They
-  survive a reload or a restart of the PC and go out from the next portal page. Batches an
-  older build queued (`{ t, e }` with `v: 2`) are sent exactly as they were queued; the
-  server accepts wire version 2 indefinitely. Two portal tabs may send the same queued
-  batch; the server keeps it once.
+  survive a reload or a restart of the PC and go out from the next portal page. Two portal
+  tabs may send the same queued batch; the server keeps it once.
+* Builds before wire version 3 queue in **`sg:site:tm:q:<hash>`** (`{ t, e }` with
+  `v: 2`). Such a tab may still be open on the PC after the update (an open tab keeps its
+  page until it is reloaded), and each time it queues, delivers or is hidden it rewrites
+  that key with its own wire version only. So this build never writes it: whenever it reads
+  its queue it moves the older key's batches into its own (oldest first) and removes that
+  key. They are sent exactly as they were queued; the server accepts wire version 2
+  indefinitely. A later wire version takes `q4:` and moves these the same way.
 * `<hash>` is a short hash of the full ingest address (a 32-bit string hash, in base 36),
   so each address has its own queue: another copy of the site on the same origin (for
   example `name.github.io/school-games` and `name.github.io/school-games-test`) built with
@@ -247,8 +252,8 @@ stopping statistics on the teacher page.
   `true`; `localStorage['sg:site:rid']` holds this PC's code (and one per profile that has
   played); the Network tab shows a `POST` to the address (type `fetch`, without a `Cookie`
   header) about 60 seconds after load or when a game closes, answered with `204`; its body
-  has `"v":3`, `u`, `p`, `z` and `w`; no `sg:site:tm:q:` key is left in `localStorage`
-  once batches are delivered.
+  has `"v":3`, `u`, `p`, `z` and `w`; no `sg:site:tm:q3:` (or older `sg:site:tm:q:`) key
+  is left in `localStorage` once batches are delivered.
 * The teacher page (🏫 → 📊) shows the line that sharing is on, with the server's host, and
   its «الرموز في لوحة المؤشرات» section shows this PC's code.
 * On the server: `GET /v1/health`, then `GET /v1/admin/live` and `GET /v1/admin/students`

@@ -779,9 +779,11 @@ test('files from other PCs are viewed together: the newest export per PC and day
 });
 
 test('clearing needs the typed word and removes only sg:site:stats: and sg:site:tm: keys; stop and resume set the settings', async t => {
-  // The portal's telemetry sink is sharing: its queue, its note and the dashboard codes are there.
+  // The portal's telemetry sink is sharing: its queue (and one of a build before wire
+  // version 3), its note and the dashboard codes are there.
   const page = await teacherPage(t, { entries: { ...seed(), 'sg:site:statsmeta': JSON.stringify({ ...META, pruned: '2026-05-30' }),
-    'sg:site:tm:q': JSON.stringify([{ t: NOW.getTime(), e: { v: 3, b: '0123456789abcdef', ev: [] } }]), 'sg:site:tm:on': '"ingest.example.org"',
+    'sg:site:tm:q3:abc12': JSON.stringify([{ t: NOW.getTime(), e: { v: 3, b: '0123456789abcdef', ev: [] } }]),
+    'sg:site:tm:q:abc12': JSON.stringify([{ t: NOW.getTime(), e: { v: 2, b: 'fedcba9876543210', ev: [] } }]), 'sg:site:tm:on': '"ingest.example.org"',
     'sg:site:rid': RID_TEXT } });
   assert.equal(await page.locator('#shareMsg').textContent(),
     'مشاركة إحصاءات اللعب مفعّلة على هذا الجهاز: تُرسل بلا أسماء، ويظهر كل طفل برمز عشوائي، إلى ingest.example.org.');

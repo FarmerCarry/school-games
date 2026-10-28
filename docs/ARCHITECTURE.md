@@ -379,11 +379,12 @@ first waiting event (or as often as the server's last `X-Batch-Every` asked, 20 
 and when the page is hidden, always by `fetch` without credentials
 (`credentials: 'omit'`: no cookie ever goes, so never by `sendBeacon`), with `keepalive`
 while the keepalive bodies in flight fit in 60 KB (the rest wait in the queue). Unsent
-batches are kept as `{ t, w0, e }` in `localStorage` `sg:site:tm:q:<hash of the ingest
+batches are kept as `{ t, w0, e }` in `localStorage` `sg:site:tm:q3:<hash of the ingest
 URL>`, so another copy of the site on the same origin with another URL never sends them (at
-most 128 KB, at most 7 days old, oldest dropped first); entries of wire version 2 queued by
-an older build are still sent, unchanged. Stopping statistics or turning sharing off drops
-every `sg:site:tm:q` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the
+most 128 KB, at most 7 days old, oldest dropped first). Entries of wire version 2 that an
+older build queued in `sg:site:tm:q:<hash>` move into it and are still sent, unchanged; this
+build never writes that key, because a pre-v3 tab still open on the PC rewrites it with v2
+entries only. Stopping statistics or turning sharing off drops every `sg:site:tm:` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the
 batch; a 4xx other than 429 drops it as malformed; 429, 5xx and network errors retry.
 Teacher "clear" removes the `sg:site:tm:` queues too (not the sharing note
 `sg:site:tm:on`, and not `sg:site:rid`). All storage calls are wrapped; no `console`; never
