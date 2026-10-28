@@ -72,13 +72,13 @@ Record the batches-per-session ratio in `server/README.md`. If it is above 16, r
 
 ```json
 { "v": 1, "pc": "8c21d0e94a6f",
-  "k": { "p1": "3f9a0c51e2b7", "p4": "c7f3a" },
+  "k": { "p1": "3f9a0c51e2b7", "p4": "b81e4c07d2a9" },
   "l": { "p4": "1b2c3d4e5f60" } }
 ```
 
 * **Owner.** `js/telemetry.js` creates and maintains this key. `js/teacher.js` may read it, and may write `k` and `l` only on an explicit teacher action (§A.8). `js/profiles.js` does not change its stored format: the code is never put on the profile record, because a pre-v3 `profiles.js` `clean()` rebuilds records from known fields and would strip it (verified error in Designs 2 and 3).
 * **`pc`**: 12 lowercase hex characters, made with the existing `hex(12)` (`crypto.getRandomValues`) the first time an active sink writes the key. It is never the teacher page's `statsmeta.pc.id` (the locked client test asserts that `pcwxyz` never appears in a batch, and that id is paired with the typed PC label in teacher exports).
-* **`k`**: profile key (`/^p[0-9a-z]{1,8}$/`) to code: either 12 lowercase hex, or (phase 2) a card code, `c` plus 4 hex (§A.10). There are at most 64 entries. A code is never derived from the key, the animal, the colour or anything else.
+* **`k`**: profile key (`/^p[0-9a-z]{1,8}$/`) to code: 12 lowercase hex. There are at most 64 entries. A code is never derived from the key, the animal, the colour or anything else.
 * **`l`**: pending links, profile key to the old code. These are written by the teacher-page transfer and consumed by the sink (§A.8).
 * **Written only while the sink is active** (`ready && live()`), and re-read from storage before each write. This keeps the rule "an inert sink writes nothing". If the write fails (blocked or full storage), the sink sends `u: ''` and `p: ''` for that page: it never invents memory-only codes, which would create fake students and PCs.
 * **Lifecycle:**
@@ -86,7 +86,7 @@ Record the batches-per-session ratio in `server/README.md`. If it is above 16, r
   * `begin()` prunes entries whose key is no longer in `SGProfiles.list()`, and records `['pr', t, u]` for each one (the profile was removed: censoring, not drop-out).
   * `changed()` does the same when it sees a key disappear.
   * The key sits outside `sg:site:stats:` and `sg:site:tm:`, so the teacher's **clear** (`clearStats()` in `js/teacher.js`) and the **stop** path in `live()` both keep it. A teacher's clear must not break a child's long-term record: the server keeps its copy anyway.
-* **Validation on read:** `v === 1`; `pc` is 12 hex or missing; every value in `k` and `l` matches `U_RE = /^(?:[0-9a-f]{12}|c[0-9a-f]{4})$/`. Anything else is dropped. A damaged key is rewritten as `{v:1, pc:'', k:{}, l:{}}`, but only by an active sink.
+* **Validation on read:** `v === 1`; `pc` is 12 hex or missing; every value in `k` and `l` matches `U_RE = /^[0-9a-f]{12}$/`. Anything else is dropped. A damaged key is rewritten as `{v:1, pc:'', k:{}, l:{}}`, but only by an active sink.
 
 ### A.2 Guests
 
@@ -132,10 +132,9 @@ About 20 children share each lab PC, so a 12-profile cap pushes most of them int
 ### A.6 Labels on the dashboard
 
 * The server stores `st_students.label` when it first sees a code. The label is the code's first 4 characters in upper case, unless another stored code already starts with those 4; then it uses 6, then 8, then 12.
-* A card code always uses its whole 5 characters (`C7F3A`).
 * A label is always a prefix of the code, so a teacher can find it. Labels never change once given.
 * The check is a primary-key range query on `u` (§D.4, W3).
-* Shown as **"Student 7F3A"** / **«الطالب 7F3A»**, with the code wrapped in LRI/PDI isolates. Card students carry a 🎴 icon.
+* Shown as **"Student 7F3A"** / **«الطالب 7F3A»**, with the code wrapped in LRI/PDI isolates.
 
 ### A.7 PC code `p`: what it enables
 
@@ -146,7 +145,7 @@ About 20 children share each lab PC, so a 12-profile cap pushes most of them int
 * The automatic school zone (§C).
 * "N PCs on the new version".
 
-### A.8 Phase 1 cross-PC link: teacher-page code transfer, retroactive through `cd` [C]
+### A.8 Cross-PC link: teacher-page code transfer, retroactive through `cd` [C]
 
 * **Codes panel** on the teacher page (read-only), under "Codes on the school dashboard":
   * This PC's code, as `8C21-D0E9-4A6F`.
@@ -166,19 +165,9 @@ About 20 children share each lab PC, so a 12-profile cap pushes most of them int
 
 `POST /v1/admin/link {u, to}` writes `aliases(u_old = u, u_new = canonical(to), how = 'owner')`. `DELETE /v1/admin/link?u=` removes it. Chains are always kept one hop deep: on every insert the server rewrites `UPDATE aliases SET u_new = :new WHERE u_new = :old`. It refuses a link that would form a cycle.
 
-### A.10 Phase 2: player cards (specified now, built after phase 1 is live)
+### A.10 Player cards: dropped
 
-* The wire format (`u = 'c' + 4 hex`, the event `cd`) and the tables (`cards`, `aliases`) ship in phase 1, so phase 2 needs no server migration.
-* `POST /v1/admin/cards {count: 1..60, band}` draws codes that are in neither `cards` nor `st_students`. Each code is 4 hex digits, and digit *i* picks one of 16 big pictures `🍎🚗⭐🐟🌙⚽🎈🌵🔑🍕🚀🌈🐞🎵🍦🏠` (65,536 codes). The server stores `cards(code, set_no, a, made_day)`.
-* The dashboard prints A4 sheets, 8 cards per sheet: the 4 pictures, the age band, "Student C7F3A" and an empty line. The paper never comes back to the system.
-* Portal: the who strip gets a "🎴" button that opens a 4×4 picture grid. The child taps 4 pictures.
-  * An existing profile with that card code on this PC is selected.
-  * Otherwise the child makes a profile (animal, colour, band) and `rid.k[newKey] = 'c' + code`.
-  * If a child links their current profile instead, `l[key]` gets the old code, and `cd` merges the history.
-* The dashboard marks a code missing from `cards` as "a card we did not print".
-* When a PC is full, the least recently played **card** profile is evicted first: its history is on the server. Its XP stays on the PC and is lost, and the dashboard says so plainly.
-* Card codes also fix lab PCs that reset every night.
-* About 2.5 KB more for the portal (phase-2 budget raise).
+The owner decided against player cards, for good. Nothing of them is built or kept: a student code is always a profile's 12 hex digits (`U_RE` above), there is no `cards` table and no `/v1/admin/cards` route, and `kind` is always `profile`. A child who plays on two PCs is joined by the teacher-page transfer (§A.8) or the owner link (§A.9).
 
 ### A.11 Deleting a student on the server [S]
 
@@ -437,8 +426,7 @@ CREATE TABLE IF NOT EXISTS st_marks (sid INTEGER NOT NULL, kind TEXT NOT NULL /*
   n INTEGER NOT NULL /* 0 when none */, x TEXT NOT NULL, PRIMARY KEY (sid, kind, t, n, x)) STRICT, WITHOUT ROWID;
   -- x: lv level | fv '1'/'0' | tu 's'/'d' | ct what||':'||minutes | pr code | cd old code
 CREATE TABLE IF NOT EXISTS aliases (u_old TEXT PRIMARY KEY, u_new TEXT NOT NULL, s INTEGER NOT NULL,
-  how TEXT NOT NULL /* pc | owner | card */) STRICT, WITHOUT ROWID;
-CREATE TABLE IF NOT EXISTS cards (code TEXT PRIMARY KEY, set_no INTEGER NOT NULL, a TEXT NOT NULL, made_day TEXT NOT NULL) STRICT, WITHOUT ROWID;
+  how TEXT NOT NULL /* pc | owner */) STRICT, WITHOUT ROWID;
 -- live, recreated with codes
 CREATE TABLE IF NOT EXISTS live (s TEXT PRIMARY KEY, slug TEXT NOT NULL, seen_minute INTEGER NOT NULL,
   u TEXT NOT NULL DEFAULT '', p TEXT NOT NULL DEFAULT '', wire INTEGER NOT NULL DEFAULT 2) STRICT, WITHOUT ROWID;
@@ -582,7 +570,7 @@ A roll is one `db.batch` of about 24 statements: the 9 rollup tables and 14 `r_s
 ### D.8 Usage meter and guards
 
 * **Meter.** Every D1 result's `meta.rows_read`, `meta.rows_written` and `meta.size_after` are summed per instance. They are flushed at most once a minute with W15: `INSERT INTO usage (day, reads, writes, size) VALUES (?, ?, ?, ?) ON CONFLICT (day) DO UPDATE SET reads = reads + excluded.reads, writes = writes + excluded.writes, size = excluded.size`. Rebuild and export reads also add to `rebuild_reads` and `export_reads`. Counts can be lost when an instance dies, so the dashboard says "about".
-* **Write guard**, sent in the `X-Batch-Every` header of every `204` (exposed through CORS, next to `Retry-After`): `60` while today's writes are ≤ 60,000; `180` up to 80,000; `300` above. Above 80,000, rolls 2 and 3 also pause. Above 90,000, admin POST actions (link, forget, recount, cards) answer `429 {"error":"writes"}`.
+* **Write guard**, sent in the `X-Batch-Every` header of every `204` (exposed through CORS, next to `Retry-After`): `60` while today's writes are ≤ 60,000; `180` up to 80,000; `300` above. Above 80,000, rolls 2 and 3 also pause. Above 90,000, admin POST actions (link, forget, recount) answer `429 {"error":"writes"}`.
 * **Read guard:**
   * Export pages answer `429 {"error":"reads"}` once today's reads exceed 3,500,000.
   * Every admin read except `live` and `settings` answers that way above 4,200,000.
@@ -886,7 +874,7 @@ The tab notes plainly: "Accuracy and reaction time are measured in 3 games so fa
 | `GET /v1/admin/live` | `{v, windowSec: 300, minSessions: 0, total: {sessions}, students, guests, unknown, pcs, games: [{slug, sessions}]}` |
 | `GET /v1/admin/settings` | `{v, clock: {tz, source, offsetMin, today, now: 'HH:MM', weekStart, weekSource, detected: [{tz, pcs}], factsSince, legacyUntil, v3Since}, keep: {days, source: 'env'\|'owner', rollupDays}, storage: {bytes, limit: 500000000, guardAt: 425000000, trimmedBefore}, usage: {day, reads, writes, readsLimit: 5000000, writesLimit: 100000, batchEvery}, rebuild: {pending, full, done}, accepts: [2, 3], pcs: {new, seen14d}}` |
 | `POST /v1/admin/settings` | Body `{tz?, source?: 'dashboard', weekStart?: 'sun'\|'mon', keepDays?: 400\|760}`, then the GET answer. `tz` without `source` is an owner choice. `source: 'dashboard'` is ignored unless the current source is `none` or `dashboard`. |
-| `GET /v1/admin/students?from&to[&band]` | `{v, range, students: [{u, label, kind: 'profile'\|'card', linked: [u…], band, bandFirst, firstDay, lastDay, days, sessions, minutes, rounds, w, l, q, games, top: [slug, slug, slug], pcs, knownBefore, removed, weekly: [13 numbers]}]}`: canonical students, with today taken from the facts. |
+| `GET /v1/admin/students?from&to[&band]` | `{v, range, students: [{u, label, kind: 'profile', linked: [u…], band, bandFirst, firstDay, lastDay, days, sessions, minutes, rounds, w, l, q, games, top: [slug, slug, slug], pcs, knownBefore, removed, weekly: [13 numbers]}]}`: canonical students, with today taken from the facts. |
 | `GET /v1/admin/student?u&from&to` | `{v, student: {u, label, kind, band, bandFirst, firstDay, lastDay, profileMadeDay, knownBefore, pcs: [label…], linked: [u…]}, days: [{day, sessions, minutes, opens, rounds, w, l, q}], hours: [24 numbers], games: [{slug, minutes, rounds, w, l, d, e, q, hits, misses, rtMean, bestScore, avgScore, ddaMean, hearts}], weekly: [{week, slug, rounds, w, l, hits, misses, rtSum, rtN, scoreSum, scoreN, ddaSum, ddaN}], rounds: [≤ 600 most recent: {day, time, slug, id, code, ms, score, tier, dda, hits, misses, rtMean, attempt, minIntoSession}], sessions: [≤ 100: {day, time, pc, minutes, games: [slug…], rounds, wins, why}], persist: {same, level, game, stop}}` |
 | `GET /v1/admin/game?slug&from&to[&band]` | `{v, slug, range, bands: [{band, students, minutes, opens}], daily: [{day, students, minutes, opens}], stats: {columns, rows}` (the `r_stat` rows of that slug), `firstWin: [{id, students, median, p75, never}], paired: {columns, rows: [[u, a, part 0\|1, rounds, w, l, hits, misses, rtSum, rtN, scoreSum, scoreN, ddaSum, ddaN]]}, flowsIn: [{from, n}], flowsOut: [{to, n}]}` |
 | `GET /v1/admin/stats?from&to&metrics=a,b,…[&band][&slug]` | `{v, range, columns: ['a','metric','slug','k1','k2','n','students',…], rows: [[…]]}`: `r_stat` grouped over the range (closed days only); `metrics` is a subset of §D.2 |
@@ -896,7 +884,6 @@ The tab notes plainly: "Accuracy and reaction time are measured in 3 games so fa
 | `POST /v1/admin/forget` | Body `{u}`, answer `{removed: {codes, sessions, visits, rounds, marks}}` |
 | `POST /v1/admin/link`, `DELETE /v1/admin/link?u=` | Body `{u, to}`, answer `{ok, u, to}`; `{ok}` |
 | `POST /v1/admin/rebuild` | Body `{}`, answer `{pending}` |
-| `GET` and `POST /v1/admin/cards` (phase 2) | `{cards: [{code, set, band, madeDay, used}]}`; body `{count, band}`, answer `{set, cards: [{code, pictures: [i,i,i,i], label}]}` |
 | `GET /v1/health` | `{ok: true, accepts: [2, 3], schema: 4}` (it does not touch D1) |
 
 * **Caching**:
@@ -948,7 +935,7 @@ The dashboard builds `school-games-data_<from>_<to>.zip`:
 | `pcs.csv` (server) | PC | pc, pc_label, first_day, last_day, days, time_zone, build, cores, memory_gb, screen, sessions, students, guest_share, minutes, smooth_share, stall_share, avg_load_ms, slow_input_share, failures, profiles_max, new_profiles |
 | `games.csv` (browser) | game | game, name_ar, name_en, categories, players, input_style, has_levels, dda, reports_hits, reports_reaction, reports_score, score_meaning_en, score_meaning_ar, tutorial |
 | `dictionary.csv` (browser) | column | file, column, type, unit, values, meaning_en, meaning_ar, source (wire event.field), available_for (all games \| DDA games \| games with a score \| tutorial games) |
-| `README.txt` (browser, Arabic and English) | | what the data is; identifiers (codes, labels, links, guests, cards); time base and zone; the cutover day; the validity notes (§E); the version history; import tips (Excel; SPSS `GET DATA /TYPE=TXT /ENCODING='UTF8'`; R `read.csv(f, fileEncoding = "UTF-8-BOM")`); example models (R `lme4::glmer(win ~ log(attempt) * band + (1 + log(attempt) \| student_linked) + (1 \| pc) + (1 \| game), family = binomial)`; SPSS `MIXED`); and a care note: "These are pseudonymous records of individual children. Keep them like other school records, and check your rules on research with children before publishing." |
+| `README.txt` (browser, Arabic and English) | | what the data is; identifiers (codes, labels, links, guests); time base and zone; the cutover day; the validity notes (§E); the version history; import tips (Excel; SPSS `GET DATA /TYPE=TXT /ENCODING='UTF8'`; R `read.csv(f, fileEncoding = "UTF-8-BOM")`); example models (R `lme4::glmer(win ~ log(attempt) * band + (1 + log(attempt) \| student_linked) + (1 \| pc) + (1 \| game), family = binomial)`; SPSS `MIXED`); and a care note: "These are pseudonymous records of individual children. Keep them like other school records, and check your rules on research with children before publishing." |
 | `labels.sps`, `load.R` (browser) | | SPSS VARIABLE and VALUE LABELS, and an R loader with factor levels, generated from `dictionary.js` |
 
 ### F.7 Demo
@@ -1028,7 +1015,6 @@ The "Before you turn it on" text shrinks to one paragraph. There are no other wa
 | 3 | S | **Deploy**: copy `server/` byte for byte into `FarmerCarry/school-games-telemetry`, except that repo's own `wrangler.json`, where only `RETENTION_DAYS` changes to `"400"`. Cloudflare deploys on push. **Check:** `/v1/health` = `accepts [2,3]`, schema 4; a real v2 batch answers 204 (after one possible 503); `/?demo`; after sign-in the legacy days and new "student unknown" sessions show every number; the next 5-minute cron runs without errors; the Settings meters move. Watch one school day. |
 | 4 | C | The client PR: `kit.js` `rx` and the dda cap; `profiles.js` 24 with `:more`; `site.js` hooks and idle hand-over; `telemetry.js` v3; `teacher.js` codes, transfer and copy; budgets; docs. **Publish only after step 3's check.** If v3 reaches PCs first, the M2 server answers 400 and the sink drops those batches for good. |
 | 5 | S, D | After two weeks: the v2 share, linked share and data-quality panel; the zone source is `pcs`. |
-| 6 | all | Phase 2 player cards (owner's yes): portal UI (C), print sheets (D), `/v1/admin/cards` (S). |
 
 ### H.3 Byte budgets [C]
 
@@ -1085,7 +1071,7 @@ An older server refuses a schema-4 database. A roll back therefore means either 
 **[S] `server/sqlite-d1.mjs`**:
 * `rows_written` becomes changes × (1 + the number of secondary indexes of the target table): an upper bound from `sqlite_master`, cached per table, for INSERT, UPDATE, DELETE and UPSERT.
 * `size_after` becomes `page_count × page_size`.
-* `rows_read` stays the rows returned. Read budgets are tested through **query plans**: every rollup and admin query uses `SEARCH` on the fact and rollup tables, never `SCAN` (except `settings`, `aliases`, `roll_days`, `usage` and `cards`). On a simulated busy day, the count of rows in the ranges a rebuild touches must be ≤ 100,000.
+* `rows_read` stays the rows returned. Read budgets are tested through **query plans**: every rollup and admin query uses `SEARCH` on the fact and rollup tables, never `SCAN` (except `settings`, `aliases`, `roll_days` and `usage`). On a simulated busy day, the count of rows in the ranges a rebuild touches must be ≤ 100,000.
 * A test file `tools/tests/telemetry-clock.test.mjs` covers `clock.mjs`.
 
 **[C] `telemetry-client.test.mjs`**:
@@ -1157,7 +1143,7 @@ An older server refuses a schema-4 database. A roll back therefore means either 
 | Release order: client v3 before the server means 400s and lost batches | Server first; the `/v1/health` gate in §H.2 step 3 |
 | Old portal tabs with 24 profiles | The `:more` key (§A.5) and the M2 `profiles.js` compatibility test |
 | Owner repo drift (its own `wrangler.json`; a partial copy breaks the dashboard) | Copy the whole folder except `wrangler.json`; the step 3 checklist |
-| Identity validity (open tabs, re-made profiles, two PCs, forgetful lab PCs, guests) | Idle hand-over, code transfer, owner link, cards (phase 2), the data-quality panel, honest copy |
+| Identity validity (open tabs, re-made profiles, two PCs, forgetful lab PCs, guests) | Idle hand-over, code transfer, owner link, the data-quality panel, honest copy |
 | Measurement validity (DDA, scores, selection, band, duo, engaged-time definition) | Validity notes in the tooltips, the README and `RESEARCH_DATA.md`; paired growth |
 | Missing data not at random | v2 share, linked share, coverage per PC on the dashboard |
 | A zone change or recount after months of data takes days under the cap | Early automatic lock; a progress banner; facts never change |
@@ -1165,7 +1151,7 @@ An older server refuses a schema-4 database. A roll back therefore means either 
 | Storage above 425 MB drops the oldest round details | The banner advises a research download each term |
 | Excel's row limit | Rounds split by month; R or SPSS for the full table |
 | Public ingest: forged batches with invented codes (an old risk, now more visible) | The Origin check stops browsers only; documented; forget and recount exist |
-| Children's experience changes (idle hand-over, 24 animals, cards) | The owner's yes (open questions 1, 2, 4) |
+| Children's experience changes (idle hand-over, 24 animals) | The owner's yes (open questions 1 and 2) |
 | Per-student pages misused to rank children | No ranks or medals; neutral, supportive copy; no negative sentences about one child |
 
 ---
@@ -1175,7 +1161,7 @@ An older server refuses a schema-4 database. A roll back therefore means either 
 | Item | Where |
 |---|---|
 | Raise `MAX` (24) and the `Kit.dda` cap; `ss.np`; a "Profiles full" flag | §A.5, §B.3, §E 42, §F.3 PCs |
-| Phase 2 player cards (`cards`, `cd`, `aliases`, "a card we did not print", eviction) plus the phase 1 teacher transfer plus the owner link | §A.8–A.10, §D.2 |
+| The teacher transfer (`cd`, `aliases`) plus the owner link; player cards dropped by the owner | §A.8–A.10, §D.2 |
 | Relative time `w` (the page's `performance.now()`, the queue's `w0`, clamps); no `c`/`w` wall clock | §B.2, §C.2 |
 | s1–s3 keep their meanings; band comparisons as small multiples; validated ramps | §F.5 |
 | Paired same-student growth; small-sample chips, never hidden | §E 27, §F.3, §F.5 |

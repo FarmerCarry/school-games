@@ -489,9 +489,9 @@ before a portal that sends version 3 is published.
 | `forget`, `rebuild` | `POST` | writes |
 | `link` | `POST`, `DELETE` | writes |
 
-Player cards (the spec's phase 2: printed cards with a short code) are not built, so a
-student code is always a profile's 12 hex digits and there is no `cards` route
-(`/v1/admin/cards` answers `404` like any unknown path). A child who plays on two PCs is
+There are no player cards: the owner dropped them for good, so a student code is always
+a profile's 12 hex digits and there is no `cards` route (`/v1/admin/cards` answers `404`
+like any unknown path). A child who plays on two PCs is
 joined by the teacher page's code transfer (the `cd` mark) or by the owner's link.
 
 `HEAD` goes with every `GET`. Every admin route needs `Authorization: Bearer
