@@ -169,15 +169,23 @@
         return [I.levelLabel(l.id, lang), ctx.has(l.students) ? I.int(l.students) : '—', I.int(l.starts), I.int(cd.w), I.int(cd.l), I.int(cd.q), I.int(l.unended || 0)];
       }));
       // How each level's rounds end: one stacked bar per level (won, lost, left unfinished, other).
-      var o = ctx.card(sec, 'level-outcomes', T.levelOutcomes, null, false);
+      var o = ctx.card(sec, 'level-outcomes', T.levelOutcomes, null, true);
+      var endings = function (l) { var cd = l.codes || {}; return [cd.w || 0, cd.l || 0, cd.q || 0, (cd.d || 0) + (cd.e || 0)]; };
+      var sum = function (parts) { return parts[0] + parts[1] + parts[2] + parts[3]; };
       ctx.draw(function () {
+        if (o.chart.hidden) return;
         C.stackRows(o.chart, { name: T.levelOutcomes, rtl: ctx.rtl(), colors: ctx.OUTCOMES.map(function (x) { return x[1]; }),
           legend: ctx.OUTCOMES.map(function (x) { return T.outcome[x[0]]; }), rows: shown.map(function (l) {
-            var cd = l.codes || {}, parts = [cd.w || 0, cd.l || 0, cd.q || 0, (cd.d || 0) + (cd.e || 0)], all = parts[0] + parts[1] + parts[2] + parts[3];
+            var parts = endings(l), all = sum(parts);
             return { label: I.levelLabel(l.id, lang), valueText: T.nTries(l.starts || 0), parts: parts.map(function (v) { return { value: v }; }),
               tip: { title: I.levelLabel(l.id, lang), rows: ctx.OUTCOMES.map(function (x, i) { return { value: all ? I.pct(parts[i] / all) : '—', label: T.outcome[x[0]] + ' (' + I.int(parts[i]) + ')', color: x[1], swatch: 'bar' }; }) } };
           }) });
       });
+      C.table(o.table, T.levelOutcomes, [{ label: T.level }].concat(ctx.OUTCOMES.map(function (x) { return { label: T.outcome[x[0]], num: true }; }), [{ label: T.tries, num: true }]),
+        list.map(function (l) {
+          var parts = endings(l), all = sum(parts);
+          return [I.levelLabel(l.id, lang)].concat(parts.map(function (v) { return all ? I.pct(v / all) : '—'; }), [I.int(l.starts)]);
+        }));
     }
     // Tries before the first win, per level (median and the slower quarter).
     if (ctx.failed(game)) return;

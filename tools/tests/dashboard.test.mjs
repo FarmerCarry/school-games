@@ -1098,6 +1098,23 @@ test('the Games tab: a card per game, a game\'s page, and the game picker', asyn
   await s.check();
 });
 
+test('a game\'s levels in the sample: how each level\'s rounds end has its table, with every ending', async t => {
+  const s = await open(t);
+  const { page } = s;
+  await page.goto(site.origin + '/?demo#/game/dino-3d');
+  await waitForView(page, 'game');
+  const k = demoFile('kpis-30-all.json');
+  const levels = k.levels.filter(l => l.slug === 'dino-3d').sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
+  await page.click('#level-outcomes .table-toggle');
+  assert.deepEqual(await page.locator('#level-outcomes .table-host thead th').allTextContents(), ['Level', 'Won', 'Lost', 'Left unfinished', 'Other ending', 'Tries']);
+  const rows = await page.locator('#level-outcomes .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
+  assert.deepEqual(rows, levels.map(l => {
+    const c = l.codes, parts = [c.w, c.l, c.q, c.d + c.e], all = parts.reduce((a, b) => a + b, 0);
+    return [I.levelLabel(l.id, 'en')].concat(parts.map(v => all ? I.pct(v / all) : '—'), [l.starts.toLocaleString('en-US')]);
+  }));
+  await s.check();
+});
+
 test('the Learning tab: one game or every measured game, and the paired same-child comparison', async t => {
   const s = await open(t);
   const { page } = s;
