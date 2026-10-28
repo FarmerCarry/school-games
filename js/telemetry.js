@@ -67,7 +67,7 @@
     }
   } catch (e) { ready = false; }
 
-  var on, cleared = 0, sess, game = 0, cur = 0, gone = [], closing = [], pend = [], known = [], mine = Object.create(null);
+  var on, cleared = 0, sess, game = 0, cur = 0, gone = [], closing = [], pend = [], known = [], mine = Object.create(null), told = {};
   var tag = 0, timer = 0, timerAt = 0, busy = 0, busyAt = 0, fly = 0, fails = 0, retryAt = 0, mq = [], temp = false, every = 60;
 
   function now() { return Date.now(); }
@@ -110,17 +110,19 @@
 
   /* ------------------------------------------------------------- codes */
   // sg:site:rid = { v: 1, pc: this PC's code, k: { profile key: its code }, l: { profile
-  // key: its older code } }, each code 12 random hex. l comes from the teacher page (the
-  // same child as on another PC). Read again before every write, and written only while
-  // active; anything malformed is dropped. fn changes it in place. undefined when storage
-  // fails: the session then has no codes, never codes that live only in this page.
+  // key: its older code }, g: { profile key: the code a teacher gave it } }, each code 12
+  // random hex. l and g come from the teacher page (the same child as on another PC): the
+  // profile's code is another PC's while g holds it. Read again before every write, and
+  // written only while active; anything malformed is dropped. fn changes it in place.
+  // undefined when storage fails: the session then has no codes, never codes that live
+  // only in this page.
   function rid(fn) {
-    var raw, r, out = { v: 1, pc: '', k: {}, l: {} };
+    var raw, r, out = { v: 1, pc: '', k: {}, l: {}, g: {} };
     try { raw = localStorage.getItem(RID); } catch (e) { return; }
     try { r = JSON.parse(raw); } catch (e) { r = 0; }
     if (r && r.v === 1) {
       if (code(r.pc)) out.pc = r.pc;
-      ['k', 'l'].forEach(function (f) {
+      ['k', 'l', 'g'].forEach(function (f) {
         var o = r[f], n = 0, k;
         if (o && typeof o == 'object') for (k in o) if (n < 64 && KEY.test(k) && code(o[k])) { out[f][k] = o[k]; n++; }
       });
@@ -131,24 +133,27 @@
     return out;
   }
   // The codes of a new session (p: its profile, null for a guest), or (p undefined) only
-  // what follows when profiles are gone: their codes go, each told once as 'pr' (the
-  // child's play on this PC stops here; it did not drop out). An older code a teacher
-  // gave this profile is told once as 'cd', so the server adds its history to this code.
+  // what follows when profiles are gone: their codes go, each one made here told once as
+  // 'pr' (the child's play on this PC stops here; it did not drop out). A code a teacher
+  // gave goes untold: the child plays on with it on the other PC. The older code a
+  // teacher's transfer left in l is told as 'cd' (once per page) at the profile's
+  // sessions, so the server adds its history to this code, until a batch naming it is
+  // delivered (linked): a lost batch never loses the link.
   function codes(s, p) {
     var list = prof('list'), was = [], cd = '', r = rid(function (r) {
-      if (isArr(list)) ['k', 'l'].forEach(function (f) {
-        for (var k in r[f]) if (!list.some(function (x) { return x.k === k; })) { if (f == 'k') was.push(r.k[k]); delete r[f][k]; }
+      if (isArr(list)) ['k', 'l', 'g'].forEach(function (f) {
+        for (var k in r[f]) if (!list.some(function (x) { return x.k === k; })) { if (f == 'k' && r.g[k] !== r.k[k]) was.push(r.k[k]); delete r[f][k]; }
       });
       if (p === undefined) return;
       if (!r.pc) r.pc = hex(12);
       if (!p) return;
       var k = p.k;
       if (!r.k[k]) r.k[k] = hex(12);
-      if (r.l[k]) { if (r.l[k] !== r.k[k]) cd = r.l[k]; delete r.l[k]; }
+      if (r.l[k] === r.k[k]) delete r.l[k]; else cd = r.l[k] || '';
     });
     if (!r) return;
     if (p !== undefined) { s.p = r.pc; s.u = p ? r.k[p.k] : ''; }
-    if (cd) rec(s, ['cd', cd]);
+    if (cd && !told[cd]) { told[cd] = 1; rec(s, ['cd', cd]); }
     was.forEach(function (u) { rec(s, ['pr', u]); });
   }
 
@@ -325,6 +330,11 @@
     } catch (e) { temp = true; }
   }
   function without(b) { save(load().filter(function (x) { return x.e.b !== b; })); }
+  // A delivered batch that names older codes ('cd') ends those pending links.
+  function linked(x) {
+    var old = x.e.ev.filter(function (ev) { return isArr(ev) && ev[0] === 'cd'; }).map(function (ev) { return ev[2]; });
+    if (old.length) rid(function (r) { for (var k in r.l) if (old.indexOf(r.l[k]) >= 0) delete r.l[k]; });
+  }
   function envelope(s) {
     var k = window.SG_OFFLINE_VERSION, m = 'web', z = '';
     try { if (matchMedia('(display-mode: standalone)').matches) m = 'app'; } catch (e) { /* web */ }
@@ -414,6 +424,7 @@
       if (status < 300) {
         fails = 0;
         every = asked == null ? 60 : /^\d+$/.test(asked) && asked >= 20 && asked <= 600 ? +asked : every;
+        load().forEach(function (x) { if (x.e.b === b) linked(x); });
       }
       without(b);
       send();
@@ -435,7 +446,8 @@
       var json;
       if (x.e.b === busy) return true;
       if (!room(json = body(x))) return false;
-      post(json);
+      // The answer reaches a page that is still open (hidden, not gone).
+      post(json).then(safe(function (r) { if (r.status > 199 && r.status < 300 && live()) linked(x); }), function () { /* kept nowhere */ });
       return sent[x.e.b] = true;
     });
     save(load().filter(function (x) { return !sent[x.e.b]; }));

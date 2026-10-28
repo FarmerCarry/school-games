@@ -52,8 +52,9 @@ does not even collect the extras (`Kit.track`, the round counters) or post
 
 ```js
 { v: 1, pc: '8c21d0e94a6f',              // this PC's code
-  k: { p1: '3f9a0c51e2b7' },             // a code per profile key (the key itself is never sent)
-  l: { p4: '1b2c3d4e5f60' } }            // a profile's older code, waiting to be linked (below)
+  k: { p1: '3f9a0c51e2b7', p4: 'b81e4c07d2a9' }, // a code per profile key (the key itself is never sent)
+  l: { p4: '1b2c3d4e5f60' },             // a profile's older code, waiting to be linked (below)
+  g: { p4: 'b81e4c07d2a9' } }            // the code a teacher gave a profile, from another PC (below)
 ```
 
 * Every code is **12 random lowercase hex** (`crypto.getRandomValues`). It is never
@@ -66,22 +67,28 @@ does not even collect the extras (`Kit.track`, the round counters) or post
   from the fields it knows.
 * When a profile is gone from the PC, the next session start (or the change itself)
   removes its code and sends `['pr', t, code]` once: the child's play on this PC stops
-  there, which the server treats as censoring, not as dropping out.
+  there, which the server treats as censoring, not as dropping out. A code a teacher gave
+  the profile (`g[key]` equals `k[key]`) is removed without a `pr`, with its `l` and `g`:
+  the child goes on playing with it on the other PC.
 * If storage refuses the write (blocked or full), the session sends `u: ''` and `p: ''`:
   the sink never invents codes that would live only in one page and count as new students
   and PCs. Anything malformed in the key is dropped; a damaged key is rewritten as
-  `{ v: 1, pc: '', k: {}, l: {} }` (and filled), only by an active sink.
+  `{ v: 1, pc: '', k: {}, l: {}, g: {} }` (and filled), only by an active sink.
 * The key lies outside `sg:site:stats:` and `sg:site:tm:`, so the teacher page's
   **clear** and the **stop** keep it: what was sent stays on the server anyway, and a
   child's long-term record must not break because a teacher cleared a PC.
 * **The same child on two PCs.** The teacher page shows each profile's code with a check
   character, for example `3F9A-0C51-E2B7-5`, and offers «الطفل نفسه على جهاز آخر»: the
   teacher types the code the other PC's teacher page shows for that child. The profile
-  then takes that code (`k`), and its own code, if it had one, waits in `l`. At that
-  profile's next session start the sink sends `['cd', t, olderCode]` once, right after
-  `ss`, and deletes `l[key]`; the server then links the older code to the new one, so the
-  child's earlier play on this PC joins the same student ([`PLAY_STATS.md`](PLAY_STATS.md),
-  section 3).
+  then takes that code (`k`, also noted in `g`), and its own code, if it had one, waits in
+  `l`. At that profile's next session start the sink sends `['cd', t, olderCode]` right
+  after `ss`; the server then links the older code to the new one, so the child's earlier
+  play on this PC joins the same student ([`PLAY_STATS.md`](PLAY_STATS.md), section 3).
+  `l[key]` stays until a batch that holds the `cd` is answered with a 2xx, so a batch lost
+  on the way (a PC switched off before the batch was queued, the queue's limits) never loses
+  the link: the next page sends it again (at most once per page; the server keeps one link).
+  A code in `g` came from another PC, so a second transfer that corrects a wrong one never
+  puts it in `l`: it is another child's history.
 
 ## What it sends
 
@@ -126,7 +133,7 @@ batches.
 | Event | Shape | Notes |
 |---|---|---|
 | session start | `['ss', t, isNew, ageDays, sinceDays, level, np, cls]` | `isNew` 1 when the player was just made on this page. `ageDays`: the profile's age in whole days (−1 for a guest). `sinceDays`: days since the profile's last play (−1 for a guest, a new profile, or one that has never played). `level` 0 for a guest. `np`: profiles on this PC (at most 24). `cls`: classroom mode on (`sg:site:classroom`). A guest on a PC without profiles is `['ss', 0, 0, -1, -1, 0, 0, 0]`. |
-| older code | `['cd', t, olderCode]` | Right after `ss`, once, when a teacher gave this profile another PC's code (above). |
+| older code | `['cd', t, olderCode]` | Right after `ss`, when a teacher gave this profile another PC's code (above): once per page until a batch that holds it is delivered. |
 | profile removed | `['pr', t, code]` | Once per profile gone from this PC. |
 | game open | `['go', t, n, slug, src, playsBefore, fav]` | `src`: the v1 launch sources of `PLAY_STATS.md` (featured, catalog, recent, favorites, category, quick, search, related, surprise, reload, history, direct) plus `starter` for the «ابدأ من هنا» card. `playsBefore`: this player's earlier visits to this game (`SGProfiles` visits), 0 for a guest. `fav` 1 when the game is hearted (`sg:site:favs`) as it opens. |
 | game ready | `['ld', t, n, slug, loadMs]` | Frame created to its first `sg:ready`; only a visit's first frame, and only if the page stayed visible (as in v1). |
@@ -275,7 +282,8 @@ stopping statistics on the teacher page.
   nothing, makes no code, and games get `telemetry: false`; a code per profile, stable
   across sessions and reloads, none for a guest, one per PC, removed profiles told once,
   a damaged `sg:site:rid` repaired, and no codes when storage refuses them; a teacher's
-  transfer giving the new code and one `cd`; `w` for retries, split batches, reloaded and
+  transfer giving the new code and one `cd` per page until it is delivered, a lost batch
+  naming it again, a given code removed without `pr`; `w` for retries, split batches, reloaded and
   older queue entries; the 60-second timer and `X-Batch-Every`; tutorials, hearts, the
   classroom timer, `gp`, `np`, `cls` and every `se.why`; back-off 20, 40, 80, 160, 300 s
   with a fake clock, for 5xx and for no answer at all; 400 and 429; a request that is never
@@ -299,5 +307,6 @@ stopping statistics on the teacher page.
   in the fast build, only in the portal's exact inlined copy of it); every other network
   API, `sendBeacon` included, stays banned there, and the same calls anywhere else fail.
 * `tools/tests/teacher-page.test.mjs`: the note, the sharing line, the codes panel and the
-  transfer (check character, refusals, `k` and `l`, disabled while sharing is off), clear
+  transfer (check character, refusals, `k`, `l` and `g`, a correction that links no given
+  code, disabled while sharing is off), clear
   removing the `sg:site:tm:` queue while the note, the codes and the sharing line stay.

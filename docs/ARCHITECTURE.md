@@ -352,7 +352,7 @@ last `t`. A new session (new `s`) starts at page load and whenever the player ch
 | Event | Shape |
 |---|---|
 | session start | `['ss', t, isNew 0/1, ageDays, sinceDays, level, np, cls]` — whole days, −1 for a guest (days since also −1 for a new profile or one that never played); `np` profiles on this PC; `cls` classroom mode |
-| older code | `['cd', t, olderCode]` — once, right after `ss`, when a teacher gave this profile another PC's code (the server links the older code to `u`) |
+| older code | `['cd', t, olderCode]` — right after `ss`, when a teacher gave this profile another PC's code (the server links the older code to `u`); once per page until a batch that holds it is delivered |
 | profile removed | `['pr', t, code]` — once per profile gone from this PC (censoring, not drop-out) |
 | game open | `['go', t, n, slug, src, playsBefore, fav]` — `src` from the v1 launch sources plus `starter`; the player's exact visits before; `fav` the game is hearted |
 | game ready | `['ld', t, n, slug, loadMs]` |
@@ -370,10 +370,12 @@ last `t`. A new session (new `s`) starts at page load and whenever the player ch
 `site.js` calls the hooks `why(code)` (`h` and `i` only, just before it changes the
 player), `fav(slug, on)` and `timer(what, minutes)` next to its own handlers; like every
 hook they do nothing while the sink is inert. A teacher's "same child as on another PC"
-on the teacher page (`js/teacher.js`, `docs/PLAY_STATS.md` section 3) writes `k[key]` and
-the older code in `l[key]`; the sink sends that `cd` at the profile's next session start
-and deletes `l[key]`. The check character the teacher page shows (Luhn mod 16) is never
-sent.
+on the teacher page (`js/teacher.js`, `docs/PLAY_STATS.md` section 3) writes `k[key]`, the
+same code in `g[key]` (given, not made here) and the older code in `l[key]`, unless that
+older code was itself given; the sink sends that `cd` at the profile's next session start
+and deletes `l[key]` once a batch holding it is answered with a 2xx. A removed profile
+whose code was given sends no `pr`: the child plays on with it on the other PC. The check
+character the teacher page shows (Luhn mod 16) is never sent.
 
 **Delivery:** events batch in memory; a batch is sent when a game closes, 60 s after the
 first waiting event (or as often as the server's last `X-Batch-Every` asked, 20 to 600 s),

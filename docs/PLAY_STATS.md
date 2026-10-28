@@ -384,12 +384,13 @@ the data pseudonymous. Period: اليوم، هذا الأسبوع، آخر 30 ي
      are ignored; Arabic digits count as digits). Refused: not 13 hex characters
      («الرمز 13 خانة؛ تحقّق منه.»), a wrong check character («إحدى خانات الرمز خاطئة؛
      تحقّق منه.»), the player's own code, and the code of another player on this PC. On
-     success the player takes that code (`k[key]`), and its own code, if it had one, waits
-     in `l[key]` (an older one already waiting stays). The page says «من اللعبة القادمة
+     success the player takes that code (`k[key]`, noted in `g[key]`), and its own code,
+     if it had one and it was not itself given by an earlier transfer, waits in `l[key]`
+     (an older one already waiting stays). The page says «من اللعبة القادمة
      يُحسب لعب هذا الطفل مع رمزه على الجهاز الآخر، ويُضم إليه ما لعبه هنا من قبل.» (without
-     the second part when the player had no code). At that player's next session the portal
-     sends the older code once (`cd`), and the server joins the play it had here to the same
-     student. The page reads `sg:site:rid` again just before it writes, and writes only on
+     the second part when nothing waits). At that player's next session the portal sends
+     the older code (`cd`), again on later pages until the server has it, and the server
+     joins the play it had here to the same student. The page reads `sg:site:rid` again just before it writes, and writes only on
      this action.
 
 ### Words used on the page
@@ -500,8 +501,9 @@ Step 1's files are the input; they do not need to change.
   the export reminder, the hours rule and games still open; the dashboard codes (the PC's
   code, each player's animal, ring and code with its check character against a Luhn mod 16
   written out in the test, "no code yet", players from both profile keys), the transfer
-  (every refusal, `k` and `l`, the oldest waiting code kept, disabled while sharing is off),
-  clear keeping `sg:site:rid`, and the copied animals and colours equal to the portal's.
+  (every refusal, `k`, `l` and `g`, the oldest waiting code kept, a correction that links
+  no given code, disabled while sharing is off), clear keeping `sg:site:rid`, and the
+  copied animals and colours equal to the portal's.
 * `tools/tests/merge-progress.test.mjs`: a merge-2048 board is one round; the goal tile
   reports nothing and a full board reports `'end'` with the score.
 * `tools/tests/play-stats-rules.test.mjs` (node only): no network APIs in Kit and the other

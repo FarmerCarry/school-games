@@ -270,16 +270,20 @@ test('dashboard codes: the Luhn mod 16 check character, how codes are shown and 
     assert.deepEqual(api.readCode(bad), { error: 'length' }, bad);
   }
 
-  // The player takes the other PC's code; its own waits in l for the portal to link once.
+  // The player takes the other PC's code, noted in g; its own waits in l for the portal to link.
   const P2 = '0a0b0c0d0e0f', OTHER = 'b0b1b2b3b4b5', THIRD = 'c0ffee000000';
-  const rid = { v: 1, pc: PC_CODE, k: { p1: P1, p2: P2 }, l: {} }, copy = structuredClone(rid);
+  const rid = { v: 1, pc: PC_CODE, k: { p1: P1, p2: P2 }, l: {}, g: {} }, copy = structuredClone(rid);
   const first = api.transfer(rid, 'p1', shown(OTHER));
-  assert.deepEqual(first, { rid: { v: 1, pc: PC_CODE, k: { p1: OTHER, p2: P2 }, l: { p1: P1 } }, joined: true });
+  assert.deepEqual(first, { rid: { v: 1, pc: PC_CODE, k: { p1: OTHER, p2: P2 }, l: { p1: P1 }, g: { p1: OTHER } }, joined: true });
   assert.deepEqual(rid, copy, 'the record read is not changed in place');
   // A second transfer before the portal linked: the oldest code still waits.
-  assert.deepEqual(api.transfer(first.rid, 'p1', shown(THIRD)).rid, { v: 1, pc: PC_CODE, k: { p1: THIRD, p2: P2 }, l: { p1: P1 } });
+  assert.deepEqual(api.transfer(first.rid, 'p1', shown(THIRD)), { rid: { v: 1, pc: PC_CODE, k: { p1: THIRD, p2: P2 }, l: { p1: P1 }, g: { p1: THIRD } }, joined: true });
+  // Correcting a wrong transfer once the portal linked: the code given before is another
+  // child's on the other PC, so it never waits to be joined to this one.
+  const linked = { ...first.rid, l: {} };
+  assert.deepEqual(api.transfer(linked, 'p1', shown(THIRD)), { rid: { v: 1, pc: PC_CODE, k: { p1: THIRD, p2: P2 }, l: {}, g: { p1: THIRD } }, joined: false });
   // A player with no code yet: nothing waits.
-  assert.deepEqual(api.transfer(rid, 'p3', shown(OTHER)), { rid: { v: 1, pc: PC_CODE, k: { p1: P1, p2: P2, p3: OTHER }, l: {} }, joined: false });
+  assert.deepEqual(api.transfer(rid, 'p3', shown(OTHER)), { rid: { v: 1, pc: PC_CODE, k: { p1: P1, p2: P2, p3: OTHER }, l: {}, g: { p3: OTHER } }, joined: false });
   // Refused: the player's own code, another player's code on this PC, and malformed codes.
   assert.deepEqual(api.transfer(rid, 'p1', shown(P1)), { error: 'own' });
   assert.deepEqual(api.transfer(rid, 'p1', shown(P2)), { error: 'other' });
@@ -287,10 +291,10 @@ test('dashboard codes: the Luhn mod 16 check character, how codes are shown and 
   assert.deepEqual(api.transfer(rid, 'p1', shown(OTHER).replace(/.$/, c => c === '0' ? '1' : '0')), { error: 'check' });
 
   // sg:site:rid and the portal's players are read as the portal keeps them; the rest is left out.
-  const none = { v: 1, pc: '', k: {}, l: {} };
+  const none = { v: 1, pc: '', k: {}, l: {}, g: {} };
   for (const text of [null, '{', '[]', '{"v":2,"pc":"8c21d0e94a6f"}']) assert.deepEqual(api.parseRid(text), none, String(text));
-  assert.deepEqual(api.parseRid(JSON.stringify({ v: 1, pc: 'PC', k: { p1: P1, p2: 'short', x1: P1, p3: 7, pqrstuvwxyz: P1 }, l: { p1: [P1], p4: P13 }, more: 1 })),
-    { v: 1, pc: '', k: { p1: P1 }, l: { p4: P13 } });
+  assert.deepEqual(api.parseRid(JSON.stringify({ v: 1, pc: 'PC', k: { p1: P1, p2: 'short', x1: P1, p3: 7, pqrstuvwxyz: P1 }, l: { p1: [P1], p4: P13 },
+    g: { p1: P1, p2: true, X: P13 }, more: 1 })), { v: 1, pc: '', k: { p1: P1 }, l: { p4: P13 }, g: { p1: P1 } });
   const record = (k, a, c) => ({ k, a, c, b: '8-9', xp: 0, lv: 1, d0: 20000, dl: 20000, g: {} });
   const main = { v: 1, seq: 30, list: [record('p1', 3, 1), record('p2', 99, -1), { k: 'Bad' }, record('p1', 5, 5)] };
   const more = { v: 1, list: [...Array(30)].map((_, i) => record('p' + (i + 3), i % 12, i % 8)) };
@@ -964,14 +968,14 @@ test('the codes panel: this PC\'s code, each player\'s code with its check chara
   assert.equal(await page.locator('#linkStatus').textContent(),
     'من اللعبة القادمة يُحسب لعب هذا الطفل مع رمزه على الجهاز الآخر، ويُضم إليه ما لعبه هنا من قبل.');
   assert.equal(await page.locator('#linkForm').isHidden(), true);
-  assert.deepEqual(await rid(), { v: 1, pc: PC_CODE, k: { p1: OTHER, p13: P13 }, l: { p1: P1 } });
+  assert.deepEqual(await rid(), { v: 1, pc: PC_CODE, k: { p1: OTHER, p13: P13 }, l: { p1: P1 }, g: { p1: OTHER } });
   assert.equal(await row('p1').locator('.code').textContent(), shown(OTHER));
   // A player with no code yet takes the other code; nothing of its own waits to be joined.
   await row('p2').locator('[data-link]').click();
   await page.locator('#linkCode').fill(shown(THIRD));
   await page.locator('#linkForm button[type="submit"]').click();
   assert.equal(await page.locator('#linkStatus').textContent(), 'من اللعبة القادمة يُحسب لعب هذا الطفل مع رمزه على الجهاز الآخر.');
-  assert.deepEqual(await rid(), { v: 1, pc: PC_CODE, k: { p1: OTHER, p2: THIRD, p13: P13 }, l: { p1: P1 } });
+  assert.deepEqual(await rid(), { v: 1, pc: PC_CODE, k: { p1: OTHER, p2: THIRD, p13: P13 }, l: { p1: P1 }, g: { p1: OTHER, p2: THIRD } });
   // Cancel closes the form and writes nothing.
   await row('p3').locator('[data-link]').click();
   await page.locator('#linkCode').fill(shown(P1));

@@ -243,11 +243,13 @@ test('the same child on two PCs: the teacher gives the second PC\'s profile the 
   await second.page.locator('#linkCode').fill(shown);
   await second.page.locator('#linkForm button[type="submit"]').click();
   assert.match(await second.page.locator('#linkStatus').textContent(), /ويُضم إليه ما لعبه هنا من قبل/);
-  assert.deepEqual(await rid(second.page), { v: 1, pc: b.pc, k: { p1: codeA }, l: { p1: codeB } });
+  assert.deepEqual(await rid(second.page), { v: 1, pc: b.pc, k: { p1: codeA }, l: { p1: codeB }, g: { p1: codeA } });
 
-  // The second PC's next session plays under the first code and names its own once.
+  // The second PC's next session plays under the first code and names its own once; the
+  // link is done once the server has the batch that names it.
   await session(second, 'the second PC after the transfer');
-  assert.deepEqual(await rid(second.page), { v: 1, pc: b.pc, k: { p1: codeA }, l: {} });
+  await until(async () => !(await rid(second.page)).l.p1, 'the link delivered');
+  assert.deepEqual(await rid(second.page), { v: 1, pc: b.pc, k: { p1: codeA }, l: {}, g: { p1: codeA } });
   const sent = second.bodies.map(body => JSON.parse(body));
   const after = sent.filter(body => body.u === codeA);
   assert.ok(after.length && after.every(body => body.p === b.pc));
