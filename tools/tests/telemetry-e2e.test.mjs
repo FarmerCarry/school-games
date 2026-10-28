@@ -104,7 +104,8 @@ async function pc(t, server) {
   return state;
 }
 // A fresh portal page (a new telemetry session), a real two-player round of tic-tac-toe
-// plus 90 s of engaged play the game reports, then home: leaving the game sends at once.
+// plus 90 s of engaged time that the test posts from inside the game frame, as Kit would
+// (so the minutes are not all under one), then home: leaving the game sends at once.
 async function session(state, label) {
   const { page } = state, sent = state.answers.length;
   await page.goto(site.origin + '/index.html');
