@@ -483,7 +483,7 @@ test('the workbook is a stored ZIP of well-formed parts: RTL sheets, an Arabic r
     'احذف الصفوف التي يكون فيها pc فارغًا', 'لا ترسم حركة مستمرة: connect-four، tic-tac-toe، typing-test.',
     'تبدأ من الصفر في متصفح آخر', 'في جدول hours استخدم أحدث ملف لكل جهاز',
     'الأرقام لكل جهاز وليست لكل طالب. لا يُرسل الموقع هذا الملف إلى أي مكان. وإذا ربط مسؤول المدرسة نسخة الموقع ' +
-    'بخادم للإحصاءات فلا تصله إلا معلومات لعب مجهولة: بلا أسماء ولا اسم للجهاز ولا أي نص كتبه الأطفال.']) {
+    'بخادم للإحصاءات فلا تصله إلا معلومات اللعب بلا أسماء ولا اسم للجهاز ولا أي نص كتبه الأطفال، ويظهر فيها كل طفل برمز عشوائي.']) {
     assert.ok(readme.includes(text), 'the read-me says: ' + text);
   }
   // Text that looks like XML or a formula stays plain text.

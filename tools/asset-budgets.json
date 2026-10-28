@@ -1,7 +1,7 @@
 {
   "format": 1,
-  "portalBytes": 394000,
-  "teacherBytes": 96000,
+  "portalBytes": 397000,
+  "teacherBytes": 98000,
   "gameHtmlBytes": {
     "air-hockey": 117000,
     "beat-dash": 115000,
@@ -45,5 +45,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5290000
+  "precacheBytes": 5295000
 }
