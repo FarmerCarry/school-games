@@ -297,6 +297,16 @@ test('both languages: Arabic sentences are Arabic with Western digits, English o
   assert.equal(I.levelLabel('s4', 'en'), '4×4 board');
   assert.equal(I.levelLabel('cpu-hard', 'en'), 'round “cpu-hard”');
   assert.deepEqual([1, 2, 3, 10, 11, 100, 103, 2.5].map(n => I.arWord(n, ['a', 'b', 'c', 'd'])), ['a', 'b', 'c', 'c', 'd', 'd', 'c', 'd']);
+  // Hundreds and thousands ending in 00, 01 or 02 take the singular genitive (100 طالب), as rowsAr does ("12,000 صف").
+  const students = ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا'];
+  assert.deepEqual([99, 100, 101, 102, 103, 111, 200, 1000, 1002].map(n => I.arWord(n, students)),
+    ['طالبًا', 'طالب', 'طالب', 'طالب', 'طلاب', 'طالبًا', 'طالب', 'طالب', 'طالب']);
+  assert.equal(I.arWord(100, ['صف', 'صفان', 'صفوف', 'صفًّا']), 'صفّ', 'the shadda stays');
+  assert.equal(I.arWord(300, ['رمز', 'رمزان', 'رموز', 'رمزًا مربوطًا']), 'رمز مربوط', 'each word of the phrase');
+  assert.equal(I.arWord(100, ['مرة', 'مرتان', 'مرات', 'مرة']), 'مرة');
+  assert.equal(TEXT.ar.nStudents(100), '100 طالب');
+  assert.equal(TEXT.ar.smallSample(200), 'بناءً على 200 طفل حتى الآن');
+  assert.equal(TEXT.ar.clockPcs(100), '100 جهاز');
   assert.deepEqual(I.duration(15215.8, 'ar'), { value: '254', unit: 'ساعة', text: '254 ساعة' });
   assert.deepEqual(I.duration(270, 'ar'), { value: '4.5', unit: 'ساعة', text: '4.5 ساعة' });
   assert.deepEqual(I.duration(5, 'ar').unit, 'دقائق');

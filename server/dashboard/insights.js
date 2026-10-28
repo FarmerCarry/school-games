@@ -138,13 +138,16 @@
   function seconds(ms) { return decimal((num(ms) || 0) / 1000, 1); }
 
   // Arabic number agreement after a written number: [one, two, 3-10, other].
-  // Fractions and 11+ take the singular; the last two digits decide past 100.
+  // Fractions and 11+ take the singular; the last two digits decide past 100. A hundred or
+  // more ending in 00, 01 or 02 takes the singular genitive: the "other" form without its
+  // accusative ending (طالبًا -> 100 طالب, صفًّا -> 100 صفّ; مرة stays مرة).
   function arWord(n, forms) {
     if (!Number.isInteger(n)) return forms[3];
     const m = n % 100;
     if (n === 1) return forms[0];
     if (n === 2) return forms[1];
     if (m >= 3 && m <= 10) return forms[2];
+    if (n >= 100 && m <= 2) return forms[3].replace(/ً(ّ?)ا(?=\s|$)/g, '$1');
     return forms[3];
   }
   // "5 مرات", "مرة واحدة", "مرتين" (after a verb).
