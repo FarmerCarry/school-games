@@ -1,4 +1,4 @@
-// The portal's anonymous picture profiles, age bands and XP (js/profiles.js and the
+// The portal's picture profiles without names, age bands and XP (js/profiles.js and the
 // "who's playing?" strip in js/site.js, docs/ARCHITECTURE.md "Profiles and age bands"),
 // driven through the real portal UI and real game pages.
 import assert from 'node:assert/strict';
