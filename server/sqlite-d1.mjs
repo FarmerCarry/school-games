@@ -6,9 +6,13 @@
 // integer); undefined, BigInt and objects are refused. A query is one statement (D1 would
 // run them all and answer with the last; node:sqlite would run only the first). Statements
 // are compiled when they first run and cached.
-// meta.rows_written is the rows changed (all tables here are WITHOUT ROWID and have no
-// other index, so this is what D1 bills); meta.rows_read is only the rows returned,
-// since node:sqlite cannot count the rows SQLite scanned.
+// meta.rows_written bills what D1 bills: every row changed by an INSERT, UPDATE, DELETE or
+// upsert counts once for the table and once for each of its secondary indexes (an upper
+// bound: an UPDATE that leaves an indexed column alone writes no index entry); the index
+// count of a table is read from the schema once and kept until a statement changes the
+// schema. meta.size_after is the database size (page_count x page_size). meta.rows_read
+// is only the rows returned, since node:sqlite cannot count the rows SQLite scanned; the
+// tests check read costs through query plans instead.
 import fs from 'node:fs';
 import path from 'node:path';
 import { hideSqliteWarning } from './warnings.mjs';
@@ -18,6 +22,9 @@ hideSqliteWarning();
 const { DatabaseSync } = await import('node:sqlite');
 
 const CACHE = 256;
+// The table a write statement changes, after any leading comments.
+const TARGET = /^(?:\s|--[^\n]*\n|\/\*[\s\S]*?\*\/)*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+["`[]?(\w+)/i;
+const DDL = /^(?:\s|--[^\n]*\n|\/\*[\s\S]*?\*\/)*(?:CREATE|DROP|ALTER)\b/i;
 
 function d1Error(error) {
   return error instanceof Error && error.message.startsWith('D1_') ? error
@@ -66,6 +73,22 @@ class Database {
     this.sqlite = sqlite;
     this.compiled = new Map();
     this.totalChanges = sqlite.prepare('SELECT total_changes() AS n, last_insert_rowid() AS id');
+    this.size = sqlite.prepare('SELECT page_count * page_size AS size FROM pragma_page_count(), pragma_page_size()');
+    this.tableSql = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?");
+    this.indexList = sqlite.prepare('SELECT origin FROM pragma_index_list(?)');
+    this.indexes = new Map();
+  }
+  // 1 + the secondary indexes of a table: the entries one changed row writes. The primary
+  // key of a WITHOUT ROWID table is the table itself; a UNIQUE constraint is an index.
+  entries(table) {
+    let n = this.indexes.get(table);
+    if (n === undefined) {
+      const sql = this.tableSql.get(table)?.sql || '';
+      const withoutRowid = /\bWITHOUT\s+ROWID\b/i.test(sql);
+      n = 1 + this.indexList.all(table).filter(index => !(withoutRowid && index.origin === 'pk')).length;
+      this.indexes.set(table, n);
+    }
+    return n;
   }
   prepare(sql) {
     if (typeof sql !== 'string') throw new TypeError('D1_TYPE_ERROR: the query must be a string');
@@ -79,7 +102,8 @@ class Database {
       if (/\S/.test(sql.slice(statement.sourceSQL.length).replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, ''))) {
         throw new Error('D1_ERROR: one statement per query (use batch() for several)');
       }
-      entry = { statement, rows: statement.columns().length > 0 };
+      const target = TARGET.exec(sql);
+      entry = { statement, rows: statement.columns().length > 0, target: target ? target[1] : null, ddl: DDL.test(sql) };
       if (this.compiled.size >= CACHE) this.compiled.delete(this.compiled.keys().next().value);
       this.compiled.set(sql, entry);
     }
@@ -89,9 +113,9 @@ class Database {
   // arrays of values (with the column names) for raw().
   execute(statement, arrays = false) {
     const started = performance.now();
-    let results = [], changes, lastRowId, columns = [];
+    let results = [], changes, lastRowId, columns = [], written = 0, size;
     try {
-      const { statement: compiled, rows } = this.compile(statement.sql);
+      const { statement: compiled, rows, target, ddl } = this.compile(statement.sql);
       if (rows) {
         const before = this.totalChanges.get();
         if (arrays) {
@@ -109,6 +133,9 @@ class Database {
         changes = Number(info.changes);
         lastRowId = Number(info.lastInsertRowid);
       }
+      if (ddl) this.indexes.clear();
+      written = changes && target ? changes * this.entries(target) : changes;
+      size = this.size.get().size;
     } catch (error) {
       throw d1Error(error);
     }
@@ -116,7 +143,7 @@ class Database {
       success: true, results, columns,
       meta: {
         served_by: 'sqlite-d1', duration: performance.now() - started, changes, last_row_id: lastRowId,
-        changed_db: changes > 0, size_after: 0, rows_read: results.length, rows_written: changes
+        changed_db: changes > 0, size_after: size, rows_read: results.length, rows_written: written
       }
     };
   }
@@ -140,6 +167,7 @@ class Database {
   }
   async exec(sql) {
     const started = performance.now();
+    this.indexes.clear();
     try { this.sqlite.exec(sql); } catch (error) { throw d1Error(error); }
     return { count: sql.split(';').filter(part => part.trim()).length, duration: performance.now() - started };
   }
