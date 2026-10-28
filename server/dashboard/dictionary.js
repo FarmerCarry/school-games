@@ -592,7 +592,7 @@
       });
       out.push('');
     });
-    return out.join('\n');
+    return out.join('\n').replace(/\n+$/, '\n');
   }
 
   return Object.freeze({

@@ -116,18 +116,22 @@
     }
     return ((16 - sum % 16) % 16).toString(16);
   }
+  // What was typed, without dashes and spaces, in lower case, Arabic digits as 0-9 (a
+  // keyboard set to Arabic types them).
+  const typed = text => String(text || '').toLowerCase().replace(/[\s\-‐-―]/g, '')
+    .replace(/[٠-٩۰-۹]/g, d => String(d.charCodeAt(0) & 15));
   // A code typed into the search: 4 to 13 letters and digits once dashes and spaces are
   // gone (a code as the teacher page shows it, 3F9A-0C51-E2B7-5, is 12 hex plus a check
   // character). Returns the lower-case prefix to look for, or null.
   function codeQuery(text) {
-    const clean = String(text || '').toLowerCase().replace(/[\s\-‐-―]/g, '');
+    const clean = typed(text);
     if (clean.length < 4 || clean.length > 13 || !/^[0-9a-z]+$/.test(clean)) return null;
     return clean.length === 13 ? clean.slice(0, 12) : clean;
   }
   // A whole code, as typed: { code } for 12 hex digits (or 13 with the right check
   // character), { wrong: true } when the check character does not match, else null.
   function fullCode(text) {
-    const clean = String(text || '').toLowerCase().replace(/[\s\-‐-―]/g, '');
+    const clean = typed(text);
     if (!/^[0-9a-f]{12}[0-9a-f]?$/.test(clean)) return null;
     const code = clean.slice(0, 12);
     return clean.length === 13 && clean[12] !== checkChar(code) ? { wrong: true } : { code };

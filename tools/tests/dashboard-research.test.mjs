@@ -94,6 +94,8 @@ test('student labels and the code search', () => {
   assert.deepEqual(R.fullCode('3F9A-0C51-E2B7-5'), { code: '3f9a0c51e2b7' });
   assert.deepEqual(R.fullCode(' 3f9a 0c51 e2b7 '), { code: '3f9a0c51e2b7' }, 'without the check character');
   assert.deepEqual(R.fullCode('3F9A-0C51-E2B7-C'), { wrong: true });
+  assert.deepEqual(R.fullCode('٣F9A-٠C51-E2B٧-٥'), { code: '3f9a0c51e2b7' }, 'Arabic digits count as digits');
+  assert.equal(R.codeQuery('٣f٩a'), '3f9a');
   assert.equal(R.fullCode('3F9A-0C51'), null, 'not a whole code');
   assert.equal(R.fullCode('3F9A-0C51-E2B7-55'), null);
   // Any one wrong digit changes the check character.
