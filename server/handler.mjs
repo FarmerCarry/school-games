@@ -243,7 +243,11 @@ export function createHandler(options) {
       case 'live GET': return store.live(t);
       case 'settings GET': return store.settings(t);
       case 'settings POST': return store.updateSettings(settingsBody(body), t);
-      case 'students GET': return store.students(period(), t);
+      case 'students GET': {
+        // A later page starts after the code `after` (its answer's next).
+        const after = query.has('after') ? code(query, 'after') : null;
+        return store.students({ ...period(), after }, t);
+      }
       case 'student GET': { const u = code(query, 'u'); return store.student({ ...period(), u }, t); }
       case 'game GET': { const slug = slugParam(query, 'slug'); return store.game({ ...period(), slug }, t); }
       case 'stats GET': { const metrics = metricsParam(query), slug = slugParam(query, 'slug', true); return store.stats({ ...period(), metrics, slug }, t); }

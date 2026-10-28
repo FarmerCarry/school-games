@@ -747,12 +747,16 @@ Anything else is `400 {"error": "<field>"}`; another media type `415`.
   (two). Keeping more is refused with `400 {"error": "storage"}` when the database,
   growing in proportion, would pass the storage guard.
 
-#### `GET /v1/admin/students?from&to&band`
+#### `GET /v1/admin/students?from&to&band[&after]`
 
 Every student who played in the period, by code. A student is a canonical code: an
 older code linked to a newer one counts as the newer one, with its history. `band`
 keeps the student-days whose first session was in that band. Today and the other days
-not rolled yet come from the facts.
+not rolled yet come from the facts. Students come in order of their code, as many as
+fit in 1.5 MB of JSON (D1 refuses a value over 2 MB; a school year of a busy school is
+about 1.3 MB): when more are left the answer has `"next"`, the last code it holds, and
+`&after=` that code gives the next page. On Cloudflare the answer is kept 10 minutes, so
+a refresh on any instance sends kept text.
 
 ```jsonc
 { "v": 1, "range": { "from": "2026-10-09", "to": "2026-10-29", "days": 21, "band": "all" },

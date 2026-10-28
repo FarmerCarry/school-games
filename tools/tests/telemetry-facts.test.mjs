@@ -472,7 +472,7 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
     'WITH k AS (SELECT COALESCE(', 'SELECT key, rows FROM kpi_cache', 'DELETE FROM st_rounds', 'DELETE FROM aliases',
     'DELETE FROM r_stat WHERE day = ?1 AND (', 'UPDATE roll_days SET rows',
     // The research reads: students, a student (rollups and facts), a game, r_stat, cohorts and PCs.
-    'SELECT json_group_array(json_array(c, days,', 'SELECT json_group_array(json_array(c, json(list)))', 'WITH p AS (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT d.day AS day',
+    "INSERT INTO kpi_cache (key, made, rows) SELECT ?6, ?7, json_object('weeks'", 'WITH s AS (SELECT c, ', 'WITH p AS (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT d.day AS day',
     'SELECT g.slug AS slug', 'SELECT date(g.day', "SELECT CAST(strftime('%H'", "SELECT date(((s.start_s + COALESCE(r.t0", 'SELECT date(((s.start_s) +',
     'SELECT CASE WHEN nx.k', 'SELECT x.day AS day, x.a AS a', 'SELECT x.day AS day, COUNT(DISTINCT', 'SELECT x.a AS a', 'SELECT COALESCE(al.u_new, x.u) AS c, x.a',
     'SELECT json_group_array(json_array(a, metric, k1', 'SELECT json_group_array(json_array(a, metric, slug', 'WITH RECURSIVE f', 'WITH codes AS',

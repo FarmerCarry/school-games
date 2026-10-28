@@ -21,7 +21,7 @@ import { CODES, ERRORS, SOURCES, WIRES } from './schema.mjs';
 import { dayBounds, localDay, localParts, offsetMin, offsetsBetween, weekStartOf } from './clock.mjs';
 import { ARGS, F, IL, PLAYS, PROFILE_AGE, REPLAY, ROLLUPS, ROLLUP_TABLES, RT, SINCE_LAST, TABLES, jsonArray, rollStatements, rollupSelect,
   spanScope, unionAll } from './rollups.mjs';
-import { JsonText, SENT, adminViews } from './admin.mjs';
+import { JsonText, SENT, STUDENTS_PAGE_BYTES, adminViews } from './admin.mjs';
 import { exportPage } from './export.mjs';
 
 export { ROLLUPS, TABLES };
@@ -782,10 +782,10 @@ const EXTRAS = EXTRAS_KEYS;
 // Options: retentionDays (the facts' default retention; the owner's keep_days setting
 // wins), openCacheMs (how long the answers' parts for the days not rolled yet are kept and
 // shared between instances, per slot of that length; 0 computes them on every request, as
-// the Node host does), guards (the thresholds of GUARDS) and exportLimits (smaller export
-// pages), both for tests. The store's work is all in SQL on db; JavaScript folds one
-// batch's events and assembles small answers.
-export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0, guards = {}, exportLimits = {} } = {}) {
+// the Node host does), guards (the thresholds of GUARDS), exportLimits (smaller export
+// pages) and studentsPageBytes (smaller students pages), for tests. The store's work is all
+// in SQL on db; JavaScript folds one batch's events and assembles small answers.
+export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0, guards = {}, exportLimits = {}, studentsPageBytes = STUDENTS_PAGE_BYTES } = {}) {
   let ready = null, sweptMinute = -1, conf = null;
   const sql = text => db.prepare(text);
   // A statement with exactly as many values as it has parameters.
@@ -1265,7 +1265,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
   // Keeps newly made parts ([key, part] pairs, or [key, part, its JSON text] when SQL gave
   // the text already) here and in kpi_cache, as far as they fit (at most KEPT_MAX bytes per
   // write): a part that cannot be kept only costs a read later.
-  async function keepParts(entries, now) {
+  async function keepParts(entries, now, { here = false } = {}) {
     const rows = [];
     let size = 0, rv = null;
     for (const [k, part, given] of entries) {
@@ -1275,7 +1275,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       rv = k.rv;
       if ((size += text.length) <= KEPT_MAX) rows.push([k.key, text]);
     }
-    if (rows.length) await run([sql(keptPut(rows.length)).bind(rv, ...rows.flat())], now).catch(() => {});
+    if (rows.length && !here) await run([sql(keptPut(rows.length)).bind(rv, ...rows.flat())], now).catch(() => {});
   }
 
   /* ------------------------------------------------------------ the KPIs */
@@ -1562,7 +1562,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
 
   // What the admin views and the export pages (admin.mjs, export.mjs) use of the store.
   const ctx = {
-    sql, bound, run, ensure, spans, wide, partKeys, lookup, keepParts, clock,
+    sql, bound, run, ensure, spans, wide, partKeys, lookup, keepParts, clock, studentsPageBytes,
     conf: () => conf, bounds: day => dayBounds(conf.tz, day),
     // Statements that raise rv and forget every kept part, and what follows once they ran.
     renew: () => [sql(RV_UP), sql(KEPT_CLEAN)],

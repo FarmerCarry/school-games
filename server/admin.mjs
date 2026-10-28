@@ -59,8 +59,9 @@ const sums = (alias, columns) => columns.map(c => `TOTAL(${alias}.${c}) AS ${c}`
 
 // Students: per canonical code, the days played, sessions, engaged ms, rounds ended, wins,
 // losses and quits from day ?5 on, and the engaged ms of each of the 13 school weeks from ?4;
-// band ?3. And the engaged ms per game. Each is one JSON text: [[c, days, sessions, engaged
-// ms, rounds, w, l, q, w0, ..., w12], ...] and [[c, [[slug, ms], ...]], ...].
+// band ?3. And the engaged ms per game from day ?5 on. Each is one JSON text: [[c, days,
+// sessions, engaged ms, rounds, w, l, q, w0, ..., w12], ...] and [[c, [[slug, ms], ...]], ...].
+// Over the rolled days ?1..?2, or the facts of the UTC seconds [?1, ?2) (src).
 const STUDENT_COUNTS = ['sessions', 'engaged_ms', 'rounds', 'w', 'l', 'q'];
 const WEEK = 'CAST((julianday(d.day) - julianday(?4)) / 7 AS INTEGER)';
 const STUDENT_WEEKS = src => 'SELECT json_group_array(json_array(c, days, ' + STUDENT_COUNTS.join(', ') +
@@ -71,20 +72,31 @@ const STUDENT_WEEKS = src => 'SELECT json_group_array(json_array(c, days, ' + ST
   ` FROM ${src.from}${LINKS('d')} WHERE ${src.days} AND (?3 IS NULL OR d.a = ?3) GROUP BY 1)`;
 const STUDENT_GAMES = src => 'SELECT json_group_array(json_array(c, json(list))) AS part FROM (SELECT c, json_group_array(json_array(slug, ms)) AS list ' +
   `FROM (SELECT ${CANON('g')} AS c, g.slug AS slug, TOTAL(g.engaged_ms) AS ms FROM ${src.from}${LINKS('g')} ` +
-  `WHERE ${src.days} AND (?3 IS NULL OR g.a = ?3) GROUP BY 1, 2) GROUP BY c)`;
+  `WHERE ${src.days} AND g.day >= ?5 AND (?3 IS NULL OR g.a = ?3) GROUP BY 1, 2) GROUP BY c)`;
+// The closed part, made and kept in kpi_cache by SQL (key ?6, rv ?7) unless it is kept
+// already: it never passes through the Worker.
+const STUDENTS_CLOSED = `INSERT INTO kpi_cache (key, made, rows) SELECT ?6, ?7, json_object('weeks', json((${STUDENT_WEEKS(source('r_student_day', 'd', null))})), ` +
+  `'games', json((${STUDENT_GAMES(source('r_student_game', 'g', null))}))) WHERE NOT EXISTS (SELECT 1 FROM kpi_cache WHERE key = ?6)`;
+// A students answer holds at most this many bytes of students (?10; D1 refuses a value over
+// 2 MB); the rest are on the next page.
+export const STUDENTS_PAGE_BYTES = 1500000;
 // The students answer itself, as one JSON text (so JavaScript neither parses nor builds it),
-// from the closed and the open part (?1, ?2: {"weeks": ..., "games": ...}, as made above):
-// both added up per student, with their games and top 3 by minutes (ties: the first slug),
-// their links, and who they are from their codes' rows (as GROUPS_INFO, below). kind is
-// always 'profile': every student code is made for a profile on a PC.
+// from the closed part (kept under ?6) and the open part (the facts of [?1, ?2) of `scope`,
+// made here): both added up per student, with their games and top 3 by minutes (ties: the
+// first slug), their links, and who they are from their codes' rows (as GROUPS_INFO,
+// below), from the code after ?8 on, as many as STUDENTS_PAGE_BYTES hold, with the last of
+// them as next when more are left (else null). kind is always 'profile': every student code is made for a profile on a PC.
 const WEEK_COLUMNS = ['days', ...STUDENT_COUNTS, ...Array.from({ length: 13 }, (_, i) => 'w' + i)];
-const STUDENTS_ANSWER = L => {
-  const weeks = n => `SELECT value ->> 0 AS c, ${WEEK_COLUMNS.map((col, i) => `value ->> ${i + 1} AS ${col}`).join(', ')} FROM json_each(?${n}, '$.weeks')`;
-  const games = n => `SELECT x.value ->> 0 AS c, y.value ->> 0 AS slug, y.value ->> 1 AS ms FROM json_each(?${n}, '$.games') x, json_each(x.value -> 1) y`;
+const STUDENTS_ANSWER = (L, scope) => {
+  const kept = path => `json_each((SELECT rows FROM kpi_cache WHERE key = ?6), '${path}')`;
+  const made = table => scope ? `json_each((${(table === 'r_student_day' ? STUDENT_WEEKS : STUDENT_GAMES)(source(table, table === 'r_student_day' ? 'd' : 'g', scope))}))` : null;
+  const weeks = from => `SELECT value ->> 0 AS c, ${WEEK_COLUMNS.map((col, i) => `value ->> ${i + 1} AS ${col}`).join(', ')} FROM ${from}`;
+  const games = from => `SELECT x.value ->> 0 AS c, y.value ->> 0 AS slug, y.value ->> 1 AS ms FROM ${from} x, json_each(x.value -> 1) y`;
+  const both = (part, closed, open) => [part(closed), ...(open ? [part(open)] : [])].join(' UNION ALL ');
   const band = col => `CASE ${col} WHEN '' THEN 'unknown' ELSE ${col} END`;
-  return `WITH s AS (SELECT c, ${WEEK_COLUMNS.map(col => `TOTAL(${col}) AS ${col}`).join(', ')} FROM (${weeks(1)} UNION ALL ${weeks(2)}) ` +
-    'GROUP BY c HAVING TOTAL(days) > 0), ' +
-    `gs AS (SELECT c, slug, TOTAL(ms) AS ms FROM (${games(1)} UNION ALL ${games(2)}) WHERE c IN (SELECT c FROM s) GROUP BY c, slug), ` +
+  return `WITH s AS (SELECT c, ${WEEK_COLUMNS.map(col => `TOTAL(${col}) AS ${col}`).join(', ')} FROM (${both(weeks, kept('$.weeks'), made('r_student_day'))}) ` +
+    'WHERE c > ?8 GROUP BY c HAVING TOTAL(days) > 0), ' +
+    `gs AS (SELECT c, slug, TOTAL(ms) AS ms FROM (${both(games, kept('$.games'), made('r_student_game'))}) WHERE c IN (SELECT c FROM s) GROUP BY c, slug), ` +
     'tops AS (SELECT c, json_group_array(slug) AS top FROM (SELECT c, slug, ROW_NUMBER() OVER (PARTITION BY c ORDER BY ms DESC, slug) AS rk FROM gs) ' +
     'WHERE rk <= 3 GROUP BY c), played AS (SELECT c, COUNT(*) AS n FROM gs GROUP BY c), ' +
     'codes AS (SELECT c, c AS u FROM s UNION SELECT a.u_new, a.u_old FROM aliases a WHERE a.u_new IN (SELECT c FROM s)), ' +
@@ -96,8 +108,9 @@ const STUDENTS_ANSWER = L => {
     `date(${L('MIN(t.first_s)')}, 'unixepoch') AS first_day, date(${L('MAX(t.last_s)')}, 'unixepoch') AS last_day, ` +
     `MIN(date(${L('t.first_s')}, 'unixepoch', '-' || IFNULL(t.age_days_first, 0) || ' days')) AS made_day, ` +
     `MIN(CASE WHEN t.removed_s IS NOT NULL THEN date(${L('t.removed_s')}, 'unixepoch') END) AS removed_day ` +
-    'FROM codes JOIN st_students t ON t.u = codes.u GROUP BY 1) ' +
-    `SELECT json_group_array(json(o)) AS students FROM (SELECT ${jsonObject([['u', 's.c'], ['label', 'COALESCE(w.label, upper(substr(s.c, 1, 4)))'],
+    'FROM codes JOIN st_students t ON t.u = codes.u GROUP BY 1), ' +
+    `page AS MATERIALIZED (SELECT c, o, SUM(length(o)) OVER (ORDER BY c) AS size FROM (SELECT s.c AS c, ${jsonObject([['u', 's.c'],
+      ['label', 'COALESCE(w.label, upper(substr(s.c, 1, 4)))'],
       ['kind', "'profile'"], ['linked', "json(IFNULL(k.list, '[]'))"], ['band', band('w.band')], ['bandFirst', band('w.band_first')],
       ['firstDay', 'w.first_day'], ['lastDay', 'w.last_day'], ...['days', 'sessions'].map(col => [col, `CAST(s.${col} AS INTEGER)`]),
       ['minutes', 'round(s.engaged_ms / 60000.0, 1)'], ...['rounds', 'w', 'l', 'q'].map(col => [col, `CAST(s.${col} AS INTEGER)`]),
@@ -105,9 +118,16 @@ const STUDENTS_ANSWER = L => {
       ['knownBefore', "CASE WHEN w.made_day < w.first_day THEN json('true') ELSE json('false') END"], ['removed', 'w.removed_day'],
       ['weekly', `json_array(${Array.from({ length: 13 }, (_, i) => `round(s.w${i} / 60000.0, 1)`).join(', ')})`]])} AS o ` +
     'FROM s LEFT JOIN who w ON w.c = s.c LEFT JOIN links k ON k.c = s.c LEFT JOIN pcs p ON p.c = s.c LEFT JOIN tops t3 ON t3.c = s.c ' +
-    'LEFT JOIN played g ON g.c = s.c ORDER BY s.c)';
+    'LEFT JOIN played g ON g.c = s.c)), ' +
+    // The first student always (so that every page moves on), then as many as fit.
+    "page_in AS (SELECT c, o FROM page WHERE size <= ?10 OR size = length(o)) " +
+    'SELECT (SELECT json_group_array(json(o)) FROM (SELECT o FROM page_in ORDER BY c)) AS students, ' +
+    'CASE WHEN (SELECT COUNT(*) FROM page) > (SELECT COUNT(*) FROM page_in) THEN (SELECT MAX(c) FROM page_in) END AS next';
 };
-const NO_PART = '{"weeks":[],"games":[]}';
+// The same, kept in kpi_cache by SQL (key ?9, rv ?7; its text: the next code, a space, the
+// students), and read back.
+const STUDENTS_KEPT = (L, scope) => `INSERT INTO kpi_cache (key, made, rows) SELECT ?9, ?7, IFNULL(next, '') || ' ' || students FROM (${STUDENTS_ANSWER(L, scope)}) ` +
+  'WHERE NOT EXISTS (SELECT 1 FROM kpi_cache WHERE key = ?9)';
 // Who the students of the codes ?1 (a JSON array) are, per canonical code, as one JSON text
 // { c: [label, band, bandFirst, firstDay, lastDay, madeDay, removedDay, pcs, [pc labels]] }:
 // the canonical code's label (a prefix of it), the band of the latest and of the first
@@ -320,34 +340,39 @@ export function adminViews(ctx) {
   // GET /v1/admin/students: every canonical student who played in the period (band: the
   // band of the day's first session), with their days, sessions, minutes, rounds ended,
   // wins, losses and quits there, the games they tried and their top 3 by minutes, their PCs
-  // and links, and minutes per school week for the 13 weeks ending with `to`'s week. Its
-  // parts and the answer stay JSON text from SQL to the reply: a school has hundreds of
-  // students, too many to parse and write again within the Workers' 10 ms.
-  async function students({ from, to, band }, now = Date.now()) {
+  // and links, and minutes per school week for the 13 weeks ending with `to`'s week; from
+  // the code after `after` on, as many as fit in 1.5 MB (next: the last of them, to ask for
+  // the next page after, when more are left). Its parts and the answer stay JSON text from SQL to the reply, and the
+  // closed part goes from SQL to kpi_cache and back to SQL without the Worker: a school has
+  // hundreds of students, too many to pass, parse and write again within the Workers' 10 ms.
+  // On Workers the answer is kept per 10-minute slot.
+  const studentsTexts = new Map();
+  async function students({ from, to, band, after = null }, now = Date.now()) {
     await ensure(now);
-    const ws = ctx.conf().weekStart === 'sun' ? 0 : 1, w0 = addDays(weekOf(to, ws), -12 * 7), start = from < w0 ? from : w0;
-    const weeks = spans(start, to), period = spans(from, to);
-    const keys = partKeys(['students', from, to, band], weeks.rolled, weeks.open, now, { raw: true });
-    let { closed, open } = await kept(keys, now);
-    const tasks = [], made = [], values = (span, scope) => [...(scope ? span.bounds : span.rolled), band, w0, from];
-    const make = (scope, entry) => {
-      const text = { weeks: '[]', games: '[]' };
-      if (scope ? weeks.open : weeks.rolled) tasks.push([bound(STUDENT_WEEKS(source('r_student_day', 'd', scope && weeks.scope)), values(weeks, scope)),
-        r => { text.weeks = r.results[0].part; }]);
-      if (scope ? period.open : period.rolled) tasks.push([bound(STUDENT_GAMES(source('r_student_game', 'g', scope && period.scope)), values(period, scope)),
-        r => { text.games = r.results[0].part; }]);
-      made.push([entry, text]);
-    };
-    if (keys.closed && !closed) make(false, keys.closed);
-    if (weeks.open && !open) make(true, keys.open);
-    await perform(tasks, now);
-    const parts = made.map(([entry, text]) => [entry, `{"weeks":${text.weeks},"games":${text.games}}`]);
-    if (keys.closed && !closed) closed = parts[0][1];
-    if (weeks.open && !open) open = parts.at(-1)[1];
-    await keepParts(parts, now);
-    let list = '[]';
-    await perform([[bound(STUDENTS_ANSWER(wide(now).local), [closed || NO_PART, open || NO_PART]), r => { list = r.results[0].students; }]], now);
-    return answer(now, { range: range(from, to, band), students: new JsonText(list) });
+    const conf = ctx.conf(), ws = conf.weekStart === 'sun' ? 0 : 1, w0 = addDays(weekOf(to, ws), -12 * 7), start = from < w0 ? from : w0;
+    const weeks = spans(start, to);
+    const out = (text, next) => answer(now, { range: range(from, to, band), students: new JsonText(text), ...(next ? { next } : {}) });
+    const page = text => { const at = text.indexOf(' '); return out(text.slice(at + 1), text.slice(0, at)); };
+    const answerKey = partKeys(['students-answer', from, to, band, ws, after], null, true, now, { raw: true }).open;
+    if (answerKey) {
+      const { found } = await lookup([answerKey], now, { links: false });
+      if (found.has(answerKey.key)) return page(found.get(answerKey.key));
+    }
+    const closedKey = weeks.rolled ? JSON.stringify(['students', start, weeks.rolled[1], band, w0, from, conf.rv]) : '';
+    const W = wide(now), L = W.local, textKey = W.day + ' ' + (weeks.scope?.day ?? '');
+    let texts = studentsTexts.get(textKey);
+    if (!texts) {
+      if (studentsTexts.size >= 8) studentsTexts.clear();
+      studentsTexts.set(textKey, texts = { answer: STUDENTS_ANSWER(L, weeks.scope), kept: STUDENTS_KEPT(L, weeks.scope) });
+    }
+    const values = [...(weeks.bounds || [0, 0]), band, w0, from, closedKey, conf.rv, after ?? '', answerKey?.key ?? '', ctx.studentsPageBytes];
+    const work = closedKey ? [bound(STUDENTS_CLOSED, [...weeks.rolled, band, w0, from, closedKey, conf.rv])] : [];
+    if (answerKey) work.push(bound(texts.kept, values), bound('SELECT rows FROM kpi_cache WHERE key = ?1', [answerKey.key]));
+    else work.push(bound(texts.answer, values));
+    const results = await run(work, now), row = results.at(-1).results[0];
+    if (!answerKey) return out(row.students, row.next);
+    await keepParts([[answerKey, row.rows]], now, { here: true });
+    return page(row.rows);
   }
 
   // GET /v1/admin/student?u: one student's page (u is any of their codes): who they are,

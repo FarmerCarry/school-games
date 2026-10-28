@@ -842,15 +842,23 @@ test('the research reads keep their closed part in D1 for every instance, made a
   clock.now = Date.parse('2026-10-21T01:30:00Z');
   await scheduled(env, '*/5 * * * *');
   await scheduled(env, '*/5 * * * *');
-  const closed = /^SELECT json_group_array\(json_array\(c, days,|^SELECT g\.slug AS slug|^SELECT x\.day AS day, x\.a AS a|^SELECT x\.p AS p|^WITH d AS MATERIALIZED \(SELECT COALESCE/;
+  // A closed part is made: read from the rollups (students: kept in kpi_cache by SQL, which then writes a row).
+  const closed = /^SELECT g\.slug AS slug|^SELECT x\.day AS day, x\.a AS a|^SELECT x\.p AS p|^WITH d AS MATERIALIZED \(SELECT COALESCE/;
+  const made = [], execute = env.DB.execute.bind(env.DB);
+  env.DB.execute = (statement, ...rest) => {
+    const result = execute(statement, ...rest);
+    if (/^INSERT INTO kpi_cache \(key, made, rows\) SELECT \?6, \?7, json_object\('weeks'/.test(statement.sql) && result.meta.changes) made.push(statement.sql);
+    return result;
+  };
   const paths = ['/v1/admin/students?from=2026-10-19&to=2026-10-20', `/v1/admin/student?u=${U}&from=2026-10-19&to=2026-10-20`,
     '/v1/admin/game?slug=road-hopper&from=2026-10-19&to=2026-10-20', '/v1/admin/pcs?from=2026-10-19&to=2026-10-20', '/v1/admin/cohorts?from=2026-10-19&to=2026-10-20'];
   const read = async instance => {
     const other = { ...env, RATE_PER_MIN: String(instance) }, measure = counted(other), out = [];
     for (const pathname of paths) {
+      made.length = 0;
       const { sql, result } = await measure(() => admin(other, pathname));
       assert.equal(result.status, 200, pathname);
-      out.push([result.json(), sql.some(text => closed.test(text))]);
+      out.push([result.json(), made.length > 0 || sql.some(text => closed.test(text))]);
     }
     return out;
   };
@@ -882,11 +890,12 @@ test('the CPU each admin answer and export page spends in JavaScript (outside SQ
   // runs on this thread, and the test files run one at a time, so this is the JavaScript's own CPU. What the Worker's D1
   // binding does is added back: it writes the request as JSON, and reads the answer as JSON (each statement's columns and
   // rows of values), making an object of every row.
-  let inSql = 0;
+  let inSql = 0, received = 0;
   const batch = db.batch.bind(db);
   db.batch = async list => {
     const t0 = performance.now(), results = await batch(list);
     const wire = JSON.stringify(results.map(r => ({ results: { columns: Object.keys(r.results[0] || {}), rows: r.results.map(Object.values) }, meta: r.meta })));
+    received += wire.length;
     inSql += performance.now() - t0;
     JSON.stringify({ batch: list.map(st => ({ sql: st.sql, params: st.params })) });
     for (const { results: { columns, rows } } of JSON.parse(wire)) rows.map(row => Object.fromEntries(row.map((v, i) => [columns[i], v])));
@@ -904,18 +913,22 @@ test('the CPU each admin answer and export page spends in JavaScript (outside SQ
     'export rounds': q => store.exportPage({ file: 'rounds', ...q }, now), 'export sessions': q => store.exportPage({ file: 'sessions', ...q }, now),
     'export students': q => store.exportPage({ file: 'students', ...q }, now)
   };
-  const medians = {};
+  const medians = {}, ratios = {};
   for (const [name, run] of Object.entries(work)) {
     const spent = [];
     for (const q of periods) {
       inSql = 0;
+      received = 0;
       const t0 = performance.now(), answer = await run(q);
       // Writing the answer is part of it: the handler's JSON, or the export page's lines.
-      if (answer.lines) answer.lines.join('\n'); else serialize(answer);
+      const text = answer.lines ? answer.lines.join('\n') : serialize(answer);
       spent.push(performance.now() - t0 - inSql);
+      ratios[name] = Math.max(ratios[name] || 0, received / text.length);
     }
     medians[name] = spent.sort((a, b) => a - b)[3];
   }
-  const limit = name => name === 'kpis' ? 5 : name.startsWith('export') ? 10 : 10;
+  // The KPI and students answers come from SQL about once: their parts never pass through the Worker.
+  for (const name of ['kpis', 'students']) assert.ok(ratios[name] < 1.5, `${name}: ${ratios[name].toFixed(2)} times its answer through the binding`);
+  const limit = name => ['kpis', 'students'].includes(name) ? 5 : name.startsWith('export') ? 10 : 10;
   for (const [name, ms] of Object.entries(medians)) assert.ok(ms <= limit(name), `${name}: ${ms.toFixed(1)} ms of JavaScript (${JSON.stringify(medians)})`);
 });

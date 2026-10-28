@@ -1314,6 +1314,28 @@ test('students, a student, a game and the PCs are exact for a hand-built school,
   await check(true);
 });
 
+test('the students come in pages of at most a set size of JSON (D1 refuses a value over 2 MB), each naming the code to go on from', async t => {
+  const s = await studentDays(t);
+  const { serialize } = await import('../../server/handler.mjs');
+  const q = { from: '2026-10-19', to: '2026-10-20', band: null };
+  // About two students fit in 700 bytes.
+  const store = openStore(s.app.store.db, { studentsPageBytes: 700 }), pages = [];
+  let after = null;
+  do {
+    const page = JSON.parse(serialize(await store.students({ ...q, after }, s.clock.now)));
+    assert.ok(JSON.stringify(page.students).length <= 700 + page.students.length, JSON.stringify(page.students).length + ' bytes');
+    pages.push(page.students.map(x => x.u));
+    after = page.next ?? null;
+    if (after) assert.equal(after, page.students.at(-1).u, 'next: the last code of the page');
+  } while (after && pages.length < 10);
+  assert.ok(pages.length >= 2, JSON.stringify(pages));
+  assert.deepEqual(pages.flat(), STUDENTS.map(x => x.u));
+  // One page holds them all at the full size, with no next; a bad cursor is refused.
+  const all = (await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-20')).json();
+  assert.deepEqual([all.students.map(x => x.u), all.next], [STUDENTS.map(x => x.u), undefined]);
+  assert.equal((await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-20&after=zz')).status, 400);
+});
+
 test('forget removes a student\'s group of codes with their facts and per-student rollups; school totals keep the play until a recount', async t => {
   const s = await studentDays(t);
   // Another child's session on U2's PC removed U2's profile there.
