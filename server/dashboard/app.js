@@ -1289,13 +1289,25 @@
       back.rows.map(function (g) { return [gameName(g.slug), I.pct(g.share), I.int(g.opens), I.int(g.opens - g.back)]; }));
     newReturning(sec, 'weeks-card', students);
   }
+  // The charts made from the students answer's weekly minutes (13 whole weeks per child,
+  // ending with the week of the period's end): a period under two weeks would show whole
+  // weeks mostly outside it, and one longer than 13 weeks shows its last 13 only (said in
+  // the card's foot).
+  var WEEKS_MIN_DAYS = 14, WEEKS_KEPT = 13;
+  function weeksShown(c) {
+    var r = range();
+    if (r.days < WEEKS_MIN_DAYS) { note(c.chart, t().weeksNeedDays); return false; }
+    if (r.days > WEEKS_KEPT * 7) note(c.foot, t().weeksLast13);
+    return true;
+  }
   // New and returning students per week, from the students answer.
   function newReturning(parent, id, students) {
     var T = t(), c = card(parent, id, T.weeksTitle, T.weeksSub, true);
     if (failed(students)) { missing(c.chart, students); return c; }
     var r = range();
     var weeks = R.newReturning(students.students, { from: r.from, to: r.to, weekStart: weekStart() });
-    if (weeks.length < 2) { note(c.chart, T.weeksNeedDays); }
+    if (!weeksShown(c)) weeks = [];
+    else if (weeks.length < 2) { note(c.chart, T.weeksNeedDays); }
     else {
       legendList(c.chart, T.weeksTitle, [[T.returningStudents, ORDINAL[0]], [T.newStudentsLabel, ORDINAL[1]]]);
       var plot = h('div', { class: 'plot' }, c.chart);
@@ -1315,6 +1327,7 @@
     return c;
   }
   ctx.newReturning = newReturning;
+  ctx.weeksShown = weeksShown;
   ctx.whenHeatmap = whenHeatmap;
 
   // PC health summary: the headline tiles and the games with a problem; each PC on the PCs tab.

@@ -1017,6 +1017,39 @@ test('a student\'s "Getting better?": weeks from every round of the period, no s
   await s.check();
 });
 
+test('weekly charts: whole weeks only for a period of two weeks or more, and the last 13 weeks said so', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  const WEEKLY = { students: ['week-minutes', 'week-days'], overview: ['weeks-card'], habits: ['habits-weeks'] };
+  // The remembered period, then each tab from a fresh load.
+  const visit = async (period, check) => {
+    await page.goto(site.origin + '/');
+    await page.evaluate(p => localStorage.setItem('sg:dash:period', p), period);
+    for (const [tab, ids] of Object.entries(WEEKLY)) {
+      await page.goto(site.origin + '/#/' + tab);
+      await page.reload();
+      await waitForView(page, tab);
+      for (const id of ids) await check(id);
+    }
+  };
+  // Today, or 7 days: a student's weekly minutes are whole weeks, mostly outside the period.
+  for (const period of ['1', '7']) {
+    await visit(period, async id => {
+      assert.match(await page.locator(`#${id} .chart-host`).textContent(), /Choose 30 or 90 days above to see the weeks/, period + ' ' + id);
+      assert.equal(await page.locator(`#${id} svg`).count(), 0, period + ' ' + id);
+    });
+  }
+  // 120 days: the students answer has 13 weeks per child, so these charts show the last 13.
+  await visit('custom:' + dayBefore(today(), 119) + ':' + today(), async id => {
+    assert.match(await page.locator(`#${id} .card-foot`).textContent(), /the last 13 weeks of the period/, id);
+  });
+  await visit('30', async id => {
+    assert.doesNotMatch(await page.locator(`#${id}`).textContent(), /last 13 weeks|Choose 30/, id);
+    assert.equal(await page.locator(`#${id} svg`).count(), 1, id);
+  });
+  await s.check();
+});
+
 test('the cohort legend tells a week at 0% from a week not reached yet', async t => {
   const s = await open(t);
   const { page } = s;

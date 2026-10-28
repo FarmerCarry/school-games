@@ -42,10 +42,10 @@
       var weeks = R.bucketize(R.studentWeeks(students, { from: r.from, to: r.to, weekStart: ctx.weekStart() }), WEEK_BUCKETS);
       histogram(ctx, grid, 'week-minutes', T.weekMinutesTitle, T.weekMinutesSub, weeks, function (b, i) {
         return i + 1 < WEEK_BUCKETS.length ? T.rangeMinutes(b.k, WEEK_BUCKETS[i + 1] - 1) : T.minutesOrMore(b.k);
-      }, T.nStudentWeeks, function (b, i) { return i + 1 < WEEK_BUCKETS.length ? String(b.k) : b.k + '+'; });
+      }, T.nStudentWeeks, function (b, i) { return i + 1 < WEEK_BUCKETS.length ? String(b.k) : b.k + '+'; }, true);
       var days = R.bucketize(R.daysPerWeek(students, { from: r.from, to: r.to, weekStart: ctx.weekStart() }), [1, 2, 3, 4, 5, 6, 7]);
       histogram(ctx, grid, 'week-days', T.weekDaysTitle, T.weekDaysSub, days, function (b) { return T.daysAWeek(b.k); }, T.nStudents,
-        function (b) { return String(b.k); });
+        function (b) { return String(b.k); }, true);
 
       cohortCard(ctx, view, data.cohorts);
 
@@ -60,12 +60,15 @@
     search: function (ctx) { if (list.host && list.host.isConnected) drawTable(ctx); }
   };
 
-  function histogram(ctx, parent, id, title, sub, buckets, label, countText, tick) {
+  // weekly: made from the students' weekly minutes (ctx.weeksShown says when they can be shown).
+  function histogram(ctx, parent, id, title, sub, buckets, label, countText, tick, weekly) {
     var T = ctx.t(), C = ctx.C, I = ctx.I;
     var c = ctx.card(parent, id, title, sub, true);
+    var shown = !weekly || ctx.weeksShown(c);
+    if (!shown) buckets = [];
     var total = buckets.reduce(function (a, b) { return a + b.n; }, 0);
-    if (!total) ctx.note(c.chart, T.noData);
-    else ctx.draw(function () {
+    if (shown && !total) ctx.note(c.chart, T.noData);
+    else if (total) ctx.draw(function () {
       if (c.chart.hidden) return;
       C.columns(c.chart, { name: title, rtl: ctx.rtl(), color: 'var(--s1)', keysHint: T.keysColumns, format: function (v) { return I.int(v); },
         bars: buckets.map(function (b, i) {
