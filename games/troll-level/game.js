@@ -24,13 +24,13 @@
   };
   // A won level unlocks the next one, also in saves from before a world was added.
   for (var q = 0; q < N - 1; q++) if (save.best[q] != null && save.unl <= q) save.unl = q + 1;
-  // Writes everything (the music setting too). If storage refuses a write, the
-  // shared warning offers a retry; it clears only once every key is saved.
+  // Writes everything. If storage refuses a write, the shared warning offers a
+  // retry; it clears only once every key is saved. (There is no background music,
+  // so the 'music' key of an old save is neither read nor written.)
   var saveUi = K.saveStatus({ retry: persist });
   function persist() {
     var ok = true;
     ['best', 'stars', 'total', 'unl', 'skin', 'last', 'ended'].forEach(function (k) { if (store.set(k, save[k]) === false) ok = false; });
-    if (store.set('music', M.on) === false) ok = false;
     if (ok) saveUi.saved(); else saveUi.failed();
     return ok;
   }
@@ -96,53 +96,6 @@
     click: function () { A.tone({ freq: 700, to: 900, type: 'square', dur: 0.05, vol: 0.1 }); },
     nope: function () { A.tone({ freq: 220, to: 160, type: 'square', dur: 0.12, vol: 0.12 }); A.tone({ freq: 180, to: 120, type: 'square', dur: 0.14, vol: 0.12, delay: 0.1 }); }
   };
-
-  /* ============================================================== music */
-  // A quiet, sneaky "tip-toe" loop (A minor, marimba-like plucks over a staccato bass).
-  // Scheduled a little ahead from the game loop, so it stops with the tab. Toggle in pause.
-  var M = { on: store.get('music', true) !== false, gain: null, level: -1, next: 0, step: 0 };
-  var M_E8 = 60 / 112 / 2;
-  var M_ROOT = [45, 45, 50, 40, 45, 45, 41, 40];
-  var M_MEL = [
-    [76, -1, -1, 72, -1, 76, -1, -1], [77, 76, -1, 72, -1, 69, -1, -1], [74, -1, -1, 77, -1, 74, -1, 69], [68, -1, 71, -1, 74, -1, 76, -1],
-    [76, -1, -1, 72, -1, 76, -1, 81], [79, -1, 77, -1, 76, -1, 72, -1], [72, -1, 74, -1, 77, -1, 76, 74], [71, -1, 68, -1, 64, -1, -1, -1]
-  ];
-  function mf(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-  function mPluck(freq, t, dur, type, vol, bright) {
-    var c = A.ctx, o = c.createOscillator(), g = c.createGain();
-    o.type = type; o.frequency.value = freq;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(M.gain); o.start(t); o.stop(t + dur + 0.02);
-    if (bright) { // marimba "tock": a short high partial
-      var o2 = c.createOscillator(), g2 = c.createGain();
-      o2.type = 'sine'; o2.frequency.value = freq * 3.98;
-      g2.gain.setValueAtTime(0.0001, t); g2.gain.exponentialRampToValueAtTime(vol * 0.25, t + 0.003); g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
-      o2.connect(g2); g2.connect(M.gain); o2.start(t); o2.stop(t + 0.09);
-    }
-  }
-  function mSchedule() {
-    var c = A.ctx;
-    if (M.next < c.currentTime - 0.2) M.next = c.currentTime + 0.05;
-    while (M.next < c.currentTime + 0.2) {
-      var t = M.next, s8 = M.step % 8, bar = Math.floor(M.step / 8) % 8, pass = Math.floor(M.step / 64) % 2;
-      var r = M_ROOT[bar];
-      if (s8 % 2 === 0) mPluck(mf(r + (s8 === 2 || s8 === 6 ? 7 : 0)), t, 0.16, 'triangle', 0.22, false);
-      if (s8 === 0 || s8 === 4) mPluck(95, t, 0.12, 'sine', 0.2, false);          // soft thump
-      if (s8 % 2 === 1) mPluck(2300, t, 0.025, 'sine', 0.018, false);            // tiny tick
-      var n = M_MEL[bar][s8];
-      if (n > 0 && (pass === 1 || bar < 4 || s8 % 2 === 0)) mPluck(mf(n), t, 0.32, 'sine', 0.13, true);
-      M.next += M_E8; M.step++;
-    }
-  }
-  function musicTick() {
-    var c = A.ctx;
-    if (!c || !A.master) return;
-    if (!M.gain) { M.gain = c.createGain(); M.gain.gain.value = 0; M.gain.connect(A.master); M.next = c.currentTime + 0.1; }
-    var want = M.on ? (mode === 'pause' ? 0.2 : mode === 'win' || mode === 'end' ? 0.25 : 0.42) : 0;
-    if (want !== M.level) { M.gain.gain.setTargetAtTime(want, c.currentTime, 0.2); M.level = want; }
-    if (want > 0 && !A.muted) mSchedule(); else M.next = c.currentTime + 0.1;
-  }
-  function paintMusic() { var b = $('btn-music'); if (b) b.textContent = 'الموسيقى: ' + (M.on ? 'تعمل' : 'متوقفة'); }
 
   /* ============================================================== text */
   var TAUNT = [
@@ -572,8 +525,6 @@
   on('btn-e-levels', function () { S.click(); goSelect(); });
   on('btn-e-menu', function () { S.click(); goTitle(); });
   on('btn-pause', pause);
-  on('btn-music', function () { M.on = !M.on; persist(); paintMusic(); S.click(); });
-  paintMusic();
   var muteBtn = K.muteButton();
   muteBtn.title = 'الصوت (M)';
 
@@ -617,7 +568,6 @@
   function update(dt) {
     var kk = K.keys;
     game.t += dt;
-    musicTick();
     if (guardT > 0) guardT -= dt;
     menuKeys();
     var w = game.world;

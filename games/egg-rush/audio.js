@@ -65,28 +65,6 @@
         T({ freq: red ? 98 : 72, type: 'sine', dur: 0.09, vol: red ? 0.11 : 0.05 });
         T({ freq: red ? 64 : 52, type: 'sine', dur: 0.12, vol: 0.05, delay: 0.11 });
       };
-    })(),
-    music: (() => {
-      let timer = 0, beat = 0, on = false;
-      const scale = [0, 4, 7, 4, 5, 7, 3, 0, 4, 7, 12, 7, 5, 4, 0, 7];
-      function step() {
-        if (!on) { timer = 0; return; }
-        const sneaky = !!ER.sfx.carry;
-        const semi = scale[beat % scale.length];
-        const base = sneaky ? 880 : 523.25;
-        const freq = base * Math.pow(2, semi / 12);
-        T({ freq: freq, type: 'sine', dur: sneaky ? 0.08 : 0.2, vol: sneaky ? 0.045 : 0.055 });
-        T({ freq: freq * 2, type: 'triangle', dur: 0.05, vol: 0.022 });
-        if (!sneaky && beat % 4 === 0) T({ freq: freq / 2, type: 'triangle', dur: 0.24, vol: 0.032 });
-        if (sneaky) T({ freq: freq * 1.5, type: 'square', dur: 0.04, vol: 0.016, delay: 0.08 });
-        beat++;
-        timer = setTimeout(step, sneaky ? 168 : 292);
-      }
-      return function (play) {
-        on = !!play;
-        if (on && !timer) step();
-        if (!on && timer) { clearTimeout(timer); timer = 0; }
-      };
     })()
   };
 })(globalThis.EggRush = globalThis.EggRush || {});

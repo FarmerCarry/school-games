@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import vm from 'node:vm';
 import { svgDataUri } from '../lib/svg-data-uri.mjs';
 import { launchChromium } from '../browser.mjs';
+import { withPageDeadline } from '../page-wait.mjs';
 import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -19,11 +20,13 @@ test('SVG URI insertion cannot escape an img attribute or inline JSON script', a
   const page = await browser.newPage();
   const table = JSON.stringify({ sample: uri }).replace(/<\//g, '<\\/');
   await page.setContent('<!doctype html><meta charset="utf-8"><script>window.thumbs=' + table + ';window.prefixReached=true;</script><script>window.afterReached=true;</script><div id="images"></div>');
-  const result = await page.evaluate(async uri => {
+  // decode() is allowed to stay pending. The element is in the document, but a
+  // deferred decode still never rejects, and page.evaluate will not time it out.
+  const result = await withPageDeadline(page, async uri => {
     const box = document.getElementById('images'); box.innerHTML = '<img src="' + thumbs.sample + '">';
     await box.firstElementChild.decode();
     return { prefixReached, afterReached, same: thumbs.sample === uri, count: box.childElementCount, tag: box.firstElementChild.tagName, loaded: box.firstElementChild.naturalWidth };
-  }, uri);
+  }, 8000, 'svg attribute image.decode()', uri);
   assert.deepEqual(result, { prefixReached: true, afterReached: true, same: true, count: 1, tag: 'IMG', loaded: 40 });
 });
 
@@ -47,14 +50,46 @@ test('every optimized thumbnail renders exactly the same pixels as its editable 
   const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage();
-  await page.goto(server.origin + '/artwork-fonts');
-  await page.evaluate(async () => { await document.fonts.load('500 32px Fredoka', 'ألعاب A'); await document.fonts.load('700 32px Fredoka', 'ألعاب A'); await document.fonts.ready; });
-  const comparison = await page.evaluate(async thumbnails => {
-    async function pixels(src) {
-      // Match the portal's actual double-quoted HTML src insertion path.
-      const box = document.createElement('div'); box.innerHTML = '<img src="' + src + '">';
-      const image = box.firstElementChild;
-      await image.decode();
+  // page.evaluate has no Playwright timeout. A font promise or img.decode()
+  // that never settles used to sit here until the 10-minute file limit.
+  const withDeadline = async (work, ms, message) => {
+    let timer;
+    try {
+      return await Promise.race([
+        work,
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); })
+      ]);
+    } finally { clearTimeout(timer); }
+  };
+  await page.goto(server.origin + '/artwork-fonts', { timeout: 15000 }).catch(error => {
+    throw new Error('Artwork font page did not finish loading within 15s', { cause: error });
+  });
+  const comparison = await withDeadline(page.evaluate(async thumbnails => {
+    const pending = (promise, ms, label) => {
+      let timer;
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label + ' timed out after ' + ms + 'ms')), ms); })
+      ]).finally(() => clearTimeout(timer));
+    };
+    // fonts.ready only fulfills. Split unicode-range faces for one family can
+    // leave that promise pending, so a stalled load has to fail on its own clock.
+    const sample = 'ألعاب A';
+    await pending(document.fonts.load('500 32px Fredoka', sample), 8000, 'Fredoka 500 load (fonts.status=' + document.fonts.status + ')');
+    await pending(document.fonts.load('700 32px Fredoka', sample), 8000, 'Fredoka 700 load (fonts.status=' + document.fonts.status + ')');
+    await pending(document.fonts.ready, 8000, 'document.fonts.ready (fonts.status=' + document.fonts.status + ')');
+    // The portal inserts each thumbnail into the live document. A detached
+    // img.decode() can stay pending forever: Chromium may defer the decode
+    // until the element has a box, and the promise is neither fulfilled nor
+    // rejected. A fresh canvas per variant avoids a reused 2D context keeping
+    // filtered SVG pixels from the previous thumbnail.
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    async function pixels(src, label) {
+      host.innerHTML = '<img src="' + src + '">';
+      const image = host.firstElementChild;
+      await pending(image.decode(), 8000, label + ' image.decode()');
+      if (!image.naturalWidth) throw new Error(label + ' produced no pixels (naturalWidth=0)');
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 400;
       canvas.getContext('2d').drawImage(image, 0, 0, 400, 400);
@@ -63,14 +98,15 @@ test('every optimized thumbnail renders exactly the same pixels as its editable 
     const differences = [], pngOnlyDifferences = [];
     const unequalPixels = (left, right) => left.rgba.some((channel, index) => channel !== right.rgba[index]);
     for (const { slug, original, windows, optimized } of thumbnails) {
-      const expected = await pixels(original);
-      const actual = await pixels(optimized), crlf = await pixels(windows);
+      const expected = await pixels(original, slug + ' original');
+      const actual = await pixels(optimized, slug + ' optimized'), crlf = await pixels(windows, slug + ' windows');
       const changed = unequalPixels(expected, actual), windowsChanged = unequalPixels(expected, crlf);
       if (changed || windowsChanged) differences.push({ slug, changed, windowsChanged, original: expected.png, optimized: actual.png, windows: crlf.png });
       else if (expected.png !== actual.png || expected.png !== crlf.png) pngOnlyDifferences.push(slug);
     }
+    host.remove();
     return { differences, pngOnlyDifferences, count: thumbnails.length, fonts: document.fonts.status };
-  }, thumbnails);
+  }, thumbnails), 90000, 'Thumbnail pixel comparison did not return within 90s (a font load or image.decode() is still pending in the page)');
   const evidence = path.join(repo, '.work/performance/asset-pixel-differences');
   fs.mkdirSync(evidence, { recursive: true });
   for (const difference of comparison.differences) for (const variant of ['original', 'optimized', 'windows']) {
@@ -91,10 +127,11 @@ function buildFixture(t) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, content);
   };
-  for (const file of ['tools/build.mjs', 'tools/check-all.mjs', 'tools/lib/svg-data-uri.mjs', 'tools/lib/zip.mjs']) write(file, fs.readFileSync(path.join(repo, file)));
+  for (const file of ['tools/build.mjs', 'tools/check-all.mjs', 'tools/lib/svg-data-uri.mjs', 'tools/lib/zip.mjs', 'tools/lib/network-rules.mjs']) write(file, fs.readFileSync(path.join(repo, file)));
   write('index.html', '<!doctype html><body><script src="js/catalog.js"></script><script src="js/site.js"></script></body>');
   write('js/catalog.js', 'window.GAMES=[{slug:"demo"}];');
   write('js/site.js', 'window.ready=true;');
+  write('js/telemetry.js', 'window.SGTelemetry={};'); // check-all reads the one allowed sender
   write('teacher.html', '<!doctype html><body><main id="teacherApp"></main><script src="js/catalog.js"></script><script src="js/teacher.js"></script></body>');
   write('js/teacher.js', 'window.SGTeacher={};');
   write('games/demo/index.html', '<!doctype html><body>Demo</body>');
@@ -115,6 +152,9 @@ function checkFixture(f) {
 test('release smoke rejects missing, changed and unknown embedded thumbnails', t => {
   const f = buildFixture(t);
   const good = JSON.parse(f.portal.match(/window\.SG_THUMBS=(\{[^\r\n]*\});/)[1]);
+  // The untouched fixture passes, so each failure below is the check's own, not a crash.
+  const control = checkFixture(f);
+  assert.equal(control.status, 0, control.stderr);
   for (const [table, message] of [
     [{}, /missing embedded thumbnail/],
     [{ demo: good.demo.replace('%23ff00ff', '%23000000') }, /does not match its source/],

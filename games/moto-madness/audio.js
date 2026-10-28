@@ -3,7 +3,8 @@
  * Engine: a sawtooth "firing" note + a triangle sub-octave through two gentle low-pass
  * filters (so it growls instead of buzzing), with a soft sine "putt-putt" pulse at the
  * firing rate. Pitch follows RPM with fake gear shifts; letting off the gas at high revs
- * gives a couple of exhaust pops. A light music loop plays underneath (toggle in pause).
+ * gives a couple of exhaust pops. The engine sounds only while the bike rolls or the gas
+ * is held, and only during play. There is no background music.
  */
 (function () {
   'use strict';
@@ -69,75 +70,11 @@
     e.o2.frequency.setTargetAtTime(freq * 0.5, now, 0.03);
     e.lfo.frequency.setTargetAtTime(freq * 0.5, now, 0.03);
     e.f.frequency.setTargetAtTime(Math.min(2400, 220 + freq * (3 + e.gas * 3.2)), now, 0.05);
-    e.g.gain.setTargetAtTime(on ? (0.052 + e.gas * 0.048) : 0, now, on ? 0.05 : 0.08);
+    // the idle purr fades out as the bike stops, so a bike parked without gas is silent
+    var idle = 0.052 * Math.min(1, sp / 160);
+    e.g.gain.setTargetAtTime(on ? (idle + e.gas * 0.048) : 0, now, on ? 0.05 : 0.08);
   };
   A.silence = function () { if (eng && au.ctx) eng.g.gain.setTargetAtTime(0, au.ctx.currentTime, 0.05); };
-
-  /* ------------------------------------------------------------ music */
-  // A short upbeat rock loop (A minor, 144 bpm): driving 8th-note bass, soft kick/snare,
-  // and a mellow filtered lead that only comes in every other pass so it doesn't nag.
-  // Scheduled a little ahead from the game loop (so it stops when the tab is hidden).
-  var mus = { on: true, gain: null, level: 1, next: 0, step: 0, nb: null };
-  var BPM = 144, E8 = 60 / BPM / 2;
-  var CH = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];     // Am F C G
-  var LEAD = [
-    [76, -1, 74, 76, -1, 72, 74, -1], [72, -1, 69, 72, -1, 74, 72, -1], [72, 74, 76, -1, 79, -1, 76, -1], [74, -1, 71, 74, -1, 76, 74, -1],
-    [81, -1, 79, 76, -1, 74, 76, -1], [77, -1, 76, 72, -1, 69, 72, -1], [72, -1, 76, 79, -1, 84, 79, -1], [79, -1, -1, 74, -1, 71, -1, -1]
-  ];
-  var BASS8 = [0, 0, 12, 0, 0, 0, 12, 7];
-  function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-  function mnote(freq, t, dur, type, vol, cutoff) {
-    var c = au.ctx, o = c.createOscillator(), g = c.createGain(), dest = mus.gain;
-    o.type = type; o.frequency.value = freq;
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g);
-    if (cutoff) { var f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cutoff; f.Q.value = 0.7; g.connect(f); f.connect(dest); }
-    else g.connect(dest);
-    o.start(t); o.stop(t + dur + 0.03);
-  }
-  function kick(t) {
-    var c = au.ctx, o = c.createOscillator(), g = c.createGain();
-    o.type = 'sine'; o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
-    o.connect(g); g.connect(mus.gain); o.start(t); o.stop(t + 0.22);
-  }
-  function snare(t) {
-    var c = au.ctx;
-    if (!mus.nb) { mus.nb = c.createBuffer(1, c.sampleRate * 0.3 | 0, c.sampleRate); var d = mus.nb.getChannelData(0); for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
-    var src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
-    src.buffer = mus.nb; f.type = 'bandpass'; f.frequency.value = 1500; f.Q.value = 0.8;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-    src.connect(f); f.connect(g); g.connect(mus.gain); src.start(t); src.stop(t + 0.14);
-    mnote(190, t, 0.08, 'triangle', 0.16);
-  }
-  function schedule() {
-    var c = au.ctx;
-    if (mus.next < c.currentTime - 0.2) mus.next = c.currentTime + 0.05;
-    while (mus.next < c.currentTime + 0.2) {
-      var t = mus.next, s8 = mus.step % 8, bar = Math.floor(mus.step / 8) % 8, pass = Math.floor(mus.step / 64) % 2;
-      var ch = CH[bar % 4];
-      mnote(mtof(ch[0] - 12 + BASS8[s8]), t, E8 * 0.9, 'triangle', 0.3, 0);
-      if (s8 === 0 || s8 === 4 || (s8 === 7 && bar % 2 === 1)) kick(t);
-      if (s8 === 2 || s8 === 6) snare(t);
-      if (s8 % 2 === 1) mnote(mtof(ch[(s8 >> 1) % 3] + 12), t, E8 * 0.8, 'triangle', 0.07, 0);
-      if (pass === 1 || bar >= 4) { var n = LEAD[bar][s8]; if (n > 0) mnote(mtof(n), t, E8 * 1.7, 'square', 0.06, 1700); }
-      mus.next += E8; mus.step++;
-    }
-  }
-  // call every frame; level: 1 = normal, lower to duck (e.g. under the win jingle)
-  A.music = function (level) {
-    var c = au.ctx;
-    if (!c || !au.master) return;
-    if (!mus.gain) { mus.gain = c.createGain(); mus.gain.gain.value = 0; mus.gain.connect(au.master); mus.next = c.currentTime + 0.1; }
-    var want = mus.on ? 0.42 * (level == null ? 1 : level) : 0;
-    if (want !== mus.level) { mus.gain.gain.setTargetAtTime(want, c.currentTime, 0.15); mus.level = want; }
-    if (!mus.on || au.muted || c.state !== 'running' && c.state !== 'suspended') return;
-    if (want > 0) schedule(); else mus.next = c.currentTime + 0.1;
-  };
-  A.setMusic = function (on) { mus.on = !!on; };
-  A.musicOn = function () { return mus.on; };
 
   var tone = function (o) { au.tone(o); }, noise = function (o) { au.noise(o); };
   A.land = function (v) {

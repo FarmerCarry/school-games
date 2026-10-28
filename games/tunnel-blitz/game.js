@@ -87,7 +87,7 @@
       var v = vn * WS;
       var loop = Math.min(7, Math.floor((k - 1) / 8));
       ZT.push({ k: k, start: s, len: v * 16, v: v, vn: vn, N: z.N, col: z.col, alt: z.alt, bg: z.bg, name: z.name + ROMAN[loop],
-        rainbow: !!z.rainbow, key: z.key });
+        rainbow: !!z.rainbow });
       s += v * 16;
     }
   })();
@@ -150,146 +150,34 @@
 
   /* -------------------------------------------------------------- audio */
   var A = Kit.audio;
-  var Mus = (function () {
-    var ac = null, out = null, nb = null, on = false, mode = 'title', bpm = 110, nextT = 0, step = 0;
-    var intensity = 0, key = 0, kicks = [], wind = null, windG = null, windF = null, windLvl = -1, echo = null;
+  // Air rush while you spin, the only continuous sound (there is no background music).
+  // Brown noise (deep "whoosh", no hiss) through a low-pass that opens up the faster you
+  // spin; silent when you are not turning. It is built the first time you spin, so the
+  // title, pause and results screens never start an audio source.
+  var Wind = (function () {
+    var g = null, f = null, lvl = -1;
     function ensure() {
-      ac = A.ctx;
+      var ac = A.ctx;
       if (!ac || !A.master) return false;
-      if (!out) {
-        // music bus: cut useless sub rumble, then a gentle compressor so the mix is full but never clips
-        out = ac.createGain(); out.gain.value = 0.85;
-        var hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 40; hp.Q.value = 0.7;
-        var comp = ac.createDynamicsCompressor();
-        comp.threshold.value = -16; comp.knee.value = 12; comp.ratio.value = 3.5; comp.attack.value = 0.006; comp.release.value = 0.2;
-        out.connect(hp); hp.connect(comp); comp.connect(A.master);
-        // a soft echo for the synth plucks (makes them sound like a real track)
-        echo = ac.createGain(); echo.gain.value = 1;
-        var dl = ac.createDelay(1); dl.delayTime.value = 0.3;
-        var dlp = ac.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 2400;
-        var fb = ac.createGain(); fb.gain.value = 0.3;
-        var wet = ac.createGain(); wet.gain.value = 0.22;
-        echo.connect(out); echo.connect(dl); dl.connect(dlp); dlp.connect(fb); fb.connect(dl); dlp.connect(wet); wet.connect(out);
-        echo.dl = dl;
-        nb = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
-        var d = nb.getChannelData(0);
-        for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-        // Air rush while you spin. Brown noise (deep "whoosh", no hiss) through a low-pass
-        // that opens up the faster you spin; silent when you are not turning.
-        var bn = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), bd = bn.getChannelData(0), last = 0;
-        for (i = 0; i < bd.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; bd[i] = last * 3.5; }
-        wind = ac.createBufferSource(); wind.buffer = bn; wind.loop = true;
-        windF = ac.createBiquadFilter(); windF.type = 'lowpass'; windF.frequency.value = 300; windF.Q.value = 0.6;
-        windG = ac.createGain(); windG.gain.value = 0;
-        wind.connect(windF); windF.connect(windG); windG.connect(A.master);
-        wind.start();
-      }
+      var bn = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), bd = bn.getChannelData(0), last = 0;
+      for (var i = 0; i < bd.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; bd[i] = last * 3.5; }
+      var src = ac.createBufferSource(); src.buffer = bn; src.loop = true;
+      f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 300; f.Q.value = 0.6;
+      g = ac.createGain(); g.gain.value = 0;
+      src.connect(f); f.connect(g); g.connect(A.master);
+      src.start();
       return true;
     }
-    function env(g, t, peak, dur) {
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(peak, t + 0.006);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    }
-    function kick(t, v) {
-      var o = ac.createOscillator(), g = ac.createGain();
-      o.type = 'sine'; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.1);
-      env(g, t, v, 0.22); o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.24);
-      // tiny click so the beat is heard on small speakers too
-      var c = ac.createOscillator(), cg = ac.createGain();
-      c.type = 'triangle'; c.frequency.setValueAtTime(1100, t); c.frequency.exponentialRampToValueAtTime(180, t + 0.025);
-      env(cg, t, v * 0.2, 0.03); c.connect(cg); cg.connect(out); c.start(t); c.stop(t + 0.05);
-      kicks.push(t); if (kicks.length > 12) kicks.shift();
-    }
-    function noiseHit(t, v, dur, type, freq, q) {
-      var s = ac.createBufferSource(); s.buffer = nb;
-      var f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; if (q) f.Q.value = q;
-      var g = ac.createGain(); env(g, t, v, dur);
-      s.connect(f); f.connect(g); g.connect(out);
-      s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.02);
-    }
-    function bass(t, hz, dur, v) {
-      var o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
-      o.type = 'sawtooth'; o.frequency.value = hz;
-      f.type = 'lowpass'; f.Q.value = 4; f.frequency.setValueAtTime(1300, t); f.frequency.exponentialRampToValueAtTime(220, t + dur);
-      env(g, t, v, dur); o.connect(f); f.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.02);
-    }
-    function pluck(t, hz, dur, v, type, cutoff) {
-      var o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
-      o.type = type; o.frequency.value = hz;
-      f.type = 'lowpass'; f.frequency.setValueAtTime(cutoff || 3000, t); f.frequency.exponentialRampToValueAtTime(700, t + dur);
-      env(g, t, v, dur); o.connect(f); f.connect(g); g.connect(echo); o.start(t); o.stop(t + dur + 0.02);
-    }
-    function pad(t, hzs, dur, v) { // warm chord under the drop
-      for (var i = 0; i < hzs.length; i++) {
-        var o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain();
-        o.type = 'sawtooth'; o.frequency.value = hzs[i]; o.detune.value = (i - 1) * 7;
-        f.type = 'lowpass'; f.frequency.value = 1100; f.Q.value = 0.5;
-        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.08);
-        g.gain.setValueAtTime(v, t + dur * 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        o.connect(f); f.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.02);
-      }
-    }
-    var PROG = [[0, 0], [-4, 1], [3, 1], [-2, 1]];
-    // three melodies that take turns every 8 bars, so long runs don't loop the same 8 notes
-    var MELS = [[0, 2, 1, 3, 2, 1, 0, 3], [3, 2, 0, 1, 2, 3, 2, 1], [0, 1, 2, 3, 3, 2, 1, 2]];
-    var ARPS = [[0, 1, 2, 3], [0, 2, 1, 3], [3, 2, 1, 0]];
-    function hz(semi) { return 55 * Math.pow(2, semi / 12); }
-    function schedule(s, t) {
-      var bar = Math.floor(s / 16), st = s % 16, ch = PROG[bar % 4];
-      var root = ch[0] + key, tones = [root, root + (ch[1] ? 4 : 3), root + 7, root + 12];
-      var sp = 60 / bpm / 4, ph = Math.floor(bar / 8) % 3, MEL = MELS[ph], ARP = ARPS[ph];
-      if (mode === 'game') {
-        if (st % 4 === 0) kick(t, 0.72);
-        if (st % 4 === 2) noiseHit(t, 0.1, 0.05, 'highpass', 7000);
-        if (intensity >= 3 && st % 2 === 1) noiseHit(t, 0.04, 0.03, 'highpass', 8000);
-        if (intensity >= 2 && (st === 4 || st === 12)) noiseHit(t, 0.24, 0.13, 'bandpass', 1800, 0.8);
-        if (st % 2 === 0) bass(t, hz((st % 4 === 2 ? root + 12 : root) + 12), sp * 1.7, 0.17);
-        if (intensity >= 1) pluck(t, hz(tones[ARP[(st + bar) % 4]] + 36), sp * 0.9, 0.06, 'square', 2600);
-        else if (st % 2 === 0) pluck(t, hz(tones[ARP[(st / 2) % 4]] + 36), sp * 1.6, 0.06, 'triangle', 3000);
-        if (intensity >= 4 && st % 4 === 0) pluck(t, hz(tones[MEL[(st / 4 + bar * 4) % 8]] + 48), sp * 3.4, 0.075, 'triangle', 4000);
-        if (intensity >= 2 && st === 0) pad(t, [hz(tones[0] + 24), hz(tones[1] + 24), hz(tones[2] + 24)], sp * 15.5, intensity >= 4 ? 0.035 : 0.026);
-      } else {
-        if (st === 0 || st === 8) kick(t, 0.4);
-        if (st % 4 === 2) noiseHit(t, 0.045, 0.04, 'highpass', 7000);
-        if (st % 2 === 0) pluck(t, hz(tones[(st / 2) % 4] + 36), sp * 1.8, 0.06, 'triangle', 3000);
-        if (st === 0) bass(t, hz(root + 12), sp * 8, 0.13);
-      }
-    }
     return {
-      get on() { return on; },
-      play: function (m) {
-        if (!ensure()) return;
-        if (!on || mode !== m) { step = 0; nextT = ac.currentTime + 0.06; }
-        mode = m; on = true;
-      },
-      stop: function () { on = false; kicks.length = 0; },
-      set: function (b, i, k) {
-        bpm = b; intensity = i; key = k;
-        if (echo && ac) echo.dl.delayTime.setTargetAtTime(Math.min(0.9, 60 / bpm * 0.75), ac.currentTime, 0.05);
-      },
-      tick: function () {
-        if (!ensure()) return;
-        var now = ac.currentTime;
-        if (!on || A.muted) { nextT = now + 0.05; return; }
-        if (nextT < now - 0.2) nextT = now + 0.05;
-        while (nextT < now + 0.12) { schedule(step, nextT); nextT += 60 / bpm / 4; step++; }
-      },
       // level 0..1 = how hard you are spinning
-      wind: function (level) {
-        if (!windG || !ac) return;
+      set: function (level) {
         if (A.muted) level = 0;
         level = Math.round(level * 20) / 20; // only touch the audio graph when it really changes
-        if (level === windLvl) return;
-        windLvl = level;
-        windG.gain.setTargetAtTime(0.09 * level * level, ac.currentTime, 0.06);
-        windF.frequency.setTargetAtTime(220 + 520 * level, ac.currentTime, 0.08);
-      },
-      sinceKick: function () {
-        if (!ac || !on || A.muted) return -1;
-        var now = ac.currentTime, last = -9;
-        for (var i = 0; i < kicks.length; i++) if (kicks[i] <= now) last = kicks[i];
-        return now - last;
+        if (!g && (!level || !ensure())) return;
+        if (level === lvl) return;
+        lvl = level;
+        g.gain.setTargetAtTime(0.09 * level * level, A.ctx.currentTime, 0.06);
+        f.frequency.setTargetAtTime(220 + 520 * level, A.ctx.currentTime, 0.08);
       }
     };
   })();
@@ -1116,14 +1004,8 @@
     Kit.stats.round('endless');
     showBanner('انطلق!', ZT[1].name, rgba(ZT[1].col, 1), 1.4);
     Sfx.go();
-    Mus.play('game'); musicForZone(1);
     document.getElementById('pauseBtn').hidden = false;
     checkMissions();
-  }
-
-  function musicForZone(k) {
-    var i = k >= 5 ? 4 : k >= 4 ? 3 : k >= 3 ? 2 : k >= 2 ? 1 : 0;
-    Mus.set(116 + (ZT[k].vn - 15) * 1.6, i, ZT[k].key);
   }
 
   function enterZone(k) {
@@ -1133,7 +1015,6 @@
     showBanner('المنطقة ' + k, Z.name + ' - أسرع!', rgba(col, 1), 2);
     G.flash = 0.55; G.flashCol = col.slice(); G.fovKick = 1; G.shake = Math.max(G.shake, 6);
     Sfx.zone();
-    musicForZone(k);
     // reward for reaching a new zone: bonus orbs (makes shop unlocks come faster)
     var zb = Math.min(40, 5 * (k - 1));
     if (zb > 0) {
@@ -1224,7 +1105,7 @@
     part(SHIP_X, SHIP_Y, 0, 0, 0.6, 260, '#ffffff', 4);
     part(SHIP_X, SHIP_Y, 0, 0, 0.9, 420, oc, 4);
     Sfx.crash();
-    Mus.stop(); Mus.wind(0);
+    Wind.set(0);
     // play stats: a crash ends the run (quits from pause or menu are counted by Kit)
     Kit.stats.end('end', G.score);
     finalizeRun();
@@ -1297,11 +1178,8 @@
   /* -------------------------------------------------------------- update */
   function update(dt) {
     G.t += dt;
-    Mus.tick();
-    // beat pulse for the walls
-    var sk = Mus.sinceKick();
+    // beat pulse for the walls, on the game clock (about 132 bpm in play, 96 on the title)
     if (G.state === 'paused') G.beat = 0; // keep the scene behind the pause panel still
-    else if (sk >= 0) G.beat = Math.max(0, 1 - sk * 5);
     else { var ph = (G.t * (G.state === 'play' ? 2.2 : 1.6)) % 1; G.beat = Math.max(0, 1 - ph * 5); }
     G.shake = Math.max(0, G.shake - dt * 45);
     G.flash = Math.max(0, G.flash - dt * 2.2);
@@ -1328,7 +1206,7 @@
       }
       if (G.wasBest && !reduced && Math.random() < dt * 14) confetti(1);
     }
-    if (G.state !== 'play') Mus.wind(0);
+    if (G.state !== 'play') Wind.set(0);
     Kit.keys.endFrame();
   }
 
@@ -1380,7 +1258,7 @@
     G.lastInp = inp;
     G.rotVel += (inp * rm - G.rotVel) * (1 - Math.exp(-dt * (inp === 0 ? 20 : 24))); // snappy: full spin speed in ~0.1 s, quick stop
     G.rot += G.rotVel * dt;
-    Mus.wind(Math.min(1, Math.abs(G.rotVel) / rm));
+    Wind.set(Math.min(1, Math.abs(G.rotVel) / rm));
     // drift sparks off the wing tip when spinning hard
     if (Math.abs(G.rotVel) > rm * 0.7 && Math.random() < 0.6) {
       var sgn = G.rotVel > 0 ? 1 : -1;
@@ -1476,7 +1354,6 @@
     $('tZone').textContent = save.bestZone;
     $('tOrbs').textContent = Kit.fmt(save.orbs);
     refreshBadges();
-    Mus.play('title'); Mus.set(104, 0, 0);
   }
 
   function cheapestLocked() {
@@ -1549,7 +1426,7 @@
     $('pause').hidden = false;
     $('pauseBtn').hidden = true;
     mouse.down = false;
-    Mus.stop(); Mus.wind(0);
+    Wind.set(0);
     Sfx.pause();
   }
   function resumeGame() {
@@ -1558,7 +1435,6 @@
     G.state = 'play';
     $('pauseBtn').hidden = false;
     Kit.keys.reset();
-    Mus.play('game'); musicForZone(G.zone);
     Sfx.resume();
   }
   function toMenu() {
@@ -1726,7 +1602,6 @@
     if (!Kit.isGameKeyEvent(e)) return;
     var c = e.code;
     if (c === 'Enter' || c === 'Space') e.preventDefault();
-    if (!Mus.on && G.state === 'title') { A.unlock(); Mus.play('title'); Mus.set(104, 0, 0); }
     if (e.repeat) return;
     if (G.modal) {
       if (c === 'Escape' || c === 'Backspace') closeModal();
@@ -1753,7 +1628,6 @@
     }
   });
   window.addEventListener('pointerdown', function (e) {
-    if (!Mus.on && G.state === 'title') { A.unlock(); Mus.play('title'); Mus.set(104, 0, 0); }
     if (G.state !== 'play' || e.button !== 0) return;
     if (e.target !== canvas && e.target !== document.body && e.target !== ui) return;
     mouse.down = true; mouse.x = view.toLogical(e.clientX, e.clientY).x;
@@ -1764,7 +1638,7 @@
 
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'الصوت'); muteBtn.title = 'الصوت (M)';
-  A.onMuteChange(function () { if (A.muted) Mus.wind(0); });
+  A.onMuteChange(function () { if (A.muted) Wind.set(0); });
 
   /* -------------------------------------------------------------- debug */
   window.__game = {

@@ -1,5 +1,5 @@
 /*
- * Block Burst — synthesized sounds and a soft music loop (WebAudio via Kit.audio).
+ * Block Burst — synthesized one-shot sounds (WebAudio via Kit.audio). No music.
  * window.BBSound
  */
 (function () {
@@ -116,49 +116,6 @@
     newBest: function () { [0, 4, 7, 12, 16, 19, 24, 28].forEach(function (s, i) { tone({ freq: hz(s + 12), type: 'triangle', dur: 0.14, vol: 0.16, delay: i * 0.06 }); }); },
     tick: function () { tone({ freq: 1800, type: 'sine', dur: 0.02, vol: 0.05 }); },
     unlock: function () { [12, 16, 19, 24, 28, 31].forEach(function (s, i) { tone({ freq: hz(s), type: 'sine', dur: 0.22, vol: 0.2, delay: i * 0.08 }); }); }
-  };
-
-  /* ------------------------------------------------------------ music */
-  // Soft generative loop, 16 bars in an A A B A form so it doesn't feel like one 4-bar loop:
-  // A = I - V - vi - IV, B = vi - IV - I - V with a different arpeggio. Bass + plucky arpeggio.
-  // It stops scheduling while the tab is hidden and plays quieter while the game is paused.
-  var CH_A = [[0, 4, 7], [7, 11, 14], [9, 12, 16], [5, 9, 12]];
-  var CH_B = [[9, 12, 16], [5, 9, 12], [0, 4, 7], [7, 11, 14]];
-  var PAT_A = [0, 1, 2, 1, 2, 0, 1, 2], PAT_B = [0, 2, 1, 2, 0, 2, 1, 0];
-  var music = { on: true, playing: false, step: 0, next: 0, timer: 0, duck: 1 };
-  var BEAT = 60 / 104 / 2; // 8th notes
-  function schedule() {
-    var ctx = A.ctx;
-    if (!ctx || !music.playing) return;
-    if (document.hidden) { music.next = 0; return; }
-    if (music.next < ctx.currentTime) music.next = ctx.currentTime + 0.05;
-    while (music.next < ctx.currentTime + 0.25) {
-      var st = music.step, barAll = Math.floor(st / 8), bar = barAll % 4, pos = st % 8;
-      var sec = Math.floor(barAll / 4) % 4, isB = sec === 2;
-      var ch = (isB ? CH_B : CH_A)[bar], pat = isB ? PAT_B : PAT_A, vol = music.duck;
-      var d = music.next - ctx.currentTime;
-      if (!A.muted && music.on) {
-        if (pos === 0 || pos === 4) A.tone({ freq: hz(ch[0] - 24), type: 'triangle', dur: BEAT * 3, vol: 0.09 * vol, delay: d, attack: 0.01 });
-        var semi = ch[pat[pos]] + (pos >= 4 && bar % 2 ? 12 : 0);
-        A.tone({ freq: hz(semi), type: 'sine', dur: BEAT * 0.9, vol: (pos % 2 ? 0.035 : 0.05) * vol, delay: d, attack: 0.008 });
-        if (pos === 6 && (barAll % 2)) A.tone({ freq: hz(ch[2] + 12), type: 'sine', dur: BEAT * 1.5, vol: 0.025 * vol, delay: d });
-        // a tiny bell melody on the B section
-        if (isB && (pos === 0 || pos === 3)) A.tone({ freq: hz(ch[pos === 0 ? 2 : 1] + 12), type: 'triangle', dur: BEAT * 2, vol: 0.03 * vol, delay: d, attack: 0.01 });
-      }
-      music.step++;
-      music.next += BEAT;
-    }
-  }
-  S.music = {
-    start: function () {
-      if (music.playing) return;
-      music.playing = true; music.next = 0;
-      if (!music.timer) music.timer = setInterval(schedule, 90);
-    },
-    stop: function () { music.playing = false; },
-    duck: function (on) { music.duck = on ? 0.35 : 1; },
-    setOn: function (v) { music.on = !!v; },
-    isOn: function () { return music.on; }
   };
 
   window.BBSound = S;

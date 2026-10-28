@@ -1,15 +1,18 @@
 # Game spec (the rules every game follows)
 
-Players are **4th and 5th graders (ages 9–11)** on **Windows PCs with a mouse and keyboard**,
-at school, as a reward. Every game is **original and written from scratch** for this site:
-no copied code or art, no ads, no network calls, no links to other sites.
+Players are **children aged 6–11** (1st to 5th grade) on **old Windows school PCs with a mouse
+and keyboard**, at school, as a reward. A 6-year-old who has barely used a mouse and an 11-year-old
+expert play the same games, so every game scales (see "Kit v2 for game authors"). Every game is
+**original and written from scratch** for this site: no copied code or art, no ads, no network
+calls, no links to other sites. The platform contract is [`ARCHITECTURE.md`](ARCHITECTURE.md);
+where the two disagree, it wins.
 
 **Board games:** Connect 4 (`connect-four`) and tic-tac-toe (`tic-tac-toe`) offer
 two players taking turns on the same PC and a computer opponent. Both modes must
 work offline and from `file://`, without player names, accounts, or a game server.
 
-The aim is **fun**: the kind of game a 10-year-old picks on Poki or CrazyGames and asks for
-"one more round". These are not educational games.
+The aim is **fun**: the kind of game a child picks on Poki or CrazyGames and asks for
+"one more round". These are not educational games: arcade, action and hyper-casual loops.
 
 ## 🌐 Language: ARABIC (required)
 
@@ -20,7 +23,8 @@ still has English text, converting it to Arabic is part of your job.**
   HUD labels, popups ("ممتاز!", "رائع!"), level and world names, shop and skin names, mission
   text, achievements, bot/character names (fun, kid-friendly names that work in Arabic),
   pause and game-over screens, and the thumbnail logo text if it has any.
-  Use simple, energetic Modern Standard Arabic that a 10-year-old understands instantly.
+  Use simple, energetic Modern Standard Arabic that a child understands instantly. The youngest
+  players barely read: keep words few and short, and show the action with pictures and keycaps.
 - **Game title**: use the Arabic `title` from this game's entry in `js/catalog.js`.
 - **Numbers** use Western digits 0–9 (scores, timers, levels): "النقاط: 120".
 - **Key names** on keycaps: arrows ← → ↑ ↓ and letters (W, A, S, D, P, M, R…) stay as printed
@@ -55,7 +59,8 @@ A game may only use files from its own folder plus these shared ones:
 
 | Path (from the game folder)          | What it is                                                    |
 |-------------------------------------|---------------------------------------------------------------|
-| `../../shared/kit.js`               | helpers: sound, saving, keys, mouse, canvas scaling, loop, particles, local play statistics |
+| `../../shared/kit.js`               | helpers: sound, saving, keys, mouse, canvas scaling, loop, particles, local play statistics, profile, difficulty (`Kit.dda`), telemetry extras (`Kit.track`) |
+| `../../shared/juice.js`             | optional procedural sound effects (`Kit.juice`); load it after `kit.js` |
 | `../../shared/game.css`             | base page styles, the Fredoka font, overlay/panel/button/keycap classes |
 | `../../lib/three/three.min.js`      | three.js r159 (classic script, gives `window.THREE`) for 3D games |
 
@@ -69,10 +74,12 @@ not loaded by other games.
    The whole site has to work when someone double-clicks `index.html` from a folder (`file://`).
    Put level data in JS files or inline.
 2. **Nothing external.** No CDNs, web fonts from the internet, online or third-party analytics,
-   iframes or links out. Play statistics stay on the PC: a game passes counts to the portal only
-   through `Kit.stats` (see "Play statistics" below) and never adds another reporting channel.
+   iframes or links out. **Games never use the network.** A game passes counts to the portal only
+   through Kit (`Kit.stats`, `Kit.track`; see "Play statistics" below) and never adds another
+   reporting channel; only the portal's `js/telemetry.js` may send anything, anonymously and only
+   when a build is configured for it.
    All art is drawn in code (canvas, SVG, CSS, three.js geometry). Sound is synthesized with
-   WebAudio (`Kit.sfx` / `Kit.audio.tone` / `Kit.audio.noise`, or your own synth code).
+   WebAudio (`Kit.juice`, `Kit.sfx` / `Kit.audio.tone` / `Kit.audio.noise`, or your own synth code).
 3. **Kid-safe.** Cartoon only: no blood, gore, realistic guns, scary horror, bad words, romance or chat.
    Shooter games (the teacher asked for one) use chunky, colourful **toy paint/foam/water blasters**:
    hits make paint splats, a defeated character pops into paint/confetti and respawns.
@@ -103,6 +110,22 @@ not loaded by other games.
    loops or every frame (each read waits for the graphics card); make images once and reuse them.
 10. **No console errors** at any point: loading, playing, pausing, dying, restarting,
    resizing or reloading.
+11. **Zero background music.** No game, menu, pause screen, result screen or portal page may play
+   background music: no music loops, sequencers, step schedulers, melody/arpeggio beds, ambient
+   music drones or "menu jingles" that repeat. Allowed:
+   - **One-shot SFX** caused by the player or by a game event (a jump, a pop, a goal).
+   - **Short one-shot cues** of at most ~2 s: win/lose/level-up/reward fanfares.
+   - **Action-tied continuous sounds** whose level follows the player's own input and that fall
+     silent when the input stops (an engine while the throttle is held, a rolling ball, wind
+     while steering). They must be silent on title, pause and result screens.
+
+   Rhythm-style games keep their beat as a **visual** pulse driven by the game clock, and may
+   quantise the pitch of player-triggered SFX to a scale (the player "plays" the notes); they
+   never schedule notes on their own. No music toggles, no `music` save keys, no "الموسيقى"
+   buttons. Old saves that carry a `music` key are simply ignored. Guard:
+   `tools/tests/zero-bgm.test.mjs` (browser suite) counts every `AudioScheduledSourceNode.start()`
+   call in every catalog game during idle windows on the title screen and the pause screen; any
+   start in those windows fails.
 
 The board games use a compact DOM board and a two-choice mode menu in place of
 rule 6's arcade title screen. In local two-player mode, players share the same mouse
@@ -174,7 +197,7 @@ clicks and key presses, saves screenshots and reports console errors (see the he
 Teachers see local statistics for each PC: which games children choose, how long they
 really play, where they stop, and how smoothly games run. Kit measures engaged time,
 frame smoothness and mute toggles by itself and posts small counts to the portal, which
-stores them on that PC. Nothing is sent over the network and a game stores nothing for
+stores them on that PC. A game sends nothing over the network and stores nothing for
 statistics. The contract is `docs/PLAY_STATS.md`; in short, each game reports its rounds:
 
 - `Kit.stats.round(id)` when a level, round, run or match starts (first play, retry,
@@ -196,3 +219,68 @@ Ids come from the game's own list and start with a letter (`'L3'`, `'w1-4'`, `'c
 modes, replays, bot-only matches or test runs. Put the calls in the UI layer (`game.js`,
 `main.js`, `ui.js`, `shared/board-game.js`), never in engine, physics, rules, simulation or
 level files, or in functions that Node tests load or call with a stub Kit.
+
+## Kit v2 for game authors
+
+The portal tells each game who is playing (an anonymous profile slot and an age band) and
+whether anonymous telemetry is on; the contract is "Kit v2" in
+[`ARCHITECTURE.md`](ARCHITECTURE.md). Everything below is safe standalone, before
+`Kit.ready()` and with odd arguments, and follows the `Kit.stats` rules above: UI layer
+only, never in engine, level or simulation files, never for demo or attract modes.
+
+**Difficulty: `Kit.dda(slug, opts)`.** Create one controller per game (or per mode that
+needs its own difficulty) once, in the UI layer. Read it at **every round start, before
+`Kit.stats.round(id)`**, and pass the difficulty into the engine as parameters; engines and
+level files stay pure (their Node verifiers load a stub Kit without `dda`).
+
+```js
+var dda = Kit.dda('road-hopper', { id: 'main', target: 0.72, tiers: 5 }); // the defaults
+function startRound() {
+  engine.start({
+    speed: dda.value(120, 260),              // lerp(easy, hard, dda.level), level 0..1
+    lanes: dda.pick([3, 4, 4, 5, 6])         // one entry per tier, dda.tier 1..tiers
+  });
+  Kit.stats.round('endless');
+}
+function roundOver(won, accuracy) {
+  dda.result(won);                           // true/false, or a number 0..1 such as accuracy
+  Kit.stats.end(won ? 'win' : 'lose');
+}
+```
+
+* Never cache `level` or `tier` across rounds: a new player can take over between rounds,
+  and Kit then loads that player's own state. One `result()` per try.
+* A new player starts by age band (6–7 → 0.12, 8–9 → 0.38, 10–11 → 0.60, unknown 0.35;
+  `opts.start` overrides). Kit keeps the child near `target` success, eases off after two
+  poor tries in a row and speeds up after three great ones. Tiers are at most 9.
+* Use `pick()` for tiered complexity (which mechanics, obstacle kinds or combos exist) and
+  `value()` for continuous knobs (speed, size, spawn rate, aim assist). Kit saves the state
+  in `Kit.store(slug)` under `dda`; a game never writes that key.
+* `Kit.profile.band` / `.player` / `.onChange(fn)` are there for rare needs (a gentler
+  first-time coach for 6–7). Never show, store or report the player key.
+
+**Telemetry extras: `Kit.track`.** No-ops unless the portal has telemetry on. One call per
+action, never per frame:
+
+* `Kit.track.hit()` / `Kit.track.miss()` for each successful / failed action in the open
+  round (a bubble popped, a fly missed), for accuracy.
+* `Kit.track.cue()` when a target appears that the child should react to; Kit times the next
+  click or game key press (not a Ctrl/Alt shortcut, Tab, or a key on a focused button or field).
+  `Kit.track.react(ms)` reports a reaction time the game timed itself.
+* Reading the controller (`dda.level`, `dda.tier`, `value()` or `pick()`) reports the tier
+  (`Kit.track.tier(n)` is only for games with their own tiers). Kit measures input latency
+  by itself.
+
+**Sound effects: `Kit.juice`.** Load `<script src="../../shared/juice.js"></script>` after
+`kit.js`. Every call is a one-shot under 1.5 s, silent while muted, in classroom mode or
+before the first key press or click, so it is safe to call on every event (mashing is
+fine: repeats within 25 ms are dropped and at most 14 voices sound at once):
+`tap()`, `select()`, `back()`, `toggle(on)`, `error()`, `hover()`, `streak(combo)`,
+`impact(power 0..1)`, `chime(1..3)`, `coin(n)`, `pop(size 0..1)`, `whoosh(speed 0..1)`,
+`jump(h 0..1)`, `land(power 0..1)`, `star(1..3)`, `levelUp()`, `fail()`, `countdown(3, 2, 1, 0)`.
+It has no music API (rule 11).
+
+**Network.** Games still never use the network: no `fetch`, beacons, sockets or remote
+addresses. Kit only posts `sg:stats` and `sg:telemetry` to the portal, and only the
+portal's `js/telemetry.js` may send anything on, anonymously and only when the build is
+configured with an ingest address.

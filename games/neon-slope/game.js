@@ -14,7 +14,6 @@
   var clamp = Kit.clamp, rand = Math.random;
   // Wraps a left-to-right snippet like "+5" so it keeps its order inside Arabic text.
   function ltr(t) { return '\u2066' + t + '\u2069'; }
-  function musicLabel() { return save.music ? 'الموسيقى: تعمل' : 'الموسيقى: متوقفة'; }
   function randInt(a, b) { return Math.floor(a + rand() * (b - a + 1)); }
   function pick(a) { return a[Math.floor(rand() * a.length)]; }
   // Classroom mode / reduced motion: steady camera, no white flash or celebration bursts.
@@ -38,7 +37,6 @@
     skin: String(readSave('skin', 'neon')),
     trail: String(readSave('trail', 'glow')),
     runs: +readSave('runs', 0) || 0,
-    music: readSave('music', true) !== false,
     missions: arr(readSave('missions', null), []),
     mDone: +readSave('mDone', 0) || 0
   };
@@ -57,7 +55,6 @@
     if (ok) saveUi.saved(); else saveUi.failed();
     return ok;
   }
-  SND.setMusicOn(save.music);
 
   /* ---------------------------------------------------------- missions */
   var MISSIONS = [
@@ -1009,7 +1006,7 @@
     st.tsTarget = 0.28;
     shatter();
     SND.sfx.crash(); if (reason === 'fall') SND.sfx.fall();
-    SND.setMusic(0); SND.rollSound(0, 0);
+    SND.rollSound(0, 0);
     st.shake = 0.7; flash(0.75);
   }
   function godRespawn() {
@@ -1291,7 +1288,6 @@
       banner('المنطقة ' + (z + 1), info.name, info.prism ? '#ffffff' : info.c);
       SND.sfx.zone(); setHorizon(z);
       if (!reducedFx) burst(b.x, b.y + 1, -b.d - 3, 40, 9, 0.9, 0.8, [info.prism ? '#ff3fd0' : info.c, '#ffffff', '#ffd93b'], 3, 3);
-      if (z >= 2) SND.setMusic(3);
     }
     if (st.bestD && !st.bestPassed && b.d > st.bestD) {
       st.bestPassed = true; SND.sfx.best();
@@ -1556,7 +1552,7 @@
     resetWorld(true);
     show('title', true); show('over', false); show('pause', false); hud.hidden = true; pauseBtn.hidden = true;
     refreshTitle();
-    SND.setMusic(1); SND.rollSound(0, 0);
+    SND.rollSound(0, 0);
   }
   // A slow PC can still be building shaders when Play is pressed (see warmShaders). The title
   // then stays up with a loading label, and the run starts as soon as it can be drawn.
@@ -1578,19 +1574,18 @@
     st.hintT = save.runs < 4 ? 4.5 : 0;
     if (!save.runs) Kit.stats.tutorial('start');
     $('hHint').classList.toggle('show', st.hintT > 0);
-    SND.sfx.start(); SND.setMusic(2);
+    SND.sfx.start();
     st.fovKick = 8;
   }
   function pauseGame() {
     if (st.mode !== 'play') return;
-    st.mode = 'paused'; show('pause', true); SND.setMusic(0); SND.rollSound(0, 0);
+    st.mode = 'paused'; show('pause', true); SND.rollSound(0, 0);
     st.shake = 0; renderDirty = true; // draw the paused scene once, without shake
     renderMissions($('pMissions'), true);
-    $('btnMusic').textContent = musicLabel();
   }
   function resumeGame() {
     if (st.mode !== 'paused') return;
-    st.mode = 'play'; show('pause', false); SND.setMusic(st.zone >= 2 ? 3 : 2, true);
+    st.mode = 'play'; show('pause', false);
   }
   function misValue(m) {
     var dist = Math.max(0, Math.floor(ball.d - START_D)), rs = st.rs || { gems: 0, air: 0, near: 0, power: 0 };
@@ -1682,7 +1677,6 @@
       setTimeout(function () { if (st.mode === 'over') SND.sfx.best(); }, 450);
       if (!reducedFx) burst(ball.x, ball.y + 2, -ball.d - 3, 90, 12, 1.6, 0.9, ['#ffd93b', '#ff3fd0', '#3ff0ff', '#7dff3a', '#ffffff'], 7, 5);
     }
-    SND.setMusic(1);
   }
   function countUp(el, to) {
     var t0 = performance.now(), dur = Math.min(900, 300 + to * 2);
@@ -1807,10 +1801,6 @@
   onClick('btnResume', resumeGame);
   onClick('btnRestart', startRun);
   onClick('btnMenu', showTitle);
-  onClick('btnMusic', function () {
-    save.music = !save.music; SND.setMusicOn(save.music); persist();
-    $('btnMusic').textContent = musicLabel();
-  });
   onClick('btnAgain', startRun);
   onClick('btnOShop', openShop);
   onClick('btnOMenu', showTitle);

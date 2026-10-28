@@ -14,14 +14,13 @@
     best: store.get('best', {}) || {},
     hat: store.get('hat', 'none'),
     solo: !!store.get('solo', false),
-    music: store.get('music', true) !== false,
     beaten: !!store.get('beaten', false)
   };
   var saveStatus = Kit.saveStatus({ retry: persist });
   // Every key is written (no short-circuit); the in-memory save stays, so Retry rewrites it all.
   function persist() {
     var ok = [store.set('unlocked', save.unlocked), store.set('best', save.best), store.set('hat', save.hat),
-      store.set('solo', save.solo), store.set('music', save.music), store.set('beaten', save.beaten)].every(Boolean);
+      store.set('solo', save.solo), store.set('beaten', save.beaten)].every(Boolean);
     if (ok) saveStatus.saved(); else saveStatus.failed();
     return ok;
   }
@@ -162,30 +161,6 @@
     locked: function () { tone({ freq: 200, to: 140, type: 'square', dur: 0.12, vol: 0.08 }); }
   };
 
-  // Soft background music: a bouncy temple loop (pentatonic).
-  var music = { next: 0, step: 0 };
-  var BEAT = 0.26;
-  var BASS = [110, 110, 87.31, 87.31, 98, 98, 82.41, 82.41];
-  var MEL = [440, 0, 523, 587, 659, 0, 587, 523, 440, 0, 392, 440, 523, 0, 0, 0,
-    349, 0, 440, 523, 587, 0, 523, 440, 392, 0, 440, 494, 330, 0, 0, 0,
-    440, 0, 659, 0, 784, 659, 587, 523, 587, 0, 523, 440, 392, 0, 440, 0,
-    349, 440, 523, 0, 494, 0, 440, 392, 330, 0, 392, 494, 440, 0, 0, 0];
-  function updateMusic() {
-    var ac = A.ctx;
-    if (!ac || A.muted || !save.music || mode === 'paused' || document.hidden) { if (ac) music.next = ac.currentTime + 0.1; return; }
-    if (music.next < ac.currentTime) music.next = ac.currentTime + 0.05;
-    while (music.next < ac.currentTime + 0.2) {
-      var d = music.next - ac.currentTime, s = music.step;
-      var bar = Math.floor(s / 8) % 8;
-      if (s % 4 === 0) tone({ freq: BASS[bar], type: 'sine', dur: 0.4, vol: 0.09, delay: d });
-      if (s % 4 === 2) tone({ freq: BASS[bar] * 1.5, type: 'sine', dur: 0.2, vol: 0.05, delay: d });
-      var m = MEL[s % MEL.length];
-      if (m) tone({ freq: m, type: 'triangle', dur: 0.22, vol: 0.045, delay: d });
-      if (s % 2 === 1) noise({ dur: 0.03, vol: 0.012, filter: 7000, delay: d });
-      music.step++; music.next += BEAT;
-    }
-  }
-
   /* ---------------------------------------------------------- input */
   var K = Kit.keys;
   function readInput() {
@@ -306,7 +281,6 @@
   }
   function refreshPause() {
     $('pauseSolo').textContent = save.solo ? 'لاعب واحد: نعم' : 'لاعب واحد: لا';
-    $('pauseMusic').textContent = save.music ? 'الموسيقى: تعمل' : 'الموسيقى: متوقفة';
     $('pauseLevel').textContent = world ? 'المرحلة ' + (levelIdx + 1) + ' · ' + LEVELS[levelIdx].name : '';
   }
 
@@ -587,7 +561,6 @@
       if (world) R.prepare(world, view.scale * view.dpr);
       if (titleWorld) R.prepare(titleWorld, view.scale * view.dpr);
     }
-    updateMusic();
     if (mode === 'paused') {
       // Frozen: the clock, particles, shake and toasts wait, so the scene drawn on pausing
       // stays correct and play resumes exactly where it stopped.
@@ -1081,7 +1054,6 @@
   on('restartBtn', function () { restart(); });
   on('pauseMapBtn', function () { SFX.click(); goMap(); });
   on('pauseSolo', function () { SFX.click(); setSolo(!save.solo); });
-  on('pauseMusic', function () { SFX.click(); save.music = !save.music; persist(); refreshPause(); });
   on('retryBtn', function () { restart(); });
   on('deadMapBtn', function () { SFX.click(); goMap(); });
   on('winNext', nextLevel);
@@ -1117,7 +1089,6 @@
     stars: totalStars,
     particles: function () { return fx.count(); },
     sfx: SFX,
-    music: function () { updateMusic(); },
     // ms per frame for update + render (to find slow drawing)
     bench: function (n) { n = n || 120; var t0 = performance.now(); for (var i = 0; i < n; i++) { update(1 / 60); render(); } return +((performance.now() - t0) / n).toFixed(2); }
   };
