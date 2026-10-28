@@ -656,3 +656,19 @@ test('a school clock moved west after the UTC day was rolled: today is read from
   assert.deepEqual(kinds, ['full']);
   assert.deepEqual(await day(T + 2 * H, 'maze-dash'), [3, 2]);
 });
+
+test('a v2 session open across the deploy starts no earlier than the facts: its play after the deploy is rolled and shown', async () => {
+  const s = open();
+  // Deployed at 00:30 UTC: the facts start on 28 October. A tab opened at 23:50 the evening
+  // before (v2: no hand-over when idle) sends its first batch to the new server at 00:48.
+  const DEPLOY = Date.parse('2026-10-28T00:30:00Z');
+  await ready(s.store, DEPLOY);
+  assert.equal((await s.settings()).facts_since, '2026-10-28');
+  await s.ingest(v2('c00000000031', [['gx', 2990, 'road-hopper', 2900000, z6, z4], ['go', 3000, 'maze-dash', 'catalog', 0],
+    ['gx', 3500, 'maze-dash', 480000, z6, z4]]), Date.parse('2026-10-28T00:48:00Z'));
+  assert.deepEqual((await s.rows('st_sessions')).map(r => new Date(r.start_s * 1000).toISOString()), ['2026-10-28T00:00:00.000Z']);
+  for (let t = DEPLOY; t < DEPLOY + 3 * DAY_MS; t += 30 * MIN) await s.store.rollupStep(t);
+  const k = await s.store.kpis({ from: '2026-10-26', to: '2026-10-30' }, DEPLOY + 3 * DAY_MS);
+  assert.deepEqual([k.totals.engagedMinutes, k.games.map(g => g.slug)], [56.3, ['maze-dash', 'road-hopper']]);
+  assert.deepEqual(k.daily.filter(hasPlay).map(d => d.day), ['2026-10-28']);
+});

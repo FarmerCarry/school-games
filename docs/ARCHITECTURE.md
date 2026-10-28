@@ -603,8 +603,9 @@ The server:
   maxima, natural keys), so it needs no batch id; v2 batches keep their de-duplication
   and are numbered into visits and rounds by the server. Rounds a student ends are
   numbered as attempts per game. A session is dated by the server's receipt time minus
-  the PC's elapsed seconds and counts on the school's local day it started
-  (`server/clock.mjs` turns zones into offsets and day bounds for SQL).
+  the PC's elapsed seconds and counts on the school's local day it started, never before
+  the first day of the facts (a v2 tab open across the deploy counts on the deploy day;
+  `server/clock.mjs` turns zones into offsets and day bounds for SQL).
 * **The school's zone** starts unknown (UTC), may take the signed-in dashboard's zone, is
   set by the first v3 batch with a valid zone, then by the PCs' nightly vote (locked at
   three PCs), unless the owner chose it; a change marks rolled days for a rebuild.

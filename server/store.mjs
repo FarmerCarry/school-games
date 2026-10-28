@@ -981,7 +981,9 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     }
     const f = fold(wire, envelope, events, wire === 2 ? state : null);
     const [estimate, clock] = sessionStart(R, wire === 3 ? envelope.w : null, f.maxT);
-    const start = state?.start ?? estimate;
+    // A session first stored now starts no earlier than the facts: a v2 tab left open across
+    // the deploy would otherwise date its play after the deploy to a day never rolled.
+    const start = state?.start ?? (conf.factsSince ? Math.max(estimate, dayBounds(conf.tz, conf.factsSince).lo) : estimate);
 
     // Attempt numbers: the rounds of this batch that end for the first time, in batch order, per game.
     const totals = new Map();

@@ -489,7 +489,9 @@ test('a client that disconnects mid-body is not logged as a server error', async
 });
 
 test('unknown and malformed events are dropped while valid ones are kept; measures are clamped', async t => {
-  const s = await start(t);
+  // Facts since 12 October: a session of 7 days (the clamped ss) starts after them.
+  const s = await start(t, { at: START - 8 * DAY_MS });
+  s.clock.now = START;
   const malformed = [
     ['zz', 1], 'go', null, 42, {}, [], ['go'], [7, 1], ['toString', 1],
     ['go', -1, 'road-hopper', 'search', 1], ['go', 1, 'Road-Hopper', 'search', 1], ['go', 1, 'road--hopper', 'search', 1],
