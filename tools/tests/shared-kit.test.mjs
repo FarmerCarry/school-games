@@ -589,6 +589,21 @@ test('v2: rx counts one pause per stop of play: a blur with the hidden page afte
   }
 });
 
+test('v2: a round\'s wall time in rx always covers its engaged time, wherever a millisecond turns between two clock reads', () => {
+  for (let step = 0.05; step < 1; step += 0.05) for (let start = 0; start < 1; start += 0.1) {
+    let t = 1000 + start;
+    const h = harness({clock: {get now() { return t += step; }}});
+    preferences(h, {telemetry: true});
+    h.Kit.ready();
+    h.window.emit('pointerdown', {button: 0});
+    h.Kit.stats.round('local');
+    for (let i = 0; i < 4; i++) h.window.emit('pointerdown', {button: 0});
+    h.Kit.stats.end('e');
+    const ev = telemetryOf(h).flatMap(m => m.ev), rx = ev.find(e => e[0] === 'rx'), re = ev.find(e => e[0] === 're');
+    assert.ok(rx[1] >= re[3], `step ${step.toFixed(2)}, start ${start.toFixed(1)}: wall ${rx[1]} ms, engaged ${re[3]} ms`);
+  }
+});
+
 test('v2: round events wait for Kit.ready() like v1 events, and go out at most 64 to a message', () => {
   const clock = {now: 0}, h = harness({clock});
   preferences(h, {telemetry: true});                      // the portal can switch telemetry on before readiness

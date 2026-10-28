@@ -173,8 +173,11 @@
   // Whole milliseconds (an int32 holds 24 days of performance.now()).
   function clock() { return perf ? perf.now() | 0 : Date.now(); }
   function text(value, length) { try { return String(value).slice(0, length); } catch (e) { return ''; } }
+  // tn: the time of the last tally, which every mark() follows: a round's wall time and its
+  // engaged time are read from the same clock reading, so wall time always covers it.
+  var tn = 0;
   function tally() {
-    var t = clock(), x = t < until ? t : until;
+    var t = tn = clock(), x = t < until ? t : until;
     if (x > from) { engaged += x - from; if (roundId) roundMs += x - from; from = x; }
     return t;
   }
@@ -265,9 +268,9 @@
   function mark(code, score) {
     if (telemetry && !failed) {
       if (code == null) tev.push(['rs', roundId, tier]);
-      else tev.push(['rx', clock() - r0, ri, rd, rp, rsum, rn, dl], ['re', code, roundId, roundMs, fin(score) ? score : -1, tier, hits, misses, rt]);
+      else tev.push(['rx', tn - r0, ri, rd, rp, rsum, rn, dl], ['re', code, roundId, roundMs, fin(score) ? score : -1, tier, hits, misses, rt]);
     }
-    hits = misses = ri = rd = rp = rsum = rn = 0; rt = [0, 0, 0, 0, 0, 0]; cueAt = -1; r0 = clock();
+    hits = misses = ri = rd = rp = rsum = rn = 0; rt = [0, 0, 0, 0, 0, 0]; cueAt = -1; r0 = tn;
   }
   // Every key press and click: engaged time, then (key repeats aside) how long the
   // event waited for the page and the reaction time to a pending cue. Only a click or
