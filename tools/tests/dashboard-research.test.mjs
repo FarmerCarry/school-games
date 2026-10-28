@@ -14,7 +14,14 @@ import path from 'node:path';
 import vm from 'node:vm';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { COLUMNS } from '../../server/export.mjs';
+import { hideSqliteWarning } from '../../server/warnings.mjs';
+
+hideSqliteWarning();
+const { DatabaseSync } = await import('node:sqlite');
+const { createApp } = await import('../../server/app.mjs');
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dashboard = path.join(repo, 'server/dashboard');
@@ -503,6 +510,43 @@ test('the browser\'s files: games.csv, dictionary.csv, README.txt in both langua
   assert.doesNotMatch(r, /sessions <-/, 'only the files of the download');
 });
 
+test('export.js: the cost of a download is the rows its SQL reads, not the lines it writes', async () => {
+  // A simulated school's facts, its KPI answer, and the rows each file's lookups in
+  // server/export.mjs must read at the least (D1 counts every row a statement reads; the
+  // Node driver counts only the rows returned, so this is counted from the facts).
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sg-export-cost-'));
+  const dbPath = path.join(dir, 'telemetry.db');
+  const sim = spawnSync(process.execPath, [path.join(repo, 'server/simulate.mjs'), '--db', dbPath, '--days', '14', '--sessions', '40', '--seed', '3'], { encoding: 'utf8' });
+  assert.equal(sim.status, 0, sim.stderr);
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const one = sql => Object.values(db.prepare(sql).get())[0];
+  const [S, V, N, M] = ['st_sessions', 'st_visits', 'st_rounds', 'st_marks'].map(table => one('SELECT COUNT(*) FROM ' + table));
+  const ofKind = kind => one(`SELECT COUNT(*) FROM st_marks WHERE kind = '${kind}'`);
+  const ofVisit = (table, where) => one(`SELECT TOTAL((SELECT COUNT(*) FROM ${table} x WHERE ${where})) FROM st_visits v`);
+  const days = one('SELECT COUNT(*) FROM r_student_day'), games = one('SELECT COUNT(*) FROM r_student_game'), students = one('SELECT COUNT(DISTINCT u) FROM r_student_day');
+  const floor = {
+    sessions: S * 2 + V * 2 + N + ofKind('lv') + ofKind('ct') * 3,
+    visits: V * 5 + 2 * ofVisit('st_rounds', 'x.sid = v.sid AND x.n = v.n') + 2 * ofVisit('st_marks', "x.sid = v.sid AND x.kind IN ('tu', 'fv')"),
+    rounds: N * 4, events: M * 4, students: days + games + students * 3, student_days: days * 2
+  };
+  db.close();
+  const app = createApp({ dbPath, adminToken: 'export-cost-token-0123456789' });
+  try {
+    const base = 'http://127.0.0.1:' + (await app.listen(0, '127.0.0.1')).port;
+    const get = async route => (await fetch(base + route, { headers: { Authorization: 'Bearer export-cost-token-0123456789' } })).json();
+    const settings = await get('/v1/admin/settings');
+    const to = settings.clock.today, from = R.shift(to, -20);
+    const est = E.estimate(await get(`/v1/admin/kpis?from=${from}&to=${to}`), settings.usage, 21);
+    const least = Object.values(floor).reduce((a, b) => a + b, 0);
+    assert.ok(least > 5 * est.lines, 'the lookups read several rows a line');
+    // The KPI answer does not count the timer and profile marks, so the estimate may fall a little short of the floor.
+    assert.ok(est.rows >= 0.9 * least && est.rows <= 1.5 * least, est.rows + ' rows estimated, ' + least + ' at the least');
+  } finally {
+    await app.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('zip.js: deflated and stored entries any unzip tool reads, with streaming CRCs', async () => {
   assert.equal(Z.crc32(Buffer.from('hello world')), zlib.crc32('hello world'));
   assert.equal(Z.crc32(Buffer.from(' world'), Z.crc32(Buffer.from('hello'))), zlib.crc32('hello world'), 'the CRC goes on from the bytes before');
@@ -582,7 +626,10 @@ test('export.js: every page once, a header from the dictionary, rounds by month,
   const est = E.estimate({ totals: { sessions: 100, gameOpens: 250, roundsStarted: 1100, roundsEnded: 1000, levelUps: 40, students: { active: 30, guestSessions: 20 } },
     games: [{ slug: 'a', hearts: { on: 5, off: 1 }, tutorials: { start: 10, done: 4 } }], quality: { pcsNew: 12 } }, { reads: 3499000, readsLimit: 5000000 }, 30);
   assert.equal(est.lines, 30 + 100 + 250 + 1100 + 60 + 80 + 30 + 12);
-  assert.equal(est.rows, Math.round(est.lines * 1.25));
+  // The rows the server's lookups read for each file (export.js estimate): students, sessions,
+  // visits (2.5 visits a session, 20 heart and tutorial marks), rounds, events, student-days,
+  // game-days, PCs.
+  assert.equal(est.rows, (30 * 3 + 80 + 250) + (200 + 500 + 1100 + 60) + (1250 + 2200 + 2 * 20 * 2.5) + 4400 + 240 + 160 + 30 + (24 + 100));
   assert.equal(est.share, est.rows / 5000000);
   assert.equal(est.stops, true, 'today’s reads so far plus these pass the export guard');
   assert.equal(E.estimate({ totals: { sessions: 100 } }, { reads: 0 }, 1).stops, false);

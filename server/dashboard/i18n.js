@@ -633,7 +633,7 @@
       return 'About ' + (rows >= 1e6 ? I.short(rows / 1e6) + ' million' : n(rows)) + ' rows: ' + (pct.charAt(0) === '<' ? 'less than ' + pct.slice(1) : 'about ' + pct) +
         ' of today’s free reading allowance.';
     },
-    exportStops: 'Today’s allowance may run out part way. The download then gives you part 1 and goes on tomorrow from where it stopped.',
+    exportStops: 'Today’s allowance may run out part way. The download then gives you part 1 and goes on tomorrow from where it stopped. A shorter period costs less.',
     exportStart: 'Download the research files',
     exportStarting: 'Starting…',
     exportCancel: 'Stop',
@@ -1299,7 +1299,7 @@
       return 'نحو ' + (rows >= 1e6 ? I.short(rows / 1e6) + ' مليون صف' : rowsAr(rows)) + ': ' + (pct.charAt(0) === '<' ? 'أقل من ' + pct.slice(1) : 'نحو ' + pct) +
         ' من حصة القراءة المجانية لليوم.';
     },
-    exportStops: 'قد تنفد حصة اليوم في منتصف الطريق، فيعطيك التنزيل الجزء الأول ويكمل غدًا من حيث توقف.',
+    exportStops: 'قد تنفد حصة اليوم في منتصف الطريق، فيعطيك التنزيل الجزء الأول ويكمل غدًا من حيث توقف. والفترة الأقصر أقل كلفة.',
     exportStart: 'نزّل ملفات البحث',
     exportStarting: 'جارٍ البدء…',
     exportCancel: 'أوقف',
