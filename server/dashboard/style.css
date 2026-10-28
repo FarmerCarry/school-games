@@ -487,6 +487,7 @@ td.flags { white-space: normal; }
 .hm-ramp { display: inline-flex; gap: 2px; }
 .hm-swatch { display: inline-block; width: 16px; height: 10px; border-radius: 2px; }
 .hm-swatch.q0 { background: var(--track); }
+.hm-swatch.is-none { background: transparent; box-shadow: inset 0 0 0 1px var(--grid); }
 .hm-swatch.q1 { background: var(--q1); } .hm-swatch.q2 { background: var(--q2); } .hm-swatch.q3 { background: var(--q3); }
 .hm-swatch.q4 { background: var(--q4); } .hm-swatch.q5 { background: var(--q5); }
 .hm-empty { margin-inline-start: 10px; }

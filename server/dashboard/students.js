@@ -101,7 +101,7 @@
           return { title: T.cohortRow(ctx.longDay(x.week), x.size), note: ctx.chipFor(x.size, null, true),
             rows: cell ? [{ value: I.pct(cell.share), label: T.cohortCell(k, cell.n, x.size), color: 'var(--q4)', swatch: 'bar' }] : [{ value: T.cohortNotYet }] };
         },
-        legend: { low: function (v) { return I.pct(v); }, high: function (v) { return I.pct(v); }, empty: T.cohortNotYet }
+        legend: { low: function (v) { return I.pct(v); }, high: function (v) { return I.pct(v); }, empty: I.pct(0), none: T.cohortNotYet }
       });
     });
     C.table(c.table, T.cohortTitle, [{ label: T.cohortStart }, { label: T.studentsCol, num: true }].concat(Array.from({ length: weeks }, function (_, k) { return { label: '+' + k, num: true }; })),

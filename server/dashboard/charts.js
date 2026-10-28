@@ -417,7 +417,8 @@
   // the lowest and highest value.
   // opts: { rows: [{ label }], cols: [{ label, tick (shown, or '' to skip) }],
   //         value(r, c) -> number | null, text(r, c) -> cell label | '', tip(r, c) -> content,
-  //         name, rtl, legend: { low, high } (texts), cellSize, minCell, rowLabelWidth, className }
+  //         name, rtl, legend: { low, high (value -> text), empty (the 0 cell's text), none (a null cell's) },
+  //         cellSize, minCell, rowLabelWidth, className }
   function heatmap(host, opts) {
     host.textContent = '';
     var R = opts.rows.length, Cn = opts.cols.length;
@@ -488,6 +489,11 @@
       if (opts.legend.empty) {
         h('span', { class: 'hm-swatch q0 hm-empty' }, legend);
         h('span', { class: 'hm-legend-text' }, legend, opts.legend.empty);
+      }
+      // A cell with no value at all (null: not reached yet) is outlined, not the 0 colour.
+      if (opts.legend.none) {
+        h('span', { class: 'hm-swatch is-none hm-empty' }, legend);
+        h('span', { class: 'hm-legend-text' }, legend, opts.legend.none);
       }
     }
     return wrap;

@@ -963,6 +963,26 @@ test('the Students tab: the code search, sorting both ways, pages of 50, and a s
   await s.check();
 });
 
+test('the cohort legend tells a week at 0% from a week not reached yet', async t => {
+  const s = await open(t);
+  const { page } = s;
+  for (const [route, id] of [['students', 'cohort-card'], ['habits', 'habits-cohorts']]) {
+    await page.goto(site.origin + '/?demo#/' + route);
+    await waitForView(page, route);
+    const looks = page.locator(`#${id}`).evaluate(card => {
+      const bg = el => el && getComputedStyle(el).backgroundColor + ' ' + getComputedStyle(el).boxShadow;
+      const swatch = text => [...card.querySelectorAll('.hm-legend .hm-legend-text')].find(x => x.textContent === text)?.previousElementSibling;
+      return { zeroCell: bg(card.querySelector('.hm-cell.q0:not(.is-none)')), noneCell: bg(card.querySelector('.hm-cell.is-none')),
+        zeroSwatch: bg(swatch('0%')), noneSwatch: bg(swatch('Not reached yet')) };
+    });
+    const x = await looks;
+    assert.ok(x.zeroCell && x.noneCell && x.zeroCell !== x.noneCell, route + ': the sample has both kinds of cell');
+    assert.equal(x.noneSwatch, x.noneCell, route + ': "Not reached yet" looks like a week not reached yet');
+    assert.equal(x.zeroSwatch, x.zeroCell, route + ': "0%" looks like a week at 0%');
+  }
+  await s.check();
+});
+
 test('a student\'s page: linking and forgetting ask twice before anything is sent; the CSV file', async t => {
   const s = await open(t, { token: TOKEN });
   const { page } = s;
