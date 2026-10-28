@@ -11,7 +11,7 @@
 // counts as the newer one), in SQL through the aliases table. Every answer takes at most 20
 // statements, and JavaScript only merges small rows per student, day or game. Pure apart
 // from the store context it is given (adminViews(ctx)).
-import { METRICS, ROLLUPS, rollupSelect } from './rollups.mjs';
+import { METRICS, ROLLUPS, jsonObject, rollupSelect } from './rollups.mjs';
 import { CODES } from './schema.mjs';
 
 const DAY_MS = 86400000;
@@ -97,14 +97,13 @@ const STUDENTS_ANSWER = L => {
     `MIN(date(${L('t.first_s')}, 'unixepoch', '-' || IFNULL(t.age_days_first, 0) || ' days')) AS made_day, ` +
     `MIN(CASE WHEN t.removed_s IS NOT NULL THEN date(${L('t.removed_s')}, 'unixepoch') END) AS removed_day ` +
     'FROM codes JOIN st_students t ON t.u = codes.u GROUP BY 1) ' +
-    "SELECT json_group_array(json(o)) AS students FROM (SELECT json_object('u', s.c, 'label', COALESCE(w.label, upper(substr(s.c, 1, 4))), " +
-    "'kind', 'profile', 'linked', json(IFNULL(k.list, '[]')), " +
-    `'band', ${band('w.band')}, 'bandFirst', ${band('w.band_first')}, 'firstDay', w.first_day, 'lastDay', w.last_day, ` +
-    `${['days', 'sessions'].map(col => `'${col}', CAST(s.${col} AS INTEGER)`).join(', ')}, 'minutes', round(s.engaged_ms / 60000.0, 1), ` +
-    `${['rounds', 'w', 'l', 'q'].map(col => `'${col}', CAST(s.${col} AS INTEGER)`).join(', ')}, 'games', IFNULL(g.n, 0), ` +
-    "'top', json(IFNULL(t3.top, '[]')), 'pcs', IFNULL(p.n, 0), " +
-    "'knownBefore', CASE WHEN w.made_day < w.first_day THEN json('true') ELSE json('false') END, 'removed', w.removed_day, " +
-    `'weekly', json_array(${Array.from({ length: 13 }, (_, i) => `round(s.w${i} / 60000.0, 1)`).join(', ')})) AS o ` +
+    `SELECT json_group_array(json(o)) AS students FROM (SELECT ${jsonObject([['u', 's.c'], ['label', 'COALESCE(w.label, upper(substr(s.c, 1, 4)))'],
+      ['kind', "'profile'"], ['linked', "json(IFNULL(k.list, '[]'))"], ['band', band('w.band')], ['bandFirst', band('w.band_first')],
+      ['firstDay', 'w.first_day'], ['lastDay', 'w.last_day'], ...['days', 'sessions'].map(col => [col, `CAST(s.${col} AS INTEGER)`]),
+      ['minutes', 'round(s.engaged_ms / 60000.0, 1)'], ...['rounds', 'w', 'l', 'q'].map(col => [col, `CAST(s.${col} AS INTEGER)`]),
+      ['games', 'IFNULL(g.n, 0)'], ['top', "json(IFNULL(t3.top, '[]'))"], ['pcs', 'IFNULL(p.n, 0)'],
+      ['knownBefore', "CASE WHEN w.made_day < w.first_day THEN json('true') ELSE json('false') END"], ['removed', 'w.removed_day'],
+      ['weekly', `json_array(${Array.from({ length: 13 }, (_, i) => `round(s.w${i} / 60000.0, 1)`).join(', ')})`]])} AS o ` +
     'FROM s LEFT JOIN who w ON w.c = s.c LEFT JOIN links k ON k.c = s.c LEFT JOIN pcs p ON p.c = s.c LEFT JOIN tops t3 ON t3.c = s.c ' +
     'LEFT JOIN played g ON g.c = s.c ORDER BY s.c)';
 };

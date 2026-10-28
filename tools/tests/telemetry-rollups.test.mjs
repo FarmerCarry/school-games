@@ -9,9 +9,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 // sqlite-d1.mjs hides node:sqlite's ExperimentalWarning before it loads node:sqlite.
-const { openDatabase } = await import('../../server/sqlite-d1.mjs');
+const { openDatabase, d1LimitError } = await import('../../server/sqlite-d1.mjs');
 const { openStore } = await import('../../server/store.mjs');
-const { ROLLUPS, BUCKETS, METRICS } = await import('../../server/rollups.mjs');
+const { ROLLUPS, BUCKETS, METRICS, rollStatements } = await import('../../server/rollups.mjs');
 const { validateBatch, CODES, ERRORS, SOURCES } = await import('../../server/schema.mjs');
 const { dayBounds } = await import('../../server/clock.mjs');
 
@@ -440,4 +440,24 @@ test('a roll reads only the facts of its day, by index: on a busy day (500 sessi
     for (const step of plan) assert.doesNotMatch(step, /^SCAN (?:st_|r_)/, text.slice(0, 80) + '\n' + plan.join('\n'));
   }
   assert.equal(checked, Object.keys(ROLLUPS).length * 2, 'the first roll and the diff of every table');
+});
+
+test('the driver refuses what D1 refuses (a sixth compound term, a 33rd function argument, a 101st parameter), and every roll statement fits', async () => {
+  const db = openDatabase(':memory:');
+  const terms = n => Array.from({ length: n }, (_, i) => 'SELECT ' + i + ' AS x').join(' UNION ALL ');
+  assert.equal((await db.prepare(terms(5)).all()).results.length, 5);
+  await assert.rejects(db.prepare(terms(6)).all(), /too many terms in compound SELECT/);
+  // Nested compounds are counted one by one, as SQLite does.
+  assert.equal((await db.prepare(`SELECT * FROM (${terms(5)}) UNION ALL SELECT * FROM (${terms(5)})`).all()).results.length, 10);
+  const list = n => Array.from({ length: n }, (_, i) => String(i)).join(', ');
+  assert.equal((await db.prepare(`SELECT json_array(${list(32)}) AS a`).first('a')).split(',').length, 32);
+  await assert.rejects(db.prepare(`SELECT json_array(${list(33)}) AS a`).all(), /too many arguments on function json_array/);
+  await assert.rejects(db.prepare("SELECT printf('%s', " + list(32) + ') AS a').all(), /too many arguments on function printf/);
+  // An IN list, a column list and a VALUES row are no function calls; text in quotes is no SQL.
+  assert.equal((await db.prepare(`SELECT 1 AS a WHERE 5 IN (${list(40)}) AND 'json_array(${list(40)})' <> ''`).first('a')), 1);
+  await assert.rejects(db.prepare('SELECT ?101 AS a').bind(...Array(101).fill(1)).all(), /too many SQL variables/);
+  for (const table of Object.keys(ROLLUPS)) {
+    for (const [kind, text] of Object.entries(rollStatements(table))) assert.equal(d1LimitError(text), null, table + ' ' + kind);
+  }
+  db.close();
 });

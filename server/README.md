@@ -1089,6 +1089,11 @@ school year's export adds about 700 pages (most of them `sessions`, `rounds` and
 
 **Statements and CPU per invocation.** D1 allows 50 statements per invocation; this
 server keeps an admin answer to 20, the 5-minute cron to 35 and the daily purge to 25.
+D1 also limits each statement: 100 KB of SQL, 100 bound parameters, 32 arguments per SQL
+function, 100 result columns and 5 terms per compound `SELECT` (workerd's local D1
+refuses a sixth `UNION ALL` term). `sqlite-d1.mjs` refuses a statement past any of these
+as D1 would, so every test runs inside them; the rollups nest their `UNION ALL` parts
+four at a time, and a KPI row of more than 32 columns comes as an array of arrays.
 The Workers free plan allows 10 ms of CPU per invocation (only CPU counts, not the time
 waiting for D1). The CPU column is JavaScript's time outside SQLite (wall time less the
 time in `db.batch`, the median of cold runs) over 30 days of the simulated school with

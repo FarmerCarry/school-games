@@ -258,6 +258,28 @@ function statParts(scope) {
 }
 
 /* ------------------------------------------------------------ the SQL */
+// D1 refuses a compound SELECT of more than 5 terms and an SQL function of more than 32
+// arguments (sqlite-d1.mjs D1_LIMITS). SELECTs joined by UNION ALL, nested as
+// SELECT * FROM (...) in groups of at most `max` terms (4 leaves room for one more term).
+export function unionAll(parts, max = 4) {
+  if (parts.length <= max) return parts.join(' UNION ALL ');
+  const groups = [];
+  for (let i = 0; i < parts.length; i += max) groups.push(parts.length - i === 1 ? parts[i] : `SELECT * FROM (${parts.slice(i, i + max).join(' UNION ALL ')})`);
+  return unionAll(groups, max);
+}
+// json_array of the expressions, as one array of arrays of at most 32 (flat when they fit):
+// read back with flatRow.
+export const ARGS = 32;
+export const jsonArray = list => list.length <= ARGS ? `json_array(${list.join(', ')})`
+  : jsonArray(Array.from({ length: Math.ceil(list.length / ARGS) }, (_, i) => `json_array(${list.slice(i * ARGS, (i + 1) * ARGS).join(', ')})`));
+// json_object of [key, SQL] pairs: the first 16 in json_object, the rest added 15 at a time by json_set.
+export function jsonObject(pairs) {
+  const arg = ([key, sql]) => [`'${key}'`, sql];
+  let text = `json_object(${pairs.slice(0, 16).flatMap(arg).join(', ')})`;
+  for (let i = 16; i < pairs.length; i += 15) text = `json_set(${text}, ${pairs.slice(i, i + 15).flatMap(([key, sql]) => [`'$.${key}'`, sql]).join(', ')})`;
+  return text;
+}
+
 const keysOf = table => ROLLUPS[table].key.map(([c]) => c);
 const valuesOf = table => [...(ROLLUPS[table].text || []), ...ROLLUPS[table].sums];
 const columnsOf = table => [...keysOf(table), ...valuesOf(table)];
@@ -276,15 +298,15 @@ export function rollupSelect(table, scope) {
   const parts = ROLL_PARTS[table].map(({ from, where = '', keys: exprs, values: sums }) =>
     `SELECT ${scope.day} AS day, ${keys.map(c => `${exprs[c]} AS ${c}`).join(', ')}, ${values.map(c => `${sums[c] ?? 'NULL'} AS ${c}`).join(', ')} ` +
     `FROM ${from} WHERE ${within(scope)}${where} GROUP BY ${positions(keys.length + 1)}`);
-  return `SELECT day, ${keys.join(', ')}, ${values.map(c => `${outer(table, c)} AS ${c}`).join(', ')} FROM (${parts.join(' UNION ALL ')}) ` +
+  return `SELECT day, ${keys.join(', ')}, ${values.map(c => `${outer(table, c)} AS ${c}`).join(', ')} FROM (${unionAll(parts)}) ` +
     `GROUP BY ${positions(keys.length + 1)}`;
 }
 function statSelect(scope) {
   const sums = ROLLUPS.r_stat.sums;
-  return statParts(scope).map(({ metric, from, derived, where = '', slug, k1, k2, values }) =>
+  return unionAll(statParts(scope).map(({ metric, from, derived, where = '', slug, k1, k2, values }) =>
     `SELECT ${derived ? 'x.day' : scope.day} AS day, ${derived ? 'x.a' : 's.a'} AS a, '${metric}' AS metric, ${slug} AS slug, ${k1} AS k1, ${k2} AS k2, ` +
     sums.map(c => `${values[c] ?? 0} AS ${c}`).join(', ') +
-    (derived ? ` FROM ${derived}${where}` : ` FROM ${from} WHERE ${within(scope)}${where}`) + ' GROUP BY 1, 2, 3, 4, 5, 6').join(' UNION ALL ');
+    (derived ? ` FROM ${derived}${where}` : ` FROM ${from} WHERE ${within(scope)}${where}`) + ' GROUP BY 1, 2, 3, 4, 5, 6'));
 }
 
 // The statements that roll one day (DAY_SCOPE's parameters), per rollup:

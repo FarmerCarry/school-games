@@ -19,8 +19,8 @@
 // facts RETENTION_DAYS (or the owner's choice) and the rollups at least 800 days.
 import { CODES, ERRORS, SOURCES, WIRES } from './schema.mjs';
 import { dayBounds, localDay, localParts, offsetMin, offsetsBetween, weekStartOf } from './clock.mjs';
-import { F, IL, PLAYS, PROFILE_AGE, REPLAY, ROLLUPS, ROLLUP_TABLES, RT, SINCE_LAST, TABLES, rollStatements, rollupSelect, spanScope }
-  from './rollups.mjs';
+import { ARGS, F, IL, PLAYS, PROFILE_AGE, REPLAY, ROLLUPS, ROLLUP_TABLES, RT, SINCE_LAST, TABLES, jsonArray, rollStatements, rollupSelect,
+  spanScope, unionAll } from './rollups.mjs';
 import { adminViews } from './admin.mjs';
 import { exportPage } from './export.mjs';
 
@@ -208,7 +208,7 @@ function legacyUpgrade() {
     const parts = sources.map(([from, keys, values]) => 'SELECT ' +
       columns.map(c => `${keys[c] || c} AS ${c}`).concat(sums.map(c => `${values[c] || 0} AS ${c}`)).join(', ') + ' FROM ' + from);
     return `INSERT INTO ${table} (${[...columns, ...sums].join(', ')}) SELECT ${columns.join(', ')}, ` +
-      sums.map(c => `SUM(${c})`).join(', ') + ` FROM (${parts.join(' UNION ALL ')}) GROUP BY ${columns.join(', ')}`;
+      sums.map(c => `SUM(${c})`).join(', ') + ` FROM (${unionAll(parts)}) GROUP BY ${columns.join(', ')}`;
   });
   sql.push(`INSERT OR IGNORE INTO seen (day, kind, key, s) SELECT day, 'd', '', s FROM session_days WHERE day >= ${LEGACY_SEEN} ` +
     `UNION SELECT day, 'g', slug, s FROM session_games WHERE day >= ${LEGACY_SEEN} ` +
@@ -559,8 +559,10 @@ const GROUPS = Object.keys(KPI);
 const AT = Object.fromEntries(GROUPS.map(name => [name, Object.fromEntries(KPI[name].sums.map((c, i) => [c, i]))]));
 const D = AT.days, G = AT.games, L = AT.levels, S = AT.sources, V = AT.devices;
 // A statement's rows as one JSON text of arrays, in the order of `columns`: the Worker then
-// parses one string instead of making an object of every row (CPU it is billed for).
-const asRows = (text, columns) => `SELECT json_group_array(json_array(${columns.join(', ')})) AS rows FROM (${text})`;
+// parses one string instead of making an object of every row (CPU it is billed for). A row
+// of more than 32 columns comes as an array of arrays (rollups.mjs jsonArray): flat() it.
+const asRows = (text, columns) => `SELECT json_group_array(${jsonArray(columns)}) AS rows FROM (${text})`;
+const NESTED = Object.fromEntries(GROUPS.map(name => [name, KPI[name].keys.length + KPI[name].sums.length > ARGS]));
 // A group over the frozen days ?1..?2 (only on a database milestone 2 used) and the rolled
 // days ?4..?5, band ?3 (null for every band, '' for the unknown band).
 function closedGroup(name, legacy) {
@@ -1169,7 +1171,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
   async function kpis({ from, to, band = null }, now = Date.now()) {
     await ensure(now);
     const { parts, aliases } = await kpiParts(from, to, band, now);
-    const all = name => parts.flatMap(part => part[name]);
+    const all = name => NESTED[name] ? parts.flatMap(part => part[name].map(row => row.flat())) : parts.flatMap(part => part[name]);
     const [dayRows, gameRows, levelRows, sourceRows, deviceRows] = GROUPS.map(all);
 
     // The day totals, per day and per band; and the facts' own, for the data-quality shares.
