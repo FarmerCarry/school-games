@@ -169,6 +169,33 @@ test('rankings are deterministic: a number first, then the slug and the id', () 
   assert.deepEqual(grid.rows[2].cells['10-11'], { code: 'few', tries: null }, 'a 2-session group is shown: not enough play yet to judge');
 });
 
+test('a period that reaches back before the update: student counts cover part of it, so no chip or sentence counts children', () => {
+  // The server tells students apart from the update day (factsSince); before it (legacyUntil
+  // and earlier) it kept daily totals only, and those days have no student count.
+  const k = sample();
+  k.games.find(g => g.slug === 'alpha').students = 1;    // the children of the last two days only
+  k.levels[0].students = 0;
+  k.bands[0].students = 2;
+  k.bands[0].games[0].students = 1;
+  k.daily.forEach((d, i) => { d.students = i < 19 ? null : 9; });
+  assert.equal(I.partialStudents(k), false, 'an answer without the update day');
+  for (const [legacyUntil, factsSince, partial] of [['2026-10-19', '2026-10-20', true], ['2026-10-01', '2026-10-01', true], ['2026-09-30', '2026-10-01', false], ['', '2026-07-30', false]]) {
+    const one = { ...k, range: { ...k.range, legacyUntil, factsSince } };
+    assert.equal(I.partialStudents(one), partial, legacyUntil);
+    const p = I.forPeriod(one);
+    if (!partial) { assert.equal(p, one, 'unchanged'); continue; }
+    assert.notEqual(p, one, 'a copy');
+    assert.equal(one.games.find(g => g.slug === 'alpha').students, 1, 'the answer itself is kept');
+    assert.ok(p.games.filter(I.shown).every(g => g.students === null));
+    assert.ok(p.levels.filter(I.shown).every(l => l.students === null));
+    assert.ok(p.bands.filter(I.shown).every(b => b.students === null && b.games.filter(I.shown).every(g => g.students == null)));
+    assert.deepEqual(p.totals, one.totals, 'the totals say whom they count (the page notes the day)');
+    assert.equal(I.favourites(p).rows.find(r => r.slug === 'alpha').small, false, 'no "based on 1 child" for a game opened 120 times');
+    assert.ok(I.insights(p, { lang: 'en' }).every(x => x.students == null), 'no sentence counts children');
+    assert.equal(p.games.find(g => g.suppressed).suppressed, true, 'a group without numbers stays one');
+  }
+});
+
 test('every group is described, even one child, with the small-sample flag', () => {
   // One child played Echo once: it is ranked, judged and named like any other game.
   const one = sample();

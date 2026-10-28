@@ -178,8 +178,9 @@
     var sec = ctx.section(parent, 'habits-guests', T.guestTitle);
     var c = ctx.card(sec, 'guest-card', null, T.guestSub, true);
     var byWeek = {};
+    // Only the days with a guest count (the days before the update have none).
     (k.daily || []).forEach(function (d) {
-      if (!I.shown(d) || !R.isDay(d.day)) return;
+      if (!I.shown(d) || !R.isDay(d.day) || !ctx.has(d.guestMinutes)) return;
       var w = R.weekOf(d.day, ctx.weekStart()), x = byWeek[w] || (byWeek[w] = { guests: 0, all: 0 });
       x.guests += d.guestMinutes || 0; x.all += d.engagedMinutes || 0;
     });

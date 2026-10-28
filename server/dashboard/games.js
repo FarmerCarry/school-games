@@ -121,16 +121,19 @@
         if (c.chart.hidden) return;
         C.barList(host, { name: T.whoPlays + ': ' + spec[1], rtl: ctx.rtl(), color: 'var(--s1)', max: max, rows: bands.map(function (b) {
           return { label: I.bandLabel(b.band, ctx.lang()), value: b[spec[0]] || 0, valueText: spec[2](b[spec[0]] || 0),
-            chip: spec[0] === 'students' ? ctx.chipFor(b.students, null) : null,
+            chip: spec[0] === 'students' && b.students ? ctx.chipFor(b.students, null) : null,
             tip: { title: I.bandLabel(b.band, ctx.lang()), rows: [{ value: T.nStudents(b.students || 0) }, { value: ctx.minutesText(b.minutes || 0), label: T.ofPlay }, { value: T.nOpens(b.opens || 0) }] } };
         }) });
       });
     });
     C.table(c.table, T.whoPlays, [{ label: T.ageGroup }, { label: T.studentsCol, num: true }, { label: T.playTime, num: true }, { label: T.opens, num: true }],
       bands.map(function (b) { return [I.bandLabel(b.band, ctx.lang()), I.int(b.students), ctx.minutesText(b.minutes || 0), I.int(b.opens)]; }));
-    var days = (game.daily || []).filter(Boolean);
+    // The game answer counts from the update day: the days before it would read 0.
+    var cut = ctx.cutover();
+    var days = (game.daily || []).filter(function (x) { return x && (!cut || x.day >= cut.factsSince); });
     var d = ctx.card(sec, 'game-daily', T.studentsPerDay0, null, true);
-    if (days.length < 7) ctx.note(d.chart, T.dailyNeedsDays);
+    if (cut && days.length < 2) ctx.note(d.chart, T.noData);
+    else if (!cut && days.length < 7) ctx.note(d.chart, T.dailyNeedsDays);
     else ctx.draw(function () {
       if (d.chart.hidden) return;
       C.lineChart(d.chart, { name: T.studentsPerDay0, rtl: ctx.rtl(), color: 'var(--s1)', height: 160, keysHint: T.keysDays, format: function (v) { return I.int(v); },
@@ -160,7 +163,8 @@
       // twice.) Without them for every level, the funnel is drawn by tries.
       var who = {};
       if (!ctx.failed(game)) (game.firstWin || []).forEach(function (f) { if (f && ctx.has(f.students)) who[f.id] = f.students; });
-      var byStudents = list.every(function (l) { return ctx.has(who[l.id]); });
+      // (Not in a period that reaches back before the update: those rows start then, the tries do not.)
+      var byStudents = !ctx.cutover() && list.every(function (l) { return ctx.has(who[l.id]); });
       var students = function (l) { return byStudents ? who[l.id] : null; };
       var c = ctx.card(sec, 'funnel-card', T.funnelTitle, byStudents ? T.funnelSub : T.funnelSubTries, true);
       var count = function (l) { return byStudents ? who[l.id] : l.starts || 0; };

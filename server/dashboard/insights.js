@@ -233,6 +233,28 @@
     return dimension === 'cores' ? label.replace(/cores?$/, c => 'processor ' + c) : dimension === 'memory' ? label + ' of memory' : 'a screen ' + label + ' wide';
   }
 
+  // ---- the update day ----------------------------------------------------------
+  // The server tells students apart from the update day (range.factsSince). The days up to
+  // range.legacyUntil come from milestone 2's daily totals, which have no students. When the
+  // period reaches back to them, every group's student count covers only part of it.
+  const isDayText = d => typeof d === 'string' && /^\d{4}-\d\d-\d\d$/.test(d);
+  function partialStudents(kpis) {
+    const r = kpis && kpis.range;
+    return !!r && isDayText(r.legacyUntil) && isDayText(r.from) && r.from <= r.legacyUntil;
+  }
+  // The KPI answer for the page: when its student counts cover only part of the period,
+  // the games', levels' and age groups' counts become unknown (null), so no chip or sentence
+  // counts children; the totals stay (the page says from which day they count).
+  function forPeriod(kpis) {
+    if (!partialStudents(kpis)) return kpis;
+    const drop = g => shown(g) ? Object.assign({}, g, { students: null }) : g;
+    const out = Object.assign({}, kpis);
+    if (Array.isArray(kpis.games)) out.games = kpis.games.map(drop);
+    if (Array.isArray(kpis.levels)) out.levels = kpis.levels.map(drop);
+    if (Array.isArray(kpis.bands)) out.bands = kpis.bands.map(b => shown(b) ? Object.assign(drop(b), Array.isArray(b.games) ? { games: b.games.map(drop) } : {}) : b);
+    return out;
+  }
+
   // ---- derived views (the page draws these; the sentences use them too) -----
   const totalsShown = k => !!k && shown(k.totals);
   const opensOf = g => num(g.opens) || 0;
@@ -719,6 +741,7 @@
     T, KIND_ORDER, BANDS, shown, small, researchInsights,
     int, decimal, short, pct, duration, seconds, arWord, arTimes, enTimes,
     catalogName, bandLabel, children, levelLabel, deviceLabel,
+    partialStudents, forPeriod,
     favourites, favouritesByBand, stuckLevels, verdict, difficultyGrid, returning, pcHealth, insights
   });
 }));

@@ -231,6 +231,12 @@
     keysSteps: 'Use the arrow keys to read each step.',
     nightlyNote: 'Charts include play up to last night.',
     cutoverNote: function (day) { return 'Before ' + day + ', days followed world time (UTC) and students were not told apart.'; },
+    cutoverTop: function (day) {
+      return 'This period reaches back before the update of ' + day + '. Before it, the server kept daily totals only: the counts of students, ' +
+        'the hours of play and the per-child charts start on ' + day + '.';
+    },
+    noDataSince: function (day) { return 'No play recorded here since ' + day + ', the update day. Charts built each night show a day’s play the next day.'; },
+    countedSince: function (day) { return 'Counted from ' + day + ', the update day'; },
     statsTomorrow: 'These charts include play up to last night; today’s play appears here tomorrow.',
     minutesUnit: 'min',
     nStudents: function (v) { return pl(v, 'student', 'students'); },
@@ -895,6 +901,12 @@
     keysSteps: 'استخدم مفاتيح الأسهم لقراءة كل خطوة.',
     nightlyNote: 'تشمل الرسوم اللعب حتى الليلة الماضية.',
     cutoverNote: function (day) { return 'قبل ' + day + ' كانت الأيام بحسب التوقيت العالمي (UTC)، ولم يكن الطلاب يُميَّزون بعضهم من بعض.'; },
+    cutoverTop: function (day) {
+      return 'تمتد هذه الفترة إلى ما قبل تحديث ' + day + '. وقبله كان الخادم يحفظ مجاميع يومية فقط: فأعداد الطلاب وساعات اللعب ' +
+        'والرسوم الخاصة بكل طفل تبدأ في ' + day + '.';
+    },
+    noDataSince: function (day) { return 'لم يُسجَّل هنا أي لعب منذ ' + day + '، يوم التحديث. والرسوم التي تُبنى كل ليلة تُظهر لعب اليوم في اليوم التالي.'; },
+    countedSince: function (day) { return 'محسوبون منذ ' + day + '، يوم التحديث'; },
     statsTomorrow: 'تشمل هذه الرسوم اللعب حتى الليلة الماضية؛ يظهر لعب اليوم هنا غدًا.',
     minutesUnit: 'دقيقة',
     nStudents: function (v) { return c(v, ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا']); },

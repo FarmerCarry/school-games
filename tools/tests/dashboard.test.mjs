@@ -662,6 +662,59 @@ test('a day of one child shows its number; days an older server left out break t
   await s.check();
 });
 
+test('a period that reaches back before the update: play sessions per day, no child counted from part of it, and the day said', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  // The updated server on a milestone-2 database: the days up to legacyUntil come from daily
+  // totals without students, and every student count starts at factsSince.
+  let top = null, factsSince = null;
+  s.mode.edit = k => {
+    factsSince = k.daily[k.daily.length - 10].day;
+    Object.assign(k.range, { legacyUntil: dayBefore(factsSince, 1), factsSince });
+    for (const d of k.daily) if (d.day < factsSince) Object.assign(d, { students: null, guestMinutes: null });
+    top = k.games.filter(g => !g.suppressed).sort((a, b) => b.opens - a.opens || (a.slug < b.slug ? -1 : 1))[0];
+    top.students = 1;   // the children of the last days only
+    for (const l of k.levels) if (l.slug === top.slug) l.students = 0;
+    return k;
+  };
+  await page.goto(site.origin + '/');
+  await waitForKpis(s, 1);
+  const k = s.lastKpis().json;
+  const since = new Date(factsSince + 'T00:00:00Z').toLocaleDateString('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' });
+  assert.match(await page.locator('#view > p.cutover').textContent(), new RegExp('reaches back before the update of ' + since + '.*start on ' + since));
+  // Students per day would read 0 before the update: play sessions per day instead, which every day has.
+  assert.equal(await page.locator('#daily-count-title').textContent(), 'Play sessions per day');
+  await page.click('#daily-count .table-toggle');
+  assert.deepEqual(await page.locator('#daily-count .table-host tbody td').allTextContents(), k.daily.slice().reverse().map(d => d.sessions.toLocaleString('en-US')));
+  // No chip or sentence counts the children of part of the period.
+  assert.doesNotMatch(await page.locator('#fav-card').textContent(), /based on/);
+  assert.doesNotMatch(await page.locator('#insights').textContent(), /based on \d+ child/);
+  assert.match(await page.locator('.tile[data-key="students"] .tile-hint').textContent(), /^Counted from \d+ \w+, the update day$/);
+  // The game page: its tiles count the whole period, its per-child answer starts at the update.
+  await page.goto(site.origin + '/#/game/' + top.slug);
+  await waitForView(page, 'game');
+  assert.equal(await tileText(page, 'students'), '—');
+  assert.ok(await page.locator('#view > p.cutover').isVisible());
+  await page.click('#game-daily .table-toggle');
+  assert.equal(await page.locator('#game-daily .table-host tbody tr').count(), 10, 'the days since the update');
+  if (await page.locator('#funnel-card .card-sub').count()) assert.equal(await page.locator('#funnel-card .card-sub').textContent(), 'Tries of each level, in level order.');
+  assert.doesNotMatch(await page.locator('#game-who').textContent(), /based on 0 children/, 'an age group nobody counted has no sample to be based on');
+  // Habits: the weeks of new and returning students start with the update's week.
+  await page.goto(site.origin + '/#/habits');
+  await waitForView(page, 'habits');
+  await page.click('#habits-weeks .table-toggle');
+  const weeks = await page.locator('#habits-weeks .table-host tbody th').allTextContents();
+  assert.ok(weeks.length >= 1 && weeks.length <= 2, weeks.join(' | '));
+  // The update day is not in the period: nothing of it.
+  s.mode.edit = null;
+  await page.goto(site.origin + '/#/overview');
+  await page.reload();
+  await waitForView(page, 'overview');
+  assert.equal(await page.locator('.cutover').count(), 0);
+  assert.equal(await page.locator('#daily-count-title').textContent(), 'Students per day');
+  await s.check();
+});
+
 test('10 to 19 tries give an early sign next to the verdict, fewer than 10 say so', async t => {
   const s = await open(t, { token: TOKEN });
   const { page } = s;
