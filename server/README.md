@@ -412,13 +412,12 @@ rate-limit bucket; an empty bucket answers `429` with `Retry-After` in seconds.
 
 ### `GET /` and other paths outside `/v1/`
 
-The dashboard's static files from `dashboard/` (`GET` and `HEAD` only; anything else,
-and missing files, are `404`). On Cloudflare, Workers static assets serve them; on Node,
+The dashboard's static files from `dashboard/` (`GET` and `HEAD` only; missing files are
+`404`, and other methods `404` on Node and `405` on Cloudflare). On Cloudflare, Workers static assets serve them; on Node,
 `static.mjs` serves only regular files inside the folder (no dot files, no `_headers`,
 no path outside it). Both send the headers in `dashboard/_headers`: a
-Content-Security-Policy (`default-src 'self'`; scripts also from
-`https://farmercarry.github.io` for the live game names), `X-Content-Type-Options:
-nosniff`, `Referrer-Policy: no-referrer`, and `Cache-Control: no-store` for the page.
+Content-Security-Policy (`default-src 'self'` and `script-src 'self'`; the game names come
+bundled in `names.js`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and `Cache-Control: no-store` for the page.
 
 ### `POST /v1/batch`
 

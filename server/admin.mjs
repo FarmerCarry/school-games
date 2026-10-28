@@ -667,7 +667,7 @@ export function adminViews(ctx) {
     await ensure(now);
     const [check] = await run([bound(LINK_CHECK, [u, to])], now), { target, u_known: uKnown, to_known: toKnown } = check.results[0];
     if (!uKnown || !toKnown) return { error: 'student', status: 404 };
-    if (target === u) return { error: 'cycle', status: 400 };
+    if (target === u || to === u) return { error: 'cycle', status: 400 };
     await run([...LINK.map(text => bound(text, [u, to, Math.floor(now / 1000)])), ...ctx.renew()], now);
     ctx.renewed();
     return answer(now, { ok: true, u, to: target });

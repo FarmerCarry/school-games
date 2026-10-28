@@ -1479,8 +1479,9 @@ test('link joins a student\'s codes one hop deep (history included), refuses cyc
   assert.deepEqual(res.json().to, U3);
   assert.deepEqual(await aliases(), [[U1, U3, 'owner'], [U4, U2, 'pc'], [U5, U3, 'owner']]);
   assert.deepEqual(await students(), [[U2, [U4], 2], [U3, [U1, U5], 2]]);
-  // Linking to a code linked to it already (a cycle), to itself, or to a code nobody played with, is refused.
-  for (const [body, status, error] of [[{ u: U3, to: U5 }, 400, 'cycle'], [{ u: U3, to: U3 }, 400, 'cycle'], [{ u: U3, to: '777777777777' }, 404, 'student'],
+  // Linking to a code linked to it already (a cycle), to itself (also a code that is linked to another), or to a
+  // code nobody played with, is refused.
+  for (const [body, status, error] of [[{ u: U3, to: U5 }, 400, 'cycle'], [{ u: U3, to: U3 }, 400, 'cycle'], [{ u: U5, to: U5 }, 400, 'cycle'], [{ u: U3, to: '777777777777' }, 404, 'student'],
     [{ u: '777777777777', to: U3 }, 404, 'student']]) {
     res = await call(s, 'POST', '/v1/admin/link', body);
     assert.deepEqual([res.status, res.json()], [status, { error }], JSON.stringify(body));
