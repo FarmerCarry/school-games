@@ -47,13 +47,19 @@ page runs under `default-src 'self'; script-src 'self'; …`.
   page adds the header from `dictionary.js` and a byte-order mark), plus `games.csv`,
   `dictionary.csv`, `README.txt` (English and Arabic), `labels.sps` (SPSS) and `load.R` (R). The
   tab first says what it costs ("About 2.4 million rows: about 48% of today's free reading
-  allowance"), then shows a progress bar. If the server's reading guard stops it (429 "reads"),
+  allowance": the rows the export's lookups read, about 7 a line, counted per file from the
+  period's KPIs), then shows a progress bar. If the server's reading guard stops it (429 "reads"),
   the files so far are part 1 and the browser remembers where it stopped (`sg:dash:export`), so
-  the next part goes on from there the next day; no row is in two parts. In the sample, the
-  files are `demo/export-*.csv`. `docs/RESEARCH_DATA.md` explains every column.
+  the next part goes on from there the next day; no row is in two parts, but the parts are made
+  on different days, which each part's `README.txt` explains. In the sample, the files are
+  `demo/export-*.csv`. `docs/RESEARCH_DATA.md` explains every column.
 * **One child's data** (Data & settings): the code the teacher page shows (`3F9A-0C51-E2B7-5`,
   its check character checked) or its start finds the student; forgetting them or linking
   another code asks twice, as on the student's page.
+* **The update day:** a period that reaches back to the days the server kept as milestone 2's
+  daily totals (`range.legacyUntil`) says so above every page. Its student counts, hours and
+  per-child charts start on `range.factsSince`; it draws play sessions per day instead of
+  students, and no chip or sentence counts the children of only part of it.
 * **Nothing is hidden:** every group is shown with its numbers, even one child. A number
   based on fewer than 5 children or 20 tries carries a "based on 2 children" chip; a
   difficulty verdict on 10 to 19 tries is an early sign. Children appear only under their

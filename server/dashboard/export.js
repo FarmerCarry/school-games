@@ -16,8 +16,6 @@
   var FILES = D.SERVER_FILES;
   var BOM = '﻿';
   var SPLIT = 500000;
-  // Rows the server reads per line it writes, about (index and table rows, the lookups of a line).
-  var READS_PER_LINE = 1.25;
   // Export pages answer 429 once the day's reads pass this (server/README.md).
   var EXPORT_GUARD = 3500000;
   var DAY_COLUMN = D.columns('rounds').indexOf('day');
@@ -25,17 +23,35 @@
   // How many lines the server's files will have, from the period's KPI answer, and what
   // reading them costs: { lines, rows (read), share (of the day's reading allowance), stops
   // (true when today's reads so far plus these pass the export guard) }.
+  // D1 counts every table and index row a statement reads, and a line of server/export.mjs
+  // reads far more than itself: a session line looks up its link, counts its visits twice,
+  // its rounds and its marks; a visit line its session, link, previous and next visit, its
+  // rounds twice and its session's heart and tutorial marks twice; a round or a mark line its
+  // session, link and the round before or the visit; each students page reads every
+  // student-day and student-game row of the period again; the PCs file every session.
+  // These are the rows those lookups match, so the estimate is a floor.
   function estimate(k, usage, days) {
     var t = k && k.totals || {}, st = t.students || {}, games = (k && k.games || []).filter(function (g) { return g && !g.suppressed; });
     var num = function (v) { return typeof v === 'number' && isFinite(v) ? v : 0; };
-    var marks = num(t.levelUps);
+    var levelUps = num(t.levelUps), others = 0;
     games.forEach(function (g) {
-      marks += num(g.hearts && g.hearts.on) + num(g.hearts && g.hearts.off) + num(g.tutorials && g.tutorials.start) + num(g.tutorials && g.tutorials.done);
+      others += num(g.hearts && g.hearts.on) + num(g.hearts && g.hearts.off) + num(g.tutorials && g.tutorials.start) + num(g.tutorials && g.tutorials.done);
     });
-    var sessions = num(t.sessions);
-    var lines = num(st.active) + sessions + num(t.gameOpens) + Math.max(num(t.roundsStarted), num(t.roundsEnded)) + marks +
-      Math.max(0, sessions - num(st.guestSessions)) + games.length * Math.max(1, num(days)) + num(k && k.quality && k.quality.pcsNew);
-    var rows = Math.round(lines * READS_PER_LINE), u = usage || {}, limit = num(u.readsLimit) || 5000000;
+    var marks = levelUps + others, sessions = num(t.sessions), opens = num(t.gameOpens), rounds = Math.max(num(t.roundsStarted), num(t.roundsEnded));
+    var students = num(st.active), studentDays = Math.max(0, sessions - num(st.guestSessions)), gameDays = games.length * Math.max(1, num(days));
+    var pcs = num(k && k.quality && k.quality.pcsNew), perSession = sessions ? opens / sessions : 0;
+    var lines = students + sessions + opens + rounds + marks + studentDays + gameDays + pcs;
+    var reads = {
+      students: students * 3 + studentDays + opens,
+      sessions: sessions * 2 + opens * 2 + rounds + marks,
+      visits: opens * 5 + rounds * 2 + 2 * others * perSession,
+      rounds: rounds * 4,
+      events: marks * 4,
+      student_days: studentDays * 2,
+      daily_games: gameDays,
+      pcs: pcs * 2 + sessions
+    };
+    var rows = Math.round(FILES.reduce(function (a, f) { return a + (reads[f] || 0); }, 0)), u = usage || {}, limit = num(u.readsLimit) || 5000000;
     return { lines: Math.round(lines), rows: rows, share: rows / limit, stops: num(u.reads) + rows > EXPORT_GUARD };
   }
 

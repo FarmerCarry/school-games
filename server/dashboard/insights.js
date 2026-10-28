@@ -138,13 +138,16 @@
   function seconds(ms) { return decimal((num(ms) || 0) / 1000, 1); }
 
   // Arabic number agreement after a written number: [one, two, 3-10, other].
-  // Fractions and 11+ take the singular; the last two digits decide past 100.
+  // Fractions and 11+ take the singular; the last two digits decide past 100. A hundred or
+  // more ending in 00, 01 or 02 takes the singular genitive: the "other" form without its
+  // accusative ending (طالبًا -> 100 طالب, صفًّا -> 100 صفّ; مرة stays مرة).
   function arWord(n, forms) {
     if (!Number.isInteger(n)) return forms[3];
     const m = n % 100;
     if (n === 1) return forms[0];
     if (n === 2) return forms[1];
     if (m >= 3 && m <= 10) return forms[2];
+    if (n >= 100 && m <= 2) return forms[3].replace(/ً(ّ?)ا(?=\s|$)/g, '$1');
     return forms[3];
   }
   // "5 مرات", "مرة واحدة", "مرتين" (after a verb).
@@ -230,6 +233,28 @@
     return dimension === 'cores' ? label.replace(/cores?$/, c => 'processor ' + c) : dimension === 'memory' ? label + ' of memory' : 'a screen ' + label + ' wide';
   }
 
+  // ---- the update day ----------------------------------------------------------
+  // The server tells students apart from the update day (range.factsSince). The days up to
+  // range.legacyUntil come from milestone 2's daily totals, which have no students. When the
+  // period reaches back to them, every group's student count covers only part of it.
+  const isDayText = d => typeof d === 'string' && /^\d{4}-\d\d-\d\d$/.test(d);
+  function partialStudents(kpis) {
+    const r = kpis && kpis.range;
+    return !!r && isDayText(r.legacyUntil) && isDayText(r.from) && r.from <= r.legacyUntil;
+  }
+  // The KPI answer for the page: when its student counts cover only part of the period,
+  // the games', levels' and age groups' counts become unknown (null), so no chip or sentence
+  // counts children; the totals stay (the page says from which day they count).
+  function forPeriod(kpis) {
+    if (!partialStudents(kpis)) return kpis;
+    const drop = g => shown(g) ? Object.assign({}, g, { students: null }) : g;
+    const out = Object.assign({}, kpis);
+    if (Array.isArray(kpis.games)) out.games = kpis.games.map(drop);
+    if (Array.isArray(kpis.levels)) out.levels = kpis.levels.map(drop);
+    if (Array.isArray(kpis.bands)) out.bands = kpis.bands.map(b => shown(b) ? Object.assign(drop(b), Array.isArray(b.games) ? { games: b.games.map(drop) } : {}) : b);
+    return out;
+  }
+
   // ---- derived views (the page draws these; the sentences use them too) -----
   const totalsShown = k => !!k && shown(k.totals);
   const opensOf = g => num(g.opens) || 0;
@@ -267,13 +292,15 @@
     });
   }
 
-  // Levels most often left unfinished.
+  // Levels most often left unfinished. A level's students in the KPI answer are summed day
+  // by day (a child who played it on two days counts twice), so they are no count of
+  // children: a level's small-sample chip rests on its tries alone.
   function stuckLevels(kpis, minTries) {
     const min = minTries == null ? T.STUCK_MIN_TRIES : minTries;
     const rows = list(kpis && kpis.levels).filter(shown).map(l => {
       const starts = num(l.starts) || 0, quits = num(l.codes && l.codes.q) || 0;
       return { slug: l.slug, id: l.id, starts, quits, rate: starts ? quits / starts : null, sessions: num(l.sessions) || 0,
-        students: num(l.students), small: small(l.students, starts) };
+        students: null, small: small(null, starts) };
     }).filter(l => l.starts >= min && l.quits > 0)
       .sort((a, b) => b.rate - a.rate || b.quits - a.quits || b.starts - a.starts || byLevel(a, b));
     return { rows };
@@ -714,6 +741,7 @@
     T, KIND_ORDER, BANDS, shown, small, researchInsights,
     int, decimal, short, pct, duration, seconds, arWord, arTimes, enTimes,
     catalogName, bandLabel, children, levelLabel, deviceLabel,
+    partialStudents, forPeriod,
     favourites, favouritesByBand, stuckLevels, verdict, difficultyGrid, returning, pcHealth, insights
   });
 }));

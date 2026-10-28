@@ -14,7 +14,14 @@ import path from 'node:path';
 import vm from 'node:vm';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { COLUMNS } from '../../server/export.mjs';
+import { hideSqliteWarning } from '../../server/warnings.mjs';
+
+hideSqliteWarning();
+const { DatabaseSync } = await import('node:sqlite');
+const { createApp } = await import('../../server/app.mjs');
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dashboard = path.join(repo, 'server/dashboard');
@@ -158,6 +165,13 @@ test('bucket labels and quantiles from a histogram', () => {
   // The last bucket has no end: a quantile there is "60 or more".
   assert.deepEqual(R.quantile([{ k: 30, n: 1 }, { k: 60, n: 3 }], 0.5), { value: 60, open: true });
   assert.equal(R.quantile([{ k: 0, n: 0 }], 0.5), null);
+  // A count (games per session, attempts, losses in a row, tier) is never 3.7: the bucket that holds the quantile.
+  const games = R.histogram(R.statRows(stats([1, 2, 3, 4].map((k, i) => row('8-9', 'games', '', String(k), '', { n: [115, 384, 503, 350][i] })))), 'games');
+  close(R.quantile(games, 0.5).value, 3.352, 0.001);
+  assert.deepEqual(R.quantile(games, 0.5, 'games'), { value: 3, open: false, label: '3' });
+  assert.deepEqual(R.quantile([{ k: 1, n: 1 }, { k: 6, n: 3 }, { k: 8, n: 0 }], 0.5, 'games'), { value: 6, open: false, label: '6–7' });
+  assert.deepEqual(R.quantile([{ k: 6, n: 1 }, { k: 8, n: 3 }], 0.5, 'games'), { value: 8, open: true, label: '8+' });
+  assert.deepEqual(R.quantile(hist, 0.5, 'sesslen'), { value: 10, open: false }, 'minutes stay linear');
   assert.deepEqual(R.bucketize([0, 9.9, 10, 45, 500, null], [0, 10, 20, 45]).map(b => b.n), [2, 1, 0, 2]);
 });
 
@@ -218,6 +232,13 @@ test('students: new and returning per week, minutes per student-week, days per w
   ], 'the weeks that overlap the period');
   assert.deepEqual(R.studentWeeks(students, { from: '2026-10-12', to: '2026-10-27', weekStart: 'sun' }).sort((x, y) => x - y), [5, 7, 10, 20, 30]);
   assert.deepEqual(R.daysPerWeek(students), [2, 1.5, 1]);
+  // The days are those of the period, so only the weeks that overlap it count: 9 days over the
+  // 5 Sunday weeks that 30 days touch, not over 13 weeks of play.
+  const steady = [{ u: 'd', days: 9, weekly: Array(13).fill(20) }];
+  assert.deepEqual(R.daysPerWeek(steady, { from: '2026-09-28', to: '2026-10-27', weekStart: 'sun' }), [9 / 5]);
+  assert.deepEqual(R.daysPerWeek(students, { from: '2026-10-12', to: '2026-10-27', weekStart: 'sun' }), [2, 1.5, 1]);
+  assert.deepEqual(R.daysPerWeek([{ u: 'e', days: 2, weekly: weekly(9, 0, 0) }], { from: '2026-10-19', to: '2026-10-27', weekStart: 'sun' }), [],
+    'play only in a week before the period');
   assert.deepEqual(R.weeklyMinutes([{ day: '2026-10-13', minutes: 5 }, { day: '2026-10-15', minutes: 7 }, { day: '2026-10-27', minutes: 1 }],
     { from: '2026-10-11', to: '2026-10-27', weekStart: 'sun' }), [{ week: '2026-10-11', minutes: 12 }, { week: '2026-10-18', minutes: 0 }, { week: '2026-10-25', minutes: 1 }]);
   assert.equal(R.winShare({ w: 3, l: 1 }), 0.75);
@@ -425,6 +446,17 @@ test('docs/RESEARCH_DATA.md is the dictionary\'s own output (rebuild: node serve
   for (const f of D.FILES) assert.ok(D.markdown().includes('### `' + f.file + '.csv`'), f.file);
 });
 
+test('no player-card leftovers in the dashboard or the research data doc (the owner said no, for good)', () => {
+  // "card" alone is the dashboard's own layout word (a chart card, a game card); these are the player cards.
+  const CARDS = /🎴|player.?cards?|card codes?|\/v1\/admin\/cards|kind\s*[:=]+\s*['"]card['"]|['"]card['"]\s*\]|(?<![#0-9a-z])c[0-9a-f]{4}(?![0-9a-z])/i;
+  const files = fs.readdirSync(dashboard).filter(f => /\.(js|mjs|html|css|md)$/.test(f)).map(f => path.join(dashboard, f))
+    .concat([path.join(repo, 'docs/RESEARCH_DATA.md')]);
+  for (const file of files) {
+    const hit = fs.readFileSync(file, 'utf8').split('\n').findIndex(line => CARDS.test(line));
+    assert.equal(hit, -1, path.relative(repo, file) + (hit >= 0 ? ':' + (hit + 1) : ''));
+  }
+});
+
 test('the browser\'s files: games.csv, dictionary.csv, README.txt in both languages, labels.sps and load.R', () => {
   const parse = text => text.trim().split('\n').map(line => {
     const cells = [];
@@ -463,6 +495,12 @@ test('the browser\'s files: games.csv, dictionary.csv, README.txt in both langua
     assert.ok(readme.includes(text), text);
   }
   for (const [en, ar] of D.NOTES) assert.ok(readme.includes(en) && readme.includes(ar));
+  // Parts are made on different days: what was played in between is in the later part only.
+  for (const text of ['made on different days', 'sessions that are in no sessions.csv', 'a period that ends yesterday or earlier',
+    'صُنعت الأجزاء في أيام مختلفة', 'لا توجد في أي ملف sessions.csv']) assert.ok(readme.includes(text), text);
+  const first = D.readme({ from: '2026-09-01', to: '2026-10-27', part: 1, stopped: { file: 'rounds' } });
+  for (const text of ['in the next part only', 'في الجزء التالي وحده']) assert.ok(first.includes(text), text);
+  assert.ok(!D.readme({ from: '2026-09-01', to: '2026-10-27' }).includes('different days'), 'one download in one go says nothing of parts');
   assert.doesNotMatch(readme, /card/i, 'there are no player cards');
   const names = files.map(f => f.name).concat(['games.csv', 'dictionary.csv']);
   const sps = D.spss(names);
@@ -476,6 +514,43 @@ test('the browser\'s files: games.csv, dictionary.csv, README.txt in both langua
   assert.match(r, /rounds <- read_sg\(c\("rounds-2026-09\.csv", "rounds-2026-10\.csv"\)/, 'the months of rounds as one table');
   assert.match(r, /students\$band_first <- factor\(students\$band_first, levels = c\("6-7", "8-9", "10-11"\)\)/);
   assert.doesNotMatch(r, /sessions <-/, 'only the files of the download');
+});
+
+test('export.js: the cost of a download is the rows its SQL reads, not the lines it writes', async () => {
+  // A simulated school's facts, its KPI answer, and the rows each file's lookups in
+  // server/export.mjs must read at the least (D1 counts every row a statement reads; the
+  // Node driver counts only the rows returned, so this is counted from the facts).
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sg-export-cost-'));
+  const dbPath = path.join(dir, 'telemetry.db');
+  const sim = spawnSync(process.execPath, [path.join(repo, 'server/simulate.mjs'), '--db', dbPath, '--days', '14', '--sessions', '40', '--seed', '3'], { encoding: 'utf8' });
+  assert.equal(sim.status, 0, sim.stderr);
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const one = sql => Object.values(db.prepare(sql).get())[0];
+  const [S, V, N, M] = ['st_sessions', 'st_visits', 'st_rounds', 'st_marks'].map(table => one('SELECT COUNT(*) FROM ' + table));
+  const ofKind = kind => one(`SELECT COUNT(*) FROM st_marks WHERE kind = '${kind}'`);
+  const ofVisit = (table, where) => one(`SELECT TOTAL((SELECT COUNT(*) FROM ${table} x WHERE ${where})) FROM st_visits v`);
+  const days = one('SELECT COUNT(*) FROM r_student_day'), games = one('SELECT COUNT(*) FROM r_student_game'), students = one('SELECT COUNT(DISTINCT u) FROM r_student_day');
+  const floor = {
+    sessions: S * 2 + V * 2 + N + ofKind('lv') + ofKind('ct') * 3,
+    visits: V * 5 + 2 * ofVisit('st_rounds', 'x.sid = v.sid AND x.n = v.n') + 2 * ofVisit('st_marks', "x.sid = v.sid AND x.kind IN ('tu', 'fv')"),
+    rounds: N * 4, events: M * 4, students: days + games + students * 3, student_days: days * 2
+  };
+  db.close();
+  const app = createApp({ dbPath, adminToken: 'export-cost-token-0123456789' });
+  try {
+    const base = 'http://127.0.0.1:' + (await app.listen(0, '127.0.0.1')).port;
+    const get = async route => (await fetch(base + route, { headers: { Authorization: 'Bearer export-cost-token-0123456789' } })).json();
+    const settings = await get('/v1/admin/settings');
+    const to = settings.clock.today, from = R.shift(to, -20);
+    const est = E.estimate(await get(`/v1/admin/kpis?from=${from}&to=${to}`), settings.usage, 21);
+    const least = Object.values(floor).reduce((a, b) => a + b, 0);
+    assert.ok(least > 5 * est.lines, 'the lookups read several rows a line');
+    // The KPI answer does not count the timer and profile marks, so the estimate may fall a little short of the floor.
+    assert.ok(est.rows >= 0.9 * least && est.rows <= 1.5 * least, est.rows + ' rows estimated, ' + least + ' at the least');
+  } finally {
+    await app.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('zip.js: deflated and stored entries any unzip tool reads, with streaming CRCs', async () => {
@@ -557,7 +632,10 @@ test('export.js: every page once, a header from the dictionary, rounds by month,
   const est = E.estimate({ totals: { sessions: 100, gameOpens: 250, roundsStarted: 1100, roundsEnded: 1000, levelUps: 40, students: { active: 30, guestSessions: 20 } },
     games: [{ slug: 'a', hearts: { on: 5, off: 1 }, tutorials: { start: 10, done: 4 } }], quality: { pcsNew: 12 } }, { reads: 3499000, readsLimit: 5000000 }, 30);
   assert.equal(est.lines, 30 + 100 + 250 + 1100 + 60 + 80 + 30 + 12);
-  assert.equal(est.rows, Math.round(est.lines * 1.25));
+  // The rows the server's lookups read for each file (export.js estimate): students, sessions,
+  // visits (2.5 visits a session, 20 heart and tutorial marks), rounds, events, student-days,
+  // game-days, PCs.
+  assert.equal(est.rows, (30 * 3 + 80 + 250) + (200 + 500 + 1100 + 60) + (1250 + 2200 + 2 * 20 * 2.5) + 4400 + 240 + 160 + 30 + (24 + 100));
   assert.equal(est.share, est.rows / 5000000);
   assert.equal(est.stops, true, 'today’s reads so far plus these pass the export guard');
   assert.equal(E.estimate({ totals: { sessions: 100 } }, { reads: 0 }, 1).stops, false);

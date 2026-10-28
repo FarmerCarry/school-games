@@ -129,6 +129,7 @@
 
     byAgeTitle: 'Favourites by age',
     byAgeSub: 'Each age group’s most opened games, as a share of that group’s game opens.',
+    byAgeSubMinutes: 'Each age group’s most played games, as a share of that group’s play time.',
     ofGroupOpens: 'of this age group’s game opens',
     ageGroup: 'Age group',
     byAgeOne: function (b) { return 'Only children aged ' + b + ' are shown, so their favourites are the list above. Choose “All ages” to compare the age groups side by side.'; },
@@ -230,6 +231,12 @@
     keysSteps: 'Use the arrow keys to read each step.',
     nightlyNote: 'Charts include play up to last night.',
     cutoverNote: function (day) { return 'Before ' + day + ', days followed world time (UTC) and students were not told apart.'; },
+    cutoverTop: function (day) {
+      return 'This period reaches back before the update of ' + day + '. Before it, the server kept daily totals only: the counts of students, ' +
+        'the hours of play and the per-child charts start on ' + day + '.';
+    },
+    noDataSince: function (day) { return 'No play recorded here since ' + day + ', the update day. Charts built each night show a day’s play the next day.'; },
+    countedSince: function (day) { return 'Counted from ' + day + ', the update day'; },
     statsTomorrow: 'These charts include play up to last night; today’s play appears here tomorrow.',
     minutesUnit: 'min',
     nStudents: function (v) { return pl(v, 'student', 'students'); },
@@ -313,6 +320,7 @@
     weeksTitle: 'New and returning students',
     weeksSub: 'Students who played each week: those who had played before, and those whose first week it was.',
     weeksNeedDays: 'Choose 30 or 90 days above to see the weeks.',
+    weeksLast13: 'These are the last 13 weeks of the period: the server keeps 13 weeks of minutes for each student.',
     returningStudents: 'Returning',
     newStudentsLabel: 'New',
     healthMore: 'See each PC on the PCs tab',
@@ -367,6 +375,7 @@
     studentNoPlay: 'This student did not play in this period. Choose a longer period above.',
     linkAction: 'Link to another code',
     csvAction: 'Download this student’s data (CSV)',
+    csvLatest: function (k) { return 'Download this student’s latest ' + n(k) + ' rounds (CSV)'; },
     forgetAction: 'Forget this student',
     linkedCodes: 'Linked codes:',
     unlink: 'Unlink',
@@ -405,12 +414,13 @@
       return up ? game + ': ' + m + ' rose from ' + first + ' in the first tries to ' + last + ' in the latest.'
         : game + ': ' + m + ' was ' + first + ' in the first tries and ' + last + ' in the latest.';
     },
+    betterLatest: function (k) { return 'By attempt: this student’s latest ' + n(k) + ' rounds, the most the server lists.'; },
     ddaTitle: 'Difficulty by attempt',
     ddaIntro: 'In the games that adapt, the difficulty level (0 to 100) the game chose at each attempt.',
     ddaLevel: 'Difficulty level',
     afterLossTitle: 'After a loss',
-    afterLossIntro: 'What came after a round this student lost or left, next to the whole school.',
-    afterLossNone: 'No lost or unfinished rounds in this period.',
+    afterLossIntro: 'What came after a round this student lost, next to the whole school’s lost rounds.',
+    afterLossNone: 'No lost rounds in this period.',
     wholeSchool: 'The whole school',
     persist: { same: 'Same level again', level: 'Another level', game: 'Another game', stop: 'Stopped playing' },
     recentTitle: 'Recent sessions',
@@ -441,10 +451,11 @@
     oneLevel: 'This game has one kind of round, so there are no levels to compare.',
     funnelTitle: 'How far children get',
     funnelSub: 'Students who played each level, in level order.',
+    funnelSubTries: 'Tries of each level, in level order.',
     unended: 'Never finished',
     levelOutcomes: 'How each level’s rounds end',
-    firstWinTitle: 'Tries before the first win',
-    firstWinSub: 'Per level: the middle child’s tries before a first win, and the slower quarter’s.',
+    firstWinTitle: 'Tries to a first win',
+    firstWinSub: 'Per level: the tries the middle child needed to win once, the winning try included, and the slower quarter’s.',
     firstWinSubRow: function (p75, never) { return 'slower quarter ' + p75 + (never ? ' · ' + n(never) + ' not won yet' : ''); },
     noWinYet: 'not won yet',
     medianTries: 'Tries (middle child)',
@@ -535,7 +546,7 @@
     persistIntro: 'After losing or leaving a round, the share that tried the same level again.',
     triedAgain: 'Tried again (any level)',
     hardestTitle: 'The hardest levels',
-    hardestIntro: 'By tries before the first win.',
+    hardestIntro: 'By tries to a first win; a level nobody has won yet comes first.',
     hardestNone: 'No level has a first win yet.',
     rtTitle: 'Reaction time by age',
     rtIntro: 'How quickly children react, as a share of their reactions, in the games that measure it.',
@@ -628,7 +639,7 @@
       return 'About ' + (rows >= 1e6 ? I.short(rows / 1e6) + ' million' : n(rows)) + ' rows: ' + (pct.charAt(0) === '<' ? 'less than ' + pct.slice(1) : 'about ' + pct) +
         ' of today’s free reading allowance.';
     },
-    exportStops: 'Today’s allowance may run out part way. The download then gives you part 1 and goes on tomorrow from where it stopped.',
+    exportStops: 'Today’s allowance may run out part way. The download then gives you part 1 and goes on tomorrow from where it stopped. A shorter period costs less.',
     exportStart: 'Download the research files',
     exportStarting: 'Starting…',
     exportCancel: 'Stop',
@@ -643,7 +654,9 @@
     exportAgain: 'Try again',
     exportCancelled: 'Stopped. Nothing was saved.',
     exportDemo: 'The sample files hold this morning’s play only.',
-    exportResume: function (range, file, day, part) { return 'A download of ' + range + ' stopped in ' + iso(file) + ' on ' + day + '. Part ' + part + ' goes on from there.'; },
+    exportResume: function (range, file, day, part) {
+      return 'A download of ' + range + ' stopped in ' + iso(file) + ' on ' + day + '. Part ' + part + ' goes on from there, with the play since then; its README says how to join the parts.';
+    },
     exportContinue: function (part) { return 'Continue: part ' + part; },
     exportForgetPart: 'Start afresh instead',
     sizeMb: function (v) { return v + ' MB'; },
@@ -786,6 +799,7 @@
 
     byAgeTitle: 'المفضلة حسب العمر',
     byAgeSub: 'أكثر الألعاب فتحًا في كل فئة عمرية، كنسبة من مرات فتح الألعاب في الفئة نفسها.',
+    byAgeSubMinutes: 'أطول الألعاب لعبًا في كل فئة عمرية، كنسبة من وقت اللعب في الفئة نفسها.',
     ofGroupOpens: 'من مرات فتح الألعاب في هذه الفئة',
     ageGroup: 'الفئة العمرية',
     byAgeOne: function (b) { return 'تظهر الآن فئة ' + b + ' وحدها، فالمفضلة لديها هي القائمة السابقة. اختر «كل الأعمار» لمقارنة الفئات العمرية جنبًا إلى جنب.'; },
@@ -887,6 +901,12 @@
     keysSteps: 'استخدم مفاتيح الأسهم لقراءة كل خطوة.',
     nightlyNote: 'تشمل الرسوم اللعب حتى الليلة الماضية.',
     cutoverNote: function (day) { return 'قبل ' + day + ' كانت الأيام بحسب التوقيت العالمي (UTC)، ولم يكن الطلاب يُميَّزون بعضهم من بعض.'; },
+    cutoverTop: function (day) {
+      return 'تمتد هذه الفترة إلى ما قبل تحديث ' + day + '. وقبله كان الخادم يحفظ مجاميع يومية فقط: فأعداد الطلاب وساعات اللعب ' +
+        'والرسوم الخاصة بكل طفل تبدأ في ' + day + '.';
+    },
+    noDataSince: function (day) { return 'لم يُسجَّل هنا أي لعب منذ ' + day + '، يوم التحديث. والرسوم التي تُبنى كل ليلة تُظهر لعب اليوم في اليوم التالي.'; },
+    countedSince: function (day) { return 'محسوبون منذ ' + day + '، يوم التحديث'; },
     statsTomorrow: 'تشمل هذه الرسوم اللعب حتى الليلة الماضية؛ يظهر لعب اليوم هنا غدًا.',
     minutesUnit: 'دقيقة',
     nStudents: function (v) { return c(v, ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا']); },
@@ -971,6 +991,7 @@
     weeksTitle: 'الطلاب الجدد والعائدون',
     weeksSub: 'الطلاب الذين لعبوا في كل أسبوع: من لعبوا من قبل، ومن كان هذا أسبوعهم الأول.',
     weeksNeedDays: 'اختر 30 أو 90 يومًا في الأعلى لترى الأسابيع.',
+    weeksLast13: 'هذه آخر 13 أسبوعًا من الفترة: يحفظ الخادم دقائق 13 أسبوعًا لكل طالب.',
     returningStudents: 'عائدون',
     newStudentsLabel: 'جدد',
     healthMore: 'اطّلع على كل جهاز في صفحة الأجهزة',
@@ -1027,6 +1048,7 @@
     studentNoPlay: 'لم يلعب هذا الطالب في هذه الفترة. اختر فترة أطول في الأعلى.',
     linkAction: 'اربطه برمز آخر',
     csvAction: 'نزّل بيانات هذا الطالب (CSV)',
+    csvLatest: function (k) { return 'نزّل آخر ' + c(k, ['جولة واحدة', 'جولتين', 'جولات', 'جولة']) + ' لهذا الطالب (CSV)'; },
     forgetAction: 'احذف هذا الطالب',
     linkedCodes: 'رموز مربوطة:',
     unlink: 'فكّ الربط',
@@ -1065,12 +1087,13 @@
       return up ? game + ': ارتفعت ' + m + ' من ' + first + ' في المحاولات الأولى إلى ' + last + ' في الأخيرة.'
         : game + ': كانت ' + m + ' ' + first + ' في المحاولات الأولى و' + last + ' في الأخيرة.';
     },
+    betterLatest: function (k) { return 'حسب المحاولة: آخر ' + c(k, ['جولة واحدة', 'جولتين', 'جولات', 'جولة']) + ' لهذا الطالب، وهي أقصى ما يعرضه الخادم.'; },
     ddaTitle: 'الصعوبة حسب المحاولة',
     ddaIntro: 'في الألعاب التي تتكيّف مع اللاعب: مستوى الصعوبة (من 0 إلى 100) الذي اختارته اللعبة في كل محاولة.',
     ddaLevel: 'مستوى الصعوبة',
     afterLossTitle: 'بعد الخسارة',
-    afterLossIntro: 'ما الذي حدث بعد جولة خسرها هذا الطالب أو تركها، مقارنةً بالمدرسة كلها.',
-    afterLossNone: 'لا جولات خاسرة أو متروكة في هذه الفترة.',
+    afterLossIntro: 'ما الذي حدث بعد جولة خسرها هذا الطالب، مقارنةً بالجولات التي خسرتها المدرسة كلها.',
+    afterLossNone: 'لا جولات خاسرة في هذه الفترة.',
     wholeSchool: 'المدرسة كلها',
     persist: { same: 'المرحلة نفسها مرة أخرى', level: 'مرحلة أخرى', game: 'لعبة أخرى', stop: 'توقّف عن اللعب' },
     recentTitle: 'الجلسات الأخيرة',
@@ -1101,10 +1124,11 @@
     oneLevel: 'لهذه اللعبة نوع واحد من الجولات، فلا مراحل للمقارنة.',
     funnelTitle: 'إلى أين يصل الأطفال',
     funnelSub: 'الطلاب الذين لعبوا كل مرحلة، بترتيب المراحل.',
+    funnelSubTries: 'محاولات كل مرحلة، بترتيب المراحل.',
     unended: 'لم تنتهِ أبدًا',
     levelOutcomes: 'كيف تنتهي جولات كل مرحلة',
-    firstWinTitle: 'المحاولات قبل أول فوز',
-    firstWinSub: 'لكل مرحلة: محاولات الطفل الأوسط قبل أول فوز، ومحاولات الربع الأبطأ.',
+    firstWinTitle: 'المحاولات حتى أول فوز',
+    firstWinSub: 'لكل مرحلة: المحاولات التي احتاجها الطفل الأوسط ليفوز مرة، ومنها المحاولة الفائزة، ومحاولات الربع الأبطأ.',
     firstWinSubRow: function (p75, never) { return 'الربع الأبطأ ' + p75 + (never ? ' · ' + n(never) + ' لم يفوزوا بعد' : ''); },
     noWinYet: 'لا فوز بعد',
     medianTries: 'المحاولات (الطفل الأوسط)',
@@ -1195,7 +1219,7 @@
     persistIntro: 'بعد خسارة جولة أو تركها: نسبة من أعادوا المرحلة نفسها.',
     triedAgain: 'حاولوا من جديد (أي مرحلة)',
     hardestTitle: 'أصعب المراحل',
-    hardestIntro: 'حسب المحاولات قبل أول فوز.',
+    hardestIntro: 'حسب المحاولات حتى أول فوز؛ وتأتي أولًا المرحلة التي لم يفز بها أحد بعد.',
     hardestNone: 'لا فوز أول في أي مرحلة بعد.',
     rtTitle: 'زمن الاستجابة حسب العمر',
     rtIntro: 'مدى سرعة استجابة الأطفال، كنسبة من استجاباتهم، في الألعاب التي تقيسها.',
@@ -1289,7 +1313,7 @@
       return 'نحو ' + (rows >= 1e6 ? I.short(rows / 1e6) + ' مليون صف' : rowsAr(rows)) + ': ' + (pct.charAt(0) === '<' ? 'أقل من ' + pct.slice(1) : 'نحو ' + pct) +
         ' من حصة القراءة المجانية لليوم.';
     },
-    exportStops: 'قد تنفد حصة اليوم في منتصف الطريق، فيعطيك التنزيل الجزء الأول ويكمل غدًا من حيث توقف.',
+    exportStops: 'قد تنفد حصة اليوم في منتصف الطريق، فيعطيك التنزيل الجزء الأول ويكمل غدًا من حيث توقف. والفترة الأقصر أقل كلفة.',
     exportStart: 'نزّل ملفات البحث',
     exportStarting: 'جارٍ البدء…',
     exportCancel: 'أوقف',
@@ -1304,7 +1328,9 @@
     exportAgain: 'حاول مرة أخرى',
     exportCancelled: 'توقف التنزيل، ولم يُحفظ شيء.',
     exportDemo: 'لا تحوي الملفات التجريبية إلا لعب هذا الصباح.',
-    exportResume: function (range, file, day, part) { return 'توقف تنزيل الفترة ' + range + ' في ' + iso(file) + ' يوم ' + day + '. ويكمل الجزء ' + part + ' من هناك.'; },
+    exportResume: function (range, file, day, part) {
+      return 'توقف تنزيل الفترة ' + range + ' في ' + iso(file) + ' يوم ' + day + '. ويكمل الجزء ' + part + ' من هناك، ومعه اللعب منذ ذلك اليوم؛ ويشرح ملف README فيه كيف تُجمع الأجزاء.';
+    },
     exportContinue: function (part) { return 'أكمل: الجزء ' + part; },
     exportForgetPart: 'ابدأ من جديد بدلًا من ذلك',
     sizeMb: function (v) { return v + ' ميغابايت'; },

@@ -169,6 +169,33 @@ test('rankings are deterministic: a number first, then the slug and the id', () 
   assert.deepEqual(grid.rows[2].cells['10-11'], { code: 'few', tries: null }, 'a 2-session group is shown: not enough play yet to judge');
 });
 
+test('a period that reaches back before the update: student counts cover part of it, so no chip or sentence counts children', () => {
+  // The server tells students apart from the update day (factsSince); before it (legacyUntil
+  // and earlier) it kept daily totals only, and those days have no student count.
+  const k = sample();
+  k.games.find(g => g.slug === 'alpha').students = 1;    // the children of the last two days only
+  k.levels[0].students = 0;
+  k.bands[0].students = 2;
+  k.bands[0].games[0].students = 1;
+  k.daily.forEach((d, i) => { d.students = i < 19 ? null : 9; });
+  assert.equal(I.partialStudents(k), false, 'an answer without the update day');
+  for (const [legacyUntil, factsSince, partial] of [['2026-10-19', '2026-10-20', true], ['2026-10-01', '2026-10-01', true], ['2026-09-30', '2026-10-01', false], ['', '2026-07-30', false]]) {
+    const one = { ...k, range: { ...k.range, legacyUntil, factsSince } };
+    assert.equal(I.partialStudents(one), partial, legacyUntil);
+    const p = I.forPeriod(one);
+    if (!partial) { assert.equal(p, one, 'unchanged'); continue; }
+    assert.notEqual(p, one, 'a copy');
+    assert.equal(one.games.find(g => g.slug === 'alpha').students, 1, 'the answer itself is kept');
+    assert.ok(p.games.filter(I.shown).every(g => g.students === null));
+    assert.ok(p.levels.filter(I.shown).every(l => l.students === null));
+    assert.ok(p.bands.filter(I.shown).every(b => b.students === null && b.games.filter(I.shown).every(g => g.students == null)));
+    assert.deepEqual(p.totals, one.totals, 'the totals say whom they count (the page notes the day)');
+    assert.equal(I.favourites(p).rows.find(r => r.slug === 'alpha').small, false, 'no "based on 1 child" for a game opened 120 times');
+    assert.ok(I.insights(p, { lang: 'en' }).every(x => x.students == null), 'no sentence counts children');
+    assert.equal(p.games.find(g => g.suppressed).suppressed, true, 'a group without numbers stays one');
+  }
+});
+
 test('every group is described, even one child, with the small-sample flag', () => {
   // One child played Echo once: it is ranked, judged and named like any other game.
   const one = sample();
@@ -178,6 +205,14 @@ test('every group is described, even one child, with the small-sample flag', () 
   assert.ok(I.favourites(one).rows.some(g => g.slug === 'echo' && g.opens === 1 && g.small === true));
   assert.ok(I.difficultyGrid(one).rows.some(r => r.slug === 'echo' && r.verdict.code === 'few' && r.small === true));
   assert.equal(I.stuckLevels(one, 1).rows.find(l => l.slug === 'echo').small, true);
+  // A level's students in the KPI answer are summed day by day (one child on two days counts
+  // twice), so they never name a number of children: the chip of a level rests on its tries.
+  const days = sample();
+  days.levels.push({ ...level('foxtrot', 'L1', 40, 20), students: 8 }, { ...level('foxtrot', 'L2', 12, 6), students: 3 });
+  const fox = I.stuckLevels(days, 1).rows.filter(l => l.slug === 'foxtrot');
+  assert.deepEqual(fox.map(l => [l.id, l.students, l.small]), [['L1', null, false], ['L2', null, true]]);
+  const said = I.insights(days, { lang: 'en' }).find(x => x.key === 'foxtrot L1');
+  assert.ok(said && said.students === null && !said.small, 'no child count in the sentence');
   assert.equal(I.favouritesByBand(one)[0].small, true, '2 students in the age group');
   assert.equal(I.favouritesByBand(one)[1].band, '10-11', 'an older server\'s group without numbers is left out, not described');
   // The rule: fewer than 5 students or fewer than 20 tries; a count not sent says nothing.
@@ -297,6 +332,16 @@ test('both languages: Arabic sentences are Arabic with Western digits, English o
   assert.equal(I.levelLabel('s4', 'en'), '4×4 board');
   assert.equal(I.levelLabel('cpu-hard', 'en'), 'round “cpu-hard”');
   assert.deepEqual([1, 2, 3, 10, 11, 100, 103, 2.5].map(n => I.arWord(n, ['a', 'b', 'c', 'd'])), ['a', 'b', 'c', 'c', 'd', 'd', 'c', 'd']);
+  // Hundreds and thousands ending in 00, 01 or 02 take the singular genitive (100 طالب), as rowsAr does ("12,000 صف").
+  const students = ['طالب واحد', 'طالبان', 'طلاب', 'طالبًا'];
+  assert.deepEqual([99, 100, 101, 102, 103, 111, 200, 1000, 1002].map(n => I.arWord(n, students)),
+    ['طالبًا', 'طالب', 'طالب', 'طالب', 'طلاب', 'طالبًا', 'طالب', 'طالب', 'طالب']);
+  assert.equal(I.arWord(100, ['صف', 'صفان', 'صفوف', 'صفًّا']), 'صفّ', 'the shadda stays');
+  assert.equal(I.arWord(300, ['رمز', 'رمزان', 'رموز', 'رمزًا مربوطًا']), 'رمز مربوط', 'each word of the phrase');
+  assert.equal(I.arWord(100, ['مرة', 'مرتان', 'مرات', 'مرة']), 'مرة');
+  assert.equal(TEXT.ar.nStudents(100), '100 طالب');
+  assert.equal(TEXT.ar.smallSample(200), 'بناءً على 200 طفل حتى الآن');
+  assert.equal(TEXT.ar.clockPcs(100), '100 جهاز');
   assert.deepEqual(I.duration(15215.8, 'ar'), { value: '254', unit: 'ساعة', text: '254 ساعة' });
   assert.deepEqual(I.duration(270, 'ar'), { value: '4.5', unit: 'ساعة', text: '4.5 ساعة' });
   assert.deepEqual(I.duration(5, 'ar').unit, 'دقائق');

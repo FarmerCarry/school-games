@@ -246,7 +246,8 @@
     var token = state.token;
     var promise = (state.demo ? demoGet(name, q) : request(url, token)).then(function (json) {
       if (!state.demo && token !== state.token) throw new Failure('stale');
-      return json;
+      // A period that reaches back before the update: its groups' student counts are partial.
+      return name === 'kpis' ? I.forPeriod(json) : json;
     });
     state.cache[url] = { gen: state.gen, promise: promise };
     promise.catch(function () { if (state.cache[url] && state.cache[url].promise === promise) delete state.cache[url]; });
@@ -484,6 +485,8 @@
     box.setAttribute('data-route', route.tab);
     var tab = tabOf(route);
     if (!view) { note(box, state.notice || T.loading, state.notice ? 'empty' : null); return; }
+    var cut = cutover();
+    if (cut) note(box, T.cutoverTop(dayText(cut.factsSince, { day: 'numeric', month: 'short', year: 'numeric' })), 'cutover');
     tab.render(ctx, box, view.data);
     renderFooter();
     redrawCharts();
@@ -512,6 +515,15 @@
   function viewKpis() {
     var v = state.views[routeKey(state.route)];
     return v && v.data && v.data.kpis && !v.data.kpis.failed ? v.data.kpis : null;
+  }
+  // The update day, when the period reaches back before it: { legacyUntil, factsSince }, or
+  // null. Up to legacyUntil the server kept milestone 2's daily totals only; students, hours
+  // and the per-child answers (students, game, stats, cohorts) start at factsSince.
+  function cutover() {
+    var r = range(), k = viewKpis(), c = state.settings && state.settings.clock;
+    var src = [k && k.range, c].filter(function (x) { return x && R.isDay(x.legacyUntil); })[0];
+    if (!src || r.from > src.legacyUntil) return null;
+    return { legacyUntil: src.legacyUntil, factsSince: R.isDay(src.factsSince) ? src.factsSince : R.shift(src.legacyUntil, 1) };
   }
 
   // An answer for a password that was signed out meanwhile is ignored.
@@ -812,7 +824,13 @@
     });
     return current;
   }
-  function note(parent, text, cls) { return h('p', { class: 'note' + (cls ? ' ' + cls : '') }, parent, text); }
+  // A chart with nothing to show in a period that reaches back before the update says from
+  // which day it counts, not that nobody played.
+  function note(parent, text, cls) {
+    var cut = text === t().noData && cutover();
+    if (cut) text = t().noDataSince(dayText(cut.factsSince, { day: 'numeric', month: 'short', year: 'numeric' }));
+    return h('p', { class: 'note' + (cls ? ' ' + cls : '') }, parent, text);
+  }
   // The small-sample chip: "based on 2 children" (fewer than 5 students, or 20 tries).
   function chipText(students, tries, long) {
     var T = t(), few = students != null && students < I.T.SMALL_STUDENTS;
@@ -941,7 +959,7 @@
     section: section, tile: tile, link: link, studentLink: studentLink, gameLink: gameLink, missing: missing, has: has,
     draw: draw, icon: icon, sentences: sentences, verdictNode: verdictNode, verdictText: verdictText, legendOf: legendOf, legendList: legendList,
     OUTCOMES: OUTCOMES, ORDINAL: ORDINAL, failureText: failureText, renderView: renderView, refreshView: refreshView,
-    keepFocus: keepFocus, postSettings: postSettings, zonePicker: zonePicker, loadSettings: loadSettings,
+    keepFocus: keepFocus, postSettings: postSettings, zonePicker: zonePicker, loadSettings: loadSettings, cutover: function () { return cutover(); },
     go: function (hash) { location.hash = hash; }
   };
 
@@ -982,14 +1000,16 @@
   function renderTiles(box, k) {
     var T = t(), tot = k && I.shown(k.totals) ? k.totals : {}, st = tot.students || {};
     var dash = '—';
-    tile(box, 'students', T.tileStudents, has(st.active) ? I.int(st.active) : dash, '', T.tileStudentsHint, has(st.active) ? st.active : null);
+    // Before the update the server did not tell students apart: these totals count from then.
+    var since = I.partialStudents(k) && R.isDay(k.range.factsSince) ? T.countedSince(dayText(k.range.factsSince, { day: 'numeric', month: 'short' })) : null;
+    tile(box, 'students', T.tileStudents, has(st.active) ? I.int(st.active) : dash, '', since || T.tileStudentsHint, has(st.active) ? st.active : null);
     var d = has(tot.engagedMinutes) ? I.duration(tot.engagedMinutes, state.lang) : null;
     tile(box, 'playTime', T.tilePlayTime, d ? d.value : dash, d ? d.unit : '', T.tilePlayTimeHint, d ? tot.engagedMinutes : null);
     var q = st.minutesPerStudentDay || {};
     tile(box, 'perStudentDay', T.tilePerStudentDay, has(q.median) ? I.short(q.median) : dash, has(q.median) ? T.minutesUnit : '',
       has(q.p25) && has(q.p75) ? T.tilePerStudentDayHint(I.short(q.p25), I.short(q.p75)) : T.tilePerStudentDayNone, has(q.median) ? q.median : null);
     tile(box, 'sessions', T.tileSessions, has(tot.sessions) ? I.int(tot.sessions) : dash, '', T.tileSessionsHint, has(tot.sessions) ? tot.sessions : null);
-    tile(box, 'newStudents', T.tileNewStudents, has(st.new) ? I.int(st.new) : dash, '', T.tileNewStudentsHint, has(st.new) ? st.new : null);
+    tile(box, 'newStudents', T.tileNewStudents, has(st.new) ? I.int(st.new) : dash, '', since || T.tileNewStudentsHint, has(st.new) ? st.new : null);
     var now = tile(box, 'now', T.tileNow, dash, '', T.tileNowHint, null);
     now.el.id = 'nowTile';
     renderLive();
@@ -1032,7 +1052,10 @@
     var T = t(), sec = section(parent, 'daily', T.dailyTitle);
     var grid = h('div', { class: 'grid-2' }, sec);
     var days = (k.daily || []).filter(Boolean);
-    var perStudent = days.some(function (d) { return has(d.students); });
+    // Students per day when every day has them; the days before the update have none, so a
+    // period that reaches back to them is drawn as play sessions, which every day has.
+    var counted = days.filter(I.shown);
+    var perStudent = counted.length > 0 && counted.every(function (d) { return has(d.students); });
     var tick = function (day) { return days.length <= 7 ? dayText(day, { weekday: 'short', day: 'numeric' }) : shortDay(day); };
     [[perStudent ? 'students' : 'sessions', perStudent ? T.dailyStudents : T.dailySessions, perStudent ? T.studentsCol : T.sessions, 'daily-count'],
       ['engagedMinutes', T.dailyMinutes, T.minutes, 'daily-minutes']].forEach(function (spec) {
@@ -1141,6 +1164,7 @@
     var minutes = groups.some(function (g) { return g.rows.some(function (r) { return r.engagedMinutes != null; }); });
     var c = card(sec, 'age-card', null, T.byAgeSub, true);
     var by = minutes ? choice(c.tools, 'byAge', [{ value: 'minutes', text: T.byMinutes }, { value: 'opens', text: T.byOpens }], 'minutes', T.showBy) : 'opens';
+    c.head.querySelector('.card-sub').textContent = by === 'minutes' ? T.byAgeSubMinutes : T.byAgeSub;
     var val = function (g, r) { return by === 'minutes' ? (g.engagedMinutes ? (r.engagedMinutes || 0) / g.engagedMinutes : 0) : r.share || 0; };
     groups.forEach(function (g) { g.top = g.rows.slice().sort(function (a, b) { return val(g, b) - val(g, a) || b.opens - a.opens; }).slice(0, 5); });
     var max = 0;
@@ -1288,13 +1312,28 @@
       back.rows.map(function (g) { return [gameName(g.slug), I.pct(g.share), I.int(g.opens), I.int(g.opens - g.back)]; }));
     newReturning(sec, 'weeks-card', students);
   }
+  // The charts made from the students answer's weekly minutes (13 whole weeks per child,
+  // ending with the week of the period's end): a period under two weeks would show whole
+  // weeks mostly outside it, and one longer than 13 weeks shows its last 13 only (said in
+  // the card's foot).
+  var WEEKS_MIN_DAYS = 14, WEEKS_KEPT = 13;
+  function weeksShown(c) {
+    var r = range();
+    if (r.days < WEEKS_MIN_DAYS) { note(c.chart, t().weeksNeedDays); return false; }
+    if (r.days > WEEKS_KEPT * 7) note(c.foot, t().weeksLast13);
+    return true;
+  }
   // New and returning students per week, from the students answer.
   function newReturning(parent, id, students) {
     var T = t(), c = card(parent, id, T.weeksTitle, T.weeksSub, true);
     if (failed(students)) { missing(c.chart, students); return c; }
     var r = range();
     var weeks = R.newReturning(students.students, { from: r.from, to: r.to, weekStart: weekStart() });
-    if (weeks.length < 2) { note(c.chart, T.weeksNeedDays); }
+    // The students answer counts from the update day: the weeks before it would read 0.
+    var cut = cutover();
+    if (cut) weeks = weeks.filter(function (w) { return R.shift(w.week, 6) >= cut.factsSince; });
+    if (!weeksShown(c)) weeks = [];
+    else if (weeks.length < (cut ? 1 : 2)) { note(c.chart, cut ? T.noData : T.weeksNeedDays); }
     else {
       legendList(c.chart, T.weeksTitle, [[T.returningStudents, ORDINAL[0]], [T.newStudentsLabel, ORDINAL[1]]]);
       var plot = h('div', { class: 'plot' }, c.chart);
@@ -1314,6 +1353,7 @@
     return c;
   }
   ctx.newReturning = newReturning;
+  ctx.weeksShown = weeksShown;
   ctx.whenHeatmap = whenHeatmap;
 
   // PC health summary: the headline tiles and the games with a problem; each PC on the PCs tab.

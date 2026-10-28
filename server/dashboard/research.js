@@ -248,8 +248,10 @@
   }
   // Quantile q (0..1) of a bucketed distribution, linear inside the bucket. The last
   // bucket has no upper bound: a quantile that falls in it is its lower bound, and
-  // `open` says so ("45 minutes or more").
-  function quantile(hist, q) {
+  // `open` says so ("45 minutes or more"). With a metric that counts (games per session,
+  // attempts, losses in a row, tiers: not minutes or seconds), the bucket that holds the
+  // quantile instead, with its label ("3", "6–7"): a session never opens 3.7 games.
+  function quantile(hist, q, metric) {
     const counts = list(hist).map(h => num(h.n) || 0), totalN = counts.reduce((a, b) => a + b, 0);
     if (!totalN) return null;
     const target = q * totalN;
@@ -258,6 +260,7 @@
       if (!counts[i]) continue;
       if (seen + counts[i] >= target || i === counts.length - 1) {
         const lo = hist[i].k, hi = i + 1 < hist.length ? hist[i + 1].k : null;
+        if (metric && BUCKETS[metric] && !CONTINUOUS.has(metric)) return { value: lo, open: hi === null, label: bucketLabel(metric, lo) };
         if (hi === null) return { value: lo, open: true };
         return { value: lo + (hi - lo) * Math.max(0, Math.min(1, (target - seen) / counts[i])), open: false };
       }
@@ -353,12 +356,14 @@
     }
     return out.filter(w => shift(w.week, 6) >= o.from && w.week <= o.to);
   }
+  // Which of the 13 weekly slots (the weeks ending with the week of `to`) overlap [from, to].
+  function weeksKept(o) {
+    return weeksEnding(o.to, 13, o.weekStart).map(w => shift(w, 6) >= o.from && w <= o.to);
+  }
   // Each student-week with play, from the weekly minutes (the histogram of minutes per
   // student per week), limited to the weeks that overlap [from, to].
   function studentWeeks(students, opts) {
-    const o = opts || {};
-    const weeks = weeksEnding(o.to, 13, o.weekStart);
-    const keep = weeks.map(w => shift(w, 6) >= o.from && w <= o.to);
+    const keep = weeksKept(opts || {});
     const out = [];
     for (const s of list(students)) list(s.weekly).slice(-13).forEach((m, i) => { if (keep[i] && num(m) > 0) out.push(m); });
     return out;
@@ -374,10 +379,13 @@
     }
     return out;
   }
-  // Days played per week, on average over the weeks a student played: [1..7].
-  function daysPerWeek(students) {
+  // Days played per week, on average over the weeks a student played: [1..7]. days counts
+  // the days of [from, to], so only the weeks that overlap it count (opts: { from, to,
+  // weekStart }; without them every one of the 13 weeks).
+  function daysPerWeek(students, opts) {
+    const o = opts || {}, keep = isDay(o.from) && isDay(o.to) ? weeksKept(o) : null;
     return list(students).map(s => {
-      const weeks = list(s.weekly).filter(m => num(m) > 0).length;
+      const weeks = list(s.weekly).slice(-13).filter((m, i) => num(m) > 0 && (!keep || keep[i])).length;
       return weeks ? Math.min(7, num(s.days) / weeks) : null;
     }).filter(v => v !== null && v > 0);
   }
@@ -456,7 +464,7 @@
   }
 
   // ---- first wins --------------------------------------------------------------------------------
-  // The game answer's firstWin rows, hardest first: the most tries before a first win
+  // The game answer's firstWin rows, hardest first: the most tries to a first win (the winning try included)
   // (median, then p75), then the share who never won.
   function hardestLevels(firstWin) {
     return list(firstWin).filter(f => f && f.id != null).map(f => {

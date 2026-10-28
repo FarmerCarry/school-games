@@ -4,7 +4,7 @@
  * reaction time). Data: the r_stat rows of GET /v1/admin/stats (attempt, fatigue,
  * persist), /v1/admin/kpis (the difficulty grid, reaction times per age
  * group) and /v1/admin/game for the games shown (paired same-student growth, tries
- * before the first win). Comparisons are associations: children choose their games.
+ * to a first win). Comparisons are associations: children choose their games.
  */
 (function () {
   'use strict';
@@ -144,31 +144,38 @@
       list.map(function (g) { return [ctx.gameName(g.slug), I.pct(g.share), I.pct(g.again), I.int(g.n), g.retryGap == null ? '—' : T.secondsValue(I.short(g.retryGap))]; }));
   }
 
-  // The hardest levels: the most tries before a first win, across the games shown.
+  // The hardest levels across the games shown: those nobody has won yet first (the most
+  // children who tried first), then the most tries to a first win.
   function hardest(ctx, parent, data) {
     var T = ctx.t(), C = ctx.C, I = ctx.I, R = ctx.R, lang = ctx.lang();
     var list = [];
     data.targets.forEach(function (slug) {
       var game = data.games[slug];
-      if (!ctx.failed(game)) R.hardestLevels(game.firstWin).forEach(function (f) { if (f.median != null) list.push(Object.assign({ slug: slug }, f)); });
+      if (!ctx.failed(game)) R.hardestLevels(game.firstWin).forEach(function (f) {
+        if (f.median != null || (f.never > 0 && tabs.shared.winnable(data.kpis, slug, f.id))) list.push(Object.assign({ slug: slug }, f));
+      });
     });
-    list.sort(function (a, b) { return b.median - a.median || (b.p75 || 0) - (a.p75 || 0) || (a.slug < b.slug ? -1 : 1); });
+    list.sort(function (a, b) {
+      return (b.median == null) - (a.median == null) || (a.median == null ? (b.neverShare || 0) - (a.neverShare || 0) || b.never - a.never : 0) ||
+        (b.median || 0) - (a.median || 0) || (b.p75 || 0) - (a.p75 || 0) || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0) ||
+        String(a.id).localeCompare(String(b.id), 'en', { numeric: true });
+    });
     var sec = ctx.section(parent, 'learning-hardest', T.hardestTitle, T.hardestIntro);
     var c = ctx.card(sec, 'hardest-card', null, null, true);
-    var shown = list.slice(0, 10), max = shown.length ? shown[0].p75 || shown[0].median || 1 : 1;
+    var shown = list.slice(0, 10), max = Math.max.apply(null, shown.map(function (f) { return f.p75 || f.median || 0; }).concat([1]));
     var label = function (f) { return ctx.gameName(f.slug) + ' · ' + I.levelLabel(f.id, lang); };
     if (!shown.length) ctx.note(c.chart, T.hardestNone);
     else ctx.draw(function () {
       if (c.chart.hidden) return;
       C.barList(c.chart, { name: T.hardestTitle, rtl: ctx.rtl(), color: 'var(--s1)', max: max, rows: shown.map(function (f) {
-        return { label: label(f), value: f.median, valueText: T.nTries(Math.round(f.median)), sub: T.firstWinSubRow(f.p75 == null ? '—' : I.short(f.p75), f.never),
+        return { label: label(f), value: f.median || 0, valueText: f.median == null ? T.noWinYet : T.nTries(Math.round(f.median)), sub: T.firstWinSubRow(f.p75 == null ? '—' : I.short(f.p75), f.never),
           chip: f.small ? ctx.chipText(f.students, null) : null,
-          tip: { title: label(f), note: f.small ? ctx.chipText(f.students, null, true) : null, rows: [{ value: I.short(f.median), label: T.medianTries, color: 'var(--s1)', swatch: 'bar' },
-            { value: f.p75 == null ? '—' : I.short(f.p75), label: T.p75Tries }, { value: T.nStudents(f.students) }] } };
+          tip: { title: label(f), note: f.small ? ctx.chipText(f.students, null, true) : null, rows: [{ value: f.median == null ? '—' : I.short(f.median), label: T.medianTries, color: 'var(--s1)', swatch: 'bar' },
+            { value: f.p75 == null ? '—' : I.short(f.p75), label: T.p75Tries }, { value: T.nStudents(f.students) }, { value: I.int(f.never), label: T.neverWon }] } };
       }) });
     });
     C.table(c.table, T.hardestTitle, [{ label: T.game }, { label: T.level }, { label: T.studentsCol, num: true }, { label: T.medianTries, num: true }, { label: T.p75Tries, num: true }, { label: T.neverWon, num: true }],
-      list.map(function (f) { return [ctx.gameName(f.slug), I.levelLabel(f.id, lang), I.int(f.students), I.short(f.median), f.p75 == null ? '—' : I.short(f.p75), I.int(f.never)]; }));
+      list.map(function (f) { return [ctx.gameName(f.slug), I.levelLabel(f.id, lang), I.int(f.students), f.median == null ? '—' : I.short(f.median), f.p75 == null ? '—' : I.short(f.p75), I.int(f.never)]; }));
   }
 
   // Reaction time by age: the share of reactions in each time band, one panel per age group.

@@ -408,8 +408,14 @@
     en.push('SCHOOL GAMES: RESEARCH FILES', '============================', '');
     en.push('Play on the school games site from ' + i.from + ' to ' + i.to + ', on the school’s clock (' + (i.tz || 'UTC') + '), exported ' + (i.exported || '') + '.');
     if (i.sample) en.push('These files are the dashboard’s SAMPLE DATA: made up to show the format. None of it comes from real children.');
-    if (i.part > 1) en.push('This is part ' + i.part + ' of the download: each file continues where part ' + (i.part - 1) + ' stopped. Add the parts’ rows together; no row is in two parts.');
-    if (i.stopped) en.push('This part stopped early, in ' + i.stopped.file + '.csv (today’s free reading allowance ran out). The next part continues from there.');
+    if (i.part > 1) {
+      en.push('This is part ' + i.part + ' of the download: each file continues where part ' + (i.part - 1) + ' stopped. Add the parts’ rows together; no row is in two parts.',
+        'The parts were made on different days: play that reached the server in between is in the later parts only, so they can hold visits, rounds and',
+        'events of sessions that are in no sessions.csv, and children missing from students.csv. Keep the rows whose session is in sessions.csv, or download',
+        'a period that ends yesterday or earlier in one go.');
+    }
+    if (i.stopped) en.push('This part stopped early, in ' + i.stopped.file + '.csv (today’s free reading allowance ran out). The next part continues from there;',
+      'play that reaches the server before then will be in the next part only.');
     en.push('', 'FILES', '-----');
     files.forEach(function (f) { var one = oneOf(f.name); en.push(f.name + ': ' + rowsOf(f) + (one ? ', one per ' + one[0] : '')); });
     en.push('README.txt: this file. labels.sps: SPSS labels. load.R: an R loader.', '');
@@ -449,8 +455,13 @@
     ar.push('ألعاب الفسحة: ملفات البحث', '========================', '');
     ar.push('اللعب على موقع ألعاب المدرسة من ' + i.from + ' إلى ' + i.to + '، بحسب ساعة المدرسة (' + (i.tz || 'UTC') + ')، صُدّرت في ' + (i.exported || '') + '.');
     if (i.sample) ar.push('هذه الملفات هي البيانات التجريبية للوحة المتابعة: أُعدّت لعرض الشكل فقط، ولا شيء منها من أطفال حقيقيين.');
-    if (i.part > 1) ar.push('هذا هو الجزء ' + i.part + ' من التنزيل: يكمل كل ملف من حيث توقف الجزء ' + (i.part - 1) + '. اجمع صفوف الأجزاء معًا، فلا يتكرر صف في جزأين.');
-    if (i.stopped) ar.push('توقف هذا الجزء مبكرًا في ' + i.stopped.file + '.csv (نفدت حصة القراءة المجانية لليوم)، ويكمل الجزء التالي من هناك.');
+    if (i.part > 1) {
+      ar.push('هذا هو الجزء ' + i.part + ' من التنزيل: يكمل كل ملف من حيث توقف الجزء ' + (i.part - 1) + '. اجمع صفوف الأجزاء معًا، فلا يتكرر صف في جزأين.',
+        'صُنعت الأجزاء في أيام مختلفة: اللعب الذي وصل إلى الخادم بينها موجود في الأجزاء اللاحقة وحدها، فقد تحوي زيارات وجولات وأحداثًا لجلسات',
+        'لا توجد في أي ملف sessions.csv، ويغيب أطفالها عن students.csv. أبقِ الصفوف التي توجد جلستها في sessions.csv، أو نزّل دفعة واحدة فترةً تنتهي أمس أو قبله.');
+    }
+    if (i.stopped) ar.push('توقف هذا الجزء مبكرًا في ' + i.stopped.file + '.csv (نفدت حصة القراءة المجانية لليوم)، ويكمل الجزء التالي من هناك؛',
+      'واللعب الذي يصل إلى الخادم قبل ذلك سيكون في الجزء التالي وحده.');
     ar.push('', 'الملفات', '-------');
     files.forEach(function (f) { var one = oneOf(f.name); ar.push(f.name + ': ' + arRows(f.rows) + (one ? '، صف لكل ' + one[1] : '')); });
     ar.push('README.txt: هذا الملف. labels.sps: تسميات SPSS. load.R: برنامج تحميل للغة R.', '');

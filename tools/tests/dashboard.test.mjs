@@ -383,9 +383,11 @@ test('the newer server\'s age-group win rates and play time are used when they a
   }
   await page.click('#age-card .table-toggle');
   assert.deepEqual(await page.locator('#age-card .table-host thead th').allTextContents(), ['Age group', 'Game', 'Share of play time', 'Games opened', 'Play time']);
+  assert.match(await page.locator('#age-card .card-sub').textContent(), /share of that group’s play time/, 'the subtitle names the measure shown');
   // The switch: by opens, as a share of the group's game opens.
   await page.click('#age-card button[data-value="opens"]');
   assert.deepEqual(await page.locator('#age-card .table-host thead th').allTextContents(), ['Age group', 'Game', 'Share of opens', 'Games opened', 'Play time']);
+  assert.match(await page.locator('#age-card .card-sub').textContent(), /share of that group’s game opens/);
   await s.check();
 });
 
@@ -657,6 +659,59 @@ test('a day of one child shows its number; days an older server left out break t
   await waitForKpis(s, n + 1);
   const ticks = await page.locator('#daily-count svg.chart .grid .tick').allTextContents();
   assert.ok(ticks.length >= 2 && ticks.every(v => /^\d+$/.test(v)), ticks.join(' '));
+  await s.check();
+});
+
+test('a period that reaches back before the update: play sessions per day, no child counted from part of it, and the day said', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  // The updated server on a milestone-2 database: the days up to legacyUntil come from daily
+  // totals without students, and every student count starts at factsSince.
+  let top = null, factsSince = null;
+  s.mode.edit = k => {
+    factsSince = k.daily[k.daily.length - 10].day;
+    Object.assign(k.range, { legacyUntil: dayBefore(factsSince, 1), factsSince });
+    for (const d of k.daily) if (d.day < factsSince) Object.assign(d, { students: null, guestMinutes: null });
+    top = k.games.filter(g => !g.suppressed).sort((a, b) => b.opens - a.opens || (a.slug < b.slug ? -1 : 1))[0];
+    top.students = 1;   // the children of the last days only
+    for (const l of k.levels) if (l.slug === top.slug) l.students = 0;
+    return k;
+  };
+  await page.goto(site.origin + '/');
+  await waitForKpis(s, 1);
+  const k = s.lastKpis().json;
+  const since = new Date(factsSince + 'T00:00:00Z').toLocaleDateString('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' });
+  assert.match(await page.locator('#view > p.cutover').textContent(), new RegExp('reaches back before the update of ' + since + '.*start on ' + since));
+  // Students per day would read 0 before the update: play sessions per day instead, which every day has.
+  assert.equal(await page.locator('#daily-count-title').textContent(), 'Play sessions per day');
+  await page.click('#daily-count .table-toggle');
+  assert.deepEqual(await page.locator('#daily-count .table-host tbody td').allTextContents(), k.daily.slice().reverse().map(d => d.sessions.toLocaleString('en-US')));
+  // No chip or sentence counts the children of part of the period.
+  assert.doesNotMatch(await page.locator('#fav-card').textContent(), /based on/);
+  assert.doesNotMatch(await page.locator('#insights').textContent(), /based on \d+ child/);
+  assert.match(await page.locator('.tile[data-key="students"] .tile-hint').textContent(), /^Counted from \d+ \w+, the update day$/);
+  // The game page: its tiles count the whole period, its per-child answer starts at the update.
+  await page.goto(site.origin + '/#/game/' + top.slug);
+  await waitForView(page, 'game');
+  assert.equal(await tileText(page, 'students'), '—');
+  assert.ok(await page.locator('#view > p.cutover').isVisible());
+  await page.click('#game-daily .table-toggle');
+  assert.equal(await page.locator('#game-daily .table-host tbody tr').count(), 10, 'the days since the update');
+  if (await page.locator('#funnel-card .card-sub').count()) assert.equal(await page.locator('#funnel-card .card-sub').textContent(), 'Tries of each level, in level order.');
+  assert.doesNotMatch(await page.locator('#game-who').textContent(), /based on 0 children/, 'an age group nobody counted has no sample to be based on');
+  // Habits: the weeks of new and returning students start with the update's week.
+  await page.goto(site.origin + '/#/habits');
+  await waitForView(page, 'habits');
+  await page.click('#habits-weeks .table-toggle');
+  const weeks = await page.locator('#habits-weeks .table-host tbody th').allTextContents();
+  assert.ok(weeks.length >= 1 && weeks.length <= 2, weeks.join(' | '));
+  // The update day is not in the period: nothing of it.
+  s.mode.edit = null;
+  await page.goto(site.origin + '/#/overview');
+  await page.reload();
+  await waitForView(page, 'overview');
+  assert.equal(await page.locator('.cutover').count(), 0);
+  assert.equal(await page.locator('#daily-count-title').textContent(), 'Students per day');
   await s.check();
 });
 
@@ -961,6 +1016,113 @@ test('the Students tab: the code search, sorting both ways, pages of 50, and a s
   await s.check();
 });
 
+test('a student\'s "Getting better?": weeks from every round of the period, no sentence about a child doing worse, and the latest rounds said so', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  const ws = (await (await fetch(ingest + '/v1/admin/settings', { headers: { Authorization: 'Bearer ' + TOKEN } })).json()).clock.weekStart;
+  const day = n => dayBefore(today(), n);
+  const round = (slug, attempt, code, d, more = {}) => ({ day: d, time: '10:00', slug, id: 'L1', code, ms: 30000, score: null, tier: null, dda: null,
+    hits: 0, misses: 0, rtMean: null, attempt, minIntoSession: 1, ...more });
+  // Connect 4: all 9 rounds; won 1 of 2 decided in the first third, 0 of 1 in the latest.
+  const c4 = ['w', 'l', 'd', 'w', 'w', 'l', 'l', 'q', 'd'].map((code, i) => round('connect-four', i + 1, code, day(20 - i)));
+  // Tank Splat: all 9 rounds, accuracy rising.
+  const ts = Array.from({ length: 9 }, (_, i) => round('tank-splat', i + 1, 'w', day(20 - i), { hits: 2 + i, misses: 8 - i }));
+  // Bubble Bop: 30 rounds over the period, the server listed the latest 9 (its rounds are the latest ones only).
+  const bubble = Array.from({ length: 30 }, (_, i) => round('bubble-bop', i + 1, i % 3 ? 'w' : 'l', day(29 - i), { hits: 5, misses: 5 }));
+  const listed = c4.concat(ts, bubble.slice(-9));
+  const sums = (slug, list) => ({ slug, minutes: list.length, rounds: list.length, w: list.filter(x => x.code === 'w').length, l: list.filter(x => x.code === 'l').length,
+    d: list.filter(x => x.code === 'd').length, e: 0, q: list.filter(x => x.code === 'q').length, hits: list.reduce((a, x) => a + x.hits, 0),
+    misses: list.reduce((a, x) => a + x.misses, 0), rtMean: null, bestScore: null, avgScore: null, ddaMean: null, hearts: 0 });
+  const weekly = [];
+  for (const x of c4.concat(ts, bubble)) {
+    const week = R.weekOf(x.day, ws);
+    let w = weekly.find(y => y.week === week && y.slug === x.slug);
+    if (!w) weekly.push(w = { week, slug: x.slug, rounds: 0, w: 0, l: 0, hits: 0, misses: 0, rtSum: 0, rtN: 0, scoreSum: 0, scoreN: 0, ddaSum: 0, ddaN: 0 });
+    w.rounds++; w.w += +(x.code === 'w'); w.l += +(x.code === 'l'); w.hits += x.hits; w.misses += x.misses;
+  }
+  const u = 'abcdef012345';
+  const answer = { v: 1, range: { from: day(29), to: day(0), days: 30, band: 'all' },
+    student: { u, label: 'ABCD', kind: 'profile', band: '8-9', bandFirst: '8-9', firstDay: day(29), lastDay: day(0), profileMadeDay: day(29), knownBefore: false,
+      removed: null, pcs: ['PC01'], linked: [] },
+    days: Array.from({ length: 30 }, (_, i) => ({ day: day(29 - i), sessions: 1, minutes: 5, opens: 1, rounds: 1, w: 1, l: 0, q: 0 })),
+    hours: Array(24).fill(0), games: [sums('bubble-bop', bubble), sums('connect-four', c4), sums('tank-splat', ts)], weekly,
+    rounds: listed.slice().reverse(), sessions: [], persist: { same: 0, level: 0, game: 0, stop: 0 } };
+  s.mode.stub = { '/v1/admin/student': () => [200, answer] };
+  await page.goto(site.origin + '/#/student/' + u);
+  await waitForView(page, 'student');
+  const notes = await page.locator('#better-card .panel').evaluateAll(ps => ps.map(p => [p.querySelector('.panel-title').textContent,
+    [...p.querySelectorAll(':scope > .note')].map(n => n.textContent).join(' ')]));
+  assert.deepEqual(notes.map(n => n[0]), ['bubble-bop', 'connect-four', 'tank-splat'].map(nameOf('en')));
+  assert.equal(notes[0][1], '', 'Bubble Bop: its first tries are not in the latest rounds');
+  assert.equal(notes[1][1], '', 'no sentence says a child did worse');
+  assert.match(notes[2][1], new RegExp('^' + nameOf('en')('tank-splat') + ': accuracy rose from \\d+% in the first tries to \\d+% in the latest\\. based on 3 tries$'));
+  assert.equal(await page.locator('#better-card .panel-head .chip').count(), 0, 'the chip is the sentence\'s, not the panel\'s');
+  // By week: every round of the period (the weekly sums), not only the listed ones.
+  await page.click('#better-card .table-toggle');
+  const rows = await page.locator('#better-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
+  assert.equal(rows.filter(r => r[0] === nameOf('en')('bubble-bop')).reduce((a, r) => a + Number(r[4]), 0), 30);
+  // By attempt: the listed rounds, and the card says they are the latest.
+  await page.click('#better-card button[data-value="attempt"]');
+  assert.match(await page.locator('#better-card .card-foot').textContent(), /latest 27 rounds/);
+  assert.match(await page.locator('#csvBtn').textContent(), /latest 27 rounds/);
+  const [file] = await Promise.all([page.waitForEvent('download'), page.click('#csvBtn')]);
+  assert.match(file.suggestedFilename(), /^student-abcd_latest27_\d{4}-\d\d-\d\d_\d{4}-\d\d-\d\d\.csv$/);
+  await s.check();
+});
+
+test('weekly charts: whole weeks only for a period of two weeks or more, and the last 13 weeks said so', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  const WEEKLY = { students: ['week-minutes', 'week-days'], overview: ['weeks-card'], habits: ['habits-weeks'] };
+  // The remembered period, then each tab from a fresh load.
+  const visit = async (period, check) => {
+    await page.goto(site.origin + '/');
+    await page.evaluate(p => localStorage.setItem('sg:dash:period', p), period);
+    for (const [tab, ids] of Object.entries(WEEKLY)) {
+      await page.goto(site.origin + '/#/' + tab);
+      await page.reload();
+      await waitForView(page, tab);
+      for (const id of ids) await check(id);
+    }
+  };
+  // Today, or 7 days: a student's weekly minutes are whole weeks, mostly outside the period.
+  for (const period of ['1', '7']) {
+    await visit(period, async id => {
+      assert.match(await page.locator(`#${id} .chart-host`).textContent(), /Choose 30 or 90 days above to see the weeks/, period + ' ' + id);
+      assert.equal(await page.locator(`#${id} svg`).count(), 0, period + ' ' + id);
+    });
+  }
+  // 120 days: the students answer has 13 weeks per child, so these charts show the last 13.
+  await visit('custom:' + dayBefore(today(), 119) + ':' + today(), async id => {
+    assert.match(await page.locator(`#${id} .card-foot`).textContent(), /the last 13 weeks of the period/, id);
+  });
+  await visit('30', async id => {
+    assert.doesNotMatch(await page.locator(`#${id}`).textContent(), /last 13 weeks|Choose 30/, id);
+    assert.equal(await page.locator(`#${id} svg`).count(), 1, id);
+  });
+  await s.check();
+});
+
+test('the cohort legend tells a week at 0% from a week not reached yet', async t => {
+  const s = await open(t);
+  const { page } = s;
+  for (const [route, id] of [['students', 'cohort-card'], ['habits', 'habits-cohorts']]) {
+    await page.goto(site.origin + '/?demo#/' + route);
+    await waitForView(page, route);
+    const looks = page.locator(`#${id}`).evaluate(card => {
+      const bg = el => el && getComputedStyle(el).backgroundColor + ' ' + getComputedStyle(el).boxShadow;
+      const swatch = text => [...card.querySelectorAll('.hm-legend .hm-legend-text')].find(x => x.textContent === text)?.previousElementSibling;
+      return { zeroCell: bg(card.querySelector('.hm-cell.q0:not(.is-none)')), noneCell: bg(card.querySelector('.hm-cell.is-none')),
+        zeroSwatch: bg(swatch('0%')), noneSwatch: bg(swatch('Not reached yet')) };
+    });
+    const x = await looks;
+    assert.ok(x.zeroCell && x.noneCell && x.zeroCell !== x.noneCell, route + ': the sample has both kinds of cell');
+    assert.equal(x.noneSwatch, x.noneCell, route + ': "Not reached yet" looks like a week not reached yet');
+    assert.equal(x.zeroSwatch, x.zeroCell, route + ': "0%" looks like a week at 0%');
+  }
+  await s.check();
+});
+
 test('a student\'s page: linking and forgetting ask twice before anything is sent; the CSV file', async t => {
   const s = await open(t, { token: TOKEN });
   const { page } = s;
@@ -978,6 +1140,16 @@ test('a student\'s page: linking and forgetting ask twice before anything is sen
   const own = s.api.find(e => e.path === '/v1/admin/student');
   assert.equal(own.search.get('u'), me);
   assert.equal(own.search.get('to'), s.today());
+  // After a loss: this child's losses next to the school's losses (not its losses and quits).
+  const school = s.api.find(e => e.path === '/v1/admin/stats' && e.search.get('metrics') === 'persist').json;
+  const lost = R.persist(R.statRows(school), { codes: ['l'] });
+  assert.ok(lost.n > 0 && lost.n < R.persist(R.statRows(school)).n, 'the school has losses and quits');
+  await page.click('#after-card .table-toggle');
+  const after = await page.locator('#after-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
+  assert.deepEqual(after.map(r => r.at(-1)), [own.json.persist.same + own.json.persist.level + own.json.persist.game + own.json.persist.stop, lost.n]
+    .map(n => n.toLocaleString('en-US')));
+  assert.deepEqual(after[1].slice(1, 5), R.PERSIST.map(k => I.pct(lost.shares[k])));
+  assert.doesNotMatch(await page.locator('#student-after .section-intro').textContent(), /left/);
   // Link: find the other code, pick it, confirm, confirm again.
   await page.click('#linkBtn');
   await page.locator('#linkSearch').pressSequentially(other.label);
@@ -1064,6 +1236,17 @@ test('the Games tab: a card per game, a game\'s page, and the game picker', asyn
     assert.equal(await page.locator('#' + id).count(), 1, id);
   }
   assert.match(await page.locator('#game-score').textContent(), /The score here is the stars of a finished level/);
+  // How far children get: the children who played each level (the game answer's first-win
+  // rows count each child once), never more than played the game.
+  const who = Object.fromEntries(call.json.firstWin.map(f => [f.id, f.students]));
+  const levels = k.levels.filter(l => l.slug === 'bubble-bop').sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
+  assert.ok(levels.length >= 2 && levels.every(l => who[l.id] != null));
+  await page.click('#funnel-card .table-toggle');
+  const funnel = await page.locator('#funnel-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [tr.children[0].textContent, tr.children[1].textContent]));
+  assert.deepEqual(funnel, levels.map(l => [I.levelLabel(l.id, 'en'), who[l.id].toLocaleString('en-US')]));
+  const players = k.games.find(g => g.slug === 'bubble-bop').students;
+  assert.ok(levels.every(l => who[l.id] <= players), 'a level never has more children than the game');
+  assert.match(await page.locator('#funnel-card .card-sub').textContent(), /Students who played each level/);
   // Only the measures this game reports are offered.
   const NAMES = { accuracy: 'Accuracy', reaction: 'Reaction time', winRate: 'Won (of finished)', score: 'Average score', timeToWin: 'Time to win' };
   const reported = R.measuresOf(R.pick(R.statRows(call.json.stats), 'attempt')).filter(m => NAMES[m]).map(m => NAMES[m]);
@@ -1076,6 +1259,23 @@ test('the Games tab: a card per game, a game\'s page, and the game picker', asyn
   await s.check();
 });
 
+test('a game\'s levels in the sample: how each level\'s rounds end has its table, with every ending', async t => {
+  const s = await open(t);
+  const { page } = s;
+  await page.goto(site.origin + '/?demo#/game/dino-3d');
+  await waitForView(page, 'game');
+  const k = demoFile('kpis-30-all.json');
+  const levels = k.levels.filter(l => l.slug === 'dino-3d').sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
+  await page.click('#level-outcomes .table-toggle');
+  assert.deepEqual(await page.locator('#level-outcomes .table-host thead th').allTextContents(), ['Level', 'Won', 'Lost', 'Left unfinished', 'Other ending', 'Tries']);
+  const rows = await page.locator('#level-outcomes .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
+  assert.deepEqual(rows, levels.map(l => {
+    const c = l.codes, parts = [c.w, c.l, c.q, c.d + c.e], all = parts.reduce((a, b) => a + b, 0);
+    return [I.levelLabel(l.id, 'en')].concat(parts.map(v => all ? I.pct(v / all) : '—'), [l.starts.toLocaleString('en-US')]);
+  }));
+  await s.check();
+});
+
 test('the Learning tab: one game or every measured game, and the paired same-child comparison', async t => {
   const s = await open(t);
   const { page } = s;
@@ -1084,11 +1284,44 @@ test('the Learning tab: one game or every measured game, and the paired same-chi
   assert.match(await page.locator('#learning-intro').textContent(), /measured in 3 games so far/);
   assert.equal(await page.locator('#learning-growth .card').count(), 3, 'every measured game');
   assert.ok(await page.locator('#learning-growth .dumbbell .mark').count() >= 3);
+  // A group of fewer than 5 children carries its chip at desktop width too, not only on a phone.
+  const marks = await page.locator('#learning-growth .dumbbell .mark').evaluateAll(gs => gs.map(g => ({
+    small: !!g.querySelector('.bar-label.is-small'), text: g.textContent })));
+  assert.ok(marks.some(m => m.small), 'the sample has a small group');
+  for (const m of marks) assert.equal(/based on \d+ child/.test(m.text), m.small, m.text);
   assert.match(await page.locator('#footNotes').textContent(), /Charts include play up to last night/);
   await page.selectOption('#gamePick', 'road-hopper');
   await page.waitForFunction(() => document.querySelectorAll('#learning-growth .card').length === 1 && !document.getElementById('dash').classList.contains('is-loading'));
   assert.match(await page.locator('#learning-growth').textContent(), /Road Hopper/);
   assert.equal(await page.locator('#learning-diff .diff-row[data-slug]').count(), 1, 'the difficulty of that game only');
+  await s.check();
+});
+
+test('tries to a first win include the winning try; the hardest levels start with one nobody has won, never an endless mode', async t => {
+  const s = await open(t);
+  const { page } = s;
+  await page.goto(site.origin + '/?demo#/game/dino-3d');
+  await waitForView(page, 'game');
+  assert.equal(await page.locator('#first-win-title').textContent(), 'Tries to a first win');
+  assert.match(await page.locator('#first-win .card-sub').textContent(), /the winning try included/);
+  await page.goto(site.origin + '/?demo#/game/rail-rush');
+  await waitForView(page, 'game');
+  assert.equal(await page.locator('#first-win').count(), 0, 'an endless mode has no first win to wait for');
+  await page.goto(site.origin + '/?demo#/learning');
+  await waitForView(page, 'learning');
+  await page.selectOption('#gamePick', 'dino-3d');
+  await page.waitForFunction(() => document.querySelectorAll('#learning-growth .card').length === 1 && !document.getElementById('dash').classList.contains('is-loading'));
+  assert.match(await page.locator('#learning-hardest .section-intro').textContent(), /tries to a first win/i);
+  const never = demoFile('game-dino-3d.json').firstWin.filter(f => f.median == null);
+  assert.deepEqual(never.map(f => f.id), ['L8'], 'the sample has a level nobody has won');
+  await page.click('#hardest-card .table-toggle');
+  const rows = await page.locator('#hardest-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
+  assert.deepEqual(rows[0].slice(1, 4), ['level 8', '1', '—'], 'never won: first, with no median');
+  assert.equal(rows.length, demoFile('game-dino-3d.json').firstWin.length, 'every level of the game');
+  // An endless mode is never won by design: it is no hard level.
+  await page.selectOption('#gamePick', 'rail-rush');
+  await page.waitForFunction(() => /Rail/.test(document.getElementById('learning-growth').textContent) && !document.getElementById('dash').classList.contains('is-loading'));
+  assert.equal(await page.locator('#hardest-card .table-host tbody tr').count(), 0);
   await s.check();
 });
 
@@ -1190,6 +1423,7 @@ test('the Data tab: the cost first; the reading allowance stops part 1, and part
   assert.equal(one.files['events.csv'], BOM + D.header('events') + '\n', 'events stopped before its first page');
   assert.equal(one.files['pcs.csv'], undefined, 'the files after the stop wait for part 2');
   assert.match(one.files['README.txt'], /stopped early, in events\.csv/);
+  assert.match(one.files['README.txt'], /will be in the next part only/, 'play after part 1 comes in part 2');
   const saved = JSON.parse(await page.evaluate(() => localStorage.getItem('sg:dash:export')));
   assert.deepEqual([saved.part, saved.file, saved.after, saved.from, saved.to], [2, 'events', null, from, to]);
   // Tomorrow (here: a reload), part 2 starts where part 1 stopped.
@@ -1203,6 +1437,7 @@ test('the Data tab: the cost first; the reading allowance stops part 1, and part
     assert.equal(two.files[f + '.csv'], BOM + D.header(f) + '\n' + await serverLines(f, from, to), f);
   }
   assert.match(two.files['README.txt'], /This is part 2 of the download/);
+  assert.match(two.files['README.txt'], /The parts were made on different days/);
   assert.equal(await page.evaluate(() => localStorage.getItem('sg:dash:export')), null, 'done: nothing left to continue');
   assert.equal(await page.locator('#exportResume').count(), 0);
   await s.check();

@@ -78,8 +78,8 @@
       if (c.chart.hidden) return;
       C.columns(c.chart, { name: title, rtl: ctx.rtl(), color: 'var(--s1)', keysHint: T.keysColumns, format: function (v) { return I.int(v); }, bars: bucketBars(ctx, hist, metric, countText) });
     });
-    var q = R.quantile(hist, 0.5);
-    if (q) ctx.note(c.foot, T.medianIs(T.bucketValue[metric](I.short(q.value)), q.open));
+    var q = R.quantile(hist, 0.5, metric);
+    if (q) ctx.note(c.foot, T.medianIs(T.bucketValue[metric](q.label && !q.open ? q.label : I.short(q.value)), q.open));
     C.table(c.table, title, [{ label: T.bucketCol[metric] }, { label: T.count, num: true }, { label: T.shareCol, num: true }],
       hist.map(function (b) { return [R.bucketLabel(metric, b.k), I.int(b.n), total ? I.pct(b.n / total) : '—']; }));
     return c;
@@ -126,7 +126,7 @@
           return { title: T.cohortRow(ctx.longDay(x.week), x.size), note: ctx.chipFor(x.size, null, true),
             rows: cell ? [{ value: I.pct(cell.share), label: T.cohortCell(k, cell.n, x.size), color: 'var(--q4)', swatch: 'bar' }] : [{ value: T.cohortNotYet }] };
         },
-        legend: { low: function (v) { return I.pct(v); }, high: function (v) { return I.pct(v); }, empty: T.cohortNotYet }
+        legend: { low: function (v) { return I.pct(v); }, high: function (v) { return I.pct(v); }, empty: I.pct(0), none: T.cohortNotYet }
       });
     });
     C.table(c.table, T.cohortTitle, [{ label: T.cohortStart }, { label: T.studentsCol, num: true }].concat(Array.from({ length: 13 }, function (_, k) { return { label: '+' + k, num: true }; })),
@@ -178,8 +178,9 @@
     var sec = ctx.section(parent, 'habits-guests', T.guestTitle);
     var c = ctx.card(sec, 'guest-card', null, T.guestSub, true);
     var byWeek = {};
+    // Only the days with a guest count (the days before the update have none).
     (k.daily || []).forEach(function (d) {
-      if (!I.shown(d) || !R.isDay(d.day)) return;
+      if (!I.shown(d) || !R.isDay(d.day) || !ctx.has(d.guestMinutes)) return;
       var w = R.weekOf(d.day, ctx.weekStart()), x = byWeek[w] || (byWeek[w] = { guests: 0, all: 0 });
       x.guests += d.guestMinutes || 0; x.all += d.engagedMinutes || 0;
     });

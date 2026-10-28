@@ -1,7 +1,7 @@
 /*
  * The Games tab (#/games: one card per game) and a game's page (#/game/<slug>).
  * Data: GET /v1/admin/kpis (the games, their levels and health) and
- * /v1/admin/game (age groups, days, the game's r_stat rows, tries before the first
+ * /v1/admin/game (age groups, days, the game's r_stat rows, tries to a first
  * win, paired same-student rows and the games before and after it). Band comparisons
  * are small multiples on one scale; won / lost / left unfinished keep s1 / s2 / s3;
  * the ordered "what happened next" stacks use the ordinal ramp.
@@ -121,16 +121,19 @@
         if (c.chart.hidden) return;
         C.barList(host, { name: T.whoPlays + ': ' + spec[1], rtl: ctx.rtl(), color: 'var(--s1)', max: max, rows: bands.map(function (b) {
           return { label: I.bandLabel(b.band, ctx.lang()), value: b[spec[0]] || 0, valueText: spec[2](b[spec[0]] || 0),
-            chip: spec[0] === 'students' ? ctx.chipFor(b.students, null) : null,
+            chip: spec[0] === 'students' && b.students ? ctx.chipFor(b.students, null) : null,
             tip: { title: I.bandLabel(b.band, ctx.lang()), rows: [{ value: T.nStudents(b.students || 0) }, { value: ctx.minutesText(b.minutes || 0), label: T.ofPlay }, { value: T.nOpens(b.opens || 0) }] } };
         }) });
       });
     });
     C.table(c.table, T.whoPlays, [{ label: T.ageGroup }, { label: T.studentsCol, num: true }, { label: T.playTime, num: true }, { label: T.opens, num: true }],
       bands.map(function (b) { return [I.bandLabel(b.band, ctx.lang()), I.int(b.students), ctx.minutesText(b.minutes || 0), I.int(b.opens)]; }));
-    var days = (game.daily || []).filter(Boolean);
+    // The game answer counts from the update day: the days before it would read 0.
+    var cut = ctx.cutover();
+    var days = (game.daily || []).filter(function (x) { return x && (!cut || x.day >= cut.factsSince); });
     var d = ctx.card(sec, 'game-daily', T.studentsPerDay0, null, true);
-    if (days.length < 7) ctx.note(d.chart, T.dailyNeedsDays);
+    if (cut && days.length < 2) ctx.note(d.chart, T.noData);
+    else if (!cut && days.length < 7) ctx.note(d.chart, T.dailyNeedsDays);
     else ctx.draw(function () {
       if (d.chart.hidden) return;
       C.lineChart(d.chart, { name: T.studentsPerDay0, rtl: ctx.rtl(), color: 'var(--s1)', height: 160, keysHint: T.keysDays, format: function (v) { return I.int(v); },
@@ -141,23 +144,37 @@
   }
 
   var natural = function (a, b) { return String(a.id).localeCompare(String(b.id), 'en', { numeric: true }); };
+  // A level children can win: some round of it was won or lost in the period (an endless
+  // mode only ends, so nobody wins it by design).
+  function winnable(k, slug, id) {
+    var l = (k && k.levels || []).filter(function (x) { return x && x.slug === slug && String(x.id) === String(id); })[0], cd = l && l.codes || {};
+    return (cd.w || 0) + (cd.l || 0) > 0;
+  }
   // Level by level: how many children reach each level, how its rounds end, and the
-  // tries before a first win.
+  // tries to a first win.
   function levels(ctx, parent, k, slug, game) {
     var T = ctx.t(), C = ctx.C, I = ctx.I, R = ctx.R, lang = ctx.lang();
     var list = (k.levels || []).filter(function (l) { return l.slug === slug && I.shown(l); }).sort(natural);
     var sec = ctx.section(parent, 'game-levels', T.levelByLevel);
     if (list.length < 2) { ctx.note(ctx.card(sec, 'funnel-card', null, null, false).chart, T.oneLevel); }
     else {
-      var c = ctx.card(sec, 'funnel-card', T.funnelTitle, T.funnelSub, true);
-      var count = function (l) { return ctx.has(l.students) ? l.students : l.starts || 0; };
+      // The children of each level: the game answer's first-win rows count each child once.
+      // (The KPI answer's level students are summed day by day: a child on two days counts
+      // twice.) Without them for every level, the funnel is drawn by tries.
+      var who = {};
+      if (!ctx.failed(game)) (game.firstWin || []).forEach(function (f) { if (f && ctx.has(f.students)) who[f.id] = f.students; });
+      // (Not in a period that reaches back before the update: those rows start then, the tries do not.)
+      var byStudents = !ctx.cutover() && list.every(function (l) { return ctx.has(who[l.id]); });
+      var students = function (l) { return byStudents ? who[l.id] : null; };
+      var c = ctx.card(sec, 'funnel-card', T.funnelTitle, byStudents ? T.funnelSub : T.funnelSubTries, true);
+      var count = function (l) { return byStudents ? who[l.id] : l.starts || 0; };
       var max = Math.max.apply(null, list.map(count).concat([1]));
       var shown = ctx.top('funnel', list, 12);
       ctx.draw(function () {
         if (c.chart.hidden) return;
         C.barList(c.chart, { name: T.funnelTitle, rtl: ctx.rtl(), color: 'var(--s1)', max: max, rows: shown.map(function (l) {
-          return { label: I.levelLabel(l.id, lang), value: count(l), valueText: ctx.has(l.students) ? T.nStudents(l.students) : T.nTries(l.starts || 0),
-            chip: ctx.chipFor(l.students, l.starts), tip: { title: I.levelLabel(l.id, lang), note: ctx.chipFor(l.students, l.starts, true), rows: [
+          return { label: I.levelLabel(l.id, lang), value: count(l), valueText: byStudents ? T.nStudents(who[l.id]) : T.nTries(l.starts || 0),
+            chip: ctx.chipFor(students(l), l.starts), tip: { title: I.levelLabel(l.id, lang), note: ctx.chipFor(students(l), l.starts, true), rows: [
               { value: T.nTries(l.starts || 0) }, { value: I.pct(l.winRate), label: T.winRate }, { value: I.int(l.unended || 0), label: T.unended }] } };
         }) });
       });
@@ -166,22 +183,31 @@
         { label: T.outcome.lost, num: true }, { label: T.leftUnfinished, num: true }, { label: T.unended, num: true }],
       list.map(function (l) {
         var cd = l.codes || {};
-        return [I.levelLabel(l.id, lang), ctx.has(l.students) ? I.int(l.students) : '—', I.int(l.starts), I.int(cd.w), I.int(cd.l), I.int(cd.q), I.int(l.unended || 0)];
+        return [I.levelLabel(l.id, lang), byStudents ? I.int(who[l.id]) : '—', I.int(l.starts), I.int(cd.w), I.int(cd.l), I.int(cd.q), I.int(l.unended || 0)];
       }));
       // How each level's rounds end: one stacked bar per level (won, lost, left unfinished, other).
-      var o = ctx.card(sec, 'level-outcomes', T.levelOutcomes, null, false);
+      var o = ctx.card(sec, 'level-outcomes', T.levelOutcomes, null, true);
+      var endings = function (l) { var cd = l.codes || {}; return [cd.w || 0, cd.l || 0, cd.q || 0, (cd.d || 0) + (cd.e || 0)]; };
+      var sum = function (parts) { return parts[0] + parts[1] + parts[2] + parts[3]; };
       ctx.draw(function () {
+        if (o.chart.hidden) return;
         C.stackRows(o.chart, { name: T.levelOutcomes, rtl: ctx.rtl(), colors: ctx.OUTCOMES.map(function (x) { return x[1]; }),
           legend: ctx.OUTCOMES.map(function (x) { return T.outcome[x[0]]; }), rows: shown.map(function (l) {
-            var cd = l.codes || {}, parts = [cd.w || 0, cd.l || 0, cd.q || 0, (cd.d || 0) + (cd.e || 0)], all = parts[0] + parts[1] + parts[2] + parts[3];
+            var parts = endings(l), all = sum(parts);
             return { label: I.levelLabel(l.id, lang), valueText: T.nTries(l.starts || 0), parts: parts.map(function (v) { return { value: v }; }),
               tip: { title: I.levelLabel(l.id, lang), rows: ctx.OUTCOMES.map(function (x, i) { return { value: all ? I.pct(parts[i] / all) : '—', label: T.outcome[x[0]] + ' (' + I.int(parts[i]) + ')', color: x[1], swatch: 'bar' }; }) } };
           }) });
       });
+      C.table(o.table, T.levelOutcomes, [{ label: T.level }].concat(ctx.OUTCOMES.map(function (x) { return { label: T.outcome[x[0]], num: true }; }), [{ label: T.tries, num: true }]),
+        list.map(function (l) {
+          var parts = endings(l), all = sum(parts);
+          return [I.levelLabel(l.id, lang)].concat(parts.map(function (v) { return all ? I.pct(v / all) : '—'; }), [I.int(l.starts)]);
+        }));
     }
-    // Tries before the first win, per level (median and the slower quarter).
+    // Tries to a first win, the winning try included, per level (median and the slower
+    // quarter); a level nobody won yet says so, unless it cannot be won (an endless mode).
     if (ctx.failed(game)) return;
-    var first = R.hardestLevels(game.firstWin).filter(function (f) { return f.median != null || f.never; }).sort(natural);
+    var first = R.hardestLevels(game.firstWin).filter(function (f) { return f.median != null || (f.never && winnable(k, slug, f.id)); }).sort(natural);
     if (!first.length) return;
     var f = ctx.card(sec, 'first-win', T.firstWinTitle, T.firstWinSub, true);
     var fmax = Math.max.apply(null, first.map(function (x) { return x.p75 || x.median || 0; }).concat([1]));
@@ -418,5 +444,5 @@
   }
 
   // The Learning tab draws the same curves and paired comparisons.
-  tabs.shared = { bandCurves: bandCurves, fmtOf: fmtOf, pairedCard: pairedCard };
+  tabs.shared = { bandCurves: bandCurves, fmtOf: fmtOf, pairedCard: pairedCard, winnable: winnable };
 }());
