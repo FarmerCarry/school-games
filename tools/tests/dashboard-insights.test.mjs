@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dashboard = path.join(repo, 'server/dashboard');
@@ -481,10 +482,12 @@ function paths(value, prefix = '', out = new Set()) {
   return out;
 }
 const dir = path.join(dashboard, 'demo');
-// The meters of the run that made the sample (rows SQLite read and wrote, the file's size)
-// depend on the SQLite build; everything else is compared byte for byte.
-const settled = text => {
+// The answers as values (so a SQLite build that writes a number differently still
+// compares equal), without the meters of the run that made the sample: the rows SQLite
+// read and wrote and the file's size depend on the SQLite build.
+const settled = (file, text) => {
   const x = JSON.parse(text);
+  if (file !== 'settings.json') return x;
   for (const k of ['reads', 'writes']) x.usage[k] = typeof x.usage[k];
   x.storage.bytes = typeof x.storage.bytes;
   return x;
@@ -496,8 +499,8 @@ test('demo/ is the server\'s own answers (rebuild: node server/dashboard/make-de
   assert.equal(fs.existsSync(path.join(dashboard, 'demo.json')), false, 'demo/ replaces demo.json');
   for (const f of files) {
     const text = fs.readFileSync(path.join(dir, f), 'utf8');
-    if (f === 'settings.json') assert.deepEqual(settled(text), settled(made[f]), f);
-    else assert.ok(text === made[f], 'demo/' + f + ' is not what the server answers now: run node server/dashboard/make-demo.mjs');
+    const same = f.endsWith('.json') ? isDeepStrictEqual(settled(f, text), settled(f, made[f])) : text === made[f];
+    assert.ok(same, 'demo/' + f + ' is not what the server answers now: run node server/dashboard/make-demo.mjs');
   }
   const size = files.reduce((a, f) => a + fs.statSync(path.join(dir, f)).size, 0);
   assert.ok(size <= 3e6, 'the sample data stays small: ' + size + ' bytes');
