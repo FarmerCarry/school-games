@@ -1133,8 +1133,8 @@ to 1.2 million rows read on a typical day with the dashboard open, and 2.1 to 2.
 million more for a school year's export.
 
 **Requests:** about 5,650 batches, 289 crons and about 1,500 dashboard calls a day; a
-school year's export adds about 700 pages (most of them `sessions`, `rounds` and
-`visits`). About 8% of the 100,000.
+school year's export adds about 700 pages of 2,500 lines (most of them `rounds`,
+`visits` and `events`). About 8% of the 100,000.
 
 **Statements and CPU per invocation.** D1 allows 50 statements per invocation; this
 server keeps an admin answer to 20, the 5-minute cron to 35 and the daily purge to 25.
@@ -1145,35 +1145,41 @@ as D1 would, so every test runs inside them; the rollups nest their `UNION ALL` 
 four at a time, and a KPI row of more than 32 columns comes as an array of arrays.
 The Workers free plan allows 10 ms of CPU per invocation (only CPU counts, not the time
 waiting for D1). The CPU column is JavaScript's time outside SQLite (wall time less the
-time in `db.batch`, the median of cold runs) over 30 days of the simulated school with
-120 and with 450 sessions a school day, on a 2.1 GHz server core:
+time in `db.batch`), plus what the Worker's D1 binding does with each batch (the request
+as JSON, the response parsed in D1's rows-and-columns form and an object made per row):
+the median of cold runs (a new instance, nothing kept) over 30 days of the simulated
+school with 120 and with 470 sessions a school day, on a 2.1 GHz server core:
 
 | Invocation | Statements | CPU outside SQLite |
 |---|---|---|
-| `kpis` over frozen, rolled and open days | 18 | 6.6–10.2 ms |
-| `students` (with 13 weeks of each of about 560 to 790 students) | 9 | 0.7–1 ms |
-| `student` | 15 | 0.7–0.9 ms |
-| `game` | 15 | 1.4–2.2 ms |
-| `stats` (every metric of every game) | 5 | 0.9–1.1 ms |
-| `cohorts` | 5 | 0.5 ms |
-| `pcs` | 9 | 0.5–0.8 ms |
-| `live`, `settings`, `POST settings` | 5, 2, at most 7 | under 0.1 ms |
-| an `export` page (`rounds`, `visits` or `events`: 5,000 lines) | 3 | 0.7–1.1 ms |
-| another `export` page | 3 | under 0.5 ms |
+| `kpis` over frozen, rolled and open days | 13 | 5.2–5.5 ms |
+| `students` (with 13 weeks of each of about 560 to 790 students) | 6 | 2.6 ms |
+| `student` | 15 | 1.5–2.1 ms |
+| `game` | 7 | 1.7–2.3 ms |
+| `stats` (every metric of every game) | 4 | 1.4–1.7 ms |
+| `cohorts` | 5 | 0.9–1.1 ms |
+| `pcs` | 7 | 1.5 ms |
+| `live`, `settings`, `POST settings` | 5, 2, 7 | under 0.1 ms |
+| an `export` page (`rounds` or `visits`: 2,500 lines, about 410 KB) | 3 | 1.3–1.6 ms |
+| an `export` page of `events` or `sessions` | 3 | 0.6–0.9 ms |
 | `forget`, `link`, `DELETE link`, `rebuild` | 17, 7, 5, 5 | under 0.2 ms |
-| the 5-minute cron's full rebuild of a day | 24 | |
-| its first roll with the zone vote | 17 | |
+| the 5-minute cron's full rebuild of a day | 26 | |
+| its first roll with the zone vote | 19 | |
 | the daily purge with frozen days and the storage guard | 24 | |
 
 The statement counts include the settings re-read (every 5 minutes) and the usage flush
-(once a minute) that an invocation may carry. The tests hold the admin answers to 10 ms
+(once a minute) that an invocation may carry. The tests hold the admin answers to 5 ms
 and an export page to 3 ms on this measure, with 120 sessions a day; runs differ by
-about a millisecond. `kpis` at a busy school is close to the limit when nothing of it is
-kept yet (the first request for a period after a roll), and takes about 6 ms with the
-rolled days' part kept. Most of its time goes to counting each game's distinct students
-over the kept and the open part (the students' games, merged per canonical code) and to
-reading the parts' rows. Kept parts are written to `kpi_cache` as the JSON text SQL made,
-bound as it is, never parsed and written again.
+about a millisecond, and the first request of a new process takes up to twice as long
+while the JavaScript engine warms up. A kept answer costs about 0.6 ms; a `kpis` whose
+rolled part is kept and whose open day is made again, about 4.4 ms. The answers are made
+as JSON text by SQL and sent as they are: the Worker parses none of a kept part, and
+writes kept parts to `kpi_cache` inside the same statements that read them.
+
+A lab whose PCs forget their profiles every night (a new code per child per day: 7,600
+codes in 30 days) takes about 7 ms for a cold `kpis` and about 10 ms for a full
+`students` page (1.5 MB, most of it the text crossing the D1 binding); the page size is
+set so that a busy school's year of students fits in one page.
 
 ## Development
 
