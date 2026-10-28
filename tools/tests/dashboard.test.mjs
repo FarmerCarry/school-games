@@ -1370,6 +1370,7 @@ test('the Data tab: the cost first; the reading allowance stops part 1, and part
   assert.equal(one.files['events.csv'], BOM + D.header('events') + '\n', 'events stopped before its first page');
   assert.equal(one.files['pcs.csv'], undefined, 'the files after the stop wait for part 2');
   assert.match(one.files['README.txt'], /stopped early, in events\.csv/);
+  assert.match(one.files['README.txt'], /will be in the next part only/, 'play after part 1 comes in part 2');
   const saved = JSON.parse(await page.evaluate(() => localStorage.getItem('sg:dash:export')));
   assert.deepEqual([saved.part, saved.file, saved.after, saved.from, saved.to], [2, 'events', null, from, to]);
   // Tomorrow (here: a reload), part 2 starts where part 1 stopped.
@@ -1383,6 +1384,7 @@ test('the Data tab: the cost first; the reading allowance stops part 1, and part
     assert.equal(two.files[f + '.csv'], BOM + D.header(f) + '\n' + await serverLines(f, from, to), f);
   }
   assert.match(two.files['README.txt'], /This is part 2 of the download/);
+  assert.match(two.files['README.txt'], /The parts were made on different days/);
   assert.equal(await page.evaluate(() => localStorage.getItem('sg:dash:export')), null, 'done: nothing left to continue');
   assert.equal(await page.locator('#exportResume').count(), 0);
   await s.check();

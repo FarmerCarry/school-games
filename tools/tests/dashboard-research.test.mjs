@@ -495,6 +495,12 @@ test('the browser\'s files: games.csv, dictionary.csv, README.txt in both langua
     assert.ok(readme.includes(text), text);
   }
   for (const [en, ar] of D.NOTES) assert.ok(readme.includes(en) && readme.includes(ar));
+  // Parts are made on different days: what was played in between is in the later part only.
+  for (const text of ['made on different days', 'sessions that are in no sessions.csv', 'a period that ends yesterday or earlier',
+    'صُنعت الأجزاء في أيام مختلفة', 'لا توجد في أي ملف sessions.csv']) assert.ok(readme.includes(text), text);
+  const first = D.readme({ from: '2026-09-01', to: '2026-10-27', part: 1, stopped: { file: 'rounds' } });
+  for (const text of ['in the next part only', 'في الجزء التالي وحده']) assert.ok(first.includes(text), text);
+  assert.ok(!D.readme({ from: '2026-09-01', to: '2026-10-27' }).includes('different days'), 'one download in one go says nothing of parts');
   assert.doesNotMatch(readme, /card/i, 'there are no player cards');
   const names = files.map(f => f.name).concat(['games.csv', 'dictionary.csv']);
   const sps = D.spss(names);

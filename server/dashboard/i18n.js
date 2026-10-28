@@ -648,7 +648,9 @@
     exportAgain: 'Try again',
     exportCancelled: 'Stopped. Nothing was saved.',
     exportDemo: 'The sample files hold this morning’s play only.',
-    exportResume: function (range, file, day, part) { return 'A download of ' + range + ' stopped in ' + iso(file) + ' on ' + day + '. Part ' + part + ' goes on from there.'; },
+    exportResume: function (range, file, day, part) {
+      return 'A download of ' + range + ' stopped in ' + iso(file) + ' on ' + day + '. Part ' + part + ' goes on from there, with the play since then; its README says how to join the parts.';
+    },
     exportContinue: function (part) { return 'Continue: part ' + part; },
     exportForgetPart: 'Start afresh instead',
     sizeMb: function (v) { return v + ' MB'; },
@@ -1314,7 +1316,9 @@
     exportAgain: 'حاول مرة أخرى',
     exportCancelled: 'توقف التنزيل، ولم يُحفظ شيء.',
     exportDemo: 'لا تحوي الملفات التجريبية إلا لعب هذا الصباح.',
-    exportResume: function (range, file, day, part) { return 'توقف تنزيل الفترة ' + range + ' في ' + iso(file) + ' يوم ' + day + '. ويكمل الجزء ' + part + ' من هناك.'; },
+    exportResume: function (range, file, day, part) {
+      return 'توقف تنزيل الفترة ' + range + ' في ' + iso(file) + ' يوم ' + day + '. ويكمل الجزء ' + part + ' من هناك، ومعه اللعب منذ ذلك اليوم؛ ويشرح ملف README فيه كيف تُجمع الأجزاء.';
+    },
     exportContinue: function (part) { return 'أكمل: الجزء ' + part; },
     exportForgetPart: 'ابدأ من جديد بدلًا من ذلك',
     sizeMb: function (v) { return v + ' ميغابايت'; },
