@@ -464,7 +464,7 @@
   }
 
   // ---- first wins --------------------------------------------------------------------------------
-  // The game answer's firstWin rows, hardest first: the most tries before a first win
+  // The game answer's firstWin rows, hardest first: the most tries to a first win (the winning try included)
   // (median, then p75), then the share who never won.
   function hardestLevels(firstWin) {
     return list(firstWin).filter(f => f && f.id != null).map(f => {

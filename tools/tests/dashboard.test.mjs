@@ -1147,6 +1147,34 @@ test('the Learning tab: one game or every measured game, and the paired same-chi
   await s.check();
 });
 
+test('tries to a first win include the winning try; the hardest levels start with one nobody has won, never an endless mode', async t => {
+  const s = await open(t);
+  const { page } = s;
+  await page.goto(site.origin + '/?demo#/game/dino-3d');
+  await waitForView(page, 'game');
+  assert.equal(await page.locator('#first-win-title').textContent(), 'Tries to a first win');
+  assert.match(await page.locator('#first-win .card-sub').textContent(), /the winning try included/);
+  await page.goto(site.origin + '/?demo#/game/rail-rush');
+  await waitForView(page, 'game');
+  assert.equal(await page.locator('#first-win').count(), 0, 'an endless mode has no first win to wait for');
+  await page.goto(site.origin + '/?demo#/learning');
+  await waitForView(page, 'learning');
+  await page.selectOption('#gamePick', 'dino-3d');
+  await page.waitForFunction(() => document.querySelectorAll('#learning-growth .card').length === 1 && !document.getElementById('dash').classList.contains('is-loading'));
+  assert.match(await page.locator('#learning-hardest .section-intro').textContent(), /tries to a first win/i);
+  const never = demoFile('game-dino-3d.json').firstWin.filter(f => f.median == null);
+  assert.deepEqual(never.map(f => f.id), ['L8'], 'the sample has a level nobody has won');
+  await page.click('#hardest-card .table-toggle');
+  const rows = await page.locator('#hardest-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
+  assert.deepEqual(rows[0].slice(1, 4), ['level 8', '1', '—'], 'never won: first, with no median');
+  assert.equal(rows.length, demoFile('game-dino-3d.json').firstWin.length, 'every level of the game');
+  // An endless mode is never won by design: it is no hard level.
+  await page.selectOption('#gamePick', 'rail-rush');
+  await page.waitForFunction(() => /Rail/.test(document.getElementById('learning-growth').textContent) && !document.getElementById('dash').classList.contains('is-loading'));
+  assert.equal(await page.locator('#hardest-card .table-host tbody tr').count(), 0);
+  await s.check();
+});
+
 // ---- the Data & settings tab ------------------------------------------------------------------
 // The entries of a ZIP file as text: { name: text }, each checked against its CRC and size.
 function unzip(buffer) {

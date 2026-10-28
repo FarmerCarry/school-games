@@ -1,7 +1,7 @@
 /*
  * The Games tab (#/games: one card per game) and a game's page (#/game/<slug>).
  * Data: GET /v1/admin/kpis (the games, their levels and health) and
- * /v1/admin/game (age groups, days, the game's r_stat rows, tries before the first
+ * /v1/admin/game (age groups, days, the game's r_stat rows, tries to a first
  * win, paired same-student rows and the games before and after it). Band comparisons
  * are small multiples on one scale; won / lost / left unfinished keep s1 / s2 / s3;
  * the ordered "what happened next" stacks use the ordinal ramp.
@@ -141,8 +141,14 @@
   }
 
   var natural = function (a, b) { return String(a.id).localeCompare(String(b.id), 'en', { numeric: true }); };
+  // A level children can win: some round of it was won or lost in the period (an endless
+  // mode only ends, so nobody wins it by design).
+  function winnable(k, slug, id) {
+    var l = (k && k.levels || []).filter(function (x) { return x && x.slug === slug && String(x.id) === String(id); })[0], cd = l && l.codes || {};
+    return (cd.w || 0) + (cd.l || 0) > 0;
+  }
   // Level by level: how many children reach each level, how its rounds end, and the
-  // tries before a first win.
+  // tries to a first win.
   function levels(ctx, parent, k, slug, game) {
     var T = ctx.t(), C = ctx.C, I = ctx.I, R = ctx.R, lang = ctx.lang();
     var list = (k.levels || []).filter(function (l) { return l.slug === slug && I.shown(l); }).sort(natural);
@@ -194,9 +200,10 @@
           return [I.levelLabel(l.id, lang)].concat(parts.map(function (v) { return all ? I.pct(v / all) : '—'; }), [I.int(l.starts)]);
         }));
     }
-    // Tries before the first win, per level (median and the slower quarter).
+    // Tries to a first win, the winning try included, per level (median and the slower
+    // quarter); a level nobody won yet says so, unless it cannot be won (an endless mode).
     if (ctx.failed(game)) return;
-    var first = R.hardestLevels(game.firstWin).filter(function (f) { return f.median != null || f.never; }).sort(natural);
+    var first = R.hardestLevels(game.firstWin).filter(function (f) { return f.median != null || (f.never && winnable(k, slug, f.id)); }).sort(natural);
     if (!first.length) return;
     var f = ctx.card(sec, 'first-win', T.firstWinTitle, T.firstWinSub, true);
     var fmax = Math.max.apply(null, first.map(function (x) { return x.p75 || x.median || 0; }).concat([1]));
@@ -433,5 +440,5 @@
   }
 
   // The Learning tab draws the same curves and paired comparisons.
-  tabs.shared = { bandCurves: bandCurves, fmtOf: fmtOf, pairedCard: pairedCard };
+  tabs.shared = { bandCurves: bandCurves, fmtOf: fmtOf, pairedCard: pairedCard, winnable: winnable };
 }());
