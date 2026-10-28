@@ -562,6 +562,48 @@ test('v2: Kit.track counts nothing before Kit.ready(), clears a cue on pause and
   for (const call of ['hit', 'miss', 'cue', 'react', 'tier']) assert.doesNotThrow(() => h.Kit.track[call](Symbol('odd')));
 });
 
+test('v2: rx counts one pause per stop of play: a blur with the hidden page after it, or both fullscreen exits, are one', () => {
+  const {pagehide, ...each} = pauses;
+  const stops = {
+    ...each,
+    'a tab switch (blur, then hidden)': h => { h.window.emit('blur'); h.document.hidden = true; h.document.emit('visibilitychange'); h.document.hidden = false; },
+    'Shift+Tab, then the blur as the portal takes the focus': h => { each['portal-escape'](h); h.window.emit('blur'); },
+    'leaving fullscreen (Kit\'s own, then the portal\'s sg:pause)': h => {
+      each['fullscreen-exit'](h);
+      h.window.emit('message', {source: h.window.parent, data: {type: 'sg:pause', reason: 'fullscreen-exit'}});
+    }
+  };
+  for (const [name, pause] of Object.entries(stops)) {
+    const clock = {now: 1000}, h = harness({clock});
+    preferences(h, {telemetry: true});
+    h.Kit.ready(); h.Kit.stats.round('L1');
+    pause(h);                                                     // before any input: play was running
+    clock.now = 2000; h.window.emit('keydown', {code: 'Space'});
+    clock.now = 3000; pause(h);
+    h.window.emit('blur');                                        // already paused: no input since
+    clock.now = 4000; h.window.emit('pointerdown', {button: 0});
+    clock.now = 5000; pause(h);
+    h.Kit.stats.end('win');
+    const rx = telemetryOf(h).flatMap(m => m.ev).find(ev => ev[0] === 'rx');
+    assert.equal(rx[4], 3, `${name}: ${JSON.stringify(rx)}`);
+  }
+});
+
+test('v2: a round\'s wall time in rx always covers its engaged time, wherever a millisecond turns between two clock reads', () => {
+  for (let step = 0.05; step < 1; step += 0.05) for (let start = 0; start < 1; start += 0.1) {
+    let t = 1000 + start;
+    const h = harness({clock: {get now() { return t += step; }}});
+    preferences(h, {telemetry: true});
+    h.Kit.ready();
+    h.window.emit('pointerdown', {button: 0});
+    h.Kit.stats.round('local');
+    for (let i = 0; i < 4; i++) h.window.emit('pointerdown', {button: 0});
+    h.Kit.stats.end('e');
+    const ev = telemetryOf(h).flatMap(m => m.ev), rx = ev.find(e => e[0] === 'rx'), re = ev.find(e => e[0] === 're');
+    assert.ok(rx[1] >= re[3], `step ${step.toFixed(2)}, start ${start.toFixed(1)}: wall ${rx[1]} ms, engaged ${re[3]} ms`);
+  }
+});
+
 test('v2: round events wait for Kit.ready() like v1 events, and go out at most 64 to a message', () => {
   const clock = {now: 0}, h = harness({clock});
   preferences(h, {telemetry: true});                      // the portal can switch telemetry on before readiness
@@ -650,7 +692,7 @@ test('v2: Kit.dda keeps guests of different bands apart', () => {
   assert.deepEqual(Object.keys(JSON.parse(h.values.get('sg:g:dda'))), ['_6-7', '_10-11']);
 });
 
-test('v2: Kit.dda keeps one state per player, at most 24 players, reloads on player change and resets', () => {
+test('v2: Kit.dda keeps one state per player, a full PC\'s 24 profiles beside its guests, reloads on player change and resets', () => {
   const h = harness(), dda = h.Kit.dda('g'), other = h.Kit.dda('g', {id: 'boss'});
   preferences(h, {band: '8-9', player: 'p1'});
   dda.result(true); other.result(false);
@@ -664,14 +706,18 @@ test('v2: Kit.dda keeps one state per player, at most 24 players, reloads on pla
   preferences(h, {player: 'p1'});
   assert.equal(dda.level, p1, 'back to the first player');
   assert.deepEqual(JSON.parse(h.values.get('sg:g:dda')), {p1: {main: [0.43, 1], boss: [0.25, 1]}, p2: {main: [0.25, 1]}});
-  // A full PC has 24 profiles (js/profiles.js): every one of them keeps its level.
-  for (let i = 3; i <= 28; i++) { preferences(h, {player: 'p' + i}); dda.result(true); }
+  // A full PC has 24 profiles (js/profiles.js): every one of them keeps its level, and so
+  // do the guests of every band beside them.
+  for (let i = 3; i <= 26; i++) { preferences(h, {player: 'p' + i}); dda.result(true); }
+  for (const band of ['', '6-7', '8-9', '10-11']) { preferences(h, {player: '', band}); dda.result(true); }
+  preferences(h, {band: '8-9'});
   let saved = JSON.parse(h.values.get('sg:g:dda'));
-  assert.deepEqual(Object.keys(saved), Array.from({length: 24}, (_, i) => 'p' + (i + 5)));
+  assert.deepEqual(Object.keys(saved), [...Array.from({length: 24}, (_, i) => 'p' + (i + 3)), '_', '_6-7', '_8-9', '_10-11'], 'guests push no profile out');
+  // Only beyond that (a removed profile's key, say) is the least recently saved player dropped.
   preferences(h, {player: 'p5'}); dda.result(true);
   preferences(h, {player: 'p29'}); dda.result(true);
   saved = JSON.parse(h.values.get('sg:g:dda'));
-  assert.deepEqual([Object.keys(saved).length, Object.keys(saved)[0], Object.keys(saved).slice(-2)], [24, 'p7', ['p5', 'p29']], 'the least recently saved player is dropped');
+  assert.deepEqual([Object.keys(saved).length, Object.keys(saved)[0], Object.keys(saved).slice(-2)], [28, 'p4', ['p5', 'p29']], 'the least recently saved player is dropped');
   preferences(h, {player: 'p5'});
   assert.equal(dda.level, 0.471, 'p5 kept both results');
   dda.reset();
@@ -760,7 +806,7 @@ test('rx: the round counters go right before every round end, only while telemet
   clock.now = 61000; key();                            // idle lapse 2
   h.window.emit('blur');                               // pause 1 cuts the window
   clock.now = 90000; key();                            // resuming after a pause is not a lapse
-  pauses.hidden(h); pauses['session-ended'](h);        // pauses 2 and 3
+  pauses.hidden(h); pauses['session-ended'](h);        // pause 2: play is already cut for the second
   h.Kit.track.cue(); clock.now = 90400; click();       // 400 ms
   for (const ms of [250, -1, NaN, Infinity, '9']) h.Kit.track.react(ms);
   clock.now = 100000; h.Kit.stats.end('win', 3);
@@ -770,7 +816,7 @@ test('rx: the round counters go right before every round end, only while telemet
   clock.now = 104000; h.window.emit('pagehide', {persisted: false}); // so does L3
   const ev = telemetryOf(h).flatMap(m => m.ev);
   assert.deepEqual(ev.map(e => e[0]), ['rs', 'rx', 're', 'rs', 'rx', 're', 'rs', 'rx', 're']);
-  assert.deepEqual(rxOf(h), [['rx', 99000, 6, 2, 3, 650, 2, -1], ['rx', 2500, 0, 0, 0, 0, 0, -1], ['rx', 500, 0, 0, 0, 0, 0, -1]]);
+  assert.deepEqual(rxOf(h), [['rx', 99000, 6, 2, 2, 650, 2, -1], ['rx', 2500, 0, 0, 0, 0, 0, -1], ['rx', 500, 0, 0, 0, 0, 0, -1]]);
   const [first] = ev.filter(e => e[0] === 're');
   assert.deepEqual([first[8], first[8].reduce((a, b) => a + b, 0)], [[1, 1, 0, 0, 0, 0], 2], 'rtN counts the same reaction times as the histogram');
   for (const m of telemetryOf(h)) {

@@ -92,7 +92,9 @@
   // Window capture listeners run before any game listener can stop the event.
   function listen(type, fn) { window.addEventListener(type, fn, true); }
   function suspend(reason) {
-    if (roundId) rp++;
+    // One pause per stop of play: a blur and the hidden page that follows it, or Kit's own
+    // fullscreen exit and the portal's, find play already cut (until 0) and count once.
+    if (roundId && until !== 0) rp++;
     sendStats(true);
     cueAt = -1;
     if (Kit.keys) Kit.keys.reset();
@@ -171,8 +173,11 @@
   // Whole milliseconds (an int32 holds 24 days of performance.now()).
   function clock() { return perf ? perf.now() | 0 : Date.now(); }
   function text(value, length) { try { return String(value).slice(0, length); } catch (e) { return ''; } }
+  // tn: the time of the last tally, which every mark() follows: a round's wall time and its
+  // engaged time are read from the same clock reading, so wall time always covers it.
+  var tn = 0;
   function tally() {
-    var t = clock(), x = t < until ? t : until;
+    var t = tn = clock(), x = t < until ? t : until;
     if (x > from) { engaged += x - from; if (roundId) roundMs += x - from; from = x; }
     return t;
   }
@@ -263,9 +268,9 @@
   function mark(code, score) {
     if (telemetry && !failed) {
       if (code == null) tev.push(['rs', roundId, tier]);
-      else tev.push(['rx', clock() - r0, ri, rd, rp, rsum, rn, dl], ['re', code, roundId, roundMs, fin(score) ? score : -1, tier, hits, misses, rt]);
+      else tev.push(['rx', tn - r0, ri, rd, rp, rsum, rn, dl], ['re', code, roundId, roundMs, fin(score) ? score : -1, tier, hits, misses, rt]);
     }
-    hits = misses = ri = rd = rp = rsum = rn = 0; rt = [0, 0, 0, 0, 0, 0]; cueAt = -1; r0 = clock();
+    hits = misses = ri = rd = rp = rsum = rn = 0; rt = [0, 0, 0, 0, 0, 0]; cueAt = -1; r0 = tn;
   }
   // Every key press and click: engaged time, then (key repeats aside) how long the
   // event waited for the page and the reaction time to a pending cue. Only a click or
@@ -312,13 +317,14 @@
     }
     // Every read (level, tier, value, pick) reports the tier and the level for the round events.
     function read() { var l = now(); Kit.track.tier(t = 1 + Math.floor(l * tiers * 0.9999)); dl = Math.round(l * 1000); return l; }
-    // The player just written moves last, so the 24 most recent players (a full PC) are kept.
+    // The player just written moves last, so the 28 most recent players are kept: a full
+    // PC's 24 profiles and the guests of each band ('_' keys, at most 4).
     function save() {
       var all = obj(store.get('dda')), k = key(), mine = obj(all[k]);
       delete all[k];
       if (n) mine[id] = [level, n]; else delete mine[id];
       all[k] = mine;
-      for (var keys = Object.keys(all); keys.length > 24;) delete all[keys.shift()];
+      for (var keys = Object.keys(all); keys.length > 28;) delete all[keys.shift()];
       store.set('dda', all);
     }
     var dda = {

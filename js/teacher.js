@@ -313,13 +313,14 @@
 
   /* ------------------------------------------------------ dashboard codes */
   // sg:site:rid as js/telemetry.js keeps it: { v: 1, pc, k: { key: code }, l: { key: older
-  // code } }. Anything malformed is left out, as the portal does.
+  // code }, g: { key: the code a teacher gave } }. Anything malformed is left out, as the
+  // portal does.
   function parseRid(text) {
-    var r = null, out = { v: 1, pc: '', k: {}, l: {} };
+    var r = null, out = { v: 1, pc: '', k: {}, l: {}, g: {} };
     try { r = JSON.parse(text); } catch (e) { /* none yet */ }
     if (obj(r) && r.v === 1) {
       if (typeof r.pc === 'string' && CODE.test(r.pc)) out.pc = r.pc;
-      ['k', 'l'].forEach(function (f) {
+      ['k', 'l', 'g'].forEach(function (f) {
         var n = 0;
         if (obj(r[f])) Object.keys(r[f]).forEach(function (k) {
           if (n < 64 && KEY.test(k) && typeof r[f][k] === 'string' && CODE.test(r[f][k])) { out[f][k] = r[f][k]; n++; }
@@ -363,16 +364,18 @@
     return checkChar(s.slice(0, 12)) === s.charAt(12) ? { code: s.slice(0, 12) } : { error: 'check' };
   }
   // "The same child as on another PC": the player takes the code the other PC shows for
-  // it. Its own code, if it had one, waits in l until the portal links it once (an older
-  // one already waiting stays). { rid, joined: an older code waits } or { error }: 'own'
-  // its code here, 'other' the code of another player on this PC.
+  // it, noted in g. Its own code, if it had one, waits in l until the portal links it (an
+  // older one already waiting stays). A code given before is another PC's, so correcting a
+  // wrong transfer never links it. { rid, joined: an older code waits } or { error }:
+  // 'own' its code here, 'other' the code of another player on this PC.
   function transfer(rid, key, text) {
     var c = readCode(text), out = JSON.parse(JSON.stringify(rid)), old = out.k[key];
     if (c.error) return c;
     if (c.code === old) return { error: 'own' };
     if (Object.keys(out.k).some(function (k) { return out.k[k] === c.code; })) return { error: 'other' };
     out.k[key] = c.code;
-    if (old && !out.l[key]) out.l[key] = old;
+    if (old && !out.l[key] && out.g[key] !== old) out.l[key] = old;
+    out.g[key] = c.code;
     return { rid: out, joined: !!out.l[key] };
   }
 

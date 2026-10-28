@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "portalBytes": 397000,
+  "portalBytes": 398000,
   "teacherBytes": 98000,
   "gameHtmlBytes": {
     "air-hockey": 117000,
@@ -14,7 +14,7 @@
     "connect-four": 56000,
     "critter-mart": 163000,
     "dino-3d": 60000,
-    "drift-king": 110000,
+    "drift-king": 111000,
     "fire-and-ice": 124000,
     "hoop-heads": 155000,
     "maze-dash": 117000,
@@ -45,5 +45,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5295000
+  "precacheBytes": 5296000
 }

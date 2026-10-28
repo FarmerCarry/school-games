@@ -582,7 +582,7 @@
   }
 
   /* ------------------------------------------------- who's playing? */
-  // Anonymous picture profiles (js/profiles.js). The strip at the top of home never
+  // Picture profiles without names (js/profiles.js). The strip at the top of home never
   // blocks: a guest plays at once and one click picks a player. A new player makes
   // three picture choices (animal, colour, age); removing one is a small teacher
   // action that asks twice. Every button carries data-w="action[:value]".

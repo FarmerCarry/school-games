@@ -20,8 +20,11 @@ const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : rep
 const sourceTree = fs.readFileSync(path.join(root, 'index.html'), 'utf8').includes('src="js/telemetry.js"');
 const INGEST = 'https://ingest.test/v1/batch';
 const ON = { url: INGEST, allowLocal: true };
-// The queue of the copy that sends to url (js/telemetry.js: a 32-bit hash of the address).
-const qKey = url => 'sg:site:tm:q:' + ([...url].reduce((h, c) => h * 31 + c.charCodeAt(0) | 0, 0) >>> 0).toString(36);
+// The queue of the copy that sends to url (js/telemetry.js: a 32-bit hash of the address),
+// and the key where builds before wire version 3 queue theirs.
+const urlHash = url => ([...url].reduce((h, c) => h * 31 + c.charCodeAt(0) | 0, 0) >>> 0).toString(36);
+const qKey = url => 'sg:site:tm:q3:' + urlHash(url);
+const oldKey = url => 'sg:site:tm:q:' + urlHash(url);
 const COOKIE = { name: 'trackme', value: 'cookie-value', domain: 'ingest.test', path: '/', secure: true, sameSite: 'None' };
 const SOURCES = ['featured', 'catalog', 'recent', 'favorites', 'category', 'quick', 'search', 'related', 'surprise',
   'reload', 'history', 'direct', 'starter'];
@@ -284,6 +287,18 @@ test('the server\'s validator is here, and it agrees with this test on the contr
   assert.deepEqual([v2.wire, v2.envelope.u, v2.envelope.w, v2.dropped], [2, '', null, 0]);
 });
 
+// docs/RESEARCH_TELEMETRY_SPEC.md §G and §A.10: the codes make the data pseudonymous, so
+// nothing on the client side calls it, or the profiles, anonymous; and nothing is left of
+// the player cards the owner dropped for good.
+test('no client file calls the telemetry or the profiles anonymous, and nothing of player cards is left', () => {
+  const client = [...fs.readdirSync(path.join(repo, 'js')).map(f => 'js/' + f), ...fs.readdirSync(path.join(repo, 'shared')).filter(f => f.endsWith('.js')).map(f => 'shared/' + f)];
+  const lines = files => files.flatMap(file => fs.readFileSync(path.join(repo, file), 'utf8').split('\n').map((line, i) => [`${file}:${i + 1}`, line]));
+  for (const [where, line] of lines([...client, 'docs/TELEMETRY.md', 'docs/ARCHITECTURE.md', '.github/workflows/build.yml'])) {
+    assert.doesNotMatch(line.replace(/\bnot anonymous\b/gi, ''), /anonym|مجهول/i, where);
+  }
+  for (const [where, line] of lines([...client, 'docs/TELEMETRY.md'])) assert.doesNotMatch(line, /player.?cards?\b|\/cards\b|بطاق(?:ة|ات) (?:ال)?لاعب/i, where);
+});
+
 test('real rounds reach the ingest server as the contract says, with codes but nothing that could name a child or a PC', async t => {
   const state = await setup(t), { page } = state;
   await page.goto(origin + '/seed.html');
@@ -296,7 +311,7 @@ test('real rounds reach the ingest server as the contract says, with codes but n
   assert.equal(await tm(page, 'sg:site:tm:on'), '"ingest.test"');
   // The active sink made this PC's code; a guest has none.
   const pc = (await rid(page)).pc;
-  assert.deepEqual(await rid(page), { v: 1, pc, k: {}, l: {} });
+  assert.deepEqual(await rid(page), { v: 1, pc, k: {}, l: {}, g: {} });
   assert.match(pc, /^[0-9a-f]{12}$/);
 
   // A child types a search, then goes home and makes a player with the mouse: the
@@ -353,7 +368,7 @@ test('real rounds reach the ingest server as the contract says, with codes but n
   assert.deepEqual(list.filter(b => b.s === guestId).map(b => [b.a, b.u, b.p]), list.filter(b => b.s === guestId).map(() => ['', '', pc]));
   // The child's code is random, kept for the profile in sg:site:rid, and never its key.
   const code = (await rid(page)).k.p1;
-  assert.deepEqual(await rid(page), { v: 1, pc, k: { p1: code }, l: {} });
+  assert.deepEqual(await rid(page), { v: 1, pc, k: { p1: code }, l: {}, g: {} });
   assert.match(code, /^[0-9a-f]{12}$/);
   assert.deepEqual([...new Set(list.filter(b => b.s === childId).map(b => [b.a, b.u, b.p].join()))], [['8-9', code, pc].join()]);
   like(guest, [['ss', 0, 0, -1, -1, 0, 0, 0], ['se', int, 0, 'p']], 'guest');
@@ -417,12 +432,12 @@ test('off unless every gate holds: games are told telemetry: false and nothing i
     await t.test(name, async t => {
       const state = await setup(t, { ...options, clock: true }), { page } = state;
       await page.goto(origin + '/seed.html');
-      // A queue and a note from an earlier build that shared.
-      await page.evaluate(([m, key, q]) => {
+      // Queues and a note from earlier builds that shared (one before wire version 3).
+      await page.evaluate(([m, keys, q]) => {
         if (m) localStorage.setItem('sg:site:statsmeta', m);
-        localStorage.setItem(key, q);
+        keys.forEach(key => localStorage.setItem(key, q));
         localStorage.setItem('sg:site:tm:on', '"ingest.test"');
-      }, [statsmeta, qKey(INGEST), seeded]);
+      }, [statsmeta, [qKey(INGEST), oldKey(INGEST)], seeded]);
       await page.goto(origin + '/');
       assert.equal(await page.evaluate(() => SGTelemetry.active()), false);
       // A new player, who would get a code from an active sink.
@@ -439,8 +454,8 @@ test('off unless every gate holds: games are told telemetry: false and nothing i
       assert.deepEqual(state.posts, [], 'nothing is sent, neither while the page lives nor as it unloads');
       // Stopped statistics and sharing turned off drop what waited; otherwise the sink only
       // removes the old note, so the teacher page does not say that this PC shares.
-      assert.deepEqual(await tmKeys(page), statsmeta ? [] : [qKey(INGEST)]);
-      if (!statsmeta) assert.equal(await tm(page, qKey(INGEST)), seeded);
+      assert.deepEqual(await tmKeys(page), statsmeta ? [] : [oldKey(INGEST), qKey(INGEST)].sort());
+      if (!statsmeta) for (const key of [qKey(INGEST), oldKey(INGEST)]) assert.equal(await tm(page, key), seeded);
       assert.equal(await tm(page, 'sg:site:rid'), null, 'no code is made or written');
     });
   }
@@ -535,7 +550,7 @@ test('a profile made on an earlier day that has never played is a first time', a
   assert.deepEqual([...new Set(batches(state).map(b => b.u))], [codes.p1, codes.p2]);
 });
 
-test('the queue survives a reload, sends oldest first, and keeps at most 128 KB, 7 days and nothing from before a clear; v2 batches go unchanged', async t => {
+test('the queue survives a reload, sends oldest first, and keeps at most 128 KB, 7 days and nothing from before a clear; an older build\'s v2 batches go unchanged', async t => {
   let down = true;
   const state = await setup(t, { clock: true, answer: () => down ? 503 : 204 }), { page } = state;
   await page.clock.pauseAt(new Date(Date.now() + 60000));
@@ -552,14 +567,16 @@ test('the queue survives a reload, sends oldest first, and keeps at most 128 KB,
     { t: 'yesterday', e: envelope('d'.repeat(16), []) }, null, 'text', { t: now, e: { v: 1, b: 'e'.repeat(16), ev: [] } },
     ...[1, 2, 3, 4, 5].map(big)
   ];
+  // Where a build before wire version 3 queued them.
   await page.evaluate(([key, q, cleared]) => {
     localStorage.setItem(key, JSON.stringify(q));
     localStorage.setItem('sg:site:statsmeta', JSON.stringify({ pc: { id: 'pcwxyz' }, clearedAt: cleared }));
-  }, [qKey(INGEST), seeded, now - 5400000]);
+  }, [oldKey(INGEST), seeded, now - 5400000]);
   await page.goto(origin + '/');
   await page.clock.runFor(60000);
   await until(() => state.posts.length === 1, 'the first send');
   await page.waitForFunction(() => window.fetched === 1);
+  assert.equal(await tm(page, oldKey(INGEST)), null, 'the older build\'s batches moved to this build\'s queue');
   let stored = await queue(page);
   assert.ok(JSON.stringify(stored).length <= 131072, 'at most 128 KB');
   const kept = stored.map(x => x.e.b);
@@ -717,6 +734,40 @@ test('a copy of the site elsewhere on this origin, built with another address, n
   await page.evaluate(() => localStorage.setItem('sg:site:statsmeta', JSON.stringify({ pc: { id: 'pcwxyz' }, off: true, offSince: Date.now() })));
   assert.equal(await page.evaluate(() => SGTelemetry.active()), false);
   assert.deepEqual(await tmKeys(page), [], 'both queues and the note are gone');
+  serverKeeps(batches(state));
+});
+
+test('a portal tab of a build before wire version 3, still open on this PC, never drops this build\'s batches, and its own join them', async t => {
+  let down = true;
+  const state = await setup(t, { clock: true, answer: () => down ? 503 : 204 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/');
+  // The server fails: the session's start waits in this build's queue.
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 1, 'the first send');
+  await page.waitForFunction(() => window.fetched === 1);
+  const waiting = JSON.parse(state.posts[0].body);
+  // The older tab's sink (wire version 2) reads and writes sg:site:tm:q:<hash>: each time
+  // it queues a batch of its own, has one delivered or is hidden, it keeps only the v: 2
+  // entries there and writes them back.
+  const old = await state.context.newPage();
+  await old.goto(origin + '/seed.html');
+  const now = await old.evaluate(() => Date.now());
+  const own = { t: now, e: { v: 2, b: 'f'.repeat(16), s: '0123456789ab', k: 'src', m: 'web', a: '', d: [4, 4, 1920], ev: [['ss', 0, 0, 0, 4, 0]] } };
+  await old.evaluate(([key, mine]) => {
+    let q = [];
+    try { q = JSON.parse(localStorage.getItem(key)) || []; } catch (e) { /* none */ }
+    localStorage.setItem(key, JSON.stringify(q.filter(x => x && x.e && x.e.v === 2).concat(mine)));
+  }, [oldKey(INGEST), own]);
+  assert.deepEqual((await queue(page)).map(x => x.e), [bare(waiting)], 'this build\'s batch is still waiting');
+  // The server is back: the waiting batch goes again, then the older tab's, as it queued it.
+  down = false;
+  await page.clock.runFor(20000);
+  await until(() => state.posts.length === 3, 'both batches');
+  await page.waitForFunction(() => window.fetched === 3);
+  assert.deepEqual(bare(JSON.parse(state.posts[1].body)), bare(waiting));
+  assert.equal(state.posts[2].body, JSON.stringify(own.e));
+  assert.deepEqual(await tmKeys(page), ['sg:site:tm:on'], 'nothing waits, and the older key is gone');
   serverKeeps(batches(state));
 });
 
@@ -945,9 +996,9 @@ test('a code per profile, stable across sessions and reloads, none for a guest, 
   // Another profile goes while p1 plays: p1's session says so. Then p1 itself goes: the
   // guest's session that follows says so.
   await page.evaluate(() => SGProfiles.remove('p2'));
-  assert.deepEqual(await rid(page), { v: 1, pc, k: { p1 }, l: {} });
+  assert.deepEqual(await rid(page), { v: 1, pc, k: { p1 }, l: {}, g: {} });
   await page.evaluate(() => SGProfiles.remove('p1'));
-  assert.deepEqual(await rid(page), { v: 1, pc, k: {}, l: {} });
+  assert.deepEqual(await rid(page), { v: 1, pc, k: {}, l: {}, g: {} });
   // Told once: the next page's session says nothing more.
   await page.reload();
   await page.clock.fastForward(60000);
@@ -980,11 +1031,11 @@ test('sg:site:rid: an active sink repairs a damaged key and keeps the valid code
     const state = await setup(t, { clock: true }), { page } = state;
     await page.goto(origin + '/seed.html');
     await seed(page, JSON.stringify({ v: 1, pc: 'NOT-A-CODE', k: { p7: 'abcdefabcdef', p8: 'short', x1: '0123456789ab', p9: 7 },
-      l: { p9: ['0123456789ab'] }, extra: 1 }), 'p7');
+      l: { p9: ['0123456789ab'] }, g: { p7: 'abcdefabcdef', p9: 1 }, extra: 1 }), 'p7');
     await page.goto(origin + '/');
     const r = await rid(page);
     assert.match(r.pc, /^[0-9a-f]{12}$/);
-    assert.deepEqual(r, { v: 1, pc: r.pc, k: { p7: 'abcdefabcdef' }, l: {} }, 'p7 keeps its code; the rest is dropped');
+    assert.deepEqual(r, { v: 1, pc: r.pc, k: { p7: 'abcdefabcdef' }, l: {}, g: { p7: 'abcdefabcdef' } }, 'p7 keeps its code; the rest is dropped');
     await page.clock.fastForward(60000);
     await until(() => state.posts.length === 1, 'the send');
     assert.deepEqual([batches(state)[0].u, batches(state)[0].p], ['abcdefabcdef', r.pc]);
@@ -1029,25 +1080,28 @@ test('sg:site:rid: an active sink repairs a damaged key and keeps the valid code
   }
 });
 
-test('a teacher\'s transfer: the profile\'s next session has the new code and names the older one once, right after ss', async t => {
+test('a teacher\'s transfer: the profile\'s next session has the new code and names the older one right after ss, once per page', async t => {
   const NEW = '3f9a0c51e2b7', OLD = '1b2c3d4e5f60', SAME = '0a0b0c0d0e0f', PC = '8c21d0e94a6f';
   const state = await setup(t, { clock: true }), { page } = state;
   await page.goto(origin + '/seed.html');
   await page.evaluate(([NEW, OLD, SAME, PC]) => {
     const p = (k, a) => ({ k, a, c: 1, b: '8-9', xp: 0, lv: 1, d0: 20000, dl: 20000, g: {} });
     localStorage.setItem('sg:site:profiles', JSON.stringify({ v: 1, seq: 2, list: [p('p1', 1), p('p2', 2)] }));
-    localStorage.setItem('sg:site:rid', JSON.stringify({ v: 1, pc: PC, k: { p1: NEW, p2: SAME }, l: { p1: OLD, p2: SAME } }));
+    localStorage.setItem('sg:site:rid', JSON.stringify({ v: 1, pc: PC, k: { p1: NEW, p2: SAME }, l: { p1: OLD, p2: SAME }, g: { p1: NEW, p2: SAME } }));
     sessionStorage.setItem('sg:site:player', 'p1');
   }, [NEW, OLD, SAME, PC]);
   await page.goto(origin + '/');
-  assert.deepEqual(await rid(page), { v: 1, pc: PC, k: { p1: NEW, p2: SAME }, l: { p2: SAME } }, 'the link is used once');
-  // A link to the profile's own code links nothing; it goes too.
+  // The link waits until a batch that names it is delivered.
+  assert.deepEqual(await rid(page), { v: 1, pc: PC, k: { p1: NEW, p2: SAME }, l: { p1: OLD, p2: SAME }, g: { p1: NEW, p2: SAME } });
+  // A link to the profile's own code links nothing; it goes at once.
   await page.evaluate(() => SGProfiles.select('p2'));
-  assert.deepEqual(await rid(page), { v: 1, pc: PC, k: { p1: NEW, p2: SAME }, l: {} });
+  assert.deepEqual((await rid(page)).l, { p1: OLD });
   await page.evaluate(() => SGProfiles.select(''));
   await page.evaluate(() => SGProfiles.select('p1'));
   await page.clock.fastForward(60000);
   await until(() => bySession(batches(state)).size === 4, 'every session');
+  await page.waitForFunction(() => !JSON.parse(localStorage.getItem('sg:site:rid')).l.p1);
+  assert.deepEqual(await rid(page), { v: 1, pc: PC, k: { p1: NEW, p2: SAME }, l: {}, g: { p1: NEW, p2: SAME } }, 'delivered: the link is done');
   const list = batches(state);
   await checkBatches(page, list);
   const sessions = [...bySession(list)].map(([s, events]) => [list.find(b => b.s === s).u, events.filter(ev => ev[0] !== 'se')]);
@@ -1059,6 +1113,65 @@ test('a teacher\'s transfer: the profile\'s next session has the new code and na
     ['', [['ss', 0, 0, -1, -1, 0, 2, 0]]],
     [NEW, [['ss', 0, 0, age, -1, 1, 2, 0]]]
   ], 'sessions');
+  // Delivered: the next page names it no more.
+  const sent = state.posts.length;
+  await page.reload();
+  await page.clock.fastForward(60000);
+  await until(() => batches(state).slice(sent).some(b => b.ev.some(ev => ev[0] === 'ss')), 'the next page\'s session');
+  assert.ok(batches(state).slice(sent).every(b => b.ev.every(ev => ev[0] !== 'cd')));
+});
+
+test('a teacher\'s link waits until a batch that names it is delivered: a lost batch never loses it', async t => {
+  const NEW = '3f9a0c51e2b7', OLD = '1b2c3d4e5f60', PC = '8c21d0e94a6f';
+  let down = true;
+  const state = await setup(t, { clock: true, answer: () => down ? 503 : 204 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/seed.html');
+  await page.evaluate(([NEW, OLD, PC]) => {
+    localStorage.setItem('sg:site:profiles', JSON.stringify({ v: 1, seq: 1, list: [{ k: 'p1', a: 1, c: 1, b: '8-9', xp: 0, lv: 1, d0: 20000, dl: 20000, g: {} }] }));
+    localStorage.setItem('sg:site:rid', JSON.stringify({ v: 1, pc: PC, k: { p1: NEW }, l: { p1: OLD }, g: { p1: NEW } }));
+    sessionStorage.setItem('sg:site:player', 'p1');
+  }, [NEW, OLD, PC]);
+  await page.goto(origin + '/');
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 1, 'the first send');
+  await inFlight(page);
+  like(JSON.parse(state.posts[0].body).ev, [['ss', 0, 0, int, -1, 1, 1, 0], ['cd', 0, OLD]]);
+  assert.deepEqual((await rid(page)).l, { p1: OLD }, 'refused: the link still waits');
+  // The batch is lost before the server is back (an old tab, the queue's 128 KB or 7 days,
+  // or a PC switched off before the batch was queued): the next page names the code again.
+  await page.evaluate(key => localStorage.removeItem(key), qKey(INGEST));
+  down = false;
+  await page.reload();
+  await page.clock.runFor(60000);
+  await until(() => batches(state).slice(1).some(b => b.ev.some(ev => ev[0] === 'cd')), 'the link named again');
+  await page.waitForFunction(() => !JSON.parse(localStorage.getItem('sg:site:rid')).l.p1);
+  assert.deepEqual(await rid(page), { v: 1, pc: PC, k: { p1: NEW }, l: {}, g: { p1: NEW } });
+  const again = batches(state).slice(1).find(b => b.ev.some(ev => ev[0] === 'cd'));
+  like(again.ev.slice(0, 2), [['ss', 0, 0, int, -1, 1, 1, 0], ['cd', 0, OLD]]);
+  assert.equal(again.u, NEW);
+  await checkBatches(page, batches(state).slice(1));
+});
+
+test('a removed profile is told as pr only with a code made here: a code a teacher gave goes on with the child on the other PC', async t => {
+  const GIVEN = '3f9a0c51e2b7', OWN = '1b2c3d4e5f60', MADE = '0a0b0c0d0e0f', PC = '8c21d0e94a6f';
+  const state = await setup(t, { clock: true }), { page } = state;
+  await page.goto(origin + '/seed.html');
+  await page.evaluate(([GIVEN, OWN, MADE, PC]) => {
+    const p = (k, a) => ({ k, a, c: 1, b: '8-9', xp: 0, lv: 1, d0: 20000, dl: 20000, g: {} });
+    localStorage.setItem('sg:site:profiles', JSON.stringify({ v: 1, seq: 2, list: [p('p1', 1), p('p2', 2)] }));
+    // p1 plays with the code its child has on another PC; its own still waits to be joined.
+    localStorage.setItem('sg:site:rid', JSON.stringify({ v: 1, pc: PC, k: { p1: GIVEN, p2: MADE }, l: { p1: OWN }, g: { p1: GIVEN } }));
+  }, [GIVEN, OWN, MADE, PC]);
+  await page.goto(origin + '/');
+  await page.evaluate(() => SGProfiles.remove('p1'));
+  assert.deepEqual(await rid(page), { v: 1, pc: PC, k: { p2: MADE }, l: {}, g: {} });
+  await page.evaluate(() => SGProfiles.remove('p2'));
+  assert.deepEqual(await rid(page), { v: 1, pc: PC, k: {}, l: {}, g: {} });
+  await page.clock.fastForward(60000);
+  await until(() => allEvents(state).length >= 2, 'the guest\'s session');
+  like(allEvents(state), [['ss', 0, 0, -1, -1, 0, 2, 0], ['pr', 0, MADE]]);
+  await checkBatches(page, batches(state));
 });
 
 test('the v3 events: profiles on the PC, classroom mode, tutorials, hearts, the classroom timer, engaged time so far and the idle hand-over', async t => {

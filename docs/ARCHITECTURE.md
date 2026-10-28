@@ -135,8 +135,9 @@ dda.reset()
   `tier = 1 + floor(level * tiers * 0.9999)`.
 * **Storage:** `Kit.store(slug)` key `dda` →
   `{ <player, or '_' + band for a guest>: { <id>: [level rounded to 3 decimals, n] } }`;
-  at most 24 players kept, a full PC (the least recently saved is dropped; game pages
-  built before milestone 2.5 still keep 16). A change of player
+  at most 28 players kept: a full PC's 24 profiles and the guests of each band (the least
+  recently saved is dropped; game pages built before milestone 2.5 still keep 16). A
+  change of player
   (or, for a guest, of band) reloads the state. A player with no results yet follows
   the current band's seed.
 * Every read of the controller (`level`, `tier`, `value`, `pick`) reports the tier to
@@ -209,7 +210,7 @@ split, `rx` and its `re` may arrive in two messages.
 | `wallMs` | the round's start to its end | elapsed milliseconds (`performance.now()`), engaged or not; never a time of day |
 | `inputs` | every key press and click Kit sees in the round | key repeats excluded |
 | `idleLapses` | a key press or click in the round after its 20 s engaged window lapsed | mouse moves, the wheel and `busy()` never count; after a pause the window is cut, so the press that resumes play is not a lapse |
-| `pauses` | every Kit pause in the round (blur, hidden page, fullscreen exit, `sg:pause`, Shift+Tab) | one blur can arrive with a hidden page, which counts twice |
+| `pauses` | every Kit pause in the round (blur, hidden page, fullscreen exit, `sg:pause`, Shift+Tab) | once per stop of play: a pause while play is already cut (no key press or click since the last pause, such as the hidden page after a blur, or the portal's `sg:pause` after Kit's own fullscreen exit) does not count again |
 | `rtSumMs`, `rtN` | the same reaction times as the `re` histogram | for the exact mean |
 | `ddaPermille` | `round(level × 1000)` of the last `Kit.dda` read of any controller in the page | −1 before the first read; sticky across rounds |
 
@@ -351,7 +352,7 @@ last `t`. A new session (new `s`) starts at page load and whenever the player ch
 | Event | Shape |
 |---|---|
 | session start | `['ss', t, isNew 0/1, ageDays, sinceDays, level, np, cls]` — whole days, −1 for a guest (days since also −1 for a new profile or one that never played); `np` profiles on this PC; `cls` classroom mode |
-| older code | `['cd', t, olderCode]` — once, right after `ss`, when a teacher gave this profile another PC's code (the server links the older code to `u`) |
+| older code | `['cd', t, olderCode]` — right after `ss`, when a teacher gave this profile another PC's code (the server links the older code to `u`); once per page until a batch that holds it is delivered |
 | profile removed | `['pr', t, code]` — once per profile gone from this PC (censoring, not drop-out) |
 | game open | `['go', t, n, slug, src, playsBefore, fav]` — `src` from the v1 launch sources plus `starter`; the player's exact visits before; `fav` the game is hearted |
 | game ready | `['ld', t, n, slug, loadMs]` |
@@ -369,21 +370,24 @@ last `t`. A new session (new `s`) starts at page load and whenever the player ch
 `site.js` calls the hooks `why(code)` (`h` and `i` only, just before it changes the
 player), `fav(slug, on)` and `timer(what, minutes)` next to its own handlers; like every
 hook they do nothing while the sink is inert. A teacher's "same child as on another PC"
-on the teacher page (`js/teacher.js`, `docs/PLAY_STATS.md` section 3) writes `k[key]` and
-the older code in `l[key]`; the sink sends that `cd` at the profile's next session start
-and deletes `l[key]`. The check character the teacher page shows (Luhn mod 16) is never
-sent.
+on the teacher page (`js/teacher.js`, `docs/PLAY_STATS.md` section 3) writes `k[key]`, the
+same code in `g[key]` (given, not made here) and the older code in `l[key]`, unless that
+older code was itself given; the sink sends that `cd` at the profile's next session start
+and deletes `l[key]` once a batch holding it is answered with a 2xx. A removed profile
+whose code was given sends no `pr`: the child plays on with it on the other PC. The check
+character the teacher page shows (Luhn mod 16) is never sent.
 
 **Delivery:** events batch in memory; a batch is sent when a game closes, 60 s after the
 first waiting event (or as often as the server's last `X-Batch-Every` asked, 20 to 600 s),
 and when the page is hidden, always by `fetch` without credentials
 (`credentials: 'omit'`: no cookie ever goes, so never by `sendBeacon`), with `keepalive`
 while the keepalive bodies in flight fit in 60 KB (the rest wait in the queue). Unsent
-batches are kept as `{ t, w0, e }` in `localStorage` `sg:site:tm:q:<hash of the ingest
+batches are kept as `{ t, w0, e }` in `localStorage` `sg:site:tm:q3:<hash of the ingest
 URL>`, so another copy of the site on the same origin with another URL never sends them (at
-most 128 KB, at most 7 days old, oldest dropped first); entries of wire version 2 queued by
-an older build are still sent, unchanged. Stopping statistics or turning sharing off drops
-every `sg:site:tm:q` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the
+most 128 KB, at most 7 days old, oldest dropped first). Entries of wire version 2 that an
+older build queued in `sg:site:tm:q:<hash>` move into it and are still sent, unchanged; this
+build never writes that key, because a pre-v3 tab still open on the PC rewrites it with v2
+entries only. Stopping statistics or turning sharing off drops every `sg:site:tm:` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the
 batch; a 4xx other than 429 drops it as malformed; 429, 5xx and network errors retry.
 Teacher "clear" removes the `sg:site:tm:` queues too (not the sharing note
 `sg:site:tm:on`, and not `sg:site:rid`). All storage calls are wrapped; no `console`; never

@@ -1,5 +1,5 @@
 /*
- * Anonymous picture profiles, age bands and XP (docs/ARCHITECTURE.md "Profiles and
+ * Picture profiles without names, age bands and XP (docs/ARCHITECTURE.md "Profiles and
  * age bands"). Plain script, loaded after shared/juice.js and before js/site.js,
  * which draws everything; this file only keeps the numbers.
  *

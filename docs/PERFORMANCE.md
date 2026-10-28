@@ -703,3 +703,36 @@ bytes plus 1,000.
 No game limit changes (drift-king keeps 1,006 bytes and swing-hook 1,035). No request,
 font, library or third-party code is added to any child's page; with `SG_TELEMETRY_URL`
 unset the built site still makes no network request at all.
+
+## Milestone 2.5 review fixes on the client, 28 October 2026
+
+The review of the integrated milestone 2.5 client changed the telemetry sink, the teacher
+page's transfer and Kit. Measured with the Linux minified build, against the integrated
+head before the fixes:
+
+* **The portal** grows by 668 bytes, from 395,534 to 396,202 (`js/telemetry.js`): +322 for
+  the wire-v3 queue under its own key, `sg:site:tm:q3:<hash>`, with the older build's
+  batches moved over from `sg:site:tm:q:<hash>` (a pre-v3 tab still open on the PC
+  rewrites that key with v2 entries only); +346 for the transfer's given codes (`g`), no
+  `pr` for a given code, and the older code kept in `l` until a batch naming it is
+  delivered. The added work is one more `getItem` of a key that is normally absent at each
+  queue read, and one `sg:site:rid` write when a batch holding a `cd` is delivered.
+* **The teacher page** grows by 35 bytes, to 96,672 of 98,000 (the transfer notes the
+  code it gives and never links a given one).
+* **Kit** grows by 17 minified bytes per game page: a pause counts only while play runs
+  (+7), and a round's wall time comes from the same clock reading as its engaged time
+  (+10). The DDA store keeps 28 players, a full PC's 24 profiles and the guests of each
+  band, for no bytes.
+* The offline cache grows by 1,281 bytes, from 5,293,074 to 5,294,355.
+
+The portal, the offline cache and drift-king kept less than 1,000 bytes, so their limits
+follow the rule above: the measured size rounded up to the next 1,000 bytes plus 1,000.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 395,534 | 396,202 | 397,000 | 398,000 |
+| drift-king | 108,994 | 109,011 | 110,000 | 111,000 |
+| Offline precache | 5,293,074 | 5,294,355 | 5,295,000 | 5,296,000 |
+
+No other limit changes (swing-hook keeps 1,018 bytes, the teacher page 1,328). No
+request, font, library or third-party code is added to any child's page.
