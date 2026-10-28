@@ -1739,14 +1739,23 @@ test('retention: facts after 400 days (or the owner\'s choice), rollups after 80
   await s.app.purge();
   assert.ok((await s.rows('usage')).every(r => r.day >= '2026-01-03'), 'usage rows are kept 60 days');
 
-  // Exactly 400 days old is kept; a day later the session goes with its student, PC, visits, rounds, marks and links.
+  // Exactly 400 days old is kept; a day later the session goes with its visits, rounds and
+  // marks. Its student, PC and links stay as long as the rollups that name them.
+  const oldPeriod = async () => {
+    const list = (await s.admin('/v1/admin/students?from=2026-01-01&to=2026-01-02')).json().students;
+    const one = await s.admin(`/v1/admin/student?u=${U}&from=2026-01-01&to=2026-01-02`);
+    const cohorts = (await s.admin('/v1/admin/cohorts?from=2026-01-01&to=2026-01-02')).json();
+    return [list.map(x => pick(x, ['u', 'band', 'firstDay', 'lastDay', 'pcs', 'linked'])), one.status, cohorts.cohorts.length];
+  };
+  const answers = await oldPeriod();
+  assert.deepEqual(answers, [[{ u: U, band: '8-9', firstDay: '2026-01-01', lastDay: '2026-01-01', pcs: 1, linked: ['1b2c3d4e5f60'] }], 200, 1]);
   s.clock.now = day0 + 400 * DAY_MS;
   assert.deepEqual(pick(await s.app.purge(), ['cutoff', 'sessions']), { cutoff: '2026-01-01', sessions: 0 });
   s.clock.now = day0 + 401 * DAY_MS;
   result = await s.app.purge();
-  assert.deepEqual(pick(result, ['cutoff', 'sessions', 'rounds', 'students', 'pcs']), { cutoff: '2026-01-02', sessions: 1, rounds: 1, students: 1, pcs: 1 });
-  assert.deepEqual(await counts(), { ...all, st_sessions: 1, st_visits: 1, st_rounds: 0, st_marks: 1, st_students: 0, st_pcs: 0, st_student_pcs: 0,
-    st_student_games: 0, aliases: 0, batches: 0 }, 'the rollups stay');
+  assert.deepEqual(pick(result, ['cutoff', 'sessions', 'rounds', 'students', 'pcs']), { cutoff: '2026-01-02', sessions: 1, rounds: 1, students: 0, pcs: 0 });
+  assert.deepEqual(await counts(), { ...all, st_sessions: 1, st_visits: 1, st_rounds: 0, st_marks: 1, batches: 0 }, 'the rollups, students, PCs and links stay');
+  assert.deepEqual(await oldPeriod(), answers, 'the period the rollups hold answers as before');
   const settings = async () => Object.fromEntries((await s.rows('settings')).map(r => [r.key, r.value]));
   assert.equal((await settings()).facts_since, '2026-01-02', 'the facts start at the cutoff');
   // The rollups go after 800 days, when the 5-minute cron has nothing to roll.
@@ -1763,6 +1772,10 @@ test('retention: facts after 400 days (or the owner\'s choice), rollups after 80
   assert.equal((await idle()).purged, '2026-01-01', 'the rollups of the oldest day go');
   assert.deepEqual((await s.rows('r_day')).map(r => r.day), ['2026-01-02']);
   assert.equal((await s.rows('roll_days', 'day'))[0].day, '2026-01-02');
+  // With them, the student, its PC and its links.
+  assert.deepEqual(pick(await s.app.purge(), ['students', 'pcs']), { students: 1, pcs: 1 });
+  assert.deepEqual(pick(await counts(), ['st_students', 'st_pcs', 'st_student_pcs', 'st_student_games', 'aliases']),
+    { st_students: 0, st_pcs: 0, st_student_pcs: 0, st_student_games: 0, aliases: 0 });
 
   // The owner keeps two school years: facts stay 760 days, rollups still 800.
   const owner = await start(t, { at: day0 });

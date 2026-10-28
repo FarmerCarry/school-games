@@ -167,10 +167,11 @@ What can be stored is decided here, not only by what the portal chooses to send.
 * **Retention.** The daily purge (Cloudflare: a cron at 03:23 UTC; Node: at start and
   every 24 hours) deletes the facts of play sessions that started more than
   `RETENTION_DAYS` days ago (default 400: a school year and the summer; the owner can
-  choose 760 on the dashboard), the student and PC rows (with their links) last seen
-  before then, the frozen daily totals of milestone 2 older than that, batch ids after
-  30 days and the server's usage counts after 60 days. The daily rollups (counts per day,
-  per game, per student code) are kept 800 days, or longer if the facts are. Live rows
+  choose 760 on the dashboard), the frozen daily totals of milestone 2 older than that,
+  batch ids after 30 days and the server's usage counts after 60 days. The daily rollups
+  (counts per day, per game, per student code) are kept 800 days, or longer if the facts
+  are, and the student and PC rows (with their links) as long as the rollups that name
+  them: until their last day of play is past the rollups' retention. Live rows
   go by a sweep every 5 minutes (Node: every minute). If the database nears the free
   plan's 500 MB, the round-by-round rows of the oldest 30 days of facts are removed (the
   rollups stay). Deletions go a few hundred sessions at a time, so a shorter retention
@@ -998,8 +999,7 @@ counts lose that student too.
   else `RETENTION_DAYS`), at most 600 sessions a night (about 15,000 rows written; more
   than a busy school's day, and the 5-minute cron deletes the rest when the day's writes
   leave room, so a shorter retention reaches its cutoff within days, never in one
-  batch), the students and PCs last seen before then with their PC lists, attempt
-  counters and links, and moves `facts_since` on with them (to the day after the newest
+  batch), and moves `facts_since` on with them (to the day after the newest
   session deleted, and to the cutoff once none older is left); the frozen daily totals of
   milestone 2 by UTC receipt day after `keep` days, a week of them a night
   (`legacy_until` is cleared once the last one goes); batch ids after 30 days, the usage counts after 60
@@ -1008,7 +1008,10 @@ counts lose that student too.
   Cloudflare and every minute on Node, so within 10 minutes even with no traffic). The
   rollups and their `roll_days` rows go after the larger of 800 days and `keep`, a day
   at a time, deleted by the 5-minute cron when it has no day to roll (so the daily purge
-  stays within D1's statement limit). Lowering the retention starts at the next purge
+  stays within D1's statement limit); the daily purge deletes the students and PCs last
+  seen before that cutoff, with their PC lists, attempt counters and links (until then a
+  period the rollups hold lists its students with their bands, days, PCs and links, and
+  a student's page and the cohorts answer as before). Lowering the retention starts at the next purge
   (Node: the next start). To erase everything on Node, stop the server and delete the database
   files; on Cloudflare, delete the Worker and its D1 database `school-games-telemetry`
   in the Cloudflare dashboard.

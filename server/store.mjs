@@ -1170,7 +1170,9 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
   // The daily purge (§D.11): the facts of the oldest sessions that started before the
   // school's local day `keep` days ago (keep_days, or RETENTION_DAYS), PURGE_SESSIONS of
   // them (more than a busy school's day; the 5-minute cron catches up on the rest); the
-  // students and PCs last seen before the cutoff, with their rows; a week at most
+  // students and PCs last seen before the rollups' own cutoff, with their rows and links
+  // (the rollups name them until then: the students list, a student, the cohorts and the
+  // linked codes of an old period answer as before); a week at most
   // of the frozen aggregate days older than `keep` (UTC receipt days); batch ids after 30
   // days, usage counts after 60, kept KPI parts of an older rollup version, and live rows
   // out of the window. facts_since moves on with the facts. Then the storage guard: above
@@ -1182,10 +1184,11 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     await ensure(now);
     const { tz } = conf, keep = keepDays(), legacy = conf.legacyUntil !== '';
     const cutoff = localDay(tz, now - keep * DAY_MS), lo = dayBounds(tz, cutoff).lo, legacyCutoff = utcDay(now - keep * DAY_MS);
+    const studentsLo = dayBounds(tz, localDay(tz, now - Math.max(ROLLUP_DAYS, keep) * DAY_MS)).lo;
     const facts = factsChunk(wide(now).local, legacy, true).map(text => bound(text, [lo, PURGE_SESSIONS, cutoff, legacyCutoff]));
     // The frozen days go before the settings statement, which clears legacy_until once they are all gone.
     const frozen = legacy ? AGGREGATES.map(table => sql(frozenChunk(table)).bind(legacyCutoff)) : [];
-    const results = await run([...facts.slice(0, 3), ...frozen, ...facts.slice(3), ...PURGE_STUDENTS.map(text => sql(text).bind(lo)),
+    const results = await run([...facts.slice(0, 3), ...frozen, ...facts.slice(3), ...PURGE_STUDENTS.map(text => sql(text).bind(studentsLo)),
       sql('DELETE FROM batches WHERE day < ?1').bind(utcDay(now - DEDUP_DAYS * DAY_MS)),
       sql('DELETE FROM usage WHERE day < ?1').bind(utcDay(now - USAGE_DAYS * DAY_MS)),
       sql(LIVE_SWEEP).bind(Math.floor(now / MINUTE_MS) - LIVE_WINDOW_MIN), sql(KEPT_CLEAN), sql(OLDEST_START)

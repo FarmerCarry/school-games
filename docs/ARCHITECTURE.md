@@ -637,8 +637,9 @@ The server:
   test locks the answers equal to milestone 2's store from Git, with its privacy floor
   set to 0, on the same v2 batches, open, rolled or both.
 * **Retention** (daily purge): facts after 400 days (`RETENTION_DAYS`, or the owner's 760),
-  600 sessions a run (the 5-minute cron catches up after a shorter retention), with the
-  students and PCs last seen before then; frozen days on the same rule, a week a night;
+  600 sessions a run (the 5-minute cron catches up after a shorter retention); the
+  students and PCs (with their links) once last seen before the rollups' cutoff, so an
+  old period the rollups hold answers as before; frozen days on the facts' rule, a week a night;
   above 425 MB the round rows of the oldest 30 days, 800 sessions a cron run.
   `facts_since` moves with the facts.
 * **Research reads** (`server/admin.mjs`): the students (each canonical code with its
