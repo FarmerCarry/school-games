@@ -29,6 +29,7 @@
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 
   var store = K.store('chaos-island');
+  var dda = K.dda('chaos-island', { id: 'match' });
   var save = fresh();
   function valid(s) {
     return !!(s && s.v === 1 && typeof s.coins === 'number' && isFinite(s.coins)
@@ -296,12 +297,22 @@
       coop: players > 1 && !!save.settings.coop,
       perks: perks
     });
+    // Read the tier before the round starts. Tiers 2 and 3 are the designed
+    // match; the ends of the scale only nudge each round's existing power.
+    var tier = dda.tier;
+    var bias = tier <= 1 ? -1 : tier >= 4 ? 1 : 0;
+    if (bias && world.plan) {
+      for (var r = 0; r < world.plan.length; r++) {
+        world.plan[r].power = Math.max(1, Math.min(5, world.plan[r].power + bias));
+      }
+    }
     dress(world);
     lastPlayers = players;
     lastIsland = island;
     lastDaily = daily;
     preBest = save.bestRounds;
     matches++;
+    if (!save.survivals) K.stats.tutorial('start');
     K.stats.round('match');
     matchLive = true;
     reported = false;
@@ -401,9 +412,14 @@
     K.keys.reset();
     focusGame();
   }
+  function tryResult(fraction) {
+    if (reported) return;
+    dda.result(fraction);
+  }
   function toMenu() {
     if (matchLive) {
       var you = human(0);
+      tryResult(you ? you.rounds / 4 : 0);
       K.stats.end('end', you ? you.coins : 0);
       matchLive = false;
     }
@@ -413,15 +429,20 @@
   }
   function restart() {
     if (mode !== 'play' && mode !== 'pause' && mode !== 'result') return;
+    if (matchLive && !reported) {
+      var you = human(0);
+      tryResult(you ? you.rounds / 4 : 0);
+    }
     beginMatch({ players: lastPlayers, island: lastIsland, daily: lastDaily });
   }
   function openResult() {
     if (reported) return;
-    reported = true;
-    matchLive = false;
     var hs = humansOf(world);
     var you = hs[0];
     var rounds = you ? you.rounds : 0;
+    tryResult(rounds / 4);
+    reported = true;
+    matchLive = false;
     var record = rounds > preBest;
     if (record) save.bestRounds = rounds;
     var score = 0;
@@ -453,7 +474,7 @@
       else if (e.t === 'pop') {
         burst(e.x, e.y, { count: mine ? 14 : 8, colors: ['#fff', '#b9ecff', '#ffd0ea'], speed: 180, life: 0.45, size: 5, gravity: -40 });
         popText(e.x, e.y - 20, 'بوب!', '#fff');
-        if (mine) { S.pop(); shake.add(7); hitT = Math.max(hitT, 0.08); }
+        if (mine) { K.track.miss(); S.pop(); shake.add(7); hitT = Math.max(hitT, 0.08); }
         else if (window.CIAudio) CIAudio.ooh();
         var botsLeft = 0;
         for (var bi = 0; bi < w.actors.length; bi++) if (w.actors[bi].bot && w.actors[bi].mode === 'run') botsLeft++;
@@ -475,6 +496,8 @@
         dirty = true;
       } else if (e.t === 'ok' && mine) {
         save.survivals++;
+        K.track.hit();
+        if (save.survivals === 1) K.stats.tutorial('done');
         save.streak = actor.streak;
         if (actor.streak > save.bestStreak) save.bestStreak = actor.streak;
         if (w.dis[0]) noteBook(w.dis[0].id, w.hard);
@@ -490,6 +513,7 @@
       } else if (e.t === 'siren') {
         var name = e.name + (e.name2 ? ' + ' + e.name2 : '');
         showCard(name, tipOf(e.id), true, e.id);
+        K.track.cue();
         S.siren();
       } else if (e.t === 'round') {
         showCard(e.name + (e.name2 ? ' + ' + e.name2 : ''), tipOf(e.id), false, e.id, e.n === 0);
@@ -1411,7 +1435,6 @@
     }
   }
   function update(dt) {
-    if (window.CIAudio) CIAudio.pump((mode === 'play' || mode === 'pause' || mode === 'result') ? world : attract);
     if (mode === 'pause') { K.keys.endFrame(); return; }
     if (cardT > 0) { cardT -= dt; if (cardT <= 0) $('siren').hidden = true; }
     if (boomT > 0) boomT -= dt;

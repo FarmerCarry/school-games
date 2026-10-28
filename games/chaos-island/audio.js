@@ -1,9 +1,7 @@
-/* جزيرة الفوضى — music and disaster cues. WebAudio only, silent while muted. */
+/* جزيرة الفوضى — one-shot disaster cues. WebAudio only, silent while muted. */
 (function () {
   'use strict';
   var A = Kit.audio;
-  var next = 0, step = 0, tempo = 1;
-  var SONG = [523, 659, 784, 659, 587, 698, 784, 880, 784, 659, 587, 523, 494, 587, 659, 784];
 
   function live() { return !!(A.ctx && !A.muted); }
   function tone(o) {
@@ -45,22 +43,6 @@
   };
 
   window.CIAudio = {
-    pump: function (w) {
-      tempo = (w && w.phase === 'danger' && w.frames < 15 * 60) ? 1.15 : 1;
-      if (!live()) { next = 0; return; }
-      var t = A.ctx.currentTime;
-      var beat = 0.26 / tempo;
-      if (!next || next < t - 0.05) next = t + 0.04;
-      var guard = 0;
-      while (next < t + 0.45 && guard++ < 6) {
-        var f = SONG[step % SONG.length];
-        tone({ freq: f, type: 'triangle', dur: beat * 0.85, vol: 0.045, delay: next - t, lp: 1800 });
-        if (step % 2 === 0) tone({ freq: f / 2, type: 'sine', dur: beat * 1.4, vol: 0.03, delay: next - t, lp: 600 });
-        if (step % 4 === 0) noise({ dur: 0.04, vol: 0.025, filter: 2500, to: 800, delay: next - t });
-        next += beat;
-        step++;
-      }
-    },
     cue: function (id) { if (CUES[id]) CUES[id](); },
     siren: function () {
       tone({ freq: 660, type: 'square', dur: 0.12, vol: 0.06, lp: 1600 });

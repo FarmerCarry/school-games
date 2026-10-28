@@ -634,3 +634,28 @@ Thumbnails remain the largest part of the portal (about 256 KB). The offline cac
 grows by 73,195 bytes (1.4%). No request, font, library or third-party code is added
 to any child's page, and with `SG_TELEMETRY_URL` unset the built site makes no network
 request at all.
+
+## Chaos Island on milestone 1, 28 October 2026
+
+جزيرة الفوضى (Chaos Island) is a fixed 1280×720 canvas party platformer added on top of
+the milestone 1 site. The island plate, pet-style characters, jelly, round chip and
+meteor warning are unchanged. The background melody is gone; disaster cues stay
+one-shot. The match reads `Kit.dda` once at the start (tiers 2 and 3 keep the
+designed powers), reports `Kit.stats` the same way a party round does, and counts a
+survival, a pop and a disaster warning with `Kit.track`.
+
+Measured with the Linux minified build, after adding this game to the milestone 1 site:
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Chaos Island | — | 117,286 | — | 119,000 |
+| Portal (thumbnail and catalog entry) | 392,040 | 400,438 | 394,000 | 402,000 |
+| Teacher page | 90,422 | 91,733 | 96,000 | 96,000 |
+| Offline precache, 49 files | 5,276,735 | 5,403,730 | 5,290,000 | 5,405,000 |
+
+The page limit is a new entry, 1,714 bytes above the built page. The portal grows by
+8,398 bytes, almost all of it the 6,896-byte thumbnail, so its limit moves from
+394,000 to 402,000 (up 8,000). The teacher page stays inside 96,000. The offline
+cache grows by 126,995 bytes (the page, the portal and the teacher entry), so
+`precacheBytes` moves from 5,290,000 to 5,405,000 (up 115,000). Headroom is 1,562
+bytes on the portal and 1,270 bytes on the precache.
