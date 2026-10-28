@@ -107,7 +107,9 @@ async function pc(t, server) {
 // plus 90 s of engaged time that the test posts from inside the game frame, as Kit would
 // (so the minutes are not all under one), then home: leaving the game sends at once.
 async function session(state, label) {
-  const { page } = state, sent = state.answers.length;
+  // Counted in bodies, the list the wait below reads: an answer is pushed only once the
+  // server has replied, so the last session's batch may not have one yet.
+  const { page } = state, sent = state.bodies.length;
   await page.goto(site.origin + '/index.html');
   await page.waitForFunction(() => window.SGProfiles && SGProfiles.player() && SGTelemetry.active());
   await page.locator('.catalog-grid .tile[data-slug="tic-tac-toe"]').click();
