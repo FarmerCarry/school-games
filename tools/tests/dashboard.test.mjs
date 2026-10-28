@@ -1016,6 +1016,35 @@ test('the Students tab: the code search, sorting both ways, pages of 50, and a s
   await s.check();
 });
 
+test('a students answer in pages: every page is asked for with after= its next, and the tabs show them all', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  // The server's own answer, cut into pages of a third of its students the way the server
+  // pages it (by code, next: the last code of a page with more after it).
+  let whole = null;
+  s.mode.stub = { '/v1/admin/students': async (method, body, search) => {
+    const q = new URLSearchParams(search), after = q.get('after');
+    q.delete('after');
+    const res = await fetch(ingest + '/v1/admin/students?' + q, { headers: { Authorization: 'Bearer ' + TOKEN } });
+    whole = await res.json();
+    const size = Math.ceil(whole.students.length / 3), left = whole.students.filter(x => after == null || x.u > after);
+    const students = left.slice(0, size);
+    return [200, { ...whole, students, ...(left.length > size ? { next: students.at(-1).u } : {}) }];
+  } };
+  await page.goto(site.origin + '/#/students');
+  await waitForView(page, 'students');
+  assert.ok(whole && whole.students.length >= 6, 'the test server has students to page');
+  const asked = s.api.filter(e => e.path === '/v1/admin/students' && e.search.get('from') === whole.range.from && e.search.get('to') === whole.range.to);
+  assert.equal(asked.length, 3, 'three pages');
+  assert.deepEqual(asked.map(e => e.search.get('after')), [null, asked[0].json.next, asked[1].json.next]);
+  assert.equal(asked[2].json.next, undefined);
+  assert.match(await page.locator('.pager-text').textContent(), new RegExp(`of ${whole.students.length}\\b`));
+  // A student of the last page is there.
+  const last = whole.students.at(-1);
+  await page.fill('#codeSearch', last.u);
+  assert.deepEqual(await page.locator('#students-card tbody tr').evaluateAll(r => r.map(x => x.dataset.u)), [last.u]);
+  await s.check();
+});
 test('a student\'s "Getting better?": weeks from every round of the period, no sentence about a child doing worse, and the latest rounds said so', async t => {
   const s = await open(t, { token: TOKEN });
   const { page } = s;

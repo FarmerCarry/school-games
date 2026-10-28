@@ -237,6 +237,19 @@
       return json;
     });
   }
+  // GET /v1/admin/students answers in pages of at most 1.5 MB: next is the last code of a
+  // page that has more after it, asked for again with after=. Every page is fetched and
+  // their students joined in one answer, without next.
+  function allStudents(url, token, json) {
+    if (!json || !json.next || !Array.isArray(json.students)) return json;
+    return request(url + '&after=' + encodeURIComponent(json.next), token).then(function (more) {
+      if (token !== state.token) throw new Failure('stale');
+      var students = json.students.concat(more && Array.isArray(more.students) ? more.students : []);
+      // A page that does not move on ends the list rather than asking for it again.
+      var next = more && more.next && more.next !== json.next ? more.next : null;
+      return allStudents(url, token, Object.assign({}, more, { students: students, next: next }));
+    });
+  }
   // One request per address and generation: the sections of a tab share it, and a
   // new generation (a tab opened, a filter changed, Refresh) asks again.
   function get(name, q) {
@@ -244,7 +257,10 @@
     var url = query(name, q), hit = state.cache[url];
     if (hit && hit.gen === state.gen) return hit.promise;
     var token = state.token;
-    var promise = (state.demo ? demoGet(name, q) : request(url, token)).then(function (json) {
+    var asked = state.demo ? demoGet(name, q) : request(url, token).then(function (json) {
+      return name === 'students' ? allStudents(url, token, json) : json;
+    });
+    var promise = asked.then(function (json) {
       if (!state.demo && token !== state.token) throw new Failure('stale');
       // A period that reaches back before the update: its groups' student counts are partial.
       return name === 'kpis' ? I.forPeriod(json) : json;
