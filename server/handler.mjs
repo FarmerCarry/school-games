@@ -7,8 +7,8 @@
 // answered 503 with Retry-After (the portal sends the batch again). Admin reads answer 429
 // once the day's free reading allowance is nearly used, and the owner's actions once the
 // day's writes are (store.mjs, guard).
-import { JsonText } from './admin.mjs';
-import { isZone } from './clock.mjs';
+import { JsonText, SENT } from './admin.mjs';
+import { zoneName } from './clock.mjs';
 import { FILES } from './export.mjs';
 import { METRICS } from './rollups.mjs';
 import { U_RE, WIRES, isSlug, validateBatch } from './schema.mjs';
@@ -156,9 +156,10 @@ function bodyCode(body, name) {
   return body[name];
 }
 
-// An export page: CSV lines, with how many and the next page's cursor.
+// An export page: its CSV lines (each ending in a line break, as SQL joined them), how many,
+// and the next page's cursor.
 class CsvPage {
-  constructor(lines, next) { this.lines = lines; this.next = next; }
+  constructor(text, rows, next) { this.text = text; this.rows = rows; this.next = next; }
 }
 
 // POST /v1/admin/settings: { tz?, source?: 'dashboard', weekStart?: 'sun' | 'mon',
@@ -168,15 +169,18 @@ function settingsBody(body) {
   const field = Object.keys(body).find(key => !SETTINGS_FIELDS.has(key));
   if (field !== undefined) throw new HttpError(400, 'field');
   const { tz, source, weekStart, keepDays } = body;
-  if (tz !== undefined && !isZone(tz)) throw new HttpError(400, 'tz');
+  if (tz !== undefined && !zoneName(tz)) throw new HttpError(400, 'tz');
   if (source !== undefined && (source !== 'dashboard' || tz === undefined)) throw new HttpError(400, 'source');
   if (weekStart !== undefined && weekStart !== 'sun' && weekStart !== 'mon') throw new HttpError(400, 'weekStart');
   if (keepDays !== undefined && keepDays !== 400 && keepDays !== 760) throw new HttpError(400, 'keepDays');
-  return { tz, source, weekStart, keepDays };
+  return { tz: tz === undefined ? tz : zoneName(tz), source, weekStart, keepDays };
 }
 
-// An answer as JSON; a field that is JSON text already (admin.mjs JsonText) is written as it is.
+// An answer as JSON; one that is JSON text already (admin.mjs JsonText, or SENT), or a field
+// that is, is written as it is.
 export function serialize(body) {
+  if (body instanceof JsonText) return body.text;
+  if (body[SENT]) return body[SENT];
   if (!Object.values(body).some(value => value instanceof JsonText)) return JSON.stringify(body);
   return '{' + Object.entries(body).filter(([, value]) => value !== undefined)
     .map(([key, value]) => JSON.stringify(key) + ':' + (value instanceof JsonText ? value.text : JSON.stringify(value))).join(',') + '}';
@@ -240,7 +244,11 @@ export function createHandler(options) {
       case 'live GET': return store.live(t);
       case 'settings GET': return store.settings(t);
       case 'settings POST': return store.updateSettings(settingsBody(body), t);
-      case 'students GET': return store.students(period(), t);
+      case 'students GET': {
+        // A later page starts after the code `after` (its answer's next).
+        const after = query.has('after') ? code(query, 'after') : null;
+        return store.students({ ...period(), after }, t);
+      }
       case 'student GET': { const u = code(query, 'u'); return store.student({ ...period(), u }, t); }
       case 'game GET': { const slug = slugParam(query, 'slug'); return store.game({ ...period(), slug }, t); }
       case 'stats GET': { const metrics = metricsParam(query), slug = slugParam(query, 'slug', true); return store.stats({ ...period(), metrics, slug }, t); }
@@ -250,7 +258,7 @@ export function createHandler(options) {
         const file = query.get('file');
         if (!FILES.includes(file)) throw new HttpError(400, 'file');
         const { from, to } = period();
-        return store.exportPage({ file, from, to, after: query.get('after') }, t).then(page => page.error ? page : new CsvPage(page.lines, page.next));
+        return store.exportPage({ file, from, to, after: query.get('after') }, t).then(page => page.error ? page : new CsvPage(page.text, page.rows, page.next));
       }
       case 'forget POST': return store.forget({ u: bodyCode(fields(body, ['u']), 'u') }, t);
       case 'link POST': { const b = fields(body, ['u', 'to']); return store.link({ u: bodyCode(b, 'u'), to: bodyCode(b, 'to') }, t); }
@@ -320,9 +328,8 @@ export function createHandler(options) {
         const answer = await admin(request, pathname.slice(10), url.searchParams);
         if (!(answer instanceof CsvPage)) return send(200, answer);
         // An export page: lines without a header, how many, and the next page's cursor.
-        const text = answer.lines.length ? answer.lines.join('\n') + '\n' : '';
-        return new Response(encoder.encode(text), { status: 200, headers: { ...headers, 'Content-Type': 'text/csv; charset=utf-8',
-          'X-Rows': String(answer.lines.length), ...(answer.next ? { 'X-Next': answer.next } : {}) } });
+        return new Response(encoder.encode(answer.text), { status: 200, headers: { ...headers, 'Content-Type': 'text/csv; charset=utf-8',
+          'X-Rows': String(answer.rows), ...(answer.next ? { 'X-Next': answer.next } : {}) } });
       }
       // Everything outside /v1/ is the dashboard's static files.
       if (assets && pathname !== '/v1' && !pathname.startsWith('/v1/') && (method === 'GET' || method === 'HEAD')) return await assets(request);

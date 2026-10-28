@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { isZone, offsetMin, localDay, localParts, dayBounds, offsetsBetween, weekStartOf } = await import('../../server/clock.mjs');
+const { isZone, zoneName, offsetMin, localDay, localParts, dayBounds, offsetsBetween, weekStartOf } = await import('../../server/clock.mjs');
 
 const at = iso => Date.parse(iso);
 const sec = iso => Date.parse(iso) / 1000;
@@ -148,4 +148,20 @@ test('isZone accepts the zones this runtime knows, and nothing else', () => {
     '__proto__', 'Europe/../etc', 'Europe//London', 'A/B/C/D/E/F/G', 'x'.repeat(41), 'Asia/Riyadh;DROP', 42, null, undefined, {}, ['UTC']]) {
     assert.equal(isZone(bad), false, String(bad));
   }
+});
+
+test('every name of UTC a browser may report is UTC; other zones keep their name, and unknown ones are none', () => {
+  for (const z of ['UTC', 'Etc/UTC', 'Etc/GMT', 'GMT', 'Etc/UCT', 'Etc/Universal', 'Etc/Zulu', 'GMT0', 'Etc/GMT+0', 'Etc/GMT-0']) assert.equal(zoneName(z), 'UTC', z);
+  for (const z of ['Asia/Riyadh', 'Europe/London', 'America/Port-au-Prince']) assert.equal(zoneName(z), z);
+  for (const bad of ['Mars/Olympus_Mons', 'utc', 'Etc/UTC ', 'constructor', '', null, 42]) assert.equal(zoneName(bad), null, String(bad));
+});
+
+test('the zone data loads with the module, so no request pays for the first DateTimeFormat', async () => {
+  const { spawnSync } = await import('node:child_process');
+  // A new process: the first local day after the import, in a zone the module has not used.
+  const script = "const c = await import(process.argv[1]); const t = performance.now(); c.localDay('Asia/Riyadh', Date.now()); " +
+    'console.log(performance.now() - t);';
+  const times = Array.from({ length: 3 }, () => Number(spawnSync(process.execPath, ['--input-type=module', '-e', script,
+    new URL('../../server/clock.mjs', import.meta.url).href], { encoding: 'utf8' }).stdout));
+  assert.ok(Math.min(...times) < 5, times.map(t => t.toFixed(1)).join(', ') + ' ms');
 });

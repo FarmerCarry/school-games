@@ -167,14 +167,16 @@ What can be stored is decided here, not only by what the portal chooses to send.
 * **Retention.** The daily purge (Cloudflare: a cron at 03:23 UTC; Node: at start and
   every 24 hours) deletes the facts of play sessions that started more than
   `RETENTION_DAYS` days ago (default 400: a school year and the summer; the owner can
-  choose 760 on the dashboard), the student and PC rows (with their links) last seen
-  before then, the frozen daily totals of milestone 2 older than that, batch ids after
-  30 days and the server's usage counts after 60 days. The daily rollups (counts per day,
-  per game, per student code) are kept 800 days, or longer if the facts are. Live rows
+  choose 760 on the dashboard), the frozen daily totals of milestone 2 older than that,
+  batch ids after 30 days and the server's usage counts after 60 days. The daily rollups
+  (counts per day, per game, per student code) are kept 800 days, or longer if the facts
+  are, and the student and PC rows (with their links) as long as the rollups that name
+  them: until their last day of play is past the rollups' retention. Live rows
   go by a sweep every 5 minutes (Node: every minute). If the database nears the free
-  plan's 500 MB, the purge removes the round-by-round rows of the oldest 30 days of
-  facts (the rollups stay). On Node, SQLite's `secure_delete` overwrites deleted rows
-  and the write-ahead log is truncated after each purge.
+  plan's 500 MB, the round-by-round rows of the oldest 30 days of facts are removed (the
+  rollups stay). Deletions go a few hundred sessions at a time, so a shorter retention
+  takes a few nights to reach the new cutoff. On Node, SQLite's `secure_delete`
+  overwrites deleted rows and the write-ahead log is truncated after each purge.
 
 ## Self-hosting on Node
 
@@ -351,16 +353,25 @@ it. To update it:
 **Rolling back.** A server older than schema 4 refuses a database this one has
 upgraded, so going back is one of:
 
-* deploying this server again with a fix (the database stays as it is); or
-* restoring the database with D1 *Time Travel* (free; any minute of the last 7 days) to
-  just before the deploy, then deploying milestone 2's server. The restore is in the
-  Cloudflare dashboard (*Storage & databases* → *D1* → `school-games-telemetry` → *Time
-  Travel*) or `npx wrangler d1 time-travel restore school-games-telemetry
-  --timestamp=<the time, RFC 3339>`. Schema 4 keeps milestone 2's daily totals frozen
-  as they were, so a restore to just before the deploy is a clean milestone 2 database;
-  what arrived after that point is lost.
+* deploying this server again with a fix (the database stays as it is): once the
+  portal's wire version 3 is published (step 4), this is the only safe way; or
+* before step 4 only: restoring the database with D1 *Time Travel* (free; any minute of
+  the last 7 days) to just before the deploy, then deploying milestone 2's server. The
+  restore is in the Cloudflare dashboard (*Storage & databases* → *D1* →
+  `school-games-telemetry` → *Time Travel*) or `npx wrangler d1 time-travel restore
+  school-games-telemetry --timestamp=<the time, RFC 3339>`. Schema 4 keeps milestone 2's
+  daily totals frozen as they were, so a restore to just before the deploy is a clean
+  milestone 2 database; what arrived after that point is lost.
 
-Meanwhile the PCs keep what they could not send for up to 7 days, and send it later.
+After step 4, milestone 2's server answers `400` to every version 3 batch, and a PC
+drops a batch answered `400` for good: going back to milestone 2 would lose every PC's
+data from then on. It would first need the portal from before step 4 published again
+and loaded by every PC (an open tab keeps the newer portal until it is reloaded), and
+the version 3 batches the PCs still hold would be lost even then.
+
+While the server answers `5xx` or cannot be reached (during a deploy, or the `503` of
+the upgrade), the PCs keep what they could not send for up to 7 days and send it later;
+any other `4xx` answer than `429` is final.
 
 **On Node,** stop the server, back up the database (see [Operations](#operations)),
 replace the folder and start it again: the Node host upgrades the database at start.
@@ -528,6 +539,10 @@ export stops well before the dashboard does; once the day's writes pass 90,000, 
 `link` and `rebuild` answer `429 {"error": "writes", "until": ...}`. `live` and
 `settings` always answer, and batches are never refused.
 
+Writes are metered per instance and flushed at the start of a batch at most once a
+minute, before anything in that batch reads the day's usage; the crons end by writing
+their own counts, so a cron run in a new Worker instance is counted too.
+
 **Kept parts.** Each read takes the days already rolled up from the rollups and the
 days after them (today, and yesterday until the night's roll) from the facts, through
 the rollups' own SQL, so both count alike (`stats`, `cohorts` and a game's `stats` and
@@ -535,7 +550,7 @@ flows take the rolled days only). The part of the rolled days is kept in
 `kpi_cache` under the route, its parameters and the rollup version `rv`, and in the
 instance's memory for an hour; on Cloudflare the part of the other days is kept 10
 minutes (on Node it is made on every request). A part over 1 MB is not kept. Each roll
-(a recount's too), forget, link and unlink raises `rv`, so later answers are made again
+(a recount's too), forget, link and unlink, and a PC's new link (a `cd` mark), raises `rv`, so later answers are made again
 (a Worker instance that kept a part in memory sees the new `rv` within 5 minutes).
 Every answer takes at most 20 statements.
 
@@ -733,19 +748,26 @@ Anything else is `400 {"error": "<field>"}`; another media type `415`.
   changes `pcs`.
 * A new zone moves every rolled day (since `factsSince`, and not trimmed by the storage
   guard) to the new clock: the 5-minute cron rebuilds them one at a time, newest first,
-  and `rebuild` shows how far it is. The facts never change.
+  as far as each UTC day's writes leave room (see *Rollups* under Operations: at a busy
+  school about one day a school day, more at weekends), and `rebuild` shows how far it
+  is. The facts never change. A day that is today again on the new clock (the clock moved
+  west after it was rolled) is read from the facts until it is over, then rebuilt.
 * The week start follows the zone while `weekSource` is `auto` (Sunday in Riyadh, Cairo
   and the other zones `clock.mjs` lists, Monday elsewhere); `weekStart` sets it for good.
 * `keepDays` overrides `RETENTION_DAYS`: 400 days (a school year and the summer) or 760
   (two). Keeping more is refused with `400 {"error": "storage"}` when the database,
   growing in proportion, would pass the storage guard.
 
-#### `GET /v1/admin/students?from&to&band`
+#### `GET /v1/admin/students?from&to&band[&after]`
 
 Every student who played in the period, by code. A student is a canonical code: an
 older code linked to a newer one counts as the newer one, with its history. `band`
 keeps the student-days whose first session was in that band. Today and the other days
-not rolled yet come from the facts.
+not rolled yet come from the facts. Students come in order of their code, as many as
+fit in 1.5 MB of JSON (D1 refuses a value over 2 MB; a school year of a busy school is
+about 1.3 MB): when more are left the answer has `"next"`, the last code it holds, and
+`&after=` that code gives the next page. On Cloudflare the answer is kept 10 minutes, so
+a refresh on any instance sends kept text.
 
 ```jsonc
 { "v": 1, "range": { "from": "2026-10-09", "to": "2026-10-29", "days": 21, "band": "all" },
@@ -759,7 +781,7 @@ not rolled yet come from the facts.
       "games": 10, "top": ["rail-rush", "block-burst", "tunnel-blitz"],   // games tried; the top 3 by minutes
       "pcs": 1,                                // PCs it ever played on
       "knownBefore": true,                     // the profile was made before its first play here
-      "removed": null,                         // the first day a PC removed the profile
+      "removed": null,                         // the day of the latest removal from a PC, while no code of the student played after it
       "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9.4, 9.3, 12.2] }   // minutes in each of the 13 school weeks ending with to's week
   ],
   "clock": { "tz": "Asia/Riyadh", "source": "pcs", "offsetMin": 180, "today": "2026-10-29" } }
@@ -833,13 +855,15 @@ The research metrics of `r_stat`, summed over the rolled days of the period (up 
 subset of `hour, rhour, sesslen, daymin, games, visitlen, flow, attempt, tenure, persist,
 fatigue, qrun, tier, tutorial` (`docs/RESEARCH_TELEMETRY_SPEC.md`, §D.2, gives each
 one's keys `k1` and `k2`); the answer lists them in that order. Rows are sorted by their
-keys.
+keys. `columns` holds the keys and only the sums the asked metrics have (every other sum
+is always 0 in their rows), in the order below; read a value by its column's name.
 
 ```jsonc
 { "v": 1, "range": { ..., "rolledThrough": "2026-10-28" }, "metrics": ["hour", "flow"], "slug": null,
-  "columns": ["a", "metric", "slug", "k1", "k2", "n", "students", "w", "l", "d", "e", "q", "ms", "wall_ms", "win_ms", "hits",
-    "misses", "rt_sum", "rt_n", "score_sum", "score_n", "tier_sum", "tier_n", "dda_sum", "dda_n", "inputs", "gap_sum", "gap_n"],
-  "rows": [ ["", "flow", "", "air-hockey", "", 1, 0, 0, ...] ],
+  // all the sums: n, students, w, l, d, e, q, ms, wall_ms, win_ms, hits, misses, rt_sum, rt_n, score_sum,
+  // score_n, tier_sum, tier_n, dda_sum, dda_n, inputs, gap_sum, gap_n; hour and flow have these:
+  "columns": ["a", "metric", "slug", "k1", "k2", "n", "students", "ms", "gap_sum", "gap_n"],
+  "rows": [ ["", "flow", "", "air-hockey", "", 1, 0, 0, 0, 0] ],
   "clock": { ... } }
 ```
 
@@ -881,7 +905,8 @@ smooth; `old`, its build is not that of the PC seen last.
 #### `GET /v1/admin/export?file&from&to[&after]`
 
 One page of a research file: `200`, `Content-Type: text/csv; charset=utf-8`, at most
-5,000 lines **without a header** (each ending in a line feed), `X-Rows: <lines>` and,
+2,500 lines **without a header** (each ending in a line feed; SQL joins them, so the
+Worker sends one string), `X-Rows: <lines>` and,
 unless it is the last page, `X-Next: <cursor>`; the next page is the same request with
 `&after=<cursor>`. A cursor that is not this file's: `400 {"error": "after"}`. The
 dashboard writes the header (its data dictionary lists the same columns as
@@ -900,12 +925,12 @@ dashboard writes the header (its data dictionary lists the same columns as
 
 | `file` | One line per | A page |
 |---|---|---|
-| `students` | student code with play in the period | 5,000 codes, by code |
+| `students` | student code with play in the period | 2,500 codes, by code |
 | `sessions` | session started in the period | 400 sessions, by start |
-| `visits`, `rounds`, `events` | game visit, round, mark (of those sessions) | 5,000 lines, in the sessions' order |
-| `student_days` | student code and school day | 5,000 lines, at most 14 days |
-| `daily_games` | day, clock, band and game: milestone 2's frozen UTC days (`clock` `utc`, without students or hearts), then the school's days | 5,000 lines, at most 30 days |
-| `pcs` | PC code with play in the period | 5,000 codes, by code |
+| `visits`, `rounds`, `events` | game visit, round, mark (of those sessions) | 2,500 lines, in the sessions' order |
+| `student_days` | student code and school day | 2,500 lines, at most 14 days |
+| `daily_games` | day, clock, band and game: milestone 2's frozen UTC days (`clock` `utc`, without students or hearts), then the school's days | 2,500 lines, at most 30 days |
+| `pcs` | PC code with play in the period | 2,500 codes, by code |
 
 Columns, in their pinned order:
 
@@ -929,6 +954,9 @@ player), `handover`, `idle`; `error` `timeout`, `script`, `load`; `outcome` and
 `heart_off`, `tutorial_start`, `tutorial_done`, `timer_start`, `timer_cancel`,
 `timer_end`, `profile_removed`, `linked`, with `value` the new level, the timer's
 minutes, or the removed or linked code. Flags are `0` or `1`.
+`removed_day` is the day of the code's latest removal from a PC, empty once the code
+played after it (a teacher moved the profile to another PC); every removal stays in
+`events` as `profile_removed`.
 
 #### `POST /v1/admin/forget`
 
@@ -956,9 +984,12 @@ an older code of the same child (the `cd` mark).
 #### `POST /v1/admin/rebuild`
 
 Body `{}`: every rolled day since `factsSince` (and not trimmed by the storage guard)
-waits to be rolled again in full; the 5-minute cron rebuilds one day at a time, newest
-first, within the day's rebuild allowance. Answers `{"pending": <days waiting>}`. Use it
-after a forget, so that the school-wide counts lose that student too.
+waits to be counted again; the 5-minute cron recounts one day at a time, newest first,
+with the diff re-roll (only the rows that change are written, and rows left without
+facts are deleted, so a recount after a forget writes a few hundred rows a day where a
+full rebuild would write every row twice), within the day's read and write allowance.
+Answers `{"pending": <days waiting>}`. Use it after a forget, so that the school-wide
+counts lose that student too.
 
 ## Operations
 
@@ -974,33 +1005,48 @@ after a forget, so that the school-wide counts lose that student too.
   `-wal`/`-shm` files).
 * **Retention.** The daily purge deletes, by the school's local day, the facts of the
   sessions that started more than `keep` days ago (`keep_days` chosen on the dashboard,
-  else `RETENTION_DAYS`), the students and PCs last seen before then with their PC
-  lists, attempt counters and links, and moves `facts_since` to that day; the frozen
-  daily totals of milestone 2 by UTC receipt day after `keep` days (`legacy_until` is
-  cleared once the last one goes); batch ids after 30 days, the usage counts after 60
+  else `RETENTION_DAYS`), at most 600 sessions a night (about 15,000 rows written; more
+  than a busy school's day, and the 5-minute cron deletes the rest when the day's writes
+  leave room, so a shorter retention reaches its cutoff within days, never in one
+  batch), and moves `facts_since` on with them (to the day after the newest
+  session deleted, and to the cutoff once none older is left); the frozen daily totals of
+  milestone 2 by UTC receipt day after `keep` days, a week of them a night
+  (`legacy_until` is cleared once the last one goes); batch ids after 30 days, the usage counts after 60
   days, kept KPI parts of an older rollup version, and live rows once they leave the
   5-minute window (by the next batch or live query, and by a sweep every 5 minutes on
   Cloudflare and every minute on Node, so within 10 minutes even with no traffic). The
-  rollups and their `roll_days` rows go after the larger of 800 days and `keep`, deleted
-  by the 5-minute cron when it has no day to roll (so the daily purge stays within D1's
-  statement limit). Lowering the retention takes effect at the next purge (Node: the
-  next start). To erase everything on Node, stop the server and delete the database
+  rollups and their `roll_days` rows go after the larger of 800 days and `keep`, a day
+  at a time, deleted by the 5-minute cron when it has no day to roll (so the daily purge
+  stays within D1's statement limit); the daily purge deletes the students and PCs last
+  seen before that cutoff, with their PC lists, attempt counters and links (until then a
+  period the rollups hold lists its students with their bands, days, PCs and links, and
+  a student's page and the cohorts answer as before). Lowering the retention starts at the next purge
+  (Node: the next start). To erase everything on Node, stop the server and delete the database
   files; on Cloudflare, delete the Worker and its D1 database `school-games-telemetry`
   in the Cloudflare dashboard.
 * **Storage guard.** When the database passes 425 MB at the daily purge, the round rows
-  of the oldest 30 days of facts are deleted (sessions, visits and every rollup stay, so
-  charts keep working) and `trimmed_before` is set; the next trim waits until the file
-  has grown again (SQLite reuses the freed space first). Days before `trimmed_before`
-  are never rebuilt for a new zone. Download the research files each term.
+  of the oldest 30 days of facts are to go (sessions, visits and every rollup stay, so
+  charts keep working): the purge sets `trim_to`, and the 5-minute cron deletes them 800
+  sessions a run (about 9,000 rows) when it has no day to roll and the day's writes leave
+  room, moving `trimmed_before` on; the next trim waits until the file has grown again
+  (SQLite reuses the freed space first). Days before `trimmed_before` are never rebuilt
+  for a new zone. Download the research files each term.
 * **Rollups.** Every 5 minutes (Node: at start and every 5 minutes) the cron rolls at most
   one of the school's local days into the `r_*` tables: first the oldest day not rolled
   yet (yesterday from 01:00 at the school; only one instance can make that roll), then a
   day waiting for a full rebuild after a change of zone (newest first), then a day that
-  late batches reached (at most once an hour per day). After yesterday's roll, the PCs
-  seen in the last 14 days vote for the school's zone. Rebuilds wait for the next UTC
-  day while the day's reads pass 3 million (2 million by rebuilds) or its writes pass
-  80,000. Each roll raises the rollup version, so the dashboard's kept answers are made
-  again.
+  late batches reached (at most once an hour per day), then a day waiting for a recount
+  (newest first). A day still running on the school's clock is never rolled again. After
+  yesterday's roll, the PCs seen in the last 14 days vote for the school's zone. A
+  rebuild, a re-roll, a recount or a catch-up deletion starts only while the day's reads
+  stay under 3 million (2 million by re-rolls) and the day's writes, plus its estimate
+  (twice the rows the day's rollups took for a full rebuild, those rows for a diff),
+  plus 40,000 for the rest of a school day's batches, roll and purge, stay at or under
+  85,000; otherwise it waits, if need be for the next UTC day. A full rebuild of a busy
+  school's day writes about 16,000 rows (its 8,000 rollup rows deleted and written
+  again), so at most two run in a UTC day: a zone change at a busy school rebuilds about
+  two days a day, and never brings the day near D1's 100,000. Each roll raises the rollup
+  version, so the dashboard's kept answers are made again.
 * **Monitoring.** `GET /v1/health`. The Node process exits when it cannot start (port in
   use, unreadable database), so the supervisor (Docker, systemd) reports or restarts it.
   On Cloudflare, the Worker's *Metrics* tab shows requests and errors without logs.
@@ -1032,17 +1078,18 @@ Schema 4 (`docs/RESEARCH_TELEMETRY_SPEC.md`, "Storage on D1", has the exact colu
 
 | Tables | What they hold |
 |---|---|
-| `st_sessions` | One row per play session: its codes (`u`, `p`, `''` when unknown), wire version, band, build, mode, device buckets, start (`start_s`, with `clock` `w` from the PC's elapsed seconds or `r` estimated from the receipt time), the PC's zone, the session start's fields (exact profile age, days since last play, level, profiles on the PC, classroom mode, and the v2 buckets), how it ended, and the server's numbering state for v2. Indexed by start and by student. |
+| `st_sessions` | One row per play session: its codes (`u`, `p`, `''` when unknown), wire version, band, build, mode, device buckets, start (`start_s`, with `clock` `w` from the PC's elapsed seconds or `r` estimated from the receipt time; never before the first day of the facts, so a v2 tab open across the deploy counts on the deploy day), the PC's zone, the session start's fields (exact profile age, days since last play, level, profiles on the PC, classroom mode, and the v2 buckets), how it ended, and the server's numbering state for v2. Indexed by start and by student. |
 | `st_visits`, `st_rounds`, `st_marks` | Game visits `(session, n)`, rounds `(session, n, k)` with their outcome, tier, score, hits, misses, reaction times and extras, the two-player flag and the student's attempt number, and marks (level-ups, hearts, tutorial steps, classroom timer, removed profiles, older codes). |
 | `st_students`, `st_pcs`, `st_student_pcs`, `st_student_games`, `aliases` | Per student code: label, first and last play, bands, profile age; per PC code: first and last play, zone, buckets, build; who played on which PC; rounds ended per student and game (for attempt numbers); links from older codes to a student's code, one hop deep (`how`: `pc` from a PC's `cd` mark, `owner` from the dashboard). |
-| `settings`, `usage`, `roll_days` | The school's zone and where it came from (and `tz_epoch`, raised with each change), the week start, the retention the owner chose, `facts_since`, `legacy_until`, `v3_since`, the rollup version `rv`, `rolled_through`, `trimmed_before`, and the cron's bookkeeping (`rebuild`: days may wait for a full rebuild; `trimmed_size`); D1 rows read, written and read by rebuilds per UTC day, and the database size (each instance adds its counts once a minute); which local days are rolled up, whether late data or a new zone made one dirty, and when it was rolled. |
+| `settings`, `usage`, `roll_days` | The school's zone and where it came from (and `tz_epoch`, raised with each change), the week start, the retention the owner chose, `facts_since`, `legacy_until`, `v3_since`, the rollup version `rv`, `rolled_through`, `trimmed_before`, and the cron's bookkeeping (`rebuild`: days may wait for a full rebuild or a recount; `trimmed_size` and `trim_to`: the storage guard's trim); D1 rows read, written and read by rebuilds per UTC day, and the database size (each instance adds its counts once a minute, and each cron run its own); which local days are rolled up, whether late data (`dirty` 1), a new zone (2) or a recount (3) waits for them, when each was rolled and the rows its rollups took (`rows`, which a re-roll is estimated from). |
 | `r_day`, `r_game_day`, `r_level_day`, `r_source_day`, `r_device_day`, `r_student_day`, `r_student_game`, `r_pc_day`, `r_stat` | Per-day rollups of the facts by the school's local day: milestone 2's daily totals with students, guests, two-player rounds, hearts, tutorials and session endings; per student code and per student and game; per PC; and `r_stat`, the research metrics (hour of play, session length, minutes per student-day, games per session, visit length, game-to-game flows, attempts, weeks of practice, what follows a round, tiredness, losses before quitting, tier, tutorials) per day, band and game. |
 | `live`, `batches`, `kpi_cache`, `meta` | Sessions in the 5-minute live window (with codes and wire version); v2 batch ids for de-duplication; kept parts of admin answers, with the rollup version they were made with; the schema version. |
 | `agg_days`, `agg_games`, `agg_levels`, `agg_sources`, `agg_devices` | Only on a database milestone 2 used: its daily totals per UTC receipt day, frozen. |
 
 Every table but `st_sessions` is `STRICT, WITHOUT ROWID`. The only indexes beyond the
-primary keys are `st_sessions_time`, `st_sessions_student`, `r_student_day_u`,
-`r_student_game_u` and `r_stat_metric`. There are no other columns.
+primary keys are `st_sessions_time`, `st_sessions_student`, `r_student_day_u` and
+`r_student_game_u` (`r_stat` has none: every read of it finds its rows by day and band,
+and an index by metric would add 60% to its size). There are no other columns.
 
 ### Free-plan arithmetic
 
@@ -1055,71 +1102,84 @@ engaged minutes per session. Scaled to a busy school of 500 sessions a school da
 | Rows written per school day | Simulated school | 500 sessions |
 |---|---|---|
 | Batches: 5.9 rows each (facts, student and PC rows, live rows, usage) | 30,000 | ≈ 32,500 |
-| The night's first roll of the day: ≈ 6,600 rollup rows (4,500 of them `r_stat`), their index entries and the live sweep | 12,400 | ≈ 13,300 |
+| The night's first roll of the day: ≈ 6,600 rollup rows (4,500 of them `r_stat`), their index entries and the live sweep | 8,000 | ≈ 8,500 |
 | Re-rolls of days that late batches reached | 50–350 each | ≈ 500 |
-| **First year** | | **≈ 46,000 (46%)** |
+| **First year** | | **≈ 41,500 (42%)** |
 | + the facts of a day deleted after 400 days (about 23 rows and index entries a session) | | + ≈ 11,400 |
-| + the rollups of a day deleted after 800 days | | + ≈ 13,300 |
-| **From the third year** | | **≈ 71,000 (71%)** |
+| + the rollups of a day deleted after 800 days | | + ≈ 8,500 |
+| **From the third year** | | **≈ 61,500 (62%)** |
 
-From the third year a busy UTC day's writes can pass 60,000, after which the PCs are
+From the third year a busy UTC day's writes can just pass 60,000, after which the PCs are
 asked to send every 180 s (`X-Batch-Every`) for the rest of that UTC day. In Riyadh that
 happens only at night, when the roll and the deletions run after the school day. The
 daily limit of 100,000 stays out of reach.
 
 | Storage | Measured | 500 sessions a school day |
 |---|---|---|
-| Facts | 1.4 KB a session | ≈ 150 MB for 400 days (about 220 school days) |
-| Rollups | 0.86 MB a school day, 70% of it `r_stat` and its index | ≈ 190 MB a year of 220 school days |
-| **After the first year** | | **≈ 345 MB (69%)** |
+| Facts | 1.24 KB a session | ≈ 135 MB for 400 days (about 220 school days) |
+| Rollups | 0.55 MB a school day of 471 sessions, 59% of it `r_stat` | ≈ 130 MB a year of 220 school days |
+| **After the first year** | | **≈ 265 MB (53%)** |
 
-The rollups are kept 800 days, so at this size the database reaches the storage guard
-(425 MB) in its second year. The guard then deletes the round rows of the oldest 30 days
-of facts each time the file has grown again, but the rollups keep growing until their
-first days pass 800 days, near the 500 MB limit. The spec's budget assumed 0.3 MB of
-rollups a school day; a school this busy should watch *Settings* → storage. Read costs
+The rollups are kept 800 days (about 480 school days), so at this size the database
+nears the storage guard (425 MB) in its third year, when the rollups' first days pass
+800 days: about 285 MB of rollups and 135 MB of facts. The guard then deletes the round
+rows of the oldest 30 days of facts (about 7 MB) each time the file has grown again, and
+the database stays under the 500 MB limit. The spec's budget assumed 0.3 MB of rollups a
+school day: `r_stat` alone takes 0.33 MB (about 4,500 rows of 23 sums), and a school this
+busy should watch *Settings* → storage. Read costs
 cannot be measured on Node (`node:sqlite` reports the rows returned, not the rows
 SQLite read): the spec (`docs/RESEARCH_TELEMETRY_SPEC.md`, "Budget math") estimates 0.6
 to 1.2 million rows read on a typical day with the dashboard open, and 2.1 to 2.6
 million more for a school year's export.
 
 **Requests:** about 5,650 batches, 289 crons and about 1,500 dashboard calls a day; a
-school year's export adds about 700 pages (most of them `sessions`, `rounds` and
-`visits`). About 8% of the 100,000.
+school year's export adds about 700 pages of 2,500 lines (most of them `rounds`,
+`visits` and `events`). About 8% of the 100,000.
 
 **Statements and CPU per invocation.** D1 allows 50 statements per invocation; this
 server keeps an admin answer to 20, the 5-minute cron to 35 and the daily purge to 25.
+D1 also limits each statement: 100 KB of SQL, 100 bound parameters, 32 arguments per SQL
+function, 100 result columns and 5 terms per compound `SELECT` (workerd's local D1
+refuses a sixth `UNION ALL` term). `sqlite-d1.mjs` refuses a statement past any of these
+as D1 would, so every test runs inside them; the rollups nest their `UNION ALL` parts
+four at a time, and a KPI row of more than 32 columns comes as an array of arrays.
 The Workers free plan allows 10 ms of CPU per invocation (only CPU counts, not the time
 waiting for D1). The CPU column is JavaScript's time outside SQLite (wall time less the
-time in `db.batch`, the median of cold runs) over 30 days of the simulated school with
-120 and with 450 sessions a school day, on a 2.1 GHz server core:
+time in `db.batch`), plus what the Worker's D1 binding does with each batch (the request
+as JSON, the response parsed in D1's rows-and-columns form and an object made per row):
+the median of cold runs (a new instance, nothing kept) over 30 days of the simulated
+school with 120 and with 470 sessions a school day, on a 2.1 GHz server core:
 
 | Invocation | Statements | CPU outside SQLite |
 |---|---|---|
-| `kpis` over frozen, rolled and open days | 18 | 6.6–10.2 ms |
-| `students` (with 13 weeks of each of about 560 to 790 students) | 9 | 0.7–1 ms |
-| `student` | 15 | 0.7–0.9 ms |
-| `game` | 15 | 1.4–2.2 ms |
-| `stats` (every metric of every game) | 5 | 0.9–1.1 ms |
-| `cohorts` | 5 | 0.5 ms |
-| `pcs` | 9 | 0.5–0.8 ms |
-| `live`, `settings`, `POST settings` | 5, 2, at most 7 | under 0.1 ms |
-| an `export` page (`rounds`, `visits` or `events`: 5,000 lines) | 3 | 0.7–1.1 ms |
-| another `export` page | 3 | under 0.5 ms |
+| `kpis` over frozen, rolled and open days | 13 | 5.2–5.5 ms |
+| `students` (with 13 weeks of each of about 560 to 790 students) | 6 | 2.6 ms |
+| `student` | 15 | 1.5–2.1 ms |
+| `game` | 7 | 1.7–2.3 ms |
+| `stats` (every metric of every game) | 4 | 1.4–1.7 ms |
+| `cohorts` | 5 | 0.9–1.1 ms |
+| `pcs` | 7 | 1.5 ms |
+| `live`, `settings`, `POST settings` | 5, 2, 7 | under 0.1 ms |
+| an `export` page (`rounds` or `visits`: 2,500 lines, about 410 KB) | 3 | 1.3–1.6 ms |
+| an `export` page of `events` or `sessions` | 3 | 0.6–0.9 ms |
 | `forget`, `link`, `DELETE link`, `rebuild` | 17, 7, 5, 5 | under 0.2 ms |
-| the 5-minute cron's full rebuild of a day | 24 | |
-| its first roll with the zone vote | 17 | |
+| the 5-minute cron's full rebuild of a day | 26 | |
+| its first roll with the zone vote | 19 | |
 | the daily purge with frozen days and the storage guard | 24 | |
 
 The statement counts include the settings re-read (every 5 minutes) and the usage flush
-(once a minute) that an invocation may carry. The tests hold the admin answers to 10 ms
+(once a minute) that an invocation may carry. The tests hold the admin answers to 5 ms
 and an export page to 3 ms on this measure, with 120 sessions a day; runs differ by
-about a millisecond. `kpis` at a busy school is close to the limit when nothing of it is
-kept yet (the first request for a period after a roll), and takes about 6 ms with the
-rolled days' part kept. Most of its time goes to counting each game's distinct students
-over the kept and the open part (the students' games, merged per canonical code) and to
-reading the parts' rows. Kept parts are written to `kpi_cache` as the JSON text SQL made,
-bound as it is, never parsed and written again.
+about a millisecond, and the first request of a new process takes up to twice as long
+while the JavaScript engine warms up. A kept answer costs about 0.6 ms; a `kpis` whose
+rolled part is kept and whose open day is made again, about 4.4 ms. The answers are made
+as JSON text by SQL and sent as they are: the Worker parses none of a kept part, and
+writes kept parts to `kpi_cache` inside the same statements that read them.
+
+A lab whose PCs forget their profiles every night (a new code per child per day: 7,600
+codes in 30 days) takes about 7 ms for a cold `kpis` and about 10 ms for a full
+`students` page (1.5 MB, most of it the text crossing the D1 binding); the page size is
+set so that a busy school's year of students fits in one page.
 
 ## Development
 

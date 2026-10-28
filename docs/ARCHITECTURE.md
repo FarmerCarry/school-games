@@ -603,24 +603,29 @@ The server:
   maxima, natural keys), so it needs no batch id; v2 batches keep their de-duplication
   and are numbered into visits and rounds by the server. Rounds a student ends are
   numbered as attempts per game. A session is dated by the server's receipt time minus
-  the PC's elapsed seconds and counts on the school's local day it started
-  (`server/clock.mjs` turns zones into offsets and day bounds for SQL).
+  the PC's elapsed seconds and counts on the school's local day it started, never before
+  the first day of the facts (a v2 tab open across the deploy counts on the deploy day;
+  `server/clock.mjs` turns zones into offsets and day bounds for SQL).
 * **The school's zone** starts unknown (UTC), may take the signed-in dashboard's zone, is
   set by the first v3 batch with a valid zone, then by the PCs' nightly vote (locked at
   three PCs), unless the owner chose it; a change marks rolled days for a rebuild.
 * **The usage meter** adds up D1's rows read and written per instance and writes them
-  once a minute; from today's writes the server answers `X-Batch-Every` (60, 180 or 300
-  seconds) so the PCs send less often near the free limit. The same counts pause
-  rebuilds of rolled days and, above 4.2 million reads, make admin reads answer `429`
-  until the next UTC day.
+  once a minute, first in a batch (so what that batch reads of the day's usage holds
+  them), and every cron run writes its own at its end; from today's writes the server
+  answers `X-Batch-Every` (60, 180 or 300 seconds) so the PCs send less often near the
+  free limit. The same counts hold back rebuilds, re-rolls and catch-up deletions to
+  what leaves 40,000 rows for the rest of a school day under 85,000 and, above 4.2
+  million reads, make admin reads answer `429` until the next UTC day.
 * **Rollups** (`server/rollups.mjs`): nine `r_*` tables (days, games, levels, sources,
   devices, students, students per game, PCs, and `r_stat`'s fourteen research metrics),
   each defined by one SQL `SELECT` over the sessions of a span of local days. The same
   text rolls a day (INSERT), rebuilds it (DELETE then INSERT), rolls it again after late
-  data (an upsert that writes only changed rows) and answers for the days not rolled
-  yet. `store.rollupStep`, on the 5-minute cron (a timer on Node), does at most one day
-  per run: yesterday's first roll from 01:00 at the school, then rebuilds after a zone
-  change, then re-rolls after late data (at most hourly). After yesterday's roll the PCs
+  data or for a recount (an upsert that writes only changed rows, then deletes the rows
+  left without facts) and answers for the days not rolled yet. `store.rollupStep`, on
+  the 5-minute cron (a timer on Node), does at most one day per run, never today:
+  yesterday's first roll from 01:00 at the school, then rebuilds after a zone change,
+  then re-rolls after late data (at most hourly), then recounts; with nothing to roll it
+  catches up on deletions a bounded step at a time. After yesterday's roll the PCs
   vote for the zone; three PCs on the top zone lock it. A test checks every table and
   metric against a JavaScript oracle over the same facts.
 * **KPIs** read the frozen `agg_*` days, the rolled days and the facts of the days not
@@ -632,8 +637,11 @@ The server:
   test locks the answers equal to milestone 2's store from Git, with its privacy floor
   set to 0, on the same v2 batches, open, rolled or both.
 * **Retention** (daily purge): facts after 400 days (`RETENTION_DAYS`, or the owner's 760),
-  with the students and PCs last seen before then; frozen days on the same rule; above
-  425 MB the round rows of the oldest 30 days. `facts_since` moves with the cutoff.
+  600 sessions a run (the 5-minute cron catches up after a shorter retention); the
+  students and PCs (with their links) once last seen before the rollups' cutoff, so an
+  old period the rollups hold answers as before; frozen days on the facts' rule, a week a night;
+  above 425 MB the round rows of the oldest 30 days, 800 sessions a cron run.
+  `facts_since` moves with the facts.
 * **Research reads** (`server/admin.mjs`): the students (each canonical code with its
   days, minutes, rounds, games, PCs, links and 13 weeks of minutes), one student's page
   (days, hours, games, weeks per game, the 600 latest rounds and 100 latest sessions,
@@ -647,12 +655,12 @@ The server:
 * **The research export** (`server/export.mjs`): eight files (students, sessions,
   visits, rounds, events, student-days, daily games with milestone 2's frozen days, PCs)
   with pinned columns; every CSV line is built in SQL from validated tokens, so no value
-  needs quoting, and pages follow a key (400 sessions, or 5,000 lines) so each row is
+  needs quoting, and pages follow a key (400 sessions, or 2,500 lines, joined into one string by SQL) so each row is
   read once. The dashboard adds the headers and zips the files.
 * **The owner's actions**: forgetting a student deletes the facts and per-student rows
   of the student's codes (the school-wide counts keep them until a recount); a link
   makes an older code count as a newer one, history included, one hop deep; a recount
-  marks every rolled day for a rebuild by the cron.
+  marks every rolled day for a diff re-roll by the cron.
 * **The simulated school** (`server/simulate.mjs`): 600 children in 24 classes on 30 PCs
   in Asia/Riyadh, mostly wire v3 with some v2, sending at the sink's real cadence; with
   `--db` it writes weeks of history and rolls them up with the real `rollupStep`. The

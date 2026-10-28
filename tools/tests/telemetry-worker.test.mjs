@@ -531,7 +531,7 @@ test('the usage meter adds up the rows of every result and writes them once a mi
   let flushes = 0, flushed = 0;
   env.DB.batch = async statements => {
     const results = await batch(statements);
-    // A flush writes the counts of the batches before it (its own are metered after it ran).
+    // A flush writes the counts of the batches before it (and the cron's last one its own rows too).
     if (statements.some(st => st.sql.startsWith('INSERT INTO usage'))) { flushes++; flushed = sums.length; }
     sums.push([results.reduce((n, r) => n + r.meta.rows_written, 0), results.reduce((n, r) => n + r.meta.rows_read, 0)]);
     return results;
@@ -543,12 +543,73 @@ test('the usage meter adds up the rows of every result and writes them once a mi
   assert.equal(flushes, 1, 'once in the first minute');
   clock.now = START + 5 * 60000;
   await scheduled(env, '*/5 * * * *');
-  assert.equal(flushes, 2);
-  // Every batch before the last flush is in the table; the later ones wait for the next.
+  assert.equal(flushes, 3, 'the cron writes the counts first, and its own last: a cron in a new instance still counts');
+  // Every batch is in the table, the cron's own and its last flush (which counts its own rows) included.
   const [usage] = await rows(env, 'usage');
-  const total = i => sums.slice(0, flushed).reduce((n, s) => n + s[i], 0);
+  const total = i => sums.slice(0, flushed + 1).reduce((n, s) => n + s[i], 0);
   assert.deepEqual([usage.day, usage.writes, usage.reads], ['2026-10-20', total(0), total(1)]);
   assert.ok(usage.size > 0);
+});
+
+// A school's last days (simulate.mjs), each rolled by the cron the next night (the last one
+// too); and a counter of the rows D1 itself writes per UTC day.
+async function rolledSchool({ days = 5, sessions = 60, now = Date.parse('2026-10-22T09:30:00Z') } = {}) {
+  const { schoolDays } = await import('../../server/simulate.mjs');
+  const db = openDatabase(':memory:'), store = openStore(db), written = new Map(), batch = db.batch.bind(db);
+  db.batch = async list => {
+    const results = await batch(list), day = new Date(Date.now()).toISOString().slice(0, 10);
+    written.set(day, (written.get(day) || 0) + results.reduce((n, r) => n + r.meta.rows_written, 0));
+    return results;
+  };
+  for (const day of schoolDays({ days, sessions, seed: 5, now })) {
+    for (const { batch: b, now: at } of day.batches) await store.ingest(validateBatch(b), at);
+    const night = Date.parse(day.day + 'T00:00:00Z') - 3 * 3600000 + DAY_MS + 65 * 60000;
+    for (let i = 0; i < 40 && (await store.rollupStep(night + i * 300000)).rolled; i++);
+  }
+  return { db, written };
+}
+// The cron every 5 minutes of a UTC day, each run a new instance (nothing in memory): the kinds of re-roll it made (first rolls aside).
+async function cronDay(t, db, day, guards) {
+  const clock = useClock(t), kinds = [];
+  for (let at = Date.parse(day + 'T00:00:00Z'); at < Date.parse(day + 'T00:00:00Z') + DAY_MS; at += 300000) {
+    clock.now = at;
+    const done = await openStore(db, { guards }).rollupStep(at);
+    if (done.kind && done.kind !== 'first') kinds.push(done.kind);
+  }
+  t.mock.restoreAll();
+  return kinds;
+}
+
+test('the cron writes its own usage even when every run is a new instance, and starts a re-roll only with room left for the school day', async t => {
+  const { db, written } = await rolledSchool();
+  const rolls = (await db.prepare('SELECT day, rows FROM roll_days ORDER BY day').all()).results;
+  assert.ok(rolls.length >= 3 && rolls.every(r => r.rows > 500), JSON.stringify(rolls));
+  // Room for one full re-roll (estimated at twice the day's rows) above the reserve for the school day, not two.
+  const most = Math.max(...rolls.map(r => r.rows)), guards = { rollWrites: 50000 + 3 * most, reserveWrites: 50000 };
+  // The owner moves the clock: every rolled day waits for a full re-roll.
+  await openStore(db).updateSettings({ tz: 'Asia/Dubai' }, Date.parse('2026-10-22T23:00:00Z'));
+  const usage = async day => (await db.prepare('SELECT writes FROM usage WHERE day = ?1').bind(day).first())?.writes ?? 0;
+  assert.deepEqual(await cronDay(t, db, '2026-10-23', guards), ['full']);
+  // What the guards read is what D1 wrote, the crons' own rows included.
+  assert.equal(await usage('2026-10-23'), written.get('2026-10-23'));
+  assert.deepEqual(await cronDay(t, db, '2026-10-24', guards), ['full']);
+  assert.equal(await usage('2026-10-24'), written.get('2026-10-24'));
+  assert.ok(written.get('2026-10-24') <= guards.rollWrites - guards.reserveWrites, written.get('2026-10-24') + ' rows written');
+});
+
+test('a recount re-rolls every day with the diff, writing only what changed, so it finishes in a night', async t => {
+  const { db, written } = await rolledSchool();
+  const store = openStore(db), now = Date.parse('2026-10-22T23:00:00Z');
+  const rolls = (await db.prepare('SELECT day, rows FROM roll_days ORDER BY day').all()).results;
+  const u = (await db.prepare("SELECT u FROM st_sessions WHERE u <> '' GROUP BY u ORDER BY COUNT(*) DESC LIMIT 1").first()).u;
+  await store.forget({ u }, now);
+  assert.equal((await store.rebuild(now)).pending, rolls.length);
+  const kinds = await cronDay(t, db, '2026-10-23', {});
+  assert.deepEqual(kinds, rolls.map(() => 'recount'));
+  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM roll_days WHERE dirty > 0').first()).n, 0);
+  // A full re-roll of every day would write each day's rows twice.
+  const full = 2 * rolls.reduce((n, r) => n + r.rows, 0);
+  assert.ok(written.get('2026-10-23') < full / 5, `${written.get('2026-10-23')} rows written, against ${full} for full re-rolls`);
 });
 
 // The earlier stores, from Git (CI checkouts without history skip these comparisons), with
@@ -657,11 +718,14 @@ test('the closed days\' KPIs are kept in D1 and shared by every instance, until 
   const expected = JSON.parse(JSON.stringify(await m2.kpis(query, now)));
   await upgrade(db, now);
   for (const { batch, now: at } of batches.slice(400)) await openStore(db).ingest(validateBatch(batch), at);
-  // The frozen days and the facts since the update: milestone 2 answers for the frozen part.
+  // The frozen days and the facts since the update: milestone 2 answers for the frozen part. 'closed': the closed part was
+  // made (SQL keeps it in kpi_cache unless it is kept already); 'open': the days not rolled yet were read from the facts.
   const reads = [], execute = db.execute.bind(db);
   db.execute = (statement, ...rest) => {
-    if (/GROUP BY/.test(statement.sql)) reads.push(/FROM agg_days/.test(statement.sql) ? 'closed' : /FROM \(SELECT day, a, /.test(statement.sql) ? 'open' : 'other');
-    return execute(statement, ...rest);
+    const result = execute(statement, ...rest);
+    if (/^INSERT INTO kpi_cache \(key, made, rows\) SELECT \?6/.test(statement.sql) && result.meta.changes) reads.push('closed');
+    if (/^SELECT json_group_array\(json_array\(day, a, part/.test(statement.sql) && /1 AS part/.test(statement.sql)) reads.push('open');
+    return result;
   };
   const first = openStore(db);
   const answer = await first.kpis(query, now);
@@ -778,15 +842,25 @@ test('the research reads keep their closed part in D1 for every instance, made a
   clock.now = Date.parse('2026-10-21T01:30:00Z');
   await scheduled(env, '*/5 * * * *');
   await scheduled(env, '*/5 * * * *');
-  const closed = /^SELECT json_group_array\(json_array\(c, days,|^SELECT g\.slug AS slug|^SELECT x\.day AS day, x\.a AS a|^SELECT x\.p AS p|^WITH d AS MATERIALIZED \(SELECT COALESCE/;
+  // A closed part is made: read from the rollups (students: kept in kpi_cache by SQL, which then writes a row).
+  const closed = /^SELECT g\.slug AS slug|^SELECT json_group_array\(json_array\(day, a, ms, opens\)\)|^SELECT x\.p AS p|^WITH d AS MATERIALIZED \(SELECT COALESCE/;
+  const made = [], execute = env.DB.execute.bind(env.DB);
+  env.DB.execute = (statement, ...rest) => {
+    const result = execute(statement, ...rest);
+    if (/^INSERT INTO kpi_cache \(key, made, rows\) SELECT (?:\?6, \?7, json_object\('weeks'|\?13, \?14, json_object\('days')/.test(statement.sql) && result.meta.changes) {
+      made.push(statement.sql);
+    }
+    return result;
+  };
   const paths = ['/v1/admin/students?from=2026-10-19&to=2026-10-20', `/v1/admin/student?u=${U}&from=2026-10-19&to=2026-10-20`,
     '/v1/admin/game?slug=road-hopper&from=2026-10-19&to=2026-10-20', '/v1/admin/pcs?from=2026-10-19&to=2026-10-20', '/v1/admin/cohorts?from=2026-10-19&to=2026-10-20'];
   const read = async instance => {
     const other = { ...env, RATE_PER_MIN: String(instance) }, measure = counted(other), out = [];
     for (const pathname of paths) {
+      made.length = 0;
       const { sql, result } = await measure(() => admin(other, pathname));
       assert.equal(result.status, 200, pathname);
-      out.push([result.json(), sql.some(text => closed.test(text))]);
+      out.push([result.json(), made.length > 0 || sql.some(text => closed.test(text))]);
     }
     return out;
   };
@@ -805,7 +879,7 @@ test('the research reads keep their closed part in D1 for every instance, made a
   assert.deepEqual(third[0][0].students.map(s => s.u), [U, '2c3d4e5f6071'].sort());
 });
 
-test('the CPU each admin answer and export page spends in JavaScript (outside SQLite) stays inside the Workers limit on a simulated school', async () => {
+test('the CPU each admin answer and export page spends in JavaScript (outside SQLite, with the D1 binding\'s own work) stays inside the Workers limit on a simulated school', async () => {
   const { schoolDays } = await import('../../server/simulate.mjs');
   const { serialize } = await import('../../server/handler.mjs');
   const now = Date.parse('2026-10-22T09:30:00Z'), db = openDatabase(':memory:'), store = openStore(db);
@@ -815,10 +889,21 @@ test('the CPU each admin answer and export page spends in JavaScript (outside SQ
     if (night < now) for (let i = 0; i < 40 && (await store.rollupStep(night + i * 300000)).rolled; i++);
   }
   // The time of a call less the time inside the driver's statements (which D1 spends, not the Worker): node:sqlite
-  // runs on this thread, and the test files run one at a time, so this is the JavaScript's own CPU.
-  let inSql = 0;
+  // runs on this thread, and the test files run one at a time, so this is the JavaScript's own CPU. What the Worker's D1
+  // binding does is added back: it writes the request as JSON, and reads the answer as JSON (each statement's columns and
+  // rows of values), making an object of every row.
+  let inSql = 0, received = 0, sent = 0;
   const batch = db.batch.bind(db);
-  db.batch = async list => { const t0 = performance.now(); try { return await batch(list); } finally { inSql += performance.now() - t0; } };
+  db.batch = async list => {
+    const t0 = performance.now(), results = await batch(list);
+    const wire = JSON.stringify(results.map(r => ({ results: { columns: Object.keys(r.results[0] || {}), rows: r.results.map(Object.values) }, meta: r.meta })));
+    received += wire.length;
+    inSql += performance.now() - t0;
+    JSON.stringify({ batch: list.map(st => ({ sql: st.sql, params: st.params })) });
+    sent += JSON.stringify(list.map(st => st.params)).length;
+    for (const { results: { columns, rows } } of JSON.parse(wire)) rows.map(row => Object.fromEntries(row.map((v, i) => [columns[i], v])));
+    return results;
+  };
   const students = JSON.parse(serialize(await store.students({ from: '2026-09-23', to: '2026-10-22', band: null }, now))).students;
   assert.ok(students.length > 500, students.length + ' students');
   const u = students.find(s => s.linked.length)?.u || students[0].u;
@@ -831,17 +916,25 @@ test('the CPU each admin answer and export page spends in JavaScript (outside SQ
     'export rounds': q => store.exportPage({ file: 'rounds', ...q }, now), 'export sessions': q => store.exportPage({ file: 'sessions', ...q }, now),
     'export students': q => store.exportPage({ file: 'students', ...q }, now)
   };
-  const medians = {};
+  const medians = {}, ratios = {}, back = {};
   for (const [name, run] of Object.entries(work)) {
     const spent = [];
     for (const q of periods) {
       inSql = 0;
+      received = 0;
+      sent = 0;
       const t0 = performance.now(), answer = await run(q);
       // Writing the answer is part of it: the handler's JSON, or the export page's lines.
-      if (answer.lines) answer.lines.join('\n'); else serialize(answer);
+      const text = answer.text !== undefined ? answer.text : serialize(answer);
       spent.push(performance.now() - t0 - inSql);
+      ratios[name] = Math.max(ratios[name] || 0, received / text.length);
+      back[name] = Math.max(back[name] || 0, sent / text.length);
     }
     medians[name] = spent.sort((a, b) => a - b)[3];
   }
-  for (const [name, ms] of Object.entries(medians)) assert.ok(ms <= (name.startsWith('export') ? 3 : 10), `${name}: ${ms.toFixed(1)} ms of JavaScript (${JSON.stringify(medians)})`);
+  // The KPI and students answers come from SQL about once, and no part of an answer goes back to D1 through the Worker.
+  for (const name of ['kpis', 'students']) assert.ok(ratios[name] < 1.5, `${name}: ${ratios[name].toFixed(2)} times its answer through the binding`);
+  for (const name of ['students', 'game', 'stats']) assert.ok(back[name] < 0.25, `${name}: ${back[name].toFixed(2)} times its answer sent back to D1`);
+  const limit = name => name.startsWith('export') ? 3 : 5;
+  for (const [name, ms] of Object.entries(medians)) assert.ok(ms <= limit(name), `${name}: ${ms.toFixed(1)} ms of JavaScript (${JSON.stringify(medians)})`);
 });

@@ -19,9 +19,9 @@
 // facts RETENTION_DAYS (or the owner's choice) and the rollups at least 800 days.
 import { CODES, ERRORS, SOURCES, WIRES } from './schema.mjs';
 import { dayBounds, localDay, localParts, offsetMin, offsetsBetween, weekStartOf } from './clock.mjs';
-import { F, IL, PLAYS, PROFILE_AGE, REPLAY, ROLLUPS, ROLLUP_TABLES, RT, SINCE_LAST, TABLES, rollStatements, rollupSelect, spanScope }
-  from './rollups.mjs';
-import { adminViews } from './admin.mjs';
+import { ARGS, F, IL, PLAYS, PROFILE_AGE, REPLAY, ROLLUPS, ROLLUP_TABLES, RT, SINCE_LAST, TABLES, jsonArray, rollStatements, rollupSelect,
+  spanScope, unionAll } from './rollups.mjs';
+import { JsonText, SENT, STUDENTS_PAGE_BYTES, adminViews } from './admin.mjs';
 import { exportPage } from './export.mjs';
 
 export { ROLLUPS, TABLES };
@@ -38,10 +38,14 @@ export const SCHEMA_VERSION = 4;
 // The free plan's daily limits (rows read and written, reset at 00:00 UTC) and size.
 export const LIMITS = { reads: 5000000, writes: 100000, bytes: 500000000 };
 // The guards (§D.8): above these, exports and then admin reads answer 429, admin actions
-// that write answer 429, re-rolls wait for the next UTC day, and the daily purge trims the
-// oldest round details.
-export const GUARDS = { exportReads: 3500000, adminReads: 4200000, adminWrites: 90000, rollWrites: 80000, rollReads: 3000000,
-  rebuildReads: 2000000, bytes: 425000000 };
+// that write answer 429, and the daily purge starts trimming the oldest round details. The
+// cron's extra work (a re-roll, a recount, and deletions it catches up on) starts only
+// while today's writes, plus its estimate, plus reserveWrites for the rest of a school
+// day's batches, roll and purge, stay at or under rollWrites, and while today's reads stay
+// under rollReads (and re-rolls' reads under rebuildReads); otherwise it waits, if need be
+// for the next UTC day.
+export const GUARDS = { exportReads: 3500000, adminReads: 4200000, adminWrites: 90000, rollWrites: 85000, reserveWrites: 40000,
+  rollReads: 3000000, rebuildReads: 2000000, bytes: 425000000 };
 const DAY_MS = 86400000;
 const DAY_S = 86400;
 const MINUTE_MS = 60000;
@@ -54,6 +58,8 @@ const KEPT_MAX = 1000000;
 // X-Batch-Every: the seconds a PC waits between batches, by today's rows written.
 const BATCH_EVERY = [[60000, 60], [80000, 180], [Infinity, 300]];
 const BANDS = [['6-7', '6-7'], ['8-9', '8-9'], ['10-11', '10-11'], ['', 'unknown']];
+// Every band a session can have, as an SQL list (rollup rows are found by day and band).
+const BAND_LIST = `(${BANDS.map(([a]) => `'${a}'`).join(', ')})`;
 const DEVICES = [['cores', 'cores'], ['mem', 'memory'], ['screen', 'screen']];
 // A local two-player round (the same rule as TWO_PLAYER in js/teacher.js).
 const DUO = /(?:^|:)(?:duo|local|pvp)$/;
@@ -63,8 +69,12 @@ const LATE_DAYS = 16;
 // The school's zone is locked once this many PCs seen in the last 14 days report it.
 const LOCK_PCS = 3;
 const VOTE_DAYS = 14;
-// The storage guard removes the round details of this many of the oldest days at a time.
-const TRIM_DAYS = 30;
+// The storage guard removes the round details of this many of the oldest days at a time,
+// TRIM_SESSIONS sessions a run (about 11 rounds each); the purge deletes the facts of
+// PURGE_SESSIONS sessions a run (about 25 rows and index entries each). A day's re-roll is
+// estimated from the rows its rollups took (twice that for a full one: delete and insert),
+// or ROLL_GUESS before it is known.
+const TRIM_DAYS = 30, TRIM_SESSIONS = 800, PURGE_SESSIONS = 600, SESSION_ROWS = 25, ROUND_ROWS = 11, ROLL_GUESS = 15000;
 const AGGREGATES = Object.keys(TABLES);
 const TEXT_KEYS = new Set(['slug', 'id', 'src']);
 
@@ -100,7 +110,8 @@ const FACTS = [
   'CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT, WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS usage (day TEXT PRIMARY KEY, reads INTEGER NOT NULL DEFAULT 0, writes INTEGER NOT NULL DEFAULT 0, ' +
     'rebuild_reads INTEGER NOT NULL DEFAULT 0, export_reads INTEGER NOT NULL DEFAULT 0, size INTEGER NOT NULL DEFAULT 0) STRICT, WITHOUT ROWID',
-  'CREATE TABLE IF NOT EXISTS roll_days (day TEXT PRIMARY KEY, dirty INTEGER NOT NULL, rolled_s INTEGER NOT NULL) STRICT, WITHOUT ROWID',
+  // rows: the rows (with their index entries) the day's rollups took when it was last rolled in full, which a re-roll's cost is estimated from.
+  'CREATE TABLE IF NOT EXISTS roll_days (day TEXT PRIMARY KEY, dirty INTEGER NOT NULL, rolled_s INTEGER NOT NULL, rows INTEGER NOT NULL DEFAULT 0) STRICT, WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS st_pcs (p TEXT PRIMARY KEY, first_s INTEGER NOT NULL, last_s INTEGER NOT NULL, z TEXT NOT NULL, ' +
     'cores INTEGER NOT NULL, mem INTEGER NOT NULL, screen INTEGER NOT NULL, k TEXT NOT NULL) STRICT, WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS st_students (u TEXT PRIMARY KEY, label TEXT NOT NULL, first_s INTEGER NOT NULL, last_s INTEGER NOT NULL, ' +
@@ -142,13 +153,15 @@ const ROLLUP_SCHEMA = Object.entries(ROLLUPS).flatMap(([table, { key, text = [],
 const SCHEMA_4 = [...FACTS, ...ROLLUP_SCHEMA];
 // The settings of a new schema 4 (TEXT values): the school's zone is unknown until a PC or
 // the dashboard reports one; facts_since is the first day of the facts and legacy_until
-// the last day of the frozen aggregates ('' when there are none). Two keys are the cron's
-// bookkeeping: rebuild is '1' while days may wait for a full re-roll, and trimmed_size the
-// database size when the storage guard last removed round details.
+// the last day of the frozen aggregates ('' when there are none). Three keys are the cron's
+// bookkeeping: rebuild is '1' while days may wait for a full re-roll or a recount,
+// trimmed_size the database size when the storage guard last started removing round
+// details, and trim_to the day it removes them up to (trimmed_before moves there a few
+// hundred sessions at a time).
 const SETTINGS_INIT = 'INSERT OR IGNORE INTO settings (key, value) VALUES ' +
   "('tz', 'UTC'), ('tz_source', 'none'), ('tz_epoch', '0'), ('week_start', 'mon'), ('week_source', 'auto'), ('keep_days', ''), " +
   "('facts_since', ?1), ('legacy_until', ?2), ('v3_since', ''), ('rv', '1'), ('rolled_through', ''), ('trimmed_before', ''), " +
-  "('rebuild', ''), ('trimmed_size', '')";
+  "('rebuild', ''), ('trimmed_size', ''), ('trim_to', '')";
 const META = 'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL) STRICT, WITHOUT ROWID';
 const setVersion = version => `INSERT INTO meta (key, value) VALUES ('schema', ${version}) ` +
   'ON CONFLICT (key) DO UPDATE SET value = excluded.value';
@@ -208,7 +221,7 @@ function legacyUpgrade() {
     const parts = sources.map(([from, keys, values]) => 'SELECT ' +
       columns.map(c => `${keys[c] || c} AS ${c}`).concat(sums.map(c => `${values[c] || 0} AS ${c}`)).join(', ') + ' FROM ' + from);
     return `INSERT INTO ${table} (${[...columns, ...sums].join(', ')}) SELECT ${columns.join(', ')}, ` +
-      sums.map(c => `SUM(${c})`).join(', ') + ` FROM (${parts.join(' UNION ALL ')}) GROUP BY ${columns.join(', ')}`;
+      sums.map(c => `SUM(${c})`).join(', ') + ` FROM (${unionAll(parts)}) GROUP BY ${columns.join(', ')}`;
   });
   sql.push(`INSERT OR IGNORE INTO seen (day, kind, key, s) SELECT day, 'd', '', s FROM session_days WHERE day >= ${LEGACY_SEEN} ` +
     `UNION SELECT day, 'g', slug, s FROM session_games WHERE day >= ${LEGACY_SEEN} ` +
@@ -290,15 +303,22 @@ const STUDENT_PC = 'INSERT OR IGNORE INTO st_student_pcs (u, p, first_s) SELECT 
 const GAMES_SET = [['rounds', 'MAX(rounds, excluded.rounds)'], ['first_s', 'MIN(first_s, excluded.first_s)']];
 const STUDENT_GAMES = `INSERT INTO st_student_games (u, slug, rounds, first_s) SELECT ?2, value ->> 0, value ->> 1, (${START}) + (value ->> 2) ` +
   `FROM json_each(?3) WHERE true ON CONFLICT (u, slug) DO UPDATE SET ${assign(GAMES_SET)} WHERE ${unchanged(GAMES_SET)}`;
-// W9: profiles removed on this PC ([code, t]); the first removal is kept.
-const REMOVED = `UPDATE st_students SET removed_s = (${START}) + (SELECT value ->> 1 FROM json_each(?2) WHERE value ->> 0 = st_students.u LIMIT 1) ` +
-  'WHERE removed_s IS NULL AND u IN (SELECT value ->> 0 FROM json_each(?2))';
+// W9: profiles removed on this PC ([code, t]); the latest removal is kept, and the answers
+// show it only while no session of the code came after it (a code a teacher moved to another
+// PC goes on there after its old PC removed it).
+const REMOVED = `UPDATE st_students SET removed_s = r.t FROM (SELECT value ->> 0 AS u, (${START}) + MAX(value ->> 1) AS t FROM json_each(?2) GROUP BY 1) r ` +
+  'WHERE st_students.u = r.u AND (st_students.removed_s IS NULL OR st_students.removed_s < r.t)';
 // W10: older codes of this student (?2), linked to its canonical code, one hop deep: links
 // to an old code move to the canonical one, and a link that would form a cycle is refused.
 const CANONICAL = 'COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2), ?2)';
 const ALIAS_HOP = `UPDATE aliases SET u_new = ${CANONICAL} WHERE u_new IN (SELECT value FROM json_each(?3) WHERE value <> ${CANONICAL})`;
 const ALIAS = `INSERT INTO aliases (u_old, u_new, s, how) SELECT value, ${CANONICAL}, (${START}), 'pc' FROM json_each(?3) ` +
   `WHERE value <> ?2 AND value <> ${CANONICAL} ON CONFLICT (u_old) DO NOTHING`;
+// Before them (in ZONE, below): rv goes up when they will change a link (an old code of ?6
+// not linked yet, or one that codes are linked to; the student ?7), so that kept answers
+// count the linked codes as one student.
+const RELINKS = "EXISTS (SELECT 1 FROM json_each(?6) j WHERE j.value <> ?7 AND j.value <> COALESCE((SELECT u_new FROM aliases WHERE u_old = ?7), ?7) " +
+  'AND (NOT EXISTS (SELECT 1 FROM aliases WHERE u_old = j.value) OR EXISTS (SELECT 1 FROM aliases WHERE u_new = j.value)))';
 // W11: a rolled day that late data reaches is rolled again.
 const LATE = 'UPDATE roll_days SET dirty = 1 WHERE day IN (SELECT value FROM json_each(?1)) AND dirty = 0';
 // W12 and every other change of the school's zone: the zone ?1 from source ?2 (week start
@@ -306,8 +326,9 @@ const LATE = 'UPDATE roll_days SET dirty = 1 WHERE day IN (SELECT value FROM jso
 // ?4 (such as ',none,dashboard,'). A new zone marks every rolled day since facts_since
 // (and not trimmed) for a full rebuild, and bumps tz_epoch and rv; the same zone from
 // another source only changes the source. ?5, when not '', is v3_since (the first v3
-// batch). SQLite reads each scalar subquery once, at its first use: the WHERE clause of the
-// first row it changes, so before any row changes.
+// batch); ?6 and ?7 are the older codes a batch links to its student, and that student (see
+// RELINKS; '[]' and '' otherwise). SQLite reads each scalar subquery once, at its first use:
+// the WHERE clause of the first row it changes, so before any row changes.
 const SETTING = key => `(SELECT value FROM settings WHERE key = '${key}')`;
 const ALLOWED = `?1 <> '' AND instr(?4, ',' || ${SETTING('tz_source')} || ',') > 0`;
 const MOVED = `${ALLOWED} AND ${SETTING('tz')} <> ?1`;
@@ -316,7 +337,7 @@ const ZONE_DIRTY = "UPDATE roll_days SET dirty = 2 WHERE day >= (SELECT MAX(valu
 const ZONE = "UPDATE settings SET value = CASE key WHEN 'tz' THEN ?1 WHEN 'tz_source' THEN ?2 WHEN 'week_start' THEN ?3 WHEN 'v3_since' THEN ?5 " +
   "WHEN 'rebuild' THEN '1' ELSE CAST(CAST(value AS INTEGER) + 1 AS TEXT) END WHERE CASE key " +
   `WHEN 'tz_source' THEN ${ALLOWED} AND value <> ?2 WHEN 'week_start' THEN ${MOVED} AND ${SETTING('week_source')} = 'auto' AND value <> ?3 ` +
-  `WHEN 'v3_since' THEN value = '' AND ?5 <> '' WHEN 'tz' THEN ${MOVED} WHEN 'tz_epoch' THEN ${MOVED} WHEN 'rv' THEN ${MOVED} ` +
+  `WHEN 'v3_since' THEN value = '' AND ?5 <> '' WHEN 'tz' THEN ${MOVED} WHEN 'tz_epoch' THEN ${MOVED} WHEN 'rv' THEN (${MOVED}) OR ${RELINKS} ` +
   `WHEN 'rebuild' THEN ${MOVED} ELSE 0 END`;
 // Who may set the zone: a PC (W12) or the dashboard's guess while nothing better is known;
 // the nightly vote also while it is the PCs' provisional choice; the owner always.
@@ -486,18 +507,23 @@ const ROLL = Object.fromEntries(ROLLUP_TABLES.map(table => [table, rollStatement
 // What the 5-minute cron reads first: the settings and today's usage (as PROBE), the day
 // after rolled_through when it already has a row (another instance rolled it), the oldest
 // day waiting for a diff re-roll (dirty 1, rolled before ?3, local days from ?2 on), the
-// newest day waiting for a full one (dirty 2; looked for only while the rebuild flag is not
-// ''), the oldest rolled day, and the zone most PCs seen since ?4 report, with their number.
+// day waiting for a full re-roll (dirty 2, newest first) or else for a recount (dirty 3,
+// newest first), looked for only while the rebuild flag is not ''; each before the
+// school's today ?5 (a day still running is never re-rolled) and with its rows; the oldest
+// rolled day with its rows, the start of the oldest fact, and the zone most PCs seen since
+// ?4 report, with their number.
 const PLAN = "SELECT (SELECT value FROM meta WHERE key = 'schema') AS schema, " +
   '(SELECT json_group_object(key, value) FROM settings) AS settings, ' +
   '(SELECT json_array(reads, writes, rebuild_reads, export_reads, size) FROM usage WHERE day = ?1) AS usage, ' +
   `(SELECT day FROM roll_days WHERE day = MAX(${SETTING('facts_since')}, IFNULL(date(${SETTING('rolled_through')}, '+1 day'), ''))) AS taken, ` +
-  '(SELECT day FROM roll_days WHERE day >= ?2 AND dirty = 1 AND rolled_s < ?3 ORDER BY day LIMIT 1) AS diff, ' +
-  `CASE WHEN IFNULL(${SETTING('rebuild')}, '1') <> '' THEN (SELECT day FROM roll_days WHERE day >= ` +
-  "(SELECT MAX(value) FROM settings WHERE key IN ('facts_since', 'trimmed_before')) AND dirty = 2 ORDER BY day DESC LIMIT 1) END AS full, " +
-  '(SELECT MIN(day) FROM roll_days) AS oldest, ' +
+  '(SELECT json_array(day, rows) FROM roll_days WHERE day >= ?2 AND day < ?5 AND dirty = 1 AND rolled_s < ?3 ORDER BY day LIMIT 1) AS diff, ' +
+  `CASE WHEN IFNULL(${SETTING('rebuild')}, '1') <> '' THEN (SELECT json_array(day, rows, dirty) FROM roll_days WHERE day >= ` +
+  "(SELECT MAX(value) FROM settings WHERE key IN ('facts_since', 'trimmed_before')) AND day < ?5 AND dirty >= 2 ORDER BY dirty, day DESC LIMIT 1) END AS full, " +
+  '(SELECT json_array(day, rows) FROM roll_days ORDER BY day LIMIT 1) AS oldest, (SELECT MIN(start_s) FROM st_sessions) AS first, ' +
   "(SELECT json_array(z, n) FROM (SELECT z, COUNT(*) AS n FROM st_pcs WHERE last_s >= ?4 AND z <> '' GROUP BY z ORDER BY 2 DESC, z LIMIT 1)) AS vote";
 const ROLL_DAY = 'INSERT INTO roll_days (day, dirty, rolled_s) VALUES (?1, 0, ?2) ON CONFLICT (day) DO UPDATE SET dirty = 0, rolled_s = excluded.rolled_s';
+// What the day's rollups took (?2 rows written by its INSERTs), after its first roll or a full re-roll.
+const ROLL_ROWS = 'UPDATE roll_days SET rows = ?2 WHERE day = ?1';
 // After a roll: rv goes up (every kept KPI part is then out of date) and, after a first
 // roll, rolled_through moves to its day.
 const ROLLED = "UPDATE settings SET value = CASE key WHEN 'rv' THEN CAST(CAST(value AS INTEGER) + 1 AS TEXT) ELSE ?1 END " +
@@ -505,26 +531,48 @@ const ROLLED = "UPDATE settings SET value = CASE key WHEN 'rv' THEN CAST(CAST(va
 const KEPT_CLEAN = `DELETE FROM kpi_cache WHERE made <> ${SETTING('rv')}`;
 // A change of the links or of the facts behind kept parts (forget, link, unlink): rv goes up.
 const RV_UP = "UPDATE settings SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'rv'";
-// No day waits for a full re-roll any more (checked when written, so a zone change that
-// came in between keeps the flag).
-const REBUILT = "INSERT INTO settings (key, value) SELECT 'rebuild', '' WHERE NOT EXISTS (SELECT 1 FROM roll_days WHERE dirty = 2) " +
+// No day waits for a full re-roll or a recount any more (checked when written, so a zone
+// change that came in between keeps the flag).
+const REBUILT = "INSERT INTO settings (key, value) SELECT 'rebuild', '' WHERE NOT EXISTS (SELECT 1 FROM roll_days WHERE dirty >= 2) " +
   'ON CONFLICT (key) DO UPDATE SET value = excluded.value';
-// The daily purge: the facts of sessions that started before ?1 (UTC seconds), the
-// students and PCs last seen before it with their rows, and the cutoffs in the settings.
-const EXPIRED = 'SELECT id FROM st_sessions WHERE start_s < ?1', GONE = 'SELECT u FROM st_students WHERE last_s < ?1';
-const PURGE_FACTS = [`DELETE FROM st_rounds WHERE sid IN (${EXPIRED})`, `DELETE FROM st_visits WHERE sid IN (${EXPIRED})`,
-  `DELETE FROM st_marks WHERE sid IN (${EXPIRED})`, 'DELETE FROM st_sessions WHERE start_s < ?1',
-  `DELETE FROM st_student_pcs WHERE u IN (${GONE})`, `DELETE FROM st_student_games WHERE u IN (${GONE})`,
-  `DELETE FROM aliases WHERE u_old IN (${GONE}) OR u_new IN (${GONE})`, 'DELETE FROM st_students WHERE last_s < ?1',
-  'DELETE FROM st_pcs WHERE last_s < ?1'];
-// facts_since moves to the facts' cutoff ?1, legacy_until goes once every frozen day is
-// before ?2, and rv goes up.
-const PURGED = "UPDATE settings SET value = CASE key WHEN 'facts_since' THEN ?1 WHEN 'legacy_until' THEN '' " +
-  "ELSE CAST(CAST(value AS INTEGER) + 1 AS TEXT) END WHERE CASE key WHEN 'facts_since' THEN value < ?1 " +
-  "WHEN 'legacy_until' THEN value <> '' AND value < ?2 WHEN 'rv' THEN 1 ELSE 0 END";
+// Deleting facts, a few hundred sessions at a time, so that one run never writes more
+// than about 15,000 rows (the daily purge, and the 5-minute cron catching up after a
+// shorter retention): the facts of the oldest ?2 sessions that started before ?1 (the UTC
+// start of the cutoff day ?3): their rounds, visits and marks; then the settings:
+// facts_since moves to ?3 when no older session is left, else to the day after the newest
+// of them (a day whose facts may be partly gone is never re-rolled), rv goes up (daily: on
+// every purge, which also deletes frozen days, students and PCs; else when facts go), and
+// legacy_until goes once every frozen row is gone (legacy: there are frozen tables); then
+// the sessions. L: the wide scope's wall clock.
+const CHUNK = 'SELECT id FROM st_sessions WHERE start_s < ?1 ORDER BY start_s LIMIT ?2';
+function factsChunk(L, legacy, daily) {
+  const since = 'CASE WHEN NOT EXISTS (SELECT 1 FROM st_sessions WHERE start_s < ?1 ORDER BY start_s LIMIT 1 OFFSET ?2) THEN ?3 ' +
+    `ELSE date(${L(`(SELECT MAX(start_s) FROM (SELECT start_s FROM st_sessions WHERE start_s < ?1 ORDER BY start_s LIMIT ?2))`)}, 'unixepoch', '+1 day') END`;
+  const frozenGone = Object.keys(TABLES).map(table => `NOT EXISTS (SELECT 1 FROM ${table})`).join(' AND ');
+  return [`DELETE FROM st_rounds WHERE sid IN (${CHUNK})`, `DELETE FROM st_visits WHERE sid IN (${CHUNK})`, `DELETE FROM st_marks WHERE sid IN (${CHUNK})`,
+    `UPDATE settings SET value = CASE key WHEN 'facts_since' THEN ${since} WHEN 'legacy_until' THEN '' ELSE CAST(CAST(value AS INTEGER) + 1 AS TEXT) END ` +
+      `WHERE CASE key WHEN 'facts_since' THEN value < ${since} WHEN 'rv' THEN ${daily ? '1' : 'EXISTS (SELECT 1 FROM st_sessions WHERE start_s < ?1)'} ` +
+      `WHEN 'legacy_until' THEN ${legacy ? `value <> '' AND value < ?4 AND ${frozenGone}` : '0'} ELSE 0 END`,
+    `DELETE FROM st_sessions WHERE id IN (${CHUNK})`];
+}
+// The frozen aggregate days before ?1, at most a week of them per table a night.
+const frozenChunk = table => `DELETE FROM ${table} WHERE day < MIN(?1, (SELECT date(MIN(day), '+7 days') FROM ${table}))`;
+// The students and PCs last seen before ?1 (UTC seconds), with their rows.
+const GONE = 'SELECT u FROM st_students WHERE last_s < ?1';
+const PURGE_STUDENTS = [`DELETE FROM st_student_pcs WHERE u IN (${GONE})`, `DELETE FROM st_student_games WHERE u IN (${GONE})`,
+  `DELETE FROM aliases WHERE u_old IN (${GONE}) OR u_new IN (${GONE})`, 'DELETE FROM st_students WHERE last_s < ?1', 'DELETE FROM st_pcs WHERE last_s < ?1'];
 const OLDEST_START = 'SELECT MIN(start_s) AS first FROM st_sessions';
-const TRIMMED = "INSERT INTO settings (key, value) VALUES ('trimmed_before', ?1), ('trimmed_size', ?2) " +
-  'ON CONFLICT (key) DO UPDATE SET value = excluded.value';
+// The storage guard starts removing round details up to the day ?1 (the database is ?2 bytes).
+const TRIM_START = "INSERT INTO settings (key, value) VALUES ('trim_to', ?1), ('trimmed_size', ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value";
+// Then the 5-minute cron removes them a few hundred sessions at a time: the rounds of the
+// oldest ?3 sessions with rounds that started in [?1, ?2) (?2: trim_to's start, ?4); and
+// trimmed_before moves to ?4 when none is left, else to the day after the newest of them.
+const TRIM_FROM = 'SELECT s.id FROM st_sessions s WHERE s.start_s >= ?1 AND s.start_s < ?2 AND EXISTS (SELECT 1 FROM st_rounds r WHERE r.sid = s.id) ' +
+  'ORDER BY s.start_s';
+const trimChunk = L => [
+  `UPDATE settings SET value = CASE WHEN NOT EXISTS (${TRIM_FROM} LIMIT 1 OFFSET ?3) THEN ?4 ELSE ` +
+    `date(${L(`(SELECT MAX(start_s) FROM st_sessions WHERE id IN (${TRIM_FROM} LIMIT ?3))`)}, 'unixepoch', '+1 day') END WHERE key = 'trimmed_before'`,
+  `DELETE FROM st_rounds WHERE sid IN (${TRIM_FROM} LIMIT ?3)`, RV_UP, KEPT_CLEAN];
 
 /* ------------------------------------------------------------ settings */
 // GET /v1/admin/settings: the settings and today's usage (as PROBE), the latest size, the
@@ -558,9 +606,13 @@ const KPI = {
 const GROUPS = Object.keys(KPI);
 const AT = Object.fromEntries(GROUPS.map(name => [name, Object.fromEntries(KPI[name].sums.map((c, i) => [c, i]))]));
 const D = AT.days, G = AT.games, L = AT.levels, S = AT.sources, V = AT.devices;
+const G_RT = RT.map(c => G[c]), G_IL = IL.map(c => G[c]), G_REPLAY = REPLAY.map(c => G[c]), G_PLAYS = PLAYS.map(c => G[c]);
+const G_ERRORS = ERRORS.map(kind => G['error_' + kind]), G_SOURCES = SOURCES.map(src => G['src_' + src]);
 // A statement's rows as one JSON text of arrays, in the order of `columns`: the Worker then
-// parses one string instead of making an object of every row (CPU it is billed for).
-const asRows = (text, columns) => `SELECT json_group_array(json_array(${columns.join(', ')})) AS rows FROM (${text})`;
+// parses one string instead of making an object of every row (CPU it is billed for). A row
+// of more than 32 columns comes as an array of arrays (rollups.mjs jsonArray): flat() it.
+const asRows = (text, columns) => `SELECT json_group_array(${jsonArray(columns)}) AS rows FROM (${text})`;
+const NESTED = Object.fromEntries(GROUPS.map(name => [name, KPI[name].keys.length + KPI[name].sums.length > ARGS]));
 // A group over the frozen days ?1..?2 (only on a database milestone 2 used) and the rolled
 // days ?4..?5, band ?3 (null for every band, '' for the unknown band).
 function closedGroup(name, legacy) {
@@ -568,27 +620,22 @@ function closedGroup(name, legacy) {
   const part = (from, days, mark) => `SELECT ${keys.map(c => c === 'part' ? `${mark} AS part` : c).join(', ')}, ` +
     sums.map(c => from === table && !frozen.has(c) ? `0 AS ${c}` : c).join(', ') + ` FROM ${from} WHERE day BETWEEN ${days} AND (?3 IS NULL OR a = ?3)`;
   const parts = [...(legacy ? [part(table, '?1 AND ?2', 0)] : []), part(rollup, '?4 AND ?5', 1)];
-  return asRows(`SELECT ${keys.join(', ')}, ${sums.map(c => `TOTAL(${c}) AS ${c}`).join(', ')} FROM (${parts.join(' UNION ALL ')}) GROUP BY ${keys.join(', ')}`,
-    [...keys, ...sums]);
+  return asRows(`SELECT ${keys.join(', ')}, ${sums.map(c => `CAST(TOTAL(${c}) AS INTEGER) AS ${c}`).join(', ')} FROM (${parts.join(' UNION ALL ')}) ` +
+    `GROUP BY ${keys.join(', ')}`, [...keys, ...sums]);
 }
 const CLOSED_GROUPS = [false, true].map(legacy => GROUPS.map(name => closedGroup(name, legacy)));
-// The same group over the days not rolled yet, from the facts: the UTC seconds [?1, ?2), band ?3.
-const openGroup = (name, scope) => asRows(`SELECT ${KPI[name].keys.map(c => c === 'part' ? '1 AS part' : c).join(', ')}, ` +
-  `${KPI[name].sums.map(c => `TOTAL(${c}) AS ${c}`).join(', ')} FROM (${rollupSelect(KPI[name].rollup, scope)}) WHERE ?3 IS NULL OR a = ?3 ` +
-  `GROUP BY ${KPI[name].keys.map((_, i) => i + 1).join(', ')}`, [...KPI[name].keys, ...KPI[name].sums]);
-// Per raw student code: its bands (each after ':', so that the unknown band '' is one too),
-// games, first play and profile start (UTC seconds: the first session's start less the
-// profile's age then; without a student row, the code's first session in the range). Over
-// the rolled days ?1..?2, or the facts of [?1, ?2); band ?3.
-const firsts = 'COALESCE(t.first_s, x.first) AS first, COALESCE(t.first_s - IFNULL(t.age_days_first, 0) * 86400, x.first) AS made';
-const STUDENT_COLUMNS = ['u', 'bands', 'games', 'first', 'made'];
-const CLOSED_STUDENTS = asRows(`SELECT x.u, x.bands, y.games, ${firsts} FROM (SELECT u, group_concat(DISTINCT ':' || a) AS bands, MIN(first_s) AS first ` +
-  'FROM r_student_day WHERE day BETWEEN ?1 AND ?2 AND (?3 IS NULL OR a = ?3) GROUP BY u) x LEFT JOIN (SELECT u, group_concat(DISTINCT slug) AS games ' +
-  'FROM r_student_game WHERE day BETWEEN ?1 AND ?2 AND (?3 IS NULL OR a = ?3) GROUP BY u) y ON y.u = x.u LEFT JOIN st_students t ON t.u = x.u', STUDENT_COLUMNS);
-const OPEN_STUDENTS = asRows(`SELECT x.u, x.bands, x.games, ${firsts} FROM (SELECT s.u, group_concat(DISTINCT ':' || s.a) AS bands, MIN(s.start_s) AS first, ` +
-  '(SELECT group_concat(DISTINCT v.slug) FROM st_sessions o JOIN st_visits v ON v.sid = o.id WHERE o.u = s.u AND o.start_s >= ?1 AND o.start_s < ?2 ' +
-  "AND (?3 IS NULL OR o.a = ?3)) AS games FROM st_sessions s WHERE s.start_s >= ?1 AND s.start_s < ?2 AND s.u <> '' AND (?3 IS NULL OR s.a = ?3) " +
-  'GROUP BY s.u) x LEFT JOIN st_students t ON t.u = x.u', STUDENT_COLUMNS);
+// A group of a whole answer: the closed part's rows (kept in kpi_cache under ?4) and the
+// group over the days not rolled yet from the facts (the UTC seconds [?1, ?2) of the scope;
+// none without one), band ?3, added up per key in SQL.
+const columnPath = (i, n) => n > ARGS ? `'$[${Math.floor(i / ARGS)}][${i % ARGS}]'` : `'$[${i}]'`;
+function mergedGroup(name, scope) {
+  const { keys, sums, rollup } = KPI[name], columns = [...keys, ...sums];
+  const parts = [`SELECT ${columns.map((c, i) => `value ->> ${columnPath(i, columns.length)} AS ${c}`).join(', ')} ` +
+    `FROM json_each((SELECT rows FROM kpi_cache WHERE key = ?4), '$.${name}')`];
+  if (scope) parts.push(`SELECT ${keys.map(c => c === 'part' ? '1 AS part' : c).join(', ')}, ${sums.join(', ')} FROM (${rollupSelect(rollup, scope)}) WHERE ?3 IS NULL OR a = ?3`);
+  return asRows(`SELECT ${keys.join(', ')}, ${sums.map(c => `CAST(TOTAL(${c}) AS INTEGER) AS ${c}`).join(', ')} FROM (${parts.join(' UNION ALL ')}) ` +
+    `GROUP BY ${keys.join(', ')}`, columns);
+}
 // The rest, as JSON: distinct students per day; the minutes of every student-day (by
 // canonical code) as counts per tenth of a minute, with their number and sum; the engaged
 // ms per day by kind of session (s a student, g a guest, u v2); and per PC (any band)
@@ -600,12 +647,15 @@ const extras = (studentDays, kinds, pcs) => `WITH sd AS MATERIALIZED (${studentD
   '(SELECT json_array(COUNT(*), TOTAL(m)) FROM sd) AS dose, ' +
   `(SELECT json_group_array(json_array(day, k2, ms)) FROM (${kinds})) AS kinds, ` +
   `(SELECT json_group_array(json_array(p, full, forgets)) FROM (${pcs})) AS pcs`;
+const EXTRAS_KEYS = ['students', 'minutes', 'dose', 'kinds', 'pcs'];
 const KIND = "CASE WHEN s.wire = 2 THEN 'u' WHEN s.u = '' THEN 'g' ELSE 's' END";
+// Over the rolled days ?4..?5, band ?3 (the closed groups' parameters).
 const CLOSED_EXTRAS = extras(
   'SELECT COALESCE(al.u_new, d.u) AS c, d.day AS day, TOTAL(d.engaged_ms) AS m FROM r_student_day d LEFT JOIN aliases al ON al.u_old = d.u ' +
-  'WHERE d.day BETWEEN ?1 AND ?2 AND (?3 IS NULL OR d.a = ?3) GROUP BY 1, 2',
-  "SELECT day, k2, TOTAL(ms) AS ms FROM r_stat WHERE metric = 'sesslen' AND slug = '' AND day BETWEEN ?1 AND ?2 AND (?3 IS NULL OR a = ?3) GROUP BY day, k2",
-  "SELECT p, MAX(np_max >= 24) AS full, MAX(new_profiles >= 3 AND new_profiles * 2 >= sessions) AS forgets FROM r_pc_day WHERE day BETWEEN ?1 AND ?2 AND p <> '' GROUP BY p");
+  'WHERE d.day BETWEEN ?4 AND ?5 AND (?3 IS NULL OR d.a = ?3) GROUP BY 1, 2',
+  'SELECT x.day AS day, x.k2 AS k2, TOTAL(x.ms) AS ms FROM r_stat x WHERE x.day IN (SELECT day FROM roll_days WHERE day BETWEEN ?4 AND ?5) ' +
+    `AND x.a IN ${BAND_LIST} AND x.metric = 'sesslen' AND x.slug = '' AND (?3 IS NULL OR x.a = ?3) GROUP BY 1, 2`,
+  "SELECT p, MAX(np_max >= 24) AS full, MAX(new_profiles >= 3 AND new_profiles * 2 >= sessions) AS forgets FROM r_pc_day WHERE day BETWEEN ?4 AND ?5 AND p <> '' GROUP BY p");
 const openExtras = scope => extras(
   `SELECT COALESCE(al.u_new, s.u) AS c, ${scope.day} AS day, TOTAL(v.engaged_ms) AS m FROM st_sessions s LEFT JOIN aliases al ON al.u_old = s.u ` +
   "LEFT JOIN st_visits v ON v.sid = s.id WHERE s.start_s >= ?1 AND s.start_s < ?2 AND s.u <> '' AND (?3 IS NULL OR s.a = ?3) GROUP BY 1, 2",
@@ -614,9 +664,58 @@ const openExtras = scope => extras(
   `SELECT p, MAX(full) AS full, MAX(forgets) AS forgets FROM (SELECT s.p AS p, ${scope.day} AS day, MAX(s.np) >= 24 AS full, ` +
   "TOTAL(s.is_new) >= 3 AND TOTAL(s.is_new) * 2 >= COUNT(*) AS forgets FROM st_sessions s WHERE s.start_s >= ?1 AND s.start_s < ?2 AND s.p <> '' " +
   'GROUP BY 1, 2) GROUP BY p');
-// The kept parts of an answer (their keys: the JSON array ?1) and every link between codes,
-// with the first play and profile start of both codes.
-const KEPT_LOOKUP = 'SELECT key, rows FROM kpi_cache WHERE key IN (SELECT value FROM json_each(?1)) UNION ALL ' +
+// The closed part of a KPI answer, made and kept in kpi_cache by SQL (key ?6, rv ?7) unless
+// it is kept already, so that it never passes through the Worker: the groups and the
+// extras as one JSON object. Over the frozen days ?1..?2 (legacy) and the rolled days
+// ?4..?5, band ?3. (SQLite computes the values only for a row that passes the WHERE.)
+const keptBySql = (key, json) => `INSERT INTO kpi_cache (key, made, rows) SELECT ${key}, ?7, ${json} ` +
+  `WHERE NOT EXISTS (SELECT 1 FROM kpi_cache WHERE key = ${key})`;
+const CLOSED_PART = [false, true].map(legacy => keptBySql('?6', 'json_object(' + GROUPS.map((name, i) => `'${name}', json((${CLOSED_GROUPS[legacy ? 1 : 0][i]}))`)
+  .concat(`'extras', json((SELECT json_object(${EXTRAS_KEYS.map(k => `'${k}', json(${k})`).join(', ')}) FROM (${CLOSED_EXTRAS})))`).join(', ') + ')'));
+const KEPT_ROWS = 'SELECT rows FROM kpi_cache WHERE key = ?1';
+// The closed part's extras (kept under ?4) and the facts' (the scope's [?1, ?2), band ?3).
+const mergedExtras = scope => "SELECT (SELECT rows -> '$.extras' FROM kpi_cache WHERE key = ?4) AS kept" +
+  (scope ? `, x.* FROM (${openExtras(scope)}) x` : '');
+// The students of the rolled days $from..$to, band $band (SQL parameters), by canonical code,
+// as JSON: who (code, first play, profile start: UTC seconds, from its codes' student rows,
+// or the first session in the range without one), bands ([code, band]) and games ([code, slug]).
+const closedStudents = (from, to, band) => `SELECT json_object('who', json((SELECT json_group_array(json_array(c, first, made)) FROM ` +
+  '(SELECT x.c AS c, MIN(COALESCE(t.first_s, x.f)) AS first, MIN(COALESCE(t.first_s - IFNULL(t.age_days_first, 0) * 86400, x.f)) AS made ' +
+  `FROM (SELECT COALESCE(al.u_new, d.u) AS c, d.u AS u, MIN(d.first_s) AS f FROM r_student_day d LEFT JOIN aliases al ON al.u_old = d.u ` +
+  `WHERE d.day BETWEEN ${from} AND ${to} AND (${band} IS NULL OR d.a = ${band}) GROUP BY 1, 2) x LEFT JOIN st_students t ON t.u = x.u GROUP BY 1))), ` +
+  `'bands', json((SELECT json_group_array(json_array(c, a)) FROM (SELECT DISTINCT COALESCE(al.u_new, d.u) AS c, d.a AS a FROM r_student_day d ` +
+  `LEFT JOIN aliases al ON al.u_old = d.u WHERE d.day BETWEEN ${from} AND ${to} AND (${band} IS NULL OR d.a = ${band})))), ` +
+  `'games', json((SELECT json_group_array(json_array(c, slug)) FROM (SELECT DISTINCT COALESCE(al.u_new, g.u) AS c, g.slug AS slug FROM r_student_game g ` +
+  `LEFT JOIN aliases al ON al.u_old = g.u WHERE g.day BETWEEN ${from} AND ${to} AND (${band} IS NULL OR g.a = ${band}))))) AS j`;
+// Kept beside the closed part (key ?8), for SQL only: JavaScript never reads it.
+const CLOSED_STUDENTS = keptBySql('?8', `(${closedStudents('?4', '?5', '?3')})`);
+// The students of a whole answer, counted in SQL, as JSON: the closed part's (kept under
+// ?1, or made again from the rolled days ?2..?3), and the facts' of the UTC seconds [?5,
+// ?6), band ?4, by canonical code: how many, how many new (the profile was made from the
+// day ?7 starts on), returning (seen before) or known before (first seen in the range,
+// made before it), counting the first play and profile start of every code linked to
+// them; and how many in each band and each game.
+const STUDENTS_COUNTED = `WITH k AS (SELECT COALESCE((${KEPT_ROWS}), (${closedStudents('?2', '?3', '?4')})) AS j), ` +
+  "o AS MATERIALIZED (SELECT COALESCE(al.u_new, s.u) AS c, s.u AS u, s.a AS a, s.id AS sid, s.start_s AS f FROM st_sessions s " +
+  "LEFT JOIN aliases al ON al.u_old = s.u WHERE s.start_s >= ?5 AND s.start_s < ?6 AND s.u <> '' AND (?4 IS NULL OR s.a = ?4)), " +
+  "who AS (SELECT value ->> 0 AS c, value ->> 1 AS first, value ->> 2 AS made FROM k, json_each(k.j, '$.who') UNION ALL " +
+  'SELECT x.c, MIN(COALESCE(t.first_s, x.f)), MIN(COALESCE(t.first_s - IFNULL(t.age_days_first, 0) * 86400, x.f)) ' +
+  'FROM (SELECT c, u, MIN(f) AS f FROM o GROUP BY 1, 2) x LEFT JOIN st_students t ON t.u = x.u GROUP BY 1), ' +
+  'per AS (SELECT c, MIN(first) AS first, MIN(made) AS made FROM who GROUP BY c), ' +
+  'linked AS (SELECT c, MIN(first) AS first, MIN(made) AS made FROM (SELECT a.u_new AS c, t.first_s AS first, t.first_s - IFNULL(t.age_days_first, 0) * 86400 AS made ' +
+  'FROM aliases a JOIN st_students t ON t.u = a.u_old UNION ALL SELECT a.u_new, t.first_s, t.first_s - IFNULL(t.age_days_first, 0) * 86400 ' +
+  'FROM aliases a JOIN st_students t ON t.u = a.u_new) GROUP BY c), ' +
+  "cls AS (SELECT CASE WHEN MIN(p.first, IFNULL(l.first, p.first)) < ?7 THEN 'r' WHEN MIN(p.made, IFNULL(l.made, p.made)) >= ?7 THEN 'n' ELSE 'k' END AS k " +
+  'FROM per p LEFT JOIN linked l ON l.c = p.c), ' +
+  "bands AS (SELECT value ->> 0 AS c, value ->> 1 AS a FROM k, json_each(k.j, '$.bands') UNION SELECT c, a FROM o), " +
+  "games AS (SELECT value ->> 0 AS c, value ->> 1 AS slug FROM k, json_each(k.j, '$.games') UNION SELECT o.c, v.slug FROM o JOIN st_visits v ON v.sid = o.sid) " +
+  "SELECT json_object('active', (SELECT COUNT(*) FROM cls), 'new', (SELECT TOTAL(k = 'n') FROM cls), 'returning', (SELECT TOTAL(k = 'r') FROM cls), " +
+  "'knownBefore', (SELECT TOTAL(k = 'k') FROM cls), 'bands', json((SELECT json_group_object(a, n) FROM (SELECT a, COUNT(*) AS n FROM bands GROUP BY a))), " +
+  "'games', json((SELECT json_group_object(slug, n) FROM (SELECT slug, COUNT(*) AS n FROM games GROUP BY slug)))) AS students";
+// The kept parts of an answer (their keys: the JSON array ?1) and, with KEPT_LINKS, every
+// link between codes, with the first play and profile start of both codes.
+const KEPT_ONLY = 'SELECT key, rows FROM kpi_cache WHERE key IN (SELECT value FROM json_each(?1))';
+const KEPT_LOOKUP = KEPT_ONLY + ' UNION ALL ' +
   "SELECT '', json_group_array(json_array(a.u_old, a.u_new, o.first_s, o.first_s - IFNULL(o.age_days_first, 0) * 86400, " +
   'n.first_s, n.first_s - IFNULL(n.age_days_first, 0) * 86400)) FROM aliases a LEFT JOIN st_students o ON o.u = a.u_old LEFT JOIN st_students n ON n.u = a.u_new';
 // Keeps parts made with rv ?1: n of them, each a key and its JSON text (?2, ?3, then ?4,
@@ -646,7 +745,7 @@ const group = (key, sessions, build) => ({ ...key, sessions, ...build() });
 function sumRows(rows, keys) {
   const map = new Map();
   for (const row of rows) {
-    const id = keys === 1 ? row[0] : row.slice(0, keys).join(' '), entry = map.get(id);
+    const id = keys === 1 ? row[0] : keys === 2 ? row[0] + ' ' + row[1] : row.slice(0, keys).join(' '), entry = map.get(id);
     if (!entry) map.set(id, { key: row.slice(0, keys), v: row.slice(keys) });
     else for (let i = keys; i < row.length; i++) entry.v[i - keys] += row[i];
   }
@@ -658,14 +757,20 @@ const sumInto = (map, id, v) => {
   else for (let i = 0; i < v.length; i++) into[i] += v[i];
 };
 const vector = (v, at, columns) => columns.map(c => v[at[c]]);
+// The same with the indexes found once: pick(v, index(at, columns)).
+const index = (at, columns) => columns.map(c => at[c]);
+const pick = (v, indexes) => indexes.map(i => v[i]);
 const frames = (v, at) => {
   const counts = vector(v, at, F), all = counts.reduce((a, b) => a + b, 0);
   return { counts, smoothShare: ratio(counts[0], all), stallShare: ratio(counts[3], all) };
 };
-const codes = (v, at) => Object.fromEntries(CODES.map(c => [c, v[at[c]]]));
+const codes = (v, at) => {
+  const out = {};
+  for (const c of CODES) out[c] = v[at[c]];
+  return out;
+};
 // KPI rows as arrays, from a statement's one JSON text (asRows).
 const arrays = result => JSON.parse(result.results[0].rows);
-const csv = text => text ? text.split(',') : [];
 // Quantiles of the minutes per student-day from the counts of each tenth of a minute (so
 // exact to the answer's one decimal): linear between the two nearest ranks, as R and
 // NumPy do by default.
@@ -683,17 +788,15 @@ function quantiles(counts, n, sum) {
   };
   return { p25: q(0.25), median: q(0.5), p75: q(0.75), mean: round(sum / n / 60000, 1) };
 }
-const EMPTY_PART = { days: [], games: [], levels: [], sources: [], devices: [], students: [],
-  extras: { students: [], minutes: [], dose: [0, 0], kinds: [], pcs: [] } };
-const EXTRAS = Object.keys(EMPTY_PART.extras), EMPTY_EXTRAS = JSON.stringify(EMPTY_PART.extras);
+const EXTRAS = EXTRAS_KEYS;
 
 // Options: retentionDays (the facts' default retention; the owner's keep_days setting
 // wins), openCacheMs (how long the answers' parts for the days not rolled yet are kept and
 // shared between instances, per slot of that length; 0 computes them on every request, as
-// the Node host does), guards (the thresholds of GUARDS) and exportLimits (smaller export
-// pages), both for tests. The store's work is all in SQL on db; JavaScript folds one
-// batch's events and assembles small answers.
-export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0, guards = {}, exportLimits = {} } = {}) {
+// the Node host does), guards (the thresholds of GUARDS), exportLimits (smaller export
+// pages) and studentsPageBytes (smaller students pages), for tests. The store's work is all
+// in SQL on db; JavaScript folds one batch's events and assembles small answers.
+export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0, guards = {}, exportLimits = {}, studentsPageBytes = STUDENTS_PAGE_BYTES } = {}) {
   let ready = null, sweptMinute = -1, conf = null;
   const sql = text => db.prepare(text);
   // A statement with exactly as many values as it has parameters.
@@ -724,40 +827,68 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       at: now, tz: s.tz || 'UTC', tzSource: s.tz_source || 'none', tzEpoch: s.tz_epoch || '0', factsSince: s.facts_since || '',
       legacyUntil: s.legacy_until || '', v3Since: s.v3_since || '', rolledThrough: s.rolled_through || '', rv: s.rv || '1',
       weekStart: s.week_start || 'mon', weekSource: s.week_source || 'auto', keepDays: Number(s.keep_days) || 0,
-      trimmedBefore: s.trimmed_before || '', trimmedSize: Number(s.trimmed_size) || 0, rebuild: s.rebuild ?? '1',
+      trimmedBefore: s.trimmed_before || '', trimmedSize: Number(s.trimmed_size) || 0, trimTo: s.trim_to || '', rebuild: s.rebuild ?? '1',
       usage: { day: utcDay(now), reads: u[0], writes: u[1], rebuild: u[2], export: u[3], size: u[4] }
     };
   }
-  // One db.batch: the settings are read again first when the copy is old (unless the
-  // statements read them themselves: fresh), this instance's usage is flushed last when a
-  // minute has passed, and every result's meta is metered. Answers the results of `statements`.
+  // One db.batch: this instance's usage is flushed first when a minute has passed, then the
+  // settings and today's usage are read again when the copy is old (unless the statements
+  // read them themselves: fresh, and then remember() them), so that what is read already
+  // holds the flush; and every result's meta is metered. Answers the results of `statements`.
   async function run(statements, now, { rebuild = false, exported = false, fresh = false } = {}) {
     const refresh = !fresh && (!conf || now - conf.at >= SETTINGS_MS), minute = Math.floor(now / MINUTE_MS);
-    const list = refresh ? [sql(PROBE).bind(utcDay(now)), ...statements] : [...statements];
-    let flush = null;
-    if (minute !== flushedMinute && pending.size) {
-      const [day, c] = pending.entries().next().value;
-      if (c.reads || c.writes || c.rebuild || c.export) {
-        flush = { day, c };
-        pending.delete(day);
-        list.push(sql(USAGE).bind(day, c.reads, c.writes, c.rebuild, c.export, c.size));
-      } else pending.delete(day);
-    }
+    const flush = minute !== flushedMinute ? takePending() : [];
+    const list = [...flush.map(([day, c]) => usageStatement(day, c)), ...(refresh ? [sql(PROBE).bind(utcDay(now))] : []), ...statements];
     let results;
     try {
       results = await db.batch(list);
     } catch (error) {
       // Nothing was written: the counts wait for the next flush.
-      if (flush) for (const [k, n] of Object.entries(flush.c)) addPending(flush.day, k, n);
+      restorePending(flush);
       throw error;
     }
-    if (refresh) remember(results[0].results[0], now);
-    if (flush) {
-      flushedMinute = minute;
-      if (conf && conf.usage.day === flush.day) for (const key of ['reads', 'writes', 'rebuild', 'export']) conf.usage[key] += flush.c[key];
-    }
+    if (flush.length) flushedMinute = minute;
+    if (refresh) remember(results[flush.length].results[0], now);
+    // Read before this batch (or by the caller from its own statements, which came after the flush).
+    else if (!fresh) addFlushed(flush);
     meter(results, now, rebuild, exported);
-    return results.slice(refresh ? 1 : 0, flush ? -1 : undefined);
+    return results.slice(flush.length + (refresh ? 1 : 0));
+  }
+  // This instance's counts of every day, taken out to be written (W15).
+  function takePending() {
+    const list = [...pending].filter(([, c]) => c.reads || c.writes || c.rebuild || c.export);
+    pending.clear();
+    return list;
+  }
+  const usageStatement = (day, c) => sql(USAGE).bind(day, c.reads, c.writes, c.rebuild, c.export, c.size);
+  function restorePending(list) {
+    for (const [day, c] of list) for (const [k, n] of Object.entries(c)) addPending(day, k, n);
+  }
+  function addFlushed(list) {
+    for (const [day, c] of list) if (conf && conf.usage.day === day) for (const key of ['reads', 'writes', 'rebuild', 'export']) conf.usage[key] += c[key];
+  }
+  // Writes this instance's counts now, with `extra` statements: the crons end with this, so
+  // that a cron's own rows reach `usage` even when its instance runs nothing else (a Worker
+  // may run each cron in a new one). Answers the results of `extra`, or null when the
+  // batch failed (the counts then wait for the next flush).
+  async function flushNow(now, extra = []) {
+    const flush = takePending(), day = utcDay(now);
+    if (!flush.length && !extra.length) return [];
+    let mine = flush.find(([d]) => d === day);
+    if (!mine) flush.push(mine = [day, { reads: 0, writes: 0, rebuild: 0, export: 0, size: 0 }]);
+    // Each statement of this batch writes one row (a usage row, a roll_days row): counted in
+    // advance, since nothing runs after it to count them.
+    mine[1].writes += extra.length + flush.length;
+    try {
+      const results = await db.batch([...extra, ...flush.map(([d, c]) => usageStatement(d, c))]);
+      flushedMinute = Math.floor(now / MINUTE_MS);
+      addFlushed(flush);
+      return results.slice(0, extra.length);
+    } catch {
+      mine[1].writes -= extra.length + flush.length;
+      restorePending(flush);
+      return null;
+    }
   }
   function addPending(day, key, n) {
     const c = pending.get(day) || pending.set(day, { reads: 0, writes: 0, rebuild: 0, export: 0, size: 0 }).get(day);
@@ -853,7 +984,9 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     }
     const f = fold(wire, envelope, events, wire === 2 ? state : null);
     const [estimate, clock] = sessionStart(R, wire === 3 ? envelope.w : null, f.maxT);
-    const start = state?.start ?? estimate;
+    // A session first stored now starts no earlier than the facts: a v2 tab left open across
+    // the deploy would otherwise date its play after the deploy to a day never rolled.
+    const start = state?.start ?? (conf.factsSince ? Math.max(estimate, dayBounds(conf.tz, conf.factsSince).lo) : estimate);
 
     // Attempt numbers: the rounds of this batch that end for the first time, in batch order, per game.
     const totals = new Map();
@@ -887,10 +1020,13 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     if (totals.size) statements.push(sql(STUDENT_GAMES).bind(s, u, JSON.stringify([...totals].map(([slug, [total, t]]) => [slug, total, t]))));
     if (f.marks.length) statements.push(sql(MARKS).bind(s, JSON.stringify(f.marks)));
     if (f.removed.length) statements.push(sql(REMOVED).bind(s, JSON.stringify(f.removed)));
-    if (f.linked.length) {
-      const olds = JSON.stringify([...new Set(f.linked)]);
-      statements.push(sql(ALIAS_HOP).bind(s, u, olds), sql(ALIAS).bind(s, u, olds));
-    }
+    // The settings first (a link raises rv when it changes the links), then the links.
+    const v3Since = wire === 3 && !conf.v3Since ? utcDay(now) : '', olds = JSON.stringify([...new Set(f.linked)]);
+    const zone = wire === 3 && z && (conf.tzSource === 'none' || conf.tzSource === 'dashboard') ? z : '';
+    const zoneChange = [zone, 'pc', zone ? weekStartOf(zone) : 'mon', BY_PC, v3Since, olds, u];
+    if (zone && zone !== conf.tz) statements.push(bound(ZONE_DIRTY, zoneChange));
+    if (zone || v3Since || f.linked.length) statements.push(bound(ZONE, zoneChange));
+    if (f.linked.length) statements.push(sql(ALIAS_HOP).bind(s, u, olds), sql(ALIAS).bind(s, u, olds));
     // Late data for a day that may be rolled already: any day before today, whatever this
     // instance last read of rolled_through (another one may have rolled it since); the
     // statement only changes a rolled day. A v3 start estimate can be a second off, so both
@@ -898,11 +1034,6 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     const local = localDay(conf.tz, now);
     const days = [...new Set([start - 5, start + 5].map(x => localDay(conf.tz, x * 1000)))].filter(day => day < local);
     if (days.length) statements.push(sql(LATE).bind(JSON.stringify(days)));
-    const v3Since = wire === 3 && !conf.v3Since ? utcDay(now) : '';
-    const zone = wire === 3 && z && (conf.tzSource === 'none' || conf.tzSource === 'dashboard') ? z : '';
-    const zoneChange = [zone, 'pc', zone ? weekStartOf(zone) : 'mon', BY_PC, v3Since];
-    if (zone && zone !== conf.tz) statements.push(bound(ZONE_DIRTY, zoneChange));
-    if (zone || v3Since) statements.push(bound(ZONE, zoneChange));
     const open = openGame(events, wire), sweep = minute !== sweptMinute;
     statements.push(sql(LIVE).bind(s, open.known ? open.slug : '', minute, open.known ? 1 : 0, open.closed, minute - LIVE_WINDOW_MIN, u, p, wire));
     if (sweep) statements.push(sql(LIVE_SWEEP).bind(minute - LIVE_WINDOW_MIN));
@@ -913,8 +1044,8 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       throw error;
     }
     if (sweep) sweptMinute = minute;
-    // Another instance or the owner may have set the zone first: the next request reads the settings again.
-    if (zone || v3Since) conf.at = -Infinity;
+    // Another instance or the owner may have set the zone first, or a link raised rv: the next request reads the settings again.
+    if (zone || v3Since || f.linked.length) conf.at = -Infinity;
     return true;
   }
 
@@ -945,59 +1076,87 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
   // day of rollups (§D.7), the first of: the first roll of the oldest local day not rolled
   // yet (before today; yesterday from 01:00 at the school); a full re-roll of the newest day
   // that waits for one (after a change of zone); a diff re-roll of the oldest day that late
-  // data reached, at most once an hour per day. Re-rolls wait for the next UTC day while
-  // today's reads or writes are high; a first roll always runs, and only one instance can
+  // data reached, at most once an hour per day; a recount (a diff re-roll) of the newest day
+  // waiting for one. Re-rolls never touch today, and they wait while the reads or writes of
+  // today leave no room for them (fits); a first roll always runs, and only one instance can
   // make it. After the first roll of yesterday the PCs vote for the school's zone. With no
-  // roll to make, rollups past their retention are deleted. Answers what it did:
-  // { rolled: day, kind: 'first' | 'full' | 'diff' | 'raced', voted: { tz, pcs }, purged: day }.
+  // roll to make, and room for it, it catches up on deletions, a bounded step at a time:
+  // the rollups of the oldest day past their retention, facts past theirs (after a shorter
+  // retention), or the round details the storage guard is removing. It ends by writing its
+  // own usage. Answers what it did: { rolled: day, kind: 'first' | 'full' | 'diff' |
+  // 'recount' | 'raced', voted: { tz, pcs }, purged: day (rollups deleted), deleted:
+  // 'facts' | 'rounds' }.
   async function rollupStep(now = Date.now()) {
     await ensure(now);
-    const R = Math.floor(now / 1000), minute = Math.floor(now / MINUTE_MS);
-    const [plan] = await run([bound(PLAN, [utcDay(now), addDays(today(now), -LATE_DAYS), R - 3600, R - VOTE_DAYS * DAY_S])], now, { fresh: true });
+    const R = Math.floor(now / 1000), minute = Math.floor(now / MINUTE_MS), before = today(now);
+    const [plan] = await run([bound(PLAN, [utcDay(now), addDays(before, -LATE_DAYS), R - 3600, R - VOTE_DAYS * DAY_S, before])], now, { fresh: true });
     const row = plan.results[0];
     remember(row, now);
     const { tz, rolledThrough, factsSince } = conf, local = today(now), yesterday = addDays(local, -1), used = usageToday(now);
-    const capped = used.rebuild > limits.rebuildReads || used.reads > limits.rollReads || used.writes > limits.rollWrites;
+    const [fullDay, fullRows, fullKind] = row.full ? JSON.parse(row.full) : [], [diffDay, diffRows] = row.diff ? JSON.parse(row.diff) : [];
+    const [oldDay, oldRows] = row.oldest ? JSON.parse(row.oldest) : [];
+    const fits = cost => used.rebuild <= limits.rebuildReads && used.reads <= limits.rollReads &&
+      used.writes + cost + limits.reserveWrites <= limits.rollWrites;
     const next = rolledThrough && addDays(rolledThrough, 1) > factsSince ? addDays(rolledThrough, 1) : factsSince;
-    const done = { rolled: null, kind: null, voted: null, purged: null }, statements = [];
+    const done = { rolled: null, kind: null, voted: null, purged: null, deleted: null }, statements = [], inserts = [];
     if (row.taken) {
       // Another instance rolled that day and moved rolled_through on; this instance's copy was old.
       statements.push(sql(ROLLED).bind(next), sql(KEPT_CLEAN));
     } else if (next && next < local && (next < yesterday || localParts(tz, now).hour >= 1)) {
       Object.assign(done, { rolled: next, kind: 'first' });
-    } else if (!capped && row.full) {
-      Object.assign(done, { rolled: row.full, kind: 'full' });
-    } else if (!capped && row.diff) {
-      Object.assign(done, { rolled: row.diff, kind: 'diff' });
+    } else if (fullKind === 2 && fullDay < local && fits(2 * (fullRows || ROLL_GUESS))) {
+      Object.assign(done, { rolled: fullDay, kind: 'full' });
+    } else if (diffDay && diffDay < local && fits(diffRows || ROLL_GUESS)) {
+      Object.assign(done, { rolled: diffDay, kind: 'diff' });
+    } else if (fullKind === 3 && fullDay < local && fits(fullRows || ROLL_GUESS)) {
+      Object.assign(done, { rolled: fullDay, kind: 'recount' });
     }
+    const rebuild = done.kind === 'full' || done.kind === 'diff' || done.kind === 'recount';
     if (done.rolled) {
       const { lo, hi, o1, ch, o2 } = dayBounds(tz, done.rolled), values = [done.rolled, lo, hi, ch, o1 * 60, o2 * 60];
       for (const table of ROLLUP_TABLES) {
-        if (done.kind === 'full') statements.push(sql(ROLL[table].clear).bind(done.rolled));
-        statements.push(bound(done.kind === 'diff' ? ROLL[table].diff : ROLL[table].insert, values));
+        const roll = ROLL[table];
+        if (done.kind === 'full') statements.push(sql(roll.clear).bind(done.rolled));
+        if (rebuild && done.kind !== 'full') {
+          statements.push(bound(roll.diff, values));
+          if (roll.prune) statements.push(sql(roll.prune).bind(done.rolled));
+        } else {
+          inserts.push(statements.length);
+          statements.push(bound(roll.insert, values));
+        }
       }
       statements.push(sql(ROLL_DAY).bind(done.rolled, R), sql(ROLLED).bind(done.kind === 'first' ? done.rolled : ''));
       // The vote, once a day: the zone most PCs report, locked once LOCK_PCS of them report it.
       const vote = row.vote ? JSON.parse(row.vote) : null;
       if (done.kind === 'first' && done.rolled === yesterday && vote && BY_VOTE.includes(',' + conf.tzSource + ',')) {
-        const change = [vote[0], vote[1] >= LOCK_PCS ? 'pcs' : 'pc', weekStartOf(vote[0]), BY_VOTE, ''];
+        const change = [vote[0], vote[1] >= LOCK_PCS ? 'pcs' : 'pc', weekStartOf(vote[0]), BY_VOTE, '', '[]', ''];
         statements.push(bound(ZONE_DIRTY, change), bound(ZONE, change));
         done.voted = { tz: vote[0], pcs: vote[1] };
       }
       statements.push(sql(KEPT_CLEAN));
     } else if (!row.taken) {
-      const cutoff = localDay(tz, now - Math.max(ROLLUP_DAYS, keepDays()) * DAY_MS);
-      if (row.oldest && row.oldest < cutoff) {
-        statements.push(...ROLLUP_TABLES.map(table => sql(`DELETE FROM ${table} WHERE day < ?1`).bind(cutoff)),
-          sql('DELETE FROM roll_days WHERE day < ?1').bind(cutoff), sql(ROLLED).bind(''), sql(KEPT_CLEAN));
-        done.purged = cutoff;
-      } else if (row.full === null && conf.rebuild !== '') {
+      const keep = keepDays(), rollupCutoff = localDay(tz, now - Math.max(ROLLUP_DAYS, keep) * DAY_MS);
+      const cutoff = localDay(tz, now - keep * DAY_MS), lo = dayBounds(tz, cutoff).lo;
+      if (oldDay && oldDay < rollupCutoff && fits(oldRows || ROLL_GUESS)) {
+        // The rollups of the oldest day past their retention.
+        statements.push(...ROLLUP_TABLES.map(table => sql(`DELETE FROM ${table} WHERE day <= ?1`).bind(oldDay)),
+          sql('DELETE FROM roll_days WHERE day <= ?1').bind(oldDay), sql(ROLLED).bind(''), sql(KEPT_CLEAN));
+        done.purged = oldDay;
+      } else if (row.first !== null && row.first < lo && fits(PURGE_SESSIONS * SESSION_ROWS)) {
+        statements.push(...factsChunk(wide(now).local, conf.legacyUntil !== '', false).map(text => bound(text, [lo, PURGE_SESSIONS, cutoff, ''])), sql(KEPT_CLEAN));
+        done.deleted = 'facts';
+      } else if (conf.trimTo && conf.trimmedBefore < conf.trimTo && fits(TRIM_SESSIONS * ROUND_ROWS)) {
+        const from = conf.trimmedBefore ? dayBounds(tz, addDays(conf.trimmedBefore, -1)).lo : 0;
+        statements.push(...trimChunk(wide(now).local).map(text => bound(text, [from, dayBounds(tz, conf.trimTo).lo, TRIM_SESSIONS, conf.trimTo])));
+        done.deleted = 'rounds';
+      } else if (!fullDay && conf.rebuild !== '') {
         statements.push(sql(REBUILT));
       }
     }
     if (minute !== sweptMinute) statements.push(sql(LIVE_SWEEP).bind(minute - LIVE_WINDOW_MIN));
+    let results = [];
     try {
-      if (statements.length) await run(statements, now, { rebuild: done.kind === 'full' || done.kind === 'diff', fresh: true });
+      if (statements.length) results = await run(statements, now, { rebuild });
     } catch (error) {
       // The same first roll by another instance at the same moment: that one counts.
       if (done.kind === 'first' && /UNIQUE constraint failed/.test(error && error.message)) return { ...done, rolled: null, kind: 'raced' };
@@ -1005,52 +1164,64 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     }
     sweptMinute = minute;
     if (statements.length > 1) conf.at = -Infinity;
+    // What the day's rollups took, for the estimate of its next re-roll; and this run's usage.
+    const rows = inserts.reduce((sum, i) => sum + (results[i].meta.rows_written || 0), 0);
+    await flushNow(now, inserts.length ? [sql(ROLL_ROWS).bind(done.rolled, rows)] : []);
     return done;
   }
 
-  // The daily purge (§D.11): the facts of the sessions that started before the school's
-  // local day `keep` days ago (keep_days, or RETENTION_DAYS), the students and PCs last
-  // seen before it with their rows; the frozen aggregate days older than `keep` (UTC
-  // receipt days); batch ids after 30 days, usage counts after 60, kept KPI parts of an
-  // older rollup version, and live rows out of the window. facts_since moves to the cutoff.
-  // Then the storage guard: above GUARDS.bytes, the round details of the oldest 30 days of
-  // facts go (their rollups stay), at most once until the database grows again. The
-  // rollups past their own retention are deleted by the 5-minute cron when it has no roll
-  // to make, which keeps this within its statement limit.
+  // The daily purge (§D.11): the facts of the oldest sessions that started before the
+  // school's local day `keep` days ago (keep_days, or RETENTION_DAYS), PURGE_SESSIONS of
+  // them (more than a busy school's day; the 5-minute cron catches up on the rest); the
+  // students and PCs last seen before the rollups' own cutoff, with their rows and links
+  // (the rollups name them until then: the students list, a student, the cohorts and the
+  // linked codes of an old period answer as before); a week at most
+  // of the frozen aggregate days older than `keep` (UTC receipt days); batch ids after 30
+  // days, usage counts after 60, kept KPI parts of an older rollup version, and live rows
+  // out of the window. facts_since moves on with the facts. Then the storage guard: above
+  // GUARDS.bytes, the round details of the oldest 30 days of facts are to go (their
+  // rollups stay), at most once until the database grows again; the 5-minute cron removes
+  // them a few hundred sessions at a time. The rollups past their own retention are deleted
+  // by the 5-minute cron too, a day at a time, which keeps this within its statement limit.
   async function purge(now) {
     await ensure(now);
     const { tz } = conf, keep = keepDays(), legacy = conf.legacyUntil !== '';
     const cutoff = localDay(tz, now - keep * DAY_MS), lo = dayBounds(tz, cutoff).lo, legacyCutoff = utcDay(now - keep * DAY_MS);
-    const results = await run([
-      ...PURGE_FACTS.map(text => sql(text).bind(lo)),
-      ...(legacy ? AGGREGATES.map(table => sql(`DELETE FROM ${table} WHERE day < ?1`).bind(legacyCutoff)) : []),
+    const studentsLo = dayBounds(tz, localDay(tz, now - Math.max(ROLLUP_DAYS, keep) * DAY_MS)).lo;
+    const facts = factsChunk(wide(now).local, legacy, true).map(text => bound(text, [lo, PURGE_SESSIONS, cutoff, legacyCutoff]));
+    // The frozen days go before the settings statement, which clears legacy_until once they are all gone.
+    const frozen = legacy ? AGGREGATES.map(table => sql(frozenChunk(table)).bind(legacyCutoff)) : [];
+    const results = await run([...facts.slice(0, 3), ...frozen, ...facts.slice(3), ...PURGE_STUDENTS.map(text => sql(text).bind(studentsLo)),
       sql('DELETE FROM batches WHERE day < ?1').bind(utcDay(now - DEDUP_DAYS * DAY_MS)),
       sql('DELETE FROM usage WHERE day < ?1').bind(utcDay(now - USAGE_DAYS * DAY_MS)),
-      sql(LIVE_SWEEP).bind(Math.floor(now / MINUTE_MS) - LIVE_WINDOW_MIN),
-      sql(PURGED).bind(cutoff, legacyCutoff), sql(KEPT_CLEAN), sql(OLDEST_START)
+      sql(LIVE_SWEEP).bind(Math.floor(now / MINUTE_MS) - LIVE_WINDOW_MIN), sql(KEPT_CLEAN), sql(OLDEST_START)
     ], now);
     kept.clear();
-    const changes = results.map(result => result.meta.changes), n = PURGE_FACTS.length, frozen = legacy ? AGGREGATES.length : 0;
-    const out = { cutoff, legacyCutoff, sessions: changes[3], rounds: changes[0], students: changes[7], pcs: changes[8],
-      rows: changes.slice(n, n + frozen).reduce((x, y) => x + y, 0), batches: changes[n + frozen], trimmed: null };
+    const changes = results.map(result => result.meta.changes), at = 3 + frozen.length + 2;
+    const out = { cutoff, legacyCutoff, sessions: changes[at - 1], rounds: changes[0], students: changes[at + 3], pcs: changes[at + 4],
+      rows: changes.slice(3, 3 + frozen.length).reduce((x, y) => x + y, 0), batches: changes[at + 5], trimmed: null };
     const size = Math.max(0, ...results.map(result => result.meta.size_after || 0)) || usageToday(now).size;
     const first = results[results.length - 1].results[0]?.first;
     if (size > limits.bytes && size > conf.trimmedSize && first != null) {
       const start = Math.max(first, conf.trimmedBefore ? dayBounds(tz, conf.trimmedBefore).lo : 0);
-      const before = localDay(tz, (start + TRIM_DAYS * DAY_S) * 1000);
-      const [trim] = await run([sql(PURGE_FACTS[0]).bind(dayBounds(tz, before).lo), sql(TRIMMED).bind(before, String(size))], now);
-      out.trimmed = { before, rounds: trim.meta.changes };
+      const to = localDay(tz, (start + TRIM_DAYS * DAY_S) * 1000);
+      await run([sql(TRIM_START).bind(to, String(size))], now);
+      out.trimmed = { to };
     }
     conf.at = -Infinity;
+    await flushNow(now);
     return out;
   }
 
   /* ---------------------------------------------- periods and kept parts */
   // A period's days from..to (YYYY-MM-DD, the school's): the rolled days (read from the
   // rollups), and the days after them (from the facts), with the UTC seconds [lo, hi) they
-  // span and the SQL scope of their clock.
-  function spans(from, to) {
-    const { tz, factsSince, rolledThrough } = conf;
+  // span and the SQL scope of their clock. Today is never a rolled day: after the school's
+  // clock moves west, the day rolled last can be today again, and its roll is then out of
+  // date (it is rolled again once it is over).
+  function spans(from, to, now) {
+    const { tz, factsSince } = conf, yesterday = addDays(today(now), -1);
+    const rolledThrough = conf.rolledThrough && conf.rolledThrough > yesterday ? yesterday : conf.rolledThrough;
     const rolled = rolledThrough && from <= rolledThrough ? [from, rolledThrough < to ? rolledThrough : to] : null;
     const start = [from, factsSince, rolledThrough ? addDays(rolledThrough, 1) : ''].reduce((x, y) => x > y ? x : y);
     if (start > to) return { rolled, open: null, bounds: null, scope: null };
@@ -1079,25 +1250,27 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     while (kept.size > KEPT_CAP) kept.delete(kept.keys().next().value);
   }
   // The keys of an answer's kept parts (§F.4, "Caching"): the closed part (when there is
-  // one) under [endpoint, params..., rv], the open part under the same and its slot of
-  // openCacheMs (never kept when that is 0). raw: the parts are JSON text, kept as it is.
+  // one: its days) under [endpoint, params..., its days, rv], the open part under
+  // [endpoint, params..., rv] and its slot of openCacheMs (never kept when that is 0). raw:
+  // the parts are JSON text, kept as it is.
   function partKeys(params, closed, open, now, { raw = false } = {}) {
     const { rv } = conf, slot = openCacheMs > 0 ? Math.floor(now / openCacheMs) : -1;
     return {
-      closed: closed ? { key: JSON.stringify([...params, rv]), until: now + CLOSED_KEEP_MS, rv, raw } : null,
+      closed: closed ? { key: JSON.stringify([...params, closed, rv]), until: now + CLOSED_KEEP_MS, rv, raw } : null,
       open: open && slot >= 0 ? { key: JSON.stringify([...params, rv, slot]), until: (slot + 1) * openCacheMs, rv, raw } : null
     };
   }
   // The parts kept under those keys (this instance's first, then kpi_cache's) and every link
-  // between codes (as KEPT_LOOKUP gives them), in one statement.
-  async function lookup(keys, now) {
+  // between codes (as KEPT_LOOKUP gives them; not with links: false), in one statement.
+  async function lookup(keys, now, { links = true } = {}) {
     const found = new Map(), wanted = new Map();
     for (const k of keys) {
       if (!k) continue;
       const part = keptPart(k.key, now);
       if (part) found.set(k.key, part); else wanted.set(k.key, k);
     }
-    const [result] = await run([sql(KEPT_LOOKUP).bind(JSON.stringify([...wanted.keys()]))], now);
+    if (!links && !wanted.size) return { found, aliases: [] };
+    const [result] = await run([sql(links ? KEPT_LOOKUP : KEPT_ONLY).bind(JSON.stringify([...wanted.keys()]))], now);
     let aliases = [];
     for (const { key, rows } of result.results) {
       if (key === '') { aliases = JSON.parse(rows); continue; }
@@ -1110,7 +1283,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
   // Keeps newly made parts ([key, part] pairs, or [key, part, its JSON text] when SQL gave
   // the text already) here and in kpi_cache, as far as they fit (at most KEPT_MAX bytes per
   // write): a part that cannot be kept only costs a read later.
-  async function keepParts(entries, now) {
+  async function keepParts(entries, now, { here = false } = {}) {
     const rows = [];
     let size = 0, rv = null;
     for (const [k, part, given] of entries) {
@@ -1120,57 +1293,73 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       rv = k.rv;
       if ((size += text.length) <= KEPT_MAX) rows.push([k.key, text]);
     }
-    if (rows.length) await run([sql(keptPut(rows.length)).bind(rv, ...rows.flat())], now).catch(() => {});
+    if (rows.length && !here) await run([sql(keptPut(rows.length)).bind(rv, ...rows.flat())], now).catch(() => {});
   }
 
   /* ------------------------------------------------------------ the KPIs */
   const extrasOf = row => Object.fromEntries(EXTRAS.map(key => [key, JSON.parse(row[key])]));
-  // The parts of a KPI answer for days from..to and band, with the links between codes:
-  // the closed part (the frozen days up to legacy_until and the rolled days up to
-  // rolled_through, kept per rollup version rv) and the open part (the days after them,
-  // from the facts with the rollups' own SELECT; kept per slot of openCacheMs).
-  async function kpiParts(from, to, band, now) {
-    const { legacyUntil } = conf;
-    const legacy = legacyUntil && from <= legacyUntil ? [from, legacyUntil < to ? legacyUntil : to] : null;
-    const { rolled, open, bounds, scope } = spans(from, to);
-    const keys = partKeys(['kpis', from, to, band], legacy || rolled, open, now);
-    const { found, aliases } = await lookup([keys.closed, keys.open], now);
-    let closed = keys.closed && found.get(keys.closed.key), recent = keys.open && found.get(keys.open.key);
-    // Statements for each part that is not kept; an empty range is '1'..'0'.
-    const none = ['1', '0'], work = [], makeClosed = !!keys.closed && !closed, makeOpen = !!open && !recent;
-    if (makeClosed) {
-      const values = [...(legacy || none), band, ...(rolled || none)];
-      work.push(...CLOSED_GROUPS[legacyUntil ? 1 : 0].map(text => sql(text).bind(...values)));
-      if (rolled) work.push(sql(CLOSED_STUDENTS).bind(...rolled, band), sql(CLOSED_EXTRAS).bind(...rolled, band));
-    }
-    if (makeOpen) {
-      work.push(...GROUPS.map(name => sql(openGroup(name, scope)).bind(...bounds, band)), sql(OPEN_STUDENTS).bind(...bounds, band),
-        sql(openExtras(scope)).bind(...bounds, band));
-    }
-    const results = work.length ? await run(work, now) : [];
-    const take = (list, students) => ({ ...Object.fromEntries(GROUPS.map((name, i) => [name, arrays(list[i])])),
-      students: students ? arrays(list[GROUPS.length]) : [],
-      extras: students ? extrasOf(list[GROUPS.length + 1].results[0]) : EMPTY_PART.extras });
-    // The same part as JSON text for kpi_cache, joined from SQL's own JSON (no stringify of what was just parsed).
-    const text = (list, students) => '{' + GROUPS.map((name, i) => `"${name}":${list[i].results[0].rows}`).join(',') +
-      `,"students":${students ? list[GROUPS.length].results[0].rows : '[]'},"extras":` +
-      (students ? '{' + EXTRAS.map(key => `"${key}":${list[GROUPS.length + 1].results[0][key]}`).join(',') + '}' : EMPTY_EXTRAS) + '}';
-    const puts = [], openList = results.slice(makeClosed ? GROUPS.length + (rolled ? 2 : 0) : 0);
-    if (makeClosed) puts.push([keys.closed, closed = take(results, !!rolled), text(results, !!rolled)]);
-    if (makeOpen) puts.push([keys.open, recent = take(openList, true), keys.open && text(openList, true)]);
-    await keepParts(puts, now);
-    return { parts: [closed, recent].filter(Boolean), aliases };
-  }
-
+  // A KPI answer's JSON text without its clock (kept per slot of openCacheMs), with the clock.
+  const withClock = (text, now) => text.slice(0, -1) + ',"clock":' + JSON.stringify(clock(now)) + '}';
   // Engagement KPIs for days from..to (YYYY-MM-DD, inclusive): the frozen UTC receipt days
   // before the update and the school's local days after it, every group with its numbers.
   // band: null for every band, '' for the unknown band. The shape is documented in
-  // server/README.md; the fields of milestone 2 keep their meaning.
+  // server/README.md; the fields of milestone 2 keep their meaning. Its parts: the closed
+  // part (the frozen days up to legacy_until and the rolled days up to rolled_through, made
+  // and kept by SQL per rollup version rv, with its students by canonical code beside it for
+  // SQL alone) and the open part (the days after them, from the facts with the rollups' own
+  // SELECT), added up and their students counted in SQL. On Workers the whole answer is kept
+  // per slot of openCacheMs, here and in kpi_cache, so that a refresh, on any instance,
+  // sends kept text.
   async function kpis({ from, to, band = null }, now = Date.now()) {
     await ensure(now);
-    const { parts, aliases } = await kpiParts(from, to, band, now);
-    const all = name => parts.flatMap(part => part[name]);
-    const [dayRows, gameRows, levelRows, sourceRows, deviceRows] = GROUPS.map(all);
+    const { legacyUntil, rv } = conf;
+    const legacy = legacyUntil && from <= legacyUntil ? [from, legacyUntil < to ? legacyUntil : to] : null;
+    const { rolled, open, bounds, scope } = spans(from, to, now);
+    const answerKey = partKeys(['kpis-answer', from, to, band], null, true, now, { raw: true }).open;
+    if (answerKey) {
+      const { found } = await lookup([answerKey], now, { links: false });
+      if (found.has(answerKey.key)) return new JsonText(withClock(found.get(answerKey.key), now));
+    }
+    // One batch: the closed part and its students, made and kept unless they are kept
+    // already; the groups and the extras of the whole answer; and its students. An empty range is '1'..'0'.
+    const none = ['1', '0'], closedKey = legacy || rolled ? JSON.stringify(['kpis', from, to, band, legacy, rolled, rv]) : '';
+    const studentsKey = closedKey ? JSON.stringify(['kpis-students', from, to, band, rolled, rv]) : '', work = [];
+    if (closedKey) {
+      const values = [...(legacy || none), band, ...(rolled || none), closedKey, rv, studentsKey];
+      work.push(bound(CLOSED_PART[legacyUntil ? 1 : 0], values), bound(CLOSED_STUDENTS, values));
+    }
+    const merged = mergedStatements(scope), at = work.length, values = [...(bounds || [0, 0]), band, closedKey];
+    work.push(...merged.groups.map(text => bound(text, values)), bound(merged.extras, values),
+      sql(STUDENTS_COUNTED).bind(studentsKey, ...(rolled || none), band, ...(bounds || [0, 0]), dayBounds(conf.tz, from).lo));
+    const results = await run(work, now);
+    const groups = Object.fromEntries(GROUPS.map((name, i) => [name, arrays(results[at + i])]));
+    const row = results[at + GROUPS.length].results[0], extras = [];
+    if (row.kept) extras.push(JSON.parse(row.kept));
+    if (scope) extras.push(extrasOf(row));
+    const answer = assemble(from, to, band, groups, extras, JSON.parse(results.at(-1).results[0].students));
+    const text = JSON.stringify(answer);
+    if (answerKey) await keepParts([[answerKey, text]], now);
+    // The answer, and the text the handler sends for it (so it is not written again).
+    answer.clock = clock(now);
+    Object.defineProperty(answer, SENT, { value: withClock(text, now) });
+    return answer;
+  }
+  // The SQL of the merged groups and extras for an open scope (or none), made once per scope.
+  const mergedTexts = new Map();
+  function mergedStatements(scope) {
+    const key = scope ? scope.day : '';
+    let texts = mergedTexts.get(key);
+    if (!texts) {
+      if (mergedTexts.size >= 8) mergedTexts.clear();
+      mergedTexts.set(key, texts = { groups: GROUPS.map(name => mergedGroup(name, scope)), extras: mergedExtras(scope) });
+    }
+    return texts;
+  }
+
+  // The answer from its groups (one row per key), its extras (the closed part's and the
+  // open part's) and its students (as STUDENTS_COUNTED counts them).
+  function assemble(from, to, band, groups, parts, counted) {
+    const [dayRows, gameRows, levelRows, sourceRows, deviceRows] = GROUPS.map(name => NESTED[name] ? groups[name].map(row => [].concat(...row)) : groups[name]);
 
     // The day totals, per day and per band; and the facts' own, for the data-quality shares.
     const total = KPI.days.sums.map(() => 0), facts = KPI.days.sums.map(() => 0), byDay = new Map(), byBand = new Map();
@@ -1185,34 +1374,14 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       if (row[1] === '') unknownBand += v[D.sessions];
     }
 
-    // Students by canonical code (an older code counts as the code it is linked to): new
-    // (the profile was made in the range), known before (first seen in the range, made
-    // before it) or returning (seen before the range).
-    const canonical = new Map(aliases.map(([u, to]) => [u, to])), students = new Map(), playedBy = new Map();
-    for (const [u, bands, games, first, made] of all('students')) {
-      const c = canonical.get(u) || u, s = students.get(c) || students.set(c, { bands: new Set(), first, made }).get(c);
-      for (const a of csv(bands)) s.bands.add(a.slice(1));
-      // Each game's students, as a set of canonical codes.
-      for (const slug of csv(games)) (playedBy.get(slug) || playedBy.set(slug, new Set()).get(slug)).add(c);
-      s.first = Math.min(s.first, first);
-      s.made = Math.min(s.made, made);
-    }
-    for (const [, to, ...known] of aliases) {
-      const s = students.get(to);
-      if (s) for (const [first, made] of [known.slice(0, 2), known.slice(2)]) if (first !== null) { s.first = Math.min(s.first, first); s.made = Math.min(s.made, made); }
-    }
-    const lo = dayBounds(conf.tz, from).lo, bandStudents = new Map(), gameStudents = new Map([...playedBy].map(([slug, set]) => [slug, set.size]));
-    let fresh = 0, returning = 0, knownBefore = 0;
-    for (const s of students.values()) {
-      if (s.first < lo) returning++;
-      else if (s.made >= lo) fresh++;
-      else knownBefore++;
-      for (const a of s.bands) bandStudents.set(a, (bandStudents.get(a) || 0) + 1);
-    }
+    // Students by canonical code (an older code counts as the code it is linked to), counted in
+    // SQL: new (the profile was made in the range), known before (first seen in the range,
+    // made before it) or returning (seen before the range), and per band and game.
+    const bandStudents = counted.bands, gameStudents = counted.games;
     // Students per day, minutes per student-day, minutes by kind of session, and PCs.
     const perDay = new Map(), guestPerDay = new Map(), tenths = new Map(), kinds = { s: 0, g: 0, u: 0 }, pcs = new Map();
     let studentDays = 0, studentMs = 0;
-    for (const { extras } of parts) {
+    for (const extras of parts) {
       for (const [day, n] of extras.students) perDay.set(day, (perDay.get(day) || 0) + n);
       for (const [tenth, n] of extras.minutes) tenths.set(tenth, (tenths.get(tenth) || 0) + n);
       studentDays += extras.dose[0];
@@ -1237,7 +1406,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
         sessionStarts: total[D.session_starts], newProfiles: total[D.new_profiles], guests: total[D.guests],
         profileAge: vector(total, D, PROFILE_AGE), daysSinceLast: vector(total, D, SINCE_LAST)
       },
-      students: { active: students.size, new: fresh, returning, knownBefore, guestSessions: facts[D.guest_sessions],
+      students: { active: counted.active, new: counted.new, returning: counted.returning, knownBefore: counted.knownBefore, guestSessions: facts[D.guest_sessions],
         guestMinutes: minutes(kinds.g), minutesPerStudentDay: quantiles(tenths, studentDays, studentMs) }
     }));
     // A frozen day of milestone 2 did not tell students apart.
@@ -1255,36 +1424,36 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     for (const { key: [, slug], v } of bandGames.values()) sumInto(bySlug, slug, v);
     const games = [...bySlug.keys()].sort(natural).map(slug => {
       const g = bySlug.get(slug), c = codes(g, G), starts = g[G.starts], closes = g[G.closes];
-      const hits = g[G.hits], misses = g[G.misses], loads = g[G.loads];
-      return group({ slug }, g[G.sessions], () => ({
-        opens: g[G.opens], closes,
+      const hits = g[G.hits], misses = g[G.misses], loads = g[G.loads], errors = {}, sources = {};
+      for (let i = 0; i < ERRORS.length; i++) errors[ERRORS[i]] = g[G_ERRORS[i]];
+      for (let i = 0; i < SOURCES.length; i++) if (g[G_SOURCES[i]]) sources[SOURCES[i]] = g[G_SOURCES[i]];
+      return {
+        slug, sessions: g[G.sessions], opens: g[G.opens], closes,
         engagedMinutes: minutes(g[G.engaged_ms]), avgEngagedSecPerOpen: mean(g[G.engaged_ms] / 1000, closes, 1),
         rounds: { starts, ends: g[G.ends], codes: c },
         completionRate: ratio(c.w, starts), winRate: ratio(c.w, c.w + c.l), dropOffRate: ratio(c.q, starts),
         avgTier: mean(g[G.tier_sum], g[G.tier_n], 2),
         hits, misses, accuracy: ratio(hits, hits + misses),
-        rt: vector(g, G, RT), il: vector(g, G, IL), frames: frames(g, G),
-        loads, avgLoadMs: loads ? Math.round(g[G.load_ms] / loads) : null,
-        errors: Object.fromEntries(ERRORS.map(kind => [kind, g[G['error_' + kind]]])),
-        sources: Object.fromEntries(SOURCES.filter(src => g[G['src_' + src]]).map(src => [src, g[G['src_' + src]]])),
-        replay: { replayIndex: vector(g, G, REPLAY), playsBefore: vector(g, G, PLAYS) },
-        students: gameStudents.get(slug) || 0, hearts: { on: g[G.hearts_on], off: g[G.hearts_off] },
+        rt: pick(g, G_RT), il: pick(g, G_IL), frames: frames(g, G),
+        loads, avgLoadMs: loads ? Math.round(g[G.load_ms] / loads) : null, errors, sources,
+        replay: { replayIndex: pick(g, G_REPLAY), playsBefore: pick(g, G_PLAYS) },
+        students: gameStudents[slug] || 0, hearts: { on: g[G.hearts_on], off: g[G.hearts_off] },
         tutorials: { start: g[G.tu_start], done: g[G.tu_done] }, wallMinutes: minutes(g[G.wall_s] * 1000),
         actionsPerMinute: mean(g[G.inputs], g[G.wall_s] / 60, 1), avgScore: mean(g[G.score_sum], g[G.score_n], 1),
         unended: g[G.unended], duoRounds: g[G.duo]
-      }));
+      };
     });
 
     // Per level (slug, round id): the funnel and where children stop.
     const levels = [...sumRows(levelRows, 2).values()].map(({ key: [slug, id], v }) => ({ slug, id, v })).sort(byLevel)
       .map(({ slug, id, v }) => {
         const c = codes(v, L), starts = v[L.starts], ends = v[L.ends];
-        return group({ slug, id }, v[L.sessions], () => ({
-          starts, ends, codes: c,
+        return {
+          slug, id, sessions: v[L.sessions], starts, ends, codes: c,
           completionRate: ratio(c.w, starts), winRate: ratio(c.w, c.w + c.l), dropOffRate: ratio(c.q, starts),
           avgMs: ends ? Math.round(v[L.ms] / ends) : null, avgTier: mean(v[L.tier_sum], v[L.tier_n], 2),
           students: v[L.students], avgScore: mean(v[L.score_sum], v[L.score_n], 1), unended: v[L.unended]
-        }));
+        };
       });
 
     // Per age band: preferences (share of the band's opens per game), difficulty and time.
@@ -1294,13 +1463,13 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       const b = byBand.get(a), opens = b[D.opens];
       return group({ band: name }, b[D.sessions], () => ({
         opens, engagedMinutes: minutes(b[D.engaged_ms]),
-        games: (perBand.get(a) || []).sort((x, y) => natural(x.slug, y.slug)).map(({ slug, v }) => group({ slug }, v[G.sessions], () => ({
-          opens: v[G.opens], share: ratio(v[G.opens], opens), avgTier: mean(v[G.tier_sum], v[G.tier_n], 2),
+        games: (perBand.get(a) || []).sort((x, y) => natural(x.slug, y.slug)).map(({ slug, v }) => ({
+          slug, sessions: v[G.sessions], opens: v[G.opens], share: ratio(v[G.opens], opens), avgTier: mean(v[G.tier_sum], v[G.tier_n], 2),
           completionRate: ratio(v[G.w], v[G.starts]),
           winRate: ratio(v[G.w], v[G.w] + v[G.l]), dropOffRate: ratio(v[G.q], v[G.starts]), engagedMinutes: minutes(v[G.engaged_ms]),
           starts: v[G.starts]
-        }))),
-        students: bandStudents.get(a) || 0
+        })),
+        students: bandStudents[a] || 0
       }));
     });
 
@@ -1333,9 +1502,10 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       oldVersionSessionShare: ratio(facts[D.v2_sessions], facts[D.sessions]), profilesFullPcs: flagged('full'), forgetfulPcs: flagged('forgets')
     };
 
+    // The clock goes last, when the answer is sent (withClock).
     return {
       v: 1, range: { from, to, days: daily.length, band: band === null ? 'all' : band || 'unknown', legacyUntil: conf.legacyUntil, factsSince: conf.factsSince },
-      minSessions: MIN_SESSIONS, clock: clock(now), totals, daily, games, levels, bands, sources, devices, modes, quality
+      minSessions: MIN_SESSIONS, totals, daily, games, levels, bands, sources, devices, modes, quality
     };
   }
 
@@ -1394,10 +1564,12 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
   async function updateSettings({ tz, source, weekStart, keepDays: days }, now = Date.now()) {
     const current = await settings(now), statements = [];
     if (tz !== undefined) {
-      const change = source === 'dashboard' ? [tz, 'dashboard', weekStartOf(tz), BY_PC, ''] : [tz, 'owner', weekStartOf(tz), BY_OWNER, ''];
+      const change = source === 'dashboard' ? [tz, 'dashboard', weekStartOf(tz), BY_PC, '', '[]', ''] : [tz, 'owner', weekStartOf(tz), BY_OWNER, '', '[]', ''];
       statements.push(bound(ZONE_DIRTY, change), bound(ZONE, change));
     }
-    if (weekStart !== undefined) statements.push(sql(WEEK_START).bind(weekStart));
+    // A new week start changes the weeks of every kept answer (cohorts, students' weeks): rv goes up.
+    if (weekStart !== undefined && weekStart !== current.clock.weekStart) statements.push(sql(WEEK_START).bind(weekStart), sql(RV_UP), sql(KEPT_CLEAN));
+    else if (weekStart !== undefined) statements.push(sql(WEEK_START).bind(weekStart));
     if (days !== undefined) {
       // The facts grow about in proportion to the days kept.
       if (days > current.keep.days && current.storage.bytes * days / current.keep.days > limits.bytes) return { error: 'storage' };
@@ -1405,12 +1577,13 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     }
     if (!statements.length) return current;
     await run(statements, now);
+    kept.clear();
     return settings(now);
   }
 
   // What the admin views and the export pages (admin.mjs, export.mjs) use of the store.
   const ctx = {
-    sql, bound, run, ensure, spans, wide, partKeys, lookup, keepParts, clock,
+    sql, bound, run, ensure, spans, wide, partKeys, lookup, keepParts, clock, studentsPageBytes, keptHere: keptPart,
     conf: () => conf, bounds: day => dayBounds(conf.tz, day),
     // Statements that raise rv and forget every kept part, and what follows once they ran.
     renew: () => [sql(RV_UP), sql(KEPT_CLEAN)],

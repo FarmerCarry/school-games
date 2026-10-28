@@ -54,7 +54,7 @@ export const ROLLUPS = {
     'load_ms', 'load_max', 'errors', 'quits', ...F, ...IL, 'np_max', 'new_profiles', 'busy_s', 'first_s', 'last_s', 'wire'] },
   r_stat: { key: [['day', TEXT], ['a', TEXT], ['metric', TEXT], ['slug', TEXT], ['k1', TEXT], ['k2', TEXT]], sums: ['n', 'students',
     ...CODES, 'ms', 'wall_ms', 'win_ms', 'hits', 'misses', 'rt_sum', 'rt_n', 'score_sum', 'score_n', 'tier_sum', 'tier_n', 'dda_sum',
-    'dda_n', 'inputs', 'gap_sum', 'gap_n'], index: ['r_stat_metric', ['metric', 'slug', 'day']] }
+    'dda_n', 'inputs', 'gap_sum', 'gap_n'] }
 };
 export const ROLLUP_TABLES = Object.keys(ROLLUPS);
 // The r_stat metrics, in the order of the spec's table.
@@ -257,7 +257,35 @@ function statParts(scope) {
   ];
 }
 
+// The r_stat sums each metric has (the others are always 0 in its rows), in the table's order.
+export const METRIC_SUMS = Object.fromEntries(METRICS.map(metric => {
+  const used = new Set(statParts(DAY_SCOPE).filter(part => part.metric === metric).flatMap(part => Object.keys(part.values)));
+  return [metric, ROLLUPS.r_stat.sums.filter(c => used.has(c))];
+}));
+
 /* ------------------------------------------------------------ the SQL */
+// D1 refuses a compound SELECT of more than 5 terms and an SQL function of more than 32
+// arguments (sqlite-d1.mjs D1_LIMITS). SELECTs joined by UNION ALL, nested as
+// SELECT * FROM (...) in groups of at most `max` terms (4 leaves room for one more term).
+export function unionAll(parts, max = 4) {
+  if (parts.length <= max) return parts.join(' UNION ALL ');
+  const groups = [];
+  for (let i = 0; i < parts.length; i += max) groups.push(parts.length - i === 1 ? parts[i] : `SELECT * FROM (${parts.slice(i, i + max).join(' UNION ALL ')})`);
+  return unionAll(groups, max);
+}
+// json_array of the expressions, as one array of arrays of at most 32 (flat when they fit):
+// read back with flatRow.
+export const ARGS = 32;
+export const jsonArray = list => list.length <= ARGS ? `json_array(${list.join(', ')})`
+  : jsonArray(Array.from({ length: Math.ceil(list.length / ARGS) }, (_, i) => `json_array(${list.slice(i * ARGS, (i + 1) * ARGS).join(', ')})`));
+// json_object of [key, SQL] pairs: the first 16 in json_object, the rest added 15 at a time by json_set.
+export function jsonObject(pairs) {
+  const arg = ([key, sql]) => [`'${key}'`, sql];
+  let text = `json_object(${pairs.slice(0, 16).flatMap(arg).join(', ')})`;
+  for (let i = 16; i < pairs.length; i += 15) text = `json_set(${text}, ${pairs.slice(i, i + 15).flatMap(([key, sql]) => [`'$.${key}'`, sql]).join(', ')})`;
+  return text;
+}
+
 const keysOf = table => ROLLUPS[table].key.map(([c]) => c);
 const valuesOf = table => [...(ROLLUPS[table].text || []), ...ROLLUPS[table].sums];
 const columnsOf = table => [...keysOf(table), ...valuesOf(table)];
@@ -276,30 +304,40 @@ export function rollupSelect(table, scope) {
   const parts = ROLL_PARTS[table].map(({ from, where = '', keys: exprs, values: sums }) =>
     `SELECT ${scope.day} AS day, ${keys.map(c => `${exprs[c]} AS ${c}`).join(', ')}, ${values.map(c => `${sums[c] ?? 'NULL'} AS ${c}`).join(', ')} ` +
     `FROM ${from} WHERE ${within(scope)}${where} GROUP BY ${positions(keys.length + 1)}`);
-  return `SELECT day, ${keys.join(', ')}, ${values.map(c => `${outer(table, c)} AS ${c}`).join(', ')} FROM (${parts.join(' UNION ALL ')}) ` +
+  return `SELECT day, ${keys.join(', ')}, ${values.map(c => `${outer(table, c)} AS ${c}`).join(', ')} FROM (${unionAll(parts)}) ` +
     `GROUP BY ${positions(keys.length + 1)}`;
 }
 function statSelect(scope) {
   const sums = ROLLUPS.r_stat.sums;
-  return statParts(scope).map(({ metric, from, derived, where = '', slug, k1, k2, values }) =>
+  return unionAll(statParts(scope).map(({ metric, from, derived, where = '', slug, k1, k2, values }) =>
     `SELECT ${derived ? 'x.day' : scope.day} AS day, ${derived ? 'x.a' : 's.a'} AS a, '${metric}' AS metric, ${slug} AS slug, ${k1} AS k1, ${k2} AS k2, ` +
     sums.map(c => `${values[c] ?? 0} AS ${c}`).join(', ') +
-    (derived ? ` FROM ${derived}${where}` : ` FROM ${from} WHERE ${within(scope)}${where}`) + ' GROUP BY 1, 2, 3, 4, 5, 6').join(' UNION ALL ');
+    (derived ? ` FROM ${derived}${where}` : ` FROM ${from} WHERE ${within(scope)}${where}`) + ' GROUP BY 1, 2, 3, 4, 5, 6'));
 }
+
+// The school-wide rollups (and r_stat), whose rows can lose every fact behind them: after a
+// forget, or (r_stat) when late data moves a visit into another bucket or gives a round a
+// next one. A row of theirs always has a count of at least 1 when it has facts, so a row
+// whose values are all zero has none. The per-student rollups lose rows only by a forget,
+// which deletes them itself.
+const PRUNED = new Set(['r_day', 'r_game_day', 'r_level_day', 'r_source_day', 'r_device_day', 'r_pc_day', 'r_stat']);
 
 // The statements that roll one day (DAY_SCOPE's parameters), per rollup:
 // insert: the first roll, or a full re-roll after `clear`; diff: an upsert that writes
-// only the rows that changed. A diff of r_stat also sets the day's rows that no longer
-// have facts (a visit grew into another bucket, a round got a next one) to zero.
+// only the rows that changed (late data, a recount after a forget or a link), then prune.
+// The diff of a pruned table also sets the day's rows that no longer have facts to zero,
+// and prune deletes them, so a diff leaves the day as a fresh roll would at a few writes.
 export function rollStatements(table) {
-  const columns = columnsOf(table), keys = keysOf(table), values = valuesOf(table);
-  const select = rollupSelect(table, DAY_SCOPE);
+  const columns = columnsOf(table), keys = keysOf(table), values = valuesOf(table), text = new Set(ROLLUPS[table].text || []);
+  const select = rollupSelect(table, DAY_SCOPE), pruned = PRUNED.has(table);
   const insert = `INSERT INTO ${table} (${columns.join(', ')}) ${select}`;
-  const source = table === 'r_stat'
-    ? `SELECT ${keys.join(', ')}, ${values.map(c => `TOTAL(${c}) AS ${c}`).join(', ')} FROM (${select} UNION ALL SELECT ${keys.join(', ')}, ` +
-      `${values.map(() => '0').join(', ')} FROM r_stat WHERE day = ?1) GROUP BY ${positions(keys.length)}`
+  // The day's stored keys, without values (NULL): each value then adds up from the facts alone, or to 0 ('' for text).
+  const source = pruned
+    ? `SELECT ${keys.join(', ')}, ${values.map(c => `${outer(table, c)} AS ${c}`).join(', ')} FROM (${select} UNION ALL SELECT ${keys.join(', ')}, ` +
+      `${values.map(() => 'NULL').join(', ')} FROM ${table} WHERE day = ?1) GROUP BY ${positions(keys.length)}`
     : select;
   const diff = `INSERT INTO ${table} (${columns.join(', ')}) SELECT * FROM (${source}) WHERE true ON CONFLICT (${keys.join(', ')}) DO UPDATE SET ` +
     values.map(c => `${c} = excluded.${c}`).join(', ') + ` WHERE (${values.join(', ')}) IS NOT (${values.map(c => 'excluded.' + c).join(', ')})`;
-  return { insert, diff, clear: `DELETE FROM ${table} WHERE day = ?1` };
+  const prune = pruned ? `DELETE FROM ${table} WHERE day = ?1 AND (${values.join(', ')}) = (${values.map(c => text.has(c) ? "''" : '0').join(', ')})` : null;
+  return { insert, diff, prune, clear: `DELETE FROM ${table} WHERE day = ?1` };
 }

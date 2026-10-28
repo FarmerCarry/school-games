@@ -291,10 +291,13 @@ test('a student\'s first and last play, bands, age and PCs come from the session
     age_days_first: 49, removed_s: null }]);
   assert.deepEqual(await s.rows('st_student_pcs', 'p'), [{ u: U1, p: P2, first_s: last }, { u: U1, p: P1, first_s: first }]);
   assert.deepEqual((await s.rows('st_pcs', 'p')).map(pc => [pc.p, pc.first_s, pc.last_s]), [[P2, last, last], [P1, first, first]]);
-  // A profile removed on a PC: its student is marked once, at the time of the first removal.
+  // A profile removed on a PC: its student is marked at the time of the latest removal, which
+  // an older one arriving later does not move back.
   await s.ingest(v3('ab0000000003', [ss3(), ['pr', 30, U1]], { u: U2, w: 40 }), T0 + 2000);
   await s.ingest(v3('ab0000000004', [ss3(), ['pr', 50, U1], ['pr', 51, 'c0ffee000000']], { u: U2, w: 60 }), T0 + 3000);
-  assert.equal((await s.rows('st_students')).find(r => r.u === U1).removed_s, R0 + 2 - 40 + 30);
+  assert.equal((await s.rows('st_students')).find(r => r.u === U1).removed_s, R0 + 3 - 60 + 50);
+  await s.ingest(v3('ab0000000005', [ss3(), ['pr', 1, U1]], { u: U2, w: 2000 }), T0 + 4000);
+  assert.equal((await s.rows('st_students')).find(r => r.u === U1).removed_s, R0 + 3 - 60 + 50);
   assert.equal((await s.rows('st_students')).find(r => r.u === U2).removed_s, null);
   assert.equal((await s.rows('st_students')).length, 2, 'an unknown removed code adds no student');
 });
@@ -449,6 +452,7 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
   await store.unlink({ u: U3 }, at);
   await store.rebuild(at);
   await store.forget({ u: U3 }, at);
+  const r_stat_reads = new Set();
   for (const [text, params] of seen) {
     if (!/^(?:SELECT|INSERT|UPDATE|DELETE|WITH)/.test(text) || /sqlite_master/.test(text)) continue;
     const plan = db.sqlite.prepare('EXPLAIN QUERY PLAN ' + text).all(...params).map(row => row.detail);
@@ -457,31 +461,39 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
       const scan = /^SCAN (st_\w+|r_\w+|batches|kpi_cache)\b/.exec(step);
       assert.ok(!scan || allowed && new RegExp(`^(?:${allowed})$`).test(scan[1]), text.slice(0, 120) + '\n' + plan.join('\n'));
     }
+    // r_stat has no index by metric: its reads find the rows of each day and band by key.
+    if (/metric = 'sesslen'|metric = 'flow' AND x\.slug = f\.slug/.test(text)) {
+      assert.ok(plan.some(step => /^SEARCH x USING PRIMARY KEY \(day=\? AND a=\? AND metric=\? AND slug=\?/.test(step)), text.slice(0, 120) + '\n' + plan.join('\n'));
+      r_stat_reads.add(/sesslen/.test(text) ? 'sesslen' : 'flow');
+    }
     // Sessions are found by their start, or for one student's codes by code and start.
     if (/FROM st_sessions s/.test(text) && /start_s >= \?1/.test(text)) {
       const index = /s\.u IN \(SELECT value FROM json_each/.test(text) ? 'st_sessions_student' : 'st_sessions_time';
       assert.ok(plan.some(step => new RegExp(`SEARCH s USING (?:COVERING )?INDEX ${index}`).test(step)), text.slice(0, 120) + '\n' + plan.join('\n'));
     }
   }
+  assert.deepEqual([...r_stat_reads].sort(), ['flow', 'sesslen']);
   // Every kind of write and pre-read was checked.
   for (const statement of ['INSERT INTO st_sessions', 'INSERT INTO st_visits', 'INSERT INTO st_rounds', 'INSERT INTO st_students', 'INSERT INTO st_pcs',
     'INSERT OR IGNORE INTO st_student_pcs', 'INSERT OR IGNORE INTO st_marks', 'INSERT INTO st_student_games', 'UPDATE st_students SET', 'UPDATE aliases SET',
     'INSERT INTO aliases', 'UPDATE roll_days SET', 'UPDATE settings SET', 'INSERT INTO live', 'DELETE FROM live', 'INSERT INTO batches', 'INSERT INTO usage',
     'SELECT s.id, s.start_s,', 'SELECT slug, rounds FROM st_student_games', 'INSERT INTO r_stat', 'DELETE FROM r_day', 'INSERT INTO roll_days',
-    'SELECT json_group_array(json_array(u, bands', 'WITH sd AS MATERIALIZED', 'SELECT key, rows FROM kpi_cache', 'DELETE FROM st_rounds', 'DELETE FROM aliases',
+    'INSERT INTO kpi_cache (key, made, rows) SELECT ?6', 'INSERT INTO kpi_cache (key, made, rows) SELECT ?8', "SELECT (SELECT rows -> '$.extras' FROM kpi_cache",
+    'WITH k AS (SELECT COALESCE(', 'SELECT key, rows FROM kpi_cache', 'DELETE FROM st_rounds', 'DELETE FROM aliases',
+    'DELETE FROM r_stat WHERE day = ?1 AND (', 'UPDATE roll_days SET rows',
     // The research reads: students, a student (rollups and facts), a game, r_stat, cohorts and PCs.
-    'SELECT json_group_array(json_array(c, days,', 'SELECT json_group_array(json_array(c, json(list)))', 'WITH p AS (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT d.day AS day',
+    "INSERT INTO kpi_cache (key, made, rows) SELECT ?6, ?7, json_object('weeks'", 'WITH s AS (SELECT c, ', 'WITH p AS (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT d.day AS day',
     'SELECT g.slug AS slug', 'SELECT date(g.day', "SELECT CAST(strftime('%H'", "SELECT date(((s.start_s + COALESCE(r.t0", 'SELECT date(((s.start_s) +',
-    'SELECT CASE WHEN nx.k', 'SELECT x.day AS day, x.a AS a', 'SELECT x.day AS day, COUNT(DISTINCT', 'SELECT x.a AS a', 'SELECT COALESCE(al.u_new, x.u) AS c, x.a',
-    'SELECT json_group_array(json_array(a, metric, k1', 'SELECT json_group_array(json_array(a, metric, slug', 'WITH RECURSIVE f', 'WITH codes AS',
+    'SELECT CASE WHEN nx.k', 'INSERT INTO kpi_cache (key, made, rows) SELECT ?13, ?14, json_object(\'days\'', "SELECT json_object('days'",
+    'INSERT INTO kpi_cache (key, made, rows) SELECT ?5, ?6, (SELECT json_group_array(json_array(a, metric, slug', 
     'WITH d AS MATERIALIZED (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT x.p AS p', 'SELECT s.p AS p', 'SELECT p, z, k', 'SELECT k FROM st_pcs',
     // Export pages of every file.
-    "SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u", "SELECT IFNULL(s.s, '') || ',' || IFNULL(v.n", "SELECT IFNULL(s.s, '') || ',' || IFNULL(r.n",
-    "SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u, '') || ',' || IFNULL(CASE", 'WITH d AS (SELECT u, day', "SELECT IFNULL(x.u", "SELECT IFNULL(x.day",
-    'WITH d AS (SELECT p, np_max',
+    ...["SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u", "SELECT IFNULL(s.s, '') || ',' || IFNULL(v.n", "SELECT IFNULL(s.s, '') || ',' || IFNULL(r.n",
+      "SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u, '') || ',' || IFNULL(CASE", 'WITH d AS (SELECT u, day', "SELECT IFNULL(x.u", "SELECT IFNULL(x.day",
+      'WITH d AS (SELECT p, np_max'].map(text => 'WITH page AS MATERIALIZED (' + text),
     // The owner's actions: link, unlink, recount and forget.
     'SELECT COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2), ?2) AS target', 'UPDATE aliases SET u_new = COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2)',
-    'INSERT INTO aliases (u_old, u_new, s, how) SELECT ?1', 'DELETE FROM aliases WHERE u_old = ?1', 'UPDATE roll_days SET dirty = 2 WHERE day >=',
+    'INSERT INTO aliases (u_old, u_new, s, how) SELECT ?1', 'DELETE FROM aliases WHERE u_old = ?1', 'UPDATE roll_days SET dirty = 3 WHERE day >=',
     'SELECT COUNT(*) AS n FROM (SELECT COALESCE', "DELETE FROM st_marks WHERE kind IN ('pr', 'cd')", 'DELETE FROM r_student_day WHERE u IN', 'DELETE FROM r_student_game WHERE u IN',
     "UPDATE settings SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'rv'"]) {
     assert.ok([...seen.keys()].some(text => text.startsWith(statement)), 'covered: ' + statement);
@@ -537,9 +549,9 @@ test('no value of a research file can hold a comma, a quote or a line break: eve
     ['pr', 12, U2], ['se', 13, 7000, 'p']], { a: '', z: 'America/Port-au-Prince', m: 'app', k: 'src' }), T0);
   await s.store.rollupStep(T0 + DAY_MS);
   for (const file of FILES) {
-    const page = await s.store.exportPage({ file, from: '2026-10-19', to: '2026-10-21' }, T0 + DAY_MS);
-    assert.ok(page.lines.length > 0, file);
-    for (const line of page.lines) {
+    const page = await s.store.exportPage({ file, from: '2026-10-19', to: '2026-10-21' }, T0 + DAY_MS), lines = page.text.replace(/\n$/, '').split('\n');
+    assert.ok(page.rows > 0 && lines.length === page.rows, file);
+    for (const line of lines) {
       assert.doesNotMatch(line, /["\n\r]/);
       assert.equal(line.split(',').length, COLUMNS[file].length, file + ': ' + line);
     }
@@ -598,4 +610,72 @@ test('simulate.mjs: one school in Riyadh at the sink\'s cadence, with guests, ol
   for (const kind of ['ss', 'go', 'ld', 'er', 'rs', 're', 're:duo', 'gp', 'gx', 'tu', 'fv', 'ct', 'lv', 'pr', 'cd', 'se']) assert.ok(kinds.has(kind), kind);
   // Children win more often once they have practised a game.
   assert.ok(wins.later[0] / wins.later[1] > wins.first[0] / wins.first[1] + 0.05, JSON.stringify(wins));
+});
+
+test('a PC linking a code (cd) raises the rollup version, so kept KPIs count both codes as one student at once', async () => {
+  const s = open();
+  await ready(s.store, T0);
+  // Two codes of one child play on 20 October; the cron rolls the day.
+  for (const [sid, u] of [['fb0000000001', U1], ['fb0000000002', U3]]) {
+    await s.ingest(v3(sid, [ss3(), ['go', 1, 1, 'road-hopper', 'catalog', 0, 0], rs3(2, 1, 1, 'road-hopper', 'L1'), re3(30, 1, 1, 'road-hopper', 'L1', 'w')], { u }), T0);
+  }
+  const night = Date.parse('2026-10-21T02:00:00Z');
+  assert.equal((await s.store.rollupStep(night)).rolled, '2026-10-20');
+  const q = { from: '2026-10-20', to: '2026-10-20', band: null }, active = async at => (await s.store.kpis(q, at)).totals.students.active;
+  assert.equal(await active(night + MIN), 2);
+  const rv = Number((await s.settings()).rv);
+  // The next morning the teacher's transfer reaches U1's PC: U3 is U1's older code.
+  await s.ingest(v3('fb0000000003', [ss3(), ['cd', 0, U3]], { u: U1 }), night + 6 * 3600000);
+  assert.equal(Number((await s.settings()).rv), rv + 1);
+  assert.equal(await active(night + 6 * 3600000 + MIN), 1);
+  // The same link again changes nothing.
+  await s.ingest(v3('fb0000000004', [ss3(), ['cd', 0, U3]], { u: U1 }), night + 7 * 3600000);
+  assert.equal(Number((await s.settings()).rv), rv + 1);
+});
+
+test('a school clock moved west after the UTC day was rolled: today is read from the facts, and rolled again only once it is over', async () => {
+  const s = open();
+  const D0 = Date.parse('2026-10-20T10:00:00Z'), H = 3600000;
+  await ready(s.store, D0);
+  const play = (sid, slug, ms, u) => v3(sid, [ss3(), ['go', 1, 1, slug, 'catalog', 0, 0], ['gx', 60, 1, slug, ms, z6, z4]], { u });
+  await s.ingest(play('fc0000000001', 'road-hopper', 60000, U1), D0);
+  await s.ingest(play('fc0000000002', 'road-hopper', 60000, U2), D0 + DAY_MS);
+  // On UTC, the cron rolls 20 and 21 October by 01:00 UTC on the 22nd.
+  for (let t = D0 + DAY_MS / 2; t <= Date.parse('2026-10-22T02:00:00Z'); t += 5 * MIN) await s.store.rollupStep(t);
+  assert.equal((await s.settings()).rolled_through, '2026-10-21');
+  // At 03:00 UTC (23:00 on the 21st in New York) the owner sets the school's zone: today there is the 21st again.
+  const T = Date.parse('2026-10-22T03:00:00Z');
+  await s.store.updateSettings({ tz: 'America/New_York' }, T);
+  assert.equal(s.store.today(T), '2026-10-21');
+  await s.ingest(play('fc0000000003', 'maze-dash', 300000, U3), T + 20 * MIN);
+  const day = async (at, slug) => {
+    const k = await s.store.kpis({ from: '2026-10-20', to: '2026-10-21' }, at);
+    return [k.daily.find(d => d.day === '2026-10-21').sessions, k.games.find(g => g.slug === slug)?.sessions ?? 0];
+  };
+  assert.deepEqual(await day(T + 25 * MIN, 'maze-dash'), [2, 1], 'today, from the facts');
+  // The cron does not roll the 21st while it lasts; a child plays at 23:50 New York time.
+  const kinds = [];
+  for (let t = T + 25 * MIN; t < T + H; t += 5 * MIN) { const r = await s.store.rollupStep(t); if (r.rolled === '2026-10-21') kinds.push(r.kind); }
+  assert.deepEqual(kinds, []);
+  await s.ingest(play('fc0000000004', 'maze-dash', 300000, '2c3d4e5f6071'), T + 50 * MIN);
+  // From midnight in New York it rebuilds the 21st, with every session of it.
+  for (let t = T + H; t <= T + 2 * H; t += 5 * MIN) { const r = await s.store.rollupStep(t); if (r.rolled === '2026-10-21') kinds.push(r.kind); }
+  assert.deepEqual(kinds, ['full']);
+  assert.deepEqual(await day(T + 2 * H, 'maze-dash'), [3, 2]);
+});
+
+test('a v2 session open across the deploy starts no earlier than the facts: its play after the deploy is rolled and shown', async () => {
+  const s = open();
+  // Deployed at 00:30 UTC: the facts start on 28 October. A tab opened at 23:50 the evening
+  // before (v2: no hand-over when idle) sends its first batch to the new server at 00:48.
+  const DEPLOY = Date.parse('2026-10-28T00:30:00Z');
+  await ready(s.store, DEPLOY);
+  assert.equal((await s.settings()).facts_since, '2026-10-28');
+  await s.ingest(v2('c00000000031', [['gx', 2990, 'road-hopper', 2900000, z6, z4], ['go', 3000, 'maze-dash', 'catalog', 0],
+    ['gx', 3500, 'maze-dash', 480000, z6, z4]]), Date.parse('2026-10-28T00:48:00Z'));
+  assert.deepEqual((await s.rows('st_sessions')).map(r => new Date(r.start_s * 1000).toISOString()), ['2026-10-28T00:00:00.000Z']);
+  for (let t = DEPLOY; t < DEPLOY + 3 * DAY_MS; t += 30 * MIN) await s.store.rollupStep(t);
+  const k = await s.store.kpis({ from: '2026-10-26', to: '2026-10-30' }, DEPLOY + 3 * DAY_MS);
+  assert.deepEqual([k.totals.engagedMinutes, k.games.map(g => g.slug)], [56.3, ['maze-dash', 'road-hopper']]);
+  assert.deepEqual(k.daily.filter(hasPlay).map(d => d.day), ['2026-10-28']);
 });

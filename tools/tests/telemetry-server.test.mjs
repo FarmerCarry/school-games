@@ -13,7 +13,7 @@ const { hideSqliteWarning } = await import('../../server/warnings.mjs');
 hideSqliteWarning();
 const { createApp, MAX_BODY } = await import('../../server/app.mjs');
 const { EVENTS, EVENTS_V3, validateBatch } = await import('../../server/schema.mjs');
-const { TABLES, SCHEMA_VERSION, openStore } = await import('../../server/store.mjs');
+const { ROLLUPS, TABLES, SCHEMA_VERSION, openStore } = await import('../../server/store.mjs');
 const { openDatabase } = await import('../../server/sqlite-d1.mjs');
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -256,7 +256,7 @@ test('the v3 fixture has every v3 kind and is stored as exact facts, with its st
     { u: U, slug: 'tic-tac-toe', rounds: 1, first_s: at + 150 }]);
   assert.deepEqual(await s.rows('aliases'), [{ u_old: '1b2c3d4e5f60', u_new: U, s: at, how: 'pc' }]);
   const settings = Object.fromEntries((await s.rows('settings')).map(r => [r.key, r.value]));
-  // rv: 1, up once by the purge at start and once by the change of zone.
+  // rv: 1, up once by the purge at start, and once by the change of zone and the new link.
   assert.deepEqual([settings.tz, settings.tz_source, settings.tz_epoch, settings.rv, settings.v3_since, settings.week_start, settings.rebuild],
     ['Asia/Riyadh', 'pc', '1', '3', '2026-10-20', 'sun', '1']);
   assert.deepEqual(await s.rows('live'), [{ s: fixture3.s, slug: '', seen_minute: Math.floor(START / 60000), u: U, p: P, wire: 3 }]);
@@ -438,6 +438,19 @@ test('v3: a malformed optional field is stored as unknown and the batch is kept 
   assert.deepEqual([cleaned.dropped, cleaned.events], [malformed.length, [['lv', 2, 3]]]);
 });
 
+test('a PC or owner that names UTC another way (Etc/UTC, GMT) sets the school\'s zone to UTC', async t => {
+  const s = await start(t);
+  assert.equal((await s.post(envelope3('c90000000001', [['ss', 0, 0, 3, 1, 2, 4, 0]], { z: 'Etc/UTC' }))).status, 204);
+  assert.deepEqual((await s.rows('st_sessions')).map(r => r.z), ['UTC']);
+  assert.deepEqual((await s.rows('st_pcs')).map(r => r.z), ['UTC']);
+  const settings = Object.fromEntries((await s.rows('settings')).map(r => [r.key, r.value]));
+  assert.deepEqual([settings.tz, settings.tz_source], ['UTC', 'pc']);
+  const set = await s.send('POST', '/v1/admin/settings', { headers: { authorization: 'Bearer ' + TOKEN, 'content-type': 'application/json' },
+    body: JSON.stringify({ tz: 'Etc/GMT' }) });
+  assert.equal(set.status, 200);
+  assert.deepEqual([set.json().clock.tz, set.json().clock.source], ['UTC', 'owner']);
+});
+
 test('bodies over 64 KB are 413, declared or streamed; exactly 64 KB is accepted', async t => {
   const s = await start(t);
   const json = JSON.stringify(fixture);
@@ -476,7 +489,9 @@ test('a client that disconnects mid-body is not logged as a server error', async
 });
 
 test('unknown and malformed events are dropped while valid ones are kept; measures are clamped', async t => {
-  const s = await start(t);
+  // Facts since 12 October: a session of 7 days (the clamped ss) starts after them.
+  const s = await start(t, { at: START - 8 * DAY_MS });
+  s.clock.now = START;
   const malformed = [
     ['zz', 1], 'go', null, 42, {}, [], ['go'], [7, 1], ['toString', 1],
     ['go', -1, 'road-hopper', 'search', 1], ['go', 1, 'Road-Hopper', 'search', 1], ['go', 1, 'road--hopper', 'search', 1],
@@ -546,7 +561,7 @@ const AGG_LEVELS = ['sessions', 'starts', 'ends', ...CODES5, 'ms', 'tier_sum', '
 const AGG_DEVICES = ['sessions', ...list('f', 4), ...list('il', 6), 'loads', 'load_ms'];
 const COLUMNS = {
   meta: ['key', 'value'], batches: ['b', 'day'], kpi_cache: ['key', 'made', 'rows'], settings: ['key', 'value'],
-  usage: ['day', 'reads', 'writes', 'rebuild_reads', 'export_reads', 'size'], roll_days: ['day', 'dirty', 'rolled_s'],
+  usage: ['day', 'reads', 'writes', 'rebuild_reads', 'export_reads', 'size'], roll_days: ['day', 'dirty', 'rolled_s', 'rows'],
   live: ['s', 'slug', 'seen_minute', 'u', 'p', 'wire'],
   st_pcs: ['p', 'first_s', 'last_s', 'z', 'cores', 'mem', 'screen', 'k'],
   st_students: ['u', 'label', 'first_s', 'last_s', 'band_first', 'band_last', 'age_days_first', 'removed_s'],
@@ -611,9 +626,10 @@ test('names, user agents, PC labels, typed text, profile keys, avatars, colours 
   const db = s.app.store.db;
   const tables = (await db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all()).results.map(r => r.name);
   assert.deepEqual(tables.sort(), Object.keys(COLUMNS).sort());
-  // The five named indexes of the spec, and the one UNIQUE (s) of st_sessions; no other.
+  // Four named indexes (the spec's five, less r_stat's by metric: every r_stat read finds
+  // its rows by day and band), and the one UNIQUE (s) of st_sessions; no other.
   const indexes = (await db.prepare("SELECT name, tbl_name, sql FROM sqlite_schema WHERE type = 'index' ORDER BY name").all()).results;
-  assert.deepEqual(indexes.filter(i => i.sql).map(i => i.name), ['r_stat_metric', 'r_student_day_u', 'r_student_game_u', 'st_sessions_student', 'st_sessions_time']);
+  assert.deepEqual(indexes.filter(i => i.sql).map(i => i.name), ['r_student_day_u', 'r_student_game_u', 'st_sessions_student', 'st_sessions_time']);
   assert.deepEqual(indexes.filter(i => !i.sql).map(i => i.tbl_name), ['st_sessions']);
   for (const table of tables) {
     const info = (await db.prepare(`PRAGMA table_info(${table})`).all()).results;
@@ -996,7 +1012,7 @@ test('KPIs are exact for a hand-built dataset, and every group is shown with its
   // Once both days are rolled up (the cron, after 01:00 the next day), the answer is the same, from the rollups.
   const before = (await s.admin('/v1/admin/kpis?from=2026-10-20&to=2026-10-21')).json();
   s.clock.now = Date.parse('2026-10-22T01:30:00Z');
-  assert.deepEqual(await s.app.roll(), { rolled: '2026-10-20', kind: 'first', voted: null, purged: null });
+  assert.deepEqual(await s.app.roll(), { rolled: '2026-10-20', kind: 'first', voted: null, purged: null, deleted: null });
   assert.deepEqual((await s.app.roll()).rolled, '2026-10-21');
   assert.deepEqual((await s.rows('r_day', 'day, a')).map(r => [r.day, r.a, r.sessions]), [['2026-10-20', '6-7', 3], ['2026-10-21', '10-11', 1]]);
   const after = (await s.admin('/v1/admin/kpis?from=2026-10-20&to=2026-10-21')).json();
@@ -1293,12 +1309,14 @@ test('students, a student, a game and the PCs are exact for a hand-built school,
       daily: GAME.daily.map(d => ({ ...d, students: 0, minutes: 0, opens: 0 })), firstWin: [], flowsIn: [], flowsOut: [],
       stats: { columns: game.stats.columns, rows: [] } });
     assert.deepEqual(await get('/v1/admin/pcs?' + q), { ...PCS_ANSWER, clock });
+    // The columns are the sums the metrics have: attempt and tier have every one but the gaps.
     const stats = await get('/v1/admin/stats?' + q + '&metrics=tier,attempt&slug=road-hopper');
     assert.deepEqual({ ...stats, rows: undefined }, { v: 1, range: { ...RANGE, rolledThrough: rolled ? '2026-10-20' : '' }, metrics: ['attempt', 'tier'],
-      slug: 'road-hopper', columns: ['a', 'metric', 'slug', 'k1', 'k2', ...STAT_COLUMNS], rows: undefined, clock });
-    assert.deepEqual(stats.rows, rolled ? [['8-9', 'attempt', 'road-hopper', '1', '', 1, 1, 1, 0, 0, 0, 0, 30000, 30000, 30000, 10, 2, 6000, 10, 50, 1, 2, 1, 500, 1, 40, 0, 0],
-      ['8-9', 'attempt', 'road-hopper', '2', '', 1, 1, 0, 1, 0, 0, 0, 30000, 0, 0, 5, 5, 0, 0, 20, 1, 2, 1, 0, 0, 0, 0, 0],
-      ['8-9', 'tier', 'road-hopper', '2', '', 2, 1, 1, 1, 0, 0, 0, 60000, 0, 30000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]] : []);
+      slug: 'road-hopper', columns: ['a', 'metric', 'slug', 'k1', 'k2', ...STAT_COLUMNS.filter(c => c !== 'gap_sum' && c !== 'gap_n')], rows: undefined, clock });
+    assert.deepEqual(stats.rows, rolled ? [['8-9', 'attempt', 'road-hopper', '1', '', 1, 1, 1, 0, 0, 0, 0, 30000, 30000, 30000, 10, 2, 6000, 10, 50, 1, 2, 1, 500, 1, 40],
+      ['8-9', 'attempt', 'road-hopper', '2', '', 1, 1, 0, 1, 0, 0, 0, 30000, 0, 0, 5, 5, 0, 0, 20, 1, 2, 1, 0, 0, 0],
+      ['8-9', 'tier', 'road-hopper', '2', '', 2, 1, 1, 1, 0, 0, 0, 60000, 0, 30000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]] : []);
+    assert.deepEqual((await get('/v1/admin/stats?' + q + '&metrics=hour')).columns, ['a', 'metric', 'slug', 'k1', 'k2', 'n', 'students', 'ms']);
     // The cohort of the week of 19 October (Monday, the first week with v3 data): U1's profile was made then.
     assert.deepEqual(await get('/v1/admin/cohorts?' + q), { v: 1, range: RANGE, weekStart: 'mon', clock,
       cohorts: rolled ? [{ week: '2026-10-19', size: 1, active: [1, ...Array(12).fill(null)] }] : [] });
@@ -1312,6 +1330,83 @@ test('students, a student, a game and the PCs are exact for a hand-built school,
   assert.equal((await s.app.roll()).rolled, '2026-10-19');
   assert.equal((await s.app.roll()).rolled, '2026-10-20');
   await check(true);
+});
+
+test('a new week start makes the kept weekly answers again: cohorts and students\' weeks follow it at once', async t => {
+  const s = await studentDays(t);
+  // A child whose profile was made on Sunday 18 October: in the cohort of that week only when weeks start on Sunday.
+  s.clock.now = Date.parse('2026-10-19T09:30:00Z');
+  assert.equal((await s.post({ ...envelope3('b60000000001', [ss3(0, 1, 1), ...visit(1, 'road-hopper', 2, 60000)], { u: '6f6f6f6f6f6f', a: '8-9' }), z: '' })).status, 204);
+  s.clock.now = Date.parse('2026-10-21T02:00:00Z');
+  await s.app.roll();
+  await s.app.roll();
+  const q = 'from=2026-10-19&to=2026-10-20', get = async pathname => (await s.admin(pathname)).json();
+  const monday = await get('/v1/admin/cohorts?' + q);
+  assert.deepEqual([monday.weekStart, monday.cohorts.map(c => c.week)], ['mon', ['2026-10-19']]);
+  await get('/v1/admin/students?' + q);
+  const set = await s.send('POST', '/v1/admin/settings', { headers: { authorization: 'Bearer ' + TOKEN, 'content-type': 'application/json' },
+    body: JSON.stringify({ weekStart: 'sun' }) });
+  assert.equal(set.status, 200);
+  // What a database with nothing kept answers, now.
+  const fresh = async pathname => {
+    const other = openStore(s.app.store.db);
+    await s.app.store.db.prepare('DELETE FROM kpi_cache').run();
+    const { serialize } = await import('../../server/handler.mjs');
+    const [route, query] = pathname.split('?'), p = Object.fromEntries(new URLSearchParams(query));
+    return JSON.parse(serialize(await other[route.split('/').at(-1)]({ ...p, band: null }, s.clock.now)));
+  };
+  const sunday = await get('/v1/admin/cohorts?' + q), students = await get('/v1/admin/students?' + q);
+  assert.equal(sunday.weekStart, 'sun');
+  assert.deepEqual(sunday.cohorts, (await fresh('/v1/admin/cohorts?' + q)).cohorts);
+  assert.deepEqual(students.students, (await fresh('/v1/admin/students?' + q)).students);
+  assert.deepEqual(sunday.cohorts.map(c => [c.week, c.size]), [['2026-10-18', monday.cohorts[0].size + 1]]);
+});
+
+test('the students come in pages of at most a set size of JSON (D1 refuses a value over 2 MB), each naming the code to go on from', async t => {
+  const s = await studentDays(t);
+  const { serialize } = await import('../../server/handler.mjs');
+  const q = { from: '2026-10-19', to: '2026-10-20', band: null };
+  // About two students fit in 700 bytes.
+  const store = openStore(s.app.store.db, { studentsPageBytes: 700 }), pages = [];
+  let after = null;
+  do {
+    const page = JSON.parse(serialize(await store.students({ ...q, after }, s.clock.now)));
+    assert.ok(JSON.stringify(page.students).length <= 700 + page.students.length, JSON.stringify(page.students).length + ' bytes');
+    pages.push(page.students.map(x => x.u));
+    after = page.next ?? null;
+    if (after) assert.equal(after, page.students.at(-1).u, 'next: the last code of the page');
+  } while (after && pages.length < 10);
+  assert.ok(pages.length >= 2, JSON.stringify(pages));
+  assert.deepEqual(pages.flat(), STUDENTS.map(x => x.u));
+  // One page holds them all at the full size, with no next; a bad cursor is refused.
+  const all = (await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-20')).json();
+  assert.deepEqual([all.students.map(x => x.u), all.next], [STUDENTS.map(x => x.u), undefined]);
+  assert.equal((await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-20&after=zz')).status, 400);
+});
+
+test('a removed profile is removed until its code plays again: a code a teacher moved to another PC is not removed by the old PC', async t => {
+  const s = await studentDays(t);
+  const removed = async () => {
+    const list = (await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-20')).json().students;
+    const one = (await s.admin(`/v1/admin/student?u=${U3}&from=2026-10-19&to=2026-10-20`)).json().student;
+    const res = await s.admin('/v1/admin/export?file=students&from=2026-10-19&to=2026-10-20');
+    const line = res.text.split('\n').find(l => l.startsWith(U3 + ','));
+    return [list.find(x => x.u === U3).removed, one.removed, line.split(',').at(-1)];
+  };
+  // At 10:00 the teacher moved U3's profile to P2 and took it off its old PC, where the next
+  // session (another child's) records the removal.
+  s.clock.now = START + 3600000;
+  assert.equal((await s.post(envelope3('b20000000007', [ss3(0, 3, 1), ['pr', 0, U3], ['lv', 1, 4]], { u: U1, z: '' }))).status, 204);
+  assert.deepEqual(await removed(), ['2026-10-20', '2026-10-20', '2026-10-20'], 'not seen since');
+  // At 11:00 U3 plays on P2.
+  s.clock.now = START + 2 * 3600000;
+  assert.equal((await s.post(envelope3('b20000000008', [ss3(0, 7, 1), ...visit(1, 'road-hopper', 2, 60000)], { u: U3, p: P2, a: '6-7', z: '' }))).status, 204);
+  assert.deepEqual(await removed(), [null, null, ''], 'a later session of the code: it was not removed everywhere');
+  // At 12:00 P2 removes it too: the latest removal counts.
+  s.clock.now = START + 3 * 3600000;
+  assert.equal((await s.post(envelope3('b20000000009', [ss3(0, 3, 1), ['pr', 0, U3], ['lv', 1, 4]], { u: U5, p: P2, z: '' }))).status, 204);
+  assert.deepEqual(await removed(), ['2026-10-20', '2026-10-20', '2026-10-20']);
+  assert.equal((await s.rows('st_students')).find(r => r.u === U3).removed_s, Math.floor((START + 3 * 3600000) / 1000) - 6);
 });
 
 test('forget removes a student\'s group of codes with their facts and per-student rollups; school totals keep the play until a recount', async t => {
@@ -1341,11 +1436,21 @@ test('forget removes a student\'s group of codes with their facts and per-studen
   assert.equal((await s.admin(`/v1/admin/student?u=${U2}&from=2026-10-19&to=2026-10-20`)).status, 404);
   // Again: nothing left to remove.
   assert.deepEqual((await call(s, 'POST', '/v1/admin/forget', { u: U2 })).json().removed, { codes: 0, sessions: 0, visits: 0, rounds: 0, marks: 0 });
-  // A recount rebuilds the days without the student.
+  // A recount counts the days again without the student, writing only the rows that change.
   assert.deepEqual((await call(s, 'POST', '/v1/admin/rebuild', {})).json(), { v: 1, pending: 2, clock: UTC_CLOCK('2026-10-21') });
-  assert.deepEqual((await s.rows('roll_days', 'day')).map(r => r.dirty), [2, 2]);
-  assert.deepEqual([(await s.app.roll()).kind, (await s.app.roll()).kind, (await s.app.roll()).rolled], ['full', 'full', null]);
+  assert.deepEqual((await s.rows('roll_days', 'day')).map(r => r.dirty), [3, 3]);
+  const rollups = async () => Object.fromEntries(await Promise.all(Object.keys(ROLLUPS).map(async table => [table, await s.rows(table)])));
+  const stale = await rollups();
+  assert.deepEqual([(await s.app.roll()).kind, (await s.app.roll()).kind, (await s.app.roll()).rolled], ['recount', 'recount', null]);
   assert.equal((await kpis()).totals.sessions, before.totals.sessions - 2);
+  // The rollups are then exactly what a first roll of the remaining facts makes: rows that only the student had are gone.
+  const recounted = await rollups();
+  await s.app.store.db.batch(Object.keys(ROLLUPS).map(table => s.app.store.db.prepare(`DELETE FROM ${table}`)).concat(s.app.store.db.prepare('DELETE FROM roll_days'),
+    s.app.store.db.prepare("UPDATE settings SET value = '' WHERE key = 'rolled_through'")));
+  const fresh = openStore(s.app.store.db);
+  assert.deepEqual([(await fresh.rollupStep(s.clock.now)).kind, (await fresh.rollupStep(s.clock.now)).kind], ['first', 'first']);
+  assert.deepEqual(await rollups(), recounted);
+  assert.ok(Object.keys(ROLLUPS).some(table => stale[table].length > recounted[table].length), 'some rows had only the forgotten student');
 });
 
 test('forget leaves no mark that names the code: an older code whose link was undone goes from the other student\'s session too', async t => {
@@ -1463,7 +1568,8 @@ test('export: every file\'s pages hold each row once, with exactly its COLUMNS a
   t.after(() => app.close());
   const get = pathname => request(`http://127.0.0.1:${port}`, 'GET', pathname, { headers: { authorization: 'Bearer ' + TOKEN } });
   // The same database with pages of the real size: each file is one page here.
-  const whole = openStore(db);
+  // One page that holds a whole file, to compare the pages with.
+  const whole = openStore(db, { exportLimits: { lines: 100000, sessions: 100000 } });
   const range = { from: '2026-10-13', to: '2026-10-22' };
   const lo = Date.parse('2026-10-13T00:00:00+03:00') / 1000, hi = Date.parse('2026-10-23T00:00:00+03:00') / 1000;
   const counted = async from => (await db.prepare(`SELECT COUNT(*) AS n FROM st_sessions s ${from} WHERE s.start_s >= ?1 AND s.start_s < ?2`).bind(lo, hi).first()).n;
@@ -1490,8 +1596,8 @@ test('export: every file\'s pages hold each row once, with exactly its COLUMNS a
       assert.equal(line.split(',').length, COLUMNS[file].length, file + ': ' + line);
     }
     const one = await whole.exportPage({ file, ...range }, now);
-    assert.equal(one.next, null, file + ' is one page of 5,000 lines');
-    assert.deepEqual(lines, one.lines, file + ': the pages hold every row once, in order');
+    assert.equal(one.next, null, file + ' is one page');
+    assert.deepEqual(lines, one.text.replace(/\n$/, '').split('\n'), file + ': the pages hold every row once, in order');
     if (expected[file] !== undefined) assert.equal(lines.length, expected[file], file);
     assert.ok(lines.length > 0 && (file === 'pcs' || pages > 1), `${file}: ${lines.length} lines in ${pages} pages`);
   }
@@ -1634,14 +1740,23 @@ test('retention: facts after 400 days (or the owner\'s choice), rollups after 80
   await s.app.purge();
   assert.ok((await s.rows('usage')).every(r => r.day >= '2026-01-03'), 'usage rows are kept 60 days');
 
-  // Exactly 400 days old is kept; a day later the session goes with its student, PC, visits, rounds, marks and links.
+  // Exactly 400 days old is kept; a day later the session goes with its visits, rounds and
+  // marks. Its student, PC and links stay as long as the rollups that name them.
+  const oldPeriod = async () => {
+    const list = (await s.admin('/v1/admin/students?from=2026-01-01&to=2026-01-02')).json().students;
+    const one = await s.admin(`/v1/admin/student?u=${U}&from=2026-01-01&to=2026-01-02`);
+    const cohorts = (await s.admin('/v1/admin/cohorts?from=2026-01-01&to=2026-01-02')).json();
+    return [list.map(x => pick(x, ['u', 'band', 'firstDay', 'lastDay', 'pcs', 'linked'])), one.status, cohorts.cohorts.length];
+  };
+  const answers = await oldPeriod();
+  assert.deepEqual(answers, [[{ u: U, band: '8-9', firstDay: '2026-01-01', lastDay: '2026-01-01', pcs: 1, linked: ['1b2c3d4e5f60'] }], 200, 1]);
   s.clock.now = day0 + 400 * DAY_MS;
   assert.deepEqual(pick(await s.app.purge(), ['cutoff', 'sessions']), { cutoff: '2026-01-01', sessions: 0 });
   s.clock.now = day0 + 401 * DAY_MS;
   result = await s.app.purge();
-  assert.deepEqual(pick(result, ['cutoff', 'sessions', 'rounds', 'students', 'pcs']), { cutoff: '2026-01-02', sessions: 1, rounds: 1, students: 1, pcs: 1 });
-  assert.deepEqual(await counts(), { ...all, st_sessions: 1, st_visits: 1, st_rounds: 0, st_marks: 1, st_students: 0, st_pcs: 0, st_student_pcs: 0,
-    st_student_games: 0, aliases: 0, batches: 0 }, 'the rollups stay');
+  assert.deepEqual(pick(result, ['cutoff', 'sessions', 'rounds', 'students', 'pcs']), { cutoff: '2026-01-02', sessions: 1, rounds: 1, students: 0, pcs: 0 });
+  assert.deepEqual(await counts(), { ...all, st_sessions: 1, st_visits: 1, st_rounds: 0, st_marks: 1, batches: 0 }, 'the rollups, students, PCs and links stay');
+  assert.deepEqual(await oldPeriod(), answers, 'the period the rollups hold answers as before');
   const settings = async () => Object.fromEntries((await s.rows('settings')).map(r => [r.key, r.value]));
   assert.equal((await settings()).facts_since, '2026-01-02', 'the facts start at the cutoff');
   // The rollups go after 800 days, when the 5-minute cron has nothing to roll.
@@ -1655,9 +1770,13 @@ test('retention: facts after 400 days (or the owner\'s choice), rollups after 80
   assert.equal((await idle()).purged, null, 'exactly 800 days old is kept');
   assert.equal((await s.rows('r_day')).length, 2);
   s.clock.now += DAY_MS;
-  assert.equal((await idle()).purged, '2026-01-02');
+  assert.equal((await idle()).purged, '2026-01-01', 'the rollups of the oldest day go');
   assert.deepEqual((await s.rows('r_day')).map(r => r.day), ['2026-01-02']);
   assert.equal((await s.rows('roll_days', 'day'))[0].day, '2026-01-02');
+  // With them, the student, its PC and its links.
+  assert.deepEqual(pick(await s.app.purge(), ['students', 'pcs']), { students: 1, pcs: 1 });
+  assert.deepEqual(pick(await counts(), ['st_students', 'st_pcs', 'st_student_pcs', 'st_student_games', 'aliases']),
+    { st_students: 0, st_pcs: 0, st_student_pcs: 0, st_student_games: 0, aliases: 0 });
 
   // The owner keeps two school years: facts stay 760 days, rollups still 800.
   const owner = await start(t, { at: day0 });
@@ -1701,31 +1820,82 @@ test('retention: facts after 400 days (or the owner\'s choice), rollups after 80
   assert.equal(await legacyUntil(), '');
 });
 
-test('the storage guard removes the round details of the oldest 30 days of facts, and again only once the database grows', async () => {
+test('a shorter retention deletes the old facts a few hundred sessions a run, the 5-minute cron catching up, never a year at once', async () => {
+  const db = openDatabase(':memory:'), day0 = Date.parse('2026-01-05T09:00:00Z'), store = openStore(db);
+  // 500 sessions on each of three days.
+  for (let d = 0; d < 3; d++) {
+    for (let i = 0; i < 500; i++) {
+      await store.ingest(validateBatch(envelope3('e3' + String(d * 1000 + i).padStart(10, '0'), [['ss', 0, 0, 3, 1, 2, 4, 0],
+        ['go', 1, 1, 'road-hopper', 'catalog', 0, 0], ['rs', 2, 1, 1, 'road-hopper', 'L1', 1, 0],
+        ['re', 30, 1, 1, 'road-hopper', 'w', 'L1', 20000, 10, 1, 3, 1, z6, null], ['gx', 31, 1, 'road-hopper', 29000, z6, z4]], { z: '' })), day0 + d * DAY_MS + i * 1000);
+    }
+  }
+  // 500 days later, with the default 400 days, all of it is past retention; every day is rolled.
+  let at = day0 + 500 * DAY_MS;
+  await db.prepare("UPDATE settings SET value = ?1 WHERE key = 'rolled_through'").bind(new Date(at - DAY_MS).toISOString().slice(0, 10)).run();
+  const batch = db.batch.bind(db);
+  let most = 0, total = 0;
+  db.batch = async list => {
+    const results = await batch(list), n = results.reduce((x, r) => x + r.meta.rows_written, 0);
+    most = Math.max(most, n);
+    total += n;
+    return results;
+  };
+  const sessions = async () => (await db.prepare('SELECT COUNT(*) AS n FROM st_sessions').first()).n;
+  const since = async () => (await db.prepare("SELECT value FROM settings WHERE key = 'facts_since'").first()).value;
+  assert.equal((await store.purge(at)).sessions, 600, 'the purge deletes 600 sessions');
+  const steps = [[await sessions(), await since()]];
+  for (let i = 0; i < 3; i++) {
+    const done = await store.rollupStep(at += 300000);
+    steps.push([await sessions(), await since(), done.deleted]);
+  }
+  // facts_since follows: a day whose facts are partly gone is before it.
+  assert.deepEqual(steps, [[900, '2026-01-07'], [300, '2026-01-08', 'facts'], [0, '2026-04-15', 'facts'], [0, '2026-04-15', null]]);
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM st_rounds').first('n'), 0);
+  assert.ok(most <= 600 * 25 && total > 2 * most, `at most ${most} of ${total} rows written in one batch`);
+});
+
+test('the storage guard removes the round details of the oldest 30 days of facts, a few hundred sessions a run, and again only once the database grows', async () => {
   const db = openDatabase(':memory:'), day0 = Date.parse('2026-01-05T09:00:00Z');
   const store = openStore(db, { guards: { bytes: 1 } });
   const round = (s, at) => store.ingest(validateBatch(envelope3(s, [['ss', 0, 0, 3, 1, 2, 4, 0], ['go', 1, 1, 'road-hopper', 'catalog', 0, 0],
     ['rs', 2, 1, 1, 'road-hopper', 'L1', 1, 0], ['re', 30, 1, 1, 'road-hopper', 'w', 'L1', 20000, 10, 1, 3, 1, z6, null]], { z: '' })), at);
-  // A session every 10 days for 100 days.
+  // A session every 10 days for 100 days, and 900 sessions on day 20.
   for (let i = 0; i < 10; i++) await round('e0000000000' + i, day0 + i * 10 * DAY_MS);
+  for (let i = 0; i < 900; i++) await round('e2' + String(i).padStart(10, '0'), day0 + 20 * DAY_MS + 3600000 + i * 1000);
   const settings = async () => Object.fromEntries((await db.prepare('SELECT key, value FROM settings').all()).results.map(r => [r.key, r.value]));
-  const left = async () => (await db.prepare('SELECT s.s FROM st_rounds r JOIN st_sessions s ON s.id = r.sid ORDER BY s.start_s').all()).results.map(r => r.s);
-  let result = await store.purge(day0 + 100 * DAY_MS);
-  assert.deepEqual(result.trimmed, { before: '2026-02-04', rounds: 3 });
+  const left = async () => (await db.prepare('SELECT s.s FROM st_rounds r JOIN st_sessions s ON s.id = r.sid WHERE s.s LIKE ? ORDER BY s.start_s').bind('e0%').all()).results.map(r => r.s);
+  const rounds = async () => (await db.prepare('SELECT COUNT(*) AS n FROM st_rounds').first()).n;
+  // The purge marks the 30 days to trim; the 5-minute cron trims them once it has nothing to roll, at most 800 sessions a run.
+  let at = day0 + 100 * DAY_MS;
+  while ((await store.rollupStep(at)).rolled) at += 1000;
+  const result = await store.purge(at);
+  assert.deepEqual(result.trimmed, { to: '2026-02-04' });
+  assert.equal(await rounds(), 910, 'nothing is deleted at once');
+  const steps = [];
+  for (let i = 0; i < 5; i++) {
+    const before = await rounds(), done = await store.rollupStep(at += 300000);
+    steps.push([done.deleted, before - await rounds(), (await settings()).trimmed_before]);
+  }
+  assert.deepEqual(steps, [['rounds', 800, '2026-01-26'], ['rounds', 103, '2026-02-04'], [null, 0, '2026-02-04'], [null, 0, '2026-02-04'], [null, 0, '2026-02-04']]);
   assert.deepEqual(await left(), ['e00000000003', 'e00000000004', 'e00000000005', 'e00000000006', 'e00000000007', 'e00000000008', 'e00000000009']);
-  assert.equal((await settings()).trimmed_before, '2026-02-04');
-  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM st_sessions').first()).n, 10, 'sessions and visits stay');
+  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM st_sessions').first()).n, 910, 'sessions and visits stay');
   // SQLite reuses the freed pages: the next purge waits until the file has grown.
-  result = await store.purge(day0 + 101 * DAY_MS);
-  assert.equal(result.trimmed, null);
+  assert.equal((await store.purge(day0 + 101 * DAY_MS)).trimmed, null);
   for (let i = 0; i < 300; i++) await round('e1' + String(i).padStart(10, '0'), day0 + 100 * DAY_MS + i * 1000);
-  result = await store.purge(day0 + 102 * DAY_MS);
-  assert.deepEqual(result.trimmed, { before: '2026-03-06', rounds: 3 });
+  assert.deepEqual((await store.purge(day0 + 102 * DAY_MS)).trimmed, { to: '2026-03-06' });
+  // The days since the last purge are rolled first; the first run with nothing to roll trims.
+  at = day0 + 102 * DAY_MS;
+  let done;
+  do done = await store.rollupStep(at += 1000); while (done.rolled);
+  assert.equal(done.deleted, 'rounds');
+  assert.equal((await settings()).trimmed_before, '2026-03-06');
+  assert.deepEqual(await left(), ['e00000000006', 'e00000000007', 'e00000000008', 'e00000000009']);
   // A change of zone does not re-roll the days without round details.
-  await db.batch([db.prepare("INSERT INTO roll_days (day, dirty, rolled_s) VALUES ('2026-01-15', 0, 1), ('2026-03-06', 0, 1), ('2026-03-07', 0, 1)")]);
-  await store.updateSettings({ tz: 'Asia/Riyadh' }, day0 + 102 * DAY_MS);
-  assert.deepEqual((await db.prepare('SELECT day, dirty FROM roll_days ORDER BY day').all()).results.map(r => [r.day, r.dirty]),
-    [['2026-01-15', 0], ['2026-03-06', 2], ['2026-03-07', 2]]);
+  await store.updateSettings({ tz: 'Asia/Riyadh' }, at);
+  const days = (await db.prepare('SELECT day, dirty FROM roll_days ORDER BY day').all()).results;
+  assert.ok(days.length > 90 && days.some(r => r.day < '2026-03-06'));
+  assert.deepEqual(days.filter(r => r.dirty !== (r.day >= '2026-03-06' ? 2 : 0)), []);
 });
 
 test('the store creates schema 4, upgrades schema 2 and 3 one step at a time keeping the frozen totals, and refuses a newer one', async t => {
@@ -1744,7 +1914,7 @@ test('the store creates schema 4, upgrades schema 2 and 3 one step at a time kee
   assert.deepEqual(await names(first.store.db), v4);
   assert.deepEqual((await first.store.db.prepare('SELECT * FROM meta').all()).results, [{ key: 'schema', value: 4 }]);
   assert.deepEqual(await settings(first.store.db), { tz: 'UTC', tz_source: 'none', tz_epoch: '0', week_start: 'mon', week_source: 'auto', keep_days: '',
-    facts_since: '2026-10-20', legacy_until: '', v3_since: '', rv: '2', rolled_through: '', trimmed_before: '', rebuild: '', trimmed_size: '' },
+    facts_since: '2026-10-20', legacy_until: '', v3_since: '', rv: '2', rolled_through: '', trimmed_before: '', rebuild: '', trimmed_size: '', trim_to: '' },
   'rv went up with the purge at start');
   await first.close();
 

@@ -9,13 +9,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 // sqlite-d1.mjs hides node:sqlite's ExperimentalWarning before it loads node:sqlite.
-const { openDatabase } = await import('../../server/sqlite-d1.mjs');
+const { openDatabase, d1LimitError } = await import('../../server/sqlite-d1.mjs');
 const { openStore } = await import('../../server/store.mjs');
-const { ROLLUPS, BUCKETS, METRICS } = await import('../../server/rollups.mjs');
+const { ROLLUPS, BUCKETS, METRICS, rollStatements } = await import('../../server/rollups.mjs');
 const { validateBatch, CODES, ERRORS, SOURCES } = await import('../../server/schema.mjs');
 const { dayBounds } = await import('../../server/clock.mjs');
 
 const DAY_MS = 86400000;
+const ROLL = Object.fromEntries(Object.keys(ROLLUPS).map(table => [table, rollStatements(table)]));
 const GAMES = ['road-hopper', 'maze-dash', 'bubble-bop', 'tic-tac-toe', 'air-hockey', 'tank-splat'];
 const LEVELS = { 'road-hopper': ['L1', 'L2', 'L3'], 'maze-dash': ['L1', 'L2'], 'bubble-bop': ['w1-1', 'w1-2'], 'tic-tac-toe': ['local', 'cpu'],
   'air-hockey': ['duo', 'solo'], 'tank-splat': ['endless'] };
@@ -375,7 +376,7 @@ for (const { zone, day, label } of [{ zone: 'Asia/Riyadh', day: '2026-10-20', la
     // The KPIs from the facts, before the roll.
     const query = { from: day, to: day, band: null }, at = (hi + 2 * 3600) * 1000;
     const before = await store.kpis(query, at);
-    assert.deepEqual(await store.rollupStep(at), { rolled: day, kind: 'first', voted: null, purged: null });
+    assert.deepEqual(await store.rollupStep(at), { rolled: day, kind: 'first', voted: null, purged: null, deleted: null });
     const expected = await oracle(db, zone, day), got = await rolled(db, day);
     covers(expected);
     for (const table of Object.keys(ROLLUPS)) assert.deepEqual(got[table], expected[table], table);
@@ -401,17 +402,20 @@ for (const { zone, day, label } of [{ zone: 'Asia/Riyadh', day: '2026-10-20', la
     assert.deepEqual((await db.prepare('SELECT dirty FROM roll_days').all()).results, [{ dirty: 1 }]);
     // At most once an hour: an hour after the roll, the diff re-roll.
     assert.equal((await store.rollupStep(at + 1800000)).rolled, null);
-    assert.deepEqual(await store.rollupStep(at + 3700000), { rolled: day, kind: 'diff', voted: null, purged: null });
+    assert.deepEqual(await store.rollupStep(at + 3700000), { rolled: day, kind: 'diff', voted: null, purged: null, deleted: null });
     const after = await oracle(db, zone, day), diffed = await rolled(db, day);
-    for (const table of Object.keys(ROLLUPS)) {
-      assert.deepEqual(table === 'r_stat' ? diffed[table].filter(r => r.n > 0) : diffed[table], after[table], 'after the diff: ' + table);
-    }
-    const zeros = diffed.r_stat.filter(r => r.n === 0);
-    assert.ok(zeros.length > 0 && zeros.every(r => ROLLUPS.r_stat.sums.every(c => r[c] === 0)), 'rows that lost their facts are zero');
-    // A full re-roll (a recount) rebuilds the day exactly.
+    // The diff leaves the day exactly as a fresh roll: the r_stat rows whose facts moved to another bucket are gone.
+    const key = r => [r.a, r.metric, r.slug, r.k1, r.k2].join(' '), now = new Set(after.r_stat.map(key));
+    assert.ok(got.r_stat.some(r => !now.has(key(r))), 'late data moved rows into other buckets');
+    for (const table of Object.keys(ROLLUPS)) assert.deepEqual(diffed[table], after[table], 'after the diff: ' + table);
+    // A full re-roll (after a change of zone) and a recount rebuild the day exactly.
     await db.prepare('UPDATE roll_days SET dirty = 2').run();
     await db.prepare("UPDATE settings SET value = '1' WHERE key = 'rebuild'").run();
     assert.equal((await openStore(db).rollupStep(at + 3800000)).kind, 'full');
+    assert.deepEqual(await rolled(db, day), after);
+    await db.prepare('UPDATE roll_days SET dirty = 3').run();
+    await db.prepare("UPDATE settings SET value = '1' WHERE key = 'rebuild'").run();
+    assert.equal((await openStore(db).rollupStep(at + 3900000)).kind, 'recount');
     assert.deepEqual(await rolled(db, day), after);
   });
 }
@@ -439,5 +443,26 @@ test('a roll reads only the facts of its day, by index: on a busy day (500 sessi
     const plan = db.sqlite.prepare('EXPLAIN QUERY PLAN ' + text).all(...params).map(step => step.detail);
     for (const step of plan) assert.doesNotMatch(step, /^SCAN (?:st_|r_)/, text.slice(0, 80) + '\n' + plan.join('\n'));
   }
-  assert.equal(checked, Object.keys(ROLLUPS).length * 2, 'the first roll and the diff of every table');
+  // The first roll and the diff of every table, and the prune of each school-wide one.
+  assert.equal(checked, Object.keys(ROLLUPS).length * 2 + Object.values(ROLL).filter(r => r.prune).length);
+});
+
+test('the driver refuses what D1 refuses (a sixth compound term, a 33rd function argument, a 101st parameter), and every roll statement fits', async () => {
+  const db = openDatabase(':memory:');
+  const terms = n => Array.from({ length: n }, (_, i) => 'SELECT ' + i + ' AS x').join(' UNION ALL ');
+  assert.equal((await db.prepare(terms(5)).all()).results.length, 5);
+  await assert.rejects(db.prepare(terms(6)).all(), /too many terms in compound SELECT/);
+  // Nested compounds are counted one by one, as SQLite does.
+  assert.equal((await db.prepare(`SELECT * FROM (${terms(5)}) UNION ALL SELECT * FROM (${terms(5)})`).all()).results.length, 10);
+  const list = n => Array.from({ length: n }, (_, i) => String(i)).join(', ');
+  assert.equal((await db.prepare(`SELECT json_array(${list(32)}) AS a`).first('a')).split(',').length, 32);
+  await assert.rejects(db.prepare(`SELECT json_array(${list(33)}) AS a`).all(), /too many arguments on function json_array/);
+  await assert.rejects(db.prepare("SELECT printf('%s', " + list(32) + ') AS a').all(), /too many arguments on function printf/);
+  // An IN list, a column list and a VALUES row are no function calls; text in quotes is no SQL.
+  assert.equal((await db.prepare(`SELECT 1 AS a WHERE 5 IN (${list(40)}) AND 'json_array(${list(40)})' <> ''`).first('a')), 1);
+  await assert.rejects(db.prepare('SELECT ?101 AS a').bind(...Array(101).fill(1)).all(), /too many SQL variables/);
+  for (const table of Object.keys(ROLLUPS)) {
+    for (const [kind, text] of Object.entries(rollStatements(table))) if (text) assert.equal(d1LimitError(text), null, table + ' ' + kind);
+  }
+  db.close();
 });

@@ -119,7 +119,7 @@ export function createApp(options = {}) {
       if (result.sessions || result.rows || result.batches) {
         log(`telemetry: purged ${result.sessions} sessions before ${result.cutoff}, ${result.rows} frozen daily rows and ${result.batches} old batch ids`);
       }
-      if (result.trimmed) log(`telemetry: the database is near its size limit: removed the round details before ${result.trimmed.before}`);
+      if (result.trimmed) log(`telemetry: the database is near its size limit: removing the round details before ${result.trimmed.to}`);
       return result;
     } catch (error) {
       log('telemetry: purge failed: ' + error.message);
