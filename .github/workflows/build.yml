@@ -233,6 +233,23 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Check that the telemetry server accepts wire version 3
+        # The portal sends wire version 3. A server that does not accept it answers those
+        # batches with 400, and the PCs drop them for good, so the site is published only
+        # once the server's /v1/health says it accepts 3 (docs/TELEMETRY.md "Turning it on";
+        # deploy server/ first, server/README.md).
+        timeout-minutes: 3
+        env:
+          SG_TELEMETRY_URL: ${{ vars.SG_TELEMETRY_URL || 'https://school-games-telemetry.services-agreement137.workers.dev/v1/batch' }}
+        run: |
+          curl -fsS --retry 3 --max-time 20 "${SG_TELEMETRY_URL%/v1/batch}/v1/health" -o health.json
+          node -e '
+            const a = JSON.parse(require("fs").readFileSync("health.json", "utf8")).accepts;
+            if (!Array.isArray(a) || !a.includes(3)) {
+              console.error("The telemetry server does not accept wire version 3 yet; deploy server/ first (server/README.md).");
+              process.exit(1);
+            }
+            console.log("The telemetry server accepts wire versions " + a.join(", ") + ".");'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
