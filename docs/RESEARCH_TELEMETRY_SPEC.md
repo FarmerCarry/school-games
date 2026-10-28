@@ -169,6 +169,8 @@ About 20 children share each lab PC, so a 12-profile cap pushes most of them int
 
 The owner decided against player cards, for good. Nothing of them is built or kept: a student code is always a profile's 12 hex digits (`U_RE` above), there is no `cards` table and no `/v1/admin/cards` route, and `kind` is always `profile`. A child who plays on two PCs is joined by the teacher-page transfer (§A.8) or the owner link (§A.9).
 
+Dropped by the owner (open question 4: no): the card codes (`c` plus 4 hex digits, and their five-character labels), the picture grid and the 🎴 label, the `cards` table, `GET` and `POST /v1/admin/cards`, the printed sheets, and the card-first eviction. Earlier mentions of them in this spec are gone; this section is the record.
+
 ### A.11 Deleting a student on the server [S]
 
 `POST /v1/admin/forget {u}` removes:
@@ -1151,7 +1153,7 @@ An older server refuses a schema-4 database. A roll back therefore means either 
 | Storage above 425 MB drops the oldest round details | The banner advises a research download each term |
 | Excel's row limit | Rounds split by month; R or SPSS for the full table |
 | Public ingest: forged batches with invented codes (an old risk, now more visible) | The Origin check stops browsers only; documented; forget and recount exist |
-| Children's experience changes (idle hand-over, 24 animals) | The owner's yes (open questions 1 and 2) |
+| Children's experience changes (idle hand-over, 24 animals) | The owner's yes (open questions 1 and 2); player cards: the owner's no (open question 4, §A.10) |
 | Per-student pages misused to rank children | No ranks or medals; neutral, supportive copy; no negative sentences about one child |
 
 ---

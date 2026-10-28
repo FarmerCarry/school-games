@@ -425,6 +425,17 @@ test('docs/RESEARCH_DATA.md is the dictionary\'s own output (rebuild: node serve
   for (const f of D.FILES) assert.ok(D.markdown().includes('### `' + f.file + '.csv`'), f.file);
 });
 
+test('no player-card leftovers in the dashboard or the research data doc (the owner said no, for good)', () => {
+  // "card" alone is the dashboard's own layout word (a chart card, a game card); these are the player cards.
+  const CARDS = /🎴|player.?cards?|card codes?|\/v1\/admin\/cards|kind\s*[:=]+\s*['"]card['"]|['"]card['"]\s*\]|(?<![#0-9a-z])c[0-9a-f]{4}(?![0-9a-z])/i;
+  const files = fs.readdirSync(dashboard).filter(f => /\.(js|mjs|html|css|md)$/.test(f)).map(f => path.join(dashboard, f))
+    .concat([path.join(repo, 'docs/RESEARCH_DATA.md')]);
+  for (const file of files) {
+    const hit = fs.readFileSync(file, 'utf8').split('\n').findIndex(line => CARDS.test(line));
+    assert.equal(hit, -1, path.relative(repo, file) + (hit >= 0 ? ':' + (hit + 1) : ''));
+  }
+});
+
 test('the browser\'s files: games.csv, dictionary.csv, README.txt in both languages, labels.sps and load.R', () => {
   const parse = text => text.trim().split('\n').map(line => {
     const cells = [];
