@@ -309,19 +309,29 @@ function statSelect(scope) {
     (derived ? ` FROM ${derived}${where}` : ` FROM ${from} WHERE ${within(scope)}${where}`) + ' GROUP BY 1, 2, 3, 4, 5, 6'));
 }
 
+// The school-wide rollups (and r_stat), whose rows can lose every fact behind them: after a
+// forget, or (r_stat) when late data moves a visit into another bucket or gives a round a
+// next one. A row of theirs always has a count of at least 1 when it has facts, so a row
+// whose values are all zero has none. The per-student rollups lose rows only by a forget,
+// which deletes them itself.
+const PRUNED = new Set(['r_day', 'r_game_day', 'r_level_day', 'r_source_day', 'r_device_day', 'r_pc_day', 'r_stat']);
+
 // The statements that roll one day (DAY_SCOPE's parameters), per rollup:
 // insert: the first roll, or a full re-roll after `clear`; diff: an upsert that writes
-// only the rows that changed. A diff of r_stat also sets the day's rows that no longer
-// have facts (a visit grew into another bucket, a round got a next one) to zero.
+// only the rows that changed (late data, a recount after a forget or a link), then prune.
+// The diff of a pruned table also sets the day's rows that no longer have facts to zero,
+// and prune deletes them, so a diff leaves the day as a fresh roll would at a few writes.
 export function rollStatements(table) {
-  const columns = columnsOf(table), keys = keysOf(table), values = valuesOf(table);
-  const select = rollupSelect(table, DAY_SCOPE);
+  const columns = columnsOf(table), keys = keysOf(table), values = valuesOf(table), text = new Set(ROLLUPS[table].text || []);
+  const select = rollupSelect(table, DAY_SCOPE), pruned = PRUNED.has(table);
   const insert = `INSERT INTO ${table} (${columns.join(', ')}) ${select}`;
-  const source = table === 'r_stat'
-    ? `SELECT ${keys.join(', ')}, ${values.map(c => `TOTAL(${c}) AS ${c}`).join(', ')} FROM (${select} UNION ALL SELECT ${keys.join(', ')}, ` +
-      `${values.map(() => '0').join(', ')} FROM r_stat WHERE day = ?1) GROUP BY ${positions(keys.length)}`
+  // The day's stored keys, without values (NULL): each value then adds up from the facts alone, or to 0 ('' for text).
+  const source = pruned
+    ? `SELECT ${keys.join(', ')}, ${values.map(c => `${outer(table, c)} AS ${c}`).join(', ')} FROM (${select} UNION ALL SELECT ${keys.join(', ')}, ` +
+      `${values.map(() => 'NULL').join(', ')} FROM ${table} WHERE day = ?1) GROUP BY ${positions(keys.length)}`
     : select;
   const diff = `INSERT INTO ${table} (${columns.join(', ')}) SELECT * FROM (${source}) WHERE true ON CONFLICT (${keys.join(', ')}) DO UPDATE SET ` +
     values.map(c => `${c} = excluded.${c}`).join(', ') + ` WHERE (${values.join(', ')}) IS NOT (${values.map(c => 'excluded.' + c).join(', ')})`;
-  return { insert, diff, clear: `DELETE FROM ${table} WHERE day = ?1` };
+  const prune = pruned ? `DELETE FROM ${table} WHERE day = ?1 AND (${values.join(', ')}) = (${values.map(c => text.has(c) ? "''" : '0').join(', ')})` : null;
+  return { insert, diff, prune, clear: `DELETE FROM ${table} WHERE day = ?1` };
 }

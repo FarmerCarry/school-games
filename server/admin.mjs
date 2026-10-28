@@ -261,9 +261,11 @@ const LINK = [`UPDATE aliases SET u_new = ${TARGET} WHERE u_new = ?1 AND ${TARGE
   `INSERT INTO aliases (u_old, u_new, s, how) SELECT ?1, ${TARGET}, ?3, 'owner' WHERE ${TARGET} <> ?1 ` +
     'ON CONFLICT (u_old) DO UPDATE SET u_new = excluded.u_new, s = excluded.s, how = excluded.how'];
 const UNLINK = 'DELETE FROM aliases WHERE u_old = ?1';
-// Recount: every rolled day since facts_since (and not trimmed) waits for a full rebuild;
-// then the days waiting.
-const RECOUNT = ["UPDATE roll_days SET dirty = 2 WHERE day >= (SELECT MAX(value) FROM settings WHERE key IN ('facts_since', 'trimmed_before')) AND dirty <> 2",
+// Recount: every rolled day since facts_since (and not trimmed) waits for a recount (dirty
+// 3: a diff re-roll, which writes only the rows that changed, so a recount after a forget
+// costs a few hundred rows a day, not the day's every row twice), unless it already waits
+// for a full re-roll; then the days waiting.
+const RECOUNT = ["UPDATE roll_days SET dirty = 3 WHERE day >= (SELECT MAX(value) FROM settings WHERE key IN ('facts_since', 'trimmed_before')) AND dirty < 2",
   "INSERT INTO settings (key, value) VALUES ('rebuild', '1') ON CONFLICT (key) DO UPDATE SET value = excluded.value",
   "SELECT COUNT(*) AS n FROM roll_days WHERE dirty > 0 AND day >= (SELECT value FROM settings WHERE key = 'facts_since')"];
 
@@ -625,8 +627,9 @@ export function adminViews(ctx) {
     return answer(now, { ok: removed.meta.changes > 0 });
   }
 
-  // POST /v1/admin/rebuild {}: every rolled day since facts_since (not trimmed) is rebuilt
-  // by the 5-minute cron, newest first; answers the days waiting.
+  // POST /v1/admin/rebuild {}: every rolled day since facts_since (not trimmed) is counted
+  // again by the 5-minute cron, newest first, as far as each day's writes leave room;
+  // answers the days waiting.
   async function rebuild(now = Date.now()) {
     await ensure(now);
     const results = await run(RECOUNT.map(text => sql(text)), now);

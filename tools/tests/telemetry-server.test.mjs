@@ -13,7 +13,7 @@ const { hideSqliteWarning } = await import('../../server/warnings.mjs');
 hideSqliteWarning();
 const { createApp, MAX_BODY } = await import('../../server/app.mjs');
 const { EVENTS, EVENTS_V3, validateBatch } = await import('../../server/schema.mjs');
-const { TABLES, SCHEMA_VERSION, openStore } = await import('../../server/store.mjs');
+const { ROLLUPS, TABLES, SCHEMA_VERSION, openStore } = await import('../../server/store.mjs');
 const { openDatabase } = await import('../../server/sqlite-d1.mjs');
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -546,7 +546,7 @@ const AGG_LEVELS = ['sessions', 'starts', 'ends', ...CODES5, 'ms', 'tier_sum', '
 const AGG_DEVICES = ['sessions', ...list('f', 4), ...list('il', 6), 'loads', 'load_ms'];
 const COLUMNS = {
   meta: ['key', 'value'], batches: ['b', 'day'], kpi_cache: ['key', 'made', 'rows'], settings: ['key', 'value'],
-  usage: ['day', 'reads', 'writes', 'rebuild_reads', 'export_reads', 'size'], roll_days: ['day', 'dirty', 'rolled_s'],
+  usage: ['day', 'reads', 'writes', 'rebuild_reads', 'export_reads', 'size'], roll_days: ['day', 'dirty', 'rolled_s', 'rows'],
   live: ['s', 'slug', 'seen_minute', 'u', 'p', 'wire'],
   st_pcs: ['p', 'first_s', 'last_s', 'z', 'cores', 'mem', 'screen', 'k'],
   st_students: ['u', 'label', 'first_s', 'last_s', 'band_first', 'band_last', 'age_days_first', 'removed_s'],
@@ -996,7 +996,7 @@ test('KPIs are exact for a hand-built dataset, and every group is shown with its
   // Once both days are rolled up (the cron, after 01:00 the next day), the answer is the same, from the rollups.
   const before = (await s.admin('/v1/admin/kpis?from=2026-10-20&to=2026-10-21')).json();
   s.clock.now = Date.parse('2026-10-22T01:30:00Z');
-  assert.deepEqual(await s.app.roll(), { rolled: '2026-10-20', kind: 'first', voted: null, purged: null });
+  assert.deepEqual(await s.app.roll(), { rolled: '2026-10-20', kind: 'first', voted: null, purged: null, deleted: null });
   assert.deepEqual((await s.app.roll()).rolled, '2026-10-21');
   assert.deepEqual((await s.rows('r_day', 'day, a')).map(r => [r.day, r.a, r.sessions]), [['2026-10-20', '6-7', 3], ['2026-10-21', '10-11', 1]]);
   const after = (await s.admin('/v1/admin/kpis?from=2026-10-20&to=2026-10-21')).json();
@@ -1341,11 +1341,21 @@ test('forget removes a student\'s group of codes with their facts and per-studen
   assert.equal((await s.admin(`/v1/admin/student?u=${U2}&from=2026-10-19&to=2026-10-20`)).status, 404);
   // Again: nothing left to remove.
   assert.deepEqual((await call(s, 'POST', '/v1/admin/forget', { u: U2 })).json().removed, { codes: 0, sessions: 0, visits: 0, rounds: 0, marks: 0 });
-  // A recount rebuilds the days without the student.
+  // A recount counts the days again without the student, writing only the rows that change.
   assert.deepEqual((await call(s, 'POST', '/v1/admin/rebuild', {})).json(), { v: 1, pending: 2, clock: UTC_CLOCK('2026-10-21') });
-  assert.deepEqual((await s.rows('roll_days', 'day')).map(r => r.dirty), [2, 2]);
-  assert.deepEqual([(await s.app.roll()).kind, (await s.app.roll()).kind, (await s.app.roll()).rolled], ['full', 'full', null]);
+  assert.deepEqual((await s.rows('roll_days', 'day')).map(r => r.dirty), [3, 3]);
+  const rollups = async () => Object.fromEntries(await Promise.all(Object.keys(ROLLUPS).map(async table => [table, await s.rows(table)])));
+  const stale = await rollups();
+  assert.deepEqual([(await s.app.roll()).kind, (await s.app.roll()).kind, (await s.app.roll()).rolled], ['recount', 'recount', null]);
   assert.equal((await kpis()).totals.sessions, before.totals.sessions - 2);
+  // The rollups are then exactly what a first roll of the remaining facts makes: rows that only the student had are gone.
+  const recounted = await rollups();
+  await s.app.store.db.batch(Object.keys(ROLLUPS).map(table => s.app.store.db.prepare(`DELETE FROM ${table}`)).concat(s.app.store.db.prepare('DELETE FROM roll_days'),
+    s.app.store.db.prepare("UPDATE settings SET value = '' WHERE key = 'rolled_through'")));
+  const fresh = openStore(s.app.store.db);
+  assert.deepEqual([(await fresh.rollupStep(s.clock.now)).kind, (await fresh.rollupStep(s.clock.now)).kind], ['first', 'first']);
+  assert.deepEqual(await rollups(), recounted);
+  assert.ok(Object.keys(ROLLUPS).some(table => stale[table].length > recounted[table].length), 'some rows had only the forgotten student');
 });
 
 test('forget leaves no mark that names the code: an older code whose link was undone goes from the other student\'s session too', async t => {
@@ -1655,7 +1665,7 @@ test('retention: facts after 400 days (or the owner\'s choice), rollups after 80
   assert.equal((await idle()).purged, null, 'exactly 800 days old is kept');
   assert.equal((await s.rows('r_day')).length, 2);
   s.clock.now += DAY_MS;
-  assert.equal((await idle()).purged, '2026-01-02');
+  assert.equal((await idle()).purged, '2026-01-01', 'the rollups of the oldest day go');
   assert.deepEqual((await s.rows('r_day')).map(r => r.day), ['2026-01-02']);
   assert.equal((await s.rows('roll_days', 'day'))[0].day, '2026-01-02');
 
@@ -1701,31 +1711,82 @@ test('retention: facts after 400 days (or the owner\'s choice), rollups after 80
   assert.equal(await legacyUntil(), '');
 });
 
-test('the storage guard removes the round details of the oldest 30 days of facts, and again only once the database grows', async () => {
+test('a shorter retention deletes the old facts a few hundred sessions a run, the 5-minute cron catching up, never a year at once', async () => {
+  const db = openDatabase(':memory:'), day0 = Date.parse('2026-01-05T09:00:00Z'), store = openStore(db);
+  // 500 sessions on each of three days.
+  for (let d = 0; d < 3; d++) {
+    for (let i = 0; i < 500; i++) {
+      await store.ingest(validateBatch(envelope3('e3' + String(d * 1000 + i).padStart(10, '0'), [['ss', 0, 0, 3, 1, 2, 4, 0],
+        ['go', 1, 1, 'road-hopper', 'catalog', 0, 0], ['rs', 2, 1, 1, 'road-hopper', 'L1', 1, 0],
+        ['re', 30, 1, 1, 'road-hopper', 'w', 'L1', 20000, 10, 1, 3, 1, z6, null], ['gx', 31, 1, 'road-hopper', 29000, z6, z4]], { z: '' })), day0 + d * DAY_MS + i * 1000);
+    }
+  }
+  // 500 days later, with the default 400 days, all of it is past retention; every day is rolled.
+  let at = day0 + 500 * DAY_MS;
+  await db.prepare("UPDATE settings SET value = ?1 WHERE key = 'rolled_through'").bind(new Date(at - DAY_MS).toISOString().slice(0, 10)).run();
+  const batch = db.batch.bind(db);
+  let most = 0, total = 0;
+  db.batch = async list => {
+    const results = await batch(list), n = results.reduce((x, r) => x + r.meta.rows_written, 0);
+    most = Math.max(most, n);
+    total += n;
+    return results;
+  };
+  const sessions = async () => (await db.prepare('SELECT COUNT(*) AS n FROM st_sessions').first()).n;
+  const since = async () => (await db.prepare("SELECT value FROM settings WHERE key = 'facts_since'").first()).value;
+  assert.equal((await store.purge(at)).sessions, 600, 'the purge deletes 600 sessions');
+  const steps = [[await sessions(), await since()]];
+  for (let i = 0; i < 3; i++) {
+    const done = await store.rollupStep(at += 300000);
+    steps.push([await sessions(), await since(), done.deleted]);
+  }
+  // facts_since follows: a day whose facts are partly gone is before it.
+  assert.deepEqual(steps, [[900, '2026-01-07'], [300, '2026-01-08', 'facts'], [0, '2026-04-15', 'facts'], [0, '2026-04-15', null]]);
+  assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM st_rounds').first('n'), 0);
+  assert.ok(most <= 600 * 25 && total > 2 * most, `at most ${most} of ${total} rows written in one batch`);
+});
+
+test('the storage guard removes the round details of the oldest 30 days of facts, a few hundred sessions a run, and again only once the database grows', async () => {
   const db = openDatabase(':memory:'), day0 = Date.parse('2026-01-05T09:00:00Z');
   const store = openStore(db, { guards: { bytes: 1 } });
   const round = (s, at) => store.ingest(validateBatch(envelope3(s, [['ss', 0, 0, 3, 1, 2, 4, 0], ['go', 1, 1, 'road-hopper', 'catalog', 0, 0],
     ['rs', 2, 1, 1, 'road-hopper', 'L1', 1, 0], ['re', 30, 1, 1, 'road-hopper', 'w', 'L1', 20000, 10, 1, 3, 1, z6, null]], { z: '' })), at);
-  // A session every 10 days for 100 days.
+  // A session every 10 days for 100 days, and 900 sessions on day 20.
   for (let i = 0; i < 10; i++) await round('e0000000000' + i, day0 + i * 10 * DAY_MS);
+  for (let i = 0; i < 900; i++) await round('e2' + String(i).padStart(10, '0'), day0 + 20 * DAY_MS + 3600000 + i * 1000);
   const settings = async () => Object.fromEntries((await db.prepare('SELECT key, value FROM settings').all()).results.map(r => [r.key, r.value]));
-  const left = async () => (await db.prepare('SELECT s.s FROM st_rounds r JOIN st_sessions s ON s.id = r.sid ORDER BY s.start_s').all()).results.map(r => r.s);
-  let result = await store.purge(day0 + 100 * DAY_MS);
-  assert.deepEqual(result.trimmed, { before: '2026-02-04', rounds: 3 });
+  const left = async () => (await db.prepare('SELECT s.s FROM st_rounds r JOIN st_sessions s ON s.id = r.sid WHERE s.s LIKE ? ORDER BY s.start_s').bind('e0%').all()).results.map(r => r.s);
+  const rounds = async () => (await db.prepare('SELECT COUNT(*) AS n FROM st_rounds').first()).n;
+  // The purge marks the 30 days to trim; the 5-minute cron trims them once it has nothing to roll, at most 800 sessions a run.
+  let at = day0 + 100 * DAY_MS;
+  while ((await store.rollupStep(at)).rolled) at += 1000;
+  const result = await store.purge(at);
+  assert.deepEqual(result.trimmed, { to: '2026-02-04' });
+  assert.equal(await rounds(), 910, 'nothing is deleted at once');
+  const steps = [];
+  for (let i = 0; i < 5; i++) {
+    const before = await rounds(), done = await store.rollupStep(at += 300000);
+    steps.push([done.deleted, before - await rounds(), (await settings()).trimmed_before]);
+  }
+  assert.deepEqual(steps, [['rounds', 800, '2026-01-26'], ['rounds', 103, '2026-02-04'], [null, 0, '2026-02-04'], [null, 0, '2026-02-04'], [null, 0, '2026-02-04']]);
   assert.deepEqual(await left(), ['e00000000003', 'e00000000004', 'e00000000005', 'e00000000006', 'e00000000007', 'e00000000008', 'e00000000009']);
-  assert.equal((await settings()).trimmed_before, '2026-02-04');
-  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM st_sessions').first()).n, 10, 'sessions and visits stay');
+  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM st_sessions').first()).n, 910, 'sessions and visits stay');
   // SQLite reuses the freed pages: the next purge waits until the file has grown.
-  result = await store.purge(day0 + 101 * DAY_MS);
-  assert.equal(result.trimmed, null);
+  assert.equal((await store.purge(day0 + 101 * DAY_MS)).trimmed, null);
   for (let i = 0; i < 300; i++) await round('e1' + String(i).padStart(10, '0'), day0 + 100 * DAY_MS + i * 1000);
-  result = await store.purge(day0 + 102 * DAY_MS);
-  assert.deepEqual(result.trimmed, { before: '2026-03-06', rounds: 3 });
+  assert.deepEqual((await store.purge(day0 + 102 * DAY_MS)).trimmed, { to: '2026-03-06' });
+  // The days since the last purge are rolled first; the first run with nothing to roll trims.
+  at = day0 + 102 * DAY_MS;
+  let done;
+  do done = await store.rollupStep(at += 1000); while (done.rolled);
+  assert.equal(done.deleted, 'rounds');
+  assert.equal((await settings()).trimmed_before, '2026-03-06');
+  assert.deepEqual(await left(), ['e00000000006', 'e00000000007', 'e00000000008', 'e00000000009']);
   // A change of zone does not re-roll the days without round details.
-  await db.batch([db.prepare("INSERT INTO roll_days (day, dirty, rolled_s) VALUES ('2026-01-15', 0, 1), ('2026-03-06', 0, 1), ('2026-03-07', 0, 1)")]);
-  await store.updateSettings({ tz: 'Asia/Riyadh' }, day0 + 102 * DAY_MS);
-  assert.deepEqual((await db.prepare('SELECT day, dirty FROM roll_days ORDER BY day').all()).results.map(r => [r.day, r.dirty]),
-    [['2026-01-15', 0], ['2026-03-06', 2], ['2026-03-07', 2]]);
+  await store.updateSettings({ tz: 'Asia/Riyadh' }, at);
+  const days = (await db.prepare('SELECT day, dirty FROM roll_days ORDER BY day').all()).results;
+  assert.ok(days.length > 90 && days.some(r => r.day < '2026-03-06'));
+  assert.deepEqual(days.filter(r => r.dirty !== (r.day >= '2026-03-06' ? 2 : 0)), []);
 });
 
 test('the store creates schema 4, upgrades schema 2 and 3 one step at a time keeping the frozen totals, and refuses a newer one', async t => {
@@ -1744,7 +1805,7 @@ test('the store creates schema 4, upgrades schema 2 and 3 one step at a time kee
   assert.deepEqual(await names(first.store.db), v4);
   assert.deepEqual((await first.store.db.prepare('SELECT * FROM meta').all()).results, [{ key: 'schema', value: 4 }]);
   assert.deepEqual(await settings(first.store.db), { tz: 'UTC', tz_source: 'none', tz_epoch: '0', week_start: 'mon', week_source: 'auto', keep_days: '',
-    facts_since: '2026-10-20', legacy_until: '', v3_since: '', rv: '2', rolled_through: '', trimmed_before: '', rebuild: '', trimmed_size: '' },
+    facts_since: '2026-10-20', legacy_until: '', v3_since: '', rv: '2', rolled_through: '', trimmed_before: '', rebuild: '', trimmed_size: '', trim_to: '' },
   'rv went up with the purge at start');
   await first.close();
 

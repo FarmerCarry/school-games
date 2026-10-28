@@ -531,7 +531,7 @@ test('the usage meter adds up the rows of every result and writes them once a mi
   let flushes = 0, flushed = 0;
   env.DB.batch = async statements => {
     const results = await batch(statements);
-    // A flush writes the counts of the batches before it (its own are metered after it ran).
+    // A flush writes the counts of the batches before it (and the cron's last one its own rows too).
     if (statements.some(st => st.sql.startsWith('INSERT INTO usage'))) { flushes++; flushed = sums.length; }
     sums.push([results.reduce((n, r) => n + r.meta.rows_written, 0), results.reduce((n, r) => n + r.meta.rows_read, 0)]);
     return results;
@@ -543,12 +543,73 @@ test('the usage meter adds up the rows of every result and writes them once a mi
   assert.equal(flushes, 1, 'once in the first minute');
   clock.now = START + 5 * 60000;
   await scheduled(env, '*/5 * * * *');
-  assert.equal(flushes, 2);
-  // Every batch before the last flush is in the table; the later ones wait for the next.
+  assert.equal(flushes, 3, 'the cron writes the counts first, and its own last: a cron in a new instance still counts');
+  // Every batch is in the table, the cron's own and its last flush (which counts its own rows) included.
   const [usage] = await rows(env, 'usage');
-  const total = i => sums.slice(0, flushed).reduce((n, s) => n + s[i], 0);
+  const total = i => sums.slice(0, flushed + 1).reduce((n, s) => n + s[i], 0);
   assert.deepEqual([usage.day, usage.writes, usage.reads], ['2026-10-20', total(0), total(1)]);
   assert.ok(usage.size > 0);
+});
+
+// A school's last days (simulate.mjs), each rolled by the cron the next night (the last one
+// too); and a counter of the rows D1 itself writes per UTC day.
+async function rolledSchool({ days = 5, sessions = 60, now = Date.parse('2026-10-22T09:30:00Z') } = {}) {
+  const { schoolDays } = await import('../../server/simulate.mjs');
+  const db = openDatabase(':memory:'), store = openStore(db), written = new Map(), batch = db.batch.bind(db);
+  db.batch = async list => {
+    const results = await batch(list), day = new Date(Date.now()).toISOString().slice(0, 10);
+    written.set(day, (written.get(day) || 0) + results.reduce((n, r) => n + r.meta.rows_written, 0));
+    return results;
+  };
+  for (const day of schoolDays({ days, sessions, seed: 5, now })) {
+    for (const { batch: b, now: at } of day.batches) await store.ingest(validateBatch(b), at);
+    const night = Date.parse(day.day + 'T00:00:00Z') - 3 * 3600000 + DAY_MS + 65 * 60000;
+    for (let i = 0; i < 40 && (await store.rollupStep(night + i * 300000)).rolled; i++);
+  }
+  return { db, written };
+}
+// The cron every 5 minutes of a UTC day, each run a new instance (nothing in memory): the kinds of re-roll it made (first rolls aside).
+async function cronDay(t, db, day, guards) {
+  const clock = useClock(t), kinds = [];
+  for (let at = Date.parse(day + 'T00:00:00Z'); at < Date.parse(day + 'T00:00:00Z') + DAY_MS; at += 300000) {
+    clock.now = at;
+    const done = await openStore(db, { guards }).rollupStep(at);
+    if (done.kind && done.kind !== 'first') kinds.push(done.kind);
+  }
+  t.mock.restoreAll();
+  return kinds;
+}
+
+test('the cron writes its own usage even when every run is a new instance, and starts a re-roll only with room left for the school day', async t => {
+  const { db, written } = await rolledSchool();
+  const rolls = (await db.prepare('SELECT day, rows FROM roll_days ORDER BY day').all()).results;
+  assert.ok(rolls.length >= 3 && rolls.every(r => r.rows > 500), JSON.stringify(rolls));
+  // Room for one full re-roll (estimated at twice the day's rows) above the reserve for the school day, not two.
+  const most = Math.max(...rolls.map(r => r.rows)), guards = { rollWrites: 50000 + 3 * most, reserveWrites: 50000 };
+  // The owner moves the clock: every rolled day waits for a full re-roll.
+  await openStore(db).updateSettings({ tz: 'Asia/Dubai' }, Date.parse('2026-10-22T23:00:00Z'));
+  const usage = async day => (await db.prepare('SELECT writes FROM usage WHERE day = ?1').bind(day).first())?.writes ?? 0;
+  assert.deepEqual(await cronDay(t, db, '2026-10-23', guards), ['full']);
+  // What the guards read is what D1 wrote, the crons' own rows included.
+  assert.equal(await usage('2026-10-23'), written.get('2026-10-23'));
+  assert.deepEqual(await cronDay(t, db, '2026-10-24', guards), ['full']);
+  assert.equal(await usage('2026-10-24'), written.get('2026-10-24'));
+  assert.ok(written.get('2026-10-24') <= guards.rollWrites - guards.reserveWrites, written.get('2026-10-24') + ' rows written');
+});
+
+test('a recount re-rolls every day with the diff, writing only what changed, so it finishes in a night', async t => {
+  const { db, written } = await rolledSchool();
+  const store = openStore(db), now = Date.parse('2026-10-22T23:00:00Z');
+  const rolls = (await db.prepare('SELECT day, rows FROM roll_days ORDER BY day').all()).results;
+  const u = (await db.prepare("SELECT u FROM st_sessions WHERE u <> '' GROUP BY u ORDER BY COUNT(*) DESC LIMIT 1").first()).u;
+  await store.forget({ u }, now);
+  assert.equal((await store.rebuild(now)).pending, rolls.length);
+  const kinds = await cronDay(t, db, '2026-10-23', {});
+  assert.deepEqual(kinds, rolls.map(() => 'recount'));
+  assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM roll_days WHERE dirty > 0').first()).n, 0);
+  // A full re-roll of every day would write each day's rows twice.
+  const full = 2 * rolls.reduce((n, r) => n + r.rows, 0);
+  assert.ok(written.get('2026-10-23') < full / 5, `${written.get('2026-10-23')} rows written, against ${full} for full re-rolls`);
 });
 
 // The earlier stores, from Git (CI checkouts without history skip these comparisons), with
