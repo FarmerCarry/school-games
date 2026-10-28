@@ -104,9 +104,11 @@ async function setup(t, { telemetry = ON, copy = telemetry, gpc = false, clock =
       if (d && d.type === 'sg:preferences') (window.prefs = window.prefs || []).push(d);
     });
     if (window.top !== window) return;
-    // Settled fetches, so a fake clock moves on only after the page has seen each answer.
+    // Settled fetches, so a fake clock moves on only after the page has seen each answer
+    // (and fetches, the ones started, to wait for every answer: inFlight below).
     const realFetch = window.fetch;
     window.fetch = function () {
+      window.fetches = (window.fetches || 0) + 1;
       const p = realFetch.apply(this, arguments), settled = () => { window.fetched = (window.fetched || 0) + 1; };
       p.then(settled, settled);
       return p;
@@ -166,6 +168,10 @@ async function until(check, label, ms = 20000) {
 const tm = (page, key) => page.evaluate(k => localStorage.getItem(k), key);
 const queue = async (page, url = INGEST) => JSON.parse(await tm(page, qKey(url)));
 const tmKeys = page => page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('sg:site:tm:')).sort());
+// Every request the page started has its answer. Moving a fake clock a minute on while one
+// is still on its way would send its batch again, as the sink does for a request a real
+// minute left unanswered.
+const inFlight = page => page.waitForFunction(() => (window.fetched || 0) === (window.fetches || 0));
 async function home(page) {
   await page.locator('#logo').click();
   await page.waitForFunction(() => document.body.className === 'route-home');
@@ -732,6 +738,7 @@ test('each player gets a new session: the old one ends after its game with why i
   // The class band for guests changes: later batches carry it.
   await page.evaluate(() => SGProfiles.setClassBand('10-11'));
   await page.evaluate(() => SGTelemetry.level(3));   // a stand-in event so something waits
+  await inFlight(page);
   await page.clock.fastForward(60000);
   await until(() => allEvents(state).some(ev => ev[0] === 'lv'), 'the batch after the band change');
 
@@ -1096,8 +1103,10 @@ test('the v3 events: profiles on the PC, classroom mode, tutorials, hearts, the 
   await until(() => allEvents(state).some(ev => ev[0] === 'gx'), 'air-hockey closing');
   // A hearted game opens; then nobody touches the PC for 20 minutes: the idle hand-over.
   await play(page, 'tic-tac-toe');
+  await inFlight(page);
   await page.clock.fastForward(20 * 60000 + 1000);
   await page.waitForFunction(() => document.body.className === 'route-home');
+  await inFlight(page);
   await page.clock.fastForward(60000);
   await until(() => bySession(batches(state)).size === 4 && allEvents(state).some(ev => ev[0] === 'se' && ev[3] === 'i'), 'the child\'s session end');
   const list = batches(state);
