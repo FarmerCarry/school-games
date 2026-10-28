@@ -287,6 +287,18 @@ test('the server\'s validator is here, and it agrees with this test on the contr
   assert.deepEqual([v2.wire, v2.envelope.u, v2.envelope.w, v2.dropped], [2, '', null, 0]);
 });
 
+// docs/RESEARCH_TELEMETRY_SPEC.md §G and §A.10: the codes make the data pseudonymous, so
+// nothing on the client side calls it, or the profiles, anonymous; and nothing is left of
+// the player cards the owner dropped for good.
+test('no client file calls the telemetry or the profiles anonymous, and nothing of player cards is left', () => {
+  const client = [...fs.readdirSync(path.join(repo, 'js')).map(f => 'js/' + f), ...fs.readdirSync(path.join(repo, 'shared')).filter(f => f.endsWith('.js')).map(f => 'shared/' + f)];
+  const lines = files => files.flatMap(file => fs.readFileSync(path.join(repo, file), 'utf8').split('\n').map((line, i) => [`${file}:${i + 1}`, line]));
+  for (const [where, line] of lines([...client, 'docs/TELEMETRY.md', 'docs/ARCHITECTURE.md', '.github/workflows/build.yml'])) {
+    assert.doesNotMatch(line.replace(/\bnot anonymous\b/gi, ''), /anonym|مجهول/i, where);
+  }
+  for (const [where, line] of lines([...client, 'docs/TELEMETRY.md'])) assert.doesNotMatch(line, /player.?cards?\b|\/cards\b|بطاق(?:ة|ات) (?:ال)?لاعب/i, where);
+});
+
 test('real rounds reach the ingest server as the contract says, with codes but nothing that could name a child or a PC', async t => {
   const state = await setup(t), { page } = state;
   await page.goto(origin + '/seed.html');
