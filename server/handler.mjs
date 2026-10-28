@@ -7,7 +7,7 @@
 // answered 503 with Retry-After (the portal sends the batch again). Admin reads answer 429
 // once the day's free reading allowance is nearly used, and the owner's actions once the
 // day's writes are (store.mjs, guard).
-import { JsonText } from './admin.mjs';
+import { JsonText, SENT } from './admin.mjs';
 import { isZone } from './clock.mjs';
 import { FILES } from './export.mjs';
 import { METRICS } from './rollups.mjs';
@@ -175,8 +175,11 @@ function settingsBody(body) {
   return { tz, source, weekStart, keepDays };
 }
 
-// An answer as JSON; a field that is JSON text already (admin.mjs JsonText) is written as it is.
+// An answer as JSON; one that is JSON text already (admin.mjs JsonText, or SENT), or a field
+// that is, is written as it is.
 export function serialize(body) {
+  if (body instanceof JsonText) return body.text;
+  if (body[SENT]) return body[SENT];
   if (!Object.values(body).some(value => value instanceof JsonText)) return JSON.stringify(body);
   return '{' + Object.entries(body).filter(([, value]) => value !== undefined)
     .map(([key, value]) => JSON.stringify(key) + ':' + (value instanceof JsonText ? value.text : JSON.stringify(value))).join(',') + '}';

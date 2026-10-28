@@ -269,10 +269,13 @@ const RECOUNT = ["UPDATE roll_days SET dirty = 3 WHERE day >= (SELECT MAX(value)
   "INSERT INTO settings (key, value) VALUES ('rebuild', '1') ON CONFLICT (key) DO UPDATE SET value = excluded.value",
   "SELECT COUNT(*) AS n FROM roll_days WHERE dirty > 0 AND day >= (SELECT value FROM settings WHERE key = 'facts_since')"];
 
-// A value that is already JSON text: the handler writes it into the answer as it is.
+// A value that is already JSON text: the handler writes it into the answer as it is (an
+// answer that is a JsonText is sent as it is). SENT: the JSON text of a whole answer object,
+// made with it.
 export class JsonText {
   constructor(text) { this.text = text; }
 }
+export const SENT = Symbol('sent');
 
 /* ------------------------------------------------------------ the views */
 // ctx: the store's helpers (store.mjs): sql, bound, run, ensure, conf (the settings as last

@@ -21,7 +21,7 @@ import { CODES, ERRORS, SOURCES, WIRES } from './schema.mjs';
 import { dayBounds, localDay, localParts, offsetMin, offsetsBetween, weekStartOf } from './clock.mjs';
 import { ARGS, F, IL, PLAYS, PROFILE_AGE, REPLAY, ROLLUPS, ROLLUP_TABLES, RT, SINCE_LAST, TABLES, jsonArray, rollStatements, rollupSelect,
   spanScope, unionAll } from './rollups.mjs';
-import { adminViews } from './admin.mjs';
+import { JsonText, SENT, adminViews } from './admin.mjs';
 import { exportPage } from './export.mjs';
 
 export { ROLLUPS, TABLES };
@@ -596,6 +596,8 @@ const KPI = {
 const GROUPS = Object.keys(KPI);
 const AT = Object.fromEntries(GROUPS.map(name => [name, Object.fromEntries(KPI[name].sums.map((c, i) => [c, i]))]));
 const D = AT.days, G = AT.games, L = AT.levels, S = AT.sources, V = AT.devices;
+const G_RT = RT.map(c => G[c]), G_IL = IL.map(c => G[c]), G_REPLAY = REPLAY.map(c => G[c]), G_PLAYS = PLAYS.map(c => G[c]);
+const G_ERRORS = ERRORS.map(kind => G['error_' + kind]), G_SOURCES = SOURCES.map(src => G['src_' + src]);
 // A statement's rows as one JSON text of arrays, in the order of `columns`: the Worker then
 // parses one string instead of making an object of every row (CPU it is billed for). A row
 // of more than 32 columns comes as an array of arrays (rollups.mjs jsonArray): flat() it.
@@ -608,27 +610,22 @@ function closedGroup(name, legacy) {
   const part = (from, days, mark) => `SELECT ${keys.map(c => c === 'part' ? `${mark} AS part` : c).join(', ')}, ` +
     sums.map(c => from === table && !frozen.has(c) ? `0 AS ${c}` : c).join(', ') + ` FROM ${from} WHERE day BETWEEN ${days} AND (?3 IS NULL OR a = ?3)`;
   const parts = [...(legacy ? [part(table, '?1 AND ?2', 0)] : []), part(rollup, '?4 AND ?5', 1)];
-  return asRows(`SELECT ${keys.join(', ')}, ${sums.map(c => `TOTAL(${c}) AS ${c}`).join(', ')} FROM (${parts.join(' UNION ALL ')}) GROUP BY ${keys.join(', ')}`,
-    [...keys, ...sums]);
+  return asRows(`SELECT ${keys.join(', ')}, ${sums.map(c => `CAST(TOTAL(${c}) AS INTEGER) AS ${c}`).join(', ')} FROM (${parts.join(' UNION ALL ')}) ` +
+    `GROUP BY ${keys.join(', ')}`, [...keys, ...sums]);
 }
 const CLOSED_GROUPS = [false, true].map(legacy => GROUPS.map(name => closedGroup(name, legacy)));
-// The same group over the days not rolled yet, from the facts: the UTC seconds [?1, ?2), band ?3.
-const openGroup = (name, scope) => asRows(`SELECT ${KPI[name].keys.map(c => c === 'part' ? '1 AS part' : c).join(', ')}, ` +
-  `${KPI[name].sums.map(c => `TOTAL(${c}) AS ${c}`).join(', ')} FROM (${rollupSelect(KPI[name].rollup, scope)}) WHERE ?3 IS NULL OR a = ?3 ` +
-  `GROUP BY ${KPI[name].keys.map((_, i) => i + 1).join(', ')}`, [...KPI[name].keys, ...KPI[name].sums]);
-// Per raw student code: its bands (each after ':', so that the unknown band '' is one too),
-// games, first play and profile start (UTC seconds: the first session's start less the
-// profile's age then; without a student row, the code's first session in the range). Over
-// the rolled days ?1..?2, or the facts of [?1, ?2); band ?3.
-const firsts = 'COALESCE(t.first_s, x.first) AS first, COALESCE(t.first_s - IFNULL(t.age_days_first, 0) * 86400, x.first) AS made';
-const STUDENT_COLUMNS = ['u', 'bands', 'games', 'first', 'made'];
-const CLOSED_STUDENTS = asRows(`SELECT x.u, x.bands, y.games, ${firsts} FROM (SELECT u, group_concat(DISTINCT ':' || a) AS bands, MIN(first_s) AS first ` +
-  'FROM r_student_day WHERE day BETWEEN ?1 AND ?2 AND (?3 IS NULL OR a = ?3) GROUP BY u) x LEFT JOIN (SELECT u, group_concat(DISTINCT slug) AS games ' +
-  'FROM r_student_game WHERE day BETWEEN ?1 AND ?2 AND (?3 IS NULL OR a = ?3) GROUP BY u) y ON y.u = x.u LEFT JOIN st_students t ON t.u = x.u', STUDENT_COLUMNS);
-const OPEN_STUDENTS = asRows(`SELECT x.u, x.bands, x.games, ${firsts} FROM (SELECT s.u, group_concat(DISTINCT ':' || s.a) AS bands, MIN(s.start_s) AS first, ` +
-  '(SELECT group_concat(DISTINCT v.slug) FROM st_sessions o JOIN st_visits v ON v.sid = o.id WHERE o.u = s.u AND o.start_s >= ?1 AND o.start_s < ?2 ' +
-  "AND (?3 IS NULL OR o.a = ?3)) AS games FROM st_sessions s WHERE s.start_s >= ?1 AND s.start_s < ?2 AND s.u <> '' AND (?3 IS NULL OR s.a = ?3) " +
-  'GROUP BY s.u) x LEFT JOIN st_students t ON t.u = x.u', STUDENT_COLUMNS);
+// A group of a whole answer: the closed part's rows (kept in kpi_cache under ?4) and the
+// group over the days not rolled yet from the facts (the UTC seconds [?1, ?2) of the scope;
+// none without one), band ?3, added up per key in SQL.
+const columnPath = (i, n) => n > ARGS ? `'$[${Math.floor(i / ARGS)}][${i % ARGS}]'` : `'$[${i}]'`;
+function mergedGroup(name, scope) {
+  const { keys, sums, rollup } = KPI[name], columns = [...keys, ...sums];
+  const parts = [`SELECT ${columns.map((c, i) => `value ->> ${columnPath(i, columns.length)} AS ${c}`).join(', ')} ` +
+    `FROM json_each((SELECT rows FROM kpi_cache WHERE key = ?4), '$.${name}')`];
+  if (scope) parts.push(`SELECT ${keys.map(c => c === 'part' ? '1 AS part' : c).join(', ')}, ${sums.join(', ')} FROM (${rollupSelect(rollup, scope)}) WHERE ?3 IS NULL OR a = ?3`);
+  return asRows(`SELECT ${keys.join(', ')}, ${sums.map(c => `CAST(TOTAL(${c}) AS INTEGER) AS ${c}`).join(', ')} FROM (${parts.join(' UNION ALL ')}) ` +
+    `GROUP BY ${keys.join(', ')}`, columns);
+}
 // The rest, as JSON: distinct students per day; the minutes of every student-day (by
 // canonical code) as counts per tenth of a minute, with their number and sum; the engaged
 // ms per day by kind of session (s a student, g a guest, u v2); and per PC (any band)
@@ -640,12 +637,14 @@ const extras = (studentDays, kinds, pcs) => `WITH sd AS MATERIALIZED (${studentD
   '(SELECT json_array(COUNT(*), TOTAL(m)) FROM sd) AS dose, ' +
   `(SELECT json_group_array(json_array(day, k2, ms)) FROM (${kinds})) AS kinds, ` +
   `(SELECT json_group_array(json_array(p, full, forgets)) FROM (${pcs})) AS pcs`;
+const EXTRAS_KEYS = ['students', 'minutes', 'dose', 'kinds', 'pcs'];
 const KIND = "CASE WHEN s.wire = 2 THEN 'u' WHEN s.u = '' THEN 'g' ELSE 's' END";
+// Over the rolled days ?4..?5, band ?3 (the closed groups' parameters).
 const CLOSED_EXTRAS = extras(
   'SELECT COALESCE(al.u_new, d.u) AS c, d.day AS day, TOTAL(d.engaged_ms) AS m FROM r_student_day d LEFT JOIN aliases al ON al.u_old = d.u ' +
-  'WHERE d.day BETWEEN ?1 AND ?2 AND (?3 IS NULL OR d.a = ?3) GROUP BY 1, 2',
-  "SELECT day, k2, TOTAL(ms) AS ms FROM r_stat WHERE metric = 'sesslen' AND slug = '' AND day BETWEEN ?1 AND ?2 AND (?3 IS NULL OR a = ?3) GROUP BY day, k2",
-  "SELECT p, MAX(np_max >= 24) AS full, MAX(new_profiles >= 3 AND new_profiles * 2 >= sessions) AS forgets FROM r_pc_day WHERE day BETWEEN ?1 AND ?2 AND p <> '' GROUP BY p");
+  'WHERE d.day BETWEEN ?4 AND ?5 AND (?3 IS NULL OR d.a = ?3) GROUP BY 1, 2',
+  "SELECT day, k2, TOTAL(ms) AS ms FROM r_stat WHERE metric = 'sesslen' AND slug = '' AND day BETWEEN ?4 AND ?5 AND (?3 IS NULL OR a = ?3) GROUP BY day, k2",
+  "SELECT p, MAX(np_max >= 24) AS full, MAX(new_profiles >= 3 AND new_profiles * 2 >= sessions) AS forgets FROM r_pc_day WHERE day BETWEEN ?4 AND ?5 AND p <> '' GROUP BY p");
 const openExtras = scope => extras(
   `SELECT COALESCE(al.u_new, s.u) AS c, ${scope.day} AS day, TOTAL(v.engaged_ms) AS m FROM st_sessions s LEFT JOIN aliases al ON al.u_old = s.u ` +
   "LEFT JOIN st_visits v ON v.sid = s.id WHERE s.start_s >= ?1 AND s.start_s < ?2 AND s.u <> '' AND (?3 IS NULL OR s.a = ?3) GROUP BY 1, 2",
@@ -654,9 +653,58 @@ const openExtras = scope => extras(
   `SELECT p, MAX(full) AS full, MAX(forgets) AS forgets FROM (SELECT s.p AS p, ${scope.day} AS day, MAX(s.np) >= 24 AS full, ` +
   "TOTAL(s.is_new) >= 3 AND TOTAL(s.is_new) * 2 >= COUNT(*) AS forgets FROM st_sessions s WHERE s.start_s >= ?1 AND s.start_s < ?2 AND s.p <> '' " +
   'GROUP BY 1, 2) GROUP BY p');
-// The kept parts of an answer (their keys: the JSON array ?1) and every link between codes,
-// with the first play and profile start of both codes.
-const KEPT_LOOKUP = 'SELECT key, rows FROM kpi_cache WHERE key IN (SELECT value FROM json_each(?1)) UNION ALL ' +
+// The closed part of a KPI answer, made and kept in kpi_cache by SQL (key ?6, rv ?7) unless
+// it is kept already, so that it never passes through the Worker: the groups and the
+// extras as one JSON object. Over the frozen days ?1..?2 (legacy) and the rolled days
+// ?4..?5, band ?3. (SQLite computes the values only for a row that passes the WHERE.)
+const keptBySql = (key, json) => `INSERT INTO kpi_cache (key, made, rows) SELECT ${key}, ?7, ${json} ` +
+  `WHERE NOT EXISTS (SELECT 1 FROM kpi_cache WHERE key = ${key})`;
+const CLOSED_PART = [false, true].map(legacy => keptBySql('?6', 'json_object(' + GROUPS.map((name, i) => `'${name}', json((${CLOSED_GROUPS[legacy ? 1 : 0][i]}))`)
+  .concat(`'extras', json((SELECT json_object(${EXTRAS_KEYS.map(k => `'${k}', json(${k})`).join(', ')}) FROM (${CLOSED_EXTRAS})))`).join(', ') + ')'));
+const KEPT_ROWS = 'SELECT rows FROM kpi_cache WHERE key = ?1';
+// The closed part's extras (kept under ?4) and the facts' (the scope's [?1, ?2), band ?3).
+const mergedExtras = scope => "SELECT (SELECT rows -> '$.extras' FROM kpi_cache WHERE key = ?4) AS kept" +
+  (scope ? `, x.* FROM (${openExtras(scope)}) x` : '');
+// The students of the rolled days $from..$to, band $band (SQL parameters), by canonical code,
+// as JSON: who (code, first play, profile start: UTC seconds, from its codes' student rows,
+// or the first session in the range without one), bands ([code, band]) and games ([code, slug]).
+const closedStudents = (from, to, band) => `SELECT json_object('who', json((SELECT json_group_array(json_array(c, first, made)) FROM ` +
+  '(SELECT x.c AS c, MIN(COALESCE(t.first_s, x.f)) AS first, MIN(COALESCE(t.first_s - IFNULL(t.age_days_first, 0) * 86400, x.f)) AS made ' +
+  `FROM (SELECT COALESCE(al.u_new, d.u) AS c, d.u AS u, MIN(d.first_s) AS f FROM r_student_day d LEFT JOIN aliases al ON al.u_old = d.u ` +
+  `WHERE d.day BETWEEN ${from} AND ${to} AND (${band} IS NULL OR d.a = ${band}) GROUP BY 1, 2) x LEFT JOIN st_students t ON t.u = x.u GROUP BY 1))), ` +
+  `'bands', json((SELECT json_group_array(json_array(c, a)) FROM (SELECT DISTINCT COALESCE(al.u_new, d.u) AS c, d.a AS a FROM r_student_day d ` +
+  `LEFT JOIN aliases al ON al.u_old = d.u WHERE d.day BETWEEN ${from} AND ${to} AND (${band} IS NULL OR d.a = ${band})))), ` +
+  `'games', json((SELECT json_group_array(json_array(c, slug)) FROM (SELECT DISTINCT COALESCE(al.u_new, g.u) AS c, g.slug AS slug FROM r_student_game g ` +
+  `LEFT JOIN aliases al ON al.u_old = g.u WHERE g.day BETWEEN ${from} AND ${to} AND (${band} IS NULL OR g.a = ${band}))))) AS j`;
+// Kept beside the closed part (key ?8), for SQL only: JavaScript never reads it.
+const CLOSED_STUDENTS = keptBySql('?8', `(${closedStudents('?4', '?5', '?3')})`);
+// The students of a whole answer, counted in SQL, as JSON: the closed part's (kept under
+// ?1, or made again from the rolled days ?2..?3), and the facts' of the UTC seconds [?5,
+// ?6), band ?4, by canonical code: how many, how many new (the profile was made from the
+// day ?7 starts on), returning (seen before) or known before (first seen in the range,
+// made before it), counting the first play and profile start of every code linked to
+// them; and how many in each band and each game.
+const STUDENTS_COUNTED = `WITH k AS (SELECT COALESCE((${KEPT_ROWS}), (${closedStudents('?2', '?3', '?4')})) AS j), ` +
+  "o AS MATERIALIZED (SELECT COALESCE(al.u_new, s.u) AS c, s.u AS u, s.a AS a, s.id AS sid, s.start_s AS f FROM st_sessions s " +
+  "LEFT JOIN aliases al ON al.u_old = s.u WHERE s.start_s >= ?5 AND s.start_s < ?6 AND s.u <> '' AND (?4 IS NULL OR s.a = ?4)), " +
+  "who AS (SELECT value ->> 0 AS c, value ->> 1 AS first, value ->> 2 AS made FROM k, json_each(k.j, '$.who') UNION ALL " +
+  'SELECT x.c, MIN(COALESCE(t.first_s, x.f)), MIN(COALESCE(t.first_s - IFNULL(t.age_days_first, 0) * 86400, x.f)) ' +
+  'FROM (SELECT c, u, MIN(f) AS f FROM o GROUP BY 1, 2) x LEFT JOIN st_students t ON t.u = x.u GROUP BY 1), ' +
+  'per AS (SELECT c, MIN(first) AS first, MIN(made) AS made FROM who GROUP BY c), ' +
+  'linked AS (SELECT c, MIN(first) AS first, MIN(made) AS made FROM (SELECT a.u_new AS c, t.first_s AS first, t.first_s - IFNULL(t.age_days_first, 0) * 86400 AS made ' +
+  'FROM aliases a JOIN st_students t ON t.u = a.u_old UNION ALL SELECT a.u_new, t.first_s, t.first_s - IFNULL(t.age_days_first, 0) * 86400 ' +
+  'FROM aliases a JOIN st_students t ON t.u = a.u_new) GROUP BY c), ' +
+  "cls AS (SELECT CASE WHEN MIN(p.first, IFNULL(l.first, p.first)) < ?7 THEN 'r' WHEN MIN(p.made, IFNULL(l.made, p.made)) >= ?7 THEN 'n' ELSE 'k' END AS k " +
+  'FROM per p LEFT JOIN linked l ON l.c = p.c), ' +
+  "bands AS (SELECT value ->> 0 AS c, value ->> 1 AS a FROM k, json_each(k.j, '$.bands') UNION SELECT c, a FROM o), " +
+  "games AS (SELECT value ->> 0 AS c, value ->> 1 AS slug FROM k, json_each(k.j, '$.games') UNION SELECT o.c, v.slug FROM o JOIN st_visits v ON v.sid = o.sid) " +
+  "SELECT json_object('active', (SELECT COUNT(*) FROM cls), 'new', (SELECT TOTAL(k = 'n') FROM cls), 'returning', (SELECT TOTAL(k = 'r') FROM cls), " +
+  "'knownBefore', (SELECT TOTAL(k = 'k') FROM cls), 'bands', json((SELECT json_group_object(a, n) FROM (SELECT a, COUNT(*) AS n FROM bands GROUP BY a))), " +
+  "'games', json((SELECT json_group_object(slug, n) FROM (SELECT slug, COUNT(*) AS n FROM games GROUP BY slug)))) AS students";
+// The kept parts of an answer (their keys: the JSON array ?1) and, with KEPT_LINKS, every
+// link between codes, with the first play and profile start of both codes.
+const KEPT_ONLY = 'SELECT key, rows FROM kpi_cache WHERE key IN (SELECT value FROM json_each(?1))';
+const KEPT_LOOKUP = KEPT_ONLY + ' UNION ALL ' +
   "SELECT '', json_group_array(json_array(a.u_old, a.u_new, o.first_s, o.first_s - IFNULL(o.age_days_first, 0) * 86400, " +
   'n.first_s, n.first_s - IFNULL(n.age_days_first, 0) * 86400)) FROM aliases a LEFT JOIN st_students o ON o.u = a.u_old LEFT JOIN st_students n ON n.u = a.u_new';
 // Keeps parts made with rv ?1: n of them, each a key and its JSON text (?2, ?3, then ?4,
@@ -686,7 +734,7 @@ const group = (key, sessions, build) => ({ ...key, sessions, ...build() });
 function sumRows(rows, keys) {
   const map = new Map();
   for (const row of rows) {
-    const id = keys === 1 ? row[0] : row.slice(0, keys).join(' '), entry = map.get(id);
+    const id = keys === 1 ? row[0] : keys === 2 ? row[0] + ' ' + row[1] : row.slice(0, keys).join(' '), entry = map.get(id);
     if (!entry) map.set(id, { key: row.slice(0, keys), v: row.slice(keys) });
     else for (let i = keys; i < row.length; i++) entry.v[i - keys] += row[i];
   }
@@ -698,14 +746,20 @@ const sumInto = (map, id, v) => {
   else for (let i = 0; i < v.length; i++) into[i] += v[i];
 };
 const vector = (v, at, columns) => columns.map(c => v[at[c]]);
+// The same with the indexes found once: pick(v, index(at, columns)).
+const index = (at, columns) => columns.map(c => at[c]);
+const pick = (v, indexes) => indexes.map(i => v[i]);
 const frames = (v, at) => {
   const counts = vector(v, at, F), all = counts.reduce((a, b) => a + b, 0);
   return { counts, smoothShare: ratio(counts[0], all), stallShare: ratio(counts[3], all) };
 };
-const codes = (v, at) => Object.fromEntries(CODES.map(c => [c, v[at[c]]]));
+const codes = (v, at) => {
+  const out = {};
+  for (const c of CODES) out[c] = v[at[c]];
+  return out;
+};
 // KPI rows as arrays, from a statement's one JSON text (asRows).
 const arrays = result => JSON.parse(result.results[0].rows);
-const csv = text => text ? text.split(',') : [];
 // Quantiles of the minutes per student-day from the counts of each tenth of a minute (so
 // exact to the answer's one decimal): linear between the two nearest ranks, as R and
 // NumPy do by default.
@@ -723,9 +777,7 @@ function quantiles(counts, n, sum) {
   };
   return { p25: q(0.25), median: q(0.5), p75: q(0.75), mean: round(sum / n / 60000, 1) };
 }
-const EMPTY_PART = { days: [], games: [], levels: [], sources: [], devices: [], students: [],
-  extras: { students: [], minutes: [], dose: [0, 0], kinds: [], pcs: [] } };
-const EXTRAS = Object.keys(EMPTY_PART.extras), EMPTY_EXTRAS = JSON.stringify(EMPTY_PART.extras);
+const EXTRAS = EXTRAS_KEYS;
 
 // Options: retentionDays (the facts' default retention; the owner's keep_days setting
 // wins), openCacheMs (how long the answers' parts for the days not rolled yet are kept and
@@ -1191,15 +1243,16 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     };
   }
   // The parts kept under those keys (this instance's first, then kpi_cache's) and every link
-  // between codes (as KEPT_LOOKUP gives them), in one statement.
-  async function lookup(keys, now) {
+  // between codes (as KEPT_LOOKUP gives them; not with links: false), in one statement.
+  async function lookup(keys, now, { links = true } = {}) {
     const found = new Map(), wanted = new Map();
     for (const k of keys) {
       if (!k) continue;
       const part = keptPart(k.key, now);
       if (part) found.set(k.key, part); else wanted.set(k.key, k);
     }
-    const [result] = await run([sql(KEPT_LOOKUP).bind(JSON.stringify([...wanted.keys()]))], now);
+    if (!links && !wanted.size) return { found, aliases: [] };
+    const [result] = await run([sql(links ? KEPT_LOOKUP : KEPT_ONLY).bind(JSON.stringify([...wanted.keys()]))], now);
     let aliases = [];
     for (const { key, rows } of result.results) {
       if (key === '') { aliases = JSON.parse(rows); continue; }
@@ -1227,52 +1280,68 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
 
   /* ------------------------------------------------------------ the KPIs */
   const extrasOf = row => Object.fromEntries(EXTRAS.map(key => [key, JSON.parse(row[key])]));
-  // The parts of a KPI answer for days from..to and band, with the links between codes:
-  // the closed part (the frozen days up to legacy_until and the rolled days up to
-  // rolled_through, kept per rollup version rv) and the open part (the days after them,
-  // from the facts with the rollups' own SELECT; kept per slot of openCacheMs).
-  async function kpiParts(from, to, band, now) {
-    const { legacyUntil } = conf;
-    const legacy = legacyUntil && from <= legacyUntil ? [from, legacyUntil < to ? legacyUntil : to] : null;
-    const { rolled, open, bounds, scope } = spans(from, to);
-    const keys = partKeys(['kpis', from, to, band], legacy || rolled, open, now);
-    const { found, aliases } = await lookup([keys.closed, keys.open], now);
-    let closed = keys.closed && found.get(keys.closed.key), recent = keys.open && found.get(keys.open.key);
-    // Statements for each part that is not kept; an empty range is '1'..'0'.
-    const none = ['1', '0'], work = [], makeClosed = !!keys.closed && !closed, makeOpen = !!open && !recent;
-    if (makeClosed) {
-      const values = [...(legacy || none), band, ...(rolled || none)];
-      work.push(...CLOSED_GROUPS[legacyUntil ? 1 : 0].map(text => sql(text).bind(...values)));
-      if (rolled) work.push(sql(CLOSED_STUDENTS).bind(...rolled, band), sql(CLOSED_EXTRAS).bind(...rolled, band));
-    }
-    if (makeOpen) {
-      work.push(...GROUPS.map(name => sql(openGroup(name, scope)).bind(...bounds, band)), sql(OPEN_STUDENTS).bind(...bounds, band),
-        sql(openExtras(scope)).bind(...bounds, band));
-    }
-    const results = work.length ? await run(work, now) : [];
-    const take = (list, students) => ({ ...Object.fromEntries(GROUPS.map((name, i) => [name, arrays(list[i])])),
-      students: students ? arrays(list[GROUPS.length]) : [],
-      extras: students ? extrasOf(list[GROUPS.length + 1].results[0]) : EMPTY_PART.extras });
-    // The same part as JSON text for kpi_cache, joined from SQL's own JSON (no stringify of what was just parsed).
-    const text = (list, students) => '{' + GROUPS.map((name, i) => `"${name}":${list[i].results[0].rows}`).join(',') +
-      `,"students":${students ? list[GROUPS.length].results[0].rows : '[]'},"extras":` +
-      (students ? '{' + EXTRAS.map(key => `"${key}":${list[GROUPS.length + 1].results[0][key]}`).join(',') + '}' : EMPTY_EXTRAS) + '}';
-    const puts = [], openList = results.slice(makeClosed ? GROUPS.length + (rolled ? 2 : 0) : 0);
-    if (makeClosed) puts.push([keys.closed, closed = take(results, !!rolled), text(results, !!rolled)]);
-    if (makeOpen) puts.push([keys.open, recent = take(openList, true), keys.open && text(openList, true)]);
-    await keepParts(puts, now);
-    return { parts: [closed, recent].filter(Boolean), aliases };
-  }
-
+  // A KPI answer's JSON text without its clock (kept per slot of openCacheMs), with the clock.
+  const withClock = (text, now) => text.slice(0, -1) + ',"clock":' + JSON.stringify(clock(now)) + '}';
   // Engagement KPIs for days from..to (YYYY-MM-DD, inclusive): the frozen UTC receipt days
   // before the update and the school's local days after it, every group with its numbers.
   // band: null for every band, '' for the unknown band. The shape is documented in
-  // server/README.md; the fields of milestone 2 keep their meaning.
+  // server/README.md; the fields of milestone 2 keep their meaning. Its parts: the closed
+  // part (the frozen days up to legacy_until and the rolled days up to rolled_through, made
+  // and kept by SQL per rollup version rv, with its students by canonical code beside it for
+  // SQL alone) and the open part (the days after them, from the facts with the rollups' own
+  // SELECT), added up and their students counted in SQL. On Workers the whole answer is kept
+  // per slot of openCacheMs, here and in kpi_cache, so that a refresh, on any instance,
+  // sends kept text.
   async function kpis({ from, to, band = null }, now = Date.now()) {
     await ensure(now);
-    const { parts, aliases } = await kpiParts(from, to, band, now);
-    const all = name => NESTED[name] ? parts.flatMap(part => part[name].map(row => row.flat())) : parts.flatMap(part => part[name]);
-    const [dayRows, gameRows, levelRows, sourceRows, deviceRows] = GROUPS.map(all);
+    const { legacyUntil, rv } = conf;
+    const legacy = legacyUntil && from <= legacyUntil ? [from, legacyUntil < to ? legacyUntil : to] : null;
+    const { rolled, open, bounds, scope } = spans(from, to);
+    const answerKey = partKeys(['kpis-answer', from, to, band], null, true, now, { raw: true }).open;
+    if (answerKey) {
+      const { found } = await lookup([answerKey], now, { links: false });
+      if (found.has(answerKey.key)) return new JsonText(withClock(found.get(answerKey.key), now));
+    }
+    // One batch: the closed part and its students, made and kept unless they are kept
+    // already; the groups and the extras of the whole answer; and its students. An empty range is '1'..'0'.
+    const none = ['1', '0'], closedKey = legacy || rolled ? JSON.stringify(['kpis', from, to, band, rv]) : '';
+    const studentsKey = closedKey ? JSON.stringify(['kpis-students', from, to, band, rv]) : '', work = [];
+    if (closedKey) {
+      const values = [...(legacy || none), band, ...(rolled || none), closedKey, rv, studentsKey];
+      work.push(bound(CLOSED_PART[legacyUntil ? 1 : 0], values), bound(CLOSED_STUDENTS, values));
+    }
+    const merged = mergedStatements(scope), at = work.length, values = [...(bounds || [0, 0]), band, closedKey];
+    work.push(...merged.groups.map(text => bound(text, values)), bound(merged.extras, values),
+      sql(STUDENTS_COUNTED).bind(studentsKey, ...(rolled || none), band, ...(bounds || [0, 0]), dayBounds(conf.tz, from).lo));
+    const results = await run(work, now);
+    const groups = Object.fromEntries(GROUPS.map((name, i) => [name, arrays(results[at + i])]));
+    const row = results[at + GROUPS.length].results[0], extras = [];
+    if (row.kept) extras.push(JSON.parse(row.kept));
+    if (scope) extras.push(extrasOf(row));
+    const answer = assemble(from, to, band, groups, extras, JSON.parse(results.at(-1).results[0].students));
+    const text = JSON.stringify(answer);
+    if (answerKey) await keepParts([[answerKey, text]], now);
+    // The answer, and the text the handler sends for it (so it is not written again).
+    answer.clock = clock(now);
+    Object.defineProperty(answer, SENT, { value: withClock(text, now) });
+    return answer;
+  }
+  // The SQL of the merged groups and extras for an open scope (or none), made once per scope.
+  const mergedTexts = new Map();
+  function mergedStatements(scope) {
+    const key = scope ? scope.day : '';
+    let texts = mergedTexts.get(key);
+    if (!texts) {
+      if (mergedTexts.size >= 8) mergedTexts.clear();
+      mergedTexts.set(key, texts = { groups: GROUPS.map(name => mergedGroup(name, scope)), extras: mergedExtras(scope) });
+    }
+    return texts;
+  }
+
+  // The answer from its groups (one row per key), its extras (the closed part's and the
+  // open part's) and its students (as STUDENTS_COUNTED counts them).
+  function assemble(from, to, band, groups, parts, counted) {
+    const [dayRows, gameRows, levelRows, sourceRows, deviceRows] = GROUPS.map(name => NESTED[name] ? groups[name].map(row => [].concat(...row)) : groups[name]);
 
     // The day totals, per day and per band; and the facts' own, for the data-quality shares.
     const total = KPI.days.sums.map(() => 0), facts = KPI.days.sums.map(() => 0), byDay = new Map(), byBand = new Map();
@@ -1287,34 +1356,14 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       if (row[1] === '') unknownBand += v[D.sessions];
     }
 
-    // Students by canonical code (an older code counts as the code it is linked to): new
-    // (the profile was made in the range), known before (first seen in the range, made
-    // before it) or returning (seen before the range).
-    const canonical = new Map(aliases.map(([u, to]) => [u, to])), students = new Map(), playedBy = new Map();
-    for (const [u, bands, games, first, made] of all('students')) {
-      const c = canonical.get(u) || u, s = students.get(c) || students.set(c, { bands: new Set(), first, made }).get(c);
-      for (const a of csv(bands)) s.bands.add(a.slice(1));
-      // Each game's students, as a set of canonical codes.
-      for (const slug of csv(games)) (playedBy.get(slug) || playedBy.set(slug, new Set()).get(slug)).add(c);
-      s.first = Math.min(s.first, first);
-      s.made = Math.min(s.made, made);
-    }
-    for (const [, to, ...known] of aliases) {
-      const s = students.get(to);
-      if (s) for (const [first, made] of [known.slice(0, 2), known.slice(2)]) if (first !== null) { s.first = Math.min(s.first, first); s.made = Math.min(s.made, made); }
-    }
-    const lo = dayBounds(conf.tz, from).lo, bandStudents = new Map(), gameStudents = new Map([...playedBy].map(([slug, set]) => [slug, set.size]));
-    let fresh = 0, returning = 0, knownBefore = 0;
-    for (const s of students.values()) {
-      if (s.first < lo) returning++;
-      else if (s.made >= lo) fresh++;
-      else knownBefore++;
-      for (const a of s.bands) bandStudents.set(a, (bandStudents.get(a) || 0) + 1);
-    }
+    // Students by canonical code (an older code counts as the code it is linked to), counted in
+    // SQL: new (the profile was made in the range), known before (first seen in the range,
+    // made before it) or returning (seen before the range), and per band and game.
+    const bandStudents = counted.bands, gameStudents = counted.games;
     // Students per day, minutes per student-day, minutes by kind of session, and PCs.
     const perDay = new Map(), guestPerDay = new Map(), tenths = new Map(), kinds = { s: 0, g: 0, u: 0 }, pcs = new Map();
     let studentDays = 0, studentMs = 0;
-    for (const { extras } of parts) {
+    for (const extras of parts) {
       for (const [day, n] of extras.students) perDay.set(day, (perDay.get(day) || 0) + n);
       for (const [tenth, n] of extras.minutes) tenths.set(tenth, (tenths.get(tenth) || 0) + n);
       studentDays += extras.dose[0];
@@ -1339,7 +1388,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
         sessionStarts: total[D.session_starts], newProfiles: total[D.new_profiles], guests: total[D.guests],
         profileAge: vector(total, D, PROFILE_AGE), daysSinceLast: vector(total, D, SINCE_LAST)
       },
-      students: { active: students.size, new: fresh, returning, knownBefore, guestSessions: facts[D.guest_sessions],
+      students: { active: counted.active, new: counted.new, returning: counted.returning, knownBefore: counted.knownBefore, guestSessions: facts[D.guest_sessions],
         guestMinutes: minutes(kinds.g), minutesPerStudentDay: quantiles(tenths, studentDays, studentMs) }
     }));
     // A frozen day of milestone 2 did not tell students apart.
@@ -1357,36 +1406,36 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     for (const { key: [, slug], v } of bandGames.values()) sumInto(bySlug, slug, v);
     const games = [...bySlug.keys()].sort(natural).map(slug => {
       const g = bySlug.get(slug), c = codes(g, G), starts = g[G.starts], closes = g[G.closes];
-      const hits = g[G.hits], misses = g[G.misses], loads = g[G.loads];
-      return group({ slug }, g[G.sessions], () => ({
-        opens: g[G.opens], closes,
+      const hits = g[G.hits], misses = g[G.misses], loads = g[G.loads], errors = {}, sources = {};
+      for (let i = 0; i < ERRORS.length; i++) errors[ERRORS[i]] = g[G_ERRORS[i]];
+      for (let i = 0; i < SOURCES.length; i++) if (g[G_SOURCES[i]]) sources[SOURCES[i]] = g[G_SOURCES[i]];
+      return {
+        slug, sessions: g[G.sessions], opens: g[G.opens], closes,
         engagedMinutes: minutes(g[G.engaged_ms]), avgEngagedSecPerOpen: mean(g[G.engaged_ms] / 1000, closes, 1),
         rounds: { starts, ends: g[G.ends], codes: c },
         completionRate: ratio(c.w, starts), winRate: ratio(c.w, c.w + c.l), dropOffRate: ratio(c.q, starts),
         avgTier: mean(g[G.tier_sum], g[G.tier_n], 2),
         hits, misses, accuracy: ratio(hits, hits + misses),
-        rt: vector(g, G, RT), il: vector(g, G, IL), frames: frames(g, G),
-        loads, avgLoadMs: loads ? Math.round(g[G.load_ms] / loads) : null,
-        errors: Object.fromEntries(ERRORS.map(kind => [kind, g[G['error_' + kind]]])),
-        sources: Object.fromEntries(SOURCES.filter(src => g[G['src_' + src]]).map(src => [src, g[G['src_' + src]]])),
-        replay: { replayIndex: vector(g, G, REPLAY), playsBefore: vector(g, G, PLAYS) },
-        students: gameStudents.get(slug) || 0, hearts: { on: g[G.hearts_on], off: g[G.hearts_off] },
+        rt: pick(g, G_RT), il: pick(g, G_IL), frames: frames(g, G),
+        loads, avgLoadMs: loads ? Math.round(g[G.load_ms] / loads) : null, errors, sources,
+        replay: { replayIndex: pick(g, G_REPLAY), playsBefore: pick(g, G_PLAYS) },
+        students: gameStudents[slug] || 0, hearts: { on: g[G.hearts_on], off: g[G.hearts_off] },
         tutorials: { start: g[G.tu_start], done: g[G.tu_done] }, wallMinutes: minutes(g[G.wall_s] * 1000),
         actionsPerMinute: mean(g[G.inputs], g[G.wall_s] / 60, 1), avgScore: mean(g[G.score_sum], g[G.score_n], 1),
         unended: g[G.unended], duoRounds: g[G.duo]
-      }));
+      };
     });
 
     // Per level (slug, round id): the funnel and where children stop.
     const levels = [...sumRows(levelRows, 2).values()].map(({ key: [slug, id], v }) => ({ slug, id, v })).sort(byLevel)
       .map(({ slug, id, v }) => {
         const c = codes(v, L), starts = v[L.starts], ends = v[L.ends];
-        return group({ slug, id }, v[L.sessions], () => ({
-          starts, ends, codes: c,
+        return {
+          slug, id, sessions: v[L.sessions], starts, ends, codes: c,
           completionRate: ratio(c.w, starts), winRate: ratio(c.w, c.w + c.l), dropOffRate: ratio(c.q, starts),
           avgMs: ends ? Math.round(v[L.ms] / ends) : null, avgTier: mean(v[L.tier_sum], v[L.tier_n], 2),
           students: v[L.students], avgScore: mean(v[L.score_sum], v[L.score_n], 1), unended: v[L.unended]
-        }));
+        };
       });
 
     // Per age band: preferences (share of the band's opens per game), difficulty and time.
@@ -1396,13 +1445,13 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       const b = byBand.get(a), opens = b[D.opens];
       return group({ band: name }, b[D.sessions], () => ({
         opens, engagedMinutes: minutes(b[D.engaged_ms]),
-        games: (perBand.get(a) || []).sort((x, y) => natural(x.slug, y.slug)).map(({ slug, v }) => group({ slug }, v[G.sessions], () => ({
-          opens: v[G.opens], share: ratio(v[G.opens], opens), avgTier: mean(v[G.tier_sum], v[G.tier_n], 2),
+        games: (perBand.get(a) || []).sort((x, y) => natural(x.slug, y.slug)).map(({ slug, v }) => ({
+          slug, sessions: v[G.sessions], opens: v[G.opens], share: ratio(v[G.opens], opens), avgTier: mean(v[G.tier_sum], v[G.tier_n], 2),
           completionRate: ratio(v[G.w], v[G.starts]),
           winRate: ratio(v[G.w], v[G.w] + v[G.l]), dropOffRate: ratio(v[G.q], v[G.starts]), engagedMinutes: minutes(v[G.engaged_ms]),
           starts: v[G.starts]
-        }))),
-        students: bandStudents.get(a) || 0
+        })),
+        students: bandStudents[a] || 0
       }));
     });
 
@@ -1435,9 +1484,10 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       oldVersionSessionShare: ratio(facts[D.v2_sessions], facts[D.sessions]), profilesFullPcs: flagged('full'), forgetfulPcs: flagged('forgets')
     };
 
+    // The clock goes last, when the answer is sent (withClock).
     return {
       v: 1, range: { from, to, days: daily.length, band: band === null ? 'all' : band || 'unknown', legacyUntil: conf.legacyUntil, factsSince: conf.factsSince },
-      minSessions: MIN_SESSIONS, clock: clock(now), totals, daily, games, levels, bands, sources, devices, modes, quality
+      minSessions: MIN_SESSIONS, totals, daily, games, levels, bands, sources, devices, modes, quality
     };
   }
 

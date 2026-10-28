@@ -468,7 +468,9 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
     'INSERT OR IGNORE INTO st_student_pcs', 'INSERT OR IGNORE INTO st_marks', 'INSERT INTO st_student_games', 'UPDATE st_students SET', 'UPDATE aliases SET',
     'INSERT INTO aliases', 'UPDATE roll_days SET', 'UPDATE settings SET', 'INSERT INTO live', 'DELETE FROM live', 'INSERT INTO batches', 'INSERT INTO usage',
     'SELECT s.id, s.start_s,', 'SELECT slug, rounds FROM st_student_games', 'INSERT INTO r_stat', 'DELETE FROM r_day', 'INSERT INTO roll_days',
-    'SELECT json_group_array(json_array(u, bands', 'WITH sd AS MATERIALIZED', 'SELECT key, rows FROM kpi_cache', 'DELETE FROM st_rounds', 'DELETE FROM aliases',
+    'INSERT INTO kpi_cache (key, made, rows) SELECT ?6', 'INSERT INTO kpi_cache (key, made, rows) SELECT ?8', "SELECT (SELECT rows -> '$.extras' FROM kpi_cache",
+    'WITH k AS (SELECT COALESCE(', 'SELECT key, rows FROM kpi_cache', 'DELETE FROM st_rounds', 'DELETE FROM aliases',
+    'DELETE FROM r_stat WHERE day = ?1 AND (', 'UPDATE roll_days SET rows',
     // The research reads: students, a student (rollups and facts), a game, r_stat, cohorts and PCs.
     'SELECT json_group_array(json_array(c, days,', 'SELECT json_group_array(json_array(c, json(list)))', 'WITH p AS (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT d.day AS day',
     'SELECT g.slug AS slug', 'SELECT date(g.day', "SELECT CAST(strftime('%H'", "SELECT date(((s.start_s + COALESCE(r.t0", 'SELECT date(((s.start_s) +',
@@ -481,7 +483,7 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
     'WITH d AS (SELECT p, np_max',
     // The owner's actions: link, unlink, recount and forget.
     'SELECT COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2), ?2) AS target', 'UPDATE aliases SET u_new = COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2)',
-    'INSERT INTO aliases (u_old, u_new, s, how) SELECT ?1', 'DELETE FROM aliases WHERE u_old = ?1', 'UPDATE roll_days SET dirty = 2 WHERE day >=',
+    'INSERT INTO aliases (u_old, u_new, s, how) SELECT ?1', 'DELETE FROM aliases WHERE u_old = ?1', 'UPDATE roll_days SET dirty = 3 WHERE day >=',
     'SELECT COUNT(*) AS n FROM (SELECT COALESCE', "DELETE FROM st_marks WHERE kind IN ('pr', 'cd')", 'DELETE FROM r_student_day WHERE u IN', 'DELETE FROM r_student_game WHERE u IN',
     "UPDATE settings SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'rv'"]) {
     assert.ok([...seen.keys()].some(text => text.startsWith(statement)), 'covered: ' + statement);

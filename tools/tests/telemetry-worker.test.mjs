@@ -718,11 +718,14 @@ test('the closed days\' KPIs are kept in D1 and shared by every instance, until 
   const expected = JSON.parse(JSON.stringify(await m2.kpis(query, now)));
   await upgrade(db, now);
   for (const { batch, now: at } of batches.slice(400)) await openStore(db).ingest(validateBatch(batch), at);
-  // The frozen days and the facts since the update: milestone 2 answers for the frozen part.
+  // The frozen days and the facts since the update: milestone 2 answers for the frozen part. 'closed': the closed part was
+  // made (SQL keeps it in kpi_cache unless it is kept already); 'open': the days not rolled yet were read from the facts.
   const reads = [], execute = db.execute.bind(db);
   db.execute = (statement, ...rest) => {
-    if (/GROUP BY/.test(statement.sql)) reads.push(/FROM agg_days/.test(statement.sql) ? 'closed' : /FROM \(SELECT day, a, /.test(statement.sql) ? 'open' : 'other');
-    return execute(statement, ...rest);
+    const result = execute(statement, ...rest);
+    if (/^INSERT INTO kpi_cache \(key, made, rows\) SELECT \?6/.test(statement.sql) && result.meta.changes) reads.push('closed');
+    if (/^SELECT json_group_array\(json_array\(day, a, part/.test(statement.sql) && /1 AS part/.test(statement.sql)) reads.push('open');
+    return result;
   };
   const first = openStore(db);
   const answer = await first.kpis(query, now);
@@ -866,7 +869,7 @@ test('the research reads keep their closed part in D1 for every instance, made a
   assert.deepEqual(third[0][0].students.map(s => s.u), [U, '2c3d4e5f6071'].sort());
 });
 
-test('the CPU each admin answer and export page spends in JavaScript (outside SQLite) stays inside the Workers limit on a simulated school', async () => {
+test('the CPU each admin answer and export page spends in JavaScript (outside SQLite, with the D1 binding\'s own work) stays inside the Workers limit on a simulated school', async () => {
   const { schoolDays } = await import('../../server/simulate.mjs');
   const { serialize } = await import('../../server/handler.mjs');
   const now = Date.parse('2026-10-22T09:30:00Z'), db = openDatabase(':memory:'), store = openStore(db);
@@ -876,10 +879,19 @@ test('the CPU each admin answer and export page spends in JavaScript (outside SQ
     if (night < now) for (let i = 0; i < 40 && (await store.rollupStep(night + i * 300000)).rolled; i++);
   }
   // The time of a call less the time inside the driver's statements (which D1 spends, not the Worker): node:sqlite
-  // runs on this thread, and the test files run one at a time, so this is the JavaScript's own CPU.
+  // runs on this thread, and the test files run one at a time, so this is the JavaScript's own CPU. What the Worker's D1
+  // binding does is added back: it writes the request as JSON, and reads the answer as JSON (each statement's columns and
+  // rows of values), making an object of every row.
   let inSql = 0;
   const batch = db.batch.bind(db);
-  db.batch = async list => { const t0 = performance.now(); try { return await batch(list); } finally { inSql += performance.now() - t0; } };
+  db.batch = async list => {
+    const t0 = performance.now(), results = await batch(list);
+    const wire = JSON.stringify(results.map(r => ({ results: { columns: Object.keys(r.results[0] || {}), rows: r.results.map(Object.values) }, meta: r.meta })));
+    inSql += performance.now() - t0;
+    JSON.stringify({ batch: list.map(st => ({ sql: st.sql, params: st.params })) });
+    for (const { results: { columns, rows } } of JSON.parse(wire)) rows.map(row => Object.fromEntries(row.map((v, i) => [columns[i], v])));
+    return results;
+  };
   const students = JSON.parse(serialize(await store.students({ from: '2026-09-23', to: '2026-10-22', band: null }, now))).students;
   assert.ok(students.length > 500, students.length + ' students');
   const u = students.find(s => s.linked.length)?.u || students[0].u;
@@ -904,5 +916,6 @@ test('the CPU each admin answer and export page spends in JavaScript (outside SQ
     }
     medians[name] = spent.sort((a, b) => a - b)[3];
   }
-  for (const [name, ms] of Object.entries(medians)) assert.ok(ms <= (name.startsWith('export') ? 3 : 10), `${name}: ${ms.toFixed(1)} ms of JavaScript (${JSON.stringify(medians)})`);
+  const limit = name => name === 'kpis' ? 5 : name.startsWith('export') ? 10 : 10;
+  for (const [name, ms] of Object.entries(medians)) assert.ok(ms <= limit(name), `${name}: ${ms.toFixed(1)} ms of JavaScript (${JSON.stringify(medians)})`);
 });
