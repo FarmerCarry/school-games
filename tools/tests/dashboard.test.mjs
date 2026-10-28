@@ -963,6 +963,60 @@ test('the Students tab: the code search, sorting both ways, pages of 50, and a s
   await s.check();
 });
 
+test('a student\'s "Getting better?": weeks from every round of the period, no sentence about a child doing worse, and the latest rounds said so', async t => {
+  const s = await open(t, { token: TOKEN });
+  const { page } = s;
+  const ws = (await (await fetch(ingest + '/v1/admin/settings', { headers: { Authorization: 'Bearer ' + TOKEN } })).json()).clock.weekStart;
+  const day = n => dayBefore(today(), n);
+  const round = (slug, attempt, code, d, more = {}) => ({ day: d, time: '10:00', slug, id: 'L1', code, ms: 30000, score: null, tier: null, dda: null,
+    hits: 0, misses: 0, rtMean: null, attempt, minIntoSession: 1, ...more });
+  // Connect 4: all 9 rounds; won 1 of 2 decided in the first third, 0 of 1 in the latest.
+  const c4 = ['w', 'l', 'd', 'w', 'w', 'l', 'l', 'q', 'd'].map((code, i) => round('connect-four', i + 1, code, day(20 - i)));
+  // Tank Splat: all 9 rounds, accuracy rising.
+  const ts = Array.from({ length: 9 }, (_, i) => round('tank-splat', i + 1, 'w', day(20 - i), { hits: 2 + i, misses: 8 - i }));
+  // Bubble Bop: 30 rounds over the period, the server listed the latest 9 (its rounds are the latest ones only).
+  const bubble = Array.from({ length: 30 }, (_, i) => round('bubble-bop', i + 1, i % 3 ? 'w' : 'l', day(29 - i), { hits: 5, misses: 5 }));
+  const listed = c4.concat(ts, bubble.slice(-9));
+  const sums = (slug, list) => ({ slug, minutes: list.length, rounds: list.length, w: list.filter(x => x.code === 'w').length, l: list.filter(x => x.code === 'l').length,
+    d: list.filter(x => x.code === 'd').length, e: 0, q: list.filter(x => x.code === 'q').length, hits: list.reduce((a, x) => a + x.hits, 0),
+    misses: list.reduce((a, x) => a + x.misses, 0), rtMean: null, bestScore: null, avgScore: null, ddaMean: null, hearts: 0 });
+  const weekly = [];
+  for (const x of c4.concat(ts, bubble)) {
+    const week = R.weekOf(x.day, ws);
+    let w = weekly.find(y => y.week === week && y.slug === x.slug);
+    if (!w) weekly.push(w = { week, slug: x.slug, rounds: 0, w: 0, l: 0, hits: 0, misses: 0, rtSum: 0, rtN: 0, scoreSum: 0, scoreN: 0, ddaSum: 0, ddaN: 0 });
+    w.rounds++; w.w += +(x.code === 'w'); w.l += +(x.code === 'l'); w.hits += x.hits; w.misses += x.misses;
+  }
+  const u = 'abcdef012345';
+  const answer = { v: 1, range: { from: day(29), to: day(0), days: 30, band: 'all' },
+    student: { u, label: 'ABCD', kind: 'profile', band: '8-9', bandFirst: '8-9', firstDay: day(29), lastDay: day(0), profileMadeDay: day(29), knownBefore: false,
+      removed: null, pcs: ['PC01'], linked: [] },
+    days: Array.from({ length: 30 }, (_, i) => ({ day: day(29 - i), sessions: 1, minutes: 5, opens: 1, rounds: 1, w: 1, l: 0, q: 0 })),
+    hours: Array(24).fill(0), games: [sums('bubble-bop', bubble), sums('connect-four', c4), sums('tank-splat', ts)], weekly,
+    rounds: listed.slice().reverse(), sessions: [], persist: { same: 0, level: 0, game: 0, stop: 0 } };
+  s.mode.stub = { '/v1/admin/student': () => [200, answer] };
+  await page.goto(site.origin + '/#/student/' + u);
+  await waitForView(page, 'student');
+  const notes = await page.locator('#better-card .panel').evaluateAll(ps => ps.map(p => [p.querySelector('.panel-title').textContent,
+    [...p.querySelectorAll(':scope > .note')].map(n => n.textContent).join(' ')]));
+  assert.deepEqual(notes.map(n => n[0]), ['bubble-bop', 'connect-four', 'tank-splat'].map(nameOf('en')));
+  assert.equal(notes[0][1], '', 'Bubble Bop: its first tries are not in the latest rounds');
+  assert.equal(notes[1][1], '', 'no sentence says a child did worse');
+  assert.match(notes[2][1], new RegExp('^' + nameOf('en')('tank-splat') + ': accuracy rose from \\d+% in the first tries to \\d+% in the latest\\. based on 3 tries$'));
+  assert.equal(await page.locator('#better-card .panel-head .chip').count(), 0, 'the chip is the sentence\'s, not the panel\'s');
+  // By week: every round of the period (the weekly sums), not only the listed ones.
+  await page.click('#better-card .table-toggle');
+  const rows = await page.locator('#better-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
+  assert.equal(rows.filter(r => r[0] === nameOf('en')('bubble-bop')).reduce((a, r) => a + Number(r[4]), 0), 30);
+  // By attempt: the listed rounds, and the card says they are the latest.
+  await page.click('#better-card button[data-value="attempt"]');
+  assert.match(await page.locator('#better-card .card-foot').textContent(), /latest 27 rounds/);
+  assert.match(await page.locator('#csvBtn').textContent(), /latest 27 rounds/);
+  const [file] = await Promise.all([page.waitForEvent('download'), page.click('#csvBtn')]);
+  assert.match(file.suggestedFilename(), /^student-abcd_latest27_\d{4}-\d\d-\d\d_\d{4}-\d\d-\d\d\.csv$/);
+  await s.check();
+});
+
 test('the cohort legend tells a week at 0% from a week not reached yet', async t => {
   const s = await open(t);
   const { page } = s;

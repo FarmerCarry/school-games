@@ -368,6 +368,7 @@
     studentNoPlay: 'This student did not play in this period. Choose a longer period above.',
     linkAction: 'Link to another code',
     csvAction: 'Download this student’s data (CSV)',
+    csvLatest: function (k) { return 'Download this student’s latest ' + n(k) + ' rounds (CSV)'; },
     forgetAction: 'Forget this student',
     linkedCodes: 'Linked codes:',
     unlink: 'Unlink',
@@ -406,6 +407,7 @@
       return up ? game + ': ' + m + ' rose from ' + first + ' in the first tries to ' + last + ' in the latest.'
         : game + ': ' + m + ' was ' + first + ' in the first tries and ' + last + ' in the latest.';
     },
+    betterLatest: function (k) { return 'By attempt: this student’s latest ' + n(k) + ' rounds, the most the server lists.'; },
     ddaTitle: 'Difficulty by attempt',
     ddaIntro: 'In the games that adapt, the difficulty level (0 to 100) the game chose at each attempt.',
     ddaLevel: 'Difficulty level',
@@ -1030,6 +1032,7 @@
     studentNoPlay: 'لم يلعب هذا الطالب في هذه الفترة. اختر فترة أطول في الأعلى.',
     linkAction: 'اربطه برمز آخر',
     csvAction: 'نزّل بيانات هذا الطالب (CSV)',
+    csvLatest: function (k) { return 'نزّل آخر ' + c(k, ['جولة واحدة', 'جولتين', 'جولات', 'جولة']) + ' لهذا الطالب (CSV)'; },
     forgetAction: 'احذف هذا الطالب',
     linkedCodes: 'رموز مربوطة:',
     unlink: 'فكّ الربط',
@@ -1068,6 +1071,7 @@
       return up ? game + ': ارتفعت ' + m + ' من ' + first + ' في المحاولات الأولى إلى ' + last + ' في الأخيرة.'
         : game + ': كانت ' + m + ' ' + first + ' في المحاولات الأولى و' + last + ' في الأخيرة.';
     },
+    betterLatest: function (k) { return 'حسب المحاولة: آخر ' + c(k, ['جولة واحدة', 'جولتين', 'جولات', 'جولة']) + ' لهذا الطالب، وهي أقصى ما يعرضه الخادم.'; },
     ddaTitle: 'الصعوبة حسب المحاولة',
     ddaIntro: 'في الألعاب التي تتكيّف مع اللاعب: مستوى الصعوبة (من 0 إلى 100) الذي اختارته اللعبة في كل محاولة.',
     ddaLevel: 'مستوى الصعوبة',

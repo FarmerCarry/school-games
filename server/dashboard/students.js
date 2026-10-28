@@ -237,7 +237,7 @@
     var open = function (fill) { panel.textContent = ''; panel.hidden = false; fill(panel); };
     var close = function () { panel.hidden = true; panel.textContent = ''; };
     var linkBtn = h('button', { type: 'button', class: 'btn-quiet', id: 'linkBtn', 'data-focus': 'act:link' }, box, T.linkAction);
-    var csvBtn = h('button', { type: 'button', class: 'btn-quiet', id: 'csvBtn', 'data-focus': 'act:csv' }, box, T.csvAction);
+    var csvBtn = h('button', { type: 'button', class: 'btn-quiet', id: 'csvBtn', 'data-focus': 'act:csv' }, box, cutRounds(a) ? T.csvLatest((a.rounds || []).length) : T.csvAction);
     var forgetBtn = h('button', { type: 'button', class: 'btn-quiet btn-danger', id: 'forgetBtn', 'data-focus': 'act:forget' }, box, T.forgetAction);
     csvBtn.addEventListener('click', function () { download(ctx, a); });
     linkBtn.addEventListener('click', function () { open(function (p) { linkPanel(ctx, p, a, close); }); });
@@ -350,7 +350,14 @@
     });
     yes.focus();
   }
-  // This student's rounds as a CSV file (UTF-8 with a byte-order mark, so Excel reads it).
+  // Whether the server listed fewer ended rounds than the student's games add up to (it
+  // lists the latest ones only).
+  function cutRounds(a) {
+    var listed = (a.rounds || []).filter(function (x) { return x.code; }).length;
+    return listed < (a.games || []).reduce(function (k, g) { return k + (g.rounds || 0); }, 0);
+  }
+  // This student's rounds as a CSV file (UTF-8 with a byte-order mark, so Excel reads it);
+  // the latest ones only when the server listed no more, and the name says so.
   function download(ctx, a) {
     var s = a.student, r = ctx.range();
     var head = ['day', 'time', 'game', 'level', 'outcome', 'engaged_ms', 'score', 'tier', 'dda_level', 'hits', 'misses', 'rt_mean_ms', 'attempt', 'minutes_into_session'];
@@ -362,7 +369,7 @@
     var blob = new Blob(['﻿' + lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
     var url = URL.createObjectURL(blob), link = document.createElement('a');
     link.href = url;
-    link.download = 'student-' + String(s.label || s.u).toLowerCase() + '_' + r.from + '_' + r.to + '.csv';
+    link.download = 'student-' + String(s.label || s.u).toLowerCase() + (cutRounds(a) ? '_latest' + (a.rounds || []).length : '') + '_' + r.from + '_' + r.to + '.csv';
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -447,7 +454,12 @@
     }));
   }
 
-  // "Getting better?": the top 3 games, one measure each, by week or by attempt.
+  // "Getting better?": the top 3 games, one measure each, by week or by attempt. By week
+  // comes from the student's weekly sums (every round of the period); by attempt and the
+  // sentence from the rounds the server lists, which are the latest ones only (cut: fewer
+  // listed than the game's rounds). A sentence compares the first third of a game's tries
+  // with the latest third only when all of them are listed, never when the measure fell
+  // (no sentence says a child did worse), and with its chip under 20 tries a third.
   var MEASURE_ORDER = ['accuracy', 'score', 'winRate'];
   function better(ctx, parent, a) {
     var T = ctx.t(), C = ctx.C, I = ctx.I, R = ctx.R;
@@ -455,51 +467,71 @@
     var c = ctx.card(sec, 'better-card', null, null, true);
     var by = ctx.choice(c.tools, 'betterBy', [{ value: 'week', text: T.byWeek }, { value: 'attempt', text: T.byAttempt }], 'week', T.showBy);
     var rounds = (a.rounds || []).filter(function (x) { return x.code; });
+    var weekly = Array.isArray(a.weekly) ? a.weekly : null;
     var games = (a.games || []).filter(function (g) { return (g.rounds || 0) > 0; }).sort(function (x, y) { return (y.rounds || 0) - (x.rounds || 0) || (x.slug < y.slug ? -1 : 1); }).slice(0, 3);
     if (!games.length) { ctx.note(c.chart, T.noData); return; }
-    var panels = [], sentences = [], tableRows = [];
+    var panels = [], tableRows = [];
+    // Sums of a list of rounds, as the weekly rows have them.
+    var sumOf = function (list) {
+      var sum = { hits: 0, misses: 0, w: 0, l: 0, scoreSum: 0, scoreN: 0, rounds: list.length };
+      list.forEach(function (x) { sum.hits += x.hits || 0; sum.misses += x.misses || 0; sum.w += +(x.code === 'w'); sum.l += +(x.code === 'l'); if (x.score != null) { sum.scoreSum += x.score; sum.scoreN++; } });
+      return sum;
+    };
     games.forEach(function (g) {
       var mine = rounds.filter(function (x) { return x.slug === g.slug; });
+      var whole = mine.length >= (g.rounds || 0);
       var name = MEASURE_ORDER.filter(function (m) {
         return m === 'accuracy' ? g.hits + g.misses > 0 : m === 'score' ? g.bestScore != null : g.w + g.l > 0;
       })[0];
       if (!name) return;
-      var value = function (list) {
-        var sum = { hits: 0, misses: 0, w: 0, l: 0, score: 0, n: 0 };
-        list.forEach(function (x) { sum.hits += x.hits || 0; sum.misses += x.misses || 0; sum.w += +(x.code === 'w'); sum.l += +(x.code === 'l'); if (x.score != null) { sum.score += x.score; sum.n++; } });
-        return name === 'accuracy' ? (sum.hits + sum.misses ? sum.hits / (sum.hits + sum.misses) : null) : name === 'score' ? (sum.n ? sum.score / sum.n : null)
+      var value = function (sum) {
+        return name === 'accuracy' ? (sum.hits + sum.misses ? sum.hits / (sum.hits + sum.misses) : null) : name === 'score' ? (sum.scoreN ? sum.scoreSum / sum.scoreN : null)
           : (sum.w + sum.l ? sum.w / (sum.w + sum.l) : null);
       };
       var groups = [];
-      if (by === 'week') {
+      if (by === 'week' && weekly) {
+        weekly.filter(function (w) { return w && w.slug === g.slug && w.rounds > 0 && R.isDay(w.week); }).sort(function (x, y) { return x.week < y.week ? -1 : 1; }).forEach(function (w) {
+          groups.push({ tick: ctx.shortDay(w.week), title: T.weekOf(ctx.longDay(w.week)), sum: w });
+        });
+      } else if (by === 'week') {
         var weeks = {};
         mine.forEach(function (x) { var w = R.weekOf(x.day, ctx.weekStart()); (weeks[w] = weeks[w] || []).push(x); });
-        Object.keys(weeks).sort().forEach(function (w) { groups.push({ tick: ctx.shortDay(w), title: T.weekOf(ctx.longDay(w)), list: weeks[w] }); });
+        Object.keys(weeks).sort().forEach(function (w) { groups.push({ tick: ctx.shortDay(w), title: T.weekOf(ctx.longDay(w)), sum: sumOf(weeks[w]) }); });
       } else {
         var buckets = R.BUCKETS.attempt, by2 = {};
         mine.forEach(function (x) { if (x.attempt == null) return; var b = buckets.filter(function (k) { return x.attempt >= k; }).pop(); (by2[b] = by2[b] || []).push(x); });
-        buckets.forEach(function (b) { if (by2[b]) groups.push({ tick: R.bucketLabel('attempt', b), title: T.attemptTitle(R.bucketLabel('attempt', b)), list: by2[b] }); });
+        buckets.forEach(function (b) { if (by2[b]) groups.push({ tick: R.bucketLabel('attempt', b), title: T.attemptTitle(R.bucketLabel('attempt', b)), sum: sumOf(by2[b]) }); });
       }
       var scale = name === 'score' ? 1 : 100;
       var fmt = function (v) { return name === 'score' ? I.short(v) : I.pct(v / 100); };
-      panels.push({ title: ctx.gameName(g.slug), sub: T.measureName[name], draw: 'line', name: ctx.gameName(g.slug) + ': ' + T.measureName[name],
+      var panel = { title: ctx.gameName(g.slug), sub: T.measureName[name], draw: 'line', name: ctx.gameName(g.slug) + ': ' + T.measureName[name],
         axis: name === 'score' ? null : function (v) { return v + '%'; },
-        points: groups.map(function (x) { var v = value(x.list); return { tick: x.tick, title: x.title, value: v == null ? null : v * scale,
-          tip: { title: x.title, rows: [{ value: v == null ? '—' : fmt(v * scale), label: T.measureName[name], color: 'var(--s1)', swatch: 'line' }, { value: T.nRounds(x.list.length) }] } }; }),
-        format: fmt, empty: T.noData });
-      groups.forEach(function (x) { var v = value(x.list); tableRows.push([ctx.gameName(g.slug), T.measureName[name], x.title, v == null ? '—' : fmt(v * scale), ctx.I.int(x.list.length)]); });
+        points: groups.map(function (x) { var v = value(x.sum); return { tick: x.tick, title: x.title, value: v == null ? null : v * scale,
+          tip: { title: x.title, rows: [{ value: v == null ? '—' : fmt(v * scale), label: T.measureName[name], color: 'var(--s1)', swatch: 'line' }, { value: T.nRounds(x.sum.rounds) }] } }; }),
+        format: fmt, empty: T.noData };
+      panels.push(panel);
+      groups.forEach(function (x) { var v = value(x.sum); tableRows.push([ctx.gameName(g.slug), T.measureName[name], x.title, v == null ? '—' : fmt(v * scale), ctx.I.int(x.sum.rounds)]); });
       // One plain sentence: the first third of the tries against the latest third.
       var sorted = mine.slice().sort(function (x, y) { return (x.attempt || 0) - (y.attempt || 0) || (x.day + x.time < y.day + y.time ? -1 : 1); });
       var third = Math.floor(sorted.length / 3);
-      if (third >= 3) {
-        var first = value(sorted.slice(0, third)), last = value(sorted.slice(-third));
-        if (first != null && last != null) sentences.push(T.betterSentence(ctx.gameName(g.slug), name, fmt(first * scale), fmt(last * scale), last > first));
+      if (whole && third >= 3) {
+        var first = value(sumOf(sorted.slice(0, third))), last = value(sumOf(sorted.slice(-third)));
+        var from = first == null ? '' : fmt(first * scale), to = last == null ? '' : fmt(last * scale);
+        if (from && to && !(last < first && from !== to)) {
+          panel.sentence = T.betterSentence(ctx.gameName(g.slug), name, from, to, last > first && from !== to);
+          panel.sentenceChip = ctx.chipFor(null, third);
+        }
       }
     });
+    if (cutRounds(a) && by === 'attempt') ctx.note(c.foot, T.betterLatest((a.rounds || []).length));
     ctx.draw(function () {
       if (c.chart.hidden) return;
       var hosts = C.multiples(c.chart, panels, { rtl: ctx.rtl(), color: 'var(--s1)', height: 140, shared: false, keysHint: T.keysSteps });
-      hosts.forEach(function (host, i) { if (sentences[i]) ctx.h('p', { class: 'note' }, host, sentences[i]); });
+      hosts.forEach(function (host, i) {
+        if (!panels[i].sentence) return;
+        var p = ctx.h('p', { class: 'note' }, host, panels[i].sentence);
+        if (panels[i].sentenceChip) { p.appendChild(document.createTextNode(' ')); ctx.h('span', { class: 'chip', 'data-small': 'true' }, p, panels[i].sentenceChip); }
+      });
     });
     C.table(c.table, T.betterTitle, [{ label: T.game }, { label: T.measure }, { label: by === 'week' ? T.week : T.attempt }, { label: T.value, num: true }, { label: T.rounds, num: true }], tableRows);
   }
