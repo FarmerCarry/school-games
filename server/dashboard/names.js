@@ -9,6 +9,7 @@ window.SG_GAME_NAMES = {
   "bubble-bop": ["فقاعات بوب","Bubble Bop"],
   "cake-guards": ["حرّاس الكعكة","Cake Guards"],
   "candy-rope": ["حبل الحلوى","Munch Rope"],
+  "chaos-island": ["جزيرة الفوضى","Chaos Island"],
   "connect-four": ["أربعة على التوالي","Connect 4"],
   "critter-mart": ["سوق الحيوانات","Critter Mart"],
   "dino-3d": ["الديناصور ثلاثي الأبعاد","Dino 3D"],
