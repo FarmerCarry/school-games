@@ -73,20 +73,22 @@ Record the batches-per-session ratio in `server/README.md`. If it is above 16, r
 ```json
 { "v": 1, "pc": "8c21d0e94a6f",
   "k": { "p1": "3f9a0c51e2b7", "p4": "b81e4c07d2a9" },
-  "l": { "p4": "1b2c3d4e5f60" } }
+  "l": { "p4": "1b2c3d4e5f60" },
+  "g": { "p4": "b81e4c07d2a9" } }
 ```
 
-* **Owner.** `js/telemetry.js` creates and maintains this key. `js/teacher.js` may read it, and may write `k` and `l` only on an explicit teacher action (§A.8). `js/profiles.js` does not change its stored format: the code is never put on the profile record, because a pre-v3 `profiles.js` `clean()` rebuilds records from known fields and would strip it (verified error in Designs 2 and 3).
+* **Owner.** `js/telemetry.js` creates and maintains this key. `js/teacher.js` may read it, and may write `k`, `l` and `g` only on an explicit teacher action (§A.8). `js/profiles.js` does not change its stored format: the code is never put on the profile record, because a pre-v3 `profiles.js` `clean()` rebuilds records from known fields and would strip it (verified error in Designs 2 and 3).
 * **`pc`**: 12 lowercase hex characters, made with the existing `hex(12)` (`crypto.getRandomValues`) the first time an active sink writes the key. It is never the teacher page's `statsmeta.pc.id` (the locked client test asserts that `pcwxyz` never appears in a batch, and that id is paired with the typed PC label in teacher exports).
 * **`k`**: profile key (`/^p[0-9a-z]{1,8}$/`) to code: 12 lowercase hex. There are at most 64 entries. A code is never derived from the key, the animal, the colour or anything else.
 * **`l`**: pending links, profile key to the old code. These are written by the teacher-page transfer and consumed by the sink (§A.8).
+* **`g`**: profile key to the code a teacher gave it through the transfer (§A.8). While `g[key] === k[key]`, the profile's code is another PC's.
 * **Written only while the sink is active** (`ready && live()`), and re-read from storage before each write. This keeps the rule "an inert sink writes nothing". If the write fails (blocked or full storage), the sink sends `u: ''` and `p: ''` for that page: it never invents memory-only codes, which would create fake students and PCs.
 * **Lifecycle:**
   * The code for the current profile is created in `begin()` when it is missing. Profiles made before v3 get one on their first v3 session.
-  * `begin()` prunes entries whose key is no longer in `SGProfiles.list()`, and records `['pr', t, u]` for each one (the profile was removed: censoring, not drop-out).
+  * `begin()` prunes entries (`k`, `l` and `g`) whose key is no longer in `SGProfiles.list()`, and records `['pr', t, u]` for each code made on this PC (the profile was removed: censoring, not drop-out). A code a teacher gave (`g[key] === k[key]`) goes without a `pr`: the child plays on with it on the other PC. A pending `l` of a removed profile goes with it, without a `pr`; the owner link (§A.9) can still join it.
   * `changed()` does the same when it sees a key disappear.
   * The key sits outside `sg:site:stats:` and `sg:site:tm:`, so the teacher's **clear** (`clearStats()` in `js/teacher.js`) and the **stop** path in `live()` both keep it. A teacher's clear must not break a child's long-term record: the server keeps its copy anyway.
-* **Validation on read:** `v === 1`; `pc` is 12 hex or missing; every value in `k` and `l` matches `U_RE = /^[0-9a-f]{12}$/`. Anything else is dropped. A damaged key is rewritten as `{v:1, pc:'', k:{}, l:{}}`, but only by an active sink.
+* **Validation on read:** `v === 1`; `pc` is 12 hex or missing; every value in `k`, `l` and `g` matches `U_RE = /^[0-9a-f]{12}$/`. Anything else is dropped. A damaged key is rewritten as `{v:1, pc:'', k:{}, l:{}, g:{}}`, but only by an active sink.
 
 ### A.2 Guests
 
@@ -126,7 +128,7 @@ About 20 children share each lab PC, so a 12-profile cap pushes most of them int
   * `save()` writes `:more` first (removing it when empty), then the main key.
   * The `storage` listener also reacts to `:more`.
   * An old `clean()` sees at most 12 records and drops nothing. An old tab can only create a profile while the main list has fewer than 12; the new code keeps the main key full whenever there are 12 or more.
-* `Kit.dda`'s player store goes from 16 to 24 (`keys.length > 24` in `save()`). Old game pages still trim to 16, which only drops the DDA level of the least recently used players.
+* `Kit.dda`'s player store goes from 16 to 28 keys: a full PC's 24 profiles plus the at most 4 guest keys `_`, `_6-7`, `_8-9` and `_10-11` (`keys.length > 28` in `save()`). Old game pages still trim to 16, which only drops the DDA level of the least recently used players.
 * `ss.np` (§B.3) reports the profile count, so the dashboard can flag "Profiles full" PCs.
 
 ### A.6 Labels on the dashboard
@@ -156,9 +158,9 @@ About 20 children share each lab PC, so a 12-profile cap pushes most of them int
 * **Action "Same child as on another PC"** (one per profile; disabled with a note while sharing is off on this PC):
   * The teacher types the 13-character code shown for that child on the other PC (case-insensitive; dashes and spaces are ignored).
   * Refused for: wrong length, a wrong check character ("one character is wrong; check the code"), or the profile's own code.
-  * On success: `rid.k[key] = newCode`, and `rid.l[key] = oldCode` when this profile had a code and no pending link is already there (keep the oldest pending link).
+  * On success: `rid.k[key] = newCode` and `rid.g[key] = newCode`; `rid.l[key] = oldCode` when this profile had a code, no pending link is already there (keep the oldest pending link), and the old code is not one a teacher gave before (`g[key] !== oldCode`). A given code is never put in `l`, so correcting a wrong transfer never merges the wrongly given child.
   * Confirmation: «من اللعبة القادمة يُحسب لعب هذا الطفل مع رمزه على الجهاز الآخر، ويُضم إليه ما لعبه هنا من قبل.» ("From the next game, this child's play counts with their code on the other PC, and what they played here before is added to it.")
-* **What the sink does with it**: at `begin()` for a profile with `rid.l[key]`, it records `['cd', t, oldCode]` right after `ss`, then deletes `l[key]`.
+* **What the sink does with it**: at `begin()` for a profile with `rid.l[key]`, it records `['cd', t, oldCode]` right after `ss`, at most once per page. `l[key]` stays until a batch holding that `cd` gets a 2xx (the answer to `done()`, or to a hidden page's own send while the page is still open), so a lost batch never loses the link.
 * **What the server does with it**: it writes `aliases(u_old = oldCode, u_new = envelope.u, how = 'pc')`, so the earlier history merges retroactively (§D.6).
 
 ### A.9 Owner link in the dashboard (for children who already have two codes) [S, D]
@@ -253,10 +255,10 @@ The server's own flags, computed at ingest:
 
 | Counter | Where | Rule |
 |---|---|---|
-| `r0` | `mark()` for a round start | `r0 = clock()`; wall time = `clock() − r0` at the end |
+| `r0` | `mark()` for a round start | `r0` = the clock reading of the `tally()` just before; wall time = that reading at the end `− r0`, so it always covers the round's engaged time |
 | `ri` inputs | `input(e)` | `if (roundId && !e.repeat) ri++` (key presses and clicks Kit already sees) |
 | `rd` idle lapses | `engage(extendOnly)` | `if (!extendOnly && roundId && until && t >= until) rd++` (a key press or click after the 20 s window lapsed, inside an open round; after a pause `until = 0`, so it is not counted) |
-| `rp` pauses | `suspend()` | `if (roundId) rp++` |
+| `rp` pauses | `suspend()` | `if (roundId && until !== 0) rp++` (one per stop of play: a blur and the hidden page after it, or Kit's own fullscreen exit and the portal's `sg:pause`, count once; a pause before any input in the round still counts) |
 | `rsum`, `rn` | the cue branch of `input()` and in `Kit.track.react(ms)` | add the measured ms; `rn++` (next to `put(rt, …)`) |
 | `dl` | `read()` in `Kit.dda` | `dl = Math.round(l * 1000)`; −1 until the first read; sticky (the DDA level of the last read before the round ended) |
 
@@ -293,7 +295,7 @@ M3 (DDA and `Kit.track` across the catalogue) adds accuracy, reaction time and D
    * The replay index is kept exactly as today (`s.n[key]`).
 3. **`gp`**: `seal()` first appends `['gp', sec(s), v.n, v.g, min(v.e, 216e5)]` for the open visit and every visit still closing, if its `v.e` changed since its last `gp` or `gx` **and** its session has other pending events. It never causes a batch of its own.
 4. **Batch timer**: `rec()` arms `arm(every * 1000)` with **`every = 60`** (was 20 s). On a 2xx answer, `done()` reads the `X-Batch-Every` header. An integer 20..600 sets `every`; anything else is ignored. A missing header resets `every` to 60. `every` lives only in memory.
-5. **Queue**: `load()` keeps entries with `e.v === 2 || e.v === 3`. Entries are `{t, w0, e}`. Everything else about the queue is unchanged (128 KB, 7 days, the clear, the address hash).
+5. **Queue**: v3 batches queue under their own key, `sg:site:tm:q3:<hash>`, which no older build reads or writes (a pre-v3 tab still open on the PC rewrites `sg:site:tm:q:<hash>` with its own wire version only). `load()` moves the old key's entries in (oldest first, de-duplicated by `b`) and removes that key; it is never written. `load()` keeps entries with `e.v === 2 || e.v === 3`. Entries are `{t, w0, e}`. Everything else about the queue is unchanged (128 KB, 7 days, the clear, the address hash). A later wire version takes `q4` and moves `q3`'s entries the same way.
 6. **New hooks** on `window.SGTelemetry`, all through `hook()` (so they do nothing when inert):
 
    | Hook | Called by `site.js` |
@@ -340,6 +342,7 @@ SQL never applies zone rules row by row. JavaScript computes the bounds and offs
 * The **first batch of a session to arrive** sets `start_s`, and it is never updated (`INSERT`; the conflict branch leaves `start_s` alone).
 * Only differences in the PC's own clock are used, so a PC whose clock is wrong by hours or years still dates its play correctly.
 * A batch held offline for 3 days lands on the day it was played.
+* A session first stored starts no earlier than the start of `facts_since`'s local day: a tab open across the deploy is counted from the deploy day, which is rolled and shown.
 
 ### C.3 The school zone (`settings`)
 
@@ -353,7 +356,8 @@ SQL never applies zone rules row by row. JavaScript computes the bounds and offs
 
 * **The nightly vote** runs in `rollupStep` after yesterday is rolled: `SELECT z, COUNT(*) FROM st_pcs WHERE last_s >= ? AND z <> '' GROUP BY z ORDER BY 2 DESC, z LIMIT 1`.
 * **A zone change** (from any source) does three things: it bumps `settings.tz_epoch`, sets `dirty = 2` (full rebuild) on every `roll_days` row since `facts_since`, and bumps `rv`. Facts never change. The cron rebuilds newest first under the read guard (§D.7), and the dashboard shows "Moving past days to the new clock: 60 of 200 days done".
-* **The week start**: `settings.week_start` is `weekStartOf(tz)` while `week_source = 'auto'`. One click sets `owner`.
+* **The week start**: `settings.week_start` is `weekStartOf(tz)` while `week_source = 'auto'`. One click sets `owner`. A change of the week start bumps `rv` and clears the kept parts, so kept cohorts and weekly minutes follow the new weeks.
+* **UTC's names**: `UTC`, `Etc/UTC`, `Etc/GMT`, `GMT` and the other names of UTC are stored as `UTC` (from a PC's `z` and from `POST /v1/admin/settings`).
 
 ### C.4 What follows the school clock
 
@@ -386,12 +390,12 @@ SQL never applies zone rules row by row. JavaScript computes the bounds and offs
 -- settings (TEXT values) and bookkeeping
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT, WITHOUT ROWID;
   -- tz, tz_source, tz_epoch, week_start, week_source, keep_days ('' = env default), facts_since, legacy_until,
-  -- v3_since, rv, rolled_through, trimmed_before
+  -- v3_since, rv, rolled_through, trimmed_before, trimmed_size, trim_to (the storage guard's end), rebuild
 CREATE TABLE IF NOT EXISTS usage (day TEXT PRIMARY KEY /* UTC */, reads INTEGER NOT NULL DEFAULT 0,
   writes INTEGER NOT NULL DEFAULT 0, rebuild_reads INTEGER NOT NULL DEFAULT 0, export_reads INTEGER NOT NULL DEFAULT 0,
   size INTEGER NOT NULL DEFAULT 0) STRICT, WITHOUT ROWID;
-CREATE TABLE IF NOT EXISTS roll_days (day TEXT PRIMARY KEY /* local */, dirty INTEGER NOT NULL /* 0 clean, 1 diff, 2 full */,
-  rolled_s INTEGER NOT NULL) STRICT, WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS roll_days (day TEXT PRIMARY KEY /* local */, dirty INTEGER NOT NULL /* 0 clean, 1 diff, 2 full, 3 recount */,
+  rolled_s INTEGER NOT NULL, rows INTEGER NOT NULL DEFAULT 0 /* rows its rollups took */) STRICT, WITHOUT ROWID;
 
 -- facts (pseudonymous, row level)
 CREATE TABLE IF NOT EXISTS st_pcs (p TEXT PRIMARY KEY, first_s INTEGER NOT NULL, last_s INTEGER NOT NULL, z TEXT NOT NULL,
@@ -446,7 +450,7 @@ CREATE TABLE IF NOT EXISTS live (s TEXT PRIMARY KEY, slug TEXT NOT NULL, seen_mi
 | `r_student_day` | `(day, u)`, plus `INDEX r_student_day_u (u, day)` | `a TEXT` (band of the day's first session), sessions, engaged_ms, opens, games, rounds, w, l, d, e, q, hits, misses, rt_sum, rt_n, level_ups, first_s, last_s, pcs |
 | `r_student_game` | `(day, slug, u)`, plus `INDEX r_student_game_u (u, day)` | `a TEXT`, opens, engaged_ms, rounds, w, l, d, e, q, hits, misses, rt_sum, rt_n, score_sum, score_n, score_max, dda_sum, dda_n, tier_sum, tier_n, hearts (net), first_attempt, last_attempt |
 | `r_pc_day` | `(day, p)` (`p = ''` covers v2 and unknown PCs) | sessions, students, guests, engaged_ms, opens, loads, load_ms, load_max, errors, quits, f0..f3, il0..il5, np_max, new_profiles, busy_s, first_s, last_s, `k TEXT`, wire |
-| `r_stat` | `(day, a, metric, slug, k1, k2)`, plus `INDEX r_stat_metric (metric, slug, day)` | n, students, w, l, d, e, q, ms, wall_ms, win_ms, hits, misses, rt_sum, rt_n, score_sum, score_n, tier_sum, tier_n, dda_sum, dda_n, inputs, gap_sum, gap_n |
+| `r_stat` | `(day, a, metric, slug, k1, k2)` (no secondary index: reads seek by day and band) | n, students, w, l, d, e, q, ms, wall_ms, win_ms, hits, misses, rt_sum, rt_n, score_sum, score_n, tier_sum, tier_n, dda_sum, dda_n, inputs, gap_sum, gap_n |
 
 `r_student_day` and `r_student_game` are keyed by the **raw** code. Links are applied when they are read, so a new link never forces a rebuild. Distinct-student counts inside `r_day`, `r_game_day`, `r_level_day`, `r_pc_day` and `r_stat` use the canonical code (`COALESCE(al.u_new, s.u)` through `LEFT JOIN aliases al ON al.u_old = s.u`), as of the day's latest roll.
 
@@ -526,8 +530,8 @@ GROUP BY s.a, r.slug, r.code, 6;
 | W6 | `st_rounds` upsert from `json_each`. `COALESCE` for every `rs` field and every `re` field, and for `attempt`; `duo` from the id. `rs` and `re` of the same `(n, k)` in one batch are one row. | `rs` and `re` |
 | W7 | `st_student_games` upsert: `rounds = MAX(rounds, excluded.rounds)`, `first_s = MIN` | fresh ended rounds, `u ≠ ''` |
 | W8 | `INSERT OR IGNORE INTO st_marks` from `json_each` (`lv fv tu ct pr cd`) | those events |
-| W9 | `UPDATE st_students SET removed_s = COALESCE(removed_s, ?) WHERE u IN (SELECT value FROM json_each(?))` | `pr` |
-| W10 | `aliases` insert plus the one-hop rewrite (§A.9), `how = 'pc'` | `cd` with `oldCode ≠ u` and `u ≠ ''` |
+| W9 | `UPDATE st_students SET removed_s = r.t FROM (… MAX(t) per code …) r WHERE u = r.u AND (removed_s IS NULL OR removed_s < r.t)`: the latest removal is kept. Answers and the export show a student removed only while `removed_s >= last_s` of the code (or of its linked codes), so later play on another PC clears it | `pr` |
+| W10 | `aliases` insert plus the one-hop rewrite (§A.9), `how = 'pc'`; a new link bumps `rv` (folded into the zone statement, so the batch stays within 20 statements) | `cd` with `oldCode ≠ u` and `u ≠ ''` |
 | W11 | `UPDATE roll_days SET dirty = 1 WHERE day = ? AND dirty = 0` | the session's local day ≤ `rolled_through` (late data) |
 | W12 | settings: `tz` = `z` and `tz_source = 'pc'` while the source is `none` or `dashboard`; also `v3_since` on the first v3 batch | rare |
 | W13 | `live` upsert (as today, plus `u`, `p`, `wire`) | always |
@@ -562,23 +566,26 @@ Each run does at most **one** day, in this order:
 1. **First roll.** The oldest local day `D` with `D < today`, `D ≥ facts_since`, no `roll_days` row, and (for `D = yesterday`) local time ≥ 01:00. It runs a plain INSERT, then upserts `roll_days (D, 0, now)`.
 2. **Full re-roll.** A `roll_days` row with `dirty = 2`, newest first, under the read cap.
 3. **Diff re-roll.** A `roll_days` row with `dirty = 1` and `rolled_s < now − 3600` (debounce: at most once an hour per day), oldest first.
+4. **Recount.** The owner's "Recount all days" marks `dirty = 3`; those days are re-rolled newest first as a diff, after every `dirty = 2` day.
 
 After a roll it sets `rolled_through` (the newest `D` such that every day from `facts_since` to `D` has a row), increments `settings.rv`, and deletes `kpi_cache` rows whose `made ≠ rv`. The vote (§C.3) runs after the day's first roll of yesterday.
 
-**Read cap:** rolls 2 and 3 are skipped for the rest of the UTC day once `usage.rebuild_reads > 2,000,000` or `usage.reads > 3,000,000`. Roll 1 always runs.
+**Read cap:** rolls 2 to 4 are skipped for the rest of the UTC day once `usage.rebuild_reads > 2,000,000` or `usage.reads > 3,000,000`. Roll 1 always runs.
+
+**Write budget:** rolls 2 to 4, and the deletions the cron catches up on (§D.11), start only while today's writes, plus the work's estimate (from `roll_days.rows`, twice that for a full re-roll, 15,000 before it is known), plus a reserve of 40,000 for the rest of the day's batches, roll and purge, stay at or under 85,000. Otherwise they wait, if need be for the next UTC day.
 
 A roll is one `db.batch` of about 24 statements: the 9 rollup tables and 14 `r_stat` metrics, the `roll_days` upsert and the settings update. The cron invocation is at most 35 statements with the sweep and the settings read. Cron CPU is statement building only, under 1 ms.
 
 ### D.8 Usage meter and guards
 
-* **Meter.** Every D1 result's `meta.rows_read`, `meta.rows_written` and `meta.size_after` are summed per instance. They are flushed at most once a minute with W15: `INSERT INTO usage (day, reads, writes, size) VALUES (?, ?, ?, ?) ON CONFLICT (day) DO UPDATE SET reads = reads + excluded.reads, writes = writes + excluded.writes, size = excluded.size`. Rebuild and export reads also add to `rebuild_reads` and `export_reads`. Counts can be lost when an instance dies, so the dashboard says "about".
-* **Write guard**, sent in the `X-Batch-Every` header of every `204` (exposed through CORS, next to `Retry-After`): `60` while today's writes are ≤ 60,000; `180` up to 80,000; `300` above. Above 80,000, rolls 2 and 3 also pause. Above 90,000, admin POST actions (link, forget, recount) answer `429 {"error":"writes"}`.
+* **Meter.** Every D1 result's `meta.rows_read`, `meta.rows_written` and `meta.size_after` are summed per instance. They are flushed at most once a minute with W15: `INSERT INTO usage (day, reads, writes, size) VALUES (?, ?, ?, ?) ON CONFLICT (day) DO UPDATE SET reads = reads + excluded.reads, writes = writes + excluded.writes, size = excluded.size`. Rebuild and export reads also add to `rebuild_reads` and `export_reads`. The meter flushes first in an invocation that flushes, and the cron flushes its own count at the end of its run, so the cron's writes are counted. Counts can be lost when an instance dies, so the dashboard says "about".
+* **Write guard**, sent in the `X-Batch-Every` header of every `204` (exposed through CORS, next to `Retry-After`): `60` while today's writes are ≤ 60,000; `180` up to 80,000; `300` above. Rolls 2 to 4 follow the write budget of §D.7 instead of a fixed pause. Above 90,000, admin POST actions (link, forget, recount) answer `429 {"error":"writes"}`.
 * **Read guard:**
   * Export pages answer `429 {"error":"reads"}` once today's reads exceed 3,500,000.
   * Every admin read except `live` and `settings` answers that way above 4,200,000.
   * The dashboard says: "Today's free reading allowance is nearly used; this continues after 03:00 (school time)". The time shown is the next 00:00 UTC in the school zone.
   * Ingest is never refused by our guards.
-* **Storage guard** (daily purge): when `size > 425,000,000` bytes, delete `st_rounds` of the oldest 30 days of facts (an `sid` range) and set `settings.trimmed_before`. Rollups stay, so charts keep working. The Data tab says "Round-by-round details before … were removed to stay inside the free 500 MB; download the research files each term."
+* **Storage guard** (daily purge): when `size > 425,000,000` bytes, set `settings.trim_to` to the end of the oldest 30 days of facts and delete their `st_rounds` 800 sessions a run (the cron catches up), moving `settings.trimmed_before` as it goes. Rollups stay, so charts keep working. The Data tab says "Round-by-round details before … were removed to stay inside the free 500 MB; download the research files each term."
 
 ### D.9 Budget math (busy school: 500 sessions/day, 4,600 batches at 60 s, 2.52 visits and 11.07 rounds per session)
 
@@ -632,6 +639,8 @@ During the rollout, while PCs still send v2 at 20 s (6,840 batches/day), ingest 
 
 The storage guard starts at 425 MB.
 
+**Measured after the milestone 2.5 review** (`server/README.md` "Free-plan arithmetic" holds the numbers, and they replace the estimates above where they differ): the rollups take about **0.55 MB per school day** of 471 sessions, not 0.3 MB (`r_stat` alone is about 0.33 MB: some 4,500 rows of 23 sums), so a busy school nears the storage guard in its third year (about 285 MB of rollups and 135 MB of facts), where the guard keeps it under 500 MB. The first roll of a school day writes about **8,000 rows**. Export pages are 2,500 lines, so a school year's export is about 700 pages.
+
 **Requests:** 4,600 batches + 289 crons + about 1,500 dashboard calls + at most 300 export pages ≈ 6,700 a day (7%).
 
 **CPU per invocation** (Node proxies in tests):
@@ -640,7 +649,7 @@ The storage guard starts at 425 MB.
 |---|---|
 | Ingest | ≤ 2 ms |
 | Admin endpoints (SQL `GROUP BY`; JavaScript assembles at most about 8,000 small rows) | ≤ 5 ms |
-| Export page (≤ 5,000 SQL-built lines joined) | ≤ 3 ms |
+| Export page (≤ 2,500 SQL-built lines, one string SQL joins) | ≤ 3 ms |
 | Cron | ≤ 1 ms |
 
 ### D.10 Statements per invocation (tests lock these)
@@ -657,8 +666,8 @@ The storage guard starts at 425 MB.
 
 * **Cutoffs:**
   * `keep = settings.keep_days || env RETENTION_DAYS` (default 400).
-  * Facts older than `localDay(now − keep)`: `st_rounds`, `st_visits` and `st_marks` with `sid` below the first session id whose `start_s` is at or after the cutoff; then the sessions themselves.
-  * `st_students` with `last_s` older than the cutoff, with their `st_student_*` rows and aliases.
+  * Facts older than `localDay(now − keep)`: `st_rounds`, `st_visits` and `st_marks` of the oldest 600 sessions before the cutoff a run, then those sessions (the cron catches up within the write budget of §D.7, so a shorter retention never deletes a year in one run).
+  * `st_students`, `st_pcs` and their `st_student_*` rows and aliases at the **rollups'** cutoff (`max(800, keep)` days), not the facts': the rollups still name them, so old periods answer the same after the facts go.
   * Rollups older than `max(800, keep)` days.
   * Legacy `agg_*` days older than `keep`.
   * `batches` older than 30 days, `usage` older than 60, `kpi_cache` whose `made ≠ rv`, and `live` out of its window.
@@ -872,14 +881,14 @@ The tab notes plainly: "Accuracy and reaction time are measured in 3 games so fa
 
 | Endpoint | Answer |
 |---|---|
-| `GET /v1/admin/kpis?from&to[&band]` | The M2 shape, unchanged (`server/README.md`), with these changes: `minSessions: 0`; no group is ever `suppressed`; `range` adds `legacyUntil` and `factsSince`; `totals.students = {active, new, returning, knownBefore, guestSessions, guestMinutes, minutesPerStudentDay: {p25, median, p75, mean}}`; `daily[].students` and `daily[].guestMinutes`; `games[]` adds `students, hearts:{on,off}, tutorials:{start,done}, wallMinutes, actionsPerMinute, avgScore, unended, duoRounds`; `levels[]` adds `students, avgScore, unended`; `bands[]` adds `students`; `quality: {linkedShare, v2Share, clockEstimatedShare, unclosedVisits, unknownBandShare, idleHandovers, pcsNew, oldVersionSessionShare, profilesFullPcs, forgetfulPcs}`. Quantiles are computed in SQL. |
+| `GET /v1/admin/kpis?from&to[&band]` | The M2 shape, unchanged (`server/README.md`), with these changes: `minSessions: 0`; no group is ever `suppressed`; `range` adds `legacyUntil` and `factsSince`; `totals.students = {active, new, returning, knownBefore, guestSessions, guestMinutes, minutesPerStudentDay: {p25, median, p75, mean}}`; `daily[].students` and `daily[].guestMinutes`; `games[]` adds `students, hearts:{on,off}, tutorials:{start,done}, wallMinutes, actionsPerMinute, avgScore, unended, duoRounds`; `levels[]` adds `students` (each day's distinct students summed over the range: student-days, not distinct students; the game page's `firstWin` counts each child once), `avgScore, unended`; `bands[]` adds `students`; `quality: {linkedShare, v2Share, clockEstimatedShare, unclosedVisits, unknownBandShare, idleHandovers, pcsNew, oldVersionSessionShare, profilesFullPcs, forgetfulPcs}`. Quantiles are computed in SQL. |
 | `GET /v1/admin/live` | `{v, windowSec: 300, minSessions: 0, total: {sessions}, students, guests, unknown, pcs, games: [{slug, sessions}]}` |
 | `GET /v1/admin/settings` | `{v, clock: {tz, source, offsetMin, today, now: 'HH:MM', weekStart, weekSource, detected: [{tz, pcs}], factsSince, legacyUntil, v3Since}, keep: {days, source: 'env'\|'owner', rollupDays}, storage: {bytes, limit: 500000000, guardAt: 425000000, trimmedBefore}, usage: {day, reads, writes, readsLimit: 5000000, writesLimit: 100000, batchEvery}, rebuild: {pending, full, done}, accepts: [2, 3], pcs: {new, seen14d}}` |
 | `POST /v1/admin/settings` | Body `{tz?, source?: 'dashboard', weekStart?: 'sun'\|'mon', keepDays?: 400\|760}`, then the GET answer. `tz` without `source` is an owner choice. `source: 'dashboard'` is ignored unless the current source is `none` or `dashboard`. |
-| `GET /v1/admin/students?from&to[&band]` | `{v, range, students: [{u, label, kind: 'profile', linked: [u…], band, bandFirst, firstDay, lastDay, days, sessions, minutes, rounds, w, l, q, games, top: [slug, slug, slug], pcs, knownBefore, removed, weekly: [13 numbers]}]}`: canonical students, with today taken from the facts. |
+| `GET /v1/admin/students?from&to[&band][&after]` | `{v, range, students: [{u, label, kind: 'profile', linked: [u…], band, bandFirst, firstDay, lastDay, days, sessions, minutes, rounds, w, l, q, games, top: [slug, slug, slug], pcs, knownBefore, removed, weekly: [13 numbers]}], next?}`: canonical students by code, with today taken from the facts, in pages of at most 1.5 MB (D1 refuses a value over 2 MB): `next` is the last code of a page with more after it, and `&after=<next>` asks for the next page; the dashboard joins every page. |
 | `GET /v1/admin/student?u&from&to` | `{v, student: {u, label, kind, band, bandFirst, firstDay, lastDay, profileMadeDay, knownBefore, pcs: [label…], linked: [u…]}, days: [{day, sessions, minutes, opens, rounds, w, l, q}], hours: [24 numbers], games: [{slug, minutes, rounds, w, l, d, e, q, hits, misses, rtMean, bestScore, avgScore, ddaMean, hearts}], weekly: [{week, slug, rounds, w, l, hits, misses, rtSum, rtN, scoreSum, scoreN, ddaSum, ddaN}], rounds: [≤ 600 most recent: {day, time, slug, id, code, ms, score, tier, dda, hits, misses, rtMean, attempt, minIntoSession}], sessions: [≤ 100: {day, time, pc, minutes, games: [slug…], rounds, wins, why}], persist: {same, level, game, stop}}` |
 | `GET /v1/admin/game?slug&from&to[&band]` | `{v, slug, range, bands: [{band, students, minutes, opens}], daily: [{day, students, minutes, opens}], stats: {columns, rows}` (the `r_stat` rows of that slug), `firstWin: [{id, students, median, p75, never}], paired: {columns, rows: [[u, a, part 0\|1, rounds, w, l, hits, misses, rtSum, rtN, scoreSum, scoreN, ddaSum, ddaN]]}, flowsIn: [{from, n}], flowsOut: [{to, n}]}` |
-| `GET /v1/admin/stats?from&to&metrics=a,b,…[&band][&slug]` | `{v, range, columns: ['a','metric','slug','k1','k2','n','students',…], rows: [[…]]}`: `r_stat` grouped over the range (closed days only); `metrics` is a subset of §D.2 |
+| `GET /v1/admin/stats?from&to&metrics=a,b,…[&band][&slug]` | `{v, range, columns: ['a','metric','slug','k1','k2','n','students',…], rows: [[…]]}`: `r_stat` grouped over the range (closed days only); `metrics` is a subset of §D.2; `columns` holds the keys and only the sums the asked metrics have (rows whose sums are all 0 are left out) |
 | `GET /v1/admin/cohorts?from&to[&band]` | `{v, weekStart, cohorts: [{week, size, active: [n0, n1, …, n12]}]}` (from `v3_since` on) |
 | `GET /v1/admin/pcs?from&to` | `{v, pcs: [{p, label, firstDay, lastDay, days, sessions, students, guests, minutes, smoothShare, stallShare, avgLoadMs, slowInputShare, errors, npMax, newProfiles, z, build, flags: ['full'\|'forgets'\|'choppy'\|'old']}]}` |
 | `GET /v1/admin/export?file&from&to[&after]` | §F.6 |
@@ -909,7 +918,7 @@ The tab notes plainly: "Accuracy and reaction time are measured in 3 games so fa
 
 ### F.6 Research export
 
-* **The request**: `GET /v1/admin/export?file=<name>&from&to[&after]` answers `200 text/csv; charset=utf-8`. The body is up to 5,000 lines **without a header**. Headers: `X-Next: <cursor>` (absent on the last page) and `X-Rows: <n>`.
+* **The request**: `GET /v1/admin/export?file=<name>&from&to[&after]` answers `200 text/csv; charset=utf-8`. The body is up to 2,500 lines (sessions: 400) **without a header**, one string SQL joins. Headers: `X-Next: <cursor>` (absent on the last page) and `X-Rows: <n>`.
 * **How lines are built**: each line is built in SQL (`col || ',' || …`) and read with `.raw()`; JavaScript only joins the lines.
 * **No quoting needed**: every value is a validated token (slugs, round ids, hex codes, band labels, numbers, ISO dates, `HH:MM:SS`), so a value never contains a comma, a quote or a newline. A test asserts this.
 * **Cursors**: `start_s.sid` for files built from sessions (pages of 400 sessions); `u` for students; `day.a.slug` for daily_games; `p` for pcs.
@@ -1015,7 +1024,7 @@ The "Before you turn it on" text shrinks to one paragraph. There are no other wa
 | 1 | S | The server PR (§D, the §F.4 endpoints, `simulate.mjs` v3, fixtures, `wrangler.json` `RETENTION_DAYS "400"`, README, tests). On its own it already works with the **M2 dashboard**: the answers are additive, nothing is suppressed, and the old dashboard's 1–2-session defence still hides some days until step 2. |
 | 2 | D | The dashboard PR (retone and clock first, then the tabs, export and demo). It may land with step 1 in one deploy. |
 | 3 | S | **Deploy**: copy `server/` byte for byte into `FarmerCarry/school-games-telemetry`, except that repo's own `wrangler.json`, where only `RETENTION_DAYS` changes to `"400"`. Cloudflare deploys on push. **Check:** `/v1/health` = `accepts [2,3]`, schema 4; a real v2 batch answers 204 (after one possible 503); `/?demo`; after sign-in the legacy days and new "student unknown" sessions show every number; the next 5-minute cron runs without errors; the Settings meters move. Watch one school day. |
-| 4 | C | The client PR: `kit.js` `rx` and the dda cap; `profiles.js` 24 with `:more`; `site.js` hooks and idle hand-over; `telemetry.js` v3; `teacher.js` codes, transfer and copy; budgets; docs. **Publish only after step 3's check.** If v3 reaches PCs first, the M2 server answers 400 and the sink drops those batches for good. |
+| 4 | C | The client PR: `kit.js` `rx` and the dda cap; `profiles.js` 24 with `:more`; `site.js` hooks and idle hand-over; `telemetry.js` v3; `teacher.js` codes, transfer and copy; budgets; docs. **Publish only after step 3's check.** If v3 reaches PCs first, the M2 server answers 400 and the sink drops those batches for good. The workflow's deploy job enforces it: it stops before publishing while the server's `/v1/health` `accepts` lacks 3. |
 | 5 | S, D | After two weeks: the v2 share, linked share and data-quality panel; the zone source is `pcs`. |
 
 ### H.3 Byte budgets [C]
@@ -1031,7 +1040,7 @@ Every change is recorded in `docs/PERFORMANCE.md`. The dashboard is outside the 
 
 ### H.4 Rollback
 
-An older server refuses a schema-4 database. A roll back therefore means either redeploying v4 with a fix, or a D1 Time Travel restore (7 days, free) followed by redeploying M2. Because `agg_*` are kept frozen, a restore to just before the deploy is a clean M2 state. PCs queue for up to 7 days meanwhile. Say this in `server/README.md` "Updating the server".
+An older server refuses a schema-4 database. A roll back therefore means either redeploying v4 with a fix, or a D1 Time Travel restore (7 days, free) followed by redeploying M2. Because `agg_*` are kept frozen, a restore to just before the deploy is a clean M2 state. PCs queue for up to 7 days meanwhile. Time Travel plus the M2 server is safe only **before** step 4 (the v3 portal) is published: the M2 server answers v3 batches with 400, which the sink treats as final. After step 4, redeploy v4 with a fix instead. Say this in `server/README.md` "Updating the server".
 
 ### H.5 Tests (each owner adds or changes their own)
 
@@ -1092,7 +1101,7 @@ An older server refuses a schema-4 database. A roll back therefore means either 
 **[C] `shared-kit.test.mjs`**:
 * `rx` comes right before every `re`, only while telemetry is on; the counters follow §B.4 (key repeats excluded, idle lapses only after 20 s, pauses, RT sum and count, DDA ‰ sticky); they reset at a round start.
 * `sg:telemetry` stays version 2; `sg:stats` v1 is byte-identical; no new timers; nothing posted at load.
-* `Kit.dda` keeps 24 players.
+* `Kit.dda` keeps 28 keys: 24 profiles and the guests' 4 band keys.
 
 **[C] `portal-profiles.test.mjs`**:
 * 24 profiles, using `sg:site:profiles:more`.
