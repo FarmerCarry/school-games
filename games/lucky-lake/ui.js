@@ -46,9 +46,6 @@
   var perfectStreak = 0;
   var goalFx = null;
   var hit = 0;
-  var musicT = 0;
-  var musicStep = 0;
-  var waterT = 0;
   var creakT = 0;
   var bookPage = 0;
   var WX = { rain: 'السمك جائع!', rainbow: 'سمك ملون!', night: 'سمك يضيء!', frenzy: 'السمك مجنون!' };
@@ -806,6 +803,7 @@
         burst(dip.x, dip.y - 8, 10, ['#fff', '#d7f4ff', '#7ee0ff']);
       }       else if (e.t === 'bite') {
         var bitten = game.state.anglers[e.i].fish;
+        Kit.track.cue();
         Sfx.bite(bitten ? bitten.rare : 0);
         shout('!', true);
         shake.add(7);
@@ -813,6 +811,7 @@
         rings.push({ x: biteAt.x, y: biteAt.y, t: 0 });
         burst(biteAt.x, biteAt.y, 12, ['#e7f8ff', '#fff', '#7ee0ff']);
       } else if (e.t === 'hook') {
+        Kit.track.hit();
         hit = 0.08;
         Sfx.splash(0);
         shake.add(9);
@@ -822,6 +821,7 @@
       }
       else if (e.t === 'splash') burst(bobberOf(game.state.anglers[e.i]).x, 330, e.kind === 'cast' ? 10 : 6, ['#e7f8ff', '#7ee0ff']);
       else if (e.t === 'catch') {
+        Kit.track.hit();
         hit = 0.08;
         var fish = game.state.anglers[e.i].fish;
         Sfx.catch(fish ? fish.rare : 0);
@@ -835,11 +835,12 @@
         if (fish && (fish.rare >= 4 || fish.boss) && !Kit.motion.reduced()) slow = 0.4;
         pop((fish ? fish.w.toFixed(1) : '') + ' كغ', 640, 240, '#fff');
       }       else if (e.t === 'escape') {
+        Kit.track.miss();
         Sfx.miss();
         shout('مع السلامة!');
         bye = { id: e.id, i: e.i, t: 0 };
-      } else if (e.t === 'miss') { Sfx.miss(); shout('هرب!'); }
-      else if (e.t === 'scare') { Sfx.miss(); shout('فزع!'); }
+      } else if (e.t === 'miss') { Kit.track.miss(); Sfx.miss(); shout('هرب!'); }
+      else if (e.t === 'scare') { Kit.track.miss(); Sfx.miss(); shout('فزع!'); }
       else if (e.t === 'reveal') {
         $('shout').hidden = true;
         shoutT = 0;
@@ -945,12 +946,6 @@
       time += dt;
       shake.update(dt);
       stepJuice(dt);
-    }
-    if (mode === 'play' || mode === 'title') {
-      musicT += dt;
-      waterT += dt;
-      if (musicT > 0.46) { musicT = 0; Sfx.music(musicStep++); }
-      if (waterT > 0.9 && mode === 'play') { waterT = 0; Sfx.water(); }
     }
     if (keys) { /* UI keys already applied */ }
     edge = false;

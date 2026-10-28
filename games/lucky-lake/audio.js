@@ -1,10 +1,8 @@
-/* Short cues plus a light loop. Mute zeros the master gain, so every cue stops. */
+/* Short one-shot cues. Mute zeros the master gain, so every cue stops. */
 (function () {
   'use strict';
   function tone(o) { if (window.Kit && Kit.audio) Kit.audio.tone(o); }
   function noise(o) { if (window.Kit && Kit.audio) Kit.audio.noise(o); }
-  var MELODY = [523, 587, 659, 784, 659, 587, 698, 659, 523, 440, 523, 659];
-  var BASS = [196, 220, 247, 196];
   window.LLAudio = {
     cast: function () {
       tone({ freq: 520, to: 220, type: 'triangle', dur: 0.12, vol: 0.1 });
@@ -60,16 +58,6 @@
     gull: function () {
       tone({ freq: 760, to: 980, type: 'square', dur: 0.09, vol: 0.05 });
       tone({ freq: 640, to: 420, type: 'square', dur: 0.12, vol: 0.05, delay: 0.1 });
-    },
-    pad: function () { this.water(); },
-    water: function () {
-      noise({ dur: 0.7, vol: 0.035, filter: 900, to: 280 });
-    },
-    music: function (step) {
-      var n = MELODY[step % MELODY.length];
-      tone({ freq: n, type: 'triangle', dur: 0.32, vol: 0.035, attack: 0.02 });
-      if (step % 2 === 0) tone({ freq: n * 1.5, type: 'sine', dur: 0.28, vol: 0.018, delay: 0.02 });
-      if (step % 4 === 0) tone({ freq: BASS[(step / 4) % 4], type: 'sine', dur: 0.42, vol: 0.03 });
     }
   };
 })();

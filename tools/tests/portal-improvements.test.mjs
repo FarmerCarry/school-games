@@ -138,10 +138,10 @@ test('personal games appear first and quick filters select matching games', asyn
   await page.goto(origin);
   const starter = page.locator('#app > a.starter');
   assert.equal(await starter.count(), 1, 'the beginner card leads the home page');
-  assert.equal(await starter.getAttribute('data-slug'), 'mouse-keyboard-academy');
+  assert.equal(await starter.getAttribute('data-slug'), 'bubble-bop');
   assert.match(await starter.innerText(), /ابدأ من هنا/);
   assert.equal(await page.locator('#app > a.starter + section .recent-grid').count(), 1, 'continue playing appears before the complete catalog');
-  assert.equal(await page.locator('.catalog-grid .tile').first().getAttribute('data-slug'), 'mouse-keyboard-academy');
+  assert.equal(await page.locator('.catalog-grid .tile').first().getAttribute('data-slug'), 'bubble-bop');
   assert.equal(await page.locator('.recent-grid .tile').getAttribute('data-slug'), 'pool-party');
   await page.locator('#chips a[href="#/favorites"]').click();
   await page.waitForFunction(() => document.body.className === 'route-favorites');

@@ -15,7 +15,9 @@ import os from 'node:os';
 import vm from 'node:vm';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { svgDataUri } from './lib/svg-data-uri.mjs';
+import { SENDER, networkUse, splitSender } from './lib/network-rules.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // SG_ROOT=_site tests the fast build made by tools/build.mjs instead of the source files.
@@ -75,21 +77,40 @@ function walk(dir) {
     d.isDirectory() ? walk(path.join(dir, d.name)) : [path.join(dir, d.name)]);
 }
 
-// Nothing on the site goes over the network (play statistics stay on each PC),
-// so the same static checks cover games and the root pages and portal scripts.
-const NETWORK = /\bfetch\s*\(|XMLHttpRequest|sendBeacon|\bWebSocket\b|\bEventSource\b/;
+// Nothing on the site goes over the network (play statistics stay on each PC) except
+// the portal's anonymous telemetry sink, js/telemetry.js (tools/lib/network-rules.mjs),
+// so the same static checks cover games, the shared scripts and the root pages and
+// portal scripts. The fast build inlines the sender into the portal: only an exact
+// copy of js/telemetry.js, inlined as tools/build.mjs does it, is checked as the sender.
+let senderCopies;
+function inlinedSender() {
+  if (senderCopies) return senderCopies;
+  const source = fs.readFileSync(path.join(REPO, SENDER), 'utf8');
+  senderCopies = [source];
+  try {
+    // The same options as jsFor() in tools/build.mjs.
+    senderCopies.unshift(createRequire(import.meta.url)('esbuild').transformSync(source,
+      { loader: 'js', minify: true, target: 'chrome100', legalComments: 'none', charset: 'utf8' }).code);
+  } catch { /* without esbuild only a --no-minify build matches */ }
+  return senderCopies = senderCopies.map(code => code.replace(/<\/(script)/gi, '<\\/$1').replace(/<!--/g, '<\\!--'));
+}
 function staticChecks(label, file) {
   const src = fs.readFileSync(file, 'utf8');
   const rel = path.relative(ROOT, file);
+  const site = rel.split(path.sep).join('/');
   if (/type\s*=\s*["']module["']/.test(src)) add(label, `${rel}: uses ES modules`);
   if (/^\s*import\s[\w{*]/m.test(src)) add(label, `${rel}: import statement`);
-  if (NETWORK.test(src)) add(label, `${rel}: network API (${src.match(NETWORK)[0]})`);
+  const { rest, sender } = built && site === 'index.html' ? splitSender(src, inlinedSender()) : { rest: src, sender: '' };
+  const network = [...networkUse(site, rest), ...networkUse(SENDER, sender)];
+  if (network.length) add(label, `${rel}: network API (${network[0]})`);
   const urls = src.match(/(?:src|href)\s*=\s*["']https?:\/\/[^"']+/g);
   if (urls) add(label, `${rel}: external URL ${urls[0]}`);
 }
 const rootFiles = fs.readdirSync(ROOT).filter(name => name.endsWith('.html')).map(name => path.join(ROOT, name));
-if (fs.existsSync(path.join(ROOT, 'js'))) {
-  rootFiles.push(...fs.readdirSync(path.join(ROOT, 'js')).filter(name => name.endsWith('.js')).map(name => path.join(ROOT, 'js', name)));
+for (const dir of ['js', 'shared']) {
+  if (fs.existsSync(path.join(ROOT, dir))) {
+    rootFiles.push(...fs.readdirSync(path.join(ROOT, dir)).filter(name => name.endsWith('.js')).map(name => path.join(ROOT, dir, name)));
+  }
 }
 for (const file of rootFiles) staticChecks(path.basename(file), file);
 

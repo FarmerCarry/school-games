@@ -299,3 +299,60 @@ test('if rollback itself fails, the previous output remains in the reported back
   assert.ok(result.stderr.includes(path.join(f.root, backup)));
   assert.equal(fs.readdirSync(f.root).some(name => name.startsWith('.school-games-build-')), false);
 });
+
+test('SG_TELEMETRY_URL reaches the portal only, is checked first, and changes nothing when unset or empty', t => {
+  const f = fixture(t);
+  f.write('index.html', '<!doctype html><html><body><script src="js/catalog.js"></script><script src="js/telemetry.js"></script>' +
+    '<script src="js/site.js"></script><script src="js/offline.js"></script></body></html>');
+  f.write('js/telemetry.js', 'window.sinkLoaded = true;');
+  const unset = { ...process.env };
+  delete unset.SG_TELEMETRY_URL;
+  const build = (value, args = []) => spawnSync(process.execPath, [path.join(f.root, 'tools/build.mjs'), '--no-minify', ...args], {
+    cwd: f.root, encoding: 'utf8', timeout: 30000, env: value === undefined ? unset : { ...unset, SG_TELEMETRY_URL: value }
+  });
+  const site = () => snapshot(path.join(f.root, '_site'));
+  const text = (files, name) => Buffer.from(files[name], 'base64').toString('utf8');
+
+  success(build(undefined));
+  const plain = site();
+  assert.ok(Object.values(plain).every(data => !Buffer.from(data, 'base64').includes('SG_TELEMETRY')), 'unset: nothing added');
+  // GitHub passes an unset repository variable as an empty string.
+  success(build(''));
+  assert.deepEqual(site(), plain, 'empty is the same as unset, byte for byte');
+
+  const url = 'https://ingest.example.org/v1/batch?school=north-2';
+  const result = build(url);
+  success(result);
+  assert.match(result.stdout, /telemetry: the portal sends anonymous events to ingest\.example\.org/);
+  const on = site();
+  const portal = text(on, 'index.html');
+  assert.equal(portal.split('window.SG_TELEMETRY=').length, 2, 'injected once');
+  assert.ok(portal.includes('<script>window.SG_TELEMETRY={url:' + JSON.stringify(url) + '};\nwindow.sinkLoaded = true;</script>'),
+    'right before the sink, in its own inline script');
+  assert.ok(!portal.includes('allowLocal'), 'never allowLocal');
+  for (const name of ['teacher.html', 'games/demo/index.html', 'sw.js']) {
+    assert.ok(!text(on, name).includes('SG_TELEMETRY') && !text(on, name).includes('ingest.example.org'), name + ' gets nothing');
+  }
+  // Only the portal, the worker's version and the download that holds them change.
+  assert.deepEqual(Object.keys(on).filter(name => on[name] !== plain[name]).sort(), ['index.html', 'school-games-offline.zip', 'sw.js']);
+  assert.deepEqual(Object.keys(on).sort(), Object.keys(plain).sort());
+
+  // The emergency switch never sends: no address in a --kill-sw build.
+  success(build(url, ['--kill-sw', '--out', '.work/kill']));
+  assert.ok(!fs.readFileSync(path.join(f.root, '.work/kill/index.html'), 'utf8').includes('SG_TELEMETRY'));
+
+  // Anything but a plain https:// address is refused before any output is touched.
+  for (const bad of ['http://ingest.example.org/v1', 'ingest.example.org', '//ingest.example.org', 'https://', ' https://ingest.example.org',
+    'https://ingest.example.org/"', "https://ingest.example.org/'", 'https://ingest.example.org/a b', 'https://ingest.example.org/\n',
+    'https://ingest.example.org/</script>', 'https://ingest.example.org/<!--', 'https://ingest.example.org\\x', 'https://ingest.example.org/`',
+    'https://user:secret@ingest.example.org/', 'https://ingést.example.org/', 'javascript:alert(1)', 'https://' + 'a'.repeat(190) + '.example.org']) {
+    refused(build(bad), /SG_TELEMETRY_URL must be an https:\/\/ address/);
+    assert.deepEqual(site(), on, 'refused: ' + JSON.stringify(bad));
+    noTemporaryOutput(f);
+  }
+  // A portal without the sink cannot be given an address.
+  f.write('index.html', '<!doctype html><html><body><script src="js/catalog.js"></script><script src="js/site.js"></script><script src="js/offline.js"></script></body></html>');
+  refused(build(url), /SG_TELEMETRY_URL is set, but index\.html does not load js\/telemetry\.js/);
+  assert.deepEqual(site(), on);
+  noTemporaryOutput(f);
+});
