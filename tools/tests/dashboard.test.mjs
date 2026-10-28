@@ -1123,6 +1123,11 @@ test('the Learning tab: one game or every measured game, and the paired same-chi
   assert.match(await page.locator('#learning-intro').textContent(), /measured in 3 games so far/);
   assert.equal(await page.locator('#learning-growth .card').count(), 3, 'every measured game');
   assert.ok(await page.locator('#learning-growth .dumbbell .mark').count() >= 3);
+  // A group of fewer than 5 children carries its chip at desktop width too, not only on a phone.
+  const marks = await page.locator('#learning-growth .dumbbell .mark').evaluateAll(gs => gs.map(g => ({
+    small: !!g.querySelector('.bar-label.is-small'), text: g.textContent })));
+  assert.ok(marks.some(m => m.small), 'the sample has a small group');
+  for (const m of marks) assert.equal(/based on \d+ child/.test(m.text), m.small, m.text);
   assert.match(await page.locator('#footNotes').textContent(), /Charts include play up to last night/);
   await page.selectOption('#gamePick', 'road-hopper');
   await page.waitForFunction(() => document.querySelectorAll('#learning-growth .card').length === 1 && !document.getElementById('dash').classList.contains('is-loading'));

@@ -538,11 +538,14 @@
     host.textContent = '';
     var rows = opts.rows, rtl = !!opts.rtl;
     var W = Math.max(260, Math.floor(host.clientWidth || 500));
-    var family = getComputedStyle(host).fontFamily, labelFont = '13px ' + family, valueFont = '600 13px ' + family;
-    var labelW = Math.round(Math.min(W * 0.34, Math.max(90, Math.max.apply(null, rows.map(function (r) { return textWidth(r.label, labelFont); }).concat([0])) + 14)));
+    var family = getComputedStyle(host).fontFamily, labelFont = '13px ' + family, valueFont = '600 13px ' + family, subFont = '12px ' + family;
+    var labelW = Math.round(Math.min(W * 0.34, Math.max(90, Math.max.apply(null, rows.map(function (r) {
+      return Math.max(textWidth(r.label, labelFont), r.chip ? textWidth(r.chip, subFont) : 0); }).concat([0])) + 14)));
     var valueW = Math.max.apply(null, rows.map(function (r) { return textWidth(r.aText + ' → ' + r.bText, valueFont); }).concat([0])) + 12;
     var narrow = W - labelW - valueW < 140;
-    var rowH = narrow ? 44 : 32, top = 4, H = rows.length * rowH + top + 22;
+    // A small group's chip: after the label on a phone, on a line under it on a wide screen.
+    var chipLine = !narrow && rows.some(function (r) { return r.chip; });
+    var rowH = narrow || chipLine ? 44 : 32, top = 4, H = rows.length * rowH + top + 22;
     var x0 = narrow ? 8 : labelW, x1 = narrow ? W - 8 : W - valueW;
     var max = opts.max || 1, min = opts.min || 0;
     var X = function (v) { var f = (v - min) / (max - min || 1); var x = x0 + f * (x1 - x0); return rtl ? W - x : x; };
@@ -558,8 +561,9 @@
       var y = top + i * rowH, g = s('g', { class: 'mark', role: 'listitem' }, svg);
       s('rect', { x: 0, y: y, width: W, height: rowH, class: 'row-hit' }, g);
       var cy = narrow ? y + 30 : y + rowH / 2, ty = narrow ? y + 14 : cy + 4.5;
-      s('text', { x: rtl ? W : 0, y: ty, class: 'bar-label' + (row.chip ? ' is-small' : ''), 'text-anchor': 'start', direction: dir }, g,
+      s('text', { x: rtl ? W : 0, y: row.chip && !narrow ? cy - 3 : ty, class: 'bar-label' + (row.chip ? ' is-small' : ''), 'text-anchor': 'start', direction: dir }, g,
         fit(row.label + (row.chip && narrow ? ' · ' + row.chip : ''), narrow ? W - valueW - 8 : labelW - 12, labelFont));
+      if (row.chip && !narrow) s('text', { x: rtl ? W : 0, y: cy + 13, class: 'bar-sub chip-text', 'text-anchor': 'start', direction: dir }, g, fit(row.chip, labelW - 12, subFont));
       // "62% → 71%" always reads left to right (first, then latest), in its own column.
       var atEnd = rtl ? !narrow : narrow;
       s('text', { x: rtl ? (narrow ? 0 : valueW - 8) : (narrow ? W : W - valueW + 8), y: ty, class: 'bar-value', 'text-anchor': atEnd ? 'end' : 'start', direction: 'ltr' }, g,
