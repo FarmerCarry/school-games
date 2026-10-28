@@ -653,7 +653,7 @@ The server:
 * **The research export** (`server/export.mjs`): eight files (students, sessions,
   visits, rounds, events, student-days, daily games with milestone 2's frozen days, PCs)
   with pinned columns; every CSV line is built in SQL from validated tokens, so no value
-  needs quoting, and pages follow a key (400 sessions, or 5,000 lines) so each row is
+  needs quoting, and pages follow a key (400 sessions, or 2,500 lines, joined into one string by SQL) so each row is
   read once. The dashboard adds the headers and zips the files.
 * **The owner's actions**: forgetting a student deletes the facts and per-student rows
   of the student's codes (the school-wide counts keep them until a recount); a link

@@ -1497,7 +1497,8 @@ test('export: every file\'s pages hold each row once, with exactly its COLUMNS a
   t.after(() => app.close());
   const get = pathname => request(`http://127.0.0.1:${port}`, 'GET', pathname, { headers: { authorization: 'Bearer ' + TOKEN } });
   // The same database with pages of the real size: each file is one page here.
-  const whole = openStore(db);
+  // One page that holds a whole file, to compare the pages with.
+  const whole = openStore(db, { exportLimits: { lines: 100000, sessions: 100000 } });
   const range = { from: '2026-10-13', to: '2026-10-22' };
   const lo = Date.parse('2026-10-13T00:00:00+03:00') / 1000, hi = Date.parse('2026-10-23T00:00:00+03:00') / 1000;
   const counted = async from => (await db.prepare(`SELECT COUNT(*) AS n FROM st_sessions s ${from} WHERE s.start_s >= ?1 AND s.start_s < ?2`).bind(lo, hi).first()).n;
@@ -1524,8 +1525,8 @@ test('export: every file\'s pages hold each row once, with exactly its COLUMNS a
       assert.equal(line.split(',').length, COLUMNS[file].length, file + ': ' + line);
     }
     const one = await whole.exportPage({ file, ...range }, now);
-    assert.equal(one.next, null, file + ' is one page of 5,000 lines');
-    assert.deepEqual(lines, one.lines, file + ': the pages hold every row once, in order');
+    assert.equal(one.next, null, file + ' is one page');
+    assert.deepEqual(lines, one.text.replace(/\n$/, '').split('\n'), file + ': the pages hold every row once, in order');
     if (expected[file] !== undefined) assert.equal(lines.length, expected[file], file);
     assert.ok(lines.length > 0 && (file === 'pcs' || pages > 1), `${file}: ${lines.length} lines in ${pages} pages`);
   }

@@ -478,9 +478,9 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
     'INSERT INTO kpi_cache (key, made, rows) SELECT ?5, ?6, (SELECT json_group_array(json_array(a, metric, slug', 
     'WITH d AS MATERIALIZED (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT x.p AS p', 'SELECT s.p AS p', 'SELECT p, z, k', 'SELECT k FROM st_pcs',
     // Export pages of every file.
-    "SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u", "SELECT IFNULL(s.s, '') || ',' || IFNULL(v.n", "SELECT IFNULL(s.s, '') || ',' || IFNULL(r.n",
-    "SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u, '') || ',' || IFNULL(CASE", 'WITH d AS (SELECT u, day', "SELECT IFNULL(x.u", "SELECT IFNULL(x.day",
-    'WITH d AS (SELECT p, np_max',
+    ...["SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u", "SELECT IFNULL(s.s, '') || ',' || IFNULL(v.n", "SELECT IFNULL(s.s, '') || ',' || IFNULL(r.n",
+      "SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u, '') || ',' || IFNULL(CASE", 'WITH d AS (SELECT u, day', "SELECT IFNULL(x.u", "SELECT IFNULL(x.day",
+      'WITH d AS (SELECT p, np_max'].map(text => 'WITH page AS MATERIALIZED (' + text),
     // The owner's actions: link, unlink, recount and forget.
     'SELECT COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2), ?2) AS target', 'UPDATE aliases SET u_new = COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2)',
     'INSERT INTO aliases (u_old, u_new, s, how) SELECT ?1', 'DELETE FROM aliases WHERE u_old = ?1', 'UPDATE roll_days SET dirty = 3 WHERE day >=',
@@ -539,9 +539,9 @@ test('no value of a research file can hold a comma, a quote or a line break: eve
     ['pr', 12, U2], ['se', 13, 7000, 'p']], { a: '', z: 'America/Port-au-Prince', m: 'app', k: 'src' }), T0);
   await s.store.rollupStep(T0 + DAY_MS);
   for (const file of FILES) {
-    const page = await s.store.exportPage({ file, from: '2026-10-19', to: '2026-10-21' }, T0 + DAY_MS);
-    assert.ok(page.lines.length > 0, file);
-    for (const line of page.lines) {
+    const page = await s.store.exportPage({ file, from: '2026-10-19', to: '2026-10-21' }, T0 + DAY_MS), lines = page.text.replace(/\n$/, '').split('\n');
+    assert.ok(page.rows > 0 && lines.length === page.rows, file);
+    for (const line of lines) {
       assert.doesNotMatch(line, /["\n\r]/);
       assert.equal(line.split(',').length, COLUMNS[file].length, file + ': ' + line);
     }

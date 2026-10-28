@@ -156,9 +156,10 @@ function bodyCode(body, name) {
   return body[name];
 }
 
-// An export page: CSV lines, with how many and the next page's cursor.
+// An export page: its CSV lines (each ending in a line break, as SQL joined them), how many,
+// and the next page's cursor.
 class CsvPage {
-  constructor(lines, next) { this.lines = lines; this.next = next; }
+  constructor(text, rows, next) { this.text = text; this.rows = rows; this.next = next; }
 }
 
 // POST /v1/admin/settings: { tz?, source?: 'dashboard', weekStart?: 'sun' | 'mon',
@@ -257,7 +258,7 @@ export function createHandler(options) {
         const file = query.get('file');
         if (!FILES.includes(file)) throw new HttpError(400, 'file');
         const { from, to } = period();
-        return store.exportPage({ file, from, to, after: query.get('after') }, t).then(page => page.error ? page : new CsvPage(page.lines, page.next));
+        return store.exportPage({ file, from, to, after: query.get('after') }, t).then(page => page.error ? page : new CsvPage(page.text, page.rows, page.next));
       }
       case 'forget POST': return store.forget({ u: bodyCode(fields(body, ['u']), 'u') }, t);
       case 'link POST': { const b = fields(body, ['u', 'to']); return store.link({ u: bodyCode(b, 'u'), to: bodyCode(b, 'to') }, t); }
@@ -327,9 +328,8 @@ export function createHandler(options) {
         const answer = await admin(request, pathname.slice(10), url.searchParams);
         if (!(answer instanceof CsvPage)) return send(200, answer);
         // An export page: lines without a header, how many, and the next page's cursor.
-        const text = answer.lines.length ? answer.lines.join('\n') + '\n' : '';
-        return new Response(encoder.encode(text), { status: 200, headers: { ...headers, 'Content-Type': 'text/csv; charset=utf-8',
-          'X-Rows': String(answer.lines.length), ...(answer.next ? { 'X-Next': answer.next } : {}) } });
+        return new Response(encoder.encode(answer.text), { status: 200, headers: { ...headers, 'Content-Type': 'text/csv; charset=utf-8',
+          'X-Rows': String(answer.rows), ...(answer.next ? { 'X-Next': answer.next } : {}) } });
       }
       // Everything outside /v1/ is the dashboard's static files.
       if (assets && pathname !== '/v1' && !pathname.startsWith('/v1/') && (method === 'GET' || method === 'HEAD')) return await assets(request);

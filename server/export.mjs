@@ -1,5 +1,5 @@
 // The research export (docs/RESEARCH_TELEMETRY_SPEC.md, §F.6): GET /v1/admin/export?file=
-// &from&to[&after] answers one page of a CSV file, at most 5,000 lines without a header (the
+// &from&to[&after] answers one page of a CSV file, at most 2,500 lines without a header (the
 // dashboard writes the header from its data dictionary, whose columns must equal COLUMNS),
 // with the cursor of the next page. Every line is built in SQL; JavaScript only joins them.
 // No value ever needs quoting: each one is a number, an ISO date, a school-clock time or a
@@ -13,7 +13,9 @@
 import { rollupSelect } from './rollups.mjs';
 import { U_RE } from './schema.mjs';
 
-export const PAGE_LINES = 5000;
+// A page is at most this many lines (a rounds page is then about 400 KB): the Worker reads it
+// as one string within a few milliseconds.
+export const PAGE_LINES = 2500;
 export const PAGE_SESSIONS = 400;
 // How many days a page of the daily files looks at, at most (a busy day has about 300
 // student-days and 140 game rows).
@@ -211,9 +213,18 @@ const PCS_PAGE = (L, scope) => `WITH d AS (${rolledAndOpen('r_pc_day', ['p', 'np
   "WHERE s.start_s >= ?7 AND s.start_s < ?8 AND s.u <> '' AND s.p > ?5 GROUP BY 1) " +
   `SELECT ${line('pcs', L)} AS l, x.p AS k1 FROM x LEFT JOIN st_pcs c ON c.p = x.p LEFT JOIN st ON st.p = x.p ORDER BY x.p LIMIT ?6`;
 
-// One page of a file: { lines, next } (next: the cursor of the next page, or null), or
-// { error, status } for a cursor that is not this file's. ctx: the store's helpers;
-// limits: { lines, sessions } (tests make pages small).
+// A page's statement (its rows: a line l and the key columns, at most size + 1 of them, in
+// order), as one row: the first `size` lines, each ending in a line break, how many rows
+// there were, and the key of row `size` (a JSON array), so that the Worker reads one string
+// it sends as it is, not an object per line. size is a whole number this module chose.
+const KEYS = { sessions: 2, visits: 3, rounds: 4, events: 6, students: 1, student_days: 2, daily_games: 4, pcs: 1 };
+const paged = (file, text, size) => `WITH page AS MATERIALIZED (${text}) SELECT ` +
+  `(SELECT group_concat(l, char(10)) || char(10) FROM (SELECT l FROM page LIMIT ${size})) AS text, (SELECT COUNT(*) FROM page) AS n, ` +
+  `(SELECT json_array(${Array.from({ length: KEYS[file] }, (_, i) => 'k' + (i + 1)).join(', ')}) FROM page LIMIT 1 OFFSET ${size - 1}) AS last`;
+
+// One page of a file: { text, rows, next } (its lines, each ending in a line break; how
+// many; and the cursor of the next page, or null), or { error, status } for a cursor that
+// is not this file's. ctx: the store's helpers; limits: { lines, sessions } (tests make pages small).
 export async function exportPage(ctx, { file, from, to, after = null }, now, limits = {}) {
   const pageLines = limits.lines || PAGE_LINES, pageSessions = limits.sessions || PAGE_SESSIONS;
   await ctx.ensure(now);
@@ -221,37 +232,32 @@ export async function exportPage(ctx, { file, from, to, after = null }, now, lim
   if (after !== null && !cursor) return { error: 'after', status: 400 };
   const conf = ctx.conf(), L = ctx.wide(now).local, lo = ctx.bounds(from).lo, hi = ctx.bounds(to).hi;
   const int = (i, fallback) => cursor ? Number(cursor[i]) : fallback;
-  let statement, size, key;
+  let text, values, size, end = null;
   if (SESSION_PAGES[file]) {
     // From the cursor's session on (the index range starts there).
     const rest = { sessions: [], visits: [int(3, 0)], rounds: [int(3, 0), int(4, 0)], events: cursor ? [cursor[3], int(4), int(5), cursor[6]] : ['', 0, 0, ''] }[file];
     size = file === 'sessions' ? pageSessions : pageLines;
-    statement = ctx.bound(SESSION_PAGES[file](L), [Math.max(lo, int(1, lo)), hi, int(1, lo - 1), int(2, 0), ...rest, size + 1]);
-    key = row => [row.k1, row.k2, row.k3, row.k4, row.k5, row.k6].filter(v => v !== undefined).join('.');
+    text = SESSION_PAGES[file](L);
+    values = [Math.max(lo, int(1, lo)), hi, int(1, lo - 1), int(2, 0), ...rest, size + 1];
   } else {
     size = pageLines;
     // The daily files look at a window of days from the cursor's day; the others at the period.
     const start = cursor && WINDOW_DAYS[file] && cursor[1] > from ? cursor[1] : from;
-    const end = WINDOW_DAYS[file] ? [addDays(start, WINDOW_DAYS[file] - 1), to].sort()[0] : to;
+    end = WINDOW_DAYS[file] ? [addDays(start, WINDOW_DAYS[file] - 1), to].sort()[0] : to;
     const span = ctx.spans(start, end), scope = span.open ? span.scope : null;
     const days = [...(span.rolled || ['1', '0']), ...(span.bounds || [0, 0])];
-    if (file === 'students') statement = ctx.bound(STUDENTS_PAGE(L, scope), [...days, cursor ? cursor[1] : '', size + 1]);
-    else if (file === 'pcs') statement = ctx.bound(PCS_PAGE(L, scope), [...days, cursor ? cursor[1] : '', size + 1, lo, hi]);
-    else if (file === 'student_days') statement = ctx.bound(STUDENT_DAYS_PAGE(L, scope), [...days, cursor ? cursor[1] : '', cursor ? cursor[2] : '', size + 1]);
+    if (file === 'students') [text, values] = [STUDENTS_PAGE(L, scope), [...days, cursor ? cursor[1] : '', size + 1]];
+    else if (file === 'pcs') [text, values] = [PCS_PAGE(L, scope), [...days, cursor ? cursor[1] : '', size + 1, lo, hi]];
+    else if (file === 'student_days') [text, values] = [STUDENT_DAYS_PAGE(L, scope), [...days, cursor ? cursor[1] : '', cursor ? cursor[2] : '', size + 1]];
     else {
       const legacy = conf.legacyUntil && start <= conf.legacyUntil ? [start, conf.legacyUntil < end ? conf.legacyUntil : end] : null;
-      statement = ctx.bound(DAILY_GAMES_PAGE(scope, !!conf.legacyUntil),
-        [...days, cursor ? cursor[1] : '', cursor ? cursor[2] : '', cursor ? cursor[3] : '', ...(legacy || ['1', '0']), cursor ? cursor[4] : '', size + 1]);
-    }
-    key = row => [row.k1, row.k2, row.k3, row.k4].filter(v => v !== undefined).join('.');
-    if (WINDOW_DAYS[file]) {
-      const [result] = await ctx.run([statement], now, { exported: true });
-      const rows = result.results;
-      if (rows.length > size) return { lines: rows.slice(0, size).map(row => row.l), next: key(rows[size - 1]) };
-      return { lines: rows.map(row => row.l), next: end < to ? addDays(end, 1) + '.' + (file === 'daily_games' ? '..' : '') : null };
+      text = DAILY_GAMES_PAGE(scope, !!conf.legacyUntil);
+      values = [...days, cursor ? cursor[1] : '', cursor ? cursor[2] : '', cursor ? cursor[3] : '', ...(legacy || ['1', '0']), cursor ? cursor[4] : '', size + 1];
     }
   }
-  const [result] = await ctx.run([statement], now, { exported: true });
-  const rows = result.results;
-  return { lines: rows.slice(0, size).map(row => row.l), next: rows.length > size ? key(rows[size - 1]) : null };
+  const [result] = await ctx.run([ctx.bound(paged(file, text, size), values)], now, { exported: true });
+  const { text: lines, n, last } = result.results[0], rows = Math.min(n, size), out = { text: lines ?? '', rows };
+  // A full page goes on after its last row; a daily file's window, at the next day.
+  if (n > size) return { ...out, next: JSON.parse(last).join('.') };
+  return { ...out, next: WINDOW_DAYS[file] && end < to ? addDays(end, 1) + '.' + (file === 'daily_games' ? '..' : '') : null };
 }

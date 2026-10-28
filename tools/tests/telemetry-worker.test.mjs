@@ -925,7 +925,7 @@ test('the CPU each admin answer and export page spends in JavaScript (outside SQ
       sent = 0;
       const t0 = performance.now(), answer = await run(q);
       // Writing the answer is part of it: the handler's JSON, or the export page's lines.
-      const text = answer.lines ? answer.lines.join('\n') : serialize(answer);
+      const text = answer.text !== undefined ? answer.text : serialize(answer);
       spent.push(performance.now() - t0 - inSql);
       ratios[name] = Math.max(ratios[name] || 0, received / text.length);
       back[name] = Math.max(back[name] || 0, sent / text.length);
@@ -935,6 +935,6 @@ test('the CPU each admin answer and export page spends in JavaScript (outside SQ
   // The KPI and students answers come from SQL about once, and no part of an answer goes back to D1 through the Worker.
   for (const name of ['kpis', 'students']) assert.ok(ratios[name] < 1.5, `${name}: ${ratios[name].toFixed(2)} times its answer through the binding`);
   for (const name of ['students', 'game', 'stats']) assert.ok(back[name] < 0.25, `${name}: ${back[name].toFixed(2)} times its answer sent back to D1`);
-  const limit = name => name.startsWith('export') ? 10 : 5;
+  const limit = name => name.startsWith('export') ? 3 : 5;
   for (const [name, ms] of Object.entries(medians)) assert.ok(ms <= limit(name), `${name}: ${ms.toFixed(1)} ms of JavaScript (${JSON.stringify(medians)})`);
 });

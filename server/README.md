@@ -894,7 +894,8 @@ smooth; `old`, its build is not that of the PC seen last.
 #### `GET /v1/admin/export?file&from&to[&after]`
 
 One page of a research file: `200`, `Content-Type: text/csv; charset=utf-8`, at most
-5,000 lines **without a header** (each ending in a line feed), `X-Rows: <lines>` and,
+2,500 lines **without a header** (each ending in a line feed; SQL joins them, so the
+Worker sends one string), `X-Rows: <lines>` and,
 unless it is the last page, `X-Next: <cursor>`; the next page is the same request with
 `&after=<cursor>`. A cursor that is not this file's: `400 {"error": "after"}`. The
 dashboard writes the header (its data dictionary lists the same columns as
@@ -913,12 +914,12 @@ dashboard writes the header (its data dictionary lists the same columns as
 
 | `file` | One line per | A page |
 |---|---|---|
-| `students` | student code with play in the period | 5,000 codes, by code |
+| `students` | student code with play in the period | 2,500 codes, by code |
 | `sessions` | session started in the period | 400 sessions, by start |
-| `visits`, `rounds`, `events` | game visit, round, mark (of those sessions) | 5,000 lines, in the sessions' order |
-| `student_days` | student code and school day | 5,000 lines, at most 14 days |
-| `daily_games` | day, clock, band and game: milestone 2's frozen UTC days (`clock` `utc`, without students or hearts), then the school's days | 5,000 lines, at most 30 days |
-| `pcs` | PC code with play in the period | 5,000 codes, by code |
+| `visits`, `rounds`, `events` | game visit, round, mark (of those sessions) | 2,500 lines, in the sessions' order |
+| `student_days` | student code and school day | 2,500 lines, at most 14 days |
+| `daily_games` | day, clock, band and game: milestone 2's frozen UTC days (`clock` `utc`, without students or hearts), then the school's days | 2,500 lines, at most 30 days |
+| `pcs` | PC code with play in the period | 2,500 codes, by code |
 
 Columns, in their pinned order:
 
