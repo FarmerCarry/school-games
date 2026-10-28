@@ -228,7 +228,9 @@ own code never logs.
 
 Wire version 3 needs a server that accepts it: deploy the server first and check that
 `GET /v1/health` answers `"accepts":[2,3]` before publishing a portal that sends v3. An
-older server answers v3 with 400, and the sink would drop those batches for good.
+older server answers v3 with 400, and the sink would drop those batches for good. The
+workflow builds with the school's Worker address by default, so the push to `main` that
+brings the v3 portal publishes it at once (and open tabs take it on their next load).
 
 1. Deploy the server (`server/README.md`: the one-click free Cloudflare setup, or Node behind
    HTTPS), with `ALLOWED_ORIGINS` set to the portal's origin (for example
