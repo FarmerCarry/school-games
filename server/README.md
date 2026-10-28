@@ -353,16 +353,25 @@ it. To update it:
 **Rolling back.** A server older than schema 4 refuses a database this one has
 upgraded, so going back is one of:
 
-* deploying this server again with a fix (the database stays as it is); or
-* restoring the database with D1 *Time Travel* (free; any minute of the last 7 days) to
-  just before the deploy, then deploying milestone 2's server. The restore is in the
-  Cloudflare dashboard (*Storage & databases* → *D1* → `school-games-telemetry` → *Time
-  Travel*) or `npx wrangler d1 time-travel restore school-games-telemetry
-  --timestamp=<the time, RFC 3339>`. Schema 4 keeps milestone 2's daily totals frozen
-  as they were, so a restore to just before the deploy is a clean milestone 2 database;
-  what arrived after that point is lost.
+* deploying this server again with a fix (the database stays as it is): once the
+  portal's wire version 3 is published (step 4), this is the only safe way; or
+* before step 4 only: restoring the database with D1 *Time Travel* (free; any minute of
+  the last 7 days) to just before the deploy, then deploying milestone 2's server. The
+  restore is in the Cloudflare dashboard (*Storage & databases* → *D1* →
+  `school-games-telemetry` → *Time Travel*) or `npx wrangler d1 time-travel restore
+  school-games-telemetry --timestamp=<the time, RFC 3339>`. Schema 4 keeps milestone 2's
+  daily totals frozen as they were, so a restore to just before the deploy is a clean
+  milestone 2 database; what arrived after that point is lost.
 
-Meanwhile the PCs keep what they could not send for up to 7 days, and send it later.
+After step 4, milestone 2's server answers `400` to every version 3 batch, and a PC
+drops a batch answered `400` for good: going back to milestone 2 would lose every PC's
+data from then on. It would first need the portal from before step 4 published again
+and loaded by every PC (an open tab keeps the newer portal until it is reloaded), and
+the version 3 batches the PCs still hold would be lost even then.
+
+While the server answers `5xx` or cannot be reached (during a deploy, or the `503` of
+the upgrade), the PCs keep what they could not send for up to 7 days and send it later;
+any other `4xx` answer than `429` is final.
 
 **On Node,** stop the server, back up the database (see [Operations](#operations)),
 replace the folder and start it again: the Node host upgrades the database at start.
