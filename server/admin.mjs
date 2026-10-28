@@ -187,8 +187,8 @@ const ONE_PERSIST = `SELECT ${NEXT} AS next, COUNT(*) AS n FROM st_sessions s JO
 // all) within the bands ?5 (a JSON array, so that r_game_day and r_stat are found by key):
 // minutes and opens per day and band; distinct students per day; days played per band and
 // student; r_stat rows (the metrics ?6); the paired thirds (part 0 to day ?7, part 1 from
-// day ?8); and the flows into it from every game, found by key (the from-games listed by a
-// walk over the r_stat_metric index, one step per game).
+// day ?8); and the flows into it from every game, found by key (from the session's start,
+// and from each game played on that day and band).
 // Each as one JSON text of arrays (the Worker parses one string, and makes no object per row).
 const asArrays = (text, columns) => `SELECT json_group_array(json_array(${columns.join(', ')})) AS rows FROM (${text})`;
 const GAME_DAYS = src => asArrays(`SELECT x.day AS day, x.a AS a, TOTAL(x.engaged_ms) AS ms, TOTAL(x.opens) AS opens FROM ${src.from} ` +
@@ -206,11 +206,11 @@ const PAIRED_SUMS = ['rounds', 'w', 'l', 'hits', 'misses', 'rt_sum', 'rt_n', 'sc
 const GAME_PAIRED = src => asArrays(`SELECT ${CANON('x')} AS c, x.a AS a, CASE WHEN x.day <= ?7 THEN 0 ELSE 1 END AS part, ${sums('x', PAIRED_SUMS)} ` +
   `FROM ${src.from}${LINKS('x')} WHERE ${src.days} AND x.slug = ?3 AND (?4 IS NULL OR x.a = ?4) AND (x.day <= ?7 OR x.day >= ?8) GROUP BY 1, 2, 3`,
 ['c', 'a', 'part', ...PAIRED_SUMS]);
-const FLOW_FROM = "WITH RECURSIVE f (slug) AS (SELECT MIN(slug) FROM r_stat WHERE metric = 'flow' UNION ALL " +
-  "SELECT (SELECT MIN(y.slug) FROM r_stat y WHERE y.metric = 'flow' AND y.slug > f.slug) FROM f WHERE f.slug IS NOT NULL) ";
-const GAME_FLOWS_IN = FLOW_FROM + 'SELECT json_group_array(json_array("from", n)) AS rows FROM (SELECT x.slug AS "from", SUM(x.n) AS n FROM r_stat x ' +
-  `WHERE x.day IN ${IN_JSON(1)} AND x.a IN ${IN_JSON(5)} AND x.metric = 'flow' AND x.slug IN (SELECT slug FROM f WHERE slug IS NOT NULL) ` +
-  "AND x.k1 = ?3 AND x.k2 = '' GROUP BY 1)";
+const FLOW_FROM = `SELECT g.day AS day, g.a AS a, g.slug AS slug FROM r_game_day g WHERE g.day IN ${IN_JSON(1)} AND g.a IN ${IN_JSON(5)} ` +
+  `UNION ALL SELECT d.value, b.value, '' FROM json_each(?1) d, json_each(?5) b`;
+const GAME_FLOWS_IN = 'SELECT json_group_array(json_array("from", n)) AS rows FROM (SELECT x.slug AS "from", SUM(x.n) AS n ' +
+  `FROM (${FLOW_FROM}) f JOIN r_stat x ON x.day = f.day AND x.a = f.a AND x.metric = 'flow' AND x.slug = f.slug AND x.k1 = ?3 AND x.k2 = '' ` +
+  'GROUP BY 1 ORDER BY 1)';
 // Tries before the first win, from the facts (the UTC seconds [?9, ?10)): per canonical
 // student and level, the ended rounds (solo, band ?4) in play order up to the first win,
 // counted per level, number of tries and whether the student won ([id, tries, won, n]).

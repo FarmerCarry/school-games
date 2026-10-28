@@ -58,6 +58,8 @@ const KEPT_MAX = 1000000;
 // X-Batch-Every: the seconds a PC waits between batches, by today's rows written.
 const BATCH_EVERY = [[60000, 60], [80000, 180], [Infinity, 300]];
 const BANDS = [['6-7', '6-7'], ['8-9', '8-9'], ['10-11', '10-11'], ['', 'unknown']];
+// Every band a session can have, as an SQL list (rollup rows are found by day and band).
+const BAND_LIST = `(${BANDS.map(([a]) => `'${a}'`).join(', ')})`;
 const DEVICES = [['cores', 'cores'], ['mem', 'memory'], ['screen', 'screen']];
 // A local two-player round (the same rule as TWO_PLAYER in js/teacher.js).
 const DUO = /(?:^|:)(?:duo|local|pvp)$/;
@@ -651,7 +653,8 @@ const KIND = "CASE WHEN s.wire = 2 THEN 'u' WHEN s.u = '' THEN 'g' ELSE 's' END"
 const CLOSED_EXTRAS = extras(
   'SELECT COALESCE(al.u_new, d.u) AS c, d.day AS day, TOTAL(d.engaged_ms) AS m FROM r_student_day d LEFT JOIN aliases al ON al.u_old = d.u ' +
   'WHERE d.day BETWEEN ?4 AND ?5 AND (?3 IS NULL OR d.a = ?3) GROUP BY 1, 2',
-  "SELECT day, k2, TOTAL(ms) AS ms FROM r_stat WHERE metric = 'sesslen' AND slug = '' AND day BETWEEN ?4 AND ?5 AND (?3 IS NULL OR a = ?3) GROUP BY day, k2",
+  'SELECT x.day AS day, x.k2 AS k2, TOTAL(x.ms) AS ms FROM r_stat x WHERE x.day IN (SELECT day FROM roll_days WHERE day BETWEEN ?4 AND ?5) ' +
+    `AND x.a IN ${BAND_LIST} AND x.metric = 'sesslen' AND x.slug = '' AND (?3 IS NULL OR x.a = ?3) GROUP BY 1, 2`,
   "SELECT p, MAX(np_max >= 24) AS full, MAX(new_profiles >= 3 AND new_profiles * 2 >= sessions) AS forgets FROM r_pc_day WHERE day BETWEEN ?4 AND ?5 AND p <> '' GROUP BY p");
 const openExtras = scope => extras(
   `SELECT COALESCE(al.u_new, s.u) AS c, ${scope.day} AS day, TOTAL(v.engaged_ms) AS m FROM st_sessions s LEFT JOIN aliases al ON al.u_old = s.u ` +

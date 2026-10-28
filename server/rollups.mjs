@@ -54,7 +54,7 @@ export const ROLLUPS = {
     'load_ms', 'load_max', 'errors', 'quits', ...F, ...IL, 'np_max', 'new_profiles', 'busy_s', 'first_s', 'last_s', 'wire'] },
   r_stat: { key: [['day', TEXT], ['a', TEXT], ['metric', TEXT], ['slug', TEXT], ['k1', TEXT], ['k2', TEXT]], sums: ['n', 'students',
     ...CODES, 'ms', 'wall_ms', 'win_ms', 'hits', 'misses', 'rt_sum', 'rt_n', 'score_sum', 'score_n', 'tier_sum', 'tier_n', 'dda_sum',
-    'dda_n', 'inputs', 'gap_sum', 'gap_n'], index: ['r_stat_metric', ['metric', 'slug', 'day']] }
+    'dda_n', 'inputs', 'gap_sum', 'gap_n'] }
 };
 export const ROLLUP_TABLES = Object.keys(ROLLUPS);
 // The r_stat metrics, in the order of the spec's table.

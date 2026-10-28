@@ -626,9 +626,10 @@ test('names, user agents, PC labels, typed text, profile keys, avatars, colours 
   const db = s.app.store.db;
   const tables = (await db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all()).results.map(r => r.name);
   assert.deepEqual(tables.sort(), Object.keys(COLUMNS).sort());
-  // The five named indexes of the spec, and the one UNIQUE (s) of st_sessions; no other.
+  // Four named indexes (the spec's five, less r_stat's by metric: every r_stat read finds
+  // its rows by day and band), and the one UNIQUE (s) of st_sessions; no other.
   const indexes = (await db.prepare("SELECT name, tbl_name, sql FROM sqlite_schema WHERE type = 'index' ORDER BY name").all()).results;
-  assert.deepEqual(indexes.filter(i => i.sql).map(i => i.name), ['r_stat_metric', 'r_student_day_u', 'r_student_game_u', 'st_sessions_student', 'st_sessions_time']);
+  assert.deepEqual(indexes.filter(i => i.sql).map(i => i.name), ['r_student_day_u', 'r_student_game_u', 'st_sessions_student', 'st_sessions_time']);
   assert.deepEqual(indexes.filter(i => !i.sql).map(i => i.tbl_name), ['st_sessions']);
   for (const table of tables) {
     const info = (await db.prepare(`PRAGMA table_info(${table})`).all()).results;

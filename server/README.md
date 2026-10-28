@@ -1043,9 +1043,9 @@ counts lose that student too.
   (twice the rows the day's rollups took for a full rebuild, those rows for a diff),
   plus 40,000 for the rest of a school day's batches, roll and purge, stay at or under
   85,000; otherwise it waits, if need be for the next UTC day. A full rebuild of a busy
-  school's day writes about 25,000 rows, so at most one or two run on a school day: a
-  zone change at a busy school takes about a school day per rebuilt day (more at
-  weekends), and never brings the day near D1's 100,000. Each roll raises the rollup
+  school's day writes about 16,000 rows (its 8,000 rollup rows deleted and written
+  again), so at most two run in a UTC day: a zone change at a busy school rebuilds about
+  two days a day, and never brings the day near D1's 100,000. Each roll raises the rollup
   version, so the dashboard's kept answers are made again.
 * **Monitoring.** `GET /v1/health`. The Node process exits when it cannot start (port in
   use, unreadable database), so the supervisor (Docker, systemd) reports or restarts it.
@@ -1087,8 +1087,9 @@ Schema 4 (`docs/RESEARCH_TELEMETRY_SPEC.md`, "Storage on D1", has the exact colu
 | `agg_days`, `agg_games`, `agg_levels`, `agg_sources`, `agg_devices` | Only on a database milestone 2 used: its daily totals per UTC receipt day, frozen. |
 
 Every table but `st_sessions` is `STRICT, WITHOUT ROWID`. The only indexes beyond the
-primary keys are `st_sessions_time`, `st_sessions_student`, `r_student_day_u`,
-`r_student_game_u` and `r_stat_metric`. There are no other columns.
+primary keys are `st_sessions_time`, `st_sessions_student`, `r_student_day_u` and
+`r_student_game_u` (`r_stat` has none: every read of it finds its rows by day and band,
+and an index by metric would add 60% to its size). There are no other columns.
 
 ### Free-plan arithmetic
 
@@ -1101,29 +1102,31 @@ engaged minutes per session. Scaled to a busy school of 500 sessions a school da
 | Rows written per school day | Simulated school | 500 sessions |
 |---|---|---|
 | Batches: 5.9 rows each (facts, student and PC rows, live rows, usage) | 30,000 | ≈ 32,500 |
-| The night's first roll of the day: ≈ 6,600 rollup rows (4,500 of them `r_stat`), their index entries and the live sweep | 12,400 | ≈ 13,300 |
+| The night's first roll of the day: ≈ 6,600 rollup rows (4,500 of them `r_stat`), their index entries and the live sweep | 8,000 | ≈ 8,500 |
 | Re-rolls of days that late batches reached | 50–350 each | ≈ 500 |
-| **First year** | | **≈ 46,000 (46%)** |
+| **First year** | | **≈ 41,500 (42%)** |
 | + the facts of a day deleted after 400 days (about 23 rows and index entries a session) | | + ≈ 11,400 |
-| + the rollups of a day deleted after 800 days | | + ≈ 13,300 |
-| **From the third year** | | **≈ 71,000 (71%)** |
+| + the rollups of a day deleted after 800 days | | + ≈ 8,500 |
+| **From the third year** | | **≈ 61,500 (62%)** |
 
-From the third year a busy UTC day's writes can pass 60,000, after which the PCs are
+From the third year a busy UTC day's writes can just pass 60,000, after which the PCs are
 asked to send every 180 s (`X-Batch-Every`) for the rest of that UTC day. In Riyadh that
 happens only at night, when the roll and the deletions run after the school day. The
 daily limit of 100,000 stays out of reach.
 
 | Storage | Measured | 500 sessions a school day |
 |---|---|---|
-| Facts | 1.4 KB a session | ≈ 150 MB for 400 days (about 220 school days) |
-| Rollups | 0.86 MB a school day, 70% of it `r_stat` and its index | ≈ 190 MB a year of 220 school days |
-| **After the first year** | | **≈ 345 MB (69%)** |
+| Facts | 1.24 KB a session | ≈ 135 MB for 400 days (about 220 school days) |
+| Rollups | 0.55 MB a school day of 471 sessions, 59% of it `r_stat` | ≈ 130 MB a year of 220 school days |
+| **After the first year** | | **≈ 265 MB (53%)** |
 
-The rollups are kept 800 days, so at this size the database reaches the storage guard
-(425 MB) in its second year. The guard then deletes the round rows of the oldest 30 days
-of facts each time the file has grown again, but the rollups keep growing until their
-first days pass 800 days, near the 500 MB limit. The spec's budget assumed 0.3 MB of
-rollups a school day; a school this busy should watch *Settings* → storage. Read costs
+The rollups are kept 800 days (about 480 school days), so at this size the database
+nears the storage guard (425 MB) in its third year, when the rollups' first days pass
+800 days: about 285 MB of rollups and 135 MB of facts. The guard then deletes the round
+rows of the oldest 30 days of facts (about 7 MB) each time the file has grown again, and
+the database stays under the 500 MB limit. The spec's budget assumed 0.3 MB of rollups a
+school day: `r_stat` alone takes 0.33 MB (about 4,500 rows of 23 sums), and a school this
+busy should watch *Settings* → storage. Read costs
 cannot be measured on Node (`node:sqlite` reports the rows returned, not the rows
 SQLite read): the spec (`docs/RESEARCH_TELEMETRY_SPEC.md`, "Budget math") estimates 0.6
 to 1.2 million rows read on a typical day with the dashboard open, and 2.1 to 2.6

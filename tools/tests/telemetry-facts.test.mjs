@@ -452,6 +452,7 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
   await store.unlink({ u: U3 }, at);
   await store.rebuild(at);
   await store.forget({ u: U3 }, at);
+  const r_stat_reads = new Set();
   for (const [text, params] of seen) {
     if (!/^(?:SELECT|INSERT|UPDATE|DELETE|WITH)/.test(text) || /sqlite_master/.test(text)) continue;
     const plan = db.sqlite.prepare('EXPLAIN QUERY PLAN ' + text).all(...params).map(row => row.detail);
@@ -460,12 +461,18 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
       const scan = /^SCAN (st_\w+|r_\w+|batches|kpi_cache)\b/.exec(step);
       assert.ok(!scan || allowed && new RegExp(`^(?:${allowed})$`).test(scan[1]), text.slice(0, 120) + '\n' + plan.join('\n'));
     }
+    // r_stat has no index by metric: its reads find the rows of each day and band by key.
+    if (/metric = 'sesslen'|metric = 'flow' AND x\.slug = f\.slug/.test(text)) {
+      assert.ok(plan.some(step => /^SEARCH x USING PRIMARY KEY \(day=\? AND a=\? AND metric=\? AND slug=\?/.test(step)), text.slice(0, 120) + '\n' + plan.join('\n'));
+      r_stat_reads.add(/sesslen/.test(text) ? 'sesslen' : 'flow');
+    }
     // Sessions are found by their start, or for one student's codes by code and start.
     if (/FROM st_sessions s/.test(text) && /start_s >= \?1/.test(text)) {
       const index = /s\.u IN \(SELECT value FROM json_each/.test(text) ? 'st_sessions_student' : 'st_sessions_time';
       assert.ok(plan.some(step => new RegExp(`SEARCH s USING (?:COVERING )?INDEX ${index}`).test(step)), text.slice(0, 120) + '\n' + plan.join('\n'));
     }
   }
+  assert.deepEqual([...r_stat_reads].sort(), ['flow', 'sesslen']);
   // Every kind of write and pre-read was checked.
   for (const statement of ['INSERT INTO st_sessions', 'INSERT INTO st_visits', 'INSERT INTO st_rounds', 'INSERT INTO st_students', 'INSERT INTO st_pcs',
     'INSERT OR IGNORE INTO st_student_pcs', 'INSERT OR IGNORE INTO st_marks', 'INSERT INTO st_student_games', 'UPDATE st_students SET', 'UPDATE aliases SET',
