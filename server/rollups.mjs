@@ -257,6 +257,12 @@ function statParts(scope) {
   ];
 }
 
+// The r_stat sums each metric has (the others are always 0 in its rows), in the table's order.
+export const METRIC_SUMS = Object.fromEntries(METRICS.map(metric => {
+  const used = new Set(statParts(DAY_SCOPE).filter(part => part.metric === metric).flatMap(part => Object.keys(part.values)));
+  return [metric, ROLLUPS.r_stat.sums.filter(c => used.has(c))];
+}));
+
 /* ------------------------------------------------------------ the SQL */
 // D1 refuses a compound SELECT of more than 5 terms and an SQL function of more than 32
 // arguments (sqlite-d1.mjs D1_LIMITS). SELECTs joined by UNION ALL, nested as

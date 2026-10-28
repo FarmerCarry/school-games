@@ -1293,12 +1293,14 @@ test('students, a student, a game and the PCs are exact for a hand-built school,
       daily: GAME.daily.map(d => ({ ...d, students: 0, minutes: 0, opens: 0 })), firstWin: [], flowsIn: [], flowsOut: [],
       stats: { columns: game.stats.columns, rows: [] } });
     assert.deepEqual(await get('/v1/admin/pcs?' + q), { ...PCS_ANSWER, clock });
+    // The columns are the sums the metrics have: attempt and tier have every one but the gaps.
     const stats = await get('/v1/admin/stats?' + q + '&metrics=tier,attempt&slug=road-hopper');
     assert.deepEqual({ ...stats, rows: undefined }, { v: 1, range: { ...RANGE, rolledThrough: rolled ? '2026-10-20' : '' }, metrics: ['attempt', 'tier'],
-      slug: 'road-hopper', columns: ['a', 'metric', 'slug', 'k1', 'k2', ...STAT_COLUMNS], rows: undefined, clock });
-    assert.deepEqual(stats.rows, rolled ? [['8-9', 'attempt', 'road-hopper', '1', '', 1, 1, 1, 0, 0, 0, 0, 30000, 30000, 30000, 10, 2, 6000, 10, 50, 1, 2, 1, 500, 1, 40, 0, 0],
-      ['8-9', 'attempt', 'road-hopper', '2', '', 1, 1, 0, 1, 0, 0, 0, 30000, 0, 0, 5, 5, 0, 0, 20, 1, 2, 1, 0, 0, 0, 0, 0],
-      ['8-9', 'tier', 'road-hopper', '2', '', 2, 1, 1, 1, 0, 0, 0, 60000, 0, 30000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]] : []);
+      slug: 'road-hopper', columns: ['a', 'metric', 'slug', 'k1', 'k2', ...STAT_COLUMNS.filter(c => c !== 'gap_sum' && c !== 'gap_n')], rows: undefined, clock });
+    assert.deepEqual(stats.rows, rolled ? [['8-9', 'attempt', 'road-hopper', '1', '', 1, 1, 1, 0, 0, 0, 0, 30000, 30000, 30000, 10, 2, 6000, 10, 50, 1, 2, 1, 500, 1, 40],
+      ['8-9', 'attempt', 'road-hopper', '2', '', 1, 1, 0, 1, 0, 0, 0, 30000, 0, 0, 5, 5, 0, 0, 20, 1, 2, 1, 0, 0, 0],
+      ['8-9', 'tier', 'road-hopper', '2', '', 2, 1, 1, 1, 0, 0, 0, 60000, 0, 30000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]] : []);
+    assert.deepEqual((await get('/v1/admin/stats?' + q + '&metrics=hour')).columns, ['a', 'metric', 'slug', 'k1', 'k2', 'n', 'students', 'ms']);
     // The cohort of the week of 19 October (Monday, the first week with v3 data): U1's profile was made then.
     assert.deepEqual(await get('/v1/admin/cohorts?' + q), { v: 1, range: RANGE, weekStart: 'mon', clock,
       cohorts: rolled ? [{ week: '2026-10-19', size: 1, active: [1, ...Array(12).fill(null)] }] : [] });

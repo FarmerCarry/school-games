@@ -474,8 +474,8 @@ test('every write, pre-read, roll, admin read and purge finds its rows by key: n
     // The research reads: students, a student (rollups and facts), a game, r_stat, cohorts and PCs.
     "INSERT INTO kpi_cache (key, made, rows) SELECT ?6, ?7, json_object('weeks'", 'WITH s AS (SELECT c, ', 'WITH p AS (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT d.day AS day',
     'SELECT g.slug AS slug', 'SELECT date(g.day', "SELECT CAST(strftime('%H'", "SELECT date(((s.start_s + COALESCE(r.t0", 'SELECT date(((s.start_s) +',
-    'SELECT CASE WHEN nx.k', 'SELECT x.day AS day, x.a AS a', 'SELECT x.day AS day, COUNT(DISTINCT', 'SELECT x.a AS a', 'SELECT COALESCE(al.u_new, x.u) AS c, x.a',
-    'SELECT json_group_array(json_array(a, metric, k1', 'SELECT json_group_array(json_array(a, metric, slug', 'WITH RECURSIVE f', 'WITH codes AS',
+    'SELECT CASE WHEN nx.k', 'INSERT INTO kpi_cache (key, made, rows) SELECT ?13, ?14, json_object(\'days\'', "SELECT json_object('days'",
+    'INSERT INTO kpi_cache (key, made, rows) SELECT ?5, ?6, (SELECT json_group_array(json_array(a, metric, slug', 
     'WITH d AS MATERIALIZED (SELECT COALESCE(al.u_new, x.u) AS c', 'SELECT x.p AS p', 'SELECT s.p AS p', 'SELECT p, z, k', 'SELECT k FROM st_pcs',
     // Export pages of every file.
     "SELECT IFNULL(s.s, '') || ',' || IFNULL(s.u", "SELECT IFNULL(s.s, '') || ',' || IFNULL(v.n", "SELECT IFNULL(s.s, '') || ',' || IFNULL(r.n",

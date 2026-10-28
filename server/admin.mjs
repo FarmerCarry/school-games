@@ -11,7 +11,7 @@
 // counts as the newer one), in SQL through the aliases table. Every answer takes at most 20
 // statements, and JavaScript only merges small rows per student, day or game. Pure apart
 // from the store context it is given (adminViews(ctx)).
-import { METRICS, ROLLUPS, jsonObject, rollupSelect } from './rollups.mjs';
+import { METRICS, METRIC_SUMS, ROLLUPS, jsonObject, rollupSelect } from './rollups.mjs';
 import { CODES } from './schema.mjs';
 
 const DAY_MS = 86400000;
@@ -188,43 +188,50 @@ const ONE_PERSIST = `SELECT ${NEXT} AS next, COUNT(*) AS n FROM st_sessions s JO
 // student; r_stat rows (the metrics ?6); the paired thirds (part 0 to day ?7, part 1 from
 // day ?8); and the flows into it from every game, found by key (the from-games listed by a
 // walk over the r_stat_metric index, one step per game).
-const GAME_DAYS = src => `SELECT x.day AS day, x.a AS a, TOTAL(x.engaged_ms) AS ms, TOTAL(x.opens) AS opens FROM ${src.from} ` +
-  `WHERE ${src.days} AND x.a IN ${IN_JSON(5)} AND x.slug = ?3 GROUP BY 1, 2`;
-const GAME_DAILY = src => `SELECT x.day AS day, COUNT(DISTINCT ${CANON('x')}) AS students FROM ${src.from}${LINKS('x')} ` +
-  `WHERE ${src.days} AND x.slug = ?3 AND (?4 IS NULL OR x.a = ?4) GROUP BY 1`;
-const GAME_STUDENTS = src => `SELECT x.a AS a, ${CANON('x')} AS c, COUNT(DISTINCT x.day) AS days FROM ${src.from}${LINKS('x')} ` +
-  `WHERE ${src.days} AND x.slug = ?3 AND (?4 IS NULL OR x.a = ?4) GROUP BY 1, 2`;
+// Each as one JSON text of arrays (the Worker parses one string, and makes no object per row).
+const asArrays = (text, columns) => `SELECT json_group_array(json_array(${columns.join(', ')})) AS rows FROM (${text})`;
+const GAME_DAYS = src => asArrays(`SELECT x.day AS day, x.a AS a, TOTAL(x.engaged_ms) AS ms, TOTAL(x.opens) AS opens FROM ${src.from} ` +
+  `WHERE ${src.days} AND x.a IN ${IN_JSON(5)} AND x.slug = ?3 GROUP BY 1, 2`, ['day', 'a', 'ms', 'opens']);
+const GAME_DAILY = src => asArrays(`SELECT x.day AS day, COUNT(DISTINCT ${CANON('x')}) AS students FROM ${src.from}${LINKS('x')} ` +
+  `WHERE ${src.days} AND x.slug = ?3 AND (?4 IS NULL OR x.a = ?4) GROUP BY 1`, ['day', 'students']);
+const GAME_STUDENTS = src => asArrays(`SELECT x.a AS a, ${CANON('x')} AS c, COUNT(DISTINCT x.day) AS days FROM ${src.from}${LINKS('x')} ` +
+  `WHERE ${src.days} AND x.slug = ?3 AND (?4 IS NULL OR x.a = ?4) GROUP BY 1, 2`, ['a', 'c', 'days']);
 const STAT_SUMS = ROLLUPS.r_stat.sums;
-const STAT_ROWS = (keys, where) => `SELECT json_group_array(json_array(${[...keys, ...STAT_SUMS].join(', ')})) AS rows FROM (` +
-  `SELECT ${keys.map(c => `x.${c} AS ${c}`).join(', ')}, ${STAT_SUMS.map(c => `SUM(x.${c}) AS ${c}`).join(', ')} FROM r_stat x ` +
+const STAT_ROWS = (keys, where, sums = STAT_SUMS) => `SELECT json_group_array(json_array(${[...keys, ...sums].join(', ')})) AS rows FROM (` +
+  `SELECT ${keys.map(c => `x.${c} AS ${c}`).join(', ')}, ${sums.map(c => `SUM(x.${c}) AS ${c}`).join(', ')} FROM r_stat x ` +
   `WHERE ${where} GROUP BY ${keys.map((_, i) => i + 1).join(', ')} ORDER BY ${keys.map((_, i) => i + 1).join(', ')})`;
 const GAME_STATS = STAT_ROWS(['a', 'metric', 'k1', 'k2'], `x.day IN ${IN_JSON(1)} AND x.a IN ${IN_JSON(5)} AND x.metric IN ${IN_JSON(6)} AND x.slug = ?3`);
 const PAIRED_SUMS = ['rounds', 'w', 'l', 'hits', 'misses', 'rt_sum', 'rt_n', 'score_sum', 'score_n', 'dda_sum', 'dda_n'];
-const GAME_PAIRED = src => `SELECT ${CANON('x')} AS c, x.a AS a, CASE WHEN x.day <= ?7 THEN 0 ELSE 1 END AS part, ${sums('x', PAIRED_SUMS)} ` +
-  `FROM ${src.from}${LINKS('x')} WHERE ${src.days} AND x.slug = ?3 AND (?4 IS NULL OR x.a = ?4) AND (x.day <= ?7 OR x.day >= ?8) GROUP BY 1, 2, 3`;
+const GAME_PAIRED = src => asArrays(`SELECT ${CANON('x')} AS c, x.a AS a, CASE WHEN x.day <= ?7 THEN 0 ELSE 1 END AS part, ${sums('x', PAIRED_SUMS)} ` +
+  `FROM ${src.from}${LINKS('x')} WHERE ${src.days} AND x.slug = ?3 AND (?4 IS NULL OR x.a = ?4) AND (x.day <= ?7 OR x.day >= ?8) GROUP BY 1, 2, 3`,
+['c', 'a', 'part', ...PAIRED_SUMS]);
 const FLOW_FROM = "WITH RECURSIVE f (slug) AS (SELECT MIN(slug) FROM r_stat WHERE metric = 'flow' UNION ALL " +
   "SELECT (SELECT MIN(y.slug) FROM r_stat y WHERE y.metric = 'flow' AND y.slug > f.slug) FROM f WHERE f.slug IS NOT NULL) ";
-const GAME_FLOWS_IN = FLOW_FROM + 'SELECT x.slug AS "from", SUM(x.n) AS n FROM r_stat x ' +
+const GAME_FLOWS_IN = FLOW_FROM + 'SELECT json_group_array(json_array("from", n)) AS rows FROM (SELECT x.slug AS "from", SUM(x.n) AS n FROM r_stat x ' +
   `WHERE x.day IN ${IN_JSON(1)} AND x.a IN ${IN_JSON(5)} AND x.metric = 'flow' AND x.slug IN (SELECT slug FROM f WHERE slug IS NOT NULL) ` +
-  "AND x.k1 = ?3 AND x.k2 = '' GROUP BY 1";
-// Tries before the first win, from the facts (the UTC seconds [?6, ?7)): per canonical
-// student and level, the ended rounds (solo, band ?4) in play order up to the first win.
-// The students are those with r_student_game rows for the game on the rolled days ?1, and
-// every student playing on the open days [?8, ?7).
-const FIRST_WIN = 'WITH codes AS (SELECT g.u AS u FROM r_student_game g WHERE g.day IN ' + IN_JSON(1) + ' AND g.slug = ?3 ' +
-  "UNION SELECT o.u FROM st_sessions o WHERE o.start_s >= ?8 AND o.start_s < ?7 AND o.u <> ''), " +
+  "AND x.k1 = ?3 AND x.k2 = '' GROUP BY 1)";
+// Tries before the first win, from the facts (the UTC seconds [?9, ?10)): per canonical
+// student and level, the ended rounds (solo, band ?4) in play order up to the first win,
+// counted per level, number of tries and whether the student won ([id, tries, won, n]).
+// The students are those with r_student_game rows for the game on the rolled days ?12, and
+// every student playing on the open days [?11, ?10).
+const FIRST_WIN = 'WITH codes AS (SELECT g.u AS u FROM r_student_game g WHERE g.day IN ' + IN_JSON(12) + ' AND g.slug = ?3 ' +
+  "UNION SELECT o.u FROM st_sessions o WHERE o.start_s >= ?11 AND o.start_s < ?10 AND o.u <> ''), " +
   "rs AS MATERIALIZED (SELECT COALESCE(al.u_new, s.u) AS c, r.id AS id, r.code AS code, printf('%011d %011d %05d %05d', s.start_s, s.id, r.n, r.k) AS o " +
-  'FROM codes JOIN st_sessions s ON s.u = codes.u AND s.start_s >= ?6 AND s.start_s < ?7 JOIN st_visits v ON v.sid = s.id AND v.slug = ?3 ' +
+  'FROM codes JOIN st_sessions s ON s.u = codes.u AND s.start_s >= ?9 AND s.start_s < ?10 JOIN st_visits v ON v.sid = s.id AND v.slug = ?3 ' +
   'JOIN st_rounds r ON r.sid = v.sid AND r.n = v.n LEFT JOIN aliases al ON al.u_old = s.u ' +
   'WHERE r.code IS NOT NULL AND r.duo = 0 AND (?4 IS NULL OR s.a = ?4)), ' +
   "fw AS (SELECT c, id, MIN(o) AS o FROM rs WHERE code = 'w' GROUP BY 1, 2) " +
+  'SELECT json_group_array(json_array(id, tries, won, n)) AS rows FROM (SELECT id, tries, won, COUNT(*) AS n FROM (' +
   'SELECT rs.id AS id, rs.c AS c, COUNT(*) AS tries, fw.o IS NOT NULL AS won FROM rs LEFT JOIN fw ON fw.c = rs.c AND fw.id = rs.id ' +
-  'WHERE fw.o IS NULL OR rs.o <= fw.o GROUP BY 1, 2';
+  'WHERE fw.o IS NULL OR rs.o <= fw.o GROUP BY 1, 2) GROUP BY 1, 2, 3)';
 
 // The r_stat metrics ?3 (a JSON array) over the rolled days of the list ?1, bands ?2, all
-// games or the game ?4.
-const STATS_ALL = STAT_ROWS(['a', 'metric', 'slug', 'k1', 'k2'], `x.day IN ${IN_JSON(1)} AND x.a IN ${IN_JSON(2)} AND x.metric IN ${IN_JSON(3)}`);
-const STATS_ONE = STAT_ROWS(['a', 'metric', 'slug', 'k1', 'k2'], `x.day IN ${IN_JSON(1)} AND x.a IN ${IN_JSON(2)} AND x.metric IN ${IN_JSON(3)} AND x.slug = ?4`);
+// games or the game ?4: only the sums those metrics have, made and kept in kpi_cache by SQL
+// (key ?5, rv ?6) unless kept already, then read back.
+const statsKept = (one, sums) => `INSERT INTO kpi_cache (key, made, rows) SELECT ?5, ?6, (${STAT_ROWS(['a', 'metric', 'slug', 'k1', 'k2'],
+  `x.day IN ${IN_JSON(1)} AND x.a IN ${IN_JSON(2)} AND x.metric IN ${IN_JSON(3)}${one ? ' AND x.slug = ?4' : ''}`, sums)}) ` +
+  'WHERE NOT EXISTS (SELECT 1 FROM kpi_cache WHERE key = ?5)';
 
 // Retention cohorts over the rolled days ?1..?2, band ?3: weeks are counted from the week
 // start ?4. A student's cohort is the week of their profile's start (the earliest of their
@@ -321,9 +328,9 @@ export function adminViews(ctx) {
     const results = await run(tasks.map(([statement]) => statement), now, options);
     results.forEach((result, i) => tasks[i][1](result));
   }
-  // Kept parts of an answer: the closed and open part found, and the links.
-  async function kept(keys, now) {
-    const { found, aliases } = await lookup([keys.closed, keys.open], now);
+  // Kept parts of an answer: the closed and open part found, and the links (unless links: false).
+  async function kept(keys, now, options) {
+    const { found, aliases } = await lookup([keys.closed, keys.open], now, options);
     return { closed: keys.closed && found.get(keys.closed.key), open: keys.open && found.get(keys.open.key), aliases };
   }
   const range = (from, to, band) => ({ from, to, days: daysBetween(from, to), band: band === null ? 'all' : bandName(band) });
@@ -447,70 +454,85 @@ export function adminViews(ctx) {
   // GET /v1/admin/game?slug: one game's page: students, minutes and opens per band and per
   // day, its r_stat rows over the rolled days, tries before the first win per level, the
   // paired first and last thirds of the period per student, and the games before and after it.
+  // A game's part over the rolled days (scope null: with its r_stat rows and flows) or a
+  // scope's facts, with the tries before a first win when firstWin: one statement that makes
+  // and keeps it in kpi_cache (key ?13, rv ?14) unless kept already (keep: it has a key), as
+  // the JSON text of its lists, so it never passes through the Worker on its way in. Made
+  // once per scope.
+  const gameMade = new Map();
+  function gamePart(scope, paired, firstWin, keep) {
+    const key = [scope ? scope.day : '', paired, firstWin, keep].join(' ');
+    let text = gameMade.get(key);
+    if (!text) {
+      if (gameMade.size >= 16) gameMade.clear();
+      const src = table => source(table, 'x', scope, true);
+      const lists = [['days', GAME_DAYS(src('r_game_day'))], ['daily', GAME_DAILY(src('r_student_game'))], ['students', GAME_STUDENTS(src('r_student_game'))],
+        ...(paired ? [['paired', GAME_PAIRED(src('r_student_game'))]] : []), ...(scope ? [] : [['stats', GAME_STATS], ['flowsIn', GAME_FLOWS_IN]]),
+        ...(firstWin ? [['firstWin', FIRST_WIN]] : [])];
+      const part = 'json_object(' + lists.map(([name, list]) => `'${name}', json((${list}))`).join(', ') + ')';
+      gameMade.set(key, text = keep ? `INSERT INTO kpi_cache (key, made, rows) SELECT ?13, ?14, ${part} WHERE NOT EXISTS (SELECT 1 FROM kpi_cache WHERE key = ?13)`
+        : `SELECT ${part} AS rows`);
+    }
+    return text;
+  }
   async function game({ slug, from, to, band }, now = Date.now()) {
     await ensure(now);
-    const period = spans(from, to), keys = partKeys(['game', slug, from, to, band], period.rolled, period.open, now);
-    let { closed, open } = await kept(keys, now);
+    const period = spans(from, to), keys = partKeys(['game', slug, from, to, band], period.rolled, period.open, now, { raw: true });
+    let { closed, open } = await kept(keys, now, { links: false });
     const third = Math.floor(daysBetween(from, to) / 3), t1 = addDays(from, third - 1), t2 = addDays(to, 1 - third);
-    const bands = json(band === null ? ALL_BANDS : [band]), metrics = json(METRICS), tasks = [];
+    const bands = json(band === null ? ALL_BANDS : [band]), metrics = json(METRICS);
     const rolledDays = period.rolled ? json(dayList(...period.rolled)) : '[]';
     const lo = ctx.bounds(from).lo, hi = ctx.bounds(to).hi, openLo = period.bounds ? period.bounds[0] : hi;
-    const make = scope => {
-      const part = { days: [], daily: [], students: [], paired: [] };
-      const values = [...(scope ? period.bounds : [rolledDays, null]), slug, band, bands, metrics, t1, t2];
-      const src = table => source(table, 'x', scope, true);
-      tasks.push([bound(GAME_DAYS(src('r_game_day')), values), r => { part.days = r.results; }],
-        [bound(GAME_DAILY(src('r_student_game')), values), r => { part.daily = r.results; }],
-        [bound(GAME_STUDENTS(src('r_student_game')), values), r => { part.students = r.results; }]);
-      if (third > 0) tasks.push([bound(GAME_PAIRED(src('r_student_game')), values), r => { part.paired = r.results; }]);
-      if (!scope) {
-        tasks.push([bound(GAME_STATS, values), r => { part.stats = JSON.parse(r.results[0].rows); }],
-          [bound(GAME_FLOWS_IN, values), r => { part.flowsIn = r.results; }]);
-      }
-      if (!!scope === !!period.open) {
-        tasks.push([bound(FIRST_WIN, [rolledDays, null, slug, band, null, lo, hi, openLo]), r => { part.firstWin = r.results; }]);
-      }
-      return part;
+    // A part is the JSON text of its lists, made (and kept) by SQL, parsed when used; the
+    // lists only the facts hold go with the open part when there is one.
+    const work = [], made = [];
+    const make = (scope, entry) => {
+      const values = [...(scope ? period.bounds : [rolledDays, null]), slug, band, bands, metrics, t1, t2, lo, hi, openLo, rolledDays, entry?.key ?? '', ctx.conf().rv];
+      work.push(bound(gamePart(scope, third > 0, !!scope === !!period.open, !!entry), values));
+      if (entry) work.push(bound('SELECT rows FROM kpi_cache WHERE key = ?1', [entry.key]));
+      made.push([entry, work.length - 1]);
     };
-    const fresh = [];
-    if (period.rolled && !closed) fresh.push([keys.closed, closed = make(null)]);
-    if (period.open && !open) fresh.push([keys.open, open = make(period.scope)]);
-    await perform(tasks, now);
-    await keepParts(fresh, now);
-
-    const parts = [closed, open].filter(Boolean), byBand = new Map(), byDay = new Map(), seen = new Map();
-    for (const row of parts.flatMap(part => part.days)) {
-      const b = byBand.get(row.a) || byBand.set(row.a, { ms: 0, opens: 0 }).get(row.a);
-      b.ms += row.ms; b.opens += row.opens;
-      const d = byDay.get(row.day) || byDay.set(row.day, { ms: 0, opens: 0, students: 0 }).get(row.day);
-      d.ms += row.ms; d.opens += row.opens;
+    if (period.rolled && !closed) make(null, keys.closed);
+    if (period.open && !open) make(period.scope, keys.open);
+    if (work.length) {
+      const results = await run(work, now), texts = made.map(([entry, at]) => [entry, results[at].results[0].rows]);
+      if (period.rolled && !closed) closed = texts[0][1];
+      if (period.open && !open) open = texts.at(-1)[1];
+      await keepParts(texts.filter(([entry]) => entry), now, { here: true });
     }
-    for (const row of parts.flatMap(part => part.daily)) (byDay.get(row.day) || byDay.set(row.day, { ms: 0, opens: 0, students: 0 }).get(row.day)).students = row.students;
-    for (const { a, c, days } of parts.flatMap(part => part.students)) {
+    const parts = [closed, open].filter(Boolean).map(part => JSON.parse(part)), closedPart = closed ? parts[0] : null;
+    const all = name => parts.flatMap(part => part[name] || []), byBand = new Map(), byDay = new Map(), seen = new Map();
+    for (const [day, a, ms, opens] of all('days')) {
+      const b = byBand.get(a) || byBand.set(a, { ms: 0, opens: 0 }).get(a);
+      b.ms += ms; b.opens += opens;
+      const d = byDay.get(day) || byDay.set(day, { ms: 0, opens: 0, students: 0 }).get(day);
+      d.ms += ms; d.opens += opens;
+    }
+    for (const [day, students] of all('daily')) (byDay.get(day) || byDay.set(day, { ms: 0, opens: 0, students: 0 }).get(day)).students = students;
+    for (const [a, c, days] of all('students')) {
       const list = seen.get(a) || seen.set(a, new Map()).get(a);
       list.set(c, (list.get(c) || 0) + days);
     }
     // Paired thirds: students (and band) with rounds in both.
     const pairs = new Map();
-    for (const row of parts.flatMap(part => part.paired)) {
-      const id = row.c + ' ' + row.a + ' ' + row.part, into = pairs.get(id);
-      if (!into) pairs.set(id, { ...row });
-      else for (const key of PAIRED_SUMS) into[key] += row[key];
+    for (const row of all('paired')) {
+      const id = row[0] + ' ' + row[1] + ' ' + row[2], into = pairs.get(id);
+      if (!into) pairs.set(id, row.slice());
+      else for (let i = 3; i < row.length; i++) into[i] += row[i];
     }
-    const paired = [...pairs.values()].filter(row => row.rounds > 0 && pairs.get(row.c + ' ' + row.a + ' ' + (1 - row.part))?.rounds > 0)
-      .sort((x, y) => natural(x.c, y.c) || natural(x.a, y.a) || x.part - y.part)
-      .map(row => [row.c, row.a, row.part, ...PAIRED_SUMS.map(key => row[key])]);
+    const paired = [...pairs.values()].filter(row => row[3] > 0 && pairs.get(row[0] + ' ' + row[1] + ' ' + (1 - row[2]))?.[3] > 0)
+      .sort((x, y) => natural(x[0], y[0]) || natural(x[1], y[1]) || x[2] - y[2]);
     // Tries before the first win, per level.
-    const levels = new Map();
-    for (const { id, tries, won } of closed?.firstWin || open?.firstWin || []) {
+    const levels = new Map(), firstWin = (closedPart && closedPart.firstWin) || parts.find(part => part.firstWin)?.firstWin || [];
+    for (const [id, tries, won, n] of firstWin) {
       const l = levels.get(id) || levels.set(id, { students: 0, never: 0, tries: [] }).get(id);
-      l.students++;
-      if (won) l.tries.push(tries); else l.never++;
+      l.students += n;
+      if (won) for (let i = 0; i < n; i++) l.tries.push(tries); else l.never += n;
     }
-    const stats = closed?.stats || [], flowsOut = new Map();
+    const stats = closedPart?.stats || [], flowsOut = new Map();
     for (const row of stats) if (row[1] === 'flow') flowsOut.set(row[2], (flowsOut.get(row[2]) || 0) + row[4]);
     const flowsIn = new Map();
-    for (const row of closed?.flowsIn || []) flowsIn.set(row.from, (flowsIn.get(row.from) || 0) + row.n);
+    for (const [from, n] of closedPart?.flowsIn || []) flowsIn.set(from, (flowsIn.get(from) || 0) + n);
     const top = (map, name) => [...map].sort((a, b) => b[1] - a[1] || natural(a[0], b[0])).map(([key, n]) => ({ [name]: key, n }));
     return answer(now, {
       slug, range: range(from, to, band),
@@ -535,15 +557,18 @@ export function adminViews(ctx) {
     await ensure(now);
     // The rows stay one JSON text, from SQL to kpi_cache to the answer: an answer of every
     // metric over months has thousands of rows, too many to parse and write again in 10 ms.
+    // Its columns: the keys and the sums the metrics have.
+    const sums = STAT_SUMS.filter(c => metrics.some(metric => METRIC_SUMS[metric].includes(c)));
     const period = spans(from, to), keys = partKeys(['stats', from, to, band, metrics.join(','), slug], period.rolled, null, now, { raw: true });
-    let { closed } = await kept(keys, now);
-    if (period.rolled && !closed) {
-      const values = [json(dayList(...period.rolled)), json(band === null ? ALL_BANDS : [band]), json(metrics), slug];
-      await perform([[bound(slug ? STATS_ONE : STATS_ALL, values), r => { closed = r.results[0].rows; }]], now);
-      await keepParts([[keys.closed, closed]], now);
+    let closed = keys.closed && ctx.keptHere(keys.closed.key, now);
+    if (keys.closed && !closed) {
+      const values = [json(dayList(...period.rolled)), json(band === null ? ALL_BANDS : [band]), json(metrics), slug, keys.closed.key, ctx.conf().rv];
+      const results = await run([bound(statsKept(!!slug, sums), values), bound('SELECT rows FROM kpi_cache WHERE key = ?1', [keys.closed.key])], now);
+      closed = results[1].results[0].rows;
+      await keepParts([[keys.closed, closed]], now, { here: true });
     }
     return answer(now, { range: { ...range(from, to, band), rolledThrough: ctx.conf().rolledThrough }, metrics, slug,
-      columns: ['a', 'metric', 'slug', 'k1', 'k2', ...STAT_SUMS], rows: new JsonText(closed || '[]') });
+      columns: ['a', 'metric', 'slug', 'k1', 'k2', ...sums], rows: new JsonText(closed || '[]') });
   }
 
   // GET /v1/admin/cohorts: per school week of the period from v3_since on (the first week

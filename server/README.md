@@ -844,13 +844,15 @@ The research metrics of `r_stat`, summed over the rolled days of the period (up 
 subset of `hour, rhour, sesslen, daymin, games, visitlen, flow, attempt, tenure, persist,
 fatigue, qrun, tier, tutorial` (`docs/RESEARCH_TELEMETRY_SPEC.md`, §D.2, gives each
 one's keys `k1` and `k2`); the answer lists them in that order. Rows are sorted by their
-keys.
+keys. `columns` holds the keys and only the sums the asked metrics have (every other sum
+is always 0 in their rows), in the order below; read a value by its column's name.
 
 ```jsonc
 { "v": 1, "range": { ..., "rolledThrough": "2026-10-28" }, "metrics": ["hour", "flow"], "slug": null,
-  "columns": ["a", "metric", "slug", "k1", "k2", "n", "students", "w", "l", "d", "e", "q", "ms", "wall_ms", "win_ms", "hits",
-    "misses", "rt_sum", "rt_n", "score_sum", "score_n", "tier_sum", "tier_n", "dda_sum", "dda_n", "inputs", "gap_sum", "gap_n"],
-  "rows": [ ["", "flow", "", "air-hockey", "", 1, 0, 0, ...] ],
+  // all the sums: n, students, w, l, d, e, q, ms, wall_ms, win_ms, hits, misses, rt_sum, rt_n, score_sum,
+  // score_n, tier_sum, tier_n, dda_sum, dda_n, inputs, gap_sum, gap_n; hour and flow have these:
+  "columns": ["a", "metric", "slug", "k1", "k2", "n", "students", "ms", "gap_sum", "gap_n"],
+  "rows": [ ["", "flow", "", "air-hockey", "", 1, 0, 0, 0, 0] ],
   "clock": { ... } }
 ```
 

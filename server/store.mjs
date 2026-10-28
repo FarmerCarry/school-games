@@ -1562,7 +1562,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
 
   // What the admin views and the export pages (admin.mjs, export.mjs) use of the store.
   const ctx = {
-    sql, bound, run, ensure, spans, wide, partKeys, lookup, keepParts, clock, studentsPageBytes,
+    sql, bound, run, ensure, spans, wide, partKeys, lookup, keepParts, clock, studentsPageBytes, keptHere: keptPart,
     conf: () => conf, bounds: day => dayBounds(conf.tz, day),
     // Statements that raise rv and forget every kept part, and what follows once they ran.
     renew: () => [sql(RV_UP), sql(KEPT_CLEAN)],
