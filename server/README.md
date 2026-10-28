@@ -1096,15 +1096,15 @@ time in `db.batch`, the median of cold runs) over 30 days of the simulated schoo
 
 | Invocation | Statements | CPU outside SQLite |
 |---|---|---|
-| `kpis` over frozen, rolled and open days | 18 | 7.5–10.5 ms |
-| `students` (with 13 weeks of each of about 600 students) | 9 | 1.3–2 ms |
-| `student` | 15 | 0.6–0.9 ms |
-| `game` | 15 | 1.4–2.1 ms |
-| `stats` (every metric of every game) | 5 | 3–3.8 ms |
-| `cohorts` | 5 | 0.4 ms |
-| `pcs` | 9 | 0.5 ms |
+| `kpis` over frozen, rolled and open days | 18 | 6.6–10.2 ms |
+| `students` (with 13 weeks of each of about 560 to 790 students) | 9 | 0.7–1 ms |
+| `student` | 15 | 0.7–0.9 ms |
+| `game` | 15 | 1.4–2.2 ms |
+| `stats` (every metric of every game) | 5 | 0.9–1.1 ms |
+| `cohorts` | 5 | 0.5 ms |
+| `pcs` | 9 | 0.5–0.8 ms |
 | `live`, `settings`, `POST settings` | 5, 2, at most 7 | under 0.1 ms |
-| an `export` page (`rounds`, `visits` or `events`: 5,000 lines) | 3 | 0.7–1 ms |
+| an `export` page (`rounds`, `visits` or `events`: 5,000 lines) | 3 | 0.7–1.1 ms |
 | another `export` page | 3 | under 0.5 ms |
 | `forget`, `link`, `DELETE link`, `rebuild` | 17, 7, 5, 5 | under 0.2 ms |
 | the 5-minute cron's full rebuild of a day | 24 | |
@@ -1113,9 +1113,13 @@ time in `db.batch`, the median of cold runs) over 30 days of the simulated schoo
 
 The statement counts include the settings re-read (every 5 minutes) and the usage flush
 (once a minute) that an invocation may carry. The tests hold the admin answers to 10 ms
-and an export page to 3 ms on this measure, with 120 sessions a day. `kpis` at a busy
-school is close to the limit when nothing of it is kept yet (the first request for a
-period after a roll), and takes about 6 ms with the rolled days' part kept.
+and an export page to 3 ms on this measure, with 120 sessions a day; runs differ by
+about a millisecond. `kpis` at a busy school is close to the limit when nothing of it is
+kept yet (the first request for a period after a roll), and takes about 6 ms with the
+rolled days' part kept. Most of its time goes to counting each game's distinct students
+over the kept and the open part (the students' games, merged per canonical code) and to
+reading the parts' rows. Kept parts are written to `kpi_cache` as the JSON text SQL made,
+bound as it is, never parsed and written again.
 
 ## Development
 

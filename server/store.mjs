@@ -619,9 +619,11 @@ const openExtras = scope => extras(
 const KEPT_LOOKUP = 'SELECT key, rows FROM kpi_cache WHERE key IN (SELECT value FROM json_each(?1)) UNION ALL ' +
   "SELECT '', json_group_array(json_array(a.u_old, a.u_new, o.first_s, o.first_s - IFNULL(o.age_days_first, 0) * 86400, " +
   'n.first_s, n.first_s - IFNULL(n.age_days_first, 0) * 86400)) FROM aliases a LEFT JOIN st_students o ON o.u = a.u_old LEFT JOIN st_students n ON n.u = a.u_new';
-// Keeps parts ([[key, rows], ...] in ?2) made with rv ?1.
-const KEPT_PUT = 'INSERT INTO kpi_cache (key, made, rows) SELECT value ->> 0, ?1, value ->> 1 FROM json_each(?2) WHERE true ' +
-  'ON CONFLICT (key) DO UPDATE SET made = excluded.made, rows = excluded.rows';
+// Keeps parts made with rv ?1: n of them, each a key and its JSON text (?2, ?3, then ?4,
+// ?5, ...), bound as they are, so that no text is escaped into a JSON parameter.
+const keptPut = n => 'INSERT INTO kpi_cache (key, made, rows) VALUES ' +
+  Array.from({ length: n }, (_, i) => `(?${2 * i + 2}, ?1, ?${2 * i + 3})`).join(', ') +
+  ' ON CONFLICT (key) DO UPDATE SET made = excluded.made, rows = excluded.rows';
 // Live sessions: how many, distinct students (by canonical code), guests, v2 sessions and PCs.
 const LIVE_TOTAL = "SELECT COUNT(*) AS sessions, COUNT(DISTINCT CASE WHEN l.u <> '' THEN COALESCE(al.u_new, l.u) END) AS students, " +
   "TOTAL(l.wire = 3 AND l.u = '') AS guests, TOTAL(l.wire = 2) AS unknown, COUNT(DISTINCT NULLIF(l.p, '')) AS pcs " +
@@ -683,6 +685,7 @@ function quantiles(counts, n, sum) {
 }
 const EMPTY_PART = { days: [], games: [], levels: [], sources: [], devices: [], students: [],
   extras: { students: [], minutes: [], dose: [0, 0], kinds: [], pcs: [] } };
+const EXTRAS = Object.keys(EMPTY_PART.extras), EMPTY_EXTRAS = JSON.stringify(EMPTY_PART.extras);
 
 // Options: retentionDays (the facts' default retention; the owner's keep_days setting
 // wins), openCacheMs (how long the answers' parts for the days not rolled yet are kept and
@@ -1104,23 +1107,24 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     }
     return { found, aliases };
   }
-  // Keeps newly made parts ([key, part] pairs) here and in kpi_cache, as far as they fit (at
-  // most KEPT_MAX bytes per write): a part that cannot be kept only costs a read later.
+  // Keeps newly made parts ([key, part] pairs, or [key, part, its JSON text] when SQL gave
+  // the text already) here and in kpi_cache, as far as they fit (at most KEPT_MAX bytes per
+  // write): a part that cannot be kept only costs a read later.
   async function keepParts(entries, now) {
     const rows = [];
     let size = 0, rv = null;
-    for (const [k, part] of entries) {
+    for (const [k, part, given] of entries) {
       if (!k) continue;
       keepPart(k.key, part, k.until, now);
-      const text = k.raw ? part : JSON.stringify(part);
+      const text = k.raw ? part : given ?? JSON.stringify(part);
       rv = k.rv;
       if ((size += text.length) <= KEPT_MAX) rows.push([k.key, text]);
     }
-    if (rows.length) await run([sql(KEPT_PUT).bind(rv, JSON.stringify(rows))], now).catch(() => {});
+    if (rows.length) await run([sql(keptPut(rows.length)).bind(rv, ...rows.flat())], now).catch(() => {});
   }
 
   /* ------------------------------------------------------------ the KPIs */
-  const extrasOf = row => Object.fromEntries(Object.keys(EMPTY_PART.extras).map(key => [key, JSON.parse(row[key])]));
+  const extrasOf = row => Object.fromEntries(EXTRAS.map(key => [key, JSON.parse(row[key])]));
   // The parts of a KPI answer for days from..to and band, with the links between codes:
   // the closed part (the frozen days up to legacy_until and the rolled days up to
   // rolled_through, kept per rollup version rv) and the open part (the days after them,
@@ -1147,9 +1151,13 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     const take = (list, students) => ({ ...Object.fromEntries(GROUPS.map((name, i) => [name, arrays(list[i])])),
       students: students ? arrays(list[GROUPS.length]) : [],
       extras: students ? extrasOf(list[GROUPS.length + 1].results[0]) : EMPTY_PART.extras });
-    const puts = [];
-    if (makeClosed) puts.push([keys.closed, closed = take(results, !!rolled)]);
-    if (makeOpen) puts.push([keys.open, recent = take(results.slice(makeClosed ? GROUPS.length + (rolled ? 2 : 0) : 0), true)]);
+    // The same part as JSON text for kpi_cache, joined from SQL's own JSON (no stringify of what was just parsed).
+    const text = (list, students) => '{' + GROUPS.map((name, i) => `"${name}":${list[i].results[0].rows}`).join(',') +
+      `,"students":${students ? list[GROUPS.length].results[0].rows : '[]'},"extras":` +
+      (students ? '{' + EXTRAS.map(key => `"${key}":${list[GROUPS.length + 1].results[0][key]}`).join(',') + '}' : EMPTY_EXTRAS) + '}';
+    const puts = [], openList = results.slice(makeClosed ? GROUPS.length + (rolled ? 2 : 0) : 0);
+    if (makeClosed) puts.push([keys.closed, closed = take(results, !!rolled), text(results, !!rolled)]);
+    if (makeOpen) puts.push([keys.open, recent = take(openList, true), keys.open && text(openList, true)]);
     await keepParts(puts, now);
     return { parts: [closed, recent].filter(Boolean), aliases };
   }
