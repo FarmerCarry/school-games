@@ -107,3 +107,83 @@ test('a paused run is drawn once with its effects held still, then only on resiz
   });
   assert.deepEqual(resumed, { paints: 40, attempt: 2, paused: false }, 'resume draws every frame and the next try starts');
 });
+
+test('there is no music: menus and pause stay silent, and each jump plays a note of the level\'s key', async t => {
+  const page = await game(t);
+  const result = await page.evaluate(() => {
+    const calls = [];
+    for (const kind of ['tone', 'noise']) {
+      const play = Kit.audio[kind];
+      Kit.audio[kind] = o => { calls.push({ kind, ...o }); return play.call(Kit.audio, o); };
+    }
+    const quiet = {};
+    __game.ff(240); quiet.title = calls.length;
+    document.getElementById('b-play').click(); calls.length = 0; // the button's own click sound
+    __game.ff(240); quiet.select = calls.length;
+    // jump on the first eight beats of level 1 (135 bpm: a beat every 26.7 ticks)
+    let inputs = '';
+    for (let tick = 0; tick < 240; tick++) inputs += [0, 1, 2, 3, 4, 5, 6, 7].some(b => Math.abs(tick - Math.round(b * 3600 / 135)) < 2) ? '1' : '0';
+    __game.autoplay(0, inputs);
+    calls.length = 0;
+    __game.ff(180);
+    const jumps = calls.filter(c => c.kind === 'tone' && c.type === 'sine' && c.dur === 0.14).map(c => c.freq);
+    document.getElementById('b-pause').click(); calls.length = 0;
+    __game.ff(240); quiet.pause = calls.length;
+    const song = BD.makeSong(BD_LEVELS[0].song, BD_LEVELS[0].bpm);
+    return { quiet, jumps, root: song.root, scale: song.scale, music: typeof BD.Music, hook: 'music' in __game };
+  });
+  assert.deepEqual(result.quiet, { title: 0, select: 0, pause: 0 }, 'nothing sounds unless the player does something');
+  assert.equal(result.music, 'undefined');
+  assert.equal(result.hook, false);
+  assert.ok(result.jumps.length >= 3, `the cube jumped (${result.jumps.length} jump notes)`);
+  const notes = result.jumps.map(f => 69 + 12 * Math.log2(f / 440));
+  for (const m of notes) {
+    assert.ok(Math.abs(m - Math.round(m)) < 1e-6, `a jump note is on the semitone grid (${m})`);
+    const step = ((Math.round(m) - result.root) % 12 + 12) % 12;
+    assert.ok(result.scale.includes(step), `a jump note is in the level's scale (${m})`);
+  }
+  assert.ok(new Set(notes.map(Math.round)).size >= 2, `jumps on different beats play different notes (${notes})`);
+});
+
+test('a win plays a short fanfare, then the result panel is silent while the fireworks go on', async t => {
+  const page = await game(t);
+  const result = await page.evaluate(() => {
+    const calls = [];
+    for (const kind of ['tone', 'noise']) {
+      const play = Kit.audio[kind];
+      Kit.audio[kind] = o => { calls.push(kind); return play.call(Kit.audio, o); };
+    }
+    __game.start(0, false);
+    __game.skipTo(99.6);
+    for (let n = 0; n < 120 && !__game.state.won; n++) __game.ff(1);
+    const won = __game.state.won;
+    __game.ff(125); // a little over 2 s of fanfare and fireworks
+    const fanfare = calls.length;
+    calls.length = 0;
+    __game.ff(240); // the result panel, with fireworks still bursting
+    return { won, fanfare, after: calls.length, panel: !document.getElementById('scr-win').hidden };
+  });
+  assert.equal(result.won, true, 'the level was finished');
+  assert.ok(result.fanfare > 0, 'the win is celebrated with sound');
+  assert.equal(result.panel, true, 'the result panel is up');
+  assert.equal(result.after, 0, 'nothing sounds on the result panel after the fanfare');
+});
+
+test('calm mode keeps the beat as colour only: nothing pulses, the glows still brighten on the beat', async t => {
+  const page = await game(t, { loop: true });
+  const beats = await page.evaluate(() => {
+    const sample = n => { const out = []; for (let i = 0; i < n; i++) { runtime.step(1); out.push(__game.beat); } return out; };
+    __game.start(0, false);
+    const lively = sample(60);
+    Kit.motion.setPreference('reduce');
+    const calm = sample(60);
+    return { lively, calm };
+  });
+  const range = (list, key) => [Math.min(...list.map(b => b[key])), Math.max(...list.map(b => b[key]))];
+  assert.ok(beats.lively.every(b => b.pulse === b.tint), 'with motion the pulse and the glow move together');
+  assert.ok(range(beats.lively, 'pulse')[1] > 0.4, 'with motion things pulse on the beat');
+  assert.deepEqual(range(beats.calm, 'pulse'), [0, 0], 'calm mode moves nothing on the beat');
+  assert.ok(beats.calm.every(b => b.beat === 0), 'calm mode holds the beat-driven bars still');
+  const [low, high] = range(beats.calm, 'tint');
+  assert.ok(low < 0.2 && high > 0.4, `calm mode still brightens the glows on the beat (${low}..${high})`);
+});

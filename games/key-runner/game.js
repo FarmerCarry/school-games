@@ -22,6 +22,9 @@
   var resultAt = 0;
   var heldWin = null;
   var scripted = false;
+  var cued = {};
+  // Hand-built tower: the tier is reported, the course itself does not change.
+  var dda = Kit.dda('key-runner');
 
   function persist() {
     save.best = Math.max(save.best || 0, save.speed || 0);
@@ -62,8 +65,8 @@
     roundId = '';
   }
   function beginRound(id) {
-    if (roundId) endRound('end', 0);
     roundId = id;
+    dda.level;
     Kit.stats.round(id);
   }
   function focusGame() {
@@ -82,6 +85,7 @@
     combo = 0;
     resultAt = 0;
     heldWin = null;
+    cued = {};
     eng.reset(runOpts(Object.assign({ mode: nextMode === 'race' ? 'race' : 'world', world: 0 }, opts || {})));
     eng.state.armed = true;
     mode = 'play';
@@ -91,7 +95,6 @@
     paintMenus();
     focusGame();
     paintPips(0);
-    KR.music(true, 0);
     if (!duo) view.playGhost(eng.state);
   }
   function paintPips(n) {
@@ -126,7 +129,6 @@
     el('stars').setAttribute('data-stars', String(stars));
     el('tower-mark').style.bottom = Math.min(92, 8 + flags * 10) + '%';
     screens();
-    KR.music(false, 0);
   }
   function startClimb() {
     Kit.audio.unlock();
@@ -157,6 +159,7 @@
     mode = 'play';
     combo = 0;
     resultAt = 0;
+    cued = {};
     eng.reset(runOpts(race ? { mode: 'race', world: 0, players: 2, speed: 0, shoe: 1, rebirths: 0, charm: false } : { mode: 'world', world: 0 }));
     eng.state.armed = true;
     dirty = true;
@@ -165,7 +168,8 @@
     paintPips(0);
   }
   function menu() {
-    endRound('end', 0);
+    if (roundId && !duo) dda.result(0);
+    endRound('quit');
     duo = false;
     activity = 'tower';
     mode = 'title';
@@ -175,7 +179,6 @@
     dirty = true;
     screens();
     paintMenus();
-    KR.music(false, 0);
   }
   function onEvents(events) {
     for (var i = 0; i < events.length; i++) {
@@ -212,6 +215,7 @@
           if (saved) view.burst(saved.x, saved.y + 1.2, saved.z, 0xff4eb6, 16);
         }
         if (ev.e === 'stage' && !duo) {
+          if (!ev.p) Kit.track.hit();
           var flags = ev.stage + 1;
           if (flags > (save.flags || 0)) save.flags = flags;
           unlockTrail(save.flags);
@@ -220,10 +224,11 @@
         } else if (ev.e === 'stage') paintPips(ev.stage + 1);
       }
       else if (ev.e === 'fall') {
+        if (!ev.p) Kit.track.miss();
         KR.sound(ev.why === 'flood' ? 'splash' : 'fall');
         shake = 0.1;
       }
-      else if (ev.e === 'glug') KR.sound('glug');
+      else if (ev.e === 'glug' && mode === 'play') KR.sound('glug');
       else if (ev.e === 'world' && !duo) {
         var time = eng.state.time;
         var fresh = !save.bestTime || time < save.bestTime;
@@ -234,6 +239,7 @@
         save.flags = 8;
         unlockTrail(8);
         persist();
+        dda.result(starsFor(time) / 3);
         endRound('win', Math.round(time));
         heldWin = { time: time, fresh: fresh };
         resultAt = performance.now() + 700;
@@ -251,7 +257,6 @@
       el('result-record').hidden = true;
       el('stars').setAttribute('data-stars', '1');
       screens();
-      KR.music(false, 0);
     }
   }
   function edge(code) {
@@ -314,8 +319,27 @@
     onEvents(eng.step(dt, input));
     if (mode === 'play') {
       hud();
-      KR.music(true, eng.state.players[0].y);
-      KR.musicTick();
+      if (!duo) watchCues();
+    }
+  }
+  function watchCues() {
+    var pl = eng.state.players[0];
+    var best = 1e9;
+    var ahead = null;
+    var pieces = eng.state.pieces;
+    var i, p, edge, d;
+    for (i = 0; i < pieces.length; i++) {
+      p = pieces[i];
+      if (!p.stand || p.gone) continue;
+      edge = p.z - p.hd;
+      if (edge < pl.z - 0.2) continue;
+      d = edge - pl.z;
+      if (d < best) { best = d; ahead = p; }
+    }
+    if (!ahead || best > 6) return;
+    if ((ahead.t === 'sink' || best > 1.2) && !cued[ahead.id]) {
+      cued[ahead.id] = 1;
+      Kit.track.cue();
     }
   }
   function draw() {

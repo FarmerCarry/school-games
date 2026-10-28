@@ -1,0 +1,169 @@
+/* Bubble Bop: a 1280x720 UI layer laid over the canvas, big picture buttons with
+   thick dark outlines, and a large high-contrast mouse pointer (the real one stays
+   visible, so the skill carries over to every other game). */
+:root { --ink: #1c2250; }
+
+/* A big white arrow with a dark outline, hotspot at the tip; a big pointing hand on
+   buttons. Browsers that cannot use them fall back to the usual pointers. */
+html, body {
+  background: #0d63b4;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M6 4L6 40L15.5 31.5L22 45L29 42L22.5 28.5L35 28.5Z' fill='%23fff' stroke='%231c2250' stroke-width='3.5' stroke-linejoin='round'/%3E%3C/svg%3E") 6 4, auto;
+}
+button, #scrGrip {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='52' viewBox='0 0 44 52'%3E%3Cpath d='M14 4a4.5 4.5 0 0 1 9 0v18h1a4 4 0 0 1 8 0v2a4 4 0 0 1 8 0v12c0 8-6 14-14 14h-2c-6 0-10-3-13-8l-7-11a4 4 0 0 1 6-5l4 4z' fill='%23fff' stroke='%231c2250' stroke-width='3.5' stroke-linejoin='round'/%3E%3C/svg%3E") 18 1, pointer;
+}
+.defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+#ui { position: fixed; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; pointer-events: none; z-index: 5; }
+#ui button { pointer-events: auto; }
+.screen { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; }
+.screen[hidden], #hud[hidden], #ghost[hidden], .score[hidden], .newbest[hidden], .bb-btn[hidden], .halo[hidden] { display: none; }
+.screen.dim:not([hidden]) { display: flex; align-items: center; justify-content: center; background: rgba(28, 34, 80, 0.55); pointer-events: auto; }
+
+/* ------------------------------------------------------------- buttons */
+.bb-btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  font: inherit; font-weight: 700; color: #fff; background: #ff7eb6;
+  border: 5px solid var(--ink); border-radius: 999px; box-shadow: 0 7px 0 var(--ink);
+  transition: transform 0.08s ease, filter 0.08s ease;
+}
+.bb-btn svg { width: 54%; height: 54%; fill: currentColor; overflow: visible; pointer-events: none; }
+.bb-btn:hover { transform: translateY(-3px) scale(1.06); filter: brightness(1.06); }
+.bb-btn:active { transform: translateY(5px); box-shadow: 0 2px 0 var(--ink); }
+.bb-btn:focus-visible { outline: 6px solid #ffcc00; outline-offset: 5px; }
+.bb-round { width: 66px; height: 66px; background: #ffffff; color: var(--ink); }
+.bb-round.big { width: 96px; height: 96px; }
+.bb-go { width: 150px; height: 150px; background: #3ddc84; }
+.bb-go svg, .bb-play svg { width: 58%; height: 58%; transform: translateX(7%); }
+/* A pulsing ring marks the one thing to press next. */
+.ring::after, .pebble.next::after {
+  content: ''; position: absolute; inset: -17px; border-radius: 50%; border: 7px solid #ffcc00;
+  animation: bb-ring 1.3s ease-out infinite; pointer-events: none;
+}
+@keyframes bb-ring { 0% { transform: scale(0.9); opacity: 1; } 100% { transform: scale(1.3); opacity: 0; } }
+.wiggle { animation: bb-wiggle 0.45s ease-in-out; }
+@keyframes bb-wiggle { 0%, 100% { translate: 0 0; } 20% { translate: -9px 0; } 50% { translate: 9px 0; } 80% { translate: -5px 0; } }
+
+.chip {
+  position: absolute; top: 14px; left: 14px; height: 62px; padding: 0 20px 0 12px; display: flex; align-items: center; gap: 8px;
+  direction: ltr; border-radius: 999px; background: rgba(28, 34, 80, 0.8); border: 4px solid #fff; color: #fff;
+  font-size: 32px; font-weight: 700; pointer-events: none;
+}
+.chip svg { width: 40px; height: 40px; fill: #ffd23f; stroke: var(--ink); stroke-width: 4; }
+
+/* --------------------------------------------------------------- title */
+.logo { position: absolute; top: 14px; left: 0; right: 0; margin: 0; text-align: center; line-height: 1; pointer-events: none; }
+.logo span {
+  display: block; font-weight: 700;
+  text-shadow: -5px -5px 0 var(--ink), 5px -5px 0 var(--ink), -5px 5px 0 var(--ink), 5px 5px 0 var(--ink),
+    0 -6px 0 var(--ink), 0 6px 0 var(--ink), -6px 0 0 var(--ink), 6px 0 0 var(--ink), 0 13px 0 var(--ink);
+}
+.logo .l1 { font-size: 96px; color: #ffffff; }
+.logo .l2 { font-size: 150px; color: #ffd23f; margin-top: -34px; }
+.bb-play { position: absolute; left: 545px; top: 452px; width: 190px; height: 190px; background: #3ddc84; border-width: 7px; box-shadow: 0 10px 0 var(--ink); }
+.bb-play::after { inset: -20px; border-width: 9px; }
+.bb-side { position: absolute; top: 590px; width: 104px; height: 104px; }
+#btnCloset { left: 60px; background: #b48cff; }
+#btnHow { right: 60px; background: #4fd1ff; }
+
+/* --------------------------------------------------- how to hold cards */
+#scrGrip { background: rgba(28, 34, 80, 0.72); pointer-events: auto; }
+.grip-card {
+  position: absolute; left: 300px; top: 26px; width: 680px; height: 510px; overflow: hidden; pointer-events: auto;
+  border: 7px solid var(--ink); border-radius: 36px; background: #c3e8ff; box-shadow: 0 11px 0 var(--ink);
+}
+.grip-card img { display: block; width: 100%; height: 100%; pointer-events: none; }
+.halo {
+  position: absolute; width: 16%; height: 20%; border-radius: 34%; transform: translate(-50%, -50%); pointer-events: none;
+  background: radial-gradient(circle, rgba(255, 228, 60, 0.8) 0%, rgba(255, 210, 40, 0.32) 48%, rgba(255, 210, 40, 0) 72%);
+  animation: bb-halo 1.1s ease-in-out infinite;
+}
+@keyframes bb-halo { 0%, 100% { opacity: 0.45; transform: translate(-50%, -50%) scale(0.94); } 50% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); } }
+#gripNext { position: absolute; left: 570px; top: 562px; width: 140px; height: 140px; }
+#gripSkip { position: absolute; top: 14px; left: 14px; }
+/* Right to left like the map and the pips: the first card's dot is on the right. */
+.grip-dots { position: absolute; top: 620px; right: 330px; display: flex; gap: 14px; }
+.grip-dots i { width: 22px; height: 22px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); border: 4px solid #fff; }
+.grip-dots i.on { background: #ffd23f; }
+
+/* ----------------------------------------------------------------- map */
+#mapHome { position: absolute; top: 14px; left: 14px; }
+#mapCloset { position: absolute; top: 14px; left: 94px; background: #b48cff; color: #fff; }
+#mapStars { left: 176px; }
+.isle { position: absolute; width: 256px; height: 170px; margin: -110px 0 0 -128px; border: 0; padding: 0; border-radius: 50%; background: transparent; box-shadow: none; pointer-events: auto; }
+.isle:hover, .isle:active { transform: none; }
+.isle:focus-visible { outline: 6px solid #ffcc00; outline-offset: 0; }
+.pebble {
+  position: absolute; width: 62px; height: 62px; margin: -31px 0 0 -31px; padding: 0; border-radius: 50%;
+  background: #fff; color: var(--ink); border: 5px solid var(--ink); box-shadow: 0 5px 0 var(--ink);
+  font: inherit; font-size: 32px; font-weight: 700; line-height: 1; direction: ltr; transition: transform 0.08s ease;
+}
+.pebble:hover { transform: translateY(-3px) scale(1.08); }
+.pebble:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--ink); }
+.pebble:focus-visible { outline: 6px solid #ffcc00; outline-offset: 4px; }
+.pebble svg.ic { width: 70%; height: 70%; fill: #ffffff; }
+.pebble.party { background: #ffd23f; }
+.pebble .st { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); display: flex; gap: 0; }
+.pebble .st svg { width: 17px; height: 17px; fill: rgba(255, 255, 255, 0.7); stroke: var(--ink); stroke-width: 6; }
+.pebble .st svg.on { fill: #ffd23f; }
+.pebble .best { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); padding: 0 8px; border-radius: 999px; background: #fff; border: 3px solid var(--ink); font-size: 18px; white-space: nowrap; }
+.pebble.locked { background: #a9b0d4; color: #59628f; border-color: #59628f; box-shadow: 0 5px 0 #59628f; }
+.pebble.locked svg.ic { fill: #59628f; stroke: none; }
+.pebble.locked .st, .pebble.locked .best { display: none; }
+.pebble.done { background: #e9fff1; }
+
+/* --------------------------------------------------------------- pause */
+#scrPause .card { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 36px 56px; background: #ffffff; border: 7px solid var(--ink); border-radius: 44px; box-shadow: 0 11px 0 var(--ink); }
+.row { display: flex; align-items: center; justify-content: center; gap: 34px; }
+#btnRestart { background: #ffd23f; }
+#btnMap, #resMap { background: #4fd1ff; color: #fff; }
+
+/* -------------------------------------------------------------- result */
+.card.result {
+  position: absolute; left: 330px; top: 330px; width: 620px; height: 364px; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly;
+  background: rgba(255, 255, 255, 0.96); border: 7px solid var(--ink); border-radius: 44px; box-shadow: 0 11px 0 var(--ink); pointer-events: auto; color: var(--ink);
+}
+.stars3 { display: flex; gap: 18px; direction: ltr; }
+.stars3 svg { width: 104px; height: 104px; fill: #e3e6f3; stroke: var(--ink); stroke-width: 4; overflow: visible; }
+.stars3 svg.on { fill: #ffd23f; animation: bb-star 0.5s cubic-bezier(0.2, 1.8, 0.5, 1) both; }
+.stars3[hidden] { display: none; }
+@keyframes bb-star { from { transform: scale(0.3) rotate(-40deg); } to { transform: scale(1) rotate(0); } }
+.score { display: flex; align-items: center; gap: 26px; direction: ltr; }
+.score > b { font-size: 92px; line-height: 1; color: var(--ink); text-shadow: 0 5px 0 #ffd23f; }
+.score .best { display: flex; align-items: center; gap: 6px; font-size: 36px; color: #59628f; }
+.score .best svg, .newbest svg { width: 44px; height: 44px; fill: #ffd23f; stroke: var(--ink); stroke-width: 4; }
+.newbest { position: absolute; top: -34px; display: flex; align-items: center; gap: 8px; padding: 4px 20px 4px 14px; border-radius: 999px; background: #ff5d9e; color: #fff; border: 5px solid var(--ink); font-size: 26px; font-weight: 700; animation: bb-star 0.5s cubic-bezier(0.2, 1.8, 0.5, 1) both; }
+.gift { position: absolute; right: -150px; top: 60px; width: 150px; height: 170px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: #fff3b0; color: var(--ink); border-radius: 30px; font-size: 22px; animation: bb-star 0.5s cubic-bezier(0.2, 1.8, 0.5, 1) both; }
+.gift canvas { width: 116px; height: 116px; }
+#resAgain { background: #ffd23f; }
+
+/* -------------------------------------------------------------- closet */
+#closetBack { position: absolute; top: 14px; left: 14px; background: #4fd1ff; color: #fff; }
+#closetStars { left: 96px; }
+.closet-panel {
+  position: absolute; left: 28px; top: 96px; width: 640px; padding: 20px; display: flex; flex-direction: column; gap: 22px; pointer-events: auto;
+  background: rgba(255, 255, 255, 0.94); border: 7px solid var(--ink); border-radius: 40px; box-shadow: 0 11px 0 var(--ink);
+}
+.shelf { display: grid; grid-template-columns: repeat(5, 104px); gap: 14px 16px; justify-content: center; }
+#colors { grid-template-columns: repeat(4, 104px); padding-bottom: 22px; border-bottom: 5px dashed #c8cfea; }
+.item { position: relative; width: 104px; height: 104px; border-radius: 28px; background: #eef1fb; color: var(--ink); box-shadow: 0 5px 0 var(--ink); }
+.item canvas { width: 92px; height: 92px; }
+.item.on { background: #fff3b0; outline: 6px solid #ffcc00; outline-offset: 2px; }
+.item.locked { background: #d5d9ec; }
+.item.locked canvas { opacity: 0.3; filter: grayscale(1); }
+.item .need { position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 2px; padding: 0 8px 0 4px; border-radius: 999px; background: #fff; border: 3px solid var(--ink); font-size: 20px; line-height: 26px; direction: ltr; }
+.item.locked .need { display: flex; }
+.item .need svg { width: 20px; height: 20px; fill: #ffd23f; stroke: var(--ink); stroke-width: 5; }
+.item .lockic { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; fill: var(--ink); display: none; }
+.item.locked .lockic { display: block; }
+
+/* ------------------------------------------------------------- HUD, coach */
+#btnPause { position: absolute; top: 14px; left: 14px; }
+#ghost { position: absolute; left: 0; top: 0; width: 84px; height: 105px; pointer-events: none; z-index: 30; will-change: transform; }
+#ghost svg { display: block; }
+
+/* Reduced motion: the rings and halos stay on screen without moving. */
+html[data-sg-motion="reduce"] .ring::after, html[data-sg-motion="reduce"] .pebble.next::after { animation: none; transform: none; opacity: 1; }
+html[data-sg-motion="reduce"] .halo { animation: none; opacity: 1; }
+html[data-sg-motion="reduce"] .bb-btn:hover, html[data-sg-motion="reduce"] .pebble:hover { transform: none; }

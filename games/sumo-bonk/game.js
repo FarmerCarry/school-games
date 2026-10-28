@@ -8,7 +8,7 @@
   var DIVE_VX = 640, DIVE_VY = 1150;
   var WIN_SCORE = 5, SD_TIME = 15;
   var CPU_WINDUP = { easy: 0.25, medium: 0.15, hard: 0.1 };
-  var SA = window.SBArt, SFX = window.SBSound, MUSIC = SFX.music;
+  var SA = window.SBArt, SFX = window.SBSound;
   var SUMOS = SA.SUMOS, HATS = SA.HATS;
   var FONT = 'Fredoka, "Segoe UI Rounded", "Segoe UI", system-ui, sans-serif';
   var OUT = SA.OUT;
@@ -47,16 +47,16 @@
     bestStreak: store.get('bestStreak', 0),
     matches: store.get('matches', 0),
     bonks: store.get('bonks', 0),
-    music: store.get('music', true),
     seenHats: store.get('seenHats', 2),
     beaten: store.get('beaten', {})
   };
   var DIFF_LV = { easy: 1, medium: 2, hard: 3 };
   var DIFF_AR = { easy: 'السهل', medium: 'المتوسط', hard: 'الصعب' };
   function medals() { var n = 0; for (var i = 0; i < 8; i++) n += save.beaten[i] || 0; return n; }
-  var SAVE_KEYS = ['stars', 'wins', 'special', 'picks', 'mode', 'diff', 'streak', 'bestStreak', 'matches', 'bonks', 'music', 'seenHats', 'beaten'];
+  var SAVE_KEYS = ['stars', 'wins', 'special', 'picks', 'mode', 'diff', 'streak', 'bestStreak', 'matches', 'bonks', 'seenHats', 'beaten'];
   // persist() writes everything (end of a match); persist('picks') just one key, so flicking
-  // through wrestlers and hats on the select screen doesn't rewrite 13 keys per key press.
+  // through wrestlers and hats on the select screen doesn't rewrite 12 keys per key press.
+  // There is no background music: an old save's 'music' key is neither read nor written.
   // A failed write shows the shared warning; until every key sticks again, each save (and the
   // retry button) rewrites all keys from the in-memory save, which stays authoritative.
   var saveUI = Kit.saveStatus({ retry: function () { persist(); } }), saveFailed = false;
@@ -79,7 +79,6 @@
     return best;
   }
   function diffUnlocked(d) { return d === 'easy' || (d === 'medium' && save.wins.easy > 0) || (d === 'hard' && save.wins.medium > 0); }
-  MUSIC.on = save.music;
 
   /* ============================================================== effects */
   var PMAX = 420, parts = [], pIdx = 0;
@@ -349,7 +348,6 @@
     } else {
       P[1].cpu = false; P[1].label = 'لاعب 2'; P[1].sumo = save.picks.s1; P[1].hat = hatUnlocked(save.picks.h1) ? save.picks.h1 : 0;
     }
-    MUSIC.play(128, false);
     beginRound();
     showScreen(null);
   }
@@ -1020,7 +1018,6 @@
     popups.length = 0; banner = null;
     if (humanWon) SFX.matchWin(); else SFX.matchLose();
     SFX.cheer(true);
-    MUSIC.play(118, true);
     skyDirty = true;
     buildOver();
     showScreen('over');
@@ -1297,7 +1294,6 @@
 
   /* ============================================================= main loop */
   function update(dt) {
-    MUSIC.update();
     handleKeys();
     if (paused) { Kit.keys.endFrame(); return; }
     if (flash > 0) flash -= dt * 1.5;
@@ -1328,7 +1324,7 @@
   /* ================================================================== UI */
   var $ = function (id) { return document.getElementById(id); };
   var screens = { title: $('scr-title'), select: $('scr-select'), pause: $('scr-pause'), over: $('scr-over') };
-  var btnPause = $('bPause'), btnMusic = $('bMusic');
+  var btnPause = $('bPause');
   function showScreen(name) {
     for (var k in screens) screens[k].hidden = k !== name;
     btnPause.hidden = !(scr === 'game' && !paused && name !== 'pause');
@@ -1337,7 +1333,6 @@
   function goTitle() {
     scr = 'title'; paused = false;
     startDemo();
-    MUSIC.play(112, true);
     refreshTitle();
     showScreen('title');
   }
@@ -1542,8 +1537,8 @@
   function pause(on) {
     if (scr !== 'game') return;
     paused = on; frameDirty = true;
-    if (on) { SFX.pause(); MUSIC.stop(); Kit.keys.reset(); showScreen('pause'); }
-    else { MUSIC.play(128, false); showScreen(null); }
+    if (on) { SFX.pause(); Kit.keys.reset(); showScreen('pause'); }
+    else showScreen(null);
   }
 
   function handleKeys() {
@@ -1615,11 +1610,7 @@
       if (e.detail > 0) b.blur();
     });
   });
-  function paintMusic() { btnMusic.textContent = '♫'; btnMusic.style.opacity = save.music ? '1' : '0.45'; btnMusic.title = save.music ? 'الموسيقى تعمل' : 'الموسيقى متوقفة'; }
-  onClick('bMusic', function () { save.music = !save.music; MUSIC.on = save.music; persist('music'); paintMusic(); });
-  btnMusic.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
   btnPause.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-  paintMusic();
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
   muteBtn.title = 'الصوت (M)';

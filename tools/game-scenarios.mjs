@@ -1,6 +1,7 @@
 /* Real UI smoke scenarios. Debug hooks are read-only here: starting, moving,
  * pausing and restarting all go through the same controls as a player. */
 import assert from 'node:assert/strict';
+import { animationFrames, waitForFrameTime, waitForGameClock } from './page-wait.mjs';
 import { clickControl } from './ui-input.mjs';
 
 const g = 'window.__game';
@@ -51,12 +52,13 @@ export const scenarios = {
       // one, cannot miss the new run when a slow frame carries the car past 1.
       await page.evaluate(() => { window.sgRetryCar = window.__game.car; });
       const fresh = `${g}.mode === 'play' && ${g}.car !== window.sgRetryCar`;
-      // The results screen ignores R for its first 0.45 s of game time. A frame
-      // advances the game at most 8 steps (0.13 s), so on a slow runner that is
-      // longer than any fixed real-time wait: press R until the fresh run starts.
+      // The results screen ignores R for its first 0.45s of game time. One
+      // slow frame moves that clock by at most 0.13s, so a wall-clock gap can
+      // be spent before the game has caught up. Press R until the fresh run
+      // starts, giving the clock 0.2s between presses.
       for (let i = 0; i < 12 && !(await evaluate(page, fresh)); i++) {
         await page.keyboard.press('KeyR');
-        await page.waitForTimeout(500);
+        await waitForGameClock(page, 0.2, 'drift-king: time between retry presses');
       }
       await requireState(page, fresh, 'drift-king: retry must start a fresh run before pause');
     }
@@ -97,10 +99,18 @@ export const scenarios = {
     await page.waitForTimeout(180); await page.mouse.up();
   }, '#btnPause', `${g}.state === 'pause'`, '#btnRestart', `${g}.run.score === 0`),
   'merge-2048': defaults(['#btnPlay'], `${g}.state().screen === 'play'`, select(`${g}.state()`, ['values','score','hist']), sequence(hold('ArrowLeft',80),hold('ArrowDown',80),hold('ArrowRight',80)), '#btnPause', `${g}.state().screen === 'pause'`, '#btnPauseRestart', `${g}.state().score === 0 && ${g}.state().hist === 0`),
-  'mouse-keyboard-academy': defaults(['#btnStart'], `${g}.screen === 'play' && ${g}.station === 'move'`, `${g}.progress`, async page => {
-    const point = await page.evaluate(() => window.__game.starPoint());
-    await page.mouse.move(point.x, point.y, { steps: 15 });
-  }, '#btnPause', `${g}.screen === 'pause'`, '#btnRestart', `${g}.screen === 'play' && ${g}.progress === 0`),
+  // World 1 needs no click: moving the real mouse onto the ringed bubble pops it.
+  'bubble-bop': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.mode === 'touch'`, `[${g}.state.time,${g}.state.hits,${g}.state.targets.map(t => [t.x, t.y])]`, async page => {
+    const hits = await page.evaluate(() => window.__game.state.hits);
+    await page.waitForFunction(() => window.__game.state.targets.length > 0, null, { timeout: 7000, polling: 40 });
+    for (let i = 0; i < 40 && await page.evaluate(hits => window.__game.state.hits <= hits, hits); i++) {
+      const point = await page.evaluate(() => window.__game.targetPoint(0));
+      if (point) await page.mouse.move(point.x, point.y, { steps: 6 });
+      await page.waitForTimeout(80);
+    }
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.hits === 0`, {
+    init: () => localStorage.setItem('sg:bubble-bop:save', JSON.stringify({ v: 1, stars: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]], best: [0, 0, 0, 0, 0], grip: true, color: 0, hat: 0, seenStars: 0 }))
+  }),
   'candy-rope': defaults(['#tPlay'], `${g}.info().state === 'play'`, `${g}.info().world`, async page => {
     const point = await page.evaluate(() => {
       const r = __game.world().ropes.find(r => r.alive);
@@ -111,7 +121,9 @@ export const scenarios = {
     await page.mouse.move(point.x-60,point.y); await page.mouse.down();
     await page.mouse.move(point.x+60,point.y,{steps:15}); await page.mouse.up();
   }, '#bPause', `${g}.info().state === 'pause'`, '#pRestart', `${g}.info().world.stars === 0`, {
-    settle: 650,
+    // The sim does not step during the 0.55s intro, so world.frame stays 0.
+    // The first step is the intro ending. A 650ms sleep can arrive before that.
+    settle: `${g}.info().world.frame >= 1`,
     beforePause: async page => {
       // The first level is solved by the one cut already asserted above.
       // Retry via the player's R shortcut before checking pause so success
@@ -166,6 +178,7 @@ const inputSnapshots = {
   'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`,
   'wacky-soccer': `${g}.world.players.filter(p => p.side === 0).map(p => p.kickT)`,
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
+  'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
@@ -198,7 +211,9 @@ const inputSeen = {
   'wacky-soccer': `${g}.match.phase === 'play' && ${g}.match.cpu[1].since < 1 && ${g}.world.players.filter(p => p.side === 0).every(p => p.kickT > 0)`,
   // The blob follows the pointer, which rests on the centred Play button below it:
   // without input it drifts straight down. The input points up and left of it.
-  'blob-battle': `${g}.info().player.x < sgInput.before.x - 20 && ${g}.info().player.y < sgInput.before.y - 20`
+  'blob-battle': `${g}.info().player.x < sgInput.before.x - 20 && ${g}.info().player.y < sgInput.before.y - 20`,
+  // A bubble that rises into a resting Bop pops too; only real pointer travel onto one counts.
+  'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
@@ -218,8 +233,8 @@ const heldKeys = {
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 
 async function evaluate(page, expr) { return page.evaluate(expr); }
-async function requireState(page, expr, label) {
-  try { await page.waitForFunction(expr, null, { timeout: 7000, polling: 40 }); }
+async function requireState(page, expr, label, timeout = 7000) {
+  try { await page.waitForFunction(expr, null, { timeout, polling: 40 }); }
   catch (error) { throw new Error(`${label}: ${expr}`, { cause: error }); }
 }
 async function focusSurface(page) { await page.evaluate(() => { document.activeElement?.blur(); window.Kit?.keys.reset(); }); }
@@ -248,12 +263,16 @@ export async function prepareScenario(page, slug) {
   if (s.init) await page.addInitScript(s.init);
 }
 async function start(page, slug, s) {
-  await requireState(page, '!!window.Kit && (!!window.__game || !!document.getElementById("boardApp") || !!window.GolfArt || !!window.Dino3DGame)', `${slug}: initialized`);
+  // The hook is assigned before the first paint, but that paint is one task.
+  // On software WebGL it can block the main thread for longer than a gameplay
+  // check, so the poll below cannot observe the assignment until the frame
+  // yields. Same condition as every other gate; only this wait covers that frame.
+  await requireState(page, '!!window.Kit && (!!window.__game || !!document.getElementById("boardApp") || !!window.GolfArt || !!window.Dino3DGame)', `${slug}: initialized`, 20000);
   for (let i=0;i<s.start.length;i++) if (!s.startIf || await evaluate(page,s.startIf[i])) await s.start[i](page);
   await focusSurface(page);
   await requireState(page,s.active,`${slug}: Start must reach gameplay`);
   if (s.ready) await requireState(page,s.ready,`${slug}: countdown must reach active play`);
-  if (s.settle) await page.waitForTimeout(s.settle);
+  if (s.settle) await requireState(page, s.settle, `${slug}: the round must be ready for input`, 8000);
 }
 export async function performInput(page, slug, {repeat = false} = {}) {
   const s = scenarios[slug];
@@ -273,7 +292,9 @@ export async function performInput(page, slug, {repeat = false} = {}) {
   } else if (watch && s.heldKey) await holdUntil(s.heldKey, 'window.sgInput.seen',
     `${s.heldKey}: held input must change gameplay (${watch.before}): ${watch.seen}`)(page);
   else await s.input(page);
-  await page.waitForTimeout(120);
+  // Give the handler a frame before the input assertion reads state. A fixed
+  // 120ms can fall between two slow frames and observe the previous one.
+  await animationFrames(page, 1, `${slug}: input frame`);
   return watch;
 }
 export async function ensureActive(page, slug) {
@@ -302,10 +323,12 @@ export async function runScenario(page, slug, { mode = 'smoke' } = {}) {
     if (typeof s.pause === 'function') await s.pause(page);
     else if (s.pause) await click(s.pause)(page); else await page.keyboard.press('Escape');
     await requireState(page,s.paused,`${slug}: Pause must open`);
-    // Let pending events settle before comparing meaningful simulation state.
-    await page.waitForTimeout(80);
+    // Let the pause handler's frame land before the snapshot, then keep
+    // watching for as long as the old wall-clock window, measured in frames
+    // that actually ran.
+    await waitForFrameTime(page, 80, `${slug}: pause settled`);
     const paused = await evaluate(page,`JSON.stringify(${s.snapshot})`);
-    await page.waitForTimeout(350);
+    await waitForFrameTime(page, 350, `${slug}: paused observation`);
     assert.equal(await evaluate(page,`JSON.stringify(${s.snapshot})`),paused,`${slug}: gameplay must freeze while paused`);
     checks.push('Pause freezes gameplay');
   } else checks.push(s.noPause);

@@ -122,6 +122,27 @@ test('Moto Madness takes a flip landed past the line off the saved time and the 
   assert.ok(left.stars > 0 && left.best > 0, `a pause before the results keeps the run (${JSON.stringify(left)})`);
 });
 
+test('Moto Madness keeps the engine silent under the results when the gas is held over the line', async t => {
+  const page = await game(t);
+  await page.evaluate(() => {
+    window.engineLog = [];
+    for (const name of ['engine', 'silence']) {
+      const real = MMA[name];
+      MMA[name] = function () { engineLog.push(name + ':' + __game.state); return real.apply(this, arguments); };
+    }
+    __game.start(0);
+  });
+  await crossLine(page);
+  const log = await page.evaluate(() => {
+    for (let i = 0; i < 300 && __game.state === 'play'; i++) __game.step(1, { gas: true });
+    __game.step(30, { gas: true }); // still holding the throttle under the results
+    return engineLog;
+  });
+  assert.equal(await page.evaluate(() => __game.state), 'complete');
+  assert.deepEqual(log.filter(call => call.startsWith('engine:') && call !== 'engine:play'), [], 'the engine is only driven during play');
+  assert.equal(log.at(-1), 'silence:complete', 'the results silence the engine and nothing turns it back on');
+});
+
 test('Moto Madness shows a retry warning when progress cannot be saved, and keeps the stars', async t => {
   const page = await game(t);
   await page.evaluate(key => {
@@ -183,6 +204,7 @@ test('Moto Madness keeps its paused frame and repaints it only when needed', asy
   assert.equal(await page.evaluate(() => frames(3)), 3, 'a running game paints every frame');
   await page.keyboard.press('KeyP');
   assert.equal(await page.evaluate(() => __game.state), 'paused');
+  assert.doesNotMatch(await page.locator('#pause').textContent(), /الموسيقى/, 'the pause panel has no music switch');
   assert.equal(await page.evaluate(() => frames(20)), 1, 'pausing paints the scene once, then keeps it');
   await page.setViewportSize({ width: 1000, height: 600 });
   await page.evaluate(() => new Promise(requestAnimationFrame));

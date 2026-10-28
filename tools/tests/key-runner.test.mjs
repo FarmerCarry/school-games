@@ -126,5 +126,5 @@ test('Key Runner two-player race reports a duo round and not a winner', async t 
   assert.equal(await page.evaluate(() => KeyRunnerGame.state.players), 2);
   assert.deepEqual(await page.evaluate(() => krProbe.rounds.map(r => r[0])), ['duo']);
   await page.evaluate(() => KeyRunnerGame.menu());
-  assert.deepEqual(await page.evaluate(() => krProbe.ends.map(e => e[0])), ['end']);
+  assert.deepEqual(await page.evaluate(() => krProbe.ends.map(e => e[0])), ['quit']);
 });

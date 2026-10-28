@@ -17,12 +17,6 @@ body { background: #1a1245; }
 .scr[hidden] { display: none !important; }
 button { font-family: var(--sg-font); }
 
-/* music button sits next to Kit's mute button */
-.music-btn { right: 62px !important; font-size: 20px; }
-.music-btn.off { opacity: 0.55; }
-.music-btn.off::after { content: ''; position: absolute; left: 8px; right: 8px; top: 19px; height: 3px; background: #ff5a5f; transform: rotate(-40deg); border-radius: 2px; }
-.music-btn { position: fixed; }
-
 /* ------------------------------------------------------------ TITLE */
 #scrTitle { display: flex; flex-direction: column; align-items: center; }
 .logo { position: relative; margin-top: 20px; text-align: center; line-height: 1; animation: logoIn 0.6s cubic-bezier(.2,1.6,.4,1) both; }

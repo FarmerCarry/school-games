@@ -1,8 +1,8 @@
 /*
  * Rail Rush — audio.js
- * Sound effects and a small step-sequencer that plays an upbeat synth track.
- * Everything is synthesised with WebAudio and routed through Kit.audio.master
- * so the shared mute button silences it.
+ * One-shot sound effects (no background music). Everything is synthesised with
+ * WebAudio and routed through Kit.audio.master so the shared mute button
+ * silences it.
  */
 (function () {
   'use strict';
@@ -65,17 +65,15 @@
   }
 
   /* ------------------------------------------------------------ mix */
-  // Sfx and music each get their own gain into the shared master (so mute still works).
+  // The effects share one gain into the shared master (so mute still works).
   var bus = null;
-  function out(c) {
+  function D(c) {
     if (!bus || bus.c !== c) {
-      var mix = c.createGain(); mix.gain.value = 1; mix.connect(A.master);
-      var sfxG = c.createGain(); sfxG.gain.value = 1; sfxG.connect(mix);
-      bus = { c: c, comp: mix, sfx: sfxG };
+      var sfxG = c.createGain(); sfxG.gain.value = 1; sfxG.connect(A.master);
+      bus = { c: c, sfx: sfxG };
     }
-    return bus;
+    return bus.sfx;
   }
-  function D(c) { return out(c).sfx; }
   // Soft bell: sine body plus two quick upper partials ("ding" instead of a square "beep").
   function bell(c, dest, t, f, dur, vol) {
     voice(c, dest, t, { f: f, dur: dur, vol: vol, type: 'sine', att: 0.003 });
@@ -178,131 +176,4 @@
     close: function () { var c = ctx(); if (!c) return; var t = c.currentTime; nz(c, D(c), t, { bp: 700, to: 2400, q: 1.5, dur: 0.35, vol: 0.2 }); }
   };
   RR.sfx = S;
-
-  /* ---------------------------------------------------------- music */
-  // 126 BPM, 16 steps per bar, 16-bar song (about 30 s) so it doesn't feel like a short loop:
-  //   bars 0-3 groove, 4-7 hook, 8-11 bell melody, 12-15 hook again with a bell double.
-  // Chords: C - Am - F - G.
-  var BPM = 126, STEP = 60 / BPM / 4, BARS = 16;
-  var CH = [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50]];
-  var ROOT = [36, 33, 29, 31];
-  var BASS_PAT = [0, null, 12, null, 0, null, 12, 0, null, 0, 12, null, 0, null, 12, 7];
-  // lead hook (MIDI, per 16th step), null = rest
-  var HOOK = [
-    [76, null, 79, null, 81, null, 79, null, 76, null, null, 74, 76, null, 72, null],
-    [72, null, null, null, 74, null, 76, null, 72, null, 69, null, 72, null, null, null],
-    [77, null, 76, null, 77, null, 81, null, 79, null, 77, null, 76, null, 74, null],
-    [74, null, null, 71, 74, null, 79, null, 77, null, 76, null, 74, null, 71, null]
-  ];
-  // bell answer melody for the middle section
-  var BELLS = [
-    [72, null, 76, null, 79, null, 76, null, 84, null, null, null, 79, null, null, null],
-    [72, null, 76, null, 81, null, 76, null, 79, null, null, null, 76, null, null, null],
-    [72, null, 77, null, 81, null, 77, null, 84, null, null, null, 81, null, 79, null],
-    [74, null, 79, null, 83, null, 79, null, 86, null, 84, null, 83, null, 79, null]
-  ];
-  var music = { on: false, mode: 'game', step: 0, next: 0, timer: 0, gain: null, paused: false };
-  function musicLevel() { return music.mode === 'game' ? 0.36 : 0.34; }
-  function ensureGain(c) {
-    if (!music.gain || music.gain.context !== c) {
-      music.gain = c.createGain();
-      music.gain.gain.value = 0.0001;
-      music.gain.connect(out(c).comp);
-      music.gain.gain.setTargetAtTime(musicLevel(), c.currentTime, 0.2);
-    }
-    return music.gain;
-  }
-  function kick(c, g, t) {
-    var o = c.createOscillator(), v = c.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.11);
-    v.gain.value = 0; v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(0.75, t + 0.003); v.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
-    o.connect(v); v.connect(g); o.start(t); o.stop(t + 0.26);
-    // short "knock" so the beat is heard on small PC speakers that can't play deep bass
-    voice(c, g, t, { f: 900, to: 180, dur: 0.025, vol: 0.12, type: 'triangle' });
-  }
-  function schedStep(c, g, s, t) {
-    var bar = Math.floor(s / 16) % BARS, st = s % 16, ch = bar % 4, sec = bar >> 2;
-    var game = music.mode === 'game';
-    // drums
-    if (game) {
-      if (st % 4 === 0) kick(c, g, t);
-      if (sec === 2 && st === 10) kick(c, g, t);
-      if (st === 4 || st === 12) { nz(c, g, t, { bp: 1800, q: 0.8, dur: 0.14, vol: 0.3 }); voice(c, g, t, { f: 200, to: 140, dur: 0.08, vol: 0.14, type: 'triangle' }); }
-      if (st % 4 === 2) nz(c, g, t, { hp: 6500, dur: 0.06, vol: 0.09 });
-      else if (st % 2 === 1) nz(c, g, t, { hp: 7500, dur: 0.03, vol: 0.045 });
-      if ((bar === 7 || bar === 15) && st >= 12) nz(c, g, t, { bp: 2000 + (st - 12) * 300, q: 1, dur: 0.08, vol: 0.14 });
-    } else if (st % 4 === 2) nz(c, g, t, { hp: 8000, dur: 0.03, vol: 0.035 });
-    // bass
-    var bp = BASS_PAT[st];
-    if (bp != null) voice(c, g, t, { f: mtof(ROOT[ch] + bp), dur: STEP * 1.6, vol: game ? 0.15 : 0.1, type: 'sawtooth', lp: game ? 650 : 420, lpTo: 180, q: 3 });
-    // arpeggio (rests while the bell melody plays)
-    var chord = CH[ch];
-    var an = chord[[0, 1, 2, 1][st % 4]] + 24 + (st >= 8 ? 12 : 0) * (st % 3 === 0 ? 1 : 0);
-    if (st % 2 === 0 && !(game && sec === 2)) voice(c, g, t, { f: mtof(an), dur: STEP * 1.2, vol: game ? (sec % 2 ? 0.032 : 0.058) : 0.04, type: 'square', lp: 2600 });
-    // pad on bar starts
-    if (st === 0) chord.forEach(function (n) { voice(c, g, t, { f: mtof(n + 12), dur: STEP * 15, vol: game ? 0.02 : 0.03, type: 'triangle', att: 0.2 }); });
-    if (!game) return;
-    // hook
-    if (sec === 1 || sec === 3) {
-      var hn = HOOK[ch][st];
-      if (hn != null) {
-        voice(c, g, t, { f: mtof(hn), dur: STEP * 1.8, vol: 0.095, type: 'square', lp: 2400 });
-        voice(c, g, t, { f: mtof(hn), dur: STEP * 1.8, vol: 0.04, type: 'sawtooth', lp: 1800, detune: 8 });
-        if (sec === 3) bell(c, g, t, mtof(hn + 12), STEP * 2.2, 0.03);
-      }
-    } else if (sec === 2) {
-      var bn = BELLS[ch][st];
-      if (bn != null) { bell(c, g, t, mtof(bn), STEP * 3.2, 0.09); voice(c, g, t, { f: mtof(bn - 12), dur: STEP * 1.5, vol: 0.035, type: 'triangle' }); }
-    }
-  }
-  function tick() {
-    var c = A.ctx;
-    // skip while the tab is hidden: background timers fire only once a second, which would
-    // play the song as random stutters
-    if (!music.on || !c || A.muted || c.state !== 'running' || document.hidden) return;
-    var g = ensureGain(c);
-    if (music.next < c.currentTime) music.next = c.currentTime + 0.05;
-    while (music.next < c.currentTime + 0.14) {
-      schedStep(c, g, music.step, music.next);
-      music.step++;
-      music.next += STEP;
-    }
-  }
-  function fadeTo(v, tc) {
-    var c = A.ctx;
-    if (!c || !music.gain) return;
-    music.gain.gain.cancelScheduledValues(c.currentTime);
-    music.gain.gain.setTargetAtTime(v, c.currentTime, tc);
-  }
-  RR.music = {
-    play: function (mode) {
-      mode = mode || 'game';
-      // resuming the same song after a pause keeps its place; anything else starts from bar 1
-      var keep = music.paused && music.mode === mode;
-      music.paused = false;
-      if (music.mode !== mode) { music.on = false; }
-      music.mode = mode;
-      if (!music.on) { music.on = true; if (!keep) music.step = 0; music.next = 0; }
-      if (!music.timer) music.timer = setInterval(tick, 30);
-      if (A.ctx) { ensureGain(A.ctx); fadeTo(musicLevel(), 0.2); }
-    },
-    stop: function () {
-      music.on = false; music.paused = false;
-      if (music.timer) { clearInterval(music.timer); music.timer = 0; }
-      fadeTo(0.0001, 0.05);
-    },
-    // pause: silence now, but remember where the song was
-    pause: function () {
-      var was = music.on;
-      this.stop();
-      music.paused = was;
-      // step back to the start of the current beat so the song resumes on the beat
-      music.step = Math.max(0, music.step - (music.step % 4) - 4);
-    },
-    // test hook: schedule one 16th step of the song into any context (offline analysis)
-    _sched: function (c, g, s, t, mode) { var m = music.mode; music.mode = mode || 'game'; schedStep(c, g, s, t); music.mode = m; },
-    get playing() { return music.on; },
-    get mode() { return music.mode; }
-  };
 })();

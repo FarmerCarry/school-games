@@ -7,7 +7,7 @@
  */
 (function () {
   'use strict';
-  var T = window.THREE, SS = window.SS, G = SS.G, sfx = SS.sfx, music = SS.music, WEAPONS = SS.WEAPONS;
+  var T = window.THREE, SS = window.SS, G = SS.G, sfx = SS.sfx, WEAPONS = SS.WEAPONS;
   var $ = function (id) { return document.getElementById(id); };
   var store = Kit.store('splat-strike');
   var clamp = Kit.clamp;
@@ -32,9 +32,11 @@
     mode: D0.mode === 'team' ? 'team' : 'ffa', map: num(D0.map, 0, 0, SS.MAPS.length - 1) | 0, diff: num(D0.diff, 0, 0, 2) | 0,
     set: {
       sens: num(S0.sens, 1, 0.2, 3), fov: num(S0.fov, 72, 60, 95), inv: !!S0.inv, qual: ['auto', 'high', 'low'].indexOf(S0.qual) >= 0 ? S0.qual : 'auto',
-      music: S0.music !== false, nums: S0.nums !== false, bob: !!S0.bob, aaOff: !!S0.aaOff
+      nums: S0.nums !== false, bob: !!S0.bob, aaOff: !!S0.aaOff
     }
   };
+  // there is no background music any more: an old save's set.music is read by nobody and is
+  // dropped by the next write
   ['pink', 'sky'].forEach(function (c) { if (save.ownC.indexOf(c) < 0) save.ownC.push(c); });
   ['none', 'cap'].forEach(function (c) { if (save.ownH.indexOf(c) < 0) save.ownH.push(c); });
   ['classic', 'lagoon'].forEach(function (c) { if (save.ownS.indexOf(c) < 0) save.ownS.push(c); });
@@ -51,7 +53,6 @@
   }
   function myColor() { return SS.byId(SS.COLORS, save.color).c; }
   function mySkin() { return SS.byId(SS.SKINS, save.skin); }
-  music.enabled = save.set.music;
 
   /* ================================================================ RENDERER */
   var canvas = $('gl'), uiEl = $('ui');
@@ -330,7 +331,6 @@
     G.start({ demo: true, map: save.map, mode: 'ffa', diff: 1 });
     show('title');
     refreshTitle(); refreshDoll();
-    music.play('menu');
   }
   function startMatch() {
     persist();
@@ -347,7 +347,6 @@
     sizeMinimap();                 // its box can only be measured now that the HUD shows
     setPlaying(true);
     requestLock();
-    music.play('game');
     sfx.start();
   }
   function pause() {
@@ -357,7 +356,6 @@
     releaseLock();
     mouse.left = mouse.right = false; UI.aimingThrow = false;
     if (G.player) { G.player.zoom = false; }
-    music.hold(true);            // nothing plays while paused
     $('pauseBtn').hidden = true; $('board').hidden = true; hudEl.classList.remove('boardon');
     document.body.classList.add('paused');
   }
@@ -372,7 +370,6 @@
     if (!UI.paused) return;
     UI.paused = false; UI.resuming = false;
     show(null);
-    music.hold(false);
     $('pauseBtn').hidden = false;
     document.body.classList.remove('paused');
     heartT = 0.6; mouse.avg = 0;
@@ -479,7 +476,7 @@
   function refreshSettings() {
     $('sSens').value = save.set.sens; $('sSensV').textContent = save.set.sens.toFixed(2);
     $('sFov').value = save.set.fov; $('sFovV').textContent = save.set.fov;
-    tog('sInv', save.set.inv); tog('sMus', save.set.music); tog('sNums', save.set.nums); tog('sBob', save.set.bob);
+    tog('sInv', save.set.inv); tog('sNums', save.set.nums); tog('sBob', save.set.bob);
     segOn($('sQual'), save.set.qual);
   }
   $('sSens').addEventListener('input', function () { save.set.sens = +this.value; $('sSensV').textContent = save.set.sens.toFixed(2); });
@@ -487,12 +484,6 @@
   $('sInv').addEventListener('click', function () { sfx.click(); save.set.inv = !save.set.inv; refreshSettings(); });
   $('sNums').addEventListener('click', function () { sfx.click(); save.set.nums = !save.set.nums; refreshSettings(); });
   $('sBob').addEventListener('click', function () { sfx.click(); save.set.bob = !save.set.bob; refreshSettings(); });
-  $('sMus').addEventListener('click', function () {
-    sfx.click(); save.set.music = !save.set.music; music.enabled = save.set.music;
-    if (save.set.music) music.play(UI.state === 'play' ? 'game' : 'menu'); else music.stop();
-    if (UI.paused) music.hold(true);
-    refreshSettings();
-  });
   $('sQual').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
     sfx.click(); save.set.qual = b.getAttribute('data-v'); save.set.aaOff = false;
@@ -961,7 +952,6 @@
     podT = 0;
     show('over');
     overAt = performance.now();
-    music.play('menu');
   }
   var coinAnim = null, podT = 0, podTagEls = null;
   function moveConfetti(sc) { if (G.fx.conf.parent !== sc) sc.add(G.fx.conf); }
@@ -1382,7 +1372,7 @@
   function render(alpha) {
     var t0 = performance.now(), dt = Math.min(0.1, (t0 - lastR) / 1000); lastR = t0;
     var still = UI.state === 'play' && UI.paused && setEl.hidden;
-    if (still && stillDrawn) { music.pump(); return; }
+    if (still && stillDrawn) return;
     stillDrawn = still;
     renderer.info.reset();
     renderer.clear();
@@ -1409,7 +1399,6 @@
       }
     }
     dynRes(t0, UI.state === 'play' && !UI.paused);
-    music.pump();
     var ft = performance.now() - t0;
     perf.ren += ft; perf.frames++;
   }

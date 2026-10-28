@@ -21,6 +21,7 @@
   /* ------------------------------------------------------------- format */
   var FORMAT = 'sg-play-stats';
   var PREFIX = 'sg:site:stats:';            // every key "clear" may remove
+  var TM = 'sg:site:tm:';                   // the telemetry queue (js/telemetry.js): cleared too, not its sharing note
   var META_KEY = 'sg:site:statsmeta';       // id, label and stop setting: never cleared
   var DAY_KEY = /^sg:site:stats:d:(\d{4}-\d{2}-\d{2})$/;
   var SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -61,7 +62,7 @@
   // CSS, typing-test redraws on key presses) count no frames, since only Kit.loop and
   // Kit.stats.frame count them: the device status says so instead of «—».
   // tools/tests/play-stats-rules.test.mjs keeps this list equal to those games.
-  var NO_FRAMES = ['connect-four', 'tic-tac-toe', 'typing-test', 'mouse-keyboard-academy'];
+  var NO_FRAMES = ['connect-four', 'tic-tac-toe', 'typing-test'];
   var MINUTES = ['دقيقة واحدة', 'دقيقتان', 'دقائق', 'دقيقة'];
   var HOURS = ['ساعة واحدة', 'ساعتان', 'ساعات', 'ساعة'];
   var TIMES = ['مرة واحدة', 'مرتان', 'مرات', 'مرة'];
@@ -290,15 +291,23 @@
       var day = parseDay(DAY_KEY.exec(key)[1], ls.getItem(key));
       if (day) days.push(day);
     });
-    return { days: days, meta: parseMeta(ls.getItem(META_KEY)), bytes: bytes };
+    return { days: days, meta: parseMeta(ls.getItem(META_KEY)), bytes: bytes, share: shareHost(ls.getItem(TM + 'on')) };
+  }
+  // The ingest server's host, which the portal's telemetry sink notes while it shares.
+  function shareHost(text) {
+    var host = '';
+    try { host = JSON.parse(text); } catch (e) { /* not sharing */ }
+    return typeof host === 'string' && /^[a-z0-9.-]{1,100}(?::\d{1,5})?$/i.test(host) ? host : '';
   }
 
-  // Removes only keys that start with sg:site:stats: (never sg:site:statsmeta).
+  // Removes only keys that start with sg:site:stats: (never sg:site:statsmeta) and the
+  // telemetry keys sg:site:tm:, so nothing recorded before the clear is sent later. The
+  // note sg:site:tm:on holds only the server's name and stays: this PC still shares.
   function clearStats(ls) {
     var keys = [];
     for (var i = 0; i < ls.length; i++) {
       var key = ls.key(i);
-      if (typeof key === 'string' && key.indexOf(PREFIX) === 0) keys.push(key);
+      if (typeof key === 'string' && (key.indexOf(PREFIX) === 0 || (key.indexOf(TM) === 0 && key !== TM + 'on'))) keys.push(key);
     }
     keys.forEach(function (key) { ls.removeItem(key); });
     return keys.length;
@@ -675,7 +684,8 @@
       ['إحصاءات اللعب في ألعاب الفسحة', null],
       ['الجهاز', info.pc + (info.label ? ' (' + info.label + ')' : '')],
       ['وقت التصدير', info.exportedAt],
-      ['ملاحظة', 'الأرقام لكل جهاز وليست لكل طالب، ولم تُرسل إلى أي مكان.'],
+      ['ملاحظة', 'الأرقام لكل جهاز وليست لكل طالب. لا يُرسل الموقع هذا الملف إلى أي مكان. وإذا ربط مسؤول المدرسة نسخة الموقع ' +
+        'بخادم للإحصاءات فلا تصله إلا معلومات لعب مجهولة: بلا أسماء ولا اسم للجهاز ولا أي نص كتبه الأطفال.'],
       ['ما في الملف', 'كل الأيام المحفوظة على هذا الجهاز وقت التصدير، لا الفترة المعروضة في الصفحة فقط.'],
       ['مدة الحفظ', KEEP + ' لذلك صدّر الملف كل أسبوع.'],
       ['مكان الحفظ', 'تُحفظ الأرقام في ملف تعريف واحد للمتصفح على هذا الجهاز. وتبدأ من الصفر في متصفح آخر، أو مع ملف تعريف مدرسي ' +
@@ -821,16 +831,16 @@
     var NAMES = names(window.GAMES);
     var COPY = location.protocol === 'file:' ? 'folder' : 'web';
     var XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    var state = { ok: false, days: [], meta: parseMeta(null), bytes: 0, files: [], ignored: [] };
+    var state = { ok: false, days: [], meta: parseMeta(null), bytes: 0, share: '', files: [], ignored: [] };
     var store = null, refresh = 0, pending = null, saving = false, again = '';
 
     function load() {
       try {
         store = window.localStorage;
         var r = readStore(store);
-        state.ok = true; state.days = r.days; state.meta = r.meta; state.bytes = r.bytes;
+        state.ok = true; state.days = r.days; state.meta = r.meta; state.bytes = r.bytes; state.share = r.share;
       } catch (e) {
-        state.ok = false; state.days = []; state.meta = parseMeta(null); state.bytes = 0;
+        state.ok = false; state.days = []; state.meta = parseMeta(null); state.bytes = 0; state.share = '';
       }
     }
     function newId() {
@@ -895,6 +905,11 @@
     function renderNotices(today, combined) {
       $('storageMsg').hidden = state.ok;
       $('stoppedMsg').hidden = !(state.ok && state.meta.off);
+      // Said only while the portal on this PC shares and nothing here stops it.
+      var share = state.ok && state.share && !state.meta.off && state.meta.raw.tm !== false && navigator.globalPrivacyControl !== true;
+      $('shareMsg').hidden = !share;
+      $('shareMsg').innerHTML = share ? 'المشاركة المجهولة مفعّلة على هذا الجهاز: يُرسل الموقع معلومات اللعب بلا أسماء ولا اسم للجهاز إلى ' +
+        bdi(state.share, true) + '.' : '';
       var r = state.ok ? reminder(state.days, state.meta, state.bytes, today) : null, why = [];
       $('reminder').hidden = !r;
       if (r) {
@@ -1112,7 +1127,7 @@
 
     function renderActions() {
       var ok = state.ok;
-      ['pcLabel', 'saveLabel', 'exportXlsx', 'exportJson', 'stopBtn', 'resumeBtn', 'clearBtn', 'academyReset'].forEach(function (id) {
+      ['pcLabel', 'saveLabel', 'exportXlsx', 'exportJson', 'stopBtn', 'resumeBtn', 'clearBtn'].forEach(function (id) {
         if ($(id)) $(id).disabled = !ok;
       });
       if (document.activeElement !== $('pcLabel')) $('pcLabel').value = state.meta.label;
@@ -1291,21 +1306,6 @@
     $('resumeBtn').addEventListener('click', function () {
       write('stopStatus', function (raw) { raw.off = false; delete raw.offSince; }, 'عاد جمع الإحصاءات على هذا الجهاز.');
     });
-    if ($('academyReset') && $('academyAsk')) {
-      $('academyReset').addEventListener('click', function () { say('academyStatus', ''); $('academyAsk').hidden = false; });
-      $('academyAsk').addEventListener('submit', function (e) {
-        e.preventDefault();
-        $('academyAsk').hidden = true;
-        try {
-          window.localStorage.removeItem('sg:mouse-keyboard-academy:save');
-          say('academyStatus', 'بدأ طالب جديد في الأكاديمية على هذا الجهاز.');
-        } catch (err) { say('academyStatus', 'تعذّر الحفظ في هذا المتصفح.', true); }
-      });
-      $('academyAsk').querySelector('[data-cancel]').addEventListener('click', function () {
-        $('academyAsk').hidden = true;
-        say('academyStatus', '');
-      });
-    }
     $('clearBtn').addEventListener('click', function () { say('clearStatus', ''); ask($('clearConfirm')); });
     confirmWith($('clearConfirm'), 'امسح', 'clearStatus', function () {
       // Save the moment first: the portal drops anything it recorded before it,
@@ -1319,8 +1319,6 @@
       render();
     });
     document.addEventListener('click', function (e) {
-      var stationLink = e.target.closest ? e.target.closest('[data-station-link]') : null;
-      if (stationLink) { location.href = stationLink.getAttribute('data-station-link'); return; }
       var link = e.target.closest ? e.target.closest('[data-open]') : null;
       if (link && $(link.getAttribute('data-open'))) $(link.getAttribute('data-open')).open = true;
       if (e.target.id === 'backLocal') { state.files = []; state.ignored = []; render(); }
@@ -1333,7 +1331,7 @@
     });
     // The portal writes while children play in another tab: follow it.
     window.addEventListener('storage', function (e) {
-      if (e.key !== null && e.key.indexOf('sg:site:stats') !== 0) return;
+      if (e.key !== null && e.key.indexOf('sg:site:stats') !== 0 && e.key.indexOf(TM) !== 0) return;
       clearTimeout(refresh);
       refresh = setTimeout(function () { load(); render(); }, 500);
     });

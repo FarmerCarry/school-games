@@ -7,7 +7,7 @@
 (function () {
   'use strict';
   var BOOT_T0 = performance.now();
-  var T = window.THREE, RR = window.RR, sfx = RR.sfx, music = RR.music;
+  var T = window.THREE, RR = window.RR, sfx = RR.sfx;
   var LW = RR.LANE_W, TOP = RR.TRAIN_TOP, CAR = RR.CAR_LEN, CGAP = RR.CAR_GAP, RAMP = RR.RAMP_LEN;
   var $ = function (id) { return document.getElementById(id); };
   var clamp = Kit.clamp, lerp = Kit.lerp, rand = Kit.rand, randInt = Kit.randInt;
@@ -773,7 +773,6 @@
     P.vy = 7; P.grounded = false; P.roll = 0;
     S.shake = 0.9;
     sfx.crash();
-    music.stop();
     parts.burst(P.x, P.y + 1.2, S.pD - 0.4, { count: 26, colors: ['#ffe14d', '#ffffff', '#ff9f1c', '#6ff7ff'], speed: 8, up: 2, life: 0.9, size: 0.38, gravity: 10 });
     flashWarn();
     if (S.reason === 'caught') botState.show = 1;
@@ -1609,7 +1608,6 @@
     S.runStart = 0; S.score = 0; S.groundY = 0; S.speed = 0;
     refreshTitle();
     show('title');
-    music.play('menu');
     Kit.keys.reset();
   }
   function startRun() {
@@ -1628,7 +1626,6 @@
     startMissions();
     show(null);
     $('hint').hidden = true;
-    music.play('game');
     Kit.keys.reset();
     actions.length = 0;
     hudCache = {};
@@ -1644,14 +1641,12 @@
     $('pop').classList.remove('show'); popTimer = 0;
     $('pMissions').innerHTML = save.missions.map(function (m) { return missionRow(m, true); }).join('');
     show('pause');
-    music.pause();
     sfx.click();
   }
   function resume() {
     if (S.mode !== 'paused') return;
     S.mode = pausedFrom;
     show(null);
-    music.play('game');
     Kit.keys.reset();
     actions.length = 0;
     lastT = performance.now();
@@ -1722,7 +1717,6 @@
     show('over');
     overAnim = { on: true, t: 0, shownAt: performance.now(), score: score, shown: 0, ready: 0.7, newBest: newBest && prevBest > 0, celebrated: false, levelUp: !!levelUp };
     sfx.gameOver();
-    setTimeout(function () { if (S.mode === 'over') music.play('menu'); }, 1600);
   }
   function tickOver(dt) {
     var o = overAnim;
