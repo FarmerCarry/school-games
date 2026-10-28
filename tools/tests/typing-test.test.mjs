@@ -3,6 +3,7 @@ import { after, before, test } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
+import { fontsReady, waitForCondition, waitForElapsed } from '../page-wait.mjs';
 import { startTestServer } from '../test-server.mjs';
 import { clickControl } from '../ui-input.mjs';
 
@@ -45,8 +46,11 @@ test('results footer names the real restart key and new animals are celebrated o
   assert.equal(steady.tierUp, 0);
   assert.equal(await page.evaluate(() => localStorage.getItem('sg:typing-test:tier')), null);
   assert.deepEqual(await page.evaluate(() => [document.getElementById('restartKey').textContent, document.getElementById('escHint').hidden]), ['Enter', true]);
-  await page.waitForTimeout(350); // Enter is ignored for 300 ms after a result
+  // Enter is ignored until 300ms after the result. That clock is performance.now(),
+  // already running when the result was recorded above.
+  await waitForElapsed(page, 300, 'typing result restart guard');
   await page.keyboard.press('Enter');
+  await waitForCondition(page, () => __game.state().screen === 'test', null, 'Enter restarts the typing test after the result guard');
   assert.equal(await page.evaluate(() => __game.state().screen), 'test');
   assert.deepEqual(await page.evaluate(() => [document.getElementById('restartKey').textContent, document.getElementById('escHint').hidden]), ['Tab', false]);
   assert.equal(await page.evaluate(() => document.querySelectorAll('#race .pbf').length), 1, 'the record flag joins the race');
@@ -79,7 +83,7 @@ const coveredBy = page => page.evaluate(() => {
 test('denied saves keep the result in this session and recover on retry', async t => {
   const page = await game(t);
   await page.setViewportSize({ width: 1100, height: 620 }); // the portal's frame: the tightest footer
-  await page.evaluate(() => document.fonts.ready); // text widths decide the overlaps below
+  await fontsReady(page, 'typing test fonts'); // text widths decide the overlaps below
   await page.evaluate(() => {
     window.restoreStorage = Storage.prototype.setItem;
     Storage.prototype.setItem = function () { throw new DOMException('full', 'QuotaExceededError'); };
@@ -124,13 +128,22 @@ test('a double-click on "erase my results" only asks; erasing needs a second, se
   await page.evaluate(() => { for (let i = 0; i < 3; i++) { __game.start({ lang: 'en', mode: 'words', amt: 10, seed: 10 + i }); __game.typeText(__game.words(10).join(' '), 180); } __game.start({ lang: 'en', mode: 'words', amt: 10 }); });
   assert.equal(await page.evaluate(() => __game.store.hist().length), 3);
   await clickControl(page, '#progMini');
-  await page.waitForTimeout(400);
+  await waitForCondition(page, () => {
+    const modal = document.getElementById('mProg');
+    const button = document.getElementById('pReset');
+    if (!modal || modal.hidden || !button || button.getBoundingClientRect().width <= 0) return false;
+    return modal.getAnimations({ subtree: true }).every(animation => {
+      const timing = animation.effect && animation.effect.getComputedTiming();
+      return !timing || timing.iterations === Infinity || animation.playState === 'finished';
+    });
+  }, null, 'progress panel finished opening');
   const box = await page.locator('#pReset').boundingBox();
   await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
-  await page.waitForTimeout(300);
+  await waitForCondition(page, () => !!document.getElementById('pReset')?.classList.contains('armed'), null, 'erase button asks for confirmation');
   assert.equal(await page.evaluate(() => __game.store.hist().length), 3, 'the results survive a double-click');
   assert.equal(await page.locator('#pReset.armed').count(), 1, 'the button asks for confirmation');
-  await page.waitForTimeout(400);
+  // A second click inside 600ms of arming is still the double-click and must not erase.
+  await waitForElapsed(page, 600, 'erase confirmation guard');
   await page.locator('#pReset').click();
   assert.equal(await page.evaluate(() => __game.store.hist().length), 0, 'a deliberate second click still erases');
 });
@@ -157,7 +170,8 @@ test('a held Enter on "erase my results" only asks, however long it is held', as
   await page.locator('#pReset').focus();
   // A held key repeats its keydown; the repeats after 600 ms used to confirm.
   await page.keyboard.down('Enter');
-  await page.waitForTimeout(700);
+  await waitForCondition(page, () => !!document.getElementById('pReset')?.classList.contains('armed'), null, 'held Enter asks before it can confirm');
+  await waitForElapsed(page, 600, 'held Enter confirmation guard');
   for (let i = 0; i < 3; i++) await page.keyboard.down('Enter');
   await page.keyboard.up('Enter');
   assert.equal(await page.evaluate(() => __game.store.hist().length), 3, 'the results survive a held Enter');

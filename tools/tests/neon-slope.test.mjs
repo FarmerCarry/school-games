@@ -88,6 +88,7 @@ test('Neon Slope draws a paused scene once, redraws resize and context restore, 
   await page.evaluate(() => { __game.dir = null; document.getElementById('btnPause').click(); });
   const dist = await page.evaluate(() => __game.state.dist);
   assert.equal(await page.evaluate(() => __game.state.mode), 'paused');
+  assert.doesNotMatch(await page.locator('#pause').textContent(), /الموسيقى/, 'the pause panel has no music switch');
   assert.equal(await page.evaluate(() => ns.count(1)), 1, 'pausing draws the scene once');
   assert.equal(await page.evaluate(() => ns.count(120)), 0, 'a settled pause draws nothing');
 
@@ -132,6 +133,7 @@ test('Neon Slope shows the save warning on failed writes and keeps progress afte
   assert.equal(await page.evaluate(() => __game.state.gems), gems);
 });
 
+// `music` is an old switch: the game has no music now, so it is ignored and not carried over.
 const legacyProgress = {
   best: 80, gems: 500, owned: ['neon', 'cookie'], ownedTrails: ['glow'], skin: 'cookie', trail: 'glow',
   runs: 8, music: false, mDone: 3,
@@ -165,7 +167,8 @@ test('Neon Slope migrates all legacy progress in one purchase write and prefers 
   await page.evaluate(() => { ns.writes = []; });
   await clickControl(page, '#sgrid .card:nth-child(2)'); // Bubblegum costs 25 gems.
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:neon-slope:save')));
-  assert.deepEqual(saved, { v: 1, ...legacyProgress, gems: 475, owned: ['neon', 'cookie', 'bubblegum'], skin: 'bubblegum' });
+  const { music, ...progress } = legacyProgress;
+  assert.deepEqual(saved, { v: 1, ...progress, gems: 475, owned: ['neon', 'cookie', 'bubblegum'], skin: 'bubblegum' });
   assert.deepEqual(await page.evaluate(() => ns.writes), ['sg:neon-slope:save']);
   const after = await page.evaluate(durableProgress);
   delete after['sg:neon-slope:save'];

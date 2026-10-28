@@ -1,7 +1,7 @@
 /*
- * Drift King — sound: engine hum, tyre screech, a light music loop and effects.
+ * Drift King — sound: engine hum, tyre screech and effects (no background music).
  * Everything is synthesised with WebAudio through Kit.audio (shared master gain,
- * so the mute button silences all of it).
+ * so the mute button silences all of it). The engine runs only while driving.
  */
 (function (root) {
   'use strict';
@@ -11,7 +11,6 @@
 
   var eng = null;       // engine nodes
   var scr = null;       // screech nodes
-  var musicOn = true, musicTimer = 0, nextNote = 0, step = 0, musicGain = null, musicLevel = 0.55;
 
   function ctx() { return A.ctx; }
 
@@ -99,84 +98,6 @@
         s.src.stop(t + 0.2); s.so.stop(t + 0.2); s.wob.stop(t + 0.2); s.flt.stop(t + 0.2);
       } catch (er) { /* ignore */ }
     }
-  };
-
-  /* ------------------------------------------------------------- music */
-  // Cheerful 8-bar loop: bass + pluck arpeggio + soft hat. 124 bpm.
-  var BPM = 124, SPB = 60 / BPM / 2; // eighth notes
-  var CHORDS = [
-    [60, 64, 67, 72], [57, 60, 64, 69], [53, 57, 60, 65], [55, 59, 62, 67],
-    [60, 64, 67, 72], [57, 60, 64, 69], [53, 57, 60, 65], [55, 59, 62, 71]
-  ];
-  var ARP = [0, 1, 2, 3, 2, 1, 2, 3], ARP2 = [0, 2, 1, 3, 1, 2, 0, 3];
-  // a soft tune that joins in on every other pass of the loop so it doesn't get repetitive
-  var LEAD = [
-    [76, -1, 79, -1, 76, 74, 72, -1], [72, -1, 76, -1, 74, 72, 69, -1], [69, 72, 77, -1, 76, -1, 72, -1], [74, -1, 71, 74, 79, -1, -1, -1],
-    [84, -1, 79, -1, 76, -1, 79, 81], [79, -1, 76, -1, 72, -1, 76, -1], [77, -1, 76, -1, 74, -1, 72, -1], [71, -1, 74, -1, 79, -1, 83, -1]
-  ];
-  function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-  function note(freq, t, dur, type, vol, dest) {
-    var c = ctx();
-    var o = c.createOscillator(), g = c.createGain();
-    o.type = type; o.frequency.value = freq;
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(dest);
-    o.start(t); o.stop(t + dur + 0.02);
-  }
-  function hat(t, vol, dest) {
-    var c = ctx();
-    if (!S._nb) S._nb = noiseBuffer(c);
-    var src = c.createBufferSource(); src.buffer = S._nb;
-    var f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000;
-    var g = c.createGain();
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-    src.connect(f); f.connect(g); g.connect(dest);
-    src.start(t, Math.random() * 0.5); src.stop(t + 0.06);
-  }
-  function schedule() {
-    var c = ctx();
-    if (!c || !musicGain) return;
-    // hidden tab: timers are throttled to ~1/s, which would play the loop in choppy bits
-    if (document.hidden) { nextNote = 0; return; }
-    if (nextNote < c.currentTime - 0.2) nextNote = c.currentTime + 0.05;
-    while (nextNote < c.currentTime + 0.25) {
-      var bar = Math.floor(step / 8) % 8, s8 = step % 8;
-      var ch = CHORDS[bar], pass = Math.floor(step / 64) % 2;
-      if (!A.muted) {
-        if (s8 === 0 || s8 === 3 || s8 === 6) note(mtof(ch[0] - 24), nextNote, SPB * 1.6, 'triangle', 0.32, musicGain);
-        note(mtof(ch[(pass ? ARP2 : ARP)[s8]] + 12), nextNote, SPB * 0.9, 'square', pass ? 0.035 : 0.045, musicGain);
-        if (pass && LEAD[bar][s8] > 0) note(mtof(LEAD[bar][s8]), nextNote, SPB * 1.6, 'triangle', 0.1, musicGain);
-        if (s8 % 2 === 1) hat(nextNote, 0.06, musicGain);
-        if (s8 === 4) note(mtof(ch[2] + 12), nextNote, SPB * 1.8, 'triangle', 0.09, musicGain);
-      }
-      nextNote += SPB;
-      step++;
-    }
-  }
-  S.setMusic = function (on) {
-    musicOn = !!on;
-    var c = ctx();
-    if (!musicOn) {
-      if (musicTimer) { clearInterval(musicTimer); musicTimer = 0; }
-      if (musicGain) { try { musicGain.gain.setTargetAtTime(0, c.currentTime, 0.05); } catch (e) { /* */ } }
-      return;
-    }
-    S.ensureMusic();
-  };
-  S.musicOn = function () { return musicOn; };
-  S.ensureMusic = function () {
-    var c = ctx();
-    if (!musicOn || !c || !A.master) return;
-    if (!musicGain) { musicGain = c.createGain(); musicGain.connect(A.master); }
-    musicGain.gain.setTargetAtTime(0.5 * musicLevel, c.currentTime, 0.1);
-    if (!musicTimer) { nextNote = c.currentTime + 0.1; musicTimer = setInterval(schedule, 60); }
-  };
-  S.musicLevel = function (lv) {
-    musicLevel = lv;
-    var c = ctx();
-    if (musicGain && c && musicOn) musicGain.gain.setTargetAtTime(0.5 * lv, c.currentTime, 0.15);
   };
 
   /* ----------------------------------------------------------- effects */

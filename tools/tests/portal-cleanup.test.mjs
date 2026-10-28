@@ -3,6 +3,7 @@ import { after, before, test } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
+import { animationFrames, fontsReady } from '../page-wait.mjs';
 import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -61,14 +62,14 @@ test('Arabic and fuzzy search retain focus and matching results without rebuildi
 test('desktop and narrow grids retain DOM order, visible cards and RTL reading order', async t => {
   const page = await newPage(t);
   await page.goto(url);
-  await page.evaluate(async () => {
-    await document.fonts.ready;
+  await fontsReady(page, 'portal catalog fonts');
+  await page.evaluate(() => {
     window.savedTiles = Array.from(document.querySelectorAll('.catalog-grid .tile'));
   });
   const original = await slugs(page);
   for (const width of [1280, 390, 900, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await animationFrames(page, 2, `catalog layout at ${width}px`);
     const layout = await page.locator('.catalog-grid .tile').evaluateAll(tiles => tiles.map(tile => {
       const rect = tile.getBoundingClientRect(), style = getComputedStyle(tile);
       return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, display: style.display, visibility: style.visibility };
