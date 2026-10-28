@@ -189,6 +189,8 @@
 
   // ---- a student's page ---------------------------------------------------------------------
   tabs.student = {
+    // The Data tab finds a code and opens the same panels (a: { student }).
+    panels: { link: function (ctx, panel, a, close) { linkPanel(ctx, panel, a, close); }, forget: function (ctx, panel, a, close) { forgetPanel(ctx, panel, a, close); } },
     load: function (ctx) {
       var u = ctx.route().arg;
       return Promise.all([ctx.get('student', { u: u }), ctx.part(ctx.get('stats', { metrics: ['persist'] }))])
@@ -208,6 +210,7 @@
       var extra = [];
       if (s.profileMadeDay) extra.push(T.profileMade(ctx.dayText(s.profileMadeDay, { day: 'numeric', month: 'short', year: 'numeric' })));
       if (s.knownBefore) extra.push(T.knownBefore);
+      if (s.removed) extra.push(T.removedOn(ctx.dayText(s.removed, { day: 'numeric', month: 'short', year: 'numeric' })));
       if (s.band && s.bandFirst && s.bandFirst !== s.band) extra.push(T.bandFirst(I.bandLabel(s.bandFirst, lang)));
       if ((s.pcs || []).length) extra.push(T.onPcs(s.pcs.join(', '), s.pcs.length));
       if (extra.length) h('p', { class: 'note' }, head, extra.join(' · '));

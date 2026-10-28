@@ -1,15 +1,15 @@
 /*
  * The Learning & difficulty tab (#/learning): are children getting better? For one
  * game (the picker) or "all measured games" (the games that count hits: accuracy and
- * reaction time). Data: the r_stat rows of GET /v1/admin/stats (attempt, tenure,
- * fatigue, persist, tier), /v1/admin/kpis (the difficulty grid, reaction times per age
+ * reaction time). Data: the r_stat rows of GET /v1/admin/stats (attempt, fatigue,
+ * persist), /v1/admin/kpis (the difficulty grid, reaction times per age
  * group) and /v1/admin/game for the games shown (paired same-student growth, tries
  * before the first win). Comparisons are associations: children choose their games.
  */
 (function () {
   'use strict';
   var tabs = window.SGTabs = window.SGTabs || {};
-  var METRICS = ['attempt', 'tenure', 'fatigue', 'persist', 'tier'];
+  var METRICS = ['attempt', 'fatigue', 'persist'];
   var BANDS = ['6-7', '8-9', '10-11'];
   var MAX_GAMES = 3;
   var RT = ['<300', '300–499', '500–799', '800–1199', '1200–1999', '2000+'];

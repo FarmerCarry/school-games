@@ -99,19 +99,38 @@
     return (s !== null && s < SMALL.students) || (t !== null && t < SMALL.tries);
   }
   // "Student 7F3A" / «الطالب 7F3A»; the code is isolated so it reads left to right in
-  // Arabic. A player card (phase 2) carries the card picture before it.
+  // Arabic.
   function studentLabel(s, lang) {
     const label = s && typeof s.label === 'string' && s.label ? s.label : String(s && s.u || '').slice(0, 4).toUpperCase();
-    const text = (lang === 'ar' ? 'الطالب ' : 'Student ') + LRI + label + PDI;
-    return s && s.kind === 'card' ? '🎴 ' + text : text;
+    return (lang === 'ar' ? 'الطالب ' : 'Student ') + LRI + label + PDI;
+  }
+  // The check character the teacher page shows after a code (3F9A-0C51-E2B7-5): Luhn
+  // mod 16 over the 12 hex digits. From the rightmost digit the factors are 2, 1, 2, ...;
+  // each addend is floor(f·v/16) + (f·v % 16); the check is (16 − sum % 16) % 16, in hex.
+  function checkChar(code) {
+    if (!/^[0-9a-f]{12}$/.test(code)) return null;
+    let sum = 0;
+    for (let i = 0; i < 12; i++) {
+      const p = (i % 2 ? 1 : 2) * parseInt(code[11 - i], 16);
+      sum += Math.floor(p / 16) + p % 16;
+    }
+    return ((16 - sum % 16) % 16).toString(16);
   }
   // A code typed into the search: 4 to 13 letters and digits once dashes and spaces are
-  // gone (a code as the teacher page shows it, 3F9A-0C51-E2B7-C, is 12 hex plus a check
+  // gone (a code as the teacher page shows it, 3F9A-0C51-E2B7-5, is 12 hex plus a check
   // character). Returns the lower-case prefix to look for, or null.
   function codeQuery(text) {
     const clean = String(text || '').toLowerCase().replace(/[\s\-‐-―]/g, '');
     if (clean.length < 4 || clean.length > 13 || !/^[0-9a-z]+$/.test(clean)) return null;
     return clean.length === 13 ? clean.slice(0, 12) : clean;
+  }
+  // A whole code, as typed: { code } for 12 hex digits (or 13 with the right check
+  // character), { wrong: true } when the check character does not match, else null.
+  function fullCode(text) {
+    const clean = String(text || '').toLowerCase().replace(/[\s\-‐-―]/g, '');
+    if (!/^[0-9a-f]{12}[0-9a-f]?$/.test(clean)) return null;
+    const code = clean.slice(0, 12);
+    return clean.length === 13 && clean[12] !== checkChar(code) ? { wrong: true } : { code };
   }
   // Students whose code, label or a linked code starts with the query.
   function findStudents(students, text) {
@@ -123,14 +142,18 @@
 
   // ---- r_stat rows ---------------------------------------------------------------------
   // { columns, rows } -> [{ a, metric, slug, k1, k2, n, students, w, ... }]. Missing
-  // numeric columns read as 0; unknown columns are kept.
+  // numeric columns read as 0; unknown columns are kept. The server stores an age group
+  // that was never set as '' and names it 'unknown' elsewhere: here it is 'unknown' too.
+  // A game's own rows have no slug column (slug '').
+  const bandOf = a => a == null || a === '' ? 'unknown' : String(a);
   function statRows(answer) {
     const columns = list(answer && answer.columns);
     return list(answer && answer.rows).filter(Array.isArray).map(r => {
       const o = {};
       columns.forEach((c, i) => { o[c] = r[i]; });
       for (const c of NUMERIC) o[c] = num(o[c]) || 0;
-      for (const c of ['a', 'metric', 'slug', 'k1', 'k2']) o[c] = o[c] == null ? '' : String(o[c]);
+      for (const c of ['metric', 'slug', 'k1', 'k2']) o[c] = o[c] == null ? '' : String(o[c]);
+      o.a = bandOf(o.a);
       return o;
     });
   }
@@ -385,7 +408,8 @@
   // The game answer's paired rows ([u, a, part 0|1, rounds, w, l, hits, misses, rtSum,
   // rtN, scoreSum, scoreN, ddaSum, ddaN]) -> per age band: the mean of each student's
   // measure in the first third (before) and the last third (after), over the students
-  // with the measure in both. all: every band together.
+  // with the measure in both. all: every band together. The server pairs a student's
+  // thirds within one age group, so a child whose age group changed counts in each.
   const PAIRED = ['u', 'a', 'part', 'rounds', 'w', 'l', 'hits', 'misses', 'rtSum', 'rtN', 'scoreSum', 'scoreN', 'ddaSum', 'ddaN'];
   function pairedRows(answer) {
     const columns = list(answer && answer.columns).length ? answer.columns : PAIRED;
@@ -393,7 +417,7 @@
       const o = {};
       columns.forEach((c, i) => { o[c] = r[i]; });
       return {
-        u: String(o.u), a: String(o.a || ''), part: Number(o.part), rounds: num(o.rounds) || 0, w: num(o.w) || 0, l: num(o.l) || 0,
+        u: String(o.u), a: bandOf(o.a), part: Number(o.part), rounds: num(o.rounds) || 0, w: num(o.w) || 0, l: num(o.l) || 0,
         hits: num(o.hits) || 0, misses: num(o.misses) || 0, rt_sum: num(o.rtSum) || 0, rt_n: num(o.rtN) || 0,
         score_sum: num(o.scoreSum) || 0, score_n: num(o.scoreN) || 0, dda_sum: num(o.ddaSum) || 0, dda_n: num(o.ddaN) || 0,
         d: 0, e: 0, q: 0, win_ms: 0, tier_sum: 0, tier_n: 0, ms: 0, inputs: 0
@@ -404,10 +428,9 @@
     const byStudent = new Map();
     for (const r of pairedRows(answer)) {
       if (r.part !== 0 && r.part !== 1) continue;
-      const s = byStudent.get(r.u) || { a: r.a, parts: [null, null] };
+      const key = r.u + ' ' + r.a, s = byStudent.get(key) || { a: r.a, parts: [null, null] };
       s.parts[r.part] = r;
-      if (r.part === 0) s.a = r.a;
-      byStudent.set(r.u, s);
+      byStudent.set(key, s);
     }
     const groups = {};
     for (const s of byStudent.values()) {
@@ -473,7 +496,7 @@
   return Object.freeze({
     SMALL, BANDS, BUCKETS, PERSIST, MEASURES: Object.keys(MEASURES), LOWER_BETTER: [...LOWER_BETTER], PC_FLAGS, bucketLabel,
     isDay, shift, weekdayOf, daysBetween, weekOf, weekdays, weekdayCounts, weeksEnding, schoolYearStart,
-    small, studentLabel, codeQuery, findStudents,
+    small, studentLabel, checkChar, codeQuery, fullCode, findStudents,
     statRows, pick, sumBy, total, measure, measuresOf, curve, curvesByBand, histogram, quantile, weekHours, activeHours,
     persist, persistShares, retryByGame, flows,
     newReturning, studentWeeks, bucketize, daysPerWeek, weeklyMinutes, winShare,

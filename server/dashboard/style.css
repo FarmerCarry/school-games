@@ -542,6 +542,25 @@ table.data .time, table.data .build { font-variant-numeric: tabular-nums; }
 .setting .clock-title { display: none; }
 .setting > p:first-child { margin-top: 0; }
 #footNotes p { margin: 0 0 4px; }
+.setting-note:empty { display: none; }
+.file-list { margin: 8px 0 0; padding-inline-start: 20px; font-size: 13.5px; }
+.file-list li { margin: 2px 0; }
+.file-list code { font-size: 12.5px; }
+.export-cost { margin: 12px 0 0; font-weight: 600; }
+.export-actions { margin-top: 12px; }
+.export-actions .btn-primary, .resume .btn-primary { display: inline-block; width: auto; }
+.export-status { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.export-status p { margin: 0; flex: 1 1 100%; }
+.export-status progress { width: 100%; max-width: 420px; height: 10px; accent-color: var(--s1); }
+.resume { margin: 12px 0 0; padding: 12px 14px; border-radius: 10px; background: var(--banner); border: 1px solid var(--banner-border); }
+.resume p { margin: 0 0 10px; }
+.resume .btn-link { margin-inline-start: 12px; }
+.dict-pick { margin: 4px 0 4px; }
+table.dictionary .dict-meaning { min-width: 16em; }
+table.dictionary .dict-name { white-space: nowrap; }
+.child-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.child-who { margin: 12px 0 0; }
+.child-result .link-results { margin-top: 10px; }
 
 /* ---- small screens --------------------------------------------------------------------------------- */
 @media (max-width: 879px) {
@@ -586,6 +605,13 @@ table.data .time, table.data .build { font-variant-numeric: tabular-nums; }
   table.health th[scope="row"], table.health td.flags { grid-column: 1 / -1; }
   table.health td.num { text-align: start; padding-top: 4px; }
   table.health td.num::before { content: attr(data-label); display: block; font-weight: 400; color: var(--ink-2); font-size: 12px; }
+  table.dictionary thead { display: none; }
+  table.dictionary, table.dictionary tbody, table.dictionary tr, table.dictionary th, table.dictionary td { display: block; }
+  table.dictionary tr { padding: 10px 0; border-bottom: 1px solid var(--grid); }
+  table.dictionary th, table.dictionary td { border: 0; padding: 2px 0; }
+  table.dictionary td.is-empty { display: none; }
+  table.dictionary .dict-meaning { min-width: 0; }
+  table.dictionary td::before { content: attr(data-label) ': '; color: var(--ink-2); font-size: 12px; }
 }
 @media (max-width: 480px) {
   .diff-row { --n: 2; row-gap: 8px; }

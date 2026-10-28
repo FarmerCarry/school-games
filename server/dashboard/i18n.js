@@ -13,6 +13,11 @@
   // Counted nouns: "1 student", "12 students"; Arabic [one, two, 3-10, 11+] after the number.
   var pl = function (v, one, many) { return v === 1 ? '1 ' + one : n(v) + ' ' + many; };
   var c = function (v, forms) { return v === 1 ? forms[0] : v === 2 ? forms[1] : n(v) + ' ' + I.arWord(v, forms); };
+  // An Arabic count of rows: "صف واحد", "صفّان", "5 صفوف", "11 صفًّا", "12,000 صف".
+  var rowsAr = function (v) {
+    var m = v % 100;
+    return v === 1 ? 'صف واحد' : v === 2 ? 'صفّان' : n(v) + (m >= 3 && m <= 10 ? ' صفوف' : m >= 11 ? ' صفًّا' : ' صف');
+  };
 
   var en = {
     appTitle: 'Play insights',
@@ -77,7 +82,9 @@
     clockPcs: function (k) { return k === 1 ? '1 PC' : n(k) + ' PCs'; },
     clockSaved: 'Saved. Past days are moving to the new clock.',
     clockFailed: 'The clock was not changed. Try again in a minute.',
-    rebuildProgress: function (done, all) { return 'Moving past days to the new clock: ' + n(done) + ' of ' + n(all) + ' days done.'; },
+    rebuildProgress: function (done, all, zone) {
+      return (zone ? 'Moving past days to the new clock: ' : 'Recounting past days: ') + n(done) + ' of ' + n(all) + ' days done.';
+    },
     smallSample: function (k) { return 'Based on ' + (k === 1 ? '1 child' : n(k) + ' children') + ' so far'; },
     smallTries: function (k) { return 'Based on ' + (k === 1 ? '1 try' : n(k) + ' tries') + ' so far'; },
     smallChip: function (k) { return 'based on ' + (k === 1 ? '1 child' : n(k) + ' children'); },
@@ -592,7 +599,9 @@
     batchEveryHint: 'Longer when the day’s writes run high',
     freePlan: function (w, r) { return 'Free plan today: about ' + w + ' of writes, ' + r + ' of reads.'; },
     trimmedNote: function (d) { return 'Round-by-round details before ' + d + ' were removed to stay inside the free 500 MB; download the research files each term.'; },
-    pcsSeen: function (k, seen) { return n(k) + ' of the ' + pl(seen, 'PC', 'PCs') + ' seen in the last 14 days run the new version.'; },
+    pcsSeen: function (seen, all) {
+      return pl(seen, 'PC', 'PCs') + ' on the new version played in the last 14 days. The server knows ' + pl(all, 'PC code', 'PC codes') + ' in all; a PC that forgets its code every night counts again each day.';
+    },
     qualityTitle: 'Data quality',
     qualityIntro: 'How far each number can be trusted.',
     lateNote: 'Play from a PC that was offline is added to the day it was played once the PC is back online, so a past day can still grow a little.',
@@ -609,6 +618,62 @@
       pcsNew: 'Old PCs send no PC code, so the number of PCs in all is not known.', oldVersionSessionShare: 'They update when someone accepts the offline update.',
       profilesFullPcs: 'New children on those PCs play as guests.', forgetfulPcs: 'A lab PC reset every night makes new students every day.'
     },
+    // ---- the research files, the dictionary, one child's data -------------------------------------
+    filesTitle: 'Research files',
+    filesIntro: 'Every row behind these charts, for Excel, SPSS or R: one file per kind of row, with the data dictionary, labels for SPSS, a loader for R and a README in English and Arabic.',
+    filesPeriod: function (range) { return 'The period chosen above: ' + range + '.'; },
+    filesOthers: 'README.txt, labels.sps and load.R: how to read the files, in English and Arabic.',
+    dictOne: function (one) { return 'One row per ' + one + '.'; },
+    exportCost: function (rows, pct) {
+      return 'About ' + (rows >= 1e6 ? I.short(rows / 1e6) + ' million' : n(rows)) + ' rows: ' + (pct.charAt(0) === '<' ? 'less than ' + pct.slice(1) : 'about ' + pct) +
+        ' of today’s free reading allowance.';
+    },
+    exportStops: 'Today’s allowance may run out part way. The download then gives you part 1 and goes on tomorrow from where it stopped.',
+    exportStart: 'Download the research files',
+    exportStarting: 'Starting…',
+    exportCancel: 'Stop',
+    exportProgress: function (file, rows, pct) { return file + ': ' + pl(rows, 'row', 'rows') + ' · ' + pct + ' of the download'; },
+    exportZipping: 'Putting the files together…',
+    exportDone: function (name, size) { return 'Ready: ' + iso(name) + ' (' + size + '). Keep it like other school records.'; },
+    exportStopped: function (part, until, name, size) {
+      return 'Today’s free reading allowance is nearly used, so the download stopped. Part ' + part + ' is ready: ' + iso(name) + ' (' + size + '). After ' + iso(until) +
+        ' (school time), come back here to continue with part ' + (part + 1) + '.';
+    },
+    exportSave: 'Save the file',
+    exportAgain: 'Try again',
+    exportCancelled: 'Stopped. Nothing was saved.',
+    exportDemo: 'The sample files hold this morning’s play only.',
+    exportResume: function (range, file, day, part) { return 'A download of ' + range + ' stopped in ' + iso(file) + ' on ' + day + '. Part ' + part + ' goes on from there.'; },
+    exportContinue: function (part) { return 'Continue: part ' + part; },
+    exportForgetPart: 'Start afresh instead',
+    sizeMb: function (v) { return v + ' MB'; },
+    sizeKb: function (v) { return v + ' KB'; },
+    dictTitle: 'The data dictionary',
+    dictIntro: 'What each column of the files means. The download has the same table as dictionary.csv.',
+    dictFile: 'File',
+    dictColumn: 'Column',
+    dictType: 'Type',
+    dictUnit: 'Unit',
+    dictValues: 'Values',
+    dictMeaning: 'Meaning',
+    dictSource: 'Comes from',
+    dictAvailable: 'Filled for',
+    dictTypes: { code: 'code', text: 'text', category: 'one of the values', integer: 'whole number', decimal: 'number', flag: '0 or 1', date: 'date', time: 'time', datetime: 'date and time (UTC)' },
+    available: { 'all games': 'all games', 'DDA games': 'the games that adapt', 'games with a score': 'games with a score', 'tutorial games': 'games with a tutorial',
+      'games with frames': 'games that report smoothness' },
+    childTitle: 'One child’s data',
+    childIntro: 'To delete a child’s data (when a parent asks, for example) or to join two codes of the same child, type the code the teacher page shows for that child.',
+    childFind: 'Find',
+    childWrong: 'One character is wrong; check the code.',
+    childNoneInPeriod: function (q) { return 'No student code starting with ' + iso(q) + ' played in this period. Type the whole code, or choose a longer period above.'; },
+    studentUnknown: 'The server holds nothing under this code.',
+    lastPlayedOn: function (d) { return 'last played ' + d; },
+    nLinked: function (k) { return pl(k, 'linked code', 'linked codes'); },
+    removedOn: function (d) { return 'profile removed from its PC on ' + d; },
+    cameBackDays: 'Came back another day',
+    cameBackDaysHint: function (two, all) { return n(two) + ' of ' + pl(all, 'student', 'students') + ' played it on 2 days or more'; },
+    keepTooBig: 'Two school years would not fit in the free 500 MB with this school’s play, so the data stays one school year.',
+    settingFailed: 'Not saved. Try again in a minute.',
     footer: 'No names are collected. Each child who picks an animal appears here under a code such as Student 7F3A; guests are counted together. A child who plays on two PCs appears as two students unless a teacher gives both profiles the same code or you link them.'
   };
 
@@ -674,7 +739,9 @@
     clockPcs: function (k) { return k === 1 ? 'جهاز واحد' : k === 2 ? 'جهازان' : n(k) + ' ' + I.arWord(k, ['جهاز', 'جهازان', 'أجهزة', 'جهازًا']); },
     clockSaved: 'حُفظت. تُنقل الأيام السابقة الآن إلى الساعة الجديدة.',
     clockFailed: 'لم تتغيّر الساعة. حاول مرة أخرى بعد دقيقة.',
-    rebuildProgress: function (done, all) { return 'تُنقل الأيام السابقة إلى الساعة الجديدة: اكتمل ' + n(done) + ' من أصل ' + n(all) + ' ' + I.arWord(all, ['يوم', 'يومين', 'أيام', 'يومًا']) + '.'; },
+    rebuildProgress: function (done, all, zone) {
+      return (zone ? 'تُنقل الأيام السابقة إلى الساعة الجديدة' : 'تُعاد حسبة الأيام السابقة') + ': اكتمل ' + n(done) + ' من أصل ' + n(all) + ' ' + I.arWord(all, ['يوم', 'يومين', 'أيام', 'يومًا']) + '.';
+    },
     smallSample: function (k) { return 'بناءً على ' + (k === 1 ? 'طفل واحد' : k === 2 ? 'طفلين' : n(k) + ' ' + I.arWord(k, ['طفل', 'طفلين', 'أطفال', 'طفلًا'])) + ' حتى الآن'; },
     smallTries: function (k) { return 'بناءً على ' + (k === 1 ? 'محاولة واحدة' : k === 2 ? 'محاولتين' : n(k) + ' ' + I.arWord(k, ['محاولة', 'محاولتين', 'محاولات', 'محاولة'])) + ' حتى الآن'; },
     smallChip: function (k) { return 'بناءً على ' + (k === 1 ? 'طفل واحد' : k === 2 ? 'طفلين' : n(k) + ' ' + I.arWord(k, ['طفل', 'طفلين', 'أطفال', 'طفلًا'])); },
@@ -1192,7 +1259,10 @@
     batchEveryHint: 'تطول المدة حين تكثر الكتابة في اليوم',
     freePlan: function (w, r) { return 'الخطة المجانية اليوم: نحو ' + w + ' من حصة الكتابة، و' + r + ' من حصة القراءة.'; },
     trimmedNote: function (d) { return 'حُذفت تفاصيل الجولات قبل ' + d + ' للبقاء ضمن الـ 500 ميغابايت المجانية؛ نزّل ملفات البحث في كل فصل دراسي.'; },
-    pcsSeen: function (k, seen) { return n(k) + ' من أصل ' + c(seen, ['جهاز واحد', 'جهازين', 'أجهزة', 'جهازًا']) + ' ظهرت في آخر 14 يومًا تعمل بالإصدار الجديد.'; },
+    pcsSeen: function (seen, all) {
+      return 'لُعب في آخر 14 يومًا على ' + c(seen, ['جهاز واحد', 'جهازين', 'أجهزة', 'جهازًا']) + ' بالإصدار الجديد. ويعرف الخادم ' + c(all, ['رمز جهاز واحد', 'رمزَي جهازين', 'رموز أجهزة', 'رمز جهاز']) +
+        ' في المجموع؛ والجهاز الذي ينسى رمزه كل ليلة يُحسب من جديد كل يوم.';
+    },
     qualityTitle: 'جودة البيانات',
     qualityIntro: 'إلى أي حد يُعتمد على كل رقم.',
     lateNote: 'يُضاف لعب جهاز كان دون اتصال إلى اليوم الذي لُعب فيه حين يعود الجهاز إلى الاتصال، فقد يزيد يوم مضى قليلًا.',
@@ -1209,6 +1279,62 @@
       pcsNew: 'لا ترسل الأجهزة القديمة رمز الجهاز، لذلك لا يُعرف عدد الأجهزة كلها.', oldVersionSessionShare: 'تتحدّث عندما يوافق أحدهم على تحديث النسخة دون اتصال.',
       profilesFullPcs: 'يلعب الأطفال الجدد على هذه الأجهزة ضيوفًا.', forgetfulPcs: 'جهاز المختبر الذي يُعاد ضبطه كل ليلة يصنع طلابًا جددًا كل يوم.'
     },
+    // ---- ملفات البحث والقاموس وبيانات طفل واحد ---------------------------------------------------------
+    filesTitle: 'ملفات البحث',
+    filesIntro: 'كل الصفوف التي تقوم عليها هذه الرسوم، للتحليل في Excel أو SPSS أو R: ملف لكل نوع من الصفوف، مع قاموس البيانات وتسميات SPSS وبرنامج تحميل للغة R وملف تعريفي بالعربية والإنجليزية.',
+    filesPeriod: function (range) { return 'الفترة المختارة في الأعلى: ' + range + '.'; },
+    filesOthers: 'README.txt وlabels.sps وload.R: كيف تُقرأ الملفات، بالعربية والإنجليزية.',
+    dictOne: function (one) { return 'صف لكل ' + one + '.'; },
+    exportCost: function (rows, pct) {
+      return 'نحو ' + (rows >= 1e6 ? I.short(rows / 1e6) + ' مليون صف' : rowsAr(rows)) + ': ' + (pct.charAt(0) === '<' ? 'أقل من ' + pct.slice(1) : 'نحو ' + pct) +
+        ' من حصة القراءة المجانية لليوم.';
+    },
+    exportStops: 'قد تنفد حصة اليوم في منتصف الطريق، فيعطيك التنزيل الجزء الأول ويكمل غدًا من حيث توقف.',
+    exportStart: 'نزّل ملفات البحث',
+    exportStarting: 'جارٍ البدء…',
+    exportCancel: 'أوقف',
+    exportProgress: function (file, rows, pct) { return iso(file) + ': ' + c(rows, ['صف واحد', 'صفّان', 'صفوف', 'صفًّا']) + ' · ' + pct + ' من التنزيل'; },
+    exportZipping: 'تُجمع الملفات معًا…',
+    exportDone: function (name, size) { return 'جاهز: ' + iso(name) + ' (' + size + '). احفظه كما تحفظ سجلات المدرسة الأخرى.'; },
+    exportStopped: function (part, until, name, size) {
+      return 'أوشكت حصة القراءة المجانية لليوم على النفاد، فتوقف التنزيل. الجزء ' + part + ' جاهز: ' + iso(name) + ' (' + size + '). بعد الساعة ' + iso(until) +
+        ' (بتوقيت المدرسة) عد إلى هنا لتكمل بالجزء ' + (part + 1) + '.';
+    },
+    exportSave: 'احفظ الملف',
+    exportAgain: 'حاول مرة أخرى',
+    exportCancelled: 'توقف التنزيل، ولم يُحفظ شيء.',
+    exportDemo: 'لا تحوي الملفات التجريبية إلا لعب هذا الصباح.',
+    exportResume: function (range, file, day, part) { return 'توقف تنزيل الفترة ' + range + ' في ' + iso(file) + ' يوم ' + day + '. ويكمل الجزء ' + part + ' من هناك.'; },
+    exportContinue: function (part) { return 'أكمل: الجزء ' + part; },
+    exportForgetPart: 'ابدأ من جديد بدلًا من ذلك',
+    sizeMb: function (v) { return v + ' ميغابايت'; },
+    sizeKb: function (v) { return v + ' كيلوبايت'; },
+    dictTitle: 'قاموس البيانات',
+    dictIntro: 'معنى كل عمود في الملفات. وفي التنزيل الجدول نفسه باسم dictionary.csv.',
+    dictFile: 'الملف',
+    dictColumn: 'العمود',
+    dictType: 'النوع',
+    dictUnit: 'الوحدة',
+    dictValues: 'القيم',
+    dictMeaning: 'المعنى',
+    dictSource: 'مصدره',
+    dictAvailable: 'يُملأ في',
+    dictTypes: { code: 'رمز', text: 'نص', category: 'إحدى القيم', integer: 'عدد صحيح', decimal: 'عدد', flag: '0 أو 1', date: 'تاريخ', time: 'وقت', datetime: 'تاريخ ووقت (UTC)' },
+    available: { 'all games': 'كل الألعاب', 'DDA games': 'الألعاب التي تتكيّف', 'games with a score': 'الألعاب ذات النتيجة', 'tutorial games': 'الألعاب ذات الدرس التعليمي',
+      'games with frames': 'الألعاب التي ترسل سلاسة الصورة' },
+    childTitle: 'بيانات طفل واحد',
+    childIntro: 'لحذف بيانات طفل (حين يطلب ولي الأمر ذلك مثلًا) أو لضم رمزين للطفل نفسه، اكتب الرمز الذي تعرضه صفحة المعلم لذلك الطفل.',
+    childFind: 'ابحث',
+    childWrong: 'حرف واحد خاطئ؛ تحقّق من الرمز.',
+    childNoneInPeriod: function (q) { return 'لم يلعب في هذه الفترة أي رمز طالب يبدأ بـ ' + iso(q) + '. اكتب الرمز كاملًا، أو اختر فترة أطول في الأعلى.'; },
+    studentUnknown: 'لا يحتفظ الخادم بشيء تحت هذا الرمز.',
+    lastPlayedOn: function (d) { return 'آخر لعب ' + d; },
+    nLinked: function (k) { return c(k, ['رمز مربوط واحد', 'رمزان مربوطان', 'رموز مربوطة', 'رمزًا مربوطًا']); },
+    removedOn: function (d) { return 'حُذف الملف من جهازه في ' + d; },
+    cameBackDays: 'عادوا في يوم آخر',
+    cameBackDaysHint: function (two, all) { return 'لعبها ' + n(two) + ' من أصل ' + c(all, ['طالب واحد', 'طالبين', 'طلاب', 'طالبًا']) + ' في يومين أو أكثر'; },
+    keepTooBig: 'لا تتسع الـ 500 ميغابايت المجانية لعامين دراسيين من لعب هذه المدرسة، فتبقى البيانات عامًا دراسيًا واحدًا.',
+    settingFailed: 'لم يُحفظ. حاول مرة أخرى بعد دقيقة.',
     footer: 'لا تُجمع الأسماء. يظهر كل طفل يختار حيوانه برمز مثل «الطالب ' + iso('7F3A') + '»، ويُحسب لعب الضيوف معًا. الطفل الذي يلعب على جهازين يظهر طالبين، إلا إذا أعطى المعلم الملفين الرمز نفسه أو ربطتهما هنا.'
   };
 

@@ -60,7 +60,7 @@
       if (info) h('p', { class: 'note' }, head, [info.cats.map(ctx.categoryName).join(' · '), T.players(info.players), T.inputStyle[info.input] || ''].filter(Boolean).join(' · '));
       if (!g) { ctx.note(view, T.gameNoPlay, 'empty'); return; }
       var rows = ctx.failed(game) ? [] : R.statRows(game.stats);
-      tiles(ctx, head, k, g, rows);
+      tiles(ctx, head, k, g, rows, game);
       if (ctx.failed(game)) ctx.missing(view, game);
       else whoPlays(ctx, view, game);
       levels(ctx, view, k, slug, game);
@@ -76,7 +76,7 @@
     }
   };
 
-  function tiles(ctx, parent, k, g, rows) {
+  function tiles(ctx, parent, k, g, rows, game) {
     var T = ctx.t(), h = ctx.h, I = ctx.I, R = ctx.R, has = ctx.has;
     var box = h('div', { class: 'tiles', id: 'game-tiles' }, parent);
     ctx.tile(box, 'students', T.tileStudents, has(g.students) ? I.int(g.students) : '—', '', T.gameStudentsHint, has(g.students) ? g.students : null);
@@ -85,8 +85,16 @@
     ctx.tile(box, 'opens', T.tileOpens, I.int(g.opens || 0), '', T.tileOpensHint, g.opens || 0);
     var perVisit = has(g.avgEngagedSecPerOpen) ? g.avgEngagedSecPerOpen / 60 : null;
     ctx.tile(box, 'perVisit', T.minutesPerVisit, perVisit == null ? '—' : I.short(perVisit), perVisit == null ? '' : T.minutesUnit, T.minutesPerVisitHint, perVisit);
-    var back = I.returning({ games: [g] }, 1).rows[0];
-    ctx.tile(box, 'cameBack', T.cameBack, back ? I.pct(back.share) : '—', '', T.cameBackHint, back ? back.share : null);
+    // Came back another day: the students who played it on 2 days or more (an older
+    // server: the opens by children who had opened it before).
+    var bands = !ctx.failed(game) && (game.bands || []).filter(function (b) { return has(b.twoDays) && has(b.students); });
+    if (bands && bands.length) {
+      var who = bands.reduce(function (a, b) { return a + b.students; }, 0), two = bands.reduce(function (a, b) { return a + b.twoDays; }, 0);
+      ctx.tile(box, 'cameBack', T.cameBackDays, who ? I.pct(two / who) : '—', '', T.cameBackDaysHint(two, who), who ? two / who : null);
+    } else {
+      var back = I.returning({ games: [g] }, 1).rows[0];
+      ctx.tile(box, 'cameBack', T.cameBack, back ? I.pct(back.share) : '—', '', T.cameBackHint, back ? back.share : null);
+    }
     var hearts = g.hearts ? (g.hearts.on || 0) - (g.hearts.off || 0) : null;
     ctx.tile(box, 'hearts', T.heartsCol, hearts == null ? '—' : I.int(hearts), '', hearts == null ? '' : T.heartsHint(g.hearts.on || 0, g.hearts.off || 0), hearts);
     // A bounce: a visit under 30 seconds with no finished round (closed days only).

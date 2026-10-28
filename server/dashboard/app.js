@@ -25,7 +25,7 @@
   var KEY = { lang: 'sg:dash:lang', theme: 'sg:dash:theme', token: 'sg:dash:token', tab: 'sg:dash:tab', period: 'sg:dash:period' };
   var TOP = 10;
   var GUEST_ADVICE = 0.25;   // a quarter of the play time or more as a guest: ask children to tap their animal
-  var CODE_RE = /^(?:[0-9a-f]{12}|c[0-9a-f]{4})$/, SLUG_RE = /^[a-z0-9-]{1,40}$/;
+  var CODE_RE = /^[0-9a-f]{12}$/, SLUG_RE = /^[a-z0-9-]{1,40}$/;
 
   var I = window.SGInsights, R = window.SGResearch, C = window.SGCharts, TEXT = window.SGDashText, h = C.h;
   var TABS_IMPL = window.SGTabs = window.SGTabs || {};
@@ -52,7 +52,7 @@
     period: 30, custom: null, customError: null, band: 'all',
     route: { tab: 'overview', arg: '', parent: 'overview' },
     live: null, liveAt: null, viewAt: null,
-    clock: null, settings: null, clockPosted: false, clockOpen: false, clockNotice: null,
+    clock: null, settings: null, clockPosted: false, clockOpen: false, clockNotice: null, zoneMoved: false,
     loading: false, seq: 0, gen: 0, notice: null, signinError: null,
     views: {}, cache: {}, demoCache: {},
     tables: {}, expanded: {}, choice: {}, sort: {}, page: {}, search: '', game: 'all'
@@ -150,7 +150,7 @@
         return res.json().catch(function () { return null; }).then(function (json) {
           if (res.status === 401) throw new Failure('wrong', 401);
           // 404 is "the password was never set", or an older server without this endpoint.
-          if (res.status === 404) throw new Failure(json && json.error === 'admin password not set' ? 'notSet' : 'missing', 404);
+          if (res.status === 404) throw new Failure(json && json.error === 'admin password not set' ? 'notSet' : 'missing', 404, json);
           if (res.status === 429) throw new Failure('busy', 429, json);
           if (res.status === 503 && json && json.error === 'updating') throw new Failure('updating', 503, json);
           if (!res.ok || !json) throw new Failure('server', res.status, json);
@@ -160,10 +160,31 @@
         });
       });
   }
+  // One page of a research file (GET /v1/admin/export): { text, next, rows }, its lines
+  // without a header and the cursor of the next page (null on the last one). Errors as for
+  // request(); 429 carries the guard's answer ({ error: 'reads', until }).
+  function requestPage(path, token) {
+    return fetch(api + path, { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store', credentials: 'omit' })
+      .catch(function () { throw new Failure('network'); })
+      .then(function (res) {
+        if (res.ok) {
+          return res.text().then(function (text) {
+            return { text: text, next: res.headers.get('X-Next') || null, rows: Number(res.headers.get('X-Rows')) || 0 };
+          });
+        }
+        return res.json().catch(function () { return null; }).then(function (json) {
+          if (res.status === 401) throw new Failure('wrong', 401);
+          if (res.status === 404) throw new Failure(json && json.error === 'admin password not set' ? 'notSet' : 'missing', 404, json);
+          if (res.status === 429) throw new Failure('busy', 429, json);
+          if (res.status === 503 && json && json.error === 'updating') throw new Failure('updating', 503, json);
+          throw new Failure('server', res.status, json);
+        });
+      });
+  }
   function failureText(f) {
     var T = t();
     if (f && f.kind === 'network') return T.errNetwork;
-    if (f && f.kind === 'missing') return T.oldServer;
+    if (f && f.kind === 'missing') return f.body && f.body.error === 'student' ? T.studentUnknown : T.oldServer;
     if (f && f.kind === 'demoMissing') return T.demoMissing;
     if (f && f.kind === 'updating') return T.errUpdating;
     if (f && f.kind === 'busy') return f.body && f.body.error === 'reads' ? T.errReads(f.body.until || '') : f.body && f.body.error === 'writes' ? T.errWrites : T.errBusy;
@@ -183,8 +204,9 @@
     if (name === 'stats') put('slug', q.slug);
     return '/v1/admin/' + name + (parts.length ? '?' + parts.join('&') : '');
   }
-  // Demo mode: the bundled answers (demo/), fetched once each; the band and metric
-  // filters the server would apply are applied here.
+  // Demo mode: the bundled answers (demo/, written by make-demo.mjs from the real
+  // server), fetched once each; the band, metric and game filters the server would apply
+  // are applied here.
   function demoFile(name, q) {
     var p = DEMO_PERIODS.indexOf(state.period) >= 0 ? state.period : 30;
     if (name === 'kpis') return 'kpis-' + p + '-' + (q.band && q.band !== 'all' && q.band !== 'unknown' ? q.band : 'all') + '.json';
@@ -209,7 +231,7 @@
       if (name === 'stats') {
         var cols = json.columns, ai = cols.indexOf('a'), mi = cols.indexOf('metric'), si = cols.indexOf('slug');
         return Object.assign({}, json, { rows: json.rows.filter(function (r) {
-          return q.metrics.indexOf(r[mi]) >= 0 && (!band || r[ai] === band) && (q.slug == null || r[si] === q.slug || (r[mi] === 'flow' && r[cols.indexOf('k1')] === q.slug));
+          return q.metrics.indexOf(r[mi]) >= 0 && (!band || r[ai] === band) && (q.slug == null || r[si] === q.slug);
         }) });
       }
       return json;
@@ -309,7 +331,7 @@
     }
     var rebuild = state.settings && state.settings.rebuild;
     if (rebuild && Number(rebuild.pending) > 0) {
-      h('p', { class: 'clock-note', role: 'status' }, box, T.rebuildProgress(Number(rebuild.done) || 0, (Number(rebuild.done) || 0) + Number(rebuild.pending)));
+      h('p', { class: 'clock-note', role: 'status' }, box, T.rebuildProgress(Number(rebuild.done) || 0, (Number(rebuild.done) || 0) + Number(rebuild.pending), state.zoneMoved));
     } else if (state.clockNotice) h('p', { class: 'clock-note', role: 'status' }, box, state.clockNotice);
     if (state.clockOpen && !state.demo) zonePicker(box, 'clockPanel', function () { state.clockOpen = false; renderClock(); if ($('clockChange')) $('clockChange').focus(); });
   }
@@ -354,6 +376,8 @@
       if (token !== state.token) return;
       state.settings = settings;
       if (settings.clock) setClock(settings.clock);
+      // Past days now move to the new clock (the progress line says so).
+      if (body.tz) state.zoneMoved = true;
       state.clockOpen = false;
       state.clockNotice = done;
       renderClock();
@@ -553,7 +577,7 @@
   function signOut(reason) {
     state.token = null; state.live = null; state.viewAt = null; state.seq++; state.gen++;
     state.views = {}; state.cache = {};
-    state.clock = null; state.settings = null; state.clockPosted = false; state.clockOpen = false; state.clockNotice = null;
+    state.clock = null; state.settings = null; state.clockPosted = false; state.clockOpen = false; state.clockNotice = null; state.zoneMoved = false;
     save(KEY.token, null);
     clearView();
     showSignIn(reason ? { kind: reason } : null);
@@ -908,6 +932,7 @@
     I: I, R: R, C: C, h: h,
     t: t, rtl: rtl, lang: function () { return state.lang; }, state: state,
     get: get, part: part, failed: failed, request: function (path, method, body) { return request(path, state.token, method, body); },
+    requestPage: function (path) { return requestPage(path, state.token); }, store: { load: load, save: save },
     range: range, today: today, weekStart: weekStart, demo: function () { return state.demo; },
     route: function () { return state.route; }, settings: function () { return state.settings; }, live: function () { return state.live; },
     gameName: gameName, gameInfo: function (slug) { return own(INFO, slug); }, categoryName: categoryName, knownSlugs: knownSlugs,
