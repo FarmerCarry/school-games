@@ -49,7 +49,7 @@ const FIELDS = {
     ['minutes', 'round(x.ms / 60000.0, 1)'], ['rounds', 'x.rounds'], ['wins', 'x.w'], ['losses', 'x.l'], ['quits', 'x.q'],
     ['games_tried', 'g.games'], ['favourite_game', 'g.top'], ['pcs', '(SELECT COUNT(*) FROM st_student_pcs p WHERE p.u = x.u)'],
     ['known_before', `CASE WHEN t.u IS NOT NULL THEN date(${L('t.first_s')}, 'unixepoch', '-' || IFNULL(t.age_days_first, 0) || ' days') < ${dayOf(L, 't.first_s')} END`],
-    ['removed_day', `CASE WHEN t.removed_s IS NOT NULL THEN ${dayOf(L, 't.removed_s')} END`]
+    ['removed_day', `CASE WHEN t.removed_s >= t.last_s THEN ${dayOf(L, 't.removed_s')} END`]
   ],
   sessions: L => [
     ['session', 's.s'], ['student', 's.u'], ['student_linked', LINKED('s')], ['pc', 's.p'],

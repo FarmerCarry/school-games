@@ -1381,6 +1381,31 @@ test('the students come in pages of at most a set size of JSON (D1 refuses a val
   assert.equal((await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-20&after=zz')).status, 400);
 });
 
+test('a removed profile is removed until its code plays again: a code a teacher moved to another PC is not removed by the old PC', async t => {
+  const s = await studentDays(t);
+  const removed = async () => {
+    const list = (await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-20')).json().students;
+    const one = (await s.admin(`/v1/admin/student?u=${U3}&from=2026-10-19&to=2026-10-20`)).json().student;
+    const res = await s.admin('/v1/admin/export?file=students&from=2026-10-19&to=2026-10-20');
+    const line = res.text.split('\n').find(l => l.startsWith(U3 + ','));
+    return [list.find(x => x.u === U3).removed, one.removed, line.split(',').at(-1)];
+  };
+  // At 10:00 the teacher moved U3's profile to P2 and took it off its old PC, where the next
+  // session (another child's) records the removal.
+  s.clock.now = START + 3600000;
+  assert.equal((await s.post(envelope3('b20000000007', [ss3(0, 3, 1), ['pr', 0, U3], ['lv', 1, 4]], { u: U1, z: '' }))).status, 204);
+  assert.deepEqual(await removed(), ['2026-10-20', '2026-10-20', '2026-10-20'], 'not seen since');
+  // At 11:00 U3 plays on P2.
+  s.clock.now = START + 2 * 3600000;
+  assert.equal((await s.post(envelope3('b20000000008', [ss3(0, 7, 1), ...visit(1, 'road-hopper', 2, 60000)], { u: U3, p: P2, a: '6-7', z: '' }))).status, 204);
+  assert.deepEqual(await removed(), [null, null, ''], 'a later session of the code: it was not removed everywhere');
+  // At 12:00 P2 removes it too: the latest removal counts.
+  s.clock.now = START + 3 * 3600000;
+  assert.equal((await s.post(envelope3('b20000000009', [ss3(0, 3, 1), ['pr', 0, U3], ['lv', 1, 4]], { u: U5, p: P2, z: '' }))).status, 204);
+  assert.deepEqual(await removed(), ['2026-10-20', '2026-10-20', '2026-10-20']);
+  assert.equal((await s.rows('st_students')).find(r => r.u === U3).removed_s, Math.floor((START + 3 * 3600000) / 1000) - 6);
+});
+
 test('forget removes a student\'s group of codes with their facts and per-student rollups; school totals keep the play until a recount', async t => {
   const s = await studentDays(t);
   // Another child's session on U2's PC removed U2's profile there.

@@ -107,7 +107,7 @@ const STUDENTS_ANSWER = (L, scope) => {
     "substr(MAX(printf('%011d', t.last_s) || t.band_last), 12) AS band, substr(MIN(printf('%011d', t.first_s) || t.band_first), 12) AS band_first, " +
     `date(${L('MIN(t.first_s)')}, 'unixepoch') AS first_day, date(${L('MAX(t.last_s)')}, 'unixepoch') AS last_day, ` +
     `MIN(date(${L('t.first_s')}, 'unixepoch', '-' || IFNULL(t.age_days_first, 0) || ' days')) AS made_day, ` +
-    `MIN(CASE WHEN t.removed_s IS NOT NULL THEN date(${L('t.removed_s')}, 'unixepoch') END) AS removed_day ` +
+    `CASE WHEN MAX(t.removed_s) >= MAX(t.last_s) THEN date(${L('MAX(t.removed_s)')}, 'unixepoch') END AS removed_day ` +
     'FROM codes JOIN st_students t ON t.u = codes.u GROUP BY 1), ' +
     `page AS MATERIALIZED (SELECT c, o, SUM(length(o)) OVER (ORDER BY c) AS size FROM (SELECT s.c AS c, ${jsonObject([['u', 's.c'],
       ['label', 'COALESCE(w.label, upper(substr(s.c, 1, 4)))'],
@@ -133,14 +133,15 @@ const STUDENTS_KEPT = (L, scope) => `INSERT INTO kpi_cache (key, made, rows) SEL
 // the canonical code's label (a prefix of it), the band of the latest and of the first
 // session, the first and last day of play on the school's clock (L: the wide scope's wall
 // clock), the start of the earliest profile (its first session's day less the profile's
-// age then), the first removal from a PC, and the PCs played on.
+// age then), the latest removal from a PC when no code of the student played after it, and
+// the PCs played on.
 const GROUPS_INFO = L => `WITH p AS (SELECT ${CANON('x')} AS c, COUNT(DISTINCT x.p) AS n, json_group_array(DISTINCT upper(substr(x.p, 1, 4))) AS labels ` +
   `FROM st_student_pcs x${LINKS('x')} WHERE x.u IN ${IN_JSON(1)} GROUP BY 1), ` +
   `t AS (SELECT ${CANON('t')} AS c, COALESCE(MAX(CASE WHEN al.u_new IS NULL THEN t.label END), upper(substr(${CANON('t')}, 1, 4))) AS label, ` +
   "substr(MAX(printf('%011d', t.last_s) || t.band_last), 12) AS band, substr(MIN(printf('%011d', t.first_s) || t.band_first), 12) AS band_first, " +
   `date(${L('MIN(t.first_s)')}, 'unixepoch') AS first_day, date(${L('MAX(t.last_s)')}, 'unixepoch') AS last_day, ` +
   `MIN(date(${L('t.first_s')}, 'unixepoch', '-' || IFNULL(t.age_days_first, 0) || ' days')) AS made_day, ` +
-  `MIN(CASE WHEN t.removed_s IS NOT NULL THEN date(${L('t.removed_s')}, 'unixepoch') END) AS removed_day ` +
+  `CASE WHEN MAX(t.removed_s) >= MAX(t.last_s) THEN date(${L('MAX(t.removed_s)')}, 'unixepoch') END AS removed_day ` +
   `FROM st_students t${LINKS('t')} WHERE t.u IN ${IN_JSON(1)} GROUP BY 1) ` +
   "SELECT json_group_object(t.c, json_array(t.label, t.band, t.band_first, t.first_day, t.last_day, t.made_day, t.removed_day, IFNULL(p.n, 0), " +
   "json(IFNULL(p.labels, '[]')))) AS info FROM t LEFT JOIN p ON p.c = t.c";

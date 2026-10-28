@@ -771,7 +771,7 @@ a refresh on any instance sends kept text.
       "games": 10, "top": ["rail-rush", "block-burst", "tunnel-blitz"],   // games tried; the top 3 by minutes
       "pcs": 1,                                // PCs it ever played on
       "knownBefore": true,                     // the profile was made before its first play here
-      "removed": null,                         // the first day a PC removed the profile
+      "removed": null,                         // the day of the latest removal from a PC, while no code of the student played after it
       "weekly": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9.4, 9.3, 12.2] }   // minutes in each of the 13 school weeks ending with to's week
   ],
   "clock": { "tz": "Asia/Riyadh", "source": "pcs", "offsetMin": 180, "today": "2026-10-29" } }
@@ -944,6 +944,9 @@ player), `handover`, `idle`; `error` `timeout`, `script`, `load`; `outcome` and
 `heart_off`, `tutorial_start`, `tutorial_done`, `timer_start`, `timer_cancel`,
 `timer_end`, `profile_removed`, `linked`, with `value` the new level, the timer's
 minutes, or the removed or linked code. Flags are `0` or `1`.
+`removed_day` is the day of the code's latest removal from a PC, empty once the code
+played after it (a teacher moved the profile to another PC); every removal stays in
+`events` as `profile_removed`.
 
 #### `POST /v1/admin/forget`
 

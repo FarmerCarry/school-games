@@ -301,9 +301,11 @@ const STUDENT_PC = 'INSERT OR IGNORE INTO st_student_pcs (u, p, first_s) SELECT 
 const GAMES_SET = [['rounds', 'MAX(rounds, excluded.rounds)'], ['first_s', 'MIN(first_s, excluded.first_s)']];
 const STUDENT_GAMES = `INSERT INTO st_student_games (u, slug, rounds, first_s) SELECT ?2, value ->> 0, value ->> 1, (${START}) + (value ->> 2) ` +
   `FROM json_each(?3) WHERE true ON CONFLICT (u, slug) DO UPDATE SET ${assign(GAMES_SET)} WHERE ${unchanged(GAMES_SET)}`;
-// W9: profiles removed on this PC ([code, t]); the first removal is kept.
-const REMOVED = `UPDATE st_students SET removed_s = (${START}) + (SELECT value ->> 1 FROM json_each(?2) WHERE value ->> 0 = st_students.u LIMIT 1) ` +
-  'WHERE removed_s IS NULL AND u IN (SELECT value ->> 0 FROM json_each(?2))';
+// W9: profiles removed on this PC ([code, t]); the latest removal is kept, and the answers
+// show it only while no session of the code came after it (a code a teacher moved to another
+// PC goes on there after its old PC removed it).
+const REMOVED = `UPDATE st_students SET removed_s = r.t FROM (SELECT value ->> 0 AS u, (${START}) + MAX(value ->> 1) AS t FROM json_each(?2) GROUP BY 1) r ` +
+  'WHERE st_students.u = r.u AND (st_students.removed_s IS NULL OR st_students.removed_s < r.t)';
 // W10: older codes of this student (?2), linked to its canonical code, one hop deep: links
 // to an old code move to the canonical one, and a link that would form a cycle is refused.
 const CANONICAL = 'COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2), ?2)';

@@ -291,10 +291,13 @@ test('a student\'s first and last play, bands, age and PCs come from the session
     age_days_first: 49, removed_s: null }]);
   assert.deepEqual(await s.rows('st_student_pcs', 'p'), [{ u: U1, p: P2, first_s: last }, { u: U1, p: P1, first_s: first }]);
   assert.deepEqual((await s.rows('st_pcs', 'p')).map(pc => [pc.p, pc.first_s, pc.last_s]), [[P2, last, last], [P1, first, first]]);
-  // A profile removed on a PC: its student is marked once, at the time of the first removal.
+  // A profile removed on a PC: its student is marked at the time of the latest removal, which
+  // an older one arriving later does not move back.
   await s.ingest(v3('ab0000000003', [ss3(), ['pr', 30, U1]], { u: U2, w: 40 }), T0 + 2000);
   await s.ingest(v3('ab0000000004', [ss3(), ['pr', 50, U1], ['pr', 51, 'c0ffee000000']], { u: U2, w: 60 }), T0 + 3000);
-  assert.equal((await s.rows('st_students')).find(r => r.u === U1).removed_s, R0 + 2 - 40 + 30);
+  assert.equal((await s.rows('st_students')).find(r => r.u === U1).removed_s, R0 + 3 - 60 + 50);
+  await s.ingest(v3('ab0000000005', [ss3(), ['pr', 1, U1]], { u: U2, w: 2000 }), T0 + 4000);
+  assert.equal((await s.rows('st_students')).find(r => r.u === U1).removed_s, R0 + 3 - 60 + 50);
   assert.equal((await s.rows('st_students')).find(r => r.u === U2).removed_s, null);
   assert.equal((await s.rows('st_students')).length, 2, 'an unknown removed code adds no student');
 });
