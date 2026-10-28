@@ -1206,9 +1206,12 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
   /* ---------------------------------------------- periods and kept parts */
   // A period's days from..to (YYYY-MM-DD, the school's): the rolled days (read from the
   // rollups), and the days after them (from the facts), with the UTC seconds [lo, hi) they
-  // span and the SQL scope of their clock.
-  function spans(from, to) {
-    const { tz, factsSince, rolledThrough } = conf;
+  // span and the SQL scope of their clock. Today is never a rolled day: after the school's
+  // clock moves west, the day rolled last can be today again, and its roll is then out of
+  // date (it is rolled again once it is over).
+  function spans(from, to, now) {
+    const { tz, factsSince } = conf, yesterday = addDays(today(now), -1);
+    const rolledThrough = conf.rolledThrough && conf.rolledThrough > yesterday ? yesterday : conf.rolledThrough;
     const rolled = rolledThrough && from <= rolledThrough ? [from, rolledThrough < to ? rolledThrough : to] : null;
     const start = [from, factsSince, rolledThrough ? addDays(rolledThrough, 1) : ''].reduce((x, y) => x > y ? x : y);
     if (start > to) return { rolled, open: null, bounds: null, scope: null };
@@ -1237,12 +1240,13 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     while (kept.size > KEPT_CAP) kept.delete(kept.keys().next().value);
   }
   // The keys of an answer's kept parts (§F.4, "Caching"): the closed part (when there is
-  // one) under [endpoint, params..., rv], the open part under the same and its slot of
-  // openCacheMs (never kept when that is 0). raw: the parts are JSON text, kept as it is.
+  // one: its days) under [endpoint, params..., its days, rv], the open part under
+  // [endpoint, params..., rv] and its slot of openCacheMs (never kept when that is 0). raw:
+  // the parts are JSON text, kept as it is.
   function partKeys(params, closed, open, now, { raw = false } = {}) {
     const { rv } = conf, slot = openCacheMs > 0 ? Math.floor(now / openCacheMs) : -1;
     return {
-      closed: closed ? { key: JSON.stringify([...params, rv]), until: now + CLOSED_KEEP_MS, rv, raw } : null,
+      closed: closed ? { key: JSON.stringify([...params, closed, rv]), until: now + CLOSED_KEEP_MS, rv, raw } : null,
       open: open && slot >= 0 ? { key: JSON.stringify([...params, rv, slot]), until: (slot + 1) * openCacheMs, rv, raw } : null
     };
   }
@@ -1300,7 +1304,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     await ensure(now);
     const { legacyUntil, rv } = conf;
     const legacy = legacyUntil && from <= legacyUntil ? [from, legacyUntil < to ? legacyUntil : to] : null;
-    const { rolled, open, bounds, scope } = spans(from, to);
+    const { rolled, open, bounds, scope } = spans(from, to, now);
     const answerKey = partKeys(['kpis-answer', from, to, band], null, true, now, { raw: true }).open;
     if (answerKey) {
       const { found } = await lookup([answerKey], now, { links: false });
@@ -1308,8 +1312,8 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     }
     // One batch: the closed part and its students, made and kept unless they are kept
     // already; the groups and the extras of the whole answer; and its students. An empty range is '1'..'0'.
-    const none = ['1', '0'], closedKey = legacy || rolled ? JSON.stringify(['kpis', from, to, band, rv]) : '';
-    const studentsKey = closedKey ? JSON.stringify(['kpis-students', from, to, band, rv]) : '', work = [];
+    const none = ['1', '0'], closedKey = legacy || rolled ? JSON.stringify(['kpis', from, to, band, legacy, rolled, rv]) : '';
+    const studentsKey = closedKey ? JSON.stringify(['kpis-students', from, to, band, rolled, rv]) : '', work = [];
     if (closedKey) {
       const values = [...(legacy || none), band, ...(rolled || none), closedKey, rv, studentsKey];
       work.push(bound(CLOSED_PART[legacyUntil ? 1 : 0], values), bound(CLOSED_STUDENTS, values));

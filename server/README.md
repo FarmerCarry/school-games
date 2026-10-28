@@ -740,7 +740,8 @@ Anything else is `400 {"error": "<field>"}`; another media type `415`.
   guard) to the new clock: the 5-minute cron rebuilds them one at a time, newest first,
   as far as each UTC day's writes leave room (see *Rollups* under Operations: at a busy
   school about one day a school day, more at weekends), and `rebuild` shows how far it
-  is. The facts never change.
+  is. The facts never change. A day that is today again on the new clock (the clock moved
+  west after it was rolled) is read from the facts until it is over, then rebuilt.
 * The week start follows the zone while `weekSource` is `auto` (Sunday in Riyadh, Cairo
   and the other zones `clock.mjs` lists, Monday elsewhere); `weekStart` sets it for good.
 * `keepDays` overrides `RETENTION_DAYS`: 400 days (a school year and the summer) or 760

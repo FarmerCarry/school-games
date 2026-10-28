@@ -244,7 +244,7 @@ export async function exportPage(ctx, { file, from, to, after = null }, now, lim
     // The daily files look at a window of days from the cursor's day; the others at the period.
     const start = cursor && WINDOW_DAYS[file] && cursor[1] > from ? cursor[1] : from;
     end = WINDOW_DAYS[file] ? [addDays(start, WINDOW_DAYS[file] - 1), to].sort()[0] : to;
-    const span = ctx.spans(start, end), scope = span.open ? span.scope : null;
+    const span = ctx.spans(start, end, now), scope = span.open ? span.scope : null;
     const days = [...(span.rolled || ['1', '0']), ...(span.bounds || [0, 0])];
     if (file === 'students') [text, values] = [STUDENTS_PAGE(L, scope), [...days, cursor ? cursor[1] : '', size + 1]];
     else if (file === 'pcs') [text, values] = [PCS_PAGE(L, scope), [...days, cursor ? cursor[1] : '', size + 1, lo, hi]];

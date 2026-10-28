@@ -357,7 +357,7 @@ export function adminViews(ctx) {
   async function students({ from, to, band, after = null }, now = Date.now()) {
     await ensure(now);
     const conf = ctx.conf(), ws = conf.weekStart === 'sun' ? 0 : 1, w0 = addDays(weekOf(to, ws), -12 * 7), start = from < w0 ? from : w0;
-    const weeks = spans(start, to);
+    const weeks = spans(start, to, now);
     const out = (text, next) => answer(now, { range: range(from, to, band), students: new JsonText(text), ...(next ? { next } : {}) });
     const page = text => { const at = text.indexOf(' '); return out(text.slice(at + 1), text.slice(0, at)); };
     const answerKey = partKeys(['students-answer', from, to, band, ws, after], null, true, now, { raw: true }).open;
@@ -387,7 +387,7 @@ export function adminViews(ctx) {
   // a loss. Answers { error: 'student', status: 404 } for a code the server does not know.
   async function student({ u, from, to }, now = Date.now()) {
     await ensure(now);
-    const ws = ctx.conf().weekStart === 'sun' ? 0 : 1, period = spans(from, to);
+    const ws = ctx.conf().weekStart === 'sun' ? 0 : 1, period = spans(from, to, now);
     const keys = partKeys(['student', u, from, to], period.rolled, period.open, now);
     let { closed, open, aliases } = await kept(keys, now);
     const g = groups(aliases), c = g.of(u), codes = json([c, ...g.linked(c)]), L = wide(now).local, who = { info: {} };
@@ -477,7 +477,7 @@ export function adminViews(ctx) {
   }
   async function game({ slug, from, to, band }, now = Date.now()) {
     await ensure(now);
-    const period = spans(from, to), keys = partKeys(['game', slug, from, to, band], period.rolled, period.open, now, { raw: true });
+    const period = spans(from, to, now), keys = partKeys(['game', slug, from, to, band], period.rolled, period.open, now, { raw: true });
     let { closed, open } = await kept(keys, now, { links: false });
     const third = Math.floor(daysBetween(from, to) / 3), t1 = addDays(from, third - 1), t2 = addDays(to, 1 - third);
     const bands = json(band === null ? ALL_BANDS : [band]), metrics = json(METRICS);
@@ -559,7 +559,7 @@ export function adminViews(ctx) {
     // metric over months has thousands of rows, too many to parse and write again in 10 ms.
     // Its columns: the keys and the sums the metrics have.
     const sums = STAT_SUMS.filter(c => metrics.some(metric => METRIC_SUMS[metric].includes(c)));
-    const period = spans(from, to), keys = partKeys(['stats', from, to, band, metrics.join(','), slug], period.rolled, null, now, { raw: true });
+    const period = spans(from, to, now), keys = partKeys(['stats', from, to, band, metrics.join(','), slug], period.rolled, null, now, { raw: true });
     let closed = keys.closed && ctx.keptHere(keys.closed.key, now);
     if (keys.closed && !closed) {
       const values = [json(dayList(...period.rolled)), json(band === null ? ALL_BANDS : [band]), json(metrics), slug, keys.closed.key, ctx.conf().rv];
@@ -581,14 +581,14 @@ export function adminViews(ctx) {
     const out = answer(now, { range: range(from, to, band), weekStart: conf.weekStart, cohorts: [] });
     if (!conf.v3Since || first > to) return out;
     const epoch = weekOf(first, ws), lastWeek = weekOf(to, ws), end = addDays(lastWeek, 13 * 7 - 1);
-    const period = spans(epoch, end), keys = partKeys(['cohorts', from, to, band], period.rolled, null, now);
+    const period = spans(epoch, end, now), keys = partKeys(['cohorts', from, to, band], period.rolled, null, now);
     let { closed } = await kept(keys, now);
     if (period.rolled && !closed) {
       const values = [...period.rolled, band, epoch, 0, Math.round((Date.parse(lastWeek) - Date.parse(epoch)) / (7 * DAY_MS))];
       await perform([[bound(COHORTS(wide(now).local), values), r => { closed = r.results.map(row => [row.cohort, row.k, row.n]); }]], now);
       await keepParts([[keys.closed, closed]], now);
     }
-    const weeks = new Map(), reached = conf.rolledThrough;
+    const weeks = new Map(), reached = period.rolled ? period.rolled[1] : '';
     for (const [w0, k, n] of closed || []) {
       const week = addDays(epoch, w0 * 7);
       const c = weeks.get(week) || weeks.set(week, { week, size: 0, active: Array.from({ length: 13 }, (_, i) => addDays(week, i * 7) <= reached ? 0 : null) }).get(week);
@@ -603,7 +603,7 @@ export function adminViews(ctx) {
   // responses, failures, profiles; its zone and build, and flags.
   async function pcs({ from, to }, now = Date.now()) {
     await ensure(now);
-    const period = spans(from, to), keys = partKeys(['pcs', from, to], period.rolled, period.open, now);
+    const period = spans(from, to, now), keys = partKeys(['pcs', from, to], period.rolled, period.open, now);
     let { closed, open } = await kept(keys, now);
     const lo = ctx.bounds(from).lo, hi = ctx.bounds(to).hi, tasks = [];
     const make = scope => {

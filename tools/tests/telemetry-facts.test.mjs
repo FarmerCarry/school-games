@@ -622,3 +622,34 @@ test('a PC linking a code (cd) raises the rollup version, so kept KPIs count bot
   await s.ingest(v3('fb0000000004', [ss3(), ['cd', 0, U3]], { u: U1 }), night + 7 * 3600000);
   assert.equal(Number((await s.settings()).rv), rv + 1);
 });
+
+test('a school clock moved west after the UTC day was rolled: today is read from the facts, and rolled again only once it is over', async () => {
+  const s = open();
+  const D0 = Date.parse('2026-10-20T10:00:00Z'), H = 3600000;
+  await ready(s.store, D0);
+  const play = (sid, slug, ms, u) => v3(sid, [ss3(), ['go', 1, 1, slug, 'catalog', 0, 0], ['gx', 60, 1, slug, ms, z6, z4]], { u });
+  await s.ingest(play('fc0000000001', 'road-hopper', 60000, U1), D0);
+  await s.ingest(play('fc0000000002', 'road-hopper', 60000, U2), D0 + DAY_MS);
+  // On UTC, the cron rolls 20 and 21 October by 01:00 UTC on the 22nd.
+  for (let t = D0 + DAY_MS / 2; t <= Date.parse('2026-10-22T02:00:00Z'); t += 5 * MIN) await s.store.rollupStep(t);
+  assert.equal((await s.settings()).rolled_through, '2026-10-21');
+  // At 03:00 UTC (23:00 on the 21st in New York) the owner sets the school's zone: today there is the 21st again.
+  const T = Date.parse('2026-10-22T03:00:00Z');
+  await s.store.updateSettings({ tz: 'America/New_York' }, T);
+  assert.equal(s.store.today(T), '2026-10-21');
+  await s.ingest(play('fc0000000003', 'maze-dash', 300000, U3), T + 20 * MIN);
+  const day = async (at, slug) => {
+    const k = await s.store.kpis({ from: '2026-10-20', to: '2026-10-21' }, at);
+    return [k.daily.find(d => d.day === '2026-10-21').sessions, k.games.find(g => g.slug === slug)?.sessions ?? 0];
+  };
+  assert.deepEqual(await day(T + 25 * MIN, 'maze-dash'), [2, 1], 'today, from the facts');
+  // The cron does not roll the 21st while it lasts; a child plays at 23:50 New York time.
+  const kinds = [];
+  for (let t = T + 25 * MIN; t < T + H; t += 5 * MIN) { const r = await s.store.rollupStep(t); if (r.rolled === '2026-10-21') kinds.push(r.kind); }
+  assert.deepEqual(kinds, []);
+  await s.ingest(play('fc0000000004', 'maze-dash', 300000, '2c3d4e5f6071'), T + 50 * MIN);
+  // From midnight in New York it rebuilds the 21st, with every session of it.
+  for (let t = T + H; t <= T + 2 * H; t += 5 * MIN) { const r = await s.store.rollupStep(t); if (r.rolled === '2026-10-21') kinds.push(r.kind); }
+  assert.deepEqual(kinds, ['full']);
+  assert.deepEqual(await day(T + 2 * H, 'maze-dash'), [3, 2]);
+});
