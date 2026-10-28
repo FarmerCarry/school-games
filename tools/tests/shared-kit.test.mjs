@@ -677,7 +677,7 @@ test('v2: Kit.dda keeps guests of different bands apart', () => {
   assert.deepEqual(Object.keys(JSON.parse(h.values.get('sg:g:dda'))), ['_6-7', '_10-11']);
 });
 
-test('v2: Kit.dda keeps one state per player, at most 24 players, reloads on player change and resets', () => {
+test('v2: Kit.dda keeps one state per player, a full PC\'s 24 profiles beside its guests, reloads on player change and resets', () => {
   const h = harness(), dda = h.Kit.dda('g'), other = h.Kit.dda('g', {id: 'boss'});
   preferences(h, {band: '8-9', player: 'p1'});
   dda.result(true); other.result(false);
@@ -691,14 +691,18 @@ test('v2: Kit.dda keeps one state per player, at most 24 players, reloads on pla
   preferences(h, {player: 'p1'});
   assert.equal(dda.level, p1, 'back to the first player');
   assert.deepEqual(JSON.parse(h.values.get('sg:g:dda')), {p1: {main: [0.43, 1], boss: [0.25, 1]}, p2: {main: [0.25, 1]}});
-  // A full PC has 24 profiles (js/profiles.js): every one of them keeps its level.
-  for (let i = 3; i <= 28; i++) { preferences(h, {player: 'p' + i}); dda.result(true); }
+  // A full PC has 24 profiles (js/profiles.js): every one of them keeps its level, and so
+  // do the guests of every band beside them.
+  for (let i = 3; i <= 26; i++) { preferences(h, {player: 'p' + i}); dda.result(true); }
+  for (const band of ['', '6-7', '8-9', '10-11']) { preferences(h, {player: '', band}); dda.result(true); }
+  preferences(h, {band: '8-9'});
   let saved = JSON.parse(h.values.get('sg:g:dda'));
-  assert.deepEqual(Object.keys(saved), Array.from({length: 24}, (_, i) => 'p' + (i + 5)));
+  assert.deepEqual(Object.keys(saved), [...Array.from({length: 24}, (_, i) => 'p' + (i + 3)), '_', '_6-7', '_8-9', '_10-11'], 'guests push no profile out');
+  // Only beyond that (a removed profile's key, say) is the least recently saved player dropped.
   preferences(h, {player: 'p5'}); dda.result(true);
   preferences(h, {player: 'p29'}); dda.result(true);
   saved = JSON.parse(h.values.get('sg:g:dda'));
-  assert.deepEqual([Object.keys(saved).length, Object.keys(saved)[0], Object.keys(saved).slice(-2)], [24, 'p7', ['p5', 'p29']], 'the least recently saved player is dropped');
+  assert.deepEqual([Object.keys(saved).length, Object.keys(saved)[0], Object.keys(saved).slice(-2)], [28, 'p4', ['p5', 'p29']], 'the least recently saved player is dropped');
   preferences(h, {player: 'p5'});
   assert.equal(dda.level, 0.471, 'p5 kept both results');
   dda.reset();

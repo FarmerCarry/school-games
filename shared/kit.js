@@ -314,13 +314,14 @@
     }
     // Every read (level, tier, value, pick) reports the tier and the level for the round events.
     function read() { var l = now(); Kit.track.tier(t = 1 + Math.floor(l * tiers * 0.9999)); dl = Math.round(l * 1000); return l; }
-    // The player just written moves last, so the 24 most recent players (a full PC) are kept.
+    // The player just written moves last, so the 28 most recent players are kept: a full
+    // PC's 24 profiles and the guests of each band ('_' keys, at most 4).
     function save() {
       var all = obj(store.get('dda')), k = key(), mine = obj(all[k]);
       delete all[k];
       if (n) mine[id] = [level, n]; else delete mine[id];
       all[k] = mine;
-      for (var keys = Object.keys(all); keys.length > 24;) delete all[keys.shift()];
+      for (var keys = Object.keys(all); keys.length > 28;) delete all[keys.shift()];
       store.set('dda', all);
     }
     var dda = {

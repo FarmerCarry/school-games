@@ -135,8 +135,9 @@ dda.reset()
   `tier = 1 + floor(level * tiers * 0.9999)`.
 * **Storage:** `Kit.store(slug)` key `dda` →
   `{ <player, or '_' + band for a guest>: { <id>: [level rounded to 3 decimals, n] } }`;
-  at most 24 players kept, a full PC (the least recently saved is dropped; game pages
-  built before milestone 2.5 still keep 16). A change of player
+  at most 28 players kept: a full PC's 24 profiles and the guests of each band (the least
+  recently saved is dropped; game pages built before milestone 2.5 still keep 16). A
+  change of player
   (or, for a guest, of band) reloads the state. A player with no results yet follows
   the current band's seed.
 * Every read of the controller (`level`, `tier`, `value`, `pick`) reports the tier to
