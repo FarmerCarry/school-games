@@ -1086,6 +1086,17 @@ test('the Games tab: a card per game, a game\'s page, and the game picker', asyn
     assert.equal(await page.locator('#' + id).count(), 1, id);
   }
   assert.match(await page.locator('#game-score').textContent(), /The score here is the stars of a finished level/);
+  // How far children get: the children who played each level (the game answer's first-win
+  // rows count each child once), never more than played the game.
+  const who = Object.fromEntries(call.json.firstWin.map(f => [f.id, f.students]));
+  const levels = k.levels.filter(l => l.slug === 'bubble-bop').sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
+  assert.ok(levels.length >= 2 && levels.every(l => who[l.id] != null));
+  await page.click('#funnel-card .table-toggle');
+  const funnel = await page.locator('#funnel-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [tr.children[0].textContent, tr.children[1].textContent]));
+  assert.deepEqual(funnel, levels.map(l => [I.levelLabel(l.id, 'en'), who[l.id].toLocaleString('en-US')]));
+  const players = k.games.find(g => g.slug === 'bubble-bop').students;
+  assert.ok(levels.every(l => who[l.id] <= players), 'a level never has more children than the game');
+  assert.match(await page.locator('#funnel-card .card-sub').textContent(), /Students who played each level/);
   // Only the measures this game reports are offered.
   const NAMES = { accuracy: 'Accuracy', reaction: 'Reaction time', winRate: 'Won (of finished)', score: 'Average score', timeToWin: 'Time to win' };
   const reported = R.measuresOf(R.pick(R.statRows(call.json.stats), 'attempt')).filter(m => NAMES[m]).map(m => NAMES[m]);

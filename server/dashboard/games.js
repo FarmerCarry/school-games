@@ -149,15 +149,22 @@
     var sec = ctx.section(parent, 'game-levels', T.levelByLevel);
     if (list.length < 2) { ctx.note(ctx.card(sec, 'funnel-card', null, null, false).chart, T.oneLevel); }
     else {
-      var c = ctx.card(sec, 'funnel-card', T.funnelTitle, T.funnelSub, true);
-      var count = function (l) { return ctx.has(l.students) ? l.students : l.starts || 0; };
+      // The children of each level: the game answer's first-win rows count each child once.
+      // (The KPI answer's level students are summed day by day: a child on two days counts
+      // twice.) Without them for every level, the funnel is drawn by tries.
+      var who = {};
+      if (!ctx.failed(game)) (game.firstWin || []).forEach(function (f) { if (f && ctx.has(f.students)) who[f.id] = f.students; });
+      var byStudents = list.every(function (l) { return ctx.has(who[l.id]); });
+      var students = function (l) { return byStudents ? who[l.id] : null; };
+      var c = ctx.card(sec, 'funnel-card', T.funnelTitle, byStudents ? T.funnelSub : T.funnelSubTries, true);
+      var count = function (l) { return byStudents ? who[l.id] : l.starts || 0; };
       var max = Math.max.apply(null, list.map(count).concat([1]));
       var shown = ctx.top('funnel', list, 12);
       ctx.draw(function () {
         if (c.chart.hidden) return;
         C.barList(c.chart, { name: T.funnelTitle, rtl: ctx.rtl(), color: 'var(--s1)', max: max, rows: shown.map(function (l) {
-          return { label: I.levelLabel(l.id, lang), value: count(l), valueText: ctx.has(l.students) ? T.nStudents(l.students) : T.nTries(l.starts || 0),
-            chip: ctx.chipFor(l.students, l.starts), tip: { title: I.levelLabel(l.id, lang), note: ctx.chipFor(l.students, l.starts, true), rows: [
+          return { label: I.levelLabel(l.id, lang), value: count(l), valueText: byStudents ? T.nStudents(who[l.id]) : T.nTries(l.starts || 0),
+            chip: ctx.chipFor(students(l), l.starts), tip: { title: I.levelLabel(l.id, lang), note: ctx.chipFor(students(l), l.starts, true), rows: [
               { value: T.nTries(l.starts || 0) }, { value: I.pct(l.winRate), label: T.winRate }, { value: I.int(l.unended || 0), label: T.unended }] } };
         }) });
       });
@@ -166,7 +173,7 @@
         { label: T.outcome.lost, num: true }, { label: T.leftUnfinished, num: true }, { label: T.unended, num: true }],
       list.map(function (l) {
         var cd = l.codes || {};
-        return [I.levelLabel(l.id, lang), ctx.has(l.students) ? I.int(l.students) : '—', I.int(l.starts), I.int(cd.w), I.int(cd.l), I.int(cd.q), I.int(l.unended || 0)];
+        return [I.levelLabel(l.id, lang), byStudents ? I.int(who[l.id]) : '—', I.int(l.starts), I.int(cd.w), I.int(cd.l), I.int(cd.q), I.int(l.unended || 0)];
       }));
       // How each level's rounds end: one stacked bar per level (won, lost, left unfinished, other).
       var o = ctx.card(sec, 'level-outcomes', T.levelOutcomes, null, true);

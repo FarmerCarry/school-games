@@ -270,13 +270,15 @@
     });
   }
 
-  // Levels most often left unfinished.
+  // Levels most often left unfinished. A level's students in the KPI answer are summed day
+  // by day (a child who played it on two days counts twice), so they are no count of
+  // children: a level's small-sample chip rests on its tries alone.
   function stuckLevels(kpis, minTries) {
     const min = minTries == null ? T.STUCK_MIN_TRIES : minTries;
     const rows = list(kpis && kpis.levels).filter(shown).map(l => {
       const starts = num(l.starts) || 0, quits = num(l.codes && l.codes.q) || 0;
       return { slug: l.slug, id: l.id, starts, quits, rate: starts ? quits / starts : null, sessions: num(l.sessions) || 0,
-        students: num(l.students), small: small(l.students, starts) };
+        students: null, small: small(null, starts) };
     }).filter(l => l.starts >= min && l.quits > 0)
       .sort((a, b) => b.rate - a.rate || b.quits - a.quits || b.starts - a.starts || byLevel(a, b));
     return { rows };

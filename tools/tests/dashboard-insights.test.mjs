@@ -178,6 +178,14 @@ test('every group is described, even one child, with the small-sample flag', () 
   assert.ok(I.favourites(one).rows.some(g => g.slug === 'echo' && g.opens === 1 && g.small === true));
   assert.ok(I.difficultyGrid(one).rows.some(r => r.slug === 'echo' && r.verdict.code === 'few' && r.small === true));
   assert.equal(I.stuckLevels(one, 1).rows.find(l => l.slug === 'echo').small, true);
+  // A level's students in the KPI answer are summed day by day (one child on two days counts
+  // twice), so they never name a number of children: the chip of a level rests on its tries.
+  const days = sample();
+  days.levels.push({ ...level('foxtrot', 'L1', 40, 20), students: 8 }, { ...level('foxtrot', 'L2', 12, 6), students: 3 });
+  const fox = I.stuckLevels(days, 1).rows.filter(l => l.slug === 'foxtrot');
+  assert.deepEqual(fox.map(l => [l.id, l.students, l.small]), [['L1', null, false], ['L2', null, true]]);
+  const said = I.insights(days, { lang: 'en' }).find(x => x.key === 'foxtrot L1');
+  assert.ok(said && said.students === null && !said.small, 'no child count in the sentence');
   assert.equal(I.favouritesByBand(one)[0].small, true, '2 students in the age group');
   assert.equal(I.favouritesByBand(one)[1].band, '10-11', 'an older server\'s group without numbers is left out, not described');
   // The rule: fewer than 5 students or fewer than 20 tries; a count not sent says nothing.
