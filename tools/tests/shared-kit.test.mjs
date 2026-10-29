@@ -51,11 +51,48 @@ test('loading Kit alone never signals game readiness; failure prevents a later f
   h.sent.length = 0;
   h.window.emit('message', {source: h.window.parent, data: {type: 'sg:request-ready'}});
   assert.equal(h.sent[0].type, 'sg:ready');
+  const failed = harness();
+  failed.window.emit('error', {target: {tagName: 'SCRIPT'}});
+  failed.window.emit('unhandledrejection', {reason: 'also'});
+  failed.Kit.ready();
+  failed.window.emit('message', {source: failed.window.parent, data: {type: 'sg:request-ready'}});
+  assert.deepEqual(failed.sent, [{type: 'sg:error', version: 1, message: 'Game script failed to load'}]);
+});
+
+test('after ready a stray error warns at most once per 10 s and a burst pauses before it fails', () => {
+  const clock = {now: 0}, h = harness({clock}), order = [];
+  h.Kit.lifecycle({
+    reset() { order.push('reset'); },
+    pause(reason) { order.push(reason); if (reason === 'error' && order.length === 2) throw new Error('save hook'); }
+  });
+  h.Kit.ready();
   h.sent.length = 0;
-  h.window.emit('error', {target: {tagName: 'SCRIPT'}});
+  h.window.emit('error', {message: 'stray', error: {message: 'x'.repeat(300)}});
+  h.window.emit('unhandledrejection', {reason: 'again'});
+  h.window.emit('error', {target: {tagName: 'IMG'}});
+  assert.equal(h.sent.length, 1);
+  assert.equal(h.sent[0].type, 'sg:warn');
+  assert.equal(h.sent[0].message.length, 240);
+  assert.deepEqual(order, [], 'one warning does not pause or fail the game');
   h.Kit.ready();
   h.window.emit('message', {source: h.window.parent, data: {type: 'sg:request-ready'}});
-  assert.deepEqual(h.sent.map(m => m.type), ['sg:error']);
+  assert.ok(h.sent.filter(m => m.type === 'sg:ready').length >= 1, 'the game stays ready');
+  clock.now = 10000;
+  h.window.emit('error', {message: 'later'});
+  assert.deepEqual(h.sent.filter(m => m.type === 'sg:warn').map(m => m.message), ['x'.repeat(240), 'later']);
+  for (let i = 0; i < 3; i++) h.window.emit('error', {message: 'burst ' + i});
+  assert.equal(h.sent.filter(m => m.type === 'sg:error').length, 0, 'four errors in the window are still warnings');
+  h.window.emit('error', {message: 'burst fatal'});
+  assert.deepEqual(order, ['reset', 'error']);
+  assert.equal(h.sent.at(-1).type, 'sg:error');
+  assert.equal(h.sent.at(-1).message, 'burst fatal');
+  assert.deepEqual(h.sent.map(m => m.type).filter(type => type === 'sg:stats' || type === 'sg:telemetry'), [], 'handlers post no statistics');
+  const after = h.sent.length;
+  h.window.emit('error', {message: 'too late'});
+  h.window.emit('unhandledrejection', {reason: 'too late'});
+  h.Kit.fail('again');
+  h.Kit.ready();
+  assert.equal(h.sent.length, after, 'a failed game reports nothing further');
 });
 
 test('focus, visibility and portal escape clear held inputs before semantic pause without auto resume', () => {
@@ -309,8 +346,12 @@ test('stats: one 10 s timer chain starts at the first Kit.ready() and stops once
   assert.equal(statsOf(h).length, 1, 'no post without unsent data');
   assert.deepEqual([pending(h), h.delays], [1, [10000, 10000, 10000]], 'each tick schedules exactly one more');
   h.window.emit('keydown', {code: 'KeyA'}); clock.now = 5000;
-  h.window.emit('error', {message: 'boom'}); h.Kit.ready();
-  assert.deepEqual(h.sent.map(m => m.type).slice(-1), ['sg:error'], 'error handlers post no statistics');
+  const before = h.sent.length;
+  h.window.emit('error', {message: 'boom'});
+  assert.deepEqual(h.sent.slice(before).map(m => m.type), ['sg:warn'], 'a runtime warning posts no statistics');
+  assert.equal(pending(h), 1, 'one warning does not stop the statistics timer');
+  h.Kit.fail('boom');
+  assert.equal(h.sent.at(-1).type, 'sg:error', 'Kit.fail posts no statistics');
   runTimers(h);
   assert.equal(pending(h), 0, 'the chain stops after a failure');
   assert.equal(h.sent.at(-1).type, 'sg:error');

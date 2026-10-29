@@ -1065,6 +1065,14 @@
       sendPreferences();
       if (sessionExpired) showHandoff(); else focusGame();
     } else if (type === 'sg:error') failFrame(f, 'x');
+    else if (type === 'sg:warn') noteGameWarn(e.data);
+  }
+  // A stray error after the game is ready. Count it on this page only: the
+  // text is not stored or sent, and the iframe is left alone.
+  var gameWarns = 0;
+  function noteGameWarn(data) {
+    gameWarns++;
+    try { window.__sgWarns = { n: gameWarns, last: String(data && data.message || '').slice(0, 240) }; } catch (e) { /* diagnostics stay local */ }
   }
   function failFrame(f, kind) {
     if (frameEl() !== f) return;

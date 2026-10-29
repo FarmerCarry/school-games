@@ -106,11 +106,12 @@ Only when embedded in the portal, and only when something changed:
 * when the game is paused for any reason, and on `pagehide`;
 * every 10 seconds while there is unsent data, from one `setTimeout` chain started the
   first time `Kit.ready()` runs (later `Kit.ready()` calls do not start another) and
-  stopped once the game has failed;
+  stopped once the game has failed (`Kit.fail`, a startup error, or a burst of
+  runtime errors). A single error after `sg:ready` does not stop it;
 * at once when 32 events are waiting.
 
 Kit never posts at load, never inside `Kit.ready()` itself, never adds fields to
-`sg:ready`, and never posts from its error handlers.
+`sg:ready`, and never posts statistics from its error or warning handlers.
 
 **Size budget:** the Kit side adds at most about 900 minified bytes to every game. Kit
 does not clean ids or clamp numbers; it sends `String(id).slice(0, 24)` and the first
@@ -168,7 +169,13 @@ The recorder is about 6 KB minified; the portal's current size and limit are in 
   bucket by engaged time: under 1 minute, 1–5, 5–15, 15 or more. Sessions that never
   reached `sg:ready` count as *never started*, kept apart from the buckets.
 * **Failures.** `sg:error` counts an error and a 20-second timeout counts a timeout
-  (no text is stored). Neither closes the session; Retry continues it.
+  (no text is stored). Neither closes the session; Retry continues it. An error
+  before `sg:ready` is `sg:error`, and the portal removes the frame. After ready,
+  Kit posts `sg:warn` instead, at most one every 10 seconds. The portal counts that
+  warning in memory for the open page (`window.__sgWarns` is `{ n, last }`). It
+  leaves the iframe up and stores nothing. Five errors within 10 seconds are fatal:
+  Kit runs the game's pause and reset hooks so it can save, then posts `sg:error`,
+  and the frame comes down as before. A warning is not an error count or a timeout.
 * **Unclosed sessions.** The open session is mirrored in `sg:site:stats:live`, with its
   open round and that round's `om`. If the portal finds one on load (the PC was switched
   off, the tab was killed), it closes it from the stored values first; the open round
