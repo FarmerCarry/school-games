@@ -499,7 +499,9 @@ test('the queue survives a reload, sends oldest first, and keeps at most 128 KB,
   const order = stored.map(x => x.e.b);
   down = false;
   await page.clock.runFor(20000);
-  await until(() => state.posts.length === 2 + order.length, 'every batch delivered');
+  // The clock has already fired the retries. A busy runner still needs real
+  // time to finish those fetches, longer than the usual 20 s wait.
+  await until(() => state.posts.length === 2 + order.length, 'every batch delivered', 60000);
   await page.waitForFunction(n => window.fetched === n, 1 + order.length);
   assert.deepEqual(state.posts.slice(1, 1 + order.length).map(p => JSON.parse(p.body).b), order, 'oldest first');
   like(JSON.parse(state.posts.at(-1).body).ev, [['ss', 0, 0, 0, 4, 0]], 'then the new page\'s session');

@@ -634,3 +634,21 @@ Thumbnails remain the largest part of the portal (about 256 KB). The offline cac
 grows by 73,195 bytes (1.4%). No request, font, library or third-party code is added
 to any child's page, and with `SG_TELEMETRY_URL` unset the built site makes no network
 request at all.
+
+## Lucky Lake on Kit v2, 28 October 2026
+
+بحيرة الحظ joins the re-platformed arcade. The fishing game is unchanged. The page
+inlines Kit v2 and drops its music loop, so only the short catch cues remain. The
+portal picks up one catalog entry and the lake thumbnail.
+
+The game page still fits the 135,000 limit it already had. The portal and the
+offline cache do not: the portal was 1,900 bytes over 394,000, and the precache was
+113,072 bytes over 5,290,000. Both limits move up only far enough to leave about a
+thousand bytes.
+
+| Measurement | Bytes | Limit |
+| --- | ---: | ---: |
+| Lucky Lake built page | 121,395 | 135,000 (unchanged) |
+| Teacher page | 91,504 | 96,000 (unchanged) |
+| Portal, thumbnail inlined | 395,900 | 397,000 (was 394,000, +3,000) |
+| Offline precache, 49 files | 5,403,072 | 5,405,000 (was 5,290,000, +115,000) |

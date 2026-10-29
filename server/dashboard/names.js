@@ -15,6 +15,7 @@ window.SG_GAME_NAMES = {
   "drift-king": ["ملك الانزلاق","Drift King"],
   "fire-and-ice": ["النار والجليد","Fire & Ice"],
   "hoop-heads": ["سلة الرؤوس الكبيرة","Hoop Heads"],
+  "lucky-lake": ["بحيرة الحظ","Lucky Lake"],
   "maze-dash": ["اندفاع المتاهة","Maze Dash"],
   "merge-2048": ["دمج 2048","2048"],
   "moto-madness": ["جنون الدراجات","Moto Madness"],
