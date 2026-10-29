@@ -115,16 +115,42 @@
     ready = true;
     tellPortal({ type: 'sg:ready', version: 1 });
   };
+  function errorText(error) {
+    return String(error && error.message || error || 'Game failed to initialize').slice(0, 240);
+  }
   Kit.fail = function (error) {
+    if (failed) return;
     failed = true;
-    tellPortal({ type: 'sg:error', version: 1, message: String(error && error.message || error || 'Game failed to initialize').slice(0, 240) });
+    tellPortal({ type: 'sg:error', version: 1, message: errorText(error) });
   };
+  // Before ready, any error still fails the handshake. Afterwards one stray
+  // exception must not throw the run away: warn the portal at most once per
+  // 10 s. Five in that window pause first (games save from that hook), then fail.
+  var warnAt = -1, recent = [], reporting = false;
+  function runtimeError(error) {
+    if (failed || reporting) return;
+    if (!ready) return Kit.fail(error);
+    var t = clock();
+    recent = recent.filter(function (x) { return t - x < 10000; });
+    recent.push(t);
+    if (recent.length >= 5) {
+      reporting = true;
+      lifecycleHandlers.slice().forEach(function (hooks) {
+        try { if (hooks.reset) hooks.reset(); } catch (e) { /* keep going */ }
+        try { hooks.pause('error'); } catch (e) { /* a save hook must not hide the failure */ }
+      });
+      return Kit.fail(error);
+    }
+    if (warnAt >= 0 && t - warnAt < 10000) return;
+    warnAt = t;
+    tellPortal({ type: 'sg:warn', version: 1, message: errorText(error) });
+  }
   listen('error', function (e) {
     // Capture script download failures as well as exceptions. Optional media do
     // not make a successfully initialized game fail its readiness handshake.
-    if (e.message || (e.target && e.target.tagName === 'SCRIPT')) Kit.fail(e.error || e.message || 'Game script failed to load');
+    if (e.message || (e.target && e.target.tagName === 'SCRIPT')) runtimeError(e.error || e.message || 'Game script failed to load');
   });
-  window.addEventListener('unhandledrejection', function (e) { Kit.fail(e.reason); });
+  window.addEventListener('unhandledrejection', function (e) { runtimeError(e.reason); });
   window.addEventListener('blur', function () { suspend('blur'); });
   document.addEventListener('visibilitychange', function () { if (document.hidden) suspend('hidden'); });
   var wasFullscreen = !!document.fullscreenElement;
