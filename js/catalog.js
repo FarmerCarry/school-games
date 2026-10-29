@@ -142,6 +142,10 @@ window.GAMES = [
     controls: [{ keys: ['←', '↑', '→', '↓'], action: 'توجيه' }, { keys: ['W', 'A', 'S', 'D'], action: 'توجيه' }, { keys: ['الفأرة'], action: 'اتبع المؤشر' }] },
   { slug: 'snake-arena', roundMinutes: [3, 8], inputStyle: 'mixed', title: 'ساحة الثعابين', en: 'Snake Arena', tags: 'دودة slither', cats: ['battle', 'arcade'], players: '1', color: '#8e44ff',
     blurb: 'كُل النقاط المضيئة، اكبر، وحاصر 15 ثعبانًا لتصبح ملك الساحة!',
-    controls: [{ keys: ['الفأرة'], action: 'وجّه الثعبان' }, { keys: ['انقر'], action: 'تسريع (اضغط مطولًا)' }, { keys: ['مسافة'], action: 'تسريع' }, { keys: ['←', '→'], action: 'لفّ يسارًا ويمينًا' }, { keys: ['A', 'D'], action: 'لفّ يسارًا ويمينًا' }] }
+    controls: [{ keys: ['الفأرة'], action: 'وجّه الثعبان' }, { keys: ['انقر'], action: 'تسريع (اضغط مطولًا)' }, { keys: ['مسافة'], action: 'تسريع' }, { keys: ['←', '→'], action: 'لفّ يسارًا ويمينًا' }, { keys: ['A', 'D'], action: 'لفّ يسارًا ويمينًا' }] },
+  { slug: 'egg-rush', roundMinutes: [5, 15], inputStyle: 'keyboard', title: 'سباق البيض', en: 'Egg Rush steal eggs pets tycoon', tags: 'بيض حيوانات فقس تايكون', cats: ['two-player', 'idle'], players: '1-2', color: '#ffd23f',
+    blurb: 'تسلّل إلى العشّ، اخطف البيضة، واهرب قبل أن يستيقظ الحارس! افقس حيوانات تجمع لك العملات!',
+    tip: 'الحارس يفتح عينه قبل أن يطاردك، راقب علامة ؟',
+    controls: [{ keys: ['W', 'A', 'S', 'D'], action: 'حركة' }, { keys: ['↑', '←', '↓', '→'], action: 'حركة' }, { keys: ['مسافة', 'E'], action: 'اخطف البيضة أو أفلتها' }, { keys: ['Q'], action: 'استخدم الأداة' }, { keys: ['انقر'], action: 'اجمع العملات وافتح المتجر' }, { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }] }
 ];
 

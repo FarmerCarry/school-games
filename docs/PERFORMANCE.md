@@ -634,3 +634,31 @@ Thumbnails remain the largest part of the portal (about 256 KB). The offline cac
 grows by 73,195 bytes (1.4%). No request, font, library or third-party code is added
 to any child's page, and with `SG_TELEMETRY_URL` unset the built site makes no network
 request at all.
+
+## Egg Rush on Kit v2, 28 October 2026
+
+سباق البيض (Egg Rush) joins the Kit v2 arcade as a 2D egg-and-pet run. It draws on
+one canvas, paints each pet and each egg once into an offscreen sprite, and keeps
+the meadow, beach and snow in one sheet that a frame only blits. Particles are
+capped at 64. There is no background music: the marimba loop is gone, and the
+short cues stay. Pixel ratio is capped at 1.5. Rounds still report through
+`Kit.stats` (so the portal can award XP) and the same `Kit.track` hit, miss and
+cue events a runner uses. The page limit stays 150,000.
+
+| Measurement | Bytes | Limit |
+| --- | ---: | ---: |
+| Egg Rush HTML | 133,777 | 150,000 (unchanged; was set at 150,000 for the ceremony) |
+| Portal (one more thumbnail and catalog entry) | 402,470 | 404,000 (was 394,000, +10,000) |
+| Offline precache, 49 files | 5,421,780 | 5,423,000 (was 5,290,000, +133,000) |
+| Teacher page | 91,260 | 96,000 (unchanged) |
+
+The built game is 133,777 bytes, 16,223 under its ceremony allowance, so that limit
+does not move. Kit v2 inlines into the page and the music loop comes out; the page
+is still inside 150,000. The portal was 392,040 / 394,000 before this game. The
+thumbnail and catalog row add 10,430 bytes, to 402,470, which is 8,470 over
+394,000, so the portal limit rises by 10,000 to 404,000 (1,530 bytes left). The
+precache was 5,276,735 / 5,290,000. The new game file adds 145,045 bytes, to
+5,421,780, which is 131,780 over 5,290,000, so the precache limit rises by 133,000
+to 5,423,000 (1,220 bytes left). The teacher page grows by 838 bytes to 91,260 and
+stays inside 96,000.
+

@@ -13,6 +13,7 @@ window.SG_GAME_NAMES = {
   "critter-mart": ["سوق الحيوانات","Critter Mart"],
   "dino-3d": ["الديناصور ثلاثي الأبعاد","Dino 3D"],
   "drift-king": ["ملك الانزلاق","Drift King"],
+  "egg-rush": ["سباق البيض","Egg Rush"],
   "fire-and-ice": ["النار والجليد","Fire & Ice"],
   "hoop-heads": ["سلة الرؤوس الكبيرة","Hoop Heads"],
   "maze-dash": ["اندفاع المتاهة","Maze Dash"],
