@@ -634,3 +634,23 @@ Thumbnails remain the largest part of the portal (about 256 KB). The offline cac
 grows by 73,195 bytes (1.4%). No request, font, library or third-party code is added
 to any child's page, and with `SG_TELEMETRY_URL` unset the built site makes no network
 request at all.
+
+## Key Runner on the re-platform, 28 October 2026
+
+عدّاء المفاتيح joins the Kit v2 site as the same candy-tower climb. The page inlines
+Kit v2 and keeps one-shot sound effects only. The portal also inlines its catalog
+row and thumbnail. Three.js stays the shared library already in the cache.
+
+| Measurement | Bytes | Limit | Raised by |
+| --- | ---: | ---: | ---: |
+| Key Runner | 79,257 | 112,000 | 0 (34,743 left) |
+| Teacher page | 91,350 | 96,000 | 0 |
+| Portal | 398,866 | 400,000 (was 394,000) | 6,000 |
+| Offline precache | 5,363,746 | 5,365,000 (was 5,290,000) | 75,000 |
+
+The game page itself fits the existing 112,000 cap. The portal was 392,040 / 394,000
+before this game and is 398,866 after the catalog row and thumbnail, 4,866 past
+394,000, so `portalBytes` is 400,000 (1,134 bytes left). The precache was 5,276,735
+/ 5,290,000. This game adds its 79,257-byte page plus those portal and teacher
+bytes, 87,011 in all, which is 73,746 past 5,290,000. `precacheBytes` is 5,365,000
+(1,254 bytes left). No other game's cap moved.

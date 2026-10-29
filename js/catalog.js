@@ -61,6 +61,17 @@ window.GAMES = [
     blurb: 'شارك رمز المسار مع أصدقائك، وتدرّب على القفز والانحناء لتتجاوز رقمك!',
     tip: 'اقفز فوق الصبّار والطيور المنخفضة، وانحنِ تحت الطيور المتوسطة. اضغط مطولًا لقفزة أعلى.',
     controls: [{ keys: ['مسافة', '↑'], action: 'اقفز (اضغط مطولًا لقفزة أعلى)' }, { keys: ['↓', 'Ctrl'], action: 'انحنِ أو انزل بسرعة' }, { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }, { keys: ['R'], action: 'أعد المسار نفسه بعد النتيجة أو أثناء التوقف' }] },
+  { slug: 'key-runner', roundMinutes: [5, 10], inputStyle: 'keyboard', title: 'عدّاء المفاتيح', en: 'Key Runner candy tower obby 3D parkour chocolate climb', tags: 'أوبي باركور مفاتيح برج حلوى ثلاثية الأبعاد', cats: ['two-player', 'challenge'], players: '1-2', color: '#ff6ad5',
+    blurb: 'اصعد برج مفاتيح الحلوى قبل أن ترتفع الشوكولاتة. ثمانية أعلام، وقت قصير.',
+    tip: 'المفتاح الذهبي يسرّعك لحظة. لا تقف، فالشوكولاتة تسرع إن توقفت.',
+    controls: [
+      { keys: ['W', 'A', 'S', 'D'], action: 'تحرّك' },
+      { keys: ['الأسهم'], action: 'تحرّك (أو اللاعب الثاني)' },
+      { keys: ['مسافة'], action: 'اقفز (اضغط مطولًا لقفزة أبعد)' },
+      { keys: ['Q', 'E'], action: 'أدر الكاميرا' },
+      { keys: ['R'], action: 'ارجع لآخر نقطة' },
+      { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }
+    ] },
   { slug: 'neon-slope', roundMinutes: [1, 3], inputStyle: 'keyboard', title: 'منحدر النيون', en: 'Neon Slope', cats: ['running', 'arcade'], players: '1', color: '#22e3a1', hot: true,
     blurb: 'تدحرج بسرعة على منحدر النيون، تفادَ الأحمر واقفز من المنصات!',
     controls: [{ keys: ['←', '→'], action: 'توجيه الكرة' }, { keys: ['A', 'D'], action: 'توجيه الكرة (بديل)' }] },
