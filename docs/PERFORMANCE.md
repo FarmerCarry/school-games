@@ -768,16 +768,21 @@ open portal tab moves to a newer verified build by itself on a quiet home screen
 (README, docs/ARCHITECTURE.md "Offline cache and updates"). Measured with the Linux
 minified build, against main at `b713f12`:
 
-* **The portal** grows by 1,048 bytes, from 396,335 to 397,383 of 398,000: +791 for
+* **The portal** grows by 1,216 bytes, from 396,335 to 397,551 of 398,000: +872 for
   `js/offline.js` (the quiet-screen plan, its timer, the once-per-tab memory in
-  sessionStorage and the hourly worker check) and +257 for `js/site.js`
-  (`SGUpdateQuiet()` and the pointer-move time). The added work is one timer while a
-  verified update waits, one passive `pointermove` listener that stores a number, and
-  at most one `registration.update()` an hour when the tab comes back into view.
-* **The offline cache** grows by the same 1,048 bytes, to 5,307,776 of 5,308,000.
-* **The worker** (`sw.js`, not precached) no longer deletes a partial cache. A resumed
-  install hashes the files the earlier attempt saved before skipping them, a disk read
-  of at most the precache size, and looks up every file once more before it takes over.
+  sessionStorage and in memory, the hourly worker check and the one on reconnecting)
+  and +344 for `js/site.js` (`SGUpdateQuiet()`, the pointer-move time and the idle
+  reset of a half-made player). The added work is one timer while a verified update
+  waits, one passive `pointermove` listener that stores a number, and at most one
+  `registration.update()` an hour when the tab comes back into view, plus one per
+  `online` event.
+* **The offline cache** grows by the same 1,216 bytes, to 5,307,944 of 5,308,000.
+* **The worker** (`sw.js`, not precached) no longer deletes its own partial cache; it
+  marks it with an empty `…|partial` cache until it is complete and deletes the
+  marked copies of other versions after copying from them, so a PC keeps one partial
+  copy at most. A resumed install hashes the files the earlier attempt saved before
+  skipping them, a disk read of at most the precache size, and looks up every file
+  once more before it takes over.
 
-Both measurements stay under their limits, so no limit changes; the portal keeps 617
-bytes and the offline cache 224, and the next change to either will need the rule above.
+Both measurements stay under their limits, so no limit changes; the portal keeps 449
+bytes and the offline cache 56, and the next change to either will need the rule above.
