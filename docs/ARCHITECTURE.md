@@ -65,12 +65,37 @@ js/profiles.js           SGProfiles — picture profiles without names, age band
 js/telemetry.js          SGTelemetry — the ONLY network sender: batches to the ingest URL
 js/stats.js              SGStats    — local play statistics v1 (unchanged format)
 js/site.js               portal shell, iframe host, routes, classroom tools
+js/offline.js            offline status and updates of the fast build (sw.js from tools/build.mjs)
 server/                  ingest + query service (Node ≥ 22, zero dependencies)
 ```
 
 Games never touch storage outside `Kit.store`, never use the network, and talk to
 the portal only through `postMessage` via Kit. The portal owns profiles, XP,
 statistics and the network.
+
+### Offline cache and updates (fast build only)
+
+The generated `sw.js` keeps every file of one build in the cache
+`sg-v2-<scope>|<version>`, each body checked against its SHA-256 prefix (`FILES`).
+
+* **Installs resume.** A failed or cut-off install keeps the verified files it saved
+  under the new version's name. The next attempt (the next visit, Retry, reconnecting,
+  or a newer version copying its unchanged files) hashes them again and downloads only
+  the rest, so a 5 MB update on a slow school line is not restarted from zero. The
+  worker activates only when every file is in its cache, and only the active worker of
+  a version reads that cache, so a partial copy is never reported ready or served.
+  Activation deletes the scope's other caches, partial ones included.
+* **Open tabs adopt a newer build by themselves.** When a newer complete version
+  controls an open portal, `js/offline.js` reloads that tab only while `SGUpdateSafe()`
+  holds (no game frame or play route, no classroom timer or its hand-over) and
+  `SGUpdateQuiet()` (js/site.js) reports the home screen with the "who's playing?"
+  strip in its list and at least 75 s without a key press, click, wheel, pointer move
+  or engaged play; the 20-minute idle hand-over is not use. It looks when the page
+  becomes visible, when the screen changes and on a timer, verifies the version again
+  right before reloading, and tries once per version and tab (sessionStorage
+  `sg:site:adopted`), so a mismatched build cannot loop. The «حدّث الصفحة الآن» button
+  stays on every screen but a game. A tab left open calls `registration.update()` when
+  it becomes visible, at most once an hour.
 
 ### Byte policy
 

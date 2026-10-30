@@ -760,3 +760,24 @@ above: the measured size rounded up to the next 1,000 bytes plus 1,000.
 | Offline precache | 5,306,831 | 5,296,000 | 5,308,000 |
 
 No other limit changes, and nothing is added to any page beyond the two Kit changes.
+
+## Resumed offline installs and automatic update adoption, 30 October 2026
+
+A failed or cut-off install of the offline cache now keeps the files it verified, and an
+open portal tab moves to a newer verified build by itself on a quiet home screen
+(README, docs/ARCHITECTURE.md "Offline cache and updates"). Measured with the Linux
+minified build, against main at `b713f12`:
+
+* **The portal** grows by 1,048 bytes, from 396,335 to 397,383 of 398,000: +791 for
+  `js/offline.js` (the quiet-screen plan, its timer, the once-per-tab memory in
+  sessionStorage and the hourly worker check) and +257 for `js/site.js`
+  (`SGUpdateQuiet()` and the pointer-move time). The added work is one timer while a
+  verified update waits, one passive `pointermove` listener that stores a number, and
+  at most one `registration.update()` an hour when the tab comes back into view.
+* **The offline cache** grows by the same 1,048 bytes, to 5,307,776 of 5,308,000.
+* **The worker** (`sw.js`, not precached) no longer deletes a partial cache. A resumed
+  install hashes the files the earlier attempt saved before skipping them, a disk read
+  of at most the precache size, and looks up every file once more before it takes over.
+
+Both measurements stay under their limits, so no limit changes; the portal keeps 617
+bytes and the offline cache 224, and the next change to either will need the rule above.
