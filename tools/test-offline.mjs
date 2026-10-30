@@ -104,19 +104,42 @@ async function update(page) {
   // Observe the worker's terminal install state instead of relying on a fixed delay.
   return page.evaluate(async () => {
     const registration = await navigator.serviceWorker.getRegistration();
-    let worker = registration.installing;
-    const found = () => { worker = registration.installing; };
-    registration.addEventListener('updatefound', found);
-    try { await registration.update(); worker ||= registration.installing; }
-    finally { registration.removeEventListener('updatefound', found); }
-    if (!worker) return registration.active?.state;
-    return new Promise(resolve => {
+    const settled = worker => new Promise(resolve => {
       const changed = () => {
         if (['activated', 'redundant'].includes(worker.state)) resolve(worker.state);
       };
       worker.addEventListener('statechange', changed);
       changed();
     });
+    // Reconnecting (js/offline.js) may be installing the version mounted before: let
+    // that attempt end, then ask for the version mounted now. An update() made while
+    // that job is still queued can be merged into it, so ask again before concluding
+    // that nothing newer is mounted.
+    if (registration.installing) await settled(registration.installing);
+    let worker = null;
+    const found = () => { worker = registration.installing; };
+    registration.addEventListener('updatefound', found);
+    try {
+      for (let i = 0; i < 4 && !worker; i++) {
+        if (i) await new Promise(resolve => setTimeout(resolve, 250));
+        await registration.update();
+        worker = registration.installing || worker;
+      }
+    } finally { registration.removeEventListener('updatefound', found); }
+    if (!worker) return registration.active?.state;
+    return settled(worker);
+  });
+}
+// Reconnecting asks for a newer worker by itself (js/offline.js): wait for that request
+// and for any install it started to end, so it cannot be taken for a later publish.
+async function reconnected(page, base, from) {
+  await waitFor(async () => hits.slice(from).some(url => url.startsWith(base + 'sw.js')), 'the reconnected portal asks for ' + base + 'sw.js');
+  await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    for (let quiet = 0; quiet < 10;) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      quiet = registration.installing ? 0 : quiet + 1;
+    }
   });
 }
 async function offlineReload(context, pages) {
@@ -457,8 +480,12 @@ try {
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await page.waitForFunction(() => document.getElementById('offlineStatus').dataset.state === 'ready');
     check(await page.locator('#offlineUpdate').isHidden(), 'failed upgrade never offers the incomplete version as an update');
+    const offlineFrom = hits.length;
     await offlineReload(context, [page]);
     check(await page.evaluate(version => window.SG_OFFLINE_VERSION === version, v2.version), 'the partial copy is never served: offline the PC keeps the complete version');
+    await reconnected(page, BASE, offlineFrom);
+    check(await page.evaluate(() => document.getElementById('offlineStatus').dataset.state === 'ready' && document.getElementById('offlineRetry').hidden),
+      'reconnecting asks for the cut-off update again by itself, with no Retry shown; it fails on the same blocked page');
     // The filter still blocks that game page when a newer build is published.
     mounts.set(BASE, v4.dir);
     check(await update(page) === 'redundant', 'a newer publish fails on the same blocked page');
@@ -466,17 +493,18 @@ try {
     check(!piled.caches.includes(cacheName(origin + BASE, v3)) && piled.counts[cacheName(origin + BASE, v4)] === v4.count - 1 &&
       piled.counts[cacheName(origin + BASE, v2)] === v2.count && piled.caches.filter(name => name.startsWith(cachePrefix(origin + BASE))).length === 3,
       'it takes over the older partial copy and deletes it: the complete version and one marked partial copy, no pile-up');
-    mounts.set(BASE, v3.dir); // that publish is rolled back
-    // A slow or flaky school line: the next attempt resumes instead of starting from zero.
+    // The filter is lifted (or a slow, flaky line comes back): the next attempt resumes
+    // instead of starting from zero.
     stalePath = null;
     hits.length = 0;
     check(await update(page) === 'activated', 'the next attempt completes the failed update');
     const resumed = hits.filter(url => url.includes('?sg='));
     check(resumed.length === 1 && resumed[0].startsWith(BASE + 'games/merge-2048/index.html?'), 'the next attempt downloads only the file still missing');
-    await installed(inspector, origin + BASE, v3);
-    check(!(await state(inspector, origin + BASE)).caches.includes(cacheName(origin + BASE, v2)), 'the completed version replaces the previous one');
+    await installed(inspector, origin + BASE, v4);
+    const replaced = await state(inspector, origin + BASE);
+    check(replaced.caches.filter(name => name.startsWith(cachePrefix(origin + BASE))).length === 1, 'the completed version replaces the previous one and is no longer marked partial');
     await offlineReload(context, [page]);
-    check(await page.evaluate(version => window.SG_OFFLINE_VERSION === version, v3.version), 'the resumed version works offline');
+    check(await page.evaluate(version => window.SG_OFFLINE_VERSION === version, v4.version), 'the resumed version works offline');
     await kill(inspector, page, origin + BASE, killBuild);
     check(true, 'kill switch unregisters its worker and removes its scoped cache');
     check(errors.length === 0, 'offline game initialization and updates have no page errors: ' + errors.join(' | '));
