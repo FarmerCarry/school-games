@@ -373,7 +373,7 @@ hook they do nothing while the sink is inert. A teacher's "same child as on anot
 on the teacher page (`js/teacher.js`, `docs/PLAY_STATS.md` section 3) writes `k[key]`, the
 same code in `g[key]` (given, not made here) and the older code in `l[key]`, unless that
 older code was itself given; the sink sends that `cd` at the profile's next session start
-and deletes `l[key]` once a batch holding it is answered with a 2xx. A removed profile
+and deletes `l[key]` once a batch holding it is delivered (the server's 204). A removed profile
 whose code was given sends no `pr`: the child plays on with it on the other PC. The check
 character the teacher page shows (Luhn mod 16) is never sent.
 
@@ -381,17 +381,33 @@ character the teacher page shows (Luhn mod 16) is never sent.
 first waiting event (or as often as the server's last `X-Batch-Every` asked, 20 to 600 s),
 and when the page is hidden, always by `fetch` without credentials
 (`credentials: 'omit'`: no cookie ever goes, so never by `sendBeacon`), with `keepalive`
-while the keepalive bodies in flight fit in 60 KB (the rest wait in the queue). Unsent
-batches are kept as `{ t, w0, e }` in `localStorage` `sg:site:tm:q3:<hash of the ingest
-URL>`, so another copy of the site on the same origin with another URL never sends them (at
-most 128 KB, at most 7 days old, oldest dropped first). Entries of wire version 2 that an
+while the keepalive bodies in flight fit in 60 KB (the rest wait in the queue). Every
+batch is kept as `{ t, w0, e }` in `localStorage` `sg:site:tm:q3:<hash of the ingest
+URL>` until the server's own answer delivers it, so another copy of the site on the same
+origin with another URL never sends them (at most 128 KB, at most 7 days old, oldest
+dropped first): a hidden or unloading page hands what waits to `fetch` but keeps it, and
+remembers for a minute what it sent so it never sends a batch twice in a row; a page that
+goes before the answer leaves the batch to the next page, which sends it again (the server
+de-duplicates v2 batch ids and writes v3 batches idempotently). Entries of wire version 2 that an
 older build queued in `sg:site:tm:q:<hash>` move into it and are still sent, unchanged; this
 build never writes that key, because a pre-v3 tab still open on the PC rewrites it with v2
-entries only. Stopping statistics or turning sharing off drops every `sg:site:tm:` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the
-batch; a 4xx other than 429 drops it as malformed; 429, 5xx and network errors retry.
-Teacher "clear" removes the `sg:site:tm:` queues too (not the sharing note
-`sg:site:tm:on`, and not `sg:site:rid`). All storage calls are wrapped; no `console`; never
-`clear()`.
+entries only. Stopping statistics or turning sharing off drops every `sg:site:tm:` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. Only the server's 204
+delivers a batch and only its JSON error (`{ "error": … }`) to a 4xx other than 429 drops it
+as malformed; anything else (429, 5xx, a school filter's or captive portal's own page, even
+a 200 or a 403, no answer) keeps it and retries. A clear (`statsmeta.clearedAt`) dated
+after the PC's clock is ignored. Teacher "clear" removes the `sg:site:tm:` queues too (not
+the notes `sg:site:tm:on` and `sg:site:tm:dx`, and not `sg:site:rid`). All storage calls
+are wrapped; no `console`; never `clear()`.
+
+**Delivery status for the teacher:** the sink keeps `sg:site:tm:dx` (the address; the last
+delivery; the first failure since, and the latest failure's kind: `network`, `server` or
+`refused`). `teacher.html` loads the same `js/telemetry.js` in check mode
+(`<meta name="sg-telemetry" content="check">`): no session, no event, no listener, no
+write; `SGTelemetry.status()` feeds the page's delivery box, and `SGTelemetry.check(cb)`
+(its «اختبر الاتصال الآن» button) asks the server's `GET /v1/health`, then sends the
+waiting batches, to the address the portal noted (the build gives the teacher page none).
+So the network carve-out stays exactly one file, inlined in the fast build into both
+pages; `tools/check-all.mjs` checks the teacher page's exact copy like the portal's.
 
 ## Ingest server (server/)
 

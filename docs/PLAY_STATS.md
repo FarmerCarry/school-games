@@ -297,6 +297,39 @@ server: «مشاركة إحصاءات اللعب مفعّلة على هذا ال
 عشوائي، إلى <host>.» Since milestone 2.5 neither says «مجهولة» (anonymous): the codes make
 the data pseudonymous. Period: اليوم، هذا الأسبوع، آخر 30 يومًا، الكل.
 
+That line sits in the box **«الإرسال إلى لوحة المؤشرات في المدرسة»**, which says at a
+glance whether this PC's play reaches the school's dashboard (since 30 October 2026, after
+a school filter silently blocked the server for two days). `js/telemetry.js`, loaded on
+this page in check mode, gives its status (`SGTelemetry.status()`, from the record
+`sg:site:tm:dx` the portal keeps; [`TELEMETRY.md`](TELEMETRY.md), "Delivery"); the page
+itself never uses the network. Its edge and first line are green, red or grey:
+
+* sharing and delivered, with no failure since: «✓ تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات.»;
+* failing: «⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ <يومين>.», then the
+  reason: no answer (or not the server's) «تعذّر الوصول إلى خادم الإحصاءات منذ <time>.
+  السبب في الغالب أن مرشّح الإنترنت في المدرسة يحجب <host>. اطلب من مسؤول تقنية المعلومات
+  في المدرسة السماح بالعنوان https://<host>. ما لم يصل يبقى محفوظًا على هذا الجهاز حتى 7
+  أيام، ويُرسل وحده عندما يعود الاتصال.»; the server's own error «يردّ خادم الإحصاءات <host>
+  بخطأ منذ <time>. …»; its refusal «⚠ رفض خادم الإحصاءات بيانات من هذا الجهاز قبل …»;
+* never delivered yet: «لم تصل إحصاءات من هذا الجهاز إلى لوحة المؤشرات بعد.»;
+* with two facts: «آخر وصول إلى لوحة المؤشرات» (how long ago, with the PC's date and
+  time, or «لم يصل شيء من هذا الجهاز بعد») and «ينتظر الإرسال» (the batches waiting, with
+  the oldest one's age, or «لا شيء»);
+* and the button **اختبر الاتصال الآن**: the sink asks the server's health and then sends
+  what waits, and the page says «✓ يصل هذا الجهاز إلى خادم الإحصاءات <host>. أُرسل الآن ما
+  كان ينتظر: <n>.» or «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز. أعطِ مسؤول تقنية
+  المعلومات في المدرسة هذا العنوان ليسمح به في مرشّح الإنترنت: https://<host>» (or that the
+  server answered with an error, or does not take this version of the site).
+
+When nothing is sent the box says why, without facts or button: a downloaded folder «هذه
+نسخة منزَّلة من الموقع (مجلد على هذا الجهاز)، ولا ترسل أبدًا شيئًا إلى لوحة المؤشرات في
+المدرسة.» with «لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة الموقع على
+الإنترنت: https://farmercarry.github.io/school-games/»; stopped statistics, sharing turned
+off, Global Privacy Control, this computer; a web copy that has not shared yet; or a PC
+whose portal noted that it shares but has not written the record yet («افتح صفحة الألعاب
+على هذا الجهاز مرة واحدة، ثم عد إلى هذه الصفحة.»). The box follows the portal's writes in
+another tab and its «قبل …» stays true on a page left open.
+
 1. Four answer cards: **أكثر الألعاب لعبًا** (by sessions of at least a minute, with
    minutes beside it), **كم يلعبون** (actual play time and average session),
    **متى يلعبون** (bars by hour), **أين يتوقفون** (the levels children give up on most).
@@ -340,8 +373,9 @@ the data pseudonymous. Period: اليوم، هذا الأسبوع، آخر 30 ي
    «أوقف»; this also stops the telemetry sink), clear this PC's statistics (type
    «امسح»; removes only keys that start with `sg:site:stats:`, and the telemetry queue
    under `sg:site:tm:` so nothing recorded before the clear is sent later; never the id,
-   label or stop setting, the note `sg:site:tm:on` that says this PC shares, or the
-   dashboard codes in `sg:site:rid`). While collection is stopped, the 🏫 strip shows
+   label or stop setting, the notes `sg:site:tm:on` that says this PC shares and
+   `sg:site:tm:dx` that says when its batches last arrived, or the dashboard codes in
+   `sg:site:rid`). While collection is stopped, the 🏫 strip shows
    «الإحصاءات متوقفة». While this PC shares, or has codes, the clear tool also says
    «ما أُرسل إلى خادم المدرسة يبقى هناك؛ لحذف بيانات طفل استخدم رمزه في لوحة المؤشرات.»,
    and its confirmation adds that the dashboard codes stay: clear and stop never touch the
@@ -509,13 +543,16 @@ Step 1's files are the input; they do not need to change.
   code, each player's animal, ring and code with its check character against a Luhn mod 16
   written out in the test, "no code yet", players from both profile keys), the transfer
   (every refusal, `k`, `l` and `g`, the oldest waiting code kept, a correction that links
-  no given code, disabled while sharing is off), clear keeping `sg:site:rid`, and the
-  copied animals and colours equal to the portal's.
+  no given code, disabled while sharing is off), clear keeping `sg:site:rid` and
+  `sg:site:tm:dx`, the copied animals and colours equal to the portal's, and the delivery
+  box: every message word for word, a blocked PC (red, since when, the host), its test
+  failing with the address for IT and then sending the waiting batches, and a downloaded
+  folder's page naming the website.
 * `tools/tests/merge-progress.test.mjs`: a merge-2048 board is one round; the goal tile
   reports nothing and a full board reports `'end'` with the score.
 * `tools/tests/play-stats-rules.test.mjs` (node only): no network APIs in Kit and the other
   shared scripts, the portal, the teacher page or games, except `fetch()` in exactly
-  `js/telemetry.js` (`sendBeacon` is banned there too; the same rule as `tools/check-all.mjs`, from
+  `js/telemetry.js`, which the teacher page loads too, in check mode (`sendBeacon` is banned there too; the same rule as `tools/check-all.mjs`, from
   `tools/lib/network-rules.mjs`); no `Kit.stats` in engine or simulation files; every game calls
   `Kit.stats.round` and `Kit.stats.end` (the games come from `js/catalog.js` and the
   `games/` folders, so a new game is checked without editing the test; a game allowed

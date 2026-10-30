@@ -167,6 +167,11 @@ The `sw.js` file in `main` is an "off switch": PCs remove the offline cache on t
 visit and use the normal site again.
 
 If the school web filter blocks it, ask IT to allow that address. The site contains no ads.
+When the site shares play with the school's dashboard (see
+[Telemetry without names](#telemetry-without-names-optional)), the filter must also allow
+the statistics server, `https://school-games-telemetry.services-agreement137.workers.dev`:
+otherwise the games work but nothing reaches the dashboard. The teacher page on each PC
+tells you which (see [Play statistics](#play-statistics-local-only)).
 
 ### Running it without the internet
 
@@ -182,7 +187,9 @@ Download the fast version as one ZIP file (under 2 MB):
    opens it. Inside it, open the `school-games` folder and double-click `index.html`.
 
 Everything works straight from the `school-games` folder, without internet or installation.
-You can copy that folder to other PCs, a USB stick or a shared drive.
+You can copy that folder to other PCs, a USB stick or a shared drive. A downloaded folder
+**never sends play to the school's dashboard**, and its teacher page says so: PCs whose play
+should reach the dashboard must open the website, `https://farmercarry.github.io/school-games/`.
 
 **Updating:** the folder never updates itself. For new games and fixes, delete the old ZIP
 and the old `school-games-offline` folder, then download and extract the ZIP again as above,
@@ -279,6 +286,19 @@ two-player modes mix players.
   2048 boards and two-player modes are left out, and runs and boards show their average
   and best score in the levels table instead. A game still open on this PC today shows its
   time with the note «مرة لعب ما زالت مفتوحة» until it is closed.
+- **Is this PC's play reaching the school's dashboard?** The box «الإرسال إلى لوحة
+  المؤشرات في المدرسة» near the top answers at a glance: green «✓ تصل إحصاءات هذا الجهاز
+  إلى لوحة المؤشرات.», or red «⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ …» with
+  the reason in plain words, plus the last delivery («آخر وصول إلى لوحة المؤشرات») and what
+  waits on this PC («ينتظر الإرسال»; kept up to 7 days and sent by itself once the
+  connection works). The usual reason is the school's web filter blocking the statistics
+  server: the box names the address to ask IT to allow. Press **اختبر الاتصال الآن** to
+  check now: it says «✓ يصل هذا الجهاز إلى خادم الإحصاءات …» and sends what waited, or
+  «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز …» with the address for IT. Check it on
+  each PC after setting up and whenever the dashboard misses a class, in the browser the
+  children use, opened from the website. A downloaded folder says that it never sends, and
+  stopped statistics say that nothing is sent. Only this button and the games page (the
+  portal) contact the statistics server; the page sends nothing when you just open it.
 - **Name the PC:** type a short label such as «جهاز 7». Never type a child's name.
 - **Export to Excel:** press **تصدير ملف Excel**. Each click saves one workbook,
   `play-stats_<pc>_<date>.xlsx`, with every stored day: an Arabic read-me sheet (اقرأني)
@@ -339,9 +359,12 @@ the UK), and research publication may need consent or an ethics review.
 Only `js/telemetry.js` in the portal sends; games never use the network. It sends no
 names, no typed text, no PC label, no profile key or picture, no clock time and no browser
 or graphics strings; it sends a random code per profile and one per PC, and the PC's time
-zone name. The teacher page shows whether this PC shares and the codes, can give a child
-who plays on two PCs one code, and «stop collecting» stops both the local statistics and
-the sharing. The server stores no IP addresses, keeps play for 400 days by default, and
+zone name. The teacher page shows whether this PC shares, whether its play actually
+reaches the server (with a button that tests the connection now), and the codes, can give
+a child who plays on two PCs one code, and «stop collecting» stops both the local
+statistics and the sharing. A PC keeps what it could not send (up to 7 days) and sends it
+once the server answers; the school's web filter must allow the server's host, and a
+downloaded folder never shares. The server stores no IP addresses, keeps play for 400 days by default, and
 shows every number, even for one child. See [`docs/TELEMETRY.md`](docs/TELEMETRY.md)
 for the portal side and [`server/README.md`](server/README.md) for the server and its
 insights dashboard.

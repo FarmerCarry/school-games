@@ -42,8 +42,9 @@ whether you need consent or an ethics review. Give your reviewers this page and 
   every event and every send.
 
 Otherwise the sink is **inert**: no requests, no timers, nothing written to storage (it
-makes no code, and only removes a sharing note, `sg:site:tm:on`, left by an earlier build
-that shared), and the portal tells games `telemetry: false` in `sg:preferences`, so Kit
+makes no code, and only removes the notes `sg:site:tm:on` and `sg:site:tm:dx` left by an
+earlier build that shared, so the teacher page neither says that this PC shares nor tests
+a server it no longer sends to), and the portal tells games `telemetry: false` in `sg:preferences`, so Kit
 does not even collect the extras (`Kit.track`, the round counters) or post
 `sg:telemetry`. When the teacher stops statistics in another tab, the open game is told
 `telemetry: false` at once and everything still waiting is dropped.
@@ -84,7 +85,7 @@ does not even collect the extras (`Kit.track`, the round counters) or post
   `l`. At that profile's next session start the sink sends `['cd', t, olderCode]` right
   after `ss`; the server then links the older code to the new one, so the child's earlier
   play on this PC joins the same student ([`PLAY_STATS.md`](PLAY_STATS.md), section 3).
-  `l[key]` stays until a batch that holds the `cd` is answered with a 2xx, so a batch lost
+  `l[key]` stays until a batch that holds the `cd` is delivered (the server's 204), so a batch lost
   on the way (a PC switched off before the batch was queued, the queue's limits) never loses
   the link: the next page sends it again (at most once per page; the server keeps one link).
   A code in `g` came from another PC, so a second transfer that corrects a wrong one never
@@ -168,10 +169,10 @@ local day records. The server stores no IP address.
 
 * Events wait in memory. A batch goes **when a game closes**, **60 seconds after the first
   waiting event** (one timer, only while something waits), and **when the page is hidden
-  or unloads**. A 2xx answer may carry **`X-Batch-Every`**: a whole number of seconds from
+  or unloads**. The server's 204 may carry **`X-Batch-Every`**: a whole number of seconds from
   20 to 600 that replaces the 60 for later timed sends (the server asks for fewer requests
   when its free daily write allowance runs low). Anything else in the header is ignored; a
-  2xx without it goes back to 60. The value lives only in the page's memory.
+  204 without it goes back to 60. The value lives only in the page's memory.
 * Every send is `fetch(url, { method: 'POST', credentials: 'omit', mode: 'cors',
   keepalive })`, **never with cookies**: a cookie the browser keeps for the ingest host (a
   district sign-in on the same site, a load balancer's stickiness cookie that would link
@@ -181,21 +182,36 @@ local day records. The server stores no IP address.
 * `keepalive` lets a request outlive its page, but the browser refuses keepalive bodies
   beyond 64 KB in flight together, so the sink keeps its own within **60 KB** (a normal
   send that does not fit goes without `keepalive`). A hidden or unloading page hands
-  `fetch` what waits at once, oldest first, while it fits: the first batch that does not
-  fit and every later one stay in the queue, and so does the batch of a normal send still
-  on its way. A batch handed over this way is not kept.
-* A **2xx** removes the batch. A **4xx other than 429** removes it as malformed (it would
-  never be accepted; the server accepts malformed optional fields rather than refuse a
-  whole batch). **429, 5xx and network errors** keep it and back off **20, 40, 80, 160,
-  then 300 s**. A request with no answer at all after a minute no longer holds the queue
-  back: its batch goes again (the server keeps it once). While the server is failing, or
-  the PC is offline (`navigator.onLine === false`), a hidden page sends nothing and the
-  queue keeps everything for later.
+  `fetch` what waits at once, oldest first, while it fits, past what this page handed to
+  `fetch` less than a minute ago and has no answer for yet (so hiding and showing the page
+  again never sends a batch twice in a row); the first batch that does not fit and every
+  later one wait for the next send.
+* **Every batch stays in the queue until the server's own answer delivers it**, also a
+  batch a hidden or unloading page handed to `fetch`: a page that goes away before the
+  answer leaves the batch to the next portal page, which sends it again. The server keeps
+  a batch once (it de-duplicates v2 batch ids, and every write of a v3 batch is
+  idempotent), so a batch delivered twice costs only the request. Before this rule an
+  unloading page removed what it handed over at once; on a network that drops requests
+  without an answer (a school filter that blocks the server), the first short page that
+  closed emptied the queue for good (28 and 29 October 2026).
+* Only the server's own answers count, because a school filter or a captive portal can
+  answer itself, even with a 200 or a 403: **204** (and nothing redirected) delivers the
+  batch and removes it. The server's JSON error, `{ "error": "…" }`, to a **4xx other than
+  429** removes it as malformed (it would never be accepted; the server accepts malformed
+  optional fields rather than refuse a whole batch). Its JSON error to a **429 or 5xx**,
+  any other answer and **no answer** keep the batch and back off **20, 40, 80, 160, then
+  300 s** (batches that fail together, as a hidden page's do, count once). A request with
+  no answer at all after a minute no longer holds the queue back: its batch goes again.
+  While the server is failing, or the PC is offline (`navigator.onLine === false`), a
+  hidden page sends nothing and the queue keeps everything for later.
 * Unsent batches wait in `localStorage` **`sg:site:tm:q3:<hash>`** (an array of
   `{ t, w0, e }`: when the batch's first event was recorded, its session's start, and the
   envelope), oldest first, **at most 128 KB** (the oldest go first) and **7 days**. They
   survive a reload or a restart of the PC and go out from the next portal page. Two portal
-  tabs may send the same queued batch; the server keeps it once.
+  tabs may send the same queued batch; the server keeps it once. A teacher's clear
+  (`statsmeta.clearedAt`) drops what was recorded before it; a clear dated after the PC's
+  clock (the clock was set back since) is ignored, since it would hold back every batch
+  until the clock passed it.
 * Builds before wire version 3 queue in **`sg:site:tm:q:<hash>`** (`{ t, e }` with
   `v: 2`). Such a tab may still be open on the PC after the update (an open tab keeps its
   page until it is reloaded), and each time it queues, delivers or is hidden it rewrites
@@ -209,20 +225,58 @@ local day records. The server stores no IP address.
   another `SG_TELEMETRY_URL` never sends, or drops, this one's batches. Both copies share
   `sg:site:rid`, so they send the same codes.
 * While the sink shares, it notes the server's host in **`sg:site:tm:on`**, so the teacher
-  page can say «مشاركة إحصاءات اللعب مفعّلة على هذا الجهاز … إلى <host>».
+  page can say «مشاركة إحصاءات اللعب مفعّلة على هذا الجهاز … إلى <host>», and whether its
+  batches arrive in **`sg:site:tm:dx`**:
+
+  ```js
+  { v: 1, u: 'https://…/v1/batch', // the address this record belongs to (another address starts again)
+    ok: 1761720300000,              // when a batch was last delivered (the PC's clock; 0: never)
+    f: 1761631500000,               // when the first failure since then came (0: none)
+    k: 'network',                   // the latest failure: 'network' (no answer, or not the server's),
+                                    // 'server' (its 429 or 5xx) or 'refused' (its 4xx: the batch is gone)
+    at: 1761720240000 }             // when that failure came
+  ```
+
+  The sink writes it as it starts (only to set `u`) and at every answer: a delivery sets
+  `ok` and clears the failure, a failure keeps the first `f`. It holds no play, so the
+  teacher page's clear keeps it.
+* **Check mode** (the teacher page): `teacher.html` loads `js/telemetry.js` under
+  `<meta name="sg-telemetry" content="check">`. There the sink never starts a session,
+  records an event, makes a code or listens to the page, and it writes nothing until the
+  teacher acts (reading the queue only moves a pre-v3 build's batches into this build's
+  key, as the portal does). `window.SGTelemetry` has only `active()` (always `false`), `status()`
+  (why this page cannot send: `folder`, `gpc`, `local`, `none` for no address, `off` or
+  `tm` from the teacher's settings; the host; the record; and the waiting batches with the
+  oldest one's time) and `check(cb)`, the teacher's «اختبر الاتصال الآن»: a `GET` of
+  `/v1/health` beside the address (`new URL('health', url)`; the server answers it
+  without its database, and only `200` with `"ok":true` and `3` in `accepts` counts), then
+  the waiting batches one at a time, oldest first, while the server takes them, for a
+  minute at most and 20 s per request, every answer going into the record (a server that
+  does not take wire version 3 is noted as the server's problem: nothing was sent). The
+  fast build gives the teacher page no address (`SG_TELEMETRY` goes to the portal only),
+  so it uses `u` from the record the portal wrote; without one there is nothing to test.
+  On a downloaded folder (`file:`) it is `folder`. Like the portal, it sends without
+  cookies, and the request is the same `fetch` in the same file.
 * Stopping statistics or turning sharing off drops every queue on this origin (another
-  copy's too), the note and every waiting event; the codes stay. The teacher page's
-  **clear** removes every `sg:site:tm:` key except the note `sg:site:tm:on` (this PC still
-  shares), and a portal page that is still open drops whatever it recorded before the
-  clear (`statsmeta.clearedAt`). Neither touches the server: to delete a child's data
-  there, the school uses the child's code on the dashboard.
+  copy's too), both notes and every waiting event; the codes stay. The teacher page's
+  **clear** removes every `sg:site:tm:` key except the notes `sg:site:tm:on` and
+  `sg:site:tm:dx` (this PC still shares), and a portal page that is still open drops
+  whatever it recorded before the clear (`statsmeta.clearedAt`). Neither touches the
+  server: to delete a child's data there, the school uses the child's code on the dashboard.
 * Every storage call is guarded (with blocked storage the queue lives in memory for that
   page, and sessions have no codes), nothing is logged, every promise is caught, and no
   call into the sink throws.
 
 The browser itself prints «Failed to load resource: the server responded with a status
-of 5xx» in the developer console when the ingest server answers with an error; the site's
-own code never logs.
+of 5xx» (or `net::ERR_FAILED` when nothing answers) in the developer console when the
+ingest server answers with an error; the site's own code never logs.
+
+**The school's web filter must allow the server's host** (for this project's site,
+`school-games-telemetry.services-agreement137.workers.dev`), for `GET` and `POST` over
+HTTPS from the PCs. A filter that blocks it usually drops the request or answers with its
+own page, which the browser cannot read across origins: the PCs keep their batches (at
+most 7 days and 128 KB each) and the teacher page says «لا تصل إحصاءات هذا الجهاز إلى
+لوحة المؤشرات منذ …», names the host and asks for it to be allowed.
 
 ## Turning it on
 
@@ -249,7 +303,8 @@ A local fast build: `SG_TELEMETRY_URL=https://telemetry.example.org/v1/batch nod
 The build accepts only an `https://` address of at most 200 characters made of URL
 characters (no quotes, spaces, backslashes, `<` or `>`), without a user name or password,
 and stops with an error otherwise. It writes `window.SG_TELEMETRY={url:"…"};` in front of
-the portal's inlined `js/telemetry.js` and nowhere else: not into `teacher.html`, the
+the portal's inlined `js/telemetry.js` and nowhere else: not into `teacher.html` (which
+inlines the same sink in check mode and takes the address from the portal's record), the
 games, `sw.js`, or a `--kill-sw` build. Unset or empty, the build output is exactly what it
 was before. The offline ZIP holds the same portal, which never sends from a folder.
 
@@ -265,8 +320,17 @@ stopping statistics on the teacher page.
   header) about 60 seconds after load or when a game closes, answered with `204`; its body
   has `"v":3`, `u`, `p`, `z` and `w`; no `sg:site:tm:q3:` (or older `sg:site:tm:q:`) key
   is left in `localStorage` once batches are delivered.
-* The teacher page (🏫 → 📊) shows the line that sharing is on, with the server's host, and
-  its «الرموز في لوحة المؤشرات» section shows this PC's code.
+* **On each school PC, the teacher page** (🏫 → 📊) shows the box «الإرسال إلى لوحة
+  المؤشرات في المدرسة»: the line that sharing is on, with the server's host; in green
+  «✓ تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات.» or in red since when they do not, with
+  the reason in plain words; the last delivery («آخر وصول إلى لوحة المؤشرات») and what
+  waits («ينتظر الإرسال»). Its button **اختبر الاتصال الآن** asks the server now and sends
+  what waits: «✓ يصل هذا الجهاز إلى خادم الإحصاءات …» with the number of batches sent, or
+  «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز …» with the address to give the school's
+  IT. Open the page on the PC the children use, in the same browser, from the website (a
+  downloaded folder says that it never sends). Its «الرموز في لوحة المؤشرات» section
+  shows this PC's code. In the developer tools, `SGTelemetry.status()` answers the same
+  on the portal and on the teacher page.
 * On the server: `GET /v1/health`, then `GET /v1/admin/live` and `GET /v1/admin/students`
   with the admin token.
 
@@ -292,10 +356,17 @@ stopping statistics on the teacher page.
   classroom timer, `gp`, `np`, `cls` and every `se.why`; back-off 20, 40, 80, 160, 300 s
   with a fake clock, for 5xx and for no answer at all; 400 and 429; a request that is never
   answered goes again after a minute; the queue across a reload, its 128 KB, 7-day and
-  clear rules, and v2 entries sent unchanged; keepalive sends on a hidden page and at
-  unload, with no cookie of the ingest host on either path (the unloading page's request is
-  seen by an interception for the whole browser), the 60 KB keepalive budget beside a send
-  still on its way, and offline; two copies of the site on one origin with two addresses,
+  clear rules (a clear dated after the PC's clock holds nothing back), and v2 entries sent
+  unchanged; keepalive sends on a hidden page and at unload, with no cookie of the ingest
+  host on either path (the unloading page's request is seen by an interception for the
+  whole browser), every batch kept until its answer, the 60 KB keepalive budget beside a
+  send still on its way, and offline; the incident of 28 October (a failed batch, then a
+  1.5 s page that closes on a network that fails: nothing is lost, and the next page sends
+  it all, oldest first); only the server's 204 delivering and only its JSON 4xx dropping (a
+  filter's 200 and 403 pages and a non-JSON 400 keep and back off), and the delivery record
+  after each kind of answer; check mode on the teacher page (no session, no write, no
+  request until the test; health, then the waiting batches; a filter's page, a server
+  without wire version 3, stopped statistics); two copies of the site on one origin with two addresses,
   each sending only its own queue, and a stop dropping both; a new session per player with
   the old one ending after its game; field-by-field checks of `sg:telemetry` and late
   frames; load failures; a stop from another tab that keeps the codes.
@@ -303,14 +374,22 @@ stopping statistics on the teacher page.
   of one profile are one student in `/v1/admin/students` with the minutes it played, the
   facts hold its codes and the zone name, dated from `w`, and the database holds nothing
   that could name a child or a PC; on two simulated PCs a teacher's transfer through the
-  teacher page makes one student of both codes, with all three sessions.
+  teacher page makes one student of both codes, with all three sessions; and with the
+  school's filter blocking the server, a played round and a short second page lose
+  nothing, the teacher page names the host to allow, and once it is allowed its test
+  delivers everything that waited: the server has both sessions and the minutes.
 * `tools/tests/build-safety.test.mjs`: the address reaches the portal only, bad addresses
   are refused before any output changes, and an unset or empty variable changes nothing.
 * `tools/tests/play-stats-rules.test.mjs` and `tools/check-all.mjs` share
   `tools/lib/network-rules.mjs`: `fetch()` is allowed in exactly `js/telemetry.js` (and,
-  in the fast build, only in the portal's exact inlined copy of it); every other network
+  in the fast build, only in the exact inlined copy of it in the portal and the teacher
+  page); every other network
   API, `sendBeacon` included, stays banned there, and the same calls anywhere else fail.
 * `tools/tests/teacher-page.test.mjs`: the note, the sharing line, the codes panel and the
   transfer (check character, refusals, `k`, `l` and `g`, a correction that links no given
   code, disabled while sharing is off), clear
-  removing the `sg:site:tm:` queue while the note, the codes and the sharing line stay.
+  removing the `sg:site:tm:` queue while both notes, the codes and the sharing line stay;
+  every message of the delivery box and of its test, word for word; the box on a blocked
+  PC (red, since when, the host), its test failing with the address for IT and then
+  sending both waiting batches, oldest first; and a downloaded folder's page naming the
+  website.
