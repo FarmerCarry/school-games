@@ -177,7 +177,11 @@ test('three sessions of a 6-7 year old: one student with the right minutes, code
   assert.equal(ttt.loads, SESSIONS);
   assert.ok(ttt.il.reduce((a, b) => a + b) > 0, 'the clicks went into the input-latency histogram');
   assert.deepEqual(ttt.replay.playsBefore, [1, 1, 1, 0, 0], 'the child had played it 0, 1 and 2 times before');
-  assert.ok(ttt.wallMinutes > 0, 'Kit\'s round counters arrived');
+  // Kit's round counters arrived, and the KPI answer adds up their wall time. A fast machine
+  // plays three short rounds in a few seconds, so compare with the facts, not with zero.
+  const wall = facts('SELECT wall_ms, inputs FROM st_rounds');
+  assert.ok(wall.length === SESSIONS && wall.every(r => r.wall_ms > 0 && r.inputs === 4), 'Kit\'s round counters arrived');
+  assert.equal(ttt.wallMinutes, minutes(Math.round(wall.reduce((sum, r) => sum + r.wall_ms, 0) / 1000) * 1000), 'the KPI answer adds up their wall time');
   const level = kpis.levels.find(l => l.slug === 'tic-tac-toe' && l.id === 'local');
   assert.equal(level.starts, SESSIONS);
   const band = kpis.bands.find(b => b.band === '6-7');
