@@ -30,45 +30,64 @@
  * Delivery: events wait in memory; batches of at most 200 events and 32 KB go when
  * a game closes, 60 s after the first waiting event (or what the server last asked for
  * in X-Batch-Every, 20 to 600 s), and when the page is hidden, each by fetch without
- * cookies, with keepalive while the bodies in flight fit in 60 KB. Unsent batches wait
- * in localStorage sg:site:tm:q3:<hash of the address>, so another copy of the site on
- * this origin that sends elsewhere never sends them (oldest first, at most 128 KB and
- * 7 days). Batches an older build queued in sg:site:tm:q:<hash> move there and go
- * unchanged; that key is never written, since a pre-v3 tab still open rewrites it with
- * its own wire version only (a later version takes q4 the same way). A 2xx or a 4xx
- * other than 429 is final; 429, 5xx and network errors back off 20, 40, 80, 160, 300 s;
- * a request with no answer after a minute is sent again. sg:site:tm:on (the server's
- * host) tells the teacher page that this PC shares. Every storage call is guarded,
- * nothing is logged, every promise is caught and no call into this file throws.
+ * cookies, with keepalive while the bodies in flight fit in 60 KB. Every batch waits in
+ * localStorage sg:site:tm:q3:<hash of the address> until the server's own answer
+ * delivers it, so another copy of the site on this origin that sends elsewhere never
+ * sends them (oldest first, at most 128 KB and 7 days): a page that goes away first
+ * leaves it to the next page, which sends it again (the server keeps a batch once).
+ * Batches an older build queued in sg:site:tm:q:<hash> move there and go unchanged;
+ * that key is never written, since a pre-v3 tab still open rewrites it with its own
+ * wire version only (a later version takes q4 the same way). Only the server's 204
+ * delivers and only its JSON error ({ "error": text }) to a 4xx other than 429 is
+ * final; anything else (429, 5xx, a school filter's or captive portal's own page, no
+ * answer) backs off 20, 40, 80, 160, 300 s; a request with no answer after a minute is
+ * sent again. sg:site:tm:on (the server's host) tells the teacher page that this PC
+ * shares, and sg:site:tm:dx whether its batches arrive (last delivery, first failure
+ * since, its kind). Every storage call is guarded, nothing is logged, every promise is
+ * caught and no call into this file throws.
+ *
+ * Check mode: the teacher page loads this file under <meta name="sg-telemetry"
+ * content="check"> to show and test delivery (status(), check(cb)). There it never
+ * starts a session, records an event or listens to the page; it sends only when the
+ * teacher presses the test button, to the address the portal noted in sg:site:tm:dx.
  */
 (function () {
   'use strict';
 
-  var TM = 'sg:site:tm:', Q = TM + 'q3:', OLD = TM + 'q:', ON = TM + 'on', META = 'sg:site:statsmeta', RID = 'sg:site:rid';
+  var TM = 'sg:site:tm:', Q = TM + 'q3:', OLD = TM + 'q:', ON = TM + 'on', DX = TM + 'dx', META = 'sg:site:statsmeta', RID = 'sg:site:rid';
   var cfg = window.SG_TELEMETRY, url = cfg && cfg.url, doc = document, nav = navigator, perf = performance;
   var isArr = Array.isArray, min = Math.min, max = Math.max, floor = Math.floor, str = JSON.stringify;
   var ID = /^(?!.*\d{3})[A-Za-z][\w:.-]{0,23}$/, SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/, BACK = [20, 40, 80, 160, 300];
-  var CODE = /^[0-9a-f]{12}$/, KEY = /^p[0-9a-z]{1,8}$/;
+  var CODE = /^[0-9a-f]{12}$/, KEY = /^p[0-9a-z]{1,8}$/, KINDS = ['network', 'refused', 'server'];
   // The caps of a round's counters (rx): wall ms, inputs, idle lapses, pauses, the sum and
   // number of reaction times, and the DDA level in thousandths (-1: none).
   var RX = [108e5, 1e5, 1e4, 1e4, 1e9, 1e5, 1000];
-  var ready = false, flagged = '';
+  // why: '' when this page may send, else 'folder' (file:), 'gpc', 'none' (no address)
+  // or 'local' (this computer, unless a test allows it).
+  var ready = false, passive = false, why = 'none', host = '', flagged = '';
   try {
-    ready = typeof url == 'string' && url.length <= 200 && /^https:\/\/[\w\-.~:/?#[\]@!$&()*+,;=%]+$/.test(url) &&
-      location.protocol != 'file:' && nav.globalPrivacyControl !== true &&
-      (cfg.allowLocal === true || !/^(?:(?:.+\.)?localhost|127(?:\.\d+){3}|\[::1\])$/i.test(location.hostname));
-    if (ready) {
-      flagged = str(new URL(url).host);
+    passive = !!doc.querySelector('meta[name="sg-telemetry"][content="check"]');
+    if (passive && !url) url = JSON.parse(localStorage.getItem(DX)).u;
+  } catch (e) { /* no address noted */ }
+  try {
+    why = location.protocol == 'file:' ? 'folder' : nav.globalPrivacyControl === true ? 'gpc' :
+      !(typeof url == 'string' && url.length <= 200 && /^https:\/\/[\w\-.~:/?#[\]@!$&()*+,;=%]+$/.test(url)) ? 'none' :
+      !(cfg && cfg.allowLocal === true) && /^(?:(?:.+\.)?localhost|127(?:\.\d+){3}|\[::1\])$/i.test(location.hostname) ? 'local' : '';
+    if (!why) {
+      host = new URL(url).host;
+      flagged = str(host);
       // The queue belongs to this address: a copy of the site elsewhere on this origin,
       // built with another address, never sends (or drops) these batches.
       for (var h = 0, i = 0; i < url.length; i++) h = h * 31 + url.charCodeAt(i) | 0;
       Q += (h >>> 0).toString(36);
       OLD += (h >>> 0).toString(36);
+      ready = true;
     }
-  } catch (e) { ready = false; }
+  } catch (e) { why = 'none'; }
 
   var on, cleared = 0, sess, game = 0, cur = 0, gone = [], closing = [], pend = [], known = [], mine = Object.create(null), told = {};
-  var tag = 0, timer = 0, timerAt = 0, busy = 0, busyAt = 0, fly = 0, fails = 0, retryAt = 0, mq = [], temp = false, every = 60;
+  // sent: the batches this page handed to fetch, by id, with when, until their answer.
+  var tag = 0, timer = 0, timerAt = 0, sent = Object.create(null), fly = 0, fails = 0, retryAt = 0, mq = [], temp = false, every = 60;
 
   function now() { return Date.now(); }
   function safe(fn) {
@@ -254,14 +273,23 @@
   }
 
   /* ---------------------------------------------------------- delivery */
-  // statsmeta, read again before every event and send. Stopped statistics or sharing
-  // turned off drop everything waiting; a teacher's clear drops what came before it.
-  // Neither touches the codes (sg:site:rid): the server keeps a child's play anyway.
-  function live() {
+  // The teacher's settings (statsmeta), read again before every event and send: why
+  // nothing may go ('off': statistics stopped, 'tm': sharing turned off, else '') and when
+  // the teacher last cleared (c). A clear dated after the PC's clock (the clock was set
+  // back since) counts as none: it would hold back every batch until the clock passed it.
+  function settings() {
     var m = null, c;
     try { m = JSON.parse(localStorage.getItem(META)); } catch (e) { /* no settings */ }
     m = m || {};
-    if (m.off || m.tm === false) {
+    c = +new Date(m.clearedAt) || 0;
+    return { why: m.off ? 'off' : m.tm === false ? 'tm' : '', c: c > now() ? 0 : c };
+  }
+  // Stopped statistics or sharing turned off drop everything waiting; a teacher's clear
+  // drops what came before it. Neither touches the codes (sg:site:rid): the server keeps
+  // a child's play anyway.
+  function live() {
+    var m = settings(), c = m.c;
+    if (m.why) {
       if (on !== false) {
         // Games open now are forgotten too: the next one opened after a resume counts.
         on = false;
@@ -280,7 +308,6 @@
       }
       return false;
     }
-    c = +new Date(m.clearedAt) || 0;
     if (c > cleared) {
       cleared = c;
       pend = pend.filter(function (s) { if (s.at < c) { s.ev = []; s.at = 0; } return s.at; });
@@ -288,7 +315,32 @@
     if (!on) { on = true; begin(0); }
     return true;
   }
-  function flag() { try { if (localStorage.getItem(ON) !== flagged) localStorage.setItem(ON, flagged); } catch (e) { /* no note */ } }
+  // The notes for the teacher page: the server's host, and the delivery record of this address.
+  function flag() {
+    try {
+      if (localStorage.getItem(ON) !== flagged) localStorage.setItem(ON, flagged);
+      var d = str(record());
+      if (localStorage.getItem(DX) !== d) localStorage.setItem(DX, d);
+    } catch (e) { /* no note */ }
+  }
+  // sg:site:tm:dx = { v: 1, u: the address, ok: when a batch was last delivered (0: never),
+  // f: when the first failure since then came (0: none), k: the latest failure's kind
+  // ('network', 'refused' or 'server'), at: when }, in the PC's clock. Anything malformed,
+  // or the record of another address, starts again.
+  function stamp(v) { return typeof v == 'number' && v > 0 && v < 1 / 0 ? v : 0; }
+  function record() {
+    var d = null;
+    try { d = JSON.parse(localStorage.getItem(DX)); } catch (e) { /* none yet */ }
+    return d && d.v === 1 && d.u === url ? { v: 1, u: url, ok: stamp(d.ok), f: stamp(d.f), k: KINDS.indexOf(d.k) < 0 ? '' : d.k, at: stamp(d.at) }
+      : { v: 1, u: url, ok: 0, f: 0, k: '', at: 0 };
+  }
+  // An answer for the record: 'ok' a delivery (or, from the test button, health: the server
+  // answered, which ends the failure without being a delivery), else a failure's kind.
+  function note(k, health) {
+    var d = record(), t = now();
+    if (k == 'ok') { if (!health) d.ok = t; d.f = d.at = 0; d.k = ''; } else { d.f = d.f || t; d.k = k; d.at = t; }
+    try { localStorage.setItem(DX, str(d)); } catch (e) { /* the teacher page knows less */ }
+  }
   // The unsent batches, oldest first: whole entries only, at most 7 days old, none from
   // before a teacher's clear, at most 128 KB together. Memory holds them when storage fails.
   // What an older build queued joins them at once, and its key goes.
@@ -309,10 +361,10 @@
     return fit(q);
   }
   function kept(q) {
-    var t = now();
+    var t = now(), c = cleared > t ? 0 : cleared;
     return (isArr(q) ? q : []).filter(function (x) {
       var e = x && x.e;
-      return !!e && x.t > t - 6048e5 && x.t >= cleared && (e.v === 2 || e.v === 3) && typeof e.b == 'string' && /^[0-9a-f]{16}$/.test(e.b) && isArr(e.ev);
+      return !!e && x.t > t - 6048e5 && x.t >= c && (e.v === 2 || e.v === 3) && typeof e.b == 'string' && /^[0-9a-f]{16}$/.test(e.b) && isArr(e.ev);
     });
   }
   // The oldest batches go first when the queue passes 128 KB.
@@ -387,13 +439,52 @@
   // One POST, never with cookies. keepalive lets it outlive the page, but the browser
   // refuses keepalive bodies beyond 64 KB in flight together: ours stay within 60 KB.
   function room(json) { return fly + json.length <= 6e4; }
-  function post(json) {
+  function post(json, signal) {
     var n = room(json) ? json.length : 0, p = fetch(url, { method: 'POST', body: json, headers: { 'Content-Type': 'text/plain' },
-      credentials: 'omit', mode: 'cors', keepalive: n > 0 });
+      credentials: 'omit', mode: 'cors', keepalive: n > 0, signal: signal });
     fly += n;
     p.then(free, free);
     function free() { fly -= n; }
     return p;
+  }
+  // go(signal)'s promise, or a rejection after ms, which aborts the request.
+  function within(ms, go) {
+    var c = null;
+    try { c = new AbortController(); } catch (e) { /* the timer alone */ }
+    return new Promise(function (ok, no) {
+      var t = setTimeout(function () { try { c.abort(); } catch (e) { /* nothing to abort */ } no(); }, ms);
+      go(c && c.signal).then(function (r) { clearTimeout(t); ok(r); }, function () { clearTimeout(t); no(); });
+    });
+  }
+  // What an answer means, as a promise that never rejects: 'ok' only for the server's own
+  // success (a batch: 204; health: 200 with { ok: true } and wire version 3 in accepts);
+  // its JSON error ({ "error": text }) to a 4xx other than 429 'refused' (final, like a
+  // health answer without version 3), to a 429 or 5xx 'server'; anything else, such as a
+  // page of a school filter or captive portal (even a 200 or a 403) or a redirect, is
+  // 'network', as is no answer at all.
+  function answer(r, health) {
+    var s = r.status;
+    if (!health && s === 204 && !r.redirected) return Promise.resolve('ok');
+    return r.text().then(function (t) {
+      var j = null;
+      try { j = JSON.parse(t); } catch (e) { /* not the server's */ }
+      if (!j || typeof j != 'object' || r.redirected) return 'network';
+      if (health && s === 200 && j.ok === true && isArr(j.accepts)) return j.accepts.indexOf(3) < 0 ? 'refused' : 'ok';
+      return typeof j.error != 'string' ? 'network' : s === 429 || s > 499 ? 'server' : s > 399 ? 'refused' : 'network';
+    }, function () { return 'network'; });
+  }
+  // Hands one batch to fetch (aborted after ms, if given); answered(kind, X-Batch-Every)
+  // follows its answer. Until then, for a minute at most, this page does not send it again.
+  function flying(b) { return sent[b] !== undefined && now() - sent[b] < 6e4; }
+  function deliver(x, json, answered, ms) {
+    var b = x.e.b;
+    sent[b] = now();
+    (ms ? within(ms, function (signal) { return post(json, signal); }) : post(json)).then(function (r) {
+      return answer(r).then(function (k) { return [k, r.headers.get('X-Batch-Every')]; });
+    }).then(null, function () { return ['network']; }).then(safe(function (a) {
+      delete sent[b];
+      answered(a[0], a[1]);
+    }));
   }
   // Sends the oldest batch; the next one follows its answer.
   function send() {
@@ -401,63 +492,102 @@
     timer = 0;
     if (!live()) return;
     seal();
-    var x = load()[0], b;
+    var x = load()[0];
     if (!x) return;
     // A request with no answer after a minute no longer holds the queue back: its batch
     // goes again (the server keeps it once), with no new event needed to wake the sink.
-    if (busy && now() - busyAt < 6e4) return arm(busyAt + 6e4 - now());
+    if (flying(x.e.b)) return arm(sent[x.e.b] + 6e4 - now());
     if (retryAt > now()) return arm(retryAt - now());
-    b = x.e.b;
-    post(body(x)).then(safe(function (r) { done(b, r.status, r.headers.get('X-Batch-Every')); }), safe(function () { done(b, 0); }));
-    busy = b;
-    busyAt = now();
+    deliver(x, body(x), function (k, asked) { done(x.e.b, k, asked); });
     arm(6e4);
   }
-  // A 2xx is delivered and a 4xx other than 429 is malformed: both are final.
-  // 429, 5xx and network errors keep the batch and back off. A 2xx may ask for timed
-  // sends less often (X-Batch-Every, whole seconds 20..600); without it they go after 60 s.
-  function done(b, status, asked) {
-    if (busy === b) busy = 0;
+  // A delivered batch and one the server refused as malformed leave the queue, and the
+  // next one goes. Any other answer keeps the batch and backs off, once for batches that
+  // failed together. A 204 may ask for timed sends less often (X-Batch-Every, whole
+  // seconds 20..600); without it they go after 60 s.
+  function done(b, k, asked) {
     // Stopped meanwhile: the queue is gone and no retry is set.
     if (!live()) return;
-    if (status > 199 && status < 300 || status > 399 && status < 500 && status !== 429) {
-      if (status < 300) {
+    note(k);
+    if (k == 'ok' || k == 'refused') {
+      if (k == 'ok') {
         fails = 0;
         every = asked == null ? 60 : /^\d+$/.test(asked) && asked >= 20 && asked <= 600 ? +asked : every;
         load().forEach(function (x) { if (x.e.b === b) linked(x); });
       }
       without(b);
       send();
-    } else {
+    } else if (retryAt <= now()) {
       retryAt = now() + 1e3 * BACK[min(fails++, 4)];
       arm(retryAt - now());
     }
   }
   // The page is hidden or going away: what waits goes at once with keepalive, unless the
-  // server has been failing or the PC is offline (the queue keeps it for later). Oldest
-  // first while the bodies fit in 60 KB; the batch already on its way stays where it is,
-  // and the queue keeps every batch not handed to fetch.
+  // server has been failing or the PC is offline. Oldest first while the bodies in flight
+  // fit in 60 KB, past what this page sent less than a minute ago. Each batch stays in the
+  // queue until its answer comes: a page that goes away first leaves it to the next page,
+  // which sends it again (the server keeps it once), so a blocked or silent network loses
+  // nothing.
   function beacon() {
     if (!live()) return;
     seal();
     if (fails || nav.onLine === false) return;
-    var sent = {};
+    var n = 0;
     load().every(function (x) {
       var json;
-      if (x.e.b === busy) return true;
+      if (flying(x.e.b)) return true;
       if (!room(json = body(x))) return false;
-      // The answer reaches a page that is still open (hidden, not gone).
-      post(json).then(safe(function (r) { if (r.status > 199 && r.status < 300 && live()) linked(x); }), function () { /* kept nowhere */ });
-      return sent[x.e.b] = true;
+      deliver(x, json, function (k, asked) { done(x.e.b, k, asked); });
+      return ++n;
     });
-    save(load().filter(function (x) { return !sent[x.e.b]; }));
-    if (!mq.length) { clearTimeout(timer); timer = 0; }
+    if (n) arm(6e4);
+  }
+
+  /* --------------------------------------------------------- check mode */
+  // For the teacher page (and the developer tools): why this page cannot send ('folder',
+  // 'gpc', 'none', 'local'; or 'off', 'tm' from the teacher's settings, else ''), the
+  // server's host, the delivery record, and how many batches wait with the oldest's time.
+  function status() {
+    var s = settings(), q, d = why ? {} : record();
+    if (s.c > cleared) cleared = s.c;
+    q = why || s.why ? [] : load();
+    return { why: why || s.why, host: host, ok: d.ok || 0, f: d.f || 0, k: d.k || '', at: d.at || 0, n: q.length, t: q.length ? q[0].t : 0 };
+  }
+  // The teacher's test: GET health beside the address (the server answers it without its
+  // database), then, while the server takes them, the waiting batches one at a time, oldest
+  // first, for a minute at most. Every answer goes into the record (a server that does not
+  // take this wire version as the server's problem: nothing was dropped). cb({ why, host }) when
+  // this page cannot send, else cb({ k: 'ok' or the first failure's kind, host, sent: the
+  // batches delivered now, n: the batches still waiting }).
+  function check(cb) {
+    var s = settings(), n = 0, end = now() + 6e4;
+    cb = safe(cb);
+    if (why || s.why) return cb({ why: why || s.why, host: host });
+    if (s.c > cleared) cleared = s.c;
+    within(2e4, function (signal) {
+      return fetch(new URL('health', url).href, { credentials: 'omit', mode: 'cors', cache: 'no-store', signal: signal });
+    }).then(function (r) { return answer(r, 1); }).then(null, function () { return 'network'; }).then(safe(function (k) {
+      note(k == 'refused' ? 'server' : k, 1);
+      if (k == 'ok') next(); else over(k);
+    }));
+    function next() {
+      var x = load()[0], w = settings().why;
+      if (w) return cb({ why: w, host: host });
+      if (!x || now() > end) return over('ok');
+      deliver(x, body(x), function (k) {
+        note(k);
+        if (k == 'ok') { n++; linked(x); }
+        if (k == 'ok' || k == 'refused') { without(x.e.b); next(); } else over(k);
+      }, 2e4);
+    }
+    function over(k) { cb({ k: k, host: host, sent: n, n: load().length }); }
   }
 
   /* --------------------------------------------------------------- API */
   function hook(fn) { return safe(function (a, b) { if (ready && live()) fn(a, b); }); }
   window.SGTelemetry = {
     active: safe(function () { return ready && live(); }),
+    status: safe(status),
     // A launch source site.js knows (surprise, search, starter), as in js/stats.js.
     tag: hook(function (slug, src) { tag = { g: slug, t: now(), s: src }; }),
     // The portal opened a game's play page; a re-render keeps the visit. The launch
@@ -532,10 +662,15 @@
   };
 
   /* --------------------------------------------------------- listeners */
-  // Inert: a sharing note left by an earlier build that shared goes, so the teacher page
-  // never says that this PC shares.
+  // Check mode (the teacher page): status() and the test, nothing else; the notes stay.
+  if (passive) {
+    window.SGTelemetry = { active: function () { return false; }, status: safe(status), check: safe(check) };
+    return;
+  }
+  // Inert: the notes left by an earlier build that shared go, so the teacher page never
+  // says that this PC shares, or tests a server this portal no longer sends to.
   if (!ready) {
-    try { if (localStorage.getItem(ON) !== null) localStorage.removeItem(ON); } catch (e) { /* nothing to say */ }
+    try { [ON, DX].forEach(function (k) { if (localStorage.getItem(k) !== null) localStorage.removeItem(k); }); } catch (e) { /* nothing to say */ }
     return;
   }
   // Launch source of a tile click, exactly as js/stats.js tells them apart.

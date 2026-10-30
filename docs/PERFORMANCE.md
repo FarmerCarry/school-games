@@ -760,3 +760,41 @@ above: the measured size rounded up to the next 1,000 bytes plus 1,000.
 | Offline precache | 5,306,831 | 5,296,000 | 5,308,000 |
 
 No other limit changes, and nothing is added to any page beyond the two Kit changes.
+
+## Delivery that waits for the server, and the teacher page's delivery box, 30 October 2026
+
+On 28 and 29 October the school's web filter blocked the statistics server and no
+classroom play reached the dashboard, while nothing on the PCs said so. The fix keeps
+every batch until the server's own 204 delivers it (a page that closes first leaves it to
+the next one), counts only the server's own answers, and lets the teacher page show and
+test delivery (docs/TELEMETRY.md, "Delivery"). Measured with the Linux minified build and
+the school's `SG_TELEMETRY_URL`, against main at b713f12:
+
+* **The portal** grows by 2,481 bytes, from 396,438 to 398,919: `js/telemetry.js` grows
+  from 11,250 to 13,731 minified bytes (batches kept until answered and the minute a page
+  waits before sending one again, the reading of each answer, the delivery record
+  `sg:site:tm:dx`, the clear dated after the PC's clock, and check mode with `status()`
+  and `check()`). The added work is one small `localStorage` write per answer and one read
+  per batch sealed; a page that closes before an answer leaves its batches for the next
+  page, which sends them once more (the server keeps them once).
+* **The teacher page** grows by 21,470 bytes, from 96,672 to 118,142: it now inlines the
+  same `js/telemetry.js` (13,731 bytes), because only that file may use the network and
+  the connection test must run there; the delivery box adds 6,609 bytes of script (most of
+  it Arabic text at two bytes a character: every reason and problem in words a teacher
+  can act on, and the test's answers), 538 of styles and about 600 of markup. Only
+  teachers open this page.
+* The offline cache grows by 23,951 bytes, from 5,306,831 to 5,330,782 (both pages, each
+  cached once, and the worker's list).
+
+All three limits follow the rule above: the measured size rounded up to the next 1,000
+bytes plus 1,000.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 396,438 | 398,919 | 398,000 | 400,000 |
+| Teacher page | 96,672 | 118,142 | 98,000 | 120,000 |
+| Offline precache | 5,306,831 | 5,330,782 | 5,308,000 | 5,332,000 |
+
+No game page changes, and no request, font, library or third-party code is added to any
+child's page. The teacher page makes a request only when the teacher presses
+«اختبر الاتصال الآن».
