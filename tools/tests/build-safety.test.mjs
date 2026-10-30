@@ -323,7 +323,7 @@ test('SG_TELEMETRY_URL reaches the portal only, is checked first, and changes no
   const url = 'https://ingest.example.org/v1/batch?school=north-2';
   const result = build(url);
   success(result);
-  assert.match(result.stdout, /telemetry: the portal sends anonymous events to ingest\.example\.org/);
+  assert.match(result.stdout, /telemetry: the portal sends play events without names to ingest\.example\.org/);
   const on = site();
   const portal = text(on, 'index.html');
   assert.equal(portal.split('window.SG_TELEMETRY=').length, 2, 'injected once');

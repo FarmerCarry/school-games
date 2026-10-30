@@ -1,6 +1,6 @@
 // Static rules for the local play statistics (docs/PLAY_STATS.md). Node only:
-// nothing on the site goes over the network except the portal's anonymous telemetry
-// sink, js/telemetry.js (docs/ARCHITECTURE.md "Telemetry sink"), engine and simulation
+// nothing on the site goes over the network except the portal's telemetry sink
+// (no names), js/telemetry.js (docs/ARCHITECTURE.md "Telemetry sink"), engine and simulation
 // files never report, and round ids never carry typed text. Runs once in the shared suite.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
