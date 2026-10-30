@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchChromium } from './browser.mjs';
+import { classroomNavigation, isRetryableNavigationError } from './classroom-nav.mjs';
 import { runScenario } from './game-scenarios.mjs';
 import { copyClassroomSite } from './classroom-files.mjs';
 
@@ -26,14 +27,8 @@ console.log(`Verified ${inventory.length} downloaded files at ${folder}`);
 
 const cases = [], errors = [];
 let browser;
-async function check(page, label, action) {
-  const item = { label, ok: false };
-  cases.push(item);
-  try { await action(); item.ok = true; }
-  catch (error) { item.error = error.stack || String(error); }
-  try { await page.screenshot({ path: path.join(artifactDir, label + '.png'), fullPage: true }); }
-  catch (error) { item.screenshotError = error.message; }
-  console.log(`${item.ok ? 'PASS' : 'FAIL'} ${label}${item.error ? ': ' + item.error.split('\n')[0] : ''}`);
+function gotoDownloaded(page, file) {
+  return page.goto(pathToFileURL(file).href, classroomNavigation);
 }
 
 try {
@@ -53,24 +48,78 @@ try {
           }
         });
       }
-      const page = await context.newPage();
-      page.setDefaultTimeout(10000);
-      page.on('pageerror', error => errors.push(`${label}: ${error.message}`));
-      page.on('console', message => { if (message.type() === 'error') errors.push(`${label}: ${message.text()}`); });
-      page.on('requestfailed', request => {
-        let disk = '';
-        if (request.url().startsWith('file:')) {
-          try { disk = fs.existsSync(fileURLToPath(request.url())) ? ' (file exists on disk)' : ' (file missing on disk)'; }
-          catch (error) { disk = ' (invalid file URL: ' + error.message + ')'; }
+      // One page per case. Edge on Windows leaves a shared page wedged after a
+      // file:// navigation that never fires load, or aborts it with
+      // net::ERR_ABORTED while the file is on disk. main run 40967117213 timed
+      // out opening road-hopper, then failed to find that game's Play button,
+      // and aborted pool-party. Closing the page ends that navigation first.
+      function watchPage(page) {
+        const bucket = [];
+        let accept = true;
+        const push = line => { if (accept) bucket.push(line); };
+        page.on('pageerror', error => push(`${label}: ${error.message}`));
+        page.on('console', message => { if (message.type() === 'error') push(`${label}: ${message.text()}`); });
+        page.on('requestfailed', request => {
+          let disk = '';
+          if (request.url().startsWith('file:')) {
+            try { disk = fs.existsSync(fileURLToPath(request.url())) ? ' (file exists on disk)' : ' (file missing on disk)'; }
+            catch (error) { disk = ' (invalid file URL: ' + error.message + ')'; }
+          }
+          push(`${label}: ${request.url()}: ${request.failure()?.errorText}${disk}`);
+        });
+        page.on('request', request => {
+          if (/^https?:/.test(request.url())) push(`${label}: external request ${request.url()}`);
+        });
+        return {
+          commit() { if (!accept) return; accept = false; errors.push(...bucket); },
+          discard() { accept = false; }
+        };
+      }
+      async function openPage() {
+        const page = await context.newPage();
+        page.setDefaultTimeout(10000);
+        return { page, watch: watchPage(page) };
+      }
+      async function check(caseLabel, action) {
+        const item = { label: caseLabel, ok: false };
+        cases.push(item);
+        let current;
+        try {
+          current = await openPage();
+          try {
+            await action(current.page);
+            item.ok = true;
+          } catch (error) {
+            // One fresh page, and only when Edge aborted or never finished the
+            // navigation. A failed gameplay check is reported as itself.
+            if (!isRetryableNavigationError(error)) throw error;
+            const line = String(error.message || error).split('\n')[0];
+            console.log(`RETRY ${caseLabel}: ${line}`);
+            item.navigationRetry = line;
+            current.watch.discard();
+            await current.page.close().catch(() => {});
+            current = null;
+            current = await openPage();
+            await action(current.page);
+            item.ok = true;
+          }
+        } catch (error) {
+          item.ok = false;
+          item.error = error.stack || String(error);
         }
-        errors.push(`${label}: ${request.url()}: ${request.failure()?.errorText}${disk}`);
-      });
-      page.on('request', request => {
-        if (/^https?:/.test(request.url())) errors.push(`${label}: external request ${request.url()}`);
-      });
+        if (current) {
+          try { await current.page.screenshot({ path: path.join(artifactDir, caseLabel + '.png'), fullPage: true }); }
+          catch (error) { item.screenshotError = error.message; }
+          current.watch.commit();
+          await current.page.close().catch(() => {});
+        }
+        const retryNote = item.navigationRetry ? ' (retried a file navigation)' : '';
+        console.log(`${item.ok ? 'PASS' : 'FAIL'} ${caseLabel}${retryNote}${item.error ? ': ' + item.error.split('\n')[0] : ''}`);
+      }
 
-      await check(page, label + '-portal', async () => {
-        await page.goto(pathToFileURL(path.join(folder, 'index.html')).href);
+      await check(label + '-portal', async page => {
+        await gotoDownloaded(page, path.join(folder, 'index.html'));
+        await page.waitForFunction(() => document.querySelectorAll('a[data-slug]').length >= 31);
         assert.ok(await page.locator('a[data-slug]').count() >= 31, 'catalog renders from a file URL');
         await page.locator('a[data-slug="tic-tac-toe"]').first().click();
         const element = await page.locator('#stage iframe').elementHandle();
@@ -84,7 +133,7 @@ try {
 
       // The teacher statistics page from the same folder: it reads this folder's
       // storage, exports files, and explains itself when storage is blocked.
-      await check(page, label + '-teacher', async () => {
+      await check(label + '-teacher', async page => {
         // One day record in the storage format the portal writes (docs/PLAY_STATS.md).
         // It has to be in place before teacher.js reads storage. A write in the
         // previous document, then a reload, can miss the built page: Edge showed
@@ -99,7 +148,7 @@ try {
             localStorage.setItem('sg:site:stats:d:2025-09-01', teacherDay);
           }, teacherDay);
         }
-        await page.goto(pathToFileURL(path.join(folder, 'teacher.html')).href);
+        await gotoDownloaded(page, path.join(folder, 'teacher.html'));
         await page.waitForFunction(() => document.getElementById('source')?.dataset.copy === 'folder');
         if (deniedStorage) {
           assert.ok(await page.locator('#storageMsg').isVisible(), 'blocked storage is explained');
@@ -134,14 +183,14 @@ try {
       });
 
       for (const slug of ['tic-tac-toe', 'connect-four', 'air-hockey', 'merge-2048', 'pizza-clicker', 'dino-3d', 'cake-guards', 'neon-slope', 'road-hopper']) {
-        await check(page, label + '-' + slug, async () => {
-          await page.goto(pathToFileURL(path.join(folder, 'games', slug, 'index.html')).href);
+        await check(label + '-' + slug, async page => {
+          await gotoDownloaded(page, path.join(folder, 'games', slug, 'index.html'));
           const result = await runScenario(page, slug, { mode: 'performance' });
           assert.ok(result.checks.length, 'the game completes observable gameplay checks');
         });
       }
-      await check(page, label + '-pool-party', async () => {
-        await page.goto(pathToFileURL(path.join(folder, 'games', 'pool-party', 'index.html')).href);
+      await check(label + '-pool-party', async page => {
+        await gotoDownloaded(page, path.join(folder, 'games', 'pool-party', 'index.html'));
         await page.locator('#btnTrick').click();
         assert.equal(await page.locator('#lvgrid .lvl').count(), 12, 'all twelve trick-shot puzzles are available in the downloaded menu');
         await page.locator('#lvBack').click();

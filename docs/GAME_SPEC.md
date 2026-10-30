@@ -164,7 +164,9 @@ pause requests. Do not resume automatically when focus returns.
 
 Call `Kit.ready()` only at the end of successful initialization. The portal waits for
 this signal instead of assuming that an iframe load means the game works. Shared
-startup error handling reports failures; it must not manufacture a ready signal.
+startup error handling reports failures before ready; it must not manufacture a ready
+signal. After ready, one stray error warns the portal and leaves the game up. Five
+errors within 10 seconds pause the game (so its pause hook can save) and then fail it.
 
 Use `Kit.motion.reduced()` for custom camera shake or decorative motion. The shared
 shake, particles, CSS and mute control already honor preferences and accessibility.
