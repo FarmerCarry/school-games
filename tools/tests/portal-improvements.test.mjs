@@ -126,7 +126,43 @@ test('refresh verification cannot discard a game launched while the status reply
   assert.equal(await page.locator('#offlineUpdate').isHidden(), true);
   await page.locator('#backGames').click();
   await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
-  assert.equal(await page.evaluate(() => refreshRaceSentinel), 'same-document', 'safe close still requires explicit fresh consent');
+  assert.equal(await page.evaluate(() => refreshRaceSentinel), 'same-document', 'closing the game is use: no reload at once');
+});
+
+test('a quiet home screen adopts a verified update by itself; other screens, a half-made player and input wait', async t => {
+  const page = await pageFor(t);
+  await mockCompletedUpdate(page);
+  await page.clock.install();
+  const quiet = () => page.evaluate(() => SGUpdateQuiet());
+  const same = () => page.evaluate(() => window.adoptSentinel === 'same document');
+  await page.goto(`${origin}/#/favorites`);
+  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+  await page.evaluate(() => { window.adoptSentinel = 'same document'; });
+  assert.equal(await quiet(), -1, 'another screen');
+  await page.clock.fastForward(5 * 60000);
+  assert.ok(await same(), 'favorites are never reloaded by themselves');
+  await page.locator('#chips a[href="#/"]').click();
+  await page.waitForFunction(() => document.body.className === 'route-home');
+  assert.ok(await quiet() >= 0 && await quiet() < 5000, 'the home screen, just used');
+  await page.locator('#who [data-w="add"]').click();
+  assert.equal(await quiet(), -1, 'a half-made player');
+  await page.clock.fastForward(5 * 60000);
+  assert.ok(await same());
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => SGUpdateQuiet() >= 0);
+  await page.clock.fastForward(60000);
+  await page.mouse.move(200, 300);
+  await page.mouse.move(220, 320);
+  assert.ok(await quiet() < 5000, 'a pointer move is use');
+  await page.clock.fastForward(60000);
+  assert.ok(await same(), '60 s after the move');
+  await Promise.all([page.waitForEvent('load'), page.clock.fastForward(20000)]);
+  assert.equal(await page.evaluate(() => window.adoptSentinel), undefined, 'reloaded by itself, without a click');
+  // The mocked page is still not the new build: once per tab and version, the button stays.
+  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+  await page.evaluate(() => { window.adoptSentinel = 'same document'; });
+  await page.clock.fastForward(5 * 60000);
+  assert.ok(await same(), 'no reload loop');
 });
 
 test('personal games appear first and quick filters select matching games', async t => {

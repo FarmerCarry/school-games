@@ -1215,8 +1215,8 @@
   // wheel on the portal and no engaged play reported by the game (sg:stats e > 0), the
   // player becomes a guest on the "who's playing?" strip. A classroom timer still running
   // is kept; the hand-over overlay of one that ran out goes too.
-  var IDLE = 20 * 60000, lastActive = performance.now();
-  function markActive() { lastActive = performance.now(); }
+  var IDLE = 20 * 60000, lastActive = performance.now(), lastUse = lastActive;
+  function markActive() { lastActive = lastUse = performance.now(); }
   function idleCheck() {
     if (!prof('player') || performance.now() - lastActive < IDLE) return;
     tm('why', 'i');
@@ -1224,8 +1224,17 @@
     whoFocus = true;
     if (sessionExpired) { clearSession(); $('#sessionStatus').textContent = T.nextPlayer; }
     if (current) go('#/');
-    markActive();
+    // The hand-over is not use: the home screen it leaves can take a newer build.
+    lastActive = performance.now();
   }
+  // js/offline.js reloads into a newer verified build by itself only on a quiet home
+  // screen: -1 while a reload could lose something (a game, the classroom timer or its
+  // hand-over, another screen, a half-made "who's playing?" step), else how long since
+  // a key press, click, wheel or pointer move here, or engaged play in a game.
+  window.SGUpdateQuiet = function () {
+    if (!window.SGUpdateSafe() || parseRoute().name !== 'home' || who.mode !== 'list') return -1;
+    return Math.max(0, performance.now() - lastUse);
+  };
   // Runs every second, also when no timer is set.
   function tickSession() {
     idleCheck();
@@ -1280,6 +1289,7 @@
       tm('timer', 'c', 0);
     });
     ['pointerdown', 'keydown', 'wheel'].forEach(function (type) { document.addEventListener(type, markActive, { capture: true, passive: true }); });
+    document.addEventListener('pointermove', function () { lastUse = performance.now(); }, { capture: true, passive: true });
     setInterval(tickSession, 1000);
   }
   function setupPlay(slug) {

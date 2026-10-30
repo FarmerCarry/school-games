@@ -1,4 +1,16 @@
-/* Offline readiness belongs to verified cached bytes, not navigator.onLine. */
+/* Offline readiness belongs to verified cached bytes, not navigator.onLine.
+ *
+ * Updates: when the worker of a newer, complete and verified version controls this
+ * tab, the tab reloads into it by itself, but only while nobody is using it. js/site.js
+ * SGUpdateQuiet() is -1 unless the portal is on its home screen with no game open, no
+ * classroom timer or its hand-over and no half-made player, and otherwise how long it
+ * has been without a key press, click, wheel or pointer move (the 20-minute idle
+ * hand-over that closes a game is not use). plan() looks when the page comes back into
+ * view, when the screen changes and on a timer; after QUIET without use it verifies the
+ * new version once more and reloads, once per version and tab. The button stays for
+ * anyone who wants the update right away. A tab left open also asks for a newer worker
+ * when it comes back into view, at most once an hour (CHECK_EVERY).
+ */
 (function () {
   'use strict';
   var status = document.getElementById('offlineStatus');
@@ -7,7 +19,39 @@
   var update = document.getElementById('offlineUpdate'), refresh = document.getElementById('offlineRefresh');
   var pageVersion = window.SG_OFFLINE_VERSION, availableVersion = null, refreshing = false;
   var registration = null, starting = false, checking = false, checkingRepair = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0, observedWorker = null, shown = '';
+  var QUIET = 75000, CHECK_EVERY = 3600000, ADOPTED = 'sg:site:adopted', adoptTimer = 0, reloading = false, checkedAt = performance.now();
   function safeToRefresh() { return typeof window.SGUpdateSafe === 'function' && window.SGUpdateSafe(); }
+  // How long the home screen has been quiet, or -1 while a reload could lose something.
+  function quietFor() {
+    try { var ms = typeof window.SGUpdateQuiet === 'function' ? Number(window.SGUpdateQuiet()) : -1; return ms >= 0 ? ms : -1; }
+    catch (e) { return -1; }
+  }
+  function quiet() { return !document.hidden && quietFor() >= QUIET && safeToRefresh(); }
+  // One automatic reload per version and tab: if the reloaded page is still not that
+  // version, the button stays instead of a reload every QUIET. No storage, no reload.
+  function tried(version) {
+    try { return window.sessionStorage.getItem(ADOPTED) === version; } catch (e) { return true; }
+  }
+  function mark(version) {
+    try { window.sessionStorage.setItem(ADOPTED, version); return tried(version); } catch (e) { return false; }
+  }
+  // Reload by itself now if it is quiet, else look again when the quiet period could
+  // be over (input restarts it). A hidden tab waits until it is visible again.
+  function plan() {
+    clearTimeout(adoptTimer);
+    adoptTimer = 0;
+    if (!availableVersion || checking || refreshing || reloading || document.hidden || tried(availableVersion)) return;
+    if (quiet()) { adopt(true); return; }
+    var ms = quietFor();
+    adoptTimer = setTimeout(plan, ms >= 0 ? Math.max(1000, QUIET - ms) : 30000);
+  }
+  // A tab left open learns of a new publish only when a page of the site opens.
+  function freshen() {
+    var owner = registration;
+    if (!owner || !owner.active || owner.installing || performance.now() - checkedAt < CHECK_EVERY) return;
+    checkedAt = performance.now();
+    try { owner.update().catch(function () {}); } catch (e) { /* the next visit asks again */ }
+  }
   function showUpdate() {
     if (!update || !refresh) return;
     update.hidden = !availableVersion || !safeToRefresh();
@@ -109,6 +153,7 @@
       retry.disabled = false;
       showUpdate();
       if (queued) { var repairNext = queuedRepair; queued = queuedRepair = false; inspect(repairNext); }
+      plan();
     }
   }
   function observe(owner, worker) {
@@ -160,31 +205,38 @@
     if (!hasWorker(owner)) return start();
     inspect(true);
   });
-  if (refresh) refresh.addEventListener('click', async function () {
+  // Reload only this tab into the verified newer version: on the button (auto false),
+  // or by itself on a quiet home screen (plan).
+  async function adopt(auto) {
     if (checking || refreshing || !availableVersion || !safeToRefresh()) return;
     var owner = registration, worker = owner && owner.active, expected = availableVersion;
     if (!worker) return;
     refreshing = true;
+    clearTimeout(adoptTimer);
     showUpdate();
     try {
       var result = await ask(worker, false);
       if (owner !== registration || worker !== owner.active) { inspect(false); return; }
       remember(result);
       if (!complete(result)) paint('unavailable', 'النسخة دون إنترنت غير مكتملة — اتصل بالإنترنت ثم أعد المحاولة', true);
-      // Verification can yield while a game opens. Never discard that new session,
-      // and reload only this tab after its own explicit consent.
-      if (availableVersion === expected && safeToRefresh()) location.reload();
+      // Verification can yield while a game opens or a child starts using the page.
+      // Never discard that; check everything again after the wait.
+      if (availableVersion === expected && safeToRefresh() && (!auto || (quiet() && mark(expected)))) {
+        reloading = true;
+        location.reload();
+      }
     } catch (e) {
       if (owner !== registration || worker !== owner.active) inspect(false);
       else { availableVersion = null; paint('unavailable', 'تعذّر التأكد من النسخة دون إنترنت — أعد المحاولة', true); }
-    } finally { refreshing = false; showUpdate(); }
-  });
-  window.addEventListener('sg:sessionchange', showUpdate);
+    } finally { refreshing = false; showUpdate(); plan(); }
+  }
+  if (refresh) refresh.addEventListener('click', function () { adopt(false); });
+  window.addEventListener('sg:sessionchange', function () { showUpdate(); plan(); });
   navigator.serviceWorker.addEventListener('controllerchange', function () { inspect(false); });
   // Reconnecting repairs an incomplete copy; a ready one only needs the quick check.
   window.addEventListener('online', function () { inspect(shown !== 'ready'); });
-  window.addEventListener('focus', function () { if (!document.hidden) inspect(false); });
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) inspect(false); });
+  window.addEventListener('focus', function () { if (!document.hidden) { freshen(); inspect(false); } });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { freshen(); inspect(false); } });
   if (document.readyState === 'complete') start();
   else window.addEventListener('load', start, { once: true });
 }());
