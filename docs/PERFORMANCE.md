@@ -736,3 +736,27 @@ follow the rule above: the measured size rounded up to the next 1,000 bytes plus
 
 No other limit changes (swing-hook keeps 1,018 bytes, the teacher page 1,328). No
 request, font, library or third-party code is added to any child's page.
+
+### Combining research telemetry with the runtime-warning fix
+
+Merging main's "Keep a ready game up after a stray runtime error" (#70) into research
+telemetry adds both Kit changes to every game page. Each change fit its own limits;
+together they leave ten game pages under 1,000 bytes of headroom and put the offline
+cache 10,831 bytes over its limit (5,306,831 of 5,296,000). Those limits follow the rule
+above: the measured size rounded up to the next 1,000 bytes plus 1,000.
+
+| Measurement | Bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: |
+| blob-battle | 106,012 | 107,000 | 108,000 |
+| bubble-bop | 114,201 | 115,000 | 116,000 |
+| connect-four | 55,228 | 56,000 | 57,000 |
+| fire-and-ice | 123,252 | 124,000 | 125,000 |
+| maze-dash | 116,259 | 117,000 | 118,000 |
+| skybound-golf | 114,268 | 115,000 | 116,000 |
+| snake-arena | 99,067 | 100,000 | 101,000 |
+| splat-strike | 231,231 | 232,000 | 233,000 |
+| swing-hook | 108,342 | 109,000 | 110,000 |
+| tic-tac-toe | 55,206 | 56,000 | 57,000 |
+| Offline precache | 5,306,831 | 5,296,000 | 5,308,000 |
+
+No other limit changes, and nothing is added to any page beyond the two Kit changes.
