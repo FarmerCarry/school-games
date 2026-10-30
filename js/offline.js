@@ -19,7 +19,7 @@
   var update = document.getElementById('offlineUpdate'), refresh = document.getElementById('offlineRefresh');
   var pageVersion = window.SG_OFFLINE_VERSION, availableVersion = null, refreshing = false;
   var registration = null, starting = false, checking = false, checkingRepair = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0, observedWorker = null, shown = '';
-  var QUIET = 75000, CHECK_EVERY = 3600000, ADOPTED = 'sg:site:adopted', adoptTimer = 0, reloading = false, checkedAt = performance.now();
+  var QUIET = 75000, CHECK_EVERY = 3600000, ADOPTED = 'sg:site:adopted', adoptTimer = 0, reloading = false, checkedAt = performance.now(), attempted = '';
   function safeToRefresh() { return typeof window.SGUpdateSafe === 'function' && window.SGUpdateSafe(); }
   // How long the home screen has been quiet, or -1 while a reload could lose something.
   function quietFor() {
@@ -28,12 +28,16 @@
   }
   function quiet() { return !document.hidden && quietFor() >= QUIET && safeToRefresh(); }
   // One automatic reload per version and tab: if the reloaded page is still not that
-  // version, the button stays instead of a reload every QUIET. No storage, no reload.
+  // version, the button stays instead of a reload every QUIET. No storage, no reload;
+  // the attempt is also kept in memory, so a sessionStorage that reads but cannot be
+  // written (full) stops this page from verifying again and again, too.
   function tried(version) {
+    if (version === attempted) return true;
     try { return window.sessionStorage.getItem(ADOPTED) === version; } catch (e) { return true; }
   }
   function mark(version) {
-    try { window.sessionStorage.setItem(ADOPTED, version); return tried(version); } catch (e) { return false; }
+    attempted = version;
+    try { window.sessionStorage.setItem(ADOPTED, version); return window.sessionStorage.getItem(ADOPTED) === version; } catch (e) { return false; }
   }
   // Reload by itself now if it is quiet, else look again when the quiet period could
   // be over (input restarts it). A hidden tab waits until it is visible again.

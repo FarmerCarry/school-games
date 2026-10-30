@@ -537,6 +537,27 @@ test('no reload by itself for an incomplete version, an uncontrolled page, an ol
   assert.equal(blocked.page.reloads, 1, 'the button still works');
 });
 
+test('a sessionStorage that reads but cannot be written (full) means no automatic reload, not a loop', async () => {
+  const storage = { getItem() { return null; }, setItem() { throw new Error('QuotaExceededError'); } };
+  const { active, page } = upgraded({ quiet: QUIET, storage });
+  active.hold = true;
+  await flush();
+  // Answer each request as the worker would; a loop asks again at once, with no timer.
+  for (let i = 0; i < 20 && active.pending.length; i++) { active.pending.shift()(); await flush(); }
+  assert.equal(page.reloads, 0, 'the attempt cannot be remembered across the reload');
+  assert.equal(active.requests.length, 2, 'the readiness check and one verification, then it stops');
+  assert.equal(page.adoptTimers().length, 0, 'and nothing keeps polling');
+  page.window.quiet = 10 * QUIET;
+  page.window.emit('sg:sessionchange'); page.document.emit('visibilitychange'); await flush();
+  while (active.pending.length) { active.pending.shift()(); await flush(); }
+  assert.equal(page.reloads, 0);
+  assert.equal(active.requests.length, 3, 'coming back into view only checks readiness again');
+  assert.equal(page.update.hidden, false, 'the button still offers the update');
+  page.refresh.emit('click'); await flush();
+  active.pending.shift()(); await flush();
+  assert.equal(page.reloads, 1, 'and it works');
+});
+
 test('a tab left open asks for a newer worker when it comes back into view, at most hourly', async () => {
   const active = worker('activated'), owner = registration({ active });
   const page = controller([owner]);
