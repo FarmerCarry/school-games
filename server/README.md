@@ -50,6 +50,12 @@ a web browser. Everything below is free.
    `https://school-games-telemetry.<your-name>.workers.dev`. Send that address to the
    developer (an email or a chat message is fine). The developer then switches the games
    site on, and children's PCs start sending statistics (without names).
+   A PC's play reaches the server only when the PC opens the games **website** and the
+   school's internet lets the PC reach this address. A web filter that blocks
+   `*.workers.dev` or new sites stops it silently: ask the school's IT to allow the
+   address. A copy opened from a downloaded folder never sends. On each PC, the teacher
+   page (🏫 then 📊) shows whether its play gets through and has a button that tests the
+   connection.
 9. **Open that address** in your browser to see the dashboard, and sign in with the
    password from step 5. Until children play, there is nothing to show; add `/?demo` to
    the address to see the dashboard with made-up sample data.

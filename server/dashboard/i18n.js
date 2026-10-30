@@ -302,8 +302,9 @@
     qualityLine: function (p) { return p + ' of play time is linked to a student.'; },
     guestAdvice: 'Ask children to tap their animal so their progress counts.',
     pcsUpdated: function (k, share) {
-      return pl(k, 'PC', 'PCs') + ' on the new version' + (share ? '; ' + share + ' of this period’s sessions still come from PCs on the old version (they update when someone accepts the offline update)' : '') + '.';
+      return pl(k, 'PC', 'PCs') + ' on the new version' + (share ? '; ' + share + ' of this period’s sessions still come from PCs on the old version (each switches the next time the site is opened on it)' : '') + '.';
     },
+    unseenPcs: 'PCs whose play never reaches the server are not counted here at all: a school web filter that blocks the statistics server, a copy opened from a downloaded folder, or statistics stopped on the PC. The teacher page on each PC shows whether its play gets through.',
     qualityMore: 'How far each number can be trusted',
     dailyStudents: 'Students per day',
     whenTitle: 'When they play',
@@ -626,7 +627,7 @@
       linkedShare: 'The rest was played as a guest or on the old version.', v2Share: 'They count in totals, never as a student.',
       clockEstimatedShare: 'Their times are estimated from when the server received them.', unclosedVisits: 'The page closed before the game ended; its minutes still count.',
       unknownBandShare: 'Counted under “Not set”.', idleHandovers: 'A profile handed back after 20 quiet minutes.',
-      pcsNew: 'Old PCs send no PC code, so the number of PCs in all is not known.', oldVersionSessionShare: 'They update when someone accepts the offline update.',
+      pcsNew: 'Old PCs send no PC code, so the number of PCs in all is not known.', oldVersionSessionShare: 'Each PC switches the next time the site is opened on it.',
       profilesFullPcs: 'New children on those PCs play as guests.', forgetfulPcs: 'A lab PC reset every night makes new students every day.'
     },
     // ---- the research files, the dictionary, one child's data -------------------------------------
@@ -973,8 +974,9 @@
     guestAdvice: 'اطلب من الأطفال أن يضغطوا على حيوانهم ليُحسب تقدّمهم.',
     pcsUpdated: function (k, share) {
       return c(k, ['جهاز واحد', 'جهازان', 'أجهزة', 'جهازًا']) + ' على الإصدار الجديد' +
-        (share ? '؛ وما زالت ' + share + ' من جلسات هذه الفترة تأتي من أجهزة على الإصدار القديم (تتحدّث عندما يوافق أحدهم على تحديث النسخة دون اتصال)' : '') + '.';
+        (share ? '؛ وما زالت ' + share + ' من جلسات هذه الفترة تأتي من أجهزة على الإصدار القديم (يتحدّث كل جهاز في المرة التالية التي يُفتح فيها الموقع عليه)' : '') + '.';
     },
+    unseenPcs: 'لا تظهر هنا أبدًا الأجهزة التي لا يصل لعبها إلى الخادم: حين يحجب مرشّح الإنترنت في المدرسة خادم الإحصاءات، أو حين تُفتح الألعاب من مجلد منزَّل، أو حين تُوقف الإحصاءات على الجهاز. وتبيّن صفحة المعلم على كل جهاز هل يصل لعبه أم لا.',
     qualityMore: 'إلى أي حد يُعتمد على كل رقم',
     dailyStudents: 'الطلاب في كل يوم',
     whenTitle: 'متى يلعبون',
@@ -1300,7 +1302,7 @@
       linkedShare: 'الباقي لُعب ضيوفًا أو على الإصدار القديم.', v2Share: 'تُحسب في المجاميع، ولا تُحسب لأي طالب.',
       clockEstimatedShare: 'أوقاتها مقدّرة من وقت وصولها إلى الخادم.', unclosedVisits: 'أُغلقت الصفحة قبل أن تنتهي اللعبة؛ وما زالت دقائقها تُحسب.',
       unknownBandShare: 'تُحسب تحت «غير محدد».', idleHandovers: 'ملف أُعيد بعد 20 دقيقة من الهدوء.',
-      pcsNew: 'لا ترسل الأجهزة القديمة رمز الجهاز، لذلك لا يُعرف عدد الأجهزة كلها.', oldVersionSessionShare: 'تتحدّث عندما يوافق أحدهم على تحديث النسخة دون اتصال.',
+      pcsNew: 'لا ترسل الأجهزة القديمة رمز الجهاز، لذلك لا يُعرف عدد الأجهزة كلها.', oldVersionSessionShare: 'يتحدّث كل جهاز في المرة التالية التي يُفتح فيها الموقع عليه.',
       profilesFullPcs: 'يلعب الأطفال الجدد على هذه الأجهزة ضيوفًا.', forgetfulPcs: 'جهاز المختبر الذي يُعاد ضبطه كل ليلة يصنع طلابًا جددًا كل يوم.'
     },
     // ---- ملفات البحث والقاموس وبيانات طفل واحد ---------------------------------------------------------

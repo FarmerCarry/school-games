@@ -1058,6 +1058,7 @@
     if (st && has(st.guestMinutes) && has(k.totals.engagedMinutes) && k.totals.engagedMinutes > 0 &&
       st.guestMinutes / k.totals.engagedMinutes >= GUEST_ADVICE) lines.push(T.guestAdvice);
     if (has(q.pcsNew)) lines.push(T.pcsUpdated(q.pcsNew, has(q.oldVersionSessionShare) && q.oldVersionSessionShare > 0 ? I.pct(q.oldVersionSessionShare) : null));
+    lines.push(T.unseenPcs);
     lines.forEach(function (line) { h('p', null, box, line); });
     link(h('p', null, box), '#/data', T.qualityMore);
   }
