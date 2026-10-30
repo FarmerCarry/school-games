@@ -162,6 +162,24 @@ test('routine checks are quick and reconnecting while ready does not re-hash the
   assert.equal(page.status['data-state'], 'ready');
 });
 
+test('reconnecting after an update was cut off asks for it again, so the download resumes', async () => {
+  const old = worker('activated'), next = worker(); next.version = 'page-v2';
+  const owner = registration({ active: old, installing: next });
+  const page = controller([owner]);
+  await flush();
+  page.window.emit('online'); await flush();
+  assert.equal(owner.updates, 0, 'not while the update is still downloading');
+  owner.installing = null; next.state = 'redundant'; next.emit('statechange'); // the line dropped
+  await flush();
+  assert.equal(page.status['data-state'], 'ready', 'the old version still works');
+  assert.equal(page.retry.hidden, true, 'and Retry is not offered for it');
+  page.window.emit('online'); await flush();
+  assert.equal(owner.updates, 1, 'the browser installs the new version again, from the files it kept');
+  owner.update = () => Promise.reject(new Error('offline again'));
+  page.window.emit('online'); await flush();
+  assert.equal(page.status['data-state'], 'ready', 'a failed request changes nothing');
+});
+
 test('callbacks from the old registration cannot overwrite or cancel replacement installation', async () => {
   const oldWorker = worker(), old = registration({ installing: oldWorker });
   const newWorker = worker(), replacement = registration({ installing: newWorker });

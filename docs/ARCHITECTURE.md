@@ -79,9 +79,10 @@ The generated `sw.js` keeps every file of one build in the cache
 `sg-v2-<scope>|<version>`, each body checked against its SHA-256 prefix (`FILES`).
 
 * **Installs resume.** A failed or cut-off install keeps the verified files it saved
-  under the new version's name. The next attempt (the next visit, Retry, reconnecting,
-  or a newer version copying its unchanged files) hashes them again and downloads only
-  the rest, so a 5 MB update on a slow school line is not restarted from zero. The
+  under the new version's name. The next attempt (the next page of the site, the
+  `online` event, the hourly check of an open tab, Retry while no complete version is
+  active, or a newer version copying its unchanged files) hashes them again and
+  downloads only the rest, so a 5 MB update on a slow school line is not restarted from zero. The
   worker activates only when every file is in its cache, and only the active worker of
   a version reads that cache, so a partial copy is never reported ready or served.
   An empty cache `…|<version>|partial` marks a copy as partial until its install is
@@ -98,9 +99,10 @@ The generated `sw.js` keeps every file of one build in the cache
   or engaged play; the 20-minute idle hand-over is not use. It looks when the page
   becomes visible, when the screen changes and on a timer, verifies the version again
   right before reloading, and tries once per version and tab (sessionStorage
-  `sg:site:adopted`), so a mismatched build cannot loop. The «حدّث الصفحة الآن» button
-  stays on every screen but a game. A tab left open calls `registration.update()` when
-  it becomes visible, at most once an hour.
+  `sg:site:adopted`, and in memory for a sessionStorage that cannot be written), so a
+  mismatched build cannot loop. The «حدّث الصفحة الآن» button shows whenever
+  `SGUpdateSafe()` holds. A tab left open calls `registration.update()` when it becomes
+  visible, at most once an hour, and on every `online` event.
 
 ### Byte policy
 

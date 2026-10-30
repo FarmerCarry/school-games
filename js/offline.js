@@ -9,7 +9,8 @@
  * view, when the screen changes and on a timer; after QUIET without use it verifies the
  * new version once more and reloads, once per version and tab. The button stays for
  * anyone who wants the update right away. A tab left open also asks for a newer worker
- * when it comes back into view, at most once an hour (CHECK_EVERY).
+ * when it comes back into view, at most once an hour (CHECK_EVERY), and on reconnecting,
+ * so an update the line cut off resumes (Retry shows only while no complete version is).
  */
 (function () {
   'use strict';
@@ -49,13 +50,17 @@
     var ms = quietFor();
     adoptTimer = setTimeout(plan, ms >= 0 ? Math.max(1000, QUIET - ms) : 30000);
   }
-  // A tab left open learns of a new publish only when a page of the site opens.
-  function freshen() {
+  // A tab left open learns of a new publish only when a page of the site opens, and an
+  // update cut off by the line is tried again only when asked: on reconnecting (resume)
+  // and when the tab comes back into view at most hourly (freshen). The files it
+  // verified before are kept (tools/build.mjs install), so it continues where it stopped.
+  function resume() {
     var owner = registration;
-    if (!owner || !owner.active || owner.installing || performance.now() - checkedAt < CHECK_EVERY) return;
+    if (!owner || !owner.active || owner.installing) return;
     checkedAt = performance.now();
     try { owner.update().catch(function () {}); } catch (e) { /* the next visit asks again */ }
   }
+  function freshen() { if (performance.now() - checkedAt >= CHECK_EVERY) resume(); }
   function showUpdate() {
     if (!update || !refresh) return;
     update.hidden = !availableVersion || !safeToRefresh();
@@ -237,8 +242,9 @@
   if (refresh) refresh.addEventListener('click', function () { adopt(false); });
   window.addEventListener('sg:sessionchange', function () { showUpdate(); plan(); });
   navigator.serviceWorker.addEventListener('controllerchange', function () { inspect(false); });
-  // Reconnecting repairs an incomplete copy; a ready one only needs the quick check.
-  window.addEventListener('online', function () { inspect(shown !== 'ready'); });
+  // Reconnecting repairs an incomplete copy (a ready one only needs the quick check) and
+  // asks for a newer worker, which resumes an update the line cut off.
+  window.addEventListener('online', function () { resume(); inspect(shown !== 'ready'); });
   window.addEventListener('focus', function () { if (!document.hidden) { freshen(); inspect(false); } });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { freshen(); inspect(false); } });
   if (document.readyState === 'complete') start();
