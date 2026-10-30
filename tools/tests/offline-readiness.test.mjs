@@ -39,7 +39,7 @@ function worker() {
       async has(n) { return exists && n === name; },
       async keys() { return exists ? [name] : []; },
       async open() { opened++; exists = true; return cache; },
-      async delete(n) { if (n === name) exists = false; return true; }
+      async delete(n) { if (n === name) { exists = false; entries.clear(); } return true; }
     },
     self: { registration: { scope, async update() { updates++; } },
       async skipWaiting() { activations++; }, addEventListener(name, fn) { handlers[name] = fn; } },
@@ -100,7 +100,7 @@ test('failed same-version installation preserves the active cache and later reco
   assert.equal(w.activations, 1);
 });
 
-test('failed new installation settles concurrent writes and removes its partial cache', async () => {
+test('a failed new installation settles concurrent writes and keeps the files it verified', async () => {
   const w = worker();
   let releaseFont, fontStarted, finished = false;
   const started = new Promise(resolve => { fontStarted = resolve; });
@@ -114,11 +114,58 @@ test('failed new installation settles concurrent writes and removes its partial 
   const rejected = assert.rejects(install, /offline/);
   await started;
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(finished, false, 'cleanup waits for the in-flight writer');
-  assert.equal(w.exists, true);
+  assert.equal(finished, false, 'the install waits for the in-flight writer');
   releaseFont();
   await rejected;
-  assert.equal(w.exists, false, 'a new partial cache is removed');
+  assert.equal(w.activations, 0, 'a partial copy never takes over');
+  assert.equal(w.exists, true, 'a slow line does not start again from zero');
+  assert.deepEqual([...w.entries.keys()].sort(), [w.scope + 'index.html', w.scope + 'shared/font.woff2']);
+  assert.equal((await w.status()).ready, false, 'and it is never reported as ready');
+});
+
+test('the next install downloads only the missing files and then activates', async () => {
+  const w = worker();
+  const failing = new Set(['games/demo/index.html', 'shared/font.woff2']);
+  w.setFetch(async (p, body) => {
+    if (failing.has(p)) throw new Error('connection reset');
+    return new Response(body);
+  });
+  await assert.rejects(w.install(), /connection reset/);
+  assert.equal(w.activations, 0);
+  failing.delete('shared/font.woff2');
+  await assert.rejects(w.install(), /connection reset/, 'a second cut-off attempt still saves what it can');
+  assert.equal(w.activations, 0);
+  assert.equal(w.entries.size, 2);
+  failing.clear();
+  w.requests.length = 0;
+  await w.install();
+  assert.deepEqual(w.requests.map(url => new URL(url).pathname), ['/school-games/games/demo/index.html'], 'only the missing file');
+  assert.equal(w.activations, 1, 'complete: it takes over');
+  const ready = await w.status();
+  assert.equal(ready.ready, true);
+  assert.equal(ready.count, 3);
+});
+
+test('a resumed install downloads a saved file again when its label or bytes are wrong', async () => {
+  const w = worker();
+  w.seed('index.html', 'portal bytes cut off half-way');
+  w.entries.set(w.scope + 'shared/font.woff2', new Response('font', { headers: { 'x-sg-hash': hash('older font') } }));
+  w.seed('games/demo/index.html');
+  w.entries.set(w.scope + 'games/demo/index.html', { headers: new Headers({ 'x-sg-hash': hash('game') }),
+    clone() { return this; }, arrayBuffer() { return Promise.reject(new TypeError('unreadable')); } });
+  await w.install();
+  assert.deepEqual(w.requests.map(url => new URL(url).pathname).sort(),
+    ['/school-games/games/demo/index.html', '/school-games/index.html', '/school-games/shared/font.woff2']);
+  assert.equal(w.activations, 1);
+  assert.equal((await w.status()).ready, true, 'every body is hashed and correct');
+});
+
+test('an install whose saved copy is lost before the end does not take over', async () => {
+  const w = worker();
+  let reads = 0;
+  // One look per file while downloading; the browser evicts the font before the last look.
+  w.setMatch(async () => { if (++reads === 4) w.entries.delete(w.scope + 'shared/font.woff2'); });
+  await assert.rejects(w.install(), /incomplete shared\/font\.woff2/);
   assert.equal(w.activations, 0);
 });
 

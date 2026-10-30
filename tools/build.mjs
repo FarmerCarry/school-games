@@ -15,7 +15,9 @@
  *   - teacher.html (local play statistics) becomes one html file the same way, without thumbnails.
  *   - sw.js: an offline cache. After the first visit the whole site is stored on the PC, pages
  *     open without asking the server, and it still works if the internet drops. Each build
- *     changes sw.js, so PCs download only the files that changed.
+ *     changes sw.js, so PCs download only the files that changed, and an interrupted
+ *     download resumes on the next attempt. js/offline.js shows its state and moves an
+ *     idle portal tab to a newer complete version.
  *   - school-games-offline.zip: this whole build in one school-games/ folder, for PCs that
  *     run it from a folder without internet (unzip, double-click index.html). It is not
  *     precached, so children's PCs never download it.
@@ -496,37 +498,43 @@ function repairCache(cache) {
 
 // Install: keep unchanged files from the previous cache, download only the changed ones
 // (straight from the network, checked against their hash), then take over right away.
+// A failed or cut-off install keeps every verified file it saved under this version's
+// name, so the next attempt (the next visit, Retry, reconnecting, or a newer version
+// copying unchanged files) downloads only what is still missing on a slow school line.
+// That partial cache is never used: this worker activates only when every file is in
+// it, and only the active worker of this version reads it (offlineStatus, fetch).
 self.addEventListener('install', function (event) {
   event.waitUntil((async function () {
-    var cacheExisted = await caches.has(CACHE);
     var cache = await caches.open(CACHE);
     var oldNames = (await caches.keys()).filter(function (k) { return (k.indexOf(CACHE_PREFIX) === 0 || isLegacyCache(k)) && k !== CACHE; });
     var olds = await Promise.all(oldNames.map(function (k) { return caches.open(k); }));
     var paths = Object.keys(FILES);
     var next = 0;
+    // A saved copy counts only with this version's label and bytes that still match it.
+    async function verified(hit, p) {
+      if (!hit || hit.headers.get('x-sg-hash') !== FILES[p]) return false;
+      try { return hex(await crypto.subtle.digest('SHA-256', await hit.clone().arrayBuffer())).slice(0, 16) === FILES[p]; }
+      catch (e) { return false; }
+    }
     async function one(p) {
       var url = new URL(p, SCOPE).href;
-      if (await cache.match(url)) return;
+      // Saved by an earlier attempt, or shared with a surviving worker of this version.
+      if (await verified(await cache.match(url), p)) return;
       for (var i = 0; i < olds.length; i++) {
         var hit = await olds[i].match(url);
-        if (hit && hit.headers.get('x-sg-hash') === FILES[p]) {
-          var oldHash = hex(await crypto.subtle.digest('SHA-256', await hit.clone().arrayBuffer())).slice(0, 16);
-          if (oldHash === FILES[p]) { await cache.put(url, hit); return; }
-        }
+        if (await verified(hit, p)) { await cache.put(url, hit); return; }
       }
       await cache.put(url, await fetchVerified(p));
     }
     async function worker() { while (next < paths.length) await one(paths[next++]); }
-    try {
-      // Finish every writer before cleaning up a failed installation.
-      var results = await Promise.allSettled([worker(), worker(), worker(), worker()]);
-      var failed = results.find(function (result) { return result.status === 'rejected'; });
-      if (failed) throw failed.reason;
-    } catch (e) {
-      // Delete only a cache owned by this install. A reinstall can share a cache
-      // with a surviving active worker; its verified pages must remain usable.
-      if (!cacheExisted) await caches.delete(CACHE);
-      throw e;
+    // Finish every writer, so all that could be saved is, before failing the install.
+    var results = await Promise.allSettled([worker(), worker(), worker(), worker()]);
+    var failed = results.find(function (result) { return result.status === 'rejected'; });
+    if (failed) throw failed.reason;
+    // Never take over with a partial copy.
+    for (var i = 0; i < paths.length; i++) {
+      var saved = await cache.match(new URL(paths[i], SCOPE).href);
+      if (!saved || saved.headers.get('x-sg-hash') !== FILES[paths[i]]) throw new Error('incomplete ' + paths[i]);
     }
     await self.skipWaiting();
   })());
