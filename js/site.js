@@ -1213,26 +1213,34 @@
   // The idle hand-over: the player lives in sessionStorage, so a tab left open would give
   // the next class the last child's profile. After 20 minutes with no key press, click or
   // wheel on the portal and no engaged play reported by the game (sg:stats e > 0), the
-  // player becomes a guest on the "who's playing?" strip. A classroom timer still running
-  // is kept; the hand-over overlay of one that ran out goes too.
+  // player becomes a guest on the "who's playing?" strip, and a new player half made (or
+  // the remove step) left on the strip goes back to its list. A classroom timer still
+  // running is kept; the hand-over overlay of one that ran out goes too.
   var IDLE = 20 * 60000, lastActive = performance.now(), lastUse = lastActive;
   function markActive() { lastActive = lastUse = performance.now(); }
   function idleCheck() {
-    if (!prof('player') || performance.now() - lastActive < IDLE) return;
-    tm('why', 'i');
-    prof('select', '');
-    whoFocus = true;
-    if (sessionExpired) { clearSession(); $('#sessionStatus').textContent = T.nextPlayer; }
-    if (current) go('#/');
+    if (performance.now() - lastActive < IDLE) return;
+    var left = who.mode !== 'list' && !!$('#who');
+    if (!prof('player') && !left) return;
+    if (prof('player')) {
+      tm('why', 'i');
+      prof('select', '');
+      whoFocus = true;
+      if (sessionExpired) { clearSession(); $('#sessionStatus').textContent = T.nextPlayer; }
+      if (current) go('#/');
+    }
+    if (left) whoSet('list');
     // The hand-over is not use: the home screen it leaves can take a newer build.
     lastActive = performance.now();
   }
   // js/offline.js reloads into a newer verified build by itself only on a quiet home
   // screen: -1 while a reload could lose something (a game, the classroom timer or its
-  // hand-over, another screen, a half-made "who's playing?" step), else how long since
-  // a key press, click, wheel or pointer move here, or engaged play in a game.
+  // hand-over, another screen, a half-made "who's playing?" step) or while a player is
+  // chosen (a reload would end that child's statistics session and start another; the
+  // idle hand-over makes a guest after 20 minutes), else how long since a key press,
+  // click, wheel or pointer move here, or engaged play in a game.
   window.SGUpdateQuiet = function () {
-    if (!window.SGUpdateSafe() || parseRoute().name !== 'home' || who.mode !== 'list') return -1;
+    if (!window.SGUpdateSafe() || parseRoute().name !== 'home' || who.mode !== 'list' || prof('player')) return -1;
     return Math.max(0, performance.now() - lastUse);
   };
   // Runs every second, also when no timer is set.

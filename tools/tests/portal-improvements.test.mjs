@@ -165,6 +165,46 @@ test('a quiet home screen adopts a verified update by itself; other screens, a h
   assert.ok(await same(), 'no reload loop');
 });
 
+test('a player sitting on the home screen is never reloaded by itself; after the idle hand-over the guest screen is', async t => {
+  const page = await pageFor(t);
+  await mockCompletedUpdate(page);
+  await page.clock.install();
+  await page.goto(origin);
+  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+  await page.locator('#who [data-w="add"]').click();
+  await page.locator('#who [data-w="a:4"]').click();
+  await page.locator('#who [data-w="c:0"]').click();
+  await page.locator('#who [data-w="b:6-7"]').click();
+  await page.waitForFunction(() => sessionStorage.getItem('sg:site:player') && document.querySelector('#who').className === 'who who-list');
+  await page.evaluate(() => { window.adoptSentinel = 'same document'; });
+  // A reload keeps the player but would end the child's statistics session and start another.
+  assert.equal(await page.evaluate(() => SGUpdateQuiet()), -1, 'a selected player');
+  await page.clock.fastForward(19 * 60000);
+  assert.equal(await page.evaluate(() => window.adoptSentinel), 'same document', '19 quiet minutes with a player chosen');
+  assert.equal(await page.locator('#offlineUpdate').isVisible(), true, 'the button still offers it');
+  await Promise.all([page.waitForEvent('load'), page.clock.fastForward(2 * 60000)]);
+  assert.equal(await page.evaluate(() => window.adoptSentinel), undefined, 'the idle hand-over made a guest, then it reloaded by itself');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:site:player') || 'guest'), 'guest');
+});
+
+test('a new player half made and left goes back to the list after 20 minutes, and the quiet home screen adopts the update', async t => {
+  const page = await pageFor(t);
+  await mockCompletedUpdate(page);
+  await page.clock.install();
+  await page.goto(origin);
+  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+  await page.locator('#who [data-w="add"]').click();
+  await page.locator('#who [data-w="a:2"]').click();
+  await page.evaluate(() => { window.adoptSentinel = 'same document'; });
+  assert.equal(await page.evaluate(() => SGUpdateQuiet()), -1, 'a half-made player');
+  await page.clock.fastForward(19 * 60000);
+  assert.equal(await page.evaluate(() => window.adoptSentinel), 'same document');
+  assert.equal(await page.locator('#who').getAttribute('class'), 'who who-new', 'a child may still be choosing');
+  await Promise.all([page.waitForEvent('load'), page.clock.fastForward(2 * 60000)]);
+  assert.equal(await page.evaluate(() => window.adoptSentinel), undefined, 'reloaded by itself once the strip was back to its list');
+  assert.equal(await page.evaluate(() => (JSON.parse(localStorage.getItem('sg:site:profiles') || '{}').list || []).length), 0, 'nothing was half saved');
+});
+
 test('personal games appear first and quick filters select matching games', async t => {
   const page = await pageFor(t);
   await page.addInitScript(() => {

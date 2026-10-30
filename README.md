@@ -222,16 +222,19 @@ every visit. Retry and a resumed download hash them again.
 
 When a newer complete version is cached, an open portal tab switches to it by itself
 while nobody is using it: on the home screen, with no game open, the classroom timer
-off and no new player half made, after about 75 seconds without a key press, click,
-scroll or mouse movement. Coming back to the tab or the 20-minute idle hand-over
-(which closes a game) after such a pause switches at once. Running or paused games,
-game menus, the classroom handoff and the other screens (a category, favorites,
-search) are never reloaded by themselves. Any screen also offers
-“حدّث الصفحة الآن” for whoever wants the update at once, except while a game is open
-or the classroom timer runs or its handoff shows; the button affects only that tab. Both check the new version once more first, give way if a game opens or someone
-starts using the page during that check, and work offline. Each tab switches by
-itself once per version. A tab left open also asks the site for a newer version when
-it comes back into view, at most once an hour.
+off, no player chosen (a guest) and no new player half made, after about 75 seconds
+without a key press, click, scroll or mouse movement. A chosen player waits for the
+hand-over, and a new player half made and left goes back to the list after 20 minutes.
+Coming back to the tab or the 20-minute idle hand-over (which closes a game) after
+such a pause switches at once. Running or paused games, game menus, the classroom
+handoff and the other screens (a category, favorites, search) are never reloaded by
+themselves. Any screen also offers “حدّث الصفحة الآن” for whoever wants the update at
+once, except while a game is open or the classroom timer runs or its handoff shows;
+the button affects only that tab. Both check the new version once more first, give
+way if a game opens or someone starts using the page during that check, and work
+offline. Each tab switches by itself once per version. A tab left open also asks the
+site for a newer version when it comes back into view (at most once an hour) and on
+reconnecting.
 The first installation never shows an update prompt. A game-only update includes the
 changed game and the portal's new build identity. Pages opened before this feature
 need an ordinary reload/navigation to acquire the prompt.

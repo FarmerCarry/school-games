@@ -3,7 +3,8 @@
  * Updates: when the worker of a newer, complete and verified version controls this
  * tab, the tab reloads into it by itself, but only while nobody is using it. js/site.js
  * SGUpdateQuiet() is -1 unless the portal is on its home screen with no game open, no
- * classroom timer or its hand-over and no half-made player, and otherwise how long it
+ * classroom timer or its hand-over, no player chosen (a guest: a reload would split a
+ * child's statistics session) and no half-made player, and otherwise how long it
  * has been without a key press, click, wheel or pointer move (the 20-minute idle
  * hand-over that closes a game is not use). plan() looks when the page comes back into
  * view, when the screen changes and on a timer; after QUIET without use it verifies the
