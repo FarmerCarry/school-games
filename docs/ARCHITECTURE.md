@@ -84,7 +84,12 @@ The generated `sw.js` keeps every file of one build in the cache
   the rest, so a 5 MB update on a slow school line is not restarted from zero. The
   worker activates only when every file is in its cache, and only the active worker of
   a version reads that cache, so a partial copy is never reported ready or served.
-  Activation deletes the scope's other caches, partial ones included.
+  An empty cache `…|<version>|partial` marks a copy as partial until its install is
+  complete (never one shared with a surviving active worker of that version). Each
+  install first copies what it can from the caches on the PC, then deletes the marked
+  copies of other versions, so a PC whose installs keep failing (a filter blocking one
+  game page) holds the active version and one partial copy at most, not one more per
+  publish. Activation deletes the scope's other caches, partial ones included.
 * **Open tabs adopt a newer build by themselves.** When a newer complete version
   controls an open portal, `js/offline.js` reloads that tab only while `SGUpdateSafe()`
   holds (no game frame or play route, no classroom timer or its hand-over) and

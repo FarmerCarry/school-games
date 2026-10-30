@@ -459,6 +459,14 @@ try {
     check(await page.locator('#offlineUpdate').isHidden(), 'failed upgrade never offers the incomplete version as an update');
     await offlineReload(context, [page]);
     check(await page.evaluate(version => window.SG_OFFLINE_VERSION === version, v2.version), 'the partial copy is never served: offline the PC keeps the complete version');
+    // The filter still blocks that game page when a newer build is published.
+    mounts.set(BASE, v4.dir);
+    check(await update(page) === 'redundant', 'a newer publish fails on the same blocked page');
+    const piled = await state(inspector, origin + BASE, [cacheName(origin + BASE, v2), cacheName(origin + BASE, v4)]);
+    check(!piled.caches.includes(cacheName(origin + BASE, v3)) && piled.counts[cacheName(origin + BASE, v4)] === v4.count - 1 &&
+      piled.counts[cacheName(origin + BASE, v2)] === v2.count && piled.caches.filter(name => name.startsWith(cachePrefix(origin + BASE))).length === 3,
+      'it takes over the older partial copy and deletes it: the complete version and one marked partial copy, no pile-up');
+    mounts.set(BASE, v3.dir); // that publish is rolled back
     // A slow or flaky school line: the next attempt resumes instead of starting from zero.
     stalePath = null;
     hits.length = 0;
