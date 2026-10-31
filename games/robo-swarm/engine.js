@@ -202,10 +202,14 @@
       run.shield[p] = run.shieldMax[p];
       run.aim[p] = p === 0 ? 0 : Math.PI;
     }
-    // A few wind-up toys are already in the box, so the first second is a game.
+    loadBlocks(run);
+    // Toys already near the kid, outside a tight circle, so the opening is busy.
+    const sx = players > 1 ? (run.x[0] + run.x[1]) * 0.5 : run.x[0];
+    const sy = players > 1 ? (run.y[0] + run.y[1]) * 0.5 : run.y[0];
     for (let n = 0; n < 4; n++) {
-      const a = n / 4 * 6.2831853;
-      RS.spawnRobot(run, 0, 1200 + Math.cos(a) * 520, 700 + Math.sin(a) * 300);
+      const side = n < 2 ? -1 : 1;
+      const yoff = n % 2 === 0 ? -140 : 140;
+      RS.spawnRobot(run, n % 2 === 0 ? 0 : 1, sx + side * 560, sy + yoff);
     }
     if (opts.levels) {
       for (let u = 0; u < 10; u++) if (opts.levels[u]) run.lv[0][u] = opts.levels[u];
@@ -221,8 +225,9 @@
 
   function emit(run, k, a, b, x, y) {
     let i = run.evN;
+    if (k === 12 && i >= EV - 28) return;
     if (i >= EV) {
-      if (k < 3) return;
+      if (k < 3 || k === 12) return;
       i = EV - 1;
     } else run.evN = i + 1;
     const e = run.ev[i];
@@ -364,6 +369,61 @@
   }
 
   const EDGE = { x: 0, y: 0 };
+  const SLIDE = { x: 0, y: 0 };
+
+  function loadBlocks(run) {
+    const src = D.blocks[run.map] || D.blocks[0];
+    run.blockN = src.length;
+    run.blocks = new Float32Array(src.length * 4);
+    for (let i = 0; i < src.length; i++) {
+      run.blocks[i * 4] = src[i][0];
+      run.blocks[i * 4 + 1] = src[i][1];
+      run.blocks[i * 4 + 2] = src[i][2];
+      run.blocks[i * 4 + 3] = src[i][3];
+    }
+  }
+
+  function blocked(run, x, y, r) {
+    const b = run.blocks;
+    for (let i = 0; i < run.blockN; i++) {
+      const o = i * 4;
+      const bx = b[o], by = b[o + 1], bw = b[o + 2], bh = b[o + 3];
+      const cx = x < bx ? bx : x > bx + bw ? bx + bw : x;
+      const cy = y < by ? by : y > by + bh ? by + bh : y;
+      const dx = x - cx, dy = y - cy;
+      if (dx === 0 && dy === 0) return true;
+      if (dx * dx + dy * dy < r * r) return true;
+    }
+    return false;
+  }
+
+  function slideBlocks(run, x, y, r, out) {
+    const b = run.blocks;
+    for (let i = 0; i < run.blockN; i++) {
+      const o = i * 4;
+      const bx = b[o], by = b[o + 1], bw = b[o + 2], bh = b[o + 3];
+      let cx = x < bx ? bx : x > bx + bw ? bx + bw : x;
+      let cy = y < by ? by : y > by + bh ? by + bh : y;
+      let dx = x - cx, dy = y - cy;
+      if (dx === 0 && dy === 0) {
+        const dl = x - bx, dr = bx + bw - x, dt = y - by, db = by + bh - y;
+        if (dl <= dr && dl <= dt && dl <= db) x = bx - r;
+        else if (dr <= dt && dr <= db) x = bx + bw + r;
+        else if (dt <= db) y = by - r;
+        else y = by + bh + r;
+      } else {
+        const d2 = dx * dx + dy * dy;
+        if (d2 < r * r && d2 > 0.0001) {
+          const inv = 1 / Math.sqrt(d2);
+          const push = (r - d2 * inv);
+          x += dx * inv * push;
+          y += dy * inv * push;
+        }
+      }
+    }
+    out.x = x;
+    out.y = y;
+  }
   function edgeInto(run, rng, out) {
     const side = (rng() * 4) | 0;
     let x, y;
@@ -467,14 +527,21 @@
     }
   }
 
-  function damageRobot(run, id, dmg, owner) {
+  function damageRobot(run, id, dmg, owner, sx, sy) {
     if (!run.rAlive[id] || dmg <= 0) return;
     run.rhp[id] -= dmg;
-    run.rHurt[id] = 0.12;
+    run.rHurt[id] = 0.16;
+    if (sx != null && run.rType[id] !== KING) {
+      const dx = run.rx[id] - sx, dy = run.ry[id] - sy;
+      const inv = 1 / (Math.sqrt(dx * dx + dy * dy) || 1);
+      const kick = run.rType[id] === 3 ? 8 : 18;
+      run.rx[id] += dx * inv * kick;
+      run.ry[id] += dy * inv * kick;
+    }
     if (run.rType[id] === KING) {
       run.bossHits = (run.bossHits || 0) + 1;
-      emit(run, 5, dmg, owner, run.rx[id], run.ry[id]);
-    }
+      emit(run, 5, Math.round(dmg), owner, run.rx[id], run.ry[id]);
+    } else emit(run, 12, Math.round(dmg), 0, run.rx[id], run.ry[id]);
     if (run.rhp[id] <= 0) killRobot(run, id);
   }
 
@@ -531,7 +598,7 @@
       const foam = lvRow(run, p, D.FOAM);
       if (foam >= 0 && cds[D.FOAM] <= 0) {
         const spec = D.weapons[D.FOAM];
-        const aim = nearestRobot(run, run.x[p], run.y[p], 820);
+        const aim = nearestRobot(run, run.x[p], run.y[p], 440);
         if (aim >= 0) {
           const dx = run.rx[aim] - run.x[p], dy = run.ry[aim] - run.y[p];
           const inv = 1 / (Math.sqrt(dx * dx + dy * dy) || 1);
@@ -645,13 +712,13 @@
         run.rx[ri] += dx * inv * 36;
         run.ry[ri] += dy * inv * 36;
       }
-      if (d2 < (R * 0.72) * (R * 0.72)) damageRobot(run, ri, dmg, p);
+        if (d2 < (R * 0.72) * (R * 0.72)) damageRobot(run, ri, dmg, p, run.x[p], run.y[p]);
     });
   }
 
   function hurtCircle(run, x, y, rad, dmg, owner) {
     queryRobots(run, x, y, rad, function (ri) {
-      if (overlap(x, y, rad, run.rx[ri], run.ry[ri], run.rr[ri] * 0.65)) damageRobot(run, ri, dmg, owner);
+      if (overlap(x, y, rad, run.rx[ri], run.ry[ri], run.rr[ri] * 0.65)) damageRobot(run, ri, dmg, owner, x, y);
     });
   }
 
@@ -673,6 +740,11 @@
       }
       run.px[i] += run.pvx[i] * dt;
       run.py[i] += run.pvy[i] * dt;
+      if (run.pKind[i] !== 4 && blocked(run, run.px[i], run.py[i], 6)) {
+        if (run.pKind[i] === 2) { run.pKind[i] = 4; continue; }
+        freeP(run, i);
+        continue;
+      }
       if (run.pKind[i] === 2) {
         const dx = run.ptx[i] - run.px[i], dy = run.pty[i] - run.py[i];
         if (dx * dx + dy * dy < 18 * 18 || run.plife[i] <= 0) {
@@ -690,7 +762,7 @@
     const rad = D.weapons[D.BALLOON].rad[row < 0 ? 2 : row];
     const x = run.px[i], y = run.py[i], dmg = run.pdmg[i];
     queryRobots(run, x, y, rad, function (ri) {
-      if (overlap(x, y, rad, run.rx[ri], run.ry[ri], run.rr[ri] * 0.4)) damageRobot(run, ri, dmg, o);
+      if (overlap(x, y, rad, run.rx[ri], run.ry[ri], run.rr[ri] * 0.4)) damageRobot(run, ri, dmg, o, x, y);
     });
     const z = allocZ(run);
     if (z >= 0) {
@@ -735,7 +807,7 @@
         if (alreadyHit(run, i, ri)) return;
         markHit(run, i, ri);
         const cannon = run.evo[owner][1] && kind === 0;
-        damageRobot(run, ri, run.pdmg[i], owner);
+        damageRobot(run, ri, run.pdmg[i], owner, run.px[i], run.py[i]);
         if (cannon && run.zFreeN > 0 && (ri & 1) === 0) {
           const z = allocZ(run);
           if (z >= 0) {
@@ -757,7 +829,7 @@
       if (run.zKind[i] !== 0 || run.zdps[i] <= 0) continue;
       const x = run.zx[i], y = run.zy[i], rad = run.zr[i], dmg = run.zdps[i] * dt;
       queryRobots(run, x, y, rad, function (ri) {
-        if (overlap(x, y, rad, run.rx[ri], run.ry[ri], run.rr[ri] * 0.5)) damageRobot(run, ri, dmg, 0);
+        if (overlap(x, y, rad, run.rx[ri], run.ry[ri], run.rr[ri] * 0.5)) damageRobot(run, ri, dmg, 0, x, y);
       });
     }
   }
@@ -814,6 +886,9 @@
       if (run.dashT[p] > 0) sp = 780;
       run.x[p] = clamp(run.x[p] + ix * sp * dt, 26, W - 26);
       run.y[p] = clamp(run.y[p] + iy * sp * dt, 26, H - 26);
+      slideBlocks(run, run.x[p], run.y[p], run.prad, SLIDE);
+      run.x[p] = clamp(SLIDE.x, 26, W - 26);
+      run.y[p] = clamp(SLIDE.y, 26, H - 26);
       run._moved[p] = m2 > 0.04 ? 1 : 0;
       if (m2 > 0.04 && run.dashT[p] <= 0) run.aim[p] = Math.atan2(iy, ix);
     }
@@ -842,7 +917,8 @@
       let dx = tx - run.rx[i], dy = ty - run.ry[i];
       let d2 = dx * dx + dy * dy;
       const inv = 1 / (Math.sqrt(d2) || 1);
-      const sp = run.rsp[i];
+      let sp = run.rsp[i];
+      if (run.t < 50 && type <= 1 && d2 < 760 * 760) sp *= 0.42;
       run.rT[i] -= dt;
       if (type === 1) {
         if (run.rMode[i] === 0 && run.rT[i] <= 0) { run.rMode[i] = 1; run.rT[i] = 0.22; }
@@ -927,6 +1003,11 @@
       else if (run.rx[i] > W - run.rr[i]) run.rx[i] = W - run.rr[i];
       if (run.ry[i] < run.rr[i]) run.ry[i] = run.rr[i];
       else if (run.ry[i] > H - run.rr[i]) run.ry[i] = H - run.rr[i];
+      if ((i & 3) === (run.frame & 3) && blocked(run, run.rx[i], run.ry[i], run.rr[i] * 0.8)) {
+        slideBlocks(run, run.rx[i], run.ry[i], run.rr[i] * 0.8, SLIDE);
+        run.rx[i] = SLIDE.x;
+        run.ry[i] = SLIDE.y;
+      }
     }
   }
 
@@ -1002,7 +1083,7 @@
       for (let p = 0; p < run.players; p++) {
         if (run.hp[p] <= 0) continue;
         const row = lvRow(run, p, D.MAGNET);
-        let rad = 34;
+        let rad = 340;
         if (row >= 0) rad = D.weapons[D.MAGNET].rad[row];
         if (run.evo[p][0]) rad += 80;
         const dx = run.x[p] - run.bx[i], dy = run.y[p] - run.by[i];
@@ -1017,7 +1098,7 @@
           break;
         }
         const inv = 1 / (Math.sqrt(d2) || 1);
-        const pull = (row >= 0 ? 420 : 80) * dt;
+        const pull = (row >= 0 ? 680 : 420) * dt;
         run.bx[i] += dx * inv * pull;
         run.by[i] += dy * inv * pull;
       }

@@ -796,16 +796,17 @@ per frame, and the moving layer is drawn into a 640×360 buffer and scaled up, s
 a swarm of 300 robots still presents one picture to the page canvas.
 
 Headless Chromium, software rendering, 1280×720, after `__game.stress()` filled
-the arena: **59 fps** (the same run without the swarm was 59 fps). A full 4:30
-simulation in Node finishes in about 1.3 s.
+the arena: **57 fps** on the final capture (earlier samples on the same machine
+were 45–53). A full 4:30 simulation in Node finishes in about 1.6 s. The world
+is still drawn into a 640×360 buffer and scaled up once.
 
 | Measurement | Before | After | Limit |
 | --- | ---: | ---: | ---: |
-| Robo Swarm HTML | — | 92,601 | 95,000 |
+| Robo Swarm HTML | — | 97,167 | 99,500 |
 | Portal | 396,669 (limit 398,000) | 400,742 | 403,000 |
-| Offline precache | 5,449,684 (limit 5,450,000) | 5,547,240 | 5,560,000 |
+| Offline precache | 5,449,684 (limit 5,450,000) | 5,551,806 | 5,560,000 |
 | Teacher page | under 98,000 | 97,554 | 98,000 (unchanged) |
 
 The game file is under the 135 KB target. The portal grew by the catalog entry
 and the thumbnail. The precache grew by that portal change plus the new game
-file. The new limits leave about 2 KB, 13 KB and 2.4 KB of headroom.
+file. The new limits leave about 2.3 KB, 13 KB and 8 KB of headroom.

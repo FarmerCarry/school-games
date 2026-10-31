@@ -23,7 +23,7 @@
   // Level rows are Lv 1..5. cd seconds, dmg per hit, and the extra fields under each weapon.
   RSD.weapons = [
     { id: 0, name: 'قاذف الرغوة', desc: 'طلقات أسرع وأقوى وتخترق', color: '#ff8a24',
-      cd: [0.42, 0.34, 0.28, 0.22, 0.17], dmg: [10, 14, 18, 24, 32], pierce: [1, 1, 2, 3, 4], speed: 740 },
+      cd: [0.38, 0.32, 0.26, 0.21, 0.16], dmg: [12, 16, 20, 26, 34], pierce: [1, 2, 2, 3, 4], speed: 760 },
     { id: 1, name: 'حلقة الفقاعات', desc: 'فقاعات تدور حولك وتفقع', color: '#3ec6ff',
       cd: [0.50, 0.46, 0.42, 0.38, 0.34], dmg: [6, 8, 11, 14, 18], n: [1, 2, 2, 3, 4], orbit: 86 },
     { id: 2, name: 'صحن طائر', desc: 'يطير ويعود ويقطع الصف', color: '#ffe14a',
@@ -35,7 +35,7 @@
     { id: 5, name: 'درب الطلاء', desc: 'يترك بقعة تؤذي من يمشي عليها', color: '#ff4f93',
       cd: [0.34, 0.30, 0.28, 0.26, 0.22], dmg: [12, 18, 26, 36, 48], rad: [30, 36, 42, 48, 56] },
     { id: 6, name: 'مغناطيس', desc: 'يسحب البراغي من بعيد', color: '#c06bff',
-      cd: [1, 1, 1, 1, 1], dmg: [0, 0, 0, 0, 0], rad: [96, 150, 210, 270, 340] },
+      cd: [1, 1, 1, 1, 1], dmg: [0, 0, 0, 0, 0], rad: [460, 580, 720, 880, 1080] },
     { id: 7, name: 'حذاء رياضي', desc: 'تجري أسرع', color: '#3ddc84',
       cd: [1, 1, 1, 1, 1], dmg: [0, 0, 0, 0, 0], bonus: [0.08, 0.16, 0.24, 0.34, 0.46] },
     { id: 8, name: 'قلب إضافي', desc: 'قلب جديد وتعبئة واحدة', color: '#ff5a7a',
@@ -51,7 +51,7 @@
 
   // type: 0 walker 1 hopper 2 roller 3 tank 4 splitter 5 shooter 6 mini 7 miniboss 8 king
   RSD.bots = [
-    { name: 'ماشي', hp: 16, speed: 84, r: 18, xp: 1, bolts: 1 },
+    { name: 'ماشي', hp: 12, speed: 80, r: 18, xp: 1, bolts: 1 },
     { name: 'قفّاز', hp: 14, speed: 70, r: 16, xp: 1, bolts: 1 },
     { name: 'دوّار', hp: 12, speed: 196, r: 16, xp: 1, bolts: 1 },
     { name: 'دبّابة', hp: 54, speed: 56, r: 26, xp: 3, bolts: 3 },
@@ -65,9 +65,9 @@
   // Spawn pressure by schedule-seconds. interval is divided by the tier's spawn rate.
   RSD.spawn = {
     breaks: [0, 22, 45, 80, 120, 160, 200],
-    interval: [1.22, 0.96, 0.72, 0.52, 0.38, 0.28, 0.20],
+    interval: [0.42, 0.38, 0.36, 0.30, 0.24, 0.18, 0.15],
     weights: [
-      [8, 0, 0, 0, 0, 0],
+      [6, 2, 0, 0, 0, 0],
       [6, 2, 0, 0, 0, 0],
       [6, 3, 1, 0, 0, 0],
       [4, 3, 2, 1, 2, 0],
@@ -76,6 +76,14 @@
       [2, 2, 2, 3, 3, 3]
     ]
   };
+
+  // Solid toy blocks. They sit outside the middle of the arena so a circling run
+  // still has a clear floor, and they stop both kids and foam.
+  RSD.blocks = [
+    [[150, 150, 108, 76], [2120, 160, 118, 80], [170, 1140, 124, 74], [2060, 1100, 112, 84], [130, 620, 68, 120], [2188, 600, 72, 128]],
+    [[180, 180, 96, 96], [2080, 200, 100, 90], [200, 1080, 110, 86], [2040, 1060, 120, 90], [150, 640, 80, 100], [2140, 660, 86, 96]],
+    [[160, 170, 120, 70], [2100, 180, 130, 74], [190, 1120, 140, 68], [2000, 1080, 150, 72], [140, 600, 76, 130], [2160, 580, 80, 140]]
+  ];
 
   RSD.maps = [
     { id: 1, name: 'صندوق الألعاب', line: 'سجادة وقطع تركيب', hp: 1, speed: 1, add: [0, 0, 0, 0, 0, 0], floor: '#e7b45a', ink: '#c4843a' },

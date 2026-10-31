@@ -90,6 +90,7 @@
   var focus = [0, 0];
   var inputs = [{ x: 0, y: 0, dash: 0 }, { x: 0, y: 0, dash: 0 }];
   var toastTimer = 0;
+  var warnText = '', warnUntil = 0;
 
   function $(id) { return document.getElementById(id); }
   function show(id) {
@@ -223,6 +224,10 @@
     $('btnPause').hidden = true;
     $('cards').hidden = true;
     $('bossBar').hidden = true;
+    $('xpTrack').hidden = true;
+    $('warn').hidden = true;
+    warnText = '';
+    warnUntil = 0;
     paintTitle();
     dirty = true;
   }
@@ -259,12 +264,15 @@
     });
     focus[0] = focus[1] = 0;
     cardKey = '';
+    warnText = '';
+    warnUntil = 0;
     Draw.resetCam(run);
     $('toast').hidden = true;
     screen = 'play';
     show(null);
     $('hud').hidden = false;
     $('btnPause').hidden = false;
+    $('xpTrack').hidden = false;
     $('cards').hidden = true;
     dirty = true;
     Sfx.ui('go');
@@ -349,6 +357,8 @@
     $('btnPause').hidden = true;
     $('cards').hidden = true;
     $('bossBar').hidden = true;
+    $('xpTrack').hidden = true;
+    $('warn').hidden = true;
     dirty = true;
   }
 
@@ -494,12 +504,14 @@
     var reduced = Kit.motion.reduced();
     for (var i = 0; i < run.evN; i++) {
       var e = run.ev[i];
-      if (e.k === 5) Kit.track.hit();
-      else if (e.k === 3 && e.a) { Kit.track.miss(); shake.add(8); }
+      if (e.k === 5) { Kit.track.hit(); shake.add(5); }
+      else if (e.k === 3 && e.a) { Kit.track.miss(); shake.add(10); }
       else if (e.k === 4) { Kit.track.react(e.a | 0); shake.add(4); }
-      else if (e.k === 1 && e.a >= 7) shake.add(e.a === 8 ? 12 : 6);
-      else if (e.k === 7) shake.add(reduced ? 0 : 14);
+      else if (e.k === 1 && e.a >= 7) shake.add(e.a === 8 ? 16 : 8);
+      else if (e.k === 6) shake.add(10);
+      else if (e.k === 7) shake.add(reduced ? 0 : 16);
       else if (e.k === 10) shake.add(3);
+      else if (e.k === 11) { warnText = e.a ? 'ملك الروبوتات!' : 'زعيم صغير!'; warnUntil = run.t + 2.6; }
     }
     Sfx.events(run);
     Draw.events(run, reduced);
@@ -518,11 +530,18 @@
     else combo.hidden = true;
     var king = run.kingId;
     var bar = $('bossBar');
-      if (king >= 0 && run.rAlive[king]) {
+    if (king >= 0 && run.rAlive[king]) {
       bar.hidden = false;
       var pct = Math.max(0, run.rhp[king] / run.rmax[king]);
       bar.querySelector('i').style.width = (pct * 100) + '%';
     } else bar.hidden = true;
+    var xp = run.next > 0 ? run.xp / run.next : 0;
+    $('xpFill').style.width = (Math.max(0, Math.min(1, xp)) * 100) + '%';
+    var soon = !run.kingAlive && !run.bossPopped && !run.endless && run.bossAt - run.t < 4 && run.bossAt - run.t > 0;
+    var warn = $('warn');
+    if (soon) { warn.hidden = false; warn.textContent = 'الملك يقترب!'; }
+    else if (run.t < warnUntil && warnText) { warn.hidden = false; warn.textContent = warnText; }
+    else warn.hidden = true;
   }
 
   function pressedStart() {
