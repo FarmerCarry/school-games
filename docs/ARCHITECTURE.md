@@ -429,7 +429,7 @@ repeat only shows that session in the dashboard's live panel for up to 5 minutes
 marks an already rolled day for a re-roll), and marks it `h: 1` (handed over as the page
 went). Every request, its answer's body included, has a minute (20 s in the teacher's
 test); without an answer by then it is aborted and counts as a network failure. Entries
-that older builds queued move into it and are still sent, unchanged: wire version 2 from
+that older builds queued move into it on a portal page and are still sent, unchanged: wire version 2 from
 `sg:site:tm:q:<hash>`, and the first v3 build's from `sg:site:tm:q3:<hash>` (a hidden page
 of that build removed every batch it handed over at once). This build never writes either
 key, because a tab of those builds still open on the PC rewrites or empties it. Stopping
@@ -444,19 +444,23 @@ queues too (not the notes `sg:site:tm:on` and `sg:site:tm:dx`, and not `sg:site:
 storage calls are wrapped; no `console`; never `clear()`.
 
 **Delivery status for the teacher:** the sink keeps `sg:site:tm:dx` (the address; the last
-delivery; the first failure since, and the latest failure's kind: `network`, `server` or
-`refused`; the last time unsent play was dropped for room or age). `teacher.html` loads
+delivery; the first failure since, and the latest failure's kind: `network`, `offline`
+(no answer while `navigator.onLine` is false), `server` or `refused`; the last time play
+that no closing page handed over was dropped for room or age). `teacher.html` loads
 the same `js/telemetry.js` in check mode (`<meta name="sg-telemetry" content="check">`):
-no session, no event, no listener, and no write until the test (apart from moving older
-builds' batches and dating back a clear ahead of the clock, as the portal does);
+no session, no event, no listener, and no write until the test (apart from dating back a
+clear ahead of the clock, as the portal does); older builds' keys it counts but only
+reads, so a tab of such a build still open sends them itself, and its test sends only
+this build's queue;
 `SGTelemetry.status()` feeds the page's
 delivery box (green only with a delivery, no failure since and nothing waiting unsent
 for more than 15 minutes since it), and `SGTelemetry.check(cb)` (its «اختبر الاتصال
 الآن» button) asks the server's `GET /v1/health`, then sends the waiting batches, to the
 address the portal noted (the build gives the teacher page none; it is read again at
 each call, so a portal opened after the teacher page counts). Health alone ends a
-failure only when nothing waits, and the test says so when health answers but the
-batches get none.
+failure only when nothing waits, older builds' batches included, and the test says so
+when health answers but the batches get none. A PC with no connection at all asks nothing: the test answers
+`offline` at once and notes nothing.
 So the network carve-out stays exactly one file, inlined in the fast build into both
 pages; `tools/check-all.mjs` checks the teacher page's exact copy like the portal's.
 

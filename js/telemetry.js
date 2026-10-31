@@ -42,17 +42,20 @@
  * same way). Only the server's 204 delivers and only its JSON error ({ "error": text })
  * to a 4xx other than 429 is final; anything else (429, 5xx, a school filter's or
  * captive portal's own page, no answer within a minute, which aborts the request) backs
- * off 20, 40, 80, 160, 300 s. sg:site:tm:on (the server's host) tells the teacher page
- * that this PC shares, and sg:site:tm:dx whether its batches arrive (last delivery,
- * first failure since, its kind, the last time unsent play was dropped). Every storage
- * call is guarded, nothing is logged, every promise is caught and no call into this
- * file throws.
+ * off 20, 40, 80, 160, 300 s; no answer while the PC has no connection at all
+ * (navigator.onLine === false) is noted as 'offline'. sg:site:tm:on (the server's host)
+ * tells the teacher page that this PC shares, and sg:site:tm:dx whether its batches
+ * arrive (last delivery, first failure since, its kind, the last time play that no
+ * closing page handed over was dropped). Every storage call is guarded, nothing is
+ * logged, every promise is caught and no call into this file throws.
  *
  * Check mode: the teacher page loads this file under <meta name="sg-telemetry"
  * content="check"> to show and test delivery (status(), check(cb)). There it never
  * starts a session, records an event or listens to the page; it sends only when the
- * teacher presses the test button, to the address the portal noted in sg:site:tm:dx
- * (read again at each call, so a portal opened after this page counts).
+ * teacher presses the test button, and only this build's queue, to the address the
+ * portal noted in sg:site:tm:dx (read again at each call, so a portal opened after this
+ * page counts). The older builds' keys it only reads, and counts as waiting: a tab of
+ * such a build still open sends them itself.
  */
 (function () {
   'use strict';
@@ -62,7 +65,7 @@
   var cfg = window.SG_TELEMETRY, url = cfg && cfg.url, doc = document, nav = navigator, perf = performance;
   var isArr = Array.isArray, min = Math.min, max = Math.max, floor = Math.floor, str = JSON.stringify;
   var ID = /^(?!.*\d{3})[A-Za-z][\w:.-]{0,23}$/, SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/, BACK = [20, 40, 80, 160, 300];
-  var CODE = /^[0-9a-f]{12}$/, KEY = /^p[0-9a-z]{1,8}$/, KINDS = ['network', 'refused', 'server'];
+  var CODE = /^[0-9a-f]{12}$/, KEY = /^p[0-9a-z]{1,8}$/, KINDS = ['network', 'refused', 'server', 'offline'];
   // The caps of a round's counters (rx): wall ms, inputs, idle lapses, pauses, the sum and
   // number of reaction times, and the DDA level in thousandths (-1: none).
   var RX = [108e5, 1e5, 1e4, 1e4, 1e9, 1e5, 1000];
@@ -364,9 +367,10 @@
   }
   // sg:site:tm:dx = { v: 1, u: the address, ok: when a batch was last delivered (0: never),
   // f: when the first failure since then came (0: none), k: the latest failure's kind
-  // ('network', 'refused' or 'server'), at: when, x: when unsent play was last dropped
-  // for the queue's 128 KB or 7 days (0: never) }, in the PC's clock. Anything malformed,
-  // or the record of another address, starts again.
+  // ('network', 'offline', 'refused' or 'server'), at: when, x: when play that no
+  // closing page handed over (h) was last dropped for the queue's 128 KB or 7 days (0:
+  // never) }, in the PC's clock. Anything malformed, or the record of another address,
+  // starts again.
   function stamp(v) { return typeof v == 'number' && v > 0 && v < 1 / 0 ? v : 0; }
   function record() {
     var d = null;
@@ -383,7 +387,8 @@
     if (k == 'ok') { if (!health) d.ok = t; d.f = d.at = 0; d.k = ''; } else { d.f = d.f || t; d.k = k; d.at = t; }
     write(d);
   }
-  // Unsent play went at t for room or age. The teacher page only reads, except in its test.
+  // Unsent play went at t for room or age (kept() and save() leave out what a closing page
+  // handed over). The teacher page only reads, except in its test.
   function lost(t) {
     var d;
     if (passive && !testing) return;
@@ -392,12 +397,13 @@
   }
   // The unsent batches, oldest first: whole entries only, at most 7 days old, none from
   // before a teacher's clear, at most 128 KB together. Memory holds them when storage fails.
-  // What older builds queued joins them at once, and their keys go.
+  // What older builds queued joins them at once, and their keys go (not on the teacher
+  // page: see waiting()).
   function load() {
     var q = mq, moved = [];
     if (!temp) {
       try { q = JSON.parse(localStorage.getItem(Q)); } catch (e) { q = mq; }
-      MOVE.forEach(function (k) {
+      if (!passive) MOVE.forEach(function (k) {
         try { var o = localStorage.getItem(k); if (o !== null) moved.push([k, o]); } catch (e) { /* nothing older */ }
       });
     }
@@ -406,9 +412,8 @@
       moved.forEach(function (m) {
         var o;
         try { o = kept(JSON.parse(m[1])); } catch (e) { o = []; }
-        o.forEach(function (x) { if (!q.some(function (y) { return y.e.b === x.e.b; })) q.push(x); });
+        join(q, o);
       });
-      q.sort(function (a, b) { return a.t - b.t; });
       save(q);
       q = mq;
       if (!temp) moved.forEach(function (m) { try { localStorage.removeItem(m[0]); } catch (e) { /* moved again next time; the server keeps a batch once */ } });
@@ -421,9 +426,24 @@
       var e = x && x.e;
       if (!e || typeof x.t != 'number' || !(x.t >= cleared) || !(e.v === 2 || e.v === 3) || typeof e.b != 'string' || !/^[0-9a-f]{16}$/.test(e.b) || !isArr(e.ev)) return false;
       if (x.t > t - 6048e5) return true;
-      late = max(late, x.t + 6048e5);
+      // A batch a closing page handed over (h) almost always arrived: only the rest is lost.
+      if (!x.h) late = max(late, x.t + 6048e5);
     });
     if (late) lost(late);
+    return q;
+  }
+  // The batches of o that q lacks join it, oldest first.
+  function join(q, o) {
+    o.forEach(function (x) { if (!q.some(function (y) { return y.e.b === x.e.b; })) q.push(x); });
+    return q.sort(function (a, b) { return a.t - b.t; });
+  }
+  // What waits. The teacher page counts what older builds queued too, but only reads it:
+  // a tab of such a build still open sends it itself, from its own key.
+  function waiting() {
+    var q = load();
+    if (passive) MOVE.forEach(function (k) {
+      try { join(q, kept(JSON.parse(localStorage.getItem(k)))); } catch (e) { /* nothing older */ }
+    });
     return q;
   }
   // The oldest batches go first when the queue passes 128 KB.
@@ -434,9 +454,9 @@
     return q;
   }
   function save(q) {
-    var n = q.length;
+    var was = q.slice();
     mq = q = fit(q);
-    if (q.length < n) lost(now());
+    if (was.slice(0, was.length - q.length).some(function (x) { return !x.h; })) lost(now());
     try {
       if (q.length) localStorage.setItem(Q, str(q)); else localStorage.removeItem(Q);
       temp = false;
@@ -508,6 +528,9 @@
     function free() { fly -= n; }
     return p;
   }
+  // No answer while the PC has no connection at all (cable out, Wi-Fi down): neither the
+  // school's filter nor the server is to blame.
+  function cut(k) { return k == 'network' && nav.onLine === false ? 'offline' : k; }
   // go(signal)'s promise, or a rejection after ms, which aborts the request: go reads the
   // answer too, so a body that never ends is cut off like headers that never come.
   function within(ms, go) {
@@ -549,7 +572,7 @@
       });
     }).then(null, function () { return ['network']; }).then(safe(function (a) {
       delete sent[b];
-      answered(a[0], a[1]);
+      answered(cut(a[0]), a[1]);
     }));
   }
   // Sends the oldest batch; the next one follows its answer.
@@ -612,26 +635,28 @@
   /* --------------------------------------------------------- check mode */
   // For the teacher page (and the developer tools): why this page cannot send ('folder',
   // 'gpc', 'none', 'local'; or 'off', 'tm' from the teacher's settings, else ''), the
-  // server's host, the delivery record, how many batches wait with the oldest's time (t),
-  // and the time of the oldest one no closing page handed to fetch (o; 0: none).
+  // server's host, the delivery record, how many batches wait (older builds' keys
+  // included) with the oldest's time (t), and the time of the oldest one no closing page
+  // handed to fetch (o; 0: none).
   function status() {
     var s, q, d, o = 0;
     noted();
     s = settings();
     d = why ? {} : record();
     if (!why) sync(s.c);
-    q = why || s.why ? [] : load();
+    q = why || s.why ? [] : waiting();
     q.forEach(function (x) { if (!x.h && !o) o = x.t; });
     return { why: why || s.why, host: host, ok: d.ok || 0, f: d.f || 0, k: d.k || '', at: d.at || 0, x: d.x || 0, n: q.length, t: q.length ? q[0].t : 0, o: o };
   }
   // The teacher's test: GET health beside the address (the server answers it without its
-  // database), then, while the server takes them, the waiting batches one at a time, oldest
-  // first, for a minute in all, each request read whole within 20 s. Every answer to a
-  // batch goes into the record; health alone ends a failure only when nothing waits (a
-  // filter may let health through and still stop the batches), and a health that fails
-  // keeps when the failure began. cb({ why, host }) when this page cannot send, else
-  // cb({ k: 'ok' or the first failure's kind, host, reached: health answered, sent: the
-  // batches delivered now, n: the batches still waiting }).
+  // database), then, while the server takes them, this build's waiting batches one at a
+  // time, oldest first, for a minute in all, each request read whole within 20 s. Every
+  // answer to a batch goes into the record; health alone ends a failure only when nothing
+  // waits (a filter may let health through and still stop the batches), and a health that
+  // fails keeps when the failure began. Without any connection it answers 'offline' at
+  // once, with no request and nothing noted. cb({ why, host }) when this page cannot send,
+  // else cb({ k: 'ok' or the first failure's kind, host, reached: health answered, sent:
+  // the batches delivered now, n: this build's batches still waiting }).
   function check(cb) {
     var s, n = 0, end = now() + 6e4;
     cb = safe(cb);
@@ -639,11 +664,13 @@
     s = settings();
     if (why || s.why) return cb({ why: why || s.why, host: host });
     sync(s.c);
+    if (nav.onLine === false) return cb({ k: 'offline', host: host, reached: false, sent: 0, n: waiting().length });
     testing = true;
     within(2e4, function (signal) {
       return fetch(new URL('health', url).href, { credentials: 'omit', mode: 'cors', cache: 'no-store', signal: signal })
         .then(function (r) { return answer(r, 1); });
     }).then(null, function () { return 'network'; }).then(safe(function (k) {
+      k = cut(k);
       if (k == 'ok') return next();
       // A server that does not take this wire version is its problem: nothing was dropped.
       note(k == 'refused' ? 'server' : k);
@@ -652,8 +679,9 @@
     function next() {
       var x = load()[0], w = settings().why, left = end - now();
       if (w) { testing = false; return cb({ why: w, host: host }); }
+      // Health alone ends a failure only when nothing waits, older builds' batches included.
       if (!x || left < 1e3) {
-        if (!x && !n) note('ok', 1);
+        if (!n && !waiting().length) note('ok', 1);
         return over('ok', true);
       }
       deliver(x, body(x), function (k) {
@@ -662,7 +690,7 @@
         if (k == 'ok' || k == 'refused') { without(x.e.b); next(); } else over(k, true);
       }, min(2e4, left));
     }
-    function over(k, reached) { var q = load().length; testing = false; cb({ k: k, host: host, reached: reached, sent: n, n: q }); }
+    function over(k, reached) { var q = waiting().length; testing = false; cb({ k: k, host: host, reached: reached, sent: n, n: q }); }
   }
 
   /* --------------------------------------------------------------- API */

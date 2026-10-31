@@ -219,7 +219,9 @@ local day records. The server stores no IP address.
   any other answer and **no answer** keep the batch and back off **20, 40, 80, 160, then
   300 s** (batches that fail together, as a hidden page's do, count once). While the server
   is failing, or the PC is offline (`navigator.onLine === false`), a hidden page sends
-  nothing and the queue keeps everything for later.
+  nothing and the queue keeps everything for later. A request that gets no answer while
+  the PC is offline (the cable out, the Wi-Fi down) is noted as `offline`, not `network`,
+  so the teacher page blames neither the school's filter nor the server.
 * Unsent batches wait in `localStorage` **`sg:site:tm:q4:<hash>`** (an array of
   `{ t, w0, e }`, plus `h: 1` once a closing page handed it over: when the batch's first
   event was recorded, its session's start, and the envelope), oldest first, **at most
@@ -243,9 +245,12 @@ local day records. The server stores no IP address.
   with its own wire version only, and the second, each time it is hidden, removes from its
   key every batch it hands to `fetch` without waiting for an answer, so on a blocked
   network it would empty a queue it shared with this build. So this build never writes
-  either key: whenever it reads its queue it moves their batches into its own (oldest
-  first, each once) and removes those keys. They are sent exactly as they were queued; the
-  server accepts wire version 2 indefinitely. The next change of this kind takes `q5:`.
+  either key: whenever a portal page reads its queue it moves their batches into its own
+  (oldest first, each once) and removes those keys. They are sent exactly as they were
+  queued; the server accepts wire version 2 indefinitely. The teacher page only reads
+  those keys: moved by it, their batches would wait for a portal page of this build, while
+  the older tab, which reads only its own key, stopped sending them. The next change of
+  this kind takes `q5:`.
 * `<hash>` is a short hash of the full ingest address (a 32-bit string hash, in base 36),
   so each address has its own queue: another copy of the site on the same origin (for
   example `name.github.io/school-games` and `name.github.io/school-games-test`) built with
@@ -260,37 +265,49 @@ local day records. The server stores no IP address.
     ok: 1761720300000,              // when a batch was last delivered (the PC's clock; 0: never)
     f: 1761631500000,               // when the first failure since then came (0: none)
     k: 'network',                   // the latest failure: 'network' (no answer within a minute,
-                                    // or not the server's), 'server' (its 429 or 5xx) or
-                                    // 'refused' (its 4xx: the batch is gone)
+                                    // or not the server's), 'offline' (no answer while
+                                    // navigator.onLine is false), 'server' (its 429 or 5xx)
+                                    // or 'refused' (its 4xx: the batch is gone)
     at: 1761720240000,              // when that failure came
-    x: 1761719000000 }              // when unsent play was last dropped for the 128 KB or the
-                                    // 7 days (0: never); a delivery does not clear it
+    x: 1761719000000 }              // when play no closing page handed over was last dropped
+                                    // for the 128 KB or the 7 days (0: never); a delivery
+                                    // does not clear it
   ```
 
   The sink writes it as it starts (only to set `u`), at every answer (a delivery sets
   `ok` and clears the failure, a failure keeps the first `f`) and when the queue drops a
-  batch for room (then `x` is now) or age (`x` is when the batch turned 7 days old). It
-  holds no play, so the teacher page's clear keeps it.
+  batch for room (then `x` is now) or age (`x` is when the batch turned 7 days old). A
+  batch marked `h: 1` is dropped without touching `x`: a closing page handed it to
+  `fetch`, so the server almost always has it, and only the answer never reached a page
+  (counted, it would make every PC's teacher page say that play was dropped after any
+  break of a week, such as the school holidays). It holds no play, so the teacher page's
+  clear keeps it.
 * **Check mode** (the teacher page): `teacher.html` loads `js/telemetry.js` under
   `<meta name="sg-telemetry" content="check">`. There the sink never starts a session,
   records an event, makes a code or listens to the page, and it writes nothing until the
-  teacher acts (reading the queue only moves older builds' batches into this build's
-  key, and a clear ahead of the clock is dated back, as the portal does). `window.SGTelemetry`
+  teacher acts (only a clear ahead of the clock is dated back, as the portal does; older
+  builds' keys it only reads). `window.SGTelemetry`
   has only `active()` (always `false`), `status()` (why this page cannot send: `folder`,
   `gpc`, `local`, `none` for no address, `off` or `tm` from the teacher's settings; the
-  host; the record, `x` included; the waiting batches `n` with the oldest one's time `t`;
-  and `o`, when the oldest batch that no closing page handed over was queued, 0 for none)
+  host; the record, `x` included; the waiting batches `n`, older builds' keys included,
+  with the oldest one's time `t`; and `o`, when the oldest batch that no closing page
+  handed over was queued, 0 for none)
   and `check(cb)`, the teacher's «اختبر الاتصال الآن»: a `GET` of `/v1/health` beside the
   address (`new URL('health', url)`; the server answers it without its database, and only
-  `200` with `"ok":true` and `3` in `accepts` counts), then the waiting batches one at a
+  `200` with `"ok":true` and `3` in `accepts` counts), then this build's waiting batches one at a
   time, oldest first, while the server takes them, for a minute in all and 20 s per
   request, each answer read to its end within that time. Every answer to a batch goes into
-  the record. Health alone ends a failure only when nothing waits: a filter may let the
-  health check through and still stop the batches, so then the failure keeps the time it
-  began, and the result says `reached: true` with the batches' failure (the page then asks
-  IT to allow the address fully, with sending data). A health that fails is noted as a
+  the record. Health alone ends a failure only when nothing waits, older builds' batches
+  included: a filter may let the health check through and still stop the batches, so then
+  the failure keeps the time it began, and the result says `reached: true` with the
+  batches' failure (the page then asks IT to allow the address fully, with sending data).
+  The result's `n` counts what still waits, older builds' batches included: when only
+  those wait, the test sends nothing after health (their tab sends them) and says that
+  they still wait. A health that fails is noted as a
   failure that keeps its start, and a server that does not take wire version 3 as the
-  server's problem (nothing was sent). The fast build gives the teacher page no address
+  server's problem (nothing was sent). With `navigator.onLine === false` the test answers
+  `{ k: 'offline', reached: false, sent: 0, n }` at once, without a request and without
+  writing the record. The fast build gives the teacher page no address
   (`SG_TELEMETRY` goes to the portal only), so it uses `u` from the record the portal
   wrote, read again at each call (a teacher who opens this page first, then the portal,
   needs no reload); without one there is nothing to test.
@@ -369,7 +386,8 @@ stopping statistics on the teacher page.
   play was dropped for room or age, when («حُذف قبل أن يصل»). Its button **اختبر الاتصال الآن** asks the server now and sends
   what waits: «✓ يصل هذا الجهاز إلى خادم الإحصاءات …» with the number of batches sent, or
   «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز …» with the address to give the school's
-  IT. Open the page on the PC the children use, in the same browser, from the website (a
+  IT (or, on a PC with no connection at all, «✗ هذا الجهاز غير متصل بالإنترنت الآن. …»,
+  and nothing for IT). Open the page on the PC the children use, in the same browser, from the website (a
   downloaded folder says that it never sends). Its «الرموز في لوحة المؤشرات» section
   shows this PC's code. In the developer tools, `SGTelemetry.status()` answers the same
   on the portal and on the teacher page.
@@ -398,11 +416,14 @@ stopping statistics on the teacher page.
   classroom timer, `gp`, `np`, `cls` and every `se.why`; back-off 20, 40, 80, 160, 300 s
   with a fake clock, for 5xx and for no answer at all; 400 and 429; a request that is never
   answered is aborted after a minute, noted as a network failure (since its first time)
-  and backed off; the queue across a reload, its 128 KB, 7-day and clear rules (a clear
+  and backed off; a send that fails while `navigator.onLine` is false noted as `offline`,
+  still since the first failure, and the teacher's test then answering `offline` without
+  a request or a write; the queue across a reload, its 128 KB, 7-day and clear rules (a clear
   dated after the PC's clock holds nothing back, and one dated ahead by a fast clock that
   is set right later never drops the play recorded until the clock passes it; a clear
   drops the open page's earlier events even after `status()`), the record of play dropped
-  for room, and v2 entries sent unchanged; keepalive sends on a hidden page and at unload, with no cookie of the ingest
+  for room or age, never of batches a closing page handed over (after the holidays), and
+  v2 entries sent unchanged; keepalive sends on a hidden page and at unload, with no cookie of the ingest
   host on either path (the unloading page's request is seen by an interception for the
   whole browser), every batch kept until its answer, the 60 KB keepalive budget beside a
   send still on its way, and offline; the incident of 28 October (a failed batch, then a
@@ -416,7 +437,13 @@ stopping statistics on the teacher page.
   page opened first; answers whose body never ends cut off after 20 s); two copies of the
   site on one origin with two addresses, each sending only its own queue, and a stop
   dropping both; a tab of a pre-v3 build and one of the first v3 build (whose hidden page
-  empties its key) never dropping this build's batches; a new session per player with
+  empties its key) never dropping this build's batches; the teacher page beside both
+  builds' keys, which its status counts and its test counts as still waiting but only
+  reads, sending this build's batch alone; with only an older build's batches waiting and
+  a failure recorded, a test that asks health alone and keeps the failure; the first v3
+  build's own `js/telemetry.js` (from `git show b713f12`; a checkout without that history
+  skips it) in a tab beside the teacher page, which still sends its batch itself; a new
+  session per player with
   the old one ending after its game; field-by-field checks of `sg:telemetry` and late
   frames; load failures; a stop from another tab that keeps the codes.
 * `tools/tests/telemetry-e2e.test.mjs` (browser and the real Node server): three sessions
@@ -428,7 +455,9 @@ stopping statistics on the teacher page.
   nothing, the teacher page names the host to allow, and once it is allowed its test
   delivers everything that waited: the server has both sessions and the minutes.
 * `tools/tests/build-safety.test.mjs`: the address reaches the portal only, bad addresses
-  are refused before any output changes, and an unset or empty variable changes nothing.
+  are refused before any output changes, and an unset or empty variable changes nothing;
+  the same for `SG_SITE_URL`, the published site's address, which reaches the teacher page
+  only.
 * `tools/tests/play-stats-rules.test.mjs` and `tools/check-all.mjs` share
   `tools/lib/network-rules.mjs`: `fetch()` is allowed in exactly `js/telemetry.js` (and,
   in the fast build, only in the exact inlined copy of it in the portal and the teacher
@@ -440,7 +469,9 @@ stopping statistics on the teacher page.
   removing the `sg:site:tm:` queue while both notes, the codes and the sharing line stay;
   every message of the delivery box and of its test, word for word (the storage limit,
   grey for batches waiting unsent for long, the line for play dropped, health answered
-  with the batches failing); the box on a blocked PC (red, since when, the host), its
+  with the batches failing, a PC with no connection at all, which names neither the
+  filter nor IT); the box on a blocked PC (red, since when, the host), its
   test failing with the address for IT and then sending both waiting batches, oldest
   first, and its result going when the box turns red later; and a downloaded folder's
-  page naming the website.
+  page naming the website its build was given (`SG_SITE_URL`), or, without one, the
+  school's games website.

@@ -40,14 +40,16 @@ const CONTRACT = {
 const TEXT = new Set(['pc', 'pc_label', 'copy', 'date', 'game', 'game_name', 'level', 'exported_at']);
 
 /* ------------------------------------------------- the page without a DOM */
-function loadPage() {
-  const sandbox = vm.createContext({ window: {}, TextEncoder });
+// site: the published address the build gives the page (SG_SITE_URL), or none.
+function loadPage(site) {
+  const sandbox = vm.createContext({ window: site ? { SG_SITE: { url: site } } : {}, TextEncoder });
   const scripts = process.env.SG_ROOT
     ? [...read(path.join(root, 'teacher.html')).matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1])
     : ['js/catalog.js', 'js/telemetry.js', 'js/teacher.js'].map(file => read(path.join(repo, file)));
   assert.equal(scripts.length, 3, 'the teacher page runs the catalog, the telemetry sink in check mode and its own script');
-  // The sink needs a page; the teacher page's pure functions do not.
-  for (const script of [scripts[0], scripts[2]]) vm.runInContext(script, sandbox);
+  // The sink needs a page; the teacher page's pure functions do not. The address a build
+  // put before the page's script gives way to the one asked for here.
+  for (const script of [scripts[0], scripts[2].replace(/^window\.SG_SITE=\{url:"[^"]*"\};\n/, '')]) vm.runInContext(script, sandbox);
   assert.ok(sandbox.window.SGTeacher, 'pure functions load without a document');
   // Results come back as plain host values (the page's objects belong to the
   // sandbox realm, which strict deep equality would tell apart).
@@ -268,8 +270,9 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
 
   // Nothing is sent, and why: no facts and no test button.
   for (const [v, extra, why, state, problem = ''] of [
+    // A build without SG_SITE_URL (the source tree, a local build) knows no address.
     [{ copy: 'folder' }, {}, 'folder', 'هذه نسخة منزَّلة من الموقع (مجلد على هذا الجهاز)، ولا ترسل أبدًا شيئًا إلى لوحة المؤشرات في المدرسة.',
-      'لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة الموقع على الإنترنت: https://farmercarry.github.io/school-games/'],
+      'لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة موقع ألعاب المدرسة على الإنترنت بدلًا من هذا المجلد.'],
     [{ off: true }, {}, 'off', 'لا يُرسل هذا الجهاز شيئًا إلى لوحة المؤشرات ما دام جمع الإحصاءات متوقفًا.'],
     [{ tm: true }, {}, 'tm', 'المشاركة مع لوحة المؤشرات متوقفة في إعدادات هذا الجهاز، فلا يُرسل شيء.'],
     [{}, { why: 'gpc' }, 'gpc', 'يطلب هذا المتصفح من المواقع ألّا تشارك بياناته (Global Privacy Control)، فلا يرسل هذا الجهاز شيئًا إلى لوحة المؤشرات.'],
@@ -284,7 +287,11 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
     const d = panel(v, extra);
     assert.deepEqual([d.why, d.state, d.problem, d.facts, d.test], [why, state, problem, [], false], why);
   }
-  assert.deepEqual(ltr(raw({ copy: 'folder' }).problem), ['https://farmercarry.github.io/school-games/'], 'the address reads left to right');
+  assert.deepEqual(ltr(raw({ copy: 'folder' }).problem), [], 'no address');
+  // The build of a published copy names where it is published, left to right.
+  const published = loadPage('https://name.github.io/school-games/').api.delivery({ copy: 'folder', off: false, tm: false, share: '', st: null }, now);
+  assert.equal(text(published.problem), 'لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة الموقع على الإنترنت: https://name.github.io/school-games/');
+  assert.deepEqual(ltr(published.problem), ['https://name.github.io/school-games/'], 'the address reads left to right');
   assert.equal(raw({ off: true }, { ok: now, f: now, k: 'network' }).why, 'off', 'stopped wins over any record');
 
   // Sharing, nothing delivered yet and nothing waiting.
@@ -327,6 +334,11 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
   assert.deepEqual(panel({}, { f: now - 2 * H, k: 'server', at: now - 6e4, n: 2, t: now - 2 * H, o: now - 2 * H }).problem,
     'يردّ خادم الإحصاءات ingest.test بخطأ منذ ' + hm(now - 2 * H) + '. ' + KEEPS + ' إذا استمر ذلك، أخبر من يدير خادم الإحصاءات.');
   assert.equal(panel({}, { f: now - 2 * H, k: 'server', at: now - 6e4 }).state, '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ ساعتين.');
+  // No connection at all (the cable out, the Wi-Fi down): since when, and that the play
+  // waits; neither the school's filter nor IT is named.
+  const offline = panel({}, { ok: now - 3 * D, f: now - 2 * H, k: 'offline', at: now - 6e4, n: 4, t: now - 2 * H, o: now - 2 * H });
+  assert.deepEqual([offline.tone, offline.state, offline.problem], ['bad', '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ ساعتين.',
+    'لم يكن هذا الجهاز متصلًا بالإنترنت منذ ' + hm(now - 2 * H) + '. ' + KEEPS]);
   const refused = panel({}, { ok: now - H, f: now - 3e5, k: 'refused', at: now - 3e5 });
   assert.deepEqual([refused.tone, refused.state, refused.problem], ['bad', '⚠ رفض خادم الإحصاءات بيانات من هذا الجهاز قبل 5 دقائق.',
     'رفض الخادم ingest.test بيانات أُرسلت من هذا الجهاز في ' + hm(now - 3e5) + '، فحُذفت. إذا تكرر ذلك، أخبر من يدير خادم الإحصاءات.']);
@@ -345,12 +357,16 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
     [{ k: 'ok', host, sent: 2, n: 0 }, true, '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. أُرسل الآن ما كان ينتظر: دفعتان.'],
     [{ k: 'ok', host, sent: 30, n: 4 }, true, '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. أُرسل الآن ما كان ينتظر: 30 دفعة. ' +
       'وما زال ينتظر: 4 دفعات، ويُرسل من صفحة الألعاب.'],
+    // Only an older build's tab has batches waiting (it sends them itself): the test sent none.
+    [{ k: 'ok', host, sent: 0, n: 2 }, true, '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. وما زال ينتظر: دفعتان، ويُرسل من صفحة الألعاب.'],
     [{ k: 'network', host, sent: 0, n: 3 }, false, IT],
     [{ k: 'network', host, sent: 1, n: 3 }, false, IT + ' (أُرسل قبل انقطاع الاتصال: دفعة واحدة.)'],
     [{ k: 'network', host, reached: false, sent: 0, n: 3 }, false, IT],
     // Health answered, then the batches got no answer: the address opens, sending to it does not.
     [{ k: 'network', host, reached: true, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكن تعذّر إرسال البيانات إليه. ' +
       'قد يسمح مرشّح الإنترنت في المدرسة بفتح العنوان ويمنع إرسال البيانات إليه. أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به كاملًا، مع إرسال البيانات: https://ingest.test'],
+    // No connection at all: nothing was asked, and there is no address to give IT.
+    [{ k: 'offline', host, reached: false, sent: 0, n: 3 }, false, '✗ هذا الجهاز غير متصل بالإنترنت الآن. ما ينتظر الإرسال يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال.'],
     [{ k: 'server', host, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه ردّ بخطأ مؤقت. البيانات محفوظة على هذا الجهاز؛ جرّب مرة أخرى بعد قليل.'],
     [{ k: 'refused', host, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه لا يقبل بيانات هذه النسخة من الموقع. أخبر من يدير خادم الإحصاءات.'],
     [{ why: 'off', host }, false, 'لا يرسل هذا الجهاز إلى لوحة المؤشرات الآن، فلا يوجد اتصال لاختباره.'],
@@ -1220,9 +1236,12 @@ test('a downloaded folder\'s teacher page says that copy never sends to the dash
   assert.equal(await page.locator('#delivery').isVisible(), true);
   assert.equal(await page.locator('#delivery').getAttribute('data-why'), 'folder');
   assert.equal(await page.locator('#deliveryState').textContent(), 'هذه نسخة منزَّلة من الموقع (مجلد على هذا الجهاز)، ولا ترسل أبدًا شيئًا إلى لوحة المؤشرات في المدرسة.');
-  assert.equal(await page.locator('#deliveryProblem').textContent(),
-    'لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة الموقع على الإنترنت: https://farmercarry.github.io/school-games/');
-  assert.equal(await page.locator('#deliveryProblem bdi[dir="ltr"]').textContent(), 'https://farmercarry.github.io/school-games/');
+  // The address this build was published at (SG_SITE_URL), if it was given one; the source tree has none.
+  const site = await page.evaluate(() => window.SG_SITE ? window.SG_SITE.url : '');
+  if (!process.env.SG_ROOT) assert.equal(site, '');
+  assert.equal(await page.locator('#deliveryProblem').textContent(), 'لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة ' +
+    (site ? 'الموقع على الإنترنت: ' + site : 'موقع ألعاب المدرسة على الإنترنت بدلًا من هذا المجلد.'));
+  assert.deepEqual(await page.locator('#deliveryProblem bdi[dir="ltr"]').allTextContents(), site ? [site] : []);
   assert.equal(await page.locator('#checkRow').isHidden(), true, 'nothing to test');
   assert.equal(await page.locator('#shareMsg').isHidden(), true);
   assert.equal(await page.evaluate(() => SGTelemetry.status().why), 'folder');

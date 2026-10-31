@@ -839,9 +839,11 @@ No game page changes, and no request is added to any page.
 A failed or cut-off install of the offline cache now keeps the files it verified, and an
 open portal tab moves to a newer verified build by itself on a quiet home screen
 (README, docs/ARCHITECTURE.md "Offline cache and updates"). Measured with the Linux
-minified build, against main at `b713f12`:
+minified build and the school's `SG_TELEMETRY_URL`, as CI builds it, against main at
+`b713f12` (this section first gave sizes measured without the address, 103 bytes
+smaller in the portal and in the offline cache; corrected on 31 October 2026):
 
-* **The portal** grows by 1,216 bytes, from 396,335 to 397,551 of 398,000: +872 for
+* **The portal** grows by 1,216 bytes, from 396,438 to 397,654 of 398,000: +872 for
   `js/offline.js` (the quiet-screen plan, its timer, the once-per-tab memory in
   sessionStorage and in memory, the hourly worker check and the one on reconnecting)
   and +344 for `js/site.js` (`SGUpdateQuiet()`, the pointer-move time and the idle
@@ -849,7 +851,8 @@ minified build, against main at `b713f12`:
   waits, one passive `pointermove` listener that stores a number, and at most one
   `registration.update()` an hour when the tab comes back into view, plus one per
   `online` event.
-* **The offline cache** grows by the same 1,216 bytes, to 5,307,944 of 5,308,000.
+* **The offline cache** grows by the same 1,216 bytes, from 5,306,831 to 5,308,047: 47
+  bytes over its limit of 5,308,000.
 * **The worker** (`sw.js`, not precached) no longer deletes its own partial cache; it
   marks it with an empty `…|partial` cache until it is complete and deletes the
   marked copies of other versions after copying from them, so a PC keeps one partial
@@ -857,8 +860,9 @@ minified build, against main at `b713f12`:
   skipping them, a disk read of at most the precache size, and looks up every file
   once more before it takes over.
 
-Both measurements stay under their limits, so no limit changes; the portal keeps 449
-bytes and the offline cache 56, and the next change to either will need the rule above.
+On its own this change would have failed CI's asset budgets by those 47 bytes (the portal
+keeps 346). It was merged only together with the delivery change, and the section that
+follows measures both together and sets the limits actually used.
 
 ## Both changes together, 31 October 2026
 
@@ -875,3 +879,42 @@ minified build and the school's `SG_TELEMETRY_URL`:
 
 The portal's new limit follows the rule above: the measured size rounded up to the next
 1,000 bytes plus 1,000. Nothing beyond the two changes is added to any page.
+
+## Integration review fixes to delivery, 31 October 2026
+
+The integration review of both changes found that the teacher page moved an older
+build's queue where that build's open tab no longer sent it, that a PC with no
+connection at all was said to be blocked by the school's filter, that batches a closing
+page had sent were reported as dropped after a week's break, and that the teacher page
+named this project's website in every copy; its second round, that the teacher's test,
+with only an older build's batches waiting, ended a recorded failure and said that
+nothing waited (docs/TELEMETRY.md, "Delivery"). Measured with
+the Linux minified build, the school's `SG_TELEMETRY_URL` and the `SG_SITE_URL` the
+workflow now gives this repository (`https://FarmerCarry.github.io/school-games/`),
+against `fcdfd8c`:
+
+* **The portal** grows by 385 bytes, from 401,118 to 401,503, within its limit: the
+  minified `js/telemetry.js` grows from 14,714 to 15,099 bytes (the teacher page reading
+  older builds' keys without moving them and its test counting them as waiting, the
+  `offline` kind and the test's answer without a connection, and the handed-over mark
+  checked before play is called lost).
+  No work is added to a child's page: one comparison per dropped batch and per failure.
+* **The teacher page** grows by 928 bytes, from 120,581 to 121,509, within its limit: the
+  same 385 bytes, 475 of `js/teacher.js` (the two Arabic messages for a PC without a
+  connection, the folder message without an address, and the test's answer when only an
+  older build's batches wait) and the 68 bytes of `window.SG_SITE` before its script
+  (860 bytes without `SG_SITE_URL`).
+* The offline cache grows by 1,313 bytes, from 5,335,420 to 5,336,733 (both pages, each
+  cached once), 733 bytes over its limit.
+
+The offline cache follows the rule above: the measured size rounded up to the next 1,000
+bytes plus 1,000. The portal's and the teacher page's limits stay.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 401,118 | 401,503 | 403,000 | 403,000 |
+| Teacher page | 120,581 | 121,509 | 122,000 | 122,000 |
+| Offline precache | 5,335,420 | 5,336,733 | 5,336,000 | 5,338,000 |
+
+No game page changes, and no request, font, library or third-party code is added to any
+page.
