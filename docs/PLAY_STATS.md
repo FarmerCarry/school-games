@@ -323,7 +323,8 @@ itself never uses the network. Its edge and first line are green, red or grey:
   time, or «لم يصل شيء من هذا الجهاز بعد») and «ينتظر الإرسال» (the batches waiting, with
   the oldest one's age, or «لا شيء»; when a closing portal page sent them all, «(أُرسل ما
   ينتظر عند إغلاق صفحة الألعاب، ويتأكد وصوله عند فتحها من جديد)»), and a third in the 7
-  days after unsent play was dropped for room or age: «حُذف قبل أن يصل» («لعب قبل <ساعتين>
+  days after play that no closing portal page sent was dropped for room or age (what one
+  sent as it closed almost always arrived): «حُذف قبل أن يصل» («لعب قبل <ساعتين>
   (<time>)، لأن مكان الانتظار على هذا الجهاز امتلأ أو مضت عليه 7 أيام»);
 * and the button **اختبر الاتصال الآن**: the sink asks the server's health and then sends
   what waits, and the page says «✓ يصل هذا الجهاز إلى خادم الإحصاءات <host>. أُرسل الآن ما

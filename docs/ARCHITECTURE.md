@@ -445,7 +445,8 @@ storage calls are wrapped; no `console`; never `clear()`.
 
 **Delivery status for the teacher:** the sink keeps `sg:site:tm:dx` (the address; the last
 delivery; the first failure since, and the latest failure's kind: `network`, `server` or
-`refused`; the last time unsent play was dropped for room or age). `teacher.html` loads
+`refused`; the last time play that no closing page handed over was dropped for room or
+age). `teacher.html` loads
 the same `js/telemetry.js` in check mode (`<meta name="sg-telemetry" content="check">`):
 no session, no event, no listener, and no write until the test (apart from dating back a
 clear ahead of the clock, as the portal does); older builds' keys it counts but only

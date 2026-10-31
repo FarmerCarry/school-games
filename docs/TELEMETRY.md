@@ -262,14 +262,19 @@ local day records. The server stores no IP address.
                                     // or not the server's), 'server' (its 429 or 5xx) or
                                     // 'refused' (its 4xx: the batch is gone)
     at: 1761720240000,              // when that failure came
-    x: 1761719000000 }              // when unsent play was last dropped for the 128 KB or the
-                                    // 7 days (0: never); a delivery does not clear it
+    x: 1761719000000 }              // when play no closing page handed over was last dropped
+                                    // for the 128 KB or the 7 days (0: never); a delivery
+                                    // does not clear it
   ```
 
   The sink writes it as it starts (only to set `u`), at every answer (a delivery sets
   `ok` and clears the failure, a failure keeps the first `f`) and when the queue drops a
-  batch for room (then `x` is now) or age (`x` is when the batch turned 7 days old). It
-  holds no play, so the teacher page's clear keeps it.
+  batch for room (then `x` is now) or age (`x` is when the batch turned 7 days old). A
+  batch marked `h: 1` is dropped without touching `x`: a closing page handed it to
+  `fetch`, so the server almost always has it, and only the answer never reached a page
+  (before 31 October 2026 it counted too, so after any break of a week, such as the school
+  holidays, every PC's teacher page said that play was dropped). It holds no play, so the
+  teacher page's clear keeps it.
 * **Check mode** (the teacher page): `teacher.html` loads `js/telemetry.js` under
   `<meta name="sg-telemetry" content="check">`. There the sink never starts a session,
   records an event, makes a code or listens to the page, and it writes nothing until the
@@ -402,7 +407,8 @@ stopping statistics on the teacher page.
   dated after the PC's clock holds nothing back, and one dated ahead by a fast clock that
   is set right later never drops the play recorded until the clock passes it; a clear
   drops the open page's earlier events even after `status()`), the record of play dropped
-  for room, and v2 entries sent unchanged; keepalive sends on a hidden page and at unload, with no cookie of the ingest
+  for room or age, never of batches a closing page handed over (after the holidays), and
+  v2 entries sent unchanged; keepalive sends on a hidden page and at unload, with no cookie of the ingest
   host on either path (the unloading page's request is seen by an interception for the
   whole browser), every batch kept until its answer, the 60 KB keepalive budget beside a
   send still on its way, and offline; the incident of 28 October (a failed batch, then a

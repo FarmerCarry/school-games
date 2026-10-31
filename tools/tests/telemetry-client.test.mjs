@@ -952,6 +952,39 @@ test('the queue survives a reload, sends oldest first, and keeps at most 128 KB,
   serverKeeps(batches(state));
 });
 
+test('play a closing page handed over is dropped for 7 days or 128 KB without being called lost; play never handed over is', async t => {
+  const state = await setup(t, { clock: true, answer: () => 503 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/seed.html');
+  const now = await page.evaluate(() => Date.now()), week = 7 * 864e5;
+  const envelope = (b, ev) => ({ v: 2, b, s: '0123456789ab', k: 'src', m: 'web', a: '', d: [4, 4, 1920], ev });
+  // After the holidays: what the last portal page handed to fetch as it closed, 8 days ago
+  // (its answer came after the page had gone), and five batches of about 26 KB, each
+  // handed over the same way, that leave no room for the next one.
+  const most = ['re', 1, 'air-hockey', 'w', 'Level_abcdefghijklmnopq', 108e5, 1e9, 9, 1e5, 1e5, [1e5, 1e5, 1e5, 1e5, 1e5, 1e5]];
+  const ids = [1, 2, 3, 4, 5].map(i => i.toString(16).padStart(16, 'a'));
+  const seeded = [{ t: now - 8 * 864e5, h: 1, e: envelope('b'.repeat(16), [['lv', 1, 2]]) },
+    ...ids.map((b, i) => ({ t: now - 36e5 + i, h: 1, e: envelope(b, Array.from({ length: 200 }, () => most)) }))];
+  await page.evaluate(([key, q]) => localStorage.setItem(key, JSON.stringify(q)), [qKey(INGEST), seeded]);
+  await page.goto(origin + '/');
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 1, 'the first send');
+  await inFlight(page);
+  const stored = await queue(page);
+  assert.deepEqual(stored.map(x => x.e.b).slice(0, -1), ids.slice(1), 'the 8-day-old batch and the oldest big one went');
+  like(stored.at(-1).e.ev, [['ss', 0, 0, -1, -1, 0, 0, 0]]);
+  assert.equal((await dx(page)).x, 0, 'and the teacher page is not told that play was dropped');
+  // A batch no page ever handed over is lost when it turns 7 days old, and the record says when.
+  const late = now - 8 * 864e5;
+  await page.evaluate(([key, x]) => localStorage.setItem(key, JSON.stringify([x, ...JSON.parse(localStorage.getItem(key))])),
+    [qKey(INGEST), { t: late, e: envelope('c'.repeat(16), [['lv', 1, 2]]) }]);
+  await page.clock.runFor(20000);
+  await until(() => state.posts.length === 2, 'the retry');
+  await inFlight(page);
+  assert.equal(JSON.parse(state.posts[1].body).b, ids[1], 'it is not sent');
+  assert.equal((await dx(page)).x, late + week);
+});
+
 test('a hidden page sends what waits by fetch with keepalive, unloading ends the session, offline keeps the queue, and no cookie goes', async t => {
   const state = await setup(t), { page } = state;
   // A cookie of the ingest server (a district sign-in, a load balancer's) goes on

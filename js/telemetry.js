@@ -44,9 +44,9 @@
  * captive portal's own page, no answer within a minute, which aborts the request) backs
  * off 20, 40, 80, 160, 300 s. sg:site:tm:on (the server's host) tells the teacher page
  * that this PC shares, and sg:site:tm:dx whether its batches arrive (last delivery,
- * first failure since, its kind, the last time unsent play was dropped). Every storage
- * call is guarded, nothing is logged, every promise is caught and no call into this
- * file throws.
+ * first failure since, its kind, the last time play that no closing page handed over
+ * was dropped). Every storage call is guarded, nothing is logged, every promise is
+ * caught and no call into this file throws.
  *
  * Check mode: the teacher page loads this file under <meta name="sg-telemetry"
  * content="check"> to show and test delivery (status(), check(cb)). There it never
@@ -366,9 +366,9 @@
   }
   // sg:site:tm:dx = { v: 1, u: the address, ok: when a batch was last delivered (0: never),
   // f: when the first failure since then came (0: none), k: the latest failure's kind
-  // ('network', 'refused' or 'server'), at: when, x: when unsent play was last dropped
-  // for the queue's 128 KB or 7 days (0: never) }, in the PC's clock. Anything malformed,
-  // or the record of another address, starts again.
+  // ('network', 'refused' or 'server'), at: when, x: when play that no closing page
+  // handed over (h) was last dropped for the queue's 128 KB or 7 days (0: never) }, in
+  // the PC's clock. Anything malformed, or the record of another address, starts again.
   function stamp(v) { return typeof v == 'number' && v > 0 && v < 1 / 0 ? v : 0; }
   function record() {
     var d = null;
@@ -385,7 +385,8 @@
     if (k == 'ok') { if (!health) d.ok = t; d.f = d.at = 0; d.k = ''; } else { d.f = d.f || t; d.k = k; d.at = t; }
     write(d);
   }
-  // Unsent play went at t for room or age. The teacher page only reads, except in its test.
+  // Unsent play went at t for room or age (kept() and save() leave out what a closing page
+  // handed over). The teacher page only reads, except in its test.
   function lost(t) {
     var d;
     if (passive && !testing) return;
@@ -423,7 +424,8 @@
       var e = x && x.e;
       if (!e || typeof x.t != 'number' || !(x.t >= cleared) || !(e.v === 2 || e.v === 3) || typeof e.b != 'string' || !/^[0-9a-f]{16}$/.test(e.b) || !isArr(e.ev)) return false;
       if (x.t > t - 6048e5) return true;
-      late = max(late, x.t + 6048e5);
+      // A batch a closing page handed over (h) almost always arrived: only the rest is lost.
+      if (!x.h) late = max(late, x.t + 6048e5);
     });
     if (late) lost(late);
     return q;
@@ -450,9 +452,9 @@
     return q;
   }
   function save(q) {
-    var n = q.length;
+    var was = q.slice();
     mq = q = fit(q);
-    if (q.length < n) lost(now());
+    if (was.slice(0, was.length - q.length).some(function (x) { return !x.h; })) lost(now());
     try {
       if (q.length) localStorage.setItem(Q, str(q)); else localStorage.removeItem(Q);
       temp = false;
