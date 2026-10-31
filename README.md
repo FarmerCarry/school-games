@@ -290,11 +290,16 @@ two-player modes mix players.
   المؤشرات في المدرسة» near the top answers at a glance: green «✓ تصل إحصاءات هذا الجهاز
   إلى لوحة المؤشرات.», or red «⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ …» with
   the reason in plain words, plus the last delivery («آخر وصول إلى لوحة المؤشرات») and what
-  waits on this PC («ينتظر الإرسال»; kept up to 7 days and sent by itself once the
-  connection works). The usual reason is the school's web filter blocking the statistics
-  server: the box names the address to ask IT to allow. Press **اختبر الاتصال الآن** to
-  check now: it says «✓ يصل هذا الجهاز إلى خادم الإحصاءات …» and sends what waited, or
-  «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز …» with the address for IT. Check it on
+  waits on this PC («ينتظر الإرسال»; sent by itself once the connection works, but the
+  PC keeps only 128 KB of it, a few hours of a busy PC's play, and 7 days: then the oldest
+  is dropped, and the box says when it last was, «حُذف قبل أن يصل»). So ask IT the same
+  day. Grey «لم يتأكد وصول …» means batches have waited unsent for over 15 minutes since the
+  last delivery: open the games page or press the test button. The usual reason for red is the school's web
+  filter blocking the statistics server: the box names the address to ask IT to allow.
+  Press **اختبر الاتصال الآن** to check now: it says «✓ يصل هذا الجهاز إلى خادم الإحصاءات …»
+  and sends what waited, or «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز …» with the
+  address for IT (or, when the server answers but the play cannot be sent to it, that the
+  filter must allow sending data to that address too). Check it on
   each PC after setting up and whenever the dashboard misses a class, in the browser the
   children use, opened from the website. A downloaded folder says that it never sends, and
   stopped statistics say that nothing is sent. Only this button and the games page (the
@@ -362,8 +367,9 @@ or graphics strings; it sends a random code per profile and one per PC, and the 
 zone name. The teacher page shows whether this PC shares, whether its play actually
 reaches the server (with a button that tests the connection now), and the codes, can give
 a child who plays on two PCs one code, and «stop collecting» stops both the local
-statistics and the sharing. A PC keeps what it could not send (up to 7 days) and sends it
-once the server answers; the school's web filter must allow the server's host, and a
+statistics and the sharing. A PC keeps what it could not send (at most 128 KB, a few
+hours of a busy PC's play, and 7 days; the oldest goes first) and sends it once the server
+answers; the school's web filter must allow the server's host, and a
 downloaded folder never shares. The server stores no IP addresses, keeps play for 400 days by default, and
 shows every number, even for one child. See [`docs/TELEMETRY.md`](docs/TELEMETRY.md)
 for the portal side and [`server/README.md`](server/README.md) for the server and its

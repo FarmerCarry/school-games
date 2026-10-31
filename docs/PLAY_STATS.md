@@ -305,21 +305,35 @@ this page in check mode, gives its status (`SGTelemetry.status()`, from the reco
 itself never uses the network. Its edge and first line are green, red or grey:
 
 * sharing and delivered, with no failure since: «✓ تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات.»;
+* delivered once, but batches that no closing portal page sent have waited for more than
+  15 minutes since the last delivery (a network that holds requests open is noted by the
+  portal after a minute; this covers a portal page that went first): grey «لم يتأكد وصول
+  إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ <20 دقيقة>.» with «ما ينتظر يُرسل عندما تكون
+  صفحة الألعاب مفتوحة على هذا الجهاز. اضغط «اختبر الاتصال الآن» …»;
 * failing: «⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ <يومين>.», then the
   reason: no answer (or not the server's) «تعذّر الوصول إلى خادم الإحصاءات منذ <time>.
   السبب في الغالب أن مرشّح الإنترنت في المدرسة يحجب <host>. اطلب من مسؤول تقنية المعلومات
-  في المدرسة السماح بالعنوان https://<host>. ما لم يصل يبقى محفوظًا على هذا الجهاز حتى 7
-  أيام، ويُرسل وحده عندما يعود الاتصال.»; the server's own error «يردّ خادم الإحصاءات <host>
+  في المدرسة السماح بالعنوان https://<host>. ما لم يصل يبقى محفوظًا على هذا الجهاز ويُرسل
+  وحده عندما يعود الاتصال، لكن مكانه محدود: بعد بضع ساعات من اللعب، أو بعد 7 أيام، يُحذف
+  الأقدم أولًا.» (the queue keeps 128 KB, which a busy PC fills in about three and a half
+  hours of play); the server's own error «يردّ خادم الإحصاءات <host>
   بخطأ منذ <time>. …»; its refusal «⚠ رفض خادم الإحصاءات بيانات من هذا الجهاز قبل …»;
 * never delivered yet: «لم تصل إحصاءات من هذا الجهاز إلى لوحة المؤشرات بعد.»;
 * with two facts: «آخر وصول إلى لوحة المؤشرات» (how long ago, with the PC's date and
   time, or «لم يصل شيء من هذا الجهاز بعد») and «ينتظر الإرسال» (the batches waiting, with
-  the oldest one's age, or «لا شيء»);
+  the oldest one's age, or «لا شيء»; when a closing portal page sent them all, «(أُرسل ما
+  ينتظر عند إغلاق صفحة الألعاب، ويتأكد وصوله عند فتحها من جديد)»), and a third in the 7
+  days after unsent play was dropped for room or age: «حُذف قبل أن يصل» («لعب قبل <ساعتين>
+  (<time>)، لأن مكان الانتظار على هذا الجهاز امتلأ أو مضت عليه 7 أيام»);
 * and the button **اختبر الاتصال الآن**: the sink asks the server's health and then sends
   what waits, and the page says «✓ يصل هذا الجهاز إلى خادم الإحصاءات <host>. أُرسل الآن ما
   كان ينتظر: <n>.» or «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز. أعطِ مسؤول تقنية
   المعلومات في المدرسة هذا العنوان ليسمح به في مرشّح الإنترنت: https://<host>» (or that the
-  server answered with an error, or does not take this version of the site).
+  server answered with an error, or does not take this version of the site). When health
+  answers but the batches get no answer it says «✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكن
+  تعذّر إرسال البيانات إليه. …» and asks IT to allow the address fully, with sending data;
+  the failure then still dates from when it began. A test result goes from the box when
+  its colour changes.
 
 When nothing is sent the box says why, without facts or button: a downloaded folder «هذه
 نسخة منزَّلة من الموقع (مجلد على هذا الجهاز)، ولا ترسل أبدًا شيئًا إلى لوحة المؤشرات في
@@ -328,7 +342,8 @@ When nothing is sent the box says why, without facts or button: a downloaded fol
 off, Global Privacy Control, this computer; a web copy that has not shared yet; or a PC
 whose portal noted that it shares but has not written the record yet («افتح صفحة الألعاب
 على هذا الجهاز مرة واحدة، ثم عد إلى هذه الصفحة.»). The box follows the portal's writes in
-another tab and its «قبل …» stays true on a page left open.
+another tab (the record the portal writes first counts too, without a reload) and its
+«قبل …» stays true on a page left open.
 
 1. Four answer cards: **أكثر الألعاب لعبًا** (by sessions of at least a minute, with
    minutes beside it), **كم يلعبون** (actual play time and average session),
