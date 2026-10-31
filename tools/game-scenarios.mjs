@@ -150,6 +150,7 @@ export const scenarios = {
   'paint-grab': defaults(['#bPlay'], `${g}.state === 'play'`, `[${g}.player.x,${g}.player.y,${g}.time()]`, hold('ArrowRight'), '#bPause', `${g}.state === 'pause'`, '#bRestart', `${g}.time() > PG.MATCH_TIME - 1`),
   'snake-arena': defaults(['#btnPlay'], `${g}.state === 'play'`, select(`${g}.player`, ['x','y','len','alive']), move, '#btnPause', `${g}.state === 'paused'`, '#btnRestart', `${g}.player.alive`),
   'splat-strike': defaults(['#playBtn'], `${g}.state.ui === 'play' && !${g}.state.paused`, `[${g}.state.player,${g}.state.matchT]`, hold('KeyW'), '#pauseBtn', `${g}.state.paused`, '#restartBtn', `${g}.state.player.kills === 0 && ${g}.state.player.deaths === 0`, { ready: `${g}.state.countdown === 0`, init: () => { HTMLCanvasElement.prototype.requestPointerLock = undefined; } }),
+  'robo-swarm': defaults(['#btnPlay'], `${g}.state === 'play' && !${g}.paused`, `[${g}.px,${g}.t]`, hold('ArrowRight'), '#btnPause', `${g}.state === 'pause'`, '#btnRestart', `${g}.t < 0.5`),
   'typing-test': {
     // A fresh profile starts in Arabic; Playwright types non-US letters without key events, so pick English in the bar.
     start: [click('[data-lang="en"]')], active: `${g}.state().screen === 'test'`, snapshot: select(`${g}.state()`, ['input','cur','correctKeys','incorrectKeys']),
@@ -182,7 +183,8 @@ const inputSnapshots = {
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
   'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`,
-  'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`
+  'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`,
+  'robo-swarm': `${g}.px`
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
@@ -226,7 +228,7 @@ const heldKeys = {
   'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
   'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
   'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'splat-strike': 'KeyW',
-  'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight'
+  'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight', 'robo-swarm': 'ArrowRight'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 

@@ -22,6 +22,7 @@ window.SG_SCORES = {
   'pool-party': ['نجوم الضربة الخادعة الرابحة (محاولات أقل، نجوم أكثر)', 'the stars of a won trick shot (fewer tries, more stars)'],
   'rail-rush': ['المسافة المقطوعة بالأمتار', 'the distance run, in metres'],
   'road-hopper': ['المسافة التي قفزها الطفل', 'how far the child hopped'],
+  'robo-swarm': ['الثواني التي صمدها الطفل في الجولة', 'the seconds the child survived in the run'],
   'skybound-golf': ['مسافة الضربة', 'the distance of the shot'],
   'snake-arena': ['طول الثعبان عند نهاية الجولة', 'the snake’s length when the round ended'],
   'splat-strike': ['إصابات الطفل في المباراة', 'the child’s splats in the match'],

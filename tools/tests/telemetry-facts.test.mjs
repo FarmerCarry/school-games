@@ -596,8 +596,11 @@ test('simulate.mjs: one school in Riyadh at the sink\'s cadence, with guests, ol
   for (const s of v3) {
     const local = new Date(s.start + 3 * 3600000);
     assert.ok(local.getUTCDay() <= 4, 'a school day');
+    // w on the wire is rounded to the nearest second, so a session that
+    // started in the first half-second of 07:30 can be reconstructed as 07:29:59.
     const minute = local.getUTCHours() * 60 + local.getUTCMinutes();
-    assert.ok(minute >= 450 && minute < 810, 'school hours: ' + local.toISOString());
+    const early = minute === 449 && local.getUTCSeconds() === 59;
+    assert.ok((minute >= 450 && minute < 810) || early, 'school hours: ' + local.toISOString());
   }
   const share = (part, whole) => part.length / whole.length;
   assert.ok(share(all.filter(s => s.v === 2), all) > 0.05 && share(all.filter(s => s.v === 2), all) < 0.2, 'a v2 minority');

@@ -1,0 +1,123 @@
+body { background: #241448; }
+
+#ui {
+  position: fixed; left: 0; top: 0; width: 1280px; height: 720px;
+  transform-origin: 0 0; pointer-events: none; z-index: 5;
+}
+#ui button, #cards, #hud { pointer-events: auto; }
+
+#hud {
+  position: absolute; top: 12px; right: 16px; left: 78px;
+  display: flex; align-items: center; gap: 8px; justify-content: flex-start;
+}
+#hud[hidden], #cards[hidden], #bossBar[hidden], #combo[hidden], #btnPause[hidden] { display: none; }
+#btnPause {
+  position: absolute; top: 12px; left: 12px; z-index: 7; width: 54px; height: 54px;
+  border: 0; border-radius: 16px; background: rgba(28, 16, 58, 0.82); color: #fff;
+  font: 700 22px var(--sg-font); cursor: pointer; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.28);
+  pointer-events: auto; z-index: 6;
+}
+#btnPause:focus-visible, .rs-card:focus-visible, .rs-chip:focus-visible { outline: 3px solid #ffe14a; outline-offset: 3px; }
+
+.rs-pill {
+  display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 14px;
+  border-radius: 999px; background: rgba(28, 16, 58, 0.82); color: #fff;
+  font-size: 22px; font-weight: 700; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25);
+}
+.rs-pill b { font-weight: 700; }
+#hudTime { min-width: 92px; justify-content: center; direction: ltr; }
+#hearts { color: #ff5a7a; letter-spacing: 1px; font-size: 20px; direction: ltr; }
+#combo { background: #ffe14a; color: #3a2a00; }
+#bossBar {
+  position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+  width: 420px; height: 22px; border-radius: 999px; background: rgba(28, 16, 58, 0.8);
+  overflow: hidden; border: 3px solid #ffe14a;
+}
+#bossBar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ff5a4a, #ffe14a); }
+#bossBar span {
+  position: absolute; inset: 0; text-align: center; font-size: 14px; font-weight: 700; line-height: 16px; color: #fff;
+}
+
+#cards {
+  position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(22, 10, 48, 0.72); gap: 12px;
+}
+#cards h2 { margin: 0; font-size: 42px; color: #fff; text-shadow: 0 4px 0 #4a2070; }
+.rs-offer { display: flex; gap: 16px; align-items: stretch; direction: ltr; }
+.rs-card { direction: rtl; }
+.rs-card {
+  width: 250px; min-height: 280px; border: 4px solid #fff; border-radius: 24px; background: #fff8ec; color: #2b1848;
+  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.28); cursor: pointer; font: inherit; padding: 12px 12px 16px; text-align: center;
+}
+.rs-card canvas { width: 84px; height: 84px; }
+.rs-card .nm { display: block; font-size: 26px; font-weight: 700; line-height: 1.15; margin-top: 4px; }
+.rs-card .lv { display: block; margin-top: 6px; font-size: 20px; font-weight: 700; color: #b45309; direction: ltr; }
+.rs-card .ds { display: block; margin-top: 6px; font-size: 16px; font-weight: 500; }
+.rs-card.on { transform: translateY(-10px); border-color: #ffe14a; box-shadow: 0 16px 0 rgba(0, 0, 0, 0.28), 0 0 0 4px rgba(255, 225, 74, 0.45); }
+.rs-card.evo { background: linear-gradient(180deg, #fffdf2, #ffe7a8); }
+.rs-card.evo .nm::before { content: '✦ '; color: #e07000; }
+.rs-who { font-size: 18px; font-weight: 700; color: #ffe14a; margin: 0 0 4px; text-align: center; }
+.rs-reroll {
+  border: 0; border-radius: 999px; background: #fff; color: #2b1848; font: 700 18px var(--sg-font);
+  padding: 8px 16px; cursor: pointer; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25);
+}
+
+.rs-overlay { background: rgba(18, 8, 40, 0.72); }
+.rs-sheet {
+  width: min(1100px, 96vw); max-height: 100%; display: grid; grid-template-columns: 1.05fr 0.95fr;
+  gap: 18px; align-items: center; padding: 8px;
+}
+.rs-logo { margin: 0; line-height: 0.92; text-align: center; }
+.rs-logo span { display: block; font-weight: 700; text-shadow: 0 6px 0 #4a2070; }
+.rs-logo .a { font-size: clamp(40px, 6vw, 68px); color: #fff; }
+.rs-logo .b { font-size: clamp(52px, 8vw, 92px); color: #ffb15a; }
+.rs-tag { margin: 8px 0 12px; text-align: center; font-size: 20px; }
+.rs-play { font-size: 34px; padding: 12px 48px; }
+.rs-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 8px 0; }
+.rs-chip {
+  border: 3px solid transparent; background: rgba(255, 255, 255, 0.92); color: #2b1848;
+  font: 700 18px var(--sg-font); border-radius: 999px; padding: 8px 14px; cursor: pointer;
+}
+.rs-chip.on { border-color: #ffe14a; background: #fff4c2; }
+.rs-chip:disabled { opacity: 0.45; cursor: default; }
+.rs-side {
+  background: rgba(22, 10, 48, 0.78); border: 3px solid rgba(255, 255, 255, 0.16);
+  border-radius: 24px; padding: 14px 16px;
+}
+.rs-howto { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; font-size: 18px; margin: 0; }
+.rs-heroes, .rs-maps { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.rs-hero {
+  width: 92px; border: 3px solid transparent; border-radius: 16px; background: rgba(255, 255, 255, 0.12);
+  color: #fff; font: 700 14px var(--sg-font); padding: 4px; cursor: pointer;
+}
+.rs-hero canvas { width: 64px; height: 64px; display: block; margin: 0 auto; }
+.rs-hero.on { border-color: #ffe14a; background: rgba(255, 225, 74, 0.18); }
+.rs-hero:disabled { opacity: 0.4; }
+.rs-meta { display: flex; justify-content: center; gap: 8px; margin-top: 8px; }
+.rs-panel { width: min(760px, 94vw); }
+.rs-shop, .rs-trophies { display: grid; gap: 8px; text-align: start; margin: 10px 0; }
+.rs-item, .rs-trophy {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  background: rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 8px 12px;
+}
+.rs-item button { margin: 0; }
+.rs-trophy.off { opacity: 0.45; }
+.rs-stars { font-size: 42px; letter-spacing: 6px; color: #ffe14a; margin: 6px 0; }
+.rs-stars i { color: rgba(255, 255, 255, 0.28); font-style: normal; }
+#toast {
+  position: fixed; top: 86px; left: 50%; transform: translateX(-50%);
+  background: #ffe14a; color: #3a2a00; font-weight: 700; font-size: 20px;
+  padding: 10px 18px; border-radius: 999px; z-index: 30; box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25);
+}
+
+@media (max-height: 680px) {
+  .rs-logo .b { font-size: 48px; }
+  .rs-logo .a { font-size: 32px; }
+  .rs-sheet { gap: 8px; }
+  .rs-side { padding: 8px; }
+  .rs-howto { font-size: 15px; }
+  .rs-play { font-size: 28px; padding: 8px 28px; }
+}
+@media (max-width: 900px) {
+  .rs-sheet { grid-template-columns: 1fr; }
+}
