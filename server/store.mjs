@@ -1021,10 +1021,16 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     if (u && conf.forgotten[u] !== undefined && start <= conf.forgotten[u]) return true;
     // Nor does a mark name a forgotten code again (its history is gone): a removal of its
     // profile or a link to it, told again or late (a PC tells an older code until it sees it
-    // delivered), from a session that started before the code played again, or while it has
-    // not. A removal or link from a session after its new play is new, and stored. Only a
-    // batch that names a forgotten code checks its student row (the *_FORGOTTEN
-    // statements): no other batch reads more.
+    // delivered), from a session that started by the forget, or before the code played
+    // again, or while it has not. A removal or link from a session after its new play is
+    // new, and stored. The forget's time is checked here, as for the batch's own code (a
+    // student row another instance made again from a batch sent again starts before the
+    // forget); only a batch that still names a forgotten code checks its student row (the
+    // *_FORGOTTEN statements): no other batch reads more.
+    const late = x => conf.forgotten[x] === undefined || start > conf.forgotten[x];
+    f.marks = f.marks.filter(([kind, , , x]) => (kind !== 'pr' && kind !== 'cd') || late(x));
+    f.removed = f.removed.filter(([x]) => late(x));
+    f.linked = f.linked.filter(late);
     const gone = JSON.stringify([...new Set([...f.removed.map(([x]) => x), ...f.linked])].filter(x => conf.forgotten[x] !== undefined));
     const named = gone !== '[]';
 

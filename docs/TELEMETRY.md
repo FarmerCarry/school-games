@@ -200,9 +200,9 @@ local day records. The server stores no IP address.
   Nor does a batch sent again bring back a student the school forgot on the dashboard:
   for 8 days the server drops (and answers 204 to) every batch of a forgotten code whose
   session started before the forget, so the PC lets it go, and stores no mark that names
-  that code from a session that started before the code played again; a later session of
-  that code is new play and is kept, and so is a mark naming it from a session after
-  that. An older code that the PC tells as `cd` until a batch naming it is delivered can
+  that code from a session that started by the forget or before the code played again; a
+  later session of that code is new play and is kept, and so is a mark naming it from a
+  session after that. An older code that the PC tells as `cd` until a batch naming it is delivered can
   get through after the 8 days (after a long break, or on a blocked network): that link
   is stored again. It names only the code, none of its play, and forgetting again
   removes it with the student it is linked to.

@@ -1601,6 +1601,53 @@ test('a forgotten code that plays again is a student again: a removal of its pro
   assert.deepEqual([U5, U6, W].filter(u => events.includes(u)), [], 'the research export names none of them');
 });
 
+test('a forgotten code that another instance stored again from before the forget names no link of that time: forgetting it again takes only it', async t => {
+  // A second instance of the server on the same database, whose settings copy can be up to
+  // SETTINGS_MS old (on Cloudflare, another Worker isolate).
+  const s = await start(t, { at: Date.parse('2026-10-19T09:00:00Z') });
+  const other = createApp({ store: openStore(s.app.store.db), allowedOrigins: [ORIGIN], adminToken: TOKEN, now: () => s.clock.now, dashboardDir: null });
+  const { port } = await other.listen(0, '127.0.0.1');
+  t.after(() => other.close());
+  const elsewhere = body => request(`http://127.0.0.1:${port}`, 'POST', '/v1/batch',
+    { headers: { 'content-type': 'text/plain;charset=UTF-8', origin: ORIGIN }, body: JSON.stringify(body) });
+  const X = '5e5e5e5e5e5e', U1 = '1a1a1a1a1a1a', U7 = '7c7c7c7c7c7c';
+  const at = iso => { s.clock.now = Date.parse(iso); };
+  const aged = (body, iso) => ({ ...body, w: Math.round((s.clock.now - Date.parse(iso)) / 1000) });
+  assert.equal((await s.post(envelope3('c70000000001', [ss3(0, 3, 1), ...visit(1, 'road-hopper', 2, 60000)], { u: U7, z: '' }))).status, 204);
+  // 20 October: X plays at 09:00 and U1's session at 09:30 tells X as its older code; neither
+  // PC sees the answer, so both keep their batch. The owner undoes the link at 09:40.
+  at('2026-10-20T09:01:00Z');
+  const first = envelope3('c10000000001', [ss3(0, 3, 1), ...visit(1, 'road-hopper', 2, 60000)], { u: X, p: P2, z: '', w: 60 });
+  assert.equal((await s.post(first)).status, 204);
+  at('2026-10-20T09:31:00Z');
+  const linker = envelope3('c20000000001', [ss3(0, 3, 1), ['cd', 0, X], ...visit(1, 'maze-dash', 2, 60000)], { u: U1, z: '', w: 60 });
+  assert.equal((await s.post(linker)).status, 204);
+  at('2026-10-20T09:40:00Z');
+  assert.equal((await call(s, 'DELETE', '/v1/admin/link?u=' + X)).json().ok, true);
+  // The other instance reads the settings at 09:42; the owner forgets X at 09:45; at 09:46
+  // X's PC sends its batch again to the other instance, which does not know the forget yet
+  // and stores it: X's student row is back, with its first play from before the forget.
+  for (const [i, iso] of ['2026-10-20T09:42:00Z', '2026-10-20T09:43:00Z'].entries()) {
+    at(iso);
+    assert.equal((await elsewhere(envelope3('c3000000000' + i, [ss3(0, -1, 0), ...visit(1, 'road-hopper', 2, 30000)], { u: '', a: '6-7', z: '' }))).status, 204);
+  }
+  at('2026-10-20T09:45:00Z');
+  assert.equal((await call(s, 'POST', '/v1/admin/forget', { u: X })).json().removed.codes, 1);
+  at('2026-10-20T09:46:00Z');
+  assert.equal((await elsewhere(aged(first, '2026-10-20T09:00:00Z'))).status, 204);
+  assert.equal((await s.rows('st_students')).filter(r => r.u === X).length, 1, 'the documented window');
+  // The next morning U1's PC sends its batch again. Its session started before the forget,
+  // so the link the owner undid stays undone, and X is not named.
+  at('2026-10-21T08:00:00Z');
+  assert.equal((await s.post(aged(linker, '2026-10-20T09:30:00Z'))).status, 204);
+  assert.deepEqual((await s.rows('aliases')).map(r => [r.u_old, r.u_new]), []);
+  assert.deepEqual((await s.rows('st_marks')).filter(m => m.x === X).map(m => m.kind), []);
+  // Forgetting X again, as server/README.md says to, takes X only: U1 keeps its play.
+  assert.equal((await call(s, 'POST', '/v1/admin/forget', { u: X })).json().removed.codes, 1);
+  assert.equal((await s.rows('st_sessions')).filter(r => r.u === U1).length, 1);
+  assert.equal((await s.rows('st_students')).filter(r => r.u === U1).length, 1);
+});
+
 test('the 5-minute cron lets a forget\'s codes go once their 8 days are over, with no later forget', async t => {
   const s = await studentDays(t);
   const forgotS = Math.floor(s.clock.now / 1000);

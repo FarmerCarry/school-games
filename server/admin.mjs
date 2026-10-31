@@ -271,7 +271,7 @@ const OF_GROUP = `(SELECT id FROM st_sessions WHERE u IN ${GROUP})`;
 // the next day). The setting 'forgotten' keeps every code of a forgotten group with the
 // time of the forget (?2, UTC seconds), as a JSON object {code: seconds}, and ingest drops
 // a batch of such a code whose session started by then, and every mark naming one from a
-// session that started before the code played again (store.mjs). A PC keeps a batch at most
+// session that started by then or before the code played again (store.mjs). A PC keeps a batch at most
 // 7 days: each forget also removes the entries FORGOTTEN_DAYS old, as does the 5-minute
 // cron when no forget comes.
 // A PC tells an older code ('cd') until a batch naming it is delivered, which can be later
