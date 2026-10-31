@@ -184,8 +184,9 @@
       var e = ev[i];
       if (e.t === 'boom') {
         if (!quiet) BBS.boom(e.n);
-        BBR.fx('boom', (e.c + 0.5) * BLB.TILE, (e.r + 0.5) * BLB.TILE);
-      } else if (e.t === 'drop' && !quiet) BBS.drop();
+      } else if (e.t === 'crate') BBR.fx('crate', (e.c + 0.5) * BLB.TILE, (e.r + 0.5) * BLB.TILE);
+      else if (e.t === 'gift') BBR.fx('item', (e.c + 0.5) * BLB.TILE, (e.r + 0.5) * BLB.TILE);
+      else if (e.t === 'drop' && !quiet) BBS.drop();
       else if (e.t === 'kick' && !quiet) BBS.kick();
       else if (e.t === 'item') { if (!quiet) BBS.item(); BBR.fx('item', (e.c ? e.c : 2) * BLB.TILE, 80); }
       else if (e.t === 'trap') {
@@ -196,8 +197,11 @@
           if (!e.own && e.by === 0 && vic && vic.team !== 0) Kit.track.hit();
           if (vic && vic.robot && e.by === 0) Kit.track.hit();
         }
-      } else if (e.t === 'free' && !quiet) BBS.free();
-      else if (e.t === 'pop') {
+      } else if (e.t === 'free') {
+        if (!quiet) BBS.free();
+        var freed = w.players[e.id];
+        if (freed) BBR.fx('free', freed.x, freed.y);
+      } else if (e.t === 'pop') {
         if (!quiet) BBS.pop();
         var who = w.players[e.victim];
         if (who) BBR.fx('pop', who.x, who.y);

@@ -9,7 +9,8 @@
   BBS.kick = function () { var j = J(); if (j) j.whoosh(0.7); };
   BBS.boom = function (n) {
     var j = J(); if (!j) return;
-    j.impact(Math.min(1, 0.35 + (n || 1) * 0.12));
+    j.whoosh(Math.min(1, 0.75 + (n || 1) * 0.05));
+    j.pop(Math.min(1, 0.6 + (n || 1) * 0.08));
     if (n >= 3) j.streak(Math.min(6, n));
   };
   BBS.item = function () { var j = J(); if (j) j.coin(); };

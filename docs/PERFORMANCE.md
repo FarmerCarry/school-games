@@ -775,12 +775,12 @@ the same run; the classroom target remains a blit-bound 60 on Intel UHD 620.
 | File | Before bytes | After bytes | Before gzip | After gzip | New limit |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Portal | 396669 | 401047 | — | 94905 | 403000 (was 398000) |
-| Balloon Blast | — | 83350 | — | 30830 | 86000 |
-| Offline precache, 49 files | 5449684 | 5538403 | | | 5545000 (was 5450000) |
+| Balloon Blast | — | 85929 | — | 31757 | 86000 |
+| Offline precache, 49 files | 5449684 | 5540982 | | | 5545000 (was 5450000) |
 
-The game file is 83,350 bytes, under the 130 KB target. The precache grew by the new
-page plus the portal's catalog entry. Portal headroom is 1,953 bytes; precache
-headroom is 6,597 bytes.
+A juice pass (fuller splash, larger critters, icon stat cards) re-measured the game
+at 85,929 bytes, still under the 130 KB target and inside the same limits. Portal
+headroom is 1,953 bytes; precache headroom is 4,018 bytes.
 
 ## Sneaky Levels worlds 6–12, 31 October 2026
 

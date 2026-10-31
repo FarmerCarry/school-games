@@ -344,7 +344,8 @@
     if (!w.battle || w.rand() > 0.4) return;
     const roll = w.rand();
     const kind = roll < 0.30 ? 'balloon' : roll < 0.58 ? 'range' : roll < 0.80 ? 'speed' : roll < 0.94 ? 'kick' : 'slow';
-    w.drops.push({ c: c, r: r, kind: kind, dead: false });
+    w.drops.push({ c: c, r: r, kind: kind, dead: false, born: w.time });
+    w.events.push({ t: 'gift', c: c, r: r, kind: kind });
   }
 
   function trap(w, p, owner, direct) {
@@ -366,12 +367,16 @@
     b.gone = true;
     if (root == null) root = b.owner;
     const cells = BLB.splashCells(w, b.c, b.r, b.range);
-    w.splashes.push({ cells: cells, life: 0.42, max: 0.42, owner: b.owner });
+    w.splashes.push({ cells: cells, life: 0.72, max: 0.72, owner: b.owner });
     w.booms++;
     w.events.push({ t: 'boom', id: b.id, owner: b.owner, c: b.c, r: b.r, n: cells.length });
     for (let i = 0; i < cells.length; i++) {
       const cell = cells[i];
-      if (tile(w, cell.c, cell.r) === CRATE) { setTile(w, cell.c, cell.r, EMPTY); maybeDrop(w, cell.c, cell.r); }
+      if (tile(w, cell.c, cell.r) === CRATE) {
+        setTile(w, cell.c, cell.r, EMPTY);
+        w.events.push({ t: 'crate', c: cell.c, r: cell.r });
+        maybeDrop(w, cell.c, cell.r);
+      }
       for (let d = 0; d < w.drops.length; d++) {
         const drop = w.drops[d];
         if (!drop.dead && drop.c === cell.c && drop.r === cell.r) drop.dead = true;
@@ -403,8 +408,7 @@
     for (let i = 0; i < w.balloons.length; i++) if (!w.balloons[i].gone && w.balloons[i].fuse <= 0) due.push(w.balloons[i]);
     due.sort((a, b) => a.id - b.id);
     for (let i = 0; i < due.length; i++) detonate(w, due[i]);
-    if (w.booms >= 3) w.pendingShake = Math.min(16, w.pendingShake + 4 + w.booms);
-    else if (w.booms) w.pendingShake = Math.min(16, w.pendingShake + 2);
+    if (w.booms) w.pendingShake = Math.min(14, Math.max(w.pendingShake, 8 + Math.min(4, w.booms)));
     w.balloons = w.balloons.filter(b => !b.gone);
     w.drops = w.drops.filter(d => !d.dead);
   }
@@ -683,5 +687,5 @@
     return b;
   };
 
-  BLB.addDrop = function (w, c, r, kind) { w.drops.push({ c: c, r: r, kind: kind, dead: false }); };
+  BLB.addDrop = function (w, c, r, kind) { w.drops.push({ c: c, r: r, kind: kind, dead: false, born: w.time }); };
 })(globalThis.BLB = globalThis.BLB || {});
