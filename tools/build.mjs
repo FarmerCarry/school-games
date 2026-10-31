@@ -108,7 +108,7 @@ function siteUrl(value) {
       'with only URL characters (no quotes, spaces, backslashes, < or >, ? or #) and no user name or password; got ' +
       JSON.stringify(value.slice(0, 60)));
   }
-  return value;
+  return url.href; // the host in lower case, as the address bar shows it
 }
 
 function isWithin(parent, child) {

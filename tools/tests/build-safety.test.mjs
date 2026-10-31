@@ -375,8 +375,9 @@ test('SG_SITE_URL reaches the teacher page only, is checked first, and changes n
   success(build(''));
   assert.deepEqual(site(), plain, 'empty is the same as unset, byte for byte');
 
+  // The workflow's default spells the owner as GitHub does; the page names the host in lower case.
   const url = 'https://name.github.io/school-games/';
-  const result = build(url);
+  const result = build('https://Name.github.io/school-games/');
   success(result);
   assert.match(result.stdout, /site: a downloaded folder's teacher page names https:\/\/name\.github\.io\/school-games\//);
   const on = site();
