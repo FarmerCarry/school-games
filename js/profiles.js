@@ -15,7 +15,9 @@
  *   Days are local calendar day numbers (days since 1970-01-01 on this PC's calendar).
  *   sessionStorage 'sg:site:player': the current player's key (missing: a guest), so a
  *   closed tab or the classroom "hand over the device" returns to guest.
- *   sessionStorage 'sg:site:xploss': loss XP given per player and game in this tab.
+ *   sessionStorage 'sg:site:xploss': XP already given per player and game in this tab.
+ *     Loss totals are the record's own keys; endless-run totals are its `e` object.
+ *     Each stops at 40, and a closed tab forgets both.
  *   localStorage 'sg:site:classband': the class default band, used for guests.
  * Everything read from storage is checked and repaired. When storage is blocked or
  * full the same state lives in memory for this page. Every storage call is guarded,
@@ -23,9 +25,12 @@
  *
  * XP comes from the v1 sg:stats round events of the current game frame (or one removed
  * under 2 s ago, as in js/stats.js), so it works with telemetry off: win +10, draw +6,
- * loss +4 (at most 40 XP of losses per game per tab session), endless end +5 (+1 per
- * 30 s of round time, at most +5 more), quit 0, plus +1 per full 60 s of engaged time in
- * a visit. Level L to L+1 needs 30 + 15(L-1) XP; the top level is 99. Guests earn nothing.
+ * loss +4 (at most 40 XP of losses per game per tab session), neutral end +5 (+1 per
+ * 30 s of round time, at most +5 more). An endless run (round id endless, run, classic
+ * or arenaN) shorter than 20 s pays nothing, and those runs stop at 40 XP per game in
+ * this tab, the same window as the loss cap. Quit 0, plus +1 per full 60 s of engaged
+ * time in a visit. Level L to L+1 needs 30 + 15(L-1) XP; the top level is 99. Guests
+ * earn nothing.
  * XP goes to the player who was playing when the frame was mounted, so a game's last
  * message after "hand over the device" still reaches the child who played.
  */
@@ -45,6 +50,7 @@
   var who = '', classBand = '';        // current player ('' = guest), class default band
   var visit = null, cur = null, gone = [];   // open visit {g, p, e}, its frame {w, g, p, v}, frames removed < 2 s ago
   var lost = Object.create(null);      // 'p1 slug' -> loss XP given in this tab
+  var runs = Object.create(null);      // 'p1 slug' -> endless-run XP given in this tab
   var changes = [], levels = [], gains = [];
 
   function fresh() { return { v: 1, seq: 0, list: [] }; }
@@ -134,11 +140,37 @@
     if (raw !== null && JSON.stringify(b) !== raw) try { localStorage.removeItem(CLASS); } catch (e) { /* ignore */ }
     return b;
   }
-  function readLost() {
-    var o = Object.create(null), v, k, n = 0;
-    try { v = JSON.parse(session(LOSS)); } catch (e) { v = null; }
-    if (isObj(v)) for (k in v) if (n < 512 && /^p[0-9a-z]{1,8} [a-z0-9][a-z0-9-]{0,39}$/.test(k) && int(v[k], 0, 40)) { o[k] = int(v[k], 0, 40); n++; }
+  var BAG_RE = /^p[0-9a-z]{1,8} [a-z0-9][a-z0-9-]{0,39}$/;
+  // One bag of totals (0..40) from a stored object. Anything else is dropped.
+  function readBag(v) {
+    var o = Object.create(null), k, n = 0;
+    if (isObj(v)) for (k in v) if (n < 512 && BAG_RE.test(k) && int(v[k], 0, 40)) { o[k] = int(v[k], 0, 40); n++; }
     return o;
+  }
+  function readCaps() {
+    var v;
+    try { v = JSON.parse(session(LOSS)); } catch (e) { v = null; }
+    if (!isObj(v)) v = {};
+    lost = readBag(v);
+    runs = readBag(v.e);
+  }
+  function saveCaps() {
+    var o = {}, k, any = false;
+    for (k in lost) o[k] = lost[k];
+    for (k in runs) any = true;
+    if (any) o.e = runs;
+    session(LOSS, JSON.stringify(o));
+  }
+  // At most 40 XP of this kind for one player and game in this tab. A guest is not counted.
+  function grantCapped(bag, f, raw) {
+    var i, n;
+    if (!f.p) return raw;
+    i = f.p + ' ' + f.g;
+    n = min(raw, 40 - (bag[i] || 0));
+    if (n <= 0) return 0;
+    bag[i] = (bag[i] || 0) + n;
+    saveCaps();
+    return n;
   }
 
   /* ----------------------------------------------------------- changes */
@@ -179,21 +211,30 @@
     emit(gains, gain, k);
     if (after > before && k === who) emit(levels, after);
   }
-  // The XP of one round event; losses count for at most 40 XP per player and game in this tab.
+  // Endless runs report a neutral end, and so do two-player matches and free play.
+  // Only the runs can be finished in a second and started again. Their ids are the ones
+  // those games use: endless, run (Rail Rush, Drift King), classic (Block Burst), arenaN
+  // (Blob Battle). A run shorter than 20 s pays nothing. The rest share the loss cap's
+  // window: 40 XP per player and game in this tab.
+  function endlessRun(id) {
+    return id === 'endless' || id === 'run' || id === 'classic' || /^arena[0-9]+$/.test(id);
+  }
+  // The XP of one round event. Losses, and endless runs, each stop at 40 XP per player
+  // and game in this tab.
   function roundXP(f, x) {
-    var c = x[0], i, n;
+    var c = x[0], ms, pay;
     if (!okId(x[1])) return 0;
     if (c == 'w') return 10;
     if (c == 'd') return 6;
-    if (c == 'e') return 5 + min(5, floor(int(x[2], 0, 108e5) / 3e4));
+    if (c == 'e') {
+      ms = int(x[2], 0, 108e5);
+      pay = 5 + min(5, floor(ms / 3e4));
+      if (!endlessRun(x[1])) return pay;
+      if (ms < 2e4) return 0;
+      return grantCapped(runs, f, pay);
+    }
     if (c != 'l') return 0;
-    if (!f.p) return 4;
-    i = f.p + ' ' + f.g;
-    n = min(4, 40 - (lost[i] || 0));
-    if (n <= 0) return 0;
-    lost[i] = (lost[i] || 0) + n;
-    session(LOSS, JSON.stringify(lost));
-    return n;
+    return grantCapped(lost, f, 4);
   }
 
   /* --------------------------------------------------------------- API */
@@ -316,7 +357,7 @@
   try {
     load();
     classBand = readClass();
-    lost = readLost();
+    readCaps();
     var k = session(PLAYER);
     who = safeKey(k, KEY_RE) && find(mem, k) ? k : '';
     if (k && !who) session(PLAYER, '');
