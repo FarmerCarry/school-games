@@ -54,8 +54,11 @@ a web browser. Everything below is free.
    school's internet lets the PC reach this address. A web filter that blocks
    `*.workers.dev` or new sites stops it silently: ask the school's IT to allow the
    address. A copy opened from a downloaded folder never sends. On each PC, the teacher
-   page (🏫 then 📊) shows whether its play gets through and has a button that tests the
-   connection.
+   page (🏫 then 📊) has a box «الإرسال إلى لوحة المؤشرات في المدرسة» that shows whether
+   its play gets through, and a button «اختبر الاتصال الآن» that tests the connection.
+   Play that cannot be sent waits on the PC and goes by itself once the address is
+   allowed (space is limited: after a few hours of play, or after 7 days, the oldest
+   goes first).
 9. **Open that address** in your browser to see the dashboard, and sign in with the
    password from step 5. Until children play, there is nothing to show; add `/?demo` to
    the address to see the dashboard with made-up sample data.
