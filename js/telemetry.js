@@ -367,7 +367,8 @@
   }
   // sg:site:tm:dx = { v: 1, u: the address, ok: when a batch was last delivered (0: never),
   // f: when the first failure since then came (0: none), k: the latest failure's kind
-  // ('network', 'offline', 'refused' or 'server'), at: when, x: when play that no
+  // ('network', 'offline', 'refused' or 'server'), at: when (after a test with a refusal,
+  // k and at name that refusal, and f is at most the test's end), x: when play that no
   // closing page handed over (h) was last dropped for the queue's 128 KB or 7 days (0:
   // never) }, in the PC's clock. Anything malformed, or the record of another address,
   // starts again.
@@ -379,9 +380,9 @@
       : { v: 1, u: url, ok: 0, f: 0, k: '', at: 0, x: 0 };
   }
   function write(d) { try { localStorage.setItem(DX, str(d)); } catch (e) { /* the teacher page knows less */ } }
-  // An answer for the record: 'ok' a delivery (or, from the test button with nothing
-  // waiting, health: the server answered, which ends the failure without being a
-  // delivery), else a failure's kind.
+  // An answer for the record: 'ok' a delivery (or, from the test button when it tried no
+  // batch and nothing waits, health: the server answered, which ends the failure without
+  // being a delivery), else a failure's kind.
   function note(k, health) {
     var d = record(), t = now();
     if (k == 'ok') { if (!health) d.ok = t; d.f = d.at = 0; d.k = ''; } else { d.f = d.f || t; d.k = k; d.at = t; }
@@ -651,14 +652,17 @@
   // The teacher's test: GET health beside the address (the server answers it without its
   // database), then, while the server takes them, this build's waiting batches one at a
   // time, oldest first, for a minute in all, each request read whole within 20 s. Every
-  // answer to a batch goes into the record; health alone ends a failure only when nothing
-  // waits (a filter may let health through and still stop the batches), and a health that
-  // fails keeps when the failure began. Without any connection it answers 'offline' at
-  // once, with no request and nothing noted. cb({ why, host }) when this page cannot send,
-  // else cb({ k: 'ok' or the first failure's kind, host, reached: health answered, sent:
-  // the batches delivered now, n: this build's batches still waiting }).
+  // answer to a batch goes into the record; health alone ends a failure only when the test
+  // tried no batch and nothing waits (a filter may let health through and still stop the
+  // batches), and a health that fails keeps when the failure began. A batch the server
+  // refuses is gone and the next one goes; the record ends with the refusal, also when a
+  // later batch is delivered or fails another way. Without any connection it answers
+  // 'offline' at once, with no request and nothing noted. cb({ why, host }) when this page
+  // cannot send, else cb({ k: 'ok', the failure's kind, or 'refused' when a batch was
+  // refused, host, reached: health answered, sent: the batches delivered now, n: the
+  // batches still waiting, older builds' included }).
   function check(cb) {
-    var s, n = 0, end = now() + 6e4;
+    var s, n = 0, r = 0, end = now() + 6e4;
     cb = safe(cb);
     noted();
     s = settings();
@@ -679,18 +683,28 @@
     function next() {
       var x = load()[0], w = settings().why, left = end - now();
       if (w) { testing = false; return cb({ why: w, host: host }); }
-      // Health alone ends a failure only when nothing waits, older builds' batches included.
+      // Health alone ends a failure only when the test tried no batch and nothing waits,
+      // older builds' batches included.
       if (!x || left < 1e3) {
-        if (!n && !waiting().length) note('ok', 1);
+        if (!n && !r && !waiting().length) note('ok', 1);
         return over('ok', true);
       }
       deliver(x, body(x), function (k) {
         note(k);
         if (k == 'ok') { n++; linked(x); }
+        if (k == 'refused') r = now();
         if (k == 'ok' || k == 'refused') { without(x.e.b); next(); } else over(k, true);
       }, min(2e4, left));
     }
-    function over(k, reached) { var q = waiting().length; testing = false; cb({ k: k, host: host, reached: reached, sent: n, n: q }); }
+    // A refusal (r: when the last one came) is the result, also beside a delivery or before
+    // a failure of another kind, and the record ends with it, dated when it came; f is the
+    // end when a delivery came after it.
+    function over(k, reached) {
+      var q = waiting().length, d;
+      if (r) { d = record(); d.f = d.f || now(); d.k = k = 'refused'; d.at = r; write(d); }
+      testing = false;
+      cb({ k: k, host: host, reached: reached, sent: n, n: q });
+    }
   }
 
   /* --------------------------------------------------------------- API */

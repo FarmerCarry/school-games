@@ -352,6 +352,7 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
 
   // What the test button reports.
   const IT = '✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز. أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به في مرشّح الإنترنت: https://ingest.test';
+  const REFUSED = '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه لا يقبل بيانات هذه النسخة من الموقع. أخبر من يدير خادم الإحصاءات.';
   for (const [result, ok, said] of [
     [{ k: 'ok', host, sent: 0, n: 0 }, true, '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. لم يكن شيء ينتظر الإرسال.'],
     [{ k: 'ok', host, sent: 2, n: 0 }, true, '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. أُرسل الآن ما كان ينتظر: دفعتان.'],
@@ -368,7 +369,13 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
     // No connection at all: nothing was asked, and there is no address to give IT.
     [{ k: 'offline', host, reached: false, sent: 0, n: 3 }, false, '✗ هذا الجهاز غير متصل بالإنترنت الآن. ما ينتظر الإرسال يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال.'],
     [{ k: 'server', host, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه ردّ بخطأ مؤقت. البيانات محفوظة على هذا الجهاز؛ جرّب مرة أخرى بعد قليل.'],
-    [{ k: 'refused', host, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه لا يقبل بيانات هذه النسخة من الموقع. أخبر من يدير خادم الإحصاءات.'],
+    [{ k: 'refused', host, sent: 0, n: 3 }, false, REFUSED + ' وما زال ينتظر: 3 دفعات، ويُرسل من صفحة الألعاب.'],
+    // The server refused the test's batches, which are gone: never «لم يكن شيء ينتظر الإرسال».
+    [{ k: 'refused', host, reached: true, sent: 0, n: 0 }, false, REFUSED],
+    // It refused some and took the others.
+    [{ k: 'refused', host, reached: true, sent: 2, n: 0 }, false, REFUSED + ' ووصل الآن ما لم يرفضه: دفعتان.'],
+    // Refused, then delivered, then a batch that got no answer: it still waits.
+    [{ k: 'refused', host, reached: true, sent: 1, n: 1 }, false, REFUSED + ' أُرسل الآن: دفعة واحدة. وما زال ينتظر: دفعة واحدة، ويُرسل من صفحة الألعاب.'],
     [{ why: 'off', host }, false, 'لا يرسل هذا الجهاز إلى لوحة المؤشرات الآن، فلا يوجد اتصال لاختباره.'],
     [{}, false, 'لا يرسل هذا الجهاز إلى لوحة المؤشرات الآن، فلا يوجد اتصال لاختباره.']
   ]) {

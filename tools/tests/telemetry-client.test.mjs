@@ -593,8 +593,11 @@ test('a send that fails while the PC has no connection at all is noted as offlin
   teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
   await teacher.goto(origin + '/teacher.html');
   await unplug(teacher);
+  // A tab of the first v3 build left a batch in its own key: the answer counts it, as status() does.
+  await seed(teacher, [[q3Key(INGEST), JSON.stringify([v3At('5'.repeat(16), await teacher.evaluate(() => Date.now()))])]]);
   const record = await tm(teacher, 'sg:site:tm:dx'), n = state.posts.length;
-  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'offline', host: 'ingest.test', reached: false, sent: 0, n: 1 });
+  assert.equal(await teacher.evaluate(() => SGTelemetry.status().n), 2);
+  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'offline', host: 'ingest.test', reached: false, sent: 0, n: 2 });
   assert.equal(state.posts.length, n, 'nothing is asked');
   assert.equal(await tm(teacher, 'sg:site:tm:dx'), record, 'and nothing is noted');
   await teacher.close();
@@ -1280,6 +1283,73 @@ test('the teacher\'s test ends a failure by health alone only when nothing waits
   assert.deepEqual(state.posts.map(p => p.method + ' ' + p.url), ['GET https://ingest.test/v1/health']);
   assert.deepEqual(await dx(teacher), failing, 'the failure still dates from when it began');
   assert.deepEqual(JSON.parse(await tm(teacher, q3Key(INGEST))), old);
+  await teacher.close();
+});
+
+test('a batch the server refuses in the teacher\'s test stays a refusal: neither health, a later delivery nor a later failure ends it, and the result says how many arrived', async t => {
+  let refused = [], later = 204;
+  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? HEALTH : refused.includes(JSON.parse(post.body).b) ? serverError(400, 'envelope') : later }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/seed.html');
+  const now = await page.evaluate(() => Date.now());
+  // A portal page of this build noted the address, had a batch delivered a day ago, and
+  // left one that the server answers with its JSON 400 (a client and a server of versions
+  // that do not match).
+  const delivered = { v: 1, u: INGEST, ok: now - 864e5, f: 0, k: '', at: 0, x: 0 };
+  refused = ['4'.repeat(16)];
+  await seed(page, [[qKey(INGEST), JSON.stringify([v3At('4'.repeat(16), now - 36e5)])], ['sg:site:tm:dx', JSON.stringify(delivered)]]);
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  const check = () => teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve)));
+  let n = state.posts.length;
+  const since = () => state.posts.slice(n).map(p => p.method + ' ' + p.url);
+  // The batch is gone, as from the portal; that health answered ends nothing, and the
+  // result is the refusal, not «nothing was waiting».
+  like(await check(), { k: 'refused', host: 'ingest.test', reached: true, sent: 0, n: 0 });
+  assert.deepEqual(since(), ['GET https://ingest.test/v1/health', 'POST ' + INGEST]);
+  assert.equal(await queue(teacher), null);
+  like(await dx(teacher), { v: 1, u: INGEST, ok: delivered.ok, f: now, k: 'refused', at: now, x: 0 });
+  // An older batch refused, a newer one delivered 15 s later: both go, the record notes the
+  // delivery and still ends with the refusal, dated when it came, and the result counts
+  // what arrived.
+  n = state.posts.length;
+  refused = ['6'.repeat(16)];
+  await seed(teacher, [[qKey(INGEST), JSON.stringify([v3At('6'.repeat(16), now - 2 * 36e5), v3At('7'.repeat(16), now - 36e5)])]]);
+  await teacher.evaluate(() => {
+    const realFetch = window.fetch;
+    window.fetch = (url, init) => init && init.body && JSON.parse(init.body).b === '7'.repeat(16)
+      ? new Promise(resolve => { window.release = () => resolve(realFetch(url, init)); }) : realFetch(url, init);
+    window.result = null;
+    SGTelemetry.check(r => { window.result = r; });
+  });
+  await teacher.waitForFunction(() => !!window.release);
+  await teacher.clock.runFor(15000);
+  await teacher.evaluate(() => window.release());
+  await teacher.waitForFunction(() => window.result !== null);
+  like(await teacher.evaluate(() => window.result), { k: 'refused', host: 'ingest.test', reached: true, sent: 1, n: 0 });
+  assert.deepEqual(since(), ['GET https://ingest.test/v1/health', 'POST ' + INGEST, 'POST ' + INGEST]);
+  assert.deepEqual(batches(state).slice(-2).map(b => b.b), ['6'.repeat(16), '7'.repeat(16)], 'oldest first');
+  assert.equal(await queue(teacher), null);
+  const end = now + 15000;
+  like(await dx(teacher), { v: 1, u: INGEST, ok: end, f: end, k: 'refused', at: now, x: 0 });
+  // A refusal, then a batch that fails another way (a 5xx, or no answer within 20 s): the
+  // result and the record are still the refusal, and that batch waits.
+  for (const answer of [serverError(503), 'hang']) {
+    n = state.posts.length;
+    later = answer;
+    refused = ['8'.repeat(16)];
+    await seed(teacher, [[qKey(INGEST), JSON.stringify([v3At('8'.repeat(16), now - 2 * 36e5), v3At('9'.repeat(16), now - 36e5)])]]);
+    const at = await teacher.evaluate(() => Date.now());
+    await teacher.evaluate(() => { window.result = null; SGTelemetry.check(r => { window.result = r; }); });
+    await until(() => state.posts.length === n + 3, 'the batch after the refusal');
+    if (answer === 'hang') await teacher.clock.runFor(20000);
+    await teacher.waitForFunction(() => window.result !== null);
+    like(await teacher.evaluate(() => window.result), { k: 'refused', host: 'ingest.test', reached: true, sent: 0, n: 1 }, String(answer.status || answer));
+    assert.deepEqual(since(), ['GET https://ingest.test/v1/health', 'POST ' + INGEST, 'POST ' + INGEST]);
+    assert.deepEqual((await queue(teacher)).map(x => x.e.b), ['9'.repeat(16)], 'the other batch still waits');
+    like(await dx(teacher), { v: 1, u: INGEST, ok: end, f: at, k: 'refused', at, x: 0 }, 'the record after ' + (answer.status || answer));
+  }
   await teacher.close();
 });
 
