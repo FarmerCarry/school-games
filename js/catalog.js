@@ -90,6 +90,17 @@ window.GAMES = [
   { slug: 'drift-king', roundMinutes: [1, 3], inputStyle: 'one-button', title: 'ملك الانزلاق', en: 'Drift King', tags: 'سيارة سيارات', cats: ['racing'], players: '1', color: '#ffc21a',
     blurb: 'انزلق بزر واحد فوق الغيوم، اجمع العملات واشترِ سيارات مجنونة!',
     controls: [{ keys: ['مسافة', 'انقر'], action: 'اضغط مطولًا للالتفاف، واترك للعودة' }] },
+  { slug: 'turbo-karts', roundMinutes: [2, 6], inputStyle: 'keyboard', title: 'سباق التوربو', en: 'Turbo Karts', tags: 'سيارة سباق كارت درفت', cats: ['racing', 'two-player'], players: '1-2', color: '#3ec6ff', hot: true,
+    blurb: 'انزلق في المنعطف، عبّئ التوربو، والتقط لعبة من الصندوق وسابق أصحابك!',
+    tip: 'اضغط مطولًا على الانزلاق داخل المنعطف ثم اتركه لتطلق التوربو.',
+    controls: [
+      { keys: ['↑', 'W'], action: 'انطلق' },
+      { keys: ['↓', 'S'], action: 'فرامل / رجوع' },
+      { keys: ['←', '→', 'A', 'D'], action: 'وجّه العربة' },
+      { keys: ['مسافة', '/'], action: 'انزلاق (اضغط مطولًا ثم اترك)' },
+      { keys: ['E', '.', 'Enter'], action: 'استخدم الأداة' },
+      { keys: ['الأسهم'], action: 'اللاعب ٢: تحرّك' }
+    ] },
   { slug: 'fire-and-ice', roundMinutes: [3, 8], inputStyle: 'keyboard', title: 'النار والجليد', en: 'Fire & Ice', tags: 'fireboy watergirl نار ماء', cats: ['two-player', 'puzzle'], players: '1-2', color: '#ff5a1f', hot: true,
     blurb: 'تعاونوا يا نار ويا جليد واهربوا من معبد مليء بالفخاخ!',
     controls: [{ keys: ['W', 'A', 'D'], action: 'الجليد: قفز / يسار / يمين' }, { keys: ['↑', '←', '→'], action: 'النار: قفز / يسار / يمين' }, { keys: ['Tab', 'Shift'], action: 'وضع اللاعب الواحد: بدّل بين النار والجليد' }] },
