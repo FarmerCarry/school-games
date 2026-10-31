@@ -270,9 +270,10 @@ const OF_GROUP = `(SELECT id FROM st_sessions WHERE u IN ${GROUP})`;
 // student's play again (a closing page's last batch goes again from the next page, often
 // the next day). The setting 'forgotten' keeps every code of a forgotten group with the
 // time of the forget (?2, UTC seconds), as a JSON object {code: seconds}, and ingest drops
-// a batch of such a code whose session started by then, and every mark naming one while
-// it has not played again (store.mjs). A PC keeps a batch at most 7 days: each forget also
-// removes the entries FORGOTTEN_DAYS old, as does the 5-minute cron when no forget comes.
+// a batch of such a code whose session started by then, and every mark naming one from a
+// session that started before the code played again (store.mjs). A PC keeps a batch at most
+// 7 days: each forget also removes the entries FORGOTTEN_DAYS old, as does the 5-minute
+// cron when no forget comes.
 // A PC tells an older code ('cd') until a batch naming it is delivered, which can be later
 // still: a link told after FORGOTTEN_DAYS is stored again. It names only the code (none of
 // its play), and forgetting again removes it with the student it is linked to.
@@ -283,9 +284,9 @@ const FORGOTTEN = "INSERT INTO settings (key, value) SELECT 'forgotten', json_gr
 // Forget: how many of the group's codes the server holds, then every fact and per-student
 // rollup row of the group (and the marks of other sessions that name one of its codes: the
 // removal of a profile, or an older code whose link was undone; both come after the
-// student's first play), the live rows, the student rows, the group's codes in
-// 'forgotten', and the links last (the group is read from them). School-wide rollups keep
-// their counts.
+// student's first play, which ingest keeps true for a forgotten code that plays again),
+// the live rows, the student rows, the group's codes in 'forgotten', and the links last
+// (the group is read from them). School-wide rollups keep their counts.
 const FORGET = [
   `SELECT COUNT(*) AS n FROM ${GROUP} g WHERE EXISTS (SELECT 1 FROM st_students WHERE u = g.u) OR EXISTS (SELECT 1 FROM st_sessions WHERE u = g.u)`,
   `DELETE FROM st_rounds WHERE sid IN ${OF_GROUP}`, `DELETE FROM st_visits WHERE sid IN ${OF_GROUP}`, `DELETE FROM st_marks WHERE sid IN ${OF_GROUP}`,
