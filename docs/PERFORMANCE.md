@@ -879,3 +879,38 @@ minified build and the school's `SG_TELEMETRY_URL`:
 
 The portal's new limit follows the rule above: the measured size rounded up to the next
 1,000 bytes plus 1,000. Nothing beyond the two changes is added to any page.
+
+## Integration review fixes to delivery, 31 October 2026
+
+The integration review of both changes found that the teacher page moved an older
+build's queue where that build's open tab no longer sent it, that a PC with no
+connection at all was said to be blocked by the school's filter, that batches a closing
+page had sent were reported as dropped after a week's break, and that the teacher page
+named this project's website in every copy (docs/TELEMETRY.md, "Delivery"). Measured with
+the Linux minified build, the school's `SG_TELEMETRY_URL` and the `SG_SITE_URL` the
+workflow now gives this repository (`https://FarmerCarry.github.io/school-games/`),
+against `fcdfd8c`:
+
+* **The portal** grows by 373 bytes, from 401,118 to 401,491, within its limit: the
+  minified `js/telemetry.js` grows from 14,714 to 15,087 bytes (the teacher page reading
+  older builds' keys without moving them, the `offline` kind and the test's answer
+  without a connection, and the handed-over mark checked before play is called lost).
+  No work is added to a child's page: one comparison per dropped batch and per failure.
+* **The teacher page** grows by 908 bytes, from 120,581 to 121,489, within its limit: the
+  same 373 bytes, 467 of `js/teacher.js` (the two Arabic messages for a PC without a
+  connection, and the folder message without an address) and the 68 bytes of
+  `window.SG_SITE` before its script (840 bytes without `SG_SITE_URL`).
+* The offline cache grows by 1,281 bytes, from 5,335,420 to 5,336,701 (both pages, each
+  cached once), 701 bytes over its limit.
+
+The offline cache follows the rule above: the measured size rounded up to the next 1,000
+bytes plus 1,000. The portal's and the teacher page's limits stay.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 401,118 | 401,491 | 403,000 | 403,000 |
+| Teacher page | 120,581 | 121,489 | 122,000 | 122,000 |
+| Offline precache | 5,335,420 | 5,336,701 | 5,336,000 | 5,338,000 |
+
+No game page changes, and no request, font, library or third-party code is added to any
+page.
