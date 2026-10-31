@@ -92,6 +92,9 @@
   // Window capture listeners run before any game listener can stop the event.
   function listen(type, fn) { window.addEventListener(type, fn, true); }
   function suspend(reason) {
+    // One pause per stop of play: a blur and the hidden page that follows it, or Kit's own
+    // fullscreen exit and the portal's, find play already cut (until 0) and count once.
+    if (roundId && until !== 0) rp++;
     sendStats(true);
     cueAt = -1;
     if (Kit.keys) Kit.keys.reset();
@@ -115,16 +118,42 @@
     ready = true;
     tellPortal({ type: 'sg:ready', version: 1 });
   };
+  function errorText(error) {
+    return String(error && error.message || error || 'Game failed to initialize').slice(0, 240);
+  }
   Kit.fail = function (error) {
+    if (failed) return;
     failed = true;
-    tellPortal({ type: 'sg:error', version: 1, message: String(error && error.message || error || 'Game failed to initialize').slice(0, 240) });
+    tellPortal({ type: 'sg:error', version: 1, message: errorText(error) });
   };
+  // Before ready, any error still fails the handshake. Afterwards one stray
+  // exception must not throw the run away: warn the portal at most once per
+  // 10 s. Five in that window pause first (games save from that hook), then fail.
+  var warnAt = -1, recent = [], reporting = false;
+  function runtimeError(error) {
+    if (failed || reporting) return;
+    if (!ready) return Kit.fail(error);
+    var t = clock();
+    recent = recent.filter(function (x) { return t - x < 10000; });
+    recent.push(t);
+    if (recent.length >= 5) {
+      reporting = true;
+      lifecycleHandlers.slice().forEach(function (hooks) {
+        try { if (hooks.reset) hooks.reset(); } catch (e) { /* keep going */ }
+        try { hooks.pause('error'); } catch (e) { /* a save hook must not hide the failure */ }
+      });
+      return Kit.fail(error);
+    }
+    if (warnAt >= 0 && t - warnAt < 10000) return;
+    warnAt = t;
+    tellPortal({ type: 'sg:warn', version: 1, message: errorText(error) });
+  }
   listen('error', function (e) {
     // Capture script download failures as well as exceptions. Optional media do
     // not make a successfully initialized game fail its readiness handshake.
-    if (e.message || (e.target && e.target.tagName === 'SCRIPT')) Kit.fail(e.error || e.message || 'Game script failed to load');
+    if (e.message || (e.target && e.target.tagName === 'SCRIPT')) runtimeError(e.error || e.message || 'Game script failed to load');
   });
-  window.addEventListener('unhandledrejection', function (e) { Kit.fail(e.reason); });
+  window.addEventListener('unhandledrejection', function (e) { runtimeError(e.reason); });
   window.addEventListener('blur', function () { suspend('blur'); });
   document.addEventListener('visibilitychange', function () { if (document.hidden) suspend('hidden'); });
   var wasFullscreen = !!document.fullscreenElement;
@@ -170,13 +199,19 @@
   // Whole milliseconds (an int32 holds 24 days of performance.now()).
   function clock() { return perf ? perf.now() | 0 : Date.now(); }
   function text(value, length) { try { return String(value).slice(0, length); } catch (e) { return ''; } }
+  // tn: the time of the last tally, which every mark() follows: a round's wall time and its
+  // engaged time are read from the same clock reading, so wall time always covers it.
+  var tn = 0;
   function tally() {
-    var t = clock(), x = t < until ? t : until;
+    var t = tn = clock(), x = t < until ? t : until;
     if (x > from) { engaged += x - from; if (roundId) roundMs += x - from; from = x; }
     return t;
   }
+  // A key press or click in a round after its window lapsed is an idle lapse (rx);
+  // after a pause until is 0, so the press that resumes play is not one.
   function engage(extendOnly) {
     var t = tally();
+    if (!extendOnly && roundId && until && t >= until) rd++;
     if (!extendOnly || t < until) { from = t; until = t + 20000; }
   }
   // Paused games and idle menus draw cheap frames: count only engaged play in a round.
@@ -239,37 +274,47 @@
   };
 
   /* ------------------------------------------------------ telemetry v2 */
-  // Extras for the portal's anonymous telemetry (docs/ARCHITECTURE.md "Kit v2"),
-  // counted only while embedded, ready and the portal says telemetry is on, and
-  // posted as sg:telemetry right after sg:stats. Like v1, round events also wait
-  // for Kit.ready(). Histograms: upper bounds in ms, the last bucket open.
-  // rt and hits/misses belong to the open round.
+  // Extras for the portal's telemetry (docs/ARCHITECTURE.md "Kit v2"), posted as
+  // sg:telemetry right after sg:stats, only while embedded, ready and the portal says
+  // telemetry is on. Like v1, round events also wait for Kit.ready(). Histograms: upper
+  // bounds in ms, the last bucket open. rt, hits/misses and the rx counters belong to the
+  // open round: r0 its start, ri inputs, rd idle lapses and rp pauses (these four are
+  // plain counts kept at any time, like the tier), rsum and rn the reaction-time sum and
+  // count (like rt, only while telemetry is on). dl is the DDA level of the last read,
+  // in thousandths (-1: none yet), kept across rounds.
   var telemetry = false, tier = 0, hits = 0, misses = 0, cueAt = -1, tev = [];
+  var r0 = 0, ri = 0, rd = 0, rp = 0, rsum = 0, rn = 0, dl = -1;
   var rt = [0, 0, 0, 0, 0, 0], il = [0, 0, 0, 0, 0, 0], RT = [300, 500, 800, 1200, 2000], IL = [8, 16, 33, 50, 100];
   function on() { return telemetry && ready && !failed; }
   function fin(v) { return typeof v === 'number' && v >= 0 && v < 1 / 0; }
   function put(list, ms, bounds) { for (var i = 0; i < 5 && ms >= bounds[i]; i++); list[i]++; }
-  // A round start (no code) or the end of the open round, beside the v1 event.
+  function timed(ms) { put(rt, ms, RT); rsum += ms; rn++; }
+  // A round start (no code) or the end of the open round, beside the v1 event. Every
+  // end comes right after its rx: wall ms, inputs, idle lapses, pauses, rsum, rn, dl.
   function mark(code, score) {
-    if (telemetry && !failed) tev.push(code == null ? ['rs', roundId, tier] : ['re', code, roundId, roundMs, fin(score) ? score : -1, tier, hits, misses, rt]);
-    hits = misses = 0; rt = [0, 0, 0, 0, 0, 0]; cueAt = -1;
+    if (telemetry && !failed) {
+      if (code == null) tev.push(['rs', roundId, tier]);
+      else tev.push(['rx', tn - r0, ri, rd, rp, rsum, rn, dl], ['re', code, roundId, roundMs, fin(score) ? score : -1, tier, hits, misses, rt]);
+    }
+    hits = misses = ri = rd = rp = rsum = rn = 0; rt = [0, 0, 0, 0, 0, 0]; cueAt = -1; r0 = tn;
   }
   // Every key press and click: engaged time, then (key repeats aside) how long the
   // event waited for the page and the reaction time to a pending cue. Only a click or
   // a key a game accepts (Kit.keys.acceptsEvent) answers the cue.
   function input(e, key) {
     engage();
+    if (roundId && !e.repeat) ri++;
     if (on() && !e.repeat) {
       var t = e.timeStamp;
       if (perf && typeof t === 'number' && t > 0 && (t = perf.now() - t) >= 0 && t <= 1000) put(il, t, IL);
-      if (cueAt >= 0 && (!key || acceptsKeyEvent(e))) { put(rt, clock() - cueAt, RT); cueAt = -1; }
+      if (cueAt >= 0 && (!key || acceptsKeyEvent(e))) { timed(clock() - cueAt); cueAt = -1; }
     }
   }
   Kit.track = {
     hit: function () { if (on()) hits++; },
     miss: function () { if (on()) misses++; },
     cue: function () { if (on()) cueAt = clock(); },
-    react: function (ms) { if (on() && fin(ms)) put(rt, ms, RT); },
+    react: function (ms) { if (on() && fin(ms)) timed(ms); },
     // The current difficulty tier 0..9 (0 = no DDA) is state, so it is kept at any time.
     tier: function (n) { if (fin(n) && n < 10) tier = n | 0; }
   };
@@ -296,15 +341,16 @@
       }
       return n ? level : unit(opts.start, SEEDS[profile.band] || 0.35);
     }
-    // Every read (level, tier, value, pick) reports the tier for the round events.
-    function read() { var l = now(); Kit.track.tier(t = 1 + Math.floor(l * tiers * 0.9999)); return l; }
-    // The player just written moves last, so the 16 most recent players are kept.
+    // Every read (level, tier, value, pick) reports the tier and the level for the round events.
+    function read() { var l = now(); Kit.track.tier(t = 1 + Math.floor(l * tiers * 0.9999)); dl = Math.round(l * 1000); return l; }
+    // The player just written moves last, so the 28 most recent players are kept: a full
+    // PC's 24 profiles and the guests of each band ('_' keys, at most 4).
     function save() {
       var all = obj(store.get('dda')), k = key(), mine = obj(all[k]);
       delete all[k];
       if (n) mine[id] = [level, n]; else delete mine[id];
       all[k] = mine;
-      for (var keys = Object.keys(all); keys.length > 16;) delete all[keys.shift()];
+      for (var keys = Object.keys(all); keys.length > 28;) delete all[keys.shift()];
       store.set('dda', all);
     }
     var dda = {
