@@ -704,7 +704,16 @@ test('a period that reaches back before the update: play sessions per day, no ch
   await waitForView(page, 'habits');
   await page.click('#habits-weeks .table-toggle');
   const weeks = await page.locator('#habits-weeks .table-host tbody th').allTextContents();
-  assert.ok(weeks.length >= 1 && weeks.length <= 2, weeks.join(' | '));
+  // Ten days from the update can cover two Sunday-weeks or three, once the school's
+  // day is a Sunday. The rows are those weeks, newest first, and none start earlier.
+  const expectedWeeks = await page.evaluate(({ since, to }) => {
+    const R = window.SGResearch;
+    const label = day => 'Week of ' + new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(day + 'T00:00:00Z'));
+    const out = [];
+    for (let w = R.weekOf(since, 'sun'); w <= to; w = R.shift(w, 7)) out.push(label(w));
+    return out.reverse();
+  }, { since: factsSince, to: k.range.to });
+  assert.deepEqual(weeks, expectedWeeks);
   // The update day is not in the period: nothing of it.
   s.mode.edit = null;
   await page.goto(site.origin + '/#/overview');
