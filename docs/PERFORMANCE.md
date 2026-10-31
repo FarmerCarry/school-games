@@ -786,3 +786,35 @@ only cached file that changed. No other budget changed.
 Both new limits are the measured size rounded up, Sneaky Levels to the next 500
 bytes and the precache to the next 1,000. That leaves 448 bytes (0.18%) and 316
 bytes (0.006%). A small text edit can exceed either limit.
+
+## Chaos Island on current main, 31 October 2026
+
+جزيرة الفوضى (Chaos Island) is a fixed 1280×720 canvas party platformer added on top
+of current main (`5e81c7d`, Sneaky Levels worlds 6–12). The island plate, pet-style
+characters, jelly, round chip and meteor warning are unchanged. The background melody
+is gone; disaster cues stay one-shot. The match reads `Kit.dda` once at the start
+(tiers 2 and 3 keep the designed powers), reports `Kit.stats` the same way a party
+round does, and counts a survival, a pop and a disaster warning with `Kit.track`.
+
+Measured with the Linux minified build and `SG_TELEMETRY_URL` unset, the same way as
+the sections above. The Actions build inlines the ingest address, which adds 103 bytes
+to the portal and therefore to the precache. The limits below are the measured sizes
+rounded up (the game to the next 500 bytes, the portal and the precache to the next
+1,000) and still cover that build.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Chaos Island | — | 117,858 | — | 118,000 |
+| Portal (thumbnail and catalog entry) | 396,669 | 405,067 | 398,000 | 406,000 |
+| Teacher page | 96,672 | 97,983 | 98,000 | 98,000 |
+| Offline precache, 49 files | 5,449,684 | 5,577,251 | 5,450,000 | 5,578,000 |
+
+The page limit is a new entry, 142 bytes (0.12%) above the built page. The portal grows
+by 8,398 bytes, almost all of it the 6,896-byte thumbnail, so its limit moves from
+398,000 to 406,000: 933 bytes (0.23%) above this measurement and 830 bytes (0.20%) above
+the Actions portal (405,170). The teacher page grows by 1,311 bytes and stays inside
+98,000, with 17 bytes left. The offline cache grows by 127,567 bytes (the new page, the
+portal and the teacher page) and gains one file, so `precacheBytes` moves from
+5,450,000 to 5,578,000: 749 bytes (0.013%) above this measurement and 646 bytes
+(0.012%) above the Actions precache (5,577,354). No other game, font or library limit
+changes.
