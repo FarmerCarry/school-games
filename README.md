@@ -17,7 +17,7 @@ adapt to each child), and none of them plays background music.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores, progress, player profiles and the play statistics are saved in each browser (localStorage).
 
-## The games (34)
+## The games (35)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -49,6 +49,7 @@ adapt to each child), and none of them plays background music.
 | انفجار المكعبات | Block Burst | 1 | ألغاز |
 | دمج 2048 | 2048 | 1 | ألغاز |
 | حبل الحلوى | Munch Rope | 1 | ألغاز |
+| تحطيم القلعة | Castle Crash | 1-2 | ألغاز، لاعبان، تحديات |
 | اندفاع المتاهة | Maze Dash | 1 | أركيد |
 | عبور الطريق | Road Hopper | 1 | أركيد |
 | المراحل الماكرة | Sneaky Levels | 1 | أركيد |
@@ -77,6 +78,8 @@ jelly king), and each level gives up to three stars for the cake that is left. F
 levels opens an endless mode, and stars unlock new cakes. Keys: 1–4 choose a tower, Space starts
 the next wave, F plays faster, U/X upgrade or sell, P/Esc pauses. `node games/cake-guards/verify.js`
 checks that every level can be won and is lost when nothing is built.
+
+**تحطيم القلعة (Castle Crash)** is a slingshot destruction game. Drag the slingshot (or aim with the keys) and launch toy ammo at wooden, ice and stone forts that shelter green Gloopies. Each level is three forts and one shared pile of shots; leftover shots are worth more stars. Ammo unlocks over three worlds, and two players can take turns knocking down each other's fort. P or Esc pauses.
 
 ### Connect 4 and tic-tac-toe
 

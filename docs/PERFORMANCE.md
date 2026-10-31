@@ -786,3 +786,23 @@ only cached file that changed. No other budget changed.
 Both new limits are the measured size rounded up, Sneaky Levels to the next 500
 bytes and the precache to the next 1,000. That leaves 448 bytes (0.18%) and 316
 bytes (0.006%). A small text edit can exceed either limit.
+
+## Castle Crash, 31 October 2026
+
+تحطيم القلعة (Castle Crash) is a fixed 1280×720 slingshot destruction game: a
+compact rigid-body solver, three worlds of forts, and a same-keyboard fort duel.
+Art is procedural canvas. Sounds are one-shot `Kit.juice` cues. The page plays
+no background music. Measured with the Linux minified build:
+
+| Measurement | After bytes | Previous limit | New limit |
+| --- | ---: | ---: | ---: |
+| Castle Crash | 94,800 | 88,000 | 96,000 |
+| Portal (thumbnail and catalog entry) | 399,552 | 402,000 | 402,000 |
+| Teacher page | 97,744 | 98,000 | 98,000 |
+| Offline precache, 49 files | 5,548,439 | 5,550,000 | 5,560,000 |
+
+The polished page is 94,800 bytes. The game limit moves from 88,000 to 96,000
+(1,200 bytes of headroom). The portal and teacher page are unchanged. The
+offline cache is 5,548,439 bytes, so its limit moves from 5,550,000 to
+5,560,000 (11,561 bytes of headroom). A headless frame with vsync disabled
+cost well under a millisecond, so a 60 Hz display stays smooth.
