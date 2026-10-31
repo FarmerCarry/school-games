@@ -198,15 +198,19 @@ local day records. The server stores no IP address.
   `h: 1` (handed over as the page went), so the teacher page does not count it as never
   sent. The server keeps a batch once (it de-duplicates v2 batch ids, and every write of a
   v3 batch is idempotent): a batch delivered twice is never counted twice in the KPIs.
-  It is not quite free, though: the server's live table counts the session of a batch
-  received now as playing now, so the dashboard's «live» panel shows that session, its
-  student and PC for up to 5 minutes, and a batch for a day already rolled marks that day
-  for a re-roll (more D1 writes, within the cron's write guard). Since the last batch of
-  every portal page goes as the page closes, this happens about once per PC per day, when
-  the first page of the next day sends it again. Before this rule an unloading page
-  removed what it handed over at once; on a network that drops requests without an answer
-  (a school filter that blocks the server), the first short page that closed emptied the
-  queue for good (28 and 29 October 2026).
+  Nor does a batch sent again bring back a student the school forgot on the dashboard:
+  for 8 days the server drops (and answers 204 to) every batch of a forgotten code whose
+  session started before the forget, so the PC lets it go, and stores no mark of any
+  session that names that code; a later session of that code is new play and is kept.
+  Sending a batch again is not quite free, though: the server's live table counts the
+  session of a batch received now as playing now, so the dashboard's «live» panel shows
+  that session, its student and PC for up to 5 minutes, and a batch for a day already
+  rolled marks that day for a re-roll (more D1 writes, within the cron's write guard).
+  Since the last batch of every portal page goes as the page closes, this happens about
+  once per PC per day, when the first page of the next day sends it again. Before this
+  rule an unloading page removed what it handed over at once; on a network that drops
+  requests without an answer (a school filter that blocks the server), the first short
+  page that closed emptied the queue for good (28 and 29 October 2026).
 * Only the server's own answers count, because a school filter or a captive portal can
   answer itself, even with a 200 or a 403: **204** (and nothing redirected) delivers the
   batch and removes it. The server's JSON error, `{ "error": "…" }`, to a **4xx other than

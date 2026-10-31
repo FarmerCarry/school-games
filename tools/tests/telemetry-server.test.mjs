@@ -1466,6 +1466,102 @@ test('forget leaves no mark that names the code: an older code whose link was un
     [[U1, [], 1], [U2, [], 1], [U3, [], 2], [U5, [], 1]], 'U2 keeps its own session');
 });
 
+test('a forgotten student stays forgotten: play a PC sends again from before the forget changes nothing, a later session is kept, and the codes go after 8 days', async t => {
+  const s = await studentDays(t);
+  // U2's session went on after its first batch: the closing page's last batch reached the
+  // server, but the page went before the answer, so the PC keeps it (h: 1).
+  const [, first] = STUDENT_DAYS[3], [, old] = STUDENT_DAYS[1];
+  const last = envelope3('b20000000002', [['se', 80, 300000, 'u']], { u: U2, p: P2, z: '', w: 85 });
+  s.clock.now = START + 10000;
+  assert.equal((await s.post(last)).status, 204);
+  s.clock.now = Date.parse('2026-10-21T02:00:00Z');
+  await s.app.roll();
+  await s.app.roll();
+  // Forgetting U4, an older code of U2, forgets both; then a recount.
+  const forgotS = Math.floor(s.clock.now / 1000);
+  assert.deepEqual((await call(s, 'POST', '/v1/admin/forget', { u: U4 })).json().removed.codes, 2);
+  assert.equal((await call(s, 'POST', '/v1/admin/rebuild', {})).status, 200);
+  assert.deepEqual([(await s.app.roll()).kind, (await s.app.roll()).kind, (await s.app.roll()).rolled], ['recount', 'recount', null]);
+  const stored = async () => ({ facts: await storedFacts(s), live: await s.rows('live'), days: await s.rows('roll_days', 'day') });
+  const left = await stored();
+  // The next morning the PC's first page sends what waits again, with w as the session's
+  // age now: U2's first batch (with ss, and the cd that linked U4), its last batch (no ss),
+  // and U4's own session of 19 October. All are answered as stored and change nothing.
+  s.clock.now = Date.parse('2026-10-21T06:00:00Z');
+  const age = (body, since) => ({ ...body, z: '', w: Math.round((s.clock.now - since) / 1000) + body.w });
+  for (const body of [age(first, START), age(last, START + 10000), age(old, START - DAY_MS)]) assert.equal((await s.post(body)).status, 204, body.s);
+  assert.deepEqual(await stored(), left, 'no fact, live row or day to roll again');
+  s.clock.now += 2 * 3600000;
+  assert.equal((await s.app.roll()).rolled, null);
+  assert.deepEqual((await s.rows('r_student_day')).filter(r => r.u === U2 || r.u === U4), []);
+  const students = async () => (await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-21')).json().students.map(x => [x.u, x.linked, x.sessions]);
+  assert.deepEqual(await students(), [[U1, [], 1], [U3, [], 2], [U5, [], 1]]);
+  // A session of U2 that starts after the forget is new play: kept (the profile and its code stay on the PC).
+  assert.equal((await s.post(envelope3('b30000000001', [ss3(0, 31, 1), ...visit(1, 'road-hopper', 2, 60000)], { u: U2, p: P2, z: '' }))).status, 204);
+  assert.deepEqual(await students(), [[U1, [], 1], [U2, [], 1], [U3, [], 2], [U5, [], 1]]);
+  assert.deepEqual((await s.rows('st_sessions')).filter(r => r.u === U2).map(r => r.s), ['b30000000001']);
+  // The setting 'forgotten' holds both codes with the forget's time, through the recount;
+  // the dashboard's settings neither show nor take it.
+  const forgotten = async () => JSON.parse((await s.rows('settings')).find(r => r.key === 'forgotten')?.value ?? '{}');
+  assert.deepEqual(await forgotten(), { [U2]: forgotS, [U4]: forgotS });
+  assert.ok(!(await s.admin('/v1/admin/settings')).text.includes(U2), 'not a setting the dashboard shows');
+  assert.deepEqual((await call(s, 'POST', '/v1/admin/settings', { forgotten: {} })).json(), { error: 'field' });
+  // A PC keeps a batch at most 7 days: each forget drops the codes forgotten 8 days before it.
+  s.clock.now = (forgotS + 7 * 86400) * 1000;
+  await call(s, 'POST', '/v1/admin/forget', { u: U3 });
+  assert.deepEqual(await forgotten(), { [U2]: forgotS, [U4]: forgotS, [U3]: forgotS + 7 * 86400 });
+  s.clock.now = (forgotS + 8 * 86400) * 1000;
+  await call(s, 'POST', '/v1/admin/forget', { u: U5 });
+  assert.deepEqual(await forgotten(), { [U3]: forgotS + 7 * 86400, [U5]: forgotS + 8 * 86400 });
+});
+
+test('no mark names a forgotten code again: a profile\'s removal or an older code that a PC tells again, or tells in a later session, is dropped', async t => {
+  const s = await studentDays(t);
+  // U5's profile was removed on its PC: the next guest session there tells 'pr' in its only
+  // batch, delivered as the page went (h: 1). U1's next session said U3 was its older code
+  // (a transfer), and the owner undid that link: U3 is another child.
+  const guest = envelope3('b20000000006', [ss3(0, -1, 0), ['pr', 1, U5], ...visit(1, 'maze-dash', 2, 30000)], { u: '', p: P2, a: '6-7', z: '' });
+  const linker = envelope3('b20000000007', [ss3(0, 3, 1), ['cd', 0, U3], ...visit(1, 'road-hopper', 2, 60000)], { u: U1, z: '' });
+  const sent = s.clock.now;
+  for (const body of [guest, linker]) assert.equal((await s.post(body)).status, 204);
+  assert.equal((await call(s, 'DELETE', '/v1/admin/link?u=' + U3)).json().ok, true);
+  // The owner forgets U2 with its older code U4, U3, and U5 last (this instance's copy of
+  // the settings is from before that forget).
+  for (const u of [U4, U3, U5]) assert.equal((await call(s, 'POST', '/v1/admin/forget', { u })).status, 200);
+  const named = async () => [...(await s.rows('st_marks')).filter(m => [U2, U3, U4, U5].includes(m.x)).map(m => m.kind + ' ' + m.x),
+    ...(await s.rows('aliases')).map(r => r.u_old + ' ' + r.u_new)];
+  assert.deepEqual(await named(), []);
+  // The next morning the PC sends both batches again (w: their sessions' age now), U2 plays
+  // again and tells its older code U4 again (the answer that ended that link was lost), and
+  // a guest session tells the removal of U3's profile.
+  s.clock.now = Date.parse('2026-10-21T06:00:00Z');
+  const again = body => ({ ...body, w: Math.round((s.clock.now - sent) / 1000) + body.w });
+  const later = [envelope3('b30000000001', [ss3(0, 31, 1), ['cd', 0, U4], ...visit(1, 'road-hopper', 2, 60000)], { u: U2, p: P2, z: '' }),
+    envelope3('b30000000002', [ss3(0, -1, 0), ['pr', 0, U3], ...visit(1, 'maze-dash', 2, 30000)], { u: '', a: '6-7', z: '' })];
+  for (const body of [again(guest), again(linker), ...later]) assert.equal((await s.post(body)).status, 204, body.s);
+  assert.deepEqual(await named(), [], 'no removal, older code or link names them');
+  // The sessions themselves are kept: none is a forgotten code's from before the forget.
+  assert.ok((await s.rows('st_sessions')).some(r => r.s === 'b30000000002'));
+  assert.deepEqual((await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-21')).json().students.map(x => [x.u, x.linked, x.sessions]),
+    [[U1, [], 2], [U2, [], 1]]);
+  const events = (await s.admin('/v1/admin/export?file=events&from=2026-10-19&to=2026-10-21')).text;
+  assert.deepEqual([U3, U4, U5].filter(u => events.includes(u)), [], 'the research export names none of them');
+});
+
+test('the 5-minute cron lets a forget\'s codes go once their 8 days are over, with no later forget', async t => {
+  const s = await studentDays(t);
+  const forgotS = Math.floor(s.clock.now / 1000);
+  assert.equal((await call(s, 'POST', '/v1/admin/forget', { u: U4 })).status, 200);
+  const forgotten = async () => JSON.parse((await s.rows('settings')).find(r => r.key === 'forgotten')?.value ?? '{}');
+  s.clock.now = (forgotS + 8 * 86400 - 60) * 1000;
+  while ((await s.app.roll()).rolled);
+  assert.deepEqual(await forgotten(), { [U2]: forgotS, [U4]: forgotS });
+  s.clock.now += 60000;
+  assert.equal((await s.app.roll()).deleted, 'forgotten');
+  assert.deepEqual(await forgotten(), {});
+  assert.equal((await s.app.roll()).deleted, null, 'once');
+});
+
 test('link joins a student\'s codes one hop deep (history included), refuses cycles and unknown codes; unlink undoes it', async t => {
   const s = await studentDays(t);
   const students = async () => (await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-20')).json().students.map(x => [x.u, x.linked, x.days]);

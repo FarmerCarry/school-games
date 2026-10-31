@@ -4,7 +4,8 @@
 // the right minutes, and one student for a child a teacher gave the same code on two PCs
 // (the teacher page's transfer, merged through cd); and a school filter that blocks the
 // server loses nothing, while the teacher page says so and, once IT allows the host,
-// delivers what waited. Playwright hands each request for https://ingest.test to the
+// delivers what waited; and a child the owner forgot does not come back when the PC sends
+// the batch its closing page left again. Playwright hands each request for https://ingest.test to the
 // in-process server on 127.0.0.1, so nothing leaves this machine. The sink is switched on
 // with window.SG_TELEMETRY = { url, allowLocal: true }, which no build ever writes (the
 // teacher page, as built, gets no address: it uses the one the portal noted). Each
@@ -360,6 +361,51 @@ test('a school filter that blocks the server loses nothing: the teacher page nam
   assert.equal(students.length, 1);
   assert.equal(students[0].minutes, minutes(engaged(state)));
   assert.ok(engaged(state) >= 90000);
+});
+
+test('a forgotten child stays forgotten: the batch the closing page left on the PC goes again from the next page and brings nothing back', async t => {
+  const server = await school(t), { admin, facts } = server;
+  const state = await pc(t, server), { page } = state;
+  await page.goto(site.origin + '/index.html');
+  await page.waitForFunction(() => window.SGProfiles && window.SGTelemetry);
+  await page.evaluate(() => {
+    const p = SGProfiles.create(1, 4, '6-7');
+    SGProfiles.select(p.k);
+    localStorage.setItem('e2e:share', '1');
+  });
+  await session(state, 'the child\'s session');
+  const { k: { p1: u } } = await rid(page);
+  await until(async () => (await admin('/v1/admin/students')).students.length === 1, 'the child at the server');
+  // Opening the teacher page closes the portal: the session's last batch (its end) goes
+  // as the page closes and stays on the PC, handed over (h: 1), for a later page to send again.
+  await page.goto(site.origin + '/teacher.html');
+  const queue = () => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('sg:site:tm:q4:')).flatMap(k => JSON.parse(localStorage.getItem(k))));
+  const waiting = await queue();
+  assert.ok(waiting.length && waiting.every(x => x.h === 1 && x.e.u === u), 'the child\'s last batch waits: ' + JSON.stringify(waiting.map(x => [x.h, x.e.u])));
+  assert.ok(waiting.some(x => x.e.ev.some(ev => ev[0] === 'se' && ev[3] === 'u')), 'the session\'s end, as the page closed');
+
+  // The owner forgets the child on the dashboard.
+  const res = await fetch(server.url + '/v1/admin/forget', { method: 'POST',
+    headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ u }) });
+  assert.deepEqual([res.status, (await res.json()).removed.codes], [200, 1]);
+  assert.deepEqual(facts('SELECT u FROM st_students'), []);
+
+  // The next morning the browser starts again (no current player: a guest), a game closes
+  // on the PC's first page, and what waited goes, oldest first, until the server has it.
+  await page.evaluate(() => sessionStorage.removeItem('sg:site:player'));
+  await page.goto(site.origin + '/index.html');
+  await page.waitForFunction(() => SGTelemetry.active() && !SGProfiles.player());
+  await page.locator('.catalog-grid .tile[data-slug="tic-tac-toe"]').click();
+  await ready(page);
+  await page.locator('#logo').click();
+  await until(async () => !(await queue()).some(x => waiting.some(w => w.e.b === x.e.b)), 'the batches that waited delivered');
+  for (const x of waiting) assert.ok(state.bodies.some(body => JSON.parse(body).b === x.e.b), 'sent again: ' + x.e.b);
+  await until(() => facts("SELECT 1 FROM st_sessions WHERE u = ''").length > 0, 'the guest\'s play at the server');
+  // The child does not come back: no session, student row or list entry.
+  assert.deepEqual(facts('SELECT s FROM st_sessions WHERE u = ?', u), []);
+  assert.deepEqual(facts('SELECT u FROM st_students'), []);
+  assert.deepEqual((await admin('/v1/admin/students')).students, []);
+  assert.ok(state.answers.every(status => status === 204), 'every batch answered as stored: ' + state.answers);
 });
 
 // Arabic counted batches, as the teacher page says them.

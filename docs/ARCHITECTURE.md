@@ -729,7 +729,11 @@ The server:
   needs quoting, and pages follow a key (400 sessions, or 2,500 lines, joined into one string by SQL) so each row is
   read once. The dashboard adds the headers and zips the files.
 * **The owner's actions**: forgetting a student deletes the facts and per-student rows
-  of the student's codes (the school-wide counts keep them until a recount); a link
+  of the student's codes (the school-wide counts keep them until a recount) and keeps the
+  codes with the time of the forget for 8 days (the setting `forgotten`, which the cron
+  then removes), in which ingest drops their batches from sessions that started before it
+  and every mark that names one of them (a PC sends a batch again until it sees the
+  answer: a closing page's last batch goes again from the next page); a link
   makes an older code count as a newer one, history included, one hop deep; a recount
   marks every rolled day for a diff re-roll by the cron.
 * **The simulated school** (`server/simulate.mjs`): 600 children in 24 classes on 30 PCs
