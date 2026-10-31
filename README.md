@@ -17,7 +17,7 @@ adapt to each child), and none of them plays background music.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores, progress, player profiles and the play statistics are saved in each browser (localStorage).
 
-## The games (34)
+## The games (35)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -36,6 +36,7 @@ adapt to each child), and none of them plays background music.
 | ملك الانزلاق | Drift King | 1 | سباقات |
 | النار والجليد | Fire & Ice | 1-2 | لاعبان، ألغاز |
 | دبابات الألوان | Paint Tanks | 1-3 | لاعبان، تحدي الروبوتات |
+| هجوم الروبوتات | Robo Swarm | 1-2 | تصويب، تحدي الروبوتات، لاعبان |
 | مصارعة السومو | Sumo Bonk | 1-2 | لاعبان، رياضة |
 | هوكي الهواء | Air Hockey | 1-2 | لاعبان، رياضة |
 | سلة الرؤوس الكبيرة | Hoop Heads | 1-2 | رياضة، لاعبان |
@@ -68,6 +69,8 @@ classmates using the same game version. P/Esc pauses; R retries the same course 
 or after a crash, and a separate button chooses a new course. The best score saves locally.
 Its original geometry and synthesized sounds use
 the bundled Three.js library and work offline, including the downloaded Windows folder.
+
+**هجوم الروبوتات (Robo Swarm)** is a recess-sized survivors game. You only move: the foam blaster fires by itself at the nearest wind-up robot. Popped robots drop bolts, and every level pauses for a choice of three upgrade cards (up to a rubber-duck tornado or a paint cannon). Survive four minutes to pop the King Robot, or pick a quick run when recess is short. Two players share one keyboard. Coins buy a heart, a little speed, or a card reroll, and beating a map opens the next arena.
 
 **حرّاس الكعكة (Cake Guards)** is a tower defense game played with the mouse. Jelly blobs march
 along candy roads towards a birthday cake; click a round pad beside the road to build a popcorn

@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "portalBytes": 398000,
+  "portalBytes": 403000,
   "teacherBytes": 98000,
   "gameHtmlBytes": {
     "air-hockey": 117000,
@@ -26,6 +26,7 @@
     "pool-party": 135000,
     "rail-rush": 144000,
     "road-hopper": 118000,
+    "robo-swarm": 99500,
     "skybound-golf": 116000,
     "snake-arena": 101000,
     "splat-strike": 233000,
@@ -45,5 +46,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5450000
+  "precacheBytes": 5560000
 }
