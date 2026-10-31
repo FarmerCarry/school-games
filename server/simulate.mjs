@@ -504,7 +504,10 @@ function schoolDay(school, r, day, dayIndex, sessions) {
     for (const child of kids) {
       // A child with two PCs takes turns: the second one first.
       const pc = school.pcs[child.second !== null && child.sessions++ % 2 === 0 ? child.second : child.home];
-      const startMs = start + r.int(0, 180) * 1000 + r.int(0, 999);
+      // w is whole seconds, rounded, so the dated start (send time minus w) can sit up
+      // to half a second before this one. Keep that inside the 07:30 slot.
+      let startMs = start + r.int(0, 180) * 1000 + r.int(0, 999);
+      if (startMs < start + 500) startMs += 500;
       const played = play(school, r, child, pc, startMs, end, timer, day);
       out.push(...batchesOf(r, school, child, pc, startMs, played));
     }

@@ -548,7 +548,8 @@ test('demo/ is the server\'s own answers (rebuild: node server/dashboard/make-de
     assert.ok(same, 'demo/' + f + ' is not what the server answers now: run node server/dashboard/make-demo.mjs');
   }
   const size = files.reduce((a, f) => a + fs.statSync(path.join(dir, f)).size, 0);
-  assert.ok(size <= 3e6, 'the sample data stays small: ' + size + ' bytes');
+  // Egg Rush's rounds take the sample from 2,982,990 bytes to just over 3 MB.
+  assert.ok(size <= 3.1e6, 'the sample data stays small: ' + size + ' bytes');
 });
 
 test('demo/ has an answer for every filter and page the sample shows, in the shapes the tabs read', () => {

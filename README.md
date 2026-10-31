@@ -17,7 +17,7 @@ adapt to each child), and none of them plays background music.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores, progress, player profiles and the play statistics are saved in each browser (localStorage).
 
-## The games (35)
+## The games (36)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -49,6 +49,7 @@ adapt to each child), and none of them plays background music.
 | حرّاس الكعكة | Cake Guards (tower defense) | 1 | استراتيجية |
 | انفجار المكعبات | Block Burst | 1 | ألغاز |
 | دمج 2048 | 2048 | 1 | ألغاز |
+| جزيرة الفوضى | Chaos Island | 1-2 | أركيد، لاعبان |
 | حبل الحلوى | Munch Rope | 1 | ألغاز |
 | اندفاع المتاهة | Maze Dash | 1 | أركيد |
 | عبور الطريق | Road Hopper | 1 | أركيد |

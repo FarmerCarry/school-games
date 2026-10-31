@@ -819,33 +819,34 @@ portal and the teacher page) and gains one file, so `precacheBytes` moves from
 (0.012%) above the Actions precache (5,577,354). No other game, font or library limit
 changes.
 
-## Egg Rush, 26 October 2026
+## Egg Rush on current main, 31 October 2026
 
-سباق البيض (Egg Rush) is a 2D egg-and-pet run. It draws on one canvas, paints each
-pet and each egg once into an offscreen sprite, and keeps the static meadow,
-beach and snow in one offscreen sheet that a frame only blits. Particles are
-capped at 64. Pixel ratio is capped at 1.5, and a paused game keeps the last frame.
+سباق البيض (Egg Rush) joins the arcade beside Chaos Island. It draws on one canvas,
+paints each pet and each egg once into an offscreen sprite, and keeps the meadow,
+beach and snow in one sheet that a frame only blits. Particles are capped at 64.
+There is no background music. Pixel ratio is capped at 1.5. Rounds report through
+`Kit.stats` (a one-player run is `main`, a two-player match is `duel:pvp`) and the
+same `Kit.track` hit, miss and cue events a runner uses.
 
-The game allowance rises from 125,000 to 150,000 bytes (+25,000). That pays for the
-full-screen hatch (a wobbling egg, cracks, a flash, rays and a rarity reveal), a
-small marimba loop with a sneaky variant, and the terrain sheet. Cutting four biomes
-paid for part of it. The portal and teacher limits stay where they were. The
-precache limit stays 5,230,000.
+Measured with the Linux minified build and `SG_TELEMETRY_URL` set, the same Actions
+build the budgets check. Main before this game is the Chaos Island head: portal
+405,170, teacher page 97,983, offline precache 5,577,354 across 49 files.
 
-| Measurement | Bytes | Limit |
-| --- | ---: | ---: |
-| Egg Rush HTML | 131,598 | 150,000 (was 125,000) |
-| Portal (thumbnail and catalog entry) | 361,093 | 366,000 (unchanged) |
-| Offline precache, 47 files | 5,224,948 | 5,230,000 (unchanged) |
-| Teacher page | 92,764 | 96,000 (unchanged) |
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Egg Rush | — | 134,352 | — | 134,500 |
+| Portal (thumbnail and catalog entry) | 405,170 | 415,600 | 406,000 | 416,000 |
+| Teacher page | 97,983 | 98,821 | 98,000 | 99,000 |
+| Offline precache, 50 files | 5,577,354 | 5,722,974 | 5,578,000 | 5,723,000 |
 
-The built game is 131,598 bytes. The ceremony pass reached 135,084, and the picture
-pass 130,600. This pass bakes each pet and egg into a small play sprite (a sharper
-copy is used only for the hatch) and caps particles at 64, which adds 998 bytes.
-The precache has 5,052 bytes left. Eggs stay ovals, the crack is the zigzag plus a
-few shell bits and a soft glow, and the starburst waits for the reveal. Pet fills
-are the pastel coat, with navy kept to a thin outline and the eyes. On the
-software-GL harness the active p95 frame time is 50.1 ms again (66.7 ms on the
-picture pass, 117 ms in the audit before the terrain sheet). The portal, including
-the arcade Arabic subset in the Egg Rush tile, is unchanged at 361,093 bytes.
+The page limit is a new entry, 148 bytes (0.11%) above the built page. The portal
+grows by 10,430 bytes, so its limit moves from 406,000 to 416,000: 400 bytes (0.096%)
+above this measurement. The teacher page grows by 838 bytes and no longer fits in
+98,000, so its limit moves to 99,000: 179 bytes (0.18%) left. The offline cache grows
+by 145,620 bytes (the new page, the portal and the teacher page) and gains one file,
+so `precacheBytes` moves from 5,578,000 to 5,723,000: 26 bytes (0.0005%) above this
+measurement. Each new limit is the measured size rounded up (the game to the next
+500 bytes, the others to the next 1,000), and each headroom is under half a percent.
+A small text edit can exceed the precache limit. No other game, font or library
+limit changes.
 

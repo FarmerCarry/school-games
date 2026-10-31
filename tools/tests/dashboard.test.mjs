@@ -468,7 +468,12 @@ test('demo mode: sample data without signing in, and nothing sent to the server'
   assert.equal(Number(await tileValue(page, 'newStudents')), k.totals.students.new);
   assert.equal(Number(await tileValue(page, 'perStudentDay')), k.totals.students.minutesPerStudentDay.median);
   assert.equal(Number(await tileValue(page, 'now')), live.total.sessions);
-  assert.match(await page.locator('.tile[data-key="now"] .tile-hint').textContent(), new RegExp(`${live.total.sessions} children: ${live.students} students, ${live.guests} guests`));
+  // One guest is "1 guest", the same plural the tile uses.
+  const countWord = (n, one, many) => (Number(n) === 1 ? '1 ' + one : n + ' ' + many);
+  assert.match(await page.locator('.tile[data-key="now"] .tile-hint').textContent(), new RegExp(
+    countWord(live.total.sessions, 'child', 'children') + ': ' +
+    countWord(live.students, 'student', 'students') + ', ' +
+    countWord(live.guests, 'guest', 'guests')));
   assert.equal(s.lastKpis(), undefined);
   // The school's day of the sample, not this computer's.
   assert.match(await page.locator('#rangeText').textContent(), /27 Oct 2026/);
@@ -1286,13 +1291,21 @@ test('the Games tab: a card per game, a game\'s page, and the game picker', asyn
   // rows count each child once), never more than played the game.
   const who = Object.fromEntries(call.json.firstWin.map(f => [f.id, f.students]));
   const levels = k.levels.filter(l => l.slug === 'bubble-bop').sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
-  assert.ok(levels.length >= 2 && levels.every(l => who[l.id] != null));
+  assert.ok(levels.length >= 2);
+  // A level only guests reached has no first-win row. The funnel then counts tries and
+  // leaves the student column blank, instead of mixing the two.
+  const byStudents = levels.every(l => who[l.id] != null);
   await page.click('#funnel-card .table-toggle');
   const funnel = await page.locator('#funnel-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [tr.children[0].textContent, tr.children[1].textContent]));
-  assert.deepEqual(funnel, levels.map(l => [I.levelLabel(l.id, 'en'), who[l.id].toLocaleString('en-US')]));
-  const players = k.games.find(g => g.slug === 'bubble-bop').students;
-  assert.ok(levels.every(l => who[l.id] <= players), 'a level never has more children than the game');
-  assert.match(await page.locator('#funnel-card .card-sub').textContent(), /Students who played each level/);
+  if (byStudents) {
+    assert.deepEqual(funnel, levels.map(l => [I.levelLabel(l.id, 'en'), who[l.id].toLocaleString('en-US')]));
+    const players = k.games.find(g => g.slug === 'bubble-bop').students;
+    assert.ok(levels.every(l => who[l.id] <= players), 'a level never has more children than the game');
+    assert.match(await page.locator('#funnel-card .card-sub').textContent(), /Students who played each level/);
+  } else {
+    assert.deepEqual(funnel, levels.map(l => [I.levelLabel(l.id, 'en'), '—']));
+    assert.match(await page.locator('#funnel-card .card-sub').textContent(), /Tries of each level/);
+  }
   // Only the measures this game reports are offered.
   const NAMES = { accuracy: 'Accuracy', reaction: 'Reaction time', winRate: 'Won (of finished)', score: 'Average score', timeToWin: 'Time to win' };
   const reported = R.measuresOf(R.pick(R.statRows(call.json.stats), 'attempt')).filter(m => NAMES[m]).map(m => NAMES[m]);
@@ -1302,6 +1315,19 @@ test('the Games tab: a card per game, a game\'s page, and the game picker', asyn
   await waitForView(page, 'game');
   assert.equal(new URL(page.url()).hash, '#/game/road-hopper');
   assert.equal(await page.locator('#game-h').textContent(), nameOf('en')('road-hopper'));
+  // The pinned sample has a student count for every Bubble Bop level, including the party.
+  await page.goto(site.origin + '/?demo#/game/bubble-bop');
+  await waitForView(page, 'game');
+  const demoK = demoFile('kpis-30-all.json');
+  const demoWho = Object.fromEntries(demoFile('game-bubble-bop.json').firstWin.map(f => [f.id, f.students]));
+  const demoLevels = demoK.levels.filter(l => l.slug === 'bubble-bop').sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
+  assert.ok(demoLevels.length >= 2 && demoLevels.every(l => demoWho[l.id] != null));
+  await page.click('#funnel-card .table-toggle');
+  const demoFunnel = await page.locator('#funnel-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [tr.children[0].textContent, tr.children[1].textContent]));
+  assert.deepEqual(demoFunnel, demoLevels.map(l => [I.levelLabel(l.id, 'en'), demoWho[l.id].toLocaleString('en-US')]));
+  const demoPlayers = demoK.games.find(g => g.slug === 'bubble-bop').students;
+  assert.ok(demoLevels.every(l => demoWho[l.id] <= demoPlayers), 'a level never has more children than the game');
+  assert.match(await page.locator('#funnel-card .card-sub').textContent(), /Students who played each level/);
   await s.check();
 });
 
@@ -1361,9 +1387,16 @@ test('tries to a first win include the winning try; the hardest level is the mos
   const firstWin = demoFile('game-dino-3d.json').firstWin;
   const never = firstWin.filter(f => f.median == null);
   assert.deepEqual(never.map(f => f.id), [], 'this sample\'s Dino levels have all been won');
+  // The same order the learning tab uses: most tries, then the slower quarter, then the id.
+  const ranked = firstWin.slice().sort((a, b) => (b.median == null) - (a.median == null) ||
+    (a.median == null ? ((b.students ? b.never / b.students : 0) - (a.students ? a.never / a.students : 0)) || (b.never - a.never) : 0) ||
+    (b.median || 0) - (a.median || 0) || (b.p75 || 0) - (a.p75 || 0) ||
+    String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
+  const top = ranked[0];
+  assert.equal(top.median, Math.max(...firstWin.map(f => f.median)));
   await page.click('#hardest-card .table-toggle');
   const rows = await page.locator('#hardest-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
-  assert.deepEqual(rows[0].slice(1, 4), ['level 4', '21', '1'], 'level 4 took the most tries and is listed first');
+  assert.deepEqual(rows[0].slice(1, 4), [I.levelLabel(top.id, 'en'), I.int(top.students), I.short(top.median)], 'the level with the most tries is listed first');
   assert.equal(rows.length, firstWin.length, 'every level of the game');
   // An endless mode is never won by design: it is no hard level.
   await page.selectOption('#gamePick', 'rail-rush');

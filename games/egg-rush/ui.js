@@ -194,12 +194,11 @@
     roundLeft = 180; roundPets = []; paradeT = 0; replayMode = mode === '2p' ? '2p' : '1p';
     hitStop = 0; hitArmed = false; ended = false; chaseOn = false;
     ER.art.onCeremonyEnd = null;
-    try { ER.sfx.music(true); } catch (e) { /* mute-safe */ }
     if (mode === '1p') {
       Kit.stats.round('main');
       if (world.tut !== 'done') Kit.stats.tutorial('start');
       persist(true);
-    } else Kit.stats.round('local');
+    } else Kit.stats.round('duel:pvp');
     paintChrome();
     if (world.notice) banner(world.notice);
     Kit.keys.reset();
@@ -227,7 +226,6 @@
     }
     world = null;
     pendingCard = null; cardDelay = 0; penCam = null; hopWait = 0; hopJob = null;
-    try { ER.sfx.music(false); } catch (e) { /* mute-safe */ }
     screen = 'title';
     closeModals();
     paintChrome();
@@ -337,6 +335,7 @@
     }
     if (e.t === 'grab') {
       streak += 1; cheer();
+      Kit.track.hit();
       S.grab();
       const px = e.x != null ? e.x : (world.players[e.p] || world.players[0]).x;
       const py = e.y != null ? e.y : (world.players[e.p] || world.players[0]).y;
@@ -349,9 +348,11 @@
     }
     else if (e.t === 'boop') {
       streak = 0;
+      Kit.track.miss();
       S.boop(); A.burst(e.x, e.y, 16, ['#fff', '#ffd23f', '#ff8a3d'], 3); A.float(e.x, e.y - 0.6, 'بوينغ!', '#fff');
       if (!calm) { shake.add(5); hitStop = Math.max(hitStop, 0.05); A.grabPop = 0.28; }
     } else if (e.t === 'spot') {
+      Kit.track.cue();
       S.alert();
       if (!calm) { slow = 0.2; zoom = 1.06; shake.add(3); }
     } else if (e.t === 'collect') {
@@ -367,6 +368,7 @@
       const dur = calm ? 1.45 : (rare ? 2.3 : 2.15);
       if (e.s >= 4) S.legend(); else S.hatch();
       S.riser(wobble, rare);
+      Kit.stats.busy();
       A.startCeremony({ b: e.b, s: e.s, v: e.v, neu: e.neu, name: petCall(e), calm: calm, wobble: wobble, dur: dur });
       hitArmed = !calm;
       roundPets.push({ b: e.b, s: e.s, v: e.v, neu: !!e.neu });
@@ -874,7 +876,6 @@
             if (g.state === 'chase') red = true;
             else if (g.state === 'watch' || g.state === 'stir') near = true;
           }
-          ER.sfx.carry = !!kid.egg;
           if ((red || near) && !cny) ER.sfx.heart(red);
           if (kid.egg) ER.art.homeGlow = Math.max(ER.art.homeGlow, 0.9);
           if (!ER.art.ceremony && hitStop <= 0) {
