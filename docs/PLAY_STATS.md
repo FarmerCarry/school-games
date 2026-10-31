@@ -343,7 +343,10 @@ itself never uses the network. Its edge and first line are green, red or grey:
 When nothing is sent the box says why, without facts or button: a downloaded folder «هذه
 نسخة منزَّلة من الموقع (مجلد على هذا الجهاز)، ولا ترسل أبدًا شيئًا إلى لوحة المؤشرات في
 المدرسة.» with «لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة الموقع على
-الإنترنت: https://farmercarry.github.io/school-games/»; stopped statistics, sharing turned
+الإنترنت: https://<owner>.github.io/<repository>/», the address the build was given
+(`SG_SITE_URL`, which the workflow sets to the repository's GitHub Pages address unless a
+repository variable names another), or, built without it, «… يجب أن تفتح الأجهزة موقع
+ألعاب المدرسة على الإنترنت بدلًا من هذا المجلد.»; stopped statistics, sharing turned
 off, Global Privacy Control, this computer; a web copy that has not shared yet; or a PC
 whose portal noted that it shares but has not written the record yet («افتح صفحة الألعاب
 على هذا الجهاز مرة واحدة، ثم عد إلى هذه الصفحة.»). The box follows the portal's writes in

@@ -96,7 +96,9 @@
   var AGO_H = ['ساعة', 'ساعتين', 'ساعات', 'ساعة'];
   var AGO_D = ['يوم', 'يومين', 'أيام', 'يومًا'];
   var BATCHES = ['دفعة واحدة', 'دفعتان', 'دفعات', 'دفعة'];
-  var SITE = 'https://farmercarry.github.io/school-games/';   // the website the PCs open to share
+  // The website the PCs open to share: the address the build was given (SG_SITE_URL,
+  // tools/build.mjs); none in the source tree or a local build.
+  var SITE = window.SG_SITE && typeof window.SG_SITE.url === 'string' ? window.SG_SITE.url : '';
   // js/telemetry.js keeps at most 128 KB (a few hours of a busy PC's play) and 7 days.
   var KEEPS = 'ما لم يصل يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال، لكن مكانه محدود: بعد بضع ساعات من اللعب، أو بعد 7 أيام، يُحذف الأقدم أولًا.';
   // A batch that no closing portal page sent (status().o) and waits longer than this is late.
@@ -448,7 +450,8 @@
     }
     if (why) {
       out.state = NOT_SENT[why] || NOT_SENT.none;
-      if (why === 'folder') out.problem = 'لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة الموقع على الإنترنت: ' + ltr(SITE);
+      if (why === 'folder') out.problem = 'لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة ' +
+        (SITE ? 'الموقع على الإنترنت: ' + ltr(SITE) : 'موقع ألعاب المدرسة على الإنترنت بدلًا من هذا المجلد.');
       if (why === 'none') {
         out.tone = 'wait';
         out.problem = 'يبدأ الإرسال عندما تُفتح صفحة الألعاب على هذا الجهاز، إذا كانت نسخة الموقع مربوطة بخادم للإحصاءات.';

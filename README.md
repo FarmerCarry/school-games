@@ -129,7 +129,11 @@ and pauses.
    after changing the Pages setting, you can also select **Run workflow** on `main`.
 6. When the deployment succeeds, share `https://<your-username>.github.io/school-games/`
    with your class. Students do not need GitHub accounts. Every later push to `main`
-   runs the checks and deploys the tested fast version.
+   runs the checks and deploys the tested fast version. The workflow gives the teacher
+   page of the offline download that address (`https://<owner>.github.io/<repository>/`);
+   if the site is published elsewhere (a custom domain, or a repository named
+   `<your-username>.github.io`), add a repository variable **`SG_SITE_URL`** with the full
+   address, ending in `/` (**Settings → Secrets and variables → Actions → Variables**).
 
 ### The fast version (recommended for PCs with slow hard disks)
 
@@ -189,7 +193,10 @@ Download the fast version as one ZIP file (under 2 MB):
 Everything works straight from the `school-games` folder, without internet or installation.
 You can copy that folder to other PCs, a USB stick or a shared drive. A downloaded folder
 **never sends play to the school's dashboard**, and its teacher page says so: PCs whose play
-should reach the dashboard must open the website, `https://farmercarry.github.io/school-games/`.
+should reach the dashboard must open the website, `https://farmercarry.github.io/school-games/`
+(the teacher page names the address its copy was published at; a copy built without
+`SG_SITE_URL`, such as a local build, names none and says to open the school's games
+website instead of the folder).
 
 **Updating:** the folder never updates itself. For new games and fixes, delete the old ZIP
 and the old `school-games-offline` folder, then download and extract the ZIP again as above,

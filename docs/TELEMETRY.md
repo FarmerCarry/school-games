@@ -446,7 +446,9 @@ stopping statistics on the teacher page.
   nothing, the teacher page names the host to allow, and once it is allowed its test
   delivers everything that waited: the server has both sessions and the minutes.
 * `tools/tests/build-safety.test.mjs`: the address reaches the portal only, bad addresses
-  are refused before any output changes, and an unset or empty variable changes nothing.
+  are refused before any output changes, and an unset or empty variable changes nothing;
+  the same for `SG_SITE_URL`, the published site's address, which reaches the teacher page
+  only.
 * `tools/tests/play-stats-rules.test.mjs` and `tools/check-all.mjs` share
   `tools/lib/network-rules.mjs`: `fetch()` is allowed in exactly `js/telemetry.js` (and,
   in the fast build, only in the exact inlined copy of it in the portal and the teacher
@@ -462,4 +464,5 @@ stopping statistics on the teacher page.
   filter nor IT); the box on a blocked PC (red, since when, the host), its
   test failing with the address for IT and then sending both waiting batches, oldest
   first, and its result going when the box turns red later; and a downloaded folder's
-  page naming the website.
+  page naming the website its build was given (`SG_SITE_URL`), or, without one, the
+  school's games website.

@@ -28,6 +28,9 @@
  *   - SG_TELEMETRY_URL (environment, optional): the https:// address of the school's telemetry
  *     ingest server (docs/TELEMETRY.md; play events without names). Only the portal gets it, as window.SG_TELEMETRY, and
  *     only in a normal build; unset or empty, nothing is added and the portal never sends.
+ *   - SG_SITE_URL (environment, optional): the https:// address the site is published at, ending
+ *     in /. Only teacher.html gets it, as window.SG_SITE, so a downloaded folder's teacher page
+ *     names the website the PCs must open to share; unset or empty, nothing is added.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -46,6 +49,7 @@ const DEST = path.resolve(ROOT, options.out);
 const MINIFY = options.minify;
 const KILL_SW = options.killSW;
 const TELEMETRY_URL = telemetryUrl(process.env.SG_TELEMETRY_URL);
+const SITE_URL = siteUrl(process.env.SG_SITE_URL);
 const esbuild = MINIFY ? require('esbuild') : null;
 
 const posix = p => p.split(path.sep).join('/');
@@ -88,6 +92,21 @@ function telemetryUrl(value) {
     !url.hostname || url.username || url.password) {
     throw new Error('SG_TELEMETRY_URL must be an https:// address of at most 200 characters with only URL characters ' +
       '(no quotes, spaces, backslashes, < or >) and no user name or password; got ' + JSON.stringify(value.slice(0, 60)));
+  }
+  return value;
+}
+
+// The published site's address goes into the teacher page's inline script the same way: a
+// plain https:// folder address ending in /, without a query, fragment, user name or password.
+function siteUrl(value) {
+  if (value === undefined || value === '') return '';
+  let url = null;
+  try { url = new URL(value); } catch { /* refused below */ }
+  if (value.length > 200 || !/^https:\/\/[\w\-.~:/[\]@!$&()*+,;=%]+\/$/.test(value) || !url || url.protocol !== 'https:' ||
+    !url.hostname || url.username || url.password) {
+    throw new Error('SG_SITE_URL must be the https:// address of the published site, ending in /, of at most 200 characters ' +
+      'with only URL characters (no quotes, spaces, backslashes, < or >, ? or #) and no user name or password; got ' +
+      JSON.stringify(value.slice(0, 60)));
   }
   return value;
 }
@@ -310,8 +329,11 @@ try {
   /* -------------------------------------------------------- teacher page */
   // Local play statistics (docs/PLAY_STATS.md). One file with the catalog inlined,
   // precached like the portal so a teacher can open it offline on each PC. It never
-  // registers the worker, and it is not a game, so it stays out of `report`.
-  const teacher = inlinePage(path.join(ROOT, 'teacher.html'));
+  // registers the worker, and it is not a game, so it stays out of `report`. The published
+  // site's address goes right before its script.
+  const site = SITE_URL ? 'window.SG_SITE={url:' + JSON.stringify(SITE_URL) + '};' : '';
+  const teacher = inlinePage(path.join(ROOT, 'teacher.html'), site ? { before: { 'js/teacher.js': site } } : undefined);
+  if (site && !teacher.includes(site)) throw new Error('SG_SITE_URL is set, but teacher.html does not load js/teacher.js');
   write('teacher.html', teacher);
 
   /* --------------------------------------------------------- static files */
@@ -373,6 +395,7 @@ try {
   for (const [f, b] of report.slice(0, 1)) console.log(`  ${f}: ${(b / 1024).toFixed(0)} KB`);
   console.log(`  teacher.html: ${(Buffer.byteLength(teacher) / 1024).toFixed(0)} KB`);
   if (telemetry) console.log(`  telemetry: the portal sends play events without names to ${new URL(TELEMETRY_URL).host}`);
+  if (site) console.log(`  site: a downloaded folder's teacher page names ${SITE_URL}`);
   const gb = report.slice(1).map(r => r[1]);
   console.log(`  games: ${(Math.min(...gb) / 1024).toFixed(0)}–${(Math.max(...gb) / 1024).toFixed(0)} KB each (one file per game)`);
 } finally {
