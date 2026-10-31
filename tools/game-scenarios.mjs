@@ -110,6 +110,7 @@ export const scenarios = {
   }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.hits === 0`, {
     init: () => localStorage.setItem('sg:bubble-bop:save', JSON.stringify({ v: 1, stars: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]], best: [0, 0, 0, 0, 0], grip: true, color: 0, hat: 0, seenStars: 0 }))
   }),
+  'castle-crash': defaults(['#bPlay'], `${g}.state === 'play'`, `[${g}.aim, ${g}.clock]`, hold('ArrowUp'), '#bPause', `${g}.state === 'pause'`, '#bRestart', `${g}.state === 'play' && ${g}.shots === 0 && ${g}.phase === 'aim'`, { ready: `${g}.phase === 'aim'` }),
   'candy-rope': defaults(['#tPlay'], `${g}.info().state === 'play'`, `${g}.info().world`, async page => {
     const point = await page.evaluate(() => {
       const r = __game.world().ropes.find(r => r.alive);
@@ -179,6 +180,7 @@ const inputSnapshots = {
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
+  'castle-crash': `${g}.aim`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
   'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`,
@@ -225,7 +227,7 @@ const heldKeys = {
   'dino-3d': 'Space',
   'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
   'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
-  'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'splat-strike': 'KeyW',
+  'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'castle-crash': 'ArrowUp', 'splat-strike': 'KeyW',
   'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;

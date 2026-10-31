@@ -33,7 +33,7 @@ function main() {
     'balance-replay.test.mjs', 'classroom-files.test.mjs', 'offline-controller.test.mjs',
     'offline-readiness.test.mjs', 'shared-kit.test.mjs', 'level-verifiers.test.mjs',
     'engine-regressions.test.mjs', 'moto-balance.test.mjs', 'play-stats-rules.test.mjs',
-    'offline-download.test.mjs', 'dino-3d-engine.test.mjs', 'cake-guards-engine.test.mjs', 'pool-position-rules.test.mjs',
+    'offline-download.test.mjs', 'dino-3d-engine.test.mjs', 'cake-guards-engine.test.mjs', 'castle-crash-engine.test.mjs', 'pool-position-rules.test.mjs',
     'bubble-bop-rules.test.mjs', 'juice.test.mjs', 'telemetry-server.test.mjs', 'telemetry-worker.test.mjs', 'telemetry-clock.test.mjs',
     'telemetry-facts.test.mjs', 'telemetry-rollups.test.mjs', 'dashboard-insights.test.mjs', 'dashboard-research.test.mjs'
   ]);

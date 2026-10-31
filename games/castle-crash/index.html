@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تحطيم القلعة</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="cv" tabindex="0"></canvas>
+<div id="ui">
+  <section id="scrTitle" class="sg-overlay">
+    <div class="panel">
+      <h1 class="logo"><b>تحطيم القلعة</b><span>اسحب المقلاع وحطّم القلعة!</span></h1>
+      <div class="row">
+        <button type="button" class="sg-btn" id="bPlay">العب!</button>
+        <button type="button" class="sg-btn secondary" id="bLevels">المراحل</button>
+      </div>
+      <div class="row">
+        <button type="button" class="sg-btn good" id="bCpu">ضد الكمبيوتر</button>
+        <button type="button" class="sg-btn secondary" id="bDuel">لاعبان</button>
+      </div>
+      <div class="howto">
+        <p><span>اسحب المقلاع ثم اترك</span><span dir="ltr"><span class="sg-key">اسحب</span></span></p>
+        <p><span>الزاوية والقوة</span><span dir="ltr"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></span></p>
+        <p><span>إطلاق وقوة الذخيرة</span><span dir="ltr"><span class="sg-key">مسافة</span></span></p>
+        <p><span>اللاعب 2 يصوّب ويطلق</span><span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">↓</span><span class="sg-key">←</span><span class="sg-key">→</span><span class="sg-key">Enter</span></span></p>
+      </div>
+      <p class="stats-line">النجوم <b id="tStars">0</b> · أكبر انهيار <b id="tCollapse">0</b></p>
+    </div>
+  </section>
+
+  <section id="scrLevels" class="sg-overlay" hidden>
+    <div class="panel">
+      <h2>المراحل</h2>
+      <div class="worlds" id="worlds"></div>
+      <div class="row"><button type="button" class="sg-btn secondary" id="bLevelsBack">القائمة</button></div>
+    </div>
+  </section>
+
+  <section id="scrAmmo" class="sg-overlay" hidden>
+    <div class="panel">
+      <h2>ذخيرة جديدة!</h2>
+      <div class="demo-ball" id="demoBall"></div>
+      <p id="demoName" style="font-size:28px;font-weight:700;margin:4px 0"></p>
+      <p id="demoTip"></p>
+      <button type="button" class="sg-btn" id="bAmmoGo">العب!</button>
+    </div>
+  </section>
+
+  <div id="hud" hidden>
+    <div>
+      <div class="pill"><span id="hFort">القلعة 1/3</span> · الطلقات <b id="hAmmo">7</b></div>
+      <div class="ammo-row" id="hAmmos" style="margin-top:8px"></div>
+    </div>
+    <div class="pill" id="hTurn" hidden>الدور <b id="hWho">1</b> · <b id="hTime">12</b></div>
+    <button type="button" id="bPause" aria-label="إيقاف">❚❚</button>
+  </div>
+  <div id="toast" hidden></div>
+
+  <section id="scrPause" class="sg-overlay" hidden>
+    <div class="panel">
+      <h2>توقّف مؤقت</h2>
+      <div class="row">
+        <button type="button" class="sg-btn" id="bResume">متابعة</button>
+        <button type="button" class="sg-btn secondary" id="bRestart">إعادة</button>
+        <button type="button" class="sg-btn secondary" id="bMenu">القائمة</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrResult" class="sg-overlay" hidden>
+    <div class="panel">
+      <h2 class="result-title" id="rTitle">أحسنت!</h2>
+      <div class="stars" id="rStars"></div>
+      <p id="rSub"></p>
+      <div class="row">
+        <button type="button" class="sg-btn" id="bAgain">العب مجدداً</button>
+        <button type="button" class="sg-btn secondary" id="bResultMenu">القائمة</button>
+      </div>
+    </div>
+  </section>
+</div>
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="physics.js"></script>
+<script src="levels.js"></script>
+<script src="solutions.js"></script>
+<script src="engine.js"></script>
+<script src="render.js"></script>
+<script src="audio.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
