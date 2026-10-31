@@ -367,7 +367,8 @@
   }
   // sg:site:tm:dx = { v: 1, u: the address, ok: when a batch was last delivered (0: never),
   // f: when the first failure since then came (0: none), k: the latest failure's kind
-  // ('network', 'offline', 'refused' or 'server'), at: when, x: when play that no
+  // ('network', 'offline', 'refused' or 'server'), at: when (after a test with a refusal,
+  // k and at name that refusal, and f is at most the test's end), x: when play that no
   // closing page handed over (h) was last dropped for the queue's 128 KB or 7 days (0:
   // never) }, in the PC's clock. Anything malformed, or the record of another address,
   // starts again.

@@ -267,7 +267,9 @@ local day records. The server stores no IP address.
                                     // or not the server's), 'offline' (no answer while
                                     // navigator.onLine is false), 'server' (its 429 or 5xx)
                                     // or 'refused' (its 4xx: the batch is gone)
-    at: 1761720240000,              // when that failure came
+    at: 1761720240000,              // when that failure came; after the teacher's test, k
+                                    // and at name its last refusal if it had one, and f is
+                                    // then at most the test's end
     x: 1761719000000 }              // when play no closing page handed over was last dropped
                                     // for the 128 KB or the 7 days (0: never); a delivery
                                     // does not clear it
