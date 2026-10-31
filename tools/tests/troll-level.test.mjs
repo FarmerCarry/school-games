@@ -100,6 +100,11 @@ test('saves from before the new worlds continue into them, and the new levels pl
     assert.equal(await where(page), `win:${i}`, `level ${i + 1} is won by its recorded solution`);
   }
   assert.equal(await page.locator('#w-lvl').textContent(), 'عالم الملك الماكر · المرحلة 100');
+  // The win panel scales in over 0.3s. On a loaded runner that entrance is still moving
+  // when the click is sampled, so the pointer misses النهاية! and the match stays on win.
+  await page.evaluate(() => {
+    document.querySelector('#scr-win .panel').getAnimations().forEach(animation => animation.finish());
+  });
   await clickControl(page, '#btn-next');
   assert.equal(await page.evaluate(() => __game.mode), 'end');
   assert.equal(await page.locator('#e-stars').textContent(), '300/300');
