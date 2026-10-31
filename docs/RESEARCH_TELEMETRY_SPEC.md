@@ -180,6 +180,8 @@ Dropped by the owner (open question 4: no): the card codes (`c` plus 4 hex digit
 * the student's group: the canonical code and every code aliased to it;
 * their `st_sessions` (with their visits, rounds and marks), `st_students`, `st_student_pcs`, `st_student_games`, `aliases`, `r_student_day` and `r_student_game` rows.
 
+It keeps one thing for 8 days: the group's codes with the time of the forget, in the setting `forgotten` (JSON `{code: forget_s}`), written in the same request as the deletes. While a code is there, a batch of that code whose session started at or before the forget is answered 204 and stored nowhere, and no `pr` or `cd` mark of any session that names the code is stored. That keeps a PC that sends a forgotten child's waiting batch again from bringing the child back. A later session of the code is new play and is kept. The 5-minute cron removes entries 8 days old; the dashboard neither shows nor sets the key.
+
 School-wide rollups (`r_day`, `r_game_day`, `r_stat`, …) keep the play already counted, and the confirmation says so truthfully. A later "Recount all days" or zone change recomputes them without that student. The teacher page's clear and stop never touch the server, and the teacher-page wording says so (§G).
 
 ---

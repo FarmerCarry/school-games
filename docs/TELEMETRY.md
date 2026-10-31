@@ -189,9 +189,8 @@ local day records. The server stores no IP address.
   teacher's test: 20 s). Without an answer by then it is aborted and counts as no answer:
   a school filter or proxy that takes the connection and never answers is noted and backed
   off exactly like one that drops it, so the teacher page turns red within about a minute
-  or two of play (before 31 October 2026 such a request was only sent again, and nothing
-  was noted, so the box stayed green while batches piled up). A page that goes away never
-  aborts its own requests: a `keepalive` request outlives it.
+  or two of play. A page that goes away never aborts its own requests: a `keepalive`
+  request outlives it.
 * **Every batch stays in the queue until the server's own answer delivers it**, also a
   batch a hidden or unloading page handed to `fetch`: a page that goes away before the
   answer leaves the batch to the next portal page, which sends it again, and marks it
