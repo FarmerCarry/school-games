@@ -129,7 +129,11 @@ and pauses.
    after changing the Pages setting, you can also select **Run workflow** on `main`.
 6. When the deployment succeeds, share `https://<your-username>.github.io/school-games/`
    with your class. Students do not need GitHub accounts. Every later push to `main`
-   runs the checks and deploys the tested fast version.
+   runs the checks and deploys the tested fast version. The workflow gives the teacher
+   page of the offline download that address (`https://<owner>.github.io/<repository>/`);
+   if the site is published elsewhere (a custom domain, or a repository named
+   `<your-username>.github.io`), add a repository variable **`SG_SITE_URL`** with the full
+   address, ending in `/` (**Settings → Secrets and variables → Actions → Variables**).
 
 ### The fast version (recommended for PCs with slow hard disks)
 
@@ -167,6 +171,11 @@ The `sw.js` file in `main` is an "off switch": PCs remove the offline cache on t
 visit and use the normal site again.
 
 If the school web filter blocks it, ask IT to allow that address. The site contains no ads.
+When the site shares play with the school's dashboard (see
+[Telemetry without names](#telemetry-without-names-optional)), the filter must also allow
+the statistics server, `https://school-games-telemetry.services-agreement137.workers.dev`:
+otherwise the games work but nothing reaches the dashboard. The teacher page on each PC
+tells you which (see [Play statistics](#play-statistics-local-only)).
 
 ### Running it without the internet
 
@@ -182,7 +191,12 @@ Download the fast version as one ZIP file (under 2 MB):
    opens it. Inside it, open the `school-games` folder and double-click `index.html`.
 
 Everything works straight from the `school-games` folder, without internet or installation.
-You can copy that folder to other PCs, a USB stick or a shared drive.
+You can copy that folder to other PCs, a USB stick or a shared drive. A downloaded folder
+**never sends play to the school's dashboard**, and its teacher page says so: PCs whose play
+should reach the dashboard must open the website, `https://farmercarry.github.io/school-games/`
+(the teacher page names the address its copy was published at; a copy built without
+`SG_SITE_URL`, such as a local build, names none and says to open the school's games
+website instead of the folder).
 
 **Updating:** the folder never updates itself. For new games and fixes, delete the old ZIP
 and the old `school-games-offline` folder, then download and extract the ZIP again as above,
@@ -211,15 +225,30 @@ window, including Shift+Tab back to the portal and leaving fullscreen.
 
 The fast site's footer shows whether every file is verified for offline use.
 “جاهز دون إنترنت” means the active version is complete; an incomplete installation
-or cleared cache offers Retry. Keep the first visit open until it is ready. A
-downloaded folder instead reports that it is running locally. Each file's bytes are
-hashed when it is cached; later visits only confirm that every verified file is
-still there, so slow disks are not re-read on every visit. Retry hashes them again.
+or cleared cache offers Retry. Keep the first visit open until it is ready. If a
+download stops part-way (a slow or unreliable school line), the files already
+verified stay saved: the next visit or page of the site, reconnecting, Retry (shown
+while no complete version is saved) or an open tab's hourly check downloads only the
+rest, and an incomplete copy is never used. A downloaded folder instead reports that it is
+running locally. Each file's bytes are hashed when it is cached; later visits only
+confirm that every verified file is still there, so slow disks are not re-read on
+every visit. Retry and a resumed download hash them again.
 
-When a newer complete version is cached, returning to the games list offers
-“حدّث الصفحة الآن”. Refresh is explicit and affects only that tab; running or paused
-games, game menus and the classroom handoff keep their session. The action verifies
-readiness again and defers if a game opened during that check. It also works offline.
+When a newer complete version is cached, an open portal tab switches to it by itself
+while nobody is using it: on the home screen, with no game open, the classroom timer
+off, no player chosen (a guest) and no new player half made, after about 75 seconds
+without a key press, click, scroll or mouse movement. A chosen player waits for the
+hand-over, and a new player half made and left goes back to the list after 20 minutes.
+Coming back to the tab or the 20-minute idle hand-over (which closes a game) after
+such a pause switches at once. Running or paused games, game menus, the classroom
+handoff and the other screens (a category, favorites, search) are never reloaded by
+themselves. Any screen also offers “حدّث الصفحة الآن” for whoever wants the update at
+once, except while a game is open or the classroom timer runs or its handoff shows;
+the button affects only that tab. Both check the new version once more first, give
+way if a game opens or someone starts using the page during that check, and work
+offline. Each tab switches by itself once per version. A tab left open also asks the
+site for a newer version when it comes back into view (at most once an hour) and on
+reconnecting.
 The first installation never shows an update prompt. A game-only update includes the
 changed game and the portal's new build identity. Pages opened before this feature
 need an ordinary reload/navigation to acquire the prompt.
@@ -279,6 +308,26 @@ two-player modes mix players.
   2048 boards and two-player modes are left out, and runs and boards show their average
   and best score in the levels table instead. A game still open on this PC today shows its
   time with the note «مرة لعب ما زالت مفتوحة» until it is closed.
+- **Is this PC's play reaching the school's dashboard?** The box «الإرسال إلى لوحة
+  المؤشرات في المدرسة» near the top answers at a glance: green «✓ تصل إحصاءات هذا الجهاز
+  إلى لوحة المؤشرات.», or red «⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ …» with
+  the reason in plain words, plus the last delivery («آخر وصول إلى لوحة المؤشرات») and what
+  waits on this PC («ينتظر الإرسال»; sent by itself once the connection works, but the
+  PC keeps only 128 KB of it, a few hours of a busy PC's play, and 7 days: then the oldest
+  is dropped, and the box says when it last was, «حُذف قبل أن يصل»). So ask IT the same
+  day. Grey «لم يتأكد وصول …» means batches have waited unsent for over 15 minutes since the
+  last delivery: open the games page or press the test button. The usual reason for red is the school's web
+  filter blocking the statistics server: the box names the address to ask IT to allow.
+  Press **اختبر الاتصال الآن** to check now: it says «✓ يصل هذا الجهاز إلى خادم الإحصاءات …»
+  and sends what waited, or «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز …» with the
+  address for IT (or, when the server answers but the play cannot be sent to it, that the
+  filter must allow sending data to that address too). A PC with no connection at all
+  (the cable out, the Wi-Fi down) is not the filter's fault: the box and the test then say
+  that it is not connected to the internet, and what waits is sent once it is. Check it on
+  each PC after setting up and whenever the dashboard misses a class, in the browser the
+  children use, opened from the website. A downloaded folder says that it never sends, and
+  stopped statistics say that nothing is sent. Only this button and the games page (the
+  portal) contact the statistics server; the page sends nothing when you just open it.
 - **Name the PC:** type a short label such as «جهاز 7». Never type a child's name.
 - **Export to Excel:** press **تصدير ملف Excel**. Each click saves one workbook,
   `play-stats_<pc>_<date>.xlsx`, with every stored day: an Arabic read-me sheet (اقرأني)
@@ -339,9 +388,13 @@ the UK), and research publication may need consent or an ethics review.
 Only `js/telemetry.js` in the portal sends; games never use the network. It sends no
 names, no typed text, no PC label, no profile key or picture, no clock time and no browser
 or graphics strings; it sends a random code per profile and one per PC, and the PC's time
-zone name. The teacher page shows whether this PC shares and the codes, can give a child
-who plays on two PCs one code, and «stop collecting» stops both the local statistics and
-the sharing. The server stores no IP addresses, keeps play for 400 days by default, and
+zone name. The teacher page shows whether this PC shares, whether its play actually
+reaches the server (with a button that tests the connection now), and the codes, can give
+a child who plays on two PCs one code, and «stop collecting» stops both the local
+statistics and the sharing. A PC keeps what it could not send (at most 128 KB, a few
+hours of a busy PC's play, and 7 days; the oldest goes first) and sends it once the server
+answers; the school's web filter must allow the server's host, and a
+downloaded folder never shares. The server stores no IP addresses, keeps play for 400 days by default, and
 shows every number, even for one child. See [`docs/TELEMETRY.md`](docs/TELEMETRY.md)
 for the portal side and [`server/README.md`](server/README.md) for the server and its
 insights dashboard.

@@ -760,3 +760,166 @@ above: the measured size rounded up to the next 1,000 bytes plus 1,000.
 | Offline precache | 5,306,831 | 5,296,000 | 5,308,000 |
 
 No other limit changes, and nothing is added to any page beyond the two Kit changes.
+
+## Delivery that waits for the server, and the teacher page's delivery box, 30 October 2026
+
+On 28 and 29 October the school's web filter blocked the statistics server and no
+classroom play reached the dashboard, while nothing on the PCs said so. The fix keeps
+every batch until the server's own 204 delivers it (a page that closes first leaves it to
+the next one), counts only the server's own answers, and lets the teacher page show and
+test delivery (docs/TELEMETRY.md, "Delivery"). Measured with the Linux minified build and
+the school's `SG_TELEMETRY_URL`, against main at b713f12:
+
+* **The portal** grows by 2,481 bytes, from 396,438 to 398,919: `js/telemetry.js` grows
+  from 11,250 to 13,731 minified bytes (batches kept until answered and the minute a page
+  waits before sending one again, the reading of each answer, the delivery record
+  `sg:site:tm:dx`, the clear dated after the PC's clock, and check mode with `status()`
+  and `check()`). The added work is one small `localStorage` write per answer and one read
+  per batch sealed; a page that closes before an answer leaves its batches for the next
+  page, which sends them once more (the server keeps them once).
+* **The teacher page** grows by 21,470 bytes, from 96,672 to 118,142: it now inlines the
+  same `js/telemetry.js` (13,731 bytes), because only that file may use the network and
+  the connection test must run there; the delivery box adds 6,609 bytes of script (most of
+  it Arabic text at two bytes a character: every reason and problem in words a teacher
+  can act on, and the test's answers), 538 of styles and about 600 of markup. Only
+  teachers open this page.
+* The offline cache grows by 23,951 bytes, from 5,306,831 to 5,330,782 (both pages, each
+  cached once, and the worker's list).
+
+All three limits follow the rule above: the measured size rounded up to the next 1,000
+bytes plus 1,000.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 396,438 | 398,919 | 398,000 | 400,000 |
+| Teacher page | 96,672 | 118,142 | 98,000 | 120,000 |
+| Offline precache | 5,306,831 | 5,330,782 | 5,308,000 | 5,332,000 |
+
+No game page changes, and no request, font, library or third-party code is added to any
+child's page. The teacher page makes a request only when the teacher presses
+«اختبر الاتصال الآن».
+
+## Review fixes to delivery and the delivery box, 31 October 2026
+
+The review of the change above found that a network which holds requests open without
+an answer was never noted (the box stayed green while batches piled up), that a portal
+tab of the build before still shared and emptied this build's queue, that a clear dated
+ahead by a fast clock came back once the clock passed it, and that the box promised a
+week of storage where 128 KB lasts a few busy hours (docs/TELEMETRY.md, "Delivery").
+Measured with the Linux minified build and the school's `SG_TELEMETRY_URL`, against the
+change above:
+
+* **The portal** grows by 983 bytes, from 398,919 to 399,902, within its limit: the
+  minified `js/telemetry.js` grows from 13,731 to 14,714 bytes (a minute's limit on every
+  request, its body included, noted as no answer; the queue key `q4` that moves the older
+  `q3` key's batches; the clear dated back once and written; the record of unsent play
+  dropped for room or age; the mark of a batch a closing page handed over; check mode
+  reading the portal's address at each call). The added work is one `localStorage` write
+  when a closing page marks what it handed over, and one per drop.
+* **The teacher page** grows by 2,439 bytes, from 118,142 to 120,581: the same 983 bytes
+  of `js/telemetry.js`, and 1,456 of `js/teacher.js`, nearly all Arabic text (the true
+  storage limit, the state for batches waiting unsent, the line for play dropped, the
+  test's answer when health answers but the batches do not).
+* The offline cache grows by 3,422 bytes, from 5,330,782 to 5,334,204 (both pages, each
+  cached once).
+
+The teacher page and the offline cache follow the rule above: the measured size rounded
+up to the next 1,000 bytes plus 1,000. The portal's limit stays.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 398,919 | 399,902 | 400,000 | 400,000 |
+| Teacher page | 118,142 | 120,581 | 120,000 | 122,000 |
+| Offline precache | 5,330,782 | 5,334,204 | 5,332,000 | 5,336,000 |
+
+No game page changes, and no request is added to any page.
+
+## Resumed offline installs and automatic update adoption, 30 October 2026
+
+A failed or cut-off install of the offline cache now keeps the files it verified, and an
+open portal tab moves to a newer verified build by itself on a quiet home screen
+(README, docs/ARCHITECTURE.md "Offline cache and updates"). Measured with the Linux
+minified build and the school's `SG_TELEMETRY_URL`, as CI builds it, against main at
+`b713f12` (this section first gave sizes measured without the address, 103 bytes
+smaller in the portal and in the offline cache; corrected on 31 October 2026):
+
+* **The portal** grows by 1,216 bytes, from 396,438 to 397,654 of 398,000: +872 for
+  `js/offline.js` (the quiet-screen plan, its timer, the once-per-tab memory in
+  sessionStorage and in memory, the hourly worker check and the one on reconnecting)
+  and +344 for `js/site.js` (`SGUpdateQuiet()`, the pointer-move time and the idle
+  reset of a half-made player). The added work is one timer while a verified update
+  waits, one passive `pointermove` listener that stores a number, and at most one
+  `registration.update()` an hour when the tab comes back into view, plus one per
+  `online` event.
+* **The offline cache** grows by the same 1,216 bytes, from 5,306,831 to 5,308,047: 47
+  bytes over its limit of 5,308,000.
+* **The worker** (`sw.js`, not precached) no longer deletes its own partial cache; it
+  marks it with an empty `…|partial` cache until it is complete and deletes the
+  marked copies of other versions after copying from them, so a PC keeps one partial
+  copy at most. A resumed install hashes the files the earlier attempt saved before
+  skipping them, a disk read of at most the precache size, and looks up every file
+  once more before it takes over.
+
+On its own this change would have failed CI's asset budgets by those 47 bytes (the portal
+keeps 346). It was merged only together with the delivery change, and the section that
+follows measures both together and sets the limits actually used.
+
+## Both changes together, 31 October 2026
+
+Merging the delivery change (portal 399,902 of 400,000) with the offline change (+1,216
+bytes for `js/offline.js` and `js/site.js`) puts the portal 1,118 bytes over its limit.
+The teacher page and the offline cache stay within theirs. Measured with the Linux
+minified build and the school's `SG_TELEMETRY_URL`:
+
+| Measurement | Bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: |
+| Portal | 401,118 | 400,000 | 403,000 |
+| Teacher page | 120,581 | 122,000 | 122,000 |
+| Offline precache | 5,335,420 | 5,336,000 | 5,336,000 |
+
+The portal's new limit follows the rule above: the measured size rounded up to the next
+1,000 bytes plus 1,000. Nothing beyond the two changes is added to any page.
+
+## Integration review fixes to delivery, 31 October 2026
+
+The integration review of both changes found that the teacher page moved an older
+build's queue where that build's open tab no longer sent it, that a PC with no
+connection at all was said to be blocked by the school's filter, that batches a closing
+page had sent were reported as dropped after a week's break, and that the teacher page
+named this project's website in every copy; its second round, that the teacher's test,
+with only an older build's batches waiting, ended a recorded failure and said that
+nothing waited; its third, that a test whose batches the server all refused said that
+nothing waited and ended the refusal; its fourth, that a batch failing another way after
+a refusal lost it; its fifth, that the answer after a refusal said everything else had
+arrived while a batch still waited (docs/TELEMETRY.md, "Delivery"). Measured with
+the Linux minified build, the school's `SG_TELEMETRY_URL` and the `SG_SITE_URL` the
+workflow now gives this repository (`https://FarmerCarry.github.io/school-games/`),
+against `fcdfd8c`:
+
+* **The portal** grows by 478 bytes, from 401,118 to 401,596, within its limit: the
+  minified `js/telemetry.js` grows from 14,714 to 15,186 bytes (the teacher page reading
+  older builds' keys without moving them and its test counting them as waiting, the
+  `offline` kind and the test's answer without a connection, the handed-over mark
+  checked before play is called lost, and the test keeping a refusal), and
+  `js/stats.js` by 6 (a tile click names the game it opens within 10 s, not 1 s).
+  No work is added to a child's page: one comparison per dropped batch and per failure.
+* **The teacher page** grows by 1,216 bytes, from 120,581 to 121,797, within its limit:
+  the same 472 bytes of `js/telemetry.js`, 676 of `js/teacher.js` (the two Arabic messages for a PC without a
+  connection, the folder message without an address, the test's answer when only an
+  older build's batches wait, and what arrived and what still waits beside a refusal)
+  and the 68 bytes of `window.SG_SITE` before its script (1,148 bytes without
+  `SG_SITE_URL`).
+* The offline cache grows by 1,694 bytes, from 5,335,420 to 5,337,114 (both pages, each
+  cached once), 1,114 bytes over its limit.
+
+The offline cache follows the rule above: the measured size rounded up to the next 1,000
+bytes plus 1,000. The portal's and the teacher page's limits stay.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 401,118 | 401,596 | 403,000 | 403,000 |
+| Teacher page | 120,581 | 121,797 | 122,000 | 122,000 |
+| Offline precache | 5,335,420 | 5,337,114 | 5,336,000 | 5,339,000 |
+
+No game page changes, and no request, font, library or third-party code is added to any
+page.

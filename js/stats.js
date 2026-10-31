@@ -32,6 +32,9 @@
   var off = 0, cleared = 0;            // from statsmeta: collection stopped, clearedAt
   var sess = 0, cur = 0, gone = [];    // open session, its frame, frames removed in the last 2 s
   var tag = 0, timer = 0;
+  // A tile click names the launch source of the game it opens within 10 s: a slow classroom
+  // PC can take more than a second to get there, and every open clears it.
+  var TAG_MS = 10000;
   var tab = Math.random();             // this tab's entry in the live key
   var isArr = Array.isArray, max = Math.max, min = Math.min, str = JSON.stringify, doc = document;
 
@@ -260,7 +263,7 @@
     open: function (slug, firstRender) {
       if (sess) return;
       var t = now(), g = delta(slug, t), src = 'history';
-      if (tag && tag.g == slug && t - tag.t < 1000) src = tag.s;
+      if (tag && tag.g == slug && t - tag.t < TAG_MS) src = tag.s;
       else if (firstRender) {
         src = 'direct';
         try { if (performance.getEntriesByType('navigation')[0].type == 'reload') src = 'reload'; } catch (e) { /* direct */ }

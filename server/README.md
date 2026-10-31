@@ -50,6 +50,15 @@ a web browser. Everything below is free.
    `https://school-games-telemetry.<your-name>.workers.dev`. Send that address to the
    developer (an email or a chat message is fine). The developer then switches the games
    site on, and children's PCs start sending statistics (without names).
+   A PC's play reaches the server only when the PC opens the games **website** and the
+   school's internet lets the PC reach this address. A web filter that blocks
+   `*.workers.dev` or new sites stops it silently: ask the school's IT to allow the
+   address. A copy opened from a downloaded folder never sends. On each PC, the teacher
+   page (🏫 then 📊) has a box «الإرسال إلى لوحة المؤشرات في المدرسة» that shows whether
+   its play gets through, and a button «اختبر الاتصال الآن» that tests the connection.
+   Play that cannot be sent waits on the PC and goes by itself once the address is
+   allowed (space is limited: after a few hours of play, or after 7 days, the oldest
+   goes first).
 9. **Open that address** in your browser to see the dashboard, and sign in with the
    password from step 5. Until children play, there is nothing to show; add `/?demo` to
    the address to see the dashboard with made-up sample data.
@@ -156,11 +165,27 @@ What can be stored is decided here, not only by what the portal chooses to send.
   /v1/admin/forget`): every session, game visit, round and mark of the student's codes
   (a code and every code linked to it), their student and PC lists, their per-student
   rollups, live rows and links, and the marks in other sessions that name one of their
-  codes (the removal of their profile, or an older code whose link was undone). The
-  school-wide daily counts, in which no child can be found, keep the play already
-  counted until a recount (`POST /v1/admin/rebuild`) makes them again from the facts
-  left. D1 *Time Travel* can still restore the database to any minute of the last 7
-  days.
+  codes (the removal of their profile, or an older code whose link was undone). A PC
+  keeps each batch until it sees the server's answer, so the last batch of a page that
+  closed goes again from the PC's next page, often the next day: for 8 days the server
+  keeps the codes themselves with the time of the forget (the setting `forgotten`, which
+  the dashboard never shows; the 5-minute cron then removes them), drops every batch of
+  theirs from a session that started before it, and drops every mark that names one of
+  them (the removal of a profile, or an older code, which a PC may tell again or late)
+  from a session that started by the forget or before that code played again, so the
+  student does not come back. A later session of the same code (its profile stays on the PC) is new play
+  and is kept, and so is a mark naming the code from a session after it (a removal of
+  that profile, or a link to that code). The 8 days cover a batch sent again (a PC keeps
+  one at most 7 days), but not an older code that a PC tells as `cd` until a batch
+  naming it is delivered: a `cd` that first gets through more than 8 days after the
+  forget (after a long break, or on a blocked network) stores the link again. It names
+  only the code, none of its play, and forgetting again removes it with the student it
+  is linked to. On Cloudflare, another Worker instance learns of the forget when it next
+  reads the settings, within 5 minutes; until then it may still store such a batch
+  (forget again to remove it). The school-wide daily counts, in which no child can be
+  found, keep the play already counted until a recount (`POST /v1/admin/rebuild`) makes
+  them again from the facts left. D1 *Time Travel* can still restore the database to any
+  minute of the last 7 days.
 * **Downloads.** The research export (`GET /v1/admin/export`) gives the rows themselves,
   under the same codes. Once downloaded they are outside the server's retention: keep
   them like other school records.
@@ -967,7 +992,11 @@ Body `{"u": "<code>"}`: forgets the student of that code, with every code linked
 { "v": 1, "removed": { "codes": 2, "sessions": 14, "visits": 41, "rounds": 160, "marks": 30 }, "clock": { ... } }
 ```
 
-A code the server does not hold answers zeros.
+A code the server does not hold answers zeros (for 8 days its play from before the forget
+is still dropped if a PC sends it, and so is every mark naming it from a session that
+started by the forget or before the code played again). A link to the code that a PC tells more than 8
+days after the forget is stored again: it names only the code, and forgetting again
+removes it with the student it is linked to.
 
 #### `POST /v1/admin/link` and `DELETE /v1/admin/link?u=`
 
@@ -1020,7 +1049,8 @@ counts lose that student too.
   stays within D1's statement limit); the daily purge deletes the students and PCs last
   seen before that cutoff, with their PC lists, attempt counters and links (until then a
   period the rollups hold lists its students with their bands, days, PCs and links, and
-  a student's page and the cohorts answer as before). Lowering the retention starts at the next purge
+  a student's page and the cohorts answer as before). The codes a forget keeps go after 8
+  days, deleted by the 5-minute cron when it has no day to roll. Lowering the retention starts at the next purge
   (Node: the next start). To erase everything on Node, stop the server and delete the database
   files; on Cloudflare, delete the Worker and its D1 database `school-games-telemetry`
   in the Cloudflare dashboard.
@@ -1081,7 +1111,7 @@ Schema 4 (`docs/RESEARCH_TELEMETRY_SPEC.md`, "Storage on D1", has the exact colu
 | `st_sessions` | One row per play session: its codes (`u`, `p`, `''` when unknown), wire version, band, build, mode, device buckets, start (`start_s`, with `clock` `w` from the PC's elapsed seconds or `r` estimated from the receipt time; never before the first day of the facts, so a v2 tab open across the deploy counts on the deploy day), the PC's zone, the session start's fields (exact profile age, days since last play, level, profiles on the PC, classroom mode, and the v2 buckets), how it ended, and the server's numbering state for v2. Indexed by start and by student. |
 | `st_visits`, `st_rounds`, `st_marks` | Game visits `(session, n)`, rounds `(session, n, k)` with their outcome, tier, score, hits, misses, reaction times and extras, the two-player flag and the student's attempt number, and marks (level-ups, hearts, tutorial steps, classroom timer, removed profiles, older codes). |
 | `st_students`, `st_pcs`, `st_student_pcs`, `st_student_games`, `aliases` | Per student code: label, first and last play, bands, profile age; per PC code: first and last play, zone, buckets, build; who played on which PC; rounds ended per student and game (for attempt numbers); links from older codes to a student's code, one hop deep (`how`: `pc` from a PC's `cd` mark, `owner` from the dashboard). |
-| `settings`, `usage`, `roll_days` | The school's zone and where it came from (and `tz_epoch`, raised with each change), the week start, the retention the owner chose, `facts_since`, `legacy_until`, `v3_since`, the rollup version `rv`, `rolled_through`, `trimmed_before`, and the cron's bookkeeping (`rebuild`: days may wait for a full rebuild or a recount; `trimmed_size` and `trim_to`: the storage guard's trim); D1 rows read, written and read by rebuilds per UTC day, and the database size (each instance adds its counts once a minute, and each cron run its own); which local days are rolled up, whether late data (`dirty` 1), a new zone (2) or a recount (3) waits for them, when each was rolled and the rows its rollups took (`rows`, which a re-roll is estimated from). |
+| `settings`, `usage`, `roll_days` | The school's zone and where it came from (and `tz_epoch`, raised with each change), the week start, the retention the owner chose, `facts_since`, `legacy_until`, `v3_since`, the rollup version `rv`, `rolled_through`, `trimmed_before`, the codes a forget keeps for 8 days (`forgotten`), and the cron's bookkeeping (`rebuild`: days may wait for a full rebuild or a recount; `trimmed_size` and `trim_to`: the storage guard's trim); D1 rows read, written and read by rebuilds per UTC day, and the database size (each instance adds its counts once a minute, and each cron run its own); which local days are rolled up, whether late data (`dirty` 1), a new zone (2) or a recount (3) waits for them, when each was rolled and the rows its rollups took (`rows`, which a re-roll is estimated from). |
 | `r_day`, `r_game_day`, `r_level_day`, `r_source_day`, `r_device_day`, `r_student_day`, `r_student_game`, `r_pc_day`, `r_stat` | Per-day rollups of the facts by the school's local day: milestone 2's daily totals with students, guests, two-player rounds, hearts, tutorials and session endings; per student code and per student and game; per PC; and `r_stat`, the research metrics (hour of play, session length, minutes per student-day, games per session, visit length, game-to-game flows, attempts, weeks of practice, what follows a round, tiredness, losses before quitting, tier, tutorials) per day, band and game. |
 | `live`, `batches`, `kpi_cache`, `meta` | Sessions in the 5-minute live window (with codes and wire version); v2 batch ids for de-duplication; kept parts of admin answers, with the rollup version they were made with; the schema version. |
 | `agg_days`, `agg_games`, `agg_levels`, `agg_sources`, `agg_devices` | Only on a database milestone 2 used: its daily totals per UTC receipt day, frozen. |
@@ -1162,7 +1192,7 @@ school with 120 and with 470 sessions a school day, on a 2.1 GHz server core:
 | `live`, `settings`, `POST settings` | 5, 2, 7 | under 0.1 ms |
 | an `export` page (`rounds` or `visits`: 2,500 lines, about 410 KB) | 3 | 1.3–1.6 ms |
 | an `export` page of `events` or `sessions` | 3 | 0.6–0.9 ms |
-| `forget`, `link`, `DELETE link`, `rebuild` | 17, 7, 5, 5 | under 0.2 ms |
+| `forget`, `link`, `DELETE link`, `rebuild` | 18, 7, 5, 5 | under 0.2 ms |
 | the 5-minute cron's full rebuild of a day | 26 | |
 | its first roll with the zone vote | 19 | |
 | the daily purge with frozen days and the storage guard | 24 | |

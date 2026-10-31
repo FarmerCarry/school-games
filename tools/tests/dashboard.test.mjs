@@ -972,6 +972,40 @@ test('the keyboard reads the heatmap cell by cell and a column chart column by c
   }
 });
 
+test('a redraw while the keyboard reads a chart (a scrollbar that comes, a resized window) gives it back the same heatmap cell and column', async t => {
+  const s = await open(t);
+  const { page } = s;
+  await page.goto(site.origin + '/?demo#/overview');
+  await waitForView(page, 'overview');
+  // Waits until the charts are drawn again and the keyboard is on one of the new marks. The
+  // dashboard is at most 1,192 pixels wide, so the window narrows below that.
+  const redrawn = async width => {
+    await page.evaluate(() => { document.activeElement.dataset.old = '1'; });
+    await page.setViewportSize({ width, height: 768 });
+    await page.waitForFunction(() => document.activeElement && document.activeElement.isConnected && !document.activeElement.dataset.old &&
+      document.activeElement !== document.body);
+  };
+  await page.locator('#when-card .hm-cell[tabindex="0"]').focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowDown');
+  const cell = () => page.evaluate(() => { const c = document.activeElement; return [c.className.split(' ')[0], c.dataset.row, c.dataset.col]; });
+  const before = await cell();
+  await redrawn(1000);
+  assert.deepEqual(await cell(), before, 'the same cell');
+  assert.equal(await page.locator('#when-card .hm-cell[tabindex="0"]').count(), 1, 'still one tab stop, on that cell');
+  assert.equal(await page.locator('#when-card .hm-cell[tabindex="0"]').getAttribute('data-row'), before[1]);
+  assert.ok(await page.locator('.tip').isVisible());
+  // A column chart keeps its column: the first week, not the latest.
+  const weeks = await page.locator('#weeks-card .table-host tbody tr th').allTextContents();
+  await page.locator('#weeks-card svg.cols').focus();
+  await page.keyboard.press('Home');
+  assert.ok((await page.locator('.tip').textContent()).includes(weeks.at(-1)), 'the first week');
+  await redrawn(900);
+  assert.equal(await page.evaluate(() => document.activeElement.closest('.card').id), 'weeks-card');
+  assert.ok((await page.locator('.tip').textContent()).includes(weeks.at(-1)), 'still the first week');
+  await s.check();
+});
+
 test('the Students tab: the code search, sorting both ways, pages of 50, and a student\'s page', async t => {
   const s = await open(t);
   const { page } = s;

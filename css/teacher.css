@@ -106,6 +106,18 @@ bdi.id { white-space: nowrap; }
 .combined { border-inline-start: 6px solid var(--blue); }
 .combined .warn { background: none; font-weight: 700; }
 .conflict td:first-child { background: var(--warn-bg); }
+/* Delivery to the school's dashboard: the colour of the edge and of the first line says it at a glance. */
+.delivery { border-inline-start: 6px solid var(--line); }
+.delivery h2 { font-size: 17px; margin-bottom: 6px; color: var(--ink-soft); }
+.delivery .state { font-size: 18px; font-weight: 700; }
+.delivery[data-tone="ok"] { border-inline-start-color: var(--green); }
+.delivery[data-tone="ok"] .state { color: var(--green); }
+.delivery[data-tone="bad"] { border-inline-start-color: var(--red); }
+.delivery[data-tone="bad"] .state { color: var(--red); }
+.delivery [hidden] { display: none; }
+.delivery .facts { margin-bottom: 8px; }
+.delivery .status { margin: 6px 0 0; }
+.delivery .status:empty { min-height: 0; margin: 0; }
 .source { margin: 0 0 14px; color: var(--ink-soft); font-size: 15px; }
 .source span { display: block; }
 

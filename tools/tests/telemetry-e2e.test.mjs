@@ -2,10 +2,14 @@
 // names (js/telemetry.js, wire version 3), to the real ingest server (server/app.mjs), and
 // the server's admin answers show what the children did: one student per profile, with
 // the right minutes, and one student for a child a teacher gave the same code on two PCs
-// (the teacher page's transfer, merged through cd). Playwright hands each POST for
-// https://ingest.test to the in-process server on 127.0.0.1, so nothing leaves this
-// machine. The sink is switched on with window.SG_TELEMETRY = { url, allowLocal: true },
-// which no build ever writes. Each browser context is one PC; its time zone is the school's.
+// (the teacher page's transfer, merged through cd); and a school filter that blocks the
+// server loses nothing, while the teacher page says so and, once IT allows the host,
+// delivers what waited; and a child the owner forgot does not come back when the PC sends
+// the batch its closing page left again. Playwright hands each request for https://ingest.test to the
+// in-process server on 127.0.0.1, so nothing leaves this machine. The sink is switched on
+// with window.SG_TELEMETRY = { url, allowLocal: true }, which no build ever writes (the
+// teacher page, as built, gets no address: it uses the one the portal noted). Each
+// browser context is one PC; its time zone is the school's.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import fs from 'node:fs';
@@ -69,19 +73,24 @@ async function school(t) {
 
 // One PC: a browser context whose POSTs to https://ingest.test reach the school's server,
 // which answers with its real status and headers. Sharing starts once the page has set
-// e2e:share, so a test decides which sessions are sent. No page or console errors and
-// no other request. (What an unloading page sends leaves after the page is gone, where
-// this route does not see it: here that is only a session's 'se'.)
+// e2e:share, so a test decides which sessions are sent. While state.blocked is set, the
+// school's filter blocks the server: every request fails (its body goes to blocked). No
+// page or console errors and no other request. (What an unloading page sends leaves after
+// the page is gone, where this route does not see it, and fails as if blocked.)
 async function pc(t, server) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', timezoneId: ZONE });
   t.after(() => context.close());
-  const state = { context, errors: [], outside: [], answers: [], bodies: [] };
+  const state = { context, errors: [], outside: [], answers: [], bodies: [], blocked: false, refused: [] };
   context.on('request', request => {
     const url = new URL(request.url());
     if (url.origin !== site.origin && url.origin !== 'https://ingest.test') state.outside.push(request.method() + ' ' + request.url());
   });
   await context.route('https://ingest.test/**', async route => {
     const request = route.request();
+    if (state.blocked) {
+      state.refused.push(request.method() === 'POST' ? request.postData() : request.method() + ' ' + request.url());
+      return route.abort('failed');
+    }
     if (request.method() === 'POST') state.bodies.push(request.postData());
     const res = await fetch(server.url + new URL(request.url()).pathname, {
       method: request.method(),
@@ -92,11 +101,16 @@ async function pc(t, server) {
     await route.fulfill({ status: res.status, headers: Object.fromEntries(res.headers), body: Buffer.from(await res.arrayBuffer()) });
   });
   await context.addInitScript(() => {
-    if (localStorage.getItem('e2e:share')) Object.defineProperty(window, 'SG_TELEMETRY', { value: { url: 'https://ingest.test/v1/batch', allowLocal: true }, writable: false });
+    if (localStorage.getItem('e2e:share')) Object.defineProperty(window, 'SG_TELEMETRY', { value: /\/teacher\.html$/.test(location.pathname)
+      ? { allowLocal: true } : { url: 'https://ingest.test/v1/batch', allowLocal: true }, writable: false });
   });
   state.page = await context.newPage();
   state.page.on('pageerror', error => state.errors.push(error.message));
-  state.page.on('console', message => { if (message.type() === 'error') state.errors.push(message.text()); });
+  // Chromium itself logs a request that the blocked network fails; the site never logs.
+  state.page.on('console', message => {
+    if (message.type() === 'error' && !(/^Failed to load resource: net::ERR_FAILED$/.test(message.text()) &&
+      message.location().url.startsWith('https://ingest.test/'))) state.errors.push(message.text());
+  });
   t.after(() => {
     assert.deepEqual(state.outside, [], 'nothing else goes over the network');
     assert.deepEqual(state.errors, [], 'no page or console errors');
@@ -126,9 +140,10 @@ async function session(state, label) {
   await page.waitForFunction(() => document.body.className === 'route-home');
   await until(() => state.bodies.slice(sent).some(body => JSON.parse(body).ev.some(ev => ev[0] === 'gx')), label + ' at the server');
 }
-// The engaged ms of every game visit the PC sent (gx), as the server adds them up.
-const engaged = (...states) => states.flatMap(s => s.bodies).flatMap(body => JSON.parse(body).ev).filter(ev => ev[0] === 'gx')
-  .reduce((ms, ev) => ms + ev[4], 0);
+// The engaged ms of every game visit the PC sent (gx), as the server adds them up: each
+// batch once (a page that goes before its answer leaves the batch for the next one).
+const engaged = (...states) => [...new Map(states.flatMap(s => s.bodies).map(body => JSON.parse(body)).map(b => [b.b, b])).values()]
+  .flatMap(b => b.ev).filter(ev => ev[0] === 'gx').reduce((ms, ev) => ms + ev[4], 0);
 const minutes = ms => Math.round(ms / 6000) / 10;
 const rid = page => page.evaluate(() => JSON.parse(localStorage.getItem('sg:site:rid')));
 
@@ -273,3 +288,125 @@ test('the same child on two PCs: the teacher gives the second PC\'s profile the 
     assert.deepEqual([page.student.u, page.student.linked, page.student.pcs.length], [codeA, [codeB], 2]);
   }
 });
+
+test('a school filter that blocks the server loses nothing: the teacher page names the host to allow, and once it is allowed its test delivers what waited', async t => {
+  const server = await school(t), { admin } = server;
+  const state = await pc(t, server), { page } = state;
+  await page.goto(site.origin + '/index.html');
+  await page.waitForFunction(() => window.SGProfiles && window.SGTelemetry);
+  await page.evaluate(meta => {
+    const p = SGProfiles.create(1, 4, '6-7');
+    SGProfiles.select(p.k);
+    localStorage.setItem('sg:site:statsmeta', meta);
+    localStorage.setItem('e2e:share', '1');
+  }, META);
+  // 28 October: the school's filter blocks the server. A child plays a round; leaving the
+  // game sends at once, and fails.
+  state.blocked = true;
+  await page.goto(site.origin + '/index.html');
+  await page.waitForFunction(() => SGTelemetry.active());
+  await page.locator('.catalog-grid .tile[data-slug="tic-tac-toe"]').click();
+  await ready(page);
+  const game = page.frameLocator('#stage iframe');
+  await game.locator('#localButton').click();
+  for (const [i, move] of [0, 3, 1, 4, 2].entries()) {
+    await game.locator(`#gameBoard [data-move="${move}"]`).click();
+    await game.locator(`#gameBoard[data-moves="${i + 1}"]`).waitFor();
+  }
+  const frame = page.frames().find(f => f.url().includes('/games/tic-tac-toe/'));
+  await frame.evaluate(() => parent.postMessage({ type: 'sg:telemetry', version: 2, e: 90000, f: [0, 0, 0, 0], il: [0, 0, 0, 0, 0, 0], ev: [] }, location.origin));
+  await page.locator('#logo').click();
+  await until(() => state.refused.some(body => body.startsWith('{') && JSON.parse(body).ev.some(ev => ev[0] === 'gx')), 'the blocked send');
+  // Another child opens the portal for a moment and closes it: that page has seen no
+  // failure, hands the whole queue to fetch as it goes, and keeps it.
+  await page.goto(site.origin + '/index.html');
+  await page.waitForFunction(() => SGTelemetry.active());
+  await page.waitForTimeout(1500);
+  await page.goto(site.origin + '/teacher.html');
+  const queued = await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('sg:site:tm:q4:')).flatMap(k => JSON.parse(localStorage.getItem(k))));
+  assert.ok(queued.length >= 3, 'both sessions wait on the PC: ' + queued.length);
+  assert.ok(queued.some(x => x.e.ev.some(ev => ev[0] === 'gx')), 'the game\'s visit among them');
+  assert.deepEqual(state.bodies, [], 'nothing reached the server');
+
+  // The teacher page, at a glance: red, and the host to give IT.
+  await page.waitForFunction(() => document.getElementById('delivery').dataset.tone === 'bad');
+  assert.match(await page.locator('#deliveryState').textContent(), /^⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ /);
+  assert.match(await page.locator('#deliveryProblem').textContent(), /مرشّح الإنترنت في المدرسة يحجب ingest\.test\. اطلب من مسؤول تقنية المعلومات في المدرسة السماح بالعنوان https:\/\/ingest\.test\./);
+  const facts = await page.locator('#deliveryFacts dd').allTextContents();
+  assert.equal(facts[0], 'لم يصل شيء من هذا الجهاز بعد');
+  assert.ok(facts[1].startsWith(count(queued.length) + '، أقدمها من قبل '), facts[1]);
+  await page.locator('#checkBtn').click();
+  await page.waitForFunction(() => /^✗/.test(document.getElementById('checkStatus').textContent));
+  assert.equal(await page.locator('#checkStatus').textContent(),
+    '✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز. أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به في مرشّح الإنترنت: https://ingest.test');
+  assert.equal(state.refused.at(-1), 'GET https://ingest.test/v1/health');
+
+  // IT allows the host: the test reaches the real server and delivers everything that waited.
+  state.blocked = false;
+  await page.locator('#checkBtn').click();
+  await page.waitForFunction(() => /^✓/.test(document.getElementById('checkStatus').textContent));
+  assert.equal(await page.locator('#checkStatus').textContent(),
+    '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. أُرسل الآن ما كان ينتظر: ' + count(queued.length) + '.');
+  assert.equal(await page.locator('#delivery').getAttribute('data-tone'), 'ok');
+  assert.equal(await page.locator('#deliveryState').textContent(), '✓ تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات.');
+  assert.deepEqual(state.bodies.map(body => JSON.parse(body).b), queued.map(x => x.e.b), 'the very batches that waited, oldest first');
+  assert.ok(state.answers.length && state.answers.every(status => status === 200 || status === 204), 'health, then every batch accepted: ' + state.answers);
+  assert.equal(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('sg:site:tm:q4:')).length), 0, 'nothing waits');
+
+  // The server has both sessions, the game's visit and its minutes: nothing was lost.
+  let kpis;
+  await until(async () => (kpis = await admin('/v1/admin/kpis')).games.find(g => g.slug === 'tic-tac-toe')?.closes === 1, 'the visit in the KPIs');
+  assert.equal(kpis.totals.sessions, 2, 'the game\'s session and the short one');
+  const { students } = await admin('/v1/admin/students');
+  assert.equal(students.length, 1);
+  assert.equal(students[0].minutes, minutes(engaged(state)));
+  assert.ok(engaged(state) >= 90000);
+});
+
+test('a forgotten child stays forgotten: the batch the closing page left on the PC goes again from the next page and brings nothing back', async t => {
+  const server = await school(t), { admin, facts } = server;
+  const state = await pc(t, server), { page } = state;
+  await page.goto(site.origin + '/index.html');
+  await page.waitForFunction(() => window.SGProfiles && window.SGTelemetry);
+  await page.evaluate(() => {
+    const p = SGProfiles.create(1, 4, '6-7');
+    SGProfiles.select(p.k);
+    localStorage.setItem('e2e:share', '1');
+  });
+  await session(state, 'the child\'s session');
+  const { k: { p1: u } } = await rid(page);
+  await until(async () => (await admin('/v1/admin/students')).students.length === 1, 'the child at the server');
+  // Opening the teacher page closes the portal: the session's last batch (its end) goes
+  // as the page closes and stays on the PC, handed over (h: 1), for a later page to send again.
+  await page.goto(site.origin + '/teacher.html');
+  const queue = () => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('sg:site:tm:q4:')).flatMap(k => JSON.parse(localStorage.getItem(k))));
+  const waiting = await queue();
+  assert.ok(waiting.length && waiting.every(x => x.h === 1 && x.e.u === u), 'the child\'s last batch waits: ' + JSON.stringify(waiting.map(x => [x.h, x.e.u])));
+  assert.ok(waiting.some(x => x.e.ev.some(ev => ev[0] === 'se' && ev[3] === 'u')), 'the session\'s end, as the page closed');
+
+  // The owner forgets the child on the dashboard.
+  const res = await fetch(server.url + '/v1/admin/forget', { method: 'POST',
+    headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ u }) });
+  assert.deepEqual([res.status, (await res.json()).removed.codes], [200, 1]);
+  assert.deepEqual(facts('SELECT u FROM st_students'), []);
+
+  // The next morning the browser starts again (no current player: a guest), a game closes
+  // on the PC's first page, and what waited goes, oldest first, until the server has it.
+  await page.evaluate(() => sessionStorage.removeItem('sg:site:player'));
+  await page.goto(site.origin + '/index.html');
+  await page.waitForFunction(() => SGTelemetry.active() && !SGProfiles.player());
+  await page.locator('.catalog-grid .tile[data-slug="tic-tac-toe"]').click();
+  await ready(page);
+  await page.locator('#logo').click();
+  await until(async () => !(await queue()).some(x => waiting.some(w => w.e.b === x.e.b)), 'the batches that waited delivered');
+  for (const x of waiting) assert.ok(state.bodies.some(body => JSON.parse(body).b === x.e.b), 'sent again: ' + x.e.b);
+  await until(() => facts("SELECT 1 FROM st_sessions WHERE u = ''").length > 0, 'the guest\'s play at the server');
+  // The child does not come back: no session, student row or list entry.
+  assert.deepEqual(facts('SELECT s FROM st_sessions WHERE u = ?', u), []);
+  assert.deepEqual(facts('SELECT u FROM st_students'), []);
+  assert.deepEqual((await admin('/v1/admin/students')).students, []);
+  assert.ok(state.answers.every(status => status === 204), 'every batch answered as stored: ' + state.answers);
+});
+
+// Arabic counted batches, as the teacher page says them.
+function count(n) { return n === 1 ? 'دفعة واحدة' : n === 2 ? 'دفعتان' : n + ' ' + (n <= 10 ? 'دفعات' : 'دفعة'); }

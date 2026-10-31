@@ -8,6 +8,7 @@
 // /copy/, as a second copy on the same origin. The browser's time zone is Asia/Riyadh.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -23,7 +24,8 @@ const ON = { url: INGEST, allowLocal: true };
 // The queue of the copy that sends to url (js/telemetry.js: a 32-bit hash of the address),
 // and the key where builds before wire version 3 queue theirs.
 const urlHash = url => ([...url].reduce((h, c) => h * 31 + c.charCodeAt(0) | 0, 0) >>> 0).toString(36);
-const qKey = url => 'sg:site:tm:q3:' + urlHash(url);
+const qKey = url => 'sg:site:tm:q4:' + urlHash(url);
+const q3Key = url => 'sg:site:tm:q3:' + urlHash(url);
 const oldKey = url => 'sg:site:tm:q:' + urlHash(url);
 const COOKIE = { name: 'trackme', value: 'cookie-value', domain: 'ingest.test', path: '/', secure: true, sameSite: 'None' };
 const SOURCES = ['featured', 'catalog', 'recent', 'favorites', 'category', 'quick', 'search', 'related', 'surprise',
@@ -51,11 +53,12 @@ before(async () => {
 });
 after(async () => { await browser?.close(); await server?.close(); });
 
-// telemetry: window.SG_TELEMETRY (null: none), and copy: the one of the copy at /copy/;
-// answer(n, post): the ingest server's status for the n-th request, or { status, headers }.
-// Every test: no page or console errors, and no request other than this server's files
-// and the answered POSTs to the ingest server.
-async function setup(t, { telemetry = ON, copy = telemetry, gpc = false, clock = false, answer = () => 204 } = {}) {
+// telemetry: window.SG_TELEMETRY (null: none), copy: the one of the copy at /copy/, and
+// teacher: the teacher page's (as built: no address of its own, so it uses the one the
+// portal noted); answer(n, post): the ingest server's status for the n-th request, or
+// { status, headers, body }. Every test: no page or console errors, and no request other
+// than this server's files and the answered requests to the ingest server.
+async function setup(t, { telemetry = ON, copy = telemetry, teacher = { allowLocal: true }, gpc = false, clock = false, answer = () => 204 } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', timezoneId: ZONE });
   t.after(() => context.close());
   const state = { context, errors: [], requests: [], posts: [], answer };
@@ -75,10 +78,10 @@ async function setup(t, { telemetry = ON, copy = telemetry, gpc = false, clock =
   const cors = { 'Access-Control-Allow-Origin': origin, 'Access-Control-Expose-Headers': 'Retry-After, X-Batch-Every' };
   await context.route('https://ingest.test/**', async route => {
     const request = route.request();
-    const { status, headers } = answered({ url: request.url(), method: request.method(), type: request.resourceType(), headers: await request.allHeaders(), body: request.postData() });
+    const { status, headers, body } = answered({ url: request.url(), method: request.method(), type: request.resourceType(), headers: await request.allHeaders(), body: request.postData() });
     if (status === 'abort') await route.abort('failed');
     else if (status === 'hang') return;
-    else await route.fulfill({ status, headers: { ...cors, ...headers } });
+    else await route.fulfill({ status, headers: { ...cors, ...headers }, body });
   });
   // What a page sends while it unloads leaves after the page is gone, where the routes
   // above no longer see it; an interception for the whole browser does, with its headers.
@@ -86,18 +89,20 @@ async function setup(t, { telemetry = ON, copy = telemetry, gpc = false, clock =
   t.after(() => cdp.detach().catch(() => {}));
   cdp.on('Fetch.requestPaused', ({ requestId, request, resourceType }) => {
     const headers = Object.fromEntries(Object.entries(request.headers).map(([name, value]) => [name.toLowerCase(), value]));
-    const { status, headers: answer } = answered({ url: request.url, method: request.method, type: resourceType.toLowerCase(), headers, body: request.postData });
+    const { status, headers: answer, body } = answered({ url: request.url, method: request.method, type: resourceType.toLowerCase(), headers, body: request.postData });
     // The page is gone: nothing waits for the answer.
     if (status === 'abort') cdp.send('Fetch.failRequest', { requestId, errorReason: 'Failed' }).catch(() => {});
     else if (status !== 'hang') {
       const responseHeaders = Object.entries({ ...cors, ...answer }).map(([name, value]) => ({ name, value }));
-      cdp.send('Fetch.fulfillRequest', { requestId, responseCode: status, responseHeaders }).catch(() => {});
+      cdp.send('Fetch.fulfillRequest', { requestId, responseCode: status, responseHeaders,
+        ...(body === undefined ? {} : { body: Buffer.from(body).toString('base64') }) }).catch(() => {});
     }
   });
   await cdp.send('Fetch.enable', { patterns: [{ urlPattern: 'https://ingest.test/*' }] });
-  await context.addInitScript(([config, copy, gpc]) => {
+  await context.addInitScript(([config, copy, teacher, gpc]) => {
     // The test's setting wins over a build's own (CI may build with SG_TELEMETRY_URL).
-    Object.defineProperty(window, 'SG_TELEMETRY', { value: (location.pathname.startsWith('/copy/') ? copy : config) || undefined, writable: false });
+    Object.defineProperty(window, 'SG_TELEMETRY', { value: (location.pathname.endsWith('/teacher.html') ? teacher :
+      location.pathname.startsWith('/copy/') ? copy : config) || undefined, writable: false });
     if (gpc) Object.defineProperty(Navigator.prototype, 'globalPrivacyControl', { configurable: true, get: () => true });
     addEventListener('message', e => {
       const d = e.data;
@@ -116,7 +121,7 @@ async function setup(t, { telemetry = ON, copy = telemetry, gpc = false, clock =
       p.then(settled, settled);
       return p;
     };
-  }, [telemetry, copy, gpc]);
+  }, [telemetry, copy, teacher, gpc]);
   if (clock) await context.clock.install();
   state.page = await context.newPage();
   state.page.on('pageerror', error => state.errors.push(error.message));
@@ -136,7 +141,17 @@ async function setup(t, { telemetry = ON, copy = telemetry, gpc = false, clock =
 }
 
 /* ------------------------------------------------------------- helpers */
-const batches = state => state.posts.map(post => JSON.parse(post.body));
+// The ingest server's own answers, as server/handler.mjs sends them: its JSON error with
+// its status, and GET /v1/health. Then what a school filter or captive portal answers itself.
+const JSON_TYPE = { 'Content-Type': 'application/json; charset=utf-8' };
+const serverError = (status, error = 'server') => ({ status, headers: JSON_TYPE, body: JSON.stringify({ error }) });
+const HEALTH = { status: 200, headers: JSON_TYPE, body: '{"ok":true,"accepts":[2,3],"schema":4}' };
+const filterPage = status => ({ status, headers: { 'Content-Type': 'text/html' }, body: '<!doctype html><title>Blocked by the school filter</title>' });
+const isHealth = post => post.method === 'GET' && post.url === 'https://ingest.test/v1/health';
+const batches = state => state.posts.filter(post => post.method === 'POST').map(post => JSON.parse(post.body));
+// Each batch once, where it was first sent: a page that goes before the answer leaves its
+// batches queued, and the next page sends them again (the server keeps each once).
+const once = list => list.filter((b, i) => list.findIndex(x => x.b === b.b) === i);
 // Every event received, per session id, in the order it was sent.
 function bySession(list) {
   const out = new Map();
@@ -171,6 +186,8 @@ async function until(check, label, ms = 20000) {
 const tm = (page, key) => page.evaluate(k => localStorage.getItem(k), key);
 const queue = async (page, url = INGEST) => JSON.parse(await tm(page, qKey(url)));
 const tmKeys = page => page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('sg:site:tm:')).sort());
+// The delivery record for the teacher page (sg:site:tm:dx).
+const dx = async page => JSON.parse(await tm(page, 'sg:site:tm:dx'));
 // Every request the page started has its answer. Moving a fake clock a minute on while one
 // is still on its way would send its batch again, as the sink does for a request a real
 // minute left unanswered.
@@ -219,6 +236,10 @@ function like(actual, expected, label = 'events') {
     assert.ok(Array.isArray(actual) && actual.length === expected.length,
       `${label}: ${JSON.stringify(actual)} should have ${expected.length} entries like ${JSON.stringify(expected, (k, v) => typeof v === 'function' ? '?' : v)}`);
     return expected.forEach((e, i) => like(actual[i], e, `${label}[${i}]`));
+  }
+  if (expected && typeof expected === 'object') {
+    assert.deepEqual(Object.keys(actual || {}), Object.keys(expected), `${label}: ${JSON.stringify(actual)} keys`);
+    return Object.keys(expected).forEach(key => like(actual[key], expected[key], `${label}.${key}`));
   }
   assert.equal(actual, expected, label);
 }
@@ -307,8 +328,9 @@ test('real rounds reach the ingest server as the contract says, with codes but n
   await state.context.addCookies([COOKIE]);
   await page.goto(origin + '/');
   assert.equal(await page.evaluate(() => SGTelemetry.active()), true);
-  assert.deepEqual(await tmKeys(page), ['sg:site:tm:on'], 'the teacher page is told this PC shares');
+  assert.deepEqual(await tmKeys(page), ['sg:site:tm:dx', 'sg:site:tm:on'], 'the teacher page is told this PC shares, and where');
   assert.equal(await tm(page, 'sg:site:tm:on'), '"ingest.test"');
+  assert.deepEqual(await dx(page), { v: 1, u: INGEST, ok: 0, f: 0, k: '', at: 0, x: 0 }, 'nothing sent yet');
   // The active sink made this PC's code; a guest has none.
   const pc = (await rid(page)).pc;
   assert.deepEqual(await rid(page), { v: 1, pc, k: {}, l: {}, g: {} });
@@ -437,6 +459,7 @@ test('off unless every gate holds: games are told telemetry: false and nothing i
         if (m) localStorage.setItem('sg:site:statsmeta', m);
         keys.forEach(key => localStorage.setItem(key, q));
         localStorage.setItem('sg:site:tm:on', '"ingest.test"');
+        localStorage.setItem('sg:site:tm:dx', JSON.stringify({ v: 1, u: 'https://ingest.test/v1/batch', ok: 1, f: 0, k: '', at: 0 }));
       }, [statsmeta, [qKey(INGEST), oldKey(INGEST)], seeded]);
       await page.goto(origin + '/');
       assert.equal(await page.evaluate(() => SGTelemetry.active()), false);
@@ -453,7 +476,8 @@ test('off unless every gate holds: games are told telemetry: false and nothing i
       await page.goto(origin + '/seed.html');
       assert.deepEqual(state.posts, [], 'nothing is sent, neither while the page lives nor as it unloads');
       // Stopped statistics and sharing turned off drop what waited; otherwise the sink only
-      // removes the old note, so the teacher page does not say that this PC shares.
+      // removes the old notes, so the teacher page neither says that this PC shares nor
+      // tests a server it does not send to.
       assert.deepEqual(await tmKeys(page), statsmeta ? [] : [oldKey(INGEST), qKey(INGEST)].sort());
       if (!statsmeta) for (const key of [qKey(INGEST), oldKey(INGEST)]) assert.equal(await tm(page, key), seeded);
       assert.equal(await tm(page, 'sg:site:rid'), null, 'no code is made or written');
@@ -461,8 +485,9 @@ test('off unless every gate holds: games are told telemetry: false and nothing i
   }
 });
 
-test('failures back off 20, 40, 80, 160, 300 s; a 2xx and a 4xx are final; 429, 5xx and network errors retry', async t => {
-  const answers = [500, 'abort', 503, 500, 502, 500, 204, 400, 429, 204];
+test('failures back off 20, 40, 80, 160, 300 s; the server\'s 204 and its JSON 4xx are final; 429, 5xx and network errors retry', async t => {
+  const answers = [serverError(500), 'abort', serverError(503, 'migrating'), serverError(500), serverError(502), serverError(500), 204,
+    serverError(400, 'bad batch'), serverError(429, 'rate limited'), 204];
   const state = await setup(t, { clock: true, answer: n => answers[n - 1] ?? 204 }), { page } = state;
   await page.clock.pauseAt(new Date(Date.now() + 60000));
   await page.goto(origin + '/');
@@ -507,21 +532,359 @@ test('failures back off 20, 40, 80, 160, 300 s; a 2xx and a 4xx are final; 429, 
   await checkBatches(page, batches(state));
 });
 
-test('a request that is never answered holds the queue back for a minute at most', async t => {
-  const state = await setup(t, { clock: true, answer: n => n === 1 ? 'hang' : 204 }), { page } = state;
+test('a request that is never answered is given up after a minute and noted as no answer: the batch waits, backs off and goes again', async t => {
+  // A school filter or proxy that takes the connection and never answers (28 October: the
+  // teacher page would otherwise have stayed green while batches piled up).
+  let hang = true;
+  const state = await setup(t, { clock: true, answer: () => hang ? 'hang' : 204 }), { page } = state;
   await page.clock.pauseAt(new Date(Date.now() + 60000));
   await page.goto(origin + '/');
+  // This PC delivered three days ago.
+  const delivered = await page.evaluate(() => Date.now()) - 3 * 864e5;
+  await page.evaluate(([key, u, ok]) => localStorage.setItem(key, JSON.stringify({ v: 1, u, ok, f: 0, k: '', at: 0, x: 0 })), ['sg:site:tm:dx', INGEST, delivered]);
   const at = async (ms, count, label) => { await page.clock.runFor(ms); await until(() => state.posts.length === count, label, 5000); };
   await at(60000, 1, 'the first send');
-  // Nothing else happens on the page: the same batch goes again a minute later.
+  const sent = await page.evaluate(() => Date.now());
   await at(59999, 1, 'no second request while the first may still be answered');
-  await at(1, 2, 'the same batch again after a minute');
+  assert.equal((await dx(page)).f, 0, 'nothing noted while the request may still be answered');
+  // A minute without an answer: the request is aborted, the batch stays and the failure is noted.
+  await at(1, 1, 'no second request at once');
   await page.waitForFunction(() => window.fetched === 1);
-  assert.deepEqual(bare(batches(state)[1]), bare(batches(state)[0]), 'the same batch, the same id');
-  assert.deepEqual(batches(state).map(b => b.w), [60, 120]);
+  like(await dx(page), { v: 1, u: INGEST, ok: delivered, f: sent + 60000, k: 'network', at: sent + 60000, x: 0 }, 'no answer is noted as a network failure');
+  like(await page.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: delivered, f: sent + 60000, k: 'network', at: sent + 60000, x: 0, n: 1, t: pos, o: pos });
+  assert.equal((await queue(page)).length, 1, 'the batch waits');
+  // It backs off like any failure, 20 s, then 40 s; each try is cut off after a minute.
+  await at(19999, 1, 'no retry before 20 s');
+  await at(1, 2, 'the retry after 20 s');
+  await at(60000, 2, 'the retry is given up after a minute too');
+  await page.waitForFunction(() => window.fetched === 2);
+  assert.equal((await dx(page)).f, sent + 60000, 'still failing since the first time');
+  hang = false;
+  await at(39999, 2, 'no retry before 40 s');
+  await at(1, 3, 'the next retry');
+  await inFlight(page);
+  assert.ok(batches(state).every(b => JSON.stringify(bare(b)) === JSON.stringify(bare(batches(state)[0]))), 'the same batch, the same id');
+  assert.deepEqual(batches(state).map(b => b.w), [60, 140, 240]);
   assert.equal(await queue(page), null, 'delivered');
-  await at(300000, 2, 'nothing more to send');
+  like(await dx(page), { v: 1, u: INGEST, ok: sent + 180000, f: 0, k: '', at: 0, x: 0 });
+  await at(300000, 3, 'nothing more to send');
   await checkBatches(page, batches(state));
+});
+
+test('a send that fails while the PC has no connection at all is noted as offline, still failing since the first time; the test then asks nothing', async t => {
+  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? HEALTH : 'abort' }), { page } = state;
+  const unplug = p => p.evaluate(() => Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false }));
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/');
+  // The school filter drops the first send: the network is to blame.
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 1, 'the first send');
+  await inFlight(page);
+  const first = await dx(page);
+  like(first, { v: 1, u: INGEST, ok: 0, f: pos, k: 'network', at: first.f, x: 0 });
+  // Then the cable is pulled: the retry fails while navigator.onLine is false.
+  await unplug(page);
+  await page.clock.runFor(20000);
+  await until(() => state.posts.length === 2, 'the retry');
+  await inFlight(page);
+  like(await dx(page), { v: 1, u: INGEST, ok: 0, f: first.f, k: 'offline', at: v => v >= first.f + 20000, x: 0 });
+  // The teacher's test on that PC answers at once: no request, and the record stays as it is.
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  await unplug(teacher);
+  // A tab of the first v3 build left a batch in its own key: the answer counts it, as status() does.
+  await seed(teacher, [[q3Key(INGEST), JSON.stringify([v3At('5'.repeat(16), await teacher.evaluate(() => Date.now()))])]]);
+  const record = await tm(teacher, 'sg:site:tm:dx'), n = state.posts.length;
+  assert.equal(await teacher.evaluate(() => SGTelemetry.status().n), 2);
+  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'offline', host: 'ingest.test', reached: false, sent: 0, n: 2 });
+  assert.equal(state.posts.length, n, 'nothing is asked');
+  assert.equal(await tm(teacher, 'sg:site:tm:dx'), record, 'and nothing is noted');
+  await teacher.close();
+});
+
+test('every batch stays queued until the server answers it: a short page on a failing network loses nothing, and a later page sends it all, oldest first', async t => {
+  let net = 'abort';
+  const state = await setup(t, { clock: true, answer: () => net }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/');
+  // The first page's session start cannot reach the server at 60 s; its end joins the
+  // queue as the page goes (a page whose sends failed hands nothing to fetch then).
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 1, 'the first send');
+  await inFlight(page);
+  await page.goto(origin + '/');
+  const first = await queue(page);
+  like(first.map(x => x.e.ev.map(ev => ev[0])), [['ss'], ['se']]);
+  // A second page for a moment (a child opens the portal and closes the tab): it has seen
+  // no failure itself, so as it goes it hands the whole queue to fetch, which fails too.
+  await page.clock.runFor(1500);
+  await page.goto(origin + '/seed.html');
+  await until(() => state.posts.length === 4, 'the closing page\'s sends');
+  const queued = await queue(page);
+  assert.ok(queued, 'the queue is still there');
+  assert.deepEqual(queued.slice(0, 2).map(x => x.e.b), first.map(x => x.e.b), 'the first page\'s batches are all still there');
+  like(queued.slice(2).map(x => x.e.ev.map(ev => ev[0])), [['ss', 'se']], 'and the second page\'s session');
+  assert.deepEqual(batches(state).slice(1).map(b => b.b), queued.map(x => x.e.b), 'handed to fetch oldest first, and kept');
+  assert.ok(queued.every(x => x.h === 1), 'and marked as handed over by a closing page');
+  like(await dx(page), { v: 1, u: INGEST, ok: 0, f: pos, k: 'network', at: pos, x: 0 }, 'the failure is noted for the teacher page');
+  // The network is back: the next page sends every batch again, oldest first, and the queue
+  // empties as the server takes them (it keeps each batch once).
+  net = 204;
+  const sent = state.posts.length;
+  await page.goto(origin + '/');
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === sent + queued.length + 1, 'every batch, then this page\'s');
+  await inFlight(page);
+  assert.deepEqual(batches(state).slice(sent, -1).map(b => b.b), queued.map(x => x.e.b));
+  like(batches(state).at(-1).ev, [['ss', 0, 0, -1, -1, 0, 0, 0]]);
+  assert.equal(await queue(page), null, 'delivered');
+  like(await dx(page), { v: 1, u: INGEST, ok: pos, f: 0, k: '', at: 0, x: 0 }, 'the delivery ends the failure');
+  const unique = once(batches(state));
+  await checkBatches(page, unique);
+  for (const b of batches(state)) assert.equal(JSON.stringify(bare(b)), JSON.stringify(bare(unique.find(x => x.b === b.b))), 'the same batch each time');
+});
+
+test('only the server\'s own 204 delivers and only its JSON error to a 4xx drops a batch: a filter\'s or captive portal\'s page keeps it, backs off and is noted', async t => {
+  const answers = [filterPage(200), filterPage(403), { status: 400, headers: { 'Content-Type': 'text/plain' }, body: 'Bad Request' }, 204,
+    serverError(403, 'forbidden'), serverError(503, 'migrating'), 204];
+  const state = await setup(t, { clock: true, answer: n => answers[n - 1] ?? 204 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/');
+  const settled = n => page.waitForFunction(n => window.fetched === n, n);
+  const at = async (ms, count, label) => { await page.clock.runFor(ms); await until(() => state.posts.length === count, label, 5000); await settled(count); };
+  await at(60000, 1, 'the first send');
+  const t1 = await page.evaluate(() => Date.now());
+  assert.equal((await queue(page))?.length, 1, 'a 200 that is not the server\'s 204 (a captive portal\'s page) keeps the batch');
+  like(await dx(page), { v: 1, u: INGEST, ok: 0, f: t1, k: 'network', at: t1, x: 0 });
+  await at(19999, 1, 'it backs off 20 s');
+  await at(1, 2, 'the retry');
+  assert.equal((await queue(page))?.length, 1, 'a 403 page of a school filter keeps the batch');
+  await at(40000, 3, 'the retry after 40 s');
+  assert.equal((await queue(page))?.length, 1, 'a 400 that is not the server\'s JSON keeps it too');
+  like(await dx(page), { v: 1, u: INGEST, ok: 0, f: t1, k: 'network', at: pos, x: 0 }, 'still failing since the first one');
+  await at(80000, 4, 'the retry after 80 s');
+  assert.equal(await queue(page), null, 'the server\'s 204 delivers it');
+  like(await dx(page), { v: 1, u: INGEST, ok: pos, f: 0, k: '', at: 0, x: 0 });
+  // The server's own JSON refusal is final: the batch goes and is never sent again.
+  await page.evaluate(() => SGTelemetry.level(4));
+  await at(60000, 5, 'the next batch');
+  assert.equal(await queue(page), null, 'refused by the server: dropped');
+  like(await dx(page), { v: 1, u: INGEST, ok: pos, f: pos, k: 'refused', at: pos, x: 0 });
+  await page.clock.runFor(400000);
+  assert.equal(state.posts.length, 5, 'never sent again');
+  // The server's JSON 503 keeps the batch, backs off from 20 s, and is noted as the server's.
+  await page.evaluate(() => SGTelemetry.level(5));
+  await at(60000, 6, 'the batch after the refusal');
+  assert.equal((await queue(page))?.length, 1);
+  assert.equal((await dx(page)).k, 'server');
+  await at(20000, 7, 'its retry');
+  assert.equal(await queue(page), null);
+  like(batches(state).map(b => b.ev.map(ev => ev[0] === 'lv' ? ev[2] : ev[0])), [['ss'], ['ss'], ['ss'], ['ss'], [4], [5], [5]]);
+  await checkBatches(page, batches(state));
+});
+
+test('a teacher\'s clear dated after the PC\'s clock (the clock was set back since) holds nothing back', async t => {
+  const state = await setup(t, { clock: true }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/seed.html');
+  const now = await page.evaluate(() => Date.now());
+  const envelope = (b, ev) => ({ v: 3, b, s: 'abcdefabcdef', k: 'src', m: 'web', a: '', d: [4, 4, 1920], u: '', p: '', z: '', ev });
+  // A batch queued an hour ago, and a clear the PC dated a year ahead before its clock was corrected.
+  await page.evaluate(([key, q, meta]) => { localStorage.setItem(key, q); localStorage.setItem('sg:site:statsmeta', meta); },
+    [qKey(INGEST), JSON.stringify([{ t: now - 3600000, w0: now - 3600000, e: envelope('1'.repeat(16), [['lv', 5, 2]]) }]),
+      JSON.stringify({ pc: { id: 'pcwxyz' }, clearedAt: now + 365 * 864e5 })]);
+  await page.goto(origin + '/');
+  // The clear is dated back to the oldest batch waiting (the clear emptied the queue, so
+  // what waits came after it), and written so: it never comes back when the clock passes it.
+  assert.equal(JSON.parse(await tm(page, 'sg:site:statsmeta')).clearedAt, now - 3600000);
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 2, 'the waiting batch and this page\'s');
+  await inFlight(page);
+  like(batches(state).map(b => b.ev.map(ev => ev[0])), [['lv'], ['ss']]);
+  assert.equal(await queue(page), null);
+  serverKeeps(batches(state));
+});
+
+test('a teacher\'s clear drops what the open portal recorded before it, also when the developer tools asked for status() first', async t => {
+  const state = await setup(t, { clock: true }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/');
+  await page.evaluate(() => SGTelemetry.level(3));
+  await page.clock.runFor(1000);
+  // The teacher page clears in another tab (statsmeta.clearedAt, and the queue keys go).
+  await page.evaluate(() => {
+    localStorage.setItem('sg:site:statsmeta', JSON.stringify({ pc: { id: 'pcwxyz' }, clearedAt: Date.now() }));
+    Object.keys(localStorage).filter(k => /^sg:site:tm:q/.test(k)).forEach(k => localStorage.removeItem(k));
+  });
+  like(await page.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: 0, f: 0, k: '', at: 0, x: 0, n: 0, t: 0, o: 0 });
+  await page.evaluate(() => SGTelemetry.level(4));
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 1, 'the next send');
+  await inFlight(page);
+  like(batches(state).map(b => b.ev), [[['lv', int, 4]]], 'only what came after the clear');
+  serverKeeps(batches(state));
+});
+
+test('a teacher\'s clear dated ahead by a fast clock that is corrected later never drops the play recorded until the clock passes it', async t => {
+  // The teacher clears while the PC's clock runs 10 minutes fast; the clock is then set
+  // right, and the server is blocked, so play waits in the queue.
+  const state = await setup(t, { clock: true, answer: () => 'abort' }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/');
+  const start = await page.evaluate(() => Date.now());
+  await page.evaluate(t => localStorage.setItem('sg:site:statsmeta', JSON.stringify({ pc: { id: 'pcwxyz' }, clearedAt: t })), start + 600000);
+  await page.evaluate(() => SGTelemetry.level(2));
+  const meta = JSON.parse(await tm(page, 'sg:site:statsmeta'));
+  assert.ok(meta.clearedAt <= start && meta.clearedAt > start - 60000, 'dated back to this page\'s start: ' + (meta.clearedAt - start));
+  assert.equal(meta.pc.id, 'pcwxyz', 'the other settings stay');
+  for (let lv = 3; lv <= 6; lv++) {
+    await page.clock.runFor(60000);
+    await page.evaluate(lv => SGTelemetry.level(lv), lv);
+  }
+  await page.clock.runFor(60000);
+  const levels = async () => (await queue(page)).flatMap(x => x.e.ev).filter(ev => ev[0] === 'lv').map(ev => ev[2]);
+  assert.deepEqual(await levels(), [2, 3, 4, 5, 6]);
+  // The clock passes the time the clear first had: nothing goes.
+  await page.clock.runFor(600000);
+  await page.evaluate(() => SGTelemetry.level(20));
+  await page.clock.runFor(60000);
+  assert.deepEqual(await levels(), [2, 3, 4, 5, 6, 20], 'the play from before the clock passed the clear is all still there');
+  serverKeeps(once(batches(state)));
+});
+
+test('check mode (the teacher page): no session, no event and no request until the test; the test asks health, then sends what waits', async t => {
+  let down = true, health = HEALTH;
+  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? health : down === 'abort' ? 'abort' : down ? serverError(503, 'migrating') : 204 }), { page } = state;
+  await state.context.addCookies([COOKIE]);
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/');
+  await page.evaluate(() => SGTelemetry.level(2));
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 1, 'the first send');
+  await inFlight(page);
+  // The portal goes (its server is failing, so it hands nothing to fetch): two batches wait.
+  await page.goto(origin + '/seed.html');
+  const waiting = await queue(page), record = await dx(page);
+  like(waiting.map(x => x.e.ev.map(ev => ev[0])), [['ss', 'lv'], ['se']]);
+  like(record, { v: 1, u: INGEST, ok: 0, f: pos, k: 'server', at: pos, x: 0 });
+  const storage = p => p.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map(k => [k, localStorage.getItem(k)])));
+  const before = await storage(page);
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  assert.deepEqual(await teacher.evaluate(() => Object.keys(SGTelemetry).sort()), ['active', 'check', 'status']);
+  assert.equal(await teacher.evaluate(() => SGTelemetry.active()), false);
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: 0, f: record.f, k: 'server', at: record.at, x: 0, n: 2, t: waiting[0].t, o: waiting[0].t });
+  await teacher.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  assert.deepEqual(await storage(teacher), before, 'opening the page wrote nothing: no session, no code, no note');
+  assert.equal(state.posts.length, 1, 'and sent nothing');
+  const check = () => teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve)));
+  let n = state.posts.length;
+  const since = () => state.posts.slice(n).map(p => p.method + ' ' + p.url);
+  // The server answers health but still fails batches: the first one stays, the test says
+  // why, and the failure still dates from when it began (health alone does not end it).
+  await teacher.clock.runFor(60000);
+  like(await check(), { k: 'server', host: 'ingest.test', reached: true, sent: 0, n: 2 });
+  assert.deepEqual(since(), ['GET https://ingest.test/v1/health', 'POST ' + INGEST]);
+  assert.ok(state.posts.every(p => p.headers.cookie === undefined), 'no cookie goes with the test either');
+  like(await dx(teacher), { v: 1, u: INGEST, ok: 0, f: record.f, k: 'server', at: record.at + 60000, x: 0 });
+  // Health answers, but the batch gets no answer the page can read (a filter that lets the
+  // address open and stops what is sent to it): reached, then failed, still since the start.
+  n = state.posts.length;
+  down = 'abort';
+  like(await check(), { k: 'network', host: 'ingest.test', reached: true, sent: 0, n: 2 });
+  assert.deepEqual(since(), ['GET https://ingest.test/v1/health', 'POST ' + INGEST]);
+  like(await dx(teacher), { v: 1, u: INGEST, ok: 0, f: record.f, k: 'network', at: pos, x: 0 });
+  down = true;
+  // A school filter's page in place of health: not reachable, and nothing is sent.
+  n = state.posts.length;
+  health = filterPage(200);
+  like(await check(), { k: 'network', host: 'ingest.test', reached: false, sent: 0, n: 2 });
+  assert.deepEqual(since(), ['GET https://ingest.test/v1/health']);
+  like(await dx(teacher), { v: 1, u: INGEST, ok: 0, f: record.f, k: 'network', at: pos, x: 0 });
+  // A server that does not take this build's wire version.
+  n = state.posts.length;
+  health = { ...HEALTH, body: '{"ok":true,"accepts":[2],"schema":3}' };
+  like(await check(), { k: 'refused', host: 'ingest.test', reached: false, sent: 0, n: 2 });
+  assert.deepEqual(since(), ['GET https://ingest.test/v1/health']);
+  // Reachable again: health, then every waiting batch, oldest first, and the record says delivered.
+  n = state.posts.length;
+  health = HEALTH;
+  down = false;
+  like(await check(), { k: 'ok', host: 'ingest.test', reached: true, sent: 2, n: 0 });
+  assert.deepEqual(since(), ['GET https://ingest.test/v1/health', 'POST ' + INGEST, 'POST ' + INGEST]);
+  assert.deepEqual(state.posts.slice(n + 1).map(p => bare(JSON.parse(p.body))), waiting.map(x => x.e), 'the very batches the portal queued');
+  assert.equal(await queue(teacher), null);
+  like(await dx(teacher), { v: 1, u: INGEST, ok: pos, f: 0, k: '', at: 0, x: 0 });
+  // Nothing waits: health only.
+  n = state.posts.length;
+  like(await check(), { k: 'ok', host: 'ingest.test', reached: true, sent: 0, n: 0 });
+  assert.deepEqual(since(), ['GET https://ingest.test/v1/health']);
+  // Statistics stopped: no request at all.
+  n = state.posts.length;
+  await teacher.evaluate(() => localStorage.setItem('sg:site:statsmeta', JSON.stringify({ pc: { id: 'pcwxyz' }, off: true, offSince: Date.now() })));
+  like(await check(), { why: 'off', host: 'ingest.test' });
+  assert.equal(await teacher.evaluate(() => SGTelemetry.status().why), 'off');
+  assert.deepEqual(since(), []);
+  assert.ok(batches(state).every(b => b.s === waiting[0].e.s), 'every batch sent is the portal\'s session: the teacher page has none');
+  serverKeeps(batches(state));
+  await teacher.close();
+});
+
+test('check mode reads the address the portal notes at each call, and its test ends within its time limits even when an answer never ends', async t => {
+  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? HEALTH : 204 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  // The teacher page is opened first on this PC: nothing to show or test yet.
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  assert.equal(await teacher.evaluate(() => SGTelemetry.status().why), 'none');
+  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { why: 'none', host: '' });
+  // The teacher opens the games page, as the box asks, and comes back: the same page now
+  // knows the address, without a reload.
+  await page.goto(origin + '/');
+  assert.ok(await dx(page), 'the portal noted its address');
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: 0, f: 0, k: '', at: 0, x: 0, n: 0, t: 0, o: 0 });
+  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'ok', host: 'ingest.test', reached: true, sent: 0, n: 0 });
+  // A proxy that sends the headers of an answer, then holds its body back: the test gives
+  // up on health after 20 s (with the address to give IT), and on a batch after 20 s too.
+  await page.goto(origin + '/seed.html');
+  const now = await teacher.evaluate(() => Date.now());
+  await teacher.evaluate(([key, q]) => localStorage.setItem(key, q), [qKey(INGEST),
+    JSON.stringify([{ t: now - 6e4, w0: now - 6e4, e: { v: 3, b: '1'.repeat(16), s: 'abcdefabcdef', k: 'src', m: 'web', a: '', d: [4, 4, 1920], u: '', p: '', z: '', ev: [['lv', 5, 2]] } }])]);
+  const stall = (status, which) => teacher.evaluate(([status, which]) => {
+    window.realFetch = window.realFetch || window.fetch;
+    window.stalled = [];
+    window.fetch = (url, init) => {
+      const method = init && init.method || 'GET';
+      window.stalled.push(method + ' ' + url);
+      if (which === 'POST' && method !== 'POST') return window.realFetch(url, init);
+      return Promise.resolve(new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{"ok":true,')); } }),
+        { status, headers: { 'Content-Type': 'application/json' } }));
+    };
+    window.result = null;
+    SGTelemetry.check(r => { window.result = r; });
+  }, [status, which]);
+  // Once the request that stalls has started (health itself is answered for real, while the
+  // page's clock stands still), no answer comes before ms, and one comes at ms.
+  const resultAfter = async (ms, requests) => {
+    await teacher.waitForFunction(n => window.stalled.length === n, requests);
+    await teacher.clock.runFor(ms - 1);
+    assert.equal(await teacher.evaluate(() => window.result), null, 'no answer before ' + ms + ' ms');
+    await teacher.clock.runFor(1);
+    await teacher.waitForFunction(() => window.result !== null);
+    return teacher.evaluate(() => window.result);
+  };
+  await stall(200, 'all');
+  like(await resultAfter(20000, 1), { k: 'network', host: 'ingest.test', reached: false, sent: 0, n: 1 });
+  assert.deepEqual(await teacher.evaluate(() => window.stalled), ['GET https://ingest.test/v1/health']);
+  // Health answers, and the batch's answer (not the server's 204) never ends.
+  await stall(400, 'POST');
+  like(await resultAfter(20000, 2), { k: 'network', host: 'ingest.test', reached: true, sent: 0, n: 1 });
+  assert.deepEqual(await teacher.evaluate(() => window.stalled), ['GET https://ingest.test/v1/health', 'POST ' + INGEST]);
+  assert.equal((await queue(teacher)).length, 1, 'the batch still waits');
+  await teacher.close();
 });
 
 test('a profile made on an earlier day that has never played is a first time', async t => {
@@ -579,6 +942,10 @@ test('the queue survives a reload, sends oldest first, and keeps at most 128 KB,
   assert.equal(await tm(page, oldKey(INGEST)), null, 'the older build\'s batches moved to this build\'s queue');
   let stored = await queue(page);
   assert.ok(JSON.stringify(stored).length <= 131072, 'at most 128 KB');
+  // The record tells the teacher page that unsent play was dropped: the 8-day-old batch went
+  // for its age (a day ago), the oldest big one for room (now).
+  const dropped = (await dx(page)).x;
+  assert.ok(dropped > now - 864e5 && dropped <= now + 60000, 'dropped for room ' + (dropped - now) + ' ms from the seed');
   const kept = stored.map(x => x.e.b);
   // The oldest big batch made room for the new one; the dropped entries are gone.
   assert.deepEqual(kept.slice(0, -1), [2, 3, 4, 5].map(i => i.toString(16).padStart(16, 'a')));
@@ -617,6 +984,42 @@ test('the queue survives a reload, sends oldest first, and keeps at most 128 KB,
   serverKeeps(batches(state));
 });
 
+test('play a closing page handed over is dropped for 7 days or 128 KB without being called lost; play never handed over is', async t => {
+  const state = await setup(t, { clock: true, answer: () => 503 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/seed.html');
+  const now = await page.evaluate(() => Date.now()), week = 7 * 864e5;
+  const envelope = (b, ev) => ({ v: 2, b, s: '0123456789ab', k: 'src', m: 'web', a: '', d: [4, 4, 1920], ev });
+  // After the holidays: what the last portal page handed to fetch as it closed, 8 days ago
+  // (its answer came after the page had gone), and five batches of about 26 KB, each
+  // handed over the same way, that just fit in 128 KB: the page's first batch makes room
+  // as it is saved.
+  const most = ['re', 1, 'air-hockey', 'w', 'Level_abcdefghijklmnopq', 108e5, 1e9, 9, 1e5, 1e5, [1e5, 1e5, 1e5, 1e5, 1e5, 1e5]];
+  const ids = [1, 2, 3, 4, 5].map(i => i.toString(16).padStart(16, 'a'));
+  const seeded = [{ t: now - 8 * 864e5, h: 1, e: envelope('b'.repeat(16), [['lv', 1, 2]]) },
+    ...ids.map((b, i) => ({ t: now - 36e5 + i, h: 1, e: envelope(b, Array.from({ length: 200 }, () => most)) }))];
+  const size = q => 1 + q.reduce((n, x) => n + JSON.stringify(x).length + 1, 0);
+  while (size(seeded.slice(1)) > 131072) seeded.at(-1).e.ev.pop();
+  await page.evaluate(([key, q]) => localStorage.setItem(key, JSON.stringify(q)), [qKey(INGEST), seeded]);
+  await page.goto(origin + '/');
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 1, 'the first send');
+  await inFlight(page);
+  const stored = await queue(page);
+  assert.deepEqual(stored.map(x => x.e.b).slice(0, -1), ids.slice(1), 'the 8-day-old batch and the oldest big one went');
+  like(stored.at(-1).e.ev, [['ss', 0, 0, -1, -1, 0, 0, 0]]);
+  assert.equal((await dx(page)).x, 0, 'and the teacher page is not told that play was dropped');
+  // A batch no page ever handed over is lost when it turns 7 days old, and the record says when.
+  const late = now - 8 * 864e5;
+  await page.evaluate(([key, x]) => localStorage.setItem(key, JSON.stringify([x, ...JSON.parse(localStorage.getItem(key))])),
+    [qKey(INGEST), { t: late, e: envelope('c'.repeat(16), [['lv', 1, 2]]) }]);
+  await page.clock.runFor(20000);
+  await until(() => state.posts.length === 2, 'the retry');
+  await inFlight(page);
+  assert.equal(JSON.parse(state.posts[1].body).b, ids[1], 'it is not sent');
+  assert.equal((await dx(page)).x, late + week);
+});
+
 test('a hidden page sends what waits by fetch with keepalive, unloading ends the session, offline keeps the queue, and no cookie goes', async t => {
   const state = await setup(t), { page } = state;
   // A cookie of the ingest server (a district sign-in, a load balancer's) goes on
@@ -629,7 +1032,9 @@ test('a hidden page sends what waits by fetch with keepalive, unloading ends the
   assert.match(state.posts[0].headers['content-type'], /^text\/plain/);
   const first = JSON.parse(state.posts[0].body);
   like(first.ev, [['ss', 0, 0, -1, -1, 0, 0, 0]]);
-  assert.equal(await queue(page), null, 'a batch handed to fetch is not kept');
+  // Kept until the server's answer, which reaches the hidden page: then it goes.
+  await page.waitForFunction(key => localStorage.getItem(key) === null, qKey(INGEST));
+  like(await dx(page), { v: 1, u: INGEST, ok: pos, f: 0, k: '', at: 0, x: 0 }, 'the delivery is noted for the teacher page');
   await setHidden(page, false);
 
   // A game, then the page unloads: the open game closes and the session ends at once.
@@ -645,20 +1050,24 @@ test('a hidden page sends what waits by fetch with keepalive, unloading ends the
   assert.equal(last.s, first.s, 'the same session');
   like(last.ev.slice(-2), [['gx', int, 1, 'air-hockey', 0, zeros(6), zeros(4)], ['se', int, 0, 'u']]);
   assert.ok(allEvents(state).some(ev => ev[0] === 'go' && ev[3] === 'air-hockey'));
-  assert.equal(await queue(page), null);
+  // The page went before the answer could come: the queue keeps what it handed to fetch,
+  // for the next page (the server keeps a batch once), marked as handed over as the page
+  // went, so the teacher page does not count it as never sent.
+  assert.deepEqual((await queue(page)).map(x => x.e.b), unload.map(p => JSON.parse(p.body).b));
+  assert.ok((await queue(page)).every(x => x.h === 1), 'marked h: 1');
 
-  // Offline: nothing goes and the batch waits in the queue.
+  // Offline: nothing goes and the batches wait in the queue.
   const sent = state.posts.length;
   await page.goto(origin + '/');
   await page.evaluate(() => Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false }));
   await setHidden(page, true);
-  like((await queue(page)).map(x => x.e.ev), [[['ss', 0, 0, -1, -1, 0, 0, 0]]]);
+  like((await queue(page)).map(x => x.e.ev.at(-1)[0]), [...unload.map(p => JSON.parse(p.body).ev.at(-1)[0]), 'ss']);
   assert.equal(state.posts.length, sent, 'nothing goes while offline');
   for (const p of state.posts) assert.equal(p.headers.cookie, undefined, 'no cookie, neither while the page lives nor as it unloads');
   await checkBatches(page, batches(state));
 });
 
-test('a hidden page hands fetch only what fits in 60 KB of keepalive bodies in flight, oldest first, and keeps the rest', async t => {
+test('a hidden page hands fetch only what fits in 60 KB of keepalive bodies in flight, oldest first, and keeps every batch until it is answered', async t => {
   const state = await setup(t, { clock: true, answer: n => n === 1 ? 'hang' : 204 }), { page } = state;
   await page.clock.pauseAt(new Date(Date.now() + 60000));
   await page.goto(origin + '/seed.html');
@@ -680,13 +1089,15 @@ test('a hidden page hands fetch only what fits in 60 KB of keepalive bodies in f
   assert.deepEqual(state.posts.map(p => JSON.parse(p.body).b), ids.slice(0, 2), 'only one more fits beside the one in flight');
   assert.ok(state.posts.every(p => p.type === 'fetch'));
   let stored = await queue(page);
-  assert.deepEqual(stored.map(x => x.e.b).slice(0, -1), [ids[0], ids[2], ids[3]], 'the batch in flight and every batch not handed to fetch stay');
+  assert.deepEqual(stored.map(x => x.e.b).slice(0, -1), [ids[0], ids[2], ids[3]], 'only the answered batch is gone; the one in flight and the rest stay');
   like(stored.at(-1).e.ev, [['ss', 0, 0, -1, -1, 0, 0, 0]]);
-  // That send was answered, so its bytes are free again: the page hidden once more sends the next.
+  // That send was answered, so its bytes are free again: the page hidden once more sends the
+  // next, and not the one still in flight.
   await setHidden(page, false);
   await setHidden(page, true);
   await until(() => state.posts.length === 3, 'the next hidden page\'s send');
   assert.equal(JSON.parse(state.posts[2].body).b, ids[2]);
+  await page.waitForFunction(() => window.fetched === 2);
   stored = await queue(page);
   assert.deepEqual(stored.map(x => x.e.b).slice(0, -1), [ids[0], ids[3]]);
   serverKeeps(batches(state));
@@ -730,10 +1141,10 @@ test('a copy of the site elsewhere on this origin, built with another address, n
   await until(() => state.posts.length === 3, 'the second copy\'s next send');
   await page.waitForFunction(() => window.fetched === 2);
   like((await queue(page, OTHER)).map(x => x.e.ev), [[['lv', int, 3]]]);
-  assert.deepEqual(await tmKeys(page), [qKey(INGEST), qKey(OTHER), 'sg:site:tm:on'].sort());
+  assert.deepEqual(await tmKeys(page), [qKey(INGEST), qKey(OTHER), 'sg:site:tm:dx', 'sg:site:tm:on'].sort());
   await page.evaluate(() => localStorage.setItem('sg:site:statsmeta', JSON.stringify({ pc: { id: 'pcwxyz' }, off: true, offSince: Date.now() })));
   assert.equal(await page.evaluate(() => SGTelemetry.active()), false);
-  assert.deepEqual(await tmKeys(page), [], 'both queues and the note are gone');
+  assert.deepEqual(await tmKeys(page), [], 'both queues and the notes are gone');
   serverKeeps(batches(state));
 });
 
@@ -767,8 +1178,219 @@ test('a portal tab of a build before wire version 3, still open on this PC, neve
   await page.waitForFunction(() => window.fetched === 3);
   assert.deepEqual(bare(JSON.parse(state.posts[1].body)), bare(waiting));
   assert.equal(state.posts[2].body, JSON.stringify(own.e));
-  assert.deepEqual(await tmKeys(page), ['sg:site:tm:on'], 'nothing waits, and the older key is gone');
+  assert.deepEqual(await tmKeys(page), ['sg:site:tm:dx', 'sg:site:tm:on'], 'nothing waits, and the older key is gone');
   serverKeeps(batches(state));
+});
+
+test('a portal tab of the first v3 build, still open on this PC, never drops this build\'s batches when it is hidden, and its own join them', async t => {
+  // That build (before 31 October 2026) queued in sg:site:tm:q3:<hash>, and a hidden page
+  // of it removed every batch it handed to fetch at once, without waiting for an answer.
+  let down = true;
+  const state = await setup(t, { clock: true, answer: () => down ? 'abort' : 204 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/');
+  // The school filter blocks the server: this build's session start waits in its queue.
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 1, 'the first send');
+  await inFlight(page);
+  const waiting = JSON.parse(state.posts[0].body);
+  const old = await state.context.newPage();
+  await old.goto(origin + '/seed.html');
+  const now = await old.evaluate(() => Date.now());
+  const own = b => ({ t: now, w0: now, e: { v: 3, b, s: 'fedcbafedcba', k: 'src', m: 'web', a: '', d: [4, 4, 1920], u: '', p: '', z: '', ev: [['lv', 5, 2]] } });
+  // What that tab does with its key: it queues a batch of its own, and when it is hidden it
+  // hands every batch there to fetch and writes the key back without them.
+  const oldTab = {
+    queue: x => old.evaluate(([key, x]) => localStorage.setItem(key, JSON.stringify((JSON.parse(localStorage.getItem(key)) || []).concat(x))), [q3Key(INGEST), x]),
+    hide: () => old.evaluate(key => localStorage.removeItem(key), q3Key(INGEST))
+  };
+  await oldTab.queue(own('e'.repeat(16)));
+  await oldTab.hide();
+  assert.deepEqual((await queue(page)).map(x => x.e), [bare(waiting)], 'this build\'s batch is still waiting');
+  // A batch that tab queues joins this build's queue at this build's next send, and its key goes.
+  await oldTab.queue(own('f'.repeat(16)));
+  await page.clock.runFor(20000);
+  await until(() => state.posts.length === 2, 'the retry');
+  await inFlight(page);
+  assert.equal(await tm(page, q3Key(INGEST)), null, 'the older key is gone');
+  assert.deepEqual((await queue(page)).map(x => x.e.b), [waiting.b, 'f'.repeat(16)]);
+  await oldTab.hide();
+  assert.deepEqual((await queue(page)).map(x => x.e.b), [waiting.b, 'f'.repeat(16)], 'hiding that tab again drops nothing');
+  // The filter lets the server through: both go, oldest first, as they were queued.
+  down = false;
+  await page.clock.runFor(40000);
+  await until(() => state.posts.length === 4, 'both batches');
+  await inFlight(page);
+  assert.deepEqual(state.posts.slice(2).map(p => JSON.parse(p.body).b), [waiting.b, 'f'.repeat(16)]);
+  assert.deepEqual(bare(JSON.parse(state.posts[3].body)), own('f'.repeat(16)).e);
+  assert.deepEqual(await tmKeys(page), ['sg:site:tm:dx', 'sg:site:tm:on'], 'nothing waits');
+  serverKeeps(batches(state));
+});
+
+// What the teacher page finds in older builds' keys, written as those builds write them.
+const storage = p => p.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map(k => [k, localStorage.getItem(k)])));
+const v3At = (b, t) => ({ t, w0: t, e: { v: 3, b, s: 'fedcbafedcba', k: 'src', m: 'web', a: '', d: [4, 4, 1920], u: '', p: '', z: '', ev: [['lv', 5, 2]] } });
+const seed = (page, items) => page.evaluate(items => items.forEach(([k, v]) => localStorage.setItem(k, v)), items);
+
+test('the teacher page only reads what older builds\' tabs queued: it counts it, its test sends only this build\'s batches and says what still waits', async t => {
+  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? HEALTH : 204 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/seed.html');
+  const now = await page.evaluate(() => Date.now());
+  // A portal tab of a build before wire version 3 and one of the first v3 build, still open
+  // on the PC, each with a batch in its own key; a portal page of this build ran too: it
+  // noted the address and left a newer batch.
+  const v2 = { t: now - 2 * 36e5, e: { v: 2, b: 'f'.repeat(16), s: '0123456789ab', k: 'src', m: 'web', a: '', d: [4, 4, 1920], ev: [['lv', 5, 2]] } };
+  const v3 = v3At('e'.repeat(16), now - 36e5), mine = v3At('1'.repeat(16), now);
+  await seed(page, [[oldKey(INGEST), JSON.stringify([v2])], [q3Key(INGEST), JSON.stringify([v3])], [qKey(INGEST), JSON.stringify([mine])],
+    ['sg:site:tm:dx', JSON.stringify({ v: 1, u: INGEST, ok: 0, f: 0, k: '', at: 0, x: 0 })]]);
+  const before = await storage(page);
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  // The box counts all three, dated from the oldest (no closing page sent it).
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: 0, f: 0, k: '', at: 0, x: 0, n: 3, t: v2.t, o: v2.t });
+  assert.deepEqual(await storage(teacher), before, 'reading moved nothing: each older key stays where its tab reads it');
+  // The test sends only this build's batch, and counts the others as still waiting.
+  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'ok', host: 'ingest.test', reached: true, sent: 1, n: 2 });
+  assert.deepEqual(state.posts.map(p => p.method + ' ' + p.url), ['GET https://ingest.test/v1/health', 'POST ' + INGEST]);
+  assert.deepEqual(bare(JSON.parse(state.posts[1].body)), mine.e);
+  assert.deepEqual([await tm(teacher, oldKey(INGEST)), await tm(teacher, q3Key(INGEST))], [before[oldKey(INGEST)], before[q3Key(INGEST)]],
+    'the older tabs\' batches are still in their keys');
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: pos, f: 0, k: '', at: 0, x: 0, n: 2, t: v2.t, o: v2.t });
+  serverKeeps(batches(state));
+  await teacher.close();
+});
+
+test('the teacher\'s test ends a failure by health alone only when nothing waits, older builds\' batches included', async t => {
+  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? HEALTH : 'abort' }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/seed.html');
+  const now = await page.evaluate(() => Date.now());
+  // The school filter lets the health check through and stops what is sent: a portal page of
+  // this build noted it, and two batches wait in the key of a first v3 build's tab, which
+  // backs off.
+  const old = [v3At('2'.repeat(16), now - 2 * 36e5), v3At('3'.repeat(16), now - 36e5)];
+  const failing = { v: 1, u: INGEST, ok: now - 2 * 864e5, f: now - 3 * 36e5, k: 'network', at: now - 6e5, x: 0 };
+  await seed(page, [[q3Key(INGEST), JSON.stringify(old)], ['sg:site:tm:dx', JSON.stringify(failing)]]);
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: failing.ok, f: failing.f, k: 'network', at: failing.at, x: 0, n: 2, t: old[0].t, o: old[0].t });
+  // The test has nothing of this build's to send, so it asks health alone: that the server
+  // answers ends no failure, and the result says that two still wait.
+  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'ok', host: 'ingest.test', reached: true, sent: 0, n: 2 });
+  assert.deepEqual(state.posts.map(p => p.method + ' ' + p.url), ['GET https://ingest.test/v1/health']);
+  assert.deepEqual(await dx(teacher), failing, 'the failure still dates from when it began');
+  assert.deepEqual(JSON.parse(await tm(teacher, q3Key(INGEST))), old);
+  await teacher.close();
+});
+
+test('a batch the server refuses in the teacher\'s test stays a refusal: neither health, a later delivery nor a later failure ends it, and the result says how many arrived', async t => {
+  let refused = [], later = 204;
+  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? HEALTH : refused.includes(JSON.parse(post.body).b) ? serverError(400, 'envelope') : later }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/seed.html');
+  const now = await page.evaluate(() => Date.now());
+  // A portal page of this build noted the address, had a batch delivered a day ago, and
+  // left one that the server answers with its JSON 400 (a client and a server of versions
+  // that do not match).
+  const delivered = { v: 1, u: INGEST, ok: now - 864e5, f: 0, k: '', at: 0, x: 0 };
+  refused = ['4'.repeat(16)];
+  await seed(page, [[qKey(INGEST), JSON.stringify([v3At('4'.repeat(16), now - 36e5)])], ['sg:site:tm:dx', JSON.stringify(delivered)]]);
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  const check = () => teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve)));
+  let n = state.posts.length;
+  const since = () => state.posts.slice(n).map(p => p.method + ' ' + p.url);
+  // The batch is gone, as from the portal; that health answered ends nothing, and the
+  // result is the refusal, not «nothing was waiting».
+  like(await check(), { k: 'refused', host: 'ingest.test', reached: true, sent: 0, n: 0 });
+  assert.deepEqual(since(), ['GET https://ingest.test/v1/health', 'POST ' + INGEST]);
+  assert.equal(await queue(teacher), null);
+  like(await dx(teacher), { v: 1, u: INGEST, ok: delivered.ok, f: now, k: 'refused', at: now, x: 0 });
+  // An older batch refused, a newer one delivered 15 s later: both go, the record notes the
+  // delivery and still ends with the refusal, dated when it came, and the result counts
+  // what arrived.
+  n = state.posts.length;
+  refused = ['6'.repeat(16)];
+  await seed(teacher, [[qKey(INGEST), JSON.stringify([v3At('6'.repeat(16), now - 2 * 36e5), v3At('7'.repeat(16), now - 36e5)])]]);
+  await teacher.evaluate(() => {
+    const realFetch = window.fetch;
+    window.fetch = (url, init) => init && init.body && JSON.parse(init.body).b === '7'.repeat(16)
+      ? new Promise(resolve => { window.release = () => resolve(realFetch(url, init)); }) : realFetch(url, init);
+    window.result = null;
+    SGTelemetry.check(r => { window.result = r; });
+  });
+  await teacher.waitForFunction(() => !!window.release);
+  await teacher.clock.runFor(15000);
+  await teacher.evaluate(() => window.release());
+  await teacher.waitForFunction(() => window.result !== null);
+  like(await teacher.evaluate(() => window.result), { k: 'refused', host: 'ingest.test', reached: true, sent: 1, n: 0 });
+  assert.deepEqual(since(), ['GET https://ingest.test/v1/health', 'POST ' + INGEST, 'POST ' + INGEST]);
+  assert.deepEqual(batches(state).slice(-2).map(b => b.b), ['6'.repeat(16), '7'.repeat(16)], 'oldest first');
+  assert.equal(await queue(teacher), null);
+  const end = now + 15000;
+  like(await dx(teacher), { v: 1, u: INGEST, ok: end, f: end, k: 'refused', at: now, x: 0 });
+  // A refusal, then a batch that fails another way (a 5xx, or no answer within 20 s): the
+  // result and the record are still the refusal, and that batch waits.
+  for (const answer of [serverError(503), 'hang']) {
+    n = state.posts.length;
+    later = answer;
+    refused = ['8'.repeat(16)];
+    await seed(teacher, [[qKey(INGEST), JSON.stringify([v3At('8'.repeat(16), now - 2 * 36e5), v3At('9'.repeat(16), now - 36e5)])]]);
+    const at = await teacher.evaluate(() => Date.now());
+    await teacher.evaluate(() => { window.result = null; SGTelemetry.check(r => { window.result = r; }); });
+    await until(() => state.posts.length === n + 3, 'the batch after the refusal');
+    if (answer === 'hang') await teacher.clock.runFor(20000);
+    await teacher.waitForFunction(() => window.result !== null);
+    like(await teacher.evaluate(() => window.result), { k: 'refused', host: 'ingest.test', reached: true, sent: 0, n: 1 }, String(answer.status || answer));
+    assert.deepEqual(since(), ['GET https://ingest.test/v1/health', 'POST ' + INGEST, 'POST ' + INGEST]);
+    assert.deepEqual((await queue(teacher)).map(x => x.e.b), ['9'.repeat(16)], 'the other batch still waits');
+    like(await dx(teacher), { v: 1, u: INGEST, ok: end, f: at, k: 'refused', at, x: 0 }, 'the record after ' + (answer.status || answer));
+  }
+  await teacher.close();
+});
+
+// js/telemetry.js of the first v3 build, the last one published before the q4 queue (CI
+// checkouts without history skip this; the tests above seed its key as it writes it).
+const FIRST_V3 = 'b713f12';
+const firstV3 = (() => {
+  const shown = spawnSync('git', ['show', `${FIRST_V3}:js/telemetry.js`], { cwd: repo, encoding: 'utf8' });
+  return shown.status === 0 && shown.stdout.includes("Q = TM + 'q3:'") ? shown.stdout : null;
+})();
+
+test('a portal tab of the first v3 build, still open on this PC, sends what it queued itself after the teacher page counted it',
+  { skip: !firstV3 && `commit ${FIRST_V3} is not in this checkout (git show failed)` }, async t => {
+  let down = true;
+  const state = await setup(t, { clock: true, answer: () => down ? 'abort' : 204 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  // That build's portal tab, never reloaded since the update: the school filter blocks its
+  // first send, so its session's start waits in its own key and goes again after 20 s.
+  await page.goto(origin + '/seed.html');
+  await page.addScriptTag({ content: firstV3 });
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 1, 'the old tab\'s first send');
+  await inFlight(page);
+  const old = JSON.parse(await tm(page, q3Key(INGEST)));
+  like(old.map(x => x.e.ev.map(ev => ev[0])), [['ss']]);
+  // A portal page of this build ran on the PC too and noted the address.
+  await seed(page, [['sg:site:tm:dx', JSON.stringify({ v: 1, u: INGEST, ok: 0, f: 0, k: '', at: 0, x: 0 })]]);
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: 0, f: 0, k: '', at: 0, x: 0, n: 1, t: old[0].t, o: old[0].t });
+  // The filter lets the server through: that tab's retry finds its batch where it left it.
+  down = false;
+  await page.clock.runFor(20000);
+  await until(() => state.posts.length === 2, 'the old tab\'s retry');
+  await inFlight(page);
+  assert.deepEqual(bare(JSON.parse(state.posts.at(-1).body)), old[0].e);
+  assert.equal(await tm(page, q3Key(INGEST)), null, 'delivered, and gone');
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: 0, f: 0, k: '', at: 0, x: 0, n: 0, t: 0, o: 0 });
+  serverKeeps(batches(state));
+  await teacher.close();
 });
 
 test('each player gets a new session: the old one ends after its game with why it ended, and a band change marks later batches', async t => {
@@ -970,7 +1592,7 @@ test('stopping statistics in another tab drops what waits and tells the open gam
   await teacher.evaluate(() => localStorage.setItem('sg:site:statsmeta', JSON.stringify({ pc: { id: 'pcwxyz' }, off: true, offSince: Date.now() })));
   await frame.waitForFunction(() => window.prefs.at(-1).telemetry === false);
   assert.equal(await page.evaluate(() => SGTelemetry.active()), false);
-  assert.deepEqual(await tmKeys(page), [], 'the note and the queue are gone');
+  assert.deepEqual(await tmKeys(page), [], 'the notes and the queue are gone');
   await home(page);
   await setHidden(page, true);
   await page.waitForTimeout(1500);
@@ -1003,7 +1625,8 @@ test('a code per profile, stable across sessions and reloads, none for a guest, 
   await page.reload();
   await page.clock.fastForward(60000);
   await until(() => bySession(batches(state)).size === 7, 'every session');
-  const list = batches(state);
+  // Each reload hands what waits to fetch as the page goes, and keeps it for the next page.
+  const list = once(batches(state));
   await checkBatches(page, list);
   assert.deepEqual([...new Set(list.map(b => b.p))], [pc], 'one PC code, on every batch');
   const sessions = [...bySession(list)].map(([s, events]) => [list.find(b => b.s === s).u, events.filter(ev => ev[0] !== 'se')]);

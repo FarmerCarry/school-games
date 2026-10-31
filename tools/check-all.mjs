@@ -80,8 +80,9 @@ function walk(dir) {
 // Nothing on the site goes over the network (play statistics stay on each PC) except
 // the portal's anonymous telemetry sink, js/telemetry.js (tools/lib/network-rules.mjs),
 // so the same static checks cover games, the shared scripts and the root pages and
-// portal scripts. The fast build inlines the sender into the portal: only an exact
-// copy of js/telemetry.js, inlined as tools/build.mjs does it, is checked as the sender.
+// portal scripts. The fast build inlines the sender into the portal and the teacher page
+// (which runs its connection test): only an exact copy of js/telemetry.js, inlined as
+// tools/build.mjs does it, is checked as the sender.
 let senderCopies;
 function inlinedSender() {
   if (senderCopies) return senderCopies;
@@ -100,7 +101,7 @@ function staticChecks(label, file) {
   const site = rel.split(path.sep).join('/');
   if (/type\s*=\s*["']module["']/.test(src)) add(label, `${rel}: uses ES modules`);
   if (/^\s*import\s[\w{*]/m.test(src)) add(label, `${rel}: import statement`);
-  const { rest, sender } = built && site === 'index.html' ? splitSender(src, inlinedSender()) : { rest: src, sender: '' };
+  const { rest, sender } = built && (site === 'index.html' || site === 'teacher.html') ? splitSender(src, inlinedSender()) : { rest: src, sender: '' };
   const network = [...networkUse(site, rest), ...networkUse(SENDER, sender)];
   if (network.length) add(label, `${rel}: network API (${network[0]})`);
   const urls = src.match(/(?:src|href)\s*=\s*["']https?:\/\/[^"']+/g);
