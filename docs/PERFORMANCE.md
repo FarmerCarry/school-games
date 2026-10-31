@@ -760,3 +760,29 @@ above: the measured size rounded up to the next 1,000 bytes plus 1,000.
 | Offline precache | 5,306,831 | 5,296,000 | 5,308,000 |
 
 No other limit changes, and nothing is added to any page beyond the two Kit changes.
+
+## Sneaky Levels worlds 6–12, 31 October 2026
+
+المراحل الماكرة gains worlds 6–12 (levels 31–100): ice, keys, boxes, portals, music
+blocks, ghosts, and the Sneaky King. Each world is its own script, inlined into the
+one game file like the rest of the game. Nothing new is fetched at runtime, and a
+frame still draws the baked backdrop plus the traps that move. The game still plays
+no background music. Measured with the Linux minified build, against current main
+(111,430 bytes, gzip 38,236):
+
+| File | Before bytes | After bytes | Before gzip | After gzip | New limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Sneaky Levels | 111,430 | 254,052 | 38,236 | 86,271 | 254,500 (was 113,000) |
+| Offline precache, 48 files | 5,307,062 | 5,449,684 |  |  | 5,450,000 (was 5,308,000) |
+
+The game file grew by 142,622 bytes. 139,699 of that is the seven minified world
+scripts (levels, Arabic hints, recorded solutions, and each world's mechanic).
+The rest, 2,923 bytes, is the shared plug-in hooks and the scrolling 100-level
+select.
+
+The same 142,622 bytes are the whole precache growth: the built game file is the
+only cached file that changed. No other budget changed.
+
+Both new limits are the measured size rounded up, Sneaky Levels to the next 500
+bytes and the precache to the next 1,000. That leaves 448 bytes (0.18%) and 316
+bytes (0.006%). A small text edit can exceed either limit.

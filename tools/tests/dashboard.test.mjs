@@ -949,6 +949,14 @@ test('the keyboard reads the heatmap cell by cell and a column chart column by c
     const { page } = s;
     await page.goto(site.origin + '/?demo#/overview');
     await waitForView(page, 'overview');
+    // The first layout schedules a chart redraw 120ms later, and that redraw hides
+    // the tooltip. A fast run can arrow into a cell before that timer fires.
+    await page.waitForFunction(() => {
+      const width = document.getElementById('dash').clientWidth;
+      const now = performance.now();
+      if (window.__dashWidth !== width) { window.__dashWidth = width; window.__dashSince = now; return false; }
+      return now - window.__dashSince > 180;
+    });
     const start = page.locator('#when-card .hm-cell[tabindex="0"]');
     assert.equal(await start.count(), 1, 'one tab stop in the grid');
     await start.focus();
