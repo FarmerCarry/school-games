@@ -890,7 +890,8 @@ named this project's website in every copy; its second round, that the teacher's
 with only an older build's batches waiting, ended a recorded failure and said that
 nothing waited; its third, that a test whose batches the server all refused said that
 nothing waited and ended the refusal; its fourth, that a batch failing another way after
-a refusal lost it (docs/TELEMETRY.md, "Delivery"). Measured with
+a refusal lost it; its fifth, that the answer after a refusal said everything else had
+arrived while a batch still waited (docs/TELEMETRY.md, "Delivery"). Measured with
 the Linux minified build, the school's `SG_TELEMETRY_URL` and the `SG_SITE_URL` the
 workflow now gives this repository (`https://FarmerCarry.github.io/school-games/`),
 against `fcdfd8c`:
@@ -901,13 +902,14 @@ against `fcdfd8c`:
   `offline` kind and the test's answer without a connection, the handed-over mark
   checked before play is called lost, and the test keeping a refusal).
   No work is added to a child's page: one comparison per dropped batch and per failure.
-* **The teacher page** grows by 1,088 bytes, from 120,581 to 121,669, within its limit:
-  the same 472 bytes, 548 of `js/teacher.js` (the two Arabic messages for a PC without a
+* **The teacher page** grows by 1,216 bytes, from 120,581 to 121,797, within its limit:
+  the same 472 bytes, 676 of `js/teacher.js` (the two Arabic messages for a PC without a
   connection, the folder message without an address, the test's answer when only an
-  older build's batches wait, and what arrived beside a refusal) and the 68 bytes of
-  `window.SG_SITE` before its script (1,020 bytes without `SG_SITE_URL`).
-* The offline cache grows by 1,560 bytes, from 5,335,420 to 5,336,980 (both pages, each
-  cached once), 980 bytes over its limit.
+  older build's batches wait, and what arrived and what still waits beside a refusal)
+  and the 68 bytes of `window.SG_SITE` before its script (1,148 bytes without
+  `SG_SITE_URL`).
+* The offline cache grows by 1,688 bytes, from 5,335,420 to 5,337,108 (both pages, each
+  cached once), 1,108 bytes over its limit.
 
 The offline cache follows the rule above: the measured size rounded up to the next 1,000
 bytes plus 1,000. The portal's and the teacher page's limits stay.
@@ -915,8 +917,8 @@ bytes plus 1,000. The portal's and the teacher page's limits stay.
 | Measurement | Before bytes | After bytes | Before limit | New limit |
 | --- | ---: | ---: | ---: | ---: |
 | Portal | 401,118 | 401,590 | 403,000 | 403,000 |
-| Teacher page | 120,581 | 121,669 | 122,000 | 122,000 |
-| Offline precache | 5,335,420 | 5,336,980 | 5,336,000 | 5,338,000 |
+| Teacher page | 120,581 | 121,797 | 122,000 | 122,000 |
+| Offline precache | 5,335,420 | 5,337,108 | 5,336,000 | 5,339,000 |
 
 No game page changes, and no request, font, library or third-party code is added to any
 page.
