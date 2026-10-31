@@ -135,7 +135,7 @@ test('the fast build ships itself as one school-games/ folder in a ZIP that the 
   }
   const sandbox = { window: {} };
   vm.runInNewContext(fs.readFileSync(path.join(repo, 'js/catalog.js'), 'utf8'), sandbox);
-  for (const file of ['index.html', 'teacher.html', 'sw.js', 'favicon.svg', 'manifest.webmanifest', 'lib/three/three.min.js', 'lib/three/LICENSE',
+  for (const file of ['index.html', 'teacher.html', 'sw.js', 'favicon.svg', 'manifest.webmanifest', 'lib/three/three.min.js', 'lib/three/LICENSE', 'shared/artkit.js',
     ...sandbox.window.GAMES.map(game => 'games/' + game.slug + '/index.html')]) {
     assert.ok(names.includes(file), 'the folder has ' + file);
   }

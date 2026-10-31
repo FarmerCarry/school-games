@@ -27,6 +27,14 @@ const holdUntilChanged = (key, snapshot) => async page => {
     `${key}: held input must change gameplay (${before})`)(page);
 };
 const click = selector => page => clickControl(page, selector);
+// Pointer scenarios were authored at 1280×720. Kit.fit and the pizza stage letterbox
+// that logical view, so a 1024×576 window needs the same point scaled and centred.
+function pagePoint(page, x, y) {
+  const vp = typeof page.viewportSize === 'function' ? page.viewportSize() : null;
+  const width = vp && vp.width || 1280, height = vp && vp.height || 720;
+  const scale = Math.min(width / 1280, height / 720);
+  return { x: (width - 1280 * scale) / 2 + x * scale, y: (height - 720 * scale) / 2 + y * scale };
+}
 const sequence = (...steps) => async page => { for (const step of steps) await step(page); };
 const move = async page => { await page.mouse.move(400, 220, { steps: 8 }); await page.waitForTimeout(240); };
 const defaults = (start, active, snapshot, input, pause, paused, restart, reset, extra = {}) =>
@@ -71,7 +79,7 @@ export const scenarios = {
   'pool-party': defaults(['#btnPlay'], `${g}.screen === 'game'`, `[${g}.balls(),${g}.aim,${g}.phase]`, holdUntilChanged('ArrowRight', `${g}.aim`), '#pauseBtn', `${g}.screen === 'pause'`, '#pRestart', `${g}.phase === 'aim' && ${g}.balls().length === 16`, { ready: `${g}.phase === 'aim'` }),
   'skybound-golf': defaults(['#play'], `document.getElementById('title-screen').hidden && document.getElementById('modal').hidden`, `document.getElementById('meters').textContent`, click('#game'), '#pause', `!document.getElementById('pause-content').hidden && !document.getElementById('modal').hidden`, '#restart', `document.getElementById('ui').dataset.phase === 'ready' && document.getElementById('meters').textContent === '0'`),
   'critter-mart': defaults(['#playBtn'], `${g}.mode === 'play'`, select(`${g}.state()`, ['player','coins','play','served']), hold('ArrowRight'), '#pauseBtn', `${g}.mode === 'pause'`, '#resumeBtn', `${g}.mode === 'play'`, { persistent: true }),
-  'pizza-clicker': defaults(['#bPlay'], `${g}.mode === 'play'`, `[${g}.S.pizzas,${g}.S.clicks]`, async page => { await page.mouse.click(840, 405); }, '#bPause', `${g}.mode === 'pause'`, '#bResume', `${g}.mode === 'play'`, { persistent: true }),
+  'pizza-clicker': defaults(['#bPlay'], `${g}.mode === 'play'`, `[${g}.S.pizzas,${g}.S.clicks]`, async page => { const p = pagePoint(page, 840, 405); await page.mouse.click(p.x, p.y); }, '#bPause', `${g}.mode === 'pause'`, '#bResume', `${g}.mode === 'play'`, { persistent: true }),
   'block-world': defaults(['#playBtn','#modeCrea'], `${g}.G.mode === 'play'`, `[${g}.player.x,${g}.player.y,${g}.G.tod]`, hold('ArrowRight'), '#pausebtn', `${g}.G.mode === 'pause'`, '#resumeBtn', `${g}.G.mode === 'play'`, { persistent: true, startIf: ['true', `${g}.G.mode === 'newworld'`] }),
   // Cake Guards: click a pad beside the road like a player, then pick popcorn from its menu.
   'cake-guards': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.coins,${g}.state.towers,${g}.state.time,${g}.state.wave]`, async page => {
@@ -93,8 +101,10 @@ export const scenarios = {
       return null;
     });
     if (!sh) { await page.waitForTimeout(180); return; }
-    await page.mouse.move([410,640,870][sh.slot],628); await page.mouse.down();
-    await page.mouse.move(392 + sh.c*62 + sh.w*31,34 + sh.r*62 + sh.h*31 + 18,{steps:12});
+    const from = pagePoint(page, [410, 640, 870][sh.slot], 628);
+    const to = pagePoint(page, 392 + sh.c * 62 + sh.w * 31, 34 + sh.r * 62 + sh.h * 31 + 18);
+    await page.mouse.move(from.x, from.y); await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 12 });
     await page.waitForTimeout(180); await page.mouse.up();
   }, '#btnPause', `${g}.state === 'pause'`, '#btnRestart', `${g}.run.score === 0`),
   'merge-2048': defaults(['#btnPlay'], `${g}.state().screen === 'play'`, select(`${g}.state()`, ['values','score','hist']), sequence(hold('ArrowLeft',80),hold('ArrowDown',80),hold('ArrowRight',80)), '#btnPause', `${g}.state().screen === 'pause'`, '#btnPauseRestart', `${g}.state().score === 0 && ${g}.state().hist === 0`),
@@ -117,8 +127,10 @@ export const scenarios = {
       const p = r.pts[Math.floor(r.pts.length / 2)]; return {x:p.x,y:p.y};
     });
     if (!point) { await page.waitForTimeout(180); return; }
-    await page.mouse.move(point.x-60,point.y); await page.mouse.down();
-    await page.mouse.move(point.x+60,point.y,{steps:15}); await page.mouse.up();
+    const from = pagePoint(page, point.x - 60, point.y);
+    const to = pagePoint(page, point.x + 60, point.y);
+    await page.mouse.move(from.x, from.y); await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 15 }); await page.mouse.up();
   }, '#bPause', `${g}.info().state === 'pause'`, '#pRestart', `${g}.info().world.stars === 0`, {
     // The sim does not step during the 0.55s intro, so world.frame stays 0.
     // The first step is the intro ending. A 650ms sleep can arrive before that.

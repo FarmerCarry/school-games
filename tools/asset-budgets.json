@@ -39,11 +39,12 @@
     "wacky-soccer": 160000
   },
   "threeBytes": 750000,
+  "artBytes": 14300,
   "fontBytes": {
     "baloo-bhaijaan-2-arabic-500-normal.woff2": 25000,
     "baloo-bhaijaan-2-arabic-700-normal.woff2": 25000,
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5450000
+  "precacheBytes": 5491000
 }

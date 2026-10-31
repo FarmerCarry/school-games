@@ -244,7 +244,21 @@ function cssFor(file, htmlDir) {
   return css.replace(/<\/(style)/gi, '<\\/$1');
 }
 
-/* Inline every local stylesheet and script of an html page (except three.js). */
+/* Inline every local stylesheet and script of an html page.
+ * three.js and the art kit stay external (one shared download, not 34 copies).
+ * tools/artkit-demo.html is a review page: it is not a game, portal or static,
+ * so the build never ships it. */
+const ART_REL = 'shared/artkit.js';
+let artBuilt = null;
+let artVersion = '';
+function loadArt() {
+  const file = path.join(ROOT, ART_REL);
+  if (!fs.existsSync(file)) return;
+  let code = read(file);
+  if (MINIFY) code = esbuild.transformSync(code, { loader: 'js', minify: true, target: 'chrome100', legalComments: 'none', charset: 'utf8' }).code;
+  artBuilt = code;
+  artVersion = crypto.createHash('sha256').update(code).digest('hex').slice(0, 8);
+}
 function inlinePage(htmlFile, extra) {
   const dir = path.dirname(htmlFile);
   let html = read(htmlFile);
@@ -256,20 +270,23 @@ function inlinePage(htmlFile, extra) {
   });
   html = html.replace(/<script\b([^>]*)>\s*<\/script>/gi, (tag, attrs) => {
     const src = (attrs.match(/\bsrc="([^"]+)"/i) || [])[1];
-    if (!src || !isLocal(src) || /(^|\/)lib\/three\//.test(src)) return tag;
+    if (!src || !isLocal(src) || /(^|\/)(lib\/three\/|shared\/artkit\.js)/.test(src)) return tag;
     if (extra && extra.skip && extra.skip.includes(src)) return '';
     if (attrs.replace(/\bsrc="[^"]+"/i, '').trim()) throw new Error(`${htmlFile}: unsupported script attributes: ${tag}`);
     let code = jsFor(path.resolve(dir, src));
     if (extra && extra.before && extra.before[src]) code = extra.before[src] + '\n' + code;
     return '<script>' + code + '</script>';
   });
-  const left = html.match(/<script\b[^>]*\bsrc="(?!(?:\.\.\/)*lib\/three\/)[^"]+"/gi);
+  if (artVersion) html = html.replace(/(\bsrc="(?:\.\.\/)*shared\/artkit\.js)(?:\?[^"]*)?"/gi, '$1?v=' + artVersion + '"');
+  if (/shared\/artkit\.js/.test(html) && artBuilt == null) throw new Error(htmlFile + ': shared/artkit.js is missing');
+  const left = html.match(/<script\b[^>]*\bsrc="(?!(?:\.\.\/)*(?:lib\/three\/|shared\/artkit\.js(?:\?[^"]*)?))[^"]+"/gi);
   if (left) throw new Error(`${htmlFile}: scripts left un-inlined: ${left.join(', ')}`);
   return html;
 }
 
 /* --------------------------------------------------------------- games */
 try {
+  loadArt();
   const cat = { window: {} };
   vm.runInNewContext(read(path.join(ROOT, 'js/catalog.js')), cat);
   const catalogSlugs = cat.window.GAMES.map(g => g.slug);
@@ -317,6 +334,7 @@ try {
   for (const f of fs.readdirSync(path.join(ROOT, 'shared/fonts'))) statics.push('shared/fonts/' + f);
   if (fs.existsSync(path.join(ROOT, 'icons'))) for (const f of fs.readdirSync(path.join(ROOT, 'icons'))) statics.push('icons/' + f);
   for (const f of statics) if (fs.existsSync(path.join(ROOT, f))) copy(f);
+  if (artBuilt != null) write(ART_REL, artBuilt);
   write('.nojekyll', '');
 
   /* ------------------------------------------------------ service worker */

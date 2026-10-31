@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { checkAssetBudgets } from '../asset-budgets.mjs';
 
 const hash = '0123456789abcdef';
-const measuredFiles = ['index.html', 'teacher.html', 'games/alpha/index.html', 'lib/three/three.min.js', 'shared/fonts/test.woff2'];
+const measuredFiles = ['index.html', 'teacher.html', 'games/alpha/index.html', 'lib/three/three.min.js', 'shared/artkit.js', 'shared/fonts/test.woff2'];
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-asset-budgets-'));
@@ -19,7 +19,7 @@ function fixture(t) {
     fs.writeFileSync(target, contents);
     return target;
   };
-  const config = { format: 1, portalBytes: 100, teacherBytes: 100, gameHtmlBytes: { alpha: 100 }, threeBytes: 100, fontBytes: { 'test.woff2': 100 }, precacheBytes: 1000 };
+  const config = { format: 1, portalBytes: 100, teacherBytes: 100, gameHtmlBytes: { alpha: 100 }, threeBytes: 100, fontBytes: { 'test.woff2': 100 }, artBytes: 100, precacheBytes: 1000 };
   const manifest = Object.fromEntries(measuredFiles.map(file => [file, hash]));
   const configPath = write('asset-budgets.json', JSON.stringify(config));
   const catalogPath = write('catalog.js', "window.GAMES=[{slug:'alpha'}];");
@@ -54,6 +54,18 @@ function metricFor(report, file) {
   assert.ok(metric, 'missing metric for ' + file);
   return metric;
 }
+
+test('the shared art kit has its own reviewed byte budget', t => {
+  const f = fixture(t);
+  const report = run(f);
+  assert.equal(report.passed, true, report.failures.join('\n'));
+  const art = report.metrics.find(metric => metric.name === 'shared:artkit');
+  assert.ok(art, 'shared:artkit is measured');
+  assert.deepEqual(art.files, ['shared/artkit.js']);
+  assert.equal(art.bytes, 100);
+  assert.equal(art.limitBytes, f.config.artBytes);
+  assert.ok(report.metrics.some(metric => metric.name === 'offline-precache' && metric.files.includes('shared/artkit.js')));
+});
 
 test('new hidden catalog games and fonts require their own reviewed budgets', t => {
   const f = fixture(t);
@@ -178,8 +190,8 @@ test('multiple budget failures are reported together with usable numeric measure
   f.config.precacheBytes = 500;
   f.saveConfig();
   const report = rejected(f);
-  assert.equal(report.metrics.filter(metric => !metric.passed).length, 6);
-  assert.ok(report.failures.length >= 6);
+  assert.equal(report.metrics.filter(metric => !metric.passed).length, 7);
+  assert.ok(report.failures.length >= 7);
   for (const metric of report.metrics) {
     assert.ok(Number.isFinite(metric.bytes));
     assert.ok(Number.isFinite(metric.limitBytes));

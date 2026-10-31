@@ -22,7 +22,7 @@ import { startTestServer } from './test-server.mjs';
 import { scenarios, prepareScenario, runScenario, performInput, ensureActive } from './game-scenarios.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const VIEWPORT = { width: 1280, height: 720 };
+const DEFAULT_VIEWPORT = { width: 1280, height: 720 };
 const sha256 = data => crypto.createHash('sha256').update(data).digest('hex');
 const round = value => +value.toFixed(3);
 const TIMINGS = ['loadMs', 'dclMs', 'firstUsefulMs', 'readyForStartMs', 'startRequestedMs', 'playableMs', 'startToPlayableMs', 'inputResponsiveMs', 'startToInputMs', 'scriptToInputMs'];
@@ -43,13 +43,22 @@ export function distribution(values) {
 }
 
 export function parseArgs(argv) {
-  const options = { samples: 1, seconds: 20, latency: 0, graphics: process.env.SG_GRAPHICS || 'software', headed: false, json: null, targets: [] };
+  const options = { samples: 1, seconds: 20, latency: 0, graphics: process.env.SG_GRAPHICS || 'software', headed: false, json: null, targets: [], cpuThrottle: 1, viewport: { ...DEFAULT_VIEWPORT } };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (['--json', '--samples', '--seconds', '--latency'].includes(arg)) {
       const value = argv[++i];
       if (!value || value.startsWith('--')) throw new Error(arg + ' requires a value');
       options[arg.slice(2)] = arg === '--json' ? value : Number(value);
+    } else if (arg === '--cpu-throttle') {
+      const value = Number(argv[++i]);
+      if (!Number.isSafeInteger(value) || value < 1) throw new Error('--cpu-throttle must be a positive integer');
+      options.cpuThrottle = value;
+    } else if (arg === '--viewport') {
+      const value = argv[++i] || '';
+      const match = /^(\d+)x(\d+)$/.exec(value);
+      if (!match || !Number(match[1]) || !Number(match[2])) throw new Error('--viewport must be WxH, for example 1024x576');
+      options.viewport = { width: Number(match[1]), height: Number(match[2]) };
     } else if (arg === '--native-gpu') options.graphics = 'native';
     else if (arg === '--headed') options.headed = true;
     else if (arg.startsWith('--')) throw new Error('Unknown option: ' + arg);
@@ -281,8 +290,8 @@ export async function main(argv = process.argv.slice(2)) {
   const { origin, close } = await startTestServer(root, { latency: options.latency, cacheControl: 'max-age=600' });
   let browser;
   const report = { format: 2, createdAt: new Date().toISOString(), build,
-    config: { ...options, targets, viewport: VIEWPORT, deviceScaleFactor: 1, serviceWorkers: 'block', cacheControl: 'max-age=600',
-      storage: 'reset before each cold and warm visit', cpuThrottle: 1, networkThrottle: 'none',
+    config: { ...options, targets, viewport: options.viewport, deviceScaleFactor: 1, serviceWorkers: 'block', cacheControl: 'max-age=600',
+      storage: 'reset before each cold and warm visit', cpuThrottle: options.cpuThrottle, networkThrottle: 'none',
       order: 'serial round-robin; rotate first target each repetition; one browser, fresh context per target/repetition',
       scenarioVersion: 'readiness-v2', scenarioSha256: sha256(fs.readFileSync(path.join(REPO, 'tools/game-scenarios.mjs'))),
       browserToolSha256: sha256(fs.readFileSync(path.join(REPO, 'tools/browser.mjs'))),
@@ -311,7 +320,7 @@ export async function main(argv = process.argv.slice(2)) {
     for (let repetition = 1; repetition <= options.samples; repetition++) {
       const shift = (repetition - 1) % targets.length;
       for (const target of [...targets.slice(shift), ...targets.slice(0, shift)]) {
-        const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, serviceWorkers: 'block' });
+        const context = await browser.newContext({ viewport: options.viewport, deviceScaleFactor: 1, serviceWorkers: 'block' });
         const row = { target, repetition, errors: [] };
         try {
           const s = scenarios[target];
@@ -323,6 +332,7 @@ export async function main(argv = process.argv.slice(2)) {
           page.on('pageerror', error => row.errors.push(String(error).split('\n')[0]));
           const session = await context.newCDPSession(page);
           await session.send('Network.enable'); await session.send('Performance.enable');
+          await session.send('Emulation.setCPUThrottlingRate', { rate: options.cpuThrottle });
           const url = target === 'portal' ? origin + '/index.html' : origin + `/games/${target}/index.html`;
           row.cold = await navigate(page, session, url, target);
           row.warm = await navigate(page, session, url, target);

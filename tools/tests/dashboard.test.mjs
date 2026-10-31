@@ -699,12 +699,16 @@ test('a period that reaches back before the update: play sessions per day, no ch
   assert.equal(await page.locator('#game-daily .table-host tbody tr').count(), 10, 'the days since the update');
   if (await page.locator('#funnel-card .card-sub').count()) assert.equal(await page.locator('#funnel-card .card-sub').textContent(), 'Tries of each level, in level order.');
   assert.doesNotMatch(await page.locator('#game-who').textContent(), /based on 0 children/, 'an age group nobody counted has no sample to be based on');
-  // Habits: the weeks of new and returning students start with the update's week.
+  // Habits: exactly the Sunday weeks from the update day through today, newest first.
   await page.goto(site.origin + '/#/habits');
   await waitForView(page, 'habits');
   await page.click('#habits-weeks .table-toggle');
   const weeks = await page.locator('#habits-weeks .table-host tbody th').allTextContents();
-  assert.ok(weeks.length >= 1 && weeks.length <= 2, weeks.join(' | '));
+  const weekLabel = iso => 'Week of ' + new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' });
+  const sunday = iso => dayBefore(iso, new Date(iso + 'T00:00:00Z').getUTCDay());
+  const expected = [];
+  for (let w = sunday(s.today()); dayBefore(w, -6) >= factsSince; w = dayBefore(w, 7)) expected.push(weekLabel(w));
+  assert.deepEqual(weeks, expected);
   // The update day is not in the period: nothing of it.
   s.mode.edit = null;
   await page.goto(site.origin + '/#/overview');

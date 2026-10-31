@@ -143,6 +143,9 @@ sizes, JavaScript execution time, or a browser's total network traffic.
   styles. The source catalog is checked every run, including hidden entries.
   Added games need an explicit limit; missing games and obsolete limits fail.
 - Shared library: `lib/three/three.min.js`, counted once in its own measurement.
+- Art kit: the minified `shared/artkit.js`, counted once as `shared:artkit` against
+  `artBytes`. It is external, so it is not copied into each game page. The cap is
+  14,500 bytes. Tier 0 still has to look like the new art, only cheaper to draw.
 - Fonts: each shipped WOFF/WOFF2/TTF/OTF/EOT file has an explicit limit. Added or
   removed fonts require a matching budget update. License text is not a font.
 - Offline precache: the sum of every unique file named in the generated
@@ -786,3 +789,40 @@ only cached file that changed. No other budget changed.
 Both new limits are the measured size rounded up, Sneaky Levels to the next 500
 bytes and the precache to the next 1,000. That leaves 448 bytes (0.18%) and 316
 bytes (0.006%). A small text edit can exceed either limit.
+
+## Shared art kit, 31 October 2026
+
+`shared/artkit.js` is the opt-in drawing kit (`Kit.art`) for the visual upgrade.
+It is one external file, minified like the other build scripts and precached
+once, on purpose: inlining it would copy the same bytes into every game. No
+game page loads it yet, and `init` is what turns the look on, so pages that
+have not moved over are unchanged. No per-game budget changes in this step.
+
+The file is procedural. There are no images and no new fonts. Glows, shadows
+and repeating backdrops are cached sprites. The quality manager starts one
+tier lower on a PC with at most two cores or 2 GB of device memory, remembers
+the tier in `Kit.store('art')`, and follows `prefers-reduced-motion`. Hit-stop
+changes drawing only.
+
+Measured with the Linux minified build. Before is the precache on current main
+(48 files). After adds this one file and nothing else: portal, teacher, every
+game and every font are the same size.
+
+| File | Before bytes | After bytes | New limit |
+| --- | ---: | ---: | ---: |
+| `shared/artkit.js` | — | 13,915 | `artBytes` 14,300 (was none; hard cap 14,500) |
+| Offline precache, 49 files | 5,449,684 | 5,463,599 | 5,491,000 (was 5,450,000) |
+
+The precache grew by exactly 13,915 bytes, the kit file. The new limit is that
+measured total plus about 0.5% (27,401 bytes, 0.50%). That headroom is for
+this shared file only. Later games still raise the precache by their own
+measured growth. The whole programme stays inside +350 KB over the 5,449,684
+baseline (ceiling about 5.80 MB). 14,300 is the measured kit plus 2.8%, under
+both the 3% review margin and the 14,500 cap.
+
+No throttled fps comparison belongs on this change: no game calls the kit yet,
+so a 4× CPU run would time the same pages as main. `tools/perf.mjs` now accepts
+`--cpu-throttle N` (CDP `Emulation.setCPUThrottlingRate`, recorded as
+`cpuThrottle`) and `--viewport WxH` for those later before/after runs.
+`tools/artkit-demo.html` is a review page and is not in the download or the
+service worker.

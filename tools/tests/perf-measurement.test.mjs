@@ -1,9 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { distribution, installObservers, summarize } from '../perf.mjs';
+import { distribution, installObservers, parseArgs, summarize } from '../perf.mjs';
 import { compareReports } from '../perf-compare.mjs';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
+
+test('cpu throttle and viewport parse, and malformed values are refused', () => {
+  const options = parseArgs(['--cpu-throttle', '4', '--viewport', '1024x576', '--samples', '1', 'portal']);
+  assert.equal(options.cpuThrottle, 4);
+  assert.deepEqual(options.viewport, { width: 1024, height: 576 });
+  assert.equal(options.targets[0], 'portal');
+  const defaults = parseArgs([]);
+  assert.equal(defaults.cpuThrottle, 1);
+  assert.deepEqual(defaults.viewport, { width: 1280, height: 720 });
+  assert.throws(() => parseArgs(['--cpu-throttle', '0']), /cpu-throttle/);
+  assert.throws(() => parseArgs(['--cpu-throttle', '1.5']), /cpu-throttle/);
+  assert.throws(() => parseArgs(['--viewport', 'big']), /viewport/);
+});
 
 test('measurement summaries retain unrounded median/spread and exclude absent values', () => {
   assert.deepEqual(distribution([4, 1, 9, 2, 3, null, undefined, NaN]), { n: 5, median: 3, min: 1, max: 9, p10: 1.4, p90: 7, mad: 1 });

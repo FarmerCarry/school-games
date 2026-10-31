@@ -59,6 +59,7 @@ time, after a 2 s tail). Any start in a window, or any output above −60 dBFS, 
 ```
 games/<slug>/            game code (UI layer calls Kit.stats / Kit.track / Kit.dda)
 shared/juice.js          Kit.juice  — procedural SFX engine (opt-in; portal + games)
+shared/artkit.js         Kit.art    — opt-in drawing kit (one shared file, not inlined)
 shared/kit.js            Kit        — lifecycle, input, audio graph, stats v1, and v2:
                                       Kit.profile, Kit.track, Kit.dda, sg:telemetry
 js/profiles.js           SGProfiles — picture profiles without names, age band, XP/levels
@@ -84,6 +85,8 @@ Kit is inlined into every game page, so every minified byte in `shared/kit.js` c
 * `shared/juice.js`: **≤ 4,500 minified bytes**, loaded only by pages that use it
   (`<script src="../../shared/juice.js">` after `kit.js`; the portal loads
   `shared/juice.js` before `js/site.js`).
+* `shared/artkit.js`: **≤ 14,500 minified bytes**, one external file (see "Art kit").
+  It is not inlined, so a byte there is paid once per PC, not once per game.
 * Per-game budgets in `tools/asset-budgets.json` are reviewed numbers: when a change
   legitimately grows a page, raise its budget to the new size plus a small margin and
   record it in `docs/PERFORMANCE.md`. Removing the academy (~171 KB) and the music
@@ -247,6 +250,65 @@ J.countdown(i)
 ```
 
 Every sound is a one-shot under 1.5 s. Juice never loops and has no music API.
+
+## Art kit (shared/artkit.js)
+
+`Kit.art` version 1. A classic script with no modules, loaded **after** `kit.js` and only by games that opt in:
+
+```html
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/artkit.js"></script>
+```
+
+The portal and `teacher.html` do not load it. Nothing runs at load: no timers, DOM nodes, storage, network, or `Math.random`. Styles apply only after `Kit.art.init()`, which sets `html[data-sg-art="2|1|0"]` and injects one `<style id="sg-art">`. A page that loads the file and never calls `init` looks the same as today. Selectors stay at `html[data-sg-art] .sg-btn` so a game's own, more specific button rules still win. Tier 0 drops `backdrop-filter` and the heavy shadows. The sheet uses logical properties and `var(--sg-font)`, `--sg-accent` and `--sg-good`.
+
+### Why it is external
+
+`shared/kit.js` is inlined into every game. Putting this kit in there would copy about 14 KB into every page (hundreds of KB of precache) and force every art fix to re-download every game. `shared/artkit.js` is one precached file, like `lib/three/three.min.js`. The browser reads it once. The build minifies it, leaves it external, and rewrites a page's `src` to `../../shared/artkit.js?v=<first 8 hex chars of the sha256>`. The service worker matches by pathname, so the query does not break the cache. `tools/artkit-demo.html` is a review page and is not shipped.
+
+The whole visual-upgrade programme may grow the offline precache by at most 350 KB over the baseline after this change. This file's own cap is `artBytes` (14,500). A helper that does not fit belongs in the one game that needs it.
+
+### What games call
+
+Gameplay, scoring, controls and each game's random stream stay as they are. Visuals use `Kit.art.rand()` (mulberry32), never `Math.random`, the game's seeded RNG, or `Kit.shake()` (that one calls `Math.random`). `Kit.art.loop(update, render)` calls the unchanged `Kit.loop(update, wrappedRender)`. Hit-stop freezes art timers only (particles, springs, shake, floating text, parallax camera). It does not change `update`'s `dt`.
+
+```js
+Kit.art.init({ canvas, ctx, mode: '2d' | 'webgl', theme?: 'day'|'night'|'neon'|'candy' })
+Kit.art.pal            // frozen: ink, sky*, grass*, gold, good, bad, team[4], ui*
+Kit.art.shade(hex, amt) / Kit.art.ramp(a, b, n) / Kit.art.stops()
+Kit.art.round / blob / outlined / gloss / shadow
+Kit.art.sprite(key, w, h, draw, { pad?, scale? }) / blit / bake
+Kit.art.glow(color, radius) / vignette(ctx, w, h, strength?) / sky(key, w, h, stops)
+Kit.art.layer(sprite, factor) → { draw(ctx, camX, camY) }
+Kit.art.fx(cap?) → { burst, update, draw }
+Kit.art.shake      // trauma ≤ 0.6, gone within 0.4 s: add, update, apply
+Kit.art.hitstop(ms) / spring(k?, damp?) / blink(slot?) / tween(from, to, ms, ease)
+Kit.art.ease.{outBack, outElastic, inOut, outQuad}
+Kit.art.pop(text, x, y, { color, size })   // plus pop.update / pop.draw
+Kit.art.flash(color, ms)                   // plus flash.update / flash.draw; ≤ 3 Hz, alpha ≤ 0.4
+Kit.art.texture(key, w, h, draw) → THREE.CanvasTexture when THREE exists
+Kit.art.three.pixelRatio() / three.lights(scene, opts) / three.blobShadow()
+Kit.art.quality.tier / quality.on(fn) / quality.frame(ms)
+Kit.art.loop(update, render) / Kit.art.rand()
+```
+
+`blink()` with no argument shares one eyelid and returns 0..1. Pass a plain object kept by the character (`Kit.art.blink(hero)`) for a separate 2–5 s timer. `tween` returns `{ v, done, update(dt) }`.
+
+Call `init` before `Kit.fit` so a resize can rebuild sprites. Sprites are cached and evicted by pixel area (16 MP, 8 MP on tier 0). They redraw when `devicePixelRatio × Kit.fit` scale crosses a 0.25 step, and once after `document.fonts.ready`. Soft shadows and glows are sprites. `ctx.shadowBlur` and `ctx.filter` are not used while drawing.
+
+### Quality
+
+The start tier is the saved `Kit.store('art')` value `tier`, if it is 0, 1 or 2. Otherwise it is 1 when `hardwareConcurrency ≤ 2` or `deviceMemory ≤ 2`, and 2 otherwise. A weak PC therefore starts one tier lower and is never raised above that start tier. An exponential moving average (α = 0.1) of the frame interval steps down one tier after it stays above 22 ms for 2 s, and up one tier after it stays under 14 ms for 8 s, at most once per 20 s. The first 3 s, hidden tabs and gaps over 250 ms are ignored. The chosen tier is saved; a failed save is ignored. `Kit.art.loop` reports frame time. A game with its own loop calls `Kit.art.quality.frame(ms)` once per painted frame.
+
+| | Tier 2 | Tier 1 | Tier 0 |
+|---|---|---|---|
+| Particles | 600 | 250 | 60 |
+| Parallax | all | two | one, baked (no motion) |
+| Glow / vignette | on | on | off |
+| three.js pixel ratio cap | 1.5 | 1 | 0.75 |
+| three.js shadow maps | on | on | off |
+
+When `Kit.motion.reduced()` is true, shake, hit-stop, flash and parallax motion are off, springs and tweens settle immediately, and particles use the tier-0 cap and fade in place.
 
 ## Portal
 

@@ -356,3 +356,38 @@ test('SG_TELEMETRY_URL reaches the portal only, is checked first, and changes no
   assert.deepEqual(site(), on);
   noTemporaryOutput(f);
 });
+
+test('the art kit stays external and versioned, and any other shared script is still refused', t => {
+  const f = fixture(t);
+  const source = 'window.Kit=window.Kit||{};window.Kit.art={version:1,marker:"ARTKIT_MARKER_9f3"};\n';
+  f.write('shared/artkit.js', source);
+  f.write('shared/nope.js', 'window.nope = true;\n');
+  f.write('tools/artkit-demo.html', '<!doctype html><title>art demo</title>');
+  f.write('games/demo/index.html', '<!doctype html><html><body>' +
+    '<script src="../../shared/artkit.js"></script>' +
+    '<script src="../../lib/three/three.min.js"></script>' +
+    '<script src="game.js"></script></body></html>');
+  success(run(f));
+  const html = fs.readFileSync(path.join(f.root, '_site/games/demo/index.html'), 'utf8');
+  const built = fs.readFileSync(path.join(f.root, '_site/shared/artkit.js'), 'utf8');
+  const version = crypto.createHash('sha256').update(built).digest('hex').slice(0, 8);
+  assert.equal(built, source);
+  assert.match(html, new RegExp('src="../../shared/artkit\\.js\\?v=' + version + '"'));
+  assert.match(html, /src="\.\.\/\.\.\/lib\/three\/three\.min\.js"/);
+  assert.equal(html.includes('ARTKIT_MARKER_9f3'), false, 'artkit is not inlined into the page');
+  assert.ok(html.includes('window.gameReady = true'));
+  const worker = fs.readFileSync(path.join(f.root, '_site/sw.js'), 'utf8');
+  assert.ok(worker.includes('"shared/artkit.js"'));
+  assert.equal(fs.existsSync(path.join(f.root, '_site/tools/artkit-demo.html')), false);
+  assert.equal(fs.existsSync(path.join(f.root, '_site/artkit-demo.html')), false);
+  success(run(f, ['--kill-sw', '--out', '.work/kill']));
+  assert.ok(fs.readFileSync(path.join(f.root, '.work/kill/sw.js'), 'utf8').includes('"shared/artkit.js"'));
+  // A different shared script is still inlined. It must not stay external the way artkit does.
+  f.write('games/demo/index.html', '<!doctype html><html><body><script src="../../shared/nope.js"></script><script src="game.js"></script></body></html>');
+  success(run(f));
+  const inlined = fs.readFileSync(path.join(f.root, '_site/games/demo/index.html'), 'utf8');
+  assert.equal(inlined.includes('shared/nope.js'), false);
+  assert.ok(inlined.includes('window.nope = true'));
+  f.write('games/demo/index.html', '<!doctype html><html><body><script src="https://example.com/extra.js"></script><script src="game.js"></script></body></html>');
+  refused(run(f), /scripts left un-inlined/);
+});

@@ -31,7 +31,7 @@ function main() {
     'board-rules.test.mjs', 'build-safety.test.mjs', 'asset-budgets.test.mjs',
     'asset-optimization.test.mjs', 'harness-regression.test.mjs',
     'balance-replay.test.mjs', 'classroom-files.test.mjs', 'offline-controller.test.mjs',
-    'offline-readiness.test.mjs', 'shared-kit.test.mjs', 'level-verifiers.test.mjs',
+    'offline-readiness.test.mjs', 'shared-kit.test.mjs', 'shared-artkit.test.mjs', 'level-verifiers.test.mjs',
     'engine-regressions.test.mjs', 'moto-balance.test.mjs', 'play-stats-rules.test.mjs',
     'offline-download.test.mjs', 'dino-3d-engine.test.mjs', 'cake-guards-engine.test.mjs', 'pool-position-rules.test.mjs',
     'bubble-bop-rules.test.mjs', 'juice.test.mjs', 'telemetry-server.test.mjs', 'telemetry-worker.test.mjs', 'telemetry-clock.test.mjs',
