@@ -1433,6 +1433,13 @@
     stat(current && current === previousGame ? 'gone' : 'close');
     prof(current && current === previousGame ? 'gone' : 'close');
     tm(current && current === previousGame ? 'gone' : 'close');
+    // The click that opened a tile is only kept for a second. Building the play
+    // page can take longer than that on a busy computer, so record the visit
+    // before that work. setupPlay's later open sees the session and does nothing.
+    if (current && current !== previousGame) {
+      stat('open', current, !renderedHash);
+      tm('open', current, !renderedHash);
+    }
     if (previousGame && !current) juice('back');
     // fullscreenchange comes only after the fullscreen stage is replaced here.
     parkToast();
