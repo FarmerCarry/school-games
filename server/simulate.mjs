@@ -213,7 +213,7 @@ export function* historyV2({ days = 28, sessions = 120, seed = 1, today = Date.n
 
 /* --------------------------------------------------------- the v3 school */
 const DDA_GAMES = new Set(['bubble-bop', 'dino-3d', 'road-hopper']);
-const DUO_GAMES = new Set(['air-hockey', 'hoop-heads', 'wacky-soccer', 'sumo-bonk', 'pool-party', 'fire-and-ice', 'connect-four', 'tic-tac-toe']);
+const DUO_GAMES = new Set(['air-hockey', 'balloon-blast', 'hoop-heads', 'wacky-soccer', 'sumo-bonk', 'pool-party', 'fire-and-ice', 'connect-four', 'tic-tac-toe']);
 const NO_SCORE = new Set(['block-world', 'connect-four', 'critter-mart', 'pizza-clicker', 'tank-splat', 'tic-tac-toe']);
 const NO_FRAMES = new Set(['connect-four', 'tic-tac-toe', 'typing-test']);
 const CHILDREN = 600, CLASS_SIZE = 25, CLASSES = CHILDREN / CLASS_SIZE, PCS = 30, MAX_PROFILES = 24, PERIODS = 6;

@@ -468,7 +468,8 @@ test('demo mode: sample data without signing in, and nothing sent to the server'
   assert.equal(Number(await tileValue(page, 'newStudents')), k.totals.students.new);
   assert.equal(Number(await tileValue(page, 'perStudentDay')), k.totals.students.minutesPerStudentDay.median);
   assert.equal(Number(await tileValue(page, 'now')), live.total.sessions);
-  assert.match(await page.locator('.tile[data-key="now"] .tile-hint').textContent(), new RegExp(`${live.total.sessions} children: ${live.students} students, ${live.guests} guests`));
+  const guestWord = live.guests === 1 ? 'guest' : 'guests';
+  assert.match(await page.locator('.tile[data-key="now"] .tile-hint').textContent(), new RegExp(`${live.total.sessions} children: ${live.students} students, ${live.guests} ${guestWord}`));
   assert.equal(s.lastKpis(), undefined);
   // The school's day of the sample, not this computer's.
   assert.match(await page.locator('#rangeText').textContent(), /27 Oct 2026/);
@@ -1350,10 +1351,10 @@ test('tries to a first win include the winning try; the hardest levels start wit
   await page.waitForFunction(() => document.querySelectorAll('#learning-growth .card').length === 1 && !document.getElementById('dash').classList.contains('is-loading'));
   assert.match(await page.locator('#learning-hardest .section-intro').textContent(), /tries to a first win/i);
   const never = demoFile('game-dino-3d.json').firstWin.filter(f => f.median == null);
-  assert.deepEqual(never.map(f => f.id), ['L8'], 'the sample has a level nobody has won');
+  assert.deepEqual(never.map(f => f.id), ['L9'], 'the sample has a level nobody has won');
   await page.click('#hardest-card .table-toggle');
   const rows = await page.locator('#hardest-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
-  assert.deepEqual(rows[0].slice(1, 4), ['level 8', '1', '—'], 'never won: first, with no median');
+  assert.deepEqual(rows[0].slice(1, 4), ['level 9', '1', '—'], 'never won: first, with no median');
   assert.equal(rows.length, demoFile('game-dino-3d.json').firstWin.length, 'every level of the game');
   // An endless mode is never won by design: it is no hard level.
   await page.selectOption('#gamePick', 'rail-rush');

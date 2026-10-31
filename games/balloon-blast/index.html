@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>معركة البالونات</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+<div id="ui">
+  <section id="scrTitle" class="scr">
+    <div class="panel brand">
+      <h1>معركة البالونات</h1>
+      <p>ضع البالون واهرب قبل الرشة!</p>
+      <div class="menu">
+        <button type="button" id="play1" class="go">العب!<small>ضد ٣ كمبيوتر</small></button>
+        <button type="button" id="play2" class="alt">لاعبان<small>على لوحة واحدة</small></button>
+        <button type="button" id="playAdv" class="alt gold">مغامرة<small>٣ عوالم</small></button>
+      </div>
+      <div class="prog" id="progLine"></div>
+      <div class="crits" id="crits"></div>
+    </div>
+    <div class="panel howto">
+      <h2>كيف تلعب</h2>
+      <div class="krow"><span>تحرّك</span><span dir="ltr"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></span></div>
+      <div class="krow"><span>بالون</span><span dir="ltr"><span class="sg-key">Space</span></span></div>
+      <div class="krow"><span>ركلة</span><span dir="ltr"><span class="sg-key">E</span></span></div>
+      <div class="krow"><span>اللاعب 2</span><span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span><span class="sg-key">/</span></span></div>
+      <div class="krow"><span>توقف</span><span dir="ltr"><span class="sg-key">P</span></span></div>
+      <p class="prog">اللمسة من صديقك تفك الفقاعة، ولمسة الخصم تفرقعها.</p>
+    </div>
+  </section>
+
+  <section id="scrDuo" class="scr" hidden>
+    <div class="panel sheet">
+      <h2>لاعبان</h2>
+      <p class="sub">نفس لوحة المفاتيح. الفريق يفك بعضه.</p>
+      <div class="row">
+        <button type="button" id="duoFfa" class="go">كلٌّ لنفسه</button>
+        <button type="button" id="duoTeam" class="alt">فريق ضد الكمبيوتر</button>
+      </div>
+      <div class="row"><button type="button" id="duoBack" class="alt">رجوع</button></div>
+    </div>
+  </section>
+
+  <section id="scrAdv" class="scr" hidden>
+    <div class="panel sheet">
+      <h2>المغامرة</h2>
+      <div class="worlds" id="worlds"></div>
+      <label class="chk"><input type="checkbox" id="coop"> مع صديق</label>
+      <div class="stages" id="stages"></div>
+      <div class="row"><button type="button" id="advBack" class="alt">رجوع</button></div>
+    </div>
+  </section>
+
+  <button type="button" id="pauseBtn" class="hbtn" hidden aria-label="إيقاف">❚❚</button>
+
+  <section id="scrPause" class="scr" hidden>
+    <div class="panel sheet">
+      <h2>توقّف</h2>
+      <div class="row">
+        <button type="button" id="bResume" class="go">متابعة</button>
+        <button type="button" id="bRestart" class="alt">إعادة</button>
+        <button type="button" id="bMenu" class="alt">القائمة</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrResult" class="scr" hidden>
+    <div class="panel sheet">
+      <div class="banner" id="resBanner">فزت!</div>
+      <div class="stars" id="resStars"></div>
+      <p class="sub" id="resSub"></p>
+      <p class="sub" id="resUnlock"></p>
+      <div class="row">
+        <button type="button" id="rAgain" class="go">العب مجدداً</button>
+        <button type="button" id="rMenu" class="alt">القائمة</button>
+      </div>
+    </div>
+  </section>
+</div>
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script src="ai.js"></script>
+<script src="render.js"></script>
+<script src="audio.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>

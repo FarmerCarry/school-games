@@ -761,6 +761,27 @@ above: the measured size rounded up to the next 1,000 bytes plus 1,000.
 
 No other limit changes, and nothing is added to any page beyond the two Kit changes.
 
+## Balloon Blast, 31 October 2026
+
+معركة البالونات is a new 15×11 water-balloon maze. The floor, pillars and crates are
+painted once into a cached map and blitted; critters are pre-rendered per direction
+and waddle frame. A frame draws that map, the balloons, the splash and at most 360
+particles. There is no background music.
+
+Measured with the Linux minified build. Software-rendered Chromium on this machine
+held about 26 frames per second in a match, a little above Hoop Heads (about 23) on
+the same run; the classroom target remains a blit-bound 60 on Intel UHD 620.
+
+| File | Before bytes | After bytes | Before gzip | After gzip | New limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Portal | 396669 | 401047 | — | 94905 | 403000 (was 398000) |
+| Balloon Blast | — | 85929 | — | 31757 | 86000 |
+| Offline precache, 49 files | 5449684 | 5540982 | | | 5545000 (was 5450000) |
+
+A juice pass (fuller splash, larger critters, icon stat cards) re-measured the game
+at 85,929 bytes, still under the 130 KB target and inside the same limits. Portal
+headroom is 1,953 bytes; precache headroom is 4,018 bytes.
+
 ## Sneaky Levels worlds 6–12, 31 October 2026
 
 المراحل الماكرة gains worlds 6–12 (levels 31–100): ice, keys, boxes, portals, music

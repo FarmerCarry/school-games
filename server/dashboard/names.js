@@ -2,6 +2,7 @@
 // The dashboard prefers the live site's catalog and falls back to these names.
 window.SG_GAME_NAMES = {
   "air-hockey": ["هوكي الهواء","Air Hockey"],
+  "balloon-blast": ["معركة البالونات","Balloon Blast"],
   "beat-dash": ["قفزة الإيقاع","Beat Dash"],
   "blob-battle": ["معركة الهلام","Blob Battle"],
   "block-burst": ["انفجار المكعبات","Block Burst"],
@@ -41,6 +42,7 @@ window.SG_GAME_NAMES = {
 // reaction times, shows a tutorial (games/<slug>/).
 window.SG_GAME_INFO = {
   "air-hockey": {"cats":["two-player","sports"],"players":2,"input":"mixed","dda":0,"track":0,"tutorial":0},
+  "balloon-blast": {"cats":["battle","two-player"],"players":2,"input":"keyboard","dda":1,"track":1,"tutorial":0},
   "beat-dash": {"cats":["running","arcade"],"players":1,"input":"one-button","dda":0,"track":0,"tutorial":1},
   "blob-battle": {"cats":["battle"],"players":1,"input":"mixed","dda":0,"track":0,"tutorial":0},
   "block-burst": {"cats":["puzzle"],"players":1,"input":"pointer","dda":0,"track":0,"tutorial":1},

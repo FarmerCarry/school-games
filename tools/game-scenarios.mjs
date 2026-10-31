@@ -67,6 +67,7 @@ export const scenarios = {
   'sumo-bonk': defaults(['#b1p','#bFight'], `${g}.state.scr === 'game' && !${g}.state.paused`, select(`${g}.state`, ['players','roundT','score']), hold('ArrowDown'), '#bPause', `${g}.state.paused`, '#bRestart', `${g}.state.phase === 'intro' && ${g}.state.score.every(n => n === 0)`, { ready: `${g}.state.phase === 'fight'` }),
   'air-hockey': defaults(['#btnPlay'], `!${g}.state().demo && !${g}.state().paused`, select(`${g}.state()`, ['pucks','mallets','score']), move, '#pauseBtn', `${g}.state().paused`, '#btnRestart', `${g}.state().score.every(n => n === 0)`),
   'hoop-heads': defaults(['[data-act="cpu"]','#selGo'], `${g}.state === 'play'`, select(`${g}.info()`, ['time','score','ball','p']), hold('ArrowRight'), '#pauseBtn', `${g}.state === 'pause'`, '#pRestart', `${g}.match.phase === 'intro' && ${g}.match.players.every(p => p.score === 0)`, { ready: `${g}.match.phase === 'play'` }),
+  'balloon-blast': defaults(['#play1'], `${g}.screen === 'play' && !${g}.paused`, `${g}.info().t + ',' + ${g}.info().px + ',' + ${g}.info().py`, hold('ArrowRight'), '#pauseBtn', `${g}.paused`, '#bRestart', `${g}.world.freeze > 0 && ${g}.world.round === 1 && ${g}.scores[0] === 0`, { ready: `${g}.world && ${g}.world.phase === 'play' && ${g}.world.freeze <= 0` }),
   'wacky-soccer': defaults(['#b1p','#bGo'], `${g}.state === 'play'`, `[${g}.match.time,${g}.match.score,${g}.world.players.map(p => [p.x,p.y])]`, hold('Space'), '#bPause', `${g}.state === 'pause'`, '#bRestart', `${g}.match.phase === 'count' && ${g}.match.score.every(n => n === 0)`, { ready: `${g}.match.phase === 'play'` }),
   'pool-party': defaults(['#btnPlay'], `${g}.screen === 'game'`, `[${g}.balls(),${g}.aim,${g}.phase]`, holdUntilChanged('ArrowRight', `${g}.aim`), '#pauseBtn', `${g}.screen === 'pause'`, '#pRestart', `${g}.phase === 'aim' && ${g}.balls().length === 16`, { ready: `${g}.phase === 'aim'` }),
   'skybound-golf': defaults(['#play'], `document.getElementById('title-screen').hidden && document.getElementById('modal').hidden`, `document.getElementById('meters').textContent`, click('#game'), '#pause', `!document.getElementById('pause-content').hidden && !document.getElementById('modal').hidden`, '#restart', `document.getElementById('ui').dataset.phase === 'ready' && document.getElementById('meters').textContent === '0'`),
@@ -174,7 +175,7 @@ const inputSnapshots = {
   'beat-dash': `${g}.state.y`, 'drift-king': `${g}.car.head`, 'fire-and-ice': `${g}.world.fire.x`,
   'moto-madness': `${g}.world.bike.x`, 'tank-splat': `${g}.app.game.tanks[0].a`,
   'sumo-bonk': `${g}.state.players[0].action`,
-  'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`,
+  'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`, 'balloon-blast': `${g}.info().px`,
   'wacky-soccer': `${g}.world.players.filter(p => p.side === 0).map(p => p.kickT)`,
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
@@ -224,7 +225,7 @@ for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen 
 const heldKeys = {
   'dino-3d': 'Space',
   'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
-  'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
+  'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'balloon-blast': 'ArrowRight', 'critter-mart': 'ArrowRight',
   'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'splat-strike': 'KeyW',
   'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight'
 };
