@@ -217,8 +217,7 @@ local day records. The server stores no IP address.
   is failing, or the PC is offline (`navigator.onLine === false`), a hidden page sends
   nothing and the queue keeps everything for later. A request that gets no answer while
   the PC is offline (the cable out, the Wi-Fi down) is noted as `offline`, not `network`,
-  so the teacher page blames neither the school's filter nor the server (before 31
-  October 2026 it said the filter blocked the server and asked for IT).
+  so the teacher page blames neither the school's filter nor the server.
 * Unsent batches wait in `localStorage` **`sg:site:tm:q4:<hash>`** (an array of
   `{ t, w0, e }`, plus `h: 1` once a closing page handed it over: when the batch's first
   event was recorded, its session's start, and the envelope), oldest first, **at most
@@ -246,8 +245,8 @@ local day records. The server stores no IP address.
   (oldest first, each once) and removes those keys. They are sent exactly as they were
   queued; the server accepts wire version 2 indefinitely. The teacher page only reads
   those keys: moved by it, their batches would wait for a portal page of this build, while
-  the older tab, which reads only its own key, stopped sending them (before 31 October
-  2026 it moved them at every render). The next change of this kind takes `q5:`.
+  the older tab, which reads only its own key, stopped sending them. The next change of
+  this kind takes `q5:`.
 * `<hash>` is a short hash of the full ingest address (a 32-bit string hash, in base 36),
   so each address has its own queue: another copy of the site on the same origin (for
   example `name.github.io/school-games` and `name.github.io/school-games-test`) built with
@@ -276,9 +275,9 @@ local day records. The server stores no IP address.
   batch for room (then `x` is now) or age (`x` is when the batch turned 7 days old). A
   batch marked `h: 1` is dropped without touching `x`: a closing page handed it to
   `fetch`, so the server almost always has it, and only the answer never reached a page
-  (before 31 October 2026 it counted too, so after any break of a week, such as the school
-  holidays, every PC's teacher page said that play was dropped). It holds no play, so the
-  teacher page's clear keeps it.
+  (counted, it would make every PC's teacher page say that play was dropped after any
+  break of a week, such as the school holidays). It holds no play, so the teacher page's
+  clear keeps it.
 * **Check mode** (the teacher page): `teacher.html` loads `js/telemetry.js` under
   `<meta name="sg-telemetry" content="check">`. There the sink never starts a session,
   records an event, makes a code or listens to the page, and it writes nothing until the
