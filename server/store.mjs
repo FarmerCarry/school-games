@@ -280,6 +280,15 @@ const MARKS = `INSERT OR IGNORE INTO st_marks (sid, kind, t, n, x) SELECT ${SID}
 // Times on the facts come from the session's stored start, never from this batch's
 // estimate, so a repeat (whose estimate moves with its receipt time) writes the same values.
 const START = 'SELECT start_s FROM st_sessions WHERE s = ?1';
+// A batch that names a forgotten code (the codes as a JSON array, `gone`; see ingest) uses
+// the *_FORGOTTEN statements: a pr or cd mark naming one, its removal and a link of one are
+// stored only when the batch's session started once the code had played again (at or
+// after its student row's first_s). The forget deleted that row, so the row is new play. A
+// removal or link that a PC sends again from before that stays dropped, and every mark that
+// names the code comes after its first play, where a later forget finds it (admin.mjs).
+const since = session => `first_s <= (SELECT start_s FROM st_sessions WHERE s = ${session})`;
+const played = (x, gone, session) => `(${x} NOT IN (SELECT value FROM json_each(${gone})) OR EXISTS (SELECT 1 FROM st_students WHERE u = ${x} AND ${since(session)}))`;
+const MARKS_FORGOTTEN = `${MARKS} WHERE value ->> 0 NOT IN ('pr', 'cd') OR ${played('value ->> 3', '?3', '?1')}`;
 // W1: the PC; its zone, device buckets and build come from its newest session.
 const newer = c => [c, `CASE WHEN excluded.last_s >= last_s THEN excluded.${c} ELSE ${c} END`];
 const PC_SET = [['first_s', 'MIN(first_s, excluded.first_s)'], ['last_s', 'MAX(last_s, excluded.last_s)'],
@@ -306,19 +315,24 @@ const STUDENT_GAMES = `INSERT INTO st_student_games (u, slug, rounds, first_s) S
   `FROM json_each(?3) WHERE true ON CONFLICT (u, slug) DO UPDATE SET ${assign(GAMES_SET)} WHERE ${unchanged(GAMES_SET)}`;
 // W9: profiles removed on this PC ([code, t]); the latest removal is kept, and the answers
 // show it only while no session of the code came after it (a code a teacher moved to another
-// PC goes on there after its old PC removed it).
+// PC goes on there after its old PC removed it). Only a code with a student row changes.
 const REMOVED = `UPDATE st_students SET removed_s = r.t FROM (SELECT value ->> 0 AS u, (${START}) + MAX(value ->> 1) AS t FROM json_each(?2) GROUP BY 1) r ` +
   'WHERE st_students.u = r.u AND (st_students.removed_s IS NULL OR st_students.removed_s < r.t)';
+const REMOVED_FORGOTTEN = `${REMOVED} AND (st_students.u NOT IN (SELECT value FROM json_each(?3)) OR st_students.${since('?1')})`;
 // W10: older codes of this student (?2), linked to its canonical code, one hop deep: links
 // to an old code move to the canonical one, and a link that would form a cycle is refused.
 const CANONICAL = 'COALESCE((SELECT u_new FROM aliases WHERE u_old = ?2), ?2)';
-const ALIAS_HOP = `UPDATE aliases SET u_new = ${CANONICAL} WHERE u_new IN (SELECT value FROM json_each(?3) WHERE value <> ${CANONICAL})`;
-const ALIAS = `INSERT INTO aliases (u_old, u_new, s, how) SELECT value, ${CANONICAL}, (${START}), 'pc' FROM json_each(?3) ` +
+// The older codes ?n (a JSON array), less the forgotten ones ?gone that had not played again
+// when the session ?session started.
+const older = (n, gone, session) => gone ? `(SELECT value FROM json_each(?${n}) WHERE ${played('value', '?' + gone, '?' + session)})` : `json_each(?${n})`;
+const aliasHop = from => `UPDATE aliases SET u_new = ${CANONICAL} WHERE u_new IN (SELECT value FROM ${from} WHERE value <> ${CANONICAL})`;
+const alias = from => `INSERT INTO aliases (u_old, u_new, s, how) SELECT value, ${CANONICAL}, (${START}), 'pc' FROM ${from} ` +
   `WHERE value <> ?2 AND value <> ${CANONICAL} ON CONFLICT (u_old) DO NOTHING`;
+const ALIAS_HOP = aliasHop(older(3)), ALIAS = alias(older(3)), ALIAS_HOP_FORGOTTEN = aliasHop(older(3, 4, 1)), ALIAS_FORGOTTEN = alias(older(3, 4, 1));
 // Before them (in ZONE, below): rv goes up when they will change a link (an old code of ?6
 // not linked yet, or one that codes are linked to; the student ?7), so that kept answers
 // count the linked codes as one student.
-const RELINKS = "EXISTS (SELECT 1 FROM json_each(?6) j WHERE j.value <> ?7 AND j.value <> COALESCE((SELECT u_new FROM aliases WHERE u_old = ?7), ?7) " +
+const relinks = from => `EXISTS (SELECT 1 FROM ${from} j WHERE j.value <> ?7 AND j.value <> COALESCE((SELECT u_new FROM aliases WHERE u_old = ?7), ?7) ` +
   'AND (NOT EXISTS (SELECT 1 FROM aliases WHERE u_old = j.value) OR EXISTS (SELECT 1 FROM aliases WHERE u_new = j.value)))';
 // W11: a rolled day that late data reaches is rolled again.
 const LATE = 'UPDATE roll_days SET dirty = 1 WHERE day IN (SELECT value FROM json_each(?1)) AND dirty = 0';
@@ -328,18 +342,20 @@ const LATE = 'UPDATE roll_days SET dirty = 1 WHERE day IN (SELECT value FROM jso
 // (and not trimmed) for a full rebuild, and bumps tz_epoch and rv; the same zone from
 // another source only changes the source. ?5, when not '', is v3_since (the first v3
 // batch); ?6 and ?7 are the older codes a batch links to its student, and that student (see
-// RELINKS; '[]' and '' otherwise). SQLite reads each scalar subquery once, at its first use:
-// the WHERE clause of the first row it changes, so before any row changes.
+// relinks; '[]' and '' otherwise), and ?8 and ?9 the forgotten codes it names and its
+// session (ZONE_FORGOTTEN). SQLite reads each scalar subquery once, at its first use: the
+// WHERE clause of the first row it changes, so before any row changes.
 const SETTING = key => `(SELECT value FROM settings WHERE key = '${key}')`;
 const ALLOWED = `?1 <> '' AND instr(?4, ',' || ${SETTING('tz_source')} || ',') > 0`;
 const MOVED = `${ALLOWED} AND ${SETTING('tz')} <> ?1`;
 const ZONE_DIRTY = "UPDATE roll_days SET dirty = 2 WHERE day >= (SELECT MAX(value) FROM settings WHERE key IN ('facts_since', 'trimmed_before')) " +
   `AND ${MOVED}`;
-const ZONE = "UPDATE settings SET value = CASE key WHEN 'tz' THEN ?1 WHEN 'tz_source' THEN ?2 WHEN 'week_start' THEN ?3 WHEN 'v3_since' THEN ?5 " +
+const zoneUpdate = from => "UPDATE settings SET value = CASE key WHEN 'tz' THEN ?1 WHEN 'tz_source' THEN ?2 WHEN 'week_start' THEN ?3 WHEN 'v3_since' THEN ?5 " +
   "WHEN 'rebuild' THEN '1' ELSE CAST(CAST(value AS INTEGER) + 1 AS TEXT) END WHERE CASE key " +
   `WHEN 'tz_source' THEN ${ALLOWED} AND value <> ?2 WHEN 'week_start' THEN ${MOVED} AND ${SETTING('week_source')} = 'auto' AND value <> ?3 ` +
-  `WHEN 'v3_since' THEN value = '' AND ?5 <> '' WHEN 'tz' THEN ${MOVED} WHEN 'tz_epoch' THEN ${MOVED} WHEN 'rv' THEN (${MOVED}) OR ${RELINKS} ` +
+  `WHEN 'v3_since' THEN value = '' AND ?5 <> '' WHEN 'tz' THEN ${MOVED} WHEN 'tz_epoch' THEN ${MOVED} WHEN 'rv' THEN (${MOVED}) OR ${relinks(from)} ` +
   `WHEN 'rebuild' THEN ${MOVED} ELSE 0 END`;
+const ZONE = zoneUpdate(older(6)), ZONE_FORGOTTEN = zoneUpdate(older(6, 8, 9));
 // Who may set the zone: a PC (W12) or the dashboard's guess while nothing better is known;
 // the nightly vote also while it is the PCs' provisional choice; the owner always.
 const BY_PC = ',none,dashboard,', BY_VOTE = ',none,dashboard,pc,', BY_OWNER = ',none,dashboard,pc,pcs,owner,';
@@ -536,7 +552,8 @@ const RV_UP = "UPDATE settings SET value = CAST(CAST(value AS INTEGER) + 1 AS TE
 // change that came in between keeps the flag).
 const REBUILT = "INSERT INTO settings (key, value) SELECT 'rebuild', '' WHERE NOT EXISTS (SELECT 1 FROM roll_days WHERE dirty >= 2) " +
   'ON CONFLICT (key) DO UPDATE SET value = excluded.value';
-// The codes of a forget FORGOTTEN_DAYS old (at ?1, UTC seconds) leave 'forgotten' (admin.mjs).
+// The codes of a forget FORGOTTEN_DAYS old (at ?1, UTC seconds) leave 'forgotten' (admin.mjs);
+// a mark naming one is then stored again (a link told that late: see FORGOTTEN there).
 const FORGOTTEN_GONE = "UPDATE settings SET value = (SELECT json_group_object(key, value) FROM json_each(settings.value) " +
   `WHERE value > ?1 - ${FORGOTTEN_DAYS * DAY_S}) WHERE key = 'forgotten'`;
 // Deleting facts, a few hundred sessions at a time, so that one run never writes more
@@ -960,7 +977,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
   // Stores one validated batch (schema.mjs validateBatch). False when it is a v2 batch
   // whose id was already received; a repeated v3 batch changes nothing and is true, as is
   // one of a session of a forgotten code from before the forget, which is not stored (nor
-  // is a mark naming a forgotten code).
+  // is a mark naming a forgotten code from a session before the code played again).
   async function ingest({ wire, envelope, events }, now) {
     await ensure(now);
     const R = Math.floor(now / 1000), minute = Math.floor(now / MINUTE_MS), { b, s, a, u, p, z, d } = envelope;
@@ -1003,12 +1020,19 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     // SETTINGS_MS; the forgetting one at once): until then it may still store such a batch.
     if (u && conf.forgotten[u] !== undefined && start <= conf.forgotten[u]) return true;
     // Nor does a mark name a forgotten code again (its history is gone): a removal of its
-    // profile or a link to it, told again or late (a PC tells an older code until it sees
-    // it delivered), from any session, for as long as the code is in 'forgotten'.
-    const remembered = x => conf.forgotten[x] === undefined;
-    f.marks = f.marks.filter(([kind, , , x]) => (kind !== 'pr' && kind !== 'cd') || remembered(x));
-    f.removed = f.removed.filter(([x]) => remembered(x));
-    f.linked = f.linked.filter(remembered);
+    // profile or a link to it, told again or late (a PC tells an older code until it sees it
+    // delivered), from a session that started by the forget, or before the code played
+    // again, or while it has not. A removal or link from a session after its new play is
+    // new, and stored. The forget's time is checked here, as for the batch's own code (a
+    // student row another instance made again from a batch sent again starts before the
+    // forget); only a batch that still names a forgotten code checks its student row (the
+    // *_FORGOTTEN statements): no other batch reads more.
+    const late = x => conf.forgotten[x] === undefined || start > conf.forgotten[x];
+    f.marks = f.marks.filter(([kind, , , x]) => (kind !== 'pr' && kind !== 'cd') || late(x));
+    f.removed = f.removed.filter(([x]) => late(x));
+    f.linked = f.linked.filter(late);
+    const gone = JSON.stringify([...new Set([...f.removed.map(([x]) => x), ...f.linked])].filter(x => conf.forgotten[x] !== undefined));
+    const named = gone !== '[]';
 
     // Attempt numbers: the rounds of this batch that end for the first time, in batch order, per game.
     const totals = new Map();
@@ -1040,15 +1064,17 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
         DUO.test(r.id) ? 1 : 0, r.attempt ?? null]))));
     }
     if (totals.size) statements.push(sql(STUDENT_GAMES).bind(s, u, JSON.stringify([...totals].map(([slug, [total, t]]) => [slug, total, t]))));
-    if (f.marks.length) statements.push(sql(MARKS).bind(s, JSON.stringify(f.marks)));
-    if (f.removed.length) statements.push(sql(REMOVED).bind(s, JSON.stringify(f.removed)));
+    if (f.marks.length) statements.push(bound(named ? MARKS_FORGOTTEN : MARKS, [s, JSON.stringify(f.marks), gone]));
+    if (f.removed.length) statements.push(bound(named ? REMOVED_FORGOTTEN : REMOVED, [s, JSON.stringify(f.removed), gone]));
     // The settings first (a link raises rv when it changes the links), then the links.
     const v3Since = wire === 3 && !conf.v3Since ? utcDay(now) : '', olds = JSON.stringify([...new Set(f.linked)]);
     const zone = wire === 3 && z && (conf.tzSource === 'none' || conf.tzSource === 'dashboard') ? z : '';
-    const zoneChange = [zone, 'pc', zone ? weekStartOf(zone) : 'mon', BY_PC, v3Since, olds, u];
+    const zoneChange = [zone, 'pc', zone ? weekStartOf(zone) : 'mon', BY_PC, v3Since, olds, u, gone, s];
     if (zone && zone !== conf.tz) statements.push(bound(ZONE_DIRTY, zoneChange));
-    if (zone || v3Since || f.linked.length) statements.push(bound(ZONE, zoneChange));
-    if (f.linked.length) statements.push(sql(ALIAS_HOP).bind(s, u, olds), sql(ALIAS).bind(s, u, olds));
+    if (zone || v3Since || f.linked.length) statements.push(bound(named ? ZONE_FORGOTTEN : ZONE, zoneChange));
+    if (f.linked.length) {
+      statements.push(bound(named ? ALIAS_HOP_FORGOTTEN : ALIAS_HOP, [s, u, olds, gone]), bound(named ? ALIAS_FORGOTTEN : ALIAS, [s, u, olds, gone]));
+    }
     // Late data for a day that may be rolled already: any day before today, whatever this
     // instance last read of rolled_through (another one may have rolled it since); the
     // statement only changes a rolled day. A v3 start estimate can be a second off, so both
