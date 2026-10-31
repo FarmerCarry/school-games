@@ -4,6 +4,7 @@
  *
  * To hide a game: set `hidden: true` on its entry.
  * To feature a game first in the catalog: set `hot: true`.
+ * To mark the one beginner starting point: set `starter: true`.
  * Plain script (not JSON) so the site also works when opened from a folder.
  */
 window.SITE = {
@@ -34,6 +35,10 @@ window.CATEGORIES = [
 // Key labels: arrows and letters as printed on the keyboard; 'مسافة' = Space,
 // 'انقر' = click, 'الفأرة' = mouse, 'اسحب' = drag.
 window.GAMES = [
+  { slug: 'bubble-bop', roundMinutes: [1, 3], inputStyle: 'mixed', title: 'فقاعات بوب', en: 'Bubble Bop beginner first game mouse keyboard bubbles balloons frog', tags: 'مبتدئ ابدأ هنا أول لعبة فقاعات فقاعة بالون بالونات ضفدع فاكهة سلة فأرة ماوس لوحة مفاتيح كيبورد صغار', cats: ['arcade'], players: '1', color: '#2fb6ec', starter: true,
+    blurb: 'حرّك صديقك بوب وافقع الفقاعات، ثم انقر البالونات واقفز مع الضفدع والتقط الفاكهة!',
+    tip: 'لعبة البداية لمن يمسك الفأرة أول مرة: بلا خسارة وبلا وقت في المراحل، ويد صغيرة تريك الحركة. اضغط <b>P</b> أو <b>Esc</b> للاستراحة.',
+    controls: [{ keys: ['الفأرة'], action: 'حرّك بوب إلى الفقاعة' }, { keys: ['انقر'], action: 'افقع البالون' }, { keys: ['مسافة'], action: 'اقفز مع الضفدع' }, { keys: ['←', '→'], action: 'حرّك السلة' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
   { slug: 'connect-four', roundMinutes: [2, 5], inputStyle: 'pointer', title: 'أربعة على التوالي', en: 'Connect 4 Connect Four local two players same computer', cats: ['two-player', 'puzzle'], players: '1-2', color: '#4389ff',
     blurb: 'اجمع 4 قطع متتالية! تحدَّ زميلك على نفس الجهاز أو العب ضد الكمبيوتر.',
     tip: 'تبادلوا الأدوار على نفس الجهاز: اللاعب الأول بالأصفر والثاني بالأحمر. يعمل الوضعان دون إنترنت.',

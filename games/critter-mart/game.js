@@ -48,7 +48,8 @@
   if (!META || typeof META !== 'object' || Array.isArray(META)) META = {};
   if (!META.hat) META.hat = 'none';
   if (!META.maxLvl) META.maxLvl = 1;
-  if (META.music === undefined) META.music = true;
+  // Older saves carry a switch for the background tune the game no longer has; the next meta write drops it.
+  delete META.music;
   if (!META.best) META.best = 0;
   var S = loadSave();
 
@@ -152,32 +153,6 @@
     rush: function () { [659, 784, 988, 784, 988, 1319].forEach(function (f, i) { note(f, null, 'triangle', 0.1, 0.16, i * 0.07); }); },
     hire: function () { [784, 988, 1175].forEach(function (f, i) { note(f, null, 'sine', 0.14, 0.18, i * 0.08); }); }
   };
-
-  // Cozy background tune (tiny step sequencer). Form A A B A so the loop is ~70 s instead of
-  // repeating the same 17 s phrase all recess; soft woodblock ticks instead of a noise hi-hat.
-  var MUS = { next: 0, step: 0 };
-  var MEL = [72, -1, 76, 79, 81, -1, 79, 76, 74, -1, 76, 74, 72, -1, 67, -1, 69, -1, 72, 74, 76, -1, 74, 72, 74, -1, 72, 69, 67, -1, -1, -1,
-    72, -1, 76, 79, 81, -1, 84, 81, 79, -1, 76, 79, 81, -1, 79, -1, 76, -1, 74, 72, 74, -1, 76, 74, 72, -1, 67, 69, 72, -1, -1, -1];
-  var MELB = [67, -1, 72, -1, 76, 74, 72, -1, 71, -1, 74, -1, 79, -1, 74, -1, 72, -1, 69, 72, 76, -1, 72, -1, 71, -1, 67, 71, 76, -1, -1, -1,
-    69, -1, 72, -1, 77, 76, 74, 72, 76, -1, 72, -1, 67, -1, 72, -1, 74, -1, 71, 74, 79, -1, 77, -1, 74, -1, 76, 74, 71, -1, -1, -1];
-  var FORM = [MEL, MEL, MELB, MEL];
-  var BASS = [48, 55, 45, 52, 41, 48, 43, 50];
-  function mfreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-  function musicTick() {
-    var ac = au.ctx;
-    if (!ac || au.muted || !META.music || R.mode !== 'play') { if (ac) MUS.next = ac.currentTime + 0.1; return; }
-    var spb = 60 / (R.rush > 0 ? 138 : 112) / 2;
-    if (MUS.next < ac.currentTime) MUS.next = ac.currentTime + 0.05;
-    while (MUS.next < ac.currentTime + 0.2) {
-      var dl = MUS.next - ac.currentTime, st = MUS.step % 64, sec = FORM[((MUS.step / 64) | 0) % FORM.length];
-      var m = sec[st];
-      if (m > 0) tone({ freq: mfreq(m), type: 'triangle', dur: spb * 1.6, vol: 0.045, delay: dl, attack: 0.01 });
-      if (st % 8 === 0) tone({ freq: mfreq(BASS[(st / 8) | 0]), type: 'sine', dur: spb * 6, vol: 0.08, delay: dl, attack: 0.02 });
-      if (st % 8 === 4) tone({ freq: mfreq(BASS[(st / 8) | 0] + 7), type: 'sine', dur: spb * 3, vol: 0.05, delay: dl, attack: 0.02 });
-      if (st % 2 === 1) note(st % 4 === 3 ? 1900 : 1600, null, 'sine', 0.025, 0.018, dl);
-      MUS.next += spb; MUS.step++;
-    }
-  }
 
   /* ========================================================= effects */
   var PARTS = [];
@@ -1398,7 +1373,6 @@
       R.hintT -= dt;
       if (R.hintT <= 0) { R.hintT = 0.25; R.hint = computeHint(); }
       renderUpgrades(false);
-      musicTick();
     } else if (R.mode === 'pause' || R.mode === 'confirm') {
       if (keys.anyPressed(['KeyP', 'Escape']) && R.mode === 'pause') resumeGame();
       else if (keys.anyPressed(['Enter', 'Space']) && R.mode === 'pause') resumeGame();
@@ -2428,7 +2402,7 @@
     setMode('play');
     if (S.finalePending) showFinale();
   }
-  function pauseGame() { if (R.mode !== 'play') return; saveGame(); setMode('pause'); $('musicBtn').textContent = 'الموسيقى: ' + (META.music ? 'تعمل' : 'متوقفة'); }
+  function pauseGame() { if (R.mode !== 'play') return; saveGame(); setMode('pause'); }
   function resumeGame() { SFX.click(); setMode('play'); K.keys.reset(); }
   function toMenu() {
     if (R.mode === 'finale') S.finalePending = false;
@@ -2472,7 +2446,6 @@
   $('resumeBtn').addEventListener('click', resumeGame);
   $('menuBtn').addEventListener('click', function () { SFX.click(); toMenu(); });
   $('restartBtn').addEventListener('click', function () { SFX.click(); askNewStore(); });
-  $('musicBtn').addEventListener('click', function () { META.music = !META.music; saveMeta(); au.unlock(); SFX.click(); $('musicBtn').textContent = 'الموسيقى: ' + (META.music ? 'تعمل' : 'متوقفة'); });
   $('yesBtn').addEventListener('click', function () { SFX.click(); newStore(); });
   $('noBtn').addEventListener('click', function () { SFX.click(); if (confirmFrom === 'pause') setMode('pause'); else if (confirmFrom === 'finale') setMode('finale'); else { setMode('title'); titleInfo(); } });
   $('collectBtn').addEventListener('click', closeWelcome);

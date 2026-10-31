@@ -1,20 +1,27 @@
 # ألعاب الفسحة (Recess Arcade) 🎮
 
-A light, ad-free games website **in Arabic** for 4th and 5th graders: a small Poki-style portal
+A light, ad-free games website **in Arabic** for children aged 6–11: a small Poki-style portal
 with original browser games, all written from scratch for this site. The site and all of its
-games are in Arabic, laid out right-to-left.
+games are in Arabic, laid out right-to-left. The games are being made to scale from a 6-year-old
+who has never held a mouse to an 11-year-old expert (Bubble Bop, Road Hopper and Dino 3D already
+adapt to each child), and none of them plays background music.
 
-- **No ads, no email/password accounts, no chat, no online tracking or third-party analytics, no links to other sites.**
-  Play statistics are counted on each PC only and are never sent anywhere (see
-  [Play statistics](#play-statistics-local-only)).
+- **No ads, no email/password accounts, no names, no chat, no third-party analytics, no links to other sites.**
+  Children pick an animal picture and their age band to play as themselves; nothing is typed.
+- Play statistics are counted on each PC (see [Play statistics](#play-statistics-local-only)).
+  A school can also run its **own** telemetry server, without names (see
+  [Telemetry without names](#telemetry-without-names-optional) and
+  [Turning on data collection](#turning-on-data-collection)); without it the site
+  makes no network request.
 - Every game, sound, font and picture lives in this repo. All games run locally in the browser.
 - **Made for Windows PCs with a mouse and keyboard.**
-- Scores, progress and the anonymous play statistics are saved in each browser (localStorage) only.
+- Scores, progress, player profiles and the play statistics are saved in each browser (localStorage).
 
-## The games (33)
+## The games (34)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
+| فقاعات بوب | Bubble Bop (first game for new mouse users) | 1 | نقطة البداية، أركيد |
 | أربعة على التوالي | Connect 4 | 1-2 | ألغاز، لاعبان على نفس الجهاز |
 | إكس أو | Tic-tac-toe | 1-2 | ألغاز، لاعبان على نفس الجهاز |
 | أصابع البرق | Lightning Fingers (typing test, English + Arabic) | 1 | تحديات |
@@ -50,6 +57,8 @@ games are in Arabic, laid out right-to-left.
 | ساحة الثعابين | Snake Arena | 1 | تحدي الروبوتات، أركيد |
 
 The original arcade games save best scores and unlocks in the browser, and have a title screen, P/Esc pause and a 🔊 mute button. The two board games use a compact board with local two-player and computer modes.
+
+**فقاعات بوب (Bubble Bop)** is the «ابدأ من هنا» starter game for a 6-year-old who has never used a mouse or keyboard. It is a real arcade game with no words to read, no way to lose and no timer in its levels. Bop, a round glowing friend, floats with the mouse pointer. Five worlds teach one input each through play: touch bubbles with Bop to pop them (no click needed), click on or near balloons, press the long Space bar so a frog catches fireflies, move a basket under falling fruit with ← → (or A/D), then a party world that mixes all four. Each world has three short levels (one to three stars) and a 60-second party round with combos, gold targets and a best score. Hit areas are bigger than the pictures, targets drift towards Bop, mashing and stray keys never cost anything, and an on-screen mouse, Space bar and arrow keys light up with the real ones. A wordless hand shows the move after a few idle seconds and repeats while the child waits. Difficulty follows the child (Kit.dda): a 6–7-year-old starts with huge, slow targets, a 10–11-year-old with a brisk challenge, and each world adapts to how the last level went. Stars unlock colours and hats for Bop. Two optional picture cards show how to hold the mouse and where the keys are. P or Esc pauses. Progress stays in this browser.
 
 **الديناصور ثلاثي الأبعاد (Dino 3D)** is a voxel desert endless runner. Jump with Space or Up,
 hold for a higher jump, and crouch or descend quickly with Down or Ctrl. Jump over low birds
@@ -223,12 +232,35 @@ storage is full. Retry keeps the current session and clears the warning only aft
 the pending data is saved. Block World's final celebration survives a reload until
 the player acknowledges it.
 
+### Players, age bands and XP
+
+The top of the home page asks «مَن يلعب؟» with big round animal pictures. A child picks
+their animal (or plays as a guest) with one click; nothing is typed and no name is stored.
+A new player picks an animal, a colour and an age band from three big number cards
+(6–7, 8–9, 10–11). In Bubble Bop, Road Hopper and Dino 3D's surprise courses the age band
+sets where difficulty starts, and the game then adapts to how that child plays; the other
+games follow in later milestones. Winning, trying and playing earn XP; the topbar
+shows the player's picture, level and progress, with a short celebration on a new level.
+Up to 24 players fit on one browser. The current player lasts only for that tab: closing
+it, the classroom «hand over the device» button, or 20 minutes with nobody playing returns
+to the guest. The classroom panel can set an age band for guests. The topbar 🔊 button
+mutes the portal and the games.
+
+### Sound
+
+There is no background music anywhere: no menu or game music, loops or jingles. Every
+sound is a short effect made in code when something happens (a pop, a jump, a reward),
+from the shared juice engine (`shared/juice.js`) or the game's own synthesizer. Classroom
+mode mutes everything. `tools/tests/zero-bgm.test.mjs` checks every game's title and pause
+screens for silence.
+
 ### Play statistics (local only)
 
 Each PC counts which games children open, how long they really play (only while they
 use the mouse or keyboard), where they stop in a game, and whether the games run
-smoothly on that PC. The numbers stay in that browser's storage. There is no server,
-no upload and no tracking script. Names, typed text and class codes are never recorded.
+smoothly on that PC. The numbers stay in that browser's storage: these local statistics
+are never uploaded (the optional, separate telemetry below sends play events without
+names). Names, typed text and class codes are never recorded.
 The numbers describe **a PC, not a child**: several children share a PC, and
 two-player modes mix players.
 
@@ -291,19 +323,61 @@ Everything the home page shows comes from **`js/catalog.js`**:
 - **Feature a game** first in the catalog: set `hot: true`.
 - **Rename the site:** change `name` in `window.SITE` (currently "ألعاب الفسحة").
 
+### Telemetry without names (optional)
+
+A school can collect play events without names from every PC on one server of its own (a
+free Cloudflare account, set up with one button; see below),
+to see which games children choose, how each child's play and skill develop over the year,
+where they stop, how difficulty settles per age band, and whether the PCs keep up. This project's published site sends to the school's
+server, named in `.github/workflows/build.yml`; a build without `SG_TELEMETRY_URL`, the
+source tree, the downloaded folder and local previews never send anything. Each child who
+picks an animal appears under a random code, so this is pseudonymous personal data: before
+turning it on, the school or district must complete its privacy review and tell parents
+(children's data: COPPA in the US, GDPR and the UK Age Appropriate Design Code in Europe and
+the UK), and research publication may need consent or an ethics review.
+
+Only `js/telemetry.js` in the portal sends; games never use the network. It sends no
+names, no typed text, no PC label, no profile key or picture, no clock time and no browser
+or graphics strings; it sends a random code per profile and one per PC, and the PC's time
+zone name. The teacher page shows whether this PC shares and the codes, can give a child
+who plays on two PCs one code, and «stop collecting» stops both the local statistics and
+the sharing. The server stores no IP addresses, keeps play for 400 days by default, and
+shows every number, even for one child. See [`docs/TELEMETRY.md`](docs/TELEMETRY.md)
+for the portal side and [`server/README.md`](server/README.md) for the server and its
+insights dashboard.
+
+### Turning on data collection
+
+The statistics server and its insights dashboard run on a **free Cloudflare account**,
+set up with one "Deploy to Cloudflare" button and no code: follow
+[Turn on data collection](server/README.md#turn-on-data-collection-about-5-minutes-no-code)
+in `server/README.md` (about 5 minutes), then send the address it shows
+(`https://school-games-telemetry.<name>.workers.dev`) to the developer, who points the
+site's fast build at it. The dashboard opens at that same address, with the password
+chosen during the setup. To run it on your own server instead, see
+[Self-hosting on Node](server/README.md#self-hosting-on-node).
+
 ## For developers
 
 ```
 index.html, css/, js/     the portal (plain HTML/CSS/JS, no build step)
 js/catalog.js             list of games, categories and site name
 js/stats.js               the portal's local play-statistics recorder
-teacher.html              teacher page: this PC's play statistics and Excel/JSON exports
+js/profiles.js            picture profiles without names, age bands and XP
+js/telemetry.js           the only network sender: play events without names to a school-run server (off by default)
+teacher.html              teacher page: this PC's play statistics, Excel/JSON exports and dashboard codes
 css/teacher.css, js/teacher.js   its styles and script (pure parts in window.SGTeacher)
 games/<slug>/             one folder per game (index.html + thumb.svg + its own files)
-shared/kit.js             tiny helper library all games use (sound, saving, input, scaling, play statistics)
+shared/kit.js             tiny helper library all games use (sound, saving, input, scaling, play statistics,
+                          age band, difficulty control Kit.dda, telemetry extras Kit.track)
+shared/juice.js           procedural sound effects (Kit.juice in games, Juice in the portal)
+server/                   the telemetry server (no names) and its insights dashboard (a Cloudflare
+                          Worker, or Node with no dependencies; deployed on its own, not part of the site)
 shared/game.css           shared game page styles + the Fredoka font
 lib/three/                three.js r159 (MIT) for the 3D games
+docs/ARCHITECTURE.md      the platform contract: runtime, profiles, telemetry, server, milestones
 docs/GAME_SPEC.md         the rules every game follows
+docs/TELEMETRY.md         the portal's telemetry (no names): gates, codes, events, delivery, turning it on
 docs/PLAY_STATS.md        play statistics: what is counted, storage and export formats
 docs/PERFORMANCE.md       size limits per game, slow-disk rules and how the fast build is measured
 tools/playtest.mjs        headless Chromium playtest harness (Playwright)

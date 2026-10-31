@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8ff3ff"/>
+      <stop offset="0.55" stop-color="#2fb6ec"/>
+      <stop offset="1" stop-color="#0d63b4"/>
+    </linearGradient>
+    <radialGradient id="bop" cx="35%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#fff6b8"/>
+      <stop offset="0.6" stop-color="#ffd23f"/>
+      <stop offset="1" stop-color="#e3a400"/>
+    </radialGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#fff27a" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#fff27a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="pink" cx="35%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="0.55" stop-color="#ff8fd0" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#ff8fd0" stop-opacity="0.95"/>
+    </radialGradient>
+    <radialGradient id="lime" cx="35%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="0.55" stop-color="#a9ef5e" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#a9ef5e" stop-opacity="0.95"/>
+    </radialGradient>
+    <radialGradient id="lilac" cx="35%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="0.55" stop-color="#c3a0ff" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#c3a0ff" stop-opacity="0.95"/>
+    </radialGradient>
+    <radialGradient id="peach" cx="35%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="0.55" stop-color="#ffad66" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#ffad66" stop-opacity="0.95"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#sea)"/>
+  <g fill="#ffffff" opacity="0.12">
+    <path d="M40 0 L90 0 L180 400 L110 400 Z"/>
+    <path d="M230 0 L270 0 L380 400 L320 400 Z"/>
+  </g>
+  <!-- seaweed and sand -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M34 380 Q52 350 34 320 Q16 290 34 260 Q52 230 34 200" stroke="#1c2250" stroke-width="20"/>
+    <path d="M34 380 Q52 350 34 320 Q16 290 34 260 Q52 230 34 200" stroke="#38c76a" stroke-width="11"/>
+    <path d="M370 384 Q352 354 370 324 Q388 294 370 264" stroke="#1c2250" stroke-width="20"/>
+    <path d="M370 384 Q352 354 370 324 Q388 294 370 264" stroke="#38c76a" stroke-width="11"/>
+  </g>
+  <path d="M0 356 Q60 336 120 354 T240 352 T400 348 L400 410 L0 410 Z" fill="#ffd98a" stroke="#1c2250" stroke-width="6"/>
+  <path d="M300 378 L306 366 L312 378 L325 380 L315 388 L318 400 L306 393 L294 400 L297 388 L287 380 Z" fill="#ff7e9e" stroke="#1c2250" stroke-width="3" stroke-linejoin="round"/>
+  <!-- bubbles -->
+  <g stroke="#1c2250" stroke-width="6">
+    <circle cx="78" cy="196" r="40" fill="url(#lime)"/>
+    <circle cx="344" cy="214" r="30" fill="url(#lilac)"/>
+    <circle cx="352" cy="302" r="22" fill="url(#peach)"/>
+    <circle cx="96" cy="300" r="22" fill="url(#pink)"/>
+  </g>
+  <g fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round">
+    <path d="M56 184 A28 28 0 0 1 72 168"/>
+    <path d="M328 204 A21 21 0 0 1 338 193"/>
+    <path d="M341 295 A15 15 0 0 1 348 288"/>
+  </g>
+  <!-- a bubble popping: sparkle lines and drops -->
+  <g stroke="#1c2250" stroke-width="5" stroke-linecap="round">
+    <path d="M290 74 L300 92 M330 64 L326 86 M352 92 L336 102 M266 104 L284 108"/>
+  </g>
+  <g fill="#ffffff" stroke="#1c2250" stroke-width="3.5">
+    <circle cx="276" cy="80" r="8"/><circle cx="350" cy="76" r="6"/><circle cx="356" cy="118" r="7"/>
+  </g>
+  <path d="M306 118 L316 96 L326 118 L348 120 L332 134 L336 156 L316 145 L296 156 L300 134 L284 120 Z" fill="#ffe066" stroke="#1c2250" stroke-width="5" stroke-linejoin="round"/>
+  <!-- Bop -->
+  <circle cx="198" cy="226" r="132" fill="url(#glow)"/>
+  <circle cx="198" cy="226" r="86" fill="url(#bop)" stroke="#1c2250" stroke-width="9"/>
+  <ellipse cx="160" cy="178" rx="22" ry="12" transform="rotate(-35 160 178)" fill="#ffffff" opacity="0.85"/>
+  <ellipse cx="146" cy="248" rx="15" ry="10" fill="#ff5a8c" opacity="0.5"/>
+  <ellipse cx="250" cy="248" rx="15" ry="10" fill="#ff5a8c" opacity="0.5"/>
+  <g stroke="#1c2250" stroke-width="5">
+    <ellipse cx="170" cy="214" rx="18" ry="22" fill="#ffffff"/>
+    <ellipse cx="226" cy="214" rx="18" ry="22" fill="#ffffff"/>
+  </g>
+  <circle cx="176" cy="218" r="11" fill="#1c2250"/><circle cx="232" cy="218" r="11" fill="#1c2250"/>
+  <circle cx="180" cy="212" r="4" fill="#ffffff"/><circle cx="236" cy="212" r="4" fill="#ffffff"/>
+  <path d="M176 252 Q198 286 220 252 Z" fill="#7a1f3d" stroke="#1c2250" stroke-width="5" stroke-linejoin="round"/>
+  <ellipse cx="198" cy="266" rx="9" ry="6" fill="#ff7a9c"/>
+  <!-- the big friendly pointer -->
+  <path d="M262 286 L262 352 L278 338 L290 362 L304 356 L292 332 L314 332 Z" fill="#ffffff" stroke="#1c2250" stroke-width="6" stroke-linejoin="round"/>
+  <!-- logo -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="900" text-anchor="middle">
+    <text x="200" y="88" font-size="66" fill="#1c2250" stroke="#1c2250" stroke-width="14" stroke-linejoin="round">فقاعات بوب</text>
+    <text x="200" y="84" font-size="66" fill="#ffd23f" stroke="#ffffff" stroke-width="2" paint-order="stroke" stroke-linejoin="round">فقاعات بوب</text>
+  </g>
+</svg>

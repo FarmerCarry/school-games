@@ -23,7 +23,7 @@ after(async () => {
 
 function fixture(overrides = {}) {
   return { best: 240, bestDist: 180.5, coins: 100, owned: ['red'], car: 'red',
-    runs: 3, done: [...earlierMissions, 'buy'], giftAt: 123456789, gems: 2, music: false, ...overrides };
+    runs: 3, done: [...earlierMissions, 'buy'], giftAt: 123456789, gems: 2, ...overrides };
 }
 
 async function game(t, entries) {
@@ -83,7 +83,8 @@ async function saveFromPause(page) {
 
 test('legacy progress migrates as one complete record and stale legacy keys never override it', async t => {
   const legacy = fixture({ owned: ['red', 'taxi'], car: 'taxi' });
-  const page = await game(t, legacy);
+  // The game has no music any more: an old music switch is ignored, never copied.
+  const page = await game(t, { ...legacy, music: false });
   assert.deepEqual((await snapshot(page)).current, { v: 1, ...legacy });
   assert.equal((await snapshot(page)).stored, null, 'migration waits for a successful save');
   await openGarage(page);
@@ -92,6 +93,7 @@ test('legacy progress migrates as one complete record and stale legacy keys neve
   const unchanged = await page.evaluate(keys => Object.fromEntries(keys.map(key =>
     [key, JSON.parse(localStorage.getItem('sg:drift-king:' + key))])), Object.keys(legacy));
   assert.deepEqual(unchanged, legacy, 'new saves must not write any legacy fields');
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:drift-king:music')), 'false', 'the old music key is left alone');
   await page.evaluate(() => {
     localStorage.setItem('sg:drift-king:coins', '9999');
     localStorage.setItem('sg:drift-king:owned', '["red"]');
@@ -104,10 +106,10 @@ test('legacy progress migrates as one complete record and stale legacy keys neve
 test('saved values are normalized without dropping valid owned cars', async t => {
   const raw = fixture({ v: 1, best: '240.9', bestDist: '180.5', coins: '123.8',
     owned: ['taxi', 'taxi', 'missing-car', null], car: 'missing-car', runs: -3,
-    done: ['buy', 'buy', 'missing-mission', null], giftAt: 'Infinity', gems: {}, music: 'false' });
+    done: ['buy', 'buy', 'missing-mission', null], giftAt: 'Infinity', gems: {}, music: false });
   const page = await game(t, { ...fixture({ coins: 9999 }), save: raw });
   const expected = { v: 1, best: 240, bestDist: 180.5, coins: 123, owned: ['red', 'taxi'],
-    car: 'red', runs: 0, done: ['buy'], giftAt: 0, gems: 0, music: true };
+    car: 'red', runs: 0, done: ['buy'], giftAt: 0, gems: 0 };
   assert.deepEqual((await snapshot(page)).current, expected);
   await openGarage(page);
   await chooseCar(page, 'red');
@@ -167,6 +169,7 @@ test('restart or menu from pause keeps a best the run already beat without count
   await page.locator('#btnPlay').press('Enter');
   await page.evaluate(() => __game.debug.skip(300));
   await page.locator('#btnPause').click();
+  assert.doesNotMatch(await page.locator('#pause').textContent(), /الموسيقى/, 'the pause panel has no music switch');
   await page.locator('#btnRestart').click();
   let { stored } = await snapshot(page);
   assert.equal(stored.best, 300);

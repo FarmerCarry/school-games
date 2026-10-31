@@ -30,15 +30,14 @@
       car: owned.indexOf(data.car) >= 0 ? data.car : 'red',
       runs: savedNumber(data.runs),
       done: savedIds(data.done, MISSIONS.map(function (m) { return m.id; })),
-      giftAt: savedNumber(data.giftAt), gems: savedNumber(data.gems),
-      music: typeof data.music === 'boolean' ? data.music : true
+      giftAt: savedNumber(data.giftAt), gems: savedNumber(data.gems)
     };
   }
   function loadSave() {
     var data = store.get('save', null);
     if (!data || typeof data !== 'object' || Array.isArray(data) || data.v !== 1) {
       data = {};
-      ['best', 'bestDist', 'coins', 'owned', 'car', 'runs', 'done', 'giftAt', 'gems', 'music'].forEach(function (key) {
+      ['best', 'bestDist', 'coins', 'owned', 'car', 'runs', 'done', 'giftAt', 'gems'].forEach(function (key) {
         data[key] = store.get(key, null);
       });
     }
@@ -156,7 +155,6 @@
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
   muteBtn.title = 'الصوت (M)';
-  DK.snd.setMusic(save.music);
 
   /* ------------------------------------------------------------- state */
   var G = {
@@ -212,7 +210,6 @@
     if (e.target && e.target.closest && e.target.closest('button, .gcard, .giftbox, .panel')) return;
     mouseDown = true;
     try { canvas.focus({ preventScroll: true }); } catch (er) { /* ignore */ }
-    DK.snd.ensureMusic();
   });
   window.addEventListener('pointerup', function () { mouseDown = false; });
   function holdInput() { return Kit.keys.down('Space') || mouseDown; }
@@ -226,7 +223,7 @@
   function show(node, on) { node.hidden = !on; }
   function click(id, fn) {
     var b = $(id);
-    b.addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); DK.snd.ensureMusic(); DK.snd.click(); fn(); if (e.detail > 0) b.blur(); });
+    b.addEventListener('click', function (e) { e.stopPropagation(); Kit.audio.unlock(); DK.snd.click(); fn(); if (e.detail > 0) b.blur(); });
   }
   var toastTimer = 0;
   function toast(text, coin) {
@@ -268,7 +265,6 @@
     clearTimeout(overTimer);
     G.mode = 'title';
     DK.snd.stopEngine();
-    DK.snd.musicLevel(0.55);
     show(el.title, true); show(el.over, false); show(el.pause, false); show(el.garage, false); show(el.gift, false);
     show(el.btnPause, false);
     G.model = DK.carById(save.car);
@@ -293,8 +289,6 @@
     overT = 0; fallT = 0; poofed = false; bannerT = 0;
     G.bestFlag = null;
     DK.snd.startEngine(G.model.pitch);
-    DK.snd.ensureMusic();
-    DK.snd.musicLevel(0.4);
     DK.snd.start();
     canvas.focus({ preventScroll: true });
   }
@@ -303,8 +297,6 @@
     if (G.mode !== 'play') return;
     G.mode = 'paused';
     DK.snd.stopEngine(true);
-    DK.snd.musicLevel(0.2);
-    $('btnMusic').textContent = 'الموسيقى: ' + (save.music ? 'تعمل' : 'متوقفة');
     show(el.pause, true);
     confetti.length = 0;   // frozen pieces would sit on the pause buttons
     persist();
@@ -325,7 +317,6 @@
     G.mode = 'play';
     armed = !holdInput();
     DK.snd.startEngine(G.model.pitch);
-    DK.snd.musicLevel(0.4);
   }
 
   var overMissions = [], overTimer = 0;
@@ -367,7 +358,6 @@
     $('oMissions').innerHTML = missionHTML(overMissions, st, justDone);
     show(el.over, true);
     DK.snd.stopEngine();
-    DK.snd.musicLevel(0.55);
     if (newBest) {
       overTimer = setTimeout(function () { DK.snd.best(); burstConfetti(90, 'top'); }, 350);
     } else overTimer = setTimeout(function () { Kit.sfx.lose(); }, 150);
@@ -546,11 +536,6 @@
   click('btnResume', resumeGame);
   click('btnRestart', function () { bankPausedRun(); startRun(); });
   click('btnMenu', function () { bankPausedRun(); toTitle(); });
-  click('btnMusic', function () {
-    save.music = !save.music; persist(); DK.snd.setMusic(save.music);
-    if (save.music) DK.snd.musicLevel(0.2);
-    $('btnMusic').textContent = 'الموسيقى: ' + (save.music ? 'تعمل' : 'متوقفة');
-  });
   click('btnAgain', startRun);
   click('btnOverGarage', function () { openGarage('over'); });
   click('btnOverMenu', toTitle);

@@ -23,6 +23,9 @@
  *     The sw.js committed at the repo root is this same off switch, so switching GitHub Pages
  *     back to the plain source site also cleans the offline cache off every PC.
  *     (Regenerate it with: node tools/build.mjs --kill-sw --out .work/kill-switch && cp .work/kill-switch/sw.js sw.js)
+ *   - SG_TELEMETRY_URL (environment, optional): the https:// address of the school's telemetry
+ *     ingest server (docs/TELEMETRY.md; play events without names). Only the portal gets it, as window.SG_TELEMETRY, and
+ *     only in a normal build; unset or empty, nothing is added and the portal never sends.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,6 +43,7 @@ const options = parseArgs(process.argv.slice(2));
 const DEST = path.resolve(ROOT, options.out);
 const MINIFY = options.minify;
 const KILL_SW = options.killSW;
+const TELEMETRY_URL = telemetryUrl(process.env.SG_TELEMETRY_URL);
 const esbuild = MINIFY ? require('esbuild') : null;
 
 const posix = p => p.split(path.sep).join('/');
@@ -52,7 +56,7 @@ const OUTPUT_PRODUCER = 'school-games/tools/build.mjs';
 // The README links to this file on the published site; keep the names stable.
 const OFFLINE_ZIP = 'school-games-offline.zip';
 const OFFLINE_FOLDER = 'school-games';
-const SOURCE_DIRS = new Set(['.git', '.github', '.agents', '.aws', '.codex', 'games', 'js', 'css', 'shared', 'lib', 'icons', 'tools', 'docs', 'node_modules', 'multiplayer-server']);
+const SOURCE_DIRS = new Set(['.git', '.github', '.agents', '.aws', '.codex', 'games', 'js', 'css', 'shared', 'lib', 'icons', 'tools', 'docs', 'node_modules', 'multiplayer-server', 'server']);
 const filesystemName = name => process.platform === 'win32' ? name.toLowerCase() : name;
 
 function parseArgs(args) {
@@ -70,6 +74,20 @@ function parseArgs(args) {
     else throw new Error('unknown build argument: ' + args[i]);
   }
   return result;
+}
+
+// The ingest address goes into an inline script, so it must be a plain https:// URL:
+// URL characters only (no quotes, spaces, backslashes, < or >), no user name or password.
+function telemetryUrl(value) {
+  if (value === undefined || value === '') return '';
+  let url = null;
+  try { url = new URL(value); } catch { /* refused below */ }
+  if (value.length > 200 || !/^https:\/\/[\w\-.~:/?#[\]@!$&()*+,;=%]+$/.test(value) || !url || url.protocol !== 'https:' ||
+    !url.hostname || url.username || url.password) {
+    throw new Error('SG_TELEMETRY_URL must be an https:// address of at most 200 characters with only URL characters ' +
+      '(no quotes, spaces, backslashes, < or >) and no user name or password; got ' + JSON.stringify(value.slice(0, 60)));
+  }
+  return value;
 }
 
 function isWithin(parent, child) {
@@ -261,6 +279,9 @@ try {
     const html = inlinePage(path.join(ROOT, 'games', slug, 'index.html'));
     write(`games/${slug}/index.html`, html);
     report.push([`games/${slug}/index.html`, Buffer.byteLength(html)]);
+    for (const name of fs.readdirSync(path.join(ROOT, 'games', slug))) {
+      if (/\.(?:webp|avif)$/i.test(name)) copy(`games/${slug}/${name}`);
+    }
   }
   const missing = catalogSlugs.filter(s => !gameDirs.includes(s));
   if (missing.length) console.warn('warning: catalog games without a folder:', missing.join(', '));
@@ -271,13 +292,15 @@ try {
     const f = path.join(ROOT, 'games', slug, 'thumb.svg');
     if (fs.existsSync(f)) thumbs[slug] = svgDataUri(read(f));
   }
-  let portal = inlinePage(path.join(ROOT, 'index.html'), {
-    before: {
-      'js/site.js': 'window.SG_THUMBS=' + JSON.stringify(thumbs).replace(/<\//g, '<\\/') + ';',
-      'js/offline.js': 'window.SG_OFFLINE_BUILD=true;'
-    },
-    skip: KILL_SW ? ['js/offline.js'] : []
-  });
+  const before = {
+    'js/site.js': 'window.SG_THUMBS=' + JSON.stringify(thumbs).replace(/<\//g, '<\\/') + ';',
+    'js/offline.js': 'window.SG_OFFLINE_BUILD=true;'
+  };
+  // The telemetry sink's ingest address: the portal only, never a kill-switch build.
+  const telemetry = TELEMETRY_URL && !KILL_SW ? 'window.SG_TELEMETRY={url:' + JSON.stringify(TELEMETRY_URL) + '};' : '';
+  if (telemetry) before['js/telemetry.js'] = telemetry;
+  let portal = inlinePage(path.join(ROOT, 'index.html'), { before, skip: KILL_SW ? ['js/offline.js'] : [] });
+  if (telemetry && !portal.includes(telemetry)) throw new Error('SG_TELEMETRY_URL is set, but index.html does not load js/telemetry.js');
   // A kill-switch deployment omits the registering controller completely.
   write('index.html', portal);
   report.unshift(['index.html', Buffer.byteLength(portal)]);
@@ -347,6 +370,7 @@ try {
   console.log(`offline download: ${OFFLINE_ZIP}, ${zipped.length} files in ${OFFLINE_FOLDER}/, ${(download.length / 1048576).toFixed(2)} MB`);
   for (const [f, b] of report.slice(0, 1)) console.log(`  ${f}: ${(b / 1024).toFixed(0)} KB`);
   console.log(`  teacher.html: ${(Buffer.byteLength(teacher) / 1024).toFixed(0)} KB`);
+  if (telemetry) console.log(`  telemetry: the portal sends play events without names to ${new URL(TELEMETRY_URL).host}`);
   const gb = report.slice(1).map(r => r[1]);
   console.log(`  games: ${(Math.min(...gb) / 1024).toFixed(0)}–${(Math.max(...gb) / 1024).toFixed(0)} KB each (one file per game)`);
 } finally {

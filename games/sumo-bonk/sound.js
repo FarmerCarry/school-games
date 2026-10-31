@@ -1,4 +1,5 @@
-/* Sumo Bonk — synthesized sound effects and a tiny music sequencer (WebAudio only). */
+/* Sumo Bonk — synthesized sound effects (WebAudio only). No background music: every sound is a
+ * one-shot caused by a move or a match event. */
 (function () {
   'use strict';
   var A = Kit.audio;
@@ -110,62 +111,6 @@
     star: function (i) { T({ freq: 900 + (i || 0) * 60, type: 'square', dur: 0.05, vol: 0.08 }); },
     pause: function () { T({ freq: 520, to: 390, type: 'triangle', dur: 0.12, vol: 0.18 }); }
   };
-
-  /* ------------------------------------------------------------- music */
-  // Bouncy pentatonic loop: taiko kick, wood clack, bass and a little lead.
-  var SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19];
-  var MEL = [
-    [4, -1, 4, 5, 4, -1, 2, -1, 3, -1, 2, -1, 0, -1, -1, -1],
-    [2, -1, 2, 3, 4, -1, 3, 2, 3, -1, -1, -1, -1, -1, 1, -1],
-    [5, -1, 4, -1, 3, -1, 4, 5, 6, -1, 5, -1, 4, -1, 3, -1],
-    [2, -1, 3, -1, 4, -1, 2, -1, 0, -1, -1, -1, 1, -1, 2, -1]
-  ];
-  var ROOTS = [0, -3, 5, 7];
-  var music = { want: false, on: true, step: 0, next: 0, gain: null, tempo: 118 };
-
-  function note(ctx, dest, freq, t, dur, type, vol, to) {
-    var o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = type; o.frequency.setValueAtTime(freq, t);
-    if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.006);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.03);
-  }
-
-  function schedule(ctx, s, t) {
-    var bar = Math.floor(s / 16) % 4, st = s % 16, dest = music.gain;
-    var root = ROOTS[bar];
-    if (st === 0 || st === 7 || st === 10) note(ctx, dest, 150, t, 0.2, 'sine', 0.55, 45);
-    if (st === 4 || st === 12) note(ctx, dest, 1500, t, 0.035, 'square', 0.06, 900);
-    if (st % 2 === 1) note(ctx, dest, 3100, t, 0.025, 'triangle', 0.02, 2400);
-    if (st === 0 || st === 3 || st === 6 || st === 8 || st === 11 || st === 14) {
-      var bf = 65.41 * Math.pow(2, (root + (st === 8 ? 12 : 0)) / 12);
-      note(ctx, dest, bf, t, 0.16, 'triangle', 0.3);
-    }
-    var m = MEL[bar][st];
-    if (m >= 0 && music.lead) note(ctx, dest, 523.25 * Math.pow(2, SCALE[m] / 12), t, 0.14, 'triangle', 0.075);
-  }
-
-  music.update = function () {
-    var ctx = A.ctx;
-    if (!ctx || !music.want || !music.on) return;
-    if (!music.gain) {
-      var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3800; lp.Q.value = 0.5;
-      lp.connect(A.master);
-      music.gain = ctx.createGain(); music.gain.gain.value = 0.32; music.gain.connect(lp);
-    }
-    var step = 60 / music.tempo / 4;
-    if (music.next < ctx.currentTime) music.next = ctx.currentTime + 0.05;
-    while (music.next < ctx.currentTime + 0.15) {
-      // muted (or the classroom quiet preset): keep the beat counting but build no audio nodes
-      if (!A.muted) schedule(ctx, music.step, music.next);
-      music.next += step; music.step = (music.step + 1) % 64;
-    }
-  };
-  music.play = function (tempo, lead) { music.want = true; music.tempo = tempo || 118; music.lead = lead !== false; };
-  music.stop = function () { music.want = false; };
-  SFX.music = music;
 
   window.SBSound = SFX;
 })();

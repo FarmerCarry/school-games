@@ -181,6 +181,81 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 .surprise:active { transform: translateY(4px); box-shadow: 0 1px 0 #d69a00; }
 .surprise.roll .dice { animation: roll 0.6s cubic-bezier(.3, 1.4, .5, 1); }
 
+/* Personal mute (sg:site:muted, shared with the games). Locked while the classroom preset is on. */
+.mute {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #eef4ff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #cbd6f2;
+  transition: transform 0.12s ease;
+}
+.mute:hover { transform: translateY(-2px); }
+.mute:active { transform: translateY(3px); box-shadow: 0 1px 0 #cbd6f2; }
+.mute[aria-disabled="true"] { background: #e4e7f0; box-shadow: none; opacity: 0.6; cursor: not-allowed; transform: none; }
+
+/* The current player: avatar in its ring colour, level and XP bar. A guest is a silhouette. */
+.me {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 50px;
+  padding-block: 0;
+  padding-inline: 4px 14px;
+  border-radius: 999px;
+  background: #fff4cc;
+  box-shadow: 0 4px 0 #e0b000;
+  transition: transform 0.12s ease;
+}
+.me[hidden] { display: none; }
+.me:hover { transform: translateY(-2px); }
+.me.guest { background: #eef4ff; box-shadow: 0 4px 0 #cbd6f2; }
+.me-face {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 4px solid var(--rc, #8a93b8);
+  background: #fff;
+  box-shadow: 0 0 0 1.5px var(--ink);
+  font-size: 23px;
+  line-height: 1;
+}
+.me-face svg, .who-face svg { width: 70%; height: 70%; fill: #7d86ad; }
+.me-info { display: flex; flex-direction: column; gap: 5px; min-width: 44px; }
+.me-lv { font-size: 17px; line-height: 1; white-space: nowrap; }
+.me-lv span { font-size: 14px; margin-inline-end: 2px; }
+.me-bar { display: block; width: 54px; height: 8px; border-radius: 99px; background: rgba(28, 34, 80, 0.16); overflow: hidden; }
+.me-bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: #ff8f00; transition: width 0.6s cubic-bezier(.3, 1.4, .5, 1); }
+.me.guest .me-bar { display: none; }
+.me.lvup { animation: lvup 0.9s cubic-bezier(.3, 1.6, .5, 1); }
+.me-gain {
+  position: absolute;
+  top: -8px;
+  inset-inline-end: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #ffcc00;
+  color: #3a2a00;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.2;
+  pointer-events: none;
+  animation: gain 1.2s ease-out both;
+}
+
 /* ------------------------------------------------------------ chips */
 .chips {
   display: flex;
@@ -373,6 +448,178 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 }
 .badge.hot { background: linear-gradient(180deg, #ff6a3d, #ff2d55); }
 .badge.p2 { background: linear-gradient(180deg, #8f6bff, #5b3df5); }
+.badge.start { background: linear-gradient(180deg, #3ec6e0, #0e8fb8); }
+
+/* Beginner starting point. Same banner shape as the other portal cards. */
+.starter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  margin: 14px 0 8px;
+  padding: 14px 16px;
+  max-width: 100%;
+  border-radius: 24px;
+  color: #1c2250;
+  text-decoration: none;
+  background:
+    radial-gradient(circle at 90% 20%, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0) 42%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0 16px, rgba(255, 255, 255, 0) 16px 32px),
+    #fff4cc;
+  box-shadow: 0 5px 0 #e0b000;
+}
+.starter-ico {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+  background: #fff;
+  font-size: 40px;
+  box-shadow: 0 4px 0 rgba(28, 34, 80, 0.12);
+  animation: bob 2.4s ease-in-out infinite;
+}
+.starter-copy { display: flex; flex-direction: column; min-width: 0; flex: 1 1 180px; }
+.starter-copy b { font-size: 28px; line-height: 1.2; }
+.starter-copy span { font-size: 20px; font-weight: 700; }
+.starter-copy small { font-size: 16px; color: #3a4578; }
+.starter-go {
+  flex: 0 0 auto;
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: #1c2250;
+  font-weight: 700;
+  font-size: 20px;
+  box-shadow: 0 4px 0 #d69a00;
+}
+
+/* "Who's playing?": big round picture avatars above the starter card. */
+.who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 22px;
+  margin: 14px 0 8px;
+  padding: 12px 18px;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 5px 0 rgba(28, 34, 80, 0.12);
+}
+.who.who-new { flex-direction: column; align-items: flex-start; }
+.who-head { flex: 0 1 auto; min-width: 0; }
+.who-title { font-size: 24px; line-height: 1.25; }
+.who-hint { margin: 2px 0 0; font-size: 16px; font-weight: 700; color: var(--ink-soft); }
+.who-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 16px; flex: 1 1 300px; }
+.who-av {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 70px;
+  padding: 2px;
+  border: 0;
+  border-radius: 20px;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  cursor: pointer;
+}
+.who-av .who-face, .who-ring .who-face {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 5px solid var(--rc, #b9c1de);
+  background: #fff;
+  box-shadow: 0 0 0 2px var(--ink), 0 5px 0 1px rgba(28, 34, 80, 0.16);
+  font-size: 34px;
+  line-height: 1;
+  transition: transform 0.18s cubic-bezier(.3, 1.8, .5, 1);
+}
+.who-av:hover .who-face { transform: translateY(-3px) scale(1.06); }
+.who-av:active .who-face { transform: scale(0.94); }
+.who-cap { font-size: 15px; font-weight: 700; line-height: 1.1; white-space: nowrap; }
+.who-av[aria-pressed="true"] { color: var(--ink); }
+/* The current player: a thick ring, a white gap, an outer navy ring and a check. */
+.who-av[aria-pressed="true"] .who-face { border-width: 8px; box-shadow: 0 0 0 3px #fff, 0 0 0 7px var(--ink), 0 6px 0 5px rgba(28, 34, 80, 0.2); }
+.who-av[aria-pressed="true"]::after, .who-remove .who-av::after {
+  content: '✓' / '';
+  position: absolute;
+  top: -6px;
+  inset-inline-end: -2px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: #138a43;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px var(--ink);
+}
+.who-remove .who-av::after { content: '✕' / ''; background: #c62828; }
+.who-guest .who-face { background: #f1f3fa; }
+.who-add .who-face { border-style: dashed; border-color: #7d86ad; background: #f6f8ff; color: var(--ink-soft); font-size: 40px; font-weight: 700; }
+.who-av.pop .who-face { animation: avPop 0.45s cubic-bezier(.3, 1.8, .5, 1); }
+.who-av.born .who-face { animation: born 0.8s cubic-bezier(.3, 1.6, .5, 1); }
+.who-edit {
+  align-self: center;
+  width: 38px;
+  height: 38px;
+  margin-inline-start: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  font-size: 17px;
+  opacity: 0.55;
+  cursor: pointer;
+}
+.who-edit:hover, .who-edit:focus-visible { opacity: 1; background: #eef4ff; }
+.who-steps { display: flex; gap: 6px; }
+.who-steps i { width: 28px; height: 8px; border-radius: 99px; background: #dde3f5; }
+.who-steps i.on { background: #0e8fb8; }
+.who-pick { display: flex; flex-wrap: wrap; gap: 12px; }
+.who-opt {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: #eef4ff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 48px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 5px 0 #cbd6f2;
+  transition: transform 0.15s cubic-bezier(.3, 1.8, .5, 1);
+}
+.who-opt:hover { transform: translateY(-3px) scale(1.05); }
+.who-opt:active { transform: translateY(3px); box-shadow: 0 2px 0 #cbd6f2; }
+.who-opt[disabled] { opacity: 0.3; cursor: not-allowed; transform: none; box-shadow: none; }
+.who-ring { background: #fff; }
+.who-ring .who-face { width: 66px; height: 66px; border-width: 9px; font-size: 32px; box-shadow: 0 0 0 2px var(--ink); }
+.who-age { width: 150px; height: 118px; gap: 0; align-content: center; }
+.who-age b { font-size: 54px; line-height: 1.05; font-weight: 700; }
+.who-age small { font-size: 17px; font-weight: 700; color: var(--ink-soft); }
+.who-age:nth-child(1) { background: #dcf7e5; box-shadow: 0 5px 0 #7fd39b; }
+.who-age:nth-child(2) { background: #dff0ff; box-shadow: 0 5px 0 #86c3f0; }
+.who-age:nth-child(3) { background: #efe5ff; box-shadow: 0 5px 0 #b99bef; }
+.who-nav { display: flex; flex-wrap: wrap; gap: 10px; }
+.who-confirm { align-items: center; }
+.who-confirm .who-av { cursor: default; }
+.who-confirm p { margin: 0; flex: 1 1 220px; font-size: 18px; font-weight: 700; color: var(--ink); }
+.pbtn.danger { background: #b3261e; color: #fff; box-shadow: 0 4px 0 #7a1712; }
+.pbtn.danger:hover { background: #961f19; }
 
 .label {
   position: absolute;
@@ -608,6 +855,14 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 .help[open] summary { margin-bottom: 10px; }
 
 @media (max-width: 1199px) {
+  /* The search box keeps its room: the badge becomes the avatar inside a ring that fills
+     with XP (--xp, set by site.js), with the level in a bubble. */
+  .topbar { gap: 12px; }
+  .me { width: 50px; padding: 0; justify-content: center; border-radius: 50%; background: conic-gradient(#ff8f00 var(--xp, 0%), #f5e3a1 0); }
+  .me-face { width: 37px; height: 37px; border-width: 3px; font-size: 20px; }
+  .me-info { display: contents; }
+  .me-lv { position: absolute; top: -7px; right: -9px; padding: 2px 6px; border-radius: 999px; background: #fff; box-shadow: 0 0 0 1.5px var(--ink); font-size: 13px; }
+  .me-lv span, .me-bar { display: none; }
   .play { flex-direction: column; align-items: center; }
   .play-side { flex: 0 0 auto; width: 100%; flex-direction: row; gap: 16px; }
   .play-side .card { flex: 1 1 0; }
@@ -645,6 +900,7 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   white-space: nowrap;
 }
 .toast.show { transform: translate(-50%, 0); opacity: 1; }
+.toast.gold { padding: 14px 30px; background: #ffcc00; color: #3a2a00; font-size: 23px; box-shadow: 0 6px 0 #d69a00, 0 10px 28px rgba(28, 34, 80, 0.3); }
 
 .burst {
   position: fixed;
@@ -683,6 +939,22 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chips { flex-wrap: nowrap; overflow-x: auto; }
   .play-side { flex-direction: column; }
+  /* The sound and player buttons share the search row; the empty item ends the first row. */
+  .topbar::after { content: ''; order: 1; flex-basis: 100%; height: 0; }
+  .search { flex: 1 1 0; min-width: 0; order: 2; }
+  .mute, .me { order: 2; }
+  .mute { width: 42px; height: 42px; font-size: 20px; }
+  .who { padding: 10px 12px; gap: 8px 14px; }
+  .who-row { gap: 10px 12px; }
+  .who-av { min-width: 60px; }
+  .who-av .who-face { width: 56px; height: 56px; font-size: 30px; }
+  .who-opt { width: 68px; height: 68px; font-size: 38px; border-radius: 18px; }
+  .who-ring .who-face { width: 56px; height: 56px; font-size: 28px; }
+  .who-age { width: 100px; height: 100px; }
+  .who-age b { font-size: 40px; }
+}
+@media (max-width: 400px) {
+  .logo-svg { height: 40px; }
 }
 
 /* ------------------------------------------------------------ animations */
@@ -724,6 +996,27 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   100% { transform: scale(1); }
 }
 @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+@keyframes avPop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+@keyframes born {
+  0% { transform: scale(0.2) rotate(-25deg); }
+  60% { transform: scale(1.25) rotate(8deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes lvup {
+  0% { transform: scale(1); box-shadow: 0 4px 0 #e0b000; }
+  35% { transform: scale(1.18) rotate(-3deg); box-shadow: 0 4px 0 #e0b000, 0 0 0 10px rgba(255, 204, 0, 0.55); }
+  100% { transform: scale(1); box-shadow: 0 4px 0 #e0b000, 0 0 0 22px rgba(255, 204, 0, 0); }
+}
+/* Ends visible, so reduced motion (which cuts animations short) still shows the number. */
+@keyframes gain {
+  0% { transform: translateY(10px) scale(0.6); opacity: 0; }
+  30% { transform: translateY(-6px) scale(1.15); opacity: 1; }
+  100% { transform: translateY(-14px) scale(1); opacity: 1; }
+}
 @keyframes burst {
   0% { transform: translate(-50%, -50%) scale(0.4); opacity: 1; }
   100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.2); opacity: 0; }
@@ -751,6 +1044,8 @@ html.classroom-open { scroll-padding-top: calc(var(--hdr) + var(--classroom-h, 0
 .classroom-controls input { width: 18px; height: 18px; }
 .classroom-controls select { font: inherit; color: var(--ink); border: 1px solid #8192b6; border-radius: 8px; padding: 7px; background: #fff; }
 .classroom-controls p { flex-basis: 100%; margin: 0; font-size: 15px; }
+.band-pick { display: inline-flex; align-items: center; gap: 8px; }
+.band-pick[hidden] { display: none; }
 /* Shown only while a teacher has stopped the local play statistics. */
 .stats-off { padding: 4px 12px; border-radius: 999px; background: #fff1c2; color: #5c4200; font-weight: 700; font-size: 15px; }
 /* Physical margin: the LTR clock's logical start would be its far side here. */

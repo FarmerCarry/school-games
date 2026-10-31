@@ -92,8 +92,44 @@
     finishHint: 'استأنف من داخل اللعبة، ثم اضغط «العودة إلى الألعاب» لتسليم الجهاز بعد الجولة.',
     titleNotFound: 'لم نجد اللعبة',
     titleSearch: 'بحث: ',
-    gameFallback: 'لعبة'
+    gameFallback: 'لعبة',
+    starterTitle: 'ابدأ من هنا',
+    starterGo: 'هيا',
+    starterBadge: 'نقطة البداية',
+    who: 'مَن يلعب؟',
+    whoHint: 'اختر حيوانك لتجمع النجوم ⭐',
+    whoGo: 'اختر مَن يلعب',
+    guest: 'ضيف',
+    guestLabel: 'ضيف: العب دون جمع النجوم',
+    addPlayer: 'لاعب جديد',
+    addShort: 'جديد',
+    pickAnimal: 'اختر حيوانك',
+    pickColor: 'اختر لونك',
+    pickAge: 'كم عمرك؟',
+    taken: ' (مأخوذ)',
+    stepBack: 'رجوع',
+    cancel: 'إلغاء',
+    welcome: 'أهلًا بك! 🎉',
+    profileTemporary: 'تعذّر الحفظ؛ هذا اللاعب مؤقت حتى تحديث الصفحة.',
+    removeMode: 'حذف لاعب',
+    removeHint: 'للمعلم: اختر اللاعب الذي تريد حذفه.',
+    removeAsk: 'حذف هذا اللاعب؟ تضيع نجومه ومستواه.',
+    removeYes: 'احذف',
+    removeSure: 'متأكد؟ احذف نهائيًا',
+    removeDone: 'تم',
+    removed: 'حُذف اللاعب.',
+    invite: 'اختر حيوانك في الرئيسية لتجمع النجوم ⭐',
+    level: function (n) { return 'المستوى ' + n; },
+    levelUp: function (n) { return 'مستوى جديد! ⭐ ' + n; },
+    // A range keeps its low-to-high order inside the Arabic sentence (see duration).
+    age: function (b) { var n = b.split('-'); return 'من ' + n[0] + ' إلى ' + n[1] + ' ' + yearsWord(+n[1]); },
+    mute: 'كتم الصوت',
+    muteLocked: 'وضع الصف يكتم الصوت الآن'
   };
+  // Picture profiles (js/profiles.js) have no names: an animal and a ring colour.
+  var ANIMAL_NAMES = ['ثعلب', 'باندا', 'نمر', 'ضفدع', 'قرد', 'بطريق', 'أسد', 'أرنب', 'كوالا', 'أخطبوط', 'يونيكورن', 'سلحفاة'];
+  var COLOR_NAMES = ['أحمر', 'برتقالي', 'أصفر', 'أخضر', 'سماوي', 'أزرق', 'بنفسجي', 'وردي'];
+  function yearsWord(n) { return n >= 3 && n <= 10 ? 'سنوات' : 'سنة'; }
   // Arabic counting: 1 لعبة واحدة, 2 لعبتان, 3-10 ألعاب, 11+ لعبة.
   function nGames(n) {
     if (n === 1) return 'لعبة واحدة';
@@ -207,14 +243,61 @@
     return String(s || '').replace(/[←-⯿️‍]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').trim();
   }
 
-  var toastTimer = 0;
-  function toast(msg) {
+  // In fullscreen only the fullscreen element is drawn, so the toast and bursts go
+  // inside it. A game's own fullscreen frame cannot hold them; they stay in the page.
+  function overlayHost() {
+    var fs = document.fullscreenElement || document.webkitFullscreenElement;
+    return fs && fs.tagName !== 'IFRAME' ? fs : document.body;
+  }
+  // Back to the page, where redrawing #app (and the stage in it) cannot remove it.
+  function parkToast() {
     var t = $('#toast');
+    if (t && t.parentNode !== document.body) document.body.appendChild(t);
+  }
+  var toastTimer = 0;
+  // cls 'gold' is the bigger level-up toast.
+  function toast(msg, cls) {
+    var t = $('#toast'), host = overlayHost();
     if (!t) return;
+    if (t.parentNode !== host) host.appendChild(t);
     t.textContent = msg;
-    t.classList.add('show');
+    t.className = 'toast show' + (cls ? ' ' + cls : '');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2600);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, cls ? 3200 : 2600);
+  }
+  // Profiles (js/profiles.js) and portal sounds (shared/juice.js) are optional:
+  // the portal works as a guest, silently, if either failed to load.
+  function prof(name, a, b, c) {
+    try { var p = window.SGProfiles; return p && typeof p[name] === 'function' ? p[name](a, b, c) : undefined; } catch (e) { return undefined; }
+  }
+  function juice(name, x) {
+    try { var j = window.Juice; if (j && typeof j[name] === 'function') j[name](x); } catch (e) { /* sounds are optional */ }
+  }
+  function focusEl(el) {
+    try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+  }
+  // No decorative motion in classroom mode or with reduced motion.
+  function calm() {
+    return classroomOn || document.documentElement.getAttribute('data-sg-motion') === 'reduce' || !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+  // A little burst of emoji flying out of an element.
+  function burst(el, chars) {
+    if (calm()) return;
+    var host = overlayHost();
+    // The topbar is not drawn in fullscreen: the stars fly out of the toast instead.
+    if (host !== document.body) el = $('#toast') || el;
+    var r = el.getBoundingClientRect();
+    for (var i = 0; i < 7; i++) {
+      var h = document.createElement('span');
+      h.className = 'burst';
+      h.textContent = chars[i % chars.length];
+      h.style.left = (r.left + r.width / 2) + 'px';
+      h.style.top = (r.top + r.height / 2) + 'px';
+      h.style.setProperty('--dx', Math.round(Math.cos(i / 7 * 6.28) * 60) + 'px');
+      h.style.setProperty('--dy', Math.round(Math.sin(i / 7 * 6.28) * 40 - 50) + 'px');
+      host.appendChild(h);
+      setTimeout((function (s) { return function () { if (s.parentNode) s.parentNode.removeChild(s); }; })(h), 900);
+    }
   }
 
   /* -------------------------------------------------------------- logo */
@@ -300,6 +383,7 @@
     // Icon-only badges keep the names drawn in the thumbnail art readable.
     var badges = '', tip = g.title + ' · ' + durationLabel(g) + ' · ' + (INPUT_LABELS[g.inputStyle] || '');
     if (g.hot) { badges += '<b class="badge hot" aria-hidden="true">🔥</b>'; tip += ' · ' + T.hotBadge; }
+    if (g.starter) { badges += '<b class="badge start" aria-hidden="true">🖱️</b>'; tip += ' · ' + T.starterBadge; }
     if (isMulti(g)) { badges += '<b class="badge p2" aria-hidden="true">👥</b>'; tip += ' · ' + T.p2Badge; }
     return '<a class="tile" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '" title="' + esc(tip) + '"' +
       ' style="--c:' + g.color + ';--c2:' + deepen(g.color, 0.45) + ';--fbs:' + fbSize(g.title) + 'cqw" aria-label="' + esc(g.title) + '">' +
@@ -342,6 +426,7 @@
   }
   var MULTI_WORDS = ' لاعبان لاعبين اثنان اثنين صديق صديقك صديقي اصدقاء ضد جماعي 2 two player players friend friends multiplayer versus 2p';
   var HOT_WORDS = ' رائج رائجه مشهور مشهوره حماس hot popular';
+  var STARTER_WORDS = ' ابدأ هنا نقطة البداية مبتدئ beginner start here tutorial first mouse keyboard';
   var INDEX = Object.create(null);
   function idx(g) {
     if (INDEX[g.slug]) return INDEX[g.slug];
@@ -350,7 +435,7 @@
       t: norm(g.title),
       en: norm((g.en || '') + ' ' + g.slug.replace(/-/g, ' ')),
       h: norm(g.title + ' ' + (g.en || '') + ' ' + g.slug.replace(/-/g, ' ') + ' ' + (g.blurb || '') + ' ' + (g.tags || '') + ' ' + cats +
-        (isMulti(g) ? MULTI_WORDS : '') + (g.hot ? HOT_WORDS : ''))
+        (isMulti(g) ? MULTI_WORDS : '') + (g.hot ? HOT_WORDS : '') + (g.starter ? STARTER_WORDS : ''))
     };
     ix.words = (ix.t + ' ' + ix.en).split(' ').filter(Boolean);
     INDEX[g.slug] = ix;
@@ -482,8 +567,291 @@
   }
 
   // Stable featured-first order, shared by home and category views.
+  // The beginner lesson leads, then hot games, then the rest.
   function featuredFirst(list) {
-    return list.filter(function (g) { return g.hot; }).concat(list.filter(function (g) { return !g.hot; }));
+    return list.filter(function (g) { return g.starter; })
+      .concat(list.filter(function (g) { return g.hot && !g.starter; }))
+      .concat(list.filter(function (g) { return !g.hot && !g.starter; }));
+  }
+  function starterCard(g) {
+    if (!g) return '';
+    return '<a class="starter" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '">' +
+      '<span class="starter-ico" aria-hidden="true">🖱️</span>' +
+      '<span class="starter-copy"><b>' + T.starterTitle + '</b><span>' + esc(g.title) + '</span><small>' + esc(g.blurb || '') + '</small></span>' +
+      '<span class="starter-go">' + T.starterGo + '</span></a>';
+  }
+
+  /* ------------------------------------------------- who's playing? */
+  // Picture profiles without names (js/profiles.js). The strip at the top of home never
+  // blocks: a guest plays at once and one click picks a player. A new player makes
+  // three picture choices (animal, colour, age); removing one is a small teacher
+  // action that asks twice. Every button carries data-w="action[:value]".
+  var GUEST_SVG = '<svg viewBox="0 0 40 40" aria-hidden="true" focusable="false"><circle cx="20" cy="14" r="8"/><path d="M4 39c1.6-10 8-14 16-14s14.4 4 16 14z"/></svg>';
+  var who = { mode: 'list', step: 1, a: 0, c: 0, k: '', sure: 0 };
+  var whoFocus = false;   // focus the strip after the next home render
+  var invited = false;    // a guest saw the invitation to pick an animal
+  function profiles() { return prof('list') || []; }
+  function avatarName(p) { return ANIMAL_NAMES[p.a] + ' بإطار ' + COLOR_NAMES[p.c]; }
+  function whoButton(w, cls, label, face, cap, extra) {
+    return '<button type="button" class="' + cls + '" data-w="' + esc(w) + '" aria-label="' + esc(label) + '"' + (extra || '') + '>' +
+      '<span class="who-face" aria-hidden="true">' + face + '</span>' + (cap ? '<span class="who-cap" aria-hidden="true">' + cap + '</span>' : '') + '</button>';
+  }
+  function avatar(p, w, label, extra) {
+    return whoButton(w + p.k, 'who-av', label, esc(p.animal), '⭐ ' + p.lv, ' style="--rc:' + p.color + '"' + (extra || ''));
+  }
+  function whoHead(title, icon, hint) {
+    return '<div class="who-head"><h2 class="who-title" id="whoTitle">' + (icon ? '<span aria-hidden="true">' + icon + '</span> ' : '') + esc(title) + '</h2>' +
+      (hint ? '<p class="who-hint">' + esc(hint) + '</p>' : '') + '</div>';
+  }
+  function whoNav(back) {
+    return '<div class="who-nav">' + (back ? '<button type="button" class="pbtn" data-w="back"><span aria-hidden="true">‹</span>' + T.stepBack + '</button>' : '') +
+      '<button type="button" class="pbtn" data-w="cancel"><span aria-hidden="true">✕</span>' + T.cancel + '</button></div>';
+  }
+  function whoInner() {
+    var list = profiles(), me = prof('player') || '', A = window.SGProfiles.ANIMALS, C = window.SGProfiles.COLORS;
+    function taken(a, c) { return list.some(function (p) { return p.a === a && p.c === c; }); }
+    var html = '', s = who.step;
+    if (who.mode === 'new') {
+      html = '<div class="who-steps" aria-hidden="true">' + [1, 2, 3].map(function (n) { return '<i' + (n <= s ? ' class="on"' : '') + '></i>'; }).join('') + '</div>' +
+        whoHead(s === 1 ? T.pickAnimal : s === 2 ? T.pickColor : T.pickAge, s === 1 ? '🐾' : s === 2 ? '🎨' : '🎂') + '<div class="who-pick pick' + s + '" role="group" aria-labelledby="whoTitle">';
+      if (s === 1) {
+        html += A.map(function (e, a) {
+          var full = C.every(function (c, i) { return taken(a, i); });
+          return whoButton('a:' + a, 'who-opt', ANIMAL_NAMES[a] + (full ? T.taken : ''), esc(e), '', full ? ' disabled' : '');
+        }).join('');
+      } else if (s === 2) {
+        html += C.map(function (color, c) {
+          var used = taken(who.a, c);
+          return whoButton('c:' + c, 'who-opt who-ring', COLOR_NAMES[c] + (used ? T.taken : ''), esc(A[who.a]), '', ' style="--rc:' + color + '"' + (used ? ' disabled' : ''));
+        }).join('');
+      } else {
+        html += window.SGProfiles.BANDS.map(function (b) {
+          var n = b.split('-');
+          return '<button type="button" class="who-opt who-age" data-w="b:' + b + '" aria-label="' + esc(T.age(b)) + '"><b dir="ltr" aria-hidden="true">' + n[0] + '–' + n[1] + '</b>' +
+            '<small aria-hidden="true">' + yearsWord(+n[1]) + '</small></button>';
+        }).join('');
+      }
+      return html + '</div>' + whoNav(s > 1);
+    }
+    if (who.mode === 'remove') {
+      return whoHead(T.removeMode, '🗑️', T.removeHint) + '<div class="who-row" role="group" aria-labelledby="whoTitle">' +
+        list.map(function (p) { return avatar(p, 'rm:', T.removeYes + ' ' + avatarName(p)); }).join('') + '</div>' +
+        '<div class="who-nav"><button type="button" class="pbtn" data-w="done">' + T.removeDone + '</button></div>';
+    }
+    if (who.mode === 'confirm') {
+      var target = list.filter(function (p) { return p.k === who.k; })[0];
+      return whoHead(T.removeMode, '🗑️') + '<div class="who-row who-confirm">' +
+        '<span class="who-av" style="--rc:' + target.color + '"><span class="who-face" aria-hidden="true">' + esc(target.animal) + '</span><span class="who-cap">⭐ ' + target.lv + '</span></span>' +
+        '<p id="whoAsk">' + esc(avatarName(target)) + ' — ' + T.removeAsk + '</p>' +
+        '<div class="who-nav"><button type="button" class="pbtn" data-w="cancel">' + T.cancel + '</button>' +
+        '<button type="button" class="pbtn danger" data-w="del" aria-describedby="whoAsk">' + (who.sure ? T.removeSure : T.removeYes) + '</button></div></div>';
+    }
+    html = list.map(function (p) {
+      var on = p.k === me;
+      return avatar(p, 'pick:', avatarName(p) + '، ' + T.level(p.lv), ' aria-pressed="' + on + '"' + (on ? ' data-on' : ''));
+    }).join('');
+    if (list.length < window.SGProfiles.MAX) html += whoButton('add', 'who-av who-add', T.addPlayer, '+', T.addShort, ' title="' + T.addPlayer + '"');
+    html += whoButton('pick:', 'who-av who-guest', T.guestLabel, GUEST_SVG, T.guest, ' aria-pressed="' + !me + '"' + (me ? '' : ' data-on'));
+    if (list.length) html += '<button type="button" class="who-edit" data-w="edit" aria-label="' + T.removeMode + '" title="' + T.removeMode + '"><span aria-hidden="true">🗑️</span></button>';
+    return whoHead(T.who, '👋', me ? '' : T.whoHint) + '<div class="who-row" role="group" aria-labelledby="whoTitle">' + html + '</div>';
+  }
+  function whoHTML() {
+    if (!window.SGProfiles) return '';
+    who.mode = 'list';
+    return '<section class="who" id="who" aria-labelledby="whoTitle">' + whoInner() + '</section>';
+  }
+  // Redraw the strip in place (home stays as it is) and focus `sel`, or the button
+  // that had focus, or the current player.
+  function paintWho(sel) {
+    var el = $('#who'), a = document.activeElement;
+    if (!el) return;
+    if (!sel && a && el.contains(a) && a.hasAttribute('data-w')) sel = '[data-w="' + a.getAttribute('data-w') + '"]';
+    if (who.mode === 'confirm' && !profiles().some(function (p) { return p.k === who.k; })) who.mode = 'list';
+    el.innerHTML = whoInner();
+    el.className = 'who who-' + who.mode;
+    var f = sel && ($(sel + ':not([disabled])', el) || $('[data-on]', el) || $('button:not([disabled])', el));
+    if (f) focusEl(f);
+  }
+  function whoSet(mode, sel) {
+    who.mode = mode;
+    paintWho(sel);
+  }
+  function focusWho() {
+    window.scrollTo(0, 0);
+    if (who.mode !== 'list') who.mode = 'list';
+    paintWho('[data-on]');
+  }
+  function createPlayer(band) {
+    who.mode = 'list';
+    var p = prof('create', who.a, who.c, band);
+    if (!p) { paintWho('[data-w="pick:"]'); return; }
+    var sel = '[data-w="pick:' + p.k + '"]';
+    paintWho(sel);
+    juice('chime', 3);
+    toast(p.saved === false ? T.profileTemporary : T.welcome);
+    var b = $(sel);
+    if (b && !calm()) { b.classList.add('born'); burst(b, ['🎉', '⭐', '✨', '🌟']); }
+  }
+  function onWho(e) {
+    var b = e.target && e.target.closest ? e.target.closest('#who button[data-w]') : null;
+    if (!b || b.disabled) return;
+    var w = b.getAttribute('data-w'), i = w.indexOf(':'), act = i < 0 ? w : w.slice(0, i), v = i < 0 ? '' : w.slice(i + 1);
+    if (act === 'pick') {
+      prof('select', v);
+      juice('pop', v ? 0.5 : 0.3);
+      paintWho('[data-w="' + w + '"]');
+      var picked = $('#who [data-w="' + w + '"]');
+      if (picked && !calm()) picked.classList.add('pop');
+    } else if (act === 'add') {
+      juice('tap');
+      who.step = 1;
+      whoSet('new', '[data-w^="a:"]');
+    } else if (act === 'a' || act === 'c') {
+      juice('pop', act === 'a' ? 0.4 : 0.6);
+      who[act] = +v;
+      who.step = act === 'a' ? 2 : 3;
+      paintWho(act === 'a' ? '[data-w^="c:"]' : '[data-w^="b:"]');
+    } else if (act === 'b') {
+      createPlayer(v);
+    } else if (act === 'back') {
+      juice('tap');
+      who.step--;
+      paintWho(who.step === 1 ? '[data-w="a:' + who.a + '"]' : '[data-w="c:' + who.c + '"]');
+    } else if (act === 'cancel') {
+      juice('back');
+      if (who.mode === 'confirm') whoSet('remove', '[data-w="rm:' + who.k + '"]');
+      else whoSet('list', '[data-w="add"]');
+    } else if (act === 'edit') {
+      juice('tap');
+      whoSet('remove', '[data-w^="rm:"]');
+    } else if (act === 'done') {
+      juice('back');
+      whoSet('list', '[data-w="edit"]');
+    } else if (act === 'rm') {
+      juice('tap');
+      who.k = v;
+      who.sure = 0;
+      whoSet('confirm', '[data-w="cancel"]');
+    } else if (act === 'del') {
+      // Asks twice; the second button ignores a double click on the first.
+      if (!who.sure) { who.sure = performance.now() || 1; paintWho('[data-w="cancel"]'); }
+      else if (performance.now() - who.sure > 500) {
+        prof('remove', who.k);
+        juice('back');
+        toast(T.removed);
+        whoSet('list', '[data-w="add"]');
+      }
+    }
+  }
+
+  /* ------------------------------------------------- topbar player badge */
+  var personalMuted = false;
+  // Avatar, level and XP bar of the current player, or a neutral silhouette for a guest.
+  function paintMe() {
+    var el = $('#me');
+    if (!el) return;
+    var p = prof('current');
+    el.hidden = !window.SGProfiles;
+    el.classList.toggle('guest', !p);
+    el.style.setProperty('--rc', p ? p.color : '#8a93b8');
+    $('.me-face', el).innerHTML = p ? esc(p.animal) : GUEST_SVG;
+    $('.me-lv', el).innerHTML = p ? '<span aria-hidden="true">⭐</span>' + p.lv : esc(T.guest);
+    var xp = (p ? Math.round(p.need ? p.have / p.need * 100 : 100) : 0) + '%';
+    $('.me-bar i', el).style.width = xp;
+    el.style.setProperty('--xp', xp);
+    el.setAttribute('aria-label', (p ? avatarName(p) + '، ' + T.level(p.lv) : T.guest) + '. ' + T.whoGo);
+  }
+  function gained(gain, k) {
+    if (!k) {
+      // Guests keep nothing; invite them once to pick an animal.
+      if (gain && !invited) { invited = true; toast(T.invite); }
+      return;
+    }
+    if (k !== prof('player')) return;
+    paintMe();
+    var el = $('#me');
+    if (!gain || !el) return;
+    var s = document.createElement('span');
+    s.className = 'me-gain';
+    s.setAttribute('aria-hidden', 'true');
+    s.textContent = '+' + gain;
+    el.appendChild(s);
+    setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 1300);
+  }
+  function levelled(lv) {
+    var el = $('#me');
+    tm('level', lv);
+    paintMe();
+    toast(T.levelUp(lv), 'gold');
+    juice('levelUp');
+    if (!el || calm()) return;
+    el.classList.remove('lvup'); void el.offsetWidth; el.classList.add('lvup');
+    burst(el, ['⭐', '🌟', '✨']);
+  }
+  // A new player, a removed one, another band: the badge, the strip and the open game follow.
+  function profilesChanged() {
+    paintMe();
+    if (who.mode !== 'new') paintWho();
+    var band = $('#classBand');
+    if (band) band.value = prof('classBand') || '';
+    sendPreferences();
+  }
+  // Personal mute, shared with every game through sg:site:muted (Kit uses the same key).
+  // The classroom preset silences everything without touching it.
+  function paintMute() {
+    var b = $('#muteBtn'), muted = personalMuted || classroomOn;
+    // Juice reads sg:site:muted and sg:site:classroom itself; this also covers blocked storage.
+    juice('setQuiet', muted);
+    if (!b) return;
+    b.setAttribute('aria-pressed', String(muted));
+    b.setAttribute('aria-disabled', String(classroomOn));
+    b.title = classroomOn ? T.muteLocked : T.mute;
+    $('span', b).textContent = muted ? '🔇' : '🔊';
+  }
+  function setupPlayer() {
+    var me = $('#me'), mute = $('#muteBtn'), app = $('#app');
+    paintMe();
+    me.addEventListener('click', function (e) {
+      if (e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      juice('tap');
+      if (parseRoute().name === 'home' && $('#who')) focusWho();
+      else { whoFocus = true; go('#/'); }
+    });
+    app.addEventListener('click', onWho);
+    app.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || who.mode === 'list' || !e.target.closest || !e.target.closest('#who')) return;
+      e.preventDefault();
+      whoSet('list', '[data-w="add"]');
+    });
+    prof('onChange', profilesChanged);
+    prof('onXP', gained);
+    prof('onLevel', levelled);
+
+    personalMuted = !!storedPreference('muted', false);
+    paintMute();
+    mute.addEventListener('click', function (e) {
+      if (classroomOn) toast(T.muteLocked);
+      else {
+        personalMuted = !personalMuted;
+        writePreference('muted', personalMuted);
+        // The open game follows at once, also from a folder where it has its own storage.
+        sendPreferences(personalMuted);
+        paintMute();
+        if (!personalMuted) juice('toggle', true);
+      }
+      // After a mouse click the keys go back to the game (so Space doesn't press this button again).
+      if (e.detail && current) activateGame();
+    });
+    // The teacher page can stop statistics (and so telemetry) at any time: the open game follows.
+    window.addEventListener('storage', function (e) {
+      if ((e.key === 'sg:site:statsmeta' || e.key === null) && telemetryOn() !== sentTelemetry) sendPreferences();
+    });
+    window.addEventListener('storage', function (e) {
+      if (e.key !== 'sg:site:muted' && e.key !== null) return;
+      personalMuted = !!storedPreference('muted', false);
+      paintMute();
+    });
   }
 
   function renderHome() {
@@ -491,7 +859,10 @@
       return '<div class="empty"><div class="empty-emoji">🛠️</div><h2>' + T.soon + '</h2><p>' + T.soonSub + '</p></div>';
     }
     var recent = getRecent().slice(0, 6).map(function (s) { return BY_SLUG[s]; });
-    return (recent.length ? sectionHTML('🕹️', T.recent, gridHTML(recent, 'recent-grid')) : '') +
+    var start = null;
+    for (var i = 0; i < GAMES.length; i++) if (GAMES[i].starter) { start = GAMES[i]; break; }
+    return whoHTML() + starterCard(start) +
+      (recent.length ? sectionHTML('🕹️', T.recent, gridHTML(recent, 'recent-grid')) : '') +
       sectionHTML('🎮', T.all, gridHTML(featuredFirst(GAMES), 'catalog-grid'), '<span class="count">' + nGames(GAMES.length) + '</span>');
   }
 
@@ -611,6 +982,8 @@
   var sessionDeadline = 0;
   var sessionExpired = false;
   var hadFullscreen = false;
+  var frameAt = 0;        // when the current frame was made (performance.now())
+  var sentTelemetry = false;
   function routeHash() { return location.hash || '#/'; }
   function frameEl() { return $('#stage iframe'); }
   // A paused game, its title/menu and the classroom handoff still own a session.
@@ -623,16 +996,33 @@
   function stat(name, a, b) {
     try { window.SGStats[name](a, b); } catch (e) { /* statistics are optional */ }
   }
+  // The telemetry sink (js/telemetry.js, no names) follows the same calls; it does
+  // nothing unless the build has an ingest address and the teacher has not stopped it.
+  // tm() skips a hook the loaded sink does not have.
+  function tm(name, a, b) {
+    try { var t = window.SGTelemetry; if (t && typeof t[name] === 'function') t[name](a, b); } catch (e) { /* telemetry is optional */ }
+  }
   // file:// uses an opaque origin, so target/source Window identity is the
   // authentication boundary. Never accept messages from other windows.
   function postGame(message) {
     var f = frameEl();
     if (f && f.contentWindow) f.contentWindow.postMessage(message, location.protocol === 'file:' ? '*' : location.origin);
   }
-  function sendPreferences() {
+  function telemetryOn() {
+    try { return !!(window.SGTelemetry && window.SGTelemetry.active && window.SGTelemetry.active()); } catch (e) { return false; }
+  }
+  // quiet: the child's own mute, sent when the topbar button changes it, and whenever
+  // storage could not keep it (a newly opened game reads the stored value instead).
+  function sendPreferences(quiet) {
     // A temporary preset must not overwrite each game's personal settings.
     // Always clear it too: file:// may give every game its own storage area.
-    postGame({ type: 'sg:preferences', classroom: classroomOn });
+    // The player's age band and profile slot are transient too (docs/ARCHITECTURE.md "Kit v2").
+    sentTelemetry = telemetryOn();
+    var message = { type: 'sg:preferences', classroom: classroomOn, band: String(prof('band') || ''),
+      player: String(prof('player') || ''), telemetry: sentTelemetry };
+    if (typeof quiet !== 'boolean' && personalMuted !== !!storedPreference('muted', false)) quiet = personalMuted;
+    if (typeof quiet === 'boolean') message.quiet = quiet;
+    postGame(message);
   }
   function focusGame() {
     if (portalFocus) return;
@@ -654,8 +1044,10 @@
   function onGameMessage(e) {
     var f = frameEl();
     if (location.protocol !== 'file:' && e.origin !== location.origin) return;
-    // The recorder also accepts sg:stats from a game removed under 2 s ago.
+    // The recorder and the XP counter also accept sg:stats from a game removed under 2 s ago.
     stat('msg', e.source, e.data);
+    prof('msg', e.source, e.data);
+    tm('msg', e.source, e.data);
     if (!f || e.source !== f.contentWindow) return;
     if (e.data === 'sg:focus-portal') {
       portalFocus = true;
@@ -664,7 +1056,9 @@
       return;
     }
     var type = e.data && e.data.type;
+    if (type === 'sg:stats' && e.data.e > 0) markActive();
     if (type === 'sg:ready') {
+      if (!frameReady) tm('ready', current, performance.now() - frameAt);
       clearTimeout(readyTimer);
       frameReady = true;
       if (!sessionExpired) f.removeAttribute('inert');
@@ -673,10 +1067,19 @@
       sendPreferences();
       if (sessionExpired) showHandoff(); else focusGame();
     } else if (type === 'sg:error') failFrame(f, 'x');
+    else if (type === 'sg:warn') noteGameWarn(e.data);
+  }
+  // A stray error after the game is ready. Count it on this page only: the
+  // text is not stored or sent, and the iframe is left alone.
+  var gameWarns = 0;
+  function noteGameWarn(data) {
+    gameWarns++;
+    try { window.__sgWarns = { n: gameWarns, last: String(data && data.message || '').slice(0, 240) }; } catch (e) { /* diagnostics stay local */ }
   }
   function failFrame(f, kind) {
     if (frameEl() !== f) return;
     stat('fail', kind);
+    tm('fail', kind);
     clearTimeout(readyTimer);
     frameReady = false;
     $('#stage').classList.remove('loading');
@@ -685,6 +1088,8 @@
     // Dispose the browsing context, including timers, audio and pending saves.
     // Merely hiding a game after a runtime error leaves its simulation alive.
     stat('gone');
+    prof('gone');
+    tm('gone');
     f.parentNode.removeChild(f);
     portalFocus = true;
     var handoff = $('#sessionHandoff');
@@ -698,7 +1103,7 @@
     var stage = $('#stage');
     if (!stage) return;
     var old = frameEl();
-    if (old) { stat('gone'); old.parentNode.removeChild(old); }
+    if (old) { stat('gone'); prof('gone'); tm('gone'); old.parentNode.removeChild(old); }
     var msg = $('#stageMsg');
     if (msg) msg.hidden = true;
     stage.classList.add('loading');
@@ -718,7 +1123,10 @@
     f.addEventListener('error', function () { failFrame(f); });
     f.src = 'games/' + encodeURIComponent(slug) + '/index.html';
     stage.appendChild(f);
+    frameAt = performance.now();
     stat('mount', f.contentWindow);
+    prof('mount', f.contentWindow);
+    tm('mount', f.contentWindow);
     readyTimer = setTimeout(function () { failFrame(f, 't'); }, 20000);
   }
   function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
@@ -754,6 +1162,7 @@
     var fullscreen = isFullscreen();
     if (hadFullscreen && !fullscreen) postGame({ type: 'sg:pause', reason: 'fullscreen-exit' });
     hadFullscreen = fullscreen;
+    if (!fullscreen) parkToast();
     var b = $('#fsBtn');
     if (b) {
       var lbl = isFullscreen() ? T.fsExit : T.fs;
@@ -774,6 +1183,7 @@
     if (classroomOn) stat('set', 'calm');
     writePreference('classroom', classroomOn);
     document.documentElement.setAttribute('data-sg-motion', classroomOn ? 'reduce' : storedPreference('motion', 'system'));
+    paintMute();
     sendPreferences();
   }
   function showHandoff() {
@@ -800,7 +1210,25 @@
     if (f && frameReady) f.removeAttribute('inert');
     window.dispatchEvent(new Event('sg:sessionchange'));
   }
+  // The idle hand-over: the player lives in sessionStorage, so a tab left open would give
+  // the next class the last child's profile. After 20 minutes with no key press, click or
+  // wheel on the portal and no engaged play reported by the game (sg:stats e > 0), the
+  // player becomes a guest on the "who's playing?" strip. A classroom timer still running
+  // is kept; the hand-over overlay of one that ran out goes too.
+  var IDLE = 20 * 60000, lastActive = performance.now();
+  function markActive() { lastActive = performance.now(); }
+  function idleCheck() {
+    if (!prof('player') || performance.now() - lastActive < IDLE) return;
+    tm('why', 'i');
+    prof('select', '');
+    whoFocus = true;
+    if (sessionExpired) { clearSession(); $('#sessionStatus').textContent = T.nextPlayer; }
+    if (current) go('#/');
+    markActive();
+  }
+  // Runs every second, also when no timer is set.
   function tickSession() {
+    idleCheck();
     if (!sessionDeadline) return;
     var left = Math.max(0, Math.ceil((sessionDeadline - performance.now()) / 1000));
     $('#sessionClock').textContent = Math.floor(left / 60) + ':' + ('0' + left % 60).slice(-2);
@@ -809,6 +1237,7 @@
       sessionExpired = true;
       $('#sessionStatus').textContent = T.sessionChoice;
       $('#sessionStart').textContent = T.startSession;
+      tm('timer', 'e', 0);
       showHandoff();
     }
   }
@@ -825,6 +1254,12 @@
     $('#classroomMode').checked = classroomOn;
     document.documentElement.setAttribute('data-sg-motion', classroomOn ? 'reduce' : storedPreference('motion', 'system'));
     $('#classroomMode').addEventListener('change', function () { setClassroom(this.checked); });
+    // The class default age band is what guests play with.
+    var band = $('#classBand');
+    if (window.SGProfiles) {
+      band.value = prof('classBand') || '';
+      band.addEventListener('change', function () { prof('setClassBand', band.value); });
+    } else $('#bandPick').hidden = true;
     $('#classroom').addEventListener('toggle', syncClassroomSpace);
     if (window.ResizeObserver) new ResizeObserver(function () { if ($('#classroom').open) syncClassroomSpace(); }).observe($('.classroom-controls'));
     $('#sessionStart').addEventListener('click', function () {
@@ -835,32 +1270,23 @@
       $('#sessionStop').hidden = false;
       $('#sessionStart').textContent = T.resetTimer;
       $('#sessionStatus').textContent = T.sessionStarted(minutes);
+      tm('timer', 's', minutes);
       window.dispatchEvent(new Event('sg:sessionchange'));
       tickSession();
     });
     $('#sessionStop').addEventListener('click', function () {
       clearSession();
       $('#sessionStatus').textContent = T.timerCancelled;
+      tm('timer', 'c', 0);
     });
+    ['pointerdown', 'keydown', 'wheel'].forEach(function (type) { document.addEventListener(type, markActive, { capture: true, passive: true }); });
     setInterval(tickSession, 1000);
-  }
-  function heartBurst(btn) {
-    if (classroomOn || document.documentElement.getAttribute('data-sg-motion') === 'reduce' || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
-    var r = btn.getBoundingClientRect();
-    for (var i = 0; i < 7; i++) {
-      var h = document.createElement('span');
-      h.className = 'burst';
-      h.textContent = ['❤️', '💖', '✨', '💗'][i % 4];
-      h.style.left = (r.left + r.width / 2) + 'px';
-      h.style.top = (r.top + r.height / 2) + 'px';
-      h.style.setProperty('--dx', Math.round(Math.cos(i / 7 * 6.28) * 60) + 'px');
-      h.style.setProperty('--dy', Math.round(Math.sin(i / 7 * 6.28) * 40 - 50) + 'px');
-      document.body.appendChild(h);
-      setTimeout((function (el) { return function () { if (el.parentNode) el.parentNode.removeChild(el); }; })(h), 900);
-    }
   }
   function setupPlay(slug) {
     stat('open', slug, !renderedHash);
+    // Before the visit is counted: telemetry reports the plays before this one.
+    tm('open', slug, !renderedHash);
+    prof('visit', slug);
     pushRecent(slug);
     mountFrame(slug);
     var stage = $('#stage');
@@ -869,6 +1295,7 @@
     $('#favBtn').addEventListener('click', function (e) {
       var result = toggleFav(slug), on = result.on;
       var b = this;
+      tm('fav', slug, on);
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', on);
       b.title = on ? T.favOn : T.fav;
@@ -876,7 +1303,7 @@
       $('.heart', b).textContent = on ? '❤️' : '🤍';
       $('.pb-lbl', b).textContent = on ? T.favOn : T.fav;
       b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
-      if (on) heartBurst(b);
+      if (on) burst(b, ['❤️', '💖', '✨', '💗']);
       toast(result.saved ? (on ? T.favAdded : T.favRemoved) : T.favTemporary);
       // After a mouse click the keys go back to the game (so Space doesn't press this button again).
       if (e.detail) activateGame();
@@ -887,9 +1314,14 @@
       mountFrame(slug);
     });
     $('#gameRetry').addEventListener('click', function () { mountFrame(slug); });
+    // The next child starts as a guest on the "who's playing?" strip.
     $('#sessionEnd').addEventListener('click', function () {
       clearSession();
       $('#sessionStatus').textContent = T.nextPlayer;
+      // Why the player's session ends (a guest's goes on: there is no new player).
+      if (prof('player')) tm('why', 'h');
+      prof('select', '');
+      whoFocus = true;
       go('#/');
     });
     $('#sessionFinish').addEventListener('click', function () {
@@ -999,6 +1431,11 @@
     // Leaving the game or switching games closes its session; a re-render of
     // the same game only replaces the frame.
     stat(current && current === previousGame ? 'gone' : 'close');
+    prof(current && current === previousGame ? 'gone' : 'close');
+    tm(current && current === previousGame ? 'gone' : 'close');
+    if (previousGame && !current) juice('back');
+    // fullscreenchange comes only after the fullscreen stage is replaced here.
+    parkToast();
     app.innerHTML = html;
     $('#searchStatus').textContent = route.name === 'search' ? ((route.q || '').trim() ? T.found(search(route.q).length) : T.searchPrompt) : '';
     document.title = title;
@@ -1019,8 +1456,22 @@
         try { heading.focus({ preventScroll: true }); } catch (e) { heading.focus(); }
       }
       // A new «تابع اللعب» row above the list can push the tile off screen.
-      if (returningTiles[0]) returningTiles[0].scrollIntoView({ block: 'nearest' });
+      // scrollIntoView can still leave a fraction of a pixel past the edge.
+      if (returningTiles[0]) {
+        var backTile = returningTiles[0];
+        backTile.scrollIntoView({ block: 'nearest' });
+        var backBox = backTile.getBoundingClientRect();
+        var backBar = $('.topbar');
+        var backTop = backBar ? backBar.getBoundingClientRect().bottom : 0;
+        var pastBottom = backBox.bottom - window.innerHeight;
+        var pastTop = backTop - backBox.top;
+        if (pastBottom > 0) window.scrollBy(0, Math.ceil(pastBottom));
+        else if (pastTop > 0) window.scrollBy(0, -Math.ceil(pastTop));
+      }
     }
+    // The topbar badge and "hand over the device" lead to the "who's playing?" strip.
+    if (whoFocus && route.name === 'home') focusWho();
+    whoFocus = false;
     renderedHash = routeHash();
     typing = false;
     window.dispatchEvent(new Event('sg:sessionchange'));
@@ -1038,7 +1489,9 @@
     var g = pool[Math.floor(Math.random() * pool.length)] || GAMES[0];
     var b = $('#surprise');
     b.classList.remove('roll'); void b.offsetWidth; b.classList.add('roll');
+    juice('whoosh', 0.8);
     stat('tag', g.slug, 'surprise');
+    tm('tag', g.slug, 'surprise');
     go('#/play/' + enc(g.slug));
   }
 
@@ -1076,6 +1529,14 @@
   }
   function tileFrom(e) { var t = e.target; return t && t.closest ? t.closest('.tile[data-slug]') : null; }
   function watchTiles() {
+    // A game tile or the starter card plays the select sound (never a hover sound).
+    document.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest ? e.target.closest('.tile[data-slug], .starter') : null;
+      if (!t || e.button || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      juice('select');
+      // Telemetry tells the starter card apart (js/stats.js counts it as history).
+      if (t.classList.contains('starter')) tm('tag', t.getAttribute('data-slug'), 'starter');
+    });
     document.addEventListener('click', function (e) {
       var tile = tileFrom(e);
       if (!tile || current || e.button > 0 || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
@@ -1103,7 +1564,7 @@
     var skip = $('.skip');
     if (skip) skip.addEventListener('click', function (e) {
       e.preventDefault();
-      var target = current ? $('#favBtn') : $('#app .tile, #app a, #app button');
+      var target = current ? $('#favBtn') : $('#app .starter, #app .tile') || $('#app a, #app button');
       if (current) activateGame();
       else if (target) target.focus();
     });
@@ -1123,7 +1584,7 @@
     $('#searchForm').addEventListener('submit', function (e) {
       e.preventDefault();
       var res = search(q.value);
-      if (res.length === 1) { q.blur(); stat('tag', res[0].slug, 'search'); go('#/play/' + enc(res[0].slug)); return; }
+      if (res.length === 1) { q.blur(); stat('tag', res[0].slug, 'search'); tm('tag', res[0].slug, 'search'); go('#/play/' + enc(res[0].slug)); return; }
       // Several results: hand keyboard focus to the first one.
       var first = $('#app .tile');
       if (res.length && first) first.focus(); else q.blur();
@@ -1136,6 +1597,7 @@
     document.addEventListener('webkitfullscreenchange', onFsChange);
     window.addEventListener('resize', fitStage);
     setupClassroom();
+    setupPlayer();
     watchTiles();
     render();
   }

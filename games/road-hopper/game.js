@@ -121,146 +121,15 @@
   function give(m) { if (!m) return; m.visible = false; pools[m.userData.key].push(m); }
 
   /* ========================================================= generation */
-  var CAR_COLORS = [0xff4b4b, 0x3f7bff, 0x22c55e, 0xa855f7, 0xff8a1f, 0x14c6c6, 0xff5fa8];
-  var TRUCK_COLORS = [0x3f7bff, 0xff4b4b, 0x22c55e, 0xff8a1f];
-  var VLEN = { car: 1.34, taxi: 1.34, van: 1.74, truck: 2.36, bus: 2.76 };
-  var TL = RH.TRAIN_LEN;
-  function themeOf(r) { return r < 0 ? 0 : Math.floor(r / 50) % THEMES.length; }
-  function diffAt(r) { return Kit.clamp(r / 220, 0, 1); }
-  function newGen(base) { return { row: base - 10, base: base, safe: 0, cluster: 'grass', left: 0, riverDir: Math.random() < 0.5 ? 1 : -1, prevType: 'grass' }; }
-  function treeKind() { return Math.random() < 0.72 ? (Math.random() < 0.5 ? 'tree1' : 'tree2') : 'rock'; }
-  function block(L, c, kind) { L.blocked[c] = kind; L.decor.push({ k: kind, x: c, rot: Kit.randInt(0, 3) }); }
-  function outerDecor(L) {
-    for (var x = -17; x <= 17; x++) {
-      if (x >= -4 && x <= 4) continue;
-      var edge = x === -5 || x === 5, p = Math.random();
-      if (p < (edge ? 0.6 : 0.3)) L.decor.push({ k: Math.random() < 0.45 ? 'tree2' : 'tree1', x: x, rot: Kit.randInt(0, 3) });
-      else if (p < (edge ? 0.68 : 0.36)) L.decor.push({ k: 'rock', x: x, rot: Kit.randInt(0, 3) });
-    }
-  }
-  function wrapX(x) { return ((x + 18) % 36 + 36) % 36 - 18; }
-
-  function chooseCluster(g, rel, d) {
-    var prev = g.cluster, c, n;
-    if (prev !== 'grass' && Math.random() < 0.72) { c = 'grass'; n = Math.random() < 0.75 ? 1 : 2; }
-    else {
-      var opts = [['road', 5], ['river', rel > 7 ? 3.2 : 0], ['rail', rel > 16 ? 1.1 + d * 1.6 : 0], ['grass', prev === 'grass' ? 0 : 1]];
-      var tot = 0, i;
-      for (i = 0; i < opts.length; i++) { if (opts[i][0] === prev) opts[i][1] = 0; tot += opts[i][1]; }
-      var pick = Math.random() * tot;
-      c = 'road';
-      for (i = 0; i < opts.length; i++) { pick -= opts[i][1]; if (pick < 0) { c = opts[i][0]; break; } }
-      if (c === 'road') n = Kit.randInt(1, Math.min(5, (rel < 14 ? 2 : 3) + Math.round(d * 2)));
-      else if (c === 'river') n = Kit.randInt(1, Math.min(4, (rel < 24 ? 2 : 3) + Math.round(d * 1.4)));
-      else if (c === 'rail') n = d > 0.35 && Math.random() < 0.4 ? 2 : 1;
-      else n = Kit.randInt(1, 2);
-    }
-    g.cluster = c; g.left = n;
-  }
-
-  function genLane(g) {
-    var r = g.row++, rel = r - g.base, d = diffAt(r);
-    var L = { row: r, type: 'grass', theme: themeOf(r), variant: r & 1, blocked: {}, decor: [], coin: null, v: 0, dir: 1,
-      vehicles: null, logs: null, rail: null, pads: false };
-    if (rel <= 4) { // safe start meadow, a wall of trees behind
-      var c;
-      if (rel <= -3) for (c = -4; c <= 4; c++) block(L, c, treeKind());
-      else if (rel !== 0 && rel !== -1) for (c = -4; c <= 4; c++) if (Math.abs(c) >= 2 && Math.random() < 0.2) block(L, c, treeKind());
-      outerDecor(L);
-      g.safe = 0; g.prevType = 'grass'; g.cluster = 'grass'; g.left = 0;
-      return L;
-    }
-    if (g.left <= 0) chooseCluster(g, rel, d);
-    g.left--;
-    if (g.cluster === 'road') genRoad(g, L, d, rel);
-    else if (g.cluster === 'river') genRiver(g, L, d, rel);
-    else if (g.cluster === 'rail') genRail(g, L, d);
-    else genGrass(g, L, d, rel);
-    g.prevType = L.type;
-    return L;
-  }
-  function genGrass(g, L, d, rel) {
-    var ns = Kit.clamp(g.safe + Kit.randInt(-2, 2), -4, 4);
-    var lo = Math.min(g.safe, ns), hi = Math.max(g.safe, ns);
-    var k = Kit.randInt(1, 2 + Math.round(d * 3));
-    for (var i = 0; i < k; i++) {
-      var c = Kit.randInt(-4, 4);
-      if ((c >= lo && c <= hi) || L.blocked[c]) continue;
-      block(L, c, treeKind());
-    }
-    g.safe = ns;
-    if (Math.random() < 0.45) {
-      for (var t = 0; t < 6; t++) {
-        var cc = Kit.randInt(-4, 4);
-        if (!L.blocked[cc]) { L.coin = { c: cc, big: rel > 20 && Math.random() < 0.08 }; break; }
-      }
-    }
-    outerDecor(L);
-  }
-  function pickCar(rel) {
-    if (rel < 10) return 'car';
-    var p = Math.random();
-    return p < 0.68 ? 'car' : p < 0.84 ? 'taxi' : 'van';
-  }
-  function genRoad(g, L, d, rel) {
-    L.type = 'road';
-    L.variant = g.prevType === 'road' ? 1 : 0;
-    L.dir = Math.random() < 0.5 ? 1 : -1;
-    var heavy = rel > 12 && Math.random() < 0.18 + d * 0.2;
-    var speed = (1.5 + Math.random() * 1.3) * (1 + d * 1.25);
-    if (heavy) speed *= 0.75;
-    var fast = !heavy && rel > 25 && Math.random() < 0.1 + d * 0.12;
-    if (fast) speed *= 1.6;
-    L.v = speed * L.dir;
-    L.fast = fast;
-    var vs = [], cur = -18 + Math.random() * 3, minGap = fast ? 5 : 3.4;
-    for (var guard = 0; guard < 12; guard++) {
-      var t = heavy ? (Math.random() < 0.55 ? 'truck' : 'bus') : pickCar(rel);
-      var len = VLEN[t];
-      if (cur + len > 18 - minGap) break;
-      var col = t === 'truck' ? Kit.pick(TRUCK_COLORS) : t === 'car' ? Kit.pick(CAR_COLORS) : 0;
-      vs.push({ t: t, x: cur + len / 2, len: len, col: col, m: null });
-      cur += len + minGap + Math.random() * (fast ? 8 : 7.5 - d * 3.5);
-    }
-    L.vehicles = vs;
-    if (Math.random() < 0.15) L.coin = { c: Kit.randInt(-4, 4), big: false };
-  }
-  function genRiver(g, L, d, rel) {
-    L.type = 'river';
-    // Ground variant: bit 1 = the next row is land (the cluster ends here), so the far
-    // bank gets foam; bit 2 alternates the ripple pattern between rows.
-    L.variant = (g.left > 0 ? 0 : 1) | (L.row & 1) << 1;
-    var logs = [], i;
-    if (rel > 12 && Math.random() < 0.22) { // lily pads: still, one is always on the safe column
-      var cols = {}; cols[g.safe] = 1;
-      var extra = Kit.randInt(2, 4);
-      for (i = 0; i < extra; i++) cols[Kit.randInt(-4, 4)] = 1;
-      for (var c in cols) logs.push({ x: +c, len: 1, pad: true, flower: Math.random() < 0.35, bob: 0, m: null });
-      L.v = 0; L.pads = true;
-    } else {
-      g.riverDir = -g.riverDir; L.dir = g.riverDir;
-      L.v = (1.0 + Math.random() * 0.8) * (1 + d * 0.8) * L.dir;
-      var avgLen = d < 0.25 ? 3.1 : 2.8, gap = 1.4 + d * 1.3 + Math.random() * 0.6;
-      var n = Math.max(3, Math.round(36 / (avgLen + gap))), lens = [], total = 0;
-      for (i = 0; i < n; i++) { var ln = d < 0.25 ? Kit.pick([2, 3, 3, 4]) : Kit.pick([2, 2, 3, 3, 4]); lens.push(ln); total += ln; }
-      while (36 - total < n * 1.1 && lens.length > 3) total -= lens.pop();
-      n = lens.length;
-      var free = 36 - total, w = [], ws = 0;
-      for (i = 0; i < n; i++) { w.push(0.7 + Math.random() * 0.6); ws += w[i]; }
-      var cur = -18 + Math.random() * 3;
-      for (i = 0; i < n; i++) {
-        logs.push({ x: wrapX(cur + lens[i] / 2), len: lens[i], pad: false, bob: 0, m: null });
-        cur += lens[i] + free * w[i] / ws;
-      }
-      g.safe = Kit.randInt(-3, 3);
-    }
-    L.logs = logs;
-  }
-  function genRail(g, L, d) {
-    L.type = 'rail';
-    L.dir = Math.random() < 0.5 ? 1 : -1;
-    L.rail = { phase: 'wait', t: 1 + Math.random() * 4, x: 0, warn: 1.5 - d * 0.4, speed: 30 + d * 8, bell: 0 };
-  }
+  // The lane generator and the five difficulty tiers live in endless.js (pure, tested
+  // in Node); tier 3 is the original balance. Kit.dda picks the tier of each run when
+  // its world is made, and T holds that tier's knobs until the next world.
+  var Lanes = window.RHEndless, TL = RH.TRAIN_LEN;
+  var dda = Kit.dda('road-hopper'), T = Lanes.tier(3);
+  function themeOf(r) { return Lanes.themeOf(r, THEMES.length); }
+  function diffAt(r) { return Lanes.diffAt(r, T); }
+  function newGen(base) { return Lanes.newGen(base, T, THEMES.length); }
+  var genLane = Lanes.genLane, wrapX = Lanes.wrapX;
 
   /* ========================================================= lane objects */
   var lanes = {}, laneMin = 0, laneMax = -1, decoDirty = true;
@@ -555,8 +424,10 @@
   var camX = 0, camZ = 0, camMode = 1;
   var _look = new THREE.Vector3(), _v = new THREE.Vector3(), skyCol = new THREE.Color(THEMES[0].sky), _skyT = new THREE.Color();
 
+  // A new world is a new run: its tier is read now (never kept from an earlier run).
   function resetWorld(b) {
     base = b || 0;
+    T = Lanes.tier(dda.tier);
     Object.keys(lanes).forEach(function (r) { removeLane(lanes[r]); });
     lanes = {};
     gen = newGen(base);
@@ -640,7 +511,7 @@
       R.x += L.dir * R.speed * dt;
       L.train.position.x = R.x;
       if (R.x * L.dir > 18 + TL / 2) {
-        R.phase = 'wait'; R.t = (2.5 + Math.random() * 4) * (1 - diffAt(L.row) * 0.3);
+        R.phase = 'wait'; R.t = (2.5 + Math.random() * 4) * (1 - diffAt(L.row) * 0.3) * T.trainGap;
         L.train.visible = false;
       }
     }
@@ -663,7 +534,7 @@
     var best = null, bd = 1e9, bpx = 0;
     for (var i = 0; i < L.logs.length; i++) {
       var o = L.logs[i], px = o.x + L.v * t, dd = Math.abs(x - px);
-      if (dd <= o.len / 2 + 0.3 && dd < bd) { bd = dd; best = o; bpx = px; }
+      if (dd <= o.len / 2 + T.land && dd < bd) { bd = dd; best = o; bpx = px; }
     }
     if (!best) return null;
     var half = best.len / 2, cell = Kit.clamp(Math.round(x - bpx + half - 0.5), 0, best.len - 1);
@@ -708,7 +579,12 @@
     P.hop = null; P.row = h.row1; P.z = -P.row;
     if (!L) return;
     if (L.type === 'river') {
-      if (!h.target) { P.x = h.x1; die('water'); return; }
+      if (!h.target) {
+        P.x = h.x1;
+        // Test hook: nothing defeats the critter in god mode, not even the water.
+        if (godMode) { P.log = null; P.y = 0; return; }
+        die('water'); return;
+      }
       P.log = h.target; P.rel = h.rel; P.x = P.log.x + P.rel; P.y = h.y1;
       P.log.bob = 1;
       if (P.log.pad) S.pad(); else S.log();
@@ -731,6 +607,7 @@
         if (LL.type === 'river') { runStats.rivers++; missionEvent('rivers', 1); }
         else if (LL.type === 'road') { runStats.roads++; missionEvent('roads', 1); }
         else if (LL.type === 'rail') { runStats.rails++; missionEvent('rails', 1); }
+        if (LL.type !== 'grass') Kit.track.hit(); // a road, river or rail safely crossed
       }
       maxRow = P.row; score = maxRow;
       missionEvent('score', score, true);
@@ -782,9 +659,9 @@
     if (L.type === 'road') {
       for (var i = 0; i < L.vehicles.length; i++) {
         var v = L.vehicles[i];
-        if (Math.abs(v.x - P.x) < v.len / 2 + 0.2) { die('car', L); return; }
+        if (Math.abs(v.x - P.x) < v.len / 2 + T.hit) { die('car', L); return; }
       }
-    } else if (L.type === 'rail' && L.rail.phase === 'go' && Math.abs(L.rail.x - P.x) < TL / 2 + 0.2) die('train', L);
+    } else if (L.type === 'rail' && L.rail.phase === 'go' && Math.abs(L.rail.x - P.x) < TL / 2 + T.hit) die('train', L);
   }
 
   var honkCD = 0;
@@ -844,6 +721,7 @@
   var REASONS = { car: 'صرت فطيرة مسطّحة!', train: 'القطار كان أسرع منك!', water: 'سقطت في الماء!', drift: 'جرفك النهر بعيدًا!', eagle: 'خطفك النسر!' };
   function die(kind, L) {
     if (P.dead) return;
+    Kit.track.miss();
     P.dead = true; P.kind = kind; deathT = 0; state = 'dying'; P.queue = null; nearRec = null;
     setWarn(false);
     var cc = charColor();
@@ -972,12 +850,13 @@
     if (state === 'play' || state === 'dying') {
       updatePlayer(dt);
       if (state === 'play' && started) {
-        var rate = 0.3 + diffAt(maxRow) * 0.3;
+        var rate = (0.3 + diffAt(maxRow) * 0.3) * T.eagle;
         autoRow += dt * (rate + Math.max(0, P.row - autoRow) * 1.2);
-        var eff = P.hop ? Math.max(P.hop.row0, P.hop.row1) : P.row, behind = autoRow - eff;
-        setWarn(behind > 2.3);
-        if (behind > 2.3) { warnT -= dt; if (warnT <= 0) { warnT = 0.45; S.warn(); } }
-        if (behind > 3.6 && !godMode) die('eagle');
+        var eff = P.hop ? Math.max(P.hop.row0, P.hop.row1) : P.row, behind = autoRow - eff, warn = behind > T.warnAt;
+        if (warn && !warnOn) Kit.track.cue(); // the eagle warning asks for a hop forward: time it
+        setWarn(warn);
+        if (warn) { warnT -= dt; if (warnT <= 0) { warnT = 0.45; S.warn(); } }
+        if (behind > T.reach && !godMode) die('eagle');
       }
     } else if (state === 'title' || titleLike()) {
       // idle hops on the title screen
@@ -1142,6 +1021,9 @@
   function startGame() {
     if (state !== 'title') return;
     A.unlock();
+    // The tier is read again before the round starts; a world made for another tier
+    // (another player took over on the title screen) is made again.
+    if (Lanes.tier(dda.tier) !== T) resetWorld(base);
     state = 'play';
     Kit.stats.round('endless');
     if (!P.hop && !P.log) { P.y = 0; P.jump = 0; } // the title idle-hop could leave the critter floating
@@ -1171,6 +1053,9 @@
     state = 'over'; overT = 0;
     save.stats.games++;
     if (++save.tipRuns === 3) Kit.stats.tutorial('done');
+    // Difficulty: the share of this tier's par distance reached. Runs that end early
+    // ease the next worlds off; runs that reach the par make them harder.
+    dda.result(Math.min(1, Math.max(0, score - base) / T.par));
     Kit.stats.end('end', score);
     missionEvent('games', 1);
     missionEvent('score', score, true);
@@ -1517,6 +1402,8 @@
   // Mouse clicks return focus to the game; keyboard activation keeps button focus.
   document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('button'); if (b && e.detail > 0) b.blur(); }, true);
   canvas.addEventListener('pointerdown', function (e) { if (state === 'play' && e.button === 0) tryHop(0, 1); });
+  // A new player (or band) on the title screen gets a world of their own tier at once.
+  Kit.profile.onChange(function () { if (titleLike() && Lanes.tier(dda.tier) !== T) resetWorld(base); });
 
   Kit.muteButton();
   onResize();
@@ -1638,6 +1525,7 @@
     get score() { return score; },
     get coins() { return save.coins; },
     get best() { return save.best; },
+    get tier() { return T.tier; },
     player: function () { return { row: P.row, x: +P.x.toFixed(2), y: +P.y.toFixed(2), dead: P.dead, kind: P.kind, onLog: !!P.log, hopping: !!P.hop, autoRow: +autoRow.toFixed(2) }; },
     lanes: function (a, b) {
       var out = [];

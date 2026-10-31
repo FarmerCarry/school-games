@@ -9,7 +9,10 @@
  *   - show the answers for a period, the per-game table and collapsed details;
  *   - export ALL stored days as one Excel workbook (a small built-in ZIP
  *     writer, no library) or one JSON file, format sg-play-stats v1;
- *   - open JSON exports from other PCs to view them together (nothing saved).
+ *   - open JSON exports from other PCs to view them together (nothing saved);
+ *   - show the codes this PC and its children have on the school's dashboard
+ *     (sg:site:rid, kept by js/telemetry.js) and, on the teacher's request, give a
+ *     child the code it has on another PC (docs/PLAY_STATS.md section 3).
  *
  * The pure parts hang off window.SGTeacher so tools/tests can run them in Node.
  * Only init() touches the DOM, and it runs only when there is a document.
@@ -21,7 +24,12 @@
   /* ------------------------------------------------------------- format */
   var FORMAT = 'sg-play-stats';
   var PREFIX = 'sg:site:stats:';            // every key "clear" may remove
+  var TM = 'sg:site:tm:';                   // the telemetry queue (js/telemetry.js): cleared too, not its sharing note
   var META_KEY = 'sg:site:statsmeta';       // id, label and stop setting: never cleared
+  var RID = 'sg:site:rid';                  // dashboard codes (js/telemetry.js): never cleared
+  var PROFILES = 'sg:site:profiles';        // the portal's players (js/profiles.js); ':more' holds 13 to 24
+  var CODE = /^[0-9a-f]{12}$/;              // a code: 12 random hex
+  var KEY = /^p[0-9a-z]{1,8}$/;             // a player's key on this PC
   var DAY_KEY = /^sg:site:stats:d:(\d{4}-\d{2}-\d{2})$/;
   var SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
   var LEVEL = /^[A-Za-z][A-Za-z0-9_:.-]{0,23}$/;
@@ -30,6 +38,9 @@
   var CAP = 307200;                         // the portal keeps all stats keys under 300 KB
   var HOUR_DAYS = 3;                        // an hours row is exported only for 3 days or more
   var TWO_PLAYER = /(?:^|:)(?:duo|local|pvp)$/; // two-player modes on one PC (no winner): 'duo', 'L4:duo'
+  // The pictures of js/profiles.js, which this page does not load (a test keeps them equal).
+  var ANIMALS = ['🦊', '🐼', '🐯', '🐸', '🐵', '🐧', '🦁', '🐰', '🐨', '🐙', '🦄', '🐢'];
+  var COLORS = ['#e53935', '#f57c00', '#fdd835', '#43a047', '#00acc1', '#1e5bd6', '#8e24aa', '#ec407a'];
   var SOURCES = ['featured', 'catalog', 'recent', 'favorites', 'category', 'quick', 'search', 'related',
     'surprise', 'reload', 'history', 'direct'];
   var BASE = ['pc', 'pc_label', 'copy'];
@@ -290,15 +301,93 @@
       var day = parseDay(DAY_KEY.exec(key)[1], ls.getItem(key));
       if (day) days.push(day);
     });
-    return { days: days, meta: parseMeta(ls.getItem(META_KEY)), bytes: bytes };
+    return { days: days, meta: parseMeta(ls.getItem(META_KEY)), bytes: bytes, share: shareHost(ls.getItem(TM + 'on')),
+      rid: parseRid(ls.getItem(RID)), players: parsePlayers(ls.getItem(PROFILES), ls.getItem(PROFILES + ':more')) };
+  }
+  // The ingest server's host, which the portal's telemetry sink notes while it shares.
+  function shareHost(text) {
+    var host = '';
+    try { host = JSON.parse(text); } catch (e) { /* not sharing */ }
+    return typeof host === 'string' && /^[a-z0-9.-]{1,100}(?::\d{1,5})?$/i.test(host) ? host : '';
   }
 
-  // Removes only keys that start with sg:site:stats: (never sg:site:statsmeta).
+  /* ------------------------------------------------------ dashboard codes */
+  // sg:site:rid as js/telemetry.js keeps it: { v: 1, pc, k: { key: code }, l: { key: older
+  // code }, g: { key: the code a teacher gave } }. Anything malformed is left out, as the
+  // portal does.
+  function parseRid(text) {
+    var r = null, out = { v: 1, pc: '', k: {}, l: {}, g: {} };
+    try { r = JSON.parse(text); } catch (e) { /* none yet */ }
+    if (obj(r) && r.v === 1) {
+      if (typeof r.pc === 'string' && CODE.test(r.pc)) out.pc = r.pc;
+      ['k', 'l', 'g'].forEach(function (f) {
+        var n = 0;
+        if (obj(r[f])) Object.keys(r[f]).forEach(function (k) {
+          if (n < 64 && KEY.test(k) && typeof r[f][k] === 'string' && CODE.test(r[f][k])) { out[f][k] = r[f][k]; n++; }
+        });
+      });
+    }
+    return out;
+  }
+  // The portal's players, in its order: [{ k, a: animal, c: colour }], at most 24.
+  function parsePlayers(main, more) {
+    var out = [], seen = {};
+    [main, more].forEach(function (text) {
+      var d = null;
+      try { d = JSON.parse(text); } catch (e) { /* none */ }
+      (obj(d) && Array.isArray(d.list) ? d.list : []).forEach(function (p) {
+        if (!obj(p) || typeof p.k !== 'string' || !KEY.test(p.k) || own(seen, p.k) || out.length >= 24) return;
+        seen[p.k] = 1;
+        out.push({ k: p.k, a: ANIMALS[p.a] ? p.a : 0, c: COLORS[p.c] ? p.c : 0 });
+      });
+    });
+    return out;
+  }
+  // The check character (Luhn mod 16): from the rightmost digit the factors are 2, 1, 2, …;
+  // each product adds its two hex digits. It catches any one wrong character. Never sent.
+  function checkChar(hex) {
+    for (var sum = 0, f = 2, i = hex.length - 1, p; i >= 0; i--, f = 3 - f) {
+      p = f * parseInt(hex.charAt(i), 16);
+      sum += (p >> 4) + (p & 15);
+    }
+    return ((16 - sum % 16) % 16).toString(16);
+  }
+  // 3F9A-0C51-E2B7, and with its check character 3F9A-0C51-E2B7-C.
+  function showCode(hex, check) {
+    return (hex + (check ? checkChar(hex) : '')).toUpperCase().replace(/(.{4})(?=.)/g, '$1-');
+  }
+  // A code the teacher typed: 13 characters, case, dashes and spaces aside (Arabic digits
+  // count as digits). { code } or { error: 'length' | 'check' }.
+  function readCode(text) {
+    var s = String(text).replace(/[\s-]/g, '').replace(/[\u0660-\u0669\u06f0-\u06f9]/g, function (d) { return d.charCodeAt(0) & 15; }).toLowerCase();
+    if (!/^[0-9a-f]{13}$/.test(s)) return { error: 'length' };
+    return checkChar(s.slice(0, 12)) === s.charAt(12) ? { code: s.slice(0, 12) } : { error: 'check' };
+  }
+  // "The same child as on another PC": the player takes the code the other PC shows for
+  // it, noted in g. Its own code, if it had one, waits in l until the portal links it (an
+  // older one already waiting stays). A code given before is another PC's, so correcting a
+  // wrong transfer never links it. { rid, joined: an older code waits } or { error }:
+  // 'own' its code here, 'other' the code of another player on this PC.
+  function transfer(rid, key, text) {
+    var c = readCode(text), out = JSON.parse(JSON.stringify(rid)), old = out.k[key];
+    if (c.error) return c;
+    if (c.code === old) return { error: 'own' };
+    if (Object.keys(out.k).some(function (k) { return out.k[k] === c.code; })) return { error: 'other' };
+    out.k[key] = c.code;
+    if (old && !out.l[key] && out.g[key] !== old) out.l[key] = old;
+    out.g[key] = c.code;
+    return { rid: out, joined: !!out.l[key] };
+  }
+
+  // Removes only keys that start with sg:site:stats: (never sg:site:statsmeta) and the
+  // telemetry keys sg:site:tm:, so nothing recorded before the clear is sent later. The
+  // note sg:site:tm:on holds only the server's name and stays: this PC still shares. The
+  // dashboard codes (sg:site:rid) stay too: what was sent stays on the server.
   function clearStats(ls) {
     var keys = [];
     for (var i = 0; i < ls.length; i++) {
       var key = ls.key(i);
-      if (typeof key === 'string' && key.indexOf(PREFIX) === 0) keys.push(key);
+      if (typeof key === 'string' && (key.indexOf(PREFIX) === 0 || (key.indexOf(TM) === 0 && key !== TM + 'on'))) keys.push(key);
     }
     keys.forEach(function (key) { ls.removeItem(key); });
     return keys.length;
@@ -675,7 +764,8 @@
       ['إحصاءات اللعب في ألعاب الفسحة', null],
       ['الجهاز', info.pc + (info.label ? ' (' + info.label + ')' : '')],
       ['وقت التصدير', info.exportedAt],
-      ['ملاحظة', 'الأرقام لكل جهاز وليست لكل طالب، ولم تُرسل إلى أي مكان.'],
+      ['ملاحظة', 'الأرقام لكل جهاز وليست لكل طالب. لا يُرسل الموقع هذا الملف إلى أي مكان. وإذا ربط مسؤول المدرسة نسخة الموقع ' +
+        'بخادم للإحصاءات فلا تصله إلا معلومات اللعب بلا أسماء ولا اسم للجهاز ولا أي نص كتبه الأطفال، ويظهر فيها كل طفل برمز عشوائي.'],
       ['ما في الملف', 'كل الأيام المحفوظة على هذا الجهاز وقت التصدير، لا الفترة المعروضة في الصفحة فقط.'],
       ['مدة الحفظ', KEEP + ' لذلك صدّر الملف كل أسبوع.'],
       ['مكان الحفظ', 'تُحفظ الأرقام في ملف تعريف واحد للمتصفح على هذا الجهاز. وتبدأ من الصفر في متصفح آخر، أو مع ملف تعريف مدرسي ' +
@@ -805,7 +895,8 @@
   }
 
   var api = {
-    FORMAT: FORMAT, PREFIX: PREFIX, META_KEY: META_KEY, COLUMNS: COLUMNS, SOURCES: SOURCES,
+    FORMAT: FORMAT, PREFIX: PREFIX, META_KEY: META_KEY, COLUMNS: COLUMNS, SOURCES: SOURCES, ANIMALS: ANIMALS, COLORS: COLORS,
+    parseRid: parseRid, parsePlayers: parsePlayers, checkChar: checkChar, showCode: showCode, readCode: readCode, transfer: transfer,
     parseDay: parseDay, parseMeta: parseMeta, readStore: readStore, clearStats: clearStats, cleanLabel: cleanLabel,
     tables: tables, exportJson: exportJson, readImport: readImport, combine: combine, periodRange: periodRange,
     summary: summary, markWinnable: markWinnable, stuck: stuck, levelResult: levelResult, verdict: verdict,
@@ -821,18 +912,27 @@
     var NAMES = names(window.GAMES);
     var COPY = location.protocol === 'file:' ? 'folder' : 'web';
     var XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    var state = { ok: false, days: [], meta: parseMeta(null), bytes: 0, files: [], ignored: [] };
-    var store = null, refresh = 0, pending = null, saving = false, again = '';
+    var state = { ok: false, days: [], meta: parseMeta(null), bytes: 0, share: '', rid: parseRid(null), players: [], files: [], ignored: [] };
+    var store = null, refresh = 0, pending = null, saving = false, again = '', linking = '';
+    var UNSAVED = 'تعذّر الحفظ في هذا المتصفح.';
 
     function load() {
       try {
         store = window.localStorage;
         var r = readStore(store);
-        state.ok = true; state.days = r.days; state.meta = r.meta; state.bytes = r.bytes;
+        state.ok = true; state.days = r.days; state.meta = r.meta; state.bytes = r.bytes; state.share = r.share;
+        state.rid = r.rid; state.players = r.players;
       } catch (e) {
-        state.ok = false; state.days = []; state.meta = parseMeta(null); state.bytes = 0;
+        state.ok = false; state.days = []; state.meta = parseMeta(null); state.bytes = 0; state.share = '';
+        state.rid = parseRid(null); state.players = [];
       }
     }
+    // The portal on this PC shares and nothing here stops it.
+    function sharing() {
+      return state.ok && !!state.share && !state.meta.off && state.meta.raw.tm !== false && navigator.globalPrivacyControl !== true;
+    }
+    // Codes were made here: something may have reached the school's server.
+    function coded() { return !!state.rid.pc || Object.keys(state.rid.k).length > 0; }
     function newId() {
       var a = new Uint8Array(4), id = 'pc';
       window.crypto.getRandomValues(a);
@@ -853,6 +953,7 @@
       return { pc: state.meta.id, label: state.meta.label, copy: COPY, exportedAt: localIso(now), today: dateKey(now), names: NAMES };
     }
     function bdi(s, ltr) { return '<bdi' + (ltr ? ' dir="ltr"' : '') + '>' + esc(s) + '</bdi>'; }
+    function code(s) { return '<bdi dir="ltr" class="code">' + esc(s) + '</bdi>'; }
     function showDate(key) { return key ? bdi(+key.slice(8, 10) + '/' + +key.slice(5, 7) + '/' + key.slice(0, 4), true) : '—'; }
     // An id such as cpu-easy stays on one line (it would break at the hyphen, right to left).
     function levelName(id) { return id === '_other' ? 'مراحل أخرى' : '<bdi dir="ltr" class="id">' + esc(id) + '</bdi>'; }
@@ -889,12 +990,18 @@
       renderSources(s);
       renderSettings(s);
       renderTutorials(s);
+      renderCodes();
       renderActions();
     }
 
     function renderNotices(today, combined) {
       $('storageMsg').hidden = state.ok;
       $('stoppedMsg').hidden = !(state.ok && state.meta.off);
+      // Said only while the portal on this PC shares and nothing here stops it.
+      var share = sharing();
+      $('shareMsg').hidden = !share;
+      $('shareMsg').innerHTML = share ? 'مشاركة إحصاءات اللعب مفعّلة على هذا الجهاز: تُرسل بلا أسماء، ويظهر كل طفل برمز عشوائي، إلى ' +
+        bdi(state.share, true) + '.' : '';
       var r = state.ok ? reminder(state.days, state.meta, state.bytes, today) : null, why = [];
       $('reminder').hidden = !r;
       if (r) {
@@ -1091,6 +1198,24 @@
         }).join('') + '</tbody></table></div>' : empty('لم يظهر شرح أول في هذه الفترة.');
     }
 
+    // The codes this PC and its players have on the school's dashboard (read only), and
+    // for each player "the same child as on another PC", only while this PC shares.
+    function renderCodes() {
+      var r = state.rid, on = sharing(), soon = function (what) { return on ? 'يُصنع في المرة القادمة التي يلعب فيها ' + what + '.' : 'لا رمز بعد.'; };
+      $('codesPanel').hidden = !state.ok || !(on || coded());
+      $('codes').innerHTML = '<p>رمز هذا الجهاز: ' + (r.pc ? code(showCode(r.pc)) : soon('طفل هنا')) + '</p>' +
+        (on ? '' : '<p class="notice warn">المشاركة غير مفعّلة على هذا الجهاز، فلا تُصنع رموز جديدة ولا يُربط طفل بجهاز آخر.</p>') +
+        (state.players.length ? '<ul class="codes">' + state.players.map(function (p) {
+          var u = r.k[p.k];
+          return '<li data-key="' + p.k + '"><span class="ring" style="border-color:' + COLORS[p.c] + '">' + ANIMALS[p.a] + '</span>' +
+            (u ? code(showCode(u, 1)) + '<span class="hint">في لوحة المؤشرات: الطالب ' + bdi(u.slice(0, 4).toUpperCase() + '…', true) + '</span>'
+              : '<span class="hint">' + soon('هذا الطفل') + '</span>') +
+            '<button type="button" class="btn" data-link="' + p.k + '"' + (on ? '' : ' disabled') + '>الطفل نفسه على جهاز آخر</button></li>';
+        }).join('') + '</ul>' : empty('لا يوجد لاعبون على هذا الجهاز بعد.'));
+      if (linking && (!on || !state.players.some(function (p) { return p.k === linking; }))) closeLink();
+    }
+    function closeLink() { linking = ''; $('linkForm').hidden = true; }
+
     // This PC's hardware: shown on the page only, never stored or exported.
     function renderHardware() {
       var gpu = '';
@@ -1112,7 +1237,9 @@
 
     function renderActions() {
       var ok = state.ok;
-      ['pcLabel', 'saveLabel', 'exportXlsx', 'exportJson', 'stopBtn', 'resumeBtn', 'clearBtn'].forEach(function (id) { $(id).disabled = !ok; });
+      ['pcLabel', 'saveLabel', 'exportXlsx', 'exportJson', 'stopBtn', 'resumeBtn', 'clearBtn'].forEach(function (id) {
+        if ($(id)) $(id).disabled = !ok;
+      });
       if (document.activeElement !== $('pcLabel')) $('pcLabel').value = state.meta.label;
       $('stopBtn').hidden = state.meta.off;
       $('resumeBtn').hidden = !state.meta.off;
@@ -1123,13 +1250,14 @@
       $('lastExport').innerHTML = !ok ? '' : state.meta.lastExport ? 'آخر تصدير: ' + showDate(dateKey(new Date(state.meta.lastExport))) + '.'
         : 'لم يُصدَّر شيء من هذا الجهاز بعد.';
       $('clearText').textContent = 'ستُحذف كل الأيام المحفوظة على هذا الجهاز (' + count(state.days.length, DAYS) + '). صدّر ملف Excel ' +
-        'أولًا إن أردت الاحتفاظ بها. يبقى اسم الجهاز ومعرّفه وإعداد الإيقاف. اكتب «امسح» للتأكيد:';
+        'أولًا إن أردت الاحتفاظ بها. يبقى اسم الجهاز ومعرّفه وإعداد الإيقاف' + (coded() ? ' ورموز لوحة المؤشرات' : '') + '. اكتب «امسح» للتأكيد:';
+      $('clearServer').hidden = !(sharing() || coded());
     }
 
     /* ---------------------------------------------------------- actions */
     function write(statusId, change, done) {
       try { updateMeta(change); say(statusId, done); }
-      catch (e) { say(statusId, 'تعذّر الحفظ في هذا المتصفح.', true); }
+      catch (e) { say(statusId, UNSAVED, true); }
       load();
       render();
     }
@@ -1297,10 +1425,46 @@
         updateMeta(function (raw) { raw.clearedAt = Date.now(); delete raw.since; delete raw.pruned; });
         clearStats(store);
         say('clearStatus', 'مُسحت إحصاءات هذا الجهاز.');
-      } catch (e) { say('clearStatus', 'تعذّر الحفظ في هذا المتصفح.', true); }
+      } catch (e) { say('clearStatus', UNSAVED, true); }
       load();
       render();
     });
+    // The same child as on another PC: the code that PC's teacher page shows for the child.
+    $('codes').addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-link]') : null, p;
+      if (!b || b.disabled) return;
+      linking = b.getAttribute('data-link');
+      p = state.players.filter(function (x) { return x.k === linking; })[0];
+      $('linkText').textContent = ANIMALS[p.a] + ' رمز هذا الطفل كما يظهر على الجهاز الآخر (13 خانة، بالحروف الإنجليزية):';
+      $('linkCode').value = '';
+      say('linkStatus', '');
+      $('linkForm').hidden = false;
+      $('linkCode').focus();
+    });
+    $('linkForm').addEventListener('submit', function (e) {
+      var t;
+      e.preventDefault();
+      load();
+      // Sharing was turned off, or the player removed, meanwhile: render() closes the form.
+      if (!sharing() || !state.players.some(function (p) { return p.k === linking; })) return render();
+      // Read again just before writing: the portal may have written meanwhile.
+      try {
+        t = transfer(parseRid(store.getItem(RID)), linking, $('linkCode').value);
+        if (t.rid) store.setItem(RID, JSON.stringify(t.rid));
+      } catch (err) { t = { error: 'save' }; }
+      if (t.error) return say('linkStatus', {
+        length: 'الرمز 13 خانة؛ تحقّق منه.',
+        check: 'إحدى خانات الرمز خاطئة؛ تحقّق منه.',
+        own: 'هذا رمزه على هذا الجهاز؛ اكتب رمزه على الجهاز الآخر.',
+        other: 'هذا رمز لاعب آخر على هذا الجهاز.',
+        save: UNSAVED
+      }[t.error], true);
+      closeLink();
+      say('linkStatus', 'من اللعبة القادمة يُحسب لعب هذا الطفل مع رمزه على الجهاز الآخر' + (t.joined ? '، ويُضم إليه ما لعبه هنا من قبل.' : '.'));
+      load();
+      render();
+    });
+    $('linkForm').querySelector('[data-cancel]').addEventListener('click', function () { closeLink(); say('linkStatus', ''); });
     document.addEventListener('click', function (e) {
       var link = e.target.closest ? e.target.closest('[data-open]') : null;
       if (link && $(link.getAttribute('data-open'))) $(link.getAttribute('data-open')).open = true;
@@ -1314,7 +1478,7 @@
     });
     // The portal writes while children play in another tab: follow it.
     window.addEventListener('storage', function (e) {
-      if (e.key !== null && e.key.indexOf('sg:site:stats') !== 0) return;
+      if (e.key !== null && e.key.indexOf('sg:site:stats') !== 0 && e.key.indexOf(TM) !== 0 && e.key !== RID && e.key.indexOf(PROFILES) !== 0) return;
       clearTimeout(refresh);
       refresh = setTimeout(function () { load(); render(); }, 500);
     });

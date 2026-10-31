@@ -14,8 +14,9 @@
   <a class="home" href="index.html">🏠 العودة إلى الألعاب</a>
 </header>
 <main class="wrap" id="teacherApp">
-  <p class="note" role="note">الأرقام لكل جهاز وليست لكل طالب، ولا تُرسل إلى أي مكان.</p>
+  <p class="note" role="note">الأرقام لكل جهاز وليست لكل طالب، وتبقى على هذا الجهاز. لا يُرسل شيء إلا إذا ربط مسؤول المدرسة نسخة الموقع بخادم للإحصاءات، وعندها يُرسل الموقع معلومات اللعب بلا أسماء ولا اسم للجهاز ولا أي نص كتبه الأطفال، ويظهر فيها كل طفل برمز عشوائي.</p>
   <p class="notice warn" id="storageMsg" hidden>لا يسمح هذا المتصفح للصفحة بقراءة التخزين المحلي، لذلك لا تظهر إحصاءات هذا الجهاز. يمكنك فتح ملفات من أجهزة أخرى لعرضها.</p>
+  <p class="notice" id="shareMsg" hidden></p>
   <p class="notice warn" id="stoppedMsg" hidden>جمع الإحصاءات متوقف على هذا الجهاز. يمكنك استئنافه من «الأدوات» أسفل الصفحة.</p>
   <p class="notice" id="reminder" hidden></p>
   <div class="notice combined" id="combined" hidden></div>
@@ -84,6 +85,17 @@
     <div id="tutorials"></div>
   </details>
 
+  <details class="panel" id="codesPanel" hidden>
+    <summary>الرموز في لوحة المؤشرات</summary>
+    <p class="hint">يظهر كل طفل في لوحة المؤشرات برمز عشوائي لا باسمه. الطفل الذي يلعب على جهازين يظهر طالبين، إلا إذا أعطيته هنا رمزه على الجهاز الآخر.</p>
+    <div id="codes"></div>
+    <form class="confirm" id="linkForm" hidden>
+      <label for="linkCode" id="linkText"></label>
+      <div class="row"><input id="linkCode" type="text" dir="ltr" maxlength="24" autocomplete="off" spellcheck="false"><button type="submit" class="btn main">اربط</button><button type="button" class="btn" data-cancel>إلغاء</button></div>
+    </form>
+    <p class="status" id="linkStatus" role="status"></p>
+  </details>
+
   <section class="panel tools" aria-labelledby="toolsTitle">
     <h2 id="toolsTitle">الأدوات</h2>
     <div class="tool">
@@ -121,6 +133,7 @@
     <div class="tool">
       <h3>مسح الإحصاءات</h3>
       <div class="row"><button type="button" class="btn danger" id="clearBtn">امسح إحصاءات هذا الجهاز</button></div>
+      <p class="hint" id="clearServer" hidden>ما أُرسل إلى خادم المدرسة يبقى هناك؛ لحذف بيانات طفل استخدم رمزه في لوحة المؤشرات.</p>
       <form class="confirm" id="clearConfirm" hidden>
         <label for="clearWord" id="clearText"></label>
         <div class="row"><input id="clearWord" type="text" autocomplete="off" spellcheck="false"><button type="submit" class="btn danger">تأكيد</button><button type="button" class="btn" data-cancel>إلغاء</button></div>

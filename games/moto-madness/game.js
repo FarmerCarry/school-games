@@ -471,10 +471,6 @@
   btn('btnGarageBack', function () { if (garageFrom === 'levels') goLevels(); else goTitle(); });
   btn('btnResume', resume);
   btn('btnRestart', restartLevel);
-  btn('btnMusic', function () { MMA.setMusic(!MMA.musicOn()); store.set('music', MMA.musicOn()); paintMusicBtn(); });
-  function paintMusicBtn() { $('btnMusic').textContent = '🎵 الموسيقى: ' + (MMA.musicOn() ? 'تعمل' : 'متوقفة'); }
-  MMA.setMusic(store.get('music', true) !== false);
-  paintMusicBtn();
   btn('btnPauseLevels', function () { sel = levelIdx; demo = false; startDemo(); goLevels(); });
   btn('btnNext', nextLevel);
   btn('btnRetry', function () { startLevel(levelIdx); });
@@ -626,7 +622,6 @@
   var lastInp = { gas: false, brake: false, lean: 0 };
   function update(dt) {
     if (state !== 'paused') clock += dt; // clouds, snow and flags stand still while paused
-    MMA.music(state === 'complete' ? 0.35 : state === 'paused' ? 0.55 : 1);
     if (state === 'play') {
       var inp = readInput();
       lastInp = inp;
@@ -651,7 +646,8 @@
       // still going nowhere after 6 s of trying: tumble off and go back to the last checkpoint
       if (stuckT > 6 && inp.gas) { world.crash('stuck'); stuckT = 0; }
       var b = world.bike;
-      MMA.engine(!world.crashed || world.crashT > 1.2, b.wheels[0].s, inp.gas && !world.crashed && world.started, !world.grounded, dt);
+      // showComplete() above may have just silenced the engine: keep it off under the results
+      if (state === 'play') MMA.engine(!world.crashed || world.crashT > 1.2, b.wheels[0].s, inp.gas && !world.crashed && world.started, !world.grounded, dt);
     } else if (state === 'title' || state === 'levels' || state === 'garage') {
       var di = MM.autopilot(world, { flips: true });
       lastInp = di;
