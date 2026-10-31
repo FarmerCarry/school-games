@@ -100,11 +100,21 @@ test('saves from before the new worlds continue into them, and the new levels pl
     assert.equal(await where(page), `win:${i}`, `level ${i + 1} is won by its recorded solution`);
   }
   assert.equal(await page.locator('#w-lvl').textContent(), 'عالم الملك الماكر · المرحلة 100');
-  // The win panel scales in over 0.3s. On a loaded runner that entrance is still moving
-  // when the click is sampled, so the pointer misses النهاية! and the match stays on win.
-  await page.evaluate(() => {
-    document.querySelector('#scr-win .panel').getAnimations().forEach(animation => animation.finish());
-  });
+  // The win panel scales in over 0.3s from its center, so النهاية! moves until that
+  // entrance ends. On a loaded runner the animation stays pending until a frame is
+  // drawn; sampling the button then misses it and the match stays on win.
+  const next = page.locator('#btn-next');
+  await next.waitFor({ state: 'visible', timeout: 5000 });
+  assert.equal(await next.isEnabled(), true, '#btn-next must be enabled');
+  assert.equal(await page.evaluate(() => {
+    const animations = document.querySelector('#scr-win .panel').getAnimations();
+    animations.forEach(animation => animation.finish());
+    const button = document.getElementById('btn-next');
+    const box = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+    return animations.every(animation => animation.effect.getComputedTiming().endTime !== Infinity)
+      && box.width > 0 && box.height > 0 && (hit === button || button.contains(hit));
+  }), true, 'the win panel entrance has finished and النهاية! can take the click');
   await clickControl(page, '#btn-next');
   assert.equal(await page.evaluate(() => __game.mode), 'end');
   assert.equal(await page.locator('#e-stars').textContent(), '300/300');
