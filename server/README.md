@@ -175,9 +175,13 @@ What can be stored is decided here, not only by what the portal chooses to send.
   code, which a PC may tell again or late), so the student does not come back. A later
   session of the same code (its profile stays on the PC) is new play and is kept, and so
   is a mark naming the code after it (a removal of that profile, or a link to that
-  code). On Cloudflare, another Worker instance learns of the forget when it next reads
-  the settings, within 5 minutes; until then it may still store such a batch (forget
-  again to remove it). The
+  code). The 8 days cover a batch sent again (a PC keeps one at most 7 days), but not an
+  older code that a PC tells as `cd` until a batch naming it is delivered: a `cd` that
+  first gets through more than 8 days after the forget (after a long break, or on a
+  blocked network) stores the link again. It names only the code, none of its play, and
+  forgetting again removes it with the student it is linked to. On Cloudflare, another
+  Worker instance learns of the forget when it next reads the settings, within 5
+  minutes; until then it may still store such a batch (forget again to remove it). The
   school-wide daily counts, in which no child can be found, keep the play already
   counted until a recount (`POST /v1/admin/rebuild`) makes them again from the facts
   left. D1 *Time Travel* can still restore the database to any minute of the last 7
@@ -990,7 +994,9 @@ Body `{"u": "<code>"}`: forgets the student of that code, with every code linked
 
 A code the server does not hold answers zeros (for 8 days its play from before the forget
 is still dropped if a PC sends it, and so is every mark naming it until the code plays
-again).
+again). A link to the code that a PC tells more than 8 days after the forget is stored
+again: it names only the code, and forgetting again removes it with the student it is
+linked to.
 
 #### `POST /v1/admin/link` and `DELETE /v1/admin/link?u=`
 

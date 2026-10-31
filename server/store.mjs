@@ -548,7 +548,8 @@ const RV_UP = "UPDATE settings SET value = CAST(CAST(value AS INTEGER) + 1 AS TE
 // change that came in between keeps the flag).
 const REBUILT = "INSERT INTO settings (key, value) SELECT 'rebuild', '' WHERE NOT EXISTS (SELECT 1 FROM roll_days WHERE dirty >= 2) " +
   'ON CONFLICT (key) DO UPDATE SET value = excluded.value';
-// The codes of a forget FORGOTTEN_DAYS old (at ?1, UTC seconds) leave 'forgotten' (admin.mjs).
+// The codes of a forget FORGOTTEN_DAYS old (at ?1, UTC seconds) leave 'forgotten' (admin.mjs);
+// a mark naming one is then stored again (a link told that late: see FORGOTTEN there).
 const FORGOTTEN_GONE = "UPDATE settings SET value = (SELECT json_group_object(key, value) FROM json_each(settings.value) " +
   `WHERE value > ?1 - ${FORGOTTEN_DAYS * DAY_S}) WHERE key = 'forgotten'`;
 // Deleting facts, a few hundred sessions at a time, so that one run never writes more

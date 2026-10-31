@@ -273,6 +273,9 @@ const OF_GROUP = `(SELECT id FROM st_sessions WHERE u IN ${GROUP})`;
 // a batch of such a code whose session started by then, and every mark naming one while
 // it has not played again (store.mjs). A PC keeps a batch at most 7 days: each forget also
 // removes the entries FORGOTTEN_DAYS old, as does the 5-minute cron when no forget comes.
+// A PC tells an older code ('cd') until a batch naming it is delivered, which can be later
+// still: a link told after FORGOTTEN_DAYS is stored again. It names only the code (none of
+// its play), and forgetting again removes it with the student it is linked to.
 export const FORGOTTEN_DAYS = 8;
 const FORGOTTEN = "INSERT INTO settings (key, value) SELECT 'forgotten', json_group_object(u, s) FROM (SELECT key AS u, value AS s " +
   `FROM json_each((SELECT value FROM settings WHERE key = 'forgotten')) WHERE value > ?2 - ${FORGOTTEN_DAYS * 86400} AND key NOT IN ${GROUP} ` +

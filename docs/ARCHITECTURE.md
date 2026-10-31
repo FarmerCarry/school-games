@@ -738,8 +738,10 @@ The server:
   then removes), in which ingest drops their batches from sessions that started before it
   and every mark that names one of them while it has not played again (a PC sends a
   batch again until it sees the answer: a closing page's last batch goes again from the
-  next page). A link makes an older code count as a newer one, history included, one hop
-  deep; a recount marks every rolled day for a diff re-roll by the cron.
+  next page). An older code that a PC tells as `cd` after the 8 days is linked again: the
+  link names only the code, none of its play, and forgetting again removes it with the
+  student it is linked to. A link makes an older code count as a newer one, history
+  included, one hop deep; a recount marks every rolled day for a diff re-roll by the cron.
 * **The simulated school** (`server/simulate.mjs`): 600 children in 24 classes on 30 PCs
   in Asia/Riyadh, mostly wire v3 with some v2, sending at the sink's real cadence; with
   `--db` it writes weeks of history and rolls them up with the real `rollupStep`. The
