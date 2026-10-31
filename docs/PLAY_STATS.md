@@ -316,7 +316,9 @@ itself never uses the network. Its edge and first line are green, red or grey:
   في المدرسة السماح بالعنوان https://<host>. ما لم يصل يبقى محفوظًا على هذا الجهاز ويُرسل
   وحده عندما يعود الاتصال، لكن مكانه محدود: بعد بضع ساعات من اللعب، أو بعد 7 أيام، يُحذف
   الأقدم أولًا.» (the queue keeps 128 KB, which a busy PC fills in about three and a half
-  hours of play); the server's own error «يردّ خادم الإحصاءات <host>
+  hours of play); no connection at all (`navigator.onLine` false: the cable out, the
+  Wi-Fi down) «لم يكن هذا الجهاز متصلًا بالإنترنت منذ <time>.» with the same sentence on
+  what is kept, and no word of the filter or IT; the server's own error «يردّ خادم الإحصاءات <host>
   بخطأ منذ <time>. …»; its refusal «⚠ رفض خادم الإحصاءات بيانات من هذا الجهاز قبل …»;
 * never delivered yet: «لم تصل إحصاءات من هذا الجهاز إلى لوحة المؤشرات بعد.»;
 * with two facts: «آخر وصول إلى لوحة المؤشرات» (how long ago, with the PC's date and
@@ -333,8 +335,10 @@ itself never uses the network. Its edge and first line are green, red or grey:
   server answered with an error, or does not take this version of the site). When health
   answers but the batches get no answer it says «✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكن
   تعذّر إرسال البيانات إليه. …» and asks IT to allow the address fully, with sending data;
-  the failure then still dates from when it began. A test result goes from the box when
-  its colour changes.
+  the failure then still dates from when it began. On a PC with no connection at all it
+  asks nothing and says «✗ هذا الجهاز غير متصل بالإنترنت الآن. ما ينتظر الإرسال يبقى
+  محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال.». A test result goes from the box
+  when its colour changes.
 
 When nothing is sent the box says why, without facts or button: a downloaded folder «هذه
 نسخة منزَّلة من الموقع (مجلد على هذا الجهاز)، ولا ترسل أبدًا شيئًا إلى لوحة المؤشرات في

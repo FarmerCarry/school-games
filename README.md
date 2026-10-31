@@ -314,7 +314,9 @@ two-player modes mix players.
   Press **اختبر الاتصال الآن** to check now: it says «✓ يصل هذا الجهاز إلى خادم الإحصاءات …»
   and sends what waited, or «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز …» with the
   address for IT (or, when the server answers but the play cannot be sent to it, that the
-  filter must allow sending data to that address too). Check it on
+  filter must allow sending data to that address too). A PC with no connection at all
+  (the cable out, the Wi-Fi down) is not the filter's fault: the box and the test then say
+  that it is not connected to the internet, and what waits is sent once it is. Check it on
   each PC after setting up and whenever the dashboard misses a class, in the browser the
   children use, opened from the website. A downloaded folder says that it never sends, and
   stopped statistics say that nothing is sent. Only this button and the games page (the

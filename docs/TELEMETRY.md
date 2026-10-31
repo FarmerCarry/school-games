@@ -215,7 +215,10 @@ local day records. The server stores no IP address.
   any other answer and **no answer** keep the batch and back off **20, 40, 80, 160, then
   300 s** (batches that fail together, as a hidden page's do, count once). While the server
   is failing, or the PC is offline (`navigator.onLine === false`), a hidden page sends
-  nothing and the queue keeps everything for later.
+  nothing and the queue keeps everything for later. A request that gets no answer while
+  the PC is offline (the cable out, the Wi-Fi down) is noted as `offline`, not `network`,
+  so the teacher page blames neither the school's filter nor the server (before 31
+  October 2026 it said the filter blocked the server and asked for IT).
 * Unsent batches wait in `localStorage` **`sg:site:tm:q4:<hash>`** (an array of
   `{ t, w0, e }`, plus `h: 1` once a closing page handed it over: when the batch's first
   event was recorded, its session's start, and the envelope), oldest first, **at most
@@ -259,8 +262,9 @@ local day records. The server stores no IP address.
     ok: 1761720300000,              // when a batch was last delivered (the PC's clock; 0: never)
     f: 1761631500000,               // when the first failure since then came (0: none)
     k: 'network',                   // the latest failure: 'network' (no answer within a minute,
-                                    // or not the server's), 'server' (its 429 or 5xx) or
-                                    // 'refused' (its 4xx: the batch is gone)
+                                    // or not the server's), 'offline' (no answer while
+                                    // navigator.onLine is false), 'server' (its 429 or 5xx)
+                                    // or 'refused' (its 4xx: the batch is gone)
     at: 1761720240000,              // when that failure came
     x: 1761719000000 }              // when play no closing page handed over was last dropped
                                     // for the 128 KB or the 7 days (0: never); a delivery
@@ -295,7 +299,9 @@ local day records. The server stores no IP address.
   began, and the result says `reached: true` with the batches' failure (the page then asks
   IT to allow the address fully, with sending data). A health that fails is noted as a
   failure that keeps its start, and a server that does not take wire version 3 as the
-  server's problem (nothing was sent). The fast build gives the teacher page no address
+  server's problem (nothing was sent). With `navigator.onLine === false` the test answers
+  `{ k: 'offline', reached: false, sent: 0, n }` at once, without a request and without
+  writing the record. The fast build gives the teacher page no address
   (`SG_TELEMETRY` goes to the portal only), so it uses `u` from the record the portal
   wrote, read again at each call (a teacher who opens this page first, then the portal,
   needs no reload); without one there is nothing to test.
@@ -374,7 +380,8 @@ stopping statistics on the teacher page.
   play was dropped for room or age, when («حُذف قبل أن يصل»). Its button **اختبر الاتصال الآن** asks the server now and sends
   what waits: «✓ يصل هذا الجهاز إلى خادم الإحصاءات …» with the number of batches sent, or
   «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز …» with the address to give the school's
-  IT. Open the page on the PC the children use, in the same browser, from the website (a
+  IT (or, on a PC with no connection at all, «✗ هذا الجهاز غير متصل بالإنترنت الآن. …»,
+  and nothing for IT). Open the page on the PC the children use, in the same browser, from the website (a
   downloaded folder says that it never sends). Its «الرموز في لوحة المؤشرات» section
   shows this PC's code. In the developer tools, `SGTelemetry.status()` answers the same
   on the portal and on the teacher page.
@@ -403,7 +410,9 @@ stopping statistics on the teacher page.
   classroom timer, `gp`, `np`, `cls` and every `se.why`; back-off 20, 40, 80, 160, 300 s
   with a fake clock, for 5xx and for no answer at all; 400 and 429; a request that is never
   answered is aborted after a minute, noted as a network failure (since its first time)
-  and backed off; the queue across a reload, its 128 KB, 7-day and clear rules (a clear
+  and backed off; a send that fails while `navigator.onLine` is false noted as `offline`,
+  still since the first failure, and the teacher's test then answering `offline` without
+  a request or a write; the queue across a reload, its 128 KB, 7-day and clear rules (a clear
   dated after the PC's clock holds nothing back, and one dated ahead by a fast clock that
   is set right later never drops the play recorded until the clock passes it; a clear
   drops the open page's earlier events even after `status()`), the record of play dropped
@@ -449,7 +458,8 @@ stopping statistics on the teacher page.
   removing the `sg:site:tm:` queue while both notes, the codes and the sharing line stay;
   every message of the delivery box and of its test, word for word (the storage limit,
   grey for batches waiting unsent for long, the line for play dropped, health answered
-  with the batches failing); the box on a blocked PC (red, since when, the host), its
+  with the batches failing, a PC with no connection at all, which names neither the
+  filter nor IT); the box on a blocked PC (red, since when, the host), its
   test failing with the address for IT and then sending both waiting batches, oldest
   first, and its result going when the box turns red later; and a downloaded folder's
   page naming the website.

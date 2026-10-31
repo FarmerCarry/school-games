@@ -327,6 +327,11 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
   assert.deepEqual(panel({}, { f: now - 2 * H, k: 'server', at: now - 6e4, n: 2, t: now - 2 * H, o: now - 2 * H }).problem,
     'يردّ خادم الإحصاءات ingest.test بخطأ منذ ' + hm(now - 2 * H) + '. ' + KEEPS + ' إذا استمر ذلك، أخبر من يدير خادم الإحصاءات.');
   assert.equal(panel({}, { f: now - 2 * H, k: 'server', at: now - 6e4 }).state, '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ ساعتين.');
+  // No connection at all (the cable out, the Wi-Fi down): since when, and that the play
+  // waits; neither the school's filter nor IT is named.
+  const offline = panel({}, { ok: now - 3 * D, f: now - 2 * H, k: 'offline', at: now - 6e4, n: 4, t: now - 2 * H, o: now - 2 * H });
+  assert.deepEqual([offline.tone, offline.state, offline.problem], ['bad', '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ ساعتين.',
+    'لم يكن هذا الجهاز متصلًا بالإنترنت منذ ' + hm(now - 2 * H) + '. ' + KEEPS]);
   const refused = panel({}, { ok: now - H, f: now - 3e5, k: 'refused', at: now - 3e5 });
   assert.deepEqual([refused.tone, refused.state, refused.problem], ['bad', '⚠ رفض خادم الإحصاءات بيانات من هذا الجهاز قبل 5 دقائق.',
     'رفض الخادم ingest.test بيانات أُرسلت من هذا الجهاز في ' + hm(now - 3e5) + '، فحُذفت. إذا تكرر ذلك، أخبر من يدير خادم الإحصاءات.']);
@@ -351,6 +356,8 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
     // Health answered, then the batches got no answer: the address opens, sending to it does not.
     [{ k: 'network', host, reached: true, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكن تعذّر إرسال البيانات إليه. ' +
       'قد يسمح مرشّح الإنترنت في المدرسة بفتح العنوان ويمنع إرسال البيانات إليه. أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به كاملًا، مع إرسال البيانات: https://ingest.test'],
+    // No connection at all: nothing was asked, and there is no address to give IT.
+    [{ k: 'offline', host, reached: false, sent: 0, n: 3 }, false, '✗ هذا الجهاز غير متصل بالإنترنت الآن. ما ينتظر الإرسال يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال.'],
     [{ k: 'server', host, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه ردّ بخطأ مؤقت. البيانات محفوظة على هذا الجهاز؛ جرّب مرة أخرى بعد قليل.'],
     [{ k: 'refused', host, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه لا يقبل بيانات هذه النسخة من الموقع. أخبر من يدير خادم الإحصاءات.'],
     [{ why: 'off', host }, false, 'لا يرسل هذا الجهاز إلى لوحة المؤشرات الآن، فلا يوجد اتصال لاختباره.'],

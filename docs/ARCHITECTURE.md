@@ -444,9 +444,9 @@ queues too (not the notes `sg:site:tm:on` and `sg:site:tm:dx`, and not `sg:site:
 storage calls are wrapped; no `console`; never `clear()`.
 
 **Delivery status for the teacher:** the sink keeps `sg:site:tm:dx` (the address; the last
-delivery; the first failure since, and the latest failure's kind: `network`, `server` or
-`refused`; the last time play that no closing page handed over was dropped for room or
-age). `teacher.html` loads
+delivery; the first failure since, and the latest failure's kind: `network`, `offline`
+(no answer while `navigator.onLine` is false), `server` or `refused`; the last time play
+that no closing page handed over was dropped for room or age). `teacher.html` loads
 the same `js/telemetry.js` in check mode (`<meta name="sg-telemetry" content="check">`):
 no session, no event, no listener, and no write until the test (apart from dating back a
 clear ahead of the clock, as the portal does); older builds' keys it counts but only
@@ -459,7 +459,8 @@ for more than 15 minutes since it), and `SGTelemetry.check(cb)` (its «اختب�
 address the portal noted (the build gives the teacher page none; it is read again at
 each call, so a portal opened after the teacher page counts). Health alone ends a
 failure only when nothing waits, and the test says so when health answers but the
-batches get none.
+batches get none. A PC with no connection at all asks nothing: the test answers
+`offline` at once and notes nothing.
 So the network carve-out stays exactly one file, inlined in the fast build into both
 pages; `tools/check-all.mjs` checks the teacher page's exact copy like the portal's.
 

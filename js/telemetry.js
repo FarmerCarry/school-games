@@ -42,11 +42,12 @@
  * same way). Only the server's 204 delivers and only its JSON error ({ "error": text })
  * to a 4xx other than 429 is final; anything else (429, 5xx, a school filter's or
  * captive portal's own page, no answer within a minute, which aborts the request) backs
- * off 20, 40, 80, 160, 300 s. sg:site:tm:on (the server's host) tells the teacher page
- * that this PC shares, and sg:site:tm:dx whether its batches arrive (last delivery,
- * first failure since, its kind, the last time play that no closing page handed over
- * was dropped). Every storage call is guarded, nothing is logged, every promise is
- * caught and no call into this file throws.
+ * off 20, 40, 80, 160, 300 s; no answer while the PC has no connection at all
+ * (navigator.onLine === false) is noted as 'offline'. sg:site:tm:on (the server's host)
+ * tells the teacher page that this PC shares, and sg:site:tm:dx whether its batches
+ * arrive (last delivery, first failure since, its kind, the last time play that no
+ * closing page handed over was dropped). Every storage call is guarded, nothing is
+ * logged, every promise is caught and no call into this file throws.
  *
  * Check mode: the teacher page loads this file under <meta name="sg-telemetry"
  * content="check"> to show and test delivery (status(), check(cb)). There it never
@@ -64,7 +65,7 @@
   var cfg = window.SG_TELEMETRY, url = cfg && cfg.url, doc = document, nav = navigator, perf = performance;
   var isArr = Array.isArray, min = Math.min, max = Math.max, floor = Math.floor, str = JSON.stringify;
   var ID = /^(?!.*\d{3})[A-Za-z][\w:.-]{0,23}$/, SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/, BACK = [20, 40, 80, 160, 300];
-  var CODE = /^[0-9a-f]{12}$/, KEY = /^p[0-9a-z]{1,8}$/, KINDS = ['network', 'refused', 'server'];
+  var CODE = /^[0-9a-f]{12}$/, KEY = /^p[0-9a-z]{1,8}$/, KINDS = ['network', 'refused', 'server', 'offline'];
   // The caps of a round's counters (rx): wall ms, inputs, idle lapses, pauses, the sum and
   // number of reaction times, and the DDA level in thousandths (-1: none).
   var RX = [108e5, 1e5, 1e4, 1e4, 1e9, 1e5, 1000];
@@ -366,9 +367,10 @@
   }
   // sg:site:tm:dx = { v: 1, u: the address, ok: when a batch was last delivered (0: never),
   // f: when the first failure since then came (0: none), k: the latest failure's kind
-  // ('network', 'refused' or 'server'), at: when, x: when play that no closing page
-  // handed over (h) was last dropped for the queue's 128 KB or 7 days (0: never) }, in
-  // the PC's clock. Anything malformed, or the record of another address, starts again.
+  // ('network', 'offline', 'refused' or 'server'), at: when, x: when play that no
+  // closing page handed over (h) was last dropped for the queue's 128 KB or 7 days (0:
+  // never) }, in the PC's clock. Anything malformed, or the record of another address,
+  // starts again.
   function stamp(v) { return typeof v == 'number' && v > 0 && v < 1 / 0 ? v : 0; }
   function record() {
     var d = null;
@@ -526,6 +528,9 @@
     function free() { fly -= n; }
     return p;
   }
+  // No answer while the PC has no connection at all (cable out, Wi-Fi down): neither the
+  // school's filter nor the server is to blame.
+  function cut(k) { return k == 'network' && nav.onLine === false ? 'offline' : k; }
   // go(signal)'s promise, or a rejection after ms, which aborts the request: go reads the
   // answer too, so a body that never ends is cut off like headers that never come.
   function within(ms, go) {
@@ -567,7 +572,7 @@
       });
     }).then(null, function () { return ['network']; }).then(safe(function (a) {
       delete sent[b];
-      answered(a[0], a[1]);
+      answered(cut(a[0]), a[1]);
     }));
   }
   // Sends the oldest batch; the next one follows its answer.
@@ -648,9 +653,10 @@
   // time, oldest first, for a minute in all, each request read whole within 20 s. Every
   // answer to a batch goes into the record; health alone ends a failure only when nothing
   // waits (a filter may let health through and still stop the batches), and a health that
-  // fails keeps when the failure began. cb({ why, host }) when this page cannot send, else
-  // cb({ k: 'ok' or the first failure's kind, host, reached: health answered, sent: the
-  // batches delivered now, n: this build's batches still waiting }).
+  // fails keeps when the failure began. Without any connection it answers 'offline' at
+  // once, with no request and nothing noted. cb({ why, host }) when this page cannot send,
+  // else cb({ k: 'ok' or the first failure's kind, host, reached: health answered, sent:
+  // the batches delivered now, n: this build's batches still waiting }).
   function check(cb) {
     var s, n = 0, end = now() + 6e4;
     cb = safe(cb);
@@ -658,11 +664,13 @@
     s = settings();
     if (why || s.why) return cb({ why: why || s.why, host: host });
     sync(s.c);
+    if (nav.onLine === false) return cb({ k: 'offline', host: host, reached: false, sent: 0, n: load().length });
     testing = true;
     within(2e4, function (signal) {
       return fetch(new URL('health', url).href, { credentials: 'omit', mode: 'cors', cache: 'no-store', signal: signal })
         .then(function (r) { return answer(r, 1); });
     }).then(null, function () { return 'network'; }).then(safe(function (k) {
+      k = cut(k);
       if (k == 'ok') return next();
       // A server that does not take this wire version is its problem: nothing was dropped.
       note(k == 'refused' ? 'server' : k);

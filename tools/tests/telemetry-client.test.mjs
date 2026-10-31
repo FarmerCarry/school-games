@@ -571,6 +571,35 @@ test('a request that is never answered is given up after a minute and noted as n
   await checkBatches(page, batches(state));
 });
 
+test('a send that fails while the PC has no connection at all is noted as offline, still failing since the first time; the test then asks nothing', async t => {
+  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? HEALTH : 'abort' }), { page } = state;
+  const unplug = p => p.evaluate(() => Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false }));
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/');
+  // The school filter drops the first send: the network is to blame.
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 1, 'the first send');
+  await inFlight(page);
+  const first = await dx(page);
+  like(first, { v: 1, u: INGEST, ok: 0, f: pos, k: 'network', at: first.f, x: 0 });
+  // Then the cable is pulled: the retry fails while navigator.onLine is false.
+  await unplug(page);
+  await page.clock.runFor(20000);
+  await until(() => state.posts.length === 2, 'the retry');
+  await inFlight(page);
+  like(await dx(page), { v: 1, u: INGEST, ok: 0, f: first.f, k: 'offline', at: v => v >= first.f + 20000, x: 0 });
+  // The teacher's test on that PC answers at once: no request, and the record stays as it is.
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  await unplug(teacher);
+  const record = await tm(teacher, 'sg:site:tm:dx'), n = state.posts.length;
+  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'offline', host: 'ingest.test', reached: false, sent: 0, n: 1 });
+  assert.equal(state.posts.length, n, 'nothing is asked');
+  assert.equal(await tm(teacher, 'sg:site:tm:dx'), record, 'and nothing is noted');
+  await teacher.close();
+});
+
 test('every batch stays queued until the server answers it: a short page on a failing network loses nothing, and a later page sends it all, oldest first', async t => {
   let net = 'abort';
   const state = await setup(t, { clock: true, answer: () => net }), { page } = state;

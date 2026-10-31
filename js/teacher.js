@@ -474,6 +474,7 @@
       out.tone = 'bad';
       out.state = '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ ' + span(st.f, now) + '.';
       out.problem = st.k === 'server' ? 'يردّ خادم الإحصاءات ' + host + ' بخطأ منذ ' + clock(st.f) + '. ' + KEEPS + ' ' + ADMIN
+        : st.k === 'offline' ? 'لم يكن هذا الجهاز متصلًا بالإنترنت منذ ' + clock(st.f) + '. ' + KEEPS
         : 'تعذّر الوصول إلى خادم الإحصاءات منذ ' + clock(st.f) + '. السبب في الغالب أن مرشّح الإنترنت في المدرسة يحجب ' + host +
           '. اطلب من مسؤول تقنية المعلومات في المدرسة السماح بالعنوان ' + http + '. ' + KEEPS;
     } else if (st.ok && st.o && now - st.o > LATE_MS && st.ok < st.o) {
@@ -491,7 +492,8 @@
     return out;
   }
   // What the test button reports (js/telemetry.js check()): { ok, text }. reached: the
-  // server answered health, so a failure after it is in sending the batches.
+  // server answered health, so a failure after it is in sending the batches; 'offline':
+  // this PC has no connection at all, so nothing was asked.
   function checked(r) {
     var host = ltr('https://' + (r.host || ''));
     if (r.why || !r.k) return { ok: false, text: 'لا يرسل هذا الجهاز إلى لوحة المؤشرات الآن، فلا يوجد اتصال لاختباره.' };
@@ -500,7 +502,8 @@
         (r.sent ? 'أُرسل الآن ما كان ينتظر: ' + count(r.sent, BATCHES) + '.' : 'لم يكن شيء ينتظر الإرسال.') +
         (r.n ? ' وما زال ينتظر: ' + count(r.n, BATCHES) + '، ويُرسل من صفحة الألعاب.' : '') };
     }
-    return { ok: false, text: r.k === 'server' ? '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه ردّ بخطأ مؤقت. البيانات محفوظة على هذا الجهاز؛ جرّب مرة أخرى بعد قليل.'
+    return { ok: false, text: r.k === 'offline' ? '✗ هذا الجهاز غير متصل بالإنترنت الآن. ما ينتظر الإرسال يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال.'
+      : r.k === 'server' ? '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه ردّ بخطأ مؤقت. البيانات محفوظة على هذا الجهاز؛ جرّب مرة أخرى بعد قليل.'
       : r.k === 'refused' ? '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه لا يقبل بيانات هذه النسخة من الموقع. أخبر من يدير خادم الإحصاءات.'
       : (r.reached ? '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكن تعذّر إرسال البيانات إليه. قد يسمح مرشّح الإنترنت في المدرسة بفتح العنوان ويمنع إرسال البيانات إليه. ' +
         'أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به كاملًا، مع إرسال البيانات: '
