@@ -12,13 +12,13 @@ const hold = (key = 'ArrowRight', ms = 220) => async page => {
   await page.waitForTimeout(ms);
   await page.keyboard.up(key);
 };
-const holdUntil = (key, expr, label) => async page => {
+const holdUntil = (key, expr, label, timeout = 7000) => async page => {
   await page.keyboard.down(key);
   try {
     // A software-rendered frame can take longer than a short fixed key hold.
     // Keep the real key down until the simulation consumes it; a broken
     // control still fails the same bounded observable-state assertion.
-    await requireState(page, expr, label);
+    await requireState(page, expr, label, timeout);
   } finally { await page.keyboard.up(key); }
 };
 const holdUntilChanged = (key, snapshot) => async page => {
@@ -289,7 +289,7 @@ export async function performInput(page, slug, {repeat = false} = {}) {
     if (await evaluate(page,`${g}.phase === 'aim'`)) await hold('Space',650)(page);
     else await page.waitForTimeout(250);
   } else if (watch && s.heldKey) await holdUntil(s.heldKey, 'window.sgInput.seen',
-    `${s.heldKey}: held input must change gameplay (${watch.before}): ${watch.seen}`)(page);
+    `${s.heldKey}: held input must change gameplay (${watch.before}): ${watch.seen}`, 20000)(page);
   else await s.input(page);
   // Give the handler a frame before the input assertion reads state. A fixed
   // 120ms can fall between two slow frames and observe the previous one.
