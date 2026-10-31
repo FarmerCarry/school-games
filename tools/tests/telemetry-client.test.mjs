@@ -8,6 +8,7 @@
 // /copy/, as a second copy on the same origin. The browser's time zone is Asia/Riyadh.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -1156,6 +1157,60 @@ test('a portal tab of the first v3 build, still open on this PC, never drops thi
   assert.deepEqual(bare(JSON.parse(state.posts[3].body)), own('f'.repeat(16)).e);
   assert.deepEqual(await tmKeys(page), ['sg:site:tm:dx', 'sg:site:tm:on'], 'nothing waits');
   serverKeeps(batches(state));
+});
+
+// js/telemetry.js of the first v3 build, the last one published before the q4 queue (CI
+// checkouts without history skip this).
+const FIRST_V3 = 'b713f12';
+const firstV3 = (() => {
+  const shown = spawnSync('git', ['show', `${FIRST_V3}:js/telemetry.js`], { cwd: repo, encoding: 'utf8' });
+  return shown.status === 0 && shown.stdout.includes("Q = TM + 'q3:'") ? shown.stdout : null;
+})();
+
+test('the teacher page only reads what a portal tab of the first v3 build queued, and that tab, still open, sends it itself',
+  { skip: !firstV3 && `commit ${FIRST_V3} is not in this checkout (git show failed)` }, async t => {
+  let down = true;
+  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? HEALTH : down ? 'abort' : 204 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  // That build's portal tab, never reloaded since the update: the school filter blocks its
+  // first send, so its session's start waits in its own key and goes again after 20 s.
+  await page.goto(origin + '/seed.html');
+  await page.addScriptTag({ content: firstV3 });
+  await page.clock.runFor(60000);
+  await until(() => state.posts.length === 1, 'the old tab\'s first send');
+  await inFlight(page);
+  const old = JSON.parse(await tm(page, q3Key(INGEST)));
+  like(old.map(x => x.e.ev.map(ev => ev[0])), [['ss']]);
+  // A portal page of this build ran on the PC too: it noted the address and left a newer batch.
+  const now = await page.evaluate(() => Date.now());
+  const mine = { t: now, w0: now, e: { v: 3, b: '1'.repeat(16), s: 'abcdefabcdef', k: 'src', m: 'web', a: '', d: [4, 4, 1920], u: '', p: '', z: '', ev: [['lv', 5, 2]] } };
+  await page.evaluate(([key, q, dx]) => { localStorage.setItem(key, q); localStorage.setItem('sg:site:tm:dx', dx); },
+    [qKey(INGEST), JSON.stringify([mine]), JSON.stringify({ v: 1, u: INGEST, ok: 0, f: 0, k: '', at: 0, x: 0 })]);
+  const storage = p => p.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map(k => [k, localStorage.getItem(k)])));
+  const before = await storage(page);
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  // The box counts both, dated from the older tab's (it is older and no closing page sent it).
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: 0, f: 0, k: '', at: 0, x: 0, n: 2, t: old[0].t, o: old[0].t });
+  assert.deepEqual(await storage(teacher), before, 'reading moved nothing: the older key stays where that tab reads it');
+  // The filter lets the server through: the test sends only this build's batch.
+  down = false;
+  const n = state.posts.length;
+  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'ok', host: 'ingest.test', reached: true, sent: 1, n: 0 });
+  assert.deepEqual(state.posts.slice(n).map(p => p.method + ' ' + p.url), ['GET https://ingest.test/v1/health', 'POST ' + INGEST]);
+  assert.deepEqual(bare(JSON.parse(state.posts.at(-1).body)), mine.e);
+  assert.deepEqual(JSON.parse(await tm(teacher, q3Key(INGEST))), old, 'the older tab\'s batch is still in its key');
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: pos, f: 0, k: '', at: 0, x: 0, n: 1, t: old[0].t, o: old[0].t });
+  // That tab's retry finds it and delivers it.
+  await page.clock.runFor(20000);
+  await until(() => state.posts.length === n + 3, 'the old tab\'s retry');
+  await inFlight(page);
+  assert.deepEqual(bare(JSON.parse(state.posts.at(-1).body)), old[0].e);
+  assert.equal(await tm(page, q3Key(INGEST)), null, 'delivered, and gone');
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: pos, f: 0, k: '', at: 0, x: 0, n: 0, t: 0, o: 0 });
+  serverKeeps(batches(state));
+  await teacher.close();
 });
 
 test('each player gets a new session: the old one ends after its game with why it ended, and a band change marks later batches', async t => {

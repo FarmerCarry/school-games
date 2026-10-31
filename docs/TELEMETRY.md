@@ -239,9 +239,12 @@ local day records. The server stores no IP address.
   with its own wire version only, and the second, each time it is hidden, removes from its
   key every batch it hands to `fetch` without waiting for an answer, so on a blocked
   network it would empty a queue it shared with this build. So this build never writes
-  either key: whenever it reads its queue it moves their batches into its own (oldest
-  first, each once) and removes those keys. They are sent exactly as they were queued; the
-  server accepts wire version 2 indefinitely. The next change of this kind takes `q5:`.
+  either key: whenever a portal page reads its queue it moves their batches into its own
+  (oldest first, each once) and removes those keys. They are sent exactly as they were
+  queued; the server accepts wire version 2 indefinitely. The teacher page only reads
+  those keys: moved by it, their batches would wait for a portal page of this build, while
+  the older tab, which reads only its own key, stopped sending them (before 31 October
+  2026 it moved them at every render). The next change of this kind takes `q5:`.
 * `<hash>` is a short hash of the full ingest address (a 32-bit string hash, in base 36),
   so each address has its own queue: another copy of the site on the same origin (for
   example `name.github.io/school-games` and `name.github.io/school-games-test`) built with
@@ -270,15 +273,16 @@ local day records. The server stores no IP address.
 * **Check mode** (the teacher page): `teacher.html` loads `js/telemetry.js` under
   `<meta name="sg-telemetry" content="check">`. There the sink never starts a session,
   records an event, makes a code or listens to the page, and it writes nothing until the
-  teacher acts (reading the queue only moves older builds' batches into this build's
-  key, and a clear ahead of the clock is dated back, as the portal does). `window.SGTelemetry`
+  teacher acts (only a clear ahead of the clock is dated back, as the portal does; older
+  builds' keys it only reads). `window.SGTelemetry`
   has only `active()` (always `false`), `status()` (why this page cannot send: `folder`,
   `gpc`, `local`, `none` for no address, `off` or `tm` from the teacher's settings; the
-  host; the record, `x` included; the waiting batches `n` with the oldest one's time `t`;
-  and `o`, when the oldest batch that no closing page handed over was queued, 0 for none)
+  host; the record, `x` included; the waiting batches `n`, older builds' keys included,
+  with the oldest one's time `t`; and `o`, when the oldest batch that no closing page
+  handed over was queued, 0 for none)
   and `check(cb)`, the teacher's «اختبر الاتصال الآن»: a `GET` of `/v1/health` beside the
   address (`new URL('health', url)`; the server answers it without its database, and only
-  `200` with `"ok":true` and `3` in `accepts` counts), then the waiting batches one at a
+  `200` with `"ok":true` and `3` in `accepts` counts), then this build's waiting batches one at a
   time, oldest first, while the server takes them, for a minute in all and 20 s per
   request, each answer read to its end within that time. Every answer to a batch goes into
   the record. Health alone ends a failure only when nothing waits: a filter may let the
@@ -412,7 +416,10 @@ stopping statistics on the teacher page.
   page opened first; answers whose body never ends cut off after 20 s); two copies of the
   site on one origin with two addresses, each sending only its own queue, and a stop
   dropping both; a tab of a pre-v3 build and one of the first v3 build (whose hidden page
-  empties its key) never dropping this build's batches; a new session per player with
+  empties its key) never dropping this build's batches; the first v3 build's own
+  `js/telemetry.js` (from `git show b713f12`; a checkout without that history skips it)
+  in a tab beside the teacher page, whose status and test only read that tab's key, so
+  the tab still sends its batch itself; a new session per player with
   the old one ending after its game; field-by-field checks of `sg:telemetry` and late
   frames; load failures; a stop from another tab that keeps the codes.
 * `tools/tests/telemetry-e2e.test.mjs` (browser and the real Node server): three sessions

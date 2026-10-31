@@ -51,8 +51,10 @@
  * Check mode: the teacher page loads this file under <meta name="sg-telemetry"
  * content="check"> to show and test delivery (status(), check(cb)). There it never
  * starts a session, records an event or listens to the page; it sends only when the
- * teacher presses the test button, to the address the portal noted in sg:site:tm:dx
- * (read again at each call, so a portal opened after this page counts).
+ * teacher presses the test button, and only this build's queue, to the address the
+ * portal noted in sg:site:tm:dx (read again at each call, so a portal opened after this
+ * page counts). The older builds' keys it only reads: a tab of such a build still open
+ * sends them itself.
  */
 (function () {
   'use strict';
@@ -392,12 +394,13 @@
   }
   // The unsent batches, oldest first: whole entries only, at most 7 days old, none from
   // before a teacher's clear, at most 128 KB together. Memory holds them when storage fails.
-  // What older builds queued joins them at once, and their keys go.
+  // What older builds queued joins them at once, and their keys go (not on the teacher
+  // page: see waiting()).
   function load() {
     var q = mq, moved = [];
     if (!temp) {
       try { q = JSON.parse(localStorage.getItem(Q)); } catch (e) { q = mq; }
-      MOVE.forEach(function (k) {
+      if (!passive) MOVE.forEach(function (k) {
         try { var o = localStorage.getItem(k); if (o !== null) moved.push([k, o]); } catch (e) { /* nothing older */ }
       });
     }
@@ -406,9 +409,8 @@
       moved.forEach(function (m) {
         var o;
         try { o = kept(JSON.parse(m[1])); } catch (e) { o = []; }
-        o.forEach(function (x) { if (!q.some(function (y) { return y.e.b === x.e.b; })) q.push(x); });
+        join(q, o);
       });
-      q.sort(function (a, b) { return a.t - b.t; });
       save(q);
       q = mq;
       if (!temp) moved.forEach(function (m) { try { localStorage.removeItem(m[0]); } catch (e) { /* moved again next time; the server keeps a batch once */ } });
@@ -424,6 +426,20 @@
       late = max(late, x.t + 6048e5);
     });
     if (late) lost(late);
+    return q;
+  }
+  // The batches of o that q lacks join it, oldest first.
+  function join(q, o) {
+    o.forEach(function (x) { if (!q.some(function (y) { return y.e.b === x.e.b; })) q.push(x); });
+    return q.sort(function (a, b) { return a.t - b.t; });
+  }
+  // What waits. The teacher page counts what older builds queued too, but only reads it:
+  // a tab of such a build still open sends it itself, from its own key.
+  function waiting() {
+    var q = load();
+    if (passive) MOVE.forEach(function (k) {
+      try { join(q, kept(JSON.parse(localStorage.getItem(k)))); } catch (e) { /* nothing older */ }
+    });
     return q;
   }
   // The oldest batches go first when the queue passes 128 KB.
@@ -612,26 +628,27 @@
   /* --------------------------------------------------------- check mode */
   // For the teacher page (and the developer tools): why this page cannot send ('folder',
   // 'gpc', 'none', 'local'; or 'off', 'tm' from the teacher's settings, else ''), the
-  // server's host, the delivery record, how many batches wait with the oldest's time (t),
-  // and the time of the oldest one no closing page handed to fetch (o; 0: none).
+  // server's host, the delivery record, how many batches wait (older builds' keys
+  // included) with the oldest's time (t), and the time of the oldest one no closing page
+  // handed to fetch (o; 0: none).
   function status() {
     var s, q, d, o = 0;
     noted();
     s = settings();
     d = why ? {} : record();
     if (!why) sync(s.c);
-    q = why || s.why ? [] : load();
+    q = why || s.why ? [] : waiting();
     q.forEach(function (x) { if (!x.h && !o) o = x.t; });
     return { why: why || s.why, host: host, ok: d.ok || 0, f: d.f || 0, k: d.k || '', at: d.at || 0, x: d.x || 0, n: q.length, t: q.length ? q[0].t : 0, o: o };
   }
   // The teacher's test: GET health beside the address (the server answers it without its
-  // database), then, while the server takes them, the waiting batches one at a time, oldest
-  // first, for a minute in all, each request read whole within 20 s. Every answer to a
-  // batch goes into the record; health alone ends a failure only when nothing waits (a
-  // filter may let health through and still stop the batches), and a health that fails
-  // keeps when the failure began. cb({ why, host }) when this page cannot send, else
+  // database), then, while the server takes them, this build's waiting batches one at a
+  // time, oldest first, for a minute in all, each request read whole within 20 s. Every
+  // answer to a batch goes into the record; health alone ends a failure only when nothing
+  // waits (a filter may let health through and still stop the batches), and a health that
+  // fails keeps when the failure began. cb({ why, host }) when this page cannot send, else
   // cb({ k: 'ok' or the first failure's kind, host, reached: health answered, sent: the
-  // batches delivered now, n: the batches still waiting }).
+  // batches delivered now, n: this build's batches still waiting }).
   function check(cb) {
     var s, n = 0, end = now() + 6e4;
     cb = safe(cb);
