@@ -334,8 +334,9 @@ itself never uses the network. Its edge and first line are green, red or grey:
   send, such as what a portal tab of an older build, still open, queued: that tab sends
   it) or «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز. أعطِ مسؤول تقنية
   المعلومات في المدرسة هذا العنوان ليسمح به في مرشّح الإنترنت: https://<host>» (or that the
-  server answered with an error, or does not take this version of the site, then with
-  «ووصل الآن ما لم يرفضه: <n>.» when it took some of the batches). When health
+  server answered with an error, or does not take this version of the site: that also
+  when a later batch failed another way, and with «ووصل الآن ما لم يرفضه: <n>.» when it
+  took some of the batches). When health
   answers but the batches get no answer it says «✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكن
   تعذّر إرسال البيانات إليه. …» and asks IT to allow the address fully, with sending data;
   the failure then still dates from when it began. On a PC with no connection at all it
