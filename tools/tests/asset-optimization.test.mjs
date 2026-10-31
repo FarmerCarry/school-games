@@ -47,11 +47,10 @@ test('every optimized thumbnail renders exactly the same pixels as its editable 
   // lazy thumbnails/animations while the exact artwork comparisons run.
   const server = await startTestServer(repo, { pages: { '/artwork-fonts': '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="/shared/game.css"><p style="font:700 32px Fredoka">ألعاب A</p>' } });
   t.after(() => server.close());
-  const browser = await launchChromium();
-  t.after(() => browser.close());
-  const page = await browser.newPage();
   // page.evaluate has no Playwright timeout. A font promise or img.decode()
-  // that never settles used to sit here until the 10-minute file limit.
+  // that never settles used to sit here until the 10-minute file limit. Closing
+  // that browser then waits on the same wedged renderer, so the file limit is
+  // what the suite sees. Give up on the browser and rasterize once more.
   const withDeadline = async (work, ms, message) => {
     let timer;
     try {
@@ -61,10 +60,15 @@ test('every optimized thumbnail renders exactly the same pixels as its editable 
       ]);
     } finally { clearTimeout(timer); }
   };
-  await page.goto(server.origin + '/artwork-fonts', { timeout: 15000 }).catch(error => {
-    throw new Error('Artwork font page did not finish loading within 15s', { cause: error });
-  });
-  const comparison = await withDeadline(page.evaluate(async thumbnails => {
+  const closeBrowser = browser => withDeadline(browser.close(), 5000, 'browser.close()').catch(() => {});
+  const rasterize = async () => {
+    const browser = await launchChromium();
+    try {
+      const page = await browser.newPage();
+      await page.goto(server.origin + '/artwork-fonts', { timeout: 15000 }).catch(error => {
+        throw new Error('Artwork font page did not finish loading within 15s', { cause: error });
+      });
+      return await withDeadline(page.evaluate(async thumbnails => {
     const pending = (promise, ms, label) => {
       let timer;
       return Promise.race([
@@ -107,6 +111,14 @@ test('every optimized thumbnail renders exactly the same pixels as its editable 
     host.remove();
     return { differences, pngOnlyDifferences, count: thumbnails.length, fonts: document.fonts.status };
   }, thumbnails), 90000, 'Thumbnail pixel comparison did not return within 90s (a font load or image.decode() is still pending in the page)');
+    } finally { await closeBrowser(browser); }
+  };
+  let comparison;
+  try { comparison = await rasterize(); }
+  catch (error) {
+    if (!/did not return within 90s|did not finish loading within 15s/.test(error.message)) throw error;
+    comparison = await rasterize();
+  }
   const evidence = path.join(repo, '.work/performance/asset-pixel-differences');
   fs.mkdirSync(evidence, { recursive: true });
   for (const difference of comparison.differences) for (const variant of ['original', 'optimized', 'windows']) {
