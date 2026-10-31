@@ -593,8 +593,11 @@ test('a send that fails while the PC has no connection at all is noted as offlin
   teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
   await teacher.goto(origin + '/teacher.html');
   await unplug(teacher);
+  // A tab of the first v3 build left a batch in its own key: the answer counts it, as status() does.
+  await seed(teacher, [[q3Key(INGEST), JSON.stringify([v3At('5'.repeat(16), await teacher.evaluate(() => Date.now()))])]]);
   const record = await tm(teacher, 'sg:site:tm:dx'), n = state.posts.length;
-  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'offline', host: 'ingest.test', reached: false, sent: 0, n: 1 });
+  assert.equal(await teacher.evaluate(() => SGTelemetry.status().n), 2);
+  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'offline', host: 'ingest.test', reached: false, sent: 0, n: 2 });
   assert.equal(state.posts.length, n, 'nothing is asked');
   assert.equal(await tm(teacher, 'sg:site:tm:dx'), record, 'and nothing is noted');
   await teacher.close();

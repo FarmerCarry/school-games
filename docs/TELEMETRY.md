@@ -425,7 +425,8 @@ stopping statistics on the teacher page.
   answered is aborted after a minute, noted as a network failure (since its first time)
   and backed off; a send that fails while `navigator.onLine` is false noted as `offline`,
   still since the first failure, and the teacher's test then answering `offline` without
-  a request or a write; the queue across a reload, its 128 KB, 7-day and clear rules (a clear
+  a request or a write, its `n` counting an older build's batch; the queue across a
+  reload, its 128 KB, 7-day and clear rules (a clear
   dated after the PC's clock holds nothing back, and one dated ahead by a fast clock that
   is set right later never drops the play recorded until the clock passes it; a clear
   drops the open page's earlier events even after `status()`), the record of play dropped
