@@ -715,12 +715,12 @@
     // A launch source site.js knows (surprise, search, starter), as in js/stats.js.
     tag: hook(function (slug, src) { tag = { g: slug, t: now(), s: src }; }),
     // The portal opened a game's play page; a re-render keeps the visit. The launch
-    // source follows js/stats.js; the plays before are js/profiles.js's visits, and fav
+    // source follows js/stats.js (a tile click names the game it opens within 10 s); the plays before are js/profiles.js's visits, and fav
     // says whether the game was hearted (sg:site:favs) when it opened.
     open: hook(function (slug, firstRender) {
       if (game || typeof slug != 'string' || slug.length > 40 || !SLUG.test(slug) || slug in Object.prototype) return;
       var t = now(), src = 'history', p = prof('current'), n = p && count(p.visits(slug), 1e6) || 0;
-      if (tag && tag.g == slug && t - tag.t < 1000) src = tag.s;
+      if (tag && tag.g == slug && t - tag.t < 10000) src = tag.s;
       else if (firstRender) {
         src = 'direct';
         try { if (perf.getEntriesByType('navigation')[0].type == 'reload') src = 'reload'; } catch (e) { /* direct */ }

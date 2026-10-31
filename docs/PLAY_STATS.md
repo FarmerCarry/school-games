@@ -192,7 +192,8 @@ The recorder is about 6 KB minified; the portal's current size and limit are in 
 
 * **Launch source**, from a capture-phase click listener (it runs before the play-page
   early return in `watchTiles`), stored as `{ slug, source, time }` and used only if the
-  slug matches and it is under 1 second old: `featured` (🔥 tile), `catalog` (other home
+  slug matches and it is under 10 seconds old (a slow classroom PC can take more than a
+  second to open the game; every open clears it): `featured` (🔥 tile), `catalog` (other home
   tiles), `recent`, `favorites`, `category`, `quick`, `search` (results or a one-result
   submit), `related` (play page), `surprise`. Without a tag: `reload` (first render of a
   reloaded page), `history` (back/forward after the first render) or `direct`.
