@@ -989,11 +989,14 @@ test('play a closing page handed over is dropped for 7 days or 128 KB without be
   const envelope = (b, ev) => ({ v: 2, b, s: '0123456789ab', k: 'src', m: 'web', a: '', d: [4, 4, 1920], ev });
   // After the holidays: what the last portal page handed to fetch as it closed, 8 days ago
   // (its answer came after the page had gone), and five batches of about 26 KB, each
-  // handed over the same way, that leave no room for the next one.
+  // handed over the same way, that just fit in 128 KB: the page's first batch makes room
+  // as it is saved.
   const most = ['re', 1, 'air-hockey', 'w', 'Level_abcdefghijklmnopq', 108e5, 1e9, 9, 1e5, 1e5, [1e5, 1e5, 1e5, 1e5, 1e5, 1e5]];
   const ids = [1, 2, 3, 4, 5].map(i => i.toString(16).padStart(16, 'a'));
   const seeded = [{ t: now - 8 * 864e5, h: 1, e: envelope('b'.repeat(16), [['lv', 1, 2]]) },
     ...ids.map((b, i) => ({ t: now - 36e5 + i, h: 1, e: envelope(b, Array.from({ length: 200 }, () => most)) }))];
+  const size = q => 1 + q.reduce((n, x) => n + JSON.stringify(x).length + 1, 0);
+  while (size(seeded.slice(1)) > 131072) seeded.at(-1).e.ev.pop();
   await page.evaluate(([key, q]) => localStorage.setItem(key, JSON.stringify(q)), [qKey(INGEST), seeded]);
   await page.goto(origin + '/');
   await page.clock.runFor(60000);
