@@ -11,7 +11,7 @@
     "bubble-bop": 116000,
     "cake-guards": 86000,
     "candy-rope": 113000,
-    "castle-crash": 88000,
+    "castle-crash": 96000,
     "connect-four": 57000,
     "critter-mart": 163000,
     "dino-3d": 60000,
@@ -46,5 +46,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5550000
+  "precacheBytes": 5560000
 }

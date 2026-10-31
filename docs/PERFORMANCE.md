@@ -796,13 +796,13 @@ no background music. Measured with the Linux minified build:
 
 | Measurement | After bytes | Previous limit | New limit |
 | --- | ---: | ---: | ---: |
-| Castle Crash | 85,520 | — | 88,000 |
-| Portal (thumbnail and catalog entry) | 399,510 | 398,000 | 402,000 |
+| Castle Crash | 94,800 | 88,000 | 96,000 |
+| Portal (thumbnail and catalog entry) | 399,510 | 402,000 | 402,000 |
 | Teacher page | 97,744 | 98,000 | 98,000 |
-| Offline precache, 49 files | 5,539,117 | 5,450,000 | 5,550,000 |
+| Offline precache, 49 files | 5,548,397 | 5,550,000 | 5,560,000 |
 
-The game file is 85,520 bytes, 2,480 under its 88,000 limit. The portal limit
-moves from 398,000 to 402,000 (2,490 bytes of headroom). The teacher page stays
-inside 98,000. The offline cache limit moves from 5,450,000 to 5,550,000
-(10,883 bytes of headroom). A headless playtest during a shot measured about
-60 fps.
+The polished page is 94,800 bytes. The game limit moves from 88,000 to 96,000
+(1,200 bytes of headroom). The portal and teacher page are unchanged. The
+offline cache is 5,548,397 bytes, so its limit moves from 5,550,000 to
+5,560,000 (11,603 bytes of headroom). A headless frame with vsync disabled
+cost well under a millisecond, so a 60 Hz display stays smooth.

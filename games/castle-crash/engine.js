@@ -105,10 +105,10 @@
     CCP.remove(world, b);
   }
 
-  function breakBlock(world, b, session) {
+  function breakBlock(world, b, session, j) {
     if (!b || b.dead || b.role !== 'block') return;
     session.broken++;
-    session.events.push({ t: 'break', x: b.x, y: b.y, mat: b.mat });
+    session.events.push({ t: 'break', x: b.x, y: b.y, mat: b.mat, j: j || 0 });
     var soda = b.mat === 'soda';
     var x = b.x, y = b.y;
     CCP.remove(world, b);
@@ -159,7 +159,7 @@
       b.user.crack = stage;
       session.events.push({ t: 'crack', x: b.x, y: b.y, n: stage, mat: b.mat });
     }
-    if (b.user.dmg >= b.hp) breakBlock(world, b, session);
+    if (b.user.dmg >= b.hp) breakBlock(world, b, session, j);
   }
 
   function applyHits(session) {
@@ -384,7 +384,7 @@
     var budget = (level.ammo || 7) + (opts.spare || 0);
     var session = {
       mode: 'level', level: level, world: world, events: [],
-      sling: { x: 214, y: 552 }, dir: 1, flip: false, originX: 0, originY: 0,
+      sling: { x: 200, y: 530 }, dir: 1, flip: false, originX: 0, originY: 0,
       fort: 0, phase: 'aim', phaseT: 0, time: 0,
       angle: 0.55, power: 0.72, ammo: (level.allow && level.allow[0]) || 'ball',
       allow: (level.allow || ['ball']).slice(),
@@ -465,20 +465,27 @@
 
   // --- duel -----------------------------------------------------------------
   function duelFort(seed) {
-    // Same shape for every seed so the two forts stay mirrors. The seed still
-    // feeds the wind. Three pockets, far enough apart that one ball cannot
-    // pop every gloopy.
+    // Mirrored castles. Each tower hides its own Gloopy under a roof, with a
+    // gap so one ball cannot sweep the whole side.
     void seed;
-    var blocks = [
-      { mat: 'wood', x: 36, y: -24, w: 64, h: 48, a: 0 },
-      { mat: 'ice', x: 120, y: -24, w: 64, h: 48, a: 0 },
-      { mat: 'stone', x: 204, y: -24, w: 64, h: 48, a: 0 }
-    ];
-    var gloopies = [
-      { x: 36, y: -63, r: 15 },
-      { x: 120, y: -63, r: 15 },
-      { x: 204, y: -63, r: 15 }
-    ];
+    var U = 48, HILL = -78, R = 15;
+    var blocks = [], gloopies = [];
+    function tower(x, n, mat, roof) {
+      var i, top, postH;
+      for (i = 0; i < n; i++) blocks.push({ mat: mat, x: x, y: HILL - U / 2 - i * U, w: U, h: U, a: 0 });
+      top = HILL - n * U;
+      blocks.push({ mat: mat, x: x, y: top - 11, w: U + 22, h: 22, a: 0 });
+      postH = R * 2 + 6;
+      blocks.push({ mat: roof, x: x - 24, y: top - 22 - postH / 2, w: 12, h: postH, a: 0 });
+      blocks.push({ mat: roof, x: x + 24, y: top - 22 - postH / 2, w: 12, h: postH, a: 0 });
+      blocks.push({ mat: roof, x: x, y: top - 22 - postH - 8, w: 60, h: 16, a: 0 });
+      gloopies.push({ x: x, y: top - 22 - R, r: R });
+    }
+    tower(34, 3, 'wood', 'stone');
+    tower(128, 4, 'stone', 'wood');
+    tower(222, 3, 'ice', 'stone');
+    blocks.push({ mat: 'stone', x: 80, y: HILL - 16, w: 48, h: 32, a: 0 });
+    blocks.push({ mat: 'wood', x: 176, y: HILL - 16, w: 48, h: 32, a: 0 });
     return { blocks: blocks, gloopies: gloopies };
   }
 
@@ -508,15 +515,24 @@
     addGround(world);
     var fort = duelFort(seed);
     var tough = 2400 * (opts.tough == null ? 1 : opts.tough);
-    placeDuelFort(world, fort, 48, 1, 0, tough);
-    placeDuelFort(world, fort, W - 48, -1, 1, tough);
+    // Raised mounds. The valley between them stays at the main ground.
+    function mound(x) {
+      CCP.addBox(world, {
+        x: x, y: GROUND - 39, w: 300, h: 78, type: 'static', m: 0,
+        fr: 0.92, re: 0.03, role: 'pad', mat: 'ground', hp: 1e9
+      });
+    }
+    mound(330);
+    mound(W - 330);
+    placeDuelFort(world, fort, 200, 1, 0, tough);
+    placeDuelFort(world, fort, W - 200, -1, 1, tough);
     var session = {
       mode: 'duel', world: world, events: [], fortDef: fort, seed: seed,
       level: { forts: [fort, fort], allow: ORDER.slice() },
       phase: 'aim', phaseT: 0, time: 0, turn: 0, turnT: 0,
       dir: 1, flip: false, side: 0,
-      sling: { x: 420, y: 552 },
-      slings: [{ x: 420, y: 552 }, { x: W - 420, y: 552 }],
+      sling: { x: 530, y: 500 },
+      slings: [{ x: 530, y: 500 }, { x: W - 530, y: 500 }],
       angle: 0.62, power: 0.7, ammo: 'ball', allow: ORDER.slice(),
       ammoLeft: 99, budget: 99, used: 0, shots: [], tapAt: -1, pendingTap: -1,
       tough: tough, preview: opts.preview == null ? 0.4 : opts.preview,
@@ -635,8 +651,8 @@
     return false;
   }
 
-  var NOISE_A = [0.95, 0.55, 0.28, 0.12, 0.034];
-  var NOISE_P = [0.55, 0.32, 0.16, 0.07, 0.028];
+  var NOISE_A = [1.75, 0.62, 0.28, 0.12, 0.034];
+  var NOISE_P = [1.0, 0.4, 0.16, 0.07, 0.028];
 
   function bestAim(session) {
     var best = { angle: 0.6, power: 0.75, score: 1e9 };

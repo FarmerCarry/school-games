@@ -27,8 +27,12 @@ body { background: #16324a; }
 .lvls button { font: inherit; font-weight: 700; border: none; border-radius: 12px; padding: 8px 0; cursor: pointer; background: #fff; color: #16324a; }
 .lvls button small { display: block; color: #c98600; font-size: 13px; }
 .lvls button:disabled { background: #9aa8b5; color: #405060; cursor: default; }
-.stars { color: #ffe56a; font-size: 42px; letter-spacing: 6px; }
-.result-title { font-size: 48px; margin: 0; }
+.stars { color: #ffe56a; font-size: 84px; letter-spacing: 10px; text-shadow: 0 6px 0 #8a5a10; animation: starpop 0.5s cubic-bezier(.2, 1.4, .35, 1); }
+.result-title { font-size: 64px; margin: 0; }
+#rSub { font-size: 26px; font-weight: 700; }
+@keyframes starpop { from { transform: scale(0.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+html[data-sg-motion="reduce"] .stars { animation: none; }
+.ammo-row button { font-size: 22px; box-shadow: inset -4px -5px 0 rgba(0, 0, 0, 0.18); }
 #scrAmmo .demo-ball { width: 84px; height: 84px; border-radius: 50%; margin: 8px auto; box-shadow: inset -10px -12px 0 rgba(0, 0, 0, 0.15), 0 8px 0 rgba(0, 0, 0, 0.2); }
 html[data-sg-motion="reduce"] #toast { animation: none; }
 #toast { position: absolute; top: 86px; left: 50%; transform: translateX(-50%); background: #fff; color: #16324a; font-weight: 700; font-size: 26px; padding: 8px 18px; border-radius: 16px; pointer-events: none; }

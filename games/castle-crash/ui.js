@@ -65,6 +65,7 @@
   var ddaDuel = Kit.dda('castle-crash', { id: 'duel', tiers: 5, target: 0.72 });
   var scr = 'title', session = null, reported = false, tracked = 0, drag = null;
   var slowT = 0, slowSkip = 0, auto = null, toastT = 0, levelIndex = 0, mode = 'level', duelSeed = 3;
+  var comboN = 0, comboT = 0, pullCd = 0;
   var previewN = [0.6, 0.51, 0.42, 0.33, 0.25];
   var toughN = [0.8, 0.9, 1, 1.1, 1.2];
 
@@ -123,7 +124,10 @@
       b.style.background = AMMO_META[id].color;
       if (id === session.ammo) b.className = 'on';
       b.setAttribute('data-ammo', id);
-      b.textContent = id === 'bowl' ? '●' : '•';
+      var glyph = { ball: '●', marble: '✳', bowl: '⬤', boom: '✹', ice: '❄' };
+      b.textContent = glyph[id] || '●';
+      b.style.background = AMMO_META[id].color;
+      b.style.color = id === 'bowl' ? '#fff' : '#1b2430';
       row.appendChild(b);
     });
   }
@@ -158,7 +162,8 @@
     session = CC.startLevel(level, {
       preview: previewN[tier - 1], tough: toughN[tier - 1], spare: tier <= 2 ? 1 : 0, seed: 1 + index
     });
-    reported = false; tracked = 0; slowT = 0; auto = null;
+    reported = false; tracked = 0; slowT = 0; auto = null; comboN = 0; comboT = 0;
+    CCR.snap(session); CCR.reset();
     Kit.stats.round('w' + level.world + '-' + level.level);
     go('play');
     S.tap();
@@ -168,7 +173,8 @@
     var tier = cpu ? ddaDuel.tier : 3;
     duelSeed = (duelSeed * 17 + 3) % 80000 + 1;
     session = CC.startDuel({ seed: duelSeed, tier: tier, cpu: cpu ? 1 : 0, preview: cpu ? previewN[Math.min(4, tier - 1)] : 0.45 });
-    reported = false; tracked = 0; slowT = 0; auto = null;
+    reported = false; tracked = 0; slowT = 0; auto = null; comboN = 0; comboT = 0;
+    CCR.snap(session); CCR.reset();
     if (cpu) Kit.stats.round('duel-cpu'); else Kit.stats.round('duel:pvp');
     go('play');
     S.tap();
@@ -243,7 +249,7 @@
     if (down) session.angle = Math.max(0.08, session.angle - 1.15 * dt);
     if (right) session.power = Math.min(1, session.power + 0.65 * dt);
     if (left) session.power = Math.max(0.15, session.power - 0.65 * dt);
-    if (fire) { S.fire(session.ammo === 'bowl'); CC.fire(session); }
+    if (fire) CC.fire(session);
     if (Kit.keys.pressed('KeyQ') || Kit.keys.pressed('KeyE') || Kit.keys.pressed('Comma') || (session.mode !== 'duel' && Kit.keys.pressed('Period'))) {
       var i = session.allow.indexOf(session.ammo);
       var dir = (Kit.keys.pressed('KeyE') || Kit.keys.pressed('Period')) ? 1 : -1;
@@ -256,26 +262,28 @@
     var tap = Kit.keys.pressed('Space') || Kit.keys.pressed('KeyE');
     if (session.mode === 'duel' && session.turn === 1) tap = Kit.keys.pressed('Period');
     else if (session.mode !== 'duel') tap = tap || Kit.keys.pressed('Enter');
-    if (tap) { if (CC.tap(session)) S.blast(); }
+    if (tap) CC.tap(session);
   }
 
   function dragAim() {
     if (!session || session.phase !== 'aim') { drag = null; return; }
     var s = session.sling;
+    var wpt = CCR.toWorld(pointer.x, pointer.y);
     if (pointer.pressed) {
-      var dx = pointer.x - s.x, dy = pointer.y - s.y;
-      if (dx * dx + dy * dy < 110 * 110) drag = { x: pointer.x, y: pointer.y };
+      var dx = wpt.x - s.x, dy = wpt.y - s.y;
+      if (dx * dx + dy * dy < 130 * 130) { drag = { x: wpt.x, y: wpt.y }; S.pull(); }
     }
     if (drag && pointer.down) {
-      drag.x = pointer.x; drag.y = pointer.y;
-      var pullX = pointer.x - s.x, pullY = pointer.y - s.y;
+      var prev = session.power;
+      drag.x = wpt.x; drag.y = wpt.y;
+      var pullX = wpt.x - s.x, pullY = wpt.y - s.y;
       var len = Math.hypot(pullX, pullY);
-      session.power = Math.max(0.15, Math.min(1, len / 130));
+      session.power = Math.max(0.15, Math.min(1, len / 150));
       var lx = -pullX, ly = -pullY, dir = session.dir || 1;
       session.angle = Math.max(0.08, Math.min(1.25, Math.atan2(-ly, lx * dir)));
+      if (session.power > prev + 0.07 && pullCd <= 0) { S.pull(); pullCd = 0.14; }
     }
     if (drag && pointer.released) {
-      S.fire(session.ammo === 'bowl');
       CC.fire(session);
       drag = null;
     }
@@ -283,16 +291,31 @@
 
   function hear() {
     if (!session) return;
-    var ev = session.events, i;
+    var ev = session.events, i, pops = 0, mag;
     for (i = 0; i < ev.length; i++) {
       CCR.burstFrom(ev[i]);
-      if (ev[i].t === 'fire') S.fire(ev[i].ammo === 'bowl');
-      else if (ev[i].t === 'pop') { S.pop(); shake.add(5); if (!Kit.motion.reduced()) slowT = 0.5; }
-      else if (ev[i].t === 'break') { S.break(ev[i].mat); shake.add(ev[i].mat === 'stone' ? 4 : 2); }
-      else if (ev[i].t === 'blast') { S.blast(); shake.add(7); }
-      else if (ev[i].t === 'crack') S.crack();
-      else if (ev[i].t === 'tap' && ev[i].ammo !== 'boom') S.pull();
+      mag = 0;
+      if (ev[i].t === 'fire') { S.fire(ev[i].ammo === 'bowl'); mag = 2.5; comboN = 0; comboT = 0; }
+      else if (ev[i].t === 'pop') {
+        S.pop(); pops++; comboN++; comboT = 1.5; mag = 6 + pops;
+        if (!Kit.motion.reduced()) slowT = Math.max(slowT, pops > 1 || comboN > 2 ? 0.85 : 0.45);
+      } else if (ev[i].t === 'break') {
+        S.break(ev[i].mat);
+        mag = ev[i].mat === 'stone' ? 8 : ev[i].mat === 'ice' ? 4 : 5;
+        if (ev[i].j > 9000) mag += 3;
+      } else if (ev[i].t === 'blast') { S.blast(); mag = 12; }
+      else if (ev[i].t === 'crack') { S.crack(); mag = 2; }
+      else if (ev[i].t === 'tap') {
+        if (ev[i].ammo === 'boom') S.blast();
+        else if (ev[i].ammo === 'ice') S.break('ice');
+        else if (ev[i].ammo === 'bowl') S.hit(0.9);
+        else if (ev[i].ammo === 'marble') S.pop();
+        else S.pull();
+        mag = ev[i].ammo === 'boom' ? 10 : 4;
+      }
+      if (mag) shake.add(mag);
     }
+    if (ev.length) session.events.length = 0;
   }
 
   function update(dt) {
@@ -319,9 +342,12 @@
       aimKeys(dt);
       if (flying) powerKey();
       dragAim();
+      if (pullCd > 0) pullCd -= dt;
+      if (comboT > 0) comboT -= dt; else comboN = 0;
+      hear();
       var scale = slowT > 0 && !Kit.motion.reduced() ? 0.5 : 1;
       if (slowT > 0) slowT -= dt;
-      if (scale < 1) { slowSkip++; if (slowSkip % 2) { Kit.keys.endFrame(); pointer.endFrame(); return; } }
+      if (scale < 1) { slowSkip++; if (slowSkip % 2) { CCR.stepCam(session, dt); CCR.stepParts(dt); shake.update(dt); Kit.keys.endFrame(); pointer.endFrame(); return; } }
       CC.step(session);
       hear();
       if (session.shotDone !== tracked) {
@@ -329,6 +355,7 @@
         if (session.lastPop > 0) Kit.track.hit(); else Kit.track.miss();
       }
       CCR.stepParts(dt);
+      CCR.stepCam(session, dt);
       shake.update(dt);
       paintHud();
       if (session.phase === 'win' || session.phase === 'lose' || session.phase === 'over') showResult();
@@ -357,7 +384,10 @@
       var n = Math.floor(all.length * (session.preview || 0.4) / 2) * 2;
       dots = all.slice(0, n);
     }
-    CCR.draw(ctx, session, { drag: drag, dots: dots, hat: HATS[save.hat], fork: FORKS[save.skin] });
+    CCR.draw(ctx, session, {
+      drag: drag, dots: dots, hat: HATS[save.hat], fork: FORKS[save.skin],
+      combo: comboT > 0 ? comboN : 0
+    });
     ctx.restore();
     if (scr !== 'play') drew = true;
   }
@@ -430,8 +460,9 @@
     get save() { return save; },
     slingPoint: function () {
       if (!session) return { x: 214, y: 552 };
+      var p = CCR.toScreen(session.sling.x, session.sling.y);
       var r = canvas.getBoundingClientRect();
-      return { x: r.left + session.sling.x * view.scale, y: r.top + session.sling.y * view.scale };
+      return { x: r.left + p.x * view.scale, y: r.top + p.y * view.scale };
     },
     start: function (opts) {
       opts = opts || {};
