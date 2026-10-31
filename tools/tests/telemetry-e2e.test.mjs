@@ -322,7 +322,7 @@ test('a school filter that blocks the server loses nothing: the teacher page nam
   await page.waitForFunction(() => SGTelemetry.active());
   await page.waitForTimeout(1500);
   await page.goto(site.origin + '/teacher.html');
-  const queued = await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('sg:site:tm:q3:')).flatMap(k => JSON.parse(localStorage.getItem(k))));
+  const queued = await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('sg:site:tm:q4:')).flatMap(k => JSON.parse(localStorage.getItem(k))));
   assert.ok(queued.length >= 3, 'both sessions wait on the PC: ' + queued.length);
   assert.ok(queued.some(x => x.e.ev.some(ev => ev[0] === 'gx')), 'the game\'s visit among them');
   assert.deepEqual(state.bodies, [], 'nothing reached the server');
@@ -350,7 +350,7 @@ test('a school filter that blocks the server loses nothing: the teacher page nam
   assert.equal(await page.locator('#deliveryState').textContent(), '✓ تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات.');
   assert.deepEqual(state.bodies.map(body => JSON.parse(body).b), queued.map(x => x.e.b), 'the very batches that waited, oldest first');
   assert.ok(state.answers.length && state.answers.every(status => status === 200 || status === 204), 'health, then every batch accepted: ' + state.answers);
-  assert.equal(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('sg:site:tm:q3:')).length), 0, 'nothing waits');
+  assert.equal(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('sg:site:tm:q4:')).length), 0, 'nothing waits');
 
   // The server has both sessions, the game's visit and its minutes: nothing was lost.
   let kpis;

@@ -260,10 +260,11 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
   // The PC's clock, D/M/YYYY HH:MM (the browser checks below pin the zone).
   const two = n => String(n).padStart(2, '0');
   const hm = ms => { const d = new Date(ms); return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`; };
-  const status = extra => ({ why: '', host, ok: 0, f: 0, k: '', at: 0, n: 0, t: 0, ...extra });
+  const status = extra => ({ why: '', host, ok: 0, f: 0, k: '', at: 0, x: 0, n: 0, t: 0, o: 0, ...extra });
   const raw = (v = {}, extra = {}) => api.delivery({ copy: 'web', off: false, tm: false, share: host, st: status(extra), ...v }, now);
   const panel = (v, extra) => { const d = raw(v, extra); return { ...d, state: text(d.state), problem: text(d.problem), facts: d.facts.map(([a, b]) => [a, text(b)]) }; };
-  const KEEPS = 'ما لم يصل يبقى محفوظًا على هذا الجهاز حتى 7 أيام، ويُرسل وحده عندما يعود الاتصال.';
+  // Kept, but at most 128 KB and 7 days: the teacher must not think there is a week to ask IT.
+  const KEEPS = 'ما لم يصل يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال، لكن مكانه محدود: بعد بضع ساعات من اللعب، أو بعد 7 أيام، يُحذف الأقدم أولًا.';
 
   // Nothing is sent, and why: no facts and no test button.
   for (const [v, extra, why, state, problem = ''] of [
@@ -291,20 +292,39 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
     facts: [['آخر وصول إلى لوحة المؤشرات', 'لم يصل شيء من هذا الجهاز بعد'], ['ينتظر الإرسال', 'لا شيء']],
     problem: 'اضغط «اختبر الاتصال الآن» لتعرف إن كان هذا الجهاز يصل إلى خادم الإحصاءات.', test: true });
   // Delivered 5 minutes ago; one batch has waited for a minute.
-  assert.deepEqual(panel({}, { ok: now - 3e5, n: 1, t: now - 6e4 }), { why: '', tone: 'ok', state: '✓ تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات.',
+  assert.deepEqual(panel({}, { ok: now - 3e5, n: 1, t: now - 6e4, o: now - 6e4 }), { why: '', tone: 'ok', state: '✓ تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات.',
     facts: [['آخر وصول إلى لوحة المؤشرات', 'قبل 5 دقائق (' + hm(now - 3e5) + ')'], ['ينتظر الإرسال', 'دفعة واحدة، أقدمها من قبل دقيقة']],
     problem: '', test: true });
+  // A network that holds requests open never answers, so nothing may be noted yet: batches
+  // that no closing page sent, waiting longer than 15 minutes since the last delivery, are
+  // not green (the hang of the review: delivered 3 days ago, 21 batches since 20 minutes).
+  assert.deepEqual(panel({}, { ok: now - 3 * D, n: 21, t: now - 12e5, o: now - 12e5 }), { why: '', tone: 'wait',
+    state: 'لم يتأكد وصول إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ 20 دقيقة.',
+    facts: [['آخر وصول إلى لوحة المؤشرات', 'قبل 3 أيام (' + hm(now - 3 * D) + ')'], ['ينتظر الإرسال', '21 دفعة، أقدمها من قبل 20 دقيقة']],
+    problem: 'ما ينتظر يُرسل عندما تكون صفحة الألعاب مفتوحة على هذا الجهاز. اضغط «اختبر الاتصال الآن» لترسله الآن، ولتعرف إن كان هذا الجهاز يصل إلى خادم الإحصاءات.',
+    test: true });
+  for (const [extra, label] of [[{ ok: now - 3 * D, n: 2, t: now - 9e5 + 1e3, o: now - 9e5 + 1e3 }, 'under 15 minutes'],
+    [{ ok: now - 6e5, n: 2, t: now - 3 * D, o: now - 3 * D }, 'a delivery since it was queued']]) {
+    assert.equal(panel({}, extra).tone, 'ok', label);
+  }
+  // What the portal sent as it closed waits for the next page to see its answer: still green.
+  const closed = panel({}, { ok: now - 3 * H, n: 1, t: now - 3 * H + 3e4, o: 0 });
+  assert.deepEqual([closed.tone, closed.facts[1][1]], ['ok', 'دفعة واحدة، أقدمها من قبل ساعتين (أُرسل ما ينتظر عند إغلاق صفحة الألعاب، ويتأكد وصوله عند فتحها من جديد)']);
+  // Unsent play dropped for room or age in the last 7 days is said, with when.
+  assert.deepEqual(panel({}, { ok: now - H, x: now - 2 * H }).facts[2], ['حُذف قبل أن يصل',
+    'لعب قبل ساعتين (' + hm(now - 2 * H) + ')، لأن مكان الانتظار على هذا الجهاز امتلأ أو مضت عليه 7 أيام']);
+  assert.equal(panel({}, { ok: now - H, x: now - 8 * D }).facts.length, 2, 'not after 7 days');
   // Blocked since the day before yesterday (the school filter of 28 October): red, since
   // when, the host it blocks and the address to ask IT for.
-  const blocked = raw({}, { ok: now - 3 * D, f: now - 2 * D - H, k: 'network', at: now - 6e4, n: 12, t: now - 2 * D });
-  assert.deepEqual(panel({}, { ok: now - 3 * D, f: now - 2 * D - H, k: 'network', at: now - 6e4, n: 12, t: now - 2 * D }), { why: '', tone: 'bad',
+  const blocked = raw({}, { ok: now - 3 * D, f: now - 2 * D - H, k: 'network', at: now - 6e4, n: 12, t: now - 2 * D, o: now - 2 * D });
+  assert.deepEqual(panel({}, { ok: now - 3 * D, f: now - 2 * D - H, k: 'network', at: now - 6e4, n: 12, t: now - 2 * D, o: now - 2 * D }), { why: '', tone: 'bad',
     state: '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ يومين.',
     facts: [['آخر وصول إلى لوحة المؤشرات', 'قبل 3 أيام (' + hm(now - 3 * D) + ')'], ['ينتظر الإرسال', '12 دفعة، أقدمها من قبل يومين']],
     problem: 'تعذّر الوصول إلى خادم الإحصاءات منذ ' + hm(now - 2 * D - H) + '. السبب في الغالب أن مرشّح الإنترنت في المدرسة يحجب ingest.test. ' +
       'اطلب من مسؤول تقنية المعلومات في المدرسة السماح بالعنوان https://ingest.test. ' + KEEPS, test: true });
   assert.deepEqual(ltr(blocked.problem), [hm(now - 2 * D - H), 'ingest.test', 'https://ingest.test']);
   // The server's own error, and its refusal (those batches are gone).
-  assert.deepEqual(panel({}, { f: now - 2 * H, k: 'server', at: now - 6e4, n: 2, t: now - 2 * H }).problem,
+  assert.deepEqual(panel({}, { f: now - 2 * H, k: 'server', at: now - 6e4, n: 2, t: now - 2 * H, o: now - 2 * H }).problem,
     'يردّ خادم الإحصاءات ingest.test بخطأ منذ ' + hm(now - 2 * H) + '. ' + KEEPS + ' إذا استمر ذلك، أخبر من يدير خادم الإحصاءات.');
   assert.equal(panel({}, { f: now - 2 * H, k: 'server', at: now - 6e4 }).state, '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ ساعتين.');
   const refused = panel({}, { ok: now - H, f: now - 3e5, k: 'refused', at: now - 3e5 });
@@ -327,6 +347,10 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
       'وما زال ينتظر: 4 دفعات، ويُرسل من صفحة الألعاب.'],
     [{ k: 'network', host, sent: 0, n: 3 }, false, IT],
     [{ k: 'network', host, sent: 1, n: 3 }, false, IT + ' (أُرسل قبل انقطاع الاتصال: دفعة واحدة.)'],
+    [{ k: 'network', host, reached: false, sent: 0, n: 3 }, false, IT],
+    // Health answered, then the batches got no answer: the address opens, sending to it does not.
+    [{ k: 'network', host, reached: true, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكن تعذّر إرسال البيانات إليه. ' +
+      'قد يسمح مرشّح الإنترنت في المدرسة بفتح العنوان ويمنع إرسال البيانات إليه. أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به كاملًا، مع إرسال البيانات: https://ingest.test'],
     [{ k: 'server', host, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه ردّ بخطأ مؤقت. البيانات محفوظة على هذا الجهاز؛ جرّب مرة أخرى بعد قليل.'],
     [{ k: 'refused', host, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه لا يقبل بيانات هذه النسخة من الموقع. أخبر من يدير خادم الإحصاءات.'],
     [{ why: 'off', host }, false, 'لا يرسل هذا الجهاز إلى لوحة المؤشرات الآن، فلا يوجد اتصال لاختباره.'],
@@ -336,6 +360,7 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
     assert.deepEqual([c.ok, text(c.text)], [ok, said], JSON.stringify(result));
   }
   assert.deepEqual(ltr(api.checked({ k: 'network', host, sent: 0, n: 0 }).text), ['https://ingest.test']);
+  assert.deepEqual(ltr(api.checked({ k: 'network', host, reached: true, sent: 0, n: 0 }).text), ['https://ingest.test']);
 });
 
 test('dashboard codes: the Luhn mod 16 check character, how codes are shown and typed, and the transfer', () => {
@@ -1114,7 +1139,7 @@ test('the codes panel: this PC\'s code, each player\'s code with its check chara
 test('the delivery panel says at a glance whether this PC\'s play reaches the dashboard; its test names the address to allow, then sends what waited', async t => {
   const INGEST = 'https://ingest.test/v1/batch', H = 36e5, D = 864e5, now = NOW.getTime();
   // The queue of the portal that sends to INGEST (js/telemetry.js: a 32-bit hash of the address).
-  const queueKey = 'sg:site:tm:q3:' + ([...INGEST].reduce((h, c) => h * 31 + c.charCodeAt(0) | 0, 0) >>> 0).toString(36);
+  const queueKey = 'sg:site:tm:q4:' + ([...INGEST].reduce((h, c) => h * 31 + c.charCodeAt(0) | 0, 0) >>> 0).toString(36);
   const envelope = b => ({ v: 3, b, s: 'abcdefabcdef', k: 'src', m: 'web', a: '', d: [4, 4, 1920], u: '', p: '', z: 'Asia/Riyadh', ev: [['ss', 0, 0, -1, -1, 0, 0, 0]] });
   const waiting = [{ t: now - 2 * D, w0: now - 2 * D, e: envelope('1'.repeat(16)) }, { t: now - 2 * H, w0: now - 2 * H, e: envelope('2'.repeat(16)) }];
   const requests = [];
@@ -1142,7 +1167,8 @@ test('the delivery panel says at a glance whether this PC\'s play reaches the da
   assert.deepEqual(await panel(), { tone: 'bad', state: '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ يومين.',
     facts: ['آخر وصول إلى لوحة المؤشرات', 'قبل 3 أيام (5/10/2026 10:30)', 'ينتظر الإرسال', 'دفعتان، أقدمها من قبل يومين'],
     problem: 'تعذّر الوصول إلى خادم الإحصاءات منذ 6/10/2026 09:30. السبب في الغالب أن مرشّح الإنترنت في المدرسة يحجب ingest.test. ' +
-      'اطلب من مسؤول تقنية المعلومات في المدرسة السماح بالعنوان https://ingest.test. ما لم يصل يبقى محفوظًا على هذا الجهاز حتى 7 أيام، ويُرسل وحده عندما يعود الاتصال.',
+      'اطلب من مسؤول تقنية المعلومات في المدرسة السماح بالعنوان https://ingest.test. ما لم يصل يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال، ' +
+      'لكن مكانه محدود: بعد بضع ساعات من اللعب، أو بعد 7 أيام، يُحذف الأقدم أولًا.',
     test: true });
   assert.deepEqual(await page.locator('#deliveryProblem bdi[dir="ltr"]').allTextContents(), ['6/10/2026 09:30', 'ingest.test', 'https://ingest.test']);
   assert.deepEqual(requests, [], 'nothing goes over the network until the teacher asks');
@@ -1163,7 +1189,15 @@ test('the delivery panel says at a glance whether this PC\'s play reaches the da
     facts: ['آخر وصول إلى لوحة المؤشرات', 'قبل أقل من دقيقة (8/10/2026 10:30)', 'ينتظر الإرسال', 'لا شيء'], problem: '', test: true });
   const stored = await storage(page);
   assert.equal(stored[queueKey], undefined, 'nothing waits');
-  assert.deepEqual(JSON.parse(stored['sg:site:tm:dx']), { v: 1, u: INGEST, ok: now, f: 0, k: '', at: 0 });
+  assert.deepEqual(JSON.parse(stored['sg:site:tm:dx']), { v: 1, u: INGEST, ok: now, f: 0, k: '', at: 0, x: 0 });
+  // Later the portal's sends fail (in another tab): the box turns red, and the green result
+  // of the earlier test goes with it rather than contradict it.
+  const portal = await page.context().newPage();
+  await portal.goto(origin + '/favicon.svg');
+  await portal.evaluate(([u, t]) => localStorage.setItem('sg:site:tm:dx', JSON.stringify({ v: 1, u, ok: t, f: t, k: 'network', at: t, x: 0 })), [INGEST, now]);
+  await page.waitForFunction(() => document.getElementById('delivery').dataset.tone === 'bad');
+  assert.equal(await page.locator('#checkStatus').textContent(), '', 'the earlier result is gone');
+  await portal.close();
   // Statistics stopped: the panel says that nothing is sent, beside the stop notice, and offers no test.
   await page.evaluate(() => localStorage.setItem('sg:site:statsmeta', JSON.stringify({ ...JSON.parse(localStorage.getItem('sg:site:statsmeta')), off: true })));
   await page.reload();

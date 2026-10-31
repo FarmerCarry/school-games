@@ -14,9 +14,10 @@
  *     (sg:site:rid, kept by js/telemetry.js) and, on the teacher's request, give a
  *     child the code it has on another PC (docs/PLAY_STATS.md section 3);
  *   - say whether this PC's play reaches the school's dashboard: the last delivery,
- *     what waits, the latest problem in plain words, and a button that tests the
- *     connection now. js/telemetry.js, loaded before this file in check mode, keeps
- *     that record (sg:site:tm:dx) and runs the test; this file never uses the network.
+ *     what waits (and since when unsent), when unsent play was last dropped, the latest
+ *     problem in plain words, and a button that tests the connection now.
+ *     js/telemetry.js, loaded before this file in check mode, keeps that record
+ *     (sg:site:tm:dx) and runs the test; this file never uses the network.
  *
  * The pure parts hang off window.SGTeacher so tools/tests can run them in Node.
  * Only init() touches the DOM, and it runs only when there is a document.
@@ -96,7 +97,10 @@
   var AGO_D = ['يوم', 'يومين', 'أيام', 'يومًا'];
   var BATCHES = ['دفعة واحدة', 'دفعتان', 'دفعات', 'دفعة'];
   var SITE = 'https://farmercarry.github.io/school-games/';   // the website the PCs open to share
-  var KEEPS = 'ما لم يصل يبقى محفوظًا على هذا الجهاز حتى 7 أيام، ويُرسل وحده عندما يعود الاتصال.';
+  // js/telemetry.js keeps at most 128 KB (a few hours of a busy PC's play) and 7 days.
+  var KEEPS = 'ما لم يصل يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال، لكن مكانه محدود: بعد بضع ساعات من اللعب، أو بعد 7 أيام، يُحذف الأقدم أولًا.';
+  // A batch that no closing portal page sent (status().o) and waits longer than this is late.
+  var LATE_MS = 15 * 6e4;
   var ADMIN = 'إذا استمر ذلك، أخبر من يدير خادم الإحصاءات.';
   // Why this PC sends nothing (js/telemetry.js status().why, or this page's own settings).
   var NOT_SENT = {
@@ -431,6 +435,9 @@
   // What the delivery panel says. v: { copy, off, tm (sharing turned off), share (the host
   // of sg:site:tm:on), st: js/telemetry.js status() or null }. { why, tone ('ok', 'bad',
   // 'wait' or 'off'), state, facts: [[term, text]], problem, test: the button is offered }.
+  // Green needs a delivery and no failure since, and nothing that waits unsent for long: a
+  // network that holds requests without an answer is noted by the portal after a minute,
+  // but a batch only a closed portal page could have sent says nothing about the network.
   function delivery(v, now) {
     var st = v.st || null, why = v.copy === 'folder' ? 'folder' : v.off ? 'off' : v.tm ? 'tm' : st ? st.why || '' : 'none';
     var out = { why: why, tone: 'off', state: '', facts: [], problem: '', test: false }, host, http;
@@ -453,8 +460,12 @@
     out.test = true;
     out.facts = [
       ['آخر وصول إلى لوحة المؤشرات', st.ok ? 'قبل ' + span(st.ok, now) + ' (' + clock(st.ok) + ')' : 'لم يصل شيء من هذا الجهاز بعد'],
-      ['ينتظر الإرسال', st.n ? count(st.n, BATCHES) + '، أقدمها من قبل ' + span(st.t, now) : 'لا شيء']
+      ['ينتظر الإرسال', st.n ? count(st.n, BATCHES) + '، أقدمها من قبل ' + span(st.t, now) +
+        (st.o ? '' : ' (أُرسل ما ينتظر عند إغلاق صفحة الألعاب، ويتأكد وصوله عند فتحها من جديد)') : 'لا شيء']
     ];
+    if (st.x && now - st.x < 7 * 864e5) {
+      out.facts.push(['حُذف قبل أن يصل', 'لعب قبل ' + span(st.x, now) + ' (' + clock(st.x) + ')، لأن مكان الانتظار على هذا الجهاز امتلأ أو مضت عليه 7 أيام']);
+    }
     if (st.f && st.k === 'refused') {
       out.tone = 'bad';
       out.state = '⚠ رفض خادم الإحصاءات بيانات من هذا الجهاز قبل ' + span(st.at, now) + '.';
@@ -465,6 +476,10 @@
       out.problem = st.k === 'server' ? 'يردّ خادم الإحصاءات ' + host + ' بخطأ منذ ' + clock(st.f) + '. ' + KEEPS + ' ' + ADMIN
         : 'تعذّر الوصول إلى خادم الإحصاءات منذ ' + clock(st.f) + '. السبب في الغالب أن مرشّح الإنترنت في المدرسة يحجب ' + host +
           '. اطلب من مسؤول تقنية المعلومات في المدرسة السماح بالعنوان ' + http + '. ' + KEEPS;
+    } else if (st.ok && st.o && now - st.o > LATE_MS && st.ok < st.o) {
+      out.tone = 'wait';
+      out.state = 'لم يتأكد وصول إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ ' + span(st.o, now) + '.';
+      out.problem = 'ما ينتظر يُرسل عندما تكون صفحة الألعاب مفتوحة على هذا الجهاز. اضغط «اختبر الاتصال الآن» لترسله الآن، ولتعرف إن كان هذا الجهاز يصل إلى خادم الإحصاءات.';
     } else if (st.ok) {
       out.tone = 'ok';
       out.state = '✓ تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات.';
@@ -475,7 +490,8 @@
     }
     return out;
   }
-  // What the test button reports (js/telemetry.js check()): { ok, text }.
+  // What the test button reports (js/telemetry.js check()): { ok, text }. reached: the
+  // server answered health, so a failure after it is in sending the batches.
   function checked(r) {
     var host = ltr('https://' + (r.host || ''));
     if (r.why || !r.k) return { ok: false, text: 'لا يرسل هذا الجهاز إلى لوحة المؤشرات الآن، فلا يوجد اتصال لاختباره.' };
@@ -486,7 +502,9 @@
     }
     return { ok: false, text: r.k === 'server' ? '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه ردّ بخطأ مؤقت. البيانات محفوظة على هذا الجهاز؛ جرّب مرة أخرى بعد قليل.'
       : r.k === 'refused' ? '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه لا يقبل بيانات هذه النسخة من الموقع. أخبر من يدير خادم الإحصاءات.'
-      : '✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز. أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به في مرشّح الإنترنت: ' + host +
+      : (r.reached ? '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكن تعذّر إرسال البيانات إليه. قد يسمح مرشّح الإنترنت في المدرسة بفتح العنوان ويمنع إرسال البيانات إليه. ' +
+        'أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به كاملًا، مع إرسال البيانات: '
+        : '✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز. أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به في مرشّح الإنترنت: ') + host +
         (r.sent ? ' (أُرسل قبل انقطاع الاتصال: ' + count(r.sent, BATCHES) + '.)' : '') };
   }
 
@@ -1012,6 +1030,9 @@
     var XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     var state = { ok: false, days: [], meta: parseMeta(null), bytes: 0, share: '', rid: parseRid(null), players: [], files: [], ignored: [] };
     var store = null, refresh = 0, pending = null, saving = false, again = '', linking = '', checking = false;
+    // The tone the box had when the last test result was shown ('': none shown, null: just
+    // shown): a result left from before the box changed would contradict it, so it goes.
+    var testedTone = '';
     var UNSAVED = 'تعذّر الحفظ في هذا المتصفح.';
 
     function load() {
@@ -1150,6 +1171,8 @@
       $('deliveryProblem').hidden = !d.problem;
       $('checkRow').hidden = !d.test;
       $('checkBtn').disabled = checking;
+      if (testedTone === null) testedTone = d.tone;
+      else if (testedTone && !checking && (d.tone !== testedTone || !d.test)) { testedTone = ''; say('checkStatus', ''); }
     }
 
     function renderSource() {
@@ -1592,6 +1615,7 @@
       t.check(function (r) {
         var c = checked(r || {});
         checking = false;
+        testedTone = null;
         $('checkStatus').innerHTML = c.text;
         $('checkStatus').classList.toggle('bad', !c.ok);
         load();

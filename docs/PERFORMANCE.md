@@ -798,3 +798,38 @@ bytes plus 1,000.
 No game page changes, and no request, font, library or third-party code is added to any
 child's page. The teacher page makes a request only when the teacher presses
 «اختبر الاتصال الآن».
+
+## Review fixes to delivery and the delivery box, 31 October 2026
+
+The review of the change above found that a network which holds requests open without
+an answer was never noted (the box stayed green while batches piled up), that a portal
+tab of the build before still shared and emptied this build's queue, that a clear dated
+ahead by a fast clock came back once the clock passed it, and that the box promised a
+week of storage where 128 KB lasts a few busy hours (docs/TELEMETRY.md, "Delivery").
+Measured with the Linux minified build and the school's `SG_TELEMETRY_URL`, against the
+change above:
+
+* **The portal** grows by 983 bytes, from 398,919 to 399,902, within its limit: the
+  minified `js/telemetry.js` grows from 13,731 to 14,714 bytes (a minute's limit on every
+  request, its body included, noted as no answer; the queue key `q4` that moves the older
+  `q3` key's batches; the clear dated back once and written; the record of unsent play
+  dropped for room or age; the mark of a batch a closing page handed over; check mode
+  reading the portal's address at each call). The added work is one `localStorage` write
+  when a closing page marks what it handed over, and one per drop.
+* **The teacher page** grows by 2,439 bytes, from 118,142 to 120,581: the same 983 bytes
+  of `js/telemetry.js`, and 1,456 of `js/teacher.js`, nearly all Arabic text (the true
+  storage limit, the state for batches waiting unsent, the line for play dropped, the
+  test's answer when health answers but the batches do not).
+* The offline cache grows by 3,422 bytes, from 5,330,782 to 5,334,204 (both pages, each
+  cached once).
+
+The teacher page and the offline cache follow the rule above: the measured size rounded
+up to the next 1,000 bytes plus 1,000. The portal's limit stays.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 398,919 | 399,902 | 400,000 | 400,000 |
+| Teacher page | 118,142 | 120,581 | 120,000 | 122,000 |
+| Offline precache | 5,330,782 | 5,334,204 | 5,332,000 | 5,336,000 |
+
+No game page changes, and no request is added to any page.
