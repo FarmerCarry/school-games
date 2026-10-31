@@ -373,7 +373,7 @@ hook they do nothing while the sink is inert. A teacher's "same child as on anot
 on the teacher page (`js/teacher.js`, `docs/PLAY_STATS.md` section 3) writes `k[key]`, the
 same code in `g[key]` (given, not made here) and the older code in `l[key]`, unless that
 older code was itself given; the sink sends that `cd` at the profile's next session start
-and deletes `l[key]` once a batch holding it is answered with a 2xx. A removed profile
+and deletes `l[key]` once a batch holding it is delivered (the server's 204). A removed profile
 whose code was given sends no `pr`: the child plays on with it on the other PC. The check
 character the teacher page shows (Luhn mod 16) is never sent.
 
@@ -381,17 +381,48 @@ character the teacher page shows (Luhn mod 16) is never sent.
 first waiting event (or as often as the server's last `X-Batch-Every` asked, 20 to 600 s),
 and when the page is hidden, always by `fetch` without credentials
 (`credentials: 'omit'`: no cookie ever goes, so never by `sendBeacon`), with `keepalive`
-while the keepalive bodies in flight fit in 60 KB (the rest wait in the queue). Unsent
-batches are kept as `{ t, w0, e }` in `localStorage` `sg:site:tm:q3:<hash of the ingest
-URL>`, so another copy of the site on the same origin with another URL never sends them (at
-most 128 KB, at most 7 days old, oldest dropped first). Entries of wire version 2 that an
-older build queued in `sg:site:tm:q:<hash>` move into it and are still sent, unchanged; this
-build never writes that key, because a pre-v3 tab still open on the PC rewrites it with v2
-entries only. Stopping statistics or turning sharing off drops every `sg:site:tm:` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the
-batch; a 4xx other than 429 drops it as malformed; 429, 5xx and network errors retry.
-Teacher "clear" removes the `sg:site:tm:` queues too (not the sharing note
-`sg:site:tm:on`, and not `sg:site:rid`). All storage calls are wrapped; no `console`; never
-`clear()`.
+while the keepalive bodies in flight fit in 60 KB (the rest wait in the queue). Every
+batch is kept as `{ t, w0, e }` in `localStorage` `sg:site:tm:q4:<hash of the ingest
+URL>` until the server's own answer delivers it, so another copy of the site on the same
+origin with another URL never sends them (at most 128 KB, a few hours of a busy PC's play,
+and at most 7 days old, oldest dropped first): a hidden or unloading page hands what waits
+to `fetch` but keeps it, and never hands a batch over again while its request is in
+flight; a page that goes before the answer leaves the batch to the next page, which sends
+it again (the server de-duplicates v2 batch ids and writes v3 batches idempotently; the
+repeat only shows that session in the dashboard's live panel for up to 5 minutes and
+marks an already rolled day for a re-roll), and marks it `h: 1` (handed over as the page
+went). Every request, its answer's body included, has a minute (20 s in the teacher's
+test); without an answer by then it is aborted and counts as a network failure. Entries
+that older builds queued move into it and are still sent, unchanged: wire version 2 from
+`sg:site:tm:q:<hash>`, and the first v3 build's from `sg:site:tm:q3:<hash>` (a hidden page
+of that build removed every batch it handed over at once). This build never writes either
+key, because a tab of those builds still open on the PC rewrites or empties it. Stopping
+statistics or turning sharing off drops every `sg:site:tm:` queue. Failures back off
+20 → 40 → 80 → 160 → 300 s. Only the server's 204 delivers a batch and only its JSON
+error (`{ "error": … }`) to a 4xx other than 429 drops it as malformed; anything else
+(429, 5xx, a school filter's or captive portal's own page, even a 200 or a 403, no answer)
+keeps it and retries. A clear (`statsmeta.clearedAt`) dated after the PC's clock is dated
+back, once and in storage, to the page's start or the oldest waiting batch, whichever is
+older, so it never drops play recorded since. Teacher "clear" removes the `sg:site:tm:`
+queues too (not the notes `sg:site:tm:on` and `sg:site:tm:dx`, and not `sg:site:rid`). All
+storage calls are wrapped; no `console`; never `clear()`.
+
+**Delivery status for the teacher:** the sink keeps `sg:site:tm:dx` (the address; the last
+delivery; the first failure since, and the latest failure's kind: `network`, `server` or
+`refused`; the last time unsent play was dropped for room or age). `teacher.html` loads
+the same `js/telemetry.js` in check mode (`<meta name="sg-telemetry" content="check">`):
+no session, no event, no listener, and no write until the test (apart from moving older
+builds' batches and dating back a clear ahead of the clock, as the portal does);
+`SGTelemetry.status()` feeds the page's
+delivery box (green only with a delivery, no failure since and nothing waiting unsent
+for more than 15 minutes since it), and `SGTelemetry.check(cb)` (its «اختبر الاتصال
+الآن» button) asks the server's `GET /v1/health`, then sends the waiting batches, to the
+address the portal noted (the build gives the teacher page none; it is read again at
+each call, so a portal opened after the teacher page counts). Health alone ends a
+failure only when nothing waits, and the test says so when health answers but the
+batches get none.
+So the network carve-out stays exactly one file, inlined in the fast build into both
+pages; `tools/check-all.mjs` checks the teacher page's exact copy like the portal's.
 
 ## Ingest server (server/)
 

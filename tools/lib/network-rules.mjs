@@ -23,7 +23,7 @@ export function networkUse(file, text) {
   return NETWORK.filter(([pattern, name]) => pattern.test(text) && !(file === SENDER && SENDER_MAY.has(name))).map(([, name]) => name);
 }
 
-// The fast build inlines the sender into the portal (tools/build.mjs). `copies` are the
+// The fast build inlines the sender into the portal and the teacher page (tools/build.mjs). `copies` are the
 // sender as the build may inline it. Returns the page without that one exact copy, and
 // the copy, so the rest of the page is checked like any other file and the copy like
 // the sender. A copy that differs from js/telemetry.js in any byte is not split off.
