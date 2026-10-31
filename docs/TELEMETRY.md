@@ -200,7 +200,8 @@ local day records. The server stores no IP address.
   Nor does a batch sent again bring back a student the school forgot on the dashboard:
   for 8 days the server drops (and answers 204 to) every batch of a forgotten code whose
   session started before the forget, so the PC lets it go, and stores no mark of any
-  session that names that code; a later session of that code is new play and is kept.
+  session that names that code until it plays again; a later session of that code is
+  new play and is kept, and so is a mark naming it after that.
   Sending a batch again is not quite free, though: the server's live table counts the
   session of a batch received now as playing now, so the dashboard's «live» panel shows
   that session, its student and PC for up to 5 minutes, and a batch for a day already

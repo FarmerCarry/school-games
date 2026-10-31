@@ -1538,14 +1538,51 @@ test('no mark names a forgotten code again: a profile\'s removal or an older cod
   const again = body => ({ ...body, w: Math.round((s.clock.now - sent) / 1000) + body.w });
   const later = [envelope3('b30000000001', [ss3(0, 31, 1), ['cd', 0, U4], ...visit(1, 'road-hopper', 2, 60000)], { u: U2, p: P2, z: '' }),
     envelope3('b30000000002', [ss3(0, -1, 0), ['pr', 0, U3], ...visit(1, 'maze-dash', 2, 30000)], { u: '', a: '6-7', z: '' })];
+  const rv = async () => (await s.rows('settings')).find(r => r.key === 'rv').value, rv0 = await rv();
   for (const body of [again(guest), again(linker), ...later]) assert.equal((await s.post(body)).status, 204, body.s);
   assert.deepEqual(await named(), [], 'no removal, older code or link names them');
+  assert.equal(await rv(), rv0, 'no link changed, so the kept answers stay');
   // The sessions themselves are kept: none is a forgotten code's from before the forget.
   assert.ok((await s.rows('st_sessions')).some(r => r.s === 'b30000000002'));
   assert.deepEqual((await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-21')).json().students.map(x => [x.u, x.linked, x.sessions]),
     [[U1, [], 2], [U2, [], 1]]);
   const events = (await s.admin('/v1/admin/export?file=events&from=2026-10-19&to=2026-10-21')).text;
   assert.deepEqual([U3, U4, U5].filter(u => events.includes(u)), [], 'the research export names none of them');
+});
+
+test('a forgotten code that plays again is a student again: a removal of its profile or a link to it, told after that, is stored', async t => {
+  const s = await studentDays(t);
+  const U6 = '6f6f6f6f6f6f', W = '7a7a7a7a7a7a', P3 = '9d9d9d9d9d9d';
+  // A teacher had given U5's code to P3 too, and took it off there: P3's guest session tells
+  // 'pr' as the page goes (h: 1). Then the owner forgets U5, and U2 with its older code U4.
+  const stale = envelope3('b20000000006', [ss3(0, -1, 0), ['pr', 1, U5], ...visit(1, 'maze-dash', 2, 30000)], { u: '', p: P3, a: '6-7', z: '' });
+  const sent = s.clock.now;
+  assert.equal((await s.post(stale)).status, 204);
+  for (const u of [U5, U4]) assert.equal((await call(s, 'POST', '/v1/admin/forget', { u })).status, 200);
+  const students = async () => (await s.admin('/v1/admin/students?from=2026-10-19&to=2026-10-22')).json().students
+    .filter(x => [U5, U6].includes(x.u)).map(x => [x.u, x.linked, x.sessions, x.removed]);
+  // The next morning U5 plays again on P2 (new play, kept), and tells W, its profile's older
+  // code. Then P3 sends its batch again: that removal came before U5's new play, so U5 is not
+  // shown as removed.
+  s.clock.now = Date.parse('2026-10-21T08:00:00Z');
+  assert.equal((await s.post(envelope3('b30000000001', [ss3(0, 31, 1), ['cd', 0, W], ...visit(1, 'road-hopper', 2, 60000)], { u: U5, p: P2, z: '' }))).status, 204);
+  s.clock.now += 3600000;
+  assert.equal((await s.post({ ...stale, w: Math.round((s.clock.now - sent) / 1000) + stale.w })).status, 204);
+  assert.deepEqual(await students(), [[U5, [W], 1, null]]);
+  // On 22 October the teacher moves U5's profile from P2 to P, where it gets the code U6 with
+  // U5 as its older code. P2's next guest session tells the removal of U5's profile (and of
+  // U4's, which has not played since the forget: dropped), and U6's first session tells U5.
+  s.clock.now = Date.parse('2026-10-22T09:00:00Z');
+  assert.equal((await s.post(envelope3('b40000000001', [ss3(0, -1, 0), ['pr', 1, U5], ['pr', 1, U4], ...visit(1, 'maze-dash', 2, 30000)],
+    { u: '', p: P2, a: '6-7', z: '' }))).status, 204);
+  assert.deepEqual(await students(), [[U5, [W], 1, '2026-10-22']], 'removed, not a dropout');
+  s.clock.now += 3600000;
+  const rv = async () => Number((await s.rows('settings')).find(r => r.key === 'rv').value), rv0 = await rv();
+  assert.equal((await s.post(envelope3('b40000000002', [ss3(1, 0, 1), ['cd', 0, U5], ...visit(1, 'road-hopper', 2, 60000)], { u: U6, z: '' }))).status, 204);
+  assert.deepEqual((await s.rows('aliases', 'u_old')).map(r => [r.u_old, r.u_new]), [[U5, U6], [W, U6]], 'W\'s link moved to U6 with U5\'s');
+  assert.ok(await rv() > rv0, 'the kept answers are made again');
+  assert.deepEqual(await students(), [[U6, [U5, W], 2, null]], 'one student, who played after the removal');
+  assert.deepEqual((await s.rows('st_marks')).filter(m => [U2, U4, U5].includes(m.x)).map(m => m.kind + ' ' + m.x).sort(), ['cd ' + U5, 'pr ' + U5, 'pr ' + U5]);
 });
 
 test('the 5-minute cron lets a forget\'s codes go once their 8 days are over, with no later forget', async t => {

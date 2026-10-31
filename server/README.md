@@ -171,11 +171,13 @@ What can be stored is decided here, not only by what the portal chooses to send.
   keeps the codes themselves with the time of the forget (the setting `forgotten`, which
   the dashboard never shows; the 5-minute cron then removes them), drops every batch of
   theirs from a session that started before it, and drops every mark of any session that
-  names one of them (the removal of a profile, or an older code, which a PC may tell
-  again or late), so the student does not come back. A later session of the same code
-  (its profile stays on the PC) is new play and is kept. On Cloudflare, another Worker
-  instance learns of the forget when it next reads the settings, within 5 minutes; until
-  then it may still store such a batch (forget again to remove it). The
+  names one of them until that code plays again (the removal of a profile, or an older
+  code, which a PC may tell again or late), so the student does not come back. A later
+  session of the same code (its profile stays on the PC) is new play and is kept, and so
+  is a mark naming the code after it (a removal of that profile, or a link to that
+  code). On Cloudflare, another Worker instance learns of the forget when it next reads
+  the settings, within 5 minutes; until then it may still store such a batch (forget
+  again to remove it). The
   school-wide daily counts, in which no child can be found, keep the play already
   counted until a recount (`POST /v1/admin/rebuild`) makes them again from the facts
   left. D1 *Time Travel* can still restore the database to any minute of the last 7
@@ -987,7 +989,8 @@ Body `{"u": "<code>"}`: forgets the student of that code, with every code linked
 ```
 
 A code the server does not hold answers zeros (for 8 days its play from before the forget
-is still dropped if a PC sends it, and so is every mark naming it).
+is still dropped if a PC sends it, and so is every mark naming it until the code plays
+again).
 
 #### `POST /v1/admin/link` and `DELETE /v1/admin/link?u=`
 

@@ -270,9 +270,9 @@ const OF_GROUP = `(SELECT id FROM st_sessions WHERE u IN ${GROUP})`;
 // student's play again (a closing page's last batch goes again from the next page, often
 // the next day). The setting 'forgotten' keeps every code of a forgotten group with the
 // time of the forget (?2, UTC seconds), as a JSON object {code: seconds}, and ingest drops
-// a batch of such a code whose session started by then, and every mark naming one
-// (store.mjs). A PC keeps a batch at most 7 days: each forget also removes the entries
-// FORGOTTEN_DAYS old, as does the 5-minute cron when no forget comes.
+// a batch of such a code whose session started by then, and every mark naming one while
+// it has not played again (store.mjs). A PC keeps a batch at most 7 days: each forget also
+// removes the entries FORGOTTEN_DAYS old, as does the 5-minute cron when no forget comes.
 export const FORGOTTEN_DAYS = 8;
 const FORGOTTEN = "INSERT INTO settings (key, value) SELECT 'forgotten', json_group_object(u, s) FROM (SELECT key AS u, value AS s " +
   `FROM json_each((SELECT value FROM settings WHERE key = 'forgotten')) WHERE value > ?2 - ${FORGOTTEN_DAYS * 86400} AND key NOT IN ${GROUP} ` +

@@ -736,10 +736,10 @@ The server:
   of the student's codes (the school-wide counts keep them until a recount) and keeps the
   codes with the time of the forget for 8 days (the setting `forgotten`, which the cron
   then removes), in which ingest drops their batches from sessions that started before it
-  and every mark that names one of them (a PC sends a batch again until it sees the
-  answer: a closing page's last batch goes again from the next page); a link
-  makes an older code count as a newer one, history included, one hop deep; a recount
-  marks every rolled day for a diff re-roll by the cron.
+  and every mark that names one of them while it has not played again (a PC sends a
+  batch again until it sees the answer: a closing page's last batch goes again from the
+  next page). A link makes an older code count as a newer one, history included, one hop
+  deep; a recount marks every rolled day for a diff re-roll by the cron.
 * **The simulated school** (`server/simulate.mjs`): 600 children in 24 classes on 30 PCs
   in Asia/Riyadh, mostly wire v3 with some v2, sending at the sink's real cadence; with
   `--db` it writes weeks of history and rolls them up with the real `rollupStep`. The
