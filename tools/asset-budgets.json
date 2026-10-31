@@ -1,7 +1,7 @@
 {
   "format": 1,
-  "portalBytes": 398000,
-  "teacherBytes": 98000,
+  "portalBytes": 402000,
+  "teacherBytes": 99000,
   "gameHtmlBytes": {
     "air-hockey": 117000,
     "beat-dash": 115000,
@@ -35,6 +35,7 @@
     "tic-tac-toe": 57000,
     "troll-level": 254500,
     "tunnel-blitz": 97000,
+    "turbo-karts": 89000,
     "typing-test": 107000,
     "wacky-soccer": 160000
   },
@@ -45,5 +46,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5450000
+  "precacheBytes": 5544000
 }

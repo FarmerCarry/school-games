@@ -17,7 +17,7 @@ adapt to each child), and none of them plays background music.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores, progress, player profiles and the play statistics are saved in each browser (localStorage).
 
-## The games (34)
+## The games (35)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -34,6 +34,7 @@ adapt to each child), and none of them plays background music.
 | الخطّاف الطائر | Swing Hook | 1 | أركيد |
 | جنون الدراجات | Moto Madness | 1 | سباقات |
 | ملك الانزلاق | Drift King | 1 | سباقات |
+| سباق التوربو | Turbo Karts | 1-2 | سباقات، لاعبان |
 | النار والجليد | Fire & Ice | 1-2 | لاعبان، ألغاز |
 | دبابات الألوان | Paint Tanks | 1-3 | لاعبان، تحدي الروبوتات |
 | مصارعة السومو | Sumo Bonk | 1-2 | لاعبان، رياضة |
@@ -57,6 +58,8 @@ adapt to each child), and none of them plays background music.
 | ساحة الثعابين | Snake Arena | 1 | تحدي الروبوتات، أركيد |
 
 The original arcade games save best scores and unlocks in the browser, and have a title screen, P/Esc pause and a 🔊 mute button. The two board games use a compact board with local two-player and computer modes.
+
+**سباق التوربو (Turbo Karts)** is a top-down toy-kart race on one screen, so two players never need a split view. Hold the drift through a corner until the lamp turns blue, orange, then purple, and release for a mini-turbo. ? boxes hand out a jelly puddle, a spring, a bubble shield, a turbo cookie, or a toy rocket that only chases the kart ahead. A race is three laps, a cup is four races, and a time trial leaves a ghost. Coins buy paint, stickers, hats and a horn.
 
 **فقاعات بوب (Bubble Bop)** is the «ابدأ من هنا» starter game for a 6-year-old who has never used a mouse or keyboard. It is a real arcade game with no words to read, no way to lose and no timer in its levels. Bop, a round glowing friend, floats with the mouse pointer. Five worlds teach one input each through play: touch bubbles with Bop to pop them (no click needed), click on or near balloons, press the long Space bar so a frog catches fireflies, move a basket under falling fruit with ← → (or A/D), then a party world that mixes all four. Each world has three short levels (one to three stars) and a 60-second party round with combos, gold targets and a best score. Hit areas are bigger than the pictures, targets drift towards Bop, mashing and stray keys never cost anything, and an on-screen mouse, Space bar and arrow keys light up with the real ones. A wordless hand shows the move after a few idle seconds and repeats while the child waits. Difficulty follows the child (Kit.dda): a 6–7-year-old starts with huge, slow targets, a 10–11-year-old with a brisk challenge, and each world adapts to how the last level went. Stars unlock colours and hats for Bop. Two optional picture cards show how to hold the mouse and where the keys are. P or Esc pauses. Progress stays in this browser.
 

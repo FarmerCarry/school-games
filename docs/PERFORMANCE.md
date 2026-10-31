@@ -786,3 +786,23 @@ only cached file that changed. No other budget changed.
 Both new limits are the measured size rounded up, Sneaky Levels to the next 500
 bytes and the precache to the next 1,000. That leaves 448 bytes (0.18%) and 316
 bytes (0.006%). A small text edit can exceed either limit.
+
+## Turbo Karts, 31 October 2026
+
+سباق التوربو is a new top-down kart race. The asphalt, kerbs and decorations are
+drawn once into an offscreen canvas; each frame blits that bitmap, a skid-mark
+canvas, and pre-rendered kart sprites. A headless software-rendered playtest
+(`node tools/playtest.mjs turbo-karts`) measured 22 fps with six karts and
+particles. On the same machine Hoop Heads measured 17 fps, so the number is the
+software renderer, not the school PC. The frame is a cached track plus sprites.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 396,669 | 400,952 | 398,000 | 402,000 |
+| Teacher page | — | 97,514 | 98,000 | 99,000 |
+| Turbo Karts | — | 86,829 | — | 89,000 |
+| Offline precache | 5,449,684 | 5,541,638 | 5,450,000 | 5,544,000 |
+
+The built game is 86,829 bytes, under the 135 KB target. The precache grew by
+the new game file plus the catalog entry and its thumbnail in the portal. No
+new dependency, font, or runtime request.

@@ -1349,11 +1349,14 @@ test('tries to a first win include the winning try; the hardest levels start wit
   await page.selectOption('#gamePick', 'dino-3d');
   await page.waitForFunction(() => document.querySelectorAll('#learning-growth .card').length === 1 && !document.getElementById('dash').classList.contains('is-loading'));
   assert.match(await page.locator('#learning-hardest .section-intro').textContent(), /tries to a first win/i);
+  // Adding a game reshuffles the sample school. In this one every Dino level
+  // has a win, so the slowest first win (level 4) leads. A level nobody has
+  // won still sorts first when the sample has one.
   const never = demoFile('game-dino-3d.json').firstWin.filter(f => f.median == null);
-  assert.deepEqual(never.map(f => f.id), ['L8'], 'the sample has a level nobody has won');
+  assert.deepEqual(never.map(f => f.id), [], 'this sample has a win on every Dino level');
   await page.click('#hardest-card .table-toggle');
   const rows = await page.locator('#hardest-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
-  assert.deepEqual(rows[0].slice(1, 4), ['level 8', '1', '—'], 'never won: first, with no median');
+  assert.deepEqual(rows[0].slice(1, 4), ['level 4', '24', '1'], 'the slowest first win leads');
   assert.equal(rows.length, demoFile('game-dino-3d.json').firstWin.length, 'every level of the game');
   // An endless mode is never won by design: it is no hard level.
   await page.selectOption('#gamePick', 'rail-rush');
