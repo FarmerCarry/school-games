@@ -268,7 +268,8 @@ test('XP from a real round, the rules per round code, the loss cap, level-ups an
   await page.locator('#classroomMode').uncheck();
   await post(page, frame, stats([['l', 'L1', 1000], ['w', 'L1', 1000]]));
   assert.equal(await xp(page), 89, 'the cap is reached; wins still count');
-  assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:site:xploss')), '{"p1 air-hockey":40}');
+  // The two endless runs above (8 + 10) sit in the same tab record, under their own cap.
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:site:xploss')), '{"p1 air-hockey":40,"e":{"p1 air-hockey":18}}');
   // XP bar: level 3 starts at 75 XP and needs 60 more.
   assert.equal(await page.locator('#me .me-bar i').evaluate(el => el.style.width), '23%');
 
@@ -315,6 +316,47 @@ test('XP from a real round, the rules per round code, the loss cap, level-ups an
   assert.equal(await page.evaluate(k => localStorage.getItem(k), KEY), before, 'guests earn nothing');
   assert.equal(await page.locator('#toast').innerText(), 'اختر حيوانك في الرئيسية لتجمع النجوم ⭐');
   assert.deepEqual(await page.evaluate(() => window.levels), [2, 3]);
+});
+
+test('an endless run under 20 s pays nothing, a 30 s run pays as before, and one game stops at 40 XP', async t => {
+  const { page } = await setup(t);
+  await page.goto(origin + '/');
+  await page.evaluate(() => SGProfiles.create(0, 0, '8-9'));
+  // A quiet game, so these counts are exact. The portal pays from the round id:
+  // endless, run (Rail Rush, Drift King), classic (Block Burst) and arenaN (Blob Battle).
+  const frame = await play(page, 'air-hockey');
+  await post(page, frame, stats([
+    ['e', 'endless', 5000], ['e', 'run', 5000], ['e', 'classic', 5000], ['e', 'arena1', 5000], ['e', 'endless', 19999]
+  ]));
+  assert.equal(await xp(page), 0, 'a run shorter than 20 s pays 0');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:site:xploss')), null, 'a short run does not spend the cap');
+
+  await post(page, frame, stats([['e', 'endless', 30000]]));
+  assert.equal(await xp(page), 6, '30 s pays +5 and +1 for the 30 s');
+  // 6 so far. Five more 30 s runs make 36; the next pays the 4 that are left; then nothing.
+  await post(page, frame, stats(Array.from({ length: 5 }, () => ['e', 'endless', 30000])));
+  assert.equal(await xp(page), 36);
+  await post(page, frame, stats([['e', 'run', 30000]]));
+  assert.equal(await xp(page), 40, 'the last 4 XP, and a run id counts toward the same game');
+  await post(page, frame, stats([['e', 'endless', 30000], ['e', 'endless', 9e6], ['e', 'arena2', 120000]]));
+  assert.equal(await xp(page), 40, 'further endless runs in this game pay nothing');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:site:xploss')), '{"e":{"p1 air-hockey":40}}');
+
+  // A two-player end is not an endless run, and a win is not part of this cap.
+  await post(page, frame, stats([['e', 'local', 5000], ['w', 'L1', 1000]]));
+  assert.equal(await xp(page), 55, 'a short neutral end and a win are outside the endless cap');
+
+  // Another game has its own 40, in the same tab record. 20 s keeps the usual +5.
+  await home(page);
+  const dash = await play(page, 'maze-dash');
+  await post(page, dash, stats([['e', 'endless', 5000]]));
+  assert.equal(await xp(page), 55, 'a short run in another game still pays nothing');
+  await post(page, dash, stats([['e', 'endless', 20000], ['e', 'endless', 30000]]));
+  assert.equal(await xp(page), 66, '20 s pays +5 and 30 s pays +6, on this game\'s own cap');
+  await post(page, dash, stats([['l', 'L1', 1000]]));
+  assert.equal(await xp(page), 70, 'a loss still pays, from its own cap');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(sessionStorage.getItem('sg:site:xploss'))),
+    { 'p1 maze-dash': 4, e: { 'p1 air-hockey': 40, 'p1 maze-dash': 11 } });
 });
 
 test('in fullscreen the level-up toast and burst are drawn over the game, and the toast comes back', async t => {

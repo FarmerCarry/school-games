@@ -319,8 +319,11 @@ Every sound is a one-shot under 1.5 s. Juice never loops and has no music API.
   never missing from both keys for a tab that reads in between.
 * **XP** comes from the v1 `sg:stats` round events the portal already receives
   (so it works with telemetry off): win +10, draw +6, loss +4 (at most 40 XP of
-  losses per game per tab session), endless end +5 (+1 per 30 s of round time, up to
-  +5 more), quit 0; plus +1 per full 60 s of engaged time in a visit.
+  losses per game per tab session), neutral end +5 (+1 per 30 s of round time, up to
+  +5 more). An endless run (round id `endless`, `run`, `classic` or `arenaN`) shorter
+  than 20 s pays nothing, and those runs stop at 40 XP per game per tab session, kept
+  under `e` in the same `sg:site:xploss` tally as the loss cap. Quit 0; plus +1 per
+  full 60 s of engaged time in a visit.
   Level `L → L+1` needs `30 + 15·(L−1)` XP. Level-ups play `Juice.levelUp()`, show a
   toast and a burst (reduced-motion aware) and are counted for telemetry.
 * The portal sends `band`, `player` and `telemetry` with every `sg:preferences`.
