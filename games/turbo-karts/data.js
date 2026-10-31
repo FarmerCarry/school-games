@@ -97,31 +97,6 @@
     return { x: a.x + dx * u, y: a.y + dy * u, tx: dx / L, ty: dy / L, seg: seg, s: s };
   }
 
-  // A few toys sitting off the asphalt. Seeded, so the picture never changes.
-  function sprinkle(theme, salt) {
-    var x = (salt * 1103515245 + 12345) >>> 0;
-    function rnd() { x = (1664525 * x + 1013904223) >>> 0; return x / 4294967296; }
-    var kinds = theme === 'toy'
-      ? ['block', 'block', 'crayon', 'ball', 'block']
-      : ['planet', 'cup', 'star', 'cookie', 'planet'];
-    var cols = theme === 'toy'
-      ? ['#ff5a7a', '#ffd23f', '#4dabff', '#7d5cff', '#3ddc84', '#ff8a3d']
-      : ['#8be9ff', '#ffe28a', '#d9c6ff', '#ffb4d9', '#b8ff9a'];
-    var out = [], k, tries = 0;
-    while (out.length < 14 && tries < 80) {
-      tries++;
-      out.push({
-        k: kinds[(rnd() * kinds.length) | 0],
-        x: 70 + rnd() * 1140,
-        y: 64 + rnd() * 590,
-        s: 0.6 + rnd() * 0.8,
-        c: cols[(rnd() * cols.length) | 0],
-        r: rnd() * TAU
-      });
-    }
-    return out;
-  }
-
   var N = 128;
   var specs = [
     { id: 0, name: 'حلقة السجادة', cup: 0, theme: 'toy', par: 74, width: 124,
@@ -159,23 +134,7 @@
       bridge: { over0: 0.5, over1: 1 } }
   ];
 
-  var TRACKS = specs.map(function (spec) {
-    spec.decor = sprinkle(spec.theme, spec.id + 3);
-    var track = bake(spec);
-    // Drop decorations that landed on the asphalt.
-    track.decor = track.decor.filter(function (d) {
-      var best = 1e9, i, a, b, dx, dy, L2, u, x, y;
-      for (i = 0; i < track.pts.length; i++) {
-        a = track.pts[i]; b = track.pts[(i + 1) % track.pts.length];
-        dx = b.x - a.x; dy = b.y - a.y; L2 = dx * dx + dy * dy || 1;
-        u = clamp(((d.x - a.x) * dx + (d.y - a.y) * dy) / L2, 0, 1);
-        x = a.x + dx * u - d.x; y = a.y + dy * u - d.y;
-        if (x * x + y * y < best) best = x * x + y * y;
-      }
-      return best > (track.width * 0.5 + 28) * (track.width * 0.5 + 28);
-    });
-    return track;
-  });
+  var TRACKS = specs.map(bake);
 
   var KARTS = [
     { id: 'spark', name: 'برق', speed: 1, grip: 1, accel: 1, price: 0, blurb: 'متوازن وسهل' },

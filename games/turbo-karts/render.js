@@ -45,7 +45,7 @@
       g.arc(rnd() * W, rnd() * H, 1 + rnd() * 2.2, 0, 6.3);
       g.fill();
     }
-    track.decor.forEach(function (d) { decor(g, d); });
+    farProps(g, track, rnd);
     strokePath(g, track.pts, track.width + 16, 'rgba(0,0,0,0.25)');
     strokePath(g, track.pts, track.width, toy ? '#5b6478' : '#3a4468');
     strokePath(g, track.pts, track.width * 0.62, toy ? '#6d7690' : '#4a5680');
@@ -87,6 +87,7 @@
       g.fillRect(-track.width * 0.42 + i * (track.width * 0.84 / 8), -5, track.width * 0.84 / 8 + 0.5, 10);
     }
     g.restore();
+    nearProps(g, track, rnd);
     trackCv = c; trackId = track.id;
     bridgeCv = null;
     if (track.bridge) {
@@ -114,39 +115,169 @@
     g.closePath();
   }
 
-  function decor(g, d) {
-    g.save();
-    g.translate(d.x, d.y);
-    g.rotate(d.r || 0);
-    g.scale(d.s, d.s);
-    g.fillStyle = d.c;
-    if (d.k === 'block') {
-      g.fillRect(-16, -12, 32, 24);
-      g.fillStyle = 'rgba(255,255,255,0.35)';
-      g.fillRect(-16, -12, 32, 6);
-    } else if (d.k === 'crayon') {
-      g.fillRect(-6, -20, 12, 34);
-      g.fillStyle = '#fff';
-      g.beginPath(); g.moveTo(-6, -20); g.lineTo(0, -32); g.lineTo(6, -20); g.fill();
-    } else if (d.k === 'ball') {
-      g.beginPath(); g.arc(0, 0, 14, 0, 6.3); g.fill();
-      g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 3; g.stroke();
-    } else if (d.k === 'planet') {
-      g.beginPath(); g.arc(0, 0, 16, 0, 6.3); g.fill();
-      g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 3;
-      g.beginPath(); g.ellipse(0, 0, 26, 8, 0.4, 0, 6.3); g.stroke();
-    } else if (d.k === 'cup') {
-      g.fillRect(-10, -6, 20, 16);
-      g.fillRect(-4, 10, 8, 6);
-      g.fillStyle = '#fff'; g.globalAlpha = 0.4; g.fillRect(-10, -6, 20, 5); g.globalAlpha = 1;
-    } else if (d.k === 'cookie') {
-      g.beginPath(); g.arc(0, 0, 13, 0, 6.3); g.fill();
-      g.fillStyle = '#7a4a12';
-      g.beginPath(); g.arc(-4, -2, 2, 0, 6.3); g.arc(4, 3, 2, 0, 6.3); g.fill();
-    } else {
-      star(g, 0, 0, 5, 12, 6, d.c);
+  // Distance from a point to the centreline. Used only while baking a track.
+  function offRoad(track, x, y, pad) {
+    var pts = track.pts, i, a, b, dx, dy, L2, u, px, py, best = 1e9;
+    for (i = 0; i < pts.length; i++) {
+      a = pts[i]; b = pts[(i + 1) % pts.length];
+      dx = b.x - a.x; dy = b.y - a.y; L2 = dx * dx + dy * dy || 1;
+      u = ((x - a.x) * dx + (y - a.y) * dy) / L2;
+      if (u < 0) u = 0; else if (u > 1) u = 1;
+      px = a.x + dx * u - x; py = a.y + dy * u - y;
+      if (px * px + py * py < best) best = px * px + py * py;
+    }
+    return best > (track.width * 0.5 + pad) * (track.width * 0.5 + pad);
+  }
+
+  function onGrass(track, x, y, pad) {
+    return x > 18 && y > 18 && x < W - 18 && y < H - 18 && offRoad(track, x, y, pad);
+  }
+
+  function tree(g, x, y, sc, toy) {
+    g.save(); g.translate(x, y); g.scale(sc, sc);
+    g.fillStyle = toy ? '#6b3f22' : '#241a4a';
+    g.fillRect(-3, 0, 6, 16);
+    g.fillStyle = toy ? '#147a34' : '#3a6fd0';
+    g.beginPath(); g.arc(-8, -8, 12, 0, 6.3); g.arc(9, -6, 13, 0, 6.3); g.arc(0, -16, 13, 0, 6.3); g.fill();
+    g.fillStyle = toy ? '#3cba58' : '#8be9ff';
+    g.beginPath(); g.arc(-2, -18, 6, 0, 6.3); g.fill();
+    g.restore();
+  }
+
+  function bush(g, x, y, sc, toy) {
+    g.save(); g.translate(x, y); g.scale(sc, sc);
+    g.fillStyle = toy ? '#0f6a30' : '#2a4ea8';
+    g.beginPath(); g.arc(-9, 2, 11, 0, 6.3); g.arc(9, 3, 12, 0, 6.3); g.arc(0, -7, 11, 0, 6.3); g.fill();
+    g.restore();
+  }
+
+  function tyres(g, x, y) {
+    var i;
+    g.save(); g.translate(x, y);
+    for (i = 0; i < 3; i++) {
+      g.fillStyle = '#1c1c1c';
+      g.beginPath(); g.ellipse(0, 8 - i * 7, 13, 6, 0, 0, 6.3); g.fill();
+      g.strokeStyle = '#555'; g.lineWidth = 2; g.stroke();
+      g.fillStyle = '#333';
+      g.beginPath(); g.ellipse(0, 8 - i * 7, 5, 2.2, 0, 0, 6.3); g.fill();
     }
     g.restore();
+  }
+
+  function cone(g, x, y) {
+    g.save(); g.translate(x, y);
+    g.fillStyle = '#ff5418';
+    g.beginPath(); g.moveTo(0, -16); g.lineTo(8, 8); g.lineTo(-8, 8); g.closePath(); g.fill();
+    g.fillStyle = '#fff';
+    g.fillRect(-6, -3, 12, 3);
+    g.fillRect(-4, -10, 8, 3);
+    g.restore();
+  }
+
+  // Trees, bushes and tyre stacks, baked under the asphalt so the road stays clean.
+  function farProps(g, track, rnd) {
+    var toy = track.theme === 'toy', i, s, side, p, dist, x, y, kind;
+    for (i = 0; i < 16; i++) {
+      s = (i + 0.37) / 16 * track.total;
+      side = (i & 1) ? 1 : -1;
+      p = TK.pointAt(track, s);
+      dist = track.width * 0.5 + 28 + rnd() * 52;
+      x = p.x + p.nx * side * dist;
+      y = p.y + p.ny * side * dist;
+      if (!onGrass(track, x, y, 22)) continue;
+      kind = (i + track.id) % 5;
+      if (kind < 2) tree(g, x, y, 0.8 + rnd() * 0.45, toy);
+      else if (kind < 4) bush(g, x, y, 0.75 + rnd() * 0.5, toy);
+      else tyres(g, x, y);
+    }
+  }
+
+  function standRoom(track, p, side) {
+    var reach = track.width * 0.5 + 108, i, x, y, room, worst = 1e9;
+    var cx = p.x + p.nx * side * reach, cy = p.y + p.ny * side * reach;
+    var spots = [[0, 0], [80, 0], [-80, 0], [0, -34], [0, 46]];
+    for (i = 0; i < spots.length; i++) {
+      x = cx + p.tx * spots[i][0] + p.nx * side * spots[i][1];
+      y = cy + p.ty * spots[i][0] + p.ny * side * spots[i][1];
+      room = Math.min(x, y, W - x, H - y);
+      if (room < 6 || !offRoad(track, x, y, 8)) return 0;
+      if (room < worst) worst = room;
+    }
+    return worst;
+  }
+
+  // Grandstand and flags by the start, plus a short row of cones. Drawn once.
+  function nearProps(g, track, rnd) {
+    var toy = track.theme === 'toy';
+    var reach = track.width * 0.5 + 108;
+    var stations = [Math.min(90, track.total * 0.04), 130, 170, 220, 280];
+    var best = null, st, bi, side, room, p, x, y;
+    for (st = 0; st < stations.length && !best; st++) {
+      p = TK.pointAt(track, stations[st]);
+      for (bi = 0; bi < 2; bi++) {
+        side = bi ? -1 : 1;
+        room = standRoom(track, p, side);
+        if (room && (!best || room > best.room)) {
+          best = { side: side, room: room, p: p, x: p.x + p.nx * side * reach, y: p.y + p.ny * side * reach };
+        }
+      }
+    }
+    if (best) {
+      g.save();
+      g.translate(best.x, best.y);
+      g.rotate(Math.atan2(best.p.ty, best.p.tx));
+      if (best.side < 0) g.scale(1, -1);
+      g.fillStyle = toy ? '#6a4630' : '#2c2358';
+      roundRect(g, -72, 4, 144, 40, 6); g.fill();
+      var seats = ['#ff5a7a', '#ffe14a', '#4dabff', '#3ddc84', '#fff'], r, c;
+      for (r = 0; r < 3; r++) for (c = 0; c < 8; c++) {
+        g.fillStyle = seats[(c + r + track.id) % seats.length];
+        g.fillRect(-64 + c * 17, 10 + r * 10, 10, 7);
+      }
+      g.fillStyle = toy ? '#e23b3b' : '#6d4cff';
+      g.fillRect(-80, -8, 160, 12);
+      var cols = ['#ff3a3a', '#ffe14a', '#3ec6ff'];
+      for (c = 0; c < 3; c++) {
+        var fx = -48 + c * 48;
+        g.strokeStyle = '#f7f7f7'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(fx, -8); g.lineTo(fx, -30); g.stroke();
+        g.fillStyle = cols[c];
+        g.beginPath(); g.moveTo(fx, -30); g.lineTo(fx + 14, -22); g.lineTo(fx, -14); g.fill();
+      }
+      g.restore();
+    } else {
+      // Flags alone, closer in, when a grandstand would leave the grass.
+      var cols2 = ['#ff3a3a', '#ffe14a', '#3ec6ff'], fi;
+      for (fi = 0; fi < 3; fi++) {
+        var fp = TK.pointAt(track, 40 + fi * 28);
+        x = fp.x + fp.nx * (track.width * 0.5 + 26);
+        y = fp.y + fp.ny * (track.width * 0.5 + 26);
+        if (!onGrass(track, x, y, 4)) continue;
+        g.strokeStyle = '#f7f7f7'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - 26); g.stroke();
+        g.fillStyle = cols2[fi];
+        g.beginPath(); g.moveTo(x, y - 26); g.lineTo(x + 14, y - 18); g.lineTo(x, y - 10); g.fill();
+      }
+    }
+    var other = best ? -best.side : 1, i, q, si, placed;
+    for (i = 0; i < 5; i++) {
+      q = TK.pointAt(track, 150 + i * 42);
+      placed = false;
+      for (si = 0; si < 2 && !placed; si++) {
+        side = other * (si ? -1 : 1);
+        x = q.x + q.nx * side * (track.width * 0.5 + 18);
+        y = q.y + q.ny * side * (track.width * 0.5 + 18);
+        if (onGrass(track, x, y, 4)) { cone(g, x, y); placed = true; }
+      }
+    }
+    // One extra stack and a bush opposite the grandstand, still off the kerb.
+    q = TK.pointAt(track, track.total * 0.55);
+    x = q.x + q.nx * (track.width * 0.5 + 40);
+    y = q.y + q.ny * (track.width * 0.5 + 40);
+    if (onGrass(track, x, y, 16)) tyres(g, x, y);
+    x = q.x - q.nx * (track.width * 0.5 + 36 + rnd() * 10);
+    y = q.y - q.ny * (track.width * 0.5 + 36);
+    if (onGrass(track, x, y, 16)) bush(g, x, y, 1, toy);
   }
 
   function star(g, x, y, r0, r1, n, color) {
@@ -240,6 +371,7 @@
     g.rotate(k.ang);
     if (ghost) g.globalAlpha = 0.35;
     if (k.finished) g.globalAlpha = 0.75;
+    g.scale(1.25, 1.25);
     if (k.hopT > 0) g.translate(0, -10 - Math.sin((0.5 - k.hopT) * 8) * 6);
     if (k.boostT > 0) {
       g.fillStyle = k.boostMul > 1.4 ? '#c86bff' : k.boostMul > 1.28 ? '#ff9a1f' : '#7ecbff';
@@ -274,17 +406,25 @@
 
   function marker(g, k, label) {
     g.save();
-    g.translate(k.x, k.y - 38 - Math.sin(performance.now() / 200) * 3);
+    g.translate(k.x, k.y - 58 - Math.sin(performance.now() / 200) * 3);
+    g.lineJoin = 'round';
+    g.lineWidth = 3;
+    g.strokeStyle = '#fff';
     g.fillStyle = k.color;
-    g.beginPath(); g.moveTo(0, 10); g.lineTo(-8, -4); g.lineTo(8, -4); g.fill();
-    g.font = '700 16px Fredoka';
-    g.direction = 'rtl';
+    g.beginPath();
+    g.moveTo(0, 16);
+    g.lineTo(-13, 1); g.lineTo(-6, 1); g.lineTo(-6, -12);
+    g.lineTo(6, -12); g.lineTo(6, 1); g.lineTo(13, 1);
+    g.closePath();
+    g.fill(); g.stroke();
+    g.font = '700 18px Fredoka';
+    g.direction = 'ltr';
     g.textAlign = 'center';
-    g.fillStyle = '#fff';
-    g.strokeStyle = '#1a1230';
     g.lineWidth = 4;
-    g.strokeText(label, 0, -8);
-    g.fillText(label, 0, -8);
+    g.strokeStyle = '#1a1230';
+    g.strokeText(label, 0, -16);
+    g.fillStyle = k.color;
+    g.fillText(label, 0, -16);
     g.restore();
   }
 
@@ -426,8 +566,8 @@
     });
     if (view.parts) view.parts(ctx);
     // Who is who.
-    if (race.karts[0] && !race.karts[0].cpu) marker(ctx, race.karts[0], '١');
-    if (race.karts[1] && !race.karts[1].cpu) marker(ctx, race.karts[1], '٢');
+    if (race.karts[0] && !race.karts[0].cpu) marker(ctx, race.karts[0], 'P1');
+    if (race.karts[1] && !race.karts[1].cpu) marker(ctx, race.karts[1], 'P2');
     if (view.play && view.count == null) {
       hud(ctx, race, 0);
       if (race.karts[1] && !race.karts[1].cpu) hud(ctx, race, 1);
