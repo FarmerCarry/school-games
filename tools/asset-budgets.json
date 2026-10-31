@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "portalBytes": 398000,
+  "portalBytes": 406000,
   "teacherBytes": 98000,
   "gameHtmlBytes": {
     "air-hockey": 117000,
@@ -11,6 +11,7 @@
     "bubble-bop": 116000,
     "cake-guards": 86000,
     "candy-rope": 113000,
+    "chaos-island": 118000,
     "connect-four": 57000,
     "critter-mart": 163000,
     "dino-3d": 60000,
@@ -45,5 +46,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5450000
+  "precacheBytes": 5578000
 }

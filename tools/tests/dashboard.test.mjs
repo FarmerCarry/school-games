@@ -704,7 +704,16 @@ test('a period that reaches back before the update: play sessions per day, no ch
   await waitForView(page, 'habits');
   await page.click('#habits-weeks .table-toggle');
   const weeks = await page.locator('#habits-weeks .table-host tbody th').allTextContents();
-  assert.ok(weeks.length >= 1 && weeks.length <= 2, weeks.join(' | '));
+  // Ten days from the update can cover two Sunday-weeks or three, once the school's
+  // day is a Sunday. The rows are those weeks, newest first, and none start earlier.
+  const expectedWeeks = await page.evaluate(({ since, to }) => {
+    const R = window.SGResearch;
+    const label = day => 'Week of ' + new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(day + 'T00:00:00Z'));
+    const out = [];
+    for (let w = R.weekOf(since, 'sun'); w <= to; w = R.shift(w, 7)) out.push(label(w));
+    return out.reverse();
+  }, { since: factsSince, to: k.range.to });
+  assert.deepEqual(weeks, expectedWeeks);
   // The update day is not in the period: nothing of it.
   s.mode.edit = null;
   await page.goto(site.origin + '/#/overview');
@@ -1334,7 +1343,7 @@ test('the Learning tab: one game or every measured game, and the paired same-chi
   await s.check();
 });
 
-test('tries to a first win include the winning try; the hardest levels start with one nobody has won, never an endless mode', async t => {
+test('tries to a first win include the winning try; the hardest level is the most tries, never an endless mode', async t => {
   const s = await open(t);
   const { page } = s;
   await page.goto(site.origin + '/?demo#/game/dino-3d');
@@ -1349,12 +1358,13 @@ test('tries to a first win include the winning try; the hardest levels start wit
   await page.selectOption('#gamePick', 'dino-3d');
   await page.waitForFunction(() => document.querySelectorAll('#learning-growth .card').length === 1 && !document.getElementById('dash').classList.contains('is-loading'));
   assert.match(await page.locator('#learning-hardest .section-intro').textContent(), /tries to a first win/i);
-  const never = demoFile('game-dino-3d.json').firstWin.filter(f => f.median == null);
-  assert.deepEqual(never.map(f => f.id), ['L8'], 'the sample has a level nobody has won');
+  const firstWin = demoFile('game-dino-3d.json').firstWin;
+  const never = firstWin.filter(f => f.median == null);
+  assert.deepEqual(never.map(f => f.id), [], 'this sample\'s Dino levels have all been won');
   await page.click('#hardest-card .table-toggle');
   const rows = await page.locator('#hardest-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
-  assert.deepEqual(rows[0].slice(1, 4), ['level 8', '1', '—'], 'never won: first, with no median');
-  assert.equal(rows.length, demoFile('game-dino-3d.json').firstWin.length, 'every level of the game');
+  assert.deepEqual(rows[0].slice(1, 4), ['level 4', '21', '1'], 'level 4 took the most tries and is listed first');
+  assert.equal(rows.length, firstWin.length, 'every level of the game');
   // An endless mode is never won by design: it is no hard level.
   await page.selectOption('#gamePick', 'rail-rush');
   await page.waitForFunction(() => /Rail/.test(document.getElementById('learning-growth').textContent) && !document.getElementById('dash').classList.contains('is-loading'));

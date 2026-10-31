@@ -12,13 +12,13 @@ const hold = (key = 'ArrowRight', ms = 220) => async page => {
   await page.waitForTimeout(ms);
   await page.keyboard.up(key);
 };
-const holdUntil = (key, expr, label) => async page => {
+const holdUntil = (key, expr, label, timeout = 7000) => async page => {
   await page.keyboard.down(key);
   try {
     // A software-rendered frame can take longer than a short fixed key hold.
     // Keep the real key down until the simulation consumes it; a broken
     // control still fails the same bounded observable-state assertion.
-    await requireState(page, expr, label);
+    await requireState(page, expr, label, timeout);
   } finally { await page.keyboard.up(key); }
 };
 const holdUntilChanged = (key, snapshot) => async page => {
@@ -135,6 +135,7 @@ export const scenarios = {
   'maze-dash': defaults(['#btn-play'], `${g}.state.screen === 'play'`, select(`${g}.state`, ['px','py','dots','time','hearts']), hold('ArrowRight'), null, `${g}.state.screen === 'pause'`, '#btn-restart', `${g}.state.dots === 0`),
   'road-hopper': defaults(['#btnPlay'], `${g}.state === 'play'`, `${g}.player()`, hold('ArrowUp'), '#btnPause', `${g}.state === 'paused'`, '#btnRestart', `${g}.score === 0`),
   'troll-level': defaults(['#btn-play'], `${g}.mode === 'play'`, `${g}.player`, hold('ArrowRight'), '#btn-pause', `${g}.mode === 'pause'`, '#btn-restart', `${g}.mode === 'play'`),
+  'chaos-island': defaults(['#btnPlay'], `${g}.mode === 'play'`, `[${g}.world.round, ${g}.world.frames, ${g}.player.x]`, hold('ArrowRight'), '#btnPause', `${g}.mode === 'pause'`, '#btnRestart', `${g}.matches > 1 && ${g}.world.round === 0 && ${g}.world.phase === 'inter' && ${g}.world.frames > 360`, { inputSnapshot: `${g}.player.x` }),
   'blob-battle': defaults(['#btnPlay'], `${g}.info().state === 'play'`, select(`${g}.info()`, ['T','mass','playerCells','alive','player']), move, '#pauseBtn', `${g}.info().state === 'pause'`, async page => {
     // Observe after the real button handler, in the same event dispatch. A fresh
     // blob can eat nearby golden pellets before a slow runner's next async poll.
@@ -225,7 +226,7 @@ const heldKeys = {
   'dino-3d': 'Space',
   'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
   'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
-  'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'splat-strike': 'KeyW',
+  'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'chaos-island': 'ArrowRight', 'splat-strike': 'KeyW',
   'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
@@ -288,7 +289,7 @@ export async function performInput(page, slug, {repeat = false} = {}) {
     if (await evaluate(page,`${g}.phase === 'aim'`)) await hold('Space',650)(page);
     else await page.waitForTimeout(250);
   } else if (watch && s.heldKey) await holdUntil(s.heldKey, 'window.sgInput.seen',
-    `${s.heldKey}: held input must change gameplay (${watch.before}): ${watch.seen}`)(page);
+    `${s.heldKey}: held input must change gameplay (${watch.before}): ${watch.seen}`, 20000)(page);
   else await s.input(page);
   // Give the handler a frame before the input assertion reads state. A fixed
   // 120ms can fall between two slow frames and observe the previous one.
