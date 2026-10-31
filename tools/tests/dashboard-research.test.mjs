@@ -3,7 +3,7 @@
 // small-sample rule, labels, the code search and the teacher page's check character; the
 // research sentences of insights.js in both languages; the game facts the tabs need
 // (names.js: categories, players, input and what each game's code reports for every
-// catalog game; scores.js: what the score means in each of the 28 score games); and the
+// catalog game; scores.js: what the score means in each of the 29 score games); and the
 // research download: dictionary.js (its columns equal server/export.mjs COLUMNS, and
 // docs/RESEARCH_DATA.md is its own output), zip.js and export.js. Pure Node: the
 // dashboard files are plain browser scripts, loaded in a vm context.
@@ -343,11 +343,11 @@ test('names.js carries every catalog game\'s categories, players and input, and 
     for (const c of info.cats) assert.ok(Object.hasOwn(w.SG_CATEGORIES, c), g.slug + ': ' + c);
     for (const flag of ['dda', 'track', 'tutorial']) assert.ok(info[flag] === 0 || info[flag] === 1, g.slug + ' ' + flag);
   }
-  // What the games' own code reports (docs/RESEARCH_TELEMETRY_SPEC.md §B.5): 3 games adapt
+  // What the games' own code reports (docs/RESEARCH_TELEMETRY_SPEC.md §B.5): 4 games adapt
   // their difficulty and count hits and reaction times, 25 show a tutorial.
   const flagged = flag => Object.keys(w.SG_GAME_INFO).filter(slug => w.SG_GAME_INFO[slug][flag]).sort();
-  assert.deepEqual(flagged('dda'), ['bubble-bop', 'dino-3d', 'road-hopper']);
-  assert.deepEqual(flagged('track'), ['bubble-bop', 'dino-3d', 'road-hopper']);
+  assert.deepEqual(flagged('dda'), ['balloon-blast', 'bubble-bop', 'dino-3d', 'road-hopper']);
+  assert.deepEqual(flagged('track'), ['balloon-blast', 'bubble-bop', 'dino-3d', 'road-hopper']);
   assert.equal(flagged('tutorial').length, 25);
   assert.deepEqual(Object.keys(w.SG_CATEGORIES), site.CATEGORIES.map(c => c.id));
   for (const c of site.CATEGORIES) {
@@ -357,7 +357,7 @@ test('names.js carries every catalog game\'s categories, players and input, and 
   }
 });
 
-test('scores.js says what the score means in exactly the 28 games that pass one', () => {
+test('scores.js says what the score means in exactly the 29 games that pass one', () => {
   const scores = loadScripts('scores.js').SG_SCORES;
   // The games' own code: a Kit.stats.end(result, score) call with a second argument
   // (a comma at the call's own depth, so a condition in parentheses counts as one argument).
@@ -377,7 +377,7 @@ test('scores.js says what the score means in exactly the 28 games that pass one'
     return files.some(f => twoArguments(fs.readFileSync(path.join(dir, f), 'utf8')));
   };
   const scoring = site.GAMES.map(g => g.slug).filter(passes).sort();
-  assert.equal(scoring.length, 28);
+  assert.equal(scoring.length, 29);
   assert.deepEqual(Object.keys(scores).sort(), scoring);
   assert.deepEqual(site.GAMES.map(g => g.slug).filter(s => !scoring.includes(s)).sort(),
     ['block-world', 'connect-four', 'critter-mart', 'pizza-clicker', 'tank-splat', 'tic-tac-toe']);
