@@ -833,3 +833,45 @@ up to the next 1,000 bytes plus 1,000. The portal's limit stays.
 | Offline precache | 5,330,782 | 5,334,204 | 5,332,000 | 5,336,000 |
 
 No game page changes, and no request is added to any page.
+
+## Resumed offline installs and automatic update adoption, 30 October 2026
+
+A failed or cut-off install of the offline cache now keeps the files it verified, and an
+open portal tab moves to a newer verified build by itself on a quiet home screen
+(README, docs/ARCHITECTURE.md "Offline cache and updates"). Measured with the Linux
+minified build, against main at `b713f12`:
+
+* **The portal** grows by 1,216 bytes, from 396,335 to 397,551 of 398,000: +872 for
+  `js/offline.js` (the quiet-screen plan, its timer, the once-per-tab memory in
+  sessionStorage and in memory, the hourly worker check and the one on reconnecting)
+  and +344 for `js/site.js` (`SGUpdateQuiet()`, the pointer-move time and the idle
+  reset of a half-made player). The added work is one timer while a verified update
+  waits, one passive `pointermove` listener that stores a number, and at most one
+  `registration.update()` an hour when the tab comes back into view, plus one per
+  `online` event.
+* **The offline cache** grows by the same 1,216 bytes, to 5,307,944 of 5,308,000.
+* **The worker** (`sw.js`, not precached) no longer deletes its own partial cache; it
+  marks it with an empty `…|partial` cache until it is complete and deletes the
+  marked copies of other versions after copying from them, so a PC keeps one partial
+  copy at most. A resumed install hashes the files the earlier attempt saved before
+  skipping them, a disk read of at most the precache size, and looks up every file
+  once more before it takes over.
+
+Both measurements stay under their limits, so no limit changes; the portal keeps 449
+bytes and the offline cache 56, and the next change to either will need the rule above.
+
+## Both changes together, 31 October 2026
+
+Merging the delivery change (portal 399,902 of 400,000) with the offline change (+1,216
+bytes for `js/offline.js` and `js/site.js`) puts the portal 1,118 bytes over its limit.
+The teacher page and the offline cache stay within theirs. Measured with the Linux
+minified build and the school's `SG_TELEMETRY_URL`:
+
+| Measurement | Bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: |
+| Portal | 401,118 | 400,000 | 403,000 |
+| Teacher page | 120,581 | 122,000 | 122,000 |
+| Offline precache | 5,335,420 | 5,336,000 | 5,336,000 |
+
+The portal's new limit follows the rule above: the measured size rounded up to the next
+1,000 bytes plus 1,000. Nothing beyond the two changes is added to any page.

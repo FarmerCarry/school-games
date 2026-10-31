@@ -218,15 +218,30 @@ window, including Shift+Tab back to the portal and leaving fullscreen.
 
 The fast site's footer shows whether every file is verified for offline use.
 “جاهز دون إنترنت” means the active version is complete; an incomplete installation
-or cleared cache offers Retry. Keep the first visit open until it is ready. A
-downloaded folder instead reports that it is running locally. Each file's bytes are
-hashed when it is cached; later visits only confirm that every verified file is
-still there, so slow disks are not re-read on every visit. Retry hashes them again.
+or cleared cache offers Retry. Keep the first visit open until it is ready. If a
+download stops part-way (a slow or unreliable school line), the files already
+verified stay saved: the next visit or page of the site, reconnecting, Retry (shown
+while no complete version is saved) or an open tab's hourly check downloads only the
+rest, and an incomplete copy is never used. A downloaded folder instead reports that it is
+running locally. Each file's bytes are hashed when it is cached; later visits only
+confirm that every verified file is still there, so slow disks are not re-read on
+every visit. Retry and a resumed download hash them again.
 
-When a newer complete version is cached, returning to the games list offers
-“حدّث الصفحة الآن”. Refresh is explicit and affects only that tab; running or paused
-games, game menus and the classroom handoff keep their session. The action verifies
-readiness again and defers if a game opened during that check. It also works offline.
+When a newer complete version is cached, an open portal tab switches to it by itself
+while nobody is using it: on the home screen, with no game open, the classroom timer
+off, no player chosen (a guest) and no new player half made, after about 75 seconds
+without a key press, click, scroll or mouse movement. A chosen player waits for the
+hand-over, and a new player half made and left goes back to the list after 20 minutes.
+Coming back to the tab or the 20-minute idle hand-over (which closes a game) after
+such a pause switches at once. Running or paused games, game menus, the classroom
+handoff and the other screens (a category, favorites, search) are never reloaded by
+themselves. Any screen also offers “حدّث الصفحة الآن” for whoever wants the update at
+once, except while a game is open or the classroom timer runs or its handoff shows;
+the button affects only that tab. Both check the new version once more first, give
+way if a game opens or someone starts using the page during that check, and work
+offline. Each tab switches by itself once per version. A tab left open also asks the
+site for a newer version when it comes back into view (at most once an hour) and on
+reconnecting.
 The first installation never shows an update prompt. A game-only update includes the
 changed game and the portal's new build identity. Pages opened before this feature
 need an ordinary reload/navigation to acquire the prompt.

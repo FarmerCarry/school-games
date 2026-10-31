@@ -65,12 +65,47 @@ js/profiles.js           SGProfiles — picture profiles without names, age band
 js/telemetry.js          SGTelemetry — the ONLY network sender: batches to the ingest URL
 js/stats.js              SGStats    — local play statistics v1 (unchanged format)
 js/site.js               portal shell, iframe host, routes, classroom tools
+js/offline.js            offline status and updates of the fast build (sw.js from tools/build.mjs)
 server/                  ingest + query service (Node ≥ 22, zero dependencies)
 ```
 
 Games never touch storage outside `Kit.store`, never use the network, and talk to
 the portal only through `postMessage` via Kit. The portal owns profiles, XP,
 statistics and the network.
+
+### Offline cache and updates (fast build only)
+
+The generated `sw.js` keeps every file of one build in the cache
+`sg-v2-<scope>|<version>`, each body checked against its SHA-256 prefix (`FILES`).
+
+* **Installs resume.** A failed or cut-off install keeps the verified files it saved
+  under the new version's name. The next attempt (the next page of the site, the
+  `online` event, the hourly check of an open tab, Retry while no complete version is
+  active, or a newer version copying its unchanged files) hashes them again and
+  downloads only the rest, so a 5 MB update on a slow school line is not restarted from zero. The
+  worker activates only when every file is in its cache, and only the active worker of
+  a version reads that cache, so a partial copy is never reported ready or served.
+  An empty cache `…|<version>|partial` marks a copy as partial until its install is
+  complete (never one shared with a surviving active worker of that version). Each
+  install first copies what it can from the caches on the PC, then deletes the marked
+  copies of other versions, so a PC whose installs keep failing (a filter blocking one
+  game page) holds the active version and one partial copy at most, not one more per
+  publish. Activation deletes the scope's other caches, partial ones included.
+* **Open tabs adopt a newer build by themselves.** When a newer complete version
+  controls an open portal, `js/offline.js` reloads that tab only while `SGUpdateSafe()`
+  holds (no game frame or play route, no classroom timer or its hand-over) and
+  `SGUpdateQuiet()` (js/site.js) reports the home screen with the "who's playing?"
+  strip in its list, no player chosen, and at least 75 s without a key press, click,
+  wheel, pointer move or engaged play; the 20-minute idle hand-over is not use. With a
+  player chosen it waits for the hand-over (the button, or the idle one after 20
+  minutes), since a reload ends that child's telemetry session and starts another; each
+  automatic reload still ends one guest session with `u` and starts another. It looks when the page
+  becomes visible, when the screen changes and on a timer, verifies the version again
+  right before reloading, and tries once per version and tab (sessionStorage
+  `sg:site:adopted`, and in memory for a sessionStorage that cannot be written), so a
+  mismatched build cannot loop. The «حدّث الصفحة الآن» button shows whenever
+  `SGUpdateSafe()` holds. A tab left open calls `registration.update()` when it becomes
+  visible, at most once an hour, and on every `online` event.
 
 ### Byte policy
 
@@ -266,9 +301,10 @@ Every sound is a one-shot under 1.5 s. Juice never loops and has no music API.
 * **Idle hand-over** (`js/site.js`): a tab left open would give the next class the last
   child's profile. After **20 minutes** with no key press, click or wheel on the portal and
   no `sg:stats` with engaged time (`e > 0`) from the open game, the player becomes a guest;
-  an open game goes back to home, where the "who's playing?" strip has focus. A classroom
-  timer that is still running is kept; the hand-over overlay of one that ran out is
-  cleared. The check runs on the classroom timer's 1-second tick, also when no timer is set.
+  an open game goes back to home, where the "who's playing?" strip has focus. A new
+  player half made (or the remove step) left on the strip goes back to its list then,
+  for a guest too. A classroom timer that is still running is kept; the hand-over
+  overlay of one that ran out is cleared. The check runs on the classroom timer's 1-second tick, also when no timer is set.
 * Storage `sg:site:profiles`, the first 12 profiles:
   `{ v: 1, seq, list: [{ k: 'p1', a: animal, c: colour, b: band, xp, lv, d0: day created,
   dl: last day played, g: { <slug>: visits } }] }` (days are local day numbers).

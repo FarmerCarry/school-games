@@ -39,7 +39,7 @@ function worker() {
       async has(n) { return exists && n === name; },
       async keys() { return exists ? [name] : []; },
       async open() { opened++; exists = true; return cache; },
-      async delete(n) { if (n === name) exists = false; return true; }
+      async delete(n) { if (n === name) { exists = false; entries.clear(); } return true; }
     },
     self: { registration: { scope, async update() { updates++; } },
       async skipWaiting() { activations++; }, addEventListener(name, fn) { handlers[name] = fn; } },
@@ -100,7 +100,7 @@ test('failed same-version installation preserves the active cache and later reco
   assert.equal(w.activations, 1);
 });
 
-test('failed new installation settles concurrent writes and removes its partial cache', async () => {
+test('a failed new installation settles concurrent writes and keeps the files it verified', async () => {
   const w = worker();
   let releaseFont, fontStarted, finished = false;
   const started = new Promise(resolve => { fontStarted = resolve; });
@@ -114,11 +114,58 @@ test('failed new installation settles concurrent writes and removes its partial 
   const rejected = assert.rejects(install, /offline/);
   await started;
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(finished, false, 'cleanup waits for the in-flight writer');
-  assert.equal(w.exists, true);
+  assert.equal(finished, false, 'the install waits for the in-flight writer');
   releaseFont();
   await rejected;
-  assert.equal(w.exists, false, 'a new partial cache is removed');
+  assert.equal(w.activations, 0, 'a partial copy never takes over');
+  assert.equal(w.exists, true, 'a slow line does not start again from zero');
+  assert.deepEqual([...w.entries.keys()].sort(), [w.scope + 'index.html', w.scope + 'shared/font.woff2']);
+  assert.equal((await w.status()).ready, false, 'and it is never reported as ready');
+});
+
+test('the next install downloads only the missing files and then activates', async () => {
+  const w = worker();
+  const failing = new Set(['games/demo/index.html', 'shared/font.woff2']);
+  w.setFetch(async (p, body) => {
+    if (failing.has(p)) throw new Error('connection reset');
+    return new Response(body);
+  });
+  await assert.rejects(w.install(), /connection reset/);
+  assert.equal(w.activations, 0);
+  failing.delete('shared/font.woff2');
+  await assert.rejects(w.install(), /connection reset/, 'a second cut-off attempt still saves what it can');
+  assert.equal(w.activations, 0);
+  assert.equal(w.entries.size, 2);
+  failing.clear();
+  w.requests.length = 0;
+  await w.install();
+  assert.deepEqual(w.requests.map(url => new URL(url).pathname), ['/school-games/games/demo/index.html'], 'only the missing file');
+  assert.equal(w.activations, 1, 'complete: it takes over');
+  const ready = await w.status();
+  assert.equal(ready.ready, true);
+  assert.equal(ready.count, 3);
+});
+
+test('a resumed install downloads a saved file again when its label or bytes are wrong', async () => {
+  const w = worker();
+  w.seed('index.html', 'portal bytes cut off half-way');
+  w.entries.set(w.scope + 'shared/font.woff2', new Response('font', { headers: { 'x-sg-hash': hash('older font') } }));
+  w.seed('games/demo/index.html');
+  w.entries.set(w.scope + 'games/demo/index.html', { headers: new Headers({ 'x-sg-hash': hash('game') }),
+    clone() { return this; }, arrayBuffer() { return Promise.reject(new TypeError('unreadable')); } });
+  await w.install();
+  assert.deepEqual(w.requests.map(url => new URL(url).pathname).sort(),
+    ['/school-games/games/demo/index.html', '/school-games/index.html', '/school-games/shared/font.woff2']);
+  assert.equal(w.activations, 1);
+  assert.equal((await w.status()).ready, true, 'every body is hashed and correct');
+});
+
+test('an install whose saved copy is lost before the end does not take over', async () => {
+  const w = worker();
+  let reads = 0;
+  // One look per file while downloading; the browser evicts the font before the last look.
+  w.setMatch(async () => { if (++reads === 4) w.entries.delete(w.scope + 'shared/font.woff2'); });
+  await assert.rejects(w.install(), /incomplete shared\/font\.woff2/);
   assert.equal(w.activations, 0);
 });
 
@@ -250,4 +297,87 @@ test('a failing scan settles outstanding reads before a queued repair recovers',
   assert.equal(w.opened, 2);
   assert.ok(w.peakMatches <= 4);
   assert.equal((await w.status(false, w.scope, true)).ready, true, 'the lock is released after recovery');
+});
+
+// CacheStorage shared by the workers of several versions of one deployment, in creation
+// order. A handle of a deleted cache writes nowhere, as in the browser.
+function cacheStorage() {
+  const stores = new Map();
+  const caches = {
+    async has(name) { return stores.has(name); },
+    async keys() { return [...stores.keys()]; },
+    async open(name) {
+      if (!stores.has(name)) stores.set(name, new Map());
+      const entries = stores.get(name);
+      return {
+        async match(url) { return entries.get(String(url))?.clone(); },
+        async put(url, response) { entries.set(String(url), response.clone()); },
+        async keys() { return [...entries.keys()].map(url => ({ url })); },
+        async delete(request) { return entries.delete(String(request.url || request)); }
+      };
+    },
+    async delete(name) { return stores.delete(name); }
+  };
+  return { stores, caches, names: () => [...stores.keys()].map(name => name.slice(name.indexOf('|') + 1)) };
+}
+// One published version: its sw.js run against the shared storage. blocked: paths the
+// school's filter answers with its own page.
+function published(storage, version, bodies, blocked = new Set()) {
+  const scope = 'https://games.test/school-games/', handlers = {}, requests = [];
+  const files = Object.fromEntries(Object.entries(bodies).map(([p, b]) => [p, hash(b)]));
+  vm.runInContext(generators.SW_SOURCE(version, files), vm.createContext({
+    URL, Response, Headers, Uint8Array, Set, crypto: crypto.webcrypto, location: { origin: 'https://games.test' }, caches: storage.caches,
+    self: { registration: { scope, async update() {} }, clients: { async claim() {} }, async skipWaiting() {},
+      addEventListener(name, fn) { handlers[name] = fn; } },
+    async fetch(url) {
+      const p = new URL(url).pathname.slice('/school-games/'.length);
+      requests.push(p);
+      return blocked.has(p) ? new Response('blocked by the school filter', { status: 403 }) : new Response(bodies[p]);
+    }
+  }));
+  const run = type => { let task; handlers[type]({ waitUntil(value) { task = value; } }); return task; };
+  return { requests, install: () => run('install'), activate: () => run('activate') };
+}
+
+test('a failing install of a newer version takes over an older partial copy and deletes it, so they never pile up', async () => {
+  const storage = cacheStorage();
+  const v1 = published(storage, 'v1', { 'index.html': 'portal 1', 'games/a/index.html': 'a 1', 'games/b/index.html': 'b 1' });
+  await v1.install(); await v1.activate();
+  const blocked = new Set(['games/b/index.html']);
+  const v2 = published(storage, 'v2', { 'index.html': 'portal 2', 'games/a/index.html': 'a 2', 'games/b/index.html': 'b 2' }, blocked);
+  await assert.rejects(v2.install(), /HTTP 403/);
+  assert.deepEqual(storage.names(), ['v1', 'v2|partial', 'v2'], 'the failed install keeps its verified files, marked as partial');
+  // Another evening publish while the filter still blocks game b: only a changed.
+  const v3 = published(storage, 'v3', { 'index.html': 'portal 2', 'games/a/index.html': 'a 3', 'games/b/index.html': 'b 2' }, blocked);
+  await assert.rejects(v3.install(), /HTTP 403/);
+  assert.deepEqual(v3.requests.sort(), ['games/a/index.html', 'games/b/index.html'], 'the portal saved by the v2 attempt is copied, not downloaded again');
+  assert.deepEqual(storage.names(), ['v1', 'v3|partial', 'v3'], 'the partial v2 copy is gone: the active version and one partial copy at most');
+  assert.equal(storage.stores.get([...storage.stores.keys()][0]).size, 3, 'the active version is untouched');
+  blocked.clear();
+  const again = published(storage, 'v3', { 'index.html': 'portal 2', 'games/a/index.html': 'a 3', 'games/b/index.html': 'b 2' });
+  await again.install();
+  assert.deepEqual(again.requests, ['games/b/index.html'], 'the next attempt downloads only what is missing');
+  assert.deepEqual(storage.names(), ['v1', 'v3'], 'a complete install is no longer marked partial');
+  await again.activate();
+  assert.deepEqual(storage.names(), ['v3']);
+});
+
+test('a failed reinstall that shares the active version\'s cache never marks it, so no other install deletes it', async () => {
+  const storage = cacheStorage(), bodies = { 'index.html': 'portal 1', 'games/a/index.html': 'a 1', 'games/b/index.html': 'b 1' };
+  const v1 = published(storage, 'v1', bodies);
+  await v1.install(); await v1.activate();
+  const active = storage.stores.get([...storage.stores.keys()][0]);
+  active.delete([...active.keys()].find(url => url.endsWith('games/b/index.html'))); // evicted
+  await assert.rejects(published(storage, 'v1', bodies, new Set(['games/b/index.html'])).install(), /HTTP 403/);
+  assert.deepEqual(storage.names(), ['v1']);
+  await assert.rejects(published(storage, 'v2', { ...bodies, 'games/a/index.html': 'a 2' }, new Set(['games/b/index.html'])).install(), /HTTP 403/);
+  assert.deepEqual(storage.names(), ['v1', 'v2|partial', 'v2'], 'the shared active cache stays');
+  assert.equal(active.size, 2);
+});
+
+test('an install that cannot even mark its copy as partial stops before saving anything', async () => {
+  const storage = cacheStorage(), open = storage.caches.open;
+  storage.caches.open = async name => { if (name.endsWith('|partial')) throw new DOMException('full', 'QuotaExceededError'); return open(name); };
+  await assert.rejects(published(storage, 'v1', { 'index.html': 'portal 1' }).install(), /full/);
+  assert.deepEqual(storage.names(), [], 'no unmarked partial copy is left behind');
 });

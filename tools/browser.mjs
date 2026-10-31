@@ -8,6 +8,16 @@ const GRAPHICS_ARGS = [
 ];
 
 export async function launchChromium(options = {}) {
+  return launch(settings => playwright.chromium.launch(settings), options);
+}
+
+// A browser profile kept in userDataDir, like a school PC's: service workers and their
+// caches survive closing the browser. Returns the BrowserContext (close it to quit).
+export async function launchPersistentChromium(userDataDir, options = {}) {
+  return launch(settings => playwright.chromium.launchPersistentContext(userDataDir, settings), options);
+}
+
+async function launch(start, options) {
   const { args = [], graphics = process.env.SG_GRAPHICS || 'software',
     channel = process.env.PLAYWRIGHT_CHANNEL || 'chromium', ...rest } = options;
   if (!['software', 'native'].includes(graphics)) {
@@ -20,7 +30,7 @@ export async function launchChromium(options = {}) {
     throw new Error(`${overrideName} does not exist: ${executablePath}. Set it to an installed Chromium executable or unset it and run npm run browsers:install.`);
   }
   try {
-    return await playwright.chromium.launch({
+    return await start({
       // Exercise desktop Chrome's renderer through its new headless mode.
       ...(executablePath ? {} : { channel }),
       ...rest,
