@@ -169,9 +169,11 @@ What can be stored is decided here, not only by what the portal chooses to send.
   keeps each batch until it sees the server's answer, so the last batch of a page that
   closed goes again from the PC's next page, often the next day: for 8 days the server
   keeps the codes themselves with the time of the forget (the setting `forgotten`, which
-  the dashboard never shows) and drops every batch of theirs from a session that started
-  before it, so the student does not come back. A later session of the same code (its
-  profile stays on the PC) is new play and is kept. On Cloudflare, another Worker
+  the dashboard never shows; the 5-minute cron then removes them), drops every batch of
+  theirs from a session that started before it, and drops every mark of any session that
+  names one of them (the removal of a profile, or an older code, which a PC may tell
+  again or late), so the student does not come back. A later session of the same code
+  (its profile stays on the PC) is new play and is kept. On Cloudflare, another Worker
   instance learns of the forget when it next reads the settings, within 5 minutes; until
   then it may still store such a batch (forget again to remove it). The
   school-wide daily counts, in which no child can be found, keep the play already
@@ -984,8 +986,8 @@ Body `{"u": "<code>"}`: forgets the student of that code, with every code linked
 { "v": 1, "removed": { "codes": 2, "sessions": 14, "visits": 41, "rounds": 160, "marks": 30 }, "clock": { ... } }
 ```
 
-A code the server does not hold answers zeros (its play from before the forget is still
-dropped if a PC sends it within 8 days).
+A code the server does not hold answers zeros (for 8 days its play from before the forget
+is still dropped if a PC sends it, and so is every mark naming it).
 
 #### `POST /v1/admin/link` and `DELETE /v1/admin/link?u=`
 
@@ -1038,7 +1040,8 @@ counts lose that student too.
   stays within D1's statement limit); the daily purge deletes the students and PCs last
   seen before that cutoff, with their PC lists, attempt counters and links (until then a
   period the rollups hold lists its students with their bands, days, PCs and links, and
-  a student's page and the cohorts answer as before). Lowering the retention starts at the next purge
+  a student's page and the cohorts answer as before). The codes a forget keeps go after 8
+  days, deleted by the 5-minute cron when it has no day to roll. Lowering the retention starts at the next purge
   (Node: the next start). To erase everything on Node, stop the server and delete the database
   files; on Cloudflare, delete the Worker and its D1 database `school-games-telemetry`
   in the Cloudflare dashboard.
