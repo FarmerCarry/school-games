@@ -343,11 +343,11 @@ test('names.js carries every catalog game\'s categories, players and input, and 
     for (const c of info.cats) assert.ok(Object.hasOwn(w.SG_CATEGORIES, c), g.slug + ': ' + c);
     for (const flag of ['dda', 'track', 'tutorial']) assert.ok(info[flag] === 0 || info[flag] === 1, g.slug + ' ' + flag);
   }
-  // What the games' own code reports (docs/RESEARCH_TELEMETRY_SPEC.md §B.5): 3 games adapt
+  // What the games' own code reports (docs/RESEARCH_TELEMETRY_SPEC.md §B.5): 4 games adapt
   // their difficulty and count hits and reaction times, 25 show a tutorial.
   const flagged = flag => Object.keys(w.SG_GAME_INFO).filter(slug => w.SG_GAME_INFO[slug][flag]).sort();
-  assert.deepEqual(flagged('dda'), ['bubble-bop', 'dino-3d', 'road-hopper']);
-  assert.deepEqual(flagged('track'), ['bubble-bop', 'dino-3d', 'road-hopper']);
+  assert.deepEqual(flagged('dda'), ['bubble-bop', 'dino-3d', 'road-hopper', 'turbo-karts']);
+  assert.deepEqual(flagged('track'), ['bubble-bop', 'dino-3d', 'road-hopper', 'turbo-karts']);
   assert.equal(flagged('tutorial').length, 25);
   assert.deepEqual(Object.keys(w.SG_CATEGORIES), site.CATEGORIES.map(c => c.id));
   for (const c of site.CATEGORIES) {
@@ -377,7 +377,7 @@ test('scores.js says what the score means in exactly the 28 games that pass one'
     return files.some(f => twoArguments(fs.readFileSync(path.join(dir, f), 'utf8')));
   };
   const scoring = site.GAMES.map(g => g.slug).filter(passes).sort();
-  assert.equal(scoring.length, 28);
+  assert.equal(scoring.length, 29);
   assert.deepEqual(Object.keys(scores).sort(), scoring);
   assert.deepEqual(site.GAMES.map(g => g.slug).filter(s => !scoring.includes(s)).sort(),
     ['block-world', 'connect-four', 'critter-mart', 'pizza-clicker', 'tank-splat', 'tic-tac-toe']);

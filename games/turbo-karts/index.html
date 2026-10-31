@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>سباق التوربو</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+<div id="ui">
+  <section id="scrTitle" class="scr">
+    <div class="logo">
+      <div class="l1">سباق</div>
+      <div class="l2">التوربو</div>
+    </div>
+    <p class="tag">انزلق في المنعطف، املأ المصباح، ثم اتركه وانطلق!</p>
+    <div class="menu">
+      <button type="button" class="mbtn go" id="bPlay"><b>العب!</b><small>سباق سريع</small></button>
+      <button type="button" class="mbtn blue" id="b2p"><b>لاعبان</b><small>لوحة مفاتيح واحدة</small></button>
+      <button type="button" class="mbtn gold" id="bCup"><b>الكأس</b><small>أربع حلبات</small></button>
+      <button type="button" class="mbtn" id="bTT"><b>سباق الوقت</b><small>طارد شبحك</small></button>
+      <div class="menu-row">
+        <button type="button" class="mbtn slim" id="bTracks">الحلبات</button>
+        <button type="button" class="mbtn slim" id="bGarage">المرآب</button>
+      </div>
+    </div>
+    <div class="card howto">
+      <h3>طريقة اللعب</h3>
+      <div class="krow"><span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">W</span></span><span>انطلق</span></div>
+      <div class="krow"><span dir="ltr"><span class="sg-key">↓</span><span class="sg-key">S</span></span><span>فرامل</span></div>
+      <div class="krow"><span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span><span>وجّه العربة</span></div>
+      <div class="krow"><span dir="ltr"><span class="sg-key">مسافة</span></span><span>انزلاق — اتركه للتوربو</span></div>
+      <div class="krow"><span dir="ltr"><span class="sg-key">E</span></span><span>الأداة</span></div>
+      <div class="krow"><span dir="ltr"><span class="sg-key">P</span></span><span>إيقاف</span></div>
+      <p class="small">لاعب ٢: الأسهم، والانزلاق <span dir="ltr" class="sg-key">/</span> والأداة <span dir="ltr" class="sg-key">.</span></p>
+    </div>
+    <div class="card prog">
+      <h3>إنجازاتك</h3>
+      <div class="coins"><b id="tCoins">0</b></div>
+      <p>الحلبات <b id="tOpen">1 / 8</b></p>
+      <p>الكؤوس <b id="tCups">— · —</b></p>
+      <button type="button" id="bEasy" class="easy" aria-pressed="false">توجيه سهل: إيقاف</button>
+      <p class="small">التوجيه السهل: اضغط نحو الجهة التي تريدها.</p>
+    </div>
+    <p class="hint">اضغط <span dir="ltr" class="sg-key">Enter</span> للعب بسرعة</p>
+  </section>
+
+  <section id="scrTracks" class="scr" hidden data-mode="cpu">
+    <h2 id="tracksTitle">اختر الحلبة</h2>
+    <div id="cupRow" class="cup-row" hidden>
+      <button type="button" id="cup0" class="cup"><b>كأس غرفة الألعاب</b><small>أربع حلبات على السجادة</small></button>
+      <button type="button" id="cup1" class="cup"><b>كأس المطبخ والفضاء</b><small>جليد وقمر وجسر</small></button>
+    </div>
+    <div id="trackGrid" class="tgrid"></div>
+    <button type="button" class="back" id="tracksBack">رجوع</button>
+  </section>
+
+  <section id="scrGarage" class="scr" hidden>
+    <h2>المرآب</h2>
+    <p class="gcoins">عملاتك <b id="gCoins">0</b></p>
+    <div id="kartGrid" class="kgrid"></div>
+    <div class="grow"><span>لون</span><div id="paintRow" class="srow2"></div></div>
+    <div class="grow"><span>ملصق</span><div id="stickerRow" class="srow2"></div></div>
+    <div class="grow"><span>قبعة</span><div id="hatRow" class="srow2"></div></div>
+    <div class="grow"><span>بوق</span><div id="hornRow" class="srow2"></div></div>
+    <button type="button" class="back" id="garageBack">رجوع</button>
+  </section>
+
+  <button type="button" id="bPause" class="pause" hidden aria-label="إيقاف">❚❚</button>
+
+  <section id="scrPause" class="scr dim" hidden>
+    <div class="panel">
+      <h2>توقّف مؤقت</h2>
+      <button type="button" class="pbtn go" id="bResume">متابعة</button>
+      <button type="button" class="pbtn" id="bRestart">إعادة</button>
+      <button type="button" class="pbtn" id="bMenu">القائمة</button>
+    </div>
+  </section>
+
+  <section id="scrResult" class="scr dim" hidden>
+    <div class="panel result">
+      <div class="banner" id="resBanner">أحسنت!</div>
+      <div class="place" id="resPlace">الأول</div>
+      <div class="stars" id="resStars"></div>
+      <div class="points" id="resPoints"></div>
+      <div class="coins-line" id="resCoins"></div>
+      <div class="note" id="resNote"></div>
+      <div class="unlock" id="resUnlock" hidden></div>
+      <div class="plist" id="resList"></div>
+      <div class="row">
+        <button type="button" class="pbtn go" id="bAgain">العب مجدداً</button>
+        <button type="button" class="pbtn" id="bResultMenu">القائمة</button>
+      </div>
+    </div>
+  </section>
+</div>
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script src="ai.js"></script>
+<script src="audio.js"></script>
+<script src="render.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>

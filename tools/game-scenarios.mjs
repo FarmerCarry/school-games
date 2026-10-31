@@ -40,6 +40,7 @@ export const scenarios = {
   'beat-dash': defaults(['#b-play','#b-go'], `${g}.scene === 'play' && !${g}.state.paused`, select(`${g}.state`, ['x','y','pct','dead','attempt']), hold('Space', 160), '#b-pause', `${g}.state.paused`, '#b-restart', `${g}.state.pct < 5`),
   'swing-hook': defaults(['#btnPlay'], `${g}.mode === 'play'`, select(`${g}.state()`, ['x','y','timer','hooked']), hold('Space', 200), '#pauseBtn', `${g}.mode === 'pause'`, '#psRestart', `${g}.state().timer < 1`),
   'moto-madness': defaults(['#btnPlay','.mm-tile[data-i="0"]'], `${g}.state === 'play'`, `[${g}.world.bike.x,${g}.world.bike.y,${g}.world.time]`, hold('ArrowUp', 280), '#pauseBtn', `${g}.state === 'paused'`, '#btnRestart', `!${g}.world.started`),
+  'turbo-karts': defaults(['#bPlay'], `${g}.state === 'count' || ${g}.state === 'race'`, `[${g}.race.time, ${g}.race.karts[0].x, ${g}.race.karts[0].y, ${g}.race.karts[0].ang]`, hold('ArrowRight'), '#bPause', `${g}.state === 'pause'`, '#bRestart', `${g}.state === 'count' && ${g}.race.time < 0.3 && ${g}.race.karts[0].lap === 0`, { ready: `${g}.state === 'race'` }),
   'drift-king': defaults(['#btnPlay'], `${g}.mode === 'play'`, pos(`${g}.car`), hold('Space'), '#btnPause', `${g}.mode === 'pause' || ${g}.mode === 'paused'`, '#btnRestart', `${g}.car.progress < 1`, {
     beforePause: async page => {
       // Nobody steers the car, so it leaves the road at the first corner about
@@ -171,7 +172,7 @@ for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
 const inputSnapshots = {
   'dino-3d': 'window.Dino3DGame.inputJumps',
   'rail-rush': `${g}.state.lane`, 'neon-slope': `${g}.state.x`, 'tunnel-blitz': `${g}.info().rot`,
-  'beat-dash': `${g}.state.y`, 'drift-king': `${g}.car.head`, 'fire-and-ice': `${g}.world.fire.x`,
+  'beat-dash': `${g}.state.y`, 'drift-king': `${g}.car.head`, 'turbo-karts': `${g}.race.karts[0].steer`, 'fire-and-ice': `${g}.world.fire.x`,
   'moto-madness': `${g}.world.bike.x`, 'tank-splat': `${g}.app.game.tanks[0].a`,
   'sumo-bonk': `${g}.state.players[0].action`,
   'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`,
@@ -224,7 +225,7 @@ for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen 
 const heldKeys = {
   'dino-3d': 'Space',
   'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
-  'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
+  'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'turbo-karts': 'ArrowRight', 'critter-mart': 'ArrowRight',
   'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'splat-strike': 'KeyW',
   'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight'
 };
