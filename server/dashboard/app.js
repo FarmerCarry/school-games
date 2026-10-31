@@ -895,7 +895,25 @@
   // Charts are drawn to their card's width once the whole page is laid out (a panel
   // measured before its neighbours exist would be too wide); a resize redraws them.
   var drawers = [];
-  function redrawCharts() { drawers.forEach(function (fn) { fn(); }); }
+  // A redraw replaces every chart's marks. The mark that had the keyboard (a chart, a bar
+  // or a heatmap cell) gets it back, the same one in the same card, so a scrollbar that
+  // comes or goes never drops a keyboard user's place; a chart read column by column keeps
+  // its column.
+  function redrawCharts() {
+    var a = document.activeElement, card = a && a.closest ? a.closest('.card[id]') : null;
+    var i = card ? [].indexOf.call(card.querySelectorAll('[tabindex]'), a) : -1, col = i < 0 ? null : a.getAttribute('data-at');
+    drawers.forEach(function (fn) { fn(); });
+    if (i < 0 || a.isConnected) return;
+    var host = document.getElementById(card.id), next = host && host.querySelectorAll('[tabindex]')[i];
+    if (!next) return;
+    if (col != null) next.setAttribute('data-at', col);
+    if (next.classList.contains('hm-cell')) {
+      var stop = host.querySelector('.hm-cell[tabindex="0"]');
+      if (stop) stop.setAttribute('tabindex', '-1');
+      next.setAttribute('tabindex', '0');
+    }
+    next.focus();
+  }
   function draw(fn) { drawers.push(fn); }
 
   var ICONS = {
