@@ -54,8 +54,8 @@
  * starts a session, records an event or listens to the page; it sends only when the
  * teacher presses the test button, and only this build's queue, to the address the
  * portal noted in sg:site:tm:dx (read again at each call, so a portal opened after this
- * page counts). The older builds' keys it only reads: a tab of such a build still open
- * sends them itself.
+ * page counts). The older builds' keys it only reads, and counts as waiting: a tab of
+ * such a build still open sends them itself.
  */
 (function () {
   'use strict';
@@ -664,7 +664,7 @@
     s = settings();
     if (why || s.why) return cb({ why: why || s.why, host: host });
     sync(s.c);
-    if (nav.onLine === false) return cb({ k: 'offline', host: host, reached: false, sent: 0, n: load().length });
+    if (nav.onLine === false) return cb({ k: 'offline', host: host, reached: false, sent: 0, n: waiting().length });
     testing = true;
     within(2e4, function (signal) {
       return fetch(new URL('health', url).href, { credentials: 'omit', mode: 'cors', cache: 'no-store', signal: signal })
@@ -679,8 +679,9 @@
     function next() {
       var x = load()[0], w = settings().why, left = end - now();
       if (w) { testing = false; return cb({ why: w, host: host }); }
+      // Health alone ends a failure only when nothing waits, older builds' batches included.
       if (!x || left < 1e3) {
-        if (!x && !n) note('ok', 1);
+        if (!n && !waiting().length) note('ok', 1);
         return over('ok', true);
       }
       deliver(x, body(x), function (k) {
@@ -689,7 +690,7 @@
         if (k == 'ok' || k == 'refused') { without(x.e.b); next(); } else over(k, true);
       }, min(2e4, left));
     }
-    function over(k, reached) { var q = load().length; testing = false; cb({ k: k, host: host, reached: reached, sent: n, n: q }); }
+    function over(k, reached) { var q = waiting().length; testing = false; cb({ k: k, host: host, reached: reached, sent: n, n: q }); }
   }
 
   /* --------------------------------------------------------------- API */

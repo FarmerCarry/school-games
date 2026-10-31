@@ -357,6 +357,8 @@ test('the delivery panel says in plain words why this PC sends nothing, or how i
     [{ k: 'ok', host, sent: 2, n: 0 }, true, '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. أُرسل الآن ما كان ينتظر: دفعتان.'],
     [{ k: 'ok', host, sent: 30, n: 4 }, true, '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. أُرسل الآن ما كان ينتظر: 30 دفعة. ' +
       'وما زال ينتظر: 4 دفعات، ويُرسل من صفحة الألعاب.'],
+    // Only an older build's tab has batches waiting (it sends them itself): the test sent none.
+    [{ k: 'ok', host, sent: 0, n: 2 }, true, '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. وما زال ينتظر: دفعتان، ويُرسل من صفحة الألعاب.'],
     [{ k: 'network', host, sent: 0, n: 3 }, false, IT],
     [{ k: 'network', host, sent: 1, n: 3 }, false, IT + ' (أُرسل قبل انقطاع الاتصال: دفعة واحدة.)'],
     [{ k: 'network', host, reached: false, sent: 0, n: 3 }, false, IT],

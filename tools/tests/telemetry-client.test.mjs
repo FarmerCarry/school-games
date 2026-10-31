@@ -1221,18 +1221,77 @@ test('a portal tab of the first v3 build, still open on this PC, never drops thi
   serverKeeps(batches(state));
 });
 
+// What the teacher page finds in older builds' keys, written as those builds write them.
+const storage = p => p.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map(k => [k, localStorage.getItem(k)])));
+const v3At = (b, t) => ({ t, w0: t, e: { v: 3, b, s: 'fedcbafedcba', k: 'src', m: 'web', a: '', d: [4, 4, 1920], u: '', p: '', z: '', ev: [['lv', 5, 2]] } });
+const seed = (page, items) => page.evaluate(items => items.forEach(([k, v]) => localStorage.setItem(k, v)), items);
+
+test('the teacher page only reads what older builds\' tabs queued: it counts it, its test sends only this build\'s batches and says what still waits', async t => {
+  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? HEALTH : 204 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/seed.html');
+  const now = await page.evaluate(() => Date.now());
+  // A portal tab of a build before wire version 3 and one of the first v3 build, still open
+  // on the PC, each with a batch in its own key; a portal page of this build ran too: it
+  // noted the address and left a newer batch.
+  const v2 = { t: now - 2 * 36e5, e: { v: 2, b: 'f'.repeat(16), s: '0123456789ab', k: 'src', m: 'web', a: '', d: [4, 4, 1920], ev: [['lv', 5, 2]] } };
+  const v3 = v3At('e'.repeat(16), now - 36e5), mine = v3At('1'.repeat(16), now);
+  await seed(page, [[oldKey(INGEST), JSON.stringify([v2])], [q3Key(INGEST), JSON.stringify([v3])], [qKey(INGEST), JSON.stringify([mine])],
+    ['sg:site:tm:dx', JSON.stringify({ v: 1, u: INGEST, ok: 0, f: 0, k: '', at: 0, x: 0 })]]);
+  const before = await storage(page);
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  // The box counts all three, dated from the oldest (no closing page sent it).
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: 0, f: 0, k: '', at: 0, x: 0, n: 3, t: v2.t, o: v2.t });
+  assert.deepEqual(await storage(teacher), before, 'reading moved nothing: each older key stays where its tab reads it');
+  // The test sends only this build's batch, and counts the others as still waiting.
+  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'ok', host: 'ingest.test', reached: true, sent: 1, n: 2 });
+  assert.deepEqual(state.posts.map(p => p.method + ' ' + p.url), ['GET https://ingest.test/v1/health', 'POST ' + INGEST]);
+  assert.deepEqual(bare(JSON.parse(state.posts[1].body)), mine.e);
+  assert.deepEqual([await tm(teacher, oldKey(INGEST)), await tm(teacher, q3Key(INGEST))], [before[oldKey(INGEST)], before[q3Key(INGEST)]],
+    'the older tabs\' batches are still in their keys');
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: pos, f: 0, k: '', at: 0, x: 0, n: 2, t: v2.t, o: v2.t });
+  serverKeeps(batches(state));
+  await teacher.close();
+});
+
+test('the teacher\'s test ends a failure by health alone only when nothing waits, older builds\' batches included', async t => {
+  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? HEALTH : 'abort' }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/seed.html');
+  const now = await page.evaluate(() => Date.now());
+  // The school filter lets the health check through and stops what is sent: a portal page of
+  // this build noted it, and two batches wait in the key of a first v3 build's tab, which
+  // backs off.
+  const old = [v3At('2'.repeat(16), now - 2 * 36e5), v3At('3'.repeat(16), now - 36e5)];
+  const failing = { v: 1, u: INGEST, ok: now - 2 * 864e5, f: now - 3 * 36e5, k: 'network', at: now - 6e5, x: 0 };
+  await seed(page, [[q3Key(INGEST), JSON.stringify(old)], ['sg:site:tm:dx', JSON.stringify(failing)]]);
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: failing.ok, f: failing.f, k: 'network', at: failing.at, x: 0, n: 2, t: old[0].t, o: old[0].t });
+  // The test has nothing of this build's to send, so it asks health alone: that the server
+  // answers ends no failure, and the result says that two still wait.
+  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'ok', host: 'ingest.test', reached: true, sent: 0, n: 2 });
+  assert.deepEqual(state.posts.map(p => p.method + ' ' + p.url), ['GET https://ingest.test/v1/health']);
+  assert.deepEqual(await dx(teacher), failing, 'the failure still dates from when it began');
+  assert.deepEqual(JSON.parse(await tm(teacher, q3Key(INGEST))), old);
+  await teacher.close();
+});
+
 // js/telemetry.js of the first v3 build, the last one published before the q4 queue (CI
-// checkouts without history skip this).
+// checkouts without history skip this; the tests above seed its key as it writes it).
 const FIRST_V3 = 'b713f12';
 const firstV3 = (() => {
   const shown = spawnSync('git', ['show', `${FIRST_V3}:js/telemetry.js`], { cwd: repo, encoding: 'utf8' });
   return shown.status === 0 && shown.stdout.includes("Q = TM + 'q3:'") ? shown.stdout : null;
 })();
 
-test('the teacher page only reads what a portal tab of the first v3 build queued, and that tab, still open, sends it itself',
+test('a portal tab of the first v3 build, still open on this PC, sends what it queued itself after the teacher page counted it',
   { skip: !firstV3 && `commit ${FIRST_V3} is not in this checkout (git show failed)` }, async t => {
   let down = true;
-  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? HEALTH : down ? 'abort' : 204 }), { page } = state;
+  const state = await setup(t, { clock: true, answer: () => down ? 'abort' : 204 }), { page } = state;
   await page.clock.pauseAt(new Date(Date.now() + 60000));
   // That build's portal tab, never reloaded since the update: the school filter blocks its
   // first send, so its session's start waits in its own key and goes again after 20 s.
@@ -1243,34 +1302,20 @@ test('the teacher page only reads what a portal tab of the first v3 build queued
   await inFlight(page);
   const old = JSON.parse(await tm(page, q3Key(INGEST)));
   like(old.map(x => x.e.ev.map(ev => ev[0])), [['ss']]);
-  // A portal page of this build ran on the PC too: it noted the address and left a newer batch.
-  const now = await page.evaluate(() => Date.now());
-  const mine = { t: now, w0: now, e: { v: 3, b: '1'.repeat(16), s: 'abcdefabcdef', k: 'src', m: 'web', a: '', d: [4, 4, 1920], u: '', p: '', z: '', ev: [['lv', 5, 2]] } };
-  await page.evaluate(([key, q, dx]) => { localStorage.setItem(key, q); localStorage.setItem('sg:site:tm:dx', dx); },
-    [qKey(INGEST), JSON.stringify([mine]), JSON.stringify({ v: 1, u: INGEST, ok: 0, f: 0, k: '', at: 0, x: 0 })]);
-  const storage = p => p.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map(k => [k, localStorage.getItem(k)])));
-  const before = await storage(page);
+  // A portal page of this build ran on the PC too and noted the address.
+  await seed(page, [['sg:site:tm:dx', JSON.stringify({ v: 1, u: INGEST, ok: 0, f: 0, k: '', at: 0, x: 0 })]]);
   const teacher = await state.context.newPage();
   teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
   await teacher.goto(origin + '/teacher.html');
-  // The box counts both, dated from the older tab's (it is older and no closing page sent it).
-  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: 0, f: 0, k: '', at: 0, x: 0, n: 2, t: old[0].t, o: old[0].t });
-  assert.deepEqual(await storage(teacher), before, 'reading moved nothing: the older key stays where that tab reads it');
-  // The filter lets the server through: the test sends only this build's batch.
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: 0, f: 0, k: '', at: 0, x: 0, n: 1, t: old[0].t, o: old[0].t });
+  // The filter lets the server through: that tab's retry finds its batch where it left it.
   down = false;
-  const n = state.posts.length;
-  like(await teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve))), { k: 'ok', host: 'ingest.test', reached: true, sent: 1, n: 0 });
-  assert.deepEqual(state.posts.slice(n).map(p => p.method + ' ' + p.url), ['GET https://ingest.test/v1/health', 'POST ' + INGEST]);
-  assert.deepEqual(bare(JSON.parse(state.posts.at(-1).body)), mine.e);
-  assert.deepEqual(JSON.parse(await tm(teacher, q3Key(INGEST))), old, 'the older tab\'s batch is still in its key');
-  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: pos, f: 0, k: '', at: 0, x: 0, n: 1, t: old[0].t, o: old[0].t });
-  // That tab's retry finds it and delivers it.
   await page.clock.runFor(20000);
-  await until(() => state.posts.length === n + 3, 'the old tab\'s retry');
+  await until(() => state.posts.length === 2, 'the old tab\'s retry');
   await inFlight(page);
   assert.deepEqual(bare(JSON.parse(state.posts.at(-1).body)), old[0].e);
   assert.equal(await tm(page, q3Key(INGEST)), null, 'delivered, and gone');
-  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: pos, f: 0, k: '', at: 0, x: 0, n: 0, t: 0, o: 0 });
+  like(await teacher.evaluate(() => SGTelemetry.status()), { why: '', host: 'ingest.test', ok: 0, f: 0, k: '', at: 0, x: 0, n: 0, t: 0, o: 0 });
   serverKeeps(batches(state));
   await teacher.close();
 });

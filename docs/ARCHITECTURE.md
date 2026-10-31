@@ -458,8 +458,8 @@ for more than 15 minutes since it), and `SGTelemetry.check(cb)` (its «اختب�
 الآن» button) asks the server's `GET /v1/health`, then sends the waiting batches, to the
 address the portal noted (the build gives the teacher page none; it is read again at
 each call, so a portal opened after the teacher page counts). Health alone ends a
-failure only when nothing waits, and the test says so when health answers but the
-batches get none. A PC with no connection at all asks nothing: the test answers
+failure only when nothing waits, older builds' batches included, and the test says so
+when health answers but the batches get none. A PC with no connection at all asks nothing: the test answers
 `offline` at once and notes nothing.
 So the network carve-out stays exactly one file, inlined in the fast build into both
 pages; `tools/check-all.mjs` checks the teacher page's exact copy like the portal's.

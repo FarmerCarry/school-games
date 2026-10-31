@@ -294,10 +294,13 @@ local day records. The server stores no IP address.
   `200` with `"ok":true` and `3` in `accepts` counts), then this build's waiting batches one at a
   time, oldest first, while the server takes them, for a minute in all and 20 s per
   request, each answer read to its end within that time. Every answer to a batch goes into
-  the record. Health alone ends a failure only when nothing waits: a filter may let the
-  health check through and still stop the batches, so then the failure keeps the time it
-  began, and the result says `reached: true` with the batches' failure (the page then asks
-  IT to allow the address fully, with sending data). A health that fails is noted as a
+  the record. Health alone ends a failure only when nothing waits, older builds' batches
+  included: a filter may let the health check through and still stop the batches, so then
+  the failure keeps the time it began, and the result says `reached: true` with the
+  batches' failure (the page then asks IT to allow the address fully, with sending data).
+  The result's `n` counts what still waits, older builds' batches included: when only
+  those wait, the test sends nothing after health (their tab sends them) and says that
+  they still wait. A health that fails is noted as a
   failure that keeps its start, and a server that does not take wire version 3 as the
   server's problem (nothing was sent). With `navigator.onLine === false` the test answers
   `{ k: 'offline', reached: false, sent: 0, n }` at once, without a request and without
@@ -431,10 +434,13 @@ stopping statistics on the teacher page.
   page opened first; answers whose body never ends cut off after 20 s); two copies of the
   site on one origin with two addresses, each sending only its own queue, and a stop
   dropping both; a tab of a pre-v3 build and one of the first v3 build (whose hidden page
-  empties its key) never dropping this build's batches; the first v3 build's own
-  `js/telemetry.js` (from `git show b713f12`; a checkout without that history skips it)
-  in a tab beside the teacher page, whose status and test only read that tab's key, so
-  the tab still sends its batch itself; a new session per player with
+  empties its key) never dropping this build's batches; the teacher page beside both
+  builds' keys, which its status counts and its test counts as still waiting but only
+  reads, sending this build's batch alone; with only an older build's batches waiting and
+  a failure recorded, a test that asks health alone and keeps the failure; the first v3
+  build's own `js/telemetry.js` (from `git show b713f12`; a checkout without that history
+  skips it) in a tab beside the teacher page, which still sends its batch itself; a new
+  session per player with
   the old one ending after its game; field-by-field checks of `sg:telemetry` and late
   frames; load failures; a stop from another tab that keeps the codes.
 * `tools/tests/telemetry-e2e.test.mjs` (browser and the real Node server): three sessions

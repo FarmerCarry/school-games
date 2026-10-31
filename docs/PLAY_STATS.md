@@ -330,7 +330,9 @@ itself never uses the network. Its edge and first line are green, red or grey:
   (<time>)، لأن مكان الانتظار على هذا الجهاز امتلأ أو مضت عليه 7 أيام»);
 * and the button **اختبر الاتصال الآن**: the sink asks the server's health and then sends
   what waits, and the page says «✓ يصل هذا الجهاز إلى خادم الإحصاءات <host>. أُرسل الآن ما
-  كان ينتظر: <n>.» or «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز. أعطِ مسؤول تقنية
+  كان ينتظر: <n>.» (with «وما زال ينتظر: <n>، ويُرسل من صفحة الألعاب.» for what it did not
+  send, such as what a portal tab of an older build, still open, queued: that tab sends
+  it) or «✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز. أعطِ مسؤول تقنية
   المعلومات في المدرسة هذا العنوان ليسمح به في مرشّح الإنترنت: https://<host>» (or that the
   server answered with an error, or does not take this version of the site). When health
   answers but the batches get no answer it says «✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكن
