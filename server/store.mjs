@@ -157,7 +157,8 @@ const SCHEMA_4 = [...FACTS, ...ROLLUP_SCHEMA];
 // bookkeeping: rebuild is '1' while days may wait for a full re-roll or a recount,
 // trimmed_size the database size when the storage guard last started removing round
 // details, and trim_to the day it removes them up to (trimmed_before moves there a few
-// hundred sessions at a time).
+// hundred sessions at a time). A forget adds forgotten (admin.mjs), which the dashboard
+// neither shows nor sets.
 const SETTINGS_INIT = 'INSERT OR IGNORE INTO settings (key, value) VALUES ' +
   "('tz', 'UTC'), ('tz_source', 'none'), ('tz_epoch', '0'), ('week_start', 'mon'), ('week_source', 'auto'), ('keep_days', ''), " +
   "('facts_since', ?1), ('legacy_until', ?2), ('v3_since', ''), ('rv', '1'), ('rolled_through', ''), ('trimmed_before', ''), " +
@@ -828,6 +829,7 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
       legacyUntil: s.legacy_until || '', v3Since: s.v3_since || '', rolledThrough: s.rolled_through || '', rv: s.rv || '1',
       weekStart: s.week_start || 'mon', weekSource: s.week_source || 'auto', keepDays: Number(s.keep_days) || 0,
       trimmedBefore: s.trimmed_before || '', trimmedSize: Number(s.trimmed_size) || 0, trimTo: s.trim_to || '', rebuild: s.rebuild ?? '1',
+      forgotten: JSON.parse(s.forgotten || '{}'),
       usage: { day: utcDay(now), reads: u[0], writes: u[1], rebuild: u[2], export: u[3], size: u[4] }
     };
   }
@@ -953,7 +955,8 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
 
   /* ----------------------------------------------------------- ingest */
   // Stores one validated batch (schema.mjs validateBatch). False when it is a v2 batch
-  // whose id was already received; a repeated v3 batch changes nothing and is true.
+  // whose id was already received; a repeated v3 batch changes nothing and is true, as is
+  // one of a session of a forgotten code from before the forget, which is not stored.
   async function ingest({ wire, envelope, events }, now) {
     await ensure(now);
     const R = Math.floor(now / 1000), minute = Math.floor(now / MINUTE_MS), { b, s, a, u, p, z, d } = envelope;
@@ -972,7 +975,9 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     if (needState) reads.push(sql(STATE).bind(s, JSON.stringify(ended)));
     if (slugs.length) reads.push(sql(ATTEMPTS).bind(u, JSON.stringify(slugs)));
     let state = null, done = new Set(), counters = new Map();
-    if (reads.length) {
+    // A student's batch needs the settings (the forgotten codes, below): an old copy is read
+    // again first, with the pre-read or alone.
+    if (reads.length || (u && now - conf.at >= SETTINGS_MS)) {
       const results = await run(reads, now);
       const row = needState ? results[0].results[0] : null;
       if (row) {
@@ -987,6 +992,11 @@ export function openStore(db, { retentionDays = RETENTION_DAYS, openCacheMs = 0,
     // A session first stored now starts no earlier than the facts: a v2 tab left open across
     // the deploy would otherwise date its play after the deploy to a day never rolled.
     const start = state?.start ?? (conf.factsSince ? Math.max(estimate, dayBounds(conf.tz, conf.factsSince).lo) : estimate);
+    // A forgotten student's play that a PC sends again (its session started by the forget)
+    // is dropped as if stored, so the PC lets it go; a later session of the code is new
+    // play, stored. Another instance sees a forget once it reads the settings again (within
+    // SETTINGS_MS; the forgetting one at once): until then it may still store such a batch.
+    if (u && conf.forgotten[u] !== undefined && start <= conf.forgotten[u]) return true;
 
     // Attempt numbers: the rounds of this batch that end for the first time, in batch order, per game.
     const totals = new Map();

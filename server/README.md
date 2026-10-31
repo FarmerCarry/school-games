@@ -165,7 +165,15 @@ What can be stored is decided here, not only by what the portal chooses to send.
   /v1/admin/forget`): every session, game visit, round and mark of the student's codes
   (a code and every code linked to it), their student and PC lists, their per-student
   rollups, live rows and links, and the marks in other sessions that name one of their
-  codes (the removal of their profile, or an older code whose link was undone). The
+  codes (the removal of their profile, or an older code whose link was undone). A PC
+  keeps each batch until it sees the server's answer, so the last batch of a page that
+  closed goes again from the PC's next page, often the next day: for 8 days the server
+  keeps the codes themselves with the time of the forget (the setting `forgotten`, which
+  the dashboard never shows) and drops every batch of theirs from a session that started
+  before it, so the student does not come back. A later session of the same code (its
+  profile stays on the PC) is new play and is kept. On Cloudflare, another Worker
+  instance learns of the forget when it next reads the settings, within 5 minutes; until
+  then it may still store such a batch (forget again to remove it). The
   school-wide daily counts, in which no child can be found, keep the play already
   counted until a recount (`POST /v1/admin/rebuild`) makes them again from the facts
   left. D1 *Time Travel* can still restore the database to any minute of the last 7
@@ -976,7 +984,8 @@ Body `{"u": "<code>"}`: forgets the student of that code, with every code linked
 { "v": 1, "removed": { "codes": 2, "sessions": 14, "visits": 41, "rounds": 160, "marks": 30 }, "clock": { ... } }
 ```
 
-A code the server does not hold answers zeros.
+A code the server does not hold answers zeros (its play from before the forget is still
+dropped if a PC sends it within 8 days).
 
 #### `POST /v1/admin/link` and `DELETE /v1/admin/link?u=`
 
@@ -1171,7 +1180,7 @@ school with 120 and with 470 sessions a school day, on a 2.1 GHz server core:
 | `live`, `settings`, `POST settings` | 5, 2, 7 | under 0.1 ms |
 | an `export` page (`rounds` or `visits`: 2,500 lines, about 410 KB) | 3 | 1.3–1.6 ms |
 | an `export` page of `events` or `sessions` | 3 | 0.6–0.9 ms |
-| `forget`, `link`, `DELETE link`, `rebuild` | 17, 7, 5, 5 | under 0.2 ms |
+| `forget`, `link`, `DELETE link`, `rebuild` | 18, 7, 5, 5 | under 0.2 ms |
 | the 5-minute cron's full rebuild of a day | 26 | |
 | its first roll with the zone vote | 19 | |
 | the daily purge with frozen days and the storage guard | 24 | |

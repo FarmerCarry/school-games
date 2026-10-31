@@ -266,11 +266,22 @@ const PC_BUILD = 'SELECT k FROM st_pcs WHERE last_s >= ?1 ORDER BY last_s DESC, 
 const CANONICAL = 'COALESCE((SELECT u_new FROM aliases WHERE u_old = ?1), ?1)';
 const GROUP = `(SELECT ${CANONICAL} AS u UNION SELECT u_old FROM aliases WHERE u_new = ${CANONICAL})`;
 const OF_GROUP = `(SELECT id FROM st_sessions WHERE u IN ${GROUP})`;
+// A PC keeps a batch until it sees the server's answer, so it may send a forgotten
+// student's play again (a closing page's last batch goes again from the next page, often
+// the next day). The setting 'forgotten' keeps every code of a forgotten group with the
+// time of the forget (?2, UTC seconds), as a JSON object {code: seconds}, and ingest drops
+// a batch of such a code whose session started by then (store.mjs). A PC keeps a batch at
+// most 7 days: each forget also removes the entries older than FORGOTTEN_DAYS.
+const FORGOTTEN_DAYS = 8;
+const FORGOTTEN = "INSERT INTO settings (key, value) SELECT 'forgotten', json_group_object(u, s) FROM (SELECT key AS u, value AS s " +
+  `FROM json_each((SELECT value FROM settings WHERE key = 'forgotten')) WHERE value > ?2 - ${FORGOTTEN_DAYS * 86400} AND key NOT IN ${GROUP} ` +
+  `UNION ALL SELECT u, CAST(?2 AS INTEGER) FROM ${GROUP}) WHERE true ON CONFLICT (key) DO UPDATE SET value = excluded.value`;
 // Forget: how many of the group's codes the server holds, then every fact and per-student
 // rollup row of the group (and the marks of other sessions that name one of its codes: the
 // removal of a profile, or an older code whose link was undone; both come after the
-// student's first play), the live rows, the student rows and the links last (the group is
-// read from them). School-wide rollups keep their counts.
+// student's first play), the live rows, the student rows, the group's codes in
+// 'forgotten', and the links last (the group is read from them). School-wide rollups keep
+// their counts.
 const FORGET = [
   `SELECT COUNT(*) AS n FROM ${GROUP} g WHERE EXISTS (SELECT 1 FROM st_students WHERE u = g.u) OR EXISTS (SELECT 1 FROM st_sessions WHERE u = g.u)`,
   `DELETE FROM st_rounds WHERE sid IN ${OF_GROUP}`, `DELETE FROM st_visits WHERE sid IN ${OF_GROUP}`, `DELETE FROM st_marks WHERE sid IN ${OF_GROUP}`,
@@ -278,7 +289,7 @@ const FORGET = [
     `(SELECT MIN(first_s) FROM st_students WHERE u IN ${GROUP}))`,
   `DELETE FROM st_sessions WHERE u IN ${GROUP}`, `DELETE FROM st_student_pcs WHERE u IN ${GROUP}`, `DELETE FROM st_student_games WHERE u IN ${GROUP}`,
   `DELETE FROM r_student_day WHERE u IN ${GROUP}`, `DELETE FROM r_student_game WHERE u IN ${GROUP}`, `DELETE FROM live WHERE u IN ${GROUP}`,
-  `DELETE FROM st_students WHERE u IN ${GROUP}`, `DELETE FROM aliases WHERE u_old IN ${GROUP} OR u_new IN ${GROUP}`
+  `DELETE FROM st_students WHERE u IN ${GROUP}`, FORGOTTEN, `DELETE FROM aliases WHERE u_old IN ${GROUP} OR u_new IN ${GROUP}`
 ];
 // Link ?1 to the canonical code of ?2 (by the owner, at ?3): links to ?1 move to it (one hop
 // deep), and ?1's own link is replaced. Nothing changes when that would form a cycle.
@@ -651,10 +662,11 @@ export function adminViews(ctx) {
   }
 
   // POST /v1/admin/forget { u }: every fact and per-student row of the student's group of
-  // codes. The school-wide rollups keep the play already counted (a recount drops it).
+  // codes, whose play a PC sends again from before now is not stored (for 8 days). The
+  // school-wide rollups keep the play already counted (a recount drops it).
   async function forget({ u }, now = Date.now()) {
     await ensure(now);
-    const results = await run([...FORGET.map(text => bound(text, [u])), ...ctx.renew()], now);
+    const results = await run([...FORGET.map(text => bound(text, [u, Math.floor(now / 1000)])), ...ctx.renew()], now);
     ctx.renewed();
     const changed = i => results[i].meta.changes;
     return answer(now, { removed: { codes: results[0].results[0].n, sessions: changed(5), visits: changed(2), rounds: changed(1), marks: changed(3) + changed(4) } });
