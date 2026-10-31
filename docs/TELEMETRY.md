@@ -296,10 +296,18 @@ local day records. The server stores no IP address.
   `200` with `"ok":true` and `3` in `accepts` counts), then this build's waiting batches one at a
   time, oldest first, while the server takes them, for a minute in all and 20 s per
   request, each answer read to its end within that time. Every answer to a batch goes into
-  the record. Health alone ends a failure only when nothing waits, older builds' batches
-  included: a filter may let the health check through and still stop the batches, so then
-  the failure keeps the time it began, and the result says `reached: true` with the
-  batches' failure (the page then asks IT to allow the address fully, with sending data).
+  the record. Health alone ends a failure only when the test tried no batch and nothing
+  waits, older builds' batches included: a filter may let the health check through and
+  still stop the batches, so then the failure keeps the time it began, and the result says
+  `reached: true` with the batches' failure (the page then asks IT to allow the address
+  fully, with sending data). A batch the server refuses (its JSON error to a 4xx other
+  than 429: a client and a server whose versions do not match) is dropped, as the portal
+  drops it, and the next one goes. The result is then `refused`, never `ok`, and the
+  record ends with the refusal. When some batches are refused and others delivered, the
+  record notes the delivery and still ends with the refusal, and the result is `refused`
+  with `sent` the delivered ones: the page says that the server does not take this
+  version's data, and how many batches arrived. A failure of another kind after a refusal
+  ends the test and is its result, as without one.
   The result's `n` counts what still waits, older builds' batches included: when only
   those wait, the test sends nothing after health (their tab sends them) and says that
   they still wait. A health that fails is noted as a
@@ -439,7 +447,9 @@ stopping statistics on the teacher page.
   empties its key) never dropping this build's batches; the teacher page beside both
   builds' keys, which its status counts and its test counts as still waiting but only
   reads, sending this build's batch alone; with only an older build's batches waiting and
-  a failure recorded, a test that asks health alone and keeps the failure; the first v3
+  a failure recorded, a test that asks health alone and keeps the failure; a test whose
+  batch the server refuses, alone and before a delivered one, which answers `refused` and
+  ends the record with the refusal; the first v3
   build's own `js/telemetry.js` (from `git show b713f12`; a checkout without that history
   skips it) in a tab beside the teacher page, which still sends its batch itself; a new
   session per player with

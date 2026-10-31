@@ -1283,6 +1283,43 @@ test('the teacher\'s test ends a failure by health alone only when nothing waits
   await teacher.close();
 });
 
+test('a batch the server refuses in the teacher\'s test stays a refusal: neither health nor a later delivery ends it, and the result says how many arrived', async t => {
+  let refused = [];
+  const state = await setup(t, { clock: true, answer: (n, post) => isHealth(post) ? HEALTH : refused.includes(JSON.parse(post.body).b) ? serverError(400, 'envelope') : 204 }), { page } = state;
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.goto(origin + '/seed.html');
+  const now = await page.evaluate(() => Date.now());
+  // A portal page of this build noted the address, had a batch delivered a day ago, and
+  // left one that the server answers with its JSON 400 (a client and a server of versions
+  // that do not match).
+  const delivered = { v: 1, u: INGEST, ok: now - 864e5, f: 0, k: '', at: 0, x: 0 };
+  refused = ['4'.repeat(16)];
+  await seed(page, [[qKey(INGEST), JSON.stringify([v3At('4'.repeat(16), now - 36e5)])], ['sg:site:tm:dx', JSON.stringify(delivered)]]);
+  const teacher = await state.context.newPage();
+  teacher.on('pageerror', error => state.errors.push('teacher: ' + error.message));
+  await teacher.goto(origin + '/teacher.html');
+  const check = () => teacher.evaluate(() => new Promise(resolve => SGTelemetry.check(resolve)));
+  let n = state.posts.length;
+  const since = () => state.posts.slice(n).map(p => p.method + ' ' + p.url);
+  // The batch is gone, as from the portal; that health answered ends nothing, and the
+  // result is the refusal, not «nothing was waiting».
+  like(await check(), { k: 'refused', host: 'ingest.test', reached: true, sent: 0, n: 0 });
+  assert.deepEqual(since(), ['GET https://ingest.test/v1/health', 'POST ' + INGEST]);
+  assert.equal(await queue(teacher), null);
+  like(await dx(teacher), { v: 1, u: INGEST, ok: delivered.ok, f: pos, k: 'refused', at: pos, x: 0 });
+  // An older batch refused, a newer one delivered: both go, the record notes the delivery
+  // and still ends with the refusal, and the result counts what arrived.
+  n = state.posts.length;
+  refused = ['6'.repeat(16)];
+  await seed(teacher, [[qKey(INGEST), JSON.stringify([v3At('6'.repeat(16), now - 2 * 36e5), v3At('7'.repeat(16), now - 36e5)])]]);
+  like(await check(), { k: 'refused', host: 'ingest.test', reached: true, sent: 1, n: 0 });
+  assert.deepEqual(since(), ['GET https://ingest.test/v1/health', 'POST ' + INGEST, 'POST ' + INGEST]);
+  assert.deepEqual(batches(state).slice(-2).map(b => b.b), ['6'.repeat(16), '7'.repeat(16)], 'oldest first');
+  assert.equal(await queue(teacher), null);
+  like(await dx(teacher), { v: 1, u: INGEST, ok: v => v > delivered.ok, f: pos, k: 'refused', at: pos, x: 0 });
+  await teacher.close();
+});
+
 // js/telemetry.js of the first v3 build, the last one published before the q4 queue (CI
 // checkouts without history skip this; the tests above seed its key as it writes it).
 const FIRST_V3 = 'b713f12';
