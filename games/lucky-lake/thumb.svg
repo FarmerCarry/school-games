@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f6dff"/>
+      <stop offset="0.55" stop-color="#7ad4ff"/>
+      <stop offset="1" stop-color="#ffe7a0"/>
+    </linearGradient>
+    <linearGradient id="lake" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3ec4ff"/>
+      <stop offset="1" stop-color="#083e78"/>
+    </linearGradient>
+    <radialGradient id="fish" cx="0.32" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#ffe9a8"/>
+      <stop offset="1" stop-color="#ff6a12"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <circle cx="332" cy="118" r="34" fill="#ffe56a"/>
+  <circle cx="318" cy="108" r="8" fill="#fff6c4"/>
+  <path d="M0 188 C80 150 150 210 230 168 C310 126 350 176 400 150 L400 236 L0 236 Z" fill="#2f8a48"/>
+  <path d="M0 214 C90 186 160 236 250 208 C330 184 360 220 400 200 L400 250 L0 250 Z" fill="#3e9a46"/>
+  <rect y="228" width="400" height="172" fill="url(#lake)"/>
+  <path d="M8 268 C80 254 130 282 200 266 C270 250 320 278 392 260" fill="none" stroke="#e7f8ff" stroke-width="5" stroke-linecap="round"/>
+  <path d="M0 312 C90 296 150 328 240 310 C320 294 360 322 400 306" fill="none" stroke="#e7f8ff" stroke-width="4" stroke-linecap="round"/>
+  <ellipse cx="58" cy="292" rx="30" ry="12" fill="#2f9a4a"/>
+  <ellipse cx="52" cy="290" rx="14" ry="6" fill="#8dff9a"/>
+  <circle cx="70" cy="286" r="5" fill="#ff7eb6"/>
+  <g transform="translate(36 168)">
+    <path d="M18 78 L78 28 L52 78 L78 128 Z" fill="#ff8a1a"/>
+    <ellipse cx="168" cy="78" rx="112" ry="64" fill="url(#fish)"/>
+    <ellipse cx="184" cy="98" rx="68" ry="30" fill="#fff3cc"/>
+    <path d="M150 22 L186 4 L190 52 Z" fill="#ffd24a"/>
+    <circle cx="236" cy="62" r="18" fill="#fff"/>
+    <circle cx="242" cy="62" r="9" fill="#243044"/>
+    <path d="M214 86 Q236 102 256 84" fill="none" stroke="#243044" stroke-width="5" stroke-linecap="round"/>
+    <path d="M292 18 L300 40 L322 48 L300 56 L292 78 L284 56 L262 48 L284 40 Z" fill="#fff"/>
+  </g>
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="700" text-anchor="middle">
+    <text x="200" y="78" font-size="68" fill="#0b2a44" stroke="#0b2a44" stroke-width="16" stroke-linejoin="round" direction="rtl">بحيرة الحظ</text>
+    <text x="200" y="74" font-size="68" fill="#ffe14a" stroke="#fff" stroke-width="3" paint-order="stroke" stroke-linejoin="round" direction="rtl">بحيرة الحظ</text>
+  </g>
+</svg>

@@ -97,6 +97,7 @@ export const scenarios = {
   'pizza-clicker': defaults(['#bPlay'], `${g}.mode === 'play'`, `[${g}.S.pizzas,${g}.S.clicks]`, async page => { await page.mouse.click(840, 405); }, '#bPause', `${g}.mode === 'pause'`, '#bResume', `${g}.mode === 'play'`, { persistent: true }),
   'block-world': defaults(['#playBtn','#modeCrea'], `${g}.G.mode === 'play'`, `[${g}.player.x,${g}.player.y,${g}.G.tod]`, hold('ArrowRight'), '#pausebtn', `${g}.G.mode === 'pause'`, '#resumeBtn', `${g}.G.mode === 'play'`, { persistent: true, startIf: ['true', `${g}.G.mode === 'newworld'`] }),
   // Cake Guards: click a pad beside the road like a player, then pick popcorn from its menu.
+  'lucky-lake': defaults(['#btnPlay'], `${g}.mode === 'play'`, `[${g}.tick,${g}.phase]`, hold('Space', 220), '#btnPause', `${g}.mode === 'pause'`, '#btnResume', `${g}.mode === 'play'`, { persistent: true }),
   'cake-guards': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.coins,${g}.state.towers,${g}.state.time,${g}.state.wave]`, async page => {
     const pad = await page.evaluate(() => window.__game.padPoint(0));
     await page.mouse.click(pad.x, pad.y);
@@ -216,6 +217,7 @@ const inputSnapshots = {
   'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`,
   'wacky-soccer': `${g}.world.players.filter(p => p.side === 0).map(p => p.kickT)`,
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
+  'lucky-lake': `${g}.charge`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
@@ -250,6 +252,8 @@ const inputSeen = {
   // The blob follows the pointer, which rests on the centred Play button below it:
   // without input it drifts straight down. The input points up and left of it.
   'blob-battle': `${g}.info().player.x < sgInput.before.x - 20 && ${g}.info().player.y < sgInput.before.y - 20`,
+  // The bobber waits by itself. Only holding cast makes the power meter climb.
+  'lucky-lake': `${g}.charge > 0.12`,
   // A bubble that rises into a resting Bop pops too; only real pointer travel onto one counts.
   'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`
 };
@@ -265,7 +269,8 @@ const heldKeys = {
   'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
   'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
   'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'chaos-island': 'ArrowRight', 'splat-strike': 'KeyW',
-  'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight', 'egg-rush': 'ArrowRight'
+  'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight', 'egg-rush': 'ArrowRight',
+  'lucky-lake': 'Space'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 

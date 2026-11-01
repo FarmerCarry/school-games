@@ -878,3 +878,34 @@ and the teacher page, and gains one file, so `precacheBytes` moves from 5,724,00
 5,811,000: 393 bytes (0.0068%) above this measurement. Each new limit is the measured
 size rounded up (the game to the next 500 bytes, the others to the next 1,000), and
 each headroom is under half a percent. No other game, font or library limit changes.
+
+## Lucky Lake on current main, 1 November 2026
+
+بحيرة الحظ (Lucky Lake) joins the site beside Key Runner. It is the same fishing
+game: one canvas, short catch cues, and no background music. A solo session reports
+`endless`, so a round under 20 seconds pays no XP and the existing 40 XP cap still
+applies. A two-player derby reports `derby:pvp` and ends `end` or `draw`. `Kit.track`
+counts a bite, a catch, and a miss. The solo score is the species in the book; the
+derby score is the heavier catch in tenths of a kilogram.
+
+Measured with the Linux minified build and `SG_TELEMETRY_URL` set, the same Actions
+build the budgets check. Main before this game is the Key Runner head: portal
+422,426, teacher page 99,749, offline precache 5,810,607 across 51 files.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Lucky Lake | — | 121,974 | — | 122,000 |
+| Portal (thumbnail and catalog entry) | 422,426 | 426,183 | 423,000 | 427,000 |
+| Teacher page | 99,749 | 100,831 | 100,000 | 101,000 |
+| Offline precache, 52 files | 5,810,607 | 5,937,420 | 5,811,000 | 5,938,000 |
+
+The page limit is a new entry, 26 bytes (0.021%) above the built page. The portal
+grows by 3,757 bytes, most of it the thumbnail and the catalog entry, so its limit
+moves from 423,000 to 427,000: 817 bytes (0.19%) above this measurement. The teacher
+page grows by 1,082 bytes and no longer fits in 100,000, so its limit moves to
+101,000: 169 bytes (0.17%) left. The offline cache grows by 126,813 bytes, which is
+the new page plus the portal and the teacher page, and gains one file, so
+`precacheBytes` moves from 5,811,000 to 5,938,000: 580 bytes (0.0098%) above this
+measurement. Each new limit is the measured size rounded up (the game to the next
+500 bytes, the others to the next 1,000), and each headroom is under half a percent.
+No other game, font or library limit changes.

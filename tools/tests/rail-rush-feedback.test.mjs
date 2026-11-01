@@ -174,12 +174,20 @@ test('Rail Rush shows the change-lane hint only when the first train blocks the 
 
 test('Rail Rush keeps the coins and best score of a run left through the pause menu', async t => {
   const page = await railRush(t);
-  const run = await page.evaluate(() => { __game.restart(); __game.god = true; __game.sim(25); return { coins: __game.state.coins, score: __game.state.score }; });
-  assert.ok(run.coins > 0 && run.score > 0, `the run earned something (${JSON.stringify(run)})`);
-  await page.evaluate(() => { document.getElementById('pauseBtn').click(); rr.step(1); document.getElementById('restartBtn').click(); rr.step(1); });
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:rail-rush:save')));
-  assert.equal(saved.coins, run.coins, 'the coins of the abandoned run are banked');
-  assert.ok(saved.best >= run.score, 'its score counts towards the best');
+  // Pause in the same turn as the snapshot. A live frame between the two
+  // would collect more coins, and the banked total would no longer match.
+  const done = await page.evaluate(() => {
+    __game.restart(); __game.god = true; __game.sim(25);
+    const run = { coins: __game.state.coins, score: __game.state.score };
+    document.getElementById('pauseBtn').click();
+    rr.step(1);
+    document.getElementById('restartBtn').click();
+    rr.step(1);
+    return { run, saved: JSON.parse(localStorage.getItem('sg:rail-rush:save')) };
+  });
+  assert.ok(done.run.coins > 0 && done.run.score > 0, `the run earned something (${JSON.stringify(done.run)})`);
+  assert.equal(done.saved.coins, done.run.coins, 'the coins of the abandoned run are banked');
+  assert.ok(done.saved.best >= done.run.score, 'its score counts towards the best');
 });
 
 test('Rail Rush buys one power-up level for a double-click on its upgrade button', async t => {
