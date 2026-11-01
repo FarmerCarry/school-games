@@ -837,16 +837,16 @@ build the budgets check. Main before this game is the Chaos Island head: portal
 | Egg Rush | — | 134,352 | — | 134,500 |
 | Portal (thumbnail and catalog entry) | 405,170 | 415,600 | 406,000 | 416,000 |
 | Teacher page | 97,983 | 98,821 | 98,000 | 99,000 |
-| Offline precache, 50 files | 5,577,354 | 5,722,974 | 5,578,000 | 5,723,000 |
+| Offline precache, 50 files | 5,577,354 | 5,723,012 | 5,578,000 | 5,724,000 |
 
 The page limit is a new entry, 148 bytes (0.11%) above the built page. The portal
 grows by 10,430 bytes, so its limit moves from 406,000 to 416,000: 400 bytes (0.096%)
 above this measurement. The teacher page grows by 838 bytes and no longer fits in
 98,000, so its limit moves to 99,000: 179 bytes (0.18%) left. The offline cache grows
-by 145,620 bytes (the new page, the portal and the teacher page) and gains one file,
-so `precacheBytes` moves from 5,578,000 to 5,723,000: 26 bytes (0.0005%) above this
-measurement. Each new limit is the measured size rounded up (the game to the next
-500 bytes, the others to the next 1,000), and each headroom is under half a percent.
-A small text edit can exceed the precache limit. No other game, font or library
+by 145,658 bytes (the new page, the portal, the teacher page, and the few bytes
+Road Hopper uses to count frames) and gains one file, so `precacheBytes` moves from
+5,578,000 to 5,724,000: 988 bytes (0.017%) above this measurement. Each new limit is
+the measured size rounded up (the game to the next 500 bytes, the others to the next
+1,000), and each headroom is under half a percent. No other game, font or library
 limit changes.
 
