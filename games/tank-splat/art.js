@@ -3,7 +3,7 @@
 (function () {
   'use strict';
 
-  var INK = '#2a2240';
+  var INK = '#1b1640';
 
   // Tank colour palettes (index = slot).
   var PAL = [
@@ -15,7 +15,7 @@
 
   // Maze themes: floor tiles, wall colours, outside colour, floor decorations.
   var THEMES = [
-    { name: 'ساحة الألعاب', f1: '#fff7e6', f2: '#fcefd2', dot: '#f3dfb8', wall: '#7c62ff', wtop: '#a894ff', wside: '#5238cf', bg: '#5a45d8', bg2: '#6a55e6', deco: 'grass' },
+    { name: 'ساحة الألعاب', f1: '#d7f5a4', f2: '#c4eb88', dot: '#b4e074', wall: '#7c62ff', wtop: '#d4c6ff', wside: '#3f2aad', bg: '#4d3cc4', bg2: '#6d5ae0', deco: 'grass' },
     { name: 'أرض الحلوى', f1: '#fff1f7', f2: '#ffe3ef', dot: '#ffcfe2', wall: '#ff5fa8', wtop: '#ff9ccb', wside: '#d63584', bg: '#e0458f', bg2: '#ec5a9e', deco: 'candy' },
     { name: 'شاطئ الرمال', f1: '#fff9df', f2: '#fcf0c4', dot: '#f2e2a4', wall: '#15b8b1', wtop: '#6fe0d9', wside: '#0c8b86', bg: '#10a4c8', bg2: '#21b4d6', deco: 'beach' },
     { name: 'مصنع الشوكولاتة', f1: '#fff5ea', f2: '#fbe8d5', dot: '#f2d6bb', wall: '#9a5a36', wtop: '#c98a5f', wside: '#6e3c20', bg: '#7a4527', bg2: '#8a5433', deco: 'choco' },
@@ -64,6 +64,16 @@
     c.closePath();
   }
   function circle(c, x, y, r) { c.beginPath(); c.arc(x, y, r > 0 ? r : 0, 0, Math.PI * 2); }
+  function artKit() { return window.Kit && Kit.art && Kit.art.sprite ? Kit.art : null; }
+  function ink() { var a = artKit(); return a ? a.pal.ink : INK; }
+  function seedRand(seed) {
+    return function () {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
 
   /* ------------------------------------------------------------ hats */
   // Hats are drawn upright (not rotated with the tank). (x, y) = top of turret.
@@ -187,103 +197,157 @@
   }
 
   /* ------------------------------------------------------------ tanks */
-  // o: { x, y, a, pal, hat, sq (squash 0..1), recoil (0..1), tread, t, blink,
-  //      dead (0..1), paint (killer colour), blobs, shield (s left), boost, flash, scale }
+  // Cached body per colour (no barrel, so recoil can slide). Tread stripes scroll on top.
+  function paintBody(c, pal) {
+    var col = ink();
+    c.lineWidth = 3; c.strokeStyle = col; c.lineJoin = 'round';
+    for (var sd = -1; sd <= 1; sd += 2) {
+      rr(c, -22, sd * 16 - 7, 44, 14, 7);
+      c.fillStyle = '#3a3354'; c.fill(); c.stroke();
+      rr(c, -18, sd * 16 - 4, 36, 8, 4); c.fillStyle = '#5c5478'; c.fill();
+    }
+    rr(c, -18, -13, 36, 26, 9);
+    c.fillStyle = pal.main; c.fill(); c.stroke();
+    c.fillStyle = pal.light; c.globalAlpha = 0.8;
+    rr(c, -13, -10, 18, 6, 3); c.fill(); c.globalAlpha = 1;
+    c.fillStyle = pal.dark; c.globalAlpha = 0.45;
+    rr(c, -13, 6, 26, 4, 2); c.fill(); c.globalAlpha = 1;
+    circle(c, -2, 0, 13);
+    c.fillStyle = pal.main; c.fill(); c.stroke();
+    circle(c, -6, -4.5, 4.4); c.fillStyle = pal.light; c.globalAlpha = 0.85; c.fill(); c.globalAlpha = 1;
+    for (var e = -1; e <= 1; e += 2) {
+      c.save(); c.translate(3, e * 5.4);
+      c.beginPath(); c.ellipse(0, 0, 5, 5.4, 0, 0, Math.PI * 2);
+      c.fillStyle = '#fff'; c.fill(); c.lineWidth = 2; c.stroke();
+      circle(c, 1.8, 0.2, 2.5); c.fillStyle = col; c.fill();
+      circle(c, 2.5, -1, 0.9); c.fillStyle = '#fff'; c.fill();
+      c.restore();
+    }
+  }
+  function paintBarrel(c, pal) {
+    var col = ink();
+    c.lineWidth = 3; c.strokeStyle = col; c.lineJoin = 'round';
+    rr(c, -14, -5, 22, 10, 4); c.fillStyle = '#f7f4ff'; c.fill(); c.stroke();
+    rr(c, 2, -7, 10, 14, 4); c.fillStyle = pal.paint; c.fill(); c.stroke();
+    c.fillStyle = pal.light; c.fillRect(-8, -3, 10, 2.4);
+  }
+  function tankSprite(pal) {
+    var a = artKit(); if (!a) return null;
+    return a.sprite('ts-body:' + pal.id, 72, 58, function (c, w, h) {
+      c.save(); c.translate(w / 2, h / 2); paintBody(c, pal); c.restore();
+    });
+  }
+  function barrelSprite(pal) {
+    var a = artKit(); if (!a) return null;
+    return a.sprite('ts-barrel:' + pal.id, 34, 22, function (c, w, h) {
+      c.save(); c.translate(w / 2, h / 2); paintBarrel(c, pal); c.restore();
+    });
+  }
+  function treadSprite() {
+    var a = artKit(); if (!a) return null;
+    return a.sprite('ts-tread', 56, 8, function (c, w, h) {
+      c.fillStyle = '#9a93b4';
+      for (var x = -7; x < w + 7; x += 7) c.fillRect(x, 0, 3.2, h);
+    });
+  }
+  function hatSprite(id) {
+    var a = artKit(); if (!a) return null;
+    return a.sprite('ts-hat:' + id, 40, 40, function (c, w, h) { drawHat(c, id, w / 2, h - 2, 1, 0); });
+  }
+  // One cached splat shape per colour, style and 3 variants. Stamped into the decal layer.
+  function splatSprite(color, style, variant) {
+    var a = artKit(); if (!a) return null;
+    variant = ((variant % 3) + 3) % 3;
+    style = style || 0;
+    return a.sprite('ts-splat:' + color + ':' + style + ':' + variant, 96, 96, function (c) {
+      drawSplat(c, 48, 48, 34, color, style, seedRand(variant * 97 + style * 13 + (color.charCodeAt(1) || 1)));
+    });
+  }
+
+  // o: { x, y, a, pal, hat, sq, recoil, tread, t, blink, dead, paint, blobs, shield, flash, muzzle, scale }
   function drawTank(c, o) {
     var pal = o.pal;
     var sc = o.scale == null ? 1 : o.scale;
-    if (sc <= 0.01) return;
+    if (sc <= 0.01 || !pal) return;
+    if (sc >= 0.95 && sc <= 1.35) sc *= 1.2;
+    var a = artKit(), dead = o.dead || 0;
+    if (a) a.shadow(c, o.x - 28 * sc, o.y - 6 * sc, 56 * sc, 32 * sc, dead > 0 ? 0.28 : 0.5);
+    if (dead > 0.02) { drawDeadTank(c, o, sc, dead); return; }
+    var body = tankSprite(pal), barrel = barrelSprite(pal), strip = treadSprite();
+    var sq = o.sq || 0, recoil = Math.min(1, o.recoil || 0);
+    var sx = 1 - sq * 0.16, sy = 1 + sq * 0.14;
     c.save();
-    c.translate(o.x, o.y);
-    // shadow
-    c.fillStyle = 'rgba(42,34,64,0.22)';
-    c.beginPath(); c.ellipse(3, 7, 24 * sc, 19 * sc, 0, 0, Math.PI * 2); c.fill();
-    c.scale(sc, sc);
-    c.rotate(o.a);
-    var sq = o.sq || 0;
-    var dead = o.dead || 0;
-    var sx = 1 - sq * 0.16 + dead * 0.1, sy = 1 + sq * 0.14 - dead * 0.12;
-    c.scale(sx, sy);
-    c.lineWidth = 3; c.strokeStyle = INK; c.lineJoin = 'round';
-
-    // treads
-    for (var sd = -1; sd <= 1; sd += 2) {
-      rr(c, -21, sd * 15 - 6.5, 42, 13, 6);
-      c.fillStyle = '#453d5e'; c.fill(); c.stroke();
-      c.save();
-      rr(c, -19, sd * 15 - 4.5, 38, 9, 4); c.clip();
-      c.fillStyle = '#7b7398';
+    c.translate(o.x, o.y); c.rotate(o.a || 0); c.scale(sc * sx, sc * sy);
+    if (body && body.canvas && a) a.blit(c, body, 0, 0);
+    else { paintBody(c, pal); }
+    if (strip && strip.canvas) {
       var ph = ((o.tread || 0) % 7 + 7) % 7;
-      for (var k = -1; k < 7; k++) { c.fillRect(-19 + k * 7 + ph, sd * 15 - 5, 3, 10); }
-      c.restore();
-    }
-    // body
-    rr(c, -18, -12.5, 36, 25, 8);
-    c.fillStyle = pal.main; c.fill(); c.stroke();
-    c.fillStyle = pal.light;
-    c.globalAlpha = 0.75; rr(c, -14, -9.5, 20, 5, 2.5); c.fill(); c.globalAlpha = 1;
-    c.fillStyle = pal.dark; c.globalAlpha = 0.5; rr(c, -14, 5.5, 28, 4, 2); c.fill(); c.globalAlpha = 1;
-
-    // barrel (paint cannon)
-    var bx = 4 - (o.recoil || 0) * 7;
-    rr(c, bx, -5, 22, 10, 4);
-    c.fillStyle = '#f4f1fb'; c.fill(); c.stroke();
-    rr(c, bx + 15, -6.5, 9, 13, 3.5);
-    c.fillStyle = pal.paint; c.fill(); c.stroke();
-    c.fillStyle = pal.light; c.fillRect(bx + 4, -3, 9, 2);
-
-    // turret
-    circle(c, -2, 0, 12.5);
-    c.fillStyle = pal.main; c.fill(); c.stroke();
-    circle(c, -5.5, -4, 4.2); c.fillStyle = pal.light; c.globalAlpha = 0.8; c.fill(); c.globalAlpha = 1;
-
-    // paint blobs when splatted
-    if (dead > 0 && o.blobs) {
-      c.fillStyle = o.paint;
-      c.globalAlpha = Math.min(1, dead * 1.6);
-      for (var b = 0; b < o.blobs.length; b += 3) { circle(c, o.blobs[b], o.blobs[b + 1], o.blobs[b + 2]); c.fill(); }
-      c.globalAlpha = 1;
-    }
-
-    // eyes
-    if (dead > 0.3) {
-      c.strokeStyle = INK; c.lineWidth = 2;
-      for (var e = -1; e <= 1; e += 2) {
-        c.save(); c.translate(2, e * 5); c.rotate(Kit.motion.reduced() ? 0 : (o.t || 0) * 6 * e);
-        c.beginPath();
-        for (var q = 0; q < 14; q++) { var aa = q * 0.7, rad = q * 0.3; c.lineTo(Math.cos(aa) * rad, Math.sin(aa) * rad); }
-        c.stroke(); c.restore();
-      }
-    } else {
-      var bl = o.blink ? 0.2 : 1;
-      for (var e2 = -1; e2 <= 1; e2 += 2) {
-        c.save(); c.translate(2.5, e2 * 5.2); c.scale(bl, 1);
-        c.beginPath(); c.ellipse(0, 0, 4.4, 4.8, 0, 0, Math.PI * 2);
-        c.fillStyle = '#fff'; c.fill(); c.lineWidth = 1.8; c.stroke();
-        circle(c, 1.7, 0, 2.3); c.fillStyle = INK; c.fill();
-        circle(c, 2.3, -1, 0.8); c.fillStyle = '#fff'; c.fill();
+      for (var sd = -1; sd <= 1; sd += 2) {
+        c.save(); rr(c, -18, sd * 16 - 4, 36, 8, 4); c.clip();
+        c.drawImage(strip.canvas, -28 + ph, sd * 16 - 4, 56, 8);
         c.restore();
       }
     }
+    if (barrel && barrel.canvas && a) a.blit(c, barrel, 16 - recoil * 8, 0);
+    else { c.save(); c.translate(16 - recoil * 8, 0); paintBarrel(c, pal); c.restore(); }
+    if (o.blink) {
+      c.fillStyle = pal.main;
+      for (var e2 = -1; e2 <= 1; e2 += 2) { rr(c, -1, e2 * 5.4 - 4.2, 10, 8.4, 3); c.fill(); }
+    }
     if (o.flash > 0) {
-      c.globalAlpha = Math.min(1, o.flash);
-      rr(c, -21, -21, 47, 42, 12); c.fillStyle = '#fff'; c.fill();
+      c.globalAlpha = Math.min(0.85, o.flash);
+      rr(c, -24, -22, 50, 44, 12); c.fillStyle = '#fff'; c.fill();
       c.globalAlpha = 1;
     }
     c.restore();
-
-    // hat (upright)
-    if (o.hat && dead < 0.5) drawHat(c, o.hat, o.x - 2 * Math.cos(o.a) * sc, o.y - 2 * Math.sin(o.a) * sc - 7 * sc, 0.9 * sc, o.t);
-
-    // shield bubble
-    if (o.shield > 0) { // reduced motion: no gentle pulse, but the expiry flicker stays
+    if (o.muzzle > 0 && a) {
+      var reach = (30 - recoil * 6) * sc, gx = o.x + Math.cos(o.a || 0) * reach, gy = o.y + Math.sin(o.a || 0) * reach;
+      var glow = a.glow(pal.paint, a.quality.tier === 0 ? 16 : 26);
+      a.blit(c, glow, gx, gy, { alpha: Math.min(0.8, o.muzzle), sx: 0.55, sy: 0.55 });
+    }
+    if (o.hat) {
+      var hx = o.x - 2 * Math.cos(o.a || 0) * sc, hy = o.y - 2 * Math.sin(o.a || 0) * sc - 8 * sc;
+      var live = o.hat === 4 || o.hat === 5 || o.hat === 6;
+      if (live || !a) drawHat(c, o.hat, hx, hy, 0.92 * sc, o.t);
+      else {
+        var hs = hatSprite(o.hat), s = 0.92 * sc;
+        if (hs && hs.canvas) a.blit(c, hs, hx, hy - 14 * s, { sx: s, sy: s });
+      }
+    }
+    if (o.shield > 0) {
       var pulse = Kit.motion.reduced() ? 1 : 1 + Math.sin((o.t || 0) * 8) * 0.04;
-      var fade = o.shield < 2 ? (Math.sin((o.t || 0) * 20) > 0 ? 1 : 0.35) : 1;
+      var fade = o.shield < 2 ? (Math.sin((o.t || 0) * 14) > 0 ? 1 : 0.4) : 1;
       c.save(); c.globalAlpha = fade;
       circle(c, o.x, o.y, 30 * pulse * sc);
       c.fillStyle = 'rgba(120,220,255,0.22)'; c.fill();
       c.lineWidth = 3; c.strokeStyle = 'rgba(255,255,255,0.95)'; c.stroke();
       c.beginPath(); c.arc(o.x, o.y, 24 * pulse * sc, -2.6, -1.7); c.lineWidth = 4; c.strokeStyle = '#fff'; c.stroke();
+      c.restore();
+    }
+  }
+  function drawDeadTank(c, o, sc, dead) {
+    var pop = dead < 0.28 ? 1 + dead * 1.35 : 1.38 * (1 - (dead - 0.28) / 0.72);
+    if (pop < 0.04) return;
+    var s = sc * pop, a = artKit();
+    var sp = splatSprite(o.paint || '#fff', 0, 2);
+    c.save(); c.globalAlpha = Math.min(1, 0.35 + dead);
+    if (sp && sp.canvas && a) a.blit(c, sp, o.x, o.y, { sx: s * 0.85, sy: s * 0.75 });
+    c.restore();
+    if (o.blobs) {
+      c.save(); c.translate(o.x, o.y); c.rotate(o.a || 0); c.scale(s, s);
+      c.globalAlpha = Math.min(1, dead * 1.5); c.fillStyle = o.paint || '#fff';
+      for (var b = 0; b < o.blobs.length; b += 3) { circle(c, o.blobs[b], o.blobs[b + 1], o.blobs[b + 2]); c.fill(); }
+      c.restore();
+    }
+    if (dead > 0.3) {
+      c.save(); c.translate(o.x, o.y); c.rotate(o.a || 0); c.scale(sc, sc);
+      c.strokeStyle = ink(); c.lineWidth = 2;
+      for (var e = -1; e <= 1; e += 2) {
+        c.save(); c.translate(2, e * 5); c.rotate(Kit.motion.reduced() ? 0 : (o.t || 0) * 4 * e);
+        c.beginPath();
+        for (var q = 0; q < 12; q++) { var aa = q * 0.75, rad = q * 0.32; c.lineTo(Math.cos(aa) * rad, Math.sin(aa) * rad); }
+        c.stroke(); c.restore();
+      }
       c.restore();
     }
   }
@@ -488,20 +552,22 @@
 
   // rnd: seeded random, so a resize redraws the same decorations.
   function drawFloor(c, m, th, rnd) {
-    var cs = m.cs;
-    c.fillStyle = th.bg; c.fillRect(0, 0, 1280, 720);
-    // diagonal stripes on the outside
+    var cs = m.cs, a = artKit(), col = ink();
+    var sky = a && a.sky('ts-bg:' + th.deco, 32, 180, [a.shade(th.bg, 0.18), th.bg, a.shade(th.bg2, -0.12)]);
+    if (sky && sky.canvas) c.drawImage(sky.canvas, 0, 0, 1280, 720);
+    else { c.fillStyle = th.bg; c.fillRect(0, 0, 1280, 720); }
     c.save();
-    c.fillStyle = th.bg2;
-    for (var i = -720; i < 1280; i += 48) {
-      c.beginPath(); c.moveTo(i, 0); c.lineTo(i + 24, 0); c.lineTo(i + 24 + 720, 720); c.lineTo(i + 720, 720); c.closePath(); c.fill();
+    c.globalAlpha = 0.28; c.fillStyle = th.bg2;
+    for (var i = -720; i < 1280; i += 64) {
+      c.beginPath(); c.moveTo(i, 0); c.lineTo(i + 22, 0); c.lineTo(i + 22 + 720, 720); c.lineTo(i + 720, 720); c.closePath(); c.fill();
     }
     c.restore();
     var x0 = m.ox, y0 = m.oy, w = m.cols * cs, h = m.rows * cs;
-    // frame shadow
-    rr(c, x0 - 12, y0 - 8, w + 24, h + 24, 18); c.fillStyle = 'rgba(0,0,0,0.18)'; c.fill();
-    rr(c, x0 - 12, y0 - 12, w + 24, h + 24, 18); c.fillStyle = th.f1; c.fill();
-    // tiles
+    if (a) a.shadow(c, x0 - 18, y0 - 8, w + 36, h + 36, 0.5);
+    rr(c, x0 - 20, y0 - 16, w + 40, h + 40, 26); c.fillStyle = col; c.fill();
+    rr(c, x0 - 14, y0 - 6, w + 28, h + 30, 20); c.fillStyle = a ? a.shade(th.wall, -0.28) : th.wside; c.fill();
+    rr(c, x0 - 14, y0 - 14, w + 28, h + 26, 20); c.fillStyle = th.f1; c.fill();
+    rr(c, x0 - 8, y0 - 12, w + 16, 10, 6); c.fillStyle = 'rgba(255,255,255,0.28)'; c.fill();
     var hs = cs / 2;
     c.fillStyle = th.f2;
     for (var ty = 0; ty < m.rows * 2; ty++) {
@@ -509,10 +575,18 @@
         if ((tx + ty) % 2) c.fillRect(x0 + tx * hs, y0 + ty * hs, hs, hs);
       }
     }
+    c.save();
+    c.beginPath(); c.rect(x0, y0, w, h); c.clip();
+    c.globalAlpha = 0.22; c.strokeStyle = a ? a.shade(th.f2, -0.2) : th.dot; c.lineWidth = 2;
+    c.beginPath();
+    for (var gy = 0; gy <= m.rows; gy++) { c.moveTo(x0, y0 + gy * cs); c.lineTo(x0 + w, y0 + gy * cs); }
+    for (var gx = 0; gx <= m.cols; gx++) { c.moveTo(x0 + gx * cs, y0); c.lineTo(x0 + gx * cs, y0 + h); }
+    c.stroke();
+    c.restore();
     c.fillStyle = th.dot;
     for (var cy = 0; cy < m.rows; cy++) {
       for (var cx = 0; cx < m.cols; cx++) {
-        circle(c, x0 + cx * cs + cs / 2, y0 + cy * cs + cs / 2, 2.5); c.fill();
+        circle(c, x0 + cx * cs + cs / 2, y0 + cy * cs + cs / 2, 2.2); c.fill();
       }
     }
     // themed decorations, kept faint (alpha 0.3)
@@ -544,41 +618,44 @@
       }
     }
     c.restore();
+    if (a) a.vignette(c, 1280, 720, 0.32);
   }
 
+  // Visual blocks are thicker than the collision rects (maze.js T stays 10).
+  // Length grows by 1px only, so a passable gap stays a gap. The lip hangs
+  // down onto the floor, never across the opening.
+  function wallBlock(r) {
+    var w = r.x2 - r.x1, h = r.y2 - r.y1, horiz = w >= h;
+    var x, y, bw, bh;
+    if (horiz) {
+      x = r.x1 + 1; bw = Math.max(8, w - 2);
+      y = (r.y1 + r.y2) / 2 - 11; bh = 20;
+    } else {
+      y = r.y1 + 1; bh = Math.max(8, h - 2);
+      x = (r.x1 + r.x2) / 2 - 11; bw = 22;
+    }
+    return { x: x, y: y, w: bw, h: bh, horiz: horiz };
+  }
   function drawWalls(c, m, th, shadowOnly) {
-    var rects = m.rects, i, r;
+    var rects = m.rects, i, r, b, a = artKit(), col = ink(), LIP = 10;
+    var side = a ? a.shade(th.wside, -0.18) : th.wside;
     if (shadowOnly) {
-      c.fillStyle = 'rgba(42,34,64,0.16)';
-      for (i = 0; i < rects.length; i++) { r = rects[i]; rr(c, r.x1 + 3, r.y1 + 7, r.x2 - r.x1, r.y2 - r.y1, 5); c.fill(); }
+      for (i = 0; i < rects.length; i++) {
+        b = wallBlock(rects[i]);
+        if (a) a.shadow(c, b.x, b.y, b.w, b.h + LIP, 0.42);
+        else { c.fillStyle = 'rgba(27,22,64,0.16)'; rr(c, b.x + 2, b.y + 8, b.w, b.h, 5); c.fill(); }
+      }
       return;
     }
-    // outline pass
-    c.fillStyle = INK;
-    for (i = 0; i < rects.length; i++) { r = rects[i]; rr(c, r.x1 - 2.5, r.y1 - 2.5, r.x2 - r.x1 + 5, r.y2 - r.y1 + 9, 7); c.fill(); }
-    // side (3D) pass
-    c.fillStyle = th.wside;
-    for (i = 0; i < rects.length; i++) { r = rects[i]; rr(c, r.x1, r.y1 + 3, r.x2 - r.x1, r.y2 - r.y1 + 3, 5); c.fill(); }
-    // top pass
-    c.fillStyle = th.wall;
-    for (i = 0; i < rects.length; i++) { r = rects[i]; rr(c, r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1, 5); c.fill(); }
-    // highlight. A wall that starts against a wall coming from above or the
-    // left starts its highlight past it, so no light stripe crosses the joint.
-    c.fillStyle = th.wtop;
     for (i = 0; i < rects.length; i++) {
-      r = rects[i];
-      var w = r.x2 - r.x1, h = r.y2 - r.y1, s = 4;
-      var gx = Math.round((r.x1 + m.T / 2 - m.ox) / m.cs), gy = Math.round((r.y1 + m.T / 2 - m.oy) / m.cs);
-      if (w > h) { if (gy > 0 && m.v[gy - 1][gx]) s = m.T + 1; rr(c, r.x1 + s, r.y1 + 2, w - s - 4.5, 3.5, 2); }
-      else {
-        if (gx > 0 && m.h[gy][gx - 1]) s = m.T + 1;
-        // at a '+' joint the horizontal wall's light runs through, so this one stops and starts again past it
-        for (var k = gy + 1, y0 = r.y1 + s, jy; (jy = m.oy + k * m.cs) < r.y2 - m.T; k++) {
-          if (m.h[k][gx - 1] && m.h[k][gx]) { rr(c, r.x1 + 2, y0, 3.5, jy + 0.5 - y0, 2); c.fill(); y0 = jy + m.T / 2 + 1; }
-        }
-        rr(c, r.x1 + 2, y0, 3.5, r.y2 - 4.5 - y0, 2);
-      }
-      c.fill();
+      r = rects[i]; b = wallBlock(r);
+      rr(c, b.x - 3, b.y - 3, b.w + 6, b.h + LIP + 3, 6); c.fillStyle = col; c.fill();
+      rr(c, b.x, b.y + 6, b.w, b.h + LIP - 5, 5); c.fillStyle = side; c.fill();
+      rr(c, b.x, b.y, b.w, b.h, 5); c.fillStyle = th.wall; c.fill();
+      rr(c, b.x + 2, b.y + 2, b.w - 4, Math.max(4, b.h * 0.42), 4); c.fillStyle = th.wtop; c.fill();
+      c.fillStyle = 'rgba(255,255,255,0.45)';
+      if (b.horiz && b.w > 22) { rr(c, b.x + 8, b.y + 3, b.w - 16, 3.5, 2); c.fill(); }
+      else if (!b.horiz && b.h > 22) { rr(c, b.x + 3, b.y + 8, 3.5, b.h - 16, 2); c.fill(); }
     }
   }
 
@@ -632,7 +709,7 @@
   window.TS_ART = {
     INK: INK, PAL: PAL, THEMES: THEMES, HATS: HATS, SPLATS: SPLATS, POWERS: POWERS,
     rr: rr, circle: circle, star: star, heart: heart,
-    drawTank: drawTank, drawHat: drawHat, drawSplat: drawSplat, drawBall: drawBall,
+    drawTank: drawTank, drawHat: drawHat, drawSplat: drawSplat, splatSprite: splatSprite, drawBall: drawBall,
     drawCrate: drawCrate, drawPowerIcon: drawPowerIcon, drawFloor: drawFloor, drawWalls: drawWalls,
     drawTrophy: drawTrophy, drawBounce: drawBounce
   };
