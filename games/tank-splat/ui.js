@@ -52,6 +52,7 @@
   /* ------------------------------------------------------------ view */
   var cv = document.getElementById('cv');
   var ui = document.getElementById('ui');
+  Kit.art.init({ canvas: cv, mode: '2d', theme: 'day' });
   var app = { screen: 'title', game: null, demo: null, match: null, lock: 0, campSel: 0, shopSlot: 0, shopKind: 'hat', resT: 0 };
   var frameDirty = true; // the paused scene is drawn once, then again only when this is set
   var view = Kit.fit(cv, W, H, {
@@ -68,6 +69,11 @@
     var g = app.screen === 'game' || app.screen === 'pause' || app.screen === 'result' ? app.game : app.demo;
     view.resize();
     if (g) g.rebuildLayers();
+  });
+  Kit.art.quality.on(function () {
+    var g = (app.screen === 'game' || app.screen === 'pause' || app.screen === 'result') ? app.game : app.demo;
+    if (g && g.rebuildLayers) g.rebuildLayers();
+    frameDirty = true;
   });
   Kit.muteButton({ key: false });
   cv.addEventListener('pointerdown', function () { cv.focus(); });
@@ -259,7 +265,7 @@
       var nb = st.bots.length, sp = nb > 2 ? 46 : 56;
       var px = nb > 2 ? 200 : 180, vx = px - 44;
       miniTank(c, px, 58, A.PAL[0], save.equip[0].hat, 0.9, -Math.PI / 2);
-      TG.text(c, 'ضد', vx, 60, 17, '#2a2240', 'center');
+      TG.text(c, 'ضد', vx, 60, 17, '#1b1640', 'center');
       st.bots.forEach(function (b, k) { miniTank(c, vx - 44 - k * sp, 58, A.PAL[k + 1], BOTS[b[1]].hat, 0.9, -Math.PI / 2); });
       if (i > un) {
         var lk = document.createElement('div'); lk.className = 'lock';
@@ -486,12 +492,12 @@
       A.drawTank(c, { x: ox, y: oy, a: -Math.PI / 2, pal: o.pal, hat: o.hat, t: t, scale: 1.2, dead: 1, paint: w.pal.paint,
         blobs: [-8, -6, 7, 9, 4, 6, -2, 10, 5] });
     });
-    TG.text(c, w.name, 330, 105 - (1 - s) * 200, 44, '#fff', 'center', '#2a2240', 9);
+    TG.text(c, w.name, 330, 105 - (1 - s) * 200, 44, '#fff', 'center', '#1b1640', 9);
   }
 
   makeDemo();
   show('title');
-  Kit.loop(update, render);
+  Kit.art.loop(update, render);
   // Redraw once the Arabic web font is ready (canvas text uses it).
   if (document.fonts && document.fonts.load) document.fonts.load('700 40px Fredoka', 'ب').then(function () { bindCounts(); frameDirty = true; }, function () {});
 

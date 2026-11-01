@@ -1,6 +1,6 @@
 /* Paint Tanks — menu styles. The #ui layer is 1280x720 logical px, scaled with the canvas. */
 html, body { background: #2e2160; }
-:root { --ink: #2a2240; }
+:root { --ink: #1b1640; }
 
 #ui {
   position: absolute; left: 0; top: 0; width: 1280px; height: 720px;
@@ -18,7 +18,8 @@ html, body { background: #2e2160; }
 /* ---------- buttons ---------- */
 .btn {
   font: inherit; font-weight: 700; font-size: 28px; line-height: 1.15;
-  color: #fff; background: #3fd15d; border: 4px solid var(--ink); border-radius: 22px;
+  color: #fff; background: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 42%), #3fd15d;
+  border: 4px solid var(--ink); border-radius: 22px;
   padding: 10px 30px 12px; cursor: pointer; box-shadow: 0 6px 0 var(--ink);
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.28);
   transition: transform 0.08s ease, filter 0.08s ease; position: relative;
@@ -26,10 +27,10 @@ html, body { background: #2e2160; }
 .btn small { display: block; font-size: 17px; font-weight: 500; opacity: 0.95; margin-top: 2px; }
 .btn:hover { transform: translateY(-3px) scale(1.03); filter: brightness(1.08); }
 .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--ink); }
-.btn.green { background: #3fd15d; }
-.btn.orange { background: #ff9d1f; }
-.btn.pink { background: #ff5fa8; }
-.btn.white { background: #fff; color: var(--ink); text-shadow: none; }
+.btn.green { background: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 42%), #3fd15d; }
+.btn.orange { background: linear-gradient(180deg, rgba(255,255,255,0.38), rgba(255,255,255,0) 42%), #ff9d1f; }
+.btn.pink { background: linear-gradient(180deg, rgba(255,255,255,0.38), rgba(255,255,255,0) 42%), #ff5fa8; }
+.btn.white { background: linear-gradient(180deg, #fff, #f3f0fa 70%); color: var(--ink); text-shadow: none; }
 .btn.small { font-size: 20px; padding: 6px 18px 8px; border-radius: 16px; box-shadow: 0 4px 0 var(--ink); }
 .btn.small2 { font-size: 20px; padding: 7px 18px 9px; }
 .btn.big { font-size: 46px; padding: 8px 70px 12px; border-radius: 28px; }
@@ -231,3 +232,15 @@ html, body { background: #2e2160; }
 
 /* <kbd> defaults to a monospace font that can't join Arabic letters ("مسافة"). */
 #ui kbd.sg-key { font-family: inherit; }
+@media (prefers-reduced-motion: reduce) {
+  .pulse, .logo, .logo .w1, .logo .w2, .card, .stage, .item, .res-stars .star.pop, .res-note.bump { animation: none; }
+}
+html[data-sg-motion="reduce"] .pulse,
+html[data-sg-motion="reduce"] .logo,
+html[data-sg-motion="reduce"] .logo .w1,
+html[data-sg-motion="reduce"] .logo .w2,
+html[data-sg-motion="reduce"] .card,
+html[data-sg-motion="reduce"] .stage,
+html[data-sg-motion="reduce"] .item,
+html[data-sg-motion="reduce"] .res-stars .star.pop,
+html[data-sg-motion="reduce"] .res-note.bump { animation: none; }

@@ -826,3 +826,46 @@ so a 4× CPU run would time the same pages as main. `tools/perf.mjs` now accepts
 `cpuThrottle`) and `--viewport WxH` for those later before/after runs.
 `tools/artkit-demo.html` is a review page and is not in the download or the
 service worker.
+
+## Tank-splat visual upgrade, 31 October 2026
+
+دبابات الألوان now draws a chunky toy-tank arena. The floor and the walls are
+baked once per maze with `Kit.art.bake`: a tile or grass floor, a vignette on
+tiers 1 and 2, and 3/4-view wall blocks (light top, darker front, ink outline,
+cached drop shadow). Collision geometry in `maze.js` is unchanged; the blocks
+are thicker than the 10 px walls but do not close a passable gap. Paint is
+stamped from cached splat sprites into one decal canvas that is cleared each
+round, capped at 200 stamps and fewer and smaller on tier 0. Each tank colour
+and hat is a cached sprite, with scrolling tread marks, a recoil spring, a
+muzzle flash and paint-drip particles from `Kit.art.fx`. A hit pops the tank
+into paint, with confetti in the shooter's colour, mild shake and a
+render-only hit-stop. The HUD is toy panels with a colour badge and a "+1" pop.
+
+The page calls `Kit.art.init` and `Kit.art.loop`. Gameplay, scoring, speeds and
+the `Math.random` call count are unchanged. The two shake draws per frame still
+call `Math.random`, so bots and crates keep their stream; the visible offset is
+`Kit.art.shake`. The old per-splat object particles are gone.
+
+Measured with the Linux minified build, against this branch before the art
+(the shared kit was already in the precache).
+
+| | Before bytes | After bytes | New limit |
+| --- | ---: | ---: | ---: |
+| `games/tank-splat/index.html` | 112,540 | 117,429 | 118,016 (was 114,000) |
+| Offline precache, 49 files | 5,463,599 | 5,468,488 | 5,495,889 (was 5,491,000) |
+
+The page grew by 4,889 bytes (4.3%), inside min(+12%, +14 KB). The new game
+limit is that size plus 0.5% (587 bytes). The precache limit rises by the same
+4,889 bytes.
+
+4× CPU throttle, 3 samples of 10 seconds, software rendering, one run at a time
+on this machine:
+
+| | Median frame | Median fps | p95 frame |
+| --- | ---: | ---: | ---: |
+| Before | 50 ms | 20.0 | 99.9 ms |
+| After | 33.4 ms | 29.9 | 83.3 ms |
+
+After is above 0.95× the before median fps, and the p95 frame is under
+1.05× the before p95 plus 1 ms. Baked: floor and walls. Cached: tank bodies,
+barrels, tread strips, hats, splat sprites, and the kit's glows and shadows.

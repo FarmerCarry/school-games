@@ -44,7 +44,9 @@ async function game(t, entries = {}) {
     const lineTo = proto.lineTo, dashOffset = Object.getOwnPropertyDescriptor(proto, 'lineDashOffset');
     let dashing = false;
     proto.drawImage = function (img) {
-      if (this.canvas.id === 'cv' && img instanceof HTMLCanvasElement) runtime.layerDraws++;
+      // Baked floor and walls are OffscreenCanvas; the paint layer is an HTML canvas.
+      // Count only full-arena blits, not tank, splat or particle sprites.
+      if (this.canvas.id === 'cv' && img && img.width >= 400) runtime.layerDraws++;
       return drawImage.apply(this, arguments);
     };
     proto.fillText = function (text, x, y) {
