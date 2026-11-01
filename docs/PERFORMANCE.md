@@ -909,3 +909,39 @@ the new page plus the portal and the teacher page, and gains one file, so
 measurement. Each new limit is the measured size rounded up (the game to the next
 500 bytes, the others to the next 1,000), and each headroom is under half a percent.
 No other game, font or library limit changes.
+
+## Turbo Karts on current main, 1 November 2026
+
+سباق التوربو (Turbo Karts) joins the site beside Lucky Lake. It is a top-down
+kart race on one canvas. The asphalt, kerbs, trees, tyre stacks, start-line
+grandstand and cones are drawn once into an offscreen canvas; each frame blits
+that bitmap, a skid-mark canvas, and pre-rendered kart sprites. There is no
+background music. A solo race reports `T1` (a win or a loss, with place points)
+and a time trial reports `tt-T1` (a neutral end, with time-trial points). A
+two-player race reports `T1:pvp` and ends `end`, so it is not a personal win.
+`Kit.dda` is read at the start of a race against the computer, and `Kit.track`
+counts a turbo, a wall or a spin, and a hazard cue. The shared XP rules are
+unchanged: an endless run under 20 seconds pays nothing, the 40 XP caps stay,
+and a `:pvp` or `:duo` id marks a two-player round.
+
+Measured with the Linux minified build and `SG_TELEMETRY_URL` set, the same Actions
+build the budgets check. Main before this game is the Lucky Lake head: portal
+426,183, teacher page 100,831, offline precache 5,937,420 across 52 files.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Turbo Karts | — | 88,885 | — | 89,000 |
+| Portal (thumbnail and catalog entry) | 426,183 | 430,466 | 427,000 | 431,000 |
+| Teacher page | 100,831 | 101,673 | 101,000 | 102,000 |
+| Offline precache, 53 files | 5,937,420 | 6,031,430 | 5,938,000 | 6,032,000 |
+
+The page limit is a new entry, 115 bytes (0.13%) above the built page. The portal
+grows by 4,283 bytes, most of it the thumbnail and the catalog entry, so its limit
+moves from 427,000 to 431,000: 534 bytes (0.12%) above this measurement. The teacher
+page grows by 842 bytes and no longer fits in 101,000, so its limit moves to
+102,000: 327 bytes (0.32%) left. The offline cache grows by 94,010 bytes, which is
+the new page plus the portal and the teacher page, and gains one file, so
+`precacheBytes` moves from 5,938,000 to 6,032,000: 570 bytes (0.0094%) above this
+measurement. Each new limit is the measured size rounded up (the game to the next
+500 bytes, the others to the next 1,000), and each headroom is under half a percent.
+No other game, font or library limit changes.

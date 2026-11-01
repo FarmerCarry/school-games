@@ -1,7 +1,7 @@
 // What the score means in each game that passes one to Kit.stats.end(result, score):
 // [Arabic, English], each completing «النتيجة هنا هي …» / "The score here is …".
 // Written by hand from the games' own code; a score is only comparable within one game.
-// tools/tests/dashboard-research.test.mjs checks that these are exactly the 32 score games.
+// tools/tests/dashboard-research.test.mjs checks that these are exactly the 33 score games.
 window.SG_SCORES = {
   'air-hockey': ['أهداف الطفل في المباراة', 'the child’s goals in the match'],
   'beat-dash': ['المسافة التي قطعها الطفل من المرحلة بالنسبة المئوية (100 عند إنهائها)', 'how far through the level the child got, in % (100 when it is finished)'],
@@ -33,6 +33,7 @@ window.SG_SCORES = {
   'swing-hook': ['نجوم المرحلة المنتهية (من 0 إلى 3)، وفي اللعب المتواصل المسافة', 'the stars of a finished level (0 to 3); in the endless run, the distance'],
   'troll-level': ['نجوم المرحلة المنتهية', 'the stars of a finished level'],
   'tunnel-blitz': ['نقاط الجولة', 'the points of the run'],
+  'turbo-karts': ['نقاط المركز في السباق (10 للأول) أو نقاط سباق الوقت', 'the place points of the race (10 for first) or the time-trial points'],
   'typing-test': ['سرعة الكتابة بالكلمات في الدقيقة', 'the typing speed, in words per minute'],
   'wacky-soccer': ['أهداف الطفل في المباراة', 'the child’s goals in the match']
 };

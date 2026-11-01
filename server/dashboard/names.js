@@ -37,6 +37,7 @@ window.SG_GAME_NAMES = {
   "tic-tac-toe": ["إكس أو","Tic Tac Toe"],
   "troll-level": ["المراحل الماكرة","Sneaky Levels"],
   "tunnel-blitz": ["نفق السرعة","Tunnel Blitz"],
+  "turbo-karts": ["سباق التوربو","Turbo Karts"],
   "typing-test": ["أصابع البرق","Lightning Fingers"],
   "wacky-soccer": ["كرة القدم المجنونة","Wacky Soccer"]
 };
@@ -80,6 +81,7 @@ window.SG_GAME_INFO = {
   "tic-tac-toe": {"cats":["two-player","puzzle"],"players":2,"input":"pointer","dda":0,"track":0,"tutorial":0},
   "troll-level": {"cats":["arcade"],"players":1,"input":"keyboard","dda":0,"track":0,"tutorial":1},
   "tunnel-blitz": {"cats":["running","arcade"],"players":1,"input":"keyboard","dda":0,"track":0,"tutorial":0},
+  "turbo-karts": {"cats":["racing","two-player"],"players":2,"input":"keyboard","dda":1,"track":1,"tutorial":0},
   "typing-test": {"cats":["challenge"],"players":1,"input":"keyboard","dda":0,"track":0,"tutorial":0},
   "wacky-soccer": {"cats":["sports","two-player"],"players":2,"input":"one-button","dda":0,"track":0,"tutorial":1}
 };

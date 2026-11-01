@@ -301,8 +301,9 @@
   function pairedCard(ctx, parent, id, paired, name, title) {
     var T = ctx.t(), C = ctx.C, I = ctx.I, R = ctx.R;
     var groups = R.paired(paired, name), f = fmtOf(ctx, name);
-    var c = ctx.card(parent, id, T.pairedTitle(title), T.pairedSub, true);
     var keys = ['all'].concat(BANDS).filter(function (b) { return groups[b]; });
+    // No comparison yet: say so, and do not offer an empty table.
+    var c = ctx.card(parent, id, T.pairedTitle(title), T.pairedSub, keys.length > 0);
     if (!keys.length) { ctx.note(c.chart, T.pairedNone); return c; }
     var values = [];
     keys.forEach(function (b) { values.push(f.scale(groups[b].before), f.scale(groups[b].after)); });
