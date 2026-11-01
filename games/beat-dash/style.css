@@ -133,3 +133,12 @@ html[data-sg-motion="reduce"] .unlock-row, html[data-sg-motion="reduce"] .win-st
 .pause-btn:hover { background: rgba(0,0,0,.55); }
 .pause-btn[hidden] { display: none; }
 .pause-btn svg { width: 100%; height: 100%; display: block; }
+
+/* Toy look on top of the shared art kit. Higher specificity so the big play target stays big. */
+html[data-sg-art] .sg-btn.big-play { font-size: 40px; padding-block: 14px; padding-inline: 56px; border-radius: 999px; }
+html[data-sg-art] .sg-btn.small { font-size: 18px; padding-block: 8px; padding-inline: 18px; }
+html[data-sg-art] .arrow { border: 3px solid #1b1640; box-shadow: inset 0 3px 0 #fff8, 0 4px 0 #1b1640; }
+html[data-sg-art] .tab { border: 3px solid transparent; }
+html[data-sg-art] .tab.on { border-color: #1b1640; box-shadow: inset 0 2px 0 #fff8, 0 3px 0 #1b1640; }
+html[data-sg-art] .card { border: 4px solid #1b1640; }
+html[data-sg-art] .howto-strip, html[data-sg-art] .preview-box, html[data-sg-art] .picker { border: 3px solid #1b1640; }

@@ -12,15 +12,22 @@
 
   var canvas = document.getElementById('game');
   var uiEl = document.getElementById('ui');
+  // Art kit before fit, so the first scale is the sprite bucket.
+  Kit.art.init({ canvas: canvas, mode: '2d', theme: 'neon' });
   var view = Kit.fit(canvas, W, H, { onResize: layoutUI });
   var ctx = view.ctx;
+  // Pooled juice. The game's own bursts stay, so their Math.random order is unchanged.
+  var juice = Kit.art.fx(36);
+  var squish = Kit.art.spring(240, 15);
   // A paused run is drawn once (see render); this marks when it must be drawn again.
   var frameDirty = true;
   // after a GPU reset the canvas comes back blank (render sets the transform every frame)
-  canvas.addEventListener('contextrestored', function () { frameDirty = true; });
+  canvas.addEventListener('contextrestored', function () { frameDirty = true; gradCache = {}; patCache = {}; });
+  Kit.art.quality.on(function () { patCache = {}; frameDirty = true; });
   var ptr = Kit.pointer(view);
   var store = Kit.store('beat-dash');
-  var shake = Kit.shake();
+  // Kit.art.shake replaces Kit.shake. Kit.shake called Math.random twice a frame for a
+  // purely visual offset; the art shake uses Kit.art.rand and never touches that stream.
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
 
@@ -205,10 +212,12 @@
         ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(x, y, s * 0.5 * (0.4 + 0.6 * k), 0, TAU); ctx.fill();
       } else if (p.shape === 4) {
         ctx.fillStyle = p.color; ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot); BD.starPath(ctx, 0, 0, s, s * 0.45, 5, 0); ctx.fill(); ctx.restore();
+      } else if (s < 9) {
+        ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(x, y, s * 0.48, 0, TAU); ctx.fill();
       } else {
-        ctx.fillStyle = p.color;
-        if (s < 9) ctx.fillRect(x - s / 2, y - s / 2, s, s);
-        else { ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot); ctx.fillRect(-s / 2, -s / 2, s, s); ctx.restore(); }
+        // Candy shard: the cube pops, it does not break into metal.
+        ctx.fillStyle = p.color; ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot);
+        BD.rr(ctx, -s / 2, -s * 0.32, s, s * 0.64, Math.max(2, s * 0.18)); ctx.fill(); ctx.restore();
       }
     }
     ctx.globalAlpha = 1;
@@ -381,7 +390,7 @@
     if (scene !== 'play' || G.paused || G.won) return;
     G.paused = true;
     // the still paused frame is drawn without a half-faded flash or a shake offset
-    G.flash = 0; shake.power = shake.x = shake.y = 0; frameDirty = true;
+    G.flash = 0; Kit.art.shake.update(8); frameDirty = true;
     show('pause');
     $('pause-level').textContent = G.L.def.name + (G.practice ? ' — تدريب' : '') + ' — المحاولة ' + G.sessionAtt;
     var bn = save.best[G.L.id] || 0, bp = save.bestP[G.L.id] || 0;
@@ -538,7 +547,14 @@
     burst(cx, cy, 26, { speed: 11, life: 0.8, size: 0.26, colors: [look.c1, look.c2, '#ffffff'], g: -22, drag: 0.8 });
     burst(cx, cy, 20, { speed: 16, life: 0.5, size: 0.1, color: '#ffffff', g: 0, shape: 1, drag: 2 });
     ring(cx, cy, look.c1, 0.3, 2.6, 0.45);
-    shake.add(14);
+    // The cube pops: confetti in screen space and a mild shake. No hit-stop:
+    // Kit.art.layer holds its camera on the wall clock during one, so a later
+    // paused redraw would not match the frame drawn while it was frozen.
+    var camX = s.x - PLAYER_SX, gy = GROUND0 + G.camY * U;
+    var px = (cx - camX) * U, py = gy - cy * U;
+    juice.burst(px, py, { n: 12, color: look.c1, speed: 260, life: 0.5, size: 8, shape: 'confetti' });
+    juice.burst(px, py, { n: 8, color: look.c2, speed: 180, life: 0.42, size: 7, shape: 'star' });
+    Kit.art.shake.add(0.45);
     if (!calm()) { G.flash = 0.45; G.flashCol = '#ffffff'; }
     sfx.die();
     save.total.jumps += s.jumps - G.jumpsAtStart; G.jumpsAtStart = s.jumps; persist('total');
@@ -566,6 +582,8 @@
   function popup(big, small, col) {
     var live = scene === 'play' && !G.dead && !G.won;
     G.popups.push({ big: big, small: small, col: col, t: 0, life: 1.6, x: live ? 180 : W / 2, y: live ? 200 : 150, centre: !live });
+    // The percent / practice line also pops beside the bar. The big RTL line stays in drawPopups.
+    Kit.art.pop(small || big, live ? 220 : W / 2, live ? 78 : 92, { color: col, size: live ? 30 : 36 });
   }
   function centrePopupUp() {
     for (var i = 0; i < G.popups.length; i++) if (G.popups[i].centre) return true;
@@ -579,19 +597,22 @@
       switch (e.t) {
         case 'jump':
           G.sqx = 0.78; G.sqy = 1.25;
+          squish.kick(2.4);
           burst(s.x + 0.5, s.grav > 0 ? s.y : s.y + 1, 6, { speed: 3, life: 0.3, size: 0.12, color: th.line, angle: s.grav > 0 ? -Math.PI / 2 : Math.PI / 2, spread: 1.8, g: 0 });
           sfx.jump();
           break;
         case 'land':
           var power = Math.min(1, (o || 0) / 30);
           G.sqx = 1.2 + 0.15 * power; G.sqy = 0.78 - 0.1 * power;
+          squish.kick(-2.2 - power);
           burst(s.x + 0.5, s.grav > 0 ? s.y : s.y + 1, 5 + Math.round(power * 8), { speed: 3 + 3 * power, life: 0.35, size: 0.13, color: th.line, angle: s.grav > 0 ? Math.PI / 2 : -Math.PI / 2, spread: 2.6, g: s.grav > 0 ? -12 : 12 });
-          if (power > 0.3) shake.add(2 + 3 * power);
+          if (power > 0.3) Kit.art.shake.add(Math.min(0.28, 0.08 + 0.16 * power));
           sfx.land(power);
           break;
         case 'pad':
           G.flashes[o.id] = 1;
           G.sqx = 0.7; G.sqy = 1.35;
+          squish.kick(3);
           burst(o.x1 + 0.4, o.dir > 0 ? o.y1 + 0.2 : o.y2 - 0.2, 16, { speed: 7, life: 0.5, size: 0.14, color: o.kind === 'Y' ? '#ffe14d' : '#4dc3ff', angle: o.dir > 0 ? Math.PI / 2 : -Math.PI / 2, spread: 1.4, g: 0, drag: 2 });
           sfx.pad();
           break;
@@ -601,13 +622,14 @@
           ring(o.cx, o.cy, oc, 0.4, 1.7, 0.4);
           burst(o.cx, o.cy, 14, { speed: 6, life: 0.4, size: 0.13, color: oc, g: 0, drag: 3, shape: 1 });
           G.sqx = 0.75; G.sqy = 1.3;
+          squish.kick(2.6);
           sfx.orb();
           break;
         case 'portal':
           G.flashes[o.id] = 1;
           if (!calm()) { G.flash = 0.35; G.flashCol = portalCol(o.kind); }
           burst(o.cx, o.cy, 18, { speed: 6, life: 0.5, size: 0.15, color: portalCol(o.kind), g: 0, jy: 2.5, drag: 2 });
-          shake.add(3);
+          Kit.art.shake.add(0.18);
           sfx.portal();
           break;
         case 'star':
@@ -639,7 +661,7 @@
     G.winUnlocks = checkUnlocks();
     if (nextWasLocked) G.winUnlocks.unshift({ kind: 'l', i: G.li + 1 });
     if (!calm()) { G.flash = 0.6; G.flashCol = '#ffffff'; }
-    shake.add(6);
+    Kit.art.shake.add(0.32);
     sfx.win();
     // calm mode: no full-screen fireworks (the win panel and its stars still appear at once)
     if (calm()) sfx.firework();
@@ -747,9 +769,9 @@
     BD.tick(demoL, s, h, h);
     for (var i = 0; i < s.ev.length; i++) {
       var e = s.ev[i];
-      if (e.t === 'jump') { demo.sqx = 0.8; demo.sqy = 1.22; }
-      if (e.t === 'land') { demo.sqx = 1.2; demo.sqy = 0.8; burst(s.x + 0.5, s.y, 6, { speed: 3, life: 0.3, size: 0.12, color: themeNow.line, angle: Math.PI / 2, spread: 2.4, g: -10 }); }
-      if (e.t === 'pad') { burst(e.o.x1 + 0.4, e.o.y1 + 0.2, 12, { speed: 6, life: 0.4, size: 0.13, color: '#ffe14d', angle: Math.PI / 2, spread: 1.3, g: 0, drag: 2 }); demo.sqx = 0.7; demo.sqy = 1.3; }
+      if (e.t === 'jump') { demo.sqx = 0.8; demo.sqy = 1.22; squish.kick(2); }
+      if (e.t === 'land') { demo.sqx = 1.2; demo.sqy = 0.8; squish.kick(-2); burst(s.x + 0.5, s.y, 6, { speed: 3, life: 0.3, size: 0.12, color: themeNow.line, angle: Math.PI / 2, spread: 2.4, g: -10 }); }
+      if (e.t === 'pad') { burst(e.o.x1 + 0.4, e.o.y1 + 0.2, 12, { speed: 6, life: 0.4, size: 0.13, color: '#ffe14d', angle: Math.PI / 2, spread: 1.3, g: 0, drag: 2 }); demo.sqx = 0.7; demo.sqy = 1.3; squish.kick(2.6); }
     }
     s.ev.length = 0;
     if (s.dead) { demo.s = null; return; }
@@ -794,7 +816,11 @@
     }
     // shared visuals
     updateParts(dt);
-    shake.update(dt);
+    Kit.art.shake.update(dt);
+    squish.update(dt);
+    juice.update(dt);
+    Kit.art.pop.update(dt);
+    Kit.art.flash.update(dt);
     G.sqx = lerp(G.sqx, 1, 0.2); G.sqy = lerp(G.sqy, 1, 0.2);
     G.flash = Math.max(0, G.flash - dt * 1.8);
     for (var id in G.flashes) { G.flashes[id] -= dt * 3; if (G.flashes[id] <= 0) delete G.flashes[id]; }
@@ -812,7 +838,8 @@
   }
 
   /* ============================================================ RENDER */
-  var gradCache = {};
+  var gradCache = {}, patCache = {}, patM = null;
+  var farSpr, midSpr, nearSpr, farL, midL, nearL, layerKey = '', layerTheme = null;
   function mixHex(a, b, t) {
     var pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
     var r = Math.round(lerp(pa >> 16, pb >> 16, t)), g = Math.round(lerp((pa >> 8) & 255, (pb >> 8) & 255, t)), bl = Math.round(lerp(pa & 255, pb & 255, t));
@@ -838,62 +865,146 @@
     return { pulse: glow, tint: glow, beat: Math.floor(b), sec: sec, frac: frac };
   }
 
-  function drawBackground(th, t, bi, camX, camY) {
-    var gk = th.bg1 + th.bg2;
-    var g = gradCache[gk];
-    if (!g) { if (Object.keys(gradCache).length > 30) gradCache = {}; g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, th.bg1); g.addColorStop(1, th.bg2); gradCache[gk] = g; }
+  function modp(a, n) { a %= n; return a < 0 ? a + n : a; }
+  function fillSky(th) {
+    var gk = th.bg1 + th.bg2, g = gradCache[gk];
+    if (!g) {
+      if (Object.keys(gradCache).length > 12) gradCache = {};
+      g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, th.bg1); g.addColorStop(1, th.bg2);
+      gradCache[gk] = g;
+    }
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    var pulse = bi.pulse;
-    // big slow shapes
+  }
+  function repaint(spr, fn) {
+    var c = spr.canvas.getContext('2d'), sx = spr.canvas.width / spr.w, sy = spr.canvas.height / spr.h;
+    c.setTransform(sx, 0, 0, sy, 0, 0);
+    c.clearRect(0, 0, spr.w, spr.h);
+    c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    fn(c, spr.w, spr.h);
+  }
+  function paintFar(c, w, h) {
+    var th = layerTheme, i, x, y, s;
+    for (i = 0; i < 8; i++) {
+      x = hash(i * 19) * w; y = hash(i * 23 + 1) * h * 0.62; s = 80 + hash(i * 11) * 150;
+      c.globalAlpha = 0.09 + hash(i * 7) * 0.07;
+      c.fillStyle = i % 2 ? th.deco : th.line;
+      if (i % 3 === 0) { c.beginPath(); c.arc(x, y, s * 0.42, 0, TAU); c.fill(); }
+      else { Kit.art.round(c, x, y, s, s * 0.72, s * 0.24); c.fill(); }
+      if (x < s) { c.globalAlpha = 0.09; if (i % 3 === 0) { c.beginPath(); c.arc(x + w, y, s * 0.42, 0, TAU); c.fill(); } else { Kit.art.round(c, x + w, y, s, s * 0.72, s * 0.24); c.fill(); } }
+    }
+    c.globalAlpha = 0.9; c.fillStyle = Kit.art.shade(th.bg1, -0.35);
+    c.beginPath(); c.moveTo(0, h);
+    for (i = 0; i <= 32; i++) {
+      x = i / 32 * w;
+      y = h * 0.74 + Math.sin(i / 32 * Math.PI * 4) * h * 0.045 + Math.sin(i / 32 * Math.PI * 8) * h * 0.02;
+      c.lineTo(x, y);
+    }
+    c.lineTo(w, h); c.closePath(); c.fill();
+    c.globalAlpha = 1;
+  }
+  function paintMid(c, w, h) {
+    var th = layerTheme, slot = 160, n = Math.round(w / slot), i, bw, bh, x;
+    c.fillStyle = Kit.art.shade(th.bg2, -0.38);
+    for (i = 0; i < n; i++) {
+      bw = 108 + (hash(i * 5) * 36 | 0); bh = 70 + hash(i * 9) * (h - 78);
+      x = i * slot + (slot - bw) / 2;
+      c.globalAlpha = 0.92;
+      Kit.art.round(c, x, h - bh, bw, bh + 30, 14); c.fill();
+      c.globalAlpha = 0.45; c.fillStyle = th.line;
+      var wy, wx;
+      for (wy = h - bh + 18; wy < h - 24; wy += 26) for (wx = x + 16; wx < x + bw - 18; wx += 22) c.fillRect(wx, wy, 9, 12);
+      c.fillStyle = Kit.art.shade(th.bg2, -0.38);
+    }
+    c.globalAlpha = 1;
+  }
+  function paintNear(c, w, h) {
+    var g = c.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.45, layerTheme.line);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.globalAlpha = 0.55; c.fillStyle = g; c.fillRect(0, 0, w, h); c.globalAlpha = 1;
+  }
+  function syncLayers(th) {
+    var key = th.bg1 + th.line + th.deco + th.bg2;
+    layerTheme = th;
+    if (!farL) {
+      farSpr = Kit.art.sprite('bd-far', W, H, function (c, w, h) { paintFar(c, w, h); }, { scale: 0.4 });
+      midSpr = Kit.art.sprite('bd-mid', W, 200, function (c, w, h) { paintMid(c, w, h); }, { scale: 0.7 });
+      nearSpr = Kit.art.sprite('bd-near', W, 64, function (c, w, h) { paintNear(c, w, h); }, { scale: 0.5 });
+      farL = Kit.art.layer(farSpr, 0.14);
+      midL = Kit.art.layer(midSpr, 0.42);
+      nearL = Kit.art.layer(nearSpr, 0.88);
+      layerKey = key;
+      return;
+    }
+    if (key === layerKey) return;
+    layerKey = key;
+    repaint(farSpr, paintFar); repaint(midSpr, paintMid); repaint(nearSpr, paintNear);
+  }
+  // One horizontal band of a parallax layer, clipped so the wrap tile above it is not drawn.
+  function drawBand(layer, camX, y, h) {
     ctx.save();
-    ctx.strokeStyle = th.deco; ctx.lineWidth = 8;
-    var span = 1700, spin = calm() ? 0 : t * 0.25;
-    for (var i = 0; i < 9; i++) {
-      var bx = ((i * 190 - camX * U * 0.08) % span + span) % span - 200;
-      var by = 90 + (i * 137 % 5) * 72 + camY * U * 0.05;
-      var sz = (70 + (i * 53 % 4) * 34) * (1 + pulse * 0.08);
-      ctx.globalAlpha = 0.16 + 0.1 * bi.tint;
-      ctx.save(); ctx.translate(bx, by); ctx.rotate(spin * (i % 2 ? 1 : -1) + i);
-      if (i % 3 === 0) { ctx.beginPath(); ctx.arc(0, 0, sz / 2, 0, TAU); ctx.stroke(); }
-      else ctx.strokeRect(-sz / 2, -sz / 2, sz, sz);
-      ctx.restore();
-    }
+    ctx.beginPath(); ctx.rect(0, y, W, h); ctx.clip();
+    ctx.translate(0, y);
+    layer.draw(ctx, camX, 0);
     ctx.restore();
-    // equalizer bars
+  }
+  function beatAlpha(bi) { return Kit.art.quality.tier === 0 ? 1 : (0.8 + 0.2 * bi.tint); }
+
+  function drawBackground(th, t, bi, camX, camY) {
+    // One full-canvas gradient (the paint marker). Layers cross-fade only between two baked themes.
+    if (themeFade && themeFade.from) {
+      fillSky(themeFade.from);
+      ctx.save(); ctx.globalAlpha = Math.min(1, themeFade.t); fillSky(themeNow); ctx.restore();
+    } else fillSky(themeNow);
+    syncLayers(themeNow);
     var gy = GROUND0 + camY * U;
-    var bw = 38, step = 48, off = camX * U * 0.3;
-    var k0 = Math.floor(off / step);
-    ctx.fillStyle = th.deco;
-    for (var k = k0; k * step - off < W; k++) {
-      var x = k * step - off;
-      var base = 40 + hash(k) * 150;
-      var hop = hash(k * 31 + bi.beat * 7) * 90;
-      var hh = (base + hop * (bi.sec === 0 ? 0.3 : 1)) * (0.6 + 0.4 * pulse);
-      ctx.globalAlpha = 0.18 + 0.08 * bi.tint;
-      ctx.fillRect(x, gy - hh, bw, hh);
-      ctx.globalAlpha = 0.35;
-      ctx.fillRect(x, gy - hh - 10, bw, 5);
-    }
-    ctx.globalAlpha = 1;
-    // pulse wash
-    if (pulse > 0.02) { ctx.fillStyle = hexA(th.line, 0.07 * pulse); ctx.fillRect(0, 0, W, H); }
+    ctx.save();
+    ctx.globalAlpha = beatAlpha(bi);
+    farL.draw(ctx, camX * U, -camY * U);
+    ctx.globalAlpha = beatAlpha(bi) * 0.95;
+    if (gy < H + 40 && gy > 80) drawBand(midL, camX * U, gy - 200, 200);
+    ctx.restore();
   }
 
+  function groundSpr(th) {
+    return Kit.art.sprite('bd-gnd:' + th.ground1 + th.ground2, 16, 200, function (c, w, h) {
+      var g = c.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, th.ground1); g.addColorStop(1, th.ground2);
+      c.fillStyle = g; c.fillRect(0, 0, w, h);
+    });
+  }
+  function tileSpr(th) {
+    var tw = U * 2;
+    return Kit.art.sprite('bd-tile:' + th.line, tw * 2, tw, function (c, w, h) {
+      c.strokeStyle = hexA(th.line, 0.2); c.lineWidth = 3;
+      Kit.art.round(c, 8, 10, tw - 16, tw - 20, 12); c.stroke();
+      Kit.art.round(c, tw + 8, 10, tw - 16, tw - 20, 12); c.stroke();
+    });
+  }
   function drawGround(th, camX, camY, bi) {
     var gy = GROUND0 + camY * U;
     if (gy >= H) return;
-    var g = ctx.createLinearGradient(0, gy, 0, gy + 170);
-    g.addColorStop(0, th.ground1); g.addColorStop(1, th.ground2);
-    ctx.fillStyle = g; ctx.fillRect(0, gy, W, H - gy);
-    // tiles
-    ctx.strokeStyle = hexA(th.line, 0.13); ctx.lineWidth = 3;
-    var tw = U * 2, off = ((camX * U) % tw + tw) % tw;
-    ctx.beginPath();
-    for (var x = -off; x < W + tw; x += tw) { ctx.rect(x + 6, gy + 10, tw - 12, tw - 12); }
-    ctx.stroke();
-    // bright line
+    th = themeNow;
+    var spr = groundSpr(th), gh = Math.min(220, H - gy);
+    if (spr.canvas) ctx.drawImage(spr.canvas, 0, gy, W, gh);
+    if (gy + gh < H) { ctx.fillStyle = th.ground2; ctx.fillRect(0, gy + gh, W, H - gy - gh); }
+    var tiles = tileSpr(th);
+    if (tiles.canvas) {
+      var tw = tiles.w, off = modp(camX * U, tw), x;
+      ctx.save(); ctx.beginPath(); ctx.rect(0, gy, W, H - gy); ctx.clip();
+      for (x = -off; x < W; x += tw) ctx.drawImage(tiles.canvas, x, gy + 4, tw, tiles.h);
+      ctx.restore();
+    }
+    if (Kit.art.quality.tier >= 1) Kit.art.gloss(ctx, 0, gy, W, 28);
+    if (nearL && gy > 20) {
+      ctx.save(); ctx.globalAlpha = beatAlpha(bi) * 0.85;
+      drawBand(nearL, camX * U, gy - 30, 64);
+      ctx.restore();
+    }
     ctx.strokeStyle = th.line;
-    ctx.globalAlpha = 0.25 + 0.35 * bi.tint; ctx.lineWidth = 12;
+    ctx.globalAlpha = Kit.art.quality.tier === 0 ? 0.55 : (0.3 + 0.4 * bi.tint); ctx.lineWidth = 12;
     ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
     ctx.globalAlpha = 1; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
@@ -902,6 +1013,77 @@
   function orbCol(k) { return k === 'o' ? '#ffe14d' : k === 'p' ? '#ff6bd6' : '#4dc3ff'; }
   function portalCol(k) { return { G: '#ffb300', N: '#35c6ff', R: '#ff4fd8', C: '#7dff5a', '1': '#ff9f40', '2': '#4dc3ff', '3': '#7dff5a', '4': '#ff4fd8' }[k]; }
 
+  function paintCandy(c, w, h, th, tier) {
+    var r = Math.min(14, w * 0.2, h * 0.42);
+    if (tier >= 1) {
+      var glow = Kit.art.glow(th.blockLine, Math.round(Math.min(w, h) * 0.55) || 16);
+      if (glow.canvas) {
+        c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.9;
+        c.drawImage(glow.canvas, -w * 0.04, -h * 0.06, w * 1.08, h * 1.1); c.restore();
+      }
+    }
+    Kit.art.round(c, 2, 2, w - 4, h - 4, r);
+    var g = c.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, Kit.art.shade(th.blockLine, 0.2));
+    g.addColorStop(0.38, Kit.art.shade(th.block, 0.58));
+    g.addColorStop(1, Kit.art.shade(th.block, -0.08));
+    Kit.art.outlined(c, g, 3.5);
+    Kit.art.gloss(c, 6, 4, w - 12, h * 0.42);
+    c.globalAlpha = 0.9; c.fillStyle = Kit.art.shade(th.block, -0.15);
+    Kit.art.round(c, w * 0.22, h * 0.28, w * 0.56, h * 0.42, r * 0.4); c.fill();
+    c.globalAlpha = 1; c.strokeStyle = th.blockLine; c.lineWidth = Math.max(2, w * 0.05);
+    c.stroke();
+  }
+  function paintSpike(c, w, h, th, dir, tier) {
+    if (tier >= 1) {
+      var glow = Kit.art.glow(th.spike, 18);
+      if (glow.canvas) {
+        c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.65;
+        c.drawImage(glow.canvas, w * 0.12, h * 0.12, w * 0.76, h * 0.76); c.restore();
+      }
+    }
+    c.beginPath();
+    if (dir > 0) {
+      c.moveTo(w * 0.16, h * 0.94);
+      c.quadraticCurveTo(w * 0.5, h * 0.02, w * 0.84, h * 0.94);
+      c.quadraticCurveTo(w * 0.5, h * 0.7, w * 0.16, h * 0.94);
+    } else {
+      c.moveTo(w * 0.16, h * 0.06);
+      c.quadraticCurveTo(w * 0.5, h * 0.98, w * 0.84, h * 0.06);
+      c.quadraticCurveTo(w * 0.5, h * 0.3, w * 0.16, h * 0.06);
+    }
+    var g = c.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, Kit.art.shade(th.spike, dir > 0 ? 0.35 : -0.1));
+    g.addColorStop(1, Kit.art.shade(th.spike, dir > 0 ? -0.12 : 0.35));
+    Kit.art.outlined(c, g, 3);
+    var ey = dir > 0 ? h * 0.62 : h * 0.4, flip = dir > 0 ? 1 : -1;
+    c.fillStyle = Kit.art.pal.ink;
+    c.beginPath(); c.arc(w * 0.4, ey - 7 * flip, 2.4, 0, TAU); c.arc(w * 0.6, ey - 7 * flip, 2.4, 0, TAU); c.fill();
+    c.strokeStyle = Kit.art.pal.ink; c.lineWidth = Math.max(2, w * 0.06); c.lineCap = 'round';
+    c.beginPath(); c.moveTo(w * 0.38, ey); c.quadraticCurveTo(w * 0.5, ey + 7 * flip, w * 0.62, ey); c.stroke();
+  }
+  function blockPattern(th, phaseX, phaseY) {
+    var tier = Kit.art.quality.tier;
+    var spr = Kit.art.sprite('bd-blk:' + th.block + th.blockLine + tier, U, U, function (c, w, h) { paintCandy(c, w, h, th, tier); });
+    if (!spr.canvas || !ctx.createPattern) return null;
+    var key = th.block + th.blockLine + tier + ':' + spr.canvas.width, pat = patCache[key];
+    if (!pat) { pat = ctx.createPattern(spr.canvas, 'repeat'); if (pat) patCache[key] = pat; }
+    if (!pat || typeof DOMMatrix !== 'function') return pat;
+    if (!patM) patM = new DOMMatrix();
+    var scx = spr.w / spr.canvas.width, scy = spr.h / spr.canvas.height;
+    patM.a = scx; patM.b = 0; patM.c = 0; patM.d = scy; patM.e = phaseX; patM.f = phaseY;
+    pat.setTransform(patM);
+    return pat;
+  }
+  function slabSprite(th) {
+    var tier = Kit.art.quality.tier;
+    return Kit.art.sprite('bd-slab:' + th.block + th.blockLine + tier, U, U * 0.5, function (c, w, h) { paintCandy(c, w, h, th, tier); }, { pad: 2 });
+  }
+  function spikeSprite(th, dir, mini) {
+    var tier = Kit.art.quality.tier, w = mini ? U * 0.62 : U * 0.86, h = mini ? U * 0.5 : U * 0.9;
+    return Kit.art.sprite('bd-spk:' + (dir > 0 ? 'u' : 'd') + (mini ? 'm' : '') + th.spike + tier, w, h, function (c, ww, hh) { paintSpike(c, ww, hh, th, dir, tier); }, { pad: 3 });
+  }
+
   function drawLevel(L, th, camX, camY, t, bi, s, savedStars) {
     var gy = GROUND0 + camY * U;
     function sx(x) { return (x - camX) * U; }
@@ -909,56 +1091,29 @@
     var c0 = Math.max(0, Math.floor(camX) - 1), c1 = Math.min(L.cols.length - 1, Math.floor(camX + W / U) + 2);
     var c, i, o, list;
     var used = s ? s.used : [];
-    // --- solids: fill
-    ctx.fillStyle = th.block;
+    // Sprites are keyed by the discrete theme so a 0.4 s fade does not rebake every frame.
+    th = themeNow;
     ctx.beginPath();
     for (c = c0; c <= c1; c++) {
       list = L.cols[c];
-      for (i = 0; i < list.length; i++) { o = list[i]; if (o.solid && o.c0 === c) ctx.rect(sx(o.x1), sy(o.y2), U * (o.x2 - o.x1), U * (o.y2 - o.y1)); }
+      for (i = 0; i < list.length; i++) { o = list[i]; if (o.t === 'block' && o.c0 === c) ctx.rect(sx(o.x1), sy(o.y2), U, U); }
     }
+    var pat = blockPattern(th, modp(-camX * U, U), modp(gy, U));
+    ctx.fillStyle = pat || th.block;
     ctx.fill();
-    // inner squares
-    ctx.strokeStyle = hexA(th.blockLine, 0.16 + 0.12 * bi.tint); ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (c = c0; c <= c1; c++) {
-      list = L.cols[c];
-      for (i = 0; i < list.length; i++) { o = list[i]; if (o.t === 'block' && o.c0 === c) ctx.rect(sx(o.x1) + 12, sy(o.y2) + 12, U - 24, U - 24); }
-    }
-    ctx.stroke();
-    // outlines on exposed edges
-    function solidAt(cc, r) { return r < 0 || !!((L.grid[cc] || 0) & (1 << r)); }
-    ctx.beginPath();
+    var slab = slabSprite(th);
     for (c = c0; c <= c1; c++) {
       list = L.cols[c];
       for (i = 0; i < list.length; i++) {
-        o = list[i]; if (!o.solid || o.c0 !== c) continue;
-        var x1 = sx(o.x1), x2 = sx(o.x2), y1 = sy(o.y2), y2 = sy(o.y1);
-        if (o.t === 'slab') { ctx.rect(x1, y1, x2 - x1, y2 - y1); continue; }
-        if (!solidAt(c, o.r + 1)) { ctx.moveTo(x1, y1); ctx.lineTo(x2, y1); }
-        if (!solidAt(c, o.r - 1)) { ctx.moveTo(x1, y2); ctx.lineTo(x2, y2); }
-        if (!solidAt(c - 1, o.r)) { ctx.moveTo(x1, y1); ctx.lineTo(x1, y2); }
-        if (!solidAt(c + 1, o.r)) { ctx.moveTo(x2, y1); ctx.lineTo(x2, y2); }
+        o = list[i];
+        if (o.t === 'slab' && o.c0 === c) Kit.art.blit(ctx, slab, sx(o.x1) + U / 2, sy(o.y2) + slab.h / 2);
+        else if (o.haz && o.c0 === c) {
+          var sp = spikeSprite(th, o.dir, o.t === 'mini');
+          var cy = o.dir > 0 ? sy(o.r) - sp.h / 2 : sy(o.r + 1) + sp.h / 2;
+          Kit.art.blit(ctx, sp, sx(o.c) + U / 2, cy);
+        }
       }
     }
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = th.blockLine; ctx.globalAlpha = 0.28 + 0.2 * bi.tint; ctx.lineWidth = 10; ctx.stroke();
-    ctx.globalAlpha = 1; ctx.lineWidth = 3.5; ctx.stroke();
-    // --- spikes
-    ctx.beginPath();
-    for (c = c0; c <= c1; c++) {
-      list = L.cols[c];
-      for (i = 0; i < list.length; i++) {
-        o = list[i]; if (!o.haz || o.c0 !== c) continue;
-        var bx = sx(o.c), hgt = o.t === 'mini' ? 0.45 : 0.95, wd = o.t === 'mini' ? 0.7 : 0.9;
-        var l = bx + U * (1 - wd) / 2, rr = bx + U * (1 + wd) / 2, mid = bx + U / 2;
-        if (o.dir > 0) { var by = sy(o.r); ctx.moveTo(l, by); ctx.lineTo(mid, by - hgt * U); ctx.lineTo(rr, by); ctx.closePath(); }
-        else { var ty = sy(o.r + 1); ctx.moveTo(l, ty); ctx.lineTo(mid, ty + hgt * U); ctx.lineTo(rr, ty); ctx.closePath(); }
-      }
-    }
-    ctx.lineJoin = 'round';
-    ctx.fillStyle = th.block; ctx.fill();
-    ctx.strokeStyle = th.spike; ctx.globalAlpha = 0.3 + 0.2 * bi.tint; ctx.lineWidth = 9; ctx.stroke();
-    ctx.globalAlpha = 1; ctx.lineWidth = 3; ctx.stroke();
     // --- pads, orbs, portals, stars
     for (c = c0; c <= c1; c++) {
       list = L.cols[c];
@@ -1021,7 +1176,8 @@
     ctx.beginPath(); ctx.arc(0, 0, U * 0.5 * (1 + 0.14 * bi.pulse), 0, TAU); ctx.stroke();
     ctx.globalAlpha = used ? 0.35 : 1;
     ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, r * (1 + fl * 0.5), 0, TAU); ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = '#1b1033'; ctx.stroke();
+    ctx.lineWidth = 3; ctx.strokeStyle = Kit.art.pal.ink; ctx.stroke();
+    Kit.art.gloss(ctx, -r, -r * 0.95, r * 2, r);
     ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(-r * 0.3, -r * 0.35, r * 0.3, 0, TAU); ctx.fill();
     if (o.kind === 'b') {
       ctx.strokeStyle = '#1b1033'; ctx.lineWidth = 3; ctx.beginPath();
@@ -1074,7 +1230,13 @@
     ctx.restore();
   }
   function drawStar(x, y, t, ghost, bi) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(t * 2) * 0.25);
+    if (Kit.art.quality.tier >= 1) {
+      var gl = Kit.art.glow(ghost ? '#9fd8ff' : '#ffe14d', 22);
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      Kit.art.blit(ctx, gl, x, y, { alpha: 0.35 + 0.2 * bi.tint });
+      ctx.restore();
+    }
+    ctx.save(); ctx.translate(x, y); ctx.rotate(calm() ? 0 : Math.sin(t * 2) * 0.25);
     var r = U * 0.42 * (1 + 0.08 * bi.pulse);
     ctx.globalAlpha = 0.35 + 0.2 * bi.tint;
     ctx.fillStyle = ghost ? '#9fd8ff' : '#ffe14d';
@@ -1087,32 +1249,48 @@
     ctx.restore();
   }
 
+  function cubeSpr(look, blink) {
+    return Kit.art.sprite('bd-cube:' + look.face + look.c1 + look.c2 + blink, U, U, function (c, w, h) {
+      c.translate(w / 2, h / 2);
+      BD.drawCube(c, w, look.face, look.c1, look.c2, blink);
+    }, { pad: 8 });
+  }
+  function trailDot(color) {
+    return Kit.art.sprite('bd-dot:' + color, 16, 16, function (c, w, h) {
+      c.fillStyle = color; c.beginPath(); c.arc(w / 2, h / 2, w * 0.46, 0, TAU); c.fill();
+    });
+  }
   function drawPlayer(s, x, y, camX, gy, rot, sqx, sqy, look, t) {
     var cx = (x + 0.5 - camX) * U, cy = gy - (y + 0.5) * U;
-    // trail
     var tr = s === G.s && !G.won ? G.trail : null;
     if (tr && tr.length > 4) {
-      ctx.strokeStyle = look.c2; ctx.lineCap = 'round';
-      for (var i = 2; i < tr.length; i += 2) {
-        var k = i / tr.length;
-        ctx.globalAlpha = k * 0.35; ctx.lineWidth = k * U * 0.45;
-        ctx.beginPath(); ctx.moveTo((tr[i - 2] - camX) * U, gy - tr[i - 1] * U); ctx.lineTo((tr[i] - camX) * U, gy - tr[i + 1] * U); ctx.stroke();
+      var dot = trailDot(look.c2), i, k, sz;
+      if (dot.canvas) for (i = 2; i < tr.length; i += 4) {
+        k = i / tr.length; sz = 7 + k * 14; ctx.globalAlpha = k * 0.55;
+        ctx.drawImage(dot.canvas, (tr[i] - camX) * U - sz / 2, gy - tr[i + 1] * U - sz / 2, sz, sz);
       }
       ctx.globalAlpha = 1;
     }
+    if (s.mode === 0) Kit.art.shadow(ctx, cx - U * 0.46, cy - U * 0.15, U * 0.92, U * 0.72, 0.4);
     ctx.save();
     ctx.translate(cx, cy);
     if (s.mode === 0) {
-      var gs = s.grav;
-      ctx.translate(0, gs * (1 - sqy) * U / 2);
-      ctx.scale(sqx, sqy);
+      var gs = s.grav, syS = sqy * squish.sy;
+      ctx.translate(0, gs * (1 - syS) * U / 2);
+      ctx.scale(sqx * squish.sx, syS);
       if (gs < 0) ctx.scale(1, -1);
       ctx.rotate(rot * gs);
-      BD.drawCube(ctx, U, look.face, look.c1, look.c2, G.blink > 0 ? 1 : 0);
+      var spr = cubeSpr(look, G.blink > 0 ? 1 : 0);
+      if (spr.canvas) {
+        var dw = spr.w + spr.ox * 2, dh = spr.h + spr.oy * 2;
+        ctx.drawImage(spr.canvas, -dw / 2, -dh / 2, dw, dh);
+      }
     } else {
       ctx.rotate(rot);
       if (s.grav < 0) ctx.scale(1, -1);
-      BD.drawRocket(ctx, U, look.face, look.c1, look.c2, t);
+      ctx.scale(squish.sx, squish.sy);
+      BD.drawFlame(ctx, U, calm() ? 0 : t);
+      BD.drawRocket(ctx, U, look.face, look.c1, look.c2, calm() ? 0 : t, true);
     }
     ctx.restore();
   }
@@ -1122,13 +1300,20 @@
     var p = s.x / L.finishX; if (p > 1) p = 1;
     var bw = 440, bx = (W - bw) / 2, by = 18, bh = 18;
     ctx.fillStyle = 'rgba(10,5,40,0.6)'; BD.rr(ctx, bx - 4, by - 4, bw + 8, bh + 8, 13); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = Kit.art.pal.ink; ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.15)'; BD.rr(ctx, bx, by, bw, bh, 9); ctx.fill();
     var best = (G.practice ? save.bestP : save.best)[L.id] || 0;
     if (best > 0) { ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(bx + bw * best / 100 - 2, by - 3, 4, bh + 6); }
     if (p > 0.005) {
+      var span = Math.max(bh, bw * p);
       ctx.fillStyle = G.practice ? '#35c6ff' : '#7dff5a';
-      BD.rr(ctx, bx, by, Math.max(bh, bw * p), bh, 9); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fillRect(bx + 8, by + 3, Math.max(0, bw * p - 16), 4);
+      BD.rr(ctx, bx, by, span, bh, 9); ctx.fill();
+      Kit.art.gloss(ctx, bx, by, span, bh);
+      if (Kit.art.quality.tier >= 1) {
+        var travel = calm() ? span * 0.32 : ((t * 80) % (span + 28)) - 14;
+        ctx.save(); ctx.beginPath(); ctx.rect(bx, by, span, bh); ctx.clip();
+        ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillRect(bx + travel, by + 1, 12, bh - 2); ctx.restore();
+      }
     }
     ctx.font = '700 26px Fredoka, "Segoe UI", sans-serif';
     ctx.direction = 'ltr'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -1240,7 +1425,7 @@
       if (G.won) camX = Math.min(G.winX, L.finishX + 2) - PLAYER_SX;
       var camY = G.camY;
       drawBackground(th, t, bi, camX, camY);
-      ctx.save(); ctx.translate(shake.x, shake.y);
+      ctx.save(); Kit.art.shake.apply(ctx);
       var gy = GROUND0 + camY * U;
       // attempt text + signs
       worldText('المحاولة ' + G.sessionAtt, (G.attemptX || 0) + 3.5, 5.2, camX, gy, 64, '#ffffff');
@@ -1261,6 +1446,7 @@
       if (!G.dead) drawPlayer(s, x, y, camX, gy, G.rot, G.sqx, G.sqy, look, t);
       drawParts(camX, gy, false);
       ctx.restore();
+      if (Kit.art.quality.tier >= 1) Kit.art.vignette(ctx, W, H, 0.28);
       drawHUD(L, s, t);
     } else {
       // menu backdrop: attract mode
@@ -1271,12 +1457,13 @@
       var camX2 = dx - (scene === 'title' ? 3.5 : 3.5);
       drawBackground(th, t, bi2, camX2, 0);
       var gy2 = GROUND0;
-      ctx.save(); ctx.translate(shake.x, shake.y);
+      ctx.save(); Kit.art.shake.apply(ctx);
       drawLevel(demoL, th, camX2, 0, t, bi2, ds, 0);
       drawGround(th, camX2, 0, bi2);
       drawPlayer(ds, dx, dy, camX2, gy2, demo.rot || 0, demo.sqx || 1, demo.sqy || 1, look, t);
       drawParts(camX2, gy2, false);
       ctx.restore();
+      if (Kit.art.quality.tier >= 1) Kit.art.vignette(ctx, W, H, 0.32);
       if (scene === 'title') {
         // only touch the DOM when the value changes (avoids a style recalc every frame)
         var pk = (1 + 0.05 * bi2.pulse).toFixed(3);
@@ -1289,7 +1476,9 @@
       if (scene === 'garage') drawPreview(look, t, bi2);
     }
     drawParts(0, 0, true);
-    if (G.flash > 0) { ctx.globalAlpha = Math.min(0.7, G.flash); ctx.fillStyle = G.flashCol; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+    juice.draw(ctx);
+    if (G.flash > 0) { ctx.globalAlpha = Math.min(0.4, G.flash); ctx.fillStyle = G.flashCol; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+    Kit.art.pop.draw(ctx);
     drawPopups();
   }
 
@@ -1310,7 +1499,7 @@
   }
 
   /* ============================================================ BOOT */
-  Kit.loop(update, render);
+  Kit.art.loop(update, render);
   goTitle();
   // canvas text (HUD, attempt count, pop-ups) uses the rounded font: repaint a paused frame once it arrives
   if (document.fonts && document.fonts.load) document.fonts.load('700 40px Fredoka', 'المحاولة 0%').then(function () { frameDirty = true; }, function () {});

@@ -826,3 +826,42 @@ so a 4× CPU run would time the same pages as main. `tools/perf.mjs` now accepts
 `cpuThrottle`) and `--viewport WxH` for those later before/after runs.
 `tools/artkit-demo.html` is a review page and is not in the download or the
 service worker.
+
+## Beat Dash visual upgrade, 31 October 2026
+
+قفزة الإيقاع now loads `shared/artkit.js` and calls `Kit.art.init` and `Kit.art.loop`.
+The playfield is a neon cartoon run: a cached sky gradient, three parallax layers
+(soft sky shapes and hills, a skyline strip, a floor-glow strip), candy blocks and
+friendly spikes from cached sprites, a cached player cube with a spring squash and
+a short dot trail, a glossed progress bar, and a vignette on tier 1 and 2. Tier 0
+keeps the new sky, hills, cube and ground, with one baked layer and no glow pulse.
+Reduced motion holds parallax, the bar highlight and the rocket flame still.
+
+Nothing in the scroll speed, jump arc, hitboxes, beat clock or percent math changed.
+The game's own `Math.random` calls are unchanged in count and order. `Kit.shake`
+(two `Math.random` calls per frame, visual offset only) is replaced by `Kit.art.shake`,
+which uses `Kit.art.rand`. Death and the win use a mild shake (trauma ≤ 0.45) and a
+pooled confetti burst. Hit-stop is not used: `Kit.art.layer` freezes its camera on
+the wall clock during hit-stop, so a paused redraw after the freeze would not match
+one taken during it.
+
+Baked or cached once: the three parallax layers (far layer at 0.4× resolution), the
+ground fill and floor tiles, the block pattern, slab and spike sprites, the player
+cube and the trail dot. No per-frame `shadowBlur`, filter or new gradient.
+
+Measured with the Linux minified build. Before is this branch's parent
+(`agent/task-artkit`, the art kit already in the precache). Throttled fps is
+`tools/perf.mjs --cpu-throttle 4 --samples 3 --seconds 10` on the same machine,
+one run at a time. Median frame time 50 ms is 20 fps.
+
+| | Before | After | New limit |
+| --- | ---: | ---: | ---: |
+| Beat Dash page | 113,391 | 119,937 | 120,500 (was 115,000) |
+| Offline precache, 49 files | 5,463,599 | 5,470,145 | 5,497,578 (was 5,491,000) |
+| 4× CPU median fps | 20 | 20 | — |
+| 4× CPU p95 frame | 100 ms | 99.9 ms | — |
+
+The page grew by 6,546 bytes (5.8%), under both 12% and 14 KB. The new page limit
+is the measured size plus 563 bytes (0.47%). The precache grew by the same 6,546
+bytes (only this game file changed). Its limit rose by that growth plus 32 bytes
+(0.49% of the growth).
