@@ -9,7 +9,7 @@
     "block-burst": 116000,
     "block-world": 160000,
     "bubble-bop": 116000,
-    "cake-guards": 86000,
+    "cake-guards": 91900,
     "candy-rope": 113000,
     "connect-four": 57000,
     "critter-mart": 163000,
@@ -46,5 +46,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5495889
+  "precacheBytes": 5502950
 }
