@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
+import { clickControl } from '../ui-input.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -200,9 +201,29 @@ test('Rail Rush buys one power-up level for a double-click on its upgrade button
   const level = () => page.evaluate(() => ({ coins: __game.save.coins, magnet: __game.save.up.magnet,
     saved: JSON.parse(localStorage.getItem('sg:rail-rush:save')).up.magnet }));
   const before = await level();
+  const upgrade = '#shopBody [data-act="up"][data-id="magnet"]';
+  const readyUpgrade = async () => {
+    const button = page.locator(upgrade);
+    await button.waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(await button.isEnabled(), true, 'the magnet upgrade must be enabled');
+    // The shop panel scales in for 0.35s. A click sampled during that move misses the button.
+    await page.evaluate(() => {
+      for (const node of [document.getElementById('shopPanel'), document.querySelector('#shopBody [data-act="up"][data-id="magnet"]')]) {
+        if (!node) continue;
+        for (const animation of node.getAnimations({ subtree: true })) {
+          if (animation.effect.getComputedTiming().endTime !== Infinity) animation.finish();
+        }
+      }
+    });
+  };
   const press = async (double) => {
-    const box = await page.locator('#shopBody [data-act="up"][data-id="magnet"]').boundingBox();
-    await page.mouse[double ? 'dblclick' : 'click'](box.x + box.width / 2, box.y + box.height / 2);
+    await readyUpgrade();
+    if (double) {
+      const box = await page.locator(upgrade).boundingBox();
+      await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+    } else {
+      await clickControl(page, upgrade);
+    }
     await page.evaluate(() => rr.step(1));
   };
   await press(true);

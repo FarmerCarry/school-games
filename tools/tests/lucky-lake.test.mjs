@@ -119,7 +119,7 @@ test('one finger and two fingers both cast, and a paused derby holds its clock',
   const page = await game(t);
   await page.locator('#btnPlay').click();
   await page.evaluate(() => ll.step(1));
-  assert.deepEqual(await page.evaluate(() => ll.stats.filter(s => s[0] === 'round')), [['round', 'solo']]);
+  assert.deepEqual(await page.evaluate(() => ll.stats.filter(s => s[0] === 'round')), [['round', 'endless']]);
   await page.keyboard.down('Space');
   await page.evaluate(() => ll.step(30));
   assert.ok(await page.evaluate(() => __game.charge > 0.12));
@@ -133,6 +133,7 @@ test('one finger and two fingers both cast, and a paused derby holds its clock',
 
   await page.locator('#btnDerby').click();
   await page.evaluate(() => ll.step(2));
+  assert.deepEqual(await page.evaluate(() => ll.stats.filter(s => s[0] === 'round').at(-1)), ['round', 'derby:pvp']);
   await page.keyboard.down('Space');
   await page.keyboard.down('Enter');
   await page.evaluate(() => ll.step(36));

@@ -6,12 +6,13 @@ they stop, and whether the school PCs run the games smoothly. This feature count
 no upload, no cookie and no third-party script. The numbers stay in the browser's
 `localStorage` on that PC until a teacher exports or clears them.
 
-The portal also has a separate, optional **anonymous telemetry** sink
+The portal also has a separate, optional **telemetry sink without names**
 ([`TELEMETRY.md`](TELEMETRY.md)). It is off unless the school's administrator builds the
 fast site with an ingest server address, and even then it never sends these day records,
-the PC's id or label, or anything a child types: only coarse, anonymous play events.
-Stopping statistics on the teacher page stops it too, and clearing removes what it has
-not sent yet.
+the PC's id or label, or anything a child types: it sends play events in which each child
+who picks an animal appears under a random code, so the school's server can follow that
+child's play over time (pseudonymous data). Stopping statistics on the teacher page stops
+it too, and clearing removes what it has not sent yet.
 
 Never recorded: names, anything a child types (typing-test words, search text, class
 codes, Snake Arena's player name), free-text error messages, screenshots, mouse paths
@@ -106,11 +107,12 @@ Only when embedded in the portal, and only when something changed:
 * when the game is paused for any reason, and on `pagehide`;
 * every 10 seconds while there is unsent data, from one `setTimeout` chain started the
   first time `Kit.ready()` runs (later `Kit.ready()` calls do not start another) and
-  stopped once the game has failed;
+  stopped once the game has failed (`Kit.fail`, a startup error, or a burst of
+  runtime errors). A single error after `sg:ready` does not stop it;
 * at once when 32 events are waiting.
 
 Kit never posts at load, never inside `Kit.ready()` itself, never adds fields to
-`sg:ready`, and never posts from its error handlers.
+`sg:ready`, and never posts statistics from its error or warning handlers.
 
 **Size budget:** the Kit side adds at most about 900 minified bytes to every game. Kit
 does not clean ids or clamp numbers; it sends `String(id).slice(0, 24)` and the first
@@ -168,7 +170,13 @@ The recorder is about 6 KB minified; the portal's current size and limit are in 
   bucket by engaged time: under 1 minute, 1–5, 5–15, 15 or more. Sessions that never
   reached `sg:ready` count as *never started*, kept apart from the buckets.
 * **Failures.** `sg:error` counts an error and a 20-second timeout counts a timeout
-  (no text is stored). Neither closes the session; Retry continues it.
+  (no text is stored). Neither closes the session; Retry continues it. An error
+  before `sg:ready` is `sg:error`, and the portal removes the frame. After ready,
+  Kit posts `sg:warn` instead, at most one every 10 seconds. The portal counts that
+  warning in memory for the open page (`window.__sgWarns` is `{ n, last }`). It
+  leaves the iframe up and stores nothing. Five errors within 10 seconds are fatal:
+  Kit runs the game's pause and reset hooks so it can save, then posts `sg:error`,
+  and the frame comes down as before. A warning is not an error count or a timeout.
 * **Unclosed sessions.** The open session is mirrored in `sg:site:stats:live`, with its
   open round and that round's `om`. If the portal finds one on load (the PC was switched
   off, the tab was killed), it closes it from the stored values first; the open round
@@ -281,12 +289,13 @@ folder: each keeps its own statistics) and the date data starts.
 
 Arabic, right to left, Western digits. Fixed note at the top: **«الأرقام لكل جهاز وليست
 لكل طالب، وتبقى على هذا الجهاز. لا يُرسل شيء إلا إذا ربط مسؤول المدرسة نسخة الموقع بخادم
-للإحصاءات، وعندها يُرسل الموقع معلومات لعب مجهولة فقط: بلا أسماء ولا اسم للجهاز ولا أي نص
-كتبه الأطفال.»** While the portal on this PC shares anonymous telemetry (it notes the server's
-host in `sg:site:tm:on`), and statistics are not stopped, sharing is not turned off and the
-browser sends no Global Privacy Control, a line under it says so and names the server:
-«المشاركة المجهولة مفعّلة على هذا الجهاز: يُرسل الموقع معلومات اللعب بلا أسماء ولا اسم للجهاز
-إلى <host>.» Period: اليوم، هذا الأسبوع، آخر 30 يومًا، الكل.
+للإحصاءات، وعندها يُرسل الموقع معلومات اللعب بلا أسماء ولا اسم للجهاز ولا أي نص كتبه
+الأطفال، ويظهر فيها كل طفل برمز عشوائي.»** While the portal on this PC shares (it notes the
+server's host in `sg:site:tm:on`), and statistics are not stopped, sharing is not turned off
+and the browser sends no Global Privacy Control, a line under it says so and names the
+server: «مشاركة إحصاءات اللعب مفعّلة على هذا الجهاز: تُرسل بلا أسماء، ويظهر كل طفل برمز
+عشوائي، إلى <host>.» Since milestone 2.5 neither says «مجهولة» (anonymous): the codes make
+the data pseudonymous. Period: اليوم، هذا الأسبوع، آخر 30 يومًا، الكل.
 
 1. Four answer cards: **أكثر الألعاب لعبًا** (by sessions of at least a minute, with
    minutes beside it), **كم يلعبون** (actual play time and average session),
@@ -328,10 +337,15 @@ browser sends no Global Privacy Control, a line under it says so and names the s
    this PC").
 5. Actions: name this PC, **تصدير ملف Excel**, **تصدير JSON**, **فتح ملفات من أجهزة أخرى**
    (view several PCs together; nothing is saved), stop or resume collecting (type
-   «أوقف»; this also stops the anonymous telemetry), clear this PC's statistics (type
+   «أوقف»; this also stops the telemetry sink), clear this PC's statistics (type
    «امسح»; removes only keys that start with `sg:site:stats:`, and the telemetry queue
    under `sg:site:tm:` so nothing recorded before the clear is sent later; never the id,
-   label or stop setting, nor the note `sg:site:tm:on` that says this PC shares). While collection is stopped, the 🏫 strip shows «الإحصاءات متوقفة».
+   label or stop setting, the note `sg:site:tm:on` that says this PC shares, or the
+   dashboard codes in `sg:site:rid`). While collection is stopped, the 🏫 strip shows
+   «الإحصاءات متوقفة». While this PC shares, or has codes, the clear tool also says
+   «ما أُرسل إلى خادم المدرسة يبقى هناك؛ لحذف بيانات طفل استخدم رمزه في لوحة المؤشرات.»,
+   and its confirmation adds that the dashboard codes stay: clear and stop never touch the
+   school's server.
    **An export counts only once its file is saved** (`lastExport`, which the reminder
    uses, is the moment the file was made). Where the browser offers pages a save dialog
    (`showSaveFilePicker`: Edge and Chrome, and only in a secure context, which includes
@@ -353,6 +367,38 @@ browser sends no Global Privacy Control, a line under it says so and names the s
    yet exported is more than 100 days old. The text says that old days are removed when
    the space fills or after 120 days, whichever comes first, and that a busy computer-lab
    PC may keep only 2–3 months. Clearing also removes `pruned`.
+7. **الرموز في لوحة المؤشرات** (collapsed; shown while this PC shares, or once it has
+   codes): the codes under which this PC and its children appear on the school's dashboard
+   (`sg:site:rid`, kept by `js/telemetry.js`; [`TELEMETRY.md`](TELEMETRY.md), "The codes").
+   The page reads it, and the portal's players (`sg:site:profiles` and
+   `sg:site:profiles:more`), itself; it does not load `js/profiles.js` and keeps its own
+   copies of the 12 animals and 8 ring colours, which a test keeps equal to
+   `SGProfiles.ANIMALS` and `SGProfiles.COLORS`.
+   * «رمز هذا الجهاز: 8C21-D0E9-4A6F» (the PC's 12 hex in groups of 4; the dashboard's PCs
+     tab shows its first four characters).
+   * For each player, in the portal's order: its animal in its colour ring, its code with a
+     check character, for example `3F9A-0C51-E2B7-5`, and «في لوحة المؤشرات: الطالب
+     3F9A…». A player without a code yet: «يُصنع في المرة القادمة التي يلعب فيها هذا
+     الطفل.» (or «لا رمز بعد.» while this PC does not share).
+   * **Check character:** Luhn mod 16 over the 12 hex digits. From the rightmost digit the
+     factors alternate 2, 1, 2, …; each product `f·v` adds `floor(f·v / 16) + f·v % 16`;
+     the check is `(16 − sum % 16) % 16`, written as hex. It catches any one wrong
+     character. It is only shown and checked, never sent.
+   * **«الطفل نفسه على جهاز آخر»** (one per player; disabled, with the note «المشاركة غير
+     مفعّلة على هذا الجهاز، فلا تُصنع رموز جديدة ولا يُربط طفل بجهاز آخر.», while this PC
+     does not share): for a child who plays on two PCs. The teacher types the 13-character
+     code the other PC's teacher page shows for that child (any case; dashes and spaces
+     are ignored; Arabic digits count as digits). Refused: not 13 hex characters
+     («الرمز 13 خانة؛ تحقّق منه.»), a wrong check character («إحدى خانات الرمز خاطئة؛
+     تحقّق منه.»), the player's own code, and the code of another player on this PC. On
+     success the player takes that code (`k[key]`, noted in `g[key]`), and its own code,
+     if it had one and it was not itself given by an earlier transfer, waits in `l[key]`
+     (an older one already waiting stays). The page says «من اللعبة القادمة
+     يُحسب لعب هذا الطفل مع رمزه على الجهاز الآخر، ويُضم إليه ما لعبه هنا من قبل.» (without
+     the second part when nothing waits). At that player's next session the portal sends
+     the older code (`cd`), again on later pages until the server has it, and the server
+     joins the play it had here to the same student. The page reads `sg:site:rid` again just before it writes, and writes only on
+     this action.
 
 ### Words used on the page
 
@@ -443,8 +489,8 @@ Step 1's files are the input; they do not need to change.
 * **Automatic collection** would need a Power Automate flow with an HTTP trigger (a
   premium licence) or an Azure Function, plus the school web filter allowing it. Any
   upload of these files would send this same JSON **from teacher.html only**. Games never
-  use the network, and the portal's only sender is the separate anonymous telemetry sink
-  (`js/telemetry.js`, [`TELEMETRY.md`](TELEMETRY.md)), which never sends these records.
+  use the network, and the portal's only sender is the separate telemetry sink without
+  names (`js/telemetry.js`, [`TELEMETRY.md`](TELEMETRY.md)), which never sends these records.
 
 ## 6. Tests
 
@@ -459,7 +505,12 @@ Step 1's files are the input; they do not need to change.
   unconfirmed download count nothing; the download offered after a closed dialog; one
   dialog at a time; a renamed file), combining, clear and stop, blocked storage, winnable
   levels (id shapes, block-burst `'classic'`, fire-and-ice `'L4:duo'`, merge-2048 boards),
-  the export reminder, the hours rule and games still open.
+  the export reminder, the hours rule and games still open; the dashboard codes (the PC's
+  code, each player's animal, ring and code with its check character against a Luhn mod 16
+  written out in the test, "no code yet", players from both profile keys), the transfer
+  (every refusal, `k`, `l` and `g`, the oldest waiting code kept, a correction that links
+  no given code, disabled while sharing is off), clear keeping `sg:site:rid`, and the
+  copied animals and colours equal to the portal's.
 * `tools/tests/merge-progress.test.mjs`: a merge-2048 board is one round; the goal tile
   reports nothing and a full board reports `'end'` with the score.
 * `tools/tests/play-stats-rules.test.mjs` (node only): no network APIs in Kit and the other

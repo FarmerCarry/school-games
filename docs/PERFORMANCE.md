@@ -635,20 +635,277 @@ grows by 73,195 bytes (1.4%). No request, font, library or third-party code is a
 to any child's page, and with `SG_TELEMETRY_URL` unset the built site makes no network
 request at all.
 
-## Lucky Lake on Kit v2, 28 October 2026
+## Research telemetry, Kit and profiles (milestone 2.5), 27 October 2026
 
-بحيرة الحظ joins the re-platformed arcade. The fishing game is unchanged. The page
-inlines Kit v2 and drops its music loop, so only the short catch cues remain. The
-portal picks up one catalog entry and the lake thumbnail.
+The first client step of milestone 2.5 (`docs/RESEARCH_TELEMETRY_SPEC.md`, steps C1
+and C2) changes three files. Measured with the Linux minified build:
 
-The game page still fits the 135,000 limit it already had. The portal and the
-offline cache do not: the portal was 1,900 bytes over 394,000, and the precache was
-113,072 bytes over 5,290,000. Both limits move up only far enough to leave about a
-thousand bytes.
+* **Kit** gains the round counters `rx` (wall time, inputs, idle lapses, pauses, the
+  reaction-time sum and count, and the DDA level) and keeps the DDA level of 24 players
+  instead of 16: +195 minified bytes per game page, under the 350 the spec allows. It adds
+  no timer and no message; per input it adds one comparison and an increment.
+* **The portal** grows by 868 bytes, to 392,908 of 394,000: 24 profiles per PC split over
+  two storage keys so that an old portal tab cannot drop profiles 13 to 24
+  (`js/profiles.js`, +396 minified bytes), and in `js/site.js` the 20-minute idle
+  hand-over and the calls for the new telemetry hooks (+472). The limit is unchanged.
+* The offline cache grows from 5,276,735 to 5,284,233 of 5,290,000 bytes (unchanged).
 
-| Measurement | Bytes | Limit |
-| --- | ---: | ---: |
-| Lucky Lake built page | 121,395 | 135,000 (unchanged) |
-| Teacher page | 91,504 | 96,000 (unchanged) |
-| Portal, thumbnail inlined | 395,900 | 397,000 (was 394,000, +3,000) |
-| Offline precache, 49 files | 5,403,072 | 5,405,000 (was 5,290,000, +115,000) |
+Seven game pages kept less than 1,000 bytes, so their limits rise to the measured size
+rounded up to the next 1,000 bytes plus 1,000, as before:
+
+| Game | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| beat-dash | 112,819 | 113,014 | 114,000 | 115,000 |
+| block-world | 157,903 | 158,098 | 159,000 | 160,000 |
+| cake-guards | 83,866 | 84,061 | 85,000 | 86,000 |
+| paint-grab | 109,862 | 110,057 | 111,000 | 112,000 |
+| rail-rush | 141,993 | 142,188 | 143,000 | 144,000 |
+| tank-splat | 111,968 | 112,163 | 113,000 | 114,000 |
+| troll-level | 110,858 | 111,053 | 112,000 | 113,000 |
+
+The other 27 games grow by the same 195 bytes inside their unchanged limits (drift-king
+is now closest, with 1,006 bytes left). No request, font, library or precached file is
+added. The rest of the client step (the v3 sink in `js/telemetry.js` and the teacher
+page's codes panel) is measured below.
+
+## Research telemetry, the v3 sink and the teacher page's codes (milestone 2.5), 28 October 2026
+
+The second client step of milestone 2.5 (steps C3 and C4) changes no game page and no
+shared script; Kit is as above. Measured with the Linux minified build:
+
+* **The portal** grows by 2,626 bytes, from 392,908 to 395,534: `js/telemetry.js` sends
+  wire version 3 (+2,623 minified bytes): the random codes in `sg:site:rid`, the pending
+  links, `w` at each send, the visit and round numbers, Kit's round counters, tutorials,
+  `gp`, hearts, the classroom timer, the session-end reason and `X-Batch-Every`. The spec
+  expected about +2.0 KB for the sink. Its new storage reads are small and rare: a session
+  start reads `sg:site:classroom` and reads (and, when a code is made or changes, writes)
+  `sg:site:rid`; a game open reads `sg:site:favs`; and each `sg:stats` message of the open
+  game now reads the teacher's settings, as each `sg:telemetry` message already did.
+* **The teacher page** grows by 6,215 bytes, from 90,422 to 96,637: the dashboard codes
+  panel with its Luhn mod 16 check character, its own copies of the portal's 12 animals
+  and 8 ring colours, the parsing of `sg:site:rid` and both profile keys, "the same child
+  as on another PC" with its five refusals, and the new copy (about +5.0 KB of minified
+  script, most of it Arabic text at two bytes a character, and about +1.2 KB of markup and
+  styles). The spec estimated at most 1.8 KB; the copy was shortened once, and going
+  further would drop the explanations a teacher needs to type a code from another PC.
+* The offline cache grows by 8,841 bytes, from 5,284,233 to 5,293,074 (the portal and
+  the teacher page, each cached once, and the worker's list).
+
+All three limits follow the rule above: the measured size rounded up to the next 1,000
+bytes plus 1,000.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 392,908 | 395,534 | 394,000 | 397,000 |
+| Teacher page | 90,422 | 96,637 | 96,000 | 98,000 |
+| Offline precache | 5,284,233 | 5,293,074 | 5,290,000 | 5,295,000 |
+
+No game limit changes (drift-king keeps 1,006 bytes and swing-hook 1,035). No request,
+font, library or third-party code is added to any child's page; with `SG_TELEMETRY_URL`
+unset the built site still makes no network request at all.
+
+## Milestone 2.5 review fixes on the client, 28 October 2026
+
+The review of the integrated milestone 2.5 client changed the telemetry sink, the teacher
+page's transfer and Kit. Measured with the Linux minified build, against the integrated
+head before the fixes:
+
+* **The portal** grows by 668 bytes, from 395,534 to 396,202 (`js/telemetry.js`): +322 for
+  the wire-v3 queue under its own key, `sg:site:tm:q3:<hash>`, with the older build's
+  batches moved over from `sg:site:tm:q:<hash>` (a pre-v3 tab still open on the PC
+  rewrites that key with v2 entries only); +346 for the transfer's given codes (`g`), no
+  `pr` for a given code, and the older code kept in `l` until a batch naming it is
+  delivered. The added work is one more `getItem` of a key that is normally absent at each
+  queue read, and one `sg:site:rid` write when a batch holding a `cd` is delivered.
+* **The teacher page** grows by 35 bytes, to 96,672 of 98,000 (the transfer notes the
+  code it gives and never links a given one).
+* **Kit** grows by 17 minified bytes per game page: a pause counts only while play runs
+  (+7), and a round's wall time comes from the same clock reading as its engaged time
+  (+10). The DDA store keeps 28 players, a full PC's 24 profiles and the guests of each
+  band, for no bytes.
+* The offline cache grows by 1,281 bytes, from 5,293,074 to 5,294,355.
+
+The portal, the offline cache and drift-king kept less than 1,000 bytes, so their limits
+follow the rule above: the measured size rounded up to the next 1,000 bytes plus 1,000.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 395,534 | 396,202 | 397,000 | 398,000 |
+| drift-king | 108,994 | 109,011 | 110,000 | 111,000 |
+| Offline precache | 5,293,074 | 5,294,355 | 5,295,000 | 5,296,000 |
+
+No other limit changes (swing-hook keeps 1,018 bytes, the teacher page 1,328). No
+request, font, library or third-party code is added to any child's page.
+
+### Combining research telemetry with the runtime-warning fix
+
+Merging main's "Keep a ready game up after a stray runtime error" (#70) into research
+telemetry adds both Kit changes to every game page. Each change fit its own limits;
+together they leave ten game pages under 1,000 bytes of headroom and put the offline
+cache 10,831 bytes over its limit (5,306,831 of 5,296,000). Those limits follow the rule
+above: the measured size rounded up to the next 1,000 bytes plus 1,000.
+
+| Measurement | Bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: |
+| blob-battle | 106,012 | 107,000 | 108,000 |
+| bubble-bop | 114,201 | 115,000 | 116,000 |
+| connect-four | 55,228 | 56,000 | 57,000 |
+| fire-and-ice | 123,252 | 124,000 | 125,000 |
+| maze-dash | 116,259 | 117,000 | 118,000 |
+| skybound-golf | 114,268 | 115,000 | 116,000 |
+| snake-arena | 99,067 | 100,000 | 101,000 |
+| splat-strike | 231,231 | 232,000 | 233,000 |
+| swing-hook | 108,342 | 109,000 | 110,000 |
+| tic-tac-toe | 55,206 | 56,000 | 57,000 |
+| Offline precache | 5,306,831 | 5,296,000 | 5,308,000 |
+
+No other limit changes, and nothing is added to any page beyond the two Kit changes.
+
+## Sneaky Levels worlds 6–12, 31 October 2026
+
+المراحل الماكرة gains worlds 6–12 (levels 31–100): ice, keys, boxes, portals, music
+blocks, ghosts, and the Sneaky King. Each world is its own script, inlined into the
+one game file like the rest of the game. Nothing new is fetched at runtime, and a
+frame still draws the baked backdrop plus the traps that move. The game still plays
+no background music. Measured with the Linux minified build, against current main
+(111,430 bytes, gzip 38,236):
+
+| File | Before bytes | After bytes | Before gzip | After gzip | New limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Sneaky Levels | 111,430 | 254,052 | 38,236 | 86,271 | 254,500 (was 113,000) |
+| Offline precache, 48 files | 5,307,062 | 5,449,684 |  |  | 5,450,000 (was 5,308,000) |
+
+The game file grew by 142,622 bytes. 139,699 of that is the seven minified world
+scripts (levels, Arabic hints, recorded solutions, and each world's mechanic).
+The rest, 2,923 bytes, is the shared plug-in hooks and the scrolling 100-level
+select.
+
+The same 142,622 bytes are the whole precache growth: the built game file is the
+only cached file that changed. No other budget changed.
+
+Both new limits are the measured size rounded up, Sneaky Levels to the next 500
+bytes and the precache to the next 1,000. That leaves 448 bytes (0.18%) and 316
+bytes (0.006%). A small text edit can exceed either limit.
+
+## Chaos Island on current main, 31 October 2026
+
+جزيرة الفوضى (Chaos Island) is a fixed 1280×720 canvas party platformer added on top
+of current main (`5e81c7d`, Sneaky Levels worlds 6–12). The island plate, pet-style
+characters, jelly, round chip and meteor warning are unchanged. The background melody
+is gone; disaster cues stay one-shot. The match reads `Kit.dda` once at the start
+(tiers 2 and 3 keep the designed powers), reports `Kit.stats` the same way a party
+round does, and counts a survival, a pop and a disaster warning with `Kit.track`.
+
+Measured with the Linux minified build and `SG_TELEMETRY_URL` unset, the same way as
+the sections above. The Actions build inlines the ingest address, which adds 103 bytes
+to the portal and therefore to the precache. The limits below are the measured sizes
+rounded up (the game to the next 500 bytes, the portal and the precache to the next
+1,000) and still cover that build.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Chaos Island | — | 117,858 | — | 118,000 |
+| Portal (thumbnail and catalog entry) | 396,669 | 405,067 | 398,000 | 406,000 |
+| Teacher page | 96,672 | 97,983 | 98,000 | 98,000 |
+| Offline precache, 49 files | 5,449,684 | 5,577,251 | 5,450,000 | 5,578,000 |
+
+The page limit is a new entry, 142 bytes (0.12%) above the built page. The portal grows
+by 8,398 bytes, almost all of it the 6,896-byte thumbnail, so its limit moves from
+398,000 to 406,000: 933 bytes (0.23%) above this measurement and 830 bytes (0.20%) above
+the Actions portal (405,170). The teacher page grows by 1,311 bytes and stays inside
+98,000, with 17 bytes left. The offline cache grows by 127,567 bytes (the new page, the
+portal and the teacher page) and gains one file, so `precacheBytes` moves from
+5,450,000 to 5,578,000: 749 bytes (0.013%) above this measurement and 646 bytes
+(0.012%) above the Actions precache (5,577,354). No other game, font or library limit
+changes.
+
+## Egg Rush on current main, 31 October 2026
+
+سباق البيض (Egg Rush) joins the arcade beside Chaos Island. It draws on one canvas,
+paints each pet and each egg once into an offscreen sprite, and keeps the meadow,
+beach and snow in one sheet that a frame only blits. Particles are capped at 64.
+There is no background music. Pixel ratio is capped at 1.5. Rounds report through
+`Kit.stats` (a one-player run is `main`, a two-player match is `duel:pvp`) and the
+same `Kit.track` hit, miss and cue events a runner uses.
+
+Measured with the Linux minified build and `SG_TELEMETRY_URL` set, the same Actions
+build the budgets check. Main before this game is the Chaos Island head: portal
+405,170, teacher page 97,983, offline precache 5,577,354 across 49 files.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Egg Rush | — | 134,352 | — | 134,500 |
+| Portal (thumbnail and catalog entry) | 405,170 | 415,600 | 406,000 | 416,000 |
+| Teacher page | 97,983 | 98,821 | 98,000 | 99,000 |
+| Offline precache, 50 files | 5,577,354 | 5,723,012 | 5,578,000 | 5,724,000 |
+
+The page limit is a new entry, 148 bytes (0.11%) above the built page. The portal
+grows by 10,430 bytes, so its limit moves from 406,000 to 416,000: 400 bytes (0.096%)
+above this measurement. The teacher page grows by 838 bytes and no longer fits in
+98,000, so its limit moves to 99,000: 179 bytes (0.18%) left. The offline cache grows
+by 145,658 bytes (the new page, the portal, the teacher page, and the few bytes
+Road Hopper uses to count frames) and gains one file, so `precacheBytes` moves from
+5,578,000 to 5,724,000: 988 bytes (0.017%) above this measurement. Each new limit is
+the measured size rounded up (the game to the next 500 bytes, the others to the next
+1,000), and each headroom is under half a percent. No other game, font or library
+limit changes.
+
+## Key Runner on current main, 1 November 2026
+
+عدّاء المفاتيح (Key Runner) joins the site beside Egg Rush. It is the same candy-tower
+climb: eight hand-built stages, one-shot sounds, and no background music. A solo climb
+reports `tower` and a win is the finish time in seconds. A two-player race reports
+`duo`, which is a two-player id, and ends `end` or `draw`. `Kit.dda` is read at the
+start of a round and `Kit.track` counts a stage, a fall, and a cue.
+
+Measured with the Linux minified build and `SG_TELEMETRY_URL` set, the same Actions
+build the budgets check. Main before this game is the Egg Rush head: portal 415,600,
+teacher page 98,821, offline precache 5,723,012 across 50 files.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Key Runner | — | 79,841 | — | 80,000 |
+| Portal (thumbnail and catalog entry) | 415,600 | 422,426 | 416,000 | 423,000 |
+| Teacher page | 98,821 | 99,749 | 99,000 | 100,000 |
+| Offline precache, 51 files | 5,723,012 | 5,810,607 | 5,724,000 | 5,811,000 |
+
+The page limit is a new entry, 159 bytes (0.20%) above the built page. The portal
+grows by 6,826 bytes, most of it the thumbnail, so its limit moves from 416,000 to
+423,000: 574 bytes (0.14%) above this measurement. The teacher page grows by 928
+bytes and no longer fits in 99,000, so its limit moves to 100,000: 251 bytes (0.25%)
+left. The offline cache grows by 87,595 bytes, which is the new page plus the portal
+and the teacher page, and gains one file, so `precacheBytes` moves from 5,724,000 to
+5,811,000: 393 bytes (0.0068%) above this measurement. Each new limit is the measured
+size rounded up (the game to the next 500 bytes, the others to the next 1,000), and
+each headroom is under half a percent. No other game, font or library limit changes.
+
+## Lucky Lake on current main, 1 November 2026
+
+بحيرة الحظ (Lucky Lake) joins the site beside Key Runner. It is the same fishing
+game: one canvas, short catch cues, and no background music. A solo session reports
+`endless`, so a round under 20 seconds pays no XP and the existing 40 XP cap still
+applies. A two-player derby reports `derby:pvp` and ends `end` or `draw`. `Kit.track`
+counts a bite, a catch, and a miss. The solo score is the species in the book; the
+derby score is the heavier catch in tenths of a kilogram.
+
+Measured with the Linux minified build and `SG_TELEMETRY_URL` set, the same Actions
+build the budgets check. Main before this game is the Key Runner head: portal
+422,426, teacher page 99,749, offline precache 5,810,607 across 51 files.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Lucky Lake | — | 121,974 | — | 122,000 |
+| Portal (thumbnail and catalog entry) | 422,426 | 426,183 | 423,000 | 427,000 |
+| Teacher page | 99,749 | 100,831 | 100,000 | 101,000 |
+| Offline precache, 52 files | 5,810,607 | 5,937,420 | 5,811,000 | 5,938,000 |
+
+The page limit is a new entry, 26 bytes (0.021%) above the built page. The portal
+grows by 3,757 bytes, most of it the thumbnail and the catalog entry, so its limit
+moves from 423,000 to 427,000: 817 bytes (0.19%) above this measurement. The teacher
+page grows by 1,082 bytes and no longer fits in 100,000, so its limit moves to
+101,000: 169 bytes (0.17%) left. The offline cache grows by 126,813 bytes, which is
+the new page plus the portal and the teacher page, and gains one file, so
+`precacheBytes` moves from 5,811,000 to 5,938,000: 580 bytes (0.0098%) above this
+measurement. Each new limit is the measured size rounded up (the game to the next
+500 bytes, the others to the next 1,000), and each headroom is under half a percent.
+No other game, font or library limit changes.

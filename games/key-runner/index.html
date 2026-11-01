@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>عدّاء المفاتيح</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-mode="title">
+<canvas id="scene" tabindex="0" aria-label="برج الحلوى. اصعد المفاتيح قبل الشوكولاتة."></canvas>
+<div id="split" aria-hidden="true"></div>
+<div id="hud" hidden>
+  <div id="pips" aria-label="الأعلام">
+    <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+  </div>
+  <div id="choco" aria-hidden="true"><b id="choco-fill"></b></div>
+</div>
+<div id="hint" hidden aria-hidden="true">
+  <div class="kb">
+    <div class="kb-row"><b class="key key-w" dir="ltr">W</b></div>
+    <div class="kb-row"><b class="key" dir="ltr">A</b><b class="key" dir="ltr">S</b><b class="key" dir="ltr">D</b></div>
+    <b class="key key-space" dir="ltr"></b>
+  </div>
+</div>
+<button id="pause-button" class="utility" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3v14H7zm7 0h3v14h-3z"/></svg></button>
+<main id="title-screen" class="screen ready">
+  <div class="card">
+    <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
+    <h1>عدّاء المفاتيح</h1>
+    <button id="play" class="play" type="button">العب</button>
+    <button id="duo" class="ghost" type="button">لاعبان</button>
+    <p class="meta">الأعلام <b id="menu-flags" dir="ltr">0</b> · الوقت <b id="menu-best" dir="ltr">—</b></p>
+  </div>
+</main>
+<section id="duo-screen" class="screen veil" hidden>
+  <div class="panel">
+    <h2>سباق لاعبين</h2>
+    <div id="race-list" class="row"></div>
+    <button id="duo-back" class="ghost" type="button">رجوع</button>
+  </div>
+</section>
+<section id="pause-screen" class="screen veil" hidden>
+  <div class="panel">
+    <h2>استراحة</h2>
+    <button id="resume" class="play" type="button">تابع</button>
+    <button id="restart" class="ghost" type="button">من البداية</button>
+    <button id="pause-menu" class="ghost" type="button">القائمة</button>
+  </div>
+</section>
+<section id="result-screen" class="screen veil" hidden>
+  <div id="confetti" aria-hidden="true"></div>
+  <div class="panel">
+    <div class="tower" aria-hidden="true"><i id="tower-mark"></i></div>
+    <p id="stars" data-stars="0" aria-label="النجوم"><b></b><b></b><b></b></p>
+    <h2 id="result-title">قمة البرج!</h2>
+    <p id="result-record" hidden>رقم جديد!</p>
+    <p id="result-line" class="lead" dir="ltr"></p>
+    <button id="again" class="play" type="button">العب مرة أخرى</button>
+    <button id="result-menu" class="ghost" type="button">القائمة</button>
+  </div>
+</section>
+<button id="quality" class="quality-button" type="button" aria-pressed="false">الرسوم: كاملة</button>
+<div id="context-notice" role="status" hidden>توقفت الرسوم مؤقتًا. انتظر لحظة لاستعادتها.</div>
+<section id="error-screen" class="screen error" hidden>
+  <div class="panel"><h2>تعذّر تشغيل اللعبة</h2><p>الرسوم ثلاثية الأبعاد غير متاحة الآن.<br>أعد فتح اللعبة أو اختر لعبة أخرى.</p></div>
+</section>
+<script src="../../shared/kit.js"></script>
+<script src="../../lib/three/three.min.js"></script>
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script src="render.js"></script>
+<script src="audio.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

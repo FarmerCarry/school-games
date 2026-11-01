@@ -9,15 +9,15 @@ adapt to each child), and none of them plays background music.
 - **No ads, no email/password accounts, no names, no chat, no third-party analytics, no links to other sites.**
   Children pick an animal picture and their age band to play as themselves; nothing is typed.
 - Play statistics are counted on each PC (see [Play statistics](#play-statistics-local-only)).
-  A school can also run its **own** anonymous telemetry server (see
-  [Anonymous telemetry](#anonymous-telemetry-optional) and
+  A school can also run its **own** telemetry server, without names (see
+  [Telemetry without names](#telemetry-without-names-optional) and
   [Turning on data collection](#turning-on-data-collection)); without it the site
   makes no network request.
 - Every game, sound, font and picture lives in this repo. All games run locally in the browser.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores, progress, player profiles and the play statistics are saved in each browser (localStorage).
 
-## The games (34)
+## The games (36)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -44,10 +44,12 @@ adapt to each child), and none of them plays background music.
 | ضربة إلى الفضاء | Skybound Golf | 1 | رياضة، أركيد |
 | سوق الحيوانات | Critter Mart | 1 | بناء وإدارة |
 | إمبراطورية البيتزا | Pizza Empire | 1 | بناء وإدارة |
+| سباق البيض | Egg Rush | 1-2 | بناء وإدارة، لاعبان |
 | عالم المكعبات | Block World | 1 | بناء وإدارة، أركيد |
 | حرّاس الكعكة | Cake Guards (tower defense) | 1 | استراتيجية |
 | انفجار المكعبات | Block Burst | 1 | ألغاز |
 | دمج 2048 | 2048 | 1 | ألغاز |
+| جزيرة الفوضى | Chaos Island | 1-2 | أركيد، لاعبان |
 | حبل الحلوى | Munch Rope | 1 | ألغاز |
 | اندفاع المتاهة | Maze Dash | 1 | أركيد |
 | عبور الطريق | Road Hopper | 1 | أركيد |
@@ -241,9 +243,10 @@ A new player picks an animal, a colour and an age band from three big number car
 sets where difficulty starts, and the game then adapts to how that child plays; the other
 games follow in later milestones. Winning, trying and playing earn XP; the topbar
 shows the player's picture, level and progress, with a short celebration on a new level.
-Up to 12 players fit on one browser. The current player lasts only for that tab: closing
-it, or the classroom «hand over the device» button, returns to the guest. The classroom
-panel can set an age band for guests. The topbar 🔊 button mutes the portal and the games.
+Up to 24 players fit on one browser. The current player lasts only for that tab: closing
+it, the classroom «hand over the device» button, or 20 minutes with nobody playing returns
+to the guest. The classroom panel can set an age band for guests. The topbar 🔊 button
+mutes the portal and the games.
 
 ### Sound
 
@@ -258,8 +261,8 @@ screens for silence.
 Each PC counts which games children open, how long they really play (only while they
 use the mouse or keyboard), where they stop in a game, and whether the games run
 smoothly on that PC. The numbers stay in that browser's storage: these local statistics
-are never uploaded (the optional, separate telemetry below sends only anonymous play
-events). Names, typed text and class codes are never recorded.
+are never uploaded (the optional, separate telemetry below sends play events without
+names). Names, typed text and class codes are never recorded.
 The numbers describe **a PC, not a child**: several children share a PC, and
 two-player modes mix players.
 
@@ -322,23 +325,26 @@ Everything the home page shows comes from **`js/catalog.js`**:
 - **Feature a game** first in the catalog: set `hot: true`.
 - **Rename the site:** change `name` in `window.SITE` (currently "ألعاب الفسحة").
 
-### Anonymous telemetry (optional)
+### Telemetry without names (optional)
 
-A school can collect anonymous play events from every PC on one server of its own (a free
-Cloudflare account, set up with one button; see below),
-to see which games children choose, where they stop, how difficulty settles per age band,
-and whether the PCs keep up. This project's published site sends to the school's
+A school can collect play events without names from every PC on one server of its own (a
+free Cloudflare account, set up with one button; see below),
+to see which games children choose, how each child's play and skill develop over the year,
+where they stop, how difficulty settles per age band, and whether the PCs keep up. This project's published site sends to the school's
 server, named in `.github/workflows/build.yml`; a build without `SG_TELEMETRY_URL`, the
-source tree, the downloaded folder and local previews never send anything. Before turning it on, the
-school or district must complete its privacy review and tell parents (children's data:
-COPPA in the US, GDPR and the UK Age Appropriate Design Code in Europe and the UK).
+source tree, the downloaded folder and local previews never send anything. Each child who
+picks an animal appears under a random code, so this is pseudonymous personal data: before
+turning it on, the school or district must complete its privacy review and tell parents
+(children's data: COPPA in the US, GDPR and the UK Age Appropriate Design Code in Europe and
+the UK), and research publication may need consent or an ethics review.
 
 Only `js/telemetry.js` in the portal sends; games never use the network. It sends no
-names, no typed text, no PC label, no profile or picture, no wall-clock times, no
-identifier that lasts beyond a portal session, and no browser or graphics strings. The
-teacher page shows whether this PC shares, and «stop collecting» stops both the local
-statistics and the sharing. The server stores no IP addresses, keeps rows for 180 days and
-hides any group smaller than three sessions. See [`docs/TELEMETRY.md`](docs/TELEMETRY.md)
+names, no typed text, no PC label, no profile key or picture, no clock time and no browser
+or graphics strings; it sends a random code per profile and one per PC, and the PC's time
+zone name. The teacher page shows whether this PC shares and the codes, can give a child
+who plays on two PCs one code, and «stop collecting» stops both the local statistics and
+the sharing. The server stores no IP addresses, keeps play for 400 days by default, and
+shows every number, even for one child. See [`docs/TELEMETRY.md`](docs/TELEMETRY.md)
 for the portal side and [`server/README.md`](server/README.md) for the server and its
 insights dashboard.
 
@@ -359,21 +365,21 @@ chosen during the setup. To run it on your own server instead, see
 index.html, css/, js/     the portal (plain HTML/CSS/JS, no build step)
 js/catalog.js             list of games, categories and site name
 js/stats.js               the portal's local play-statistics recorder
-js/profiles.js            anonymous picture profiles, age bands and XP
-js/telemetry.js           the only network sender: anonymous events to a school-run server (off by default)
-teacher.html              teacher page: this PC's play statistics and Excel/JSON exports
+js/profiles.js            picture profiles without names, age bands and XP
+js/telemetry.js           the only network sender: play events without names to a school-run server (off by default)
+teacher.html              teacher page: this PC's play statistics, Excel/JSON exports and dashboard codes
 css/teacher.css, js/teacher.js   its styles and script (pure parts in window.SGTeacher)
 games/<slug>/             one folder per game (index.html + thumb.svg + its own files)
 shared/kit.js             tiny helper library all games use (sound, saving, input, scaling, play statistics,
                           age band, difficulty control Kit.dda, telemetry extras Kit.track)
 shared/juice.js           procedural sound effects (Kit.juice in games, Juice in the portal)
-server/                   the anonymous telemetry server and its insights dashboard (a Cloudflare
+server/                   the telemetry server (no names) and its insights dashboard (a Cloudflare
                           Worker, or Node with no dependencies; deployed on its own, not part of the site)
 shared/game.css           shared game page styles + the Fredoka font
 lib/three/                three.js r159 (MIT) for the 3D games
 docs/ARCHITECTURE.md      the platform contract: runtime, profiles, telemetry, server, milestones
 docs/GAME_SPEC.md         the rules every game follows
-docs/TELEMETRY.md         the portal's anonymous telemetry: gates, events, delivery, turning it on
+docs/TELEMETRY.md         the portal's telemetry (no names): gates, codes, events, delivery, turning it on
 docs/PLAY_STATS.md        play statistics: what is counted, storage and export formats
 docs/PERFORMANCE.md       size limits per game, slow-disk rules and how the fast build is measured
 tools/playtest.mjs        headless Chromium playtest harness (Playwright)

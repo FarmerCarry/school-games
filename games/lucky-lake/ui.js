@@ -625,14 +625,17 @@
 
   function startSolo() {
     bootGame(1, { spot: liveSave().spot });
-    Kit.stats.round('solo');
+    // 'endless' is the open session id: under 20 s pays nothing, and the
+    // existing 40 XP cap for one player and game in this tab still applies.
+    Kit.stats.round('endless');
     statsOpen = 'solo';
   }
 
   function startDerby() {
     var sec = liveSave().derby || 180;
     bootGame(2, { players: 2, seconds: sec, spot: 1, forceSpot: 1 });
-    Kit.stats.round('derby');
+    // A :pvp id is a two-player round on one PC, so it is not a personal win.
+    Kit.stats.round('derby:pvp');
     statsOpen = 'derby';
   }
 
