@@ -1,7 +1,7 @@
 // What the score means in each game that passes one to Kit.stats.end(result, score):
 // [Arabic, English], each completing «النتيجة هنا هي …» / "The score here is …".
 // Written by hand from the games' own code; a score is only comparable within one game.
-// tools/tests/dashboard-research.test.mjs checks that these are exactly the 29 score games.
+// tools/tests/dashboard-research.test.mjs checks that these are exactly the 30 score games.
 window.SG_SCORES = {
   'air-hockey': ['أهداف الطفل في المباراة', 'the child’s goals in the match'],
   'beat-dash': ['المسافة التي قطعها الطفل من المرحلة بالنسبة المئوية (100 عند إنهائها)', 'how far through the level the child got, in % (100 when it is finished)'],
@@ -13,6 +13,7 @@ window.SG_SCORES = {
   'chaos-island': ['العملات التي جُمعت', 'the coins collected'],
   'dino-3d': ['نقاط الجولة', 'the points of the run'],
   'drift-king': ['المسافة المقطوعة مع مكافأة الانزلاق', 'the distance driven plus the drift bonus'],
+  'egg-rush': ['البيض الذي فُقس في الجولة، وفي مباراة اللاعبين عملات اللاعب الأعلى', 'the eggs hatched in the round; in a two-player match, the higher coin total'],
   'fire-and-ice': ['نجوم المرحلة المنتهية', 'the stars of a finished level'],
   'hoop-heads': ['نقاط الطفل في المباراة', 'the child’s points in the match'],
   'maze-dash': ['نجوم المرحلة المنتهية (من 0 إلى 3)، وفي التسلق المتواصل الارتفاع والنقاط', 'the stars of a finished level (0 to 3); in the endless climb, the height and the dots'],

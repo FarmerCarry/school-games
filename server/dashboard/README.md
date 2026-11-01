@@ -18,7 +18,7 @@ page runs under `default-src 'self'; script-src 'self'; …`.
 | `i18n.js` | Every word of the page in Arabic and English. |
 | `style.css` | Light and dark colour roles (validated dataviz palette, the sequential `--q1..--q5` and ordinal `--o1..--o4` ramps), layout down to 360 px. |
 | `names.js` | Every game's Arabic and English name, categories, players and input style from `js/catalog.js`, whether its own code adapts the difficulty, counts hits and reaction times or shows a tutorial (`games/<slug>/`), and the category names. |
-| `scores.js` | What the score means in each of the 29 games that pass one (hand-written). |
+| `scores.js` | What the score means in each of the 30 games that pass one (hand-written). |
 | `demo/` | `/?demo`: the real server's answers for every request the sample makes (the KPIs per period and age group, playing now, the settings, the students, the research metrics, the cohorts, the PCs, three students' and six games' pages) and this morning's lines of each research file (`export-<file>.csv`), fetched lazily; at most 3 MB. |
 | `make-demo.mjs` | Rebuilds `demo/`: `node server/dashboard/make-demo.mjs`. `server/simulate.mjs`'s school plays 90 days (50 sessions a school day) into a database in memory, the store rolls each night up, and the real Node server answers at a pinned clock (Tuesday 27 October 2026, 10:40 at the school), so the files are the same on every run. `dashboard-insights.test.mjs` runs it again and fails while `demo/` differs: run it after a change to the server's answers or the catalog. Not deployed (`.assetsignore`). |
 | `make-names.mjs` | Rebuilds `names.js` after a game is added or renamed: `node server/dashboard/make-names.mjs`. Not deployed. |

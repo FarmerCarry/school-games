@@ -818,3 +818,35 @@ portal and the teacher page) and gains one file, so `precacheBytes` moves from
 5,450,000 to 5,578,000: 749 bytes (0.013%) above this measurement and 646 bytes
 (0.012%) above the Actions precache (5,577,354). No other game, font or library limit
 changes.
+
+## Egg Rush on current main, 31 October 2026
+
+سباق البيض (Egg Rush) joins the arcade beside Chaos Island. It draws on one canvas,
+paints each pet and each egg once into an offscreen sprite, and keeps the meadow,
+beach and snow in one sheet that a frame only blits. Particles are capped at 64.
+There is no background music. Pixel ratio is capped at 1.5. Rounds report through
+`Kit.stats` (a one-player run is `main`, a two-player match is `duel:pvp`) and the
+same `Kit.track` hit, miss and cue events a runner uses.
+
+Measured with the Linux minified build and `SG_TELEMETRY_URL` set, the same Actions
+build the budgets check. Main before this game is the Chaos Island head: portal
+405,170, teacher page 97,983, offline precache 5,577,354 across 49 files.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Egg Rush | — | 134,352 | — | 134,500 |
+| Portal (thumbnail and catalog entry) | 405,170 | 415,600 | 406,000 | 416,000 |
+| Teacher page | 97,983 | 98,821 | 98,000 | 99,000 |
+| Offline precache, 50 files | 5,577,354 | 5,723,012 | 5,578,000 | 5,724,000 |
+
+The page limit is a new entry, 148 bytes (0.11%) above the built page. The portal
+grows by 10,430 bytes, so its limit moves from 406,000 to 416,000: 400 bytes (0.096%)
+above this measurement. The teacher page grows by 838 bytes and no longer fits in
+98,000, so its limit moves to 99,000: 179 bytes (0.18%) left. The offline cache grows
+by 145,658 bytes (the new page, the portal, the teacher page, and the few bytes
+Road Hopper uses to count frames) and gains one file, so `precacheBytes` moves from
+5,578,000 to 5,724,000: 988 bytes (0.017%) above this measurement. Each new limit is
+the measured size rounded up (the game to the next 500 bytes, the others to the next
+1,000), and each headroom is under half a percent. No other game, font or library
+limit changes.
+

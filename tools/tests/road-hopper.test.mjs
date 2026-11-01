@@ -38,13 +38,13 @@ after(async () => {
 // `failPictures: n` makes the first n character pictures fail. `embed: {band, telemetry}`
 // opens the game inside the stand-in portal, sends it those preferences and returns the
 // game's frame (the host page is frame.page()).
-async function game(t, { reducedMotion = 'no-preference', idle = true, failPictures = 0, entries = {}, failSave = false, embed = null } = {}) {
+async function game(t, { reducedMotion = 'no-preference', idle = true, failPictures = 0, entries = {}, failSave = false, denyStorage = false, embed = null } = {}) {
   const context = await browser.newContext({ viewport: { width: 960, height: 540 }, reducedMotion });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.text()); });
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  await page.addInitScript(([idle, failPictures, entries, failSave]) => {
+  await page.addInitScript(([idle, failPictures, entries, failSave, denyStorage]) => {
     if (!sessionStorage.getItem('road-hopper-fixture')) {
       for (const [key, value] of Object.entries(entries)) localStorage.setItem('sg:road-hopper:' + key, JSON.stringify(value));
       sessionStorage.setItem('road-hopper-fixture', '1');
@@ -93,7 +93,13 @@ async function game(t, { reducedMotion = 'no-preference', idle = true, failPictu
       }
       return write.apply(this, arguments);
     };
-  }, [idle, failPictures, entries, failSave]);
+    // The classroom folder blocks every storage call, including reads.
+    if (denyStorage) {
+      for (const method of ['getItem', 'setItem', 'removeItem']) {
+        Storage.prototype[method] = function () { throw new DOMException('Storage disabled by test', 'SecurityError'); };
+      }
+    }
+  }, [idle, failPictures, entries, failSave, denyStorage]);
   if (embed) {
     await page.goto(server.origin + EMBED);
     const frame = page.frames().find(f => f.url().includes('/games/road-hopper/'));
@@ -505,6 +511,17 @@ test('the age band picks the first tier, the title world follows a new player, a
     assert.deepEqual([e[1], e[2], e[4], e[5], e[7]], ['e', 'endless', up.scores[i], 1, 1]);
     assert.ok(e[6] >= 5 && e[6] < e[4], `hazards crossed are hits (${e[6]} of ${e[4]} rows)`);
   }
+});
+
+test('blocked storage still boots, and an up hop still lands on a higher row', async t => {
+  const page = await game(t, { denyStorage: true, idle: false });
+  await page.evaluate(() => { document.getElementById('btnPlay').click(); rh.frames(8); });
+  assert.equal(await page.evaluate(() => __game.state), 'play');
+  const before = await page.evaluate(() => __game.player().row);
+  await page.evaluate(() => { __game.press('ArrowUp'); rh.frames(20); });
+  const after = await page.evaluate(() => __game.player());
+  assert.ok(after.row > before, `up hop lands (row ${before} -> ${after.row})`);
+  assert.equal(after.dead, false);
 });
 
 test('the eagle warning is a telemetry cue: the next hop gives a reaction time', async t => {
