@@ -826,3 +826,51 @@ so a 4× CPU run would time the same pages as main. `tools/perf.mjs` now accepts
 `cpuThrottle`) and `--viewport WxH` for those later before/after runs.
 `tools/artkit-demo.html` is a review page and is not in the download or the
 service worker.
+
+## Cake Guards visual upgrade, 31 October 2026
+
+حرّاس الكعكة now draws through `Kit.art` (theme `candy`). Gameplay, scoring,
+wave timing and the seeded decoration layout are unchanged. `engine.js` was
+not edited. The decoration `rng()` call count in `art.js` is the same as
+before. `Kit.particles` and `Kit.shake` are gone from this game; both called
+`Math.random` for purely visual bursts and shake offsets. Those effects now
+use `Kit.art.fx`, `Kit.art.shake` and `Kit.art.rand`. No new `Math.random`
+calls were added.
+
+Baked once per level, resize bucket and quality tier (`Kit.art.bake`): grass
+tile and tufts, a cookie road (crust, inner shade, highlight, sprinkles) and
+the flowers, lollipops, candy trees and rocks. Cached sprites: tower body and
+barrel for each type and level, jelly open/shut faces, shots, build pads, the
+muzzle puff and glows. The birthday cake is cached per look and bite count;
+its wobble is a `Kit.art.spring` and does not move the hit position. The frame
+loop is `Kit.art.loop`. Tier 0 skips glow and vignette and flattens the HUD
+shadows; it still uses the new outlined art. Reduced motion settles the spring,
+stops the bob and the banner pop, and lets particles fade in place.
+
+Measured with the Linux minified build, on this branch, before any of this
+game's art (84,438 bytes, the previous reviewed size).
+
+| File | Before bytes | After bytes | New limit |
+| --- | ---: | ---: | ---: |
+| Cake Guards | 84,438 | 91,499 | 91,900 (was 86,000) |
+| Offline precache, 49 files | 5,463,599 | 5,470,660 | 5,498,061 (was 5,491,000) |
+
+The page grew by 7,061 bytes (8.4%), inside min(+12%, +14 KB) = +10,132.
+91,900 is the measured page plus 401 bytes (0.44%). The precache grew by the
+same 7,061 bytes (only this game's built file changed). Its limit rose by
+exactly that growth, so the previous headroom is unchanged.
+
+Throttled combat frames, 4× CPU, software graphics, 1280×720, three 10-second
+samples after the usual scenario starts wave 1. `tools/perf.mjs` records the
+cold and warm navigations, then its activity phase calls the build-a-tower
+input again. Pad 0 already has a tower, so the build card never appears and
+the run stops at `locator.waitFor` 5000 ms. That happens on the old art and
+the new art. The numbers below use the same observers, viewport, throttle and
+sample length, and time the wave instead of that second click. Median of the
+three sample medians:
+
+| | Before | After | Gate |
+| --- | ---: | ---: | --- |
+| Median fps | 29.94 | 30.03 | ≥ 28.44 (95% of before) |
+| Median frame | 33.4 ms | 33.3 ms | |
+| p95 frame | 66.7 ms | 66.6 ms | ≤ 71.0 ms (1.05× before + 1 ms) |
