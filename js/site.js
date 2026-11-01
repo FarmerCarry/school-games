@@ -582,7 +582,7 @@
   }
 
   /* ------------------------------------------------- who's playing? */
-  // Anonymous picture profiles (js/profiles.js). The strip at the top of home never
+  // Picture profiles without names (js/profiles.js). The strip at the top of home never
   // blocks: a guest plays at once and one click picks a player. A new player makes
   // three picture choices (animal, colour, age); removing one is a small teacher
   // action that asks twice. Every button carries data-w="action[:value]".
@@ -996,8 +996,9 @@
   function stat(name, a, b) {
     try { window.SGStats[name](a, b); } catch (e) { /* statistics are optional */ }
   }
-  // The anonymous telemetry sink (js/telemetry.js) follows the same calls; it does
+  // The telemetry sink (js/telemetry.js, no names) follows the same calls; it does
   // nothing unless the build has an ingest address and the teacher has not stopped it.
+  // tm() skips a hook the loaded sink does not have.
   function tm(name, a, b) {
     try { var t = window.SGTelemetry; if (t && typeof t[name] === 'function') t[name](a, b); } catch (e) { /* telemetry is optional */ }
   }
@@ -1055,6 +1056,7 @@
       return;
     }
     var type = e.data && e.data.type;
+    if (type === 'sg:stats' && e.data.e > 0) markActive();
     if (type === 'sg:ready') {
       if (!frameReady) tm('ready', current, performance.now() - frameAt);
       clearTimeout(readyTimer);
@@ -1065,6 +1067,14 @@
       sendPreferences();
       if (sessionExpired) showHandoff(); else focusGame();
     } else if (type === 'sg:error') failFrame(f, 'x');
+    else if (type === 'sg:warn') noteGameWarn(e.data);
+  }
+  // A stray error after the game is ready. Count it on this page only: the
+  // text is not stored or sent, and the iframe is left alone.
+  var gameWarns = 0;
+  function noteGameWarn(data) {
+    gameWarns++;
+    try { window.__sgWarns = { n: gameWarns, last: String(data && data.message || '').slice(0, 240) }; } catch (e) { /* diagnostics stay local */ }
   }
   function failFrame(f, kind) {
     if (frameEl() !== f) return;
@@ -1200,7 +1210,25 @@
     if (f && frameReady) f.removeAttribute('inert');
     window.dispatchEvent(new Event('sg:sessionchange'));
   }
+  // The idle hand-over: the player lives in sessionStorage, so a tab left open would give
+  // the next class the last child's profile. After 20 minutes with no key press, click or
+  // wheel on the portal and no engaged play reported by the game (sg:stats e > 0), the
+  // player becomes a guest on the "who's playing?" strip. A classroom timer still running
+  // is kept; the hand-over overlay of one that ran out goes too.
+  var IDLE = 20 * 60000, lastActive = performance.now();
+  function markActive() { lastActive = performance.now(); }
+  function idleCheck() {
+    if (!prof('player') || performance.now() - lastActive < IDLE) return;
+    tm('why', 'i');
+    prof('select', '');
+    whoFocus = true;
+    if (sessionExpired) { clearSession(); $('#sessionStatus').textContent = T.nextPlayer; }
+    if (current) go('#/');
+    markActive();
+  }
+  // Runs every second, also when no timer is set.
   function tickSession() {
+    idleCheck();
     if (!sessionDeadline) return;
     var left = Math.max(0, Math.ceil((sessionDeadline - performance.now()) / 1000));
     $('#sessionClock').textContent = Math.floor(left / 60) + ':' + ('0' + left % 60).slice(-2);
@@ -1209,6 +1237,7 @@
       sessionExpired = true;
       $('#sessionStatus').textContent = T.sessionChoice;
       $('#sessionStart').textContent = T.startSession;
+      tm('timer', 'e', 0);
       showHandoff();
     }
   }
@@ -1241,13 +1270,16 @@
       $('#sessionStop').hidden = false;
       $('#sessionStart').textContent = T.resetTimer;
       $('#sessionStatus').textContent = T.sessionStarted(minutes);
+      tm('timer', 's', minutes);
       window.dispatchEvent(new Event('sg:sessionchange'));
       tickSession();
     });
     $('#sessionStop').addEventListener('click', function () {
       clearSession();
       $('#sessionStatus').textContent = T.timerCancelled;
+      tm('timer', 'c', 0);
     });
+    ['pointerdown', 'keydown', 'wheel'].forEach(function (type) { document.addEventListener(type, markActive, { capture: true, passive: true }); });
     setInterval(tickSession, 1000);
   }
   function setupPlay(slug) {
@@ -1263,6 +1295,7 @@
     $('#favBtn').addEventListener('click', function (e) {
       var result = toggleFav(slug), on = result.on;
       var b = this;
+      tm('fav', slug, on);
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', on);
       b.title = on ? T.favOn : T.fav;
@@ -1285,6 +1318,8 @@
     $('#sessionEnd').addEventListener('click', function () {
       clearSession();
       $('#sessionStatus').textContent = T.nextPlayer;
+      // Why the player's session ends (a guest's goes on: there is no new player).
+      if (prof('player')) tm('why', 'h');
       prof('select', '');
       whoFocus = true;
       go('#/');

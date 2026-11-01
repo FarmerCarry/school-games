@@ -51,11 +51,48 @@ test('loading Kit alone never signals game readiness; failure prevents a later f
   h.sent.length = 0;
   h.window.emit('message', {source: h.window.parent, data: {type: 'sg:request-ready'}});
   assert.equal(h.sent[0].type, 'sg:ready');
+  const failed = harness();
+  failed.window.emit('error', {target: {tagName: 'SCRIPT'}});
+  failed.window.emit('unhandledrejection', {reason: 'also'});
+  failed.Kit.ready();
+  failed.window.emit('message', {source: failed.window.parent, data: {type: 'sg:request-ready'}});
+  assert.deepEqual(failed.sent, [{type: 'sg:error', version: 1, message: 'Game script failed to load'}]);
+});
+
+test('after ready a stray error warns at most once per 10 s and a burst pauses before it fails', () => {
+  const clock = {now: 0}, h = harness({clock}), order = [];
+  h.Kit.lifecycle({
+    reset() { order.push('reset'); },
+    pause(reason) { order.push(reason); if (reason === 'error' && order.length === 2) throw new Error('save hook'); }
+  });
+  h.Kit.ready();
   h.sent.length = 0;
-  h.window.emit('error', {target: {tagName: 'SCRIPT'}});
+  h.window.emit('error', {message: 'stray', error: {message: 'x'.repeat(300)}});
+  h.window.emit('unhandledrejection', {reason: 'again'});
+  h.window.emit('error', {target: {tagName: 'IMG'}});
+  assert.equal(h.sent.length, 1);
+  assert.equal(h.sent[0].type, 'sg:warn');
+  assert.equal(h.sent[0].message.length, 240);
+  assert.deepEqual(order, [], 'one warning does not pause or fail the game');
   h.Kit.ready();
   h.window.emit('message', {source: h.window.parent, data: {type: 'sg:request-ready'}});
-  assert.deepEqual(h.sent.map(m => m.type), ['sg:error']);
+  assert.ok(h.sent.filter(m => m.type === 'sg:ready').length >= 1, 'the game stays ready');
+  clock.now = 10000;
+  h.window.emit('error', {message: 'later'});
+  assert.deepEqual(h.sent.filter(m => m.type === 'sg:warn').map(m => m.message), ['x'.repeat(240), 'later']);
+  for (let i = 0; i < 3; i++) h.window.emit('error', {message: 'burst ' + i});
+  assert.equal(h.sent.filter(m => m.type === 'sg:error').length, 0, 'four errors in the window are still warnings');
+  h.window.emit('error', {message: 'burst fatal'});
+  assert.deepEqual(order, ['reset', 'error']);
+  assert.equal(h.sent.at(-1).type, 'sg:error');
+  assert.equal(h.sent.at(-1).message, 'burst fatal');
+  assert.deepEqual(h.sent.map(m => m.type).filter(type => type === 'sg:stats' || type === 'sg:telemetry'), [], 'handlers post no statistics');
+  const after = h.sent.length;
+  h.window.emit('error', {message: 'too late'});
+  h.window.emit('unhandledrejection', {reason: 'too late'});
+  h.Kit.fail('again');
+  h.Kit.ready();
+  assert.equal(h.sent.length, after, 'a failed game reports nothing further');
 });
 
 test('focus, visibility and portal escape clear held inputs before semantic pause without auto resume', () => {
@@ -309,8 +346,12 @@ test('stats: one 10 s timer chain starts at the first Kit.ready() and stops once
   assert.equal(statsOf(h).length, 1, 'no post without unsent data');
   assert.deepEqual([pending(h), h.delays], [1, [10000, 10000, 10000]], 'each tick schedules exactly one more');
   h.window.emit('keydown', {code: 'KeyA'}); clock.now = 5000;
-  h.window.emit('error', {message: 'boom'}); h.Kit.ready();
-  assert.deepEqual(h.sent.map(m => m.type).slice(-1), ['sg:error'], 'error handlers post no statistics');
+  const before = h.sent.length;
+  h.window.emit('error', {message: 'boom'});
+  assert.deepEqual(h.sent.slice(before).map(m => m.type), ['sg:warn'], 'a runtime warning posts no statistics');
+  assert.equal(pending(h), 1, 'one warning does not stop the statistics timer');
+  h.Kit.fail('boom');
+  assert.equal(h.sent.at(-1).type, 'sg:error', 'Kit.fail posts no statistics');
   runTimers(h);
   assert.equal(pending(h), 0, 'the chain stops after a failure');
   assert.equal(h.sent.at(-1).type, 'sg:error');
@@ -481,17 +522,19 @@ test('v2: sg:telemetry follows sg:stats with the same e and f, round starts and 
     v1(1000, [['s', 'L1']], 'L1'),
     v2(1000, [1, 0, 0, 0, 0, 0], [['rs', 'L1', 3]]),
     v1(3000, [['q', 'L1', 3000], ['s', 'L2']], 'L2'),
-    v2(3000, [1, 1, 0, 1, 0, 0], [['re', 'q', 'L1', 3000, -1, 4, 2, 1, [1, 1, 0, 0, 1, 1]], ['rs', 'L2', 4]]),
+    // rx before each end: wall ms, inputs (the key repeat aside), idle lapses, pauses,
+    // the reaction-time sum and count (450 + 1450 + 120 + 2000 ms) and the DDA level (none).
+    v2(3000, [1, 1, 0, 1, 0, 0], [['rx', 3000, 3, 0, 0, 4020, 4, -1], ['re', 'q', 'L1', 3000, -1, 4, 2, 1, [1, 1, 0, 0, 1, 1]], ['rs', 'L2', 4]]),
     v1(1000, [['l', 'L2', 1000]], '', [1, 0, 1, 0]),
-    v2(1000, zeros, [['re', 'l', 'L2', 1000, -1, 4, 0, 1, zeros]], [1, 0, 1, 0]),
+    v2(1000, zeros, [['rx', 1000, 0, 0, 0, 0, 0, -1], ['re', 'l', 'L2', 1000, -1, 4, 0, 1, zeros]], [1, 0, 1, 0]),
     v1(0, [['s', 'L3']], 'L3'),
     v2(0, zeros, [['rs', 'L3', 4]]),
     v1(1000, [['w', 'L3', 1000, 120]], ''),
-    v2(1000, zeros, [['re', 'w', 'L3', 1000, 120, 4, 0, 0, zeros]]),
+    v2(1000, zeros, [['rx', 1000, 0, 0, 0, 0, 0, -1], ['re', 'w', 'L3', 1000, 120, 4, 0, 0, zeros]]),
     v1(0, [['s', 'L4']], 'L4'),
     v2(0, zeros, [['rs', 'L4', 4]]),
     v1(1000, [['d', 'L4', 1000, -5]], ''),
-    v2(1000, zeros, [['re', 'd', 'L4', 1000, -1, 4, 0, 0, zeros]]),
+    v2(1000, zeros, [['rx', 1000, 0, 0, 0, 0, 0, -1], ['re', 'd', 'L4', 1000, -1, 4, 0, 0, zeros]]),
     v2(0, [0, 0, 0, 0, 0, 1], [])
   ]);
   assert.deepEqual(h.clones, h.sent, 'every message survives structured cloning');
@@ -515,7 +558,7 @@ test('v2: a round still open when the page goes away ends as a quit, unless the 
   h.Kit.track.miss();
   clock.now = 9000; h.window.emit('pagehide', {persisted: false});                 // gone: a quit for v2
   const v2 = h.sent.filter(m => m.type === 'sg:telemetry').flatMap(m => m.ev);
-  assert.deepEqual(v2, [['rs', 'L1', 2], ['re', 'q', 'L1', 4000, -1, 2, 1, 1, zeros]]);
+  assert.deepEqual(v2, [['rs', 'L1', 2], ['rx', 8000, 1, 0, 0, 0, 0, -1], ['re', 'q', 'L1', 4000, -1, 2, 1, 1, zeros]]);
   const v1 = h.sent.filter(m => m.type === 'sg:stats');
   assert.deepEqual(v1.at(-1).o, 'L1', 'sg:stats still names the open round, so the portal records its own quit');
   assert.ok(v1.every(m => m.r.every(e => e[0] !== 'q')), 'v1 gets no quit event from Kit');
@@ -555,9 +598,51 @@ test('v2: Kit.track counts nothing before Kit.ready(), clears a cue on pause and
   clock.now = 900; h.window.emit('keydown', {code: 'KeyA'});
   clock.now = 1500; h.Kit.track.tier(7.8);
   h.Kit.stats.end('win');
-  assert.deepEqual(telemetryOf(h).flatMap(m => m.ev), [['rs', 'L1', 2], ['re', 'w', 'L1', 600, -1, 7, 0, 0, zeros]],
+  assert.deepEqual(telemetryOf(h).flatMap(m => m.ev), [['rs', 'L1', 2], ['rx', 1500, 2, 0, 1, 0, 0, -1], ['re', 'w', 'L1', 600, -1, 7, 0, 0, zeros]],
     'no hits, misses or reaction times before readiness or across a pause');
   for (const call of ['hit', 'miss', 'cue', 'react', 'tier']) assert.doesNotThrow(() => h.Kit.track[call](Symbol('odd')));
+});
+
+test('v2: rx counts one pause per stop of play: a blur with the hidden page after it, or both fullscreen exits, are one', () => {
+  const {pagehide, ...each} = pauses;
+  const stops = {
+    ...each,
+    'a tab switch (blur, then hidden)': h => { h.window.emit('blur'); h.document.hidden = true; h.document.emit('visibilitychange'); h.document.hidden = false; },
+    'Shift+Tab, then the blur as the portal takes the focus': h => { each['portal-escape'](h); h.window.emit('blur'); },
+    'leaving fullscreen (Kit\'s own, then the portal\'s sg:pause)': h => {
+      each['fullscreen-exit'](h);
+      h.window.emit('message', {source: h.window.parent, data: {type: 'sg:pause', reason: 'fullscreen-exit'}});
+    }
+  };
+  for (const [name, pause] of Object.entries(stops)) {
+    const clock = {now: 1000}, h = harness({clock});
+    preferences(h, {telemetry: true});
+    h.Kit.ready(); h.Kit.stats.round('L1');
+    pause(h);                                                     // before any input: play was running
+    clock.now = 2000; h.window.emit('keydown', {code: 'Space'});
+    clock.now = 3000; pause(h);
+    h.window.emit('blur');                                        // already paused: no input since
+    clock.now = 4000; h.window.emit('pointerdown', {button: 0});
+    clock.now = 5000; pause(h);
+    h.Kit.stats.end('win');
+    const rx = telemetryOf(h).flatMap(m => m.ev).find(ev => ev[0] === 'rx');
+    assert.equal(rx[4], 3, `${name}: ${JSON.stringify(rx)}`);
+  }
+});
+
+test('v2: a round\'s wall time in rx always covers its engaged time, wherever a millisecond turns between two clock reads', () => {
+  for (let step = 0.05; step < 1; step += 0.05) for (let start = 0; start < 1; start += 0.1) {
+    let t = 1000 + start;
+    const h = harness({clock: {get now() { return t += step; }}});
+    preferences(h, {telemetry: true});
+    h.Kit.ready();
+    h.window.emit('pointerdown', {button: 0});
+    h.Kit.stats.round('local');
+    for (let i = 0; i < 4; i++) h.window.emit('pointerdown', {button: 0});
+    h.Kit.stats.end('e');
+    const ev = telemetryOf(h).flatMap(m => m.ev), rx = ev.find(e => e[0] === 'rx'), re = ev.find(e => e[0] === 're');
+    assert.ok(rx[1] >= re[3], `step ${step.toFixed(2)}, start ${start.toFixed(1)}: wall ${rx[1]} ms, engaged ${re[3]} ms`);
+  }
 });
 
 test('v2: round events wait for Kit.ready() like v1 events, and go out at most 64 to a message', () => {
@@ -570,11 +655,11 @@ test('v2: round events wait for Kit.ready() like v1 events, and go out at most 6
   h.Kit.ready();
   assert.deepEqual(h.sent, [{type: 'sg:ready', version: 1}]);
   runTimers(h);
-  const expected = [['rs', 'L1', 1]];
-  for (let i = 1; i < 50; i++) expected.push(['re', 'q', 'L1', 0, -1, 1, 0, 0, zeros], ['rs', 'L1', 1]);
-  expected.push(['re', 'w', 'L1', 0, 9, 1, 0, 0, zeros]);
-  assert.deepEqual(h.sent.slice(1).map(m => m.type), ['sg:stats', 'sg:telemetry', 'sg:telemetry']);
-  assert.deepEqual(telemetryOf(h).map(m => m.ev.length), [64, 36]);
+  const expected = [['rs', 'L1', 1]], rx = ['rx', 0, 0, 0, 0, 0, 0, -1];
+  for (let i = 1; i < 50; i++) expected.push(rx, ['re', 'q', 'L1', 0, -1, 1, 0, 0, zeros], ['rs', 'L1', 1]);
+  expected.push(rx, ['re', 'w', 'L1', 0, 9, 1, 0, 0, zeros]);
+  assert.deepEqual(h.sent.slice(1).map(m => m.type), ['sg:stats', 'sg:telemetry', 'sg:telemetry', 'sg:telemetry']);
+  assert.deepEqual(telemetryOf(h).map(m => m.ev.length), [64, 64, 22]);
   assert.deepEqual(telemetryOf(h).flatMap(m => m.ev), expected);
   // Switching telemetry off before readiness drops the waiting events.
   const late = harness({clock});
@@ -648,7 +733,7 @@ test('v2: Kit.dda keeps guests of different bands apart', () => {
   assert.deepEqual(Object.keys(JSON.parse(h.values.get('sg:g:dda'))), ['_6-7', '_10-11']);
 });
 
-test('v2: Kit.dda keeps one state per player, at most 16 players, reloads on player change and resets', () => {
+test('v2: Kit.dda keeps one state per player, a full PC\'s 24 profiles beside its guests, reloads on player change and resets', () => {
   const h = harness(), dda = h.Kit.dda('g'), other = h.Kit.dda('g', {id: 'boss'});
   preferences(h, {band: '8-9', player: 'p1'});
   dda.result(true); other.result(false);
@@ -662,13 +747,18 @@ test('v2: Kit.dda keeps one state per player, at most 16 players, reloads on pla
   preferences(h, {player: 'p1'});
   assert.equal(dda.level, p1, 'back to the first player');
   assert.deepEqual(JSON.parse(h.values.get('sg:g:dda')), {p1: {main: [0.43, 1], boss: [0.25, 1]}, p2: {main: [0.25, 1]}});
-  for (let i = 3; i <= 20; i++) { preferences(h, {player: 'p' + i}); dda.result(true); }
+  // A full PC has 24 profiles (js/profiles.js): every one of them keeps its level, and so
+  // do the guests of every band beside them.
+  for (let i = 3; i <= 26; i++) { preferences(h, {player: 'p' + i}); dda.result(true); }
+  for (const band of ['', '6-7', '8-9', '10-11']) { preferences(h, {player: '', band}); dda.result(true); }
+  preferences(h, {band: '8-9'});
   let saved = JSON.parse(h.values.get('sg:g:dda'));
-  assert.deepEqual(Object.keys(saved), ['p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'p11', 'p12', 'p13', 'p14', 'p15', 'p16', 'p17', 'p18', 'p19', 'p20']);
+  assert.deepEqual(Object.keys(saved), [...Array.from({length: 24}, (_, i) => 'p' + (i + 3)), '_', '_6-7', '_8-9', '_10-11'], 'guests push no profile out');
+  // Only beyond that (a removed profile's key, say) is the least recently saved player dropped.
   preferences(h, {player: 'p5'}); dda.result(true);
-  preferences(h, {player: 'p21'}); dda.result(true);
+  preferences(h, {player: 'p29'}); dda.result(true);
   saved = JSON.parse(h.values.get('sg:g:dda'));
-  assert.deepEqual([Object.keys(saved).length, Object.keys(saved)[0], Object.keys(saved).slice(-2)], [16, 'p7', ['p5', 'p21']], 'the least recently saved player is dropped');
+  assert.deepEqual([Object.keys(saved).length, Object.keys(saved)[0], Object.keys(saved).slice(-2)], [28, 'p4', ['p5', 'p29']], 'the least recently saved player is dropped');
   preferences(h, {player: 'p5'});
   assert.equal(dda.level, 0.471, 'p5 kept both results');
   dda.reset();
@@ -705,14 +795,15 @@ test('v2: every read of dda.tier reports it to Kit.track.tier for the round even
   dda.result(true);
   dda.pick([1, 2, 3, 4, 5]);
   h.Kit.stats.end('win');
-  assert.deepEqual(telemetryOf(h).flatMap(m => m.ev).map(event => event[0] === 'rs' ? event[2] : event[5]), [3, 4]);
+  const tiers = g => telemetryOf(g).flatMap(m => m.ev).filter(event => event[0] !== 'rx').map(event => event[0] === 'rs' ? event[2] : event[5]);
+  assert.deepEqual(tiers(h), [3, 4]);
   // A game that reads only level or value() still reports its tier (0 means "no DDA").
   for (const read of [d => d.level, d => d.value(1, 2)]) {
     const g = harness();
     g.Kit.ready(); preferences(g, {telemetry: true, band: '10-11'});
     read(g.Kit.dda('g'));
     g.Kit.stats.round('L1'); g.Kit.stats.end('win');
-    assert.deepEqual(telemetryOf(g).flatMap(m => m.ev).map(event => event[0] === 'rs' ? event[2] : event[5]), [3, 3], String(read));
+    assert.deepEqual(tiers(g), [3, 3], String(read));
   }
 });
 
@@ -733,4 +824,87 @@ test('v2: a cue is answered only by a click or a key the game accepts, and switc
   const [re] = telemetryOf(h).flatMap(m => m.ev).filter(event => event[0] === 're');
   assert.deepEqual(re[8], [1, 0, 0, 1, 0, 0], 'rejected keys and a cue from before telemetry went off are not timed');
   assert.deepEqual(telemetryOf(h).reduce((sum, m) => sum.map((n, i) => n + m.il[i]), zeros), [9, 0, 0, 0, 0, 0], 'every press still counts for input latency');
+});
+
+/* ------------------------------------------------------------- rx */
+// docs/ARCHITECTURE.md "Kit v2": ['rx', wallMs, inputs, idleLapses, pauses, rtSumMs, rtN,
+// ddaPermille] right before every round end, still inside sg:telemetry version 2.
+const rxOf = h => telemetryOf(h).flatMap(m => m.ev).filter(event => event[0] === 'rx');
+
+test('rx: the round counters go right before every round end, only while telemetry is on, and reset at a round start', () => {
+  const clock = {now: 0}, h = harness({clock});
+  h.Kit.ready(); preferences(h, {telemetry: true});
+  const key = (extra = {}) => h.window.emit('keydown', {code: 'KeyA', ...extra});
+  const click = () => h.window.emit('pointerdown', {button: 0});
+  key(); click(); h.window.emit('blur');               // no round yet: nothing counts
+  key();                                               // open until 21 000
+  clock.now = 1000; h.Kit.stats.round('L1');
+  key(); key({repeat: true}); click();                 // 2 inputs: a key repeat is not one
+  h.window.emit('pointermove'); h.window.emit('wheel'); h.Kit.stats.busy();
+  clock.now = 30000; click();                          // the window lapsed at 21 000: idle lapse 1
+  clock.now = 35000; h.window.emit('pointermove');     // until 55 000
+  clock.now = 60000; h.window.emit('pointermove'); h.window.emit('wheel'); h.Kit.stats.busy(); // lapsed, but these only extend
+  clock.now = 61000; key();                            // idle lapse 2
+  h.window.emit('blur');                               // pause 1 cuts the window
+  clock.now = 90000; key();                            // resuming after a pause is not a lapse
+  pauses.hidden(h); pauses['session-ended'](h);        // pause 2: play is already cut for the second
+  h.Kit.track.cue(); clock.now = 90400; click();       // 400 ms
+  for (const ms of [250, -1, NaN, Infinity, '9']) h.Kit.track.react(ms);
+  clock.now = 100000; h.Kit.stats.end('win', 3);
+  h.window.emit('blur'); key(); click(); h.Kit.track.react(100); // between rounds: nothing counts
+  clock.now = 101000; h.Kit.stats.round('L2');
+  clock.now = 103500; h.Kit.stats.round('L3');         // L2 ends as a quit, with counters of its own
+  clock.now = 104000; h.window.emit('pagehide', {persisted: false}); // so does L3
+  const ev = telemetryOf(h).flatMap(m => m.ev);
+  assert.deepEqual(ev.map(e => e[0]), ['rs', 'rx', 're', 'rs', 'rx', 're', 'rs', 'rx', 're']);
+  assert.deepEqual(rxOf(h), [['rx', 99000, 6, 2, 2, 650, 2, -1], ['rx', 2500, 0, 0, 0, 0, 0, -1], ['rx', 500, 0, 0, 0, 0, 0, -1]]);
+  const [first] = ev.filter(e => e[0] === 're');
+  assert.deepEqual([first[8], first[8].reduce((a, b) => a + b, 0)], [[1, 1, 0, 0, 0, 0], 2], 'rtN counts the same reaction times as the histogram');
+  for (const m of telemetryOf(h)) {
+    assert.equal(m.version, 2, 'sg:telemetry stays version 2');
+    assert.deepEqual(Object.keys(m), ['type', 'version', 'e', 'f', 'il', 'ev']);
+  }
+  assert.ok(ev.every(e => e.every(v => typeof v === 'string' || (Array.isArray(v) ? v.every(Number.isInteger) : Number.isInteger(v)))), 'whole numbers only');
+  assert.deepEqual(h.clones, h.sent, 'every message survives structured cloning');
+  assert.deepEqual(h.delays, [10000], 'no new timers');
+  // The same play with telemetry off: no rx, and sg:stats version 1 is unchanged.
+  const quiet = harness({clock: {now: 0}}), loud = harness({clock: {now: 0}});
+  for (const [g, telemetry] of [[quiet, false], [loud, true]]) {
+    g.Kit.ready(); preferences(g, {telemetry});
+    g.window.emit('keydown', {code: 'KeyA'}); g.Kit.stats.round('L1'); g.window.emit('blur');
+    g.window.emit('pointerdown', {button: 0}); g.Kit.stats.end('lose');
+  }
+  assert.deepEqual([telemetryOf(quiet), rxOf(loud).length], [[], 1]);
+  assert.deepEqual(statsOf(quiet), statsOf(loud));
+});
+
+test('rx: wall time, inputs, idle lapses and pauses count from the round start even while telemetry was off', () => {
+  const clock = {now: 0}, h = harness({clock});
+  h.Kit.ready(); preferences(h, {telemetry: false});
+  h.window.emit('keydown', {code: 'KeyA'});
+  clock.now = 500; h.Kit.stats.round('L1');
+  clock.now = 25000; h.window.emit('keydown', {code: 'KeyA'}); h.window.emit('blur');
+  h.Kit.track.cue(); h.Kit.track.react(300);           // reaction times only count while telemetry is on
+  preferences(h, {telemetry: true});
+  clock.now = 26000; h.window.emit('pointerdown', {button: 0}); h.Kit.track.react(200);
+  clock.now = 30000; h.Kit.stats.end('win');
+  assert.deepEqual(rxOf(h), [['rx', 29500, 2, 1, 1, 200, 1, -1]]);
+  // Nothing is sent once the game has failed.
+  h.Kit.stats.round('L2'); h.Kit.fail('boom'); h.Kit.stats.end('win');
+  assert.equal(rxOf(h).length, 1);
+});
+
+test('rx: the DDA level is the last read before the round ended, in thousandths, and stays until the next read', () => {
+  const h = harness({clock: {now: 0}});
+  h.Kit.ready(); preferences(h, {telemetry: true, band: '10-11'});
+  const play = (id, between = () => {}, during = () => {}) => { between(); h.Kit.stats.round(id); during(); h.Kit.stats.end('win'); };
+  play('L0');                                          // no controller read yet: -1
+  const dda = h.Kit.dda('g'), boss = h.Kit.dda('g', {id: 'boss', start: 0.123});
+  play('L1', () => dda.tier, () => dda.result(true));  // read 0.6 at the start; a result is not a read
+  play('L2');                                          // sticky
+  play('L3', () => {}, () => dda.value(1, 2));         // the new level 0.65
+  play('L4', () => boss.pick([1, 2, 3, 4, 5]));        // the latest read of any controller
+  play('L5', () => dda.level);
+  assert.deepEqual(rxOf(h).map(e => e[7]), [-1, 600, 600, 650, 123, 650]);
+  assert.deepEqual([[...h.values.keys()], JSON.parse(h.values.get('sg:g:dda'))], [['sg:g:dda'], {'_10-11': {main: [0.65, 1]}}], 'reading stores nothing');
 });

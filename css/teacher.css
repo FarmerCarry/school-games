@@ -228,6 +228,11 @@ td.heart { color: var(--pink); }
 .status { min-height: 1.6em; font-weight: 700; color: var(--green); }
 .status.bad { color: var(--red); }
 #combined .btn { margin-top: 6px; }
+.codes { list-style: none; margin: 8px 0; padding: 0; }
+.codes li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.codes .hint { margin: 0; }
+.ring { display: inline-grid; place-items: center; width: 34px; height: 34px; border: 4px solid; border-radius: 50%; background: #fff; font-size: 20px; }
+.code { font-family: Consolas, ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
 
 @media (max-width: 600px) {
   .top, .wrap { padding-inline: 16px; }

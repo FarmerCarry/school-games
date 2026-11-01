@@ -76,7 +76,7 @@ not loaded by other games.
 2. **Nothing external.** No CDNs, web fonts from the internet, online or third-party analytics,
    iframes or links out. **Games never use the network.** A game passes counts to the portal only
    through Kit (`Kit.stats`, `Kit.track`; see "Play statistics" below) and never adds another
-   reporting channel; only the portal's `js/telemetry.js` may send anything, anonymously and only
+   reporting channel; only the portal's `js/telemetry.js` may send anything, without names and only
    when a build is configured for it.
    All art is drawn in code (canvas, SVG, CSS, three.js geometry). Sound is synthesized with
    WebAudio (`Kit.juice`, `Kit.sfx` / `Kit.audio.tone` / `Kit.audio.noise`, or your own synth code).
@@ -164,7 +164,9 @@ pause requests. Do not resume automatically when focus returns.
 
 Call `Kit.ready()` only at the end of successful initialization. The portal waits for
 this signal instead of assuming that an iframe load means the game works. Shared
-startup error handling reports failures; it must not manufacture a ready signal.
+startup error handling reports failures before ready; it must not manufacture a ready
+signal. After ready, one stray error warns the portal and leaves the game up. Five
+errors within 10 seconds pause the game (so its pause hook can save) and then fail it.
 
 Use `Kit.motion.reduced()` for custom camera shake or decorative motion. The shared
 shake, particles, CSS and mute control already honor preferences and accessibility.
@@ -223,7 +225,7 @@ level files, or in functions that Node tests load or call with a stub Kit.
 ## Kit v2 for game authors
 
 The portal tells each game who is playing (an anonymous profile slot and an age band) and
-whether anonymous telemetry is on; the contract is "Kit v2" in
+whether telemetry (without names) is on; the contract is "Kit v2" in
 [`ARCHITECTURE.md`](ARCHITECTURE.md). Everything below is safe standalone, before
 `Kit.ready()` and with odd arguments, and follows the `Kit.stats` rules above: UI layer
 only, never in engine, level or simulation files, never for demo or attract modes.
@@ -282,5 +284,5 @@ It has no music API (rule 11).
 
 **Network.** Games still never use the network: no `fetch`, beacons, sockets or remote
 addresses. Kit only posts `sg:stats` and `sg:telemetry` to the portal, and only the
-portal's `js/telemetry.js` may send anything on, anonymously and only when the build is
+portal's `js/telemetry.js` may send anything on, without names and only when the build is
 configured with an ingest address.

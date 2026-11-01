@@ -12,14 +12,36 @@ const hold = (key = 'ArrowRight', ms = 220) => async page => {
   await page.waitForTimeout(ms);
   await page.keyboard.up(key);
 };
-const holdUntil = (key, expr, label) => async page => {
-  await page.keyboard.down(key);
+const holdUntil = (key, expr, label, timeout = 7000, { retry = false } = {}) => async page => {
+  const deadline = Date.now() + timeout;
+  let last;
   try {
-    // A software-rendered frame can take longer than a short fixed key hold.
-    // Keep the real key down until the simulation consumes it; a broken
-    // control still fails the same bounded observable-state assertion.
-    await requireState(page, expr, label);
-  } finally { await page.keyboard.up(key); }
+    do {
+      // Release and press again so a focus reset that swallowed the first
+      // keydown still produces a new edge the game can see.
+      await page.keyboard.up(key).catch(() => {});
+      if (retry) {
+        await page.evaluate(() => {
+          const surface = document.getElementById('gl') || document.querySelector('canvas');
+          if (surface) { try { surface.focus({ preventScroll: true }); } catch (e) { surface.focus(); } }
+          window.Kit?.keys.reset();
+        });
+      }
+      await page.keyboard.down(key);
+      // A software-rendered frame can take longer than a short fixed key hold.
+      // Keep the real key down until the simulation consumes it; a broken
+      // control still fails the same bounded observable-state assertion.
+      const slice = Math.max(1, retry ? Math.min(1500, deadline - Date.now()) : deadline - Date.now());
+      try {
+        await requireState(page, expr, label, slice);
+        return;
+      } catch (error) {
+        last = error;
+        if (!retry || Date.now() >= deadline) break;
+      }
+    } while (retry);
+    throw last;
+  } finally { await page.keyboard.up(key).catch(() => {}); }
 };
 const holdUntilChanged = (key, snapshot) => async page => {
   const before = await page.evaluate(`JSON.stringify(${snapshot})`);
@@ -30,7 +52,7 @@ const click = selector => page => clickControl(page, selector);
 const sequence = (...steps) => async page => { for (const step of steps) await step(page); };
 const move = async page => { await page.mouse.move(400, 220, { steps: 8 }); await page.waitForTimeout(240); };
 const defaults = (start, active, snapshot, input, pause, paused, restart, reset, extra = {}) =>
-  ({ start: start.map(click), active, snapshot, input, pause, paused, restart, reset, ...extra });
+  ({ start: start.map(step => typeof step === 'function' ? step : click(step)), active, snapshot, input, pause, paused, restart, reset, ...extra });
 
 export const scenarios = {
   'dino-3d': defaults(['#play'], `window.Dino3DGame.mode === 'playing'`, `[window.Dino3DGame.state.score,window.Dino3DGame.state.distance,window.Dino3DGame.state.player]`, hold('Space', 180), '#pause-button', `window.Dino3DGame.mode === 'paused'`, '#restart', `window.Dino3DGame.state.score < 10`),
@@ -134,8 +156,23 @@ export const scenarios = {
     }
   }),
   'maze-dash': defaults(['#btn-play'], `${g}.state.screen === 'play'`, select(`${g}.state`, ['px','py','dots','time','hearts']), hold('ArrowRight'), null, `${g}.state.screen === 'pause'`, '#btn-restart', `${g}.state.dots === 0`),
-  'road-hopper': defaults(['#btnPlay'], `${g}.state === 'play'`, `${g}.player()`, hold('ArrowUp'), '#btnPause', `${g}.state === 'paused'`, '#btnRestart', `${g}.score === 0`),
+  // The first WebGL frame (and a blocked store) can stall the title past a 5 s
+  // click, and a 220 ms ArrowUp can be released before that frame reads it.
+  // Wait until the play loop has actually stepped, then hold Up until the hop
+  // lands on a higher row. The eagle's autoRow moves by itself and does not count.
+  'road-hopper': defaults([async page => {
+    await requireState(page, `!!${g} && !!document.getElementById('btnPlay')`, 'road-hopper: title ready', 20000);
+    await clickControl(page, '#btnPlay', { timeout: 20000 });
+    await page.evaluate(() => { window.sgRoadFrames = window.__game.frames; });
+  }], `${g}.state === 'play'`, `${g}.player()`, hold('ArrowUp'), '#btnPause', `${g}.state === 'paused'`, '#btnRestart', `${g}.score === 0`, {
+    // autoRow stays put until the first hop, so a new frame is the ready signal.
+    settle: `${g}.state === 'play' && ${g}.frames > window.sgRoadFrames`, settleTimeout: 20000,
+    inputSnapshot: `${g}.player().row`,
+    inputSeen: `${g}.player().row > sgInput.before`,
+    retryHold: true
+  }),
   'troll-level': defaults(['#btn-play'], `${g}.mode === 'play'`, `${g}.player`, hold('ArrowRight'), '#btn-pause', `${g}.mode === 'pause'`, '#btn-restart', `${g}.mode === 'play'`),
+  'chaos-island': defaults(['#btnPlay'], `${g}.mode === 'play'`, `[${g}.world.round, ${g}.world.frames, ${g}.player.x]`, hold('ArrowRight'), '#btnPause', `${g}.mode === 'pause'`, '#btnRestart', `${g}.matches > 1 && ${g}.world.round === 0 && ${g}.world.phase === 'inter' && ${g}.world.frames > 360`, { inputSnapshot: `${g}.player.x` }),
   'blob-battle': defaults(['#btnPlay'], `${g}.info().state === 'play'`, select(`${g}.info()`, ['T','mass','playerCells','alive','player']), move, '#pauseBtn', `${g}.info().state === 'pause'`, async page => {
     // Observe after the real button handler, in the same event dispatch. A fresh
     // blob can eat nearby golden pellets before a slow runner's next async poll.
@@ -157,7 +194,8 @@ export const scenarios = {
     input: async page => { await page.keyboard.type(await page.evaluate(() => __game.words(1)[0].slice(0,3))); },
     pause: async page => { await page.evaluate(() => window.dispatchEvent(new Event('blur'))); }, paused: `${g}.state().unfocused`,
     restart: async page => { await page.keyboard.press('Enter'); await page.keyboard.press('Tab'); }, reset: `${g}.state().phase === 'ready' && ${g}.state().input === ''`
-  }
+  },
+  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.coins]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnResume', `${g}.screen==='play'`, { persistent: true })
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -182,7 +220,7 @@ const inputSnapshots = {
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
-  'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`,
+  'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`, 'egg-rush': `${g}.px`,
   'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
@@ -223,12 +261,11 @@ for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen 
 // the fixed hold, because a player stopped by a wall cannot change state. Snake
 // Arena's repeated input stays the pointer; its checked input is key steering.
 const heldKeys = {
-  'dino-3d': 'Space',
-  'key-runner': 'KeyW',
+  'dino-3d': 'Space', 'road-hopper': 'ArrowUp', 'key-runner': 'KeyW',
   'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
   'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
-  'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'splat-strike': 'KeyW',
-  'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight'
+  'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'chaos-island': 'ArrowRight', 'splat-strike': 'KeyW',
+  'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight', 'egg-rush': 'ArrowRight'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 
@@ -272,7 +309,7 @@ async function start(page, slug, s) {
   await focusSurface(page);
   await requireState(page,s.active,`${slug}: Start must reach gameplay`);
   if (s.ready) await requireState(page,s.ready,`${slug}: countdown must reach active play`);
-  if (s.settle) await requireState(page, s.settle, `${slug}: the round must be ready for input`, 8000);
+  if (s.settle) await requireState(page, s.settle, `${slug}: the round must be ready for input`, s.settleTimeout || 8000);
 }
 export async function performInput(page, slug, {repeat = false} = {}) {
   const s = scenarios[slug];
@@ -290,7 +327,7 @@ export async function performInput(page, slug, {repeat = false} = {}) {
     if (await evaluate(page,`${g}.phase === 'aim'`)) await hold('Space',650)(page);
     else await page.waitForTimeout(250);
   } else if (watch && s.heldKey) await holdUntil(s.heldKey, 'window.sgInput.seen',
-    `${s.heldKey}: held input must change gameplay (${watch.before}): ${watch.seen}`)(page);
+    `${s.heldKey}: held input must change gameplay (${watch.before}): ${watch.seen}`, 20000, { retry: !!s.retryHold })(page);
   else await s.input(page);
   // Give the handler a frame before the input assertion reads state. A fixed
   // 120ms can fall between two slow frames and observe the previous one.
