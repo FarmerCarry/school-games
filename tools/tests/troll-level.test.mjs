@@ -182,7 +182,10 @@ test('a settled pause stops redrawing until a resize, and reduced motion skips t
   await page.evaluate(() => {
     window.draws = 0; window.flashes = 0;
     const ctx = document.getElementById('cv').getContext('2d'), draw = ctx.drawImage, fill = ctx.fillRect;
-    ctx.drawImage = function () { window.draws++; return draw.apply(this, arguments); };
+    ctx.drawImage = function (image) {
+      if (image && image.width >= 600 && image.height >= 300) window.draws++;
+      return draw.apply(this, arguments);
+    };
     ctx.fillRect = function (x, y, w, h) {
       if (w === 1280 && h === 720 && this.fillStyle === '#ffffff') window.flashes++;
       return fill.apply(this, arguments);
@@ -232,10 +235,16 @@ test('the baked level canvas is rebaked when its context comes back', async t =>
   const page = await game(t);
   const alpha = await page.evaluate(() => {
     const ctx = document.getElementById('cv').getContext('2d'), draw = ctx.drawImage;
-    ctx.drawImage = function (image) { window.baked = image; return draw.apply(this, arguments); };
+    ctx.drawImage = function (image) {
+      if (image && image.width >= 600 && image.height >= 300) window.baked = image;
+      return draw.apply(this, arguments);
+    };
     __game.start(0); stepGame(1);
     const centre = () => baked.getContext('2d').getImageData(baked.width >> 1, baked.height >> 1, 1, 1).data[3];
-    baked.width = baked.width; // a GPU reset leaves the canvas blank
+    // A same-size width write no longer blanks the bitmap. Shrinking it does,
+    // which is the blank a lost context comes back with. The restore handler
+    // must paint the level plate again at its real size.
+    baked.width = baked.width - 1;
     const lost = centre();
     baked.dispatchEvent(new Event('contextrestored')); stepGame(1);
     return [lost, centre()];

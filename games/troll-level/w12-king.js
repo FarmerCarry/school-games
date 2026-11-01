@@ -329,50 +329,6 @@
       g.closePath();
     };
 
-    // The throne room: the editor grid of the backstage showing through near the
-    // edges, a giant soft crown, pillars to the floor, banners from the top with a
-    // crooked-crown emblem, and diamond sparkles.
-    Art.SCENERY.royal = function (g, pal, r) {
-      var i, x, y, s, grad = g.createRadialGradient(E.W / 2, E.H / 2, 160, E.W / 2, E.H / 2, 760);
-      grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(1, 'rgba(255,255,255,0.3)');
-      g.strokeStyle = grad; g.lineWidth = 1; g.beginPath();
-      for (x = T; x < E.W; x += T) { g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, E.H); }
-      for (y = T; y < E.H; y += T) { g.moveTo(0, y + 0.5); g.lineTo(E.W, y + 0.5); }
-      g.stroke();
-      g.fillStyle = grad; g.font = '600 12px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
-      for (x = 1; x < COLS - 1; x++) g.fillText(String(x), x * T + T / 2, 3 * T + 10);
-      for (y = 4; y < ROWS - 5; y++) g.fillText(String(y), T + 10, y * T + T / 2);
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.13; g.beginPath();
-      crownPath(g, E.W / 2, 470, 250, -0.08);
-      g.fill();
-      g.globalAlpha = 1; g.fillStyle = pal.bg2; g.beginPath();
-      for (i = 0; i < 4; i++) {
-        x = 150 + i * 327 + r() * 30;
-        g.rect(x - 26, 132, 52, E.H); g.rect(x - 36, 118, 72, 18); g.rect(x - 34, 500, 68, 20);
-      }
-      g.fill();
-      g.strokeStyle = pal.bg; g.lineWidth = 4; g.beginPath();
-      for (i = 0; i < 4; i++) {
-        x = 150 + i * 327;
-        for (s = -12; s <= 12; s += 12) { g.moveTo(x + s, 146); g.lineTo(x + s, 492); }
-      }
-      g.stroke();
-      for (i = 0; i < 3; i++) {
-        x = 314 + i * 327 + r() * 30; y = 250 + r() * 50;
-        g.fillStyle = '#d93a5a'; g.globalAlpha = 0.55; g.beginPath();
-        g.moveTo(x - 32, 0); g.lineTo(x + 32, 0); g.lineTo(x + 32, y); g.lineTo(x, y - 26); g.lineTo(x - 32, y); g.closePath();
-        g.fill();
-        g.fillStyle = '#ffffff'; g.globalAlpha = 0.8; g.beginPath();
-        crownPath(g, x, y - 60, 17, 0.2);
-        g.fill();
-      }
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.5; g.beginPath();
-      for (i = 0; i < 18; i++) {
-        x = r() * E.W; y = 130 + r() * 360; s = 4 + r() * 6;
-        g.moveTo(x, y - s); g.lineTo(x + s * 0.6, y); g.lineTo(x, y + s); g.lineTo(x - s * 0.6, y); g.closePath();
-      }
-      g.fill();
-    };
 
     // Each piece is painted once into a small canvas (no per-frame Arabic text
     // layout): origin at its top-left tile corner, with an M px margin around.

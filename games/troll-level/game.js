@@ -47,6 +47,7 @@
 
   /* ============================================================== canvas */
   var cv = $('cv'), ui = $('ui');
+  K.art.init({ canvas: cv, mode: '2d', theme: 'day' });
   // staticDirty: rebake the level canvas. sceneDirty: a still menu/pause scene
   // needs one more frame (see render).
   var staticDirty = true, sceneDirty = true;
@@ -61,7 +62,30 @@
   // canvas (see ensureStatic): rebake and redraw when either comes back.
   function restored() { staticDirty = true; sceneDirty = true; }
   cv.addEventListener('contextrestored', restored);
-  var fx = K.particles(), shake = K.shake();
+  var artFx = K.art.fx(420), fxBusy = 0, shT = 0, popBusy = 0;
+  var squish = K.art.spring(220, 13);
+  K.art.quality.on(function () { Art.invalidate(); staticDirty = true; sceneDirty = true; });
+  function puff(x, y, o) {
+    o = o || {};
+    var n = o.n || o.count || 8, color = o.color, shape = o.shape || 'dot', life;
+    if (!color && o.colors) {
+      color = o.colors[(K.art.rand() * o.colors.length) | 0];
+      if (!o.shape && o.colors.length > 3) shape = 'confetti';
+    }
+    artFx.burst(x, y, { n: n, color: color || '#ffffff', speed: o.speed, life: o.life, size: o.size, shape: shape });
+    life = (o.life || 0.6) * 1.15;
+    if (life > fxBusy) fxBusy = life;
+  }
+  var fx = { burst: puff, update: function (dt) { artFx.update(dt); if (fxBusy > 0) fxBusy -= dt; }, draw: function (c) { artFx.draw(c); }, clear: function () { artFx.update(4); fxBusy = 0; } };
+  var shake = {
+    add: function (v) { K.art.shake.add(v > 1 ? Math.min(0.55, v / 16) : v); shT = 0.4; },
+    update: function (dt) { K.art.shake.update(dt); if (shT > 0) shT -= dt; },
+    apply: function (c) { K.art.shake.apply(c); }
+  };
+  function cheek(x, y) {
+    K.art.pop(TAUNT[(K.art.rand() * TAUNT.length) | 0], x, y - 26, { color: '#ffe14d', size: 22 });
+    popBusy = 0.85;
+  }
 
   /* ============================================================== sounds */
   var A = K.audio;
@@ -225,12 +249,12 @@
       var g = c.getContext('2d');
       g.fillStyle = un ? '#ffa41b' : '#8f7fa6'; g.fillRect(0, 0, 130, 130);
       g.fillStyle = '#1c1226'; g.fillRect(0, 112, 130, 18);
-      if (un) Art.drawPlayer(g, 65, 112, { skin: sk.id, face: 1, t: 0.4, scale: 1.75, ink: '#1c1226' });
+      if (un) Art.drawPlayer(g, 65, 112, { skin: sk.id, face: 1, t: 0.4, scale: 1.75, crisp: 1, ink: '#1c1226' });
       else {
         // mystery silhouette with a question mark
         var tmp = document.createElement('canvas'); tmp.width = 130; tmp.height = 130;
         var tg = tmp.getContext('2d');
-        Art.drawPlayer(tg, 65, 112, { skin: sk.id, face: 1, t: 0.4, scale: 1.75, ink: '#1c1226' });
+        Art.drawPlayer(tg, 65, 112, { skin: sk.id, face: 1, t: 0.4, scale: 1.75, crisp: 1, ink: '#1c1226' });
         tg.globalCompositeOperation = 'source-in'; tg.fillStyle = '#3a2d4f'; tg.fillRect(0, 0, 130, 130);
         g.drawImage(tmp, 0, 0);
         g.font = '700 46px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle'; g.direction = 'ltr';
@@ -302,20 +326,20 @@
     var loud = !demo;
     switch (type) {
       case 'jump':
-        game.vis.sx = 0.72; game.vis.sy = 1.32;
-        fx.burst(d.x, d.y, { count: 5, color: '#ffffff', speed: 90, life: 0.3, size: 5, gravity: -80 });
+        squish.kick(7);
+        fx.burst(d.x, d.y, { count: 4, color: '#ffffff', speed: 80, life: 0.28, size: 5, shape: 'smoke' });
         if (loud) S.jump();
         break;
       case 'land':
         if (d.v > 250) {
           var k = Math.min(1, d.v / 1000);
-          game.vis.sx = 1 + 0.4 * k; game.vis.sy = 1 - 0.34 * k;
-          fx.burst(d.x, d.y, { count: 6, color: '#ffffff', speed: 120, life: 0.3, size: 5, gravity: 0, angle: -Math.PI / 2 * w.gs, spread: Math.PI * 1.2 });
+          squish.kick(-8 * k);
+          fx.burst(d.x, d.y, { count: 5, color: '#fff6e0', speed: 110, life: 0.3, size: 5, shape: 'smoke' });
           if (loud) S.land(d.v);
         }
         break;
       case 'step':
-        fx.burst(d.x, d.y, { count: 1, color: '#ffffff', speed: 40, life: 0.25, size: 4, gravity: -60 });
+        fx.burst(d.x, d.y, { count: 2, color: '#fff6e0', speed: 40, life: 0.25, size: 5, shape: 'smoke' });
         break;
       case 'die':
         if (!demo) {
@@ -332,16 +356,16 @@
           game.marks.push({ x: d.x, y: d.y });
           S.splat();
         } else say(K.pick(TAUNT), 1.3);
-        var skin = Art.skinById(save.skin);
-        fx.burst(d.x, d.y, { count: 22, colors: [skin.body, pal.ink, '#ffffff'], speed: 420, life: 0.7, size: 9, gravity: 900 });
-        fx.burst(d.x, d.y, { count: 10, colors: ['#ffe14d', '#ffffff'], speed: 260, life: 0.5, size: 6, gravity: 400 });
+        fx.burst(d.x, d.y, { count: 12, color: '#ffffff', speed: 180, life: 0.55, size: 14, shape: 'smoke' });
+        fx.burst(d.x, d.y, { count: 8, color: '#ffe14d', speed: 220, life: 0.45, size: 8, shape: 'star' });
         shake.add(demo ? 5 : 11);
-        game.flash = 0.35; game.flashC = '#ffffff';   // drawn only with full motion (see render)
+        game.flash = 0.35; game.flashC = '#ffffff';
+        K.art.flash('#ffffff', 160);
         break;
       case 'respawn':
         game.vis.sc = 0.2; game.vis.sx = 1; game.vis.sy = 1;
         var p = w.p;
-        fx.burst(p.x + PH.w / 2, p.y + PH.h / 2, { count: 10, color: '#ffffff', speed: 160, life: 0.35, size: 6, gravity: 0 });
+        fx.burst(p.x + PH.w / 2, p.y + PH.h / 2, { count: 10, color: '#fff6c0', speed: 150, life: 0.4, size: 7, shape: 'spark' });
         if (loud) S.respawn();
         if (demo) {
           var bi = Math.min(w.attempt, LV.DEMO.bots.length - 1);
@@ -350,10 +374,12 @@
         break;
       case 'pop':
         shake.add(3);
-        fx.burst(d.x, d.y, { count: 6, color: pal.ink, speed: 150, life: 0.3, size: 5 });
+        fx.burst(d.x, d.y, { count: 8, color: '#ffffff', speed: 150, life: 0.35, size: 9, shape: 'smoke' });
+        cheek(d.x, d.y);
         if (loud) S.shing();
         break;
       case 'drop':
+        tauntGroup(d.g);
         if (loud) { if (d.delay > 0.02) S.rumble(); else S.whoosh(); }
         break;
       case 'thud':
@@ -362,11 +388,11 @@
         if (loud) S.thud();
         break;
       case 'crumble':
-        crumbs(d.g, 5);
+        crumbs(d.g, 5); tauntGroup(d.g);
         if (loud) S.crack();
         break;
       case 'poof':
-        crumbs(d.g, 3);
+        crumbs(d.g, 3); tauntGroup(d.g);
         if (loud) S.poof();
         break;
       case 'doormove':
@@ -376,7 +402,7 @@
         if (loud) S.buzz();
         break;
       case 'flip':
-        shake.add(4); game.flash = 0.25; game.flashC = pal.bg2;
+        shake.add(4); game.flash = 0.25; game.flashC = pal.bg2; K.art.flash(pal.bg2, 120);
         if (loud) S.flip(d.gs < 0);
         break;
       case 'reverse':
@@ -401,8 +427,8 @@
         break;
       case 'spring':
         shake.add(3);
-        game.vis.sx = 0.6; game.vis.sy = 1.45;
-        fx.burst(d.x, d.y, { count: 8, color: '#ff4d6d', speed: 200, life: 0.4, size: 6 });
+        squish.kick(9);
+        fx.burst(d.x, d.y, { count: 8, color: '#ff4d6d', speed: 180, life: 0.4, size: 6, shape: 'spark' });
         if (loud) S.boing();
         break;
       case 'reveal':
@@ -416,13 +442,23 @@
         game.winT = 0;
         if (!demo) commitWin();
         var dx = d.d.x + (d.d.g ? d.d.g.ox : 0) + 20, dy = d.d.y + (d.d.g ? d.d.g.oy : 0) + 30;
-        fx.burst(dx, dy, { count: 40, colors: CONFETTI, speed: 520, life: 1.1, size: 9, gravity: 700 });
+        fx.burst(dx, dy, { count: 16, color: '#ffcc00', speed: 340, life: 0.85, size: 11, shape: 'star' });
+        K.art.pop(WIN_TITLES[(K.art.rand() * WIN_TITLES.length) | 0], dx, dy - 34, { color: '#ffe14d', size: 30 });
+        popBusy = 0.85;
+        K.art.hitstop(70);
         shake.add(4);
         if (loud) S.win();
         break;
       default: // a world plug-in's own event
         if (Art.EV[type]) Art.EV[type](d, { fx: fx, shake: shake, say: say, sfx: function (n) { if (loud) (S[n] || (Art.SFX[n] && function () { Art.SFX[n](A); }) || function () {})(); }, pal: pal, loud: loud, demo: demo });
     }
+  }
+  function tauntGroup(g) {
+    if (!g || !g.tiles || !g.tiles.length) return;
+    var t0 = g.tiles[0];
+    var x = t0.x * T + (g.ox || 0) + T / 2, y = t0.y * T + (g.oy || 0);
+    fx.burst(x, y, { count: 6, color: '#ffffff', speed: 120, life: 0.35, size: 8, shape: 'smoke' });
+    cheek(x, y);
   }
   function dustUnder(g) {
     if (!g) return;
@@ -630,14 +666,27 @@
     }
 
     // visuals
-    var v = game.vis, e = Math.min(1, dt * 12);
-    v.sx += (1 - v.sx) * e; v.sy += (1 - v.sy) * e; v.sc += (1 - v.sc) * Math.min(1, dt * 16);
+    var v = game.vis;
+    squish.update(dt);
+    v.sx = squish.sx; v.sy = squish.sy;
+    if (Math.abs(v.sx - 1) + Math.abs(v.sy - 1) < 0.02) { squish.sx = squish.sy = 1; squish.v = 0; v.sx = v.sy = 1; }
+    v.sc += (1 - v.sc) * Math.min(1, dt * 16);
     v.blink -= dt; if (v.blink < -3) v.blink = 0.12 + Math.random() * 0.4;
+    if (w && w.state === 'play' && !w.p.onGround && w.p.face) {
+      var wx = (w.p.x + (w.p.face > 0 ? PH.w + 2 : -2)) / T | 0;
+      var wy = (w.p.y + PH.h * 0.45) / T | 0;
+      if (wx >= 0 && wy >= 0 && wx < E.COLS && wy < E.ROWS && w.grid[wy * E.COLS + wx] && game.t - (v.sparkAt || 0) > 0.09) {
+        v.sparkAt = game.t;
+        fx.burst(w.p.x + (w.p.face > 0 ? PH.w : 0), w.p.y + 12, { count: 2, color: '#fff6c0', speed: 70, life: 0.22, size: 4, shape: 'spark' });
+      }
+    }
     if (game.msgT > 0) game.msgT -= dt;
     if (game.introT > 0) game.introT -= dt;
     if (game.flash > 0) game.flash -= dt;
     if (game.revLabelT > 0) game.revLabelT -= dt;
+    if (popBusy > 0) popBusy -= dt;
     fx.update(dt); shake.update(dt);
+    K.art.pop.update(dt); K.art.flash.update(dt);
     kk.endFrame();
   }
 
@@ -672,6 +721,7 @@
     // Exactly one canvas pixel per screen pixel: no resampling blur, and the live
     // trap tiles line up with the baked ground without a hairline.
     ctx.drawImage(sc, 0, 0, sc.width / game.staticRes, sc.height / game.staticRes);
+    Art.drawSkyBits(ctx, t, K.art.quality.tier);
     // Kit.fit can round the canvas a device pixel past the baked image, and the
     // canvas is never cleared: paint that edge like the walls.
     var dk = view.scale * view.dpr / game.staticRes, ex = Math.round(sc.width * dk), ey = Math.round(sc.height * dk);
@@ -702,8 +752,11 @@
       if (!d.bit && !(d.g && !d.g.active)) {
         // gentle "come here" pulse behind every door (fake ones look just as inviting)
         var dx = d.x + (d.g ? d.g.ox : 0) + 20, dy = d.y + (d.g ? d.g.oy : 0) + (d.hang ? 28 : 32);
-        ctx.save(); ctx.globalAlpha = glow ? 0.6 : 0.18 + 0.1 * Math.sin(t * 4); ctx.fillStyle = '#ffffff';
-        ctx.beginPath(); ctx.arc(dx, dy, (glow ? 52 : 38) + 4 * Math.sin(t * 4), 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        var gsp = K.art.glow('#fff6c0', glow ? 46 : 34);
+        if (gsp && gsp.canvas) {
+          ctx.save(); ctx.globalAlpha = glow ? 0.9 : 0.5 + 0.1 * Math.sin(t * 3);
+          ctx.drawImage(gsp.canvas, dx - gsp.w / 2, dy - gsp.h / 2, gsp.w, gsp.h); ctx.restore();
+        }
       }
       Art.drawDoor(ctx, d, pal, t, glow);
     }
@@ -725,6 +778,7 @@
       if (k >= 1) return;
     }
     var run = p.onGround && Math.abs(p.vx) > 40;
+    K.art.shadow(ctx, x - 18, y - 14, 36, 16, w.gs < 0 ? 0.28 : 0.42);
     Art.drawPlayer(ctx, x, y, {
       sx: v.sx, sy: v.sy, face: p.face, skin: save.skin, t: game.t, flip: w.gs < 0, ink: game.pal.ink,
       run: run, air: !p.onGround, blink: v.blink > 0, look: p.onGround ? 0 : (p.vy * w.gs > 0 ? 1 : -1),
@@ -846,7 +900,7 @@
   var STILL = { pause: 1, select: 1, skins: 1, end: 1 };
   function settled() {
     var v = game.vis;
-    return !fx.list.length && game.flash <= 0 && !shake.power && game.msgT <= 0 && game.introT <= 0 &&
+    return fxBusy <= 0 && popBusy <= 0 && game.flash <= 0 && shT <= 0 && game.msgT <= 0 && game.introT <= 0 &&
       Math.abs(v.sc - 1) + Math.abs(v.sx - 1) + Math.abs(v.sy - 1) < 0.01;
   }
 
@@ -859,8 +913,9 @@
     ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
     if (!w) { ctx.fillStyle = '#1c1226'; ctx.fillRect(0, 0, 1280, 720); return; }
     ctx.save();
-    ctx.translate(shake.x, shake.y);
+    shake.apply(ctx);
     drawWorld();
+    K.art.pop.draw(ctx);
     ctx.restore();
     if (!game.demo && (mode === 'play' || mode === 'pause')) drawHUD();
     if (game.demo && game.msg && game.msgT > 0 && mode === 'title') {
@@ -868,9 +923,7 @@
       bubble(game.msg, p.x + PH.w / 2, p.y - 40, 22, Math.min(1, game.msgT * 4));
     }
     // full-screen flash: decorative, so classroom mode and reduced motion skip it
-    if (game.flash > 0 && !K.motion.reduced()) {
-      ctx.save(); ctx.globalAlpha = Math.min(0.5, game.flash); ctx.fillStyle = game.flashC; ctx.fillRect(0, 0, 1280, 720); ctx.restore();
-    }
+    K.art.flash.draw(ctx, 1280, 720);
   }
 
   /* ============================================================== debug hook */
@@ -905,7 +958,7 @@
 
   /* ============================================================== boot */
   goTitle();
-  K.loop(update, render);
+  K.art.loop(update, render);
   try {
     document.fonts.addEventListener('loadingdone', function () { sceneDirty = true; });
     document.fonts.load('700 40px Fredoka', 'ب').catch(function () { /* Use fallback fonts. */ });

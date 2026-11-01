@@ -170,60 +170,6 @@
         g.quadraticCurveTo(x + s * 2.2, y - s * 2.5, x + s, y - s * 2.9); g.closePath();
       }
     };
-    // A treble clef centred on its curl at (x, y), s = one staff gap: one path to stroke.
-    var clefShape = function (g, x, y, s) {
-      g.moveTo(x + 0.2 * s, y - 0.1 * s);
-      g.bezierCurveTo(x - 0.5 * s, y - 0.3 * s, x - 0.6 * s, y + 0.8 * s, x + 0.1 * s, y + 0.8 * s);
-      g.bezierCurveTo(x + 1.1 * s, y + 0.8 * s, x + 1.1 * s, y - 0.7 * s, x + 0.1 * s, y - 1.1 * s);
-      g.bezierCurveTo(x - 0.9 * s, y - 1.6 * s, x - 0.2 * s, y - 2.4 * s, x + 0.35 * s, y - 3.2 * s);
-      g.bezierCurveTo(x + 0.6 * s, y - 2.6 * s, x - 0.2 * s, y - 2.2 * s, x - 0.05 * s, y - 1.2 * s);
-      g.lineTo(x + 0.35 * s, y + 1.6 * s);
-      g.quadraticCurveTo(x + 0.35 * s, y + 2.2 * s, x - 0.25 * s, y + 2.0 * s);
-    };
-
-    // A music box: soft wavy staffs with notes and clefs across the sky, a big
-    // speaker on one side, and equalizer bars rising from behind the floor.
-    Art.SCENERY.music = function (g, pal, r) {
-      var i, k, x, y, y0, ph, side = r() < 0.5, sx = side ? 120 + r() * 60 : 1100 + r() * 60;
-      var wave = function (xx, base, p) { return base + Math.sin(xx / 240 + p) * 16; };
-      // the speaker
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.16;
-      Art.rr(g, sx - 105, 250, 210, 520, 28); g.fill();
-      g.fillStyle = pal.bg2; g.globalAlpha = 1; g.beginPath();
-      g.arc(sx, 420, 78, 0, TAU); g.moveTo(sx + 30, 300); g.arc(sx, 300, 30, 0, TAU); g.fill();
-      g.strokeStyle = '#ffffff'; g.lineWidth = 6; g.globalAlpha = 0.4; g.beginPath();
-      g.arc(sx, 420, 78, 0, TAU); g.moveTo(sx + 46, 420); g.arc(sx, 420, 46, 0, TAU); g.moveTo(sx + 30, 300); g.arc(sx, 300, 30, 0, TAU);
-      g.stroke();
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.45; g.beginPath(); g.arc(sx, 420, 18, 0, TAU); g.arc(sx, 300, 9, 0, TAU); g.fill();
-      // equalizer bars, tallest in gentle waves
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.2; g.beginPath();
-      ph = r() * 6;
-      for (x = 8; x < E.W; x += 40) {
-        var h = 40 + Math.abs(Math.sin(x / 150 + ph)) * 110 + r() * 26;
-        g.moveTo(x + 24, E.H); g.arc(x + 12, 520 - h + 12, 12, 0, Math.PI, true); g.lineTo(x, E.H);
-      }
-      g.fill();
-      // two staffs with a clef and a few notes sitting on their lines
-      for (i = 0; i < 2; i++) {
-        y0 = 150 + i * 150 + r() * 20; ph = r() * 6;
-        g.strokeStyle = '#ffffff'; g.lineWidth = 3; g.globalAlpha = 0.3; g.beginPath();
-        for (k = 0; k < 5; k++) {
-          g.moveTo(0, wave(0, y0 + k * 18, ph));
-          for (x = 32; x <= E.W; x += 32) g.lineTo(x, wave(x, y0 + k * 18, ph));
-        }
-        g.stroke();
-        x = 40 + r() * 200;
-        g.lineWidth = 6; g.globalAlpha = 0.42; g.lineCap = 'round'; g.beginPath();
-        clefShape(g, x, wave(x, y0 + 54, ph), 18); g.stroke();
-        g.fillStyle = '#ffffff'; g.beginPath(); g.arc(x - 4, wave(x, y0 + 54, ph) + 34, 6, 0, TAU); g.fill();
-        g.globalAlpha = 0.38; g.beginPath();
-        for (x += 150 + r() * 80; x < E.W - 60; x += 140 + r() * 120) {
-          y = wave(x, y0 + 9 * Math.floor(r() * 9), ph);
-          noteShape(g, x, y, 9, r() < 0.5);
-        }
-        g.fill();
-      }
-    };
 
     // Block pictures, drawn once per scale k (device pixels per logical pixel): a solid
     // block and a dashed ghost of each colour, 44 x 44 around the 40 x 40 tile.

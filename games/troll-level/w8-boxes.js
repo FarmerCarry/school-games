@@ -226,54 +226,6 @@
 
     Art.GROUND.toys = { top: RED, line: '#ffffff', mark: 'ring', stroke: 2.5 };
 
-    // A toy shelf: lemon stripes and confetti, then on a red-and-white checker
-    // strip with a toy-train track: letter blocks, a spinning top and a ring
-    // stacker. The shelf runs down to the bottom, so nothing floats over a pit.
-    Art.SCENERY.toys = function (g, pal, r) {
-      var i, k, x, y, s, top = 470;
-      g.fillStyle = pal.bg2; g.globalAlpha = 0.8; g.beginPath();
-      for (k = -E.H; k < E.W + E.H; k += 110) { g.moveTo(k, 0); g.lineTo(k + 46, 0); g.lineTo(k + 46 - E.H, E.H); g.lineTo(k - E.H, E.H); g.closePath(); }
-      g.fill();
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.5; g.beginPath();
-      for (i = 0; i < 36; i++) { x = r() * E.W; y = 120 + r() * 320; s = 3 + r() * 5; g.moveTo(x + s, y); g.arc(x, y, s, 0, TAU); }
-      g.fill();
-      g.globalAlpha = 0.2; g.fillRect(0, top, E.W, E.H - top);
-      g.fillStyle = RED; g.globalAlpha = 0.3; g.beginPath();
-      for (x = 0; x < E.W; x += 20) g.rect(x, top + ((x / 20) % 2) * 10, 20, 10);
-      g.fill();
-      // the train track: a rail and its sleepers
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.55; g.fillRect(0, top - 7, E.W, 3);
-      g.beginPath();
-      for (x = 6; x < E.W; x += 24) g.rect(x, top - 10, 10, 10);
-      g.fill();
-      // letter blocks: a stack of two and one beside it
-      x = 70 + r() * 120;
-      var blocks = [[x, top - 80, 'أ'], [x + 84, top - 80, 'ب'], [x + 42, top - 162, 'ت']];
-      g.font = '700 46px ' + Art.FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
-      for (i = 0; i < 3; i++) {
-        var q = blocks[i];
-        g.fillStyle = '#ffffff'; g.globalAlpha = 0.42; Art.rr(g, q[0], q[1], 80, 80, 12); g.fill();
-        g.strokeStyle = pal.bg; g.globalAlpha = 0.9; g.lineWidth = 4; Art.rr(g, q[0] + 9, q[1] + 9, 62, 62, 8); g.stroke();
-        g.fillStyle = pal.bg; g.fillText(q[2], q[0] + 40, q[1] + 42);
-      }
-      // a spinning top: point on the shelf, a wide body, a handle
-      x = 560 + r() * 160; y = top - 14;
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.42; g.beginPath();
-      g.moveTo(x, top); g.quadraticCurveTo(x + 70, y - 40, x + 60, y - 70); g.quadraticCurveTo(x, y - 96, x - 60, y - 70);
-      g.quadraticCurveTo(x - 70, y - 40, x, top); g.rect(x - 7, y - 124, 14, 40);
-      g.fill();
-      g.strokeStyle = pal.bg; g.globalAlpha = 0.9; g.lineWidth = 5; g.beginPath();
-      g.moveTo(x - 58, y - 62); g.quadraticCurveTo(x, y - 44, x + 58, y - 62); g.stroke();
-      // a ring stacker: rings from big to small on a pole, a ball on top
-      x = 980 + r() * 160;
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.42; g.beginPath(); g.rect(x - 6, top - 210, 12, 210);
-      for (k = 0; k < 4; k++) { s = 58 - k * 11; y = top - 22 - k * 38; g.moveTo(x + s, y); g.ellipse(x, y, s, 20, 0, 0, TAU); }
-      g.moveTo(x + 20, top - 196); g.arc(x, top - 196, 20, 0, TAU);
-      g.fill();
-      g.strokeStyle = pal.bg; g.globalAlpha = 0.9; g.lineWidth = 3; g.beginPath();
-      for (k = 0; k < 4; k++) { s = 58 - k * 11; y = top - 22 - k * 38; g.moveTo(x - s * 0.7, y - 8); g.quadraticCurveTo(x, y - 18, x + s * 0.7, y - 8); }
-      g.stroke();
-    };
 
     // Box sprites, drawn once at twice the size (a body, a light top, a dark
     // bottom, an ink frame and four rivets); the '?' is its own sprite so it can bob.

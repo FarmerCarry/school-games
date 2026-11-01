@@ -826,3 +826,38 @@ so a 4× CPU run would time the same pages as main. `tools/perf.mjs` now accepts
 `cpuThrottle`) and `--viewport WxH` for those later before/after runs.
 `tools/artkit-demo.html` is a review page and is not in the download or the
 service worker.
+
+## Visual upgrade: troll-level, 31 October 2026
+
+المراحل الماكرة now loads `shared/artkit.js` and draws through `Kit.art`. Gameplay,
+level data, hitboxes, scoring and the two `Math.random` calls (the death-taunt
+coin-flip and the blink timer) are unchanged. `Kit.particles` and `Kit.shake`
+are no longer used, so those visual `Math.random` calls are gone; bursts and
+the camera shake go through `Kit.art.fx` and `Kit.art.shake` (`Kit.art.rand` only).
+
+Each world bakes one backdrop the first time it is shown and drops it when the
+world changes: a `Kit.art.sky` gradient plus two silhouette layers (hills, snow,
+waves, trees, candy, forts, stars, or smiling ghosts), via `Kit.art.bake`. Tier
+0 flattens the clouds into that plate. Higher tiers drift a cached cloud sprite.
+A vignette is baked only above tier 0. Ground and trap tiles share one routine:
+a shaded body, a crack of ambient occlusion, an ink rim on exposed edges, and
+the same cap, bumps, drips and marks as before, so a fake block still matches
+the ground it imitates. The hero is drawn 12% larger around the same feet, with
+an ink outline, a cached drop shadow and a squash spring. Spikes, vanishing
+floors and the exit use pooled smoke, sparks and floating taunts. Doors, keys
+and portals use `Kit.art.glow`. The loop is `Kit.art.loop`.
+
+Throttled on this machine with `tools/perf.mjs --cpu-throttle 4 --samples 3 --seconds 10`,
+software graphics, one run at a time. Median frame time stayed 33.3 ms (30.0 fps)
+and the p95 frame stayed 50 ms, before and after.
+
+| | Before bytes | After bytes | New limit |
+| --- | ---: | ---: | ---: |
+| Sneaky Levels page | 254,052 | 245,839 | 247,000 (was 254,500) |
+| Offline precache, 49 files | 5,463,599 | 5,455,386 | 5,482,000 (was 5,491,000) |
+
+The page shrank by 8,213 bytes: the per-level scenery painters came out, and the
+shared plate replaced them. The precache moved by that same 8,213 bytes (the
+art kit file was already counted). 247,000 is the measured page plus 0.47%.
+5,482,000 is the measured precache plus 0.49%. Net growth is under both 12% and
+14 KB.

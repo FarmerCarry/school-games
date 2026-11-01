@@ -395,6 +395,8 @@
       if (k.m || k.fly) { stamp(ctx, S.key, cx, cy, 1, Math.sin(t * 30) * 0.25); continue; }
       if (k.inside) { drawFrozen(ctx, S, k, t); continue; }
       cy += Math.sin(t * 3 + k.hx * 0.07) * 3;
+      var glow = root.Kit && root.Kit.art && root.Kit.art.quality.tier > 0 && root.Kit.art.glow(GOLD, 26);
+      if (glow && glow.canvas) { ctx.globalAlpha = 0.7; ctx.drawImage(glow.canvas, cx - glow.w / 2, cy - glow.h / 2); ctx.globalAlpha = 1; }
       stamp(ctx, S.key, cx, cy, 1, 0);
       s = Math.sin(t * (k.fake ? 6 : 3) + k.hx);
       stamp(ctx, S.spark, cx - 12, cy - 11, (k.fake ? 0.6 : 0.4) + s * 0.2, 0);
@@ -486,59 +488,6 @@
     ctx.globalAlpha = 1;
   }
 
-  // Sunset castle, baked once: a big low sun with soft rays, puffy clouds, pale castles
-  // with cone roofs and pennants (running to the bottom, so none floats over a pit),
-  // a line of bunting and long banners with a key under the ceiling.
-  function castle(g, pal, r) {
-    var i, j, x, y, s, a, cx = 200 + r() * 880, cy = 430;
-    g.fillStyle = pal.bg2; g.globalAlpha = 0.65; g.beginPath();
-    for (i = 0; i < 16; i++) { a = i * Math.PI / 8 + 0.1; g.moveTo(cx, cy); g.arc(cx, cy, 1500, a, a + Math.PI / 16); g.closePath(); }
-    g.fill();
-    g.fillStyle = '#ffe6a8'; g.globalAlpha = 0.35; g.beginPath(); blob(g, cx, cy, 175); g.fill();
-    g.globalAlpha = 0.6; g.beginPath(); blob(g, cx, cy, 120); g.fill();
-    g.fillStyle = '#ffffff'; g.globalAlpha = 0.3; g.beginPath();
-    for (i = 0; i < 4; i++) {
-      x = 90 + i * 320 + r() * 150; y = 190 + r() * 90; s = 0.7 + r() * 0.5;
-      blob(g, x, y, 32 * s); blob(g, x + 34 * s, y + 9 * s, 23 * s); blob(g, x - 34 * s, y + 11 * s, 21 * s);
-    }
-    g.fill();
-    // castles: a crenellated wall between two towers, each tower with a cone roof and a pennant
-    g.globalAlpha = 0.32; g.beginPath();
-    for (i = 0; i < 3; i++) {
-      x = 40 + i * 430 + r() * 150; s = 150 + r() * 70; y = 420 + r() * 40;
-      g.rect(x, y, s, E.H - y);
-      for (j = 0; j < s; j += 24) g.rect(x + j, y - 12, 12, 12);
-      for (j = 0; j < 2; j++) {
-        a = j ? x + s - 22 : x - 22; var top = y - 80 - r() * 50;
-        g.rect(a, top, 44, E.H - top);
-        g.moveTo(a - 6, top); g.lineTo(a + 22, top - 50); g.lineTo(a + 50, top); g.closePath();
-        g.rect(a + 21, top - 72, 2.5, 24);
-        g.moveTo(a + 23.5, top - 72); g.lineTo(a + 44, top - 66); g.lineTo(a + 23.5, top - 60); g.closePath();
-      }
-    }
-    g.fill();
-    // bunting under the ceiling
-    var cols = ['#ffffff', GOLD, '#ff6b8a'];
-    g.globalAlpha = 0.55;
-    for (j = 0; j < 3; j++) {
-      g.fillStyle = cols[j]; g.beginPath();
-      for (i = j; i < 40; i += 3) {
-        x = i * 33 + 6; y = 136 + Math.sin(x / E.W * Math.PI) * 34;
-        g.moveTo(x, y); g.lineTo(x + 22, y + 1); g.lineTo(x + 11, y + 20); g.closePath();
-      }
-      g.fill();
-    }
-    // banners with a white key, hanging from the ceiling
-    for (i = 0; i < 2; i++) {
-      x = 180 + i * 760 + r() * 160;
-      g.globalAlpha = 0.4; g.fillStyle = '#d9466b'; g.beginPath();
-      g.moveTo(x, 120); g.lineTo(x + 52, 120); g.lineTo(x + 52, 270); g.lineTo(x + 26, 248); g.lineTo(x, 270); g.closePath();
-      g.fill();
-      g.globalAlpha = 0.75; g.save(); g.translate(x + 26, 186); g.rotate(Math.PI / 2); g.scale(1.4, 1.4);
-      paintKey(g, '#ffffff', '#ffffff'); g.restore();
-    }
-  }
-
   // The knight skin: a dark visor with a bright slit, two grey rivets and a swaying red plume.
   function knight(ctx, face, t, ink, top) {
     var sw = Math.sin(t * 3) * 3, i;
@@ -554,7 +503,6 @@
   }
 
   if (Art) {
-    Art.SCENERY.castle = castle;
     Art.GROUND.castle = { top: '#f3d9cf', bumps: 1, mark: 'pebble' };
     Art.CAUSE.key = ['المفتاح عضّك!', 'مفتاح بأسنان!'];
     Art.SKINS.push({ id: 'knight', name: 'الفارس', stars: 150, body: '#cfd6e6' });
