@@ -68,11 +68,14 @@
         bot: p.bot ? window.TS_BOT.create(p.bot) : null,
         score: 0, x: 0, y: 0, a: 0, alive: true, dead: 0, cool: 0, active: 0,
         weapon: null, ammo: 0, laser: 0, speed: 0, shield: 0,
-        sq: 0, recoil: 0, tread: 0, blinkT: 1 + Math.random() * 3, blink: 0, flash: 0, scale: 0,
+        sq: 0, recoil: 0, tread: 0, blinkT: 1 + Math.random() * 3, blink: 0, flash: 0, muzzle: 0, scale: 0, popHud: 0,
         paint: '#000', blobs: null, splats: 0, lastKill: -9, moving: 0, dispScore: 0
       };
+      t.spring = Kit.art.spring(200, 13);
       G.tanks.push(t);
     });
+    var fx = Kit.art.fx(160);
+    G.fx = fx;
 
     G.newRound = newRound; G.update = update; G.render = render; G.skipSpectate = false;
     G.rebuildLayers = function () { buildLayers(G); };
@@ -122,7 +125,8 @@
         var dd = open.length ? open[Math.floor(Math.random() * open.length)] : 0;
         t.a = [0, Math.PI / 2, Math.PI, -Math.PI / 2][dd];
         t.alive = true; t.dead = 0; t.cool = 0.2; t.active = 0; t.weapon = null; t.ammo = 0;
-        t.laser = 0; t.speed = 0; t.shield = 0; t.sq = 0; t.recoil = 0; t.flash = 0; t.scale = 0; t.blobs = null;
+        t.laser = 0; t.speed = 0; t.shield = 0; t.sq = 0; t.recoil = 0; t.flash = 0; t.muzzle = 0; t.scale = 0; t.blobs = null;
+        if (t.spring) { t.spring.sx = 1; t.spring.sy = 1; t.spring.v = 0; }
         if (t.bot) window.TS_BOT.reset(t.bot);
       });
     }
@@ -135,6 +139,7 @@
       G.winner = winner;
       if (winner) {
         winner.score++;
+        winner.popHud = 1;
         if (winner.human && !G.demo) G.coins += 10;
         if (!G.demo) { S.roundWin(); setTimeout(function () { S.point(); }, 380); }
         burst(winner.x, winner.y, 30, [winner.pal.paint, '#fff', '#ffe14d'], 260, 5, 0.9);
@@ -156,12 +161,14 @@
       if (G.slow > 0) { G.slow -= dt; sdt = dt * 0.3; }
       if (G.state === 'play' && G.spectate > 0) sdt = dt * 2.2;
 
-      // shake (off with reduced motion or the classroom preset)
+      // Same two Math.random calls as before, so bots and crates keep their stream.
+      // The picture uses Kit.art.shake (its own RNG, trauma at most 0.6).
       if (Kit.motion.reduced()) { G.shakeP = 0; G.shx = 0; G.shy = 0; }
       else {
         G.shakeP = Math.max(0, G.shakeP - dt * 38);
         G.shx = (Math.random() - 0.5) * 2 * G.shakeP; G.shy = (Math.random() - 0.5) * 2 * G.shakeP;
       }
+      Kit.art.shake.update(dt);
 
       if (G.state === 'ready') {
         G.timer -= dt;
@@ -196,7 +203,9 @@
           burst(Math.random() * W, -10, 3, ['#ff4f63', '#ffc61f', '#3fd15d', '#3b8cff', '#a64dff', wt ? wt.pal.paint : '#fff'], 120, 6, 2.5, 220);
         }
       }
-      stepParts(dt);
+      fx.update(dt);
+      Kit.art.pop.update(dt);
+      Kit.art.flash.update(dt);
       stepPops(dt);
     }
 
@@ -204,6 +213,8 @@
       t.sq = Math.max(0, t.sq - dt * 4);
       t.recoil = Math.max(0, t.recoil - dt * 7);
       t.flash = Math.max(0, t.flash - dt * 4);
+      if (t.muzzle) t.muzzle = Math.max(0, t.muzzle - dt * 9);
+      if (t.spring) t.spring.update(dt);
       t.blinkT -= dt;
       if (t.blinkT < 0) { t.blink = 0.12; t.blinkT = 2 + Math.random() * 3.5; }
       t.blink = Math.max(0, t.blink - dt);
@@ -323,7 +334,8 @@
       var lim = t.bot ? t.bot.p.maxBalls : MAX_BALLS;
       if (t.active >= lim && t.weapon !== 'giant') { if (t.human && !G.demo) S.nope(); t.cool = 0.12; return; }
       t.cool = FIRE_CD;
-      t.recoil = 1; t.sq = 0.7;
+      t.recoil = 1; t.sq = 0.7; t.muzzle = 1;
+      if (t.spring) t.spring.kick(8);
       var giant = false, angles = [0];
       if (t.weapon === 'triple') { angles = [-0.24, 0, 0.24]; }
       else if (t.weapon === 'giant') { giant = true; }
@@ -331,6 +343,8 @@
       for (var i = 0; i < angles.length; i++) spawnBall(t, t.a + angles[i], giant);
       var mx = t.x + Math.cos(t.a) * 28, my = t.y + Math.sin(t.a) * 28;
       burst(mx, my, giant ? 10 : 5, [t.pal.paint, '#fff'], 120, giant ? 6 : 4, 0.25);
+      var tier = Kit.art.quality.tier;
+      fx.burst(mx, my, { n: tier === 0 ? 3 : 6, color: t.pal.paint, speed: 80, life: 0.32, size: tier === 0 ? 3 : 5, shape: 'dot' });
       if (!G.demo) { if (giant) S.giant(); else S.fire(t.human ? 1 : 0.85 + t.slot * 0.05); }
     }
 
@@ -365,7 +379,7 @@
               if (!spawning) {
                 if (!G.demo) S.bounce(Math.min(b.bounces, 6));
                 addDot(b.x - nx * b.r * 0.6, b.y - ny * b.r * 0.6, b.giant ? 7 : 3.2, b.color);
-                if (b.giant) G.shakeP = Math.max(G.shakeP, 3);
+                if (b.giant) { G.shakeP = Math.max(G.shakeP, 3); Kit.art.shake.add(0.12); }
               }
             }
           }
@@ -428,6 +442,9 @@
       addSplat(t.x, t.y, b && b.giant ? 62 : 46, killer.pal.paint, killer.splat);
       burst(t.x, t.y, 34, [killer.pal.paint, killer.pal.light, t.pal.main, '#fff'], 340, 7, 0.75);
       G.shakeP = Math.max(G.shakeP, G.demo ? 4 : 13);
+      Kit.art.shake.add(G.demo ? 0.22 : 0.45);
+      Kit.art.hitstop(G.demo ? 40 : 80);
+      Kit.art.flash(killer.pal.paint, 90);
       if (!G.demo) S.splat();
       var self = killer === t;
       if (G.demo) { /* quiet title-screen demo */ }
@@ -502,24 +519,25 @@
     }
 
     /* -------------------------------------------------------- effects */
+    // Same Math.random calls as the old particle burst, in the same order, so bots
+    // and crates keep their stream. The pixels come from the pooled kit emitter.
     function burst(x, y, n, colors, speed, size, life, grav) {
-      if (Kit.motion.reduced()) n = Math.ceil(n / 3); // fewer flying bits, same feedback
+      if (Kit.motion.reduced()) n = Math.ceil(n / 3);
       for (var i = 0; i < n; i++) {
-        if (G.parts.length > 450) G.parts.shift();
         var a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.7);
-        G.parts.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: size * (0.5 + Math.random() * 0.7),
-          life: life * (0.6 + Math.random() * 0.4), max: life, c: colors[Math.floor(Math.random() * colors.length)], g: grav || 0 });
+        var r = size * (0.5 + Math.random() * 0.7);
+        var lf = life * (0.6 + Math.random() * 0.4);
+        var col = colors[Math.floor(Math.random() * colors.length)];
+        void a; void s; void r; void lf; void col;
       }
-    }
-    function stepParts(dt) {
-      for (var i = G.parts.length - 1; i >= 0; i--) {
-        var p = G.parts[i];
-        p.life -= dt;
-        if (p.life <= 0) { G.parts.splice(i, 1); continue; }
-        var f = p.g ? 1 : Math.pow(0.04, dt);
-        p.vx *= f; p.vy = p.vy * f + p.g * dt;
-        p.x += p.vx * dt; p.y += p.vy * dt;
-      }
+      var tier = Kit.art.quality.tier;
+      var vn = tier === 0 ? Math.min(6, n) : Math.min(tier === 1 ? 12 : 16, n);
+      if (vn > 0) fx.burst(x, y, {
+        n: vn, color: colors[0], speed: Math.min(speed, 260), life: Math.min(life, 0.7),
+        size: tier === 0 ? Math.min(size, 4) : Math.min(size, 6.5),
+        shape: n >= 24 || grav ? 'confetti' : 'dot'
+      });
+      if (tier > 0 && n >= 24) fx.burst(x, y, { n: tier === 2 ? 7 : 4, color: colors[1] || '#fff', speed: speed * 0.45, life: 0.6, size: 6, shape: 'star' });
     }
     function pop(x, y, text, color, size, life, center) {
       if (G.pops.length > 12) G.pops.shift();
@@ -533,15 +551,26 @@
       }
     }
 
+    function stampCap() {
+      var tier = Kit.art.quality.tier;
+      return tier <= 0 ? 48 : tier === 1 ? 110 : 200;
+    }
     function addSplat(x, y, s, color, style) {
-      var rec = { x: x, y: y, s: s, color: color, style: style, seed: (Math.random() * 1e9) | 0 };
-      if (G.splats.length > 60) G.splats.shift();
+      var seed = (Math.random() * 1e9) | 0;
+      var tier = Kit.art.quality.tier;
+      if (tier === 0) s *= 0.62;
+      var rec = { x: x, y: y, s: s, color: color, style: style, seed: seed };
+      if (G.splats.length + G.dots.length >= stampCap()) return;
       G.splats.push(rec);
       drawSplatRec(rec);
     }
     function addDot(x, y, r, color) {
+      var tier = Kit.art.quality.tier;
+      if (tier === 0) r *= 0.55;
+      if (G.splats.length + G.dots.length >= stampCap()) return;
+      if (tier === 0 && (G.dots.length & 1)) return;
       var rec = { x: x, y: y, r: r, color: color };
-      if (G.dots.length < 400) { G.dots.push(rec); drawDotRec(rec); }
+      G.dots.push(rec); drawDotRec(rec);
     }
   }
 
@@ -551,7 +580,10 @@
   function drawSplatRec(rec) {
     if (!layers.paint || !curGame) return;
     var c = paintCtx(); c.save(); clipMaze(c, curGame.maze);
-    A.drawSplat(c, rec.x, rec.y, rec.s, rec.color, rec.style, mulberry(rec.seed));
+    var sp = A.splatSprite(rec.color, rec.style, rec.seed % 3);
+    var sc = rec.s / 46;
+    if (sp && sp.canvas) c.drawImage(sp.canvas, rec.x - 48 * sc, rec.y - 48 * sc, 96 * sc, 96 * sc);
+    else A.drawSplat(c, rec.x, rec.y, rec.s, rec.color, rec.style, mulberry(rec.seed));
     c.restore();
   }
   function drawDotRec(rec) {
@@ -564,15 +596,19 @@
   function buildLayers(G) {
     curGame = G;
     var k = layers.k;
-    if (!layers.floor) { layers.floor = mkLayer(); layers.paint = mkLayer(); layers.walls = mkLayer(); }
-    var fc = sizeLayer(layers.floor, k);
-    A.drawFloor(fc, G.maze, G.theme, mulberry(G.maze.seed)); // same decorations after a resize
+    if (!layers.paint) layers.paint = mkLayer();
+    var tier = Kit.art.quality.tier;
+    var key = G.maze.seed + ':' + G.themeIdx + ':' + G.maze.cols + 'x' + G.maze.rows + ':' + G.maze.cs + ':' + tier;
+    layers.floor = Kit.art.bake('ts-floor:' + key, W, H, function (c) {
+      A.drawFloor(c, G.maze, G.theme, mulberry(G.maze.seed));
+    });
+    layers.walls = Kit.art.bake('ts-walls:' + key, W, H, function (c) {
+      A.drawWalls(c, G.maze, G.theme, true);
+      A.drawWalls(c, G.maze, G.theme, false);
+    });
     sizeLayer(layers.paint, k);
     G.splats.forEach(drawSplatRec);
     G.dots.forEach(drawDotRec);
-    var wc = sizeLayer(layers.walls, k);
-    A.drawWalls(wc, G.maze, G.theme, true);
-    A.drawWalls(wc, G.maze, G.theme, false);
   }
 
   function setQuality(k, G) {
@@ -596,10 +632,10 @@
     var G = this;
     if (curGame !== G) buildLayers(G);
     c.save();
-    c.translate(G.shx, G.shy);
-    c.drawImage(layers.floor, 0, 0, W, H);
-    c.drawImage(layers.paint, 0, 0, W, H);
-    c.drawImage(layers.walls, 0, 0, W, H);
+    Kit.art.shake.apply(c);
+    if (layers.floor && layers.floor.canvas) c.drawImage(layers.floor.canvas, 0, 0, W, H);
+    if (layers.paint) c.drawImage(layers.paint, 0, 0, W, H);
+    if (layers.walls && layers.walls.canvas) c.drawImage(layers.walls.canvas, 0, 0, W, H);
     var i, t;
     // crates
     for (i = 0; i < G.crates.length; i++) { var k = G.crates[i]; A.drawCrate(c, k.x, k.y, k.pw, k.t, easeBack(k.pop)); }
@@ -614,7 +650,7 @@
       M.trace(G.maze, t.x, t.y, t.a, laser ? LASER_AIM : GUIDE_AIM, G.laserPts);
       var p = G.laserPts;
       c.save();
-      c.globalAlpha = !laser ? 0.5 : t.laser < 2 ? (Math.sin(G.time * 20) > 0 ? 0.8 : 0.3) : 0.85;
+      c.globalAlpha = !laser ? 0.5 : t.laser < 2 ? (Math.sin(G.time * 14) > 0 ? 0.8 : 0.35) : 0.85;
       c.lineWidth = laser ? 4 : 3; c.lineCap = 'round'; c.strokeStyle = t.pal.paint;
       c.setLineDash([2, 10]); c.lineDashOffset = Kit.motion.reduced() ? 0 : -G.time * 40;
       c.beginPath(); c.moveTo(p[0], p[1]);
@@ -642,7 +678,7 @@
         A.drawTank(c, {
           x: t.x, y: t.y, a: t.a, pal: t.pal, hat: t.hat, sq: t.sq, recoil: t.recoil, tread: t.tread, t: G.time,
           blink: t.blink > 0 && !Kit.motion.reduced(), dead: t.alive ? 0 : t.dead, paint: t.paint, blobs: t.blobs, shield: t.alive ? t.shield : 0,
-          flash: t.flash, scale: easeBack(t.scale)
+          flash: t.flash, muzzle: t.muzzle, recoil: Math.max(t.recoil, t.spring ? Math.min(1, Math.abs(1 - t.spring.sy) * 3.2) : 0), scale: easeBack(t.scale)
         });
       }
     }
@@ -652,16 +688,11 @@
       var b = G.balls[i], sp = Math.hypot(b.vx, b.vy);
       c.globalAlpha = 0.25; A.circle(c, b.x - b.vx / sp * b.r * 1.6, b.y - b.vy / sp * b.r * 1.6, b.r * 0.75); c.fillStyle = b.color; c.fill();
       c.globalAlpha = 0.12; A.circle(c, b.x - b.vx / sp * b.r * 3, b.y - b.vy / sp * b.r * 3, b.r * 0.55); c.fill();
-      c.globalAlpha = b.life < 1 ? (Math.sin(G.time * 30) > 0 ? 1 : 0.5) : 1;
+      c.globalAlpha = b.life < 1 ? (Math.sin(G.time * 14) > 0 ? 1 : 0.55) : 1;
       A.drawBall(c, b.x, b.y, b.r, b.color, b.sq, b.sqA);
       c.globalAlpha = 1;
     }
-    // particles
-    for (i = 0; i < G.parts.length; i++) {
-      var pt = G.parts[i];
-      c.globalAlpha = Math.max(0, Math.min(1, pt.life / pt.max * 1.5));
-      c.fillStyle = pt.c; A.circle(c, pt.x, pt.y, pt.r); c.fill();
-    }
+    if (G.fx) G.fx.draw(c);
     c.globalAlpha = 1;
     // name tags during the countdown
     if (G.state === 'ready' && !G.demo) {
@@ -689,12 +720,14 @@
       var s = age < 0.15 ? 0.5 + age / 0.15 * 0.7 : age < 0.3 ? 1.2 - (age - 0.15) / 0.15 * 0.2 : 1;
       c.save(); c.globalAlpha = Math.min(1, f * 3);
       c.translate(pp.x, pp.y); c.scale(s, s);
-      text(c, pp.text, 0, 0, pp.size, pp.color, 'center', '#2a2240', pp.size * 0.22);
+      text(c, pp.text, 0, 0, pp.size, pp.color, 'center', '#1b1640', pp.size * 0.22);
       c.restore();
     }
     c.restore();
 
     if (!G.demo && G.state !== 'matchEnd') drawHud(c, G);
+    Kit.art.pop.draw(c);
+    Kit.art.flash.draw(c, W, H);
   }
 
   function easeBack(t) { if (t >= 1) return 1; if (t <= 0) return 0; var s = 1.7; t = t - 1; return t * t * ((s + 1) * t + s) + 1; }
@@ -710,9 +743,14 @@
       var hl = G.state === 'roundEnd' && G.winner === t ? 1 + (rm ? 0.03 : Math.sin(G.time * 12) * 0.04) : 1; // reduced: still, a bit bigger
       c.save();
       c.translate(x + bw / 2, y + bh / 2); c.scale(hl, hl); c.translate(-(x + bw / 2), -(y + bh / 2));
-      A.rr(c, x, y + 4, bw, bh, 18); c.fillStyle = 'rgba(0,0,0,0.25)'; c.fill();
-      A.rr(c, x, y, bw, bh, 18); c.fillStyle = t.alive || G.state === 'ready' ? '#fff' : '#e4e0ee'; c.fill();
+      A.rr(c, x, y + 5, bw, bh, 18); c.fillStyle = 'rgba(27,22,64,0.28)'; c.fill();
+      A.rr(c, x, y, bw, bh, 18); c.fillStyle = t.alive || G.state === 'ready' ? '#fff7ea' : '#e4e0ee'; c.fill();
       c.lineWidth = 4; c.strokeStyle = t.pal.dark; c.stroke();
+      if (Kit.art.gloss) Kit.art.gloss(c, x + 10, y + 3, bw - 20, 16);
+      if (t.popHud) {
+        Kit.art.pop('+1', x + bw - 78, y + 6, { color: t.pal.main, size: 28 });
+        t.popHud = 0;
+      }
       // mini tank on the right
       c.save(); c.beginPath(); A.rr(c, x, y, bw, bh, 18); c.clip();
       A.rr(c, x + bw - 58, y, 58, bh, 0); c.fillStyle = t.pal.light; c.fill();
@@ -722,7 +760,7 @@
       // name
       c.font = '700 20px Fredoka';
       var name = t.name;
-      text(c, name, x + bw - 64, y + 17, 20, '#2a2240', 'right');
+      text(c, name, x + bw - 64, y + 17, 20, '#1b1640', 'right');
       // pips
       var pr = G.target > 5 ? 6 : 7.5, ps = pr * 2 + 5;
       var px = x + bw - 64 - pr;
@@ -747,8 +785,8 @@
       var sc = easeBack(Math.min(1, bt * 3));
       c.save(); c.translate(W / 2, H / 2); c.scale(sc, sc);
       ribbon(c, 0, 0, 420, 96, G.theme.wall);
-      text(c, 'الجولة ' + G.round, 0, -8, 50, '#fff', 'center', '#2a2240', 9);
-      text(c, G.theme.name, 0, 34, 22, '#fff', 'center', '#2a2240', 5);
+      text(c, 'الجولة ' + G.round, 0, -8, 50, '#fff', 'center', '#1b1640', 9);
+      text(c, G.theme.name, 0, 34, 22, '#fff', 'center', '#1b1640', 5);
       c.restore();
     }
     if (G.state === 'play' && G.spectate > 0) {
@@ -765,7 +803,7 @@
       c.font = '700 54px Fredoka'; c.direction = 'rtl';
       var mw = Math.max(420, c.measureText(msg).width + 120);
       ribbon(c, 0, 0, mw, 100, col);
-      text(c, msg, 0, 2, 54, '#fff', 'center', '#2a2240', 10);
+      text(c, msg, 0, 2, 54, '#fff', 'center', '#1b1640', 10);
       if (G.selfOut && G.humans === 1) {
         A.rr(c, -210, 72, 420, 42, 21); c.fillStyle = 'rgba(42,34,64,0.85)'; c.fill();
         text(c, 'انتبه: كراتك ترتدّ وتلطّخك!', 0, 93, 24, '#fff', 'center');
@@ -784,10 +822,10 @@
       c.beginPath();
       c.moveTo(x + s * (w / 2 - 20), y - h / 2 + 18); c.lineTo(x + s * (w / 2 + 40), y - h / 2 + 18);
       c.lineTo(x + s * (w / 2 + 22), y + 8); c.lineTo(x + s * (w / 2 + 40), y + h / 2 + 12); c.lineTo(x + s * (w / 2 - 20), y + h / 2 + 12);
-      c.closePath(); c.fill(); c.lineWidth = 4; c.strokeStyle = '#2a2240'; c.stroke();
+      c.closePath(); c.fill(); c.lineWidth = 4; c.strokeStyle = '#1b1640'; c.stroke();
     });
     A.rr(c, x - w / 2, y - h / 2, w, h, 22); c.fillStyle = col; c.fill();
-    c.lineWidth = 5; c.strokeStyle = '#2a2240'; c.stroke();
+    c.lineWidth = 5; c.strokeStyle = '#1b1640'; c.stroke();
     A.rr(c, x - w / 2 + 12, y - h / 2 + 8, w - 24, 12, 6); c.fillStyle = 'rgba(255,255,255,0.3)'; c.fill();
     c.restore();
   }
