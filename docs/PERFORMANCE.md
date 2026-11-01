@@ -850,3 +850,31 @@ the measured size rounded up (the game to the next 500 bytes, the others to the 
 1,000), and each headroom is under half a percent. No other game, font or library
 limit changes.
 
+## Key Runner on current main, 1 November 2026
+
+عدّاء المفاتيح (Key Runner) joins the site beside Egg Rush. It is the same candy-tower
+climb: eight hand-built stages, one-shot sounds, and no background music. A solo climb
+reports `tower` and a win is the finish time in seconds. A two-player race reports
+`duo`, which is a two-player id, and ends `end` or `draw`. `Kit.dda` is read at the
+start of a round and `Kit.track` counts a stage, a fall, and a cue.
+
+Measured with the Linux minified build and `SG_TELEMETRY_URL` set, the same Actions
+build the budgets check. Main before this game is the Egg Rush head: portal 415,600,
+teacher page 98,821, offline precache 5,723,012 across 50 files.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Key Runner | — | 79,841 | — | 80,000 |
+| Portal (thumbnail and catalog entry) | 415,600 | 422,426 | 416,000 | 423,000 |
+| Teacher page | 98,821 | 99,749 | 99,000 | 100,000 |
+| Offline precache, 51 files | 5,723,012 | 5,810,607 | 5,724,000 | 5,811,000 |
+
+The page limit is a new entry, 159 bytes (0.20%) above the built page. The portal
+grows by 6,826 bytes, most of it the thumbnail, so its limit moves from 416,000 to
+423,000: 574 bytes (0.14%) above this measurement. The teacher page grows by 928
+bytes and no longer fits in 99,000, so its limit moves to 100,000: 251 bytes (0.25%)
+left. The offline cache grows by 87,595 bytes, which is the new page plus the portal
+and the teacher page, and gains one file, so `precacheBytes` moves from 5,724,000 to
+5,811,000: 393 bytes (0.0068%) above this measurement. Each new limit is the measured
+size rounded up (the game to the next 500 bytes, the others to the next 1,000), and
+each headroom is under half a percent. No other game, font or library limit changes.

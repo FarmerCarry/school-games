@@ -313,7 +313,9 @@ test('table views, tooltips, and a game one child opened: shown with its numbers
   // Students per game, as the updated server sends them: one game only one child played.
   s.mode.edit = k => {
     for (const g of k.games) if (!g.suppressed) g.students = 40;
-    const few = k.games.filter(g => !g.suppressed).sort((a, b) => b.opens - a.opens)[0];
+    // Same order as SGInsights.favourites, so a tie on opens still marks the row the chart shows first.
+    const few = k.games.filter(g => !g.suppressed).sort((a, b) =>
+      (b.opens || 0) - (a.opens || 0) || (b.sessions || 0) - (a.sessions || 0) || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0))[0];
     few.students = 1;
     return k;
   };
