@@ -192,7 +192,25 @@ test('a save that fails at the coins keeps the first-win bonus for a later win',
 test('a double-click on Menu shows the title instead of starting the match under it', async t => {
   const page = await game(t);
   const doubleClick = async selector => {
-    const box = await page.locator(selector).boundingBox();
+    const button = page.locator(selector);
+    await button.waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(await button.isEnabled(), true, `${selector} must be enabled`);
+    // The over and pause panels scale in from their center, so القائمة moves until
+    // that entrance ends. A double-click sampled then misses and the match stays up.
+    assert.equal(await page.evaluate(sel => {
+      const button = document.querySelector(sel);
+      const panel = button.closest('.panel');
+      for (const node of [panel, button]) {
+        if (!node) continue;
+        for (const animation of node.getAnimations({ subtree: true })) {
+          if (animation.effect.getComputedTiming().endTime !== Infinity) animation.finish();
+        }
+      }
+      const box = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return box.width > 0 && box.height > 0 && (hit === button || button.contains(hit));
+    }, selector), true, `${selector} can take the click`);
+    const box = await button.boundingBox();
     await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
   };
   await startCpuMatch(page);

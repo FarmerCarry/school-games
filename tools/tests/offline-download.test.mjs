@@ -15,6 +15,30 @@ import { zip, crc32 } from '../lib/zip.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const ZIP_NAME = 'school-games-offline.zip';
+
+function catalogSlugs() {
+  const sandbox = { window: {} };
+  vm.runInNewContext(fs.readFileSync(path.join(repo, 'js/catalog.js'), 'utf8'), sandbox);
+  return sandbox.window.GAMES.map(game => game.slug);
+}
+
+function workerFiles(source) {
+  const match = source.match(/^var (?:FILES|OWN_FILES) = (.+);$/m);
+  assert.ok(match, 'the worker names its files');
+  const value = JSON.parse(match[1]);
+  return Array.isArray(value) ? value : Object.keys(value);
+}
+
+test('every catalog game is listed for the offline worker', () => {
+  // The committed sw.js is the generated kill switch (tools/build.mjs --kill-sw).
+  // Its file list is what a preview compares, and the release worker's FILES map
+  // is checked against the same catalog after a build below.
+  const names = workerFiles(fs.readFileSync(path.join(repo, 'sw.js'), 'utf8'));
+  for (const slug of catalogSlugs()) {
+    assert.ok(names.includes('games/' + slug + '/index.html'), slug + ' is missing from sw.js');
+  }
+});
+
 const FOLDER = 'school-games/';
 // 1 January 1980 00:00 in MS-DOS format: the same bytes on every build.
 const DOS_TIME = 0, DOS_DATE = 33;
@@ -148,6 +172,9 @@ test('the fast build ships itself as one school-games/ folder in a ZIP that the 
   const worker = fs.readFileSync(path.join(out, 'sw.js'), 'utf8');
   const precache = JSON.parse(worker.match(/^var FILES = (.+);$/m)[1]);
   assert.ok(Object.hasOwn(precache, 'index.html') && Object.hasOwn(precache, 'teacher.html'));
+  for (const slug of catalogSlugs()) {
+    assert.ok(Object.hasOwn(precache, 'games/' + slug + '/index.html'), slug + ' is precached');
+  }
   assert.equal(Object.hasOwn(precache, ZIP_NAME), false, 'the ZIP is not in the offline cache');
   assert.equal(worker.includes(ZIP_NAME), false, 'the worker never names the ZIP');
   const marker = JSON.parse(fs.readFileSync(path.join(out, '.school-games-build.json'), 'utf8'));

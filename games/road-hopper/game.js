@@ -1414,10 +1414,12 @@
   // passed (split into sub-steps of at most 1/60 s). A fixed 60 Hz step without interpolation
   // made cars and the camera judder whenever a frame got 0 or 2 updates (and constantly on
   // 75/144 Hz screens).
+  var frameCount = 0;
   (function () {
     var last = 0;
     function frame(t) {
       requestAnimationFrame(frame);
+      frameCount++;
       var ms = last && t - last, dt = last ? Math.min(0.1, ms / 1000) : 1 / 60;
       last = t;
       if (document.hidden || dt <= 0) return;
@@ -1522,6 +1524,7 @@
   }
   window.__game = {
     get state() { return state; },
+    get frames() { return frameCount; },
     get score() { return score; },
     get coins() { return save.coins; },
     get best() { return save.best; },

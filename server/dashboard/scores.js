@@ -1,7 +1,7 @@
 // What the score means in each game that passes one to Kit.stats.end(result, score):
 // [Arabic, English], each completing «النتيجة هنا هي …» / "The score here is …".
 // Written by hand from the games' own code; a score is only comparable within one game.
-// tools/tests/dashboard-research.test.mjs checks that these are exactly the 28 score games.
+// tools/tests/dashboard-research.test.mjs checks that these are exactly the 32 score games.
 window.SG_SCORES = {
   'air-hockey': ['أهداف الطفل في المباراة', 'the child’s goals in the match'],
   'beat-dash': ['المسافة التي قطعها الطفل من المرحلة بالنسبة المئوية (100 عند إنهائها)', 'how far through the level the child got, in % (100 when it is finished)'],
@@ -10,10 +10,14 @@ window.SG_SCORES = {
   'bubble-bop': ['نجوم المرحلة المنتهية (من 1 إلى 3)، وفي جولات الحفلة النقاط', 'the stars of a finished level (1 to 3); in the party rounds, the points'],
   'cake-guards': ['نجوم المرحلة الرابحة (من 1 إلى 3)، وإلا فعدد الموجات التي صُدّت', 'the stars of a won level (1 to 3); otherwise the waves held back'],
   'candy-rope': ['النجوم التي جُمعت في المرحلة المنتهية (من 0 إلى 3)', 'the stars collected in a finished level (0 to 3)'],
+  'chaos-island': ['العملات التي جُمعت', 'the coins collected'],
   'dino-3d': ['نقاط الجولة', 'the points of the run'],
   'drift-king': ['المسافة المقطوعة مع مكافأة الانزلاق', 'the distance driven plus the drift bonus'],
+  'egg-rush': ['البيض الذي فُقس في الجولة، وفي مباراة اللاعبين عملات اللاعب الأعلى', 'the eggs hatched in the round; in a two-player match, the higher coin total'],
   'fire-and-ice': ['نجوم المرحلة المنتهية', 'the stars of a finished level'],
   'hoop-heads': ['نقاط الطفل في المباراة', 'the child’s points in the match'],
+  'key-runner': ['وقت إنهاء البرج بالثواني، وفي سباق اللاعبين صفر', 'the time to finish the tower, in seconds; in a two-player race, zero'],
+  'lucky-lake': ['أنواع السمك في الكتاب، وفي سباق اللاعبين وزن الصيد الأثقل بعُشر الكيلوغرام', 'the species in the book; in a two-player match, the heavier catch in tenths of a kilogram'],
   'maze-dash': ['نجوم المرحلة المنتهية (من 0 إلى 3)، وفي التسلق المتواصل الارتفاع والنقاط', 'the stars of a finished level (0 to 3); in the endless climb, the height and the dots'],
   'merge-2048': ['نقاط اللعبة', 'the points of the game'],
   'moto-madness': ['نجوم المضمار المنتهي بحسب الوقت', 'the stars of a finished track, by time'],

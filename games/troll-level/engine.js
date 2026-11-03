@@ -8,6 +8,8 @@
  *   !  invisible block (solid, appears when touched)
  *   ^ v < >  spikes     1-9  hidden spike group (pops out of the neighbouring block)
  *   P  player start     D  exit door     E  fake door    J  spring    G  gravity flipper
+ * Other characters belong to plug-ins (Engine.mod, Engine.tile): each new world
+ * file registers its mechanic there, so this file stays the same for all worlds.
  */
 (function (root) {
   'use strict';
@@ -18,6 +20,7 @@
     g: 2300, jump: 690, cut: 220, maxFall: 1000, coyote: 0.1, buffer: 0.13, spring: 1260
   };
   var DEAD_T = 0.28;
+  var MODS = [], CELLS = {}, TILES = {}, kinds = 1;
 
   function overlap(ax, ay, aw, ah, bx, by, bw, bh) {
     return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
@@ -76,6 +79,7 @@
     this.emit = opts.emit || function () {};
     this.attempt = 0;
     this.rects = [];
+    this.P = {};
     this.reset();
   }
   var W = World.prototype;
@@ -107,6 +111,7 @@
       for (x = 0; x < COLS; x++) {
         c = row[x] || ' ';
         if (c === '#') this.grid[y * COLS + x] = 1;
+        else if (TILES[c]) this.grid[y * COLS + x] = TILES[c].k;
         else if ((c >= 'a' && c <= 'z' && c !== 'v') || c === '=') {
           g = this.gmap[c] || this.newGroup(c);
           if (c === '=') g.fake = true;
@@ -117,6 +122,7 @@
           g.invis = true; g.tiles.push({ x: x, y: y });
           this.owner[y * COLS + x] = g;
         } else if (c === 'P') start = { x: x, y: y };
+        else if (CELLS[c]) CELLS[c].cell(this, c, x, y);
       }
     }
     for (y = 0; y < ROWS; y++) {
@@ -158,6 +164,7 @@
     for (var i = 0; i < this.doors.length; i++) {
       if (this.doors[i].fake) this.fakes.push(this.doors[i]); else if (!this.door) this.door = this.doors[i];
     }
+    for (i = 0; i < MODS.length; i++) if (MODS[i].init) MODS[i].init(this);
     if (this.def.script) this.def.script(this.api());
   };
 
@@ -240,6 +247,7 @@
       shake: function (a) { w.emit('shake', { a: a }); },
       sfx: function (name) { w.emit('sfx', { name: name }); }
     };
+    for (var i = 0; i < MODS.length; i++) if (MODS[i].api) MODS[i].api(api, w);
     return api;
   };
 
@@ -257,7 +265,7 @@
       for (var tx = x0; tx <= x1; tx++) {
         if (tx < 0 || tx >= COLS) { if (ty < ROWS + 2 && ty > -3) out.push({ x: tx * T, y: ty * T, w: T, h: T, g: null }); continue; }
         if (ty < 0 || ty >= ROWS) continue;
-        if (this.grid[ty * COLS + tx]) out.push({ x: tx * T, y: ty * T, w: T, h: T, g: null });
+        if (this.grid[ty * COLS + tx]) out.push({ x: tx * T, y: ty * T, w: T, h: T, g: null, k: this.grid[ty * COLS + tx] });
       }
     }
     for (var i = 0; i < this.groups.length; i++) {
@@ -268,6 +276,11 @@
         if (overlap(x, y, w, h, rx, ry, T, T)) out.push({ x: rx, y: ry, w: T, h: T, g: g });
       }
     }
+    var n = out.length, k;
+    for (i = 0; i < MODS.length; i++) if (MODS[i].rects) MODS[i].rects(this, x, y, w, h, out, skip);
+    // a plug-in rect that misses the query would shove the player across the room
+    for (i = k = n; i < out.length; i++) if (overlap(x, y, w, h, out[i].x, out[i].y, out[i].w, out[i].h)) out[k++] = out[i];
+    out.length = k;
     return out;
   };
 
@@ -301,8 +314,13 @@
     }
     p.y = ny;
     var down = dy * this.gs > 0;
-    if (down) { p.onGround = true; p.ground = gref ? gref.g : null; }
-    else if (Math.abs(p.vy) > 250) this.emit('bonk', { x: p.x + PH.w / 2, y: dy < 0 ? p.y : p.y + PH.h });
+    if (down) { p.onGround = true; p.ground = gref ? gref.g : null; p.gr = gref; }
+    else {
+      if (Math.abs(p.vy) > 250) this.emit('bonk', { x: p.x + PH.w / 2, y: dy < 0 ? p.y : p.y + PH.h });
+      // a head (or, upside down, feet-first) hit against the rect: boxes, switches...
+      if (gref && gref.g && gref.g.onHead) gref.g.onHead(gref);
+      for (var m = 0; gref && m < MODS.length; m++) if (MODS[m].head) MODS[m].head(this, gref);
+    }
     p.vy = 0;
   };
 
@@ -381,6 +399,8 @@
     if (fired) this.triggers = this.triggers.filter(function (q) { return !q.done; });
     for (i = 0; i < this.ticks.length; i++) this.ticks[i]();
 
+    for (i = 0; i < MODS.length; i++) if (MODS[i].step) MODS[i].step(this);
+    if (this.state !== 'play') return;
     this.updateGroups();
     if (this.state !== 'play') return;
     this.updateDoors();
@@ -388,6 +408,7 @@
     this.updateSaws();
     this.updatePlayer(inp);
     if (this.state !== 'play') return;
+    for (i = 0; i < MODS.length; i++) if (MODS[i].after) { MODS[i].after(this); if (this.state !== 'play') return; }
     this.checkHazards();
   };
 
@@ -485,18 +506,22 @@
     if (this.revT > 0) { this.revT -= DT; var tmp = l; l = r; r = tmp; }
     var dir = (r ? 1 : 0) - (l ? 1 : 0);
     if (dir) p.face = dir;
-    var ground = p.onGround;
+    var ground = p.onGround, P = this.P;
+    // this frame's physics; a plug-in may change them (ice, wind...)
+    P.accG = PH.accG; P.turnG = PH.turnG; P.decG = PH.decG; P.accA = PH.accA; P.decA = PH.decA; P.run = PH.run; P.jump = PH.jump;
+    for (i = 0; i < MODS.length; i++) if (MODS[i].phys) MODS[i].phys(this, p, P, dir);
     var acc;
-    if (dir) acc = ground ? (p.vx * dir < 0 ? PH.turnG : PH.accG) : PH.accA;
-    else acc = ground ? PH.decG : PH.decA;
-    p.vx = approach(p.vx, dir * PH.run, acc * DT);
+    if (dir) acc = ground ? (p.vx * dir < 0 ? P.turnG : P.accG) : P.accA;
+    else acc = ground ? P.decG : P.decA;
+    p.vx = approach(p.vx, dir * P.run, acc * DT);
 
     if (inp.jp) p.buf = PH.buffer; else p.buf -= DT;
     if (ground) p.coy = PH.coyote; else p.coy -= DT;
     if (p.buf > 0 && p.coy > 0) {
-      p.vy = -PH.jump * gs; p.buf = 0; p.coy = 0; p.jumping = true;
+      p.vy = -P.jump * gs; p.buf = 0; p.coy = 0; p.jumping = true;
       p.onGround = false; p.ground = null;
       this.emit('jump', { x: p.x + PH.w / 2, y: gs > 0 ? p.y + PH.h : p.y });
+      for (i = 0; i < MODS.length; i++) if (MODS[i].jump) MODS[i].jump(this);
     }
     if (p.jumping && !inp.jh && p.vy * gs < -PH.cut) p.vy = -PH.cut * gs;
     if (p.vy * gs >= 0) p.jumping = false;
@@ -581,7 +606,30 @@
     }
   };
 
-  var Engine = { World: World, T: T, COLS: COLS, ROWS: ROWS, W: WW, H: WH, DT: DT, PH: PH, DEAD_T: DEAD_T };
+  var Engine = { World: World, Group: Group, T: T, COLS: COLS, ROWS: ROWS, W: WW, H: WH, DT: DT, PH: PH, DEAD_T: DEAD_T, overlap: overlap, approach: approach };
+
+  // Plug-ins. Engine.mod({ chars, cell, init, api, step, after, rects, head, phys, jump }):
+  //   chars + cell(w, ch, x, y): map characters it owns, read while the map is parsed
+  //     (before spikes, so a plug-in tile can hold a spike); init(w): after parsing;
+  //   api(L, w): add script functions; step(w): each frame before groups move;
+  //   after(w): after the player moved, before hazards (may call w.die);
+  //   rects(w, x, y, wd, h, out, skip): push extra solid rects { x, y, w, h, g };
+  //   head(w, rect): the player's head hit rect; phys(w, p, P, dir): change this
+  //   frame's physics in P (accG turnG decG accA decA run jump); jump(w): a jump began.
+  // Every hook runs in every level, so it must return at once when its level has
+  // none of its things. No randomness: recorded solutions must replay exactly.
+  Engine.mod = function (m) {
+    MODS.push(m);
+    for (var i = 0; m.chars && i < m.chars.length; i++) CELLS[m.chars[i]] = m;
+    return m;
+  };
+  // A solid map tile with properties (e.g. Engine.tile('~', { ice: 1 })): a collision
+  // rect carries its kind as rect.k, and Engine.TILE[k] holds the properties.
+  Engine.tile = function (ch, props) {
+    props.k = ++kinds; props.ch = ch; TILES[ch] = props; Engine.TILE[props.k] = props;
+    return props;
+  };
+  Engine.TILE = [null, { k: 1, ch: '#' }];
 
   // Parse a compact input script: "R40 RJ8 _20 L10" = hold keys for N frames.
   Engine.parseInputs = function (str) {

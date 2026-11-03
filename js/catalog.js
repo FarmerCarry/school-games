@@ -61,6 +61,17 @@ window.GAMES = [
     blurb: 'شارك رمز المسار مع أصدقائك، وتدرّب على القفز والانحناء لتتجاوز رقمك!',
     tip: 'اقفز فوق الصبّار والطيور المنخفضة، وانحنِ تحت الطيور المتوسطة. اضغط مطولًا لقفزة أعلى.',
     controls: [{ keys: ['مسافة', '↑'], action: 'اقفز (اضغط مطولًا لقفزة أعلى)' }, { keys: ['↓', 'Ctrl'], action: 'انحنِ أو انزل بسرعة' }, { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }, { keys: ['R'], action: 'أعد المسار نفسه بعد النتيجة أو أثناء التوقف' }] },
+  { slug: 'key-runner', roundMinutes: [5, 10], inputStyle: 'keyboard', title: 'عدّاء المفاتيح', en: 'Key Runner candy tower obby 3D parkour chocolate climb', tags: 'أوبي باركور مفاتيح برج حلوى ثلاثية الأبعاد', cats: ['two-player', 'challenge'], players: '1-2', color: '#ff6ad5',
+    blurb: 'اصعد برج مفاتيح الحلوى قبل أن ترتفع الشوكولاتة. ثمانية أعلام، وقت قصير.',
+    tip: 'المفتاح الذهبي يسرّعك لحظة. لا تقف، فالشوكولاتة تسرع إن توقفت.',
+    controls: [
+      { keys: ['W', 'A', 'S', 'D'], action: 'تحرّك' },
+      { keys: ['الأسهم'], action: 'تحرّك (أو اللاعب الثاني)' },
+      { keys: ['مسافة'], action: 'اقفز (اضغط مطولًا لقفزة أبعد)' },
+      { keys: ['Q', 'E'], action: 'أدر الكاميرا' },
+      { keys: ['R'], action: 'ارجع لآخر نقطة' },
+      { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }
+    ] },
   { slug: 'neon-slope', roundMinutes: [1, 3], inputStyle: 'keyboard', title: 'منحدر النيون', en: 'Neon Slope', cats: ['running', 'arcade'], players: '1', color: '#22e3a1', hot: true,
     blurb: 'تدحرج بسرعة على منحدر النيون، تفادَ الأحمر واقفز من المنصات!',
     controls: [{ keys: ['←', '→'], action: 'توجيه الكرة' }, { keys: ['A', 'D'], action: 'توجيه الكرة (بديل)' }] },
@@ -122,6 +133,22 @@ window.GAMES = [
   { slug: 'merge-2048', roundMinutes: [5, 15], inputStyle: 'keyboard', title: 'دمج 2048', en: '2048', cats: ['puzzle'], players: '1', color: '#edc22e',
     blurb: 'ادمج البلاطات، افتح أشكالاً مدهشة ووصل إلى 2048!',
     controls: [{ keys: ['←', '↑', '→', '↓'], action: 'تحريك البلاطات' }, { keys: ['W', 'A', 'S', 'D'], action: 'تحريك البلاطات' }, { keys: ['اسحب'], action: 'تحريك البلاطات بالفأرة' }, { keys: ['U', 'Z'], action: 'تراجع (3 مرات في كل لعبة)' }] },
+  { slug: 'chaos-island', roundMinutes: [4, 8], inputStyle: 'keyboard', title: 'جزيرة الفوضى', en: 'Chaos Island disaster survival party platformer', tags: 'كوارث نجاة فيضان نيازك حفلة', cats: ['two-player', 'arcade'], players: '1-2', color: '#7ce577',
+    blurb: 'فيضان جيلي؟ نيازك مارشملو؟ اصمد 45 ثانية على الجزيرة واجمع العملات مع صديقك!',
+    tip: 'انظر إلى الظلال على الأرض: هناك سيسقط النيزك!',
+    controls: [
+      { keys: ['←', '→'], action: 'حركة' },
+      { keys: ['A', 'D'], action: 'حركة' },
+      { keys: ['↑', 'W', 'مسافة'], action: 'قفز (ومع الترقية: قفزة ثانية)' },
+      { keys: ['↓', 'S'], action: 'نزول سريع أو انزل من المنصة' },
+      { keys: ['F'], action: 'إمساك عند الريح والجليد' },
+      { keys: ['E', 'مسافة'], action: 'بعد الفرقعة: أسقط قشرة موز أو وسادة قفز' },
+      { keys: ['Q'], action: 'حركة مضحكة في الاستراحة' },
+      { keys: ['←', '→', '↑'], action: 'اللاعب الثاني: حركة وقفزة' },
+      { keys: ['Enter'], action: 'اللاعب الثاني بعد الفرقعة: أسقط غرضاً' },
+      { keys: ['الفأرة'], action: 'حرّك اللاعب الأول باتجاه المؤشر' },
+      { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }
+    ] },
   { slug: 'candy-rope', roundMinutes: [1, 3], inputStyle: 'pointer', title: 'حبل الحلوى', en: 'Munch Rope', tags: 'cut the rope قص الحبل', cats: ['puzzle'], players: '1', color: '#8bd346',
     blurb: 'اقطع الحبال، اجمع النجوم، وأطعم الوحش قضّوم حلوته اللذيذة!',
     controls: [{ keys: ['اسحب'], action: 'اقطع الحبال' }, { keys: ['انقر'], action: 'فرقع الفقاعة وشغّل النافخ' }] },
@@ -142,6 +169,22 @@ window.GAMES = [
     controls: [{ keys: ['←', '↑', '→', '↓'], action: 'توجيه' }, { keys: ['W', 'A', 'S', 'D'], action: 'توجيه' }, { keys: ['الفأرة'], action: 'اتبع المؤشر' }] },
   { slug: 'snake-arena', roundMinutes: [3, 8], inputStyle: 'mixed', title: 'ساحة الثعابين', en: 'Snake Arena', tags: 'دودة slither', cats: ['battle', 'arcade'], players: '1', color: '#8e44ff',
     blurb: 'كُل النقاط المضيئة، اكبر، وحاصر 15 ثعبانًا لتصبح ملك الساحة!',
-    controls: [{ keys: ['الفأرة'], action: 'وجّه الثعبان' }, { keys: ['انقر'], action: 'تسريع (اضغط مطولًا)' }, { keys: ['مسافة'], action: 'تسريع' }, { keys: ['←', '→'], action: 'لفّ يسارًا ويمينًا' }, { keys: ['A', 'D'], action: 'لفّ يسارًا ويمينًا' }] }
+    controls: [{ keys: ['الفأرة'], action: 'وجّه الثعبان' }, { keys: ['انقر'], action: 'تسريع (اضغط مطولًا)' }, { keys: ['مسافة'], action: 'تسريع' }, { keys: ['←', '→'], action: 'لفّ يسارًا ويمينًا' }, { keys: ['A', 'D'], action: 'لفّ يسارًا ويمينًا' }] },
+  { slug: 'lucky-lake', roundMinutes: [3, 15], inputStyle: 'mixed', title: 'بحيرة الحظ', en: 'Lucky Lake fishing game fish collection', tags: 'صيد سمك سنارة بحر', cats: ['two-player', 'idle'], players: '1-2', color: '#2ec4ff',
+    blurb: 'ارمِ السنارة، انتظر العلامة !، واسحب السمكة! اجمع 60 سمكة واصطد السمكة الأسطورية!',
+    tip: 'لا تضغط عند النقرة الأولى، انتظر علامة ! ثم اضغط بسرعة',
+    controls: [
+      { keys: ['مسافة', 'الفأرة'], action: 'اضغط مطوّلًا للرمي، وانتظر ! ثم اضغط' },
+      { keys: ['مسافة', 'الفأرة'], action: 'في السحب: اضغط ليصعد الشريط واتركه لينزل' },
+      { keys: ['A', 'D'], action: 'تصويب اللاعب 1 (والأسهم في لعب فردي)' },
+      { keys: ['Enter'], action: 'اللاعب 2: رمي وعضّ وسحب' },
+      { keys: ['←', '→'], action: 'تصويب اللاعب 2' },
+      { keys: ['1', '2', '3', '4'], action: 'المتجر، الكتاب، الحوض، الخريطة' },
+      { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }
+    ] },
+  { slug: 'egg-rush', roundMinutes: [5, 15], inputStyle: 'keyboard', title: 'سباق البيض', en: 'Egg Rush steal eggs pets tycoon', tags: 'بيض حيوانات فقس تايكون', cats: ['two-player', 'idle'], players: '1-2', color: '#ffd23f',
+    blurb: 'تسلّل إلى العشّ، اخطف البيضة، واهرب قبل أن يستيقظ الحارس! افقس حيوانات تجمع لك العملات!',
+    tip: 'الحارس يفتح عينه قبل أن يطاردك، راقب علامة ؟',
+    controls: [{ keys: ['W', 'A', 'S', 'D'], action: 'حركة' }, { keys: ['↑', '←', '↓', '→'], action: 'حركة' }, { keys: ['مسافة', 'E'], action: 'اخطف البيضة أو أفلتها' }, { keys: ['Q'], action: 'استخدم الأداة' }, { keys: ['انقر'], action: 'اجمع العملات وافتح المتجر' }, { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }] }
 ];
 

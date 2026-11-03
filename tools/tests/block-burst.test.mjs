@@ -156,14 +156,29 @@ test('a classic run whose save failed is continued from the menu instead of bein
 
 test('a won level is saved at once, before its ending animation and result panel', async t => {
   const page = await game(t);
+  // commitWin writes the stars before state becomes 'ending'. A loss uses that same
+  // state and writes nothing, and the deals are random, so greedy play sometimes
+  // loses level 1. Play until the level is won, and read storage in that same turn.
   const ended = await page.evaluate(() => {
-    __game.startLevel(0); stepGame(2);
-    for (let i = 0; i < 80 && __game.state === 'play'; i++) __game.auto(1);
-    return { state: __game.state, result: __game.run.result };
+    let outcome = null;
+    for (let attempt = 0; attempt < 12 && !(outcome && outcome.result === 'win'); attempt++) {
+      let n = attempt * 9973 + 1;
+      Math.random = () => { n = (n * 16807) % 2147483647; return (n - 1) / 2147483646; };
+      __game.startLevel(0);
+      stepGame(2);
+      for (let i = 0; i < 80 && __game.state === 'play'; i++) __game.auto(1);
+      if (__game.run && __game.run.result === 'win' && __game.state === 'ending') {
+        const adv = JSON.parse(localStorage.getItem('sg:block-burst:adv'));
+        outcome = { state: __game.state, result: __game.run.result, stars: adv && adv[0], attempt };
+      } else {
+        outcome = { state: __game.state, result: __game.run && __game.run.result, stars: null, attempt };
+      }
+    }
+    return outcome;
   });
-  assert.equal(ended.state, 'ending', `level 1 is won by greedy play (${JSON.stringify(ended)})`);
-  const adv = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:block-burst:adv')));
-  assert.ok(adv && adv[0] >= 1, 'the stars are already in storage if the page is left now');
+  assert.equal(ended.result, 'win', `level 1 is won by greedy play (${JSON.stringify(ended)})`);
+  assert.equal(ended.state, 'ending', `the win is still in its ending animation (${JSON.stringify(ended)})`);
+  assert.ok(ended.stars >= 1, 'the stars are already in storage if the page is left now');
   await page.evaluate(() => { for (let i = 0; i < 600 && __game.state === 'ending'; i++) stepGame(1); });
   assert.equal(await page.evaluate(() => __game.state), 'win', 'the result panel still follows');
 });

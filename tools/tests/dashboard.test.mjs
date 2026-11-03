@@ -313,7 +313,9 @@ test('table views, tooltips, and a game one child opened: shown with its numbers
   // Students per game, as the updated server sends them: one game only one child played.
   s.mode.edit = k => {
     for (const g of k.games) if (!g.suppressed) g.students = 40;
-    const few = k.games.filter(g => !g.suppressed).sort((a, b) => b.opens - a.opens)[0];
+    // Same order as SGInsights.favourites, so a tie on opens still marks the row the chart shows first.
+    const few = k.games.filter(g => !g.suppressed).sort((a, b) =>
+      (b.opens || 0) - (a.opens || 0) || (b.sessions || 0) - (a.sessions || 0) || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0))[0];
     few.students = 1;
     return k;
   };
@@ -468,7 +470,12 @@ test('demo mode: sample data without signing in, and nothing sent to the server'
   assert.equal(Number(await tileValue(page, 'newStudents')), k.totals.students.new);
   assert.equal(Number(await tileValue(page, 'perStudentDay')), k.totals.students.minutesPerStudentDay.median);
   assert.equal(Number(await tileValue(page, 'now')), live.total.sessions);
-  assert.match(await page.locator('.tile[data-key="now"] .tile-hint').textContent(), new RegExp(`${live.total.sessions} children: ${live.students} students, ${live.guests} guests`));
+  // One guest is "1 guest", the same plural the tile uses.
+  const countWord = (n, one, many) => (Number(n) === 1 ? '1 ' + one : n + ' ' + many);
+  assert.match(await page.locator('.tile[data-key="now"] .tile-hint').textContent(), new RegExp(
+    countWord(live.total.sessions, 'child', 'children') + ': ' +
+    countWord(live.students, 'student', 'students') + ', ' +
+    countWord(live.guests, 'guest', 'guests')));
   assert.equal(s.lastKpis(), undefined);
   // The school's day of the sample, not this computer's.
   assert.match(await page.locator('#rangeText').textContent(), /27 Oct 2026/);
@@ -704,7 +711,16 @@ test('a period that reaches back before the update: play sessions per day, no ch
   await waitForView(page, 'habits');
   await page.click('#habits-weeks .table-toggle');
   const weeks = await page.locator('#habits-weeks .table-host tbody th').allTextContents();
-  assert.ok(weeks.length >= 1 && weeks.length <= 2, weeks.join(' | '));
+  // Ten days from the update can cover two Sunday-weeks or three, once the school's
+  // day is a Sunday. The rows are those weeks, newest first, and none start earlier.
+  const expectedWeeks = await page.evaluate(({ since, to }) => {
+    const R = window.SGResearch;
+    const label = day => 'Week of ' + new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(day + 'T00:00:00Z'));
+    const out = [];
+    for (let w = R.weekOf(since, 'sun'); w <= to; w = R.shift(w, 7)) out.push(label(w));
+    return out.reverse();
+  }, { since: factsSince, to: k.range.to });
+  assert.deepEqual(weeks, expectedWeeks);
   // The update day is not in the period: nothing of it.
   s.mode.edit = null;
   await page.goto(site.origin + '/#/overview');
@@ -949,6 +965,14 @@ test('the keyboard reads the heatmap cell by cell and a column chart column by c
     const { page } = s;
     await page.goto(site.origin + '/?demo#/overview');
     await waitForView(page, 'overview');
+    // The first layout schedules a chart redraw 120ms later, and that redraw hides
+    // the tooltip. A fast run can arrow into a cell before that timer fires.
+    await page.waitForFunction(() => {
+      const width = document.getElementById('dash').clientWidth;
+      const now = performance.now();
+      if (window.__dashWidth !== width) { window.__dashWidth = width; window.__dashSince = now; return false; }
+      return now - window.__dashSince > 180;
+    });
     const start = page.locator('#when-card .hm-cell[tabindex="0"]');
     assert.equal(await start.count(), 1, 'one tab stop in the grid');
     await start.focus();
@@ -1303,13 +1327,21 @@ test('the Games tab: a card per game, a game\'s page, and the game picker', asyn
   // rows count each child once), never more than played the game.
   const who = Object.fromEntries(call.json.firstWin.map(f => [f.id, f.students]));
   const levels = k.levels.filter(l => l.slug === 'bubble-bop').sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
-  assert.ok(levels.length >= 2 && levels.every(l => who[l.id] != null));
+  assert.ok(levels.length >= 2);
+  // A level only guests reached has no first-win row. The funnel then counts tries and
+  // leaves the student column blank, instead of mixing the two.
+  const byStudents = levels.every(l => who[l.id] != null);
   await page.click('#funnel-card .table-toggle');
   const funnel = await page.locator('#funnel-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [tr.children[0].textContent, tr.children[1].textContent]));
-  assert.deepEqual(funnel, levels.map(l => [I.levelLabel(l.id, 'en'), who[l.id].toLocaleString('en-US')]));
-  const players = k.games.find(g => g.slug === 'bubble-bop').students;
-  assert.ok(levels.every(l => who[l.id] <= players), 'a level never has more children than the game');
-  assert.match(await page.locator('#funnel-card .card-sub').textContent(), /Students who played each level/);
+  if (byStudents) {
+    assert.deepEqual(funnel, levels.map(l => [I.levelLabel(l.id, 'en'), who[l.id].toLocaleString('en-US')]));
+    const players = k.games.find(g => g.slug === 'bubble-bop').students;
+    assert.ok(levels.every(l => who[l.id] <= players), 'a level never has more children than the game');
+    assert.match(await page.locator('#funnel-card .card-sub').textContent(), /Students who played each level/);
+  } else {
+    assert.deepEqual(funnel, levels.map(l => [I.levelLabel(l.id, 'en'), '—']));
+    assert.match(await page.locator('#funnel-card .card-sub').textContent(), /Tries of each level/);
+  }
   // Only the measures this game reports are offered.
   const NAMES = { accuracy: 'Accuracy', reaction: 'Reaction time', winRate: 'Won (of finished)', score: 'Average score', timeToWin: 'Time to win' };
   const reported = R.measuresOf(R.pick(R.statRows(call.json.stats), 'attempt')).filter(m => NAMES[m]).map(m => NAMES[m]);
@@ -1319,6 +1351,19 @@ test('the Games tab: a card per game, a game\'s page, and the game picker', asyn
   await waitForView(page, 'game');
   assert.equal(new URL(page.url()).hash, '#/game/road-hopper');
   assert.equal(await page.locator('#game-h').textContent(), nameOf('en')('road-hopper'));
+  // The pinned sample has a student count for every Bubble Bop level, including the party.
+  await page.goto(site.origin + '/?demo#/game/bubble-bop');
+  await waitForView(page, 'game');
+  const demoK = demoFile('kpis-30-all.json');
+  const demoWho = Object.fromEntries(demoFile('game-bubble-bop.json').firstWin.map(f => [f.id, f.students]));
+  const demoLevels = demoK.levels.filter(l => l.slug === 'bubble-bop').sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
+  assert.ok(demoLevels.length >= 2 && demoLevels.every(l => demoWho[l.id] != null));
+  await page.click('#funnel-card .table-toggle');
+  const demoFunnel = await page.locator('#funnel-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [tr.children[0].textContent, tr.children[1].textContent]));
+  assert.deepEqual(demoFunnel, demoLevels.map(l => [I.levelLabel(l.id, 'en'), demoWho[l.id].toLocaleString('en-US')]));
+  const demoPlayers = demoK.games.find(g => g.slug === 'bubble-bop').students;
+  assert.ok(demoLevels.every(l => demoWho[l.id] <= demoPlayers), 'a level never has more children than the game');
+  assert.match(await page.locator('#funnel-card .card-sub').textContent(), /Students who played each level/);
   await s.check();
 });
 
@@ -1360,7 +1405,7 @@ test('the Learning tab: one game or every measured game, and the paired same-chi
   await s.check();
 });
 
-test('tries to a first win include the winning try; the hardest levels start with one nobody has won, never an endless mode', async t => {
+test('tries to a first win include the winning try; the hardest level is the most tries, never an endless mode', async t => {
   const s = await open(t);
   const { page } = s;
   await page.goto(site.origin + '/?demo#/game/dino-3d');
@@ -1375,12 +1420,20 @@ test('tries to a first win include the winning try; the hardest levels start wit
   await page.selectOption('#gamePick', 'dino-3d');
   await page.waitForFunction(() => document.querySelectorAll('#learning-growth .card').length === 1 && !document.getElementById('dash').classList.contains('is-loading'));
   assert.match(await page.locator('#learning-hardest .section-intro').textContent(), /tries to a first win/i);
-  const never = demoFile('game-dino-3d.json').firstWin.filter(f => f.median == null);
-  assert.deepEqual(never.map(f => f.id), ['L8'], 'the sample has a level nobody has won');
+  const firstWin = demoFile('game-dino-3d.json').firstWin;
+  const never = firstWin.filter(f => f.median == null);
+  assert.deepEqual(never.map(f => f.id), [], 'this sample\'s Dino levels have all been won');
+  // The same order the learning tab uses: most tries, then the slower quarter, then the id.
+  const ranked = firstWin.slice().sort((a, b) => (b.median == null) - (a.median == null) ||
+    (a.median == null ? ((b.students ? b.never / b.students : 0) - (a.students ? a.never / a.students : 0)) || (b.never - a.never) : 0) ||
+    (b.median || 0) - (a.median || 0) || (b.p75 || 0) - (a.p75 || 0) ||
+    String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
+  const top = ranked[0];
+  assert.equal(top.median, Math.max(...firstWin.map(f => f.median)));
   await page.click('#hardest-card .table-toggle');
   const rows = await page.locator('#hardest-card .table-host tbody tr').evaluateAll(trs => trs.map(tr => [...tr.children].map(c => c.textContent)));
-  assert.deepEqual(rows[0].slice(1, 4), ['level 8', '1', '—'], 'never won: first, with no median');
-  assert.equal(rows.length, demoFile('game-dino-3d.json').firstWin.length, 'every level of the game');
+  assert.deepEqual(rows[0].slice(1, 4), [I.levelLabel(top.id, 'en'), I.int(top.students), I.short(top.median)], 'the level with the most tries is listed first');
+  assert.equal(rows.length, firstWin.length, 'every level of the game');
   // An endless mode is never won by design: it is no hard level.
   await page.selectOption('#gamePick', 'rail-rush');
   await page.waitForFunction(() => /Rail/.test(document.getElementById('learning-growth').textContent) && !document.getElementById('dash').classList.contains('is-loading'));

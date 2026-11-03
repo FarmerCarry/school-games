@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
+import { clickControl } from '../ui-input.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -173,12 +174,20 @@ test('Rail Rush shows the change-lane hint only when the first train blocks the 
 
 test('Rail Rush keeps the coins and best score of a run left through the pause menu', async t => {
   const page = await railRush(t);
-  const run = await page.evaluate(() => { __game.restart(); __game.god = true; __game.sim(25); return { coins: __game.state.coins, score: __game.state.score }; });
-  assert.ok(run.coins > 0 && run.score > 0, `the run earned something (${JSON.stringify(run)})`);
-  await page.evaluate(() => { document.getElementById('pauseBtn').click(); rr.step(1); document.getElementById('restartBtn').click(); rr.step(1); });
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:rail-rush:save')));
-  assert.equal(saved.coins, run.coins, 'the coins of the abandoned run are banked');
-  assert.ok(saved.best >= run.score, 'its score counts towards the best');
+  // Pause in the same turn as the snapshot. A live frame between the two
+  // would collect more coins, and the banked total would no longer match.
+  const done = await page.evaluate(() => {
+    __game.restart(); __game.god = true; __game.sim(25);
+    const run = { coins: __game.state.coins, score: __game.state.score };
+    document.getElementById('pauseBtn').click();
+    rr.step(1);
+    document.getElementById('restartBtn').click();
+    rr.step(1);
+    return { run, saved: JSON.parse(localStorage.getItem('sg:rail-rush:save')) };
+  });
+  assert.ok(done.run.coins > 0 && done.run.score > 0, `the run earned something (${JSON.stringify(done.run)})`);
+  assert.equal(done.saved.coins, done.run.coins, 'the coins of the abandoned run are banked');
+  assert.ok(done.saved.best >= done.run.score, 'its score counts towards the best');
 });
 
 test('Rail Rush buys one power-up level for a double-click on its upgrade button', async t => {
@@ -192,9 +201,29 @@ test('Rail Rush buys one power-up level for a double-click on its upgrade button
   const level = () => page.evaluate(() => ({ coins: __game.save.coins, magnet: __game.save.up.magnet,
     saved: JSON.parse(localStorage.getItem('sg:rail-rush:save')).up.magnet }));
   const before = await level();
+  const upgrade = '#shopBody [data-act="up"][data-id="magnet"]';
+  const readyUpgrade = async () => {
+    const button = page.locator(upgrade);
+    await button.waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(await button.isEnabled(), true, 'the magnet upgrade must be enabled');
+    // The shop panel scales in for 0.35s. A click sampled during that move misses the button.
+    await page.evaluate(() => {
+      for (const node of [document.getElementById('shopPanel'), document.querySelector('#shopBody [data-act="up"][data-id="magnet"]')]) {
+        if (!node) continue;
+        for (const animation of node.getAnimations({ subtree: true })) {
+          if (animation.effect.getComputedTiming().endTime !== Infinity) animation.finish();
+        }
+      }
+    });
+  };
   const press = async (double) => {
-    const box = await page.locator('#shopBody [data-act="up"][data-id="magnet"]').boundingBox();
-    await page.mouse[double ? 'dblclick' : 'click'](box.x + box.width / 2, box.y + box.height / 2);
+    await readyUpgrade();
+    if (double) {
+      const box = await page.locator(upgrade).boundingBox();
+      await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+    } else {
+      await clickControl(page, upgrade);
+    }
     await page.evaluate(() => rr.step(1));
   };
   await press(true);
