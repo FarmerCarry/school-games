@@ -65,12 +65,47 @@ js/profiles.js           SGProfiles — picture profiles without names, age band
 js/telemetry.js          SGTelemetry — the ONLY network sender: batches to the ingest URL
 js/stats.js              SGStats    — local play statistics v1 (unchanged format)
 js/site.js               portal shell, iframe host, routes, classroom tools
+js/offline.js            offline status and updates of the fast build (sw.js from tools/build.mjs)
 server/                  ingest + query service (Node ≥ 22, zero dependencies)
 ```
 
 Games never touch storage outside `Kit.store`, never use the network, and talk to
 the portal only through `postMessage` via Kit. The portal owns profiles, XP,
 statistics and the network.
+
+### Offline cache and updates (fast build only)
+
+The generated `sw.js` keeps every file of one build in the cache
+`sg-v2-<scope>|<version>`, each body checked against its SHA-256 prefix (`FILES`).
+
+* **Installs resume.** A failed or cut-off install keeps the verified files it saved
+  under the new version's name. The next attempt (the next page of the site, the
+  `online` event, the hourly check of an open tab, Retry while no complete version is
+  active, or a newer version copying its unchanged files) hashes them again and
+  downloads only the rest, so a 5 MB update on a slow school line is not restarted from zero. The
+  worker activates only when every file is in its cache, and only the active worker of
+  a version reads that cache, so a partial copy is never reported ready or served.
+  An empty cache `…|<version>|partial` marks a copy as partial until its install is
+  complete (never one shared with a surviving active worker of that version). Each
+  install first copies what it can from the caches on the PC, then deletes the marked
+  copies of other versions, so a PC whose installs keep failing (a filter blocking one
+  game page) holds the active version and one partial copy at most, not one more per
+  publish. Activation deletes the scope's other caches, partial ones included.
+* **Open tabs adopt a newer build by themselves.** When a newer complete version
+  controls an open portal, `js/offline.js` reloads that tab only while `SGUpdateSafe()`
+  holds (no game frame or play route, no classroom timer or its hand-over) and
+  `SGUpdateQuiet()` (js/site.js) reports the home screen with the "who's playing?"
+  strip in its list, no player chosen, and at least 75 s without a key press, click,
+  wheel, pointer move or engaged play; the 20-minute idle hand-over is not use. With a
+  player chosen it waits for the hand-over (the button, or the idle one after 20
+  minutes), since a reload ends that child's telemetry session and starts another; each
+  automatic reload still ends one guest session with `u` and starts another. It looks when the page
+  becomes visible, when the screen changes and on a timer, verifies the version again
+  right before reloading, and tries once per version and tab (sessionStorage
+  `sg:site:adopted`, and in memory for a sessionStorage that cannot be written), so a
+  mismatched build cannot loop. The «حدّث الصفحة الآن» button shows whenever
+  `SGUpdateSafe()` holds. A tab left open calls `registration.update()` when it becomes
+  visible, at most once an hour, and on every `online` event.
 
 ### Byte policy
 
@@ -266,9 +301,10 @@ Every sound is a one-shot under 1.5 s. Juice never loops and has no music API.
 * **Idle hand-over** (`js/site.js`): a tab left open would give the next class the last
   child's profile. After **20 minutes** with no key press, click or wheel on the portal and
   no `sg:stats` with engaged time (`e > 0`) from the open game, the player becomes a guest;
-  an open game goes back to home, where the "who's playing?" strip has focus. A classroom
-  timer that is still running is kept; the hand-over overlay of one that ran out is
-  cleared. The check runs on the classroom timer's 1-second tick, also when no timer is set.
+  an open game goes back to home, where the "who's playing?" strip has focus. A new
+  player half made (or the remove step) left on the strip goes back to its list then,
+  for a guest too. A classroom timer that is still running is kept; the hand-over
+  overlay of one that ran out is cleared. The check runs on the classroom timer's 1-second tick, also when no timer is set.
 * Storage `sg:site:profiles`, the first 12 profiles:
   `{ v: 1, seq, list: [{ k: 'p1', a: animal, c: colour, b: band, xp, lv, d0: day created,
   dl: last day played, g: { <slug>: visits } }] }` (days are local day numbers).
@@ -376,7 +412,7 @@ hook they do nothing while the sink is inert. A teacher's "same child as on anot
 on the teacher page (`js/teacher.js`, `docs/PLAY_STATS.md` section 3) writes `k[key]`, the
 same code in `g[key]` (given, not made here) and the older code in `l[key]`, unless that
 older code was itself given; the sink sends that `cd` at the profile's next session start
-and deletes `l[key]` once a batch holding it is answered with a 2xx. A removed profile
+and deletes `l[key]` once a batch holding it is delivered (the server's 204). A removed profile
 whose code was given sends no `pr`: the child plays on with it on the other PC. The check
 character the teacher page shows (Luhn mod 16) is never sent.
 
@@ -384,17 +420,54 @@ character the teacher page shows (Luhn mod 16) is never sent.
 first waiting event (or as often as the server's last `X-Batch-Every` asked, 20 to 600 s),
 and when the page is hidden, always by `fetch` without credentials
 (`credentials: 'omit'`: no cookie ever goes, so never by `sendBeacon`), with `keepalive`
-while the keepalive bodies in flight fit in 60 KB (the rest wait in the queue). Unsent
-batches are kept as `{ t, w0, e }` in `localStorage` `sg:site:tm:q3:<hash of the ingest
-URL>`, so another copy of the site on the same origin with another URL never sends them (at
-most 128 KB, at most 7 days old, oldest dropped first). Entries of wire version 2 that an
-older build queued in `sg:site:tm:q:<hash>` move into it and are still sent, unchanged; this
-build never writes that key, because a pre-v3 tab still open on the PC rewrites it with v2
-entries only. Stopping statistics or turning sharing off drops every `sg:site:tm:` queue. Failures back off 20 → 40 → 80 → 160 → 300 s. A 2xx drops the
-batch; a 4xx other than 429 drops it as malformed; 429, 5xx and network errors retry.
-Teacher "clear" removes the `sg:site:tm:` queues too (not the sharing note
-`sg:site:tm:on`, and not `sg:site:rid`). All storage calls are wrapped; no `console`; never
-`clear()`.
+while the keepalive bodies in flight fit in 60 KB (the rest wait in the queue). Every
+batch is kept as `{ t, w0, e }` in `localStorage` `sg:site:tm:q4:<hash of the ingest
+URL>` until the server's own answer delivers it, so another copy of the site on the same
+origin with another URL never sends them (at most 128 KB, a few hours of a busy PC's play,
+and at most 7 days old, oldest dropped first): a hidden or unloading page hands what waits
+to `fetch` but keeps it, and never hands a batch over again while its request is in
+flight; a page that goes before the answer leaves the batch to the next page, which sends
+it again (the server de-duplicates v2 batch ids and writes v3 batches idempotently; the
+repeat only shows that session in the dashboard's live panel for up to 5 minutes and
+marks an already rolled day for a re-roll), and marks it `h: 1` (handed over as the page
+went). Every request, its answer's body included, has a minute (20 s in the teacher's
+test); without an answer by then it is aborted and counts as a network failure. Entries
+that older builds queued move into it on a portal page and are still sent, unchanged: wire version 2 from
+`sg:site:tm:q:<hash>`, and the first v3 build's from `sg:site:tm:q3:<hash>` (a hidden page
+of that build removed every batch it handed over at once). This build never writes either
+key, because a tab of those builds still open on the PC rewrites or empties it. Stopping
+statistics or turning sharing off drops every `sg:site:tm:` queue. Failures back off
+20 → 40 → 80 → 160 → 300 s. Only the server's 204 delivers a batch and only its JSON
+error (`{ "error": … }`) to a 4xx other than 429 drops it as malformed; anything else
+(429, 5xx, a school filter's or captive portal's own page, even a 200 or a 403, no answer)
+keeps it and retries. A clear (`statsmeta.clearedAt`) dated after the PC's clock is dated
+back, once and in storage, to the page's start or the oldest waiting batch, whichever is
+older, so it never drops play recorded since. Teacher "clear" removes the `sg:site:tm:`
+queues too (not the notes `sg:site:tm:on` and `sg:site:tm:dx`, and not `sg:site:rid`). All
+storage calls are wrapped; no `console`; never `clear()`.
+
+**Delivery status for the teacher:** the sink keeps `sg:site:tm:dx` (the address; the last
+delivery; the first failure since, and the latest failure's kind: `network`, `offline`
+(no answer while `navigator.onLine` is false), `server` or `refused`; the last time play
+that no closing page handed over was dropped for room or age). `teacher.html` loads
+the same `js/telemetry.js` in check mode (`<meta name="sg-telemetry" content="check">`):
+no session, no event, no listener, and no write until the test (apart from dating back a
+clear ahead of the clock, as the portal does); older builds' keys it counts but only
+reads, so a tab of such a build still open sends them itself, and its test sends only
+this build's queue;
+`SGTelemetry.status()` feeds the page's
+delivery box (green only with a delivery, no failure since and nothing waiting unsent
+for more than 15 minutes since it), and `SGTelemetry.check(cb)` (its «اختبر الاتصال
+الآن» button) asks the server's `GET /v1/health`, then sends the waiting batches, to the
+address the portal noted (the build gives the teacher page none; it is read again at
+each call, so a portal opened after the teacher page counts). Health alone ends a
+failure only when the test tried no batch and nothing waits, older builds' batches
+included, and the test says so when health answers but the batches get none. A batch the
+server refuses keeps the refusal in the record and the result, also beside a delivered
+one or before a failure of another kind. A PC with no connection at all asks nothing:
+the test answers `offline` at once and notes nothing.
+So the network carve-out stays exactly one file, inlined in the fast build into both
+pages; `tools/check-all.mjs` checks the teacher page's exact copy like the portal's.
 
 ## Ingest server (server/)
 
@@ -665,9 +738,16 @@ The server:
   needs quoting, and pages follow a key (400 sessions, or 2,500 lines, joined into one string by SQL) so each row is
   read once. The dashboard adds the headers and zips the files.
 * **The owner's actions**: forgetting a student deletes the facts and per-student rows
-  of the student's codes (the school-wide counts keep them until a recount); a link
-  makes an older code count as a newer one, history included, one hop deep; a recount
-  marks every rolled day for a diff re-roll by the cron.
+  of the student's codes (the school-wide counts keep them until a recount) and keeps the
+  codes with the time of the forget for 8 days (the setting `forgotten`, which the cron
+  then removes), in which ingest drops their batches from sessions that started before it
+  and every mark that names one of them from a session that started by the forget or
+  before that code played again (a PC sends a batch again until it sees the answer: a closing page's last
+  batch goes again from the next page). An older code that a PC tells as `cd` after the
+  8 days is linked again: the link names only the code, none of its play, and forgetting
+  again removes it with the student it is linked to. A link makes an older code count as
+  a newer one, history included, one hop deep; a recount marks every rolled day for a
+  diff re-roll by the cron.
 * **The simulated school** (`server/simulate.mjs`): 600 children in 24 classes on 30 PCs
   in Asia/Riyadh, mostly wire v3 with some v2, sending at the sink's real cadence; with
   `--db` it writes weeks of history and rolls them up with the real `rollupStep`. The

@@ -362,11 +362,13 @@ test('every invocation stays inside D1\'s free limits: the upgrade alone (503), 
   assert.equal((await rows(old, 'agg_days')).length, 1, 'the frozen totals stay');
   // The worst first batch of an instance: a late session (a rolled day) from a PC that
   // reports the zone first, its student with a removed profile and an older code, over 200
-  // events of every kind.
+  // events of every kind. The removed profile's code was forgotten, then played again before
+  // this session: the batch checks the codes it names (store.mjs MARKS_FORGOTTEN).
   await old.DB.batch([old.DB.prepare("UPDATE settings SET value = '2026-10-18' WHERE key = 'facts_since'"),
     old.DB.prepare("UPDATE settings SET value = '2026-10-19' WHERE key = 'rolled_through'"),
     old.DB.prepare("INSERT INTO roll_days (day, dirty, rolled_s) VALUES ('2026-10-19', 0, 1)"),
-    old.DB.prepare("INSERT INTO st_students (u, label, first_s, last_s, band_first, band_last) VALUES ('77aa00bb11cc', '77AA', 1, 1, '', '')")]);
+    old.DB.prepare("INSERT INTO st_students (u, label, first_s, last_s, band_first, band_last) VALUES ('77aa00bb11cc', '77AA', 1, 1, '', '')"),
+    old.DB.prepare("INSERT INTO settings (key, value) VALUES ('forgotten', ?1)").bind(JSON.stringify({ '77aa00bb11cc': 0 }))]);
   const games = Array.from({ length: 38 }, (_, i) => 'game-' + i);
   const wide = envelope3('f0000000000a', [['ss', 0, 0, 30, 1, 5, 7, 1], ['pr', 0, '77aa00bb11cc'], ['cd', 0, '1b2c3d4e5f60'], ['ct', 1, 's', 20],
     ...games.flatMap((slug, i) => [['go', 2 + i, i + 1, slug, 'catalog', 1, 0], ['rs', 2 + i, i + 1, 1, slug, 'L1', 1, 0],
@@ -383,6 +385,8 @@ test('every invocation stays inside D1\'s free limits: the upgrade alone (503), 
   assert.ok(n <= 20, `the worst batch took ${n} statements`);
   assert.deepEqual((await rows(next, 'roll_days')).map(r => r.dirty), [2], 'it marked the late day, then the zone change rebuilt it');
   assert.equal((await rows(next, 'st_rounds')).length, 38);
+  assert.deepEqual([(await rows(next, 'st_students')).find(r => r.u === '77aa00bb11cc').removed_s > 0, (await rows(next, 'aliases')).map(r => r.u_old)],
+    [true, ['1b2c3d4e5f60']], 'the removal and the link are stored');
   // 200 events over 100 games and levels (v2): still one statement per table.
   const v2wide = envelope('f00000000009', [
     ...Array.from({ length: 100 }, (_, i) => ['go', i, 'game-' + i, 'catalog', 0]),

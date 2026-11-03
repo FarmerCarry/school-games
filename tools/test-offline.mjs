@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /*
- * Browser regression tests for build caching, offline loading, updates, scope isolation,
- * migration from shared legacy caches, and the emergency switch.
+ * Browser regression tests for build caching, offline loading, updates (resumed after a
+ * failed download, and adopted by an idle tab by itself in a persistent browser profile),
+ * scope isolation, migration from shared legacy caches, and the emergency switch.
  *
  *   node tools/test-offline.mjs
  *   node tools/test-offline.mjs --scopes-only  # focus on migration and isolation
@@ -16,7 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { launchChromium } from './browser.mjs';
+import { launchChromium, launchPersistentChromium } from './browser.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-offline-'));
@@ -103,19 +104,42 @@ async function update(page) {
   // Observe the worker's terminal install state instead of relying on a fixed delay.
   return page.evaluate(async () => {
     const registration = await navigator.serviceWorker.getRegistration();
-    let worker = registration.installing;
-    const found = () => { worker = registration.installing; };
-    registration.addEventListener('updatefound', found);
-    try { await registration.update(); worker ||= registration.installing; }
-    finally { registration.removeEventListener('updatefound', found); }
-    if (!worker) return registration.active?.state;
-    return new Promise(resolve => {
+    const settled = worker => new Promise(resolve => {
       const changed = () => {
         if (['activated', 'redundant'].includes(worker.state)) resolve(worker.state);
       };
       worker.addEventListener('statechange', changed);
       changed();
     });
+    // Reconnecting (js/offline.js) may be installing the version mounted before: let
+    // that attempt end, then ask for the version mounted now. An update() made while
+    // that job is still queued can be merged into it, so ask again before concluding
+    // that nothing newer is mounted.
+    if (registration.installing) await settled(registration.installing);
+    let worker = null;
+    const found = () => { worker = registration.installing; };
+    registration.addEventListener('updatefound', found);
+    try {
+      for (let i = 0; i < 4 && !worker; i++) {
+        if (i) await new Promise(resolve => setTimeout(resolve, 250));
+        await registration.update();
+        worker = registration.installing || worker;
+      }
+    } finally { registration.removeEventListener('updatefound', found); }
+    if (!worker) return registration.active?.state;
+    return settled(worker);
+  });
+}
+// Reconnecting asks for a newer worker by itself (js/offline.js): wait for that request
+// and for any install it started to end, so it cannot be taken for a later publish.
+async function reconnected(page, base, from) {
+  await waitFor(async () => hits.slice(from).some(url => url.startsWith(base + 'sw.js')), 'the reconnected portal asks for ' + base + 'sw.js');
+  await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    for (let quiet = 0; quiet < 10;) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      quiet = registration.installing ? 0 : quiet + 1;
+    }
   });
 }
 async function offlineReload(context, pages) {
@@ -169,6 +193,93 @@ async function kill(inspector, page, scope, killBuild) {
   }, 'kill switch ' + scope);
   await navigated;
   await page.waitForLoadState('load');
+}
+// A school PC keeps one browser profile and often leaves the portal open all day. A newer
+// verified build must replace an idle home-screen tab by itself, with no click, and never
+// a tab with a game open: that one waits until the game is closed, the classroom timer is
+// off and its home screen has been quiet again (js/offline.js QUIET, 75 s). The pages'
+// clocks are fast-forwarded instead of waiting; the service worker keeps real time.
+async function automaticAdoption(origin, v1, v2, v3) {
+  const base = '/adopt/', scope = origin + base, profile = path.join(WORK, 'profile');
+  const options = { viewport: { width: 1280, height: 720 } }, errors = [];
+  const watch = page => { page.on('pageerror', error => errors.push(error.message)); return page; };
+  const version = page => page.evaluate(() => window.SG_OFFLINE_VERSION);
+  const sentinel = page => page.evaluate(() => window.adoptSentinel || null);
+  // No readiness check in flight, so a jump in time cannot time it out.
+  const settled = page => page.waitForFunction(() => document.getElementById('offlineStatus')?.dataset.state === 'ready' &&
+    !document.getElementById('offlineRefresh').disabled);
+  mounts.set(base, v1.dir);
+  let pc = await launchPersistentChromium(profile, options);
+  try {
+    const first = watch(pc.pages()[0] || await pc.newPage());
+    await first.goto(scope);
+    await settled(first);
+  } finally { await pc.close(); }
+  check(true, 'a PC saves the build in its browser profile and is switched off');
+
+  pc = await launchPersistentChromium(profile, options);
+  try {
+    await pc.clock.install();
+    const inspector = await pc.newPage();
+    await inspector.goto(origin + '/inspect/');
+    const idle = watch(pc.pages()[0]), playing = watch(await pc.newPage());
+    const response = await idle.goto(scope, { waitUntil: 'load' });
+    await playing.goto(scope, { waitUntil: 'load' });
+    await settled(idle); await settled(playing);
+    check(response.fromServiceWorker() && await version(idle) === v1.version, 'after a restart the PC opens its saved build');
+    await openOfflineGame(playing, 'merge-2048');
+    const game = playing.frames().find(frame => frame.url().includes('/games/merge-2048/'));
+    await game.evaluate(() => { window.adoptGame = 'same game'; });
+    for (const page of [idle, playing]) await page.evaluate(() => { window.adoptSentinel = 'old document'; });
+
+    mounts.set(base, v2.dir); // published while the portal stays open
+    check(await update(idle) === 'activated', 'a newer build installs while both tabs stay open');
+    await installed(inspector, scope, v2);
+    await idle.locator('#offlineUpdate').waitFor({ state: 'visible' });
+    await settled(idle);
+    check(await sentinel(idle) === 'old document' && await playing.locator('#offlineUpdate').isHidden(),
+      'the verified update waits for a quiet home screen and is not offered over a game');
+    await Promise.all([idle.waitForEvent('load'), pc.clock.fastForward(80000)]);
+    await settled(idle);
+    check(await version(idle) === v2.version && !(await sentinel(idle)) && await idle.locator('#offlineUpdate').isHidden(),
+      'after 80 s without input an idle home-screen tab adopts the new build by itself, without a click');
+    check(await version(playing) === v1.version && await sentinel(playing) === 'old document' &&
+      await game.evaluate(() => window.adoptGame) === 'same game', 'the tab with a game open is not reloaded');
+
+    await playing.locator('#backGames').click();
+    await playing.locator('#offlineUpdate').waitFor({ state: 'visible' });
+    await settled(playing);
+    await pc.clock.fastForward(30000);
+    check(await sentinel(playing) === 'old document', 'closing the game is use: 30 s later the tab has not reloaded');
+    await playing.locator('#classroom summary').click();
+    await playing.locator('#sessionStart').click();
+    await settled(playing);
+    await pc.clock.fastForward(80000);
+    check(await sentinel(playing) === 'old document', 'a running classroom timer keeps the document, however quiet');
+    await playing.locator('#sessionStop').click();
+    await settled(playing);
+    await Promise.all([playing.waitForEvent('load'), pc.clock.fastForward(80000)]);
+    await settled(playing);
+    check(await version(playing) === v2.version && !(await sentinel(playing)),
+      'with the game closed, the timer off and 80 s without input, that tab adopts the new build by itself too');
+    await offlineReload(pc, [idle, playing]);
+    check(await version(idle) === v2.version && await version(playing) === v2.version, 'both tabs work offline on the adopted build');
+  } finally { await pc.close(); }
+
+  mounts.set(base, v3.dir); // another evening publish while the PC is off
+  pc = await launchPersistentChromium(profile, options);
+  try {
+    await pc.clock.install();
+    const morning = watch(pc.pages()[0]);
+    const response = await morning.goto(scope, { waitUntil: 'load' });
+    check(response.fromServiceWorker() && await version(morning) === v2.version, 'the next morning the portal first opens the saved build');
+    await morning.locator('#offlineUpdate').waitFor({ state: 'visible', timeout: 60000 });
+    await settled(morning);
+    await Promise.all([morning.waitForEvent('load'), pc.clock.fastForward(80000)]);
+    await settled(morning);
+    check(await version(morning) === v3.version, 'the first session after an evening publish adopts it by itself once the home screen is quiet');
+  } finally { await pc.close(); }
+  check(errors.length === 0, 'automatic adoption has no page errors: ' + errors.join(' | '));
 }
 
 try {
@@ -307,8 +418,9 @@ try {
     check(await page.evaluate(async url => (await fetch(url)).ok, missingGame), 'a failed cache repair can retry with verified server bytes');
     await installed(inspector, origin + BASE, v1);
 
+    // Off the home screen, so this tab never reloads into the update by itself either.
     const otherTab = await context.newPage();
-    await otherTab.goto(origin + BASE);
+    await otherTab.goto(origin + BASE + '#/favorites');
     await otherTab.evaluate(() => { window.updateTabSentinel = 'unconsenting-tab'; });
     await openOfflineGame(page, 'connect-four');
     const liveGame = page.frames().find(frame => frame.url().includes('/games/connect-four/'));
@@ -360,14 +472,39 @@ try {
 
     mounts.set(BASE, v3.dir);
     stalePath = BASE + 'games/merge-2048/index.html';
+    hits.length = 0;
     check(await update(page) === 'redundant', 'stale server bytes cause the new worker to fail installation');
-    const afterStale = await state(inspector, origin + BASE, [cacheName(origin + BASE, v2)]);
-    check(!afterStale.caches.includes(cacheName(origin + BASE, v3)) && afterStale.counts[cacheName(origin + BASE, v2)] === v2.count, 'failed update removes its partial cache and retains the previous complete version');
+    const afterStale = await state(inspector, origin + BASE, [cacheName(origin + BASE, v2), cacheName(origin + BASE, v3)]);
+    check(afterStale.counts[cacheName(origin + BASE, v3)] === v3.count - 1 && afterStale.counts[cacheName(origin + BASE, v2)] === v2.count,
+      `failed update keeps the ${v3.count - 1} files it verified and the previous complete version`);
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await page.waitForFunction(() => document.getElementById('offlineStatus').dataset.state === 'ready');
     check(await page.locator('#offlineUpdate').isHidden(), 'failed upgrade never offers the incomplete version as an update');
+    const offlineFrom = hits.length;
     await offlineReload(context, [page]);
+    check(await page.evaluate(version => window.SG_OFFLINE_VERSION === version, v2.version), 'the partial copy is never served: offline the PC keeps the complete version');
+    await reconnected(page, BASE, offlineFrom);
+    check(await page.evaluate(() => document.getElementById('offlineStatus').dataset.state === 'ready' && document.getElementById('offlineRetry').hidden),
+      'reconnecting asks for the cut-off update again by itself, with no Retry shown; it fails on the same blocked page');
+    // The filter still blocks that game page when a newer build is published.
+    mounts.set(BASE, v4.dir);
+    check(await update(page) === 'redundant', 'a newer publish fails on the same blocked page');
+    const piled = await state(inspector, origin + BASE, [cacheName(origin + BASE, v2), cacheName(origin + BASE, v4)]);
+    check(!piled.caches.includes(cacheName(origin + BASE, v3)) && piled.counts[cacheName(origin + BASE, v4)] === v4.count - 1 &&
+      piled.counts[cacheName(origin + BASE, v2)] === v2.count && piled.caches.filter(name => name.startsWith(cachePrefix(origin + BASE))).length === 3,
+      'it takes over the older partial copy and deletes it: the complete version and one marked partial copy, no pile-up');
+    // The filter is lifted (or a slow, flaky line comes back): the next attempt resumes
+    // instead of starting from zero.
     stalePath = null;
+    hits.length = 0;
+    check(await update(page) === 'activated', 'the next attempt completes the failed update');
+    const resumed = hits.filter(url => url.includes('?sg='));
+    check(resumed.length === 1 && resumed[0].startsWith(BASE + 'games/merge-2048/index.html?'), 'the next attempt downloads only the file still missing');
+    await installed(inspector, origin + BASE, v4);
+    const replaced = await state(inspector, origin + BASE);
+    check(replaced.caches.filter(name => name.startsWith(cachePrefix(origin + BASE))).length === 1, 'the completed version replaces the previous one and is no longer marked partial');
+    await offlineReload(context, [page]);
+    check(await page.evaluate(version => window.SG_OFFLINE_VERSION === version, v4.version), 'the resumed version works offline');
     await kill(inspector, page, origin + BASE, killBuild);
     check(true, 'kill switch unregisters its worker and removes its scoped cache');
     check(errors.length === 0, 'offline game initialization and updates have no page errors: ' + errors.join(' | '));
@@ -393,6 +530,8 @@ try {
     } finally { await context.setOffline(false); }
     check(true, 'the replacement version works offline after the old cache and server bytes are gone');
     await recoveryPage.close();
+
+    await automaticAdoption(origin, v1, v2, v3);
   }
 
   // Same-origin deployments must stay independent even when their build hashes match.

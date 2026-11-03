@@ -12,7 +12,12 @@
  *   - open JSON exports from other PCs to view them together (nothing saved);
  *   - show the codes this PC and its children have on the school's dashboard
  *     (sg:site:rid, kept by js/telemetry.js) and, on the teacher's request, give a
- *     child the code it has on another PC (docs/PLAY_STATS.md section 3).
+ *     child the code it has on another PC (docs/PLAY_STATS.md section 3);
+ *   - say whether this PC's play reaches the school's dashboard: the last delivery,
+ *     what waits (and since when unsent), when unsent play was last dropped, the latest
+ *     problem in plain words, and a button that tests the connection now.
+ *     js/telemetry.js, loaded before this file in check mode, keeps that record
+ *     (sg:site:tm:dx) and runs the test; this file never uses the network.
  *
  * The pure parts hang off window.SGTeacher so tools/tests can run them in Node.
  * Only init() touches the DOM, and it runs only when there is a document.
@@ -24,7 +29,7 @@
   /* ------------------------------------------------------------- format */
   var FORMAT = 'sg-play-stats';
   var PREFIX = 'sg:site:stats:';            // every key "clear" may remove
-  var TM = 'sg:site:tm:';                   // the telemetry queue (js/telemetry.js): cleared too, not its sharing note
+  var TM = 'sg:site:tm:';                   // the telemetry queue (js/telemetry.js): cleared too, not its two notes (on, dx)
   var META_KEY = 'sg:site:statsmeta';       // id, label and stop setting: never cleared
   var RID = 'sg:site:rid';                  // dashboard codes (js/telemetry.js): never cleared
   var PROFILES = 'sg:site:profiles';        // the portal's players (js/profiles.js); ':more' holds 13 to 24
@@ -86,6 +91,28 @@
     'وقد لا يحفظ جهاز في مختبر حاسوب مزدحم إلا شهرين أو ثلاثة.';
   var OPEN_NOTE = 'مرة لعب ما زالت مفتوحة، وتظهر هنا بعد إغلاق اللعبة.';
   var FILES = ['ملف واحد', 'ملفين', 'ملفات', 'ملفًا'];
+  // Delivery to the school's dashboard. After «قبل» and «منذ» the nouns take these forms.
+  var AGO_M = ['دقيقة', 'دقيقتين', 'دقائق', 'دقيقة'];
+  var AGO_H = ['ساعة', 'ساعتين', 'ساعات', 'ساعة'];
+  var AGO_D = ['يوم', 'يومين', 'أيام', 'يومًا'];
+  var BATCHES = ['دفعة واحدة', 'دفعتان', 'دفعات', 'دفعة'];
+  // The website the PCs open to share: the address the build was given (SG_SITE_URL,
+  // tools/build.mjs); none in the source tree or a local build.
+  var SITE = window.SG_SITE && typeof window.SG_SITE.url === 'string' ? window.SG_SITE.url : '';
+  // js/telemetry.js keeps at most 128 KB (a few hours of a busy PC's play) and 7 days.
+  var KEEPS = 'ما لم يصل يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال، لكن مكانه محدود: بعد بضع ساعات من اللعب، أو بعد 7 أيام، يُحذف الأقدم أولًا.';
+  // A batch that no closing portal page sent (status().o) and waits longer than this is late.
+  var LATE_MS = 15 * 6e4;
+  var ADMIN = 'إذا استمر ذلك، أخبر من يدير خادم الإحصاءات.';
+  // Why this PC sends nothing (js/telemetry.js status().why, or this page's own settings).
+  var NOT_SENT = {
+    folder: 'هذه نسخة منزَّلة من الموقع (مجلد على هذا الجهاز)، ولا ترسل أبدًا شيئًا إلى لوحة المؤشرات في المدرسة.',
+    off: 'لا يُرسل هذا الجهاز شيئًا إلى لوحة المؤشرات ما دام جمع الإحصاءات متوقفًا.',
+    tm: 'المشاركة مع لوحة المؤشرات متوقفة في إعدادات هذا الجهاز، فلا يُرسل شيء.',
+    gpc: 'يطلب هذا المتصفح من المواقع ألّا تشارك بياناته (Global Privacy Control)، فلا يرسل هذا الجهاز شيئًا إلى لوحة المؤشرات.',
+    local: 'هذه النسخة تعمل من هذا الحاسوب نفسه، فلا ترسل شيئًا إلى لوحة المؤشرات.',
+    none: 'لم يرسل هذا الجهاز إحصاءات إلى لوحة المؤشرات حتى الآن.'
+  };
 
   // The read-me sheet explains every exported column. Shared columns are written
   // once here; a table can override a column whose meaning differs there.
@@ -381,16 +408,113 @@
 
   // Removes only keys that start with sg:site:stats: (never sg:site:statsmeta) and the
   // telemetry keys sg:site:tm:, so nothing recorded before the clear is sent later. The
-  // note sg:site:tm:on holds only the server's name and stays: this PC still shares. The
-  // dashboard codes (sg:site:rid) stay too: what was sent stays on the server.
+  // notes sg:site:tm:on (the server's name) and sg:site:tm:dx (when batches last arrived)
+  // hold no play and stay: this PC still shares. The dashboard codes (sg:site:rid) stay
+  // too: what was sent stays on the server.
   function clearStats(ls) {
     var keys = [];
     for (var i = 0; i < ls.length; i++) {
       var key = ls.key(i);
-      if (typeof key === 'string' && (key.indexOf(PREFIX) === 0 || (key.indexOf(TM) === 0 && key !== TM + 'on'))) keys.push(key);
+      if (typeof key === 'string' && (key.indexOf(PREFIX) === 0 || (key.indexOf(TM) === 0 && key !== TM + 'on' && key !== TM + 'dx'))) keys.push(key);
     }
     keys.forEach(function (key) { ls.removeItem(key); });
     return keys.length;
+  }
+
+  /* ------------------------------------------- delivery to the dashboard */
+  function ltr(s) { return '<bdi dir="ltr">' + esc(s) + '</bdi>'; }
+  // 29/10/2026 08:05 by the PC's clock.
+  function clock(ms) {
+    var d = new Date(ms);
+    return ltr(d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()));
+  }
+  // How long ago, for «قبل» and «منذ»: «دقيقتين», «3 ساعات», «يومين»; a time ahead of the
+  // PC's clock (set back since) reads «أقل من دقيقة».
+  function span(ms, now) {
+    var m = Math.floor((now - ms) / 6e4);
+    return m < 1 ? 'أقل من دقيقة' : m < 60 ? count(m, AGO_M) : m < 2880 ? count(Math.floor(m / 60), AGO_H) : count(Math.floor(m / 1440), AGO_D);
+  }
+  // What the delivery panel says. v: { copy, off, tm (sharing turned off), share (the host
+  // of sg:site:tm:on), st: js/telemetry.js status() or null }. { why, tone ('ok', 'bad',
+  // 'wait' or 'off'), state, facts: [[term, text]], problem, test: the button is offered }.
+  // Green needs a delivery and no failure since, and nothing that waits unsent for long: a
+  // network that holds requests without an answer is noted by the portal after a minute,
+  // but a batch only a closed portal page could have sent says nothing about the network.
+  function delivery(v, now) {
+    var st = v.st || null, why = v.copy === 'folder' ? 'folder' : v.off ? 'off' : v.tm ? 'tm' : st ? st.why || '' : 'none';
+    var out = { why: why, tone: 'off', state: '', facts: [], problem: '', test: false }, host, http;
+    if (why === 'none' && v.share) {
+      // Sharing, by the note of a build before this record: the portal writes it on its next load.
+      return { why: why, tone: 'wait', state: 'لا توجد بعد معلومات عن وصول إحصاءات هذا الجهاز.',
+        facts: [], problem: 'افتح صفحة الألعاب على هذا الجهاز مرة واحدة، ثم عد إلى هذه الصفحة.', test: false };
+    }
+    if (why) {
+      out.state = NOT_SENT[why] || NOT_SENT.none;
+      if (why === 'folder') out.problem = 'لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة ' +
+        (SITE ? 'الموقع على الإنترنت: ' + ltr(SITE) : 'موقع ألعاب المدرسة على الإنترنت بدلًا من هذا المجلد.');
+      if (why === 'none') {
+        out.tone = 'wait';
+        out.problem = 'يبدأ الإرسال عندما تُفتح صفحة الألعاب على هذا الجهاز، إذا كانت نسخة الموقع مربوطة بخادم للإحصاءات.';
+      }
+      return out;
+    }
+    host = ltr(st.host);
+    http = ltr('https://' + st.host);
+    out.test = true;
+    out.facts = [
+      ['آخر وصول إلى لوحة المؤشرات', st.ok ? 'قبل ' + span(st.ok, now) + ' (' + clock(st.ok) + ')' : 'لم يصل شيء من هذا الجهاز بعد'],
+      ['ينتظر الإرسال', st.n ? count(st.n, BATCHES) + '، أقدمها من قبل ' + span(st.t, now) +
+        (st.o ? '' : ' (أُرسل ما ينتظر عند إغلاق صفحة الألعاب، ويتأكد وصوله عند فتحها من جديد)') : 'لا شيء']
+    ];
+    if (st.x && now - st.x < 7 * 864e5) {
+      out.facts.push(['حُذف قبل أن يصل', 'لعب قبل ' + span(st.x, now) + ' (' + clock(st.x) + ')، لأن مكان الانتظار على هذا الجهاز امتلأ أو مضت عليه 7 أيام']);
+    }
+    if (st.f && st.k === 'refused') {
+      out.tone = 'bad';
+      out.state = '⚠ رفض خادم الإحصاءات بيانات من هذا الجهاز قبل ' + span(st.at, now) + '.';
+      out.problem = 'رفض الخادم ' + host + ' بيانات أُرسلت من هذا الجهاز في ' + clock(st.at) + '، فحُذفت. إذا تكرر ذلك، أخبر من يدير خادم الإحصاءات.';
+    } else if (st.f) {
+      out.tone = 'bad';
+      out.state = '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ ' + span(st.f, now) + '.';
+      out.problem = st.k === 'server' ? 'يردّ خادم الإحصاءات ' + host + ' بخطأ منذ ' + clock(st.f) + '. ' + KEEPS + ' ' + ADMIN
+        : st.k === 'offline' ? 'لم يكن هذا الجهاز متصلًا بالإنترنت منذ ' + clock(st.f) + '. ' + KEEPS
+        : 'تعذّر الوصول إلى خادم الإحصاءات منذ ' + clock(st.f) + '. السبب في الغالب أن مرشّح الإنترنت في المدرسة يحجب ' + host +
+          '. اطلب من مسؤول تقنية المعلومات في المدرسة السماح بالعنوان ' + http + '. ' + KEEPS;
+    } else if (st.ok && st.o && now - st.o > LATE_MS && st.ok < st.o) {
+      out.tone = 'wait';
+      out.state = 'لم يتأكد وصول إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ ' + span(st.o, now) + '.';
+      out.problem = 'ما ينتظر يُرسل عندما تكون صفحة الألعاب مفتوحة على هذا الجهاز. اضغط «اختبر الاتصال الآن» لترسله الآن، ولتعرف إن كان هذا الجهاز يصل إلى خادم الإحصاءات.';
+    } else if (st.ok) {
+      out.tone = 'ok';
+      out.state = '✓ تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات.';
+    } else {
+      out.tone = 'wait';
+      out.state = 'لم تصل إحصاءات من هذا الجهاز إلى لوحة المؤشرات بعد.';
+      out.problem = 'اضغط «اختبر الاتصال الآن» لتعرف إن كان هذا الجهاز يصل إلى خادم الإحصاءات.';
+    }
+    return out;
+  }
+  // What the test button reports (js/telemetry.js check()): { ok, text }. reached: the
+  // server answered health, so a failure after it is in sending the batches; 'offline':
+  // this PC has no connection at all, so nothing was asked; 'refused' with sent: the
+  // server refused some batches (they are gone) and took the others.
+  function checked(r) {
+    var host = ltr('https://' + (r.host || ''));
+    if (r.why || !r.k) return { ok: false, text: 'لا يرسل هذا الجهاز إلى لوحة المؤشرات الآن، فلا يوجد اتصال لاختباره.' };
+    if (r.k === 'ok') {
+      return { ok: true, text: '✓ يصل هذا الجهاز إلى خادم الإحصاءات ' + ltr(r.host) + '.' +
+        (r.sent ? ' أُرسل الآن ما كان ينتظر: ' + count(r.sent, BATCHES) + '.' : r.n ? '' : ' لم يكن شيء ينتظر الإرسال.') +
+        (r.n ? ' وما زال ينتظر: ' + count(r.n, BATCHES) + '، ويُرسل من صفحة الألعاب.' : '') };
+    }
+    return { ok: false, text: r.k === 'offline' ? '✗ هذا الجهاز غير متصل بالإنترنت الآن. ما ينتظر الإرسال يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال.'
+      : r.k === 'server' ? '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه ردّ بخطأ مؤقت. البيانات محفوظة على هذا الجهاز؛ جرّب مرة أخرى بعد قليل.'
+      : r.k === 'refused' ? '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه لا يقبل بيانات هذه النسخة من الموقع. أخبر من يدير خادم الإحصاءات.' +
+        (r.sent ? (r.n ? ' أُرسل الآن: ' : ' ووصل الآن ما لم يرفضه: ') + count(r.sent, BATCHES) + '.' : '') +
+        (r.n ? ' وما زال ينتظر: ' + count(r.n, BATCHES) + '، ويُرسل من صفحة الألعاب.' : '')
+      : (r.reached ? '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكن تعذّر إرسال البيانات إليه. قد يسمح مرشّح الإنترنت في المدرسة بفتح العنوان ويمنع إرسال البيانات إليه. ' +
+        'أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به كاملًا، مع إرسال البيانات: '
+        : '✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز. أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به في مرشّح الإنترنت: ') + host +
+        (r.sent ? ' (أُرسل قبل انقطاع الاتصال: ' + count(r.sent, BATCHES) + '.)' : '') };
   }
 
   /* ------------------------------------------------------------- tables */
@@ -901,6 +1025,7 @@
     tables: tables, exportJson: exportJson, readImport: readImport, combine: combine, periodRange: periodRange,
     summary: summary, markWinnable: markWinnable, stuck: stuck, levelResult: levelResult, verdict: verdict,
     hoursFromDays: hoursFromDays, hoursFromRows: hoursFromRows, oldestUnexported: oldestUnexported, reminder: reminder,
+    delivery: delivery, checked: checked,
     NO_FRAMES: NO_FRAMES, duration: duration, xlsx: xlsx, zip: zip, crc32: crc32, localIso: localIso, dateKey: dateKey, addDays: addDays, names: names
   };
   window.SGTeacher = api;
@@ -913,7 +1038,10 @@
     var COPY = location.protocol === 'file:' ? 'folder' : 'web';
     var XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     var state = { ok: false, days: [], meta: parseMeta(null), bytes: 0, share: '', rid: parseRid(null), players: [], files: [], ignored: [] };
-    var store = null, refresh = 0, pending = null, saving = false, again = '', linking = '';
+    var store = null, refresh = 0, pending = null, saving = false, again = '', linking = '', checking = false;
+    // The tone the box had when the last test result was shown ('': none shown, null: just
+    // shown): a result left from before the box changed would contradict it, so it goes.
+    var testedTone = '';
     var UNSAVED = 'تعذّر الحفظ في هذا المتصفح.';
 
     function load() {
@@ -981,6 +1109,7 @@
       var hours = v.combined ? hoursFromRows(v.tables.hours) : hoursFromDays(state.days, range.from, range.to);
       $('range').innerHTML = range.from ? 'من ' + showDate(range.from) + ' إلى ' + showDate(range.to) : 'كل الأيام المحفوظة';
       renderNotices(today, v.combined);
+      renderDelivery();
       renderSource();
       renderCards(s, hours, !!v.combined);
       renderGames(s);
@@ -1033,6 +1162,26 @@
       }
       box.innerHTML = html;
       box.hidden = !html;
+    }
+
+    // Whether this PC's play reaches the school's dashboard (js/telemetry.js status(), read
+    // again at each render, so after every write of the portal in another tab).
+    function renderDelivery() {
+      var st = null, t = window.SGTelemetry, d;
+      try { st = t && typeof t.status === 'function' ? t.status() || null : null; } catch (e) { st = null; }
+      d = delivery({ copy: COPY, off: state.meta.off, tm: state.meta.raw.tm === false, share: state.share, st: st }, Date.now());
+      $('delivery').hidden = !state.ok && COPY !== 'folder';
+      $('delivery').setAttribute('data-tone', d.tone);
+      $('delivery').setAttribute('data-why', d.why);
+      $('deliveryState').innerHTML = d.state;
+      $('deliveryFacts').innerHTML = d.facts.map(function (f) { return '<dt>' + f[0] + '</dt><dd>' + f[1] + '</dd>'; }).join('');
+      $('deliveryFacts').hidden = !d.facts.length;
+      $('deliveryProblem').innerHTML = d.problem;
+      $('deliveryProblem').hidden = !d.problem;
+      $('checkRow').hidden = !d.test;
+      $('checkBtn').disabled = checking;
+      if (testedTone === null) testedTone = d.tone;
+      else if (testedTone && !checking && (d.tone !== testedTone || !d.test)) { testedTone = ''; say('checkStatus', ''); }
     }
 
     function renderSource() {
@@ -1465,6 +1614,23 @@
       render();
     });
     $('linkForm').querySelector('[data-cancel]').addEventListener('click', function () { closeLink(); say('linkStatus', ''); });
+    // Test the connection now: js/telemetry.js asks the server's health, then sends what waits.
+    $('checkBtn').addEventListener('click', function () {
+      var t = window.SGTelemetry;
+      if (checking || !t || typeof t.check !== 'function') return;
+      checking = true;
+      $('checkBtn').disabled = true;
+      say('checkStatus', 'جارٍ اختبار الاتصال…');
+      t.check(function (r) {
+        var c = checked(r || {});
+        checking = false;
+        testedTone = null;
+        $('checkStatus').innerHTML = c.text;
+        $('checkStatus').classList.toggle('bad', !c.ok);
+        load();
+        render();
+      });
+    });
     document.addEventListener('click', function (e) {
       var link = e.target.closest ? e.target.closest('[data-open]') : null;
       if (link && $(link.getAttribute('data-open'))) $(link.getAttribute('data-open')).open = true;
@@ -1485,6 +1651,8 @@
 
     // A page restored from the back/forward cache missed storage events.
     window.addEventListener('pageshow', function (e) { if (e.persisted) { load(); render(); } });
+    // «قبل 5 دقائق» stays true on a page left open.
+    setInterval(function () { if (!document.hidden) renderDelivery(); }, 6e4);
 
     load();
     render();

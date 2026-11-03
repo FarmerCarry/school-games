@@ -201,20 +201,24 @@ test('late messages after Back are credited to the game that sent them, never to
   await page.evaluate(() => history.back());
   await playing(page, 'air-hockey');
   await leave(state);
-  // A tile click is a launch source for 1 s only (here its navigation was cancelled).
-  await page.evaluate(() => {
-    const tile = document.querySelector('.catalog-grid .tile[data-slug="tic-tac-toe"]');
-    tile.addEventListener('click', e => e.preventDefault(), { once: true });
-    tile.click();
-  });
-  await state.context.clock.runFor(1500);
-  await go(page, '#/play/tic-tac-toe');
-  await playing(page, 'tic-tac-toe');
-  await leave(state);
+  // A tile click is a launch source for 10 s: a slow PC that takes 1.5 s to open the game
+  // still counts the tile, a click 10.5 s before the game opens does not (here the
+  // click's own navigation is cancelled, so the open comes later).
+  for (const wait of [1500, 10500]) {
+    await page.evaluate(() => {
+      const tile = document.querySelector('.catalog-grid .tile[data-slug="tic-tac-toe"]');
+      tile.addEventListener('click', e => e.preventDefault(), { once: true });
+      tile.click();
+    });
+    await state.context.clock.runFor(wait);
+    await go(page, '#/play/tic-tac-toe');
+    await playing(page, 'tic-tac-toe');
+    await leave(state);
+  }
 
   const record = await read(page);
   checkRecord(record, DAY);
-  assert.deepEqual(record.g['tic-tac-toe'].src, { history: 1 }, 'a stale tile click is not used');
+  assert.deepEqual(record.g['tic-tac-toe'].src, { catalog: 1, history: 1 }, 'a slow open keeps its tile; a stale tile click is not used');
   const a = record.g['air-hockey'], b = record.g[related];
   assert.deepEqual([a.o, a.src, a.e, a.b, a.f], [2, { catalog: 1, history: 1 }, 45000, [2, 0, 0, 0], [0, 0, 0, 0]], 'nothing from the departed game reaches the next session');
   // Changed on purpose: a quit the portal makes used to file 0 ms, so a free-play or

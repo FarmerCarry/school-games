@@ -3,14 +3,15 @@
 // the inlined scripts), including unpacking the .xlsx byte by byte. Browser checks
 // use seeded day records and a fixed clock: numbers, periods, exports, combining
 // other PCs' files, clear, stop, blocked storage, the dashboard codes and "the same
-// child as on another PC", requests and console errors.
+// child as on another PC", the delivery panel and its connection test, requests and
+// console errors.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import zlib from 'node:zlib';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
 
@@ -39,13 +40,16 @@ const CONTRACT = {
 const TEXT = new Set(['pc', 'pc_label', 'copy', 'date', 'game', 'game_name', 'level', 'exported_at']);
 
 /* ------------------------------------------------- the page without a DOM */
-function loadPage() {
-  const sandbox = vm.createContext({ window: {}, TextEncoder });
+// site: the published address the build gives the page (SG_SITE_URL), or none.
+function loadPage(site) {
+  const sandbox = vm.createContext({ window: site ? { SG_SITE: { url: site } } : {}, TextEncoder });
   const scripts = process.env.SG_ROOT
     ? [...read(path.join(root, 'teacher.html')).matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1])
-    : ['js/catalog.js', 'js/teacher.js'].map(file => read(path.join(repo, file)));
-  assert.equal(scripts.length, 2, 'the teacher page runs the catalog and its own script');
-  for (const script of scripts) vm.runInContext(script, sandbox);
+    : ['js/catalog.js', 'js/telemetry.js', 'js/teacher.js'].map(file => read(path.join(repo, file)));
+  assert.equal(scripts.length, 3, 'the teacher page runs the catalog, the telemetry sink in check mode and its own script');
+  // The sink needs a page; the teacher page's pure functions do not. The address a build
+  // put before the page's script gives way to the one asked for here.
+  for (const script of [scripts[0], scripts[2].replace(/^window\.SG_SITE=\{url:"[^"]*"\};\n/, '')]) vm.runInContext(script, sandbox);
   assert.ok(sandbox.window.SGTeacher, 'pure functions load without a document');
   // Results come back as plain host values (the page's objects belong to the
   // sandbox realm, which strict deep equality would tell apart).
@@ -251,6 +255,137 @@ function checkWorkbook(bytes) {
 }
 
 /* ============================================================ node checks */
+test('the delivery panel says in plain words why this PC sends nothing, or how its batches arrive; the test button says what it found', () => {
+  const now = NOW.getTime(), H = 36e5, D = 864e5, host = 'ingest.test';
+  const text = html => html.replace(/<[^>]+>/g, '');
+  const ltr = html => [...html.matchAll(/<bdi dir="ltr">([^<]*)<\/bdi>/g)].map(match => match[1]);
+  // The PC's clock, D/M/YYYY HH:MM (the browser checks below pin the zone).
+  const two = n => String(n).padStart(2, '0');
+  const hm = ms => { const d = new Date(ms); return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`; };
+  const status = extra => ({ why: '', host, ok: 0, f: 0, k: '', at: 0, x: 0, n: 0, t: 0, o: 0, ...extra });
+  const raw = (v = {}, extra = {}) => api.delivery({ copy: 'web', off: false, tm: false, share: host, st: status(extra), ...v }, now);
+  const panel = (v, extra) => { const d = raw(v, extra); return { ...d, state: text(d.state), problem: text(d.problem), facts: d.facts.map(([a, b]) => [a, text(b)]) }; };
+  // Kept, but at most 128 KB and 7 days: the teacher must not think there is a week to ask IT.
+  const KEEPS = 'ما لم يصل يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال، لكن مكانه محدود: بعد بضع ساعات من اللعب، أو بعد 7 أيام، يُحذف الأقدم أولًا.';
+
+  // Nothing is sent, and why: no facts and no test button.
+  for (const [v, extra, why, state, problem = ''] of [
+    // A build without SG_SITE_URL (the source tree, a local build) knows no address.
+    [{ copy: 'folder' }, {}, 'folder', 'هذه نسخة منزَّلة من الموقع (مجلد على هذا الجهاز)، ولا ترسل أبدًا شيئًا إلى لوحة المؤشرات في المدرسة.',
+      'لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة موقع ألعاب المدرسة على الإنترنت بدلًا من هذا المجلد.'],
+    [{ off: true }, {}, 'off', 'لا يُرسل هذا الجهاز شيئًا إلى لوحة المؤشرات ما دام جمع الإحصاءات متوقفًا.'],
+    [{ tm: true }, {}, 'tm', 'المشاركة مع لوحة المؤشرات متوقفة في إعدادات هذا الجهاز، فلا يُرسل شيء.'],
+    [{}, { why: 'gpc' }, 'gpc', 'يطلب هذا المتصفح من المواقع ألّا تشارك بياناته (Global Privacy Control)، فلا يرسل هذا الجهاز شيئًا إلى لوحة المؤشرات.'],
+    [{}, { why: 'local' }, 'local', 'هذه النسخة تعمل من هذا الحاسوب نفسه، فلا ترسل شيئًا إلى لوحة المؤشرات.'],
+    [{ share: '' }, { why: 'none' }, 'none', 'لم يرسل هذا الجهاز إحصاءات إلى لوحة المؤشرات حتى الآن.',
+      'يبدأ الإرسال عندما تُفتح صفحة الألعاب على هذا الجهاز، إذا كانت نسخة الموقع مربوطة بخادم للإحصاءات.'],
+    [{ share: '', st: null }, {}, 'none', 'لم يرسل هذا الجهاز إحصاءات إلى لوحة المؤشرات حتى الآن.',
+      'يبدأ الإرسال عندما تُفتح صفحة الألعاب على هذا الجهاز، إذا كانت نسخة الموقع مربوطة بخادم للإحصاءات.'],
+    // The sharing note of a build before the delivery record: the portal's next load writes it.
+    [{}, { why: 'none' }, 'none', 'لا توجد بعد معلومات عن وصول إحصاءات هذا الجهاز.', 'افتح صفحة الألعاب على هذا الجهاز مرة واحدة، ثم عد إلى هذه الصفحة.']
+  ]) {
+    const d = panel(v, extra);
+    assert.deepEqual([d.why, d.state, d.problem, d.facts, d.test], [why, state, problem, [], false], why);
+  }
+  assert.deepEqual(ltr(raw({ copy: 'folder' }).problem), [], 'no address');
+  // The build of a published copy names where it is published, left to right.
+  const published = loadPage('https://name.github.io/school-games/').api.delivery({ copy: 'folder', off: false, tm: false, share: '', st: null }, now);
+  assert.equal(text(published.problem), 'لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة الموقع على الإنترنت: https://name.github.io/school-games/');
+  assert.deepEqual(ltr(published.problem), ['https://name.github.io/school-games/'], 'the address reads left to right');
+  assert.equal(raw({ off: true }, { ok: now, f: now, k: 'network' }).why, 'off', 'stopped wins over any record');
+
+  // Sharing, nothing delivered yet and nothing waiting.
+  assert.deepEqual(panel(), { why: '', tone: 'wait', state: 'لم تصل إحصاءات من هذا الجهاز إلى لوحة المؤشرات بعد.',
+    facts: [['آخر وصول إلى لوحة المؤشرات', 'لم يصل شيء من هذا الجهاز بعد'], ['ينتظر الإرسال', 'لا شيء']],
+    problem: 'اضغط «اختبر الاتصال الآن» لتعرف إن كان هذا الجهاز يصل إلى خادم الإحصاءات.', test: true });
+  // Delivered 5 minutes ago; one batch has waited for a minute.
+  assert.deepEqual(panel({}, { ok: now - 3e5, n: 1, t: now - 6e4, o: now - 6e4 }), { why: '', tone: 'ok', state: '✓ تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات.',
+    facts: [['آخر وصول إلى لوحة المؤشرات', 'قبل 5 دقائق (' + hm(now - 3e5) + ')'], ['ينتظر الإرسال', 'دفعة واحدة، أقدمها من قبل دقيقة']],
+    problem: '', test: true });
+  // A network that holds requests open never answers, so nothing may be noted yet: batches
+  // that no closing page sent, waiting longer than 15 minutes since the last delivery, are
+  // not green (the hang of the review: delivered 3 days ago, 21 batches since 20 minutes).
+  assert.deepEqual(panel({}, { ok: now - 3 * D, n: 21, t: now - 12e5, o: now - 12e5 }), { why: '', tone: 'wait',
+    state: 'لم يتأكد وصول إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ 20 دقيقة.',
+    facts: [['آخر وصول إلى لوحة المؤشرات', 'قبل 3 أيام (' + hm(now - 3 * D) + ')'], ['ينتظر الإرسال', '21 دفعة، أقدمها من قبل 20 دقيقة']],
+    problem: 'ما ينتظر يُرسل عندما تكون صفحة الألعاب مفتوحة على هذا الجهاز. اضغط «اختبر الاتصال الآن» لترسله الآن، ولتعرف إن كان هذا الجهاز يصل إلى خادم الإحصاءات.',
+    test: true });
+  for (const [extra, label] of [[{ ok: now - 3 * D, n: 2, t: now - 9e5 + 1e3, o: now - 9e5 + 1e3 }, 'under 15 minutes'],
+    [{ ok: now - 6e5, n: 2, t: now - 3 * D, o: now - 3 * D }, 'a delivery since it was queued']]) {
+    assert.equal(panel({}, extra).tone, 'ok', label);
+  }
+  // What the portal sent as it closed waits for the next page to see its answer: still green.
+  const closed = panel({}, { ok: now - 3 * H, n: 1, t: now - 3 * H + 3e4, o: 0 });
+  assert.deepEqual([closed.tone, closed.facts[1][1]], ['ok', 'دفعة واحدة، أقدمها من قبل ساعتين (أُرسل ما ينتظر عند إغلاق صفحة الألعاب، ويتأكد وصوله عند فتحها من جديد)']);
+  // Unsent play dropped for room or age in the last 7 days is said, with when.
+  assert.deepEqual(panel({}, { ok: now - H, x: now - 2 * H }).facts[2], ['حُذف قبل أن يصل',
+    'لعب قبل ساعتين (' + hm(now - 2 * H) + ')، لأن مكان الانتظار على هذا الجهاز امتلأ أو مضت عليه 7 أيام']);
+  assert.equal(panel({}, { ok: now - H, x: now - 8 * D }).facts.length, 2, 'not after 7 days');
+  // Blocked since the day before yesterday (the school filter of 28 October): red, since
+  // when, the host it blocks and the address to ask IT for.
+  const blocked = raw({}, { ok: now - 3 * D, f: now - 2 * D - H, k: 'network', at: now - 6e4, n: 12, t: now - 2 * D, o: now - 2 * D });
+  assert.deepEqual(panel({}, { ok: now - 3 * D, f: now - 2 * D - H, k: 'network', at: now - 6e4, n: 12, t: now - 2 * D, o: now - 2 * D }), { why: '', tone: 'bad',
+    state: '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ يومين.',
+    facts: [['آخر وصول إلى لوحة المؤشرات', 'قبل 3 أيام (' + hm(now - 3 * D) + ')'], ['ينتظر الإرسال', '12 دفعة، أقدمها من قبل يومين']],
+    problem: 'تعذّر الوصول إلى خادم الإحصاءات منذ ' + hm(now - 2 * D - H) + '. السبب في الغالب أن مرشّح الإنترنت في المدرسة يحجب ingest.test. ' +
+      'اطلب من مسؤول تقنية المعلومات في المدرسة السماح بالعنوان https://ingest.test. ' + KEEPS, test: true });
+  assert.deepEqual(ltr(blocked.problem), [hm(now - 2 * D - H), 'ingest.test', 'https://ingest.test']);
+  // The server's own error, and its refusal (those batches are gone).
+  assert.deepEqual(panel({}, { f: now - 2 * H, k: 'server', at: now - 6e4, n: 2, t: now - 2 * H, o: now - 2 * H }).problem,
+    'يردّ خادم الإحصاءات ingest.test بخطأ منذ ' + hm(now - 2 * H) + '. ' + KEEPS + ' إذا استمر ذلك، أخبر من يدير خادم الإحصاءات.');
+  assert.equal(panel({}, { f: now - 2 * H, k: 'server', at: now - 6e4 }).state, '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ ساعتين.');
+  // No connection at all (the cable out, the Wi-Fi down): since when, and that the play
+  // waits; neither the school's filter nor IT is named.
+  const offline = panel({}, { ok: now - 3 * D, f: now - 2 * H, k: 'offline', at: now - 6e4, n: 4, t: now - 2 * H, o: now - 2 * H });
+  assert.deepEqual([offline.tone, offline.state, offline.problem], ['bad', '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ ساعتين.',
+    'لم يكن هذا الجهاز متصلًا بالإنترنت منذ ' + hm(now - 2 * H) + '. ' + KEEPS]);
+  const refused = panel({}, { ok: now - H, f: now - 3e5, k: 'refused', at: now - 3e5 });
+  assert.deepEqual([refused.tone, refused.state, refused.problem], ['bad', '⚠ رفض خادم الإحصاءات بيانات من هذا الجهاز قبل 5 دقائق.',
+    'رفض الخادم ingest.test بيانات أُرسلت من هذا الجهاز في ' + hm(now - 3e5) + '، فحُذفت. إذا تكرر ذلك، أخبر من يدير خادم الإحصاءات.']);
+  // The words after «قبل» and «منذ»; a time ahead of the PC's clock reads «أقل من دقيقة».
+  for (const [ago, words] of [[3e4, 'أقل من دقيقة'], [6e4, 'دقيقة'], [12e4, 'دقيقتين'], [3e5, '5 دقائق'], [9e5, '15 دقيقة'], [H, 'ساعة'],
+    [2 * H, 'ساعتين'], [5 * H, '5 ساعات'], [D, '24 ساعة'], [47 * H, '47 ساعة'], [2 * D, 'يومين'], [3 * D, '3 أيام'], [11 * D, '11 يومًا'], [-H, 'أقل من دقيقة']]) {
+    assert.equal(panel({}, { ok: now - ago }).facts[0][1], 'قبل ' + words + ' (' + hm(now - ago) + ')', words);
+  }
+  // A host is text, never markup.
+  assert.ok(!raw({}, { host: '<b>x</b>', f: now - H, k: 'network', at: now }).problem.includes('<b>'));
+
+  // What the test button reports.
+  const IT = '✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز. أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به في مرشّح الإنترنت: https://ingest.test';
+  const REFUSED = '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه لا يقبل بيانات هذه النسخة من الموقع. أخبر من يدير خادم الإحصاءات.';
+  for (const [result, ok, said] of [
+    [{ k: 'ok', host, sent: 0, n: 0 }, true, '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. لم يكن شيء ينتظر الإرسال.'],
+    [{ k: 'ok', host, sent: 2, n: 0 }, true, '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. أُرسل الآن ما كان ينتظر: دفعتان.'],
+    [{ k: 'ok', host, sent: 30, n: 4 }, true, '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. أُرسل الآن ما كان ينتظر: 30 دفعة. ' +
+      'وما زال ينتظر: 4 دفعات، ويُرسل من صفحة الألعاب.'],
+    // Only an older build's tab has batches waiting (it sends them itself): the test sent none.
+    [{ k: 'ok', host, sent: 0, n: 2 }, true, '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. وما زال ينتظر: دفعتان، ويُرسل من صفحة الألعاب.'],
+    [{ k: 'network', host, sent: 0, n: 3 }, false, IT],
+    [{ k: 'network', host, sent: 1, n: 3 }, false, IT + ' (أُرسل قبل انقطاع الاتصال: دفعة واحدة.)'],
+    [{ k: 'network', host, reached: false, sent: 0, n: 3 }, false, IT],
+    // Health answered, then the batches got no answer: the address opens, sending to it does not.
+    [{ k: 'network', host, reached: true, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكن تعذّر إرسال البيانات إليه. ' +
+      'قد يسمح مرشّح الإنترنت في المدرسة بفتح العنوان ويمنع إرسال البيانات إليه. أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به كاملًا، مع إرسال البيانات: https://ingest.test'],
+    // No connection at all: nothing was asked, and there is no address to give IT.
+    [{ k: 'offline', host, reached: false, sent: 0, n: 3 }, false, '✗ هذا الجهاز غير متصل بالإنترنت الآن. ما ينتظر الإرسال يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال.'],
+    [{ k: 'server', host, sent: 0, n: 3 }, false, '✗ وصل هذا الجهاز إلى خادم الإحصاءات، لكنه ردّ بخطأ مؤقت. البيانات محفوظة على هذا الجهاز؛ جرّب مرة أخرى بعد قليل.'],
+    [{ k: 'refused', host, sent: 0, n: 3 }, false, REFUSED + ' وما زال ينتظر: 3 دفعات، ويُرسل من صفحة الألعاب.'],
+    // The server refused the test's batches, which are gone: never «لم يكن شيء ينتظر الإرسال».
+    [{ k: 'refused', host, reached: true, sent: 0, n: 0 }, false, REFUSED],
+    // It refused some and took the others.
+    [{ k: 'refused', host, reached: true, sent: 2, n: 0 }, false, REFUSED + ' ووصل الآن ما لم يرفضه: دفعتان.'],
+    // Refused, then delivered, then a batch that got no answer: it still waits.
+    [{ k: 'refused', host, reached: true, sent: 1, n: 1 }, false, REFUSED + ' أُرسل الآن: دفعة واحدة. وما زال ينتظر: دفعة واحدة، ويُرسل من صفحة الألعاب.'],
+    [{ why: 'off', host }, false, 'لا يرسل هذا الجهاز إلى لوحة المؤشرات الآن، فلا يوجد اتصال لاختباره.'],
+    [{}, false, 'لا يرسل هذا الجهاز إلى لوحة المؤشرات الآن، فلا يوجد اتصال لاختباره.']
+  ]) {
+    const c = api.checked(result);
+    assert.deepEqual([c.ok, text(c.text)], [ok, said], JSON.stringify(result));
+  }
+  assert.deepEqual(ltr(api.checked({ k: 'network', host, sent: 0, n: 0 }).text), ['https://ingest.test']);
+  assert.deepEqual(ltr(api.checked({ k: 'network', host, reached: true, sent: 0, n: 0 }).text), ['https://ingest.test']);
+});
+
 test('dashboard codes: the Luhn mod 16 check character, how codes are shown and typed, and the transfer', () => {
   for (let i = 0; i < 500; i++) {
     const hex = [...Array(12)].map(() => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
@@ -505,14 +640,17 @@ before(async () => {
 });
 after(async () => { await browser?.close(); await server?.close(); });
 
-const OWN_FILES = /^\/(?:teacher\.html|favicon\.(?:svg|ico)|js\/(?:catalog|teacher)\.js|css\/teacher\.css|shared\/fonts\/[\w.-]+\.woff2)$/;
+const OWN_FILES = /^\/(?:teacher\.html|favicon\.(?:svg|ico)|js\/(?:catalog|telemetry|teacher)\.js|css\/teacher\.css|shared\/fonts\/[\w.-]+\.woff2)$/;
 // Edge and Chrome save exports through their save dialog (showSaveFilePicker), which
 // headless Chromium closes at once. A stand-in dialog answers as window.pickerAnswer
 // says ('save', 'cancel', 'refuse', 'fail', or 'hold' to stay open until
 // window.closePicker() is called), saves under window.pickerName when one is set (the
 // teacher renamed the file), refuses a second dialog while one is open, as Chrome
-// does, and keeps each saved file in window.savedFiles.
-async function teacherPage(t, { blocked = false, entries = seed() } = {}) {
+// does, and keeps each saved file in window.savedFiles. ingest(request): the answer of
+// a stand-in ingest server at https://ingest.test ({ status, contentType, body }, or
+// 'abort'), which the page may then reach (from this computer, as a test allows); it
+// returns nothing to leave the page without that server.
+async function teacherPage(t, { blocked = false, entries = seed(), ingest = null } = {}) {
   if (!browser) browser = await launchChromium();
   const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, serviceWorkers: 'block', timezoneId: 'Asia/Riyadh', acceptDownloads: true });
   t.after(() => context.close());
@@ -540,6 +678,14 @@ async function teacherPage(t, { blocked = false, entries = seed() } = {}) {
       } };
     };
   });
+  if (ingest) {
+    await context.addInitScript(() => Object.defineProperty(window, 'SG_TELEMETRY', { value: { allowLocal: true }, writable: false }));
+    await context.route('https://ingest.test/**', async route => {
+      const answer = ingest(route.request());
+      if (answer === 'abort') return route.abort('failed');
+      await route.fulfill({ ...answer, headers: { 'Access-Control-Allow-Origin': origin, 'Access-Control-Expose-Headers': 'Retry-After, X-Batch-Every' } });
+    });
+  }
   if (blocked) {
     await context.addInitScript(() => {
       for (const method of ['getItem', 'setItem', 'removeItem']) {
@@ -550,9 +696,15 @@ async function teacherPage(t, { blocked = false, entries = seed() } = {}) {
   const page = await context.newPage();
   const problems = [];
   page.on('pageerror', error => problems.push('page error: ' + error.message));
-  page.on('console', message => { if (message.type() === 'error') problems.push('console error: ' + message.text()); });
+  // Chromium itself logs a request to the stand-in ingest server that gets no answer; the page never logs.
+  page.on('console', message => {
+    if (message.type() !== 'error' || ingest && /^Failed to load resource: net::ERR_FAILED$/.test(message.text()) &&
+      message.location().url.startsWith('https://ingest.test/')) return;
+    problems.push('console error: ' + message.text());
+  });
   page.on('request', request => {
     const url = new URL(request.url());
+    if (ingest && url.origin === 'https://ingest.test') return;
     if (/^https?:$/.test(url.protocol) && (url.origin !== origin || !OWN_FILES.test(url.pathname))) problems.push('request: ' + request.url());
   });
   t.after(() => assert.deepEqual(problems, [], 'no page errors, console errors or requests beyond the page\'s own files'));
@@ -788,6 +940,7 @@ test('clearing needs the typed word and removes only sg:site:stats: and sg:site:
   const page = await teacherPage(t, { entries: { ...seed(), 'sg:site:statsmeta': JSON.stringify({ ...META, pruned: '2026-05-30' }),
     'sg:site:tm:q3:abc12': JSON.stringify([{ t: NOW.getTime(), e: { v: 3, b: '0123456789abcdef', ev: [] } }]),
     'sg:site:tm:q:abc12': JSON.stringify([{ t: NOW.getTime(), e: { v: 2, b: 'fedcba9876543210', ev: [] } }]), 'sg:site:tm:on': '"ingest.example.org"',
+    'sg:site:tm:dx': JSON.stringify({ v: 1, u: 'https://ingest.example.org/v1/batch', ok: NOW.getTime() - 60000, f: 0, k: '', at: 0 }),
     'sg:site:rid': RID_TEXT } });
   assert.equal(await page.locator('#shareMsg').textContent(),
     'مشاركة إحصاءات اللعب مفعّلة على هذا الجهاز: تُرسل بلا أسماء، ويظهر كل طفل برمز عشوائي، إلى ingest.example.org.');
@@ -851,9 +1004,9 @@ test('clearing needs the typed word and removes only sg:site:stats: and sg:site:
   await page.locator('#clearWord').fill(' «امسح» ');
   await page.locator('#clearConfirm button[type="submit"]').click();
   const after = await storage(page);
-  assert.deepEqual(Object.keys(after), ['other-site-key', 'sg:candy-rope:save', 'sg:site:favs', 'sg:site:rid', 'sg:site:statsmeta', 'sg:site:tm:on'],
-    'the telemetry queue goes; the note that this PC shares and the dashboard codes stay');
-  for (const key of ['other-site-key', 'sg:candy-rope:save', 'sg:site:favs', 'sg:site:rid']) assert.equal(after[key], before[key]);
+  assert.deepEqual(Object.keys(after), ['other-site-key', 'sg:candy-rope:save', 'sg:site:favs', 'sg:site:rid', 'sg:site:statsmeta', 'sg:site:tm:dx', 'sg:site:tm:on'],
+    'the telemetry queue goes; the notes that this PC shares and when its batches last arrived, and the dashboard codes, stay');
+  for (const key of ['other-site-key', 'sg:candy-rope:save', 'sg:site:favs', 'sg:site:rid', 'sg:site:tm:dx']) assert.equal(after[key], before[key]);
   meta = JSON.parse(after['sg:site:statsmeta']);
   assert.deepEqual(meta, { pc: { id: 'pcabcd', label }, off: true, custom: 'kept', offSince: NOW.getTime(), clearedAt: NOW.getTime() });
   assert.match(await page.locator('#clearStatus').textContent(), /مُسحت/);
@@ -1004,6 +1157,102 @@ test('the codes panel: this PC\'s code, each player\'s code with its check chara
   assert.equal(await page.locator('#codes p').first().textContent(), 'رمز هذا الجهاز: يُصنع في المرة القادمة التي يلعب فيها طفل هنا.');
   assert.equal(await page.locator('#codes .notice').count(), 0);
   assert.equal(await page.locator('#clearServer').isVisible(), true, 'this PC shares: the clear note says what stays on the server');
+});
+
+test('the delivery panel says at a glance whether this PC\'s play reaches the dashboard; its test names the address to allow, then sends what waited', async t => {
+  const INGEST = 'https://ingest.test/v1/batch', H = 36e5, D = 864e5, now = NOW.getTime();
+  // The queue of the portal that sends to INGEST (js/telemetry.js: a 32-bit hash of the address).
+  const queueKey = 'sg:site:tm:q4:' + ([...INGEST].reduce((h, c) => h * 31 + c.charCodeAt(0) | 0, 0) >>> 0).toString(36);
+  const envelope = b => ({ v: 3, b, s: 'abcdefabcdef', k: 'src', m: 'web', a: '', d: [4, 4, 1920], u: '', p: '', z: 'Asia/Riyadh', ev: [['ss', 0, 0, -1, -1, 0, 0, 0]] });
+  const waiting = [{ t: now - 2 * D, w0: now - 2 * D, e: envelope('1'.repeat(16)) }, { t: now - 2 * H, w0: now - 2 * H, e: envelope('2'.repeat(16)) }];
+  const requests = [];
+  let allowed = false;
+  // The portal noted the server, its last delivery three days ago and the failures since
+  // the day before yesterday; it sends to the address in that record.
+  const page = await teacherPage(t, { entries: { ...seed(), 'sg:site:tm:on': '"ingest.test"', [queueKey]: JSON.stringify(waiting),
+    'sg:site:tm:dx': JSON.stringify({ v: 1, u: INGEST, ok: now - 3 * D, f: now - 2 * D - H, k: 'network', at: now - 6e4 }) },
+  ingest: request => {
+    requests.push([request.method() + ' ' + request.url(), request.postData()]);
+    if (!allowed) return 'abort';
+    return request.method() === 'GET' ? { status: 200, contentType: 'application/json; charset=utf-8', body: '{"ok":true,"accepts":[2,3],"schema":4}' } : { status: 204 };
+  } });
+  const panel = () => page.evaluate(() => {
+    const el = id => document.getElementById(id);
+    const shown = id => el(id).checkVisibility();
+    return { tone: el('delivery').dataset.tone, state: el('deliveryState').textContent,
+      facts: shown('deliveryFacts') ? [...el('deliveryFacts').children].map(c => c.textContent) : [],
+      problem: shown('deliveryProblem') ? el('deliveryProblem').textContent : '', test: shown('checkRow') };
+  });
+  const tested = mark => page.waitForFunction(mark => document.getElementById('checkStatus').textContent.startsWith(mark), mark)
+    .then(() => page.locator('#checkStatus').textContent());
+  // Sharing is on, and in the same box: red, since when, the host and what to ask IT.
+  assert.equal(await page.locator('#shareMsg').textContent(), 'مشاركة إحصاءات اللعب مفعّلة على هذا الجهاز: تُرسل بلا أسماء، ويظهر كل طفل برمز عشوائي، إلى ingest.test.');
+  assert.deepEqual(await panel(), { tone: 'bad', state: '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ يومين.',
+    facts: ['آخر وصول إلى لوحة المؤشرات', 'قبل 3 أيام (5/10/2026 10:30)', 'ينتظر الإرسال', 'دفعتان، أقدمها من قبل يومين'],
+    problem: 'تعذّر الوصول إلى خادم الإحصاءات منذ 6/10/2026 09:30. السبب في الغالب أن مرشّح الإنترنت في المدرسة يحجب ingest.test. ' +
+      'اطلب من مسؤول تقنية المعلومات في المدرسة السماح بالعنوان https://ingest.test. ما لم يصل يبقى محفوظًا على هذا الجهاز ويُرسل وحده عندما يعود الاتصال، ' +
+      'لكن مكانه محدود: بعد بضع ساعات من اللعب، أو بعد 7 أيام، يُحذف الأقدم أولًا.',
+    test: true });
+  assert.deepEqual(await page.locator('#deliveryProblem bdi[dir="ltr"]').allTextContents(), ['6/10/2026 09:30', 'ingest.test', 'https://ingest.test']);
+  assert.deepEqual(requests, [], 'nothing goes over the network until the teacher asks');
+  // The school's filter still blocks the server: the test names the address to give IT.
+  await page.locator('#checkBtn').click();
+  assert.equal(await tested('✗'), '✗ تعذّر الوصول إلى خادم الإحصاءات من هذا الجهاز. أعطِ مسؤول تقنية المعلومات في المدرسة هذا العنوان ليسمح به في مرشّح الإنترنت: https://ingest.test');
+  assert.equal(await page.locator('#checkStatus').getAttribute('class'), 'status bad');
+  assert.deepEqual(requests.map(r => r[0]), ['GET https://ingest.test/v1/health']);
+  assert.equal((await panel()).state, '⚠ لا تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات منذ يومين.', 'still failing since the same time');
+  // IT allowed it: the test reaches the server and sends both waiting batches, oldest first.
+  allowed = true;
+  await page.locator('#checkBtn').click();
+  assert.equal(await tested('✓'), '✓ يصل هذا الجهاز إلى خادم الإحصاءات ingest.test. أُرسل الآن ما كان ينتظر: دفعتان.');
+  assert.equal(await page.locator('#checkStatus').getAttribute('class'), 'status');
+  assert.deepEqual(requests.slice(1).map(r => r[0]), ['GET https://ingest.test/v1/health', 'POST ' + INGEST, 'POST ' + INGEST]);
+  assert.deepEqual(requests.slice(2).map(r => JSON.parse(r[1]).b), ['1'.repeat(16), '2'.repeat(16)]);
+  assert.deepEqual(await panel(), { tone: 'ok', state: '✓ تصل إحصاءات هذا الجهاز إلى لوحة المؤشرات.',
+    facts: ['آخر وصول إلى لوحة المؤشرات', 'قبل أقل من دقيقة (8/10/2026 10:30)', 'ينتظر الإرسال', 'لا شيء'], problem: '', test: true });
+  const stored = await storage(page);
+  assert.equal(stored[queueKey], undefined, 'nothing waits');
+  assert.deepEqual(JSON.parse(stored['sg:site:tm:dx']), { v: 1, u: INGEST, ok: now, f: 0, k: '', at: 0, x: 0 });
+  // Later the portal's sends fail (in another tab): the box turns red, and the green result
+  // of the earlier test goes with it rather than contradict it.
+  const portal = await page.context().newPage();
+  await portal.goto(origin + '/favicon.svg');
+  await portal.evaluate(([u, t]) => localStorage.setItem('sg:site:tm:dx', JSON.stringify({ v: 1, u, ok: t, f: t, k: 'network', at: t, x: 0 })), [INGEST, now]);
+  await page.waitForFunction(() => document.getElementById('delivery').dataset.tone === 'bad');
+  assert.equal(await page.locator('#checkStatus').textContent(), '', 'the earlier result is gone');
+  await portal.close();
+  // Statistics stopped: the panel says that nothing is sent, beside the stop notice, and offers no test.
+  await page.evaluate(() => localStorage.setItem('sg:site:statsmeta', JSON.stringify({ ...JSON.parse(localStorage.getItem('sg:site:statsmeta')), off: true })));
+  await page.reload();
+  assert.deepEqual(await panel(), { tone: 'off', state: 'لا يُرسل هذا الجهاز شيئًا إلى لوحة المؤشرات ما دام جمع الإحصاءات متوقفًا.', facts: [], problem: '', test: false });
+  assert.equal(await page.locator('#stoppedMsg').isVisible(), true);
+  assert.equal(await page.locator('#shareMsg').isHidden(), true);
+  assert.equal(requests.length, 4, 'opening the page sent nothing');
+});
+
+test('a downloaded folder\'s teacher page says that copy never sends to the dashboard and names the website the PCs must open', async t => {
+  if (!browser) browser = await launchChromium();
+  const context = await browser.newContext({ serviceWorkers: 'block', timezoneId: 'Asia/Riyadh' });
+  t.after(() => context.close());
+  const page = await context.newPage(), problems = [];
+  page.on('pageerror', error => problems.push('page error: ' + error.message));
+  page.on('console', message => { if (message.type() === 'error') problems.push('console error: ' + message.text()); });
+  page.on('request', request => { if (/^https?:/.test(request.url())) problems.push('request: ' + request.url()); });
+  await page.goto(pathToFileURL(path.join(root, 'teacher.html')).href);
+  await page.waitForFunction(() => document.getElementById('source')?.dataset.copy === 'folder');
+  assert.equal(await page.locator('#delivery').isVisible(), true);
+  assert.equal(await page.locator('#delivery').getAttribute('data-why'), 'folder');
+  assert.equal(await page.locator('#deliveryState').textContent(), 'هذه نسخة منزَّلة من الموقع (مجلد على هذا الجهاز)، ولا ترسل أبدًا شيئًا إلى لوحة المؤشرات في المدرسة.');
+  // The address this build was published at (SG_SITE_URL), if it was given one; the source tree has none.
+  const site = await page.evaluate(() => window.SG_SITE ? window.SG_SITE.url : '');
+  if (!process.env.SG_ROOT) assert.equal(site, '');
+  assert.equal(await page.locator('#deliveryProblem').textContent(), 'لكي يصل لعب الأطفال إلى لوحة المؤشرات، يجب أن تفتح الأجهزة ' +
+    (site ? 'الموقع على الإنترنت: ' + site : 'موقع ألعاب المدرسة على الإنترنت بدلًا من هذا المجلد.'));
+  assert.deepEqual(await page.locator('#deliveryProblem bdi[dir="ltr"]').allTextContents(), site ? [site] : []);
+  assert.equal(await page.locator('#checkRow').isHidden(), true, 'nothing to test');
+  assert.equal(await page.locator('#shareMsg').isHidden(), true);
+  assert.equal(await page.evaluate(() => SGTelemetry.status().why), 'folder');
+  assert.deepEqual(problems, []);
 });
 
 test('the teacher page\'s copies of the animals and ring colours are the portal\'s own', async t => {

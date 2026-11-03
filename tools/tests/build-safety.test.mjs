@@ -356,3 +356,58 @@ test('SG_TELEMETRY_URL reaches the portal only, is checked first, and changes no
   assert.deepEqual(site(), on);
   noTemporaryOutput(f);
 });
+
+test('SG_SITE_URL reaches the teacher page only, is checked first, and changes nothing when unset or empty', t => {
+  const f = fixture(t);
+  const unset = { ...process.env };
+  delete unset.SG_SITE_URL;
+  delete unset.SG_TELEMETRY_URL;
+  const build = (value, args = []) => spawnSync(process.execPath, [path.join(f.root, 'tools/build.mjs'), '--no-minify', ...args], {
+    cwd: f.root, encoding: 'utf8', timeout: 30000, env: value === undefined ? unset : { ...unset, SG_SITE_URL: value }
+  });
+  const site = () => snapshot(path.join(f.root, '_site'));
+  const text = (files, name) => Buffer.from(files[name], 'base64').toString('utf8');
+
+  success(build(undefined));
+  const plain = site();
+  assert.ok(Object.values(plain).every(data => !Buffer.from(data, 'base64').includes('SG_SITE')), 'unset: nothing added');
+  // GitHub passes an unset repository variable as an empty string.
+  success(build(''));
+  assert.deepEqual(site(), plain, 'empty is the same as unset, byte for byte');
+
+  // The workflow's default spells the owner as GitHub does; the page names the host in lower case.
+  const url = 'https://name.github.io/school-games/';
+  const result = build('https://Name.github.io/school-games/');
+  success(result);
+  assert.match(result.stdout, /site: a downloaded folder's teacher page names https:\/\/name\.github\.io\/school-games\//);
+  const on = site();
+  const teacher = text(on, 'teacher.html');
+  assert.equal(teacher.split('window.SG_SITE=').length, 2, 'injected once');
+  assert.ok(teacher.includes('<script>window.SG_SITE={url:' + JSON.stringify(url) + '};\nwindow.SGTeacher = {};</script>'),
+    'right before the teacher page\'s script, in its own inline script');
+  for (const name of ['index.html', 'games/demo/index.html', 'sw.js']) {
+    assert.ok(!text(on, name).includes('SG_SITE') && !text(on, name).includes('name.github.io'), name + ' gets nothing');
+  }
+  // Only the teacher page changes, and with it the offline version (in the worker and the
+  // portal) and the download that holds them.
+  assert.deepEqual(Object.keys(on).filter(name => on[name] !== plain[name]).sort(), ['index.html', 'school-games-offline.zip', 'sw.js', 'teacher.html']);
+  assert.equal(text(on, 'index.html').replace(/SG_OFFLINE_VERSION="[0-9a-f]{16}"/, ''), text(plain, 'index.html').replace(/SG_OFFLINE_VERSION="[0-9a-f]{16}"/, ''),
+    'the portal only by its offline version');
+  assert.deepEqual(Object.keys(on).sort(), Object.keys(plain).sort());
+
+  // Anything but a plain https:// folder address is refused before any output is touched.
+  for (const bad of ['http://name.github.io/school-games/', 'name.github.io/school-games/', '//name.github.io/', 'https://',
+    'https://name.github.io/school-games', ' https://name.github.io/', 'https://name.github.io/"/', "https://name.github.io/'/",
+    'https://name.github.io/a b/', 'https://name.github.io/</script>/', 'https://name.github.io/<!--/', 'https://name.github.io\\x/',
+    'https://name.github.io/`/', 'https://name.github.io/?a=/', 'https://name.github.io/#a/', 'https://user:secret@name.github.io/',
+    'https://nämé.github.io/', 'javascript:alert(1)//', 'https://' + 'a'.repeat(190) + '.github.io/']) {
+    refused(build(bad), /SG_SITE_URL must be the https:\/\/ address of the published site/);
+    assert.deepEqual(site(), on, 'refused: ' + JSON.stringify(bad));
+    noTemporaryOutput(f);
+  }
+  // A teacher page without its script cannot be given an address.
+  f.write('teacher.html', '<!doctype html><html><body><main id="teacherApp"></main><script src="js/catalog.js"></script></body></html>');
+  refused(build(url), /SG_SITE_URL is set, but teacher\.html does not load js\/teacher\.js/);
+  assert.deepEqual(site(), on);
+  noTemporaryOutput(f);
+});

@@ -113,6 +113,10 @@ jobs:
           # Cloudflare Worker, unless the SG_TELEMETRY_URL repository variable names another
           # server.
           SG_TELEMETRY_URL: ${{ vars.SG_TELEMETRY_URL || 'https://school-games-telemetry.services-agreement137.workers.dev/v1/batch' }}
+          # The address a downloaded folder's teacher page names: where GitHub Pages publishes
+          # this repository, unless the SG_SITE_URL repository variable names another (a
+          # custom domain, or a repository named <owner>.github.io).
+          SG_SITE_URL: ${{ vars.SG_SITE_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
       - name: Check built asset performance budgets
         timeout-minutes: 5
         run: npm run perf:assets -- --report artifacts/asset-budgets.json
@@ -200,6 +204,7 @@ jobs:
         run: npm run build
         env:
           SG_TELEMETRY_URL: ${{ vars.SG_TELEMETRY_URL || 'https://school-games-telemetry.services-agreement137.workers.dev/v1/batch' }}
+          SG_SITE_URL: ${{ vars.SG_SITE_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
       # Test the teachers' offline download (README) as they get it: unzipped on Windows.
       # tools/tests/offline-download.test.mjs proves it holds the built files byte for byte.
       - name: Unzip the offline download

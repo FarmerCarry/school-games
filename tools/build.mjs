@@ -15,7 +15,9 @@
  *   - teacher.html (local play statistics) becomes one html file the same way, without thumbnails.
  *   - sw.js: an offline cache. After the first visit the whole site is stored on the PC, pages
  *     open without asking the server, and it still works if the internet drops. Each build
- *     changes sw.js, so PCs download only the files that changed.
+ *     changes sw.js, so PCs download only the files that changed, and an interrupted
+ *     download resumes on the next attempt. js/offline.js shows its state and moves an
+ *     idle portal tab to a newer complete version.
  *   - school-games-offline.zip: this whole build in one school-games/ folder, for PCs that
  *     run it from a folder without internet (unzip, double-click index.html). It is not
  *     precached, so children's PCs never download it.
@@ -26,6 +28,9 @@
  *   - SG_TELEMETRY_URL (environment, optional): the https:// address of the school's telemetry
  *     ingest server (docs/TELEMETRY.md; play events without names). Only the portal gets it, as window.SG_TELEMETRY, and
  *     only in a normal build; unset or empty, nothing is added and the portal never sends.
+ *   - SG_SITE_URL (environment, optional): the https:// address the site is published at, ending
+ *     in /. Only teacher.html gets it, as window.SG_SITE, so a downloaded folder's teacher page
+ *     names the website the PCs must open to share; unset or empty, nothing is added.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,6 +49,7 @@ const DEST = path.resolve(ROOT, options.out);
 const MINIFY = options.minify;
 const KILL_SW = options.killSW;
 const TELEMETRY_URL = telemetryUrl(process.env.SG_TELEMETRY_URL);
+const SITE_URL = siteUrl(process.env.SG_SITE_URL);
 const esbuild = MINIFY ? require('esbuild') : null;
 
 const posix = p => p.split(path.sep).join('/');
@@ -88,6 +94,21 @@ function telemetryUrl(value) {
       '(no quotes, spaces, backslashes, < or >) and no user name or password; got ' + JSON.stringify(value.slice(0, 60)));
   }
   return value;
+}
+
+// The published site's address goes into the teacher page's inline script the same way: a
+// plain https:// folder address ending in /, without a query, fragment, user name or password.
+function siteUrl(value) {
+  if (value === undefined || value === '') return '';
+  let url = null;
+  try { url = new URL(value); } catch { /* refused below */ }
+  if (value.length > 200 || !/^https:\/\/[\w\-.~:/[\]@!$&()*+,;=%]+\/$/.test(value) || !url || url.protocol !== 'https:' ||
+    !url.hostname || url.username || url.password) {
+    throw new Error('SG_SITE_URL must be the https:// address of the published site, ending in /, of at most 200 characters ' +
+      'with only URL characters (no quotes, spaces, backslashes, < or >, ? or #) and no user name or password; got ' +
+      JSON.stringify(value.slice(0, 60)));
+  }
+  return url.href; // the host in lower case, as the address bar shows it
 }
 
 function isWithin(parent, child) {
@@ -308,8 +329,11 @@ try {
   /* -------------------------------------------------------- teacher page */
   // Local play statistics (docs/PLAY_STATS.md). One file with the catalog inlined,
   // precached like the portal so a teacher can open it offline on each PC. It never
-  // registers the worker, and it is not a game, so it stays out of `report`.
-  const teacher = inlinePage(path.join(ROOT, 'teacher.html'));
+  // registers the worker, and it is not a game, so it stays out of `report`. The published
+  // site's address goes right before its script.
+  const site = SITE_URL ? 'window.SG_SITE={url:' + JSON.stringify(SITE_URL) + '};' : '';
+  const teacher = inlinePage(path.join(ROOT, 'teacher.html'), site ? { before: { 'js/teacher.js': site } } : undefined);
+  if (site && !teacher.includes(site)) throw new Error('SG_SITE_URL is set, but teacher.html does not load js/teacher.js');
   write('teacher.html', teacher);
 
   /* --------------------------------------------------------- static files */
@@ -371,6 +395,7 @@ try {
   for (const [f, b] of report.slice(0, 1)) console.log(`  ${f}: ${(b / 1024).toFixed(0)} KB`);
   console.log(`  teacher.html: ${(Buffer.byteLength(teacher) / 1024).toFixed(0)} KB`);
   if (telemetry) console.log(`  telemetry: the portal sends play events without names to ${new URL(TELEMETRY_URL).host}`);
+  if (site) console.log(`  site: a downloaded folder's teacher page names ${SITE_URL}`);
   const gb = report.slice(1).map(r => r[1]);
   console.log(`  games: ${(Math.min(...gb) / 1024).toFixed(0)}–${(Math.max(...gb) / 1024).toFixed(0)} KB each (one file per game)`);
 } finally {
@@ -496,38 +521,72 @@ function repairCache(cache) {
 
 // Install: keep unchanged files from the previous cache, download only the changed ones
 // (straight from the network, checked against their hash), then take over right away.
+// A failed or cut-off install keeps every verified file it saved under this version's
+// name, so the next attempt (the next page of the site, Retry, reconnecting, the hourly
+// check of an open tab, or a newer version copying unchanged files) downloads only what
+// is still missing on a slow school line. That partial cache is never used: this worker
+// activates only when every file is in it, and only the active worker of this version
+// reads it (offlineStatus, fetch). An empty cache named CACHE + PARTIAL marks it partial
+// until the install is complete. An install first copies what it can from the caches
+// already on the PC and then deletes the marked copies of other versions, so a PC whose
+// installs keep failing (a filter blocking one game) keeps the active version and one
+// partial copy at most, not one more for every publish.
+var PARTIAL = '|partial';
+function isPartial(k) { return k.slice(-PARTIAL.length) === PARTIAL; }
+async function settle(tasks) {
+  // Finish every writer, so all that could be saved is, before failing.
+  var results = await Promise.allSettled(tasks);
+  var failed = results.find(function (result) { return result.status === 'rejected'; });
+  if (failed) throw failed.reason;
+}
 self.addEventListener('install', function (event) {
   event.waitUntil((async function () {
-    var cacheExisted = await caches.has(CACHE);
+    var mark = CACHE + PARTIAL;
+    // A reinstall can share a cache with a surviving active worker of this version: only
+    // a cache this install starts, or one an earlier attempt marked, is marked partial.
+    if (!(await caches.has(CACHE)) || await caches.has(mark)) await caches.open(mark);
     var cache = await caches.open(CACHE);
-    var oldNames = (await caches.keys()).filter(function (k) { return (k.indexOf(CACHE_PREFIX) === 0 || isLegacyCache(k)) && k !== CACHE; });
+    var names = await caches.keys();
+    var oldNames = names.filter(function (k) { return (k.indexOf(CACHE_PREFIX) === 0 || isLegacyCache(k)) && k !== CACHE && !isPartial(k); });
     var olds = await Promise.all(oldNames.map(function (k) { return caches.open(k); }));
-    var paths = Object.keys(FILES);
-    var next = 0;
-    async function one(p) {
+    var paths = Object.keys(FILES), missing = [];
+    // A saved copy counts only with this version's label and bytes that still match it.
+    async function verified(hit, p) {
+      if (!hit || hit.headers.get('x-sg-hash') !== FILES[p]) return false;
+      try { return hex(await crypto.subtle.digest('SHA-256', await hit.clone().arrayBuffer())).slice(0, 16) === FILES[p]; }
+      catch (e) { return false; }
+    }
+    // What the PC has already: saved by an earlier attempt, shared with a surviving
+    // worker of this version, or unchanged in another version's copy.
+    async function local(p) {
       var url = new URL(p, SCOPE).href;
-      if (await cache.match(url)) return;
+      if (await verified(await cache.match(url), p)) return;
       for (var i = 0; i < olds.length; i++) {
         var hit = await olds[i].match(url);
-        if (hit && hit.headers.get('x-sg-hash') === FILES[p]) {
-          var oldHash = hex(await crypto.subtle.digest('SHA-256', await hit.clone().arrayBuffer())).slice(0, 16);
-          if (oldHash === FILES[p]) { await cache.put(url, hit); return; }
-        }
+        if (await verified(hit, p)) { await cache.put(url, hit); return; }
       }
-      await cache.put(url, await fetchVerified(p));
+      missing.push(p);
     }
-    async function worker() { while (next < paths.length) await one(paths[next++]); }
-    try {
-      // Finish every writer before cleaning up a failed installation.
-      var results = await Promise.allSettled([worker(), worker(), worker(), worker()]);
-      var failed = results.find(function (result) { return result.status === 'rejected'; });
-      if (failed) throw failed.reason;
-    } catch (e) {
-      // Delete only a cache owned by this install. A reinstall can share a cache
-      // with a surviving active worker; its verified pages must remain usable.
-      if (!cacheExisted) await caches.delete(CACHE);
-      throw e;
+    function workers(list, one) {
+      var next = 0;
+      async function worker() { while (next < list.length) await one(list[next++]); }
+      return [worker(), worker(), worker(), worker()];
     }
+    try { await settle(workers(paths, local)); }
+    finally {
+      // Whatever this version shares with the partial copies of others is in its own cache
+      // now (or the PC is short of space). They are of no further use.
+      await Promise.all(names.filter(function (k) { return k.indexOf(CACHE_PREFIX) === 0 && isPartial(k) && k !== mark; }).map(async function (k) {
+        try { await caches.delete(k.slice(0, -PARTIAL.length)); await caches.delete(k); } catch (e) { /* the next install tries again */ }
+      }));
+    }
+    await settle(workers(missing, async function (p) { await cache.put(new URL(p, SCOPE).href, await fetchVerified(p)); }));
+    // Never take over with a partial copy.
+    for (var i = 0; i < paths.length; i++) {
+      var saved = await cache.match(new URL(paths[i], SCOPE).href);
+      if (!saved || saved.headers.get('x-sg-hash') !== FILES[paths[i]]) throw new Error('incomplete ' + paths[i]);
+    }
+    await caches.delete(mark);
     await self.skipWaiting();
   })());
 });

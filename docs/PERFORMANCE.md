@@ -909,3 +909,13 @@ the new page plus the portal and the teacher page, and gains one file, so
 measurement. Each new limit is the measured size rounded up (the game to the next
 500 bytes, the others to the next 1,000), and each headroom is under half a percent.
 No other game, font or library limit changes.
+
+## Delivery reliability on current main (rebase of #74), 3 November 2026
+
+PR #74 (keep classroom play until the server confirms it, teacher delivery box, idle-tab updates) is rebased onto main after Lucky Lake and the other recent games. The size deltas measured against the older base are applied on top of the current main budgets:
+
+- Portal limit: 427,000 → 432,000
+- Teacher page limit: 101,000 → 125,000
+- Offline precache limit: 5,938,000 → 5,969,000
+
+These follow the same rounding rule (measured size rounded up to the next 1,000 + 1,000). Exact re-measurement after the rebase will be confirmed by the next CI run. No game pages change. Principles (Arabic/RTL, offline, local-only stats, no ads/tracking) are preserved.

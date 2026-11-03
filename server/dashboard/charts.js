@@ -79,6 +79,11 @@
     var r = node.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top };
   }
+  // The column a chart read before a redraw replaced it (app.js redrawCharts), else `none`.
+  function kept(svg, none) {
+    var v = Number(svg.getAttribute('data-at'));
+    return svg.hasAttribute('data-at') && v >= 0 ? v : none;
+  }
   function tipText(content) {
     return [content.title].concat((content.rows || []).map(function (r) { return r.value + (r.label ? ' ' + r.label : ''); }))
       .concat(content.note ? [content.note] : []).filter(Boolean).join(', ');
@@ -239,6 +244,7 @@
     }
     function move(i, anchor) {
       at = Math.max(0, Math.min(n - 1, i));
+      svg.setAttribute('data-at', String(at));
       var x = r1(X(at)) + 0.5;
       cross.setAttribute('visibility', 'visible');
       crossLine.setAttribute('x1', x); crossLine.setAttribute('x2', x);
@@ -259,7 +265,7 @@
     hit.addEventListener('pointermove', function (e) { move(nearest(e.clientX), { x: e.clientX, y: e.clientY }); });
     hit.addEventListener('pointerleave', leave);
     svg.addEventListener('blur', leave);
-    svg.addEventListener('focus', function () { move(at < 0 ? last : at); });
+    svg.addEventListener('focus', function () { move(at < 0 ? kept(svg, last) : at); });
     svg.addEventListener('keydown', function (e) {
       var step = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1, ArrowUp: 1, ArrowDown: -1 }[e.key];
       if (e.key === 'Home') { move(0); e.preventDefault(); } else if (e.key === 'End') { move(n - 1); e.preventDefault(); } else if (step) { move((at < 0 ? last : at) + step); e.preventDefault(); }
@@ -329,12 +335,13 @@
     var at = -1;
     function move(i) {
       at = Math.max(0, Math.min(n - 1, i));
+      svg.setAttribute('data-at', String(at));
       nodes.forEach(function (x, k) { x.classList.toggle('is-hover', k === at); });
       var b = bars[at], box = svg.getBoundingClientRect(), tip = b.tip || { title: b.title || b.tick, rows: [{ value: (opts.format || compact)(totals[at]) }] };
       showTip(tip, { x: box.left + X(at) + bw / 2, y: box.top + Y(totals[at]) });
       say(tipText(tip));
     }
-    svg.addEventListener('focus', function () { if (n) move(at < 0 ? n - 1 : at); });
+    svg.addEventListener('focus', function () { if (n) move(at < 0 ? kept(svg, n - 1) : at); });
     svg.addEventListener('blur', function () { nodes.forEach(function (x) { x.classList.remove('is-hover'); }); hideTip(); });
     svg.addEventListener('keydown', function (e) {
       var step = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1, ArrowUp: 1, ArrowDown: -1 }[e.key];
