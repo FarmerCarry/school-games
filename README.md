@@ -17,17 +17,18 @@ adapt to each child), and none of them plays background music.
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores, progress, player profiles and the play statistics are saved in each browser (localStorage).
 
-## The games (36)
+## The games (38)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
 | فقاعات بوب | Bubble Bop (first game for new mouse users) | 1 | نقطة البداية، أركيد |
 | أربعة على التوالي | Connect 4 | 1-2 | ألغاز، لاعبان على نفس الجهاز |
 | إكس أو | Tic-tac-toe | 1-2 | ألغاز، لاعبان على نفس الجهاز |
-| أصابع البرق | Lightning Fingers (typing test, English + Arabic) | 1 | تحديات |
+| أصابع البرق | Lightning Fingers (typing game with lightning clouds and a speed test, Arabic + English) | 1 | تحديات، أركيد |
+| عدّاء المفاتيح | Key Runner (find the keys on the school keyboard) | 1-2 | تحديات، لاعبان |
 | ضربة الطلاء | Splat Strike (3D paint-blaster arena vs bots) | 1 | تصويب، تحدي الروبوتات |
 | عدّاء السكة | Rail Rush | 1 | جري |
-| الديناصور ثلاثي الأبعاد | Dino 3D | 1 | جري، أركيد |
+| الديناصور ثلاثي الأبعاد | Dino 3D (voxel dinosaur journey) | 1 | جري، أركيد |
 | منحدر النيون | Neon Slope | 1 | جري، أركيد |
 | نفق السرعة | Tunnel Blitz | 1 | جري، أركيد |
 | قفزة الإيقاع | Beat Dash | 1 | جري، أركيد |
@@ -44,7 +45,8 @@ adapt to each child), and none of them plays background music.
 | ضربة إلى الفضاء | Skybound Golf | 1 | رياضة، أركيد |
 | سوق الحيوانات | Critter Mart | 1 | بناء وإدارة |
 | إمبراطورية البيتزا | Pizza Empire | 1 | بناء وإدارة |
-| سباق البيض | Egg Rush | 1-2 | بناء وإدارة، لاعبان |
+| سباق البيض | Egg Rush (sneak and freeze in the farmyard) | 1-2 | لاعبان، أركيد |
+| بحيرة الحظ | Lucky Lake (fishing) | 1-2 | لاعبان، أركيد |
 | عالم المكعبات | Block World | 1 | بناء وإدارة، أركيد |
 | حرّاس الكعكة | Cake Guards (tower defense) | 1 | استراتيجية |
 | انفجار المكعبات | Block Burst | 1 | ألغاز |
@@ -62,14 +64,38 @@ The original arcade games save best scores and unlocks in the browser, and have 
 
 **فقاعات بوب (Bubble Bop)** is the «ابدأ من هنا» starter game for a 6-year-old who has never used a mouse or keyboard. It is a real arcade game with no words to read, no way to lose and no timer in its levels. Bop, a round glowing friend, floats with the mouse pointer. Eleven worlds teach one input each through play. The first five: touch bubbles with Bop to pop them (no click needed), click on or near balloons, press the long Space bar so a frog catches fireflies, move a basket under falling fruit with ← → (or A/D), and a party world that mixes these four. The next six: drag baby turtles to the pool of their colour, double-click sleeping clams to find pearls, press and hold the button (or Space) to blow a bubble until it fills a ring, steer a submarine to starfish with all four arrows (or WASD), press the letter a balloon carries, and a grand party world that mixes these five. The letter world draws an on-screen keyboard like the school's own (Latin letter top-left, Arabic letter bottom-right, F and J bumps); keys are found by their place, so either input language works, and the key to press always glows. It starts with F and J, then the home row and the rows above and below. Each world has three short levels (one to three stars) and a 60-second party round with combos, gold targets and a best score; the map shows worlds 1–5 and 6–11 on two pages turned with big arrows. Hit areas are bigger than the pictures, targets drift towards Bop, mashing and stray keys never cost anything, and an on-screen mouse, Space bar, arrow keys and keyboard light up with the real ones. A wordless hand shows the move after a few idle seconds and repeats while the child waits. Difficulty follows the child (Kit.dda): a 6–7-year-old starts with huge, slow targets, a generous double-click gap and hold window and turtles that can also be carried with two clicks, a 10–11-year-old with a brisk challenge, and each world adapts to how the last level went. Stars (up to 99) unlock colours and hats for Bop. Two optional picture cards show how to hold the mouse and where the keys are. P or Esc pauses. Progress stays in this browser, and saves from the five-world version keep all their stars.
 
-**الديناصور ثلاثي الأبعاد (Dino 3D)** is a voxel desert endless runner. Jump with Space or Up,
-hold for a higher jump, and crouch or descend quickly with Down or Ctrl. Jump over low birds
-and crouch under middle-height birds as the pace increases and the desert changes from day
-to night. Enter a four-digit course code to practise the same obstacle layout or share it with
-classmates using the same game version. P/Esc pauses; R retries the same course from pause
-or after a crash, and a separate button chooses a new course. The best score saves locally.
-Its original geometry and synthesized sounds use
-the bundled Three.js library and work offline, including the downloaded Windows folder.
+**الديناصور ثلاثي الأبعاد (Dino 3D)** is a voxel journey runner: a baby dinosaur runs home to its
+family through five worlds (desert, jungle, snowy mountains, volcano island and a starry night),
+three levels each, and each world brings one new obstacle. Space or ↑ jumps (hold for a higher
+jump), ↓ ducks, a click also jumps, and → or Shift is a roar dash once fruit has filled its meter:
+it smashes crates and skims over goo. A bump is a comic tumble that costs a heart; levels give
+one to three stars for finishing, collecting eggs and keeping hearts, and eggs unlock colours and
+hats. Endless mode is open from the start; its small «رمز» button takes a four-digit course code
+so a class can practise the same obstacle layout on the same game version. P/Esc pauses. Its
+original geometry and synthesized sounds use the bundled Three.js library and work offline,
+including the downloaded Windows folder.
+
+**عدّاء المفاتيح (Key Runner)** teaches where every key is. A little runner hops across giant
+keycap stones printed like the school's Dell Arabic keyboard (Latin letter top-left, Arabic letter
+bottom-right); pressing the key on the next stone makes it hop and adds +1 speed. An on-screen
+keyboard always shows the key to press, glowing. Seven worlds go Space and arrows, F and J, the
+home row, the top row, the bottom row, numbers, then all keys with short Arabic words. A slow
+child never falls: the runner waits at the edge. Keys are read by their place, so it works with
+either input language. Two players race on split lanes, one on the left half of the keyboard and
+one on the right. Esc pauses, because P is a letter here.
+
+**سباق البيض (Egg Rush)** is a top-down sneak-and-freeze game. A farm kid (arrows or WASD) carries
+eggs from sleeping guards' nests to the home nest, where each hatches into a baby that joins a
+parade behind the kid. A guard that stirs shows «؟» first; when it looks, standing still is safe
+and moving in its cone means a comic bump and the egg rolls back. Five farms (hens, ducks,
+penguins, ostriches and a dino mum) with four yards each add water, ice, cover, patrols and golden
+eggs. Two players race on the same keyboard.
+
+**بحيرة الحظ (Lucky Lake)** is a fishing game where the fish are visible under the water. Aim with
+the mouse (or the arrows) and click or press Space to cast, wait for the «!» bite, then hold to
+keep the fish inside the reel bar's green zone. Five places from the village pond to a magic night
+lagoon each have three picture goals (stars); there are 33 species and funny junk, a fish book and
+rod upgrades. Two players fish against the clock from a dock and a boat (Space and Enter).
 
 **حرّاس الكعكة (Cake Guards)** is a tower defense game played with the mouse. Jelly blobs march
 along candy roads towards a birthday cake; click a round pad beside the road to build a popcorn
@@ -105,10 +131,17 @@ upgrades and ball styles; longer shots unlock five worlds from the meadow to the
 can carry the ball to the edge of space. Progress saves locally; saves from the earlier version keep
 their coins, best distance and balls, and get their upgrade coins back.
 
-**أصابع البرق (typing test)** works like Monkeytype: time (15/30/60 s), words (10/25/50) or
-sentences, in English or Arabic, with the same WPM/accuracy formulas. For a class race, click
-**تحدٍّ للصف**, pick a test and write the 4-digit code on the board; every student who enters that
-code gets exactly the same words. Tab starts a new test.
+**أصابع البرق (Lightning Fingers)** is a typing game for children. Pick «عربي» or «English», then type
+the word on a cloud before it reaches the little town: the first letter picks the cloud, the next
+key always glows on an on-screen copy of the school keyboard (Latin and Arabic legends), and a
+finished word is zapped by a friendly lightning bolt into a rainbow. A wrong key only shakes the
+cloud (no Backspace needed); hamza forms are accepted, the B key's «لا» counts, and keys still
+count when the PC's input language is the other one. Five worlds per language (letters; 3-letter,
+4-letter and longer words; short phrases), four levels each with 1–3 stars; speed is shown as an
+animal from a snail to a rocket. «اختبار السرعة» is a 30 s or 60 s test with Monkeytype's WPM and
+accuracy formulas, a personal best and a history chart. For a class race, click **تحدٍّ للصف** →
+«للمعلم: رمز جديد», pick a test and write the 4-digit code on the board; every student who types
+that code gets exactly the same words.
 
 **ضربة الطلاء (shooter)** is a first-person arena game in the style of Krunker / Shell Shockers,
 made school-friendly: toy paint blasters, cute round "splat buddies", and paint splats instead of
@@ -274,7 +307,7 @@ two-player modes mix players.
   which games they play most, how long, at what time and where they stop. A table lists
   each game. Device status, how children reach the games, settings and first-time
   tutorials are in folded sections below. Device status rates each game سلس / مقبول / بطيء
-  from drawing speed and load time; Connect Four, Tic Tac Toe and Lightning Fingers have
+  from drawing speed and load time; Connect Four and Tic Tac Toe have
   no steady drawing loop, so they show «لا تُقاس» (their load times still show).
   «Where they stop» lists only levels that can be won or lost, with
   «فازوا في N من M محاولات» (tries include leaving the level); free play, endless runs,
@@ -523,7 +556,7 @@ independent holdouts. Actual student playtests remain necessary for difficulty f
 ## Credits and licenses
 
 - Games, art, sounds and site: original work made for this project. أصابع البرق computes
-  its results with the same published rules as Monkeytype (WPM, raw, accuracy, consistency),
+  its speed-test results with the same published rules as Monkeytype (WPM and accuracy),
   so students' scores are comparable; the code is our own.
 - [three.js](https://threejs.org) r159, MIT license (`lib/three/LICENSE`).
 - Fredoka font (Latin) and Baloo Bhaijaan 2 font (Arabic), SIL Open Font License

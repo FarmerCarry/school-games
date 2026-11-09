@@ -88,9 +88,8 @@ Rules for games:
   four buckets: smooth ≤ 20 ms, ok ≤ 34 ms, choppy ≤ 250 ms, stall > 250 ms. The first
   frame after the loop starts or the page becomes visible is skipped. Cost per frame:
   a subtraction, a few comparisons and an increment. Games with no steady drawing loop
-  while playing (connect-four and tic-tac-toe move pieces with CSS; typing-test redraws
-  on key presses and runs `requestAnimationFrame` only for short bursts of effects)
-  count no frames: counting those bursts would judge the effects, not the PC. The
+  while playing (connect-four and tic-tac-toe move pieces with CSS) count no frames:
+  counting short bursts of effects would judge the effects, not the PC. The
   teacher page lists them in `NO_FRAMES` (js/teacher.js); keep that list equal to the
   games that call neither `Kit.loop` nor `Kit.stats.frame`.
 * **Mute toggles** (the in-game sound button or M).

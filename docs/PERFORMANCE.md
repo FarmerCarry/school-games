@@ -50,7 +50,7 @@ One browser runs serially; keep other browser/rendering/CPU verification out of 
 
 `--latency` is synthetic HTTP delay, never a HDD simulation. `--native-gpu --headed` removes software overrides for experiments on actual school hardware; compare that separate profile only with itself. Native local measurements are still needed before making hardware FPS/storage claims.
 
-The default CLI includes the portal and every catalog game. DOM-led routes are supported: `typing-test`, `connect-four` and `tic-tac-toe` use real words/chooser controls and normal typing/board moves, rather than a hidden results canvas.
+The default CLI includes the portal and every catalog game. DOM-led routes are supported: `connect-four` and `tic-tac-toe` use their chooser controls and normal board moves; `typing-test` starts from its title's «English» button and the map's next level, then types the real next letter of a cloud.
 
 ## Meaning of each timing
 
