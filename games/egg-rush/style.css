@@ -66,9 +66,9 @@ html, body { background: #4f9a3a; }
 /* ----------------------------------------------------------------- map */
 #mapHome { position: absolute; top: 14px; left: 14px; }
 #mapStars { left: 96px; }
-#cards { position: absolute; left: 22px; right: 22px; top: 100px; height: 600px; display: flex; flex-direction: row; justify-content: center; gap: 14px; }
+#cards { position: absolute; left: 22px; right: 22px; top: 112px; height: 580px; display: flex; flex-direction: row; justify-content: center; gap: 14px; }
 .wcard {
-  position: relative; width: 234px; height: 590px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 10px 14px;
+  position: relative; width: 234px; height: 548px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 10px 14px;
   background: #fff8e6; color: var(--ink); border: 6px solid var(--ink); border-radius: 34px; box-shadow: 0 9px 0 var(--ink); pointer-events: auto;
 }
 .wcard canvas { width: 202px; height: 200px; border-radius: 22px; border: 4px solid var(--ink); background: #9be36a; }

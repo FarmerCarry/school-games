@@ -39,6 +39,8 @@
   let intro = null, countdown = 0, ending = null, result = null, resultT = 0, resultLock = 0, busyT = 0;
   let menuIdle = 0, menuNext = 5, closetFrom = 'title', tries = 0;
   let parades = [[], []], hatching = [], floats = [], rings = [], slots = [], streak = 0;
+  // eggs flying from the home nest up into their slot in the HUD, and slots that pop
+  let flyers = [], filled = 0, slotPop = [];
   let idle = 0, ghost = null, happy = [0, 0], squash = [0, 0], stepT = [0, 0], held = {}, stopHint = 0;
   const walk = [0, 0], coneBuf = [];
   const mouse = { x: W / 2, y: H / 2, down: false, known: false };
@@ -240,7 +242,7 @@
 
   /* -------------------------------------------------------------- rounds */
   function resetRound() {
-    parades = [[], []]; hatching = []; floats = []; rings = []; slots = []; streak = 0;
+    parades = [[], []]; hatching = []; floats = []; rings = []; slots = []; streak = 0; flyers = []; filled = 0; slotPop = [];
     ghost = null; idle = 0; happy = [0, 0]; squash = [0, 0]; held = {}; stopHint = 0;
     fx.clear(); ending = null; result = null; countdown = 0; mouse.down = false;
   }
@@ -284,6 +286,7 @@
   function restart() { J.select(); if (duo) startDuo(); else startLevel(cur, true); }
   function pause(own) {
     if (screen !== 'play') return;
+    $('btnMenu').querySelector('use').setAttribute('href', duo ? '#i-home' : '#i-map');
     setScreen('pause');
     mouse.down = false;
     if (own) J.back();
@@ -346,6 +349,8 @@
     $('resGift').hidden = true;
     $('resStars').querySelectorAll('svg').forEach(s => s.classList.remove('on'));
     $('resAgain').hidden = r.duo;
+    $('resMenu').querySelector('use').setAttribute('href', r.duo ? '#i-home' : '#i-map');
+    $('resMenu').setAttribute('aria-label', r.duo ? 'البداية' : 'الخريطة');
     if (r.duo) {
       $('resP1').textContent = String(r.r.scores[0]); $('resP2').textContent = String(r.r.scores[1]);
       $('resWinner').textContent = r.win < 0 ? 'تعادل!' : 'فاز ' + (r.win + 1) + '!';
@@ -510,7 +515,7 @@
     if (e.gold) save.golden[bw] = Math.min(save.babies[bw], save.golden[bw] + 1);
     persist();
     hatching.push({ x: e.x, y: e.y, p: e.p, w: bw, gold: e.gold, t: 0 });
-    if (!duo) for (let i = 0; i < e.value; i++) slots.push(e.gold ? 1 : 0);
+    if (!duo) for (let i = 0; i < e.value; i++) { slots.push(e.gold ? 1 : 0); flyers.push({ i: slots.length - 1, x: e.x, y: e.y - 40, t: -i * 0.08, gold: e.gold }); }
     J.coin(2);
     happy[e.p] = 1.2; squash[e.p] = 0.25;
     idle = 0; ghost = null;
@@ -737,7 +742,20 @@
       if (!hand.on && menuIdle >= menuNext) { menuNext = menuIdle + 7; menuHand(); }
     }
   }
+  function slotXY(i) {
+    const n = world.goal, sw = 42, pw = Math.min(n * sw + 28, 760);
+    return { x: 640 + pw / 2 - 14 - sw / 2 - i * sw, y: 45 };
+  }
+  function flyStep(dt) {
+    for (let i = flyers.length - 1; i >= 0; i--) {
+      const f = flyers[i];
+      f.t += dt;
+      if (f.t >= 0.6) { flyers.splice(i, 1); filled = Math.max(filled, f.i + 1); slotPop[f.i] = 1; J.coin(Math.min(5, f.i % 5 + 1)); }
+    }
+    for (let i = 0; i < slotPop.length; i++) if (slotPop[i]) slotPop[i] = Math.max(0, slotPop[i] - dt * 3);
+  }
   function decay(dt) {
+    if (world) flyStep(dt);
     for (let i = 0; i < 2; i++) { happy[i] = Math.max(0, happy[i] - dt); squash[i] = Math.max(0, squash[i] - dt * 1.4); }
     for (let i = rings.length - 1; i >= 0; i--) { rings[i].t += dt; if (rings[i].t > rings[i].life) rings.splice(i, 1); }
     for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i]; f.t += dt; f.y -= dt * 46; if (f.t > 1.2) floats.splice(i, 1); }
@@ -898,7 +916,7 @@
     A.rr(ctx, 640 - pw / 2, 12, pw, 66, 33); paint(ctx, 'rgba(42,29,62,0.78)', 4, '#ffffff');
     for (let i = 0; i < n; i++) {
       const x = x0 - i * sw, y = 45;
-      if (i < slots.length) A.egg(ctx, x, y, w.plan.w, slots[i] ? 1 : 0, 0, 0.95);
+      if (i < filled) A.egg(ctx, x, y, w.plan.w, slots[i] ? 1 : 0, 0, 0.95 * (1 + (still ? 0 : (slotPop[i] || 0) * 0.5)));
       else { A.eggPath(ctx, x, y + 2, 13); paint(ctx, 'rgba(255,255,255,0.18)', 3, 'rgba(255,255,255,0.6)'); }
     }
     // two star badges beside the eggs: few catches (hearts left), and the par clock
@@ -950,6 +968,11 @@
     drawWorld(ctx, still);
     drawFxLayer(ctx);
     drawHud(ctx, still);
+    for (const f of flyers) {
+      if (f.t < 0) continue;
+      const k = Math.min(1, f.t / 0.6), e = k * k * (3 - 2 * k), to = slotXY(f.i);
+      A.egg(ctx, f.x + (to.x - f.x) * e, f.y + (to.y - f.y) * e - Math.sin(k * Math.PI) * 90, world.plan.w, f.gold ? 1 : 0, k * 6, 1.3 - 0.35 * k);
+    }
     drawKeys(ctx, still);
     drawStopHint(ctx, still);
     if (intro) drawIntro(ctx, still);
@@ -1003,11 +1026,19 @@
       snailOrHare(ctx, x + 36, y + 34, fast);
     });
   }
+  // Fast: three chevrons on green. Slow: a snail on orange.
   function snailOrHare(ctx, x, y, fast) {
-    A.circle(ctx, x, y, 26); paint(ctx, fast ? '#3ddc84' : '#ff9f43', 4, A.INK);
-    ctx.lineWidth = 5; ctx.strokeStyle = '#ffffff'; ctx.lineCap = 'round';
-    const n = fast ? 3 : 1;
-    for (let i = 0; i < n; i++) { const ox = x - 10 + i * 9 - (n - 1) * 2; ctx.beginPath(); ctx.moveTo(ox - 4, y - 9); ctx.lineTo(ox + 5, y); ctx.lineTo(ox - 4, y + 9); ctx.stroke(); }
+    A.circle(ctx, x, y, 26); paint(ctx, fast ? '#3ddc84' : '#ffb347', 4, A.INK);
+    ctx.lineCap = 'round';
+    if (fast) {
+      ctx.lineWidth = 5; ctx.strokeStyle = '#ffffff';
+      for (let i = 0; i < 3; i++) { const ox = x - 10 + i * 9 - 4; ctx.beginPath(); ctx.moveTo(ox - 4, y - 9); ctx.lineTo(ox + 5, y); ctx.lineTo(ox - 4, y + 9); ctx.stroke(); }
+      return;
+    }
+    A.rr(ctx, x - 17, y + 4, 32, 9, 4.5); paint(ctx, '#ffe08a', 2.5, A.INK);
+    ctx.beginPath(); ctx.moveTo(x + 12, y + 6); ctx.lineTo(x + 16, y - 6); ctx.moveTo(x + 15, y + 6); ctx.lineTo(x + 21, y - 4); paint(ctx, null, 2.5, A.INK);
+    A.circle(ctx, x - 3, y - 2, 11); paint(ctx, '#c0784a', 3, A.INK);
+    ctx.beginPath(); ctx.arc(x - 3, y - 2, 5.5, 0, Math.PI * 1.6); paint(ctx, null, 2.5, A.INK);
   }
   function lessonIce(ctx, cx, cy) {
     const pw = 620, ph = 190, x = cx - pw / 2, y = cy - ph / 2;
@@ -1057,10 +1088,10 @@
   function lessonGold(ctx, cx, cy, giant) {
     const pw = 620, ph = 190, x = cx - pw / 2, y = cy - ph / 2;
     scene(ctx, x, y, pw, ph, giant ? 'dino' : 'farm');
-    A.egg(ctx, x + 470, y + 90, giant ? 4 : 0, giant ? 2 : 1, 0, giant ? 1.25 : 2.2);
+    A.egg(ctx, x + 480, y + 92, giant ? 4 : 0, giant ? 2 : 1, 0, giant ? 1.75 : 2.2);
     A.text(ctx, '=', x + 380, y + 92, 60, '#ffffff', { stroke: 10 });
     const n = giant ? 5 : 3;
-    for (let i = 0; i < n; i++) A.egg(ctx, x + 330 - i * 50, y + 92, giant ? 4 : 0, 0, 0, 1.4);
+    for (let i = 0; i < n; i++) A.egg(ctx, x + 330 - i * 46, y + 92, giant ? 4 : 0, 0, 0, 1.25);
     endScene(ctx, x, y, pw, ph);
     snailOrHare(ctx, x + 40, y + ph - 34, false);
   }
@@ -1098,11 +1129,12 @@
     panel(ctx, cx - cw / 2, cy - ch / 2, cw, ch, '#fff8e6');
     // the ribbon: the world's name and which of its 4 yards this is
     const ry = cy - ch / 2 - 6;
-    A.rr(ctx, cx - 200, ry - 30, 400, 66, 33); paint(ctx, '#ff9a2e', 5, A.INK);
+    A.rr(ctx, cx - 240, ry - 30, 480, 66, 33); paint(ctx, '#ff9a2e', 5, A.INK);
     if (duo) A.text(ctx, 'سباق اثنين', cx, ry + 2, 38, '#ffffff');
     else {
-      A.text(ctx, WORLD_NAMES[world.plan.w], cx + 46, ry + 2, WORLD_NAMES[world.plan.w].length > 8 ? 30 : 38, '#ffffff');
-      for (let i = 0; i < 4; i++) { A.circle(ctx, cx - 160 + (3 - i) * 26, ry + 2, i === world.plan.l ? 10 : 7); paint(ctx, i === world.plan.l ? '#ffd23f' : i < world.plan.l ? '#ffffff' : 'rgba(255,255,255,0.45)', 3, A.INK); }
+      const name = WORLD_NAMES[world.plan.w];
+      A.text(ctx, name, cx + 56, ry + 2, name.length > 8 ? 28 : 38, '#ffffff');
+      for (let i = 0; i < 4; i++) { A.circle(ctx, cx - 206 + (3 - i) * 26, ry + 2, i === world.plan.l ? 10 : 7); paint(ctx, i === world.plan.l ? '#ffd23f' : i < world.plan.l ? '#ffffff' : 'rgba(255,255,255,0.45)', 3, A.INK); }
     }
     // the goal: these eggs, into the home nest
     if (!duo) {
