@@ -46,10 +46,19 @@
   A.circle = circle; A.rr = rr; A.shade = shade; A.starPath = starPath;
 
   var cache = {};
+  // Pools, coral walls and keycaps are drawn at sizes that follow the tier and the level,
+  // so their keys keep changing over a long session. Keep only the most recent few of each
+  // (more than any one scene draws at once) instead of every size ever drawn.
+  var LIMIT = { pool: 6, co: 12, cap: 32 }, recent = { pool: [], co: [], cap: [] };
+  function family(key) {
+    return key.lastIndexOf('pool', 0) === 0 ? 'pool' : key.lastIndexOf('co', 0) === 0 ? 'co' : key.lastIndexOf('cap', 0) === 0 ? 'cap' : '';
+  }
   function sprite(key, w, h, draw) {
     if (cache[key]) return cache[key];
     var c = cv(w * SS, h * SS), g = c.getContext('2d');
     g.scale(SS, SS); draw(g, w, h);
+    var f = family(key);
+    if (f) { recent[f].push(key); if (recent[f].length > LIMIT[f]) delete cache[recent[f].shift()]; }
     return (cache[key] = c);
   }
 
@@ -1343,5 +1352,5 @@
     return c;
   };
   // A lost or restored canvas context makes every sprite again.
-  A.reset = function () { cache = {}; bgCache = []; kbCache = null; };
+  A.reset = function () { cache = {}; recent = { pool: [], co: [], cap: [] }; bgCache = []; kbCache = null; };
 })();
