@@ -343,12 +343,13 @@ test('names.js carries every catalog game\'s categories, players and input, and 
     for (const c of info.cats) assert.ok(Object.hasOwn(w.SG_CATEGORIES, c), g.slug + ': ' + c);
     for (const flag of ['dda', 'track', 'tutorial']) assert.ok(info[flag] === 0 || info[flag] === 1, g.slug + ' ' + flag);
   }
-  // What the games' own code reports (docs/RESEARCH_TELEMETRY_SPEC.md §B.5): 4 games adapt
-  // their difficulty, 6 count hits and reaction times, 27 show a tutorial.
+  // What the games' own code reports (docs/RESEARCH_TELEMETRY_SPEC.md §B.5): 7 games adapt
+  // their difficulty, 7 count hits and reaction times, 31 show a tutorial.
   const flagged = flag => Object.keys(w.SG_GAME_INFO).filter(slug => w.SG_GAME_INFO[slug][flag]).sort();
-  assert.deepEqual(flagged('dda'), ['bubble-bop', 'dino-3d', 'key-runner', 'road-hopper']);
-  assert.deepEqual(flagged('track'), ['bubble-bop', 'dino-3d', 'egg-rush', 'key-runner', 'lucky-lake', 'road-hopper']);
-  assert.equal(flagged('tutorial').length, 27);
+  const adaptive = ['bubble-bop', 'dino-3d', 'egg-rush', 'key-runner', 'lucky-lake', 'road-hopper', 'typing-test'];
+  assert.deepEqual(flagged('dda'), adaptive);
+  assert.deepEqual(flagged('track'), adaptive);
+  assert.equal(flagged('tutorial').length, 31);
   assert.deepEqual(Object.keys(w.SG_CATEGORIES), site.CATEGORIES.map(c => c.id));
   for (const c of site.CATEGORIES) {
     const [ar, en] = w.SG_CATEGORIES[c.id];

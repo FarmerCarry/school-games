@@ -55,13 +55,13 @@ window.SG_GAME_INFO = {
   "chaos-island": {"cats":["two-player","arcade"],"players":2,"input":"keyboard","dda":0,"track":0,"tutorial":1},
   "connect-four": {"cats":["two-player","puzzle"],"players":2,"input":"pointer","dda":0,"track":0,"tutorial":0},
   "critter-mart": {"cats":["idle"],"players":1,"input":"mixed","dda":0,"track":0,"tutorial":1},
-  "dino-3d": {"cats":["running","arcade"],"players":1,"input":"keyboard","dda":1,"track":1,"tutorial":0},
+  "dino-3d": {"cats":["running","arcade"],"players":1,"input":"keyboard","dda":1,"track":1,"tutorial":1},
   "drift-king": {"cats":["racing"],"players":1,"input":"one-button","dda":0,"track":0,"tutorial":1},
-  "egg-rush": {"cats":["two-player","idle"],"players":2,"input":"keyboard","dda":0,"track":1,"tutorial":1},
+  "egg-rush": {"cats":["two-player","arcade"],"players":2,"input":"keyboard","dda":1,"track":1,"tutorial":1},
   "fire-and-ice": {"cats":["two-player","puzzle"],"players":2,"input":"keyboard","dda":0,"track":0,"tutorial":0},
   "hoop-heads": {"cats":["sports","two-player"],"players":2,"input":"keyboard","dda":0,"track":0,"tutorial":1},
-  "key-runner": {"cats":["two-player","challenge"],"players":2,"input":"keyboard","dda":1,"track":1,"tutorial":0},
-  "lucky-lake": {"cats":["two-player","idle"],"players":2,"input":"mixed","dda":0,"track":1,"tutorial":0},
+  "key-runner": {"cats":["two-player","challenge"],"players":2,"input":"keyboard","dda":1,"track":1,"tutorial":1},
+  "lucky-lake": {"cats":["two-player","arcade"],"players":2,"input":"mixed","dda":1,"track":1,"tutorial":1},
   "maze-dash": {"cats":["arcade"],"players":1,"input":"keyboard","dda":0,"track":0,"tutorial":1},
   "merge-2048": {"cats":["puzzle"],"players":1,"input":"keyboard","dda":0,"track":0,"tutorial":0},
   "moto-madness": {"cats":["racing"],"players":1,"input":"keyboard","dda":0,"track":0,"tutorial":1},
@@ -80,7 +80,7 @@ window.SG_GAME_INFO = {
   "tic-tac-toe": {"cats":["two-player","puzzle"],"players":2,"input":"pointer","dda":0,"track":0,"tutorial":0},
   "troll-level": {"cats":["arcade"],"players":1,"input":"keyboard","dda":0,"track":0,"tutorial":1},
   "tunnel-blitz": {"cats":["running","arcade"],"players":1,"input":"keyboard","dda":0,"track":0,"tutorial":0},
-  "typing-test": {"cats":["challenge"],"players":1,"input":"keyboard","dda":0,"track":0,"tutorial":0},
+  "typing-test": {"cats":["challenge","arcade"],"players":1,"input":"keyboard","dda":1,"track":1,"tutorial":1},
   "wacky-soccer": {"cats":["sports","two-player"],"players":2,"input":"one-button","dda":0,"track":0,"tutorial":1}
 };
 // Category names: [Arabic, English].
