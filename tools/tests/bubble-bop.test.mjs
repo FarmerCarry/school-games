@@ -86,6 +86,9 @@ async function openLevel(page, w, l) {
   await page.keyboard.press('Enter');
   await step(page, 2);
   assert.equal((await state(page)).screen, 'map');
+  // Worlds 6-11 are on the map's second page, behind the big arrow.
+  const want = w >= 5 ? 1 : 0;
+  if ((await state(page)).mapPage !== want) { await page.locator(want ? '#mapNext' : '#mapPrev').click(); await step(page, 2); }
   await page.locator(`.pebble[data-w="${w}"][data-l="${l}"]`).click();
   await step(page, 2);
   assert.equal((await state(page)).screen, 'play');
@@ -557,4 +560,205 @@ test('statistics and telemetry reach a stub portal with valid round ids, hits an
   assert.equal(won[1], 'w'); assert.ok(won[6] >= 8, 'hits for every popped bubble'); assert.equal(won[7], 0);
   assert.equal(quit[1], 'q'); assert.ok(quit[6] >= 1, 'a hit'); assert.ok(quit[7] >= 1, 'a missed click');
   assert.ok(quit[8].reduce((a, b) => a + b, 0) >= 1, 'a reaction time to a balloon');
+});
+
+/* ------------------------------------------------------------ worlds 6-11 */
+// An eleven-world save with worlds before `done` finished and `open` levels of world `done` starred.
+const SAVE11 = (done, open = 0) => ({ v: 1, stars: Array.from({ length: 11 }, (_, w) => w < done ? [3, 3, 3] : w === done ? [0, 1, 2].map(i => i < open ? 1 : 0) : [0, 0, 0]),
+  best: Array(11).fill(0), grip: true, color: 0, hat: 0, seenStars: 0 });
+const at = (page, x, y) => page.evaluate(([x, y]) => __game.point(x, y), [x, y]);
+
+test('a five-world save opens world 6 on the map\'s second page; the arrows and ← → turn the pages', async t => {
+  const page = await game(t, { save: SAVE(5) });
+  assert.equal((await page.evaluate(() => __game.save)).stars.length, 11, 'an old save grows to eleven worlds');
+  await page.keyboard.press('Enter');
+  await step(page, 2);
+  let s = await state(page);
+  assert.equal(s.screen, 'map'); assert.equal(s.mapPage, 1, 'the map opens where the next level is');
+  const visible = sel => page.locator(sel).isVisible();
+  assert.ok(await visible('.pebble[data-w="5"][data-l="0"]') && await visible('.pebble[data-w="10"][data-l="P"]'));
+  assert.ok(!await visible('.pebble[data-w="0"][data-l="0"]'));
+  assert.equal(await page.locator('.pebble[data-w="5"][data-l="0"]').evaluate(b => b.classList.contains('next') && !b.classList.contains('locked')), true, 'world 6 is open');
+  assert.equal(await page.locator('.pebble[data-w="6"][data-l="0"]').evaluate(b => b.classList.contains('locked')), true, 'world 7 waits');
+  await page.locator('#mapPrev').click();
+  await step(page, 2);
+  assert.equal((await state(page)).mapPage, 0);
+  assert.ok(await visible('.pebble[data-w="0"][data-l="0"]') && !await visible('.pebble[data-w="5"][data-l="0"]'));
+  assert.equal(await page.locator('.pebble[data-w="4"][data-l="2"] .st svg.on').count(), 3, 'the old stars are all there');
+  await page.keyboard.press('ArrowLeft');
+  await step(page, 2);
+  assert.equal((await state(page)).mapPage, 1, '← turns to the next page, like the reading direction');
+  await page.keyboard.press('Enter');
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.screen, 'play'); assert.equal(s.world, 5); assert.equal(s.mode, 'drag');
+  assert.deepEqual((await page.evaluate(() => bb.stats)).filter(c => c[0] === 'round').map(c => c[1]), ['w6L1']);
+});
+
+test('world 6: a real press, move and release carries a turtle into its pool', async t => {
+  const page = await game(t, { save: SAVE11(5), dda: { _: { w6: [0.3, 4] } } });
+  await openLevel(page, 5, 0);
+  assert.equal((await state(page)).tier, 2);
+  assert.ok(await until(page, 's.targets.length > 0'));
+  await step(page, 20);
+  let s = await state(page);
+  const turtle = s.targets[0], pool = s.pools.find(p => p.color === turtle.home);
+  // A click on the sand does nothing bad; a click on the turtle (tier 2) does not pick it up.
+  const sand = await at(page, 1100, 260);
+  await page.mouse.click(sand.x, sand.y);
+  const a = await at(page, turtle.x, turtle.y);
+  await page.mouse.click(a.x, a.y);
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.held, 0); assert.equal(s.hits, 0); assert.equal(s.slips, 0); assert.ok(s.missClicks >= 1);
+  // Press, hold, move, release.
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.held, turtle.id, 'pressed on the turtle: it is in the hand');
+  assert.equal(s.button, true, 'the on-screen mouse shows the button held');
+  const b = await at(page, pool.x, pool.y);
+  for (let i = 1; i <= 10; i++) { await page.mouse.move(a.x + (b.x - a.x) * i / 10, a.y + (b.y - a.y) * i / 10); await step(page, 3); }
+  const carried = (await state(page)).targets.find(o => o.id === turtle.id);
+  assert.ok(Math.hypot(carried.x - pool.x, carried.y - pool.y) < pool.r, 'the turtle follows the pointer');
+  await page.mouse.up();
+  assert.ok(await until(page, 's.hits === 1', 60), 'let go over its pool: home');
+  s = await state(page);
+  assert.equal(s.held, 0); assert.equal(s.slips, 0);
+  const calls = await page.evaluate(() => bb.cues.length);
+  assert.ok(calls >= 1, 'a turtle appearing is a reaction cue');
+});
+
+test('world 7: one click knocks a clam; a double click opens it', async t => {
+  const page = await game(t, { save: SAVE11(6), dda: { _: { w7: [0.3, 4] } } });
+  await openLevel(page, 6, 0);
+  assert.ok(await until(page, 's.targets.length > 0'));
+  await step(page, 20);
+  const c = (await state(page)).targets[0], p = await at(page, c.x, c.y);
+  await page.mouse.click(p.x, p.y);
+  await step(page, 1);
+  let s = await state(page);
+  assert.equal(s.hits, 0); assert.equal(s.targets.find(o => o.id === c.id).armed, true, 'one click fills one dot');
+  await step(page, 90);
+  assert.equal((await state(page)).targets.find(o => o.id === c.id).armed, false, 'too slow: the dot empties, nothing lost');
+  await page.mouse.dblclick(p.x, p.y);
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.hits, 1, 'a real double click opens the clam');
+  assert.equal(s.escapes, 0);
+});
+
+test('world 8: holding the button or Space blows the bubble; letting go in the ring fills it', async t => {
+  const page = await game(t, { save: SAVE11(7), dda: { _: { w8: [0.05, 4] } } });
+  await openLevel(page, 7, 0);
+  assert.ok(await until(page, 's.targets.length > 0 && s.targets[0].state === "ready"'));
+  // A short click only poofs a little bubble: no pop, no slip.
+  await page.mouse.move(640, 600);
+  await page.mouse.click(640, 600);
+  await step(page, 3);
+  let s = await state(page);
+  assert.equal(s.hits, 0); assert.equal(s.escapes, 0);
+  // The mouse button held down.
+  await page.mouse.down();
+  await step(page, 2);
+  assert.equal((await state(page)).targets[0].state, 'grow');
+  assert.ok(await until(page, 's.targets[0].inBand', 400), 'the bubble reaches the ring');
+  await step(page, 4);
+  await page.mouse.up();
+  await step(page, 2);
+  assert.equal((await state(page)).hits, 1, 'let go inside the ring');
+  // Space works the same.
+  assert.ok(await until(page, 's.targets.length > 0 && s.targets[0].state === "ready"', 300));
+  await page.keyboard.down('Space');
+  await step(page, 2);
+  assert.ok(await until(page, 's.targets[0] && s.targets[0].inBand', 400));
+  await step(page, 4);
+  await page.keyboard.up('Space');
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.hits, 2, 'Space blows bubbles too');
+  // Pausing while holding drops the bubble quietly.
+  assert.ok(await until(page, 's.targets.length > 0 && s.targets[0].state === "ready"', 300));
+  await page.keyboard.down('Space');
+  await step(page, 20);
+  await page.keyboard.press('KeyP');
+  await step(page, 2);
+  await page.keyboard.up('Space');
+  assert.equal((await state(page)).screen, 'pause');
+  const frozen = await state(page);
+  await step(page, 60);
+  assert.equal((await state(page)).time, frozen.time, 'nothing grows while paused');
+  await page.keyboard.press('KeyP');
+  await step(page, 3);
+  s = await state(page);
+  assert.equal(s.screen, 'play'); assert.equal(s.targets[0].state, 'ready'); assert.equal(s.escapes, 0); assert.equal(s.hits, 2);
+});
+
+test('world 9: the arrows and WASD steer the submarine to the starfish', async t => {
+  const page = await game(t, { save: SAVE11(8), dda: { _: { w9: [0.05, 4] } } });
+  await openLevel(page, 8, 0);
+  assert.ok(await until(page, 's.targets.length > 0'));
+  for (const [key, axis, sign] of [['ArrowRight', 'x', 1], ['ArrowLeft', 'x', -1], ['KeyW', 'y', -1], ['KeyS', 'y', 1]]) {
+    const before = (await state(page)).sub;
+    await page.keyboard.down(key);
+    await step(page, 20);
+    await page.keyboard.up(key);
+    // The submarine glides to a stop before the next key.
+    await step(page, 30);
+    const after = (await state(page)).sub;
+    assert.ok((after[axis] - before[axis]) * sign > 30, `${key} moves the submarine (${JSON.stringify(before)} → ${JSON.stringify(after)})`);
+  }
+  // Steer to the first starfish with the arrows.
+  for (let i = 0; i < 40 && (await state(page)).hits === 0; i++) {
+    const s = await state(page), f = s.targets[0];
+    if (!f) { await step(page, 5); continue; }
+    const keys = [];
+    if (Math.abs(f.x - s.sub.x) > 20) keys.push(f.x > s.sub.x ? 'ArrowRight' : 'ArrowLeft');
+    if (Math.abs(f.y - s.sub.y) > 20) keys.push(f.y > s.sub.y ? 'ArrowDown' : 'ArrowUp');
+    for (const k of keys) await page.keyboard.down(k);
+    await step(page, 6);
+    for (const k of keys) await page.keyboard.up(k);
+  }
+  assert.equal((await state(page)).hits, 1, 'the submarine picked up a starfish');
+});
+
+test('world 10: the letter on the balloon pops it, in English or Arabic input; a wrong key costs nothing', async t => {
+  const page = await game(t, { save: SAVE11(9), dda: { _: { w10: [0.05, 4] } } });
+  await openLevel(page, 9, 0);
+  assert.ok(await until(page, 's.targets.length > 0'));
+  let s = await state(page);
+  const code = s.targets[0].code;
+  assert.ok(['KeyF', 'KeyJ'].includes(code), 'tier 1 is F and J');
+  for (const key of ['KeyQ', 'Space', code === 'KeyF' ? 'KeyJ' : 'KeyF']) await page.keyboard.press(key);
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.hits, 0); assert.equal(s.escapes, 0); assert.equal(s.screen, 'play');
+  assert.ok(s.missClicks >= 3, 'wrong keys are counted for the difficulty, never against the stars');
+  await page.keyboard.press(code);
+  await step(page, 2);
+  assert.equal((await state(page)).hits, 1, 'the right key pops its balloon');
+  // The same key with an Arabic keyboard layout: the key's place (code) counts, not its letter.
+  assert.ok(await until(page, 's.targets.length > 0', 400));
+  const next = (await state(page)).targets[0].code, cdp = await page.context().newCDPSession(page);
+  const ar = { KeyF: 'ب', KeyJ: 'ت' }[next];
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', code: next, key: ar, text: ar, unmodifiedText: ar, windowsVirtualKeyCode: next === 'KeyF' ? 70 : 74 });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', code: next, key: ar, windowsVirtualKeyCode: next === 'KeyF' ? 70 : 74 });
+  await step(page, 2);
+  assert.equal((await state(page)).hits, 2, 'the Arabic letter on the same key pops it');
+  // P still pauses and M still mutes in the letters world.
+  await page.keyboard.press('KeyP');
+  await step(page, 1);
+  assert.equal((await state(page)).screen, 'pause');
+  const frozen = await state(page);
+  await step(page, 60);
+  assert.equal((await state(page)).time, frozen.time);
+});
+
+test('world 11 mixes the five new skills, part after part', async t => {
+  const page = await game(t, { save: SAVE11(10), dda: { _: { w11: [0.05, 4] } } });
+  await openLevel(page, 10, 0);
+  const s = await state(page);
+  assert.equal(s.mode, 'drag'); assert.equal(s.goal, 2);
+  assert.deepEqual((await page.evaluate(() => bb.stats)).filter(c => c[0] === 'round').map(c => c[1]), ['w11L1']);
 });

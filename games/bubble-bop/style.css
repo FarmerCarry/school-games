@@ -9,7 +9,7 @@ html, body {
   background: #0d63b4;
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M6 4L6 40L15.5 31.5L22 45L29 42L22.5 28.5L35 28.5Z' fill='%23fff' stroke='%231c2250' stroke-width='3.5' stroke-linejoin='round'/%3E%3C/svg%3E") 6 4, auto;
 }
-button, #scrGrip {
+button, #scrGrip, #game.grab {
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='52' viewBox='0 0 44 52'%3E%3Cpath d='M14 4a4.5 4.5 0 0 1 9 0v18h1a4 4 0 0 1 8 0v2a4 4 0 0 1 8 0v12c0 8-6 14-14 14h-2c-6 0-10-3-13-8l-7-11a4 4 0 0 1 6-5l4 4z' fill='%23fff' stroke='%231c2250' stroke-width='3.5' stroke-linejoin='round'/%3E%3C/svg%3E") 18 1, pointer;
 }
 .defs { position: absolute; width: 0; height: 0; overflow: hidden; }
@@ -112,6 +112,13 @@ button, #scrGrip {
 .pebble.locked svg.ic { fill: #59628f; stroke: none; }
 .pebble.locked .st, .pebble.locked .best { display: none; }
 .pebble.done { background: #e9fff1; }
+.pebble[hidden], .isle[hidden] { display: none; }
+/* The big arrows that turn the map's two pages (worlds 1-5, worlds 6-11). */
+.page-btn { position: absolute; top: 188px; background: #ffd23f; color: #ffffff; }
+.page-btn svg { width: 62%; height: 62%; }
+#mapNext { left: 18px; }
+#mapPrev { right: 18px; }
+#mapPrev svg { transform: scaleX(-1); }
 
 /* --------------------------------------------------------------- pause */
 #scrPause .card { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 36px 56px; background: #ffffff; border: 7px solid var(--ink); border-radius: 44px; box-shadow: 0 11px 0 var(--ink); }
@@ -142,20 +149,21 @@ button, #scrGrip {
 #closetBack { position: absolute; top: 14px; left: 14px; background: #4fd1ff; color: #fff; }
 #closetStars { left: 96px; }
 .closet-panel {
-  position: absolute; left: 28px; top: 96px; width: 640px; padding: 20px; display: flex; flex-direction: column; gap: 22px; pointer-events: auto;
+  position: absolute; left: 24px; top: 92px; width: 700px; padding: 16px 18px; display: flex; flex-direction: column; gap: 16px; pointer-events: auto;
   background: rgba(255, 255, 255, 0.94); border: 7px solid var(--ink); border-radius: 40px; box-shadow: 0 11px 0 var(--ink);
 }
-.shelf { display: grid; grid-template-columns: repeat(5, 104px); gap: 14px 16px; justify-content: center; }
-#colors { grid-template-columns: repeat(4, 104px); padding-bottom: 22px; border-bottom: 5px dashed #c8cfea; }
-.item { position: relative; width: 104px; height: 104px; border-radius: 28px; background: #eef1fb; color: var(--ink); box-shadow: 0 5px 0 var(--ink); }
-.item canvas { width: 92px; height: 92px; }
+/* 13 colours and 16 hats: seven to a row, every tile still a big button. */
+.shelf { display: grid; grid-template-columns: repeat(7, 84px); gap: 14px 12px; justify-content: center; }
+#colors { padding-bottom: 18px; border-bottom: 5px dashed #c8cfea; }
+.item { position: relative; width: 84px; height: 84px; border-radius: 24px; background: #eef1fb; color: var(--ink); box-shadow: 0 5px 0 var(--ink); }
+.item canvas { width: 76px; height: 76px; }
 .item.on { background: #fff3b0; outline: 6px solid #ffcc00; outline-offset: 2px; }
 .item.locked { background: #d5d9ec; }
 .item.locked canvas { opacity: 0.3; filter: grayscale(1); }
 .item .need { position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 2px; padding: 0 8px 0 4px; border-radius: 999px; background: #fff; border: 3px solid var(--ink); font-size: 20px; line-height: 26px; direction: ltr; }
 .item.locked .need { display: flex; }
 .item .need svg { width: 20px; height: 20px; fill: #ffd23f; stroke: var(--ink); stroke-width: 5; }
-.item .lockic { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; fill: var(--ink); display: none; }
+.item .lockic { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; fill: var(--ink); display: none; }
 .item.locked .lockic { display: block; }
 
 /* ------------------------------------------------------------- HUD, coach */
