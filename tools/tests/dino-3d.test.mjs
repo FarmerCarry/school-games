@@ -1,6 +1,6 @@
 // Dino 3D in real Chromium: real keyboard and mouse input, the journey and endless
 // rounds, pause and lifecycle, saves and failed saves, the wardrobe and the map, the
-// course code, difficulty and the statistics and telemetry a portal receives.
+// course code and difficulty.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -10,43 +10,33 @@ import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
-const ID = /^[A-Za-z][A-Za-z0-9_:.-]{0,23}$/;
-// A stand-in portal: the game in an iframe, the preferences it is sent, and every
-// message it posts back (window.got).
-const EMBED = '/embed/dino-3d.html';
-const HOST = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>host</title></head><body style="margin:0">
-<iframe id="game" src="/games/dino-3d/" style="width:1100px;height:620px;border:0"></iframe>
-<script>
-window.got = [];
-addEventListener('message', function (e) { if (e.source === document.getElementById('game').contentWindow) got.push(e.data); });
-window.prefs = function (p) { document.getElementById('game').contentWindow.postMessage(Object.assign({ type: 'sg:preferences' }, p), location.origin); };
-</script></body></html>`;
 let browser, server;
-before(async () => { server = await startTestServer(root, { pages: { [EMBED]: HOST } }); browser = await launchChromium(); });
+before(async () => { server = await startTestServer(root); browser = await launchChromium(); });
 after(async () => { await browser?.close(); await server?.close(); });
 
 const SAVE = (extra = {}) => ({ v: 2, stars: Array(15).fill(0), best: Array(15).fill(0), bank: 0, far: 0, color: 0, hat: 0, seen: 0, coach: true, ...extra });
 const starsUpTo = n => Array.from({ length: 15 }, (_, i) => i < n ? 3 : 0);
 
 // The page with its frame loop stepped by hand (probe.step: updates and one paint;
-// probe.run: updates only), Kit.stats and Kit.ready recorded, and storage that can fail.
+// probe.run: updates only), Kit.ready and every Kit.dda result recorded
+// (probe.results: [id, outcome]), and storage that can fail. `ddaStart: { main, endless }`
+// is the level each difficulty starts at before it has a result (Kit.dda's `start`).
 // It never moves obstacles or the dino: input goes through the real keyboard and mouse.
-async function game(t, { save, dda, deniedStorage = false, embed = null, viewport = { width: 1100, height: 620 } } = {}) {
+async function game(t, { save, ddaStart = {}, deniedStorage = false, viewport = { width: 1100, height: 620 } } = {}) {
   const context = await browser.newContext({ viewport, serviceWorkers: 'block', reducedMotion: 'reduce' });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   context.on('request', request => { if (!request.url().startsWith(server.origin)) errors.push('External request: ' + request.url()); });
   t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'no errors or external requests'); });
-  await context.addInitScript(({ save, dda, deniedStorage }) => {
+  await context.addInitScript(({ save, ddaStart, deniedStorage }) => {
     if (!/\/games\/dino-3d\//.test(location.pathname)) return;
     if (!sessionStorage.getItem('dino-seeded')) {
       sessionStorage.setItem('dino-seeded', '1');
       if (save !== undefined) localStorage.setItem('sg:dino-3d:save', JSON.stringify(save));
-      if (dda) localStorage.setItem('sg:dino-3d:dda', JSON.stringify(dda));
     }
     let kit, update, render;
-    const probe = window.dinoProbe = { stats: [], ready: 0, failSave: false, writes: 0 };
+    const probe = window.dinoProbe = { results: [], ready: 0, failSave: false, writes: 0 };
     probe.step = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); render(0); };
     probe.run = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); };
     // Updates until a condition holds (or the budget runs out), then one paint.
@@ -57,10 +47,12 @@ async function game(t, { save, dda, deniedStorage = false, embed = null, viewpor
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (u, r) => { update = u; render = r; return { running: true, stop() {} }; };
-      for (const name of ['round', 'end', 'tutorial']) {
-        const call = kit.stats[name];
-        kit.stats[name] = function (...args) { probe.stats.push([name, ...args]); return call.apply(this, args); };
-      }
+      const dda = kit.dda;
+      kit.dda = (slug, opts = {}) => {
+        const id = opts.id || 'main', control = dda.call(kit, slug, Object.assign({ start: ddaStart[id] }, opts)), result = control.result;
+        control.result = outcome => { probe.results.push([id, outcome]); return result.call(control, outcome); };
+        return control;
+      };
       const ready = kit.ready;
       kit.ready = (...args) => { probe.ready++; return ready.apply(kit, args); };
     } });
@@ -74,33 +66,19 @@ async function game(t, { save, dda, deniedStorage = false, embed = null, viewpor
       if (deniedStorage) throw new DOMException('Storage fixture', 'SecurityError');
       return read.apply(this, arguments);
     };
-  }, { save, dda, deniedStorage });
-  if (embed) {
-    await page.goto(server.origin + EMBED);
-    const frame = page.frames().find(f => f.url().includes('/games/dino-3d/'));
-    await frame.waitForFunction(() => !!window.Dino3DGame && window.dinoProbe.ready === 1, null, { polling: 50 });
-    await prefs(frame, embed);
-    return frame;
-  }
+  }, { save, ddaStart, deniedStorage });
   await page.goto(`${server.origin}/games/dino-3d/`);
   await page.waitForFunction(() => !!window.Dino3DGame && window.dinoProbe.ready === 1, null, { polling: 50 });
   return page;
-}
-async function prefs(frame, p) {
-  await frame.evaluate(() => {
-    window.prefsSeen = new Promise(resolve => addEventListener('message', function seen(e) {
-      if (e.data && e.data.type === 'sg:preferences') { removeEventListener('message', seen); resolve(); }
-    }));
-  });
-  await frame.page().evaluate(p => window.prefs(p), p);
-  await frame.evaluate(() => window.prefsSeen);
 }
 const state = page => page.evaluate(() => Dino3DGame.state);
 const mode = page => page.evaluate(() => Dino3DGame.mode);
 const step = (page, n = 1) => page.evaluate(n => dinoProbe.step(n), n);
 const run = (page, n = 1) => page.evaluate(n => dinoProbe.run(n), n);
 const until = (page, cond, max) => page.evaluate(([c, m]) => dinoProbe.until(c, m), [cond, max]);
-const stats = page => page.evaluate(() => dinoProbe.stats);
+const results = page => page.evaluate(() => dinoProbe.results);
+// The level a difficulty has reached on this PC, read through a second controller.
+const ddaLevel = (page, id) => page.evaluate(id => Kit.dda('dino-3d', { id }).level, id);
 const visible = (page, sel) => page.locator(sel).isVisible();
 // keyboard.down resolves when the browser takes the key, which can be before the page
 // runs its listeners; wait until this page has seen it (after Kit's own listener).
@@ -174,13 +152,12 @@ async function playWithBot(page, maxMoves = 400) {
   return mode(page);
 }
 
-test('the title is not a round; Play starts level 1-1 with its coach, and real keys and clicks move the dino', async t => {
+test('the title waits for Play; Play starts level 1-1 with its coach, and real keys and clicks move the dino', async t => {
   const page = await game(t);
   await step(page, 3);
   assert.equal(await mode(page), 'title');
   assert.ok(await visible(page, '#title') && await visible(page, '#play'));
   assert.equal(await visible(page, '#pause-button'), false);
-  assert.deepEqual(await stats(page), [], 'the title is not a round');
   // A click on the empty title makes the dino hop; it starts nothing.
   await page.mouse.click(40, 400);
   await step(page, 2);
@@ -189,8 +166,7 @@ test('the title is not a round; Play starts level 1-1 with its coach, and real k
   await key(page, 'Enter');
   await step(page);
   let s = await state(page);
-  assert.equal(s.mode, 'playing'); assert.equal(s.id, 'b1L1'); assert.equal(s.level, 0);
-  assert.deepEqual((await stats(page)).map(c => c.slice(0, 2)), [['round', 'b1L1'], ['tutorial', 'start']]);
+  assert.equal(s.mode, 'playing'); assert.equal(s.id, 'b1L1'); assert.equal(s.level, 0); assert.equal(s.endless, false);
   assert.ok(await visible(page, '#intro'), 'a first-time child sees the keys');
   assert.ok(await visible(page, '#pause-button'));
   assert.equal(s.player.y, 0);
@@ -213,7 +189,6 @@ test('the title is not a round; Play starts level 1-1 with its coach, and real k
   await key(page, 'ArrowDown', 'up');
   await step(page, 2);
   assert.equal((await state(page)).player.duck, false);
-  for (const c of (await stats(page)).filter(c => c[0] === 'round')) assert.match(c[1], ID);
 });
 
 test('P and Esc pause and resume; a pause freezes the world; focus loss pauses and coming back does not resume', async t => {
@@ -251,8 +226,8 @@ test('P and Esc pause and resume; a pause freezes the world; focus loss pauses a
   await key(page, 'KeyP'); await run(page, 1);
   await key(page, 'KeyR'); await step(page);
   const s = await state(page);
-  assert.equal(s.mode, 'playing'); assert.ok(s.distance < 1);
-  assert.deepEqual((await stats(page)).filter(c => c[0] === 'round').map(c => c[1]), ['b1L1', 'b1L1']);
+  assert.equal(s.mode, 'playing'); assert.ok(s.distance < 1); assert.equal(s.id, 'b1L1');
+  assert.deepEqual(await results(page), [], 'a pause and a restart are no result');
 });
 
 test('an idle dino bumps obstacles, tumbles, runs out of hearts and gets a result; R plays again at once', async t => {
@@ -271,8 +246,12 @@ test('an idle dino bumps obstacles, tumbles, runs out of hearts and gets a resul
   assert.ok(await visible(page, '#result'));
   assert.equal(await visible(page, '#next'), false, 'level 1-2 is not open yet');
   assert.equal((await state(page)).stars, 0);
-  const ends = (await stats(page)).filter(c => c[0] === 'end');
-  assert.equal(ends.length, 1); assert.equal(ends[0][1], 'lose'); assert.equal(ends[0][2], s.eggs >= 0 ? (await state(page)).eggs : 0);
+  s = await state(page);
+  assert.ok(s.over && !s.done && s.hearts <= 0, 'the try is lost: ' + JSON.stringify(s));
+  assert.equal(await page.locator('#res-title').textContent(), 'حاول مرة أخرى!');
+  const lost = await results(page);
+  assert.equal(lost.length, 1, 'one result for the lost try');
+  assert.equal(lost[0][0], 'main'); assert.ok(lost[0][1] < 0.3, 'a lost try is a poor result: ' + lost[0][1]);
   await key(page, 'KeyR');
   await run(page, 1);
   assert.equal(await mode(page), 'result', 'R waits a moment so a late jump cannot skip the result');
@@ -281,11 +260,11 @@ test('an idle dino bumps obstacles, tumbles, runs out of hearts and gets a resul
   await step(page);
   s = await state(page);
   assert.equal(s.mode, 'playing'); assert.equal(s.id, 'b1L1'); assert.equal(s.hearts, 6); assert.equal(s.score, 0);
-  assert.deepEqual((await stats(page)).filter(c => c[0] === 'round').map(c => c[1]), ['b1L1', 'b1L1']);
+  assert.equal(s.over, false); assert.ok(s.distance < 1, 'R starts a new try from the start');
 });
 
 test('a careful child finishes level 1-1: the family, stars, eggs, the save survives a reload and Next opens 1-2', async t => {
-  const page = await game(t, { save: SAVE({ coach: false }), dda: { _: { main: [0.05, 4] } } });
+  const page = await game(t, { save: SAVE({ coach: false }), ddaStart: { main: 0.05 } });
   await clickPlay(page);
   assert.equal((await state(page)).tier, 1);
   assert.equal(await playWithBot(page), 'ending');
@@ -297,9 +276,8 @@ test('a careful child finishes level 1-1: the family, stars, eggs, the save surv
   assert.ok(s.stars >= 2, 'stars: ' + s.stars);
   assert.equal(await page.locator('#res-stars svg.on').count(), s.stars, 'the stars pop in');
   assert.equal(await page.locator('#res-n').textContent(), String(s.eggs), 'the eggs count up');
-  const calls = await stats(page);
-  assert.deepEqual(calls.filter(c => c[0] === 'end'), [['end', 'win', s.eggs]]);
-  assert.deepEqual(calls.filter(c => c[0] === 'tutorial').map(c => c[1]), ['start', 'done']);
+  const won = await results(page);
+  assert.equal(won.length, 1); assert.equal(won[0][0], 'main'); assert.ok(won[0][1] >= 0.5, 'a finished level is a good result: ' + won[0][1]);
   const saved = await page.evaluate(() => Dino3DGame.save);
   assert.equal(saved.stars[0], s.stars); assert.equal(saved.best[0], s.eggs); assert.equal(saved.bank, s.eggs); assert.equal(saved.coach, true);
   assert.ok(await visible(page, '#next'));
@@ -334,7 +312,8 @@ test('the map opens unlocked levels only; a locked one stays shut', async t => {
   await page.locator('#pause-button').click(); await step(page);
   await page.locator('#pause-menu').click(); await step(page);
   assert.equal(await mode(page), 'map');
-  assert.deepEqual((await stats(page)).filter(c => c[0] === 'end').map(c => c[1]), ['quit'], 'leaving from the pause is a quit');
+  assert.deepEqual(await results(page), [], 'leaving from the pause is no result');
+  assert.equal((await page.evaluate(() => Dino3DGame.save)).stars[4], 0, 'and earns no stars');
   await key(page, 'Escape'); await step(page);
   assert.equal(await mode(page), 'title');
 });
@@ -380,7 +359,7 @@ test('with storage blocked the game still plays', async t => {
 });
 
 test('endless: a course code is the same course for everyone, at tier 3, and never moves the difficulty', async t => {
-  const page = await game(t, { save: SAVE({ far: 120 }), dda: { _: { main: [0.9, 6], endless: [0.05, 3] } } });
+  const page = await game(t, { save: SAVE({ far: 120 }), ddaStart: { main: 0.9, endless: 0.05 } });
   await page.locator('#btn-endless').click(); await step(page);
   assert.equal(await mode(page), 'endless');
   assert.equal(await page.locator('#far-best').textContent(), '120');
@@ -404,10 +383,11 @@ test('endless: a course code is the same course for everyone, at tier 3, and nev
   assert.ok(await until(page, `g.mode === 'result'`, 400));
   s = await state(page);
   assert.ok(await visible(page, '#res-far'));
-  assert.deepEqual((await stats(page)).filter(c => c[0] === 'end'), [['end', 'end', Math.floor(s.distance)]]);
-  const dda = JSON.parse(await page.evaluate(() => localStorage.getItem('sg:dino-3d:dda')));
-  assert.deepEqual(dda._.endless, [0.05, 3], 'a code run does not move the difficulty');
-  await run(page, 40);
+  assert.ok(s.over && s.endless && s.code === '0042', 'the code run ended: ' + JSON.stringify(s));
+  assert.deepEqual(await results(page), [], 'a code run does not move the difficulty');
+  assert.equal(await ddaLevel(page, 'endless'), 0.05);
+  await run(page, 80); await step(page);
+  assert.equal(await page.locator('#res-m').textContent(), String(Math.floor(s.distance)), 'the result counts up to the distance run');
   await key(page, 'KeyR'); await step(page);
   assert.equal((await state(page)).code, '0042', 'again plays the same course');
   assert.deepEqual(await layout(), first);
@@ -418,40 +398,36 @@ test('endless: a course code is the same course for everyone, at tier 3, and nev
   await key(page, 'Enter'); await step(page);
   s = await state(page);
   assert.equal(s.endless, true); assert.equal(s.code, ''); assert.equal(s.tier, 1);
-  assert.deepEqual((await stats(page)).filter(c => c[0] === 'round').map(c => c[1]), ['endless', 'endless', 'endless']);
+  assert.equal(s.mode, 'playing');
 });
 
-test('difficulty: the age band seeds the tier, results move it, and cues, hits and misses reach telemetry', async t => {
-  const frame = await game(t, { embed: { band: '6-7', telemetry: true } }), page = frame.page();
-  await frame.locator('#play').click();
-  await step(frame);
-  assert.equal((await state(frame)).tier, 1, 'a 6-7 guest starts at tier 1');
+test('difficulty: the first tier, a quit is no result, and a failed try eases the next one off', async t => {
+  const page = await game(t, { ddaStart: { main: 0.12 } });
+  await page.locator('#play').click();
+  await step(page);
+  assert.equal((await state(page)).tier, 1, 'level 0.12 is tier 1');
   // A few obstacles cleared with the real keyboard, then the menu.
-  await frame.evaluate(BOT);
+  await page.evaluate(BOT);
   for (let i = 0; i < 4; i++) {
-    const next = await frame.evaluate(() => dinoBot.next());
-    await key(frame, next.key, 'down'); await run(frame, next.frames); await key(frame, next.key, 'up');
+    const next = await page.evaluate(() => dinoBot.next());
+    await key(page, next.key, 'down'); await run(page, next.frames); await key(page, next.key, 'up');
   }
-  await run(frame, 80);
-  assert.ok((await frame.evaluate(() => Dino3DGame.world.cleared)) >= 3);
-  await key(frame, 'KeyP'); await run(frame, 1);
-  await frame.locator('#pause-menu').click(); await step(frame);
+  await run(page, 80);
+  assert.ok((await page.evaluate(() => Dino3DGame.world.cleared)) >= 3);
+  await key(page, 'KeyP'); await run(page, 1);
+  await page.locator('#pause-menu').click(); await step(page);
+  assert.deepEqual(await results(page), [], 'the quit is not a result');
   // Then an idle try that runs out of hearts: the next try is easier.
-  await frame.locator('.pebble[data-level="0"]').click(); await step(frame);
-  assert.ok(await until(frame, `g.mode === 'result'`, 8000));
-  const dda = JSON.parse(await frame.evaluate(() => localStorage.getItem('sg:dino-3d:dda')));
-  assert.equal(dda['_6-7'].main[1], 1, 'one result, the quit is not one');
-  assert.ok(dda['_6-7'].main[0] < 0.12, 'a failed try eases off: ' + dda['_6-7'].main[0]);
-  await page.waitForFunction(() => got.filter(m => m && m.type === 'sg:telemetry').flatMap(m => m.ev).filter(e => e[0] === 're').length >= 2, null, { polling: 50 });
-  const ev = await page.evaluate(() => got.filter(m => m && m.type === 'sg:telemetry').flatMap(m => m.ev));
-  const ends = ev.filter(e => e[0] === 're');
-  assert.deepEqual(ev.filter(e => e[0] === 'rs').map(e => e.slice(1)), [['b1L1', 1], ['b1L1', 1]]);
-  // [re, code, id, ms, score, tier, hits, misses, reaction times]
-  assert.equal(ends[0][1], 'q');
-  assert.ok(ends[0][6] >= 3 && ends[0][7] === 0, `cleared obstacles are hits: ${ends[0]}`);
-  assert.ok(ends[0][8].reduce((a, b) => a + b, 0) >= 3, 'presses after a cue are reaction times');
-  assert.equal(ends[1][1], 'l'); assert.equal(ends[1][5], 1);
-  assert.ok(ends[1][7] >= 3 && ends[1][6] === 0, `bumps are misses: ${ends[1]}`);
+  await page.locator('.pebble[data-level="0"]').click(); await step(page);
+  assert.equal((await state(page)).tier, 1);
+  assert.ok(await until(page, `g.mode === 'result'`, 8000));
+  const s = await state(page);
+  assert.ok(s.over && s.bumps >= 3, 'the idle try bumped its way out of hearts: ' + JSON.stringify(s));
+  const tries = await results(page);
+  assert.equal(tries.length, 1, 'one result, the quit is not one');
+  assert.equal(tries[0][0], 'main');
+  const level = await ddaLevel(page, 'main');
+  assert.ok(level < 0.12, 'a failed try eases off: ' + level);
 });
 
 test('the controls stay inside the frame at classroom and full-screen sizes', async t => {
