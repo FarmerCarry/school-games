@@ -17,7 +17,7 @@ window.SG_SCORES = {
   'fire-and-ice': ['نجوم المرحلة المنتهية', 'the stars of a finished level'],
   'hoop-heads': ['نقاط الطفل في المباراة', 'the child’s points in the match'],
   'key-runner': ['وقت إنهاء البرج بالثواني، وفي سباق اللاعبين صفر', 'the time to finish the tower, in seconds; in a two-player race, zero'],
-  'lucky-lake': ['أنواع السمك في الكتاب، وفي سباق اللاعبين وزن الصيد الأثقل بعُشر الكيلوغرام', 'the species in the book; in a two-player match, the heavier catch in tenths of a kilogram'],
+  'lucky-lake': ['ما اصطاده الطفل (سمكًا وأشياء طريفة) في رحلة واحدة إلى مكان، وفي مسابقة اللاعبين وزن السلة الأثقل بعُشر الكيلوغرام', 'the catches (fish and funny junk) landed on one trip to a place; in a two-player derby, the heavier basket’s weight in tenths of a kilogram'],
   'maze-dash': ['نجوم المرحلة المنتهية (من 0 إلى 3)، وفي التسلق المتواصل الارتفاع والنقاط', 'the stars of a finished level (0 to 3); in the endless climb, the height and the dots'],
   'merge-2048': ['نقاط اللعبة', 'the points of the game'],
   'moto-madness': ['نجوم المضمار المنتهي بحسب الوقت', 'the stars of a finished track, by time'],

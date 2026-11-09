@@ -96,8 +96,15 @@ export const scenarios = {
   'critter-mart': defaults(['#playBtn'], `${g}.mode === 'play'`, select(`${g}.state()`, ['player','coins','play','served']), hold('ArrowRight'), '#pauseBtn', `${g}.mode === 'pause'`, '#resumeBtn', `${g}.mode === 'play'`, { persistent: true }),
   'pizza-clicker': defaults(['#bPlay'], `${g}.mode === 'play'`, `[${g}.S.pizzas,${g}.S.clicks]`, async page => { await page.mouse.click(840, 405); }, '#bPause', `${g}.mode === 'pause'`, '#bResume', `${g}.mode === 'play'`, { persistent: true }),
   'block-world': defaults(['#playBtn','#modeCrea'], `${g}.G.mode === 'play'`, `[${g}.player.x,${g}.player.y,${g}.G.tod]`, hold('ArrowRight'), '#pausebtn', `${g}.G.mode === 'pause'`, '#resumeBtn', `${g}.G.mode === 'play'`, { persistent: true, startIf: ['true', `${g}.G.mode === 'newworld'`] }),
+  // Lucky Lake: a first visit goes straight to the village pond. The fish swim by
+  // themselves; only the child's own cast (the mouse in the water, a click or Space)
+  // moves the hook, and Restart starts a fresh trip with no cast yet.
+  'lucky-lake': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.mode === 'solo'`, `[${g}.state.time,${g}.state.p1,${g}.state.fish]`, async page => {
+    const point = await page.evaluate(() => window.__game.point(760, 470));
+    await page.mouse.move(point.x, point.y, { steps: 6 });
+    await page.mouse.click(point.x, point.y);
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.p1.casts === 0 && ${g}.state.trip === 0`),
   // Cake Guards: click a pad beside the road like a player, then pick popcorn from its menu.
-  'lucky-lake': defaults(['#btnPlay'], `${g}.mode === 'play'`, `[${g}.tick,${g}.phase]`, hold('Space', 220), '#btnPause', `${g}.mode === 'pause'`, '#btnResume', `${g}.mode === 'play'`, { persistent: true }),
   'cake-guards': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.coins,${g}.state.towers,${g}.state.time,${g}.state.wave]`, async page => {
     const pad = await page.evaluate(() => window.__game.padPoint(0));
     await page.mouse.click(pad.x, pad.y);
@@ -217,7 +224,7 @@ const inputSnapshots = {
   'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`,
   'wacky-soccer': `${g}.world.players.filter(p => p.side === 0).map(p => p.kickT)`,
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
-  'lucky-lake': `${g}.charge`,
+  'lucky-lake': `${g}.state.p1.casts`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
@@ -252,8 +259,8 @@ const inputSeen = {
   // The blob follows the pointer, which rests on the centred Play button below it:
   // without input it drifts straight down. The input points up and left of it.
   'blob-battle': `${g}.info().player.x < sgInput.before.x - 20 && ${g}.info().player.y < sgInput.before.y - 20`,
-  // The bobber waits by itself. Only holding cast makes the power meter climb.
-  'lucky-lake': `${g}.charge > 0.12`,
+  // The fish swim and bite by themselves; only the child's press casts the hook.
+  'lucky-lake': `${g}.state.p1.casts > sgInput.before`,
   // A bubble that rises into a resting Bop pops too; only real pointer travel onto one counts.
   'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`
 };

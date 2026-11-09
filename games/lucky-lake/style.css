@@ -101,6 +101,7 @@ html, body { background: #0d4f7a; }
 #btnMenu, #resMap { background: #4fd1ff; color: #fff; }
 .card h2 { margin: 0; font-size: 44px; line-height: 1.15; font-weight: 700; }
 
+#scrCatch { pointer-events: auto; }
 .card.catch { position: absolute; left: 380px; top: 70px; width: 520px; padding: 18px 20px 26px; gap: 6px; background: #fff8e8; }
 .card.catch canvas { width: 440px; height: 230px; }
 .facts { display: flex; align-items: center; justify-content: center; gap: 18px; font-size: 32px; font-weight: 700; }

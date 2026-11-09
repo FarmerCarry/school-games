@@ -89,7 +89,7 @@
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'll-btn place';
       // Right to left like Arabic reading: the village pond is on the right.
-      b.style.left = (1052 - i * 236 - 112) + 'px';
+      b.style.left = (1000 - i * 236) + 'px';
       b.innerHTML = '<i class="num">' + (i + 1) + '</i><canvas width="392" height="300"></canvas><b>' + P.name + '</b><span class="st">' + '<svg><use href="#i-star"/></svg>'.repeat(3) +
         '</span><span class="lock"><svg aria-hidden="true"><use href="#i-lock"/></svg></span><span class="need"><svg aria-hidden="true"><use href="#i-star"/></svg>2</span>';
       on(b, () => pickPlace(i, b));
@@ -565,7 +565,7 @@
     $('basketNum').textContent = String(trip.catches.length);
     if (p.streak >= 2) {
       const k = p.streak >= 5 ? 2 : p.streak >= 3 ? 1 : 0;
-      if (p.streak === 2 || p.streak === 3 || p.streak === 5 || p.streak % 5 === 0) { float(250, 70, PRAISE[k], '#ffd23f', 44); J.streak(p.streak); }
+      if (p.streak === 2 || p.streak === 3 || p.streak === 5 || p.streak % 5 === 0) { float(640, 170, PRAISE[k], '#ffd23f', 50); J.streak(p.streak); }
     }
     if (res.newSpecies && !c.junk) J.chime(Math.min(3, LL.SPECIES[c.sp].rarity));
     card = { pending: true, c: c, res: res, t: 0 };
@@ -694,7 +694,6 @@
       if (card && card.pending && world.players[0].state !== 'land') { card.pending = false; openCard(card.c, card.res); }
       if (card && card.open) {
         card.t += dt;
-        drawCardArt();
         busyT += dt;
         if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
         if (card.t > 9) closeCard(false);
@@ -921,7 +920,7 @@
     const ctx = view.ctx;
     ctx.save();
     ctx.translate(shake.x, shake.y);
-    if ((screen === 'play' || screen === 'pause') && world) { drawWorld(ctx, world); drawHud(ctx); }
+    if ((screen === 'play' || screen === 'pause') && world) { drawWorld(ctx, world); drawHud(ctx); if (card && card.open && screen === 'play') drawCardArt(); }
     else if ((screen === 'result' || screen === 'duoEnd') && world) {
       drawWorld(ctx, world);
       ctx.fillStyle = 'rgba(28,34,80,0.35)'; ctx.fillRect(0, 0, W, H);
