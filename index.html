@@ -17,26 +17,10 @@
     <span class="search-icon" aria-hidden="true">🔍</span>
     <input id="q" type="search" placeholder="ابحث عن لعبة…" aria-label="ابحث عن لعبة" spellcheck="false" autocomplete="off" maxlength="40" enterkeyhint="search">
   </form>
-  <details class="classroom" id="classroom">
-    <summary title="إعدادات الصف"><span aria-hidden="true">🏫</span> <span class="classroom-label">إعدادات الصف</span><span id="sessionClock" aria-label="الوقت المتبقي"></span></summary>
-    <div class="classroom-controls">
-      <label><input type="checkbox" id="classroomMode"> وضع الصف: صوت هادئ وحركة أقل</label>
-      <span class="band-pick" id="bandPick"><label for="classBand">عمر الطلاب (للضيوف)</label>
-      <select id="classBand"><option value="">غير محدد</option><option value="6-7">&#x2066;6–7&#x2069; سنوات</option><option value="8-9">&#x2066;8–9&#x2069; سنوات</option><option value="10-11">&#x2066;10–11&#x2069; سنة</option></select></span>
-      <label for="sessionMinutes">وقت الجلسة</label>
-      <select id="sessionMinutes"><option value="5">5 دقائق</option><option value="10" selected>10 دقائق</option><option value="15">15 دقيقة</option><option value="20">20 دقيقة</option></select>
-      <button type="button" class="pbtn" id="sessionStart">ابدأ المؤقّت</button>
-      <button type="button" class="pbtn" id="sessionStop" hidden>ألغِ المؤقّت</button>
-      <a class="pbtn" id="statsLink" href="teacher.html" target="_blank" rel="noopener"><span aria-hidden="true">📊</span> إحصاءات هذا الجهاز</a>
-      <span class="stats-off" id="statsOff" hidden>الإحصاءات متوقفة</span>
-      <p id="sessionStatus" role="status" aria-live="polite">يتوقف اللعب عند انتهاء الوقت لتسليم الجهاز أو متابعة الجولة.</p>
-    </div>
-  </details>
   <button class="surprise" id="surprise" type="button" title="العب لعبة عشوائية" aria-label="فاجئني! العب لعبة عشوائية">
     <span class="dice" aria-hidden="true">🎲</span><span class="surprise-text">فاجئني!</span>
   </button>
   <button class="mute" id="muteBtn" type="button" aria-pressed="false" aria-label="كتم الصوت" title="كتم الصوت"><span aria-hidden="true">🔊</span></button>
-  <a class="me guest" id="me" href="#/" aria-label="ضيف. اختر مَن يلعب" title="مَن يلعب؟"><span class="me-face" aria-hidden="true"></span><span class="me-info" aria-hidden="true"><b class="me-lv">ضيف</b><span class="me-bar"><i></i></span></span></a>
 </header>
 <nav class="chips" id="chips" aria-label="أقسام الألعاب"></nav>
 <nav class="quick-filters" id="quickFilters" aria-label="اختر طريقة اللعب"></nav>
@@ -53,10 +37,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <noscript><p class="noscript">شغّل JavaScript في المتصفح لتلعب الألعاب.</p></noscript>
 <script src="js/catalog.js"></script>
-<script src="js/stats.js"></script>
 <script src="shared/juice.js"></script>
-<script src="js/profiles.js"></script>
-<script src="js/telemetry.js"></script>
 <script src="js/site.js"></script>
 <script src="js/offline.js"></script>
 </body>

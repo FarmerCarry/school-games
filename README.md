@@ -4,19 +4,15 @@ A light, ad-free games website **in Arabic** for children aged 6–11: a small P
 with original browser games, all written from scratch for this site. The site and all of its
 games are in Arabic, laid out right-to-left. The games are being made to scale from a 6-year-old
 who has never held a mouse to an 11-year-old expert (Bubble Bop, Road Hopper, Dino 3D, Key Runner,
-Lightning Fingers, Egg Rush, Lucky Lake and Chaos Island already adapt to each child), and none of
-them plays background music.
+Lightning Fingers, Egg Rush, Lucky Lake and Chaos Island adapt their difficulty to how the children
+play on each PC), and none of them plays background music.
 
-- **No ads, no email/password accounts, no names, no chat, no third-party analytics, no links to other sites.**
-  Children pick an animal picture and their age band to play as themselves; nothing is typed.
-- Play statistics are counted on each PC (see [Play statistics](#play-statistics-local-only)).
-  A school can also run its **own** telemetry server, without names (see
-  [Telemetry without names](#telemetry-without-names-optional) and
-  [Turning on data collection](#turning-on-data-collection)); without it the site
-  makes no network request.
-- Every game, sound, font and picture lives in this repo. All games run locally in the browser.
+- **No ads, no accounts, no profiles, no names, no chat, no statistics, no analytics, no links to other sites.**
+  Children open a game and play; nothing is typed and nothing about their play is recorded or sent.
+- The site makes no network requests: every game, sound, font and picture lives in this repo,
+  and all games run locally in the browser.
 - **Made for Windows PCs with a mouse and keyboard.**
-- Scores, progress, player profiles and the play statistics are saved in each browser (localStorage).
+- Scores, progress and each game's difficulty are saved in each browser (localStorage).
 
 ## The games (38)
 
@@ -236,7 +232,7 @@ and the old `school-games-offline` folder, then download and extract the ZIP aga
 so the games are back in the same place. (If the old ZIP is still there, the new download
 and its folder get ` (1)` added to their names.) Replace any copies of the `school-games`
 folder on other PCs, USB sticks or shared drives with the new one too.
-Saved progress and play statistics stay, because the browser keeps them, not the folder.
+Saved progress stays, because the browser keeps it, not the folder.
 The ZIP is part of the fast version, so it is there only while GitHub Pages publishes it.
 
 For developers, GitHub's **Code → Download ZIP** gives the editable source instead. It also
@@ -250,11 +246,9 @@ rounds, one-button games, or games for friends. `roundMinutes` in the catalog is
 estimate for choosing a game, not a time limit; `inputStyle` describes its controls.
 Returning from a game restores the originating tile and browsing position.
 
-The classroom controls offer quiet sound, reduced effects, and an optional session
-timer. The quiet/effects preset is temporary and preserves each game's personal
-preferences. When time expires, the game pauses behind a handoff prompt; it is not closed
-or reset. Resume is explicit. Games also pause when focus leaves their playing
-window, including Shift+Tab back to the portal and leaving fullscreen.
+The topbar 🔊 button mutes the portal and the games. Games pause when focus leaves their
+playing window, including Shift+Tab back to the portal and leaving fullscreen; Resume is
+explicit.
 
 The fast site's footer shows whether every file is verified for offline use.
 “جاهز دون إنترنت” means the active version is complete; an incomplete installation
@@ -265,7 +259,7 @@ still there, so slow disks are not re-read on every visit. Retry hashes them aga
 
 When a newer complete version is cached, returning to the games list offers
 “حدّث الصفحة الآن”. Refresh is explicit and affects only that tab; running or paused
-games, game menus and the classroom handoff keep their session. The action verifies
+games and game menus keep their session. The action verifies
 readiness again and defers if a game opened during that check. It also works offline.
 The first installation never shows an update prompt. A game-only update includes the
 changed game and the portal's new build identity. Pages opened before this feature
@@ -279,90 +273,13 @@ storage is full. Retry keeps the current session and clears the warning only aft
 the pending data is saved. Block World's final celebration survives a reload until
 the player acknowledges it.
 
-### Players, age bands and XP
-
-The top of the home page asks «مَن يلعب؟» with big round animal pictures. A child picks
-their animal (or plays as a guest) with one click; nothing is typed and no name is stored.
-A new player picks an animal, a colour and an age band from three big number cards
-(6–7, 8–9, 10–11). In Bubble Bop, Road Hopper, Dino 3D, Key Runner, Lightning Fingers, Egg Rush,
-Lucky Lake and Chaos Island the age band sets where difficulty starts, and the game then adapts to how that child plays; the other
-games follow in later milestones. Winning, trying and playing earn XP; the topbar
-shows the player's picture, level and progress, with a short celebration on a new level.
-Up to 24 players fit on one browser. The current player lasts only for that tab: closing
-it, the classroom «hand over the device» button, or 20 minutes with nobody playing returns
-to the guest. The classroom panel can set an age band for guests. The topbar 🔊 button
-mutes the portal and the games.
-
 ### Sound
 
 There is no background music anywhere: no menu or game music, loops or jingles. Every
 sound is a short effect made in code when something happens (a pop, a jump, a reward),
-from the shared juice engine (`shared/juice.js`) or the game's own synthesizer. Classroom
-mode mutes everything. `tools/tests/zero-bgm.test.mjs` checks every game's title and pause
+from the shared juice engine (`shared/juice.js`) or the game's own synthesizer. The 🔊
+button mutes everything. `tools/tests/zero-bgm.test.mjs` checks every game's title and pause
 screens for silence.
-
-### Play statistics (local only)
-
-Each PC counts which games children open, how long they really play (only while they
-use the mouse or keyboard), where they stop in a game, and whether the games run
-smoothly on that PC. The numbers stay in that browser's storage: these local statistics
-are never uploaded (the optional, separate telemetry below sends play events without
-names). Names, typed text and class codes are never recorded.
-The numbers describe **a PC, not a child**: several children share a PC, and
-two-player modes mix players.
-
-- **Open:** 🏫 إعدادات الصف → 📊 إحصاءات هذا الجهاز (or open `teacher.html`). It opens
-  in a new tab, so a running game is not interrupted. It works offline and from a
-  downloaded folder. The web copy and a downloaded folder keep separate statistics, so
-  open the page the same way the children open the games.
-- **Read:** choose a period (اليوم، هذا الأسبوع، آخر 30 يومًا، الكل). Four cards answer
-  which games they play most, how long, at what time and where they stop. A table lists
-  each game. Device status, how children reach the games, settings and first-time
-  tutorials are in folded sections below. Device status rates each game سلس / مقبول / بطيء
-  from drawing speed and load time; Connect Four and Tic Tac Toe have
-  no steady drawing loop, so they show «لا تُقاس» (their load times still show).
-  «Where they stop» lists only levels that can be won or lost, with
-  «فازوا في N من M محاولات» (tries include leaving the level); free play, endless runs,
-  2048 boards and two-player modes are left out, and runs and boards show their average
-  and best score in the levels table instead. A game still open on this PC today shows its
-  time with the note «مرة لعب ما زالت مفتوحة» until it is closed.
-- **Name the PC:** type a short label such as «جهاز 7». Never type a child's name.
-- **Export to Excel:** press **تصدير ملف Excel**. Each click saves one workbook,
-  `play-stats_<pc>_<date>.xlsx`, with every stored day: an Arabic read-me sheet (اقرأني)
-  and the tables `days`, `games`, `levels` and `hours`. **تصدير JSON** saves the same data
-  as a `.json` file. Edge and Chrome open a save dialog: choose the folder (for example
-  the shared OneDrive folder) and save. Closing the dialog saves nothing, and the page
-  says so. If the dialog never opens (a school policy can block it), press
-  **تنزيل الملف بدلًا من ذلك** under that message. That button, other browsers and a page
-  opened over plain `http://` from another computer download the file instead, and the
-  page asks «هل حُفظ؟»: press **نعم، حُفظ الملف** only once the file is saved. An export
-  counts (and the reminder below goes away) only when the file is saved. Export every
-  week: old days are removed when the statistics space (300 KB) fills or after 120 days,
-  whichever comes first, and a busy computer-lab PC may keep only 2–3 months. The page
-  shows a reminder when the space is more than three-quarters full and nothing was
-  exported for a week, when days were removed for space before they were exported, or when
-  the oldest day not yet exported is more than 100 days old. For privacy the `hours` table
-  has no dates and lists a game's hour only when it was played then on at least 3 days,
-  and not on every day the game was played. It still shows when games are usually played,
-  so keep the files like class records.
-- **Combine PCs:** press **فتح ملفات من أجهزة أخرى** and choose the JSON files from other
-  PCs to see them together. Nothing from those files is saved. In Excel, put the
-  workbooks in one folder and use **Data → Get Data → From Folder**. Drop rows where `pc`
-  is empty (an empty table keeps one blank row). For each `pc` and `date`, keep only the
-  rows from the file with the newest `exported_at`; never add two exports of the same PC
-  and day. The `hours` table has no dates (each file sums all its days), so for it keep
-  only each PC's newest export.
-- **Stop or clear:** stop collecting (type «أوقف» to confirm) or clear this PC's
-  statistics (type «امسح»). Clearing never removes game progress, the PC name or the
-  stop setting.
-- **One browser profile on one PC:** the statistics live in the browser profile the
-  children use on that PC. A roaming school profile, a temporary one that is reset at
-  sign-out, another browser, or clearing the browser's site data starts again from zero.
-  Use the same browser and a profile that stays on the PC, and export before a PC is
-  reset.
-
-The page has no password. A child who opens it could stop or clear the statistics,
-so both actions need a typed word. The formats are in [`docs/PLAY_STATS.md`](docs/PLAY_STATS.md).
 
 Everything the home page shows comes from **`js/catalog.js`**:
 
@@ -370,62 +287,20 @@ Everything the home page shows comes from **`js/catalog.js`**:
 - **Feature a game** first in the catalog: set `hot: true`.
 - **Rename the site:** change `name` in `window.SITE` (currently "ألعاب الفسحة").
 
-### Telemetry without names (optional)
-
-A school can collect play events without names from every PC on one server of its own (a
-free Cloudflare account, set up with one button; see below),
-to see which games children choose, how each child's play and skill develop over the year,
-where they stop, how difficulty settles per age band, and whether the PCs keep up. This project's published site sends to the school's
-server, named in `.github/workflows/build.yml`; a build without `SG_TELEMETRY_URL`, the
-source tree, the downloaded folder and local previews never send anything. Each child who
-picks an animal appears under a random code, so this is pseudonymous personal data: before
-turning it on, the school or district must complete its privacy review and tell parents
-(children's data: COPPA in the US, GDPR and the UK Age Appropriate Design Code in Europe and
-the UK), and research publication may need consent or an ethics review.
-
-Only `js/telemetry.js` in the portal sends; games never use the network. It sends no
-names, no typed text, no PC label, no profile key or picture, no clock time and no browser
-or graphics strings; it sends a random code per profile and one per PC, and the PC's time
-zone name. The teacher page shows whether this PC shares and the codes, can give a child
-who plays on two PCs one code, and «stop collecting» stops both the local statistics and
-the sharing. The server stores no IP addresses, keeps play for 400 days by default, and
-shows every number, even for one child. See [`docs/TELEMETRY.md`](docs/TELEMETRY.md)
-for the portal side and [`server/README.md`](server/README.md) for the server and its
-insights dashboard.
-
-### Turning on data collection
-
-The statistics server and its insights dashboard run on a **free Cloudflare account**,
-set up with one "Deploy to Cloudflare" button and no code: follow
-[Turn on data collection](server/README.md#turn-on-data-collection-about-5-minutes-no-code)
-in `server/README.md` (about 5 minutes), then send the address it shows
-(`https://school-games-telemetry.<name>.workers.dev`) to the developer, who points the
-site's fast build at it. The dashboard opens at that same address, with the password
-chosen during the setup. To run it on your own server instead, see
-[Self-hosting on Node](server/README.md#self-hosting-on-node).
-
 ## For developers
 
 ```
 index.html, css/, js/     the portal (plain HTML/CSS/JS, no build step)
 js/catalog.js             list of games, categories and site name
-js/stats.js               the portal's local play-statistics recorder
-js/profiles.js            picture profiles without names, age bands and XP
-js/telemetry.js           the only network sender: play events without names to a school-run server (off by default)
-teacher.html              teacher page: this PC's play statistics, Excel/JSON exports and dashboard codes
-css/teacher.css, js/teacher.js   its styles and script (pure parts in window.SGTeacher)
+js/offline.js             the fast build's offline cache controller (footer status, update prompt)
 games/<slug>/             one folder per game (index.html + thumb.svg + its own files)
-shared/kit.js             tiny helper library all games use (sound, saving, input, scaling, play statistics,
-                          age band, difficulty control Kit.dda, telemetry extras Kit.track)
+shared/kit.js             tiny helper library all games use (sound, saving, input, scaling, lifecycle,
+                          difficulty control Kit.dda)
 shared/juice.js           procedural sound effects (Kit.juice in games, Juice in the portal)
-server/                   the telemetry server (no names) and its insights dashboard (a Cloudflare
-                          Worker, or Node with no dependencies; deployed on its own, not part of the site)
 shared/game.css           shared game page styles + the Fredoka font
 lib/three/                three.js r159 (MIT) for the 3D games
-docs/ARCHITECTURE.md      the platform contract: runtime, profiles, telemetry, server, milestones
+docs/ARCHITECTURE.md      the platform contract: runtime, Kit, the portal, sound, difficulty
 docs/GAME_SPEC.md         the rules every game follows
-docs/TELEMETRY.md         the portal's telemetry (no names): gates, codes, events, delivery, turning it on
-docs/PLAY_STATS.md        play statistics: what is counted, storage and export formats
 docs/PERFORMANCE.md       size limits per game, slow-disk rules and how the fast build is measured
 tools/playtest.mjs        headless Chromium playtest harness (Playwright)
 tools/build.mjs           builds the fast version (one file per game + offline cache + offline ZIP)
@@ -455,9 +330,9 @@ npm test                        # deterministic bug regressions and browser chec
 npm run test:unit                # the regression files under tools/tests/
 npm run test:shared              # source-independent rules, build safety and tool fixtures
 npm run test:browser             # gameplay and portal checks for the selected SG_ROOT
-npm run test:tooling             # server, report and audio-probe helper checks
+npm run test:tooling             # test server, report and audio-probe helper checks
 npm run test:scenarios           # prove inert Start/Pause buttons or input fail the gameplay checks
-npm run test:classroom           # downloaded folder, Arabic/spaced paths, denied storage, teacher page
+npm run test:classroom           # downloaded folder, Arabic/spaced paths, denied storage
 npm run test:regressions         # additional gameplay and portal keyboard checks
 npm run check                   # smoke-test all source games
 npm run build                   # fast build into _site/ (the Pages artifact, with the offline ZIP)

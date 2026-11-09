@@ -137,8 +137,6 @@ sizes, JavaScript execution time, or a browser's total network traffic.
 
 - Portal: the single built `index.html`, including inlined thumbnails, styles,
   catalog, and scripts.
-- Teacher page: the single built `teacher.html` (play statistics), including its
-  inlined catalog, styles and script. It is precached but only teachers open it.
 - Games: each built `games/<slug>/index.html`, including its inlined code and
   styles. The source catalog is checked every run, including hidden entries.
   Added games need an explicit limit; missing games and obsolete limits fail.

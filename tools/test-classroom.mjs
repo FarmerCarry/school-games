@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Downloaded-folder checks, including spaces/Arabic paths, unavailable storage and the teacher page.
+/* Downloaded-folder checks, including spaces/Arabic paths and unavailable storage.
  * PLAYWRIGHT_CHANNEL=msedge node tools/test-classroom.mjs
  * SG_ROOT=_site node tools/test-classroom.mjs
  */
@@ -129,57 +129,6 @@ try {
         await frame.locator('#localButton').click();
         await frame.locator('#gameBoard [data-move="0"]').click();
         await frame.waitForFunction(() => document.getElementById('gameBoard').dataset.moves === '1');
-      });
-
-      // The teacher statistics page from the same folder: it reads this folder's
-      // storage, exports files, and explains itself when storage is blocked.
-      await check(label + '-teacher', async page => {
-        // One day record in the storage format the portal writes (docs/PLAY_STATS.md).
-        // It has to be in place before teacher.js reads storage. A write in the
-        // previous document, then a reload, can miss the built page: Edge showed
-        // All selected while this row was still today's short visit (no counted
-        // session). The week view can already list that visit, so wait until All
-        // shows a session of a minute or more.
-        if (!deniedStorage) {
-          const teacherDay = JSON.stringify({ v: 1, d: '2025-09-01', s: { calm: 1 },
-            g: { 'tic-tac-toe': { o: 2, e: 95000, hh: { 10: 95000 }, b: [1, 1, 0, 0], lv: { duo: [2, 0, 0, 1, 1, 0, 90000, 0, 0, 0, 1, 0] } } } });
-          await page.addInitScript(teacherDay => {
-            if (!/\/teacher\.html$/i.test(location.pathname)) return;
-            localStorage.setItem('sg:site:stats:d:2025-09-01', teacherDay);
-          }, teacherDay);
-        }
-        await gotoDownloaded(page, path.join(folder, 'teacher.html'));
-        await page.waitForFunction(() => document.getElementById('source')?.dataset.copy === 'folder');
-        if (deniedStorage) {
-          assert.ok(await page.locator('#storageMsg').isVisible(), 'blocked storage is explained');
-          assert.ok(await page.locator('#exportXlsx').isDisabled(), 'exports need readable storage');
-          return;
-        }
-        // A file:// page is a secure context, so Edge offers its save dialog, which a
-        // headless browser closes at once. Check the download path instead (the dialog
-        // is covered by tools/tests/teacher-page.test.mjs).
-        await page.evaluate(() => { delete window.showSaveFilePicker; });
-        await page.locator('input[name="period"][value="all"]').check();
-        const row = page.locator('#gameTable tr[data-game="tic-tac-toe"]');
-        await page.waitForFunction(() => {
-          const selected = document.querySelector('input[name="period"]:checked');
-          const line = document.querySelector('#gameTable tr[data-game="tic-tac-toe"]');
-          return !!selected && selected.value === 'all' && !!line && Number(line.getAttribute('data-sessions')) >= 1;
-        });
-        assert.ok(Number(await row.getAttribute('data-sessions')) >= 1, 'the seeded session of a minute or more is shown');
-        const [json] = await Promise.all([page.waitForEvent('download'), page.locator('#exportJson').click()]);
-        assert.match(json.suggestedFilename(), /^play-stats_pc[a-z]{4}_\d{4}-\d{2}-\d{2}\.json$/);
-        const exported = JSON.parse(fs.readFileSync(await json.path(), 'utf8'));
-        assert.equal(exported.format, 'sg-play-stats');
-        assert.equal(exported.pc.copy, 'folder');
-        assert.ok(exported.tables.games.some(row => row.game === 'tic-tac-toe' && row.date === '2025-09-01' && row.seconds === 95));
-        // The download counts as an export only once the teacher confirms it was saved.
-        assert.match(await page.locator('#lastExport').textContent(), /لم يُصدَّر شيء/);
-        await page.locator('#exportYes').click();
-        assert.match(await page.locator('#lastExport').textContent(), /آخر تصدير/);
-        const [workbook] = await Promise.all([page.waitForEvent('download'), page.locator('#exportXlsx').click()]);
-        assert.match(workbook.suggestedFilename(), /^play-stats_pc[a-z]{4}_\d{4}-\d{2}-\d{2}\.xlsx$/);
-        assert.equal(fs.readFileSync(await workbook.path()).subarray(0, 4).toString('latin1'), 'PK\u0003\u0004', 'the workbook is a ZIP package');
       });
 
       for (const slug of ['tic-tac-toe', 'connect-four', 'air-hockey', 'merge-2048', 'pizza-clicker', 'dino-3d', 'cake-guards', 'neon-slope', 'road-hopper']) {

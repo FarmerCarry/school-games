@@ -213,18 +213,10 @@ test('juice: the portal master comes back up after its own unmute and follows th
   const events = ctx.nodes[0].gain.events.length;
   ctx.currentTime = 2; h.J.pop();
   assert.equal(ctx.nodes[0].gain.events.length, events, 'no master automation while it is already up');
-  // The classroom preset the portal stores (sg:site:classroom) silences Juice by itself.
+  // A stored classroom switch from an older portal is ignored: only sg:site:muted silences Juice.
   h.values.set('sg:site:classroom', 'true'); h.emit('storage', { key: 'sg:site:classroom' });
-  assert.equal(level(h), 0, 'what still sounds is cut');
-  const nodes = ctx.nodes.length;
-  playAll(h.J, ctx);
-  assert.equal(ctx.nodes.length, nodes, 'classroom: no audio nodes');
-  h.values.set('sg:site:classroom', 'false');
   ctx.currentTime += 1; h.J.tap();
-  assert.ok(ctx.nodes.length > nodes && level(h) === 0.5, 'sound again once the preset is off');
-  const classroom = portal({ stored: { 'sg:site:classroom': 'true' } });
-  classroom.emit('pointerdown'); classroom.J.tap();
-  assert.deepEqual([classroom.contexts[0].nodes.length, level(classroom)], [1, 0], 'a classroom PC starts silent');
+  assert.equal(level(h), 0.5, 'an old classroom key does not mute');
 });
 
 test('juice: a suspended portal context is resumed by each gesture and its rejection is caught', () => {

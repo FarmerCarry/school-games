@@ -56,7 +56,7 @@ async function mockCompletedUpdate(page) {
   });
 }
 
-test('verified update waits through real game menus, play, pause and classroom handoff', async t => {
+test('verified update waits through real game menus, play and pause', async t => {
   const page = await pageFor(t);
   await mockCompletedUpdate(page);
   await page.clock.install();
@@ -70,38 +70,13 @@ test('verified update waits through real game menus, play, pause and classroom h
   await frame.locator('#pauseBtn').click();
   await frame.waitForFunction(() => __game.state().paused);
   assert.equal(await page.evaluate(() => SGUpdateSafe()), false, 'paused match is not a safe refresh');
-  await page.locator('#classroom summary').click();
-  await page.locator('#sessionMinutes').selectOption('5');
-  await page.locator('#sessionStart').click();
-  await page.clock.fastForward(300001);
-  await page.locator('#sessionHandoff').waitFor({ state: 'visible' });
-  assert.equal(await page.evaluate(() => SGUpdateSafe()), false, 'handoff dialog keeps the game session');
   assert.equal(await page.locator('#offlineUpdate').isHidden(), true);
   assert.equal(await frame.evaluate(() => window.updateProgress), 'same-live-game');
-  await page.locator('#sessionEnd').click();
+  await page.locator('#backGames').click();
   await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
   assert.equal(await page.evaluate(() => SGUpdateSafe()), true);
   assert.equal(await page.locator('#stage iframe').count(), 0);
   assert.equal(await page.locator('#offlineRefresh').innerText(), 'حدّث الصفحة الآن');
-});
-
-test('verified update waits while the classroom timer runs or has expired between games', async t => {
-  const page = await pageFor(t);
-  await mockCompletedUpdate(page);
-  await page.clock.install();
-  await page.goto(origin);
-  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
-  await page.locator('#classroom summary').click();
-  await page.locator('#sessionMinutes').selectOption('5');
-  await page.locator('#sessionStart').click();
-  assert.equal(await page.locator('#offlineUpdate').isHidden(), true, 'a reload would drop the running timer');
-  assert.equal(await page.evaluate(() => SGUpdateSafe()), false);
-  await page.clock.fastForward(300001);
-  await page.waitForFunction(() => document.querySelector('#sessionClock').textContent === '0:00');
-  assert.equal(await page.locator('#offlineUpdate').isHidden(), true, 'the next game still owes the handoff');
-  assert.equal(await page.evaluate(() => SGUpdateSafe()), false);
-  await page.locator('#sessionStop').click();
-  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
 });
 
 test('refresh verification cannot discard a game launched while the status reply is pending', async t => {
@@ -234,41 +209,25 @@ test('a runtime failure disposes the game and rejects stale messages before retr
   assert.equal(requests, 2);
 });
 
-test('classroom changes stay transient across file games with separate saved preferences', async t => {
+test('the portal sound button mutes a game opened from a folder, where it has its own storage', async t => {
   const page = await pageFor(t);
-  // Browsers differ in file:// storage scoping. Force per-path preference keys
-  // so this regression stays covered even when a browser shares file storage.
+  // Browsers differ in file:// storage scoping. Force per-path preference keys so the
+  // game cannot read the portal's stored mute and must follow the portal's message.
   await page.addInitScript(() => {
     const get = Storage.prototype.getItem, set = Storage.prototype.setItem;
     const scoped = key => /^sg:site:(muted|motion)$/.test(key) ? location.pathname + ':' + key : key;
     Storage.prototype.getItem = function (key) { return get.call(this, scoped(key)); };
     Storage.prototype.setItem = function (key, value) { return set.call(this, scoped(key), value); };
-    if (location.pathname.includes('/games/air-hockey/') && localStorage.getItem('sg:site:motion') === null) {
-      localStorage.setItem('sg:site:muted', 'false'); localStorage.setItem('sg:site:motion', '"full"');
-    }
-    if (location.pathname.includes('/games/pool-party/') && localStorage.getItem('sg:site:motion') === null) {
-      localStorage.setItem('sg:site:muted', 'true'); localStorage.setItem('sg:site:motion', '"system"');
-    }
   });
   await page.goto(pathToFileURL(path.join(root, 'index.html')).href + '#/play/air-hockey');
   await page.waitForFunction(() => document.querySelector('#stage').getAttribute('aria-busy') === 'false' && document.querySelector('#stageMsg').hidden);
-  let frame = page.frames().find(item => item.url().includes('/games/air-hockey/'));
-  assert.equal(await frame.evaluate(() => Kit.audio.muted || Kit.motion.reduced()), false);
-  await page.locator('#classroom summary').click();
-  await page.locator('#classroomMode').check();
-  await frame.waitForFunction(() => Kit.audio.muted && Kit.motion.reduced());
-  assert.deepEqual(await frame.evaluate(() => [localStorage.getItem('sg:site:muted'), localStorage.getItem('sg:site:motion')]), ['false', '"full"']);
-  await page.evaluate(() => { location.hash = '#/play/pool-party'; });
-  await page.waitForFunction(() => document.querySelector('#stage iframe')?.src.includes('/pool-party/') && document.querySelector('#stage').getAttribute('aria-busy') === 'false');
-  frame = page.frames().find(item => item.url().includes('/games/pool-party/'));
-  await frame.waitForFunction(() => Kit.audio.muted && Kit.motion.reduced());
-  await page.locator('#classroomMode').uncheck();
-  await frame.waitForFunction(() => Kit.audio.muted && !Kit.motion.reduced());
-  await page.evaluate(() => { location.hash = '#/play/air-hockey'; });
-  await page.waitForFunction(() => document.querySelector('#stage iframe')?.src.includes('/air-hockey/') && document.querySelector('#stage').getAttribute('aria-busy') === 'false');
-  frame = page.frames().find(item => item.url().includes('/games/air-hockey/'));
-  await frame.waitForFunction(() => !Kit.audio.muted && !Kit.motion.reduced());
-  assert.equal(await frame.evaluate(() => Kit.motion.preference), 'full', 'the original game keeps its personal motion preference');
+  const frame = page.frames().find(item => item.url().includes('/games/air-hockey/'));
+  assert.equal(await frame.evaluate(() => Kit.audio.muted), false);
+  await page.locator('#muteBtn').click();
+  await frame.waitForFunction(() => Kit.audio.muted);
+  assert.equal(await page.locator('#muteBtn').getAttribute('aria-pressed'), 'true');
+  await page.locator('#muteBtn').click();
+  await frame.waitForFunction(() => !Kit.audio.muted);
 });
 
 test('selected and hovered category chips and fullscreen controls meet normal text contrast', async t => {
@@ -287,32 +246,6 @@ test('selected and hovered category chips and fullscreen controls meet normal te
     const colors = await page.locator('#fsBtn').evaluate(el => ({ foreground: getComputedStyle(el).color, background: getComputedStyle(el).backgroundColor }));
     assert.ok(contrast(rgb(colors.foreground), rgb(colors.background)) >= 4.5, JSON.stringify(colors));
   }
-});
-
-test('classroom preset reaches the game and timed handoff pauses without replacing its frame', async t => {
-  const page = await pageFor(t);
-  await page.clock.install();
-  const frame = await openGame(page);
-  await page.locator('#classroom summary').click();
-  await page.locator('#classroomMode').check();
-  await frame.waitForFunction(() => Kit.audio.muted && Kit.motion.reduced());
-  await page.locator('#sessionMinutes').selectOption('5');
-  await page.locator('#sessionStart').click();
-  await clickControl(frame, '#btnPlay');
-  await frame.evaluate(() => { window.handoffSentinel = 'same-session'; });
-  await page.clock.fastForward(300001);
-  await page.locator('#sessionHandoff').waitFor({ state: 'visible' });
-  assert.equal(await frame.evaluate(() => window.__game.state().paused), true);
-  assert.equal(await frame.evaluate(() => window.handoffSentinel), 'same-session');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'sessionEnd');
-  await page.keyboard.press('Tab');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'sessionFinish');
-  await page.locator('#sessionFinish').click();
-  assert.equal(await page.locator('#sessionHandoff').isVisible(), false);
-  assert.equal(await frame.evaluate(() => window.__game.state().paused), true, 'continuing a round requires explicit in-game Resume');
-  assert.equal(await frame.evaluate(() => window.handoffSentinel), 'same-session');
-  await page.locator('#classroomMode').uncheck();
-  await frame.waitForFunction(() => !Kit.audio.muted && Kit.motion.preference === 'system');
 });
 
 test('leaving portal fullscreen pauses the still-visible game', async t => {
@@ -377,32 +310,12 @@ test('portal metadata preserves board controls at classroom laptop height and nu
   assert.ok(range.first < range.last, `duration range is visually reversed: ${JSON.stringify(range)}`);
 });
 
-test('minute counts agree with their number in round estimates and the session status', async t => {
+test('minute counts agree with their number in round estimates', async t => {
   const page = await pageFor(t);
   await page.goto(origin);
   const tip = slug => page.locator(`#app .tile[data-slug="${slug}"]`).first().getAttribute('title');
   // 3-10 take دقائق, 11 and above دقيقة; a range agrees with its last number.
   assert.match(await tip('pool-party'), /⁦5–10⁩ دقائق للجولة/);
   assert.match(await tip('merge-2048'), /⁦5–15⁩ دقيقة للجولة/);
-  await page.locator('#classroom summary').click();
-  for (const [minutes, word] of [['10', 'دقائق'], ['15', 'دقيقة'], ['20', 'دقيقة']]) {
-    await page.locator('#sessionMinutes').selectOption(minutes);
-    await page.locator('#sessionStart').click();
-    assert.equal(await page.locator('#sessionStatus').textContent(), `بدأت جلسة ${minutes} ${word}. يتوقف اللعب عند انتهاء الوقت.`);
-  }
 });
 
-test('the classroom timer ignores a change of the PC clock during the lesson', async t => {
-  const page = await pageFor(t);
-  await page.clock.install();
-  await openGame(page); // the handoff covers a running game
-  await page.locator('#classroom summary').click();
-  await page.locator('#sessionMinutes').selectOption('5');
-  await page.locator('#sessionStart').click();
-  // Windows corrects the clock by 20 minutes: the handoff must not appear early.
-  await page.clock.setSystemTime(await page.evaluate(() => Date.now() + 20 * 60000));
-  await page.clock.fastForward(2000);
-  assert.equal(await page.locator('#sessionHandoff').isHidden(), true, 'a clock jump does not end the session');
-  await page.clock.fastForward(300000);
-  await page.locator('#sessionHandoff').waitFor({ state: 'visible' });
-});

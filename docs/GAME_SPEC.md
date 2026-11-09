@@ -59,7 +59,7 @@ A game may only use files from its own folder plus these shared ones:
 
 | Path (from the game folder)          | What it is                                                    |
 |-------------------------------------|---------------------------------------------------------------|
-| `../../shared/kit.js`               | helpers: sound, saving, keys, mouse, canvas scaling, loop, particles, local play statistics, profile, difficulty (`Kit.dda`), telemetry extras (`Kit.track`) |
+| `../../shared/kit.js`               | helpers: sound, saving, keys, mouse, canvas scaling, loop, particles, lifecycle, difficulty (`Kit.dda`) |
 | `../../shared/juice.js`             | optional procedural sound effects (`Kit.juice`); load it after `kit.js` |
 | `../../shared/game.css`             | base page styles, the Fredoka font, overlay/panel/button/keycap classes |
 | `../../lib/three/three.min.js`      | three.js r159 (classic script, gives `window.THREE`) for 3D games |
@@ -74,10 +74,8 @@ not loaded by other games.
    The whole site has to work when someone double-clicks `index.html` from a folder (`file://`).
    Put level data in JS files or inline.
 2. **Nothing external.** No CDNs, web fonts from the internet, online or third-party analytics,
-   iframes or links out. **Games never use the network.** A game passes counts to the portal only
-   through Kit (`Kit.stats`, `Kit.track`; see "Play statistics" below) and never adds another
-   reporting channel; only the portal's `js/telemetry.js` may send anything, without names and only
-   when a build is configured for it.
+   iframes or links out. **Nothing on the site uses the network, and nothing records how
+   children play:** no statistics, telemetry, analytics or reporting of any kind.
    All art is drawn in code (canvas, SVG, CSS, three.js geometry). Sound is synthesized with
    WebAudio (`Kit.juice`, `Kit.sfx` / `Kit.audio.tone` / `Kit.audio.noise`, or your own synth code).
 3. **Kid-safe.** Cartoon only: no blood, gore, realistic guns, scary horror, bad words, romance or chat.
@@ -159,7 +157,7 @@ chunky logo. Self-contained: no external refs, no embedded bitmaps, under about 
 Register the existing semantic pause function with `Kit.lifecycle({ pause: pauseGame })`.
 It must be safe to call repeatedly, freeze active gameplay and show an explicit Resume
 choice. Use the optional `reset` callback for game-specific held mouse or movement
-state. Shared lifecycle handling covers blur, hidden tabs, portal escape and classroom
+state. Shared lifecycle handling covers blur, hidden tabs, portal escape and portal
 pause requests. Do not resume automatically when focus returns.
 
 Call `Kit.ready()` only at the end of successful initialization. The portal waits for
@@ -176,8 +174,6 @@ Give such pop-ups and toasts a reduced-motion style that keeps them readable, an
 remove them with a timer rather than `animationend`.
 When a game is paused or hidden, keep its last frame instead of redrawing an unchanged
 scene every frame; redraw on resize, canvas restoration, late fonts and resume.
-The portal's classroom preset temporarily overrides sound and effects without
-writing each game's personal preferences; disabling it restores those preferences.
 Handle `Kit.store(...).set(...) === false`; `Kit.saveStatus({ retry: saveGame })` provides
 a consistent Arabic warning and retry button. Clear it only after all pending writes
 succeed. Preserve existing saved progress when a write or reset fails.
@@ -194,46 +190,16 @@ saved-state regression tests alongside those browser scenarios.
 clicks and key presses, saves screenshots and reports console errors (see the header of
 `tools/playtest.mjs`). Look at the screenshots to check what the game actually looks like.
 
-## Play statistics (Kit.stats)
+## Difficulty and sound for game authors
 
-Teachers see local statistics for each PC: which games children choose, how long they
-really play, where they stop, and how smoothly games run. Kit measures engaged time,
-frame smoothness and mute toggles by itself and posts small counts to the portal, which
-stores them on that PC. A game sends nothing over the network and stores nothing for
-statistics. The contract is `docs/PLAY_STATS.md`; in short, each game reports its rounds:
-
-- `Kit.stats.round(id)` when a level, round, run or match starts (first play, retry,
-  restart, next level). Free-play games call `Kit.stats.round('main')` when play starts.
-  A new `round()` while one is open counts the open round as a quit.
-- `Kit.stats.end(result, score)` when it ends: `'win'`, `'lose'`, `'draw'` or `'end'`, with an
-  optional score ≥ 0 (any round may carry one: distance, stars, points; endless runs end
-  with `'end'` and a score). Two-player modes on one PC (`'duo'`, `'local'`, `'pvp'`) report
-  only `'end'` or `'draw'`. Automatic respawns inside a level are not new rounds.
-- `Kit.stats.tutorial('start')` / `('done')` for a first-time tutorial or coach,
-  `Kit.stats.busy()` at passive moments the child watches (at most about once per
-  second, never per frame), and `Kit.stats.frame(ms)` only in games with their own
-  `requestAnimationFrame` loop. A game that uses neither `Kit.loop` nor
-  `Kit.stats.frame` (no steady drawing loop while playing) belongs in `NO_FRAMES` in
-  `js/teacher.js`, so the teacher page says its smoothness is not measured.
-
-Ids come from the game's own list and start with a letter (`'L3'`, `'w1-4'`, `'cpu-easy'`,
-`'endless'`). Never put typed text, names or codes in an id. Never report demo or attract
-modes, replays, bot-only matches or test runs. Put the calls in the UI layer (`game.js`,
-`main.js`, `ui.js`, `shared/board-game.js`), never in engine, physics, rules, simulation or
-level files, or in functions that Node tests load or call with a stub Kit.
-
-## Kit v2 for game authors
-
-The portal tells each game who is playing (an anonymous profile slot and an age band) and
-whether telemetry (without names) is on; the contract is "Kit v2" in
-[`ARCHITECTURE.md`](ARCHITECTURE.md). Everything below is safe standalone, before
-`Kit.ready()` and with odd arguments, and follows the `Kit.stats` rules above: UI layer
-only, never in engine, level or simulation files, never for demo or attract modes.
+Everything below is safe standalone, before `Kit.ready()` and with odd arguments. Keep it in
+the UI layer (`game.js`, `main.js`, `ui.js`), never in engine, level or simulation files,
+which stay pure for their Node tests.
 
 **Difficulty: `Kit.dda(slug, opts)`.** Create one controller per game (or per mode that
-needs its own difficulty) once, in the UI layer. Read it at **every round start, before
-`Kit.stats.round(id)`**, and pass the difficulty into the engine as parameters; engines and
-level files stay pure (their Node verifiers load a stub Kit without `dda`).
+needs its own difficulty) once, in the UI layer. Read it at **every round start** and pass
+the difficulty into the engine as parameters; engines and level files stay pure (their Node
+verifiers load a stub Kit without `dda`).
 
 ```js
 var dda = Kit.dda('road-hopper', { id: 'main', target: 0.72, tiers: 5 }); // the defaults
@@ -242,47 +208,30 @@ function startRound() {
     speed: dda.value(120, 260),              // lerp(easy, hard, dda.level), level 0..1
     lanes: dda.pick([3, 4, 4, 5, 6])         // one entry per tier, dda.tier 1..tiers
   });
-  Kit.stats.round('endless');
 }
 function roundOver(won, accuracy) {
   dda.result(won);                           // true/false, or a number 0..1 such as accuracy
-  Kit.stats.end(won ? 'win' : 'lose');
 }
 ```
 
-* Never cache `level` or `tier` across rounds: a new player can take over between rounds,
-  and Kit then loads that player's own state. One `result()` per try.
-* A new player starts by age band (6–7 → 0.12, 8–9 → 0.38, 10–11 → 0.60, unknown 0.35;
-  `opts.start` overrides). Kit keeps the child near `target` success, eases off after two
-  poor tries in a row and speeds up after three great ones. Tiers are at most 9.
+* The difficulty belongs to the PC: children share a PC and there are no profiles. One
+  `result()` per try; never report demo or attract modes, replays or two-player rounds.
+* A PC with no results starts at 0.35 (`opts.start` overrides). Kit keeps the players near
+  `target` success, eases off after two poor tries in a row and speeds up after three great
+  ones. Tiers are at most 9.
 * Use `pick()` for tiered complexity (which mechanics, obstacle kinds or combos exist) and
   `value()` for continuous knobs (speed, size, spawn rate, aim assist). Kit saves the state
   in `Kit.store(slug)` under `dda`; a game never writes that key.
-* `Kit.profile.band` / `.player` / `.onChange(fn)` are there for rare needs (a gentler
-  first-time coach for 6–7). Never show, store or report the player key.
-
-**Telemetry extras: `Kit.track`.** No-ops unless the portal has telemetry on. One call per
-action, never per frame:
-
-* `Kit.track.hit()` / `Kit.track.miss()` for each successful / failed action in the open
-  round (a bubble popped, a fly missed), for accuracy.
-* `Kit.track.cue()` when a target appears that the child should react to; Kit times the next
-  click or game key press (not a Ctrl/Alt shortcut, Tab, or a key on a focused button or field).
-  `Kit.track.react(ms)` reports a reaction time the game timed itself.
-* Reading the controller (`dda.level`, `dda.tier`, `value()` or `pick()`) reports the tier
-  (`Kit.track.tier(n)` is only for games with their own tiers). Kit measures input latency
-  by itself.
 
 **Sound effects: `Kit.juice`.** Load `<script src="../../shared/juice.js"></script>` after
-`kit.js`. Every call is a one-shot under 1.5 s, silent while muted, in classroom mode or
-before the first key press or click, so it is safe to call on every event (mashing is
+`kit.js`. Every call is a one-shot under 1.5 s, silent while muted or before the first key
+press or click, so it is safe to call on every event (mashing is
 fine: repeats within 25 ms are dropped and at most 14 voices sound at once):
 `tap()`, `select()`, `back()`, `toggle(on)`, `error()`, `hover()`, `streak(combo)`,
 `impact(power 0..1)`, `chime(1..3)`, `coin(n)`, `pop(size 0..1)`, `whoosh(speed 0..1)`,
 `jump(h 0..1)`, `land(power 0..1)`, `star(1..3)`, `levelUp()`, `fail()`, `countdown(3, 2, 1, 0)`.
 It has no music API (rule 11).
 
-**Network.** Games still never use the network: no `fetch`, beacons, sockets or remote
-addresses. Kit only posts `sg:stats` and `sg:telemetry` to the portal, and only the
-portal's `js/telemetry.js` may send anything on, without names and only when the build is
-configured with an ingest address.
+**Network.** Games never use the network: no `fetch`, beacons, sockets or remote addresses.
+Kit only talks to the portal (ready, warnings, failures and the Shift+Tab hand-off), and the
+portal sends nothing anywhere.
