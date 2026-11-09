@@ -16,7 +16,7 @@ const root = process.env.SG_ROOT ? path.resolve(repo,process.env.SG_ROOT) : repo
 // sample, once, against the source (the scenario definitions are the same for the
 // fast build): the eight games whose players move or act by themselves, then one game
 // for each other kind of input check: a held key among computer players, an
-// auto-runner's jump, pointer, drag, typing, DOM button and board move. Name games,
+// auto-runner's jump, pointer, drag, typing (a cloud's letter), DOM button and board move. Name games,
 // or "all", to check others:  node tools/test-scenarios.mjs drift-king
 const sample = [
   'paint-grab', 'snake-arena', 'moto-madness', 'sumo-bonk', 'hoop-heads', 'wacky-soccer', 'blob-battle', 'drift-king',

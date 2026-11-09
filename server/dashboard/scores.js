@@ -33,6 +33,6 @@ window.SG_SCORES = {
   'swing-hook': ['نجوم المرحلة المنتهية (من 0 إلى 3)، وفي اللعب المتواصل المسافة', 'the stars of a finished level (0 to 3); in the endless run, the distance'],
   'troll-level': ['نجوم المرحلة المنتهية', 'the stars of a finished level'],
   'tunnel-blitz': ['نقاط الجولة', 'the points of the run'],
-  'typing-test': ['سرعة الكتابة بالكلمات في الدقيقة', 'the typing speed, in words per minute'],
+  'typing-test': ['سرعة الكتابة بالكلمات في الدقيقة (في المراحل واختبار السرعة)', 'the typing speed, in words per minute (in the cloud levels and the speed test)'],
   'wacky-soccer': ['أهداف الطفل في المباراة', 'the child’s goals in the match']
 };

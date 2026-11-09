@@ -125,22 +125,26 @@ test('shared preferences follow system motion, persist overrides and expose mute
   assert.equal(await frame.locator('.sg-mute').getAttribute('aria-pressed'), 'true', 'saved mute state is exposed after reload');
 });
 
-test('typing time freezes away from the game and requires explicit resume', async t => {
+test('typing play freezes away from the game and requires explicit resume', async t => {
   const context = await browser.newContext(); t.after(() => context.close());
   const page = await context.newPage();
   await page.goto(`${server.origin}/games/typing-test/index.html`);
-  await page.evaluate(() => __game.typeText(__game.words(1)[0].slice(0, 1), 0));
-  assert.equal(await page.evaluate(() => __game.state().phase), 'running');
+  await page.locator('[data-lang="en"]').click();
+  await page.locator('.pebble.next').click();
+  await page.waitForFunction(() => __game.state.screen === 'play' && !!__game.state.next);
+  await page.keyboard.type(await page.evaluate(() => __game.state.next));
+  assert.equal(await page.evaluate(() => __game.state.keys), 1);
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  await page.locator('#unfocus').waitFor({state: 'visible'});
-  const timer = await page.locator('#timer').textContent();
+  await page.locator('#scrPause').waitFor({state: 'visible'});
+  const clock = await page.evaluate(() => __game.state.t);
   await page.waitForTimeout(1100);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  assert.equal(await page.locator('#unfocus').isVisible(), true);
-  assert.equal(await page.locator('#timer').textContent(), timer);
-  await page.locator('#unfocus').click();
-  assert.equal(await page.locator('#unfocus').isVisible(), false);
-  assert.equal(await page.evaluate(() => __game.state().phase), 'running');
+  assert.equal(await page.locator('#scrPause').isVisible(), true, 'focus coming back does not resume');
+  assert.equal(await page.evaluate(() => __game.state.t), clock, 'the clouds stay where they were');
+  await page.locator('#btnResume').click();
+  assert.equal(await page.locator('#scrPause').isVisible(), false);
+  assert.equal(await page.evaluate(() => __game.state.screen), 'play');
+  assert.equal(await page.evaluate(() => __game.state.keys), 1);
 });
 
 test('optional font download failures preserve playable games in the real portal', async t => {

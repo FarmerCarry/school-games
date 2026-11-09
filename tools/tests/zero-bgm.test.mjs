@@ -18,8 +18,6 @@
 // or leaves play. Special flows, taken from each game's scenario:
 // - skybound-golf gets no click: its whole title is a canvas, and a click is the first
 //   swing, which starts play.
-// - typing-test has no title screen: its first screen is the ready test, which is where a
-//   child idles, and its pause is the "click to continue" state after focus leaves.
 // - connect-four and tic-tac-toe start on their two-choice mode menu (their title).
 // - maze-dash has no Pause button: Esc pauses it, as in runScenario.
 // - drift-king and candy-rope first run their scenario's beforePause step (a fresh run or

@@ -68,11 +68,11 @@
     history: 'زرّا الرجوع والتقدم في المتصفح', direct: 'رابط مباشر'
   };
   var VERDICTS = { smooth: 'سلس', ok: 'مقبول', slow: 'بطيء', unmeasured: 'لا تُقاس' };
-  // Games with no steady drawing loop while playing (board games move pieces with
-  // CSS, typing-test redraws on key presses) count no frames, since only Kit.loop and
+  // Games with no steady drawing loop while playing (the board games move pieces with
+  // CSS) count no frames, since only Kit.loop and
   // Kit.stats.frame count them: the device status says so instead of «—».
   // tools/tests/play-stats-rules.test.mjs keeps this list equal to those games.
-  var NO_FRAMES = ['connect-four', 'tic-tac-toe', 'typing-test'];
+  var NO_FRAMES = ['connect-four', 'tic-tac-toe'];
   var MINUTES = ['دقيقة واحدة', 'دقيقتان', 'دقائق', 'دقيقة'];
   var HOURS = ['ساعة واحدة', 'ساعتان', 'ساعات', 'ساعة'];
   var TIMES = ['مرة واحدة', 'مرتان', 'مرات', 'مرة'];

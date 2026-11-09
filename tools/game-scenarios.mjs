@@ -205,13 +205,13 @@ export const scenarios = {
   'paint-grab': defaults(['#bPlay'], `${g}.state === 'play'`, `[${g}.player.x,${g}.player.y,${g}.time()]`, hold('ArrowRight'), '#bPause', `${g}.state === 'pause'`, '#bRestart', `${g}.time() > PG.MATCH_TIME - 1`),
   'snake-arena': defaults(['#btnPlay'], `${g}.state === 'play'`, select(`${g}.player`, ['x','y','len','alive']), move, '#btnPause', `${g}.state === 'paused'`, '#btnRestart', `${g}.player.alive`),
   'splat-strike': defaults(['#playBtn'], `${g}.state.ui === 'play' && !${g}.state.paused`, `[${g}.state.player,${g}.state.matchT]`, hold('KeyW'), '#pauseBtn', `${g}.state.paused`, '#restartBtn', `${g}.state.player.kills === 0 && ${g}.state.player.deaths === 0`, { ready: `${g}.state.countdown === 0`, init: () => { HTMLCanvasElement.prototype.requestPointerLock = undefined; } }),
-  'typing-test': {
-    // A fresh profile starts in Arabic; Playwright types non-US letters without key events, so pick English in the bar.
-    start: [click('[data-lang="en"]')], active: `${g}.state().screen === 'test'`, snapshot: select(`${g}.state()`, ['input','cur','correctKeys','incorrectKeys']),
-    input: async page => { await page.keyboard.type(await page.evaluate(() => __game.words(1)[0].slice(0,3))); },
-    pause: async page => { await page.evaluate(() => window.dispatchEvent(new Event('blur'))); }, paused: `${g}.state().unfocused`,
-    restart: async page => { await page.keyboard.press('Enter'); await page.keyboard.press('Tab'); }, reset: `${g}.state().phase === 'ready' && ${g}.state().input === ''`
-  },
+  // English, because Playwright types non-US letters without key events. The input is the
+  // real next letter of the cloud to type (the hook only reads it); a level's own clock runs
+  // by itself, so the input check watches the right keys alone.
+  'typing-test': defaults(['[data-lang="en"]', '.pebble.next'], `${g}.state.screen === 'play'`, `[${g}.state.t,${g}.state.keys,${g}.state.errors,${g}.state.clouds]`, async page => {
+    await page.waitForFunction(() => !!window.__game.state.next, null, { timeout: 15000, polling: 40 });
+    await page.keyboard.type(await page.evaluate(() => window.__game.state.next));
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.keys === 0 && ${g}.state.done === 0`),
   // The first yard opens behind a picture card; a held arrow closes it and walks the kid.
   // Restart puts the kid back on the doorstep with no egg hatched.
   'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`)
@@ -235,7 +235,7 @@ const inputSnapshots = {
   'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`,
   'wacky-soccer': `${g}.world.players.filter(p => p.side === 0).map(p => p.kickT)`,
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
-  'lucky-lake': `${g}.state.p1.casts`,
+  'lucky-lake': `${g}.state.p1.casts`, 'typing-test': `${g}.state.keys`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
   'key-runner': `${g}.state.hits`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
