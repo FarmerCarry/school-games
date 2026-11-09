@@ -10,7 +10,7 @@ window.SG_SCORES = {
   'bubble-bop': ['نجوم المرحلة المنتهية (من 1 إلى 3)، وفي جولات الحفلة النقاط', 'the stars of a finished level (1 to 3); in the party rounds, the points'],
   'cake-guards': ['نجوم المرحلة الرابحة (من 1 إلى 3)، وإلا فعدد الموجات التي صُدّت', 'the stars of a won level (1 to 3); otherwise the waves held back'],
   'candy-rope': ['النجوم التي جُمعت في المرحلة المنتهية (من 0 إلى 3)', 'the stars collected in a finished level (0 to 3)'],
-  'chaos-island': ['العملات التي جُمعت', 'the coins collected'],
+  'chaos-island': ['العملات التي جمعها الطفل في المباراة (من الجزيرة ومكافأة كل جولة نجا منها)، وفي مباراة اللاعبين عملاتهما معاً', 'the coins the child collected in the match (picked up on the island, plus the bonus for each round survived); in a two-player match, both players’ coins together'],
   'dino-3d': ['البيض الذي جُمع في المرحلة، وفي الجري بلا نهاية المسافة بالأمتار', 'the eggs collected in a level; in the endless run, the distance in metres'],
   'drift-king': ['المسافة المقطوعة مع مكافأة الانزلاق', 'the distance driven plus the drift bonus'],
   'egg-rush': ['البيض الذي فُقس في المرحلة، وفي سباق اللاعبين البيض الذي فقسه اللاعبان معًا', 'the eggs hatched in the level; in a two-player race, the eggs both players hatched together'],
