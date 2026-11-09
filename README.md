@@ -213,7 +213,7 @@ If the school web filter blocks it, ask IT to allow that address. The site conta
 
 ### Running it without the internet
 
-Download the fast version as one ZIP file (about 2 MB):
+Download the fast version as one ZIP file (under 2 MB):
 **<https://farmercarry.github.io/school-games/school-games-offline.zip>**
 (a copy of the site published from your own account has it at
 `https://<your-username>.github.io/school-games/school-games-offline.zip`).

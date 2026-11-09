@@ -942,3 +942,27 @@ not keep every size it drew. Frame rates were not measured for this change: the 
 machine ran seven browsers at once, so its numbers are noise. Measure the rebuilt games
 on the school's weakest PC with `npm run perf -- --native-gpu --headed --seconds 30
 egg-rush lucky-lake chaos-island key-runner dino-3d typing-test bubble-bop`.
+
+## No telemetry, statistics, profiles or class settings, 9 November 2026
+
+The owner removed every kind of play tracking: the telemetry sender and server, the local
+play statistics and the teacher statistics page, the picture profiles with age bands and
+XP, and the class settings panel. Kit loses `Kit.stats`, `Kit.track`, `Kit.profile` and the
+classroom preset, so every game page is smaller; the portal loses three scripts and its
+player and class panels; `teacher.html` is no longer built or cached, so the offline cache
+holds 51 files. The teacher page's own limit (`teacherBytes`) is gone.
+
+Measured with the Linux minified build (no telemetry address any more), against the
+previous entry's measurements.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 426,109 | 377,312 | 427,000 | 378,000 |
+| Teacher page | 101,717 | — (removed) | 102,000 | — |
+| 38 game pages together | 4,818,911 | 4,705,154 | — | each rounded up to 500 |
+| Offline precache, 52 → 51 files | 6,194,963 | 5,930,692 | 6,195,000 | 5,931,000 |
+| Offline ZIP | 2,181,109 | 2,078,154 | — | — |
+
+Each game page shrinks by about 3,000 bytes (the Kit statistics, telemetry and profile
+code it inlined, plus each game's own calls). Every limit is again the measured size
+rounded up (the games to the next 500 bytes, the portal and the cache to the next 1,000).
