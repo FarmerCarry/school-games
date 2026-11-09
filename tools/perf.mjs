@@ -107,8 +107,8 @@ export function installObservers({ target, active, ready }) {
     }
     if (target === 'hoop-heads') return visible(document.getElementById('scrTitle')) && visible(document.querySelector('[data-act="cpu"]'));
     if (target === 'splat-strike') return visible(document.getElementById('title')) && visible(document.getElementById('playBtn')) && document.getElementById('mapSeg')?.children.length > 0;
-    if (target === 'typing-test') return visible(document.getElementById('testView')) &&
-      visible(document.getElementById('wordsBox')) && document.getElementById('words')?.children.length > 0;
+    if (target === 'typing-test') return visible(document.getElementById('scrTitle')) &&
+      visible(document.querySelector('[data-lang="en"]')) && [...document.querySelectorAll('canvas')].some(visible);
     if (target === 'connect-four' || target === 'tic-tac-toe') return visible(document.getElementById('boardApp')) &&
       visible(document.getElementById('localButton')) && visible(document.getElementById('pcButton'));
     // Generic canvas games need a visible surface, not the first hidden canvas

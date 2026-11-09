@@ -8,158 +8,150 @@
 <link rel="stylesheet" href="../../shared/game.css">
 <link rel="stylesheet" href="style.css">
 </head>
-<body class="t-dark">
-<div id="app">
-  <header id="top" class="chrome">
-    <div class="logo" aria-label="أصابع البرق"><span class="bolt">⚡</span><span class="lt">أصابع البرق</span></div>
-    <nav class="tools">
-      <button type="button" class="tb" id="bTeacher" title="أنشئ رمز تحدٍّ يكتبه الجميع">🏆 <span>تحدٍّ للصف</span></button>
-      <button type="button" class="tb" id="bCode" title="اكتب رمز التحدي الذي كتبه المعلم">🔢 <span>أدخل رمزًا</span></button>
-      <button type="button" class="tb" id="bProg" title="نتائجك وأرقامك القياسية">📈 <span>تقدّمك</span></button>
-      <i class="tsep"></i>
-      <button type="button" class="tb ic" id="bKbd" title="مساعد لوحة المفاتيح" aria-pressed="false">⌨️</button>
-      <button type="button" class="tb ic lbl" id="bSound" title="أصوات المفاتيح" aria-pressed="false">🎹 <span id="bSoundLbl">أصوات المفاتيح</span></button>
-      <button type="button" class="tb ic" id="bTheme" title="المظهر: داكن / فاتح">🌙</button>
-    </nav>
-  </header>
+<body>
+<!-- Icons: every button is a picture first, so a child who cannot read yet can play. -->
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 15 L22 8 L42 15 L58 8 L58 49 L42 56 L22 49 L6 56 Z"/><path d="M22 10 L22 47 M42 17 L42 54" stroke="#1c2250" stroke-width="4" opacity=".35"/><circle cx="32" cy="30" r="6" fill="#ff5d6c"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
+  <symbol id="i-crown" viewBox="0 0 64 64"><path d="M8 20 L20 34 L32 12 L44 34 L56 20 L52 50 L12 50 Z" stroke-linejoin="round"/><circle cx="32" cy="38" r="4" fill="#ff5d6c"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 64 64"><rect x="26" y="2" width="12" height="9" rx="3"/><circle cx="32" cy="36" r="24" fill="none" stroke="currentColor" stroke-width="8"/><path d="M32 36 L32 20 M32 36 L42 42" stroke="currentColor" stroke-width="6" stroke-linecap="round"/></symbol>
+  <symbol id="i-cup" viewBox="0 0 64 64"><path d="M18 8 L46 8 L46 22 Q46 40 32 42 Q18 40 18 22 Z M18 13 Q6 13 8 24 Q10 32 19 32 M46 13 Q58 13 56 24 Q54 32 45 32" stroke="#1c2250" stroke-width="3.5" stroke-linejoin="round"/><path d="M28 42 L36 42 L37 50 L27 50 Z M18 50 L46 50 L46 58 L18 58 Z" stroke="#1c2250" stroke-width="3.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 64 64"><path d="M38 4 L12 36 L28 36 L22 60 L52 24 L35 24 Z" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-dice" viewBox="0 0 64 64"><rect x="8" y="8" width="48" height="48" rx="12" fill="#fff" stroke="#1c2250" stroke-width="4"/><circle cx="22" cy="22" r="5" fill="#1c2250"/><circle cx="42" cy="42" r="5" fill="#1c2250"/><circle cx="32" cy="32" r="5" fill="#1c2250"/></symbol>
+  <symbol id="i-back" viewBox="0 0 64 64"><path d="M36 10 L58 32 L36 54 L36 42 L8 42 L8 22 L36 22 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-x" viewBox="0 0 64 64"><path d="M16 16 L48 48 M48 16 L16 48" stroke="currentColor" stroke-width="11" stroke-linecap="round"/></symbol>
+  <symbol id="i-del" viewBox="0 0 64 64"><path d="M24 12 L56 12 L56 52 L24 52 L6 32 Z" stroke="currentColor" stroke-width="5" stroke-linejoin="round" fill="none"/><path d="M30 24 L46 40 M46 24 L30 40" stroke="currentColor" stroke-width="6" stroke-linecap="round"/></symbol>
+</svg>
 
-  <div id="bar" class="chrome">
-    <div class="grp" id="gLang">
-      <button type="button" class="opt" data-lang="en">English</button>
-      <button type="button" class="opt" data-lang="ar">العربية</button>
-    </div>
-    <i class="sep"></i>
-    <div class="grp" id="gMode">
-      <button type="button" class="opt" data-mode="time">⏱️ وقت</button>
-      <button type="button" class="opt" data-mode="words">🔤 كلمات</button>
-      <button type="button" class="opt" data-mode="sentences">📜 جمل</button>
-    </div>
-    <i class="sep"></i>
-    <div class="grp" id="gAmt"></div>
-    <i class="sep"></i>
-    <div class="grp">
-      <button type="button" class="opt chk" id="bLenient" title="اقبل ا بدل أ/إ/آ، و ه بدل ة، و ي بدل ى/ئ، و و بدل ؤ"><span class="box"></span>تساهل في الهمزات</button>
-    </div>
+<canvas id="game" tabindex="0" aria-label="أصابع البرق"></canvas>
+
+<!-- A 1280x720 layer laid exactly over the canvas (scaled by game.js). -->
+<div id="ui">
+  <div id="hud" hidden>
+    <button type="button" id="btnPause" class="tt-btn tt-round" aria-label="استراحة" title="استراحة (Esc)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
   </div>
 
-  <main id="stage">
-    <section id="testView">
-      <div id="chTag" hidden><span>🏆 تحدي الصف</span><b id="chCode" dir="ltr"></b><span id="chDesc"></span><button type="button" id="chExit" title="الخروج من التحدي">✕</button></div>
-      <div id="live"><span id="timer"></span><span id="liveWpm" dir="rtl"></span><span id="hint" dir="rtl">ابدأ الكتابة وسيبدأ الوقت ⚡</span><div id="race" aria-hidden="true"></div></div>
-      <div id="wordsBox">
-        <div id="clip"><div id="words"></div></div>
-        <div id="unfocus" hidden><span>👆 انقر هنا للمتابعة</span></div>
-        <div id="caps" hidden>⇪ زر <span class="sg-key">Caps Lock</span> مفعّل!</div>
-      </div>
-      <div id="warn" hidden></div>
-      <div id="kbd" hidden></div>
-    </section>
+  <section id="scrTitle" class="screen" aria-label="أصابع البرق">
+    <h1 class="logo"><span class="l1">أصابع</span><span class="l2">البرق</span></h1>
+    <div class="langs">
+      <button type="button" id="btnAr" data-lang="ar" class="tt-btn lang"><span class="glyph">ع</span><b>عربي</b></button>
+      <button type="button" id="btnEn" data-lang="en" class="tt-btn lang"><span class="glyph" dir="ltr">Aa</span><b dir="ltr">English</b></button>
+    </div>
+    <div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+    <button type="button" id="btnTest" class="tt-btn side"><svg aria-hidden="true"><use href="#i-clock"/></svg><b>اختبار السرعة</b></button>
+    <button type="button" id="btnClass" class="tt-btn teacher" aria-label="تحدٍّ للصف" title="تحدٍّ للصف: رمز من 4 أرقام"><svg aria-hidden="true"><use href="#i-cup"/></svg><b>تحدٍّ للصف</b></button>
+  </section>
 
-    <section id="resView" hidden>
-      <div class="rtop">
-        <div class="bigs">
-          <div class="st"><div class="lbl">السرعة <small>wpm</small></div><div class="num" id="rWpm">0</div></div>
-          <div class="st"><div class="lbl">الدقة <small>acc</small></div><div class="num" id="rAcc">0%</div></div>
+  <section id="scrMap" class="screen" aria-label="الخريطة" hidden>
+    <button type="button" id="mapHome" class="tt-btn tt-round" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="chip" id="mapStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+    <div id="worlds"></div>
+  </section>
+
+  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+    <div class="card">
+      <button type="button" id="btnResume" class="tt-btn tt-go" aria-label="تابع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <div class="row">
+        <button type="button" id="btnMap" class="tt-btn tt-round big" aria-label="الخريطة"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="btnRestart" class="tt-btn tt-round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrResult" class="screen" aria-label="النتيجة" hidden>
+    <div class="card result">
+      <div class="stars3" id="resStars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
+      <div class="rainy" id="resRainy" hidden><b>حاول مرة أخرى!</b></div>
+      <div class="stats">
+        <div class="stat"><canvas id="resAnimal" width="120" height="104"></canvas></div>
+        <div class="stat acc"><b id="resAcc">100%</b><span>الدقة</span></div>
+      </div>
+      <div class="row">
+        <button type="button" id="resMap" class="tt-btn tt-round big" aria-label="الخريطة"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="resNext" class="tt-btn tt-go ring" aria-label="التالي"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+        <button type="button" id="resAgain" class="tt-btn tt-round big" aria-label="مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrSetup" class="screen" aria-label="اختبار السرعة" hidden>
+    <button type="button" id="setupHome" class="tt-btn tt-round" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="card setup">
+      <h2><svg aria-hidden="true"><use href="#i-clock"/></svg>اختبار السرعة</h2>
+      <div class="toggle" role="group" aria-label="اللغة">
+        <button type="button" class="opt" data-tlang="ar">عربي</button>
+        <button type="button" class="opt" data-tlang="en" dir="ltr">English</button>
+      </div>
+      <div class="toggle" role="group" aria-label="المدة">
+        <button type="button" class="opt" data-tdur="30"><span dir="ltr">30</span> ثانية</button>
+        <button type="button" class="opt" data-tdur="60"><span dir="ltr">60</span> ثانية</button>
+      </div>
+      <div class="best-row"><span class="best"><svg aria-hidden="true"><use href="#i-crown"/></svg><b id="setupBest">—</b></span><canvas id="setupChart" width="300" height="70"></canvas></div>
+      <button type="button" id="btnGo" class="tt-btn tt-go ring" aria-label="ابدأ"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    </div>
+  </section>
+
+  <section id="scrTestResult" class="screen" aria-label="النتيجة" hidden>
+    <div class="card tresult">
+      <div class="code-tag" id="trCode" hidden><svg aria-hidden="true"><use href="#i-cup"/></svg><span>الرمز</span><b dir="ltr" id="trCodeNum"></b></div>
+      <div class="tr-top">
+        <canvas id="trAnimal" width="180" height="156"></canvas>
+        <div class="tr-num"><b id="trWpm">0</b><span>كلمة في الدقيقة</span></div>
+        <div class="tr-acc"><b id="trAcc">100%</b><span>الدقة</span></div>
+      </div>
+      <div class="newbest" id="trNewBest" hidden><svg aria-hidden="true"><use href="#i-crown"/></svg><span>رقم جديد!</span></div>
+      <div class="best-row"><span class="best"><svg aria-hidden="true"><use href="#i-crown"/></svg><b id="trBest">0</b></span><canvas id="trChart" width="300" height="70"></canvas></div>
+      <div class="row">
+        <button type="button" id="trHome" class="tt-btn tt-round big" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <button type="button" id="trAgain" class="tt-btn tt-go ring" aria-label="مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrClass" class="screen dim" aria-label="تحدٍّ للصف" hidden>
+    <div class="card klass">
+      <button type="button" id="classClose" class="tt-btn tt-round x" aria-label="إغلاق"><svg aria-hidden="true"><use href="#i-x"/></svg></button>
+      <h2><svg aria-hidden="true"><use href="#i-cup"/></svg>تحدٍّ للصف</h2>
+      <div id="classEnter">
+        <p class="sub">اكتب الرمز الذي على السبورة</p>
+        <div class="digits" dir="ltr" id="codeDigits"><span></span><span></span><span></span><span></span></div>
+        <div class="pad" dir="ltr" id="codePad"></div>
+        <div class="row">
+          <button type="button" id="codeGo" class="tt-btn tt-go small" aria-label="ابدأ التحدي" disabled><svg aria-hidden="true"><use href="#i-play"/></svg></button>
         </div>
-        <div class="graph">
-          <canvas id="chart"></canvas>
-          <div class="legend"><span class="lg w">السرعة</span><span class="lg r">السرعة الخام</span><span class="lg e">أخطاء</span></div>
+        <button type="button" id="teacherBtn" class="linkish">للمعلم: رمز جديد</button>
+      </div>
+      <div id="classTeach" hidden>
+        <p class="sub">اختر الاختبار، ثم اكتب الرمز على السبورة</p>
+        <div class="presets" id="presets"></div>
+      </div>
+      <div id="classShow" hidden>
+        <div class="bigcode" dir="ltr" id="showCode"></div>
+        <p class="sub" id="showDesc"></p>
+        <div class="row">
+          <button type="button" id="showBack" class="tt-btn tt-round" aria-label="اختبار آخر"><svg aria-hidden="true"><use href="#i-back"/></svg></button>
+          <button type="button" id="showPlay" class="tt-btn tt-go small" aria-label="جرّب التحدي هنا"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+          <button type="button" id="showDice" class="tt-btn tt-round" aria-label="رمز آخر"><svg aria-hidden="true"><use href="#i-dice"/></svg></button>
         </div>
       </div>
-      <div class="rbot">
-        <div class="badge" id="rBadge"></div>
-        <div class="pb" id="rPb"></div>
-        <div class="rcode" id="rCode" hidden><span>رمز التحدي</span><b dir="ltr" id="rCodeNum"></b></div>
-      </div>
-      <div class="rmid">
-        <div class="st sm"><div class="lbl">نوع الاختبار</div><div class="val" id="rType"></div></div>
-        <div class="st sm"><div class="lbl">السرعة الخام <small>raw</small></div><div class="val" id="rRaw"></div></div>
-        <div class="st sm"><div class="lbl">الأحرف</div><div class="val chars" id="rChars">
-          <b class="kc" title="صحيحة: أحرف الكلمات المكتوبة صحيحًا مع المسافات (مثل Monkeytype)">0</b><b class="ki" title="خاطئة: أحرف كُتبت خطأً">0</b><b class="kx" title="زائدة: أحرف كُتبت بعد نهاية الكلمة">0</b><b class="km" title="ناقصة: أحرف لم تُكتب">0</b>
-          <small class="kc">صحيحة</small><small class="ki">خاطئة</small><small class="kx">زائدة</small><small class="km">ناقصة</small>
-        </div></div>
-        <div class="st sm"><div class="lbl">الثبات</div><div class="val" id="rCons"></div></div>
-        <div class="st sm"><div class="lbl">الوقت</div><div class="val" id="rTime"></div></div>
-      </div>
-      <div class="rbtns">
-        <button type="button" class="btn main" id="bNext"><span id="bNextLbl">اختبار جديد</span></button>
-        <button type="button" class="btn" id="bRepeat">🔁 أعد نفس الكلمات</button>
-        <button type="button" class="btn" id="bLeave" hidden>اختبار جديد</button>
-      </div>
-    </section>
-  </main>
-
-  <footer id="foot" class="chrome">
-    <button type="button" id="progMini" title="تقدّمك">
-      <canvas id="spark"></canvas>
-      <span id="progTxt"></span>
-    </button>
-    <div class="hints">
-      <span><span class="sg-key" id="restartKey">Tab</span> <span id="tabHint">اختبار جديد</span></span>
-      <span id="escHint"><span class="sg-key">Esc</span> الإعدادات</span>
-      <span><span dir="ltr"><span class="sg-key">Alt</span>+<span class="sg-key">Shift</span></span> لغة لوحة المفاتيح</span>
     </div>
-  </footer>
-</div>
+  </section>
 
-<!-- Teacher: make a class challenge code -->
-<div class="modal" id="mTeacher" hidden>
-  <div class="card wide">
-    <button type="button" class="x" data-close>✕</button>
-    <h2>🏆 تحدٍّ للصف</h2>
-    <div id="tPick">
-      <p class="sub">اختر نوع التحدي، وسيظهر رمز من 4 أرقام تكتبه على السبورة.</p>
-      <div class="presets" id="presets"></div>
-    </div>
-    <div id="tShow" hidden>
-      <div class="bigcode" dir="ltr" id="tCode"></div>
-      <div class="cdesc" id="tDesc"></div>
-      <p class="sub">يضغط الطلاب <b>«🔢 أدخل رمزًا»</b> ويكتبون هذا الرمز، فتظهر للجميع الكلمات نفسها تمامًا.</p>
-      <div class="mbtns">
-        <button type="button" class="btn main" id="tPlay">▶ جرّب التحدي هنا</button>
-        <button type="button" class="btn" id="tAgain">🎲 رمز آخر</button>
-        <button type="button" class="btn" id="tBack">↩ نوع آخر</button>
-      </div>
-    </div>
-  </div>
+  <!-- The wordless coach: a hand that shows what to press after a few idle seconds. -->
+  <canvas id="ghost" width="120" height="150" aria-hidden="true" hidden></canvas>
 </div>
-
-<!-- Student: enter a challenge code -->
-<div class="modal" id="mCode" hidden>
-  <div class="card">
-    <button type="button" class="x" data-close>✕</button>
-    <h2>🔢 أدخل رمز التحدي</h2>
-    <div class="digits" dir="ltr" id="cDigits"><span></span><span></span><span></span><span></span></div>
-    <div class="cdesc" id="cDesc">اكتب الأرقام الأربعة التي كتبها المعلم</div>
-    <div class="pad" dir="ltr" id="cPad"></div>
-    <div class="mbtns"><button type="button" class="btn main" id="cGo" disabled>▶ ابدأ التحدي <span class="sg-key">Enter</span></button></div>
-  </div>
-</div>
-
-<!-- Progress -->
-<div class="modal" id="mProg" hidden>
-  <div class="card wide">
-    <button type="button" class="x" data-close>✕</button>
-    <h2>📈 تقدّمك</h2>
-    <div class="pgrid">
-      <div class="pchart"><canvas id="progChart"></canvas><div class="psub" id="progSub"></div></div>
-      <div class="plist">
-        <h3>🏅 أرقامك القياسية</h3>
-        <div id="pbList"></div>
-      </div>
-    </div>
-    <h3>🕒 آخر النتائج</h3>
-    <div id="histList"></div>
-    <div class="mbtns"><button type="button" class="btn danger" id="pReset">🗑️ امسح نتائجي</button></div>
-  </div>
-</div>
-
-<canvas id="fx"></canvas>
+<div id="live" class="sr" aria-live="polite"></div>
 
 <script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
 <script src="words.js"></script>
 <script src="engine.js"></script>
-<script src="kbd.js"></script>
+<script src="art.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

@@ -105,67 +105,45 @@ test('inherited object names show the missing-route page', async t => {
   }
 });
 
-test('typing restart shortcut leaves controls, modals and Shift+Tab navigable', async t => {
+test('typing game: letters reach the clouds, Shift+Tab returns to the portal, codes and Tab keep working', async t => {
   const page = await newPage(t);
   const frame = await openGame(page, 'typing-test');
-  await frame.evaluate(() => window.__game.start({ lang: 'en', seed: 42 }));
-  await page.keyboard.type('a');
-  assert.equal(await frame.evaluate(() => window.__game.state().input), 'a');
-  await page.keyboard.press('Tab');
-  assert.equal(await frame.evaluate(() => window.__game.state().input), '');
+  const state = () => frame.evaluate(() => window.__game.state);
+  await frame.locator('[data-lang="en"]').click();
+  await frame.locator('.pebble.next').click();
+  await frame.waitForFunction(() => window.__game.state.screen === 'play' && !!window.__game.state.next);
+  await page.keyboard.type(await frame.evaluate(() => window.__game.state.next));
+  assert.equal((await state()).keys, 1, 'a letter typed in the portal reaches the cloud');
 
-  await frame.evaluate(() => window.__game.start({ lang: 'en', seed: 42 }));
   await page.keyboard.press('Shift+Tab');
-  assert.equal(await frame.evaluate(() => window.__game.state().seed), 42);
   await page.waitForFunction(() => document.activeElement.id === 'favBtn');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'favBtn', 'Shift+Tab returns from the typing surface to the portal');
-
-  await frame.locator('#bTeacher').focus();
-  await page.keyboard.press('Tab');
-  assert.equal(await frame.evaluate(() => document.activeElement.id), 'bCode');
-  assert.equal(await frame.evaluate(() => window.__game.state().seed), 42);
-
-  await frame.locator('#bTeacher').focus();
+  assert.equal((await state()).screen, 'pause', 'leaving the game for the portal pauses it');
+  await frame.locator('#btnResume').focus();
   await page.keyboard.press('Enter');
-  assert.equal(await frame.evaluate(() => window.__game.state().modal), 'mTeacher');
-  await page.keyboard.press('Tab');
-  assert.equal(await frame.evaluate(() => document.activeElement.hasAttribute('data-close')), true);
-  await page.keyboard.press('Tab');
-  assert.equal(await frame.evaluate(() => document.activeElement.getAttribute('data-p')), '1');
-  await page.keyboard.press('Shift+Tab');
-  assert.equal(await frame.evaluate(() => document.activeElement.hasAttribute('data-close')), true);
-  await page.keyboard.press('Space');
-  assert.equal(await frame.evaluate(() => window.__game.state().modal), null);
+  await frame.waitForFunction(() => window.__game.state.screen === 'play');
+  assert.equal((await state()).keys, 1, 'Enter on Resume resumes the same level');
 
-  await frame.locator('#bCode').focus();
-  await page.keyboard.press('Enter');
+  // From the title, the class challenge takes a code typed on the keyboard.
+  await frame.locator('#btnPause').click();
+  await frame.locator('#btnMap').click();
+  await frame.locator('#mapHome').click();
+  await frame.locator('#btnClass').click();
   const code = await frame.evaluate(() => window.__game.engine.makeCode(1, 123));
   await page.keyboard.type(code);
   await page.keyboard.press('Enter');
-  assert.equal(await frame.evaluate(() => window.__game.state().code), code, 'typing a code then Enter still starts the challenge');
-  assert.equal(await frame.evaluate(() => window.__game.state().modal), null);
+  await frame.waitForFunction(() => window.__game.state.screen === 'test');
+  assert.equal((await state()).code, code, 'typing a code then Enter starts that challenge');
 
-  await frame.evaluate(() => {
-    window.__game.start({ lang: 'en', seed: 42 });
-    window.__game.typeText('a');
-    window.__game.finish();
-  });
-  await page.keyboard.press('Tab');
-  assert.equal(await frame.evaluate(() => window.__game.state().screen), 'results', 'Tab on results navigates without restarting');
-  await frame.locator('#bRepeat').focus();
-  await page.keyboard.press('Enter');
-  assert.equal(await frame.evaluate(() => window.__game.state().seed), 42, 'Enter activates the focused repeat button');
-
-  // Esc exposes settings; from there the ordinary tab sequence can leave the game.
-  await frame.evaluate(() => document.activeElement.blur());
+  // From the pause menu, the ordinary Tab order leads out of the game.
+  await frame.evaluate(() => document.activeElement && document.activeElement.blur());
   await page.keyboard.press('Escape');
-  assert.equal(await frame.evaluate(() => document.body.classList.contains('kbnav')), true);
+  await frame.waitForFunction(() => window.__game.state.screen === 'pause');
   let escaped = false;
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 30; i++) {
     await page.keyboard.press('Tab');
     if (await page.evaluate(() => document.activeElement.tagName !== 'IFRAME')) { escaped = true; break; }
   }
-  assert.ok(escaped, 'typing settings must provide a keyboard path out of the iframe');
+  assert.ok(escaped, 'the pause menu provides a keyboard path out of the iframe');
 });
 
 test('Fire and Ice retains solo Tab switching and Shift+Tab can leave play', async t => {

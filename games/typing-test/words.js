@@ -1,144 +1,54 @@
 /*
- * أصابع البرق — word lists.
- * Plain words only: no tashkeel, no tatweel, no names of real people.
- * IMPORTANT: challenge codes pick words by their position in these lists, so every PC must
- * run the same version. Changing a list changes what a code produces (that's fine between
- * releases, but never edit these during a class challenge).
+ * أصابع البرق (Lightning Fingers) — the words.
+ * Simple, concrete kid words (animals, food, colours, school, family, nature) in plain
+ * letters: no tashkeel, no tatweel, no names of people. Arabic and English each have
+ * their own five worlds:
+ *   w1  one list per level: home-row letters, top-row letters, bottom-row letters, 2-letter words
+ *   w2  3-letter words      w3  4-letter words      w4  longer words      w5  short phrases
+ * Worlds 2-5 are 'easy | harder': the DDA tier decides how many harder ones a level mixes in.
+ * test / easy: the speed test and the class challenge draw from these.
+ * IMPORTANT: a class challenge code picks words by their position in test / easy, so every
+ * PC must run the same version of this file (never edit it during a class challenge).
  */
 window.TT_WORDS = {
-  en: (
-    'the and you that was for are with his they this have from one had word but not what all were when ' +
-    'your can said there use she how will out her make like him time look two more write see first water ' +
-    'call who now find long down day did get come made may new take little work our name good think say ' +
-    'help boy came want show three small put well big home try hand play animal house mother answer learn ' +
-    'add food plant school father keep tree never start city eye light head under story saw left close ' +
-    'next hard open begin always both paper got run car night walk white sea grow river four book hear ' +
-    'stop idea eat face watch far let above girl young talk soon song family apple banana cat dog bird ' +
-    'fish horse rabbit lion tiger bear frog duck cake cookie pizza juice milk bread happy funny friend ' +
-    'smile laugh jump swim dance sing draw color red blue green yellow orange purple pink brown black sun ' +
-    'moon star sky rain snow wind cloud flower garden park beach ocean island forest rocket planet space ' +
-    'robot game ball kite bike train boat plane bus teacher class lunch pencil desk chair table window ' +
-    'door clock phone computer music puppy kitten turtle zebra monkey giraffe elephant dolphin whale ' +
-    'penguin butterfly bee candy honey lemon grape cherry carrot tomato potato rice soup egg cheese sweet ' +
-    'warm cold hot fast slow tall short soft loud quiet brave smart strong bright clean fresh nice best ' +
-    'better win team goal score climb build paint bake share visit travel dream magic treasure castle ' +
-    'crown gold coin gift party birthday holiday summer winter spring morning evening today tomorrow week ' +
-    'month shoe hat shirt baby sister brother grass hill lake rainbow shell sand wave boot sock toy doll ' +
-    'bell drum map farm cow sheep goat nest seed leaf ' +
-    // very common short words (Monkeytype's lists are full of them, and they set the rhythm)
-    'a to of in is it on at we go up my me he be do no so an as by or us if'
-  ).split(' '),
-
-  ar: (
-    'مدرسة معلم معلمة طالب طالبة كتاب قلم دفتر ممحاة مسطرة حقيبة فصل سبورة درس واجب امتحان مكتبة صديق ' +
-    'صديقة ملعب فسحة جرس رسم قراءة كتابة حساب علوم لغة سؤال جواب ورقة مقعد حاسوب شاشة مفتاح فكرة قصة ' +
-    'كلمة حرف رقم جملة أب أم أخ أخت جد جدة عم عمة خال خالة ابن بنت عائلة طفل بيت غرفة باب نافذة سرير ' +
-    'مطبخ حديقة جار قطة كلب حصان أسد نمر فيل زرافة قرد أرنب سلحفاة بطة دجاجة بقرة خروف جمل غزال ثعلب ' +
-    'دب نحلة فراشة نملة سمكة حوت دلفين عصفور نسر ببغاء طاووس ضفدع خبز ماء حليب عصير تفاح موز برتقال ' +
-    'عنب فراولة بطيخ ليمون تمر جزر طماطم بطاطا أرز جبن بيض عسل سكر ملح شاي كعكة حلوى حساء سلطة فطور ' +
-    'غداء عشاء طعام أحمر أزرق أخضر أصفر أبيض أسود بني وردي برتقالي بنفسجي رمادي لون ألوان شمس قمر نجمة ' +
-    'سماء أرض بحر نهر جبل شجرة زهرة وردة مطر ثلج ريح غيمة رمل صحراء غابة جزيرة شاطئ موج نار هواء صخرة ' +
-    'عشب ضوء ليل نهار صباح مساء يوم أسبوع شهر سنة صيف شتاء ربيع خريف ساعة دقيقة وقت كتب قرأ ذهب جاء ' +
-    'أكل شرب لعب نام فتح جلس وقف مشى ركض قفز سبح ضحك سمع رأى قال عمل فهم تعلم ساعد أحب وجد طار بنى ' +
-    'حمل سأل أجاب نظر عاد خرج دخل زار طبخ غسل رتب زرع صعد نزل بدأ فاز حاول شكر ابتسم يكتب يقرأ يلعب ' +
-    'يذهب يحب يركض يرسم يسبح نلعب نتعلم نقرأ تكتب تلعب يطير يأكل يشرب كبير صغير جميل سريع بطيء طويل ' +
-    'قصير جديد قديم سعيد نظيف ذكي قوي لطيف حار بارد سهل صعب قريب بعيد واسع هادئ مفيد شجاع نشيط ممتع ' +
-    'رائع لذيذ ثقيل خفيف كثير قليل أول آخر في من إلى على عن مع هذا هذه ذلك تلك هنا هناك كل بعض لا نعم ' +
-    'ثم أو لكن قبل بعد فوق تحت أمام خلف بين عند كيف ماذا متى أين لماذا هو هي نحن أنا أنت هم الذي التي ' +
-    'كان كانت ليس جدا أيضا دائما اليوم غدا أمس معا البيت الشمس القمر الولد البنت الماء الأرض السماء ' +
-    'البحر الحديقة الصباح الكتاب الفصل الأسد الآن الإجابة الأزهار الألوان لاعب سلام أولاد بلاد علامة ' +
-    'ملابس كلام ثلاثة طلاب فلاح ملاعق واحد اثنان أربعة خمسة ستة سبعة ثمانية تسعة عشرة يد رأس عين أذن ' +
-    'أنف فم قدم شعر سيارة قطار طائرة سفينة دراجة حافلة طريق مدينة قرية سوق كرة لعبة هدية حفلة صورة ' +
-    'رحلة نجاح فرح حلم أمل بالون هاتف مصباح كرسي طاولة مرآة مظلة قبعة حذاء قميص'
-  ).split(' '),
-
-  enS: [
-    'The sun is bright and warm today.',
-    'I like to read books at night.',
-    'My cat sleeps on a soft chair.',
-    'We play football at school.',
-    'Can you help me find my red pencil?',
-    'The little bird can sing a happy song.',
-    'Practice makes perfect.',
-    'A friend in need is a friend indeed.',
-    'Look before you leap.',
-    'The early bird catches the worm.',
-    'Every day is a new chance to learn.',
-    'I drink a glass of milk every morning.',
-    'The rabbit likes to eat carrots.',
-    'We planted a tree in the garden.',
-    'Stars shine in the dark night sky.',
-    'My brother can ride his bike fast.',
-    'Let us draw a big blue whale!',
-    'The turtle is slow, but it never gives up.',
-    'Please close the door when you leave.',
-    'Where did you put my green ball?',
-    'Reading is fun and makes you smart.',
-    'The train goes very fast on the track.',
-    'It is raining, so take an umbrella.',
-    'I help my mom cook dinner.',
-    'The elephant has a long nose.',
-    'We visit our grandparents on the weekend.',
-    'Kind words make people smile.',
-    'Teamwork makes the dream work.',
-    'Wash your hands before you eat.',
-    'The moon looks like a silver ball.',
-    'My best friend loves to paint.',
-    'What is your favorite color?',
-    'The kite flew high over the hill.',
-    'Winter is cold, and summer is hot.',
-    'Always try your best!',
-    'The puppy wags its tail when it is happy.',
-    'Honey is sweet and yummy.',
-    'Clean up your toys after you play.',
-    'Two heads are better than one.',
-    'Slow and steady wins the race.',
-    'Thank you for being a good friend.',
-    'Dolphins are smart and playful.'
-  ],
-
-  arS: [
-    'الشمس تشرق كل صباح.',
-    'أحب القراءة في المساء.',
-    'العلم نور.',
-    'من جد وجد، ومن زرع حصد.',
-    'الصديق وقت الضيق.',
-    'خير جليس في الزمان كتاب.',
-    'العقل السليم في الجسم السليم.',
-    'لكل مجتهد نصيب.',
-    'اليد الواحدة لا تصفق.',
-    'الصبر مفتاح الفرج.',
-    'القناعة كنز لا يفنى.',
-    'درهم وقاية خير من قنطار علاج.',
-    'نلعب كرة القدم في الفسحة.',
-    'أمي تطبخ طعاما لذيذا.',
-    'هل قرأت قصة جديدة اليوم؟',
-    'القطة الصغيرة تنام على الكرسي.',
-    'أزرع وردة حمراء في الحديقة.',
-    'الطيور تطير عاليا في السماء.',
-    'نذهب إلى المدرسة مبكرا.',
-    'أساعد أبي في ترتيب البيت.',
-    'البحر واسع وأمواجه زرقاء.',
-    'أكتب واجبي بخط جميل.',
-    'ما أجمل الربيع وأزهاره!',
-    'الرياضة تجعل الجسم قويا.',
-    'أشرب الماء كل يوم.',
-    'صديقي يحب الرسم والألوان.',
-    'في الليل تلمع النجوم.',
-    'الفيل حيوان كبير وذكي.',
-    'أحب زيارة جدي وجدتي.',
-    'أنظف أسناني قبل النوم.',
-    'المكتبة مليئة بالكتب المفيدة.',
-    'هيا نتعلم شيئا جديدا!',
-    'السلحفاة بطيئة، لكنها لا تستسلم.',
-    'أين وضعت قلمي الأزرق؟',
-    'الشجرة تعطينا الظل والثمر.',
-    'الأرنب يحب أكل الجزر.',
-    'نحتفل بعيد ميلاد أخي غدا.',
-    'الأصدقاء يساعد بعضهم بعضا.',
-    'رتب غرفتك، واغسل يديك.',
-    'العب بلطف، وشارك ألعابك.',
-    'التعاون يجعل العمل سهلا.',
-    'في الصيف نسبح في البحر.'
-  ]
+  ar: {
+    w1: [
+      'ب ت ن م ل ا س ي ك ش ط',
+      'ض ص ث ق ف غ ع ه خ ح ج د',
+      'ر ز و ة ى ظ ذ ء',
+      'يد فم أب أم أخ عم دب لا من في هو هي قط جد سن نم قم كل خذ مع'
+    ],
+    w2: 'قطة أسد فيل نمر قرد بطة ديك حوت جمل سمك موز خبز تمر جبن بيض عسل لبن تين عنب شمس قمر نجم بحر نهر جبل ورد مطر نور قلم باب بيت درس أخت بنت ولد جدة كرة لون يوم رسم ' +
+      '| فأر ذئب ثور أرز ماء شاي سكر ملح جزر ثلج ريح عمة خال صوت ظبي غيم',
+    w3: 'أرنب نملة نحلة سمكة حصان غزال بقرة خروف حليب عصير تفاح كعكة حلوى جبنة طعام أحمر أزرق أخضر أصفر أبيض كتاب دفتر صديق معلم شجرة زهرة وردة سماء نجمة ملعب لعبة هدية ' +
+      '| ضفدع ثعلب بطيخ فطور غداء عشاء أسود وردي غيمة سرير مطبخ',
+    w4: 'فراشة زرافة دجاجة دلفين عصفور طاووس ليمون طماطم بطاطا سيارة طائرة حافلة دراجة مدرسة معلمة ممحاة مسطرة حقيبة حديقة مكتبة عائلة بالون نافذة صاروخ ' +
+      '| سلحفاة برتقال فراولة بنفسجي برتقالي أصدقاء ببغاء ملعقة حاسوب طاولة صحراء',
+    w5: 'قطة صغيرة|بيت كبير|أحب أمي|أحب أبي|كرة حمراء|قلم أزرق|أنا أقرأ|نلعب معا|الأسد قوي|وردة جميلة|القمر جميل|أنا سعيد|بطة صفراء|الفيل كبير|أرنب سريع|يوم جميل|سمكة صغيرة|شجرة عالية' +
+      '||الشمس حارة اليوم|سماء زرقاء صافية|أشرب الماء كل يوم|السلحفاة بطيئة جدا|حديقة خضراء كبيرة|صديقي لطيف وذكي|نلعب الكرة معا|الطائرة في السماء',
+    test: 'قطة أسد فيل نمر قرد بطة ديك حوت جمل سمك موز خبز تمر جبن بيض عسل تين عنب شمس قمر نجم بحر نهر جبل ورد مطر قلم باب بيت درس أخت بنت ولد كرة لون يوم ' +
+      'أرنب نملة نحلة سمكة حصان غزال بقرة خروف حليب عصير تفاح كعكة حلوى طعام أحمر أزرق أخضر أصفر أبيض كتاب دفتر صديق معلم شجرة زهرة وردة سماء نجمة ملعب لعبة هدية ' +
+      'فراشة زرافة دجاجة دلفين عصفور ليمون طماطم سيارة طائرة حافلة دراجة مدرسة حقيبة حديقة مكتبة عائلة بالون نافذة صاروخ',
+    easy: 'يد فم أب أم أخ عم دب من في هو هي جد قطة أسد فيل نمر قرد بطة ديك حوت جمل سمك موز خبز تمر جبن بيض عسل تين عنب شمس قمر نجم بحر نهر جبل ورد قلم باب بيت ولد كرة يوم'
+  },
+  en: {
+    w1: [
+      'a s d f g h j k l',
+      'q w e r t y u i o p',
+      'z x c v b n m',
+      'go up me we no on in at it is my hi do so to be he an am'
+    ],
+    w2: 'cat dog pig cow hen fox bee owl ant bat sun sky sea red bus car hat cap bag pen cup egg jam pie mom dad box toy bed run hop sit big hot fun ' +
+      '| yak rat van mud zoo wet jet fix wax zip',
+    w3: 'fish frog bird duck lion bear goat deer crab milk cake corn rice soup pear blue pink gold moon star tree rain snow wind leaf rock book ball kite doll drum bike boat ship hand foot nose jump swim sing play ' +
+      '| jeep wolf yolk jazz quiz king yawn wave',
+    w4: 'apple tiger zebra mouse horse panda sheep whale snake bread lemon grape melon pizza candy robot train plane truck green ' +
+      '| purple yellow orange rabbit monkey turtle parrot banana cookie cherry carrot school pencil garden flower rocket castle planet rainbow',
+    w5: 'a red hat|my big dog|cats can jump|we like cake|a fish can swim|the moon is big|red and blue|my pet frog|the bus is fast|pigs love mud|snow is cold|my cat naps|a happy duck|birds can fly' +
+      '||the sun is hot|a big red ball|look at the sky|the tree is tall|we can play now|a cup of milk|the frog can hop|my kite is blue',
+    test: 'cat dog pig cow hen fox bee owl ant bat sun sky sea red bus car hat cap bag pen cup egg jam pie box toy bed run hop sit big hot fun ' +
+      'fish frog bird duck lion bear goat deer crab milk cake corn rice soup pear blue pink gold moon star tree rain snow wind leaf rock book ball kite doll drum bike boat ship hand foot nose jump swim sing play ' +
+      'apple tiger zebra mouse horse panda sheep whale snake bread lemon grape melon pizza candy robot train plane truck green',
+    easy: 'go up me we no on in at it is my do so to be he cat dog pig cow hen fox bee owl ant bat sun sky sea red bus car hat cap bag pen cup egg jam pie box toy bed run hop sit big hot fun'
+  }
 };
