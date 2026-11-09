@@ -189,7 +189,7 @@
     refreshWardrobe(); setMode('wardrobe'); snap = false;
   }
   function closeWardrobe() { J.back(); if (wardFrom === 'map') toMap(); else toTitle(); }
-  function dress() { view.setLook(D.COLORS[save.color].c, D.HATS[save.hat].id); }
+  function dress() { var c = D.COLORS[save.color].c; view.setLook(c, D.HATS[save.hat].id); $('trip-me').style.fill = '#' + c.toString(16).padStart(6, '0'); }
   function equip(type, i, el) {
     var list = type === 'color' ? D.COLORS : D.HATS;
     if (list[i].need > save.bank) { J.error(); wiggle(el); return; }
@@ -280,7 +280,7 @@
         next: i < 14 && D.isOpen(save, i + 1) };
     }
     ending = { t: 0, dur: result.won ? 3 : 1.6, x: world.x, v: world.speed, hopT: 0 };
-    hideCoach(); $('intro').hidden = true;
+    updateHud(); hideCoach(); $('intro').hidden = true;
     setMode('ending');
     if (result.won) {
       J.levelUp();
@@ -312,6 +312,7 @@
     $('next').hidden = r.endless || !r.won && !r.next;
     $('next').setAttribute('aria-label', !r.endless && cur.level < 14 ? 'المرحلة التالية' : 'الخريطة');
     $('result').classList.toggle('lost', !r.endless && !r.won);
+    $('again').classList.toggle('play', !!$('next').hidden);
     say(r.endless ? r.distance + ' م' : r.won ? r.stars + ' / 3' : 'حاول مرة أخرى');
     setMode('result');
   }
