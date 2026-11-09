@@ -8,70 +8,120 @@
 <link rel="stylesheet" href="../../shared/game.css">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-mode="title">
-<canvas id="scene" tabindex="0" aria-label="برج الحلوى. اصعد المفاتيح قبل الشوكولاتة."></canvas>
-<div id="split" aria-hidden="true"></div>
-<div id="hud" hidden>
-  <div id="pips" aria-label="الأعلام">
-    <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+<body>
+<!-- Icons: every button is a picture, so a child who cannot read yet can play. -->
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 15 L22 8 L42 15 L58 8 L58 49 L42 56 L22 49 L6 56 Z"/><path d="M22 10 L22 47 M42 17 L42 54" stroke="#1c2250" stroke-width="4" opacity=".35"/><circle cx="32" cy="30" r="6" fill="#ff5d6c"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-hat" viewBox="0 0 64 64"><path d="M10 40 Q8 14 32 12 Q56 14 54 40 Z" stroke="#1c2250" stroke-width="3.5" stroke-linejoin="round"/><path d="M40 36 Q58 33 62 42 Q50 47 38 44 Z" fill="#2a7fd6" stroke="#1c2250" stroke-width="3.5" stroke-linejoin="round"/><circle cx="32" cy="12" r="5" fill="#ffd23f" stroke="#1c2250" stroke-width="3"/></symbol>
+  <symbol id="i-two" viewBox="0 0 64 64"><circle cx="21" cy="30" r="14" fill="#ff8a3d" stroke="#1c2250" stroke-width="3.5"/><circle cx="44" cy="34" r="14" fill="#4fc3ff" stroke="#1c2250" stroke-width="3.5"/><circle cx="17" cy="27" r="3" fill="#1c2250"/><circle cx="26" cy="27" r="3" fill="#1c2250"/><circle cx="40" cy="31" r="3" fill="#1c2250"/><circle cx="49" cy="31" r="3" fill="#1c2250"/><path d="M8 58 L56 58" stroke="#1c2250" stroke-width="5" stroke-linecap="round"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
+  <symbol id="i-crown" viewBox="0 0 64 64"><path d="M8 20 L20 34 L32 12 L44 34 L56 20 L52 50 L12 50 Z" stroke-linejoin="round"/><circle cx="32" cy="38" r="4" fill="#ff5d6c"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 64 64"><circle cx="32" cy="34" r="24" fill="#ffffff" stroke="#1c2250" stroke-width="5"/><path d="M32 20 L32 35 L42 41" fill="none" stroke="#1c2250" stroke-width="5" stroke-linecap="round"/><rect x="26" y="3" width="12" height="7" rx="3" fill="#1c2250"/></symbol>
+  <symbol id="i-aim" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="#ff5d6c" stroke="#1c2250" stroke-width="4"/><circle cx="32" cy="32" r="17" fill="#ffffff" stroke="#1c2250" stroke-width="3"/><circle cx="32" cy="32" r="8" fill="#ff5d6c" stroke="#1c2250" stroke-width="3"/></symbol>
+  <symbol id="i-key" viewBox="0 0 64 64"><rect x="6" y="10" width="52" height="46" rx="10" fill="#2c3150" stroke="#1c2250" stroke-width="4"/><rect x="11" y="13" width="42" height="34" rx="8" fill="#3a4168"/><text x="20" y="38" font-family="Fredoka, sans-serif" font-weight="700" font-size="22" fill="#ffffff">F</text><text x="46" y="44" font-family="Fredoka, sans-serif" font-weight="700" font-size="18" fill="#ffffff" text-anchor="end" direction="rtl">ب</text></symbol>
+  <symbol id="i-inf" viewBox="0 0 64 64"><path d="M32 32 C24 18 8 18 8 32 C8 46 24 46 32 32 C40 18 56 18 56 32 C56 46 40 46 32 32 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/></symbol>
+</svg>
+
+<canvas id="game" tabindex="0" aria-label="عدّاء المفاتيح"></canvas>
+
+<!-- A 1280x720 layer laid exactly over the canvas (scaled by game.js). -->
+<div id="ui">
+  <div id="hud" hidden>
+    <button type="button" id="btnPause" class="kr-btn kr-round" aria-label="استراحة" title="استراحة (Esc)"><svg aria-hidden="true"><use href="#i-pause"/></svg><span class="esc" dir="ltr">Esc</span></button>
   </div>
-  <div id="choco" aria-hidden="true"><b id="choco-fill"></b></div>
+
+  <section id="scrTitle" class="screen" aria-label="عدّاء المفاتيح">
+    <h1 class="logo"><span class="l1">عدّاء</span><span class="l2">المفاتيح</span></h1>
+    <button type="button" id="btnPlay" class="kr-btn kr-play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    <div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+    <button type="button" id="btnCloset" class="kr-btn kr-side" aria-label="خزانة زوزو"><svg aria-hidden="true"><use href="#i-hat"/></svg></button>
+    <button type="button" id="btnDuo" class="kr-btn kr-side" aria-label="سباق اثنين"><svg aria-hidden="true"><use href="#i-two"/></svg></button>
+    <div id="labels" role="group" aria-label="الحرف الكبير على المفاتيح">
+      <button type="button" class="lbl" data-label="ar" aria-label="عربي"><span class="cap"><b class="a big">ب</b><i class="l">F</i></span><small>عربي</small></button>
+      <button type="button" class="lbl" data-label="both" aria-label="عربي وEnglish"><span class="cap"><b class="a">ب</b><i class="l big">F</i></span><small>الاثنان</small></button>
+      <button type="button" class="lbl" data-label="en" aria-label="English"><span class="cap"><b class="a">ب</b><i class="l big xl">F</i></span><small dir="ltr">English</small></button>
+    </div>
+  </section>
+
+  <section id="scrMap" class="screen" aria-label="العوالم" hidden>
+    <button type="button" id="mapHome" class="kr-btn kr-round" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="chip" id="mapStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+    <button type="button" id="mapCloset" class="kr-btn kr-round" aria-label="خزانة زوزو"><svg aria-hidden="true"><use href="#i-hat"/></svg></button>
+    <div id="cards"></div>
+  </section>
+
+  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+    <div class="card">
+      <button type="button" id="btnResume" class="kr-btn kr-go" aria-label="تابع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <div class="row">
+        <button type="button" id="btnMenu" class="kr-btn kr-round big" aria-label="الخريطة"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="btnRestart" class="kr-btn kr-round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrResult" class="screen" aria-label="النتيجة" hidden>
+    <div class="card result">
+      <div class="stars3" id="resStars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
+      <div class="score" id="resScore" hidden><svg aria-hidden="true"><use href="#i-key"/></svg><b id="resNum">0</b><span class="best"><svg aria-hidden="true"><use href="#i-crown"/></svg><b id="resBest">0</b></span></div>
+      <div class="stats" id="resStats"><span class="st"><svg aria-hidden="true"><use href="#i-clock"/></svg><b id="resTime" dir="ltr">0</b></span><span class="st"><svg aria-hidden="true"><use href="#i-aim"/></svg><b id="resAcc" dir="ltr">0%</b></span></div>
+      <div class="newbest" id="resNewBest" hidden><svg aria-hidden="true"><use href="#i-crown"/></svg><span>رقم جديد!</span></div>
+      <button type="button" class="kr-btn gift" id="resGift" aria-label="شيء جديد في الخزانة" hidden><canvas id="giftCanvas" width="132" height="132"></canvas><span>جديد!</span></button>
+      <div class="row">
+        <button type="button" id="resMap" class="kr-btn kr-round big" aria-label="الخريطة"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="resNext" class="kr-btn kr-go ring" aria-label="التالي"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+        <button type="button" id="resAgain" class="kr-btn kr-round big" aria-label="مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrCloset" class="screen" aria-label="خزانة زوزو" hidden>
+    <button type="button" id="closetBack" class="kr-btn kr-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="chip" id="closetStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+    <div class="closet-panel">
+      <div class="shelf" id="colors" role="group" aria-label="الألوان"></div>
+      <div class="shelf" id="hats" role="group" aria-label="القبعات"></div>
+    </div>
+  </section>
+
+  <section id="scrDuo" class="screen" aria-label="سباق اثنين" hidden>
+    <button type="button" id="duoBack" class="kr-btn kr-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <button type="button" id="duoGo" class="kr-btn kr-go ring" aria-label="ابدأ السباق"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+  </section>
+
+  <section id="scrDuoEnd" class="screen" aria-label="الفائز" hidden>
+    <div class="card duo-end">
+      <div class="winner"><svg aria-hidden="true"><use href="#i-crown"/></svg><span id="duoWinner">فاز اللاعب 1!</span></div>
+      <div class="row">
+        <button type="button" id="duoMenu" class="kr-btn kr-round big" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <button type="button" id="duoAgain" class="kr-btn kr-go ring" aria-label="سباق جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- The wordless coach: a hand that presses the key to type. -->
+  <div id="ghost" aria-hidden="true" hidden>
+    <svg viewBox="0 0 80 110" width="80" height="110">
+      <g stroke="#1c2250" stroke-width="5" stroke-linejoin="round">
+        <path d="M33 104 L33 52 Q33 44 40 44 Q47 44 47 52 L47 70 Q49 64 55 64 Q61 64 61 71 L61 74 Q63 69 69 70 Q75 71 75 78 L75 84 Q75 96 66 104 Z" fill="#ffffff"/>
+        <path d="M33 74 Q27 66 21 70 Q15 75 22 84 L33 98" fill="#ffffff"/>
+        <rect x="31" y="6" width="18" height="52" rx="9" fill="#ffffff"/>
+      </g>
+      <path d="M36 14 L44 14" stroke="#1c2250" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+    </svg>
+  </div>
 </div>
-<div id="hint" hidden aria-hidden="true">
-  <div class="kb">
-    <div class="kb-row"><b class="key key-w" dir="ltr">W</b></div>
-    <div class="kb-row"><b class="key" dir="ltr">A</b><b class="key" dir="ltr">S</b><b class="key" dir="ltr">D</b></div>
-    <b class="key key-space" dir="ltr"></b>
-  </div>
-</div>
-<button id="pause-button" class="utility" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3v14H7zm7 0h3v14h-3z"/></svg></button>
-<main id="title-screen" class="screen ready">
-  <div class="card">
-    <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
-    <h1>عدّاء المفاتيح</h1>
-    <button id="play" class="play" type="button">العب</button>
-    <button id="duo" class="ghost" type="button">لاعبان</button>
-    <p class="meta">الأعلام <b id="menu-flags" dir="ltr">0</b> · الوقت <b id="menu-best" dir="ltr">—</b></p>
-  </div>
-</main>
-<section id="duo-screen" class="screen veil" hidden>
-  <div class="panel">
-    <h2>سباق لاعبين</h2>
-    <div id="race-list" class="row"></div>
-    <button id="duo-back" class="ghost" type="button">رجوع</button>
-  </div>
-</section>
-<section id="pause-screen" class="screen veil" hidden>
-  <div class="panel">
-    <h2>استراحة</h2>
-    <button id="resume" class="play" type="button">تابع</button>
-    <button id="restart" class="ghost" type="button">من البداية</button>
-    <button id="pause-menu" class="ghost" type="button">القائمة</button>
-  </div>
-</section>
-<section id="result-screen" class="screen veil" hidden>
-  <div id="confetti" aria-hidden="true"></div>
-  <div class="panel">
-    <div class="tower" aria-hidden="true"><i id="tower-mark"></i></div>
-    <p id="stars" data-stars="0" aria-label="النجوم"><b></b><b></b><b></b></p>
-    <h2 id="result-title">قمة البرج!</h2>
-    <p id="result-record" hidden>رقم جديد!</p>
-    <p id="result-line" class="lead" dir="ltr"></p>
-    <button id="again" class="play" type="button">العب مرة أخرى</button>
-    <button id="result-menu" class="ghost" type="button">القائمة</button>
-  </div>
-</section>
-<button id="quality" class="quality-button" type="button" aria-pressed="false">الرسوم: كاملة</button>
-<div id="context-notice" role="status" hidden>توقفت الرسوم مؤقتًا. انتظر لحظة لاستعادتها.</div>
-<section id="error-screen" class="screen error" hidden>
-  <div class="panel"><h2>تعذّر تشغيل اللعبة</h2><p>الرسوم ثلاثية الأبعاد غير متاحة الآن.<br>أعد فتح اللعبة أو اختر لعبة أخرى.</p></div>
-</section>
+<div id="live" class="sr" aria-live="polite"></div>
+
 <script src="../../shared/kit.js"></script>
-<script src="../../lib/three/three.min.js"></script>
-<script src="data.js"></script>
+<script src="../../shared/juice.js"></script>
 <script src="engine.js"></script>
-<script src="render.js"></script>
-<script src="audio.js"></script>
+<script src="art.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

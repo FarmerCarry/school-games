@@ -1,93 +1,79 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
   <defs>
-    <radialGradient id="bg" cx="50%" cy="30%" r="78%">
-      <stop offset="0" stop-color="#fff7fb"/>
-      <stop offset="0.42" stop-color="#ff7ec4"/>
-      <stop offset="1" stop-color="#e21878"/>
-    </radialGradient>
-    <radialGradient id="body" cx="35%" cy="28%" r="75%">
-      <stop offset="0" stop-color="#d7ecff"/>
-      <stop offset="1" stop-color="#2a62d6"/>
-    </radialGradient>
-    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#fff6b0"/>
-      <stop offset="1" stop-color="#ffb000"/>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4fc0ff"/>
+      <stop offset="1" stop-color="#d2f4ff"/>
     </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#ffe14d" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#ffe14d" stop-opacity="0"/>
+    </radialGradient>
   </defs>
-  <rect width="400" height="400" fill="url(#bg)"/>
-  <g fill="#fff" opacity="0.16">
-    <path d="M200 230 L145 -24 L188 -24 Z"/>
-    <path d="M200 230 L248 -24 L310 -24 Z"/>
-    <path d="M200 230 L424 24 L424 96 Z"/>
-    <path d="M200 230 L-24 24 L-24 96 Z"/>
-    <path d="M200 230 L424 188 L400 260 Z"/>
-    <path d="M200 230 L-24 188 L8 260 Z"/>
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <circle cx="338" cy="150" r="34" fill="#fff27a" stroke="#1c2250" stroke-width="5"/>
+  <path d="M-10 262 Q40 214 100 236 Q160 258 210 222 Q270 186 330 226 Q370 250 410 230 L410 300 L-10 300 Z" fill="#a3e86f"/>
+  <path d="M-10 280 Q60 250 130 268 Q200 286 260 258 Q330 232 410 262 L410 320 L-10 320 Z" fill="#57bd4b" stroke="#1c2250" stroke-width="4"/>
+  <!-- speed lines -->
+  <g fill="#ffffff" opacity="0.85">
+    <rect x="10" y="150" width="70" height="7" rx="3.5"/>
+    <rect x="34" y="176" width="54" height="7" rx="3.5"/>
+    <rect x="0" y="202" width="64" height="7" rx="3.5"/>
   </g>
-  <g fill="#fff">
-    <ellipse cx="62" cy="168" rx="32" ry="13"/>
-    <ellipse cx="90" cy="162" rx="20" ry="11"/>
-    <ellipse cx="318" cy="176" rx="34" ry="13"/>
-    <ellipse cx="348" cy="170" rx="18" ry="10"/>
+  <!-- posts and water -->
+  <g stroke="#1c2250" stroke-width="4">
+    <rect x="46" y="326" width="26" height="80" rx="5" fill="#c7834a"/>
+    <rect x="186" y="318" width="26" height="90" rx="5" fill="#c7834a"/>
+    <rect x="326" y="326" width="26" height="80" rx="5" fill="#c7834a"/>
   </g>
-  <ellipse cx="200" cy="378" rx="168" ry="18" fill="#6a3418"/>
-  <ellipse cx="200" cy="368" rx="148" ry="10" fill="#8a4b28"/>
-  <g>
-    <rect x="16" y="292" width="92" height="18" rx="8" fill="#1d6fd0"/>
-    <rect x="16" y="268" width="92" height="46" rx="12" fill="#7eb6ff" stroke="#1a4e96" stroke-width="4"/>
-    <rect x="26" y="276" width="72" height="26" rx="7" fill="#fff6ea"/>
-    <text x="62" y="296" text-anchor="middle" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="22" font-weight="700" fill="#1a2a55">ق</text>
+  <path d="M0 352 Q12 346 25 352 T50 352 T75 352 T100 352 T125 352 T150 352 T175 352 T200 352 T225 352 T250 352 T275 352 T300 352 T325 352 T350 352 T375 352 T400 352 L400 400 L0 400 Z" fill="#35b2f5" stroke="#ffffff" stroke-width="5"/>
+  <!-- keycap stones: dark caps printed like the real keys -->
+  <g stroke="#1c2250" stroke-width="5">
+    <rect x="6" y="268" width="106" height="74" rx="16" fill="#252a46"/>
+    <rect x="12" y="272" width="94" height="56" rx="12" fill="#3a4168" stroke="none"/>
   </g>
-  <g>
-    <rect x="292" y="278" width="92" height="18" rx="8" fill="#c98412"/>
-    <rect x="292" y="254" width="92" height="46" rx="12" fill="#ffd24a" stroke="#8a5a08" stroke-width="4"/>
-    <rect x="302" y="262" width="72" height="26" rx="7" fill="#fff6ea"/>
-    <text x="338" y="282" text-anchor="middle" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="22" font-weight="700" fill="#3a2140">ط</text>
+  <text x="20" y="300" font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" font-size="30" fill="#ffffff">F</text>
+  <text x="98" y="322" font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" font-size="32" fill="#ffffff" text-anchor="end">ب</text>
+  <circle cx="200" cy="296" r="92" fill="url(#glow)"/>
+  <g stroke="#1c2250" stroke-width="5">
+    <rect x="146" y="258" width="108" height="76" rx="16" fill="#e2a400"/>
+    <rect x="152" y="262" width="96" height="58" rx="12" fill="#ffe14d" stroke="none"/>
   </g>
-  <g>
-    <rect x="118" y="328" width="164" height="22" rx="8" fill="#1f8a42"/>
-    <rect x="118" y="292" width="164" height="58" rx="14" fill="#3ddc6a" stroke="#146b32" stroke-width="5"/>
-    <rect x="132" y="304" width="136" height="30" rx="8" fill="#f3fff4"/>
-    <text x="200" y="326" text-anchor="middle" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="20" font-weight="700" fill="#146b32">مسافة</text>
+  <text x="162" y="292" font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" font-size="32" fill="#1c2250">J</text>
+  <text x="240" y="314" font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" font-size="36" fill="#1c2250" text-anchor="end">ت</text>
+  <path d="M186 228 L214 228 L200 248 Z" fill="#ffe14d" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/>
+  <g stroke="#1c2250" stroke-width="5">
+    <rect x="288" y="268" width="106" height="74" rx="16" fill="#252a46"/>
+    <rect x="294" y="272" width="94" height="56" rx="12" fill="#3a4168" stroke="none"/>
   </g>
-  <g fill="#fff6ea">
-    <path d="M78 214 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z"/>
-    <path d="M332 128 l4 9 9 3 -9 4 -4 9 -4 -9 -9 -4 9 -4 z"/>
-    <path d="M352 236 l3 7 7 2 -7 3 -3 7 -3 -7 -7 -3 7 -3 z"/>
+  <text x="302" y="300" font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" font-size="30" fill="#ffffff">K</text>
+  <text x="380" y="322" font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" font-size="32" fill="#ffffff" text-anchor="end">ن</text>
+  <!-- the runner mid-hop with its scarf -->
+  <g transform="translate(118 196) rotate(-8)">
+    <path d="M-20 4 Q-50 -6 -76 6 L-74 22 Q-50 14 -20 20 Z" fill="#ff4d6d" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/>
+    <ellipse cx="-12" cy="44" rx="13" ry="8" fill="#7a3a10" stroke="#1c2250" stroke-width="4"/>
+    <ellipse cx="16" cy="40" rx="13" ry="8" fill="#7a3a10" stroke="#1c2250" stroke-width="4"/>
+    <ellipse cx="0" cy="0" rx="40" ry="38" fill="#ff8a3d" stroke="#1c2250" stroke-width="6"/>
+    <ellipse cx="6" cy="14" rx="22" ry="16" fill="#ffffff" opacity="0.3"/>
+    <path d="M-39 8 Q0 18 39 8 L37 22 Q0 32 -37 22 Z" fill="#ff4d6d" stroke="#1c2250" stroke-width="4"/>
+    <ellipse cx="-4" cy="-12" rx="11" ry="14" fill="#ffffff" stroke="#1c2250" stroke-width="4"/>
+    <ellipse cx="22" cy="-12" rx="11" ry="14" fill="#ffffff" stroke="#1c2250" stroke-width="4"/>
+    <circle cx="1" cy="-10" r="6.5" fill="#1c2250"/><circle cx="27" cy="-10" r="6.5" fill="#1c2250"/>
+    <circle cx="3" cy="-13" r="2.4" fill="#ffffff"/><circle cx="29" cy="-13" r="2.4" fill="#ffffff"/>
+    <path d="M6 2 Q14 12 22 2 Z" fill="#7a1f3d" stroke="#1c2250" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M-30 -28 Q-28 -52 2 -52 Q30 -52 32 -28 Z" fill="#3fa2ff" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M22 -32 Q46 -36 54 -26 Q40 -22 22 -24 Z" fill="#2a7fd6" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/>
   </g>
-  <g stroke="#fff" stroke-width="5" stroke-linecap="round" opacity="0.85">
-    <path d="M156 250 q-28 8 -36 -8"/>
-    <path d="M154 268 q-34 6 -40 8"/>
+  <!-- +1 -->
+  <text x="268" y="214" font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" font-size="46" fill="#ffffff" stroke="#1c2250" stroke-width="9" stroke-linejoin="round" paint-order="stroke">+1</text>
+  <g fill="#ffd23f" stroke="#1c2250" stroke-width="3" stroke-linejoin="round">
+    <path d="M250 176 L254 186 L264 187 L256 193 L259 203 L250 197 L241 203 L244 193 L236 187 L246 186 Z"/>
+    <path d="M344 196 L347 203 L354 204 L349 208 L351 215 L344 211 L337 215 L339 208 L334 204 L341 203 Z"/>
   </g>
-  <g transform="translate(200 242) scale(0.9)">
-    <ellipse cx="0" cy="92" rx="28" ry="7" fill="#14301c" opacity="0.28"/>
-    <ellipse cx="-22" cy="78" rx="16" ry="9" fill="#2458c4" stroke="#1a2a55" stroke-width="4" transform="rotate(-28 -22 78)"/>
-    <ellipse cx="26" cy="62" rx="16" ry="9" fill="#2458c4" stroke="#1a2a55" stroke-width="4" transform="rotate(24 26 62)"/>
-    <path d="M-16 18 Q-48 -8 -34 -36" fill="none" stroke="#1a2a55" stroke-width="12" stroke-linecap="round"/>
-    <path d="M-16 18 Q-48 -8 -34 -36" fill="none" stroke="#8ec4ff" stroke-width="6" stroke-linecap="round"/>
-    <path d="M16 16 Q48 -12 36 -40" fill="none" stroke="#1a2a55" stroke-width="12" stroke-linecap="round"/>
-    <path d="M16 16 Q48 -12 36 -40" fill="none" stroke="#8ec4ff" stroke-width="6" stroke-linecap="round"/>
-    <circle cx="-34" cy="-38" r="8" fill="#fff3df" stroke="#1a2a55" stroke-width="3"/>
-    <circle cx="36" cy="-42" r="8" fill="#fff3df" stroke="#1a2a55" stroke-width="3"/>
-    <rect x="-22" y="-8" width="44" height="78" rx="22" fill="url(#body)" stroke="#1a2a55" stroke-width="5"/>
-    <circle cx="0" cy="-28" r="32" fill="#fff6ea" stroke="#1a2a55" stroke-width="5"/>
-    <ellipse cx="-14" cy="-18" rx="7" ry="4" fill="#ffb0c8"/>
-    <ellipse cx="14" cy="-18" rx="7" ry="4" fill="#ffb0c8"/>
-    <ellipse cx="-12" cy="-34" rx="8" ry="10" fill="#fff"/>
-    <ellipse cx="12" cy="-34" rx="8" ry="10" fill="#fff"/>
-    <circle cx="-12" cy="-32" r="4" fill="#2a2030"/>
-    <circle cx="12" cy="-32" r="4" fill="#2a2030"/>
-    <circle cx="-10.6" cy="-33.6" r="1.5" fill="#fff"/>
-    <circle cx="13.4" cy="-33.6" r="1.5" fill="#fff"/>
-    <path d="M-12 -16 Q0 -6 12 -16" fill="none" stroke="#2a2030" stroke-width="3" stroke-linecap="round"/>
-  </g>
-  <g transform="translate(292 186) rotate(8)">
-    <rect x="0" y="0" width="52" height="30" rx="12" fill="#fff" stroke="#7a1248" stroke-width="4"/>
-    <text x="26" y="22" text-anchor="middle" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" fill="#e42386">+1</text>
-  </g>
-  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="700" text-anchor="middle" direction="rtl" stroke-linejoin="round">
-    <text x="200" y="78" font-size="78" fill="#3a1248" stroke="#3a1248" stroke-width="16">عدّاء</text>
-    <text x="200" y="74" font-size="78" fill="url(#gold)" stroke="#fff" stroke-width="3" paint-order="stroke">عدّاء</text>
-    <text x="200" y="148" font-size="58" fill="#3a1248" stroke="#3a1248" stroke-width="14">المفاتيح</text>
-    <text x="200" y="144" font-size="58" fill="#fff" stroke="#e21878" stroke-width="3" paint-order="stroke">المفاتيح</text>
+  <!-- logo -->
+  <g font-family="Fredoka, 'Segoe UI', Tahoma, Arial, sans-serif" font-weight="700" text-anchor="middle" direction="rtl" stroke-linejoin="round">
+    <text x="200" y="80" font-size="66" fill="#1c2250" stroke="#1c2250" stroke-width="16">عدّاء</text>
+    <text x="200" y="76" font-size="66" fill="#ffd23f">عدّاء</text>
+    <text x="200" y="138" font-size="58" fill="#1c2250" stroke="#1c2250" stroke-width="16">المفاتيح</text>
+    <text x="200" y="134" font-size="58" fill="#ffffff">المفاتيح</text>
   </g>
 </svg>
