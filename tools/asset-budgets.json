@@ -1,26 +1,26 @@
 {
   "format": 1,
   "portalBytes": 427000,
-  "teacherBytes": 101000,
+  "teacherBytes": 102000,
   "gameHtmlBytes": {
     "air-hockey": 117000,
     "beat-dash": 115000,
     "blob-battle": 108000,
     "block-burst": 116000,
     "block-world": 160000,
-    "bubble-bop": 177000,
+    "bubble-bop": 176000,
     "cake-guards": 86000,
     "candy-rope": 113000,
-    "chaos-island": 153000,
+    "chaos-island": 151500,
     "connect-four": 57000,
     "critter-mart": 163000,
-    "dino-3d": 128500,
+    "dino-3d": 127000,
     "drift-king": 111000,
-    "egg-rush": 157000,
+    "egg-rush": 155500,
     "fire-and-ice": 125000,
     "hoop-heads": 155000,
-    "key-runner": 122500,
-    "lucky-lake": 141500,
+    "key-runner": 121000,
+    "lucky-lake": 140000,
     "maze-dash": 118000,
     "merge-2048": 82000,
     "moto-madness": 134000,
@@ -39,7 +39,7 @@
     "tic-tac-toe": 57000,
     "troll-level": 254500,
     "tunnel-blitz": 97000,
-    "typing-test": 121500,
+    "typing-test": 120000,
     "wacky-soccer": 160000
   },
   "threeBytes": 750000,
@@ -49,5 +49,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5938000
+  "precacheBytes": 6195000
 }

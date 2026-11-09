@@ -909,3 +909,38 @@ the new page plus the portal and the teacher page, and gains one file, so
 measurement. Each new limit is the measured size rounded up (the game to the next
 500 bytes, the others to the next 1,000), and each headroom is under half a percent.
 No other game, font or library limit changes.
+
+## Seven rebuilt and extended games, 9 November 2026
+
+Egg Rush, Lucky Lake, Chaos Island, Key Runner, Dino 3D and Lightning Fingers are
+rebuilt from scratch, and Bubble Bop gains worlds 6–11. Every page stays one file with
+procedural art and short one-shot sounds; no file, font or library is added, so the
+offline cache still holds 52 files. Key Runner no longer uses three.js (it is a 2D canvas
+game now); Dino 3D still loads the shared three.js file, which is unchanged.
+
+Measured with the Linux minified build and `SG_TELEMETRY_URL` set, the same Actions
+build the budgets check, against main before this change (the Lucky Lake head, e10a143).
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Bubble Bop (worlds 6–11) | 114,201 | 175,690 | 116,000 | 176,000 |
+| Chaos Island | 117,858 | 151,460 | 118,000 | 151,500 |
+| Dino 3D | 58,949 | 126,877 | 60,000 | 127,000 |
+| Egg Rush | 134,352 | 155,433 | 134,500 | 155,500 |
+| Key Runner | 79,841 | 120,510 | 80,000 | 121,000 |
+| Lucky Lake | 121,974 | 139,995 | 122,000 | 140,000 |
+| Lightning Fingers | 105,898 | 119,839 | 107,000 | 120,000 |
+| Portal | 426,183 | 426,109 | 427,000 | 427,000 (unchanged) |
+| Teacher page (catalog text) | 100,831 | 101,717 | 101,000 | 102,000 |
+| Offline precache, 52 files | 5,937,420 | 6,194,963 | 5,938,000 | 6,195,000 |
+| Offline ZIP | 2,092,773 | 2,181,109 | — | — |
+
+The seven pages grow by 256,731 bytes together; the teacher page grows by 886 bytes
+because it inlines the longer catalog entries, and the portal shrinks by 74 bytes.
+The offline cache grows by 257,543 bytes (4.3%). Each new limit is the measured size
+rounded up (the games to the next 500 bytes, the others to the next 1,000). Bubble Bop
+caps its tier-sized sprite caches (pools, coral walls and keycaps) so a long session does
+not keep every size it drew. Frame rates were not measured for this change: the build
+machine ran seven browsers at once, so its numbers are noise. Measure the rebuilt games
+on the school's weakest PC with `npm run perf -- --native-gpu --headed --seconds 30
+egg-rush lucky-lake chaos-island key-runner dino-3d typing-test bubble-bop`.

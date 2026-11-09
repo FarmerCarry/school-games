@@ -3,8 +3,9 @@
 A light, ad-free games website **in Arabic** for children aged 6–11: a small Poki-style portal
 with original browser games, all written from scratch for this site. The site and all of its
 games are in Arabic, laid out right-to-left. The games are being made to scale from a 6-year-old
-who has never held a mouse to an 11-year-old expert (Bubble Bop, Road Hopper and Dino 3D already
-adapt to each child), and none of them plays background music.
+who has never held a mouse to an 11-year-old expert (Bubble Bop, Road Hopper, Dino 3D, Key Runner,
+Lightning Fingers, Egg Rush, Lucky Lake and Chaos Island already adapt to each child), and none of
+them plays background music.
 
 - **No ads, no email/password accounts, no names, no chat, no third-party analytics, no links to other sites.**
   Children pick an animal picture and their age band to play as themselves; nothing is typed.
@@ -51,7 +52,7 @@ adapt to each child), and none of them plays background music.
 | حرّاس الكعكة | Cake Guards (tower defense) | 1 | استراتيجية |
 | انفجار المكعبات | Block Burst | 1 | ألغاز |
 | دمج 2048 | 2048 | 1 | ألغاز |
-| جزيرة الفوضى | Chaos Island | 1-2 | أركيد، لاعبان |
+| جزيرة الفوضى | Chaos Island (survive the island's silly disasters) | 1-2 | لاعبان، أركيد |
 | حبل الحلوى | Munch Rope | 1 | ألغاز |
 | اندفاع المتاهة | Maze Dash | 1 | أركيد |
 | عبور الطريق | Road Hopper | 1 | أركيد |
@@ -96,6 +97,17 @@ the mouse (or the arrows) and click or press Space to cast, wait for the «!» b
 keep the fish inside the reel bar's green zone. Five places from the village pond to a magic night
 lagoon each have three picture goals (stars); there are 33 species and funny junk, a fish book and
 rod upgrades. Two players fish against the clock from a dock and a boat (Space and Enter).
+
+**جزيرة الفوضى (Chaos Island)** is a disaster-survival party platformer on one island in side view.
+Each round a picture card announces one silly disaster and the move that beats it: climb above a
+jelly flood, step away from the shadows of marshmallow meteors, walk against the wind or go inside
+the house, jump rolling snowballs on ice, keep off cracking platforms in a quake, leave the lit
+column under a thunder cloud, dodge beach balls, and hide indoors from a little tornado. A hit is a
+cartoon bonk that costs one of three hearts; at none you float as a little ghost until the next
+round. Cute computer islanders play the same rules, and a podium ends the match. Four islands
+(beach, snow, candy, sky) give one to three stars by rounds survived, and coins buy hats, colours
+and capes. Arrows or WASD move and jump, ↓/S drops through a platform; two players share the
+island on WASD and the arrows.
 
 **حرّاس الكعكة (Cake Guards)** is a tower defense game played with the mouse. Jelly blobs march
 along candy roads towards a birthday cake; click a round pad beside the road to build a popcorn
@@ -205,7 +217,7 @@ If the school web filter blocks it, ask IT to allow that address. The site conta
 
 ### Running it without the internet
 
-Download the fast version as one ZIP file (under 2 MB):
+Download the fast version as one ZIP file (about 2 MB):
 **<https://farmercarry.github.io/school-games/school-games-offline.zip>**
 (a copy of the site published from your own account has it at
 `https://<your-username>.github.io/school-games/school-games-offline.zip`).
@@ -272,8 +284,8 @@ the player acknowledges it.
 The top of the home page asks «مَن يلعب؟» with big round animal pictures. A child picks
 their animal (or plays as a guest) with one click; nothing is typed and no name is stored.
 A new player picks an animal, a colour and an age band from three big number cards
-(6–7, 8–9, 10–11). In Bubble Bop, Road Hopper and Dino 3D's surprise courses the age band
-sets where difficulty starts, and the game then adapts to how that child plays; the other
+(6–7, 8–9, 10–11). In Bubble Bop, Road Hopper, Dino 3D, Key Runner, Lightning Fingers, Egg Rush,
+Lucky Lake and Chaos Island the age band sets where difficulty starts, and the game then adapts to how that child plays; the other
 games follow in later milestones. Winning, trying and playing earn XP; the topbar
 shows the player's picture, level and progress, with a short celebration on a new level.
 Up to 24 players fit on one browser. The current player lasts only for that tab: closing
