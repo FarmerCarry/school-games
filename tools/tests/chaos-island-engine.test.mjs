@@ -14,7 +14,6 @@ const sandbox = { window: {} };
 vm.runInNewContext(source, sandbox);
 const CI = sandbox.window.CI;
 const DT = 1 / 60;
-const ID = /^[A-Za-z][A-Za-z0-9_:.-]{0,23}$/;
 const plain = v => JSON.parse(JSON.stringify(v));
 
 // A scripted child: each frame it asks the same planner the computer islanders use, with
@@ -341,15 +340,11 @@ test('coins appear during a round, are picked up by touching them, and surviving
   assert.ok(clear && clear.survivors.includes(0));
 });
 
-test('stars, outcomes and round ids', () => {
+test('stars and outcomes', () => {
   assert.equal(CI.stars(0, 5), 0); assert.equal(CI.stars(2, 5), 0); assert.equal(CI.stars(3, 5), 1);
   assert.equal(CI.stars(4, 5), 2); assert.equal(CI.stars(5, 5), 3);
   assert.equal(CI.stars(1, 3), 0); assert.equal(CI.stars(2, 3), 1); assert.equal(CI.stars(3, 3), 3);
   assert.equal(CI.stars(1, 0), 0);
-  for (let i = 0; i < 4; i++) assert.match(CI.roundId(i), ID);
-  assert.deepEqual([0, 1, 2, 3].map(i => CI.roundId(i)), ['i1', 'i2', 'i3', 'i4']);
-  assert.equal(CI.roundId(2, true), 'duo');
-  assert.equal(CI.roundId(99), 'i4');
 });
 
 test('saves: a fresh one, junk and the old version load as a fresh playable save; fields are checked', () => {

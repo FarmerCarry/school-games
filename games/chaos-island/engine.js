@@ -4,7 +4,7 @@
  * Pure: no DOM, no Kit, no timers and no Math.random (a world takes a seed), so the Node
  * test loads this file with { window: {} } and plays whole matches with scripted players.
  * game.js reads the DDA tier, builds a plan, steps the world with the children's keys and
- * turns the world's events into pictures, sound and statistics. */
+ * turns the world's events into pictures and sound. */
 (function () {
   'use strict';
   var CI = window.CI = window.CI || {};
@@ -229,7 +229,6 @@
     var share = survived / rounds;
     return share >= 1 - 1e-9 ? 3 : share >= 0.8 - 1e-9 ? 2 : share >= 0.6 - 1e-9 ? 1 : 0;
   };
-  CI.roundId = function (island, duo) { return duo ? 'duo' : 'i' + (clamp(island | 0, 0, 3) + 1); };
 
   /* ------------------------------------------------------------------ plans */
   // What one match plays: its rounds (one disaster, or two in a late combo round) at a tier.

@@ -11,18 +11,16 @@ import { clickControl } from '../ui-input.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
-const ID = /^[A-Za-z][A-Za-z0-9_:.-]{0,23}$/;
 const NAMES = ['فيضان الجيلي', 'نيازك المارشملو', 'الريح', 'الأرض الجليدية', 'الزلزال', 'غيوم البرق', 'كرات الشاطئ', 'الإعصار الصغير'];
 let browser, server;
 before(async () => { server = await startTestServer(root); browser = await launchChromium(); });
 after(async () => { await browser?.close(); await server?.close(); });
 
 const SAVE = (extra = {}) => ({ v: 2, coins: 0, stars: [0, 0, 0, 0], best: [0, 0, 0, 0], duo: 0, owned: ['c0', 'h0', 'x0'], color: 'c0', hat: 'h0', extra: 'x0', island: 0, tut: true, ...extra });
-// A guest's difficulty level: 0.05 is tier 1 (three rounds), 0.95 is tier 5.
-const DDA = level => ({ _: { match: [level, 4], duo: [level, 4] } });
-
+// `dda` is the level every difficulty starts at before it has a result (Kit.dda's
+// `start`): 0.05 is tier 1 (three rounds), 0.95 is tier 5.
 // Every test: no page errors, no console errors, nothing fetched from anywhere else.
-async function game(t, { save, dda = DDA(0.05), raw, viewport = { width: 1280, height: 720 } } = {}) {
+async function game(t, { save, dda = 0.05, raw, viewport = { width: 1280, height: 720 } } = {}) {
   const ctx = await browser.newContext({ viewport });
   const errors = [], requests = [];
   ctx.on('page', page => {
@@ -32,17 +30,16 @@ async function game(t, { save, dda = DDA(0.05), raw, viewport = { width: 1280, h
   ctx.on('request', r => { if (!r.url().startsWith(server.origin + '/')) requests.push(r.url()); });
   t.after(async () => { await ctx.close(); assert.deepEqual(errors, [], 'no errors'); assert.deepEqual(requests, [], 'no network requests'); });
   // Seeded once per tab, so a reload keeps what the game saved.
-  await ctx.addInitScript(({ save, dda, raw }) => {
+  await ctx.addInitScript(({ save, raw }) => {
     if (location.protocol !== 'http:' || sessionStorage.getItem('ci-seeded')) return;
     sessionStorage.setItem('ci-seeded', '1');
     if (save !== undefined) localStorage.setItem('sg:chaos-island:save', JSON.stringify(save));
     if (raw !== undefined) localStorage.setItem('sg:chaos-island:save', raw);
-    if (dda) localStorage.setItem('sg:chaos-island:dda', JSON.stringify(dda));
-  }, { save, dda, raw });
-  // The frame loop is stepped by hand; Kit.stats and Kit.track calls are recorded.
-  await ctx.addInitScript(() => {
+  }, { save, raw });
+  // The frame loop is stepped by hand; every Kit.dda result is recorded as [id, outcome].
+  await ctx.addInitScript(dda => {
     let kit;
-    const ci = window.ci = { stats: [], track: [] };
+    const ci = window.ci = { results: [] };
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (update, render) => {
@@ -51,16 +48,14 @@ async function game(t, { save, dda = DDA(0.05), raw, viewport = { width: 1280, h
         ci.paint = () => render(0);
         return { stop() {} };
       };
-      for (const name of ['round', 'end', 'tutorial']) {
-        const call = kit.stats[name];
-        kit.stats[name] = function (...args) { ci.stats.push([name, ...args]); return call.apply(this, args); };
-      }
-      for (const name of ['cue', 'hit', 'miss']) {
-        const call = kit.track[name];
-        kit.track[name] = function (...args) { ci.track.push(name); return call.apply(this, args); };
-      }
+      const make = kit.dda;
+      kit.dda = (slug, opts = {}) => {
+        const control = make.call(kit, slug, Object.assign({ start: dda }, opts)), result = control.result;
+        control.result = outcome => { ci.results.push([opts.id || 'main', outcome]); return result.call(control, outcome); };
+        return control;
+      };
     } });
-  });
+  }, dda);
   const page = await ctx.newPage();
   await page.goto(`${server.origin}/games/chaos-island/`);
   await page.waitForFunction(() => window.__game && window.ci.step);
@@ -70,7 +65,7 @@ async function game(t, { save, dda = DDA(0.05), raw, viewport = { width: 1280, h
 const g = (page, expr) => page.evaluate(expr);
 const step = (page, n = 1) => page.evaluate(n => ci.step(n), n);
 const run = (page, n = 1) => page.evaluate(n => { ci.run(n); ci.paint(); }, n);
-const calls = (page, name) => page.evaluate(name => ci.stats.filter(c => c[0] === name).map(c => c.slice(1)), name);
+const results = page => page.evaluate(() => ci.results);
 // Runs the game until a condition holds (or the frame budget runs out).
 async function until(page, cond, max = 60 * 400) {
   return page.evaluate(({ cond, max }) => {
@@ -98,25 +93,25 @@ async function autoplay(page, max = 60 * 400) {
 }
 const me = page => page.evaluate(() => { const a = __game.player; return { x: a.x, y: a.y, vy: a.vy, ground: a.ground && a.ground.id, hearts: a.hearts, coins: a.coins, ghost: a.ghost }; });
 
-test('the title shows the island with its islanders at play, and reports and saves nothing', async t => {
+test('the title shows the island with its islanders at play, and starts and saves nothing', async t => {
   const page = await game(t);
   assert.equal(await g(page, () => __game.mode), 'title');
   const before = await g(page, () => __game.demo.actors.map(a => [a.x, a.y]));
   await step(page, 400);
   const after = await g(page, () => __game.demo.actors.map(a => [a.x, a.y]));
   assert.notDeepEqual(after, before, 'the islanders on the title move about');
-  assert.deepEqual(await g(page, () => ci.stats), [], 'no round, no end, no tutorial from the title');
+  assert.deepEqual(await g(page, () => [__game.mode, __game.world, __game.matches]), ['title', null, 0], 'no match from the title');
   assert.deepEqual(await g(page, () => Object.keys(localStorage).filter(k => k.startsWith('sg:chaos-island:') && k !== 'sg:chaos-island:dda')), []);
   // One big Play button, two side buttons and the four islands: nothing else to click.
   assert.deepEqual(await g(page, () => [...document.querySelectorAll('#scrTitle button')].map(b => b.id || b.className)), ['btnPlay', 'btnWardrobe', 'btnDuo', 'isle on', 'isle locked', 'isle locked', 'isle locked']);
 });
 
-test('Enter starts a match: the tier is read first, then the round; the card names the disaster and counts 3, 2, 1', async t => {
+test('Enter starts a match at the tier read at its start; the card names the disaster and counts 3, 2, 1', async t => {
   const page = await game(t, { save: SAVE() });
   await page.keyboard.press('Enter');
   await step(page);
   assert.equal(await g(page, () => __game.mode), 'play');
-  assert.deepEqual(await calls(page, 'round'), [['i1']]);
+  assert.deepEqual(await g(page, () => [__game.island, __game.duo, __game.matches, __game.world.isl.id]), [0, false, 1, 'beach']);
   const w = await g(page, () => ({ rounds: __game.world.rounds, bots: __game.world.actors.length - 1, tier: __game.world.tier, first: __game.world.plan.rounds[0].a }));
   assert.deepEqual(w, { rounds: 3, bots: 3, tier: 1, first: w.first }, 'tier 1: three rounds and three computer islanders');
   assert.ok(['flood', 'meteors'].includes(w.first), 'the very first disaster is a gentle one');
@@ -217,15 +212,14 @@ test('following the coach\'s keys wins the youngest tier: stars, a new island, c
   assert.equal(await g(page, () => __game.mode), 'result');
   const res = await g(page, () => __game.result), saved = await g(page, () => __game.save);
   assert.ok(res.stars >= 2, 'survived the rounds: ' + JSON.stringify(res));
-  assert.deepEqual(await calls(page, 'end'), [['win', res.coins]], 'a win, with the coins collected as the score');
+  assert.equal(res.duo, false);
   assert.ok(res.coins >= 6, 'two coins per round survived at least');
   assert.equal(saved.stars[0], res.stars);
   assert.equal(saved.coins, res.coins);
   assert.equal(res.newIsle, 1, 'the snow island opens');
-  const dda = await g(page, () => JSON.parse(localStorage.getItem('sg:chaos-island:dda'))._.match);
-  assert.equal(dda[1], 5, 'one difficulty result for the match');
-  const track = await g(page, () => ci.track);
-  assert.ok(track.includes('cue') && track.includes('hit'), 'warnings cue, dodges and survived rounds hit');
+  const tries = await results(page);
+  assert.equal(tries.length, 1, 'one difficulty result for the match');
+  assert.equal(tries[0][0], 'match'); assert.ok(tries[0][1] >= 0.6, 'the rounds survived: ' + tries[0][1]);
   // The result card: the stars pop in, Play again is the big ringed button.
   await step(page, 90);
   assert.equal(await g(page, () => document.querySelectorAll('#resStars svg.on').length), res.stars);
@@ -244,20 +238,20 @@ test('doing nothing loses, and Play again (Enter) starts a fresh match at once',
   await step(page);
   await until(page, "g.mode === 'result'", 60 * 140);
   assert.equal(await g(page, () => __game.mode), 'result');
-  assert.equal((await g(page, () => __game.result)).stars, 0);
-  const end = (await calls(page, 'end'))[0];
-  assert.equal(end[0], 'lose');
-  assert.ok(Number.isInteger(end[1]) && end[1] >= 0);
-  assert.ok((await g(page, () => ci.track)).includes('miss'), 'every bonk is a miss');
+  const res = await g(page, () => __game.result);
+  assert.equal(res.stars, 0);
+  assert.ok(Number.isInteger(res.coins) && res.coins >= 0);
+  const tries = await results(page);
+  assert.equal(tries.length, 1); assert.equal(tries[0][0], 'match'); assert.ok(tries[0][1] < 0.6, 'a lost match is a poor result: ' + tries[0][1]);
   await step(page, 50);
   await page.keyboard.press('Enter');
   await step(page);
   assert.equal(await g(page, () => __game.mode), 'play');
-  assert.deepEqual(await calls(page, 'round'), [['i1'], ['i1']]);
+  assert.deepEqual(await g(page, () => [__game.island, __game.result, __game.world.round, __game.world.phase]), [0, null, 0, 'card'], 'a fresh match on the same island');
   assert.equal(await g(page, () => __game.matches), 2);
 });
 
-test('Restart from the pause starts the match over; Menu leaves it as a quit', async t => {
+test('Restart from the pause starts the match over; Menu leaves it without a result', async t => {
   const page = await game(t, { save: SAVE() });
   await page.keyboard.press('Enter');
   await step(page);
@@ -267,20 +261,21 @@ test('Restart from the pause starts the match over; Menu leaves it as a quit', a
   await clickControl(page, '#btnRestart');
   await step(page);
   assert.deepEqual(await g(page, () => [__game.mode, __game.matches, __game.world.round, __game.world.phase]), ['play', 2, 0, 'card']);
-  assert.deepEqual(await calls(page, 'round'), [['i1'], ['i1']]);
+  assert.equal(await g(page, () => __game.island), 0);
   await page.keyboard.press('Escape');
   await step(page);
   await clickControl(page, '#btnMenu');
   await step(page);
   assert.equal(await g(page, () => __game.mode), 'title');
-  assert.deepEqual(await calls(page, 'end'), [['quit']]);
+  assert.deepEqual(await results(page), [], 'neither the restart nor the menu is a result');
+  assert.deepEqual(await g(page, () => [__game.result, __game.save.stars[0], __game.save.coins]), [null, 0, 0], 'a match left early earns nothing');
 });
 
-test('two players share the keyboard: W A S D and the arrows, both on the island, reported only as end', async t => {
+test('two players share the keyboard: W A S D and the arrows, both on the island, and their coins add up', async t => {
   const page = await game(t, { save: SAVE() });
   await clickControl(page, '#btnDuo');
   await step(page);
-  assert.deepEqual(await calls(page, 'round'), [['duo']]);
+  assert.deepEqual(await g(page, () => [__game.mode, __game.duo, __game.players.length]), ['play', true, 2]);
   const pos = () => g(page, () => __game.players.map(a => ({ x: a.x, y: a.y })));
   const p0 = await pos();
   assert.equal(p0.length, 2);
@@ -300,23 +295,24 @@ test('two players share the keyboard: W A S D and the arrows, both on the island
   assert.ok(p3[1].y < 590 && p3[0].y === 600, '↑ jumps player 2 only');
   await page.keyboard.up('ArrowUp');
   await until(page, "g.mode === 'result'", 60 * 140);
-  const ends = await calls(page, 'end'), coins = await g(page, () => __game.players.reduce((s, a) => s + a.coins, 0));
-  assert.deepEqual(ends, [['end', coins]], 'a two-player match only ends, with both players\' coins');
+  const res = await g(page, () => __game.result), coins = await g(page, () => __game.players.reduce((s, a) => s + a.coins, 0));
+  assert.deepEqual([res.duo, res.coins], [true, coins], 'a two-player match adds up both players\' coins');
+  assert.deepEqual((await results(page)).map(r => r[0]), ['duo'], 'it moves the two-player difficulty only');
   assert.equal(await g(page, () => document.querySelectorAll('#resSheet .who').length), 2, 'both players on the card');
   assert.equal(await g(page, () => document.getElementById('resStars').hidden), true);
 });
 
-test('the first match shows the coach and reports the tutorial', async t => {
+test('the first match shows the coach until its first round is survived', async t => {
   const page = await game(t, { save: SAVE({ tut: false }) });
   await page.keyboard.press('Enter');
   await step(page);
-  assert.deepEqual(await calls(page, 'tutorial'), [['start']]);
+  assert.equal(await g(page, () => __game.save.tut), false, 'the first lesson is not done yet');
   await page.keyboard.down('ArrowRight'); await step(page, 10); await page.keyboard.up('ArrowRight');
   assert.equal((await g(page, () => __game.coach)).on, true, 'the coach stays on through the first round');
   await autoplay(page, 60 * 40);
   await until(page, 'g.world.round === 1 || g.mode !== "play"', 60 * 10);
-  assert.deepEqual(await calls(page, 'tutorial'), [['start'], ['done']]);
-  assert.equal(await g(page, () => __game.save.tut), true);
+  assert.equal(await g(page, () => __game.save.tut), true, 'surviving the first round ends the first lesson');
+  assert.equal((await g(page, () => JSON.parse(localStorage.getItem('sg:chaos-island:save')))).tut, true, 'and it is saved');
   // Later on the coach waits until the child stops pressing keys.
   await page.keyboard.down('ArrowRight'); await step(page, 10); await page.keyboard.up('ArrowRight');
   await step(page, 2);
@@ -439,17 +435,17 @@ test('the end card, the pause card, the title and the wardrobe fit every window;
   assert.ok(sizes[0] > sizes[1]);
 });
 
-test('round ids are valid and a quit or a new match never leaves a round open twice', async t => {
+test('a match starts on the chosen island, and after a quit → picks the island before', async t => {
   const page = await game(t, { save: SAVE({ stars: [3, 3, 3, 0], island: 3 }) });
   assert.equal(await g(page, () => __game.island), 3);
   await page.keyboard.press('Enter');
   await step(page);
+  assert.deepEqual(await g(page, () => [__game.mode, __game.island, __game.world.isl.id]), ['play', 3, 'sky']);
   await page.keyboard.press('KeyP'); await step(page);
   await clickControl(page, '#btnMenu'); await step(page);
   await page.keyboard.press('ArrowRight'); await step(page);
   assert.equal(await g(page, () => __game.island), 2, '→ picks the island to the right (the one before)');
   await page.keyboard.press('Enter'); await step(page);
-  const rounds = (await calls(page, 'round')).map(c => c[0]);
-  assert.deepEqual(rounds, ['i4', 'i3']);
-  for (const id of rounds) assert.match(id, ID);
+  assert.deepEqual(await g(page, () => [__game.mode, __game.island, __game.matches, __game.world.isl.id]), ['play', 2, 2, 'candy']);
+  assert.deepEqual(await results(page), [], 'the quit is no result');
 });
