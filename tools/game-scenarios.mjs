@@ -196,7 +196,9 @@ export const scenarios = {
     pause: async page => { await page.evaluate(() => window.dispatchEvent(new Event('blur'))); }, paused: `${g}.state().unfocused`,
     restart: async page => { await page.keyboard.press('Enter'); await page.keyboard.press('Tab'); }, reset: `${g}.state().phase === 'ready' && ${g}.state().input === ''`
   },
-  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.coins]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnResume', `${g}.screen==='play'`, { persistent: true })
+  // The first yard opens behind a picture card; a held arrow closes it and walks the kid.
+  // Restart puts the kid back on the doorstep with no egg hatched.
+  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`)
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,

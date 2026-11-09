@@ -184,9 +184,9 @@ window.GAMES = [
       { keys: ['1', '2', '3', '4'], action: 'المتجر، الكتاب، الحوض، الخريطة' },
       { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }
     ] },
-  { slug: 'egg-rush', roundMinutes: [5, 15], inputStyle: 'keyboard', title: 'سباق البيض', en: 'Egg Rush steal eggs pets tycoon', tags: 'بيض حيوانات فقس تايكون', cats: ['two-player', 'idle'], players: '1-2', color: '#ffd23f',
-    blurb: 'تسلّل إلى العشّ، اخطف البيضة، واهرب قبل أن يستيقظ الحارس! افقس حيوانات تجمع لك العملات!',
-    tip: 'الحارس يفتح عينه قبل أن يطاردك، راقب علامة ؟',
-    controls: [{ keys: ['W', 'A', 'S', 'D'], action: 'حركة' }, { keys: ['↑', '←', '↓', '→'], action: 'حركة' }, { keys: ['مسافة', 'E'], action: 'اخطف البيضة أو أفلتها' }, { keys: ['Q'], action: 'استخدم الأداة' }, { keys: ['انقر'], action: 'اجمع العملات وافتح المتجر' }, { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }] }
+  { slug: 'egg-rush', roundMinutes: [1, 4], inputStyle: 'keyboard', title: 'سباق البيض', en: 'Egg Rush sneak freeze eggs hatch chicks farm', tags: 'بيض فقس كتاكيت مزرعة دجاج تمثال', cats: ['two-player', 'arcade'], players: '1-2', color: '#ffd23f',
+    blurb: 'تسلّل إلى العشّ وخذ البيضة إلى بيتك لتفقس! وإذا فتح الحارس عينه فقف مكانك كالتمثال.',
+    tip: 'عندما تظهر <b>؟</b> فوق الحارس قف حتى ينام. القش والشجيرات تخفيك.',
+    controls: [{ keys: ['←', '↑', '→', '↓'], action: 'امشِ (واللاعب 2 في سباق اثنين)' }, { keys: ['W', 'A', 'S', 'D'], action: 'امشِ (واللاعب 1 في سباق اثنين)' }, { keys: ['الفأرة'], action: 'اضغط مطوّلًا لتمشي نحو المؤشر' }, { keys: ['P', 'Esc'], action: 'استراحة' }] }
 ];
 
