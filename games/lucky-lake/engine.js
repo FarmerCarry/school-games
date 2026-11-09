@@ -122,7 +122,6 @@
     place('lagoon', 'البحيرة السحرية', 236, 676, 7, { night: true, junk: [{ x: 700, y: 652 }, { x: 1040, y: 654 }], goals: { n: 6, sp: 'golden', w: 25 } })
   ];
   LL.SPECIES.forEach(function (s) { LL.PLACES[s.place].species.push(s.i); });
-  LL.ROUND_IDS = ['p1', 'p2', 'p3', 'p4', 'p5', 'duo'];
   LL.roundId = function (p) { return 'p' + (clamp(p | 0, 0, 4) + 1); };
   // The rod tips: player 1 on the dock at the left, player 2 in the boat at the right.
   LL.ROD = [{ x: 330, y: 66 }, { x: 990, y: 92 }];

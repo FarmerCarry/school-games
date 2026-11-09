@@ -9,7 +9,6 @@
   var SS = 2; // sprites are drawn at twice their logical size
   A.INK = INK;
   A.P1 = '#ff9a1f'; A.P2 = '#e05cff';
-  A.GREEN = '#5be38f';
 
   function cv(w, h) { var c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; }
   function circle(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, TAU); }
@@ -36,7 +35,7 @@
   }
   // A tiny seeded generator for decoration, so a scene looks the same every time.
   function seeded(n) { return function () { n = (n * 16807) % 2147483647; return (n - 1) / 2147483646; }; }
-  A.circle = circle; A.rr = rr; A.ell = ell; A.starPath = starPath; A.shade = shade; A.alpha = alpha;
+  A.circle = circle; A.rr = rr; A.ell = ell; A.starPath = starPath;
 
   var cache = {};
   function sprite(key, w, h, draw) {
@@ -311,7 +310,6 @@
       g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
     });
   }
-  A.glow = glowSprite;
   // Draws species s at (x, y), facing dir, scale k. o: { time, still, wag, sil, phase, alpha }
   A.species = function (g, s, x, y, dir, k, o) {
     o = o || {};
@@ -423,7 +421,6 @@
     { sky: ['#8fd2ff', '#d3efff', '#f4fbff'], water: ['#86d8f2', '#3a8fc4', '#1b4a7c'], floor: '#8a96a8', floor2: '#6c788c', plant: '#58b8a8', plant2: '#3d8f88', far: '#e8f4ff', far2: '#c6dcf2' },
     { sky: ['#140f45', '#2c2378', '#4a3a9a'], water: ['#4646b8', '#25218a', '#0f0b46'], floor: '#3a2c74', floor2: '#2a1f5c', plant: '#3df5c8', plant2: '#20b49a', far: '#2a2068', far2: '#3a2c84' }
   ];
-  A.SCENE = SCENE;
   var bgs = {};
   // The still scene for place i at pixel scale ps.
   A.bg = function (i, ps) {
@@ -525,6 +522,12 @@
     // The water: its depth layers from the light surface to the dark deep.
     g.fillStyle = vgrad(g, S.water, top, bed); g.fillRect(0, top, W, H - top);
     for (k = 1; k < 4; k++) { g.fillStyle = 'rgba(0,0,40,0.06)'; g.fillRect(0, top + (bed - top) * k / 4, W, (bed - top) / 4); }
+    // Light rays fall from the surface.
+    for (k = 0; k < 4; k++) {
+      var x0 = 420 + k * 230;
+      g.beginPath(); g.moveTo(x0, top); g.lineTo(x0 + 60, top); g.lineTo(x0 + 150, bed - 40); g.lineTo(x0 + 40, bed - 40); g.closePath();
+      g.fillStyle = P.night ? 'rgba(184,168,255,0.05)' : 'rgba(255,255,255,' + (0.05 + 0.02 * (k % 2)) + ')'; g.fill();
+    }
     // Back plants (behind the fish).
     for (k = 0; k < 12; k++) weed(g, 340 + r() * 920, bed + 6, 80 + r() * 120, alpha(S.plant2, 0.55), 7, 18 + r() * 14);
     // The lake floor.
@@ -627,6 +630,27 @@
     });
   }
   var FRONT = [[450, 120], [690, 90], [940, 140], [1180, 110]];
+  function waveStrip(i, amp) {
+    var night = LL.PLACES[i].night, period = TAU / 0.03, w = W + period + 4;
+    return sprite('wave' + i, w, 24, function (g) {
+      var y0 = 12, x;
+      g.beginPath(); g.moveTo(0, y0 - 2);
+      for (x = 0; x <= w; x += 16) g.lineTo(x, y0 + Math.sin(x * 0.03) * amp - 1);
+      g.lineTo(w, y0 + 8); g.lineTo(0, y0 + 8); g.closePath();
+      g.fillStyle = night ? 'rgba(160,150,255,0.45)' : 'rgba(255,255,255,0.55)'; g.fill();
+      g.beginPath();
+      for (x = 0; x <= w; x += 16) g[x ? 'lineTo' : 'moveTo'](x, y0 + Math.sin(x * 0.03) * amp - 1);
+      ink(g, 3, night ? 'rgba(200,190,255,0.9)' : 'rgba(255,255,255,0.95)');
+    });
+  }
+  function lilySprite(flower) {
+    return sprite('lily' + (flower ? 1 : 0), 80, 30, function (g) {
+      var lx = 40, ly = 18;
+      ell(g, lx, ly, 34, 9); fill(g, '#45c35a'); ink(g, 3);
+      g.beginPath(); g.moveTo(lx, ly); g.lineTo(lx + 30, ly - 4); g.lineTo(lx + 26, ly + 4); g.closePath(); fill(g, SCENE[0].water[0]);
+      if (flower) { circle(g, lx - 10, ly - 6, 7); fill(g, '#ff8fd0'); ink(g, 2.5); circle(g, lx - 10, ly - 7, 2.5); fill(g, '#ffe066'); }
+    });
+  }
   // Moving parts of the scene behind the fish: clouds, light rays, the river's streaks.
   A.sceneBack = function (g, i, ps, time, still) {
     var P = LL.PLACES[i], top = P.surface;
@@ -636,21 +660,14 @@
       var cx = ((still ? 0 : time) * (8 + k * 4) + k * 460 + i * 130) % (W + 300) - 150;
       g.drawImage(cs, cx, 18 + k * 34 + (k === 1 ? 20 : 0), 140 * (1 - k * 0.15), 80 * (1 - k * 0.15));
     }
-    // Light rays fall from the surface and slowly breathe.
-    g.save();
-    for (k = 0; k < 4; k++) {
-      var a = still ? 0.07 : 0.05 + 0.04 * Math.sin(time * 0.7 + k * 1.9), x0 = 420 + k * 230;
-      g.globalAlpha = P.night ? a * 0.6 : a;
-      g.beginPath(); g.moveTo(x0, top); g.lineTo(x0 + 60, top); g.lineTo(x0 + 150, P.bed - 40); g.lineTo(x0 + 40, P.bed - 40); g.closePath();
-      g.fillStyle = P.night ? '#b8a8ff' : '#ffffff'; g.fill();
-    }
-    g.restore();
     if (P.current && !still) {
       g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 3; g.lineCap = 'round';
+      g.beginPath();
       for (k = 0; k < 9; k++) {
         var sx = (time * (60 + k * 7) + k * 173) % (W + 200) - 100, sy = top + 60 + (k * 53) % (P.bed - top - 100);
-        g.beginPath(); g.moveTo(sx, sy); g.quadraticCurveTo(sx + 30, sy - 5, sx + 60, sy); g.stroke();
+        g.moveTo(sx, sy); g.quadraticCurveTo(sx + 30, sy - 5, sx + 60, sy);
       }
+      g.stroke();
     }
   };
   // The parts in front of the fish: swaying plants, the shining water line, the ice.
@@ -661,22 +678,14 @@
       g.save(); g.translate(f[0], P.bed + 8); g.transform(1, 0, sway, 1, 0, 0);
       g.drawImage(sp, -40, -f[1], 80, f[1]); g.restore();
     });
-    // The water line: a bright band of small waves.
-    g.beginPath(); g.moveTo(0, top - 2);
-    var amp = i === 2 ? 5 : 2.6, sp2 = still ? 0 : time * (i === 2 ? 2.2 : 1.4);
-    for (var x = 0; x <= W; x += 32) g.lineTo(x, top + Math.sin(x * 0.03 + sp2) * amp - 1);
-    g.lineTo(W, top + 8); g.lineTo(0, top + 8); g.closePath();
-    g.fillStyle = P.night ? 'rgba(160,150,255,0.45)' : 'rgba(255,255,255,0.55)'; g.fill();
-    g.beginPath();
-    for (x = 0; x <= W; x += 32) g[x ? 'lineTo' : 'moveTo'](x, top + Math.sin(x * 0.03 + sp2) * amp - 1);
-    ink(g, 3, P.night ? 'rgba(200,190,255,0.9)' : 'rgba(255,255,255,0.95)');
+    // The water line: a strip of small waves drawn once and slid along.
+    var amp = i === 2 ? 5 : 2.6, sp2 = still ? 0 : time * (i === 2 ? 2.2 : 1.4), period = TAU / 0.03;
+    g.drawImage(waveStrip(i, amp), -((sp2 / 0.03) % period), top - 12, W + period + 4, 24);
     if (i === 0) {
       // Lily pads float on the pond.
       [[520, 0], [880, 1], [1210, 2]].forEach(function (l) {
         var lx = l[0] + (still ? 0 : Math.sin(time * 0.8 + l[1]) * 4);
-        ell(g, lx, top + 2, 34, 9); fill(g, '#45c35a'); ink(g, 3);
-        g.beginPath(); g.moveTo(lx, top + 2); g.lineTo(lx + 30, top - 2); g.lineTo(lx + 26, top + 6); g.closePath(); fill(g, SCENE[0].water[0]);
-        if (l[1] === 1) { circle(g, lx - 10, top - 4, 7); fill(g, '#ff8fd0'); ink(g, 2.5); circle(g, lx - 10, top - 5, 2.5); fill(g, '#ffe066'); }
+        g.drawImage(lilySprite(l[1] === 1), lx - 40, top - 16, 80, 30);
       });
     }
     if (P.holes) g.drawImage(iceSprite(), 0, top - 24, W, 70);
@@ -686,50 +695,61 @@
   // The fisher: a round kid in a bucket hat. P1 on the dock faces right; P2 in the boat
   // faces left. o: { side, hat, shirt, pants, time, still, mood ('', 'bite', 'happy', 'sad'),
   // lean (-1..1), bend (0..1), reelT, look: {x, y}, sit }
-  A.fisher = function (g, x, y, o) {
-    var d = o.side, t = o.time, still = o.still, mood = o.mood || '';
-    var breathe = still ? 0 : Math.sin(t * 2.2) * 1.5, hop = o.hop || 0, lean = (o.lean || 0) * 0.2;
-    g.save(); g.translate(x, y - hop);
-    // Legs and shoes (hidden in the boat).
-    if (!o.sit) {
+  // The fisher is two cached sprites: the legs, and the body with the head (one per mood
+  // and gaze); breathing, hops and leaning are transforms of those sprites.
+  function fisherLegs(o) {
+    var d = o.side;
+    return sprite('fl' + o.pants + d, 60, 40, function (g) {
+      g.translate(30, 34);
       rr(g, -16, -30, 13, 30, 6); fill(g, o.pants); ink(g, 4);
       rr(g, 3, -30, 13, 30, 6); fill(g, o.pants); ink(g, 4);
       ell(g, -9 + d * 3, -1, 11, 6); fill(g, '#4a3a5a'); ink(g, 3.5);
       ell(g, 9 + d * 3, -1, 11, 6); fill(g, '#4a3a5a'); ink(g, 3.5);
-    }
-    g.rotate(lean * d);
-    // Body.
-    rr(g, -24, -82 + breathe, 48, 56, 18); fill(g, o.shirt); ink(g, 4.5);
-    rr(g, -24, -50 + breathe, 48, 24, 10); fill(g, o.pants); ink(g, 4);
-    g.beginPath(); g.moveTo(-12, -50 + breathe); g.lineTo(-12, -78 + breathe); g.moveTo(12, -50 + breathe); g.lineTo(12, -78 + breathe); ink(g, 5, o.pants);
-    // Head.
-    var hy = -112 + breathe * 1.3;
-    circle(g, d * 2, hy, 30); fill(g, '#ffd2a8'); ink(g, 4.5);
-    var lx = o.look ? Math.max(-1, Math.min(1, (o.look.x - x) / 300)) : d, ly = o.look ? Math.max(-1, Math.min(1, (o.look.y - (y + hy)) / 300)) : 0.2;
-    var eo = mood === 'bite' ? 1.35 : 1;
-    [-1, 1].forEach(function (k) {
-      var ex = d * 2 + k * 11 + d * 6, ey = hy - 2;
-      if (mood === 'happy') { g.beginPath(); g.arc(ex, ey + 2, 6, Math.PI * 1.1, Math.PI * 1.9); ink(g, 3.5); return; }
-      ell(g, ex, ey, 6.5 * eo, 8 * eo); fill(g, '#fff'); ink(g, 3);
-      circle(g, ex + lx * 2.5, ey + ly * 2.5, 3.8 * eo); fill(g, INK);
-      circle(g, ex + lx * 2.5 - 1.2, ey + ly * 2.5 - 1.6, 1.4); fill(g, '#fff');
     });
-    cheek(g, d * 2 - 17 + d * 6, hy + 10, 6); cheek(g, d * 2 + 17 + d * 6, hy + 10, 6);
-    var mx = d * 8, my = hy + 14;
-    if (mood === 'bite') { ell(g, mx, my, 5, 6); fill(g, '#7a1f3d'); ink(g, 3); }
-    else if (mood === 'happy') { g.beginPath(); g.moveTo(mx - 9, my - 2); g.quadraticCurveTo(mx, my + 12, mx + 9, my - 2); g.closePath(); fill(g, '#7a1f3d'); ink(g, 3); }
-    else if (mood === 'sad') { g.beginPath(); g.arc(mx, my + 6, 6, Math.PI * 1.15, Math.PI * 1.85); ink(g, 3.2); }
-    else { g.beginPath(); g.arc(mx, my - 2, 7, 0.3, Math.PI - 0.3); ink(g, 3.2); }
-    // Freckles.
-    g.fillStyle = 'rgba(190,110,60,0.6)';
-    [[-5, 6], [-1, 8], [3, 6]].forEach(function (f) { circle(g, d * 2 - 16 + d * 6 + f[0], hy + f[1], 1.3); g.fill(); circle(g, d * 2 + 16 + d * 6 + f[0], hy + f[1], 1.3); g.fill(); });
-    // The bucket hat with its little lure pin.
-    ell(g, d * 2, hy - 20, 42, 11); fill(g, shade(o.hat, -0.12)); ink(g, 4);
-    g.beginPath(); g.moveTo(d * 2 - 27, hy - 20); g.quadraticCurveTo(d * 2 - 26, hy - 50, d * 2, hy - 50); g.quadraticCurveTo(d * 2 + 26, hy - 50, d * 2 + 27, hy - 20); g.closePath();
-    fill(g, o.hat); ink(g, 4);
-    g.beginPath(); g.moveTo(d * 2 - 27, hy - 26); g.quadraticCurveTo(d * 2, hy - 20, d * 2 + 27, hy - 26); g.lineTo(d * 2 + 27, hy - 20); g.quadraticCurveTo(d * 2, hy - 14, d * 2 - 27, hy - 20); g.closePath(); fill(g, o.band); ink(g, 3);
-    ell(g, d * 2 - 8, hy - 42, 10, 4, -0.2); fill(g, 'rgba(255,255,255,0.5)');
-    circle(g, d * 2 - d * 16, hy - 30, 5); fill(g, '#ff5d6c'); ink(g, 2.5);
+  }
+  function fisherTop(o, mood, lx, ly) {
+    var d = o.side;
+    return sprite('fh' + o.hat + o.shirt + d + mood + lx + ly, 120, 160, function (g) {
+      g.translate(60, 166);
+      rr(g, -24, -82, 48, 56, 18); fill(g, o.shirt); ink(g, 4.5);
+      rr(g, -24, -50, 48, 24, 10); fill(g, o.pants); ink(g, 4);
+      g.beginPath(); g.moveTo(-12, -50); g.lineTo(-12, -78); g.moveTo(12, -50); g.lineTo(12, -78); ink(g, 5, o.pants);
+      var hy = -112;
+      circle(g, d * 2, hy, 30); fill(g, '#ffd2a8'); ink(g, 4.5);
+      var eo = mood === 'bite' ? 1.35 : 1;
+      [-1, 1].forEach(function (k) {
+        var ex = d * 2 + k * 11 + d * 6, ey = hy - 2;
+        if (mood === 'happy') { g.beginPath(); g.arc(ex, ey + 2, 6, Math.PI * 1.1, Math.PI * 1.9); ink(g, 3.5); return; }
+        ell(g, ex, ey, 6.5 * eo, 8 * eo); fill(g, '#fff'); ink(g, 3);
+        circle(g, ex + lx * 2.5, ey + ly * 2.5, 3.8 * eo); fill(g, INK);
+        circle(g, ex + lx * 2.5 - 1.2, ey + ly * 2.5 - 1.6, 1.4); fill(g, '#fff');
+      });
+      cheek(g, d * 2 - 17 + d * 6, hy + 10, 6); cheek(g, d * 2 + 17 + d * 6, hy + 10, 6);
+      var mx = d * 8, my = hy + 14;
+      if (mood === 'bite') { ell(g, mx, my, 5, 6); fill(g, '#7a1f3d'); ink(g, 3); }
+      else if (mood === 'happy') { g.beginPath(); g.moveTo(mx - 9, my - 2); g.quadraticCurveTo(mx, my + 12, mx + 9, my - 2); g.closePath(); fill(g, '#7a1f3d'); ink(g, 3); }
+      else if (mood === 'sad') { g.beginPath(); g.arc(mx, my + 6, 6, Math.PI * 1.15, Math.PI * 1.85); ink(g, 3.2); }
+      else { g.beginPath(); g.arc(mx, my - 2, 7, 0.3, Math.PI - 0.3); ink(g, 3.2); }
+      // Freckles.
+      g.fillStyle = 'rgba(190,110,60,0.6)';
+      [[-5, 6], [-1, 8], [3, 6]].forEach(function (f) { circle(g, d * 2 - 16 + d * 6 + f[0], hy + f[1], 1.3); g.fill(); circle(g, d * 2 + 16 + d * 6 + f[0], hy + f[1], 1.3); g.fill(); });
+      // The bucket hat with its little lure pin.
+      ell(g, d * 2, hy - 20, 42, 11); fill(g, shade(o.hat, -0.12)); ink(g, 4);
+      g.beginPath(); g.moveTo(d * 2 - 27, hy - 20); g.quadraticCurveTo(d * 2 - 26, hy - 50, d * 2, hy - 50); g.quadraticCurveTo(d * 2 + 26, hy - 50, d * 2 + 27, hy - 20); g.closePath();
+      fill(g, o.hat); ink(g, 4);
+      g.beginPath(); g.moveTo(d * 2 - 27, hy - 26); g.quadraticCurveTo(d * 2, hy - 20, d * 2 + 27, hy - 26); g.lineTo(d * 2 + 27, hy - 20); g.quadraticCurveTo(d * 2, hy - 14, d * 2 - 27, hy - 20); g.closePath(); fill(g, o.band); ink(g, 3);
+      ell(g, d * 2 - 8, hy - 42, 10, 4, -0.2); fill(g, 'rgba(255,255,255,0.5)');
+      circle(g, d * 2 - d * 16, hy - 30, 5); fill(g, '#ff5d6c'); ink(g, 2.5);
+    });
+  }
+  A.fisher = function (g, x, y, o) {
+    var d = o.side, mood = o.mood || '', hop = o.hop || 0, lean = (o.lean || 0) * 0.2;
+    var breathe = o.still ? 0 : Math.sin(o.time * 2.2) * 1.5;
+    var lx = o.look ? Math.round(Math.max(-1, Math.min(1, (o.look.x - x) / 200))) : d, ly = o.look ? Math.round(Math.max(-1, Math.min(1, (o.look.y - (y - 112)) / 200))) : 0;
+    g.save(); g.translate(x, y - hop);
+    if (!o.sit) g.drawImage(fisherLegs(o), -30, -34, 60, 40);
+    g.rotate(lean * d);
+    g.drawImage(fisherTop(o, mood, lx, ly), -60, -166 + breathe, 120, 160);
     g.restore();
   };
   // The rod from the hands to its tip, bent by a pull. Returns the tip.
@@ -754,20 +774,29 @@
   };
 
   /* --------------------------------------------------------- line, bobber */
-  A.bobber = function (g, x, y, k) {
-    k = k || 1;
-    g.beginPath(); g.moveTo(x, y - 12 * k); g.lineTo(x, y - 22 * k); ink(g, 3);
-    circle(g, x, y, 10 * k); fill(g, '#ffffff'); ink(g, 3.5);
-    g.save(); circle(g, x, y, 10 * k); g.clip(); g.fillStyle = '#ff4d4d'; g.fillRect(x - 12 * k, y - 12 * k, 24 * k, 12 * k); g.restore();
-    circle(g, x, y, 10 * k); ink(g, 3.5);
-    circle(g, x - 3 * k, y - 4 * k, 2.5 * k); fill(g, 'rgba(255,255,255,0.9)');
+  var bobberSprite = function () {
+    return sprite('bobber', 30, 42, function (g) {
+      var x = 15, y = 28;
+      g.beginPath(); g.moveTo(x, y - 12); g.lineTo(x, y - 22); ink(g, 3);
+      circle(g, x, y, 10); fill(g, '#ffffff'); ink(g, 3.5);
+      g.save(); circle(g, x, y, 10); g.clip(); g.fillStyle = '#ff4d4d'; g.fillRect(x - 12, y - 12, 24, 12); g.restore();
+      circle(g, x, y, 10); ink(g, 3.5);
+      circle(g, x - 3, y - 4, 2.5); fill(g, 'rgba(255,255,255,0.9)');
+    });
   };
+  A.bobber = function (g, x, y, k) { k = k || 1; g.drawImage(bobberSprite(), x - 15 * k, y - 28 * k, 30 * k, 42 * k); };
   // The hook with a wiggly worm.
+  function hookSprite() {
+    return sprite('hook', 30, 40, function (g) {
+      var x = 15, y = 14;
+      g.beginPath(); g.moveTo(x, y - 10); g.lineTo(x, y + 4); g.arc(x - 6, y + 4, 6, 0, Math.PI * 0.95); ink(g, 4.5); ink(g, 2.2, '#dfe6f2');
+      g.beginPath(); g.moveTo(x - 2, y - 2); g.bezierCurveTo(x + 8, y + 2, x - 8, y + 10, x + 4, y + 16);
+      ink(g, 8); ink(g, 5, '#ff8fb0');
+    });
+  }
   A.hookArt = function (g, x, y, time, still) {
-    g.beginPath(); g.moveTo(x, y - 10); g.lineTo(x, y + 4); g.arc(x - 6, y + 4, 6, 0, Math.PI * 0.95); ink(g, 4.5); ink(g, 2.2, '#dfe6f2');
-    var w = still ? 0 : Math.sin(time * 6) * 4;
-    g.beginPath(); g.moveTo(x - 2, y - 2); g.bezierCurveTo(x + 8 + w, y + 2, x - 8 - w, y + 10, x + 4 + w, y + 16);
-    ink(g, 8); ink(g, 5, '#ff8fb0');
+    g.save(); g.translate(x, y - 10); g.rotate(still ? 0 : Math.sin(time * 6) * 0.18);
+    g.drawImage(hookSprite(), -15, -4, 30, 40); g.restore();
   };
   A.line = function (g, x1, y1, x2, y2, sag, taut) {
     g.beginPath(); g.moveTo(x1, y1);
@@ -784,11 +813,16 @@
     g.save();
     g.globalAlpha = faint ? 0.45 : 1;
     var shift = still ? 0 : (time * 1.6) % 1;
+    // All the dots in one path: one fill and one stroke.
+    g.beginPath();
     for (k = 0; k < n; k++) {
       var p = LL.arcPoint(from, { x: to.x }, surface, arc, Math.min(1, (k + shift) / n));
-      circle(g, p.x, p.y, 5.5); fill(g, '#ffffff'); ink(g, 3, color);
+      g.moveTo(p.x + 5.5, p.y); g.arc(p.x, p.y, 5.5, 0, TAU);
     }
-    for (var y = surface + 14; y < to.y - 20; y += 18) { circle(g, to.x, y, 3); fill(g, alpha('#ffffff', 0.85)); }
+    fill(g, '#ffffff'); ink(g, 3, color);
+    g.beginPath();
+    for (var y = surface + 14; y < to.y - 20; y += 18) { g.moveTo(to.x + 3, y); g.arc(to.x, y, 3, 0, TAU); }
+    fill(g, 'rgba(255,255,255,0.85)');
     var pr = still ? 0 : Math.sin(time * 5) * 3;
     circle(g, to.x, to.y, 24 + pr); ink(g, 8, alpha(INK, 0.35)); ink(g, 5, color);
     circle(g, to.x, to.y, 7); fill(g, color); ink(g, 2.5);
@@ -841,20 +875,25 @@
 
   /* ------------------------------------------------------------- icons */
   // «؟» and «!» bubbles over a fish or the bobber.
-  A.mark = function (g, x, y, ch, k, color) {
+  function markSprite(ch) {
+    return sprite('mark' + ch, 96, 96, function (g) {
+      g.translate(48, 46);
+      if (ch === '!') {
+        starPath(g, 0, 0, 40, 26, 0.1); fill(g, '#ffd23f'); ink(g, 5);
+        A.text(g, '!', 0, 3, 50, '#ff4d4d', { lw: 8 });
+      } else {
+        rr(g, -20, -22, 40, 40, 14); fill(g, '#ffffff'); ink(g, 4);
+        g.beginPath(); g.moveTo(-6, 16); g.lineTo(0, 28); g.lineTo(6, 16); fill(g, '#ffffff'); ink(g, 4);
+        g.fillStyle = '#fff'; g.fillRect(-7, 12, 14, 6);
+        A.text(g, ch, 0, -1, 30, '#4f7bff', { lw: 0, stroke: false });
+      }
+    });
+  }
+  A.mark = function (g, x, y, ch, k) {
     k = k || 1;
-    g.save(); g.translate(x, y); g.scale(k, k);
-    if (ch === '!') {
-      starPath(g, 0, 0, 40, 26, 0.1); fill(g, color || '#ffd23f'); ink(g, 5);
-      A.text(g, '!', 0, 3, 50, '#ff4d4d', { lw: 8 });
-    } else {
-      rr(g, -20, -22, 40, 40, 14); fill(g, '#ffffff'); ink(g, 4);
-      g.beginPath(); g.moveTo(-6, 16); g.lineTo(0, 28); g.lineTo(6, 16); fill(g, '#ffffff'); ink(g, 4);
-      g.fillStyle = '#fff'; g.fillRect(-7, 12, 14, 6);
-      A.text(g, ch, 0, -1, 30, '#4f7bff', { lw: 0, stroke: false });
-    }
-    g.restore();
+    g.drawImage(markSprite(ch), x - 48 * k, y - 46 * k, 96 * k, 96 * k);
   };
+  A.resetText = function () { delete cache['mark!']; delete cache['mark\u061f']; };
   A.coin = function (g, x, y, r) {
     circle(g, x, y, r); fill(g, '#ffd23f'); ink(g, Math.max(2, r * 0.22));
     circle(g, x, y, r * 0.62); ink(g, Math.max(1.5, r * 0.14), '#e0a400');
@@ -910,7 +949,6 @@
     A.text(g, 'kg', 0, 4, 15, '#ffffff', { stroke: false });
     g.restore();
   }
-  A.weightIcon = weightIcon;
   A.coinChip = function (g, x, y, n, bump) {
     var s = 1 + (bump || 0) * 0.2, txt = String(n), w = 70 + txt.length * 16;
     g.save(); g.translate(x, y); g.scale(s, s);

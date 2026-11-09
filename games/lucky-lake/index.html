@@ -9,7 +9,6 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<!-- Icons: every button is a picture, so a child who cannot read yet can play. -->
 <svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
   <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
   <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
@@ -28,123 +27,121 @@
 
 <canvas id="game" tabindex="0" aria-label="بحيرة الحظ"></canvas>
 
-<!-- A 1280x720 layer laid exactly over the canvas (scaled by game.js). -->
 <div id="ui">
-  <div id="hud" hidden>
-    <button type="button" id="btnPause" class="ll-btn ll-round" aria-label="استراحة" title="استراحة (P)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
-    <button type="button" id="btnBasket" class="ll-btn ll-round" aria-label="سلة الرحلة" title="سلة الرحلة"><svg aria-hidden="true"><use href="#i-basket"/></svg><b id="basketNum">0</b></button>
+<div id="hud" hidden>
+  <button type="button" id="btnPause" class="ll-btn ll-round" aria-label="استراحة" title="استراحة (P)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+  <button type="button" id="btnBasket" class="ll-btn ll-round" aria-label="سلة الرحلة" title="سلة الرحلة"><svg aria-hidden="true"><use href="#i-basket"/></svg><b id="basketNum">0</b></button>
+</div>
+
+<section id="scrTitle" class="screen" aria-label="بحيرة الحظ">
+  <h1 class="logo"><span class="l1">بحيرة</span><span class="l2">الحظ</span></h1>
+  <div class="chip" id="titleFish" aria-label="أنواع السمك"><svg aria-hidden="true"><use href="#i-fish"/></svg><b>0</b></div>
+  <button type="button" id="btnPlay" class="ll-btn ll-play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+  <div class="side">
+    <button type="button" id="btnBook" class="ll-btn ll-side" aria-label="كتاب السمك"><svg aria-hidden="true"><use href="#i-book"/></svg><span>الكتاب</span></button>
+    <button type="button" id="btnDuo" class="ll-btn ll-side" aria-label="مسابقة الصيد للاعبين"><svg aria-hidden="true"><use href="#i-duo"/></svg><span>لاعبان</span></button>
+    <button type="button" id="btnRods" class="ll-btn ll-side" aria-label="الصنانير"><svg aria-hidden="true"><use href="#i-rod"/></svg><span>الصنارة</span></button>
   </div>
+</section>
 
-  <section id="scrTitle" class="screen" aria-label="بحيرة الحظ">
-    <h1 class="logo"><span class="l1">بحيرة</span><span class="l2">الحظ</span></h1>
-    <div class="chip" id="titleFish" aria-label="أنواع السمك"><svg aria-hidden="true"><use href="#i-fish"/></svg><b>0</b></div>
-    <button type="button" id="btnPlay" class="ll-btn ll-play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-    <div class="side">
-      <button type="button" id="btnBook" class="ll-btn ll-side" aria-label="كتاب السمك"><svg aria-hidden="true"><use href="#i-book"/></svg><span>الكتاب</span></button>
-      <button type="button" id="btnDuo" class="ll-btn ll-side" aria-label="مسابقة الصيد للاعبين"><svg aria-hidden="true"><use href="#i-duo"/></svg><span>لاعبان</span></button>
-      <button type="button" id="btnRods" class="ll-btn ll-side" aria-label="الصنانير"><svg aria-hidden="true"><use href="#i-rod"/></svg><span>الصنارة</span></button>
+<section id="scrMap" class="screen" aria-label="الأماكن" hidden>
+  <button type="button" id="mapHome" class="ll-btn ll-round" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+  <div class="chip coins" id="mapCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div>
+  <div id="places"></div>
+</section>
+
+<section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+  <div class="card">
+    <button type="button" id="btnResume" class="ll-btn ll-go" aria-label="تابع الصيد"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    <div class="row">
+      <button type="button" id="btnMenu" class="ll-btn ll-round big" aria-label="الأماكن"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+      <button type="button" id="btnRestart" class="ll-btn ll-round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
     </div>
-  </section>
-
-  <section id="scrMap" class="screen" aria-label="الأماكن" hidden>
-    <button type="button" id="mapHome" class="ll-btn ll-round" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="chip coins" id="mapCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div>
-    <div id="places"></div>
-  </section>
-
-  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
-    <div class="card">
-      <button type="button" id="btnResume" class="ll-btn ll-go" aria-label="تابع الصيد"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-      <div class="row">
-        <button type="button" id="btnMenu" class="ll-btn ll-round big" aria-label="الأماكن"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
-        <button type="button" id="btnRestart" class="ll-btn ll-round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
-      </div>
-    </div>
-  </section>
-
-  <section id="scrCatch" class="screen" aria-label="صيد جديد" hidden>
-    <div class="card catch" id="catchCard">
-      <div class="ribbon" id="catchNew" hidden>جديد!</div>
-      <div class="ribbon best" id="catchBest" hidden>رقم جديد!</div>
-      <canvas id="catchArt" width="440" height="230"></canvas>
-      <h2 id="catchName"></h2>
-      <div class="facts">
-        <span class="fact" id="catchWeight"></span>
-        <span class="fact stars" id="catchStars" aria-hidden="true"></span>
-        <span class="fact coins"><i class="coin"></i><b id="catchCoins">+0</b></span>
-      </div>
-      <button type="button" id="catchOk" class="ll-btn ll-go small ring" aria-label="رائع، تابع"><svg aria-hidden="true"><use href="#i-check"/></svg></button>
-    </div>
-  </section>
-
-  <section id="scrResult" class="screen" aria-label="نتيجة الرحلة" hidden>
-    <div class="card result">
-      <h2 id="resPlace"></h2>
-      <div class="stars3" id="resStars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
-      <canvas id="resCatches" width="600" height="120"></canvas>
-      <div class="facts"><span class="fact coins"><i class="coin"></i><b id="resCoins">+0</b></span><span class="fact"><svg aria-hidden="true"><use href="#i-fish"/></svg><b id="resCount">0</b></span></div>
-      <div class="newplace" id="resNewPlace" hidden><svg aria-hidden="true"><use href="#i-map"/></svg><span>مكان جديد!</span></div>
-      <div class="row">
-        <button type="button" id="resMap" class="ll-btn ll-round big" aria-label="الأماكن"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
-        <button type="button" id="resNext" class="ll-btn ll-go ring" aria-label="صِد مرة أخرى"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-        <button type="button" id="resAgain" class="ll-btn ll-round big" aria-label="صِد هنا مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
-      </div>
-    </div>
-  </section>
-
-  <section id="scrBook" class="screen" aria-label="كتاب السمك" hidden>
-    <button type="button" id="bookBack" class="ll-btn ll-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="chip" id="bookCount" aria-label="أنواع السمك"><svg aria-hidden="true"><use href="#i-book"/></svg><b>0</b></div>
-  </section>
-
-  <section id="scrRods" class="screen" aria-label="الصنارة" hidden>
-    <button type="button" id="rodsBack" class="ll-btn ll-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="chip coins" id="rodsCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div>
-    <div id="tiles"></div>
-  </section>
-
-  <section id="scrDuo" class="screen dim" aria-label="مسابقة الصيد" hidden>
-    <div class="card duo">
-      <div class="players" dir="ltr">
-        <div class="pl p1" id="duoP1"><i class="tag">1</i>
-          <div class="keys"><span class="sg-key">W</span><br><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></div>
-          <div class="keys"><span class="sg-key wide">مسافة</span></div><svg class="ok" aria-hidden="true"><use href="#i-check"/></svg></div>
-        <div class="mid"><div class="clock" dir="ltr">2:00</div><svg aria-hidden="true" class="fishic"><use href="#i-fish"/></svg></div>
-        <div class="pl p2" id="duoP2"><i class="tag">2</i>
-          <div class="keys"><span class="sg-key">↑</span><br><span class="sg-key">←</span><span class="sg-key">↓</span><span class="sg-key">→</span></div>
-          <div class="keys"><span class="sg-key wide">Enter</span></div><svg class="ok" aria-hidden="true"><use href="#i-check"/></svg></div>
-      </div>
-      <button type="button" id="duoGo" class="ll-btn ll-go ring" aria-label="ابدأ المسابقة"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-    </div>
-  </section>
-
-  <section id="scrDuoEnd" class="screen" aria-label="الفائز" hidden>
-    <div class="card result duoend">
-      <h2 id="duoWinner"></h2>
-      <canvas id="duoCatches" width="640" height="210"></canvas>
-      <div class="row">
-        <button type="button" id="duoHome" class="ll-btn ll-round big" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-        <button type="button" id="duoAgain" class="ll-btn ll-go ring" aria-label="مسابقة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
-      </div>
-    </div>
-  </section>
-
-  <!-- The wordless coach: a hand that shows the move after a few idle seconds. -->
-  <div id="ghost" aria-hidden="true" hidden>
-    <svg viewBox="0 0 80 100" width="84" height="105">
-      <g fill="#1c2250" stroke="#1c2250" stroke-width="9" stroke-linejoin="round">
-        <rect x="22" y="5" width="17" height="54" rx="8.5"/><rect x="37" y="36" width="15" height="30" rx="7.5"/>
-        <rect x="50" y="40" width="14" height="28" rx="7"/><rect x="3" y="52" width="27" height="14" rx="7" transform="rotate(38 16 59)"/>
-        <rect x="14" y="46" width="52" height="48" rx="19"/>
-      </g>
-      <g fill="#ffffff">
-        <rect x="22" y="5" width="17" height="54" rx="8.5"/><rect x="37" y="36" width="15" height="30" rx="7.5"/>
-        <rect x="50" y="40" width="14" height="28" rx="7"/><rect x="3" y="52" width="27" height="14" rx="7" transform="rotate(38 16 59)"/>
-        <rect x="14" y="46" width="52" height="48" rx="19"/>
-      </g>
-      <path d="M41 48 L41 60 M54 52 L54 62" stroke="#1c2250" stroke-width="3" stroke-linecap="round" opacity=".45"/>
-    </svg>
   </div>
+</section>
+
+<section id="scrCatch" class="screen" aria-label="صيد جديد" hidden>
+  <div class="card catch" id="catchCard">
+    <div class="ribbon" id="catchNew" hidden>جديد!</div>
+    <div class="ribbon best" id="catchBest" hidden>رقم جديد!</div>
+    <canvas id="catchArt" width="440" height="230"></canvas>
+    <h2 id="catchName"></h2>
+    <div class="facts">
+      <span class="fact" id="catchWeight"></span>
+      <span class="fact stars" id="catchStars" aria-hidden="true"></span>
+      <span class="fact coins"><i class="coin"></i><b id="catchCoins">+0</b></span>
+    </div>
+    <button type="button" id="catchOk" class="ll-btn ll-go small ring" aria-label="رائع، تابع"><svg aria-hidden="true"><use href="#i-check"/></svg></button>
+  </div>
+</section>
+
+<section id="scrResult" class="screen" aria-label="نتيجة الرحلة" hidden>
+  <div class="card result">
+    <h2 id="resPlace"></h2>
+    <div class="stars3" id="resStars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
+    <canvas id="resCatches" width="600" height="120"></canvas>
+    <div class="facts"><span class="fact coins"><i class="coin"></i><b id="resCoins">+0</b></span><span class="fact"><svg aria-hidden="true"><use href="#i-fish"/></svg><b id="resCount">0</b></span></div>
+    <div class="newplace" id="resNewPlace" hidden><svg aria-hidden="true"><use href="#i-map"/></svg><span>مكان جديد!</span></div>
+    <div class="row">
+      <button type="button" id="resMap" class="ll-btn ll-round big" aria-label="الأماكن"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+      <button type="button" id="resNext" class="ll-btn ll-go ring" aria-label="صِد مرة أخرى"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <button type="button" id="resAgain" class="ll-btn ll-round big" aria-label="صِد هنا مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+    </div>
+  </div>
+</section>
+
+<section id="scrBook" class="screen" aria-label="كتاب السمك" hidden>
+  <button type="button" id="bookBack" class="ll-btn ll-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+  <div class="chip" id="bookCount" aria-label="أنواع السمك"><svg aria-hidden="true"><use href="#i-book"/></svg><b>0</b></div>
+</section>
+
+<section id="scrRods" class="screen" aria-label="الصنارة" hidden>
+  <button type="button" id="rodsBack" class="ll-btn ll-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+  <div class="chip coins" id="rodsCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div>
+  <div id="tiles"></div>
+</section>
+
+<section id="scrDuo" class="screen dim" aria-label="مسابقة الصيد" hidden>
+  <div class="card duo">
+    <div class="players" dir="ltr">
+      <div class="pl p1" id="duoP1"><i class="tag">1</i>
+        <div class="keys"><span class="sg-key">W</span><br><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></div>
+        <div class="keys"><span class="sg-key wide">مسافة</span></div><svg class="ok" aria-hidden="true"><use href="#i-check"/></svg></div>
+      <div class="mid"><div class="clock" dir="ltr">2:00</div><svg aria-hidden="true" class="fishic"><use href="#i-fish"/></svg></div>
+      <div class="pl p2" id="duoP2"><i class="tag">2</i>
+        <div class="keys"><span class="sg-key">↑</span><br><span class="sg-key">←</span><span class="sg-key">↓</span><span class="sg-key">→</span></div>
+        <div class="keys"><span class="sg-key wide">Enter</span></div><svg class="ok" aria-hidden="true"><use href="#i-check"/></svg></div>
+    </div>
+    <button type="button" id="duoGo" class="ll-btn ll-go ring" aria-label="ابدأ المسابقة"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+  </div>
+</section>
+
+<section id="scrDuoEnd" class="screen" aria-label="الفائز" hidden>
+  <div class="card result duoend">
+    <h2 id="duoWinner"></h2>
+    <canvas id="duoCatches" width="640" height="210"></canvas>
+    <div class="row">
+      <button type="button" id="duoHome" class="ll-btn ll-round big" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+      <button type="button" id="duoAgain" class="ll-btn ll-go ring" aria-label="مسابقة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+    </div>
+  </div>
+</section>
+
+<div id="ghost" aria-hidden="true" hidden>
+  <svg viewBox="0 0 80 100" width="84" height="105">
+    <g fill="#1c2250" stroke="#1c2250" stroke-width="9" stroke-linejoin="round">
+      <rect x="22" y="5" width="17" height="54" rx="8.5"/><rect x="37" y="36" width="15" height="30" rx="7.5"/>
+      <rect x="50" y="40" width="14" height="28" rx="7"/><rect x="3" y="52" width="27" height="14" rx="7" transform="rotate(38 16 59)"/>
+      <rect x="14" y="46" width="52" height="48" rx="19"/>
+    </g>
+    <g fill="#ffffff">
+      <rect x="22" y="5" width="17" height="54" rx="8.5"/><rect x="37" y="36" width="15" height="30" rx="7.5"/>
+      <rect x="50" y="40" width="14" height="28" rx="7"/><rect x="3" y="52" width="27" height="14" rx="7" transform="rotate(38 16 59)"/>
+      <rect x="14" y="46" width="52" height="48" rx="19"/>
+    </g>
+    <path d="M41 48 L41 60 M54 52 L54 62" stroke="#1c2250" stroke-width="3" stroke-linecap="round" opacity=".45"/>
+  </svg>
+</div>
 </div>
 <div id="live" class="sr" aria-live="polite"></div>
 

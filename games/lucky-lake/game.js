@@ -857,14 +857,31 @@
     }
     ctx.globalAlpha = 1;
   }
+  // The goals and the coin counter change rarely: they are drawn into their own canvas
+  // only when something on them changes, and blitted every frame.
+  const hud = { c: null, key: '' };
+  function hudLayer(still) {
+    const ps = pixelScale(), st = save.places[place], G = LL.PLACES[place].goals;
+    const key = [ps, place, st.n, st.g.join(''), save.book[G.sp] ? 1 : 0, Math.round(coinShown), goalBump.map(b => b.toFixed(2)).join(), coinBump.toFixed(2)].join('|');
+    if (!hud.c) hud.c = document.createElement('canvas');
+    if (hud.key !== key) {
+      hud.key = key;
+      const c = hud.c;
+      c.width = Math.ceil(W * ps); c.height = Math.ceil(140 * ps);
+      const g = c.getContext('2d');
+      g.setTransform(ps, 0, 0, ps, 0, 0);
+      A.goals(g, place, save, time, goalBump, still);
+      A.coinChip(g, 1212, 42, Math.round(coinShown), coinBump);
+    }
+    return hud.c;
+  }
   function drawHud(ctx) {
     const still = calm();
     if (mode === 'solo') {
-      A.goals(ctx, place, save, time, goalBump, still);
-      A.coinChip(ctx, 1214, 104, Math.round(coinShown), coinBump);
+      ctx.drawImage(hudLayer(still), 0, 0, W, 140);
       for (const f of flyers) {
         if (f.t < 0) continue;
-        const k = f.t, e = 1 - Math.pow(1 - k, 2), x = f.x + (1150 - f.x) * e, y = f.y + (104 - f.y) * e - Math.sin(k * Math.PI) * 80;
+        const k = f.t, e = 1 - Math.pow(1 - k, 2), x = f.x + (1160 - f.x) * e, y = f.y + (42 - f.y) * e - Math.sin(k * Math.PI) * 80;
         A.coin(ctx, x, y, 14);
       }
       if (banner) {
@@ -929,9 +946,10 @@
     ctx.restore();
   }
 
-  canvas.addEventListener('contextrestored', () => { A.reset(); thumbsDrawn = false; dirty = true; });
+  canvas.addEventListener('contextrestored', () => { A.reset(); thumbsDrawn = false; hud.key = ''; dirty = true; });
   if (document.fonts && document.fonts.load) {
-    document.fonts.load('700 40px Fredoka', 'بحيرة 5').then(() => { dirty = true; }, () => { /* fallback fonts */ });
+    // Text drawn into cached pictures is drawn again once the font is there.
+    document.fonts.load('700 40px Fredoka', 'بحيرة 5؟!').then(() => { A.resetText(); hud.key = ''; dirty = true; }, () => { /* fallback fonts */ });
   }
 
   /* --------------------------------------------------- test and debug hook */
