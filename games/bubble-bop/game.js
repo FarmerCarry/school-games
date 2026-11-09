@@ -1,7 +1,6 @@
-/* Bubble Bop (فقاعات بوب): screens, mouse and keyboard, the ghost-hand coach, saves,
- * sound and play statistics. rules.js simulates the worlds; art.js draws them.
- * This is the UI layer: it reads Kit.dda at every level start and reports Kit.stats
- * rounds and Kit.track hits, misses and cues. */
+/* Bubble Bop (فقاعات بوب): screens, mouse and keyboard, the ghost-hand coach, saves
+ * and sound. rules.js simulates the worlds; art.js draws them.
+ * This is the UI layer: it reads Kit.dda at every level start. */
 (function () {
   'use strict';
   const BB = window.BB, A = BB.art, J = Kit.juice, W = BB.W, H = BB.H, KEYS = BB.KEYS;
@@ -24,12 +23,12 @@
     saveStatus.saved();
     return true;
   }
-  // One difficulty controller per world (Kit keeps it per player and age band).
+  // One difficulty controller per world (Kit keeps it on this PC).
   const dda = BB.WORLDS.map((_, i) => Kit.dda('bubble-bop', { id: 'w' + (i + 1) }));
 
   /* --------------------------------------------------------------- state */
   let screen = 'title', world = null, cur = { w: 0, l: 0 }, time = 0, ending = null, result = null, resultT = 0, resultLock = 0;
-  let closetFrom = 'title', gripCard = 0, gripThen = '', gripAt = 0, menuIdle = 0, menuNext = 4, busyT = 0, lastMissT = -9, unlockFx = null;
+  let closetFrom = 'title', gripCard = 0, gripThen = '', gripAt = 0, menuIdle = 0, menuNext = 4, unlockFx = null;
   const ptr = { x: W / 2, y: H / 2, known: false, travel: 0, movedAt: -9 };
   const menuBop = { x: 640, y: 364, vx: 0, vy: 0 };
   let clicks = [], jumpPress = false, holdDir = 0, keyDir = 0, anyKey = '';
@@ -91,7 +90,6 @@
     gripThen = then; gripCard = 0;
     paintGrip();
     setScreen('grip');
-    Kit.stats.tutorial('start');
     const warm = new Image(); warm.src = 'grip-keys.webp';
   }
   function paintGrip() {
@@ -109,12 +107,11 @@
   function gripNext() {
     if (screen !== 'grip') return;
     if (gripCard === 0) { J.tap(); gripCard = 1; paintGrip(); }
-    else { J.select(); gripDone(false); }
+    else { J.select(); gripDone(); }
   }
-  // Skipping the cards (the X or Esc) is not finishing them: only the last card reports done.
-  function gripDone(skipped) {
+  // The last card, the X or Esc: the cards are seen and not shown again.
+  function gripDone() {
     if (screen !== 'grip') return;
-    if (!skipped) Kit.stats.tutorial('done');
     if (!save.grip) { save.grip = true; persist(); }
     const then = gripThen; gripThen = '';
     if (then === 'play') afterGrip(); else toTitle();
@@ -262,13 +259,12 @@
 
   /* -------------------------------------------------------------- levels */
   function startLevel(w, l) {
-    // Difficulty is read at every level start, before the round is reported.
+    // Difficulty is read at every level start.
     const d = dda[w], tier = d.tier;
     const plan = BB.plan(w, l, tier);
     world = BB.create(plan, (Math.random() * 2147483647) | 0);
     if (ptr.known) { world.bop.x = BB.clamp(ptr.x, 0, W); world.bop.y = BB.clamp(ptr.y, 0, H); }
     cur = { w: w, l: l };
-    Kit.stats.round(plan.id);
     ending = null; result = null;
     clicks = []; jumpPress = false; holdDir = 0; keyDir = 0;
     mouseEvs = []; btnDown = false; letters = []; steerDx = 0; steerDy = 0; steerClick = ''; cancelNext = false;
@@ -298,7 +294,6 @@
     Kit.keys.reset();
   }
   function quitToMap() {
-    Kit.stats.end('quit');
     J.back();
     toMap(-1, cur.w);
   }
@@ -310,7 +305,6 @@
     if (stars > prev) save.stars[cur.w][cur.l] = stars;
     persist();
     dda[cur.w].result(BB.outcome(r));
-    Kit.stats.end('win', stars);
     result = { party: false, stars: stars, prev: prev, items: BB.unlocks(before, BB.total(save)),
       newWorld: cur.w < BB.N - 1 && !nextWasOpen && BB.worldOpen(save, cur.w + 1) ? cur.w + 1 : -1, newParty: !partyWasOpen && BB.isOpen(save, cur.w, 'P') };
     ending = { t: 1.5 };
@@ -324,7 +318,6 @@
     const r = BB.result(world), best = save.best[cur.w], isBest = r.score > best;
     if (isBest) { save.best[cur.w] = r.score; persist(); }
     dda[cur.w].result(BB.outcome(r));
-    Kit.stats.end('end', r.score);
     result = { party: true, score: r.score, best: Math.max(best, r.score), isBest: isBest && r.score > 0, items: [] };
     ending = { t: 1.2 };
     happy = 1.2;
@@ -370,8 +363,6 @@
       if (r.isBest) { $('resNewBest').hidden = false; J.star(3); burstAt(640, 340, '#ffd23f'); }
       else J.star(1);
     }
-    busyT += dt;
-    if (resultT < 3 && busyT >= 1) { busyT = 0; Kit.stats.busy(); }
   }
   function next() {
     if (!result) return;
@@ -393,7 +384,7 @@
   on($('btnCloset'), () => openCloset('title'));
   on($('btnHow'), () => { J.select(); showGrip('title'); });
   on($('gripNext'), gripNext);
-  on($('gripSkip'), () => { J.back(); gripDone(true); });
+  on($('gripSkip'), () => { J.back(); gripDone(); });
   // A click anywhere on the cards' screen turns the card, but not in the first moment
   // after it appears: the second click of a double click on Play must not skip it.
   $('scrGrip').addEventListener('click', e => { e.stopPropagation(); if (e.detail < 2 && time - gripAt >= 0.4) gripNext(); });
@@ -492,7 +483,7 @@
   function handleKeys() {
     const K = Kit.keys, go = K.anyPressed(['Enter', 'NumpadEnter', 'Space']);
     if (screen === 'title') { if (go) play(); }
-    else if (screen === 'grip') { if (K.pressed('Escape')) { J.back(); gripDone(true); } else if (anyKey) gripNext(); }
+    else if (screen === 'grip') { if (K.pressed('Escape')) { J.back(); gripDone(); } else if (anyKey) gripNext(); }
     else if (screen === 'map') {
       if (go) startNext(); else if (K.pressed('Escape')) { J.back(); toTitle(); }
       // Right to left: the next page of worlds lies to the left.
@@ -745,8 +736,6 @@
   // swimming in its pool, a pearl flying up, a keycap falling from a popped balloon.
   function anim(a) { a.t = 0; anims.push(a); if (anims.length > 12) anims.shift(); }
   function onPop(e) {
-    Kit.track.hit();
-    if (e.kind === 'bubble') Kit.track.react(Math.round(e.age * 1000));
     const col = popColor(e), k = e.kind, r = k === 'wand' ? e.br : e.r;
     if (k === 'bubble') { J.pop(Math.min(1, e.r / 70)); shake.add(2); }
     else if (k === 'balloon' || k === 'kballoon') { J.impact(0.3); J.pop(0.85); shake.add(4); }
@@ -773,19 +762,11 @@
   const byId = id => world.targets.find(o => o.id === id && !o.dead);
   function handleEvents() {
     for (const e of world.ev) {
-      // A reaction time counts from the moment there is something to press: a balloon, a fruit,
-      // a turtle, a clam, a wand, a starfish or a keycap appears, or a firefly comes over the
-      // frog. Touching a bubble needs no press.
-      if (e.t === 'spawn') { if (world.mode !== 'touch' && world.mode !== 'jump') Kit.track.cue(); }
-      else if (e.t === 'near') Kit.track.cue();
-      else if (e.t === 'pop') onPop(e);
+      if (e.t === 'pop') onPop(e);
       else if (e.t === 'escape') {
-        Kit.track.miss();
         if (e.kind === 'fruit') { J.land(0.2); fx.burst(e.x, BB.BASKET.ground - 6, { count: 8, colors: ['#ffffff', '#c8f0a0'], speed: 160, life: 0.4, size: 6, gravity: 500 }); }
         else if (e.kind === 'clam') fx.burst(e.x, e.y + 30, { count: 8, colors: ['#ffe39a', '#ffffff'], speed: 120, life: 0.4, size: 6, gravity: 300 });
       } else if (e.t === 'missClick') {
-        if (time - lastMissT > 0.3) Kit.track.miss();
-        lastMissT = time;
         ripple(e.x, e.y, true); J.tap();
       } else if (e.t === 'jump') J.jump(0.7);
       else if (e.t === 'land') { J.land(0.3); frogLand = 1; }
@@ -799,11 +780,10 @@
       else if (e.t === 'home') { J.whoosh(0.3); rings.push({ x: e.x, y: e.y, r0: e.r * 0.3, r1: e.r * 1.1, t: 0, life: 0.45, color: '159,228,255', lw: 8 }); }
       else if (e.t === 'drop') J.land(0.25);
       else if (e.t === 'wrong') { J.jump(0.45); poolPulse[e.home % 3] = 1.6; const t = byId(e.id); if (t) t.wig = 1; }
-      else if (e.t === 'slip') Kit.track.miss();
       else if (e.t === 'knock') { J.tap(); flash.two = 1; }
       else if (e.t === 'crack') { J.impact(0.3); shake.add(2); burstAt(e.x, e.y - e.r * 0.4, '#fff7fb'); }
       else if (e.t === 'blow') { J.whoosh(0.15); growStep = 0; bandWas = false; }
-      else if (e.t === 'poof') { Kit.track.miss(); J.pop(0.1); anim({ kind: 'poof', x: e.x, y: e.y, r: e.br }); }
+      else if (e.t === 'poof') { J.pop(0.1); anim({ kind: 'poof', x: e.x, y: e.y, r: e.br }); }
       else if (e.t === 'boing') {
         J.jump(1); J.land(0.6); shake.add(4);
         fx.burst(e.x, e.y, { count: 22, colors: ['#9fe4ff', '#ff9ad5', '#fff27a', '#ffffff'], speed: 420, life: 0.6, size: 8, gravity: 260 });
@@ -813,8 +793,6 @@
         wallWig[e.wall] = 1;
         fx.burst(e.x, e.y, { count: 5, colors: ['#ffffff', '#bff0ff'], speed: 90, life: 0.5, size: 6, gravity: -60 });
       } else if (e.t === 'wrongKey') {
-        if (time - lastMissT > 0.3) Kit.track.miss();
-        lastMissT = time;
         J.tap(); keyFx.wrong[e.code] = 1; flash.keyGlow = 1;
       }
     }
@@ -889,9 +867,6 @@
       }
     } else {
       ending.t -= dt;
-      // The celebration is a passive moment the child watches.
-      busyT += dt;
-      if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
       if (ending.t <= 0) showResult();
     }
   }
