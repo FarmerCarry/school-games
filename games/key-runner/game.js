@@ -1,467 +1,1056 @@
-/* Picture-first tower climb. The engine never calls Kit.stats. */
+/* Key Runner (عدّاء المفاتيح): screens, the real keyboard, the ghost-hand coach, saves, sound
+ * and play statistics. engine.js runs the courses; art.js draws them.
+ * This is the UI layer: it reads Kit.dda at every round start and reports Kit.stats rounds
+ * and Kit.track cues, hits and misses. Every key press is taken in the order it was typed
+ * (KeyboardEvent.code, so an Arabic or an English Windows keyboard both work). */
 (function () {
   'use strict';
-  var KR = window.KeyRunner;
-  function el(id) { return document.getElementById(id); }
-  var store = Kit.store('key-runner');
-  var save = KR.normalizeSave(store.get('save', null));
-  var saveStatus = Kit.saveStatus({ retry: persist });
-  var mode = 'title';
-  var duo = false;
-  var roundId = '';
-  var dirty = true;
-  var contextLost = false;
-  var eng, view, loop, fit;
-  var prevKey = {};
-  var shake = 0;
-  var fovKick = 0;
-  var activity = 'tower';
-  var hitUntil = 0;
-  var combo = 0;
-  var comboAt = 0;
-  var resultAt = 0;
-  var heldWin = null;
-  var scripted = false;
-  var cued = {};
-  // Hand-built tower: the tier is reported, the course itself does not change.
-  var dda = Kit.dda('key-runner');
+  const KR = window.KR, A = KR.art, J = Kit.juice, W = KR.W, H = KR.H;
+  const $ = id => document.getElementById(id);
+  const canvas = $('game'), ui = $('ui'), ghostEl = $('ghost');
+  const calm = () => Kit.motion.reduced();
+  let dirty = true;
+  const view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: v => {
+    ui.style.left = canvas.style.left; ui.style.top = canvas.style.top; ui.style.transform = 'scale(' + v.scale + ')'; dirty = true;
+  } });
+  const shake = Kit.shake();
+  const pixelScale = () => Math.min(2, Math.max(0.5, Math.round(view.scale * view.dpr * 4) / 4));
 
+  // Lanes: a solo course above the keyboard, the title's attract run, two duo lanes.
+  const SOLO = { y: 0, h: 720, base: 318, runX: 380 };
+  const TITLE = { y: 0, h: 720, base: 470, runX: 300 };
+  const LANES = [{ y: 0, h: 360, base: 212, runX: 450, clip: true }, { y: 360, h: 360, base: 212, runX: 450, clip: true }];
+  const KB = { u: 46, x: Math.round((W - KR.KB_UNITS * 46) / 2), y: 480 };
+  const HALF_U = 34;
+  const PRAISE = ['رائع!', 'ممتاز!', 'مذهل!', 'خارق!', 'أسطوري!'];
+  const P_COLORS = [0, 1];
+
+  /* ---------------------------------------------------------------- save */
+  const store = Kit.store('key-runner');
+  const saveStatus = Kit.saveStatus({ retry: persist });
+  let save = KR.loadSave(store.get('save', null));
   function persist() {
-    save.best = Math.max(save.best || 0, save.speed || 0);
-    if (store.set('save', save)) saveStatus.saved();
-    else saveStatus.failed();
+    if (store.set('save', save) === false) { saveStatus.failed(); return false; }
+    saveStatus.saved();
+    return true;
   }
-  function clock(t) {
-    t = Math.max(0, t || 0);
-    var m = Math.floor(t / 60);
-    var s = Math.floor(t % 60);
-    return m + ':' + (s < 10 ? '0' : '') + s;
+  // One difficulty for the levels, one for the endless run (Kit keeps them per player).
+  const ddaLevels = Kit.dda('key-runner', { id: 'levels' });
+  const ddaEndless = Kit.dda('key-runner', { id: 'endless' });
+
+  /* --------------------------------------------------------------- state */
+  let screen = 'title', mode = '', cur = { w: 0, l: 0 }, time = 0;
+  let solo = null, lanes = null, demo = null, ending = null, result = null, resultT = 0, resultLock = 0;
+  let queue = [], countdown = 0, winner = -1, duoScene = 3, intro = null, busyT = 0, menuIdle = 0, menuNext = 5;
+  let gaugeBump = 0, coinBump = 0, heartBump = 0, firstCoach = false, tutorialHits = 0, closetFrom = 'title', unlockFx = -1;
+  const flash = {};
+  const calls = [];
+  const coach = { t: 0, next: 3 };
+
+  /* -------------------------------------------------------------- lanes */
+  function makeLane(plan, seed, geo, color, hat, scene) {
+    const w = KR.create(plan, seed);
+    return { w: w, geo: geo, scene: scene, cam: w.r.x - geo.runX, fx: Kit.particles(), floats: [], fxs: new Map(), run: 0, sq: 0, sqv: 0,
+      trail: [], color: color, hat: hat, lines: [], demoT: 0 };
   }
-  function paintMenus() {
-    var q = el('quality');
-    var low = save.quality === 'low';
-    q.setAttribute('aria-pressed', low ? 'true' : 'false');
-    q.textContent = low ? 'الرسوم: خفيفة' : 'الرسوم: كاملة';
-    var best = el('menu-best');
-    if (best) best.textContent = save.bestTime ? clock(save.bestTime) : '—';
-    var flags = el('menu-flags');
-    if (flags) flags.textContent = String(save.flags || 0);
+  function stoneFx(L, s) { let f = L.fxs.get(s); if (!f) { f = { dip: 0, shake: 0, miss: 0 }; L.fxs.set(s, f); } return f; }
+  function laneFloat(L, x, y, text, color, size) {
+    L.floats.push({ x: x, y: y, text: text, color: color, size: size || 38, t: 0 });
+    if (L.floats.length > 12) L.floats.shift();
   }
-  function screens() {
-    el('title-screen').hidden = mode !== 'title';
-    el('duo-screen').hidden = mode !== 'duo';
-    el('pause-screen').hidden = mode !== 'paused';
-    el('result-screen').hidden = mode !== 'result';
-    el('hud').hidden = mode === 'title' || mode === 'duo' || mode === 'result';
-    el('pause-button').hidden = mode !== 'play';
-    el('quality').hidden = mode === 'play';
-    el('hint').hidden = mode !== 'play';
-    document.body.dataset.mode = mode;
-    document.body.dataset.duo = duo && mode === 'play' ? '1' : '0';
+  function burst(L, x, y, colors, count, speed, gravity) {
+    L.fx.burst(x, y, { count: count || 14, colors: colors, speed: speed || 300, life: 0.6, size: 8, gravity: gravity == null ? 500 : gravity });
+    if (L.fx.list.length > 240) L.fx.list.splice(0, L.fx.list.length - 240);
   }
-  function endRound(result, score) {
-    if (!roundId) return;
-    Kit.stats.end(result, score);
-    roundId = '';
-  }
-  function beginRound(id) {
-    roundId = id;
-    dda.level;
-    Kit.stats.round(id);
-  }
-  function focusGame() {
-    var node = document.activeElement;
-    if (node && node.blur) node.blur();
-    el('scene').focus({ preventScroll: true });
-  }
-  function runOpts(next) {
-    return Object.assign({
-      speed: save.speed, shoe: save.shoe, rebirths: save.rebirths, charm: !!save.charm, players: 1
-    }, next || {});
-  }
-  function go(nextMode, opts, round) {
-    duo = nextMode === 'race';
-    activity = nextMode;
-    combo = 0;
-    resultAt = 0;
-    heldWin = null;
-    cued = {};
-    eng.reset(runOpts(Object.assign({ mode: nextMode === 'race' ? 'race' : 'world', world: 0 }, opts || {})));
-    eng.state.armed = true;
-    mode = 'play';
-    dirty = true;
-    if (round) beginRound(round);
-    screens();
-    paintMenus();
-    focusGame();
-    paintPips(0);
-    if (!duo) view.playGhost(eng.state);
-  }
-  function paintPips(n) {
-    var dots = el('pips').querySelectorAll('i');
-    for (var i = 0; i < dots.length; i++) dots[i].classList.toggle('on', i < n);
-  }
-  function starsFor(time) {
-    var stages = KR.worlds()[0].stages;
-    var gold = 0, silver = 0, bronze = 0;
-    for (var i = 0; i < stages.length; i++) {
-      gold += stages[i].gold;
-      silver += stages[i].silver;
-      bronze += stages[i].bronze;
+  // A big word of praise; in a race it shows on the lane of the player who earned it.
+  function call(text, color, y) { calls.push({ text: text, t: 0, color: color || '#ffd23f', y: y }); if (calls.length > 4) calls.shift(); }
+  const SPARK = ['#ffe14d', '#ffffff', '#7ef0a2', '#4fd1ff'];
+  // Turns a lane's engine events into pictures, sound and (when `real`) statistics.
+  function laneEvents(L, real, quiet) {
+    const w = L.w;
+    for (const e of w.ev) {
+      if (e.t === 'cue') { if (real === 'solo') Kit.track.cue(); }
+      else if (e.t === 'hit') {
+        if (real === 'solo') Kit.track.hit();
+        const s = w.stones[e.i], cx = (e.x + e.x1) / 2;
+        if (s) stoneFx(L, s).dip = 1;
+        if (real) flash[e.code] = ['ok', 0.35];
+        burst(L, cx, e.y - 8, SPARK, 12, 280, 380);
+        laneFloat(L, cx, e.y - 30, '+1', '#ffffff', 40);
+        if (!quiet) {
+          J.streak(Math.min(13, e.combo));
+          gaugeBump = 1;
+          if (e.combo >= 5 && e.combo % 5 === 0) {
+            call(PRAISE[Math.min(PRAISE.length - 1, e.combo / 5 - 1)], '', real === 'duo' ? L.geo.y + 120 : undefined);
+            J.chime(e.combo >= 15 ? 3 : 2);
+          }
+          if (e.steps > 0 && e.steps % 5 === 0) J.whoosh(Math.min(1, e.steps / w.tune.maxSteps));
+          wordDone(L, e);
+        }
+        if (real === 'solo') { coach.t = 0; coach.next = coachDelay(); hideHand(); }
+        if (real === 'solo' && firstCoach && ++tutorialHits >= 3) {
+          firstCoach = false; Kit.stats.tutorial('done');
+          if (!save.coach) { save.coach = true; persist(); }
+        }
+      } else if (e.t === 'wrong') {
+        if (real === 'solo') Kit.track.miss();
+        const s = w.stones[e.i];
+        if (s) { const f = stoneFx(L, s); f.shake = 1; f.miss = 0.4; }
+        if (real) flash[e.code] = ['miss', 0.4];
+        if (!quiet) { boop(); if (w.tune.wrongCost) gaugeBump = -1; }
+        if (real === 'solo') { coach.next = Math.min(coach.next, coach.t + 1.2); }
+      } else if (e.t === 'act') {
+        L.sq = e.kind === 'slide' ? 0.6 : -0.45; L.sqv = 0;
+        if (!quiet) { if (e.kind === 'slide') J.whoosh(0.5); else J.jump(e.kind === 'climb' ? 0.8 : 0.5); }
+        burst(L, e.x - 6, e.y - 2, ['#ffffff', '#e8e8f8'], 6, 120, -40);
+      } else if (e.t === 'land') {
+        L.sq = 0.5; L.sqv = 0;
+        if (!quiet) J.land(0.25);
+        burst(L, e.x, e.y - 2, ['#ffffff', '#f2efe6'], 7, 140, -30);
+      } else if (e.t === 'stop') {
+        if (!quiet && e.lost >= 3) { gaugeBump = -1; J.land(0.15); }
+        L.sq = 0.3;
+      } else if (e.t === 'coin') {
+        if (!quiet) { J.coin(Math.min(5, 1 + (e.coins % 5))); coinBump = 1; }
+        burst(L, e.x, e.y, ['#ffc93c', '#fff3b0', '#ffffff'], 12, 260, 300);
+      } else if (e.t === 'heart') {
+        heartBump = 1; J.back();
+        burst(L, e.x, e.y - 80, ['#ff5d6c', '#ffffff'], 14, 240, 400);
+      } else if (e.t === 'finish') {
+        if (real === 'solo') finishLevel();
+      } else if (e.t === 'over') {
+        if (real === 'solo') finishEndless();
+      }
     }
-    if (time <= gold) return 3;
-    if (time <= silver) return 2;
-    if (time <= bronze) return 1;
-    return 1;
+    w.ev.length = 0;
   }
-  function unlockTrail(flags) {
-    var trail = flags >= 8 ? 3 : flags >= 6 ? 2 : flags >= 3 ? 1 : 0;
-    if (trail && save.owned.trails.indexOf(trail) < 0) save.owned.trails.push(trail);
-    if (trail > save.trail) save.trail = trail;
+  // The last letter of a word: the whole word pops above its stones.
+  function wordDone(L, e) {
+    const plan = L.w.plan;
+    if (e.word < 0 || !plan.words) return;
+    const word = plan.words[e.word], i = e.i + (L.w.offset || 0) - 1;
+    if (!word || i !== word.start + word.len - 1) return;
+    laneFloat(L, e.x, e.y - 150, word.text, '#ffd23f', 56);
+    J.chime(1);
   }
-  function showResult(time, flags, fresh) {
-    mode = 'result';
+  function boop() {
+    // A soft, low "boop": never a buzzer.
+    Kit.audio.tone({ freq: 330, to: 230, type: 'sine', dur: 0.16, vol: 0.16 });
+  }
+  function laneStep(L, dt, real, quiet) {
+    const w = L.w;
+    KR.step(w, dt);
+    laneEvents(L, real, quiet);
+    const target = w.r.x - L.geo.runX;
+    L.cam += (target - L.cam) * Math.min(1, dt * 7);
+    if (Math.abs(target - L.cam) > 600) L.cam = target;
+    animLane(L, dt);
+  }
+  function animLane(L, dt) {
+    const w = L.w;
+    L.run += dt * Math.max(0, w.r.vel) / 9;
+    L.sqv += (-L.sq * 220 - L.sqv * 15) * dt; L.sq += L.sqv * dt;
+    L.fx.update(dt);
+    for (let i = L.floats.length - 1; i >= 0; i--) { const f = L.floats[i]; f.t += dt; f.y -= dt * 50; if (f.t > 1.1) L.floats.splice(i, 1); }
+    L.fxs.forEach(f => { f.dip = Math.max(0, f.dip - dt * 4); f.shake = Math.max(0, f.shake - dt * 3); f.miss = Math.max(0, f.miss - dt); });
+    // A short trail behind a fast runner.
+    L.trail.unshift({ x: w.r.x, y: w.r.y });
+    if (L.trail.length > 8) L.trail.pop();
+    // Speed lines that grow with the "+1" steps.
+    const k = w.steps / Math.max(1, w.tune.maxSteps);
+    while (L.lines.length < 12) L.lines.push({ x: Math.random() * W, y: 40 + Math.random() * (L.geo.base + 40), len: 60 + Math.random() * 120 });
+    for (const ln of L.lines) { ln.x -= (300 + w.r.vel * 2.2) * dt * (0.6 + k); if (ln.x + ln.len < 0) { ln.x = W + Math.random() * 200; ln.y = 40 + Math.random() * (L.geo.base + 40); } }
+  }
+
+  /* ------------------------------------------------------------ screens */
+  const SCREENS = { title: 'scrTitle', map: 'scrMap', pause: 'scrPause', result: 'scrResult', closet: 'scrCloset', duo: 'scrDuo', duoEnd: 'scrDuoEnd' };
+  function setScreen(name) {
+    screen = name;
+    for (const k in SCREENS) $(SCREENS[k]).hidden = k !== name;
+    $('hud').hidden = name !== 'play';
+    hideHand();
+    menuIdle = 0; menuNext = 5;
     dirty = true;
-    var stars = starsFor(time);
-    el('result-title').textContent = 'قمة البرج!';
-    el('result-line').textContent = flags + '/8   ' + clock(time);
-    el('result-record').hidden = !fresh;
-    el('stars').setAttribute('data-stars', String(stars));
-    el('tower-mark').style.bottom = Math.min(92, 8 + flags * 10) + '%';
-    screens();
+    if (name === 'play') focusGame();
   }
-  function startClimb() {
-    Kit.audio.unlock();
-    go('world', { speed: save.speed }, 'tower');
+  function focusGame() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  function say(text) { $('live').textContent = text; }
+  function setChip(id) { $(id).querySelector('b').textContent = String(KR.total(save)); }
+  function starsText(n) { return n === 1 ? 'نجمة واحدة' : n === 2 ? 'نجمتان' : n + ' نجوم'; }
+
+  function toTitle() {
+    solo = null; lanes = null; mode = ''; ending = null;
+    newDemo();
+    setScreen('title');
+    setChip('titleStars');
+    paintLabels();
+    $('btnCloset').classList.toggle('ring', hasNewItem());
+  }
+  function play() {
+    J.select();
+    // A child who has never played goes straight into the first run; others pick on the map.
+    if (!KR.total(save)) startLevel(0, 0); else toMap(-1);
+  }
+  function newDemo() {
+    const seed = (Math.random() * 1e9) | 0;
+    demo = makeLane(KR.plan(1, 2, 3, seed), seed, TITLE, save.color, save.hat, 0);
+  }
+
+  /* --------------------------------------------------------- label mode */
+  function paintLabels() {
+    document.querySelectorAll('.lbl').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.label === save.label)));
+  }
+  document.querySelectorAll('.lbl').forEach(b => on(b, () => {
+    if (save.label === b.dataset.label) return;
+    save.label = b.dataset.label;
     persist();
-  }
-  function startRace() {
-    Kit.audio.unlock();
-    go('race', { players: 2, speed: 0, shoe: 1, rebirths: 0, charm: false }, 'duo');
-  }
-  function pause() {
-    if (mode !== 'play') return;
-    mode = 'paused';
+    J.toggle(true);
+    paintLabels();
+    paintCards();
     dirty = true;
+  }));
+
+  /* ---------------------------------------------------------------- map */
+  const cardEls = [];
+  const CARD_KEYS = [['Space', 'ArrowUp', 'ArrowDown'], ['KeyF', 'KeyJ', 'KeyG'], ['KeyA', 'KeyS', 'KeyD'], ['KeyQ', 'KeyW', 'KeyE'],
+    ['KeyZ', 'KeyX', 'KeyC'], ['Digit1', 'Digit2', 'Digit3'], ['KeyK', 'KeyL', 'Semicolon']];
+  function starRow() { return '<span class="st" aria-hidden="true">' + '<svg><use href="#i-star"/></svg>'.repeat(3) + '</span>'; }
+  function buildMap() {
+    const box = $('cards');
+    KR.WORLDS.forEach((wd, w) => {
+      const card = document.createElement('div');
+      card.className = 'wcard';
+      card.innerHTML = '<button type="button" class="pic"><canvas width="560" height="320"></canvas></button>' +
+        '<span class="num">' + (w + 1) + '</span><span class="wstars"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></span>' +
+        '<svg class="lock" aria-hidden="true"><use href="#i-lock"/></svg><h2>' + wd.name + '</h2><div class="levels"></div>';
+      const lv = card.querySelector('.levels'), btns = [];
+      for (let l = 0; l < KR.LEVELS; l++) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'lvl'; b.dataset.w = String(w); b.dataset.l = String(l);
+        b.innerHTML = '<b>' + (l + 1) + '</b>' + starRow();
+        on(b, () => pickLevel(w, l, b));
+        lv.appendChild(b); btns.push(b);
+      }
+      const pic = card.querySelector('.pic');
+      on(pic, () => openWorld(w));
+      box.appendChild(card);
+      cardEls.push({ card: card, pic: pic, canvas: pic.querySelector('canvas'), btns: btns });
+    });
+    const card = document.createElement('div');
+    card.className = 'wcard endless';
+    card.innerHTML = '<button type="button" class="pic"><canvas width="560" height="320"></canvas></button>' +
+      '<svg class="lock" aria-hidden="true"><use href="#i-lock"/></svg><h2>سباق بلا نهاية</h2>' +
+      '<span class="best"><svg aria-hidden="true"><use href="#i-crown"/></svg><b>0</b></span>' +
+      '<button type="button" class="kr-btn kr-go big-go" id="btnEndless" aria-label="سباق بلا نهاية"><svg aria-hidden="true"><use href="#i-inf"/></svg></button>';
+    box.appendChild(card);
+    on(card.querySelector('.pic'), () => openEndless(card));
+    on(card.querySelector('#btnEndless'), () => openEndless(card));
+    cardEls.push({ card: card, pic: card.querySelector('.pic'), canvas: card.querySelector('canvas'), btns: [], endless: true });
+  }
+  let painted = '';
+  function paintCards(force) {
+    const sig = save.label + KR.WORLDS.map((_, w) => KR.worldOpen(save, w) ? 1 : 0).join('') + (KR.endlessOpen(save) ? 1 : 0) + save.color + '.' + save.hat;
+    if (sig === painted && !force) return;
+    painted = sig;
+    cardEls.forEach((c, w) => {
+      if (c.endless) { paintEndlessCard(c); return; }
+      A.card(c.canvas, w, CARD_KEYS[w], save.label, !KR.worldOpen(save, w));
+    });
+  }
+  function paintEndlessCard(c) {
+    const g = c.canvas.getContext('2d');
+    A.card(c.canvas, 6, [], save.label, false);
+    g.save(); g.scale(2, 2);
+    A.runner(g, 140, 128, { color: save.color, hat: save.hat, pose: 'run', still: true, run: 1, scale: 1.1, speed: 1 });
+    g.restore();
+    if (!KR.endlessOpen(save)) { g.fillStyle = 'rgba(40,46,90,0.55)'; g.fillRect(0, 0, c.canvas.width, c.canvas.height); }
+  }
+  function refreshMap() {
+    const next = KR.nextLevel(save);
+    cardEls.forEach((c, w) => {
+      if (c.endless) {
+        const open = KR.endlessOpen(save);
+        c.card.classList.toggle('locked', !open);
+        c.card.querySelector('.best b').textContent = String(save.endless);
+        c.card.querySelector('.best').hidden = !save.endless;
+        c.pic.setAttribute('aria-label', 'سباق بلا نهاية' + (open ? '' : ' (مقفل)'));
+        return;
+      }
+      const open = KR.worldOpen(save, w);
+      c.card.classList.toggle('locked', !open);
+      c.card.querySelector('.wstars b').textContent = KR.worldStars(save, w) + '/' + KR.LEVELS * 3;
+      c.pic.setAttribute('aria-label', KR.WORLDS[w].name + (open ? '' : ' (مقفل)'));
+      c.btns.forEach((b, l) => {
+        const ok = KR.isOpen(save, w, l), stars = save.stars[w][l];
+        b.classList.toggle('locked', !ok);
+        b.classList.toggle('done', stars > 0);
+        b.classList.toggle('next', next.w === w && next.l === l && !stars);
+        b.querySelectorAll('.st svg').forEach((s, i) => s.classList.toggle('on', i < stars));
+        b.setAttribute('aria-label', 'المرحلة ' + (l + 1) + (ok ? (stars ? '، ' + starsText(stars) : '') : ' (مقفلة)'));
+      });
+    });
+    setChip('mapStars');
+  }
+  function toMap(fresh) {
+    solo = null; lanes = null; mode = ''; ending = null;
+    if (!demo) newDemo();
+    refreshMap();
+    paintCards();
+    setScreen('map');
+    J.whoosh(0.4);
+    unlockFx = fresh;
+    if (fresh >= 0) {
+      J.levelUp();
+      const c = cardEls[fresh];
+      if (c) { wiggle(c.card); demoBurst(); }
+    }
+  }
+  function demoBurst() { if (demo) for (let i = 0; i < 4; i++) burst(demo, demo.cam + 200 + i * 260, -200, ['#ffd23f', '#ffffff', '#ff7eb6', '#4fd1ff'], 22, 380, 300); }
+  function wiggle(el) { el.classList.remove('wiggle'); void el.offsetWidth; el.classList.add('wiggle'); setTimeout(() => el.classList.remove('wiggle'), 500); }
+  function pickLevel(w, l, el) {
+    if (!KR.isOpen(save, w, l)) { J.tap(); wiggle(el); return; }
+    J.select(); startLevel(w, l);
+  }
+  // A click on a world's picture opens its first level without stars (or its first level).
+  function openWorld(w) {
+    if (!KR.worldOpen(save, w)) { J.tap(); wiggle(cardEls[w].card); return; }
+    for (let l = 0; l < KR.LEVELS; l++) if (KR.isOpen(save, w, l) && !save.stars[w][l]) { J.select(); startLevel(w, l); return; }
+    J.select(); startLevel(w, 0);
+  }
+  function openEndless(card) {
+    if (!KR.endlessOpen(save)) { J.tap(); wiggle(card); return; }
+    J.select(); startEndless();
+  }
+  function startNext() { const n = KR.nextLevel(save); J.select(); startLevel(n.w, n.l); }
+
+  /* ------------------------------------------------------------- closet */
+  const items = [];
+  function hasNewItem() { return KR.unlocks(save.seen, KR.total(save)).length > 0; }
+  function buildCloset() {
+    [['color', KR.COLORS, 'colors'], ['hat', KR.HATS, 'hats']].forEach(([type, list, id]) => {
+      list.forEach((it, i) => {
+        const b = document.createElement('button'), c = document.createElement('canvas');
+        b.type = 'button'; b.className = 'kr-btn item';
+        c.width = c.height = 192;
+        b.appendChild(c);
+        b.insertAdjacentHTML('beforeend', '<svg class="lockic" aria-hidden="true"><use href="#i-lock"/></svg><span class="need"><svg aria-hidden="true"><use href="#i-star"/></svg>' + it.need + '</span>');
+        on(b, () => equip(type, i, b));
+        $(id).appendChild(b);
+        items.push({ type: type, i: i, el: b, c: c });
+      });
+    });
+  }
+  function refreshCloset() {
+    const total = KR.total(save);
+    items.forEach(it => {
+      const list = it.type === 'color' ? KR.COLORS : KR.HATS, locked = list[it.i].need > total;
+      it.el.classList.toggle('locked', locked);
+      it.el.classList.toggle('on', (it.type === 'color' ? save.color : save.hat) === it.i);
+      it.el.setAttribute('aria-label', (it.type === 'color' ? 'لون ' : 'قبعة ') + (it.i + 1) + (locked ? ' (مقفل)' : ''));
+      A.itemIcon(it.c, it, save);
+    });
+    setChip('closetStars');
+  }
+  function openCloset(from) {
+    closetFrom = from;
+    J.select();
+    if (save.seen !== KR.total(save)) { save.seen = KR.total(save); persist(); }
+    refreshCloset();
+    $('closetBack').querySelector('use').setAttribute('href', from === 'title' ? '#i-home' : '#i-map');
+    setScreen('closet');
+  }
+  function closeCloset() { J.back(); if (closetFrom === 'title') toTitle(); else toMap(-1); }
+  function equip(type, i, el) {
+    const list = type === 'color' ? KR.COLORS : KR.HATS;
+    if (list[i].need > KR.total(save)) { J.tap(); wiggle(el); return; }
+    if (type === 'color') save.color = i; else save.hat = i;
+    persist();
+    J.select();
+    if (demo) { demo.color = save.color; demo.hat = save.hat; burst(demo, demo.cam + 330, -150, ['#ffd23f', '#ffffff', A.COLOR_OF(save.color)], 26, 320, 240); }
+    refreshCloset();
+  }
+
+  /* ------------------------------------------------------------- rounds */
+  function resetPlay() {
+    queue.length = 0; ending = null; result = null; calls.length = 0; intro = null;
+    for (const k in flash) delete flash[k];
+    gaugeBump = coinBump = heartBump = 0;
+    coach.t = 0; coach.next = coachDelay();
     Kit.keys.reset();
-    prevKey = {};
-    screens();
   }
-  function resume() {
-    if (mode !== 'paused') return;
-    mode = 'play';
-    dirty = true;
-    screens();
-    focusGame();
+  function startLevel(w, l) {
+    // Difficulty is read at every level start, before the round is reported.
+    const tier = ddaLevels.tier, seed = (Math.random() * 2147483647) | 0;
+    const plan = KR.plan(w, l, tier, seed);
+    mode = 'level'; cur = { w: w, l: l }; lanes = null;
+    solo = makeLane(plan, seed, SOLO, save.color, save.hat, w);
+    Kit.stats.round(plan.id);
+    resetPlay();
+    firstCoach = !save.coach && w === 0 && l === 0; tutorialHits = 0;
+    // The first run ever is the coached one: the hand shows the key as soon as the runner waits.
+    if (firstCoach) Kit.stats.tutorial('start');
+    coach.next = coachDelay();
+    intro = { t: 0, keys: plan.fresh, w: w, l: l };
+    setScreen('play');
+    J.whoosh(0.5);
+  }
+  function startEndless() {
+    const tier = ddaEndless.tier, seed = (Math.random() * 2147483647) | 0;
+    const plan = KR.endlessPlan(KR.topWorld(save), tier, seed);
+    mode = 'endless'; lanes = null;
+    solo = makeLane(plan, seed, SOLO, save.color, save.hat, 6);
+    Kit.stats.round('endless');
+    resetPlay();
+    firstCoach = false;
+    intro = { t: 0, keys: [], endless: true };
+    setScreen('play');
+    J.whoosh(0.6);
+  }
+  function openDuo() {
+    J.select();
+    mode = 'duo';
+    duoScene = (duoScene + 1) % KR.WORLDS.length;
+    buildLanes();
+    solo = null;
+    setScreen('duo');
+  }
+  function buildLanes() {
+    const seed = (Math.random() * 2147483647) | 0;
+    lanes = [0, 1].map(side => {
+      const L = makeLane(KR.duoPlan(side, seed), seed, LANES[side], P_COLORS[side], 0, duoScene);
+      L.side = side;
+      return L;
+    });
+  }
+  // Go: the race is the round; a 3-2-1 with both half keyboards on screen comes first.
+  function startDuo() {
+    if (!lanes || screen === 'play') buildLanes();
+    mode = 'duo'; solo = null; winner = -1;
+    Kit.stats.round('duo');
+    resetPlay();
+    countdown = 3.6;
+    setScreen('play');
+    J.countdown(3);
   }
   function restart() {
-    var race = activity === 'race';
-    mode = 'play';
-    combo = 0;
-    resultAt = 0;
-    cued = {};
-    eng.reset(runOpts(race ? { mode: 'race', world: 0, players: 2, speed: 0, shoe: 1, rebirths: 0, charm: false } : { mode: 'world', world: 0 }));
-    eng.state.armed = true;
-    dirty = true;
-    screens();
-    focusGame();
-    paintPips(0);
+    J.select();
+    if (mode === 'duo') { duoScene = (duoScene + 1) % KR.WORLDS.length; buildLanes(); startDuo(); }
+    else if (mode === 'endless') startEndless();
+    else startLevel(cur.w, cur.l);
   }
-  function menu() {
-    if (roundId && !duo) dda.result(0);
-    endRound('quit');
-    duo = false;
-    activity = 'tower';
-    mode = 'title';
-    resultAt = 0;
-    heldWin = null;
-    eng.reset(runOpts({ mode: 'world', world: 0 }));
-    dirty = true;
-    screens();
-    paintMenus();
+  function pause(own) {
+    if (screen !== 'play') return;
+    setScreen('pause');
+    queue.length = 0;
+    if (own) J.back();
   }
-  function onEvents(events) {
-    for (var i = 0; i < events.length; i++) {
-      var ev = events[i];
-      if (ev.e === 'jump') { KR.sound('jump'); shake = Math.max(shake, 0.04); }
-      else if (ev.e === 'land') {
-        KR.sound('land', ev.row);
-        var landed = eng.state.players[ev.p];
-        if (landed) view.dust(landed.x, landed.y + 0.05, landed.z, 10);
+  function resume() {
+    if (screen !== 'pause') return;
+    J.select();
+    setScreen('play');
+    Kit.keys.reset();
+  }
+  function quitToMenu() {
+    // Two-player rounds report only 'end'.
+    Kit.stats.end(mode === 'duo' ? 'end' : 'quit');
+    J.back();
+    if (mode === 'duo') toTitle(); else toMap(-1);
+  }
+
+  // A result is saved the moment the flag is reached, before the celebration.
+  function finishLevel() {
+    const w = solo.w, r = KR.result(w), stars = KR.stars(r), before = KR.total(save);
+    const prev = save.stars[cur.w][cur.l], prevBest = save.best[cur.w][cur.l], tenths = Math.max(1, Math.round(r.time * 10));
+    const nextWasOpen = cur.w + 1 < KR.WORLD_COUNT && KR.worldOpen(save, cur.w + 1), endlessWas = KR.endlessOpen(save);
+    if (stars > prev) save.stars[cur.w][cur.l] = stars;
+    if (!prevBest || tenths < prevBest) save.best[cur.w][cur.l] = tenths;
+    persist();
+    ddaLevels.result(KR.outcome(r));
+    Kit.stats.end('win', stars);
+    result = { kind: 'level', stars: stars, r: r, newBest: (prevBest > 0 && tenths < prevBest) || (prev > 0 && stars > prev), items: KR.unlocks(before, KR.total(save)),
+      newWorld: cur.w + 1 < KR.WORLD_COUNT && !nextWasOpen && KR.worldOpen(save, cur.w + 1) ? cur.w + 1 : -1, newEndless: !endlessWas && KR.endlessOpen(save) };
+    ending = { t: 1.7 };
+    J.levelUp();
+    hideHand();
+    celebrate(solo);
+  }
+  function finishEndless() {
+    const w = solo.w, r = KR.result(w), best = save.endless, keys = r.hits, isBest = keys > best;
+    if (isBest) { save.endless = keys; persist(); }
+    ddaEndless.result(KR.outcome(r));
+    Kit.stats.end('end', keys);
+    result = { kind: 'endless', keys: keys, best: Math.max(best, keys), isBest: isBest && best > 0, r: r };
+    ending = { t: 1.5 };
+    J.fail();
+    hideHand();
+  }
+  function finishDuo(win) {
+    winner = win;
+    Kit.stats.end(win < 0 ? 'draw' : 'end');
+    ending = { t: 1.6 };
+    J.levelUp();
+    if (win >= 0) celebrate(lanes[win]);
+  }
+  function celebrate(L) {
+    if (calm()) return;
+    const x = L.w.r.x;
+    for (let i = 0; i < 5; i++) burst(L, x - 300 + i * 150, -260 - (i % 2) * 40, ['#ff7eb6', '#ffd23f', '#4fd1ff', '#5be38f', '#ffffff'], 22, 380, 420);
+    shake.add(5);
+  }
+  function showResult() {
+    ending = null; resultT = 0; resultLock = 0.6;
+    const r = result, level = r.kind === 'level';
+    $('resStars').hidden = !level;
+    $('resStats').hidden = !level;
+    $('resScore').hidden = level;
+    $('resNewBest').hidden = true;
+    $('resGift').hidden = true;
+    $('resStars').querySelectorAll('svg').forEach(s => s.classList.remove('on'));
+    if (level) {
+      $('resTime').textContent = r.r.time.toFixed(1);
+      $('resAcc').textContent = Math.floor(r.r.acc * 100) + '%';
+    } else { $('resNum').textContent = String(r.keys); $('resBest').textContent = String(r.best); }
+    $('resNext').setAttribute('aria-label', level ? (cur.l < KR.LEVELS - 1 ? 'المرحلة التالية' : 'الخريطة') : 'مرة أخرى');
+    $('resAgain').hidden = !level;
+    say(level ? starsText(r.stars) : 'المفاتيح ' + r.keys);
+    setScreen('result');
+  }
+  // Stars pop in one by one on the game clock, then the rewards.
+  function resultStep(dt) {
+    const r = result, before = resultT;
+    resultT += dt;
+    const at = t => before < t && resultT >= t;
+    if (r.kind === 'level') {
+      for (let i = 0; i < r.stars; i++) if (at(0.3 + i * 0.38)) { $('resStars').children[i].classList.add('on'); J.star(i + 1); if (solo) burst(solo, solo.cam + 520 + i * 120, -120, ['#ffd23f', '#ffffff'], 16, 300, 300); }
+      if (at(0.4 + r.stars * 0.38)) {
+        if (r.newBest) { $('resNewBest').hidden = false; J.chime(3); }
+        if (r.items.length) { const it = r.items[r.items.length - 1]; A.itemIcon($('giftCanvas'), it, save); $('resGift').hidden = false; J.chime(3); }
+        if (r.newWorld >= 0 || r.newEndless) J.levelUp();
       }
-      else if (ev.e === 'press') {
-        var now = performance.now();
-        combo = now - comboAt < 900 ? combo + 1 : 1;
-        comboAt = now;
-        KR.sound('press', combo);
-        view.pressKey(ev.id);
-        view.burst(ev.x, ev.y + 0.35, ev.z, 0xffe14a, 6);
-      }
-      else if (ev.e === 'bounce') {
-        KR.sound('bounce');
-        shake = 0.12;
-        var bounced = eng.state.players[ev.p];
-        if (bounced) view.burst(bounced.x, bounced.y + 0.3, bounced.z, 0x7dffa0, 8);
-      }
-      else if (ev.e === 'haste') {
-        KR.sound('haste');
-        fovKick = 8;
-      }
-      else if (ev.e === 'checkpoint' || ev.e === 'stage') {
-        if (ev.e === 'checkpoint') {
-          KR.sound('checkpoint');
-          hitUntil = performance.now() + 100;
-          var saved = eng.state.players[ev.p];
-          if (saved) view.burst(saved.x, saved.y + 1.2, saved.z, 0xff4eb6, 16);
-        }
-        if (ev.e === 'stage' && !duo) {
-          if (!ev.p) Kit.track.hit();
-          var flags = ev.stage + 1;
-          if (flags > (save.flags || 0)) save.flags = flags;
-          unlockTrail(save.flags);
-          paintPips(flags);
-          persist();
-        } else if (ev.e === 'stage') paintPips(ev.stage + 1);
-      }
-      else if (ev.e === 'fall') {
-        if (!ev.p) Kit.track.miss();
-        KR.sound(ev.why === 'flood' ? 'splash' : 'fall');
-        shake = 0.1;
-      }
-      else if (ev.e === 'glug' && mode === 'play') KR.sound('glug');
-      else if (ev.e === 'world' && !duo) {
-        var time = eng.state.time;
-        var fresh = !save.bestTime || time < save.bestTime;
-        if (fresh) {
-          save.bestTime = time;
-          KR.sound('record');
-        }
-        save.flags = 8;
-        unlockTrail(8);
-        persist();
-        dda.result(starsFor(time) / 3);
-        endRound('win', Math.round(time));
-        heldWin = { time: time, fresh: fresh };
-        resultAt = performance.now() + 700;
-        var winner = eng.state.players[ev.p];
-        if (winner) view.burst(winner.x, winner.y + 1.6, winner.z, 0xffe14a, 18);
-        KR.sound('world');
-      }
+    } else if (at(0.35)) {
+      if (r.isBest) { $('resNewBest').hidden = false; J.star(3); } else J.star(1);
     }
-    if (eng.state.over && duo && mode === 'play') {
-      endRound(eng.state.over.type === 'draw' ? 'draw' : 'end', 0);
-      mode = 'result';
-      dirty = true;
-      el('result-title').textContent = eng.state.over.type === 'draw' ? 'تعادل!' : 'انتهى السباق';
-      el('result-line').textContent = eng.state.over.winner === 1 ? 'الوردي' : 'الأزرق';
-      el('result-record').hidden = true;
-      el('stars').setAttribute('data-stars', '1');
-      screens();
+    busyT += dt;
+    if (resultT < 3 && busyT >= 1) { busyT = 0; Kit.stats.busy(); }
+  }
+  function next() {
+    if (!result) return;
+    J.select();
+    if (result.kind === 'endless') startEndless();
+    else if (cur.l < KR.LEVELS - 1) startLevel(cur.w, cur.l + 1);
+    else toMap(result.newWorld);
+  }
+  function again() { if (!result) return; J.select(); if (result.kind === 'endless') startEndless(); else startLevel(cur.w, cur.l); }
+  function resultToMap() { J.back(); toMap(result && result.kind === 'level' && cur.l === KR.LEVELS - 1 ? result.newWorld : -1); }
+
+  /* --------------------------------------------------------------- input */
+  // A mouse click hands the keyboard back to the game; keyboard activation keeps focus.
+  // The second click of a double click is dropped (it would land on the next screen).
+  function on(el, fn) {
+    el.addEventListener('click', e => { e.stopPropagation(); if (e.detail > 1) return; Kit.audio.unlock(); if (e.detail > 0) { el.blur(); focusGame(); } fn(e); });
+  }
+  on($('btnPlay'), play);
+  on($('btnCloset'), () => openCloset('title'));
+  on($('btnDuo'), openDuo);
+  on($('mapHome'), () => { J.back(); toTitle(); });
+  on($('mapCloset'), () => openCloset('map'));
+  on($('btnPause'), () => pause(true));
+  on($('btnResume'), resume);
+  on($('btnRestart'), restart);
+  on($('btnMenu'), quitToMenu);
+  on($('resNext'), () => { if (resultLock <= 0) next(); });
+  on($('resAgain'), () => { if (resultLock <= 0) again(); });
+  on($('resMap'), () => { if (resultLock <= 0) resultToMap(); });
+  on($('resGift'), () => openCloset('map'));
+  on($('closetBack'), closeCloset);
+  on($('duoGo'), () => { J.select(); startDuo(); });
+  on($('duoBack'), () => { J.back(); toTitle(); });
+  on($('duoAgain'), () => { if (resultLock <= 0) restart(); });
+  on($('duoMenu'), () => { if (resultLock <= 0) { J.back(); toTitle(); } });
+  canvas.addEventListener('pointerdown', () => { focusGame(); menuIdle = 0; });
+  window.addEventListener('pointermove', () => { menuIdle = 0; });
+  // Typing keys are taken in the order they were pressed: key repeats, Ctrl/Alt shortcuts
+  // and keys on focused buttons never type.
+  window.addEventListener('keydown', e => {
+    if (!Kit.isGameKeyEvent(e)) return;
+    menuIdle = 0;
+    if (screen !== 'play') return;
+    const code = KR.norm(e.code);
+    if (!KR.isGameKey(code)) return;
+    e.preventDefault();
+    if (!e.repeat && queue.length < 24) queue.push(code);
+  });
+  function handleKeys() {
+    const K = Kit.keys, go = K.anyPressed(['Enter', 'NumpadEnter', 'Space']);
+    if (screen === 'title') { if (go) play(); }
+    else if (screen === 'map') { if (go) startNext(); else if (K.pressed('Escape')) { J.back(); toTitle(); } }
+    else if (screen === 'closet') { if (go || K.pressed('Escape')) closeCloset(); }
+    else if (screen === 'duo') { if (go) { J.select(); startDuo(); } else if (K.pressed('Escape')) { J.back(); toTitle(); } }
+    else if (screen === 'play') { if (K.pressed('Escape')) pause(true); }
+    else if (screen === 'pause') { if (K.anyPressed(['Escape', 'Enter', 'NumpadEnter', 'Space'])) resume(); else if (K.pressed('KeyR')) restart(); }
+    else if (screen === 'result' && resultLock <= 0) {
+      if (go) next(); else if (K.pressed('KeyR')) again();
+      else if (K.pressed('Escape')) resultToMap();
+    } else if (screen === 'duoEnd' && resultLock <= 0) {
+      if (go || K.pressed('KeyR')) restart(); else if (K.pressed('Escape')) { J.back(); toTitle(); }
     }
   }
-  function edge(code) {
-    var now = Kit.keys.down(code);
-    var hit = now && !prevKey[code];
-    prevKey[code] = now;
-    return hit;
-  }
-  function wish(pl, ix, iz) {
-    var yaw = pl.face + pl.cam;
-    return {
-      x: ix * Math.cos(yaw) + iz * Math.sin(yaw),
-      z: -ix * Math.sin(yaw) + iz * Math.cos(yaw)
-    };
-  }
-  function padInput(pl, ix, iz, jump, respawn, cam) {
-    var w = wish(pl, ix, iz);
-    return { x: w.x, z: w.z, jump: jump, respawn: respawn, cam: cam };
-  }
-  function readInput() {
-    if (scripted && mode === 'play') return KR.suggest(eng.state, 0);
-    var players = eng.state.players;
-    var cam = (edge('KeyQ') ? -1 : 0) + (edge('KeyE') ? 1 : 0);
-    if (!duo) {
-      var ix = (Kit.keys.down('KeyD') || Kit.keys.down('ArrowRight') ? 1 : 0) - (Kit.keys.down('KeyA') || Kit.keys.down('ArrowLeft') ? 1 : 0);
-      var iz = (Kit.keys.down('KeyW') || Kit.keys.down('ArrowUp') ? 1 : 0) - (Kit.keys.down('KeyS') || Kit.keys.down('ArrowDown') ? 1 : 0);
-      return padInput(players[0], ix, iz, Kit.keys.down('Space'), edge('KeyR'), cam);
-    }
-    return [
-      padInput(players[0],
-        (Kit.keys.down('KeyD') ? 1 : 0) - (Kit.keys.down('KeyA') ? 1 : 0),
-        (Kit.keys.down('KeyW') ? 1 : 0) - (Kit.keys.down('KeyS') ? 1 : 0),
-        Kit.keys.down('Space'), edge('KeyG'), cam),
-      padInput(players[1],
-        (Kit.keys.down('ArrowRight') ? 1 : 0) - (Kit.keys.down('ArrowLeft') ? 1 : 0),
-        (Kit.keys.down('ArrowUp') ? 1 : 0) - (Kit.keys.down('ArrowDown') ? 1 : 0),
-        Kit.keys.down('Enter') || Kit.keys.down('NumpadEnter'),
-        edge('Period'), 0)
-    ];
-  }
-  function hud() {
-    var pl = eng.state.players[0];
-    var gap = pl.y - (eng.state.floodY || -2.2);
-    var danger = Math.max(0, Math.min(1, 1 - gap / 7));
-    el('choco-fill').style.height = (16 + danger * 84) + '%';
-    el('choco').classList.toggle('hot', danger > 0.72);
-  }
-  function update(dt) {
-    if (mode === 'paused' || mode === 'result' || mode === 'duo' || contextLost) return;
-    if (resultAt && mode === 'play') {
-      dirty = true;
-      if (performance.now() >= resultAt && heldWin) {
-        showResult(heldWin.time, 8, heldWin.fresh);
-        heldWin = null;
+  // The child's keys, in order, for this step.
+  function typeKeys() {
+    if (!queue.length) return;
+    const keys = queue.splice(0, queue.length);
+    if (ending) return;
+    if (mode === 'duo') {
+      if (countdown > 0) return;
+      for (const code of keys) {
+        const side = KR.sideOf(code);
+        if (side < 0) continue;
+        const L = lanes[side];
+        if (KR.press(L.w, code) === 'ignore') flash[code] = ['down', 0.2];
       }
       return;
     }
-    if (performance.now() < hitUntil) { dirty = true; return; }
-    var input = mode === 'title' ? {} : readInput();
-    onEvents(eng.step(dt, input));
-    if (mode === 'play') {
-      hud();
-      if (!duo) watchCues();
+    for (const code of keys) {
+      if (KR.press(solo.w, code) === 'ignore') flash[code] = ['down', 0.2];
     }
   }
-  function watchCues() {
-    var pl = eng.state.players[0];
-    var best = 1e9;
-    var ahead = null;
-    var pieces = eng.state.pieces;
-    var i, p, edge, d;
-    for (i = 0; i < pieces.length; i++) {
-      p = pieces[i];
-      if (!p.stand || p.gone) continue;
-      edge = p.z - p.hd;
-      if (edge < pl.z - 0.2) continue;
-      d = edge - pl.z;
-      if (d < best) { best = d; ahead = p; }
+
+  /* ----------------------------------------------------- the ghost hand */
+  // A wordless coach: a hand that comes up from the bottom and presses the key to type.
+  const ghost = { on: false, get: null, t: 0, dur: 0, x: 0, y: 0, sx: 0, sy: 0, press: 0 };
+  function showHand(get, dur) {
+    const p = get();
+    if (!p) return false;
+    ghost.on = true; ghost.get = get; ghost.t = 0; ghost.dur = dur || 2.6;
+    ghost.sx = p.x + 120; ghost.sy = Math.min(H + 60, p.y + 220); ghost.x = ghost.sx; ghost.y = ghost.sy;
+    ghostEl.hidden = false;
+    placeGhost();
+    return true;
+  }
+  function hideHand() { ghost.on = false; ghostEl.hidden = true; }
+  function ghostStep(dt) {
+    if (!ghost.on) return;
+    ghost.t += dt;
+    const p = ghost.get();
+    if (!p || ghost.t > ghost.dur) { hideHand(); return; }
+    const k = calm() ? 1 : Math.min(1, ghost.t / 0.6), e = 1 - Math.pow(1 - k, 3);
+    ghost.x = ghost.sx + (p.x - ghost.sx) * e; ghost.y = ghost.sy + (p.y - ghost.sy) * e;
+    ghost.press = k >= 1 && !calm() ? Math.max(0, Math.sin((ghost.t - 0.6) * 9)) : 0;
+    placeGhost();
+  }
+  function placeGhost() {
+    ghostEl.style.transform = 'translate(' + (ghost.x - 40).toFixed(1) + 'px,' + (ghost.y - 6 + ghost.press * 10).toFixed(1) + 'px) scale(' + (1 - ghost.press * 0.06).toFixed(3) + ')';
+    ghostEl.style.opacity = Math.min(1, ghost.t * 4).toFixed(2);
+  }
+  function targetKeyPoint() {
+    const t = solo && KR.target(solo.w);
+    return t ? A.keyCenter(t.code, KB.x, KB.y, KB.u, '') : null;
+  }
+  function coachDelay() {
+    if (firstCoach) return 0.9;
+    const tier = solo ? solo.w.plan.tier : 3;
+    return tier <= 2 ? 3 : 5;
+  }
+  // While the runner waits, the hand shows the key after a few seconds, then every 6 s.
+  function coachStep(dt) {
+    const w = solo.w;
+    if (ending || w.r.phase !== 'wait') { coach.t = 0; coach.next = coachDelay(); return; }
+    coach.t += dt;
+    if (ghost.on || coach.t < coach.next) return;
+    coach.next = coach.t + (showHand(targetKeyPoint, 2.8) ? 6 : 0.5);
+  }
+  function centerOf(el) {
+    const r = el.getBoundingClientRect();
+    return r.width ? view.toLogical(r.left + r.width / 2, r.top + r.height / 2) : null;
+  }
+  // The menus get the hand too: Play on the title, the next level on the map, and so on.
+  function menuDemo() {
+    let el = null;
+    if (screen === 'title') el = $('btnPlay');
+    else if (screen === 'map') el = document.querySelector('.lvl.next') || null;
+    else if (screen === 'result' && resultT > 1.5) el = $('resNext');
+    else if (screen === 'duo') el = $('duoGo');
+    else if (screen === 'duoEnd') el = $('duoAgain');
+    if (el) showHand(() => centerOf(el), 2.4);
+  }
+
+  /* --------------------------------------------------------------- loop */
+  function decay(dt) {
+    for (const k in flash) { flash[k][1] -= dt; if (flash[k][1] <= 0) delete flash[k]; }
+    gaugeBump += (0 - gaugeBump) * Math.min(1, dt * 6);
+    coinBump = Math.max(0, coinBump - dt * 3); heartBump = Math.max(0, heartBump - dt * 2);
+    for (let i = calls.length - 1; i >= 0; i--) { calls[i].t += dt; if (calls[i].t > 1.3) calls.splice(i, 1); }
+  }
+  function soloStep(dt) {
+    typeKeys();
+    if (ending) {
+      ending.t -= dt;
+      animLane(solo, dt);
+      busyT += dt;
+      if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
+      if (ending.t <= 0) showResult();
+      return;
     }
-    if (!ahead || best > 6) return;
-    if ((ahead.t === 'sink' || best > 1.2) && !cued[ahead.id]) {
-      cued[ahead.id] = 1;
-      Kit.track.cue();
+    laneStep(solo, dt, 'solo', false);
+    if (screen === 'play' && !ending) coachStep(dt);
+    if (intro) { intro.t += dt; if (intro.t > 2.2) intro = null; }
+  }
+  function duoStep(dt) {
+    if (countdown > 0) {
+      const was = Math.ceil(countdown - 0.6);
+      countdown -= dt;
+      const now = Math.ceil(countdown - 0.6);
+      queue.length = 0;
+      if (now !== was && now >= 0) J.countdown(now);
+      if (countdown <= 0) { countdown = 0; call('انطلق!', '#5be38f'); }
+      lanes.forEach(L => animLane(L, dt));
+      return;
+    }
+    typeKeys();
+    if (ending) {
+      ending.t -= dt;
+      lanes.forEach(L => animLane(L, dt));
+      if (ending.t <= 0) { ending = null; resultLock = 0.6; $('duoWinner').textContent = winner < 0 ? 'تعادل!' : 'فاز اللاعب ' + (winner + 1) + '!'; say($('duoWinner').textContent); setScreen('duoEnd'); }
+      return;
+    }
+    lanes.forEach(L => laneStep(L, dt, 'duo', false));
+    const done = lanes.map(L => L.w.done);
+    if (done[0] || done[1]) finishDuo(done[0] && done[1] ? -1 : done[0] ? 0 : 1);
+  }
+  function demoStep(dt) {
+    if (!demo) return;
+    const w = demo.w, t = KR.target(w);
+    demo.demoT += dt;
+    if (t && demo.demoT > 0.32) { KR.press(w, t.code); demo.demoT = 0; }
+    laneStep(demo, dt, '', true);
+    if (w.done) newDemo();
+  }
+  function update(dt) {
+    time += dt;
+    handleKeys();
+    if (screen === 'play') {
+      if (mode === 'duo') duoStep(dt); else if (solo) soloStep(dt);
+    } else {
+      queue.length = 0;
+      if (screen === 'title') demoStep(dt);
+      if (screen === 'duo' && lanes) lanes.forEach(L => animLane(L, dt));
+      if (screen === 'duoEnd' && lanes) lanes.forEach(L => animLane(L, dt));
+      if (screen === 'result') { resultStep(dt); if (solo) animLane(solo, dt); }
+      if (resultLock > 0) resultLock -= dt;
+      if (screen !== 'pause' && screen !== 'closet') {
+        menuIdle += dt;
+        if (!ghost.on && menuIdle >= menuNext) { menuNext = menuIdle + 6; menuDemo(); }
+      }
+    }
+    if (screen !== 'pause') { ghostStep(dt); shake.update(dt); decay(dt); }
+    Kit.keys.endFrame();
+  }
+
+  /* -------------------------------------------------------------- render */
+  function pulse() { return calm() ? 1 : 0.5 + 0.5 * Math.sin(time * 8); }
+  function geoOf(L) { return { h: L.geo.h, base: L.geo.base, ps: pixelScale() }; }
+  // One lane of the world: sky, hills, posts, water, keycap stones, coins, the runner, effects.
+  function drawLane(ctx, L, o) {
+    o = o || {};
+    const g = L.geo, w = L.w, still = calm(), cam = L.cam, base = g.base, si = L.scene, geo = geoOf(L), mode = save.label;
+    ctx.save();
+    ctx.translate(0, g.y);
+    if (g.clip) { ctx.beginPath(); ctx.rect(0, 0, W, g.h); ctx.clip(); }
+    A.backdrop(ctx, si, geo, cam, time, still);
+    // Speed lines behind everything in front of the sky.
+    const k = w.steps / Math.max(1, w.tune.maxSteps);
+    if (!still && k > 0.12 && !w.done) {
+      ctx.globalAlpha = Math.min(0.75, k);
+      ctx.fillStyle = '#ffffff';
+      for (const ln of L.lines) ctx.fillRect(ln.x, ln.y, ln.len * (0.6 + k), 4);
+      ctx.globalAlpha = 1;
+    }
+    let first = -1, last = -1;
+    for (let i = 0; i < w.stones.length; i++) { const s = w.stones[i]; if (s.x1 - cam < -90 || s.x0 - cam > W + 90) continue; if (first < 0) first = i; last = i; }
+    for (let i = first; i >= 0 && i <= last; i++) {
+      const s = w.stones[i], sx = s.x0 - cam, sy = base + s.y, wd = s.x1 - s.x0;
+      if (wd > 300) { for (let p = 60; p < wd - 40; p += 160) A.post(ctx, si, sx + p - 60, sy, 120, g.h); }
+      else A.post(ctx, si, sx, sy, wd, g.h);
+    }
+    A.water(ctx, si, geo, cam, time, still);
+    const pl = pulse();
+    for (let i = first; i >= 0 && i <= last; i++) {
+      const s = w.stones[i], sx = s.x0 - cam, sy = base + s.y, wd = s.x1 - s.x0;
+      if (!KR.isKeyStone(s)) {
+        A.stone(ctx, si, s, sx, sy, { state: 'idle', hidden: true });
+        if (s.kind === 'finish') A.flag(ctx, s.flag - cam, sy, time, still);
+        continue;
+      }
+      const f = L.fxs.get(s);
+      let state = 'idle', hidden = false, dim = false;
+      if (i <= w.on) dim = true;
+      else if (s.typed) state = 'typed';
+      else if (i === w.next && KR.visible(w, i) && !w.done) state = 'target';
+      else if (!KR.visible(w, i)) hidden = true;
+      if (f && f.miss > 0 && state === 'target') state = 'miss';
+      if (state === 'target' || state === 'miss') A.glow(ctx, sx + wd / 2, sy + 44, wd * 0.95 + 30, 100, '#ffe14d', (w.r.phase === 'wait' ? 0.75 : 0.45) + 0.35 * pl);
+      const dip = (f ? f.dip * 12 : 0) + (state === 'typed' ? 6 : 0);
+      const shk = f && f.shake > 0 && !still ? Math.sin(f.shake * 38) * f.shake * 11 : 0;
+      A.stone(ctx, si, s, sx, sy, { state: state, hidden: hidden, dim: dim, mode: mode, dip: dip, shake: shk });
+      if (s.kind === 'slide') A.bar(ctx, sx, sy, time);
+      if (state === 'target' && !o.noPointer) A.pointer(ctx, sx + wd / 2, sy - (s.kind === 'slide' ? 64 : 4), time, still);
+      if (s.coin && !s.coin.got) A.coin(ctx, s.coin.x - cam, base + s.coin.y + (still ? 0 : Math.sin(time * 3 + i) * 4), 15, time + i, still);
+    }
+    drawWords(ctx, L, first, last);
+    // The runner, its trail and its effects.
+    const r = w.r, rx = r.x - cam, ry = base + r.y;
+    if (!still && k > 0.3) {
+      for (let i = 2; i < L.trail.length; i += 2) {
+        const p = L.trail[i];
+        ctx.globalAlpha = 0.28 * (1 - i / L.trail.length) * k;
+        A.circle(ctx, p.x - cam, base + p.y - 38, 26); ctx.fillStyle = A.COLOR_OF(L.color); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    A.runner(ctx, rx, ry, runnerLook(L));
+    if (r.phase === 'wait' && !w.done && !o.noBubble) waitBubble(ctx, L, rx, ry);
+    ctx.save(); ctx.translate(-cam, base);
+    L.fx.draw(ctx);
+    for (const f of L.floats) {
+      ctx.globalAlpha = Math.max(0, 1 - Math.max(0, f.t - 0.6) / 0.5);
+      A.text(ctx, f.text, f.x, f.y, f.size, f.color, { stroke: 7 });
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    ctx.restore();
+  }
+  function runnerLook(L) {
+    const w = L.w, r = w.r, t = KR.target(w);
+    let pose = r.phase === 'run' ? 'run' : r.phase === 'wait' ? 'wait' : r.phase === 'act' ? (r.act.kind === 'slide' ? 'slide' : 'hop') : 'idle';
+    if (w.done) pose = w.over ? 'sad' : 'cheer';
+    if (w.r.vel < 4 && pose === 'run') pose = 'idle';
+    const look = t ? { x: Math.max(-1, Math.min(1, (t.x0 - r.x) / 160)), y: 0.6 } : { x: 1, y: 0 };
+    return { color: L.color, hat: L.hat, pose: pose, t: time, run: L.run, squash: L.sq, speed: Math.min(1, w.steps / Math.max(1, w.tune.maxSteps)),
+      still: calm(), long: r.waitT > 2.5, look: look, ground: r.phase !== 'act' };
+  }
+  // A thought bubble over a waiting runner with the key it needs.
+  function waitBubble(ctx, L, x, y) {
+    const t = KR.target(L.w);
+    if (!t || L.w.r.waitT < 0.35) return;
+    const bx = x + 44, by = y - 132, k = Math.min(1, (L.w.r.waitT - 0.35) * 5);
+    ctx.save(); ctx.translate(bx, by); ctx.scale(k, k);
+    A.circle(ctx, -30, 56, 7); ctx.fillStyle = '#fff'; ctx.fill(); A.ink(ctx, 3.5);
+    A.circle(ctx, -18, 40, 10); ctx.fillStyle = '#fff'; ctx.fill(); A.ink(ctx, 3.5);
+    A.rr(ctx, -10, -34, 92, 66, 22); ctx.fillStyle = '#fff'; ctx.fill(); A.ink(ctx, 4.5);
+    const key = KR.KEY[t.code], wide = t.code === 'Space';
+    A.rr(ctx, wide ? -4 : 10, -26, wide ? 80 : 52, 50, 10); ctx.fillStyle = '#ffe14d'; ctx.fill(); A.ink(ctx, 3.5);
+    A.legends(ctx, key, wide ? -2 : 13, -24, wide ? 76 : 46, 44, 1, save.label, A.INK, false);
+    ctx.restore();
+  }
+  // Words of the last level float above their stones with a dot per letter (right to left).
+  function drawWords(ctx, L, first, last) {
+    const w = L.w, words = w.plan.words;
+    if (!words || !words.length || first < 0) return;
+    const seen = new Set();
+    for (let i = first; i <= last; i++) {
+      const s = w.stones[i];
+      if (!s || !(s.word >= 0) || seen.has(s.word) || !KR.visible(w, i)) continue;
+      seen.add(s.word);
+      const word = words[s.word], a = w.stones[word.start + 1], b = w.stones[word.start + word.len];
+      if (!a || !b) continue;
+      const cx = (a.x0 + b.x1) / 2 - L.cam, y = L.geo.base + Math.min(a.y, b.y) - 150, n = word.len;
+      let typed = 0;
+      for (let j = 0; j < n; j++) if (w.stones[word.start + 1 + j].typed) typed++;
+      const wpx = Math.max(150, n * 46);
+      A.rr(ctx, cx - wpx / 2, y - 40, wpx, 86, 26); ctx.fillStyle = typed === n ? '#d8ffe6' : '#ffffff'; ctx.fill(); A.ink(ctx, 5);
+      A.text(ctx, word.text, cx, y - 2, 46, A.INK);
+      for (let j = 0; j < n; j++) {
+        A.circle(ctx, cx + (n - 1) * 11 - j * 22, y + 32, 6);
+        ctx.fillStyle = j < typed ? '#3ddc84' : '#d8dcef'; ctx.fill(); A.ink(ctx, 2.5);
+      }
     }
   }
-  function draw() {
-    if ((mode === 'paused' || mode === 'result') && !dirty) return;
-    if (contextLost) return;
+  function keyboardFor(L) {
+    const t = L && KR.target(L.w);
+    return { mode: save.label, zone: levelKeys(), target: t ? t.code : '', pulse: pulse(), down: code => Kit.keys.down(code), flash: flash, ps: pixelScale() };
+  }
+  function levelKeys() {
+    if (mode === 'endless' && solo) return solo.w.plan.pool;
+    if (mode === 'level') { const lv = KR.WORLDS[cur.w].levels[cur.l]; return lv.k; }
+    return [];
+  }
+  function drawHud(ctx) {
+    const w = solo.w, still = calm();
+    if (mode === 'level') {
+      // The world's number and four level dots, then the way to the flag.
+      A.circle(ctx, 128, 46, 26); ctx.fillStyle = A.SCENES[cur.w].glow; ctx.fill(); A.ink(ctx, 5);
+      A.text(ctx, String(cur.w + 1), 128, 48, 32, '#ffffff', { stroke: 6 });
+      // Level dots read right to left, like the level buttons on the map.
+      for (let l = 0; l < KR.LEVELS; l++) { A.circle(ctx, 172 + (KR.LEVELS - 1 - l) * 24, 46, 9); ctx.fillStyle = l === cur.l ? '#ffd23f' : l < cur.l ? '#ffffff' : 'rgba(255,255,255,0.35)'; ctx.fill(); A.ink(ctx, 3.5); }
+      A.progress(ctx, 290, 46, 560, KR.progress(w), A.COLOR_OF(save.color));
+    } else {
+      for (let i = 0; i < 3; i++) A.heart(ctx, 128 + i * 52, 46, 1.25 + (i === w.hearts && heartBump > 0 ? heartBump * 0.4 : 0), i < w.hearts);
+      A.rr(ctx, 520, 14, 240, 64, 32); ctx.fillStyle = 'rgba(28,34,80,0.75)'; ctx.fill(); A.ink(ctx, 4, '#ffffff');
+      A.text(ctx, String(w.hits), 640, 48, 44, '#ffffff', { stroke: 6 });
+      if (save.endless) { A.text(ctx, '★ ' + save.endless, 830, 48, 28, '#ffd23f', { stroke: 6 }); }
+    }
+    A.coin(ctx, 920, 46, 18, time, true);
+    A.text(ctx, String(w.coins), 948, 48, 32, '#ffffff', { stroke: 6, align: 'left' });
+    A.gauge(ctx, 1146, 96, 56, w.steps, w.tune.maxSteps, gaugeBump, time, still);
+    if (w.combo >= 3) {
+      A.rr(ctx, 1096, 164, 100, 42, 21); ctx.fillStyle = '#ff5d6c'; ctx.fill(); A.ink(ctx, 4);
+      A.text(ctx, '×' + w.combo, 1146, 186, 28, '#ffffff', { stroke: 5 });
+    }
+  }
+  function drawCalls(ctx, y) {
+    for (const c of calls) {
+      if (!c.text) continue;
+      const k = Math.min(1, c.t / 0.18), s = calm() ? 1 : 0.6 + 0.4 * k + (k >= 1 ? 0 : 0.2);
+      ctx.save(); ctx.globalAlpha = Math.max(0, 1 - Math.max(0, c.t - 0.9) / 0.4);
+      ctx.translate(640, (c.y == null ? y : c.y) - Math.min(30, c.t * 30)); ctx.scale(s, s);
+      A.text(ctx, c.text, 0, 0, c.y == null ? 76 : 60, c.color || '#ffd23f', { stroke: 12 });
+      ctx.restore();
+    }
+  }
+  // At a level's start: the new keys of the lesson, big, as they look on the keyboard.
+  function drawIntro(ctx) {
+    if (!intro || !intro.keys || !intro.keys.length) return;
+    const t = intro.t, a = Math.min(1, t * 4, (2.2 - t) * 3), n = intro.keys.length, size = 112, gap = 26;
+    const total = n * size + (n - 1) * gap + (intro.keys.indexOf('Space') >= 0 ? 120 : 0), x0 = 640 - total / 2, y = 128;
+    ctx.save(); ctx.globalAlpha = Math.max(0, a);
+    A.rr(ctx, x0 - 34, y - 26, total + 68, size + 60, 34); ctx.fillStyle = 'rgba(28,34,80,0.82)'; ctx.fill(); A.ink(ctx, 5, '#ffffff');
+    let x = x0;
+    intro.keys.forEach((code, i) => {
+      const wd = code === 'Space' ? size + 120 : size, bob = calm() ? 0 : Math.sin(t * 6 + i) * 5;
+      A.glow(ctx, x + wd / 2, y + size / 2 + bob, wd, size, '#ffe14d', 0.6);
+      A.rr(ctx, x, y + bob, wd, size, 22); ctx.fillStyle = '#d99a00'; ctx.fill(); A.ink(ctx, 5);
+      A.rr(ctx, x + 7, y + 5 + bob, wd - 14, size - 22, 18); ctx.fillStyle = '#ffe14d'; ctx.fill();
+      A.legends(ctx, KR.KEY[code], x + 8, y + 6 + bob, wd - 16, size - 24, 1, save.label, A.INK, false);
+      x += wd + gap;
+    });
+    ctx.restore();
+  }
+  function drawPlay(ctx) {
+    drawLane(ctx, solo);
+    A.keyboard(ctx, KB.x, KB.y, KB.u, keyboardFor(screen === 'play' || screen === 'pause' ? solo : null));
+    drawHud(ctx);
+    drawIntro(ctx);
+    drawCalls(ctx, 210);
+  }
+  function drawDuo(ctx) {
+    const still = calm();
+    lanes.forEach((L, side) => {
+      drawLane(ctx, L, { noBubble: false });
+      const y = L.geo.y, w = L.w;
+      // The player's badge, the way to the flag and the speed.
+      A.circle(ctx, 130, y + 40, 28); ctx.fillStyle = A.COLOR_OF(L.color); ctx.fill(); A.ink(ctx, 5);
+      A.text(ctx, String(side + 1), 130, y + 42, 34, '#ffffff', { stroke: 6 });
+      A.progress(ctx, 180, y + 40, 860, KR.progress(w), A.COLOR_OF(L.color));
+      A.gauge(ctx, 1170, y + 64, 40, w.steps, w.tune.maxSteps, 0, time, still);
+      // This player's half of the keyboard, always on, its next key glowing.
+      const t = KR.target(w), sz = A.kbSize(HALF_U, side ? 'R' : 'L');
+      A.keyboard(ctx, 26, y + L.geo.h - sz.h - 18, HALF_U, { mode: save.label, zone: side ? KR.RIGHT : KR.LEFT, target: t && countdown <= 0 && !ending ? t.code : '',
+        pulse: pulse(), down: code => Kit.keys.down(code), flash: flash, half: side ? 'R' : 'L', ps: pixelScale() });
+    });
+    ctx.fillStyle = '#1c2250'; ctx.fillRect(0, 356, W, 8);
+    if (countdown > 0) {
+      const n = Math.ceil(countdown - 0.6);
+      ctx.fillStyle = 'rgba(28,34,80,0.25)'; ctx.fillRect(0, 0, W, H);
+      A.text(ctx, n > 0 ? String(n) : '!', 640, 360, 190, '#ffd23f', { stroke: 18 });
+    }
+    drawCalls(ctx, 360);
+  }
+  function drawDuoIntro(ctx) {
+    drawDuo(ctx);
+    // Who types where: a big badge on each lane.
+    lanes.forEach((L, side) => {
+      const y = L.geo.y + 112, x = 930;
+      A.rr(ctx, x - 110, y - 40, 220, 80, 30); ctx.fillStyle = A.COLOR_OF(L.color); ctx.fill(); A.ink(ctx, 5);
+      A.text(ctx, 'اللاعب ' + (side + 1), x, y + 2, 40, '#ffffff', { stroke: 7 });
+    });
+  }
+  function drawPodium(ctx) {
+    const still = calm();
+    A.backdrop(ctx, lanes[0].scene, { h: 720, base: 470, ps: pixelScale() }, time * 30, time, still);
+    A.water(ctx, lanes[0].scene, { h: 720, base: 470, ps: pixelScale() }, time * 30, time, still);
+    const blocks = [{ x: 470, h: winner === 0 ? 150 : winner < 0 ? 110 : 70 }, { x: 810, h: winner === 1 ? 150 : winner < 0 ? 110 : 70 }];
+    blocks.forEach((b, side) => {
+      const top = 690 - b.h;
+      A.rr(ctx, b.x - 110, top, 220, b.h + 140, 22); ctx.fillStyle = side === winner ? '#ffd23f' : '#ffffff'; ctx.fill(); A.ink(ctx, 6);
+      A.text(ctx, String(side + 1), b.x, top + 50, 58, A.INK);
+      A.runner(ctx, b.x, top, { color: P_COLORS[side], hat: side === winner ? 5 : 0, pose: side === winner || winner < 0 ? 'cheer' : 'idle', t: time + side, still: still, scale: 1.6 });
+    });
+    for (const L of lanes) { ctx.save(); ctx.translate(-L.cam, L.geo.base); L.fx.draw(ctx); ctx.restore(); }
+  }
+  function drawTitleScene(ctx) { if (demo) drawLane(ctx, demo, { noPointer: false, noBubble: true }); }
+  // The map and the closet: the meadow drifting by, without the attract run.
+  function drawMenuBg(ctx) {
+    const geo = { h: 720, base: TITLE.base, ps: pixelScale() }, cam = calm() ? 0 : time * 24;
+    A.backdrop(ctx, 0, geo, cam, time, calm());
+    A.water(ctx, 0, geo, cam, time, calm());
+  }
+  // The result: the runner cheers big on the left, the card stands on the right.
+  function drawResultScene(ctx) {
+    drawLane(ctx, solo, { noBubble: true, noPointer: true });
+    ctx.fillStyle = 'rgba(28,34,80,0.42)'; ctx.fillRect(0, 0, W, H);
+    const lost = result && result.kind === 'endless';
+    A.glow(ctx, 250, 470, 230, 200, '#ffe14d', lost ? 0.3 : 0.7);
+    A.runner(ctx, 250, 610, { color: save.color, hat: save.hat, pose: lost ? 'idle' : 'cheer', t: time, still: calm(), scale: 3 });
+  }
+  function drawCloset(ctx) {
+    drawMenuBg(ctx);
+    ctx.fillStyle = 'rgba(28,34,80,0.25)'; ctx.fillRect(0, 0, W, H);
+    A.runner(ctx, 300, 560, { color: save.color, hat: save.hat, pose: 'idle', t: time, still: calm(), scale: 3.4 });
+  }
+  function render() {
+    if ((screen === 'pause') && !dirty) return;
     dirty = false;
-    shake *= 0.86;
-    fovKick *= 0.86;
-    if (Kit.motion.reduced()) { shake = 0; fovKick = 0; }
-    view.render(eng.state, {
-      engine: eng, quality: save.quality, reduced: Kit.motion.reduced(),
-      shake: shake, fovKick: fovKick
-    });
-  }
-  function buildRaces() {
-    var root = el('race-list');
-    root.innerHTML = '';
-    var button = document.createElement('button');
-    button.id = 'race-0';
-    button.type = 'button';
-    button.className = 'choice';
-    button.textContent = 'برج الحلوى';
-    button.addEventListener('click', startRace);
-    root.appendChild(button);
+    const ctx = view.ctx;
+    ctx.save();
+    ctx.translate(shake.x, shake.y);
+    if (screen === 'title') drawTitleScene(ctx);
+    else if (screen === 'map') drawMenuBg(ctx);
+    else if (screen === 'closet') drawCloset(ctx);
+    else if (screen === 'result' && solo) drawResultScene(ctx);
+    else if (screen === 'duo') drawDuoIntro(ctx);
+    else if (screen === 'duoEnd') drawPodium(ctx);
+    else if (mode === 'duo' && lanes) drawDuo(ctx);
+    else if (solo) drawPlay(ctx);
+    if (screen === 'map') { ctx.fillStyle = 'rgba(28,34,80,0.2)'; ctx.fillRect(0, 0, W, H); }
+    ctx.restore();
   }
 
-  el('play').addEventListener('click', startClimb);
-  el('duo').addEventListener('click', function () { mode = 'duo'; buildRaces(); screens(); });
-  el('duo-back').addEventListener('click', function () { mode = 'title'; screens(); });
-  el('resume').addEventListener('click', resume);
-  el('restart').addEventListener('click', restart);
-  el('pause-menu').addEventListener('click', menu);
-  el('pause-button').addEventListener('click', pause);
-  el('again').addEventListener('click', startClimb);
-  el('result-menu').addEventListener('click', menu);
-  el('quality').addEventListener('click', function () {
-    save.quality = save.quality === 'low' ? 'high' : 'low';
-    paintMenus();
-    persist();
-    if (fit) fit.resize();
-    dirty = true;
-  });
-  window.addEventListener('keydown', function (e) {
-    if (!Kit.isGameKeyEvent(e) || e.repeat) return;
-    if ((mode === 'title' || mode === 'result') && (e.code === 'Space' || e.code === 'Enter')) {
-      e.preventDefault();
-      startClimb();
-    } else if (e.code === 'KeyP' || e.code === 'Escape') {
-      e.preventDefault();
-      if (mode === 'play') pause();
-      else if (mode === 'paused') resume();
-    } else if (mode === 'paused' && e.code === 'KeyR') {
-      e.preventDefault();
-      restart();
-    }
-  });
-
-  var canvas = el('scene');
-  canvas.addEventListener('webglcontextlost', function (e) {
-    e.preventDefault();
-    contextLost = true;
-    if (mode === 'play') pause();
-    el('context-notice').hidden = false;
-  });
-  canvas.addEventListener('webglcontextrestored', function () {
-    contextLost = false;
-    el('context-notice').hidden = true;
-    dirty = true;
-    if (fit) fit.resize();
-  });
-
-  Kit.lifecycle({ pause: pause, reset: function () { prevKey = {}; } });
-  Kit.motion.onChange(function () { dirty = true; });
-  Kit.muteButton();
-  paintMenus();
-  try {
-    eng = KR.createEngine(runOpts({ mode: 'world', world: 0 }));
-    view = KR.createView(canvas);
-    fit = Kit.fit(canvas, 1280, 800, {
-      webgl: true,
-      maxDpr: 1.5,
-      onResize: function () {
-        canvas.style.right = 'auto';
-        var dpr = save.quality === 'low' ? 1 : Math.min(1.5, window.devicePixelRatio || 1);
-        view.setPixelRatio(dpr);
-        dirty = true;
-      }
-    });
-    document.fonts.load('700 40px Fredoka', 'ب').then(function () { view.rebuildText(); dirty = true; }).catch(function () {});
-    screens();
-    draw();
-    window.KeyRunnerGame = window.__game = {
-      get mode() { return mode; },
-      get state() {
-        var pl = eng.state.players[0];
-        return {
-          z: pl.z, y: pl.y, x: pl.x, speed: pl.speed, stage: pl.stage,
-          players: eng.state.players.length, world: eng.state.world
-        };
-      },
-      get save() { return save; },
-      start: startClimb, pause: pause, resume: resume, restart: restart, menu: menu,
-      set auto(on) { scripted = !!on; },
-      draws: function () { return view.drawCalls(); },
-      get engine() { return eng; },
-      reveal: function () {
-        var time = eng.state.time;
-        var fresh = !save.bestTime || time < save.bestTime;
-        if (fresh) save.bestTime = time;
-        save.flags = 8;
-        unlockTrail(8);
-        showResult(time, 8, fresh);
-        dirty = true;
-        draw();
-      }
-    };
-    loop = Kit.loop(update, draw, { hz: 60 });
-    Kit.ready();
-  } catch (error) {
-    if (loop) loop.stop();
-    el('error-screen').hidden = false;
-    el('title-screen').hidden = true;
-    Kit.fail(error);
+  canvas.addEventListener('contextrestored', () => { A.reset(); dirty = true; paintCards(true); if (screen === 'closet') refreshCloset(); });
+  if (document.fonts && document.fonts.load) {
+    Promise.all([document.fonts.load('700 40px Fredoka', 'ب'), document.fonts.load('700 40px Fredoka', 'F'), document.fonts.load('500 20px Fredoka', 'Tab ب')])
+      .then(() => { A.reset(); dirty = true; painted = ''; if (screen === 'map') paintCards(); if (screen === 'closet') refreshCloset(); }, () => { /* fallback fonts */ });
   }
+
+  /* --------------------------------------------------- test and debug hook */
+  const page = (x, y) => { const r = canvas.getBoundingClientRect(); return { x: r.left + x * view.scale, y: r.top + y * view.scale }; };
+  function laneState(L) {
+    const w = L.w, t = KR.target(w);
+    return { target: t ? t.code : '', next: w.next + w.offset, on: w.on + w.offset, x: Math.round(w.r.x * 10) / 10, y: Math.round(w.r.y * 10) / 10,
+      phase: w.r.phase, steps: w.steps, speed: Math.round(w.r.vel), hits: w.hits, misses: w.misses, stops: w.stops, combo: w.combo,
+      coins: w.coins, time: Math.round(w.t * 1000) / 1000, done: w.done, hearts: w.hearts, ahead: w.tune.ahead };
+  }
+  window.__game = {
+    get state() {
+      const s = solo && mode !== 'duo' ? laneState(solo) : { target: '', next: 0, on: 0, x: 0, y: 0, phase: '', steps: 0, speed: 0, hits: 0, misses: 0, stops: 0, combo: 0, coins: 0, time: 0, done: false, hearts: 0, ahead: 0 };
+      return Object.assign(s, {
+        screen: screen, mode: mode, paused: screen === 'pause', world: cur.w, level: cur.l, tier: solo && mode !== 'duo' ? solo.w.plan.tier : 0,
+        id: solo && mode !== 'duo' ? solo.w.plan.id : mode === 'duo' ? 'duo' : '', keys: solo && solo.w.plan.keys ? solo.w.plan.keys.slice() : [],
+        ending: !!ending, stars: result && result.kind === 'level' ? result.stars : 0, endlessKeys: result && result.kind === 'endless' ? result.keys : 0,
+        label: save.label, ghost: ghost.on, countdown: Math.round(countdown * 100) / 100, winner: winner,
+        lanes: lanes ? lanes.map(laneState) : []
+      });
+    },
+    get save() { return JSON.parse(JSON.stringify(save)); },
+    // Where a logical point or an on-screen key is on the page, for tests that use the real mouse.
+    point: page,
+    keyPoint: code => { const p = A.keyCenter(code, KB.x, KB.y, KB.u, ''); return p ? page(p.x, p.y) : null; }
+  };
+
+  buildMap();
+  buildCloset();
+  Kit.muteButton({ key: false });
+  Kit.lifecycle({ pause: () => pause(false), reset: () => { queue.length = 0; } });
+  toTitle();
+  Kit.loop(update, render);
+  Kit.ready();
 })();
