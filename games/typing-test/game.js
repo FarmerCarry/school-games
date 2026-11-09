@@ -153,7 +153,7 @@
     coaching = !save.coach;
     if (coaching) Kit.stats.tutorial('start');
     ending = null; result = null;
-    clearFx(); flowers = [];
+    clearFx(); clearGarden();
     coach.idle = 0; coach.next = coaching ? 2.2 : 4;
     shownWpm = 0; introT = 0;
     setScreen('play');
@@ -206,7 +206,7 @@
     $('resStars').hidden = !won;
     $('resRainy').hidden = won;
     $('resStars').querySelectorAll('svg').forEach(s => s.classList.remove('on'));
-    $('resAcc').textContent = Math.round(r.r.acc * 100) + '%';
+    $('resAcc').textContent = r.r.hits + r.r.errors ? Math.round(r.r.acc * 100) + '%' : '—';
     A.animalCard($('resAnimal'), TT.animal(r.r.wpm));
     $('resNext').setAttribute('aria-label', !won ? 'مرة أخرى' : cur.l < TT.LEVELS - 1 ? 'المرحلة التالية' : 'الخريطة');
     $('resNext').querySelector('use').setAttribute('href', won ? '#i-play' : '#i-again');
@@ -236,6 +236,7 @@
 
   /* ------------------------------------------------------- the speed test */
   const newSeed = () => (Math.random() * 2147483647) | 0;
+  const TEST_IDS = { 30: 'test30', 60: 'test60' };
   function openSetup() {
     test = null; world = null;
     if (!save.tlang) save.tlang = lang;
@@ -254,7 +255,7 @@
     test = TT.test(cfg);
     world = null;
     // The class challenge is one id for every code: a code is never put in statistics.
-    Kit.stats.round(cfg.code ? 'class' : 'test' + cfg.dur);
+    Kit.stats.round(cfg.challenge ? 'class' : TEST_IDS[cfg.dur]);
     testResult = null; ending = null;
     clearFx();
     shownWpm = 0; slide = 0; coach.idle = 0; coach.next = 5;
@@ -321,7 +322,7 @@
     const p = TT.parseCode(code);
     if (!p) { J.error(); wiggle($('codeDigits')); code = ''; paintClass(); return; }
     J.select();
-    startTest({ lang: p.lang, dur: p.dur, kind: p.kind, seed: p.seed, code: p.code });
+    startTest({ lang: p.lang, dur: p.dur, kind: p.kind, seed: p.seed, code: p.code, challenge: true });
   }
   // English sits in a direction isolate, so the line reads right to left: «English · 30 ثانية».
   function presetText(p) { return (p.lang === 'ar' ? 'عربي' : '\u2068English\u2069') + (p.kind === 'easy' ? ' سهل' : '') + ' · ' + p.dur + ' ثانية'; }
@@ -498,8 +499,7 @@
     if (!calm()) flashT = 0.16;
     // a flower grows in the garden for every cloud
     const side = flowers.length % 2, fxr = side ? 1040 + Math.random() * 216 : 24 + Math.random() * 212;
-    flowers.push({ x: fxr, y: 480 + Math.random() * 220, kind: (Math.random() * 6) | 0, t: 0 });
-    if (flowers.length > 40) flowers.shift();
+    if (flowers.length < 60) flowers.push({ x: fxr, y: 480 + Math.random() * 220, kind: (Math.random() * 6) | 0, t: 0 });
     if (coaching) { coaching = false; Kit.stats.tutorial('done'); if (!save.coach) { save.coach = true; persist(); } }
     coach.idle = 0; coach.next = 4;
   }
@@ -675,7 +675,8 @@
   }
   function drawKeyboard(g, kbLang) {
     const still = calm();
-    g.drawImage(A.keyboardBase(kbLang, pixelScale(), true), 0, 0, W, H);
+    const C = A.KB_CROP;
+    g.drawImage(A.keyboardBase(kbLang, pixelScale(), true), C.x, C.y, C.w, C.h);
     const k = currentKey();
     if (k) {
       A.keyLit(g, k.code, kbLang, 'glow', 1 + glowBoost, time, still);
@@ -707,9 +708,23 @@
     A.text(g, String(n), 4, 12, 24, '#ff7a1a', { outline: 4 });
     g.restore();
   }
+  // Grown flowers are baked into one cached strip of garden; only growing ones are drawn live.
+  let garden = null, gardenPs = 0;
   function drawGarden(g) {
-    for (const f of flowers) A.flower(g, f.x, f.y, f.kind, calm() ? 1 : Math.min(1, f.t / 0.5));
+    const ps = pixelScale();
+    if (!garden || gardenPs !== ps) {
+      garden = document.createElement('canvas'); garden.width = Math.ceil(W * ps); garden.height = Math.ceil(290 * ps); gardenPs = ps;
+      for (const f of flowers) f.baked = false;
+    }
+    const gc = garden.getContext('2d');
+    let baked = false;
+    for (const f of flowers) {
+      if (!f.baked && (f.t >= 0.5 || calm())) { gc.setTransform(ps, 0, 0, ps, 0, -430 * ps); A.flower(gc, f.x, f.y, f.kind, 1); f.baked = true; }
+      if (f.baked) baked = true; else A.flower(g, f.x, f.y, f.kind, f.t / 0.5);
+    }
+    if (baked) g.drawImage(garden, 0, 430, W, 290);
   }
+  function clearGarden() { flowers = []; if (garden) garden.getContext('2d').clearRect(0, 0, garden.width, garden.height); }
   function drawPlay(g) {
     const w = world, still = calm(), P = w.plan;
     g.drawImage(A.scene('play', pixelScale()), 0, 0, W, H);
@@ -737,13 +752,14 @@
       A.guide(g, target.letterX, target.letterY + 26, k.x + k.w / 2, k.y - 6, time, still);
     }
     drawHud(g);
+    // The level's number pops up for a moment as it starts.
     if (introT < 1.4 && !ending) {
-      const k = introT / 1.4, a = Math.min(1, k * 6, (1 - k) * 4);
-      g.globalAlpha = a;
-      A.pill(g, 470, 300, 340, 92, '#ffffff');
-      A.text(g, TT.WORLD[cur.w].sample[P.lang], 690, 344, 44, A.INK, { outline: 0, rtl: P.lang === 'ar' });
-      A.text(g, (cur.w + 1) + '-' + (cur.l + 1), 540, 346, 44, '#ff7eb6', { outline: 6 });
-      g.globalAlpha = 1;
+      const k = introT / 1.4, s = still ? 1 : Math.min(1.08, 0.4 + k * 5) - Math.max(0, k * 5 - 1) * 0.08;
+      g.save(); g.globalAlpha = Math.min(1, (1 - k) * 4); g.translate(640, 300); g.scale(Math.max(1, s), Math.max(1, s));
+      A.pill(g, -120, -44, 240, 88, '#ffd23f');
+      A.boltIcon(g, 76, 0, 1.5, '#ffffff');
+      A.text(g, (cur.w + 1) + '-' + (cur.l + 1), -22, 3, 54, '#ffffff', { outline: 9 });
+      g.restore();
     }
     if (flashT > 0) { g.fillStyle = 'rgba(255,255,240,' + (flashT * 1.4).toFixed(3) + ')'; g.fillRect(0, 0, W, H); }
   }
@@ -866,7 +882,7 @@
     g.restore();
   }
 
-  canvas.addEventListener('contextrestored', () => { A.reset(); dirty = true; });
+  canvas.addEventListener('contextrestored', () => { A.reset(); garden = null; dirty = true; });
   if (document.fonts && document.fonts.load) {
     Promise.all([document.fonts.load('700 40px Fredoka', 'بتث'), document.fonts.load('700 40px Fredoka', 'Aa1')])
       .then(() => { A.reset(); dirty = true; }, () => { /* fallback fonts */ });
@@ -893,7 +909,7 @@
         test: s ? { lang: s.lang, dur: s.dur, kind: s.kind, started: s.started, t: s.t, wi: s.wi, ci: s.ci, word: TT.testWord(s), words: s.words.slice(0, 12) } : null,
         code: testCfg && testCfg.code ? testCfg.code : '', klass: screen === 'klass' ? klassMode : '', typedCode: code,
         result: testResult ? { wpm: testResult.r.wpm, acc: testResult.r.acc, best: testResult.isBest } : null,
-        ghost: ghost.on, flowers: flowers.length
+        ghost: ghost.on, flowers: flowers.length, clock: Math.round(time * 100) / 100
       };
     },
     get save() { return JSON.parse(JSON.stringify(save)); },

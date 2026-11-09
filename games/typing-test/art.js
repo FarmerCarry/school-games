@@ -194,7 +194,7 @@
     var a0 = g.globalAlpha;
     if (c.locked) {
       var pulse = still ? 0.6 : 0.5 + 0.5 * Math.sin(time * 7);
-      g.globalAlpha = a0 * (0.55 + 0.45 * pulse); g.drawImage(cloudGlow(w), -(w + 60) / 2, -CH / 2, w + 60, CH); g.globalAlpha = a0;
+      g.globalAlpha = a0 * (0.75 + 0.25 * pulse); g.drawImage(cloudGlow(w), -(w + 60) / 2, -CH / 2, w + 60, CH); g.globalAlpha = a0;
     }
     g.drawImage(cloudBody(w, false), -(w + 60) / 2, -CH / 2, w + 60, CH);
     if (c.storm > 0.02) { g.globalAlpha = a0 * Math.min(1, c.storm); g.drawImage(cloudBody(w, true), -(w + 60) / 2, -CH / 2, w + 60, CH); g.globalAlpha = a0; }
@@ -316,8 +316,12 @@
   A.legends = legends;
   function bump(g, k, color) { rr(g, k.x + k.w / 2 - 7, k.y + k.h - 10, 14, 3.5, 2); g.fillStyle = color; g.fill(); }
   // The whole keyboard with its legends, once per language and pixel scale.
+  // Cropped to the keyboard's own box (A.KB_CROP), so a frame blits no empty pixels.
+  A.KB_CROP = { x: A.KB_BOX.x - 4, y: A.KB_BOX.y - 4, w: A.KB_BOX.w + 8, h: H - A.KB_BOX.y + 4 };
   A.keyboardBase = function (lang, ps, zones) {
-    return layer('kb-' + lang + (zones ? 'z' : ''), ps, W, H, function (g) {
+    var C = A.KB_CROP;
+    return layer('kb-' + lang + (zones ? 'z' : ''), ps, C.w, C.h, function (g) {
+      g.translate(-C.x, -C.y);
       var b = A.KB_BOX;
       rr(g, b.x, b.y + 6, b.w, b.h + 30, 26); fill(g, 'rgba(28,34,80,0.35)');
       rr(g, b.x, b.y, b.w, b.h + 30, 26); fill(g, '#2a2f4f'); ink(g, 6);
@@ -562,7 +566,8 @@
   };
 
   /* ------------------------------------------------------ result charts */
-  // A small bar chart of recent speeds (newest on the left, like reading); best in gold.
+  // A small bar chart of recent speeds, right to left like reading (the newest is the
+  // furthest left); the best in gold, the newest in blue.
   A.chart = function (canvas, list, best) {
     var g = canvas.getContext('2d'), w = canvas.width, h = canvas.height;
     g.clearRect(0, 0, w, h);
@@ -570,7 +575,7 @@
     g.lineWidth = 2; g.strokeStyle = 'rgba(28,34,80,0.25)'; g.beginPath(); g.moveTo(8, h - 6); g.lineTo(w - 8, h - 6); g.stroke();
     if (best > 0) { var by = h - 6 - (h - 16) * best / top; g.setLineDash([6, 6]); g.strokeStyle = '#ff9f1c'; g.beginPath(); g.moveTo(8, by); g.lineTo(w - 8, by); g.stroke(); g.setLineDash([]); }
     list.slice(-n).forEach(function (v, i, all) {
-      var bh = Math.max(4, (h - 16) * v / top), x = w - 10 - (all.length - i) * bw + 4;
+      var bh = Math.max(4, (h - 16) * v / top), x = w - 10 - (i + 1) * bw + 4;
       rr(g, x, h - 6 - bh, bw - 8, bh, 5); fill(g, v >= best && best > 0 ? '#ffd23f' : i === all.length - 1 ? '#4fd1ff' : '#b8c6f5'); ink(g, 2.5);
     });
   };
