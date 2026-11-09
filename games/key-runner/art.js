@@ -337,7 +337,7 @@
   }
   A.post = function (ctx, si, x, y, w, bottom) {
     var top = y + KR.CAP_H - 12, h = Math.min(240, bottom - top), sky = A.SCENES[si].deco === 'sky';
-    if (sky) { ctx.drawImage(sprite('cpost', 84, 52, function (g) { cloudShape(g, 42, 34, 0.62, '#ffffff', 4); }), x + w / 2 - 42, y + KR.CAP_H - 22, 84, 52); return; }
+    if (sky) { ctx.drawImage(sprite('cpost', 120, 70, function (g) { cloudShape(g, 60, 46, 0.95, '#ffffff', 4.5); circle(g, 38, 34, 6); fill(g, 'rgba(200,215,255,0.6)'); }), x + w / 2 - 60, y + KR.CAP_H - 34, 120, 70); return; }
     if (h > 0) ctx.drawImage(postSprite(si), 0, 0, 44 * SS, h * SS, x + w / 2 - 22, top, 44, h);
   };
   // The low candy bar the runner slides under (↓).

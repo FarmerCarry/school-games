@@ -911,7 +911,7 @@
   function drawIntro(ctx) {
     if (!intro || !intro.keys || !intro.keys.length) return;
     const t = intro.t, a = Math.min(1, t * 4, (2.2 - t) * 3), n = intro.keys.length, size = 112, gap = 26;
-    const total = n * size + (n - 1) * gap + (intro.keys.indexOf('Space') >= 0 ? 120 : 0), x0 = 640 - total / 2, y = 128;
+    const total = n * size + (n - 1) * gap + (intro.keys.indexOf('Space') >= 0 ? 120 : 0), x0 = 640 - total / 2, y = 100;
     ctx.save(); ctx.globalAlpha = Math.max(0, a);
     A.rr(ctx, x0 - 34, y - 26, total + 68, size + 60, 34); ctx.fillStyle = 'rgba(28,34,80,0.82)'; ctx.fill(); A.ink(ctx, 5, '#ffffff');
     let x = x0;
@@ -948,7 +948,7 @@
       A.gauge(ctx, 1170, y + 64, 40, w.steps, w.tune.maxSteps, 0, time, still);
       // This player's half of the keyboard, always on, its next key glowing.
       const t = KR.target(w), sz = A.kbSize(HALF_U, side ? 'R' : 'L');
-      A.keyboard(ctx, 26, y + L.geo.h - sz.h - 18, HALF_U, { mode: save.label, zone: side ? KR.RIGHT : KR.LEFT, target: t && countdown <= 0 && !ending ? t.code : '',
+      A.keyboard(ctx, 26, y + L.geo.h - sz.h - 18, HALF_U, { mode: save.label, zone: side ? KR.RIGHT : KR.LEFT, target: t && !ending ? t.code : '',
         pulse: pulse(), down: code => Kit.keys.down(code), flash: flash, half: side ? 'R' : 'L', ps: pixelScale() });
     });
     ctx.fillStyle = '#1c2250'; ctx.fillRect(0, 356, W, 8);
@@ -991,7 +991,7 @@
   // The result: the runner cheers big on the left, the card stands on the right.
   function drawResultScene(ctx) {
     drawLane(ctx, solo, { noBubble: true, noPointer: true });
-    ctx.fillStyle = 'rgba(28,34,80,0.42)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(28,34,80,0.3)'; ctx.fillRect(0, 0, W, H);
     const lost = result && result.kind === 'endless';
     A.glow(ctx, 250, 470, 230, 200, '#ffe14d', lost ? 0.3 : 0.7);
     A.runner(ctx, 250, 610, { color: save.color, hat: save.hat, pose: lost ? 'idle' : 'cheer', t: time, still: calm(), scale: 3 });
