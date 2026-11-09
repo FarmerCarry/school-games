@@ -11,7 +11,7 @@ window.SG_SCORES = {
   'cake-guards': ['نجوم المرحلة الرابحة (من 1 إلى 3)، وإلا فعدد الموجات التي صُدّت', 'the stars of a won level (1 to 3); otherwise the waves held back'],
   'candy-rope': ['النجوم التي جُمعت في المرحلة المنتهية (من 0 إلى 3)', 'the stars collected in a finished level (0 to 3)'],
   'chaos-island': ['العملات التي جُمعت', 'the coins collected'],
-  'dino-3d': ['نقاط الجولة', 'the points of the run'],
+  'dino-3d': ['البيض الذي جُمع في المرحلة، وفي الجري بلا نهاية المسافة بالأمتار', 'the eggs collected in a level; in the endless run, the distance in metres'],
   'drift-king': ['المسافة المقطوعة مع مكافأة الانزلاق', 'the distance driven plus the drift bonus'],
   'egg-rush': ['البيض الذي فُقس في الجولة، وفي مباراة اللاعبين عملات اللاعب الأعلى', 'the eggs hatched in the round; in a two-player match, the higher coin total'],
   'fire-and-ice': ['نجوم المرحلة المنتهية', 'the stars of a finished level'],

@@ -22,10 +22,10 @@ function stateOfGame() {
   if (!g && window.Dino3DGame) {
     // Dino's visible screens and score reflect start/pause/restart without
     // depending on private engine state or an additional production debug API.
-    const screens = ['ready-screen', 'pause-screen', 'over-screen'];
+    const screens = ['title', 'map', 'endless', 'wardrobe', 'pause-screen', 'result'];
     return JSON.stringify({ mode: document.body.dataset.mode,
       screens: Object.fromEntries(screens.map(id => [id, !document.getElementById(id).hidden])),
-      score: document.getElementById('score').textContent });
+      eggs: document.getElementById('hud-eggs').textContent });
   }
   let state = typeof g.state === 'function' ? g.state() : g.state;
   if (state && typeof state === 'object') return JSON.stringify({ screen: state.screen, phase: state.phase, ui: state.ui, paused: state.paused, modal: state.modal });
