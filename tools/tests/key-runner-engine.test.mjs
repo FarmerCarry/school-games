@@ -213,7 +213,8 @@ test('type-ahead: correct keys queue up as far as the keycaps are shown, in orde
   while (waiting.r.phase !== 'wait') { KR.step(waiting, DT); waiting.ev.length = 0; }
   KR.press(waiting, waiting.stones[1].code);
   assert.equal(waiting.r.phase, 'act');
-  assert.deepEqual(plain(waiting.ev.map(e => e.t)), ['hit', 'act', 'cue'], 'the hop shows the next key');
+  assert.deepEqual(plain(waiting.ev.map(e => e.t)), ['hit', 'act']);
+  assert.equal(KR.target(waiting), waiting.stones[2], 'the hop shows the next key');
 });
 
 test('wrong keys: a soft miss that never moves on; a speed step only at the top tiers; stops reset the speed', () => {
@@ -282,18 +283,18 @@ test('coins along the path, events carry positions, progress goes from 0 to 1', 
   }
   assert.equal(w.coins, w.coinsMade, 'every coin over a gap is collected on the hop');
   assert.equal(KR.progress(w), 1);
-  for (const t of ['cue', 'hit', 'act', 'land', 'coin', 'finish']) assert.ok(seen.has(t), t);
+  for (const t of ['hit', 'act', 'land', 'coin', 'finish']) assert.ok(seen.has(t), t);
 });
 
-test('a new target is cued once, when it becomes the key to press', () => {
+test('every key becomes the key to press once, in order', () => {
   const plan = KR.plan(1, 1, 3, 5), w = KR.create(plan, 5);
-  const cues = [];
-  const take = () => { for (const e of w.ev) if (e.t === 'cue') cues.push(e.i); w.ev.length = 0; };
+  const shown = [];
+  const take = () => { if (KR.target(w) && shown[shown.length - 1] !== w.next) shown.push(w.next); w.ev.length = 0; };
   take();
-  assert.deepEqual(cues, [1]);
+  assert.deepEqual(shown, [1]);
   for (let i = 0; i < 60 * 60 && !w.done; i++) { const t = KR.target(w); if (t && i % 40 === 0) KR.press(w, t.code); KR.step(w, DT); take(); }
   assert.ok(w.done);
-  assert.deepEqual(cues, plain(plan.keys.map((_, i) => i + 1)), 'one cue per key, in order');
+  assert.deepEqual(shown, plain(plan.keys.map((_, i) => i + 1)), 'one key after another, in order');
 });
 
 test('endless: keys from the opened worlds, a heart lost per long stop, three end the run, arrays stay small', () => {

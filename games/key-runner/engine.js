@@ -4,7 +4,7 @@
  * Pure: no DOM, no Kit, no timers and no Math.random (a course takes a seed), so the Node
  * test loads this file with { window: {} } and plays every level with a scripted typist.
  * game.js reads the DDA tier, builds a plan, feeds the child's real key presses in order
- * and turns the events into pictures, sound and statistics. */
+ * and turns the events into pictures and sound. */
 (function () {
   'use strict';
   var KR = window.KR = window.KR || {};
@@ -275,7 +275,7 @@
   KR.create = function (plan, seed) {
     var w = {
       plan: plan, kind: plan.kind, tune: plan.tune, rand: KR.rng(seed == null ? 1 : seed), stones: [], end: Infinity,
-      on: 0, next: 1, cued: 0, offset: 0, made: 0, last: [],
+      on: 0, next: 1, offset: 0, made: 0, last: [],
       r: { x: KR.START_X, y: 0, vel: 0, phase: 'run', act: null, waitT: 0, graceT: 0, lost: false },
       steps: 0, hits: 0, misses: 0, stops: 0, combo: 0, bestCombo: 0, coins: 0, coinsMade: 0, t: 0, hearts: 3, boost: 1,
       done: false, over: false, ev: []
@@ -287,7 +287,6 @@
       w.end = w.stones.length;
       w.stones.push({ x0: last.x1, x1: last.x1 + 560, y: last.y, code: '', kind: 'finish', typed: true, flag: last.x1 + 250 });
     } else fill(w);
-    cue(w);
     return w;
   };
   function wordAt(plan, i) {
@@ -328,7 +327,7 @@
     if (w.kind !== 'endless' || w.on < 12) return;
     var k = w.on - 4;
     w.stones.splice(0, k);
-    w.on -= k; w.next -= k; w.cued -= k; w.offset += k;
+    w.on -= k; w.next -= k; w.offset += k;
   }
   KR.isKeyStone = function (s) { return !!s && s.kind !== 'start' && s.kind !== 'finish'; };
   // The x where the runner must act for the next stone, or null when the way is clear.
@@ -344,10 +343,6 @@
     return w.stones[w.next];
   };
   KR.visible = function (w, i) { return i <= w.on + w.tune.ahead; };
-  function cue(w) {
-    var s = KR.target(w);
-    if (s && w.cued !== w.next) { w.cued = w.next; w.ev.push({ t: 'cue', i: w.next, code: s.code, x: s.x0, y: s.y }); }
-  }
 
   /* --------------------------------------------------------------- input */
   // One key press, in the order the child typed it. Correct keys queue up ahead of the
@@ -366,7 +361,6 @@
       w.steps = Math.min(w.tune.maxSteps, w.steps + 1);
       w.ev.push({ t: 'hit', i: w.next - 1, code: code, x: s.x0, x1: s.x1, y: s.y, combo: w.combo, steps: w.steps, waiting: w.r.phase === 'wait', word: s.word });
       if (w.r.phase === 'wait' && w.next - 1 === w.on + 1) act(w);
-      cue(w);
       return 'hit';
     }
     w.misses++; w.combo = 0;
@@ -432,7 +426,6 @@
         trim(w);
       }
     }
-    cue(w);
     return w;
   };
   // How far through the course the runner is, 0..1 (levels and races).
