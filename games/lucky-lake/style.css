@@ -160,6 +160,7 @@ html, body { background: #0d4f7a; }
 .mid .fishic { width: 90px; height: 90px; fill: #ffd23f; }
 
 /* ------------------------------------------------------------- HUD, coach */
+#hud { position: absolute; left: 0; top: 0; z-index: 3; }
 #btnPause { position: absolute; top: 14px; left: 14px; }
 #btnBasket { position: absolute; top: 14px; left: 94px; background: #fff3d6; }
 #btnBasket svg { width: 64%; height: 64%; }

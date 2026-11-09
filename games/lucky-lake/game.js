@@ -764,7 +764,11 @@
     }
     // The line, the bobber and the hook.
     const st = p.state;
-    if (st === 'reel') A.line(ctx, tx, ty, p.hook.x, p.hook.y, 0, true);
+    if (st === 'reel') {
+      // On the ice the line runs down through its hole.
+      if (w.P.holes) { A.line(ctx, tx, ty, p.hook.x, top, 0, true); A.line(ctx, p.hook.x, top, p.hook.x, p.hook.y, 0, true); }
+      else A.line(ctx, tx, ty, p.hook.x, p.hook.y, 0, true);
+    }
     else if (st === 'ready' || st === 'land') {
       A.line(ctx, tx, ty, tx, ty + 34, 0, true); A.bobber(ctx, tx, ty + 40, 0.8); A.hookArt(ctx, tx, ty + 60, time, still);
     } else if (st === 'cast' || st === 'back') {
