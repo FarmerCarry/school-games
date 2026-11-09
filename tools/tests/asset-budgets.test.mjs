@@ -175,12 +175,11 @@ test('directory symlinks cannot make precache measurements escape the build root
 test('multiple budget failures are reported together with usable numeric measurements', t => {
   const f = fixture(t);
   for (const file of measuredFiles) f.write(file, Buffer.alloc(110));
-  f.config.precacheBytes = 500;
+  f.config.precacheBytes = 400;
   f.saveConfig();
   const report = rejected(f);
-  // portal, game, three.js and font; four 110-byte files still fit the 500-byte cache limit.
-  assert.equal(report.metrics.filter(metric => !metric.passed).length, 4);
-  assert.ok(report.failures.length >= 4);
+  assert.equal(report.metrics.filter(metric => !metric.passed).length, 5);
+  assert.ok(report.failures.length >= 5);
   for (const metric of report.metrics) {
     assert.ok(Number.isFinite(metric.bytes));
     assert.ok(Number.isFinite(metric.limitBytes));
