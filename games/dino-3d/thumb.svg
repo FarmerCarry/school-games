@@ -1,47 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
- <defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#e8b762"/><stop offset="1" stop-color="#f8d892"/></linearGradient><linearGradient id="river" x2="1" y2="1"><stop stop-color="#55caca"/><stop offset="1" stop-color="#249ba9"/></linearGradient></defs>
- <path fill="url(#sky)" d="M0 0h400v400H0z"/>
- <path fill="#dba754" d="M0 141h42v-18h57v21h46v-37h51v17h38v29h58v-34h62v26h46v255H0z"/>
- <path fill="#efc578" d="m0 264 284-132 116 65v203H0z"/>
- <path fill="#d7a14d" d="m0 332 302-153 98 52v169H0z"/>
- <path fill="#f5d292" d="m16 400 280-199 16 9L47 400z"/>
- <path fill="url(#river)" d="M0 273 247 149l18 10L0 369z"/>
- <path fill="#f7dda7" d="m0 266 245-122 8 5L0 285zm0 109 265-216 11 7L13 400H0z"/>
- <path fill="#9fe1d6" d="m0 309 40-19 5 3-39 20zm79-25 28-18 5 3-28 19zm32-51 21-11 5 3-21 12z"/>
- <path fill="#d5a15a" d="m264 247 16-9 10 6-16 10zm59-3 14-8 12 7-14 8zm20 58 16-9 9 6-16 9z"/>
- <ellipse cx="194" cy="339" rx="85" ry="20" fill="#8c703e" opacity=".2"/>
- <!-- An original isometric voxel T-rex, looking along the desert track. -->
- <path fill="#337440" d="m113 272-24 11-35-27-18-1-10-17 26-5 28 18 27 1 30 15z"/>
- <path fill="#64aa4b" d="m36 238 17-6 28 18 27 1 29 16-24 12-24-15-18-1-20-15z"/>
- <path fill="#4b9042" d="m119 230 68-24 49 35-15 72-70 11-45-38z"/>
- <path fill="#6fb254" d="m119 230 68-24 49 35-62 25-68-25z"/>
- <path fill="#397a3c" d="m174 266 62-25-15 72-49 19z"/>
- <path fill="#4c9446" d="m172 217-1-48 38-23 48 28-2 64-49 25z"/>
- <path fill="#86bc60" d="m172 217 34 22v24l-34-20z"/>
- <path fill="#63a94b" d="m159 158 5-59 59-24 57 30-1 59-61 26z"/>
- <path fill="#80bd5a" d="m164 99 59-24 57 30-62 28z"/>
- <path fill="#468c40" d="m218 133 62-28-1 59-61 26z"/>
- <path fill="#61a64a" d="m232 132 49-20 43 21-1 45-59 26-32-24z"/>
- <path fill="#7bbb57" d="m232 132 49-20 43 21-62 28z"/>
- <path fill="#3b803d" d="m262 161 62-28-1 45-59 26z"/>
- <path fill="#284f32" d="m265 185 58-25v7l-58 26z"/>
- <path fill="#f5efc8" d="m239 137 18-8v24l-18 8z"/>
- <path fill="#1d382b" d="m248 137 9-4v15l-9 4z"/>
- <path fill="#2c5b34" d="m306 143 8-3v7l-8 3z"/>
- <path fill="#e1dfae" d="m272 186 7-3v9l-7 3z"/>
- <path fill="#35793c" d="m203 230 23-9 10 14-1 20 17-7 6 10-30 13-19-15z"/>
- <path fill="#75ae52" d="m203 230 23-9 10 14-23 10z"/>
- <path fill="#d2d69e" d="m251 249 6-3 6 9-6 3z"/>
- <path fill="#377a3e" d="m169 295 26 13-5 29 24 11-3 16-50 1-11-15 10-29z"/>
- <path fill="#6cae4d" d="m150 285 29 3 16 20-24 10-21-14z"/>
- <path fill="#4e9544" d="m133 285 23 14-11 28-18 12-35-4-1-15 28-2z"/>
- <path fill="#cbd194" d="m163 352 10 1v10h-10zm18 1 10-1v11h-10zm-88-29 8 1v8l-8-1z"/>
- <!-- Flowering cactus marks the next jump. -->
- <path fill="#337e49" d="m335 276 15-7v-78l-15 7z"/>
- <path fill="#65a965" d="m325 191 10 7v78l-10-7z"/>
- <path fill="#78b674" d="m325 191 15-7 10 7-15 7z"/>
- <path fill="#448e54" d="m333 242-25-12v-32l10 6v20l15 6zm15-10 21-10v-35l-11 5v25l-10 5z"/>
- <path fill="#e990ac" d="m324 188 14-7 14 7-15 7z"/>
- <path fill="#f5b6bf" d="m330 181 9-4 8 5-9 5z"/>
- <path fill="#fff4d2" d="m57 69 9-15 10 15-10 7zm277-22 5-10 6 10-6 6z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fb0ff"/><stop offset=".62" stop-color="#9fdcff"/><stop offset="1" stop-color="#ffe3a6"/></linearGradient></defs>
+<rect width="400" height="400" fill="url(#s)"/>
+<circle cx="52" cy="170" r="50" fill="#fff6b0" opacity=".6"/>
+<g fill="#fff"><rect x="300" y="140" width="76" height="20" rx="10"/><rect x="318" y="128" width="40" height="20" rx="10"/><rect x="196" y="186" width="54" height="16" rx="8"/></g>
+<g stroke="#2a2140" stroke-width="4" stroke-linejoin="round">
+<circle cx="52" cy="170" r="26" fill="#ffe14d" stroke-width="5"/>
+<path d="M-6 300V214H34V196H92V226H128V300Z" fill="#e0763c"/><path d="M34 196H92V208H34Z" fill="#f7b866"/>
+<path d="M262 300V230H300V206H372V238H406V300Z" fill="#d9692f"/><path d="M300 206H372V218H300Z" fill="#f09a4c"/>
+<path d="M118 300V252H170V240H226V262H268V300Z" fill="#ee9248"/>
+<path d="M58 300V236q0-8 8-8t8 8v64ZM74 262h10v-14q0-6 5-6t5 6v20q0 4-4 4H74Z" fill="#3a9a50"/>
+<path d="M344 300V246q0-7 7-7t7 7v54ZM344 270h-9v-12q0-5-4-5t-4 5v17q0 3 3 3h14Z" fill="#3a9a50"/>
+</g>
+<path d="M-10 292 410 276V400H-10Z" fill="#ffd27a"/>
+<path d="M30 291h52l2 41-54 1ZM134 287h52l2 41-54 1ZM238 283h52l2 41-54 1ZM342 279h52l2 41-54 1Z" fill="#f7c66a"/>
+<path d="M-10 336 410 320V400H-10Z" fill="#c8763c" stroke="#2a2140" stroke-width="5"/>
+<path d="M-10 336 410 320v10L-10 346Z" fill="#e0a352"/>
+<path d="M-10 292 410 276" stroke="#2a2140" stroke-width="4"/>
+<ellipse cx="248" cy="318" rx="36" ry="7" fill="#2a2140" opacity=".22"/>
+<g stroke="#2a2140" stroke-width="5" stroke-linejoin="round">
+<path d="M236 318V266q0-10 10-10t10 10v52ZM256 290h12v-14q0-6 5-6t5 6v18q0 4-4 4H256ZM236 300h-10v-14q0-6-5-6t-5 6v18q0 4 4 4h16Z" fill="#45c45e"/>
+<circle cx="246" cy="254" r="8" fill="#ff6fae"/>
+<ellipse cx="292" cy="186" rx="17" ry="21" fill="#fff8ea" transform="rotate(14 292 186)" stroke-width="4"/>
+<ellipse cx="340" cy="226" rx="15" ry="19" fill="#fff8ea" transform="rotate(20 340 226)" stroke-width="4"/>
+</g>
+<circle cx="286" cy="182" r="5" fill="#45c4ff"/><circle cx="298" cy="194" r="5" fill="#ff6fae"/><circle cx="295" cy="175" r="3.5" fill="#6fe04f"/><circle cx="335" cy="222" r="4.5" fill="#ff6fae"/><circle cx="345" cy="232" r="4" fill="#45c4ff"/>
+<path d="M60 304q26-18 50-22" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-dasharray="2 14"/>
+<g fill="#fff6dc" stroke="#2a2140" stroke-width="3.5"><circle cx="48" cy="306" r="11"/><circle cx="30" cy="312" r="8"/><circle cx="66" cy="314" r="7"/></g>
+<g transform="translate(150 252) scale(.8) rotate(-14)" stroke="#2a2140" stroke-width="5" stroke-linejoin="round" fill="#49d16a">
+<path d="M-52-4-112 4q-20 2-26-18l20 2 58-18Z"/>
+<path d="M-120-12-114-26-104-15M-96-18-88-32-80-21M-50-34-42-50-32-34M-26-38-16-56-6-38M10-122 20-140 30-122M36-124 46-142 56-124" fill="#ff9a3c"/>
+<rect x="-20" y="36" width="26" height="34" rx="7" fill="#3fb85a" transform="rotate(28 -7 36)"/>
+<rect x="14" y="34" width="26" height="32" rx="7" fill="#3fb85a" transform="rotate(14 27 34)"/>
+<rect x="-58" y="-34" width="104" height="84" rx="20"/>
+<rect x="2" y="-14" width="40" height="58" rx="12" fill="#fff1c8"/>
+<rect x="36" y="2" width="22" height="14" rx="6"/>
+<rect x="-14" y="-122" width="128" height="104" rx="24"/>
+<rect x="58" y="-98" width="24" height="32" rx="8" fill="#2a2140"/>
+<path d="M70-46q22 16 42-2" fill="#7a1f3d"/>
+<g stroke="none"><circle cx="74" cy="-89" r="6" fill="#fff"/><circle cx="65" cy="-76" r="3" fill="#fff"/><ellipse cx="50" cy="-52" rx="12" ry="7" fill="#ff8db5"/><circle cx="104" cy="-104" r="3.5" fill="#2a2140"/></g>
+</g>
+<g font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" text-anchor="middle" direction="rtl">
+<text x="200" y="68" font-size="62" fill="#2a2140" stroke="#2a2140" stroke-width="14" stroke-linejoin="round">الديناصور</text>
+<text x="200" y="64" font-size="62" fill="#ffd23f">الديناصور</text>
+<rect x="112" y="80" width="176" height="40" rx="20" fill="#ff5fa4" stroke="#2a2140" stroke-width="5"/>
+<text x="200" y="110" font-size="27" fill="#fff">ثلاثي الأبعاد</text>
+</g>
 </svg>
