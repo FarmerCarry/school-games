@@ -1,7 +1,7 @@
-/* Dino 3D (الديناصور ثلاثي الأبعاد): screens, keyboard and mouse, the coach, saves,
- * sound and play statistics. engine.js runs the journey; art.js draws it in 3D.
- * This is the UI layer: it reads Kit.dda at every round start and reports Kit.stats
- * rounds and Kit.track cues, hits and misses. */
+/* Dino 3D (الديناصور ثلاثي الأبعاد): screens, keyboard and mouse, the coach, saves
+ * and sound. engine.js runs the journey; art.js draws it in 3D.
+ * This is the UI layer: it reads Kit.dda at every round start and reports each
+ * result back to it. */
 (function () {
   'use strict';
   var D = window.Dino3D, J = Kit.juice;
@@ -20,13 +20,13 @@
     saveStatus.saved();
     return true;
   }
-  // One difficulty for the journey and one for the endless run (Kit keeps them per child).
+  // One difficulty for the journey and one for the endless run (Kit keeps them on this PC).
   var ddaMain = Kit.dda('dino-3d', { id: 'main' }), ddaRun = Kit.dda('dino-3d', { id: 'endless' });
 
   /* -------------------------------------------------------------- state */
   var mode = 'title', world = null, cur = { level: 0, endless: false, code: '' }, view = null, time = 0, viewTime = 0;
   var inputJumps = 0, pointerJump = false, pointerTap = false, ending = null, result = null, resultT = 0, resultLock = 0, wardFrom = 'title';
-  var menuIdle = 0, menuNext = 4, busyT = 0, dirty = true, contextLost = false, snap = true, spin = 0, lastFrame = 0;
+  var menuIdle = 0, menuNext = 4, dirty = true, contextLost = false, snap = true, spin = 0, lastFrame = 0;
   var coach = { id: 0, t: 0, seen: {}, bumped: {}, intro: 0 }, streak = 0, bannerT = 0, ghostT = 0;
   var hud = { hp: -1, eggs: -1, trip: -1, roar: -1, m: -1 };
   var show = { x: 0, y: 0, ground: true, running: false, hop: true, idle: true, speed: 0 };
@@ -210,27 +210,24 @@
     snap = true;
   }
   function startLevel(i) {
-    // The difficulty is read at every start, before the round is reported.
+    // The difficulty is read at every start.
     var tier = ddaMain.tier, L = D.LEVEL[i];
     world = D.create({ level: i, tier: tier });
     cur = { level: i, endless: false, code: '' };
-    Kit.stats.round(L.id);
     resetRound();
     $('trip').hidden = false; $('meters').hidden = true; $('code-tag').hidden = true;
     coach.intro = !save.coach && i === 0 ? 7 : 0;
-    if (coach.intro) { Kit.stats.tutorial('start'); showIntro(); } else $('intro').hidden = true;
+    if (coach.intro) showIntro(); else $('intro').hidden = true;
     showBanner(L, !!coach.intro);
     setMode('playing');
     J.whoosh(0.5);
   }
   // A course code is the same course for every child on this version: tier 3 for all,
-  // and it never moves anyone's difficulty.
+  // and it never moves the difficulty.
   function startEndless(code) {
     var shared = D.validCode(code), tier = shared ? 3 : ddaRun.tier;
-    if (shared) Kit.track.tier(3);
     world = D.create({ endless: true, tier: tier, seed: shared ? D.codeSeed(code) : (Math.random() * 4294967296) >>> 0 });
     cur = { level: -1, endless: true, code: shared ? code : '' };
-    Kit.stats.round('endless');
     resetRound();
     $('trip').hidden = true; $('meters').hidden = false; $('hud-far').textContent = String(save.far);
     $('code-tag').hidden = !shared; $('code-now').textContent = shared ? code : '';
@@ -252,7 +249,6 @@
     setMode('playing');
   }
   function quit() {
-    Kit.stats.end('quit');
     J.back();
     if (cur.endless) toTitle(); else toMap();
   }
@@ -266,16 +262,14 @@
       if (best) save.far = r.distance;
       persist();
       if (!cur.code) ddaRun.result(D.outcome(r));
-      Kit.stats.end('end', r.distance);
       result = { endless: true, won: false, r: r, best: best && far > 0, distance: r.distance, items: D.unlocks(before, save.bank) };
     } else {
       var i = cur.level, st = D.stars(r), prev = save.stars[i], prevBest = save.best[i];
       if (st > prev) save.stars[i] = st;
       if (r.finished && r.eggs > prevBest) save.best[i] = r.eggs;
-      if (r.finished && i === 0 && !save.coach) { save.coach = true; Kit.stats.tutorial('done'); }
+      if (r.finished && i === 0 && !save.coach) save.coach = true;
       persist();
       ddaMain.result(D.outcome(r));
-      Kit.stats.end(r.finished ? 'win' : 'lose', r.eggs);
       result = { endless: false, won: r.finished, r: r, stars: st, best: r.finished && prevBest > 0 && r.eggs > prevBest, items: D.unlocks(before, save.bank),
         next: i < 14 && D.isOpen(save, i + 1) };
     }
@@ -296,8 +290,6 @@
       else { e.hopT -= dt; if (e.hopT <= 0) { e.hopT = 0.75; view.kick('hop'); } }
       if (!calm() && Math.floor(e.t * 2.5) !== Math.floor((e.t - dt) * 2.5)) view.burst(world.len + 3.2 + (Math.random() - 0.5) * 3, 3.2, (Math.random() - 0.5) * 2, { count: 14, colors: [0xff6fae, 0xffd23f, 0x4fb8ff, 0x7be05a], speed: 3, life: 1.4, size: 0.12, gravity: 3 });
     }
-    busyT += dt;
-    if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
     if (e.t >= e.dur) showResult();
   }
   function showResult() {
@@ -334,8 +326,6 @@
         $('res-gift').hidden = false; J.chime(2);
       }
     }
-    busyT += dt;
-    if (resultT < 3 && busyT >= 1) { busyT = 0; Kit.stats.busy(); }
   }
   function next() {
     if (!result) return;
@@ -456,20 +446,17 @@
         case 'jump': inputJumps++; J.jump(0.6); view.kick('jump'); view.burst(world.x - 0.2, 0.05, 0, { count: 5, colors: [0xffffff, 0xf0e0c0], speed: 1.6, up: 0.2, life: 0.4, size: 0.13, gravity: 2 }); break;
         case 'land': J.land(e.power * 0.7); view.kick('land', e.power); if (e.power > 0.35) view.burst(world.x, 0.05, 0, { count: 8, colors: [0xffffff, 0xf0e0c0], speed: 2, up: 0.15, life: 0.45, size: 0.14, gravity: 2 }); break;
         case 'cue':
-          Kit.track.cue();
           coach.seen[e.kind] = (coach.seen[e.kind] || 0) + 1;
           if (e.kind === 'crate' && p.roar >= 1) showCoach('dash', e.id);
           else if (wantsCoach(e.kind)) { showCoach(e.kind === 'vine' || e.form === 'mid' ? 'duck' : 'jump', e.id); if (coach.bumped[e.kind]) coach.bumped[e.kind]--; }
           if (coach.intro > 1.5) coach.intro = 1.5;
           break;
         case 'clear':
-          Kit.track.hit();
           if (e.id === coach.id) hideCoach();
           streak++;
           if (streak % 6 === 0) { callout(PRAISE[Math.min(3, streak / 6 - 1)], world.x, p.y + 2.2); J.streak(Math.min(8, streak / 6 + 1)); }
           break;
         case 'smash':
-          Kit.track.hit();
           if (e.id === coach.id) hideCoach();
           o = obsById(e.id);
           J.impact(0.8); J.pop(1); view.shake(0.35);
@@ -478,14 +465,12 @@
           for (var b = 0; b < e.bonus; b++) flyEgg(world.x + 0.8, 1.2 + b * 0.3);
           break;
         case 'bump':
-          Kit.track.miss();
           if (e.id === coach.id) hideCoach();
           coach.bumped[e.kind] = 2; streak = 0;
           J.impact(0.5); view.kick('bump'); view.shake(0.5);
           view.burst(world.x + 0.4, p.y + 1, 0, { count: 12, colors: BIT, speed: 3, life: 0.7, size: 0.12, gravity: 4 });
           break;
         case 'splash':
-          Kit.track.miss();
           coach.bumped.gap = 2; streak = 0; hideCoach();
           J.pop(0.9); J.land(0.8); view.kick('bump'); view.shake(0.4);
           view.burst(world.x, -0.1, 0, { count: 22, colors: [view.BIO[D.biomeAt(world, world.x)].goo, 0xffffff], speed: 4.5, up: 1.2, life: 0.8, size: 0.16, gravity: 10 });

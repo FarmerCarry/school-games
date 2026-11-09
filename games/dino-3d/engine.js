@@ -5,7 +5,7 @@
  * Pure: no DOM, no Kit, no THREE, no timers and no unseeded randomness, so
  * tools/tests/dino-3d-engine.test.mjs loads it with { window: {} } and plays whole
  * levels with scripted players. game.js reads the DDA tier, steps a world with the
- * child's input and turns its events into pictures, sound and statistics. */
+ * child's input and turns its events into pictures and sound. */
 (function () {
   'use strict';
   var D = window.Dino3D = window.Dino3D || {};
@@ -13,7 +13,7 @@
   D.HP = 6;                 // three hearts, counted in halves
   D.LEVELS = 15;
   D.ZONE = 300;             // endless: metres per biome
-  D.CUE_S = 1.1;            // an obstacle this many seconds away is a reaction cue
+  D.CUE_S = 1.1;            // an obstacle this many seconds away is a cue (the coach shows its move)
   // The baby dino's collider: narrower and lower than the art.
   var HALF_W = 0.3, STAND = 1.3, DUCK = 0.72, AIR_DUCK = 0.95;
   var HOLD = 0.3, DASH_S = 0.85, DASH_X = 1.85, MUD_X = 0.55, SUB = 1 / 120, ACT = 24;

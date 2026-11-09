@@ -1543,7 +1543,7 @@
     if (dist > save.best) save.best = dist;
     save.missions.forEach(function (mm) { if (mm.t === 'total' && !mm.done) mm.prog += dist; });
     distanceUnlocks(dist, false);
-    if (++save.runs === 4) Kit.stats.tutorial('done');
+    save.runs++;
     persist();
   }
   function showTitle() {
@@ -1566,13 +1566,11 @@
     resetWorld(false, dbg.startAt || 0);
     rollMissions(); persist();
     st.mode = 'play'; st.lastUnlockCheck = 0;
-    Kit.stats.round('endless');
     show('title', false); show('over', false); show('pause', false); hud.hidden = false; pauseBtn.hidden = false;
     lastHud.d = lastHud.g = lastHud.z = -1;
     $('hBest').innerHTML = 'الأفضل: <span id="hBestN">' + Kit.fmt(save.best) + '</span> م'; $('hBest').classList.remove('beat');
     $('hBest').style.visibility = save.best > 0 ? 'visible' : 'hidden';
     st.hintT = save.runs < 4 ? 4.5 : 0;
-    if (!save.runs) Kit.stats.tutorial('start');
     $('hHint').classList.toggle('show', st.hintT > 0);
     SND.sfx.start();
     st.fovKick = 8;
@@ -1651,8 +1649,7 @@
     save.missions.forEach(function (mm) { if (mm.t === 'total' && !mm.done) mm.prog += dist; });
     save.gems += st.gemsRun + bonus;
     if (newBest) save.best = dist;
-    if (++save.runs === 4) Kit.stats.tutorial('done');
-    Kit.stats.end('end', dist);
+    save.runs++;
     distanceUnlocks(dist, false);
     persist();
     var line = pick(OVER_LINES[st.reason] || OVER_LINES.bonk);
@@ -1858,7 +1855,6 @@
     dynRes(now, st.mode === 'play');
     // lastT stays current while paused, so resuming does not count the idle time.
     if (st.mode === 'paused' && !renderDirty) { K.endFrame(); return; }
-    if (st.mode === 'play') Kit.stats.frame(ms); // raw frame time (0 on the first frame)
     renderDirty = false;
     // Until the shaders are built nothing is drawn, so nothing moves either.
     if (glReady) {

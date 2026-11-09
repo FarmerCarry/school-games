@@ -415,10 +415,6 @@
     G.pal = WORLDS[wi];
     resetPlayer(r.L.start.x, r.L.start.y);
     G.firstMoveDone = false;
-    // Play statistics: every level try (play, retry, restart, next) is a round.
-    // Level 1's first-move arrows are the tutorial until level 1 is first won.
-    if (n === 1 && !save.lv[1]) Kit.stats.tutorial('start');
-    Kit.stats.round('L' + n);
     G.cam = camTarget();
     if (TIPS[n]) banner(TIPS[n], n === 1 ? 6 : 4.2);
     else banner(G.def.name, 2.2, '#fff');
@@ -442,7 +438,6 @@
     G.height = 0; G.maxHeight = 0; G.nextMilestone = 50;
     G.bestLine = save.bestH; G.beatBest = false; G.bonus = 0;
     G.firstMoveDone = false;
-    Kit.stats.round('endless');
     G.cam = camTarget();
     banner(save.runs < 2 ? 'اصعد بسرعة! الهلام يرتفع!' : 'انطلق!', 3);
     hideAll();
@@ -451,9 +446,9 @@
 
   function restart() { leaveRun(); if (G.mode === 'endless') startEndless(); else startLevel(G.levelN); }
   // A Rising Goo run left alive (R, or Restart or Menu from pause) still banks what it
-  // earned; statistics count it as a quit, so it reports no end.
+  // earned.
   function leaveRun() {
-    if (G.mode === 'endless' && G.phase === 'play' && (G.screen === 'play' || G.screen === 'pause') && (scoreNow() || G.coinsGot)) commitOver(true);
+    if (G.mode === 'endless' && G.phase === 'play' && (G.screen === 'play' || G.screen === 'pause') && (scoreNow() || G.coinsGot)) commitOver();
   }
 
   /* --------------------------------------------------------- the grid */
@@ -489,7 +484,6 @@
     if (!G.firstMoveDone) {
       G.firstMoveDone = true;
       if (G.mode === 'endless') G.gooStarted = true;
-      else if (G.levelN === 1 && !save.lv[1]) Kit.stats.tutorial('done');
     }
     if (G.world.tile(P.cx, P.cy) !== T.TRAP) { P.safeX = P.cx; P.safeY = P.cy; }
     P.dir = d; P.moving = true; P.buffer = -1;
@@ -627,7 +621,6 @@
     else G.hearts = 0;
     G.deathKind = kind;
     if (G.mode === 'endless') commitOver();
-    else if (G.hearts <= 0) Kit.stats.end('lose');
   }
 
   function checkHazards() {
@@ -1537,7 +1530,6 @@
     persist();
     checkMaskUnlocks(starsBefore, totalStars(), -1);
     if (!prev.done && n % 10 === 0 && n < LEVELS.length) toast('فتحت عالمًا جديدًا: ' + WORLDS[n / 10].name + '!');
-    Kit.stats.end('win', got.filter(Boolean).length);
     G.result = { got: got, starBonus: starBonus, newBestTime: !!prev.done && newBestTime };
   }
   function showWin() {
@@ -1587,9 +1579,8 @@
     showScreen('fail');
     G.resultLock = 0.5;
   }
-  function commitOver(left) {
+  function commitOver() {
     var score = scoreNow();
-    if (!left) Kit.stats.end('end', score);
     var isBest = score > save.bestScore;
     var hBefore = save.bestH;
     save.runs++;

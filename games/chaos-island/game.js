@@ -1,7 +1,7 @@
-/* Chaos Island (جزيرة الفوضى): screens, keyboard, the coach, saves, sound and play
- * statistics. engine.js simulates the islands; art.js draws them.
- * This is the UI layer: it reads Kit.dda at every match start and reports Kit.stats
- * rounds and Kit.track hits, misses and cues. */
+/* Chaos Island (جزيرة الفوضى): screens, keyboard, the coach, saves and sound.
+ * engine.js simulates the islands; art.js draws them.
+ * This is the UI layer: it reads Kit.dda at every match start and reports each
+ * finished match back to it. */
 (function () {
   'use strict';
   const CI = window.CI, A = CI.art, J = Kit.juice, W = CI.W, H = CI.H, G = CI.GROUND;
@@ -37,7 +37,7 @@
 
   /* --------------------------------------------------------------- state */
   let screen = 'title', world = null, demo = null, duo = false, time = 0, matches = 0, ending = 0, result = null, resultT = 0, resultLock = 0;
-  let isle = save.island, names = [], tutorial = false, cardT = 0, cardKinds = [], cardHide = 0, busyT = 0, lastCue = -9, streak = 0;
+  let isle = save.island, names = [], tutorial = false, cardT = 0, cardKinds = [], cardHide = 0, streak = 0;
   let shownCoins = [0, 0], doorHintT = 0, goT = 0, keysShowT = 0;
   const coach = { mind: CI.mind(0, 0, 77), idle: 0, on: false, inp: null };
   const parts = [], floats = [], debris = [], flyers = [];
@@ -151,7 +151,7 @@
   function p2Look(p1) { return { color: p1.color === '#4fc3ff' ? '#ff6b6b' : '#4fc3ff', hat: 'cap', extra: '' }; }
   function startMatch(two) {
     duo = !!two;
-    // Difficulty is read at every match start, before the round is reported.
+    // Difficulty is read at every match start.
     const d = duo ? ddaDuo : ddaSolo, tier = d.tier;
     const seed = (Math.random() * 2147483647) | 0, plan = CI.plan(isle, tier, seed), looks = [CI.look(save)];
     if (duo) looks.push(p2Look(looks[0]));
@@ -159,10 +159,8 @@
     const pool = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
     names = world.actors.map((a, i) => a.human ? (duo ? String(i + 1) : 'أنت') : pool[i % pool.length]);
     matches++;
-    Kit.stats.round(CI.roundId(isle, duo));
     tutorial = !duo && !save.tut;
-    if (tutorial) Kit.stats.tutorial('start');
-    ending = 0; result = null; streak = 0; shownCoins = [0, 0]; lastCue = -9; goT = 0; doorHintT = 0; keysShowT = duo ? 7 : 5;
+    ending = 0; result = null; streak = 0; shownCoins = [0, 0]; goT = 0; doorHintT = 0; keysShowT = duo ? 7 : 5;
     parts.length = 0; floats.length = 0; debris.length = 0; flyers.length = 0;
     coach.mind = CI.mind(0, 0, 77); coach.idle = 0; coach.on = false;
     setScreen('play');
@@ -184,10 +182,6 @@
   }
   function restart() { J.select(); startMatch(duo); }
   function quitToMenu() {
-    if (world && !result) {
-      if (duo) Kit.stats.end('end', world.actors[0].coins + world.actors[1].coins);
-      else Kit.stats.end('quit');
-    }
     J.back();
     toTitle();
   }
@@ -200,10 +194,9 @@
       if (stars > prev) save.stars[isle] = stars;
       if (coins > best) save.best[isle] = coins;
       save.coins += coins;
-      if (tutorial) { save.tut = true; Kit.stats.tutorial('done'); tutorial = false; }
+      if (tutorial) { save.tut = true; tutorial = false; }
       persist();
       ddaSolo.result(CI.outcome(w, 0));
-      Kit.stats.end(stars > 0 ? 'win' : 'lose', coins);
       result = { duo: false, stars: stars, prev: prev, coins: coins, best: coins > best && coins > 0, newIsle: isle < 3 && !nextWasOpen && CI.isOpen(save, isle + 1) ? isle + 1 : -1, rank: rank };
     } else {
       const a = w.actors[0], b = w.actors[1], coins = a.coins + b.coins, best = save.duo;
@@ -211,7 +204,6 @@
       if (coins > best) save.duo = coins;
       persist();
       ddaDuo.result((a.survived + b.survived) / (2 * rounds));
-      Kit.stats.end('end', coins);
       result = { duo: true, coins: coins, best: coins > best && coins > 0, newIsle: -1, rank: rank };
     }
     ending = 1.3;
@@ -245,8 +237,6 @@
       if (r.newIsle >= 0) { $('resNewText').textContent = 'جزيرة جديدة!'; $('resNew').hidden = false; J.levelUp(); }
       else if (r.best) { $('resNewText').textContent = 'رقم جديد!'; $('resNew').hidden = false; J.star(3); }
     }
-    busyT += dt;
-    if (resultT < 3 && busyT >= 1) { busyT = 0; Kit.stats.busy(); }
   }
   function again() { if (!result) return; startMatch(result.duo); }
   function nextIsle() {
@@ -316,8 +306,7 @@
   function squeak(v) { Kit.audio.tone({ freq: 620, to: 1450, type: 'sine', dur: 0.16, vol: 0.2 * v }); Kit.audio.tone({ freq: 900, to: 500, type: 'triangle', dur: 0.1, vol: 0.12 * v, delay: 0.12 }); }
   function splashSound() { Kit.audio.noise({ dur: 0.45, vol: 0.26, filter: 1800, to: 300 }); J.pop(0.2); }
   const isHuman = i => i >= 0 && world && world.actors[i] && world.actors[i].human;
-  function cue() { if (time - lastCue > 0.7) { lastCue = time; Kit.track.cue(); } }
-  // The world's events become pictures, sound and statistics.
+  // The world's events become pictures and sound.
   function handleEvents() {
     const w = world;
     for (const e of w.ev) {
@@ -330,7 +319,6 @@
           break;
         case 'door': doorHintT = 6; J.select(); break;
         case 'warn':
-          cue();
           if (e.kind === 'flood') J.chime(1);
           else if (e.kind === 'wind') J.whoosh(0.35);
           else if (e.kind === 'tornado') { J.whoosh(0.8); doorHintT = 4; }
@@ -342,7 +330,7 @@
         case 'live': break;
         case 'bonk':
           if (human) {
-            Kit.track.miss(); squeak(1); J.impact(0.35); shake.add(9); streak = 0;
+            squeak(1); J.impact(0.35); shake.add(9); streak = 0;
             float(e.x, e.y - 50, 'أوه!', '#ffffff', 34);
           } else squeak(0.35);
           burst(e.x, e.y - 20, 12, ['#ffe14d', '#ffffff', '#ff9ad5'], 260, 0.6, 8, 200, 1);
@@ -359,7 +347,6 @@
           break;
         case 'dodge':
           if (human) {
-            Kit.track.hit();
             streak++;
             if (streak === 4 || streak === 8 || streak === 12) { float(a.x, a.y - 110, PRAISE[streak / 4 - 1], '#ffd23f', 44); J.streak(streak / 4 + 1); }
           }
@@ -403,7 +390,6 @@
     const w = world, humans = w.actors.filter(a => a.human);
     humans.forEach(a => {
       if (e.survivors.indexOf(a.i) >= 0) {
-        Kit.track.hit();
         float(a.x, a.y - 120, 'نجوت!', '#5be38f', 50);
         flyers.push({ x: a.x, y: a.y - 40, t: 0, v: 2, who: a.i, bonus: true });
       }
@@ -411,7 +397,7 @@
     const ok = humans.some(a => e.survivors.indexOf(a.i) >= 0);
     if (ok) { J.chime(2); burst(640, 200, 30, ['#ff7eb6', '#ffd23f', '#4fc3ff', '#5be38f', '#ffffff'], 400, 1, 9, 400); }
     else J.fail();
-    if (tutorial && e.round === 0 && ok) { save.tut = true; persist(); Kit.stats.tutorial('done'); tutorial = false; }
+    if (tutorial && e.round === 0 && ok) { save.tut = true; persist(); tutorial = false; }
   }
   function tick(el) { el.classList.remove('tick'); void el.offsetWidth; el.classList.add('tick'); }
   function showCard(kinds) {
@@ -463,8 +449,6 @@
   function playStep(dt) {
     if (ending > 0) {
       ending -= dt;
-      busyT += dt;
-      if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
       if (ending <= 0) showResult();
       return;
     }
