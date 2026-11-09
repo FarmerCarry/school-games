@@ -343,10 +343,10 @@ test('names.js carries every catalog game\'s categories, players and input, and 
     for (const c of info.cats) assert.ok(Object.hasOwn(w.SG_CATEGORIES, c), g.slug + ': ' + c);
     for (const flag of ['dda', 'track', 'tutorial']) assert.ok(info[flag] === 0 || info[flag] === 1, g.slug + ' ' + flag);
   }
-  // What the games' own code reports (docs/RESEARCH_TELEMETRY_SPEC.md §B.5): 7 games adapt
-  // their difficulty, 7 count hits and reaction times, 31 show a tutorial.
+  // What the games' own code reports (docs/RESEARCH_TELEMETRY_SPEC.md §B.5): 8 games adapt
+  // their difficulty and count hits and reaction times, 31 show a tutorial.
   const flagged = flag => Object.keys(w.SG_GAME_INFO).filter(slug => w.SG_GAME_INFO[slug][flag]).sort();
-  const adaptive = ['bubble-bop', 'dino-3d', 'egg-rush', 'key-runner', 'lucky-lake', 'road-hopper', 'typing-test'];
+  const adaptive = ['bubble-bop', 'chaos-island', 'dino-3d', 'egg-rush', 'key-runner', 'lucky-lake', 'road-hopper', 'typing-test'];
   assert.deepEqual(flagged('dda'), adaptive);
   assert.deepEqual(flagged('track'), adaptive);
   assert.equal(flagged('tutorial').length, 31);

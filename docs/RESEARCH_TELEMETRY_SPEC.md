@@ -275,12 +275,12 @@ Everything except `dl` resets at a round start. Budget: at most **350 minified b
 
 | Data | Games | Source |
 |---|---|---|
-| level id, outcome w/l/d/e/q, engaged ms, replay, wall time, inputs, idle lapses, pauses | all 34 (connect-four and tic-tac-toe through `shared/board-game.js`) | `Kit.stats.round/end`, Kit `rx` |
-| score | 28; not block-world, connect-four, critter-mart, pizza-clicker, tank-splat, tic-tac-toe | `Kit.stats.end(result, score)` |
-| tutorial start/done | the 25 that call `Kit.stats.tutorial` | `sg:stats` v1 `['t', …]` |
-| tier, hits/misses (accuracy), RT histogram plus exact mean, DDA level | 3: bubble-bop, dino-3d, road-hopper | `Kit.dda`, `Kit.track` |
-| frames (smoothness) | 31; not connect-four, tic-tac-toe, typing-test (`NO_FRAMES`) | Kit |
-| load, failures, input latency | all 34 | portal plus Kit |
+| level id, outcome w/l/d/e/q, engaged ms, replay, wall time, inputs, idle lapses, pauses | all 38 (connect-four and tic-tac-toe through `shared/board-game.js`) | `Kit.stats.round/end`, Kit `rx` |
+| score | 32; not block-world, connect-four, critter-mart, pizza-clicker, tank-splat, tic-tac-toe | `Kit.stats.end(result, score)` |
+| tutorial start/done | the 31 that call `Kit.stats.tutorial` | `sg:stats` v1 `['t', …]` |
+| tier, hits/misses (accuracy), RT histogram plus exact mean, DDA level | 8: bubble-bop, chaos-island, dino-3d, egg-rush, key-runner, lucky-lake, road-hopper, typing-test | `Kit.dda`, `Kit.track` |
+| frames (smoothness) | 36; not connect-four, tic-tac-toe (`NO_FRAMES`) | Kit |
+| load, failures, input latency | all 38 | portal plus Kit |
 | local two-player rounds | air-hockey, hoop-heads, wacky-soccer, sumo-bonk, pool-party, fire-and-ice, connect-four, tic-tac-toe (ids matching `TWO_PLAYER`) | server flag `duo` |
 
 M3 (DDA and `Kit.track` across the catalogue) adds accuracy, reaction time and DDA level to more games with no wire change.

@@ -52,7 +52,7 @@ window.SG_GAME_INFO = {
   "bubble-bop": {"cats":["arcade"],"players":1,"input":"mixed","dda":1,"track":1,"tutorial":1},
   "cake-guards": {"cats":["strategy"],"players":1,"input":"pointer","dda":0,"track":0,"tutorial":1},
   "candy-rope": {"cats":["puzzle"],"players":1,"input":"pointer","dda":0,"track":0,"tutorial":1},
-  "chaos-island": {"cats":["two-player","arcade"],"players":2,"input":"keyboard","dda":0,"track":0,"tutorial":1},
+  "chaos-island": {"cats":["two-player","arcade"],"players":2,"input":"keyboard","dda":1,"track":1,"tutorial":1},
   "connect-four": {"cats":["two-player","puzzle"],"players":2,"input":"pointer","dda":0,"track":0,"tutorial":0},
   "critter-mart": {"cats":["idle"],"players":1,"input":"mixed","dda":0,"track":0,"tutorial":1},
   "dino-3d": {"cats":["running","arcade"],"players":1,"input":"keyboard","dda":1,"track":1,"tutorial":1},
