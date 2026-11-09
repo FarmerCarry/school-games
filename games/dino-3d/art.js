@@ -67,13 +67,13 @@
     var BIO = [
       { sky: [0x47b5ff, 0xffe3a6], fog: 0xffd9a0, hemi: [0xfff3dc, 0xc98a52, 1.7], sun: [0xfff0d0, 2.3], path: [0xf7cd73, 0xf0bf62], edge: 0xe0a352, dirt: [0xc8763c, 0xa95f30],
         side: [0xeeb563, 0xe4a756], back: [0xe8914a, 0xdb8040, 0xcf6e3a], fill: 0xf1c06a, goo: 0x7be05a, mud: 0x9a6236, stone: 0xc58450 },
-      { sky: [0x3ab2ff, 0xc9f6c4], fog: 0xb4ecbc, hemi: [0xf2fff0, 0x4f8a3c, 1.7], sun: [0xfffbe6, 2.2], path: [0x9ad85c, 0x8acb4e], edge: 0x5fb03f, dirt: [0x8b5a35, 0x744a2c],
+      { sky: [0x3ab2ff, 0xc9f6c4], fog: 0xb4ecbc, hemi: [0xf2fff0, 0x4f8a3c, 1.7], sun: [0xfffbe6, 2.2], path: [0xe0b77a, 0xd4a96c], edge: 0x5fb03f, dirt: [0x8b5a35, 0x744a2c],
         side: [0x6fc449, 0x63b840], back: [0x4fae3c, 0x449f37, 0x3a9032], fill: 0x5fba42, goo: 0x58d0ff, mud: 0x7d4f2c, stone: 0x9a8c7a },
-      { sky: [0x6bb8ff, 0xeef8ff], fog: 0xe3f1ff, hemi: [0xffffff, 0x8fb2d8, 1.75], sun: [0xffffff, 2.1], path: [0xf7fcff, 0xe9f3fb], edge: 0xc9e2f4, dirt: [0x8aa6c9, 0x7290b6],
+      { sky: [0x6bb8ff, 0xeef8ff], fog: 0xe3f1ff, hemi: [0xffffff, 0x8fb2d8, 1.75], sun: [0xffffff, 2.1], path: [0xd6ebfb, 0xc8e2f7], edge: 0x8fb8de, dirt: [0x8aa6c9, 0x7290b6],
         side: [0xf0f7fd, 0xe2eef8], back: [0xdcebf7, 0xcfe3f4, 0xc2d9ee], fill: 0xeaf4fc, goo: 0x7fe4ff, mud: 0xc6dcf2, stone: 0x9fb4cc },
       { sky: [0xff8a6b, 0xffe2a4], fog: 0xffc79e, hemi: [0xfff0e0, 0x8a5a6a, 1.75], sun: [0xffe2c0, 2.3], path: [0xf0c48a, 0xe6b67a], edge: 0xc4875a, dirt: [0x7a5470, 0x6a4762],
         side: [0x8a6a80, 0x806278], back: [0x5fbf5a, 0x8a6a80, 0x7a5c72], fill: 0x34c6e8, goo: 0xff6a3c, mud: 0x6e3f2e, stone: 0x8d7480 },
-      { sky: [0x10133e, 0x4b3c93], fog: 0x2d2a6a, hemi: [0x9fa8ff, 0x2a2350, 1.25], sun: [0xbfc8ff, 1.2], path: [0x6a6fd0, 0x5f64c4], edge: 0x4a4fa8, dirt: [0x3a2f6e, 0x30285e],
+      { sky: [0x10133e, 0x4b3c93], fog: 0x2d2a6a, hemi: [0xaab2ff, 0x3a3168, 1.6], sun: [0xc8d0ff, 1.6], path: [0x6a6fd0, 0x5f64c4], edge: 0x4a4fa8, dirt: [0x3a2f6e, 0x30285e],
         side: [0x3d4fa0, 0x374896], back: [0x2f3f86, 0x29387a, 0x24326e], fill: 0x2d3d84, goo: 0x46ffd2, mud: 0x5b3a7c, stone: 0x6d6aa8 }
     ];
     view.BIO = BIO;
@@ -187,15 +187,17 @@
         l.push([0, -35, 0, 4.2, 3, 4.2, bulb, glow], [0, -35.6, 0, 2.6, 0.6, 2.6, shade(bulb, 0.8), glow], [1.6, -34, 2.15, 0.6, 0.7, 0.1, INK], [1.6, -34, -2.15, 0.6, 0.7, 0.1, INK]);
         return l;
       },
+      // Night kites glow like paper lanterns, so they read in the dark.
       flyerBody: function (b, look) {
-        var c = [0x34c6c0, 0xff8a3c, 0x7a5cff][look], belly = 0xfff1c8;
-        return [[0, -1.6, 0, 6.4, 3.2, 3.6, c], [0.4, -1.8, 0, 4, 1, 3, belly], [-4.2, -0.8, 0, 4.2, 3.4, 3.4, c], [-7.6, 0, 0, 3.2, 1.2, 1.8, 0xffb03c], [-3.4, 2.4, 0, 3, 1, 1, shade(c, 0.8)],
-          [-5, 0.8, 1.75, 1.4, 1.4, 0.1, WHITE], [-5.2, 0.9, 1.82, 0.7, 0.9, 0.1, INK], [-5, 0.8, -1.75, 1.4, 1.4, 0.1, WHITE], [-5.2, 0.9, -1.82, 0.7, 0.9, 0.1, INK],
+        var c = [0x3fe6dc, 0xffa04c, 0xc77bff][look], belly = 0xfff1c8, l = [[0, -1.6, 0, 6.4, 3.2, 3.6, c], [0.4, -1.8, 0, 4, 1, 3, belly], [-4.2, -0.8, 0, 4.2, 3.4, 3.4, c], [-7.6, 0, 0, 3.2, 1.2, 1.8, 0xffd23f], [-3.4, 2.4, 0, 3, 1, 1, 0xff6fae],
           [4, -1, 0, 2.4, 1, 1, c], [6, -1.4, 0, 1.6, 1.6, 0.4, 0xff4f9a], [8, -1.8, 0, 1.6, 1.6, 0.4, 0xffd23f], [10, -2.2, 0, 1.6, 1.6, 0.4, 0x4fb8ff]];
+        l.forEach(function (e) { e.push(1); });
+        return l.concat([[-5, 0.8, 1.75, 1.4, 1.4, 0.1, WHITE, 1], [-5.2, 0.9, 1.82, 0.7, 0.9, 0.1, INK], [-5, 0.8, -1.75, 1.4, 1.4, 0.1, WHITE, 1], [-5.2, 0.9, -1.82, 0.7, 0.9, 0.1, INK]]);
       },
       flyerWings: function (b, look) {
-        var w = [0xffd23f, 0x4fb8ff, 0xff6fae][look];
-        return [[0, 0, 4.4, 5, 0.6, 7, w], [0.6, 0, 9.2, 3.6, 0.5, 3, shade(w, 0.85)], [0, 0, -4.4, 5, 0.6, 7, w], [0.6, 0, -9.2, 3.6, 0.5, 3, shade(w, 0.85)], [-1.2, 0.3, 4.4, 1, 0.3, 6, WHITE], [-1.2, 0.3, -4.4, 1, 0.3, 6, WHITE]];
+        var w = [0xffe14d, 0x7fd6ff, 0xff8fc6][look], l = [[0, 0, 4.4, 5, 0.6, 7, w], [0.6, 0, 9.2, 3.6, 0.5, 3, mix(w, WHITE, 0.4)], [0, 0, -4.4, 5, 0.6, 7, w], [0.6, 0, -9.2, 3.6, 0.5, 3, mix(w, WHITE, 0.4)], [-1.2, 0.3, 4.4, 1, 0.3, 6, WHITE], [-1.2, 0.3, -4.4, 1, 0.3, 6, WHITE]];
+        l.forEach(function (e) { e.push(1); });
+        return l;
       },
       roller: function (b) {
         var base = [WHITE, 0x8a5a33, WHITE, 0x8a5a33, 0xb38cff][b], dot = [0xbfe4ff, 0x5a3a20, 0xbfe4ff, 0x5a3a20, 0xe8d6ff][b], glow = b === 4 ? 1 : 0;
@@ -216,7 +218,7 @@
       fruit3: function () { return [[0, -2.4, 0, 3.6, 4, 3.6, 0xffb02e], [0, -2, 0, 3.9, 3.2, 3.9, 0xff9a1f], [0, 1.6, 0, 1.2, 2.4, 1.2, 0x3fbf5a], [-1, 1.6, 0, 1, 1.6, 1, 0x58d872], [1, 1.6, 0, 1, 1.6, 1, 0x58d872]]; },
       fruit4: function () { return [[0, -2, 0, 4, 4, 4, 0xc77bff, 1], [0, -1.6, 0, 4.4, 3.2, 4.4, 0xb05cff, 1], [0, 2, 0, 0.6, 1, 0.6, 0x46ffd2, 1], [0.8, 2.6, 0, 1.6, 0.6, 1, 0x46ffd2, 1]]; },
       heart: function () { return [[-1.2, -2, 0, 2.4, 3.6, 1.8, 0xff3b6b], [1.2, -2, 0, 2.4, 3.6, 1.8, 0xff3b6b], [0, -2.8, 0, 2, 1.6, 1.6, 0xff3b6b], [-1.5, 1.6, 0, 2.2, 0.8, 1.6, 0xff3b6b], [1.5, 1.6, 0, 2.2, 0.8, 1.6, 0xff3b6b], [-1.6, 0.4, 0.95, 0.8, 0.8, 0.1, WHITE]]; },
-      star: function () { return [[0, -1, 0, 1.2, 2, 0.6, 0xffe14d], [0, -0.4, 0, 2.4, 0.8, 0.6, 0xffe14d]]; }
+      star: function () { return [[0, -1.2, 0, 1.2, 2.4, 0.6, 0xffe14d, 1], [0, -0.4, 0, 2.8, 0.8, 0.6, 0xffe14d, 1], [0, -0.2, 0.31, 0.6, 0.6, 0.1, 0xffffff, 1]]; }
     };
 
     /* ----------------------------------------------------- scenery props */
@@ -302,7 +304,7 @@
       for (var i = 0; i < CH; i++) {
         var x = x0 + i + 0.5, bb = biomeAt(x), Q = BIO[bb], X = x * 10;
         l.push([X, -6.5, 33.5, 10, 4, 37, i % 2 ? Q.side[0] : Q.side[1]], [X, -12, 33.5, 10, 5.5, 37, Q.dirt[1]]);
-        if (r() < 0.4) tuft(bb, r, X + (r() - 0.5) * 6, 18 + r() * 12, l);
+        if (r() < 0.4 && Math.abs(x) > 8) tuft(bb, r, X + (r() - 0.5) * 6, 18 + r() * 12, l); // none right under the menu camera
         var h1 = 1 + r() * 3, h2 = 3 + r() * 6, h3 = 8 + r() * 14;
         l.push([X, -2, -20, 10, h1 + 2, 10, Q.back[0]], [X, -2, -32, 10, h2 + 2, 14, Q.back[1]], [X, -2, -50, 10, h3 + 2, 22, Q.back[2]]);
         if (bb === 0 && r() < 0.5) l.push([X, h3, -56, 10, 4 + r() * 10, 10, r() < 0.5 ? 0xd96a3a : 0xe8894a]);
