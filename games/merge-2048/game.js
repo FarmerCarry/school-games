@@ -591,10 +591,6 @@
     G.dead = !G.board.canMove(); G.deadAt = now + 0.3;
     G.winPending = G.won && !G.keep; G.maxT = G.board.maxTile(); G.newBest = G.startBest > 0 && G.score > G.startBest;
     G.shownScore = G.score;
-    // Play statistics: a new or resumed board is a round 's'+N. A board has no
-    // winner and is kept between visits, so it ends only as a neutral 'end' with
-    // the score when it fills up; the goal tile is a moment inside the round.
-    Kit.stats.round('s' + N);
     setScreen('play');
     refreshHUD(true);
     saveGame();
@@ -719,8 +715,8 @@
     // Rebuild that result from the restored board, preserving acknowledgement.
     if (!G.keep) G.won = G.maxT >= WIN[G.N];
     G.winPending = G.won && !G.keep;
-    // The full board ended its round; playing on after Undo is a new one.
-    if (G.screen === 'over') { Kit.stats.round('s' + G.N); setScreen('play'); }
+    // Undo on the full board goes back to playing it.
+    if (G.screen === 'over') setScreen('play');
     sfx.undo();
     for (var i = 0; i < 18; i++) {
       var a = i / 18 * 6.28;
@@ -765,7 +761,6 @@
 
   function showOver() {
     var N = G.N;
-    Kit.stats.end('end', G.score);
     setScreen('over');
     $('overScore').textContent = Kit.fmt(G.score);
     $('overBestVal').textContent = Kit.fmt(save.best[N]);
