@@ -1126,7 +1126,7 @@
   var camPos = new T.Vector3(0, 2, 5), camLook = new T.Vector3(0, 1, 0), tmpV = new T.Vector3(), tmpL = new T.Vector3();
   var lastT = performance.now(), renderDirty = true;
   canvas.addEventListener('webglcontextrestored', function () { renderDirty = true; });
-  // camera shake and confetti follow the shared reduced-motion setting (classroom preset too)
+  // camera shake and confetti follow the shared reduced-motion setting
   var reducedMotion = Kit.motion.reduced();
   Kit.motion.onChange(function (r) { reducedMotion = r; if (r) stopConfetti(); });
   function render(alpha) {

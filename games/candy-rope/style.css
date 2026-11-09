@@ -33,7 +33,7 @@ body { background: #2a1640; }
 .hb .bulb::after { content: ''; position: absolute; left: 4px; top: 16px; width: 10px; height: 8px; border-radius: 0 0 4px 4px; background: #d8d8e8; }
 .hb.glow { animation: hbglow 0.9s ease-in-out infinite; }
 @keyframes hbglow { 0%,100% { box-shadow: 0 4px 0 rgba(0,0,0,0.25), 0 0 0 0 rgba(255,225,77,0.9); } 50% { box-shadow: 0 4px 0 rgba(0,0,0,0.25), 0 0 0 10px rgba(255,225,77,0); } }
-/* reduced motion / classroom: a still yellow ring instead of the pulse, so the hint still calls */
+/* reduced motion: a still yellow ring instead of the pulse, so the hint still calls */
 html[data-sg-motion="reduce"] .hb.glow { animation: none; box-shadow: 0 4px 0 rgba(0,0,0,0.25), 0 0 0 5px rgba(255,225,77,0.9); }
 
 /* ---------- title ---------- */

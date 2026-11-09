@@ -951,7 +951,7 @@
   /* ================================================================ CAMERA + VIEW MODEL */
   var deathCam = { t: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, killer: null };
   var fovCur = save.set.fov, titleA = 0.6, dollSpin = 0;
-  // reduced motion (own setting or the classroom preset): no camera shake, recoil jolt, landing dip,
+  // reduced motion: no camera shake, recoil jolt, landing dip,
   // sprint FOV kick or confetti (core.js skips it on splats too). The view-model kick, paint pops and
   // sniper zoom stay.
   var calm = Kit.motion.reduced();

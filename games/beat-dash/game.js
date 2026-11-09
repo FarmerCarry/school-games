@@ -116,7 +116,7 @@
   /* ----------------------------------------------------------- helpers */
   function $(id) { return document.getElementById(id); }
   function lerp(a, b, t) { return a + (b - a) * t; }
-  // Reduced motion (personal setting or classroom preset): no full-screen flashes, beat pulsing or spinning shapes.
+  // Reduced motion: no full-screen flashes, beat pulsing or spinning shapes.
   // Read every frame, so a change applies at once.
   function calm() { return Kit.motion.reduced(); }
   function hash(n) { n = Math.imul(n | 0, 374761393) + 668265263 | 0; n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }

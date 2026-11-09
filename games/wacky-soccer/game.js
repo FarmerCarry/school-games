@@ -105,7 +105,7 @@
   var parts = [], pops = [], shake = Kit.shake();
   var hitstop = 0, hype = 0, flash = 0;
   var CONF = ['#ff5a5f', '#ffd23f', '#3ddc84', '#4f7cff', '#ff8fb1', '#ffffff', '#9b5de5', '#ff9f1c'];
-  // Reduced motion (or the classroom preset): no full-screen flash, goal zoom or confetti.
+  // Reduced motion: no full-screen flash, goal zoom or confetti.
   // Kick stars, banners and sounds stay, because they tell the player what happened.
   Kit.motion.onChange(function (reduced) {
     if (reduced) { flash = 0; parts = parts.filter(function (p) { return p.type !== 'conf'; }); }

@@ -880,7 +880,7 @@
   // A paused scene is static, so once its effects settle it is kept instead of redrawn
   // every frame. Resize, context restore, late fonts and motion changes draw it again.
   var frozen = false;
-  // Reduced motion (personal setting or the classroom preset) calms shake, flashes, zoom and confetti.
+  // Reduced motion calms shake, flashes, zoom and confetti.
   var reduced = Kit.motion.reduced();
   Kit.motion.onChange(function (r) { reduced = r; frozen = false; });
   function render() {

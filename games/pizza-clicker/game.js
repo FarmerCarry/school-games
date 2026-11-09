@@ -327,7 +327,7 @@
     if (floats.length >= MAXF) floats.shift();
     floats.push({ x: x, y: y, vy: opt.vy || -90, life: opt.life || 1, max: opt.life || 1, text: text, size: opt.size || 30, color: opt.color || '#ffffff', rtl: !!opt.rtl, pop: 0, combo: !!opt.combo });
   }
-  // Reduced motion (or the classroom preset) keeps the kitchen still.
+  // Reduced motion keeps the kitchen still.
   function shake(p) { if (!K.motion.reduced()) shakeP = Math.max(shakeP, p); }
   K.motion.onChange(function (reduced) { if (reduced) shakeP = shakeX = shakeY = 0; });
 

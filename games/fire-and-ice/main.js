@@ -44,7 +44,7 @@
   canvas.addEventListener('contextrestored', function () { R.clearGlows(); view.resize(); });
   var ptr = Kit.pointer(view);
   var fx = R.particles();
-  // Reduced motion / classroom preset: no ambient embers or confetti, and small
+  // Reduced motion: no ambient embers or confetti, and small
   // bursts so jumps, gems, doors and deaths still give feedback.
   var calm = false;
   function setCalm(v) { calm = !!v; fx.scale = calm ? 0.3 : 1; }

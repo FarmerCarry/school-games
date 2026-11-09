@@ -158,7 +158,7 @@
   /* ------------------------------------------------------------- particles */
   var PMAX = 480, parts = [], pcur = 0;
   for (var pi = 0; pi < PMAX; pi++) parts.push({ on: false });
-  // Reduced motion / classroom preset: smaller bursts, no speed lines or white flash.
+  // Reduced motion: smaller bursts, no speed lines or white flash.
   var calm = Kit.motion.reduced();
   Kit.motion.onChange(function (r) { calm = r; if (r) flashT = 0; frameDirty = true; });
   function P(type, x, y, vx, vy, life, size, color, g, drag) {

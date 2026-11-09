@@ -997,7 +997,7 @@
       fctx.restore();
     }
   }
-  // Switching to reduced motion (e.g. the classroom preset) stops shake and confetti at once.
+  // Switching to reduced motion stops shake and confetti at once.
   Kit.motion.onChange(function (reduced) { if (reduced) { shakeP = 0; conf.length = 0; redraw = true; } });
 
   function onResize() {

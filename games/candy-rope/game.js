@@ -176,7 +176,7 @@
   /* ------------------------------------------------------------ particles */
   var PMAX = 520, parts = [], pn = 0;
   for (var pi = 0; pi < PMAX; pi++) parts.push({ on: false });
-  // Particles are pure decoration: none in reduced-motion / classroom mode (sounds and HUD stars stay).
+  // Particles are pure decoration: none in reduced-motion mode (sounds and HUD stars stay).
   Kit.motion.onChange(function (reduced) { dirty = true; if (reduced) for (var i = 0; i < PMAX; i++) parts[i].on = false; });
   function spawn(x, y, vx, vy, life, size, color, type, g) {
     if (Kit.motion.reduced()) return null;

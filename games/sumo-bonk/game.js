@@ -142,7 +142,7 @@
   var shake = Kit.shake();
   var cam = { x: W / 2, y: H / 2, z: 1, punch: 0 };
   var hitstop = 0, timeScale = 1, slowT = 0, flash = 0, hype = 0;
-  // reduced motion / the classroom preset: no zoom punches, ring-out zoom, white flashes or confetti
+  // reduced motion: no zoom punches, ring-out zoom, white flashes or confetti
   // (Kit.shake already rests; hitstop and slow motion stay because they are gameplay timing)
   function calm() { return Kit.motion.reduced(); }
   Kit.motion.onChange(function (reduced) {

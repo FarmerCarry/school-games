@@ -860,7 +860,7 @@
       var p = w.p;
       bubble(game.msg, p.x + PH.w / 2, p.y - 40, 22, Math.min(1, game.msgT * 4));
     }
-    // full-screen flash: decorative, so classroom mode and reduced motion skip it
+    // full-screen flash: decorative, so reduced motion skips it
     if (game.flash > 0 && !K.motion.reduced()) {
       ctx.save(); ctx.globalAlpha = Math.min(0.5, game.flash); ctx.fillStyle = game.flashC; ctx.fillRect(0, 0, 1280, 720); ctx.restore();
     }

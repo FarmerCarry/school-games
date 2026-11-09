@@ -57,7 +57,7 @@ html, body { background: #9fe3ff; }
 .pop.pink { color: #ff9ed0; }
 #banner { position: absolute; left: 0; right: 0; top: 16%; text-align: center; opacity: 0; }
 #banner.show { animation: banner 2.4s ease-out forwards; }
-/* Reduced motion (and the classroom preset) shortens every animation to almost nothing,
+/* Reduced motion shortens every animation to almost nothing,
    which would jump these straight to their invisible last frame. Show them still
    instead; game.js removes each popup and hides the banner on a timer. */
 html[data-sg-motion="reduce"] .pop { animation: none; }

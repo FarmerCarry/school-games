@@ -230,8 +230,8 @@
 
   /* ============================================================ effects */
   var parts = [], sparts = [];   // world-space and screen-space particles
-  // Confetti, sparkles and full-screen flashes are decoration: reduced motion (or the classroom
-  // preset) turns them off. Capture waves, popups and banners stay because they carry information.
+  // Confetti, sparkles and full-screen flashes are decoration: reduced motion turns them
+  // off. Capture waves, popups and banners stay because they carry information.
   var calm = Kit.motion.reduced();
   Kit.motion.onChange(function (r) { calm = r; frameDirty = true; if (r) { parts.length = 0; sparts.length = 0; flashA = 0; } });
   function part(x, y, o) {

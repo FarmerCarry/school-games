@@ -383,7 +383,7 @@
     }
     cam.zoom += (zt - cam.zoom) * (1 - Math.exp(-dt * 2.2));
     G.shake = Math.max(0, G.shake - dt * 45);
-    // Reduced motion / classroom preset: keep the camera steady (slow-motion and rings still mark the hit).
+    // Reduced motion: keep the camera steady (slow-motion and rings still mark the hit).
     if (Kit.motion.reduced()) { G.shake = 0; cam.sx = cam.sy = 0; return; }
     cam.sx = (Math.random() - 0.5) * 2 * G.shake / cam.zoom;
     cam.sy = (Math.random() - 0.5) * 2 * G.shake / cam.zoom;

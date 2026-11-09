@@ -140,7 +140,7 @@
   function blk(color, gem) { return Art.block(save.skin, color, gem); }
 
   /* -------------------------------------------------------- particles */
-  // Reduced motion / classroom preset: no sparks, shards or confetti. Popups, words,
+  // Reduced motion: no sparks, shards or confetti. Popups, words,
   // banners, beams and the white flash on clearing cells stay (gameplay feedback).
   function calm() { return Kit.motion.reduced(); }
   Kit.motion.onChange(function (reduced) { if (reduced) { parts.length = 0; shards.length = 0; confetti.length = 0; } });

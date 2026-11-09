@@ -250,7 +250,7 @@
     }
     if (confetti.length > 400) confetti.splice(0, confetti.length - 400);
   }
-  // Reduced motion (or the classroom preset) switched on mid-celebration or mid-zoom.
+  // Reduced motion switched on mid-celebration or mid-zoom.
   Kit.motion.onChange(function (reduced) {
     if (reduced) { confetti.length = 0; if (G) G.zoom = 1; }
     frameDirty = true;

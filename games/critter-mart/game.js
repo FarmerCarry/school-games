@@ -170,7 +170,7 @@
     }
   }
   var CONF = ['#ff4d5e', '#ffd23f', '#3ddc84', '#3d8bfd', '#ff8fbf', '#9b6bff', '#ff9f1c'];
-  // Confetti is pure decoration, so reduced motion (and the classroom preset) skips it.
+  // Confetti is pure decoration, so reduced motion skips it.
   function confetti(x, y, n) { if (K.motion.reduced()) return; burst(x, y, n || 60, { speed: 520, up: 260, life: 1.4, size: 9, colors: CONF, g: 700, shape: 'conf' }); }
 
   var FLY = [];
