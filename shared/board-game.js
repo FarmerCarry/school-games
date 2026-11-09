@@ -323,7 +323,7 @@
     startingSeat = 3 - startingSeat;
     newRound();
   });
-  // Keep Kit's classroom lock and preference updates, with the board's text label.
+  // Kit's mute button and preference updates, with the board's text label.
   var soundPlaceholder = el('soundButton'), soundButton = Kit.muteButton({ key: false });
   soundButton.id = 'soundButton'; soundButton.className = 'sound-button';
   soundButton.removeAttribute('aria-label');
