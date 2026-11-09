@@ -170,9 +170,9 @@ window.GAMES = [
   { slug: 'snake-arena', roundMinutes: [3, 8], inputStyle: 'mixed', title: 'ساحة الثعابين', en: 'Snake Arena', tags: 'دودة slither', cats: ['battle', 'arcade'], players: '1', color: '#8e44ff',
     blurb: 'كُل النقاط المضيئة، اكبر، وحاصر 15 ثعبانًا لتصبح ملك الساحة!',
     controls: [{ keys: ['الفأرة'], action: 'وجّه الثعبان' }, { keys: ['انقر'], action: 'تسريع (اضغط مطولًا)' }, { keys: ['مسافة'], action: 'تسريع' }, { keys: ['←', '→'], action: 'لفّ يسارًا ويمينًا' }, { keys: ['A', 'D'], action: 'لفّ يسارًا ويمينًا' }] },
-  { slug: 'lucky-lake', roundMinutes: [3, 10], inputStyle: 'mixed', title: 'بحيرة الحظ', en: 'Lucky Lake fishing game see the fish cast hook reel fish book rods two players derby', tags: 'صيد سمك سمكة سنارة صنارة بحيرة نهر بحر شاطئ', cats: ['two-player', 'arcade'], players: '1-2', color: '#2ec4ff',
+  { slug: 'lucky-lake', roundMinutes: [3, 10], inputStyle: 'mixed', title: 'بحيرة الحظ', en: 'Lucky Lake fishing game fish book two players', tags: 'صيد سمك سنارة صنارة بحيرة بحر', cats: ['two-player', 'arcade'], players: '1-2', color: '#2ec4ff',
     blurb: 'ترى السمك تحت الماء! صوّب السنارة، انتظر علامة ! واسحب السمكة. خمسة أماكن وكتاب سمك وسمكة ذهبية أسطورية!',
-    tip: 'عندما تنقر السمكة الطُّعم لا تضغط، انتظر علامة ! ثم اضغط بسرعة. في السحب اضغط مطوّلًا ليصعد الشريط الأخضر إلى السمكة، واتركه لينزل.',
+    tip: 'لا تضغط حين تنقر السمكة الطُّعم، انتظر علامة ! ثم اضغط بسرعة. في السحب اضغط مطوّلًا ليصعد الشريط الأخضر.',
     controls: [
       { keys: ['الفأرة'], action: 'صوّب حيث تريد الصنارة' },
       { keys: ['انقر', 'مسافة'], action: 'ارمِ السنارة، ثم اضغط عند علامة !' },

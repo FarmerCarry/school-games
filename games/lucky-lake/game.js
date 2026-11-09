@@ -963,7 +963,7 @@
     if (!p) return null;
     const r = p.reel;
     return { state: p.state, casts: p.casts, aim: { x: round1(p.aim.x), y: round1(p.aim.y) }, hook: { x: round1(p.hook.x), y: round1(p.hook.y) },
-      bob: { x: round1(p.bob.x), y: round1(p.bob.y) }, fish: p.fish, catches: p.catches.length, total: p.total,
+      fish: p.fish, catches: p.catches.length, total: p.total,
       reel: r ? { z: round1(r.z * 100) / 100, h: r.h, f: round1(r.f * 100) / 100, meter: round1(r.meter * 100) / 100, inZone: r.inZone } : null };
   }
   window.__game = {
@@ -979,9 +979,7 @@
     },
     get save() { return JSON.parse(JSON.stringify(save)); },
     // Where a logical point is on the page, for tests that move the real mouse there.
-    point: page,
-    fishPoint: i => { const f = world && world.fish[i || 0]; return f ? page(LL.mouth(f).x, LL.mouth(f).y) : null; },
-    bobberPoint: () => world ? page(world.players[0].bob.x, world.P.surface) : null
+    point: page
   };
 
   buildMap();
