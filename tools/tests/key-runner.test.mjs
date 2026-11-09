@@ -351,6 +351,8 @@ test('the layout follows the window, and a mouse click on Play hands the keyboar
   const box = await page.locator('#game').boundingBox();
   assert.ok(Math.abs(box.width - 1100) < 2 && Math.abs(box.height - 618.75) < 2);
   await page.setViewportSize({ width: 800, height: 600 });
+  // The canvas follows the window's resize event, which arrives after the new size.
+  await page.waitForFunction(() => Math.abs(document.getElementById('game').getBoundingClientRect().width - 800) < 2);
   await step(page, 1);
   const small = await page.locator('#game').boundingBox();
   assert.ok(Math.abs(small.width - 800) < 2 && Math.abs(small.height - 450) < 2);
