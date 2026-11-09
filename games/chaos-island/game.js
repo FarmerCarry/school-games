@@ -522,7 +522,7 @@
   const ctx = view.ctx;
   function hudCoinX(k) { return k ? 1032 : 116; }
   function lookOf(a, w) {
-    return { color: a.look.color, hat: a.look.hat, extra: a.look.extra, face: a.face, vx: a.vx, vy: a.vy, ground: !!a.ground, land: a.land, bonk: a.bonk, inv: a.inv,
+    return { color: a.look.color, hat: a.look.hat, extra: a.look.extra, face: a.face, vx: a.vx, vy: a.vy, ground: !!a.ground, land: a.land, bonk: a.bonk, bonkKind: a.bonkKind, inv: a.inv,
       ghost: a.ghost, time: time, still: calm(), scale: 1, seed: a.i * 1.7, mood: CI.has(w, 'flood') && !a.ground ? 'up' : '', lean: a.blown ? -Math.sign(a.push) * 0.18 : a.push ? -Math.sign(a.push) * 0.08 : 0 };
   }
   function drawWorld(w, play) {
@@ -565,6 +565,8 @@
       if (a.human) o.marker = duo ? String(a.i + 1) : 'me';
       A.islander(ctx, a.x, a.y, o);
       if (!a.human && a.mind && a.mind.goofT > 0 && !a.ghost) A.label(ctx, a.mind.goof === 'nap' ? 'z z' : a.mind.goof === 'dance' ? '♪' : '!', a.x + 22, a.y - 76, 26, '#ffffff', false, 5);
+      // The islanders say their names while the first card shows.
+      if (play && !a.human && w.round === 0 && w.phase === 'card' && names[a.i]) A.label(ctx, names[a.i], a.x, a.y + 22, 22, '#ffffff', true, 5);
     }
     // An open house frames whoever is inside; a child keeps the marker over the roof.
     if (w.door) {
@@ -573,7 +575,7 @@
     }
     // Falling and bouncing things.
     for (const h of w.haz) {
-      if (h.k === 'drop') A.drop(ctx, h, w.t, still);
+      if (h.k === 'drop') A.drop(ctx, h, w.t, still, isl);
       else if (h.k === 'ball') A.ball(ctx, h, w.t, still);
       else if (h.k === 'snow') A.snowball(ctx, h, w.t, still);
       else if (h.k === 'twister') A.twister(ctx, h, w.t, still, isl);

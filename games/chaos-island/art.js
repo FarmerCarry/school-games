@@ -362,6 +362,13 @@
         rr(g, door, hh - 98, 64, 98, 14); fill(g, t.door); ink(g, 5);
         rr(g, door + 12, hh - 84, 40, 26, 8); fill(g, shade(t.door, 0.25)); ink(g, 3);
         circle(g, h.side < 0 ? door + 12 : door + 52, hh - 44, 5); fill(g, '#ffd23f'); ink(g, 2.5);
+        // A flower box under the window.
+        var fx = h.side < 0 ? 52 : w - 52;
+        rr(g, fx - 30, wallTop + 70, 60, 14, 4); fill(g, '#c9874a'); ink(g, 4);
+        [-18, 0, 18].forEach(function (d, i) {
+          for (var pe = 0; pe < 5; pe++) { circle(g, fx + d + Math.cos(pe * 1.26) * 5, wallTop + 64 + Math.sin(pe * 1.26) * 5, 4); fill(g, ['#ff5d6c', '#ffd23f', '#ff9ad5'][i]); }
+          circle(g, fx + d, wallTop + 64, 2.5); fill(g, '#ffffff');
+        });
       }
       // The flat roof (you can stand on it) with a little trapdoor.
       rr(g, -12, 0, w + 24, 20, 8); fill(g, t.roof); ink(g, 5);
@@ -453,8 +460,15 @@
     if (s > 1.6) body(ctx, o.color, face, state, o.extra, dizzy ? t : 0);
     else ctx.drawImage(bodySprite(o.color, face, state, o.extra), -36, -36, 72, 72);
     ctx.restore();
+    // A zap leaves the hair standing up in yellow spikes for a moment.
+    if (o.bonk > 0 && o.bonkKind === 'clouds') {
+      var hb = -24 - R * 0.96 * sy + 12;
+      ctx.beginPath(); ctx.moveTo(-20, hb);
+      for (var z = 0; z < 7; z++) ctx.lineTo(-18 + z * 6, hb - (z % 2 ? 6 : 22));
+      ctx.lineTo(20, hb); ctx.closePath(); fill(ctx, '#ffe14d'); ink(ctx, 3.5);
+    }
     // Hat, on the top of the squashed head.
-    if (o.hat) hat(ctx, o.hat, 0, -24 - R * 0.96 * sy + 4, face, t, still);
+    if (o.hat && !(o.bonk > 0 && o.bonkKind === 'clouds')) hat(ctx, o.hat, 0, -24 - R * 0.96 * sy + 4, face, t, still);
     ctx.restore();
     // Spinning stars when bonked.
     if (o.bonk > 0) {
@@ -599,12 +613,15 @@
     ell(ctx, x, y + 2, r * (1.15 + pulse), r * 0.34 * (1.15 + pulse)); ctx.lineWidth = 5; ctx.strokeStyle = INK; ctx.stroke();
     ctx.lineWidth = 3; ctx.strokeStyle = color || (k > 0.6 ? '#ff4d4d' : '#ffd23f'); ctx.stroke();
   };
-  A.drop = function (ctx, h, time, still) {
+  A.drop = function (ctx, h, time, still, isl) {
     var s = h.art === 'meteor' ? marshSprite() : nutSprite(), size = h.art === 'meteor' ? 76 : 60, y = h.y;
     if (h.state === 'warn') {
-      if (h.art !== 'meteor' && time - h.born < 0.45) {
-        // The coconut pops up out of the tree first.
-        return;
+      // A coconut is first shaken up out of the palm, high into the sky.
+      var k = (time - h.born) / 0.55;
+      if (h.art !== 'meteor' && isl && k < 1) {
+        var tx = isl.tree.x, ty = isl.tree.top - 10;
+        ctx.save(); ctx.translate(tx + (h.x - tx) * k * 0.35, ty - k * (ty + 60) + Math.sin(k * Math.PI) * -40); ctx.rotate(still ? 0 : time * 10);
+        ctx.drawImage(s, -size / 2, -size / 2, size, size); ctx.restore();
       }
       return;
     }

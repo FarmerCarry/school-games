@@ -492,7 +492,7 @@
   function hurt(w, a, kind, src, kx, vy) {
     if (a.ghost || a.inv > 0 || w.phase !== 'live') return false;
     if (a.inside && kind !== 'flood') return false;
-    a.hearts--; a.inv = INV; a.bonk = 1.3;
+    a.hearts--; a.inv = INV; a.bonk = 1.3; a.bonkKind = kind;
     if (kx) a.kx = kx;
     if (vy) { a.vy = vy; a.ground = null; a.cut = true; }
     var id = src && typeof src === 'object' ? src.id : src | 0;
