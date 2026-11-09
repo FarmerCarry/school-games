@@ -412,6 +412,7 @@ test('saves: fresh, old, damaged and hand-edited saves all load as playable ones
   assert.equal(s.stars.length, 20);
   assert.deepEqual(plain(s.best.slice(0, 3)), [400, 0, 0]);
   assert.deepEqual(plain(s.babies), [5, 0, 0, 1, 2]);
+  assert.deepEqual(plain(ER.loadSave({ v: 2, babies: [2, 0, 0, 0, 0], golden: [9, 3, 0, 0, 0] }).golden), [2, 0, 0, 0, 0], 'never more golden babies than babies');
   assert.equal(s.color, 1, 'unlocked with 8 stars');
   assert.equal(s.hat, 0);
   assert.equal(s.seen, 0);

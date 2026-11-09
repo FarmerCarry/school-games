@@ -697,7 +697,7 @@
     s.stars = ints(raw.stars, 20, 0, 3);
     s.best = ints(raw.best, 20, 0, 99999);
     s.babies = ints(raw.babies, 5, 0, 999999);
-    s.golden = ints(raw.golden, 5, 0, 999999);
+    s.golden = ints(raw.golden, 5, 0, 999999).map(function (g, i) { return Math.min(g, s.babies[i]); });
     var total = ER.total(s);
     s.color = int(raw.color, 0, ER.COLORS.length - 1) && ER.COLORS[raw.color].need <= total ? raw.color : 0;
     s.hat = int(raw.hat, 0, ER.HATS.length - 1) && ER.HATS[raw.hat].need <= total ? raw.hat : 0;

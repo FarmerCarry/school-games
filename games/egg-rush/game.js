@@ -800,11 +800,41 @@
     A.kid(ctx, p.x, p.y, { color: look.color, hat: look.hat, face: p.face, up: up && !mood, walk: walk[i], moving: p.moving, still: still,
       carry: p.carry ? { world: world.plan.w, gold: p.carry.gold } : null, mood: mood, t: time, squash: squash[i] * (still ? 0 : 1) });
   }
+  // Gentle life in the yard: cloud shadows drift over it and the water glints
+  // (none under reduced motion).
+  function ambient(ctx, plan, still) {
+    if (still) return;
+    ctx.fillStyle = 'rgba(30,40,90,0.07)';
+    for (let i = 0; i < 3; i++) {
+      const x = ((time * 12 + i * 560) % 1760) - 240, y = 210 + i * 170;
+      A.ell(ctx, x, y, 170, 64); ctx.fill(); A.ell(ctx, x + 120, y - 26, 100, 46); ctx.fill();
+    }
+    ctx.lineWidth = 3; ctx.strokeStyle = '#ffffff';
+    for (const z of plan.zones) {
+      if (z.kind !== 'water') continue;
+      for (let i = 0; i < 5; i++) {
+        const k = (time * 0.45 + i / 5) % 1, gx = z.x + 24 + (i * 137) % Math.max(30, z.w - 48), gy = z.y + 24 + (i * 89) % Math.max(30, z.h - 48);
+        if (ER.zoneAt(world, gx, gy) !== 'water') continue;
+        ctx.globalAlpha = Math.sin(k * Math.PI) * 0.75;
+        ctx.beginPath(); ctx.arc(gx, gy, 8 + k * 14, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  function snowfall(ctx, plan, still) {
+    if (still || plan.biome !== 'snow') return;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    for (let i = 0; i < 28; i++) {
+      const x = (i * 149 + Math.sin(time * 0.8 + i) * 24 + 1280) % W, y = ((time * 34 + i * 83) % (H + 40)) - 20;
+      A.circle(ctx, x, y, 2.4 + (i % 3)); ctx.fill();
+    }
+  }
   // Everything that stands on the ground, sorted by where its feet are.
   const ents = [];
   function drawWorld(ctx, still) {
     const w = world, plan = w.plan;
     ctx.drawImage(A.ground(plan, pixelScale()), 0, 0, W, H);
+    ambient(ctx, plan, still);
     // home nests glow while their kid carries an egg
     plan.homes.forEach((h, i) => {
       const p = w.players[i], hot = p && p.carry;
@@ -846,6 +876,7 @@
       else if (it.f === 5) drawHatch(ctx, o, still);
       else if (it.f === 6) drawGhost(ctx, o, still);
     }
+    snowfall(ctx, plan, still);
     for (const h of hatching) drawHatch(ctx, h, still);
     // the next thing to touch: a bouncing arrow over an egg, or over home while carrying
     w.players.forEach((p, i) => {

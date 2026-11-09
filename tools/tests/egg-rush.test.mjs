@@ -16,8 +16,8 @@ after(async () => { await browser?.close(); await server?.close(); });
 
 // The game with its frame loop stepped by hand and its Kit.stats calls recorded.
 // saved: a raw string put in storage once per tab; failSave: storage refuses the save.
-async function game(t, { saved, failSave = false } = {}) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+async function game(t, { saved, failSave = false, reducedMotion = 'no-preference' } = {}) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -222,8 +222,8 @@ test('playing the first yard with the keyboard: eggs hatch, the level ends with 
   assert.equal(await g(page, '__game.level'), 'w1L2', 'Enter on the map opens the next yard');
 });
 
-test('moving in a looking hen\'s eyes: «!», a bump, the egg rolls back, and a miss is reported', async t => {
-  const page = await game(t, { saved: SAVE(1) });
+for (const motion of ['no-preference', 'reduce']) test(`moving in a looking hen's eyes: «!», a bump, the egg rolls back, and a miss is reported (motion: ${motion})`, async t => {
+  const page = await game(t, { saved: SAVE(1), reducedMotion: motion });
   await page.keyboard.press('Enter');
   await step(page, 2);
   await page.locator('.lvl[data-li="0"]').click();
@@ -246,7 +246,8 @@ test('moving in a looking hen\'s eyes: «!», a bump, the egg rolls back, and a 
   for (let i = 0; i < 60 && !(await g(page, '__game.catches')); i++) await step(page, 2);
   await keys(page, []);
   assert.equal(await g(page, '__game.catches'), 1);
-  assert.ok(await g(page, '__game.shake') > 0, 'the screen shakes');
+  if (motion === 'reduce') assert.equal(await g(page, '__game.shake'), 0, 'no shake under reduced motion');
+  else assert.ok(await g(page, '__game.shake') > 0, 'the screen shakes');
   assert.ok((await g(page, 'er.track')).includes('miss'));
   await step(page, 200);
   assert.equal(await g(page, '__game.carrying'), false, 'the egg was dropped');
