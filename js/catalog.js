@@ -182,9 +182,9 @@ window.GAMES = [
       { keys: ['1', '2', '3', '4'], action: 'المتجر، الكتاب، الحوض، الخريطة' },
       { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }
     ] },
-  { slug: 'egg-rush', roundMinutes: [5, 15], inputStyle: 'keyboard', title: 'سباق البيض', en: 'Egg Rush steal eggs pets tycoon', tags: 'بيض حيوانات فقس تايكون', cats: ['two-player', 'idle'], players: '1-2', color: '#ffd23f',
-    blurb: 'تسلّل إلى العشّ، اخطف البيضة، واهرب قبل أن يستيقظ الحارس! افقس حيوانات تجمع لك العملات!',
-    tip: 'الحارس يفتح عينه قبل أن يطاردك، راقب علامة ؟',
-    controls: [{ keys: ['W', 'A', 'S', 'D'], action: 'حركة' }, { keys: ['↑', '←', '↓', '→'], action: 'حركة' }, { keys: ['مسافة', 'E'], action: 'اخطف البيضة أو أفلتها' }, { keys: ['Q'], action: 'استخدم الأداة' }, { keys: ['انقر'], action: 'اجمع العملات وافتح المتجر' }, { keys: ['P', 'Esc'], action: 'إيقاف مؤقت' }] }
+  { slug: 'egg-rush', roundMinutes: [1, 4], inputStyle: 'keyboard', title: 'سباق البيض', en: 'Egg Rush sneak freeze statue game eggs hatch chicks farm animals two players', tags: 'بيض فقس كتاكيت صيصان مزرعة دجاجة بطة بطريق نعامة ديناصور تسلل تمثال قف لاعبان', cats: ['two-player', 'arcade'], players: '1-2', color: '#ffd23f',
+    blurb: 'تسلّل إلى العشّ وخذ البيضة إلى بيتك لتفقس! وإذا فتح الحارس عينه فقف مكانك كالتمثال.',
+    tip: 'عندما تظهر علامة <b>؟</b> فوق الحارس قف ولا تتحرك حتى ينام من جديد. القش والشجيرات تخفيك عن عينيه. في سباق اثنين: اللاعب 1 يمشي بـ <b>W A S D</b> واللاعب 2 بالأسهم.',
+    controls: [{ keys: ['←', '↑', '→', '↓'], action: 'امشِ، وتُلتقط البيضة باللمس' }, { keys: ['W', 'A', 'S', 'D'], action: 'امشِ (واللاعب 1 في سباق اثنين)' }, { keys: ['الفأرة'], action: 'اضغط مطوّلًا لتمشي نحو المؤشر' }, { keys: ['←', '↑', '→', '↓'], action: 'اللاعب 2 في سباق اثنين' }, { keys: ['P', 'Esc'], action: 'استراحة' }] }
 ];
 

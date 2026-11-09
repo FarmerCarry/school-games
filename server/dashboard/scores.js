@@ -13,7 +13,7 @@ window.SG_SCORES = {
   'chaos-island': ['العملات التي جُمعت', 'the coins collected'],
   'dino-3d': ['نقاط الجولة', 'the points of the run'],
   'drift-king': ['المسافة المقطوعة مع مكافأة الانزلاق', 'the distance driven plus the drift bonus'],
-  'egg-rush': ['البيض الذي فُقس في الجولة، وفي مباراة اللاعبين عملات اللاعب الأعلى', 'the eggs hatched in the round; in a two-player match, the higher coin total'],
+  'egg-rush': ['البيض الذي فُقس في المرحلة، وفي سباق اللاعبين البيض الذي فقسه اللاعبان معًا', 'the eggs hatched in the level; in a two-player race, the eggs both players hatched together'],
   'fire-and-ice': ['نجوم المرحلة المنتهية', 'the stars of a finished level'],
   'hoop-heads': ['نقاط الطفل في المباراة', 'the child’s points in the match'],
   'key-runner': ['وقت إنهاء البرج بالثواني، وفي سباق اللاعبين صفر', 'the time to finish the tower, in seconds; in a two-player race, zero'],
