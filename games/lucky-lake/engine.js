@@ -3,7 +3,7 @@
  * Pure: no DOM, no Kit, no timers and no Math.random (a world takes a seed), so
  * tools/tests/lucky-lake-engine.test.mjs loads it with { window: {} } and fishes whole
  * sessions with scripted players. game.js reads the DDA tier, steps the world with the
- * child's input and turns its events into pictures, sound and statistics. */
+ * child's input and turns its events into pictures and sound. */
 (function () {
   'use strict';
   var LL = window.LL = window.LL || {};
@@ -122,7 +122,6 @@
     place('lagoon', 'البحيرة السحرية', 236, 676, 7, { night: true, junk: [{ x: 700, y: 652 }, { x: 1040, y: 654 }], goals: { n: 6, sp: 'golden', w: 25 } })
   ];
   LL.SPECIES.forEach(function (s) { LL.PLACES[s.place].species.push(s.i); });
-  LL.roundId = function (p) { return 'p' + (clamp(p | 0, 0, 4) + 1); };
   // The rod tips: player 1 on the dock at the left, player 2 in the boat at the right.
   LL.ROD = [{ x: 330, y: 66 }, { x: 990, y: 92 }];
 
@@ -641,7 +640,6 @@
     var a = w.players[0].total, b = w.players[1] ? w.players[1].total : 0;
     return a === b ? 0 : a > b ? 1 : 2;
   };
-  LL.duoScore = function (w) { return Math.max(w.players[0].total, w.players[1] ? w.players[1].total : 0); };
 
   /* ------------------------------------------------- DDA outcomes */
   // 0..1 for Kit.dda, once per fish that came to the hook: landed 1, lost on the reel a

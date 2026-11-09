@@ -1,6 +1,5 @@
 // Lucky Lake in real Chromium: real mouse and keyboard input, a whole catch, the trip's
-// result, saves (and a full disk), pause, the places map, rods and the two-player derby,
-// with the statistics a portal would receive.
+// result, saves (and a full disk), pause, the places map, rods and the two-player derby.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -17,10 +16,12 @@ after(async () => { await browser?.close(); await server?.close(); });
 const places = (stars = []) => [0, 1, 2, 3, 4].map(i => ({ n: stars[i] ? 6 : 0, g: [0, 1, 2].map(k => k < (stars[i] || 0) ? 1 : 0) }));
 const SAVE = (extra = {}) => ({ v: 2, coins: 0, caught: 0, book: {}, junk: {}, places: places(), rods: { zone: 0, reel: 0, lure: 0, bait: 0 }, coach: true, ...extra });
 // DDA levels: 0.05 is tier 1, 0.5 is tier 3.
-const TIER = { 1: { _: { solo: [0.05, 4] } }, 3: { _: { solo: [0.5, 4] } } };
+const TIER = { 1: 0.05, 3: 0.5 };
 
-// The game with its frame loop stepped by hand, Kit.stats recorded, and a storage that
-// can be told to fail. No page errors, no console errors, no requests off the server.
+// The game with its frame loop stepped by hand, every Kit.dda result recorded
+// (ll.results), and a storage that can be told to fail. `dda` is the level solo fishing
+// starts at before it has a result (Kit.dda's `start`).
+// No page errors, no console errors, no requests off the server.
 async function game(t, { save, dda, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
   const ctx = await browser.newContext({ viewport: { width: size[0], height: size[1] }, reducedMotion });
   const errors = [], requests = [];
@@ -36,10 +37,9 @@ async function game(t, { save, dda, reducedMotion = 'reduce', size = [1280, 720]
     if (!sessionStorage.getItem('ll-seeded')) {
       sessionStorage.setItem('ll-seeded', '1');
       if (save !== undefined) localStorage.setItem('sg:lucky-lake:save', typeof save === 'string' ? save : JSON.stringify(save));
-      if (dda) localStorage.setItem('sg:lucky-lake:dda', JSON.stringify(dda));
     }
     let kit;
-    const ll = window.ll = { stats: [], cues: 0, hits: 0, misses: 0, failSave: false };
+    const ll = window.ll = { results: [], failSave: false };
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (update, render) => {
@@ -48,15 +48,12 @@ async function game(t, { save, dda, reducedMotion = 'reduce', size = [1280, 720]
         ll.render = () => render(0);
         return { stop() {} };
       };
-      for (const name of ['round', 'end', 'tutorial']) {
-        const call = kit.stats[name];
-        kit.stats[name] = function (...args) { ll.stats.push([name, ...args]); return call.apply(this, args); };
-      }
-      for (const name of ['cue', 'hit', 'miss']) {
-        const call = kit.track[name];
-        const key = { cue: 'cues', hit: 'hits', miss: 'misses' }[name];
-        kit.track[name] = function (...args) { ll[key]++; return call.apply(this, args); };
-      }
+      const make = kit.dda;
+      kit.dda = (slug, opts) => {
+        const control = make.call(kit, slug, Object.assign({ start: dda }, opts)), result = control.result;
+        control.result = outcome => { ll.results.push(outcome); return result.call(control, outcome); };
+        return control;
+      };
     } });
     const write = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key) {
@@ -71,7 +68,7 @@ async function game(t, { save, dda, reducedMotion = 'reduce', size = [1280, 720]
 }
 const state = page => page.evaluate(() => __game.state);
 const step = (page, n = 1) => page.evaluate(n => ll.step(n), n);
-const stats = (page, kind) => page.evaluate(kind => ll.stats.filter(s => !kind || s[0] === kind), kind);
+const results = page => page.evaluate(() => ll.results);
 const stored = page => page.evaluate(() => { const raw = localStorage.getItem('sg:lucky-lake:save'); return raw ? JSON.parse(raw) : null; });
 // Steps the game until a condition on its state holds (or the step budget runs out).
 async function until(page, cond, max = 3600) {
@@ -113,17 +110,17 @@ async function catchOne(page) {
   return false;
 }
 
-test('the title is no round; Play goes straight to the village pond the first time and starts the round', async t => {
+test('the title waits; Play goes straight to the village pond the first time and starts a trip', async t => {
   const page = await game(t, { dda: TIER[1] });
   await step(page, 30);
   assert.equal((await state(page)).screen, 'title');
-  assert.deepEqual(await stats(page), [], 'nothing is reported on the title');
+  assert.equal((await state(page)).tripOpen, false, 'the title opens no trip');
   assert.equal(await page.locator('#titleFish b').textContent(), '0/33');
   await page.locator('#btnPlay').click();
   await step(page);
   const s = await state(page);
   assert.equal(s.screen, 'play'); assert.equal(s.mode, 'solo'); assert.equal(s.place, 0); assert.equal(s.tier, 1);
-  assert.deepEqual(await stats(page), [['round', 'p1'], ['tutorial', 'start']]);
+  assert.equal(s.tripOpen, true); assert.equal(s.trip, 0);
   assert.equal(s.p1.state, 'ready');
   // The idle coach shows a hand after a moment, and it never casts by itself.
   assert.ok(await until(page, 's.ghost', 60 * 4), 'the hand shows where to cast');
@@ -188,14 +185,12 @@ test('a whole catch with real input: the «!», a press, holding to reel; then t
   }
   const s = await state(page);
   assert.ok(s.trip >= 1);
-  assert.equal(await page.evaluate(() => ll.cues) >= 1, true, 'the «!» is a reaction cue');
   const saved = await stored(page);
   assert.equal(saved.caught, 1, 'saved the moment it is landed');
   assert.equal(Object.keys(saved.book).length, 1, 'the fish is in the book');
   assert.ok(saved.coins > 0);
-  assert.equal(saved.coach, true);
-  assert.deepEqual((await stats(page, 'tutorial')).map(c => c[1]), ['start', 'done']);
-  assert.ok(await page.evaluate(() => ll.hits) >= 1);
+  assert.equal(saved.coach, true, 'the first fish ends the first lesson');
+  assert.ok((await results(page)).includes(1), 'a landed fish is a full result for the difficulty');
   // The catch card shows the fish big with its name, weight and coins.
   if (!(await state(page)).card) assert.ok(await until(page, 's.card', 120));
   assert.equal(await page.locator('#scrCatch').isVisible(), true);
@@ -226,14 +221,14 @@ test('pressing during a nibble scares the fish off: the hook stays, nothing is h
     }
     // Tier 3 fish always nibble at least once before the bite.
     if (await until(page, "s.fish.some(f => f.state === 'nibble')", 60 * 15)) {
-      const casts = (await state(page)).p1.casts;
+      const casts = (await state(page)).p1.casts, before = (await results(page)).length;
       await page.keyboard.press('Space');
       await step(page);
       const now = await state(page);
       assert.notEqual(now.p1.state, 'reel', 'a nibble is never a bite');
       assert.equal(now.p1.casts, casts, 'the hook stays where it is');
       assert.ok(now.fish.some(f => f.state === 'flee'), 'the fish swims off');
-      assert.ok(await page.evaluate(() => ll.misses) >= 1);
+      assert.deepEqual((await results(page)).slice(before), [0], 'a scared fish is a failed try for the difficulty');
       spooked = true;
     }
   }
@@ -273,7 +268,7 @@ test('P, Esc, the button and a lost focus pause the lake; nothing moves while pa
   }
 });
 
-test('leaving a place shows the trip: its catches and stars; Play again and R start a new trip, each one round', async t => {
+test('leaving a place shows the trip: its catches and stars; Play again and R start a new trip', async t => {
   const page = await game(t, { save: SAVE(), dda: TIER[1] });
   await page.keyboard.press('Enter'); await step(page, 2);
   await page.keyboard.press('Enter'); await step(page, 2);
@@ -284,30 +279,31 @@ test('leaving a place shows the trip: its catches and stars; Play again and R st
   await step(page, 2);
   let s = await state(page);
   assert.equal(s.screen, 'result');
-  assert.equal(await page.locator('#resCount').textContent(), '1');
-  assert.deepEqual(await stats(page, 'end'), [['end', 'end', 1]], 'the trip ends with its catches');
+  assert.equal(await page.locator('#resCount').textContent(), '1', 'the trip shows its catches');
+  assert.equal(s.tripOpen, false, 'the basket button ends the trip');
   // Enter, Space and R are ignored for the first moment, then play again.
   await page.keyboard.press('Enter'); await step(page);
   assert.equal((await state(page)).screen, 'result');
   await step(page, 50);
   await page.keyboard.press('Enter'); await step(page, 2);
   s = await state(page);
-  assert.equal(s.screen, 'play'); assert.equal(s.trip, 0); assert.equal(s.p1.casts, 0);
+  assert.equal(s.screen, 'play'); assert.equal(s.trip, 0); assert.equal(s.p1.casts, 0); assert.equal(s.tripOpen, true);
   // The pause menu's places button also ends the trip; R on the result fishes here again.
   await page.keyboard.press('KeyP'); await step(page);
   await page.locator('#btnMenu').click(); await step(page, 60);
-  assert.equal((await state(page)).screen, 'result');
+  s = await state(page);
+  assert.equal(s.screen, 'result'); assert.equal(s.tripOpen, false);
+  assert.equal(await page.locator('#resCount').textContent(), '0', 'that trip landed nothing');
   await page.keyboard.press('KeyR'); await step(page, 2);
-  assert.equal((await state(page)).screen, 'play');
+  s = await state(page);
+  assert.equal(s.screen, 'play'); assert.equal(s.tripOpen, true); assert.equal(s.place, 0);
   // Restart from the pause starts a fresh trip too.
   const casted = await mouseTo(page, 650, 420);
   await page.mouse.click(casted.x, casted.y); await step(page, 5);
   await page.keyboard.press('Escape'); await step(page);
   await page.locator('#btnRestart').click(); await step(page);
   s = await state(page);
-  assert.equal(s.screen, 'play'); assert.equal(s.p1.casts, 0);
-  const rounds = (await stats(page)).filter(c => c[0] === 'round' || c[0] === 'end');
-  assert.deepEqual(rounds, [['round', 'p1'], ['end', 'end', 1], ['round', 'p1'], ['end', 'end', 0], ['round', 'p1'], ['end', 'end', 0], ['round', 'p1']]);
+  assert.equal(s.screen, 'play'); assert.equal(s.p1.casts, 0); assert.equal(s.trip, 0); assert.equal(s.tripOpen, true);
   // The result's map button goes to the places.
   await page.locator('#btnBasket').click(); await step(page, 50);
   await page.locator('#resMap').click(); await step(page);
@@ -330,8 +326,7 @@ test('the places map: two stars open the next place; a locked one wiggles and do
   assert.equal((await state(page)).screen, 'map');
   await page.locator('.place').nth(1).click(); await step(page);
   const s = await state(page);
-  assert.equal(s.screen, 'play'); assert.equal(s.place, 1);
-  assert.deepEqual((await stats(page, 'round')).map(c => c[1]), ['p2']);
+  assert.equal(s.screen, 'play'); assert.equal(s.place, 1); assert.equal(s.tripOpen, true);
 });
 
 test('saves come back after a reload, and an old or damaged save opens a fresh lake', async t => {
@@ -381,7 +376,7 @@ test('rods: coins buy an upgrade; a full disk shows the warning, keeps the rod, 
   assert.equal(await page.locator('#bookCount b').textContent(), '0/33');
 });
 
-test('two players: the derby starts on both keys, each aims and casts with their own keys, and the end reports only end with the heavier total', async t => {
+test('two players: the derby starts on both keys, each aims and casts with their own keys, and the heavier total wins', async t => {
   const page = await game(t, { save: SAVE() });
   await page.locator('#btnDuo').click(); await step(page);
   let s = await state(page);
@@ -395,11 +390,11 @@ test('two players: the derby starts on both keys, each aims and casts with their
   assert.match(await page.locator('#duoP1').getAttribute('class'), /ready/);
   await page.keyboard.press('Enter'); await step(page);
   assert.equal((await state(page)).duo, 'count');
-  assert.deepEqual(await stats(page, 'round'), [], 'the countdown is not yet the match');
-  await step(page, 185);
+  await step(page, 90);
+  assert.deepEqual([(await state(page)).duo, (await state(page)).left], ['count', 120], 'the countdown is not yet the match');
+  await step(page, 95);
   s = await state(page);
   assert.equal(s.duo, 'go');
-  assert.deepEqual((await stats(page, 'round')).map(c => c[1]), ['duo']);
   // Each player's keys move only their own aim.
   const a0 = s.p1.aim, b0 = s.p2.aim;
   await page.keyboard.down('KeyD'); await step(page, 20); await page.keyboard.up('KeyD');
@@ -426,10 +421,8 @@ test('two players: the derby starts on both keys, each aims and casts with their
   // Both players fish on until the two minutes are up.
   assert.ok(await until(page, "s.screen === 'duoEnd'", 60 * 140));
   s = await state(page);
-  const end = await stats(page, 'end');
-  assert.equal(end.length, 1);
-  assert.equal(end[0][1], 'end', 'a derby reports only end');
-  assert.equal(end[0][2], Math.max(s.p1.total, s.p2.total), 'with the heavier total in tenths of a kg');
+  assert.equal(s.winner, s.p1.total === s.p2.total ? 0 : s.p1.total > s.p2.total ? 1 : 2, 'the heavier total wins');
+  assert.deepEqual(await results(page), [], 'a derby never moves the solo difficulty');
   assert.equal(await page.locator('#scrDuoEnd').isVisible(), true);
   assert.match(await page.locator('#duoWinner').textContent(), s.winner ? new RegExp('فاز اللاعب ' + s.winner) : /تعادل/);
   // Play again after a moment.

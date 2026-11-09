@@ -1,12 +1,10 @@
-/* Lucky Lake (بحيرة الحظ): screens, mouse and keyboard, the wordless coach, saves,
- * sound and play statistics. engine.js simulates the lake; art.js draws it.
+/* Lucky Lake (بحيرة الحظ): screens, mouse and keyboard, the wordless coach, saves
+ * and sound. engine.js simulates the lake; art.js draws it.
  * This is the UI layer: it reads Kit.dda when a trip starts (and at every cast), and
- * reports Kit.stats rounds and Kit.track cues, hits and misses.
- * Rounds: a solo trip to a place is one round ('p1'..'p5'). It starts when the child
- * starts fishing there and ends when the child leaves the place (the basket button or
- * the pause menu's places button, or Restart, which starts a new trip):
- * Kit.stats.end('end', catches landed on the trip). A derby is one 'duo' round that
- * ends with Kit.stats.end('end', the heavier total in tenths of a kg). */
+ * reports each fish that came to the hook back to it.
+ * A solo trip to a place starts when the child starts fishing there and ends when the
+ * child leaves the place (the basket button or the pause menu's places button, or
+ * Restart, which starts a new trip). */
 (function () {
   'use strict';
   const LL = window.LL, A = LL.art, J = Kit.juice, W = LL.W, H = LL.H;
@@ -32,11 +30,11 @@
     saveStatus.saved();
     return true;
   }
-  // One difficulty controller for solo fishing (Kit keeps it per player and age band).
+  // One difficulty controller for solo fishing (Kit keeps it on this PC).
   const dda = Kit.dda('lucky-lake', { id: 'solo' });
 
   /* --------------------------------------------------------------- state */
-  let screen = 'title', mode = 'solo', world = null, place = 0, time = 0, busyT = 0, menuIdle = 0, menuNext = 4;
+  let screen = 'title', mode = 'solo', world = null, place = 0, time = 0, menuIdle = 0, menuNext = 4;
   const menuWorld = LL.create({ place: 0, seed: 11 });
   let trip = { open: false, catches: [], coins: 0, before: 0, newPlace: -1, earned: [] };
   let card = null, result = null, resultT = 0, resultLock = 0, duo = null, duoEnd = null, banner = null;
@@ -123,12 +121,10 @@
 
   /* --------------------------------------------------------------- solo */
   function startSolo(i) {
-    // Difficulty is read at every trip start, before the round is reported.
+    // Difficulty is read at every trip start.
     const tier = dda.tier, G = LL.PLACES[i].goals;
     place = i; mode = 'solo';
     world = LL.create({ place: i, tier: tier, rods: save.rods, seed: (Math.random() * 2147483647) | 0, boost: save.places[i].g[1] ? '' : G.sp });
-    Kit.stats.round(LL.roundId(i));
-    if (!save.coach) Kit.stats.tutorial('start');
     trip = { open: true, catches: [], coins: 0, before: LL.stars(save, i), newPlace: -1, earned: [] };
     card = null; result = null; banner = null; duo = null;
     resetPlay();
@@ -143,12 +139,11 @@
     pressQ = false; ptr.down = false; coinShown = save.coins; timers = [];
     Kit.keys.reset();
   }
-  // Leaving a place ends its trip (the round) with the number of catches landed.
+  // Leaving a place ends its trip.
   function endTrip() {
     if (!trip.open) return;
     trip.open = false;
     if (card) closeCard(true);
-    Kit.stats.end('end', trip.catches.length);
   }
   function finishTrip() {
     if (mode !== 'solo' || !world) return;
@@ -274,8 +269,6 @@
       }
     }
     if (r.newPlace >= 0 && at(0.4 + Math.max(0, r.stars - r.before) * 0.38)) { $('resNewPlace').hidden = false; J.levelUp(); confetti(); }
-    busyT += dt;
-    if (resultT < 3 && busyT >= 1) { busyT = 0; Kit.stats.busy(); }
   }
   function resultNext() {
     if (!result) return;
@@ -357,14 +350,13 @@
     else if (duo.phase === 'count') {
       const n = 3 - Math.floor(duo.t);
       if (n !== duo.count) { duo.count = n; J.countdown(Math.max(0, n)); }
-      if (duo.t >= 3) { duo.phase = 'go'; duo.t = 0; Kit.stats.round('duo'); }
+      if (duo.t >= 3) { duo.phase = 'go'; duo.t = 0; }
     }
   }
   function finishDuo() {
     if (!duo || duo.over) return;
     duo.over = true;
     const win = LL.duoWinner(world);
-    Kit.stats.end('end', LL.duoScore(world));
     duoEnd = { win: win, t: 0 };
     $('duoWinner').textContent = win ? 'فاز اللاعب ' + win + '!' : 'تعادل!';
     $('duoWinner').style.color = win === 1 ? '#e07800' : win === 2 ? '#b23fe0' : A.INK;
@@ -512,18 +504,18 @@
           J.impact(0.6); J.pop(0.15); shake.add(3);
           ripple(e.x, surfaceY(), 1, '255,230,90'); splash(e.x, surfaceY(), 8);
           setMood(e.p, 'bite', 1.5);
-          if (solo()) { Kit.track.cue(); coach.bites++; }
+          if (solo()) coach.bites++;
           break;
         case 'spook':
           J.back(); float(p.bob.x, surfaceY() - 60, 'انتظر !', '#ffffff', 30);
           fx.burst(e.x, e.y, { count: 8, colors: ['#ffffff'], speed: 90, life: 0.7, size: 6, gravity: -160 });
-          if (solo()) { Kit.track.miss(); dda.result(0); }
+          if (solo()) dda.result(0);
           break;
         case 'late':
           J.error(); setMood(e.p, 'sad', 1);
           if (!e.junk) {
             float(e.x, e.y - 40, 'فاتتك!', '#ffffff', 30);
-            if (solo()) { Kit.track.miss(); dda.result(0); }
+            if (solo()) dda.result(0);
           }
           break;
         case 'hooked':
@@ -535,7 +527,7 @@
         case 'escape':
           J.back(); ripple(e.x, surfaceY(), 0.7); splash(e.x, surfaceY(), 8); setMood(e.p, 'sad', 1.2);
           float(e.x, surfaceY() - 50, e.junk ? 'أفلتت!' : 'هربت!', '#ffffff', 32);
-          if (solo() && !e.junk) { Kit.track.miss(); dda.result(LL.outcome('escape', e.peak)); }
+          if (solo() && !e.junk) dda.result(LL.outcome('escape', e.peak));
           break;
         case 'back': J.whoosh(0.2); break;
         case 'timeup': finishDuo(); break;
@@ -554,13 +546,12 @@
       float(e.p ? 1060 : 220, surfaceY() - 180, c.junk ? '0 كغ' : '+' + LL.weightText(c.w10) + ' كغ', e.p ? '#f3c4ff' : '#ffd8a8', 34);
       return;
     }
-    Kit.track.hit();
     if (!c.junk) dda.result(1);
     const res = LL.applyCatch(save, place, c);
     trip.catches.push(c); trip.coins += c.coins;
     if (res.unlocked >= 0) trip.newPlace = res.unlocked;
     pendingGoals = pendingGoals.concat(res.goals);
-    if (!c.junk && !save.coach) { save.coach = true; Kit.stats.tutorial('done'); }
+    if (!c.junk && !save.coach) save.coach = true;
     persist();
     $('basketNum').textContent = String(trip.catches.length);
     if (p.streak >= 2) {
@@ -694,8 +685,6 @@
       if (card && card.pending && world.players[0].state !== 'land') { card.pending = false; openCard(card.c, card.res); }
       if (card && card.open) {
         card.t += dt;
-        busyT += dt;
-        if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
         if (card.t > 9) closeCard(false);
       }
     }

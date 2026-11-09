@@ -14,7 +14,6 @@ const sandbox = { window: {} };
 vm.runInNewContext(source, sandbox);
 const LL = sandbox.window.LL;
 const DT = 1 / 60;
-const ID = /^[A-Za-z][A-Za-z0-9_:.-]{0,23}$/;
 const plain = v => JSON.parse(JSON.stringify(v));
 
 // Steps the world, collecting events; input(w, i) gives the inputs of step i.
@@ -95,7 +94,7 @@ test('every tuning knob moves one way from tier 1 to tier 5, in the direction th
   for (let i = 1; i < LL.PULL.length; i++) assert.ok(LL.PULL[i].v > LL.PULL[i - 1].v && LL.PULL[i].rest[1] < LL.PULL[i - 1].rest[1]);
 });
 
-test('five places with their own species, goals and round ids; every species belongs to one place', () => {
+test('five places with their own species and goals; every species belongs to one place', () => {
   assert.equal(LL.PLACES.length, 5);
   const ids = new Set();
   LL.PLACES.forEach((P, i) => {
@@ -105,9 +104,6 @@ test('five places with their own species, goals and round ids; every species bel
     assert.ok(P.goals.n >= 3 && P.goals.w > 0);
     // The weight goal can be met by a fish of the place.
     assert.ok(P.species.some(s => LL.SPECIES[s].max >= P.goals.w), `${P.id}: a fish can weigh ${P.goals.w}`);
-    const id = LL.roundId(i);
-    assert.match(id, ID); assert.doesNotMatch(id, /\d{3}/);
-    assert.equal(id, 'p' + (i + 1));
   });
   for (const s of LL.SPECIES) {
     assert.ok(!ids.has(s.id), 'unique ' + s.id); ids.add(s.id);
@@ -423,7 +419,6 @@ test('the derby: two fishers on one lake, each with their own aim and reel; time
   assert.ok(events.filter(e => e.t === 'landed').every(e => e.p === 0 || e.p === 1));
   const win = LL.duoWinner(w);
   assert.equal(win, a.total === b.total ? 0 : a.total > b.total ? 1 : 2);
-  assert.equal(LL.duoScore(w), Math.max(a.total, b.total));
   // No new cast once the clock has run out.
   const casts = a.casts;
   LL.step(w, DT, [{ press: true }, { press: true }]);
