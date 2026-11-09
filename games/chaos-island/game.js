@@ -564,7 +564,7 @@
       const o = lookOf(a, w);
       if (a.human) o.marker = duo ? String(a.i + 1) : 'me';
       A.islander(ctx, a.x, a.y, o);
-      if (!a.human && a.mind && a.mind.goofT > 0 && !a.ghost) A.text(ctx, a.mind.goof === 'nap' ? 'z z' : a.mind.goof === 'dance' ? '♪' : '!', a.x + 22, a.y - 76, 26, '#ffffff', false, 5);
+      if (!a.human && a.mind && a.mind.goofT > 0 && !a.ghost) A.label(ctx, a.mind.goof === 'nap' ? 'z z' : a.mind.goof === 'dance' ? '♪' : '!', a.x + 22, a.y - 76, 26, '#ffffff', false, 5);
     }
     // An open house frames whoever is inside; a child keeps the marker over the roof.
     if (w.door) {
@@ -594,7 +594,7 @@
     ctx.globalAlpha = 1;
     for (const f of floats) {
       ctx.globalAlpha = Math.max(0, 1 - Math.max(0, f.t - 0.7) / 0.5);
-      A.text(ctx, f.text, f.x, f.y, f.size, f.color, f.rtl);
+      A.label(ctx, f.text, f.x, f.y, f.size, f.color, f.rtl);
     }
     ctx.globalAlpha = 1;
   }
@@ -603,12 +603,12 @@
     const still = calm(), humans = w.actors.filter(a => a.human);
     humans.forEach((a, k) => {
       const x0 = k ? 1100 : 30, dir = k ? -1 : 1;
-      if (duo) { A.circle(ctx, x0 + dir * 4, 34, 20); ctx.fillStyle = a.look.color; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = A.INK; ctx.stroke(); A.text(ctx, String(k + 1), x0 + dir * 4, 35, 24, '#ffffff', false, 4); }
+      if (duo) { A.circle(ctx, x0 + dir * 4, 34, 20); ctx.fillStyle = a.look.color; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = A.INK; ctx.stroke(); A.label(ctx, String(k + 1), x0 + dir * 4, 35, 24, '#ffffff', false, 4); }
       for (let i = 0; i < 3; i++) A.heart(ctx, x0 + dir * ((duo ? 50 : 22) + i * 46), 34, 1.25, i < a.hearts && !a.ghost);
       const cx = hudCoinX(k);
       A.rr(ctx, cx - 46, 72, 104, 44, 22); ctx.fillStyle = 'rgba(28,34,80,0.8)'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = '#ffffff'; ctx.stroke();
       A.coin(ctx, cx - 24, 94, 15, 0, false);
-      A.text(ctx, String(shownCoins[k]), cx + 18, 95, 28, '#ffffff', false, 0);
+      A.label(ctx, String(shownCoins[k]), cx + 18, 95, 28, '#ffffff', false, 0);
     });
     // One dot per round: green for survived, grey for lost, the current one pulses.
     const n = w.rounds, me = w.actors[0];
@@ -625,9 +625,14 @@
       ctx.direction = 'ltr';
       A.rr(ctx, x0 - 16, 52, tw + 32, 48, 24); ctx.fillStyle = 'rgba(255,255,255,0.94)'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = A.INK; ctx.stroke();
       kinds.forEach((k, i) => A.icon(ctx, k, x0 + tw - 24 - i * 50, 76, 0.6, time, still));
-      A.text(ctx, label, x0 + lw / 2, 77, 26, A.INK, true, 0);
+      A.label(ctx, label, x0 + lw / 2, 77, 26, A.INK, true, 0);
     }
-    if (goT > 0) { ctx.globalAlpha = Math.min(1, goT * 3); A.text(ctx, 'انطلق!', 640, 360, 96 * (1 + (still ? 0 : (0.9 - goT) * 0.3)), '#ffd23f', true, 12); ctx.globalAlpha = 1; }
+    if (goT > 0) {
+      const k = 1 + (still ? 0 : (0.9 - goT) * 0.3);
+      ctx.save(); ctx.globalAlpha = Math.min(1, goT * 3); ctx.translate(640, 360); ctx.scale(k, k);
+      A.label(ctx, 'انطلق!', 0, 0, 96, '#ffd23f', true, 12);
+      ctx.restore();
+    }
     if (flash > 0) { ctx.fillStyle = 'rgba(255,255,230,' + (flash * 1.6) + ')'; ctx.fillRect(0, 0, W, H); }
     // The coach: the keys to press now, and where to go.
     if (coach.on && coach.inp) {
@@ -655,9 +660,11 @@
           const cy = 662;
           A.rr(ctx, cx - 150, cy - 56, 300, 112, 26); ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = A.INK; ctx.stroke();
           A.circle(ctx, cx - 118, cy, 24); ctx.fillStyle = pl[k].look.color; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = A.INK; ctx.stroke();
-          A.text(ctx, String(k + 1), cx - 118, cy + 1, 28, '#ffffff', false, 4);
-          A.key(ctx, cx + 22, cy - 22, L[0], K.down(C[0]), time, true, 44);
-          A.key(ctx, cx - 30, cy + 26, L[1], K.down(C[1]), time, true, 44); A.key(ctx, cx + 22, cy + 26, L[2], K.down(C[2]), time, true, 44); A.key(ctx, cx + 74, cy + 26, L[3], K.down(C[3]), time, true, 44);
+          A.label(ctx, String(k + 1), cx - 118, cy + 1, 28, '#ffffff', false, 4);
+          ctx.save(); ctx.translate(cx + 26, cy); ctx.scale(0.8, 0.8);
+          A.key(ctx, 0, -32, L[0], K.down(C[0]), time, true, 50);
+          A.key(ctx, -62, 34, L[1], K.down(C[1]), time, true, 50); A.key(ctx, 0, 34, L[2], K.down(C[2]), time, true, 50); A.key(ctx, 62, 34, L[3], K.down(C[3]), time, true, 50);
+          ctx.restore();
         });
       } else if (!coach.on && w.phase === 'card') {
         A.key(ctx, 526, 666, '←', false, time, still); A.key(ctx, 602, 666, '↑', false, time, still); A.key(ctx, 678, 666, '↓', false, time, still); A.key(ctx, 754, 666, '→', false, time, still);
@@ -668,7 +675,7 @@
     for (const f of flyers) {
       const k = duo && f.who === 1 ? 1 : 0, e = f.t / 0.6, x = f.x + (hudCoinX(k) - 24 - f.x) * e, y = f.y + (94 - f.y) * e - Math.sin(e * Math.PI) * 120;
       A.coin(ctx, x, y, 15, time * 10, false);
-      if (f.bonus) A.text(ctx, '+' + f.v, x + 24, y - 18, 24, '#ffd23f', false, 4);
+      if (f.bonus) A.label(ctx, '+' + f.v, x + 24, y - 18, 24, '#ffd23f', false, 4);
     }
   }
   function drawWardrobe() {
@@ -700,7 +707,7 @@
       if (a.human) o.marker = duo ? String(a.i + 1) : 'me';
       A.islander(ctx, x, y + hop, o);
       const label = a.human ? (duo ? '' : 'أنت') : names[a.i];
-      if (label) A.text(ctx, label, x, y + 22, 24, '#ffffff', true, 5);
+      if (label) A.label(ctx, label, x, y + 22, 24, '#ffffff', true, 5);
     });
     drawFx();
   }
@@ -719,7 +726,8 @@
   }
 
   canvas.addEventListener('contextrestored', () => { A.reset(); dirty = true; isleBtns.forEach((b, i) => A.isleIcon(b.c, CI.ISLANDS[i])); if (screen === 'wardrobe') refreshWardrobe(); });
-  if (document.fonts && document.fonts.load) document.fonts.load('700 40px Fredoka', 'جزيرة 5').then(() => { dirty = true; }, () => { /* fallback fonts */ });
+  // Text pictures made before the font arrived are made again with it.
+  if (document.fonts && document.fonts.load) document.fonts.load('700 40px Fredoka', 'جزيرة 5').then(() => { A.resetText(); dirty = true; }, () => { /* fallback fonts */ });
 
   /* --------------------------------------------------- test and debug hook */
   const page = (x, y) => { const r = canvas.getBoundingClientRect(); return { x: r.left + x * view.scale, y: r.top + y * view.scale }; };

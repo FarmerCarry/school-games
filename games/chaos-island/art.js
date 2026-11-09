@@ -40,7 +40,7 @@
     g.scale(SS, SS); draw(g, w, h);
     return (cache[key] = c);
   }
-  A.reset = function () { cache = {}; bgs = {}; };
+  A.reset = function () { cache = {}; bgs = {}; if (A.resetText) A.resetText(); };
 
   /* ---------------------------------------------------------------- themes */
   var TH = A.THEMES = {
@@ -394,6 +394,10 @@
   };
   // The frame of an open front, drawn over the islanders who are inside.
   A.houseFront = function (ctx, isl) {
+    var h = isl.house, w = h.x1 - h.x0, hh = G - h.roofY;
+    ctx.drawImage(sprite('front' + isl.id, w + 40, hh + 40, function (g) { g.translate(20 - h.x0, 20 - h.roofY); houseFront(g, isl); }), h.x0 - 20, h.roofY - 20, w + 40, hh + 40);
+  };
+  function houseFront(ctx, isl) {
     var h = isl.house, t = TH[isl.id], w = h.x1 - h.x0, hh = G - h.roofY, x = h.x0, y = h.roofY;
     ctx.save();
     ctx.beginPath(); ctx.rect(x, y, w, hh); rr(ctx, x + 14, y + 38, w - 28, hh - 38, 10, true); ctx.fillStyle = t.wall; ctx.fill('evenodd');
@@ -402,7 +406,7 @@
     rr(ctx, x - 12, y, w + 24, 20, 8); fill(ctx, t.roof); ink(ctx, 5);
     if (isl.id === 'snow') { rr(ctx, x - 14, y - 8, w + 28, 14, 7); fill(ctx, '#ffffff'); ink(ctx, 4); }
     ctx.restore();
-  };
+  }
   // A glowing arrow over the open door: "in here!"
   A.doorHint = function (ctx, isl, time, still) {
     var h = isl.house, x = (h.x0 + h.x1) / 2, y = h.roofY - 70 + (still ? 0 : Math.sin(time * 6) * 8);
@@ -440,38 +444,14 @@
       ctx.beginPath(); ctx.moveTo(-16 * face, -40); ctx.quadraticCurveTo(-34 * face + flap * face, -18, -30 * face + flap * face, 2); ctx.lineTo(8 * face, -6); ctx.closePath();
       fill(ctx, '#ff4d6d'); ink(ctx, 4);
     }
-    // Feet.
-    var step = walk ? Math.sin(t * 16) * 7 : 0;
-    ell(ctx, -10 + step, -3, 9, 6); fill(ctx, shade(o.color, -0.35)); ink(ctx, 3.5);
-    ell(ctx, 10 - step, -3, 9, 6); fill(ctx, shade(o.color, -0.35)); ink(ctx, 3.5);
-    // Body.
+    // Feet, then the body (a cached picture per colour, facing, face and extra) squashed.
+    var step = walk ? Math.sin(t * 16) * 7 : 0, foot = footSprite(o.color);
+    ctx.drawImage(foot, -22 + step, -12, 24, 18); ctx.drawImage(foot, -2 - step, -12, 24, 18);
+    var dizzy = o.bonk > 0, blink = !still && (Math.floor(t * 0.7 + (o.seed || 0)) % 5 === 0) && ((t * 0.7 + (o.seed || 0)) % 1 < 0.08);
+    var state = dizzy ? 'd' : !o.ground && o.vy > 200 ? 'f' : blink ? 'b' : o.mood === 'up' ? 'u' : 'n';
     ctx.save(); ctx.translate(0, -24); ctx.scale(sx, sy);
-    ell(ctx, 0, 0, R, R * 0.96); fill(ctx, o.color); ink(ctx, 5);
-    ell(ctx, -8, -10, 9, 6, -0.5); fill(ctx, 'rgba(255,255,255,0.55)');
-    ell(ctx, 0, 14, 16, 7); fill(ctx, shade(o.color, 0.3));
-    if (o.extra === 'scarf') {
-      ctx.beginPath(); ctx.moveTo(-22, 6); ctx.quadraticCurveTo(0, 16, 22, 6); ctx.lineTo(21, 13); ctx.quadraticCurveTo(0, 23, -21, 13); ctx.closePath(); fill(ctx, '#5bc6ff'); ink(ctx, 3.5);
-      rr(ctx, -6 * face - 4, 10, 9, 20, 4); fill(ctx, '#ff5d6c'); ink(ctx, 3);
-    }
-    // Eyes and mouth.
-    var ex = face * 4, dizzy = o.bonk > 0, blink = !still && (Math.floor(t * 0.7 + (o.seed || 0)) % 5 === 0) && ((t * 0.7 + (o.seed || 0)) % 1 < 0.08);
-    [-9, 9].forEach(function (dx) {
-      var cx = dx + ex, cy = -4;
-      if (blink && !dizzy) { ctx.beginPath(); ctx.moveTo(cx - 6, cy); ctx.lineTo(cx + 6, cy); ink(ctx, 3.5); return; }
-      ell(ctx, cx, cy, 7.5, 9); fill(ctx, '#ffffff'); ink(ctx, 3);
-      if (dizzy) { ctx.beginPath(); for (var a = 0; a < 9; a += 0.5) ctx.lineTo(cx + Math.cos(a + t * 8) * a * 0.6, cy + Math.sin(a + t * 8) * a * 0.6); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke(); }
-      else {
-        var py = o.mood === 'up' ? -3 : o.vy > 300 && !o.ground ? 2 : 0;
-        circle(ctx, cx + face * 2.5, cy + py, 4.2); fill(ctx, INK); circle(ctx, cx + face * 2.5 - 1.2, cy + py - 1.5, 1.5); fill(ctx, '#fff');
-      }
-    });
-    if (o.extra === 'glasses') {
-      rr(ctx, -18 + ex, -11, 15, 12, 4); fill(ctx, INK); rr(ctx, 3 + ex, -11, 15, 12, 4); fill(ctx, INK);
-      ctx.beginPath(); ctx.moveTo(-3 + ex, -7); ctx.lineTo(3 + ex, -7); ink(ctx, 3); rr(ctx, -15 + ex, -9, 5, 3, 1.5); fill(ctx, '#fff');
-    }
-    ell(ctx, -17 + ex * 0.5, 7, 4.5, 3); fill(ctx, 'rgba(255,90,120,0.4)'); ell(ctx, 17 + ex * 0.5, 7, 4.5, 3); fill(ctx, 'rgba(255,90,120,0.4)');
-    if (dizzy || !o.ground && o.vy > 200) { ell(ctx, ex * 0.7, 9, 4.5, 5.5); fill(ctx, INK); }
-    else { ctx.beginPath(); ctx.arc(ex * 0.7, 6, 7, 0.25, Math.PI - 0.25); ink(ctx, 3.2); }
+    if (s > 1.6) body(ctx, o.color, face, state, o.extra, dizzy ? t : 0);
+    else ctx.drawImage(bodySprite(o.color, face, state, o.extra), -36, -36, 72, 72);
     ctx.restore();
     // Hat, on the top of the squashed head.
     if (o.hat) hat(ctx, o.hat, 0, -24 - R * 0.96 * sy + 4, face, t, still);
@@ -486,8 +466,50 @@
     ctx.globalAlpha = 1;
     if (o.marker) marker(ctx, x, y - (o.hat ? 92 : 78) * s - (still ? 0 : Math.abs(Math.sin(t * 4)) * 5), o.marker, o.color);
   };
+  function footSprite(color) {
+    return sprite('foot' + color, 24, 18, function (g) { ell(g, 12, 9, 9, 6); fill(g, shade(color, -0.35)); ink(g, 3.5); });
+  }
+  function bodySprite(color, face, state, extra) {
+    return sprite('body' + color + face + state + extra, 72, 72, function (g) { g.translate(36, 36); body(g, color, face, state, extra, 0); });
+  }
+  // The round body with its face: n normal, b blinking, u looking up, f falling (mouth
+  // open), d dizzy after a bonk.
+  function body(ctx, color, face, state, extra, t) {
+    var R = 25, ex = face * 4;
+    ell(ctx, 0, 0, R, R * 0.96); fill(ctx, color); ink(ctx, 5);
+    ell(ctx, -8, -10, 9, 6, -0.5); fill(ctx, 'rgba(255,255,255,0.55)');
+    ell(ctx, 0, 14, 16, 7); fill(ctx, shade(color, 0.3));
+    if (extra === 'scarf') {
+      ctx.beginPath(); ctx.moveTo(-22, 6); ctx.quadraticCurveTo(0, 16, 22, 6); ctx.lineTo(21, 13); ctx.quadraticCurveTo(0, 23, -21, 13); ctx.closePath(); fill(ctx, '#5bc6ff'); ink(ctx, 3.5);
+      rr(ctx, -6 * face - 4, 10, 9, 20, 4); fill(ctx, '#ff5d6c'); ink(ctx, 3);
+    }
+    [-9, 9].forEach(function (dx) {
+      var cx = dx + ex, cy = -4;
+      if (state === 'b') { ctx.beginPath(); ctx.moveTo(cx - 6, cy); ctx.lineTo(cx + 6, cy); ink(ctx, 3.5); return; }
+      ell(ctx, cx, cy, 7.5, 9); fill(ctx, '#ffffff'); ink(ctx, 3);
+      if (state === 'd') { ctx.beginPath(); for (var a = 0; a < 9; a += 0.5) ctx.lineTo(cx + Math.cos(a + t * 8) * a * 0.6, cy + Math.sin(a + t * 8) * a * 0.6); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke(); }
+      else {
+        var py = state === 'u' ? -3 : state === 'f' ? 2 : 0;
+        circle(ctx, cx + face * 2.5, cy + py, 4.2); fill(ctx, INK); circle(ctx, cx + face * 2.5 - 1.2, cy + py - 1.5, 1.5); fill(ctx, '#fff');
+      }
+    });
+    if (extra === 'glasses') {
+      rr(ctx, -18 + ex, -11, 15, 12, 4); fill(ctx, INK); rr(ctx, 3 + ex, -11, 15, 12, 4); fill(ctx, INK);
+      ctx.beginPath(); ctx.moveTo(-3 + ex, -7); ctx.lineTo(3 + ex, -7); ink(ctx, 3); rr(ctx, -15 + ex, -9, 5, 3, 1.5); fill(ctx, '#fff');
+    }
+    ell(ctx, -17 + ex * 0.5, 7, 4.5, 3); fill(ctx, 'rgba(255,90,120,0.4)'); ell(ctx, 17 + ex * 0.5, 7, 4.5, 3); fill(ctx, 'rgba(255,90,120,0.4)');
+    if (state === 'd' || state === 'f') { ell(ctx, ex * 0.7, 9, 4.5, 5.5); fill(ctx, INK); }
+    else { ctx.beginPath(); ctx.arc(ex * 0.7, 6, 7, 0.25, Math.PI - 0.25); ink(ctx, 3.2); }
+  }
+  // A hat: a cached picture, with the propeller's blade spinning on top.
   function hat(ctx, kind, x, y, face, t, still) {
-    ctx.save(); ctx.translate(x, y);
+    ctx.drawImage(sprite('hat' + kind + face, 96, 72, function (g) { g.translate(48, 52); hatArt(g, kind, face); }), x - 48, y - 52, 96, 72);
+    if (kind === 'propeller') {
+      var sp = still ? 1 : Math.cos(t * 20);
+      ell(ctx, x, y - 26, 22 * Math.abs(sp) + 3, 5); fill(ctx, '#ff5d6c'); ink(ctx, 3);
+    }
+  }
+  function hatArt(ctx, kind, face) {
     if (kind === 'straw') {
       ell(ctx, 0, 2, 32, 8); fill(ctx, '#ffd36b'); ink(ctx, 4);
       rr(ctx, -16, -16, 32, 18, 9); fill(ctx, '#ffd36b'); ink(ctx, 4); rr(ctx, -16, -4, 32, 6, 3); fill(ctx, '#ff5d6c');
@@ -502,8 +524,6 @@
     } else if (kind === 'propeller') {
       ctx.beginPath(); ctx.arc(0, 3, 18, Math.PI, 0); ctx.closePath(); fill(ctx, '#4fc3ff'); ink(ctx, 4);
       ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(0, -25); ink(ctx, 3);
-      var sp = still ? 1 : Math.cos(t * 20);
-      ell(ctx, 0, -26, 22 * Math.abs(sp) + 3, 5); fill(ctx, '#ff5d6c'); ink(ctx, 3);
     } else if (kind === 'crown') {
       ctx.beginPath(); ctx.moveTo(-17, 3); ctx.lineTo(-19, -18); ctx.lineTo(-9, -8); ctx.lineTo(0, -24); ctx.lineTo(9, -8); ctx.lineTo(19, -18); ctx.lineTo(17, 3); ctx.closePath();
       fill(ctx, '#ffd23f'); ink(ctx, 4); circle(ctx, 0, -4, 4); fill(ctx, '#ff5d6c'); ink(ctx, 2);
@@ -511,7 +531,6 @@
       for (var p = 0; p < 5; p++) { circle(ctx, 12 + Math.cos(p * 1.26) * 7, -6 + Math.sin(p * 1.26) * 7, 5.5); fill(ctx, '#ff9ad5'); ink(ctx, 2.5); }
       circle(ctx, 12, -6, 4.5); fill(ctx, '#ffe14d'); ink(ctx, 2.5);
     }
-    ctx.restore();
   }
   A.hat = hat;
   // A cute little ghost: the same eyes, a wavy hem, floating.
@@ -662,22 +681,36 @@
       ctx.lineWidth = 4; ctx.strokeStyle = '#ffffff'; ctx.stroke();
     }
   };
-  // The cartoon tornado: spinning rings, wider at the top, with leaves caught in it.
+  // The cartoon tornado: a wobbling funnel, wide at the top, with white swirls running
+  // round it and leaves caught in it.
   A.twister = function (ctx, h, time, still, isl) {
-    var g = h.grow, x = h.x, spin = still ? 0 : time * 9, top = 120, n = 9;
-    ctx.save(); ctx.globalAlpha = 0.35 + 0.65 * g;
-    for (var i = 0; i < n; i++) {
-      var k = i / (n - 1), y = G - 10 - k * (G - 10 - top) * (0.3 + 0.7 * g), rw = (16 + k * 70) * (0.35 + 0.65 * g), wob = still ? 0 : Math.sin(spin * 0.7 + i) * 10 * k;
-      ell(ctx, x + wob, y, rw, 10 + k * 8); ctx.lineWidth = 12; ctx.strokeStyle = INK; ctx.stroke();
+    var g = h.grow, x = h.x, spin = still ? 0 : time * 9, top = 110 + (1 - g) * 300, bot = G - 4, n = 10;
+    ctx.save(); ctx.globalAlpha = 0.45 + 0.55 * g;
+    var L = [], R = [];
+    for (var i = 0; i <= n; i++) {
+      var k = i / n, y = bot - k * (bot - top), half = (14 + k * k * 78 + k * 12) * (0.4 + 0.6 * g), wob = still ? 0 : Math.sin(spin * 0.5 + k * 5) * 14 * k;
+      L.push([x + wob - half, y]); R.push([x + wob + half, y]);
     }
-    for (var j = 0; j < n; j++) {
-      var k2 = j / (n - 1), y2 = G - 10 - k2 * (G - 10 - top) * (0.3 + 0.7 * g), rw2 = (16 + k2 * 70) * (0.35 + 0.65 * g), wob2 = still ? 0 : Math.sin(spin * 0.7 + j) * 10 * k2;
-      ell(ctx, x + wob2, y2, rw2, 10 + k2 * 8); ctx.fillStyle = j % 2 ? '#c9d3ea' : '#e6ecf8'; ctx.fill();
-      ctx.beginPath(); ctx.ellipse(x + wob2, y2, rw2 * 0.8, 4 + k2 * 5, 0, spin + j, spin + j + 2.2); ctx.lineWidth = 3; ctx.strokeStyle = '#8f9dc4'; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(L[0][0], L[0][1]);
+    L.forEach(function (p) { ctx.lineTo(p[0], p[1]); });
+    for (var r = R.length - 1; r >= 0; r--) ctx.lineTo(R[r][0], R[r][1]);
+    ctx.closePath(); fill(ctx, '#d3dbef'); ink(ctx, 6);
+    // Swirl stripes going round the funnel.
+    ctx.save(); ctx.clip();
+    for (var sI = 0; sI < 7; sI++) {
+      var y0 = bot - ((sI / 7 + (still ? 0 : time * 0.6)) % 1) * (bot - top), k2 = (bot - y0) / (bot - top);
+      var hw = (14 + k2 * k2 * 78 + k2 * 12) * (0.4 + 0.6 * g), cx = x + (still ? 0 : Math.sin(spin * 0.5 + k2 * 5) * 14 * k2);
+      ctx.beginPath(); ctx.ellipse(cx, y0, hw * 0.95, 6 + k2 * 10, 0, 0.15, Math.PI - 0.15);
+      ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(cx, y0 + 12, hw * 0.9, 6 + k2 * 10, 0, 0.3, Math.PI - 0.3);
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(120,135,180,0.55)'; ctx.stroke();
     }
-    for (var l = 0; l < 5; l++) {
-      var la = spin * 0.8 + l * 1.3, lk = (l + 0.5) / 5, ly = G - 30 - lk * (G - 160) * g, lr = (20 + lk * 60) * g;
-      ell(ctx, x + Math.cos(la) * lr, ly + Math.sin(la) * 6, 8, 4, la); fill(ctx, TH[isl.id].leaf); ink(ctx, 2);
+    ctx.restore();
+    ell(ctx, x, top, (104 * (0.4 + 0.6 * g)), 16 * g + 4); fill(ctx, '#eef2fb'); ink(ctx, 5);
+    ell(ctx, x, bot + 2, 46 * g + 10, 8); ctx.fillStyle = 'rgba(28,34,80,0.22)'; ctx.fill();
+    for (var l = 0; l < 6; l++) {
+      var la = spin * 0.8 + l * 1.05, lk = (l + 0.5) / 6, ly = bot - 30 - lk * (bot - top - 40), lr = (24 + lk * 70) * g;
+      ell(ctx, x + Math.cos(la) * lr, ly + Math.sin(la) * 8, 9, 4.5, la); fill(ctx, l % 2 ? TH[isl.id].leaf : '#c08347'); ink(ctx, 2);
     }
     ctx.restore();
   };
@@ -742,22 +775,25 @@
 
   /* ---------------------------------------------------------------- coins */
   A.coin = function (ctx, x, y, r, spin, big) {
-    var sx = Math.max(0.18, Math.abs(Math.cos(spin)));
-    ctx.save(); ctx.translate(x, y); ctx.scale(sx, 1);
-    circle(ctx, 0, 0, r); fill(ctx, big ? '#ffb43f' : '#ffd23f'); ink(ctx, Math.max(3, r * 0.2));
-    circle(ctx, 0, 0, r * 0.62); ctx.lineWidth = r * 0.16; ctx.strokeStyle = big ? '#e07a17' : '#e8a317'; ctx.stroke();
-    if (big) { starPath(ctx, 0, 0, r * 0.5, r * 0.22); fill(ctx, '#fff6c2'); }
-    else { ctx.beginPath(); ctx.moveTo(-r * 0.15, -r * 0.35); ctx.lineTo(-r * 0.15, r * 0.35); ctx.moveTo(r * 0.15, -r * 0.35); ctx.lineTo(r * 0.15, r * 0.35); ctx.lineWidth = r * 0.14; ctx.strokeStyle = '#e8a317'; ctx.stroke(); }
-    ctx.restore();
+    var sx = Math.max(0.18, Math.abs(Math.cos(spin))), R = 20;
+    var c = sprite('coin' + (big ? 1 : 0), 2 * R + 8, 2 * R + 8, function (g) {
+      g.translate(R + 4, R + 4);
+      circle(g, 0, 0, R); fill(g, big ? '#ffb43f' : '#ffd23f'); ink(g, R * 0.2);
+      circle(g, 0, 0, R * 0.62); g.lineWidth = R * 0.16; g.strokeStyle = big ? '#e07a17' : '#e8a317'; g.stroke();
+      if (big) { starPath(g, 0, 0, R * 0.5, R * 0.22); fill(g, '#fff6c2'); }
+      else { g.beginPath(); g.moveTo(-R * 0.15, -R * 0.35); g.lineTo(-R * 0.15, R * 0.35); g.moveTo(R * 0.15, -R * 0.35); g.lineTo(R * 0.15, R * 0.35); g.lineWidth = R * 0.14; g.strokeStyle = '#e8a317'; g.stroke(); }
+    }), k = r / R;
+    ctx.drawImage(c, x - (R + 4) * k * sx, y - (R + 4) * k, (2 * R + 8) * k * sx, (2 * R + 8) * k);
   };
 
   /* ------------------------------------------------------------------ HUD */
   A.heart = function (ctx, x, y, s, full) {
-    ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
-    ctx.beginPath(); ctx.moveTo(0, 14); ctx.bezierCurveTo(-24, -2, -16, -22, 0, -10); ctx.bezierCurveTo(16, -22, 24, -2, 0, 14); ctx.closePath();
-    fill(ctx, full ? '#ff4d6d' : 'rgba(255,255,255,0.35)'); ink(ctx, 4);
-    if (full) { ell(ctx, -8, -8, 4, 3, -0.6); fill(ctx, 'rgba(255,255,255,0.7)'); }
-    ctx.restore();
+    ctx.drawImage(sprite('heart' + full, 48, 44, function (g) {
+      g.translate(24, 24);
+      g.beginPath(); g.moveTo(0, 14); g.bezierCurveTo(-24, -2, -16, -22, 0, -10); g.bezierCurveTo(16, -22, 24, -2, 0, 14); g.closePath();
+      fill(g, full ? '#ff4d6d' : 'rgba(255,255,255,0.35)'); ink(g, 4);
+      if (full) { ell(g, -8, -8, 4, 3, -0.6); fill(g, 'rgba(255,255,255,0.7)'); }
+    }), x - 24 * s, y - 24 * s, 48 * s, 44 * s);
   };
   function text(ctx, str, x, y, size, color, rtl, outline) {
     ctx.font = '700 ' + size + 'px Fredoka';
@@ -768,13 +804,33 @@
     ctx.direction = 'ltr';
   }
   A.text = text;
+  // The same text as a cached picture (HUD numbers, names, callouts): no glyph work per frame.
+  var labels = {}, nLabels = 0;
+  A.label = function (ctx, str, x, y, size, color, rtl, outline) {
+    size = Math.round(size);
+    var key = str + '|' + size + '|' + color + '|' + outline, c = labels[key];
+    if (!c) {
+      if (nLabels > 240) { labels = {}; nLabels = 0; }
+      ctx.save(); ctx.font = '700 ' + size + 'px Fredoka'; ctx.direction = rtl ? 'rtl' : 'ltr';
+      var ow = outline === 0 ? 0 : outline || Math.max(4, size * 0.2), w = ctx.measureText(str).width + ow * 2 + 8, h = size * 1.7;
+      ctx.restore();
+      c = cv(w * SS, h * SS);
+      var g = c.getContext('2d'); g.scale(SS, SS);
+      text(g, str, w / 2, h / 2, size, color, rtl, outline);
+      c.lw = w; c.lh = h; labels[key] = c; nLabels++;
+    }
+    ctx.drawImage(c, x - c.lw / 2, y - c.lh / 2, c.lw, c.lh);
+  };
+  A.resetText = function () { labels = {}; nLabels = 0; cache = {}; };
   // A keycap the coach can light up.
   A.key = function (ctx, x, y, label, lit, time, still, w) {
     w = w || 64;
     var down = lit && !still && Math.floor(time * 4) % 2 === 0 ? 4 : 0;
-    rr(ctx, x - w / 2, y - 30 + 6, w, 60, 14); fill(ctx, '#9aa3c7');
-    rr(ctx, x - w / 2, y - 30 + down, w, 56, 14); fill(ctx, lit ? '#ffd23f' : '#ffffff'); ink(ctx, 5);
-    text(ctx, label, x, y - 2 + down, label.length > 2 ? 22 : 32, INK, /[؀-ۿ]/.test(label), 0);
+    ctx.drawImage(sprite('keyb' + w, w + 12, 76, function (g) { rr(g, 6, 12, w, 60, 14); fill(g, '#9aa3c7'); }), x - w / 2 - 6, y - 36, w + 12, 76);
+    ctx.drawImage(sprite('key' + label + w + (lit ? 1 : 0), w + 12, 70, function (g) {
+      rr(g, 6, 6, w, 56, 14); fill(g, lit ? '#ffd23f' : '#ffffff'); ink(g, 5);
+      text(g, label, 6 + w / 2, 32, label.length > 2 ? 22 : 32, INK, /[؀-ۿ]/.test(label), 0);
+    }), x - w / 2 - 6, y - 36 + down, w + 12, 70);
     if (lit && !still) { rr(ctx, x - w / 2 - 8, y - 38, w + 16, 76, 20); ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,210,63,' + (0.5 + 0.5 * Math.sin(time * 10)) + ')'; ctx.stroke(); }
   };
   // Small pictures of each disaster, for the badge and the card.
@@ -785,9 +841,9 @@
     else if (kind === 'wind') { arrow(ctx, 0, -8, 1, 0.55); arrow(ctx, -6, 14, 1, 0.45); }
     else if (kind === 'ice') A.snowIcon(ctx, 0, 0, 0.75);
     else if (kind === 'quake') { rr(ctx, -26, -8, 52, 16, 5); fill(ctx, '#c9874a'); ink(ctx, 4); ctx.beginPath(); ctx.moveTo(-6, -8); ctx.lineTo(2, 0); ctx.lineTo(-4, 4); ctx.lineTo(4, 10); ctx.lineWidth = 4; ctx.strokeStyle = '#ff7a1a'; ctx.stroke(); A.nutIcon(ctx, 14, -22, 0.4); }
-    else if (kind === 'clouds') { A.stormCloud(ctx, { x: 0, y: -6, id: 1, state: 'drift', fade: 0 }, 0, true); ctx.beginPath(); ctx.moveTo(4, 14); ctx.lineTo(-6, 30); ctx.lineTo(4, 30); ctx.lineTo(-4, 46); ctx.lineWidth = 6; ctx.strokeStyle = '#ffe14d'; ctx.stroke(); }
+    else if (kind === 'clouds') { ctx.scale(0.45, 0.45); A.stormCloud(ctx, { x: 0, y: -14, id: 1, state: 'drift', fade: 0 }, 0, true); ctx.beginPath(); ctx.moveTo(6, 14); ctx.lineTo(-10, 38); ctx.lineTo(6, 38); ctx.lineTo(-6, 64); ctx.lineWidth = 16; ctx.strokeStyle = INK; ctx.stroke(); ctx.lineWidth = 9; ctx.strokeStyle = '#ffe14d'; ctx.stroke(); }
     else if (kind === 'balls') A.ballIcon(ctx, 0, 0, 0.5);
-    else if (kind === 'tornado') { for (var k = 0; k < 5; k++) { ell(ctx, (k % 2) * 4 - 2, 20 - k * 10, 6 + k * 5, 4); fill(ctx, k % 2 ? '#c9d3ea' : '#e6ecf8'); ink(ctx, 3); } }
+    else if (kind === 'tornado') { ctx.beginPath(); ctx.moveTo(-4, 24); ctx.quadraticCurveTo(-10, 0, -30, -24); ctx.lineTo(30, -24); ctx.quadraticCurveTo(10, 0, 4, 24); ctx.closePath(); fill(ctx, '#d3dbef'); ink(ctx, 4); [-14, -2, 10].forEach(function (yy, k3) { ctx.beginPath(); ctx.ellipse(0, yy, 22 - k3 * 7, 4, 0, 0.2, Math.PI - 0.2); ctx.lineWidth = 3; ctx.strokeStyle = '#ffffff'; ctx.stroke(); }); }
     ctx.restore();
   };
 

@@ -796,7 +796,7 @@
       start: function (w, d) { d.next = 0.5; },
       step: function (w, d) {
         if (w.pt >= d.next && !w.haz.some(function (h) { return h.k === 'twister'; })) {
-          var dir = w.house.side < 0 ? -1 : 1, id = newId(w), x = dir < 0 ? W + 40 : -40, T = w.T;
+          var dir = w.house.side < 0 ? -1 : 1, id = newId(w), x = dir < 0 ? W - 64 : 64, T = w.T;
           var h = { k: 'twister', kind: 'tornado', id: id, x: x, dir: dir, born: w.t, enter: w.t + T.twisterWarn, speed: T.twister * (d.power < 1 ? 0.85 : 1),
             hw: 62, grow: 0, spin: 0, leg: 1, turn: 0, hits: [], threat: threatList(w, function () { return true; }) };
           w.haz.push(h); d.next = BIG;
