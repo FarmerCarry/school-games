@@ -1,7 +1,6 @@
-/* أصابع البرق (Lightning Fingers): screens, typing, the coach hand, saves, sound and play
- * statistics. engine.js runs the clouds and the speed test; art.js draws them.
- * This is the UI layer: it reads Kit.dda at every level start and reports Kit.stats rounds
- * and Kit.track cues, hits and misses (one hit per right key press, one miss per wrong one). */
+/* أصابع البرق (Lightning Fingers): screens, typing, the coach hand, saves and sound.
+ * engine.js runs the clouds and the speed test; art.js draws them.
+ * This is the UI layer: it reads Kit.dda at every level start. */
 (function () {
   'use strict';
   const TT = window.TT, A = TT.art, J = Kit.juice, W = TT.W, H = TT.H;
@@ -32,7 +31,7 @@
 
   /* --------------------------------------------------------------- state */
   let screen = 'title', lang = save.lang || 'ar', world = null, cur = { w: 0, l: 0 }, time = 0;
-  let test = null, testCfg = null, testResult = null, pausedFrom = '', ending = null, result = null, resultT = 0, resultLock = 0, busyT = 0;
+  let test = null, testCfg = null, testResult = null, pausedFrom = '', ending = null, result = null, resultT = 0, resultLock = 0;
   let coaching = false, menuIdle = 0, menuNext = 5, unlockFx = null, flashT = 0, introT = 0, shownWpm = 0, phase = 0, slide = 0;
   const coach = { idle: 0, next: 4 };
   const ghost = { on: false, x: 0, y: 0, t: 0, taps: 2, el: null, dom: false };
@@ -143,15 +142,13 @@
   /* -------------------------------------------------------------- levels */
   function clearFx() { fx.clear(); sparks = []; bolts = []; bows = []; puffs = []; floats = []; for (const k in lit) delete lit[k]; glowBoost = 0; }
   function startLevel(w, l) {
-    // Difficulty is read at every level start, before the round is reported.
+    // Difficulty is read at every level start.
     const tier = dda[lang].tier;
     const plan = TT.plan(lang, w, l, tier);
     world = TT.create(plan, (Math.random() * 2147483647) | 0);
     cur = { w: w, l: l };
     test = null;
-    Kit.stats.round(plan.id);
     coaching = !save.coach;
-    if (coaching) Kit.stats.tutorial('start');
     ending = null; result = null;
     clearFx(); clearGarden();
     coach.idle = 0; coach.next = coaching ? 2.2 : 4;
@@ -179,7 +176,6 @@
     Kit.keys.reset();
   }
   function quit() {
-    Kit.stats.end('quit');
     J.back();
     if (pausedFrom === 'test') { if (testCfg && testCfg.code) toTitle(); else openSetup(); } else toMap(-1);
   }
@@ -191,7 +187,6 @@
     if (stars > prev) save.stars[lang][cur.w][cur.l] = stars;
     persist();
     dda[lang].result(TT.outcome(r));
-    Kit.stats.end(r.won ? 'win' : 'lose', Math.round(r.wpm));
     result = { stars: stars, r: r, newWorld: nextWorld >= 0 && TT.worldOpen(save, lang, nextWorld) ? nextWorld : -1 };
     ending = { t: r.won ? 1.6 : 1.4 };
     if (r.won) {
@@ -222,8 +217,6 @@
       for (let i = 0; i < r.stars; i++) if (at(0.3 + i * 0.38)) { $('resStars').children[i].classList.add('on'); J.star(i + 1); burstAt(560 + i * 80, 250, '#ffd23f'); }
       if (at(0.5 + r.stars * 0.38) && r.newWorld >= 0) J.levelUp();
     }
-    busyT += dt;
-    if (resultT < 3 && busyT >= 1) { busyT = 0; Kit.stats.busy(); }
   }
   function next() {
     if (!result) return;
@@ -236,7 +229,6 @@
 
   /* ------------------------------------------------------- the speed test */
   const newSeed = () => (Math.random() * 2147483647) | 0;
-  const TEST_IDS = { 30: 'test30', 60: 'test60' };
   function openSetup() {
     test = null; world = null;
     if (!save.tlang) save.tlang = lang;
@@ -254,8 +246,6 @@
     testCfg = cfg;
     test = TT.test(cfg);
     world = null;
-    // The class challenge is one id for every code: a code is never put in statistics.
-    Kit.stats.round(cfg.challenge ? 'class' : TEST_IDS[cfg.dur]);
     testResult = null; ending = null;
     clearFx();
     shownWpm = 0; slide = 0; coach.idle = 0; coach.next = 5;
@@ -267,7 +257,6 @@
     // An easy class challenge (short words) is not a speed record for the usual test.
     const r = TT.testResult(test), isBest = test.kind === 'easy' ? false : TT.addTest(save, test.lang, test.dur, r, !!testCfg.challenge);
     if (test.kind !== 'easy') persist();
-    Kit.stats.end('end', Math.round(r.wpm));
     testResult = { r: r, isBest: isBest, best: save.best[test.lang + test.dur] };
     ending = { t: 0.9 };
     J.chime(2);
@@ -293,8 +282,6 @@
     if (before < 0.35 && resultT >= 0.35) {
       if (testResult.isBest) { $('trNewBest').hidden = false; J.star(3); burstAt(640, 360, '#ffd23f'); } else J.star(1);
     }
-    busyT += dt;
-    if (resultT < 3 && busyT >= 1) { busyT = 0; Kit.stats.busy(); }
   }
 
   /* ---------------------------------------------------- class challenge */
@@ -438,14 +425,13 @@
     coach.idle = 0; stopGhost();
     flashKey(ev.code, n > 0 ? 'good' : 'bad');
     for (const e of test.ev) {
-      if (e.t === 'key') { Kit.track.hit(); J.tap(); if (e.combo > 0 && e.combo % 25 === 0) praise(e.combo / 25 - 1, 640, 330); }
+      if (e.t === 'key') { J.tap(); if (e.combo > 0 && e.combo % 25 === 0) praise(e.combo / 25 - 1, 640, 330); }
       else if (e.t === 'word') { J.pop(0.4); slide += 1; }
       else if (e.t === 'miss') miss(640, 230);
     }
     test.ev.length = 0;
   }
   function miss(x, y) {
-    Kit.track.miss();
     glowBoost = 1;
     if (time - lastMiss > 0.3) J.error();
     lastMiss = time;
@@ -463,10 +449,9 @@
   function burstAt(x, y, color) { fx.burst(x, y, { count: 16, colors: [color, '#ffffff', '#ffd23f'], speed: 300, life: 0.6, size: 8, gravity: 300 }); }
   function handleEvents(ev) {
     for (const e of world.ev) {
-      if (e.t === 'ready') Kit.track.cue();
-      else if (e.t === 'spawn') { /* clouds slide in quietly */ }
+      if (e.t === 'spawn') { /* clouds slide in quietly */ }
       else if (e.t === 'key') {
-        Kit.track.hit(); J.tap();
+        J.tap();
         const c = TT.find(world, e.id), from = keyTop(ev ? ev.code : 'Space');
         if (c) sparks.push({ x1: from.x, y1: from.y, x2: c.letterX || c.x, y2: c.letterY || c.y, t: 0 });
         if (sparks.length > 12) sparks.shift();
@@ -475,7 +460,6 @@
       } else if (e.t === 'zap') zap(e, ev);
       else if (e.t === 'miss') miss(e.x, e.y);
       else if (e.t === 'rain') {
-        Kit.track.miss();
         J.land(0.4); shake.add(4);
         sunBump[Math.max(0, Math.min(2, e.suns))] = 1;
         float(e.x, e.y + 70, '☂', '#4fd1ff', 40);
@@ -501,7 +485,7 @@
     // a flower grows in the garden for every cloud
     const side = flowers.length % 2, fxr = side ? 1040 + Math.random() * 216 : 24 + Math.random() * 212;
     if (flowers.length < 60) flowers.push({ x: fxr, y: 480 + Math.random() * 220, kind: (Math.random() * 6) | 0, t: 0 });
-    if (coaching) { coaching = false; Kit.stats.tutorial('done'); if (!save.coach) { save.coach = true; persist(); } }
+    if (coaching) { coaching = false; if (!save.coach) { save.coach = true; persist(); } }
     coach.idle = 0; coach.next = 4;
   }
 
@@ -579,8 +563,6 @@
       shownWpm += (TT.liveWpm(world) - shownWpm) * Math.min(1, dt * 3);
     } else {
       ending.t -= dt;
-      busyT += dt;
-      if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
       if (ending.t <= 0) showResult();
     }
   }
@@ -597,8 +579,6 @@
       slide = Math.max(0, slide - dt * 6);
     } else {
       ending.t -= dt;
-      busyT += dt;
-      if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
       if (ending.t <= 0) showTestResult();
     }
   }

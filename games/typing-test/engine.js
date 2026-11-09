@@ -3,7 +3,7 @@
  * Pure: no DOM, no Kit, no timers and no Math.random (a world takes a seed), so
  * tools/tests/typing-test-engine.test.mjs loads it with { window: {} } and plays whole
  * levels with a scripted typist. game.js reads the DDA tier, feeds key presses in and
- * turns the world's events into pictures, sound and statistics. */
+ * turns the world's events into pictures and sound. */
 (function () {
   'use strict';
   var TT = window.TT = window.TT || {};
@@ -178,11 +178,10 @@
   // Heights on screen: clouds slide in to READY_Y, waiting clouds stop near EDGE_Y and the
   // town starts at TOWN_Y (a cloud that gets there rains on it).
   TT.READY_Y = 150; TT.EDGE_Y = 292; TT.TOWN_Y = 350; TT.START_Y = -70;
-  TT.roundId = function (lang, w, l) { return lang + (w + 1) + 'L' + (l + 1); };
   TT.plan = function (lang, w, l, tier) {
     var T = TT.TUNE, i = Math.max(0, Math.min(TT.TIERS - 1, (tier | 0) - 1)), wd = TT.WORLD[w];
     return {
-      id: TT.roundId(lang, w, l), lang: lang, w: w, l: l, tier: i + 1,
+      lang: lang, w: w, l: l, tier: i + 1,
       count: wd.count[l] + T.extra[i], fall: T.fall[i] * wd.fall, live: Math.min(T.live[i], wd.live), gap: T.gap[i] * wd.gap,
       wait: !!T.wait[i], slow: T.slow[i], mix: Math.min(0.9, T.mix[i] + l * 0.08), guide: !!T.guide[i],
       target: Math.round(T.target[i] * wd.pace * 10) / 10
@@ -285,10 +284,7 @@
       var c = w.clouds[i];
       c.age += dt; c.t += dt; c.shake = Math.max(0, c.shake - dt);
       if (c.state === 'in') {
-        var shown = c.y > 0;
         c.y += Math.max(70, (TT.READY_Y - c.y) * 5) * dt;
-        // 'ready': the word is in sight and can be typed (the moment a reaction time starts).
-        if (!shown && c.y > 0) w.ev.push({ t: 'ready', id: c.id });
         if (c.y >= TT.READY_Y) { c.y = TT.READY_Y; c.state = 'fly'; c.t = 0; }
       } else if (c.state === 'fly') {
         c.y += P.fall * (w.lock === c.id ? P.slow : 1) * dt;

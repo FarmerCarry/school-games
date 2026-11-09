@@ -1,6 +1,6 @@
 // Lightning Fingers in real Chromium: real keyboard and mouse, cloud levels in English and
 // Arabic (the PC's layout is English here, so Arabic levels are typed by physical key),
-// pause, saves, the speed test, the class challenge, and what a portal receives.
+// pause, saves, the speed test and the class challenge.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -10,14 +10,8 @@ import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
-const ID = /^[A-Za-z][A-Za-z0-9_:.-]{0,23}$/;
-// A portal stand-in: it embeds the game, records what the game posts, and sends preferences.
-const PARENT = `<!doctype html><meta charset="utf-8"><style>body{margin:0}iframe{position:absolute;left:0;top:0;width:1280px;height:720px;border:0}</style>
-<iframe id="f" src="/games/typing-test/"></iframe>
-<script>window.msgs = []; addEventListener('message', e => { if (e.source === f.contentWindow) msgs.push(e.data); });
-function prefs(p) { f.contentWindow.postMessage(Object.assign({ type: 'sg:preferences' }, p), location.origin); }</script>`;
 let browser, server;
-before(async () => { server = await startTestServer(root, { pages: { '/tt-parent': PARENT } }); browser = await launchChromium(); });
+before(async () => { server = await startTestServer(root); browser = await launchChromium(); });
 after(async () => { await browser?.close(); await server?.close(); });
 
 const grid = done => [0, 1, 2, 3, 4].map(w => w < done ? [3, 3, 3, 3] : [0, 0, 0, 0]);
@@ -51,12 +45,12 @@ async function context(t, options = {}) {
   }, { save: options.save, dda: options.dda, failSave: !!options.failSave });
   return ctx;
 }
-// The game with its frame loop stepped by hand, and its Kit.stats / Kit.track calls recorded.
+// The game with its frame loop stepped by hand.
 async function game(t, options = {}) {
   const ctx = await context(t, options);
   await ctx.addInitScript(() => {
     let kit;
-    const tt = window.tt = { stats: [], track: [] };
+    const tt = window.tt = {};
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (update, render) => {
@@ -65,14 +59,6 @@ async function game(t, options = {}) {
         tt.paint = () => render(0);
         return { stop() {} };
       };
-      for (const name of ['round', 'end', 'tutorial']) {
-        const call = kit.stats[name];
-        kit.stats[name] = function (...args) { tt.stats.push([name, ...args]); return call.apply(this, args); };
-      }
-      for (const name of ['hit', 'miss', 'cue']) {
-        const call = kit.track[name];
-        kit.track[name] = function (...args) { tt.track.push(name); return call.apply(this, args); };
-      }
     } });
   });
   const page = await ctx.newPage();
@@ -114,14 +100,14 @@ async function typeLevel(page, { per = 6, max = 600, wrongEvery = 0 } = {}) {
   return false;
 }
 
-test('the title is not a round; a language opens its map and is remembered', async t => {
+test('the title waits; a language opens its map and is remembered', async t => {
   const page = await game(t);
   await step(page, 5);
   const s = await state(page);
   assert.equal(s.screen, 'title');
   assert.equal(s.lang, 'ar', 'a first visit starts in Arabic');
   assert.equal(await page.locator('#btnAr').evaluate(b => b.classList.contains('ring')), true);
-  assert.deepEqual(await page.evaluate(() => tt.stats), [], 'the title starts no round');
+  assert.equal(s.mode, '', 'the title starts no level and no test');
   await page.locator('[data-lang="en"]').click();
   await step(page, 2);
   assert.equal((await state(page)).screen, 'map');
@@ -139,10 +125,11 @@ test('the title is not a round; a language opens its map and is remembered', asy
   assert.equal((await state(page)).screen, 'map');
 });
 
-test('a level reads the tier, starts a round, and the lit key pops the cloud; the first coach is reported', async t => {
+test('a level reads the tier, starts at that level, and the lit key pops the cloud; the first coach is saved', async t => {
   const page = await game(t, { save: SAVE({ coach: false }), dda: { _: { en: [0.05, 3] } } });
   await openLevel(page, 'en');
   let s = await state(page);
+  assert.deepEqual([s.mode, s.lang, s.world, s.level], ['level', 'en', 0, 0], 'the first English level starts');
   assert.equal(s.tier, 1, 'a low DDA level plays tier 1');
   assert.equal(s.wait, true, 'tier 1 clouds wait at the edge');
   assert.ok(await until(page, '!!s.next'), 'a cloud comes in');
@@ -154,11 +141,7 @@ test('a level reads the tier, starts a round, and the lit key pops the cloud; th
   s = await state(page);
   assert.equal(s.keys, 1);
   assert.equal(s.done, 1, 'a one-letter cloud pops with one key');
-  const calls = await page.evaluate(() => tt.stats);
-  assert.deepEqual(calls.filter(c => c[0] === 'round'), [['round', 'en1L1']]);
-  assert.deepEqual(calls.filter(c => c[0] === 'tutorial').map(c => c[1]), ['start', 'done']);
-  const track = await page.evaluate(() => tt.track);
-  assert.ok(track.includes('cue') && track.includes('hit'), 'a cue when the cloud can be typed, a hit for the key');
+  assert.equal(s.errors, 0);
   assert.equal((await page.evaluate(() => __game.save)).coach, true, 'the coach is saved as done');
   // The idle hand shows the key after a few seconds of waiting.
   assert.ok(await until(page, 's.ghost', 60 * 6), 'the coach hand comes back while the child waits');
@@ -186,8 +169,7 @@ test('a wrong key shakes the cloud and costs accuracy, never progress; Backspace
   await step(page, 2);
   s = await state(page);
   assert.equal(s.done, 1, 'typing the rest pops the cloud');
-  assert.equal(s.errors, 1);
-  assert.equal((await page.evaluate(() => tt.track)).filter(x => x === 'miss').length, 1, 'one miss per wrong key');
+  assert.equal(s.errors, 1, 'one mistake per wrong key');
 });
 
 test('an Arabic level counts the physical keys when the PC is set to English, and «لا» is one B press', async t => {
@@ -244,8 +226,7 @@ test('Esc and the pause button pause; a paused level stays frozen; P is a letter
   await step(page);
   s = await state(page);
   assert.deepEqual([s.screen, s.keys, s.done], ['play', 0, 0], 'Restart starts the level again');
-  const rounds = (await page.evaluate(() => tt.stats)).filter(c => c[0] === 'round').map(c => c[1]);
-  assert.deepEqual(rounds, ['en3L1', 'en3L1']);
+  assert.deepEqual([s.mode, s.lang, s.world, s.level], ['level', 'en', 2, 0], 'the same level');
 });
 
 test('a finished level shows its stars, saves at once (also after a reload), and Enter goes on', async t => {
@@ -256,8 +237,8 @@ test('a finished level shows its stars, saves at once (also after a reload), and
   const s = await state(page);
   assert.ok(s.stars >= 1 && s.stars <= 3);
   assert.equal((await page.evaluate(() => __game.save)).stars.en[0][0], s.stars, 'saved before the celebration');
-  const end = (await page.evaluate(() => tt.stats)).find(c => c[0] === 'end');
-  assert.equal(end[1], 'win'); assert.ok(Number.isInteger(end[2]) && end[2] >= 0, 'the score is the speed in words per minute');
+  assert.equal(s.won, true, 'the level is won');
+  assert.equal(await page.locator('#resStars').isVisible(), true);
   // The result ignores keys for a moment (a child still typing never skips it), then Enter goes on.
   await page.keyboard.press('Enter');
   await step(page);
@@ -284,7 +265,7 @@ test('a level where every cloud reaches the town ends gently and offers another 
   assert.deepEqual([s.suns, s.stars], [0, 0]);
   assert.equal(await page.locator('#resRainy').isVisible(), true);
   assert.equal(await page.locator('#resAgain').isVisible(), false);
-  assert.equal((await page.evaluate(() => tt.stats)).find(c => c[0] === 'end')[1], 'lose');
+  assert.equal(s.won, false, 'the level is lost');
   await step(page, 60);
   await page.keyboard.press('KeyR');
   await step(page);
@@ -330,16 +311,14 @@ test('the speed test: the clock starts at the first key, stops at 30 s, and keep
   const save = await page.evaluate(() => __game.save);
   assert.equal(save.best.en30, s.result.wpm);
   assert.equal(save.tests.length, 2);
-  const stats = await page.evaluate(() => tt.stats);
-  assert.deepEqual(stats.filter(c => c[0] === 'round').map(c => c[1]), ['test30']);
-  assert.equal(stats.find(c => c[0] === 'end')[2], Math.round(s.result.wpm));
+  assert.deepEqual([s.mode, s.test.lang, s.test.dur], ['test', 'en', 30], 'the 30 s English test ended');
   await step(page, 60);
   await page.keyboard.press('KeyR');
   await step(page);
   assert.equal((await state(page)).screen, 'test', 'R starts another test');
 });
 
-test('a class code typed on two PCs gives both exactly the same words; the code is never in statistics', async t => {
+test('a class code typed on two PCs gives both exactly the same words', async t => {
   const words = [];
   let code = '';
   for (let pc = 0; pc < 2; pc++) {
@@ -365,8 +344,6 @@ test('a class code typed on two PCs gives both exactly the same words; the code 
     const s = await state(page);
     assert.deepEqual([s.screen, s.mode, s.code, s.test.lang, s.test.dur], ['test', 'class', code, 'ar', 60]);
     words.push(s.test.words);
-    const stats = JSON.stringify(await page.evaluate(() => tt.stats));
-    assert.ok(stats.includes('"class"') && !stats.includes(code), 'round id class, never the code');
   }
   assert.deepEqual(words[0], words[1]);
   // A code that is not a test wiggles and empties.
@@ -413,38 +390,27 @@ test('the layout fits a small portal frame: the UI layer follows the canvas', as
   assert.ok(box.b[0] >= box.c[0] && box.b[2] <= box.c[0] + box.c[2] && box.b[3] <= box.c[1] + box.c[3], 'the buttons stay on the canvas');
 });
 
-// Embedded like in the portal: rounds, ends and telemetry reach the parent.
-test('statistics and telemetry reach a stub portal with valid round ids, hits, misses and a reaction time', async t => {
-  const ctx = await context(t, { save: SAVE() });
-  const page = await ctx.newPage();
-  await page.goto(`${server.origin}/tt-parent`);
-  const frame = page.frames().find(f => f.url().includes('/games/typing-test/'));
-  await frame.waitForFunction(() => window.__game && window.Kit);
-  await page.waitForFunction(() => window.msgs.some(m => m && m.type === 'sg:ready'));
-  await page.evaluate(() => prefs({ band: '6-7', player: '', telemetry: true }));
-  await frame.waitForFunction(() => Kit.profile.band === '6-7');
-  await frame.locator('[data-lang="en"]').click();
-  await frame.locator('.pebble[data-w="0"][data-l="0"]').click();
-  await frame.waitForFunction(() => __game.state.screen === 'play' && !!__game.state.next, null, { timeout: 15000 });
-  assert.equal(await frame.evaluate(() => __game.state.tier), 1, 'a six-year-old starts at tier 1');
-  await page.waitForTimeout(400);
-  await page.keyboard.press(await frame.evaluate(() => __game.state.nextKey === 'KeyQ' ? 'KeyZ' : 'KeyQ'));
-  await page.keyboard.press(await frame.evaluate(() => __game.state.nextKey));
-  await frame.waitForFunction(() => __game.state.done >= 1);
+test('leaving a level from the pause card goes back to the map, and the level can be played again', async t => {
+  const page = await game(t, { save: SAVE(), dda: { _: { en: [0.05, 3] } } });
+  await openLevel(page, 'en', 0, 0);
+  assert.equal((await state(page)).tier, 1);
+  assert.ok(await until(page, '!!s.nextKey'));
+  const s0 = await state(page);
+  await page.keyboard.press(s0.nextKey === 'KeyQ' ? 'KeyZ' : 'KeyQ');
+  await page.keyboard.press(s0.nextKey);
+  await step(page, 2);
+  let s = await state(page);
+  assert.deepEqual([s.keys, s.errors, s.done], [1, 1, 1], 'a wrong key, then the right one pops the cloud');
   await page.keyboard.press('Escape');
-  await frame.waitForFunction(() => __game.state.screen === 'pause');
-  await frame.locator('#btnMap').click();
-  await page.waitForFunction(() => msgs.some(m => m.type === 'sg:telemetry' && m.ev.some(e => e[0] === 're' && e[2] === 'en1L1')));
-  const msgs = await page.evaluate(() => window.msgs);
-  const events = msgs.filter(m => m.type === 'sg:stats').flatMap(m => m.r);
-  const starts = events.filter(e => e[0] === 's').map(e => e[1]);
-  assert.deepEqual(starts, ['en1L1']);
-  for (const id of starts) { assert.match(id, ID); assert.doesNotMatch(id, /\d{3}/); }
-  assert.ok(events.some(e => e[0] === 'q' && e[1] === 'en1L1'), 'leaving a level is a quit');
-  const tm = msgs.filter(m => m.type === 'sg:telemetry').flatMap(m => m.ev);
-  assert.deepEqual(tm.filter(e => e[0] === 'rs').map(e => [e[1], e[2]]), [['en1L1', 1]], 'the round start carries the tier');
-  const re = tm.find(e => e[0] === 're' && e[2] === 'en1L1');
-  assert.equal(re[1], 'q');
-  assert.ok(re[6] >= 1, 'a hit for the right key'); assert.ok(re[7] >= 1, 'a miss for the wrong key');
-  assert.ok(re[8].reduce((a, b) => a + b, 0) >= 1, 'a reaction time from the cloud to the first key');
+  await step(page);
+  assert.equal((await state(page)).screen, 'pause');
+  await page.locator('#btnMap').click();
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.screen, 'map', 'Map leaves the level');
+  assert.equal((await page.evaluate(() => __game.save)).stars.en[0][0], 0, 'a level left early earns no stars');
+  await page.locator('.pebble[data-w="0"][data-l="0"]').click();
+  await step(page, 2);
+  s = await state(page);
+  assert.deepEqual([s.screen, s.world, s.level, s.keys, s.done], ['play', 0, 0, 0, 0], 'and starts afresh');
 });
