@@ -381,6 +381,18 @@ test('a class code typed on two PCs gives both exactly the same words; the code 
   assert.equal((await state(page)).screen, 'title');
 });
 
+test('reduced motion: the level still plays, pops and shows its stars', async t => {
+  const page = await game(t, { save: SAVE(), dda: { _: { en: [0.05, 3] } }, reducedMotion: 'reduce' });
+  assert.equal(await page.evaluate(() => Kit.motion.reduced()), true);
+  await openLevel(page, 'en', 0, 0);
+  assert.ok(await typeLevel(page, { per: 20 }));
+  assert.ok(await until(page, 's.screen === "result"', 60 * 4));
+  await step(page, 120);
+  const s = await state(page);
+  assert.equal(await page.locator('#resStars svg.on').count(), s.stars, 'every star earned is shown');
+  assert.equal(await page.locator('#resStars svg.on').first().isVisible(), true);
+});
+
 test('the mute button mutes without binding M, which stays a letter', async t => {
   const page = await game(t, { save: SAVE(), dda: { _: { en: [0.05, 3] } } });
   assert.equal(await page.locator('.sg-mute').getAttribute('aria-pressed'), 'false');

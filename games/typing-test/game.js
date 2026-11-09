@@ -264,8 +264,9 @@
     J.whoosh(0.5);
   }
   function finishTest() {
-    const r = TT.testResult(test), isBest = TT.addTest(save, test.lang, test.dur, r, !!testCfg.code);
-    persist();
+    // An easy class challenge (short words) is not a speed record for the usual test.
+    const r = TT.testResult(test), isBest = test.kind === 'easy' ? false : TT.addTest(save, test.lang, test.dur, r, !!testCfg.challenge);
+    if (test.kind !== 'easy') persist();
     Kit.stats.end('end', Math.round(r.wpm));
     testResult = { r: r, isBest: isBest, best: save.best[test.lang + test.dur] };
     ending = { t: 0.9 };

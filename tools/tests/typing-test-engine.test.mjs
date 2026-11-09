@@ -218,6 +218,9 @@ test('a key still counts when the PC\'s input language does not fit the word (ma
   assert.equal(TT.match('cat', 0, key('d', 'KeyD'), 'en'), 0);
   // Synthetic events without a key are read from the code.
   assert.equal(TT.match('قطة', 0, { code: 'KeyR' }, 'ar'), 1);
+  // Shift held by mistake on the Arabic layout: Shift+R types a mark, the key's letter counts.
+  assert.equal(TT.match('قطة', 0, key('ٌ', 'KeyR', true), 'ar'), 1);
+  assert.equal(TT.match('قطة', 0, key('ً', 'KeyW', true), 'ar'), 0, 'but only on the right key');
 });
 
 test('a class code means the same words on every PC; codes are checked', () => {

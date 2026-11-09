@@ -91,6 +91,9 @@
     if (k) out.push(k);
     var fits = k && (k === ' ' || (lang === 'ar' ? isAr(k[0]) : !isAr(k[0])));
     if (!fits) { var m = TT.keyChar(ev.code, !!ev.shift, lang); if (m && m !== k) out.push(m); }
+    // Shift held by mistake turns Arabic letters into marks (Shift+Q is a fatha): the
+    // letter printed on that key still counts.
+    if (lang === 'ar' && ev.shift) { var u = TT.keyChar(ev.code, false, 'ar'); if (u && out.indexOf(u) < 0) out.push(u); }
     return out;
   };
   // How many letters of text, from pos, this key press types (0: a wrong key).
