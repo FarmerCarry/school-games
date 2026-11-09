@@ -173,7 +173,9 @@ export const scenarios = {
     retryHold: true
   }),
   'troll-level': defaults(['#btn-play'], `${g}.mode === 'play'`, `${g}.player`, hold('ArrowRight'), '#btn-pause', `${g}.mode === 'pause'`, '#btn-restart', `${g}.mode === 'play'`),
-  'chaos-island': defaults(['#btnPlay'], `${g}.mode === 'play'`, `[${g}.world.round, ${g}.world.frames, ${g}.player.x]`, hold('ArrowRight'), '#btnPause', `${g}.mode === 'pause'`, '#btnRestart', `${g}.matches > 1 && ${g}.world.round === 0 && ${g}.world.phase === 'inter' && ${g}.world.frames > 360`, { inputSnapshot: `${g}.player.x` }),
+  // Only the child's own keys add to player.walk (the wind, bonks and platforms never do).
+  // Restart begins a new match: its first round's picture card, a fresh clock.
+  'chaos-island': defaults(['#btnPlay'], `${g}.mode === 'play'`, `[${g}.world.round, ${g}.world.frames, ${g}.player.x, ${g}.player.y]`, hold('ArrowRight'), '#btnPause', `${g}.mode === 'pause'`, '#btnRestart', `${g}.matches > 1 && ${g}.world.round === 0 && ${g}.world.phase === 'card' && ${g}.world.t < 3`, { inputSnapshot: `${g}.player.walk`, inputSeen: `${g}.player.walk > sgInput.before + 8` }),
   'blob-battle': defaults(['#btnPlay'], `${g}.info().state === 'play'`, select(`${g}.info()`, ['T','mass','playerCells','alive','player']), move, '#pauseBtn', `${g}.info().state === 'pause'`, async page => {
     // Observe after the real button handler, in the same event dispatch. A fresh
     // blob can eat nearby golden pellets before a slow runner's next async poll.
