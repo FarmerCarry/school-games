@@ -20,7 +20,7 @@ after(async () => {
 
 // Hoop Heads with the test driving its loop: hh.step(n) runs n fixed updates, each
 // followed by a render, and hh.draw(n) only renders. hh.renders counts scene draws and
-// hh.stats lists the Kit.stats.round/end calls, e.g. ['round', 'cpu-0'], ['end', 'win', 5].
+// hh.matches lists the real (not demo) matches the engine was asked to start, e.g. 'cpu-0', 'duo', 'tour'.
 async function hoop(t, { fontGate } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
   const page = await context.newPage(), errors = [];
@@ -28,7 +28,7 @@ async function hoop(t, { fontGate } = {}) {
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
   await page.addInitScript(() => {
     let kit, update, render;
-    const hh = window.hh = { renders: 0, failSave: false, stats: [] };
+    const hh = window.hh = { renders: 0, failSave: false, matches: [] };
     hh.step = (n = 1) => { for (let i = 0; i < n; i++) { update(1 / 60); render(0); } };
     hh.draw = (n = 1) => { for (let i = 0; i < n; i++) render(0); };
     hh.down = code => window.dispatchEvent(new KeyboardEvent('keydown', { code }));
@@ -41,10 +41,6 @@ async function hoop(t, { fontGate } = {}) {
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (u, r) => { update = u; render = r; return { running: true, stop() {} }; };
-      for (const name of ['round', 'end']) {
-        const call = kit.stats[name];
-        kit.stats[name] = function (...args) { hh.stats.push([name, ...args]); return call.apply(this, args); };
-      }
     } });
     const write = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key) {
@@ -61,8 +57,9 @@ async function hoop(t, { fontGate } = {}) {
       await document.fonts.ready;
       await new Promise(resolve => setTimeout(resolve, 50));
     }
-    const draw = HH.render;
+    const draw = HH.render, make = HH.newMatch;
     HH.render = function (c, v, m, info) { hh.renders++; hh.info = info; return draw.apply(this, arguments); };
+    HH.newMatch = function (o) { if (o.mode !== 'demo') hh.matches.push(o.mode === 'cpu' ? 'cpu-' + o.lv : o.mode); return make.apply(this, arguments); };
   }, !fontGate);
   return page;
 }
@@ -197,19 +194,19 @@ test('Hoop Heads keeps a match decided before a pause in its celebration', async
     seen.push(__game.state);
     const saved = HH.store.get('save', { stats: {} });
     const cpu = { coins: saved.coins, games: saved.stats.games, wins: saved.stats.wins, streak: saved.streak };
-    // Two players, then R: the match counts once, with no winner reported.
+    // Two players, then R: the match counts once and a new one starts.
     __game.start({ mode: 'duo' }); __game.skipIntro(); __game.endNow(1); hh.untilDecided();
     seen.push(pause()); hh.tap('KeyR'); hh.step(1); seen.push(__game.match.phase);
     // A resumed celebration still opens the result screen without saving again.
     __game.skipIntro(); __game.endNow(0); hh.untilDecided(); pause(); document.getElementById('pResume').click();
     seen.push(hh.untilResult());
     const { stats } = HH.store.get('save', { stats: {} });
-    return { seen, cpu, games: stats.games, wins: stats.wins, coins: __game.save.coins, stats: hh.stats };
+    return { seen, cpu, games: stats.games, wins: stats.wins, coins: __game.save.coins, matches: hh.matches };
   });
   assert.deepEqual(result, {
     seen: ['end', 'pause', 'title', 'pause', 'intro', 'result'],
     cpu: { coins: 20, games: 1, wins: 1, streak: 1 }, games: 3, wins: 1, coins: 20 + 12 + 12,
-    stats: [['round', 'cpu-0'], ['end', 'win', 5], ['round', 'duo'], ['end', 'end'], ['round', 'duo'], ['end', 'end']]
+    matches: ['cpu-0', 'duo', 'duo']
   });
 });
 
@@ -224,12 +221,12 @@ test('Hoop Heads a cup match won before a pause moves the cup on instead of repl
     document.getElementById('ladGo').click(); __game.skipIntro(); __game.endNow(0); hh.untilDecided();
     hh.tap('KeyP'); hh.step(1); document.getElementById('pRestart').click();
     const saved = HH.store.get('save', { cups: {} });
-    return { ladder, state: __game.state, text: document.getElementById('trText').textContent, cup: saved.cups.b, coins: saved.coins, stats: hh.stats };
+    return { ladder, state: __game.state, text: document.getElementById('trText').textContent, cup: saved.cups.b, coins: saved.coins, matches: hh.matches };
   });
   assert.deepEqual(result, {
     ladder: { state: 'ladder', done: 4 }, state: 'trophy', text: 'فزت بـالكأس البرونزية!+169', cup: true,
     coins: (5 + 20 + 3 * 6) + (5 + 20 + 4 * 6) + 120,
-    stats: [['round', 'tour-b-4'], ['end', 'win', 5], ['round', 'tour-b-5'], ['end', 'win', 5]]
+    matches: ['tour', 'tour']
   });
 });
 
@@ -255,14 +252,14 @@ async function doubleClick(page, locator) {
 
 test('Hoop Heads a double-click acts once, and never on what its first click opened', async t => {
   const page = await hoop(t);
-  const now = () => page.evaluate(() => ({ state: __game.state, picked: HH.CHARS[__game.sel.idx[0]].id, p1: __game.save.p1, stats: hh.stats.length }));
+  const now = () => page.evaluate(() => ({ state: __game.state, picked: HH.CHARS[__game.sel.idx[0]].id, p1: __game.save.p1, matches: hh.matches.length }));
   await doubleClick(page, page.locator('#mainMenu [data-act="cpu"]'));
-  assert.deepEqual(await now(), { state: 'select', picked: 'robo', p1: 'robo', stats: 0 }, 'the select screen stays, with the saved player');
+  assert.deepEqual(await now(), { state: 'select', picked: 'robo', p1: 'robo', matches: 0 }, 'the select screen stays, with the saved player');
   // a double-click on another card still starts with it, once
   const other = await page.evaluate(() => HH.CHARS.findIndex((c, i) => HH.isUnlocked(c) && i !== __game.sel.idx[0]));
   await doubleClick(page, page.locator('#charGrid .cc').nth(other));
-  assert.deepEqual(await page.evaluate(() => [__game.state, __game.match.players[0].ch.id, hh.stats]),
-    ['play', await page.evaluate(i => HH.CHARS[i].id, other), [['round', 'cpu-0']]]);
+  assert.deepEqual(await page.evaluate(() => [__game.state, __game.match.players[0].ch.id, hh.matches]),
+    ['play', await page.evaluate(i => HH.CHARS[i].id, other), ['cpu-0']]);
   await page.evaluate(() => { __game.skipIntro(); __game.endNow(0); hh.untilResult(); });
   await doubleClick(page, page.locator('#rMenu'));
   assert.equal(await page.evaluate(() => __game.state), 'title', 'not the tournament under القائمة');
