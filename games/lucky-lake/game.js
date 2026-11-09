@@ -808,6 +808,8 @@
       if (p.state === 'bite') {
         const k = 1 + (still ? 0 : Math.max(0, 0.3 - p.t) * 2) + (still ? 0 : Math.sin(time * 14) * 0.05);
         A.mark(ctx, p.bob.x, top - 74, '!', k);
+        // Two fishers on one lake: the bite's «!» carries the number of whose fish it is.
+        if (mode === 'duo') A.badge(ctx, p.bob.x + (p.i ? -44 : 44) * k, top - 108, String(p.i + 1), p.i ? A.P2 : A.P1, 18 * k);
         if (mode === 'solo' && (w.tier <= 2 || coach.bites < 5)) { A.mouseIcon(ctx, p.bob.x + 70, top - 74, 0.8, !still && Math.sin(time * 10) > 0, '#ffd23f'); }
       } else if (f && f.state === 'nibble' && mode === 'solo' && (w.tier <= 2 || !save.coach)) thinking(ctx, p.bob.x, top - 58, still);
     }
