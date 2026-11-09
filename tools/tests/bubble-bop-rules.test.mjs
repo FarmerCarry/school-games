@@ -1,4 +1,4 @@
-// Bubble Bop rules (games/bubble-bop/rules.js): tuning, forgiving input, stars, ids,
+// Bubble Bop rules (games/bubble-bop/rules.js): tuning, forgiving input, stars, plans,
 // saves, and whole levels played with simulated children. Node only, no browser.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -13,7 +13,6 @@ const sandbox = { window: {} };
 vm.runInNewContext(source, sandbox);
 const BB = sandbox.window.BB;
 const DT = 1 / 60;
-const ID = /^[A-Za-z][A-Za-z0-9_:.-]{0,23}$/;
 // Values made in the rules' own context, compared as plain data.
 const plain = v => JSON.parse(JSON.stringify(v));
 
@@ -86,18 +85,13 @@ test('a finished level always earns one to three stars, and the DDA outcome stay
   assert.equal(BB.stars({ hits: 8, escapes: 20, missClicks: 0, time: 200, par: 50 }), 1, 'finishing slowly still earns a star');
 });
 
-test('round ids are valid statistics ids, one per level and party round', () => {
-  assert.equal(BB.ROUND_IDS.length, 44, 'eleven worlds, three levels and a party each');
-  assert.equal(new Set(BB.ROUND_IDS).size, 44);
-  for (const id of BB.ROUND_IDS) {
-    assert.match(id, ID);
-    assert.doesNotMatch(id, /\d{3}/);
-  }
-  assert.deepEqual([BB.roundId(0, 0), BB.roundId(4, 2), BB.roundId(2, 'P')], ['w1L1', 'w5L3', 'w3P']);
-  assert.deepEqual([BB.roundId(5, 0), BB.roundId(9, 2), BB.roundId(10, 'P')], ['w6L1', 'w10L3', 'w11P']);
+test('every level and party round of the eleven worlds has a plan at every tier', () => {
+  assert.equal(BB.N, 11, 'eleven worlds, three levels and a party each');
   for (let w = 0; w < BB.N; w++) for (const l of [0, 1, 2, 'P']) for (let tier = 1; tier <= 5; tier++) {
     const plan = BB.plan(w, l, tier);
-    assert.match(plan.id, ID);
+    assert.equal(plan.w, w);
+    assert.equal(plan.l, l);
+    assert.equal(plan.party, l === 'P');
     assert.equal(plan.tier, tier);
     if (l === 'P') assert.equal(plan.duration, BB.PARTY_SECONDS);
     // World 11 has five short parts of at least two targets each (ten or more in all).
@@ -177,22 +171,25 @@ test('pressing Space at random moments finishes every tier-1 jump level', () => 
   }
 });
 
-test('a firefly says when to jump once, as it comes over the frog and the Space bar lights up', () => {
+test('fireflies start away from the frog and come over it, where the Space bar lights up', () => {
   for (let tier = 1; tier <= BB.TIERS; tier++) {
-    const world = BB.create(BB.plan(2, 0, tier), 3), near = new Set(), spawned = new Set();
+    const world = BB.create(BB.plan(2, 0, tier), 3), over = new Set(), spawned = new Set();
+    const reach = BB.knob(world, 'window') * BB.NEAR;
     for (let i = 0; i < 60 * 30; i++) {
       BB.step(world, DT, { px: null, py: null, clicks: [], jump: false, dir: 0 });
       for (const e of world.ev) {
-        if (e.t === 'spawn') spawned.add(e.id);
-        if (e.t !== 'near') continue;
-        assert.ok(spawned.has(e.id) && !near.has(e.id), `tier ${tier}: one cue per firefly`);
-        near.add(e.id);
-        assert.ok(Math.abs(e.x - world.frog.x) < BB.knob(world, 'window') * BB.NEAR, `tier ${tier}: the cue comes over the frog, not where the fly starts`);
+        if (e.t !== 'spawn') continue;
+        spawned.add(e.id);
+        assert.ok(Math.abs(e.x - world.frog.x) >= reach, `tier ${tier}: a firefly starts away from the frog`);
       }
       world.ev.length = 0;
+      for (const f of world.targets) if (!f.dead && Math.abs(f.x - world.frog.x) < reach) {
+        assert.ok(spawned.has(f.id), `tier ${tier}: firefly ${f.id} came in`);
+        over.add(f.id);
+      }
     }
     // A tier-1 firefly waits above the frog; from tier 2 they fly past one after another.
-    assert.ok(near.size >= (tier === 1 ? 1 : 3), `tier ${tier}: ${near.size} cues`);
+    assert.ok(over.size >= (tier === 1 ? 1 : 3), `tier ${tier}: ${over.size} fireflies came over the frog`);
   }
 });
 

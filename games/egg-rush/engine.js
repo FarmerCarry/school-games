@@ -4,7 +4,7 @@
  * Pure: no DOM, no Kit, no timers and no Math.random (a world takes a seed), so the
  * Node test loads this file (with levels.js) in { window: {} } and plays every level
  * with a scripted player. game.js reads the DDA tier, builds a plan, steps the world
- * with the child's keys and turns the world's events into pictures, sound and stats. */
+ * with the child's keys and turns the world's events into pictures and sound. */
 (function () {
   'use strict';
   var ER = window.ER = window.ER || {};

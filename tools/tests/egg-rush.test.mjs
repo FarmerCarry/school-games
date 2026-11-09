@@ -1,6 +1,5 @@
 // Egg Rush (سباق البيض) in real Chromium: real keyboard and mouse input on a frame loop
-// stepped by hand, statistics, pause, results, saves (also a blocked one) and the
-// two-player race.
+// stepped by hand, pause, results, saves (also a blocked one) and the two-player race.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -14,7 +13,7 @@ let browser, server;
 before(async () => { server = await startTestServer(root); browser = await launchChromium(); });
 after(async () => { await browser?.close(); await server?.close(); });
 
-// The game with its frame loop stepped by hand and its Kit.stats calls recorded.
+// The game with its frame loop stepped by hand.
 // saved: a raw string put in storage once per tab; failSave: storage refuses the save.
 async function game(t, { saved, failSave = false, reducedMotion = 'no-preference' } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion });
@@ -25,21 +24,13 @@ async function game(t, { saved, failSave = false, reducedMotion = 'no-preference
   await page.addInitScript(({ saved, failSave }) => {
     if (saved !== undefined && !sessionStorage.getItem('er-seeded')) { sessionStorage.setItem('er-seeded', '1'); localStorage.setItem('sg:egg-rush:save', saved); }
     let kit;
-    const er = window.er = { stats: [], track: [], failSave: !!failSave };
+    const er = window.er = { failSave: !!failSave };
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (update, render) => {
         er.step = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); render(0); };
         return { stop() {} };
       };
-      for (const name of ['round', 'end', 'tutorial']) {
-        const call = kit.stats[name];
-        kit.stats[name] = function (...args) { er.stats.push([name, ...args]); return call.apply(this, args); };
-      }
-      for (const name of ['hit', 'miss', 'cue', 'react']) {
-        const call = kit.track[name];
-        kit.track[name] = function (...args) { er.track.push(name === 'react' ? ['react', args[0]] : name); return call.apply(this, args); };
-      }
     } });
     const write = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key) {
@@ -91,17 +82,18 @@ async function playLevel(page, maxFrames = 9000) {
   await keys(page, []);
 }
 
-test('the title is not a round; Play opens the first yard with a picture card, and the arrows move the kid', async t => {
+test('the title waits; Play opens the first yard with a picture card, and the arrows move the kid', async t => {
   const page = await game(t);
   await step(page, 30);
   assert.equal(await g(page, '__game.screen'), 'title');
-  assert.deepEqual(await g(page, 'er.stats'), [], 'nothing reported on the title');
+  assert.deepEqual([await g(page, '__game.tries'), await g(page, '__game.level')], [0, ''], 'the title starts no yard');
   await page.locator('#btnPlay').click();
   await step(page, 2);
   assert.equal(await g(page, '__game.screen'), 'play');
   assert.equal(await g(page, '__game.level'), 'w1L1');
   assert.equal(await g(page, '__game.intro'), true, 'the rule card first');
-  assert.deepEqual(await g(page, 'er.stats'), [['round', 'w1L1'], ['tutorial', 'start']]);
+  assert.equal(await g(page, '__game.tries'), 1, 'one yard started');
+  assert.equal((await g(page, '__game.save')).coached, false, 'the first yard is the coached one');
   // The world waits behind the card.
   await step(page, 60);
   assert.equal(await g(page, '__game.time'), 0);
@@ -161,36 +153,16 @@ test('P and Esc pause; a paused yard is frozen even with keys held; leaving the 
   await step(page);
   assert.equal(await g(page, '__game.screen'), 'play');
   assert.equal(await g(page, '__game.atStart'), true);
-  assert.deepEqual((await g(page, 'er.stats')).filter(s => s[0] === 'round').map(s => s[1]), ['w1L1', 'w1L1']);
-  // The map button leaves the level as a quit
+  assert.deepEqual([await g(page, '__game.tries'), await g(page, '__game.level'), await g(page, '__game.hatched')], [2, 'w1L1', 0], 'the same yard again, from the start');
+  // The map button leaves the level unfinished
   await page.keyboard.press('Escape');
   await step(page);
   await page.locator('#btnMenu').click();
   await step(page);
   assert.equal(await g(page, '__game.screen'), 'map');
-  const ends = (await g(page, 'er.stats')).filter(s => s[0] === 'end');
-  assert.deepEqual(ends, [['end', 'quit']]);
-});
-
-test('a guard that stirs while the kid walks times how fast the child lets go and freezes', async t => {
-  const page = await game(t, { saved: SAVE(0) });
-  await page.keyboard.press('Enter');
-  await step(page, 2);
-  await focus(page);
-  await keys(page, ['ArrowRight']);
-  let stirred = false;
-  for (let f = 0; f < 4000 && !stirred; f += 5) {
-    await step(page, 5);
-    stirred = await page.evaluate(() => __game.time > 0 && __game.guards.some(q => q.state === 'stir'));
-  }
-  assert.ok(stirred, 'a guard stirs while the arrow is held');
-  assert.deepEqual((await g(page, 'er.track')).filter(x => Array.isArray(x)), [], 'no reaction while the key is still held');
-  await keys(page, []);
-  await step(page, 2);
-  const reacts = (await g(page, 'er.track')).filter(x => Array.isArray(x));
-  assert.equal(reacts.length, 1, 'one reaction time for letting go');
-  assert.ok(reacts[0][1] >= 0 && reacts[0][1] <= 400, 'the freeze came within a few frames: ' + reacts[0][1]);
-  assert.equal((await g(page, 'er.track')).includes('cue'), false);
+  assert.equal(await g(page, '__game.level'), '', 'the yard is left');
+  const left = await g(page, '__game.save');
+  assert.deepEqual([left.stars[0], left.best[0]], [2, 0], 'leaving early records no result');
 });
 
 test('playing the first yard with the keyboard: eggs hatch, the level ends with stars, saves, and Play again', async t => {
@@ -201,22 +173,14 @@ test('playing the first yard with the keyboard: eggs hatch, the level ends with 
   await playLevel(page);
   assert.equal(await g(page, '__game.ending'), true, 'the yard is finished');
   assert.ok(await g(page, '__game.hatched') >= await g(page, '__game.goal'));
-  const track = await g(page, 'er.track');
-  assert.ok(track.filter(x => x === 'hit').length >= 3, 'a hit per hatched egg');
-  // A stirring guard asks the child to stop, so the game times the freeze itself instead of
-  // cueing Kit, which would time the next key press.
-  assert.equal(track.includes('cue'), false, 'no cue: the answer to a stir is letting go of the keys');
-  for (const r of track.filter(x => Array.isArray(x))) assert.ok(Number.isInteger(r[1]) && r[1] >= 0 && r[1] <= 5000, 'a freeze time in ms: ' + r[1]);
   await step(page, 150);
   assert.equal(await g(page, '__game.screen'), 'result');
   const stars = await g(page, '__game.stars');
   assert.ok(stars >= 2 && stars <= 3);
   await step(page, 120);
   assert.equal(await page.locator('#resStars svg.on').count(), stars);
-  const stats = await g(page, 'er.stats');
   const goal = await g(page, '__game.goal');
-  assert.deepEqual(stats.filter(s => s[0] === 'end'), [['end', 'win', goal]], 'a win with the eggs hatched');
-  assert.deepEqual(stats.filter(s => s[0] === 'tutorial').map(s => s[1]), ['start', 'done']);
+  assert.equal(await g(page, '__game.eggs'), goal, 'a win with the eggs hatched');
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:egg-rush:save')));
   assert.equal(saved.v, 2);
   assert.equal(saved.stars[0], stars);
@@ -246,7 +210,7 @@ test('playing the first yard with the keyboard: eggs hatch, the level ends with 
   assert.equal(await g(page, '__game.level'), 'w1L2', 'Enter on the map opens the next yard');
 });
 
-for (const motion of ['no-preference', 'reduce']) test(`moving in a looking hen's eyes: «!», a bump, the egg rolls back, and a miss is reported (motion: ${motion})`, async t => {
+for (const motion of ['no-preference', 'reduce']) test(`moving in a looking hen's eyes: «!», a bump, and the egg rolls back (motion: ${motion})`, async t => {
   const page = await game(t, { saved: SAVE(1), reducedMotion: motion });
   await page.keyboard.press('Enter');
   await step(page, 2);
@@ -272,7 +236,6 @@ for (const motion of ['no-preference', 'reduce']) test(`moving in a looking hen'
   assert.equal(await g(page, '__game.catches'), 1);
   if (motion === 'reduce') assert.equal(await g(page, '__game.shake'), 0, 'no shake under reduced motion');
   else assert.ok(await g(page, '__game.shake') > 0, 'the screen shakes');
-  assert.ok((await g(page, 'er.track')).includes('miss'));
   await step(page, 200);
   assert.equal(await g(page, '__game.carrying'), false, 'the egg was dropped');
   assert.equal(await g(page, '__game.eggList[0].state'), 'nest', 'and rolled back to the nest');
@@ -333,12 +296,12 @@ test('old and broken saves load as a fresh, playable game', async t => {
   }
 });
 
-test('two players: both kids respond to their own keys, bumps and the clock, and the race reports only end or draw', async t => {
+test('two players: both kids respond to their own keys, bumps and the clock, and the race ends in a win or a draw', async t => {
   const page = await game(t);
   await page.locator('#btnDuo').click();
   await step(page, 2);
   assert.equal(await g(page, '__game.mode'), 'duo');
-  assert.deepEqual(await g(page, 'er.stats'), [['round', 'duo']]);
+  assert.equal(await g(page, '__game.tries'), 1, 'one race started');
   assert.equal(await g(page, '__game.intro'), true, 'the keys card first');
   await focus(page);
   await page.keyboard.press('Enter');
@@ -388,19 +351,16 @@ test('two players: both kids respond to their own keys, bumps and the clock, and
   assert.equal(await g(page, '__game.screen'), 'result');
   const scores = await g(page, '__game.scores');
   assert.ok(scores[0] >= 1 && scores[1] >= 1, 'both kids hatched eggs: ' + scores);
-  const ends = (await g(page, 'er.stats')).filter(s => s[0] === 'end');
-  assert.equal(ends.length, 1);
-  assert.ok(ends[0][1] === 'end' || ends[0][1] === 'draw');
-  assert.equal(ends[0][2], await g(page, '__game.eggs'), 'the score is the eggs hatched in the race');
+  const winner = await g(page, '__game.winner');
+  assert.equal(winner, scores[0] === scores[1] ? -1 : scores[0] > scores[1] ? 0 : 1, 'the kid with more eggs wins, or a draw');
   assert.equal(await page.locator('#resDuo').isVisible(), true);
-  assert.equal(await g(page, 'er.track.length'), 0, 'no reaction times or accuracy from a two-player race');
   assert.equal((await g(page, '__game.save')).duo, 1);
   // Enter starts a rematch
   await step(page, 60);
   await page.keyboard.press('Enter');
   await step(page, 2);
   assert.equal(await g(page, '__game.mode'), 'duo');
-  assert.deepEqual((await g(page, 'er.stats')).filter(s => s[0] === 'round').map(s => s[1]), ['duo', 'duo']);
+  assert.deepEqual([await g(page, '__game.tries'), await g(page, '__game.screen'), await g(page, '__game.scores')], [2, 'play', [0, 0]], 'a new race');
 });
 
 test('the barn and the wardrobe open from the title and close with Esc; locked outfits stay locked', async t => {

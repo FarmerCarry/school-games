@@ -1,9 +1,7 @@
 /* Egg Rush (سباق البيض): screens, keyboard and mouse, the wordless coach (a ghost kid
- * that shows the way and freezes when a guard wakes), parades of babies, saves, sound
- * and play statistics. engine.js simulates the yard; art.js draws it.
- * This is the UI layer: it reads Kit.dda at every round start and reports Kit.stats
- * rounds and Kit.track hits (eggs hatched), misses (catches) and reaction times (a guard stirs
- * while the kid walks: the time until the child lets go of the keys and freezes). */
+ * that shows the way and freezes when a guard wakes), parades of babies, saves and sound.
+ * engine.js simulates the yard; art.js draws it.
+ * This is the UI layer: it reads Kit.dda at every round start. */
 (function () {
   'use strict';
   const ER = window.ER, A = ER.art, J = Kit.juice, W = ER.W, H = ER.H, TAU = Math.PI * 2;
@@ -37,15 +35,12 @@
 
   /* --------------------------------------------------------------- state */
   let screen = 'title', world = null, cur = 0, duo = false, time = 0;
-  let intro = null, countdown = 0, ending = null, result = null, resultT = 0, resultLock = 0, busyT = 0;
+  let intro = null, countdown = 0, ending = null, result = null, resultT = 0, resultLock = 0;
   let menuIdle = 0, menuNext = 5, closetFrom = 'title', tries = 0;
   let parades = [[], []], hatching = [], floats = [], rings = [], slots = [], streak = 0;
   // eggs flying from the home nest up into their slot in the HUD, and slots that pop
   let flyers = [], filled = 0, slotPop = [];
   let idle = 0, ghost = null, happy = [0, 0], squash = [0, 0], stepT = [0, 0], held = {}, stopHint = 0;
-  // Seconds since a guard began to stir while the child was walking, until they freeze; -1 = none.
-  // walking: a direction key (or the mouse) was held this step; sliding on ice does not count.
-  let freezeT = -1, walking = false;
   const walk = [0, 0], coneBuf = [];
   const mouse = { x: W / 2, y: H / 2, down: false, known: false };
   const menuKid = { x: 640, y: 600, t: 0, walk: 0, face: 1, babies: [] };
@@ -247,17 +242,15 @@
   /* -------------------------------------------------------------- rounds */
   function resetRound() {
     parades = [[], []]; hatching = []; floats = []; rings = []; slots = []; streak = 0; flyers = []; filled = 0; slotPop = [];
-    ghost = null; idle = 0; happy = [0, 0]; squash = [0, 0]; held = {}; stopHint = 0; freezeT = -1;
+    ghost = null; idle = 0; happy = [0, 0]; squash = [0, 0]; held = {}; stopHint = 0;
     fx.clear(); ending = null; result = null; countdown = 0; mouse.down = false;
   }
   function startLevel(li, quick) {
-    // Difficulty is read at every round start, before the round is reported.
+    // Difficulty is read at every round start.
     const tier = dda.tier;
     const plan = ER.plan(li, tier);
     world = ER.create(plan, (Math.random() * 2147483647) | 0);
     cur = li; duo = false; tries++;
-    Kit.stats.round(plan.id);
-    if (li === 0 && !save.coached) Kit.stats.tutorial('start');
     resetRound();
     const lesson = LESSON[li] || '';
     intro = quick ? null : { t: 0, max: lesson ? 14 : 3.2, lesson: lesson, out: 0 };
@@ -272,7 +265,6 @@
     const plan = ER.duoPlan(b, tier);
     world = ER.create(plan, (Math.random() * 2147483647) | 0);
     cur = -1; duo = true; tries++;
-    Kit.stats.round('duo');
     resetRound();
     intro = { t: 0, max: 14, lesson: 'duo', out: 0 };
     setScreen('play');
@@ -302,8 +294,6 @@
     Kit.keys.reset();
   }
   function quitToMenu() {
-    // A solo level left from the pause is a quit; a two-player race reports only its end.
-    if (!duo) Kit.stats.end('quit');
     J.back();
     if (duo) toTitle(); else toMap();
   }
@@ -319,8 +309,6 @@
     const nextOpen = li < 19 && ER.isOpen(save, li + 1);
     persist();
     dda.result(ER.outcome(r));
-    Kit.stats.end('win', r.eggs);
-    if (coach) Kit.stats.tutorial('done');
     result = { duo: false, stars: stars, prev: prev, r: r, newBest: prev > 0 && (stars > prev || tenths < prevBest), items: ER.unlocks(before, ER.total(save)), nextOpen: nextOpen };
     ending = { t: 1.9 };
     happy[0] = 2;
@@ -332,7 +320,6 @@
     const r = ER.result(world), win = ER.winner(world);
     save.duo = (save.duo + 1) % 100000;
     persist();
-    Kit.stats.end(win < 0 ? 'draw' : 'end', r.eggs);
     result = { duo: true, win: win, r: r };
     ending = { t: 2.1 };
     if (win >= 0) happy[win] = 2.5; else happy = [2.5, 2.5];
@@ -380,8 +367,6 @@
         if (r.items.length) { const it = r.items[r.items.length - 1]; itemIcon($('giftCanvas'), it); $('resGift').hidden = false; J.chime(3); }
       }
     } else if (at(0.35)) J.star(3);
-    busyT += dt;
-    if (resultT < 3 && busyT >= 1) { busyT = 0; Kit.stats.busy(); }
   }
   function next() {
     if (!result) return;
@@ -513,7 +498,6 @@
   }
   const babyWorld = () => world.plan.w;
   function onHatch(e) {
-    if (!duo) Kit.track.hit();
     const bw = babyWorld();
     save.babies[bw] = Math.min(999999, save.babies[bw] + 1);
     if (e.gold) save.golden[bw] = Math.min(save.babies[bw], save.golden[bw] + 1);
@@ -534,7 +518,7 @@
   function handleEvents() {
     for (const e of world.ev) {
       const g = e.g != null ? world.guards[e.g] : null;
-      if (e.t === 'stir') { if (!duo && freezeT < 0 && walking) freezeT = 0; SFX.hmm(); if (cur <= 1 && !duo) stopHint = g.dur; }
+      if (e.t === 'stir') { SFX.hmm(); if (cur <= 1 && !duo) stopHint = g.dur; }
       else if (e.t === 'wake') SFX.blink();
       else if (e.t === 'sleep') {
         SFX.yawn();
@@ -542,8 +526,7 @@
         if (held[e.g]) { held[e.g] = false; const p = world.players[0]; float(p.x, p.y - 100, 'أحسنت!', '#7fffb0', 40); J.chime(1); ring(p.x, p.y - 20, 20, 70, '127,255,176', 0.5); }
       } else if (e.t === 'caught') {
         SFX.squawk(); shake.add(7);
-        if (!duo) Kit.track.miss();
-        streak = 0; held = {}; freezeT = -1;
+        streak = 0; held = {};
         feathers(e.gx, e.gy, g.kind);
         ring(e.x, e.y - 20, 20, 80, '255,90,90', 0.45);
       } else if (e.t === 'hop') J.jump(0.25);
@@ -660,9 +643,6 @@
       if (intro.out) { intro.out += dt; if (intro.out > 0.35) intro = null; }
       else {
         intro.t += dt;
-        // the picture card is a moment the child looks at
-        busyT += dt;
-        if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
         if (intro.t > intro.max) closeIntro();
       }
       paradeStep(dt);
@@ -679,13 +659,8 @@
     if (!ending) {
       const inp = readInput();
       const moving = inp.some(i => i.x || i.y);
-      walking = moving;
       // Idle only counts while it is safe to walk: standing still for a guard is right.
       const p0 = world.players[0], safe = !duo && !p0.carry && !p0.spotted && threat(p0.x, p0.y) === 0 && world.guards.every(g => g.state === 'sleep' || g.state === 'walk');
-      // A stir asks the child to freeze, so the reaction is letting go of the keys, not a press.
-      if (freezeT >= 0) {
-        if (!moving) { Kit.track.react(Math.round(freezeT * 1000)); freezeT = -1; } else if ((freezeT += dt) > 5) freezeT = -1;
-      }
       if (moving) { idle = 0; if (ghost && !ghost.out) ghost.out = 0.0001; } else if (safe || (!duo && p0.carry && threat(p0.x, p0.y) === 0)) idle += dt; else idle = Math.min(idle, 1);
       ER.step(world, dt, inp);
       handleEvents();
@@ -705,8 +680,6 @@
       if (stopHint > 0) stopHint -= dt;
     } else {
       ending.t -= dt;
-      busyT += dt;
-      if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
       if (ending.t <= 0) showResult();
     }
     paradeStep(dt);

@@ -17,7 +17,6 @@ vm.runInNewContext(fs.readFileSync(path.join(dir, 'words.js'), 'utf8'), sandbox)
 vm.runInNewContext(engineSource, sandbox);
 const TT = sandbox.window.TT, WORDS = sandbox.window.TT_WORDS;
 const DT = 1 / 60;
-const ID = /^[A-Za-z][A-Za-z0-9_:.-]{0,23}$/;
 const plain = v => JSON.parse(JSON.stringify(v));
 const key = (k, code, shift = false) => ({ key: k, code, shift });
 
@@ -302,8 +301,7 @@ test('stars: finishing earns one, 90 % accuracy a second, the tier\'s speed the 
 
 test('every level of both languages is won by a slow typist at tier 1 and a quick one at tier 5', () => {
   for (const lang of TT.LANGS) for (let w = 0; w < TT.WORLDS; w++) for (let l = 0; l < TT.LEVELS; l++) {
-    const id = TT.roundId(lang, w, l);
-    assert.match(id, ID); assert.doesNotMatch(id, /\d{3}/);
+    const id = `${lang} world ${w + 1} level ${l + 1}`;
     // A six-year-old finding each key: half a key a second, two seconds to start a word.
     const slow = play(lang, w, l, 1, { cps: 0.5, react: 2, seed: 11 + w * 7 + l });
     assert.ok(slow.r.won, `${id} tier 1 slow typist wins`);

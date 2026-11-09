@@ -3,7 +3,7 @@
  * Pure: no DOM, no Kit, no timers and no Math.random (a world takes a seed), so the
  * Node test loads this file with { window: {} } and plays whole levels with fake input.
  * game.js reads the DDA tier, builds a plan, steps the world with the child's input
- * and turns the world's events into pictures, sound and statistics. */
+ * and turns the world's events into pictures and sound. */
 (function () {
   'use strict';
   var BB = window.BB = window.BB || {};
@@ -261,12 +261,6 @@
     };
   };
 
-  /* --------------------------------------------------------------- ids */
-  // 'w1L1'..'w11L3' for levels and 'w1P'..'w11P' for party rounds.
-  BB.roundId = function (w, l) { return 'w' + (w + 1) + (l === 'P' ? 'P' : 'L' + (l + 1)); };
-  BB.ROUND_IDS = [];
-  for (var wi = 0; wi < BB.N; wi++) { for (var li = 0; li < 3; li++) BB.ROUND_IDS.push(BB.roundId(wi, li)); BB.ROUND_IDS.push(BB.roundId(wi, 'P')); }
-
   /* -------------------------------------------------------------- plans */
   // What one try plays: its modes and goals at a tier, the pace par and, for a party, the clock.
   BB.plan = function (w, l, tier) {
@@ -284,7 +278,7 @@
       return { mode: mode, goal: goal };
     });
     return { w: w, l: party ? 'P' : lv, party: party, tier: tier, segments: segments, par: Math.round(par),
-      duration: party ? BB.PARTY_SECONDS : 0, expect: Math.round(expect), id: BB.roundId(w, party ? 'P' : lv) };
+      duration: party ? BB.PARTY_SECONDS : 0, expect: Math.round(expect) };
   };
 
   /* --------------------------------------------------------- hit tests */
@@ -402,7 +396,7 @@
     var points = (t.gold ? 5 : 1) * w.mult;
     w.score += points;
     w.ev.push({ t: 'pop', kind: t.kind, id: t.id, x: t.x, y: t.y, r: t.r, gold: t.gold, color: t.color, combo: w.combo,
-      mult: w.mult, points: points, by: by, age: t.age, big: !!t.big, type: t.type, br: t.br, critter: t.critter, home: t.home, code: t.code, cap: t.cap });
+      mult: w.mult, points: points, by: by, big: !!t.big, type: t.type, br: t.br, critter: t.critter, home: t.home, code: t.code, cap: t.cap });
     // A big bubble bursts into three little ones.
     if (t.big) {
       for (var i = 0; i < 3; i++) {
@@ -546,8 +540,6 @@
         if (f.dead) continue;
         f.age += dt;
         var dx = f.x - frog.x, ad = Math.abs(dx), k = slow + (1 - slow) * clamp((ad - 10) / (win * 1.5), 0, 1);
-        // The moment to press Space, which a reaction time counts from (not the fly's start).
-        if (!f.near && ad < win * BB.NEAR) { f.near = true; w.ev.push({ t: 'near', kind: 'fly', id: f.id, x: f.x, y: f.y }); }
         if (slow === 0 && ad <= 10 && f.waited < f.wait) { f.waited += dt; f.x += (frog.x - f.x) * Math.min(1, dt * 4); }
         else f.x += f.dir * speed * Math.max(k, slow > 0 ? slow : 0.16) * dt;
         f.y = f.baseY + Math.sin(f.age * 3.2 + f.phase) * f.zig;

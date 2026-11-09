@@ -1,6 +1,5 @@
 // Key Runner in real Chromium: real key presses (by physical key), the type-ahead queue,
-// wrong keys, pause, results, saves, the label mode, endless runs, the two-player race and
-// the statistics a portal receives.
+// wrong keys, pause, results, saves, the label mode, endless runs and the two-player race.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -19,8 +18,7 @@ const SAVE = (rows, extra = {}) => ({ v: 2, stars: stars(rows), best: stars(), e
 // A DDA state for a guest: level 0..1 after a few results (tier 1 at 0.05, tier 5 at 0.95).
 const DDA = level => ({ _: { levels: [level, 8], endless: [level, 8] } });
 
-// The game with its frame loop stepped by hand, Kit.stats and Kit.track calls recorded,
-// and storage that can be made to fail. Every test: no page errors, no console errors and
+// The game with its frame loop stepped by hand, and storage that can be made to fail. Every test: no page errors, no console errors and
 // no request off the test server.
 async function game(t, { save, dda, deniedStorage = false, viewport = { width: 1280, height: 720 } } = {}) {
   const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
@@ -36,7 +34,7 @@ async function game(t, { save, dda, deniedStorage = false, viewport = { width: 1
       if (dda) localStorage.setItem('sg:key-runner:dda', JSON.stringify(dda));
     }
     let kit;
-    const kr = window.kr = { stats: [], track: { cue: 0, hit: 0, miss: 0 }, failSave: false };
+    const kr = window.kr = { failSave: false };
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (update, render) => {
@@ -45,14 +43,6 @@ async function game(t, { save, dda, deniedStorage = false, viewport = { width: 1
         kr.paint = () => render(0);
         return { stop() {} };
       };
-      for (const name of ['round', 'end', 'tutorial']) {
-        const call = kit.stats[name];
-        kit.stats[name] = function (...args) { kr.stats.push([name, ...args]); return call.apply(this, args); };
-      }
-      for (const name of ['cue', 'hit', 'miss']) {
-        const call = kit.track[name];
-        kit.track[name] = function (...args) { kr.track[name]++; return call.apply(this, args); };
-      }
     } });
     const write = Storage.prototype.setItem, read = Storage.prototype.getItem;
     Storage.prototype.setItem = function (key) {
@@ -71,7 +61,6 @@ async function game(t, { save, dda, deniedStorage = false, viewport = { width: 1
 }
 const state = page => page.evaluate(() => __game.state);
 const step = (page, n = 1) => page.evaluate(n => kr.step(n), n);
-const calls = (page, name) => page.evaluate(name => kr.stats.filter(c => c[0] === name).map(c => c.slice(1)), name);
 async function until(page, cond, max = 3600) {
   return page.evaluate(({ cond, max }) => {
     const ok = new Function('s', 'return (' + cond + ');');
@@ -107,19 +96,17 @@ async function openLevel(page, w, l) {
   assert.equal((await state(page)).screen, 'play');
 }
 
-test('the title is not a round; Enter starts the first run, Space hops and the coach shows the key', async t => {
+test('the title only shows the attract run; Enter starts the first run, Space hops and the coach shows the key', async t => {
   const page = await game(t);
   await step(page, 30);
   let s = await state(page);
   assert.equal(s.screen, 'title');
-  assert.deepEqual(await calls(page, 'round'), [], 'the attract run on the title is not a round');
-  assert.equal(await page.evaluate(() => kr.track.hit), 0);
+  assert.deepEqual([s.mode, s.id, s.hits], ['', '', 0], 'the attract run on the title is not a run of the child');
   await page.keyboard.press('Enter');
   await step(page);
   s = await state(page);
-  assert.equal(s.screen, 'play'); assert.equal(s.id, 'w1L1'); assert.equal(s.target, 'Space');
-  assert.deepEqual(await calls(page, 'round'), [['w1L1']]);
-  assert.deepEqual(await calls(page, 'tutorial'), [['start']]);
+  assert.equal(s.screen, 'play'); assert.equal(s.mode, 'level'); assert.equal(s.id, 'w1L1'); assert.equal(s.target, 'Space');
+  assert.equal((await page.evaluate(() => __game.save)).coach, false, 'the first run is the coached one');
   // Nothing typed: the runner runs to the first edge and waits there, and the hand shows Space.
   assert.ok(await until(page, 's.phase === "wait"', 600));
   const waiting = await state(page);
@@ -132,10 +119,10 @@ test('the title is not a round; Enter starts the first run, Space hops and the c
   s = await state(page);
   assert.equal(s.hits, 1); assert.equal(s.phase, 'act'); assert.equal(s.steps, 1);
   assert.equal(s.ghost, false);
-  assert.ok(await page.evaluate(() => kr.track.cue) >= 2 && await page.evaluate(() => kr.track.hit) === 1);
+  assert.equal((await page.evaluate(() => __game.save)).coach, false, 'one key is not the whole lesson');
   for (let i = 0; i < 2; i++) { assert.ok(await until(page, '!!s.target', 600)); await typeTarget(page); }
-  assert.deepEqual(await calls(page, 'tutorial'), [['start'], ['done']]);
-  assert.equal((await page.evaluate(() => __game.save)).coach, true);
+  assert.equal((await state(page)).hits, 3);
+  assert.equal((await page.evaluate(() => __game.save)).coach, true, 'three right keys finish the coached start');
 });
 
 test('keys count by their physical position, in the order typed; repeats, shortcuts and stray keys do not type', async t => {
@@ -171,7 +158,6 @@ test('keys count by their physical position, in the order typed; repeats, shortc
   assert.equal(after.misses, 1, 'one wrong press, its repeats ignored');
   assert.equal(after.target, s.target, 'the same key is still wanted');
   assert.equal(after.steps, s.steps - 1, 'at the top tier a wrong key costs a speed step');
-  assert.equal(await page.evaluate(() => kr.track.miss), 1);
   // P and M are letters here: they neither pause nor mute.
   const muted = await page.evaluate(() => Kit.audio.muted);
   await page.keyboard.press('KeyP'); await page.keyboard.press('KeyM');
@@ -208,7 +194,7 @@ test('pause freezes everything, focus does not resume, and Restart starts the le
   await step(page, 1);
   const fresh = await state(page);
   assert.equal(fresh.screen, 'play'); assert.equal(fresh.hits, 0); assert.ok(fresh.time < 0.1);
-  assert.deepEqual((await calls(page, 'round')).map(c => c[0]), ['w1L2', 'w1L2']);
+  assert.deepEqual([fresh.mode, fresh.id], ['level', 'w1L2'], 'the same level again');
 });
 
 test('finishing a level: stars, the result, Play again with R, the next level with Enter, saved for a reload', async t => {
@@ -218,7 +204,7 @@ test('finishing a level: stars, the result, Play again with R, the next level wi
   assert.ok(await until(page, 's.screen === "result"', 400));
   let s = await state(page);
   assert.equal(s.stars, 3, 'quick and sure: three stars');
-  assert.deepEqual(await calls(page, 'end'), [['win', 3]]);
+  assert.deepEqual([s.mode, s.id, s.done], ['level', 'w2L1', true], 'the level is won');
   assert.equal(await page.locator('#resStars svg.on').count(), 0, 'the stars pop in one by one');
   await step(page, 120);
   assert.equal(await page.locator('#resStars svg.on').count(), 3);
@@ -236,7 +222,7 @@ test('finishing a level: stars, the result, Play again with R, the next level wi
   await step(page, 1);
   s = await state(page);
   assert.equal(s.id, 'w2L2');
-  assert.deepEqual((await calls(page, 'round')).map(c => c[0]), ['w2L1', 'w2L1', 'w2L2']);
+  assert.deepEqual([s.screen, s.hits, s.done], ['play', 0, false], 'the next level starts afresh');
   // A reload keeps the stars: the map shows them and the next level is open.
   await page.reload();
   await page.waitForFunction(() => window.__game && window.kr.step);
@@ -302,27 +288,27 @@ test('the endless run opens after world 2, ends after three long stops and keeps
   await step(page, 2);
   let s = await state(page);
   assert.equal(s.mode, 'endless'); assert.equal(s.hearts, 3);
-  assert.deepEqual(await calls(page, 'round'), [['endless']]);
+  assert.deepEqual([s.screen, s.hits], ['play', 0]);
   for (let i = 0; i < 6; i++) { await until(page, '!!s.target', 600); await typeTarget(page); }
   assert.ok(await until(page, 's.screen === "result"', 60 * 40), 'three long stops end the run');
   s = await state(page);
   assert.equal(s.endlessKeys, 6);
-  assert.deepEqual(await calls(page, 'end'), [['end', 6]]);
+  assert.equal(s.hearts, 0, 'the run ended on its last heart');
   assert.equal((await page.evaluate(() => __game.save)).endless, 6);
   assert.equal(await page.locator('#resNum').textContent(), '6');
 });
 
-test('two players race on the two halves of one keyboard; only "end" is reported', async t => {
+test('two players race on the two halves of one keyboard, and Enter races again', async t => {
   const page = await game(t, { save: SAVE({ 0: [1, 0, 0, 0] }) });
   await page.locator('#btnDuo').click();
   await step(page, 2);
-  assert.equal((await state(page)).screen, 'duo');
-  assert.deepEqual(await calls(page, 'round'), [], 'the duo screen is not a round yet');
+  let s = await state(page);
+  assert.equal(s.screen, 'duo');
+  assert.equal(s.countdown, 0, 'the duo screen does not start the race yet');
   await page.locator('#duoGo').click();
   await step(page, 1);
-  let s = await state(page);
-  assert.equal(s.mode, 'duo'); assert.ok(s.countdown > 0);
-  assert.deepEqual(await calls(page, 'round'), [['duo']]);
+  s = await state(page);
+  assert.equal(s.screen, 'play'); assert.equal(s.mode, 'duo'); assert.ok(s.countdown > 0);
   // During the 3-2-1 nothing types.
   await page.keyboard.press(s.lanes[0].target || 'KeyF');
   await step(page, 1);
@@ -351,12 +337,13 @@ test('two players race on the two halves of one keyboard; only "end" is reported
   s = await state(page);
   assert.equal(s.winner, 0);
   assert.match(await page.locator('#duoWinner').textContent(), /اللاعب 1/);
-  assert.deepEqual(await calls(page, 'end'), [['end']]);
-  assert.equal(await page.evaluate(() => kr.track.hit), 0, 'a race between two children is not one child\'s accuracy');
   await step(page, 60);
   await page.keyboard.press('Enter');
   await step(page, 1);
-  assert.deepEqual((await calls(page, 'round')).map(c => c[0]), ['duo', 'duo'], 'Enter races again');
+  s = await state(page);
+  assert.deepEqual([s.screen, s.mode, s.winner], ['play', 'duo', -1], 'Enter races again');
+  assert.ok(s.countdown > 0);
+  assert.deepEqual(s.lanes.map(l => l.hits), [0, 0]);
 });
 
 test('the layout follows the window, and a mouse click on Play hands the keyboard to the game', async t => {

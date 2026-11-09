@@ -1,8 +1,8 @@
-/* Key Runner (عدّاء المفاتيح): screens, the real keyboard, the ghost-hand coach, saves, sound
- * and play statistics. engine.js runs the courses; art.js draws them.
- * This is the UI layer: it reads Kit.dda at every round start and reports Kit.stats rounds
- * and Kit.track cues, hits and misses. Every key press is taken in the order it was typed
- * (KeyboardEvent.code, so an Arabic or an English Windows keyboard both work). */
+/* Key Runner (عدّاء المفاتيح): screens, the real keyboard, the ghost-hand coach, saves and
+ * sound. engine.js runs the courses; art.js draws them.
+ * This is the UI layer: it reads Kit.dda at every round start. Every key press is taken in
+ * the order it was typed (KeyboardEvent.code, so an Arabic or an English Windows keyboard
+ * both work). */
 (function () {
   'use strict';
   const KR = window.KR, A = KR.art, J = Kit.juice, W = KR.W, H = KR.H;
@@ -41,7 +41,7 @@
   /* --------------------------------------------------------------- state */
   let screen = 'title', mode = '', cur = { w: 0, l: 0 }, time = 0;
   let solo = null, lanes = null, demo = null, ending = null, result = null, resultT = 0, resultLock = 0;
-  let queue = [], countdown = 0, winner = -1, duoScene = 3, intro = null, busyT = 0, menuIdle = 0, menuNext = 5;
+  let queue = [], countdown = 0, winner = -1, duoScene = 3, intro = null, menuIdle = 0, menuNext = 5;
   let gaugeBump = 0, coinBump = 0, heartBump = 0, firstCoach = false, tutorialHits = 0, closetFrom = 'title', unlockFx = -1;
   const flash = {};
   const calls = [];
@@ -65,13 +65,11 @@
   // A big word of praise; in a race it shows on the lane of the player who earned it.
   function call(text, color, y) { calls.push({ text: text, t: 0, color: color || '#ffd23f', y: y }); if (calls.length > 4) calls.shift(); }
   const SPARK = ['#ffe14d', '#ffffff', '#7ef0a2', '#4fd1ff'];
-  // Turns a lane's engine events into pictures, sound and (when `real`) statistics.
+  // Turns a lane's engine events into pictures and sound (`real`: a lane a child plays).
   function laneEvents(L, real, quiet) {
     const w = L.w;
     for (const e of w.ev) {
-      if (e.t === 'cue') { if (real === 'solo') Kit.track.cue(); }
-      else if (e.t === 'hit') {
-        if (real === 'solo') Kit.track.hit();
+      if (e.t === 'hit') {
         const s = w.stones[e.i], cx = (e.x + e.x1) / 2;
         if (s) stoneFx(L, s).dip = 1;
         if (real) flash[e.code] = ['ok', 0.35];
@@ -89,11 +87,10 @@
         }
         if (real === 'solo') { coach.t = 0; coach.next = coachDelay(); hideHand(); }
         if (real === 'solo' && firstCoach && ++tutorialHits >= 3) {
-          firstCoach = false; Kit.stats.tutorial('done');
+          firstCoach = false;
           if (!save.coach) { save.coach = true; persist(); }
         }
       } else if (e.t === 'wrong') {
-        if (real === 'solo') Kit.track.miss();
         const s = w.stones[e.i];
         if (s) { const f = stoneFx(L, s); f.shake = 1; f.miss = 0.4; }
         if (real) flash[e.code] = ['miss', 0.4];
@@ -379,16 +376,14 @@
     Kit.keys.reset();
   }
   function startLevel(w, l) {
-    // Difficulty is read at every level start, before the round is reported.
+    // Difficulty is read at every level start.
     const tier = ddaLevels.tier, seed = (Math.random() * 2147483647) | 0;
     const plan = KR.plan(w, l, tier, seed);
     mode = 'level'; cur = { w: w, l: l }; lanes = null;
     solo = makeLane(plan, seed, SOLO, save.color, save.hat, w);
-    Kit.stats.round(plan.id);
     resetPlay();
     firstCoach = !save.coach && w === 0 && l === 0; tutorialHits = 0;
     // The first run ever is the coached one: the hand shows the key as soon as the runner waits.
-    if (firstCoach) Kit.stats.tutorial('start');
     coach.next = coachDelay();
     intro = { t: 0, keys: plan.fresh, w: w, l: l };
     setScreen('play');
@@ -399,7 +394,6 @@
     const plan = KR.endlessPlan(KR.topWorld(save), tier, seed);
     mode = 'endless'; lanes = null;
     solo = makeLane(plan, seed, SOLO, save.color, save.hat, 6);
-    Kit.stats.round('endless');
     resetPlay();
     firstCoach = false;
     intro = { t: 0, keys: [], endless: true };
@@ -426,7 +420,6 @@
   function startDuo() {
     if (!lanes || screen === 'play') buildLanes();
     mode = 'duo'; solo = null; winner = -1;
-    Kit.stats.round('duo');
     resetPlay();
     countdown = 3.6;
     setScreen('play');
@@ -451,8 +444,6 @@
     Kit.keys.reset();
   }
   function quitToMenu() {
-    // Two-player rounds report only 'end'.
-    Kit.stats.end(mode === 'duo' ? 'end' : 'quit');
     J.back();
     if (mode === 'duo') toTitle(); else toMap(-1);
   }
@@ -466,7 +457,6 @@
     if (!prevBest || tenths < prevBest) save.best[cur.w][cur.l] = tenths;
     persist();
     ddaLevels.result(KR.outcome(r));
-    Kit.stats.end('win', stars);
     result = { kind: 'level', stars: stars, r: r, newBest: (prevBest > 0 && tenths < prevBest) || (prev > 0 && stars > prev), items: KR.unlocks(before, KR.total(save)),
       newWorld: cur.w + 1 < KR.WORLD_COUNT && !nextWasOpen && KR.worldOpen(save, cur.w + 1) ? cur.w + 1 : -1, newEndless: !endlessWas && KR.endlessOpen(save) };
     ending = { t: 1.7 };
@@ -478,7 +468,6 @@
     const w = solo.w, r = KR.result(w), best = save.endless, keys = r.hits, isBest = keys > best;
     if (isBest) { save.endless = keys; persist(); }
     ddaEndless.result(KR.outcome(r));
-    Kit.stats.end('end', keys);
     result = { kind: 'endless', keys: keys, best: Math.max(best, keys), isBest: isBest && best > 0, r: r };
     ending = { t: 1.5 };
     J.fail();
@@ -486,7 +475,6 @@
   }
   function finishDuo(win) {
     winner = win;
-    Kit.stats.end(win < 0 ? 'draw' : 'end');
     ending = { t: 1.6 };
     J.levelUp();
     if (win >= 0) celebrate(lanes[win]);
@@ -530,8 +518,6 @@
     } else if (at(0.35)) {
       if (r.isBest) { $('resNewBest').hidden = false; J.star(3); } else J.star(1);
     }
-    busyT += dt;
-    if (resultT < 3 && busyT >= 1) { busyT = 0; Kit.stats.busy(); }
   }
   function next() {
     if (!result) return;
@@ -686,8 +672,6 @@
     if (ending) {
       ending.t -= dt;
       animLane(solo, dt);
-      busyT += dt;
-      if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
       if (ending.t <= 0) showResult();
       return;
     }
