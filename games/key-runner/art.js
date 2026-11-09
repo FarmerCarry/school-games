@@ -151,12 +151,12 @@
     layerKeys.push(key);
     while (layerKeys.length > 2) delete cache[layerKeys.shift()];
     var S = A.SCENES[si], ps = geo.ps, b = geo.base, R = seeded(si * 977 + 13);
-    // The sky is soft: it is drawn at most at its logical size.
-    var sp = Math.min(ps, 1), sky = cv(W * sp, geo.h * sp), g = sky.getContext('2d');
-    g.scale(sp, sp);
+    // The back layer is the sky and the far hills in one opaque tile, down to the water.
+    var hb = b + 120, back = cv(W * ps, hb * ps), g = back.getContext('2d');
+    g.scale(ps, ps);
     var gr = g.createLinearGradient(0, 0, 0, b + 100);
     gr.addColorStop(0, S.sky[0]); gr.addColorStop(1, S.sky[1]);
-    g.fillStyle = gr; g.fillRect(0, 0, W, geo.h);
+    g.fillStyle = gr; g.fillRect(0, 0, W, hb);
     if (S.deco === 'city') {
       for (var i = 0; i < 90; i++) { var sx = R() * W, sy = R() * (b - 40), sr = 1 + R() * 2.4; circle(g, sx, sy, sr); fill(g, 'rgba(255,255,255,' + (0.4 + R() * 0.6).toFixed(2) + ')'); }
       circle(g, 1010, b * 0.32, 46); fill(g, S.sun); ink(g, 5);
@@ -169,9 +169,9 @@
     if (S.deco === 'castle') {
       A.RAINBOW.forEach(function (c, i) { g.beginPath(); g.arc(380, b + 60, 330 - i * 16, Math.PI, TAU); g.lineWidth = 16; g.strokeStyle = alpha(c, 0.75); g.stroke(); });
     }
-    // Far layer: soft hills (or clouds, or a skyline) behind everything.
-    var far = cv(W * ps, 260 * ps), f = far.getContext('2d'), fy = 230; // far tile covers b-230 .. b+30
-    f.scale(ps, ps);
+    // Far hills (or clouds, or a skyline) on the same tile, from b - 230 down.
+    var f = g, fy = 230;
+    f.save(); f.translate(0, b - fy);
     if (S.deco === 'sky') {
       for (var c = 0; c < 9; c++) cloudShape(f, (c + 0.3) * W / 9, fy - 30 - (c % 3) * 34, 1.3 + (c % 2) * 0.5, c % 2 ? S.far : S.far2, 0);
       hills(f, W, fy + 20, 40, S.far2, 7 + si, 260);
@@ -182,6 +182,7 @@
       hills(f, W, fy - 40, 110, S.far, 3 + si, 260);
       hills(f, W, fy + 10, 70, S.far2, 11 + si, 260);
     }
+    f.restore();
     // Mid layer: closer hills with trees, lollipops, palms, balloons, buildings or towers.
     var mid = cv(W * ps, 240 * ps), m = mid.getContext('2d'), my = 200; // mid tile covers b-200 .. b+40
     m.scale(ps, ps);
@@ -213,8 +214,11 @@
       ink(fo, 5, S.foam);
       for (var p = 0; p < 22; p++) { rr(fo, p * W / 22 + 20, 26 + (p % 2) * 6, 26, 4, 2); fill(fo, alpha(S.foam, 0.55)); }
     }
-    return (cache[key] = { sky: sky, far: far, mid: mid, foam: foam, farY: b - fy, midY: b - my });
+    // The water below the foam: its colour, then a deeper band, as plain opaque colours.
+    var deep = mix(S.water, S.deep, 0.5);
+    return (cache[key] = { back: back, hb: hb, mid: mid, foam: foam, midY: b - my, deep: deep });
   }
+  function mix(a, b, k) { var x = rgb(a), y = rgb(b); return 'rgb(' + x.map(function (v, i) { return Math.round(v + (y[i] - v) * k); }).join(',') + ')'; }
   function tiled(ctx, img, off, y, h) {
     var x = -(((off % W) + W) % W);
     ctx.drawImage(img, x, y, W, h);
@@ -223,7 +227,7 @@
   // The world behind a lane: sky, drifting clouds, far and mid hills with parallax.
   A.backdrop = function (ctx, si, geo, cam, time, still) {
     var L = layers(si, geo), S = A.SCENES[si], b = geo.base;
-    ctx.drawImage(L.sky, 0, 0, W, geo.h);
+    tiled(ctx, L.back, cam * 0.15, 0, L.hb);
     if (S.deco !== 'city') {
       var cl = cloudSprite();
       for (var i = 0; i < 4; i++) {
@@ -231,16 +235,17 @@
         ctx.drawImage(cl, x, b * (0.12 + (i % 3) * 0.13), 150 + (i % 2) * 40, 64 + (i % 2) * 16);
       }
     }
-    tiled(ctx, L.far, cam * 0.15, L.farY, 260);
     tiled(ctx, L.mid, cam * 0.4, L.midY, 240);
   };
   // The water (or cloud sea) between the stones, drawn after the stones' posts.
-  A.water = function (ctx, si, geo, cam, time, still) {
-    var L = layers(si, geo), S = A.SCENES[si], wy = geo.base + 100;
-    ctx.fillStyle = S.water; ctx.fillRect(0, wy + 18, W, geo.h - wy - 18);
-    ctx.fillStyle = alpha(S.deep, 0.5); ctx.fillRect(0, wy + 52, W, geo.h - wy - 52);
+  // floor: where something opaque (the keyboard deck) covers the lane from below.
+  A.water = function (ctx, si, geo, cam, time, still, floor) {
+    var L = layers(si, geo), S = A.SCENES[si], wy = geo.base + 100, bottom = Math.min(geo.h, floor || geo.h);
+    ctx.fillStyle = S.water; ctx.fillRect(0, wy + 18, W, Math.max(0, Math.min(34, bottom - wy - 18)));
+    if (bottom > wy + 52) { ctx.fillStyle = L.deep; ctx.fillRect(0, wy + 52, W, bottom - wy - 52); }
     tiled(ctx, L.foam, cam + (still ? 0 : time * 18), wy - 6, 40);
   };
+  A.deepOf = function (si, geo) { return layers(si, geo).deep; };
   function cloudSprite() {
     return sprite('cloud', 150, 64, function (g) { cloudShape(g, 75, 44, 1.25, 'rgba(255,255,255,0.92)', 0); });
   }
@@ -309,7 +314,7 @@
     x += o.shake || 0; y += o.dip || 0;
     ctx.drawImage(capSprite(si, w, st), x - 6, y - 4, w + 12, KR.CAP_H + 16);
     if (o.hidden || !k) {
-      circle(ctx, x + w / 2, y + 34, 6); fill(ctx, 'rgba(255,255,255,0.18)');
+      if (!o.plain) { circle(ctx, x + w / 2, y + 34, 6); fill(ctx, 'rgba(255,255,255,0.18)'); }
       return;
     }
     legends(ctx, k, x + 7, y + 4, w - 14, KR.CAP_H - 20, 1.18, o.mode || 'both', st === 'idle' ? '#ffffff' : INK, o.dim);
@@ -317,15 +322,23 @@
     if (s.code === 'KeyF' || s.code === 'KeyJ') { rr(ctx, x + w * 0.4, y + KR.CAP_H - 23, w * 0.2, 4, 2); fill(ctx, st === 'idle' ? 'rgba(255,255,255,0.5)' : 'rgba(28,34,80,0.45)'); }
   };
   // The post under a stone, down into the water.
+  // A stone's post (a sprite drawn once per world), cut where it goes under the water.
+  function postSprite(si) {
+    return sprite('post' + si, 44, 240, function (g) {
+      var S = A.SCENES[si];
+      rr(g, 5, 2, 34, 260, 6); fill(g, S.stem);
+      if (S.deco === 'candy') {
+        g.save(); rr(g, 5, 2, 34, 260, 6); g.clip();
+        for (var sy = 2; sy < 260; sy += 26) { g.beginPath(); g.moveTo(2, sy); g.lineTo(42, sy - 14); g.lineTo(42, sy - 4); g.lineTo(2, sy + 10); g.closePath(); fill(g, S.stem2); }
+        g.restore();
+      } else { rr(g, 26, 6, 9, 260, 4); fill(g, S.stem2); }
+      rr(g, 5, 2, 34, 260, 6); ink(g, 4.5);
+    });
+  }
   A.post = function (ctx, si, x, y, w, bottom) {
-    var S = A.SCENES[si], cx = x + w / 2;
-    if (S.deco === 'sky') { cloudShape(ctx, cx, y + KR.CAP_H + 12, 0.9, '#ffffff', 4); return; }
-    rr(ctx, cx - 17, y + KR.CAP_H - 10, 34, bottom - y - KR.CAP_H + 20, 6); fill(ctx, S.stem); ink(ctx, 4.5);
-    if (S.deco === 'candy') {
-      ctx.save(); rr(ctx, cx - 17, y + KR.CAP_H - 10, 34, bottom - y - KR.CAP_H + 20, 6); ctx.clip();
-      for (var sy = y + KR.CAP_H - 10; sy < bottom + 20; sy += 26) { ctx.beginPath(); ctx.moveTo(cx - 20, sy); ctx.lineTo(cx + 20, sy - 14); ctx.lineTo(cx + 20, sy - 4); ctx.lineTo(cx - 20, sy + 10); ctx.closePath(); fill(ctx, S.stem2); }
-      ctx.restore(); rr(ctx, cx - 17, y + KR.CAP_H - 10, 34, bottom - y - KR.CAP_H + 20, 6); ink(ctx, 4.5);
-    } else { rr(ctx, cx + 4, y + KR.CAP_H - 6, 9, bottom - y - KR.CAP_H + 14, 4); fill(ctx, S.stem2); }
+    var top = y + KR.CAP_H - 12, h = Math.min(240, bottom - top), sky = A.SCENES[si].deco === 'sky';
+    if (sky) { ctx.drawImage(sprite('cpost', 84, 52, function (g) { cloudShape(g, 42, 34, 0.62, '#ffffff', 4); }), x + w / 2 - 42, y + KR.CAP_H - 22, 84, 52); return; }
+    if (h > 0) ctx.drawImage(postSprite(si), 0, 0, 44 * SS, h * SS, x + w / 2 - 22, top, 44, h);
   };
   // The low candy bar the runner slides under (↓).
   A.bar = function (ctx, x, top, time) {
@@ -545,15 +558,32 @@
     var k = KR.KEY[code], b = kbBounds(u, half);
     return k ? { x: x + k.x * u + k.w * u / 2 - b.x, y: y + k.row * u + u / 2 } : null;
   };
-  // o: { mode, zone: [codes], target, pulse (0..1), down(code), flash: {code: [state, t]}, half, ps, panel }
+  function panel(g, x, y, b, u) {
+    var pad = u * 0.32;
+    rr(g, x - pad, y - pad, b.w + pad * 2, b.h + pad * 2, u * 0.4); fill(g, '#3b4166'); ink(g, 5);
+    rr(g, x - pad + 6, y - pad + 6, b.w + pad * 2 - 12, b.h + pad * 2 - 12, u * 0.32); fill(g, '#11142a');
+  }
+  // The bottom of the screen in one image: the water's colour, the keyboard's body and its keys.
+  A.deck = function (ctx, x, y, u, top, color, mode, zone, ps) {
+    var key = 'D' + x + '_' + y + '_' + u + '_' + top + color + mode + zone.join(',') + '_' + ps;
+    var d = cache[key];
+    if (!d) {
+      for (var k in cache) if (k.charAt(0) === 'D') delete cache[k];
+      var h = KR.H - top, c = cv(W * ps, h * ps), g = c.getContext('2d'), base = kbBase(u, mode, zone, '', ps);
+      g.scale(ps, ps);
+      g.fillStyle = color; g.fillRect(0, 0, W, h);
+      g.translate(0, -top);
+      panel(g, x, y, base.b, u);
+      g.drawImage(base.img, x, y, base.b.w, base.b.h);
+      d = cache[key] = c;
+    }
+    ctx.drawImage(d, 0, top, W, KR.H - top);
+  };
+  // o: { mode, zone: [codes], target, pulse (0..1), down(code), flash: {code: [state, t]}, half, ps, panel, base }
   A.keyboard = function (ctx, x, y, u, o) {
     var base = kbBase(u, o.mode || 'both', o.zone || [], o.half || '', o.ps || 1), b = base.b;
-    if (o.panel !== false) {
-      var pad = u * 0.32;
-      rr(ctx, x - pad, y - pad, b.w + pad * 2, b.h + pad * 2, u * 0.4); fill(ctx, '#3b4166'); ink(ctx, 5);
-      rr(ctx, x - pad + 6, y - pad + 6, b.w + pad * 2 - 12, b.h + pad * 2 - 12, u * 0.32); fill(ctx, '#11142a');
-    }
-    ctx.drawImage(base.img, x, y, b.w, b.h);
+    if (o.panel !== false) panel(ctx, x, y, b, u);
+    if (o.base !== false) ctx.drawImage(base.img, x, y, b.w, b.h);
     var gap = u * 0.1, mode = o.mode || 'both';
     function cap(code, st) {
       var k = KR.KEY[code];
@@ -580,10 +610,16 @@
   // A speedometer: the "+1" steps fill the dial, the number sits in the middle.
   A.gauge = function (ctx, x, y, r, steps, max, bump, time, still) {
     var k = Math.min(1, steps / Math.max(1, max)), s = 1 + (bump || 0) * 0.18;
-    ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
-    circle(ctx, 0, 0, r); fill(ctx, '#ffffff'); ink(ctx, 5);
     var a0 = Math.PI * 0.8, a1 = Math.PI * 2.2;
-    ctx.beginPath(); ctx.arc(0, 0, r - 12, a0, a1); ctx.lineWidth = 12; ctx.strokeStyle = '#e4e8f7'; ctx.lineCap = 'round'; ctx.stroke();
+    // The dial's face is drawn once.
+    var face = sprite('gauge' + r, r * 2 + 8, r * 2 + 8, function (g) {
+      g.translate(r + 4, r + 4);
+      circle(g, 0, 0, r); fill(g, '#ffffff'); ink(g, 5);
+      g.beginPath(); g.arc(0, 0, r - 12, a0, a1); g.lineWidth = 12; g.strokeStyle = '#e4e8f7'; g.lineCap = 'round'; g.stroke();
+    });
+    ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+    ctx.drawImage(face, -r - 4, -r - 4, r * 2 + 8, r * 2 + 8);
+    ctx.lineCap = 'round';
     if (k > 0) {
       ctx.beginPath(); ctx.arc(0, 0, r - 12, a0, a0 + (a1 - a0) * k); ctx.lineWidth = 12;
       ctx.strokeStyle = k < 0.4 ? '#5be38f' : k < 0.75 ? '#ffb020' : '#ff5d6c'; ctx.stroke();
@@ -612,7 +648,7 @@
     g.save(); g.scale(k, k);
     var geo = { h: 400, base: 230, ps: 1 }, L = layers(si, geo);
     g.save(); g.translate(0, -130); g.scale(0.5, 0.5);
-    g.drawImage(L.sky, 0, 0, W, 400); g.drawImage(L.far, 0, L.farY, W, 260); g.drawImage(L.mid, -100, L.midY, W, 240);
+    g.drawImage(L.back, 0, 0, W, L.hb); g.drawImage(L.mid, -100, L.midY, W, 240);
     g.restore();
     var S = A.SCENES[si];
     g.fillStyle = S.water; g.fillRect(0, 118, 280, 40); g.drawImage(L.foam, 0, 112, 640, 20);

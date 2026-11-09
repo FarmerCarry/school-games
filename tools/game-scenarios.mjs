@@ -56,7 +56,16 @@ const defaults = (start, active, snapshot, input, pause, paused, restart, reset,
 
 export const scenarios = {
   'dino-3d': defaults(['#play'], `window.Dino3DGame.mode === 'playing'`, `[window.Dino3DGame.state.score,window.Dino3DGame.state.distance,window.Dino3DGame.state.player]`, hold('Space', 180), '#pause-button', `window.Dino3DGame.mode === 'paused'`, '#restart', `window.Dino3DGame.state.score < 10`),
-  'key-runner': defaults(['#play'], `window.KeyRunnerGame.mode === 'play'`, `[window.KeyRunnerGame.state.z]`, hold('KeyW', 400), '#pause-button', `window.KeyRunnerGame.mode === 'paused'`, '#restart', `window.KeyRunnerGame.state.z < 1.2`),
+  // A first visit starts world 1, level 1. The runner waits at each edge: only the real key
+  // its next stone shows (Space here) counts as a hit and hops it on.
+  'key-runner': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === 'w1L1'`, `[${g}.state.time,${g}.state.x,${g}.state.hits]`, async page => {
+    const before = await page.evaluate(() => window.__game.state.hits);
+    for (let i = 0; i < 40 && await page.evaluate(hits => window.__game.state.hits <= hits, before); i++) {
+      const key = await page.evaluate(() => window.__game.state.target);
+      if (key) await page.keyboard.press(key);
+      await page.waitForTimeout(120);
+    }
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.hits === 0 && ${g}.state.next === 1`),
   'rail-rush': defaults(['#playBtn'], `${g}.state.mode === 'play'`, select(`${g}.state`, ['x','y','dist','score','lane']), hold('ArrowRight'), '#pauseBtn', `${g}.state.mode === 'pause' || ${g}.state.mode === 'paused'`, '#restartBtn', `${g}.state.dist < 15`),
   'neon-slope': defaults(['#btnPlay'], `${g}.state.mode === 'play'`, select(`${g}.state`, ['x','y','dist','gemsRun']), holdUntilChanged('ArrowRight', `${g}.state.x`), '#btnPause', `${g}.state.mode === 'paused'`, '#btnRestart', `${g}.state.dist < 15`),
   'tunnel-blitz': defaults(['#playBtn'], `${g}.info().state === 'play'`, select(`${g}.info()`, ['rot','D','score','orbsRun']), hold('ArrowRight'), '#pauseBtn', `${g}.info().state === 'paused'`, '#restartBtn', `${g}.info().D < 15`),
@@ -219,6 +228,7 @@ const inputSnapshots = {
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
   'lucky-lake': `${g}.charge`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
+  'key-runner': `${g}.state.hits`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
@@ -255,7 +265,10 @@ const inputSeen = {
   // The bobber waits by itself. Only holding cast makes the power meter climb.
   'lucky-lake': `${g}.charge > 0.12`,
   // A bubble that rises into a resting Bop pops too; only real pointer travel onto one counts.
-  'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`
+  'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`,
+  // The runner runs to the first edge by itself and waits there; only the key its next
+  // stone shows counts as a hit (any other key is a miss, nothing at all is nothing).
+  'key-runner': `${g}.state.hits > sgInput.before`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
@@ -265,7 +278,7 @@ for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen 
 // the fixed hold, because a player stopped by a wall cannot change state. Snake
 // Arena's repeated input stays the pointer; its checked input is key steering.
 const heldKeys = {
-  'dino-3d': 'Space', 'road-hopper': 'ArrowUp', 'key-runner': 'KeyW',
+  'dino-3d': 'Space', 'road-hopper': 'ArrowUp',
   'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
   'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
   'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'chaos-island': 'ArrowRight', 'splat-strike': 'KeyW',

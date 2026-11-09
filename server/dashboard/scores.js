@@ -16,7 +16,7 @@ window.SG_SCORES = {
   'egg-rush': ['البيض الذي فُقس في الجولة، وفي مباراة اللاعبين عملات اللاعب الأعلى', 'the eggs hatched in the round; in a two-player match, the higher coin total'],
   'fire-and-ice': ['نجوم المرحلة المنتهية', 'the stars of a finished level'],
   'hoop-heads': ['نقاط الطفل في المباراة', 'the child’s points in the match'],
-  'key-runner': ['وقت إنهاء البرج بالثواني، وفي سباق اللاعبين صفر', 'the time to finish the tower, in seconds; in a two-player race, zero'],
+  'key-runner': ['نجوم المرحلة المنتهية (من 1 إلى 3)، وفي السباق بلا نهاية عدد المفاتيح الصحيحة', 'the stars of a finished level (1 to 3); in the endless run, the keys typed right'],
   'lucky-lake': ['أنواع السمك في الكتاب، وفي سباق اللاعبين وزن الصيد الأثقل بعُشر الكيلوغرام', 'the species in the book; in a two-player match, the heavier catch in tenths of a kilogram'],
   'maze-dash': ['نجوم المرحلة المنتهية (من 0 إلى 3)، وفي التسلق المتواصل الارتفاع والنقاط', 'the stars of a finished level (0 to 3); in the endless climb, the height and the dots'],
   'merge-2048': ['نقاط اللعبة', 'the points of the game'],

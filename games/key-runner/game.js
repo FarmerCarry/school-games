@@ -769,15 +769,15 @@
     for (let i = 0; i < w.stones.length; i++) { const s = w.stones[i]; if (s.x1 - cam < -90 || s.x0 - cam > W + 90) continue; if (first < 0) first = i; last = i; }
     for (let i = first; i >= 0 && i <= last; i++) {
       const s = w.stones[i], sx = s.x0 - cam, sy = base + s.y, wd = s.x1 - s.x0;
-      if (wd > 300) { for (let p = 60; p < wd - 40; p += 160) A.post(ctx, si, sx + p - 60, sy, 120, g.h); }
-      else A.post(ctx, si, sx, sy, wd, g.h);
+      if (wd > 300) { for (let p = 60; p < wd - 40; p += 160) A.post(ctx, si, sx + p - 60, sy, 120, base + 140); }
+      else A.post(ctx, si, sx, sy, wd, base + 140);
     }
-    A.water(ctx, si, geo, cam, time, still);
+    A.water(ctx, si, geo, cam, time, still, o.floor);
     const pl = pulse();
     for (let i = first; i >= 0 && i <= last; i++) {
       const s = w.stones[i], sx = s.x0 - cam, sy = base + s.y, wd = s.x1 - s.x0;
       if (!KR.isKeyStone(s)) {
-        A.stone(ctx, si, s, sx, sy, { state: 'idle', hidden: true });
+        A.stone(ctx, si, s, sx, sy, { state: 'idle', hidden: true, plain: true });
         if (s.kind === 'finish') A.flag(ctx, s.flag - cam, sy, time, still);
         continue;
       }
@@ -925,9 +925,13 @@
     });
     ctx.restore();
   }
+  const DECK_TOP = KB.y - Math.round(KB.u * 0.32) - 8;
   function drawPlay(ctx) {
-    drawLane(ctx, solo);
-    A.keyboard(ctx, KB.x, KB.y, KB.u, keyboardFor(screen === 'play' || screen === 'pause' ? solo : null));
+    drawLane(ctx, solo, { floor: DECK_TOP });
+    const k = keyboardFor(screen === 'play' || screen === 'pause' ? solo : null);
+    A.deck(ctx, KB.x, KB.y, KB.u, DECK_TOP, A.deepOf(solo.scene, geoOf(solo)), k.mode, k.zone, k.ps);
+    k.panel = false; k.base = false;
+    A.keyboard(ctx, KB.x, KB.y, KB.u, k);
     drawHud(ctx);
     drawIntro(ctx);
     drawCalls(ctx, 210);
