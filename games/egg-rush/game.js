@@ -2,7 +2,8 @@
  * that shows the way and freezes when a guard wakes), parades of babies, saves, sound
  * and play statistics. engine.js simulates the yard; art.js draws it.
  * This is the UI layer: it reads Kit.dda at every round start and reports Kit.stats
- * rounds and Kit.track hits (eggs hatched), misses (catches) and cues (a guard stirs). */
+ * rounds and Kit.track hits (eggs hatched), misses (catches) and reaction times (a guard stirs
+ * while the kid walks: the time until the child lets go of the keys and freezes). */
 (function () {
   'use strict';
   const ER = window.ER, A = ER.art, J = Kit.juice, W = ER.W, H = ER.H, TAU = Math.PI * 2;
@@ -42,6 +43,9 @@
   // eggs flying from the home nest up into their slot in the HUD, and slots that pop
   let flyers = [], filled = 0, slotPop = [];
   let idle = 0, ghost = null, happy = [0, 0], squash = [0, 0], stepT = [0, 0], held = {}, stopHint = 0;
+  // Seconds since a guard began to stir while the child was walking, until they freeze; -1 = none.
+  // walking: a direction key (or the mouse) was held this step; sliding on ice does not count.
+  let freezeT = -1, walking = false;
   const walk = [0, 0], coneBuf = [];
   const mouse = { x: W / 2, y: H / 2, down: false, known: false };
   const menuKid = { x: 640, y: 600, t: 0, walk: 0, face: 1, babies: [] };
@@ -243,7 +247,7 @@
   /* -------------------------------------------------------------- rounds */
   function resetRound() {
     parades = [[], []]; hatching = []; floats = []; rings = []; slots = []; streak = 0; flyers = []; filled = 0; slotPop = [];
-    ghost = null; idle = 0; happy = [0, 0]; squash = [0, 0]; held = {}; stopHint = 0;
+    ghost = null; idle = 0; happy = [0, 0]; squash = [0, 0]; held = {}; stopHint = 0; freezeT = -1;
     fx.clear(); ending = null; result = null; countdown = 0; mouse.down = false;
   }
   function startLevel(li, quick) {
@@ -530,7 +534,7 @@
   function handleEvents() {
     for (const e of world.ev) {
       const g = e.g != null ? world.guards[e.g] : null;
-      if (e.t === 'stir') { if (!duo) Kit.track.cue(); SFX.hmm(); if (cur <= 1 && !duo) stopHint = g.dur; }
+      if (e.t === 'stir') { if (!duo && freezeT < 0 && walking) freezeT = 0; SFX.hmm(); if (cur <= 1 && !duo) stopHint = g.dur; }
       else if (e.t === 'wake') SFX.blink();
       else if (e.t === 'sleep') {
         SFX.yawn();
@@ -539,7 +543,7 @@
       } else if (e.t === 'caught') {
         SFX.squawk(); shake.add(7);
         if (!duo) Kit.track.miss();
-        streak = 0; held = {};
+        streak = 0; held = {}; freezeT = -1;
         feathers(e.gx, e.gy, g.kind);
         ring(e.x, e.y - 20, 20, 80, '255,90,90', 0.45);
       } else if (e.t === 'hop') J.jump(0.25);
@@ -675,8 +679,13 @@
     if (!ending) {
       const inp = readInput();
       const moving = inp.some(i => i.x || i.y);
+      walking = moving;
       // Idle only counts while it is safe to walk: standing still for a guard is right.
       const p0 = world.players[0], safe = !duo && !p0.carry && !p0.spotted && threat(p0.x, p0.y) === 0 && world.guards.every(g => g.state === 'sleep' || g.state === 'walk');
+      // A stir asks the child to freeze, so the reaction is letting go of the keys, not a press.
+      if (freezeT >= 0) {
+        if (!moving) { Kit.track.react(Math.round(freezeT * 1000)); freezeT = -1; } else if ((freezeT += dt) > 5) freezeT = -1;
+      }
       if (moving) { idle = 0; if (ghost && !ghost.out) ghost.out = 0.0001; } else if (safe || (!duo && p0.carry && threat(p0.x, p0.y) === 0)) idle += dt; else idle = Math.min(idle, 1);
       ER.step(world, dt, inp);
       handleEvents();

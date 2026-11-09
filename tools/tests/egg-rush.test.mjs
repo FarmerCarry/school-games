@@ -36,9 +36,9 @@ async function game(t, { saved, failSave = false, reducedMotion = 'no-preference
         const call = kit.stats[name];
         kit.stats[name] = function (...args) { er.stats.push([name, ...args]); return call.apply(this, args); };
       }
-      for (const name of ['hit', 'miss', 'cue']) {
+      for (const name of ['hit', 'miss', 'cue', 'react']) {
         const call = kit.track[name];
-        kit.track[name] = function (...args) { er.track.push(name); return call.apply(this, args); };
+        kit.track[name] = function (...args) { er.track.push(name === 'react' ? ['react', args[0]] : name); return call.apply(this, args); };
       }
     } });
     const write = Storage.prototype.setItem;
@@ -172,6 +172,27 @@ test('P and Esc pause; a paused yard is frozen even with keys held; leaving the 
   assert.deepEqual(ends, [['end', 'quit']]);
 });
 
+test('a guard that stirs while the kid walks times how fast the child lets go and freezes', async t => {
+  const page = await game(t, { saved: SAVE(0) });
+  await page.keyboard.press('Enter');
+  await step(page, 2);
+  await focus(page);
+  await keys(page, ['ArrowRight']);
+  let stirred = false;
+  for (let f = 0; f < 4000 && !stirred; f += 5) {
+    await step(page, 5);
+    stirred = await page.evaluate(() => __game.time > 0 && __game.guards.some(q => q.state === 'stir'));
+  }
+  assert.ok(stirred, 'a guard stirs while the arrow is held');
+  assert.deepEqual((await g(page, 'er.track')).filter(x => Array.isArray(x)), [], 'no reaction while the key is still held');
+  await keys(page, []);
+  await step(page, 2);
+  const reacts = (await g(page, 'er.track')).filter(x => Array.isArray(x));
+  assert.equal(reacts.length, 1, 'one reaction time for letting go');
+  assert.ok(reacts[0][1] >= 0 && reacts[0][1] <= 400, 'the freeze came within a few frames: ' + reacts[0][1]);
+  assert.equal((await g(page, 'er.track')).includes('cue'), false);
+});
+
 test('playing the first yard with the keyboard: eggs hatch, the level ends with stars, saves, and Play again', async t => {
   const page = await game(t);
   await page.keyboard.press('Enter');
@@ -182,7 +203,10 @@ test('playing the first yard with the keyboard: eggs hatch, the level ends with 
   assert.ok(await g(page, '__game.hatched') >= await g(page, '__game.goal'));
   const track = await g(page, 'er.track');
   assert.ok(track.filter(x => x === 'hit').length >= 3, 'a hit per hatched egg');
-  assert.ok(track.includes('cue'), 'a cue when a guard stirs');
+  // A stirring guard asks the child to stop, so the game times the freeze itself instead of
+  // cueing Kit, which would time the next key press.
+  assert.equal(track.includes('cue'), false, 'no cue: the answer to a stir is letting go of the keys');
+  for (const r of track.filter(x => Array.isArray(x))) assert.ok(Number.isInteger(r[1]) && r[1] >= 0 && r[1] <= 5000, 'a freeze time in ms: ' + r[1]);
   await step(page, 150);
   assert.equal(await g(page, '__game.screen'), 'result');
   const stars = await g(page, '__game.stars');
