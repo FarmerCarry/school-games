@@ -9,122 +9,146 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 15 L22 8 L42 15 L58 8 L58 49 L42 56 L22 49 L6 56 Z"/><path d="M22 10 L22 47 M42 17 L42 54" stroke="#1c2250" stroke-width="4" opacity=".35"/><circle cx="32" cy="30" r="6" fill="#ff5d6c"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-fish" viewBox="0 0 64 64"><path d="M6 32 Q22 12 42 18 Q52 22 58 32 Q52 42 42 46 Q22 52 6 32 Z M6 32 L-2 20 L-2 44 Z" transform="translate(4 0)" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/><circle cx="46" cy="28" r="4" fill="#1c2250"/></symbol>
+  <symbol id="i-book" viewBox="0 0 64 64"><path d="M32 14 Q20 6 6 10 L6 52 Q20 48 32 56 Q44 48 58 52 L58 10 Q44 6 32 14 Z" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/><path d="M32 14 L32 56" stroke="#1c2250" stroke-width="4"/><path d="M14 26 Q20 20 26 26 Q20 32 14 26 Z M40 34 Q46 28 52 34 Q46 40 40 34 Z" fill="#ff8a3d"/></symbol>
+  <symbol id="i-rod" viewBox="0 0 64 64"><path d="M10 56 L48 8" stroke="currentColor" stroke-width="7" stroke-linecap="round"/><path d="M48 8 Q56 26 54 40" fill="none" stroke="#1c2250" stroke-width="3"/><circle cx="54" cy="44" r="6" fill="#ff5d6c" stroke="#1c2250" stroke-width="3"/><circle cx="18" cy="46" r="8" fill="#ffd23f" stroke="#1c2250" stroke-width="3.5"/></symbol>
+  <symbol id="i-duo" viewBox="0 0 64 64"><circle cx="20" cy="22" r="11" fill="#ff9a1f" stroke="#1c2250" stroke-width="4"/><path d="M4 56 Q4 36 20 36 Q36 36 36 56 Z" fill="#ff9a1f" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/><circle cx="44" cy="22" r="11" fill="#e05cff" stroke="#1c2250" stroke-width="4"/><path d="M28 56 Q28 36 44 36 Q60 36 60 56 Z" fill="#e05cff" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-basket" viewBox="0 0 64 64"><path d="M8 26 L56 26 L50 56 L14 56 Z" fill="#c98a4a" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/><path d="M16 26 Q32 4 48 26" fill="none" stroke="#1c2250" stroke-width="5"/><path d="M22 34 L24 50 M32 34 L32 50 M42 34 L40 50" stroke="#1c2250" stroke-width="3" opacity=".5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 64 64"><path d="M12 34 L26 48 L52 18" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
+</svg>
+
 <canvas id="game" tabindex="0" aria-label="بحيرة الحظ"></canvas>
+
 <div id="ui">
-  <div id="hud" hidden>
-    <div class="ll-primary">
-      <div class="ll-pill ll-coins"><span class="ll-coin"></span><b id="coinNum">0</b></div>
-      <div class="ll-meta">
-        <span id="spotPill">بركة القرية</span>
-        <span>·</span>
-        <span>الكتاب <b id="bookNum">0/60</b></span>
-        <span id="timerDot" hidden>·</span>
-        <b id="timerPill" hidden dir="ltr">3:00</b>
-      </div>
-    </div>
-    <div class="ll-actions">
-      <button type="button" id="btnShop" aria-label="المتجر"><i class="ll-ico shop" aria-hidden="true"></i></button>
-      <button type="button" id="btnBook" aria-label="الكتاب"><i class="ll-ico book" aria-hidden="true"></i></button>
-      <button type="button" id="btnAqua" aria-label="الحوض"><i class="ll-ico drop" aria-hidden="true"></i></button>
-      <button type="button" id="btnMap" aria-label="الخريطة"><i class="ll-ico pin" aria-hidden="true"></i></button>
-      <button type="button" id="btnPause" aria-label="إيقاف مؤقت">⏸</button>
-    </div>
-  </div>
-  <div id="questLine" hidden><i class="ll-qfish" aria-hidden="true"></i><span id="questText"></span><b id="questStamp" hidden>تم!</b></div>
-  <div id="eventBanner" hidden><i id="eventIcon" aria-hidden="true"></i><b id="eventText"></b></div>
-  <div id="hint" hidden>اضغط مطوّلًا ثم اترك</div>
-  <div id="coach" hidden>
-    <div class="ll-hand"></div>
-    <div class="ll-mini"><i></i></div>
-    <div class="ll-bob"></div>
-    <div class="ll-mark">!</div>
-  </div>
-  <div id="shout" hidden></div>
+<div id="hud" hidden>
+  <button type="button" id="btnPause" class="ll-btn ll-round" aria-label="استراحة" title="استراحة (P)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+  <button type="button" id="btnBasket" class="ll-btn ll-round" aria-label="سلة الرحلة" title="سلة الرحلة"><svg aria-hidden="true"><use href="#i-basket"/></svg><b id="basketNum">0</b></button>
 </div>
 
-<div class="sg-overlay ll-overlay" id="scr-title">
-  <div class="ll-title">
-    <h1 class="ll-logo">بحيرة <span>الحظ</span></h1>
-    <p class="ll-tag">ارمِ السنارة، انتظر علامة !، ثم اسحب السمكة.</p>
-    <div id="titleRing" aria-hidden="true"></div>
-    <button class="sg-btn ll-play" id="btnPlay" type="button">العب</button>
-    <div class="ll-row">
-      <button class="sg-btn secondary" id="btnDerby" type="button">لاعبان</button>
-      <span class="ll-len" dir="ltr">
-        <button class="sg-btn secondary" type="button" data-sec="120">2 د</button>
-        <button class="sg-btn secondary" type="button" data-sec="180" aria-pressed="true">3 د</button>
-        <button class="sg-btn secondary" type="button" data-sec="300">5 د</button>
-      </span>
-    </div>
-    <label class="ll-check"><input type="checkbox" id="easyToggle"> سحب أسهل (منطقة أكبر)</label>
-    <div class="ll-howto">
-      <div><span class="sg-key">مسافة</span> أو الفأرة: اضغط مطوّلًا للرمي، وانتظر <b>!</b> ثم اضغط</div>
-      <div>في السحب: اضغط مطوّلًا ليصعد الشريط، واتركه لينزل</div>
-      <div>لاعب 2: <span class="sg-key">Enter</span> · التصويب <span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> و <span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span></div>
-    </div>
-    <p class="ll-progress" id="titleProgress"></p>
+<section id="scrTitle" class="screen" aria-label="بحيرة الحظ">
+  <h1 class="logo"><span class="l1">بحيرة</span><span class="l2">الحظ</span></h1>
+  <div class="chip" id="titleFish" aria-label="أنواع السمك"><svg aria-hidden="true"><use href="#i-fish"/></svg><b>0</b></div>
+  <button type="button" id="btnPlay" class="ll-btn ll-play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+  <div class="side">
+    <button type="button" id="btnBook" class="ll-btn ll-side" aria-label="كتاب السمك"><svg aria-hidden="true"><use href="#i-book"/></svg><span>الكتاب</span></button>
+    <button type="button" id="btnDuo" class="ll-btn ll-side" aria-label="مسابقة الصيد للاعبين"><svg aria-hidden="true"><use href="#i-duo"/></svg><span>لاعبان</span></button>
+    <button type="button" id="btnRods" class="ll-btn ll-side" aria-label="الصنانير"><svg aria-hidden="true"><use href="#i-rod"/></svg><span>الصنارة</span></button>
   </div>
-</div>
+</section>
 
-<div class="sg-overlay ll-overlay" id="scr-pause" hidden>
-  <div class="sg-panel">
-    <h2>استراحة</h2>
-    <p class="sg-sub">البحيرة تنتظرك.</p>
-    <div class="ll-row">
-      <button class="sg-btn good" id="btnResume" type="button">استمرار</button>
-      <button class="sg-btn" id="btnRestart" type="button">رمية جديدة</button>
-      <button class="sg-btn secondary" id="btnMenu" type="button">القائمة</button>
-    </div>
-    <label class="ll-check"><input type="checkbox" id="easyPause"> سحب أسهل</label>
-  </div>
-</div>
+<section id="scrMap" class="screen" aria-label="الأماكن" hidden>
+  <button type="button" id="mapHome" class="ll-btn ll-round" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+  <div class="chip coins" id="mapCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div>
+  <div id="places"></div>
+</section>
 
-<div class="sg-overlay ll-overlay" id="scr-result" hidden>
-  <div id="confetti" class="ll-confetti"></div>
-  <div class="sg-panel ll-panel">
-    <h2 id="resultTitle">انتهت المسابقة</h2>
-    <canvas id="resultHero" width="320" height="170" hidden></canvas>
-    <div class="ll-podium" id="podium"></div>
-    <p id="resultHat" hidden>قبعة جديدة!</p>
-    <p id="resultSub"></p>
-    <div class="ll-row">
-      <button class="sg-btn" id="btnAgain" type="button">العب مرة أخرى</button>
-      <button class="sg-btn secondary" id="btnResultMenu" type="button">القائمة</button>
+<section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+  <div class="card">
+    <button type="button" id="btnResume" class="ll-btn ll-go" aria-label="تابع الصيد"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    <div class="row">
+      <button type="button" id="btnMenu" class="ll-btn ll-round big" aria-label="الأماكن"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+      <button type="button" id="btnRestart" class="ll-btn ll-round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
     </div>
   </div>
-</div>
+</section>
 
-  <div class="sg-overlay ll-overlay" id="scr-card" hidden>
-  <div class="sg-panel ll-cardbox">
-    <div id="cardBanner"><b id="cardStars">★</b><span class="ll-ribbon" id="cardRare"></span></div>
-    <canvas id="fishView" width="640" height="340"></canvas>
-    <div id="cardNew" hidden>جديد!</div>
-    <div id="cardBest" hidden>رقم قياسي!</div>
-    <div id="cardPerfect" hidden>ممتاز!</div>
-    <h2 id="cardName"></h2>
-    <div id="cardWeight" dir="ltr"></div>
-    <p class="ll-price" id="cardPrice"></p>
-    <p id="cardHint"></p>
-    <div class="ll-row">
-      <button class="sg-btn" id="btnSell" type="button">بيع <span class="sg-key">1</span></button>
-      <button class="sg-btn good" id="btnKeep" type="button">حوض <span class="sg-key">2</span></button>
-      <button class="sg-btn secondary" id="btnFree" type="button">أطلق <span class="sg-key">3</span></button>
+<section id="scrCatch" class="screen" aria-label="صيد جديد" hidden>
+  <div class="card catch" id="catchCard">
+    <div class="ribbon" id="catchNew" hidden>جديد!</div>
+    <div class="ribbon best" id="catchBest" hidden>رقم جديد!</div>
+    <canvas id="catchArt" width="440" height="230"></canvas>
+    <h2 id="catchName"></h2>
+    <div class="facts">
+      <span class="fact" id="catchWeight"></span>
+      <span class="fact stars" id="catchStars" aria-hidden="true"></span>
+      <span class="fact coins"><i class="coin"></i><b id="catchCoins">+0</b></span>
+    </div>
+    <button type="button" id="catchOk" class="ll-btn ll-go small ring" aria-label="رائع، تابع"><svg aria-hidden="true"><use href="#i-check"/></svg></button>
+  </div>
+</section>
+
+<section id="scrResult" class="screen" aria-label="نتيجة الرحلة" hidden>
+  <div class="card result">
+    <h2 id="resPlace"></h2>
+    <div class="stars3" id="resStars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
+    <canvas id="resCatches" width="600" height="120"></canvas>
+    <div class="facts"><span class="fact coins"><i class="coin"></i><b id="resCoins">+0</b></span><span class="fact"><svg aria-hidden="true"><use href="#i-fish"/></svg><b id="resCount">0</b></span></div>
+    <div class="newplace" id="resNewPlace" hidden><svg aria-hidden="true"><use href="#i-map"/></svg><span>مكان جديد!</span></div>
+    <div class="row">
+      <button type="button" id="resMap" class="ll-btn ll-round big" aria-label="الأماكن"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+      <button type="button" id="resNext" class="ll-btn ll-go ring" aria-label="صِد مرة أخرى"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <button type="button" id="resAgain" class="ll-btn ll-round big" aria-label="صِد هنا مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
     </div>
   </div>
-</div>
+</section>
 
-<div class="sg-overlay ll-overlay" id="scr-panel" hidden>
-  <div class="sg-panel ll-panel">
-    <h2 id="panelTitle"></h2>
-    <div id="panelBody"></div>
-    <div class="ll-row"><button class="sg-btn secondary" id="btnPanelClose" type="button">إغلاق</button></div>
+<section id="scrBook" class="screen" aria-label="كتاب السمك" hidden>
+  <button type="button" id="bookBack" class="ll-btn ll-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+  <div class="chip" id="bookCount" aria-label="أنواع السمك"><svg aria-hidden="true"><use href="#i-book"/></svg><b>0</b></div>
+</section>
+
+<section id="scrRods" class="screen" aria-label="الصنارة" hidden>
+  <button type="button" id="rodsBack" class="ll-btn ll-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+  <div class="chip coins" id="rodsCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div>
+  <div id="tiles"></div>
+</section>
+
+<section id="scrDuo" class="screen dim" aria-label="مسابقة الصيد" hidden>
+  <div class="card duo">
+    <div class="players" dir="ltr">
+      <div class="pl p1" id="duoP1"><i class="tag">1</i>
+        <div class="keys"><span class="sg-key">W</span><br><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></div>
+        <div class="keys"><span class="sg-key wide">مسافة</span></div><svg class="ok" aria-hidden="true"><use href="#i-check"/></svg></div>
+      <div class="mid"><div class="clock" dir="ltr">2:00</div><svg aria-hidden="true" class="fishic"><use href="#i-fish"/></svg></div>
+      <div class="pl p2" id="duoP2"><i class="tag">2</i>
+        <div class="keys"><span class="sg-key">↑</span><br><span class="sg-key">←</span><span class="sg-key">↓</span><span class="sg-key">→</span></div>
+        <div class="keys"><span class="sg-key wide">Enter</span></div><svg class="ok" aria-hidden="true"><use href="#i-check"/></svg></div>
+    </div>
+    <button type="button" id="duoGo" class="ll-btn ll-go ring" aria-label="ابدأ المسابقة"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
   </div>
+</section>
+
+<section id="scrDuoEnd" class="screen" aria-label="الفائز" hidden>
+  <div class="card result duoend">
+    <h2 id="duoWinner"></h2>
+    <canvas id="duoCatches" width="640" height="210"></canvas>
+    <div class="row">
+      <button type="button" id="duoHome" class="ll-btn ll-round big" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+      <button type="button" id="duoAgain" class="ll-btn ll-go ring" aria-label="مسابقة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+    </div>
+  </div>
+</section>
+
+<div id="ghost" aria-hidden="true" hidden>
+  <svg viewBox="0 0 80 100" width="84" height="105">
+    <g fill="#1c2250" stroke="#1c2250" stroke-width="9" stroke-linejoin="round">
+      <rect x="22" y="5" width="17" height="54" rx="8.5"/><rect x="37" y="36" width="15" height="30" rx="7.5"/>
+      <rect x="50" y="40" width="14" height="28" rx="7"/><rect x="3" y="52" width="27" height="14" rx="7" transform="rotate(38 16 59)"/>
+      <rect x="14" y="46" width="52" height="48" rx="19"/>
+    </g>
+    <g fill="#ffffff">
+      <rect x="22" y="5" width="17" height="54" rx="8.5"/><rect x="37" y="36" width="15" height="30" rx="7.5"/>
+      <rect x="50" y="40" width="14" height="28" rx="7"/><rect x="3" y="52" width="27" height="14" rx="7" transform="rotate(38 16 59)"/>
+      <rect x="14" y="46" width="52" height="48" rx="19"/>
+    </g>
+    <path d="M41 48 L41 60 M54 52 L54 62" stroke="#1c2250" stroke-width="3" stroke-linecap="round" opacity=".45"/>
+  </svg>
 </div>
+</div>
+<div id="live" class="sr" aria-live="polite"></div>
 
 <script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
 <script src="engine.js"></script>
 <script src="art.js"></script>
-<script src="audio.js"></script>
-<script src="ui.js"></script>
+<script src="game.js"></script>
 </body>
 </html>
