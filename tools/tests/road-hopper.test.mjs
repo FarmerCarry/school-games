@@ -12,19 +12,8 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
 let browser, server;
 
-// A stand-in portal: the game in an iframe, the preferences it is sent, and every
-// message it posts back (window.got).
-const EMBED = '/embed/road-hopper.html';
-const HOST = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>host</title></head><body style="margin:0">
-<iframe id="game" src="/games/road-hopper/" style="width:960px;height:540px;border:0"></iframe>
-<script>
-window.got = [];
-addEventListener('message', function (e) { if (e.source === document.getElementById('game').contentWindow) got.push(e.data); });
-window.prefs = function (p) { document.getElementById('game').contentWindow.postMessage(Object.assign({ type: 'sg:preferences' }, p), location.origin); };
-</script></body></html>`;
-
 before(async () => {
-  server = await startTestServer(root, { pages: { [EMBED]: HOST } });
+  server = await startTestServer(root);
   browser = await launchChromium();
 });
 after(async () => {
@@ -35,16 +24,24 @@ after(async () => {
 // The game runs its own requestAnimationFrame loop; the page captures it so a test
 // can drive frames by hand (waits therefore poll on a timer, not on frames) and count WebGL clears of the main canvas (one or more per
 // drawn scene). `idle: false` keeps the idle-time warm-up from running at all;
-// `failPictures: n` makes the first n character pictures fail. `embed: {band, telemetry}`
-// opens the game inside the stand-in portal, sends it those preferences and returns the
-// game's frame (the host page is frame.page()).
-async function game(t, { reducedMotion = 'no-preference', idle = true, failPictures = 0, entries = {}, failSave = false, denyStorage = false, embed = null } = {}) {
+// `failPictures: n` makes the first n character pictures fail. `ddaStart: level` is the
+// level Kit.dda starts this PC at before any result is saved (its `start` option), so a
+// test knows the first tier.
+async function game(t, { reducedMotion = 'no-preference', idle = true, failPictures = 0, entries = {}, failSave = false, denyStorage = false, ddaStart = null } = {}) {
   const context = await browser.newContext({ viewport: { width: 960, height: 540 }, reducedMotion });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.text()); });
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  await page.addInitScript(([idle, failPictures, entries, failSave, denyStorage]) => {
+  await page.addInitScript(([idle, failPictures, entries, failSave, denyStorage, ddaStart]) => {
+    if (ddaStart !== null) {
+      let kit;
+      Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
+        kit = value;
+        const dda = kit.dda;
+        kit.dda = (slug, opts) => dda.call(kit, slug, Object.assign({ start: ddaStart }, opts));
+      } });
+    }
     if (!sessionStorage.getItem('road-hopper-fixture')) {
       for (const [key, value] of Object.entries(entries)) localStorage.setItem('sg:road-hopper:' + key, JSON.stringify(value));
       sessionStorage.setItem('road-hopper-fixture', '1');
@@ -99,28 +96,10 @@ async function game(t, { reducedMotion = 'no-preference', idle = true, failPictu
         Storage.prototype[method] = function () { throw new DOMException('Storage disabled by test', 'SecurityError'); };
       }
     }
-  }, [idle, failPictures, entries, failSave, denyStorage]);
-  if (embed) {
-    await page.goto(server.origin + EMBED);
-    const frame = page.frames().find(f => f.url().includes('/games/road-hopper/'));
-    await frame.waitForFunction(() => window.__game, null, { polling: 50 });
-    await prefs(frame, embed);
-    return frame;
-  }
+  }, [idle, failPictures, entries, failSave, denyStorage, ddaStart]);
   await page.goto(`${server.origin}/games/road-hopper/`);
   await page.waitForFunction(() => window.__game, null, { polling: 50 });
   return page;
-}
-// The stand-in portal sends new preferences; they are applied once a listener added
-// after Kit's own has seen them.
-async function prefs(frame, p) {
-  await frame.evaluate(() => {
-    window.prefsSeen = new Promise(resolve => addEventListener('message', function seen(e) {
-      if (e.data && e.data.type === 'sg:preferences') { removeEventListener('message', seen); resolve(); }
-    }));
-  });
-  await frame.page().evaluate(p => window.prefs(p), p);
-  await frame.evaluate(() => window.prefsSeen);
 }
 
 test('reduced motion keeps the new-world banner and reward popups readable, without confetti', async t => {
@@ -455,25 +434,24 @@ test('every tier makes crossable worlds whose hazards come later, calmer and wit
   assert.ok(measured[1].fast < measured[2].fast && measured[2].fast < measured[4].fast, JSON.stringify(measured));
 });
 
-const telemetry = page => page.evaluate(() => got.filter(m => m && m.type === 'sg:telemetry').flatMap(m => m.ev));
-const sum = list => list.reduce((a, b) => a + b, 0);
+// The level Kit.dda keeps for this PC, read through a second controller.
+const ddaLevel = page => page.evaluate(() => Kit.dda('road-hopper').level);
 
-test('the age band picks the first tier, the title world follows a new player, and finished runs move the tier', async t => {
-  const frame = await game(t, { idle: false, embed: { band: '6-7', telemetry: true } }), page = frame.page();
-  assert.deepEqual(await frame.evaluate(() => [__game.tier, __game.state]), [1, 'title'], 'a 6-7 guest starts at tier 1');
-  await prefs(frame, { band: '10-11', telemetry: true });
-  assert.equal(await frame.evaluate(() => __game.tier), 3, 'a 10-11 guest gets a tier-3 world on the title at once');
-  // A 10-11 guest who crashes at once twice is eased down to tier 2.
-  assert.deepEqual(await frame.evaluate(() => {
+test('the first tier makes the title world, and finished runs move the tier and keep it', async t => {
+  // Crashing at once twice from tier 3 eases the next worlds down to tier 2.
+  const hard = await game(t, { idle: false, ddaStart: 0.6 });
+  assert.deepEqual(await hard.evaluate(() => [__game.tier, __game.state]), [3, 'title'], 'the title world is made at the first tier');
+  assert.deepEqual(await hard.evaluate(() => {
     const g = __game, seen = [];
     g.start(); seen.push(g.tier);
     g.kill('car'); g.step(2); g.press('KeyR'); seen.push(g.tier);
     g.kill('car'); g.step(2); g.press('Escape'); seen.push(g.tier, g.state);
     return seen;
   }), [3, 3, 2, 'title']);
-  // A 6-7 guest (their own level) who reaches the par twice is lifted to tier 2.
-  await prefs(frame, { band: '6-7', telemetry: true });
-  const up = await frame.evaluate(() => {
+  assert.equal(await ddaLevel(hard), 0.217);
+  // Reaching the par twice from tier 1 lifts the next worlds to tier 2.
+  const easy = await game(t, { idle: false, ddaStart: 0.12 });
+  const up = await easy.evaluate(() => {
     const g = __game, seen = [g.tier], scores = [];
     for (let run = 0; run < 2; run++) {
       if (run) g.press('KeyR'); else g.start();
@@ -497,20 +475,11 @@ test('the age band picks the first tier, the title world follows a new player, a
   });
   assert.ok(up.scores.every(score => score >= 30), `both runs reached tier 1's par (${up.scores})`);
   assert.deepEqual(up.seen, [1, 2]);
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:road-hopper:dda')));
-  assert.deepEqual(Object.keys(saved).sort(), ['_10-11', '_6-7'], 'each guest band keeps its own level');
-  assert.deepEqual(saved['_10-11'].main, [0.217, 2]);
-  assert.deepEqual(saved['_6-7'].main, [0.211, 2]);
-  // Telemetry: the tier at every round start and end, roads, rivers and rails crossed
-  // as hits and the crash as the miss.
-  await page.waitForFunction(() => got.filter(m => m && m.type === 'sg:telemetry').flatMap(m => m.ev).filter(e => e[0] === 'rs').length >= 5, null, { polling: 50 });
-  const events = await telemetry(page), ends = events.filter(e => e[0] === 're');
-  assert.deepEqual(events.filter(e => e[0] === 'rs').map(e => e.slice(1)), [['endless', 3], ['endless', 3], ['endless', 1], ['endless', 1], ['endless', 2]]);
-  assert.deepEqual(ends.slice(0, 2).map(e => [e[1], e[2], e[4], e[5], e[6], e[7]]), [['e', 'endless', 0, 3, 0, 1], ['e', 'endless', 0, 3, 0, 1]]);
-  for (const [i, e] of ends.slice(2).entries()) {
-    assert.deepEqual([e[1], e[2], e[4], e[5], e[7]], ['e', 'endless', up.scores[i], 1, 1]);
-    assert.ok(e[6] >= 5 && e[6] < e[4], `hazards crossed are hits (${e[6]} of ${e[4]} rows)`);
-  }
+  assert.equal(await ddaLevel(easy), 0.211);
+  // The level is kept on this PC: after a reload the title world is made at tier 2.
+  await easy.reload();
+  await easy.waitForFunction(() => window.__game, null, { polling: 50 });
+  assert.deepEqual(await easy.evaluate(() => [__game.tier, __game.state]), [2, 'title'], 'the next visit starts where the last runs left the tier');
 });
 
 test('blocked storage still boots, and an up hop still lands on a higher row', async t => {
@@ -524,17 +493,15 @@ test('blocked storage still boots, and an up hop still lands on a higher row', a
   assert.equal(after.dead, false);
 });
 
-test('the eagle warning is a telemetry cue: the next hop gives a reaction time', async t => {
-  const frame = await game(t, { idle: false, embed: { band: '6-7', telemetry: true } }), page = frame.page();
-  assert.equal(await frame.evaluate(() => {
+test('the eagle warning comes on when the critter lingers, and a crash still ends the run', async t => {
+  const page = await game(t, { idle: false, ddaStart: 0.12 });
+  assert.deepEqual(await page.evaluate(() => {
     const g = __game, warn = document.getElementById('warn');
     g.start(); g.hop(0, 1); g.step(0.5);
+    const early = warn.classList.contains('on');
     for (let s = 0; s < 60 && !warn.classList.contains('on'); s += 0.5) g.step(0.5);
-    const warned = warn.classList.contains('on');
+    const warned = warn.classList.contains('on'), tier = g.tier;
     g.press('ArrowUp'); g.kill('car'); g.step(2);
-    return warned;
-  }), true);
-  await page.waitForFunction(() => got.some(m => m && m.type === 'sg:telemetry' && m.ev.some(e => e[0] === 're')), null, { polling: 50 });
-  const end = (await telemetry(page)).find(e => e[0] === 're');
-  assert.deepEqual([end[5], end[7], sum(end[8])], [1, 1, 1], 'tier 1, one miss and one reaction time');
+    return [tier, early, warned, g.state];
+  }), [1, false, true, 'over'], 'no warning after the first hop; lingering at tier 1 brings it on');
 });

@@ -3,31 +3,29 @@
 A light, ad-free games website **in Arabic** for children aged 6–11: a small Poki-style portal
 with original browser games, all written from scratch for this site. The site and all of its
 games are in Arabic, laid out right-to-left. The games are being made to scale from a 6-year-old
-who has never held a mouse to an 11-year-old expert (Bubble Bop, Road Hopper and Dino 3D already
-adapt to each child), and none of them plays background music.
+who has never held a mouse to an 11-year-old expert (Bubble Bop, Road Hopper, Dino 3D, Key Runner,
+Lightning Fingers, Egg Rush, Lucky Lake and Chaos Island adapt their difficulty to how the children
+play on each PC), and none of them plays background music.
 
-- **No ads, no email/password accounts, no names, no chat, no third-party analytics, no links to other sites.**
-  Children pick an animal picture and their age band to play as themselves; nothing is typed.
-- Play statistics are counted on each PC (see [Play statistics](#play-statistics-local-only)).
-  A school can also run its **own** telemetry server, without names (see
-  [Telemetry without names](#telemetry-without-names-optional) and
-  [Turning on data collection](#turning-on-data-collection)); without it the site
-  makes no network request.
-- Every game, sound, font and picture lives in this repo. All games run locally in the browser.
+- **No ads, no accounts, no profiles, no names, no chat, no statistics, no analytics, no links to other sites.**
+  Children open a game and play; nothing is typed and nothing about their play is recorded or sent.
+- The site makes no network requests: every game, sound, font and picture lives in this repo,
+  and all games run locally in the browser.
 - **Made for Windows PCs with a mouse and keyboard.**
-- Scores, progress, player profiles and the play statistics are saved in each browser (localStorage).
+- Scores, progress and each game's difficulty are saved in each browser (localStorage).
 
-## The games (36)
+## The games (38)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
 | فقاعات بوب | Bubble Bop (first game for new mouse users) | 1 | نقطة البداية، أركيد |
 | أربعة على التوالي | Connect 4 | 1-2 | ألغاز، لاعبان على نفس الجهاز |
 | إكس أو | Tic-tac-toe | 1-2 | ألغاز، لاعبان على نفس الجهاز |
-| أصابع البرق | Lightning Fingers (typing test, English + Arabic) | 1 | تحديات |
+| أصابع البرق | Lightning Fingers (typing game with lightning clouds and a speed test, Arabic + English) | 1 | تحديات، أركيد |
+| عدّاء المفاتيح | Key Runner (find the keys on the school keyboard) | 1-2 | تحديات، لاعبان |
 | ضربة الطلاء | Splat Strike (3D paint-blaster arena vs bots) | 1 | تصويب، تحدي الروبوتات |
 | عدّاء السكة | Rail Rush | 1 | جري |
-| الديناصور ثلاثي الأبعاد | Dino 3D | 1 | جري، أركيد |
+| الديناصور ثلاثي الأبعاد | Dino 3D (voxel dinosaur journey) | 1 | جري، أركيد |
 | منحدر النيون | Neon Slope | 1 | جري، أركيد |
 | نفق السرعة | Tunnel Blitz | 1 | جري، أركيد |
 | قفزة الإيقاع | Beat Dash | 1 | جري، أركيد |
@@ -44,12 +42,13 @@ adapt to each child), and none of them plays background music.
 | ضربة إلى الفضاء | Skybound Golf | 1 | رياضة، أركيد |
 | سوق الحيوانات | Critter Mart | 1 | بناء وإدارة |
 | إمبراطورية البيتزا | Pizza Empire | 1 | بناء وإدارة |
-| سباق البيض | Egg Rush | 1-2 | بناء وإدارة، لاعبان |
+| سباق البيض | Egg Rush (sneak and freeze in the farmyard) | 1-2 | لاعبان، أركيد |
+| بحيرة الحظ | Lucky Lake (fishing) | 1-2 | لاعبان، أركيد |
 | عالم المكعبات | Block World | 1 | بناء وإدارة، أركيد |
 | حرّاس الكعكة | Cake Guards (tower defense) | 1 | استراتيجية |
 | انفجار المكعبات | Block Burst | 1 | ألغاز |
 | دمج 2048 | 2048 | 1 | ألغاز |
-| جزيرة الفوضى | Chaos Island | 1-2 | أركيد، لاعبان |
+| جزيرة الفوضى | Chaos Island (survive the island's silly disasters) | 1-2 | لاعبان، أركيد |
 | حبل الحلوى | Munch Rope | 1 | ألغاز |
 | اندفاع المتاهة | Maze Dash | 1 | أركيد |
 | عبور الطريق | Road Hopper | 1 | أركيد |
@@ -60,16 +59,51 @@ adapt to each child), and none of them plays background music.
 
 The original arcade games save best scores and unlocks in the browser, and have a title screen, P/Esc pause and a 🔊 mute button. The two board games use a compact board with local two-player and computer modes.
 
-**فقاعات بوب (Bubble Bop)** is the «ابدأ من هنا» starter game for a 6-year-old who has never used a mouse or keyboard. It is a real arcade game with no words to read, no way to lose and no timer in its levels. Bop, a round glowing friend, floats with the mouse pointer. Five worlds teach one input each through play: touch bubbles with Bop to pop them (no click needed), click on or near balloons, press the long Space bar so a frog catches fireflies, move a basket under falling fruit with ← → (or A/D), then a party world that mixes all four. Each world has three short levels (one to three stars) and a 60-second party round with combos, gold targets and a best score. Hit areas are bigger than the pictures, targets drift towards Bop, mashing and stray keys never cost anything, and an on-screen mouse, Space bar and arrow keys light up with the real ones. A wordless hand shows the move after a few idle seconds and repeats while the child waits. Difficulty follows the child (Kit.dda): a 6–7-year-old starts with huge, slow targets, a 10–11-year-old with a brisk challenge, and each world adapts to how the last level went. Stars unlock colours and hats for Bop. Two optional picture cards show how to hold the mouse and where the keys are. P or Esc pauses. Progress stays in this browser.
+**فقاعات بوب (Bubble Bop)** is the «ابدأ من هنا» starter game for a 6-year-old who has never used a mouse or keyboard. It is a real arcade game with no words to read, no way to lose and no timer in its levels. Bop, a round glowing friend, floats with the mouse pointer. Eleven worlds teach one input each through play. The first five: touch bubbles with Bop to pop them (no click needed), click on or near balloons, press the long Space bar so a frog catches fireflies, move a basket under falling fruit with ← → (or A/D), and a party world that mixes these four. The next six: drag baby turtles to the pool of their colour, double-click sleeping clams to find pearls, press and hold the button (or Space) to blow a bubble until it fills a ring, steer a submarine to starfish with all four arrows (or WASD), press the letter a balloon carries, and a grand party world that mixes these five. The letter world draws an on-screen keyboard like the school's own (Latin letter top-left, Arabic letter bottom-right, F and J bumps); keys are found by their place, so either input language works, and the key to press always glows. It starts with F and J, then the home row and the rows above and below. Each world has three short levels (one to three stars) and a 60-second party round with combos, gold targets and a best score; the map shows worlds 1–5 and 6–11 on two pages turned with big arrows. Hit areas are bigger than the pictures, targets drift towards Bop, mashing and stray keys never cost anything, and an on-screen mouse, Space bar, arrow keys and keyboard light up with the real ones. A wordless hand shows the move after a few idle seconds and repeats while the child waits. Difficulty follows the child (Kit.dda): a 6–7-year-old starts with huge, slow targets, a generous double-click gap and hold window and turtles that can also be carried with two clicks, a 10–11-year-old with a brisk challenge, and each world adapts to how the last level went. Stars (up to 99) unlock colours and hats for Bop. Two optional picture cards show how to hold the mouse and where the keys are. P or Esc pauses. Progress stays in this browser, and saves from the five-world version keep all their stars.
 
-**الديناصور ثلاثي الأبعاد (Dino 3D)** is a voxel desert endless runner. Jump with Space or Up,
-hold for a higher jump, and crouch or descend quickly with Down or Ctrl. Jump over low birds
-and crouch under middle-height birds as the pace increases and the desert changes from day
-to night. Enter a four-digit course code to practise the same obstacle layout or share it with
-classmates using the same game version. P/Esc pauses; R retries the same course from pause
-or after a crash, and a separate button chooses a new course. The best score saves locally.
-Its original geometry and synthesized sounds use
-the bundled Three.js library and work offline, including the downloaded Windows folder.
+**الديناصور ثلاثي الأبعاد (Dino 3D)** is a voxel journey runner: a baby dinosaur runs home to its
+family through five worlds (desert, jungle, snowy mountains, volcano island and a starry night),
+three levels each, and each world brings one new obstacle. Space or ↑ jumps (hold for a higher
+jump), ↓ ducks, a click also jumps, and → or Shift is a roar dash once fruit has filled its meter:
+it smashes crates and skims over goo. A bump is a comic tumble that costs a heart; levels give
+one to three stars for finishing, collecting eggs and keeping hearts, and eggs unlock colours and
+hats. Endless mode is open from the start; its small «رمز» button takes a four-digit course code
+so a class can practise the same obstacle layout on the same game version. P/Esc pauses. Its
+original geometry and synthesized sounds use the bundled Three.js library and work offline,
+including the downloaded Windows folder.
+
+**عدّاء المفاتيح (Key Runner)** teaches where every key is. A little runner hops across giant
+keycap stones printed like the school's Dell Arabic keyboard (Latin letter top-left, Arabic letter
+bottom-right); pressing the key on the next stone makes it hop and adds +1 speed. An on-screen
+keyboard always shows the key to press, glowing. Seven worlds go Space and arrows, F and J, the
+home row, the top row, the bottom row, numbers, then all keys with short Arabic words. A slow
+child never falls: the runner waits at the edge. Keys are read by their place, so it works with
+either input language. Two players race on split lanes, one on the left half of the keyboard and
+one on the right. Esc pauses, because P is a letter here.
+
+**سباق البيض (Egg Rush)** is a top-down sneak-and-freeze game. A farm kid (arrows or WASD) carries
+eggs from sleeping guards' nests to the home nest, where each hatches into a baby that joins a
+parade behind the kid. A guard that stirs shows «؟» first; when it looks, standing still is safe
+and moving in its cone means a comic bump and the egg rolls back. Five farms (hens, ducks,
+penguins, ostriches and a dino mum) with four yards each add water, ice, cover, patrols and golden
+eggs. Two players race on the same keyboard.
+
+**بحيرة الحظ (Lucky Lake)** is a fishing game where the fish are visible under the water. Aim with
+the mouse (or the arrows) and click or press Space to cast, wait for the «!» bite, then hold to
+keep the fish inside the reel bar's green zone. Five places from the village pond to a magic night
+lagoon each have three picture goals (stars); there are 33 species and funny junk, a fish book and
+rod upgrades. Two players fish against the clock from a dock and a boat (Space and Enter).
+
+**جزيرة الفوضى (Chaos Island)** is a disaster-survival party platformer on one island in side view.
+Each round a picture card announces one silly disaster and the move that beats it: climb above a
+jelly flood, step away from the shadows of marshmallow meteors, walk against the wind or go inside
+the house, jump rolling snowballs on ice, keep off cracking platforms in a quake, leave the lit
+column under a thunder cloud, dodge beach balls, and hide indoors from a little tornado. A hit is a
+cartoon bonk that costs one of three hearts; at none you float as a little ghost until the next
+round. Cute computer islanders play the same rules, and a podium ends the match. Four islands
+(beach, snow, candy, sky) give one to three stars by rounds survived, and coins buy hats, colours
+and capes. Arrows or WASD move and jump, ↓/S drops through a platform; two players share the
+island on WASD and the arrows.
 
 **حرّاس الكعكة (Cake Guards)** is a tower defense game played with the mouse. Jelly blobs march
 along candy roads towards a birthday cake; click a round pad beside the road to build a popcorn
@@ -105,10 +139,17 @@ upgrades and ball styles; longer shots unlock five worlds from the meadow to the
 can carry the ball to the edge of space. Progress saves locally; saves from the earlier version keep
 their coins, best distance and balls, and get their upgrade coins back.
 
-**أصابع البرق (typing test)** works like Monkeytype: time (15/30/60 s), words (10/25/50) or
-sentences, in English or Arabic, with the same WPM/accuracy formulas. For a class race, click
-**تحدٍّ للصف**, pick a test and write the 4-digit code on the board; every student who enters that
-code gets exactly the same words. Tab starts a new test.
+**أصابع البرق (Lightning Fingers)** is a typing game for children. Pick «عربي» or «English», then type
+the word on a cloud before it reaches the little town: the first letter picks the cloud, the next
+key always glows on an on-screen copy of the school keyboard (Latin and Arabic legends), and a
+finished word is zapped by a friendly lightning bolt into a rainbow. A wrong key only shakes the
+cloud (no Backspace needed); hamza forms are accepted, the B key's «لا» counts, and keys still
+count when the PC's input language is the other one. Five worlds per language (letters; 3-letter,
+4-letter and longer words; short phrases), four levels each with 1–3 stars; speed is shown as an
+animal from a snail to a rocket. «اختبار السرعة» is a 30 s or 60 s test with Monkeytype's WPM and
+accuracy formulas, a personal best and a history chart. For a class race, click **تحدٍّ للصف** →
+«للمعلم: رمز جديد», pick a test and write the 4-digit code on the board; every student who types
+that code gets exactly the same words.
 
 **ضربة الطلاء (shooter)** is a first-person arena game in the style of Krunker / Shell Shockers,
 made school-friendly: toy paint blasters, cute round "splat buddies", and paint splats instead of
@@ -191,7 +232,7 @@ and the old `school-games-offline` folder, then download and extract the ZIP aga
 so the games are back in the same place. (If the old ZIP is still there, the new download
 and its folder get ` (1)` added to their names.) Replace any copies of the `school-games`
 folder on other PCs, USB sticks or shared drives with the new one too.
-Saved progress and play statistics stay, because the browser keeps them, not the folder.
+Saved progress stays, because the browser keeps it, not the folder.
 The ZIP is part of the fast version, so it is there only while GitHub Pages publishes it.
 
 For developers, GitHub's **Code → Download ZIP** gives the editable source instead. It also
@@ -205,11 +246,9 @@ rounds, one-button games, or games for friends. `roundMinutes` in the catalog is
 estimate for choosing a game, not a time limit; `inputStyle` describes its controls.
 Returning from a game restores the originating tile and browsing position.
 
-The classroom controls offer quiet sound, reduced effects, and an optional session
-timer. The quiet/effects preset is temporary and preserves each game's personal
-preferences. When time expires, the game pauses behind a handoff prompt; it is not closed
-or reset. Resume is explicit. Games also pause when focus leaves their playing
-window, including Shift+Tab back to the portal and leaving fullscreen.
+The topbar 🔊 button mutes the portal and the games. Games pause when focus leaves their
+playing window, including Shift+Tab back to the portal and leaving fullscreen; Resume is
+explicit.
 
 The fast site's footer shows whether every file is verified for offline use.
 “جاهز دون إنترنت” means the active version is complete; an incomplete installation
@@ -220,7 +259,7 @@ still there, so slow disks are not re-read on every visit. Retry hashes them aga
 
 When a newer complete version is cached, returning to the games list offers
 “حدّث الصفحة الآن”. Refresh is explicit and affects only that tab; running or paused
-games, game menus and the classroom handoff keep their session. The action verifies
+games and game menus keep their session. The action verifies
 readiness again and defers if a game opened during that check. It also works offline.
 The first installation never shows an update prompt. A game-only update includes the
 changed game and the portal's new build identity. Pages opened before this feature
@@ -234,90 +273,13 @@ storage is full. Retry keeps the current session and clears the warning only aft
 the pending data is saved. Block World's final celebration survives a reload until
 the player acknowledges it.
 
-### Players, age bands and XP
-
-The top of the home page asks «مَن يلعب؟» with big round animal pictures. A child picks
-their animal (or plays as a guest) with one click; nothing is typed and no name is stored.
-A new player picks an animal, a colour and an age band from three big number cards
-(6–7, 8–9, 10–11). In Bubble Bop, Road Hopper and Dino 3D's surprise courses the age band
-sets where difficulty starts, and the game then adapts to how that child plays; the other
-games follow in later milestones. Winning, trying and playing earn XP; the topbar
-shows the player's picture, level and progress, with a short celebration on a new level.
-Up to 24 players fit on one browser. The current player lasts only for that tab: closing
-it, the classroom «hand over the device» button, or 20 minutes with nobody playing returns
-to the guest. The classroom panel can set an age band for guests. The topbar 🔊 button
-mutes the portal and the games.
-
 ### Sound
 
 There is no background music anywhere: no menu or game music, loops or jingles. Every
 sound is a short effect made in code when something happens (a pop, a jump, a reward),
-from the shared juice engine (`shared/juice.js`) or the game's own synthesizer. Classroom
-mode mutes everything. `tools/tests/zero-bgm.test.mjs` checks every game's title and pause
+from the shared juice engine (`shared/juice.js`) or the game's own synthesizer. The 🔊
+button mutes everything. `tools/tests/zero-bgm.test.mjs` checks every game's title and pause
 screens for silence.
-
-### Play statistics (local only)
-
-Each PC counts which games children open, how long they really play (only while they
-use the mouse or keyboard), where they stop in a game, and whether the games run
-smoothly on that PC. The numbers stay in that browser's storage: these local statistics
-are never uploaded (the optional, separate telemetry below sends play events without
-names). Names, typed text and class codes are never recorded.
-The numbers describe **a PC, not a child**: several children share a PC, and
-two-player modes mix players.
-
-- **Open:** 🏫 إعدادات الصف → 📊 إحصاءات هذا الجهاز (or open `teacher.html`). It opens
-  in a new tab, so a running game is not interrupted. It works offline and from a
-  downloaded folder. The web copy and a downloaded folder keep separate statistics, so
-  open the page the same way the children open the games.
-- **Read:** choose a period (اليوم، هذا الأسبوع، آخر 30 يومًا، الكل). Four cards answer
-  which games they play most, how long, at what time and where they stop. A table lists
-  each game. Device status, how children reach the games, settings and first-time
-  tutorials are in folded sections below. Device status rates each game سلس / مقبول / بطيء
-  from drawing speed and load time; Connect Four, Tic Tac Toe and Lightning Fingers have
-  no steady drawing loop, so they show «لا تُقاس» (their load times still show).
-  «Where they stop» lists only levels that can be won or lost, with
-  «فازوا في N من M محاولات» (tries include leaving the level); free play, endless runs,
-  2048 boards and two-player modes are left out, and runs and boards show their average
-  and best score in the levels table instead. A game still open on this PC today shows its
-  time with the note «مرة لعب ما زالت مفتوحة» until it is closed.
-- **Name the PC:** type a short label such as «جهاز 7». Never type a child's name.
-- **Export to Excel:** press **تصدير ملف Excel**. Each click saves one workbook,
-  `play-stats_<pc>_<date>.xlsx`, with every stored day: an Arabic read-me sheet (اقرأني)
-  and the tables `days`, `games`, `levels` and `hours`. **تصدير JSON** saves the same data
-  as a `.json` file. Edge and Chrome open a save dialog: choose the folder (for example
-  the shared OneDrive folder) and save. Closing the dialog saves nothing, and the page
-  says so. If the dialog never opens (a school policy can block it), press
-  **تنزيل الملف بدلًا من ذلك** under that message. That button, other browsers and a page
-  opened over plain `http://` from another computer download the file instead, and the
-  page asks «هل حُفظ؟»: press **نعم، حُفظ الملف** only once the file is saved. An export
-  counts (and the reminder below goes away) only when the file is saved. Export every
-  week: old days are removed when the statistics space (300 KB) fills or after 120 days,
-  whichever comes first, and a busy computer-lab PC may keep only 2–3 months. The page
-  shows a reminder when the space is more than three-quarters full and nothing was
-  exported for a week, when days were removed for space before they were exported, or when
-  the oldest day not yet exported is more than 100 days old. For privacy the `hours` table
-  has no dates and lists a game's hour only when it was played then on at least 3 days,
-  and not on every day the game was played. It still shows when games are usually played,
-  so keep the files like class records.
-- **Combine PCs:** press **فتح ملفات من أجهزة أخرى** and choose the JSON files from other
-  PCs to see them together. Nothing from those files is saved. In Excel, put the
-  workbooks in one folder and use **Data → Get Data → From Folder**. Drop rows where `pc`
-  is empty (an empty table keeps one blank row). For each `pc` and `date`, keep only the
-  rows from the file with the newest `exported_at`; never add two exports of the same PC
-  and day. The `hours` table has no dates (each file sums all its days), so for it keep
-  only each PC's newest export.
-- **Stop or clear:** stop collecting (type «أوقف» to confirm) or clear this PC's
-  statistics (type «امسح»). Clearing never removes game progress, the PC name or the
-  stop setting.
-- **One browser profile on one PC:** the statistics live in the browser profile the
-  children use on that PC. A roaming school profile, a temporary one that is reset at
-  sign-out, another browser, or clearing the browser's site data starts again from zero.
-  Use the same browser and a profile that stays on the PC, and export before a PC is
-  reset.
-
-The page has no password. A child who opens it could stop or clear the statistics,
-so both actions need a typed word. The formats are in [`docs/PLAY_STATS.md`](docs/PLAY_STATS.md).
 
 Everything the home page shows comes from **`js/catalog.js`**:
 
@@ -325,62 +287,20 @@ Everything the home page shows comes from **`js/catalog.js`**:
 - **Feature a game** first in the catalog: set `hot: true`.
 - **Rename the site:** change `name` in `window.SITE` (currently "ألعاب الفسحة").
 
-### Telemetry without names (optional)
-
-A school can collect play events without names from every PC on one server of its own (a
-free Cloudflare account, set up with one button; see below),
-to see which games children choose, how each child's play and skill develop over the year,
-where they stop, how difficulty settles per age band, and whether the PCs keep up. This project's published site sends to the school's
-server, named in `.github/workflows/build.yml`; a build without `SG_TELEMETRY_URL`, the
-source tree, the downloaded folder and local previews never send anything. Each child who
-picks an animal appears under a random code, so this is pseudonymous personal data: before
-turning it on, the school or district must complete its privacy review and tell parents
-(children's data: COPPA in the US, GDPR and the UK Age Appropriate Design Code in Europe and
-the UK), and research publication may need consent or an ethics review.
-
-Only `js/telemetry.js` in the portal sends; games never use the network. It sends no
-names, no typed text, no PC label, no profile key or picture, no clock time and no browser
-or graphics strings; it sends a random code per profile and one per PC, and the PC's time
-zone name. The teacher page shows whether this PC shares and the codes, can give a child
-who plays on two PCs one code, and «stop collecting» stops both the local statistics and
-the sharing. The server stores no IP addresses, keeps play for 400 days by default, and
-shows every number, even for one child. See [`docs/TELEMETRY.md`](docs/TELEMETRY.md)
-for the portal side and [`server/README.md`](server/README.md) for the server and its
-insights dashboard.
-
-### Turning on data collection
-
-The statistics server and its insights dashboard run on a **free Cloudflare account**,
-set up with one "Deploy to Cloudflare" button and no code: follow
-[Turn on data collection](server/README.md#turn-on-data-collection-about-5-minutes-no-code)
-in `server/README.md` (about 5 minutes), then send the address it shows
-(`https://school-games-telemetry.<name>.workers.dev`) to the developer, who points the
-site's fast build at it. The dashboard opens at that same address, with the password
-chosen during the setup. To run it on your own server instead, see
-[Self-hosting on Node](server/README.md#self-hosting-on-node).
-
 ## For developers
 
 ```
 index.html, css/, js/     the portal (plain HTML/CSS/JS, no build step)
 js/catalog.js             list of games, categories and site name
-js/stats.js               the portal's local play-statistics recorder
-js/profiles.js            picture profiles without names, age bands and XP
-js/telemetry.js           the only network sender: play events without names to a school-run server (off by default)
-teacher.html              teacher page: this PC's play statistics, Excel/JSON exports and dashboard codes
-css/teacher.css, js/teacher.js   its styles and script (pure parts in window.SGTeacher)
+js/offline.js             the fast build's offline cache controller (footer status, update prompt)
 games/<slug>/             one folder per game (index.html + thumb.svg + its own files)
-shared/kit.js             tiny helper library all games use (sound, saving, input, scaling, play statistics,
-                          age band, difficulty control Kit.dda, telemetry extras Kit.track)
+shared/kit.js             tiny helper library all games use (sound, saving, input, scaling, lifecycle,
+                          difficulty control Kit.dda)
 shared/juice.js           procedural sound effects (Kit.juice in games, Juice in the portal)
-server/                   the telemetry server (no names) and its insights dashboard (a Cloudflare
-                          Worker, or Node with no dependencies; deployed on its own, not part of the site)
 shared/game.css           shared game page styles + the Fredoka font
 lib/three/                three.js r159 (MIT) for the 3D games
-docs/ARCHITECTURE.md      the platform contract: runtime, profiles, telemetry, server, milestones
+docs/ARCHITECTURE.md      the platform contract: runtime, Kit, the portal, sound, difficulty
 docs/GAME_SPEC.md         the rules every game follows
-docs/TELEMETRY.md         the portal's telemetry (no names): gates, codes, events, delivery, turning it on
-docs/PLAY_STATS.md        play statistics: what is counted, storage and export formats
 docs/PERFORMANCE.md       size limits per game, slow-disk rules and how the fast build is measured
 tools/playtest.mjs        headless Chromium playtest harness (Playwright)
 tools/build.mjs           builds the fast version (one file per game + offline cache + offline ZIP)
@@ -410,9 +330,9 @@ npm test                        # deterministic bug regressions and browser chec
 npm run test:unit                # the regression files under tools/tests/
 npm run test:shared              # source-independent rules, build safety and tool fixtures
 npm run test:browser             # gameplay and portal checks for the selected SG_ROOT
-npm run test:tooling             # server, report and audio-probe helper checks
+npm run test:tooling             # test server, report and audio-probe helper checks
 npm run test:scenarios           # prove inert Start/Pause buttons or input fail the gameplay checks
-npm run test:classroom           # downloaded folder, Arabic/spaced paths, denied storage, teacher page
+npm run test:classroom           # downloaded folder, Arabic/spaced paths, denied storage
 npm run test:regressions         # additional gameplay and portal keyboard checks
 npm run check                   # smoke-test all source games
 npm run build                   # fast build into _site/ (the Pages artifact, with the offline ZIP)
@@ -523,7 +443,7 @@ independent holdouts. Actual student playtests remain necessary for difficulty f
 ## Credits and licenses
 
 - Games, art, sounds and site: original work made for this project. أصابع البرق computes
-  its results with the same published rules as Monkeytype (WPM, raw, accuracy, consistency),
+  its speed-test results with the same published rules as Monkeytype (WPM and accuracy),
   so students' scores are comparable; the code is our own.
 - [three.js](https://threejs.org) r159, MIT license (`lib/three/LICENSE`).
 - Fredoka font (Latin) and Baloo Bhaijaan 2 font (Arabic), SIL Open Font License

@@ -15,8 +15,6 @@
   var progress = loadProgress(), level = progress.level, roundLevel = level;
   // The session score lasts until the mode changes; computer wins are saved.
   var score = { 1: 0, 2: 0 }, firstWin = false;
-  // Play statistics: a round counts from its first move by a child, so a level re-deal before it is no round.
-  var counted = false;
 
   document.documentElement.classList.add(game);
   app.innerHTML = '<header class="game-header"><div><h1>' + title + '</h1><p>' +
@@ -60,8 +58,6 @@
   // Count a finished round once, when its last move is made.
   function scoreRound() {
     firstWin = false;
-    // Two players on one PC report no winner; against the computer the child is seat 1.
-    Kit.stats.end(state.draw ? 'draw' : mode === 'local' ? 'end' : state.winner === 1 ? 'win' : 'lose');
     if (!state.winner) return;
     score[state.winner]++;
     if (mode !== 'computer' || state.winner !== 1) return;
@@ -267,7 +263,6 @@
     if (!canMove()) return;
     var next = rules.play(state, move);
     if (!next) return;
-    if (!counted) { counted = true; Kit.stats.round(mode === 'local' ? mode : 'cpu-' + roundLevel); }
     state = next;
     if (finished()) scoreRound();
     renderBoard(true); scheduleComputer();
@@ -287,7 +282,7 @@
   }
   function newRound() {
     stopTimers(); pendingBoardFocus = null; state = rules.create(game); state.turn = startingSeat;
-    paused = false; firstWin = false; counted = false; roundLevel = level;
+    paused = false; firstWin = false; roundLevel = level;
     renderBoard(); scheduleComputer(); focusBoard();
   }
   function start(selectedMode) { mode = selectedMode; startingSeat = 1; score = { 1: 0, 2: 0 }; newRound(); }
@@ -328,7 +323,7 @@
     startingSeat = 3 - startingSeat;
     newRound();
   });
-  // Keep Kit's classroom lock and preference updates, with the board's text label.
+  // Kit's mute button and preference updates, with the board's text label.
   var soundPlaceholder = el('soundButton'), soundButton = Kit.muteButton({ key: false });
   soundButton.id = 'soundButton'; soundButton.className = 'sound-button';
   soundButton.removeAttribute('aria-label');

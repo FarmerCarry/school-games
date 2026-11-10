@@ -81,8 +81,8 @@ test('every catalog entry is well-formed, including Lucky Lake', () => {
   assert.equal(lake.players, '1-2');
   assert.equal(lake.inputStyle, 'mixed');
   assert.equal(lake.color, '#2ec4ff');
-  assert.deepEqual([...lake.cats], ['two-player', 'idle']);
-  assert.deepEqual([...lake.roundMinutes], [3, 15]);
+  assert.deepEqual([...lake.cats], ['two-player', 'arcade']);
+  assert.deepEqual([...lake.roundMinutes], [3, 10]);
   assert.equal(ARABIC.test(lake.blurb), true);
   assert.equal(lake.blurb.includes('\uFFFD'), false);
   assert.equal(lake.controls.length, 7);

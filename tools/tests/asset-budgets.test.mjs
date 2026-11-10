@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { checkAssetBudgets } from '../asset-budgets.mjs';
 
 const hash = '0123456789abcdef';
-const measuredFiles = ['index.html', 'teacher.html', 'games/alpha/index.html', 'lib/three/three.min.js', 'shared/fonts/test.woff2'];
+const measuredFiles = ['index.html', 'games/alpha/index.html', 'lib/three/three.min.js', 'shared/fonts/test.woff2'];
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-asset-budgets-'));
@@ -19,7 +19,7 @@ function fixture(t) {
     fs.writeFileSync(target, contents);
     return target;
   };
-  const config = { format: 1, portalBytes: 100, teacherBytes: 100, gameHtmlBytes: { alpha: 100 }, threeBytes: 100, fontBytes: { 'test.woff2': 100 }, precacheBytes: 1000 };
+  const config = { format: 1, portalBytes: 100, gameHtmlBytes: { alpha: 100 }, threeBytes: 100, fontBytes: { 'test.woff2': 100 }, precacheBytes: 1000 };
   const manifest = Object.fromEntries(measuredFiles.map(file => [file, hash]));
   const configPath = write('asset-budgets.json', JSON.stringify(config));
   const catalogPath = write('catalog.js', "window.GAMES=[{slug:'alpha'}];");
@@ -79,7 +79,7 @@ test('new hidden catalog games and fonts require their own reviewed budgets', t 
 });
 
 test('missing measured assets and extra missing manifest entries return failures', async t => {
-  for (const file of ['shared/fonts/test.woff2', 'teacher.html']) await t.test(file, t => {
+  for (const file of ['shared/fonts/test.woff2', 'index.html']) await t.test(file, t => {
     const f = fixture(t);
     fs.unlinkSync(path.join(f.root, file));
     rejected(f, file);
@@ -175,11 +175,11 @@ test('directory symlinks cannot make precache measurements escape the build root
 test('multiple budget failures are reported together with usable numeric measurements', t => {
   const f = fixture(t);
   for (const file of measuredFiles) f.write(file, Buffer.alloc(110));
-  f.config.precacheBytes = 500;
+  f.config.precacheBytes = 400;
   f.saveConfig();
   const report = rejected(f);
-  assert.equal(report.metrics.filter(metric => !metric.passed).length, 6);
-  assert.ok(report.failures.length >= 6);
+  assert.equal(report.metrics.filter(metric => !metric.passed).length, 5);
+  assert.ok(report.failures.length >= 5);
   for (const metric of report.metrics) {
     assert.ok(Number.isFinite(metric.bytes));
     assert.ok(Number.isFinite(metric.limitBytes));

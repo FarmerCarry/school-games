@@ -179,7 +179,6 @@ test('a Rising Goo run left alive through the pause menu or R keeps its coins an
   const page = await gamePage(t);
   const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('sg:maze-dash:save')) || {});
   const climb = () => page.evaluate(() => {
-    if (!window.ends) { window.ends = []; const end = Kit.stats.end; Kit.stats.end = function () { ends.push([...arguments]); return end.apply(this, arguments); }; }
     __game.endless(); __game.god = true; __game.autoplay = true;
     for (let i = 0; i < 400 && !(__game.state.height >= 10 && __game.state.coins > 0); i++) stepGame(30);
     __game.god = false; __game.autoplay = false;
@@ -201,5 +200,6 @@ test('a Rising Goo run left alive through the pause menu or R keeps its coins an
   await page.keyboard.press('r');
   await page.evaluate(() => stepGame(1));
   assert.deepEqual(kept(await saved()), { coins: banked.coins + run2.coins + Math.floor(run2.height / 5), bestH: Math.max(run.height, run2.height), runs: 2 }, 'R in play banks the run');
-  assert.deepEqual(await page.evaluate(() => ends), [], 'statistics still count a run left alive as a quit');
+  const fresh = await page.evaluate(() => __game.state);
+  assert.deepEqual([fresh.screen, fresh.mode, fresh.height, fresh.coins], ['play', 'endless', 0, 0], 'and starts a fresh run');
 });

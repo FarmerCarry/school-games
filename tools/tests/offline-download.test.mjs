@@ -159,7 +159,7 @@ test('the fast build ships itself as one school-games/ folder in a ZIP that the 
   }
   const sandbox = { window: {} };
   vm.runInNewContext(fs.readFileSync(path.join(repo, 'js/catalog.js'), 'utf8'), sandbox);
-  for (const file of ['index.html', 'teacher.html', 'sw.js', 'favicon.svg', 'manifest.webmanifest', 'lib/three/three.min.js', 'lib/three/LICENSE',
+  for (const file of ['index.html', 'sw.js', 'favicon.svg', 'manifest.webmanifest', 'lib/three/three.min.js', 'lib/three/LICENSE',
     ...sandbox.window.GAMES.map(game => 'games/' + game.slug + '/index.html')]) {
     assert.ok(names.includes(file), 'the folder has ' + file);
   }
@@ -168,10 +168,10 @@ test('the fast build ships itself as one school-games/ folder in a ZIP that the 
   const total = entries.reduce((sum, entry) => sum + entry.data.length, 0);
   assert.ok(download.length < total * 0.6, `the download (${download.length} bytes) is compressed (${total} bytes unpacked)`);
 
-  // Children's PCs never cache the teacher's download; the next build may replace it.
+  // Children's PCs never cache the download itself; the next build may replace it.
   const worker = fs.readFileSync(path.join(out, 'sw.js'), 'utf8');
   const precache = JSON.parse(worker.match(/^var FILES = (.+);$/m)[1]);
-  assert.ok(Object.hasOwn(precache, 'index.html') && Object.hasOwn(precache, 'teacher.html'));
+  assert.ok(Object.hasOwn(precache, 'index.html'));
   for (const slug of catalogSlugs()) {
     assert.ok(Object.hasOwn(precache, 'games/' + slug + '/index.html'), slug + ' is precached');
   }

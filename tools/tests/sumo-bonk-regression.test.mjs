@@ -22,8 +22,7 @@ after(async () => {
 // Steps only simulate unless asked to paint (painting every frame on SwiftShader is what made
 // this file slow), and Math.random is seeded so every run plays out the same way.
 // sumo.texts collects canvas text drawn on the main canvas; sumo.paints counts sky paints
-// (one per full scene render); sumo.flashes counts full-screen white washes; sumo.stats
-// logs Kit.stats.round and Kit.stats.end calls.
+// (one per full scene render); sumo.flashes counts full-screen white washes.
 async function game(t, { reduce = false, failSaves = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 640, height: 360 } });
   const page = await context.newPage(), errors = [];
@@ -33,7 +32,7 @@ async function game(t, { reduce = false, failSaves = false } = {}) {
     let seed = 7;
     Math.random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
     if (reduce) localStorage.setItem('sg:site:motion', '"reduce"');
-    const sumo = window.sumo = { texts: [], paints: 0, flashes: 0, failSaves, stats: [] };
+    const sumo = window.sumo = { texts: [], paints: 0, flashes: 0, failSaves };
     let kit, update, render;
     sumo.step = (n = 1, paint = false) => { for (let i = 0; i < n; i++) { update(1 / 60); if (paint) render(0); } };
     sumo.key = (code, n = 1) => {
@@ -47,10 +46,6 @@ async function game(t, { reduce = false, failSaves = false } = {}) {
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (u, r) => { update = u; render = r; return { stop() {} }; };
-      for (const name of ['round', 'end']) {
-        const call = kit.stats[name];
-        kit.stats[name] = (...args) => { sumo.stats.push([name, ...args]); return call.apply(kit.stats, args); };
-      }
     } });
     const write = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key) {
@@ -201,10 +196,10 @@ test('a match won and then left from the pause menu during the celebration still
     const resume = winAndPause(1);
     document.getElementById('bResume').click(); sumo.step(300);
     const podium = { scr: __game.state.scr, earned: document.getElementById('oStars').textContent, ...saved() };
-    // two players on one PC are saved the same way and report no winner
+    // two players on one PC are saved the same way
     const duo = winAndPause(2);
     document.getElementById('bMenu').click(); sumo.step(10);
-    return { menu, afterMenu, restart, afterRestart, resume, podium, duo, afterDuo: saved(), stats: sumo.stats };
+    return { menu, afterMenu, restart, afterRestart, resume, podium, duo, afterDuo: { scr: __game.state.scr, ...saved() } };
   });
   const celebrating = { scr: 'game', paused: true };
   assert.deepEqual(run.menu, { ...celebrating, stored: '8' }, 'the win is stored before the podium, so leaving the page keeps it too');
@@ -214,13 +209,7 @@ test('a match won and then left from the pause menu during the celebration still
   assert.deepEqual(run.resume, { ...celebrating, stored: '24' });
   assert.deepEqual(run.podium, { scr: 'over', earned: '+8', stars: 24, easy: 3, pvp: 0, matches: 3 }, 'the podium counts up the same +8 and awards nothing more');
   assert.deepEqual(run.duo, { ...celebrating, stored: '32' });
-  assert.deepEqual(run.afterDuo, { stars: 32, easy: 3, pvp: 1, matches: 4 });
-  assert.deepEqual(run.stats, [
-    ['round', 'cpu-easy'], ['end', 'win', 5],
-    ['round', 'cpu-easy'], ['end', 'win', 5], ['round', 'cpu-easy'],
-    ['round', 'cpu-easy'], ['end', 'win', 5],
-    ['round', 'pvp'], ['end', 'end']
-  ], 'each won match ends as a win (never a quit), and the two-player match as an end');
+  assert.deepEqual(run.afterDuo, { scr: 'title', stars: 32, easy: 3, pvp: 1, matches: 4 }, 'the two-player match counts once too');
 });
 
 // Dashes into a rival standing near the edge, then follows the ring-out frame by frame

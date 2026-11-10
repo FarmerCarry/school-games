@@ -105,7 +105,7 @@
   var parts = [], pops = [], shake = Kit.shake();
   var hitstop = 0, hype = 0, flash = 0;
   var CONF = ['#ff5a5f', '#ffd23f', '#3ddc84', '#4f7cff', '#ff8fb1', '#ffffff', '#9b5de5', '#ff9f1c'];
-  // Reduced motion (or the classroom preset): no full-screen flash, goal zoom or confetti.
+  // Reduced motion: no full-screen flash, goal zoom or confetti.
   // Kick stars, banners and sounds stay, because they tell the player what happened.
   Kit.motion.onChange(function (reduced) {
     if (reduced) { flash = 0; parts = parts.filter(function (p) { return p.type !== 'conf'; }); }
@@ -1059,16 +1059,11 @@
       cfg = { mode: 'cup', teams: [WS.teamById(cupRun.team), WS.teamById(cupRun.opps[cupRun.round])], skill: cup.skills[cupRun.round], target: WS.CUP_GOALS, cupRound: cupRun.round };
     }
     cfg.first = save.stats.matches < 3 || mode === '2p';
-    // play-stats round id, kept with the config so Restart and Again repeat it
-    cfg.sid = mode === 'cpu' ? 'cpu-' + WS.DIFFS[cfg.diff].id : mode === 'cup' ? 'cup-' + WS.CUPS[cupRun.id].id + '-r' + (cupRun.round + 1) : 'duo';
     lastCfg = cfg;
     beginMatch(cfg);
   }
   // Every real match starts here (new, restart, again); demo and showcase matches never do.
-  // The first 3 matches show the kickoff key hints: that is the first-time coach.
   function beginMatch(cfg) {
-    Kit.stats.round(cfg.sid);
-    if (save.stats.matches < 3) Kit.stats.tutorial('start');
     newMatch(cfg);
     parts.length = 0; pops.length = 0;
     state = 'play'; showScr(null);
@@ -1269,9 +1264,6 @@
     var coins = 0;
     heldBadges = r.badges;
     save.stats.matches++;
-    // two players report no winner
-    if (m.mode === '2p') Kit.stats.end('end'); else Kit.stats.end(win ? 'win' : 'lose', m.score[0]);
-    if (save.stats.matches === 3) Kit.stats.tutorial('done');
     if (m.mode === '2p') {
       coins = 10;
       r.head = m.winner === 0 ? 'فاز اللاعب 1!' : 'فاز اللاعب 2!';

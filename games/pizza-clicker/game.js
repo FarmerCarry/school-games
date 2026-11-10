@@ -327,7 +327,7 @@
     if (floats.length >= MAXF) floats.shift();
     floats.push({ x: x, y: y, vy: opt.vy || -90, life: opt.life || 1, max: opt.life || 1, text: text, size: opt.size || 30, color: opt.color || '#ffffff', rtl: !!opt.rtl, pop: 0, combo: !!opt.combo });
   }
-  // Reduced motion (or the classroom preset) keeps the kitchen still.
+  // Reduced motion keeps the kitchen still.
   function shake(p) { if (!K.motion.reduced()) shakeP = Math.max(shakeP, p); }
   K.motion.onChange(function (reduced) { if (reduced) shakeP = shakeX = shakeY = 0; });
 
@@ -430,7 +430,7 @@
     }
     var sp = scenePos(i);
     if (sp) { toppingBurst(sp.x, sp.y, 10, 260); floatText(sp.x, sp.y - 30, '+' + n, { size: 30, color: '#7dff9a' }); }
-    if (S.tut < 2 && i === 0) { S.tut = 2; Kit.stats.tutorial('done'); } // play stats: the coach is finished
+    if (S.tut < 2 && i === 0) S.tut = 2; // the coach is finished
     save();
     refreshShop(true);
     return true;
@@ -912,7 +912,6 @@
   var titleEl = $('title'), pauseEl = $('pause');
   function showTitle() {
     mode = 'title'; hideTip();
-    Kit.stats.end('end'); // play stats: back at the menu ends the free-play round (ignored at boot: none open)
     titleEl.hidden = false; pauseEl.hidden = true;
     $('bPlay').textContent = S.lifetime > 0 ? 'تابع!' : 'العب!';
     $('titleProg').innerHTML = S.lifetime > 0
@@ -924,10 +923,6 @@
     K.audio.unlock();
     titleEl.hidden = true;
     mode = 'play';
-    // Play stats: free play is one 'main' round from Play/Continue until showTitle;
-    // a first-time player starts the coach (hint steps S.tut 0 -> 2).
-    Kit.stats.round('main');
-    if (!S.tut) Kit.stats.tutorial('start');
     snd.collect();
     if (!started) {
       started = true;

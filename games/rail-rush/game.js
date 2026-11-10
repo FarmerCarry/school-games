@@ -1126,7 +1126,7 @@
   var camPos = new T.Vector3(0, 2, 5), camLook = new T.Vector3(0, 1, 0), tmpV = new T.Vector3(), tmpL = new T.Vector3();
   var lastT = performance.now(), renderDirty = true;
   canvas.addEventListener('webglcontextrestored', function () { renderDirty = true; });
-  // camera shake and confetti follow the shared reduced-motion setting (classroom preset too)
+  // camera shake and confetti follow the shared reduced-motion setting
   var reducedMotion = Kit.motion.reduced();
   Kit.motion.onChange(function (r) { reducedMotion = r; if (r) stopConfetti(); });
   function render(alpha) {
@@ -1611,10 +1611,6 @@
     Kit.keys.reset();
   }
   function startRun() {
-    // Play statistics: every run (play, again, restart) is a round; a new one while a run is
-    // open counts that run as a quit. The first runs of a fresh save play the scripted intro.
-    if (!save.runs) Kit.stats.tutorial('start');
-    Kit.stats.round('run');
     bankRun();
     overAnim.on = false;
     resetPlayer(); resetRun();
@@ -1665,9 +1661,6 @@
     save.totals.boards += run.boards;
     save.totals.runs += 1;
     save.runs += 1;
-    // the intro patterns stop after 3 finished runs; the run ends with its distance in metres
-    if (save.runs == 3) Kit.stats.tutorial('done');
-    Kit.stats.end('end', Math.floor(run.dist));
     var score = run.score, newBest = score > save.best;
     var prevBest = save.best;
     if (newBest) save.best = score;

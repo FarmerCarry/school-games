@@ -56,7 +56,16 @@ const defaults = (start, active, snapshot, input, pause, paused, restart, reset,
 
 export const scenarios = {
   'dino-3d': defaults(['#play'], `window.Dino3DGame.mode === 'playing'`, `[window.Dino3DGame.state.score,window.Dino3DGame.state.distance,window.Dino3DGame.state.player]`, hold('Space', 180), '#pause-button', `window.Dino3DGame.mode === 'paused'`, '#restart', `window.Dino3DGame.state.score < 10`),
-  'key-runner': defaults(['#play'], `window.KeyRunnerGame.mode === 'play'`, `[window.KeyRunnerGame.state.z]`, hold('KeyW', 400), '#pause-button', `window.KeyRunnerGame.mode === 'paused'`, '#restart', `window.KeyRunnerGame.state.z < 1.2`),
+  // A first visit starts world 1, level 1. The runner waits at each edge: only the real key
+  // its next stone shows (Space here) counts as a hit and hops it on.
+  'key-runner': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === 'w1L1'`, `[${g}.state.time,${g}.state.x,${g}.state.hits]`, async page => {
+    const before = await page.evaluate(() => window.__game.state.hits);
+    for (let i = 0; i < 40 && await page.evaluate(hits => window.__game.state.hits <= hits, before); i++) {
+      const key = await page.evaluate(() => window.__game.state.target);
+      if (key) await page.keyboard.press(key);
+      await page.waitForTimeout(120);
+    }
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.hits === 0 && ${g}.state.next === 1`),
   'rail-rush': defaults(['#playBtn'], `${g}.state.mode === 'play'`, select(`${g}.state`, ['x','y','dist','score','lane']), hold('ArrowRight'), '#pauseBtn', `${g}.state.mode === 'pause' || ${g}.state.mode === 'paused'`, '#restartBtn', `${g}.state.dist < 15`),
   'neon-slope': defaults(['#btnPlay'], `${g}.state.mode === 'play'`, select(`${g}.state`, ['x','y','dist','gemsRun']), holdUntilChanged('ArrowRight', `${g}.state.x`), '#btnPause', `${g}.state.mode === 'paused'`, '#btnRestart', `${g}.state.dist < 15`),
   'tunnel-blitz': defaults(['#playBtn'], `${g}.info().state === 'play'`, select(`${g}.info()`, ['rot','D','score','orbsRun']), hold('ArrowRight'), '#pauseBtn', `${g}.info().state === 'paused'`, '#restartBtn', `${g}.info().D < 15`),
@@ -96,8 +105,15 @@ export const scenarios = {
   'critter-mart': defaults(['#playBtn'], `${g}.mode === 'play'`, select(`${g}.state()`, ['player','coins','play','served']), hold('ArrowRight'), '#pauseBtn', `${g}.mode === 'pause'`, '#resumeBtn', `${g}.mode === 'play'`, { persistent: true }),
   'pizza-clicker': defaults(['#bPlay'], `${g}.mode === 'play'`, `[${g}.S.pizzas,${g}.S.clicks]`, async page => { await page.mouse.click(840, 405); }, '#bPause', `${g}.mode === 'pause'`, '#bResume', `${g}.mode === 'play'`, { persistent: true }),
   'block-world': defaults(['#playBtn','#modeCrea'], `${g}.G.mode === 'play'`, `[${g}.player.x,${g}.player.y,${g}.G.tod]`, hold('ArrowRight'), '#pausebtn', `${g}.G.mode === 'pause'`, '#resumeBtn', `${g}.G.mode === 'play'`, { persistent: true, startIf: ['true', `${g}.G.mode === 'newworld'`] }),
+  // Lucky Lake: a first visit goes straight to the village pond. The fish swim by
+  // themselves; only the child's own cast (the mouse in the water, a click or Space)
+  // moves the hook, and Restart starts a fresh trip with no cast yet.
+  'lucky-lake': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.mode === 'solo'`, `[${g}.state.time,${g}.state.p1,${g}.state.fish]`, async page => {
+    const point = await page.evaluate(() => window.__game.point(760, 470));
+    await page.mouse.move(point.x, point.y, { steps: 6 });
+    await page.mouse.click(point.x, point.y);
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.p1.casts === 0 && ${g}.state.trip === 0`),
   // Cake Guards: click a pad beside the road like a player, then pick popcorn from its menu.
-  'lucky-lake': defaults(['#btnPlay'], `${g}.mode === 'play'`, `[${g}.tick,${g}.phase]`, hold('Space', 220), '#btnPause', `${g}.mode === 'pause'`, '#btnResume', `${g}.mode === 'play'`, { persistent: true }),
   'cake-guards': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.coins,${g}.state.towers,${g}.state.time,${g}.state.wave]`, async page => {
     const pad = await page.evaluate(() => window.__game.padPoint(0));
     await page.mouse.click(pad.x, pad.y);
@@ -173,7 +189,9 @@ export const scenarios = {
     retryHold: true
   }),
   'troll-level': defaults(['#btn-play'], `${g}.mode === 'play'`, `${g}.player`, hold('ArrowRight'), '#btn-pause', `${g}.mode === 'pause'`, '#btn-restart', `${g}.mode === 'play'`),
-  'chaos-island': defaults(['#btnPlay'], `${g}.mode === 'play'`, `[${g}.world.round, ${g}.world.frames, ${g}.player.x]`, hold('ArrowRight'), '#btnPause', `${g}.mode === 'pause'`, '#btnRestart', `${g}.matches > 1 && ${g}.world.round === 0 && ${g}.world.phase === 'inter' && ${g}.world.frames > 360`, { inputSnapshot: `${g}.player.x` }),
+  // Only the child's own keys add to player.walk (the wind, bonks and platforms never do).
+  // Restart begins a new match: its first round's picture card, a fresh clock.
+  'chaos-island': defaults(['#btnPlay'], `${g}.mode === 'play'`, `[${g}.world.round, ${g}.world.frames, ${g}.player.x, ${g}.player.y]`, hold('ArrowRight'), '#btnPause', `${g}.mode === 'pause'`, '#btnRestart', `${g}.matches > 1 && ${g}.world.round === 0 && ${g}.world.phase === 'card' && ${g}.world.t < 3`, { inputSnapshot: `${g}.player.walk`, inputSeen: `${g}.player.walk > sgInput.before + 8` }),
   'blob-battle': defaults(['#btnPlay'], `${g}.info().state === 'play'`, select(`${g}.info()`, ['T','mass','playerCells','alive','player']), move, '#pauseBtn', `${g}.info().state === 'pause'`, async page => {
     // Observe after the real button handler, in the same event dispatch. A fresh
     // blob can eat nearby golden pellets before a slow runner's next async poll.
@@ -189,14 +207,16 @@ export const scenarios = {
   'paint-grab': defaults(['#bPlay'], `${g}.state === 'play'`, `[${g}.player.x,${g}.player.y,${g}.time()]`, hold('ArrowRight'), '#bPause', `${g}.state === 'pause'`, '#bRestart', `${g}.time() > PG.MATCH_TIME - 1`),
   'snake-arena': defaults(['#btnPlay'], `${g}.state === 'play'`, select(`${g}.player`, ['x','y','len','alive']), move, '#btnPause', `${g}.state === 'paused'`, '#btnRestart', `${g}.player.alive`),
   'splat-strike': defaults(['#playBtn'], `${g}.state.ui === 'play' && !${g}.state.paused`, `[${g}.state.player,${g}.state.matchT]`, hold('KeyW'), '#pauseBtn', `${g}.state.paused`, '#restartBtn', `${g}.state.player.kills === 0 && ${g}.state.player.deaths === 0`, { ready: `${g}.state.countdown === 0`, init: () => { HTMLCanvasElement.prototype.requestPointerLock = undefined; } }),
-  'typing-test': {
-    // A fresh profile starts in Arabic; Playwright types non-US letters without key events, so pick English in the bar.
-    start: [click('[data-lang="en"]')], active: `${g}.state().screen === 'test'`, snapshot: select(`${g}.state()`, ['input','cur','correctKeys','incorrectKeys']),
-    input: async page => { await page.keyboard.type(await page.evaluate(() => __game.words(1)[0].slice(0,3))); },
-    pause: async page => { await page.evaluate(() => window.dispatchEvent(new Event('blur'))); }, paused: `${g}.state().unfocused`,
-    restart: async page => { await page.keyboard.press('Enter'); await page.keyboard.press('Tab'); }, reset: `${g}.state().phase === 'ready' && ${g}.state().input === ''`
-  },
-  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.coins]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnResume', `${g}.screen==='play'`, { persistent: true })
+  // English, because Playwright types non-US letters without key events. The input is the
+  // real next letter of the cloud to type (the hook only reads it); a level's own clock runs
+  // by itself, so the input check watches the right keys alone.
+  'typing-test': defaults(['[data-lang="en"]', '.pebble.next'], `${g}.state.screen === 'play'`, `[${g}.state.t,${g}.state.keys,${g}.state.errors,${g}.state.clouds]`, async page => {
+    await page.waitForFunction(() => !!window.__game.state.next, null, { timeout: 15000, polling: 40 });
+    await page.keyboard.type(await page.evaluate(() => window.__game.state.next));
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.keys === 0 && ${g}.state.done === 0`),
+  // The first yard opens behind a picture card; a held arrow closes it and walks the kid.
+  // Restart puts the kid back on the doorstep with no egg hatched.
+  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`)
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -217,8 +237,9 @@ const inputSnapshots = {
   'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`,
   'wacky-soccer': `${g}.world.players.filter(p => p.side === 0).map(p => p.kickT)`,
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
-  'lucky-lake': `${g}.charge`,
+  'lucky-lake': `${g}.state.p1.casts`, 'typing-test': `${g}.state.keys`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
+  'key-runner': `${g}.state.hits`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
@@ -252,10 +273,13 @@ const inputSeen = {
   // The blob follows the pointer, which rests on the centred Play button below it:
   // without input it drifts straight down. The input points up and left of it.
   'blob-battle': `${g}.info().player.x < sgInput.before.x - 20 && ${g}.info().player.y < sgInput.before.y - 20`,
-  // The bobber waits by itself. Only holding cast makes the power meter climb.
-  'lucky-lake': `${g}.charge > 0.12`,
+  // The fish swim and bite by themselves; only the child's press casts the hook.
+  'lucky-lake': `${g}.state.p1.casts > sgInput.before`,
   // A bubble that rises into a resting Bop pops too; only real pointer travel onto one counts.
-  'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`
+  'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`,
+  // The runner runs to the first edge by itself and waits there; only the key its next
+  // stone shows counts as a hit (any other key is a miss, nothing at all is nothing).
+  'key-runner': `${g}.state.hits > sgInput.before`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
@@ -265,7 +289,7 @@ for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen 
 // the fixed hold, because a player stopped by a wall cannot change state. Snake
 // Arena's repeated input stays the pointer; its checked input is key steering.
 const heldKeys = {
-  'dino-3d': 'Space', 'road-hopper': 'ArrowUp', 'key-runner': 'KeyW',
+  'dino-3d': 'Space', 'road-hopper': 'ArrowUp',
   'tunnel-blitz': 'ArrowRight', 'beat-dash': 'Space', 'moto-madness': 'ArrowUp', 'drift-king': 'Space',
   'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
   'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'chaos-island': 'ArrowRight', 'splat-strike': 'KeyW',

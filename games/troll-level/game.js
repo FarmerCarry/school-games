@@ -265,10 +265,6 @@
 
   function startLevel(i) {
     i = Math.max(0, Math.min(N - 1, i));
-    // Play statistics: a round is a level visit (deaths respawn and R keeps the deaths).
-    // The level 1 keycaps are the tutorial until level 1 is first won.
-    if (!i && save.best[0] == null) Kit.stats.tutorial('start');
-    Kit.stats.round('L' + (i + 1));
     game.li = i; game.demo = false;
     // A level may borrow another world's look (pal: a world index) or skip its title card.
     game.pal = WORLDS[LEVELS[i].pal != null ? LEVELS[i].pal : WOF[i]];
@@ -446,9 +442,6 @@
     var starsBefore = starCount();
     var prev = save.best[i];
     var newBest = prev != null && d < prev;
-    var first = prev == null;
-    // Play statistics (not for a __game.solve replay): the stars are the score.
-    if (!game.auto) { if (!i && first) Kit.stats.tutorial('done'); Kit.stats.end('win', stars); }
     if (prev == null || d < prev) save.best[i] = d;
     save.stars[i] = Math.max(save.stars[i] || 0, stars);
     var unlockedNext = false;
@@ -867,7 +860,7 @@
       var p = w.p;
       bubble(game.msg, p.x + PH.w / 2, p.y - 40, 22, Math.min(1, game.msgT * 4));
     }
-    // full-screen flash: decorative, so classroom mode and reduced motion skip it
+    // full-screen flash: decorative, so reduced motion skips it
     if (game.flash > 0 && !K.motion.reduced()) {
       ctx.save(); ctx.globalAlpha = Math.min(0.5, game.flash); ctx.fillStyle = game.flashC; ctx.fillRect(0, 0, 1280, 720); ctx.restore();
     }

@@ -16,10 +16,8 @@
 // every keydown) and a primary click in the top-left corner, away from every control (some
 // games start their title music on the first click). The test checks that neither starts
 // or leaves play. Special flows, taken from each game's scenario:
-// - dino-3d and skybound-golf get no click: their whole title is a canvas, and a click is
-//   the first jump or swing, which starts play.
-// - typing-test has no title screen: its first screen is the ready test, which is where a
-//   child idles, and its pause is the "click to continue" state after focus leaves.
+// - skybound-golf gets no click: its whole title is a canvas, and a click is the first
+//   swing, which starts play.
 // - connect-four and tic-tac-toe start on their two-choice mode menu (their title).
 // - maze-dash has no Pause button: Esc pauses it, as in runScenario.
 // - drift-king and candy-rope first run their scenario's beforePause step (a fresh run or
@@ -56,7 +54,7 @@ const SLOW_MS = 60000;
 // Output peaks above this (-60 dBFS) are heard; a sound faded out with setTargetAtTime is
 // far below it after TAIL_MS.
 const SILENT = 0.001;
-const CLICK_PLAYS = new Set(['dino-3d', 'skybound-golf']);
+const CLICK_PLAYS = new Set(['skybound-golf']);
 // Pages run side by side in one browser: each game spends most of its time waiting.
 const PAGES = Math.max(2, Math.min(4, os.availableParallelism()));
 const FIXTURE = '/zero-bgm-fixture';

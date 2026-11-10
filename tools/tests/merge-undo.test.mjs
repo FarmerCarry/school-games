@@ -256,15 +256,8 @@ for (const key of ['Space']) {
   });
 }
 
-test('Undo from the game-over screen reopens a statistics round, so the next full board is counted', async t => {
+test('Undo from the game-over screen returns to play, and the next full board ends the game again', async t => {
   const page = await gamePage(t, false);
-  await page.evaluate(() => {
-    window.statsLog = [];
-    for (const name of ['round', 'end']) {
-      const call = Kit.stats[name];
-      Kit.stats[name] = function () { window.statsLog.push(name); return call.apply(this, arguments); };
-    }
-  });
   await page.keyboard.press('Enter');
   await awaitScreen(page, 'play');
   await page.evaluate(() => {
@@ -286,5 +279,4 @@ test('Undo from the game-over screen reopens a statistics round, so the next ful
   assert.equal((await state(page)).screen, 'play');
   await page.evaluate(() => window.__game.forceOver());
   await awaitScreen(page, 'over');
-  assert.deepEqual(await page.evaluate(() => window.statsLog), ['round', 'end', 'round', 'end']);
 });

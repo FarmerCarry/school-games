@@ -1,1393 +1,911 @@
-/*
- * أصابع البرق (Lightning Fingers) — a Monkeytype-style typing test in English and Arabic.
- *
- * How it works (short version):
- *   - Input: one window keydown listener reads e.key. A key may insert several characters at once
- *     (the Arabic لا key: e.key "لا", or — as Chrome on Windows does — keydown "Unidentified" followed
- *     by two keypress events ل + ا, handled as ONE keystroke). No hidden <input> is needed.
- *   - Words: every word is a flex item; its letters are plain INLINE spans (so Arabic letters stay
- *     joined while each one gets its own colour). A keystroke only touches the affected span.
- *     Ligatures (one glyph for two letters, e.g. لا) are split with zero-width joiners whenever the
- *     two letters must look different (see "ligatures" below).
- *   - Caret: a separate absolutely-positioned bar inside #words, placed from ONE Range rect of the
- *     next letter per keystroke (RTL: right edge of the next letter; LTR: left edge).
- *   - Lines: #words is translated up one line at a time so the active word stays on line 2.
- *   - Stats: TTEngine (engine.js) uses Monkeytype's result rules. Challenge codes seed a PRNG.
- */
+/* أصابع البرق (Lightning Fingers): screens, typing, the coach hand, saves and sound.
+ * engine.js runs the clouds and the speed test; art.js draws them.
+ * This is the UI layer: it reads Kit.dda at every level start. */
 (function () {
   'use strict';
+  const TT = window.TT, A = TT.art, J = Kit.juice, W = TT.W, H = TT.H;
+  const $ = id => document.getElementById(id);
+  const canvas = $('game'), ui = $('ui');
+  const calm = () => Kit.motion.reduced();
+  let dirty = true;
+  const view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: v => {
+    ui.style.left = canvas.style.left; ui.style.top = canvas.style.top; ui.style.transform = 'scale(' + v.scale + ')';
+    A.reset(); dirty = true;
+  } });
+  const fx = Kit.particles(), shake = Kit.shake();
+  const pixelScale = () => Math.min(2, Math.max(0.5, Math.round(view.scale * view.dpr * 4) / 4));
 
-  var E = window.TTEngine;
-  var KB = window.TTKeyboard;
-  var store = Kit.store('typing-test');
-  var $ = function (id) { return document.getElementById(id); };
-  var body = document.body;
-
-  /* ------------------------------------------------------------ settings */
-  // First visit starts in Arabic like the rest of the site; a saved choice wins.
-  var S = (function () {
-    var d = { lang: 'ar', mode: 'time', amt: { time: 30, words: 25, sentences: 3 }, lenient: true, kbd: false, sound: false, theme: 'dark' };
-    var s = store.get('settings', null);
-    if (s && typeof s === 'object') {
-      if (s.lang === 'ar' || s.lang === 'en') d.lang = s.lang;
-      if (E.MODES.indexOf(s.mode) >= 0) d.mode = s.mode;
-      if (s.amt && typeof s.amt === 'object') E.MODES.forEach(function (m) { if (E.AMOUNTS[m].indexOf(s.amt[m]) >= 0) d.amt[m] = s.amt[m]; });
-      if (typeof s.lenient === 'boolean') d.lenient = s.lenient;
-      d.kbd = !!s.kbd;
-      d.sound = !!s.sound;
-      if (s.theme === 'light') d.theme = 'light';
-    }
-    return d;
-  })();
-  function saveSettings() { save('settings', S); }
-
-  // Writes that failed stay in `pending` (the game keeps using them) until a retry succeeds.
-  var pending = {}, saveUi = null;
-  function save(key, value) { pending[key] = value; flushSaves(); }
-  function flushSaves() {
-    for (var k in pending) if (store.set(k, pending[k])) delete pending[k];
-    if (Object.keys(pending).length) (saveUi || (saveUi = Kit.saveStatus({ retry: flushSaves }))).failed();
-    else if (saveUi) saveUi.saved();
-  }
-  function saved(key, fallback) { return key in pending ? pending[key] : store.get(key, fallback); }
-
-  /* ---------------------------------------------------------------- text */
-  // English is wrapped in a Unicode isolate so "English · 10 كلمات" keeps its order inside Arabic text.
-  var LANG_NAME = { en: '\u2066English\u2069', ar: 'العربية' };
-  function amtText(mode, amt) {
-    if (mode === 'time') return amt + ' ثانية';
-    if (mode === 'words') return amt + (amt <= 10 ? ' كلمات' : ' كلمة');
-    return amt + ' جمل';
-  }
-  var MODE_ICON = { time: '⏱️', words: '🔤', sentences: '📜' };
-  function typeText(o) { return LANG_NAME[o.lang] + ' · ' + MODE_ICON[o.mode] + ' ' + amtText(o.mode, o.amt); }
-  function lenText(l) { return l ? 'تساهل في الهمزات ✓' : 'بدون تساهل'; }
-  // Speed as an Arabic unit ("words per minute"), like km/h; 'wpm' stays only as a small tag on results.
-  var UNIT = 'كلمة/د';
-  function speedHtml(v) { return '<span dir="rtl">' + Math.round(v) + ' ' + UNIT + '</span>'; }
-  function lastResultsText(n) {
-    if (n === 1) return 'آخر نتيجة';
-    if (n === 2) return 'آخر نتيجتين';
-    if (n <= 10) return 'آخر ' + n + ' نتائج';
-    return 'آخر ' + n + ' نتيجة';
-  }
-
-  /* ------------------------------------------------------------- elements */
-  var testView = $('testView'), resView = $('resView');
-  var wordsEl = $('words'), clipEl = $('clip'), wordsBox = $('wordsBox');
-  var liveEl = $('live'), timerEl = $('timer'), liveWpmEl = $('liveWpm');
-  var kbdEl = $('kbd'), warnEl = $('warn'), capsEl = $('caps'), unfocusEl = $('unfocus'), hintEl = $('hint');
-  var caret = document.createElement('div');
-  caret.id = 'caret';
-  var rng = document.createRange();
-
-  /* ---------------------------------------------------------------- state */
-  var T = null;            // the current test
-  var screen = 'test';     // 'test' | 'results'
-  var modal = null;        // id of the open modal
-  var lastResult = null;
-  var finishedAt = 0;
-  var tickTimer = 0;
-  var lineH = 40, caretH = 30, caretW = 3;
-  var clockSkew = 0;       // test hook: typeText(str, ms) advances a virtual clock
-  var pausedAt = null;
-  function now() { return (pausedAt === null ? performance.now() : pausedAt) + clockSkew; }
-  function randomSeed() { return (Math.floor(Math.random() * 4294967296) >>> 0); } // seed choice only; generation is PRNG
-
-  /* ------------------------------------------------------- start a test */
-  // opts: { code } challenge | { repeat: true } same words | { seed } fixed seed | {} fresh words
-  function newTest(opts) {
-    opts = opts || {};
-    clearTimeout(tickTimer);
-    pausedAt = null;
-    setUnfocused(false);
-    var cfg;
-    if (opts.code) {
-      var c = E.parseCode(opts.code);
-      if (!c) return false;
-      cfg = { lang: c.lang, mode: c.mode, amt: c.amt, lenient: true, seed: c.seed, code: c.code, pick: c.pick };
-    } else if (opts.repeat && T) {
-      cfg = { lang: T.lang, mode: T.mode, amt: T.amt, lenient: T.lenient, seed: T.seed, code: T.code, pick: T.pick };
-    } else {
-      cfg = { lang: S.lang, mode: S.mode, amt: S.amt[S.mode], lenient: S.lenient, seed: opts.seed != null ? (opts.seed >>> 0) : randomSeed(), code: null, pick: null };
-    }
-    T = {
-      lang: cfg.lang, mode: cfg.mode, amt: cfg.amt, lenient: cfg.lenient, seed: cfg.seed, code: cfg.code, pick: cfg.pick,
-      gen: E.generator(cfg.lang, cfg.mode, cfg.amt, cfg.seed, cfg.pick),
-      words: [], els: [], hist: [], cur: 0, input: '',
-      phase: 'ready', start: 0, corr: 0, inc: 0, keys: [], errs: [], wpmHist: [], liveWpm: 0, scroll: 0
-    };
-    body.classList.remove('typing');
-    body.classList.toggle('challenge', !!T.code);
-    $('bar').title = T.code ? 'أنت في تحدي الصف: اخرج منه أولًا بزر ✕' : '';
-    if (T.lang !== 'en') capsEl.hidden = true; // Caps Lock only matters for English
-    hintEl.hidden = false;
-    hideWarn(true);
-    showScreen('test');
-    render();
-    updateBar();
-    updateLive();
-    updateChallengeTag();
-    updateFoot();
+  /* ---------------------------------------------------------------- save */
+  const store = Kit.store('typing-test');
+  const saveStatus = Kit.saveStatus({ retry: persist });
+  let save = TT.loadSave(store.get('save', null));
+  // The previous version kept only a language choice worth carrying over.
+  if (!save.lang) { const old = store.get('settings', null); if (old && (old.lang === 'ar' || old.lang === 'en')) save.lang = old.lang; }
+  function persist() {
+    if (store.set('save', save) === false) { saveStatus.failed(); return false; }
+    saveStatus.saved();
     return true;
   }
-  // Tab: a fresh test, or the same challenge again while in a class challenge.
-  function quickRestart() {
-    if (T && T.code) newTest({ repeat: true });
-    else newTest();
+  // One difficulty controller per language: a child's Arabic and English typing differ.
+  const dda = { ar: Kit.dda('typing-test', { id: 'ar' }), en: Kit.dda('typing-test', { id: 'en' }) };
+
+  /* --------------------------------------------------------------- state */
+  let screen = 'title', lang = save.lang || 'ar', world = null, cur = { w: 0, l: 0 }, time = 0;
+  let test = null, testCfg = null, testResult = null, pausedFrom = '', ending = null, result = null, resultT = 0, resultLock = 0;
+  let coaching = false, menuIdle = 0, menuNext = 5, unlockFx = null, flashT = 0, introT = 0, shownWpm = 0, phase = 0, slide = 0;
+  const coach = { idle: 0, next: 4 };
+  const ghost = { on: false, x: 0, y: 0, t: 0, taps: 2, el: null, dom: false };
+  const lit = {}; // code -> { kind: 'good' | 'bad', t }
+  let sparks = [], bolts = [], bows = [], puffs = [], floats = [], flowers = [], deco = [], lastMiss = -9, glowBoost = 0, comboBump = 0, sunBump = [0, 0, 0];
+  const PRAISE = ['رائع!', 'ممتاز!', 'مذهل!', 'خارق!'];
+
+  /* ------------------------------------------------------------ screens */
+  const SCREENS = { title: 'scrTitle', map: 'scrMap', pause: 'scrPause', result: 'scrResult', setup: 'scrSetup', tresult: 'scrTestResult', klass: 'scrClass' };
+  function setScreen(name) {
+    screen = name;
+    for (const k in SCREENS) $(SCREENS[k]).hidden = k !== name && !(name === 'klass' && k === 'title');
+    $('hud').hidden = name !== 'play' && name !== 'test';
+    stopGhost();
+    menuIdle = 0; menuNext = 5;
+    dirty = true;
+    if (name === 'play' || name === 'test') focusGame();
+  }
+  function focusGame() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  function say(text) { $('live').textContent = text; }
+  function starsText(n) { return n === 1 ? 'نجمة واحدة' : n === 2 ? 'نجمتان' : n + ' نجوم'; }
+  function setChip(id) { $(id).querySelector('b').textContent = String(TT.total(save)); }
+
+  function toTitle() {
+    world = null; test = null;
+    setScreen('title');
+    setChip('titleStars');
+    paintLangs();
+  }
+  function paintLangs() {
+    $('btnAr').classList.toggle('ring', lang === 'ar');
+    $('btnEn').classList.toggle('ring', lang === 'en');
+  }
+  function pickLang(l) {
+    lang = l;
+    if (save.lang !== l) { save.lang = l; persist(); }
+    J.select();
+    toMap(-1);
   }
 
-  function render() {
-    var ar = T.lang === 'ar';
-    testView.classList.toggle('ar', ar);
-    testView.classList.toggle('en', !ar);
-    wordsEl.setAttribute('dir', ar ? 'rtl' : 'ltr');
-    wordsEl.setAttribute('lang', T.lang);
-    liveEl.setAttribute('dir', ar ? 'rtl' : 'ltr');
-    wordsEl.classList.add('noanim');
-    wordsEl.textContent = '';
-    wordsEl.style.transform = 'translateY(0px)';
-    appendWords(T.gen.take(T.gen.finite ? 1000 : 100));
-    buildRace();
-    wordsEl.appendChild(caret);
-    caret.className = 'blink';
-    measure();
-    placeCaret();
-    void wordsEl.offsetWidth; // commit the jump before transitions come back
-    wordsEl.classList.remove('noanim');
-    if (S.kbd) { KB.build(kbdEl, T.lang); updateKbd(); }
+  /* ---------------------------------------------------------------- map */
+  const isles = [], pebbles = [];
+  function on(el, fn) {
+    // A mouse click hands the keyboard back to the game; a double click acts once.
+    el.addEventListener('click', e => { e.stopPropagation(); if (e.detail > 1) return; Kit.audio.unlock(); if (e.detail > 0) { el.blur(); focusGame(); } fn(e); });
   }
-  function appendWords(list) {
-    var frag = document.createDocumentFragment(), ar = T.lang === 'ar';
-    for (var i = 0; i < list.length; i++) {
-      var w = list[i], el = document.createElement('div');
-      el.className = 'w';
-      for (var j = 0; j < w.length; j++) {
-        var s = document.createElement('span');
-        s.ch = w[j];
-        s.textContent = w[j];
-        el.appendChild(s);
+  function buildMap() {
+    const box = $('worlds');
+    A.ISLES.forEach((p, w) => {
+      const isle = document.createElement('button');
+      isle.type = 'button'; isle.className = 'isle';
+      isle.style.left = p.x + 'px'; isle.style.top = p.y + 'px';
+      on(isle, () => openWorld(w));
+      box.appendChild(isle); isles.push(isle);
+      const row = [];
+      for (let l = 0; l < TT.LEVELS; l++) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'pebble';
+        b.dataset.w = String(w); b.dataset.l = String(l);
+        b.style.left = (p.x + [96, 32, -32, -96][l]) + 'px'; b.style.top = (p.y + 104) + 'px';
+        b.innerHTML = '<b>' + (l + 1) + '</b><span class="st" aria-hidden="true">' + '<svg><use href="#i-star"/></svg>'.repeat(3) + '</span>';
+        on(b, () => pickLevel(w, l, b));
+        box.appendChild(b); row.push(b);
       }
-      if (ar) for (var k = 0; k < w.length; k++) paintLetter(el, k);
-      T.words.push(w);
-      T.els.push(el);
-      frag.appendChild(el);
-    }
-    wordsEl.appendChild(frag);
-  }
-  function measure() {
-    var el = T && T.els[0];
-    if (!el) return;
-    lineH = el.offsetHeight || lineH;
-    caretH = caret.offsetHeight || caretH;
-    caretW = caret.offsetWidth || caretW;
-  }
-
-  /* ----------------------------------------------------------- ligatures */
-  // The font draws some Arabic letter pairs as ONE glyph: لا (ل + ا/أ/إ/آ) and, in this font, a final
-  // ي/ى/ئ after letters like ب ت ن ف ك (في, بني, على…). Such a glyph takes the colour of its first
-  // letter and the second letter's span gets a zero-width box, so a half-typed pair looked fully
-  // typed, a wrong second letter never turned red and the caret could not stand between the two.
-  // A zero-width joiner (ZWJ) on both sides of the span boundary keeps the letters joined but
-  // stops the ligature, and each letter then gets its own colour and its own box for the caret:
-  //   - لا keeps its ligature while both letters look the same (untyped, or both typed right/wrong,
-  //     like the brief allows) and is split while they differ, or when both are extra letters (so the
-  //     caret moves on every extra letter). Its width changes by ~1 px: the line never re-flows mid-word.
-  //   - every other joined pair is always split, so the optional ligatures (في, بي…) are simply
-  //     never used in the typing area; all other words render exactly as without the joiners.
-  // English has the same problem with Fredoka's fi/fl/ll/tt ligatures: style.css turns them off.
-  var ZWJ = '\u200D';
-  var AR_JOIN_NEXT = 'ئبتثجحخسشصضطظعغفقكلمنهىي';   // letters that connect to the following letter
-  var AR_JOIN_PREV = AR_JOIN_NEXT + 'آأؤإاةدذرزو';   // letters that connect to the letter before them
-  var ALEFS = 'اأإآ';
-  // Must spans i and i+1 of a word be drawn apart?
-  function splitAt(el, i) {
-    var ns = el.childNodes, a = ns[i], b = ns[i + 1];
-    if (!a || !b || AR_JOIN_NEXT.indexOf(a.ch) < 0 || AR_JOIN_PREV.indexOf(b.ch) < 0) return false;
-    if (a.ch === 'ل' && ALEFS.indexOf(b.ch) >= 0) return a.className !== b.className || a.className === 'x';
-    return true;
-  }
-  function paintLetter(el, i) {
-    var sp = el.childNodes[i];
-    if (!sp || sp.ch == null) return;
-    var t = (i > 0 && splitAt(el, i - 1) ? ZWJ : '') + sp.ch + (splitAt(el, i) ? ZWJ : '');
-    if (sp.textContent !== t) sp.textContent = t;
-  }
-  // After span i changed (its colour, or it was added/removed): at most 3 spans, usually no DOM write.
-  function syncLig(el, i) {
-    if (T.lang !== 'ar') return;
-    paintLetter(el, i - 1); paintLetter(el, i); paintLetter(el, i + 1);
-  }
-
-  /* ----------------------------------------------------------- the caret */
-  // One Range rect per call. Also scrolls lines so the active word stays on the 2nd line.
-  function placeCaret() {
-    var el = T.els[T.cur];
-    if (!el) return;
-    var n = el.childNodes.length, pos = T.input.length, rtl = T.lang === 'ar', r, x;
-    if (pos < n) {
-      rng.selectNodeContents(el.childNodes[pos]);
-      r = rng.getBoundingClientRect();
-      x = rtl ? r.right : r.left;
-    } else {
-      rng.selectNodeContents(el.childNodes[n - 1]);
-      r = rng.getBoundingClientRect();
-      x = rtl ? r.left : r.right;
-    }
-    var base = wordsEl.getBoundingClientRect();
-    var top = el.offsetTop;
-    if (top - T.scroll > lineH * 1.5) {
-      T.scroll = lineAbove(T.cur, top);
-      wordsEl.style.transform = 'translateY(' + (-T.scroll) + 'px)';
-    }
-    var cx = x - base.left - caretW / 2, cy = top + (lineH - caretH) / 2;
-    caret.style.transform = 'translate(' + cx.toFixed(1) + 'px,' + cy.toFixed(1) + 'px)';
-  }
-  // Top of the line just above word i (exact, from the words' own offsets; no rounding drift).
-  function lineAbove(i, top) {
-    for (var j = i - 1; j >= 0; j--) { var t = T.els[j].offsetTop; if (t < top - 1) return t; }
-    return Math.max(0, top - lineH);
-  }
-  // After a resize or the web font arriving: lines re-flow, so re-measure everything.
-  function relayout() {
-    if (screen === 'results' && lastResult) { drawChart(lastResult); }
-    drawSpark();
-    if (!T || screen !== 'test') return;
-    wordsEl.classList.add('noanim');
-    measure();
-    var el = T.els[T.cur], top = el ? el.offsetTop : 0;
-    T.scroll = top >= lineH * 0.5 ? lineAbove(T.cur, top) : 0;
-    wordsEl.style.transform = 'translateY(' + (-T.scroll) + 'px)';
-    placeCaret();
-    void wordsEl.offsetWidth;
-    wordsEl.classList.remove('noanim');
-  }
-
-  /* -------------------------------------------------------------- typing */
-  function secIndex(t) {
-    var s = Math.max(0, Math.floor((t - T.start) / 1000));
-    if (T.mode === 'time') s = Math.min(s, T.amt - 1);
-    return s;
-  }
-  // Typed with the other keyboard language? In an Arabic test the English layout gives Latin letters,
-  // and on the letter keys و ز ك ط ج د ذ ظ it gives , . ; ' [ ] ` / (only a slip if a letter is expected).
-  var AR_KEYS_ON_EN = ",.;'[]`/";
-  function wrongScript(c, expected) {
-    if (T.lang !== 'ar') return E.isArabicChar(c);
-    if (E.isLatinLetter(c)) return true;
-    return AR_KEYS_ON_EN.indexOf(c) >= 0 && !!expected && /[\u0621-\u064A]/.test(expected);
-  }
-
-  // k = the text of ONE keystroke (1 char, or 2 for the لا key). Returns true if anything was typed.
-  // quiet = no sound (the 2nd character of a key that arrived as two keypress events).
-  function typeKey(k, quiet) {
-    if (!T || T.phase === 'done' || screen !== 'test') return false;
-    k = E.cleanKey(k);
-    var expect = T.words[T.cur][T.input.length];
-    for (var i = 0; i < k.length; i++) if (wrongScript(k[i], i ? null : expect)) { langWarn(); return false; }
-    if (!warnEl.hidden) hideWarn();
-    var t = now();
-    if (T.phase === 'ready') startTest(t);
-    else if (T.mode === 'time' && t - T.start >= T.amt * 1000) { finish(); return false; }
-    var typed = false, wrong = false;
-    for (var j = 0; j < k.length && T.phase === 'running'; j++) {
-      var r = insertChar(k[j], t);
-      if (r !== 0) typed = true;
-      if (r < 0) wrong = true;
-    }
-    if (!typed) return false;
-    if (T.phase === 'running') { placeCaret(); updateKbd(); }
-    if (!quiet) sound(wrong ? 'err' : 'key');
-    return true;
-  }
-  // 1 = correct, -1 = wrong, 0 = ignored
-  function insertChar(c, t) {
-    var w = T.words[T.cur], pos = T.input.length;
-    if (pos >= w.length + E.MAX_EXTRA) return 0;
-    var ok = pos < w.length && E.charEq(c, w[pos], T.lenient);
-    T.input += c;
-    var sec = secIndex(t);
-    T.keys[sec] = (T.keys[sec] || 0) + 1;
-    if (ok) T.corr++;
-    else { T.inc++; T.errs[sec] = (T.errs[sec] || 0) + 1; }
-    var el = T.els[T.cur];
-    if (pos < w.length) el.childNodes[pos].className = ok ? 'c' : 'i';
-    else {
-      var s = document.createElement('span');
-      s.className = 'x';
-      s.ch = c;
-      s.textContent = c;
-      el.appendChild(s);
-    }
-    syncLig(el, pos);
-    // words / sentences: typing the last word exactly ends the test (no space needed)
-    if (T.gen.finite && T.cur === T.words.length - 1 && E.wordEq(T.input, w, T.lenient)) finish(t);
-    return ok ? 1 : -1;
-  }
-  function space() {
-    if (!T || T.phase !== 'running' || T.input === '') return 0; // like Monkeytype: no skipping empty words
-    var t = now();
-    if (T.mode === 'time' && t - T.start >= T.amt * 1000) { finish(); return 0; }
-    var w = T.words[T.cur], ok = E.wordEq(T.input, w, T.lenient);
-    var sec = secIndex(t);
-    T.keys[sec] = (T.keys[sec] || 0) + 1;
-    if (ok) T.corr++;
-    else { T.inc++; T.errs[sec] = (T.errs[sec] || 0) + 1; T.els[T.cur].classList.add('err'); }
-    T.hist[T.cur] = T.input;
-    if (T.gen.finite && T.cur === T.words.length - 1) { finish(t); return ok ? 1 : -1; }
-    T.cur++;
-    T.input = '';
-    if (!T.gen.finite && T.words.length - T.cur < 40) appendWords(T.gen.take(60));
-    placeCaret();
-    updateKbd();
-    updateLive();
-    return ok ? 1 : -1;
-  }
-  // Backspace edits the current word. At the start of a word it goes back into the previous word
-  // ONLY if that word has a mistake (Monkeytype rule). whole = Ctrl+Backspace (delete the word).
-  function backspace(whole) {
-    if (!T || T.phase !== 'running') return false;
-    // time is up but the 1 s timer has not fired yet: end the test, don't edit the result
-    if (T.mode === 'time' && now() - T.start >= T.amt * 1000) { finish(T.start + T.amt * 1000); return false; }
-    var el = T.els[T.cur], w = T.words[T.cur];
-    if (T.input.length === 0) {
-      if (T.cur === 0) return false;
-      var pi = T.cur - 1;
-      if (E.wordEq(T.hist[pi], T.words[pi], T.lenient)) return false;
-      if (T.els[pi].offsetTop < T.scroll - 1) return false; // that line already scrolled away
-      T.cur = pi;
-      T.input = T.hist[pi];
-      T.hist.length = pi;
-      el = T.els[pi];
-      w = T.words[pi];
-      el.classList.remove('err');
-      updateLive();
-      if (!whole) { placeCaret(); updateKbd(); return true; }
-    }
-    if (whole) {
-      for (var i = 0; i < Math.min(T.input.length, w.length); i++) el.childNodes[i].className = '';
-      while (el.childNodes.length > w.length) el.removeChild(el.lastChild);
-      if (T.lang === 'ar') for (var j = 0; j < w.length; j++) paintLetter(el, j);
-      T.input = '';
-    } else {
-      var p = T.input.length - 1;
-      if (p >= w.length) el.removeChild(el.lastChild);
-      else el.childNodes[p].className = '';
-      syncLig(el, p);
-      T.input = T.input.slice(0, -1);
-    }
-    placeCaret();
-    updateKbd();
-    return true;
-  }
-
-  /* --------------------------------------------------------------- timer */
-  function startTest(t) {
-    T.phase = 'running';
-    T.start = t;
-    // Play stats: one round per test, from the first key to finish(); a test left or replaced
-    // before that is a quit. The id is the test type only ('ar-time-30', 'en-words-25',
-    // 'ar-sent-5'); a class challenge is the plain 'code', never the code or anything typed.
-    var id = T.code ? 'code' : T.lang + '-' + T.mode.replace('ences', '') + '-' + T.amt;
-    Kit.stats.round(id);
-    caret.className = '';
-    body.classList.add('typing');
-    hintEl.hidden = true;
-    mouse.x = -1;
-    exitKbnav();
-    tickTimer = setTimeout(tick, 1000);
-    updateLive();
-  }
-  function currentHist() { var h = T.hist.slice(0, T.cur); h.push(T.input); return h; }
-  function tick() {
-    clearTimeout(tickTimer);
-    if (!T || T.phase !== 'running' || pausedAt !== null) return;
-    var el = (now() - T.start) / 1000;
-    var n = Math.floor(el + 1e-6);
-    var upto = T.mode === 'time' ? Math.min(n, T.amt) : n;
-    if (upto > T.wpmHist.length) {
-      var cc = E.countChars(currentHist(), T.words, T.mode, T.lenient);
-      for (var s = T.wpmHist.length + 1; s <= upto; s++) T.wpmHist[s - 1] = E.wpmRaw(cc, s).wpm;
-      T.liveWpm = T.wpmHist[upto - 1];
-    }
-    if (T.mode === 'time' && el >= T.amt - 1e-3) { finish(T.start + T.amt * 1000); return; }
-    updateLive();
-    tickTimer = setTimeout(tick, Math.max(4, T.start + (n + 1) * 1000 - now() + 1));
-  }
-  function updateLive() {
-    if (!T) return;
-    var running = T.phase === 'running';
-    var txt;
-    if (T.mode === 'time') {
-      var left = running ? Math.max(0, T.amt - Math.floor((now() - T.start) / 1000 + 1e-6)) : T.amt;
-      txt = String(left);
-    } else txt = T.cur + '/' + T.words.length;
-    timerEl.textContent = txt;
-    timerEl.className = running ? '' : 'dim';
-    liveWpmEl.textContent = running && T.wpmHist.length ? Math.round(T.liveWpm) + ' ' + UNIT : '';
-    updateRace();
-  }
-
-  /* ----------------------------------------------------------- race lane */
-  // A ⚡ races along the live row: its place is the live speed, so it passes the animal badges and
-  // the 🏁 of this test type's personal best. It moves once a second with the live wpm (a CSS
-  // transform transition glides between seconds), so there is still no animation loop.
-  var raceEl = $('race'), race = null;
-  var LEFT_FACING = '🐇🐎🐆'; // emoji animals drawn facing left (style.css .lf mirrors them in English)
-  var RIGHT_FACING = '🚀'; // and the rocket points right (.rf mirrors it in Arabic)
-  function buildRace() {
-    var pb = getPbs()[pbKey(T)], best = pb && pb.wpm > 0 ? pb.wpm : 0;
-    var max = Math.max(50, Math.ceil(best * 1.25 / 10) * 10), marks = [], html = '';
-    E.BADGES.forEach(function (b) { if (b.min) marks.push({ v: b.min, t: b.icon, n: b.name }); });
-    if (best) marks.push({ v: best, t: '🏁', n: 'رقمك القياسي: ' + Math.round(best) + ' ' + UNIT, pb: 1 });
-    marks.forEach(function (m) {
-      m.p = Math.min(1, m.v / max);
-      html += '<i class="ms' + (m.pb ? ' pbf' : LEFT_FACING.indexOf(m.t) >= 0 ? ' lf' : RIGHT_FACING.indexOf(m.t) >= 0 ? ' rf' : '') + '" title="' + m.n + '" style="--p:' + m.p.toFixed(3) + '">' + m.t + '</i>';
+      pebbles.push(row);
     });
-    raceEl.style.setProperty('--p', 0); // new elements start at 0, not gliding back from the last test
-    raceEl.innerHTML = '<b class="fill"></b>' + html + '<b class="run"><i>⚡</i></b>';
-    race = { max: max, marks: marks, els: raceEl.querySelectorAll('.ms'), p: 0 };
   }
-  function updateRace() {
-    if (!race) return;
-    var w = T.phase === 'running' ? T.liveWpm : 0, p = Math.min(1, w / race.max), p0 = race.p;
-    race.p = p;
-    raceEl.style.setProperty('--p', p.toFixed(3));
-    // A mark pops the first time it is passed (one ding when key sounds are on), but only once
-    // the speed has settled: live wpm jumps around in the first seconds. Lighting up, the pop and
-    // the ding wait until the ⚡ reaches the mark in its linear 0.9 s glide from p0 to p.
-    var ding = -1, settled = T.wpmHist.length >= 3, glide = p !== p0 && !Kit.motion.reduced();
-    for (var i = 0; i < race.marks.length; i++) {
-      var el = race.els[i], m = race.marks[i], on = w >= m.v, dl = 0;
-      if (on !== el.classList.contains('on')) {
-        if (glide) dl = Math.min(0.9, Math.max(0, 0.9 * (m.p - p0) / (p - p0)));
-        el.style.transitionDelay = dl.toFixed(2) + 's';
-        el.classList.toggle('on', on);
-      }
-      if (on && settled && !el.classList.contains('hit')) {
-        el.style.animationDelay = dl.toFixed(2) + 's';
-        el.classList.add('hit');
-        ding = ding < 0 ? dl : Math.min(ding, dl);
-      }
-    }
-    if (ding >= 0) sound('pass', ding);
-  }
-
-  /* -------------------------------------------------------------- finish */
-  function finish(tEnd) {
-    if (!T || T.phase !== 'running') return;
-    clearTimeout(tickTimer);
-    T.phase = 'done';
-    if (tEnd == null) tEnd = now();
-    var secs = T.mode === 'time' ? T.amt : (tEnd - T.start) / 1000;
-    var R = E.results({
-      hist: currentHist(), words: T.words, mode: T.mode, lenient: T.lenient, seconds: secs,
-      correctKeys: T.corr, incorrectKeys: T.inc, keys: T.keys, errs: T.errs, wpmHist: T.wpmHist
+  function refreshMap() {
+    const next = TT.nextLevel(save, lang);
+    pebbles.forEach((row, w) => {
+      const open = TT.worldOpen(save, lang, w);
+      isles[w].setAttribute('aria-label', 'العالم ' + (w + 1) + (open ? '' : ' (مقفل)'));
+      row.forEach((b, l) => {
+        const ok = TT.isOpen(save, lang, w, l), stars = save.stars[lang][w][l];
+        b.classList.toggle('locked', !ok);
+        b.classList.toggle('done', stars > 0);
+        b.classList.toggle('next', next.w === w && next.l === l);
+        b.querySelectorAll('.st svg').forEach((s, i) => s.classList.toggle('on', i < stars));
+        b.setAttribute('aria-label', 'المرحلة ' + (l + 1) + (ok ? (stars ? '، ' + starsText(stars) : '') : ' (مقفلة)'));
+      });
     });
-    R.lang = T.lang; R.mode = T.mode; R.amt = T.amt; R.lenient = T.lenient; R.code = T.code; R.seed = T.seed;
-    R.t = Date.now();
-    R.valid = R.acc >= 75 && R.wpm > 0;
-    Kit.stats.end('end', Math.round(R.wpm)); // play stats: score = speed (finish runs once per test)
-    record(R);
-    lastResult = R;
-    finishedAt = performance.now();
-    body.classList.remove('typing');
-    KB.show('', false);
-    showResults(R);
+    setChip('mapStars');
   }
-  function pbKey(o) { return o.lang + '|' + o.mode + '|' + o.amt + '|' + (o.lenient ? 'l' : 's'); }
-  // Only object entries are results: anything else in the saved maps or list is dropped.
-  function isObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
-  function getPbs() {
-    var p = saved('pbs', {});
-    if (!isObj(p)) return {};
-    Object.keys(p).forEach(function (k) { if (!isObj(p[k])) delete p[k]; });
-    return p;
+  function toMap(fresh) {
+    world = null; test = null;
+    refreshMap();
+    setScreen('map');
+    J.whoosh(0.4);
+    unlockFx = fresh >= 0 ? { w: fresh, t: 0 } : null;
+    if (unlockFx) {
+      J.levelUp();
+      const p = A.ISLES[fresh];
+      for (let i = 0; i < 4; i++) fx.burst(p.x, p.y - 30, { count: 22, colors: ['#ffd23f', '#ffffff', '#ff7eb6', '#4fd1ff'], speed: 340, life: 0.9, size: 8, gravity: 260 });
+    }
   }
-  function getHist() { var h = saved('hist', []); return Array.isArray(h) ? h.filter(isObj) : []; }
-  // Every finished test goes into the history (so beginners see their progress too); only results
-  // with at least 75% accuracy can be personal bests. Low-accuracy entries are flagged v:0.
-  // 'tier' = the best animal badge ever reached (index in E.BADGES), so moving up can be celebrated.
-  // Saves from before it existed get it from their personal bests, so nothing old is "new".
-  function record(R) {
-    var pbs = getPbs(), key = pbKey(R), old = pbs[key], tier = saved('tier', null);
-    if (typeof tier !== 'number') {
-      tier = -1;
-      for (var k in pbs) if (pbs[k] && typeof pbs[k].wpm === 'number') tier = Math.max(tier, E.badge(Math.round(pbs[k].wpm)).i);
-    }
-    var got = E.badge(Math.round(R.wpm)).i;
-    R.tierUp = R.valid && got > tier && got > 0 ? got : 0; // the starting 🐢 is not a promotion
-    if (R.tierUp) save('tier', got);
-    R.prevPb = old && typeof old.wpm === 'number' ? old.wpm : null;
-    R.isPb = false;
-    if (R.valid && (R.prevPb == null || R.wpm > R.prevPb)) {
-      pbs[key] = { wpm: R.wpm, acc: R.acc, raw: R.raw, cons: R.consistency, t: R.t };
-      save('pbs', pbs);
-      R.isPb = true;
-    }
-    var h = getHist();
-    var e = { t: R.t, lang: R.lang, mode: R.mode, amt: R.amt, len: R.lenient ? 1 : 0, wpm: R.wpm, raw: R.raw, acc: R.acc, cons: R.consistency };
-    if (!R.valid) e.v = 0;
-    if (R.code) e.code = R.code;
-    h.push(e);
-    while (h.length > 30) h.shift();
-    save('hist', h);
+  function wiggle(el) { el.classList.remove('wiggle'); void el.offsetWidth; el.classList.add('wiggle'); setTimeout(() => el.classList.remove('wiggle'), 500); }
+  function pickLevel(w, l, el) {
+    if (!TT.isOpen(save, lang, w, l)) { J.tap(); wiggle(el); return; }
+    J.select(); startLevel(w, l);
+  }
+  function openWorld(w) {
+    if (!TT.worldOpen(save, lang, w)) { J.tap(); wiggle(isles[w]); return; }
+    for (let l = 0; l < TT.LEVELS; l++) if (TT.isOpen(save, lang, w, l) && !save.stars[lang][w][l]) { J.select(); startLevel(w, l); return; }
+    J.select(); startLevel(w, 0);
+  }
+  function startNext() { const n = TT.nextLevel(save, lang); J.select(); startLevel(n.w, n.l); }
+
+  /* -------------------------------------------------------------- levels */
+  function clearFx() { fx.clear(); sparks = []; bolts = []; bows = []; puffs = []; floats = []; for (const k in lit) delete lit[k]; glowBoost = 0; }
+  function startLevel(w, l) {
+    // Difficulty is read at every level start.
+    const tier = dda[lang].tier;
+    const plan = TT.plan(lang, w, l, tier);
+    world = TT.create(plan, (Math.random() * 2147483647) | 0);
+    cur = { w: w, l: l };
+    test = null;
+    coaching = !save.coach;
+    ending = null; result = null;
+    clearFx(); clearGarden();
+    coach.idle = 0; coach.next = coaching ? 2.2 : 4;
+    shownWpm = 0; introT = 0;
+    setScreen('play');
+    Kit.keys.reset();
+    J.whoosh(0.5);
+  }
+  function restart() {
+    J.select();
+    if (pausedFrom === 'test' || screen === 'tresult') startTest(testCfg.code ? testCfg : Object.assign({}, testCfg, { seed: newSeed() }));
+    else startLevel(cur.w, cur.l);
+  }
+  function pause(own) {
+    if (screen !== 'play' && screen !== 'test') return;
+    pausedFrom = screen;
+    setScreen('pause');
+    if (own) J.back();
+    say('استراحة');
+  }
+  function resume() {
+    if (screen !== 'pause') return;
+    J.select();
+    setScreen(pausedFrom);
+    Kit.keys.reset();
+  }
+  function quit() {
+    J.back();
+    if (pausedFrom === 'test') { if (testCfg && testCfg.code) toTitle(); else openSetup(); } else toMap(-1);
   }
 
-  /* ------------------------------------------------------------- results */
-  function showScreen(s) {
-    screen = s;
-    body.classList.toggle('results', s === 'results');
-    testView.hidden = s !== 'test';
-    resView.hidden = s !== 'results';
-    // On results Tab moves between buttons (on purpose) and Enter or Esc starts the next test.
-    $('restartKey').textContent = s === 'results' ? 'Enter' : 'Tab';
-    $('escHint').hidden = s === 'results';
+  // A result is saved the moment the level ends, before the celebration.
+  function finishLevel() {
+    const r = TT.result(world), stars = TT.stars(r), prev = save.stars[lang][cur.w][cur.l];
+    const nextWorld = cur.w + 1 < TT.WORLDS && !TT.worldOpen(save, lang, cur.w + 1) ? cur.w + 1 : -1;
+    if (stars > prev) save.stars[lang][cur.w][cur.l] = stars;
+    persist();
+    dda[lang].result(TT.outcome(r));
+    result = { stars: stars, r: r, newWorld: nextWorld >= 0 && TT.worldOpen(save, lang, nextWorld) ? nextWorld : -1 };
+    ending = { t: r.won ? 1.6 : 1.4 };
+    if (r.won) {
+      J.chime(stars);
+      if (!calm()) for (let i = 0; i < 5; i++) fx.burst(160 + i * 240, 140, { count: 24, colors: ['#ff7eb6', '#ffd23f', '#4fd1ff', '#5be38f', '#ffffff'], speed: 380, life: 1.1, size: 9, gravity: 420 });
+      shake.add(5);
+    } else J.fail();
   }
-  function showResults(R) {
-    showScreen('results');
-    var wpmEl = $('rWpm'), accEl = $('rAcc');
-    wpmEl.textContent = Math.round(R.wpm);
-    wpmEl.title = R.wpm.toFixed(2) + ' كلمة في الدقيقة';
-    accEl.textContent = Math.floor(R.acc) + '%';
-    accEl.title = R.acc.toFixed(2) + '% — ' + R.correctKeys + ' ضغطة صحيحة و' + R.incorrectKeys + ' خاطئة';
-    [wpmEl, accEl].forEach(function (n) { n.classList.remove('pop'); void n.offsetWidth; n.classList.add('pop'); });
-    $('rType').innerHTML = typeText(R) + '<br><small style="color:var(--sub)">' + lenText(R.lenient) + '</small>';
-    $('rRaw').textContent = Math.round(R.raw);
-    $('rRaw').title = R.raw.toFixed(2);
-    var cs = $('rChars').querySelectorAll('b');
-    for (var ci = 0; ci < 4; ci++) cs[ci].textContent = R.chars[ci];
-    $('rCons').textContent = Math.round(R.consistency) + '%';
-    $('rCons').title = R.consistency.toFixed(2) + '%';
-    $('rTime').textContent = Math.round(R.seconds) + ' ث';
-    $('rTime').title = R.seconds.toFixed(2) + ' ثانية';
+  function showResult() {
+    ending = null; resultT = 0; resultLock = 0.8;
+    const r = result, won = r.r.won;
+    $('resStars').hidden = !won;
+    $('resRainy').hidden = won;
+    $('resStars').querySelectorAll('svg').forEach(s => s.classList.remove('on'));
+    $('resAcc').textContent = r.r.hits + r.r.errors ? Math.round(r.r.acc * 100) + '%' : '—';
+    A.animalCard($('resAnimal'), TT.animal(r.r.wpm));
+    $('resNext').setAttribute('aria-label', !won ? 'مرة أخرى' : cur.l < TT.LEVELS - 1 ? 'المرحلة التالية' : 'الخريطة');
+    $('resNext').querySelector('use').setAttribute('href', won ? '#i-play' : '#i-again');
+    $('resAgain').hidden = !won;
+    say(won ? starsText(r.stars) : 'حاول مرة أخرى');
+    setScreen('result');
+  }
+  function resultStep(dt) {
+    const r = result, before = resultT;
+    resultT += dt;
+    const at = t => before < t && resultT >= t;
+    if (r.r.won) {
+      for (let i = 0; i < r.stars; i++) if (at(0.3 + i * 0.38)) { $('resStars').children[i].classList.add('on'); J.star(i + 1); burstAt(560 + i * 80, 250, '#ffd23f'); }
+      if (at(0.5 + r.stars * 0.38) && r.newWorld >= 0) J.levelUp();
+    }
+  }
+  function next() {
+    if (!result) return;
+    J.select();
+    if (!result.r.won) startLevel(cur.w, cur.l);
+    else if (cur.l < TT.LEVELS - 1) startLevel(cur.w, cur.l + 1);
+    else toMap(result.newWorld);
+  }
+  function again() { J.select(); startLevel(cur.w, cur.l); }
 
-    var shown = Math.round(R.wpm), b = E.badge(shown);
-    var nextTxt = b.next ? 'باقي ' + speedHtml(b.next.min - shown) + ' لتصبح ' + b.next.icon + ' ' + b.next.name : 'أنت في القمة! 🌟';
-    $('rBadge').className = R.tierUp ? 'badge up' : 'badge';
-    $('rBadge').innerHTML = '<span class="be">' + b.cur.icon + '</span><div><b>' + (R.tierUp ? '🎉 أصبحت ' + b.cur.name + '!' : b.cur.name) +
-      '</b><small>' + nextTxt + '</small></div>';
-
-    var pb = $('rPb');
-    pb.className = 'pb';
-    if (!R.valid) {
-      pb.innerHTML = R.acc < 75 ?
-        '<span class="warn">⚠️ الدقة أقل من 75%، لذلك لا تُحسب رقمًا قياسيًا.<br>الدقة أولًا ثم السرعة!</span>' :
-        '<span class="warn">⚠️ لم تكتب أي كلمة صحيحة، لذلك لا تُحسب رقمًا قياسيًا.</span>';
-    } else if (R.isPb && R.prevPb != null) {
-      pb.className = 'pb new';
-      // equal after rounding? then show the decimals so the kid sees it really went up
-      var was = Math.round(R.prevPb) === shown ? R.prevPb.toFixed(2) + ' ← ' + R.wpm.toFixed(2) : Math.round(R.prevPb);
-      pb.innerHTML = '🎉 رقم قياسي جديد! <small dir="auto">&nbsp;(كان ' + was + ')</small>';
-    } else if (R.isPb) {
-      pb.innerHTML = '🎯 أول نتيجة لك في هذا النوع من الاختبارات.<br>حاول أن تتغلّب عليها!';
-    } else {
-      var gap = Math.round(R.prevPb) - shown;
-      pb.innerHTML = '🏅 رقمك القياسي هنا:&nbsp;<b style="color:var(--main)">' + speedHtml(R.prevPb) + '</b>' +
-        (gap > 0 ? '<br>باقي ' + gap + ' فقط لتتغلّب عليه!' : '<br>قريب جدًا من رقمك القياسي!');
-    }
-
-    $('rCode').hidden = !R.code;
-    $('rCodeNum').textContent = R.code || '';
-    $('bNextLbl').textContent = R.code ? '🔁 أعد التحدي' : 'اختبار جديد';
-    $('bRepeat').hidden = !!R.code;
-    $('bLeave').hidden = !R.code;
-    drawChart(R);
-    updateFoot();
-    // Key sounds are opt-in (like Monkeytype), but a new record or a new animal gets its short
-    // fanfare anyway: the mute button and the portal's classroom mode still silence it (A.muted).
-    var big = (R.isPb && R.prevPb != null) || R.tierUp;
-    if (big) { confetti(170); fanfare(); }
-    else {
-      if (R.isPb) confetti(60); // the first result of this test type: a smaller burst
-      if (S.sound) doneChime();
-    }
+  /* ------------------------------------------------------- the speed test */
+  const newSeed = () => (Math.random() * 2147483647) | 0;
+  function openSetup() {
+    test = null; world = null;
+    if (!save.tlang) save.tlang = lang;
+    paintSetup();
+    setScreen('setup');
   }
-
-  /* --------------------------------------------------------------- chart */
-  function remPx() { return parseFloat(getComputedStyle(document.documentElement).fontSize) || 16; }
-  function cssVar(n) { return getComputedStyle(body).getPropertyValue(n).trim(); }
-  function prepCanvas(cv) {
-    var w = cv.clientWidth, h = cv.clientHeight, dpr = Math.min(window.devicePixelRatio || 1, 2);
-    if (!w || !h) return null;
-    var W = Math.round(w * dpr), H = Math.round(h * dpr);
-    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
-    var ctx = cv.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    return { ctx: ctx, w: w, h: h };
+  function paintSetup() {
+    document.querySelectorAll('[data-tlang]').forEach(b => b.classList.toggle('on', b.dataset.tlang === save.tlang));
+    document.querySelectorAll('[data-tdur]').forEach(b => b.classList.toggle('on', +b.dataset.tdur === save.tdur));
+    const k = save.tlang + save.tdur;
+    $('setupBest').textContent = save.best[k] ? String(Math.round(save.best[k])) : '—';
+    A.chart($('setupChart'), save.tests.filter(t => t.k === k).map(t => t.w), save.best[k]);
   }
-  function niceMax(v) {
-    var steps = [20, 40, 60, 80, 100, 120, 160, 200, 240, 300, 400, 500, 600, 800]; // all divisible by 4
-    for (var i = 0; i < steps.length; i++) if (v <= steps[i]) return steps[i];
-    return Math.ceil(v / 200) * 200;
+  function startTest(cfg) {
+    testCfg = cfg;
+    test = TT.test(cfg);
+    world = null;
+    testResult = null; ending = null;
+    clearFx();
+    shownWpm = 0; slide = 0; coach.idle = 0; coach.next = 5;
+    setScreen('test');
+    Kit.keys.reset();
+    J.whoosh(0.5);
   }
-  function maxOf(a) { var m = 0; for (var i = 0; i < a.length; i++) if (a[i] > m) m = a[i]; return m; }
-  function drawChart(R) {
-    var c = prepCanvas($('chart'));
-    if (!c) return;
-    var ctx = c.ctx, rem = remPx(), ch = R.chart, n = ch.x.length;
-    var main = cssVar('--main'), sub = cssVar('--sub'), err = cssVar('--err'), line = cssVar('--line');
-    var maxY = niceMax(Math.max(10, maxOf(ch.wpm), maxOf(ch.raw)));
-    var maxE = Math.max(1, maxOf(ch.err));
-    var padL = 2.5 * rem, padR = 1.9 * rem, padT = 0.7 * rem, padB = 1.65 * rem;
-    var gw = c.w - padL - padR, gh = c.h - padT - padB;
-    var x0 = ch.x[0], x1 = ch.x[n - 1];
-    var X = function (x) { return n < 2 ? padL + gw / 2 : padL + (x - x0) / (x1 - x0) * gw; };
-    var Y = function (v) { return padT + gh - v / maxY * gh; };
-    var YE = function (v) { return padT + gh - v / maxE * gh; };
-    ctx.font = '500 ' + (0.85 * rem) + 'px Fredoka, sans-serif';
-    ctx.direction = 'ltr';
-    ctx.textBaseline = 'middle';
-    // grid + left axis (wpm)
-    ctx.lineWidth = 1;
-    for (var g = 0; g <= 4; g++) {
-      var gy = Math.round(Y(maxY * g / 4)) + 0.5;
-      ctx.strokeStyle = line;
-      ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + gw, gy); ctx.stroke();
-      ctx.fillStyle = sub; ctx.textAlign = 'right';
-      ctx.fillText(String(maxY * g / 4), padL - 0.4 * rem, gy);
-    }
-    // right axis (errors)
-    ctx.fillStyle = err; ctx.textAlign = 'left';
-    ctx.fillText(String(maxE), padL + gw + 0.4 * rem, YE(maxE));
-    ctx.fillText('0', padL + gw + 0.4 * rem, YE(0));
-    // x labels (seconds)
-    ctx.fillStyle = sub; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    var every = Math.max(1, Math.ceil(n / 10));
-    for (var i = 0; i < n; i++) {
-      if (i % every !== 0 && i !== n - 1) continue;
-      if (i !== n - 1 && n - 1 - i < every * 0.6) continue;
-      var lx = ch.x[i];
-      ctx.fillText(String(Math.round(lx * 10) / 10), X(lx), padT + gh + 0.35 * rem);
-    }
-    function path(vals) {
-      ctx.beginPath();
-      for (var k = 0; k < n; k++) { var px = X(ch.x[k]), py = Y(vals[k]); if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
-    }
-    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    // raw (burst per second)
-    path(ch.raw); ctx.strokeStyle = sub; ctx.lineWidth = 2; ctx.stroke();
-    // wpm with a soft fill
-    path(ch.wpm);
-    if (n > 1) {
-      ctx.lineTo(X(x1), Y(0)); ctx.lineTo(X(x0), Y(0)); ctx.closePath();
-      var grad = ctx.createLinearGradient(0, padT, 0, padT + gh);
-      grad.addColorStop(0, hexA(main, 0.28)); grad.addColorStop(1, hexA(main, 0));
-      ctx.fillStyle = grad; ctx.fill();
-      path(ch.wpm);
-    }
-    ctx.strokeStyle = main; ctx.lineWidth = 3; ctx.stroke();
-    for (var p = 0; p < n; p++) { ctx.fillStyle = main; ctx.beginPath(); ctx.arc(X(ch.x[p]), Y(ch.wpm[p]), n > 40 ? 1.5 : 2.5, 0, 6.2832); ctx.fill(); }
-    // errors: red dots on the right-hand scale (bigger dot = more mistakes in that second)
-    ctx.fillStyle = err;
-    for (var q = 0; q < n; q++) {
-      if (!ch.err[q]) continue;
-      var rr = (0.22 + 0.12 * Math.min(1, ch.err[q] / maxE)) * rem;
-      ctx.beginPath(); ctx.arc(X(ch.x[q]), YE(ch.err[q]), rr, 0, 6.2832); ctx.fill();
-    }
+  function finishTest() {
+    // An easy class challenge (short words) is not a speed record for the usual test.
+    const r = TT.testResult(test), isBest = test.kind === 'easy' ? false : TT.addTest(save, test.lang, test.dur, r, !!testCfg.challenge);
+    if (test.kind !== 'easy') persist();
+    testResult = { r: r, isBest: isBest, best: save.best[test.lang + test.dur] };
+    ending = { t: 0.9 };
+    J.chime(2);
+    if (!calm()) for (let i = 0; i < 4; i++) fx.burst(240 + i * 260, 160, { count: 20, colors: ['#ff7eb6', '#ffd23f', '#4fd1ff', '#5be38f', '#ffffff'], speed: 360, life: 1, size: 9, gravity: 420 });
   }
-  function hexA(hex, a) {
-    var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex);
-    if (!m) return 'rgba(255,196,0,' + a + ')';
-    return 'rgba(' + parseInt(m[1], 16) + ',' + parseInt(m[2], 16) + ',' + parseInt(m[3], 16) + ',' + a + ')';
+  function showTestResult() {
+    ending = null; resultT = 0; resultLock = 0.8;
+    const t = testResult, r = t.r, k = r.lang + r.dur;
+    $('trWpm').textContent = String(Math.round(r.wpm));
+    $('trAcc').textContent = Math.round(r.acc) + '%';
+    $('trBest').textContent = String(Math.round(t.best));
+    $('trNewBest').hidden = true;
+    $('trCode').hidden = !testCfg.code;
+    $('trCodeNum').textContent = testCfg.code || '';
+    A.animalCard($('trAnimal'), r.animal);
+    A.chart($('trChart'), save.tests.filter(x => x.k === k).map(x => x.w), save.best[k]);
+    say(Math.round(r.wpm) + ' كلمة في الدقيقة');
+    setScreen('tresult');
+  }
+  function testResultStep(dt) {
+    const before = resultT;
+    resultT += dt;
+    if (before < 0.35 && resultT >= 0.35) {
+      if (testResult.isBest) { $('trNewBest').hidden = false; J.star(3); burstAt(640, 360, '#ffd23f'); } else J.star(1);
+    }
   }
 
-  /* ---------------------------------------------------- progress (footer) */
-  function drawLine(cv, vals, opts) {
-    var c = prepCanvas(cv);
-    if (!c || !vals.length) return;
-    var ctx = c.ctx, main = cssVar('--main'), sub = cssVar('--sub'), rem = remPx();
-    var padL = opts.axis ? 2.5 * rem : 3, padR = 6, padT = 6, padB = opts.axis ? 1.2 * rem : 4;
-    var gw = c.w - padL - padR, gh = c.h - padT - padB;
-    var maxY = opts.axis ? niceMax(Math.max(10, maxOf(vals))) : Math.max(5, maxOf(vals)) * 1.1;
-    var X = function (i) { return vals.length < 2 ? padL + gw / 2 : padL + i / (vals.length - 1) * gw; };
-    var Y = function (v) { return padT + gh - v / maxY * gh; };
-    if (opts.axis) {
-      ctx.font = '500 ' + (0.85 * rem) + 'px Fredoka, sans-serif';
-      ctx.direction = 'ltr'; ctx.textBaseline = 'middle'; ctx.textAlign = 'right';
-      for (var g = 0; g <= 4; g++) {
-        var gy = Math.round(Y(maxY * g / 4)) + 0.5;
-        ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + gw, gy); ctx.stroke();
-        ctx.fillStyle = sub; ctx.fillText(String(maxY * g / 4), padL - 0.35 * rem, gy);
-      }
-    }
-    if (opts.pb != null) {
-      ctx.setLineDash([4, 4]); ctx.strokeStyle = sub; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(padL, Y(opts.pb)); ctx.lineTo(padL + gw, Y(opts.pb)); ctx.stroke();
-      ctx.setLineDash([]);
-    }
-    ctx.beginPath();
-    for (var i = 0; i < vals.length; i++) { if (i) ctx.lineTo(X(i), Y(vals[i])); else ctx.moveTo(X(i), Y(vals[i])); }
-    ctx.strokeStyle = main; ctx.lineWidth = opts.axis ? 3 : 2; ctx.lineJoin = 'round'; ctx.stroke();
-    // dots: low-accuracy results (opts.low[i]) are drawn hollow and grey
-    for (var j = 0; j < vals.length; j++) {
-      if (!opts.axis && j !== vals.length - 1) continue;
-      var low = opts.low && opts.low[j], rad = opts.axis ? 3.5 : 3;
-      ctx.beginPath(); ctx.arc(X(j), Y(vals[j]), rad, 0, 6.2832);
-      if (low) { ctx.fillStyle = cssVar('--bg2'); ctx.fill(); ctx.strokeStyle = sub; ctx.lineWidth = 2; ctx.stroke(); }
-      else { ctx.fillStyle = main; ctx.fill(); }
-    }
+  /* ---------------------------------------------------- class challenge */
+  let code = '', klassMode = 'enter';
+  function openClass() {
+    J.select();
+    code = ''; klassMode = 'enter';
+    paintClass();
+    setScreen('klass');
   }
-  function wpms(h) { return h.map(function (e) { return e.wpm; }); }
-  function lows(h) { return h.map(function (e) { return e.v === 0; }); }
-  function drawSpark() {
-    var h = getHist();
-    if (h.length) drawLine($('spark'), wpms(h), { low: lows(h) });
+  function paintClass() {
+    $('classEnter').hidden = klassMode !== 'enter';
+    $('classTeach').hidden = klassMode !== 'teach';
+    $('classShow').hidden = klassMode !== 'show';
+    const cells = $('codeDigits').children;
+    for (let i = 0; i < 4; i++) { cells[i].textContent = code[i] || ''; cells[i].classList.toggle('cur', i === code.length); }
+    $('codeGo').disabled = code.length !== 4;
+    $('codeGo').classList.toggle('ring', code.length === 4);
   }
-  function updateFoot() {
-    var h = getHist(), txt = $('progTxt'), spark = $('spark'), last = h[h.length - 1];
-    spark.style.display = h.length ? '' : 'none';
-    // A low-accuracy result keeps its note in the tooltip only: a longer line would reach the middle
-    // of the footer, under the save warning. Results explain it and the spark draws that dot hollow.
-    $('progMini').title = last && last.v === 0 ? 'تقدّمك · آخر نتيجة: الدقة ' + Math.floor(last.acc) + '%، أقل من 75%، لذلك لا تُحسب رقمًا قياسيًا' : 'تقدّمك';
-    if (!last) { txt.textContent = '📈 تقدّمك: لا نتائج بعد، ابدأ الكتابة!'; return; }
-    var pb = T ? getPbs()[pbKey(T)] : null;
-    txt.textContent = '📈 تقدّمك · آخر نتيجة ' + Math.round(last.wpm) + (pb ? ' · رقمك القياسي هنا ' + Math.round(pb.wpm) : '');
-    drawSpark();
+  function digit(d) {
+    if (klassMode !== 'enter' || code.length >= 4) return;
+    code += d; J.tap(); paintClass();
   }
+  function backDigit() { if (klassMode === 'enter' && code) { code = code.slice(0, -1); J.back(); paintClass(); } }
+  function goCode() {
+    const p = TT.parseCode(code);
+    if (!p) { J.error(); wiggle($('codeDigits')); code = ''; paintClass(); return; }
+    J.select();
+    startTest({ lang: p.lang, dur: p.dur, kind: p.kind, seed: p.seed, code: p.code, challenge: true });
+  }
+  // English sits in a direction isolate, so the line reads right to left: «English · 30 ثانية».
+  function presetText(p) { return (p.lang === 'ar' ? 'عربي' : '\u2068English\u2069') + (p.kind === 'easy' ? ' سهل' : '') + ' · ' + p.dur + ' ثانية'; }
+  function buildClass() {
+    const pad = $('codePad');
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].forEach(d => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = d; b.dataset.d = d;
+      on(b, () => digit(d)); pad.appendChild(b);
+    });
+    const del = document.createElement('button'); del.type = 'button'; del.setAttribute('aria-label', 'امسح');
+    del.innerHTML = '<svg aria-hidden="true"><use href="#i-del"/></svg>'; on(del, backDigit); pad.appendChild(del);
+    const box = $('presets');
+    Object.keys(TT.PRESETS).forEach(n => {
+      const p = TT.PRESETS[n], b = document.createElement('button');
+      b.type = 'button'; b.dataset.p = n; b.textContent = presetText(p);
+      on(b, () => showCode(+n)); box.appendChild(b);
+    });
+    on($('teacherBtn'), () => { J.select(); klassMode = 'teach'; paintClass(); });
+    on($('classClose'), closeClass);
+    on($('codeGo'), goCode);
+    on($('showBack'), () => { J.back(); klassMode = 'teach'; paintClass(); });
+    on($('showDice'), () => showCode(TT.parseCode($('showCode').textContent).preset));
+    on($('showPlay'), () => { code = $('showCode').textContent; goCode(); });
+  }
+  function showCode(preset) {
+    J.select();
+    const c = TT.makeCode(preset, Math.floor(Math.random() * 1000)), p = TT.parseCode(c);
+    $('showCode').textContent = c;
+    $('showDesc').textContent = presetText(p);
+    klassMode = 'show'; paintClass();
+  }
+  function closeClass() { J.back(); toTitle(); }
 
-  /* ------------------------------------------------------- settings bar */
-  function updateBar() {
-    var shown = T || { lang: S.lang, mode: S.mode, amt: S.amt[S.mode], lenient: S.lenient };
-    each('#gLang .opt', function (b) { b.classList.toggle('on', b.getAttribute('data-lang') === shown.lang); });
-    each('#gMode .opt', function (b) { b.classList.toggle('on', b.getAttribute('data-mode') === shown.mode); });
-    var g = $('gAmt');
-    if (g.getAttribute('data-mode') !== shown.mode) {
-      g.setAttribute('data-mode', shown.mode);
-      g.innerHTML = E.AMOUNTS[shown.mode].map(function (a) { return '<button type="button" class="opt" data-amt="' + a + '">' + a + '</button>'; }).join('');
-    }
-    each('#gAmt .opt', function (b) { b.classList.toggle('on', +b.getAttribute('data-amt') === shown.amt); });
-    $('bLenient').classList.toggle('on', !!shown.lenient);
-    $('bKbd').classList.toggle('on', S.kbd);
-    $('bKbd').setAttribute('aria-pressed', String(S.kbd));
-    $('bSound').classList.toggle('on', S.sound);
-    $('bSound').title = S.sound ? 'أصوات المفاتيح: تعمل (اضغط لإيقافها)' : 'أصوات المفاتيح: متوقفة (اضغط لتشغيلها)';
-    $('bSoundLbl').textContent = S.sound ? 'أصوات المفاتيح ✓' : 'أصوات المفاتيح';
-    $('bSound').setAttribute('aria-pressed', String(S.sound));
-    $('bTheme').textContent = S.theme === 'dark' ? '🌙' : '☀️';
-  }
-  function each(sel, fn) { var l = document.querySelectorAll(sel); for (var i = 0; i < l.length; i++) fn(l[i]); }
-  // During a class challenge the settings bar is locked: a click explains how to leave the challenge
-  // (the ✕ on the challenge chip) instead of silently dropping the code and changing the settings.
-  function barLocked() {
-    if (!T || !T.code) return false;
-    showBanner('🏆 أنت في تحدي الصف! لتغيير الإعدادات اخرج منه أولًا بزر ✕');
-    var c = $('chTag'); c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake');
-    return true;
-  }
-  function updateChallengeTag() {
-    var on = !!(T && T.code);
-    $('chTag').hidden = !on;
-    $('tabHint').textContent = on ? 'أعد التحدي' : 'اختبار جديد';
-    if (on) { $('chCode').textContent = T.code; $('chDesc').textContent = typeText(T); }
-  }
-  function applyTheme() {
-    body.classList.toggle('t-dark', S.theme === 'dark');
-    body.classList.toggle('t-light', S.theme !== 'dark');
-  }
-  function setKbd(on) {
-    S.kbd = on;
-    kbdEl.hidden = !on;
-    if (on && T) { KB.build(kbdEl, T.lang); updateKbd(); }
-    relayout();
-  }
-  function updateKbd() {
-    if (!S.kbd || !T) return;
-    if (T.phase === 'done') { KB.show('', false); return; }
-    var w = T.words[T.cur], inp = T.input, bad = inp.length > w.length;
-    for (var i = 0; !bad && i < inp.length; i++) if (!E.charEq(inp[i], w[i], T.lenient)) bad = true;
-    var next = bad ? '' : (inp.length < w.length ? w.slice(inp.length) : (T.gen.finite && T.cur === T.words.length - 1 ? '' : ' '));
-    KB.show(next, bad);
-  }
+  /* --------------------------------------------------------------- input */
+  on($('btnAr'), () => pickLang('ar'));
+  on($('btnEn'), () => pickLang('en'));
+  on($('btnTest'), () => { J.select(); openSetup(); });
+  on($('btnClass'), openClass);
+  on($('mapHome'), () => { J.back(); toTitle(); });
+  on($('btnPause'), () => pause(true));
+  on($('btnResume'), resume);
+  on($('btnRestart'), restart);
+  on($('btnMap'), quit);
+  on($('resNext'), () => { if (resultLock <= 0) next(); });
+  on($('resAgain'), () => { if (resultLock <= 0) again(); });
+  on($('resMap'), () => { if (resultLock <= 0) { J.back(); toMap(result && result.r.won && cur.l === TT.LEVELS - 1 ? result.newWorld : -1); } });
+  on($('setupHome'), () => { J.back(); toTitle(); });
+  on($('btnGo'), () => { J.select(); startTest({ lang: save.tlang, dur: save.tdur, kind: 'test', seed: newSeed() }); });
+  document.querySelectorAll('[data-tlang]').forEach(b => on(b, () => { J.toggle(true); save.tlang = b.dataset.tlang; persist(); paintSetup(); }));
+  document.querySelectorAll('[data-tdur]').forEach(b => on(b, () => { J.toggle(true); save.tdur = +b.dataset.tdur; persist(); paintSetup(); }));
+  on($('trAgain'), () => { if (resultLock <= 0) restart(); });
+  on($('trHome'), () => { if (resultLock <= 0) { J.back(); toTitle(); } });
 
-  /* --------------------------------------------------- language warning */
-  var warnTimer = 0;
-  function langWarn() {
-    var keys = '<span dir="ltr"><span class="sg-key">Alt</span> + <span class="sg-key">Shift</span></span>';
-    showBanner('⌨️ ' + (T.lang === 'ar' ? 'لوحة المفاتيح بالإنجليزية!' : 'لوحة المفاتيح بالعربية!') + ' اضغط ' + keys + ' للتبديل');
-    if (S.sound) sound('err');
-  }
-  // The banner sits on the live row: while it shows, body.warnOn hides the start hint under it
-  // (a longer banner, e.g. the challenge lock, would otherwise cover part of the hint).
-  function showBanner(html) {
-    body.classList.add('warnOn');
-    if (warnEl.hidden) { warnEl.innerHTML = html; warnEl.hidden = false; warnEl.classList.remove('again'); }
-    else { warnEl.innerHTML = html; warnEl.classList.remove('again'); void warnEl.offsetWidth; warnEl.classList.add('again'); }
-    clearTimeout(warnTimer);
-    warnTimer = setTimeout(hideWarn, 3500);
-  }
-  function hideWarn() { clearTimeout(warnTimer); warnEl.hidden = true; body.classList.remove('warnOn'); }
-
-  /* --------------------------------------------------------------- focus */
-  function setUnfocused(on) {
-    if (on && T && T.phase === 'running' && pausedAt === null) {
-      pausedAt = performance.now(); clearTimeout(tickTimer);
-    } else if (!on && pausedAt !== null) {
-      if (T && T.phase === 'running') T.start += performance.now() - pausedAt;
-      pausedAt = null;
-      if (T && T.phase === 'running') tick();
-    }
-    unfocusEl.hidden = !on;
-    wordsBox.classList.toggle('blurred', on);
-    if (on) body.classList.remove('typing');
-  }
-  unfocusEl.addEventListener('pointerdown', function () { setUnfocused(false); });
-  unfocusEl.setAttribute('role', 'button'); unfocusEl.tabIndex = 0;
-  unfocusEl.addEventListener('keydown', function (e) {
-    if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); setUnfocused(false); unfocusEl.blur(); }
+  canvas.addEventListener('pointerdown', () => { focusGame(); menuIdle = 0; });
+  window.addEventListener('pointermove', () => { menuIdle = 0; });
+  // Typing goes straight to the engine on keydown (a slow frame never drops a letter).
+  // Esc pauses (in update); P is a letter here, so it never pauses.
+  window.addEventListener('keydown', e => {
+    if (screen === 'klass' && klassKey(e)) return;
+    if (!Kit.isGameKeyEvent(e)) return;
+    menuIdle = 0;
+    if (screen !== 'play' && screen !== 'test') return;
+    if (e.repeat || e.code === 'Escape') return;
+    const ev = { key: e.key, code: e.code, shift: e.shiftKey };
+    if (!TT.printable(ev)) return;
+    e.preventDefault(); // ' and / open a quick-find bar in some browsers
+    if (screen === 'play' && world && !ending) typeLevel(ev);
+    else if (screen === 'test' && test && !test.over) typeTest(ev);
   });
-
-  /* ------------------------------------------ keyboard navigation (Esc) */
-  var kbnav = false;
-  function navButtons() {
-    var l = [].slice.call(document.querySelectorAll('#top button, #bar button')).filter(function (b) { return b.offsetParent; });
-    return l.map(function (b) { var r = b.getBoundingClientRect(); return { b: b, row: Math.round(r.top / 20), x: r.left, cx: r.left + r.width / 2 }; })
-      .sort(function (a, b) { return a.row - b.row || a.x - b.x; });
-  }
-  function enterKbnav() {
-    kbnav = true;
-    body.classList.add('kbnav');
-    var b = document.querySelector('#bar .opt.on') || document.querySelector('#bar .opt');
-    if (b) b.focus();
-  }
-  function exitKbnav() {
-    if (!kbnav) return;
-    kbnav = false;
-    body.classList.remove('kbnav');
-    var a = document.activeElement;
-    if (a && a.blur && a !== body) a.blur();
-  }
-  function navKey(e) {
-    var k = e.key;
-    if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') {
-      e.preventDefault();
-      var l = navButtons(), a = document.activeElement, i = -1;
-      for (var j = 0; j < l.length; j++) if (l[j].b === a) i = j;
-      if (i < 0) { if (l[0]) l[0].b.focus(); return true; }
-      var t = null;
-      if (k === 'ArrowLeft') t = l[(i - 1 + l.length) % l.length];
-      else if (k === 'ArrowRight') t = l[(i + 1) % l.length];
-      else {
-        var row = l[i].row, best = null, bd = 1e9;
-        var rows = l.map(function (o) { return o.row; }).filter(function (r, x, arr) { return arr.indexOf(r) === x; });
-        var ri = rows.indexOf(row) + (k === 'ArrowDown' ? 1 : -1);
-        if (ri >= 0 && ri < rows.length) l.forEach(function (o) { if (o.row === rows[ri] && Math.abs(o.cx - l[i].cx) < bd) { bd = Math.abs(o.cx - l[i].cx); best = o; } });
-        t = best;
-      }
-      if (t) t.b.focus();
-      return true;
-    }
-    if (k === 'Enter' || k === ' ') {
-      e.preventDefault();
-      var f = document.activeElement;
-      if (f && f.tagName === 'BUTTON') {
-        var sel = f.id ? '#' + f.id : null, attr = ['data-lang', 'data-mode', 'data-amt'].filter(function (x) { return f.hasAttribute(x); })[0];
-        var val = attr ? f.getAttribute(attr) : null;
-        f.click();
-        // the click may rebuild buttons: put the focus back on the same choice
-        var again = sel ? document.querySelector(sel) : document.querySelector('[' + attr + '="' + val + '"]');
-        if (again && kbnav) again.focus();
-      }
-      return true;
-    }
+  // The class challenge dialog takes digits (also Arabic-Indic ones), Backspace and Enter.
+  function klassKey(e) {
+    if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return false;
+    if (e.code === 'Escape') { e.preventDefault(); if (klassMode === 'enter') closeClass(); else { J.back(); klassMode = klassMode === 'show' ? 'teach' : 'enter'; paintClass(); } return true; }
+    if (klassMode !== 'enter') return false;
+    const d = /^[0-9]$/.test(e.key) ? e.key : /^[٠-٩]$/.test(e.key) ? String(e.key.charCodeAt(0) - 0x660) : /^(Digit|Numpad)[0-9]$/.test(e.code) ? e.code.slice(-1) : '';
+    if (d) { e.preventDefault(); digit(d); return true; }
+    if (e.code === 'Backspace') { e.preventDefault(); backDigit(); return true; }
+    if ((e.code === 'Enter' || e.code === 'NumpadEnter') && !Kit.keys.isNativeTarget(e.target)) { e.preventDefault(); if (code.length === 4) goCode(); return true; }
     return false;
   }
+  function handleKeys() {
+    const K = Kit.keys, go = K.anyPressed(['Enter', 'NumpadEnter', 'Space']);
+    if (screen === 'title') { if (go) pickLang(lang); }
+    else if (screen === 'map') { if (go) startNext(); else if (K.pressed('Escape')) { J.back(); toTitle(); } }
+    else if (screen === 'play' || screen === 'test') { if (K.pressed('Escape')) pause(true); }
+    else if (screen === 'pause') { if (K.anyPressed(['Escape', 'Enter', 'NumpadEnter', 'Space'])) resume(); }
+    else if (screen === 'result' && resultLock <= 0) {
+      if (go) next(); else if (K.pressed('KeyR')) (result.r.won ? again() : next());
+      else if (K.pressed('Escape')) { J.back(); toMap(-1); }
+    } else if (screen === 'setup') {
+      if (go) { J.select(); startTest({ lang: save.tlang, dur: save.tdur, kind: 'test', seed: newSeed() }); }
+      else if (K.pressed('Escape')) { J.back(); toTitle(); }
+    } else if (screen === 'tresult' && resultLock <= 0) {
+      if (go || K.pressed('KeyR')) restart();
+      else if (K.pressed('Escape')) { J.back(); toTitle(); }
+    }
+  }
 
-  /* ----------------------------------------------------------- keyboard */
-  var mouse = { x: -1, y: -1 };
-  // One physical keystroke. On Windows the Arabic لا key arrives as keydown "Unidentified" followed by
-  // TWO keypress events (ل then ا); both belong to this stroke (one sound, same rules as the keydown).
-  var stroke = { swallow: false, sounded: false, lamAlef: false };
-  // Arabic (101) keys that type ل + an alef in one stroke: physical key (+ Shift) -> text.
-  var LAM_ALEF_KEY = { KeyB: 'لا', ShiftKeyB: 'لآ', ShiftKeyG: 'لأ', ShiftKeyT: 'لإ' };
-  function isText(k) {
-    if (k.length === 1) return k.charCodeAt(0) >= 32;
-    return k.length <= 4 && /^[؀-ۿﭐ-ﻼ]+$/.test(k);
+  /* ------------------------------------------------------------- typing */
+  function keyTop(code) { const k = TT.KEYS[code]; return k ? { x: k.x + k.w / 2, y: k.y + 4 } : { x: W / 2, y: TT.KB.y }; }
+  function flashKey(code, kind) { if (TT.KEYS[code]) lit[code] = { kind: kind, t: kind === 'bad' ? 0.35 : 0.2 }; }
+  function typeLevel(ev) {
+    const n = TT.key(world, ev);
+    if (n === 0) return;
+    coach.idle = 0; stopGhost();
+    flashKey(ev.code, n > 0 ? 'good' : 'bad');
+    handleEvents(ev);
   }
-  function onControl(target) {
-    return Kit.keys.isNativeTarget(target);
+  function typeTest(ev) {
+    const n = TT.testKey(test, ev);
+    if (n === 0) return;
+    coach.idle = 0; stopGhost();
+    flashKey(ev.code, n > 0 ? 'good' : 'bad');
+    for (const e of test.ev) {
+      if (e.t === 'key') { J.tap(); if (e.combo > 0 && e.combo % 25 === 0) praise(e.combo / 25 - 1, 640, 330); }
+      else if (e.t === 'word') { J.pop(0.4); slide += 1; }
+      else if (e.t === 'miss') miss(640, 230);
+    }
+    test.ev.length = 0;
   }
-  // Caps Lock warning (English tests only): follows the real state on every key, Caps Lock included.
-  function updateCaps(e) {
-    if (!T || T.lang !== 'en' || screen !== 'test' || !e.getModifierState) return;
-    var on = e.getModifierState('CapsLock');
-    if (capsEl.hidden === on) capsEl.hidden = !on;
+  function miss(x, y) {
+    glowBoost = 1;
+    if (time - lastMiss > 0.3) J.error();
+    lastMiss = time;
+    if (!calm()) fx.burst(x, y, { count: 6, colors: ['#ffffff', '#c9cfe6'], speed: 140, life: 0.35, size: 6, gravity: 200 });
   }
-  window.addEventListener('keyup', updateCaps, true);
-  Kit.keys.captureTab(function () { return !modal && !kbnav && screen === 'test'; });
-  function onKey(e) {
-    var k = e.key;
-    if (k == null) return;
-    if (Kit.keys.isNativeTarget(e.target)) {
-      if (k === 'Escape' && modal) { modalKey(e); return; }
-      if (k !== 'Escape' || !Kit.keys.acceptsEvent(e)) {
-        if (kbnav) navKey(e);
-        return;
-      }
-    }
-    if (k === 'Tab' && !Kit.keys.acceptsEvent(e)) return;
-    stroke = { swallow: true, sounded: false, lamAlef: false };
-    Kit.audio.unlock();
-    updateCaps(e);
-    if (modal) { modalKey(e); return; }
-    if (e.isComposing || k === 'Process' || k === 'Dead') return;
-    // Only the typing surface owns the restart shortcut. Shift+Tab and Tab
-    // on menus/results retain normal browser focus traversal, including out
-    // of the iframe. Esc also exposes the settings navigation below.
-    if (k === 'Tab') {
-      if (screen === 'test' && !kbnav && !onControl(e.target) &&
-          !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        if (!e.repeat) quickRestart();
-      }
-      return;
-    }
-    if (!unfocusEl.hidden) {
-      if (k === 'Enter' || k === ' ') setUnfocused(false);
-      if (isText(k) || k === 'Backspace' || k === 'Enter') e.preventDefault();
-      return;
-    }
-    if (screen === 'results') {
-      if (k === 'Enter') {
-        e.preventDefault();
-        if (!e.repeat && performance.now() - finishedAt > 300) quickRestart();
-      } else if (k === 'Escape') { e.preventDefault(); quickRestart(); }
-      else if (isText(k) || k === 'Backspace') e.preventDefault();
-      return;
-    }
-    if (k === 'Escape') {
-      e.preventDefault();
-      if (T.phase === 'running') newTest({ repeat: true }); // abandon: same words, settings bar back
-      else if (kbnav) exitKbnav();
-      else enterKbnav();
-      return;
-    }
-    if (kbnav && navKey(e)) return;
-    if (k === 'Backspace') {
-      e.preventDefault();
-      if (backspace(e.ctrlKey || e.altKey || e.metaKey)) sound('back');
-      return;
-    }
-    if ((e.ctrlKey && !e.altKey) || e.metaKey) return;   // browser shortcuts (Ctrl+R, Ctrl+Shift+I …)
-    if (e.altKey && !e.ctrlKey) return;                   // Alt / Alt+Shift (switching keyboard language)
-    if (k === ' ' || k === 'Spacebar') {
-      e.preventDefault();
-      exitKbnav();
-      var r = space();
-      if (r) sound(r > 0 ? 'space' : 'err');
-      return;
-    }
-    if (k === 'Enter') { e.preventDefault(); return; }
-    if (k === 'Unidentified' || k === '') { stroke.swallow = false; return; } // text follows as keypress
-    if (!isText(k)) return;
-    e.preventDefault();
-    exitKbnav();
-    typeKey(k);
+  function praise(i, x, y) {
+    float(x, y, PRAISE[Math.max(0, Math.min(3, i))], '#ffd23f', 64);
+    J.chime(1);
+    if (!calm()) fx.burst(x, y, { count: 28, colors: A.RAINBOW, speed: 380, life: 0.9, size: 8, gravity: 300 });
   }
-  window.addEventListener('keydown', onKey, true);
-  // Fallback for keys whose keydown had no usable e.key (see "stroke" above).
-  window.addEventListener('keypress', function (e) {
-    if (e.defaultPrevented) return;
-    if (onControl(e.target)) return;
-    var k = e.key, lamAlef = false;
-    if (!k || !isText(k)) {
-      k = e.charCode >= 32 ? String.fromCharCode(e.charCode) : '';
-      // Some systems deliver the whole لا key as ONE keypress: its key is '' and charCode holds only
-      // the ل. Work out which alef from the physical key (Windows "Arabic (101)"). An unknown key
-      // keeps the old behaviour (just the ل), so a system that sends the alef separately still works.
-      var guess = k === 'ل' && e.key === '' && !stroke.sounded ? LAM_ALEF_KEY[(e.shiftKey ? 'Shift' : '') + e.code] : null;
-      if (guess) { k = guess; lamAlef = true; }
+  function float(x, y, text, color, size) {
+    floats.push({ x: x, y: y, text: text, color: color, size: size || 34, t: 0 });
+    if (floats.length > 14) floats.shift();
+  }
+  function burstAt(x, y, color) { fx.burst(x, y, { count: 16, colors: [color, '#ffffff', '#ffd23f'], speed: 300, life: 0.6, size: 8, gravity: 300 }); }
+  function handleEvents(ev) {
+    for (const e of world.ev) {
+      if (e.t === 'spawn') { /* clouds slide in quietly */ }
+      else if (e.t === 'key') {
+        J.tap();
+        const c = TT.find(world, e.id), from = keyTop(ev ? ev.code : 'Space');
+        if (c) sparks.push({ x1: from.x, y1: from.y, x2: c.letterX || c.x, y2: c.letterY || c.y, t: 0 });
+        if (sparks.length > 12) sparks.shift();
+        if (e.combo >= 3) comboBump = 1;
+        if (e.combo > 0 && e.combo % 15 === 0) praise(e.combo / 15 - 1, W / 2, 210);
+      } else if (e.t === 'zap') zap(e, ev);
+      else if (e.t === 'miss') miss(e.x, e.y);
+      else if (e.t === 'rain') {
+        J.land(0.4); shake.add(4);
+        sunBump[Math.max(0, Math.min(2, e.suns))] = 1;
+        float(e.x, e.y + 70, '☂', '#4fd1ff', 40);
+      } else if (e.t === 'done' || e.t === 'lose') finishLevel();
     }
-    if (!k || k === ' ' || !isText(k)) return;
-    if ((e.ctrlKey && !e.altKey) || e.metaKey || (e.altKey && !e.ctrlKey)) return;
-    e.preventDefault();
-    if (stroke.swallow || modal || screen !== 'test' || !unfocusEl.hidden) return;
-    // …and if that system then sends the alef as a keypress of its own, it is already typed
-    if (stroke.lamAlef && ALEFS.indexOf(k) >= 0) { stroke.lamAlef = false; return; }
-    stroke.lamAlef = lamAlef;
-    exitKbnav();
-    typeKey(k, stroke.sounded);
-    stroke.sounded = true;
-  }, true);
+    world.ev.length = 0;
+  }
+  function zap(e, ev) {
+    const from = keyTop(ev ? ev.code : 'Space'), c = TT.find(world, e.id);
+    bolts.push({ x1: from.x, y1: from.y, x2: e.x, y2: e.y + 28, t: 0, seed: 1 + ((time * 1000) | 0) % 997 });
+    bows.push({ x: e.x, y: e.y + 46, r: Math.max(60, (c ? c.w : 150) * 0.42), t: 0 });
+    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; puffs.push({ x: e.x, y: e.y, vx: Math.cos(a) * 160, vy: Math.sin(a) * 90, r: 22, t: 0 }); }
+    if (puffs.length > 48) puffs.splice(0, puffs.length - 48);
+    if (bolts.length > 4) bolts.shift();
+    if (bows.length > 4) bows.shift();
+    fx.burst(e.x, e.y + 30, { count: 14, colors: ['#6fd0ff', '#bfefff', '#ffffff'], speed: 140, life: 0.8, size: 6, gravity: 900, angle: Math.PI / 2, spread: 1.6 });
+    fx.burst(e.x, e.y, { count: 18, colors: ['#ffd23f', '#ffffff', '#ff7eb6', '#4fd1ff'], speed: 320, life: 0.7, size: 7, gravity: 160 });
+    float(e.x, e.y - 50, '+1', '#ffffff', 40);
+    J.impact(0.35); J.pop(0.6);
+    if (e.combo >= 3) J.streak(Math.min(13, Math.floor(e.combo / 3)));
+    shake.add(3);
+    if (!calm()) flashT = 0.16;
+    // a flower grows in the garden for every cloud
+    const side = flowers.length % 2, fxr = side ? 1040 + Math.random() * 216 : 24 + Math.random() * 212;
+    if (flowers.length < 60) flowers.push({ x: fxr, y: 480 + Math.random() * 220, kind: (Math.random() * 6) | 0, t: 0 });
+    if (coaching) { coaching = false; if (!save.coach) { save.coach = true; persist(); } }
+    coach.idle = 0; coach.next = 4;
+  }
 
-  window.addEventListener('mousemove', function (e) {
-    if (!body.classList.contains('typing')) return;
-    if (mouse.x < 0) { mouse.x = e.clientX; mouse.y = e.clientY; return; }
-    if (Math.abs(e.clientX - mouse.x) + Math.abs(e.clientY - mouse.y) > 14) body.classList.remove('typing');
-  });
-  // Mouse clicks must not leave a button focused (Space/Enter would press it again).
-  document.addEventListener('click', function (e) {
-    var b = e.target && e.target.closest ? e.target.closest('button') : null;
-    if (b && e.detail > 0) setTimeout(function () { if (document.activeElement === b) b.blur(); }, 0);
-  });
-  $('stage').addEventListener('pointerdown', function () { exitKbnav(); });
-
-  /* ------------------------------------------------------------- buttons */
-  $('gLang').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-lang]'); if (!b || barLocked()) return;
-    S.lang = b.getAttribute('data-lang'); saveSettings(); newTest();
-  });
-  $('gMode').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-mode]'); if (!b || barLocked()) return;
-    S.mode = b.getAttribute('data-mode'); saveSettings(); newTest();
-  });
-  $('gAmt').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-amt]'); if (!b || barLocked()) return;
-    S.amt[S.mode] = +b.getAttribute('data-amt'); saveSettings(); newTest();
-  });
-  $('bLenient').addEventListener('click', function () {
-    if (barLocked()) return;
-    S.lenient = !(T ? T.lenient : S.lenient);
-    saveSettings(); newTest();
-  });
-  $('bKbd').addEventListener('click', function () { setKbd(!S.kbd); saveSettings(); updateBar(); });
-  $('bSound').addEventListener('click', function () {
-    S.sound = !S.sound; saveSettings(); updateBar();
-    Kit.audio.unlock();
-    if (S.sound) setTimeout(function () { sound('key'); }, 30);
-  });
-  $('bTheme').addEventListener('click', function () {
-    S.theme = S.theme === 'dark' ? 'light' : 'dark'; saveSettings(); applyTheme(); updateBar();
-    relayout();
-    if (modal === 'mProg') renderProgress();
-  });
-  $('chExit').addEventListener('click', function () { newTest(); });
-  $('bNext').addEventListener('click', function () { quickRestart(); });
-  $('bRepeat').addEventListener('click', function () { newTest({ repeat: true }); });
-  $('bLeave').addEventListener('click', function () { newTest(); });
-  $('bTeacher').addEventListener('click', function () { openModal('mTeacher'); teacherPick(); });
-  $('bCode').addEventListener('click', function () { openModal('mCode'); codeReset(); });
-  $('bProg').addEventListener('click', function () { openModal('mProg'); renderProgress(); });
-  $('progMini').addEventListener('click', function () { openModal('mProg'); renderProgress(); });
-
-  /* -------------------------------------------------------------- modals */
-  function openModal(id) {
-    closeModal();
-    if (T && T.phase === 'running') newTest({ repeat: true });
-    exitKbnav();
-    modal = id;
-    $(id).hidden = false;
-    body.classList.remove('typing');
-    // Start before the modal's controls so Tab reaches its close button,
-    // while typing a challenge code followed by Enter keeps its shortcut.
-    $(id).setAttribute('tabindex', '-1');
-    $(id).focus();
+  /* --------------------------------------------------- the coach's hand */
+  // A wordless coach: after a few idle seconds a hand taps the glowing key (or the button
+  // to press on a menu). It runs on the game clock, so it freezes with a pause.
+  const ghostEl = $('ghost');
+  A.handInto(ghostEl);
+  function showGhost(x, y, dom) { ghost.on = true; ghost.x = x; ghost.y = y; ghost.t = 0; ghost.dom = dom; }
+  function stopGhost() { ghost.on = false; if (ghostEl) ghostEl.hidden = true; }
+  function ghostStep(dt) {
+    if (!ghost.on) return;
+    ghost.t += dt;
+    if (ghost.t > 2.2) { stopGhost(); return; }
+    if (ghost.dom && ghostEl) {
+      const press = ghostPress();
+      ghostEl.hidden = false;
+      ghostEl.style.transform = 'translate(' + (ghost.x - 40).toFixed(1) + 'px,' + (ghost.y - 98 + press * 10).toFixed(1) + 'px)';
+      ghostEl.style.opacity = ghostAlpha().toFixed(2);
+    }
   }
-  function closeModal() {
-    if (!modal) return;
-    $(modal).hidden = true;
-    modal = null;
+  function ghostPress() { return calm() ? 0 : Math.max(0, Math.sin(Math.min(1, (ghost.t % 0.8) / 0.5) * Math.PI)); }
+  function ghostAlpha() { return Math.min(1, ghost.t * 5, (2.2 - ghost.t) * 5); }
+  function coachStep(dt) {
+    coach.idle += dt;
+    if (ghost.on || coach.idle < coach.next) return;
+    const k = currentKey();
+    if (!k) { coach.next = coach.idle + 0.5; return; }
+    const c = A.keyCenter(k.code);
+    showGhost(c.x, c.y, false);
+    coach.next = coach.idle + 6;
   }
-  each('.modal', function (m) {
-    m.addEventListener('pointerdown', function (e) { if (e.target === m) closeModal(); });
-    var x = m.querySelector('[data-close]');
-    if (x) x.addEventListener('click', closeModal);
-  });
-  function digitOf(e) {
-    var k = e.key;
-    if (/^[0-9]$/.test(k)) return k;
-    if (/^[٠-٩]$/.test(k)) return String(k.charCodeAt(0) - 0x660);
-    if (/^[۰-۹]$/.test(k)) return String(k.charCodeAt(0) - 0x6F0);
-    if (/^(Digit|Numpad)[0-9]$/.test(e.code || '') && !e.shiftKey) return e.code.slice(-1);
+  function centerOf(el) {
+    const r = el.getBoundingClientRect();
+    return r.width ? view.toLogical(r.left + r.width / 2, r.top + r.height / 2) : null;
+  }
+  function menuGhost() {
+    let el = null;
+    if (screen === 'title') el = lang === 'en' ? $('btnEn') : $('btnAr');
+    else if (screen === 'map') el = document.querySelector('.pebble.next');
+    else if (screen === 'result' && resultT > 1.5) el = $('resNext');
+    else if (screen === 'setup') el = $('btnGo');
+    if (!el) return;
+    const p = centerOf(el);
+    if (p) showGhost(p.x, p.y, true);
+  }
+  // The key to press now (with Shift when it needs it), for the glow and the coach.
+  function currentKey() {
+    if (screen === 'play' && world && !ending) { const n = TT.next(world); return n && n.key; }
+    if (screen === 'test' && test && !test.over) {
+      const w = TT.testWord(test);
+      return test.ci >= w.length ? { code: 'Space', shift: false } : TT.nextKey(w, test.ci, test.lang);
+    }
     return null;
   }
-  function modalKey(e) {
-    var k = e.key;
-    if (k === 'Escape') { e.preventDefault(); closeModal(); return; }
-    if (k === 'Tab') return;
-    if (onControl(e.target) && (k === 'Enter' || k === ' ' || k === 'Spacebar')) {
-      e.stopPropagation();
-      return;
-    }
-    if (k === ' ') { e.preventDefault(); return; }
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    var d = digitOf(e);
-    if (modal === 'mTeacher') {
-      if (!$('tPick').hidden && d && d !== '0') { e.preventDefault(); teacherShow(+d); }
-      else if (!$('tShow').hidden && k === 'Enter') { e.preventDefault(); $('tPlay').click(); }
-    } else if (modal === 'mCode') {
-      if (d) { e.preventDefault(); codeDigit(d); }
-      else if (k === 'Backspace') { e.preventDefault(); codeBack(); }
-      else if (k === 'Enter') { e.preventDefault(); codeGo(); }
-      else if (isText(k)) e.preventDefault();
-    }
-  }
 
-  // Teacher: pick a preset -> a code in huge digits.
-  var tPreset = 0, tCode = '';
-  (function buildPresets() {
-    var html = '';
-    for (var p = 1; p <= 9; p++) {
-      var o = E.PRESETS[p];
-      html += '<button type="button" class="preset" data-p="' + p + '"><span class="n">' + p + '</span><span><b>' + LANG_NAME[o.lang] +
-        '</b><small>' + MODE_ICON[o.mode] + ' ' + amtText(o.mode, o.amt) + '</small></span></button>';
-    }
-    $('presets').innerHTML = html;
-    $('presets').addEventListener('click', function (e) { var b = e.target.closest('[data-p]'); if (b) teacherShow(+b.getAttribute('data-p')); });
-  })();
-  function teacherPick() { $('tPick').hidden = false; $('tShow').hidden = true; }
-  function teacherShow(p) {
-    tPreset = p;
-    var num, tries = 0;
-    do { num = Math.floor(Math.random() * 1000); } while (E.makeCode(p, num) === tCode && ++tries < 5);
-    tCode = E.makeCode(p, num);
-    $('tCode').textContent = tCode;
-    $('tDesc').textContent = typeText(E.PRESETS[p]) + ' · تساهل في الهمزات';
-    $('tPick').hidden = true; $('tShow').hidden = false;
+  /* ----------------------------------------------------------------- loop */
+  function decay(dt) {
+    for (const k in lit) { lit[k].t -= dt; if (lit[k].t <= 0) delete lit[k]; }
+    glowBoost = Math.max(0, glowBoost - dt * 1.5); comboBump = Math.max(0, comboBump - dt * 4); flashT = Math.max(0, flashT - dt);
+    for (let i = 0; i < 3; i++) sunBump[i] = Math.max(0, sunBump[i] - dt * 2);
+    for (let i = sparks.length - 1; i >= 0; i--) { sparks[i].t += dt; if (sparks[i].t > 0.22) sparks.splice(i, 1); }
+    for (let i = bolts.length - 1; i >= 0; i--) { bolts[i].t += dt; if (bolts[i].t > 0.32) bolts.splice(i, 1); }
+    for (let i = bows.length - 1; i >= 0; i--) { bows[i].t += dt; if (bows[i].t > 1.3) bows.splice(i, 1); }
+    for (let i = puffs.length - 1; i >= 0; i--) { const p = puffs[i]; p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.t > 0.5) puffs.splice(i, 1); }
+    for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i]; f.t += dt; f.y -= dt * 46; if (f.t > 1.1) floats.splice(i, 1); }
+    for (const f of flowers) f.t += dt;
   }
-  $('tAgain').addEventListener('click', function () { teacherShow(tPreset); });
-  $('tBack').addEventListener('click', teacherPick);
-  $('tPlay').addEventListener('click', function () { closeModal(); newTest({ code: tCode }); });
-
-  // Student: type the 4-digit code.
-  var cBuf = '';
-  (function buildPad() {
-    var keys = ['1', '2', '3', '4', '5', '⌫', '6', '7', '8', '9', '0'];
-    $('cPad').innerHTML = keys.map(function (k) { return '<button type="button" data-k="' + k + '">' + k + '</button>'; }).join('');
-    $('cPad').addEventListener('click', function (e) {
-      var b = e.target.closest('[data-k]'); if (!b) return;
-      var k = b.getAttribute('data-k');
-      if (k === '⌫') codeBack(); else codeDigit(k);
-    });
-  })();
-  function codeReset() { cBuf = ''; codeRender(); }
-  function codeDigit(d) { if (cBuf.length < 4) cBuf += d; codeRender(); if (cBuf.length === 4 && !E.parseCode(cBuf)) shakeDigits(); }
-  function codeBack() { cBuf = cBuf.slice(0, -1); codeRender(); }
-  function codeGo() {
-    var c = E.parseCode(cBuf);
-    if (!c) { shakeDigits(); return; }
-    closeModal();
-    newTest({ code: c.code });
-  }
-  function shakeDigits() { var d = $('cDigits'); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake'); }
-  function codeRender() {
-    var spans = $('cDigits').children;
-    for (var i = 0; i < 4; i++) { spans[i].textContent = cBuf[i] || ''; spans[i].className = i === cBuf.length ? 'cur' : ''; }
-    var desc = $('cDesc'), c = cBuf.length === 4 ? E.parseCode(cBuf) : null;
-    desc.className = 'cdesc';
-    if (cBuf.length < 4) desc.textContent = cBuf.length ? 'أكمل الأرقام الأربعة…' : 'اكتب الأرقام الأربعة التي كتبها المعلم';
-    else if (c) desc.textContent = '✓ ' + typeText(c);
-    else { desc.textContent = 'رمز غير صحيح: يبدأ الرمز برقم من 1 إلى 9'; desc.className = 'cdesc bad'; }
-    $('cGo').disabled = !c;
-  }
-  $('cGo').addEventListener('click', codeGo);
-
-  // Progress: chart of the last 30 results + personal bests + history.
-  function fmtDate(t) {
-    var d = new Date(t), p = function (n) { return (n < 10 ? '0' : '') + n; };
-    return p(d.getDate()) + '/' + p(d.getMonth() + 1) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
-  }
-  function renderProgress() {
-    var h = getHist(), pbs = getPbs();
-    var keys = Object.keys(pbs).sort(function (a, b) { return pbs[b].wpm - pbs[a].wpm; });
-    var best = keys.length ? pbs[keys[0]].wpm : null;
-    var anyLow = h.some(function (e) { return e.v === 0; });
-    var okW = wpms(h.filter(function (e) { return e.v !== 0; }));
-    $('progSub').textContent = h.length ? lastResultsText(h.length) + ' (السرعة بالكلمة في الدقيقة). الخط المتقطع = أفضل نتيجة.' +
-      (anyLow ? ' النقطة الفارغة = دقة أقل من 75%.' : '') : 'لا نتائج بعد. أنهِ اختبارًا لترى تقدّمك هنا!';
-    var cv = $('progChart');
-    var c = prepCanvas(cv);
-    if (h.length) drawLine(cv, wpms(h), { axis: true, low: lows(h), pb: okW.length ? maxOf(okW) : null });
-    else if (c) c.ctx.clearRect(0, 0, c.w, c.h);
-    $('pbList').innerHTML = keys.length ? keys.map(function (k) {
-      var p = k.split('|'), o = { lang: p[0], mode: p[1], amt: +p[2] };
-      return '<div class="row"><span class="t">' + typeText(o) + (p[3] === 's' ? ' · بدون تساهل' : '') + '</span><span class="v">' +
-        speedHtml(pbs[k].wpm) + '</span><span class="d">' + Math.floor(pbs[k].acc) + '%</span></div>';
-    }).join('') : '<div class="empty">لا أرقام قياسية بعد.</div>';
-    $('histList').innerHTML = h.length ? h.slice().reverse().map(function (e) {
-      var low = e.v === 0;
-      return '<div class="row' + (low ? ' low' : '') + '"' + (low ? ' title="الدقة أقل من 75%: لا تُحسب رقمًا قياسيًا"' : '') + '><span class="d" dir="ltr">' + fmtDate(e.t) + '</span><span class="t">' + typeText(e) + (e.code ? ' · 🏆 <b dir="ltr">' + e.code + '</b>' : '') +
-        '</span><span class="v">' + speedHtml(e.wpm) + '</span><span class="d">' + (low ? '⚠️ ' : '') + Math.floor(e.acc) + '%</span></div>';
-    }).join('') : '<div class="empty">—</div>';
-    if (best == null) best = 0;
-    var r = $('pReset');
-    r.classList.remove('armed');
-    r.textContent = '🗑️ امسح نتائجي';
-  }
-  var resetTimer = 0, armedAt = 0;
-  $('pReset').addEventListener('click', function () {
-    var r = $('pReset');
-    if (!r.classList.contains('armed')) {
-      r.classList.add('armed'); r.textContent = 'متأكد؟ اضغط مرة أخرى للمسح';
-      armedAt = performance.now();
-      clearTimeout(resetTimer);
-      resetTimer = setTimeout(function () { r.classList.remove('armed'); r.textContent = '🗑️ امسح نتائجي'; }, 3000);
-      return;
-    }
-    // The confirming click must come after the question could be read: the second click
-    // of a double-click would otherwise erase everything at once.
-    if (performance.now() - armedAt < 600) return;
-    ['pbs', 'hist', 'tier'].forEach(function (k) { delete pending[k]; store.remove(k); });
-    flushSaves(); renderProgress(); updateFoot(); buildRace();
-  });
-  // A focused button clicks on every auto-repeated Enter, and a key held past 600 ms
-  // would still confirm; only a new key press may.
-  $('pReset').addEventListener('keydown', function (e) {
-    if (e.repeat && (e.key === 'Enter' || e.key === ' ')) e.preventDefault();
-  });
-
-  /* -------------------------------------------------------------- sounds */
-  // Soft, short tones only (no noise, no square waves). At most one sound per keystroke.
-  // delay (s, optional): when the 'pass' ding plays.
-  function sound(kind, delay) {
-    if (!S.sound) return;
-    var A = Kit.audio;
-    if (!A.ctx || A.muted) return;
-    if (kind === 'key') {
-      A.tone({ freq: 1500 + Math.random() * 260, to: 1100, type: 'sine', dur: 0.035, vol: 0.1, attack: 0.002 });
-      A.tone({ freq: 240, to: 150, type: 'triangle', dur: 0.045, vol: 0.14, attack: 0.002 });
-    } else if (kind === 'space') {
-      A.tone({ freq: 1150, to: 850, type: 'sine', dur: 0.04, vol: 0.09, attack: 0.002 });
-      A.tone({ freq: 180, to: 110, type: 'triangle', dur: 0.06, vol: 0.16, attack: 0.002 });
-    } else if (kind === 'back') {
-      A.tone({ freq: 900, to: 700, type: 'sine', dur: 0.03, vol: 0.07, attack: 0.002 });
-    } else if (kind === 'pass') {
-      var d = delay || 0;
-      A.tone({ freq: 1046.5, type: 'triangle', dur: 0.12, vol: 0.07, delay: d, attack: 0.005 });
-      A.tone({ freq: 1568, type: 'sine', dur: 0.18, vol: 0.05, delay: d + 0.07, attack: 0.005 });
-    } else if (kind === 'err') {
-      A.tone({ freq: 150, to: 85, type: 'sine', dur: 0.12, vol: 0.32, attack: 0.004 });
-      A.tone({ freq: 310, to: 170, type: 'triangle', dur: 0.06, vol: 0.06, attack: 0.003 });
+  function playStep(dt) {
+    if (!ending) {
+      TT.step(world, dt);
+      handleEvents(null);
+      if (!ending) coachStep(dt);
+      introT += dt;
+      shownWpm += (TT.liveWpm(world) - shownWpm) * Math.min(1, dt * 3);
+    } else {
+      ending.t -= dt;
+      if (ending.t <= 0) showResult();
     }
   }
-  function fanfare() {
-    var A = Kit.audio;
-    if (!A.ctx || A.muted) return;
-    [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) {
-      A.tone({ freq: f, type: 'triangle', dur: 0.24, vol: 0.13, delay: i * 0.09, attack: 0.01 });
-      A.tone({ freq: f * 2, type: 'sine', dur: 0.16, vol: 0.03, delay: i * 0.09, attack: 0.01 });
-    });
-    A.tone({ freq: 1318.5, type: 'sine', dur: 0.6, vol: 0.08, delay: 0.38, attack: 0.02 });
-    A.tone({ freq: 1567.98, type: 'sine', dur: 0.6, vol: 0.05, delay: 0.42, attack: 0.02 });
+  function testStep(dt) {
+    if (!ending) {
+      const left = Math.ceil(test.dur - test.t);
+      TT.testStep(test, dt);
+      const now = Math.ceil(test.dur - test.t);
+      if (test.started && now !== left && now >= 1 && now <= 3) J.countdown(now);
+      for (const e of test.ev) if (e.t === 'over') finishTest();
+      test.ev.length = 0;
+      if (!ending) coachStep(dt);
+      shownWpm += (TT.testLiveWpm(test) - shownWpm) * Math.min(1, dt * 3);
+      slide = Math.max(0, slide - dt * 6);
+    } else {
+      ending.t -= dt;
+      if (ending.t <= 0) showTestResult();
+    }
   }
-  function doneChime() {
-    var A = Kit.audio;
-    if (!A.ctx || A.muted) return;
-    A.tone({ freq: 880, type: 'sine', dur: 0.18, vol: 0.08, attack: 0.008 });
-    A.tone({ freq: 1318.5, type: 'sine', dur: 0.3, vol: 0.06, delay: 0.1, attack: 0.01 });
-  }
-
-  /* ------------------------------------------------------------ confetti */
-  var fx = { cv: $('fx'), ctx: null, parts: [], raf: 0, last: 0, until: 0, dpr: 1 };
-  // (Re)size the confetti canvas to the window; also called per frame, so a resize or fullscreen
-  // switch during the celebration doesn't leave smeared trails.
-  function fxSize() {
-    var cv = fx.cv, W = Math.round(window.innerWidth * fx.dpr), H = Math.round(window.innerHeight * fx.dpr);
-    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; fx.ctx.setTransform(fx.dpr, 0, 0, fx.dpr, 0, 0); }
-  }
-  // n pieces; skipped with reduced motion or the classroom preset (the results text still celebrates).
-  function confetti(n) {
-    if (Kit.motion.reduced()) return;
-    var cv = fx.cv, W = window.innerWidth, H = window.innerHeight;
-    fx.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    cv.style.display = 'block';
-    fx.ctx = cv.getContext('2d');
-    cv.width = 0; fxSize();
-    var cols = ['#ffc400', '#ff5d6c', '#4ed98a', '#5fb0ff', '#b98bff', '#ffffff', '#ff9f43'];
-    fx.parts = [];
-    for (var i = 0; i < n; i++) {
-      var side = i % 3; // 0 = rain from the top, 1/2 = cannons from the bottom corners
-      var p = { c: cols[i % cols.length], w: 6 + Math.random() * 6, h: 4 + Math.random() * 4, r: Math.random() * 6.28, vr: (Math.random() - 0.5) * 12 };
-      if (side === 0) { p.x = Math.random() * W; p.y = -20 - Math.random() * H * 0.4; p.vx = (Math.random() - 0.5) * 120; p.vy = 60 + Math.random() * 160; }
-      else {
-        // cannons from the bottom corners, aimed up and inwards
-        var a = (side === 1 ? -1.1 : -Math.PI + 1.1) + (Math.random() - 0.5) * 0.5;
-        var sp = H * (1.1 + Math.random() * 0.8);
-        p.x = side === 1 ? -10 : W + 10; p.y = H * 0.9;
-        p.vx = Math.cos(a) * sp; p.vy = Math.sin(a) * sp;
+  function decoStep(dt) {
+    // Title clouds carry letters; now and then a silent bolt from the town pops one.
+    while (deco.length < 5) {
+      const ar = deco.length % 2 === 0, set = ar ? 'بتنملاسيكشعقف' : 'abcdefghklmnoprst';
+      deco.push({ x: time < 0.1 ? 100 + deco.length * 260 : -120 - Math.random() * 500, y: 120 + Math.random() * 360, v: 26 + Math.random() * 22, text: set[(Math.random() * set.length) | 0], lang: ar ? 'ar' : 'en', w: 150, phase: Math.random() * 6, zap: 0 });
+    }
+    for (let i = deco.length - 1; i >= 0; i--) {
+      const d = deco[i];
+      d.x += d.v * dt;
+      if (d.zap > 0) { d.zap += dt; if (d.zap > 0.4) deco.splice(i, 1); continue; }
+      if (d.x > W + 140) deco.splice(i, 1);
+    }
+    if (!calm() && Math.random() < dt / 2.6) {
+      const d = deco.find(o => !o.zap && o.x > 120 && o.x < W - 120 && (o.y > 300 || o.x < 330 || o.x > 950));
+      if (d) {
+        d.zap = 0.001;
+        bolts.push({ x1: d.x + 60, y1: 640, x2: d.x, y2: d.y + 28, t: 0, seed: (Math.random() * 900) | 0 });
+        bows.push({ x: d.x, y: d.y + 40, r: 70, t: 0 });
+        fx.burst(d.x, d.y, { count: 14, colors: ['#ffd23f', '#ffffff', '#ff7eb6'], speed: 260, life: 0.6, size: 7, gravity: 160 });
       }
-      fx.parts.push(p);
     }
-    fx.last = performance.now();
-    fx.until = fx.last + 4200;
-    cancelAnimationFrame(fx.raf);
-    fx.raf = requestAnimationFrame(fxFrame);
   }
-  function fxFrame(t) {
-    var dt = Math.min(0.05, (t - fx.last) / 1000), W = window.innerWidth, H = window.innerHeight, ctx = fx.ctx, alive = 0;
-    fx.last = t;
-    fxSize();
-    ctx.clearRect(0, 0, W, H);
-    for (var i = 0; i < fx.parts.length; i++) {
-      var p = fx.parts[i];
-      if (p.y > H + 30) continue;
-      alive++;
-      p.vy += 520 * dt; p.vx *= (1 - 1.2 * dt); p.vy *= (1 - 0.9 * dt);
-      p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
-      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
-      ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2 * Math.abs(Math.cos(p.r * 1.7)), p.w, p.h * Math.abs(Math.cos(p.r * 1.7)) + 1);
-      ctx.restore();
+  const parade = { x: 0 };
+  function update(dt) {
+    time += dt;
+    handleKeys();
+    if (screen === 'play' && world) playStep(dt);
+    else if (screen === 'test' && test) testStep(dt);
+    else if (screen !== 'pause') {
+      if (screen === 'title' || screen === 'klass') { decoStep(dt); parade.x += dt * 90; }
+      if (screen === 'result') resultStep(dt);
+      if (screen === 'tresult') testResultStep(dt);
+      if (resultLock > 0) resultLock -= dt;
+      if (unlockFx) { unlockFx.t += dt; if (unlockFx.t > 1.4) unlockFx = null; }
+      if (screen !== 'klass') {
+        menuIdle += dt;
+        if (!ghost.on && menuIdle >= menuNext) { menuNext = menuIdle + 6; menuGhost(); }
+      }
     }
-    if (alive && t < fx.until && !Kit.motion.reduced()) fx.raf = requestAnimationFrame(fxFrame); // stops if motion is reduced mid-burst
-    else { ctx.clearRect(0, 0, W, H); fx.cv.style.display = 'none'; fx.parts = []; }
+    if (screen !== 'pause') {
+      ghostStep(dt);
+      fx.update(dt); shake.update(dt); decay(dt);
+      if (fx.list.length > 300) fx.list.splice(0, fx.list.length - 300);
+      phase += dt * (2 + Math.min(40, shownWpm) * 0.35);
+    }
+    Kit.keys.endFrame();
   }
 
-  /* ---------------------------------------------------------------- boot */
-  applyTheme();
-  kbdEl.hidden = !S.kbd;
-  Kit.muteButton({ key: false }); // M must stay typable
-  newTest();
-  window.addEventListener('resize', relayout);
-  try {
-    if (document.fonts) {
-      document.fonts.load('500 32px Fredoka', 'aب').then(relayout, function () {});
-      document.fonts.ready.then(relayout);
-      if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', relayout);
+  /* --------------------------------------------------------------- render */
+  // Rainbows and puffs sit in the sky; bolts and sparks leave the keyboard, so they
+  // are drawn over it (drawSparks), with the particles and the floating words.
+  function drawSky(g) {
+    for (const b of bows) A.rainbow(g, b.x, b.y, b.r, Math.min(1, b.t * 6) * Math.max(0, 1 - Math.max(0, b.t - 0.7) / 0.6));
+    for (const p of puffs) A.puff(g, p.x, p.y, p.r * (1 + p.t * 1.5), Math.max(0, 1 - p.t / 0.5));
+  }
+  function drawFx(g) {
+    const still = calm();
+    for (const b of bolts) A.bolt(g, b.x1, b.y1, b.x2, b.y2, b.seed, b.t / 0.32);
+    for (const s of sparks) {
+      const k = Math.min(1, s.t / 0.2), x = s.x1 + (s.x2 - s.x1) * k, y = s.y1 + (s.y2 - s.y1) * k;
+      g.globalAlpha = 1 - k * 0.3;
+      A.starPath(g, x, y, 11, 5, k * 3); g.fillStyle = '#fff27a'; g.fill(); g.lineWidth = 2.5; g.strokeStyle = A.INK; g.stroke();
+      g.globalAlpha = 1;
     }
-  } catch (e) { /* ignore */ }
-  setTimeout(function () { if (!document.hasFocus()) setUnfocused(true); }, 600);
+    fx.draw(g);
+    for (const f of floats) {
+      g.globalAlpha = Math.max(0, 1 - Math.max(0, f.t - 0.6) / 0.5);
+      const pop = still ? 1 : Math.min(1, 0.6 + f.t * 4);
+      A.text(g, f.text, f.x, f.y, f.size * pop, f.color);
+    }
+    g.globalAlpha = 1;
+  }
+  function drawKeyboard(g, kbLang) {
+    const still = calm();
+    const C = A.KB_CROP;
+    g.drawImage(A.keyboardBase(kbLang, pixelScale(), true), C.x, C.y, C.w, C.h);
+    const k = currentKey();
+    if (k) {
+      A.keyLit(g, k.code, kbLang, 'glow', 1 + glowBoost, time, still);
+      if (k.shift) A.keyLit(g, TT.leftHand(k.code) ? 'ShiftRight' : 'ShiftLeft', kbLang, 'glow', 1, time, still);
+    }
+    for (const code in lit) if (!k || code !== k.code || lit[code].kind === 'bad') A.keyLit(g, code, kbLang, lit[code].kind, 1, time, still);
+    if (ghost.on && !ghost.dom) A.hand(g, ghost.x, ghost.y, ghostPress(), ghostAlpha());
+  }
+  function drawHud(g) {
+    const still = calm(), w = world;
+    // progress: clouds done of the level
+    A.pill(g, 88, 14, 170, 58);
+    A.cloudIcon(g, 126, 42, 1.2);
+    A.text(g, w.done + '/' + w.total, 206, 44, 30, A.INK, { outline: 0 });
+    A.track(g, TT.liveWpm(w), shownWpm, phase, time, still, w.plan.target);
+    for (let i = 0; i < TT.SUNS; i++) {
+      const s = 1 + sunBump[i] * 0.4;
+      A.sun(g, 1150 - i * 56, 42, 19 * s, i >= w.suns, time, still);
+    }
+    if (w.combo >= 3) drawCombo(g, w.combo);
+  }
+  // The chain of right keys: a bolt, the count, and «سلسلة!».
+  function drawCombo(g, n) {
+    const s = 1 + comboBump * 0.18;
+    g.save(); g.translate(348, 43); g.scale(s, s);
+    A.pill(g, -74, -27, 148, 54, '#fff3c4');
+    A.boltIcon(g, 50, -1, 1);
+    A.text(g, 'سلسلة!', 4, -9, 19, A.INK, { outline: 0, rtl: true });
+    A.text(g, String(n), 4, 12, 24, '#ff7a1a', { outline: 4 });
+    g.restore();
+  }
+  // Grown flowers are baked into one cached strip of garden; only growing ones are drawn live.
+  let garden = null, gardenPs = 0;
+  function drawGarden(g) {
+    const ps = pixelScale();
+    if (!garden || gardenPs !== ps) {
+      garden = document.createElement('canvas'); garden.width = Math.ceil(W * ps); garden.height = Math.ceil(290 * ps); gardenPs = ps;
+      for (const f of flowers) f.baked = false;
+    }
+    const gc = garden.getContext('2d');
+    let baked = false;
+    for (const f of flowers) {
+      if (!f.baked && (f.t >= 0.5 || calm())) { gc.setTransform(ps, 0, 0, ps, 0, -430 * ps); A.flower(gc, f.x, f.y, f.kind, 1); f.baked = true; }
+      if (f.baked) baked = true; else A.flower(g, f.x, f.y, f.kind, f.t / 0.5);
+    }
+    if (baked) g.drawImage(garden, 0, 430, W, 290);
+  }
+  function clearGarden() { flowers = []; if (garden) garden.getContext('2d').clearRect(0, 0, garden.width, garden.height); }
+  function drawPlay(g) {
+    const w = world, still = calm(), P = w.plan;
+    g.drawImage(A.scene('play', pixelScale()), 0, 0, W, H);
+    A.driftClouds(g, time, still);
+    drawGarden(g);
+    const n = ending ? null : TT.next(w), target = n && n.cloud;
+    const list = w.clouds.slice().sort((a, b) => (a.id === w.lock) - (b.id === w.lock) || a.y - b.y);
+    for (const c of list) {
+      if (c.state === 'zap') continue;
+      const storm = P.wait ? 0 : Math.max(0, Math.min(0.85, (c.y - 160) / (TT.TOWN_Y - 160)));
+      if (c.state === 'rain') A.rain(g, c.x, c.y, c.w, c.t / 1.5, time);
+      g.globalAlpha = c.state === 'rain' ? Math.max(0, 1 - Math.max(0, c.t - 1) / 0.5) : 1;
+      c.lang = P.lang; c.storm = c.state === 'rain' ? 1 : storm; c.locked = c.id === w.lock;
+      c.next = c === target && n.key ? (n.key.code === 'KeyB' && P.lang === 'ar' ? 2 : 1) : 0;
+      c.scale = c.state === 'in' ? 0.85 + 0.15 * Math.min(1, Math.max(0, (c.y + 70) / 166)) : 1;
+      A.cloud(g, c, time, still);
+      g.globalAlpha = 1;
+    }
+    drawSky(g);
+    drawKeyboard(g, P.lang);
+    drawFx(g);
+    // the dotted guide from the letter to its key, for the youngest tiers and the first coach
+    if (target && n.key && (P.guide || coaching) && target.letterX) {
+      const k = TT.KEYS[n.key.code];
+      A.guide(g, target.letterX, target.letterY + 26, k.x + k.w / 2, k.y - 6, time, still);
+    }
+    drawHud(g);
+    // The level's number pops up for a moment as it starts.
+    if (introT < 1.4 && !ending) {
+      const k = introT / 1.4, s = still ? 1 : Math.min(1.08, 0.4 + k * 5) - Math.max(0, k * 5 - 1) * 0.08;
+      g.save(); g.globalAlpha = Math.min(1, (1 - k) * 4); g.translate(640, 300); g.scale(Math.max(1, s), Math.max(1, s));
+      A.pill(g, -120, -44, 240, 88, '#ffd23f');
+      A.boltIcon(g, 76, 0, 1.5, '#ffffff');
+      A.text(g, (cur.w + 1) + '-' + (cur.l + 1), -22, 3, 54, '#ffffff', { outline: 9 });
+      g.restore();
+    }
+    if (flashT > 0) { g.fillStyle = 'rgba(255,255,240,' + (flashT * 1.4).toFixed(3) + ')'; g.fillRect(0, 0, W, H); }
+  }
+  // The speed test: the timer, the running animal, a ribbon of words and the keyboard.
+  const ribbon = { y: 236 };
+  function drawTest(g) {
+    const s = test, still = calm(), ar = s.lang === 'ar', dir = ar ? -1 : 1;
+    g.drawImage(A.scene('play', pixelScale()), 0, 0, W, H);
+    A.driftClouds(g, time, still);
+    // timer ring
+    const left = s.dur - s.t, k = left / s.dur;
+    g.beginPath(); g.arc(1140, 44, 36, 0, Math.PI * 2); g.fillStyle = '#ffffff'; g.fill(); g.lineWidth = 5; g.strokeStyle = A.INK; g.stroke();
+    g.beginPath(); g.moveTo(1140, 44); g.arc(1140, 44, 30, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); g.closePath(); g.fillStyle = left <= 5 && s.started ? '#ff7e5f' : '#9fe4ff'; g.fill();
+    A.text(g, String(Math.ceil(left)), 1140, 46, 32, '#ffffff', { outline: 6 });
+    if (s.combo >= 3) drawCombo(g, s.combo);
+    A.track(g, TT.testLiveWpm(s), shownWpm, phase, time, still);
+    // the word card
+    A.rr(g, 70, 136, 1140, 200, 40); g.fillStyle = 'rgba(28,34,80,0.3)'; g.fill();
+    A.rr(g, 70, 130, 1140, 200, 40); g.fillStyle = '#ffffff'; g.fill(); g.lineWidth = 6; g.strokeStyle = A.INK; g.stroke();
+    g.save(); A.rr(g, 76, 136, 1128, 188, 34); g.clip();
+    const word = TT.testWord(s), cx = 640, size = 64;
+    g.font = A.font(size); g.direction = ar ? 'rtl' : 'ltr'; g.textBaseline = 'middle';
+    const cw = g.measureText(word).width, off = slide * 120 * dir * -1;
+    // finished words on one side, coming words on the other
+    let x = cx + off - dir * (cw / 2 + 40);
+    g.font = A.font(40);
+    for (let i = s.wi - 1; i >= 0 && Math.abs(x - cx) < 700; i--) {
+      const ww = g.measureText(s.words[i]).width;
+      g.globalAlpha = 0.45; A.text(g, s.words[i], x - dir * ww / 2, ribbon.y, 40, '#3fb85a', { outline: 0 });
+      x -= dir * (ww + 36);
+    }
+    x = cx + off + dir * (cw / 2 + 44);
+    for (let i = s.wi + 1; i < s.words.length && Math.abs(x - cx) < 700; i++) {
+      g.font = A.font(44);
+      const ww = g.measureText(s.words[i]).width;
+      g.globalAlpha = i === s.wi + 1 ? 0.85 : 0.55; A.text(g, s.words[i], x + dir * ww / 2, ribbon.y, 44, '#7a83b8', { outline: 0 });
+      x += dir * (ww + 40);
+    }
+    g.globalAlpha = 1;
+    const c = { text: word, typed: Math.min(s.ci, word.length), x: cx + off, y: ribbon.y - 6, w: cw + 40, shake: 0, phase: 0, lang: s.lang, storm: 0, locked: false,
+      next: s.ci < word.length ? (ar && word[s.ci] === 'ل' && /[اأإآ]/.test(word[s.ci + 1] || '') ? 2 : 1) : 0, scale: 1 };
+    drawWord(g, c, size, still);
+    g.restore();
+    if (s.ci >= word.length) A.text(g, 'مسافة', 640, 300, 26, '#ff9f1c', { outline: 5 });
+    if (!s.started) A.text(g, ar ? 'ابدأ الكتابة!' : 'ابدأ الكتابة! Start typing', 640, 382, 34, '#ffffff', { outline: 7 });
+    if (testCfg && testCfg.code) { A.pill(g, 900, 18, 170, 52, '#fff3c4'); A.text(g, testCfg.code, 985, 45, 32, A.INK, { outline: 0 }); }
+    drawKeyboard(g, s.lang);
+    drawFx(g);
+  }
+  // A test word: like a cloud's word, without the cloud.
+  function drawWord(g, c, size, still) {
+    const ar = c.lang === 'ar';
+    g.font = A.font(size); g.direction = ar ? 'rtl' : 'ltr'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const full = g.measureText(c.text).width, pre = n => n <= 0 ? 0 : g.measureText(c.text.slice(0, n) + (n < c.text.length ? '‍' : '')).width;
+    const tw = pre(c.typed), edge = ar ? c.x + full / 2 : c.x - full / 2, dir = ar ? -1 : 1;
+    g.fillStyle = A.INK; g.fillText(c.text, c.x, c.y);
+    if (c.typed > 0) {
+      g.save(); g.beginPath(); g.rect(ar ? edge - tw - 2 : edge - 6, c.y - 60, tw + 8, 120); g.clip();
+      g.lineJoin = 'round'; g.lineWidth = 10; g.strokeStyle = A.INK; g.strokeText(c.text, c.x, c.y);
+      g.fillStyle = '#ffd23f'; g.fillText(c.text, c.x, c.y);
+      g.restore();
+    }
+    if (c.next) {
+      const nw = Math.max(16, pre(c.typed + c.next) - tw), nx = edge + dir * (tw + nw / 2), p = still ? 1 : 0.75 + 0.25 * Math.sin(time * 9);
+      A.rr(g, nx - nw / 2 - 3, c.y + size * 0.48, nw + 6, 10, 5); g.fillStyle = A.INK; g.fill();
+      A.rr(g, nx - nw / 2, c.y + size * 0.48 + 2, nw, 6, 3); g.fillStyle = 'rgba(255,159,28,' + p.toFixed(3) + ')'; g.fill();
+    }
+  }
+  function drawTitle(g) {
+    const still = calm();
+    g.drawImage(A.scene('title', pixelScale()), 0, 0, W, H);
+    A.driftClouds(g, time, still);
+    for (const d of deco) {
+      const k = d.zap ? Math.min(1, d.zap / 0.25) : 0;
+      if (k >= 1) continue;
+      g.globalAlpha = 1 - k;
+      A.cloud(g, { text: d.text, typed: d.zap ? 1 : 0, x: d.x, y: d.y, w: d.w, shake: 0, phase: d.phase, lang: d.lang, storm: 0, locked: false, next: 0, scale: 0.8 + k * 0.3 }, time, still);
+      g.globalAlpha = 1;
+    }
+    // the six speed animals run along the street, slow to fast
+    for (let i = 0; i < 6; i++) {
+      const x = W + 80 - ((parade.x * (0.35 + i * 0.22) + i * 230) % (W + 200));
+      A.animal(g, i, x, 668, 0.9, time * (3 + i * 2), still);
+    }
+    drawSky(g);
+    drawFx(g);
+  }
+  function drawMap(g) {
+    g.drawImage(A.map(lang, pixelScale()), 0, 0, W, H);
+    A.ISLES.forEach((p, w) => {
+      const fresh = unlockFx && unlockFx.w === w;
+      if (!TT.worldOpen(save, lang, w)) {
+        A.circle(g, p.x, p.y + 4, 36); g.fillStyle = 'rgba(255,255,255,0.85)'; g.fill(); g.lineWidth = 4; g.strokeStyle = A.INK; g.stroke();
+        A.lock(g, p.x, p.y - 4);
+      } else if (fresh && unlockFx.t < 0.8) {
+        g.globalAlpha = 1 - unlockFx.t / 0.8; const s = 1 + unlockFx.t;
+        g.save(); g.translate(p.x, p.y - 20); g.scale(s, s); A.lock(g, 0, 0); g.restore(); g.globalAlpha = 1;
+      }
+    });
+    drawFx(g);
+  }
+  function drawBack(g) {
+    g.drawImage(A.scene('title', pixelScale()), 0, 0, W, H);
+    A.driftClouds(g, time, calm());
+    drawSky(g);
+    drawFx(g);
+  }
+  function render() {
+    if (screen === 'pause' && !dirty) return;
+    dirty = false;
+    const g = view.ctx;
+    g.save();
+    g.translate(shake.x, shake.y);
+    const base = screen === 'pause' ? pausedFrom : screen;
+    if (base === 'title' || base === 'klass') drawTitle(g);
+    else if (base === 'map') drawMap(g);
+    else if ((base === 'play' || base === 'result') && world) drawPlay(g);
+    else if ((base === 'test' || base === 'tresult') && test) drawTest(g);
+    else drawBack(g);
+    g.restore();
+  }
 
-  /* ------------------------------------------------- automated test hooks */
+  canvas.addEventListener('contextrestored', () => { A.reset(); garden = null; dirty = true; });
+  if (document.fonts && document.fonts.load) {
+    Promise.all([document.fonts.load('700 40px Fredoka', 'بتث'), document.fonts.load('700 40px Fredoka', 'Aa1')])
+      .then(() => { A.reset(); dirty = true; }, () => { /* fallback fonts */ });
+  }
+
+  /* --------------------------------------------------- test and debug hook */
+  const page = (x, y) => { const r = canvas.getBoundingClientRect(); return { x: r.left + x * view.scale, y: r.top + y * view.scale }; };
+  function nextText() {
+    if (screen === 'play' && world && !world.over) { const n = TT.next(world); return n ? n.cloud.text.slice(n.cloud.typed) : ''; }
+    if (screen === 'test' && test && !test.over) { const w = TT.testWord(test); return test.ci >= w.length ? ' ' : w.slice(test.ci); }
+    return '';
+  }
   window.__game = {
-    state: function () {
+    get state() {
+      const w = world, s = test, k = currentKey();
       return {
-        screen: screen, modal: modal, phase: T.phase, lang: T.lang, mode: T.mode, amt: T.amt, lenient: T.lenient,
-        code: T.code, seed: T.seed, cur: T.cur, input: T.input, hist: T.hist.slice(), scroll: T.scroll, lineH: lineH,
-        wordCount: T.words.length, correctKeys: T.corr, incorrectKeys: T.inc, liveWpm: T.liveWpm,
-        warn: !warnEl.hidden, unfocused: !unfocusEl.hidden, typing: body.classList.contains('typing'), settings: JSON.parse(JSON.stringify(S))
+        screen: screen, paused: screen === 'pause', pausedFrom: pausedFrom, lang: lang, mode: w ? 'level' : s ? (testCfg && testCfg.code ? 'class' : 'test') : '',
+        world: cur.w, level: cur.l, tier: w ? w.plan.tier : 0, t: w ? Math.round(w.t * 1000) / 1000 : s ? Math.round(s.t * 1000) / 1000 : 0,
+        keys: w ? w.hits : s ? s.hits : 0, errors: w ? w.errors : s ? s.errors : 0, chars: w ? w.chars : 0, done: w ? w.done : 0, total: w ? w.total : 0,
+        suns: w ? w.suns : 0, combo: w ? w.combo : s ? s.combo : 0, lock: w ? w.lock : 0, over: w ? w.over : s ? s.over : false, won: w ? w.won : false,
+        ending: !!ending, stars: result ? result.stars : 0, wait: w ? w.plan.wait : false,
+        clouds: w ? w.clouds.map(c => ({ id: c.id, text: c.text, typed: c.typed, x: Math.round(c.x), y: Math.round(c.y), state: c.state })) : [],
+        next: nextText().slice(0, 1), rest: nextText(), nextKey: k ? k.code : '', shift: k ? !!k.shift : false,
+        test: s ? { lang: s.lang, dur: s.dur, kind: s.kind, started: s.started, t: s.t, wi: s.wi, ci: s.ci, word: TT.testWord(s), words: s.words.slice(0, 12) } : null,
+        code: testCfg && testCfg.code ? testCfg.code : '', klass: screen === 'klass' ? klassMode : '', typedCode: code,
+        result: testResult ? { wpm: testResult.r.wpm, acc: testResult.r.acc, best: testResult.isBest } : null,
+        ghost: ghost.on, flowers: flowers.length, clock: Math.round(time * 100) / 100
       };
     },
-    // start({ lang, mode, amt, lenient, seed }) or start({ code: '5372' })
-    start: function (o) {
-      o = o || {};
-      if (o.code) { newTest({ code: o.code }); return this.state(); }
-      if (o.lang) S.lang = o.lang;
-      if (o.mode) S.mode = o.mode;
-      if (o.amt) S.amt[S.mode] = o.amt;
-      if (typeof o.lenient === 'boolean') S.lenient = o.lenient;
-      saveSettings(); updateBar();
-      newTest({ seed: o.seed });
-      return this.state();
-    },
-    // Types through the same code path as real keys. ' ' = space, '\b' = Backspace, '\x7f' = Ctrl+Backspace.
-    // msPerChar advances a virtual clock between keystrokes (for deterministic wpm tests).
-    typeText: function (str, msPerChar) {
-      var keys = Array.isArray(str) ? str : String(str).split('');
-      for (var i = 0; i < keys.length; i++) {
-        var k = keys[i];
-        if (k === '\b') backspace(false);
-        else if (k === '\x7f') backspace(true);
-        else if (k === ' ') space();
-        else typeKey(k);
-        if (msPerChar) { clockSkew += msPerChar; if (T.phase === 'running') tick(); }
-      }
-      return this.state();
-    },
-    finish: function () { finish(); return lastResult; },
-    results: function () { return lastResult; },
-    challenge: function (code) { return newTest({ code: code }); },
-    setSeed: function (seed) { newTest({ seed: seed }); return T.seed; },
-    words: function (n) { return T.words.slice(0, n || 50); },
-    caret: function () {
-      var cr = caret.getBoundingClientRect(), el = T.els[T.cur], n = el.childNodes[T.input.length];
-      var lr = n ? n.getBoundingClientRect() : null;
-      return { caret: { x: cr.left, y: cr.top, w: cr.width, h: cr.height }, next: lr ? { left: lr.left, right: lr.right, top: lr.top } : null, clip: clipEl.getBoundingClientRect().toJSON() };
-    },
-    engine: E,
-    store: { pbs: getPbs, hist: getHist }
+    get save() { return JSON.parse(JSON.stringify(save)); },
+    engine: TT,
+    // Where a logical point or an on-screen key is on the page, for tests that use the real mouse.
+    point: page,
+    keyPoint: code => { const c = A.keyCenter(code); return c ? page(c.x, c.y) : null; }
   };
-  Kit.lifecycle({ pause: function () { if (screen === 'test') setUnfocused(true); } });
+
+  buildMap();
+  buildClass();
+  // P is a letter, so pause is Esc and the on-screen button; M is a letter too.
+  Kit.muteButton({ key: false });
+  Kit.lifecycle({ pause: () => pause(false), reset: () => { for (const k in lit) delete lit[k]; } });
+  toTitle();
+  Kit.loop(update, render);
   Kit.ready();
 })();

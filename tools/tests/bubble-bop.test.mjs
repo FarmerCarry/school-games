@@ -1,5 +1,5 @@
 // Bubble Bop in real Chromium: real mouse and keyboard input, saves, pause, mute,
-// reduced motion, and the statistics and telemetry a portal receives.
+// reduced motion and the difficulty tiers.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -9,14 +9,8 @@ import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
-const ID = /^[A-Za-z][A-Za-z0-9_:.-]{0,23}$/;
-// A portal stand-in: it embeds the game, records what the game posts, and sends preferences.
-const PARENT = `<!doctype html><meta charset="utf-8"><style>body{margin:0}iframe{position:absolute;left:0;top:0;width:1280px;height:720px;border:0}</style>
-<iframe id="f" src="/games/bubble-bop/"></iframe>
-<script>window.msgs = []; addEventListener('message', e => { if (e.source === f.contentWindow) msgs.push(e.data); });
-function prefs(p) { f.contentWindow.postMessage(Object.assign({ type: 'sg:preferences' }, p), location.origin); }</script>`;
 let browser, server;
-before(async () => { server = await startTestServer(root, { pages: { '/bb-parent': PARENT } }); browser = await launchChromium(); });
+before(async () => { server = await startTestServer(root); browser = await launchChromium(); });
 after(async () => { await browser?.close(); await server?.close(); });
 
 const SAVE = (worldsDone, extra = {}) => ({ v: 1, stars: [0, 1, 2, 3, 4].map(w => w < worldsDone ? [3, 3, 3] : [0, 0, 0]), best: [0, 0, 0, 0, 0], grip: true, color: 0, hat: 0, seenStars: 0, ...extra });
@@ -40,12 +34,12 @@ async function context(t, options = {}) {
   }, { save: options.save, dda: options.dda });
   return ctx;
 }
-// The game with its frame loop stepped by hand, and its Kit.stats calls recorded.
+// The game with its frame loop stepped by hand.
 async function game(t, options = {}) {
   const ctx = await context(t, options);
   await ctx.addInitScript(() => {
     let kit;
-    const bb = window.bb = { stats: [], cues: [] };
+    const bb = window.bb = {};
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (update, render) => {
@@ -55,13 +49,6 @@ async function game(t, options = {}) {
         bb.paint = () => render(0);
         return { stop() {} };
       };
-      for (const name of ['round', 'end', 'tutorial']) {
-        const call = kit.stats[name];
-        kit.stats[name] = function (...args) { bb.stats.push([name, ...args]); return call.apply(this, args); };
-      }
-      // What is on screen at each reaction-time cue.
-      const cue = kit.track.cue;
-      kit.track.cue = function (...args) { const s = window.__game && __game.state; bb.cues.push(s && { mode: s.mode, frog: s.frog && s.frog.x, targets: s.targets }); return cue.apply(this, args); };
     } });
   });
   const page = await ctx.newPage();
@@ -86,6 +73,9 @@ async function openLevel(page, w, l) {
   await page.keyboard.press('Enter');
   await step(page, 2);
   assert.equal((await state(page)).screen, 'map');
+  // Worlds 6-11 are on the map's second page, behind the big arrow.
+  const want = w >= 5 ? 1 : 0;
+  if ((await state(page)).mapPage !== want) { await page.locator(want ? '#mapNext' : '#mapPrev').click(); await step(page, 2); }
   await page.locator(`.pebble[data-w="${w}"][data-l="${l}"]`).click();
   await step(page, 2);
   assert.equal((await state(page)).screen, 'play');
@@ -115,9 +105,7 @@ test('Enter or a click starts; a first visit shows the two picture cards, then t
   await step(page);
   const s = await state(page);
   assert.equal(s.screen, 'play'); assert.equal(s.world, 0); assert.equal(s.level, 0); assert.equal(s.mode, 'touch');
-  const calls = await page.evaluate(() => bb.stats);
-  assert.deepEqual(calls.filter(c => c[0] === 'tutorial').map(c => c[1]), ['start', 'done']);
-  assert.deepEqual(calls.find(c => c[0] === 'round'), ['round', 'w1L1']);
+  assert.equal(s.party, false); assert.equal(s.hits, 0);
   assert.equal((await page.evaluate(() => __game.save)).grip, true, 'the cards are seen once');
 
   const again = await game(t, { save: SAVE(0) });
@@ -146,10 +134,11 @@ test('a click anywhere on the picture cards turns them, but a double click on Pl
   await step(page);
   s = await state(page);
   assert.equal(s.screen, 'play', 'and the next one starts the first bubbles');
-  assert.deepEqual((await page.evaluate(() => bb.stats)).filter(c => c[0] === 'tutorial').map(c => c[1]), ['start', 'done']);
+  assert.equal(s.world, 0); assert.equal(s.level, 0);
+  assert.equal((await page.evaluate(() => __game.save)).grip, true, 'the cards are seen once');
 });
 
-test('the picture cards can be skipped with the X or Esc, and a skip is not reported as finished', async t => {
+test('the picture cards can be skipped with the X or Esc', async t => {
   for (const skip of ['x', 'Escape']) {
     const page = await game(t);
     await page.keyboard.press('Enter');
@@ -159,7 +148,8 @@ test('the picture cards can be skipped with the X or Esc, and a skip is not repo
     await step(page);
     assert.equal((await state(page)).screen, 'play', skip + ': straight into the first bubbles');
     assert.equal((await page.evaluate(() => __game.save)).grip, true, skip + ': the cards are not shown again');
-    assert.deepEqual((await page.evaluate(() => bb.stats)).filter(c => c[0] === 'tutorial').map(c => c[1]), ['start'], skip);
+    const s = await state(page);
+    assert.equal(s.world, 0, skip); assert.equal(s.level, 0, skip);
   }
 });
 
@@ -171,14 +161,18 @@ test('a double click on a button acts once: its second click never lands on the 
   await step(page, 2);
   assert.equal((await state(page)).screen, 'map', 'a double click on Play opens the map, not a world-3 level');
   await page.locator('.pebble[data-w="0"][data-l="0"]').click();
+  await step(page);
+  const lv = await state(page);
+  assert.deepEqual([lv.screen, lv.world, lv.level], ['play', 0, 0]);
   await step(page, 30);
   await page.keyboard.press('KeyP');
   await step(page);
   const map = await page.locator('#btnMap').boundingBox();
   await page.mouse.dblclick(map.x + map.width / 2, map.y + map.height / 2);
   await step(page, 2);
-  assert.equal((await state(page)).screen, 'map', 'a double click on the pause Map button stays on the map');
-  assert.deepEqual((await page.evaluate(() => bb.stats)).filter(c => c[0] === 'round').map(c => c[1]), ['w1L1'], 'no other level started');
+  const s = await state(page);
+  assert.equal(s.screen, 'map', 'a double click on the pause Map button stays on the map');
+  assert.deepEqual([s.world, s.level], [0, 0], 'no other level started');
 });
 
 test('world 1 pops by hovering only, and a near miss within the margin still pops', async t => {
@@ -214,7 +208,7 @@ test('world 2: a click near a balloon pops it; a missed click shows a ripple and
   await step(page, 30);
   const s = await state(page), b = s.targets[0];
   const margin = await page.evaluate(tier => BB.TUNE.tap.margin[tier - 1], s.tier);
-  // Far from every balloon: a ripple, a miss for statistics, and nothing lost.
+  // Far from every balloon: a ripple, and nothing lost.
   const far = await page.evaluate(([x, y]) => __game.point(x, y), [b.x > 640 ? 120 : 1160, 620]);
   const ripples = await page.evaluate(() => __game.state.ripples);
   await page.mouse.click(far.x, far.y);
@@ -267,17 +261,25 @@ test('world 3: Space jumps and catches; other keys never cost anything; at tier 
   assert.equal((await state(easy)).frog.jumps, 2, 'and so does a click on the on-screen Space bar');
 });
 
-test('a reaction time starts when there is something to press: a firefly over the frog, not far away', async t => {
+test('fireflies fly over the frog one after another, where the Space bar lights up', async t => {
   const page = await game(t, { save: SAVE(2), dda: { _: { w3: [0.3, 4] } } });
   await openLevel(page, 2, 0);
-  const tier = (await state(page)).tier;
-  assert.ok(await until(page, 'bb.cues.length >= 3', 60 * 30), 'the fireflies fly past the frog one after another');
-  const { cues, reach } = await page.evaluate(tier => ({ cues: bb.cues, reach: BB.TUNE.jump.window[tier - 1] * BB.NEAR }), tier);
-  for (const c of cues) {
-    assert.equal(c.mode, 'jump');
-    const gap = Math.min(...c.targets.map(f => Math.abs(f.x - c.frog)));
-    assert.ok(gap < reach, `the cue comes as a firefly is ${Math.round(gap)} px from the frog, when the Space bar lights up (${Math.round(reach)} px)`);
-  }
+  const s = await state(page);
+  assert.equal(s.mode, 'jump'); assert.equal(s.tier, 2);
+  const over = await page.evaluate(tier => {
+    const reach = BB.TUNE.jump.window[tier - 1] * BB.NEAR, seen = new Set();
+    try {
+      for (let i = 0; i < 60 * 30 && seen.size < 3; i++) {
+        const st = __game.state;
+        for (const f of st.targets) if (Math.abs(f.x - st.frog.x) < reach) seen.add(f.id);
+        bb.run(1);
+      }
+    } finally { bb.paint(); }
+    return seen.size;
+  }, s.tier);
+  assert.ok(over >= 3, `the fireflies fly past the frog one after another (${over})`);
+  const now = await state(page);
+  assert.equal(now.hits, 0, 'nothing is caught without a jump'); assert.equal(now.frog.jumps, 0); assert.equal(now.screen, 'play');
 });
 
 test('world 4: the arrow keys (and A, D) move the basket under the fruit', async t => {
@@ -475,86 +477,217 @@ test('spoken hints use only an Arabic voice installed on the PC, never an online
   }
 });
 
-// Embedded like in the portal: rounds, ends and telemetry reach the parent.
-async function embedded(t, prefs, options) {
-  const ctx = await context(t, options);
-  const page = await ctx.newPage();
-  await page.goto(`${server.origin}/bb-parent`);
-  const frame = page.frames().find(f => f.url().includes('/games/bubble-bop/'));
-  await frame.waitForFunction(() => window.__game && window.Kit);
-  await page.waitForFunction(() => window.msgs.some(m => m && m.type === 'sg:ready'));
-  await page.evaluate(p => prefs(p), prefs);
-  // A click can overtake the message on a busy PC: play only once the game has the band.
-  await frame.waitForFunction(band => Kit.profile.band === band, prefs.band);
-  return { page, frame };
-}
-const fstate = frame => frame.evaluate(() => __game.state);
-
-test('the age band sets the starting tier: a 6-year-old gets bigger, slower bubbles than a 10-year-old', async t => {
+// The saved difficulty sets the starting tier: tier 1 has bigger bubbles than tier 3.
+test('the difficulty tier sets the bubbles: tier 1 gets bigger bubbles than tier 3', async t => {
   const seen = {};
-  for (const band of ['6-7', '10-11']) {
-    const { page, frame } = await embedded(t, { band, player: '', telemetry: false }, { save: SAVE(0) });
-    await page.mouse.click(640, 545); // the Play button
-    await frame.waitForFunction(() => __game.state.screen === 'play' && __game.state.targets.length > 0);
-    const s = await fstate(frame);
-    seen[band] = { tier: s.tier, r: s.targets[0].r };
+  for (const [name, level] of [['easy', 0.12], ['hard', 0.6]]) {
+    const page = await game(t, { save: SAVE(0), dda: { _: { w1: [level, 4] } } });
+    await page.locator('#btnPlay').click();
+    await step(page);
+    assert.equal((await state(page)).screen, 'play', name);
+    assert.ok(await until(page, 's.targets.length > 0'), name + ': a bubble rises');
+    const s = await state(page);
+    seen[name] = { tier: s.tier, r: s.targets[0].r };
   }
-  assert.deepEqual(seen['6-7'], { tier: 1, r: 66 });
-  assert.equal(seen['10-11'].tier, 3);
-  assert.ok(seen['10-11'].r < seen['6-7'].r);
+  assert.deepEqual(seen.easy, { tier: 1, r: 66 });
+  assert.equal(seen.hard.tier, 3);
+  assert.ok(seen.hard.r < seen.easy.r);
 });
 
-test('statistics and telemetry reach a stub portal with valid round ids, hits and misses', async t => {
-  const { page, frame } = await embedded(t, { band: '6-7', player: '', telemetry: true }, { save: SAVE(1) });
-  // Win world 1 level 1 by moving the mouse.
-  await page.mouse.click(640, 545);
-  await frame.waitForFunction(() => __game.state.screen === 'map');
-  await frame.locator('.pebble[data-w="0"][data-l="0"]').click();
-  await frame.waitForFunction(() => __game.state.screen === 'play');
-  for (let i = 0; i < 300 && (await fstate(frame)).screen === 'play' && !(await fstate(frame)).ending; i++) {
-    const p = await frame.evaluate(() => __game.targetPoint(0));
-    if (p) await page.mouse.move(p.x, p.y, { steps: 3 });
-    await page.waitForTimeout(60);
-  }
-  await frame.waitForFunction(() => __game.state.screen === 'result', null, { timeout: 10000 });
-  // World 2: one miss and one hit, then back to the map from the pause. (The result
-  // ignores clicks for its first 0.6 s, so a child mashing the mouse sees the stars.)
-  await page.waitForTimeout(900);
-  await frame.locator('#resMap').click();
-  await frame.waitForFunction(() => __game.state.screen === 'map');
-  await frame.locator('.pebble[data-w="1"][data-l="0"]').click();
-  await frame.waitForFunction(() => __game.state.targets.length > 0);
-  await page.waitForTimeout(400);
-  // A click far from every balloon: the corner farthest from them.
-  const miss = await frame.evaluate(() => {
-    const spots = [[90, 640], [1190, 640], [640, 690], [90, 160], [1190, 160]], ts = __game.state.targets;
-    const room = ([x, y]) => Math.min(...ts.map(t => Math.hypot(t.x - x, t.y - y)));
-    return spots.sort((a, b) => room(b) - room(a))[0];
-  });
-  await page.mouse.click(miss[0], miss[1]);
-  await frame.waitForFunction(() => __game.state.missClicks >= 1, null, { timeout: 10000 });
-  for (let i = 0; i < 20 && !(await fstate(frame)).hits; i++) {
-    const p = await frame.evaluate(() => __game.targetPoint(0));
-    if (p) await page.mouse.click(p.x, p.y);
-    await page.waitForTimeout(80);
-  }
-  assert.ok((await fstate(frame)).hits >= 1);
+/* ------------------------------------------------------------ worlds 6-11 */
+// An eleven-world save with worlds before `done` finished and `open` levels of world `done` starred.
+const SAVE11 = (done, open = 0) => ({ v: 1, stars: Array.from({ length: 11 }, (_, w) => w < done ? [3, 3, 3] : w === done ? [0, 1, 2].map(i => i < open ? 1 : 0) : [0, 0, 0]),
+  best: Array(11).fill(0), grip: true, color: 0, hat: 0, seenStars: 0 });
+const at = (page, x, y) => page.evaluate(([x, y]) => __game.point(x, y), [x, y]);
+
+test('a five-world save opens world 6 on the map\'s second page; the arrows and ← → turn the pages', async t => {
+  const page = await game(t, { save: SAVE(5) });
+  assert.equal((await page.evaluate(() => __game.save)).stars.length, 11, 'an old save grows to eleven worlds');
+  await page.keyboard.press('Enter');
+  await step(page, 2);
+  let s = await state(page);
+  assert.equal(s.screen, 'map'); assert.equal(s.mapPage, 1, 'the map opens where the next level is');
+  const visible = sel => page.locator(sel).isVisible();
+  assert.ok(await visible('.pebble[data-w="5"][data-l="0"]') && await visible('.pebble[data-w="10"][data-l="P"]'));
+  assert.ok(!await visible('.pebble[data-w="0"][data-l="0"]'));
+  assert.equal(await page.locator('.pebble[data-w="5"][data-l="0"]').evaluate(b => b.classList.contains('next') && !b.classList.contains('locked')), true, 'world 6 is open');
+  assert.equal(await page.locator('.pebble[data-w="6"][data-l="0"]').evaluate(b => b.classList.contains('locked')), true, 'world 7 waits');
+  await page.locator('#mapPrev').click();
+  await step(page, 2);
+  assert.equal((await state(page)).mapPage, 0);
+  assert.ok(await visible('.pebble[data-w="0"][data-l="0"]') && !await visible('.pebble[data-w="5"][data-l="0"]'));
+  assert.equal(await page.locator('.pebble[data-w="4"][data-l="2"] .st svg.on').count(), 3, 'the old stars are all there');
+  await page.keyboard.press('ArrowLeft');
+  await step(page, 2);
+  assert.equal((await state(page)).mapPage, 1, '← turns to the next page, like the reading direction');
+  await page.keyboard.press('Enter');
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.screen, 'play'); assert.equal(s.world, 5); assert.equal(s.level, 0); assert.equal(s.mode, 'drag');
+});
+
+test('world 6: a real press, move and release carries a turtle into its pool', async t => {
+  const page = await game(t, { save: SAVE11(5), dda: { _: { w6: [0.3, 4] } } });
+  await openLevel(page, 5, 0);
+  assert.equal((await state(page)).tier, 2);
+  assert.ok(await until(page, 's.targets.length > 0'));
+  await step(page, 20);
+  let s = await state(page);
+  const turtle = s.targets[0], pool = s.pools.find(p => p.color === turtle.home);
+  // A click on the sand does nothing bad; a click on the turtle (tier 2) does not pick it up.
+  const sand = await at(page, 1100, 260);
+  await page.mouse.click(sand.x, sand.y);
+  const a = await at(page, turtle.x, turtle.y);
+  await page.mouse.click(a.x, a.y);
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.held, 0); assert.equal(s.hits, 0); assert.equal(s.slips, 0); assert.ok(s.missClicks >= 1);
+  // Press, hold, move, release.
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.held, turtle.id, 'pressed on the turtle: it is in the hand');
+  assert.equal(s.button, true, 'the on-screen mouse shows the button held');
+  const b = await at(page, pool.x, pool.y);
+  for (let i = 1; i <= 10; i++) { await page.mouse.move(a.x + (b.x - a.x) * i / 10, a.y + (b.y - a.y) * i / 10); await step(page, 3); }
+  const carried = (await state(page)).targets.find(o => o.id === turtle.id);
+  assert.ok(Math.hypot(carried.x - pool.x, carried.y - pool.y) < pool.r, 'the turtle follows the pointer');
+  await page.mouse.up();
+  assert.ok(await until(page, 's.hits === 1', 60), 'let go over its pool: home');
+  s = await state(page);
+  assert.equal(s.held, 0); assert.equal(s.slips, 0);
+});
+
+test('world 7: one click knocks a clam; a double click opens it', async t => {
+  const page = await game(t, { save: SAVE11(6), dda: { _: { w7: [0.3, 4] } } });
+  await openLevel(page, 6, 0);
+  assert.ok(await until(page, 's.targets.length > 0'));
+  await step(page, 20);
+  const c = (await state(page)).targets[0], p = await at(page, c.x, c.y);
+  await page.mouse.click(p.x, p.y);
+  await step(page, 1);
+  let s = await state(page);
+  assert.equal(s.hits, 0); assert.equal(s.targets.find(o => o.id === c.id).armed, true, 'one click fills one dot');
+  await step(page, 90);
+  assert.equal((await state(page)).targets.find(o => o.id === c.id).armed, false, 'too slow: the dot empties, nothing lost');
+  await page.mouse.dblclick(p.x, p.y);
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.hits, 1, 'a real double click opens the clam');
+  assert.equal(s.escapes, 0);
+});
+
+test('world 8: holding the button or Space blows the bubble; letting go in the ring fills it', async t => {
+  const page = await game(t, { save: SAVE11(7), dda: { _: { w8: [0.05, 4] } } });
+  await openLevel(page, 7, 0);
+  assert.ok(await until(page, 's.targets.length > 0 && s.targets[0].state === "ready"'));
+  // A short click only poofs a little bubble: no pop, no slip.
+  await page.mouse.move(640, 600);
+  await page.mouse.click(640, 600);
+  await step(page, 3);
+  let s = await state(page);
+  assert.equal(s.hits, 0); assert.equal(s.escapes, 0);
+  // The mouse button held down.
+  await page.mouse.down();
+  await step(page, 2);
+  assert.equal((await state(page)).targets[0].state, 'grow');
+  assert.ok(await until(page, 's.targets[0].inBand', 400), 'the bubble reaches the ring');
+  await step(page, 4);
+  await page.mouse.up();
+  await step(page, 2);
+  assert.equal((await state(page)).hits, 1, 'let go inside the ring');
+  // Space works the same.
+  assert.ok(await until(page, 's.targets.length > 0 && s.targets[0].state === "ready"', 300));
+  await page.keyboard.down('Space');
+  await step(page, 2);
+  assert.ok(await until(page, 's.targets[0] && s.targets[0].inBand', 400));
+  await step(page, 4);
+  await page.keyboard.up('Space');
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.hits, 2, 'Space blows bubbles too');
+  // Pausing while holding drops the bubble quietly.
+  assert.ok(await until(page, 's.targets.length > 0 && s.targets[0].state === "ready"', 300));
+  await page.keyboard.down('Space');
+  await step(page, 20);
   await page.keyboard.press('KeyP');
-  await frame.locator('#btnMap').click();
-  await page.waitForFunction(() => msgs.some(m => m.type === 'sg:telemetry' && m.ev.some(e => e[0] === 're' && e[2] === 'w2L1')));
-  const msgs = await page.evaluate(() => window.msgs);
-  const events = msgs.filter(m => m.type === 'sg:stats').flatMap(m => m.r);
-  const starts = events.filter(e => e[0] === 's').map(e => e[1]);
-  assert.deepEqual(starts, ['w1L1', 'w2L1']);
-  for (const id of starts) { assert.match(id, ID); assert.doesNotMatch(id, /\d{3}/); }
-  const win = events.find(e => e[0] === 'w');
-  assert.equal(win[1], 'w1L1'); assert.ok(win[3] >= 1 && win[3] <= 3, 'a win carries its stars');
-  assert.ok(events.some(e => e[0] === 'q' && e[1] === 'w2L1'), 'leaving a level is a quit');
-  const tm = msgs.filter(m => m.type === 'sg:telemetry').flatMap(m => m.ev);
-  const rs = tm.filter(e => e[0] === 'rs');
-  assert.deepEqual(rs.map(e => [e[1], e[2]]), [['w1L1', 1], ['w2L1', 1]], 'round starts carry the tier');
-  const won = tm.find(e => e[0] === 're' && e[2] === 'w1L1'), quit = tm.find(e => e[0] === 're' && e[2] === 'w2L1');
-  assert.equal(won[1], 'w'); assert.ok(won[6] >= 8, 'hits for every popped bubble'); assert.equal(won[7], 0);
-  assert.equal(quit[1], 'q'); assert.ok(quit[6] >= 1, 'a hit'); assert.ok(quit[7] >= 1, 'a missed click');
-  assert.ok(quit[8].reduce((a, b) => a + b, 0) >= 1, 'a reaction time to a balloon');
+  await step(page, 2);
+  await page.keyboard.up('Space');
+  assert.equal((await state(page)).screen, 'pause');
+  const frozen = await state(page);
+  await step(page, 60);
+  assert.equal((await state(page)).time, frozen.time, 'nothing grows while paused');
+  await page.keyboard.press('KeyP');
+  await step(page, 3);
+  s = await state(page);
+  assert.equal(s.screen, 'play'); assert.equal(s.targets[0].state, 'ready'); assert.equal(s.escapes, 0); assert.equal(s.hits, 2);
+});
+
+test('world 9: the arrows and WASD steer the submarine to the starfish', async t => {
+  const page = await game(t, { save: SAVE11(8), dda: { _: { w9: [0.05, 4] } } });
+  await openLevel(page, 8, 0);
+  assert.ok(await until(page, 's.targets.length > 0'));
+  for (const [key, axis, sign] of [['ArrowRight', 'x', 1], ['ArrowLeft', 'x', -1], ['KeyW', 'y', -1], ['KeyS', 'y', 1]]) {
+    const before = (await state(page)).sub;
+    await page.keyboard.down(key);
+    await step(page, 20);
+    await page.keyboard.up(key);
+    // The submarine glides to a stop before the next key.
+    await step(page, 30);
+    const after = (await state(page)).sub;
+    assert.ok((after[axis] - before[axis]) * sign > 30, `${key} moves the submarine (${JSON.stringify(before)} → ${JSON.stringify(after)})`);
+  }
+  // Steer to the first starfish with the arrows.
+  for (let i = 0; i < 40 && (await state(page)).hits === 0; i++) {
+    const s = await state(page), f = s.targets[0];
+    if (!f) { await step(page, 5); continue; }
+    const keys = [];
+    if (Math.abs(f.x - s.sub.x) > 20) keys.push(f.x > s.sub.x ? 'ArrowRight' : 'ArrowLeft');
+    if (Math.abs(f.y - s.sub.y) > 20) keys.push(f.y > s.sub.y ? 'ArrowDown' : 'ArrowUp');
+    for (const k of keys) await page.keyboard.down(k);
+    await step(page, 6);
+    for (const k of keys) await page.keyboard.up(k);
+  }
+  assert.equal((await state(page)).hits, 1, 'the submarine picked up a starfish');
+});
+
+test('world 10: the letter on the balloon pops it, in English or Arabic input; a wrong key costs nothing', async t => {
+  const page = await game(t, { save: SAVE11(9), dda: { _: { w10: [0.05, 4] } } });
+  await openLevel(page, 9, 0);
+  assert.ok(await until(page, 's.targets.length > 0'));
+  let s = await state(page);
+  const code = s.targets[0].code;
+  assert.ok(['KeyF', 'KeyJ'].includes(code), 'tier 1 is F and J');
+  for (const key of ['KeyQ', 'Space', code === 'KeyF' ? 'KeyJ' : 'KeyF']) await page.keyboard.press(key);
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.hits, 0); assert.equal(s.escapes, 0); assert.equal(s.screen, 'play');
+  assert.ok(s.missClicks >= 3, 'wrong keys are counted for the difficulty, never against the stars');
+  await page.keyboard.press(code);
+  await step(page, 2);
+  assert.equal((await state(page)).hits, 1, 'the right key pops its balloon');
+  // The same key with an Arabic keyboard layout: the key's place (code) counts, not its letter.
+  assert.ok(await until(page, 's.targets.length > 0', 400));
+  const next = (await state(page)).targets[0].code, cdp = await page.context().newCDPSession(page);
+  const ar = { KeyF: 'ب', KeyJ: 'ت' }[next];
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', code: next, key: ar, text: ar, unmodifiedText: ar, windowsVirtualKeyCode: next === 'KeyF' ? 70 : 74 });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', code: next, key: ar, windowsVirtualKeyCode: next === 'KeyF' ? 70 : 74 });
+  await step(page, 2);
+  assert.equal((await state(page)).hits, 2, 'the Arabic letter on the same key pops it');
+  // P still pauses and M still mutes in the letters world.
+  await page.keyboard.press('KeyP');
+  await step(page, 1);
+  assert.equal((await state(page)).screen, 'pause');
+  const frozen = await state(page);
+  await step(page, 60);
+  assert.equal((await state(page)).time, frozen.time);
+});
+
+test('world 11 mixes the five new skills, part after part', async t => {
+  const page = await game(t, { save: SAVE11(10), dda: { _: { w11: [0.05, 4] } } });
+  await openLevel(page, 10, 0);
+  const s = await state(page);
+  assert.equal(s.mode, 'drag'); assert.equal(s.goal, 2);
+  assert.equal(s.screen, 'play'); assert.equal(s.world, 10); assert.equal(s.level, 0);
 });

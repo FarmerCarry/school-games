@@ -12,7 +12,6 @@
  *   - each game becomes ONE html file: its CSS/JS plus shared/kit.js and shared/game.css are
  *     minified and inlined. Fonts and three.js stay shared files (cached once for all games).
  *   - the portal becomes one html file with its CSS, JS, the catalog and all thumbnails inlined.
- *   - teacher.html (local play statistics) becomes one html file the same way, without thumbnails.
  *   - sw.js: an offline cache. After the first visit the whole site is stored on the PC, pages
  *     open without asking the server, and it still works if the internet drops. Each build
  *     changes sw.js, so PCs download only the files that changed.
@@ -23,9 +22,6 @@
  *     The sw.js committed at the repo root is this same off switch, so switching GitHub Pages
  *     back to the plain source site also cleans the offline cache off every PC.
  *     (Regenerate it with: node tools/build.mjs --kill-sw --out .work/kill-switch && cp .work/kill-switch/sw.js sw.js)
- *   - SG_TELEMETRY_URL (environment, optional): the https:// address of the school's telemetry
- *     ingest server (docs/TELEMETRY.md; play events without names). Only the portal gets it, as window.SG_TELEMETRY, and
- *     only in a normal build; unset or empty, nothing is added and the portal never sends.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -43,7 +39,6 @@ const options = parseArgs(process.argv.slice(2));
 const DEST = path.resolve(ROOT, options.out);
 const MINIFY = options.minify;
 const KILL_SW = options.killSW;
-const TELEMETRY_URL = telemetryUrl(process.env.SG_TELEMETRY_URL);
 const esbuild = MINIFY ? require('esbuild') : null;
 
 const posix = p => p.split(path.sep).join('/');
@@ -74,20 +69,6 @@ function parseArgs(args) {
     else throw new Error('unknown build argument: ' + args[i]);
   }
   return result;
-}
-
-// The ingest address goes into an inline script, so it must be a plain https:// URL:
-// URL characters only (no quotes, spaces, backslashes, < or >), no user name or password.
-function telemetryUrl(value) {
-  if (value === undefined || value === '') return '';
-  let url = null;
-  try { url = new URL(value); } catch { /* refused below */ }
-  if (value.length > 200 || !/^https:\/\/[\w\-.~:/?#[\]@!$&()*+,;=%]+$/.test(value) || !url || url.protocol !== 'https:' ||
-    !url.hostname || url.username || url.password) {
-    throw new Error('SG_TELEMETRY_URL must be an https:// address of at most 200 characters with only URL characters ' +
-      '(no quotes, spaces, backslashes, < or >) and no user name or password; got ' + JSON.stringify(value.slice(0, 60)));
-  }
-  return value;
 }
 
 function isWithin(parent, child) {
@@ -296,21 +277,10 @@ try {
     'js/site.js': 'window.SG_THUMBS=' + JSON.stringify(thumbs).replace(/<\//g, '<\\/') + ';',
     'js/offline.js': 'window.SG_OFFLINE_BUILD=true;'
   };
-  // The telemetry sink's ingest address: the portal only, never a kill-switch build.
-  const telemetry = TELEMETRY_URL && !KILL_SW ? 'window.SG_TELEMETRY={url:' + JSON.stringify(TELEMETRY_URL) + '};' : '';
-  if (telemetry) before['js/telemetry.js'] = telemetry;
   let portal = inlinePage(path.join(ROOT, 'index.html'), { before, skip: KILL_SW ? ['js/offline.js'] : [] });
-  if (telemetry && !portal.includes(telemetry)) throw new Error('SG_TELEMETRY_URL is set, but index.html does not load js/telemetry.js');
   // A kill-switch deployment omits the registering controller completely.
   write('index.html', portal);
   report.unshift(['index.html', Buffer.byteLength(portal)]);
-
-  /* -------------------------------------------------------- teacher page */
-  // Local play statistics (docs/PLAY_STATS.md). One file with the catalog inlined,
-  // precached like the portal so a teacher can open it offline on each PC. It never
-  // registers the worker, and it is not a game, so it stays out of `report`.
-  const teacher = inlinePage(path.join(ROOT, 'teacher.html'));
-  write('teacher.html', teacher);
 
   /* --------------------------------------------------------- static files */
   const statics = ['favicon.svg', 'manifest.webmanifest', 'lib/three/three.min.js', 'lib/three/LICENSE'];
@@ -369,8 +339,6 @@ try {
   console.log(`offline cache: ${Object.keys(precache).length} files, ${(total / 1048576).toFixed(2)} MB, version ${version}${KILL_SW ? ' (KILL SWITCH sw.js)' : ''}`);
   console.log(`offline download: ${OFFLINE_ZIP}, ${zipped.length} files in ${OFFLINE_FOLDER}/, ${(download.length / 1048576).toFixed(2)} MB`);
   for (const [f, b] of report.slice(0, 1)) console.log(`  ${f}: ${(b / 1024).toFixed(0)} KB`);
-  console.log(`  teacher.html: ${(Buffer.byteLength(teacher) / 1024).toFixed(0)} KB`);
-  if (telemetry) console.log(`  telemetry: the portal sends play events without names to ${new URL(TELEMETRY_URL).host}`);
   const gb = report.slice(1).map(r => r[1]);
   console.log(`  games: ${(Math.min(...gb) / 1024).toFixed(0)}–${(Math.max(...gb) / 1024).toFixed(0)} KB each (one file per game)`);
 } finally {

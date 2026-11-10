@@ -158,7 +158,7 @@
   /* ------------------------------------------------------------- particles */
   var PMAX = 480, parts = [], pcur = 0;
   for (var pi = 0; pi < PMAX; pi++) parts.push({ on: false });
-  // Reduced motion / classroom preset: smaller bursts, no speed lines or white flash.
+  // Reduced motion: smaller bursts, no speed lines or white flash.
   var calm = Kit.motion.reduced();
   Kit.motion.onChange(function (r) { calm = r; if (r) flashT = 0; frameDirty = true; });
   function P(type, x, y, vx, vy, life, size, color, g, drag) {
@@ -373,9 +373,6 @@
     tutorialRelease = i < 2;
     tries = 1;
     setMode('play');
-    // Play statistics: one try per start or restart (falls respawn inside the try).
-    Kit.stats.round('L' + (i + 1));
-    if (tutorialRelease && !starBits(1)) Kit.stats.tutorial('start'); // the release coach, first time
   }
   function startEndless() {
     endless = true; attract = false;
@@ -387,7 +384,6 @@
     needFresh = holdInput();
     tutorialRelease = false;
     setMode('play');
-    Kit.stats.round('endless');
   }
   function startAttract() {
     attract = true; endless = true;
@@ -403,7 +399,6 @@
     tries++;
     needFresh = holdInput();
     setMode('play');
-    Kit.stats.round('L' + (lvl + 1));
   }
   function respawn() {
     // quick respawn after a bonk / splash
@@ -439,8 +434,7 @@
           }
           kick(4);
           if (endless || lvl !== 0) {
-            if (tutorialRelease && !attract && !starBits(1)) Kit.stats.tutorial('done'); // the coach clears
-            tutorialRelease = false;
+            tutorialRelease = false; // the coach clears
           }
           break;
         case 'bounce':
@@ -1595,18 +1589,16 @@
     }
     if (lvl + 2 > save.unlocked) save.unlocked = Math.min(LEVELS.length, lvl + 2);
     persist();
-    Kit.stats.end('win', popcount(got)); // once per finish (never the attract run, which has no finish)
     result = { got: got, before: before, after: totalStars(), newBest: newBest };
   }
   function commitEndless() {
     var d = dist(), prev = save.endless;
-    Kit.stats.end('end', d); // a real run only: the attract run restarts itself instead
     if (d > prev) save.endless = d;
     persist();
     result = { d: d, prev: prev };
   }
   // An endless run left alive (R, or Restart, Menu or Levels from pause) still keeps its
-  // distance; statistics count it as a quit, so it reports no end.
+  // distance.
   function bankEndless() {
     if (endless && !attract && w && w.st === 'play' && dist() > save.endless) { save.endless = dist(); persist(); }
   }

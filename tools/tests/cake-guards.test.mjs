@@ -11,7 +11,7 @@ let browser, server;
 before(async () => { server = await startTestServer(root); browser = await launchChromium(); });
 after(async () => { await browser?.close(); await server?.close(); });
 
-// The frame loop is stepped by hand, Kit.stats calls are recorded and saves can be made to fail.
+// The frame loop is stepped by hand and saves can be made to fail.
 async function game(t, { saved, reducedMotion = 'no-preference' } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion });
   const page = await context.newPage(), errors = [];
@@ -20,7 +20,7 @@ async function game(t, { saved, reducedMotion = 'no-preference' } = {}) {
   await page.addInitScript(saved => {
     if (saved !== undefined) localStorage.setItem('sg:cake-guards:save', saved);
     let kit;
-    const cg = window.cg = { paints: 0, stats: [], failSave: false };
+    const cg = window.cg = { paints: 0, failSave: false };
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
       kit.loop = (update, render) => {
@@ -29,10 +29,6 @@ async function game(t, { saved, reducedMotion = 'no-preference' } = {}) {
         cg.run = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); };
         return { stop() {} };
       };
-      for (const name of ['round', 'end', 'tutorial']) {
-        const call = kit.stats[name];
-        kit.stats[name] = function (...args) { cg.stats.push([name, ...args]); return call.apply(this, args); };
-      }
     } });
     const write = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key) {
@@ -79,9 +75,9 @@ test('a won level is saved the moment it is won; Restart from a pause in the cel
   assert.equal((await state(page)).screen, 'pause');
   await page.locator('#btnRestart').click();
   await page.evaluate(() => cg.step(1));
-  assert.deepEqual([(await state(page)).screen, (await state(page)).wave], ['play', 0]);
+  const restarted = await state(page);
+  assert.deepEqual([restarted.screen, restarted.level, restarted.endless, restarted.wave, restarted.phase], ['play', 0, false, 0, 'build'], 'Restart opens a fresh try of level 1');
   assert.equal((await stored(page)).stars[0], 3, 'restarting does not take the win away');
-  assert.deepEqual(await page.evaluate(() => cg.stats.filter(s => s[0] !== 'tutorial')), [['round', 'L1'], ['end', 'win', 3], ['round', 'L1']]);
   // Without a pause the result screen follows, and Enter goes on to level 2.
   await page.evaluate(() => { __game.win(); cg.run(200); cg.step(1); });
   assert.equal(await page.locator('#scr-win').isVisible(), true);
@@ -105,8 +101,8 @@ test('a lost level reports the waves it held; an endless run saves its best at t
   // The fourth wave eats the cake.
   await page.evaluate(() => { document.getElementById('btnWave').click(); __game.lose(); cg.step(1); });
   assert.equal((await stored(page)).endless, 3, 'the best is saved before the result screen');
-  const ends = await page.evaluate(() => cg.stats.filter(s => s[0] === 'end'));
-  assert.deepEqual(ends, [['end', 'lose', 0], ['end', 'end', 3]]);
+  const ended = await state(page);
+  assert.deepEqual([ended.endless, ended.phase, ended.wave - 1], [true, 'lost', 3], 'the endless run ends after holding three waves');
   await page.evaluate(() => cg.step(120));
   assert.equal(await page.locator('#scr-over').isVisible(), true);
   assert.equal(await page.locator('#overWaves').textContent(), '3');
@@ -238,7 +234,6 @@ test('the first level teaches by doing, and the keyboard covers waves, speed and
   await page.keyboard.press('Escape');
   await page.evaluate(() => cg.step(1));
   assert.equal((await state(page)).screen, 'pause');
-  assert.deepEqual(await page.evaluate(() => cg.stats.filter(s => s[0] === 'tutorial')), [['tutorial', 'start']]);
 });
 
 test('reduced motion keeps the banner readable and removes it by a timer', async t => {

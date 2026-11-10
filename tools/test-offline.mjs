@@ -175,7 +175,7 @@ try {
   for (const dir of ['games', 'js', 'css', 'shared', 'lib', 'icons', 'tools/lib']) {
     fs.cpSync(path.join(REPO, dir), path.join(SOURCE, dir), { recursive: true });
   }
-  for (const file of ['index.html', 'teacher.html', 'manifest.webmanifest', 'favicon.svg', 'tools/build.mjs']) {
+  for (const file of ['index.html', 'manifest.webmanifest', 'favicon.svg', 'tools/build.mjs']) {
     fs.copyFileSync(path.join(REPO, file), path.join(SOURCE, file));
   }
   fs.symlinkSync(path.join(REPO, 'node_modules'), path.join(SOURCE, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
@@ -262,16 +262,6 @@ try {
       await openOfflineGame(page, slug);
       check(true, 'offline game loads: ' + slug);
     }
-    // The teacher statistics page is precached too: a teacher opens it on each PC,
-    // often without internet. It reads only this browser's storage.
-    const teacher = await context.newPage();
-    teacher.on('pageerror', error => errors.push('teacher.html: ' + error.message));
-    const teacherResponse = await teacher.goto(origin + BASE + 'teacher.html', { waitUntil: 'load' });
-    assert.ok(teacherResponse.ok() && teacherResponse.fromServiceWorker(), 'teacher page comes from the offline worker');
-    await teacher.waitForFunction(() => document.getElementById('source')?.dataset.copy === 'web' && !!document.querySelector('#gameTable'));
-    assert.equal(await teacher.locator('#storageMsg').isHidden(), true, 'teacher page reads local storage offline');
-    await teacher.close();
-    check(true, 'offline teacher statistics page loads from cache');
     await page.evaluate(() => { location.hash = '#/'; });
     await context.setOffline(false);
 

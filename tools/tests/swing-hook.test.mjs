@@ -219,7 +219,6 @@ test('an endless run left alive with R or through the pause menu keeps its dista
   const saved = () => page.evaluate(() => (JSON.parse(localStorage.getItem('sg:swing-hook:save')) || {}).endless);
   // The opening launch flies about 11 m before its splash: leave the run mid-air.
   const fly = frames => page.evaluate(n => {
-    if (!window.ends) { window.ends = []; const end = Kit.stats.end; Kit.stats.end = function () { ends.push([...arguments]); return end.apply(this, arguments); }; }
     __game.endless(); const x0 = __game.state().x; __game.script('1'.repeat(6)); stepGame(n);
     const s = __game.state(); return { st: s.st, m: Math.floor((s.x - x0) / 50) };
   }, frames);
@@ -234,5 +233,5 @@ test('an endless run left alive with R or through the pause menu keeps its dista
   assert.equal(await page.evaluate(() => __game.mode), 'pause');
   await page.locator('#psMenu').click();
   assert.equal(await saved(), run.m, 'Menu from pause keeps the longer distance');
-  assert.deepEqual(await page.evaluate(() => ends), [], 'statistics still count a run left alive as a quit');
+  assert.equal(await page.evaluate(() => __game.mode), 'title', 'and leaves the run');
 });

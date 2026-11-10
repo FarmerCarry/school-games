@@ -156,7 +156,7 @@
       if (G.slow > 0) { G.slow -= dt; sdt = dt * 0.3; }
       if (G.state === 'play' && G.spectate > 0) sdt = dt * 2.2;
 
-      // shake (off with reduced motion or the classroom preset)
+      // shake (off with reduced motion)
       if (Kit.motion.reduced()) { G.shakeP = 0; G.shx = 0; G.shy = 0; }
       else {
         G.shakeP = Math.max(0, G.shakeP - dt * 38);

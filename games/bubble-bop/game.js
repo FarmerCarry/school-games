@@ -1,7 +1,6 @@
-/* Bubble Bop (فقاعات بوب): screens, mouse and keyboard, the ghost-hand coach, saves,
- * sound and play statistics. rules.js simulates the worlds; art.js draws them.
- * This is the UI layer: it reads Kit.dda at every level start and reports Kit.stats
- * rounds and Kit.track hits, misses and cues. */
+/* Bubble Bop (فقاعات بوب): screens, mouse and keyboard, the ghost-hand coach, saves
+ * and sound. rules.js simulates the worlds; art.js draws them.
+ * This is the UI layer: it reads Kit.dda at every level start. */
 (function () {
   'use strict';
   const BB = window.BB, A = BB.art, J = Kit.juice, W = BB.W, H = BB.H, KEYS = BB.KEYS;
@@ -24,22 +23,32 @@
     saveStatus.saved();
     return true;
   }
-  // One difficulty controller per world (Kit keeps it per player and age band).
+  // One difficulty controller per world (Kit keeps it on this PC).
   const dda = BB.WORLDS.map((_, i) => Kit.dda('bubble-bop', { id: 'w' + (i + 1) }));
 
   /* --------------------------------------------------------------- state */
   let screen = 'title', world = null, cur = { w: 0, l: 0 }, time = 0, ending = null, result = null, resultT = 0, resultLock = 0;
-  let closetFrom = 'title', gripCard = 0, gripThen = '', gripAt = 0, menuIdle = 0, menuNext = 4, busyT = 0, lastMissT = -9, unlockFx = null;
+  let closetFrom = 'title', gripCard = 0, gripThen = '', gripAt = 0, menuIdle = 0, menuNext = 4, unlockFx = null;
   const ptr = { x: W / 2, y: H / 2, known: false, travel: 0, movedAt: -9 };
   const menuBop = { x: 640, y: 364, vx: 0, vy: 0 };
   let clicks = [], jumpPress = false, holdDir = 0, keyDir = 0, anyKey = '';
-  const flash = { space: 0, left: 0, right: 0, click: 0, move: 0, wiggle: 0, spaceGlow: 0, keyGlow: 0, mouseHint: 0 };
+  // Worlds 6-11: button presses and releases in order (drag), the button held (drag, hold),
+  // letter keys pressed, the arrows held, an on-screen arrow held with the mouse (tiers 1-2),
+  // and a quiet let-go after a pause.
+  let mouseEvs = [], btnDown = false, letters = [], steerDx = 0, steerDy = 0, steerClick = '', cancelNext = false;
+  const flash = { space: 0, left: 0, right: 0, click: 0, move: 0, wiggle: 0, spaceGlow: 0, keyGlow: 0, mouseHint: 0, held: 0, two: 0,
+    up: 0, down: 0, west: 0, east: 0 };
+  const keyFx = { wrong: {}, demo: {} };
   const coach = { hit: 0, input: 0, next: 4, said: false };
   const taught = {};
   let happy = 0, frogLand = 0, pipBump = 0, multBump = 0;
   let rings = [], floats = [], deco = [], ripples = 0, trailT = 0;
+  let anims = [], poolPulse = [0, 0, 0], wallWig = [0, 0, 0, 0], growStep = 0, bandWas = false, bumpT = -9, demoTurn = 0, grabCursor = false;
   const PRAISE = ['رائع!', 'ممتاز!', 'مذهل!', 'خارق!'];
-  const SAY = { touch: 'حرّك الفأرة إلى الفقاعة', tap: 'انقر على البالون', jump: 'اضغط مسافة', catch: 'حرّك السلة بالأسهم' };
+  const SAY = { touch: 'حرّك الفأرة إلى الفقاعة', tap: 'انقر على البالون', jump: 'اضغط مسافة', catch: 'حرّك السلة بالأسهم',
+    drag: 'اسحب السلحفاة إلى بيتها', dbl: 'انقر مرتين على الصدفة', hold: 'اضغط مطولًا ثم اترك', steer: 'حرّك الغواصة بالأسهم', keys: 'اضغط الحرف نفسه' };
+  const ARROWS = { up: ['ArrowUp', 'KeyW'], down: ['ArrowDown', 'KeyS'], west: ['ArrowLeft', 'KeyA'], east: ['ArrowRight', 'KeyD'] };
+  const STEP = { up: [0, -1], down: [0, 1], west: [-1, 0], east: [1, 0] };
 
   /* ------------------------------------------------------------ screens */
   const SCREENS = { title: 'scrTitle', grip: 'scrGrip', map: 'scrMap', pause: 'scrPause', result: 'scrResult', closet: 'scrCloset' };
@@ -47,6 +56,7 @@
     screen = name;
     for (const k in SCREENS) $(SCREENS[k]).hidden = k !== name;
     $('hud').hidden = name !== 'play';
+    if (name !== 'play' && grabCursor) { grabCursor = false; canvas.classList.remove('grab'); }
     stopDemo();
     menuIdle = 0; menuNext = 4;
     dirty = true;
@@ -80,7 +90,6 @@
     gripThen = then; gripCard = 0;
     paintGrip();
     setScreen('grip');
-    Kit.stats.tutorial('start');
     const warm = new Image(); warm.src = 'grip-keys.webp';
   }
   function paintGrip() {
@@ -98,19 +107,20 @@
   function gripNext() {
     if (screen !== 'grip') return;
     if (gripCard === 0) { J.tap(); gripCard = 1; paintGrip(); }
-    else { J.select(); gripDone(false); }
+    else { J.select(); gripDone(); }
   }
-  // Skipping the cards (the X or Esc) is not finishing them: only the last card reports done.
-  function gripDone(skipped) {
+  // The last card, the X or Esc: the cards are seen and not shown again.
+  function gripDone() {
     if (screen !== 'grip') return;
-    if (!skipped) Kit.stats.tutorial('done');
     if (!save.grip) { save.grip = true; persist(); }
     const then = gripThen; gripThen = '';
     if (then === 'play') afterGrip(); else toTitle();
   }
 
   /* ---------------------------------------------------------------- map */
+  // Two pages: worlds 1-5 and worlds 6-11, turned with the big arrows (or ← →).
   const isles = [], pebbles = [];
+  let mapPage = 0;
   function starIcons() { return '<span class="st" aria-hidden="true">' + '<svg><use href="#i-star"/></svg>'.repeat(3) + '</span>'; }
   function buildMap() {
     const box = $('islands');
@@ -135,8 +145,15 @@
   }
   function refreshMap() {
     const next = BB.nextLevel(save);
+    $('mapNext').hidden = mapPage === 1;
+    $('mapPrev').hidden = mapPage === 0;
+    // The arrow rings when the next level waits on the other page.
+    $('mapNext').classList.toggle('ring', A.pageOf(next.w) === 1);
+    $('mapPrev').classList.toggle('ring', A.pageOf(next.w) === 0);
     pebbles.forEach((row, w) => {
-      const open = BB.worldOpen(save, w);
+      const open = BB.worldOpen(save, w), shown = A.pageOf(w) === mapPage;
+      isles[w].hidden = !shown;
+      row.forEach(b => { b.hidden = !shown; });
       isles[w].setAttribute('aria-label', 'العالم ' + (w + 1) + (open ? '' : ' (مقفل)'));
       row.forEach((b, j) => {
         const l = j === 3 ? 'P' : j, ok = BB.isOpen(save, w, l), stars = l === 'P' ? 0 : save.stars[w][l];
@@ -155,8 +172,10 @@
     });
     setChip('mapStars');
   }
-  function toMap(fresh) {
+  // The map opens on the page of a world just unlocked, else of world w, else of the next level.
+  function toMap(fresh, w) {
     world = null;
+    mapPage = A.pageOf(fresh >= 0 ? fresh : w >= 0 ? w : BB.nextLevel(save).w);
     refreshMap();
     setScreen('map');
     J.whoosh(0.4);
@@ -166,6 +185,14 @@
       const p = A.ISLANDS[fresh];
       for (let i = 0; i < 4; i++) fx.burst(p.x, p.y - 20, { count: 22, colors: ['#ffd23f', '#ffffff', '#ff7eb6', '#4fd1ff'], speed: 340, life: 0.9, size: 8, gravity: 260 });
     }
+  }
+  function turnPage(p) {
+    if (screen !== 'map' || p === mapPage) return;
+    J.whoosh(0.6);
+    mapPage = p;
+    refreshMap();
+    stopDemo(); menuIdle = 0; menuNext = 4; unlockFx = null;
+    dirty = true;
   }
   function wiggle(el) { el.classList.remove('wiggle'); void el.offsetWidth; el.classList.add('wiggle'); setTimeout(() => el.classList.remove('wiggle'), 500); }
   function pickLevel(w, l, el) {
@@ -232,15 +259,16 @@
 
   /* -------------------------------------------------------------- levels */
   function startLevel(w, l) {
-    // Difficulty is read at every level start, before the round is reported.
+    // Difficulty is read at every level start.
     const d = dda[w], tier = d.tier;
     const plan = BB.plan(w, l, tier);
     world = BB.create(plan, (Math.random() * 2147483647) | 0);
     if (ptr.known) { world.bop.x = BB.clamp(ptr.x, 0, W); world.bop.y = BB.clamp(ptr.y, 0, H); }
     cur = { w: w, l: l };
-    Kit.stats.round(plan.id);
     ending = null; result = null;
     clicks = []; jumpPress = false; holdDir = 0; keyDir = 0;
+    mouseEvs = []; btnDown = false; letters = []; steerDx = 0; steerDy = 0; steerClick = ''; cancelNext = false;
+    anims = []; poolPulse = [0, 0, 0]; wallWig = [0, 0, 0, 0]; keyFx.wrong = {}; keyFx.demo = {}; growStep = 0; bandWas = false;
     fx.clear(); rings = []; floats = [];
     coach.hit = 0; coach.input = 0; coach.said = false; coach.next = taught[world.mode] ? 4 : 1.6;
     setScreen('play');
@@ -248,10 +276,15 @@
     J.whoosh(0.5);
   }
   function restart() { J.select(); startLevel(cur.w, cur.l); }
+  // A held button or key is let go quietly: a carried turtle waits, a growing bubble is dropped.
+  function letGo() {
+    holdDir = 0; keyDir = 0; steerDx = 0; steerDy = 0; steerClick = '';
+    btnDown = false; mouseEvs = []; letters = []; cancelNext = true;
+  }
   function pause(own) {
     if (screen !== 'play') return;
     setScreen('pause');
-    holdDir = 0; keyDir = 0;
+    letGo();
     if (own) J.back();
   }
   function resume() {
@@ -261,21 +294,19 @@
     Kit.keys.reset();
   }
   function quitToMap() {
-    Kit.stats.end('quit');
     J.back();
-    toMap(-1);
+    toMap(-1, cur.w);
   }
 
   // A result is saved the moment the level is finished, before the celebration.
   function finishLevel() {
     const r = BB.result(world), stars = BB.stars(r), before = BB.total(save), prev = save.stars[cur.w][cur.l];
-    const nextWasOpen = cur.w < 4 && BB.worldOpen(save, cur.w + 1), partyWasOpen = BB.isOpen(save, cur.w, 'P');
+    const nextWasOpen = cur.w < BB.N - 1 && BB.worldOpen(save, cur.w + 1), partyWasOpen = BB.isOpen(save, cur.w, 'P');
     if (stars > prev) save.stars[cur.w][cur.l] = stars;
     persist();
     dda[cur.w].result(BB.outcome(r));
-    Kit.stats.end('win', stars);
     result = { party: false, stars: stars, prev: prev, items: BB.unlocks(before, BB.total(save)),
-      newWorld: cur.w < 4 && !nextWasOpen && BB.worldOpen(save, cur.w + 1) ? cur.w + 1 : -1, newParty: !partyWasOpen && BB.isOpen(save, cur.w, 'P') };
+      newWorld: cur.w < BB.N - 1 && !nextWasOpen && BB.worldOpen(save, cur.w + 1) ? cur.w + 1 : -1, newParty: !partyWasOpen && BB.isOpen(save, cur.w, 'P') };
     ending = { t: 1.5 };
     happy = 1.5;
     J.chime(stars);
@@ -287,7 +318,6 @@
     const r = BB.result(world), best = save.best[cur.w], isBest = r.score > best;
     if (isBest) { save.best[cur.w] = r.score; persist(); }
     dda[cur.w].result(BB.outcome(r));
-    Kit.stats.end('end', r.score);
     result = { party: true, score: r.score, best: Math.max(best, r.score), isBest: isBest && r.score > 0, items: [] };
     ending = { t: 1.2 };
     happy = 1.2;
@@ -333,15 +363,13 @@
       if (r.isBest) { $('resNewBest').hidden = false; J.star(3); burstAt(640, 340, '#ffd23f'); }
       else J.star(1);
     }
-    busyT += dt;
-    if (resultT < 3 && busyT >= 1) { busyT = 0; Kit.stats.busy(); }
   }
   function next() {
     if (!result) return;
     J.select();
     if (result.party) startLevel(cur.w, 'P');
     else if (cur.l < 2) startLevel(cur.w, cur.l + 1);
-    else toMap(result.newWorld);
+    else toMap(result.newWorld, cur.w);
   }
   function again() { J.select(); startLevel(cur.w, cur.l); }
 
@@ -356,7 +384,7 @@
   on($('btnCloset'), () => openCloset('title'));
   on($('btnHow'), () => { J.select(); showGrip('title'); });
   on($('gripNext'), gripNext);
-  on($('gripSkip'), () => { J.back(); gripDone(true); });
+  on($('gripSkip'), () => { J.back(); gripDone(); });
   // A click anywhere on the cards' screen turns the card, but not in the first moment
   // after it appears: the second click of a double click on Play must not skip it.
   $('scrGrip').addEventListener('click', e => { e.stopPropagation(); if (e.detail < 2 && time - gripAt >= 0.4) gripNext(); });
@@ -368,7 +396,9 @@
   on($('btnMap'), quitToMap);
   on($('resNext'), () => { if (resultLock <= 0) next(); });
   on($('resAgain'), () => { if (resultLock <= 0) again(); });
-  on($('resMap'), () => { if (resultLock <= 0) { J.back(); toMap(result && !result.party && cur.l === 2 ? result.newWorld : -1); } });
+  on($('resMap'), () => { if (resultLock <= 0) { J.back(); toMap(result && !result.party && cur.l === 2 ? result.newWorld : -1, cur.w); } });
+  on($('mapNext'), () => turnPage(1));
+  on($('mapPrev'), () => turnPage(0));
   on($('resGift'), () => openCloset('map'));
   on($('closetBack'), closeCloset);
 
@@ -377,7 +407,9 @@
     if (ptr.known) ptr.travel += Math.min(400, Math.hypot(p.x - ptr.x, p.y - ptr.y));
     ptr.x = p.x; ptr.y = p.y; ptr.known = true; ptr.movedAt = time;
     menuIdle = 0;
-    if (screen === 'play' && world && (world.mode === 'touch' || world.mode === 'tap')) { coach.input = 0; flash.move = 1; }
+    if (screen === 'play' && world && (world.mode === 'touch' || world.mode === 'tap' || btnDown)) { coach.input = 0; flash.move = 1; }
+    // A button let go where the page could not see it (outside the frame) ends the drag here.
+    if ((btnDown || steerClick) && e.buttons === 0) release(e, false);
   });
   const inRect = (p, k) => Math.abs(p.x - k.x) <= k.w / 2 + 14 && Math.abs(p.y - k.y) <= k.h / 2 + 16;
   canvas.addEventListener('pointerdown', e => {
@@ -386,20 +418,53 @@
     const p = view.toLogical(e.clientX, e.clientY);
     ptr.x = p.x; ptr.y = p.y; ptr.known = true;
     menuIdle = 0;
-    if (screen === 'play' && world && !ending) playClick(p);
+    if (screen === 'play' && world && !ending) {
+      // A drag or a hold keeps the pointer, so letting go anywhere (even outside the frame) is seen.
+      if (world.mode === 'drag' || world.mode === 'hold' || world.mode === 'steer') { try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* old browsers */ } }
+      playClick(p);
+    }
     else if (screen === 'title' || screen === 'map' || screen === 'closet') boing(p);
   });
-  window.addEventListener('pointerup', () => { holdDir = 0; });
+  // Letting go of the button: the end of a drag (where the pointer is now) or of a hold.
+  function release(e, cancel) {
+    holdDir = 0; steerClick = '';
+    if (!btnDown) return;
+    btnDown = false;
+    if (screen === 'play' && world && world.mode === 'drag') {
+      const p = view.toLogical(e.clientX, e.clientY);
+      mouseEvs.push({ down: false, x: p.x, y: p.y, cancel: cancel });
+    }
+  }
+  window.addEventListener('pointerup', e => release(e, false));
+  window.addEventListener('pointercancel', e => release(e, true));
   window.addEventListener('keydown', e => {
     if (!Kit.isGameKeyEvent(e) || e.repeat) return;
     menuIdle = 0;
-    if (e.code !== 'KeyP' && e.code !== 'Escape' && e.code !== 'KeyM' && e.code !== 'Tab') anyKey = e.code;
+    if (e.code !== 'KeyP' && e.code !== 'Escape' && e.code !== 'KeyM' && e.code !== 'Tab') {
+      anyKey = e.code;
+      // Letters by the key's place (KeyboardEvent.code), so Arabic and English input both work.
+      if (screen === 'play' && world && !ending && world.mode === 'keys' && letters.length < 8) letters.push(e.code);
+    }
   });
+  const keyUnder = p => { for (const code in BB.KEY_LABELS) { const k = BB.keyAt(code); if (k && Math.abs(p.x - k.x) <= BB.KB.u / 2 && Math.abs(p.y - k.y) <= BB.KB.u / 2) return code; } return ''; };
   // Every click in play shows something; nothing a click does ever costs anything.
   function playClick(p) {
     const mode = world.mode;
     flash.click = 1;
-    if (mode === 'tap') { clicks.push({ x: p.x, y: p.y }); coach.input = 0; }
+    if (mode === 'tap' || mode === 'dbl') { clicks.push({ x: p.x, y: p.y }); coach.input = 0; }
+    else if (mode === 'drag') { mouseEvs.push({ down: true, x: p.x, y: p.y }); btnDown = true; coach.input = 0; }
+    else if (mode === 'hold') { btnDown = true; coach.input = 0; }
+    else if (mode === 'steer') {
+      // Tiers 1-2: holding the mouse on an on-screen arrow steers too.
+      const dir = Object.keys(STEP).find(d => inRect(p, KEYS[d]));
+      if (dir && world.tier <= 2) { steerClick = dir; coach.input = 0; }
+      else { flash.keyGlow = 1; ripple(p.x, p.y, true); }
+    } else if (mode === 'keys') {
+      // A click on the on-screen keyboard only shows the way: the real key pops the balloon.
+      const code = keyUnder(p);
+      if (code) keyFx.wrong[code] = 0.6;
+      flash.keyGlow = 1; ripple(p.x, p.y, true);
+    }
     else if (mode === 'jump') {
       const onKey = inRect(p, KEYS.space) || Math.abs(p.x - world.frog.x) < 110 && p.y > world.frog.y - 150;
       if (onKey && BB.knob(world, 'anyKey')) { jumpPress = true; flash.space = 1; coach.input = 0; }
@@ -418,14 +483,18 @@
   function handleKeys() {
     const K = Kit.keys, go = K.anyPressed(['Enter', 'NumpadEnter', 'Space']);
     if (screen === 'title') { if (go) play(); }
-    else if (screen === 'grip') { if (K.pressed('Escape')) { J.back(); gripDone(true); } else if (anyKey) gripNext(); }
-    else if (screen === 'map') { if (go) startNext(); else if (K.pressed('Escape')) { J.back(); toTitle(); } }
+    else if (screen === 'grip') { if (K.pressed('Escape')) { J.back(); gripDone(); } else if (anyKey) gripNext(); }
+    else if (screen === 'map') {
+      if (go) startNext(); else if (K.pressed('Escape')) { J.back(); toTitle(); }
+      // Right to left: the next page of worlds lies to the left.
+      else if (K.anyPressed(['ArrowLeft', 'KeyA'])) turnPage(1); else if (K.anyPressed(['ArrowRight', 'KeyD'])) turnPage(0);
+    }
     else if (screen === 'closet') { if (go || K.pressed('Escape')) closeCloset(); }
     else if (screen === 'play') { if (K.anyPressed(['KeyP', 'Escape'])) pause(true); else if (!ending) playKeys(K); }
     else if (screen === 'pause') { if (K.anyPressed(['KeyP', 'Escape', 'Enter', 'NumpadEnter', 'Space'])) resume(); else if (K.pressed('KeyR')) restart(); }
     else if (screen === 'result' && resultLock <= 0) {
       if (go) next(); else if (K.pressed('KeyR')) (result.party ? next() : again());
-      else if (K.pressed('Escape')) { J.back(); toMap(-1); }
+      else if (K.pressed('Escape')) { J.back(); toMap(-1, cur.w); }
     }
   }
   // Stray keys are never punished: the key or the mouse that is needed lights up instead.
@@ -444,6 +513,17 @@
       if (r) flash.right = 1;
       if (l || r) coach.input = 0;
       else if (anyKey) flash.keyGlow = 1;
+    } else if (mode === 'steer') {
+      const d = {};
+      for (const k in ARROWS) { d[k] = K.anyDown(ARROWS[k]); if (d[k]) flash[k] = 1; }
+      steerDx = (d.east ? 1 : 0) - (d.west ? 1 : 0); steerDy = (d.down ? 1 : 0) - (d.up ? 1 : 0);
+      if (d.up || d.down || d.west || d.east) coach.input = 0;
+      else if (anyKey) flash.keyGlow = 1;
+    } else if (mode === 'hold') {
+      if (K.down('Space')) { flash.space = 1; coach.input = 0; }
+      else if (anyKey) { flash.spaceGlow = 1; flash.mouseHint = 1; }
+    } else if (mode === 'keys') {
+      if (letters.length) coach.input = 0;
     } else if (anyKey) flash.mouseHint = 1;
   }
 
@@ -452,7 +532,10 @@
   // clock (it freezes with a pause). Steps: { at, down }, { to, s }, { press, track, onPress },
   // { hold, onHold }, { wait }. Targets may be functions, so the hand follows moving ones.
   // down: the hand reaches down from above, for the keys along the bottom edge.
-  const ghost = { on: false, steps: null, i: 0, t: 0, x: 0, y: 0, press: 0, alpha: 0, down: false };
+  // A move step with held: true keeps the finger pressed (a drag) and may carry a see-through
+  // copy of a turtle; a press step may set its own period (a quick double click); a hold step
+  // may blow a see-through bubble (ghost.blow, its radius).
+  const ghost = { on: false, steps: null, i: 0, t: 0, x: 0, y: 0, press: 0, alpha: 0, down: false, carry: null, blow: 0 };
   const pt = p => typeof p === 'function' ? p() : p;
   function demo(steps) {
     const p0 = steps && steps[0] && pt(steps[0].at);
@@ -463,14 +546,14 @@
     placeGhost();
     return true;
   }
-  function stopDemo() { ghost.on = false; ghost.steps = null; ghostEl.hidden = true; }
+  function stopDemo() { ghost.on = false; ghost.steps = null; ghost.carry = null; ghost.blow = 0; ghostEl.hidden = true; }
   function ghostStep(dt) {
     if (!ghost.on) return;
     const s = ghost.steps[ghost.i];
     if (!s) { stopDemo(); return; }
     ghost.t += dt;
     ghost.alpha = Math.min(1, ghost.alpha + dt * 5);
-    ghost.press = 0;
+    ghost.press = 0; ghost.carry = null; ghost.blow = 0;
     let done = false;
     if (s.at) { const p = pt(s.at); if (!p) { stopDemo(); return; } ghost.x = p.x; ghost.y = p.y; done = true; }
     else if (s.to) {
@@ -479,15 +562,16 @@
       if (!s.from) s.from = { x: ghost.x, y: ghost.y };
       const k = calm() ? 1 : Math.min(1, ghost.t / s.s), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
       ghost.x = s.from.x + (p.x - s.from.x) * e; ghost.y = s.from.y + (p.y - s.from.y) * e;
+      if (s.held) { ghost.press = calm() ? 0 : 1; ghost.carry = s.carry || null; }
       if (s.onMove) s.onMove();
       done = k >= 1;
     } else if (s.press) {
-      const k = ghost.t / 0.36, ph = k % 1;
+      const per = s.period || 0.36, k = ghost.t / per, ph = k % 1;
       if (s.track) { const p = pt(s.track); if (p) { ghost.x = p.x; ghost.y = p.y; } }
       ghost.press = calm() ? 0 : Math.sin(Math.min(1, ph / 0.8) * Math.PI);
       if (s.onPress && ph > 0.35 && s.count !== Math.floor(k)) { s.count = Math.floor(k); s.onPress(); }
-      done = ghost.t >= s.press * 0.36;
-    } else if (s.hold) { ghost.press = calm() ? 0 : 1; if (s.onHold) s.onHold(); done = ghost.t >= s.hold; }
+      done = ghost.t >= s.press * per;
+    } else if (s.hold) { ghost.press = calm() ? 0 : 1; if (s.carry) ghost.carry = s.carry; if (s.onHold) s.onHold(); done = ghost.t >= s.hold; }
     else { if (s.track) { const p = pt(s.track); if (p) { ghost.x = p.x; ghost.y = p.y; } } done = ghost.t >= (s.wait || 0); }
     if (done) { ghost.i++; ghost.t = 0; }
     placeGhost();
@@ -518,6 +602,48 @@
     catch: () => {
       const f = focusTarget(), side = f && f.x < world.basket.x ? 'left' : 'right', k = KEYS[side];
       return [{ at: { x: k.x, y: k.y - 10 }, down: true }, { hold: 1.1, onHold: () => { flash[side] = 1; flash.keyGlow = 1; } }, { wait: 0.2 }];
+    },
+    // Press on the turtle, hold, carry a see-through turtle to its pool, let go.
+    drag: () => {
+      const t = focusTarget();
+      if (!t || t.state !== 'idle') return null;
+      const copy = { r: t.r, home: t.home, gold: t.gold, phase: t.phase, face: 1 };
+      const home = () => { const p = world && world.pools.length ? BB.poolOf(world, t.home) : null; return p && { x: p.x, y: p.y }; };
+      return [{ at: { x: t.x + 130, y: Math.min(H - 60, t.y + 110) } }, { to: targetPos(t.id), s: 0.8 },
+        { hold: 0.35, carry: copy, onHold: () => { flash.held = 1; } },
+        { to: home, s: 1.4, held: true, carry: copy, onMove: () => { flash.held = 1; flash.move = 1; } }, { wait: 0.5 }];
+    },
+    // Two quick taps on the clam, a pause, and two more.
+    dbl: () => {
+      const t = focusTarget();
+      if (!t) return null;
+      const tap = () => { flash.click = 1; flash.two = 1; };
+      return [{ at: { x: t.x + 140, y: Math.min(H - 60, t.y + 120) } }, { to: targetPos(t.id), s: 0.9 },
+        { press: 2, period: 0.2, track: targetPos(t.id), onPress: tap }, { wait: 0.7, track: targetPos(t.id) },
+        { press: 2, period: 0.2, track: targetPos(t.id), onPress: tap }, { wait: 0.3 }];
+    },
+    // Hold (on the wand with the mouse, or on the Space bar) while a see-through bubble fills the ring.
+    hold: () => {
+      const t = world.targets.find(o => !o.dead && o.kind === 'wand');
+      if (!t || t.state !== 'ready') return null;
+      const dur = BB.holdTime(world.tier, t.r) / (world.party ? Math.pow(1.06, world.wave - 1) : 1), bar = demoTurn++ % 2 === 1;
+      const at = bar ? { x: KEYS.space.x + 150, y: KEYS.space.y - 8 } : { x: t.x + 4, y: 580 };
+      const grow = () => { ghost.blow = BB.BUBBLE0 + (t.ring - BB.BUBBLE0) * Math.min(1, ghost.t / dur); if (bar) { flash.space = 1; flash.spaceGlow = 1; } else flash.held = 1; };
+      return [{ at: at, down: bar }, { wait: 0.3 }, { hold: dur, onHold: grow }, { wait: 0.5 }];
+    },
+    // Hold the arrow that points towards the starfish.
+    steer: () => {
+      const t = focusTarget();
+      if (!t) return null;
+      const vx = t.x - world.sub.x, vy = t.y - world.sub.y;
+      const dir = Math.abs(vx) > Math.abs(vy) ? (vx > 0 ? 'east' : 'west') : (vy > 0 ? 'down' : 'up'), k = KEYS[dir];
+      return [{ at: { x: k.x, y: k.y - 8 }, down: true }, { hold: 1.1, onHold: () => { flash[dir] = 1; flash.keyGlow = 1; } }, { wait: 0.2 }];
+    },
+    // Press the key the balloon carries, on the on-screen keyboard.
+    keys: () => {
+      const b = focusTarget(), k = b && BB.keyAt(b.code);
+      if (!k) return null;
+      return [{ at: { x: k.x, y: k.y - 4 }, down: true }, { press: 2, onPress: () => { keyFx.demo[b.code] = 1; flash.keyGlow = 1; } }, { wait: 0.3 }];
     }
   };
   function playDemo() {
@@ -539,7 +665,10 @@
   function menuDemo() {
     let el = null, press = 2;
     if (screen === 'title') el = $('btnPlay');
-    else if (screen === 'map') el = document.querySelector('.pebble.next');
+    else if (screen === 'map') {
+      // The next level, or the arrow to its page.
+      el = document.querySelector('.pebble.next:not([hidden])') || (mapPage ? $('mapPrev') : $('mapNext'));
+    }
     else if (screen === 'result' && resultT > 1.5) el = $('resNext');
     else if (screen === 'grip') el = gripCard ? $('halo2') : $('halo1');
     if (!el) return;
@@ -594,56 +723,91 @@
     floats.push({ x: x, y: y, text: text, color: color, size: size || 34, t: 0, rtl: /[؀-ۿ]/.test(text) });
     if (floats.length > 16) floats.shift();
   }
-  const POP_COLORS = { bubble: A.TINTS, balloon: A.BALLOONS, fly: ['#fff27a', '#ffd23f'], fruit: A.FRUIT };
+  const POP_COLORS = { bubble: A.TINTS, balloon: A.BALLOONS, fly: ['#fff27a', '#ffd23f'], fruit: A.FRUIT,
+    turtle: ['#9ef0ff', '#ffffff', '#5cc96b'], clam: ['#fff7fb', '#c58bff', '#ff8fc0'], wand: ['#9fe4ff', '#ff9ad5', '#fff27a'], star: A.STARS, kballoon: A.BALLOONS };
+  function popColor(e) {
+    if (e.gold) return '#ffc93c';
+    if (e.kind === 'fruit') return POP_COLORS.fruit[e.type];
+    if (e.kind === 'turtle') return A.HOMES[e.home % 3];
+    const list = POP_COLORS[e.kind] || ['#ffffff'];
+    return list[e.color % list.length] || '#ffffff';
+  }
+  // Short pictures that outlive a target: a bubble floating off with its critter, a turtle
+  // swimming in its pool, a pearl flying up, a keycap falling from a popped balloon.
+  function anim(a) { a.t = 0; anims.push(a); if (anims.length > 12) anims.shift(); }
   function onPop(e) {
-    Kit.track.hit();
-    if (e.kind === 'bubble') Kit.track.react(Math.round(e.age * 1000));
-    const col = e.gold ? '#ffc93c' : (POP_COLORS[e.kind][e.kind === 'fruit' ? e.type : e.color] || '#ffffff');
-    if (e.kind === 'bubble') { J.pop(Math.min(1, e.r / 70)); shake.add(2); }
-    else if (e.kind === 'balloon') { J.impact(0.3); J.pop(0.85); shake.add(4); }
-    else if (e.kind === 'fly') { J.coin(Math.min(5, e.combo)); shake.add(2); }
+    const col = popColor(e), k = e.kind, r = k === 'wand' ? e.br : e.r;
+    if (k === 'bubble') { J.pop(Math.min(1, e.r / 70)); shake.add(2); }
+    else if (k === 'balloon' || k === 'kballoon') { J.impact(0.3); J.pop(0.85); shake.add(4); }
+    else if (k === 'fly' || k === 'star') { J.coin(Math.min(5, e.combo)); shake.add(2); }
+    else if (k === 'turtle') { J.coin(Math.min(5, e.combo)); J.pop(0.45); shake.add(2); }
+    else if (k === 'clam') { J.pop(0.6); J.coin(Math.min(5, e.combo)); shake.add(2); }
+    else if (k === 'wand') { J.chime(1); J.pop(0.95); shake.add(2); }
     else { J.impact(0.22); shake.add(3); }
     if (e.combo >= 2) J.streak(e.combo);
     if (e.gold) J.coin(5);
-    fx.burst(e.x, e.y, { count: e.kind === 'balloon' ? 18 : 12, colors: [col, '#ffffff', col], speed: e.kind === 'balloon' ? 340 : 260, life: 0.55, size: 8, gravity: e.kind === 'bubble' ? 60 : 380 });
-    rings.push({ x: e.x, y: e.y, r0: e.r * 0.8, r1: e.r * 1.6, t: 0, life: 0.3, color: '255,255,255', lw: 7 });
-    if (world.party) float(e.x, e.y - e.r - 10, '+' + e.points, e.gold ? '#ffd23f' : '#ffffff', e.points > 1 ? 40 : 32);
-    if (e.combo >= 5 && e.combo % 5 === 0) float(e.x, e.y - e.r - 54, PRAISE[Math.min(3, e.combo / 5 - 1)], '#ffd23f', 44);
+    if (k === 'turtle') anim({ kind: 'swim', x: e.x, y: e.y, home: e.home, gold: e.gold, r: e.r });
+    else if (k === 'clam') { anim({ kind: 'clam', x: e.x, y: e.y, r: e.r, color: e.color, gold: e.gold }); anim({ kind: 'pearl', x: e.x, y: e.y - e.r * 0.3, gold: e.gold }); }
+    else if (k === 'wand') anim({ kind: 'float', x: e.x, y: e.y, r: e.br, critter: e.critter, sway: Math.random() * 6 });
+    else if (k === 'kballoon') anim({ kind: 'cap', x: e.x, y: e.y + e.r * 1.4 + 26, code: e.code, size: e.cap || 70, vx: (Math.random() - 0.5) * 120, vy: -160, spin: (Math.random() - 0.5) * 6 });
+    fx.burst(e.x, e.y, { count: k === 'balloon' || k === 'kballoon' || k === 'wand' ? 18 : 12, colors: [col, '#ffffff', col], speed: k === 'balloon' || k === 'kballoon' ? 340 : 260, life: 0.55, size: 8,
+      gravity: k === 'bubble' || k === 'wand' ? 60 : k === 'turtle' ? 200 : 380 });
+    rings.push({ x: e.x, y: e.y, r0: r * 0.8, r1: r * 1.6, t: 0, life: 0.3, color: '255,255,255', lw: 7 });
+    if (world.party) float(e.x, e.y - r - 10, '+' + e.points, e.gold ? '#ffd23f' : '#ffffff', e.points > 1 ? 40 : 32);
+    if (e.combo >= 5 && e.combo % 5 === 0) float(e.x, e.y - r - 54, PRAISE[Math.min(3, e.combo / 5 - 1)], '#ffd23f', 44);
     if (world.party && e.mult > 1 && e.combo % 5 === 0) multBump = 1;
     happy = Math.max(happy, 0.6); pipBump = 1;
     coach.hit = 0; coach.next = 4; stopDemo();
   }
+  const byId = id => world.targets.find(o => o.id === id && !o.dead);
   function handleEvents() {
     for (const e of world.ev) {
-      // A reaction time counts from the moment there is something to press: a balloon or a
-      // fruit appears, or a firefly comes over the frog. Touching a bubble needs no press.
-      if (e.t === 'spawn') { if (world.mode === 'tap' || world.mode === 'catch') Kit.track.cue(); }
-      else if (e.t === 'near') Kit.track.cue();
-      else if (e.t === 'pop') onPop(e);
+      if (e.t === 'pop') onPop(e);
       else if (e.t === 'escape') {
-        Kit.track.miss();
         if (e.kind === 'fruit') { J.land(0.2); fx.burst(e.x, BB.BASKET.ground - 6, { count: 8, colors: ['#ffffff', '#c8f0a0'], speed: 160, life: 0.4, size: 6, gravity: 500 }); }
+        else if (e.kind === 'clam') fx.burst(e.x, e.y + 30, { count: 8, colors: ['#ffe39a', '#ffffff'], speed: 120, life: 0.4, size: 6, gravity: 300 });
       } else if (e.t === 'missClick') {
-        if (time - lastMissT > 0.3) Kit.track.miss();
-        lastMissT = time;
         ripple(e.x, e.y, true); J.tap();
       } else if (e.t === 'jump') J.jump(0.7);
       else if (e.t === 'land') { J.land(0.3); frogLand = 1; }
       else if (e.t === 'vanish') rings.push({ x: e.x, y: e.y, r0: e.r, r1: e.r * 1.3, t: 0, life: 0.35, color: '255,255,255', lw: 5 });
-      else if (e.t === 'segment') { J.whoosh(0.7); coach.hit = 0; coach.next = taught[world.mode] ? 4 : 1.6; coach.said = false; stopDemo(); keyDir = 0; holdDir = 0; }
+      else if (e.t === 'segment') { J.whoosh(0.7); coach.hit = 0; coach.next = taught[world.mode] ? 4 : 1.6; coach.said = false; stopDemo(); keyDir = 0; holdDir = 0; steerClick = ''; cancelNext = true; }
       else if (e.t === 'wave') { J.whoosh(0.9); J.chime(1); multBump = 1; burstAt(W / 2, 60, '#ffd23f'); }
       else if (e.t === 'done') finishLevel();
       else if (e.t === 'timeup') finishParty();
+      // worlds 6-11
+      else if (e.t === 'grab' || e.t === 'pick') { J.toggle(true); stopDemo(); fx.burst(e.x, e.y + 30, { count: 6, colors: ['#ffe39a', '#ffffff'], speed: 120, life: 0.35, size: 6, gravity: 300 }); }
+      else if (e.t === 'home') { J.whoosh(0.3); rings.push({ x: e.x, y: e.y, r0: e.r * 0.3, r1: e.r * 1.1, t: 0, life: 0.45, color: '159,228,255', lw: 8 }); }
+      else if (e.t === 'drop') J.land(0.25);
+      else if (e.t === 'wrong') { J.jump(0.45); poolPulse[e.home % 3] = 1.6; const t = byId(e.id); if (t) t.wig = 1; }
+      else if (e.t === 'knock') { J.tap(); flash.two = 1; }
+      else if (e.t === 'crack') { J.impact(0.3); shake.add(2); burstAt(e.x, e.y - e.r * 0.4, '#fff7fb'); }
+      else if (e.t === 'blow') { J.whoosh(0.15); growStep = 0; bandWas = false; }
+      else if (e.t === 'poof') { J.pop(0.1); anim({ kind: 'poof', x: e.x, y: e.y, r: e.br }); }
+      else if (e.t === 'boing') {
+        J.jump(1); J.land(0.6); shake.add(4);
+        fx.burst(e.x, e.y, { count: 22, colors: ['#9fe4ff', '#ff9ad5', '#fff27a', '#ffffff'], speed: 420, life: 0.6, size: 8, gravity: 260 });
+        rings.push({ x: e.x, y: e.y, r0: e.br, r1: e.br * 1.35, t: 0, life: 0.35, color: '255,255,255', lw: 8 });
+      } else if (e.t === 'bump') {
+        if (time - bumpT > 0.3) { J.land(0.3); bumpT = time; }
+        wallWig[e.wall] = 1;
+        fx.burst(e.x, e.y, { count: 5, colors: ['#ffffff', '#bff0ff'], speed: 90, life: 0.5, size: 6, gravity: -60 });
+      } else if (e.t === 'wrongKey') {
+        J.tap(); keyFx.wrong[e.code] = 1; flash.keyGlow = 1;
+      }
     }
     world.ev.length = 0;
   }
   // The target the pulsing ring (and the coach) points at.
   function focusTarget() {
     if (!world) return null;
+    const m = world.mode;
+    if (m === 'drag' && (world.held || world.carry)) return byId(world.held || world.carry) || null;
     let best = null, d = Infinity;
     for (const t of world.targets) {
-      if (t.dead) continue;
-      const v = world.mode === 'jump' ? Math.abs(t.x - world.frog.x) : world.mode === 'catch' ? -t.y : Math.hypot(t.x - world.bop.x, t.y - world.bop.y);
+      if (t.dead || (m === 'drag' && t.state !== 'idle')) continue;
+      const v = m === 'jump' ? Math.abs(t.x - world.frog.x) : m === 'catch' ? -t.y : m === 'keys' ? t.id
+        : m === 'steer' ? Math.hypot(t.x - world.sub.x, t.y - world.sub.y) : Math.hypot(t.x - world.bop.x, t.y - world.bop.y);
       if (v < d) { d = v; best = t; }
     }
     return best;
@@ -656,15 +820,44 @@
     pipBump = Math.max(0, pipBump - dt * 4); multBump = Math.max(0, multBump - dt * 3);
     for (let i = rings.length - 1; i >= 0; i--) { rings[i].t += dt; if (rings[i].t > rings[i].life) rings.splice(i, 1); }
     for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i]; f.t += dt; f.y -= dt * 46; if (f.t > 1.1) floats.splice(i, 1); }
+    for (let i = 0; i < 3; i++) poolPulse[i] = Math.max(0, poolPulse[i] - dt);
+    for (let i = 0; i < 4; i++) wallWig[i] = Math.max(0, wallWig[i] - dt * 2.5);
+    for (const m of [keyFx.wrong, keyFx.demo]) for (const c in m) { m[c] -= dt * 1.6; if (m[c] <= 0) delete m[c]; }
+    for (let i = anims.length - 1; i >= 0; i--) {
+      const a = anims[i];
+      a.t += dt;
+      if (a.kind === 'float') { a.y -= dt * (120 + 160 * Math.min(1, a.t)); a.x += Math.sin(a.t * 3 + a.sway) * 40 * dt; if (a.t > 2.2) { burstAt(a.x, a.y, '#9fe4ff'); anims.splice(i, 1); } }
+      else if (a.kind === 'poof') { a.y -= dt * 240; if (a.t > 0.5) { fx.burst(a.x, a.y, { count: 8, colors: ['#9fe4ff', '#ffffff'], speed: 140, life: 0.35, size: 5, gravity: 0 }); anims.splice(i, 1); } }
+      else if (a.kind === 'cap') { a.vy += 1400 * dt; a.x += a.vx * dt; a.y += a.vy * dt; if (a.y > H + 80) anims.splice(i, 1); }
+      else if (a.t > (a.kind === 'pearl' ? 0.7 : 1.1)) anims.splice(i, 1);
+    }
+  }
+  // Worlds 6-11: the rising notes of a growing bubble, and a chime the moment it fills the ring.
+  function holdSounds() {
+    const t = world.mode === 'hold' && world.targets.find(o => !o.dead && o.state === 'grow');
+    if (!t) { bandWas = false; return; }
+    const n = Math.floor((t.br - BB.BUBBLE0) / Math.max(10, t.ring - BB.BUBBLE0) * 4);
+    if (n > growStep && n <= 4) { growStep = n; J.streak(n); }
+    if (t.inBand && !bandWas) { J.select(); flash.spaceGlow = 1; }
+    bandWas = t.inBand;
   }
   function playStep(dt) {
     if (!ending) {
       if (world.party) { const left = Math.ceil(BB.left(world) - dt), was = Math.ceil(BB.left(world)); if (left !== was && left >= 1 && left <= 3) J.countdown(left); }
-      const input = { px: ptr.known ? ptr.x : null, py: ptr.known ? ptr.y : null, clicks: clicks, jump: jumpPress, dir: keyDir || holdDir };
-      clicks = []; jumpPress = false;
+      const sc = steerClick ? STEP[steerClick] : null, hold = btnDown || (world.mode === 'hold' && Kit.keys.down('Space'));
+      const input = { px: ptr.known ? ptr.x : null, py: ptr.known ? ptr.y : null, clicks: clicks, jump: jumpPress, dir: keyDir || holdDir,
+        mouse: mouseEvs, hold: hold, dx: steerDx || (sc ? sc[0] : 0), dy: steerDy || (sc ? sc[1] : 0), keys: letters, cancel: cancelNext };
+      clicks = []; jumpPress = false; mouseEvs = []; letters = []; cancelNext = false;
+      if (hold) coach.input = 0;
+      if (steerClick) flash[steerClick] = 1;
       BB.step(world, dt, input);
       handleEvents();
+      holdSounds();
       coachStep(dt);
+      for (const t of world.targets) if (t.wig) t.wig = Math.max(0, t.wig - dt * 2);
+      // A hand pointer over a turtle that can be picked up, and while carrying one.
+      const grab = world.mode === 'drag' && !!(world.held || world.carry || world.targets.some(t => t.hot && !t.dead));
+      if (grab !== grabCursor) { grabCursor = grab; canvas.classList.toggle('grab', grab); }
       // A quick Bop leaves a short sparkle trail (none under reduced motion).
       const b = world.bop, sp = Math.hypot(b.vx, b.vy);
       trailT -= dt;
@@ -674,9 +867,6 @@
       }
     } else {
       ending.t -= dt;
-      // The celebration is a passive moment the child watches.
-      busyT += dt;
-      if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
       if (ending.t <= 0) showResult();
     }
   }
@@ -743,10 +933,11 @@
   }
   function drawMap(ctx) {
     const still = calm();
-    ctx.drawImage(A.bg('map', pixelScale()), 0, 0, W, H);
+    ctx.drawImage(A.bg(mapPage ? 'map2' : 'map', pixelScale()), 0, 0, W, H);
     A.ISLANDS.forEach((p, w) => {
+      if (A.pageOf(w) !== mapPage) return;
       const fresh = unlockFx && unlockFx.w === w;
-      if (!BB.worldOpen(save, w)) A.lock(ctx, p.x, p.y - 30);
+      if (!BB.worldOpen(save, w)) A.lock(ctx, p.x, p.y - 30, mapPage ? 0.86 : 1);
       else if (fresh && unlockFx.t < 0.8) { ctx.globalAlpha = 1 - unlockFx.t / 0.8; const s = 1 + unlockFx.t; ctx.save(); ctx.translate(p.x, p.y - 30); ctx.scale(s, s); A.lock(ctx, 0, 0); ctx.restore(); ctx.globalAlpha = 1; }
     });
     A.bop(ctx, menuBop.x, menuBop.y, { color: save.color, hat: save.hat, time: time, still: still, scale: 0.9, vx: menuBop.vx, vy: menuBop.vy, look: bopLook(), happy: happy });
@@ -777,12 +968,95 @@
       else A.fruit(ctx, t, time, still);
     }
   }
+  // Effects that outlive a target (see anim()).
+  function drawAnims(ctx, still) {
+    for (const a of anims) {
+      const fade = a.kind === 'float' ? Math.max(0, 1 - Math.max(0, a.t - 1.6) / 0.6) : 1;
+      ctx.globalAlpha = fade;
+      if (a.kind === 'float') { A.soap(ctx, a.x, a.y, a.r); A.critter(ctx, a.critter, a.x, a.y + 4, 0.9); }
+      else if (a.kind === 'poof') A.soap(ctx, a.x, a.y, Math.max(6, a.r * (1 - a.t)));
+      else if (a.kind === 'clam') {
+        ctx.globalAlpha = Math.max(0, 1 - Math.max(0, a.t - 0.6) / 0.5);
+        A.clam(ctx, { x: a.x, y: a.y, r: a.r, color: a.color, phase: 0, knock: 0, dig: 0, gold: a.gold }, time, still, { open: Math.min(1, a.t / 0.12), empty: true });
+      } else if (a.kind === 'swim') { ctx.globalAlpha = Math.max(0, 1 - a.t / 1.1); A.turtle(ctx, { x: a.x, y: a.y - (still ? 0 : Math.sin(a.t * 9) * 4), r: a.r * 0.75, home: a.home, gold: a.gold, face: 1, phase: 0 }, time, still, false); }
+      else if (a.kind === 'pearl') { const k = Math.min(1, a.t / 0.7), e = k * k; A.pearl(ctx, a.x + (W / 2 - a.x) * e, a.y + (44 - a.y) * e - Math.sin(k * Math.PI) * 80, 20 * (1 - 0.5 * k), a.gold); }
+      else if (a.kind === 'cap') { ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(still ? 0 : a.spin * a.t); A.keycap(ctx, a.code, 0, 0, a.size, 0); ctx.restore(); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  // Worlds 6-11: the scene's moving parts, Bop, and the real input device lighting up with it.
+  function drawNew(ctx, w, still, focus, look) {
+    const mode = w.mode, scene = BB.WORLDS[cur.w].scene;
+    const sit = (x, y, s) => A.bop(ctx, x, y, { color: save.color, hat: save.hat, time: time, still: still, scale: s, look: look, happy: happy });
+    const ring = focus && !ending ? () => A.ring(ctx, focus.x, focus.y, focus.kind === 'star' ? focus.r + 10 : focus.kind === 'clam' ? focus.r * 1.05 : focus.r * 1.12, time, still) : () => {};
+    if (mode === 'drag') {
+      const hand = w.held || w.carry, carried = hand ? byId(hand) : null;
+      for (const p of w.pools) A.pool(ctx, p, time, still, { glow: carried ? (carried.home === p.color ? 1 : 0) : focus && focus.home === p.color ? 0.35 : 0, pulse: poolPulse[p.color] });
+      // The youngest see a dotted path from the next turtle to its pool.
+      if (!carried && focus && w.tier <= 2) { const p = BB.poolOf(w, focus.home); A.guide(ctx, focus.x, focus.y, p.x, p.y, focus.r + 6, p.r + 10, time, still); }
+      if (!carried) ring();
+      sit(96, 640, 0.7);
+      for (const t of w.targets) if (!t.dead && t.id !== hand) A.turtle(ctx, t, time, still, false);
+      drawAnims(ctx, still);
+      if (ghost.on && ghost.carry) { ctx.globalAlpha = 0.55 * ghost.alpha; A.turtle(ctx, Object.assign({}, ghost.carry, { x: ghost.x, y: ghost.y + 6 }), time, still, true); ctx.globalAlpha = 1; }
+      if (carried) A.turtle(ctx, carried, time, still, true);
+    } else if (mode === 'dbl') {
+      ring();
+      // Away from the reef, the clams up high stand on little podiums (drawn behind every clam).
+      if (scene !== 'reef') for (const t of w.targets) if (!t.dead && t.rock) A.podium(ctx, t.x, t.y + t.r * 0.42, 630);
+      for (const t of w.targets) if (!t.dead) { A.clam(ctx, t, time, still, { open: 0 }); A.clamDots(ctx, t, t.armed, time, still); }
+      sit(70, 652, 0.65);
+      drawAnims(ctx, still);
+    } else if (mode === 'hold') {
+      const t = w.targets.find(o => !o.dead) || { x: BB.WAND.x, y: BB.WAND.y, r: 0, ring: 0, state: 'gone', critter: 0 };
+      A.wand(ctx, t, time, still, { tol: BB.knob(w, 'tol'), ghost: ghost.on ? ghost.blow : 0 });
+      sit(330, 616, 0.8);
+      drawAnims(ctx, still);
+    } else if (mode === 'steer') {
+      w.walls.forEach((wl, i) => A.coral(ctx, wl, wallWig[i] || 0, time, still));
+      ring();
+      for (const t of w.targets) if (!t.dead) A.starfish(ctx, t, time, still);
+      A.sub(ctx, w.sub, { bop: { color: save.color }, time: time, still: still, happy: happy });
+      drawAnims(ctx, still);
+    } else if (mode === 'keys') {
+      ring();
+      for (const t of w.targets) if (!t.dead) A.kballoon(ctx, t, time, still, t === focus);
+      sit(66, 572, 0.62);
+      drawAnims(ctx, still);
+    }
+    drawFxLayer(ctx);
+    // The input mirror.
+    if (mode === 'drag' || mode === 'dbl') {
+      const hot = w.targets.some(t => t.hot && !t.dead);
+      A.mouseIcon(ctx, { move: flash.move, click: flash.click, held: mode === 'drag' && (btnDown || flash.held > 0.4) ? 1 : 0, two: mode === 'dbl' ? 1 : 0,
+        hint: Math.max(flash.mouseHint, hot ? 1 : 0.25), time: time, still: still });
+    } else if (mode === 'hold') {
+      const t = w.targets.find(o => !o.dead), ready = t && t.state === 'ready';
+      A.spaceBar(ctx, { down: Kit.keys.down('Space') || flash.space > 0.55, glow: Math.max(flash.spaceGlow, ready ? 0.45 + 0.35 * Math.sin(time * 6) : 0), wiggle: 0, time: time, still: still });
+      A.mouseIcon(ctx, { move: 0, click: 0, held: btnDown || flash.held > 0.4 ? 1 : 0, hint: Math.max(flash.mouseHint, ready ? 0.6 : 0), time: time, still: still });
+    } else if (mode === 'steer') {
+      const vx = focus ? focus.x - w.sub.x : 0, vy = focus ? focus.y - w.sub.y : 0, pul = still ? 0.8 : 0.55 + 0.45 * Math.sin(time * 8);
+      const want = { east: vx > 40, west: vx < -40, down: vy > 40, up: vy < -40 };
+      for (const d of ['west', 'down', 'east', 'up']) {
+        A.arrowCap(ctx, d, { down: Kit.keys.anyDown(ARROWS[d]) || flash[d] > 0.55 || steerClick === d, glow: Math.max(flash.keyGlow * 0.8, want[d] ? pul : 0) });
+      }
+    } else if (mode === 'keys') {
+      // The keyboard is always there, and the key of every balloon glows at once (brightest:
+      // the next one); a key pressed shows down, a wrong one flashes.
+      const glow = {}, down = {};
+      for (const t of w.targets) if (!t.dead) glow[t.code] = Math.max(t === focus ? 1 : 0.6, flash.keyGlow);
+      for (const code in BB.KEY_LABELS) if (Kit.keys.down(code) || (keyFx.demo[code] || 0) > 0.5) down[code] = true;
+      A.keyboard(ctx, { glow: glow, down: down, wrong: keyFx.wrong, time: time, still: still, k: pixelScale() });
+    }
+  }
+  const NEW_MODES = { drag: 1, dbl: 1, hold: 1, steer: 1, keys: 1 };
   function drawPlay(ctx) {
     const w = world, still = calm(), mode = w.mode, focus = ending ? null : focusTarget();
     ctx.drawImage(A.bg(BB.WORLDS[cur.w].scene, pixelScale()), 0, 0, W, H);
+    const look = focus ? { x: focus.x, y: focus.y } : bopLook();
+    if (NEW_MODES[mode]) { drawNew(ctx, w, still, focus, look); drawHud(ctx, w, still); return; }
     if (mode === 'catch') for (const t of w.targets) if (!t.dead) A.fruitShadow(ctx, t);
     if (focus) A.ring(ctx, focus.x, focus.y, focus.kind === 'balloon' ? focus.r * 1.15 : focus.kind === 'fly' ? focus.r + 8 : focus.r, time, still);
-    const look = focus ? { x: focus.x, y: focus.y } : bopLook();
     if (mode === 'jump') {
       drawTargets(ctx, still);
       A.frog(ctx, w.frog, time, still, frogLand, focus);
@@ -814,6 +1088,10 @@
       const hot = mode === 'tap' && w.targets.some(t => t.hot && !t.dead);
       A.mouseIcon(ctx, { move: flash.move, click: flash.click, hint: Math.max(flash.mouseHint, hot ? 1 : mode === 'tap' ? 0.25 : 0), time: time, still: still });
     }
+    drawHud(ctx, w, still);
+  }
+  function drawHud(ctx, w, still) {
+    const mode = w.mode;
     if (w.party) A.partyHud(ctx, { score: w.score, mult: w.mult, multBump: multBump, left: BB.left(w), total: w.plan.duration, best: save.best[cur.w], wave: w.wave, still: still });
     else A.pips(ctx, mode, w.goal, w.segHits, time, still, pipBump);
     if (w.plan.segments.length > 1) A.parts(ctx, w.plan.segments.map(s => s.mode), w.seg, time);
@@ -850,10 +1128,16 @@
         tier: w ? w.tier : 0, hits: w ? w.hits : 0, goal: w ? w.goal : 0, segHits: w ? w.segHits : 0, escapes: w ? w.escapes : 0,
         missClicks: w ? w.missClicks : 0, score: w ? w.score : 0, combo: w ? w.combo : 0, mult: w ? w.mult : 1,
         time: w ? Math.round(w.t * 1000) / 1000 : 0, left: w ? BB.left(w) : 0, ending: !!ending, stars: result && !result.party ? result.stars : 0,
-        targets: w ? w.targets.filter(t => !t.dead).map(t => ({ id: t.id, kind: t.kind, x: Math.round(t.x * 10) / 10, y: Math.round(t.y * 10) / 10, r: t.r, gold: t.gold })) : [],
+        targets: w ? w.targets.filter(t => !t.dead).map(t => ({ id: t.id, kind: t.kind, x: Math.round(t.x * 10) / 10, y: Math.round(t.y * 10) / 10, r: t.r, gold: t.gold,
+          state: t.state, home: t.home, code: t.code, armed: t.armed, br: t.br, ring: t.ring, inBand: t.inBand })) : [],
         bop: w ? { x: Math.round(w.bop.x), y: Math.round(w.bop.y) } : { x: Math.round(menuBop.x), y: Math.round(menuBop.y) },
         frog: w ? { x: w.frog.x, y: Math.round(w.frog.y), air: w.frog.air, jumps: w.frog.jumps } : null,
         basket: w ? { x: Math.round(w.basket.x), hw: w.basket.hw } : null,
+        // worlds 6-11
+        pools: w ? w.pools.map(p => ({ x: Math.round(p.x), y: Math.round(p.y), r: p.r, color: p.color })) : [],
+        held: w ? w.held || w.carry : 0, slips: w ? w.escapes : 0,
+        sub: w ? { x: Math.round(w.sub.x), y: Math.round(w.sub.y) } : null, walls: w ? w.walls.length : 0,
+        mapPage: mapPage, button: btnDown,
         travel: Math.round(ptr.travel), shake: shake.power, ghost: ghost.on, grip: gripCard, ripples: ripples
       };
     },
@@ -861,13 +1145,16 @@
     // Where a logical point is on the page, for tests that move the real mouse there.
     point: page,
     targetPoint: i => { const t = world && world.targets.filter(o => !o.dead)[i || 0]; return t ? page(t.x, t.y) : null; },
-    keyPoint: name => page(KEYS[name].x, KEYS[name].y)
+    keyPoint: name => page(KEYS[name].x, KEYS[name].y),
+    // The on-screen keyboard's key for a code, and a turtle's pool.
+    letterPoint: code => { const k = BB.keyAt(code); return k ? page(k.x, k.y) : null; },
+    poolPoint: color => { const p = world && world.pools.find(o => o.color === color); return p ? page(p.x, p.y) : null; }
   };
 
   buildMap();
   buildCloset();
   Kit.muteButton();
-  Kit.lifecycle({ pause: () => pause(false), reset: () => { holdDir = 0; keyDir = 0; clicks = []; jumpPress = false; } });
+  Kit.lifecycle({ pause: () => pause(false), reset: () => { clicks = []; jumpPress = false; letGo(); } });
   toTitle();
   Kit.loop(update, render);
   Kit.ready();

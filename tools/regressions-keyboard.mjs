@@ -22,10 +22,10 @@ function stateOfGame() {
   if (!g && window.Dino3DGame) {
     // Dino's visible screens and score reflect start/pause/restart without
     // depending on private engine state or an additional production debug API.
-    const screens = ['ready-screen', 'pause-screen', 'over-screen'];
+    const screens = ['title', 'map', 'endless', 'wardrobe', 'pause-screen', 'result'];
     return JSON.stringify({ mode: document.body.dataset.mode,
       screens: Object.fromEntries(screens.map(id => [id, !document.getElementById(id).hidden])),
-      score: document.getElementById('score').textContent });
+      eggs: document.getElementById('hud-eggs').textContent });
   }
   let state = typeof g.state === 'function' ? g.state() : g.state;
   if (state && typeof state === 'object') return JSON.stringify({ screen: state.screen, phase: state.phase, ui: state.ui, paused: state.paused, modal: state.modal });
@@ -147,24 +147,44 @@ export async function testPortalKeyboard({ browser, origin }) {
 }
 
 export async function testTypingTab({ browser, origin }) {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await context.newPage();
+  const state = () => page.evaluate(() => __game.state);
   try {
     await page.goto(`${origin}/games/typing-test/`);
     await page.waitForFunction(() => !!window.__game);
-    await page.evaluate(() => { document.activeElement?.blur(); __game.start({ lang: 'en', mode: 'words', amt: 10, seed: 1234 }); });
-    await page.keyboard.type('abc');
-    assert.equal((await page.evaluate(() => __game.state())).input, 'abc', 'typing remains functional on the test surface');
+    await page.locator('[data-lang="en"]').click();
+    await page.locator('.pebble.next').click();
+    await page.waitForFunction(() => __game.state.screen === 'play' && !!__game.state.next);
+    await page.keyboard.type(await page.evaluate(() => __game.state.next));
+    assert.equal((await state()).keys, 1, 'typing reaches the clouds');
+    // P, M and R are letters here: they never pause, mute or restart.
+    const muted = await page.evaluate(() => Kit.audio.muted);
+    await page.keyboard.type('pmr');
+    assert.equal((await state()).screen, 'play', 'P is a letter, not pause');
+    assert.equal(await page.evaluate(() => Kit.audio.muted), muted, 'M is a letter, not mute');
+    assert.equal((await state()).keys, 1, 'R does not restart the level');
+    // Tab is not captured: it moves focus to a control and neither types nor restarts.
     await page.keyboard.press('Tab');
-    assert.equal((await page.evaluate(() => __game.state())).input, '', 'ordinary Tab still restarts the typing test');
-    assert.equal((await page.evaluate(() => __game.state())).phase, 'ready', 'restart returns to a fresh test');
-    await page.locator('#bProg').focus();
-    await page.keyboard.press('Enter');
-    await page.waitForFunction(() => __game.state().modal === 'mProg');
-    await page.locator('#mProg [data-close]').focus();
+    assert.equal(await page.evaluate(() => document.activeElement.tagName), 'BUTTON', 'Tab reaches the next control');
+    assert.equal((await state()).keys, 1, 'Tab types nothing');
+    await page.locator('#btnPause').focus();
     await page.keyboard.press('Escape');
-    assert.equal((await page.evaluate(() => __game.state())).modal, null, 'Escape closes a typing modal from its focused button');
-    console.log('  ✓ typing test: letters and Tab restart');
+    await page.waitForFunction(() => __game.state.screen === 'pause');
+    await page.locator('#btnRestart').focus();
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => __game.state.screen === 'play');
+    assert.equal((await state()).keys, 1, 'Escape from a focused pause-menu button resumes, it does not restart');
+    // The class challenge dialog closes with Escape from its focused button.
+    await page.goto(`${origin}/games/typing-test/`);
+    await page.waitForFunction(() => !!window.__game);
+    await page.locator('#btnClass').focus();
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => __game.state.screen === 'klass');
+    await page.locator('#classClose').focus();
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => __game.state.screen === 'title');
+    console.log('  ✓ typing game: letters stay letters, Tab navigates, Escape pauses and closes');
   } finally { await context.close(); }
 }
 

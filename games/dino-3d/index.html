@@ -8,68 +8,127 @@
 <link rel="stylesheet" href="../../shared/game.css">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-mode="ready">
-<canvas id="scene" tabindex="0" aria-label="مسار الديناصور. مسافة للقفز، والسهم إلى الأسفل للانحناء."></canvas>
-<div id="hud" hidden>
-  <div class="score-item"><span>الأفضل</span><b id="best-score" class="score-text" dir="ltr">00000</b><canvas id="best-digits" class="pixel-digits" aria-hidden="true"></canvas></div>
-  <div class="score-item current-score"><span>النقاط</span><b id="score" class="score-text" dir="ltr">00000</b><canvas id="score-digits" class="pixel-digits" aria-hidden="true"></canvas></div>
-</div>
-<button id="pause-button" class="utility" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3v14H7zm7 0h3v14h-3z"/></svg></button>
-<main id="ready-screen" class="screen ready">
-  <div class="intro">
-    <h1>الديناصور<br><span>ثلاثي الأبعاد</span></h1>
-    <p class="description">اقفز فوق الصبّار والطيور المنخفضة، وانحنِ تحت الطيور المتوسطة!</p>
-    <form id="course-form" novalidate>
-      <div class="course-controls">
-        <label for="course-code">رمز المسار</label>
-        <input id="course-code" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" dir="ltr" placeholder="مفاجأة" aria-describedby="course-help course-error">
-        <button id="new-course" class="text-button" type="button">مسار جديد</button>
-      </div>
-      <p id="course-help" class="course-help">أربعة أرقام لمسار تتدرّب عليه. شارك الرمز مع أصدقائك في النسخة نفسها من اللعبة.</p>
-      <p id="course-error" class="course-help" role="alert" hidden>اكتب رمزًا من أربعة أرقام، مثل 0042.</p>
-      <button id="play" class="dino-button" type="submit">العب المسار<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16l13-8z"/></svg></button>
-    </form>
-    <div class="instructions">
-      <p><span dir="ltr"><kbd class="sg-key">مسافة</kbd> <kbd class="sg-key">↑</kbd></span> قفز</p>
-      <p><span dir="ltr"><kbd class="sg-key">↓</kbd> <kbd class="sg-key">Ctrl</kbd></span> انحناء</p>
-      <p class="touch-instruction">المس أعلى الشاشة للقفز وأسفلها للانحناء</p>
+<body data-mode="title">
+<!-- Icons: every button is a picture, so a child who cannot read yet can play. -->
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 15 L22 8 L42 15 L58 8 L58 49 L42 56 L22 49 L6 56 Z"/><path d="M22 10 L22 47 M42 17 L42 54" stroke="#2a2140" stroke-width="4" opacity=".35"/><circle cx="32" cy="30" r="6" fill="#ff5d6c"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-hat" viewBox="0 0 64 64"><path d="M18 6 Q32 2 46 6 L44 40 L20 40 Z" stroke="#2a2140" stroke-width="3.5" stroke-linejoin="round"/><path d="M4 44 Q32 34 60 44 Q60 54 32 54 Q4 54 4 44 Z" stroke="#2a2140" stroke-width="3.5" stroke-linejoin="round"/><path d="M20 30 L44 30 L44 39 L20 39 Z" fill="#ff5d6c"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
+  <symbol id="i-egg" viewBox="0 0 64 64"><path d="M32 4 C48 4 56 30 56 40 C56 54 45 61 32 61 C19 61 8 54 8 40 C8 30 16 4 32 4 Z" fill="#fff6e0" stroke="#2a2140" stroke-width="5"/><circle cx="24" cy="30" r="5" fill="#5ec8ff"/><circle cx="40" cy="42" r="6" fill="#ff7eb6"/><circle cx="36" cy="20" r="3.5" fill="#7be05a"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 64 64"><path d="M32 57 C14 44 4 34 4 21 C4 11 12 5 20 5 C26 5 30 8 32 13 C34 8 38 5 44 5 C52 5 60 11 60 21 C60 34 50 44 32 57 Z" stroke="#2a2140" stroke-width="5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-inf" viewBox="0 0 64 64"><path d="M32 32 C26 22 20 18 14 18 C7 18 3 24 3 32 C3 40 7 46 14 46 C20 46 26 42 32 32 C38 22 44 18 50 18 C57 18 61 24 61 32 C61 40 57 46 50 46 C44 46 38 42 32 32 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-dino" viewBox="0 0 64 64"><path d="M10 54 L10 30 Q10 12 30 12 L44 12 Q58 12 58 26 L58 34 Q58 40 50 40 L34 40 L34 54 Z" stroke="#2a2140" stroke-width="4.5" stroke-linejoin="round"/><circle cx="40" cy="24" r="6.5" fill="#fff"/><circle cx="42" cy="25" r="3.6" fill="#2a2140"/><path d="M14 16 L20 6 L24 14 M24 12 L31 4 L33 12" fill="none" stroke="#2a2140" stroke-width="4" stroke-linejoin="round"/><path d="M46 34 L54 34" stroke="#2a2140" stroke-width="3.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-nest" viewBox="0 0 64 64"><ellipse cx="32" cy="44" rx="28" ry="12" fill="#b07a4a" stroke="#2a2140" stroke-width="4.5"/><path d="M22 40 C22 26 28 20 32 20 C36 20 42 26 42 40 Z" fill="#fff6e0" stroke="#2a2140" stroke-width="4"/><path d="M8 42 L20 48 M56 42 L44 48 M26 52 L38 50" stroke="#7a4f2a" stroke-width="3.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 64 64"><path d="M36 3 L12 36 L29 36 L24 61 L52 24 L34 24 Z" stroke="#2a2140" stroke-width="4.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-mouse" viewBox="0 0 64 64"><rect x="16" y="6" width="32" height="52" rx="16" fill="#fff" stroke="#2a2140" stroke-width="4"/><path d="M32 8 L32 26 M17 26 L47 26" stroke="#2a2140" stroke-width="3.5"/><rect x="29" y="13" width="6" height="10" rx="3" fill="#ffd23f"/></symbol>
+  <symbol id="i-hand" viewBox="0 0 80 100"><g fill="#2a2140" stroke="#2a2140" stroke-width="9" stroke-linejoin="round"><rect x="22" y="5" width="17" height="54" rx="8.5"/><rect x="37" y="36" width="15" height="30" rx="7.5"/><rect x="50" y="40" width="14" height="28" rx="7"/><rect x="14" y="46" width="52" height="48" rx="19"/></g><g fill="#fff"><rect x="22" y="5" width="17" height="54" rx="8.5"/><rect x="37" y="36" width="15" height="30" rx="7.5"/><rect x="50" y="40" width="14" height="28" rx="7"/><rect x="14" y="46" width="52" height="48" rx="19"/></g></symbol>
+</svg>
+
+<canvas id="scene" tabindex="0" aria-label="الديناصور ثلاثي الأبعاد. مسافة للقفز، والسهم إلى الأسفل للانحناء، والسهم إلى اليمين للزئير."></canvas>
+
+<!-- A 1280x720 layer laid over the middle of the 3D view (scaled by game.js). -->
+<div id="ui">
+  <section id="title" class="screen" aria-label="الديناصور ثلاثي الأبعاد">
+    <h1 class="logo"><span class="l1">الديناصور</span><span class="l2">ثلاثي الأبعاد</span></h1>
+    <div class="chip stars-chip" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b id="title-stars">0</b></div>
+    <div class="title-row">
+      <button type="button" id="btn-wardrobe" class="btn round side pink" aria-label="الخزانة"><svg aria-hidden="true"><use href="#i-hat"/></svg></button>
+      <button type="button" id="play" class="btn play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <button type="button" id="btn-endless" class="btn round side orange" aria-label="جري بلا نهاية"><svg aria-hidden="true"><use href="#i-inf"/></svg></button>
     </div>
-    <p class="menu-best">أفضل نتيجة <b id="menu-best" dir="ltr">0</b></p>
+  </section>
+
+  <section id="map" class="screen" aria-label="الخريطة" hidden>
+    <button type="button" id="map-home" class="btn round corner" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="chip stars-chip" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b id="map-stars">0</b></div>
+    <div id="cards"></div>
+  </section>
+
+  <section id="endless" class="screen" aria-label="جري بلا نهاية" hidden>
+    <button type="button" id="endless-home" class="btn round corner" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="card endless-card">
+      <h2><svg aria-hidden="true"><use href="#i-inf"/></svg><span>جري بلا نهاية</span></h2>
+      <p class="far">الأفضل <b id="far-best" dir="ltr">0</b> م</p>
+      <button type="button" id="endless-go" class="btn play ring" aria-label="ابدأ الجري"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <button type="button" id="code-btn" class="btn small" aria-expanded="false">رمز</button>
+      <form id="code-row" hidden novalidate>
+        <input id="code-input" type="text" inputmode="numeric" maxlength="4" autocomplete="off" dir="ltr" placeholder="0000" aria-label="رمز من أربعة أرقام">
+        <button type="submit" id="code-go" class="btn small go" aria-label="العب بالرمز"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+        <p id="code-error" role="alert" hidden>أربعة أرقام، مثل 0042</p>
+      </form>
+    </div>
+  </section>
+
+  <div id="hud" hidden>
+    <div class="hud-left">
+      <div class="hearts" id="hearts"><i></i><i></i><i></i></div>
+      <div class="chip egg-chip" id="egg-chip"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="hud-eggs" dir="ltr">0</b></div>
+    </div>
+    <div class="trip" id="trip" dir="ltr"><i class="fill" id="trip-fill"></i><svg class="nest" aria-hidden="true"><use href="#i-nest"/></svg><svg class="me" id="trip-me" aria-hidden="true"><use href="#i-dino"/></svg></div>
+    <div class="meters" id="meters" hidden><b id="hud-m" dir="ltr">0</b><span>م</span><small>الأفضل <b id="hud-far" dir="ltr">0</b></small></div>
+    <div class="code-tag" id="code-tag" hidden>رمز <b id="code-now" dir="ltr"></b></div>
+    <div class="roar" id="roar"><svg class="bolt" aria-hidden="true"><use href="#i-bolt"/></svg><div class="bar"><i id="roar-fill"></i></div><span class="sg-key" dir="ltr">→</span></div>
+    <div class="coach" id="coach" hidden></div>
+    <div class="intro" id="intro" hidden></div>
+    <div class="banner" id="banner" hidden></div>
+    <div id="floats" aria-hidden="true"></div>
   </div>
-</main>
-<section id="pause-screen" class="screen veil" aria-labelledby="pause-title" hidden>
-  <div class="dialog">
-    <h2 id="pause-title">استراحة</h2>
-    <button id="resume" class="dino-button" type="button">تابع اللعب</button>
-    <button id="restart" class="text-button" type="button">أعد المسار نفسه</button>
-    <button id="new-course-paused" class="text-button" type="button">العب مسارًا جديدًا</button>
-    <button id="pause-menu" class="text-button" type="button">القائمة</button>
-    <p class="small-help"><kbd class="sg-key">P</kbd> متابعة <span>·</span> <kbd class="sg-key">R</kbd> إعادة المسار</p>
-  </div>
-</section>
-<section id="over-screen" class="screen over" aria-labelledby="over-title" hidden>
-  <div class="dialog">
-    <h2 id="over-title">انتهت الجولة!</h2>
-    <p id="record" hidden>رقم قياسي جديد!</p>
-    <p class="result">النقاط <b id="final-score" dir="ltr">0</b></p>
-    <button id="retry" class="dino-button retry-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.2 6.4A9 9 0 1 0 21 15h-3.2a6 6 0 1 1-1-6.5L13 12h9V3z"/></svg><span>أعد المسار نفسه</span></button>
-    <button id="new-course-over" class="text-button" type="button">العب مسارًا جديدًا</button>
-    <button id="menu" class="text-button" type="button">القائمة</button>
-    <p class="small-help"><kbd class="sg-key">R</kbd> إعادة المسار</p>
-  </div>
-</section>
-<p id="course-tag" class="course-tag" hidden>المسار <b id="active-course" dir="ltr"></b></p>
-<button id="quality" class="quality-button" type="button" aria-pressed="false">الرسوم: كاملة</button>
-<div id="context-notice" role="status" hidden>توقفت الرسوم مؤقتًا. انتظر لحظة لاستعادتها.</div>
-<section id="error-screen" class="screen error" hidden>
-  <div class="dialog"><h2>تعذّر تشغيل اللعبة</h2><p>الرسوم ثلاثية الأبعاد غير متاحة الآن.<br>أعد فتح اللعبة أو اختر لعبة أخرى.</p></div>
-</section>
+
+  <section id="pause-screen" class="screen dim" aria-label="استراحة" hidden>
+    <div class="card">
+      <button type="button" id="resume" class="btn play" aria-label="تابع اللعب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <div class="row">
+        <button type="button" id="pause-menu" class="btn round big" aria-label="القائمة"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="restart" class="btn round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+      <p class="keys"><span dir="ltr"><span class="sg-key">P</span></span> <span dir="ltr"><span class="sg-key">R</span></span></p>
+    </div>
+  </section>
+
+  <section id="result" class="screen" aria-label="النتيجة" hidden>
+    <div class="card result">
+      <h2 id="res-title">رائع!</h2>
+      <div class="stars3" id="res-stars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
+      <div class="res-eggs" id="res-eggs"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="res-n" dir="ltr">0</b></div>
+      <div class="res-far" id="res-far" hidden><b id="res-m" dir="ltr">0</b> م</div>
+      <div class="newbest" id="res-best" hidden><svg aria-hidden="true"><use href="#i-star"/></svg><span>رقم جديد!</span></div>
+      <button type="button" class="btn gift" id="res-gift" aria-label="شيء جديد في الخزانة" hidden><svg aria-hidden="true"><use href="#i-hat"/></svg><span>جديد!</span></button>
+      <div class="row">
+        <button type="button" id="result-menu" class="btn round big" aria-label="القائمة"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="next" class="btn play" aria-label="المرحلة التالية"><svg aria-hidden="true"><use href="#i-play"/></svg><span class="sg-key" dir="ltr">→</span></button>
+        <button type="button" id="again" class="btn round big" aria-label="مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg><span class="sg-key" dir="ltr">R</span></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="wardrobe" class="screen" aria-label="الخزانة" hidden>
+    <button type="button" id="wardrobe-back" class="btn round corner" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="closet">
+      <div class="chip egg-chip"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="bank" dir="ltr">0</b></div>
+      <div class="shelf" id="colors" role="group" aria-label="الألوان"></div>
+      <div class="shelf hats" id="hats" role="group" aria-label="القبعات"></div>
+    </div>
+  </section>
+
+  <section id="error-screen" class="screen dim" hidden>
+    <div class="card"><h2>تعذّر تشغيل اللعبة</h2><p>الرسوم ثلاثية الأبعاد غير متاحة الآن.<br>أعد فتح اللعبة أو اختر لعبة أخرى.</p></div>
+  </section>
+  <div id="context-notice" class="notice" role="status" hidden>توقفت الرسوم لحظة… انتظر قليلًا.</div>
+  <svg id="ghost" aria-hidden="true" hidden><use href="#i-hand"/></svg>
+</div>
+<button type="button" id="pause-button" class="pause-button" aria-label="استراحة" title="استراحة (P / Esc)" hidden><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+<div id="live" class="sr" aria-live="polite"></div>
+
 <script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
 <script src="../../lib/three/three.min.js"></script>
-<script src="data.js"></script>
 <script src="engine.js"></script>
-<script src="render.js"></script>
-<script src="audio.js"></script>
+<script src="art.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

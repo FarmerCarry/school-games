@@ -1,57 +1,98 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
-<title>سباق البيض</title>
-<defs>
-<style>@font-face{font-family:Fredoka;font-weight:700;src:url("data:font/woff2;base64,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") format("woff2")}</style>
-<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-<stop offset="0" stop-color="#7ec8ff"/>
-<stop offset="0.55" stop-color="#c8ecff"/>
-<stop offset="1" stop-color="#fff3c4"/>
-</linearGradient>
-<radialGradient id="chick" cx="38%" cy="32%" r="75%">
-<stop offset="0" stop-color="#fff6a0"/>
-<stop offset="1" stop-color="#ffc107"/>
-</radialGradient>
-</defs>
-<rect width="400" height="400" fill="url(#sky)"/>
-<circle cx="338" cy="64" r="28" fill="#ffd23f"/>
-<circle cx="328" cy="54" r="8" fill="#fff8c8"/>
-<ellipse cx="70" cy="390" rx="160" ry="80" fill="#8fd46a"/>
-<ellipse cx="300" cy="410" rx="190" ry="100" fill="#6fbf4a"/>
-<g fill="#fff" stroke="#ffd23f" stroke-width="2" stroke-linejoin="round">
-<path d="M46 118 l5 12 12 5 -12 5 -5 12 -5 -12 -12 -5 12 -5 z"/>
-<path d="M352 168 l4 10 10 4 -10 4 -4 10 -4 -10 -10 -4 10 -4 z"/>
-<path d="M86 196 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 z"/>
-</g>
-<ellipse cx="200" cy="352" rx="108" ry="22" fill="#2a2348" opacity="0.12"/>
-<path d="M78 292c0-70 40-108 92-108 18 28 22 70 8 128-28 16-100 8-100-20z" fill="#fff8e8" stroke="#2a2348" stroke-width="8" stroke-linejoin="round"/>
-<path d="M322 292c0-70-40-108-92-108-18 28-22 70-8 128 28 16 100 8 100-20z" fill="#fffdf8" stroke="#2a2348" stroke-width="8" stroke-linejoin="round"/>
-<path d="M118 250c-36-8-58-46-40-78 16 10 28 36 36 62z" fill="url(#chick)" stroke="#2a2348" stroke-width="7" stroke-linejoin="round"/>
-<path d="M282 250c36-8 58-46 40-78-16 10-28 36-36 62z" fill="url(#chick)" stroke="#2a2348" stroke-width="7" stroke-linejoin="round"/>
-<ellipse cx="200" cy="248" rx="86" ry="78" fill="url(#chick)" stroke="#2a2348" stroke-width="8"/>
-<ellipse cx="200" cy="272" rx="46" ry="36" fill="#fff6c2"/>
-<circle cx="168" cy="232" r="18" fill="#fff" stroke="#2a2348" stroke-width="5"/>
-<circle cx="232" cy="232" r="18" fill="#fff" stroke="#2a2348" stroke-width="5"/>
-<circle cx="174" cy="236" r="9" fill="#2a2348"/>
-<circle cx="238" cy="236" r="9" fill="#2a2348"/>
-<circle cx="178" cy="232" r="3.5" fill="#fff"/>
-<circle cx="242" cy="232" r="3.5" fill="#fff"/>
-<ellipse cx="142" cy="258" rx="12" ry="7" fill="#ff8aa0" opacity="0.85"/>
-<ellipse cx="258" cy="258" rx="12" ry="7" fill="#ff8aa0" opacity="0.85"/>
-<path d="M186 258h28l-14 20z" fill="#ff8a3d" stroke="#2a2348" stroke-width="4" stroke-linejoin="round"/>
-<path d="M188 176c-2-28 14-40 16-16" fill="none" stroke="#e6a800" stroke-width="8" stroke-linecap="round"/>
-<path d="M206 174c12-26 28-20 14 8" fill="none" stroke="#e6a800" stroke-width="8" stroke-linecap="round"/>
-<path d="M168 318l-16 28m16-28v30m0-30l14 26" fill="none" stroke="#ff8a3d" stroke-width="7" stroke-linecap="round"/>
-<path d="M232 318l-14 26m14-26v30m0-30l16 28" fill="none" stroke="#ff8a3d" stroke-width="7" stroke-linecap="round"/>
-<g>
-<circle cx="64" cy="250" r="16" fill="#ffd23f" stroke="#2a2348" stroke-width="4"/>
-<rect x="62" y="240" width="4" height="20" rx="2" fill="#fff6c2"/>
-<circle cx="336" cy="236" r="13" fill="#ffd23f" stroke="#2a2348" stroke-width="4"/>
-<rect x="334.2" y="227" width="3.4" height="18" rx="1.5" fill="#fff6c2"/>
-</g>
-<g font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" text-anchor="middle" direction="rtl">
-<text x="200" y="78" font-size="76" fill="#2a2348" stroke="#2a2348" stroke-width="16" stroke-linejoin="round" paint-order="stroke">سباق</text>
-<text x="200" y="78" font-size="76" fill="#fff8e8">سباق</text>
-<text x="200" y="150" font-size="70" fill="#2a2348" stroke="#2a2348" stroke-width="16" stroke-linejoin="round" paint-order="stroke">البيض</text>
-<text x="200" y="150" font-size="70" fill="#ff8a3d">البيض</text>
-</g>
+  <defs>
+    <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b4ef7c"/>
+      <stop offset="1" stop-color="#6fc046"/>
+    </linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5fc0ff"/>
+      <stop offset="1" stop-color="#a9e2ff"/>
+    </linearGradient>
+    <radialGradient id="gold" cx="35%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#fff6c2"/>
+      <stop offset="0.55" stop-color="#ffd23f"/>
+      <stop offset="1" stop-color="#e89a10"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#grass)"/>
+  <rect width="400" height="70" fill="url(#sky)"/>
+  <!-- trees and the fence at the back of the yard -->
+  <g stroke="#2a1d3e" stroke-width="5">
+    <circle cx="20" cy="62" r="30" fill="#45b34e"/><circle cx="80" cy="56" r="34" fill="#45b34e"/><circle cx="150" cy="64" r="28" fill="#45b34e"/>
+    <circle cx="250" cy="58" r="32" fill="#45b34e"/><circle cx="320" cy="64" r="30" fill="#45b34e"/><circle cx="388" cy="56" r="34" fill="#45b34e"/>
+  </g>
+  <g fill="#6fcf62"><circle cx="10" cy="52" r="14"/><circle cx="70" cy="44" r="16"/><circle cx="142" cy="54" r="13"/><circle cx="240" cy="47" r="15"/><circle cx="311" cy="54" r="14"/><circle cx="378" cy="45" r="16"/></g>
+  <circle cx="92" cy="68" r="5" fill="#ff4d4d" stroke="#2a1d3e" stroke-width="2"/><circle cx="262" cy="70" r="5" fill="#ff4d4d" stroke="#2a1d3e" stroke-width="2"/>
+  <g fill="#e3a55e" stroke="#2a1d3e" stroke-width="3"><rect x="-4" y="76" width="408" height="8" rx="3"/><rect x="-4" y="90" width="408" height="8" rx="3"/></g>
+  <g fill="#c98a46" stroke="#2a1d3e" stroke-width="3">
+    <rect x="12" y="66" width="12" height="40" rx="4"/><rect x="76" y="66" width="12" height="40" rx="4"/><rect x="140" y="66" width="12" height="40" rx="4"/>
+    <rect x="204" y="66" width="12" height="40" rx="4"/><rect x="268" y="66" width="12" height="40" rx="4"/><rect x="332" y="66" width="12" height="40" rx="4"/><rect x="392" y="66" width="12" height="40" rx="4"/>
+  </g>
+  <!-- grass tufts and flowers -->
+  <g stroke="#4f9a34" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.7">
+    <path d="M40 150 l4 8 l1 -10 m-1 10 l6 -6"/><path d="M190 128 l4 8 l1 -10 m-1 10 l6 -6"/><path d="M360 160 l4 8 l1 -10 m-1 10 l6 -6"/>
+    <path d="M60 290 l4 8 l1 -10 m-1 10 l6 -6"/><path d="M230 300 l4 8 l1 -10 m-1 10 l6 -6"/>
+  </g>
+  <g fill="#ffffff"><circle cx="120" cy="140" r="4"/><circle cx="350" cy="300" r="4"/><circle cx="30" cy="230" r="4"/></g>
+  <g fill="#ffe14d"><circle cx="120" cy="140" r="1.8"/><circle cx="350" cy="300" r="1.8"/><circle cx="30" cy="230" r="1.8"/></g>
+  <!-- the hen's vision cone, sweeping towards the kid -->
+  <path d="M286 186 L46 112 A250 250 0 0 0 52 300 Z" fill="#fff06e" opacity="0.45"/>
+  <path d="M286 186 L46 112 A250 250 0 0 0 52 300 Z" fill="none" stroke="#f0a820" stroke-width="4" stroke-linejoin="round" opacity="0.85"/>
+  <!-- nest with eggs -->
+  <ellipse cx="282" cy="248" rx="58" ry="27" fill="#c98a3e" stroke="#2a1d3e" stroke-width="5"/>
+  <ellipse cx="282" cy="244" rx="38" ry="15" fill="#7a4a1e"/>
+  <g stroke="#e0a84c" stroke-width="3" stroke-linecap="round"><path d="M232 244 l10 6 M246 262 l12 2 M300 266 l12 -3 M322 252 l10 -6 M262 232 l-8 -4"/></g>
+  <path d="M262 214 C276 214 278 244 262 250 C246 244 248 214 262 214 Z" fill="#fff6e2" stroke="#2a1d3e" stroke-width="4"/>
+  <path d="M296 220 C311 220 313 250 296 256 C279 250 281 220 296 220 Z" fill="#fff6e2" stroke="#2a1d3e" stroke-width="4"/>
+  <ellipse cx="257" cy="225" rx="3" ry="5" fill="#ffffff"/>
+  <!-- the hen, one eye open -->
+  <path d="M318 158 Q344 126 336 118 Q330 132 324 126 Q326 140 312 146 Z" fill="#fff7ee" stroke="#2a1d3e" stroke-width="5" stroke-linejoin="round"/>
+  <ellipse cx="306" cy="176" rx="42" ry="33" fill="#ffffff" stroke="#2a1d3e" stroke-width="6"/>
+  <ellipse cx="312" cy="180" rx="22" ry="14" fill="#efe5da" stroke="#2a1d3e" stroke-width="4" transform="rotate(12 312 180)"/>
+  <path d="M270 128 a6 6 0 0 1 11 -3 a6 6 0 0 1 11 0 a6 6 0 0 1 9 5 l-4 5 l-24 0 Z" fill="#ff4d4d" stroke="#2a1d3e" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="282" cy="150" r="21" fill="#ffffff" stroke="#2a1d3e" stroke-width="5"/>
+  <path d="M262 148 L246 154 L262 160 Z" fill="#ffb52e" stroke="#2a1d3e" stroke-width="4" stroke-linejoin="round"/>
+  <ellipse cx="263" cy="166" rx="5" ry="7" fill="#ff4d4d" stroke="#2a1d3e" stroke-width="3"/>
+  <circle cx="274" cy="146" r="7" fill="#ffffff" stroke="#2a1d3e" stroke-width="3"/><circle cx="272" cy="147" r="4" fill="#2a1d3e"/><circle cx="270.5" cy="145" r="1.5" fill="#ffffff"/>
+  <path d="M286 146 q5 5 10 0" fill="none" stroke="#2a1d3e" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- the ؟ bubble -->
+  <path d="M318 76 a28 28 0 1 1 -12 48 l-14 10 l4 -16 a28 28 0 0 1 22 -42 Z" fill="#fff6c2" stroke="#2a1d3e" stroke-width="5" stroke-linejoin="round"/>
+  <text x="320" y="118" text-anchor="middle" direction="rtl" font-family="Fredoka, 'Segoe UI', Tahoma, Arial, sans-serif" font-weight="900" font-size="46" fill="#ff7a1a" stroke="#2a1d3e" stroke-width="3" paint-order="stroke">؟</text>
+  <!-- chicks in a parade -->
+  <g stroke="#2a1d3e" stroke-width="3.5">
+    <ellipse cx="36" cy="316" rx="18" ry="16" fill="#ffe14d"/><ellipse cx="72" cy="300" rx="16" ry="14" fill="#ffd23f"/>
+  </g>
+  <g fill="#2a1d3e"><circle cx="40" cy="310" r="3"/><circle cx="50" cy="310" r="3"/><circle cx="75" cy="295" r="2.6"/><circle cx="84" cy="295" r="2.6"/></g>
+  <path d="M43 316 l9 1 l-5 6 Z M78 301 l8 1 l-4 5 Z" fill="#ff9a2e" stroke="#2a1d3e" stroke-width="2" stroke-linejoin="round"/>
+  <!-- the kid, frozen like a statue, a golden egg balanced on the hat -->
+  <ellipse cx="146" cy="300" rx="34" ry="10" fill="#2a1d3e" opacity="0.2"/>
+  <g stroke="#2a1d3e" stroke-linejoin="round" stroke-linecap="round">
+    <ellipse cx="132" cy="296" rx="11" ry="7" fill="#6b3d1f" stroke-width="4"/><ellipse cx="160" cy="296" rx="11" ry="7" fill="#6b3d1f" stroke-width="4"/>
+    <path d="M118 238 L92 226" stroke-width="15"/><path d="M118 238 L92 226" stroke="#fff2c8" stroke-width="8"/>
+    <path d="M174 238 L200 226" stroke-width="15"/><path d="M174 238 L200 226" stroke="#fff2c8" stroke-width="8"/>
+    <circle cx="90" cy="225" r="8" fill="#ffcc9e" stroke-width="4"/><circle cx="202" cy="225" r="8" fill="#ffcc9e" stroke-width="4"/>
+    <rect x="120" y="228" width="52" height="64" rx="22" fill="#fff2c8" stroke-width="5"/>
+    <path d="M122 254 L170 254 L170 270 Q170 290 146 290 Q122 290 122 270 Z" fill="#3f8cff" stroke="none"/>
+    <rect x="132" y="242" width="28" height="18" rx="5" fill="#3f8cff" stroke="none"/>
+    <rect x="120" y="228" width="52" height="64" rx="22" fill="none" stroke-width="5"/>
+    <circle cx="146" cy="196" r="29" fill="#ffcc9e" stroke-width="5"/>
+  </g>
+  <path d="M118 188 q12 -12 24 -6 q12 -8 26 -2 q8 -2 10 6 l0 -12 l-60 0 Z" fill="#8a4b25"/>
+  <g stroke="#2a1d3e" stroke-width="4" stroke-linecap="round" fill="none"><path d="M128 196 l8 5 l-8 4"/><path d="M164 196 l-8 5 l8 4"/></g>
+  <ellipse cx="146" cy="214" rx="7" ry="5" fill="#ff8fa0" stroke="#2a1d3e" stroke-width="3"/>
+  <ellipse cx="126" cy="209" rx="7" ry="4" fill="#ff6f8f" opacity="0.65"/><ellipse cx="168" cy="209" rx="7" ry="4" fill="#ff6f8f" opacity="0.65"/>
+  <!-- straw hat -->
+  <ellipse cx="146" cy="174" rx="44" ry="14" fill="#f6d47a" stroke="#2a1d3e" stroke-width="5"/>
+  <path d="M124 174 Q124 146 146 146 Q168 146 168 174 Z" fill="#f2c25e" stroke="#2a1d3e" stroke-width="5" stroke-linejoin="round"/>
+  <rect x="124" y="160" width="44" height="8" rx="3" fill="#e8473f"/>
+  <!-- the golden egg -->
+  <path d="M146 92 C170 92 176 140 146 146 C116 140 122 92 146 92 Z" fill="url(#gold)" stroke="#2a1d3e" stroke-width="5" transform="rotate(-8 146 120)"/>
+  <path d="M146 112 l4 9 l10 1 l-8 6 l3 10 l-9 -6 l-9 6 l3 -10 l-8 -6 l10 -1 Z" fill="#fff6c2" stroke="#2a1d3e" stroke-width="2.5" stroke-linejoin="round" transform="rotate(-8 146 120)"/>
+  <!-- a nervous sweat drop -->
+  <path d="M186 168 q-7 10 0 13 q7 -3 0 -13 Z" fill="#7fd4ff" stroke="#2a1d3e" stroke-width="2.5"/>
+  <!-- logo -->
+  <g font-family="Fredoka, 'Segoe UI', Tahoma, Arial, sans-serif" font-weight="900" text-anchor="middle" direction="rtl">
+    <text x="200" y="378" font-size="66" fill="#2a1d3e" stroke="#2a1d3e" stroke-width="16" stroke-linejoin="round">سباق البيض</text>
+    <text x="200" y="372" font-size="66" fill="#ffd23f" stroke="#ffffff" stroke-width="2" paint-order="stroke" stroke-linejoin="round">سباق البيض</text>
+  </g>
 </svg>

@@ -15,8 +15,8 @@
  *
  * Games play through the Kit audio graph: Kit creates Kit.audio.ctx on the first key
  * press or click and mute turns Kit.audio.master down. The portal creates its own
- * AudioContext on the first key press or click and follows sg:site:muted and the stored
- * classroom preset (sg:site:classroom), read again at every sound.
+ * AudioContext on the first key press or click and follows sg:site:muted, read again at
+ * every sound.
  * Nothing plays before a user gesture or while muted (no audio nodes are created then).
  *
  * Every sound is one short one-shot synthesised on the spot: no files, no loops, no
@@ -35,9 +35,9 @@
   var J = {};
 
   function num(x, lo, hi, fallback) { return typeof x === 'number' && x === x ? x < lo ? lo : x > hi ? hi : x : fallback; }
-  // The portal's own stored switches: sg:site:muted and the classroom preset.
+  // The portal's own stored switch: sg:site:muted.
   function site(key) { try { return !!JSON.parse(W.localStorage.getItem('sg:site:' + key)); } catch (e) { return false; } }
-  function muted() { return quiet || (kit ? kit.muted : site('muted') || site('classroom')); }
+  function muted() { return quiet || (kit ? kit.muted : site('muted')); }
 
   // Portal only: an own context on the first gesture, resumed by later ones.
   function unlock() {
@@ -58,7 +58,7 @@
   if (!kit && W.addEventListener) {
     W.addEventListener('pointerdown', unlock, true);
     W.addEventListener('keydown', unlock, true);
-    W.addEventListener('storage', function (e) { if (!e.key || /^sg:site:(muted|classroom)$/.test(e.key)) paint(); });
+    W.addEventListener('storage', function (e) { if (!e.key || e.key === 'sg:site:muted') paint(); });
   }
 
   // The context to play in, or null before the first gesture or while muted.
